@@ -9380,6 +9380,21 @@ gameRouter.post("/admin/teams/:teamId/manager-attr", async (c) => {
   });
 });
 
+// POST /api/admin/voice-rerecord-drunk?scenario=…&limit=3 — už odeslané hlasovky s tématem
+// přehraje opilým hlasem (stejný hráč a text). Volat opakovaně, dokud `left` není 0.
+gameRouter.post("/admin/voice-rerecord-drunk", async (c) => {
+  const scenarioId = c.req.query("scenario") ?? "";
+  const { getScenarioById } = await import("../messaging/ai-player-scenarios");
+  const scenario = getScenarioById(scenarioId);
+  if (!scenario) return c.json({ error: "Neznámé téma" }, 400);
+  const { rerecordVoiceMessagesDrunk } = await import("../messaging/voice-message");
+  const limit = Math.min(10, Math.max(1, Number(c.req.query("limit") ?? "3")));
+  const r = await rerecordVoiceMessagesDrunk(c.env.DB, c.env, { scenarioId, scene: scenario.description, limit })
+    .catch((e) => { logger.error({ module: "game.ts" }, "přehrání hlasovek opile", e); return null; });
+  if (!r) return c.json({ error: "přehrání selhalo" }, 500);
+  return c.json({ ok: true, ...r });
+});
+
 // POST /api/admin/spawn-ai-chats — ruční spuštění SMS od hráčů (jinak jen cron 0 14).
 // Umožňuje ověřit obsah zpráv bez čekání na noční běh. `?teamId=` spustí jen jeden tým
 // bez losu a cooldownu, `&voice=1` k tomu rovnou pošle hlasovku (jinak strop 2 týdně).

@@ -392,3 +392,71 @@ export async function recordVoiceMessage(
     transcript,
   };
 }
+
+/**
+ * Přehraje už odeslané hlasovky s daným tématem opilým hlasem (varianta C):
+ * stejný hráč, stejný hlas i text, jen opilá mluva. Přepíše nahrávku v R2,
+ * přepis v těle zprávy, délku a obrys. Zprávy se nemažou.
+ *
+ * Po `limit` kusech, ať jeden požadavek nečeká minuty. Hotové mají v metadatech
+ * `drunk: 1`, takže opakované volání pokračuje tam, kde skončilo.
+ */
+export async function rerecordVoiceMessagesDrunk(
+  db: D1Database,
+  env: { GEMINI_API_KEY?: string; SEED_DATA?: R2Bucket },
+  opts: { scenarioId: string; scene: string; limit: number },
+): Promise<{ done: Array<{ messageId: string; player: string; durationSec: number }>; failed: string[]; left: number }> {
+  if (!env.GEMINI_API_KEY || !env.SEED_DATA) throw new Error("chybí klíč Gemini nebo úložiště");
+  const rows = await db.prepare(
+    `SELECT m.id, m.conversation_id, m.body, m.metadata, p.first_name, p.age, p.nationality, p.life_context
+       FROM messages m JOIN players p ON p.id = m.sender_id
+      WHERE json_extract(m.metadata, '$.scenario_id') = ? AND json_extract(m.metadata, '$.type') = 'voice'
+        AND json_extract(m.metadata, '$.drunk') IS NULL
+      ORDER BY m.sent_at LIMIT ?`,
+  ).bind(opts.scenarioId, opts.limit).all<{
+    id: string; conversation_id: string; body: string; metadata: string;
+    first_name: string; age: number; nationality: string | null; life_context: string | null;
+  }>();
+
+  const done: Array<{ messageId: string; player: string; durationSec: number }> = [];
+  const failed: string[] = [];
+  for (const row of rows.results) {
+    const meta = JSON.parse(row.metadata) as VoiceMessageMeta;
+    let stored: unknown = null;
+    try {
+      stored = row.life_context ? (JSON.parse(row.life_context) as { voice?: unknown }).voice : null;
+    } catch (e) {
+      logger.warn({ module: M }, `life_context zprávy ${row.id} není JSON`, e);
+    }
+    const voice: PlayerVoice = isPlayerVoice(stored) ? stored : { name: meta.voice, trait: VOICE_TRAITS[0] };
+    const transcript = drunkSpeech(spokenText(row.body));
+    const prompt = buildVoicePrompt({
+      firstName: row.first_name, age: row.age, scene: opts.scene, voice,
+      nationality: row.nationality, transcript, drunk: true,
+    });
+    const pcm = await synthesizeSpeech(env.GEMINI_API_KEY, prompt, voice.name);
+    if (!pcm || pcm.length < SAMPLE_RATE) {
+      failed.push(row.id);
+      continue;
+    }
+    await env.SEED_DATA.put(meta.audioKey, pcmToWav(pcm), { httpMetadata: { contentType: "audio/wav" } });
+    const durationSec = durationSecFromPcm(pcm);
+    await db.batch([
+      db.prepare(
+        `UPDATE messages SET body = ?, metadata = json_set(metadata, '$.durationSec', ?, '$.peaks', json(?), '$.drunk', 1)
+          WHERE id = ?`,
+      ).bind(transcript, durationSec, JSON.stringify(peaksFromPcm(pcm)), row.id),
+      db.prepare(
+        "UPDATE conversations SET last_message_text = ? WHERE id = ? AND last_message_text LIKE '🎤%'",
+      ).bind(voicePreviewText(durationSec), row.conversation_id),
+    ]);
+    done.push({ messageId: row.id, player: row.first_name, durationSec });
+  }
+
+  const left = await db.prepare(
+    `SELECT COUNT(*) AS n FROM messages
+      WHERE json_extract(metadata, '$.scenario_id') = ? AND json_extract(metadata, '$.type') = 'voice'
+        AND json_extract(metadata, '$.drunk') IS NULL`,
+  ).bind(opts.scenarioId).first<{ n: number }>();
+  return { done, failed, left: left?.n ?? 0 };
+}
