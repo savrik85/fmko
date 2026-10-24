@@ -30,6 +30,7 @@ import {
 import {
   pickScenarioForPlayer,
   getScenarioById,
+  type AiScenario,
   type PlayerSnapshot,
 } from "./ai-player-scenarios";
 
@@ -297,8 +298,8 @@ export async function getOrCreatePlayerConversation(
 export async function applyAiPlayerThreads(
   db: D1Database,
   env: { GEMINI_API_KEY?: string; CACHE_KV?: KVNamespace; AI?: Ai; SEED_DATA?: R2Bucket },
-  /** Ruční spuštění z adminu: jen jeden tým, bez losu a cooldownu, volitelně rovnou hlasovka. */
-  manual?: { teamId: string; forceVoice?: boolean },
+  /** Ruční spuštění z adminu: jen jeden tým, bez losu a cooldownu, volitelně rovnou hlasovka a pevné téma. */
+  manual?: { teamId: string; forceVoice?: boolean; scenarioId?: string },
 ): Promise<{ spawned: number; skipped: number }> {
   // Ptáme se přepínače, ne klíče. Dokud tu stála holá podmínka na
   // `GEMINI_API_KEY`, nezaložilo se jediné vlákno nikde, kde se jede přes
@@ -333,7 +334,8 @@ export async function applyAiPlayerThreads(
       continue;
     }
     try {
-      const ok = await spawnForTeam(db, env, team.id, manual?.forceVoice ?? false);
+      const forcedScenario = manual?.scenarioId ? getScenarioById(manual.scenarioId) : null;
+      const ok = await spawnForTeam(db, env, team.id, manual?.forceVoice ?? false, forcedScenario);
       if (ok) spawned++; else skipped++;
     } catch (e) {
       logger.warn({ module: "ai-player-spawn" }, `spawn for team ${team.id} failed`, e);
@@ -350,6 +352,7 @@ async function spawnForTeam(
   env: { GEMINI_API_KEY?: string; CACHE_KV?: KVNamespace; SEED_DATA?: R2Bucket },
   teamId: string,
   forceVoice: boolean,
+  forcedScenario: AiScenario | null = null,
 ): Promise<boolean> {
   // 0. Poslední odehraný zápas + série výsledků — kontext pro scénáře (výhra/prohra,
   //    góly, karty). Dřív scénáře o výhře padaly i po prohře, protože o zápase nevěděly.
@@ -423,11 +426,20 @@ async function spawnForTeam(
     snap.zivotniSituace = kind ? { kind, label: nazevSituace(kind) } : undefined;
     return snap;
   });
-  const player = pickPlayerWeighted(snapshots, Math.random);
+  // Ruční téma jde i týmům s rozjetou konverzací: hráč, se kterým se zrovna píše, se vynechá,
+  // jinak by nové vlákno přepsalo stav toho běžícího.
+  const busy = new Set<string | null>();
+  if (forcedScenario) {
+    const rows = await db.prepare("SELECT participant_id FROM conversations WHERE team_id = ? AND ai_thread_active = 1")
+      .bind(teamId).all<{ participant_id: string | null }>()
+      .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "hráči s rozjetou konverzací", e); return { results: [] }; });
+    for (const r of rows.results) busy.add(r.participant_id);
+  }
+  const player = pickPlayerWeighted(snapshots.filter((snap) => !busy.has(snap.id)), Math.random);
   if (!player) return false;
 
   // 3. Vyber scénář vážený osobností/stavem hráče
-  const scenario = pickScenarioForPlayer(player, Math.random);
+  const scenario = forcedScenario ?? pickScenarioForPlayer(player, Math.random);
   if (!scenario) {
     logger.info({ module: "ai-player-spawn" }, `no scenario fits player ${player.firstName} ${player.lastName}`);
     return false;
