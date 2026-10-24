@@ -423,7 +423,8 @@ describe("hlášení o hráči, který hraje ve hře", () => {
     await db.prepare("DELETE FROM players WHERE id = 'a-star'").run();
     await maintainScoutReports(db, undefined);
     expect((await db.prepare("SELECT status FROM scout_reports WHERE id = ?").bind(report.id).first<{ status: string }>())!.status).toBe("gone");
-  });
+    // 300 běhů údržby přes D1: na CI runneru to přetáhne výchozích 5 s, lokálně ne.
+  }, 60_000);
 });
 
 describe("vrácení cestovného za úkoly bez práce", () => {
