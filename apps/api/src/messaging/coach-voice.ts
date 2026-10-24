@@ -23,6 +23,21 @@ export const COACH_AUDIO_TYPES: Record<string, string> = {
 /** Minuta opusu nebo aac je kolem půl megabajtu, víc trenér nenamluví. */
 export const COACH_AUDIO_MAX_BYTES = 2_000_000;
 export const COACH_AUDIO_MAX_SEC = 60;
+/** Strop přepisů na tým a den. Každý přepis stojí, i když zpráva nakonec neodejde. */
+export const COACH_VOICE_NOTES_PER_DAY = 40;
+
+/**
+ * Započte jeden přepis do denního stropu týmu. Vrací false, když je strop vyčerpaný.
+ * KV není atomické, pár přepisů navíc při souběhu nevadí.
+ */
+export async function takeVoiceNoteQuota(kv: KVNamespace, teamId: string, now = new Date()): Promise<boolean> {
+  const key = `coach_voice_notes:${teamId}:${now.toISOString().slice(0, 10)}`;
+  const used = Number(await kv.get(key).catch((e: unknown) => { logger.warn({ module: M }, "strop hlasových odpovědí", e); return null; }) ?? 0);
+  if (used >= COACH_VOICE_NOTES_PER_DAY) return false;
+  await kv.put(key, String(used + 1), { expirationTtl: 2 * 86400 })
+    .catch((e: unknown) => logger.warn({ module: M }, "zápis stropu hlasových odpovědí", e));
+  return true;
+}
 
 export function coachAudioKey(teamId: string, id: string, ext: string): string {
   return `voice/coach/${teamId}/${id}.${ext}`;

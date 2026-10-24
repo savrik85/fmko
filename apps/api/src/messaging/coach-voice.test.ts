@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { coachAudioKey, isCoachAudioKey, sanitizePeaks, trustedTranscript } from "./coach-voice";
+import { COACH_VOICE_NOTES_PER_DAY, coachAudioKey, isCoachAudioKey, sanitizePeaks, takeVoiceNoteQuota, trustedTranscript } from "./coach-voice";
 
 describe("hlasová odpověď trenéra", () => {
   it("k zprávě jde připojit jen nahrávka vlastního týmu", () => {
@@ -37,5 +37,18 @@ describe("hlasová odpověď trenéra", () => {
     expect(trustedTranscript({ text: "Ahoj", transcription_info: { duration_after_vad: 0.2 } })).toBeNull();
     expect(trustedTranscript({ text: "  " })).toBeNull();
     expect(trustedTranscript(null)).toBeNull();
+  });
+
+  it("denní strop přepisů na tým", async () => {
+    const store = new Map<string, string>();
+    const kv = {
+      get: async (k: string) => store.get(k) ?? null,
+      put: async (k: string, v: string) => { store.set(k, v); },
+    } as unknown as KVNamespace;
+    const day = new Date("2026-10-24T12:00:00Z");
+    for (let i = 0; i < COACH_VOICE_NOTES_PER_DAY; i++) expect(await takeVoiceNoteQuota(kv, "t1", day)).toBe(true);
+    expect(await takeVoiceNoteQuota(kv, "t1", day)).toBe(false);
+    expect(await takeVoiceNoteQuota(kv, "t2", day)).toBe(true);
+    expect(await takeVoiceNoteQuota(kv, "t1", new Date("2026-10-25T12:00:00Z"))).toBe(true);
   });
 });
