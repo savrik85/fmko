@@ -15,7 +15,7 @@ import {
 import {
   assignmentPositions, cancelScoutAssignment, createLeagueScoutAssignment, createMatchScoutAssignment,
   createPlayerScoutAssignment, createScoutAssignment, loadActiveAssignment, loadActiveAssignments,
-  loadTeamScout, loadTeamScouts, maintainScoutReports, requestRevisit, runScoutWork, scoutEffectiveness,
+  loadTeamScout, loadTeamScouts, maintainScoutReports, refundUnworkedScoutTravel, requestRevisit, runScoutWork, scoutEffectiveness,
 } from "../scouting/scout-work";
 import { estimateWillingness, startAiNegotiation } from "../transfers/ai-negotiation";
 import type { VirtualPlayerData } from "../transfers/virtual-purchase";
@@ -373,4 +373,15 @@ scoutingRouter.post("/admin/scout/run", async (c) => {
   const pushEnv = { VAPID_PUBLIC_KEY: c.env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: c.env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: c.env.VAPID_SUBJECT };
   const maintenance = c.req.query("maintain") === "1" ? await maintainScoutReports(c.env.DB, pushEnv) : null;
   return c.json({ ok: true, work, maintenance });
+});
+
+// Vrácení cestovného za úkoly, které nic neodpracovaly (prověrka 2026-10-24). `before` = čas
+// nasazení opravy (ISO). Bez `apply=1` jen vypíše, co by vrátilo; druhý běh nic nevrátí.
+scoutingRouter.post("/admin/scout/refund-unworked", async (c) => {
+  const before = c.req.query("before");
+  if (!before || Number.isNaN(Date.parse(before))) return c.json({ error: "Chybí before: čas nasazení opravy (ISO)." }, 400);
+  const apply = c.req.query("apply") === "1";
+  const res = await refundUnworkedScoutTravel(c.env.DB, { before: new Date(before).toISOString(), apply });
+  logger.info({ module: "scouting" }, `vrácení cestovného za úkoly bez práce: ${res.refunds.length} stržení, ${res.total} Kč${apply ? "" : " (jen výpis)"}`);
+  return c.json({ ok: true, apply, ...res });
 });

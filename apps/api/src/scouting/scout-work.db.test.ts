@@ -19,7 +19,7 @@ import { recordTransaction } from "../season/finance-processor";
 import { executeStaffTick } from "../staff/staff-tick";
 import {
   createLeagueScoutAssignment, createMatchScoutAssignment, createPlayerScoutAssignment, createScoutAssignment, maintainScoutReports,
-  runScoutWork,
+  refundUnworkedScoutTravel, runScoutWork,
 } from "./scout-work";
 
 const app = new Hono<{ Bindings: Bindings }>();
@@ -423,5 +423,55 @@ describe("hlášení o hráči, který hraje ve hře", () => {
     await db.prepare("DELETE FROM players WHERE id = 'a-star'").run();
     await maintainScoutReports(db, undefined);
     expect((await db.prepare("SELECT status FROM scout_reports WHERE id = ?").bind(report.id).first<{ status: string }>())!.status).toBe("gone");
+  });
+});
+
+describe("vrácení cestovného za úkoly bez práce", () => {
+  beforeEach(seed);
+
+  /** Úkol a jeho stržení tak, jak je na produkci zapsal starý kód (bez práce). */
+  async function oldTask(id: string, staffId: string, type: string, status: string, charges: Array<{ id: string; at: string; amount?: number }>) {
+    await db.prepare(
+      `INSERT INTO scout_assignments (id, team_id, staff_id, assignment_type, age_min, age_max, radius_km, weekly_cost, weeks_total, status, started_game_date)
+       VALUES (?, ?, ?, ?, 16, 21, 0, 500, 4, ?, '2026-10-05T16:00:00.000Z')`,
+    ).bind(id, BUYER, staffId, type, status).run();
+    for (const c of charges) {
+      await db.prepare(
+        "INSERT INTO transactions (id, team_id, type, amount, balance_after, description, reference_id, game_date, created_at) VALUES (?, ?, 'scout_travel', ?, 0, 'Cestovné skauta', ?, '2026-10-12', ?)",
+      ).bind(c.id, BUYER, c.amount ?? -500, id, c.at).run();
+    }
+  }
+
+  it("vrátí každé stržení za úkol bez práce jednou, práci po opravě a doručitelné mise ne", async () => {
+    await oldTask("u21-old", "sc-u21", "u21_league", "active", [{ id: "tx-1", at: "2026-10-12 05:00:03" }, { id: "tx-2", at: "2026-10-19 05:00:04" }]);
+    await oldTask("league-old", "sc-league", "league", "active", [
+      { id: "tx-3", at: "2026-10-19 05:00:05" },
+      // Týden odpracovaný po nasazení opravy se platí normálně.
+      { id: "tx-after-fix", at: "2026-10-26 05:00:06" },
+    ]);
+    await oldTask("player-cancelled", "sc-player", "player", "cancelled", [{ id: "tx-4", at: "2026-10-09 14:07:49" }]);
+    // Aktivní mise zaplacená při zadání: hlášení po opravě dostane, nevrací se.
+    await oldTask("player-active", "sc-match", "player", "active", [{ id: "tx-5", at: "2026-10-22 09:05:17" }]);
+    // Oblast fungovala, nevrací se.
+    await oldTask("area-ok", "sc-area", "area", "active", [{ id: "tx-6", at: "2026-10-19 05:00:01", amount: -3000 }]);
+    const before = "2026-10-25T12:00:00.000Z";
+
+    const dry = await refundUnworkedScoutTravel(db, { before, apply: false });
+    expect(dry.refunds.map((r) => r.transactionId).sort()).toEqual(["tx-1", "tx-2", "tx-3", "tx-4"]);
+    expect(dry.total).toBe(2000);
+    expect(await budget()).toBe(START_BUDGET);
+
+    const done = await refundUnworkedScoutTravel(db, { before, apply: true });
+    expect(done.total).toBe(2000);
+    expect(await budget()).toBe(START_BUDGET + 2000);
+    const refundRows = (await db.prepare(
+      "SELECT reference_id, amount, description FROM transactions WHERE type = 'scout_travel' AND amount > 0 ORDER BY reference_id",
+    ).all<{ reference_id: string; amount: number; description: string }>()).results;
+    expect(refundRows.map((r) => [r.reference_id, r.amount])).toEqual([["tx-1", 500], ["tx-2", 500], ["tx-3", 500], ["tx-4", 500]]);
+    expect(refundRows[0].description).toBe("Vráceno cestovné skauta: úkol bez práce (U21 liga)");
+
+    // Druhý běh nic nevrátí.
+    expect((await refundUnworkedScoutTravel(db, { before, apply: true })).total).toBe(0);
+    expect(await budget()).toBe(START_BUDGET + 2000);
   });
 });
