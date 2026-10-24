@@ -225,11 +225,11 @@ export async function processTeamDay(
       // Efekty už jsou zaúčtované z answer endpointu, tady dopisujeme jen text.
       try {
         const pm = await env.DB.prepare(
-          `SELECT id, answers, answer_tones, questions, context, league_id, game_week, referee_id
+          `SELECT id, answers, answer_tones, questions, context, league_id, game_week, referee_id, match_calendar_id
            FROM coach_interviews
            WHERE team_id = ? AND kind = 'post_match' AND status = 'answered' AND article_news_id IS NULL
            ORDER BY created_at DESC LIMIT 1`
-        ).bind(teamId).first<{ id: string; answers: string; answer_tones: string | null; questions: string; context: string | null; league_id: string; game_week: number; referee_id: string | null }>()
+        ).bind(teamId).first<{ id: string; answers: string; answer_tones: string | null; questions: string; context: string | null; league_id: string; game_week: number; referee_id: string | null; match_calendar_id: string | null }>()
           .catch((e) => { logger.warn({ module: "daily-tick" }, "post-match článek retry lookup", e); return null; });
 
         const apiKeyPm = (env as { GEMINI_API_KEY?: string }).GEMINI_API_KEY;
@@ -240,8 +240,8 @@ export async function processTeamDay(
           const { parseStoredTones } = await import("../news/answer-tone");
           const tonesPm = parseStoredTones(pm.answer_tones, answers.length);
           const { generatePostMatchArticle } = await import("../news/post-match-interview");
-          const { redaktorProRubriku, pokynyProRedaktora, sentimentKeKlubu } = await import("../news/journalists");
-          const red = await redaktorProRubriku(env.DB, pm.league_id, "interview", teamId)
+          const { journalistForInterview, pokynyProRedaktora, sentimentKeKlubu } = await import("../news/journalists");
+          const red = await journalistForInterview(env.DB, pm.league_id, teamId, pm.match_calendar_id, "post_match")
             .catch((e) => { logger.warn({ module: "daily-tick" }, "redaktor pro retry", e); return null; });
           const sent = red ? await sentimentKeKlubu(env.DB, red.id, teamId) : 0;
           const art = await generatePostMatchArticle(apiKeyPm, ctx, questions, answers,

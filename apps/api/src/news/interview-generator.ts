@@ -9,7 +9,9 @@ import { GEMINI_TEXT_MODEL } from "./gemini-helper";
 import { logger } from "../lib/logger";
 import { calculateStandings } from "../stats/standings";
 import { VILLAGE_FLAVOR } from "./ai-reporter";
+import { RELATIONSHIP_RATING_RULE } from "./journalists";
 import { toneLine, tonePromptRule, type AnswerTone } from "./answer-tone";
+import type { Scandal } from "./press-scandals";
 
 interface MatchContext {
   teamName: string;
@@ -32,13 +34,11 @@ interface MatchContext {
   /** Vztah trenérů (manager_relations) — null/undefined = nic zajímavého */
   relation?: import("../community/manager-relations").RelationPromptContext | null;
   /**
-   * Co se děje mezi fanoušky, když to stojí za otázku.
-   *
-   * Redaktor se ptá na věci, které lidi v okrese řeší, a nálada na tribuně mezi
-   * ně patří stejně jako forma. Je to hotová věta s fakty, protože prompt má
-   * zákaz halucinací: model smí použít jen to, co dostane.
+   * Kauzy, na které se redaktor zeptá (0–2): hospoda, průšvihy, pokuty, dluhy,
+   * tribuna… Hotové věty s fakty, protože prompt má zákaz halucinací: model
+   * smí použít jen to, co dostane. Viz `press-scandals.ts`.
    */
-  fanoveFakt?: string | null;
+  scandals?: Scandal[];
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -223,8 +223,10 @@ export async function generateInterviewQuestions(
     .map((p) => `${p.name} (${p.position}${p.goals ? `, ${p.goals} gólů` : ""})`)
     .join(", ");
 
+  const scandals = ctx.scandals ?? [];
+
   // Whitelist povolených jmen hráčů — Gemini nesmí použít žádné jiné
-  const allowedPlayerNames = ctx.topPlayers.map((p) => p.name);
+  const allowedPlayerNames = [...new Set([...ctx.topPlayers.map((p) => p.name), ...scandals.flatMap((k) => k.names)])];
   const allowedPlayerNamesStr = allowedPlayerNames.length
     ? allowedPlayerNames.map((n) => `"${n}"`).join(", ")
     : "(žádná jména hráčů nejsou povolena)";
@@ -256,6 +258,9 @@ export async function generateInterviewQuestions(
     : `Otázka může zmínit jen název soupeře "${ctx.opponentName}" a fakta z kontextu (pozice v tabulce, forma, vztah trenérů). NEPOUŽÍVEJ žádné jméno trenéra soupeře — žádné nemáme. NEVYMÝŠLEJ si žádná jména.`)
     + relationHint;
 
+  const scandalQuestion = (k: Scandal) =>
+    `KAUZA. Vyjdi VÝHRADNĚ z tohohle faktu a zeptej se na něj trenéra napřímo, klidně ostře nebo bulvárně ("Je pravda, že…", "Jak vysvětlíte, že…", "Nestydíte se…"): "${k.fact}". Z faktu ber jména, čísla i kluby přesně tak, jak jsou napsané, a nic k nim nepřidávej: žádná další jména, částky, data ani domněnky vydávané za fakt. Domýšlet smíš jen otázkou.`;
+
   const prompt = `${pokynyRedaktora ?? "Jsi bulvárnější redaktor Okresního zpravodaje v Čechách."} Napiš přesně 3 otázky pro trenéra
 fotbalového týmu ${ctx.teamName} před zápasem ${ctx.isHome ? "doma" : "venku"} s ${ctx.opponentName} (kolo ${ctx.gameWeek}).
 
@@ -269,6 +274,8 @@ fotbalového týmu ${ctx.teamName} před zápasem ${ctx.isHome ? "doma" : "venku
 - NIKDY si nevymýšlej jména trenérů. ${ctx.opponentManagerName ? `Jediný povolený trenér soupeře: "${ctx.opponentManagerName}".` : "Jméno trenéra soupeře NEMÁŠ, nesmíš žádné použít."}
 - NIKDY si nevymýšlej zranění, citáty, ani události, které nejsou v kontextu níže.
 - Pokud pro nějakou otázku nemáš dost konkrétních dat z kontextu, napiš obecnější otázku BEZ vymyšlených faktů — to je VŽDY lepší než si něco vycucat z prstu.
+
+🔥 KONFRONTACE: Nejsi tiskový mluvčí klubu. Aspoň jedna otázka MUSÍ být nepříjemná: připomeň prohru, sérii bez výhry, místo v tabulce nebo kauzu. Žádné nahrávky typu „to se vám povedlo, že?". Ostrost i míra bulváru se řídí tvou povahou a vztahem ke klubu, ale úplně hodný nejsi nikdy. Ostrý smíš být jen ve formulaci, fakta zůstávají jen ta ze zadání.
 
 INSTRUKCE:
 - KAŽDÁ otázka musí být konkrétní — používej JEN fakta z kontextu níže (jména hráčů ze seznamu, skutečný poslední výsledek, formu)
@@ -284,9 +291,11 @@ INSTRUKCE:
 ${vztahPokyn ?? "Vztah neutrální, ptej se věcně."}
 
 OTÁZKA 1 (1–2 věty, ZAKONČI OTAZNÍKEM — ptáš se, nekomentuješ) — o vlastním týmu / nadcházejícím zápase: použij JEN fakt z "Forma" nebo "Poslední výsledek" nebo jméno hráče ze seznamu povolených
-OTÁZKA 2 (1–2 věty, ZAKONČI OTAZNÍKEM) — taktika, sestava, zranění nebo klíčový hráč: použij JEN jméno ze seznamu povolených hráčů (nebo ze "Zranění", pokud jsou). Pokud žádné jméno nemáš, ptej se na taktiku obecně bez jmen.
-OTÁZKA 3 (1–2 věty, ZAKONČI OTAZNÍKEM) — ${ctx.fanoveFakt
-    ? `MÍŘENÁ NA FANOUŠKY. Vyjdi VÝHRADNĚ z tohohle faktu a zeptej se na něj trenéra: "${ctx.fanoveFakt}". Nic si k tomu nepřidávej, žádná jiná čísla ani jména.`
+OTÁZKA 2 (1–2 věty, ZAKONČI OTAZNÍKEM) — ${scandals[0]
+    ? scandalQuestion(scandals[0])
+    : `taktika, sestava, zranění nebo klíčový hráč: použij JEN jméno ze seznamu povolených hráčů (nebo ze "Zranění", pokud jsou). Pokud žádné jméno nemáš, ptej se na taktiku obecně bez jmen.`}
+OTÁZKA 3 (1–2 věty, ZAKONČI OTAZNÍKEM) — ${scandals[1]
+    ? scandalQuestion(scandals[1])
     : `MÍŘENÁ NA SOUPEŘE. ${soupereOtazka}`}
 
 KONTEXT (tým trenéra):
@@ -350,14 +359,15 @@ PRAVIDLA:
 - PIKANTNÍ / BULVÁRNÍ obsah (prostitutky, pití, narážky na soupeře, drby, dámské delegace, zákulisí, voodoo, chobotnice ve svazu, ...) = ZACHOVAT a dát mu prostor. Klidně doslovná citace, nebo parafráze se zachováním obsahu i pointy. Čtenář chce srandu, ne sterilní text.
 - SPROSTÁ SLOVA (kurva, píča, zkurvenej atp.) = jen tyhle konkrétní výrazy měkčíme do bulvárního novinářského jazyka, ale pointu/smysl zachovat ("trenér nebral servítky", "ostře zkritizoval" apod.). Pikantní ≠ vulgární — zmínku o prostitutkách NECENZURUJ.
 - Pokud jsou odpovědi krátké nebo strohé: napiš, že trenér byl stručný/neochotný. Např. "Trenér byl před utkáním mlčenlivý." nebo "Na otázku ohledně X trenér odpověděl jen stroze."
+- Pokud se trenér nepříjemné otázce (kauza, prohra, slib) vyhnul nebo ji odbyl, NEZAMLČUJ to, čtenáři to musí vidět: "Na otázku o X trenér uhnul." Fakta z otázky smíš v článku zopakovat, nic dalšího k nim nepřidávej.
 - Pokud jsou odpovědi pozitivní/zajímavé: cituj je nebo parafrázuj věrně
 - NARÁŽKY MEZI TRENÉRY: pokud trenér něco hodí na kolegu z jiného týmu (např. "Kopyto brečí do novin"), zachovej to — rivalita mezi manažery je koření okresního přeboru
-- Tón: bulvárnější regionální zpravodaj s humorem, ne suchý sportovní komentátor. Lehká ironie, občas pobavený podtón ("zda si v neděli budou hrát fotbalisté, nebo pacienti, ukáže až zápas"), ale bez výsměchu trenérovi
+- Tón se řídí tvou povahou z úvodu: bulvár klidně ostře, s posměškem a palcovým titulkem, vyčůraný s jedovatým podtextem, seriózní věcně a kriticky. Regionální zpravodaj s humorem, ne suchý sportovní komentátor ("zda si v neděli budou hrát fotbalisté, nebo pacienti, ukáže až zápas")
 - Čeština, bez markdown, bez odrážek
 - Bez uvozovek kolem celého textu
 - STRIKTNĚ: první řádek = titulek (max 80 znaků, bez "Titulek:" prefixu). Titulek má být chytlavý, klidně s klíčovou hláškou trenéra nebo narážkou na nejpikantnější část rozhovoru
 - Od druhého řádku = body článku
-- ÚPLNĚ POSLEDNÍ řádek (a jen ten) = "VZTAH: <číslo -25 až 25> | <důvod, max 8 slov>". Není součástí článku — hodnotíš v něm SÁM ZA SEBE, jak na tebe trenér svými odpověďmi zapůsobil: vstřícnost, ochota, respekt k tobě = plus; arogance, odbytí, urážky novinářů = mínus; nijak zvlášť = číslo blízko nule
+- ÚPLNĚ POSLEDNÍ řádek (a jen ten) = "VZTAH: <číslo -25 až 25> | <důvod, max 8 slov>". Není součástí článku. ${RELATIONSHIP_RATING_RULE}
 
 ${tonPravidlo ? `${tonPravidlo}\n\n` : ""}PŘEPIS ROZHOVORU:
 ${qaPairs}`;
@@ -548,13 +558,24 @@ export async function tryCreateInterviewRequest(
     opponentFormStr: opponentForm,
     opponentLastResult: opponentLast,
     relation,
-    fanoveFakt: await fanoveFaktProRozhovor(db, teamRow.team_id as string),
   };
 
-  // 7. Generuj otázky přes Gemini — ptá se konkrétní redaktor
-  const { redaktorProRubriku, pokynyProRedaktora, sentimentKeKlubu, vztahKeKlubuText } = await import("./journalists");
-  const redaktor = await redaktorProRubriku(db, ctx.leagueId, "interview", teamRow.team_id as string);
+  // 7. Kdo se ptá a na jaké kauzy. Bulvár otevře dvě, ostatní jednu; zbytek
+  //    otázek zůstává na formě a soupeři.
+  const { journalistForInterview, pokynyProRedaktora, sentimentKeKlubu, vztahKeKlubuText } = await import("./journalists");
+  const { loadScandals, pickScandals, recentScandalRefs } = await import("./press-scandals");
+  const redaktor = await journalistForInterview(db, ctx.leagueId, teamRow.team_id, ctx.calendarId, "pre_match");
   const vztah = redaktor ? await sentimentKeKlubu(db, redaktor.id, teamRow.team_id as string) : 0;
+  const [allScandals, usedScandalRefs] = await Promise.all([
+    loadScandals(db, teamRow.team_id, { opponentTeamId, calendarId: ctx.calendarId }),
+    recentScandalRefs(db, teamRow.team_id),
+  ]);
+  matchCtx.scandals = pickScandals(allScandals, {
+    style: redaktor?.style ?? null,
+    count: redaktor?.style === "bulvar" ? 2 : 1,
+    seed: `${teamRow.team_id}|${ctx.calendarId}|pre_match`,
+    usedRefs: usedScandalRefs,
+  });
   const questions = await generateInterviewQuestions(
     geminiApiKey, matchCtx,
     redaktor ? pokynyProRedaktora(redaktor, vztah) : undefined,
@@ -570,8 +591,8 @@ export async function tryCreateInterviewRequest(
   await db
     .prepare(
       `INSERT INTO coach_interviews
-         (id, league_id, team_id, manager_id, match_calendar_id, game_week, questions, status, expires_at, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`,
+         (id, league_id, team_id, manager_id, match_calendar_id, game_week, questions, topics, status, expires_at, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`,
     )
     .bind(
       id,
@@ -581,6 +602,12 @@ export async function tryCreateInterviewRequest(
       ctx.calendarId,
       ctx.gameWeek,
       JSON.stringify(questions),
+      // Témata v pořadí otázek; `ref` kauzy hlídá, aby se tatáž neotvírala znovu.
+      JSON.stringify([
+        { key: "own_team" },
+        matchCtx.scandals[0] ? { key: "scandal", ref: matchCtx.scandals[0].ref } : { key: "tactics" },
+        matchCtx.scandals[1] ? { key: "scandal", ref: matchCtx.scandals[1].ref } : { key: "opponent" },
+      ]),
       expiresAt,
     )
     .run()
@@ -638,64 +665,4 @@ export async function tryCreateInterviewRequest(
     { module: "interview-generator", teamId: teamRow.team_id },
     `interview request created for ${teamRow.manager_name} vs ${opponentName} (week ${ctx.gameWeek})`,
   );
-}
-
-
-/**
- * Co na tribuně stojí za otázku.
- *
- * Vrací hotovou větu s fakty, nebo `null`, když se nic neděje. Prompt má tvrdý
- * zákaz halucinací, takže model nesmí dostat „zeptej se na fanoušky" a domýšlet
- * si zbytek. Pořadí je podle toho, co lidi pálí nejvíc.
- */
-async function fanoveFaktProRozhovor(db: D1Database, teamId: string): Promise<string | null> {
-  try {
-    const kampan = await db.prepare(
-      `SELECT kind, target_name, podpisy FROM fan_campaigns
-       WHERE team_id = ? AND status IN ('sbira','splnena')
-       ORDER BY podpisy DESC LIMIT 1`,
-    ).bind(teamId).first<{ kind: string; target_name: string; podpisy: number }>()
-      .catch((e) => { logger.warn({ module: "interview-generator" }, "kampaň pro rozhovor", e); return null; });
-    if (kampan) {
-      return kampan.kind === "trener_ven"
-        ? `Na tribuně se objevil transparent s vaším jménem a slovem „konči", podepsalo se pod to ${kampan.podpisy} lidí.`
-        : `Fanoušci sbírají podpisy za to, aby ${kampan.target_name} přestal nastupovat, mají jich ${kampan.podpisy}.`;
-    }
-
-    // Pokuty za výtržnosti jsou konkrétní číslo, na které se dá zeptat.
-    const bordel = await db.prepare(
-      `SELECT COUNT(*) AS n, COALESCE(SUM(fine), 0) AS pokuty FROM fan_incidents
-       WHERE team_id = ? AND created_at > datetime('now', '-30 days')`,
-    ).bind(teamId).first<{ n: number; pokuty: number }>()
-      .catch((e) => { logger.warn({ module: "interview-generator" }, "výtržnosti pro rozhovor", e); return null; });
-    if (bordel && bordel.n >= 2) {
-      return `Za poslední měsíc má klub ${bordel.n} zápisů o výtržnostech fanoušků a zaplatil na pokutách ${bordel.pokuty} Kč.`;
-    }
-
-    const rival = await db.prepare(
-      `SELECT r.heat, CASE WHEN r.team_a = ?1 THEN tb.name ELSE ta.name END AS souper
-       FROM fan_rivalries r
-       LEFT JOIN teams ta ON ta.id = r.team_a
-       LEFT JOIN teams tb ON tb.id = r.team_b
-       WHERE (r.team_a = ?1 OR r.team_b = ?1) AND r.heat >= 60
-       ORDER BY r.heat DESC LIMIT 1`,
-    ).bind(teamId).first<{ heat: number; souper: string | null }>()
-      .catch((e) => { logger.warn({ module: "interview-generator" }, "rivalita pro rozhovor", e); return null; });
-    if (rival?.souper) {
-      return `Mezi vašimi fanoušky a fanoušky klubu ${rival.souper} je to dlouhodobě vyhrocené.`;
-    }
-
-    // Nálada sama o sobě stojí za otázku, jen když je opravdu špatná nebo dobrá.
-    const nalada = await db.prepare(
-      "SELECT ROUND(AVG(mood)) AS m FROM fan_groups WHERE team_id = ?",
-    ).bind(teamId).first<{ m: number }>()
-      .catch((e) => { logger.warn({ module: "interview-generator" }, "nálada pro rozhovor", e); return null; });
-    if (nalada && nalada.m <= 28) return "Nálada na tribuně je dlouhodobě špatná a chodí míň lidí.";
-    if (nalada && nalada.m >= 78) return "Na tribuně je znát nadšení, lidi chodí a fandí.";
-
-    return null;
-  } catch (e) {
-    logger.warn({ module: "interview-generator" }, `fanoušci pro rozhovor u ${teamId}`, e);
-    return null;
-  }
 }

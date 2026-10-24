@@ -6,7 +6,7 @@
  * přesvědčil, že trenér sudího chválil, když text říká opak.
  */
 
-export type TopicKey = "vysledek" | "rozhodci" | "vyrok_soupere";
+export type TopicKey = "vysledek" | "rozhodci" | "vyrok_soupere" | "scandal";
 
 export type Postoj = "kritika" | "neutral" | "obhajoba";
 
@@ -44,6 +44,11 @@ export interface PostMatchContext {
   opponentStatement: { quote: string; tone: string } | null;
   scorers: string[];
   gameWeek: number | null;
+  /**
+   * Kauza, na kterou se redaktor zeptá (hospoda, průšvih, pokuta…). Hotová věta
+   * z dat, viz `press-scandals.ts`. Ukládá se s kontextem, aby ji znal i článek.
+   */
+  scandal?: { ref: string; fact: string; names: string[] } | null;
 }
 
 // ── Lexikální klasifikace postoje k rozhodčímu ───────────────────────────────

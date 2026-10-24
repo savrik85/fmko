@@ -19,24 +19,33 @@ function pick(rng: { int: (a: number, b: number) => number }, arr: readonly stri
 
 function vysledekQuestions(c: PostMatchContext): string[] {
   const skore = `${c.ownScore}:${c.oppScore}`;
+  // Vedle neutrálních otázek i rýpavé, ať redaktor není jen tiskový mluvčí.
+  // Rýpou jen do toho, co je ve výsledku vidět, nic si nedomýšlí.
   if (c.outcome === "win") {
     return [
       `Bereš tři body za ${skore} s ${c.opponentName}. Co rozhodlo?`,
       `Vyhráli jste ${skore}. Byl to výkon, na kterém se dá stavět, nebo spíš zápas, co se odehrál sám?`,
       `${skore} nad ${c.opponentName}, čekal jsi to takhle, nebo tě mužstvo překvapilo?`,
+      `${skore}. Vyhráli jste vy, nebo spíš prohrál ${c.opponentName}?`,
     ];
   }
   if (c.outcome === "loss") {
+    const thrashing = c.oppScore - c.ownScore >= 3;
     return [
       `Prohra ${skore} s ${c.opponentName}. Kde se to zlomilo?`,
       `${skore} doma i venku bolí. Co budeš v kabině říkat?`,
       `Odjíždíte s ${skore}. Byl soupeř lepší, nebo jste si to udělali sami?`,
+      `Prohra ${skore}. Kdo za ni nese vinu víc, hráči, nebo trenér?`,
+      thrashing
+        ? `${skore} je výprask. Dlužíte fanouškům omluvu?`
+        : `${skore}. Poslouchá tě ještě kabina?`,
     ];
   }
   return [
     `Remíza ${skore}. Bod dobrý, nebo ztracené dva?`,
     `${skore} s ${c.opponentName}, spokojenost, nebo zklamání?`,
     `Dělíte se o body. Sáhli jste si na víc?`,
+    `Zase jen ${skore}. Nestačí ti to málo?`,
   ];
 }
 
@@ -92,17 +101,31 @@ function vyrokQuestions(c: PostMatchContext): string[] {
   ];
 }
 
+/** Kauza z dat a k ní přímá otázka. Fakt je hotová věta, otázka nic nepřidává. */
+function scandalQuestions(fact: string): string[] {
+  return [
+    `${fact} Co na to říkáš?`,
+    `${fact} Jak to vysvětlíš?`,
+    `${fact} Je to v pořádku?`,
+    `Okres řeší jedno: ${fact} Tvůj komentář?`,
+  ];
+}
+
 /**
  * Poskládá otázky bez pomoci LLM. Vrací dvojici otázka + téma, aby zůstalo
  * jasné, na co která odpovídá — na tom stojí klasifikace odpovědí i validace.
+ *
+ * Kauza nahrazuje obecnou otázku na soupeře. Když ale soupeřův trenér před
+ * zápasem něco prohlásil, zůstanou obě, protože citát je sám o sobě konfrontace.
  */
-export function buildFallbackQuestions(c: PostMatchContext): Array<{ question: string; key: TopicKey }> {
+export function buildFallbackQuestions(c: PostMatchContext): Array<{ question: string; key: TopicKey; ref?: string }> {
   const rng = createRng(seedFromString(`postmatch|${c.matchId}|${c.teamId}`));
-  const out: Array<{ question: string; key: TopicKey }> = [
+  const out: Array<{ question: string; key: TopicKey; ref?: string }> = [
     { question: pick(rng, vysledekQuestions(c)), key: "vysledek" },
   ];
   // Otázka na rozhodčího odpadá u zápasů odehraných před jeho zavedením.
   if (c.refereeName) out.push({ question: pick(rng, rozhodciQuestions(c)), key: "rozhodci" });
-  out.push({ question: pick(rng, vyrokQuestions(c)), key: "vyrok_soupere" });
+  if (c.scandal) out.push({ question: pick(rng, scandalQuestions(c.scandal.fact)), key: "scandal", ref: c.scandal.ref });
+  if (c.opponentStatement || !c.scandal) out.push({ question: pick(rng, vyrokQuestions(c)), key: "vyrok_soupere" });
   return out;
 }

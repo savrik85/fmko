@@ -8387,28 +8387,28 @@ gameRouter.get("/teams/:teamId/coach-interviews", async (c) => {
   });
 
   // Kdo se ptá — redaktor se určuje stejným seedem jako při psaní otázek,
-  // takže vyjde tentýž člověk i bez ukládání do rozhovoru.
-  const { redaktorProRubriku, sentimentKeKlubu, popisVztahu, jmenoRedaktora } = await import("../news/journalists");
-  const prvni = rows.results?.[0];
-  let tazatel: Record<string, unknown> | null = null;
-  if (prvni) {
-    const redaktor = await redaktorProRubriku(c.env.DB, prvni.league_id as string, "interview", teamId)
+  // takže vyjde tentýž člověk i bez ukládání do rozhovoru. Rozhovory se mezi
+  // redaktory střídají, proto se hledá pro každý zvlášť.
+  const { journalistForInterview, sentimentKeKlubu, popisVztahu, jmenoRedaktora } = await import("../news/journalists");
+  const interviewers = await Promise.all((rows.results ?? []).map(async (r): Promise<Record<string, unknown> | null> => {
+    const redaktor = await journalistForInterview(c.env.DB, r.league_id as string, teamId,
+      r.match_calendar_id as string | null, (r.kind as string | null) ?? "pre_match")
       .catch((e) => { logger.warn({ module: "game.ts" }, "redaktor pro rozhovor", e); return null; });
-    if (redaktor) {
-      const sentiment = await sentimentKeKlubu(c.env.DB, redaktor.id, teamId);
-      tazatel = {
-        id: redaktor.id,
-        name: jmenoRedaktora(redaktor),
-        style: redaktor.style,
-        bio: redaktor.bio,
-        sentiment,
-        vztah: popisVztahu(sentiment),
-        avatar: (() => { try { return JSON.parse(redaktor.avatar); } catch { return null; } })(),
-      };
-    }
-  }
+    if (!redaktor) return null;
+    const sentiment = await sentimentKeKlubu(c.env.DB, redaktor.id, teamId);
+    return {
+      id: redaktor.id,
+      name: jmenoRedaktora(redaktor),
+      style: redaktor.style,
+      bio: redaktor.bio,
+      sentiment,
+      vztah: popisVztahu(sentiment),
+      avatar: (() => { try { return JSON.parse(redaktor.avatar); } catch { return null; } })(),
+    };
+  }));
+  const tazatel = interviewers[0] ?? null;
 
-  const interviews = (rows.results ?? []).map((r) => ({
+  const interviews = (rows.results ?? []).map((r, i) => ({
     id: r.id,
     leagueId: r.league_id,
     teamId: r.team_id,
@@ -8430,7 +8430,7 @@ gameRouter.get("/teams/:teamId/coach-interviews", async (c) => {
     status: r.status,
     expiresAt: r.expires_at,
     createdAt: r.created_at,
-    journalist: tazatel,
+    journalist: interviewers[i] ?? null,
   }));
 
   return c.json({ interviews, journalist: tazatel });
@@ -8500,9 +8500,10 @@ gameRouter.post("/teams/:teamId/coach-interviews/:interviewId/answer", async (c)
     ).bind(teamId).first<{ manager_name: string; manager_avatar: string | null; team_name: string; league_id: string }>()
       .catch((e) => { logger.warn({ module: "game.ts" }, "manažer pro pozápasový článek", e); return null; });
 
-    const { redaktorProRubriku: redakce, pokynyProRedaktora: pokyny, sentimentKeKlubu: sentimentPM } =
+    const { journalistForInterview: redakce, pokynyProRedaktora: pokyny, sentimentKeKlubu: sentimentPM } =
       await import("../news/journalists");
-    const redaktorPM = mgr ? await redakce(c.env.DB, mgr.league_id, "interview", teamId)
+    const redaktorPM = mgr ? await redakce(c.env.DB, mgr.league_id, teamId,
+      interview.match_calendar_id as string | null, "post_match")
       .catch((e) => { logger.warn({ module: "game.ts" }, "redaktor pozápasového rozhovoru", e); return null; }) : null;
     const sentPM = redaktorPM ? await sentimentPM(c.env.DB, redaktorPM.id, teamId) : 0;
 
@@ -8604,8 +8605,9 @@ gameRouter.post("/teams/:teamId/coach-interviews/:interviewId/answer", async (c)
   // Season-wrap rozhovor (match_calendar_id = 'season-{n}-wrap') → sezónní bilanční článek, ne pregame
   const isSeasonWrap = String(interview.match_calendar_id ?? "").includes("-wrap");
   let article: { headline: string; body: string; reakce?: { posun: number; duvod: string } } | null;
-  const { redaktorProRubriku, pokynyProRedaktora, sentimentKeKlubu } = await import("../news/journalists");
-  const redaktor = await redaktorProRubriku(c.env.DB, managerRow.league_id as string, "interview", teamId);
+  const { journalistForInterview, pokynyProRedaktora, sentimentKeKlubu } = await import("../news/journalists");
+  const redaktor = await journalistForInterview(c.env.DB, managerRow.league_id as string, teamId,
+    interview.match_calendar_id as string | null, (interview.kind as string | null) ?? "pre_match");
   const vztahKeKlubu = redaktor ? await sentimentKeKlubu(c.env.DB, redaktor.id, teamId) : 0;
 
   if (isSeasonWrap) {
