@@ -112,6 +112,10 @@ export type TransactionType =
   | "bet_win"
   | "bet_refund"
   | "bet_confiscated"
+  // Přátelák o peníze (multiplayer/friendlies.ts): sázka se skládá při přijetí a je to nákup,
+  // klub v mínusu o peníze hrát nemůže. Výhra a vrácená sázka jsou příjmy.
+  | "friendly_stake"
+  | "friendly_stake_payout"
   // Sliby sponzorům (etapa 3): bonus za splněný slib a pokuta za nesplněný.
   // Pokuta ZÁMĚRNĚ není v PURCHASE_TYPES, strhne se i při záporném rozpočtu jako disciplinary_fine.
   | "sponsor_bonus"
@@ -229,7 +233,7 @@ const PURCHASE_TYPES = new Set<TransactionType>([
   "pitch_repair", "pitch_upgrade", "promotional_campaign", "bus_subsidy",
   "concession_wholesale", "transfer_admin_fee", "loan_fee",
   "manager_social", "player_bonus", "staff_signing", "course_fee", "staff_task", "coach_course", "coach_exam_retake", "fan_relations",
-  "bet_stake", "bet_levy",
+  "bet_stake", "bet_levy", "friendly_stake",
 ]);
 
 /**

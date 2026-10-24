@@ -10,6 +10,7 @@ import { teamsRouter } from "./teams";
 import { matchesRouter } from "./matches";
 import { messagingRouter } from "./messaging";
 import { groupChatsRouter } from "./group-chats";
+import { friendliesRouter } from "./friendlies";
 
 function bindings(db: FalesnaD1, session: Record<string, unknown> | null): Bindings {
   return {
@@ -104,4 +105,23 @@ describe("Telefon a chaty manažerů: číst smí jen majitel týmu", () => {
     const res = await messagingRouter.request("/teams/t1/unread-count", { method: "GET", headers: { Authorization: "Bearer tok" } }, bindings(db, { userId: "owner" }));
     expect(res.status).toBe(200);
   });
+});
+
+describe("Přáteláky: přehled a náklady čte jen majitel týmu", () => {
+  for (const path of ["/teams/t1/challenges", "/teams/t1/friendlies/quote?opponent=t2&venue=neutral&costPayer=each"]) {
+    it(`${path} bez přihlášení vrací 401 a nic nečte`, async () => {
+      const db = new FalesnaD1([]);
+      const res = await friendliesRouter.request(path, { method: "GET" }, bindings(db, null));
+      expect(res.status).toBe(401);
+      expect(db.dotazy.some((d) => /challenges|friendly_offers|budget/.test(d.sql))).toBe(false);
+    });
+
+    it(`${path} s cizím týmem vrací 403`, async () => {
+      const db = new FalesnaD1([
+        { sql: /SELECT id FROM teams WHERE id = \? AND user_id = \?/, first: null },
+      ]);
+      const res = await friendliesRouter.request(path, { method: "GET", headers: { Authorization: "Bearer tok" } }, bindings(db, { userId: "someone-else" }));
+      expect(res.status).toBe(403);
+    });
+  }
 });

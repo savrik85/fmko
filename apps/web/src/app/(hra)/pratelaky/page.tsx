@@ -1,269 +1,285 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
-import { apiFetch } from "@/lib/api";
-import { SectionLabel, Spinner, Card, CardBody } from "@/components/ui";
+import { apiFetch, showError } from "@/lib/api";
+import { SectionLabel, Spinner, Tabs, useTabParam, useConfirm } from "@/components/ui";
+import { FriendlyForm } from "./FriendlyForm";
+import { FriendlyRecord } from "./FriendlyRecord";
+import {
+  FixtureCard, FriendlyCard, PRIMARY_BUTTON, SECONDARY_BUTTON, StakeTag, StatusPill, TAG, TeamLink,
+  dayLabel, formatCZK, sumCosts, venueText,
+  type FriendliesData, type FriendlyView, type OfferView,
+} from "./friendly-ui";
 
-interface Challenge {
-  id: string;
-  challengerName?: string;
-  challengedName?: string;
-  message: string | null;
-  createdAt: string;
-  matchId?: string | null;
-  matchStatus?: string | null;
-  status?: string;
-  homeScore?: number;
-  awayScore?: number;
-}
+const TAB_KEYS = ["matches", "challenge", "offers", "record"] as const;
 
-interface TeamOption {
-  id: string;
-  name: string;
-  village: string;
-}
-
-interface ChallengesData {
-  incoming: Challenge[];
-  outgoing: Challenge[];
-  played: Challenge[];
-  cooldownDaysLeft: number;
-  canChallenge: boolean;
-  teams: TeamOption[];
-  leagueMatchToday?: boolean;
-}
+const OFFER_VENUE_TEXT: Record<OfferView["venue"], string> = {
+  poster: "u nich",
+  taker: "u tebe",
+  neutral: "na neutrálu",
+};
 
 export default function FriendlyPage() {
   const { teamId } = useTeam();
-  const [data, setData] = useState<ChallengesData | null>(null);
+  const [data, setData] = useState<FriendliesData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [sending, setSending] = useState<string | null>(null);
-  const [status, setStatus] = useState("");
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [notice, setNotice] = useState("");
+  const [showOfferForm, setShowOfferForm] = useState(false);
+  const [challengeTarget, setChallengeTarget] = useState<string | null>(null);
+  const [tab, setTab] = useTabParam(TAB_KEYS);
+  const { confirm, dialog: confirmDialog } = useConfirm({ sheet: true });
+  const topRef = useRef<HTMLDivElement>(null);
 
-  const load = () => {
+  const load = useCallback(() => {
     if (!teamId) return;
-    apiFetch<ChallengesData>(`/api/teams/${teamId}/challenges`)
-      .then((d) => { setData(d); setLoading(false); })
-      .catch(() => setLoading(false));
+    apiFetch<FriendliesData>(`/api/teams/${teamId}/challenges`)
+      .then(setData)
+      .catch((e) => console.error("načtení přáteláků:", e))
+      .finally(() => setLoading(false));
+  }, [teamId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const flash = (msg: string) => {
+    setNotice(msg);
+    setTimeout(() => setNotice(""), 5000);
   };
 
-  useEffect(() => { load(); }, [teamId]);
-
-  const sendChallenge = async (opponentId: string) => {
-    if (!teamId || sending) return;
-    setSending(opponentId);
+  const act = async (id: string, path: string, errorTitle: string, success: string) => {
+    if (!teamId || busyId) return;
+    setBusyId(id);
     try {
-      await apiFetch(`/api/teams/${teamId}/challenge/${opponentId}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
-      setStatus("Výzva odeslána!");
-      setTimeout(() => setStatus(""), 3000);
+      await apiFetch(`/api/teams/${teamId}${path}`, { method: "POST" });
+      flash(success);
       load();
-    } catch (e: any) {
-      setStatus(e.message ?? "Chyba");
-      setTimeout(() => setStatus(""), 3000);
+    } catch (e) {
+      console.error(`${errorTitle}:`, e);
+      showError(errorTitle, (e as Error)?.message || "Zkus to znovu.");
+    } finally {
+      setBusyId(null);
     }
-    setSending(null);
   };
 
-  const acceptChallenge = async (challengeId: string) => {
-    if (!teamId || sending) return;
-    setSending(challengeId);
-    try {
-      await apiFetch(`/api/teams/${teamId}/challenge/${challengeId}/accept`, { method: "POST" });
-      setStatus("Výzva přijata! Nastav sestavu.");
-      setTimeout(() => setStatus(""), 4000);
-      load();
-    } catch (e: any) {
-      setStatus(e.message ?? "Chyba");
-      setTimeout(() => setStatus(""), 3000);
-    }
-    setSending(null);
+  const accept = async (f: FriendlyView) => {
+    const details = [
+      { label: "Kdy", value: f.date ? `${dayLabel(f.date)} v 18:00` : "nejbližší volný den" },
+      { label: "Kde", value: venueText(f.venue, f.neutralVillage) },
+      ...(f.stake > 0 ? [{ label: "Sázka", value: `${formatCZK(f.stake)} složíš hned` }] : []),
+      { label: "Tvoje náklady", value: sumCosts(f.myCosts) > 0 ? formatCZK(sumCosts(f.myCosts)) : "nic" },
+    ];
+    const ok = await confirm({ title: `Přátelák s ${f.opponent.name}?`, details, confirmLabel: "Přijmout" });
+    if (ok) await act(f.id, `/challenge/${f.id}/accept`, "Výzvu se nepodařilo přijmout", `Přátelák s ${f.opponent.name} je domluvený${f.date ? ` na ${dayLabel(f.date)}` : "."}`);
   };
 
-  const declineChallenge = async (challengeId: string) => {
-    if (!teamId || sending) return;
-    setSending(challengeId);
-    try {
-      await apiFetch(`/api/teams/${teamId}/challenge/${challengeId}/decline`, { method: "POST" });
-      setStatus("Výzva odmítnuta.");
-      setTimeout(() => setStatus(""), 3000);
-      load();
-    } catch (e: any) {
-      setStatus(e.message ?? "Chyba");
-    }
-    setSending(null);
+  const take = async (o: OfferView) => {
+    const details = [
+      { label: "Kdy", value: `${dayLabel(o.date)} v 18:00` },
+      { label: "Kde", value: o.venue === "neutral" && o.neutralVillage ? `neutrální hřiště, ${o.neutralVillage}` : OFFER_VENUE_TEXT[o.venue] },
+      ...(o.stake > 0 ? [{ label: "Sázka", value: `${formatCZK(o.stake)} složíš hned` }] : []),
+      { label: "Tvoje náklady", value: sumCosts(o.myCosts) > 0 ? formatCZK(sumCosts(o.myCosts)) : "nic" },
+    ];
+    const ok = await confirm({ title: `Hrát s ${o.team.name}?`, details, confirmLabel: "Beru termín" });
+    if (ok) await act(o.id, `/friendly-offers/${o.id}/take`, "Termín se nepodařilo vzít", `Přátelák s ${o.team.name} je domluvený na ${dayLabel(o.date)}`);
   };
 
-  const cancelChallenge = async (challengeId: string) => {
-    if (!teamId || sending) return;
-    setSending(challengeId);
-    try {
-      await apiFetch(`/api/teams/${teamId}/challenge/${challengeId}/cancel`, { method: "POST" });
-      setStatus("Výzva zrušena.");
-      setTimeout(() => setStatus(""), 3000);
-      load();
-    } catch (e: any) {
-      setStatus(e.message ?? "Chyba");
-      setTimeout(() => setStatus(""), 3000);
-    }
-    setSending(null);
+  // Z karty rivala rovnou do výzvy s vybraným soupeřem.
+  const challengeAgain = (opponentId: string) => {
+    setChallengeTarget(opponentId);
+    setTab("challenge");
+    // Karta rivala bývá hluboko dole, formulář začíná nahoře.
+    setTimeout(() => topRef.current?.scrollIntoView({ block: "start" }), 0);
   };
 
   if (loading) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
-  if (!data) return <div className="page-container"><div className="text-center text-muted py-8">Chyba načítání</div></div>;
+  if (!data || !teamId) return <div className="page-container"><div className="card p-6 text-center text-muted">Přáteláky se nepodařilo načíst.</div></div>;
+
+  const openOffers = data.offers.filter((o) => !o.blocked).length;
 
   return (
-    <div className="page-container space-y-5">
-      {status && <div className="text-sm font-heading font-bold text-pitch-500">{status}</div>}
+    <div ref={topRef} className="page-container space-y-5">
+      {confirmDialog}
+      <Tabs
+        items={[
+          { key: "matches", label: "Zápasy", count: data.incoming.length || null },
+          { key: "challenge", label: "Vyzvat" },
+          { key: "offers", label: "Volné termíny", count: openOffers || null },
+          { key: "record", label: "Bilance" },
+        ]}
+        value={tab}
+        onChange={setTab}
+        layout="grid"
+      />
 
-      {/* Incoming challenges */}
+      {notice && <div className="card px-4 py-3 text-sm font-heading font-bold text-pitch-600">{notice}</div>}
+
+      {tab === "matches" && (
+        <MatchesTab data={data} busyId={busyId} onAccept={accept}
+          onDecline={(f) => act(f.id, `/challenge/${f.id}/decline`, "Výzvu se nepodařilo odmítnout", "Výzva odmítnuta.")}
+          onCancel={(f) => act(f.id, `/challenge/${f.id}/cancel`, "Výzvu se nepodařilo stáhnout", "Výzva stažena.")}
+          onGoChallenge={() => setTab("challenge")} onGoOffers={() => setTab("offers")} />
+      )}
+
+      {tab === "challenge" && (
+        <div className="space-y-3">
+          <p className="text-sm text-muted">
+            Vyzvi konkrétní klub na den, kdy oba máte volno. Mezi přáteláky musí být aspoň {data.limits.restDays} dny
+            a v den ligy, poháru nebo turnaje se nehraje.
+          </p>
+          <FriendlyForm key={challengeTarget ?? "none"} mode="challenge" teamId={teamId} teams={data.teams} days={data.days}
+            limits={data.limits} budget={data.budget} initialOpponentId={challengeTarget}
+            onDone={(msg) => { flash(msg); setChallengeTarget(null); setTab("matches"); load(); }} />
+        </div>
+      )}
+
+      {tab === "offers" && (
+        <div className="space-y-5">
+          <div>
+            <SectionLabel>Nabízejí termín ({data.offers.length})</SectionLabel>
+            {data.offers.length === 0 ? (
+              <div className="card p-6 text-center text-muted text-sm">Teď nikdo volný termín nenabízí. Nabídni svůj, ať tě někdo vyzve.</div>
+            ) : (
+              <div className="space-y-3">
+                {data.offers.map((o) => (
+                  <FixtureCard key={o.id}
+                    date={o.date}
+                    crest={o.team.crest}
+                    title={<TeamLink id={o.team.id} name={o.team.name} />}
+                    place={`18:00 · ${o.venue === "neutral" && o.neutralVillage ? `neutrální hřiště, ${o.neutralVillage}` : `hraje se ${OFFER_VENUE_TEXT[o.venue]}`}${o.distanceKm != null ? ` · ${o.distanceKm} km` : ""}`}
+                    tags={
+                      <div className="flex flex-wrap gap-1.5 mt-2">
+                        {o.stake > 0 && <StakeTag stake={o.stake} />}
+                        {o.costPayer === "poster" && <span className={TAG}>náklady platí oni</span>}
+                        {o.myCosts && <span className={TAG}>{sumCosts(o.myCosts) > 0 ? `tvoje náklady ${formatCZK(sumCosts(o.myCosts))}` : "neplatíš nic"}</span>}
+                      </div>
+                    }
+                    message={o.message}
+                    warning={o.blocked}
+                    actions={
+                      <button onClick={() => take(o)} disabled={!!o.blocked || busyId === o.id} className={PRIMARY_BUTTON}>Beru termín</button>
+                    }
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <SectionLabel>Moje nabídky ({data.myOffers.length}/{data.limits.maxOpenOffers})</SectionLabel>
+            {data.myOffers.length > 0 && (
+              <div className="space-y-3 mb-3">
+                {data.myOffers.map((o) => (
+                  <FixtureCard key={o.id}
+                    date={o.date}
+                    crest={data.me?.crest}
+                    title={<span className="font-heading font-bold text-base">Hledáš soupeře</span>}
+                    place={`18:00 · ${o.venue === "poster" ? "u tebe" : o.venue === "taker" ? "u soupeře" : "na neutrálu"}${o.costPayer === "poster" ? " · platíš za oba" : ""}`}
+                    tags={o.stake > 0 ? <div className="flex flex-wrap gap-1.5 mt-2"><StakeTag stake={o.stake} /></div> : null}
+                    message={o.message}
+                    actions={
+                      <button onClick={() => act(o.id, `/friendly-offers/${o.id}/withdraw`, "Nabídku se nepodařilo stáhnout", "Nabídka stažena.")}
+                        disabled={busyId === o.id} className={SECONDARY_BUTTON}>
+                        Stáhnout
+                      </button>
+                    }
+                  />
+                ))}
+              </div>
+            )}
+            {data.myOffers.length < data.limits.maxOpenOffers && (
+              showOfferForm ? (
+                <FriendlyForm mode="offer" teamId={teamId} teams={data.teams} days={data.days} limits={data.limits} budget={data.budget}
+                  onDone={(msg) => { flash(msg); setShowOfferForm(false); load(); }} />
+              ) : (
+                <button onClick={() => setShowOfferForm(true)} className={`w-full ${PRIMARY_BUTTON}`}>Nabídnout volný termín</button>
+              )
+            )}
+          </div>
+        </div>
+      )}
+
+      {tab === "record" && <FriendlyRecord data={data} onChallenge={challengeAgain} />}
+    </div>
+  );
+}
+
+function MatchesTab({ data, busyId, onAccept, onDecline, onCancel, onGoChallenge, onGoOffers }: {
+  data: FriendliesData;
+  busyId: string | null;
+  onAccept: (f: FriendlyView) => void;
+  onDecline: (f: FriendlyView) => void;
+  onCancel: (f: FriendlyView) => void;
+  onGoChallenge: () => void;
+  onGoOffers: () => void;
+}) {
+  const empty = data.incoming.length + data.upcoming.length + data.outgoing.length + data.cancelled.length === 0;
+  return (
+    <div className="space-y-5">
       {data.incoming.length > 0 && (
         <div>
-          <SectionLabel>Příchozí výzvy</SectionLabel>
-          <div className="space-y-2">
-            {data.incoming.map((ch) => (
-              <Card key={ch.id}>
-                <CardBody>
-                  <div className="flex items-center gap-3">
-                    <span className="text-2xl">⚽</span>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-heading font-bold text-base">{ch.challengerName}</div>
-                      {ch.message && <div className="text-sm text-muted italic">"{ch.message}"</div>}
-                      <div className="text-xs text-muted">Přátelský zápas • 1 000 Kč</div>
-                    </div>
-                    <div className="flex gap-2 shrink-0">
-                      <button onClick={() => acceptChallenge(ch.id)} disabled={sending === ch.id}
-                        className="px-3 py-1.5 bg-pitch-500 text-white rounded-soft font-heading font-bold text-xs disabled:opacity-50">
-                        Přijmout
-                      </button>
-                      <button onClick={() => declineChallenge(ch.id)} disabled={sending === ch.id}
-                        className="px-3 py-1.5 bg-gray-200 text-ink rounded-soft font-heading font-bold text-xs disabled:opacity-50">
-                        Odmítnout
-                      </button>
-                    </div>
-                  </div>
-                </CardBody>
-              </Card>
+          <SectionLabel>Výzvy pro tebe ({data.incoming.length})</SectionLabel>
+          <div className="space-y-3">
+            {data.incoming.map((f) => (
+              <FriendlyCard key={f.id} f={f} status={<StatusPill tone="gold">čeká na tebe</StatusPill>}>
+                <button onClick={() => onAccept(f)} disabled={busyId === f.id || !!f.clash} className={PRIMARY_BUTTON}>Přijmout</button>
+                <button onClick={() => onDecline(f)} disabled={busyId === f.id} className={SECONDARY_BUTTON}>Odmítnout</button>
+              </FriendlyCard>
             ))}
           </div>
         </div>
       )}
 
-      {/* Outgoing challenges */}
-      {data.outgoing.length > 0 && (
+      {data.upcoming.length > 0 && (
         <div>
-          <SectionLabel>Odeslané výzvy</SectionLabel>
-          <div className="space-y-2">
-            {data.outgoing.map((ch) => {
-              const isAccepted = ch.status === "accepted";
+          <SectionLabel>Domluvené ({data.upcoming.length})</SectionLabel>
+          <div className="space-y-3">
+            {data.upcoming.map((f) => {
+              const today = f.matchStatus === "lineups_open";
               return (
-                <Card key={ch.id}>
-                  <CardBody>
-                    <div className="flex items-center gap-3">
-                      <span className="text-2xl">{isAccepted ? "✅" : "📨"}</span>
-                      <div className="flex-1 min-w-0">
-                        <div className="font-heading font-bold text-base">{ch.challengedName}</div>
-                        <div className={`text-xs ${isAccepted ? "text-pitch-600 font-bold" : "text-muted"}`}>
-                          {isAccepted ? "Přijato! Nastav sestavu." : "Čeká na odpověď"}
-                        </div>
-                      </div>
-                      {isAccepted && ch.matchId && (
-                        <Link href={`/zapas?calendarId=${ch.matchId}`}
-                          className="px-3 py-1.5 bg-pitch-500 text-white rounded-soft font-heading font-bold text-xs shrink-0">
-                          Sestava ▶
-                        </Link>
-                      )}
-                      {!isAccepted && (
-                        <button onClick={() => cancelChallenge(ch.id)} disabled={sending === ch.id}
-                          className="px-3 py-1.5 bg-gray-200 text-ink rounded-soft font-heading font-bold text-xs disabled:opacity-50 shrink-0">
-                          Zrušit
-                        </button>
-                      )}
-                    </div>
-                  </CardBody>
-                </Card>
+                <FriendlyCard key={f.id} f={f} status={today ? null : <StatusPill tone="muted">domluveno</StatusPill>}>
+                  {today && f.matchId && (
+                    <Link href={`/zapas?calendarId=${f.matchId}`} className={PRIMARY_BUTTON}>Sestava</Link>
+                  )}
+                </FriendlyCard>
               );
             })}
           </div>
         </div>
       )}
 
-      {/* Send challenge */}
-      <div>
-        <SectionLabel>Vyzvat soupeře</SectionLabel>
-        {!data.canChallenge ? (
-          <div className="text-sm text-muted">Cooldown: ještě {data.cooldownDaysLeft} {data.cooldownDaysLeft === 1 ? "den" : "dny"}</div>
-        ) : (() => {
-          // Zápas se hraje v 18:00 v den PŘIJETÍ výzvy; přijetí po 19:00 → hraje se další den.
-          // Když už čeká jiná výzva / domluvený zápas, další přátelák přijde na řadu až následující volný den.
-          const pragueHour = Number(new Intl.DateTimeFormat("cs", { hour: "numeric", hour12: false, timeZone: "Europe/Prague" }).format(new Date()));
-          const hasOpenChallenge = data.incoming.length > 0
-            || data.outgoing.some((ch) => ch.status === "pending" || (ch.status === "accepted" && ch.matchStatus !== "simulated"));
-          // V den ligového zápasu se přátelák nesehraje dnes — sehraje se, až ho soupeř přijme na volný den.
-          const slotLabel = hasOpenChallenge ? "další volný den"
-            : data.leagueMatchToday ? "nejbližší volný den"
-            : (pragueHour >= 19 ? "zítra 18:00" : "dnes 18:00");
-          return (
-          <div className="space-y-2">
-            <p className="text-sm text-muted leading-relaxed">
-              {hasOpenChallenge
-                ? "Už máš rozjednanou výzvu, ta má přednost. Další domluvený přátelák se odehraje nejbližší volný den po ní."
-                : "Zápas se hraje v 18:00 v den, kdy soupeř výzvu přijme (přijetí po 19:00 = hraje se další den). Po odehraném přáteláku je 3denní pauza."}
-            </p>
-            {data.teams.map((t) => (
-              <Card key={t.id}>
-                <CardBody>
-                  <div className="flex items-center gap-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="font-heading font-bold text-base">{t.name}</div>
-                      <div className="text-xs text-muted">{t.village}</div>
-                    </div>
-                    <button onClick={() => sendChallenge(t.id)} disabled={sending === t.id}
-                      className="px-3 py-1.5 bg-pitch-500 text-white rounded-soft font-heading font-bold text-xs disabled:opacity-50 shrink-0">
-                      Vyzvat ⚽ · {slotLabel}
-                    </button>
-                  </div>
-                </CardBody>
-              </Card>
-            ))}
-            {data.teams.length === 0 && (
-              <div className="text-sm text-muted">Žádní další hráčští manažeři v lize.</div>
-            )}
-          </div>
-          );
-        })()}
-      </div>
-
-      {/* Played friendlies */}
-      {data.played.length > 0 && (
+      {data.outgoing.length > 0 && (
         <div>
-          <SectionLabel>Odehrané přáteláky</SectionLabel>
-          <div className="space-y-2">
-            {data.played.map((ch) => (
-              <Card key={ch.id}>
-                <CardBody>
-                  <div className="flex items-center gap-3">
-                    <span className="text-2xl">🏆</span>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-heading font-bold text-sm">
-                        {ch.challengerName} {ch.homeScore}:{ch.awayScore} {ch.challengedName}
-                      </div>
-                    </div>
-                    {ch.matchId && (
-                      <Link href={`/zapas/${ch.matchId}/zaznam`}
-                        className="text-xs text-pitch-600 hover:underline shrink-0">
-                        Replay ▶
-                      </Link>
-                    )}
-                  </div>
-                </CardBody>
-              </Card>
+          <SectionLabel>Odeslané výzvy ({data.outgoing.length})</SectionLabel>
+          <div className="space-y-3">
+            {data.outgoing.map((f) => (
+              <FriendlyCard key={f.id} f={f} status={<StatusPill tone="muted">čeká na odpověď</StatusPill>}>
+                <button onClick={() => onCancel(f)} disabled={busyId === f.id} className={SECONDARY_BUTTON}>Stáhnout</button>
+              </FriendlyCard>
             ))}
+          </div>
+        </div>
+      )}
+
+      {data.cancelled.length > 0 && (
+        <div>
+          <SectionLabel>Zrušené</SectionLabel>
+          <div className="space-y-3">
+            {data.cancelled.map((f) => (
+              // Důvod zrušení se ukáže na místě, kde u příchozí výzvy bývá kolize.
+              <FriendlyCard key={f.id} f={{ ...f, myCosts: null, clash: f.cancelReason }} status={<StatusPill tone="red">nehrálo se</StatusPill>} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {empty && (
+        <div className="card p-6 text-center space-y-3">
+          <p className="text-sm text-muted">Zatím nic domluveného. Vyzvi soupeře, nebo se podívej, kdo nabízí volný termín.</p>
+          <div className="flex gap-2 justify-center flex-wrap">
+            <button onClick={onGoChallenge} className={PRIMARY_BUTTON}>Vyzvat soupeře</button>
+            <button onClick={onGoOffers} className={SECONDARY_BUTTON}>Volné termíny</button>
           </div>
         </div>
       )}

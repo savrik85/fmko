@@ -27,7 +27,8 @@ beforeAll(async () => {
     "CREATE TABLE villages (id TEXT PRIMARY KEY, district TEXT)",
     `CREATE TABLE teams (id TEXT PRIMARY KEY, name TEXT NOT NULL, user_id TEXT, parent_team_id TEXT,
        team_type TEXT, village_id TEXT)`,
-    `CREATE TABLE challenges (id TEXT PRIMARY KEY, challenger_team_id TEXT, challenged_team_id TEXT, status TEXT)`,
+    `CREATE TABLE challenges (id TEXT PRIMARY KEY, challenger_team_id TEXT, challenged_team_id TEXT, status TEXT,
+       stake INTEGER NOT NULL DEFAULT 0, stake_status TEXT)`,
     `CREATE TABLE transfer_offers (id TEXT PRIMARY KEY, from_team_id TEXT, to_team_id TEXT, offer_type TEXT,
        status TEXT, offer_amount INTEGER, counter_amount INTEGER)`,
     "INSERT INTO users VALUES ('u-vys', 'vys@example.cz'), ('u-rez', 'rez@example.cz'), ('u-x', 'x@example.cz'), ('u-y', 'y@example.cz')",
@@ -43,8 +44,9 @@ beforeAll(async () => {
        ('ai1', 'AI klub', 'ai', NULL, 'senior', 'v-pt'),
        ('ai2', 'Jiný AI klub', 'ai', NULL, 'senior', 'v-pt')`,
     "INSERT INTO club_links (team_id, group_id, note) VALUES ('vys', 'g1', '13 přáteláků'), ('rez', 'g1', NULL)",
-    `INSERT INTO challenges VALUES ('c1', 'vys', 'rez', 'played'), ('c2', 'rez', 'vys', 'played'),
-       ('c3', 'vys', 'rez', 'played'), ('c4', 'vys', 'rez', 'declined'), ('c5', 'x', 'y', 'played')`,
+    `INSERT INTO challenges (id, challenger_team_id, challenged_team_id, status, stake, stake_status) VALUES
+       ('c1', 'vys', 'rez', 'played', 0, NULL), ('c2', 'rez', 'vys', 'played', 1000, 'paid'),
+       ('c3', 'vys', 'rez', 'played', 500, 'refunded'), ('c4', 'vys', 'rez', 'declined', 0, NULL), ('c5', 'x', 'y', 'played', 0, NULL)`,
     `INSERT INTO transfer_offers VALUES
        ('o1', 'rez-u21', 'vys', 'loan', 'accepted', 2000, NULL),
        ('o2', 'vys', 'rez', 'transfer', 'accepted', 500, 800),
@@ -105,7 +107,8 @@ describe("přehled podezřelých dvojic", () => {
     expect(pairs).toHaveLength(1);
     const [p] = pairs;
     expect(new Set([p.a.name, p.b.name])).toEqual(new Set(["Výškovice", "Řeznictví"]));
-    expect(p).toMatchObject({ friendlies: 3, transfers: 1, loans: 1, money: 2800, linked: true });
+    // 2 000 + 800 z obchodů a 1 000 z vyplacené sázky; vrácená sázka se nepočítá.
+    expect(p).toMatchObject({ friendlies: 3, transfers: 1, loans: 1, money: 3800, linked: true });
     expect([p.a.email, p.b.email].sort()).toEqual(["rez@example.cz", "vys@example.cz"]);
   });
 

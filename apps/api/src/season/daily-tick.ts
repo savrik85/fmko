@@ -1265,6 +1265,18 @@ export async function executeDailyTick(
     // odbylo dřív, než kdokoli vstane — přesně to dělal do 2026-08-28. Postup kol řeší
     // samostatný pohárový tick v index.ts, který se pouští až od poledne.
 
+    // ── Přáteláky: domluvené na dnešek se otevřou na sestavu, propadlé výzvy vyprší ──
+    try {
+      const { openDueFriendlies, expireStaleFriendlies, gameDay } = await import("../multiplayer/friendlies");
+      const { pragueHour } = await import("../lib/match-tick-schedule");
+      const today = gameDay(globalGameDate);
+      const expired = await expireStaleFriendlies(env.DB, today, pragueHour());
+      const opened = await openDueFriendlies(env.DB, today);
+      if (opened > 0 || expired.challenges > 0 || expired.offers > 0) {
+        logger.info({ module: "friendlies" }, `přáteláky: otevřeno ${opened}, vypršelo ${expired.challenges} výzev a ${expired.offers} nabídek`);
+      }
+    } catch (e) { logger.error({ module: "friendlies" }, "ranní přáteláky selhaly", e); }
+
     // ── Delegace rozhodčích na zápasy za dva herní dny ──
     // Záměrně PŘED per-tým smyčkou: delegace je per liga a musí proběhnout i pro
     // zápasy dvou AI týmů, zatímco smyčka níž běží per tým a lidské trenéry filtruje.
