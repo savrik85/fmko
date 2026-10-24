@@ -24,7 +24,7 @@ import { offerReplyDeadline } from "../transfers/offer-deadline";
 import { suspensionSms, injurySms } from "../events/injury-sms";
 import { injuryPronenessOf } from "../injuries/proneness";
 import { isBodyType } from "../generators/physicals";
-import { MAX_TRANSFER_AMOUNT, MAX_ACTIVE_INSTALLMENT_DEALS, CPU_CLUB_ID, clubPrefixOf, marketValue, sponsorWeeklyPayout, transferTermsError, transferSchedule, formatTermsSummary, termsFromRow, type TransferTerms } from "@okresni-masina/shared";
+import { MAX_TRANSFER_AMOUNT, MAX_ACTIVE_INSTALLMENT_DEALS, CPU_CLUB_ID, clubPrefixOf, marketValue, sponsorWeeklyPayout, transferTermsError, transferSchedule, formatTermsSummary, termsFromRow, splitPlanByLineup, benchForLineup, type TransferTerms } from "@okresni-masina/shared";
 
 /**
  * Povrchy areálu, které má klub ZAPLACENÉ.
@@ -4435,8 +4435,7 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
       isAuto: lineup.is_auto === 1,
       captainId: lineup.captain_id ?? null,
       presetSlot: lineup.preset_slot ?? null,
-      matchPlan: parseStoredPlan(lineup.match_plan),
-      bench: parseStoredBench(lineup.bench_data),
+      ...storedExtrasForSquad(lineup, new Set(players.results.map((p) => p.id as string))),
       source: lineupSource, // "explicit" = pro tento zápas, "default" = fallback z poslední uložené
       players: (() => { try { return JSON.parse(lineup.players_data); } catch (e) { logger.warn({ module: "game" }, "parse lineup players_data", e); return []; } })(),
     } : null,
@@ -4570,6 +4569,28 @@ gameRouter.post("/teams/:teamId/lineup-preview", async (c) => {
   return c.json({ ...preview, cardRisk });
 });
 
+/**
+ * Uložené pokyny a lavička srovnané na sestavu a dnešní kádr. Sestava bývá z minulého
+ * zápasu a hráč z lavičky nebo z pokynu mezitím mohl odejít; web by je poslal zpátky
+ * a uložení by sestavu odmítlo. Kádr = aktivní hráči týmu, stejně jako při uložení.
+ */
+function storedExtrasForSquad(
+  row: { players_data: string; match_plan: string | null; bench_data: string | null },
+  squadIds: ReadonlySet<string>,
+) {
+  let starters: Array<{ playerId: string }> = [];
+  try {
+    starters = JSON.parse(row.players_data);
+  } catch (e) {
+    logger.warn({ module: "game" }, "parse players_data pro pokyny a lavičku", e);
+  }
+  const lineupIds = { starterIds: new Set(starters.map((p) => p.playerId)), squadIds };
+  return {
+    matchPlan: splitPlanByLineup(parseStoredPlan(row.match_plan), lineupIds).kept,
+    bench: benchForLineup(parseStoredBench(row.bench_data), lineupIds),
+  };
+}
+
 // GET lineup for specific calendar entry
 gameRouter.get("/teams/:teamId/lineup/:calendarId", async (c) => {
   const teamId = c.req.param("teamId");
@@ -4578,13 +4599,15 @@ gameRouter.get("/teams/:teamId/lineup/:calendarId", async (c) => {
     "SELECT formation, tactic, hardness, players_data, captain_id, preset_slot, match_plan, bench_data FROM lineups WHERE team_id = ? AND calendar_id = ?"
   ).bind(teamId, calendarId).first<{ formation: string; tactic: string; hardness: string | null; players_data: string; captain_id: string | null; preset_slot: string | null; match_plan: string | null; bench_data: string | null }>();
   if (!row) return c.json({ lineup: null });
+  const squadRows = await c.env.DB.prepare(
+    "SELECT id FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active')"
+  ).bind(teamId).all<{ id: string }>();
   return c.json({
     lineup: {
       formation: row.formation, tactic: row.tactic, hardness: row.hardness ?? "normal",
       captainId: row.captain_id ?? null,
       presetSlot: row.preset_slot ?? null,
-      matchPlan: parseStoredPlan(row.match_plan),
-      bench: parseStoredBench(row.bench_data),
+      ...storedExtrasForSquad(row, new Set(squadRows.results.map((r) => r.id))),
       players: (() => { try { return JSON.parse(row.players_data); } catch { return []; } })(),
     },
   });
@@ -4871,24 +4894,18 @@ gameRouter.post("/teams/:teamId/lineup-presets/:slot/apply", async (c) => {
   // přeskládaly absence, plánované střídání se odkazuje na hráče, který dnes
   // nehraje — takové pravidlo se zahodí a uživatel se to dozví hned, ne až po
   // zápase, kde by pokyn tiše nesepnul.
-  const starterIds = new Set(finalPlayers.map((p) => p.playerId));
-  const squadIds = new Set(allPlayers.results.filter((p) => !p.unavailable).map((p) => p.id));
-  const storedPlan = parseStoredPlan(preset.match_plan);
-  const matchPlan = storedPlan.filter((rule) => {
-    if (rule.action.kind !== "sub") return true;
-    const outOk = starterIds.has(rule.action.outPlayerId);
-    const inOk = squadIds.has(rule.action.inPlayerId) && !starterIds.has(rule.action.inPlayerId);
-    if (outOk && inOk) return true;
+  const lineupIds = {
+    starterIds: new Set(finalPlayers.map((p) => p.playerId)),
+    squadIds: new Set(allPlayers.results.filter((p) => !p.unavailable).map((p) => p.id)),
+  };
+  const { kept: matchPlan, dropped } = splitPlanByLineup(parseStoredPlan(preset.match_plan), lineupIds);
+  for (const { rule } of dropped) {
     warnings.push(`Pokyn na střídání v ${rule.fromMinute}. minutě zrušen, hráč není k dispozici`);
-    return false;
-  });
+  }
 
   // Z lavičky presetu vypadnou zranění, suspendovaní a hráči, kteří se mezitím dostali
   // do základu jako náhrada. Volné místo doplní automat při sestavování zápasu.
-  const storedBench = parseStoredBench(preset.bench_data);
-  const bench = storedBench
-    ? storedBench.filter((id) => squadIds.has(id) && !starterIds.has(id))
-    : null;
+  const bench = benchForLineup(parseStoredBench(preset.bench_data), lineupIds);
 
   return c.json({
     formation: preset.formation,

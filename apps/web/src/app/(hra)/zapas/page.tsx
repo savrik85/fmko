@@ -15,8 +15,8 @@ import { CollapsibleCard } from "@/components/ui";
 import type { RefereeProfileView, RefereeStatsView } from "@/lib/referee-info";
 import { getTacticTooltip, getFormationTooltip, getHardnessTooltip, type TacticKey, type HardnessKey } from "@/lib/tactic-info";
 import { MatchPlanEditor } from "./MatchPlanEditor";
-import type { MatchPlanRule } from "@okresni-masina/shared";
-import { computeLineupChemistry, type RelationshipType } from "@okresni-masina/shared";
+import type { MatchPlanRule, SubMismatch } from "@okresni-masina/shared";
+import { computeLineupChemistry, splitPlanByLineup, benchForLineup, type RelationshipType } from "@okresni-masina/shared";
 import { LineupPreview, type CardRisk } from "@/components/LineupPreview";
 import { useOpenOnDesktop } from "@/components/ui";
 import { splitBench } from "@/lib/bench";
@@ -323,6 +323,8 @@ function MatchPage() {
   }, [teamId]);
 
   const [saveError, setSaveError] = useState<string | null>(null);
+  /** Které pokyny na střídání se při uložení zrušily, protože už nesedí na sestavu. */
+  const [planNotice, setPlanNotice] = useState<string | null>(null);
 
   const autoFill = (pool: AvailablePlayer[], form: string) => {
     const slots = POSITIONS[form] ?? POSITIONS["4-4-2"];
@@ -360,11 +362,16 @@ function MatchPage() {
     const slots = POSITIONS[formation] ?? POSITIONS["4-4-2"];
     const players = selected.map((id, i) => ({ playerId: id!, matchPosition: slots[i].pos })).filter((p) => p.playerId);
     if (players.length !== 11) { setSaveError("Sestava musí mít 11 hráčů"); return; }
+    const fitted = fitToLineup();
     try {
       await apiFetch(`/api/teams/${teamId}/lineup-presets/${slot}`, {
         method: "PUT", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ formation, tactic, hardness, captainId, players, matchPlan, bench: benchToSave() }),
+        body: JSON.stringify({ formation, tactic, hardness, captainId, players, matchPlan: fitted.matchPlan, bench: fitted.bench }),
       });
+      if (fitted.dropped.length > 0) {
+        setMatchPlan(fitted.matchPlan);
+        setPlanNotice(fitted.dropped.map(droppedRuleNote).join(" "));
+      }
       const d = await apiFetch<{ presets: typeof presets }>(`/api/teams/${teamId}/lineup-presets`);
       setPresets(d.presets ?? presets);
     } catch (e) { console.error("save preset:", e); setSaveError("Nepodařilo se uložit preset"); throw e; }
@@ -441,8 +448,35 @@ function MatchPage() {
     }
   };
 
-  // Hráč ze základu na lavičce být nemůže — po změně formace tam mohl zůstat
-  const benchToSave = () => benchIds ? benchIds.filter((id) => !selected.includes(id)) : null;
+  const planName = (p: AvailablePlayer) => `${p.lastName} ${p.firstName.charAt(0)}.`;
+
+  /**
+   * Pokyny a lavička srovnané na sestavu, která se ukládá. Sestavu mění i automat
+   * (omluvení) a hráči odcházejí z klubu; pokyn nebo náhradník, který na ni nesedí,
+   * by API odmítlo a celá sestava by se neuložila.
+   */
+  const fitToLineup = () => {
+    const lineupIds = {
+      starterIds: new Set(selected.filter((id): id is string => !!id)),
+      squadIds: new Set(players.map((p) => p.id)),
+    };
+    const { kept, dropped } = splitPlanByLineup(matchPlan, lineupIds);
+    return { matchPlan: kept, bench: benchForLineup(benchIds, lineupIds), dropped };
+  };
+
+  const DROP_REASONS: Record<SubMismatch, (outName: string, inName: string) => string> = {
+    out_not_starting: (outName) => `${outName} nehraje od začátku`,
+    in_already_starting: (_, inName) => `${inName} už hraje od začátku`,
+    in_not_in_squad: (_, inName) => `${inName} už není v kádru`,
+  };
+  const droppedRuleNote = ({ rule, reason }: { rule: MatchPlanRule; reason: SubMismatch }) => {
+    if (rule.action.kind !== "sub") return "";
+    const nameOf = (id: string) => {
+      const p = players.find((x) => x.id === id);
+      return p ? planName(p) : "hráč";
+    };
+    return `Pokyn na střídání v ${rule.fromMinute}. minutě zrušen, ${DROP_REASONS[reason](nameOf(rule.action.outPlayerId), nameOf(rule.action.inPlayerId))}.`;
+  };
 
   /** Postaví hráče do základu. Když šel z lavičky, sedne si na jeho místo ten, koho vystřídal. */
   const placeInLineup = (slot: number, playerId: string) => {
@@ -462,14 +496,20 @@ function MatchPage() {
     if (!teamId || !nextMatch || saving) return;
     setSaving(true);
     setSaveError(null);
+    setPlanNotice(null);
     try {
       const slots = POSITIONS[formation] ?? POSITIONS["4-4-2"];
+      const fitted = fitToLineup();
       const res = await apiFetch<{ ok?: boolean; error?: string }>(`/api/teams/${teamId}/lineup`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ calendarId: nextMatch.calendarId, formation, tactic, hardness, captainId, presetSlot: activePreset, matchPlan, bench: benchToSave(), players: selected.map((id, i) => ({ playerId: id!, matchPosition: slots[i].pos })).filter((p) => p.playerId) }),
+        body: JSON.stringify({ calendarId: nextMatch.calendarId, formation, tactic, hardness, captainId, presetSlot: activePreset, matchPlan: fitted.matchPlan, bench: fitted.bench, players: selected.map((id, i) => ({ playerId: id!, matchPosition: slots[i].pos })).filter((p) => p.playerId) }),
       });
       if (res.ok) {
         setSaved(true);
+        if (fitted.dropped.length > 0) {
+          setMatchPlan(fitted.matchPlan);
+          setPlanNotice(fitted.dropped.map(droppedRuleNote).join(" "));
+        }
         setLineupSource("explicit");
         trackEvent("lineup_saved", {
           formation,
@@ -533,7 +573,6 @@ function MatchPage() {
 
   // Nabídky hráčů pro pokyny na lavičce. Jen ti, kdo na zápas opravdu pojedou —
   // pokyn s omluveným nebo s hráčem, který zůstane doma, by engine tiše zahodil.
-  const planName = (p: AvailablePlayer) => `${p.lastName} ${p.firstName.charAt(0)}.`;
   const planStarters = selected
     .map((id) => players.find((p) => p.id === id))
     .filter((p): p is AvailablePlayer => !!p && !p.absent)
@@ -1377,6 +1416,7 @@ function MatchPage() {
           className={`btn btn-lg w-full ${saved ? "btn-ghost" : "btn-primary"}`}>
           {saving ? "Ukládám..." : saved ? "Uloženo ✓" : activePreset ? `Použít Sestavu ${activePreset} pro zápas` : "Uložit sestavu"}
         </button>
+        {planNotice && <p className="text-sm text-muted mt-2 text-center">{planNotice}</p>}
         {saveError && <p className="text-sm text-card-red mt-2 text-center">{saveError}</p>}
       </div>
 
