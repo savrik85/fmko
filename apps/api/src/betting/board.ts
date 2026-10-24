@@ -308,16 +308,20 @@ async function loadScorers(
  * Kola se berou napříč sezónami: league_id se recykluje, a na začátku nového
  * ročníku je lepší úroveň z konce minulého než žádná. Síla týmů je dnešní,
  * ne tehdejší. Za šest kol se kádry pohnou o pár bodů, na úroveň to nemá vliv.
+ *
+ * Úroveň se smršťuje k přehrání nového enginu (engine-transition.ts) jako k prioru, který
+ * „hrál" těsně před nejstarším kolem v okně. Dřív ho jedno kolo zahodilo celé.
  */
-async function loadGoalLevel(db: D1Database, leagueId: string): Promise<number> {
+export async function loadGoalLevel(db: D1Database, leagueId: string): Promise<number> {
   // Jen kola odehraná na enginu podle rolí; do prvního z nich úroveň z přehrání
   // nového enginu (engine-transition.ts), ne z „hokejových“ kol starého.
+  const priorLevel = engineFallbackLevel(leagueId);
   const kola = await db.prepare(
     `SELECT id FROM season_calendar WHERE league_id = ? AND status = 'simulated' AND scheduled_at >= ?
       ORDER BY scheduled_at DESC LIMIT ?`
   ).bind(leagueId, ENGINE_SINCE, LEVEL_WINDOW_ROUNDS).all<{ id: string }>()
     .catch((e) => { logger.warn({ module: M }, `odehraná kola ligy ${leagueId}`, e); return { results: [] }; });
-  if (kola.results.length === 0) return engineFallbackLevel(leagueId);
+  if (kola.results.length === 0) return priorLevel;
   const stari = new Map(kola.results.map((k, i) => [k.id, i]));
 
   const zapasy = await db.prepare(
@@ -327,7 +331,8 @@ async function loadGoalLevel(db: D1Database, leagueId: string): Promise<number> 
   ).bind(...kola.results.map((k) => k.id)).all<{
     home_team_id: string; away_team_id: string; home_score: number; away_score: number; calendar_id: string;
   }>().catch((e) => { logger.warn({ module: M }, `zápasy pro úroveň gólů ligy ${leagueId}`, e); return { results: [] }; });
-  if (zapasy.results.length === 0) return 1;
+  // Kolo bez výsledků nic neříká: platí přehrání, ne referenční úroveň testovací databáze.
+  if (zapasy.results.length === 0) return priorLevel;
 
   const tymy = [...new Set(zapasy.results.flatMap((z) => [z.home_team_id, z.away_team_id]))];
   const sily = await loadStrengths(db, tymy);
@@ -343,7 +348,9 @@ async function loadGoalLevel(db: D1Database, leagueId: string): Promise<number> 
       roundsAgo: stari.get(z.calendar_id) ?? LEVEL_WINDOW_ROUNDS,
     };
   });
-  return goalLevel(vzorky);
+  // Prior stojí těsně před nejstarším kolem v okně. S plným oknem (šest kol) je mimo
+  // a platí jen data, jako před zavedením prioru.
+  return goalLevel(vzorky, { level: priorLevel, roundsAgo: kola.results.length });
 }
 
 type MatchOddsRow = Omit<OddsRow, "leagueId" | "seasonNumber" | "calendarId">;
