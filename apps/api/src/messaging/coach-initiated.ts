@@ -19,8 +19,9 @@ import { nazevSituace } from "../incidents/situace";
 import { temaZeStavu } from "../incidents/tema";
 import { nactiZnalostiHrace } from "../incidents/znalosti-db";
 import {
-  generateCoachInitiatedReply, generateSquadGroupReaction, GeminiUnavailableError,
+  generateCoachInitiatedReply, generateSquadGroupReaction, GeminiUnavailableError, playerTimeContext,
 } from "./ai-player-chat";
+import { coachStreak, leftOnReadChance, markCoachMessagesRead, readDelayMs } from "./left-on-read";
 import {
   INJURY_COLUMN, loadLastOwnMessageAt, loadPlayerSnapshot, loadTeamContext, nactiSituaceTymu, pockejNezDopise,
 } from "./ai-player-spawn";
@@ -115,6 +116,22 @@ export async function startCoachThread(
     // když tam z nějakého důvodu není, přidáme ji, ať na ni má hráč co odpovědět.
     if (historie[historie.length - 1]?.body !== opts.coachMessage) {
       historie.push({ sender: "coach", body: opts.coachMessage });
+    }
+
+    // „Přečteno“ (left-on-read.ts): hráč si zprávu přečte a neodpoví. Vlákno se
+    // neotevírá, další zpráva trenéra to zkusí znovu (a třetí za sebou ho spíš otráví).
+    const readInput = {
+      closing: false,
+      relationship: player.coachRelationship,
+      coachStreak: await coachStreak(db, opts.convId),
+      atWork: playerTimeContext(player, new Date()).situace === "prace",
+    };
+    // Dotaz na incident a domluva o váze čekají odpověď, na ty hráč odepíše vždycky.
+    if (!tema && !player.weightTalk && Math.random() < leftOnReadChance(readInput)) {
+      await new Promise((resolve) => setTimeout(resolve, readDelayMs(Math.random())));
+      await markCoachMessagesRead(db, opts.convId, new Date().toISOString());
+      logger.info({ module: M }, `hráč ${opts.playerId} nechal trenéra na přečteno`);
+      return false;
     }
 
     const zacatek = Date.now();
