@@ -103,8 +103,11 @@ async function sendPhoneSMS(db: D1Database, teamId: string, senderName: string, 
     .bind(body.slice(0, 100), convId).run().catch((e) => logger.warn({ module: "game" }, "db op failed", e));
 }
 
-/** After transfer: recalculate commute distance and give the player a free squad number in the new team. */
-async function onPlayerTransferred(db: D1Database, playerId: string, newTeamId: string) {
+/**
+ * After transfer: recalculate commute distance and give the player a free squad number in the new team.
+ * `permanent` = hráč klub opouští natrvalo (přestup, odkup z hostování, výměna), ne hostování ani návrat z něj.
+ */
+async function onPlayerTransferred(db: D1Database, playerId: string, newTeamId: string, opts: { permanent: boolean }) {
   // Kupec si vzal hráče nabídnutého k jeho poptávce → poptávka je vyřízená.
   const { closeDemandsForArrival } = await import("../transfers/demands");
   await closeDemandsForArrival(db, playerId, newTeamId)
@@ -129,6 +132,13 @@ async function onPlayerTransferred(db: D1Database, playerId: string, newTeamId: 
     // At minimum reset squad number
     await db.prepare("UPDATE players SET squad_number = NULL, life_context = json_remove(life_context, '$.trainingRest') WHERE id = ?")
       .bind(playerId).run().catch((e) => logger.warn({ module: "game" }, "db op failed", e));
+  }
+
+  // Truc a slib patří klubu, ze kterého hráč natrvalo odešel. Hostování ani návrat z něj
+  // na nich nic nemění: hráč pořád patří kmenovému klubu, se kterým je má.
+  if (opts.permanent) {
+    const { clearUnrestAfterTransfer } = await import("../transfers/promises");
+    await clearUnrestAfterTransfer(db, playerId, newTeamId);
   }
 
   // Číslo ze starého klubu se smazalo výše; v novém dostane volné (bez kolize se spoluhráči)
@@ -6276,7 +6286,7 @@ gameRouter.post("/teams/:teamId/bids/:bidId/accept", async (c) => {
   await settleOnResale(c.env.DB, { playerId, ownerClubTeamId: sellerClubTeamId, saleAmount: amount, saleOfferId: bidId, gameDate })
     .catch((e) => logger.error({ module: "game" }, "doplacení splátek a procent při přijetí bidu", e));
 
-  await onPlayerTransferred(c.env.DB, playerId, buyerTeamId);
+  await onPlayerTransferred(c.env.DB, playerId, buyerTeamId, { permanent: true });
 
   // Kořaly kupce: první koupě, celebrita v týmu. Kontrola dřív neběžela nikde a obě
   // trofeje šly získat jen ručním zpětným přepočtem.
@@ -7659,10 +7669,10 @@ gameRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
     .bind(crypto.randomUUID(), offerId, scope.actorClubTeamId, amount, acceptMessage, terms.upfrontPct, terms.installments, terms.sellOnPct).run()
     .catch((e) => logger.warn({ module: "game" }, "insert accept event", e));
 
-  // Update commute + reset squad number
-  await onPlayerTransferred(c.env.DB, playerId, buyerDestTeamId);
+  // Update commute + reset squad number (odkup z hostování je trvalý přestup, samo hostování ne)
+  await onPlayerTransferred(c.env.DB, playerId, buyerDestTeamId, { permanent: offerType !== "loan" });
   for (const swapId of swapPlayerIds) {
-    await onPlayerTransferred(c.env.DB, swapId, sellerTeamId);
+    await onPlayerTransferred(c.env.DB, swapId, sellerTeamId, { permanent: true });
   }
 
   // Kořaly kupce (klub, ne jeho dorost): první koupě, celebrita v týmu. Hostování
@@ -7924,7 +7934,7 @@ async function vratZHostovani(
   ).bind(gameDate, iniciator === "kmenovy" ? "loan_recalled" : "loan_terminated", player.id, borrowerTeamId)
     .run().catch((e) => logger.warn({ module: "game" }, "close loan contract failed", e));
 
-  await onPlayerTransferred(db, player.id, ownerRosterTeamId);
+  await onPlayerTransferred(db, player.id, ownerRosterTeamId, { permanent: false });
 
   const borrower = await db.prepare("SELECT name FROM teams WHERE id = ?").bind(borrowerTeamId).first<{ name: string }>();
   const owner = await db.prepare("SELECT name, league_id FROM teams WHERE id = ?").bind(ownerClubTeamId).first<{ name: string; league_id: string }>();

@@ -85,6 +85,61 @@ export async function settleDepartedPromises(db: D1Database): Promise<number> {
   return (kept?.meta?.changes ?? 0) + (expired?.meta?.changes ?? 0);
 }
 
+/**
+ * Po trvalém přestupu (2026-10-24): truc a slib patří klubu, ze kterého hráč odešel, a s hráčem
+ * nikam nejdou. Dřív je nový klub zdědil: porušený slib prodeje ho stál morálku hráče, truc 90
+ * a SMS „slíbil jste, že mě pustíte“, slib sestavy se vyhodnocoval nad zápasy nového týmu
+ * a `resolvePromises` při tom zavíral i sliby nového klubu.
+ *
+ * - Sliby ostatních klubů se uzavřou hned, stejně jako u odešlého hráče (settleDepartedPromises):
+ *   prodej a „pustit ho“ dodržel, místo v sestavě vypršelo.
+ * - Truc z `life_context` zmizí. Slib zůstane, jen když ho dal sám nový klub (hráč u něj hostoval
+ *   a klub ho odkoupil), a to už bez trucu kmenového klubu.
+ * - Předstírané zranění bylo nástrojem trucu, tak s ním končí.
+ *
+ * Volat jen po trvalém přestupu, ne po odchodu na hostování ani po návratu z něj: tam hráč
+ * pořád patří klubu, kterému truc i slib patří.
+ */
+export async function clearUnrestAfterTransfer(db: D1Database, playerId: string, newTeamId: string): Promise<void> {
+  const club = await db.prepare("SELECT COALESCE(parent_team_id, id) AS id FROM teams WHERE id = ?")
+    .bind(newTeamId).first<{ id: string }>()
+    .catch((e) => { logger.warn({ module: M }, "klub po přestupu", e); return null; });
+  const newClubTeamId = club?.id ?? newTeamId;
+
+  const ownTypes = await db.prepare(
+    "SELECT DISTINCT type FROM player_promises WHERE player_id = ? AND team_id = ? AND status = 'active'",
+  ).bind(playerId, newClubTeamId).all<{ type: PromiseType }>()
+    .then((r) => new Set(r.results.map((row) => row.type)))
+    .catch((e) => { logger.warn({ module: M }, "sliby nového klubu po přestupu", e); return new Set<PromiseType>(); });
+  const pledgeRow = await db.prepare("SELECT json_extract(life_context, '$.transferUnrest.pledge') AS pledge FROM players WHERE id = ?")
+    .bind(playerId).first<{ pledge: string | null }>()
+    .catch((e) => { logger.warn({ module: M }, "slib hráče po přestupu", e); return null; });
+  const pledge = (() => {
+    if (!pledgeRow?.pledge) return null;
+    try { return JSON.parse(pledgeRow.pledge) as { type?: PromiseType }; } catch (e) {
+      logger.warn({ module: M }, "nečitelný slib hráče po přestupu", e);
+      return null;
+    }
+  })();
+
+  const keepPledge = pledge?.type != null && ownTypes.has(pledge.type);
+  await (keepPledge
+    ? db.prepare("UPDATE players SET life_context = json_set(life_context, '$.transferUnrest', json(?)) WHERE id = ?")
+      .bind(JSON.stringify({ level: 0, pledge }), playerId)
+    : db.prepare("UPDATE players SET life_context = json_remove(life_context, '$.transferUnrest') WHERE id = ?")
+      .bind(playerId)
+  ).run().catch((e) => logger.warn({ module: M }, `truc po přestupu ${playerId}`, e));
+
+  await db.prepare(
+    `UPDATE player_promises SET status = CASE WHEN type = 'minutes' THEN 'expired' ELSE 'kept' END, resolved_at = ?
+      WHERE player_id = ? AND status = 'active' AND team_id != ?`,
+  ).bind(new Date().toISOString(), playerId, newClubTeamId).run()
+    .catch((e) => logger.warn({ module: M }, `sliby starého klubu po přestupu ${playerId}`, e));
+
+  await db.prepare("DELETE FROM injuries WHERE player_id = ? AND is_fake = 1").bind(playerId).run()
+    .catch((e) => logger.warn({ module: M }, `předstírané zranění po přestupu ${playerId}`, e));
+}
+
 /** Sliby hráče v klubu, běžící první, pak nejnovější. */
 export async function listPromises(db: D1Database, playerId: string, clubTeamId: string): Promise<PlayerPromise[]> {
   const rows = await db.prepare(

@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { Miniflare } from "miniflare";
+import { readFileSync } from "node:fs";
 import type { Bindings } from "../index";
 import { marketValue } from "@okresni-masina/shared";
 
@@ -228,7 +229,7 @@ beforeAll(async () => {
       created_at TEXT NOT NULL DEFAULT (datetime('now')), resolved_at TEXT
     );
 
-    CREATE TABLE injuries (id TEXT PRIMARY KEY, player_id TEXT NOT NULL, days_remaining INTEGER NOT NULL DEFAULT 0);
+    CREATE TABLE injuries (id TEXT PRIMARY KEY, player_id TEXT NOT NULL, days_remaining INTEGER NOT NULL DEFAULT 0, is_fake INTEGER NOT NULL DEFAULT 0);
 
     CREATE TABLE transfer_listings (
       id TEXT PRIMARY KEY,
@@ -310,6 +311,9 @@ beforeAll(async () => {
       PRIMARY KEY (team_id, achievement_key)
     );
   `);
+  // Sliby hráčům podle skutečné migrace (bez převzetí starých slibů, to potřebuje plná data).
+  await executeStatements(readFileSync(new URL("../../migrations/0268_player_promises.sql", import.meta.url), "utf8")
+    .split("-- Sliby, které už běží")[0].replace(/--.*$/gm, ""));
 
   await sessionKv.put("session:seller-token", JSON.stringify({
     userId: "user-seller",
@@ -366,6 +370,8 @@ beforeEach(async () => {
     DELETE FROM season_calendar;
     DELETE FROM departed_players;
     DELETE FROM team_achievements;
+    DELETE FROM player_promises;
+    DELETE FROM injuries;
   `);
 
   await db.batch([
@@ -825,5 +831,108 @@ describe("výměna víc hráčů za jednoho", () => {
     const after = await readJson(await callRoute("/teams/buyer-a/offers", { token: "buyer-token" }));
     const done = after.history.find((o: Record<string, unknown>) => o.id === offer.id);
     expect(done.swap_players.map((p: Record<string, unknown>) => p.last_name)).toEqual(["Druhý", "První"]);
+  });
+});
+
+describe("truc a slib zůstanou v klubu, ze kterého hráč trvale odešel", () => {
+  const UNREST = {
+    level: 50, reason: "rejected_offer", teamName: "FK Engel Vimperk", since: "2026-10-19T10:00:52Z",
+    pledge: { type: "transfer", madeAt: "2026-10-20T06:25:49Z", deadline: "2099-11-19T06:25:49Z" }, reasons: ["money"],
+  };
+
+  // Slib vzniká až po nabídce: připomínka slibu u nové nabídky v tomhle schématu nemá kam psát.
+  async function giveUnrest(playerId: string, clubTeamId: string) {
+    await db.batch([
+      db.prepare("UPDATE players SET life_context = json_set(life_context, '$.transferUnrest', json(?)) WHERE id = ?")
+        .bind(JSON.stringify(UNREST), playerId),
+      db.prepare("INSERT INTO player_promises (id, team_id, player_id, type, status, made_at, deadline) VALUES (?, ?, ?, 'transfer', 'active', ?, ?)")
+        .bind(`promise-${playerId}`, clubTeamId, playerId, UNREST.pledge.madeAt, UNREST.pledge.deadline),
+    ]);
+  }
+  const unrestOf = async (playerId: string) => {
+    const row = await db.prepare("SELECT json_extract(life_context, '$.transferUnrest') AS unrest FROM players WHERE id = ?")
+      .bind(playerId).first<{ unrest: string | null }>();
+    return row?.unrest ? JSON.parse(row.unrest) as typeof UNREST : null;
+  };
+  const promiseStatus = async (playerId: string) =>
+    (await db.prepare("SELECT status FROM player_promises WHERE player_id = ?").bind(playerId).first<{ status: string }>())?.status;
+  const accept = (offerId: string) =>
+    callRoute(`/teams/seller-a/offers/${offerId}/accept`, { method: "POST", token: "seller-token", body: {} });
+  async function lendStarToBuyer() {
+    await db.batch([
+      db.prepare("UPDATE players SET team_id = 'buyer-a', loan_from_team_id = 'seller-a', loan_until = ? WHERE id = 'star'").bind(FUTURE),
+      db.prepare("UPDATE player_contracts SET is_active = 0 WHERE player_id = 'star'"),
+      db.prepare("INSERT INTO player_contracts (id, player_id, team_id, season_id, join_type, fee, is_active) VALUES ('loan-star', 'star', 'buyer-a', 'season', 'loan', 0, 1)"),
+    ]);
+  }
+
+  it("přestup: kupec nedostane truc ani slib prodávajícího, morálka zůstane", async () => {
+    const offer = await makeOffer({ amount: 20_000 });
+    await giveUnrest("star", "seller-a");
+    expect((await accept(offer.id)).status).toBe(200);
+
+    expect(await unrestOf("star")).toBeNull();
+    expect(await promiseStatus("star")).toBe("kept");
+    const lc = JSON.parse((await db.prepare("SELECT life_context FROM players WHERE id = 'star'").first<{ life_context: string }>())!.life_context);
+    expect(lc.morale).toBe(50);
+  });
+
+  it("přestup z inzerátu: stejně", async () => {
+    await db.batch([
+      db.prepare("INSERT INTO transfer_listings (id, player_id, team_id, asking_price, league_id, status, expires_at) VALUES ('listing', 'star', 'seller-a', 20000, 'league-a', 'active', ?)").bind(FUTURE),
+      db.prepare("INSERT INTO transfer_bids (id, listing_id, team_id, amount, last_action_by, status) VALUES ('bid', 'listing', 'buyer-a', 20000, 'buyer-a', 'pending')"),
+    ]);
+    await giveUnrest("star", "seller-a");
+    expect((await callRoute("/teams/seller-a/bids/bid/accept", { method: "POST", token: "seller-token" })).status).toBe(200);
+
+    expect(await unrestOf("star")).toBeNull();
+    expect(await promiseStatus("star")).toBe("kept");
+  });
+
+  it("výměna: hráč, který jde ke prodávajícímu, si truc kupce nenese", async () => {
+    await db.batch([
+      db.prepare(`INSERT INTO players (id, team_id, first_name, last_name, age, position, overall_rating,
+        skills, physical, personality, life_context, avatar, weekly_wage, squad_number, residence, commute_km)
+        VALUES ('swap-one', 'buyer-a', 'Karel', 'První', 24, 'MID', 40, '{}', '{}', '{}', '{"condition":100}', '{}', 200, 21, 'Testov', 0)`),
+      db.prepare(`INSERT INTO player_contracts (id, player_id, team_id, season_id, joined_at, join_type, fee, is_active)
+        VALUES ('contract-swap-one', 'swap-one', 'buyer-a', 'season', ?, 'generated', 0, 1)`).bind(GAME_DATE),
+    ]);
+    const offer = await makeOffer({ amount: 0, offeredPlayerIds: ["swap-one"] });
+    expect(offer.status).toBe(200);
+    await giveUnrest("swap-one", "buyer-a");
+    expect((await accept(offer.id)).status).toBe(200);
+
+    expect(await unrestOf("swap-one")).toBeNull();
+    expect(await promiseStatus("swap-one")).toBe("kept");
+  });
+
+  it("odkup z hostování je trvalý přestup: truc kmenového klubu končí", async () => {
+    await lendStarToBuyer();
+    const offer = await makeOffer({ amount: 1 });
+    expect(offer.status).toBe(200);
+    await giveUnrest("star", "seller-a");
+    expect((await accept(offer.id)).status).toBe(200);
+
+    expect(await unrestOf("star")).toBeNull();
+    expect(await promiseStatus("star")).toBe("kept");
+  });
+
+  it("hostování truc nemaže, hráč pořád patří kmenovému klubu", async () => {
+    const offer = await makeOffer({ amount: 1_000, offerType: "loan", loanDuration: 30 });
+    await giveUnrest("star", "seller-a");
+    expect((await accept(offer.id)).status).toBe(200);
+
+    expect(await unrestOf("star")).toEqual(UNREST);
+    expect(await promiseStatus("star")).toBe("active");
+  });
+
+  it("návrat z hostování truc nemaže, kmenový klub ho má dál", async () => {
+    await lendStarToBuyer();
+    await giveUnrest("star", "seller-a");
+    expect((await callRoute("/teams/buyer-a/loans/star/terminate", { method: "POST", token: "buyer-token" })).status).toBe(200);
+
+    expect((await db.prepare("SELECT team_id FROM players WHERE id = 'star'").first<{ team_id: string }>())!.team_id).toBe("seller-a");
+    expect(await unrestOf("star")).toEqual(UNREST);
+    expect(await promiseStatus("star")).toBe("active");
   });
 });
