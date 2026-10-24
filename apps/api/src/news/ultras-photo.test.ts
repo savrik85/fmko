@@ -66,6 +66,12 @@ describe("fotky plachet kotle", () => {
     expect(bannerTextMatches("JEDINĚ HORNÍ SPŮLE!", "JEDINÉ HORNÍ SPÓLE!")).toBe(false);
   });
 
+  it("slepená slova nesedí, zalomení řádku a interpunkce ano", () => {
+    expect(bannerTextMatches("BOHDALEC MÁ DÍRU V PRDELI!", "BOHDALEC MÁDÍRU V PRDELI!")).toBe(false);
+    expect(bannerTextMatches("BOHDALEC MÁ DÍRU V PRDELI!", "BOHDALEC MÁ\nDÍRU V PRDELI")).toBe(true);
+    expect(bannerTextMatches("NIKDO NÁS NEMÁ RÁD. A CO.", "NIKDO NÁS NEMÁ RÁD A CO")).toBe(true);
+  });
+
   it("háček zapsaný samostatným znaménkem se nezahodí", () => {
     // Gemini tak přepsalo chybné plachty: háček nad Y místo čárky, háček navíc nad V.
     expect(bannerTextMatches("VE VÝBORU", "VE VY\u030CBORU")).toBe(false);

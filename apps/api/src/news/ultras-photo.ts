@@ -145,12 +145,13 @@ export function ultrasPhotoPrompt(b: UltrasBanner): string {
 }
 
 /**
- * Nápis na fotce sedí, když sedí písmena i s diakritikou. Mezery a interpunkce se nepočítají.
+ * Nápis na fotce sedí, když sedí slova a písmena i s diakritikou. Interpunkce a zalomení řádků
+ * se nepočítají, slepená slova ano („MÁDÍRU“ místo „MÁ DÍRU“ prošlo, dokud se mezery zahazovaly).
  * Samostatná znaménka (\p{M}) zůstávají: Gemini píše háček nad Y jako „Y̌“ a bez nich by
  * chybná plachta prošla jako „Y“.
  */
 export function bannerTextMatches(expected: string, read: string): boolean {
-  const norm = (s: string) => s.normalize("NFC").toLocaleUpperCase("cs").replace(/[^\p{L}\p{M}\p{N}]/gu, "");
+  const norm = (s: string) => s.normalize("NFC").toLocaleUpperCase("cs").replace(/[^\p{L}\p{M}\p{N}]+/gu, " ").trim();
   return norm(expected) === norm(read);
 }
 
