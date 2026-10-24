@@ -102,6 +102,39 @@ export function spokenText(body: string): string {
     .trim();
 }
 
+/**
+ * Opilý hlas. Pokyny samotné dají huhlání a pauzy, smích ale skoro ne
+ * (ověřeno přepisem tří variant 2026-10-24). Proto se do textu ke čtení
+ * přidávají značky, které model zahraje a nepřečte. V přepisu ve hře nejsou.
+ */
+const DRUNK_NOTES = "Drunk: heavily slurred speech and poor articulation, mushy consonants, words running into each other, "
+  + "stretched vowels. Slow, uneven tempo; he loses his train of thought, makes long pauses in the middle of sentences "
+  + "and restarts words. He giggles and laughs at his own words and hiccups a couple of times.";
+
+const DRUNK_TAG_LIMIT = 2;
+
+/** Značky do textu ke čtení: smích po zvolání, dlouhá pauza u trojtečky, občas škytnutí. Každé nanejvýš dvakrát. */
+export function drunkTranscript(text: string, random: () => number = Math.random): string {
+  let laughs = 0;
+  let pauses = 0;
+  let hiccups = 0;
+  return text.replace(/([.!?…]+)(\s+|$)/g, (match, punct: string, space: string) => {
+    if (punct.includes("!") && laughs < DRUNK_TAG_LIMIT) {
+      laughs++;
+      return `${punct} [laughs]${space}`;
+    }
+    if ((punct.startsWith("...") || punct === "…") && pauses < DRUNK_TAG_LIMIT) {
+      pauses++;
+      return `${punct} [long pause]${space}`;
+    }
+    if (hiccups < DRUNK_TAG_LIMIT && random() < 0.35) {
+      hiccups++;
+      return `${punct} [hiccup]${space}`;
+    }
+    return match;
+  });
+}
+
 function languageNote(nationality: string | null): string {
   switch (nationality) {
     case null:
@@ -130,15 +163,18 @@ export function buildVoicePrompt(opts: {
   voice: PlayerVoice;
   nationality: string | null;
   transcript: string;
+  drunk?: boolean;
 }): string {
   return [
     `# AUDIO PROFILE: ${opts.firstName}, ${opts.age}, player of a village football club in South Bohemia`,
     "## THE SCENE",
-    `He records a voice message to his coach on his phone. Situation: ${opts.scene}`,
+    `He records a voice message to his coach on his phone${opts.drunk ? " after far too many beers in the village pub" : ""}. `
+      + `Situation: ${opts.scene}`,
     "### DIRECTOR'S NOTES",
     "Style: completely natural and unscripted, like a real WhatsApp voice message recorded on a phone by an ordinary person. "
       + "Not a performance, not a radio or audiobook voice. Natural breathing, small hesitations and short pauses where the commas "
       + "and dots are. The mood follows the situation and the words.",
+    ...(opts.drunk ? [DRUNK_NOTES] : []),
     `Voice: ${opts.voice.trait}.`,
     `Language: ${languageNote(opts.nationality)}`,
     "#### TRANSCRIPT",
@@ -264,6 +300,8 @@ export async function recordVoiceMessage(
     player: VoicePlayer;
     scene: string;
     body: string;
+    /** Hráč volá z hospody: opilý hlas se smíchem a škytáním. */
+    drunk?: boolean;
     force?: boolean;
     random?: () => number;
     now?: Date;
@@ -281,8 +319,9 @@ export async function recordVoiceMessage(
     if ((opts.random ?? Math.random)() >= VOICE_MESSAGE_CHANCE) return null;
   }
 
-  const transcript = spokenText(opts.body);
-  if (!transcript) return null;
+  const plain = spokenText(opts.body);
+  if (!plain) return null;
+  const transcript = opts.drunk ? drunkTranscript(plain, opts.random ?? Math.random) : plain;
 
   let stored: unknown = null;
   try {
@@ -305,6 +344,7 @@ export async function recordVoiceMessage(
     voice,
     nationality: opts.player.nationality,
     transcript,
+    drunk: opts.drunk,
   });
   const pcm = await synthesizeSpeech(env.GEMINI_API_KEY, prompt, voice.name);
   // Pod půl vteřiny to není hlasovka, ale useknutá odpověď.
