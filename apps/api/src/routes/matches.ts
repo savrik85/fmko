@@ -1519,11 +1519,14 @@ matchesRouter.post("/teams/:teamId/challenge/:challengeId/accept", async (c) => 
   }
 
   // Create match PŘED status claim — aby accepted challenge nikdy nebyl bez match.
-  // Pokud už proběhl dnešní match-tick (cron 0 16 UTC), naplánovat na zítřejší game_date —
-  // zítra ráno daily-tick game_date posune o den, zítra v 18:00 CEST match-tick zápas odsimuluje.
-  // Bez tohoto by FE den mezi acceptance a simulací ukazoval rozporně ("Tréninkový den" × "dnes!").
+  // Pokud už proběhl dnešní match-tick (18:00 v Praze, lib/match-tick-schedule.ts), naplánovat
+  // na zítřejší game_date — zítra ráno daily-tick game_date posune o den a zítra v 18:00
+  // match-tick zápas odsimuluje. Bez tohoto by FE den mezi acceptance a simulací ukazoval
+  // rozporně ("Tréninkový den" × "dnes!"). Bez známé pražské hodiny platí staré pravidlo v UTC.
   const matchDate = new Date(team.game_date);
-  if (new Date().getUTCHours() >= 17) {
+  const { pragueHour } = await import("../lib/match-tick-schedule");
+  const hourInPrague = pragueHour();
+  if (hourInPrague != null ? hourInPrague >= 18 : new Date().getUTCHours() >= 17) {
     matchDate.setUTCDate(matchDate.getUTCDate() + 1);
   }
   const matchId = uuid();

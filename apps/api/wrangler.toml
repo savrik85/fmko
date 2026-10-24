@@ -42,6 +42,10 @@ crons = [
   "0 16 * * *",
   "5 16 * * *",
   "20 16 * * *",
+  # Kolo se hraje v 18:00 v Praze: v zimě je to 17:00 UTC (lib/match-tick-schedule.ts).
+  "0 17 * * *",
+  "5 17 * * *",
+  "20 17 * * *",
 ]
 
 # ── Fronty (produkce) ──
@@ -188,4 +192,8 @@ crons = [
   "0 16 * * *",
   "5 16 * * *",
   "20 16 * * *",
+  # Kolo se hraje v 18:00 v Praze: v zimě je to 17:00 UTC (lib/match-tick-schedule.ts).
+  "0 17 * * *",
+  "5 17 * * *",
+  "20 17 * * *",
 ]
