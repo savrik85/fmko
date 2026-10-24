@@ -486,10 +486,15 @@ export const EQUIPMENT_COOLDOWN_DAYS: Record<number, number> = {
  * Každá položka musí dávat smysl SAMA O SOBĚ — na kartě i v bazaru se zobrazuje
  * vždycky jen jedna, ne celý sloupec. Zkratky typu „+10 %, +2 chemie" nebo
  * „o 30 % pomaleji" vypadaly jako oříznutý text, protože jim chyběl podmět.
+ *
+ * Čísla jsou to, co dá `calculateEffects` vybavení v plném stavu. Míče L3 dřív slibovaly
+ * +20 % tréninku a dávaly 15, dresy L3 „zájem sponzorů", který nikde není, a míče L2
+ * +1 techniku místo tří. Kde se efekt zaokrouhluje z poloviny (2,5 → 3), platí nižší
+ * číslo: plný stav vydrží jen do prvního dne opotřebení.
  */
 const UPGRADE_EFFECT_LABELS: Record<string, string[]> = {
-  balls:           ["", "+5 % trénink", "+10 % trénink, +1 technika v zápase", "+20 % trénink, +4 technika v zápase"],
-  jerseys:         ["", "+2 morálka", "+5 morálka", "+8 morálka a zájem sponzorů"],
+  balls:           ["", "+5 % trénink, +1 technika v zápase", "+10 % trénink, +3 technika v zápase", "+15 % trénink, +4 technika v zápase"],
+  jerseys:         ["", "+2 morálka", "+5 morálka", "+8 morálka"],
   training_cones:  ["", "+7 % efektivita tréninku", "+14 % efektivita tréninku", "+21 % efektivita tréninku"],
   first_aid:       ["", "Šance na zranění -10 %", "Šance na zranění -20 %, nová o den kratší", "Šance na zranění -30 %, nová o 2 dny kratší"],
   boots_stock:     ["", "Ztráta kondice -5 %", "Ztráta kondice -10 %", "Ztráta kondice -15 %"],
@@ -512,7 +517,8 @@ const UPGRADE_EFFECT_LABELS: Record<string, string[]> = {
   sports_drinks:   ["", "Únava v závěru -20 %", "Únava v závěru -40 %", "Únava v závěru -60 %"],
   nutrition:       ["", "Hospoda -20 %, tréninkem k ideální váze", "Hospoda -35 %, jídelníček k ideální váze", "Hospoda -50 %, jídelníček 2× rychleji"],
   raffle:          ["", "+3 Kč z diváka na domácím zápase", "+6 Kč z diváka na domácím zápase", "+9 Kč z diváka na domácím zápase"],
-  pa_system:       ["", "+2 spokojenost fanoušků za zápas", "+4 spokojenost fanoušků za zápas", "+6 spokojenost fanoušků za zápas"],
+  // Hraje jen doma (finance-processor posílá ozvučení jen u domácího zápasu).
+  pa_system:       ["", "+2 spokojenost fanoušků po domácím zápase", "+4 spokojenost fanoušků po domácím zápase", "+6 spokojenost fanoušků po domácím zápase"],
   trophy_case:     ["", "Truc hráčů roste o 12 % pomaleji", "Truc hráčů roste o 24 % pomaleji", "Truc hráčů roste o 36 % pomaleji"],
   area_security:   ["", "Vloupání zvenku o 40 % méně", "Vloupání zvenku o 65 % méně, alarm a kamera u kabin", "Vloupání zvenku o 80 % méně, kamery v celém areálu"],
 };
@@ -647,7 +653,7 @@ export function getUpgradeOptions(
       currentLevel: current,
       nextLevel: next,
       cost: costs[next] ?? 99999,
-      effect: UPGRADE_EFFECT_LABELS[cat]?.[next] ?? "",
+      effect: getUpgradeEffectLabel(cat, next),
       description: LEVEL_DESCRIPTIONS[cat]?.[next] ?? "",
       locked: unlock.locked,
       lockReason: unlock.reason,
@@ -712,7 +718,25 @@ export function getLevelDescription(category: string, level: number): string {
   return LEVEL_DESCRIPTIONS[category]?.[level] ?? "";
 }
 
-/** Textový popis bonusu na dané úrovni — bazar ho ukazuje na kartě nabídky. */
+/**
+ * Dovětek k popisku: čísla platí pro vybavení v plném stavu.
+ *
+ * Efekt se násobí stavem (`lv × stav / 100` v calculateEffects) a vybavení každý den
+ * chátrá (season/daily-tick.ts), takže koupené „+10 % trénink" po měsíci dává míň.
+ * Zabezpečení areálu se stavem nenásobí: zámek chrání i zrezivělý, alarm a kamera
+ * pod `ZABEZPECENI_MIN_STAV` nefungují vůbec.
+ */
+function wearNote(category: string, level: number): string {
+  if (category === "area_security") {
+    return level >= 2 ? `pod ${ZABEZPECENI_MIN_STAV} % stavu nefungují, zámek chrání dál` : "";
+  }
+  return "platí v plném stavu, s opotřebením slábne";
+}
+
+/** Textový popis bonusu na dané úrovni — obchod ho ukazuje u vylepšení, bazar na kartě nabídky. */
 export function getUpgradeEffectLabel(category: string, level: number): string {
-  return UPGRADE_EFFECT_LABELS[category]?.[level] ?? "";
+  const label = UPGRADE_EFFECT_LABELS[category]?.[level] ?? "";
+  if (!label) return "";
+  const note = wearNote(category, level);
+  return note ? `${label} (${note})` : label;
 }
