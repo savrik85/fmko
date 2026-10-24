@@ -1547,39 +1547,9 @@ gameRouter.post("/teams/:teamId/equipment/repair", async (c) => {
 gameRouter.get("/teams/:teamId/stadium", async (c) => {
   const teamId = c.req.param("teamId");
 
-  let stadium = await c.env.DB.prepare(
-    "SELECT * FROM stadiums WHERE team_id = ?"
-  ).bind(teamId).first<Record<string, unknown>>().catch((e) => { logger.warn({ module: "game" }, "fetch stadium", e); return null; });
-
-  if (!stadium) {
-    // Auto-create stadium
-    const team = await c.env.DB.prepare(
-      "SELECT t.*, v.size FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?"
-    ).bind(teamId).first<Record<string, unknown>>().catch((e) => { logger.warn({ module: "game" }, "fetch team for stadium creation", e); return null; });
-
-    if (!team) return c.json({ error: "Team not found" }, 404);
-
-    const { generateStadium } = await import("../stadium/stadium-generator");
-    const { createRng } = await import("../generators/rng");
-    let seed = 0;
-    for (let i = 0; i < teamId.length; i++) seed = ((seed << 5) - seed + teamId.charCodeAt(i)) | 0;
-    const rng = createRng(Math.abs(seed));
-    const config = generateStadium(rng, team.size as string);
-
-    const id = crypto.randomUUID();
-    await c.env.DB.prepare(
-      // Plachtu píše kotel. Sloupec už nikdo nečte, ale ať v datech nelže.
-            `INSERT INTO stadiums (id, team_id, capacity, pitch_condition, pitch_type, changing_rooms, showers, refreshments, lighting, stands, parking, fence, ultras_text_mode)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'fanousci')`
-    ).bind(id, teamId, config.capacity, config.pitchCondition, config.pitchType,
-      config.changingRooms, config.showers, config.refreshments, config.lighting,
-      config.stands, config.parking, config.fence,
-    ).run().catch((e) => logger.warn({ module: "game" }, "insert stadium", e));
-
-    // Re-read from DB to get proper snake_case column names
-    stadium = await c.env.DB.prepare("SELECT * FROM stadiums WHERE team_id = ?")
-      .bind(teamId).first<Record<string, unknown>>() ?? { id, team_id: teamId, ...config };
-  }
+  const { ensureStadiumRow } = await import("../stadium/stadium-service");
+  const stadium = await ensureStadiumRow(c.env.DB, teamId);
+  if (!stadium) return c.json({ error: "Team not found" }, 404);
 
   // Get upgrade options with unlock logic
   const { getUpgradeOptions } = await import("../stadium/stadium-generator");
