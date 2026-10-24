@@ -226,6 +226,21 @@ export function trackEvent(eventName: string, properties?: Record<string, unknow
 }
 
 /**
+ * Chyba zachycená v error.tsx nebo global-error.tsx. Zachycenou chybu React nepustí
+ * do window.onerror, takže ji automatické hlídání chyb PostHogu samo nevidí. Když chyba
+ * přijde hned při prvním vykreslení, PostHog ještě nemusí běžet, proto se tu spouští.
+ */
+export function captureError(error: unknown, properties?: Record<string, unknown>) {
+  const client = initPostHog();
+  if (!client) return;
+  try {
+    client.captureException(error, properties);
+  } catch (err) {
+    console.warn("[Analytics] Chyba při captureError:", err);
+  }
+}
+
+/**
  * Zaznamenání zobrazení stránky pro Next.js App Router s obohacením o sekci a záložku.
  */
 export function trackPageView(
