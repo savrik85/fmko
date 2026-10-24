@@ -9381,10 +9381,13 @@ gameRouter.post("/admin/teams/:teamId/manager-attr", async (c) => {
 });
 
 // POST /api/admin/spawn-ai-chats — ruční spuštění SMS od hráčů (jinak jen cron 0 14).
-// Umožňuje ověřit obsah zpráv bez čekání na noční běh.
+// Umožňuje ověřit obsah zpráv bez čekání na noční běh. `?teamId=` spustí jen jeden tým
+// bez losu a cooldownu, `&voice=1` k tomu rovnou pošle hlasovku (jinak strop 2 týdně).
 gameRouter.post("/admin/spawn-ai-chats", async (c) => {
   const { applyAiPlayerThreads } = await import("../messaging/ai-player-spawn");
-  const r = await applyAiPlayerThreads(c.env.DB, c.env)
+  const teamId = c.req.query("teamId");
+  const manual = teamId ? { teamId, forceVoice: c.req.query("voice") === "1" } : undefined;
+  const r = await applyAiPlayerThreads(c.env.DB, c.env, manual)
     .catch((e) => { logger.error({ module: "game.ts" }, "manual ai chat spawn", e); return null; });
   if (!r) return c.json({ error: "spawn selhal" }, 500);
   return c.json({ ok: true, ...r });

@@ -68,6 +68,23 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   return res.json() as Promise<T>;
 }
 
+/**
+ * Stáhne binární data (nahrávku) s přihlášením. `<audio src>` neumí poslat
+ * hlavičku s tokenem, takže soukromé nahrávky se přehrávají z blobu.
+ */
+export async function apiFetchBlob(path: string): Promise<Blob> {
+  const token = typeof window !== "undefined" ? localStorage.getItem("om_token") : null;
+  const res = await fetch(`${API_BASE}${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) {
+    const error = new Error(`Stažení se nezdařilo (${res.status})`);
+    (error as Error & { status: number }).status = res.status;
+    throw error;
+  }
+  return res.blob();
+}
+
 /** Zobrazí chybový dialog (náš ErrorDialogProvider); fallback na alert pokud dialog není mountnutý. */
 export function showError(title: string, message: string): void {
   if (typeof window === "undefined") return;
