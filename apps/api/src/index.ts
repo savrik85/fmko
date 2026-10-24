@@ -200,6 +200,17 @@ export default {
       log("error", "čísla dresů se nepodařilo doplnit", e);
     }
 
+    // ── Úklid hlasových odpovědí trenéra, které se nahrály, ale neodeslaly (messaging/coach-voice.ts) ──
+    if (cron === "0 3 * * *") {
+      try {
+        const { cleanupPendingCoachAudio } = await import("./messaging/coach-voice");
+        const removed = await cleanupPendingCoachAudio(env.SEED_DATA);
+        if (removed > 0) log("info", `neodeslané hlasové odpovědi: smazáno ${removed}`);
+      } catch (e: any) {
+        log("error", "úklid neodeslaných hlasových odpovědí selhal", e);
+      }
+    }
+
     // ── DAILY TICK: 4:00 CET (3:00 UTC) — posouvá dny, tréninky, zprávy ──
     // Manuální trigger (!cron) spustí denní tick + zápasový tick
     if (cron === "0 3 * * *" || !cron) {
