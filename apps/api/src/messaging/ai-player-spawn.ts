@@ -290,14 +290,25 @@ export async function loadTeamContext(db: D1Database, teamId: string): Promise<T
   };
 }
 
+/** Nejstarší konverzace týmu s hráčem. Zdvojené z doby před opravou se tak nestřídají. */
+const FIND_PLAYER_CONVERSATION =
+  "SELECT id FROM conversations WHERE team_id = ? AND type = 'player' AND participant_id = ? ORDER BY created_at, rowid LIMIT 1";
+
+/**
+ * Najde, nebo založí konverzaci týmu s hráčem.
+ *
+ * Unikátní index na (team_id, type, participant_id) v databázi není, takže dva souběžné
+ * požadavky (rychlé klikání na 💬 SMS) dřív oba nic nenašly a založily dvě konverzace.
+ * Zápis proto vkládá jen tehdy, když žádná není: jeden příkaz, D1 ho provede celý
+ * najednou. Pak se vrací ta konverzace, která v databázi opravdu je.
+ */
 export async function getOrCreatePlayerConversation(
   db: D1Database,
   teamId: string,
   player: { id: string; firstName: string; lastName: string; nickname?: string | null; avatar?: string | null },
 ): Promise<string> {
-  const existing = await db.prepare(
-    "SELECT id FROM conversations WHERE team_id = ? AND type = 'player' AND participant_id = ? LIMIT 1",
-  ).bind(teamId, player.id).first<{ id: string }>()
+  const find = () => db.prepare(FIND_PLAYER_CONVERSATION).bind(teamId, player.id).first<{ id: string }>();
+  const existing = await find()
     .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "find player conv", e); return null; });
   if (existing?.id) return existing.id;
 
@@ -305,9 +316,12 @@ export async function getOrCreatePlayerConversation(
   const now = new Date().toISOString();
   const title = player.nickname ? `${player.firstName} "${player.nickname}" ${player.lastName}` : `${player.firstName} ${player.lastName}`;
   await db.prepare(
-    "INSERT INTO conversations (id, team_id, type, title, participant_id, participant_avatar, last_message_at, created_at) VALUES (?, ?, 'player', ?, ?, ?, ?, ?)",
-  ).bind(convId, teamId, title, player.id, player.avatar ?? "{}", now, now).run();
-  return convId;
+    `INSERT INTO conversations (id, team_id, type, title, participant_id, participant_avatar, last_message_at, created_at)
+     SELECT ?, ?, 'player', ?, ?, ?, ?, ?
+      WHERE NOT EXISTS (SELECT 1 FROM conversations WHERE team_id = ? AND type = 'player' AND participant_id = ?)`,
+  ).bind(convId, teamId, title, player.id, player.avatar ?? "{}", now, now, teamId, player.id).run();
+  // Souběžný požadavek mohl konverzaci založit mezi hledáním a zápisem, pak se náš zápis neprovedl.
+  return (await find())?.id ?? convId;
 }
 
 /**
