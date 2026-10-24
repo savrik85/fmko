@@ -6,6 +6,7 @@
 import { Hono } from "hono";
 import type { Bindings } from "../index";
 import { logger } from "../lib/logger";
+import { photoKey } from "../messaging/player-photo";
 import { requireTeamOwnership, requireAdmin, requirePrivateTeamRead } from "../auth/middleware";
 import { listGroupChatsForTeam } from "./group-chats";
 import { sendWebPushToTeam, getNotificationPreferences } from "../community/web-push";
@@ -354,7 +355,8 @@ messagingRouter.get("/teams/:teamId/voice-messages/:messageId/audio", async (c) 
 });
 
 // GET /api/teams/:teamId/photos/:messageId — fotka, kterou hráč poslal se zprávou (player-photo.ts).
-// Stejně jako hlasovky jen pro vlastní tým.
+// Stejně jako hlasovky jen pro vlastní tým. Nová appka bere fotky přes /player-photos/:id níž,
+// tahle cesta zůstává pro prohlížeče se starou verzí.
 messagingRouter.get("/teams/:teamId/photos/:messageId", async (c) => {
   const teamId = c.req.param("teamId");
   const messageId = c.req.param("messageId");
@@ -369,6 +371,20 @@ messagingRouter.get("/teams/:teamId/photos/:messageId", async (c) => {
   if (!obj) return c.json({ error: "Fotka není k dispozici" }, 404);
   return new Response(obj.body, {
     headers: { "Content-Type": obj.httpMetadata?.contentType ?? "image/jpeg", "Cache-Control": "private, max-age=604800" },
+  });
+});
+
+// GET /api/player-photos/:id — fotka od hráče podle náhodného id fotky (R2 `photos/<id>.jpg`).
+// Bez přihlášení jako odkaz: id zná jen majitel konverzace (je v metadatech zprávy) a uhodnout
+// nejde. Obyčejný odkaz umí přehrát i nahrávka v PostHogu; obrázek stažený s přihlášením do
+// paměti prohlížeče ukázala jako rozbitý (2026-10-24).
+messagingRouter.get("/player-photos/:id", async (c) => {
+  const id = c.req.param("id");
+  if (!/^[0-9a-f-]{36}$/.test(id)) return c.json({ error: "Neplatná fotka" }, 400);
+  const obj = await c.env.SEED_DATA.get(photoKey(id));
+  if (!obj) return c.json({ error: "Fotka neexistuje" }, 404);
+  return new Response(obj.body, {
+    headers: { "Content-Type": obj.httpMetadata?.contentType ?? "image/jpeg", "Cache-Control": "public, max-age=31536000, immutable" },
   });
 });
 

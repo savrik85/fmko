@@ -660,8 +660,8 @@ export default function ConversationPage() {
                           ) : (
                             <div className="relative">
                               {/* Fotka od hráče (player-photo.ts), text pod ní je popisek jako ve WhatsAppu. */}
-                              {msg.metadata?.type === "photo" && teamId && (
-                                <PlayerPhoto teamId={teamId} messageId={msg.id} alt={String(msg.metadata.photoAlt ?? "Fotka")} />
+                              {msg.metadata?.type === "photo" && (
+                                <PlayerPhoto photoKey={String(msg.metadata.photoKey ?? "")} alt={String(msg.metadata.photoAlt ?? "Fotka")} />
                               )}
                               <p className="whitespace-pre-wrap break-words">
                                 {emoticonize(msg.body)}
