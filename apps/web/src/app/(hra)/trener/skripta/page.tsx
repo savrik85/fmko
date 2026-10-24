@@ -8,7 +8,7 @@
  * ptá serveru (pokryje i druhý prohlížeč nebo telefon).
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
@@ -49,7 +49,10 @@ export default function SkriptaPage() {
       });
   }, [teamId, courseId]);
 
-  useEffect(() => { window.scrollTo({ top: 0 }); }, [index]);
+  // Nová lekce od začátku. Posouvá se <main> z herního layoutu, ne okno, takže
+  // window.scrollTo nedělal nic a lekce se otevřela tam, kde skončila předchozí.
+  const topRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { topRef.current?.scrollIntoView({ block: "start" }); }, [index]);
 
   // U dokončeného kurzu už test spustit nejde, hlídat není co.
   const watch = !!data && data.course.status !== "passed" && data.course.status !== "failed";
@@ -124,7 +127,7 @@ export default function SkriptaPage() {
           <Spinner size="lg" />
         </div>
       )}
-      <div className={`page-container space-y-4 max-w-[760px] ${checking ? "invisible" : ""}`}>
+      <div ref={topRef} className={`page-container space-y-4 max-w-[760px] ${checking ? "invisible" : ""}`}>
         <div className="card p-4 sm:p-5">
           <div className="text-sm text-muted">{data.course.topic}</div>
           <h1 className="text-xl font-heading font-extrabold">{data.course.title}</h1>

@@ -264,7 +264,9 @@ function RunningExam({ exam, teamId, courseId, onFinished, onReload }: {
   }, []);
 
   // Nová otázka vždy od začátku — jinak by ji po přechodu z úvodu překryla lišta s časem.
-  useEffect(() => { window.scrollTo({ top: 0 }); }, [index]);
+  // Posouvá se <main> z herního layoutu, ne okno: window.scrollTo tu nedělal nic.
+  const topRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { topRef.current?.scrollIntoView({ block: "start" }); }, [index]);
 
   useEffect(() => {
     if (remaining <= 0) void submit();
@@ -361,7 +363,7 @@ function RunningExam({ exam, teamId, courseId, onFinished, onReload }: {
   const low = remaining < 60_000;
 
   return (
-    <div className="page-container space-y-4 max-w-[760px]">
+    <div ref={topRef} className="page-container space-y-4 max-w-[760px]">
       {/* Odpočet — pořád na očích */}
       <div className={`sticky top-0 z-10 card p-3 flex items-center justify-between ${low ? "bg-red-50 border border-red-300" : ""}`}>
         <div className="text-sm text-muted">Otázka <strong className="text-ink tabular-nums">{index + 1}/{exam.questions.length}</strong> · zodpovězeno {answeredCount}</div>
