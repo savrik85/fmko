@@ -42,6 +42,15 @@ function useSchodekViewportu(): number {
   return schodek;
 }
 
+/**
+ * Klepnutí na záložku, na které už hráč je, posune obsah nahoru (jako v nativních
+ * aplikacích). Scrolluje <main> z herního layoutu, okno se neposouvá.
+ */
+function scrollMainToTop() {
+  const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+  document.querySelector("main")?.scrollTo({ top: 0, behavior: reduceMotion ? "auto" : "smooth" });
+}
+
 export function BottomNav() {
   const pathname = usePathname();
   const schodek = useSchodekViewportu();
@@ -84,6 +93,14 @@ export function BottomNav() {
             <Link
               key={item.label}
               href={item.href}
+              onClick={(e) => {
+                // Podstránka (třeba konverzace v Telefonu) normálně přejde na začátek záložky.
+                if (pathname !== item.href) return;
+                scrollMainToTop();
+                // Stejná adresa: navigace by nic nezměnila. S parametry (?tab=…) se dál
+                // přejde na výchozí pohled záložky jako dřív.
+                if (!window.location.search && !window.location.hash) e.preventDefault();
+              }}
               className={`relative flex flex-col items-center justify-center gap-0.5 px-3 rounded-soft transition-colors min-w-[56px] ${
                 isActive
                   ? "text-white"
