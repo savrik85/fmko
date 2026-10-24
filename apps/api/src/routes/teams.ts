@@ -1164,11 +1164,32 @@ teamsRouter.get("/:id/players/:playerId", async (c) => {
     trend30d = weightTrend(physical.weight, log.results.map((r) => ({ gameDate: r.game_date, weight: r.weight })), today);
   }
 
+  // Smí divák na hráče nabídnout? Rozjednaná nabídka nebo blokace po odmítnutí se ukáže
+  // hned na profilu, ne až chybou po odeslání. Nabízí cizí klub a u hostujícího hráče i ten,
+  // kdo si ho půjčil (odkup); kmenový klub ani majitel U21 ne.
+  let offerState: { activeOfferId: string | null; retry: import("../transfers/offer-cooldown").OfferRetryBlock | null } | null = null;
+  if (divakovo && !isParentClub && !isOwnU21 && (!isOwn || !!row.loan_from_team_id)) {
+    const { resolveClubTeamId } = await import("../transfers/offer-club-scope");
+    const { offerRetryBlock } = await import("../transfers/offer-cooldown");
+    const clubTeamId = (await resolveClubTeamId(c.env.DB, teamId)
+      .catch((e) => { logger.warn({ module: "teams" }, "klub diváka pro stav nabídky", e); return null; })) ?? teamId;
+    const active = await c.env.DB.prepare(
+      `SELECT id FROM transfer_offers
+       WHERE player_id = ? AND from_team_id IN (SELECT id FROM teams WHERE id = ? OR parent_team_id = ?)
+         AND status IN ('pending','countered') LIMIT 1`,
+    ).bind(row.id as string, clubTeamId, clubTeamId).first<{ id: string }>()
+      .catch((e) => { logger.warn({ module: "teams" }, "rozjednaná nabídka diváka", e); return null; });
+    const retry = active ? null : await offerRetryBlock(c.env.DB, row.id as string, clubTeamId)
+      .catch((e) => { logger.warn({ module: "teams" }, "blokace další nabídky", e); return null; });
+    offerState = { activeOfferId: active?.id ?? null, retry };
+  }
+
   return c.json({
     ...ocisteny.row,
     isOwn,
     isParentClub,
     loan,
+    offerState,
     skills,
     physical,
     // Počítá se až ze zamlžených hodnot: u cizího hráče nesmí prozradit přesnou váhu.

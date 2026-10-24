@@ -105,6 +105,21 @@ function dnySlovem(n: number): string {
   return n < 5 ? "dny" : "dní";
 }
 
+/** Smí divák na hráče nabídnout? Počítá server (transfers/offer-cooldown.ts). */
+interface OfferState {
+  activeOfferId: string | null;
+  retry: { daysLeft: number; reason: "rejected" | "ended_by_seller" | "seller_silent" } | null;
+}
+
+function retryReasonText(retry: NonNullable<OfferState["retry"]>): string {
+  const wait = `Znovu nabídnout můžeš za ${retry.daysLeft} ${dnySlovem(retry.daysLeft)}.`;
+  switch (retry.reason) {
+    case "rejected": return `Prodávající tvou poslední nabídku odmítl. ${wait}`;
+    case "ended_by_seller": return `Prodávající s tebou jednání ukončil. ${wait}`;
+    case "seller_silent": return `Prodávající na tvou nabídku neodpověděl a propadla. ${wait}`;
+  }
+}
+
 export default function PlayerDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -129,6 +144,8 @@ export default function PlayerDetailPage() {
   const [offerMessage, setOfferMessage] = useState("");
   const [offerSending, setOfferSending] = useState(false);
   const [offerSent, setOfferSent] = useState(false);
+  const [offerState, setOfferState] = useState<OfferState | null>(null);
+  const [retryInfoOpen, setRetryInfoOpen] = useState(false);
   const [offerType, setOfferType] = useState<"transfer" | "loan">("transfer");
   const [loanDuration, setLoanDuration] = useState("30");
   const [targetSquad, setTargetSquad] = useState<"senior" | "u21">("senior");
@@ -210,10 +227,11 @@ export default function PlayerDetailPage() {
   useEffect(() => {
     if (!teamId) return;
     // First fetch the player to find which team they belong to
-    apiFetch<Player & { isWatched?: boolean; watchers?: Array<{ id: string; name: string; primary_color: string; secondary_color: string; badge_pattern: string }> }>(`/api/teams/${teamId}/players/${playerId}`)
+    apiFetch<Player & { isWatched?: boolean; watchers?: Array<{ id: string; name: string; primary_color: string; secondary_color: string; badge_pattern: string }>; offerState?: OfferState | null }>(`/api/teams/${teamId}/players/${playerId}`)
       .then(async (p) => {
         setPlayer(p);
         setIsWatched(!!p.isWatched);
+        setOfferState(p.offerState ?? null);
         const playerOwnerTeamId = p.team_id || teamId;
         const isForeign = playerOwnerTeamId !== teamId;
 
@@ -394,11 +412,14 @@ export default function PlayerDetailPage() {
 
   useEffect(() => {
     if (!prefillOffer || !canSendOffer) return;
+    setPrefillOffer(null);
+    // Rozjednaná nabídka má vlastní tlačítko a blokovanou nabídku nemá smysl skládat.
+    if (offerState?.activeOfferId) return;
+    if (offerState?.retry) { setRetryInfoOpen(true); return; }
     setOfferType("transfer");
     setOfferAmount(prefillOffer);
     setOfferOpen(true);
-    setPrefillOffer(null);
-  }, [prefillOffer, canSendOffer]);
+  }, [prefillOffer, canSendOffer, offerState]);
 
   async function sendOffer() {
     if (!teamId || !player || offerSending) return;
@@ -655,12 +676,21 @@ export default function PlayerDetailPage() {
             return (
               <div className="mt-3 flex flex-wrap gap-2">
                 {/* Nabídka / Odkoupit */}
-                {canSendOffer && !offerSent && (
+                {canSendOffer && !offerSent && (offerState?.activeOfferId ? (
+                  <Link href={`/prestupy/nabidka/${offerState.activeOfferId}`} className={`${btnBase} ${btnNeutral}`}>
+                    {isLoanedToUs ? "💰 Odkup rozjednán" : "🤝 Rozjednáno"}
+                  </Link>
+                ) : offerState?.retry ? (
+                  <button onClick={() => setRetryInfoOpen(!retryInfoOpen)}
+                    className={`${btnBase} ${retryInfoOpen ? btnNeutralActive : btnNeutral} opacity-70`}>
+                    {isLoanedToUs ? "💰 Odkoupit" : "🤝 Nabídka"} za {offerState.retry.daysLeft} {dnySlovem(offerState.retry.daysLeft)}
+                  </button>
+                ) : (
                   <button onClick={() => { if (isLoanedToUs) setOfferType("transfer"); setOfferOpen(!offerOpen); }}
                     className={`${btnBase} ${offerOpen ? btnNeutralActive : btnNeutral}`}>
                     {offerOpen ? "✕ Zavřít" : isLoanedToUs ? "💰 Odkoupit" : "🤝 Nabídka"}
                   </button>
-                )}
+                ))}
                 {/* Povolat zpět — kmenový klub u hostování zdarma */}
                 {player.loan?.canRecall && (
                   <button onClick={async () => {
@@ -767,6 +797,11 @@ export default function PlayerDetailPage() {
         {offerSent && (
           <div className="max-w-[1280px] mx-auto mt-3">
             <div className="text-white/80 text-sm font-heading font-bold">Nabídka odeslána</div>
+          </div>
+        )}
+        {retryInfoOpen && offerState?.retry && !offerSent && (
+          <div className="max-w-[1280px] mx-auto mt-3">
+            <div className={`${light ? "text-gray-700" : "text-white/80"} text-sm font-heading`}>{retryReasonText(offerState.retry)}</div>
           </div>
         )}
         {offerOpen && (
