@@ -67,7 +67,7 @@ const STYLY: Record<JournalistStyle, StyleDef> = {
       "Fotoaparát nosí i na pohřby. Prý nikdy nevíš.",
     ],
     hlasky: ["A teď to hlavní!", "Zdroje blízké kabině tvrdí…", "Co na to říkáte vy?"],
-    rubriky: ["player_interview", "transfer"],
+    rubriky: ["player_interview", "transfer", "interview"],
   },
   seriozni: {
     label: "seriózní",
@@ -82,7 +82,7 @@ const STYLY: Record<JournalistStyle, StyleDef> = {
       "Tvrzení bez opory v datech se do článku nedostane.",
     ],
     hlasky: ["Podívejme se na to střízlivě.", "Čísla mluví jasně.", "Bez emocí, prosím."],
-    rubriky: ["ai_report", "round_summary", "matchday_preview", "governance_minutes"],
+    rubriky: ["ai_report", "round_summary", "matchday_preview", "governance_minutes", "interview"],
   },
   vycurany: {
     label: "vyčůraný",
@@ -260,6 +260,25 @@ export async function redaktorProRubriku(
   return vyber[Math.abs(seed) % vyber.length];
 }
 
+/**
+ * Kdo z redakce dělá konkrétní rozhovor s trenérem.
+ *
+ * Dřív seed stál jen na týmu, takže každého trenéra zpovídal pořád tentýž
+ * (vyčůraný) redaktor a vztah s ním po pár kolech vyšplhal na maximum. Teď se
+ * mezi rozhovory střídá bulvár, vyčůraný i seriózní. Seed je z týmu, kola a
+ * druhu rozhovoru, takže otázky, článek i karta v Událostech vyjdou na
+ * stejného člověka, aniž by se musel ukládat.
+ */
+export function journalistForInterview(
+  db: D1Database,
+  leagueId: string,
+  teamId: string,
+  calendarId: string | null | undefined,
+  kind: string | null | undefined,
+): Promise<Journalist | null> {
+  return redaktorProRubriku(db, leagueId, "interview", `${teamId}|${calendarId ?? ""}|${kind ?? "pre_match"}`);
+}
+
 /** Jak se redaktor dívá na konkrétní klub. 0 = nemá důvod ho řešit. */
 export async function sentimentKeKlubu(db: D1Database, journalistId: string, teamId: string): Promise<number> {
   const row = await db.prepare(
@@ -312,11 +331,14 @@ export function pokynyProRedaktora(j: Journalist, sentiment = 0): string {
  * viděl pořád stejné neutrální otázky, i když si redaktora už znepřátelil.
  */
 export function vztahKeKlubuText(sentiment: number): string {
+  // I oblíbenec dostane aspoň jednu nepříjemnou otázku. Dřív je redaktor
+  // obcházel úplně, a protože vztah po pár rozhovorech vyskočil na maximum,
+  // ptal se nakonec celé lize jen na příjemné věci.
   if (sentiment >= 70) {
-    return "Tenhle klub je tvůj oblíbenec. V otázkách trenérovi nahráváš, dáváš mu prostor se pochlubit, nepříjemná témata obcházíš a v článku chyby omlouváš.";
+    return "Tenhle klub je tvůj oblíbenec. Trenérovi dáváš prostor se pochlubit a v článku píšeš s pochopením. Novinář jsi ale pořád: aspoň jednu nepříjemnou věc otevřeš i tady, jen v rukavičkách.";
   }
   if (sentiment >= 30) {
-    return "K tomuhle klubu máš slabost. Otázky jsou vstřícné, spíš příležitost se předvést než past, a v článku píšeš s pochopením.";
+    return "K tomuhle klubu máš slabost. Otázky jsou spíš vstřícné, ale aspoň jedna jde po slabině nebo kauze, protože to čtenáři chtějí. V článku píšeš s pochopením.";
   }
   if (sentiment <= -70) {
     return "Tenhle klub nesnášíš a je to znát. Otázky jsou ostré až provokativní: připomínáš prohry a trapné momenty, rýpeš do slabin, hledáš, kde se trenér chytne. V článku mu nic neodpustíš. Fakta si ale nevymýšlíš.";
@@ -324,7 +346,37 @@ export function vztahKeKlubuText(sentiment: number): string {
   if (sentiment <= -30) {
     return "S tímhle klubem máš spory. Otázky jsou nepříjemné, jdeš po slabinách a připomínáš, co se nepovedlo. V článku jsi kritický. Fakta si ale nevymýšlíš.";
   }
-  return "K tomuhle klubu nemáš zvláštní vztah, ptáš se věcně.";
+  return "K tomuhle klubu nemáš zvláštní vztah. Ptáš se věcně a nepříjemným věcem se nevyhýbáš.";
+}
+
+/**
+ * Jak redaktor po rozhovoru hodnotí trenéra. Vkládá se do promptu článku,
+ * odkud se vrací posun vztahu.
+ *
+ * Dřív stačilo být vstřícný a model dával skoro vždy +15 až +25. Teď je
+ * obyčejná slušná odpověď kolem nuly a o plus se trenér musí zasloužit podle
+ * toho, co daný redaktor chce slyšet.
+ */
+export const RELATIONSHIP_RATING_RULE =
+  "Hodnotíš SÁM ZA SEBE podle své povahy z úvodu, jak se ti s trenérem mluvilo. " +
+  "Běžná slušná odpověď je 0 až +3, nic víc. Velké plus (+10 a výš) jen za něco výjimečného: " +
+  "bulvární redaktor za peprnou hlášku nebo přiznání, seriózní za poctivý věcný rozbor, " +
+  "vyčůraný za upřímnost u nepříjemné otázky, patriot za srdce pro fanoušky. " +
+  "Mínus za odbytí, mlžení a uhýbání před nepříjemnou otázkou, za aroganci a urážky novinářů (bulvárnímu vadí i nuda).";
+
+/**
+ * Nový vztah po rozhovoru.
+ *
+ * Dvě brzdy, bez kterých vztah po pár kolech vždycky skončil na +100: hodnota
+ * se před každým posunem o kus vrací k nule (redaktor zapomíná), a posun
+ * směrem od nuly slábne, čím je vztah vyhrocenější. Posun zpátky k nule
+ * platí celý, takže se pokažený vztah dá napravit a oblíbenec může spadnout.
+ */
+export function nextSentiment(current: number, shift: number): number {
+  const base = current * 0.85;
+  const awayFromZero = Math.sign(shift) === Math.sign(base) && base !== 0;
+  const effect = awayFromZero ? shift * (1 - Math.abs(base) / 100) : shift;
+  return Math.max(-100, Math.min(100, Math.round(base + effect)));
 }
 
 /** Slovní popis vztahu pro UI i pro log. */
@@ -350,7 +402,7 @@ export async function posunSentiment(
   duvod: string,
 ): Promise<number> {
   const stary = await sentimentKeKlubu(db, journalistId, teamId);
-  const novy = Math.max(-100, Math.min(100, stary + Math.round(posun)));
+  const novy = nextSentiment(stary, posun);
 
   await db.prepare(
     `INSERT INTO journalist_relations (id, journalist_id, team_id, sentiment, duvod, updated_at)
