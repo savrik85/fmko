@@ -232,17 +232,19 @@ export async function executeStaffTick(env: Bindings, gameDate?: Date): Promise<
     logger.error({ module: "staff-tick" }, "údržba hlášení skautů", e);
   }
 
+  // ── Skauti na úkolech (scouting/scout-work.ts) ──
+  // Týdenní úkoly (oblast, ligy) objíždějí kluby v pondělí. Mise (sledování hráče, rozbor
+  // soupeře) skaut odvede dva dny po zadání, proto se ostatní dny pouští jen ony.
+  try {
+    const { runScoutWork } = await import("../scouting/scout-work");
+    const sw = await runScoutWork(env, { gameDate: effectiveDate.toISOString(), missionsOnly: dayOfWeek !== 1 });
+    result.scoutTips += sw.reports;
+  } catch (e) {
+    logger.error({ module: "staff-tick" }, "práce skautů na úkolech", e);
+  }
+
   // ── Týdenní (pondělí): kurzy + skautův tip ──
   if (dayOfWeek === 1) {
-    // Skauti na úkolech: objedou kluby v okruhu a pošlou hlášení (scouting/scout-work.ts).
-    try {
-      const { runScoutWork } = await import("../scouting/scout-work");
-      const sw = await runScoutWork(env, { gameDate: effectiveDate.toISOString() });
-      result.scoutTips += sw.reports;
-    } catch (e) {
-      logger.error({ module: "staff-tick" }, "práce skautů na úkolech", e);
-    }
-
     // Odpočet týdnů běžících kurzů
     await db.prepare(
       "UPDATE staff_members SET course_weeks_remaining = course_weeks_remaining - 1 WHERE team_id IS NOT NULL AND course_weeks_remaining > 0"

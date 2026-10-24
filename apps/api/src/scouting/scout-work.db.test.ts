@@ -12,9 +12,11 @@ import { Miniflare } from "miniflare";
 import { Hono } from "hono";
 import type { Bindings } from "../index";
 import { createSession } from "../auth/session";
+import { loadMatchMods } from "../equipment/match-mods";
 import { logger } from "../lib/logger";
 import { scoutingRouter } from "../routes/scouting";
 import { recordTransaction } from "../season/finance-processor";
+import { executeStaffTick } from "../staff/staff-tick";
 import {
   createLeagueScoutAssignment, createMatchScoutAssignment, createPlayerScoutAssignment, createScoutAssignment, runScoutWork,
 } from "./scout-work";
@@ -28,6 +30,8 @@ let env: Bindings;
 
 /** Čtvrtek, kdy manažer úkoly zadá, a pondělí, kdy skauti pracují (staff tick). */
 const THURSDAY = "2026-10-22T16:00:00.000Z";
+const FRIDAY = "2026-10-23T16:00:00.000Z";
+const SATURDAY = "2026-10-24T16:00:00.000Z";
 const MONDAY = "2026-10-26T16:00:00.000Z";
 
 const BUYER = "t-buyer";
@@ -281,7 +285,7 @@ describe("cestovné až po odvedené práci", () => {
     expect(await budget()).toBe(START_BUDGET - 500);
   });
 
-  it("bez peněz na cestovné skaut na misi nejede a nic se nestrhne", async () => {
+  it("bez peněz na cestovné skaut na misi nejede a nic se nestrhne (zrušeno s vysvětlením)", async () => {
     const player = ok(await createPlayerScoutAssignment(db, { teamId: BUYER, staffId: "sc-player", targetPlayerId: "a-star", gameDate: THURSDAY }));
     await db.prepare("UPDATE teams SET budget = 200 WHERE id = ?").bind(BUYER).run();
 
@@ -291,5 +295,70 @@ describe("cestovné až po odvedené práci", () => {
     expect(await budget()).toBe(200);
     expect(await assignment(player.id)).toMatchObject({ status: "cancelled", reports_sent: 0 });
     expect((await scoutSms()).some((s) => s.includes("nejsou peníze"))).toBe(true);
+  });
+});
+
+describe("rozbor soupeře a mise do dvou dnů", () => {
+  beforeEach(seed);
+
+  it("mise skaut odvede za dva dny i mimo pondělí, týdenní úkoly čekají na pondělí", async () => {
+    const player = ok(await createPlayerScoutAssignment(db, { teamId: BUYER, staffId: "sc-player", targetPlayerId: "a-star", gameDate: THURSDAY }));
+    const match = ok(await createMatchScoutAssignment(db, { teamId: BUYER, staffId: "sc-match", targetTeamId: OPP_A, gameDate: THURSDAY }));
+    const league = ok(await createLeagueScoutAssignment(db, { teamId: BUYER, staffId: "sc-league", assignmentType: "league", weeks: 2, gameDate: THURSDAY }));
+
+    await runScoutWork(env, { gameDate: FRIDAY, missionsOnly: true });
+    expect(await assignment(player.id)).toMatchObject({ status: "active", weeks_worked: 0 });
+    expect(await assignment(match.id)).toMatchObject({ status: "active", weeks_worked: 0 });
+
+    await runScoutWork(env, { gameDate: SATURDAY, missionsOnly: true });
+    expect(await assignment(player.id)).toMatchObject({ status: "finished", reports_sent: 1 });
+    expect(await assignment(match.id)).toMatchObject({ status: "finished", reports_sent: 1 });
+    expect(await assignment(league.id)).toMatchObject({ status: "active", weeks_worked: 0 });
+  });
+
+  it("denní staff tick pošle skauta na misi, v sobotu týdenní úkol nepracuje", async () => {
+    const match = ok(await createMatchScoutAssignment(db, { teamId: BUYER, staffId: "sc-match", targetTeamId: OPP_A, gameDate: THURSDAY }));
+    const league = ok(await createLeagueScoutAssignment(db, { teamId: BUYER, staffId: "sc-league", assignmentType: "league", weeks: 2, gameDate: THURSDAY }));
+    await db.prepare("INSERT OR REPLACE INTO game_clock (id, offset_days) VALUES (1, 0)").run();
+
+    await executeStaffTick(env, new Date(SATURDAY));
+
+    expect(await assignment(match.id)).toMatchObject({ status: "finished", reports_sent: 1 });
+    expect(await assignment(league.id)).toMatchObject({ status: "active", weeks_worked: 0 });
+  });
+
+  it("hotový rozbor dá v lize +2 techniku a +3 morálku jen proti rozebranému soupeři", async () => {
+    const match = ok(await createMatchScoutAssignment(db, { teamId: BUYER, staffId: "sc-match", targetTeamId: OPP_A, gameDate: THURSDAY }));
+    await runScoutWork(env, { gameDate: MONDAY });
+
+    const scouted = await loadMatchMods(db, BUYER, true, OPP_A);
+    const other = await loadMatchMods(db, BUYER, true, OPP_B);
+    expect(scouted.techniqueMod - other.techniqueMod).toBe(2);
+    expect(scouted.moraleMod - other.moraleMod).toBe(3);
+
+    const data = JSON.parse((await assignment(match.id))!.result_data!) as Record<string, unknown>;
+    expect(data).toMatchObject({ techniqueBonus: 2, moraleBonus: 3 });
+    expect(data).not.toHaveProperty("tacticalBonus");
+    // Co formulář slibuje: rozestavení a styl, klíčový hráč, slabé místo a bonus.
+    const sms = (await scoutSms()).find((s) => s.startsWith("📋"))!;
+    expect(sms).toContain("3-5-2 a taktiku „Vyrovnaná“");
+    expect(sms).toContain("Petr Rychlý (záložník, hodnocení 58)");
+    expect(sms).toContain("Slabé místo: Karel Pomalý (obránce)");
+    expect(sms).toContain("+2 technika a +3 morálka");
+    expect(sms).not.toMatch(/[—–]/);
+  });
+
+  it("bonus z rozboru po 14 dnech skončí, i když hranice padne na týž den", async () => {
+    const match = ok(await createMatchScoutAssignment(db, { teamId: BUYER, staffId: "sc-match", targetTeamId: OPP_A, gameDate: THURSDAY }));
+    await runScoutWork(env, { gameDate: MONDAY });
+    // Hotovo před 14 dny a kusem dne: dřív se `closed_at` (s T) porovnával jako text
+    // s datetime() (s mezerou) a na hraničním dni bonus platil dál.
+    const edgeDay = new Date(Date.now() - 14 * 86_400_000).toISOString().slice(0, 10);
+    await db.prepare("UPDATE scout_assignments SET closed_at = ? WHERE id = ?").bind(`${edgeDay}T00:00:00Z`, match.id).run();
+
+    const scouted = await loadMatchMods(db, BUYER, true, OPP_A);
+    const other = await loadMatchMods(db, BUYER, true, OPP_B);
+    expect(scouted.techniqueMod).toBe(other.techniqueMod);
+    expect(scouted.moraleMod).toBe(other.moraleMod);
   });
 });
