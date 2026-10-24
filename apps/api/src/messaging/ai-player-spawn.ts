@@ -20,6 +20,7 @@ import { pickAmbience, recordVoiceMessage, voicePreviewText } from "./voice-mess
 import { PHOTO_CHANCE, PHOTO_SCENES, generatePlayerPhoto, historyBody, pickPhotoScene } from "./player-photo";
 import { coachRelationStmts } from "../lib/coach-relation";
 import { weightTalkFromState } from "../season/weight-talk";
+import { coachStreak, leftOnReadChance, markCoachMessagesRead, readDelayMs } from "./left-on-read";
 import {
   generateInitialMessage,
   generateReply,
@@ -836,6 +837,21 @@ async function handleAiPlayerReplyInner(
   // max_replies funguje jako tvrdý strop. AI ale může konverzaci uzavřít kdykoli dřív přes conversation_complete.
   const isHardCap = newRepliesCount >= state.max_replies;
 
+  // „Přečteno“ (left-on-read.ts): hráč si zprávu přečte a neodpoví, rozhovor tím končí.
+  // Rozhoduje se před generováním odpovědi, ať se mezitím neukazuje „píše…“.
+  const readInput = {
+    relationship: player.coachRelationship,
+    coachStreak: await coachStreak(db, convId),
+    atWork: playerTimeContext(player, new Date()).situace === "prace",
+  };
+  // Dotaz na incident, domluva o váze a přemlouvání trucujícího hráče čekají odpověď.
+  const mayLeaveOnRead = !state.incidentId && !player.weightTalk && state.trigger !== "left_out";
+  if (mayLeaveOnRead && Math.random() < leftOnReadChance({ ...readInput, closing: isHardCap })) {
+    await new Promise((resolve) => setTimeout(resolve, readDelayMs(Math.random())));
+    await leaveOnReadAndClose(db, env, conv, state, player, scenario, history);
+    return;
+  }
+
   logger.info({ module: "ai-player-spawn" }, `calling generateReply for conv ${convId} (turn ${newRepliesCount}/${state.max_replies}, isHardCap=${isHardCap})`);
   let reply: { body: string; conversationComplete: boolean };
   try {
@@ -851,6 +867,13 @@ async function handleAiPlayerReplyInner(
       return;
     }
     throw e;
+  }
+
+  // Na konci rozhovoru už často není co dodat: hráč závěrečnou repliku nepošle, jen si
+  // trenérovu zprávu přečte.
+  if (mayLeaveOnRead && (reply.conversationComplete || isHardCap) && Math.random() < leftOnReadChance({ ...readInput, closing: true })) {
+    await leaveOnReadAndClose(db, env, conv, state, player, scenario, history);
+    return;
   }
 
   await pockejNezDopise(zacatek, reply.body, player);
@@ -899,12 +922,50 @@ async function handleAiPlayerReplyInner(
   await applyResolutionAndClose(db, convId, conv.team_id, player.id, reply.body, senderName, scenario.id, state, resolution);
 }
 
+/**
+ * „Přečteno“: trenérovy zprávy dostanou modré fajfky, hráč nic nenapíše a rozhovor se
+ * vyhodnotí a zavře. Kdyby zůstal čekat na trenéra, `expireStaleAiThreads` by po pár dnech
+ * hráče „urazila“, že mu trenér neodepsal, ačkoli naposled psal trenér.
+ */
+async function leaveOnReadAndClose(
+  db: D1Database,
+  env: ChatEnv,
+  conv: ConvRow,
+  state: AiThreadStateData,
+  player: PlayerSnapshot,
+  scenario: AiScenario,
+  history: ThreadMessage[],
+): Promise<void> {
+  await markCoachMessagesRead(db, conv.id, new Date().toISOString());
+  let resolution: NonNullable<AiThreadStateData["resolution"]>;
+  try {
+    resolution = { ...(await evaluateResolution(env, player, history, scenario)) };
+  } catch (e) {
+    logger.warn({ module: "ai-player-spawn" }, "vyhodnocení rozhovoru nechaného na přečteno, beru neutrální", e);
+    resolution = {
+      morale_delta: 0, condition_delta: 0, relationship_delta: 0, absence_days: 0, absence_reason: "",
+      summary: "Konverzace skončila bez výrazného závěru.", tone: "neutral",
+    };
+  }
+  // Když šlo o vážnou věc (stížnost, přestup), nechat trenéra na přečteno vztah trochu sníží.
+  if (scenario.category === "complaint" || scenario.category === "transfer") {
+    resolution = {
+      ...resolution,
+      relationship_delta: resolution.relationship_delta - 2,
+      summary: `${resolution.summary} Nakonec tě nechal na přečteno.`,
+    };
+  }
+  logger.info({ module: "ai-player-spawn" }, `conv ${conv.id}: hráč nechal trenéra na přečteno`);
+  await applyResolutionAndClose(db, conv.id, conv.team_id, player.id, null, `${player.firstName} ${player.lastName}`, scenario.id, state, resolution);
+}
+
 async function applyResolutionAndClose(
   db: D1Database,
   convId: string,
   teamId: string,
   playerId: string,
-  finalReplyBody: string,
+  /** Závěrečná replika hráče; null = „přečteno“, hráč už nic nenapsal. */
+  finalReplyBody: string | null,
   senderName: string,
   scenarioId: string,
   state: AiThreadStateData,
@@ -929,9 +990,9 @@ async function applyResolutionAndClose(
 
   const stmts: D1PreparedStatement[] = [
     // Závěrečná zpráva hráče
-    db.prepare(
+    ...(finalReplyBody === null ? [] : [db.prepare(
       "INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, metadata, sent_at, read) VALUES (?, ?, 'player', ?, ?, ?, ?, ?, 0)",
-    ).bind(uuid(), convId, playerId, senderName, finalReplyBody, JSON.stringify({ ai_generated: true, scenario_id: scenarioId, turn: state.max_replies, final: true }), now),
+    ).bind(uuid(), convId, playerId, senderName, finalReplyBody, JSON.stringify({ ai_generated: true, scenario_id: scenarioId, turn: state.max_replies, final: true }), now)]),
 
     // Aplikace dopadu na hráče (morale + condition v life_context)
     db.prepare(
@@ -954,14 +1015,18 @@ async function applyResolutionAndClose(
     })),
 
     // Uzavření konverzace. Bez systémové hlášky zůstává v přehledu poslední
-    // replika hráče, což je i tak to, co si trenér přečte.
-    db.prepare(
-      "UPDATE conversations SET ai_thread_state = ?, ai_thread_active = 0, last_message_text = ?, last_message_at = ?, unread_count = unread_count + ? WHERE id = ?",
-    ).bind(
-      JSON.stringify(newState),
-      (hlasitUkonceni ? systemMsg : finalReplyBody).slice(0, 100),
-      now, hlasitUkonceni ? 2 : 1, convId,
-    ),
+    // replika hráče, což je i tak to, co si trenér přečte. Při „přečteno“ bez hlášky
+    // zůstává v přehledu trenérova zpráva a nic nepřibývá k nepřečteným.
+    finalReplyBody === null && !hlasitUkonceni
+      ? db.prepare("UPDATE conversations SET ai_thread_state = ?, ai_thread_active = 0 WHERE id = ?")
+        .bind(JSON.stringify(newState), convId)
+      : db.prepare(
+        "UPDATE conversations SET ai_thread_state = ?, ai_thread_active = 0, last_message_text = ?, last_message_at = ?, unread_count = unread_count + ? WHERE id = ?",
+      ).bind(
+        JSON.stringify(newState),
+        (hlasitUkonceni ? systemMsg : finalReplyBody ?? "").slice(0, 100),
+        now, (hlasitUkonceni ? 1 : 0) + (finalReplyBody === null ? 0 : 1), convId,
+      ),
   ];
 
   if (jeOdTrenera) {

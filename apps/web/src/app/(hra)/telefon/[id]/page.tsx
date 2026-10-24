@@ -285,6 +285,8 @@ export default function ConversationPage() {
           setAiThreadState(ai.state);
           setMessages((prev) => {
             if (msgs.length !== prev.length) return msgs;
+            // „Přečteno“ bez odpovědi mění jen metadata existující zprávy, počet zůstává.
+            if (msgs.some((m, i) => m.metadata?.readAt !== prev[i]?.metadata?.readAt)) return msgs;
             if (msgs.length > 0 && prev.length > 0 && msgs[msgs.length - 1].id !== prev[prev.length - 1].id) return msgs;
             return prev;
           });
@@ -474,10 +476,12 @@ export default function ConversationPage() {
     setSending(false);
   };
 
-  // Moje zpráva je „přečtená", když na ni druhá strana už něco napsala.
+  // Moje zpráva je „přečtená", když na ni druhá strana už něco napsala, nebo když si ji
+  // hráč jen přečetl a neodpověděl (`metadata.readAt`, api messaging/left-on-read.ts).
   const lastReplyAt = messages.reduce(
     (latest, m) => (m.senderType && m.senderType !== "user" && m.sentAt > latest ? m.sentAt : latest), "",
   );
+  const isRead = (m: Message) => m.sentAt <= lastReplyAt || Boolean(m.metadata?.readAt);
 
   const grouped: Array<{ date: string; messages: Message[] }> = [];
   for (const msg of messages) {
@@ -654,7 +658,7 @@ export default function ConversationPage() {
                               />
                               <div className="flex justify-end items-center gap-1 text-sm text-[#667781] leading-none -mt-4">
                                 {formatTime(msg.sentAt)}
-                                {isUser && <Ticks read={msg.sentAt <= lastReplyAt} />}
+                                {isUser && <Ticks read={isRead(msg)} />}
                               </div>
                             </>
                           ) : (
@@ -669,7 +673,7 @@ export default function ConversationPage() {
                               </p>
                               <span className="absolute bottom-0 right-0 flex items-center gap-1 text-sm text-[#667781] leading-none">
                                 {formatTime(msg.sentAt)}
-                                {isUser && <Ticks read={msg.sentAt <= lastReplyAt} />}
+                                {isUser && <Ticks read={isRead(msg)} />}
                               </span>
                             </div>
                           )}

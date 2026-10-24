@@ -4,6 +4,14 @@ vi.mock("./ai-player-chat", () => ({
   generateCoachInitiatedReply: vi.fn(),
   generateSquadGroupReaction: vi.fn(async () => "Jasně, trenére."),
   GeminiUnavailableError: class GeminiUnavailableError extends Error {},
+  playerTimeContext: vi.fn(() => ({ situace: "volno" })),
+}));
+// „Přečteno“ je náhoda; testy ji vypnou (šance 0) a zapnou jen tam, kde ji zkoušejí.
+vi.mock("./left-on-read", () => ({
+  coachStreak: vi.fn(async () => 1),
+  leftOnReadChance: vi.fn(() => 0),
+  markCoachMessagesRead: vi.fn(async () => undefined),
+  readDelayMs: vi.fn(() => 0),
 }));
 vi.mock("./ai-player-spawn", () => ({
   INJURY_COLUMN: "NULL AS injury",
@@ -22,6 +30,7 @@ import { nactiZnalostiHrace } from "../incidents/znalosti-db";
 import { generateCoachInitiatedReply, generateSquadGroupReaction } from "./ai-player-chat";
 import { nactiSituaceTymu } from "./ai-player-spawn";
 import { replyInSquadGroup, startCoachThread } from "./coach-initiated";
+import { leftOnReadChance, markCoachMessagesRead } from "./left-on-read";
 
 const TEMA = { incidentId: "inc-1", incidentDen: "2026-09-16" };
 
@@ -105,3 +114,24 @@ describe("hráč zná svou životní situaci", () => {
     expect(mluvci.zivotniSituace).toEqual({ kind: "rozvod", label: "Rozvod" });
   });
 });
+
+describe("konverzace začatá trenérem a přečteno", () => {
+  it("hráč si zprávu jen přečte: fajfky zmodrají, odpověď ani vlákno nevznikne", async () => {
+    vi.mocked(leftOnReadChance).mockReturnValueOnce(1);
+    const d = db(null);
+    expect(await zacni(d)).toBe(false);
+    expect(markCoachMessagesRead).toHaveBeenCalledWith(expect.anything(), "konv-1", expect.any(String));
+    expect(generateCoachInitiatedReply).not.toHaveBeenCalled();
+    expect(stavVlakna(d)).toBeUndefined();
+  });
+
+  it("na dotaz k incidentu odpoví vždycky, i kdyby jinak nechal na přečteno", async () => {
+    vi.mocked(leftOnReadChance).mockReturnValue(1);
+    vi.mocked(generateCoachInitiatedReply).mockResolvedValue({ body: "Nic nevím.", conversationComplete: false });
+    await zacni(db(TEMA));
+    expect(markCoachMessagesRead).not.toHaveBeenCalled();
+    expect(generateCoachInitiatedReply).toHaveBeenCalled();
+    vi.mocked(leftOnReadChance).mockReturnValue(0);
+  });
+});
+
