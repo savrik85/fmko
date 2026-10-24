@@ -6,7 +6,9 @@ const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
 
 async function getVapidPublicKey(): Promise<string | null> {
   try {
-    const res = await fetch(`${API}/api/push/vapid-key`, { credentials: "include" });
+    // Bez credentials: API odpovídá `Access-Control-Allow-Origin: *` a prohlížeč
+    // by odpověď na požadavek s cookies zablokoval. Klíč je veřejný.
+    const res = await fetch(`${API}/api/push/vapid-key`);
     if (!res.ok) return null;
     const data = await res.json() as { publicKey?: string };
     return data.publicKey ?? null;
