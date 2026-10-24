@@ -34,6 +34,17 @@ import {
   type PlayerSnapshot,
 } from "./ai-player-scenarios";
 
+/** Koncept ruční zprávy z režimu nanečisto. Ostré odeslání pak pošle přesně tohle. */
+export interface MessageDraft {
+  playerId: string;
+  playerName: string;
+  coachRelationship: number;
+  scenarioId: string;
+  text: string;
+}
+const DRAFT_TTL_SECONDS = 86400;
+const draftKey = (teamId: string) => `message_draft:${teamId}`;
+
 const SPAWN_PROBABILITY = 0.30;       // ~2× týdně per tým
 const COOLDOWN_DAYS = 3;              // min 3 dny mezi thready aby se neobjevily 2 v řadě
 const STALE_DAYS_FOR_OFFEND = 3;      // 3 herní dny bez odpovědi trenéra
@@ -299,8 +310,8 @@ export async function applyAiPlayerThreads(
   db: D1Database,
   env: { GEMINI_API_KEY?: string; CACHE_KV?: KVNamespace; AI?: Ai; SEED_DATA?: R2Bucket },
   /** Ruční spuštění z adminu: jen jeden tým, bez losu a cooldownu, volitelně rovnou hlasovka a pevné téma. */
-  manual?: { teamId: string; forceVoice?: boolean; scenarioId?: string },
-): Promise<{ spawned: number; skipped: number }> {
+  manual?: { teamId: string; forceVoice?: boolean; scenarioId?: string; dryRun?: boolean },
+): Promise<{ spawned: number; skipped: number; draft?: MessageDraft }> {
   // Ptáme se přepínače, ne klíče. Dokud tu stála holá podmínka na
   // `GEMINI_API_KEY`, nezaložilo se jediné vlákno nikde, kde se jede přes
   // Workers AI bez gemini klíče — přepínač `ai_provider` tudy neměl jak
@@ -327,6 +338,7 @@ export async function applyAiPlayerThreads(
 
   let spawned = 0;
   let skipped = 0;
+  let draft: MessageDraft | undefined;
 
   for (const team of candidateTeams.results) {
     if (!manual && Math.random() >= SPAWN_PROBABILITY) {
@@ -335,8 +347,11 @@ export async function applyAiPlayerThreads(
     }
     try {
       const forcedScenario = manual?.scenarioId ? getScenarioById(manual.scenarioId) : null;
-      const ok = await spawnForTeam(db, env, team.id, manual?.forceVoice ?? false, forcedScenario);
-      if (ok) spawned++; else skipped++;
+      const result = await spawnForTeam(db, env, team.id, {
+        forceVoice: manual?.forceVoice ?? false, forcedScenario, dryRun: manual?.dryRun ?? false,
+      });
+      if (result?.sent) spawned++; else skipped++;
+      if (result && manual?.dryRun) draft = result.draft;
     } catch (e) {
       logger.warn({ module: "ai-player-spawn" }, `spawn for team ${team.id} failed`, e);
       skipped++;
@@ -344,16 +359,23 @@ export async function applyAiPlayerThreads(
   }
 
   logger.info({ module: "ai-player-spawn" }, `spawn done: ${spawned} new threads, ${skipped} skipped, ${candidateTeams.results.length} candidates`);
-  return { spawned, skipped };
+  return { spawned, skipped, draft };
 }
 
+/**
+ * Založí vlákno, ve kterém se hráč ozve sám. Vrací null, když se nic nezaložilo.
+ *
+ * `dryRun` jen vybere hráče a nechá napsat text, uloží ho jako koncept do KV
+ * a nic nepošle. Ostré ruční odeslání se stejným tématem pak koncept použije,
+ * takže odejde přesně to, co bylo vidět nanečisto.
+ */
 async function spawnForTeam(
   db: D1Database,
   env: { GEMINI_API_KEY?: string; CACHE_KV?: KVNamespace; SEED_DATA?: R2Bucket },
   teamId: string,
-  forceVoice: boolean,
-  forcedScenario: AiScenario | null = null,
-): Promise<boolean> {
+  opts: { forceVoice?: boolean; forcedScenario?: AiScenario | null; dryRun?: boolean } = {},
+): Promise<{ sent: boolean; draft: MessageDraft } | null> {
+  const forcedScenario = opts.forcedScenario ?? null;
   // 0. Poslední odehraný zápas + série výsledků — kontext pro scénáře (výhra/prohra,
   //    góly, karty). Dřív scénáře o výhře padaly i po prohře, protože o zápase nevěděly.
   const lastMatch = await db.prepare(
@@ -416,7 +438,7 @@ async function spawnForTeam(
   ).bind(teamId, lastMatch?.id ?? "", teamId).all<Record<string, unknown>>()
     .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "load players for spawn", e); return { results: [] }; });
 
-  if (playersRow.results.length === 0) return false;
+  if (playersRow.results.length === 0) return null;
 
   // 2. Vážený výběr hráče: 60 % "potřeba" (nízká morale, málo minut, vysoký temper), 40 % random
   const situace = await nactiSituaceTymu(db, teamId);
@@ -435,14 +457,19 @@ async function spawnForTeam(
       .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "hráči s rozjetou konverzací", e); return { results: [] }; });
     for (const r of rows.results) busy.add(r.participant_id);
   }
-  const player = pickPlayerWeighted(snapshots.filter((snap) => !busy.has(snap.id)), Math.random);
-  if (!player) return false;
+  const saved = forcedScenario && !opts.dryRun ? await readDraft(env.CACHE_KV, teamId) : null;
+  const draftPlayer = saved?.scenarioId === forcedScenario?.id
+    ? snapshots.find((snap) => snap.id === saved?.playerId) ?? null
+    : null;
+  if (saved && !draftPlayer) logger.warn({ module: "ai-player-spawn", teamId }, "koncept nesedí (hráč nebo téma), píše se nový text");
+  const player = draftPlayer ?? pickPlayerWeighted(snapshots.filter((snap) => !busy.has(snap.id)), Math.random);
+  if (!player) return null;
 
   // 3. Vyber scénář vážený osobností/stavem hráče
   const scenario = forcedScenario ?? pickScenarioForPlayer(player, Math.random);
   if (!scenario) {
     logger.info({ module: "ai-player-spawn" }, `no scenario fits player ${player.firstName} ${player.lastName}`);
-    return false;
+    return null;
   }
 
   // Hráč začíná sám, nejde o výslech: jen veřejné znalosti (spec 10b).
@@ -462,13 +489,26 @@ async function spawnForTeam(
   // 5. Gemini call
   let initialBody: string;
   try {
-    initialBody = await generateInitialMessage(env, player, scenario, teamCtx);
+    initialBody = draftPlayer && saved ? saved.text : await generateInitialMessage(env, player, scenario, teamCtx);
   } catch (e) {
     if (e instanceof GeminiUnavailableError) {
       logger.warn({ module: "ai-player-spawn" }, `Gemini unavailable for ${player.firstName}: ${e.message}`);
-      return false;
+      return null;
     }
     throw e;
+  }
+
+  const draft: MessageDraft = {
+    playerId: player.id,
+    playerName: `${player.firstName} ${player.lastName}`,
+    coachRelationship: player.coachRelationship,
+    scenarioId: scenario.id,
+    text: initialBody,
+  };
+  if (opts.dryRun) {
+    await env.CACHE_KV?.put(draftKey(teamId), JSON.stringify(draft), { expirationTtl: DRAFT_TTL_SECONDS })
+      .catch((e) => logger.warn({ module: "ai-player-spawn", teamId }, "uložení konceptu", e));
+    return { sent: false, draft };
   }
 
   // 6. Najdi/vytvoř player conversation, vlož zprávu, nastav state
@@ -506,7 +546,7 @@ async function spawnForTeam(
     // Z hospody: kdo se přiznává k pivu, nebo kdo rád pije a zrovna slaví.
     drunk: scenario.id === "alcohol_struggle"
       || (player.alcohol > 70 && (scenario.category === "positive" || scenario.id === "personal_milestone")),
-    force: forceVoice,
+    force: opts.forceVoice ?? false,
     player: {
       id: player.id,
       firstName: player.firstName,
@@ -535,8 +575,26 @@ async function spawnForTeam(
     ).bind(now, teamId),
   ]);
 
+  if (draftPlayer) {
+    await env.CACHE_KV?.delete(draftKey(teamId))
+      .catch((e) => logger.warn({ module: "ai-player-spawn", teamId }, "smazání použitého konceptu", e));
+  }
+
   logger.info({ module: "ai-player-spawn", teamId }, `spawned AI thread: ${player.firstName} ${player.lastName} → ${scenario.id}${voice ? ` (hlasovka ${voice.durationSec} s, ${voice.voice})` : ""}`);
-  return true;
+  return { sent: true, draft };
+}
+
+async function readDraft(kv: KVNamespace | undefined, teamId: string): Promise<MessageDraft | null> {
+  if (!kv) return null;
+  const raw = await kv.get(draftKey(teamId))
+    .catch((e) => { logger.warn({ module: "ai-player-spawn", teamId }, "čtení konceptu", e); return null; });
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as MessageDraft;
+  } catch (e) {
+    logger.warn({ module: "ai-player-spawn", teamId }, "koncept není JSON", e);
+    return null;
+  }
 }
 
 function pickPlayerWeighted(
