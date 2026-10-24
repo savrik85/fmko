@@ -11,6 +11,7 @@
  */
 
 import { logger } from "../lib/logger";
+import { historyBody } from "./player-photo";
 import { coachChatAlreadyCounted, coachRelationStmts } from "../lib/coach-relation";
 import { getTeamGameDate } from "../community/manager-relations";
 import { createRng, cryptoSeed } from "../generators/rng";
@@ -98,16 +99,17 @@ export async function startCoachThread(
     const drive = await db
       .prepare(
         `SELECT * FROM (
-           SELECT sender_type, body, sent_at FROM messages
+           SELECT sender_type, body, sent_at, json_extract(metadata, '$.photoAlt') AS photo_alt FROM messages
            WHERE conversation_id = ? AND sender_type IN ('player','user')
            ORDER BY sent_at DESC LIMIT 6
          ) ORDER BY sent_at ASC`,
-      ).bind(opts.convId).all<{ sender_type: string; body: string }>()
+      ).bind(opts.convId).all<{ sender_type: string; body: string; photo_alt: string | null }>()
       .catch((e) => { logger.warn({ module: M }, "historie konverzace", e); return null; });
 
+    // Popis fotky, kterou hráč dřív poslal, ať si ji pamatuje (player-photo.ts).
     const historie = (drive?.results ?? []).map((m) => ({
       sender: (m.sender_type === "user" ? "coach" : "player") as "coach" | "player",
-      body: m.body,
+      body: historyBody(m.body, m.photo_alt),
     }));
     // Poslední trenérova zpráva už v historii je (uložila se před tímhle voláním);
     // když tam z nějakého důvodu není, přidáme ji, ať na ni má hráč co odpovědět.

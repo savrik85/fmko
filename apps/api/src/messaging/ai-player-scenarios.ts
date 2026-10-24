@@ -15,6 +15,8 @@ import type { TransferTalk } from "../transfers/unrest-reasons";
 export type ScenarioCategory = "complaint" | "positive" | "personal" | "transfer";
 
 export interface PlayerSnapshot {
+  /** Píše z hospody (ruční téma s fotkou stolu): časový kontext se přepne na pití v hospodě. */
+  atPub?: boolean;
   id: string;
   firstName: string;
   lastName: string;
@@ -101,11 +103,30 @@ export interface AiScenario {
   description: string;
   /** Vrací 0 pokud scénář není relevantní, jinak waha (vyšší = vhodnější). */
   weight: (p: PlayerSnapshot) => number;
+  /** Ruční rozeslání: v kolik (UTC) hráč píše. Bez něj odpoledne ve 14:00 UTC. */
+  writtenAtUtcHour?: number;
+  /** Hráč sedí v hospodě, ať text i čas sedí k fotce stolu s pivy. */
+  atPub?: boolean;
 }
 
 const w = (cond: boolean, value: number): number => (cond ? value : 0);
 
 export const AI_PLAYER_SCENARIOS: AiScenario[] = [
+  // Jen ruční rozeslání z adminu (večerní pozvánka s fotkou z hospody), náhodný spawn ho nevybere.
+  {
+    id: "pub_invite",
+    label: "Pozvánka do hospody",
+    category: "personal",
+    expectedTurns: 3,
+    description:
+      "Sedíš večer s partou z týmu v hospodě, je veselo, na stole piva a panáky. Posíláš trenérovi fotku stolu "
+      + "a zveš ho, ať se staví, klidně s vtipem nebo s narážkou, že platí rundu. Podle vztahu s trenérem: když je dobrý, "
+      + "zveš ho srdečně; když je špatný, spíš ze slušnosti nebo trochu jízlivě. O žádném odehraném zápase, výsledku ani "
+      + "tabulce nemluv.",
+    weight: () => 0,
+    writtenAtUtcHour: 19,
+    atPub: true,
+  },
   // Jen ruční rozeslání z adminu (ukázková hlasovka pro všechny), náhodný spawn ho nevybere.
   {
     id: "coach_relationship_voice",

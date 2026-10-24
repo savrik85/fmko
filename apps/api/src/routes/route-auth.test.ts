@@ -75,6 +75,7 @@ describe("Telefon a chaty manažerů: číst smí jen majitel týmu", () => {
     ["/teams/t1/unread-count", messagingRouter],
     ["/teams/t1/notifications", messagingRouter],
     ["/teams/t1/voice-messages/m1/audio", messagingRouter],
+    ["/teams/t1/photos/m1", messagingRouter],
     ["/teams/t1/group-chats", groupChatsRouter],
     ["/teams/t1/group-chats/g1/messages", groupChatsRouter],
   ];
