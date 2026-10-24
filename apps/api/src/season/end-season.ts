@@ -158,6 +158,18 @@ export async function runEndSeasonStep(
     return { allDone: true, ready: false, seasonNumber, remainingLeagues: 0, detail: `${runningTournament.name} ještě běží, sezónu jde zakončit až po finále` };
   }
 
+  // Gate: neodehraný pohár téhle sezóny. Taky i s force: po rolloveru berou maybeAdvanceCup
+  // i admin advance jen pohár aktivní sezóny, takže by starý zůstal navždy rozehraný, bez
+  // finále a bez výplat. Finále padá na sobotu po posledním kole ligy (cupRoundDates).
+  let runningCup: { detail: string } | null;
+  try {
+    runningCup = await runningCupGate(db, seasonNumber);
+  } catch (e) {
+    logger.error({ module: "end-season" }, "stav poháru nejde načíst", e);
+    return { allDone: false, ready: false, seasonNumber, status: "error", remainingLeagues: 0, detail: "stav poháru nejde načíst, konec sezóny čeká" };
+  }
+  if (runningCup) return { allDone: true, ready: false, seasonNumber, remainingLeagues: 0, detail: runningCup.detail };
+
   const u21Started = (await getLeagueStates(db, seasonNumber, "u21")).filter((s) => s.started);
 
   // Gate: lidské odehrané ligy musí být dohrané (AI-only neblokují), i U21. force přebije.
@@ -207,6 +219,32 @@ export async function runEndSeasonStep(
   }
 
   return { allDone: true, ready: true, seasonNumber, remainingLeagues: 0, detail: "sezóna zakončena" };
+}
+
+const SHORT_WEEKDAY = ["ne", "po", "út", "st", "čt", "pá", "so"];
+
+/**
+ * Běží pohár sezóny? Vrací zprávu pro admina (kolo a den dalšího zápasu), jinak null.
+ * Chyba čtení propadne: neznámý stav poháru nesmí pustit rollover.
+ */
+async function runningCupGate(db: D1Database, seasonNumber: number): Promise<{ detail: string } | null> {
+  const cup = await db.prepare(
+    "SELECT id, name, current_round, total_rounds FROM cup_competitions WHERE season_number = ? AND status = 'active' LIMIT 1",
+  ).bind(seasonNumber).first<{ id: string; name: string; current_round: number; total_rounds: number }>();
+  if (!cup) return null;
+
+  const { roundName } = await import("../cup/cup");
+  const next = await db.prepare(
+    "SELECT MIN(scheduled_at) AS at FROM cup_matches WHERE cup_id = ? AND status = 'scheduled'",
+  ).bind(cup.id).first<{ at: string | null }>();
+  // Pohárová kola se hrají v 16:00 UTC, den je v Praze stejný.
+  const when = next?.at ? new Date(next.at) : null;
+  const day = when && Number.isFinite(when.getTime())
+    ? `, ${SHORT_WEEKDAY[when.getUTCDay()]} ${when.getUTCDate()}. ${when.getUTCMonth() + 1}.`
+    : "";
+  return {
+    detail: `${cup.name} ještě běží (${roundName(cup.current_round, cup.total_rounds)}${day}), sezónu jde zakončit až po finále`,
+  };
 }
 
 /**

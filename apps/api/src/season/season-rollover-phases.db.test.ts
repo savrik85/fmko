@@ -300,3 +300,45 @@ describe("dodatečný dorostový cyklus, když stárnutí už proběhlo", () => 
     expect(await count(db, "SELECT COUNT(*) AS n FROM players")).toBe(players);
   }, 300_000);
 });
+
+describe("konec sezóny čeká na finále poháru", () => {
+  /**
+   * Odehraná a dohraná sezóna 1 (jedno kolo stačí) a pohár sezóny 1. Finále S3 vychází
+   * na sobotu po posledním kole ligy (so 30. 1., liga končí ve čt 28. 1.). Rollover před
+   * ním by pohár nechal navždy rozehraný: maybeAdvanceCup i admin advance berou jen pohár
+   * aktivní sezóny, takže by se finále nikdy neodehrálo a nevyplatilo.
+   */
+  async function playedSeasonWithCup(cupStatus: "active" | "finished"): Promise<World> {
+    const world = await freshWorld();
+    const { db } = world;
+    await db.prepare(
+      "INSERT INTO season_calendar (id, league_id, season_number, game_week, match_day, scheduled_at, status) VALUES ('cal-1', ?, 1, 1, 'thursday', '2027-01-28T17:00:00.000Z', 'simulated')",
+    ).bind(LEAGUE).run();
+    await db.prepare(
+      "INSERT INTO matches (id, league_id, calendar_id, round, home_team_id, away_team_id, status, home_score, away_score) VALUES ('match-1', ?, 'cal-1', 1, 'team-human-1', 'team-human-2', 'simulated', 2, 1)",
+    ).bind(LEAGUE).run();
+    await db.prepare(
+      "INSERT INTO cup_competitions (id, season_number, name, status, total_rounds, current_round) VALUES ('cup-1', 1, 'Český amatérský pohár', ?, 8, 8)",
+    ).bind(cupStatus).run();
+    await db.prepare(
+      "INSERT INTO cup_matches (id, cup_id, round, bracket_pos, status, scheduled_at) VALUES ('cup-final', 'cup-1', 8, 0, ?, '2027-01-30T16:00:00.000Z')",
+    ).bind(cupStatus === "active" ? "scheduled" : "simulated").run();
+    return world;
+  }
+
+  it("neodehrané finále zastaví konec sezóny i s force a nic se nespustí", async () => {
+    const { db } = await playedSeasonWithCup("active");
+    for (const force of [false, true]) {
+      const r = await runEndSeasonStep(db, undefined, { force });
+      expect(r).toMatchObject({ allDone: true, ready: false, seasonNumber: 1 });
+      expect(r.detail).toBe("Český amatérský pohár ještě běží (Finále, so 30. 1.), sezónu jde zakončit až po finále");
+    }
+    expect(await count(db, "SELECT COUNT(*) AS n FROM season_end_progress WHERE season_number = 1")).toBe(0);
+  }, 300_000);
+
+  it("po finále konec sezóny normálně začne", async () => {
+    const { db } = await playedSeasonWithCup("finished");
+    const r = await runEndSeasonStep(db, undefined);
+    expect(r).toMatchObject({ allDone: false, ready: true, seasonNumber: 1, phase: "finalize", status: "done" });
+  }, 300_000);
+});
