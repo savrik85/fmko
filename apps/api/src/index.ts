@@ -32,6 +32,7 @@ import tournamentRouter from "./routes/tournament";
 import clubPrefixRouter from "./routes/club-prefix";
 import { clubWebsiteRouter } from "./routes/club-website";
 import { squadAnalysisRouter } from "./routes/squad-analysis";
+import { menuBadgesRouter } from "./routes/menu-badges";
 // transfers endpoints are in gameRouter
 import { recoverStuckRounds } from "./multiplayer/match-runner";
 import { executeDailyTick } from "./season/daily-tick";
@@ -143,6 +144,7 @@ app.route("/api", bettingRouter);
 app.route("/api", tournamentRouter);
 app.route("/api", clubPrefixRouter);
 app.route("/api", squadAnalysisRouter);
+app.route("/api", menuBadgesRouter);
 
 export default {
   fetch: app.fetch,
