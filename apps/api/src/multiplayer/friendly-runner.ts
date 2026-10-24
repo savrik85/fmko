@@ -8,13 +8,68 @@ import { createRng, cryptoSeed } from "../generators/rng";
 import { experienceGainChance } from "../skills/training";
 import type { TeamSetup, Weather, Hardness } from "../engine/types";
 import { buildMatchPlayers } from "./match-runner";
-import { loadTicketAttendanceFactor } from "../season/finance-processor";
+import { loadTicketAttendanceFactor, recordTransaction } from "../season/finance-processor";
+import { pragueHour } from "../lib/match-tick-schedule";
+import {
+  expireStaleFriendlies, findBusy, gameDay, neutralVenueName, openDueFriendlies, quoteFriendly, refundStake, settleStake,
+  type ChallengeVenue, type CostPayer,
+} from "./friendlies";
+
+/** Obecní hřiště napůl cesty: žádný skvost, ale posekané. */
+const NEUTRAL_PITCH_CONDITION = 60;
 import { logger } from "../lib/logger";
 
+interface DueFriendly {
+  id: string; home_team_id: string; away_team_id: string; day: string;
+  challenge_id: string | null; challenger_team_id: string | null; challenged_team_id: string | null;
+  venue: ChallengeVenue | null; neutral_village_id: string | null; cost_payer: CostPayer | null;
+  stake: number | null; stake_status: string | null; match_date: string | null;
+}
+
+/**
+ * Přátelák se nehraje, když má některý z týmů ten den soutěžní zápas (pohár se mohl
+ * vylosovat až po domluvě). Zápas zmizí z rozpisu, sázka se vrátí, oba dostanou SMS.
+ */
+async function cancelForClash(db: D1Database, m: DueFriendly, reason: string, names: Record<string, string>, gameDate: string): Promise<void> {
+  if (m.challenge_id) {
+    await db.prepare(
+      `UPDATE challenges SET status = 'expired', cancel_reason = ?, match_id = NULL, resolved_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+        WHERE id = ?`,
+    ).bind(reason, m.challenge_id).run();
+    await refundStake(db,
+      { id: m.challenge_id, challenger_team_id: m.challenger_team_id!, challenged_team_id: m.challenged_team_id!, stake: m.stake ?? 0, stake_status: m.stake_status },
+      { challenger: names[m.challenger_team_id!] ?? "soupeřem", opponent: names[m.challenged_team_id!] ?? "soupeřem" }, gameDate);
+  }
+  await db.batch([
+    db.prepare("DELETE FROM lineups WHERE calendar_id = ?").bind(m.id),
+    db.prepare("DELETE FROM matches WHERE id = ? AND status = 'lineups_open'").bind(m.id),
+  ]);
+  const { sendSystemSMS } = await import("../messaging/system-sms");
+  for (const [tid, oid] of [[m.home_team_id, m.away_team_id], [m.away_team_id, m.home_team_id]]) {
+    await sendSystemSMS(db, tid, "Sportovní ředitel",
+      `↩️ Přátelák s ${names[oid] ?? "soupeřem"} se dnes nehraje: ${reason}${m.stake ? " Sázka se vrátila." : ""}`);
+  }
+}
+
 export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
+  const clock = await db.prepare("SELECT game_date FROM teams WHERE game_date IS NOT NULL LIMIT 1")
+    .first<{ game_date: string }>();
+  const today = gameDay(clock?.game_date ?? new Date().toISOString());
+  const gameDateIso = clock?.game_date ?? new Date().toISOString();
+  // Ranní otevření mohlo neproběhnout (tick spadl), tak to zkusíme ještě teď.
+  await expireStaleFriendlies(db, today, pragueHour()).catch((e) => logger.error({ module: "friendly-runner" }, "vypršení přáteláků", e));
+  await openDueFriendlies(db, today).catch((e) => logger.error({ module: "friendly-runner" }, "otevření dnešních přáteláků", e));
+
+  // Jen přáteláky na dnešek a starší nedohrané. Domluvené na pozdější den čekají.
   const matches = await db.prepare(
-    "SELECT id, home_team_id, away_team_id FROM matches WHERE calendar_id IS NULL AND league_id IS NULL AND status = 'lineups_open'"
-  ).all();
+    `SELECT m.id, m.home_team_id, m.away_team_id, substr(m.created_at, 1, 10) AS day,
+            c.id AS challenge_id, c.challenger_team_id, c.challenged_team_id, c.venue, c.neutral_village_id,
+            c.cost_payer, c.stake, c.stake_status, c.match_date
+       FROM matches m
+       LEFT JOIN challenges c ON c.match_id = m.id
+      WHERE m.calendar_id IS NULL AND m.league_id IS NULL AND m.status = 'lineups_open'
+        AND substr(m.created_at, 1, 10) <= ?`,
+  ).bind(today).all<DueFriendly>();
 
   if (matches.results.length === 0) return 0;
 
@@ -32,11 +87,28 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
   }
 
   for (const match of matches.results) {
-    const matchId = match.id as string;
-    const homeTeamId = match.home_team_id as string;
-    const awayTeamId = match.away_team_id as string;
+    const matchId = match.id;
+    const homeTeamId = match.home_team_id;
+    const awayTeamId = match.away_team_id;
+    const isNeutral = match.venue === "neutral";
 
     try {
+      const nameRows = await db.prepare("SELECT id, name FROM teams WHERE id IN (?, ?)").bind(homeTeamId, awayTeamId)
+        .all<{ id: string; name: string }>();
+      const names = Object.fromEntries(nameRows.results.map((r) => [r.id, r.name]));
+
+      // Soutěžní zápas ten den má přednost.
+      const clashHome = await findBusy(db, homeTeamId, match.day, { competitiveOnly: true });
+      const clashAway = clashHome ? null : await findBusy(db, awayTeamId, match.day, { competitiveOnly: true });
+      const clash = clashHome ?? clashAway;
+      if (clash) {
+        const who = names[clashHome ? homeTeamId : awayTeamId] ?? "Soupeř";
+        const kind = clash.kind === "league" ? "ligu" : clash.kind === "cup" ? "pohár" : "turnaj";
+        await cancelForClash(db, match, `${who} ten den hraje ${kind}.`, names, gameDateIso);
+        logger.info({ module: "friendly-runner" }, `přátelák ${matchId} zrušen kvůli kolizi (${clash.kind})`);
+        continue;
+      }
+
       // Absence RNG obstará buildMatchPlayers interně (matchKey = matchId; phase day_before+match_day).
       const rng = createRng(Date.now() + matchId.charCodeAt(0));
 
@@ -155,11 +227,19 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
         plan: awayPlan,
       };
 
-      // Stadium info
-      const stadiumRow = await db.prepare("SELECT pitch_condition, pitch_moisture FROM stadiums WHERE team_id = ?")
+      // Stadium info. Na neutrálním hřišti se hraje na obecním hřišti obce napůl cesty,
+      // trávník domácích se neopotřebuje a vstupné nikdo nevybírá.
+      const stadiumRow = isNeutral ? null : await db.prepare("SELECT pitch_condition, pitch_moisture FROM stadiums WHERE team_id = ?")
         .bind(homeTeamId).first<{ pitch_condition: number; pitch_moisture: number | null }>().catch((e) => { logger.warn({ module: "friendly-runner" }, "load stadium", e); return null; });
-      const stadiumNameRow = await db.prepare("SELECT stadium_name FROM teams WHERE id = ?")
-        .bind(homeTeamId).first<{ stadium_name: string }>().catch((e) => { logger.warn({ module: "friendly-runner" }, "load stadium name", e); return null; });
+      const neutralVillage = isNeutral && match.neutral_village_id
+        ? await db.prepare("SELECT name FROM villages WHERE id = ?").bind(match.neutral_village_id).first<{ name: string }>()
+          .catch((e) => { logger.warn({ module: "friendly-runner" }, "neutrální obec", e); return null; })
+        : null;
+      const stadiumNameRow = isNeutral
+        ? { stadium_name: neutralVenueName(neutralVillage?.name ?? "na půli cesty") }
+        : await db.prepare("SELECT stadium_name FROM teams WHERE id = ?")
+          .bind(homeTeamId).first<{ stadium_name: string }>().catch((e) => { logger.warn({ module: "friendly-runner" }, "load stadium name", e); return null; });
+      const pitchCondition = isNeutral ? NEUTRAL_PITCH_CONDITION : stadiumRow?.pitch_condition ?? 50;
 
       // Vybavení a zaměstnanci platí i v přáteláku — dřív se sem nepředávaly vůbec.
       const { loadMatchMods } = await import("../equipment/match-mods");
@@ -169,14 +249,18 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
 
       // Simulate — vypočítej attendance JEDNOU a použij ji všude (jinak by simulace + DB měly různá čísla).
       // I na přátelák se vybírá vstupné domácích, takže přemrštěná cena odradí i tady.
-      const ticketAttendanceMul = await loadTicketAttendanceFactor(db, homeTeamId);
-      const friendlyAttendance = Math.round((20 + Math.random() * 50) * ticketAttendanceMul);
+      const ticketAttendanceMul = isNeutral ? 1 : await loadTicketAttendanceFactor(db, homeTeamId);
+      const friendlyAttendance = isNeutral
+        ? Math.round(10 + Math.random() * 20)
+        : Math.round((20 + Math.random() * 50) * ticketAttendanceMul);
       const result = simulateMatch(rng, {
         home: homeSetup,
         away: awaySetup,
         weather,
-        isHomeAdvantage: false, // přátelák = neutrální
-        pitchCondition: stadiumRow?.pitch_condition ?? 50,
+        // Výhoda domácích platí, když se hraje u jednoho z klubů. Přáteláky z doby
+        // před místem zápasu (bez výzvy s místem) se hrály bez ní a tak doběhnou.
+        isHomeAdvantage: !!match.venue && !isNeutral,
+        pitchCondition,
         pitchMoisture: stadiumRow?.pitch_moisture ?? 50,
         stadiumName: stadiumNameRow?.stadium_name ?? undefined,
         attendance: friendlyAttendance,
@@ -226,7 +310,7 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
         result.homeScore, result.awayScore,
         JSON.stringify(result.events), JSON.stringify(commentary),
         friendlyAttendance,
-        stadiumNameRow?.stadium_name ?? null, stadiumRow?.pitch_condition ?? 50, weather,
+        stadiumNameRow?.stadium_name ?? null, pitchCondition, weather,
         JSON.stringify(homeLineupData), JSON.stringify(awayLineupData),
         matchAbsences.length > 0 ? JSON.stringify(matchAbsences) : null,
         result.possessionHome,
@@ -235,12 +319,56 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
 
       // Přátelák trávník opotřebuje stejně jako mistrák — hraje se na něm taky.
       {
-        const { applyPitchWear } = await import("../stadium/pitch-wear");
-        await applyPitchWear(db, homeTeamId, weather);
+        if (!isNeutral) {
+          const { applyPitchWear } = await import("../stadium/pitch-wear");
+          await applyPitchWear(db, homeTeamId, weather);
+        }
       }
 
       // Update challenge status
-      await db.prepare("UPDATE challenges SET status = 'played' WHERE match_id = ?").bind(matchId).run().catch((e) => logger.warn({ module: "friendly-runner" }, "update challenge status", e));
+      await db.prepare("UPDATE challenges SET status = 'played', resolved_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE match_id = ?").bind(matchId).run().catch((e) => logger.warn({ module: "friendly-runner" }, "update challenge status", e));
+
+      // Náklady podle domluvy (rozhodčí, cestovné, pronájem) a sázka. Přáteláky z doby před
+      // podmínkami (bez dne) zaplatily paušál 1 000 Kč už při přijetí, proto se tu nestrhává nic.
+      let stakeLine = "";
+      if (match.challenge_id && match.match_date) {
+        const challengerName = names[match.challenger_team_id!] ?? "soupeřem";
+        const opponentName = names[match.challenged_team_id!] ?? "soupeřem";
+        try {
+          const quote = await quoteFriendly(db, match.challenger_team_id!, match.challenged_team_id!,
+            { venue: match.venue ?? "challenger", costPayer: match.cost_payer ?? "each" }, match.neutral_village_id);
+          if (quote) {
+            for (const [tid, lines, opp] of [
+              [match.challenger_team_id!, quote.costs.challenger, opponentName],
+              [match.challenged_team_id!, quote.costs.opponent, challengerName],
+            ] as const) {
+              for (const line of lines) {
+                await recordTransaction(db, tid, "match_expense", -line.amount, `Přátelák s ${opp}: ${line.label.toLowerCase()}`, gameDateIso, matchId);
+              }
+            }
+          }
+        } catch (e) {
+          logger.error({ module: "friendly-runner" }, `náklady přáteláku ${matchId}`, e);
+        }
+
+        const challengerIsHome = match.challenger_team_id === homeTeamId;
+        const challengerGoals = challengerIsHome ? result.homeScore : result.awayScore;
+        const opponentGoals = challengerIsHome ? result.awayScore : result.homeScore;
+        const winner = challengerGoals > opponentGoals ? "challenger" : challengerGoals < opponentGoals ? "opponent" : null;
+        try {
+          await settleStake(db,
+            { id: match.challenge_id, challenger_team_id: match.challenger_team_id!, challenged_team_id: match.challenged_team_id!, stake: match.stake ?? 0, stake_status: match.stake_status },
+            winner, { challenger: challengerName, opponent: opponentName }, gameDateIso);
+          if (match.stake) {
+            const pot = (match.stake * 2).toLocaleString("cs");
+            stakeLine = winner === "challenger" ? ` Sázku ${pot} Kč bere ${challengerName}.`
+              : winner === "opponent" ? ` Sázku ${pot} Kč bere ${opponentName}.`
+              : " Remíza, sázka se vrátila oběma.";
+          }
+        } catch (e) {
+          logger.error({ module: "friendly-runner" }, `vyúčtování sázky přáteláku ${matchId}`, e);
+        }
+      }
 
       // Aktualizuj sehranost — přátelák je trénink, MUSÍ se počítat do sehranosti
       try {
@@ -264,7 +392,7 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
         const awayTeamRow = await db.prepare("SELECT user_id FROM teams WHERE id = ?").bind(awayTeamId).first<{ user_id: string }>().catch((e) => { logger.warn({ module: "friendly-runner" }, "fetch away team user_id", e); return null; });
 
         if (homeTeamRow?.user_id && homeTeamRow.user_id !== "ai") {
-          await processMatchDayFinances(db, homeTeamId, matchId, true, homeResult, attendance, gameDate, 50, true);
+          await processMatchDayFinances(db, homeTeamId, matchId, !isNeutral, homeResult, attendance, gameDate, 50, true);
         }
         if (awayTeamRow?.user_id && awayTeamRow.user_id !== "ai") {
           await processMatchDayFinances(db, awayTeamId, matchId, false, awayResult, attendance, gameDate, 50, true);
@@ -366,7 +494,7 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
       }
 
       // SMS both teams
-      const smsBody = `⚽ Přátelák odehrán! ${homeSetup.teamName} ${result.homeScore}:${result.awayScore} ${awaySetup.teamName}`;
+      const smsBody = `⚽ Přátelák odehrán! ${homeSetup.teamName} ${result.homeScore}:${result.awayScore} ${awaySetup.teamName}.${stakeLine}`;
       for (const tid of [homeTeamId, awayTeamId]) {
         let convId = await db.prepare("SELECT id FROM conversations WHERE team_id = ? AND type = 'system' AND title = 'Sportovní ředitel'")
           .bind(tid).first<{ id: string }>().then((r) => r?.id).catch((e) => { logger.warn({ module: "friendly-runner" }, "find sportovni reditel conv", e); return null; });

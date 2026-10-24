@@ -3167,10 +3167,11 @@ gameRouter.get("/teams/:teamId/season-info", async (c) => {
   // Friendly matches (challenges)
   const friendlyMatches = await c.env.DB.prepare(
     `SELECT m.id, m.status, m.home_team_id, m.away_team_id, m.home_score, m.away_score, m.created_at, m.simulated_at,
-       t1.name as home_name, t2.name as away_name
+       t1.name as home_name, t2.name as away_name, ch.venue AS friendly_venue
      FROM matches m
      JOIN teams t1 ON m.home_team_id = t1.id
      JOIN teams t2 ON m.away_team_id = t2.id
+     LEFT JOIN challenges ch ON ch.match_id = m.id
      WHERE (m.home_team_id = ? OR m.away_team_id = ?) AND m.calendar_id IS NULL
        AND COALESCE(m.simulated_at, m.created_at) >= ?
      ORDER BY m.created_at DESC LIMIT 10`
@@ -3184,7 +3185,7 @@ gameRouter.get("/teams/:teamId/season-info", async (c) => {
       type: "match",
       date: (fm.simulated_at ?? fm.created_at) as string,
       title: `Přátelák ${opponent}`,
-      subtitle: isHome ? "Doma" : "Venku",
+      subtitle: fm.friendly_venue === "neutral" ? "Neutrální hřiště" : isHome ? "Doma" : "Venku",
       status: fmStatus === "simulated"
         ? `${fm.home_score}:${fm.away_score}`
         : fmStatus === "lineups_open" ? "Nastav sestavu!" : "Naplánováno",

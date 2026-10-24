@@ -120,7 +120,7 @@ export interface SuspiciousPair {
   friendlies: number;
   transfers: number;
   loans: number;
-  /** Kolik korun se mezi nimi přelilo v přijatých nabídkách, oběma směry. */
+  /** Kolik korun se mezi nimi přelilo v přijatých nabídkách a sázkách v přátelácích, oběma směry. */
   money: number;
   linked: boolean;
 }
@@ -185,13 +185,19 @@ export async function suspiciousPairs(db: D1Database, limit = 20): Promise<Suspi
     return s;
   };
 
+  // Sázka v přáteláku je další cesta, jak přelít peníze, proto se přičítá k obchodům.
   const friendlies = await db.prepare(
-    `SELECT challenger_team_id AS x, challenged_team_id AS y, COUNT(*) AS n
+    `SELECT challenger_team_id AS x, challenged_team_id AS y, COUNT(*) AS n,
+            SUM(CASE WHEN stake_status = 'paid' THEN stake ELSE 0 END) AS staked
        FROM challenges WHERE status = 'played'
       GROUP BY MIN(challenger_team_id, challenged_team_id), MAX(challenger_team_id, challenged_team_id)`,
-  ).all<{ x: string; y: string; n: number }>()
-    .catch((e) => { logger.error({ module: M }, "přáteláky pro přehled dvojic", e); return { results: [] as Array<{ x: string; y: string; n: number }> }; });
-  for (const r of friendlies.results) statsFor(r.x, r.y).friendlies += r.n;
+  ).all<{ x: string; y: string; n: number; staked: number | null }>()
+    .catch((e) => { logger.error({ module: M }, "přáteláky pro přehled dvojic", e); return { results: [] as Array<{ x: string; y: string; n: number; staked: number | null }> }; });
+  for (const r of friendlies.results) {
+    const pair = statsFor(r.x, r.y);
+    pair.friendlies += r.n;
+    pair.money += r.staked ?? 0;
+  }
 
   // Nabídka drží soupisku, dvojice se počítá za kluby (U21 patří pod A-tým).
   const deals = await db.prepare(
