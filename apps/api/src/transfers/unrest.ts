@@ -293,7 +293,8 @@ export async function performUnrestAction(
   // Rozhovor v telefonu: dohodu jde uzavřít i uprostřed rozhovoru po zatrhnutém přestupu
   // (je to tah trenéra, hráč na ni v rozhovoru odpoví). Jiný rozhovor ji blokuje.
   const conv = await db.prepare(
-    "SELECT id, ai_thread_active, ai_thread_state FROM conversations WHERE team_id = ? AND type = 'player' AND participant_id = ? ORDER BY created_at DESC LIMIT 1",
+    // Stejná konverzace jako v Telefonu: při starých duplikátech nejstarší (ai-player-spawn.ts).
+    "SELECT id, ai_thread_active, ai_thread_state FROM conversations WHERE team_id = ? AND type = 'player' AND participant_id = ? ORDER BY created_at, rowid LIMIT 1",
   ).bind(teamId, playerId).first<{ id: string; ai_thread_active: number; ai_thread_state: string | null }>()
     .catch((e) => { logger.warn({ module: "unrest" }, "load conversation", e); return null; });
   let inThread = false;
