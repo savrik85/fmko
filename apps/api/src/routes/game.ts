@@ -1438,9 +1438,17 @@ gameRouter.get("/teams/:teamId/equipment", async (c) => {
     };
   });
 
+  // Ozvučení spadá pod společný strop zázemí. Nabídka řekne, kolik spokojenosti
+  // tomuhle klubu opravdu přidá, a když nic, tak dřív, než zaplatí.
+  const { loadAmenityInput, withEquipmentAmenity } = await import("../season/amenity-outlook");
+  const amenityInput = await loadAmenityInput(c.env.DB, teamId);
+
   return c.json({
     categories,
-    upgrades: getUpgradeOptions(levels, team?.reputation ?? 0, matchCount?.cnt ?? 0, seasonNum),
+    upgrades: withEquipmentAmenity(
+      getUpgradeOptions(levels, team?.reputation ?? 0, matchCount?.cnt ?? 0, seasonNum),
+      levels, conditions, amenityInput,
+    ),
     repairs: getRepairOptions(levels, conditions),
     effects,
     sellOptions,
@@ -1736,6 +1744,11 @@ gameRouter.get("/teams/:teamId/stadium", async (c) => {
   const herniDen = ((teamInfo?.game_date as string) ?? "").slice(0, 10);
   const matchDay = !!herniDen && dalsiDoma?.scheduledAt?.slice(0, 10) === herniDen;
 
+  // Sociálky a pořadatelé spadají pod společný strop zázemí s ozvučením, obsluhou,
+  // bufetem a trávníkem. Nabídka řekne, kolik spokojenosti klubu opravdu přidají.
+  const { loadAmenityInput, withFacilityAmenity } = await import("../season/amenity-outlook");
+  const amenityInput = await loadAmenityInput(c.env.DB, teamId);
+
   return c.json({
     stadiumName: teamInfo?.stadium_name ?? null,
     /** Dnes se hraje doma → 3D areál se otevře v zápasovém režimu. */
@@ -1757,12 +1770,15 @@ gameRouter.get("/teams/:teamId/stadium", async (c) => {
     vipBox,
     customization,
     visualUpgrades,
-    upgrades: getUpgradeOptions(
-      facilities,
-      teamInfo?.reputation ?? 0,
-      matchCount?.cnt ?? 0,
-      mustSeason(currentSeason?.number),
-      ignoreProgressLocks,
+    upgrades: withFacilityAmenity(
+      getUpgradeOptions(
+        facilities,
+        teamInfo?.reputation ?? 0,
+        matchCount?.cnt ?? 0,
+        mustSeason(currentSeason?.number),
+        ignoreProgressLocks,
+      ),
+      facilities, amenityInput,
     ),
     standExtensions: await (async () => {
       const { loadExtensions } = await import("../stadium/extensions-db");

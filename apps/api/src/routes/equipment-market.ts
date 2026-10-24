@@ -134,7 +134,7 @@ equipmentMarketRouter.get("/teams/:teamId/equipment-market", async (c) => {
 
   const equip = await ensureEquipmentRow(c.env.DB, teamId);
   if (!equip) return c.json({ error: "Vybavení se nepodařilo načíst" }, 500);
-  const { levels } = splitEquipmentRow(equip);
+  const { levels, conditions } = splitEquipmentRow(equip);
 
   const { matchesPlayed, season } = await fetchUnlockContext(c.env.DB, teamId);
 
@@ -179,6 +179,13 @@ equipmentMarketRouter.get("/teams/:teamId/equipment-market", async (c) => {
     for (const row of rows?.results ?? []) sellerConditions.set(row.team_id as string, row);
   }
 
+  // Ozvučení z bazaru spadá pod společný strop zázemí stejně jako z obchodu. Zázemí
+  // se načítá, jen když se takové vybavení v bazaru prodává.
+  const { equipmentPurchaseAmenity, equipmentRaisesAmenity, loadAmenityInput } = await import("../season/amenity-outlook");
+  const amenityInput = (offersRes.results as Array<{ category: string }>).some((r) => equipmentRaisesAmenity(r.category))
+    ? await loadAmenityInput(c.env.DB, teamId)
+    : null;
+
   const listings = (offersRes.results as Array<Record<string, unknown>>)
     .filter((row) => isKnownCategory(row.category))
     .map((row) => {
@@ -192,6 +199,9 @@ equipmentMarketRouter.get("/teams/:teamId/equipment-market", async (c) => {
       const liveCondition = (sellerRow?.[`${category}_condition`] as number) ?? (row.condition_at_listing as number);
       const unlock = checkLevelUnlock(level, me.reputation, matchesPlayed, season);
       const shopPrice = shopCostFromLevel(category, myLevel, level);
+      const amenity = myLevel < level
+        ? equipmentPurchaseAmenity(category, level, liveCondition, levels, conditions, amenityInput)
+        : null;
 
       let blockReason: string | null = null;
       if (myLevel >= level) blockReason = `Tohle už máš, úroveň ${myLevel}`;
@@ -226,6 +236,8 @@ equipmentMarketRouter.get("/teams/:teamId/equipment-market", async (c) => {
         canBuy: blockReason === null,
         blockReason,
         lockDetail: unlock.locked ? unlock.detail : null,
+        // Co koupě v tomhle stavu přidá spokojenosti po domácím zápase (jen ozvučení).
+        ...(amenity ? { amenity } : {}),
         ...oznaceniInzeratu({
           teamId: (row.team_id as string | null) ?? null, isAiListing: isAi,
           incidentId, incidentTeamId: (row.incident_team_id as string | null) ?? null,

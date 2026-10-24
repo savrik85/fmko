@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { apiAction, apiFetch, type Team } from "@/lib/api";
 import { Spinner, SectionLabel, useConfirm, LockDetail, Tabs } from "@/components/ui";
+import { amenityDetail, amenityTone, withAmenityNote } from "@/lib/amenity-outlook";
 import { SellDialog } from "./SellDialog";
 import { BazarTab } from "./BazarTab";
 import {
@@ -92,9 +93,11 @@ function EquipmentPage() {
     if (!teamId || acting) return;
     const ok = await confirm({
       title: `Vylepšit ${u.label} na úroveň ${u.nextLevel}?`,
-      description: u.description,
+      // Ozvučení má společný strop zázemí: co klubu opravdu přidá, musí být vidět před platbou.
+      description: withAmenityNote(u.description, u.amenity),
       details: [
         { label: "Bonus", value: u.effect, color: "text-pitch-500" },
+        ...(u.amenity ? [amenityDetail(u.amenity)] : []),
         { label: "Cena", value: `-${formatCZK(u.cost)}`, color: "text-card-red" },
       ],
       confirmLabel: `Koupit za ${formatCZK(u.cost)}`,
@@ -178,6 +181,7 @@ function EquipmentPage() {
       { label: "Úroveň", value: `${l.myLevel} → ${l.level}`, color: "text-pitch-500" },
       { label: "Stav", value: `${l.condition} %`, color: condColor(l.condition) },
       { label: "Efektivní úroveň", value: `${myEffective} → ${newEffective}`, color: newEffective >= myEffective ? "text-pitch-500" : "text-card-red" },
+      ...(l.amenity ? [amenityDetail(l.amenity)] : []),
       { label: "Cena", value: `-${formatCZK(l.price)}`, color: "text-card-red" },
     ];
     if (l.repairCostAfterBuy > 0) {
@@ -186,9 +190,9 @@ function EquipmentPage() {
 
     const ok = await confirm({
       title: `Koupit ${l.categoryLabel} od ${l.teamName}?`,
-      description: newEffective < myEffective
+      description: withAmenityNote(newEffective < myEffective
         ? "Pozor: vybavení je sice vyšší úrovně, ale v horším stavu, efektivní úroveň ti klesne. Po opravě bude vyšší."
-        : l.levelDescription,
+        : l.levelDescription, l.amenity),
       details,
       confirmLabel: `Koupit za ${formatCZK(l.price)}`,
     });
@@ -356,9 +360,12 @@ function EquipmentPage() {
                   {/* Upgrade info + action */}
                   {upgrade && !upgrade.locked && (
                     <div className="flex items-center justify-between gap-3 mt-1">
-                      <div>
+                      <div className="min-w-0">
                         <div className="text-sm"><span className="font-heading font-bold">Lv.{upgrade.nextLevel}</span> <span className="text-muted">—</span> <span className="font-heading font-bold tabular-nums">{formatCZK(upgrade.cost)}</span></div>
-                        <div className="text-xs text-pitch-600">{upgrade.effect}</div>
+                        <div className="text-sm text-pitch-600 leading-snug">{upgrade.effect}</div>
+                        {upgrade.amenity && (
+                          <div className={`text-sm leading-snug mt-1 ${amenityTone(upgrade.amenity)}`}>{upgrade.amenity.note}</div>
+                        )}
                       </div>
                       <button onClick={() => handleUpgrade(upgrade)} disabled={!canUpgrade || !!acting}
                         className={`${CARD_BTN} ${

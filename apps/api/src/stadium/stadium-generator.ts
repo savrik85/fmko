@@ -301,8 +301,10 @@ export function popisPrirustku(key: string, from: number, to: number): string {
       return `+${pct(rozdil(SKALY.parking.attendance))} návštěvnost`;
     case "entrance_gate":
       return `+${pct(rozdil(SKALY.entrance_gate.attendance))} návštěvnost`;
+    // Spokojenost ze zázemí platí jen doma a má společný strop (AMENITY_BONUS_CAP).
+    // Kolik z toho klub opravdu dostane, dopisuje k nabídce season/amenity-outlook.ts.
     case "toilets":
-      return `+${rozdil(SKALY.toilets.satisfaction)} spokojenost po zápase`;
+      return `+${rozdil(SKALY.toilets.satisfaction)} spokojenost po domácím zápase`;
     case "ultras_stand":
       return `+${rozdil(SKALY.ultras_stand.morale)} morálka od kotle`;
     case "security": {
@@ -310,7 +312,7 @@ export function popisPrirustku(key: string, from: number, to: number): string {
       // bere první výskyt znaménka s číslem a porovnává ho se změřeným efektem.
       const casti = [`−${pct(rozdil(SKALY.security.riziko))} riziko výtržností`];
       const klid = rozdil(SKALY.security.klid);
-      if (klid > 0) casti.push(`+${klid} spokojenost po zápase`);
+      if (klid > 0) casti.push(`+${klid} spokojenost po domácím zápase`);
       // Bez znaménka, ať to regex v testu nesebere místo rizika.
       casti.push(`provoz ${SKALY.security.naklad[to]} Kč za domácí zápas`);
       return casti.join(", ");
