@@ -961,10 +961,21 @@ export async function executeDailyTick(
     "UPDATE injuries SET days_remaining = days_remaining - 1 WHERE days_remaining > 0"
   ).run();
   const healed = await env.DB.prepare(
-    `SELECT p.id, p.team_id, p.first_name, p.last_name, i.days_total, i.is_fake, i.osobni_volno
+    `SELECT p.id, p.team_id, p.first_name, p.last_name, i.days_total, i.is_fake, i.osobni_volno, i.description
      FROM injuries i JOIN players p ON i.player_id = p.id WHERE i.days_remaining <= 0`
-  ).all<{ id: string; team_id: string; first_name: string; last_name: string; days_total: number | null; is_fake: number | null; osobni_volno: number | null }>()
+  ).all<{ id: string; team_id: string; first_name: string; last_name: string; days_total: number | null; is_fake: number | null; osobni_volno: number | null; description: string | null }>()
     .catch((e) => { logger.warn({ module: "daily-tick" }, "fetch healed injuries", e); return { results: [] as never[] }; });
+  // Doléčené zranění si hráč pamatuje (`lastInjury`), řádek v injuries se hned smaže. Bez toho
+  // na „doufám, že už je ti líp" odepsal „žádné zranění nemám, to si pleteš" (prod 2026-10-17).
+  if (healed.results.length > 0) {
+    const healedAt = new Date().toISOString();
+    await env.DB.batch(healed.results.map((h) => env.DB.prepare(
+      "UPDATE players SET life_context = json_set(COALESCE(life_context, '{}'), '$.lastInjury', json(?)) WHERE id = ?",
+    ).bind(JSON.stringify({
+      description: h.description ?? "", days: h.days_total ?? 0, healedAt,
+      volno: h.osobni_volno === 1, fake: h.is_fake === 1,
+    }), h.id))).catch((e) => logger.warn({ module: "daily-tick" }, "zápis doléčeného zranění", e));
+  }
   await env.DB.prepare("DELETE FROM injuries WHERE days_remaining <= 0").run();
 
   if (healed.results.length > 0) {

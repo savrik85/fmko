@@ -9479,6 +9479,35 @@ gameRouter.post("/admin/spawn-ai-chats", async (c) => {
   return c.json({ ok: true, ...r });
 });
 
+// POST /api/admin/casual-message?teamId=… — zpráva „jen tak" od hráče (jinak hodinový cron, kostka).
+// `&topic=casual_pig_slaughter` vynutí téma, `&dryRun=1` jen vrátí koncept (text a fotku) a nic nepošle.
+gameRouter.post("/admin/casual-message", async (c) => {
+  const teamId = c.req.query("teamId");
+  if (!teamId) return c.json({ error: "chybí teamId" }, 400);
+  const { spawnCasualMessages } = await import("../messaging/casual-messages");
+  const dryRun = c.req.query("dryRun") === "1";
+  // `&gemini=1` u náhledu napíše text přes Gemini i na testingu, kde přepínač ai_provider drží
+  // slabší workers-ai. Bez KV se přepínač čte jako výchozí „gemini" (lib/ai-provider.ts).
+  const env = dryRun && c.req.query("gemini") === "1" ? { ...c.env, CACHE_KV: undefined } : c.env;
+  // `&at=2026-11-14T13:00:00Z` u náhledu: jako by hráč psal v tu chvíli (den, hodina, roční doba).
+  const at = dryRun && c.req.query("at") ? new Date(String(c.req.query("at"))) : new Date();
+  if (Number.isNaN(at.getTime())) return c.json({ error: "neplatné at" }, 400);
+  const r = await spawnCasualMessages(c.env.DB, env, at, {
+    teamId, topicId: c.req.query("topic") || undefined, dryRun,
+  }).catch((e) => { logger.error({ module: "game.ts" }, "ruční zpráva jen tak", e); return null; });
+  if (!r) return c.json({ error: "zpráva selhala" }, 500);
+  return c.json({ ok: true, ...r });
+});
+
+// POST /api/admin/phone-hourly — doručí odložené zprávy hráčů hned (jinak cron 30 * * * *).
+gameRouter.post("/admin/phone-hourly", async (c) => {
+  const { deliverDueFollowUps } = await import("../messaging/follow-ups");
+  const r = await deliverDueFollowUps(c.env.DB, c.env)
+    .catch((e) => { logger.error({ module: "game.ts" }, "ruční doručení odložených zpráv", e); return null; });
+  if (!r) return c.json({ error: "doručení selhalo" }, 500);
+  return c.json({ ok: true, ...r });
+});
+
 // POST /api/admin/cup/advance — odsimuluje aktuální kolo poháru.
 gameRouter.post("/admin/cup/advance", async (c) => {
   const cup = await c.env.DB.prepare("SELECT id FROM cup_competitions WHERE season_number = ? AND status = 'active' LIMIT 1")

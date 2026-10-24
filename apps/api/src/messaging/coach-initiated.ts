@@ -23,8 +23,10 @@ import {
 } from "./ai-player-chat";
 import { coachStreak, leftOnReadChance, markCoachMessagesRead, readDelayMs } from "./left-on-read";
 import {
-  INJURY_COLUMN, loadLastOwnMessageAt, loadPlayerSnapshot, loadTeamContext, nactiSituaceTymu, pockejNezDopise,
+  INJURY_COLUMN, afterPlayerReply, loadLastOwnMessageAt, loadPlayerSnapshot, loadTeamContext, nactiSituaceTymu,
+  pockejNezDopise, scheduleRetryReply,
 } from "./ai-player-spawn";
+import { loadChatMemory } from "./player-memory";
 import type { PlayerSnapshot } from "./ai-player-scenarios";
 import { carryWeightTalk, weightTalkFromState } from "../season/weight-talk";
 
@@ -61,8 +63,12 @@ const PLAYER_SELECT = `
  */
 export async function startCoachThread(
   db: D1Database,
-  env: { GEMINI_API_KEY?: string },
-  opts: { convId: string; teamId: string; playerId: string; coachMessage: string },
+  env: { GEMINI_API_KEY?: string; CACHE_KV?: KVNamespace },
+  opts: {
+    convId: string; teamId: string; playerId: string; coachMessage: string;
+    /** Odpověď přichází se zpožděním po výpadku modelu (follow-ups.ts). */
+    lateReply?: "offline";
+  },
 ): Promise<boolean> {
   try {
     const row = await db
@@ -91,6 +97,8 @@ export async function startCoachThread(
     if (teamGameDate?.game_date) player.weightTalk = weightTalkFromState(vlakno?.ai_thread_state, teamGameDate.game_date);
     player.znalostiIncidentu = await nactiZnalostiHrace(db, { teamId: opts.teamId, playerId: opts.playerId, tema });
     player.lastOwnMessageAt = await loadLastOwnMessageAt(db, opts.convId, player.id);
+    player.lateReply = opts.lateReply;
+    const memory = await loadChatMemory(db, player, { teamId: opts.teamId, convId: opts.convId });
 
     /*
      * Historie i tady: když trenér napíše podruhé po uzavřeném vlákně, hráč
@@ -100,17 +108,18 @@ export async function startCoachThread(
     const drive = await db
       .prepare(
         `SELECT * FROM (
-           SELECT sender_type, body, sent_at, json_extract(metadata, '$.photoAlt') AS photo_alt FROM messages
+           SELECT sender_type, body, sent_at, json_extract(metadata, '$.photoAlt') AS photo_alt,
+                  json_extract(metadata, '$.drunk') AS drunk FROM messages
            WHERE conversation_id = ? AND sender_type IN ('player','user')
            ORDER BY sent_at DESC LIMIT 6
          ) ORDER BY sent_at ASC`,
-      ).bind(opts.convId).all<{ sender_type: string; body: string; photo_alt: string | null }>()
+      ).bind(opts.convId).all<{ sender_type: string; body: string; photo_alt: string | null; drunk: number | null }>()
       .catch((e) => { logger.warn({ module: M }, "historie konverzace", e); return null; });
 
     // Popis fotky, kterou hráč dřív poslal, ať si ji pamatuje (player-photo.ts).
     const historie = (drive?.results ?? []).map((m) => ({
       sender: (m.sender_type === "user" ? "coach" : "player") as "coach" | "player",
-      body: historyBody(m.body, m.photo_alt),
+      body: historyBody(m.body, m.photo_alt, m.drunk === 1),
     }));
     // Poslední trenérova zpráva už v historii je (uložila se před tímhle voláním);
     // když tam z nějakého důvodu není, přidáme ji, ať na ni má hráč co odpovědět.
@@ -142,6 +151,7 @@ export async function startCoachThread(
 
     const now = new Date().toISOString();
     const jmeno = `${player.firstName} ${player.lastName}`;
+    await afterPlayerReply(db, { teamId: opts.teamId, convId: opts.convId, player, reply, at: now, offerIds: memory.offerIds });
     // Když hráč rovnou uzavřel, thread se neotevírá — jinak by konverzace
     // čekala na odpověď, kterou už nikdo nedluží.
     const pokracuje = !reply.conversationComplete;
@@ -194,6 +204,8 @@ export async function startCoachThread(
   } catch (e) {
     if (e instanceof GeminiUnavailableError) {
       logger.warn({ module: M }, `model nedostupný pro ${opts.playerId}`);
+      // Trenér za SMS zaplatil: hráč odpoví, až model zase půjde (23. 10. neodepsal ~12 hodin nikdo).
+      await scheduleRetryReply(db, { teamId: opts.teamId, playerId: opts.playerId, convId: opts.convId });
       return false;
     }
     logger.error({ module: M }, `konverzace s hráčem ${opts.playerId}`, e);
@@ -266,7 +278,7 @@ export async function replyInSquadGroup(
       snap.zivotniSituace = kind ? { kind, label: nazevSituace(kind) } : undefined;
       return snap;
     });
-    const mluvci = vyberMluvciho(kadr);
+    const mluvci = vyberMluvciho(await awakeFirst(db, opts.convId, kadr));
     if (!mluvci) return false;
 
     // Před celou kabinou nikdo nic neprozradí: jen veřejné znalosti (spec 10b).
@@ -327,6 +339,28 @@ export async function replyInSquadGroup(
     logger.error({ module: M }, `reakce v kabině ${opts.teamId}`, e);
     return false;
   }
+}
+
+/**
+ * Kdo v kabině může odpovědět: jen ti, kdo jsou vzhůru. Když spí všichni, vrací celý
+ * kádr a SMS jednoho vzbudí. Ten pak 30 minut nespí (`AWAKE_AFTER_OWN_MESSAGE_MS`),
+ * takže na další zprávy odpovídá zase on. Dřív ve Vimperku ve 23:15 napsalo pět hráčů
+ * za sebou „vzbudils mi rodinu" (prod 2026-10-22).
+ */
+async function awakeFirst(db: D1Database, convId: string, kadr: PlayerSnapshot[]): Promise<PlayerSnapshot[]> {
+  const recent = await db.prepare(
+    `SELECT sender_id, strftime('%Y-%m-%dT%H:%M:%SZ', MAX(julianday(sent_at))) AS at FROM messages
+      WHERE conversation_id = ? AND sender_type = 'player' AND julianday(sent_at) > julianday('now', '-1 hour')
+      GROUP BY sender_id`,
+  ).bind(convId).all<{ sender_id: string; at: string }>()
+    .catch((e) => { logger.warn({ module: M }, "kdo v kabině nedávno psal", e); return { results: [] as Array<{ sender_id: string; at: string }> }; });
+  const wrote = new Map(recent.results.map((r) => [r.sender_id, r.at]));
+  const now = new Date();
+  const awake = kadr.filter((p) => {
+    p.lastOwnMessageAt = wrote.get(p.id) ?? p.lastOwnMessageAt;
+    return playerTimeContext(p, now).situace !== "spi";
+  });
+  return awake.length > 0 ? awake : kadr;
 }
 
 /**

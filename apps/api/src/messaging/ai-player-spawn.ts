@@ -28,9 +28,11 @@ import {
   GeminiUnavailableError,
   playerTimeContext,
   type ChatEnv,
+  type ReplyResult,
   type ThreadMessage,
   type TeamContext,
 } from "./ai-player-chat";
+import { loadChatMemory, offerStanceStmt } from "./player-memory";
 import {
   pickScenarioForPlayer,
   getScenarioById,
@@ -55,6 +57,8 @@ const draftKey = (teamId: string) => `message_draft:${teamId}`;
 // za 1–2 týdny (prod 10/2026), uživatel chtěl hlasovky blíž ke dvěma týdně (2026-10-24).
 const SPAWN_PROBABILITY = 0.50;
 const COOLDOWN_DAYS = 3;              // min 3 dny mezi thready aby se neobjevily 2 v řadě
+/** Šance, že se hráč ráno po opilé hlasovce sám ozve (follow-ups.ts). */
+const HANGOVER_CHANCE = 0.6;
 const STALE_DAYS_FOR_OFFEND = 3;      // 3 herní dny bez odpovědi trenéra
 const SAFETY_NET_DAYS = 14;           // safety net pro úplně zaseknuté thready
 
@@ -79,6 +83,8 @@ interface AiThreadStateData {
   /** Spoluhráč, o kterém konverzace je (konflikt / pochvala) — podle výsledku se upraví jejich vztah. */
   subject_player_id?: string;
   subject_player_name?: string;
+  /** Zpráva „jen tak" (casual-messages.ts): neodpovězená nikoho neurazí. */
+  casual?: boolean;
   /** Incident, na který se trenér ptá (spec 7a). Platí jen v herní den `incidentDen`. */
   incidentId?: string;
   incidentDen?: string;
@@ -138,6 +144,18 @@ function parseInjury(raw: unknown): PlayerSnapshot["injury"] {
   }
 }
 
+/** Jak dlouho po vyléčení hráč o zranění mluví jako o nedávném. */
+const RECENT_INJURY_DAYS = 14;
+
+/** `life_context.lastInjury` (denní tick při vyléčení), jen pokud je čerstvé. */
+export function recentInjuryFrom(raw: unknown, now = Date.now()): PlayerSnapshot["recentInjury"] {
+  if (!raw || typeof raw !== "object") return undefined;
+  const r = raw as { description?: unknown; healedAt?: unknown; volno?: unknown; fake?: unknown };
+  const at = typeof r.healedAt === "string" ? Date.parse(r.healedAt) : NaN;
+  if (!Number.isFinite(at) || now - at > RECENT_INJURY_DAYS * 86400_000) return undefined;
+  return { description: typeof r.description === "string" ? r.description : "", volno: r.volno === true, fake: r.fake === true };
+}
+
 export function loadPlayerSnapshot(
   row: Record<string, unknown>,
   matchCtx?: { lastOutcome: "win" | "loss" | "draw" | null; teamStreak: number },
@@ -173,6 +191,7 @@ export function loadPlayerSnapshot(
     romani: lifeContext.romani === true,
     transferTalk: transferTalkFrom(lifeContext.transferUnrest),
     injury: parseInjury(row.injury),
+    recentInjury: recentInjuryFrom(lifeContext.lastInjury),
     // Kontext posledního zápasu — hráč, který nenastoupil, má last_minutes NULL.
     lastMatchOutcome: matchCtx?.lastOutcome ?? null,
     playedLastMatch: row.last_minutes != null && (row.last_minutes as number) > 0,
@@ -359,6 +378,8 @@ export async function applyAiPlayerThreads(
        AND NOT EXISTS (
          SELECT 1 FROM conversations c WHERE c.team_id = t.id AND c.ai_thread_active = 1
            AND COALESCE(c.participant_id, '') NOT LIKE 'so-%'
+           -- Rozepsaná zpráva „jen tak" stížnost nebrzdí, jen se vynechá ten hráč (busy níž).
+           AND json_extract(c.ai_thread_state, '$.casual') IS NULL
        )`,
   ).bind(`-${COOLDOWN_DAYS} days`).all<{ id: string }>()
     .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "candidate teams query", e); return { results: [] }; });
@@ -475,10 +496,10 @@ async function spawnForTeam(
     snap.zivotniSituace = kind ? { kind, label: nazevSituace(kind) } : undefined;
     return snap;
   });
-  // Ruční téma jde i týmům s rozjetou konverzací: hráč, se kterým se zrovna píše, se vynechá,
-  // jinak by nové vlákno přepsalo stav toho běžícího.
+  // Hráč, se kterým se zrovna píše, se vynechá, jinak by nové vlákno přepsalo stav toho běžícího.
+  // Platí pro ruční téma i pro zprávu „jen tak", která stížnost nebrzdí.
   const busy = new Set<string | null>();
-  if (forcedScenario) {
+  {
     const rows = await db.prepare("SELECT participant_id FROM conversations WHERE team_id = ? AND ai_thread_active = 1")
       .bind(teamId).all<{ participant_id: string | null }>()
       .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "hráči s rozjetou konverzací", e); return { results: [] }; });
@@ -553,9 +574,9 @@ async function spawnForTeam(
     if (scene) {
       const key = await generatePlayerPhoto(env.AI, env.SEED_DATA, scene, uuid(), seedFromString(messageId));
       if (key) photo = { key, alt: scene.alt };
+      else logger.warn({ module: "ai-player-spawn", teamId }, `fotka ${scene.id} se nepovedla, zpráva jde bez ní`);
       // Kdo posílá fotku z hospody, píše opile (přání uživatele 2026-10-24).
       if (key && scene.id.startsWith("pub_")) player.atPub = true;
-      else logger.warn({ module: "ai-player-spawn", teamId }, `fotka ${scene.id} se nepovedla, zpráva jde bez ní`);
     }
   }
 
@@ -661,6 +682,21 @@ async function spawnForTeam(
       .catch((e) => logger.warn({ module: "ai-player-spawn", teamId }, "smazání použitého konceptu", e));
   }
 
+  // Pozvánka (z hospody): na trenérovo „jdu" se čeká šest hodin (casual-messages.ts).
+  if (scenario.invite) {
+    const { openInvite } = await import("./casual-messages");
+    await openInvite(env.CACHE_KV, convId, { kind: scenario.invite, topicId: scenario.id, teamId, playerId: player.id, playerFirstName: player.firstName });
+  }
+  // Ráno po opilé hlasovce se hráč, který trenéra aspoň bere, omluví nebo to zlehčí.
+  if (voice?.drunk && player.coachRelationship >= 40 && Math.random() < HANGOVER_CHANCE) {
+    const { nextFreeMoment, scheduleFollowUp } = await import("./follow-ups");
+    await scheduleFollowUp(db, {
+      teamId, playerId: player.id, convId, kind: "hangover",
+      dueAt: nextFreeMoment(player, new Date(Date.now() + 10 * 3600_000), { allowWork: true, earliestHour: 7 }),
+      payload: { anchorAt: now },
+    });
+  }
+
   logger.info({ module: "ai-player-spawn", teamId }, `spawned AI thread: ${player.firstName} ${player.lastName} → ${scenario.id}${voice ? ` (hlasovka ${voice.durationSec} s, ${voice.voice})` : ""}${photo ? " (fotka)" : ""}`);
   return { sent: true, draft };
 }
@@ -714,11 +750,13 @@ function pickPlayerWeighted(
  */
 export async function handleAiPlayerReply(
   db: D1Database,
-  env: { GEMINI_API_KEY?: string },
+  env: { GEMINI_API_KEY?: string; CACHE_KV?: KVNamespace },
   convId: string,
+  /** Odpověď přichází se zpožděním (follow-ups.ts): hráč řekne, že neměl telefon u sebe. */
+  opts: { lateReply?: "offline" } = {},
 ): Promise<void> {
   try {
-    await handleAiPlayerReplyInner(db, env, convId);
+    await handleAiPlayerReplyInner(db, env, convId, opts);
   } catch (e) {
     logger.error({ module: "ai-player-spawn" }, `handleAiPlayerReply CRASHED for conv ${convId}`, e);
     // Reset awaiting na coach aby trenér mohl zkusit znovu odpovědět
@@ -731,8 +769,9 @@ export async function handleAiPlayerReply(
 
 async function handleAiPlayerReplyInner(
   db: D1Database,
-  env: { GEMINI_API_KEY?: string },
+  env: { GEMINI_API_KEY?: string; CACHE_KV?: KVNamespace },
   convId: string,
+  opts: { lateReply?: "offline" },
 ): Promise<void> {
   logger.info({ module: "ai-player-spawn" }, `handleAiPlayerReply START for conv ${convId}`);
   // Od téhle chvíle se počítá, jak dlouho hráči odpověď trvala. Generování
@@ -814,12 +853,16 @@ async function handleAiPlayerReplyInner(
     .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "herní den pro domluvu o váze", e); return null; });
   if (teamGameDate?.game_date) player.weightTalk = weightTalkFromState(conv.ai_thread_state, teamGameDate.game_date);
   player.lastOwnMessageAt = await loadLastOwnMessageAt(db, convId, player.id);
+  player.lateReply = opts.lateReply;
+  const memory = await loadChatMemory(db, player, { teamId: conv.team_id, convId });
   const teamCtx = await loadTeamContext(db, conv.team_id);
+  // Rozhovor „jen tak" bez tabulky, jinak ji model cpe do každé odpovědi (casual-messages.ts).
+  if (scenario.category === "casual" && scenario.id !== "casual_how_are_you") teamCtx.leaguePosition = undefined;
 
   // Načti historii (posledních 6 zpráv chronologicky)
   const histRows = await db.prepare(
-    "SELECT sender_type, body, sent_at, json_extract(metadata, '$.photoAlt') AS photo_alt FROM messages WHERE conversation_id = ? ORDER BY sent_at DESC LIMIT 6",
-  ).bind(convId).all<{ sender_type: string; body: string; sent_at: string; photo_alt: string | null }>()
+    "SELECT sender_type, body, sent_at, json_extract(metadata, '$.photoAlt') AS photo_alt, json_extract(metadata, '$.drunk') AS drunk FROM messages WHERE conversation_id = ? ORDER BY sent_at DESC LIMIT 6",
+  ).bind(convId).all<{ sender_type: string; body: string; sent_at: string; photo_alt: string | null; drunk: number | null }>()
     .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "load history", e); return { results: [] }; });
 
   const history: ThreadMessage[] = histRows.results
@@ -827,7 +870,7 @@ async function handleAiPlayerReplyInner(
     .filter((m) => m.sender_type === "player" || m.sender_type === "user")
     .map((m) => ({
       sender: m.sender_type === "player" ? "player" : "coach",
-      body: historyBody(m.body, m.photo_alt),
+      body: historyBody(m.body, m.photo_alt, m.drunk === 1),
       // Zprávy z dřívějších rozhovorů: model je smí znát, ale vyhodnocení tohohle rozhovoru
       // je počítat nesmí (příslib místa v základu z 13. 10. se propsal do hospody 24. 10.).
       earlier: m.sent_at < (state.initiated_at ?? ""),
@@ -853,7 +896,7 @@ async function handleAiPlayerReplyInner(
   }
 
   logger.info({ module: "ai-player-spawn" }, `calling generateReply for conv ${convId} (turn ${newRepliesCount}/${state.max_replies}, isHardCap=${isHardCap})`);
-  let reply: { body: string; conversationComplete: boolean };
+  let reply: ReplyResult;
   try {
     reply = await generateReply(env, player, history, scenario, teamCtx, isHardCap);
     logger.info({ module: "ai-player-spawn" }, `generateReply OK: complete=${reply.conversationComplete}, body=${reply.body.slice(0, 60)}`);
@@ -864,6 +907,8 @@ async function handleAiPlayerReplyInner(
         "UPDATE conversations SET ai_thread_state = ? WHERE id = ?",
       ).bind(JSON.stringify({ ...state, awaiting: "coach" }), convId).run()
         .catch((err) => logger.warn({ module: "ai-player-spawn" }, "rollback awaiting", err));
+      // Trenér za SMS zaplatil: hráč odpoví, až model zase půjde (23. 10. neodepsal ~12 hodin nikdo).
+      await scheduleRetryReply(db, { teamId: conv.team_id, playerId: player.id, convId });
       return;
     }
     throw e;
@@ -881,6 +926,7 @@ async function handleAiPlayerReplyInner(
   const now = new Date().toISOString();
   const senderName = `${player.firstName} ${player.lastName}`;
   const shouldClose = reply.conversationComplete || isHardCap;
+  await afterPlayerReply(db, { teamId: conv.team_id, convId, player, reply, at: now, offerIds: memory.offerIds });
 
   if (!shouldClose) {
     // Branch A: pokračuje v rozhovoru
@@ -919,6 +965,13 @@ async function handleAiPlayerReplyInner(
     };
   }
 
+  if (scenario.category === "casual" && resolution) {
+    // Psal jen tak: žádné volno a jen malá změna nálady, stejné meze jako rozhovor od trenéra.
+    const { COACH_CHAT_MAX_MORALE } = await import("../lib/coach-relation");
+    resolution.morale_delta = Math.max(-COACH_CHAT_MAX_MORALE, Math.min(COACH_CHAT_MAX_MORALE, resolution.morale_delta));
+    resolution.condition_delta = 0;
+    resolution.absence_days = 0;
+  }
   await applyResolutionAndClose(db, convId, conv.team_id, player.id, reply.body, senderName, scenario.id, state, resolution);
 }
 
@@ -985,7 +1038,8 @@ async function applyResolutionAndClose(
   // „Konverzace ukončena" se shrnutím do chatu už nepíšeme (uživatel 2026-10-24): jestli
   // hráče naštval, vidí trenér ve vztahu v profilu. Hlášku dostane jen schválené volno,
   // o tom se trenér dozvědět musí.
-  const jeOdTrenera = scenarioId === "coach_initiated";
+  // Zpráva „jen tak" se počítá jako rozhovor od trenéra: malý dopad se stropem jednou denně.
+  const jeOdTrenera = scenarioId === "coach_initiated" || getScenarioById(scenarioId)?.category === "casual";
   const hlasitUkonceni = absenceDays > 0;
 
   const stmts: D1PreparedStatement[] = [
@@ -1196,6 +1250,13 @@ export async function expireStaleAiThreads(
       // hovoru. Žádná urážka, vyhodnotí se, co v rozhovoru padlo.
       await closeCoachThreadQuietly(db, env, conv, state);
       coachClosed++;
+    } else if (state.awaiting === "coach" && state.casual) {
+      // Zpráva „jen tak": neodpověděl, nic se neděje. Jinak by víc zpráv znamenalo víc povinností.
+      // Bez posunu last_message_at, ať se konverzace v seznamu nevyhoupne nahoru.
+      await db.prepare("UPDATE conversations SET ai_thread_state = ?, ai_thread_active = 0 WHERE id = ?")
+        .bind(JSON.stringify({ ...state, awaiting: "done", resolution: { morale_delta: 0, condition_delta: 0, relationship_delta: 0, summary: "Trenér neodpověděl.", tone: "neutral" } }), conv.id).run()
+        .catch((e) => logger.warn({ module: "ai-player-spawn" }, `zavření zprávy jen tak ${conv.id}`, e));
+      coachClosed++;
     } else if (state.awaiting === "coach") {
       // Hráč se urazí
       await offendPlayer(db, conv, state);
@@ -1334,6 +1395,39 @@ async function offendPlayer(
   ]);
 
   logger.info({ module: "ai-player-spawn", teamId: conv.team_id }, `offended player ${playerRow.first_name} ${playerRow.last_name} (morale ${moraleDelta}, relationship ${relationshipDelta})`);
+}
+
+/**
+ * Co hra potřebuje zařídit po každé odpovědi hráče, ať ji napsalo vlákno od hráče,
+ * nebo od trenéra: slíbil, že se ozve později (follow-ups.ts ho pak opravdu nechá
+ * napsat), a co řekl o čekající nabídce (offer-rejection-impact.ts se podle toho zařídí).
+ */
+export async function afterPlayerReply(
+  db: D1Database,
+  r: { teamId: string; convId: string; player: PlayerSnapshot; reply: Pick<ReplyResult, "writeLater" | "transferStance">; at: string; offerIds: string[] },
+): Promise<void> {
+  if (r.reply.transferStance) {
+    await offerStanceStmt(db, r.player.id, r.reply.transferStance, r.offerIds).run()
+      .catch((e) => logger.warn({ module: "ai-player-spawn", teamId: r.teamId }, "zápis postoje k nabídce", e));
+  }
+  if (r.reply.writeLater) {
+    const { nextFreeMoment, scheduleFollowUp } = await import("./follow-ups");
+    // `replace`: kdo „ozvu se pak" napsal podruhé, se ozve po té druhé (kotva se posune).
+    await scheduleFollowUp(db, {
+      teamId: r.teamId, playerId: r.player.id, convId: r.convId, kind: "reply_later",
+      dueAt: nextFreeMoment(r.player, new Date(Date.parse(r.at) + 3600_000)),
+      payload: { anchorAt: r.at }, replace: true,
+    });
+  }
+}
+
+/** Model nešel, když trenér psal: odpověď se zkusí za necelou hodinu znovu (follow-ups.ts). */
+export async function scheduleRetryReply(
+  db: D1Database,
+  r: { teamId: string; playerId: string; convId: string },
+): Promise<void> {
+  const { scheduleFollowUp } = await import("./follow-ups");
+  await scheduleFollowUp(db, { ...r, kind: "retry_reply", dueAt: new Date(Date.now() + 50 * 60_000) });
 }
 
 /**

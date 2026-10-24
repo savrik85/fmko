@@ -271,3 +271,48 @@ describe("starší rozhovory jsou jen kontext", () => {
   });
 });
 
+
+describe("hráč ví, co sám udělal", () => {
+  it("po opilé hlasovce nezapírá, o zmeškaném hovoru ví, doléčené zranění zná", () => {
+    const p = buildSystemPrompt(hrac({
+      drunkVoiceRecently: true,
+      missedCall: { count: 2 },
+      injury: null,
+      recentInjury: { description: "Natažený sval", volno: false, fake: false },
+    }), tym, kdy(2, 18));
+    expect(p).toContain("OPILOU hlasovku");
+    expect(p).toContain("nezapírej");
+    expect(p).toContain("2× volal");
+    expect(p).toContain("Nedávno jsi byl zraněný (Natažený sval)");
+    expect(p).not.toContain("Když trenér tvrdí, že jsi byl zraněný, nepřikyvuj");
+  });
+
+  it("čekající nabídku zná i s tím, jak moc ho láká", () => {
+    const p = buildSystemPrompt(hrac({ pendingOffers: [{ club: "FK FORPSI Čkyně", interest: 2 }] }), tym, kdy(2, 18));
+    expect(p).toContain("NABÍDKA: FK FORPSI Čkyně o tebe stojí");
+    expect(p).toContain("dost tě to láká");
+  });
+});
+
+describe("co hra z odpovědi pozná navíc", () => {
+  it("slib „ozvu se pak“ pozná i bez pole v JSON", async () => {
+    vi.mocked(generateText).mockResolvedValueOnce(JSON.stringify({ body: "Jsem v práci, ozvu se potom.", conversation_complete: true }));
+    const r = await generateReply({}, hrac(), [{ sender: "coach", body: "Zvednu ti plat." }], getScenarioById("coach_initiated")!, tym, false);
+    expect(r.writeLater).toBe(true);
+  });
+
+  it("postoj k nabídce se ptá jen u hráče, na kterého nějaká čeká", async () => {
+    vi.mocked(generateText).mockClear();
+    vi.mocked(generateText).mockResolvedValueOnce(JSON.stringify({ body: "Zůstávám, odmítněte to.", conversation_complete: true, write_later: false, transfer_stance: "stay" }));
+    const s = await generateReply({}, hrac({ pendingOffers: [{ club: "FK FORPSI Čkyně", interest: 2 }] }), [{ sender: "coach", body: "Zůstaň u nás." }], getScenarioById("coach_initiated")!, tym, false);
+    expect(s.transferStance).toBe("stay");
+    expect(String(vi.mocked(generateText).mock.calls[0][1])).toContain("transfer_stance");
+
+    vi.mocked(generateText).mockClear();
+    vi.mocked(generateText).mockResolvedValueOnce(JSON.stringify({ body: "Jasně.", conversation_complete: true, transfer_stance: "stay" }));
+    const noOffer = await generateReply({}, hrac(), [{ sender: "coach", body: "Zdar." }], getScenarioById("coach_initiated")!, tym, false);
+    expect(String(vi.mocked(generateText).mock.calls[0][1])).not.toContain("transfer_stance");
+    expect(noOffer.transferStance).toBeUndefined();
+    expect(noOffer.writeLater).toBe(false);
+  });
+});

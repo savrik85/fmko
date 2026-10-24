@@ -46,6 +46,8 @@ crons = [
   "0 17 * * *",
   "5 17 * * *",
   "20 17 * * *",
+  # Telefon každou hodinu: zprávy „jen tak" a odložené zprávy hráčů (messaging/casual-messages.ts).
+  "30 * * * *",
 ]
 
 # ── Fronty (produkce) ──
@@ -196,4 +198,6 @@ crons = [
   "0 17 * * *",
   "5 17 * * *",
   "20 17 * * *",
+  # Telefon každou hodinu: zprávy „jen tak" a odložené zprávy hráčů (messaging/casual-messages.ts).
+  "30 * * * *",
 ]

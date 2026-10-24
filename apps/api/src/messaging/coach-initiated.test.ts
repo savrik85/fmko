@@ -13,6 +13,7 @@ vi.mock("./left-on-read", () => ({
   markCoachMessagesRead: vi.fn(async () => undefined),
   readDelayMs: vi.fn(() => 0),
 }));
+vi.mock("./player-memory", () => ({ loadChatMemory: vi.fn(async () => ({ offerIds: [] })) }));
 vi.mock("./ai-player-spawn", () => ({
   INJURY_COLUMN: "NULL AS injury",
   loadPlayerSnapshot: vi.fn((r: Record<string, unknown>) => ({
@@ -22,12 +23,14 @@ vi.mock("./ai-player-spawn", () => ({
   pockejNezDopise: vi.fn(async () => undefined),
   nactiSituaceTymu: vi.fn(async () => new Map()),
   loadLastOwnMessageAt: vi.fn(async () => undefined),
+  afterPlayerReply: vi.fn(async () => undefined),
+  scheduleRetryReply: vi.fn(async () => undefined),
 }));
 vi.mock("../incidents/znalosti-db", () => ({ nactiZnalostiHrace: vi.fn(async () => []) }));
 
 import { FalesnaD1, jakoD1 } from "../incidents/testovaci-d1";
 import { nactiZnalostiHrace } from "../incidents/znalosti-db";
-import { generateCoachInitiatedReply, generateSquadGroupReaction } from "./ai-player-chat";
+import { generateCoachInitiatedReply, generateSquadGroupReaction, playerTimeContext } from "./ai-player-chat";
 import { nactiSituaceTymu } from "./ai-player-spawn";
 import { replyInSquadGroup, startCoachThread } from "./coach-initiated";
 import { leftOnReadChance, markCoachMessagesRead } from "./left-on-read";
@@ -92,6 +95,19 @@ describe("konverzace začatá trenérem a domluva o váze", () => {
 });
 
 describe("kabina", () => {
+  it("v noci odpovídá jen ten, kdo je vzhůru; když spí všichni, vzbudí se jeden", async () => {
+    const squad = (asleep: string[]) => {
+      vi.mocked(playerTimeContext).mockImplementation((p) => ({ situace: asleep.includes(p.id) ? "spi" : "pije" }) as ReturnType<typeof playerTimeContext>);
+      return new FalesnaD1([{ sql: /FROM players p/, all: [{ id: "a" }, { id: "b" }, { id: "c" }] }]);
+    };
+    await replyInSquadGroup(jakoD1(squad(["a", "c"])), {}, { teamId: "tym-a", convId: "kabina", coachMessage: "Kluci, zítra v šest!" });
+    expect((vi.mocked(generateSquadGroupReaction).mock.calls[0][1] as { id: string }).id).toBe("b");
+
+    vi.mocked(generateSquadGroupReaction).mockClear();
+    await replyInSquadGroup(jakoD1(squad(["a", "b", "c"])), {}, { teamId: "tym-a", convId: "kabina", coachMessage: "Kluci, zítra v šest!" });
+    expect(generateSquadGroupReaction).toHaveBeenCalledTimes(1);
+  });
+
   it("mluvčí dostane jen veřejné znalosti", async () => {
     await replyInSquadGroup(jakoD1(db(null)), {}, { teamId: "tym-a", convId: "kabina", coachMessage: "Kdo ukradl dresy?" });
     expect(nactiZnalostiHrace).toHaveBeenCalledWith(expect.anything(), { teamId: "tym-a", playerId: "s" });

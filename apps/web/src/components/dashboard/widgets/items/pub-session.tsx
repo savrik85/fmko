@@ -22,6 +22,7 @@ const INCIDENT_ICONS: Record<string, string> = {
   nobody: "🌙",
   coach_led_visit: "🧑‍🏫",
   coach_led_one: "🧑‍🏫",
+  coach_invited: "🧑‍🏫",
   cat: "🐈",
   priest: "⛪",
   scout: "🕵️",
