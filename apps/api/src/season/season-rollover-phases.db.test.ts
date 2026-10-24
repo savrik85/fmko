@@ -180,6 +180,19 @@ describe("rollover po fázích", () => {
     expect(await count(db, "SELECT COUNT(*) AS n FROM village_history WHERE event_type = 'election_held'")).toBe(elections);
   }, 300_000);
 
+  it("kurzy právě skončené sezóny zůstanou, hlídač kurzů z nich měří ještě tři týdny", async () => {
+    const { db } = await freshWorld();
+    for (const season of [0, 1]) {
+      await db.prepare(
+        `INSERT INTO bet_odds (id, league_id, season_number, calendar_id, match_id, market, selection, odds_x100, probability, label, game_date)
+         VALUES (?, ?, ?, ?, ?, '1x2', '1', 190, 0.5, 'Domácí', '2026-10-12T03:00:00.000Z')`,
+      ).bind(`odds-${season}`, LEAGUE, season, `cal-${season}`, `match-${season}`).run();
+    }
+    await rolloverAllLeagues(db, 1);
+    expect(await count(db, "SELECT COUNT(*) AS n FROM bet_odds WHERE season_number = 1")).toBe(1);
+    expect(await count(db, "SELECT COUNT(*) AS n FROM bet_odds WHERE season_number = 0")).toBe(0);
+  }, 300_000);
+
   it("fáze, která se přerušila uprostřed a nesmí běžet dvakrát, se znovu nepustí a rollover jde dál", async () => {
     const { db } = await freshWorld();
     await db.prepare(
