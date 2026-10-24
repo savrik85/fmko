@@ -363,17 +363,34 @@ messagingRouter.post("/teams/:teamId/conversations/:convId/voice-note", async (c
   ).bind(convId).first<{ team_id: string; type: string; participant_id: string | null; ai_thread_active: number }>()
     .catch((e) => { logger.warn({ module: "messaging" }, "konverzace pro hlasovou odpověď", e); return null; });
   if (!conv || conv.team_id !== teamId) return c.json({ error: "Konverzace nenalezena" }, 404);
-  if (!odpovidatLze(conv.type, conv.ai_thread_active === 1, { participantId: conv.participant_id }).canReply) {
-    return c.json({ error: "Do téhle konverzace se odpovídat nedá." }, 400);
-  }
-  if (!c.env.AI) return c.json({ error: "Přepis hlasu teď nefunguje." }, 503);
+  const rule = odpovidatLze(conv.type, conv.ai_thread_active === 1, { participantId: conv.participant_id });
+  if (!rule.canReply) return c.json({ error: "Do téhle konverzace se odpovídat nedá." }, 400);
 
   const {
-    COACH_AUDIO_TYPES, COACH_AUDIO_MAX_BYTES, COACH_AUDIO_MAX_SEC, coachAudioKey, transcribeCoachVoice,
+    COACH_AUDIO_TYPES, COACH_AUDIO_MAX_BYTES, COACH_AUDIO_MAX_SEC, coachAudioKey, transcribeCoachVoice, takeVoiceNoteQuota,
   } = await import("../messaging/coach-voice");
   const contentType = (c.req.header("Content-Type") ?? "").split(";")[0].trim().toLowerCase();
   const ext = COACH_AUDIO_TYPES[contentType];
   if (!ext) return c.json({ error: "Nahrávka je v nepodporovaném formátu." }, 415);
+  // Velikost podle hlavičky dřív, než se tělo načte do paměti.
+  const declaredBytes = Number(c.req.header("Content-Length") ?? NaN);
+  if (!Number.isFinite(declaredBytes)) return c.json({ error: "Chybí velikost nahrávky." }, 411);
+  if (declaredBytes > COACH_AUDIO_MAX_BYTES) return c.json({ error: "Nahrávka je moc dlouhá." }, 413);
+
+  // Stejné brzdy jako u SMS: vypnuté AI a došlý kredit se poznají před placeným přepisem.
+  const { isAiEnabled } = await import("../lib/ai-provider");
+  if (!c.env.AI || !(await isAiEnabled(c.env))) return c.json({ error: "Telefon je bez signálu, odpovídání je dočasně vypnuté." }, 503);
+  if (rule.channel === "sms") {
+    const { loadCredit } = await import("../messaging/phone-credit");
+    const credit = await loadCredit(c.env.DB, teamId);
+    if (credit.zbyva < credit.cenaSms) {
+      return c.json({ error: `Na SMS ti nezbývá kredit, máš ${credit.zbyva} Kč a zpráva stojí ${credit.cenaSms} Kč. Dobije se zítra ráno.` }, 400);
+    }
+  }
+  if (!(await takeVoiceNoteQuota(c.env.CACHE_KV, teamId))) {
+    return c.json({ error: "Dnes už jsi nahrál hlasovek dost, zkus to zítra nebo napiš SMS." }, 429);
+  }
+
   const audio = new Uint8Array(await c.req.arrayBuffer());
   if (audio.length < 1000) return c.json({ error: "Nahrávka je prázdná." }, 400);
   if (audio.length > COACH_AUDIO_MAX_BYTES) return c.json({ error: "Nahrávka je moc dlouhá." }, 413);
