@@ -15,7 +15,7 @@ import { transferTalkFrom } from "../transfers/unrest-reasons";
 import { nactiZnalostiHrace } from "../incidents/znalosti-db";
 import { nazevSituace } from "../incidents/situace";
 import { logger } from "../lib/logger";
-import { recordVoiceMessage, voicePreviewText } from "./voice-message";
+import { pickAmbience, recordVoiceMessage, voicePreviewText } from "./voice-message";
 import { coachRelationStmts } from "../lib/coach-relation";
 import { weightTalkFromState } from "../season/weight-talk";
 import {
@@ -23,6 +23,7 @@ import {
   generateReply,
   evaluateResolution,
   GeminiUnavailableError,
+  playerTimeContext,
   type ChatEnv,
   type ThreadMessage,
   type TeamContext,
@@ -224,12 +225,15 @@ async function pickSubjectTeammate(
 
 export async function loadTeamContext(db: D1Database, teamId: string): Promise<TeamContext> {
   const row = await db.prepare(
-    `SELECT t.name, v.name as village_name, m.name as manager_name, t.league_id
+    `SELECT t.name, v.name as village_name, v.size as village_size, v.district, m.name as manager_name, t.league_id
      FROM teams t
      LEFT JOIN villages v ON t.village_id = v.id
      LEFT JOIN managers m ON m.team_id = t.id
      WHERE t.id = ?`,
-  ).bind(teamId).first<{ name: string; village_name: string | null; manager_name: string | null; league_id: string | null }>()
+  ).bind(teamId).first<{
+    name: string; village_name: string | null; village_size: string | null; district: string | null;
+    manager_name: string | null; league_id: string | null;
+  }>()
     .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "loadTeamContext", e); return null; });
 
   // Poslední odehraný zápas — bez něj si model výsledek vymyslí a gratuluje k prohře,
@@ -275,6 +279,8 @@ export async function loadTeamContext(db: D1Database, teamId: string): Promise<T
   return {
     teamName: row?.name ?? "tým",
     villageName: row?.village_name ?? undefined,
+    // Pražské čtvrti mají ve hře velikost vesnice, ulice je tam slyšet stejně.
+    urban: row?.district === "Praha" || ["town", "small_city", "city"].includes(row?.village_size ?? ""),
     managerName: row?.manager_name ?? undefined,
     lastMatchResult,
     leaguePosition,
@@ -494,12 +500,14 @@ async function spawnForTeam(
   }
 
   // 5. Gemini call
+  // Ruční rozeslání se píše jako běžná zpráva od hráče v odpoledním ticku (14:00 UTC),
+  // ne podle skutečného času: ve tři ráno by všichni psali, že je trenér vzbudil.
+  const startedAt = new Date();
+  const writtenAt = forcedScenario
+    ? new Date(Date.UTC(startedAt.getUTCFullYear(), startedAt.getUTCMonth(), startedAt.getUTCDate(), 14))
+    : startedAt;
   let initialBody: string;
   try {
-    // Ruční rozeslání se píše jako běžná zpráva od hráče v odpoledním ticku (14:00 UTC),
-    // ne podle skutečného času: ve tři ráno by všichni psali, že je trenér vzbudil.
-    const now = new Date();
-    const writtenAt = forcedScenario ? new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 14)) : now;
     initialBody = draftPlayer && saved ? saved.text : await generateInitialMessage(env, player, scenario, teamCtx, writtenAt);
   } catch (e) {
     if (e instanceof GeminiUnavailableError) {
@@ -549,14 +557,21 @@ async function spawnForTeam(
   // 7. Místo SMS hlasovka (voice-message.ts): nanejvýš 2 týdně na tým a jen přes Gemini.
   //    Text zůstává v těle zprávy jako přepis, z něj AI bere kontext pro další odpovědi.
   const messageId = uuid();
+  // Z hospody: kdo se přiznává k pivu, nebo kdo rád pije a zrovna slaví.
+  const drunk = scenario.id === "alcohol_struggle"
+    || (player.alcohol > 70 && (scenario.category === "positive" || scenario.id === "personal_milestone"));
+  // Zvuk pod hlasem podle toho, kde hráč podle textu zprávy je (v práci, doma, v hospodě).
+  const timeContext = playerTimeContext(player, writtenAt);
   const recorded = await recordVoiceMessage(db, env, {
     teamId,
     messageId,
     scene: scenario.description,
     body: initialBody,
-    // Z hospody: kdo se přiznává k pivu, nebo kdo rád pije a zrovna slaví.
-    drunk: scenario.id === "alcohol_struggle"
-      || (player.alcohol > 70 && (scenario.category === "positive" || scenario.id === "personal_milestone")),
+    drunk,
+    ambience: pickAmbience({
+      drunk, situation: timeContext.situace, drinksAt: timeContext.kdePije, occupation: player.occupation,
+      urban: teamCtx.urban ?? false, seed: messageId,
+    }),
     force: opts.forceVoice ?? false,
     player: {
       id: player.id,

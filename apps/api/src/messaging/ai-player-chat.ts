@@ -11,7 +11,7 @@ import { logger } from "../lib/logger";
 import { COACH_CHAT_MAX_MORALE, COACH_CHAT_MAX_RELATION } from "../lib/coach-relation";
 import { seedFromString } from "../lib/seed";
 import { getOccupationByName, smenaProPovolani } from "../generators/occupations";
-import { domacnostSeSituaci, kontextCasu, popisSituace, pravidloEmoji } from "./chat-kontext";
+import { domacnostSeSituaci, kontextCasu, popisSituace, pravidloEmoji, type CasovyKontext } from "./chat-kontext";
 import { blokZnalosti } from "../incidents/znalosti";
 import type { PlayerSnapshot, AiScenario } from "./ai-player-scenarios";
 import { weightTalkPrompt } from "../season/weight-talk";
@@ -32,6 +32,19 @@ export interface TeamContext {
   squadNames?: string[];
   /** Spoluhráč, o kterého v konverzaci jde (konflikt / pochvala za asistenci). */
   subjectPlayerName?: string;
+  /** Praha nebo město. Venku je pod hlasovkou slyšet ulice, ne vesnice. */
+  urban?: boolean;
+}
+
+/**
+ * Co hráč v danou chvíli dělá a kde je. Jeden výpočet pro text zprávy i zvuk
+ * pod hlasovkou, aby hráč, který píše z práce, nebyl slyšet z gauče.
+ */
+export function playerTimeContext(player: PlayerSnapshot, kdy: Date): CasovyKontext {
+  return kontextCasu(
+    kdy, smenaProPovolani(player.occupation), seedFromString(player.id),
+    player.alcohol, player.age, player.lastOwnMessageAt,
+  );
 }
 
 export interface ResolutionResult {
@@ -130,10 +143,7 @@ export function buildSystemPrompt(player: PlayerSnapshot, team: TeamContext, kdy
 
   // Kolik je hodin a co dělá. Bez toho psal každý ve dvě ráno stejně ochotně
   // jako v neděli odpoledne, což je na SMS od vesnického fotbalisty poznat.
-  const cas = kontextCasu(
-    kdy, smenaProPovolani(player.occupation), seedFromString(player.id),
-    player.alcohol, player.age, player.lastOwnMessageAt,
-  );
+  const cas = playerTimeContext(player, kdy);
   const occ = player.occupation ? getOccupationByName(player.occupation) : undefined;
   // Výmluvy bez vazby na počasí: tady o něm nic nevíme.
   const vymluvy = (occ?.excuses ?? []).filter((e) => !e.weather).map((e) => e.text);

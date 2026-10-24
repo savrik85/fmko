@@ -10,6 +10,8 @@
  */
 
 import { logger } from "../lib/logger";
+import { getOccupationByName } from "../generators/occupations";
+import type { KdePije, Situace } from "./chat-kontext";
 
 const M = "voice-message";
 
@@ -60,6 +62,8 @@ export interface VoiceMessageMeta {
   durationSec: number;
   peaks: number[];
   voice: string;
+  /** Zvuk pod hlasem, když se přimíchal. */
+  ambience?: Ambience;
 }
 
 function hash(text: string): number {
@@ -286,15 +290,96 @@ export function peaksFromPcm(pcm: Uint8Array, bars = PEAK_BARS): number[] {
   return rms.map((r) => Math.round(Math.sqrt(r / top) * 100) / 100);
 }
 
-/** Nahrávka hospody pod opilé hlasovky (CC0, freesound 376456 „Pub in Cambridge“), PCM 24 kHz mono 16 bit. */
-export const PUB_AMBIENCE_KEY = "voice/ambience/pub-24k.pcm";
+/**
+ * Zvuk pod hlasovkou podle toho, kde hráč zrovna je. Uživatel chtěl po hospodě
+ * pod opilými hlasovkami zvuk pod každou (2026-10-24). Nahrávky jsou CC0
+ * z freesound.org, v R2 jako PCM 24 kHz mono 16 bit (`ambienceKey`).
+ *
+ * `level` je hlasitost podkladu proti hlasu (RMS). Hospodu 0,22 odladil uživatel,
+ * tiché místnosti jdou níž, ať z nich nezačne šumět ticho.
+ */
+export const AMBIENCES = {
+  /** freesound 376456 „Pub in Cambridge“ */
+  pub: { level: 0.22 },
+  home: { level: 0.16 },
+  village: { level: 0.2 },
+  street: { level: 0.2 },
+  farm: { level: 0.2 },
+  forest: { level: 0.2 },
+  car: { level: 0.2 },
+  kitchen: { level: 0.2 },
+  construction: { level: 0.18 },
+  workshop: { level: 0.18 },
+  office: { level: 0.16 },
+  shop: { level: 0.18 },
+  pitch: { level: 0.2 },
+} as const satisfies Record<string, { level: number }>;
+
+export type Ambience = keyof typeof AMBIENCES;
+
+export function ambienceKey(ambience: Ambience): string {
+  return `voice/ambience/${ambience}-24k.pcm`;
+}
+
+/** Kde hráč pracuje, podle id povolání (`generators/occupations.ts`). Kdo tu není, pracuje venku. */
+const WORKPLACE_AMBIENCE: Record<string, Ambience> = {
+  zemedelec: "farm", traktorista: "farm", kombajner: "farm", chovatel: "farm", sezonni_delnik: "farm",
+  lesni_delnik: "forest", drevorubec: "forest", hajny: "forest", myslivec: "forest", delnik_v_pile: "forest",
+  zednik: "construction", tesar: "construction", pokryvac: "construction", instalater: "construction",
+  malir_pokoju: "construction", elektrikar: "construction", delnik_v_kamenolomu: "construction",
+  kovar: "workshop", truhlar: "workshop", stolar: "workshop", automechanik: "workshop", svarac: "workshop",
+  opravar: "workshop", mistr_v_tovarne: "workshop", skladnik: "workshop", hasic: "workshop",
+  hospodsky: "pub", barman: "pub", cisnik: "pub",
+  kuchar: "kitchen", pekar: "kitchen",
+  reznik: "shop", prodavac: "shop", obchodnik: "shop", prodavac_trafika: "shop",
+  ridic_autobusu: "car", ridic_mhd: "car", ridic_kamionu: "car", taxikar: "car", ridic_boltu: "car",
+  tramvajak: "car", strojvedouci_metro: "car", policista: "car", zachranar: "car", postovni: "car",
+  ucetni: "office", urednik: "office", programator: "office", podnikatel: "office", ucitel: "office",
+  strojni_inzenyr: "office", vratny: "office", uklidova_firma: "office",
+  spravce_hriste: "pitch",
+};
 
 /**
- * Pod hlas přimíchá šum hospody: začne 0,6 s před hlasem, 0,8 s po něm dozní,
- * okraje se prolnou a hlasitost je kolem pětiny hlasu. Odladěno uživatelem
- * na ukázkových hlasovkách 2026-10-24 („zvuk hospody je top“).
+ * Zvuk pod hlasovku. Řídí se stejným časovým kontextem jako text zprávy
+ * (`chat-kontext.ts`), takže kdo píše, že je v práci, je slyšet z práce.
+ * Opilý volá vždycky z hospody, jak to říká i scéna v pokynech pro hlas.
  */
-export function mixAmbience(voice: Uint8Array, ambience: Uint8Array, seed: number): Uint8Array {
+export function pickAmbience(opts: {
+  drunk: boolean;
+  situation: Situace;
+  drinksAt: KdePije | null;
+  occupation?: string;
+  /** Praha nebo město: venku je slyšet ulice, ne vesnice. */
+  urban: boolean;
+  /** Pro volno, kdy může být doma i venku. */
+  seed: string;
+}): Ambience {
+  if (opts.drunk) return "pub";
+  const outdoor: Ambience = opts.urban ? "street" : "village";
+  switch (opts.situation) {
+    case "pije":
+      return opts.drinksAt === "hospoda" ? "pub" : "home";
+    case "prace": {
+      // Hráči koupení z profi klubů mají povolání „Fotbalista“, v katalogu povolání není.
+      if (opts.occupation === "Fotbalista") return "pitch";
+      const id = opts.occupation ? getOccupationByName(opts.occupation)?.id : undefined;
+      return (id ? WORKPLACE_AMBIENCE[id] : undefined) ?? outdoor;
+    }
+    case "volno":
+      return hash(opts.seed) % 2 === 0 ? "home" : outdoor;
+    default:
+      // Po šichtě je podle textu doma, kdo spí, taky.
+      return "home";
+  }
+}
+
+/**
+ * Pod hlas přimíchá podklad: začne 0,6 s před hlasem, 0,8 s po něm dozní
+ * a okraje se prolnou. Hlasitost podle `level`, u hospody kolem pětiny hlasu,
+ * odladěno uživatelem na ukázkových hlasovkách 2026-10-24 („zvuk hospody je top“).
+ * Špičky podkladu (kladivo, cinknutí) zůstanou pod polovinou špiček hlasu.
+ */
+export function mixAmbience(voice: Uint8Array, ambience: Uint8Array, seed: number, level: number = AMBIENCES.pub.level): Uint8Array {
   const v = new Int16Array(voice.buffer.slice(voice.byteOffset, voice.byteOffset + (voice.length & ~1)));
   const a = new Int16Array(ambience.buffer.slice(ambience.byteOffset, ambience.byteOffset + (ambience.length & ~1)));
   if (a.length === 0) return voice;
@@ -307,13 +392,21 @@ export function mixAmbience(voice: Uint8Array, ambience: Uint8Array, seed: numbe
 
   let voiceSum = 0;
   let voiceCount = 0;
+  let voicePeak = 0;
   for (const sample of v) {
     if (sample !== 0) { voiceSum += sample * sample; voiceCount++; }
+    voicePeak = Math.max(voicePeak, Math.abs(sample));
   }
   let bedSum = 0;
-  for (let i = 0; i < total; i++) bedSum += at(i) * at(i);
+  let bedPeak = 0;
+  for (let i = 0; i < total; i++) {
+    bedSum += at(i) * at(i);
+    bedPeak = Math.max(bedPeak, Math.abs(at(i)));
+  }
   const voiceRms = voiceCount ? Math.sqrt(voiceSum / voiceCount) : 3000;
-  const gain = (voiceRms * 0.22) / (Math.sqrt(bedSum / total) || 1);
+  const rmsGain = (voiceRms * level) / (Math.sqrt(bedSum / total) || 1);
+  const peakGain = voicePeak && bedPeak ? (voicePeak * 0.5) / bedPeak : rmsGain;
+  const gain = Math.min(rmsGain, peakGain);
 
   const mix = new Float64Array(total);
   let peak = 0;
@@ -329,14 +422,16 @@ export function mixAmbience(voice: Uint8Array, ambience: Uint8Array, seed: numbe
   return out;
 }
 
-async function withPubAmbience(bucket: R2Bucket, voice: Uint8Array, seedText: string): Promise<Uint8Array> {
-  const obj = await bucket.get(PUB_AMBIENCE_KEY)
-    .catch((e) => { logger.warn({ module: M }, "načtení nahrávky hospody", e); return null; });
+/** Nahrávka podkladu z R2. Když chybí, hlasovka jde bez ní. */
+async function loadAmbience(bucket: R2Bucket, ambience: Ambience): Promise<Uint8Array | null> {
+  const key = ambienceKey(ambience);
+  const obj = await bucket.get(key)
+    .catch((e) => { logger.warn({ module: M }, `načtení podkladu ${key}`, e); return null; });
   if (!obj) {
-    logger.warn({ module: M }, "nahrávka hospody chybí, opilá hlasovka jde bez ní");
-    return voice;
+    logger.warn({ module: M }, `podklad ${key} chybí, hlasovka jde bez něj`);
+    return null;
   }
-  return mixAmbience(voice, new Uint8Array(await obj.arrayBuffer()), hash(seedText));
+  return new Uint8Array(await obj.arrayBuffer());
 }
 
 export function durationSecFromPcm(pcm: Uint8Array, sampleRate = SAMPLE_RATE): number {
@@ -423,6 +518,8 @@ export async function recordVoiceMessage(
     body: string;
     /** Hráč volá z hospody: opilý hlas se smíchem a škytáním. */
     drunk?: boolean;
+    /** Zvuk pod hlasem (`pickAmbience`). Opilý je vždycky v hospodě. */
+    ambience?: Ambience;
     force?: boolean;
     random?: () => number;
     now?: Date;
@@ -470,8 +567,9 @@ export async function recordVoiceMessage(
   const raw = await synthesizeSpeech(env.GEMINI_API_KEY, prompt, voice.name);
   // Pod půl vteřiny to není hlasovka, ale useknutá odpověď.
   if (!raw || raw.length < SAMPLE_RATE) return null;
-  // Opilý volá z hospody, pod hlas se přimíchá její šum.
-  const pcm = opts.drunk ? await withPubAmbience(env.SEED_DATA, raw, opts.messageId) : raw;
+  const ambience: Ambience | undefined = opts.drunk ? "pub" : opts.ambience;
+  const bed = ambience ? await loadAmbience(env.SEED_DATA, ambience) : null;
+  const pcm = ambience && bed ? mixAmbience(raw, bed, hash(opts.messageId), AMBIENCES[ambience].level) : raw;
 
   const audioKey = `voice/${opts.messageId}.wav`;
   const saved = await env.SEED_DATA.put(audioKey, pcmToWav(pcm), { httpMetadata: { contentType: "audio/wav" } })
@@ -479,7 +577,10 @@ export async function recordVoiceMessage(
   if (!saved) return null;
 
   return {
-    meta: { type: "voice", audioKey, durationSec: durationSecFromPcm(pcm), peaks: peaksFromPcm(pcm), voice: voice.name },
+    meta: {
+      type: "voice", audioKey, durationSec: durationSecFromPcm(pcm), peaks: peaksFromPcm(pcm), voice: voice.name,
+      ...(ambience && bed ? { ambience } : {}),
+    },
     transcript,
   };
 }
@@ -515,6 +616,7 @@ export async function rerecordVoiceMessagesDrunk(
 
   const done: Array<{ messageId: string; player: string; durationSec: number }> = [];
   const failed: string[] = [];
+  const pub = rows.results.length > 0 ? await loadAmbience(env.SEED_DATA, "pub") : null;
   for (const row of rows.results) {
     const meta = JSON.parse(row.metadata) as VoiceMessageMeta;
     let stored: unknown = null;
@@ -534,7 +636,7 @@ export async function rerecordVoiceMessagesDrunk(
       failed.push(row.id);
       continue;
     }
-    const pcm = await withPubAmbience(env.SEED_DATA, raw, row.id);
+    const pcm = pub ? mixAmbience(raw, pub, hash(row.id), AMBIENCES.pub.level) : raw;
     await env.SEED_DATA.put(meta.audioKey, pcmToWav(pcm), { httpMetadata: { contentType: "audio/wav" } });
     const durationSec = durationSecFromPcm(pcm);
     await db.batch([
