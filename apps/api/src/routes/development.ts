@@ -690,12 +690,46 @@ developmentRouter.post("/admin/dospivani/:teamId", requireAdmin, async (c) => {
   });
 });
 
-// POST /api/admin/u21/cyklus — ruční spuštění dorostového cyklu.
-// Stejný mechanismus, jaký běží při přechodu sezóny: přerostlí odejdou, přijde nový ročník.
+// POST /api/admin/u21/cyklus?season=N[&agingDone=1] — dorostový cyklus sezóny N po dávkách.
+// Stejná funkce jako fáze u21_cycle rolloveru: přerostlí (22+) do áčka, nový ročník
+// šestnáctiletých. Nikoho nestárne. Volat opakovaně, dokud nevrátí done: true; hotový
+// cyklus se znovu nepustí (kurzor __u21__/N/u21_cycle).
+//
+// Pro dodatečné doběhnutí po rolloveru, který po stárnutí nedoběhl (21. 10. 2026):
+// stárnutí tehdy proběhlo, ale marker ne. `agingDone=1` ho zapíše (i s dospíváním,
+// které běželo hned po něm), ať se stárnutí sezóny N už nikdy nepustí podruhé.
+// Bez markeru a bez potvrzení endpoint odmítne: cyklus patří až za stárnutí.
 developmentRouter.post("/admin/u21/cyklus", requireAdmin, async (c) => {
-  const { dorostovyCyklusVsech } = await import("../season/u21-lifecycle");
-  const souhrn = await dorostovyCyklusVsech(c.env.DB);
-  return c.json({ ok: true, ...souhrn });
+  const db = c.env.DB;
+  const season = Number(c.req.query("season"));
+  if (!Number.isInteger(season) || season < 1) {
+    return c.json({ error: "Chybí parametr season: číslo sezóny, jejíž dorostový cyklus má doběhnout." }, 400);
+  }
+  const active = await db.prepare("SELECT MAX(number) AS n FROM seasons WHERE status = 'active'").first<{ n: number | null }>();
+  if (active?.n !== season) {
+    return c.json({ error: `Dorostový cyklus jde pustit jen pro aktivní sezónu (${active?.n ?? "žádná"}).` }, 409);
+  }
+  const { findPendingRollover } = await import("../season/season-rollover");
+  const pending = await findPendingRollover(db);
+  if (pending != null) {
+    return c.json({ error: `Běží rollover sezóny ${pending}, cyklus je jeho součástí. Dokonči ho přes Ukončit sezónu.` }, 409);
+  }
+
+  const { youthAgingDone, markYouthAgingDone, runYouthCycleChunk, clearFreshAcademyFlags } = await import("../season/u21-lifecycle");
+  if (!(await youthAgingDone(db, season))) {
+    if (c.req.query("agingDone") !== "1") {
+      return c.json({
+        error: `Stárnutí dorostu sezóny ${season} není zapsané. Jestli už proběhlo, pošli agingDone=1: zapíše se jako hotové a nikdo znovu nezestárne.`,
+      }, 409);
+    }
+    await markYouthAgingDone(db, season);
+  }
+
+  const r = await runYouthCycleChunk(db, season);
+  // Značka čerstvého odchovance patří jen létu, ve kterém vznikl. Po cyklu ji rollover maže
+  // (fáze u21_flags), dodatečný cyklus to udělá taky.
+  const flagsCleared = r.done ? await clearFreshAcademyFlags(db) : 0;
+  return c.json({ ok: true, season, ...r, flagsCleared });
 });
 
 // POST /api/admin/u21/pregeneruj?scope=ai|all — přepíše soupisky dorostů dnešním generátorem.

@@ -20,6 +20,9 @@ import type { VillageInfo } from "../generators/player";
 import { levelFromVillageSize } from "../generators/create-player";
 import type { Position } from "../league/u21-generator";
 import { teoretickyStropHrace } from "../skills/vyhled-hrace";
+import {
+  U21_PROGRESS_KEY, insertProgressIfMissing, parseCursor, readProgress, writeProgress, type ProgressKey,
+} from "./season-progress";
 
 const M = "u21-lifecycle";
 
@@ -229,26 +232,113 @@ async function nactiObec(db: D1Database, clubId: string): Promise<(VillageInfo &
 }
 
 /**
- * Projede dorosty všech klubů. Volá se z rolloveru, hlídá si ho tam marker — dvakrát
- * spuštěný cyklus by poslal do áčka další ročník a doplnil dorost nad cílový počet.
+ * Kolik dorostů projde jedna invokace cyklu. Dorost stojí kolem dvaceti dotazů (povýšení
+ * po hráči, nový ročník, SMS) a D1 má strop dotazů na invokaci. Všech 42 dorostů najednou
+ * by se k němu nebezpečně přiblížilo, proto po dávkách.
  */
-export async function dorostovyCyklusVsech(db: D1Database): Promise<{ tymu: number; povyseno: number; propusteno: number; prislo: number }> {
-  const tymy = await db.prepare(
-    "SELECT id FROM teams WHERE team_type = 'u21' AND parent_team_id IS NOT NULL",
-  ).all<{ id: string }>()
-    .catch((e) => { logger.warn({ module: M }, "load u21 teams", e); return { results: [] as never[] }; });
+export const YOUTH_CYCLE_CHUNK = 6;
 
-  const souhrn = { tymu: 0, povyseno: 0, propusteno: 0, prislo: 0 };
-  for (const t of tymy.results) {
-    const rng = createRng(cryptoSeed());
-    const v = await dorostovyCyklus(db, t.id, rng);
-    souhrn.tymu++;
-    souhrn.povyseno += v.povyseni.length;
-    souhrn.propusteno += v.propusteni.length;
-    souhrn.prislo += v.prislo;
-    await oznamDorostovyCyklus(db, t.id, v).catch((e) => logger.warn({ module: M, teamId: t.id }, "notify cycle", e));
+export interface YouthCycleChunkResult {
+  /** Prošly už všechny dorosty. */
+  done: boolean;
+  teamsDone: number;
+  teamsTotal: number;
+  /** Součty za celý cyklus sezóny, ne jen za tuhle dávku. */
+  promoted: number;
+  released: number;
+  arrived: number;
+}
+
+interface YouthCycleCursor {
+  teams: string[];
+  promoted: number;
+  released: number;
+  arrived: number;
+}
+
+export function youthCycleKey(seasonNumber: number): ProgressKey {
+  return { leagueId: U21_PROGRESS_KEY, seasonNumber, phase: "u21_cycle" };
+}
+
+/**
+ * Jedna dávka dorostového cyklu sezóny `seasonNumber` (sezóna, do které se právě přešlo).
+ *
+ * NIKDY nikoho nestárne. Počítá s tím, že stárnutí sezóny už proběhlo, a jen pošle do áčka,
+ * kdo už 22 má, a doplní nový ročník. Proto jde pustit i dodatečně, když rollover po stárnutí
+ * nedoběhl (21. 10. 2026).
+ *
+ * Jeden dorost je idempotentní: přerostlí po prvním průchodu v dorostu nejsou a kádr je
+ * doplněný na cílový počet, takže druhý průchod nic nezmění. Kurzor se proto píše až PO
+ * dorostu. Spadne-li invokace mezi dorostem a zápisem kurzoru, další dávka ho projede
+ * znovu a nic se nezdvojí. Kurzor celé sezóny navíc brání tomu, aby se cyklus pustil
+ * podruhé: dvakrát by to vadilo jen se stárnutím mezi tím, ale opatrnost nic nestojí.
+ */
+export async function runYouthCycleChunk(
+  db: D1Database, seasonNumber: number, chunkSize = YOUTH_CYCLE_CHUNK,
+): Promise<YouthCycleChunkResult> {
+  const key = youthCycleKey(seasonNumber);
+  const progress = await readProgress(db, key);
+  const cursor = parseCursor<YouthCycleCursor>(progress?.cursor, { teams: [], promoted: 0, released: 0, arrived: 0 });
+  const processed = new Set(cursor.teams);
+  const teams = (await db.prepare(
+    "SELECT id FROM teams WHERE team_type = 'u21' AND parent_team_id IS NOT NULL ORDER BY id",
+  ).all<{ id: string }>()).results.map((t) => t.id);
+  const summary = (done: boolean): YouthCycleChunkResult => ({
+    done,
+    teamsDone: teams.filter((id) => processed.has(id)).length,
+    teamsTotal: teams.length,
+    promoted: cursor.promoted, released: cursor.released, arrived: cursor.arrived,
+  });
+  if (progress?.status === "done") return summary(true);
+
+  for (const teamId of teams.filter((id) => !processed.has(id)).slice(0, chunkSize)) {
+    const outcome = await dorostovyCyklus(db, teamId, createRng(cryptoSeed()));
+    await oznamDorostovyCyklus(db, teamId, outcome)
+      .catch((e) => logger.warn({ module: M, teamId }, "notify cycle", e));
+    processed.add(teamId);
+    cursor.teams = [...processed];
+    cursor.promoted += outcome.povyseni.length;
+    cursor.released += outcome.propusteni.length;
+    cursor.arrived += outcome.prislo;
+    await writeProgress(db, key, "pending", JSON.stringify(cursor));
   }
-  return souhrn;
+
+  const finished = teams.every((id) => processed.has(id));
+  if (finished) await writeProgress(db, key, "done", JSON.stringify(cursor));
+  logger.info({ module: M },
+    `dorostový cyklus sezóny ${seasonNumber}: ${processed.size}/${teams.length} dorostů, do áčka ${cursor.promoted}, uvolněno ${cursor.released}, přišlo ${cursor.arrived}`);
+  return summary(finished);
+}
+
+/**
+ * Zapíše stárnutí a dospívání dorostu sezóny jako hotové, aniž by cokoli spustilo.
+ *
+ * Pro dodatečný cyklus po rolloveru, který 21. 10. 2026 po stárnutí a dospívání dorostu
+ * přestal zapisovat: obojí proběhlo, marker ne. Bez markeru by se stárnutí jednou mohlo
+ * pustit znovu a kluci by zestárli o dva roky. Existující marker nepřepíše.
+ */
+export async function markYouthAgingDone(db: D1Database, seasonNumber: number): Promise<void> {
+  const note = JSON.stringify({ recorded: "manual" });
+  for (const phase of ["u21_aging", "u21_maturation"]) {
+    await insertProgressIfMissing(db, { leagueId: U21_PROGRESS_KEY, seasonNumber, phase }, "done", note);
+  }
+}
+
+/** Proběhlo už stárnutí dorostu sezóny (podle markeru)? */
+export async function youthAgingDone(db: D1Database, seasonNumber: number): Promise<boolean> {
+  const row = await readProgress(db, { leagueId: U21_PROGRESS_KEY, seasonNumber, phase: "u21_aging" });
+  return row?.status === "done";
+}
+
+/**
+ * Úklid značky čerstvého odchovance. Platí jen pro léto, ve kterém vznikl, takže patří
+ * až za stárnutí, dospívání i cyklus. Idempotentní.
+ */
+export async function clearFreshAcademyFlags(db: D1Database): Promise<number> {
+  const r = await db.prepare(
+    "UPDATE players SET life_context = json_remove(life_context, '$.freshAcademyGraduate') WHERE json_extract(COALESCE(life_context, '{}'), '$.freshAcademyGraduate') IS NOT NULL",
+  ).run();
+  return r.meta?.changes ?? 0;
 }
 
 /**
