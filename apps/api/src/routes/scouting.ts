@@ -179,9 +179,11 @@ scoutingRouter.get("/teams/:teamId/scout", async (c) => {
     `SELECT ${REPORT_COLS} FROM scout_reports WHERE team_id = ? AND status NOT IN ('active','negotiating') ORDER BY created_at DESC LIMIT 15`,
   ).bind(teamId).all<ReportRow>();
 
-  // Soupeři v lize pro možnost taktického rozboru
+  // Soupeři v lize pro možnost taktického rozboru. Obec týmu je ve `villages` (teams.city
+  // neexistuje; dotaz dřív padal a nabídka soupeřů byla vždycky prázdná).
   const leagueOpponents = await db.prepare(
-    `SELECT t.id, t.name, t.city FROM teams t
+    `SELECT t.id, t.name, v.name AS city FROM teams t
+     LEFT JOIN villages v ON v.id = t.village_id
      WHERE t.league_id = (SELECT league_id FROM teams WHERE id = ?)
        AND t.id != ?
      ORDER BY t.name ASC`,

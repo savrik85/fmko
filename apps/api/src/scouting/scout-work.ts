@@ -424,17 +424,20 @@ async function evaluatePlayerMission(
   gameDate: string,
   sender: string,
 ): Promise<void> {
+  // Hráč obec nemá, má ji jeho klub (players.village_id neexistuje).
   const player = await db.prepare(
     `SELECT p.id, p.first_name, p.last_name, p.position, p.age, p.overall_rating, p.hidden_talent,
-            p.skills, p.physical, p.skills_max, p.personality, p.avatar, p.village_id, v.district, t.name as club_name
+            p.skills, p.physical, p.skills_max, p.personality, p.avatar,
+            t.village_id, v.name AS club_city, v.district, t.name AS club_name
      FROM players p
-     LEFT JOIN villages v ON p.village_id = v.id
-     LEFT JOIN teams t ON p.team_id = t.id
+     LEFT JOIN teams t ON t.id = p.team_id
+     LEFT JOIN villages v ON v.id = t.village_id
      WHERE p.id = ?`,
   ).bind(a.target_player_id).first<{
     id: string; first_name: string; last_name: string; position: string; age: number; overall_rating: number;
     hidden_talent: number | null; skills: string | null; physical: string | null; skills_max: string | null;
-    personality: string | null; avatar: string | null; village_id: string | null; district: string | null; club_name: string | null;
+    personality: string | null; avatar: string | null; village_id: string | null; club_city: string | null;
+    district: string | null; club_name: string | null;
   }>();
 
   if (!player) {
@@ -482,12 +485,12 @@ async function evaluatePlayerMission(
   };
 
   await db.prepare(
-    `INSERT INTO scout_reports (id, team_id, assignment_id, source, village_id, club_name, district, distance_km,
+    `INSERT INTO scout_reports (id, team_id, assignment_id, source, village_id, club_name, club_city, district, distance_km,
        player_data, first_name, last_name, age, position, rating_lo, rating_hi, potential_lo, potential_hi, visits,
        pros, cons, willingness, status, expires_at, created_game_date)
-     VALUES (?, ?, ?, 'village_club', ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, 2, ?, ?, 2, 'active', ?, ?)`,
+     VALUES (?, ?, ?, 'village_club', ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, 2, ?, ?, 2, 'active', ?, ?)`,
   ).bind(
-    reportId, a.team_id, a.id, player.village_id, player.club_name ?? "Cizí klub", player.district ?? "Okres",
+    reportId, a.team_id, a.id, player.village_id, player.club_name ?? "Cizí klub", player.club_city, player.district ?? "Okres",
     JSON.stringify(pData), player.first_name, player.last_name, player.age, player.position,
     rr.lo, rr.hi, pr?.lo ?? null, pr?.hi ?? null, JSON.stringify(pros), JSON.stringify(cons), expiresAt, gameDate,
   ).run();
@@ -510,13 +513,16 @@ async function evaluateMatchMission(
   gameDate: string,
   sender: string,
 ): Promise<void> {
-  const opp = await db.prepare("SELECT id, name, formation FROM teams WHERE id = ?").bind(a.target_team_id).first<{
-    id: string; name: string; formation: string | null;
-  }>();
+  const opp = await db.prepare("SELECT id, name FROM teams WHERE id = ?").bind(a.target_team_id).first<{ id: string; name: string }>();
   if (!opp) {
     await db.prepare("UPDATE scout_assignments SET status = 'cancelled', end_reason = 'team_gone', closed_at = strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE id = ?").bind(a.id).run();
     return;
   }
+  // Rozestavení tým nemá ve `teams`, je v sestavě. Přednost má poslední uložená ručně
+  // (automatická nemá `submitted_at`, řadí se na konec), bez sestavy výchozí 4-4-2.
+  const lineup = await db.prepare(
+    "SELECT formation FROM lineups WHERE team_id = ? ORDER BY submitted_at DESC, id ASC LIMIT 1",
+  ).bind(opp.id).first<{ formation: string | null }>();
 
   const topPlayer = await db.prepare(
     "SELECT first_name, last_name, position, overall_rating FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active') ORDER BY overall_rating DESC LIMIT 1",
@@ -528,7 +534,7 @@ async function evaluateMatchMission(
      ORDER BY overall_rating ASC LIMIT 1`,
   ).bind(opp.id).first<{ first_name: string; last_name: string; position: string; overall_rating: number }>();
 
-  const formation = opp.formation ?? "4-4-2";
+  const formation = lineup?.formation ?? "4-4-2";
   const keyDesc = topPlayer ? `${topPlayer.first_name} ${topPlayer.last_name} (${topPlayer.position}, rating ${topPlayer.overall_rating})` : "vyrovnaný kádr";
   const weakDesc = weakPlayer ? `${weakPlayer.first_name} ${weakPlayer.last_name} (${weakPlayer.position})` : "bez výrazné díry";
 
@@ -696,8 +702,9 @@ async function searchLeague(
   const placeholders = teamIds.map(() => "?").join(",");
   const positions = assignmentPositions(a);
 
+  // Obličej je v `players.avatar` (sloupec face_config neexistuje).
   let query = `SELECT p.id, p.team_id, p.first_name, p.last_name, p.age, p.position, p.overall_rating, p.hidden_talent,
-                      p.personality, p.physical, p.face_config, p.skills_max, p.skills,
+                      p.personality, p.physical, p.avatar, p.skills_max, p.skills,
                       t.name as club_name, v.name as club_city, v.district, v.id as village_id
                FROM players p
                JOIN teams t ON p.team_id = t.id
@@ -718,7 +725,7 @@ async function searchLeague(
   const pRows = await db.prepare(query).bind(...binds).all<{
     id: string; team_id: string; first_name: string; last_name: string; age: number; position: string;
     overall_rating: number; hidden_talent: number | null; personality: string | null; physical: string | null;
-    face_config: string | null; skills_max: string | null; skills: string | null; club_name: string; club_city: string | null;
+    avatar: string | null; skills_max: string | null; skills: string | null; club_name: string; club_city: string | null;
     district: string | null; village_id: string | null;
   }>();
 
@@ -758,7 +765,7 @@ async function searchLeague(
     } catch (e) { logger.warn({ module: "scouting" }, "neplatný strop dovedností kandidáta", e); }
 
     let faceConfig: Record<string, unknown> | undefined = undefined;
-    try { if (p.face_config) faceConfig = JSON.parse(p.face_config); } catch (e) { logger.warn({ module: "scouting" }, "neplatný obličej kandidáta", e); }
+    try { if (p.avatar) faceConfig = JSON.parse(p.avatar); } catch (e) { logger.warn({ module: "scouting" }, "neplatný obličej kandidáta", e); }
 
     let parsedSkills: Record<string, number> = {};
     try { if (p.skills) parsedSkills = JSON.parse(p.skills); } catch (e) { logger.warn({ module: "scouting" }, "neplatné dovednosti kandidáta", e); }
