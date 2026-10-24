@@ -1,70 +1,29 @@
 "use client";
 
 import { useEffect } from "react";
+import { pushAvailability, syncPushSubscription } from "@/lib/push";
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
-
-async function getVapidPublicKey(): Promise<string | null> {
-  try {
-    // Bez credentials: API odpovídá `Access-Control-Allow-Origin: *` a prohlížeč
-    // by odpověď na požadavek s cookies zablokoval. Klíč je veřejný.
-    const res = await fetch(`${API}/api/push/vapid-key`);
-    if (!res.ok) return null;
-    const data = await res.json() as { publicKey?: string };
-    return data.publicKey ?? null;
-  } catch (e) {
-    console.error("PushNotificationManager: failed to fetch VAPID key:", e);
-    return null;
-  }
-}
-
-function urlBase64ToUint8Array(base64String: string): Uint8Array {
-  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
-  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
-  const rawData = atob(base64);
-  return Uint8Array.from([...rawData].map((c) => c.charCodeAt(0)));
-}
-
-async function registerAndSubscribe(): Promise<void> {
-  if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
-
-  try {
-    const registration = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
-
-    const stored = localStorage.getItem("push_enabled");
-    if (stored !== "true") return;
-
-    const vapidKey = await getVapidPublicKey();
-    if (!vapidKey) return;
-
-    const existing = await registration.pushManager.getSubscription();
-    if (existing) return; // already subscribed
-
-    const permission = await Notification.requestPermission();
-    if (permission !== "granted") return;
-
-    const subscription = await registration.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(vapidKey) as BufferSource,
-    });
-
-    const token = localStorage.getItem("om_token");
-    await fetch(`${API}/api/push/subscribe`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: JSON.stringify(subscription.toJSON()),
-    });
-  } catch (e) {
-    console.error("PushNotificationManager: registration failed:", e);
-  }
+/**
+ * Registruje service worker (bez něj nefunguje ani klik na upozornění) a obnoví odběr,
+ * který prohlížeč má. Dřív se existující odběr serveru neposlal vůbec, takže odběr,
+ * který server smazal, se už nikdy nevrátil. O povolení tady nežádá, to jde jen kliknutím.
+ */
+function syncQuietly(): void {
+  syncPushSubscription().catch((e) => console.warn("Obnova odběru upozornění selhala:", e));
 }
 
 export function PushNotificationManager() {
   useEffect(() => {
-    registerAndSubscribe();
+    if (!("serviceWorker" in navigator)) return;
+    navigator.serviceWorker.register("/sw.js", { scope: "/" })
+      .catch((e) => console.error("Registrace service workeru selhala:", e));
+    if (pushAvailability() !== "supported") return;
+
+    syncQuietly();
+    // Po přihlášení se kořenový layout znovu nepřipojí; obnova proto i při návratu do aplikace.
+    const onVisible = () => { if (document.visibilityState === "visible") syncQuietly(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
   }, []);
 
   return null;

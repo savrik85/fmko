@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { SectionLabel } from "@/components/ui";
+import { currentPushSubscription, disablePush, enablePush, pushAvailability, type EnablePushResult, type PushAvailability } from "@/lib/push";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
 
@@ -26,16 +28,17 @@ const PREF_LABELS: { key: keyof NotifPrefs; label: string; desc: string; icon: s
   { key: "system",         icon: "⚙️", label: "Systémové zprávy",           desc: "Technické a herní oznámení" },
 ];
 
-function urlBase64ToUint8Array(base64String: string): Uint8Array {
-  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
-  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
-  const rawData = atob(base64);
-  return Uint8Array.from([...rawData].map((c) => c.charCodeAt(0)));
-}
+const ENABLE_FAILURE_TEXT: Partial<Record<EnablePushResult, string>> = {
+  denied: "Prohlížeč upozornění zablokoval. Povol je v nastavení prohlížeče u stránky prales.fun.",
+  failed: "Zapnout se nepovedlo. Zkus to prosím znovu.",
+};
 
 function usePushNotifications() {
   const [pushEnabled, setPushEnabled] = useState(false);
-  const [pushSupported, setPushSupported] = useState(false);
+  const [availability, setAvailability] = useState<PushAvailability>("unsupported");
+  const [blocked, setBlocked] = useState(false);
+  const [pushError, setPushError] = useState<string | null>(null);
+  const [pushBusy, setPushBusy] = useState(false);
   const [prefs, setPrefs] = useState<NotifPrefs>({
     match_reminder: true, match_result: true, transfer: true,
     challenge: true, event: true, season: true, system: true,
@@ -48,12 +51,15 @@ function usePushNotifications() {
   }, []);
 
   useEffect(() => {
-    const supported = "serviceWorker" in navigator && "PushManager" in window;
-    setPushSupported(supported);
-    if (!supported) return;
+    const avail = pushAvailability();
+    setAvailability(avail);
+    if (avail !== "supported") return;
+    setBlocked(Notification.permission === "denied");
 
-    const stored = localStorage.getItem("push_enabled") === "true";
-    setPushEnabled(stored);
+    // Zapnuto je, když prohlížeč odběr opravdu má, ne když to tvrdí localStorage.
+    currentPushSubscription()
+      .then((sub) => setPushEnabled(!!sub))
+      .catch((e) => console.error("Zjištění odběru upozornění selhalo:", e));
 
     const token = localStorage.getItem("om_token");
     if (!token) return;
@@ -63,53 +69,29 @@ function usePushNotifications() {
       .catch((e) => console.error("Failed to load push prefs:", e));
   }, []);
 
-  const enablePush = useCallback(async () => {
-    if (!("serviceWorker" in navigator)) return;
+  const enable = useCallback(async () => {
+    setPushBusy(true);
+    setPushError(null);
+    const result = await enablePush();
+    setPushBusy(false);
+    if (result === "enabled") { setPushEnabled(true); setBlocked(false); return; }
+    if (result === "denied") setBlocked(true);
+    setPushError(ENABLE_FAILURE_TEXT[result] ?? null);
+  }, []);
+
+  const disable = useCallback(async () => {
+    setPushBusy(true);
+    setPushError(null);
     try {
-      const reg = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
-      const permission = await Notification.requestPermission();
-      if (permission !== "granted") return;
-
-      const res = await fetch(`${API}/api/push/vapid-key`);
-      const { publicKey } = await res.json() as { publicKey: string };
-
-      const sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(publicKey) as BufferSource,
-      });
-
-      const saveRes = await fetch(`${API}/api/push/subscribe`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeaders() },
-        body: JSON.stringify(sub.toJSON()),
-      });
-      if (!saveRes.ok) throw new Error(`subscribe failed: ${saveRes.status}`);
-
-      localStorage.setItem("push_enabled", "true");
-      setPushEnabled(true);
-    } catch (e) {
-      console.error("enablePush failed:", e);
-    }
-  }, [authHeaders]);
-
-  const disablePush = useCallback(async () => {
-    try {
-      const reg = await navigator.serviceWorker.getRegistration("/sw.js");
-      const sub = await reg?.pushManager.getSubscription();
-      if (sub) {
-        await fetch(`${API}/api/push/unsubscribe`, {
-          method: "DELETE",
-          headers: { "Content-Type": "application/json", ...authHeaders() },
-          body: JSON.stringify({ endpoint: sub.endpoint }),
-        });
-        await sub.unsubscribe();
-      }
-      localStorage.setItem("push_enabled", "false");
+      await disablePush();
       setPushEnabled(false);
     } catch (e) {
-      console.error("disablePush failed:", e);
+      console.error("Vypnutí upozornění selhalo:", e);
+      setPushError("Vypnout se nepovedlo. Zkus to prosím znovu.");
+    } finally {
+      setPushBusy(false);
     }
-  }, [authHeaders]);
+  }, []);
 
   const savePrefs = useCallback(async (updated: NotifPrefs) => {
     setPrefs(updated);
@@ -127,7 +109,7 @@ function usePushNotifications() {
     }
   }, [authHeaders]);
 
-  return { pushEnabled, pushSupported, prefs, prefsSaving, enablePush, disablePush, savePrefs };
+  return { pushEnabled, availability, blocked, pushError, pushBusy, prefs, prefsSaving, enable, disable, savePrefs };
 }
 
 function checkPassword(pw: string): string[] {
@@ -146,7 +128,8 @@ export default function SettingsPage() {
   const [newPw2, setNewPw2] = useState("");
   const [status, setStatus] = useState<{ type: "ok" | "error"; msg: string } | null>(null);
   const [saving, setSaving] = useState(false);
-  const { pushEnabled, pushSupported, prefs, prefsSaving, enablePush, disablePush, savePrefs } = usePushNotifications();
+  const { pushEnabled, availability, blocked, pushError, pushBusy, prefs, prefsSaving, enable, disable, savePrefs } = usePushNotifications();
+  const pushSupported = availability === "supported";
   const pwErrors = newPw ? checkPassword(newPw) : [];
   const pwMatch = newPw2 && newPw !== newPw2;
   const canSubmit = currentPw && newPw && newPw2 && pwErrors.length === 0 && newPw === newPw2;
@@ -244,24 +227,40 @@ export default function SettingsPage() {
             </div>
             <div>
               <h3 className="font-heading font-bold text-base leading-tight">Push notifikace</h3>
-              <p className="text-xs text-muted mt-0.5">
-                {!pushSupported
-                  ? "Prohlížeč nepodporuje push"
+              <p className="text-sm text-muted mt-0.5">
+                {availability === "ios_install"
+                  ? "Na iPhonu jen z Pralesu přidaného na plochu"
+                  : !pushSupported
+                  ? "Tenhle prohlížeč upozornění neumí"
                   : pushEnabled
                   ? "Zapnuto, dostáváš upozornění"
+                  : blocked
+                  ? "Zablokované v prohlížeči"
                   : "Vypnuto"}
               </p>
             </div>
           </div>
           {pushSupported && (
             <button
-              onClick={pushEnabled ? disablePush : enablePush}
-              className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors flex-shrink-0 mt-1.5 ${pushEnabled ? "bg-pitch-500" : "bg-gray-200"}`}
+              onClick={pushEnabled ? disable : enable}
+              disabled={pushBusy}
+              aria-label={pushEnabled ? "Vypnout upozornění" : "Zapnout upozornění"}
+              className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors flex-shrink-0 mt-1.5 disabled:opacity-50 ${pushEnabled ? "bg-pitch-500" : "bg-gray-200"}`}
             >
               <span className={`inline-block h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${pushEnabled ? "translate-x-6" : "translate-x-1"}`} />
             </button>
           )}
         </div>
+        {availability === "ios_install" && (
+          <p className="px-5 pb-4 text-sm">
+            Klepni dole na Sdílet, vyber „Přidat na plochu“ a Prales pak otevírej z plochy. Tam upozornění zapneš.{" "}
+            <Link href="/aplikace" className="font-bold text-pitch-600 hover:underline">Jak na to</Link>
+          </p>
+        )}
+        {pushSupported && !pushEnabled && blocked && !pushError && (
+          <p className="px-5 pb-4 text-sm">Povol upozornění v nastavení prohlížeče u stránky prales.fun, pak je tady zapneš.</p>
+        )}
+        {pushError && <p className="px-5 pb-4 text-sm text-card-red">{pushError}</p>}
 
         {/* Preference typů */}
         {pushSupported && pushEnabled && (
@@ -299,10 +298,10 @@ export default function SettingsPage() {
           </>
         )}
 
-        {pushSupported && !pushEnabled && (
+        {pushSupported && !pushEnabled && !blocked && (
           <div className="px-5 pb-5">
-            <p className="text-xs text-muted">
-              Zapni a dostávej upozornění na výsledky, přestupy nebo výzvy — i když máš Prales zavřený.
+            <p className="text-sm text-muted">
+              Zapni a dostávej upozornění na výsledky, přestupy nebo výzvy, i když máš Prales zavřený.
             </p>
           </div>
         )}
