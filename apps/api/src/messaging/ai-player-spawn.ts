@@ -489,7 +489,11 @@ async function spawnForTeam(
   // 5. Gemini call
   let initialBody: string;
   try {
-    initialBody = draftPlayer && saved ? saved.text : await generateInitialMessage(env, player, scenario, teamCtx);
+    // Ruční rozeslání se píše jako běžná zpráva od hráče v odpoledním ticku (14:00 UTC),
+    // ne podle skutečného času: ve tři ráno by všichni psali, že je trenér vzbudil.
+    const now = new Date();
+    const writtenAt = forcedScenario ? new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 14)) : now;
+    initialBody = draftPlayer && saved ? saved.text : await generateInitialMessage(env, player, scenario, teamCtx, writtenAt);
   } catch (e) {
     if (e instanceof GeminiUnavailableError) {
       logger.warn({ module: "ai-player-spawn" }, `Gemini unavailable for ${player.firstName}: ${e.message}`);

@@ -315,8 +315,10 @@ export async function generateInitialMessage(
   player: PlayerSnapshot,
   scenario: AiScenario,
   team: TeamContext,
+  /** Čas, ve kterém hráč píše. Ruční rozeslání v noci by jinak psalo, že je trenér vzbudil. */
+  kdy: Date = new Date(),
 ): Promise<string> {
-  const system = buildSystemPrompt(player, team);
+  const system = buildSystemPrompt(player, team, kdy);
   const contextLine = team.lastMatchResult ? ` Poslední zápas: ${team.lastMatchResult}.` : "";
   const positionLine = team.leaguePosition ? ` Tým je v lize na ${team.leaguePosition}. místě.` : "";
 
