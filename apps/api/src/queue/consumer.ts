@@ -163,7 +163,7 @@ async function handleMessage(body: AnyQueueMessage, env: Bindings): Promise<RunO
       const ctx = await aiCtxOrSkip(env, "ultras_report");
       if (!ctx) return { status: "skipped" };
       const { generateUltrasReport } = await import("../news/ultras-report");
-      await generateUltrasReport(env.DB, env.GEMINI_API_KEY, body.calendarId, ctx);
+      await generateUltrasReport(env.DB, env.GEMINI_API_KEY, body.calendarId, ctx, { ai: env.AI, bucket: env.SEED_DATA });
       return { status: "done" };
     }
 

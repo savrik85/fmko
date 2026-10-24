@@ -8761,8 +8761,32 @@ gameRouter.post("/admin/generate-ultras-report", async (c) => {
   if (!calendarId) return c.json({ error: "calendarId query parameter required" }, 400);
   if (!c.env.GEMINI_API_KEY) return c.json({ error: "GEMINI_API_KEY není nastaven" }, 503);
   const { generateUltrasReport } = await import("../news/ultras-report");
-  const result = await generateUltrasReport(c.env.DB, c.env.GEMINI_API_KEY, calendarId);
+  const result = await generateUltrasReport(c.env.DB, c.env.GEMINI_API_KEY, calendarId, undefined, { ai: c.env.AI, bucket: c.env.SEED_DATA });
   return c.json({ ok: true, ...result });
+});
+
+// POST /api/admin/ultras-photos?newsId=X — doplní fotky plachet do už vydaného reportu Prales Ultras
+// (nové reporty je dostávají samy). Kotle, které fotku mají, se přeskočí.
+gameRouter.post("/admin/ultras-photos", async (c) => {
+  const newsId = c.req.query("newsId");
+  if (!newsId) return c.json({ error: "newsId query parameter required" }, 400);
+  if (!c.env.AI) return c.json({ error: "Workers AI není k dispozici" }, 503);
+  const row = await c.env.DB.prepare("SELECT id, photos_json FROM ultras_reports WHERE news_id = ?")
+    .bind(newsId).first<{ id: string; photos_json: string | null }>();
+  if (!row) return c.json({ error: "Report nenalezen" }, 404);
+  const photos = JSON.parse(row.photos_json ?? "[]") as import("../news/ultras-report").UltrasPhoto[];
+  const teamIds = photos.map((p) => p.teamId);
+  const colors = teamIds.length === 0 ? { results: [] as Array<{ id: string; primary_color: string | null; secondary_color: string | null }> } : await c.env.DB
+    .prepare(`SELECT id, primary_color, secondary_color FROM teams WHERE id IN (${teamIds.map(() => "?").join(",")})`)
+    .bind(...teamIds).all<{ id: string; primary_color: string | null; secondary_color: string | null }>();
+  const { addUltrasPhotos } = await import("../news/ultras-report");
+  const { readAiProvider } = await import("../lib/ai-provider");
+  const ocrKey = (await readAiProvider(c.env.CACHE_KV)) === "gemini" ? c.env.GEMINI_API_KEY : undefined;
+  const added = await addUltrasPhotos(c.env.AI, c.env.SEED_DATA, photos, colors.results.map((t) => ({
+    homeTeamId: t.id, primaryColor: t.primary_color ?? "#2D5F2D", secondaryColor: t.secondary_color ?? "#ffffff",
+  })), ocrKey);
+  await c.env.DB.prepare("UPDATE ultras_reports SET photos_json = ? WHERE id = ?").bind(JSON.stringify(photos), row.id).run();
+  return c.json({ ok: true, added, photos: photos.map((p) => ({ team: p.teamName, text: p.ultrasText, photoId: p.photoId ?? null })) });
 });
 
 // POST /api/admin/generate-player-interview?calendarId=X — dev trigger pro Rozhovor s hráčem

@@ -3,7 +3,7 @@
 import { useState, useEffect, Fragment } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
-import { apiFetch, apiAction, type Team } from "@/lib/api";
+import { API_BASE, apiFetch, apiAction, type Team } from "@/lib/api";
 import { Spinner } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { EntityLink } from "@/components/ui/entity-link";
@@ -39,6 +39,8 @@ interface UltrasPhoto {
   capacity: number;
   fillPct: number;
   caption: string;
+  /** Fotka plachty od AI (news/ultras-photo.ts). Bez ní se plachta kreslí přes /kotel-foto. */
+  photoId?: string;
 }
 
 interface Journalist {
@@ -503,20 +505,34 @@ export default function NewsPage() {
                 <div className="grid grid-cols-2 lg:grid-cols-3 gap-x-5 gap-y-4 mt-5">
                   {ur.photos.map((ph) => (
                     <figure key={ph.teamId}>
-                      <img
-                        src={`/kotel-foto?text=${encodeURIComponent(ph.ultrasText)}&bg=${encodeURIComponent(ph.bannerColor)}&fg=${encodeURIComponent(ph.textColor)}&p=${encodeURIComponent(ph.bannerColor)}&s=${encodeURIComponent(ph.textColor)}&lvl=${encodeURIComponent(String(ph.level))}&att=${encodeURIComponent(String(ph.attendance))}&team=${encodeURIComponent(ph.teamName)}&cap=${encodeURIComponent(ph.caption)}`}
-                        alt={`Kotel ${ph.teamName}`}
-                        width={1200}
-                        height={630}
-                        className="w-full h-auto border border-ink/25"
-                        loading="lazy"
-                      />
-                      {/* Popisek jen tady — jméno i počet diváků jsou už vypálené ve fotce */}
+                      {ph.photoId ? (
+                        // Fotka fanoušků s plachtou od AI, nápis je namalovaný přímo na látce.
+                        <img
+                          src={`${API_BASE}/api/ultras-photos/${ph.photoId}`}
+                          alt={`Kotel ${ph.teamName} s plachtou „${ph.ultrasText}“`}
+                          width={1024}
+                          height={640}
+                          className="w-full h-auto border border-ink/25"
+                          loading="lazy"
+                        />
+                      ) : (
+                        <img
+                          src={`/kotel-foto?text=${encodeURIComponent(ph.ultrasText)}&bg=${encodeURIComponent(ph.bannerColor)}&fg=${encodeURIComponent(ph.textColor)}&p=${encodeURIComponent(ph.bannerColor)}&s=${encodeURIComponent(ph.textColor)}&lvl=${encodeURIComponent(String(ph.level))}&att=${encodeURIComponent(String(ph.attendance))}&team=${encodeURIComponent(ph.teamName)}&cap=${encodeURIComponent(ph.caption)}`}
+                          alt={`Kotel ${ph.teamName}`}
+                          width={1200}
+                          height={630}
+                          className="w-full h-auto border border-ink/25"
+                          loading="lazy"
+                        />
+                      )}
+                      {/* U kreslené plachty jsou jméno i počet diváků vypálené v obrázku, u fotky je doplní popisek
+                          (kromě nejnavštívenějšího kotle, ten má diváky v popisku už od reportu). */}
                       <figcaption className="text-micro text-muted mt-1 leading-snug">
                         <EntityLink type="team" id={ph.teamId} className="font-heading font-bold text-ink">
                           {ph.teamName}
                         </EntityLink>
                         {" "}{ph.caption}
+                        {ph.photoId && !ph.caption.includes("divák") && <>{" · "}{ph.attendance.toLocaleString("cs")} diváků</>}
                       </figcaption>
                     </figure>
                   ))}

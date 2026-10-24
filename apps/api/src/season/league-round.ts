@@ -453,7 +453,7 @@ async function dispatchRoundReports(
 
   try {
     const { generateUltrasReport } = await import("../news/ultras-report");
-    const ultrasPromise = generateUltrasReport(env.DB, env.GEMINI_API_KEY, calendarId).catch((e) =>
+    const ultrasPromise = generateUltrasReport(env.DB, env.GEMINI_API_KEY, calendarId, undefined, { ai: env.AI, bucket: env.SEED_DATA }).catch((e) =>
       logger.error({ module: "league-round" }, "Ultras report failed", e),
     );
     if (opts.ctx) opts.ctx.waitUntil(ultrasPromise);
