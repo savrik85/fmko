@@ -7,7 +7,9 @@
  *
  * Pořadí per-liga wrap fází (awards+archive PŘED odchody — retired se mažou
  * z players): finalize → rewards → awards → archive → departures → replenish
- * → village → articles → interviews. Pak JEDEN globální rollover.
+ * → village → articles → interviews. Pak JEDEN globální rollover, taky po krocích
+ * (season-rollover.ts, ROLLOVER_PHASES). Rozběhnutý rollover má při dalším volání
+ * přednost před vším ostatním, i když už je aktivní nová sezóna.
  *
  * Gate: zakončí se, až jsou dohrané LIDSKÉ senior ligy (AI-only ligy, které
  * match-tick nezpracovává, neblokují). `force` přebije. Wrap běží jen pro ligy,
@@ -23,7 +25,8 @@ import { captureDepartures, buildTeamRecap } from "./season-recap";
 import { applyVillageSeasonReaction } from "./season-village";
 import { generateSeasonWrapArticle } from "../news/season-wrap";
 import { createSeasonWrapInterviews } from "../news/season-interview";
-import { rolloverAllLeagues } from "./season-rollover";
+import { beginRollover, findPendingRollover, runRolloverStep } from "./season-rollover";
+import { ROLLOVER_KEY } from "./season-progress";
 import { createRng, cryptoSeed } from "../generators/rng";
 import { logger } from "../lib/logger";
 
@@ -40,7 +43,6 @@ type WrapPhase = (typeof WRAP_PHASES)[number];
 // odchody, akademie, obec ani články se jí netýkají, ty řeší liga áčka.
 const U21_WRAP_PHASES = ["awards", "archive"] as const satisfies readonly WrapPhase[];
 
-const ROLLOVER_KEY = "__global__";
 const DEPARTURES_CHUNK = 3;
 
 export interface EndSeasonStepResult {
@@ -124,6 +126,18 @@ export async function runEndSeasonStep(
   geminiApiKey: string | undefined,
   opts: { force?: boolean } = {},
 ): Promise<EndSeasonStepResult> {
+  // 0. Rozběhnutý rollover dokončit dřív, než se cokoli posoudí. Nová sezóna je v tu chvíli
+  //    už aktivní a nic se v ní nehrálo, takže by ji kontrola níž odbyla „sezóna zatím
+  //    nezačala" a rollover by zůstal napůl.
+  let pendingRollover: number | null;
+  try {
+    pendingRollover = await findPendingRollover(db);
+  } catch (e) {
+    logger.error({ module: "end-season" }, "stav rolloveru nejde načíst", e);
+    return { allDone: false, ready: true, phase: "rollover", status: "error", remainingLeagues: 0, detail: "stav rolloveru nejde načíst" };
+  }
+  if (pendingRollover != null) return stepRollover(db, pendingRollover);
+
   const seasonNumber = await getGlobalSeason(db);
   if (seasonNumber == null) return { allDone: true, ready: false, remainingLeagues: 0, detail: "žádná aktivní sezóna" };
 
@@ -177,20 +191,39 @@ export async function runEndSeasonStep(
     }
   }
 
-  // 2. Globální rollover (jednou, až mají všechny odehrané ligy wrap hotový)
+  // 2. Globální rollover (jednou, až mají všechny odehrané ligy wrap hotový). Založí se
+  //    markerem s kotvou nové sezóny a pak jde po krocích, jeden krok na volání.
   const rollProg = await getProgress(db, ROLLOVER_KEY, seasonNumber, "rollover");
   if (rollProg?.status !== "done") {
     try {
-      const r = await rolloverAllLeagues(db, seasonNumber);
-      await setProgress(db, ROLLOVER_KEY, seasonNumber, "rollover", "done");
-      return { allDone: true, ready: true, seasonNumber, phase: "rollover", status: "done", remainingLeagues: 0, detail: `nová sezóna ${r.newSeasonNumber}, rollnuto ${r.rolledLeagues} lig` };
+      if (await beginRollover(db, seasonNumber) === "done") {
+        return { allDone: true, ready: true, seasonNumber, remainingLeagues: 0, detail: "sezóna zakončena" };
+      }
     } catch (e) {
-      logger.error({ module: "end-season" }, "global rollover failed", e);
-      return { allDone: false, ready: true, seasonNumber, phase: "rollover", status: "error", remainingLeagues: 0, detail: "rollover selhal" };
+      logger.error({ module: "end-season" }, "global rollover: založení selhalo", e);
+      return { allDone: false, ready: true, seasonNumber, phase: "rollover", status: "error", remainingLeagues: 0, detail: "rollover nejde založit" };
     }
+    return stepRollover(db, seasonNumber);
   }
 
   return { allDone: true, ready: true, seasonNumber, remainingLeagues: 0, detail: "sezóna zakončena" };
+}
+
+/**
+ * Jeden krok rolloveru. `allDone` jen když doběhla poslední fáze. Admin tlačítko volá
+ * dál, dokud ho nedostane, takže rollover se nemůže tvářit hotový v půlce.
+ */
+async function stepRollover(db: D1Database, oldSeasonNumber: number): Promise<EndSeasonStepResult> {
+  try {
+    const r = await runRolloverStep(db, oldSeasonNumber);
+    if (r.finished) {
+      return { allDone: true, ready: true, seasonNumber: oldSeasonNumber, phase: "rollover", status: "done", remainingLeagues: 0, detail: r.detail };
+    }
+    return { allDone: false, ready: true, seasonNumber: oldSeasonNumber, phase: `rollover:${r.phase}`, status: r.status, remainingLeagues: 0, detail: r.detail };
+  } catch (e) {
+    logger.error({ module: "end-season" }, "global rollover failed", e);
+    return { allDone: false, ready: true, seasonNumber: oldSeasonNumber, phase: "rollover", status: "error", remainingLeagues: 0, detail: "rollover selhal, další krok ho zkusí znovu" };
+  }
 }
 
 async function runWrapPhase(
