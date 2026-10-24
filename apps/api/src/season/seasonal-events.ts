@@ -626,9 +626,11 @@ const EVENT_TEMPLATES_PRAHA: SeasonalEventDef[] = [
     type: "letni_soustredeni", title: "Letní soustředění", gameWeek: 0,
     description: "Volitelné soustředění před novou sezónou. Boost pro přípravu, ale stojí peníze.",
     effects: [],
+    // Typ jako venkovská varianta. Události už uložené v DB nesou starý `stamina`,
+    // ten event-effects.ts obslouží taky.
     choices: [
-      { id: "full", label: "Kompletní soustředění (3 dny, -8 000 Kč)", effects: [{ type: "budget", value: -8000, description: "-8 000 Kč" }, { type: "stamina", value: 5, description: "+5 vytrvalost pro všechny" }, { type: "morale", value: 10, description: "+10 morálka" }] },
-      { id: "weekend", label: "Víkendový kemp (-3 000 Kč)", effects: [{ type: "budget", value: -3000, description: "-3 000 Kč" }, { type: "stamina", value: 2, description: "+2 vytrvalost" }] },
+      { id: "full", label: "Kompletní soustředění (3 dny, -8 000 Kč)", effects: [{ type: "budget", value: -8000, description: "-8 000 Kč" }, { type: "stamina_boost", value: 5, description: "+5 vytrvalost pro všechny" }, { type: "morale", value: 10, description: "+10 morálka" }] },
+      { id: "weekend", label: "Víkendový kemp (-3 000 Kč)", effects: [{ type: "budget", value: -3000, description: "-3 000 Kč" }, { type: "stamina_boost", value: 2, description: "+2 vytrvalost" }] },
       { id: "no", label: "Letos bez soustředění", effects: [] },
     ],
   },
