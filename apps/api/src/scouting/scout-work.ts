@@ -10,7 +10,7 @@
 
 import {
   SCOUT_AGE_MAX, SCOUT_AGE_MIN, SCOUT_POSITIONS, SCOUT_WEEKS_OPTIONS, isYouthScoutTask,
-  scoutWeeklyCost, willingnessFromChance, SCOUT_LEAGUE_WEEKLY_COST, SCOUT_POSITION_LABELS,
+  scoutWeeklyCost, willingnessFromChance, SCOUT_LEAGUE_WEEKLY_COST, SCOUT_POSITION_LABELS, PLAN_TACTIC_LABELS,
 } from "@okresni-masina/shared";
 import type { Bindings } from "../index";
 import { createRng, cryptoSeed, type Rng } from "../generators/rng";
@@ -26,6 +26,7 @@ import { boundingBox, loadVillagesInRadius, pickClubsToVisit, villageClubName, t
 import { blurredAskHint, blurredWillingness, potentialRange, rangeMid, ratingRange, type Range } from "./fog";
 import { projectRating } from "./youth-growth";
 import { isFromAbroad } from "./foreign";
+import { OPPONENT_ANALYSIS_BONUS_DAYS, OPPONENT_ANALYSIS_MORALE_BONUS, OPPONENT_ANALYSIS_TECHNIQUE_BONUS } from "./opponent-analysis";
 import { activeSeasonNumber, loadOutsideSquad, outsideClubValuation, type OutsideSquad } from "./outside-clubs";
 import { emptyWeekSms, finishedSms, reportCons, reportPros, reportSms, revisitSms, type ReportSubject } from "./report-text";
 
@@ -35,6 +36,8 @@ export const SCOUT_REPORT_TTL_DAYS = 10;
 const REVISIT_EXTEND_DAYS = 7;
 /** Cestovné jednorázové mise (sledování hráče, rozbor soupeře). */
 export const SCOUT_MISSION_COST = 500;
+/** Za kolik herních dní skaut misi odvede (slibuje to i formulář: „Doba mise: 2 dny“). */
+export const SCOUT_MISSION_DAYS = 2;
 /** Denní šance, že hráče z hlášení sebere jiný klub (odhad, spec). */
 export const SCOUT_SNAP_UP_DAILY_CHANCE = 0.03;
 /** Názor na potenciál dává skaut jen u mladých; u dospělých by model růstu sliboval nesmysly. */
@@ -390,20 +393,39 @@ interface Candidate {
 
 export interface ScoutWorkResult { teams: number; reports: number; revisits: number; finished: number; skippedNoMoney: number }
 
+/** Jednorázová mise (sledování hráče, rozbor soupeře), na rozdíl od týdenních úkolů. */
+function isMission(a: Pick<AssignmentRow, "assignment_type">): boolean {
+  return a.assignment_type === "player" || a.assignment_type === "match";
+}
+
+/** Je mise zadaná aspoň před `SCOUT_MISSION_DAYS` herními dny? */
+function missionDue(a: Pick<AssignmentRow, "started_game_date">, gameDate: string): boolean {
+  const start = Date.parse(`${(a.started_game_date ?? "").slice(0, 10)}T12:00:00Z`);
+  const today = Date.parse(`${gameDate.slice(0, 10)}T12:00:00Z`);
+  if (Number.isNaN(start) || Number.isNaN(today)) return true;
+  return Math.round((today - start) / 86_400_000) >= SCOUT_MISSION_DAYS;
+}
+
 /**
- * Pondělní práce skautů na úkolech. Idempotentní přes `last_work_game_date`; `force`
- * (admin testování) pracuje znovu i týž den.
+ * Práce skautů na úkolech. Týdenní úkoly (oblast, ligy) pracují v pondělí, mise den, kdy
+ * od zadání uplynou `SCOUT_MISSION_DAYS` dny (`missionsOnly` = denní běh jen pro mise).
+ * Idempotentní přes `last_work_game_date`; `force` (admin testování) pracuje znovu i týž
+ * den a mise nečeká.
  */
-export async function runScoutWork(env: Pick<Bindings, "DB">, opts: { gameDate: string; teamId?: string; force?: boolean }): Promise<ScoutWorkResult> {
+export async function runScoutWork(
+  env: Pick<Bindings, "DB">, opts: { gameDate: string; teamId?: string; force?: boolean; missionsOnly?: boolean },
+): Promise<ScoutWorkResult> {
   const db = env.DB;
   const day = opts.gameDate.slice(0, 10);
   const result: ScoutWorkResult = { teams: 0, reports: 0, revisits: 0, finished: 0, skippedNoMoney: 0 };
   const rows = await db.prepare(
-    `SELECT * FROM scout_assignments WHERE status = 'active'${opts.teamId ? " AND team_id = ?" : ""}`,
+    `SELECT * FROM scout_assignments WHERE status = 'active'${opts.teamId ? " AND team_id = ?" : ""}`
+      + (opts.missionsOnly ? " AND assignment_type IN ('player','match')" : ""),
   ).bind(...(opts.teamId ? [opts.teamId] : [])).all<AssignmentRow>()
     .catch((e) => { logger.warn({ module: "scouting" }, "načtení úkolů", e); return { results: [] as AssignmentRow[] }; });
 
   for (const a of rows.results) {
+    if (isMission(a) && !opts.force && !missionDue(a, opts.gameDate)) continue;
     try {
       const claim = await db.prepare(
         `UPDATE scout_assignments SET last_work_game_date = ? WHERE id = ? AND status = 'active'
@@ -557,8 +579,8 @@ async function evaluateMatchMission(
   // Rozestavení tým nemá ve `teams`, je v sestavě. Přednost má poslední uložená ručně
   // (automatická nemá `submitted_at`, řadí se na konec), bez sestavy výchozí 4-4-2.
   const lineup = await db.prepare(
-    "SELECT formation FROM lineups WHERE team_id = ? ORDER BY submitted_at DESC, id ASC LIMIT 1",
-  ).bind(opp.id).first<{ formation: string | null }>();
+    "SELECT formation, tactic FROM lineups WHERE team_id = ? ORDER BY submitted_at DESC, id ASC LIMIT 1",
+  ).bind(opp.id).first<{ formation: string | null; tactic: string | null }>();
 
   const topPlayer = await db.prepare(
     "SELECT first_name, last_name, position, overall_rating FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active') ORDER BY overall_rating DESC LIMIT 1",
@@ -571,16 +593,24 @@ async function evaluateMatchMission(
   ).bind(opp.id).first<{ first_name: string; last_name: string; position: string; overall_rating: number }>();
 
   const formation = lineup?.formation ?? "4-4-2";
-  const keyDesc = topPlayer ? `${topPlayer.first_name} ${topPlayer.last_name} (${topPlayer.position}, rating ${topPlayer.overall_rating})` : "vyrovnaný kádr";
-  const weakDesc = weakPlayer ? `${weakPlayer.first_name} ${weakPlayer.last_name} (${weakPlayer.position})` : "bez výrazné díry";
+  const tactic = PLAN_TACTIC_LABELS[(lineup?.tactic ?? "balanced") as keyof typeof PLAN_TACTIC_LABELS] ?? PLAN_TACTIC_LABELS.balanced;
+  const postOf =(p: string) => (SCOUT_POSITION_LABELS[p as keyof typeof SCOUT_POSITION_LABELS] ?? p).toLowerCase();
+  const keyDesc = topPlayer ? `${topPlayer.first_name} ${topPlayer.last_name} (${postOf(topPlayer.position)}, hodnocení ${topPlayer.overall_rating})` : "vyrovnaný kádr";
+  const weakDesc = weakPlayer ? `${weakPlayer.first_name} ${weakPlayer.last_name} (${postOf(weakPlayer.position)})` : "bez výrazné díry";
 
+  // Bonus do zápasu čte equipment/match-mods.ts podle hotového úkolu (opponent-analysis.ts),
+  // tady se jen zapíše, co rozbor dal a do kdy platí.
+  const bonusUntil = new Date(Date.now() + OPPONENT_ANALYSIS_BONUS_DAYS * 86_400_000);
   const resultData = JSON.stringify({
     opponentId: opp.id,
     opponentName: opp.name,
     formation,
+    tactic,
     keyPlayer: keyDesc,
     weakPlayer: weakDesc,
-    tacticalBonus: 2,
+    techniqueBonus: OPPONENT_ANALYSIS_TECHNIQUE_BONUS,
+    moraleBonus: OPPONENT_ANALYSIS_MORALE_BONUS,
+    bonusUntil: bonusUntil.toISOString(),
   });
 
   await db.prepare(
@@ -588,8 +618,11 @@ async function evaluateMatchMission(
        result_data = ?, closed_at = strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE id = ?`,
   ).bind(resultData, a.id).run();
 
+  const until = bonusUntil.toLocaleDateString("cs-CZ", { day: "numeric", month: "numeric", timeZone: "Europe/Prague" });
   await sendScoutSms(db, a.team_id, sender,
-    `📋 Taktický rozbor soupeře ${opp.name} je hotový. Hrají ${formation}, nejvíc si hlídejte ${keyDesc}. Naše taktická příprava má navrch.`,
+    `📋 Taktický rozbor soupeře ${opp.name} je hotový. Hrají ${formation} a taktiku „${tactic}“. `
+      + `Nejvíc si hlídejte: ${keyDesc}. Slabé místo: ${weakDesc}. `
+      + `Na ligový zápas s nimi do ${until} máme navrch: +${OPPONENT_ANALYSIS_TECHNIQUE_BONUS} technika a +${OPPONENT_ANALYSIS_MORALE_BONUS} morálka.`,
   );
   return `Cestovné skauta: zápasový rozbor soupeře ${opp.name}`;
 }
@@ -604,7 +637,7 @@ async function workOneWeek(db: D1Database, a: AssignmentRow, gameDate: string, r
   }
   const sender = `${scout.first_name} ${scout.last_name}`;
 
-  if ((a.assignment_type === "player" && a.target_player_id) || (a.assignment_type === "match" && a.target_team_id)) {
+  if (isMission(a)) {
     await workMission(db, a, scout, gameDate, sender, result);
     return;
   }

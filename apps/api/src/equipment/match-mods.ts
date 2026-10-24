@@ -79,18 +79,12 @@ export async function mergeStaffMatchMods(
   merged.injurySeverityMod += fx.injurySeverityReduction;
   if (isHome) merged.crowdMod += fx.crowdMod + fx.crowdAttendanceBonus; // šéf fanklubu jen doma
 
-  // Taktický bonus ze skautingu soupeře
+  // Taktický bonus z rozboru soupeře skautem (scouting/opponent-analysis.ts)
   if (opponentTeamId) {
-    const scouted = await db.prepare(
-      `SELECT id FROM scout_assignments
-       WHERE team_id = ? AND target_team_id = ? AND assignment_type = 'match' AND status = 'finished'
-         AND closed_at > datetime('now', '-14 days') LIMIT 1`,
-    ).bind(teamId, opponentTeamId).first<{ id: string }>()
-      .catch((e) => { logger.warn({ module: MODULE }, "check scouted opponent", e); return null; });
-    if (scouted) {
-      merged.techniqueMod += 2;
-      merged.moraleMod += 3;
-    }
+    const { opponentAnalysisBonus } = await import("../scouting/opponent-analysis");
+    const scouted = await opponentAnalysisBonus(db, teamId, opponentTeamId);
+    merged.techniqueMod += scouted.techniqueMod;
+    merged.moraleMod += scouted.moraleMod;
   }
 
   // Zápasové úkoly zaměstnanců (staff/staff-tasks.ts): jen ligový zápas, na který byly zadané.
