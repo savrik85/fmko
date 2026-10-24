@@ -334,13 +334,60 @@ export function calcBusAttendees(busSize: BusSize): BusAttendeesCalc {
   return { attendees, busSize };
 }
 
+export interface BusDropIn {
+  /** Kolik lidí autobusy přivezly celkem. Tohle číslo jde do návštěvy zápasu. */
+  total: number;
+  /** Počty vylosované teď, podle id objednávky. Po zápase je uloží `applyBusConversion`. */
+  rolled: Map<string, number>;
+}
+
+/**
+ * Kolik lidí přivezou objednané autobusy na zápas. Losuje se jednou za zápas.
+ *
+ * Dřív si počet losovala návštěva (match-runner, pohár) a `applyBusConversion` po zápase
+ * losovala znovu a do `attendees_brought` uložila to druhé číslo. Přehled autobusu
+ * i reportér ve zpravodaji pak hlásili jiný počet, než kolik lidí do návštěvy opravdu
+ * přibylo, a konverze na stálé fanoušky se počítala z čísla, které nikdo nepřivezl.
+ *
+ * Objednávka, která už `attendees_brought` má (opakovaná simulace zápasu), se znovu
+ * nelosuje: do návštěvy jde uložený počet.
+ */
+export async function rollBusDropIn(db: DB, teamId: string, matchId: string): Promise<BusDropIn> {
+  const rows = await db
+    .prepare("SELECT id, bus_size, attendees_brought FROM bus_subsidies WHERE team_id = ? AND match_id = ?")
+    .bind(teamId, matchId)
+    .all<{ id: string; bus_size: BusSize; attendees_brought: number | null }>()
+    .catch((e) => {
+      logger.warn({ module: "fanbase-helpers" }, "load bus subsidies for attendance", e);
+      return { results: [] as Array<{ id: string; bus_size: BusSize; attendees_brought: number | null }> };
+    });
+
+  const rolled = new Map<string, number>();
+  let total = 0;
+  for (const r of rows.results) {
+    if (r.attendees_brought != null) {
+      total += r.attendees_brought;
+      continue;
+    }
+    if (!BUS_CONFIG.SIZES[r.bus_size]) continue;
+    const { attendees } = calcBusAttendees(r.bus_size);
+    rolled.set(r.id, attendees);
+    total += attendees;
+  }
+  return { total, rolled };
+}
+
 // Po home zápase: pro každý bus_subsidy záznam aktualizuj satellite (per-village).
 // Konverze používá distance modifier — bližší obec = vyšší procento.
 // Zápis je JEN do bus_satellite_fans, ne do team_fanbase (single-source-of-truth per origin).
+//
+// `rolled` jsou počty z `rollBusDropIn`, se kterými se počítala návštěva. Uloží se
+// beze změny, žádné druhé losování.
 export async function applyBusConversion(
   db: DB,
   teamId: string,
   matchId: string,
+  rolled: ReadonlyMap<string, number>,
 ): Promise<{ totalDropIn: number; totalConverted: number }> {
   const subsidies = await db
     .prepare(
@@ -394,16 +441,28 @@ export async function applyBusConversion(
   let totalConverted = 0;
 
   for (const s of subsidies.results) {
-    const { attendees } = calcBusAttendees(s.bus_size);
-    totalDropIn += attendees;
+    // Autobus objednaný až po výpočtu návštěvy do ní nikoho nepřivezl. Zapíše se nula,
+    // ať ho další běh znovu neotevře, a do série autobusů z obce se nepočítá.
+    const counted = rolled.get(s.id);
+    const attendees = counted ?? 0;
+    if (counted === undefined) {
+      logger.warn(
+        { module: "fanbase-helpers", teamId, matchId },
+        `autobus ${s.id} nebyl v návštěvě zápasu, ukládá se 0 lidí`,
+      );
+    }
 
-    await db
-      .prepare("UPDATE bus_subsidies SET attendees_brought = ? WHERE id = ?")
+    const saved = await db
+      .prepare("UPDATE bus_subsidies SET attendees_brought = ? WHERE id = ? AND attendees_brought IS NULL")
       .bind(attendees, s.id)
       .run()
       .catch((e) => {
         logger.warn({ module: "fanbase-helpers" }, "update bus attendees", e);
+        return null;
       });
+    // Souběžný běh ho už zpracoval (nebo zápis selhal): konverzi nezdvojovat.
+    if (!saved || saved.meta.changes === 0 || counted === undefined) continue;
+    totalDropIn += attendees;
 
     // Distance modifier
     const distanceKm =

@@ -367,29 +367,17 @@ export async function runScheduledMatches(
             const rep = homeInfo?.reputation ?? 50;
 
             // Tier-based base (hardcore + regular + casual + walk-up z vesnice + walk-up z okolí)
-            const {loadFanbaseAggregate, loadRegionalPopulation, expectedAttendance, homeAdvantageFromFanbase} =
+            const {loadFanbaseAggregate, loadRegionalPopulation, expectedAttendance, homeAdvantageFromFanbase, rollBusDropIn} =
                 await import("../season/fanbase-helpers");
-            const {BUS_CONFIG} = await import("../season/fanbase-config");
             const {agg: fanbaseAgg} = await loadFanbaseAggregate(db, homeTeamId);
             const {regionalPopulation} = await loadRegionalPopulation(db, homeTeamId);
             const expected = expectedAttendance(fanbaseAgg, homeInfo?.population ?? 500, regionalPopulation);
             const popBase = expected.total;
 
-            // Bus drop-in pro tento zápas (z objednaných busů)
-            const busRows = await db.prepare(
-                "SELECT bus_size FROM bus_subsidies WHERE team_id = ? AND match_id = ?"
-            ).bind(homeTeamId, matchId).all<{ bus_size: keyof typeof BUS_CONFIG.SIZES }>()
-                .catch((e) => {
-                    logger.warn({module: "match-runner"}, "load bus subsidies for attendance", e);
-                    return {results: [] as Array<{ bus_size: keyof typeof BUS_CONFIG.SIZES }>};
-                });
-            let busDropIn = 0;
-            for (const b of busRows.results) {
-                const cfg = BUS_CONFIG.SIZES[b.bus_size];
-                if (cfg) {
-                    busDropIn += Math.round(cfg.attendeesMin + Math.random() * (cfg.attendeesMax - cfg.attendeesMin));
-                }
-            }
+            // Bus drop-in pro tento zápas (z objednaných busů). Vylosované počty si nese
+            // pozápasová konverze, ať se do `attendees_brought` uloží totéž číslo.
+            const busDrop = await rollBusDropIn(db, homeTeamId, matchId);
+            const busDropIn = busDrop.total;
 
             // Reputation bonus (higher rep = more fans)
             const repBonus = Math.round(popBase * (rep / 100) * 0.3);
@@ -928,7 +916,7 @@ export async function runScheduledMatches(
                     } = await import("../season/fanbase-helpers");
 
                     // Domácí: bus + promo + tier promotion + loss penalty
-                    const busResult = await applyBusConversion(db, homeTeamId, matchId);
+                    const busResult = await applyBusConversion(db, homeTeamId, matchId, busDrop.rolled);
                     const wasPromoted = (promoRow?.promotion_boost ?? 1.0) > 1.0;
                     const promoResult = await applyPromoConversion(
                         db,
