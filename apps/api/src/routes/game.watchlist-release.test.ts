@@ -76,6 +76,7 @@ beforeAll(async () => {
       is_celebrity INTEGER DEFAULT 0, nationality TEXT DEFAULT 'CZ', skills_max TEXT DEFAULT '{}', status TEXT DEFAULT 'active',
       loan_from_team_id TEXT, residence TEXT, commute_km REAL, squad_number INTEGER, coach_relationship INTEGER
     );
+    CREATE TABLE club_links (team_id TEXT PRIMARY KEY, group_id TEXT NOT NULL, note TEXT, created_at TEXT);
     CREATE TABLE injuries (id TEXT PRIMARY KEY, player_id TEXT NOT NULL, team_id TEXT, type TEXT, days_remaining INTEGER NOT NULL);
     CREATE TABLE sell_on_clauses (id TEXT PRIMARY KEY, player_id TEXT, beneficiary_team_id TEXT, pct INTEGER, status TEXT, resolved_at TEXT);
     CREATE TABLE player_watchlist (

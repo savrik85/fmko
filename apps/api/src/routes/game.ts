@@ -20,6 +20,7 @@ import { requireTeamOwnership, requireAdmin, requireOwnedTeamRead } from "../aut
 import { buildPlayerView } from "../transfers/player-view";
 import { findTransferSearchPlayerRows, resolveTransferSearchContext } from "../transfers/player-search";
 import { resolveClubTeamId, resolveOfferClubScope } from "../transfers/offer-club-scope";
+import { areClubsLinked, LINKED_CLUBS_ERRORS } from "../competition/club-links";
 import { offerReplyDeadline } from "../transfers/offer-deadline";
 import { suspensionSms, injurySms } from "../events/injury-sms";
 import { injuryPronenessOf } from "../injuries/proneness";
@@ -5422,6 +5423,10 @@ gameRouter.post("/teams/:teamId/free-agents/:faId/sign", async (c) => {
       return c.json({ error: "Hráče propuštěného z jiného tvého klubu podepsat nemůžeš." }, 400);
     }
   }
+  // Propojené kluby i ve stejném okrese: propuštění a podpis by byl přestup bez přestupu.
+  if (fa.released_from_team_id && await areClubsLinked(c.env.DB, teamId, fa.released_from_team_id as string)) {
+    return c.json({ error: LINKED_CLUBS_ERRORS.freeAgent }, 403);
+  }
 
   let agentVillage: { lat: number; lng: number } | null = null;
   if (fa.village_id) {
@@ -6151,6 +6156,9 @@ gameRouter.post("/teams/:teamId/market/:listingId/bid", async (c) => {
   if (listingInfo.seller_team_id === teamId || await resolveClubTeamId(c.env.DB, listingInfo.seller_team_id) === buyerClubTeamId) {
     return c.json({ error: "Nemůžeš nabízet na vlastního hráče" }, 400);
   }
+  if (await areClubsLinked(c.env.DB, buyerClubTeamId, listingInfo.seller_team_id)) {
+    return c.json({ error: LINKED_CLUBS_ERRORS.transfer }, 403);
+  }
 
   // Idempotence — pokud uz existuje aktivni offer od tohoto tymu na tohoto hrace, vratit ho
   const existing = await c.env.DB.prepare(
@@ -6216,6 +6224,9 @@ gameRouter.post("/teams/:teamId/bids/:bidId/accept", async (c) => {
   const sellerTeamId = bid.seller_team_id as string;
   if (sellerTeamId !== teamId && buyerTeamId !== teamId) {
     return c.json({ error: "Nemáš přístup k této nabídce" }, 403);
+  }
+  if (await areClubsLinked(c.env.DB, buyerTeamId, sellerTeamId)) {
+    return c.json({ error: LINKED_CLUBS_ERRORS.transfer }, 403);
   }
   const playerId = bid.player_id as string;
   // Counter_amount ma prednost (jako u offers)
@@ -6478,6 +6489,10 @@ gameRouter.post("/teams/:teamId/offers", async (c) => {
   // Owner user check — only human teams can receive offers
   const ownerTeam = await c.env.DB.prepare("SELECT user_id FROM teams WHERE id = ?").bind(targetOwnerId).first<{ user_id: string }>();
   if (!ownerTeam || ownerTeam.user_id === "ai") return c.json({ error: "Nabídky lze posílat jen lidským týmům" }, 400);
+  // Propojené kluby: platí pro přestup, hostování, výměnu i odkup z hostování.
+  if (await areClubsLinked(c.env.DB, buyerClubTeamId, targetOwnerId)) {
+    return c.json({ error: LINKED_CLUBS_ERRORS.transfer }, 403);
+  }
 
   // U21 cíl: kupující musí mít U21 tým, hráč musí být do 21 let, nebýt na hostování ani čekat na návrat
   if (targetSquad === "u21") {
@@ -7117,6 +7132,10 @@ gameRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
   if (!scope?.role || !scope.onTurn) return c.json({ error: "Nabídka nenalezena nebo nejsi na tahu" }, 409);
   if (offer.expires_at && new Date(offer.expires_at as string) < new Date()) {
     return c.json({ error: "Nabídka vypršela" }, 410);
+  }
+  // Nabídka mohla vzniknout, než admin kluby propojil. Přijetím by obchod prošel.
+  if (await areClubsLinked(c.env.DB, scope.buyerClubTeamId, scope.sellerClubTeamId)) {
+    return c.json({ error: LINKED_CLUBS_ERRORS.transfer }, 403);
   }
 
   // ?? přeskakuje jen null/undefined, ne 0 — proto explicitní kontrola.
@@ -7822,6 +7841,9 @@ gameRouter.post("/teams/:teamId/offers/:offerId/counter", async (c) => {
   if (!scope.onTurn) return c.json({ error: "Nejsi na tahu" }, 409);
   if (offer.expires_at && new Date(offer.expires_at) < new Date()) {
     return c.json({ error: "Nabídka vypršela" }, 410);
+  }
+  if (await areClubsLinked(c.env.DB, scope.buyerClubTeamId, scope.sellerClubTeamId)) {
+    return c.json({ error: LINKED_CLUBS_ERRORS.transfer }, 403);
   }
 
   // Podmínky protinávrhu: co strana neposlala, zůstává z aktuálního návrhu (starší klienti posílají jen částku).
@@ -10624,6 +10646,16 @@ gameRouter.get("/admin/market-stats", async (c) => {
     .catch((e) => { logger.warn({ module: "game" }, "přehled přestupovky", e); return { results: [] as never[] }; });
 
   return c.json({ ok: true, dnu, souhrn, podleDnu: radky, prestupovka: inzeraty.results ?? [] });
+});
+
+/**
+ * Propojené kluby a podezřelé dvojice. Propojení se zapisuje ručně do `club_links`,
+ * tady je jen přehled: kdo už propojený je a kdo spolu hraje a obchoduje nejvíc.
+ */
+gameRouter.get("/admin/club-links", async (c) => {
+  const { listLinkGroups, suspiciousPairs } = await import("../competition/club-links");
+  const [groups, pairs] = await Promise.all([listLinkGroups(c.env.DB), suspiciousPairs(c.env.DB)]);
+  return c.json({ ok: true, groups, pairs });
 });
 
 gameRouter.get("/admin/health", async (c) => {

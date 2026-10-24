@@ -173,6 +173,8 @@ export interface Team {
   id: string;
   user_id?: string;
   name: string;
+  /** Kluby se stejným majitelem, propojení zapisuje admin. */
+  sameOwnerClubs?: Array<{ id: string; name: string }>;
   village_name: string;
   population: number;
   size: string;

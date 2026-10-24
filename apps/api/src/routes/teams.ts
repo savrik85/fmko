@@ -937,9 +937,14 @@ teamsRouter.get("/:id", async (c) => {
     `SELECT capacity, ${STAND_COLUMNS}, vip_box, pitch_condition, pitch_type FROM stadiums WHERE team_id = ? LIMIT 1`
   ).bind(c.req.param("id")).first<{ capacity: number; vip_box: number | null; pitch_condition: number; pitch_type: string } & Partial<Record<StandSide | "stand_ext_capacity", number | null>>>().catch((e) => { logger.warn({ module: "teams" }, "db op failed", e); return null; });
   const { calculateFacilityEffects: calcFxTeam } = await import("../stadium/stadium-generator");
+  // Propojení zapisuje admin a je veřejné, profil ho ukazuje každému.
+  const { sameOwnerClubs } = await import("../competition/club-links");
+  const sameOwner = await sameOwnerClubs(c.env.DB, c.req.param("id"))
+    .catch((e) => { logger.warn({ module: "teams" }, "kluby se stejným majitelem", e); return []; });
 
   return c.json({
     ...team,
+    sameOwnerClubs: sameOwner,
     stadium: stadium ? { name: team.stadium_name, capacity: stadium.capacity + calcFxTeam({ ...standFacilities(stadium), vip_box: stadium.vip_box ?? 0 }).capacityBonus, pitchCondition: stadium.pitch_condition, pitchType: stadium.pitch_type } : null,
   });
 });

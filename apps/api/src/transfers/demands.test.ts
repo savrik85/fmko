@@ -23,10 +23,11 @@ const runMigration = async (file: string, cut?: string) => {
 };
 
 beforeEach(async () => {
-  for (const t of ["transfer_demands", "transfer_demand_pitches", "player_promises", "transfer_offers", "messages", "conversations", "players", "teams", "leagues"]) {
+  for (const t of ["transfer_demands", "transfer_demand_pitches", "player_promises", "transfer_offers", "messages", "conversations", "players", "teams", "leagues", "club_links"]) {
     await db.prepare(`DROP TABLE IF EXISTS ${t}`).run();
   }
   await db.prepare("CREATE TABLE leagues (id TEXT PRIMARY KEY, district TEXT, name TEXT)").run();
+  await runMigration("0273_club_links.sql");
   await db.prepare("CREATE TABLE teams (id TEXT PRIMARY KEY, name TEXT, user_id TEXT, league_id TEXT, parent_team_id TEXT, village_id TEXT)").run();
   await db.prepare(
     `CREATE TABLE players (id TEXT PRIMARY KEY, team_id TEXT, first_name TEXT, last_name TEXT, nationality TEXT, age INTEGER, position TEXT,
@@ -146,6 +147,15 @@ describe("nabídnutí hráče manažerovi", () => {
     expect(forA!.mine[0].pitches.map((p) => p.playerName).sort()).toEqual(["Jan Malý", "Petr Novák"]);
     const forB = await listDemands(db, "B");
     expect(forB!.managers[0].myPitches).toHaveLength(2);
+  });
+
+  it("klubu se stejným majitelem (propojení od admina) hráče nenabídne", async () => {
+    await db.prepare("INSERT INTO club_links (team_id, group_id) VALUES ('A', 'g'), ('B', 'g')").run();
+    const d = await createDemand(db, "A", input());
+    if (!d.ok) throw new Error();
+    const res = await pitchPlayer(db, "B", d.id, "b1", createRng(1));
+    expect(res).toMatchObject({ ok: false });
+    expect(res.ok ? "" : res.error).toContain("stejným majitelem");
   });
 
   it("tři hráči najednou: strop 2 platí i při souběhu", async () => {
