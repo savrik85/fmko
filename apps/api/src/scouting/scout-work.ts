@@ -33,6 +33,8 @@ import { emptyWeekSms, finishedSms, reportCons, reportPros, reportSms, revisitSm
 export const SCOUT_REPORT_TTL_DAYS = 10;
 /** Opakovaná návštěva prodlouží platnost hlášení o týden. */
 const REVISIT_EXTEND_DAYS = 7;
+/** Cestovné jednorázové mise (sledování hráče, rozbor soupeře). */
+export const SCOUT_MISSION_COST = 500;
 /** Denní šance, že hráče z hlášení sebere jiný klub (odhad, spec). */
 export const SCOUT_SNAP_UP_DAILY_CHANCE = 0.03;
 /** Názor na potenciál dává skaut jen u mladých; u dospělých by model růstu sliboval nesmysly. */
@@ -184,17 +186,17 @@ export async function createPlayerScoutAssignment(db: D1Database, input: {
   if (!player) return fail(404, "Hráč nenalezen.");
   if (player.team_id === input.teamId) return fail(400, "Nemůžeš skautovat vlastního hráče.");
 
-  const cost = 500;
+  const cost = SCOUT_MISSION_COST;
   const budget = await db.prepare("SELECT budget FROM teams WHERE id = ?").bind(input.teamId).first<{ budget: number }>();
   if (!budget || budget.budget < cost) return fail(400, "V pokladně není dost peněz na cestovné (500 Kč).");
 
+  // Cestovné se strhne, až skaut práci odvede (workMission), ne při zadání.
   const id = crypto.randomUUID();
   try {
     await db.prepare(
       `INSERT INTO scout_assignments (id, team_id, staff_id, assignment_type, target_player_id, age_min, age_max, radius_km, weekly_cost, weeks_total, started_game_date)
        VALUES (?, ?, ?, 'player', ?, 0, 99, 0, ?, 1, ?)`,
     ).bind(id, input.teamId, scout.id, player.id, cost, input.gameDate).run();
-    await recordTransaction(db, input.teamId, "scout_travel", -cost, `Cestovné skauta: sledování hráče ${player.first_name} ${player.last_name}`, input.gameDate, id);
   } catch (e) {
     logger.warn({ module: "scouting" }, "zadání hráčského úkolu", e);
     return fail(409, "Skaut už na jednom úkolu je.");
@@ -214,17 +216,17 @@ export async function createMatchScoutAssignment(db: D1Database, input: {
   const opp = await db.prepare("SELECT id, name FROM teams WHERE id = ?").bind(input.targetTeamId).first<{ id: string; name: string }>();
   if (!opp) return fail(404, "Soupeř nenalezen.");
 
-  const cost = 500;
+  const cost = SCOUT_MISSION_COST;
   const budget = await db.prepare("SELECT budget FROM teams WHERE id = ?").bind(input.teamId).first<{ budget: number }>();
   if (!budget || budget.budget < cost) return fail(400, "V pokladně není dost peněz na cestovné (500 Kč).");
 
+  // Cestovné se strhne, až skaut rozbor odvede (workMission), ne při zadání.
   const id = crypto.randomUUID();
   try {
     await db.prepare(
       `INSERT INTO scout_assignments (id, team_id, staff_id, assignment_type, target_team_id, target_match_id, age_min, age_max, radius_km, weekly_cost, weeks_total, started_game_date)
        VALUES (?, ?, ?, 'match', ?, ?, 0, 99, 0, ?, 1, ?)`,
     ).bind(id, input.teamId, scout.id, opp.id, input.targetMatchId ?? null, cost, input.gameDate).run();
-    await recordTransaction(db, input.teamId, "scout_travel", -cost, `Cestovné skauta: zápasový rozbor soupeře ${opp.name}`, input.gameDate, id);
   } catch (e) {
     logger.warn({ module: "scouting" }, "zadání zápasového úkolu", e);
     return fail(409, "Skaut už na jednom úkolu je.");
@@ -411,19 +413,51 @@ export async function runScoutWork(env: Pick<Bindings, "DB">, opts: { gameDate: 
       result.teams++;
       await workOneWeek(db, a, opts.gameDate, result);
     } catch (e) {
-      logger.error({ module: "scouting" }, `práce skauta ${a.id}`, e);
+      // Cestovné se strhává až po odvedené práci, takže spadlá práce nic nestojí. Úkol zůstává
+      // aktivní a skaut to zkusí při dalším běhu.
+      logger.error({ module: "scouting", teamId: a.team_id }, `práce skauta ${a.id} (${a.assignment_type ?? "area"}) spadla, cestovné se nestrhlo`, e);
     }
   }
   return result;
 }
 
+/**
+ * Jednorázová mise (sledování hráče, rozbor soupeře). Cestovné se strhne až po odvedené
+ * práci. Starší mise se platily už při zadání, ty se podruhé neplatí.
+ */
+async function workMission(db: D1Database, a: AssignmentRow, scout: ScoutRow, gameDate: string, sender: string, result: ScoutWorkResult): Promise<void> {
+  const prepaid = await db.prepare(
+    "SELECT 1 AS paid FROM transactions WHERE team_id = ? AND type = 'scout_travel' AND reference_id = ? LIMIT 1",
+  ).bind(a.team_id, a.id).first<{ paid: number }>();
+  if (!prepaid) {
+    const budget = await db.prepare("SELECT budget FROM teams WHERE id = ?").bind(a.team_id).first<{ budget: number }>();
+    if (!budget || budget.budget < a.weekly_cost) {
+      result.skippedNoMoney++;
+      await db.prepare(
+        "UPDATE scout_assignments SET status = 'cancelled', end_reason = 'no_money', closed_at = strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE id = ? AND status = 'active'",
+      ).bind(a.id).run();
+      await sendScoutSms(db, a.team_id, sender,
+        `⛽ Na cestovné (${a.weekly_cost.toLocaleString("cs-CZ")} Kč) v klubu nejsou peníze, takže nikam nejedu. Úkol ruším, zadej ho znovu, až peníze budou.`);
+      return;
+    }
+  }
+  const travel = a.assignment_type === "player"
+    ? await evaluatePlayerMission(db, a, scout, gameDate, sender)
+    : await evaluateMatchMission(db, a, scout, gameDate, sender);
+  if (!travel) return;
+  if (!prepaid) await recordTransaction(db, a.team_id, "scout_travel", -a.weekly_cost, travel, gameDate, a.id);
+  result.reports++;
+  result.finished++;
+}
+
+/** Hlášení o hráči. Vrací popis cestovného, `null` když hráč už ve hře není (mise zrušena). */
 async function evaluatePlayerMission(
   db: D1Database,
   a: AssignmentRow,
   scout: ScoutRow,
   gameDate: string,
   sender: string,
-): Promise<void> {
+): Promise<string | null> {
   // Hráč obec nemá, má ji jeho klub (players.village_id neexistuje).
   const player = await db.prepare(
     `SELECT p.id, p.first_name, p.last_name, p.position, p.age, p.overall_rating, p.hidden_talent,
@@ -442,7 +476,7 @@ async function evaluatePlayerMission(
 
   if (!player) {
     await db.prepare("UPDATE scout_assignments SET status = 'cancelled', end_reason = 'player_gone', closed_at = strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE id = ?").bind(a.id).run();
-    return;
+    return null;
   }
 
   const eff = scoutEffectiveness(scout);
@@ -504,19 +538,21 @@ async function evaluatePlayerMission(
     `🔍 Viděl jsem ${player.first_name} ${player.last_name} (${player.position}) v akci. Odhad hodnocení ${rr.lo}–${rr.hi}. Hlášení máš na stole.`,
     reportId,
   );
+  return `Cestovné skauta: sledování hráče ${player.first_name} ${player.last_name}`;
 }
 
+/** Rozbor soupeře. Vrací popis cestovného, `null` když soupeř už ve hře není (mise zrušena). */
 async function evaluateMatchMission(
   db: D1Database,
   a: AssignmentRow,
   scout: ScoutRow,
   gameDate: string,
   sender: string,
-): Promise<void> {
+): Promise<string | null> {
   const opp = await db.prepare("SELECT id, name FROM teams WHERE id = ?").bind(a.target_team_id).first<{ id: string; name: string }>();
   if (!opp) {
     await db.prepare("UPDATE scout_assignments SET status = 'cancelled', end_reason = 'team_gone', closed_at = strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE id = ?").bind(a.id).run();
-    return;
+    return null;
   }
   // Rozestavení tým nemá ve `teams`, je v sestavě. Přednost má poslední uložená ručně
   // (automatická nemá `submitted_at`, řadí se na konec), bez sestavy výchozí 4-4-2.
@@ -555,6 +591,7 @@ async function evaluateMatchMission(
   await sendScoutSms(db, a.team_id, sender,
     `📋 Taktický rozbor soupeře ${opp.name} je hotový. Hrají ${formation}, nejvíc si hlídejte ${keyDesc}. Naše taktická příprava má navrch.`,
   );
+  return `Cestovné skauta: zápasový rozbor soupeře ${opp.name}`;
 }
 
 async function workOneWeek(db: D1Database, a: AssignmentRow, gameDate: string, result: ScoutWorkResult): Promise<void> {
@@ -567,17 +604,8 @@ async function workOneWeek(db: D1Database, a: AssignmentRow, gameDate: string, r
   }
   const sender = `${scout.first_name} ${scout.last_name}`;
 
-  if (a.assignment_type === "player" && a.target_player_id) {
-    await evaluatePlayerMission(db, a, scout, gameDate, sender);
-    result.reports++;
-    result.finished++;
-    return;
-  }
-
-  if (a.assignment_type === "match" && a.target_team_id) {
-    await evaluateMatchMission(db, a, scout, gameDate, sender);
-    result.reports++;
-    result.finished++;
+  if ((a.assignment_type === "player" && a.target_player_id) || (a.assignment_type === "match" && a.target_team_id)) {
+    await workMission(db, a, scout, gameDate, sender, result);
     return;
   }
 
@@ -592,13 +620,8 @@ async function workOneWeek(db: D1Database, a: AssignmentRow, gameDate: string, r
     result.skippedNoMoney++;
     await sendScoutSms(db, a.team_id, sender, `⛽ Na cestovné (${a.weekly_cost.toLocaleString("cs-CZ")} Kč) v klubu nejsou peníze. Tenhle týden zůstávám doma.`);
   } else {
-    const travelDesc = a.assignment_type === "u21_league"
-      ? "Cestovné skauta (U21 liga)"
-      : a.assignment_type === "league"
-        ? "Cestovné skauta (A-tým liga)"
-        : `Cestovné skauta (okruh ${a.radius_km} km)`;
-    await recordTransaction(db, a.team_id, "scout_travel", -a.weekly_cost, travelDesc, gameDate, a.id);
-    worked = true;
+    // Nejdřív práce, cestovné až po ní: když práce spadne, výjimka sem nedojde a tým nic
+    // nezaplatí (dřív se strhávalo předem a ligové úkoly platily týdny bez jediné práce).
     if (a.revisit_report_id && await revisit(db, a, eff, sender)) {
       result.revisits++;
     } else if (a.assignment_type === "u21_league" || a.assignment_type === "league") {
@@ -612,6 +635,13 @@ async function workOneWeek(db: D1Database, a: AssignmentRow, gameDate: string, r
       reported = found.reported ? 1 : 0;
       result.reports += reported;
     }
+    const travelDesc = a.assignment_type === "u21_league"
+      ? "Cestovné skauta (U21 liga)"
+      : a.assignment_type === "league"
+        ? "Cestovné skauta (A-tým liga)"
+        : `Cestovné skauta (okruh ${a.radius_km} km)`;
+    await recordTransaction(db, a.team_id, "scout_travel", -a.weekly_cost, travelDesc, gameDate, a.id);
+    worked = true;
   }
 
   const weeksWorked = a.weeks_worked + 1;

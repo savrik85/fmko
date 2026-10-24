@@ -587,7 +587,7 @@ export default function ScoutPage() {
                       <span className="font-heading font-bold tabular-nums text-ink">{kc(SCOUT_LEAGUE_WEEKLY_COST * weeks)}</span>
                     </div>
                     <div className="text-xs text-muted pt-1">
-                      Cestovné se strhává postupně každé pondělí ({kc(SCOUT_LEAGUE_WEEKLY_COST)} / týden) při odeslání hlášení.
+                      Cestovné ({kc(SCOUT_LEAGUE_WEEKLY_COST)} / týden) se strhává každé pondělí po odvedené práci, i když skaut zrovna nikoho nenajde.
                     </div>
                   </div>
 
@@ -660,7 +660,7 @@ export default function ScoutPage() {
                       <span className="font-heading font-bold tabular-nums text-ink">{kc(SCOUT_LEAGUE_WEEKLY_COST * weeks)}</span>
                     </div>
                     <div className="text-xs text-muted pt-1">
-                      Cestovné se strhává postupně každé pondělí ({kc(SCOUT_LEAGUE_WEEKLY_COST)} / týden) při odeslání hlášení.
+                      Cestovné ({kc(SCOUT_LEAGUE_WEEKLY_COST)} / týden) se strhává každé pondělí po odvedené práci, i když skaut zrovna nikoho nenajde.
                     </div>
                   </div>
 
