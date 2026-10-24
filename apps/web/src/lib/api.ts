@@ -13,6 +13,20 @@ function wait(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/**
+ * Událost pro TeamProvider: API odmítlo požadavek s 401. Jestli je přihlášení
+ * opravdu pryč, rozhodne až TeamProvider, 401 má i pár jiných důvodů.
+ */
+export const AUTH_REJECTED_EVENT = "auth-rejected";
+
+export interface AuthRejectedDetail {
+  path: string;
+  error: string;
+}
+
+/** 401 z přihlášení znamená špatné heslo, ne ztracenou session. */
+const LOGIN_PATH = "/auth/login";
+
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   // Automaticky přidáme Authorization header pokud je token v localStorage
   const token = typeof window !== "undefined" ? localStorage.getItem("om_token") : null;
@@ -49,6 +63,10 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
     const err = await res.json().catch(() => ({ error: res.statusText }));
     const error = new Error((err as { error: string }).error ?? "API error");
     (error as Error & { status: number }).status = res.status;
+    if (res.status === 401 && path !== LOGIN_PATH && typeof window !== "undefined") {
+      const detail: AuthRejectedDetail = { path, error: error.message };
+      window.dispatchEvent(new CustomEvent(AUTH_REJECTED_EVENT, { detail }));
+    }
     if (res.status >= 500 && typeof window !== "undefined") {
       trackEvent("api_server_error", {
         endpoint: path,

@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, apiAction, showError, type Player } from "@/lib/api";
+import { trackEvent } from "@/lib/analytics";
 import { nationalityFlag } from "@/lib/nationality";
 import { Spinner, SectionLabel, PositionBadge, useConfirm, BadgePreview, type BadgePattern, Tabs, useTabParam, Sheet, SheetDialog, Button } from "@/components/ui";
 import { PlayerRevealCard } from "@/components/players/reveal-card";
@@ -1828,6 +1829,13 @@ export default function TransfersPage() {
                             console.error("Transfer action failed:", e);
                             errMessage = e.message || "Nepodařilo se podepsat hráče";
                             return null;
+                          });
+                          // Stejná událost jako u apiAction, jinak neúspěšné podpisy v analytice chybí.
+                          trackEvent("game_action", {
+                            action: "Podpis volného hráče",
+                            result: errMessage ? "failed" : "success",
+                            error: errMessage,
+                            path: window.location.pathname,
                           });
                           if (errMessage) {
                             showError("Podpis se nezdařil", errMessage);
