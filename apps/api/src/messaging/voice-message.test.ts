@@ -5,7 +5,7 @@ import {
   VOICE_MESSAGES_PER_WEEK,
   ageGroup,
   buildVoicePrompt,
-  drunkTranscript,
+  drunkSpeech,
   durationSecFromPcm,
   pcmToWav,
   peaksFromPcm,
@@ -120,12 +120,13 @@ describe("hlasovka místo SMS", () => {
     const db = new FalesnaD1([{ sql: /COUNT\(\*\) AS n/, first: { n: 0 } }]);
     const bucket = r2();
 
-    const meta = await recordVoiceMessage(jakoD1(db), { GEMINI_API_KEY: "k", CACHE_KV: kv(null), SEED_DATA: bucket }, {
+    const recorded = await recordVoiceMessage(jakoD1(db), { GEMINI_API_KEY: "k", CACHE_KV: kv(null), SEED_DATA: bucket }, {
       teamId: "t1", messageId: "m1", player: PLAYER, scene: "Lavička.", body: "Trenére, tady Martin 😤", random: () => 0,
     });
 
-    expect(meta).toMatchObject({ type: "voice", audioKey: "voice/m1.wav", durationSec: 2 });
-    expect(meta?.peaks).toHaveLength(40);
+    expect(recorded?.meta).toMatchObject({ type: "voice", audioKey: "voice/m1.wav", durationSec: 2 });
+    expect(recorded?.meta.peaks).toHaveLength(40);
+    expect(recorded?.transcript).toBe("Trenére, tady Martin");
     expect(bucket.stored.has("voice/m1.wav")).toBe(true);
     const body = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
     expect(body.contents[0].parts[0].text.split("#### TRANSCRIPT\n")[1]).toBe("Trenére, tady Martin");
@@ -167,16 +168,20 @@ describe("hlasovka místo SMS", () => {
 });
 
 describe("opilá hlasovka", () => {
-  it("smích po zvolání, pauza u trojtečky, škytnutí; text ke čtení jinak stejný", () => {
-    const out = drunkTranscript("Šéfe... tady Pepa. Tři jedna! Fakt. Dobrou.", () => 0);
-    expect(out).toBe("Šéfe... [long pause] tady Pepa. [hiccup] Tři jedna! [laughs] Fakt. [hiccup] Dobrou.");
+  const DRUNK_SAMPLE = "Šéfe... tady Pepa. Hele, sorry, že volám takhle pozdě, ale ten zápas, co? Tři jedna! "
+    + "My tu u Ježka ještě sedíme, Tonda platí rundu... Hele, zejtra na trénink dorazím asi trochu pozdějc, jo? "
+    + "Ale v pondělí jsem fit, fakt. Vy jste nejlepší trenér v okrese. Fakt. Dobrou.";
+
+  it("opilý text jako ve vítězné variantě C: natažená samohláska, hehe, ehm, opakování", () => {
+    expect(drunkSpeech(DRUNK_SAMPLE)).toBe(
+      "Šééfe... tady Pepa. Hele, sorry, že volám takhle pozdě, ale ten zápas, co? Tři jedna! Hehehe. "
+      + "My tu u Ježka ještě sedíme, Tonda platí rundu... Ehm... Hele, zejtra na trénink dorazím asi trochu pozdějc, jo? "
+      + "Ale v pondělí jsem fit, fakt fakt. Vy jste nejlepší trenér v okrese. Fakt... fakt. Dobrou... dobrou.",
+    );
   });
 
-  it("každá značka nanejvýš dvakrát", () => {
-    const out = drunkTranscript("A! B! C! D... E... F... G. H. I. J.", () => 0);
-    expect(out.match(/\[laughs\]/g)).toHaveLength(2);
-    expect(out.match(/\[long pause\]/g)).toHaveLength(2);
-    expect(out.match(/\[hiccup\]/g)).toHaveLength(2);
+  it("krátká zpráva: jen natažení a smích, jméno se neopakuje", () => {
+    expect(drunkSpeech("Trenére, vyhráli jsme! Tonda je borec.")).toBe("Treenére, vyhráli jsme! Hehehe. Tonda je borec.");
   });
 
   it("opilé pokyny jen když hráč volá z hospody", () => {
@@ -185,14 +190,15 @@ describe("opilá hlasovka", () => {
     expect(buildVoicePrompt(base)).not.toContain("slurred");
   });
 
-  it("do TTS jdou značky, do přepisu ve hře ne", async () => {
+  it("namluví se opilý text a ten se vrátí jako přepis", async () => {
     const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => ttsResponse(pcm(2)));
     vi.stubGlobal("fetch", fetchMock);
     const db = new FalesnaD1([{ sql: /COUNT\(\*\) AS n/, first: { n: 0 } }]);
-    await recordVoiceMessage(jakoD1(db), { GEMINI_API_KEY: "k", CACHE_KV: kv(null), SEED_DATA: r2() }, {
+    const recorded = await recordVoiceMessage(jakoD1(db), { GEMINI_API_KEY: "k", CACHE_KV: kv(null), SEED_DATA: r2() }, {
       teamId: "t1", messageId: "m1", player: PLAYER, scene: "Výhra.", body: "Tři jedna! Dobrou.", drunk: true, random: () => 0,
     });
     const body = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
-    expect(body.contents[0].parts[0].text.split("#### TRANSCRIPT\n")[1]).toBe("Tři jedna! [laughs] Dobrou. [hiccup]");
+    expect(body.contents[0].parts[0].text.split("#### TRANSCRIPT\n")[1]).toBe("Třii jedna! Hehehe. Dobrou... dobrou.");
+    expect(recorded?.transcript).toBe("Třii jedna! Hehehe. Dobrou... dobrou.");
   });
 });

@@ -486,7 +486,7 @@ async function spawnForTeam(
   // 7. Místo SMS hlasovka (voice-message.ts): nanejvýš 2 týdně na tým a jen přes Gemini.
   //    Text zůstává v těle zprávy jako přepis, z něj AI bere kontext pro další odpovědi.
   const messageId = uuid();
-  const voice = await recordVoiceMessage(db, env, {
+  const recorded = await recordVoiceMessage(db, env, {
     teamId,
     messageId,
     scene: scenario.description,
@@ -503,12 +503,15 @@ async function spawnForTeam(
       lifeContext: (playerRow.life_context as string | null) ?? null,
     },
   });
+  const voice = recorded?.meta ?? null;
+  // U hlasovky je tělem zprávy přepis toho, co zaznělo (u opilé se liší od SMS).
+  const body = recorded?.transcript ?? initialBody;
   const now = new Date().toISOString();
 
   await db.batch([
     db.prepare(
       "INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, metadata, sent_at, read) VALUES (?, ?, 'player', ?, ?, ?, ?, ?, 0)",
-    ).bind(messageId, convId, player.id, senderName, initialBody, JSON.stringify({ ai_generated: true, scenario_id: scenario.id, turn: 0, ...voice }), now),
+    ).bind(messageId, convId, player.id, senderName, body, JSON.stringify({ ai_generated: true, scenario_id: scenario.id, turn: 0, ...voice }), now),
     db.prepare(
       `UPDATE conversations
        SET ai_thread_state = ?, ai_thread_active = 1, ai_thread_last_at = ?,

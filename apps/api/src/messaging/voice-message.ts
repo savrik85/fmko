@@ -103,36 +103,62 @@ export function spokenText(body: string): string {
 }
 
 /**
- * Opilý hlas. Pokyny samotné dají huhlání a pauzy, smích ale skoro ne
- * (ověřeno přepisem tří variant 2026-10-24). Proto se do textu ke čtení
- * přidávají značky, které model zahraje a nepřečte. V přepisu ve hře nejsou.
+ * Opilý hlas. Pokyny samotné dají huhlání a pauzy, smích ale skoro ne.
+ * Ze tří variant (2026-10-24) vyhrála ta, kde je opilý i samotný text:
+ * natažené samohlásky, „hehe“, „ehm“ a opakovaná slova. Model je pak zahraje.
  */
 const DRUNK_NOTES = "Drunk: heavily slurred speech and poor articulation, mushy consonants, words running into each other, "
   + "stretched vowels. Slow, uneven tempo; he loses his train of thought, makes long pauses in the middle of sentences "
-  + "and restarts words. He giggles and laughs at his own words and hiccups a couple of times.";
+  + "and restarts words. He giggles and laughs at his own words.";
 
-const DRUNK_TAG_LIMIT = 2;
+/** Krátká slova, která opilý člověk opakuje („vy… vy jste“). U jmen by opakování znělo divně. */
+const REPEATABLE_WORDS = new Set(["vy", "ty", "já", "my", "to", "ale", "hele", "jo", "no", "tak", "fakt", "prostě", "víte"]);
 
-/** Značky do textu ke čtení: smích po zvolání, dlouhá pauza u trojtečky, občas škytnutí. Každé nanejvýš dvakrát. */
-export function drunkTranscript(text: string, random: () => number = Math.random): string {
+/**
+ * Text, jak ho namluví opilý hráč: natažená samohláska v prvním slově
+ * (Šééfe), smích po zvoláních, „ehm“ uprostřed, zopakované krátké slovo,
+ * „fakt fakt“ a zopakované krátké rozloučení. Obsah zprávy zůstává stejný.
+ */
+export function drunkSpeech(text: string): string {
+  const sentences = (text.match(/[^.!?…]+[.!?…]*/g) ?? [text]).map((s) => s.trim()).filter(Boolean);
+  if (sentences.length === 0) return text;
+
+  sentences[0] = sentences[0].replace(/[áéíóúůý]|[aeiouy]/i, (vowel) => vowel + vowel);
+
   let laughs = 0;
-  let pauses = 0;
-  let hiccups = 0;
-  return text.replace(/([.!?…]+)(\s+|$)/g, (match, punct: string, space: string) => {
-    if (punct.includes("!") && laughs < DRUNK_TAG_LIMIT) {
+  for (let i = 0; i < sentences.length && laughs < 2; i++) {
+    if (sentences[i].endsWith("!")) {
+      sentences[i] += laughs === 0 ? " Hehehe." : " Hehe.";
       laughs++;
-      return `${punct} [laughs]${space}`;
     }
-    if ((punct.startsWith("...") || punct === "…") && pauses < DRUNK_TAG_LIMIT) {
-      pauses++;
-      return `${punct} [long pause]${space}`;
+  }
+
+  if (sentences.length >= 4) {
+    const middle = Math.floor(sentences.length / 2);
+    sentences[middle] = `Ehm... ${sentences[middle]}`;
+  }
+
+  // „fakt fakt“ jen ve delší větě, samotné „Fakt.“ si nechá opakování níž.
+  const emphasisIndex = sentences.findIndex((s, i) => i > 0 && /\bfakt\b/i.test(s) && s.split(/\s+/).length >= 3);
+  if (emphasisIndex >= 0) {
+    sentences[emphasisIndex] = sentences[emphasisIndex].replace(/\bfakt\b/i, (word) => `${word} ${word.toLocaleLowerCase("cs")}`);
+  }
+
+  for (let i = sentences.length - 2; i >= 1; i--) {
+    const first = sentences[i].match(/^\p{L}+/u)?.[0];
+    if (i !== emphasisIndex && first && REPEATABLE_WORDS.has(first.toLocaleLowerCase("cs"))) {
+      sentences[i] = `${first}... ${first.toLocaleLowerCase("cs")}${sentences[i].slice(first.length)}`;
+      break;
     }
-    if (hiccups < DRUNK_TAG_LIMIT && random() < 0.35) {
-      hiccups++;
-      return `${punct} [hiccup]${space}`;
-    }
-    return match;
-  });
+  }
+
+  const last = sentences.length - 1;
+  const farewell = sentences[last].match(/^(\p{L}+)([.!?…]*)$/u);
+  if (last > 0 && farewell) {
+    sentences[last] = `${farewell[1]}... ${farewell[1].toLocaleLowerCase("cs")}${farewell[2] || "."}`;
+  }
+
+  return sentences.join(" ");
 }
 
 function languageNote(nationality: string | null): string {
@@ -275,6 +301,12 @@ export async function voiceMessagesLastWeek(db: D1Database, teamId: string, now:
   return row?.n ?? 0;
 }
 
+export interface RecordedVoiceMessage {
+  meta: VoiceMessageMeta;
+  /** Co v nahrávce zazní. U opilé hlasovky se liší od textu SMS, proto jde do těla zprávy jako přepis. */
+  transcript: string;
+}
+
 export interface VoicePlayer {
   id: string;
   firstName: string;
@@ -285,7 +317,7 @@ export interface VoicePlayer {
 }
 
 /**
- * Zkusí zprávu od hráče namluvit a uložit do R2. Vrací metadata hlasovky,
+ * Zkusí zprávu od hráče namluvit a uložit do R2. Vrací metadata hlasovky a přepis,
  * nebo null, když má odejít obyčejná SMS: týdenní strop, náhoda, jiný
  * poskytovatel než Gemini, chybějící úložiště nebo chyba namluvení.
  *
@@ -306,7 +338,7 @@ export async function recordVoiceMessage(
     random?: () => number;
     now?: Date;
   },
-): Promise<VoiceMessageMeta | null> {
+): Promise<RecordedVoiceMessage | null> {
   if (!env.GEMINI_API_KEY || !env.SEED_DATA) return null;
   const { readAiProvider } = await import("../lib/ai-provider");
   if ((await readAiProvider(env.CACHE_KV)) !== "gemini") return null;
@@ -321,7 +353,7 @@ export async function recordVoiceMessage(
 
   const plain = spokenText(opts.body);
   if (!plain) return null;
-  const transcript = opts.drunk ? drunkTranscript(plain, opts.random ?? Math.random) : plain;
+  const transcript = opts.drunk ? drunkSpeech(plain) : plain;
 
   let stored: unknown = null;
   try {
@@ -355,5 +387,8 @@ export async function recordVoiceMessage(
     .catch((e) => { logger.warn({ module: M }, `uložení hlasovky ${audioKey}`, e); return null; });
   if (!saved) return null;
 
-  return { type: "voice", audioKey, durationSec: durationSecFromPcm(pcm), peaks: peaksFromPcm(pcm), voice: voice.name };
+  return {
+    meta: { type: "voice", audioKey, durationSec: durationSecFromPcm(pcm), peaks: peaksFromPcm(pcm), voice: voice.name },
+    transcript,
+  };
 }
