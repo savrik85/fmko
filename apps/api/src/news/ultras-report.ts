@@ -4,6 +4,8 @@
 import { logger } from "../lib/logger";
 import type { AiContext } from "../lib/ai-provider";
 import { calculateFacilityEffects } from "../stadium/stadium-generator";
+import { seedFromString } from "../lib/seed";
+import { generateUltrasPhoto, ULTRAS_PHOTOS_PER_REPORT } from "./ultras-photo";
 
 export interface UltrasPhoto {
   teamId: string;
@@ -16,6 +18,8 @@ export interface UltrasPhoto {
   capacity: number;
   fillPct: number;
   caption: string;
+  /** Fotka plachty od AI (`ultras-photo.ts`), bez ní zůstane kreslená plachta. */
+  photoId?: string;
 }
 
 interface HomeMatch {
@@ -134,6 +138,8 @@ export async function generateUltrasReport(
   geminiApiKey: string,
   calendarId: string,
   aiCtx?: AiContext,
+  /** Workers AI a R2 pro fotky plachet. Bez nich zůstanou kreslené plachty. */
+  media?: { ai?: Ai; bucket?: R2Bucket },
 ): Promise<{ newsId: string | null; photos: number; skipped: boolean }> {
   // 1. Odvodit league_id, game_week, season_number z kalendáře.
   const cal = await db
@@ -216,6 +222,12 @@ export async function generateUltrasReport(
 
   // 4. Galerie kotlů.
   const photos = pickGallery(homeMatches);
+  // 4b. Fotky plachet místo kreslených. Nápis kontroluje Gemini, jen když kolo Gemini
+  //     píše: testing jede přes Workers AI a nemá ujídat produkční kvótu.
+  if (media?.ai && media.bucket) {
+    const ocrKey = (aiCtx?.provider ?? "gemini") === "gemini" ? geminiApiKey : undefined;
+    await addUltrasPhotos(media.ai, media.bucket, photos, homeMatches, ocrKey);
+  }
 
   // 5. Článek přes Gemini (fallback při selhání).
   let article = "";
@@ -252,6 +264,39 @@ export async function generateUltrasReport(
     .run();
 
   return { newsId, photos: photos.length, skipped: false };
+}
+
+/**
+ * Doplní kotlům s plachtou fotku (`photoId`). Bere barvy šál z klubových barev
+ * domácích. Plachty bez nápisu a ty nad limit kola zůstanou kreslené.
+ */
+export async function addUltrasPhotos(
+  ai: Ai,
+  bucket: R2Bucket,
+  photos: UltrasPhoto[],
+  teams: Array<{ homeTeamId: string; primaryColor: string; secondaryColor: string }>,
+  ocrKey?: string,
+): Promise<number> {
+  let added = 0;
+  for (const ph of photos) {
+    if (added >= ULTRAS_PHOTOS_PER_REPORT || ph.photoId || !ph.ultrasText?.trim()) continue;
+    const team = teams.find((t) => t.homeTeamId === ph.teamId);
+    // Seed z id fotky, ne z týmu: se stejnou plachtou by jinak kotel měl každé kolo tutéž fotku.
+    const photoId = crypto.randomUUID();
+    // Fotka je jen ozdoba: když generování spadne nečekanou chybou, report musí vyjít s kreslenou plachtou.
+    const id = await generateUltrasPhoto(ai, bucket, {
+      ultrasText: ph.ultrasText,
+      bannerColor: ph.bannerColor,
+      textColor: ph.textColor,
+      primaryColor: team?.primaryColor ?? ph.bannerColor,
+      secondaryColor: team?.secondaryColor ?? ph.textColor,
+      level: ph.level,
+    }, photoId, seedFromString(photoId), ocrKey)
+      .catch((e: unknown) => { logger.warn({ module: "ultras-report" }, `fotka plachty ${ph.teamName} spadla`, e); return null; });
+    if (id) { ph.photoId = id; added++; }
+    else logger.warn({ module: "ultras-report" }, `fotka plachty ${ph.teamName} se nepovedla, zůstane kreslená`);
+  }
+  return added;
 }
 
 /** Inline Gemini REST volání (vzor ai-reporter.ts). Volný text, 1. řádek = headline. */

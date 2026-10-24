@@ -516,6 +516,19 @@ leagueRouter.get("/leagues/:leagueId/results", async (c) => {
   return c.json({ results: results.results });
 });
 
+// GET /api/ultras-photos/:id — fotka plachty z reportu Prales Ultras (news/ultras-photo.ts).
+// Veřejná jako zpravodaj sám, plachty visí na stadionu, žádné soukromé údaje.
+leagueRouter.get("/ultras-photos/:id", async (c) => {
+  const id = c.req.param("id");
+  if (!/^[0-9a-f-]{36}$/.test(id)) return c.json({ error: "Neplatná fotka" }, 400);
+  const { ultrasPhotoKey } = await import("../news/ultras-photo");
+  const obj = await c.env.SEED_DATA.get(ultrasPhotoKey(id));
+  if (!obj) return c.json({ error: "Fotka neexistuje" }, 404);
+  return new Response(obj.body, {
+    headers: { "Content-Type": "image/jpeg", "Cache-Control": "public, max-age=31536000, immutable" },
+  });
+});
+
 // GET /api/leagues/:leagueId/news — zpravodaj cizí ligy
 leagueRouter.get("/leagues/:leagueId/news", async (c) => {
   const leagueId = c.req.param("leagueId");
