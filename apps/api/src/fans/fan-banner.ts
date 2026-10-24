@@ -113,18 +113,25 @@ export async function prepoctiTransparent(
   // na Tribunu. Výjimka: heslo z katalogu se zkusí nahradit vlastním, když je
   // AI k dispozici. Katalogová hesla se po stadionech opakují.
   const zKatalogu = !!stary && mozneTransparenty(stav).includes(stary);
-  if (staryPlati && !(zKatalogu && ai)) return null;
+  // Plachta, která už visela na domácím zápase (je v galerii reportu kotle), se do dalšího
+  // přemaluje: důvod zůstává, heslo bude jiné. Fotka plachty jde ke každému domácímu zápasu
+  // i na klubový web, se stejným nápisem by se tam kolo co kolo opakovala.
+  const alreadyShown = staryPlati && !!stary && await bannerAlreadyShown(db, teamId, stary);
+  if (staryPlati && !alreadyShown && !(zKatalogu && ai)) return null;
+  const forbidden = alreadyShown && stary ? [...obsazene, stary] : obsazene;
 
   const odModelu = ai
     ? await napisPlachtu(ai, {
-        ton: sablona.tone, stav, sablona, obec: stav.obec ?? "naše obec", sponzori, obsazene,
+        ton: sablona.tone, stav, sablona, obec: stav.obec ?? "naše obec", sponzori, obsazene: forbidden,
         seed: seedFromString(`vzory|${teamId}|${gameDate.slice(0, 10)}`),
       })
     : null;
   // Model nic použitelného nenapsal a stará plachta pořád platí: nechá se viset,
   // aby se kvůli výpadku nestřídala katalogová hesla.
-  if (!odModelu && staryPlati) return null;
-  const t = { ...sablona, text: odModelu ?? zalozniHeslo(stav, sablona, obsazene) };
+  if (!odModelu && staryPlati && !alreadyShown) return null;
+  const t = { ...sablona, text: odModelu ?? zalozniHeslo(stav, sablona, forbidden) };
+  // Pro tenhle důvod katalog jiné heslo nemá (výtka k taktice má jen jedno): plachta visí dál.
+  if (alreadyShown && t.text === stary) return null;
 
   await db
     .prepare("UPDATE stadiums SET ultras_text = ?, ultras_text_duvod = ? WHERE team_id = ?")
@@ -172,6 +179,18 @@ export async function formaKlubu(db: D1Database, teamId: string): Promise<{ seri
     }
   }
   return { serie, goly, zapasu: rows.results.length };
+}
+
+/** Visela už tahle plachta na domácím zápase? Galerie reportu kotle nese nápis každého domácího kotle. */
+async function bannerAlreadyShown(db: D1Database, teamId: string, text: string): Promise<boolean> {
+  const row = await db.prepare(
+    `SELECT 1 AS shown FROM ultras_reports r, json_each(r.photos_json) p
+      WHERE r.league_id = (SELECT league_id FROM teams WHERE id = ?)
+        AND json_extract(p.value, '$.teamId') = ? AND json_extract(p.value, '$.ultrasText') = ?
+      LIMIT 1`,
+  ).bind(teamId, teamId, text).first<{ shown: number }>()
+    .catch((e) => { logger.warn({ module: M }, `visela plachta ${teamId} na zápase`, e); return null; });
+  return !!row;
 }
 
 /** Kluby ze stejné ligy: název, obec a co jim visí na plachtě. */

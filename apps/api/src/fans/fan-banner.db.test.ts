@@ -28,6 +28,7 @@ beforeAll(async () => {
   await db.exec("CREATE TABLE managers (team_id TEXT PRIMARY KEY, name TEXT)");
   await db.exec("CREATE TABLE fan_rivalries (id TEXT, team_a TEXT, team_b TEXT, heat INTEGER, fights INTEGER, incidents INTEGER, last_game_date TEXT, history TEXT)");
   await db.exec("CREATE TABLE matches (home_team_id TEXT, away_team_id TEXT, home_score INTEGER, away_score INTEGER, simulated_at TEXT, created_at TEXT)");
+  await db.exec("CREATE TABLE ultras_reports (league_id TEXT, photos_json TEXT)");
   await db.batch([
     db.prepare("INSERT INTO villages VALUES ('v1', 'Podolí', 'Praha')"),
     db.prepare("INSERT INTO teams VALUES ('t1', 'FK Rohlík Podolí', 'v1', NULL, 'l1')"),
@@ -66,5 +67,30 @@ describe("přepočet plachty", () => {
   it("stará plachta s číslem jde dolů", async () => {
     await db.prepare("UPDATE stadiums SET ultras_text = 'PODOLÍ MÁ 5 VÝHER' WHERE team_id = 't1'").run();
     expect(await prepoctiTransparent(db, "t1", [kotel], "2026-09-28")).not.toBeNull();
+  });
+});
+
+describe("plachta po domácím zápase", () => {
+  const report = (texts: Array<{ teamId: string; ultrasText: string }>) =>
+    db.prepare("INSERT INTO ultras_reports VALUES ('l1', ?)").bind(JSON.stringify(texts)).run();
+
+  it("dokud na zápase nevisela, nebo visela jiná, zůstává", async () => {
+    await prepoctiTransparent(db, "t1", [kotel], "2026-09-29");
+    const before = await plachta();
+    await report([{ teamId: "t1", ultrasText: "NĚJAKÁ STARŠÍ PLACHTA" }, { teamId: "t2", ultrasText: before!.ultras_text }]);
+    expect(await prepoctiTransparent(db, "t1", [kotel], "2026-09-29")).toBeNull();
+    expect((await plachta())!.ultras_text).toBe(before!.ultras_text);
+  });
+
+  it("plachta, která už visela na domácím zápase, se před dalším přemaluje se stejným důvodem", async () => {
+    const before = await plachta();
+    await report([{ teamId: "t1", ultrasText: before!.ultras_text }]);
+    const repainted = await prepoctiTransparent(db, "t1", [kotel], "2026-09-30");
+    expect(repainted).not.toBeNull();
+    const after = await plachta();
+    expect(after!.ultras_text).not.toBe(before!.ultras_text);
+    expect(after!.ultras_text_duvod).toBe(before!.ultras_text_duvod);
+    // Nová plachta na zápase ještě nevisela, takže druhý den visí dál.
+    expect(await prepoctiTransparent(db, "t1", [kotel], "2026-10-01")).toBeNull();
   });
 });
