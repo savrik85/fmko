@@ -154,12 +154,38 @@ export const LEVEL_WINDOW_ROUNDS = 6;
 export const LEVEL_MIN = 0.5;
 export const LEVEL_MAX = 2.5;
 
+/**
+ * Síla prioru: úroveň z přehrání nového enginu (engine-transition.ts) váží jako
+ * tolik zápasů odehraných těsně před prvním skutečným kolem.
+ *
+ * Proč čtrnáct, tedy dvě kola čtrnáctičlenné soutěže. Góly jsou přerozptýlené
+ * (rozptyl/průměr 1 + 1/DISPERSION_C = 1,385), takže úroveň z n zápasů po zhruba
+ * 4,5 gólu má relativní chybu √(1,385 / (4,5 · n)): z jednoho kola (7 zápasů) 21 %.
+ * Přehrání má zápasů 6 552, jenže startovalo z kádrů 9. 10., ne z dnešních, a věříme
+ * mu zhruba na ±15 %. To odpovídá 1,385 / (4,5 · 0,15²) ≈ 14 zápasům.
+ *
+ * Dřív prior nebyl a jedno kolo ho zahodilo celé: po kole 12. 10. vyšla úroveň
+ * Prachatic 1,09 místo 1,38 z přehrání, Prahy 1,56 místo 1,36, Budějovic 0,84 místo 1,12,
+ * přitom všechny tři odchylky jsou v jedné směrodatné chybě jednoho kola.
+ */
+export const LEVEL_PRIOR_MATCHES = 14;
+
 export interface LevelSample {
   /** Góly, které v zápase skutečně padly. */
   goals: number;
   /** Góly, které by zápasu dal model při úrovni 1, podle síly obou týmů. */
   expected: number;
   /** Kolik kol zpátky se hrálo. 0 = poslední odehrané kolo. */
+  roundsAgo: number;
+}
+
+export interface LevelPrior {
+  /** Úroveň z přehrání nového enginu (ENGINE_FALLBACK_LEVEL). */
+  level: number;
+  /**
+   * Kolik kol zpátky prior „hrál": těsně před nejstarším skutečným kolem, tedy počet
+   * skutečných kol v okně. Stárne jako každé jiné kolo a s plným oknem vypadne.
+   */
   roundsAgo: number;
 }
 
@@ -172,20 +198,35 @@ export interface LevelSample {
  * víc (viz BASE_HOME_GOALS). Prostý průměr by tu úroveň nafoukl a sázka
  * na „míň gólů" by začala vydělávat.
  *
- * Žádné přitahování k referenční úrovni. Zpětný test ukázal, že by v silných
- * soutěžích úroveň soustavně podstřelovalo, tedy právě tím směrem, ze kterého
- * sázející těží.
+ * Smršťování k přehrání (`prior`) je bayesovské: gama prior na úroveň a góly úměrné
+ * úrovni dávají aposteriorní průměr (váha_prioru · úroveň_prioru + Σw · úroveň_dat) /
+ * (váha_prioru + Σw), kde Σw je počet zápasů vážený stářím kola a váha prioru je
+ * LEVEL_PRIOR_MATCHES zestárlých stejně jako kolo o `prior.roundsAgo` zpátky. Na začátku
+ * tedy rozhoduje přehrání, s každým kolem víc data, a s plným oknem (LEVEL_WINDOW_ROUNDS)
+ * prior vypadne úplně.
+ *
+ * K referenční úrovni 1 se nepřitahuje. Zpětný test ukázal, že by v silných soutěžích
+ * úroveň soustavně podstřelovalo, tedy právě tím směrem, ze kterého sázející těží. Prior
+ * z přehrání je jiná věc: je změřený pro každou soutěž na novém enginu a v ustáleném
+ * stavu (šest kol) už nepůsobí, takže zářijový zpětný test platí dál.
  */
-export function goalLevel(samples: LevelSample[]): number {
-  let skutecne = 0;
-  let cekane = 0;
+export function goalLevel(samples: LevelSample[], prior?: LevelPrior): number {
+  let actual = 0;
+  let expected = 0;
+  let matches = 0;
   for (const s of samples) {
     const w = Math.pow(0.5, s.roundsAgo / LEVEL_HALF_LIFE_ROUNDS);
-    skutecne += w * s.goals;
-    cekane += w * s.expected;
+    actual += w * s.goals;
+    expected += w * s.expected;
+    matches += w;
   }
-  if (cekane <= 0) return 1;
-  return clamp(skutecne / cekane, LEVEL_MIN, LEVEL_MAX);
+  const priorWeight = prior && prior.roundsAgo < LEVEL_WINDOW_ROUNDS
+    ? LEVEL_PRIOR_MATCHES * Math.pow(0.5, prior.roundsAgo / LEVEL_HALF_LIFE_ROUNDS)
+    : 0;
+  if (expected <= 0) return prior ? clamp(prior.level, LEVEL_MIN, LEVEL_MAX) : 1;
+  const dataLevel = actual / expected;
+  if (!prior || priorWeight <= 0) return clamp(dataLevel, LEVEL_MIN, LEVEL_MAX);
+  return clamp((priorWeight * prior.level + matches * dataLevel) / (priorWeight + matches), LEVEL_MIN, LEVEL_MAX);
 }
 
 /**

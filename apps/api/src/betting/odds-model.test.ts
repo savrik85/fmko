@@ -3,7 +3,7 @@ import {
   BASE_HOME_GOALS, BASE_AWAY_GOALS, DISPERSION_C, MARGIN, MIN_ODDS_X100, MAX_ODDS_X100,
   expectedGoals, formAdjustment, goalDistribution, outcomeProbabilities, totalsProbabilities,
   doubleChanceProbabilities,
-  goalLevel, LEVEL_MIN, LEVEL_MAX, LEVEL_HALF_LIFE_ROUNDS,
+  goalLevel, LEVEL_MIN, LEVEL_MAX, LEVEL_HALF_LIFE_ROUNDS, LEVEL_PRIOR_MATCHES, LEVEL_WINDOW_ROUNDS,
   scorerShares, availability, scorerProbability, MAX_SHARE, type ScorerInput,
   applyMargin, toOddsX100, marketOdds, singleSideOdds, combineOddsX100, capPayout,
 } from "./odds-model";
@@ -143,6 +143,44 @@ describe("úroveň gólů soutěže", () => {
   it("jedno ujeté kolo nevyrobí nesmyslnou úroveň", () => {
     expect(goalLevel([{ goals: 40, expected: 3, roundsAgo: 0 }])).toBe(LEVEL_MAX);
     expect(goalLevel([{ goals: 0, expected: 3, roundsAgo: 0 }])).toBe(LEVEL_MIN);
+  });
+});
+
+describe("úroveň gólů se smršťuje k přehrání nového enginu", () => {
+  const roundOf = (goals: number, expected: number, roundsAgo = 0) =>
+    Array.from({ length: 7 }, () => ({ goals, expected, roundsAgo }));
+
+  it("přehrání váží jako LEVEL_PRIOR_MATCHES zápasů", () => {
+    expect(LEVEL_PRIOR_MATCHES).toBe(14);
+    // Přehrání o jeden poločas zpátky váží 14 × 0,5 = 7 zápasů, stejně jako kolo dat:
+    // (7 × 1,0 + 7 × 2,0) / 14 = 1,5.
+    expect(goalLevel(roundOf(6, 3), { level: 1, roundsAgo: LEVEL_HALF_LIFE_ROUNDS })).toBeCloseTo(1.5, 10);
+  });
+
+  it("jedno kolo už přehrání nezahodí (Prachatice po 12. 10.)", () => {
+    // 7 zápasů, 28 gólů při 25,83 očekávaných: samotné kolo dá 1,084, dřív platilo celé.
+    // Přehrání 1,38 je kolo zpátky: váha 14 × 0,5^(1/2) = 9,8995 zápasu proti 7.
+    // (9,8995 × 1,38 + 7 × 1,0840) / 16,8995 = 1,2574.
+    const samples = roundOf(4, 3.69);
+    expect(goalLevel(samples)).toBeCloseTo(1.0840, 4);
+    expect(goalLevel(samples, { level: 1.38, roundsAgo: 1 })).toBeCloseTo(1.2574, 4);
+  });
+
+  it("s dalšími koly přehrání slábne a s plným oknem vypadne", () => {
+    const fiveRounds = [0, 1, 2, 3, 4].flatMap((r) => roundOf(6, 3, r));
+    const sixRounds = [0, 1, 2, 3, 4, 5].flatMap((r) => roundOf(6, 3, r));
+    const afterOne = goalLevel(roundOf(6, 3), { level: 1, roundsAgo: 1 });
+    const afterFive = goalLevel(fiveRounds, { level: 1, roundsAgo: 5 });
+    expect(afterOne).toBeLessThan(afterFive);
+    expect(afterFive).toBeLessThan(2);
+    // Šest kol nového enginu: přehrání je mimo okno, platí jen data jako dřív.
+    expect(goalLevel(sixRounds, { level: 1, roundsAgo: LEVEL_WINDOW_ROUNDS })).toBe(goalLevel(sixRounds));
+    expect(goalLevel(sixRounds, { level: 1, roundsAgo: LEVEL_WINDOW_ROUNDS })).toBeCloseTo(2, 10);
+  });
+
+  it("bez zápasů platí přehrání, mantinely platí i s ním", () => {
+    expect(goalLevel([], { level: 1.38, roundsAgo: 0 })).toBe(1.38);
+    expect(goalLevel([{ goals: 60, expected: 3, roundsAgo: 0 }], { level: 1.38, roundsAgo: 1 })).toBe(LEVEL_MAX);
   });
 
   it("úroveň násobí góly obou týmů a poměr sil nechává být", () => {

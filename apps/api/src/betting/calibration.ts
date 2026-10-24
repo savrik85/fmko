@@ -38,7 +38,9 @@ export const CALIBRATION_DAYS = 21;
  */
 // 2026-10-11: engine podle rolí, STRENGTH_K 0,085 a úroveň gólů jen z kol nového
 // enginu (engine-transition.ts) — hlídá se jen to, co od té doby běží.
-export const MODEL_SINCE = "2026-10-11";
+// 2026-10-26: úroveň gólů se smršťuje k přehrání (LEVEL_PRIOR_MATCHES). Lístek na první
+// kolo sezóny 3 (po 26. 10.) přepíše denní tick ten den ráno už novým modelem.
+export const MODEL_SINCE = "2026-10-26";
 
 /** Pod tolik vyhodnocených tipů se trh neposuzuje, je to jen šum. */
 export const CALIBRATION_MIN_N = 50;
