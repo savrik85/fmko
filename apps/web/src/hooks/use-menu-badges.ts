@@ -20,6 +20,14 @@ export interface MenuBadgesState {
   isLoading: boolean;
 }
 
+/**
+ * Jak staré odznaky obnoví pravidelná kontrola. Jen u viditelné záložky: skrytá
+ * záložka dřív každých 30 s tahala pět endpointů, i když se na ni nikdo nedíval.
+ */
+const POLL_INTERVAL_MS = 60_000;
+/** Změna stránky nebo návrat na záložku obnoví odznaky nejvýš jednou za tuhle dobu. */
+const NAVIGATION_REFRESH_MS = 15_000;
+
 let globalState: MenuBadgesState = {
   unreadMessages: 0,
   incomingOffers: 0,
@@ -35,27 +43,43 @@ let globalState: MenuBadgesState = {
 
 const listeners = new Set<(state: MenuBadgesState) => void>();
 let lastFetchTime = 0;
+let lastFetchTeamId: string | null = null;
 let isFetching = false;
+/** Vynucené obnovení, které přišlo během běžícího načítání, se pustí hned po něm. */
+let queuedRefresh: { teamId: string; token: string | null } | null = null;
 
 function notifyListeners() {
   listeners.forEach((listener) => listener(globalState));
 }
 
-export async function fetchMenuBadges(teamId: string, token: string | null, force = false) {
-  if (isFetching) return;
+interface FetchMenuBadgesOptions {
+  /** Obnovit hned, bez ohledu na stáří dat (událost refresh-menu-badges). */
+  force?: boolean;
+  /** Mladší data se znovu nenačítají. */
+  maxAgeMs?: number;
+}
+
+export async function fetchMenuBadges(teamId: string, token: string | null, options: FetchMenuBadgesOptions = {}) {
+  const { force = false, maxAgeMs = 0 } = options;
+  if (isFetching) {
+    // Běžící načítání by mohlo vrátit stav ještě před změnou, kvůli které se o obnovu žádá.
+    if (force || teamId !== lastFetchTeamId) queuedRefresh = { teamId, token };
+    return;
+  }
   const now = Date.now();
-  // Ochrana proti vícenásobnému volání v krátkém čase (throttle 2s pokud není force)
-  if (!force && now - lastFetchTime < 2000) return;
+  if (!force && teamId === lastFetchTeamId && now - lastFetchTime < maxAgeMs) return;
 
   isFetching = true;
   lastFetchTime = now;
+  lastFetchTeamId = teamId;
 
   try {
     const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
 
     const [convsRes, offersRes, votesRes, gremiumRes, betsRes] = await Promise.allSettled([
       apiFetch<Array<{ unreadCount: number }>>(`/api/teams/${teamId}/conversations`),
-      apiFetch<OffersPayload>(`/api/teams/${teamId}/offers`),
+      // Jen pole pro odznak. Plné /offers je těžké a při zápasovém kole padalo.
+      apiFetch<OffersPayload>(`/api/teams/${teamId}/menu-badges/offers`),
       apiFetch<Array<{ status: string; my_answer: string | null }>>("/api/votes", { headers }),
       apiFetch<{ toVote: number; unseenMeetings: number }>(`/api/teams/${teamId}/competition/pending`),
       apiFetch<{ unseen: number }>(`/api/teams/${teamId}/bets/pending`),
@@ -108,6 +132,9 @@ export async function fetchMenuBadges(teamId: string, token: string | null, forc
     console.error("fetchMenuBadges error:", e);
   } finally {
     isFetching = false;
+    const next = queuedRefresh;
+    queuedRefresh = null;
+    if (next) void fetchMenuBadges(next.teamId, next.token, { force: true });
   }
 }
 
@@ -135,6 +162,47 @@ export function triggerMenuBadgesRefresh() {
   if (typeof window !== "undefined") {
     window.dispatchEvent(new Event("refresh-menu-badges"));
   }
+}
+
+// Hook používá víc komponent naráz (spodní lišta, postranní menu, titulek, stránka Více).
+// Kontrola i posluchače proto běží jednou pro všechny, ne v každé komponentě zvlášť.
+let subscribers = 0;
+let activeTeam: { teamId: string; token: string | null } | null = null;
+let pollTimer: ReturnType<typeof setInterval> | null = null;
+
+function refreshActiveTeam(options: FetchMenuBadgesOptions) {
+  if (activeTeam) void fetchMenuBadges(activeTeam.teamId, activeTeam.token, options);
+}
+
+const onForcedRefresh = () => refreshActiveTeam({ force: true });
+
+const onVisibilityChange = () => {
+  if (document.visibilityState === "visible") refreshActiveTeam({ maxAgeMs: NAVIGATION_REFRESH_MS });
+};
+
+const onPollTick = () => {
+  if (document.visibilityState === "visible") refreshActiveTeam({ maxAgeMs: POLL_INTERVAL_MS });
+};
+
+function subscribe(teamId: string, token: string | null): () => void {
+  activeTeam = { teamId, token };
+  subscribers++;
+  if (subscribers === 1) {
+    window.addEventListener("refresh-menu-badges", onForcedRefresh);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    // Kontrola stáří je levná, takže běží častěji. Načítá se, až když jsou data
+    // starší než minuta, ať odznaky po kliknutí na jinou stránku nejdou znovu.
+    pollTimer = setInterval(onPollTick, NAVIGATION_REFRESH_MS);
+  }
+  return () => {
+    subscribers--;
+    if (subscribers > 0) return;
+    window.removeEventListener("refresh-menu-badges", onForcedRefresh);
+    document.removeEventListener("visibilitychange", onVisibilityChange);
+    if (pollTimer) clearInterval(pollTimer);
+    pollTimer = null;
+    activeTeam = null;
+  };
 }
 
 /**
@@ -169,22 +237,14 @@ export function useMenuBadges(): MenuBadgesState {
 
   useEffect(() => {
     if (!teamId) return;
+    return subscribe(teamId, token);
+  }, [teamId, token]);
 
-    fetchMenuBadges(teamId, token);
-
-    const onRefresh = () => {
-      fetchMenuBadges(teamId, token, true);
-    };
-    window.addEventListener("refresh-menu-badges", onRefresh);
-
-    const interval = setInterval(() => {
-      fetchMenuBadges(teamId, token);
-    }, 30000);
-
-    return () => {
-      window.removeEventListener("refresh-menu-badges", onRefresh);
-      clearInterval(interval);
-    };
+  // Změna stránky obnoví odznaky, ale nejvýš jednou za 15 s. Dřív každé kliknutí
+  // v menu poslalo pět dotazů včetně těžkých nabídek.
+  useEffect(() => {
+    if (!teamId) return;
+    void fetchMenuBadges(teamId, token, { maxAgeMs: NAVIGATION_REFRESH_MS });
   }, [teamId, token, pathname]);
 
   return state;

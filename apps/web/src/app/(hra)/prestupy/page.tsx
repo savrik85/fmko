@@ -810,7 +810,8 @@ export default function TransfersPage() {
 
   const isFiltered = activeCount > 0;
 
-  const refresh = async () => {
+  /** `initial`: první načtení stránky. Odznaky menu se při něm obnovují samy (změna stránky). */
+  const refresh = async ({ initial = false }: { initial?: boolean } = {}) => {
     if (!teamId) return;
     const [fa, market, offers, squad, poRaw] = await Promise.all([
       apiFetch<{ freeAgents: FreeAgent[] }>(`/api/teams/${teamId}/free-agents`).catch((e) => { console.error("Failed to load free agents:", e); return { freeAgents: [] }; }),
@@ -846,20 +847,22 @@ export default function TransfersPage() {
     if (tab === "offers") {
       markOffersSeen(teamId, offers);
       setIncomingOffersCount(0);
-      triggerMenuBadgesRefresh();
+      // Po akci (přijetí, protinabídka…) se mohly změnit i jiné odznaky, třeba nové SMS.
+      // Jedno obnovení stačí: efekt níž už jen označuje viděné, na server se neptá.
+      if (!initial) triggerMenuBadgesRefresh();
     }
   };
 
   useEffect(() => {
     if (!teamId) return;
-    refresh().then(() => setLoading(false)).catch((e) => { console.error("Failed to load transfers data:", e); setLoading(false); });
+    refresh({ initial: true }).then(() => setLoading(false)).catch((e) => { console.error("Failed to load transfers data:", e); setLoading(false); });
   }, [teamId]);
 
+  // Přepnutí na záložku Nabídky: viděné se označí jen u sebe, odznak se nastaví rovnou.
   useEffect(() => {
     if (tab === "offers" && teamId && (incoming.length > 0 || outgoing.length > 0 || incomingBids.length > 0 || outgoingBids.length > 0)) {
       markOffersSeen(teamId, { incoming, outgoing, incomingBids, outgoingBids });
       setIncomingOffersCount(0);
-      triggerMenuBadgesRefresh();
     }
   }, [tab, teamId, incoming, outgoing, incomingBids, outgoingBids]);
 
