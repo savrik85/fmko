@@ -10,6 +10,7 @@ import { AutoGrowTextarea, Spinner } from "@/components/ui";
 import { PhoneFrame } from "@/components/phone/phone-frame";
 import { SponsorLink } from "@/components/sponsors/sponsor-link";
 import { VoiceMessage } from "../VoiceMessage";
+import { CoachVoiceRecorder, type CoachVoiceNote } from "../CoachVoiceRecorder";
 interface Message {
   id: string;
   body: string;
@@ -169,6 +170,8 @@ export default function ConversationPage() {
   const [channel, setChannel] = useState<"sms" | "imessage" | null>("imessage");
   const [replyHint, setReplyHint] = useState<{ text: string; href?: string; label?: string } | null>(null);
   const [creditError, setCreditError] = useState<string | null>(null);
+  // Trenér nahrává nebo kontroluje hlasovou odpověď: řádek pro SMS ustoupí nahrávání.
+  const [voiceActive, setVoiceActive] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
 
   const messagesUrl = isGroup
@@ -339,6 +342,25 @@ export default function ConversationPage() {
       setCreditError(zprava.includes("kredit") ? zprava : "Zprávu se nepodařilo odeslat.");
     }
     setSending(false);
+  };
+
+  /** Hlasová odpověď: přepis jde jako text zprávy, nahrávka v `voice` (jinak stejně jako SMS). */
+  const handleSendVoice = async (note: CoachVoiceNote) => {
+    if (!teamId) return;
+    setCreditError(null);
+    const res = await apiFetch<{ id: string; sentAt: string; credit?: { zbyva: number; cenaSms: number; zprav: number } }>(messagesUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        body: note.transcript,
+        voice: { audioKey: note.audioKey, durationSec: note.durationSec, peaks: note.peaks },
+      }),
+    });
+    if (res.credit) setCredit(res.credit);
+    setMessages((prev) => [...prev, {
+      id: res.id, senderType: "user", senderId: teamId, senderName: "Ty", body: note.transcript,
+      metadata: { type: "voice", durationSec: note.durationSec, peaks: note.peaks }, sentAt: res.sentAt, read: true,
+    }]);
   };
 
   const handleUnrestAction = async (deal: { id: string; message: string }) => {
@@ -745,7 +767,8 @@ export default function ConversationPage() {
           </p>
         )}
         <div className="flex items-end gap-2">
-          {/* Roste s textem, ať je vidět celá zpráva. Enter odesílá, Shift+Enter dělá nový řádek. */}
+          {!voiceActive && (
+          /* Roste s textem, ať je vidět celá zpráva. Enter odesílá, Shift+Enter dělá nový řádek. */
           <AutoGrowTextarea
             value={newMsg}
             onChange={(e) => setNewMsg(e.target.value)}
@@ -768,6 +791,19 @@ export default function ConversationPage() {
             disabled={cekaSeNaHrace || nemaNaSms}
             className="flex-1 min-w-0 bg-gray-100 rounded-[1.25rem] px-3 py-2 text-base leading-6 outline-none focus:ring-2 focus:ring-pitch-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
           />
+          )}
+          {/* Hlasová odpověď jen hráči: přepis čte AI stejně jako SMS. */}
+          {!isGroup && conv?.type === "player" && teamId && (
+            <CoachVoiceRecorder
+              teamId={teamId}
+              convId={convId}
+              disabled={sending || cekaSeNaHrace || nemaNaSms}
+              onSend={handleSendVoice}
+              onActiveChange={setVoiceActive}
+              onError={setCreditError}
+            />
+          )}
+          {!voiceActive && (
           <button
             onClick={handleSend}
             disabled={!newMsg.trim() || sending || cekaSeNaHrace || nemaNaSms}
@@ -777,6 +813,7 @@ export default function ConversationPage() {
           >
             &#9654;
           </button>
+          )}
         </div>
       </div>
       )}
