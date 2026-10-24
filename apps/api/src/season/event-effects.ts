@@ -16,6 +16,33 @@ export interface EventEffect {
 }
 
 /**
+ * Výdrž ze soustředění pro celý kádr.
+ *
+ * Výdrž žije ve dvou kopiích, `skills` a `physical`, a pravdu drží `physical`: čte ji
+ * zápasový engine (engine/lineup-loader.ts, multiplayer/match-runner.ts) i profil hráče.
+ * Dřív se bonus psal jen do `skills`, takže klub za soustředění zaplatil a na hřišti
+ * se nezměnilo nic. Teď se vychází z `physical` a nová hodnota jde do obou kopií
+ * naráz, stejně jako u tréninku (daily-tick.ts) a růstu ze zápasu (match-growth.ts).
+ *
+ * Strop je škála 0–100 jako v původním zápisu. Potenciál ze `skills_max` se záměrně
+ * nehlídá: soustředění slibuje „+5 vytrvalost pro všechny" a s potenciálem by ho
+ * naplno dostalo jen 57 % hráčů lidských klubů (produkce 2026-10-24: 157 z 605
+ * na stropu, 103 jen zčásti).
+ */
+async function applyStaminaBoost(db: D1Database, teamId: string, value: number): Promise<void> {
+  const current = "COALESCE(json_extract(physical, '$.stamina'), json_extract(skills, '$.stamina'))";
+  const boosted = `MIN(100, MAX(1, ${current} + ?))`;
+  await db.prepare(
+    `UPDATE players SET
+       physical = json_set(COALESCE(physical, '{}'), '$.stamina', ${boosted}),
+       skills = json_set(skills, '$.stamina', ${boosted})
+     WHERE team_id = ? AND json_valid(skills) AND json_valid(COALESCE(physical, '{}'))
+       AND ${current} IS NOT NULL`,
+  ).bind(value, value, teamId).run()
+    .catch((e) => logger.warn({ module: "event-effects" }, "apply stamina boost", e));
+}
+
+/**
  * Aplikuje efekty na tým. `label` jde do popisu transakce a condition logu,
  * `gameDate` do transakce.
  */
@@ -51,11 +78,9 @@ export async function applyEventEffects(
       ).bind(effect.value, teamId).run()
         .catch((e) => logger.warn({ module: "event-effects" }, "update morale from event", e));
     }
-    if (effect.type === "stamina_boost") {
-      await db.prepare(
-        `UPDATE players SET skills = json_set(skills, '$.stamina', MIN(100, json_extract(skills, '$.stamina') + ?)) WHERE team_id = ?`,
-      ).bind(effect.value, teamId).run()
-        .catch((e) => logger.warn({ module: "event-effects" }, "apply stamina boost", e));
+    // Letní soustředění. Pražská varianta šablony měla typ `stamina` a nikdo ji neobsloužil.
+    if (effect.type === "stamina_boost" || effect.type === "stamina") {
+      await applyStaminaBoost(db, teamId, effect.value);
     }
     if (effect.type === "experience") {
       await db.prepare(
