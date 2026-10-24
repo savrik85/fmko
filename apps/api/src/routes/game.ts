@@ -1749,12 +1749,19 @@ gameRouter.get("/teams/:teamId/stadium", async (c) => {
   const { loadAmenityInput, withFacilityAmenity } = await import("../season/amenity-outlook");
   const amenityInput = await loadAmenityInput(c.env.DB, teamId);
 
+  // Kolik lidí doma opravdu chodí: u nabídky tribun a přístaveb vedle kapacity,
+  // ať klub nestaví místa, která žádný zápas nenaplní.
+  const { loadHomeAttendance } = await import("../stadium/home-attendance");
+  const homeAttendance = await loadHomeAttendance(c.env.DB, teamId);
+
   return c.json({
     stadiumName: teamInfo?.stadium_name ?? null,
     /** Dnes se hraje doma → 3D areál se otevře v zápasovém režimu. */
     matchDay,
     matchDayOpponent: matchDay ? (dalsiDoma?.opponent ?? null) : null,
     capacity: effectiveCapacity,
+    /** Průměrná a nejvyšší návštěva posledních domácích soutěžních zápasů (null = nepovedlo se načíst). */
+    homeAttendance,
     pitchCondition: stadium.pitch_condition,
     pitchType: stadium.pitch_type,
     currentWeather: dnesniPocasi?.weather ?? null,

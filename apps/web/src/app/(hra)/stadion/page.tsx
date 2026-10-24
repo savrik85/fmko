@@ -65,6 +65,32 @@ interface ExtSlotData {
   options: ExtOptionData[];
 }
 
+/** Kolik lidí doma chodí, z posledních domácích soutěžních zápasů. Počítá server. */
+interface HomeAttendance {
+  matches: number;
+  average: number | null;
+  max: number | null;
+}
+
+/** Návštěva, se kterou se dá porovnat kapacita. Null, když klub doma ještě nehrál. */
+function knownAttendance(a: HomeAttendance | null | undefined): { matches: number; average: number; max: number } | null {
+  if (!a || a.matches === 0 || a.average === null || a.max === null) return null;
+  return { matches: a.matches, average: a.average, max: a.max };
+}
+
+/** Věta k nabídce tribun a přístaveb: kolik lidí doma chodí proti tomu, kolik se jich vejde. */
+function attendanceSentence(a: HomeAttendance | null | undefined, capacity: number): string | null {
+  const known = knownAttendance(a);
+  if (!known) return null;
+  const came = known.matches === 1
+    ? `Na posledním domácím zápase přišlo ${known.max} diváků.`
+    : `Na posledních ${known.matches} domácích zápasech přišlo v průměru ${known.average} diváků, nejvíc ${known.max}.`;
+  const filled = known.max >= capacity
+    ? ` Nejvyšší návštěva naplnila celou kapacitu ${capacity} míst.`
+    : ` Ani nejvyšší návštěva nenaplnila kapacitu ${capacity} míst, volných zůstalo ${capacity - known.max}.`;
+  return came + filled;
+}
+
 interface UpgradeOption {
   facility: string;
   label: string;
@@ -153,6 +179,8 @@ interface StadiumData {
   matchDayOpponent?: string | null;
   stadiumName: string | null;
   capacity: number;
+  /** Návštěva posledních domácích soutěžních zápasů (počítá server). Null, když se nenačetla. */
+  homeAttendance?: HomeAttendance | null;
   pitchCondition: number;
   pitchType: string;
   facilities: Record<string, number>;
@@ -596,7 +624,10 @@ export default function StadiumPage() {
   };
 
   const handleBuildExtension = async (slot: ExtSlotData, option: ExtOptionData) => {
-    if (!teamId || acting) return;
+    if (!teamId || acting || !stadium) return;
+    // Vedle kapacity i to, kolik lidí doma opravdu chodí: místa navíc se vyplatí,
+    // jen když se stadion plní.
+    const attendance = knownAttendance(stadium.homeAttendance);
     const ok = await confirm({
       title: option.replaces
         ? `Nahradit mobilní tribunku: ${option.label}?`
@@ -604,7 +635,15 @@ export default function StadiumPage() {
       description: option.replaces
         ? `${slot.label}: mobilní tribunka se rozebere a místo obsadí ${option.label.toLowerCase()} (${option.capacityGain >= 0 ? "+" : ""}${option.capacityGain} míst)`
         : `${slot.label}: +${option.capacityGain} míst`,
-      details: [{ label: "Cena", value: `-${formatCZK(option.cost)}`, color: "text-card-red" }],
+      details: [
+        { label: "Kapacita", value: `${stadium.capacity} → ${stadium.capacity + option.capacityGain} míst` },
+        ...(attendance ? [{
+          label: "Domácí návštěva",
+          value: `průměr ${attendance.average}, nejvíc ${attendance.max}`,
+          color: attendance.max < stadium.capacity ? "text-gold-600" : undefined,
+        }] : []),
+        { label: "Cena", value: `-${formatCZK(option.cost)}`, color: "text-card-red" },
+      ],
       confirmLabel: option.replaces ? "Nahradit" : slot.built ? "Vylepšit" : "Postavit",
     });
     if (!ok) return;
@@ -646,6 +685,23 @@ export default function StadiumPage() {
               <span className="text-muted">·</span>{" "}
               <span className="font-heading font-bold tabular-nums">{formatCZK(o.cost)}</span>
             </div>
+            {stadium && (() => {
+              // Kapacita po stavbě vedle toho, kolik lidí doma opravdu chodí.
+              const attendance = knownAttendance(stadium.homeAttendance);
+              const unused = !!attendance && attendance.max < stadium.capacity;
+              return (
+                <div className={`text-sm leading-snug ${unused ? "text-gold-600" : "text-muted"}`}>
+                  Po stavbě <span className="font-heading font-bold tabular-nums">{stadium.capacity + o.capacityGain}</span> míst.
+                  {attendance && (
+                    <>
+                      {" "}Doma chodí v průměru <span className="font-heading font-bold tabular-nums">{attendance.average}</span>,
+                      nejvíc <span className="font-heading font-bold tabular-nums">{attendance.max}</span>
+                      {unused ? `, dnešních ${stadium.capacity} míst se nezaplnilo.` : "."}
+                    </>
+                  )}
+                </div>
+              );
+            })()}
             {o.locked && <LockDetail detail={o.lockDetail} fallback={o.lockReason} />}
             <div className="flex flex-wrap gap-2">
               <button onClick={() => showExtPreview(slot, o)} className="btn btn-sm min-h-11 flex-1 sm:flex-none">
@@ -1316,6 +1372,16 @@ export default function StadiumPage() {
             Každá strana je jedna karta: vylepšení tribuny a její přístavba pohromadě. Rohy jsou pod nimi. Než přístavbu postavíš,
             podívej se na ni v náhledu ve 3D areálu.
           </p>
+          {(() => {
+            const sentence = attendanceSentence(stadium.homeAttendance, stadium.capacity);
+            const known = knownAttendance(stadium.homeAttendance);
+            if (!sentence || !known) return null;
+            return (
+              <p className={`text-sm leading-snug font-heading font-bold ${known.max < stadium.capacity ? "text-gold-600" : "text-pitch-600"}`}>
+                {sentence}
+              </p>
+            );
+          })()}
           {extError && <div className="text-sm text-card-red font-heading font-bold">{extError}</div>}
 
           <Podnadpis>Strany</Podnadpis>
