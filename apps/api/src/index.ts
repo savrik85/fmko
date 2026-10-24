@@ -167,10 +167,16 @@ export default {
     env = aiSwitch.env;
     if (aiSwitch.provider !== "gemini") log("info", `AI poskytovatel: ${aiSwitch.provider}`);
 
+    // Ligové kolo se hraje v 18:00 pražského času: v létě v 16:xx UTC, v zimě v 17:xx UTC
+    // (lib/match-tick-schedule.ts). Crony jsou v plánu pro obě hodiny.
+    const { pragueHour, isMatchTickNow, isRoundRecoveryTickNow } = await import("./lib/match-tick-schedule");
+    const hourInPrague = pragueHour();
+    const isRecoveryCron = cron === "20 16 * * *" || cron === "20 17 * * *";
+
     // ── ODPOVĚDI CIZÍCH KLUBŮ: při každém cronu doručí odpovědi, jejichž čas nastal ──
     // Klub odpovídá s prodlevou 1–4 hodiny; kdo jednání zrovna nemá otevřené, dostane SMS
     // a push nejpozději s dalším cronem. Lhůty jednání se kontrolují tamtéž.
-    if (cron !== "20 16 * * *") {
+    if (!isRecoveryCron) {
       try {
         const { revealDueAiReplies, expireAiNegotiations } = await import("./transfers/ai-negotiation");
         const pushEnv = { VAPID_PUBLIC_KEY: env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: env.VAPID_SUBJECT };
@@ -302,11 +308,11 @@ export default {
       } catch (e) { log("error", "tournament tick (14:00) failed", e); }
     }
 
-    // ── DOHRÁNÍ ZASEKLÝCH KOL: 16:20 UTC ──
+    // ── DOHRÁNÍ ZASEKLÝCH KOL: 18:20 v Praze (16:20 UTC v létě, 17:20 UTC v zimě) ──
     // Recovery v zápasovém ticku bere jen kola zamčená déle než 15 minut, aby nesahala
-    // na kolo, které konzumer z 16:00 pořád hraje. Kolo, které v 16:0x opravdu spadlo,
+    // na kolo, které konzumer z 18:00 pořád hraje. Kolo, které v 18:0x opravdu spadlo,
     // by tak čekalo do zítřejšího ticku; tenhle ho dohraje ještě týž den.
-    if (cron === "20 16 * * *") {
+    if (isRoundRecoveryTickNow(cron, hourInPrague)) {
       try {
         const recovered = await recoverStuckRounds(env.DB, env.GEMINI_API_KEY);
         for (const r of recovered) {
@@ -321,10 +327,10 @@ export default {
       } catch (e) { log("error", "tournament recovery (16:20) failed", e); }
     }
 
-    // ── MATCH TICK: 18:00 CEST — simuluje zápasy ──
+    // ── MATCH TICK: 18:00 v Praze (16:00 UTC v létě, 17:00 UTC v zimě) — simuluje zápasy ──
     // Režim "queue": cron jen rozešle zprávy, ligy se zpracují každá ve vlastní invokaci.
     // Režim "loop": stará cesta, všechny ligy v jedné invokaci (přepínač v CACHE_KV).
-    const isMatchTick = cron?.startsWith("0 16") || cron?.startsWith("5 16") || cron?.startsWith("10 16") || cron?.startsWith("15 16") || !cron;
+    const isMatchTick = isMatchTickNow(cron, hourInPrague);
     if (isMatchTick) {
       try {
         log("info", "match tick starting");

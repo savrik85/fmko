@@ -124,8 +124,11 @@ npx wrangler d1 execute prales-db-test --remote --file /tmp/query.sql
 
 ### Cron triggers
 - **Plán: Workers Paid ($5/měs)** — limit **250 cron triggers/účet**, prostor je volný
-- Produkce (`wrangler.toml` top level): **9 cronů** (0 3, 0 5, 0 6, 0 10, 0 11, 0 14, 0 16, 5 16, 20 16) — můžeš přidávat další
-- `20 16` jen dohrává zaseklá kola. Recovery bere kolo až po 15 minutách od zamčení
+- Produkce (`wrangler.toml` top level): **12 cronů** (0 3, 0 5, 0 6, 0 10, 0 11, 0 14, 0 16, 5 16, 20 16, 0 17, 5 17, 20 17) — můžeš přidávat další
+- **Ligové kolo je v 18:00 v Praze: v létě 16:xx UTC, v zimě 17:xx UTC.** Které z dvojice
+  crony hraje, rozhoduje skutečná pražská hodina (`lib/match-tick-schedule.ts`); dřív se
+  v zimě hrálo v 17:00, hodinu před rozpisem (oprava 2026-10-24).
+- `20 16` / `20 17` jen dohrává zaseklá kola (v 18:20 v Praze). Recovery bere kolo až po 15 minutách od zamčení
   (`season_calendar.locked_at`), protože kolo se hraje ~5 minut a recovery z `5 16` dřív
   sahala na běžící kolo a zápasy se odsimulovaly dvakrát (incident 2026-09-21).
 - **Crony jsou v UTC, poledne v Praze se v čase posouvá.** Proto jsou v plánu `0 10` i `0 11`:
@@ -133,7 +136,7 @@ npx wrangler d1 execute prales-db-test --remote --file /tmp/query.sql
   hodinou (`Intl.DateTimeFormat` s `Europe/Prague` v `index.ts`), ne samotným cronem.
   Pohár se **neposouvá v nočním ticku** — od 2026-08-28 to `daily-tick.ts` nedělá, jinak by se
   kolo odbylo v 5 ráno, než kdokoli vstane.
-- Testing (`[env.testing.triggers]`): **od 2026-08-17 zrcadlí produkci, teď 9 cronů**.
+- Testing (`[env.testing.triggers]`): **od 2026-08-17 zrcadlí produkci, teď 12 cronů**.
   Dřívější pravidlo `crons = []` vzniklo kvůli limitu Free plánu (5/účet) a je zastaralé.
   Ověřeno přes Cloudflare API: účet je na Workers Paid, napříč workery běželo 8 cronů,
   po přidání testingu je jich 15 z 250.
