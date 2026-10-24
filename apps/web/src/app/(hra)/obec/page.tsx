@@ -278,15 +278,12 @@ function FavorBar({ value, label }: { value: number; label?: string }) {
   );
 }
 
+/**
+ * Volby proběhnou při každém konci sezóny (season-rollover), takže uložený konec mandátu
+ * (volby ho píšou o 4 roky dál) neříká, jak dlouho zastupitel zůstane.
+ */
 function termRemaining(termEndAt: string): string {
-  const now = new Date();
-  const end = new Date(termEndAt);
-  const diffMs = end.getTime() - now.getTime();
-  const days = Math.round(diffMs / (1000 * 60 * 60 * 24));
-  if (days <= 0) return "Funkční období skončilo";
-  if (days < 90) return `Ve funkci ještě ${days} dní`;
-  const years = days / 365;
-  return `Ve funkci ještě ${years.toFixed(1)} let`;
+  return new Date(termEndAt).getTime() > Date.now() ? "Ve funkci do konce sezóny" : "Funkční období skončilo";
 }
 
 export default function ObecPage() {
