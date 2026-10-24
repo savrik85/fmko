@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { useTeam } from "@/context/team-context";
+import { useTeam, SESSION_ENDED_FLAG } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
 import { Button, Input, ErrorBox } from "@/components/ui";
 
@@ -12,8 +12,16 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [sessionEnded, setSessionEnded] = useState(false);
   const { login } = useTeam();
   const router = useRouter();
+
+  // Sem hráče poslala hra, protože přihlášení skončilo. Bez vysvětlení to vypadá jako chyba.
+  useEffect(() => {
+    if (!sessionStorage.getItem(SESSION_ENDED_FLAG)) return;
+    sessionStorage.removeItem(SESSION_ENDED_FLAG);
+    setSessionEnded(true);
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -62,6 +70,11 @@ export default function LoginPage() {
 
         {/* Form */}
         <div className="animate-slide-up" style={{ animationDelay: "80ms" }}>
+          {sessionEnded && (
+            <p className="mb-6 rounded-lg border border-gold-500/30 bg-gold-500/10 px-4 py-3 text-center text-sm text-gold-500">
+              Přihlášení skončilo. Přihlas se znovu a hraj dál.
+            </p>
+          )}
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* name + autoComplete: bez nich správce hesel přihlášení nevyplní.
                 Na mobilu je to ta nejdražší obrazovka v aplikaci. */}

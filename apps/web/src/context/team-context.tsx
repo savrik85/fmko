@@ -1,9 +1,9 @@
 "use client";
 
-import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useRef, type ReactNode } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { apiFetch } from "@/lib/api";
-import { identifyUser, resetUser } from "@/lib/analytics";
+import { apiFetch, AUTH_REJECTED_EVENT, type AuthRejectedDetail } from "@/lib/api";
+import { identifyUser, resetUser, trackEvent } from "@/lib/analytics";
 
 interface AuthState {
   token: string | null;
@@ -86,12 +86,76 @@ const TeamContext = createContext<TeamContextValue | null>(null);
 
 const STORAGE_TOKEN = "om_token";
 const STORAGE_TEAM = "om_team";
+/** Příznak pro přihlašovací stránku (sessionStorage): hráč se neodhlásil sám, přihlášení skončilo. */
+export const SESSION_ENDED_FLAG = "om_session_ended";
+/** Po 401 z /auth/me se to za chvíli zkusí ještě jednou, než se token zahodí. */
+const AUTH_RECHECK_DELAY_MS = 1500;
 const PUBLIC_PATHS = ["/", "/vitejte", "/prihlaseni", "/registrace", "/pozvanka", "/klub"];
+
+function isUnauthorized(e: unknown): boolean {
+  return (e as { status?: number })?.status === 401;
+}
+
+/** Ověří token přes /auth/me. Na jednu 401 se token nezahazuje, zkusí se znovu. */
+async function fetchMeWithRecheck(token: string): Promise<AuthMeResponse> {
+  const fetchMe = () => apiFetch<AuthMeResponse>("/auth/me", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  try {
+    return await fetchMe();
+  } catch (e) {
+    if (!isUnauthorized(e)) throw e;
+    await new Promise((resolve) => setTimeout(resolve, AUTH_RECHECK_DELAY_MS));
+    return fetchMe();
+  }
+}
+
+/**
+ * Zaznamená, proč hráč přišel o přihlášení. Bez toho nešlo dohledat, kdo a proč
+ * token smazal (incident 2026-10-24: token zmizel uprostřed hry).
+ */
+function trackSessionLost(reason: string, error: string | null) {
+  const navigation = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
+  trackEvent("auth_session_lost", {
+    reason,
+    error,
+    path: window.location.pathname,
+    navigation_type: navigation?.type ?? null,
+    standalone: window.matchMedia("(display-mode: standalone)").matches,
+    visibility: document.visibilityState,
+  });
+}
 
 export function TeamProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>(EMPTY_AUTH_STATE);
   const router = useRouter();
   const pathname = usePathname();
+  const checkingAuthRef = useRef(false);
+
+  function applyUser(token: string, user: AuthMeResponse) {
+    const teamData = buildTeamData(user);
+    localStorage.setItem(STORAGE_TEAM, JSON.stringify(teamData));
+    setState({
+      token, userId: user.id, email: user.email,
+      ...teamData, isAdmin: user.isAdmin ?? false, isLoading: false,
+    });
+    identifyUser(user.id, {
+      email: user.email,
+      ...teamData,
+      isAdmin: user.isAdmin ?? false,
+    });
+  }
+
+  /** Přihlášení je pryč: uklidit token a přesměrováním poslat hráče na přihlášení. */
+  function dropSession(token: string | null) {
+    // Jiné okno se mezitím mohlo přihlásit znovu, jeho token zůstane.
+    if (localStorage.getItem(STORAGE_TOKEN) === token) {
+      localStorage.removeItem(STORAGE_TOKEN);
+      localStorage.removeItem(STORAGE_TEAM);
+    }
+    sessionStorage.setItem(SESSION_ENDED_FLAG, "1");
+    setState({ ...EMPTY_AUTH_STATE, isLoading: false });
+  }
 
   // Load token on mount, verify with /auth/me
   useEffect(() => {
@@ -101,27 +165,12 @@ export function TeamProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    apiFetch<AuthMeResponse>("/auth/me", {
-      headers: { Authorization: `Bearer ${stored}` },
-    })
-      .then((user) => {
-        const teamData = buildTeamData(user);
-        localStorage.setItem(STORAGE_TEAM, JSON.stringify(teamData));
-        setState({
-          token: stored, userId: user.id, email: user.email,
-          ...teamData, isAdmin: user.isAdmin ?? false, isLoading: false,
-        });
-        identifyUser(user.id, {
-          email: user.email,
-          ...teamData,
-          isAdmin: user.isAdmin ?? false,
-        });
-      })
+    fetchMeWithRecheck(stored)
+      .then((user) => applyUser(stored, user))
       .catch((err: Error & { status?: number }) => {
         if (err?.status === 401) {
-          localStorage.removeItem(STORAGE_TOKEN);
-          localStorage.removeItem(STORAGE_TEAM);
-          setState({ ...EMPTY_AUTH_STATE, isLoading: false });
+          trackSessionLost("rejected_on_load", err.message);
+          dropSession(stored);
         } else {
           // API unreachable — restore from localStorage so redirect doesn't fire
           const cached = localStorage.getItem(STORAGE_TEAM);
@@ -189,6 +238,63 @@ export function TeamProvider({ children }: { children: ReactNode }) {
       window.removeEventListener("team-budget-changed", refresh);
     };
   }, [state.token, state.teamId]);
+
+  // Přihlášení se může ztratit i na otevřené stránce: jiné okno token smaže, nebo
+  // API začne session odmítat. Stránka jinak dál posílá požadavky bez tokenu a
+  // hráči padá každá akce, dokud aplikaci sám neotevře znovu.
+  useEffect(() => {
+    const current = state.token;
+    if (!current) return;
+
+    async function onRejected(e: Event) {
+      // Ověření samo volá /auth/me, jeho 401 sem chodí taky.
+      if (checkingAuthRef.current) return;
+      checkingAuthRef.current = true;
+      const { error } = (e as CustomEvent<AuthRejectedDetail>).detail;
+      const stored = localStorage.getItem(STORAGE_TOKEN);
+      try {
+        if (!stored) {
+          trackSessionLost("token_missing", error);
+          dropSession(null);
+          return;
+        }
+        const user = await fetchMeWithRecheck(stored);
+        // Session platí, 401 mělo jiný důvod. Jen převzít token, pokud se jiné okno přihlásilo znovu.
+        if (stored !== current) applyUser(stored, user);
+      } catch (err) {
+        if (isUnauthorized(err)) {
+          trackSessionLost("rejected_while_open", (err as Error).message);
+          dropSession(stored);
+        } else {
+          console.warn("ověření přihlášení po 401 selhalo:", err);
+        }
+      } finally {
+        checkingAuthRef.current = false;
+      }
+    }
+
+    // Chodí jen z ostatních oken stejného webu.
+    function onStorage(e: StorageEvent) {
+      if (e.key !== STORAGE_TOKEN && e.key !== null) return;
+      const stored = localStorage.getItem(STORAGE_TOKEN);
+      if (stored === current) return;
+      if (!stored) {
+        trackSessionLost("token_removed_in_other_window", null);
+        dropSession(null);
+        return;
+      }
+      apiFetch<AuthMeResponse>("/auth/me", { headers: { Authorization: `Bearer ${stored}` } })
+        .then((user) => applyUser(stored, user))
+        .catch((err) => console.warn("převzetí přihlášení z jiného okna selhalo:", err));
+    }
+
+    window.addEventListener(AUTH_REJECTED_EVENT, onRejected);
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener(AUTH_REJECTED_EVENT, onRejected);
+      window.removeEventListener("storage", onStorage);
+    };
+  }, [state.token]);
 
   // Redirect logic
   useEffect(() => {
