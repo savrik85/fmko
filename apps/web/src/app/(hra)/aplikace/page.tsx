@@ -163,7 +163,8 @@ export default function AppInstallPage() {
           </div>
         </div>
         <div className="flex gap-2 flex-wrap mt-3">
-          {["Rychlý přístup z plochy", "Offline podpora", "Push notifikace"].map((f) => (
+          {/* Offline režim appka nemá: service worker obsluhuje jen upozornění, nic necachuje. */}
+          {["Rychlý přístup z plochy", "Push notifikace"].map((f) => (
             <span key={f} className="text-xs bg-pitch-50 text-pitch-700 font-heading font-bold px-2 py-1 rounded-full">
               ✓ {f}
             </span>
