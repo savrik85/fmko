@@ -5,6 +5,7 @@ import {
   VOICE_MESSAGES_PER_WEEK,
   ageGroup,
   buildVoicePrompt,
+  drunkTranscript,
   durationSecFromPcm,
   pcmToWav,
   peaksFromPcm,
@@ -162,5 +163,36 @@ describe("hlasovka místo SMS", () => {
     });
     expect(meta).toBeNull();
     expect(bucket.stored.size).toBe(0);
+  });
+});
+
+describe("opilá hlasovka", () => {
+  it("smích po zvolání, pauza u trojtečky, škytnutí; text ke čtení jinak stejný", () => {
+    const out = drunkTranscript("Šéfe... tady Pepa. Tři jedna! Fakt. Dobrou.", () => 0);
+    expect(out).toBe("Šéfe... [long pause] tady Pepa. [hiccup] Tři jedna! [laughs] Fakt. [hiccup] Dobrou.");
+  });
+
+  it("každá značka nanejvýš dvakrát", () => {
+    const out = drunkTranscript("A! B! C! D... E... F... G. H. I. J.", () => 0);
+    expect(out.match(/\[laughs\]/g)).toHaveLength(2);
+    expect(out.match(/\[long pause\]/g)).toHaveLength(2);
+    expect(out.match(/\[hiccup\]/g)).toHaveLength(2);
+  });
+
+  it("opilé pokyny jen když hráč volá z hospody", () => {
+    const base = { firstName: "Pepa", age: 31, scene: "Výhra.", nationality: "CZ", voice: { name: "Algenib", trait: "loud and direct" }, transcript: "Šéfe." };
+    expect(buildVoicePrompt({ ...base, drunk: true })).toContain("slurred");
+    expect(buildVoicePrompt(base)).not.toContain("slurred");
+  });
+
+  it("do TTS jdou značky, do přepisu ve hře ne", async () => {
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => ttsResponse(pcm(2)));
+    vi.stubGlobal("fetch", fetchMock);
+    const db = new FalesnaD1([{ sql: /COUNT\(\*\) AS n/, first: { n: 0 } }]);
+    await recordVoiceMessage(jakoD1(db), { GEMINI_API_KEY: "k", CACHE_KV: kv(null), SEED_DATA: r2() }, {
+      teamId: "t1", messageId: "m1", player: PLAYER, scene: "Výhra.", body: "Tři jedna! Dobrou.", drunk: true, random: () => 0,
+    });
+    const body = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
+    expect(body.contents[0].parts[0].text.split("#### TRANSCRIPT\n")[1]).toBe("Tři jedna! [laughs] Dobrou. [hiccup]");
   });
 });

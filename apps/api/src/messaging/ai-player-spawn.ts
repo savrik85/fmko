@@ -491,6 +491,9 @@ async function spawnForTeam(
     messageId,
     scene: scenario.description,
     body: initialBody,
+    // Z hospody: kdo se přiznává k pivu, nebo kdo rád pije a zrovna slaví.
+    drunk: scenario.id === "alcohol_struggle"
+      || (player.alcohol > 70 && (scenario.category === "positive" || scenario.id === "personal_milestone")),
     force: forceVoice,
     player: {
       id: player.id,
