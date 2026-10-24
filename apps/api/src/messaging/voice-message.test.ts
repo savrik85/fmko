@@ -6,7 +6,9 @@ import {
   ageGroup,
   buildVoicePrompt,
   drunkSpeech,
+  withoutCoachAddress,
   durationSecFromPcm,
+  mixAmbience,
   pcmToWav,
   peaksFromPcm,
   pickPlayerVoice,
@@ -34,6 +36,7 @@ function r2(): R2Bucket & { stored: Map<string, unknown> } {
   return {
     stored,
     put: async (key: string, value: unknown) => { stored.set(key, value); return { key }; },
+    get: async () => null,
   } as unknown as R2Bucket & { stored: Map<string, unknown> };
 }
 
@@ -175,14 +178,26 @@ describe("opilá hlasovka", () => {
 
   it("opilý text jako ve vítězné variantě C: natažená samohláska, hehe, ehm, opakování", () => {
     expect(drunkSpeech(DRUNK_SAMPLE)).toBe(
-      "Šééfe... tady Pepa. Hele, sorry, že volám takhle pozdě, ale ten zápas, co? Tři jedna! Hehehe. "
-      + "My tu u Ježka ještě sedíme, Tonda platí rundu... Ehm... Hele, zejtra na trénink dorazím asi trochu pozdějc, jo? "
+      "Šééfe... Kurva. tady Pepa. Hele, sorry, že volám takhle pozdě, ale ten zápas, co? Tři jedna! Hehehe. "
+      + "My tu u Ježka ještě sedíme, Tonda platí rundu... Ehm... Hele, zejtra na trénink dorazím asi trochu pozdějc, jo, ty vole? "
       + "Ale v pondělí jsem fit, fakt fakt. Vy jste nejlepší trenér v okrese. Fakt... fakt. Dobrou... dobrou.",
     );
   });
 
-  it("krátká zpráva: jen natažení a smích, jméno se neopakuje", () => {
-    expect(drunkSpeech("Trenére, vyhráli jsme! Tonda je borec.")).toBe("Treenére, vyhráli jsme! Hehehe. Tonda je borec.");
+  it("krátká zpráva: oslovení trenére vypadne, přibude ehm a dvě nadávky", () => {
+    expect(drunkSpeech("Trenére, vyhráli jsme! Tonda je borec.")).toBe("Vyyhráli jsme! Hehehe. Kurva fix. Ehm... Tonda je borec, do píči.");
+  });
+
+  it("oslovení trenére z opilé řeči mizí bez zbytků čárek", () => {
+    expect(withoutCoachAddress("Trenére, makám.")).toBe("Makám.");
+    expect(withoutCoachAddress("Čau trenére, chci hrát.")).toBe("Čau, chci hrát.");
+    expect(withoutCoachAddress("Víte, trenére, já nevím.")).toBe("Víte, já nevím.");
+    expect(withoutCoachAddress("Díky, trenére!")).toBe("Díky!");
+  });
+
+  it("pokyny pro hlas jsou bez českého popisu situace, ten model četl nahlas", () => {
+    const prompt = buildVoicePrompt({ firstName: "Pepa", age: 31, scene: "Hráč se ozývá sám.", nationality: "CZ", voice: { name: "Algenib", trait: "x" }, transcript: "Ahoj.", drunk: true });
+    expect(prompt.split("#### TRANSCRIPT")[0]).not.toContain("Hráč se ozývá");
   });
 
   it("opilé pokyny jen když hráč volá z hospody", () => {
@@ -199,8 +214,8 @@ describe("opilá hlasovka", () => {
       teamId: "t1", messageId: "m1", player: PLAYER, scene: "Výhra.", body: "Tři jedna! Dobrou.", drunk: true, random: () => 0,
     });
     const body = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
-    expect(body.contents[0].parts[0].text.split("#### TRANSCRIPT\n")[1]).toBe("Třii jedna! Hehehe. Dobrou... dobrou.");
-    expect(recorded?.transcript).toBe("Třii jedna! Hehehe. Dobrou... dobrou.");
+    expect(body.contents[0].parts[0].text.split("#### TRANSCRIPT\n")[1]).toBe("Třii jedna! Hehehe. Do píči. Ehm... Dobrou, kurva.");
+    expect(recorded?.transcript).toBe("Třii jedna! Hehehe. Do píči. Ehm... Dobrou, kurva.");
   });
 });
 
@@ -226,6 +241,33 @@ describe("přehrání odeslaných hlasovek opile", () => {
     expect(body.generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName).toBe("Orus");
     expect(body.contents[0].parts[0].text).toContain("slurred");
     const update = db.davky.flat().find((d) => /UPDATE messages SET body/.test(d.sql));
-    expect(update?.params[0]).toBe("Treenére, v pondělí chci hrát. Fakt... fakt.");
+    expect(update?.params[0]).toBe("V poondělí chci hrát. Do píči. Ehm... Fakt, kurva.");
+  });
+});
+
+describe("hospoda pod opilou hlasovkou", () => {
+  it("začne před hlasem, dozní po něm, okraje prolne a nepřebije hlas", () => {
+    const ambience = new Uint8Array(24000 * 2 * 4);
+    const av = new DataView(ambience.buffer);
+    for (let i = 0; i < ambience.length / 2; i++) av.setInt16(i * 2, i % 2 ? 2000 : -2000, true);
+    const out = mixAmbience(pcm(1), ambience, 7);
+    const ov = new DataView(out.buffer);
+    expect(out.length).toBe((14400 + 24000 + 19200) * 2);
+    expect(ov.getInt16(0, true)).toBe(0);
+    expect(Math.abs(ov.getInt16(10000 * 2, true))).toBeGreaterThan(0);
+    let peak = 0;
+    for (let i = 0; i < out.length / 2; i++) peak = Math.max(peak, Math.abs(ov.getInt16(i * 2, true)));
+    expect(peak).toBeLessThanOrEqual(32767);
+  });
+
+  it("opilá hlasovka s nahrávkou hospody je o předehru a dozvuk delší", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ttsResponse(pcm(2))));
+    const ambience = new Uint8Array(24000 * 2 * 10).fill(1);
+    const bucket = { ...r2(), get: async () => ({ arrayBuffer: async () => ambience.buffer }) } as unknown as R2Bucket;
+    const db = new FalesnaD1([{ sql: /COUNT\(\*\) AS n/, first: { n: 0 } }]);
+    const recorded = await recordVoiceMessage(jakoD1(db), { GEMINI_API_KEY: "k", CACHE_KV: kv(null), SEED_DATA: bucket }, {
+      teamId: "t1", messageId: "m1", player: PLAYER, scene: "x", body: "Vyhráli jsme! Dobrou.", drunk: true, random: () => 0,
+    });
+    expect(recorded?.meta.durationSec).toBe(3);
   });
 });

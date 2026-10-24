@@ -9389,7 +9389,8 @@ gameRouter.post("/admin/voice-rerecord-drunk", async (c) => {
   if (!scenario) return c.json({ error: "Neznámé téma" }, 400);
   const { rerecordVoiceMessagesDrunk } = await import("../messaging/voice-message");
   const limit = Math.min(10, Math.max(1, Number(c.req.query("limit") ?? "3")));
-  const r = await rerecordVoiceMessagesDrunk(c.env.DB, c.env, { scenarioId, scene: scenario.description, limit })
+  const fixAddress = c.req.query("fixAddress") === "1";
+  const r = await rerecordVoiceMessagesDrunk(c.env.DB, c.env, { scenarioId, scene: scenario.description, limit, fixAddress })
     .catch((e) => { logger.error({ module: "game.ts" }, "přehrání hlasovek opile", e); return null; });
   if (!r) return c.json({ error: "přehrání selhalo" }, 500);
   return c.json({ ok: true, ...r });

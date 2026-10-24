@@ -18,6 +18,8 @@ interface VoiceMessageProps {
   /** Obrys nahrávky 0–1, spočítaný při vytvoření. Bez něj se vykreslí náhradní. */
   peaks?: number[];
   transcript: string;
+  /** Verze nahrávky. Po přehrání se mění adresa, jinak by prohlížeč hrál starou z mezipaměti. */
+  rev?: number;
 }
 
 type PlayState = "idle" | "loading" | "playing" | "paused" | "error";
@@ -38,7 +40,7 @@ function formatDuration(sec: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
 
-export function VoiceMessage({ teamId, messageId, durationSec, peaks, transcript }: VoiceMessageProps) {
+export function VoiceMessage({ teamId, messageId, durationSec, peaks, transcript, rev }: VoiceMessageProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const urlRef = useRef<string | null>(null);
   const [state, setState] = useState<PlayState>("idle");
@@ -53,7 +55,7 @@ export function VoiceMessage({ teamId, messageId, durationSec, peaks, transcript
 
   async function loadAudio(): Promise<HTMLAudioElement> {
     if (audioRef.current) return audioRef.current;
-    const blob = await apiFetchBlob(`/api/teams/${teamId}/voice-messages/${messageId}/audio`);
+    const blob = await apiFetchBlob(`/api/teams/${teamId}/voice-messages/${messageId}/audio?v=${rev ?? 1}`);
     const url = URL.createObjectURL(blob);
     urlRef.current = url;
     const audio = new Audio(url);

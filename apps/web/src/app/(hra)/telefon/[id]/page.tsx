@@ -555,6 +555,7 @@ export default function ConversationPage() {
                               durationSec={Number(msg.metadata.durationSec ?? 0)}
                               peaks={Array.isArray(msg.metadata.peaks) ? (msg.metadata.peaks as number[]) : undefined}
                               transcript={msg.body}
+                              rev={Number(msg.metadata.rev ?? 1)}
                             />
                           ) : (
                             <p className="whitespace-pre-wrap">{emoticonize(msg.body)}</p>
