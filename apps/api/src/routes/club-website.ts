@@ -1899,7 +1899,7 @@ clubWebsiteRouter.get("/:id/website/matches", async (c) => {
     id: string; round: number; status: string; home_score: number | null; away_score: number | null;
     attendance: number | null; events: string | null; mom_player_id: string | null; simulated_at: string | null;
     scheduled_at: string | null; home_id: string; home_name: string; away_id: string; away_name: string;
-    league_name: string | null; mom_first: string | null; mom_last: string | null;
+    league_name: string | null; mom_first: string | null; mom_last: string | null; calendar_id: string | null;
   };
   type CupRow = {
     id: string; round: number; status: string; home_score: number | null; away_score: number | null;
@@ -1911,7 +1911,7 @@ clubWebsiteRouter.get("/:id/website/matches", async (c) => {
   const [leagueRows, cupRows] = await Promise.all([
     db.prepare(
       `SELECT m.id, m.round, m.status, m.home_score, m.away_score, m.attendance, m.events, m.mom_player_id,
-              m.simulated_at, sc.scheduled_at, ht.id AS home_id, ht.name AS home_name, at.id AS away_id,
+              m.simulated_at, m.calendar_id, sc.scheduled_at, ht.id AS home_id, ht.name AS home_name, at.id AS away_id,
               at.name AS away_name, l.name AS league_name, mp.first_name AS mom_first, mp.last_name AS mom_last
        FROM matches m
        JOIN teams ht ON ht.id = m.home_team_id
@@ -1948,9 +1948,13 @@ clubWebsiteRouter.get("/:id/website/matches", async (c) => {
     ...(leagueRows.results ?? []).map((r) => (r.home_id === teamId ? r.away_id : r.home_id)),
     ...(cupRows.results ?? []).map((r) => (r.home_id === teamId ? r.away_id : r.home_id)),
   ].filter((id): id is string => !!id);
-  const [names, teamSlugs] = await Promise.all([
+  const homeCalendarIds = (leagueRows.results ?? [])
+    .filter((r) => r.home_id === teamId && r.status === "simulated" && r.calendar_id)
+    .map((r) => r.calendar_id as string);
+  const [names, teamSlugs, fanPhotos] = await Promise.all([
     playerNameIndex(db, [teamId, ...opponentIds]),
     teamSlugMap(db, [teamId, ...opponentIds]),
+    fanPhotosByRound(db, teamId, homeCalendarIds),
   ]);
 
   const fixtures: ClubWebsiteFixture[] = [
@@ -1975,6 +1979,7 @@ clubWebsiteRouter.get("/:id/website/matches", async (c) => {
         attendance: played ? r.attendance : null,
         scorers: played ? scorersFromEvents(r.events, isHome, teamId, oppId, names) : [],
         manOfMatch: r.mom_player_id && r.mom_first ? { id: r.mom_player_id, name: `${r.mom_first} ${r.mom_last}` } : null,
+        fanPhoto: isHome && played ? fanPhotos.get(r.calendar_id ?? "") ?? null : null,
       };
     }),
     ...(cupRows.results ?? []).map((r): ClubWebsiteFixture => {
@@ -1998,6 +2003,7 @@ clubWebsiteRouter.get("/:id/website/matches", async (c) => {
         attendance: played ? r.attendance : null,
         scorers: played ? scorersFromEvents(r.events, isHome, teamId, oppId, names) : [],
         manOfMatch: null,
+        fanPhoto: null,
       };
     }),
   ].sort((a, b) => (a.date ?? "9999").localeCompare(b.date ?? "9999") || a.round - b.round);
@@ -2005,6 +2011,36 @@ clubWebsiteRouter.get("/:id/website/matches", async (c) => {
   const page: ClubWebsiteMatchesPage = { club, teamSlugs, seasonNumber: season, fixtures };
   return c.json(page);
 });
+
+/**
+ * Fotky kotle klubu z reportů Prales Ultras, podle kola. Report fotí kotel
+ * domácích, takže se hledá jen v kolech, kdy klub hrál doma.
+ */
+async function fanPhotosByRound(
+  db: D1Database,
+  teamId: string,
+  calendarIds: string[],
+): Promise<Map<string, { id: string; text: string }>> {
+  const out = new Map<string, { id: string; text: string }>();
+  if (calendarIds.length === 0) return out;
+  const rows = await db.prepare(
+    `SELECT calendar_id, photos_json FROM ultras_reports WHERE calendar_id IN (${calendarIds.map(() => "?").join(",")})`,
+  ).bind(...calendarIds).all<{ calendar_id: string; photos_json: string }>()
+    .catch((e) => {
+      logger.warn(MODULE, "matches page: fan photos", e);
+      return { results: [] as Array<{ calendar_id: string; photos_json: string }> };
+    });
+  for (const r of rows.results ?? []) {
+    try {
+      const photos = JSON.parse(r.photos_json) as Array<{ teamId?: string; photoId?: string; ultrasText?: string }>;
+      const own = photos.find((p) => p.teamId === teamId && p.photoId);
+      if (own?.photoId) out.set(r.calendar_id, { id: own.photoId, text: own.ultrasText ?? "" });
+    } catch (e) {
+      logger.warn(MODULE, "matches page: unreadable ultras photos", e);
+    }
+  }
+  return out;
+}
 
 /** Forma, pozice, nejlepší střelec a soupiska týmu pro zpravodaj. */
 async function programTeam(

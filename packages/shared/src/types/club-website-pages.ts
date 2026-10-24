@@ -40,6 +40,11 @@ export interface ClubWebsiteFixture {
   attendance: number | null;
   scorers: ClubWebsiteScorer[];
   manOfMatch: { id: string; name: string } | null;
+  /**
+   * Fotka domácího kotle s plachtou z reportu Prales Ultras (`/api/ultras-photos/:id`).
+   * Jen u domácích ligových zápasů, kde fotka vznikla; venku se fotí kotel soupeře.
+   */
+  fanPhoto: { id: string; text: string } | null;
 }
 
 /** /klub/<slug>/zapasy: rozpis a výsledky aktuální sezóny (liga i pohár). */
