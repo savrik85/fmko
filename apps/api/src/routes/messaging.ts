@@ -16,18 +16,14 @@ const messagingRouter = new Hono<{ Bindings: Bindings }>();
 messagingRouter.use("/teams/:teamId/*", requireTeamOwnership);
 // Telefon je soukromý: obecný `requireTeamOwnership` čtení propouští, takže se
 // hlídá na každé jeho cestě zvlášť. Dřív šly cizí SMS i vyjednávání číst bez přihlášení.
-for (const path of [
-  "/teams/:teamId/conversations",
-  "/teams/:teamId/conversations/*",
-  "/teams/:teamId/missed-calls",
-  "/teams/:teamId/notifications",
-  "/teams/:teamId/contacts",
-  "/teams/:teamId/phone-credit",
-  "/teams/:teamId/unread-count",
-  "/teams/:teamId/voice-messages/*",
-]) {
-  messagingRouter.use(path, requirePrivateTeamRead);
-}
+messagingRouter.use("/teams/:teamId/conversations", requirePrivateTeamRead);
+messagingRouter.use("/teams/:teamId/conversations/*", requirePrivateTeamRead);
+messagingRouter.use("/teams/:teamId/missed-calls", requirePrivateTeamRead);
+messagingRouter.use("/teams/:teamId/notifications", requirePrivateTeamRead);
+messagingRouter.use("/teams/:teamId/contacts", requirePrivateTeamRead);
+messagingRouter.use("/teams/:teamId/phone-credit", requirePrivateTeamRead);
+messagingRouter.use("/teams/:teamId/unread-count", requirePrivateTeamRead);
+messagingRouter.use("/teams/:teamId/voice-messages/*", requirePrivateTeamRead);
 // Admin broadcast endpointy vyžadují admin session.
 messagingRouter.use("/admin/*", requireAdmin);
 
