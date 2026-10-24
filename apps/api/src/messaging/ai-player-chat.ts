@@ -20,6 +20,24 @@ import { weightTalkPrompt } from "../season/weight-talk";
 export interface ThreadMessage {
   sender: "player" | "coach";
   body: string;
+  /** Zpráva z dřívějšího rozhovoru: pro odpověď jen kontext, do vyhodnocení se nepočítá. */
+  earlier?: boolean;
+}
+
+/**
+ * Historie do promptu. Starší rozhovory jdou zvlášť jako kontext, aby si hráč
+ * nepletl dávná témata (sliby, stížnosti) s tím, o čem se píše teď.
+ */
+function formatHistory(history: ThreadMessage[], firstName: string): string {
+  const line = (m: ThreadMessage) => `${m.sender === "player" ? firstName : "TRENÉR"}: ${m.body}`;
+  const earlier = history.filter((m) => m.earlier);
+  const current = history.filter((m) => !m.earlier);
+  return [
+    ...(earlier.length > 0
+      ? ["DŘÍVĚJŠÍ HOVOR (jen kontext, NEODPOVÍDEJ na něj a neopakuj ho):", ...earlier.map(line), "", "TEĎ:"]
+      : []),
+    ...current.map(line),
+  ].join("\n");
 }
 
 export interface TeamContext {
@@ -373,9 +391,7 @@ export async function generateReply(
   isFinalTurn: boolean,
 ): Promise<ReplyResult> {
   const system = buildSystemPrompt(player, team);
-  const histText = history
-    .map((m) => `${m.sender === "player" ? player.firstName : "TRENÉR"}: ${m.body}`)
-    .join("\n");
+  const histText = formatHistory(history, player.firstName);
 
   const closingHint = isFinalTurn
     ? "TOTO JE TVOJE POSLEDNÍ ZPRÁVA — uzavři ji (poděkuj / smiř se / rozluč se / nebo prásknout dveřmi pokud tě trenér naštval). Žádné nové otázky. Pole `conversation_complete` MUSÍ být true."
@@ -474,7 +490,9 @@ export async function evaluateResolution(
   history: ThreadMessage[],
   scenario: AiScenario,
 ): Promise<ResolutionResult> {
+  // Hodnotí se jen tenhle rozhovor, starší zprávy by do výsledku zatáhly dávná témata.
   const histText = history
+    .filter((m) => !m.earlier)
     .map((m) => `${m.sender === "player" ? player.firstName : "TRENÉR"}: ${m.body}`)
     .join("\n");
 

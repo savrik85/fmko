@@ -15,7 +15,7 @@ vi.mock("../lib/ai-provider", () => ({
 
 import { BEZ_ZNALOSTI, HLAVICKA_ZNALOSTI, type RadekZnalosti } from "../incidents/znalosti";
 import { generateText } from "../lib/ai-provider";
-import { ZAKAZ_ZIVOTNICH_SITUACI, buildSystemPrompt, evaluateResolution, popisZdravi } from "./ai-player-chat";
+import { ZAKAZ_ZIVOTNICH_SITUACI, buildSystemPrompt, evaluateResolution, generateReply, popisZdravi } from "./ai-player-chat";
 import { getScenarioById } from "./ai-player-scenarios";
 import type { PlayerSnapshot } from "./ai-player-scenarios";
 
@@ -238,3 +238,36 @@ describe("popisZdravi", () => {
     expect(prompt).toContain("Zdraví: jsi fit");
   });
 });
+
+describe("starší rozhovory jsou jen kontext", () => {
+  // Skutečný případ z 24. 10.: příslib místa v základu z 13. 10. se propsal do vyhodnocení hospody.
+  const historie = [
+    { sender: "coach" as const, body: "V příštích zápasech s tebou počítám v základu.", earlier: true },
+    { sender: "player" as const, body: "No, tak to je fajn, trenére.", earlier: true },
+    { sender: "player" as const, body: "[Fotka: stůl v hospodě plný piv a panáků] trenere pod na jedno" },
+    { sender: "coach" as const, body: "Zdar hovada, já chlastám doma." },
+  ];
+
+  it("vyhodnocení rozhovoru počítá jen aktuální rozhovor", async () => {
+    vi.mocked(generateText).mockClear();
+    await evaluateResolution({}, hrac(), historie, getScenarioById("pub_invite")!);
+    const prompt = String(vi.mocked(generateText).mock.calls[0][1]);
+    expect(prompt).not.toContain("počítám v základu");
+    expect(prompt).toContain("já chlastám doma");
+    expect(prompt).toContain("[Fotka: stůl v hospodě plný piv a panáků]");
+  });
+
+  it("odpověď vidí starší zprávy odděleně, jen jako kontext", async () => {
+    vi.mocked(generateText).mockClear();
+    vi.mocked(generateText).mockResolvedValueOnce(JSON.stringify({ body: "doma je to nuda", conversation_complete: false }));
+    await generateReply({}, hrac(), historie, getScenarioById("pub_invite")!, tym, false);
+    const prompt = String(vi.mocked(generateText).mock.calls[0][1]);
+    const kontext = prompt.indexOf("DŘÍVĚJŠÍ HOVOR");
+    const ted = prompt.indexOf("TEĎ:");
+    expect(kontext).toBeGreaterThan(-1);
+    expect(prompt.indexOf("počítám v základu")).toBeGreaterThan(kontext);
+    expect(prompt.indexOf("počítám v základu")).toBeLessThan(ted);
+    expect(prompt.indexOf("já chlastám doma")).toBeGreaterThan(ted);
+  });
+});
+
