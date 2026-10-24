@@ -567,8 +567,11 @@ async function rolloverBetting(db: D1Database, ctx: RolloverContext): Promise<st
       }
     }
 
-    // Kurzový lístek staré sezóny už nikoho nezajímá a jen roste.
-    await db.prepare("DELETE FROM bet_odds WHERE season_number < ?").bind(ctx.newSeason).run();
+    // Lístky se mažou o sezónu později. Kurzy právě skončené sezóny potřebuje hlídač
+    // kurzů (calibration.ts měří kurzy odehraných zápasů za poslední tři týdny, admin
+    // přehled až za 120 dní): kdyby zmizely s rolloverem, byl by hlídač na přelomu
+    // sezón slepý a přeměřit model by nebylo z čeho. Starší sezóny už nikdo nepotřebuje.
+    await db.prepare("DELETE FROM bet_odds WHERE season_number < ?").bind(ctx.oldSeason).run();
   } catch (e) { logger.error({ module: "betting" }, "úklid sázek při rolloveru selhal", e); }
   return `sázky: vráceno ${refunded} tiketů`;
 }
