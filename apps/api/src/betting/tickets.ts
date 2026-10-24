@@ -9,6 +9,7 @@ import { logger } from "../lib/logger";
 import { resolveRules } from "../competition/rules";
 import { recordTransaction, assertPurchaseAllowed } from "../season/finance-processor";
 import { recordCompetitionEntry } from "../competition/ledger";
+import { linkedTeamIds, LINKED_CLUBS_ERRORS } from "../competition/club-links";
 import { combineOddsX100, capPayout } from "./odds-model";
 
 const M = "betting-tickets";
@@ -156,6 +157,11 @@ export async function placeTicket(db: D1Database, input: {
     if (moje.has(m.home_team_id) || moje.has(m.away_team_id)) {
       return { ok: false, status: 400, error: "Na vlastní zápas se nesází. To by nebyl fotbal, ale domluva." };
     }
+  }
+  // Klub se stejným majitelem je stejná domluva, jen přes druhý účet.
+  const linked = await linkedTeamIds(db, teamId);
+  if (zapasyMoje.results.some((m) => linked.has(m.home_team_id) || linked.has(m.away_team_id))) {
+    return { ok: false, status: 400, error: LINKED_CLUBS_ERRORS.bet };
   }
 
   // ── Kurzy ze serveru. To, co poslal klient, se použije jen k porovnání. ──

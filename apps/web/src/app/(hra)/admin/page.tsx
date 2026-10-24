@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
+import { pocet } from "@/lib/referee-info";
 import { SectionLabel } from "@/components/ui";
 
 interface SeedTable { key: string; label: string; count: number; editable: boolean; districts?: string[] }
@@ -138,6 +139,10 @@ export default function AdminPage() {
 
       <Rozbalovaci nazev="Trh hráčů" ikona="📊" popis="Kolik lidí vytvořila hra a kolik jich pustili manažeři">
         <TrhSection />
+      </Rozbalovaci>
+
+      <Rozbalovaci nazev="Propojené kluby" ikona="🔗" popis="Stejný majitel, podezřelé dvojice">
+        <ClubLinksSection />
       </Rozbalovaci>
 
       <Rozbalovaci nazev="Sezóna" ikona="🏁" popis="Zakončení ročníku">
@@ -1474,6 +1479,119 @@ function TrhSection() {
           )}
         </>
       )}
+    </div>
+  );
+}
+
+/* ── Propojené kluby ── */
+
+interface LinkedClub { teamId: string; name: string; email: string | null; district: string | null }
+interface PairClub extends LinkedClub { groupId: string | null }
+interface ClubLinksData {
+  groups: Array<{ groupId: string; clubs: Array<LinkedClub & { note: string | null; linkedAt: string }> }>;
+  pairs: Array<{ a: PairClub; b: PairClub; friendlies: number; transfers: number; loans: number; money: number; linked: boolean }>;
+}
+
+/** Příkaz, který propojí dvojici v databázi. Klub, který už ve skupině je, zůstane, druhý se k němu přidá. */
+function linkCommand(pair: ClubLinksData["pairs"][number]): string | null {
+  const { a, b } = pair;
+  if (a.groupId && b.groupId && a.groupId !== b.groupId) return null;
+  const groupId = a.groupId ?? b.groupId ?? `g-${a.teamId.slice(0, 8)}`;
+  const note = `${pocet(pair.friendlies, "přátelák", "přáteláky", "přáteláků")}, ${pocet(pair.transfers + pair.loans, "obchod", "obchody", "obchodů")}`;
+  const rows = [a, b].filter((club) => !club.groupId).map((club) => `("${club.teamId}", "${groupId}", "${note}")`);
+  // Produkční DB jen z produkční domény. Localhost běží proti testovací.
+  const host = typeof window !== "undefined" ? window.location.hostname : "";
+  const dbName = host.endsWith("prales.fun") && !host.includes("test") ? "prales-db-prod" : "prales-db-test";
+  return `npx wrangler d1 execute ${dbName} --remote --command 'INSERT INTO club_links (team_id, group_id, note) VALUES ${rows.join(", ")}'`;
+}
+
+function ClubLinksSection() {
+  const [data, setData] = useState<ClubLinksData | null>(null);
+  const [error, setError] = useState("");
+  const [copied, setCopied] = useState<string | null>(null);
+
+  useEffect(() => {
+    apiFetch<ClubLinksData>("/api/admin/club-links")
+      .then(setData)
+      .catch((e) => { console.error("propojené kluby:", e); setError("Přehled se nepodařilo načíst."); });
+  }, []);
+
+  const copy = async (key: string, text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(key);
+      setTimeout(() => setCopied(null), 2000);
+    } catch (e) {
+      console.error("kopírování příkazu:", e);
+    }
+  };
+
+  if (error) return <div className="card p-4 text-sm text-card-red">{error}</div>;
+  if (!data) return <div className="card p-4 text-sm text-muted">Načítám…</div>;
+
+  return (
+    <div className="space-y-3">
+      <div className="card p-4">
+        <SectionLabel>🔗 Propojené kluby</SectionLabel>
+        <div className="text-sm text-muted mb-3">
+          Kluby jednoho člověka. Mezi sebou nesmí přestupovat, hostovat, podepsat propuštěného hráče
+          ani sázet na zápasy toho druhého. Profil týmu ukazuje „Stejný majitel jako…“.
+        </div>
+        {data.groups.length === 0 && <div className="text-sm text-muted">Zatím žádné propojení.</div>}
+        <div className="space-y-2">
+          {data.groups.map((g) => (
+            <div key={g.groupId} className="rounded-soft bg-gray-50 p-3">
+              <div className="text-sm text-muted mb-1">skupina {g.groupId}</div>
+              {g.clubs.map((club) => (
+                <div key={club.teamId} className="text-sm py-0.5">
+                  <a href={`/tym/${club.teamId}`} className="font-heading font-bold text-base hover:underline">{club.name}</a>
+                  <span className="text-muted"> · {club.district ?? "?"} · {club.email ?? "bez e-mailu"}</span>
+                  {club.note && <div className="text-muted italic">{club.note}</div>}
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="card p-4">
+        <SectionLabel>🕵️ Podezřelé dvojice</SectionLabel>
+        <div className="text-sm text-muted mb-3">
+          Kdo spolu nejčastěji hraje přáteláky a uzavírá obchody. Nic se tu netrestá, rozhoduješ ty.
+          Propojení zapíše příkaz, který si zkopíruješ a pustíš v terminálu.
+        </div>
+        {data.pairs.length === 0 && <div className="text-sm text-muted">Žádná dvojice nestojí za pohled.</div>}
+        <div className="space-y-2">
+          {data.pairs.map((p) => {
+            const key = `${p.a.teamId}|${p.b.teamId}`;
+            const command = p.linked ? null : linkCommand(p);
+            return (
+              <div key={key} className="rounded-soft border border-gray-200 p-3">
+                <div className="flex flex-wrap items-baseline gap-x-2">
+                  <a href={`/tym/${p.a.teamId}`} className="font-heading font-bold text-base hover:underline">{p.a.name}</a>
+                  <span className="text-muted">a</span>
+                  <a href={`/tym/${p.b.teamId}`} className="font-heading font-bold text-base hover:underline">{p.b.name}</a>
+                  {p.linked && <span className="text-sm font-heading font-bold text-pitch-600">propojené</span>}
+                </div>
+                <div className="text-sm mt-1">
+                  {pocet(p.friendlies, "přátelák", "přáteláky", "přáteláků")} · {pocet(p.transfers, "přestup", "přestupy", "přestupů")} · {pocet(p.loans, "hostování", "hostování", "hostování")} · {p.money.toLocaleString("cs")} Kč
+                </div>
+                <div className="text-sm text-muted break-all">
+                  {p.a.email ?? "?"} ({p.a.district ?? "?"}) · {p.b.email ?? "?"} ({p.b.district ?? "?"})
+                </div>
+                {!p.linked && (command ? (
+                  <button onClick={() => copy(key, command)}
+                    className="mt-2 px-3 py-1.5 rounded-soft text-sm font-heading font-bold bg-gray-100 hover:bg-gray-200">
+                    {copied === key ? "Zkopírováno" : "Zkopírovat příkaz k propojení"}
+                  </button>
+                ) : (
+                  <div className="mt-2 text-sm text-muted">Každý klub je v jiné skupině, spoj je ručně.</div>
+                ))}
+              </div>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }

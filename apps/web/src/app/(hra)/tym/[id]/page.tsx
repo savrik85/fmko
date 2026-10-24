@@ -66,6 +66,22 @@ function getPlayerSortValue(p: Player, key: SortKey): number | string {
   }
 }
 
+/** „Stejný majitel jako …" — propojení klubů zapisuje admin a je veřejné. */
+function SameOwnerNote({ clubs }: { clubs?: Array<{ id: string; name: string }> }) {
+  if (!clubs || clubs.length === 0) return null;
+  return (
+    <div className="card px-4 py-3 text-sm text-muted">
+      🔗 Stejný majitel jako{" "}
+      {clubs.map((club, i) => (
+        <span key={club.id}>
+          {i > 0 && (i === clubs.length - 1 ? " a " : ", ")}
+          <a href={`/tym/${club.id}`} className="font-heading font-bold text-base text-ink hover:underline">{club.name}</a>
+        </span>
+      ))}
+    </div>
+  );
+}
+
 export default function TeamPage() {
   const params = useParams();
   const router = useRouter();
@@ -327,6 +343,7 @@ export default function TeamPage() {
       </div>
 
     <div className="page-container space-y-5">
+      <SameOwnerNote clubs={team.sameOwnerClubs} />
 
       {/* ═══ Kádr cizího týmu — hned nahoře, kvůli přestupům i přípravě na zápas ═══ */}
       {!isOwnTeam && (

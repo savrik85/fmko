@@ -14,6 +14,7 @@ import { brokenCzech } from "../messaging/foreign-speech";
 import { sendSystemSMS } from "../messaging/system-sms";
 import { offerReplyDeadline } from "./offer-deadline";
 import { resolveClubTeamId } from "./offer-club-scope";
+import { areClubsLinked, LINKED_CLUBS_ERRORS } from "../competition/club-links";
 
 export type DemandPosition = "GK" | "DEF" | "MID" | "FWD";
 export type DemandRole = "starter" | "squad" | "prospect";
@@ -406,6 +407,7 @@ export async function pitchPlayer(db: D1Database, teamId: string, demandId: stri
     if (demand.team_id === me.clubTeamId) return { ok: false, error: "Vlastní poptávce hráče nenabídneš." };
     const owner = await db.prepare("SELECT user_id FROM teams WHERE id = ?").bind(demand.team_id).first<{ user_id: string | null }>();
     if (owner?.user_id && owner.user_id === me.userId) return { ok: false, error: "Mezi vlastními týmy se hráči přes poptávky nenabízejí." };
+    if (await areClubsLinked(db, me.clubTeamId, demand.team_id)) return { ok: false, error: LINKED_CLUBS_ERRORS.demandPitch };
   } else if (demand.district !== me.district) {
     return { ok: false, error: "Tahle poptávka je z jiného okresu." };
   }

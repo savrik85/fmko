@@ -104,6 +104,7 @@ beforeAll(async () => {
       reputation INTEGER NOT NULL DEFAULT 50
     );
 
+    CREATE TABLE club_links (team_id TEXT PRIMARY KEY, group_id TEXT NOT NULL, note TEXT, created_at TEXT);
     CREATE TABLE managers (
       id TEXT PRIMARY KEY,
       team_id TEXT NOT NULL,
@@ -339,6 +340,7 @@ beforeEach(async () => {
     DELETE FROM seasons;
     DELETE FROM season_calendar;
     DELETE FROM departed_players;
+    DELETE FROM club_links;
   `);
 
   await db.batch([
@@ -838,5 +840,36 @@ describe("nabídka na hráče U21 ovládaná trenérem mateřského klubu", () =
     expect(buyerDetail.status).toBe(200);
     expect(buyerBody.role).toBe("buyer");
     expect(buyerBody.on_turn).toBe(true);
+  });
+});
+
+describe("propojené kluby (stejný majitel)", () => {
+  beforeEach(async () => {
+    await db.prepare("INSERT INTO club_links (team_id, group_id) VALUES ('buyer-a', 'g'), ('seller-a', 'g')").run();
+  });
+
+  it("nabídku na hráče propojeného klubu nepošle ani do jeho U21", async () => {
+    const res = await callRoute("/teams/buyer-a/offers", {
+      method: "POST",
+      token: "buyer-token",
+      body: { playerId: "junior", amount: 40000 },
+    });
+    expect(res.status).toBe(403);
+    expect((await readJson(res)).error).toContain("stejného majitele");
+    const offers = await db.prepare("SELECT COUNT(*) AS n FROM transfer_offers WHERE id <> 'offer-u21'").first<{ n: number }>();
+    expect(offers?.n).toBe(0);
+  });
+
+  it("nabídku z doby před propojením nepřijme a hráč zůstane", async () => {
+    const res = await callRoute("/teams/seller-a/offers/offer-u21/accept", {
+      method: "POST",
+      token: "seller-token",
+      body: {},
+    });
+    expect(res.status).toBe(403);
+    const player = await db.prepare("SELECT team_id FROM players WHERE id = 'junior'").first<{ team_id: string }>();
+    expect(player?.team_id).toBe("seller-u21");
+    const offer = await db.prepare("SELECT status FROM transfer_offers WHERE id = 'offer-u21'").first<{ status: string }>();
+    expect(offer?.status).toBe("pending");
   });
 });
