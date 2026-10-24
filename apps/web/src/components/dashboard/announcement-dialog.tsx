@@ -24,9 +24,11 @@ interface Announcement {
   buttonLabel: string;
 }
 
+// Vypnuto 2026-10-25 (uživatel): oprava hodnocení z července už není aktuální a noví
+// manažeři ji dostávali hned po prvním přihlášení.
 export const ANNOUNCEMENT: Announcement = {
   id: "prepocet-hodnoceni-2026-07-31",
-  active: true,
+  active: false,
   emoji: "📊",
   title: "Hodnocení hráčů je přepočítané",
   subtitle: "Opravili jsme chybu, která se táhla od začátku hry",
