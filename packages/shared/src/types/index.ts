@@ -128,6 +128,7 @@ export {
   PLAN_TACTIC_LABELS,
   PLAN_HARDNESS_LABELS,
 } from "./match-plan";
+export * from "./lineup-fit";
 export { marketValue, marketValueAgeFactor, marketValueEstimate, marketValueUncapped, MARKET_VALUE_MIN, MARKET_VALUE_MAX, MAX_TRANSFER_AMOUNT } from "./market-value";
 export * from "./transfer-terms";
 export * from "./scouting";
