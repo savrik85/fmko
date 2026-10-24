@@ -64,6 +64,8 @@ export interface VoiceMessageMeta {
   voice: string;
   /** Zvuk pod hlasem, když se přimíchal. */
   ambience?: Ambience;
+  /** Opilá hlasovka z hospody. Hráč pak v odpovědích nezapírá, že pil (player-memory.ts). */
+  drunk?: true;
 }
 
 function hash(text: string): number {
@@ -580,6 +582,7 @@ export async function recordVoiceMessage(
     meta: {
       type: "voice", audioKey, durationSec: durationSecFromPcm(pcm), peaks: peaksFromPcm(pcm), voice: voice.name,
       ...(ambience && bed ? { ambience } : {}),
+      ...(opts.drunk ? { drunk: true as const } : {}),
     },
     transcript,
   };

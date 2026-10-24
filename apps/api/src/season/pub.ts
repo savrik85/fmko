@@ -1265,12 +1265,15 @@ async function applyIncidentEffects(
  *
  * Pro choice="all": všichni active+healthy, +8 morale + −15 cond, vyšší prob hangoveru
  * Pro choice="one": hráč s nejnižší morale, +3 morale, −5 cond, žádné drama
+ * Pro choice="invited": trenér přišel na pozvání z SMS (casual-messages.ts) za partou,
+ *   která už v hospodě sedí: kdo pozval a pár pijáků, +5 morale, −8 cond, kocovina jen pijákům
  */
 export async function createCoachLedSession(
   db: D1Database,
   teamId: string,
   gameDate: string,
-  choice: "all" | "one",
+  choice: "all" | "one" | "invited",
+  opts: { inviterId?: string } = {},
 ): Promise<{ ok: true; attendeesCount: number; incidentsCount: number } | { ok: false; reason: string }> {
   // Načti aktivní non-injured non-suspended hráče
   const players = await db.prepare(
@@ -1329,6 +1332,44 @@ export async function createCoachLedSession(
           ? `${prvni.firstName} ${prvni.lastName} to vzal za celou kabinu. Ráno to pozná.`
           : `Přebrali ${prebrali.map((o) => o.lastName).join(", ")}. Ráno bude v kabině ticho.`,
         effects: prebrali.map((o) => ({
+          playerId: o.playerId, type: "hangover" as const,
+          label: "Ranní kocovina (−15 kondice)",
+        })),
+      });
+    }
+  } else if (choice === "invited") {
+    // Parta, která trenéra pozvala: kdo psal, a k němu pár lidí, co rádi pijí.
+    const inviter = players.results.find((p) => p.id === opts.inviterId);
+    if (!inviter) return { ok: false, reason: "Kdo zval, není k dispozici" };
+    const buddies = players.results
+      .filter((p) => p.id !== inviter.id && (p.alcohol ?? 30) >= 45)
+      .sort(() => Math.random() - 0.5)
+      .slice(0, 5);
+    for (const p of [inviter, ...buddies]) {
+      attendees.push({
+        playerId: p.id, firstName: p.first_name, lastName: p.last_name,
+        alcohol: p.alcohol ?? 30, teamId, isVisitor: false,
+      });
+    }
+    incidents.push({
+      type: "coach_invited",
+      playerIds: attendees.map((a) => a.playerId),
+      // Jméno v prvním pádě jako podmět, šablony neskloňují (reference_generovane_ceske_texty).
+      text: `${inviter.first_name} ${inviter.last_name} pozval trenéra za partou do hospody a trenér opravdu dorazil. Zaplatil rundu.`,
+      effects: attendees.flatMap((a) => [
+        { playerId: a.playerId, type: "morale" as const, delta: 5, label: "+5 morálka" },
+        { playerId: a.playerId, type: "condition" as const, delta: -8, label: "−8 kondice" },
+      ]),
+    });
+    const overdid = attendees.filter((a) => a.alcohol >= 60 && Math.random() < 0.2 + ((a.alcohol - 60) / 40) * 0.25);
+    if (overdid.length > 0) {
+      incidents.push({
+        type: "drink_record",
+        playerIds: overdid.map((o) => o.playerId),
+        text: overdid.length === 1
+          ? `${overdid[0].firstName} ${overdid[0].lastName} si s trenérem připíjel až do zavíračky. Ráno to pozná.`
+          : `S trenérem vydrželi do zavíračky ${overdid.map((o) => o.lastName).join(", ")}. Ráno bude ticho.`,
+        effects: overdid.map((o) => ({
           playerId: o.playerId, type: "hangover" as const,
           label: "Ranní kocovina (−15 kondice)",
         })),

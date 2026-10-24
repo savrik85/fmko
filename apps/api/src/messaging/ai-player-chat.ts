@@ -15,6 +15,7 @@ import { domacnostSeSituaci, kontextCasu, popisSituace, pravidloEmoji, type Caso
 import { blokZnalosti } from "../incidents/znalosti";
 import type { PlayerSnapshot, AiScenario } from "./ai-player-scenarios";
 import { weightTalkPrompt } from "../season/weight-talk";
+import { memoryPromptLines, type OfferStance } from "./player-memory";
 
 
 export interface ThreadMessage {
@@ -143,6 +144,13 @@ export function popisZdravi(player: PlayerSnapshot): string {
   const inj = player.injury;
   if (inj === undefined) return "";
   if (inj === null) {
+    const last = player.recentInjury;
+    if (last) {
+      const detail = last.description ? ` (${last.description})` : "";
+      if (last.volno) return `Zdraví: jsi fit. Nedávno jsi měl od trenéra osobní volno${detail}, to už skončilo.`;
+      if (last.fake) return `Zdraví: jsi fit. Nedávno jsi trenérovi hlásil zranění${detail}, které jsi jen hrál, a teď jsi zpátky. Nepřiznáš to.`;
+      return `Zdraví: jsi zase fit. Nedávno jsi byl zraněný${detail}, už je to dobré. Když se trenér ptá, jak ti je, víš, na co se ptá.`;
+    }
     return "Zdraví: jsi fit, nejsi zraněný ani nemáš volno. Když trenér tvrdí, že jsi byl zraněný, nepřikyvuj mu a oprav ho.";
   }
   const popis = inj.description ? ` (${inj.description})` : "";
@@ -231,8 +239,47 @@ export function buildSystemPrompt(player: PlayerSnapshot, team: TeamContext, kdy
     situace,
     blokZnalosti(player.znalostiIncidentu),
     player.weightTalk ? weightTalkPrompt(player.weightTalk) : "",
+    ...memoryPromptLines(player),
+    player.lateReply === "offline"
+      ? "- Na trenérovu poslední zprávu odpovídáš až teď, po pár hodinách, telefon jsi neměl u sebe. Klidně to jednou větou řekni."
+      : "",
   ].filter(Boolean).join("\n");
 }
+
+/**
+ * Pole JSON odpovědi, která hra potřebuje vědět navíc (odložená odpověď, postoj k nabídce).
+ * Postoj k nabídce se ptá jen u hráče, na kterého nějaká nabídka čeká.
+ */
+function replyFlagFields(player: PlayerSnapshot): { schema: string; rules: string[] } {
+  const offers = (player.pendingOffers?.length ?? 0) > 0;
+  return {
+    schema: `, "write_later": <true|false>${offers ? `, "transfer_stance": "stay"|"leave"|"none"` : ""}`,
+    rules: [
+      "- write_later: true JEN když v téhle zprávě trenérovi slibuješ, že se ozveš později (teď nemáš čas). Jinak false.",
+      ...(offers
+        ? ["- transfer_stance: \"stay\", když v téhle zprávě jasně říkáš, že zůstaneš nebo ať trenér nabídku odmítne; \"leave\", když jasně chceš odejít nebo ať ji přijme; jinak \"none\"."]
+        : []),
+    ],
+  };
+}
+
+function parseReplyFlags(
+  parsed: { write_later?: unknown; transfer_stance?: unknown },
+  body: string,
+  player: PlayerSnapshot,
+): Pick<ReplyResult, "writeLater" | "transferStance"> {
+  // Postoj platí jen tam, kde se na něj ptáme: „zůstávám" bez čekající nabídky by se jinak
+  // přilepil k první nabídce, která přijde.
+  const asked = (player.pendingOffers?.length ?? 0) > 0;
+  return {
+    // Model pole občas vynechá, i když napíše „ozvu se pak". Text je pojistka.
+    writeLater: parsed.write_later === true || PROMISES_LATER_RE.test(body),
+    transferStance: asked && (parsed.transfer_stance === "stay" || parsed.transfer_stance === "leave") ? parsed.transfer_stance : undefined,
+  };
+}
+
+/** „Ozvu se pak", „napíšu potom", slovensky „ozvem sa", lámaně „ja ozvat potom". */
+const PROMISES_LATER_RE = /\b(ozvu se|ozvem sa|ozvat se? potom|napíšu (ti |vám )?(pak|potom|později|večer)|zavolám (ti |vám )?(pak|potom|později)|ozvu (se )?(pak|potom|později|večer))/i;
 
 /**
  * Rozhovor po zatrhnutém přestupu (2026-10-18): hráč zná svůj skutečný důvod odchodu
@@ -380,6 +427,10 @@ export interface ReplyResult {
    * pohnul vztahem k trenérovi a morálkou. Vyhodnocuje se ve stejném volání modelu.
    */
   effect?: { relationshipDelta: number; moraleDelta: number; summary: string };
+  /** Hráč v odpovědi slíbil, že se ozve později. Hra mu pak odpověď opravdu pošle (follow-ups.ts). */
+  writeLater?: boolean;
+  /** Co hráč v odpovědi řekl o čekající nabídce. Jen u hráče, na kterého nějaká čeká. */
+  transferStance?: OfferStance;
 }
 
 export async function generateReply(
@@ -392,6 +443,7 @@ export async function generateReply(
 ): Promise<ReplyResult> {
   const system = buildSystemPrompt(player, team);
   const histText = formatHistory(history, player.firstName);
+  const flags = replyFlagFields(player);
 
   const closingHint = isFinalTurn
     ? "TOTO JE TVOJE POSLEDNÍ ZPRÁVA — uzavři ji (poděkuj / smiř se / rozluč se / nebo prásknout dveřmi pokud tě trenér naštval). Žádné nové otázky. Pole `conversation_complete` MUSÍ být true."
@@ -417,6 +469,11 @@ export async function generateReply(
     "- Když trenér souhlasil/podpořil → poděkuj upřímně, žádná ironie.",
     "",
     closingHint,
+    // Na produkci trenér pozvání nejdřív odbyl („chlastám doma“) a za minutu napsal „už letím“.
+    // Kdyby se konverzace zavřela po první odpovědi, hra by se o přijetí nedozvěděla.
+    scenario.invite && !isFinalTurn
+      ? "POZVÁNKA: conversation_complete dej true, až když trenér jasně řekne, jestli přijde. Když se vymlouvá, zkus ho jednou přemluvit."
+      : "",
     // Slabší model pokyn o dohodě uprostřed promptu přešel a zopakoval svou předchozí
     // zprávu (test 2026-10-18), proto ještě jednou na konci, kde ho nepřehlédne.
     scenario.id === "rejected_offer" && player.transferTalk?.deals.length
@@ -424,13 +481,14 @@ export async function generateReply(
       : "",
     `Drž svou povahu (temperament ${player.temper}, vztah ${player.coachRelationship}/100). NEOPAKUJ slova ani fráze co jsi nebo trenér už použil v této konverzaci. NEPIŠ podpis.`,
     "",
+    ...flags.rules,
     "Vrať POUZE JSON v tomto tvaru (žádný markdown, žádný komentář):",
-    `{"body": "<text SMS, max 200 znaků>", "conversation_complete": <true pokud je téma vyřešené, jinak false>}`,
+    `{"body": "<text SMS, max 200 znaků>", "conversation_complete": <true pokud je téma vyřešené, jinak false>${flags.schema}}`,
   ].filter(Boolean).join("\n");
 
   const raw = await callModel(env, prompt, { json: true, maxTokens: 256, temperature: 1.0 });
 
-  const parsed = tryParseJson<{ body?: unknown; conversation_complete?: unknown }>(raw);
+  const parsed = tryParseJson<{ body?: unknown; conversation_complete?: unknown; write_later?: unknown; transfer_stance?: unknown }>(raw);
   if (!parsed) {
     logger.warn({ module: "ai-player-chat" }, `reply JSON parse failed: ${raw.slice(0, 300)}`);
     throw new GeminiUnavailableError("Reply JSON parse failed");
@@ -445,6 +503,7 @@ export async function generateReply(
   return {
     body,
     conversationComplete: parsed.conversation_complete === true || isFinalTurn,
+    ...parseReplyFlags(parsed, body, player),
   };
 }
 
@@ -510,6 +569,9 @@ export async function evaluateResolution(
     `{"morale_delta": <-15..+15>, "condition_delta": <-5..+5>, "relationship_delta": <-15..+15>, "absence_days": <0..5>, "absence_reason": "<krátký česky důvod, jen pokud absence_days > 0>", "summary": "<1 věta česky o tom jak hráč odchází>", "tone": "positive"|"negative"|"neutral"}`,
     "",
     ...(scenario.id === "rejected_offer" ? transferJudgeLines(player) : []),
+    ...(scenario.category === "casual"
+      ? ["- Hráč psal jen tak, o nic nežádal: absence_days = 0. Delty malé (-3..+3), přátelská odpověď trenéra kladně, odbytí záporně."]
+      : []),
     "Pravidla:",
     "- Pokud trenér reagoval empaticky/správně → kladné delty (zvlášť relationship +5..+12, morale +3..+10).",
     "- Pokud trenér byl odmítavý/hrubý/lhostejný → záporné (relationship -5..-12, morale -3..-10).",
@@ -554,6 +616,30 @@ export async function evaluateResolution(
 }
 
 /**
+ * Přijal trenér pozvání? Ptá se jen na jeho poslední zprávu, pár hodin po pozvání
+ * (casual-messages.ts). Na produkci psali „Ok jdu“, „už letím“, „počkej až usne žena
+ * a pak vyrazím“, ale i „chlastám doma“, takže to slovník nepozná.
+ */
+export async function coachAcceptsInvite(
+  env: ChatEnv,
+  invite: { label: string; playerFirstName: string },
+  coachMessage: string,
+): Promise<boolean> {
+  const prompt = [
+    `Hráč ${invite.playerFirstName} trenéra zval nebo se ho ptal: ${invite.label}.`,
+    `Trenér mu teď napsal: „${coachMessage}"`,
+    "",
+    "Souhlasil trenér v TÉHLE zprávě? Tedy slíbil, že přijde (\"jdu\", \"dorazím\", \"už letím\", \"počkej, za chvíli jsem tam\"),",
+    "nebo hráči řekl, ať se staví (\"jasně, přijď\", \"stav se v šest\").",
+    "Váhání, \"možná\", \"uvidím\", vtip bez slibu nebo odmítnutí = false.",
+    "",
+    "Vrať POUZE JSON: {\"accepted\": true|false}",
+  ].join("\n");
+  const raw = await callModel(env, prompt, { json: true, maxTokens: 40, temperature: 0 });
+  return tryParseJson<{ accepted?: unknown }>(raw)?.accepted === true;
+}
+
+/**
  * Odpověď hráče na zprávu, kterou mu trenér napsal sám od sebe.
  *
  * Vlastní generátor, protože `generateReply` staví na scénáři, který si hráč
@@ -571,6 +657,7 @@ export async function generateCoachInitiatedReply(
   const histText = history
     .map((m) => `${m.sender === "player" ? player.firstName : "TRENÉR"}: ${m.body}`)
     .join("\n");
+  const flags = replyFlagFields(player);
 
   const prompt = [
     system,
@@ -592,25 +679,71 @@ export async function generateCoachInitiatedReply(
     `- morale_delta (-${COACH_CHAT_MAX_MORALE}..+${COACH_CHAT_MAX_MORALE}): jak ti rozhovor zvedl nebo zkazil náladu.`,
     "- summary: jedna krátká věta česky ve TŘETÍ osobě o tom, co trenér v poslední zprávě udělal, bez čísel (např. „Trenér se omluvil a pozval ho na pivo“, „Trenér ho seřval za výkon“, „Trenér jen pozdravil“).",
     "Při conversation_complete = false dej relationship_delta a morale_delta 0.",
+    ...flags.rules,
     "",
     "Vrať POUZE JSON (žádný markdown):",
-    `{"body": "<text SMS, max 200 znaků>", "conversation_complete": <true|false>, "relationship_delta": <číslo>, "morale_delta": <číslo>, "summary": "<věta>"}`,
+    `{"body": "<text SMS, max 200 znaků>", "conversation_complete": <true|false>, "relationship_delta": <číslo>, "morale_delta": <číslo>, "summary": "<věta>"${flags.schema}}`,
   ].filter(Boolean).join("\n");
 
   const raw = await callModel(env, prompt, { json: true, maxTokens: 320, temperature: 0.95 });
   const parsed = tryParseJson<{
     body?: unknown; conversation_complete?: unknown;
     relationship_delta?: unknown; morale_delta?: unknown; summary?: unknown;
+    write_later?: unknown; transfer_stance?: unknown;
   }>(raw);
   if (!parsed || typeof parsed.body !== "string" || !parsed.body.trim()) {
     throw new GeminiUnavailableError("Coach-initiated reply JSON parse failed");
   }
   const complete = parsed.conversation_complete === true || isFinalTurn;
+  const body = trimSms(parsed.body);
   return {
-    body: trimSms(parsed.body),
+    body,
     conversationComplete: complete,
     effect: complete ? coachChatEffect(parsed) : undefined,
+    ...parseReplyFlags(parsed, body, player),
   };
+}
+
+/**
+ * Zpráva, kterou hráč pošle sám později (follow-ups.ts): odpověď po šichtě, ranní
+ * omluva po opilé hlasovce, poděkování za přijaté pozvání. `instruction` říká, proč
+ * píše teď; historie je, co si spolu psali naposledy.
+ */
+export async function generateFollowUpMessage(
+  env: ChatEnv,
+  player: PlayerSnapshot,
+  team: TeamContext,
+  history: ThreadMessage[],
+  instruction: string,
+  opts: { kdy?: Date; photo?: { alt: string } } = {},
+): Promise<Pick<ReplyResult, "body" | "transferStance">> {
+  const system = buildSystemPrompt(player, team, opts.kdy);
+  const offers = (player.pendingOffers?.length ?? 0) > 0;
+  const prompt = [
+    system,
+    "",
+    `PROČ PÍŠEŠ TEĎ: ${instruction}`,
+    ...(opts.photo
+      ? [`K SMS přikládáš fotku z mobilu: ${opts.photo.alt}. Text je popisek k ní jako ve WhatsAppu: fotku nepopisuj, jen na ni přirozeně navaž.`]
+      : []),
+    "",
+    "HISTORIE KONVERZACE (naposledy dole):",
+    history.length > 0 ? formatHistory(history, player.firstName) : "(zatím nic)",
+    "",
+    "Napiš JEDNU SMS. Neslibuj, že se ozveš později, teď už píšeš. NEOPAKUJ věty z historie. NEPIŠ podpis.",
+    ...(offers ? replyFlagFields(player).rules.slice(1) : []),
+    "",
+    "Vrať POUZE JSON (žádný markdown):",
+    `{"body": "<text SMS, max 200 znaků>"${offers ? `, "transfer_stance": "stay"|"leave"|"none"` : ""}}`,
+  ].filter(Boolean).join("\n");
+
+  const raw = await callModel(env, prompt, { json: true, maxTokens: 256, temperature: 0.95 });
+  const parsed = tryParseJson<{ body?: unknown; transfer_stance?: unknown }>(raw);
+  if (!parsed || typeof parsed.body !== "string" || !parsed.body.trim()) {
+    throw new GeminiUnavailableError("Follow-up JSON parse failed");
+  }
+  const body = trimSms(parsed.body);
+  return { body, transferStance: parseReplyFlags(parsed, body, player).transferStance };
 }
 
 /** Dopad rozhovoru od trenéra z odpovědi modelu, oříznutý na povolené meze. */

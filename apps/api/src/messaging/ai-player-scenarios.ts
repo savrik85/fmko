@@ -11,8 +11,11 @@
 
 import type { RadekZnalosti } from "../incidents/znalosti";
 import type { TransferTalk } from "../transfers/unrest-reasons";
+import type { InterestLevel } from "../transfers/player-interest";
+import { CASUAL_TOPICS, type InviteKind } from "./casual-topics";
 
-export type ScenarioCategory = "complaint" | "positive" | "personal" | "transfer";
+/** `casual` = zpráva „jen tak" (casual-topics.ts): bez stížnosti, neodpovězená nikoho neurazí. */
+export type ScenarioCategory = "complaint" | "positive" | "personal" | "transfer" | "casual";
 
 export interface PlayerSnapshot {
   /** Píše z hospody (ruční téma s fotkou stolu): časový kontext se přepne na pití v hospodě. */
@@ -93,6 +96,26 @@ export interface PlayerSnapshot {
    * `loadLastOwnMessageAt`. Kdo před chvílí psal, toho trenérova SMS nevzbudila.
    */
   lastOwnMessageAt?: string;
+
+  /**
+   * Naposledy doléčené zranění (`life_context.lastInjury`, zapisuje denní tick). Bez něj
+   * hráč na „doufám, že už je ti líp" odepsal „žádné zranění nemám, to si pleteš".
+   */
+  recentInjury?: { description: string; volno: boolean; fake: boolean };
+  /** Trenérovi v posledních dnech volal a ten to nevzal (tabulka missed_calls). */
+  missedCall?: { count: number };
+  /** V téhle konverzaci nedávno poslal opilou hlasovku. Ať pak nezapírá, že pil. */
+  drunkVoiceRecently?: boolean;
+  /**
+   * Nabídky jiných klubů, které na něj čekají na rozhodnutí trenéra, a jak moc ho lákají.
+   * Bez nich hráč trenérovi slíbil „zůstávám, odmítněte to" a po odmítnutí se zlobil.
+   */
+  pendingOffers?: Array<{ club: string; interest: InterestLevel }>;
+  /**
+   * Odpovídá se zpožděním: `busy` = slíbil, že se ozve po práci, `offline` = zprávu
+   * nedostal hned (výpadek modelu). Jen pro odložené zprávy (follow-ups.ts).
+   */
+  lateReply?: "busy" | "offline";
 }
 
 export interface AiScenario {
@@ -107,6 +130,8 @@ export interface AiScenario {
   writtenAtUtcHour?: number;
   /** Hráč sedí v hospodě, ať text i čas sedí k fotce stolu s pivy. */
   atPub?: boolean;
+  /** Hráč trenéra někam zve. Když pozvání přijme, něco se stane (casual-messages.ts). */
+  invite?: InviteKind;
 }
 
 const w = (cond: boolean, value: number): number => (cond ? value : 0);
@@ -126,6 +151,7 @@ export const AI_PLAYER_SCENARIOS: AiScenario[] = [
     weight: () => 0,
     writtenAtUtcHour: 19,
     atPub: true,
+    invite: "pub",
   },
   // Jen ruční rozeslání z adminu (ukázková hlasovka pro všechny), náhodný spawn ho nevybere.
   {
@@ -227,7 +253,10 @@ export const AI_PLAYER_SCENARIOS: AiScenario[] = [
     expectedTurns: 2,
     description:
       "Mladý/náhradní hráč dostal poprvé šanci a chce poděkovat. Přiznává, že byl nervózní, slibuje, že nezklame.",
+    // Jen kdo v posledním zápase opravdu nastoupil. Minuty za 30 dní to nepoznají:
+    // hráč pak děkoval „za šanci v posledním zápase, i když jsem nehrál" (2026-10-21).
     weight: (p) =>
+      p.playedLastMatch !== true ? 0 :
       w(p.age <= 22 && p.recentMinutes > 30 && p.recentMinutes < 200, 5) +
       w(p.coachRelationship < 60, 2),
   },
@@ -485,5 +514,5 @@ export function pickScenarioForPlayer(
 }
 
 export function getScenarioById(id: string): AiScenario | null {
-  return AI_PLAYER_SCENARIOS.find((s) => s.id === id) ?? null;
+  return AI_PLAYER_SCENARIOS.find((s) => s.id === id) ?? CASUAL_TOPICS.find((s) => s.id === id) ?? null;
 }

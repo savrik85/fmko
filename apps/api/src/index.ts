@@ -171,6 +171,20 @@ export default {
     env = aiSwitch.env;
     if (aiSwitch.provider !== "gemini") log("info", `AI poskytovatel: ${aiSwitch.provider}`);
 
+    // ── TELEFON KAŽDOU HODINU (xx:30): zprávy „jen tak" a odložené zprávy hráčů ──
+    // Končí hned tady. Bloky níž se zčásti řídí jen pražskou hodinou (pohár od poledne),
+    // hodinový cron by je spouštěl každou hodinu.
+    if (cron === "30 * * * *") {
+      try {
+        const { runPhoneHourly } = await import("./messaging/casual-messages");
+        const r = await runPhoneHourly(env.DB, env);
+        log("info", `telefon: ${r.casual} zpráv jen tak, odložené ${r.followUps.delivered} doručeno / ${r.followUps.cancelled} zrušeno / ${r.followUps.retried} znovu`);
+      } catch (e: any) {
+        log("error", "hodinový běh telefonu selhal", e);
+      }
+      return;
+    }
+
     // Ligové kolo se hraje v 18:00 pražského času: v létě v 16:xx UTC, v zimě v 17:xx UTC
     // (lib/match-tick-schedule.ts). Crony jsou v plánu pro obě hodiny.
     const { pragueHour, isMatchTickNow, isRoundRecoveryTickNow } = await import("./lib/match-tick-schedule");

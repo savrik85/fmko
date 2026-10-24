@@ -17,6 +17,7 @@ import { applyCoachRelationDelta } from "../lib/coach-relation";
 import { reasonSms, unrestReasonsFromFactors, type ClubStep, type UnrestReason } from "./unrest-reasons";
 import { LEVEL_RANK } from "../league/district-leagues";
 import { resolvePromises } from "./promises";
+import { stanceForOffer } from "../messaging/player-memory";
 
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 const DAY_MS = 86400000;
@@ -198,9 +199,23 @@ export async function applyOfferRejectionImpact(
   // nebo nechal propadnout: porušený slib bez ohledu na to, jak moc hráč chce pryč.
   const brokenReleasePledge = unrest.pledge?.type === "release" && unrest.pledge.offerId === (offer.id as string);
 
+  // Co hráč trenérovi o nabídce sám napsal (messaging/player-memory.ts). Dřív dostal David Novák
+  // hned po svém „nabídku odmítněte“ šablonu „smetl jste to ze stolu“ (prod 2026-10-24).
+  // Postoj ale vzniká z odpovědi modelu na text manažera, takže zájem posune nejvýš o jeden
+  // stupeň: kdo váhal nebo chtěl jít, se po přemluvení nezlobí; kdo velmi chtěl přestoupit,
+  // se zlobí dál, jen míň. Jinak by šlo trest obejít tím, co manažer hráči napíše.
+  const stance = stanceForOffer(lc.offerStance, offer.id as string);
+  if (stance) {
+    await db.prepare("UPDATE players SET life_context = json_remove(life_context, '$.offerStance') WHERE id = ?")
+      .bind(playerId).run().catch((e) => logger.warn({ module: "rejection-impact" }, "smazání postoje k nabídce", e));
+  }
+  const level = (stance === "stay" ? Math.max(0, interest.level - 1)
+    : stance === "leave" ? Math.max(interest.level, 2) : interest.level) as typeof interest.level;
+  if (stance) logger.info({ module: "rejection-impact" }, `${trigger}: ${playerRef.firstName} ${playerRef.lastName} v SMS řekl ${stance}, zájem ${interest.level} → ${level}`);
+
   // Hráč odejít nechtěl → žádný trest; věrný patriot má z odmítnutí radost
-  if (interest.level <= 1 && !brokenReleasePledge) {
-    if (interest.level === 0 && (pers.patriotism ?? 50) > 70) {
+  if (level <= 1 && !brokenReleasePledge) {
+    if (level === 0 && (pers.patriotism ?? 50) > 70) {
       const newMorale = clamp(morale + 2, 0, 100);
       await db.prepare("UPDATE players SET life_context = json_set(life_context, '$.morale', ?) WHERE id = ?")
         .bind(newMorale, playerId).run().catch((e) => logger.warn({ module: "rejection-impact" }, "loyal morale boost", e));
@@ -220,8 +235,8 @@ export async function applyOfferRejectionImpact(
   const temper: number = pers.temper ?? 40;
   const temperScale = 0.75 + temper / 200; // 0.75–1.25
 
-  let moraleDelta = Math.round((interest.level === 3 ? -10 : -6) * temperScale * loanFactor * stackFactor);
-  let coachRelDelta = Math.round((interest.level === 3 ? -6 : -3) * loanFactor * stackFactor);
+  let moraleDelta = Math.round((level === 3 ? -10 : -6) * temperScale * loanFactor * stackFactor);
+  let coachRelDelta = Math.round((level === 3 ? -6 : -3) * loanFactor * stackFactor);
   // Klubová kronika a vitrína — hráč, kterému klub něco znamená, odchází neradi.
   // U rodáků (vysoký patriotism) váží dvojnásob: ty fotky v klubovně jsou jejich.
   const trophyFx = await (async () => {
@@ -234,7 +249,7 @@ export async function applyOfferRejectionImpact(
   const patriotism: number = pers.patriotism ?? 50;
   const loyaltyMod = Math.min(0.6, trophyFx * (patriotism >= 70 ? 2 : 1));
 
-  let unrestAdd = Math.round((interest.level === 3 ? 55 : 35) * loanFactor * stackFactor * (1 - loyaltyMod));
+  let unrestAdd = Math.round((level === 3 ? 55 : 35) * loanFactor * stackFactor * (1 - loyaltyMod));
   let newLevel = clamp(Math.round(unrest.level + unrestAdd), 0, 100);
 
   if (brokenTransferPledge) {
@@ -326,13 +341,13 @@ export async function applyOfferRejectionImpact(
       : undefined;
     await createNotification(db, sellerClubTeamId, "transfer",
       `😠 ${playerRef.firstName} ${playerRef.lastName} je naštvaný`,
-      `${trigger === "expire" ? "Nabídka od" : "Odmítl jsi nabídku od"} ${teamName} — hráč o přestup stál (${INTEREST_LABELS[interest.level]}).`,
+      `${trigger === "expire" ? "Nabídka od" : "Odmítl jsi nabídku od"} ${teamName} — hráč o přestup stál (${INTEREST_LABELS[level]}).`,
       `/hrac/${playerId}`,
       pushEnv);
   } catch (e) { logger.warn({ module: "rejection-impact" }, "unrest notification", e); }
 
   logger.info({ module: "rejection-impact" },
-    `${trigger}: ${playerRef.firstName} ${playerRef.lastName} interest=${interest.level} morale ${morale}→${newMorale} unrest ${unrest.level}→${newLevel}`);
+    `${trigger}: ${playerRef.firstName} ${playerRef.lastName} interest=${level} morale ${morale}→${newMorale} unrest ${unrest.level}→${newLevel}`);
 }
 
 function pick<T>(arr: T[]): T {

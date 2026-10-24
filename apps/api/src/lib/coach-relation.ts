@@ -17,6 +17,8 @@ export type CoachRelationSource =
   | "transfer_rejected"
   | "interview"
   | "pub"
+  // Trenér přišel na pozvání z SMS (messaging/follow-ups.ts).
+  | "invite"
   | "incident"
   | "left_out"
   | "arrival"

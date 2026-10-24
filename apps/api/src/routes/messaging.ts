@@ -575,6 +575,18 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
       .catch((e) => logger.warn({ module: "messaging" }, "domluva o váze", e));
   }
 
+  // Hráč trenéra pozval (hospoda, zabijačka…): když v téhle zprávě slíbil, že přijde, splní se to
+  // (messaging/casual-messages.ts). Posuzuje se jen pár hodin po pozvání, jinak nic nestojí.
+  // U hlasové odpovědi je `body` její přepis, „jdu“ do mikrofonu platí stejně.
+  if (conv?.type === "player") {
+    const { handleCoachMessageForInvite } = await import("../messaging/casual-messages");
+    c.executionCtx.waitUntil(
+      handleCoachMessageForInvite(c.env.DB, c.env, convId, body.body.trim())
+        .then(() => undefined)
+        .catch((e) => logger.error({ module: "messaging" }, "odpověď na pozvání", e)),
+    );
+  }
+
   // AI player chat hook: pokud je thread aktivní a čeká na trenéra,
   // atomic UPDATE awaiting='player' (race guard) a spustíme generování reply v pozadí.
   if (conv?.type === "player" && conv.ai_thread_active === 1) {

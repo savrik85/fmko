@@ -60,6 +60,61 @@ export const PHOTO_SCENES: Record<string, PhotoScene> = {
     alt: "zablácené kopačky a míč na tréninku",
     portrait: true,
   },
+  // Zprávy „jen tak" (casual-topics.ts) a poděkování po přijatém pozvání.
+  fishing_catch: {
+    id: "fishing_catch",
+    prompt: `${PHONE_PHOTO} A big mirror carp lying on wet grass at the edge of a South Bohemian fish pond, next to it a fishing rod and a landing net, reeds and a misty pond surface behind, early morning light. ${NO_TEXT}`,
+    alt: "velký kapr v trávě u rybníka, vedle prut a podběrák",
+    portrait: true,
+  },
+  mushrooms_basket: {
+    id: "mushrooms_basket",
+    prompt: `${PHONE_PHOTO} A wicker basket full of freshly picked porcini mushrooms standing on green moss in a spruce forest, a small folding knife on top, autumn light between the trees. ${NO_TEXT}`,
+    alt: "košík plný hřibů na mechu v lese",
+    portrait: true,
+  },
+  pig_slaughter_table: {
+    id: "pig_slaughter_table",
+    prompt: `${PHONE_PHOTO} A farmhouse kitchen table after a traditional Czech home pig slaughter feast: plates of homemade jitrnice and jelito sausages, sliced boiled pork, a pot of soup, rye bread, grated horseradish and small glasses of clear plum brandy, checked oilcloth tablecloth, warm evening light. Only cooked food, no raw meat, no animals. ${NO_TEXT}`,
+    alt: "stůl ze zabijačky: jitrnice, jelita, ovar a slivovice",
+    portrait: false,
+  },
+  bbq_grill: {
+    id: "bbq_grill",
+    prompt: `${PHONE_PHOTO} A charcoal grill in a village garden with sizzling sausages and pork neck steaks, smoke rising, a crate of brown beer bottles without labels next to it, a wooden fence and fruit trees behind, summer evening. ${NO_TEXT}`,
+    alt: "gril na zahradě s klobásami a krkovicí, vedle basa piv",
+    portrait: true,
+  },
+  feast_cakes: {
+    id: "feast_cakes",
+    prompt: `${PHONE_PHOTO} A kitchen table with a large baking tray of traditional round Czech koláče with poppy seed, plum jam and sweet cottage cheese fillings, dusted with sugar, a cup of coffee next to it, an old lace tablecloth, morning light from a window. ${NO_TEXT}`,
+    alt: "plech posvícenských koláčů s mákem, povidly a tvarohem",
+    portrait: false,
+  },
+  gift_basket: {
+    id: "gift_basket",
+    prompt: `${PHONE_PHOTO} A kitchen table with a cardboard tray of brown hen eggs, two glass jars of golden honey without labels and a bowl of red apples, ready to be given away, morning light. ${NO_TEXT}`,
+    alt: "vajíčka od slepic, med ve sklenicích a jablka na stole",
+    portrait: true,
+  },
+  new_boots: {
+    id: "new_boots",
+    prompt: `${PHONE_PHOTO} A pair of brand-new football boots in an open shoebox on a bed with crumpled tissue paper, plain bright colors, no brand logos, no stripes, evening lamp light. ${NO_TEXT}`,
+    alt: "nové kopačky v otevřené krabici na posteli",
+    portrait: true,
+  },
+  wedding_rings: {
+    id: "wedding_rings",
+    prompt: `${PHONE_PHOTO} Two gold wedding rings lying on a white tablecloth next to a small bouquet of flowers and glasses of sparkling wine, a festively decorated village hall blurred in the background. ${NO_TEXT}`,
+    alt: "snubní prstýnky na stole vedle kytice a sklenic",
+    portrait: true,
+  },
+  baby_shoes: {
+    id: "baby_shoes",
+    prompt: `${PHONE_PHOTO} Tiny knitted baby shoes lying on a soft white blanket next to a small plush teddy bear, warm soft light, no baby in the photo. ${NO_TEXT}`,
+    alt: "malé pletené botičky na dečce vedle plyšáka",
+    portrait: true,
+  },
 };
 
 /** Pohled z práce podle pracoviště (`WORKPLACE_AMBIENCE` ve voice-message.ts). */
@@ -169,7 +224,11 @@ export async function generatePlayerPhoto(
   return null;
 }
 
-/** Zpráva v historii pro AI: fotka se popíše, ať hráč ví, co poslal. */
-export function historyBody(body: string, photoAlt: string | null | undefined): string {
-  return photoAlt ? `[Fotka: ${photoAlt}] ${body}` : body;
+/**
+ * Zpráva v historii pro AI: fotka se popíše, ať hráč ví, co poslal. Opilá hlasovka
+ * se označí, jinak hráč druhý den tvrdil, že nepije.
+ */
+export function historyBody(body: string, photoAlt: string | null | undefined, drunkVoice = false): string {
+  const tags = [photoAlt ? `[Fotka: ${photoAlt}]` : "", drunkVoice ? "[Opilá hlasovka z hospody]" : ""].filter(Boolean);
+  return tags.length > 0 ? `${tags.join(" ")} ${body}` : body;
 }
