@@ -26,7 +26,11 @@ export function PhoneFrame({ children }: { children: React.ReactNode }) {
   // ve hře. Na malém displeji je proto rámeček tenčí a rohy menší, ať se
   // neukusuje z obsahu.
   return (
-    <div className="flex justify-center items-start p-2 sm:py-6 sm:px-4 h-full sm:h-auto">
+    // Na mobilu sahá telefon až ke spodní liště: layout drží pod obsahem pevných 5rem
+    // (`pb-20` v main), lišta je ale nižší, takže se o rozdíl protáhne a stejně tolik
+    // ubere zápornou spodní marginou, aby main nezačal rolovat. `--bottom-nav-h`
+    // hlásí BottomNav, bez něj se počítá s výškou lišty 3rem.
+    <div className="flex justify-center items-start px-2 pt-2 pb-1 h-[calc(100%+5rem-var(--bottom-nav-h,3rem))] -mb-[calc(5rem-var(--bottom-nav-h,3rem))] sm:mb-0 sm:py-6 sm:px-4 sm:h-auto">
       <div className="w-full sm:w-[380px] h-full sm:h-[700px] rounded-[1.75rem] sm:rounded-[2.5rem] border-4 sm:border-[6px] border-[#2c2c2e] shadow-xl sm:shadow-2xl overflow-hidden relative bg-white flex flex-col">
         {/* Notch */}
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-24 sm:w-28 h-5 sm:h-6 bg-gray-800 rounded-b-2xl z-20" />

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMenuBadges } from "@/hooks/use-menu-badges";
 
 /**
@@ -55,6 +55,20 @@ export function BottomNav() {
   const pathname = usePathname();
   const schodek = useSchodekViewportu();
   const badges = useMenuBadges();
+  const navRef = useRef<HTMLElement | null>(null);
+
+  // Skutečná výška lišty pro stránky, které mají sahat až k ní (Telefon). Mění se se
+  // safe-area a schodkem, pevné odsazení `pb-20` v layoutu nechávalo nad lištou mezeru.
+  useEffect(() => {
+    const nav = navRef.current;
+    if (!nav || typeof ResizeObserver === "undefined") return;
+    const root = document.documentElement;
+    const publish = () => root.style.setProperty("--bottom-nav-h", `${nav.offsetHeight}px`);
+    publish();
+    const observer = new ResizeObserver(publish);
+    observer.observe(nav);
+    return () => { observer.disconnect(); root.style.removeProperty("--bottom-nav-h"); };
+  }, []);
 
   const items = [
     { href: "/prehled", label: "Domů", icon: "🏟" },
@@ -67,6 +81,7 @@ export function BottomNav() {
 
   return (
     <nav
+      ref={navRef}
       className="on-dark fixed bottom-0 left-0 right-0 z-[var(--z-nav)] sm:hidden"
       style={{
         background: "var(--color-chrome)",
