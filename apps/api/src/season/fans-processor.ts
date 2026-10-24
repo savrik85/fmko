@@ -100,6 +100,83 @@ function clamp(n: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, n));
 }
 
+/** Produkt bufetu tak, jak ho fanoušci posuzují: kvalita a prodejní cena. */
+export type PricedProduct = Pick<SoldProductInput, "key" | "qualityLevel" | "sellPrice">;
+
+/** Název produktu a kolikrát je prodejní cena nad nákupní. Null, když produkt nemá nákupní cenu. */
+function productPricing(p: PricedProduct): { label: string; priceRatio: number } | null {
+  const catalog = CONCESSION_CATALOG[p.key];
+  if (!catalog) return null;
+  const tier = catalog.tiers[p.qualityLevel];
+  if (!tier || tier.wholesalePrice === 0) return null;
+  return { label: catalog.label.toLowerCase(), priceRatio: p.sellPrice / tier.wholesalePrice };
+}
+
+/** Co ze zázemí stadionu fanoušky po domácím zápase potěší. */
+export interface AmenityInput {
+  /** Ozvučení a hlasatel. */
+  paSystemBonus?: number;
+  /** Sociálky a pořadatelská služba. */
+  facilityBonus?: number;
+  /** Usměvavá obsluha, jen u vlastního prodeje. */
+  staffBonus?: number;
+  concessionMode: "external" | "self";
+  /** Nabídka bufetu. Kvalitní zboží za férovou cenu potěší, jen u vlastního prodeje. */
+  products: PricedProduct[];
+  /** Stav trávníku 0–100. */
+  pitchCondition?: number | null;
+}
+
+/**
+ * Body za zázemí před stropem `AMENITY_BONUS_CAP` a co je přineslo.
+ *
+ * Jediný výpočet pro zápas (`computeMatchSatisfactionDelta`) i pro nabídku vylepšení
+ * (`amenity-outlook.ts`). Obchod tak ukáže přesně to, co zápas započítá: ozvučení,
+ * sociálky i pořadatelé slibují každé svoje body, ale sečtou se a useknou na strop.
+ */
+export function amenityPoints(input: AmenityInput): { points: number; sources: string[] } {
+  let points = 0;
+  const sources: string[] = [];
+  // Ozvučení a hlasatel — hymna před derby, sestavy nahlas, dechovka o poločase
+  if ((input.paSystemBonus ?? 0) > 0) {
+    points += input.paSystemBonus as number;
+    sources.push("ozvučení");
+  }
+  if ((input.facilityBonus ?? 0) > 0) {
+    points += input.facilityBonus as number;
+    sources.push("sociálky");
+  }
+  if (input.concessionMode === "self" && (input.staffBonus ?? 0) > 0) {
+    points += input.staffBonus as number;
+    sources.push("obsluha");
+  }
+  // Kvalitní občerstvení za férovou cenu, jen self mode
+  if (input.concessionMode === "self") {
+    for (const p of input.products) {
+      const pricing = productPricing(p);
+      if (pricing && p.qualityLevel >= 2 && pricing.priceRatio <= 1.8) {
+        points += 1;
+        sources.push(pricing.label);
+      }
+    }
+  }
+  if (input.pitchCondition != null && input.pitchCondition >= 90) {
+    points += 1;
+    sources.push("trávník jak koberec");
+  }
+  return { points, sources };
+}
+
+/**
+ * O kolik spokojenosti po domácím zápase klub přijde nebo ji získá, když se body zázemí
+ * změní z `before` na `after`. Body nad strop se nepočítají, takže vylepšení klubu,
+ * který strop už má, nepřidá nic.
+ */
+export function amenityGain(before: number, after: number): number {
+  const counted = (points: number) => Math.min(AMENITY_BONUS_CAP, Math.max(0, points));
+  return counted(after) - counted(before);
+}
+
 /**
  * Spočítá delta spokojenosti fanoušků po zápase. Pure funkce, testovatelná bez DB.
  */
@@ -145,39 +222,16 @@ export function computeMatchSatisfactionDelta(input: MatchSatisfactionInput): Ma
     }
   }
 
-  // 4. Ozvučení a hlasatel — hymna před derby, sestavy nahlas, dechovka o poločase
-  // Kladné body za zázemí se sčítají zvlášť a na konci se useknou stropem.
-  let zazemi = 0;
-  const zazemiCo: string[] = [];
-  if ((input.paSystemBonus ?? 0) > 0) {
-    zazemi += input.paSystemBonus as number;
-    zazemiCo.push("ozvučení");
-  }
-  if ((input.facilityBonus ?? 0) > 0) {
-    zazemi += input.facilityBonus as number;
-    zazemiCo.push("sociálky");
-  }
-  if (input.concessionMode === "self" && (input.staffBonus ?? 0) > 0) {
-    zazemi += input.staffBonus as number;
-    zazemiCo.push("obsluha");
-  }
+  // 4. Zázemí (ozvučení, sociálky, obsluha, kvalitní bufet, trávník) se sčítá zvlášť
+  // v `amenityPoints` a na konci se usekne stropem. Tady zůstávají jen postihy.
 
   // 5. Občerstvení — jen self mode má dopad na satisfaction
   if (input.concessionMode === "self") {
     for (const p of input.soldProducts) {
-      const catalog = CONCESSION_CATALOG[p.key];
-      if (!catalog) continue;
-      const tier = catalog.tiers[p.qualityLevel];
-      if (!tier || tier.wholesalePrice === 0) continue;
+      const pricing = productPricing(p);
+      if (!pricing) continue;
+      const { priceRatio, label } = pricing;
 
-      const priceRatio = p.sellPrice / tier.wholesalePrice;
-      const label = catalog.label.toLowerCase();
-
-      // Kvalitní a férové ceny = +1
-      if (p.qualityLevel >= 2 && priceRatio <= 1.8) {
-        zazemi += 1;
-        zazemiCo.push(label);
-      }
       // Nízká kvalita a přepálená cena = -2
       if (p.qualityLevel <= 1 && priceRatio > 2.0) {
         delta -= 2;
@@ -214,16 +268,21 @@ export function computeMatchSatisfactionDelta(input: MatchSatisfactionInput): Ma
     } else if (pc < 35) {
       delta -= 2;
       reasons.push("Zanedbaný trávník -2");
-    } else if (pc >= 90) {
-      zazemi += 1;
-      zazemiCo.push("trávník jak koberec");
     }
   }
 
-  if (zazemi > 0) {
-    const body = Math.min(AMENITY_BONUS_CAP, zazemi);
-    delta += body;
-    reasons.push(`Zázemí +${body} (${zazemiCo.join(", ")})`);
+  const amenity = amenityPoints({
+    paSystemBonus: input.paSystemBonus,
+    facilityBonus: input.facilityBonus,
+    staffBonus: input.staffBonus,
+    concessionMode: input.concessionMode,
+    products: input.soldProducts,
+    pitchCondition: input.pitchCondition,
+  });
+  if (amenity.points > 0) {
+    const counted = Math.min(AMENITY_BONUS_CAP, amenity.points);
+    delta += counted;
+    reasons.push(`Zázemí +${counted} (${amenity.sources.join(", ")})`);
   }
 
   return { delta: clamp(delta, -15, 15), reasons };

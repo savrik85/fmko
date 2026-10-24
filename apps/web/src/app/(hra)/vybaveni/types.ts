@@ -1,4 +1,5 @@
 import type { LockDetailData } from "@/components/ui";
+import type { AmenityOutlook } from "@/lib/amenity-outlook";
 
 export interface CategoryInfo {
   key: string; label: string; level: number; condition: number; effectiveLevel: number; description: string;
@@ -8,6 +9,8 @@ export interface UpgradeOption {
   category: string; label: string; currentLevel: number; nextLevel: number; cost: number;
   effect: string; description: string; locked: boolean;
   lockReason?: string; lockDetail?: LockDetailData; lockHint?: string;
+  /** Ozvučení: kolik spokojenosti klubu po stropu zázemí opravdu přidá. */
+  amenity?: AmenityOutlook;
 }
 
 export interface RepairOption {
@@ -57,6 +60,8 @@ export interface BazarListing {
   price: number; expiresAt: string;
   myLevel: number; shopPrice: number; savings: number; repairCostAfterBuy: number;
   canBuy: boolean; blockReason: string | null; lockDetail: LockDetailData | null;
+  /** Ozvučení: kolik spokojenosti koupě v tomhle stavu klubu po stropu zázemí přidá. */
+  amenity?: AmenityOutlook;
   /** Soukromý inzerát: kradené zboží, prodává ho soukromník (incidenty). */
   isPrivateListing: boolean;
   /** Jen okradenému klubu a jen u poznatelného zboží: vypadá to jako jeho ukradené vybavení. */

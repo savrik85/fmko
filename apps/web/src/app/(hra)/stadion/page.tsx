@@ -8,6 +8,7 @@ import { Spinner, SectionLabel, useConfirm, LockDetail, type LockDetailData } fr
 import { StadiumView } from "@/components/stadium/stadium-view";
 import { KotelPrehravac } from "@/components/stadium/KotelPrehravac";
 import { moistureLabel, moistureHint } from "@/lib/pitch-moisture";
+import { amenityDetail, amenityTone, withAmenityNote, type AmenityOutlook } from "@/lib/amenity-outlook";
 
 /** Počasí nad areálem — popisek do hlavičky karty. */
 const WEATHER_LABEL: Record<string, string> = {
@@ -76,6 +77,8 @@ interface UpgradeOption {
   lockDetail?: LockDetailData;
   lockHint?: string;
   villageCanFund?: boolean;
+  /** Sociálky a pořadatelé: kolik spokojenosti klubu po stropu zázemí opravdu přidají. */
+  amenity?: AmenityOutlook;
 }
 
 interface PitchAction {
@@ -555,12 +558,16 @@ export default function StadiumPage() {
     setActing(null);
   };
 
-  const handleUpgrade = async (facility: string, label: string, cost: number, effect: string) => {
+  const handleUpgrade = async (facility: string, label: string, cost: number, effect: string, amenity?: AmenityOutlook) => {
     if (!teamId || acting) return;
     const ok = await confirm({
       title: `Vylepšit ${label}?`,
-      description: effect,
-      details: [{ label: "Cena", value: `-${formatCZK(cost)}`, color: "text-card-red" }],
+      // Zázemí má společný strop: co vylepšení klubu opravdu přidá, musí hráč vidět před platbou.
+      description: withAmenityNote(effect, amenity),
+      details: [
+        ...(amenity ? [amenityDetail(amenity)] : []),
+        { label: "Cena", value: `-${formatCZK(cost)}`, color: "text-card-red" },
+      ],
       confirmLabel: `Koupit za ${formatCZK(cost)}`,
     });
     if (!ok) return;
@@ -1460,9 +1467,12 @@ export default function StadiumPage() {
                       <span className="font-heading font-bold tabular-nums">{formatCZK(upgrade.cost)}</span>
                     </div>
                     <div className="text-sm text-pitch-600 leading-snug">{upgrade.effect}</div>
+                    {upgrade.amenity && (
+                      <div className={`text-sm leading-snug mt-1 ${amenityTone(upgrade.amenity)}`}>{upgrade.amenity.note}</div>
+                    )}
                   </div>
                   <button
-                    onClick={() => handleUpgrade(upgrade.facility, upgrade.label, upgrade.cost, upgrade.effect)}
+                    onClick={() => handleUpgrade(upgrade.facility, upgrade.label, upgrade.cost, upgrade.effect, upgrade.amenity)}
                     disabled={!canUpgrade || !!acting}
                     className="btn btn-primary btn-sm min-h-11 w-full sm:w-auto"
                   >

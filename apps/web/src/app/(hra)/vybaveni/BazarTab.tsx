@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { LockDetail, SectionLabel, Spinner } from "@/components/ui";
+import { amenityTone } from "@/lib/amenity-outlook";
 import {
   EQUIPMENT_ICONS, condBarColor, condColor, daysLeft, formatCZK,
   type BazarData, type BazarListing, type MyListing,
@@ -169,6 +170,9 @@ export function BazarTab({ data, loading, budget, busy, onBuy, onWithdraw, onRep
               </div>
 
               {l.effect && <div className="text-sm text-pitch-600 mb-3">{l.effect}</div>}
+              {l.amenity && (
+                <div className={`text-sm leading-snug -mt-2 mb-3 ${amenityTone(l.amenity)}`}>{l.amenity.note}</div>
+              )}
 
               <div className="mt-auto space-y-1">
                 <div className="text-base font-heading font-bold tabular-nums">{formatCZK(l.price)}</div>
