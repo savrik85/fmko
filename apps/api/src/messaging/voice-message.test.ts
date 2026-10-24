@@ -9,6 +9,7 @@ import {
   withoutCoachAddress,
   durationSecFromPcm,
   mixAmbience,
+  pickAmbience,
   pcmToWav,
   peaksFromPcm,
   pickPlayerVoice,
@@ -269,5 +270,66 @@ describe("hospoda pod opilou hlasovkou", () => {
       teamId: "t1", messageId: "m1", player: PLAYER, scene: "x", body: "Vyhráli jsme! Dobrou.", drunk: true, random: () => 0,
     });
     expect(recorded?.meta.durationSec).toBe(3);
+  });
+});
+
+describe("zvuk pod každou hlasovkou", () => {
+  const base = { drunk: false, drinksAt: null, urban: false, seed: "m1" } as const;
+
+  it("v práci je slyšet pracoviště podle povolání", () => {
+    expect(pickAmbience({ ...base, situation: "prace", occupation: "Zemědělec" })).toBe("farm");
+    expect(pickAmbience({ ...base, situation: "prace", occupation: "Zedník" })).toBe("construction");
+    expect(pickAmbience({ ...base, situation: "prace", occupation: "Automechanik" })).toBe("workshop");
+    expect(pickAmbience({ ...base, situation: "prace", occupation: "Řidič autobusu" })).toBe("car");
+    expect(pickAmbience({ ...base, situation: "prace", occupation: "Hospodský" })).toBe("pub");
+    expect(pickAmbience({ ...base, situation: "prace", occupation: "Fotbalista" })).toBe("pitch");
+  });
+
+  it("povolání bez pracoviště je venku: na vesnici vesnice, v Praze ulice", () => {
+    expect(pickAmbience({ ...base, situation: "prace", occupation: "Zahradník" })).toBe("village");
+    expect(pickAmbience({ ...base, situation: "prace", occupation: "Metař", urban: true })).toBe("street");
+  });
+
+  it("po šichtě doma, opilý vždycky v hospodě, pití doma u televize", () => {
+    expect(pickAmbience({ ...base, situation: "po_praci", occupation: "Zedník" })).toBe("home");
+    expect(pickAmbience({ ...base, drunk: true, situation: "prace", occupation: "Zedník" })).toBe("pub");
+    expect(pickAmbience({ ...base, situation: "pije", drinksAt: "doma" })).toBe("home");
+    expect(pickAmbience({ ...base, situation: "pije", drinksAt: "hospoda" })).toBe("pub");
+  });
+
+  it("volno je doma nebo venku, podle zprávy", () => {
+    const places = new Set(["a", "b", "c", "d", "e", "f"].map((seed) =>
+      pickAmbience({ ...base, situation: "volno", occupation: "Student", seed })));
+    expect([...places].sort()).toEqual(["home", "village"]);
+  });
+
+  it("rána v podkladu nepřeřve hlas", () => {
+    const bed = new Uint8Array(24000 * 2 * 4);
+    const bv = new DataView(bed.buffer);
+    for (let i = 0; i < bed.length / 2; i++) bv.setInt16(i * 2, i % 2 ? 100 : -100, true);
+    // Bouchnutí kladiva v předehře, než hráč začne mluvit.
+    bv.setInt16(10000 * 2, 30000, true);
+    const out = mixAmbience(pcm(1), bed, 0, 0.18);
+    expect(Math.abs(new DataView(out.buffer).getInt16(10000 * 2, true))).toBeLessThanOrEqual(6001);
+  });
+
+  it("načte podklad podle místa a zapíše ho do metadat, bez nahrávky jde hlas sám", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ttsResponse(pcm(2))));
+    const bed = new Uint8Array(24000 * 2 * 10).fill(1);
+    const keys: string[] = [];
+    const bucket = { ...r2(), get: async (key: string) => { keys.push(key); return { arrayBuffer: async () => bed.buffer }; } } as unknown as R2Bucket;
+    const db = new FalesnaD1([{ sql: /COUNT\(\*\) AS n/, first: { n: 0 } }]);
+    const farm = await recordVoiceMessage(jakoD1(db), { GEMINI_API_KEY: "k", CACHE_KV: kv(null), SEED_DATA: bucket }, {
+      teamId: "t1", messageId: "m1", player: PLAYER, scene: "x", body: "Jsem v kravíně.", ambience: "farm", random: () => 0,
+    });
+    expect(keys).toEqual(["voice/ambience/farm-24k.pcm"]);
+    expect(farm?.meta.ambience).toBe("farm");
+    expect(farm?.meta.durationSec).toBe(3);
+
+    const plain = await recordVoiceMessage(jakoD1(db), { GEMINI_API_KEY: "k", CACHE_KV: kv(null), SEED_DATA: r2() }, {
+      teamId: "t1", messageId: "m2", player: PLAYER, scene: "x", body: "Jsem v kravíně.", ambience: "farm", random: () => 0,
+    });
+    expect(plain?.meta.ambience).toBeUndefined();
+    expect(plain?.meta.durationSec).toBe(2);
   });
 });
