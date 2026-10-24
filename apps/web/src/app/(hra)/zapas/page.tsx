@@ -948,7 +948,7 @@ function MatchPage() {
         <div>
         <p className="text-center text-sm h-8 flex items-center justify-center gap-1 mb-1">
           {swapSource !== null ? (
-            <><span className="font-heading font-bold text-gold-600">Vyber pozici kam přesunout</span><button onClick={() => setSwapSource(null)} className="text-muted hover:text-ink">✕</button></>
+            <><span className="font-heading font-bold text-gold-600">Vyber pozici kam přesunout</span><button type="button" onClick={() => setSwapSource(null)} aria-label="Zrušit přesun" className="w-8 h-8 shrink-0 inline-flex items-center justify-center rounded-control text-base leading-none text-muted hover:text-ink hover:bg-black/5">✕</button></>
           ) : editSlot !== null ? (
             <span className="font-heading font-bold text-pitch-600">Vyber hráče ze seznamu vpravo</span>
           ) : (
@@ -1036,7 +1036,7 @@ function MatchPage() {
         </div>
         <p className="text-center text-sm h-8 flex items-center justify-center gap-1 mt-1">
           {swapSource !== null ? (
-            <><span className="font-heading font-bold text-gold-600">Vyber pozici kam přesunout</span><button onClick={() => setSwapSource(null)} className="text-muted hover:text-ink">✕</button></>
+            <><span className="font-heading font-bold text-gold-600">Vyber pozici kam přesunout</span><button type="button" onClick={() => setSwapSource(null)} aria-label="Zrušit přesun" className="w-8 h-8 shrink-0 inline-flex items-center justify-center rounded-control text-base leading-none text-muted hover:text-ink hover:bg-black/5">✕</button></>
           ) : editSlot !== null ? (
             <span className="font-heading font-bold text-pitch-600">Vyber hráče ze seznamu vpravo</span>
           ) : (
