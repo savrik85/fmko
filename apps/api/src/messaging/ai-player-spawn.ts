@@ -15,7 +15,9 @@ import { transferTalkFrom } from "../transfers/unrest-reasons";
 import { nactiZnalostiHrace } from "../incidents/znalosti-db";
 import { nazevSituace } from "../incidents/situace";
 import { logger } from "../lib/logger";
+import { seedFromString } from "../lib/seed";
 import { pickAmbience, recordVoiceMessage, voicePreviewText } from "./voice-message";
+import { PHOTO_CHANCE, PHOTO_SCENES, generatePlayerPhoto, historyBody, pickPhotoScene } from "./player-photo";
 import { coachRelationStmts } from "../lib/coach-relation";
 import { weightTalkFromState } from "../season/weight-talk";
 import {
@@ -42,6 +44,8 @@ export interface MessageDraft {
   coachRelationship: number;
   scenarioId: string;
   text: string;
+  /** Fotka ke konceptu (R2 klíč a popis), ostré odeslání pošle tutéž. */
+  photo?: { key: string; alt: string } | null;
 }
 const DRAFT_TTL_SECONDS = 86400;
 const draftKey = (teamId: string) => `message_draft:${teamId}`;
@@ -393,7 +397,7 @@ export async function applyAiPlayerThreads(
  */
 async function spawnForTeam(
   db: D1Database,
-  env: { GEMINI_API_KEY?: string; CACHE_KV?: KVNamespace; SEED_DATA?: R2Bucket },
+  env: { GEMINI_API_KEY?: string; CACHE_KV?: KVNamespace; SEED_DATA?: R2Bucket; AI?: Ai },
   teamId: string,
   opts: { forceVoice?: boolean; forcedScenario?: AiScenario | null; dryRun?: boolean } = {},
 ): Promise<{ sent: boolean; draft: MessageDraft } | null> {
@@ -518,13 +522,47 @@ async function spawnForTeam(
   // 5. Gemini call
   // Ruční rozeslání se píše jako běžná zpráva od hráče v odpoledním ticku (14:00 UTC),
   // ne podle skutečného času: ve tři ráno by všichni psali, že je trenér vzbudil.
+  // Téma z hospody má vlastní večerní hodinu (`writtenAtUtcHour`).
   const startedAt = new Date();
   const writtenAt = forcedScenario
-    ? new Date(Date.UTC(startedAt.getUTCFullYear(), startedAt.getUTCMonth(), startedAt.getUTCDate(), 14))
+    ? new Date(Date.UTC(startedAt.getUTCFullYear(), startedAt.getUTCMonth(), startedAt.getUTCDate(), forcedScenario.writtenAtUtcHour ?? 14))
     : startedAt;
+  if (scenario.atPub) player.atPub = true;
+
+  const messageId = uuid();
+  // Z hospody: kdo se přiznává k pivu, nebo kdo rád pije a zrovna slaví.
+  const drunk = scenario.id === "alcohol_struggle"
+    || (player.alcohol > 70 && (scenario.category === "positive" || scenario.id === "personal_milestone"));
+  // Kde hráč podle textu zprávy je (v práci, doma, v hospodě): podle toho zvuk pod hlasovkou i fotka z práce.
+  const timeContext = playerTimeContext(player, writtenAt);
+  const ambience = pickAmbience({
+    drunk, situation: timeContext.situace, drinksAt: timeContext.kdePije, occupation: player.occupation,
+    urban: teamCtx.urban ?? false, seed: messageId,
+  });
+
+  // 5a. Fotka k SMS (player-photo.ts) dřív než text, ať na ni text naváže. Téma z hospody ji má
+  //     vždycky, běžná zpráva občas, když k situaci sedí. Koncept si nese fotku, se kterou vznikl.
+  let photo: { key: string; alt: string } | null = draftPlayer && saved ? (saved.photo ?? null) : null;
+  if (!(draftPlayer && saved) && env.AI && env.SEED_DATA && !opts.forceVoice) {
+    const scene = scenario.atPub
+      ? PHOTO_SCENES.pub_round
+      : Math.random() < PHOTO_CHANCE
+        ? pickPhotoScene({ scenarioId: scenario.id, scenarioCategory: scenario.category, workplace: timeContext.situace === "prace" ? ambience : null })
+        : null;
+    if (scene) {
+      const key = await generatePlayerPhoto(env.AI, env.SEED_DATA, scene, uuid(), seedFromString(messageId));
+      if (key) photo = { key, alt: scene.alt };
+      // Kdo posílá fotku z hospody, píše opile (přání uživatele 2026-10-24).
+      if (key && scene.id.startsWith("pub_")) player.atPub = true;
+      else logger.warn({ module: "ai-player-spawn", teamId }, `fotka ${scene.id} se nepovedla, zpráva jde bez ní`);
+    }
+  }
+
   let initialBody: string;
   try {
-    initialBody = draftPlayer && saved ? saved.text : await generateInitialMessage(env, player, scenario, teamCtx, writtenAt);
+    initialBody = draftPlayer && saved
+      ? saved.text
+      : await generateInitialMessage(env, player, scenario, teamCtx, writtenAt, photo ? { alt: photo.alt } : undefined);
   } catch (e) {
     if (e instanceof GeminiUnavailableError) {
       logger.warn({ module: "ai-player-spawn" }, `Gemini unavailable for ${player.firstName}: ${e.message}`);
@@ -539,6 +577,7 @@ async function spawnForTeam(
     coachRelationship: player.coachRelationship,
     scenarioId: scenario.id,
     text: initialBody,
+    photo,
   };
   if (opts.dryRun) {
     await env.CACHE_KV?.put(draftKey(teamId), JSON.stringify(draft), { expirationTtl: DRAFT_TTL_SECONDS })
@@ -572,22 +611,14 @@ async function spawnForTeam(
 
   // 7. Místo SMS hlasovka (voice-message.ts): nanejvýš 2 týdně na tým a jen přes Gemini.
   //    Text zůstává v těle zprávy jako přepis, z něj AI bere kontext pro další odpovědi.
-  const messageId = uuid();
-  // Z hospody: kdo se přiznává k pivu, nebo kdo rád pije a zrovna slaví.
-  const drunk = scenario.id === "alcohol_struggle"
-    || (player.alcohol > 70 && (scenario.category === "positive" || scenario.id === "personal_milestone"));
-  // Zvuk pod hlasem podle toho, kde hráč podle textu zprávy je (v práci, doma, v hospodě).
-  const timeContext = playerTimeContext(player, writtenAt);
-  const recorded = await recordVoiceMessage(db, env, {
+  //    Zpráva s fotkou je SMS s popiskem, hlasovka k ní nejde.
+  const recorded = photo ? null : await recordVoiceMessage(db, env, {
     teamId,
     messageId,
     scene: scenario.description,
     body: initialBody,
     drunk,
-    ambience: pickAmbience({
-      drunk, situation: timeContext.situace, drinksAt: timeContext.kdePije, occupation: player.occupation,
-      urban: teamCtx.urban ?? false, seed: messageId,
-    }),
+    ambience,
     force: opts.forceVoice ?? false,
     player: {
       id: player.id,
@@ -605,13 +636,20 @@ async function spawnForTeam(
   await db.batch([
     db.prepare(
       "INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, metadata, sent_at, read) VALUES (?, ?, 'player', ?, ?, ?, ?, ?, 0)",
-    ).bind(messageId, convId, player.id, senderName, body, JSON.stringify({ ai_generated: true, scenario_id: scenario.id, turn: 0, ...voice }), now),
+    ).bind(messageId, convId, player.id, senderName, body, JSON.stringify({
+      ai_generated: true, scenario_id: scenario.id, turn: 0,
+      ...(photo ? { type: "photo", photoKey: photo.key, photoAlt: photo.alt } : voice),
+    }), now),
     db.prepare(
       `UPDATE conversations
        SET ai_thread_state = ?, ai_thread_active = 1, ai_thread_last_at = ?,
            last_message_text = ?, last_message_at = ?, unread_count = unread_count + 1
        WHERE id = ?`,
-    ).bind(JSON.stringify(state), now, voice ? voicePreviewText(voice.durationSec) : initialBody.slice(0, 100), now, convId),
+    ).bind(
+      JSON.stringify(state), now,
+      photo ? `📷 ${initialBody.slice(0, 90)}` : voice ? voicePreviewText(voice.durationSec) : initialBody.slice(0, 100),
+      now, convId,
+    ),
     db.prepare(
       "UPDATE teams SET last_ai_player_thread_at = ? WHERE id = ?",
     ).bind(now, teamId),
@@ -622,7 +660,7 @@ async function spawnForTeam(
       .catch((e) => logger.warn({ module: "ai-player-spawn", teamId }, "smazání použitého konceptu", e));
   }
 
-  logger.info({ module: "ai-player-spawn", teamId }, `spawned AI thread: ${player.firstName} ${player.lastName} → ${scenario.id}${voice ? ` (hlasovka ${voice.durationSec} s, ${voice.voice})` : ""}`);
+  logger.info({ module: "ai-player-spawn", teamId }, `spawned AI thread: ${player.firstName} ${player.lastName} → ${scenario.id}${voice ? ` (hlasovka ${voice.durationSec} s, ${voice.voice})` : ""}${photo ? " (fotka)" : ""}`);
   return { sent: true, draft };
 }
 
@@ -761,6 +799,8 @@ async function handleAiPlayerReplyInner(
   }
 
   const player = loadPlayerSnapshot(playerRow);
+  // Pozvánka z hospody: v celé konverzaci sedí v hospodě a píše opile, i když už je pozdě.
+  if (scenario.atPub) player.atPub = true;
   player.znalostiIncidentu = await nactiZnalostiHrace(db, {
     teamId: conv.team_id, playerId: player.id,
     tema: state.incidentId && state.incidentDen ? { incidentId: state.incidentId, den: state.incidentDen } : null,
@@ -777,14 +817,14 @@ async function handleAiPlayerReplyInner(
 
   // Načti historii (posledních 6 zpráv chronologicky)
   const histRows = await db.prepare(
-    "SELECT sender_type, body FROM messages WHERE conversation_id = ? ORDER BY sent_at DESC LIMIT 6",
-  ).bind(convId).all<{ sender_type: string; body: string }>()
+    "SELECT sender_type, body, json_extract(metadata, '$.photoAlt') AS photo_alt FROM messages WHERE conversation_id = ? ORDER BY sent_at DESC LIMIT 6",
+  ).bind(convId).all<{ sender_type: string; body: string; photo_alt: string | null }>()
     .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "load history", e); return { results: [] }; });
 
   const history: ThreadMessage[] = histRows.results
     .reverse()
     .filter((m) => m.sender_type === "player" || m.sender_type === "user")
-    .map((m) => ({ sender: m.sender_type === "player" ? "player" : "coach", body: m.body }));
+    .map((m) => ({ sender: m.sender_type === "player" ? "player" : "coach", body: historyBody(m.body, m.photo_alt) }));
 
   const newRepliesCount = state.current_replies + 1;
   // max_replies funguje jako tvrdý strop. AI ale může konverzaci uzavřít kdykoli dřív přes conversation_complete.
@@ -1133,12 +1173,12 @@ async function closeCoachThreadQuietly(
       playerId = playerRow.id as string;
       // Jen zprávy tohohle rozhovoru: starší už se vyhodnotily jinde.
       const rows = await db.prepare(
-        `SELECT sender_type, body FROM messages
+        `SELECT sender_type, body, json_extract(metadata, '$.photoAlt') AS photo_alt FROM messages
           WHERE conversation_id = ? AND sender_type IN ('player','user') AND sent_at >= ?
           ORDER BY sent_at ASC LIMIT 12`,
-      ).bind(conv.id, state.initiated_at ?? "1970-01-01").all<{ sender_type: string; body: string }>();
+      ).bind(conv.id, state.initiated_at ?? "1970-01-01").all<{ sender_type: string; body: string; photo_alt: string | null }>();
       const history: ThreadMessage[] = rows.results.map((m) => ({
-        sender: m.sender_type === "player" ? "player" : "coach", body: m.body,
+        sender: m.sender_type === "player" ? "player" : "coach", body: historyBody(m.body, m.photo_alt),
       }));
       if (history.length > 0) {
         resolution = { ...(await evaluateResolution(env, loadPlayerSnapshot(playerRow), history, scenario)) };
@@ -1270,7 +1310,6 @@ export async function pockejNezDopise(
 ): Promise<void> {
   const { kontextCasu, zpozdeniOdpovedi } = await import("./chat-kontext");
   const { smenaProPovolani } = await import("../generators/occupations");
-  const { seedFromString } = await import("../lib/seed");
 
   const cas = kontextCasu(
     new Date(), smenaProPovolani(player.occupation), seedFromString(player.id),

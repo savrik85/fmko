@@ -41,10 +41,14 @@ export interface TeamContext {
  * pod hlasovkou, aby hráč, který píše z práce, nebyl slyšet z gauče.
  */
 export function playerTimeContext(player: PlayerSnapshot, kdy: Date): CasovyKontext {
-  return kontextCasu(
+  const k = kontextCasu(
     kdy, smenaProPovolani(player.occupation), seedFromString(player.id),
     player.alcohol, player.age, player.lastOwnMessageAt,
   );
+  // Píše z hospody (pozvánka, fotka stolu s pivy): sedí tam a je opilý, i když by podle hodin byl
+  // doma. Uživatel chtěl, ať z hospody píše opile (2026-10-24), proto rovnou nejvyšší podnapilost.
+  if (player.atPub) return { ...k, situace: "pije", kdePije: "hospoda", podnapilost: 3 };
+  return k;
 }
 
 export interface ResolutionResult {
@@ -327,6 +331,8 @@ export async function generateInitialMessage(
   team: TeamContext,
   /** Čas, ve kterém hráč píše. Ruční rozeslání v noci by jinak psalo, že je trenér vzbudil. */
   kdy: Date = new Date(),
+  /** Fotka, kterou hráč k SMS přikládá (popis česky). Text k ní má sedět jako popisek. */
+  photo?: { alt: string },
 ): Promise<string> {
   const system = buildSystemPrompt(player, team, kdy);
   const contextLine = team.lastMatchResult ? ` Poslední zápas: ${team.lastMatchResult}.` : "";
@@ -336,6 +342,9 @@ export async function generateInitialMessage(
     system,
     "",
     `SCÉNÁŘ: ${scenario.description}${contextLine}${positionLine}`,
+    ...(photo
+      ? ["", `K SMS přikládáš fotku z mobilu: ${photo.alt}. Text je popisek k ní jako ve WhatsAppu: fotku nepopisuj, jen na ni přirozeně navaž.`]
+      : []),
     "",
     `Napiš trenérovi PRVNÍ SMS k tomuto scénáři. Drž tón odpovídající své povaze a vztahu s trenérem (${player.coachRelationship}/100). NEPIŠ podpis. Vrať POUZE text SMS.`,
   ].join("\n");

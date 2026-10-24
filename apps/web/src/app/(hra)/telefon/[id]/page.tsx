@@ -10,6 +10,7 @@ import { AutoGrowTextarea, Spinner } from "@/components/ui";
 import { PhoneFrame } from "@/components/phone/phone-frame";
 import { SponsorLink } from "@/components/sponsors/sponsor-link";
 import { VoiceMessage } from "../VoiceMessage";
+import { PlayerPhoto } from "../PlayerPhoto";
 import { CoachVoiceRecorder, SendIcon, isVoiceRecordingSupported, type CoachVoiceNote } from "../CoachVoiceRecorder";
 interface Message {
   id: string;
@@ -655,6 +656,10 @@ export default function ConversationPage() {
                             </>
                           ) : (
                             <div className="relative">
+                              {/* Fotka od hráče (player-photo.ts), text pod ní je popisek jako ve WhatsAppu. */}
+                              {msg.metadata?.type === "photo" && teamId && (
+                                <PlayerPhoto teamId={teamId} messageId={msg.id} alt={String(msg.metadata.photoAlt ?? "Fotka")} />
+                              )}
                               <p className="whitespace-pre-wrap break-words">
                                 {emoticonize(msg.body)}
                                 <span className={`inline-block ${isUser ? "w-[4.5rem]" : "w-12"}`} aria-hidden />

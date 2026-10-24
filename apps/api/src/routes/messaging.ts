@@ -24,6 +24,7 @@ messagingRouter.use("/teams/:teamId/contacts", requirePrivateTeamRead);
 messagingRouter.use("/teams/:teamId/phone-credit", requirePrivateTeamRead);
 messagingRouter.use("/teams/:teamId/unread-count", requirePrivateTeamRead);
 messagingRouter.use("/teams/:teamId/voice-messages/*", requirePrivateTeamRead);
+messagingRouter.use("/teams/:teamId/photos/*", requirePrivateTeamRead);
 // Admin broadcast endpointy vyžadují admin session.
 messagingRouter.use("/admin/*", requireAdmin);
 
@@ -349,6 +350,25 @@ messagingRouter.get("/teams/:teamId/voice-messages/:messageId/audio", async (c) 
   // Hlasovky hráčů jsou wav, trenérovy nahrávky z prohlížeče webm nebo mp4.
   return new Response(obj.body, {
     headers: { "Content-Type": obj.httpMetadata?.contentType ?? "audio/wav", "Cache-Control": "private, max-age=86400" },
+  });
+});
+
+// GET /api/teams/:teamId/photos/:messageId — fotka, kterou hráč poslal se zprávou (player-photo.ts).
+// Stejně jako hlasovky jen pro vlastní tým.
+messagingRouter.get("/teams/:teamId/photos/:messageId", async (c) => {
+  const teamId = c.req.param("teamId");
+  const messageId = c.req.param("messageId");
+  const row = await c.env.DB.prepare(
+    `SELECT json_extract(m.metadata, '$.photoKey') AS photo_key
+       FROM messages m JOIN conversations cv ON cv.id = m.conversation_id
+      WHERE m.id = ? AND cv.team_id = ?`,
+  ).bind(messageId, teamId).first<{ photo_key: string | null }>()
+    .catch((e) => { logger.warn({ module: "messaging" }, `fotka ${messageId}`, e); return null; });
+  if (!row?.photo_key) return c.json({ error: "Fotka neexistuje" }, 404);
+  const obj = await c.env.SEED_DATA.get(row.photo_key);
+  if (!obj) return c.json({ error: "Fotka není k dispozici" }, 404);
+  return new Response(obj.body, {
+    headers: { "Content-Type": obj.httpMetadata?.contentType ?? "image/jpeg", "Cache-Control": "private, max-age=604800" },
   });
 });
 
