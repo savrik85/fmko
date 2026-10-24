@@ -495,8 +495,15 @@ export default function ConversationPage() {
     <PhoneFrame>
       {/* Header */}
       <div className="bg-[#008069] text-white px-3 py-2 flex items-center gap-2.5 shrink-0">
-        <button onClick={() => router.push("/telefon")} className="text-white/70 hover:text-white text-sm">
-          &#8592;
+        {/* Šipka zpět jako ve WhatsAppu: bílá a výrazná, ne bledý znak. */}
+        <button
+          onClick={() => router.push("/telefon")}
+          aria-label="Zpět na Telefon"
+          className="-ml-1 w-8 h-8 shrink-0 flex items-center justify-center text-white"
+        >
+          <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden>
+            <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" />
+          </svg>
         </button>
         {headerEmoji ? (
           <div className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center text-white text-sm shrink-0">
