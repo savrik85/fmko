@@ -5259,13 +5259,12 @@ gameRouter.post("/teams/:teamId/players/:playerId/release", async (c) => {
     return c.json({ error: "Hostující hráč nemůže být propuštěn, patří jinému klubu" }, 400);
   }
   // Propuštěním by procenta z příštího přestupu propadla a klub by si hráče mohl hned
-  // podepsat zpátky jako volného a prodat ho bez nich. Hráče s doložkou jde jen prodat.
-  const sellOnClause = await c.env.DB.prepare(
-    `SELECT c.pct, t.name AS beneficiary_name FROM sell_on_clauses c LEFT JOIN teams t ON t.id = c.beneficiary_team_id
-      WHERE c.player_id = ? AND c.status = 'active' LIMIT 1`,
-  ).bind(playerId).first<{ pct: number; beneficiary_name: string | null }>();
+  // podepsat zpátky jako volného a prodat ho bez nich. Hráče s doložkou jde jen prodat
+  // (stejné pravidlo hlídá výměna, transfers/swap-players.ts).
+  const { activeSellOnClause } = await import("../transfers/installments");
+  const sellOnClause = await activeSellOnClause(c.env.DB, playerId);
   if (sellOnClause) {
-    return c.json({ error: `${player.first_name} ${player.last_name} má doložku: ${sellOnClause.pct} % z příštího přestupu pro ${sellOnClause.beneficiary_name ?? "bývalý klub"}. Propustit ho nejde, můžeš ho prodat.` }, 400);
+    return c.json({ error: `${player.first_name} ${player.last_name} má doložku: ${sellOnClause.pct} % z příštího přestupu pro ${sellOnClause.beneficiaryName ?? "bývalý klub"}. Propustit ho nejde, můžeš ho prodat.` }, 400);
   }
 
   // Idempotency: zamezit duplicitám při double-click
@@ -7161,6 +7160,14 @@ gameRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {
   ).bind(offerId).all<{ id: string; first_name: string | null; last_name: string | null; overall_rating: number | null; age: number | null; position: string | null }>()).results;
   const swapPlayerIds = swapRows.map((r) => r.id);
   const swapPlayerNames = swapRows.filter((r) => r.first_name).map((r) => `${r.first_name} ${r.last_name}`);
+  // Hráč s doložkou o procentech na výměnu nesmí (nabídka mohla vzniknout dřív, než to výměna hlídala).
+  if (swapRows.length > 0) {
+    const { swapSellOnError } = await import("../transfers/swap-players");
+    for (const r of swapRows) {
+      const sellOn = await swapSellOnError(c.env.DB, r, "Na výměnu jít nemůže.");
+      if (sellOn) return c.json({ error: sellOn }, 409);
+    }
+  }
   // Procenta z příštího přestupu se u výměny počítají z doplatku i z tržní ceny hráčů, kteří
   // jdou opačně. Jinak by šlo doložku obejít prodejem za hráče a symbolický doplatek.
   const saleValueForSellOn = amount + swapRows.reduce((sum, r) =>

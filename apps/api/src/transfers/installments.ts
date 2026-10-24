@@ -118,6 +118,19 @@ export async function settleOnResale(
   return out;
 }
 
+/**
+ * Běžící doložka o procentech z příštího přestupu hráče, nebo null. Hráče s doložkou jde jen
+ * prodat: propuštěním ani výměnou by klub, kterému procenta patří, nedostal nic.
+ * Bez catch schválně: když dotaz selže, má akce spadnout, ne doložku obejít.
+ */
+export async function activeSellOnClause(db: D1Database, playerId: string): Promise<{ pct: number; beneficiaryName: string | null } | null> {
+  const row = await db.prepare(
+    `SELECT c.pct, t.name AS beneficiary_name FROM sell_on_clauses c LEFT JOIN teams t ON t.id = c.beneficiary_team_id
+      WHERE c.player_id = ? AND c.status = 'active' LIMIT 1`,
+  ).bind(playerId).first<{ pct: number; beneficiary_name: string | null }>();
+  return row ? { pct: row.pct, beneficiaryName: row.beneficiary_name } : null;
+}
+
 /** Hráč odešel bez peněz (propuštění, konec kariéry, zmizení): procenta propadnou. Splátky běží dál. */
 export async function lapseSellOnClauses(db: D1Database, playerId: string): Promise<void> {
   await db.prepare("UPDATE sell_on_clauses SET status = 'lapsed', resolved_at = ? WHERE player_id = ? AND status = 'active'")
