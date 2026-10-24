@@ -9387,7 +9387,10 @@ gameRouter.post("/admin/spawn-ai-chats", async (c) => {
   const { applyAiPlayerThreads } = await import("../messaging/ai-player-spawn");
   const teamId = c.req.query("teamId");
   // `&scenario=coach_relationship_voice` vynutí téma (ukázková hlasovka podle vztahu k trenérovi).
-  const manual = teamId ? { teamId, forceVoice: c.req.query("voice") === "1", scenarioId: c.req.query("scenario") } : undefined;
+  // `&dryRun=1` jen ukáže a uloží koncept (hráč + text), ostré odeslání ho pak pošle beze změny.
+  const manual = teamId
+    ? { teamId, forceVoice: c.req.query("voice") === "1", scenarioId: c.req.query("scenario"), dryRun: c.req.query("dryRun") === "1" }
+    : undefined;
   const r = await applyAiPlayerThreads(c.env.DB, c.env, manual)
     .catch((e) => { logger.error({ module: "game.ts" }, "manual ai chat spawn", e); return null; });
   if (!r) return c.json({ error: "spawn selhal" }, 500);
