@@ -5,7 +5,7 @@ import { logger } from "../lib/logger";
 import type { AiContext } from "../lib/ai-provider";
 import { calculateFacilityEffects } from "../stadium/stadium-generator";
 import { seedFromString } from "../lib/seed";
-import { generateUltrasPhoto, ULTRAS_PHOTOS_PER_REPORT } from "./ultras-photo";
+import { generateUltrasPhoto, ULTRAS_PHOTOS_PER_REPORT, ultrasStandFromStadium, type UltrasBanner } from "./ultras-photo";
 
 export interface UltrasPhoto {
   teamId: string;
@@ -40,6 +40,8 @@ interface HomeMatch {
   textColor: string;
   primaryColor: string;
   secondaryColor: string;
+  /** Tribuna, na které kotel stojí (pro fotku plachty). */
+  stand: NonNullable<UltrasBanner["stand"]>;
 }
 
 const FACILITY_KEYS = ["changing_rooms", "showers", "refreshments", "stands", "stand_main", "stand_opposite", "stand_goal_west", "stand_goal_east", "stand_ext_capacity", "parking", "fence", "roof", "ultras_stand", "toilets", "security", "cage", "vip_box"];
@@ -217,6 +219,12 @@ export async function generateUltrasReport(
       textColor,
       primaryColor: primary,
       secondaryColor: (r.home_secondary as string) ?? "#ffffff",
+      stand: ultrasStandFromStadium({
+        stand_goal_west: r.stand_goal_west as number | null,
+        stands: r.stands as number | null,
+        roof: r.roof as number | null,
+        cage: r.cage as number | null,
+      }),
     };
   });
 
@@ -274,7 +282,7 @@ export async function addUltrasPhotos(
   ai: Ai,
   bucket: R2Bucket,
   photos: UltrasPhoto[],
-  teams: Array<{ homeTeamId: string; primaryColor: string; secondaryColor: string }>,
+  teams: Array<{ homeTeamId: string; primaryColor: string; secondaryColor: string; stand?: UltrasBanner["stand"] }>,
   ocrKey?: string,
 ): Promise<number> {
   let added = 0;
@@ -291,6 +299,7 @@ export async function addUltrasPhotos(
       primaryColor: team?.primaryColor ?? ph.bannerColor,
       secondaryColor: team?.secondaryColor ?? ph.textColor,
       level: ph.level,
+      stand: team?.stand,
     }, photoId, seedFromString(photoId), ocrKey)
       .catch((e: unknown) => { logger.warn({ module: "ultras-report" }, `fotka plachty ${ph.teamName} spadla`, e); return null; });
     if (id) { ph.photoId = id; added++; }

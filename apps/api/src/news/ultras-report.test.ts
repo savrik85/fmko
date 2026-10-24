@@ -39,6 +39,12 @@ describe("fotky plachet v reportu kotle", () => {
     expect(generateUltrasPhoto).toHaveBeenCalledTimes(ULTRAS_PHOTOS_PER_REPORT);
   });
 
+  it("fotka dostane tribunu kotle z dat klubu", async () => {
+    const stand = { level: 2, roof: 1, cage: 1 };
+    await addUltrasPhotos(ai, bucket, [photo("t1", "JEDINĚ ČKYNĚ!")], [{ homeTeamId: "t1", primaryColor: "#920c32", secondaryColor: "#1A1A1A", stand }]);
+    expect(generateUltrasPhoto.mock.calls[0][2]).toMatchObject({ stand });
+  });
+
   it("šály mají barvy domácího klubu, bez klubu barvy plachty", async () => {
     const photos = [photo("t1", "JEDINĚ SPŮLE!"), photo("t2", "DO TOHO")];
     await addUltrasPhotos(ai, bucket, photos, [{ homeTeamId: "t1", primaryColor: "#920c32", secondaryColor: "#1A1A1A" }]);

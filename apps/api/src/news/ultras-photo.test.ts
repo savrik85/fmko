@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { BANNER_READ_PROMPT, bannerTextMatches, colorName, generateUltrasPhoto, ultrasPhotoKey, ultrasPhotoPrompt } from "./ultras-photo";
+import { BANNER_READ_PROMPT, bannerTextMatches, colorName, generateUltrasPhoto, ultrasPhotoKey, ultrasPhotoPrompt, ultrasStandFromStadium } from "./ultras-photo";
 
 const BANNER = {
   ultrasText: "RADŠI KELÍMKY NA TRÁVNÍKU NEŽ LEMRY VE VÝBORU",
@@ -29,6 +29,31 @@ describe("fotky plachet kotle", () => {
     expect(ultrasPhotoPrompt({ ...BANNER, ultrasText: "KOVÁČIK. NÁŠ KLUK." })).toContain("Czech letters painted carefully: Č, Š have a small v-shaped caron above");
     expect(ultrasPhotoPrompt({ ...BANNER, ultrasText: "Už teď" })).toContain("Czech letters painted carefully: Ž, Ď have");
     expect(ultrasPhotoPrompt({ ...BANNER, ultrasText: "ROD VEN!" })).not.toContain("caron");
+  });
+
+  it("kotel stojí na své tribuně podle úrovně ve hře, bez tribuny u plotu", () => {
+    const prompt = (level: number, roof = 0, cage = 0) => ultrasPhotoPrompt({ ...BANNER, stand: { level, roof, cage } });
+    expect(prompt(0)).toContain("behind a low metal fence");
+    expect(prompt(0)).toContain("no stadium stands");
+    expect(ultrasPhotoPrompt(BANNER)).toContain("no stadium stands");
+    expect(prompt(1)).toContain("low concrete terrace steps");
+    expect(prompt(2, 1)).toContain("small stand behind the goal under a simple metal roof");
+    expect(prompt(3)).toContain("large stand behind the goal, many rows");
+    expect(prompt(3)).not.toContain("roof");
+    for (const level of [1, 2, 3]) expect(prompt(level)).not.toContain("no stadium stands");
+  });
+
+  it("mříž nebo plexi před kotlem, plachta visí z jejich strany hřiště", () => {
+    const prompt = (cage: number) => ultrasPhotoPrompt({ ...BANNER, stand: { level: 2, roof: 0, cage } });
+    expect(prompt(1)).toContain("metal mesh fence");
+    expect(prompt(2)).toContain("plexiglass");
+    expect(prompt(0)).not.toMatch(/mesh|plexiglass/);
+  });
+
+  it("tribuna kotle ze stadionu: za levou brankou, bez sloupců stran podle tribun celkem", () => {
+    expect(ultrasStandFromStadium({ stand_goal_west: 2, stands: 3, roof: 1, cage: null })).toEqual({ level: 2, roof: 1, cage: 0 });
+    expect(ultrasStandFromStadium({ stand_goal_west: null, stands: 3 })).toEqual({ level: 3, roof: 0, cage: 0 });
+    expect(ultrasStandFromStadium({})).toEqual({ level: 0, roof: 0, cage: 0 });
   });
 
   it("nápis stejné barvy jako plachta se namaluje čitelně", () => {
