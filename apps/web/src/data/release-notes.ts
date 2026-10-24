@@ -12,6 +12,15 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    date: "2026-10-24",
+    emoji: "🤝",
+    title: "Nové přáteláky",
+    items: [
+      "Soupeře vyzveš na konkrétní den se vzkazem a podmínkami: kde se hraje (u tebe, u soupeře, nebo na obecním hřišti napůl cesty), kdo platí náklady a jestli se hraje o peníze, až o 10 000 Kč. Vítěz bere obě sázky.",
+      "Ve Volných termínech nabídneš den, kdy máš volno, a vezme ho kdokoli. V Bilanci uvidíš svou formu, žebříček přáteláků sezóny a s kým máš co oplácet.",
+    ],
+  },
+  {
     date: "2026-10-19",
     emoji: "🔎",
     title: "Poptávky",
