@@ -7,12 +7,15 @@
 import { Hono } from "hono";
 import type { Bindings } from "../index";
 import { logger } from "../lib/logger";
-import { requireTeamOwnership } from "../auth/middleware";
+import { requireTeamOwnership, requirePrivateTeamRead } from "../auth/middleware";
 
 const groupChatsRouter = new Hono<{ Bindings: Bindings }>();
 
 groupChatsRouter.use("/teams/:teamId/group-chats/*", requireTeamOwnership);
 groupChatsRouter.use("/teams/:teamId/group-chats", requireTeamOwnership);
+// Chaty manažerů nejsou veřejné, čtení hlídá vlastnictví týmu stejně jako Telefon.
+groupChatsRouter.use("/teams/:teamId/group-chats/*", requirePrivateTeamRead);
+groupChatsRouter.use("/teams/:teamId/group-chats", requirePrivateTeamRead);
 
 const GLOBAL_CHAT_ID = "global";
 

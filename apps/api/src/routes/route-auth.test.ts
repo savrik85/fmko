@@ -8,6 +8,8 @@ import { FalesnaD1, jakoD1 } from "../incidents/testovaci-d1";
 import type { Bindings } from "../index";
 import { teamsRouter } from "./teams";
 import { matchesRouter } from "./matches";
+import { messagingRouter } from "./messaging";
+import { groupChatsRouter } from "./group-chats";
 
 function bindings(db: FalesnaD1, session: Record<string, unknown> | null): Bindings {
   return {
@@ -64,4 +66,41 @@ describe("admin přepočty statistik: jen admin", () => {
       expect(res.status).toBe(403);
     });
   }
+});
+
+describe("Telefon a chaty manažerů: číst smí jen majitel týmu", () => {
+  const PRIVATE_PATHS: Array<[string, typeof messagingRouter]> = [
+    ["/teams/t1/conversations", messagingRouter],
+    ["/teams/t1/conversations/c1", messagingRouter],
+    ["/teams/t1/unread-count", messagingRouter],
+    ["/teams/t1/notifications", messagingRouter],
+    ["/teams/t1/voice-messages/m1/audio", messagingRouter],
+    ["/teams/t1/group-chats", groupChatsRouter],
+    ["/teams/t1/group-chats/g1/messages", groupChatsRouter],
+  ];
+
+  for (const [path, router] of PRIVATE_PATHS) {
+    it(`${path} bez přihlášení vrací 401 a nic nečte`, async () => {
+      const db = new FalesnaD1([]);
+      const res = await router.request(path, { method: "GET" }, bindings(db, null));
+      expect(res.status).toBe(401);
+      expect(db.dotazy.some((d) => /conversations|messages|group_chat/.test(d.sql))).toBe(false);
+    });
+
+    it(`${path} s cizím týmem vrací 403`, async () => {
+      const db = new FalesnaD1([
+        { sql: /SELECT id FROM teams WHERE id = \? AND user_id = \?/, first: null },
+      ]);
+      const res = await router.request(path, { method: "GET", headers: { Authorization: "Bearer tok" } }, bindings(db, { userId: "someone-else" }));
+      expect(res.status).toBe(403);
+    });
+  }
+
+  it("majitel svůj Telefon přečte", async () => {
+    const db = new FalesnaD1([
+      { sql: /SELECT id FROM teams WHERE id = \? AND user_id = \?/, first: { id: "t1" } },
+    ]);
+    const res = await messagingRouter.request("/teams/t1/unread-count", { method: "GET", headers: { Authorization: "Bearer tok" } }, bindings(db, { userId: "owner" }));
+    expect(res.status).toBe(200);
+  });
 });

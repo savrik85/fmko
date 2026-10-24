@@ -6,7 +6,7 @@
 import { Hono } from "hono";
 import type { Bindings } from "../index";
 import { logger } from "../lib/logger";
-import { requireTeamOwnership, requireAdmin } from "../auth/middleware";
+import { requireTeamOwnership, requireAdmin, requirePrivateTeamRead } from "../auth/middleware";
 import { listGroupChatsForTeam } from "./group-chats";
 import { sendWebPushToTeam, getNotificationPreferences } from "../community/web-push";
 
@@ -14,6 +14,19 @@ const messagingRouter = new Hono<{ Bindings: Bindings }>();
 
 // Write operace (odesílání zpráv, mark-read, vytváření konverzací) vyžadují ownership.
 messagingRouter.use("/teams/:teamId/*", requireTeamOwnership);
+// Telefon je soukromý: obecný `requireTeamOwnership` čtení propouští, takže se
+// hlídá na každé jeho cestě zvlášť. Dřív šly cizí SMS i vyjednávání číst bez přihlášení.
+for (const path of [
+  "/teams/:teamId/conversations",
+  "/teams/:teamId/conversations/*",
+  "/teams/:teamId/missed-calls",
+  "/teams/:teamId/notifications",
+  "/teams/:teamId/contacts",
+  "/teams/:teamId/phone-credit",
+  "/teams/:teamId/unread-count",
+]) {
+  messagingRouter.use(path, requirePrivateTeamRead);
+}
 // Admin broadcast endpointy vyžadují admin session.
 messagingRouter.use("/admin/*", requireAdmin);
 
