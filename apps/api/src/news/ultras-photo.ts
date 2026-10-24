@@ -155,6 +155,9 @@ export async function generateUltrasPhoto(
   geminiApiKey?: string,
   retryDelayMs = 1500,
 ): Promise<string | null> {
+  // Ů model nenamaluje (na testu 0 z 16 pokusů, vždy Ú nebo Ű) a šablona „… ZŮSTÁVÁ“ je častá:
+  // pokusy by se jen spálily, plachta zůstane rovnou kreslená.
+  if (/[Ůů]/.test(banner.ultrasText)) return null;
   const prompt = ultrasPhotoPrompt(banner);
   for (let attempt = 0; attempt < ATTEMPTS; attempt++) {
     if (attempt > 0 && retryDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, retryDelayMs));

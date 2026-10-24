@@ -50,7 +50,7 @@ describe("fotky plachet kotle", () => {
   });
 
   it("když Gemini přečte jiný nápis, zkusí jiný seed a vezme až ten správný", async () => {
-    const reads = ["JEDINÉ HORNÍ SPÓLE!", "JEDINĚ HORNÍ SPŮLE!"];
+    const reads = ["JEDINÉ ČKYNĚ!", "JEDINĚ ČKYNĚ!"];
     const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => new Response(JSON.stringify({
       candidates: [{ content: { parts: [{ text: reads.shift() }] } }],
     })));
@@ -65,7 +65,7 @@ describe("fotky plachet kotle", () => {
     } as unknown as Ai;
     const stored: string[] = [];
     const bucket = { put: async (key: string) => { stored.push(key); return { key }; } } as unknown as R2Bucket;
-    const id = await generateUltrasPhoto(ai, bucket, { ...BANNER, ultrasText: "JEDINĚ HORNÍ SPŮLE!" }, "abc", 3, "klic", 0);
+    const id = await generateUltrasPhoto(ai, bucket, { ...BANNER, ultrasText: "JEDINĚ ČKYNĚ!" }, "abc", 3, "klic", 0);
     expect(id).toBe("abc");
     expect(seeds.length).toBe(2);
     expect(stored).toEqual([ultrasPhotoKey("abc")]);
@@ -81,6 +81,14 @@ describe("fotky plachet kotle", () => {
     const ai = { run: async () => ({ image: btoa("jpeg") }) } as unknown as Ai;
     const bucket = { put: async () => ({}) } as unknown as R2Bucket;
     expect(await generateUltrasPhoto(ai, bucket, BANNER, "x", 1, "klic", 0)).toBeNull();
+  });
+
+  it("nápis s Ů se nefotí vůbec, model ho nenamaluje", async () => {
+    const run = vi.fn(async () => ({ image: btoa("jpeg") }));
+    const ai = { run } as unknown as Ai;
+    const bucket = { put: async () => ({}) } as unknown as R2Bucket;
+    expect(await generateUltrasPhoto(ai, bucket, { ...BANNER, ultrasText: "ZABIJAK ZŮSTÁVÁ" }, "z", 1, "klic", 0)).toBeNull();
+    expect(run).not.toHaveBeenCalled();
   });
 
   it("bez klíče se nápis nekontroluje a bere se první fotka", async () => {
