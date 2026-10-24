@@ -106,6 +106,18 @@ export interface AiScenario {
 const w = (cond: boolean, value: number): number => (cond ? value : 0);
 
 export const AI_PLAYER_SCENARIOS: AiScenario[] = [
+  // Jen ruční rozeslání z adminu (ukázková hlasovka pro všechny), náhodný spawn ho nevybere.
+  {
+    id: "coach_relationship_voice",
+    label: "Co mu chce říct",
+    category: "personal",
+    expectedTurns: 2,
+    description:
+      "Hráč se ozývá sám, protože chce trenérovi říct, jak to mezi nimi vidí. Řiď se vztahem s trenérem: když je vysoký, "
+      + "ocení ho, poděkuje mu a řekne, že za ním stojí; když je nízký, vyčte mu, co ho na něm štve (že ho nestaví, jak s ním "
+      + "jedná, že mu nevěří), klidně ostře; když je kolem středu, řekne mu narovinu, co by od něj chtěl. Konkrétně a osobně.",
+    weight: () => 0,
+  },
   // ───── COMPLAINT ─────
   {
     id: "bench_complaint",

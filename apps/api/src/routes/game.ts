@@ -9386,7 +9386,8 @@ gameRouter.post("/admin/teams/:teamId/manager-attr", async (c) => {
 gameRouter.post("/admin/spawn-ai-chats", async (c) => {
   const { applyAiPlayerThreads } = await import("../messaging/ai-player-spawn");
   const teamId = c.req.query("teamId");
-  const manual = teamId ? { teamId, forceVoice: c.req.query("voice") === "1" } : undefined;
+  // `&scenario=coach_relationship_voice` vynutí téma (ukázková hlasovka podle vztahu k trenérovi).
+  const manual = teamId ? { teamId, forceVoice: c.req.query("voice") === "1", scenarioId: c.req.query("scenario") } : undefined;
   const r = await applyAiPlayerThreads(c.env.DB, c.env, manual)
     .catch((e) => { logger.error({ module: "game.ts" }, "manual ai chat spawn", e); return null; });
   if (!r) return c.json({ error: "spawn selhal" }, 500);
