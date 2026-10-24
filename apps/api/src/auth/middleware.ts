@@ -90,3 +90,21 @@ export async function requireOwnedTeamRead(
   ).bind(teamId, session.userId).first();
   return ownTeam ? null : c.json({ error: "Přístup odepřen" }, 403);
 }
+
+/**
+ * Soukromé čtení: GET a HEAD pustí jen majitele týmu, zbytek nechá na
+ * `requireTeamOwnership`.
+ *
+ * Věší se jen na konkrétní cesty (Telefon, skupinové chaty). Všechny routery
+ * sdílí prefix /api, takže obecné `/teams/:teamId/*` by dopadlo i na routery
+ * připojené později, včetně veřejných stránek klubu.
+ */
+export const requirePrivateTeamRead = createMiddleware<{ Bindings: Bindings }>(async (c, next) => {
+  if (c.req.method === "GET" || c.req.method === "HEAD") {
+    const teamId = c.req.param("teamId");
+    if (!teamId) return c.json({ error: "Chybí teamId parametr" }, 400);
+    const denied = await requireOwnedTeamRead(c, teamId);
+    if (denied) return denied;
+  }
+  return next();
+});
