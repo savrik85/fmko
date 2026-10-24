@@ -190,7 +190,8 @@ function RuleRow({
           type="button"
           onClick={onRemove}
           aria-label={`Smazat pokyn ${poradi}`}
-          className="shrink-0 w-7 h-7 rounded-soft text-muted hover:text-card-red hover:bg-white transition-colors text-base leading-none"
+          // 32 px na prst; záporný okraj drží hlavičku pokynu stejně vysokou jako dřív.
+          className="shrink-0 w-8 h-8 -my-0.5 flex items-center justify-center rounded-soft text-muted hover:text-card-red hover:bg-white transition-colors text-base leading-none"
         >
           ✕
         </button>
