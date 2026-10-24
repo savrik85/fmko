@@ -485,6 +485,13 @@ async function spawnForTeam(
   // 4. Načti team context
   const teamCtx = await loadTeamContext(db, teamId);
   if (subject) teamCtx.subjectPlayerName = subject.name;
+  // Ruční rozeslání na začátku sezóny: odehrané zápasy a tabulka jsou z minulé sezóny, mluvit se o nich nemá.
+  if (forcedScenario) {
+    player.lastMatchOutcome = undefined;
+    player.playedLastMatch = undefined;
+    teamCtx.lastMatchResult = undefined;
+    teamCtx.leaguePosition = undefined;
+  }
 
   // 5. Gemini call
   let initialBody: string;
