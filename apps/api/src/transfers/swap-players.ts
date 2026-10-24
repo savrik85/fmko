@@ -6,6 +6,7 @@
  */
 
 import { resolveClubTeamId } from "./offer-club-scope";
+import { activeSellOnClause } from "./installments";
 import { logger } from "../lib/logger";
 
 const M = "swap-players";
@@ -43,6 +44,21 @@ export function parseSwapPlayerIds(
   return { ids };
 }
 
+/**
+ * Hráč s doložkou o procentech z příštího přestupu na výměnu nesmí, stejně jako ho nejde propustit:
+ * výměnou by šel dál bez ceny, ze které by se procenta platila. Splátky výměně nevadí, běží dál
+ * jako po propuštění: kupující výměnou nic neutrží, takže nemá z čeho dluh doplatit hned.
+ */
+export async function swapSellOnError(
+  db: D1Database,
+  player: Pick<SwapPlayerBrief, "id" | "first_name" | "last_name">,
+  ending: string,
+): Promise<string | null> {
+  const clause = await activeSellOnClause(db, player.id);
+  if (!clause) return null;
+  return `${swapPlayerName(player)} má doložku: ${clause.pct} % z příštího přestupu pro ${clause.beneficiaryName ?? "bývalý klub"}. ${ending}`;
+}
+
 /** Smí kupující tyhle hráče nabídnout? Vrací první problém, nebo null. */
 export async function swapPlayersError(
   db: D1Database,
@@ -51,8 +67,8 @@ export async function swapPlayersError(
 ): Promise<{ status: 400 | 404; error: string } | null> {
   for (const id of ids) {
     if (id === opts.targetPlayerId) return { status: 400, error: "Nelze nabídnout stejného hráče" };
-    const swap = await db.prepare("SELECT team_id, loan_from_team_id, next_match_return FROM players WHERE id = ?")
-      .bind(id).first<{ team_id: string; loan_from_team_id: string | null; next_match_return: number }>();
+    const swap = await db.prepare("SELECT team_id, loan_from_team_id, next_match_return, first_name, last_name FROM players WHERE id = ?")
+      .bind(id).first<{ team_id: string; loan_from_team_id: string | null; next_match_return: number; first_name: string | null; last_name: string | null }>();
     if (!swap) return { status: 404, error: "Hráč na výměnu nenalezen" };
     const swapClubTeamId = await resolveClubTeamId(db, swap.team_id);
     if (swapClubTeamId !== opts.buyerClubTeamId) return { status: 400, error: "Hráč na výměnu není ve tvém klubu" };
@@ -62,6 +78,9 @@ export async function swapPlayersError(
       .bind(id).first()
       .catch((e) => { logger.warn({ module: M }, "zranění hráče na výměnu", e); return null; });
     if (injury) return { status: 400, error: "Zraněného hráče nelze nabídnout na výměnu" };
+    const sellOn = await swapSellOnError(db, { id, first_name: swap.first_name, last_name: swap.last_name },
+      "Na výměnu ho dát nejde, můžeš ho prodat.");
+    if (sellOn) return { status: 400, error: sellOn };
   }
   return null;
 }

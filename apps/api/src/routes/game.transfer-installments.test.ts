@@ -648,6 +648,58 @@ describe("doložku o procentech nejde obejít", () => {
     expect((await db.prepare("SELECT status FROM sell_on_clauses").first<{ status: string }>())!.status).toBe("active");
   });
 
+  async function addPlayer(id: string, teamId: string, firstName: string, lastName: string) {
+    await db.batch([
+      db.prepare(`INSERT INTO players (id, team_id, first_name, last_name, age, position, overall_rating,
+        skills, physical, personality, life_context, avatar, weekly_wage, squad_number, residence, commute_km)
+        VALUES (?, ?, ?, ?, 25, 'MID', 45, '{}', '{}', '{}', '{"condition":100}', '{}', 200, NULL, 'Testov', 0)`)
+        .bind(id, teamId, firstName, lastName),
+      db.prepare(`INSERT INTO player_contracts (id, player_id, team_id, season_id, joined_at, join_type, fee, is_active)
+        VALUES (?, ?, ?, 'season', ?, 'generated', 0, 1)`).bind(`contract-${id}`, id, teamId, GAME_DATE),
+    ]);
+  }
+
+  it("hráče s doložkou nejde dát na výměnu, stejně jako ho nejde propustit", async () => {
+    await buyWithSellOn();
+    await addPlayer("target", "third-a", "Tomáš", "Cíl");
+    const r = await makeOffer({ playerId: "target", amount: 1_000, offeredPlayerIds: ["star"] });
+    expect(r.status).toBe(400);
+    expect(r.json.error).toBe("Petr Hvězda má doložku: 10 % z příštího přestupu pro Prodávající. Na výměnu ho dát nejde, můžeš ho prodat.");
+    expect((await db.prepare("SELECT COUNT(*) AS n FROM transfer_offers WHERE player_id = 'target'").first<{ n: number }>())!.n).toBe(0);
+  });
+
+  it("výměnu s hráčem, který má doložku, nejde přijmout ani u starší nabídky; nic se nepohne", async () => {
+    await addPlayer("swap-one", "buyer-a", "Karel", "První");
+    const offer = await makeOffer({ amount: 1_000, offeredPlayerIds: ["swap-one"] });
+    expect(offer.status).toBe(200);
+    // Nabídka vznikla dřív, než výměna doložky hlídala.
+    await db.prepare("INSERT INTO sell_on_clauses (id, offer_id, player_id, player_name, beneficiary_team_id, owner_team_id, pct) VALUES ('cl-swap', 'o-old', 'swap-one', 'Karel První', 'third-a', 'buyer-a', 15)").run();
+    const before = await budgets();
+
+    const r = await callRoute(`/teams/seller-a/offers/${offer.id}/accept`, { method: "POST", token: "seller-token", body: {} });
+    expect(r.status).toBe(409);
+    expect((await readJson(r)).error).toBe("Karel První má doložku: 15 % z příštího přestupu pro Třetí klub. Na výměnu jít nemůže.");
+    expect((await db.prepare("SELECT team_id FROM players WHERE id = 'star'").first<{ team_id: string }>())!.team_id).toBe("seller-a");
+    expect((await db.prepare("SELECT team_id FROM players WHERE id = 'swap-one'").first<{ team_id: string }>())!.team_id).toBe("buyer-a");
+    expect(await budgets()).toEqual(before);
+    expect((await db.prepare("SELECT status FROM transfer_offers WHERE id = ?").bind(offer.id).first<{ status: string }>())!.status).toBe("pending");
+    expect((await db.prepare("SELECT status FROM sell_on_clauses WHERE id = 'cl-swap'").first<{ status: string }>())!.status).toBe("active");
+  });
+
+  it("hráče, kterého kupující ještě splácí, vyměnit jde: splátky běží dál jako po propuštění", async () => {
+    const bought = await makeOffer({ amount: 60_000, upfrontPct: 30, installments: 4 });
+    expect((await callRoute(`/teams/seller-a/offers/${bought.id}/accept`, { method: "POST", token: "seller-token", body: {} })).status).toBe(200);
+    await addPlayer("target", "third-a", "Tomáš", "Cíl");
+
+    const swap = await makeOffer({ playerId: "target", amount: 0, offeredPlayerIds: ["star"] });
+    expect(swap.status).toBe(200);
+    expect((await callRoute(`/teams/third-a/offers/${swap.id}/accept`, { method: "POST", token: "third-token", body: {} })).status).toBe(200);
+
+    expect((await db.prepare("SELECT team_id FROM players WHERE id = 'star'").first<{ team_id: string }>())!.team_id).toBe("third-a");
+    expect(await db.prepare("SELECT buyer_team_id, status, remaining FROM transfer_installments").first())
+      .toEqual({ buyer_team_id: "buyer-a", status: "active", remaining: 42_000 });
+  });
+
   it("u výměny se procenta počítají z doplatku i z tržní ceny hráče, který jde opačně", async () => {
     await buyWithSellOn();
     await db.prepare(`INSERT INTO players (id, team_id, first_name, last_name, age, position, overall_rating,
