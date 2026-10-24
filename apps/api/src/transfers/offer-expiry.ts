@@ -10,6 +10,7 @@ import { logger } from "../lib/logger";
 import { sendSystemSMS } from "../messaging/system-sms";
 import { applyOfferRejectionImpact } from "./offer-rejection-impact";
 import { resolveOfferClubScope } from "./offer-club-scope";
+import { computeInterestForOffer, interestOfferOf } from "./player-interest";
 
 /** Kolik nabídek se zpracuje za jeden tick (D1 limity), zbytek přijde na řadu příště. */
 const EXPIRY_BATCH_LIMIT = 20;
@@ -92,7 +93,13 @@ export async function remindIdleOffers(env: Bindings, now: Date = new Date()): P
     const deadline = new Date(offer.expires_at).toLocaleString("cs-CZ", {
       timeZone: "Europe/Prague", weekday: "short", day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit",
     });
-    const wantsOut = sellerOnTurn && Number(offer.player_interest ?? 0) >= 2;
+    // Zájem hráče TEĎ, stejně jako ho přepočítá propadnutí (applyOfferRejectionImpact).
+    // Uložený `player_interest` je snímek z doby nabídky a následek by sliboval podle něj.
+    const interest = sellerOnTurn
+      ? await computeInterestForOffer(db, offer.player_id, interestOfferOf(offer))
+        .catch((e) => { logger.warn({ module: "offer-expiry" }, `interest ${offer.id}`, e); return null; })
+      : null;
+    const wantsOut = (interest?.level ?? 0) >= 2;
     const what = sellerOnTurn
       ? `nabídku od ${names.buyerName} na ${names.deal} ${names.playerName}`
       : `protinabídku od ${names.sellerName} na ${names.deal} ${names.playerName}`;

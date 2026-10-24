@@ -6,11 +6,17 @@ const sideEffects = vi.hoisted(() => ({
   applyOfferRejectionImpact: vi.fn(async (_db: unknown, _offer: { id: string }, _trigger: string, _env: unknown) => undefined),
   sendSystemSMS: vi.fn(async (_db: unknown, _teamId: string, _role: string, _body: string) => undefined),
   createNotification: vi.fn(async (_db: unknown, _teamId: string, _type: string, _title: string, _body: string, _url?: string) => undefined),
+  // Zájem hráče teď (stejný výpočet jako při propadnutí). Úroveň si nastaví každý test.
+  computeInterestForOffer: vi.fn(async (_db: unknown, _playerId: string, _offer: unknown): Promise<{ level: number; score: number; factors: [] } | null> => null),
 }));
 
 vi.mock("./offer-rejection-impact", () => ({ applyOfferRejectionImpact: sideEffects.applyOfferRejectionImpact }));
 vi.mock("../messaging/system-sms", () => ({ sendSystemSMS: sideEffects.sendSystemSMS }));
 vi.mock("../community/notifications", () => ({ createNotification: sideEffects.createNotification }));
+vi.mock("./player-interest", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./player-interest")>()),
+  computeInterestForOffer: sideEffects.computeInterestForOffer,
+}));
 
 import { expireIdleOffers, remindIdleOffers } from "./offer-expiry";
 import { OFFER_REPLY_DAYS, offerReplyDeadline } from "./offer-deadline";
@@ -53,15 +59,20 @@ beforeEach(async () => {
   sideEffects.applyOfferRejectionImpact.mockClear();
   sideEffects.sendSystemSMS.mockClear();
   sideEffects.createNotification.mockClear();
+  sideEffects.computeInterestForOffer.mockReset();
+  sideEffects.computeInterestForOffer.mockResolvedValue(null);
   await db.prepare("DELETE FROM transfer_offers").run();
 });
 
-async function addOffer(id: string, o: { status: string; lastActionBy: string | null; expiresAt: string; from?: string; to?: string; virtual?: string; interest?: number }) {
+async function addOffer(id: string, o: { status: string; lastActionBy: string | null; expiresAt: string; from?: string; to?: string; virtual?: string; interest?: number; counter?: number }) {
   await db.prepare(
-    `INSERT INTO transfer_offers (id, player_id, from_team_id, to_team_id, offer_amount, status, last_action_by, offer_type, virtual_team_data, player_interest, expires_at)
-     VALUES (?, 'p1', ?, ?, 10000, ?, ?, 'transfer', ?, ?, ?)`,
-  ).bind(id, o.from ?? "buyer", o.to ?? "seller", o.status, o.lastActionBy, o.virtual ?? null, o.interest ?? null, o.expiresAt).run();
+    `INSERT INTO transfer_offers (id, player_id, from_team_id, to_team_id, offer_amount, counter_amount, status, last_action_by, offer_type, virtual_team_data, player_interest, expires_at)
+     VALUES (?, 'p1', ?, ?, 10000, ?, ?, ?, 'transfer', ?, ?, ?)`,
+  ).bind(id, o.from ?? "buyer", o.to ?? "seller", o.counter ?? null, o.status, o.lastActionBy, o.virtual ?? null, o.interest ?? null, o.expiresAt).run();
 }
+
+/** Hráč o přestup stojí teď tolik (0–3), ať je v nabídce uloženo cokoli. */
+const interestNow = (level: number) => sideEffects.computeInterestForOffer.mockResolvedValue({ level, score: 0, factors: [] });
 
 async function statusOf(id: string) {
   return (await db.prepare("SELECT status FROM transfer_offers WHERE id = ?").bind(id).first<{ status: string }>())?.status;
@@ -132,6 +143,7 @@ describe("připomínka před koncem lhůty", () => {
 
   it("prodávajícímu na tahu připomene lhůtu a že to hráč vezme jako odmítnutí", async () => {
     await addOffer("remind-seller", { status: "pending", lastActionBy: "buyer", expiresAt: SOON, interest: 3 });
+    interestNow(3);
     expect(await remindIdleOffers(env, NOW)).toBe(1);
     const [sms] = smsTo("seller");
     expect(sms).toContain("Na nabídku od FK Kupec na přestup Karel Chtivý máš čas do");
@@ -159,5 +171,42 @@ describe("připomínka před koncem lhůty", () => {
   it("se vzdálenou lhůtou nepřipomíná", async () => {
     await addOffer("remind-later", { status: "pending", lastActionBy: "buyer", expiresAt: LATER });
     expect(await remindIdleOffers(env, NOW)).toBe(0);
+  });
+
+  it("následek podle toho, jak o přestup stojí teď, ne při vzniku nabídky", async () => {
+    // Při vzniku chtěl pryč, teď už ne: propadnutí ho nenaštve, připomínka nesmí strašit.
+    await addOffer("cooled-down", { status: "pending", lastActionBy: "buyer", expiresAt: SOON, interest: 3 });
+    interestNow(1);
+    await remindIdleOffers(env, NOW);
+    expect(smsTo("seller")[0]).toMatch(/Když neodpovíš, propadne\.$/);
+    expect(sideEffects.createNotification.mock.calls[0]?.[4]).not.toContain("odmítnutí");
+
+    // Při vzniku nechtěl, teď chce: propadnutí ho naštve, připomínka to musí říct.
+    sideEffects.sendSystemSMS.mockClear();
+    await addOffer("warmed-up", { status: "pending", lastActionBy: "buyer", expiresAt: SOON, interest: 0 });
+    interestNow(2);
+    await remindIdleOffers(env, NOW);
+    expect(smsTo("seller")[0]).toContain("propadne a Karel to vezme jako odmítnutí");
+  });
+
+  it("zájem počítá jako propadnutí: z aktuální částky, u cizího klubu z jeho síly a země", async () => {
+    await addOffer("countered-by-buyer", { status: "countered", lastActionBy: "buyer", expiresAt: SOON, counter: 15000 });
+    await addOffer("german", {
+      status: "pending", lastActionBy: null, expiresAt: "2026-10-12T09:00:00.000Z", from: "virtual_ai",
+      virtual: '{"name":"SV Grafenau","rating":52,"country":"DE"}',
+    });
+    await remindIdleOffers(env, NOW);
+    expect(sideEffects.computeInterestForOffer.mock.calls.map((call) => call.slice(1))).toEqual([
+      ["p1", { fromTeamId: "buyer", offerAmount: 15000, virtualRating: null, virtualCountry: null }],
+      ["p1", { fromTeamId: "virtual_ai", offerAmount: 10000, virtualRating: 52, virtualCountry: "DE" }],
+    ]);
+  });
+
+  it("kupci na tahu zájem hráče nepočítá, následek se ho netýká", async () => {
+    await addOffer("buyer-turn", { status: "countered", lastActionBy: "seller", expiresAt: SOON });
+    interestNow(3);
+    await remindIdleOffers(env, NOW);
+    expect(sideEffects.computeInterestForOffer).not.toHaveBeenCalled();
+    expect(smsTo("buyer")[0]).not.toContain("odmítnutí");
   });
 });
