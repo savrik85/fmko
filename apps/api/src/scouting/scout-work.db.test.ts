@@ -6,13 +6,15 @@
  * teams.city). Na produkci pak úkoly „Sledovat hráče“, „U21 liga“, „Naše liga“ a „Rozbor
  * soupeře“ nikdy nic neudělaly, jen se strhávalo cestovné (prověrka 2026-10-24).
  */
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
 import { Miniflare } from "miniflare";
 import { Hono } from "hono";
 import type { Bindings } from "../index";
 import { createSession } from "../auth/session";
+import { logger } from "../lib/logger";
 import { scoutingRouter } from "../routes/scouting";
+import { recordTransaction } from "../season/finance-processor";
 import {
   createLeagueScoutAssignment, createMatchScoutAssignment, createPlayerScoutAssignment, createScoutAssignment, runScoutWork,
 } from "./scout-work";
@@ -199,5 +201,95 @@ describe("týden práce nad skutečným schématem", () => {
     const body = await res.json() as { opponents: Array<{ id: string; name: string; city: string | null }> };
     expect(body.opponents.map((o) => o.name).sort()).toEqual(["SK Čkyně", "TJ Lhenice"]);
     expect(body.opponents.find((o) => o.id === OPP_A)?.city).toBe("Čkyně");
+  });
+});
+
+/** D1, která na dotazu odpovídajícím `pattern` spadne (výpadek uprostřed týdenní práce). */
+function failingDb(pattern: RegExp): D1Database {
+  return new Proxy(db, {
+    get(target, prop) {
+      if (prop === "prepare") {
+        return (sql: string) => {
+          if (pattern.test(sql)) throw new Error("simulovaný výpadek D1");
+          return target.prepare(sql);
+        };
+      }
+      const value = Reflect.get(target, prop, target);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+}
+
+async function travelOf(assignmentId: string) {
+  return (await db.prepare("SELECT amount, description FROM transactions WHERE type = 'scout_travel' AND reference_id = ?")
+    .bind(assignmentId).all<{ amount: number; description: string }>()).results;
+}
+
+async function budget(): Promise<number> {
+  return (await db.prepare("SELECT budget FROM teams WHERE id = ?").bind(BUYER).first<{ budget: number }>())!.budget;
+}
+
+describe("cestovné až po odvedené práci", () => {
+  beforeEach(seed);
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  it("když týdenní práce spadne, cestovné se nestrhne a chyba se zaloguje", async () => {
+    const errors = vi.spyOn(logger, "error");
+    const league = ok(await createLeagueScoutAssignment(db, { teamId: BUYER, staffId: "sc-league", assignmentType: "league", weeks: 2, gameDate: THURSDAY }));
+    const area = ok(await createScoutAssignment(db, {
+      teamId: BUYER, staffId: "sc-area", positions: null, ageMin: 18, ageMax: 32, radiusKm: 30, weeks: 2, gameDate: THURSDAY,
+    }));
+    const player = ok(await createPlayerScoutAssignment(db, { teamId: BUYER, staffId: "sc-player", targetPlayerId: "a-star", gameDate: THURSDAY }));
+
+    await runScoutWork({ DB: failingDb(/INSERT INTO scout_reports/) }, { gameDate: MONDAY });
+
+    expect(await budget()).toBe(START_BUDGET);
+    for (const id of [league.id, area.id, player.id]) {
+      expect(await travelOf(id)).toEqual([]);
+      expect(await assignment(id)).toMatchObject({ status: "active", weeks_worked: 0, reports_sent: 0 });
+    }
+    expect(errors.mock.calls.filter(([ctx]) => ctx.module === "scouting")).toHaveLength(3);
+  });
+
+  it("sledování hráče a rozbor se platí až po práci, týdenní úkoly po odvedeném týdnu", async () => {
+    const player = ok(await createPlayerScoutAssignment(db, { teamId: BUYER, staffId: "sc-player", targetPlayerId: "a-star", gameDate: THURSDAY }));
+    const match = ok(await createMatchScoutAssignment(db, { teamId: BUYER, staffId: "sc-match", targetTeamId: OPP_A, gameDate: THURSDAY }));
+    const u21 = ok(await createLeagueScoutAssignment(db, { teamId: BUYER, staffId: "sc-u21", assignmentType: "u21_league", weeks: 2, gameDate: THURSDAY }));
+    const area = ok(await createScoutAssignment(db, {
+      teamId: BUYER, staffId: "sc-area", positions: null, ageMin: 18, ageMax: 32, radiusKm: 15, weeks: 2, gameDate: THURSDAY,
+    }));
+    // Zadání nic nestojí.
+    expect(await budget()).toBe(START_BUDGET);
+
+    await runScoutWork(env, { gameDate: MONDAY });
+
+    expect(await travelOf(player.id)).toEqual([{ amount: -500, description: "Cestovné skauta: sledování hráče Petr Rychlý" }]);
+    expect(await travelOf(match.id)).toEqual([{ amount: -500, description: "Cestovné skauta: zápasový rozbor soupeře SK Čkyně" }]);
+    expect(await travelOf(u21.id)).toEqual([{ amount: -500, description: "Cestovné skauta (U21 liga)" }]);
+    expect(await travelOf(area.id)).toEqual([{ amount: -1500, description: "Cestovné skauta (okruh 15 km)" }]);
+    expect(await budget()).toBe(START_BUDGET - 3000);
+  });
+
+  it("mise zaplacená už při zadání (starý kód) se po práci nestrhne podruhé", async () => {
+    const player = ok(await createPlayerScoutAssignment(db, { teamId: BUYER, staffId: "sc-player", targetPlayerId: "a-star", gameDate: THURSDAY }));
+    await recordTransaction(db, BUYER, "scout_travel", -500, "Cestovné skauta: sledování hráče Petr Rychlý", THURSDAY, player.id);
+
+    await runScoutWork(env, { gameDate: MONDAY });
+
+    expect(await assignment(player.id)).toMatchObject({ status: "finished", reports_sent: 1 });
+    expect(await travelOf(player.id)).toHaveLength(1);
+    expect(await budget()).toBe(START_BUDGET - 500);
+  });
+
+  it("bez peněz na cestovné skaut na misi nejede a nic se nestrhne", async () => {
+    const player = ok(await createPlayerScoutAssignment(db, { teamId: BUYER, staffId: "sc-player", targetPlayerId: "a-star", gameDate: THURSDAY }));
+    await db.prepare("UPDATE teams SET budget = 200 WHERE id = ?").bind(BUYER).run();
+
+    await runScoutWork(env, { gameDate: MONDAY });
+
+    expect(await travelOf(player.id)).toEqual([]);
+    expect(await budget()).toBe(200);
+    expect(await assignment(player.id)).toMatchObject({ status: "cancelled", reports_sent: 0 });
+    expect((await scoutSms()).some((s) => s.includes("nejsou peníze"))).toBe(true);
   });
 });
