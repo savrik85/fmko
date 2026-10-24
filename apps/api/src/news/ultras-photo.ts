@@ -8,8 +8,8 @@
  * a když nápis nesedí, zkusí se jiný seed. Když se nepovede ani na čtvrtý pokus,
  * zůstane kreslená plachta.
  *
- * Stadion na fotce není (uživatel: AI by ho pokaždé postavila jinak), jen plot,
- * fanoušci a kopce za nimi.
+ * Celý stadion na fotce není (uživatel: AI by ho pokaždé postavila jinak), jen tribuna
+ * kotle za levou brankou podle úrovně z dat klubu; bez tribuny plot a kopce za ním.
  */
 
 import { logger } from "../lib/logger";
@@ -70,6 +70,49 @@ export interface UltrasBanner {
   secondaryColor: string;
   /** Velikost kotle 1–3 (`stadiums.ultras_stand`). */
   level: number;
+  /**
+   * Kde kotel stojí: tribuna za levou brankou (`stand_goal_west`, ve 3D jih), střecha (`roof`)
+   * a mříž nebo plexi před kotlem (`cage`). Bez údaje stojí fanoušci u plotu bez tribuny.
+   */
+  stand?: { level: number; roof: number; cage: number };
+}
+
+/**
+ * Tribuna kotle ze sloupců `stadiums`. Kotel stojí za levou brankou (ve 3D jih,
+ * `SEKTOR_STRANY.kotel`); stadion bez sloupců stran má jen `stands`.
+ */
+export function ultrasStandFromStadium(s: {
+  stand_goal_west?: number | null;
+  stands?: number | null;
+  roof?: number | null;
+  cage?: number | null;
+}): NonNullable<UltrasBanner["stand"]> {
+  return { level: s.stand_goal_west ?? s.stands ?? 0, roof: s.roof ?? 0, cage: s.cage ?? 0 };
+}
+
+/** Tribuna kotle slovy pro model, podle popisů úrovní ve hře (`UPGRADE_EFFECTS`). */
+function standScene(stand: UltrasBanner["stand"]): { place: string; extra: string } {
+  const level = Math.max(0, Math.min(3, Math.round(stand?.level ?? 0)));
+  if (level === 0) {
+    return { place: "standing behind a low metal fence by the pitch", extra: "Spruce-covered hills behind, no stadium stands in the picture." };
+  }
+  const roof = level >= 2 && (stand?.roof ?? 0) >= 1 ? " under a simple metal roof" : "";
+  const place = [
+    "",
+    // „Stání s ohrádkou za brankou“
+    "standing on a few low concrete terrace steps with a simple metal railing behind the goal",
+    // „Tribunka za brankou“
+    `standing in a small stand behind the goal${roof}, a few rows of plain plastic seats rising behind them`,
+    // „Velká tribuna za brankou“
+    `standing at the front of a large stand behind the goal${roof}, many rows of plain plastic seats rising high behind them`,
+  ][level];
+  const cage = stand?.cage ?? 0;
+  const barrier = cage >= 2
+    ? " Tall clear plexiglass panels stand between them and the pitch, the banner hangs on the pitch side of the panels."
+    : cage === 1
+      ? " A tall metal mesh fence stands between them and the pitch, the banner is tied to the pitch side of the mesh."
+      : "";
+  return { place, extra: `Photo taken from the edge of the pitch, spruce-covered hills visible above the stand.${barrier} The seats are plain, without any lettering.` };
 }
 
 export function ultrasPhotoPrompt(b: UltrasBanner): string {
@@ -89,11 +132,12 @@ export function ultrasPhotoPrompt(b: UltrasBanner): string {
   // Bez nápovědy model maluje háček jako čárku (KOVÁĆIK 6× ze 6), s ní 3× ze 3 správně (2026-10-24).
   // Ů nenamaluje ani s nápovědou, takovou plachtu zachrání jen kontrola a kreslená plachta.
   const carons = [...new Set(b.ultrasText.toLocaleUpperCase("cs").match(/[ČŠŘŽĚŇŤĎ]/g) ?? [])];
+  const scene = standScene(b.stand);
   return [
-    `Candid smartphone photo of ${crowd} of a village football club in South Bohemia, wearing ${primary} and ${secondary} scarves, standing behind a low metal fence by the pitch.`,
+    `Candid smartphone photo of ${crowd} of a village football club in South Bohemia, wearing ${primary} and ${secondary} scarves, ${scene.place}.`,
     `They hold up a long ${banner} cloth banner hand-painted with uneven ${letters} brush letters that read exactly "${b.ultrasText}".`,
-    "The paint is slightly smudged and follows the folds of the fabric. Overcast autumn afternoon, spruce-covered hills behind.",
-    "No other text or logos anywhere, no stadium stands in the picture.",
+    `The paint is slightly smudged and follows the folds of the fabric. Overcast autumn afternoon. ${scene.extra}`,
+    "No other text or logos anywhere.",
     ...(carons.length > 0
       ? [`Czech letters painted carefully: ${carons.join(", ")} ${carons.length > 1 ? "have" : "has"} a small v-shaped caron above, not an acute accent.`]
       : []),

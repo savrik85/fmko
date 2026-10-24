@@ -8776,14 +8776,23 @@ gameRouter.post("/admin/ultras-photos", async (c) => {
   if (!row) return c.json({ error: "Report nenalezen" }, 404);
   const photos = JSON.parse(row.photos_json ?? "[]") as import("../news/ultras-report").UltrasPhoto[];
   const teamIds = photos.map((p) => p.teamId);
-  const colors = teamIds.length === 0 ? { results: [] as Array<{ id: string; primary_color: string | null; secondary_color: string | null }> } : await c.env.DB
-    .prepare(`SELECT id, primary_color, secondary_color FROM teams WHERE id IN (${teamIds.map(() => "?").join(",")})`)
-    .bind(...teamIds).all<{ id: string; primary_color: string | null; secondary_color: string | null }>();
+  type TeamRow = {
+    id: string; primary_color: string | null; secondary_color: string | null;
+    stand_goal_west: number | null; stands: number | null; roof: number | null; cage: number | null;
+  };
+  // Tribuna kotle podle dnešního stadionu klubu (fotka plachty ukáže kotel na jeho tribuně).
+  const teams = teamIds.length === 0 ? { results: [] as TeamRow[] } : await c.env.DB
+    .prepare(`SELECT t.id, t.primary_color, t.secondary_color, s.stand_goal_west, s.stands, s.roof, s.cage
+                FROM teams t LEFT JOIN stadiums s ON s.team_id = t.id
+               WHERE t.id IN (${teamIds.map(() => "?").join(",")})`)
+    .bind(...teamIds).all<TeamRow>();
   const { addUltrasPhotos } = await import("../news/ultras-report");
+  const { ultrasStandFromStadium } = await import("../news/ultras-photo");
   const { readAiProvider } = await import("../lib/ai-provider");
   const ocrKey = (await readAiProvider(c.env.CACHE_KV)) === "gemini" ? c.env.GEMINI_API_KEY : undefined;
-  const added = await addUltrasPhotos(c.env.AI, c.env.SEED_DATA, photos, colors.results.map((t) => ({
+  const added = await addUltrasPhotos(c.env.AI, c.env.SEED_DATA, photos, teams.results.map((t) => ({
     homeTeamId: t.id, primaryColor: t.primary_color ?? "#2D5F2D", secondaryColor: t.secondary_color ?? "#ffffff",
+    stand: ultrasStandFromStadium(t),
   })), ocrKey);
   await c.env.DB.prepare("UPDATE ultras_reports SET photos_json = ? WHERE id = ?").bind(JSON.stringify(photos), row.id).run();
   return c.json({ ok: true, added, photos: photos.map((p) => ({ team: p.teamName, text: p.ultrasText, photoId: p.photoId ?? null })) });
