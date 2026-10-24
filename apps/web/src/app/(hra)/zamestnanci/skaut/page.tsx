@@ -419,7 +419,7 @@ export default function ScoutPage() {
                 Cíl: {a.targetPlayerName ?? "Konkrétní hráč"}
               </div>
               <div className="text-sm text-muted">
-                Skaut detailně analyzuje výkony a skryté vlastnosti tohoto hráče. Mise trvá 2 dny. Po jejím dokončení dorazí zpráva s odhalenými atributy a charakterem hráče.
+                Skaut se na hráče podívá dvakrát. Mise trvá 2 dny, pak dorazí hlášení s odhadem hodnocení, u mladých do 21 let i stropu, a s povahou hráče. Nabídku na přestup mu pošleš z jeho profilu.
               </div>
               <button onClick={stop} className="w-full py-2.5 rounded-xl font-heading font-bold border-2 border-red-200 text-red-700 bg-white hover:bg-red-50 transition-colors">
                 Ukončit úkol
