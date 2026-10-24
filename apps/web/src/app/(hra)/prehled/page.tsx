@@ -21,6 +21,7 @@ import { WidgetFrame } from "@/components/dashboard/widgets/widget-frame";
 import { WidgetPicker } from "@/components/dashboard/widgets/widget-picker";
 import type { DataKey, LayoutItem, WidgetDef, WidgetHeight, WidgetWidth } from "@/components/dashboard/widgets/types";
 import { PreseasonNotice } from "@/components/team/preseason-notice";
+import { PushPrompt } from "@/components/push/push-prompt";
 
 const COL_SPAN: Record<WidgetWidth, string> = {
   1: "lg:col-span-1",
@@ -162,6 +163,7 @@ export default function DashboardPage() {
   return (
     <div className="page-container space-y-5">
       <PreseasonNotice />
+      <PushPrompt />
       {confirmDialog}
 
       <div className="flex items-center justify-end gap-2">

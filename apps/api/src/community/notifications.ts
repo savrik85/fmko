@@ -2,6 +2,7 @@
  * FMK-20: Notifikace — push/email/in-app.
  */
 
+import { logger } from "../lib/logger";
 import { getNotificationPreferences, sendWebPushToTeam, type PushEnv } from "./web-push";
 
 export type NotificationType = "match_reminder" | "match_result" | "event" | "challenge" | "transfer" | "season" | "system";
@@ -34,14 +35,14 @@ export async function createNotification(
   ).bind(crypto.randomUUID(), teamId, type, title, body, actionUrl ?? null).run();
 
   if (env?.VAPID_PUBLIC_KEY && env?.VAPID_PRIVATE_KEY) {
-    // Fire-and-forget — selhání push nesmí rozbít in-app notifikaci
-    getNotificationPreferences(db, teamId)
-      .then((prefs) => {
-        if (prefs[type] !== false) {
-          return sendWebPushToTeam(env, teamId, title, body, actionUrl);
-        }
-      })
-      .catch((e) => console.warn("[notifications] web push failed:", e));
+    // Push se čeká: nedočkaný slib Worker po konci požadavku nebo ticku utne a push
+    // tiše nedojde. Selhání push ale nesmí rozbít oznámení v aplikaci, jen se zaloguje.
+    try {
+      const prefs = await getNotificationPreferences(db, teamId);
+      if (prefs[type] !== false) await sendWebPushToTeam(env, teamId, title, body, actionUrl);
+    } catch (e) {
+      logger.warn({ module: "notifications", teamId }, "web push failed", e);
+    }
   }
 }
 
