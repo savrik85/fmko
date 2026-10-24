@@ -8,8 +8,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
+import { useOpenPlayerConversation } from "@/hooks/use-open-player-conversation";
 import { Spinner, PositionBadge } from "@/components/ui";
 import { formatKg, formatKgChange, WEIGHT_CATEGORY, type WeightCategoryKey } from "@/lib/player-attrs";
 import type { PosFilter } from "@/components/players/squad-attribute-table";
@@ -66,7 +66,7 @@ function trendTone(trend: number, category: WeightCategoryKey | null): string {
 
 /** Souhrn je za celý kádr, filtr postů zužuje jen tabulku. */
 export function SquadBodyTab({ teamId, filter }: { teamId: string; filter: PosFilter }) {
-  const router = useRouter();
+  const { open: openSms, openingPlayerId } = useOpenPlayerConversation(teamId);
   const [data, setData] = useState<BodyOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -77,15 +77,6 @@ export function SquadBodyTab({ teamId, filter }: { teamId: string; filter: PosFi
       .catch((e) => { console.error("body-overview fetch:", e); setError("Přehled se nepodařilo načíst."); })
       .finally(() => setLoading(false));
   }, [teamId]);
-
-  async function openSms(playerId: string) {
-    try {
-      const res = await apiFetch<{ conversationId: string }>(`/api/teams/${teamId}/player-conversation/${playerId}`, { method: "POST" });
-      router.push(`/telefon/${res.conversationId}`);
-    } catch (e) {
-      console.error("open player conversation:", e);
-    }
-  }
 
   if (loading) return <div className="card p-6 flex items-center justify-center min-h-[120px]"><Spinner /></div>;
   if (error || !data) return <div className="card p-4 text-sm text-card-red text-center">{error ?? "Přehled se nepodařilo načíst."}</div>;
@@ -187,8 +178,9 @@ export function SquadBodyTab({ teamId, filter }: { teamId: string; filter: PosFi
                     </td>
                     <td className="py-1 px-1.5 text-center">
                       {p.problem && (
-                        <button onClick={() => openSms(p.id)} aria-label={`Napsat hráči ${p.name}`} title="Napsat SMS"
-                          className="min-w-9 min-h-9 rounded-control hover:bg-pitch-50 transition-colors text-sm">
+                        <button onClick={() => openSms(p.id)} disabled={openingPlayerId !== null}
+                          aria-label={`Napsat hráči ${p.name}`} title="Napsat SMS"
+                          className="min-w-9 min-h-9 rounded-control hover:bg-pitch-50 transition-colors text-sm disabled:opacity-50">
                           💬
                         </button>
                       )}

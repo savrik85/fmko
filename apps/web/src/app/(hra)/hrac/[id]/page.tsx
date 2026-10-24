@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { apiFetch, apiAction, type Player, type Team, type CareerStats, type PlayerMatchEntry, type PlayerContract } from "@/lib/api";
 import { useTeam } from "@/context/team-context";
+import { useOpenPlayerConversation } from "@/hooks/use-open-player-conversation";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { PotentialProgress } from "@/components/players/potential-progress";
 import { usePotencial, PotentialBox, PotentialBadge } from "@/components/players/potential-summary";
@@ -162,6 +163,7 @@ export default function PlayerDetailPage() {
   const [scoutsData, setScoutsData] = useState<Array<{ id: string; name: string; eff: number; assignment: any | null }>>([]);
   const [scoutLoading, setScoutLoading] = useState(false);
   const [scoutSent, setScoutSent] = useState(false);
+  const { open: openConversation, openingPlayerId: openingConversationFor } = useOpenPlayerConversation(teamId);
   const { confirm, dialog: confirmDialog } = useConfirm();
   const [coachLog, setCoachLog] = useState<CoachRelationLogItem[]>([]);
   const [profileExtras, setProfileExtras] = useState<{
@@ -750,17 +752,12 @@ export default function PlayerDetailPage() {
                     založil konverzaci s hráčem sám od sebe jen jeden manažer.
                     Ostatní na to neměli kudy, jen odpovídali na došlé SMS. */}
                 {isOwnPlayer && (
-                  <button onClick={async () => {
-                    try {
-                      const res = await apiFetch<{ conversationId: string }>(`/api/teams/${teamId}/player-conversation/${player.id}`, { method: "POST" });
-                      router.push(`/telefon/${res.conversationId}`);
-                    } catch (e) { console.error("open player conversation:", e); }
-                  }}
+                  <button onClick={() => openConversation(player.id)} disabled={openingConversationFor !== null}
                     aria-label={`Napsat hráči ${player.first_name} ${player.last_name}`}
                     // Krátký popisek a bez roztahování přes celou šířku: s plnou
                     // šířkou by se řada tlačítek na mobilu zalomila o řádek navíc
                     // a hlavička hráče by zabrala půl displeje.
-                    className={`shrink-0 sm:flex-initial min-w-0 sm:min-w-[120px] rounded-xl px-3 sm:px-4 py-2 text-sm font-heading font-bold transition-colors flex items-center justify-center gap-1.5 ${btnNeutral}`}>
+                    className={`shrink-0 sm:flex-initial min-w-0 sm:min-w-[120px] rounded-xl px-3 sm:px-4 py-2 text-sm font-heading font-bold transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50 ${btnNeutral}`}>
                     💬 SMS
                   </button>
                 )}
