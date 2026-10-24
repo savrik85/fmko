@@ -11,6 +11,7 @@ import {
   peaksFromPcm,
   pickPlayerVoice,
   recordVoiceMessage,
+  rerecordVoiceMessagesDrunk,
   spokenText,
   voicePreviewText,
 } from "./voice-message";
@@ -200,5 +201,31 @@ describe("opilá hlasovka", () => {
     const body = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
     expect(body.contents[0].parts[0].text.split("#### TRANSCRIPT\n")[1]).toBe("Třii jedna! Hehehe. Dobrou... dobrou.");
     expect(recorded?.transcript).toBe("Třii jedna! Hehehe. Dobrou... dobrou.");
+  });
+});
+
+describe("přehrání odeslaných hlasovek opile", () => {
+  it("stejný hráč a hlas, opilý text do TTS i přepisu, nahrávka přepsaná na stejném klíči", async () => {
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => ttsResponse(pcm(3)));
+    vi.stubGlobal("fetch", fetchMock);
+    const db = new FalesnaD1([
+      { sql: /FROM messages m JOIN players p/, all: [{
+        id: "m1", conversation_id: "c1", body: "Trenére, v pondělí chci hrát. Fakt.",
+        metadata: JSON.stringify({ type: "voice", audioKey: "voice/m1.wav", durationSec: 10, peaks: [], voice: "Orus", scenario_id: "x" }),
+        first_name: "Marek", age: 22, nationality: "CZ", life_context: JSON.stringify({ voice: { name: "Orus", trait: "speaks fast" } }),
+      }] },
+      { sql: /SELECT COUNT\(\*\) AS n FROM messages/, first: { n: 0 } },
+    ]);
+    const bucket = r2();
+
+    const r = await rerecordVoiceMessagesDrunk(jakoD1(db), { GEMINI_API_KEY: "k", SEED_DATA: bucket }, { scenarioId: "x", scene: "Vztah.", limit: 3 });
+
+    expect(r).toEqual({ done: [{ messageId: "m1", player: "Marek", durationSec: 3 }], failed: [], left: 0 });
+    expect(bucket.stored.has("voice/m1.wav")).toBe(true);
+    const body = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
+    expect(body.generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName).toBe("Orus");
+    expect(body.contents[0].parts[0].text).toContain("slurred");
+    const update = db.davky.flat().find((d) => /UPDATE messages SET body/.test(d.sql));
+    expect(update?.params[0]).toBe("Treenére, v pondělí chci hrát. Fakt... fakt.");
   });
 });
