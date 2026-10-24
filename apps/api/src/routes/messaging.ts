@@ -346,9 +346,47 @@ messagingRouter.get("/teams/:teamId/voice-messages/:messageId/audio", async (c) 
 
   const obj = await c.env.SEED_DATA.get(row.audio_key);
   if (!obj) return c.json({ error: "Nahrávka není k dispozici" }, 404);
+  // Hlasovky hráčů jsou wav, trenérovy nahrávky z prohlížeče webm nebo mp4.
   return new Response(obj.body, {
-    headers: { "Content-Type": "audio/wav", "Cache-Control": "private, max-age=86400" },
+    headers: { "Content-Type": obj.httpMetadata?.contentType ?? "audio/wav", "Cache-Control": "private, max-age=86400" },
   });
+});
+
+// POST /api/teams/:teamId/conversations/:convId/voice-note — trenér nahrál hlasovou odpověď.
+// Nahrávka se uloží a Whisper ji přepíše. Odeslání jde přes běžné odeslání zprávy
+// (`voice` v těle), takže platí stejný kredit a stejné háčky jako u SMS.
+messagingRouter.post("/teams/:teamId/conversations/:convId/voice-note", async (c) => {
+  const teamId = c.req.param("teamId");
+  const convId = c.req.param("convId");
+  const conv = await c.env.DB.prepare(
+    "SELECT team_id, type, participant_id, ai_thread_active FROM conversations WHERE id = ?",
+  ).bind(convId).first<{ team_id: string; type: string; participant_id: string | null; ai_thread_active: number }>()
+    .catch((e) => { logger.warn({ module: "messaging" }, "konverzace pro hlasovou odpověď", e); return null; });
+  if (!conv || conv.team_id !== teamId) return c.json({ error: "Konverzace nenalezena" }, 404);
+  if (!odpovidatLze(conv.type, conv.ai_thread_active === 1, { participantId: conv.participant_id }).canReply) {
+    return c.json({ error: "Do téhle konverzace se odpovídat nedá." }, 400);
+  }
+  if (!c.env.AI) return c.json({ error: "Přepis hlasu teď nefunguje." }, 503);
+
+  const {
+    COACH_AUDIO_TYPES, COACH_AUDIO_MAX_BYTES, COACH_AUDIO_MAX_SEC, coachAudioKey, transcribeCoachVoice,
+  } = await import("../messaging/coach-voice");
+  const contentType = (c.req.header("Content-Type") ?? "").split(";")[0].trim().toLowerCase();
+  const ext = COACH_AUDIO_TYPES[contentType];
+  if (!ext) return c.json({ error: "Nahrávka je v nepodporovaném formátu." }, 415);
+  const audio = new Uint8Array(await c.req.arrayBuffer());
+  if (audio.length < 1000) return c.json({ error: "Nahrávka je prázdná." }, 400);
+  if (audio.length > COACH_AUDIO_MAX_BYTES) return c.json({ error: "Nahrávka je moc dlouhá." }, 413);
+  const durationSec = Math.min(COACH_AUDIO_MAX_SEC, Math.max(1, Math.round(Number(c.req.query("durationSec")) || 1)));
+
+  const transcript = await transcribeCoachVoice(c.env.AI, audio);
+  if (!transcript) return c.json({ error: "Nahrávce nebylo rozumět, zkus to znovu a mluv blíž k mikrofonu." }, 422);
+
+  const audioKey = coachAudioKey(teamId, uuid(), ext);
+  const saved = await c.env.SEED_DATA.put(audioKey, audio, { httpMetadata: { contentType } })
+    .catch((e) => { logger.warn({ module: "messaging" }, `uložení hlasové odpovědi ${audioKey}`, e); return null; });
+  if (!saved) return c.json({ error: "Nahrávku se nepodařilo uložit." }, 500);
+  return c.json({ audioKey, transcript, durationSec });
 });
 
 // POST /api/teams/:teamId/player-conversation/:playerId — najdi/založ 1:1 konverzaci s hráčem
@@ -378,9 +416,29 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
   const teamId = c.req.param("teamId");
   const convId = c.req.param("convId");
   // `optionId` = tlačítko hotové odpovědi (SMS od majitele firmy). Tón z něj bere jen server.
-  const body = await c.req.json<{ body: string; optionId?: string }>();
+  // `voice` = hlasová odpověď nahraná přes /voice-note, `body` je pak její přepis.
+  const body = await c.req.json<{
+    body: string; optionId?: string; voice?: { audioKey?: unknown; durationSec?: unknown; peaks?: unknown };
+  }>();
 
   if (!body.body?.trim()) return c.json({ error: "Empty message" }, 400);
+
+  let voiceMeta: { type: "voice"; audioKey: string; durationSec: number; peaks?: number[] } | null = null;
+  if (body.voice) {
+    const { isCoachAudioKey, sanitizePeaks, COACH_AUDIO_MAX_SEC } = await import("../messaging/coach-voice");
+    const key = body.voice.audioKey;
+    const stored = isCoachAudioKey(teamId, key)
+      ? await c.env.SEED_DATA.head(key).catch((e) => { logger.warn({ module: "messaging" }, "kontrola hlasové odpovědi", e); return null; })
+      : null;
+    if (!isCoachAudioKey(teamId, key) || !stored) return c.json({ error: "Nahrávka nenalezena" }, 400);
+    const peaks = sanitizePeaks(body.voice.peaks);
+    voiceMeta = {
+      type: "voice",
+      audioKey: key,
+      durationSec: Math.min(COACH_AUDIO_MAX_SEC, Math.max(1, Math.round(Number(body.voice.durationSec) || 1))),
+      ...(peaks ? { peaks } : {}),
+    };
+  }
 
   // Ověřit že konverzace patří tomuto týmu
   const convOwner = await c.env.DB.prepare("SELECT team_id FROM conversations WHERE id = ?")
@@ -431,11 +489,12 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
   const now = new Date().toISOString();
 
   await c.env.DB.prepare(
-    "INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, sent_at, read) VALUES (?, ?, 'user', ?, ?, ?, ?, 1)"
-  ).bind(msgId, convId, teamId, senderName, body.body.trim(), now).run();
+    "INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, metadata, sent_at, read) VALUES (?, ?, 'user', ?, ?, ?, ?, ?, 1)"
+  ).bind(msgId, convId, teamId, senderName, body.body.trim(), voiceMeta ? JSON.stringify(voiceMeta) : null, now).run();
 
   // Update conversation
-  const trimmedText = body.body.trim().slice(0, 100);
+  const { voicePreviewText } = await import("../messaging/voice-message");
+  const trimmedText = voiceMeta ? voicePreviewText(voiceMeta.durationSec) : body.body.trim().slice(0, 100);
   await c.env.DB.prepare(
     "UPDATE conversations SET last_message_text = ?, last_message_at = ? WHERE id = ?"
   ).bind(trimmedText, now, convId).run();
