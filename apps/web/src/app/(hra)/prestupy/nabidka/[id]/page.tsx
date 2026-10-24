@@ -377,7 +377,7 @@ export default function OfferDetailPage() {
         <MessageDialog
           title={role === "buyer" ? "Stáhnout nabídku?" : "Ukončit jednání?"}
           description={role === "buyer"
-            ? "Nabídka bude zrušena."
+            ? "Nabídka bude zrušena. Novou můžeš poslat kdykoli."
             : playerWantsOut
               ? `Jednání bude ukončeno. ${player?.first_name ?? "Hráč"} o přestup stojí, vezme to jako odmítnutí a spadne mu nálada.`
               : "Jednání bude ukončeno."}
