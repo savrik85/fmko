@@ -1172,6 +1172,53 @@ async function createReport(
   }), reportId);
 }
 
+// ─── Vrácení cestovného za úkoly bez práce ──────────────────────────────────
+
+const REFUND_LABELS: Record<string, string> = {
+  u21_league: "U21 liga", league: "naše liga", player: "sledování hráče", match: "rozbor soupeře",
+};
+
+export interface TravelRefund {
+  teamId: string; teamName: string; transactionId: string; assignmentId: string; assignmentType: string; amount: number;
+}
+
+/**
+ * Vrácení cestovného, které starý kód strhl za úkoly, jež nikdy nic neodpracovaly (prověrka
+ * 2026-10-24: U21 liga, Naše liga a mise padaly na SQL a cestovné se strhávalo dál).
+ *
+ * Vrací se každé stržení zvlášť (typ scout_travel, `reference_id` = id stržení), takže druhý
+ * běh už nic nevrátí. Jen stržení před `before` (nasazení opravy): týdny odpracované potom
+ * se platí normálně. Aktivní mise se nevrací, hlášení po opravě dostanou bez další platby.
+ * `apply: false` jen vypíše, co by se vrátilo.
+ */
+export async function refundUnworkedScoutTravel(
+  db: D1Database, opts: { before: string; apply: boolean },
+): Promise<{ refunds: TravelRefund[]; total: number }> {
+  const rows = await db.prepare(
+    `SELECT tr.id AS transactionId, tr.team_id AS teamId, t.name AS teamName, -tr.amount AS amount,
+            sa.id AS assignmentId, sa.assignment_type AS assignmentType, t.game_date AS gameDate
+       FROM transactions tr
+       JOIN scout_assignments sa ON sa.id = tr.reference_id
+       JOIN teams t ON t.id = tr.team_id
+      WHERE tr.type = 'scout_travel' AND tr.amount < 0 AND julianday(tr.created_at) < julianday(?)
+        AND (sa.assignment_type IN ('league','u21_league')
+             OR (sa.assignment_type IN ('player','match') AND sa.status = 'cancelled'))
+        AND NOT EXISTS (SELECT 1 FROM transactions r WHERE r.reference_id = tr.id AND r.type = 'scout_travel' AND r.amount > 0)
+      ORDER BY t.name, tr.created_at`,
+  ).bind(opts.before).all<TravelRefund & { gameDate: string | null }>();
+
+  const refunds: TravelRefund[] = [];
+  for (const r of rows.results) {
+    if (opts.apply) {
+      await recordTransaction(db, r.teamId, "scout_travel", r.amount,
+        `Vráceno cestovné skauta: úkol bez práce (${REFUND_LABELS[r.assignmentType] ?? r.assignmentType})`,
+        r.gameDate ?? new Date().toISOString(), r.transactionId);
+    }
+    refunds.push({ teamId: r.teamId, teamName: r.teamName, transactionId: r.transactionId, assignmentId: r.assignmentId, assignmentType: r.assignmentType, amount: r.amount });
+  }
+  return { refunds, total: refunds.reduce((sum, r) => sum + r.amount, 0) };
+}
+
 // ─── Denní údržba hlášení ───────────────────────────────────────────────────
 
 /**
