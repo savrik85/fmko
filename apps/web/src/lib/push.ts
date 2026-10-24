@@ -20,6 +20,14 @@ function isIos(): boolean {
   return /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
 }
 
+/** Telefon nebo tablet. Výzva k zapnutí upozornění patří jen sem, na počítači je v Nastavení. */
+export function isMobileDevice(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const uaData = (navigator as Navigator & { userAgentData?: { mobile?: boolean } }).userAgentData;
+  if (uaData?.mobile) return true;
+  return isIos() || /Android|Mobile/i.test(navigator.userAgent);
+}
+
 function isStandalone(): boolean {
   return window.matchMedia?.("(display-mode: standalone)").matches
     || (navigator as Navigator & { standalone?: boolean }).standalone === true;
