@@ -41,6 +41,8 @@ export interface ScoutReport {
   willingness: { level: number; label: string } | null;
   negotiationId: string | null;
   freeAgentId: string | null;
+  /** Hráč hraje ve hře (ligový úkol, sledování hráče): kupuje se nabídkou z jeho profilu. */
+  gamePlayerId: string | null;
   expiresAt: string;
   createdAt: string;
 }
@@ -150,7 +152,9 @@ export function ScoutReportSheet({ teamId, reportId, onClose, onChanged }: {
                 {Object.keys(r.avatar ?? {}).length > 0 ? <FaceAvatar faceConfig={r.avatar} size={58} /> : <span className="text-2xl">👤</span>}
               </div>
               <div className="min-w-0">
-                <div className="font-heading font-bold text-xl">{name}</div>
+                <div className="font-heading font-bold text-xl">
+                  {r.gamePlayerId ? <Link href={`/hrac/${r.gamePlayerId}`} className="hover:underline">{name}</Link> : name}
+                </div>
                 <div className="flex items-center gap-2 flex-wrap text-sm mt-0.5">
                   <PositionBadge position={r.position as "GK" | "DEF" | "MID" | "FWD"} />
                   <span className="text-muted">{r.age} let</span>
@@ -204,13 +208,24 @@ export function ScoutReportSheet({ teamId, reportId, onClose, onChanged }: {
               {r.source === "free_agent" && r.weeklyWage != null && (
                 <div><span className="text-muted">Chce </span><span className="font-heading font-bold tabular-nums">{r.weeklyWage.toLocaleString("cs")} Kč týdně</span></div>
               )}
+              {r.gamePlayerId && (active || r.status === "negotiating") && (
+                <div className="text-muted">Hraje za {r.clubName ?? "klub ve hře"}. Nabídku na přestup mu pošleš z jeho profilu.</div>
+              )}
               {(active || r.status === "negotiating") && (
-                <div className="text-muted">Hlášení platí ještě {daysLeft(r.expiresAt)} {daysLeft(r.expiresAt) === 1 ? "den" : daysLeft(r.expiresAt) < 5 ? "dny" : "dní"}. Mezitím ho může sebrat jiný klub.</div>
+                <div className="text-muted">
+                  Hlášení platí ještě {daysLeft(r.expiresAt)} {daysLeft(r.expiresAt) === 1 ? "den" : daysLeft(r.expiresAt) < 5 ? "dny" : "dní"}.
+                  {r.gamePlayerId ? "" : " Mezitím ho může sebrat jiný klub."}
+                </div>
               )}
             </div>
 
             <div className="flex flex-col gap-2 pt-1">
-              {active && r.source === "village_club" && (
+              {(active || r.status === "negotiating") && r.gamePlayerId && (
+                <Link href={`/hrac/${r.gamePlayerId}`} className="w-full py-3 rounded-xl font-heading font-bold bg-pitch-500 text-white text-center hover:bg-pitch-600 transition-colors">
+                  Otevřít profil hráče
+                </Link>
+              )}
+              {active && r.source === "village_club" && !r.gamePlayerId && (
                 <button onClick={() => setOfferOpen(true)} className="w-full py-3 rounded-xl font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">
                   Začít jednat s klubem
                 </button>

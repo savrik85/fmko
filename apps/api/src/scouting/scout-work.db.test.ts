@@ -18,7 +18,8 @@ import { scoutingRouter } from "../routes/scouting";
 import { recordTransaction } from "../season/finance-processor";
 import { executeStaffTick } from "../staff/staff-tick";
 import {
-  createLeagueScoutAssignment, createMatchScoutAssignment, createPlayerScoutAssignment, createScoutAssignment, runScoutWork,
+  createLeagueScoutAssignment, createMatchScoutAssignment, createPlayerScoutAssignment, createScoutAssignment, maintainScoutReports,
+  runScoutWork,
 } from "./scout-work";
 
 const app = new Hono<{ Bindings: Bindings }>();
@@ -360,5 +361,67 @@ describe("rozbor soupeře a mise do dvou dnů", () => {
     const other = await loadMatchMods(db, BUYER, true, OPP_B);
     expect(scouted.techniqueMod).toBe(other.techniqueMod);
     expect(scouted.moraleMod).toBe(other.moraleMod);
+  });
+});
+
+describe("hlášení o hráči, který hraje ve hře", () => {
+  beforeEach(seed);
+
+  async function asBuyer(path: string, init?: RequestInit) {
+    const token = await createSession(env.SESSION_KV, "u-buyer", "buyer@example.test", BUYER);
+    return app.request(path, { ...init, headers: { ...(init?.headers ?? {}), Authorization: `Bearer ${token}`, "Content-Type": "application/json" } }, env);
+  }
+
+  it("vede na profil hráče a s klubem se o něm jednat nedá (žádný klon hráče)", async () => {
+    const league = ok(await createLeagueScoutAssignment(db, { teamId: BUYER, staffId: "sc-league", assignmentType: "league", weeks: 2, gameDate: THURSDAY }));
+    const player = ok(await createPlayerScoutAssignment(db, { teamId: BUYER, staffId: "sc-player", targetPlayerId: "a-star", gameDate: THURSDAY }));
+    await runScoutWork(env, { gameDate: MONDAY });
+
+    const [leagueReport] = await reportsOf(league.id);
+    const [playerReport] = await reportsOf(player.id);
+    expect(JSON.parse(playerReport.player_data).gamePlayerId).toBe("a-star");
+    expect(["a-star", "a-weak", "b-fwd"]).toContain(JSON.parse(leagueReport.player_data).gamePlayerId);
+    // Cenu a ochotu u hráče ve hře neurčuje klub mimo hru, skaut je nevymýšlí.
+    expect(leagueReport.ask_hint).toBeNull();
+
+    const list = await (await asBuyer(`/api/teams/${BUYER}/scout`)).json() as { reports: Array<{ id: string; gamePlayerId: string | null }> };
+    expect(list.reports.find((r) => r.id === playerReport.id)?.gamePlayerId).toBe("a-star");
+
+    const detail = await (await asBuyer(`/api/teams/${BUYER}/scout/reports/${playerReport.id}`)).json() as {
+      report: { gamePlayerId: string | null; willingness: unknown; askHint: number | null };
+    };
+    expect(detail.report).toMatchObject({ gamePlayerId: "a-star", willingness: null, askHint: null });
+
+    const res = await asBuyer(`/api/teams/${BUYER}/scout/reports/${playerReport.id}/negotiate`, {
+      method: "POST", body: JSON.stringify({ amount: 10_000 }),
+    });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toContain("profilu");
+    expect((await db.prepare("SELECT COUNT(*) AS n FROM ai_negotiations").first<{ n: number }>())!.n).toBe(0);
+    expect((await db.prepare("SELECT status FROM scout_reports WHERE id = ?").bind(playerReport.id).first<{ status: string }>())!.status).toBe("active");
+  });
+
+  it("ligový skaut nehlásí stejného hráče dvakrát za sebou", async () => {
+    const league = ok(await createLeagueScoutAssignment(db, { teamId: BUYER, staffId: "sc-league", assignmentType: "league", weeks: 2, gameDate: THURSDAY }));
+    await runScoutWork(env, { gameDate: MONDAY });
+    await runScoutWork(env, { gameDate: "2026-11-02T16:00:00.000Z" });
+
+    const ids = (await reportsOf(league.id)).map((r) => JSON.parse(r.player_data).gamePlayerId as string);
+    expect(ids).toHaveLength(2);
+    expect(new Set(ids).size).toBe(2);
+  });
+
+  it("hráče ve hře nesebere náhodou klub mimo hru, hlášení zmizí, až hráč ve hře nebude", async () => {
+    const player = ok(await createPlayerScoutAssignment(db, { teamId: BUYER, staffId: "sc-player", targetPlayerId: "a-star", gameDate: THURSDAY }));
+    await runScoutWork(env, { gameDate: MONDAY });
+    const [report] = await reportsOf(player.id);
+
+    // Dřív ho údržba hlášení sebrala s šancí 3 % denně („sebral ho jiný klub“).
+    for (let i = 0; i < 300; i++) await maintainScoutReports(db, undefined);
+    expect((await db.prepare("SELECT status FROM scout_reports WHERE id = ?").bind(report.id).first<{ status: string }>())!.status).toBe("active");
+
+    await db.prepare("DELETE FROM players WHERE id = 'a-star'").run();
+    await maintainScoutReports(db, undefined);
+    expect((await db.prepare("SELECT status FROM scout_reports WHERE id = ?").bind(report.id).first<{ status: string }>())!.status).toBe("gone");
   });
 });

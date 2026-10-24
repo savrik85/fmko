@@ -26,6 +26,7 @@ import { installmentBudgetError, installmentLimitError, weeklyInstallment } from
 import { purchaseVirtualPlayer, type VirtualPlayerData } from "./virtual-purchase";
 import { outsideClubValuation } from "../scouting/outside-clubs";
 import { villageCoords } from "../scouting/candidates";
+import { gamePlayerIdOf } from "../scouting/game-player-report";
 
 /** Nejvíc hráčů v kádru; víc klub z trhu nekoupí (stejně jako u volných hráčů). */
 export const SQUAD_CAP = 30;
@@ -135,6 +136,8 @@ async function loadSource(db: D1Database, source: "listing" | "scout_report", id
   ).bind(id).first<{ id: string; team_id: string; source: string; player_data: string; club_name: string | null; club_city: string | null; district: string | null; club_rank: number | null; club_mean: number | null; village_id: string | null; distance_km: number; status: string; expires_at: string; outside_player_id: string | null }>();
   if (!r || r.team_id !== buyerClubTeamId) return fail(404, "Hlášení nenalezeno.");
   if (r.source !== "village_club") return fail(400, "Volný hráč nemá klub, s kým jednat. Podepiš ho rovnou.");
+  // Hráč, který hraje ve hře: nákup přes jednání by ho naklonoval a originál by zůstal u klubu.
+  if (gamePlayerIdOf(r.player_data)) return fail(400, "Hráč hraje za klub ve hře. Nabídku na přestup mu pošli z jeho profilu.");
   if (r.outside_player_id && !await outsidePlayerAvailable(db, r.outside_player_id)) {
     await db.prepare("UPDATE scout_reports SET status = 'gone', resolved_at = ? WHERE id = ? AND status = 'active'")
       .bind(new Date().toISOString(), r.id).run()

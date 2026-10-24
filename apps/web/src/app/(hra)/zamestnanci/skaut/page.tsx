@@ -401,9 +401,9 @@ export default function ScoutPage() {
               </div>
               <div className="text-sm text-muted">
                 {a.assignment_type === "u21_league"
-                  ? "Skaut jezdí na zápasy U21 ligy a v pondělí pošle zprávu o největším talentu soupeřů včetně odhadu jeho stropu a ceny."
-                  : "Skaut jezdí na ligové zápasy soupeřů a v pondělí pošle zprávu o vybraném hráči včetně odhadu formy a ceny."}
-                {" "}Cestovné {kc(a.weekly_cost || SCOUT_LEAGUE_WEEKLY_COST)} týdně se strhává v pondělí.
+                  ? "Skaut jezdí na zápasy U21 ligy a v pondělí pošle zprávu o největším talentu soupeřů včetně odhadu jeho stropu."
+                  : "Skaut jezdí na ligové zápasy soupeřů a v pondělí pošle zprávu o vybraném hráči včetně odhadu hodnocení."}
+                {" "}Nabídku na přestup pak pošleš z profilu hráče. Cestovné {kc(a.weekly_cost || SCOUT_LEAGUE_WEEKLY_COST)} týdně se strhává v pondělí po odvedené práci.
               </div>
               <button onClick={stop} className="w-full py-2.5 rounded-xl font-heading font-bold border-2 border-red-200 text-red-700 bg-white hover:bg-red-50 transition-colors">
                 Ukončit úkol
@@ -549,7 +549,7 @@ export default function ScoutPage() {
                       {data.leagues.u21.name}
                     </div>
                     <p className="text-sm text-pitch-900">
-                      Skaut objíždí zápasy a tréninky soupeřů v naší dorostenecké U21 lize. Sleduje reálné mladé hráče do 21 let a hodnotí jejich <strong>strop a potenciál růstu</strong>. V pondělí pošle zprávu o největším talentu s odhadem ceny a ochoty jednat o přestupu.
+                      Skaut objíždí zápasy a tréninky soupeřů v naší dorostenecké U21 lize. Sleduje reálné mladé hráče do 21 let a hodnotí jejich <strong>strop a potenciál růstu</strong>. V pondělí pošle zprávu o největším talentu, nabídku na přestup pak pošleš z profilu hráče.
                     </p>
                   </div>
 
@@ -622,7 +622,7 @@ export default function ScoutPage() {
                       {data.leagues.senior.name}
                     </div>
                     <p className="text-sm text-amber-950">
-                      Skaut objíždí zápasy naší soutěže a sleduje hráče v kádrech soupeřů. Vytipuje nejlepší posily, odhadne jejich kvalitu, formu, pořizovací cenu a ochotu přestoupit.
+                      Skaut objíždí zápasy naší soutěže a sleduje hráče v kádrech soupeřů. Vytipuje posily a odhadne jejich kvalitu, nabídku na přestup pak pošleš z profilu hráče.
                     </p>
                   </div>
 

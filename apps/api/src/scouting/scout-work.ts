@@ -27,6 +27,7 @@ import { blurredAskHint, blurredWillingness, potentialRange, rangeMid, ratingRan
 import { projectRating } from "./youth-growth";
 import { isFromAbroad } from "./foreign";
 import { OPPONENT_ANALYSIS_BONUS_DAYS, OPPONENT_ANALYSIS_MORALE_BONUS, OPPONENT_ANALYSIS_TECHNIQUE_BONUS } from "./opponent-analysis";
+import { GAME_PLAYER_ID_SQL, gamePlayerIdOf, type ScoutReportPlayerData } from "./game-player-report";
 import { activeSeasonNumber, loadOutsideSquad, outsideClubValuation, type OutsideSquad } from "./outside-clubs";
 import { emptyWeekSms, finishedSms, reportCons, reportPros, reportSms, revisitSms, type ReportSubject } from "./report-text";
 
@@ -349,6 +350,19 @@ async function sendScoutSms(db: D1Database, teamId: string, sender: string, body
   }
 }
 
+/** Post do SMS česky („záložník“), ne zkratkou MID. */
+function postLabel(position: string): string {
+  return (SCOUT_POSITION_LABELS[position as keyof typeof SCOUT_POSITION_LABELS] ?? position).toLowerCase();
+}
+
+/** Kolik km je obec cizího týmu od obce klubu; bez souřadnic 0. */
+async function distanceFromClub(db: D1Database, teamId: string, lat: number | null, lng: number | null): Promise<number> {
+  if (lat == null || lng == null) return 0;
+  const home = await db.prepare("SELECT v.lat, v.lng FROM teams t JOIN villages v ON v.id = t.village_id WHERE t.id = ?")
+    .bind(teamId).first<{ lat: number; lng: number }>();
+  return home ? Math.round(haversineKm(home.lat, home.lng, lat, lng)) : 0;
+}
+
 // ─── Týdenní práce ──────────────────────────────────────────────────────────
 
 /** Jedenáctý nejlepší v kádru: kdo je pod ním, do sestavy se nedostane. */
@@ -484,7 +498,7 @@ async function evaluatePlayerMission(
   const player = await db.prepare(
     `SELECT p.id, p.first_name, p.last_name, p.position, p.age, p.overall_rating, p.hidden_talent,
             p.skills, p.physical, p.skills_max, p.personality, p.avatar,
-            t.village_id, v.name AS club_city, v.district, t.name AS club_name
+            t.village_id, v.name AS club_city, v.district, v.lat, v.lng, t.name AS club_name
      FROM players p
      LEFT JOIN teams t ON t.id = p.team_id
      LEFT JOIN villages v ON v.id = t.village_id
@@ -493,7 +507,7 @@ async function evaluatePlayerMission(
     id: string; first_name: string; last_name: string; position: string; age: number; overall_rating: number;
     hidden_talent: number | null; skills: string | null; physical: string | null; skills_max: string | null;
     personality: string | null; avatar: string | null; village_id: string | null; club_city: string | null;
-    district: string | null; club_name: string | null;
+    district: string | null; lat: number | null; lng: number | null; club_name: string | null;
   }>();
 
   if (!player) {
@@ -526,7 +540,10 @@ async function evaluatePlayerMission(
 
   const reportId = crypto.randomUUID();
   const expiresAt = new Date(Date.now() + SCOUT_REPORT_TTL_DAYS * 86_400_000).toISOString();
-  const pData: VirtualPlayerData = {
+  // Hráč hraje ve hře: hlášení vede na jeho profil a běžnou nabídku (game-player-report.ts),
+  // proto bez ceny a ochoty klubu mimo hru.
+  const pData: ScoutReportPlayerData = {
+    gamePlayerId: player.id,
     firstName: player.first_name,
     lastName: player.last_name,
     age: player.age,
@@ -536,19 +553,23 @@ async function evaluatePlayerMission(
     skills: player.skills ? JSON.parse(player.skills) : {},
     skillCaps: player.skills_max ? JSON.parse(player.skills_max) : {},
     avatar: player.avatar ? JSON.parse(player.avatar) : {},
-    physical: {},
+    physical: player.physical ? JSON.parse(player.physical) : {},
     personality: pers,
+    fromTeam: player.club_name ?? undefined,
+    fromCity: player.club_city ?? undefined,
+    fromDistrict: player.district ?? undefined,
   };
+  const distanceKm = await distanceFromClub(db, a.team_id, player.lat, player.lng);
 
   await db.prepare(
     `INSERT INTO scout_reports (id, team_id, assignment_id, source, village_id, club_name, club_city, district, distance_km,
        player_data, first_name, last_name, age, position, rating_lo, rating_hi, potential_lo, potential_hi, visits,
        pros, cons, willingness, status, expires_at, created_game_date)
-     VALUES (?, ?, ?, 'village_club', ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, 2, ?, ?, 2, 'active', ?, ?)`,
+     VALUES (?, ?, ?, 'village_club', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 2, ?, ?, NULL, 'active', ?, ?)`,
   ).bind(
-    reportId, a.team_id, a.id, player.village_id, player.club_name ?? "Cizí klub", player.club_city, player.district ?? "Okres",
+    reportId, a.team_id, a.id, player.village_id, player.club_name ?? "Cizí klub", player.club_city, player.district ?? "Okres", distanceKm,
     JSON.stringify(pData), player.first_name, player.last_name, player.age, player.position,
-    rr.lo, rr.hi, pr?.lo ?? null, pr?.hi ?? null, JSON.stringify(pros), JSON.stringify(cons), expiresAt, gameDate,
+    rr.lo, rr.hi, pr?.lo ?? null, pr?.hi ?? null, JSON.stringify(pros), JSON.stringify(cons), expiresAt, gameDate.slice(0, 10),
   ).run();
 
   await db.prepare(
@@ -556,8 +577,10 @@ async function evaluatePlayerMission(
        closed_at = strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE id = ?`,
   ).bind(a.id).run();
 
+  const club = player.club_name ? `, ${player.club_name}` : "";
   await sendScoutSms(db, a.team_id, sender,
-    `🔍 Viděl jsem ${player.first_name} ${player.last_name} (${player.position}) v akci. Odhad hodnocení ${rr.lo}–${rr.hi}. Hlášení máš na stole.`,
+    `🔍 Byl jsem se podívat na hráče ${player.first_name} ${player.last_name} (${postLabel(player.position)}${club}). `
+      + `Hodnocení odhaduju na ${rr.lo} až ${rr.hi}. Hlášení máš na stole, nabídku mu pošleš z jeho profilu.`,
     reportId,
   );
   return `Cestovné skauta: sledování hráče ${player.first_name} ${player.last_name}`;
@@ -594,9 +617,8 @@ async function evaluateMatchMission(
 
   const formation = lineup?.formation ?? "4-4-2";
   const tactic = PLAN_TACTIC_LABELS[(lineup?.tactic ?? "balanced") as keyof typeof PLAN_TACTIC_LABELS] ?? PLAN_TACTIC_LABELS.balanced;
-  const postOf =(p: string) => (SCOUT_POSITION_LABELS[p as keyof typeof SCOUT_POSITION_LABELS] ?? p).toLowerCase();
-  const keyDesc = topPlayer ? `${topPlayer.first_name} ${topPlayer.last_name} (${postOf(topPlayer.position)}, hodnocení ${topPlayer.overall_rating})` : "vyrovnaný kádr";
-  const weakDesc = weakPlayer ? `${weakPlayer.first_name} ${weakPlayer.last_name} (${postOf(weakPlayer.position)})` : "bez výrazné díry";
+  const keyDesc = topPlayer ? `${topPlayer.first_name} ${topPlayer.last_name} (${postLabel(topPlayer.position)}, hodnocení ${topPlayer.overall_rating})` : "vyrovnaný kádr";
+  const weakDesc = weakPlayer ? `${weakPlayer.first_name} ${weakPlayer.last_name} (${postLabel(weakPlayer.position)})` : "bez výrazné díry";
 
   // Bonus do zápasu čte equipment/match-mods.ts podle hotového úkolu (opponent-analysis.ts),
   // tady se jen zapíše, co rozbor dal a do kdy platí.
@@ -713,8 +735,10 @@ async function revisit(db: D1Database, a: AssignmentRow, eff: number, sender: st
     }, eff, visits, seedKey)
     : null;
   const extended = new Date(Math.max(new Date(r.expires_at).getTime(), Date.now() + REVISIT_EXTEND_DAYS * 86_400_000)).toISOString();
-  // Další návštěva zpřesní i odhad ceny.
-  const askHint = r.source === "village_club" ? blurredAskHint(openingAsk(player, r.club_rank, a.team_id, seedKey), eff, visits, seedKey) : null;
+  // Další návštěva zpřesní i odhad ceny. Hráč ve hře cenu klubu mimo hru nemá (game-player-report.ts).
+  const askHint = r.source === "village_club" && !gamePlayerIdOf(player)
+    ? blurredAskHint(openingAsk(player, r.club_rank, a.team_id, seedKey), eff, visits, seedKey)
+    : null;
   await db.prepare(
     "UPDATE scout_reports SET visits = ?, rating_lo = ?, rating_hi = ?, potential_lo = ?, potential_hi = ?, expires_at = ?, ask_hint = COALESCE(?, ask_hint) WHERE id = ?",
   ).bind(visits, rr.lo, rr.hi, pr?.lo ?? null, pr?.hi ?? null, extended, askHint, r.id).run();
@@ -768,7 +792,7 @@ async function searchLeague(
   // Obličej je v `players.avatar` (sloupec face_config neexistuje).
   let query = `SELECT p.id, p.team_id, p.first_name, p.last_name, p.age, p.position, p.overall_rating, p.hidden_talent,
                       p.personality, p.physical, p.avatar, p.skills_max, p.skills,
-                      t.name as club_name, v.name as club_city, v.district, v.id as village_id
+                      t.name as club_name, v.name as club_city, v.district, v.id as village_id, v.lat, v.lng
                FROM players p
                JOIN teams t ON p.team_id = t.id
                LEFT JOIN villages v ON t.village_id = v.id
@@ -789,7 +813,7 @@ async function searchLeague(
     id: string; team_id: string; first_name: string; last_name: string; age: number; position: string;
     overall_rating: number; hidden_talent: number | null; personality: string | null; physical: string | null;
     avatar: string | null; skills_max: string | null; skills: string | null; club_name: string; club_city: string | null;
-    district: string | null; village_id: string | null;
+    district: string | null; village_id: string | null; lat: number | null; lng: number | null;
   }>();
 
   if (!pRows.results || pRows.results.length === 0) {
@@ -797,16 +821,12 @@ async function searchLeague(
     return { visited: visitedTeams.length, reported: false };
   }
 
+  // O kom už tým platné hlášení má, toho skaut znovu nehlásí (dřív se hledalo `player_data.id`,
+  // které se nikdy nezapisovalo, takže chodilo pořád totéž jméno).
   const activeReports = await db.prepare(
-    "SELECT player_data FROM scout_reports WHERE team_id = ? AND status IN ('active','negotiating')",
-  ).bind(a.team_id).all<{ player_data: string }>();
-  const reportedIds = new Set<string>();
-  for (const rep of activeReports.results ?? []) {
-    try {
-      const parsed = JSON.parse(rep.player_data) as { id?: string };
-      if (parsed?.id) reportedIds.add(parsed.id);
-    } catch (e) { logger.warn({ module: "scouting" }, "neplatná data hráče v hlášení skauta", e); }
-  }
+    `SELECT ${GAME_PLAYER_ID_SQL} AS id FROM scout_reports WHERE team_id = ? AND status IN ('active','negotiating')`,
+  ).bind(a.team_id).all<{ id: string | null }>();
+  const reportedIds = new Set(activeReports.results.map((r) => r.id).filter((id): id is string => !!id));
 
   const pool = pRows.results.filter((p) => !reportedIds.has(p.id));
   const candidates = pool.length > 0 ? pool : pRows.results;
@@ -866,7 +886,10 @@ async function searchLeague(
   }
 
   const reportId = crypto.randomUUID();
-  const playerPayload: VirtualPlayerData = {
+  // Hráč soupeře hraje ve hře: hlášení vede na jeho profil a běžnou nabídku, ne na jednání
+  // s klubem mimo hru (to by ho naklonovalo). Proto ani cena a ochota klubu mimo hru.
+  const playerPayload: ScoutReportPlayerData = {
+    gamePlayerId: best.row.id,
     firstName: best.row.first_name,
     lastName: best.row.last_name,
     age: best.row.age,
@@ -884,14 +907,13 @@ async function searchLeague(
   };
 
   const expiresAt = new Date(Date.now() + 28 * 86_400_000).toISOString();
-  const askVal = isU21 ? 15000 : 35000;
-  const willingness = willingnessFromChance(Math.round(40 + rng.random() * 40));
+  const distanceKm = await distanceFromClub(db, a.team_id, best.row.lat, best.row.lng);
   const subject: ReportSubject = {
     position: best.row.position,
     age: best.row.age,
     skills: best.parsedSkills,
     personality: best.parsedPersonality,
-    distanceKm: 15,
+    distanceKm,
   };
 
   await db.prepare(
@@ -899,20 +921,20 @@ async function searchLeague(
       (id, team_id, assignment_id, source, village_id, club_name, club_city, district, distance_km,
        player_data, first_name, last_name, age, position, rating_lo, rating_hi, potential_lo, potential_hi,
        visits, club_rank, club_mean, ask_hint, pros, cons, willingness, status, expires_at, created_game_date)
-     VALUES (?, ?, ?, 'village_club', ?, ?, ?, ?, 15, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 8, ?, ?, ?, ?, ?, 'active', ?, ?)`
+     VALUES (?, ?, ?, 'village_club', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NULL, NULL, NULL, ?, ?, NULL, 'active', ?, ?)`
   ).bind(
-    reportId, a.team_id, a.id, best.row.village_id, best.row.club_name, best.row.club_city, best.row.district,
+    reportId, a.team_id, a.id, best.row.village_id, best.row.club_name, best.row.club_city, best.row.district, distanceKm,
     JSON.stringify(playerPayload), best.row.first_name, best.row.last_name, best.row.age, best.row.position,
     best.ratingRange.lo, best.ratingRange.hi, best.potential?.lo ?? null, best.potential?.hi ?? null,
-    best.row.overall_rating, askVal, JSON.stringify(reportPros(subject)), JSON.stringify(reportCons(subject)),
-    willingness, expiresAt, gameDate.slice(0, 10),
+    JSON.stringify(reportPros(subject)), JSON.stringify(reportCons(subject)),
+    expiresAt, gameDate.slice(0, 10),
   ).run();
 
   const leagueLabel = isU21 ? "dorostenecké U21 lize" : "naší lize";
-  const posLabel = SCOUT_POSITION_LABELS[best.row.position as keyof typeof SCOUT_POSITION_LABELS] ?? best.row.position;
+  const posLabel = postLabel(best.row.position);
   const smsBody = isU21 && best.potential
-    ? `V ${leagueLabel} jsem na zápase týmu ${best.row.club_name} sledoval talent: ${best.row.first_name} ${best.row.last_name} (${posLabel}, ${best.row.age} let). Strop vidím na ${best.potential.lo}–${best.potential.hi}. Hlášení je připraveno.`
-    : `V ${leagueLabel} jsem na zápase týmu ${best.row.club_name} sledoval hráče: ${best.row.first_name} ${best.row.last_name} (${posLabel}, ${best.row.age} let). Hodnocení odhaduji na ${best.ratingRange.lo}–${best.ratingRange.hi}. Hlášení je připraveno.`;
+    ? `V ${leagueLabel} jsem na zápase týmu ${best.row.club_name} sledoval talent: ${best.row.first_name} ${best.row.last_name} (${posLabel}, ${best.row.age} let). Strop vidím na ${best.potential.lo} až ${best.potential.hi}. Hlášení je připraveno, nabídku mu pošleš z jeho profilu.`
+    : `V ${leagueLabel} jsem na zápase týmu ${best.row.club_name} sledoval hráče: ${best.row.first_name} ${best.row.last_name} (${posLabel}, ${best.row.age} let). Hodnocení odhaduju na ${best.ratingRange.lo} až ${best.ratingRange.hi}. Hlášení je připraveno, nabídku mu pošleš z jeho profilu.`;
 
   await sendScoutSms(db, a.team_id, sender, smsBody, reportId);
   return { visited: visitedTeams.length, reported: true };
@@ -1168,6 +1190,13 @@ export async function maintainScoutReports(db: D1Database, env: PushEnv | undefi
      WHERE status = 'active' AND source = 'free_agent' AND NOT EXISTS (SELECT 1 FROM free_agents fa WHERE fa.id = scout_reports.free_agent_id)`,
   ).bind(nowIso).run();
 
+  // Hráč ve hře (game-player-report.ts), který už ve hře není (konec kariéry, smazaný tým).
+  await db.prepare(
+    `UPDATE scout_reports SET status = 'gone', resolved_at = ?
+     WHERE status = 'active' AND ${GAME_PLAYER_ID_SQL} IS NOT NULL
+       AND NOT EXISTS (SELECT 1 FROM players p WHERE p.id = ${GAME_PLAYER_ID_SQL})`,
+  ).bind(nowIso).run();
+
   const rng = createRng(cryptoSeed());
   let gone = 0;
   const goneReport = async (r: { id: string; status: string; negotiation_id: string | null }) => {
@@ -1196,9 +1225,11 @@ export async function maintainScoutReports(db: D1Database, env: PushEnv | undefi
     for (const r of reports.results) await goneReport(r);
   }
 
-  // Starší hlášení (hráč vylosovaný jen pro jedno hlášení) po staru, každé zvlášť.
+  // Starší hlášení (hráč vylosovaný jen pro jedno hlášení) po staru, každé zvlášť. Hráče ve
+  // hře klub mimo hru nesebere, ten patří svému klubu.
   const live = await db.prepare(
-    "SELECT id, status, negotiation_id FROM scout_reports WHERE status IN ('active','negotiating') AND source = 'village_club' AND outside_player_id IS NULL",
+    `SELECT id, status, negotiation_id FROM scout_reports
+      WHERE status IN ('active','negotiating') AND source = 'village_club' AND outside_player_id IS NULL AND ${GAME_PLAYER_ID_SQL} IS NULL`,
   ).all<{ id: string; status: string; negotiation_id: string | null }>();
   for (const r of live.results) {
     if (rng.random() >= SCOUT_SNAP_UP_DAILY_CHANCE) continue;
