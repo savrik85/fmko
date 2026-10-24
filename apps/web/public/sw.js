@@ -1,8 +1,6 @@
 // Prales — Service Worker
-// Handles push notifications and basic offline support.
-
-const CACHE_NAME = "prales-v1";
-const OFFLINE_URL = "/offline";
+// Obsluhuje jen push notifikace. Nic necachuje a fetch nezachytává, takže bez
+// připojení appka nefunguje (stránka /offline neexistuje).
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
@@ -17,8 +15,9 @@ self.addEventListener("push", (event) => {
   let data = { title: "Prales", body: "Máš novou zprávu.", url: "/prehled" };
   try {
     if (event.data) data = { ...data, ...event.data.json() };
-  } catch {
-    // ponechat výchozí data
+  } catch (e) {
+    // Notifikace se ukáže s výchozím textem.
+    console.warn("push: data notifikace se nepodařilo přečíst:", e);
   }
 
   event.waitUntil(
