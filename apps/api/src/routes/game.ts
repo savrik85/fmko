@@ -1173,48 +1173,6 @@ gameRouter.get("/teams/:teamId/pub-status", async (c) => {
   return c.json({ available: daysDiff >= 2, daysLeft: Math.max(0, Math.ceil(2 - daysDiff)) });
 });
 
-// POST /api/teams/:id/youth — nastavit investici do mládeže
-gameRouter.post("/teams/:teamId/youth", async (c) => {
-  const body = await c.req.json<{ investment: string }>();
-
-  const costs: Record<string, number> = { none: 0, minimal: 500, medium: 2000, high: 5000 };
-  const cost = costs[body.investment] ?? 0;
-
-  return c.json({
-    ok: true,
-    investment: body.investment,
-    monthlyCost: cost,
-    message: cost === 0
-      ? "Mládežnická akademie zrušena."
-      : `Investice do mládeže: ${cost} Kč/měsíc.`,
-  });
-});
-
-// POST /api/teams/:id/recruit — aktivní nábor
-gameRouter.post("/teams/:teamId/recruit", async (c) => {
-  const body = await c.req.json<{ action: string }>();
-  const rng = createRng(cryptoSeed());
-
-  const actions: Record<string, { cost: number; prob: number; desc: string }> = {
-    poster: { cost: 200, prob: 0.15, desc: "Plakát na obecní nástěnce" },
-    newsletter: { cost: 500, prob: 0.25, desc: "Inzerát v obecním zpravodaji" },
-    visit: { cost: 1500, prob: 0.4, desc: "Objíždění sousedních vesnic" },
-  };
-
-  const action = actions[body.action];
-  if (!action) return c.json({ error: "Unknown action" }, 400);
-
-  const success = rng.random() < action.prob;
-
-  return c.json({
-    success,
-    cost: action.cost,
-    message: success
-      ? `${action.desc}, někdo se ozval! Nový hráč chce přijít.`
-      : `${action.desc}, bohužel se nikdo neozval.`,
-  });
-});
-
 // GET /api/teams/:id/news — obecní zpravodaj / news feed
 //
 // Odznak s počtem nepřečtených článků tady byl a je pryč. Vymyslel jsem si ho
