@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import {
   MAX_PLAN_RULES,
   PLAN_MINUTE_MIN,
@@ -171,6 +172,9 @@ function RuleRow({
 }) {
   const trigger = rule.trigger;
   const action = rule.action;
+  // Rozepsaná minuta. Ořezávat při každém stisku nešlo: smazané pole se hned vrátilo
+  // na 1 a z „60“ se po dopsání další číslice stalo „90“.
+  const [minuteDraft, setMinuteDraft] = useState<string | null>(null);
   const chybiHrac = action.kind === "sub"
     && (!starters.some((p) => p.id === action.outPlayerId) || !bench.some((p) => p.id === action.inPlayerId));
 
@@ -249,12 +253,24 @@ function RuleRow({
               min={PLAN_MINUTE_MIN}
               max={PLAN_MINUTE_MAX}
               className={selectClass}
-              value={rule.fromMinute}
+              value={minuteDraft ?? String(rule.fromMinute)}
               onChange={(e) => {
-                const raw = Number(e.target.value);
-                if (!Number.isFinite(raw)) return;
+                const text = e.target.value;
+                setMinuteDraft(text);
+                // Platná minuta se propíše hned, aby šla sestava uložit i bez opuštění pole.
+                const typed = Number(text);
+                if (text.trim() !== "" && Number.isInteger(typed) && typed >= PLAN_MINUTE_MIN && typed <= PLAN_MINUTE_MAX) {
+                  onChange({ ...rule, fromMinute: typed });
+                }
+              }}
+              onBlur={() => {
+                if (minuteDraft === null) return;
+                setMinuteDraft(null);
+                // Prázdné pole vrátí poslední platnou minutu, číslo mimo rozsah se ořízne.
+                const raw = Number(minuteDraft);
+                if (minuteDraft.trim() === "" || !Number.isFinite(raw)) return;
                 const minute = Math.min(PLAN_MINUTE_MAX, Math.max(PLAN_MINUTE_MIN, Math.round(raw)));
-                onChange({ ...rule, fromMinute: minute });
+                if (minute !== rule.fromMinute) onChange({ ...rule, fromMinute: minute });
               }}
             />
           </label>
