@@ -9,6 +9,7 @@ import { FaceAvatar } from "@/components/players/face-avatar";
 import { AutoGrowTextarea, Spinner } from "@/components/ui";
 import { PhoneFrame } from "@/components/phone/phone-frame";
 import { SponsorLink } from "@/components/sponsors/sponsor-link";
+import { VoiceMessage } from "../VoiceMessage";
 interface Message {
   id: string;
   body: string;
@@ -547,7 +548,17 @@ export default function ConversationPage() {
                             ? `${mojeBublina} rounded-br-tight`
                             : "bg-white shadow-sm rounded-bl-tight"
                         }`}>
-                          <p className="whitespace-pre-wrap">{emoticonize(msg.body)}</p>
+                          {msg.metadata?.type === "voice" && teamId ? (
+                            <VoiceMessage
+                              teamId={teamId}
+                              messageId={msg.id}
+                              durationSec={Number(msg.metadata.durationSec ?? 0)}
+                              peaks={Array.isArray(msg.metadata.peaks) ? (msg.metadata.peaks as number[]) : undefined}
+                              transcript={msg.body}
+                            />
+                          ) : (
+                            <p className="whitespace-pre-wrap">{emoticonize(msg.body)}</p>
+                          )}
                           {/* Žádost o rozhovor chodí SMS, ale formulář je na Událostech. */}
                           {msg.metadata?.type === "interview_request"
                             && otevreneRozhovory.has(String(msg.metadata.interviewId ?? "")) && (

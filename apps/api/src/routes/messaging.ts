@@ -24,6 +24,7 @@ for (const path of [
   "/teams/:teamId/contacts",
   "/teams/:teamId/phone-credit",
   "/teams/:teamId/unread-count",
+  "/teams/:teamId/voice-messages/*",
 ]) {
   messagingRouter.use(path, requirePrivateTeamRead);
 }
@@ -326,6 +327,31 @@ messagingRouter.get("/teams/:teamId/conversations/:convId", async (c) => {
     aiThreadState: parseAiThreadState(convOwner.ai_thread_state),
     participantId: convOwner.participant_id,
     unrest,
+  });
+});
+
+/**
+ * Nahrávka hlasovky od hráče (`messages.metadata.type = "voice"`).
+ *
+ * Na rozdíl od chorálů a hymny je to soukromá zpráva trenérovi, takže jde přes
+ * přihlášení (`requirePrivateTeamRead` výše). `<audio src>` token poslat neumí,
+ * web si proto nahrávku stáhne s hlavičkou a přehraje ji z blobu.
+ */
+messagingRouter.get("/teams/:teamId/voice-messages/:messageId/audio", async (c) => {
+  const teamId = c.req.param("teamId");
+  const messageId = c.req.param("messageId");
+  const row = await c.env.DB.prepare(
+    `SELECT json_extract(m.metadata, '$.audioKey') AS audio_key
+       FROM messages m JOIN conversations cv ON cv.id = m.conversation_id
+      WHERE m.id = ? AND cv.team_id = ?`,
+  ).bind(messageId, teamId).first<{ audio_key: string | null }>()
+    .catch((e) => { logger.warn({ module: "messaging" }, `hlasovka ${messageId}`, e); return null; });
+  if (!row?.audio_key) return c.json({ error: "Hlasovka neexistuje" }, 404);
+
+  const obj = await c.env.SEED_DATA.get(row.audio_key);
+  if (!obj) return c.json({ error: "Nahrávka není k dispozici" }, 404);
+  return new Response(obj.body, {
+    headers: { "Content-Type": "audio/wav", "Cache-Control": "private, max-age=86400" },
   });
 });
 

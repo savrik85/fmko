@@ -15,6 +15,7 @@ import { transferTalkFrom } from "../transfers/unrest-reasons";
 import { nactiZnalostiHrace } from "../incidents/znalosti-db";
 import { nazevSituace } from "../incidents/situace";
 import { logger } from "../lib/logger";
+import { recordVoiceMessage, voicePreviewText } from "./voice-message";
 import { coachRelationStmts } from "../lib/coach-relation";
 import { weightTalkFromState } from "../season/weight-talk";
 import {
@@ -295,7 +296,9 @@ export async function getOrCreatePlayerConversation(
  */
 export async function applyAiPlayerThreads(
   db: D1Database,
-  env: { GEMINI_API_KEY?: string; CACHE_KV?: KVNamespace; AI?: Ai },
+  env: { GEMINI_API_KEY?: string; CACHE_KV?: KVNamespace; AI?: Ai; SEED_DATA?: R2Bucket },
+  /** Ruční spuštění z adminu: jen jeden tým, bez losu a cooldownu, volitelně rovnou hlasovka. */
+  manual?: { teamId: string; forceVoice?: boolean },
 ): Promise<{ spawned: number; skipped: number }> {
   // Ptáme se přepínače, ne klíče. Dokud tu stála holá podmínka na
   // `GEMINI_API_KEY`, nezaložilo se jediné vlákno nikde, kde se jede přes
@@ -309,7 +312,7 @@ export async function applyAiPlayerThreads(
   }
 
   // Najdi lidské týmy s active=0 conversation a buď žádný předchozí thread, nebo cooldown vypršel
-  const candidateTeams = await db.prepare(
+  const candidateTeams = manual ? { results: [{ id: manual.teamId }] } : await db.prepare(
     `SELECT t.id
      FROM teams t
      WHERE t.user_id != 'ai'
@@ -325,12 +328,12 @@ export async function applyAiPlayerThreads(
   let skipped = 0;
 
   for (const team of candidateTeams.results) {
-    if (Math.random() >= SPAWN_PROBABILITY) {
+    if (!manual && Math.random() >= SPAWN_PROBABILITY) {
       skipped++;
       continue;
     }
     try {
-      const ok = await spawnForTeam(db, env, team.id);
+      const ok = await spawnForTeam(db, env, team.id, manual?.forceVoice ?? false);
       if (ok) spawned++; else skipped++;
     } catch (e) {
       logger.warn({ module: "ai-player-spawn" }, `spawn for team ${team.id} failed`, e);
@@ -344,8 +347,9 @@ export async function applyAiPlayerThreads(
 
 async function spawnForTeam(
   db: D1Database,
-  env: { GEMINI_API_KEY?: string },
+  env: { GEMINI_API_KEY?: string; CACHE_KV?: KVNamespace; SEED_DATA?: R2Bucket },
   teamId: string,
+  forceVoice: boolean,
 ): Promise<boolean> {
   // 0. Poslední odehraný zápas + série výsledků — kontext pro scénáře (výhra/prohra,
   //    góly, karty). Dřív scénáře o výhře padaly i po prohře, protože o zápase nevěděly.
@@ -477,25 +481,43 @@ async function spawnForTeam(
     subject_player_name: subject?.name,
     resolution: null,
   };
-  const now = new Date().toISOString();
   const senderName = `${player.firstName} ${player.lastName}`;
+
+  // 7. Místo SMS hlasovka (voice-message.ts): nanejvýš 2 týdně na tým a jen přes Gemini.
+  //    Text zůstává v těle zprávy jako přepis, z něj AI bere kontext pro další odpovědi.
+  const messageId = uuid();
+  const voice = await recordVoiceMessage(db, env, {
+    teamId,
+    messageId,
+    scene: scenario.description,
+    body: initialBody,
+    force: forceVoice,
+    player: {
+      id: player.id,
+      firstName: player.firstName,
+      age: Number(playerRow.age ?? 25),
+      nationality: (playerRow.nationality as string | null) ?? null,
+      lifeContext: (playerRow.life_context as string | null) ?? null,
+    },
+  });
+  const now = new Date().toISOString();
 
   await db.batch([
     db.prepare(
       "INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, metadata, sent_at, read) VALUES (?, ?, 'player', ?, ?, ?, ?, ?, 0)",
-    ).bind(uuid(), convId, player.id, senderName, initialBody, JSON.stringify({ ai_generated: true, scenario_id: scenario.id, turn: 0 }), now),
+    ).bind(messageId, convId, player.id, senderName, initialBody, JSON.stringify({ ai_generated: true, scenario_id: scenario.id, turn: 0, ...voice }), now),
     db.prepare(
       `UPDATE conversations
        SET ai_thread_state = ?, ai_thread_active = 1, ai_thread_last_at = ?,
            last_message_text = ?, last_message_at = ?, unread_count = unread_count + 1
        WHERE id = ?`,
-    ).bind(JSON.stringify(state), now, initialBody.slice(0, 100), now, convId),
+    ).bind(JSON.stringify(state), now, voice ? voicePreviewText(voice.durationSec) : initialBody.slice(0, 100), now, convId),
     db.prepare(
       "UPDATE teams SET last_ai_player_thread_at = ? WHERE id = ?",
     ).bind(now, teamId),
   ]);
 
-  logger.info({ module: "ai-player-spawn", teamId }, `spawned AI thread: ${player.firstName} ${player.lastName} → ${scenario.id}`);
+  logger.info({ module: "ai-player-spawn", teamId }, `spawned AI thread: ${player.firstName} ${player.lastName} → ${scenario.id}${voice ? ` (hlasovka ${voice.durationSec} s, ${voice.voice})` : ""}`);
   return true;
 }
 
