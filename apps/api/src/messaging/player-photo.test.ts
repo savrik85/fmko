@@ -43,16 +43,16 @@ describe("fotky od hráčů", () => {
         return { key };
       },
     } as unknown as R2Bucket;
-    const key = await generatePlayerPhoto(ai, bucket, PHOTO_SCENES.pub_round, "abc", 5);
+    const key = await generatePlayerPhoto(ai, bucket, PHOTO_SCENES.pub_round, "abc", 5, 0);
     expect(key).toBe(photoKey("abc"));
     expect(stored.get("photos/abc.jpg")?.type).toBe("image/jpeg");
     expect(calls.length).toBe(2);
     expect(calls[0]).not.toBe(calls[1]);
   });
 
-  it("když se fotka nepovede ani napotřetí, vrátí null", async () => {
+  it("když se fotka nepovede ani napočtvrté, vrátí null", async () => {
     const ai = { run: async () => { throw new Error("AiError: 3030: Your output has been flagged"); } } as unknown as Ai;
     const bucket = { put: async () => ({}) } as unknown as R2Bucket;
-    expect(await generatePlayerPhoto(ai, bucket, PHOTO_SCENES.injury, "x", 1)).toBeNull();
+    expect(await generatePlayerPhoto(ai, bucket, PHOTO_SCENES.injury, "x", 1, 0)).toBeNull();
   });
 });

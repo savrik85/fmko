@@ -30,7 +30,8 @@ export interface PhotoScene {
   portrait: boolean;
 }
 
-const PHONE_PHOTO = "Candid smartphone photo taken by the person himself, natural colors, slightly tilted, ordinary and unglamorous, not staged.";
+// „Pohled hráče“ musí být řečeno výslovně: jen „taken by the person himself“ dalo u obchodu selfie (2026-10-24).
+const PHONE_PHOTO = "Candid smartphone photo from the person's own point of view, showing what he sees in front of him; he is not in the photo, it is not a selfie. Natural colors, slightly tilted, ordinary and unglamorous, not staged.";
 const NO_TEXT = "No logos, no labels, no printed text, no writing anywhere. No faces looking at the camera.";
 
 /** Fotky podle situace. Klíče používá `pickPhotoScene` a ruční téma `pub_invite`. */
@@ -43,7 +44,7 @@ export const PHOTO_SCENES: Record<string, PhotoScene> = {
   },
   pub_celebration: {
     id: "pub_celebration",
-    prompt: `${PHONE_PHOTO} A crowded long wooden table in a village pub after a won amateur football match: many plain dimpled glass mugs of lager with no print being raised in a toast by several arms, blurred cheerful people in the background, warm light, evening. ${NO_TEXT}`,
+    prompt: `${PHONE_PHOTO} Close-up of many hands raising plain dimpled glass mugs of lager with no print in a toast over a long wooden table in a village pub after a won amateur football match, faces out of the frame, warm light, evening. ${NO_TEXT}`,
     alt: "přípitek v hospodě po výhře, nad stolem zvednuté půllitry",
     portrait: false,
   },
@@ -80,7 +81,7 @@ const WORK_SCENES: Partial<Record<Ambience, { prompt: string; alt: string }>> = 
     alt: "autodílna, auto na zvedáku",
   },
   car: {
-    prompt: "View from the driver's seat of a van on a narrow country road in South Bohemia, hands on the steering wheel at the edge of the frame, fields and spruce forest outside, overcast.",
+    prompt: "View from the driver's seat of a van on a narrow country road in South Bohemia, only the top rim of the steering wheel at the bottom edge of the frame with the centre hub out of frame, fields and spruce forest outside, overcast.",
     alt: "pohled za volantem dodávky na okresce",
   },
   office: {
@@ -88,7 +89,7 @@ const WORK_SCENES: Partial<Record<Ambience, { prompt: string; alt: string }>> = 
     alt: "pracovní stůl v kanceláři s kafem a papíry",
   },
   shop: {
-    prompt: "Behind the counter of a small village grocery shop, shelves with bread and goods, a cash register, morning light.",
+    prompt: "View over the counter of a small village grocery shop: a cash register and a basket of bread rolls in the foreground, shelves with goods behind, morning light, nobody in the frame.",
     alt: "za pultem malého obchodu",
   },
   kitchen: {
@@ -133,8 +134,8 @@ export function photoKey(id: string): string {
 }
 
 /**
- * Nakreslí fotku a uloží ji do R2. Při výpadku (3043) nebo zablokování filtrem (3030)
- * zkusí jiný seed. Vrací klíč, nebo null, když se nepovedla (zpráva pak odejde bez fotky).
+ * Nakreslí fotku a uloží ji do R2. Při výpadku (3043), přetížení (400) nebo zablokování
+ * filtrem (3030) zkusí po pauze jiný seed, nanejvýš čtyřikrát. Vrací klíč, nebo null, když se nepovedla (zpráva pak odejde bez fotky).
  */
 export async function generatePlayerPhoto(
   ai: Ai,
@@ -142,8 +143,11 @@ export async function generatePlayerPhoto(
   scene: PhotoScene,
   id: string,
   seed: number,
+  /** Pauza před dalším pokusem. Rychlé dotazy za sebou model občas odmítne (400/3043). */
+  retryDelayMs = 1500,
 ): Promise<string | null> {
-  for (let attempt = 0; attempt < 3; attempt++) {
+  for (let attempt = 0; attempt < 4; attempt++) {
+    if (attempt > 0 && retryDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, retryDelayMs * attempt));
     const form = new FormData();
     form.append("prompt", scene.prompt);
     form.append("width", scene.portrait ? "768" : "1024");
