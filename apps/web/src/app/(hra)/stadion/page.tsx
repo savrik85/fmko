@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { clientOnly } from "@/components/client-only";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, type Team } from "@/lib/api";
@@ -441,6 +441,8 @@ export default function StadiumPage() {
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("3d");
+  /** Karta s areálem (2D/3D). Na ni se posouvá náhled přístavby. */
+  const sceneCardRef = useRef<HTMLDivElement>(null);
   const [openPicker, setOpenPicker] = useState<keyof Customization | null>(null);
   const [viewerOpen, setViewerOpen] = useState(false);
   /** Přístavba, na kterou se hráč dívá v náhledu (průhledná ve 3D, nic se nestaví). */
@@ -579,9 +581,11 @@ export default function StadiumPage() {
     setExtError(null);
     setExtPreview({ item: { slot: slot.slot, kind: option.kind, level: option.level }, option, slotLabel: slot.label });
     setOpenSlot(slot.slot);
-    // Náhled je vidět jen ve 3D areálu, takže se na něj přepne a stránka odroluje nahoru.
+    // Náhled je vidět jen ve 3D areálu, takže se na něj přepne a stránka odroluje ke kartě
+    // s areálem. Posouvá se <main> z herního layoutu, ne okno: window.scrollTo nedělal nic
+    // a náhled zůstal mimo obrazovku.
     switchView("3d");
-    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+    sceneCardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
   const handleBuildExtension = async (slot: ExtSlotData, option: ExtOptionData) => {
@@ -692,7 +696,7 @@ export default function StadiumPage() {
       />
 
       {/* ═══ Stadium visualization + stats ═══ */}
-      <div className="card p-4 sm:p-5 space-y-4">
+      <div ref={sceneCardRef} className="card p-4 sm:p-5 space-y-4">
         <header className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
           <h2 className="font-heading font-bold text-lg">{stadium.stadiumName ?? "Areál"}</h2>
           {stadium.currentWeather && (
