@@ -200,6 +200,16 @@ export async function placeTicket(db: D1Database, input: {
   const calendarId = [...kola][0];
   const { league_id: leagueId, season_number: seasonNumber } = kurzy.results[0];
 
+  // ── Jen vlastní soutěž ───────────────────────────────────────────────────
+  // Lístek ukazuje jen ligu klubu, ale kurzy jiných lig v tabulce leží taky.
+  // Bez téhle kontroly šlo přes API vsadit na cizí ligu a odvod by šel podle
+  // jejího sazebníku do její pokladny.
+  const ownLeague = await db.prepare("SELECT league_id FROM teams WHERE id = ?")
+    .bind(teamId).first<{ league_id: string | null }>();
+  if (!ownLeague?.league_id || ownLeague.league_id !== leagueId) {
+    return { ok: false, status: 400, error: "Sázet jde jen na zápasy vlastní soutěže." };
+  }
+
   // ── Herní kolo a povolení sázet ──────────────────────────────────────────
   const kolo = await db.prepare(
     "SELECT game_week, status FROM season_calendar WHERE id = ?"
