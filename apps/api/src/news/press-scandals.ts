@@ -474,7 +474,11 @@ export async function loadScandals(
     sameOwnerScandal(db, teamId, opts.opponentTeamId ?? null),
     fanScandals(db, teamId),
   ]);
-  return parts.flat();
+  // Věty skládají i texty od hráčů (názvy klubů, důvody pokut z návrhů,
+  // trenérova slova) a jdou do promptu. Bez oddělovačů a zalomení se z nich
+  // nedá udělat pokyn pro model.
+  const clean = (text: string, max: number) => sanitizeForPrompt(text, max).replace(/\s*\n+\s*/g, " ");
+  return parts.flat().map((s) => ({ ...s, fact: clean(s.fact, 400), names: s.names.map((n) => clean(n, 80)) }));
 }
 
 /** Kauzy otevřené v posledních rozhovorech týmu — ty se hned znovu neotvírají. */
