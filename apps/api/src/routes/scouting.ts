@@ -21,6 +21,7 @@ import { estimateWillingness, startAiNegotiation } from "../transfers/ai-negotia
 import type { VirtualPlayerData } from "../transfers/virtual-purchase";
 import { blurredWillingness } from "../scouting/fog";
 import { villageCoords } from "../scouting/candidates";
+import { gamePlayerIdOf } from "../scouting/game-player-report";
 
 /** Avatar zaměstnance je v DB JSON text; neplatný se bere jako bez obličeje. */
 function parseAvatar(raw: string | null | undefined): Record<string, unknown> {
@@ -72,6 +73,8 @@ function reportView(r: ReportRow) {
   const p = playerOf(r.player_data);
   return {
     id: r.id, source: r.source, status: r.status,
+    // Hráč hraje ve hře: kupuje se běžnou nabídkou z jeho profilu (scouting/game-player-report.ts).
+    gamePlayerId: gamePlayerIdOf(p),
     firstName: r.first_name, lastName: r.last_name, age: r.age, position: r.position,
     avatar: p.avatar ?? {},
     // Volný hráč se podepisuje za svou mzdu (stejně jako v seznamu volných hráčů).
@@ -301,7 +304,8 @@ scoutingRouter.get("/teams/:teamId/scout/reports/:id", async (c) => {
   const view = reportView(r);
 
   // Ochota se přepočítá čerstvě: mezitím se mohl změnit kádr, trenér nebo reputace.
-  if (r.status === "active" || r.status === "negotiating") {
+  // U hráče ve hře ne: model ochoty je pro hráče klubů mimo hru.
+  if ((r.status === "active" || r.status === "negotiating") && !view.gamePlayerId) {
     const coords = await villageCoords(c.env.DB, r.village_id);
     try {
       const chance = await estimateWillingness(c.env.DB, teamId, JSON.parse(r.player_data) as VirtualPlayerData, r.district, coords, r.club_mean);
