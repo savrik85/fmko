@@ -48,6 +48,14 @@ const MAX_REPLIES_PER_RUN = 12;
 const ceil100 = (v: number) => Math.ceil(v / 100) * 100;
 
 /**
+ * Nárok na odpověď podle režimu: rozhodnutí nanečisto (shadow) nesmí po přepnutí na `on`
+ * zablokovat skutečnou odpověď na tentýž tah.
+ */
+export function claimTask(mode: DecisionMode, task: string): string {
+  return mode === "shadow" ? `shadow:${task}` : task;
+}
+
+/**
  * Za kolik hodin AI odpoví: 1–20 h, pevně pro daný tah (opakovaný běh nic nezmění).
  * Netrpělivý trenér odpovídá rychleji, trpělivý si dá na čas.
  */
@@ -404,7 +412,7 @@ async function replyToLegacyBids(ctx: RunContext, budget: { left: number }): Pro
     if (budget.left <= 0) break;
     const created = parseDbTime(bid.created_at) ?? ctx.now;
     if (ctx.now < replyDueAt(created, null, replyDelayHours(`bid|${bid.id}|${bid.status}`, club.profile))) continue;
-    if (!(await claimCoachTask(db, club.teamId, `transfer_bid:${bid.id}`, `${bid.status}|${bid.counter_amount ?? bid.amount}`))) continue;
+    if (!(await claimCoachTask(db, club.teamId, claimTask(ctx.mode, `transfer_bid:${bid.id}`), `${bid.status}|${bid.counter_amount ?? bid.amount}`))) continue;
     const player = await loadPlayer(db, bid.player_id);
     if (!player) continue;
     const mv = playerValue(player);
@@ -470,7 +478,7 @@ async function replyToDemandPitches(ctx: RunContext, budget: { left: number }): 
     if (ctx.now < replyDueAt(created, null, replyDelayHours(`pitch|${pitch.id}`, club.profile))) continue;
     // Nabídka na nabídnutého hráče je vlastní obchod: nad limitem obchodů AI počká.
     if (!canOpenDeal(club, await openOutgoingOffers(db, club.teamId))) break;
-    if (!(await claimCoachTask(db, club.teamId, `transfer_pitch:${pitch.id}`, "reply"))) continue;
+    if (!(await claimCoachTask(db, club.teamId, claimTask(ctx.mode, `transfer_pitch:${pitch.id}`), "reply"))) continue;
 
     const player = await loadPlayer(db, pitch.player_id);
     const playerName = player ? `${player.first_name} ${player.last_name}` : "hráč";
@@ -530,6 +538,8 @@ async function replyToDemandPitches(ctx: RunContext, budget: { left: number }): 
  */
 export async function replyToTransferOffers(env: Bindings, teamId: string, now: Date = new Date(), profileArg?: AiCoachProfile): Promise<number> {
   const db = env.DB;
+  // Hodinová úloha běží u každého AI klubu: bez rozjednaných věcí se kádr ani nenačítá.
+  if (!(await hasOpenNegotiations(db, teamId))) return 0;
   const mode = await readCoachMode(env.CACHE_KV, "market");
   const profile = profileArg ?? await ensureAiProfile(db, teamId);
   let club = await loadAiClubState(db, teamId, profile, now);
@@ -557,7 +567,7 @@ export async function replyToTransferOffers(env: Bindings, teamId: string, now: 
     const due = replyDueAt(last.at, expiresAt, replyDelayHours(`${offer.id}|${last.key}`, profile));
     if (now < due) continue;
 
-    const task = `transfer_reply:${offer.id}`;
+    const task = claimTask(mode, `transfer_reply:${offer.id}`);
     const claimKey = last.key;
     if (!(await claimCoachTask(db, teamId, task, claimKey))) continue;
     try {
@@ -580,6 +590,23 @@ export async function replyToTransferOffers(env: Bindings, teamId: string, now: 
   handled += await replyToLegacyBids(ctx, budget);
   handled += await replyToDemandPitches(ctx, budget);
   return handled;
+}
+
+/** Má klub rozjednanou nabídku, příhoz nebo nabídnutého hráče? Při chybě čtení raději ano. */
+async function hasOpenNegotiations(db: D1Database, teamId: string): Promise<boolean> {
+  const row = await db.prepare(
+    `SELECT
+       (SELECT COUNT(*) FROM transfer_offers
+         WHERE status IN ('pending', 'countered')
+           AND (to_team_id IN (SELECT id FROM teams WHERE id = ? OR parent_team_id = ?)
+             OR from_team_id IN (SELECT id FROM teams WHERE id = ? OR parent_team_id = ?)))
+     + (SELECT COUNT(*) FROM transfer_demand_pitches dp JOIN transfer_demands d ON d.id = dp.demand_id
+         WHERE d.team_id = ? AND d.status = 'active' AND dp.status = 'pitched')
+     + (SELECT COUNT(*) FROM transfer_bids tb JOIN transfer_listings tl ON tl.id = tb.listing_id
+         WHERE tl.team_id = ? AND tl.status = 'active' AND tb.status IN ('pending', 'countered')) AS n`,
+  ).bind(teamId, teamId, teamId, teamId, teamId, teamId).first<{ n: number }>()
+    .catch((e) => { logger.warn({ module: M }, `rozjednané přestupy ${teamId}`, e); return { n: 1 }; });
+  return (row?.n ?? 0) > 0;
 }
 
 /** Hodinová část AI trenéra: odpovědi na nabídky, protinávrhy a nabídnuté hráče. */

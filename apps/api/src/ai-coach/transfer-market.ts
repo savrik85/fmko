@@ -29,7 +29,7 @@ import { readCoachMode } from "./mode";
 import { ensureAiProfile, type AiCoachProfile } from "./profile";
 import { MAX_SQUAD, SIGNING_SQUAD_THRESHOLD, TARGET_SENIOR_SQUAD, type PositionNeed } from "./squad";
 import { loadAiClubState, pragueDay, pragueHour, type AiClubState } from "./transfer-club";
-import { canOpenDeal, openOutgoingOffers } from "./transfer-replies";
+import { canOpenDeal, claimTask, openOutgoingOffers } from "./transfer-replies";
 import { hashString, maxBuyPrice, openDealLimit, openingAsk, openingBid, stableUnit } from "./valuation";
 
 const M = "ai-transfer-market";
@@ -351,7 +351,7 @@ export async function runTransferMarket(env: Bindings, teamId: string, now: Date
   if (!opts.ignoreSchedule) {
     if (pragueHour(now) < marketHour(teamId)) return { skipped: "not_yet", mode, actions: [] };
     const day = pragueDay(now);
-    if (!(await claimCoachTask(db, teamId, "transfer_market", day))) return { skipped: "done_today", mode, actions: [] };
+    if (!(await claimCoachTask(db, teamId, claimTask(mode, "transfer_market"), day))) return { skipped: "done_today", mode, actions: [] };
     if (stableUnit(`market-day|${teamId}|${day}`) >= marketDayChance(profile)) {
       return { skipped: "quiet_day", mode, actions: [] };
     }

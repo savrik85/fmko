@@ -454,6 +454,26 @@ describe("člověk kupuje od AI klubu", () => {
     expect(log?.mode).toBe("shadow");
     expect(JSON.parse(log!.executed)).toBe("shadow");
     expect(JSON.parse(log!.actions).kind).toBe("accept");
+    // Další hodina v shadow nic nového nezapíše, po přepnutí na `on` AI opravdu odpoví.
+    await replyToTransferOffers(env, "ai-club", later(22), PROFILE);
+    expect((await db.prepare("SELECT COUNT(*) AS n FROM ai_coach_decisions WHERE context_ref = ?").bind(offer.offerId).first<{ n: number }>())?.n).toBe(1);
+    await cacheKv.put("ai_coach_mode", "on");
+    await replyToTransferOffers(env, "ai-club", later(23), PROFILE);
+    expect((await offerRow(offer.offerId))?.status).toBe("accepted");
+  });
+
+  it("přebytečného mladíka AI půjčí i zadarmo, oporu nepůjčí ani za peníze", async () => {
+    await db.batch([playerInsert("ai-young", "ai-club", "MID", 33, 19)]);
+    const young = await offerFromHuman({ playerId: "ai-young", amount: 0, offerType: "loan", loanDuration: 45 });
+    expect(young.status).toBe(200);
+    const key = await offerFromHuman({ playerId: "ai-def1", amount: 20_000, offerType: "loan", loanDuration: 30 });
+    expect(key.status).toBe(200);
+    await replyToTransferOffers(env, "ai-club", later(), PROFILE);
+    expect((await offerRow(young.offerId))?.status).toBe("accepted");
+    const loaned = await db.prepare("SELECT team_id, loan_from_team_id FROM players WHERE id = 'ai-young'").first();
+    expect(loaned).toEqual({ team_id: "human", loan_from_team_id: "ai-club" });
+    expect((await offerRow(key.offerId))?.status).toBe("rejected");
+    expect((await db.prepare("SELECT team_id FROM players WHERE id = 'ai-def1'").first<{ team_id: string }>())?.team_id).toBe("ai-club");
   });
 
   it("nabídku klubu mimo hru AI přijme jen nad rezervací, smlouvat s ním nejde", async () => {

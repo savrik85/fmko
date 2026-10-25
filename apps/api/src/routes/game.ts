@@ -7699,8 +7699,9 @@ gameRouter.post("/admin/generate-ai-offers", async (c) => {
   const { generateAiOffers } = await import("../transfers/virtual-teams");
   const { createRng, cryptoSeed } = await import("../generators/rng");
   const rng = createRng(cryptoSeed());
+  // Stejné ligy jako denní tick: CPU nabídky jdou i na hráče AI klubů.
   const leagues = await c.env.DB.prepare(
-    "SELECT l.id, l.district FROM leagues l JOIN teams t ON t.league_id = l.id WHERE t.user_id != 'ai' GROUP BY l.id"
+    "SELECT l.id, l.district FROM leagues l JOIN teams t ON t.league_id = l.id GROUP BY l.id"
   ).all().catch((e) => { logger.warn({ module: "game" }, "fetch leagues for force offers", e); return { results: [] }; });
   let created = 0;
   for (const lg of leagues.results) {
@@ -7709,12 +7710,13 @@ gameRouter.post("/admin/generate-ai-offers", async (c) => {
   return c.json({ ok: true, expired, created });
 });
 
-// POST /api/admin/generate-club-demands — doplní poptávky klubů mimo hru do plna v každém okrese s manažery.
+// POST /api/admin/generate-club-demands — doplní poptávky klubů mimo hru do plna v každém okrese s kluby
+// (lidskými i AI, stejně jako denní tick).
 gameRouter.post("/admin/generate-club-demands", async (c) => {
   const { generateClubDemands, CLUB_DEMANDS_PER_DISTRICT } = await import("../transfers/demands");
   const rng = createRng(cryptoSeed());
   const districts = await c.env.DB.prepare(
-    "SELECT DISTINCT l.district FROM leagues l JOIN teams t ON t.league_id = l.id WHERE t.user_id IS NOT NULL AND t.user_id != 'ai' AND t.parent_team_id IS NULL",
+    "SELECT DISTINCT l.district FROM leagues l JOIN teams t ON t.league_id = l.id WHERE t.user_id IS NOT NULL AND t.parent_team_id IS NULL",
   ).all<{ district: string }>();
   let created = 0;
   for (const d of districts.results) {
