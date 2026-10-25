@@ -79,8 +79,8 @@ adminAiCoachRouter.get("/clubs", async (c) => {
   const rows = await c.env.DB.prepare(
     `SELECT t.id, t.name, t.budget, t.reputation, l.name AS league_name, m.name AS coach_name, m.ai_profile,
             m.tactics, m.youth_development, m.discipline, m.motivation,
-            (SELECT COUNT(*) FROM ai_coach_decisions d WHERE d.team_id = t.id AND d.created_at >= datetime('now', '-7 days')) AS decisions_7d,
-            (SELECT COUNT(*) FROM ai_coach_decisions d WHERE d.team_id = t.id AND d.created_at >= datetime('now', '-7 days') AND d.used_fallback = 1) AS fallback_7d,
+            (SELECT COUNT(*) FROM ai_coach_decisions d WHERE d.team_id = t.id AND d.created_at >= strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-7 days')) AS decisions_7d,
+            (SELECT COUNT(*) FROM ai_coach_decisions d WHERE d.team_id = t.id AND d.created_at >= strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-7 days') AND d.used_fallback = 1) AS fallback_7d,
             (SELECT MAX(d.created_at) FROM ai_coach_decisions d WHERE d.team_id = t.id) AS last_decision_at
        FROM teams t
        LEFT JOIN leagues l ON l.id = t.league_id
@@ -93,7 +93,7 @@ adminAiCoachRouter.get("/clubs", async (c) => {
   const totals = await c.env.DB.prepare(
     `SELECT COUNT(*) AS n, SUM(used_fallback) AS fallback, SUM(CASE WHEN error IS NOT NULL THEN 1 ELSE 0 END) AS errors,
             AVG(latency_ms) AS latency
-       FROM ai_coach_decisions WHERE created_at >= datetime('now', '-7 days') AND mode != 'off'`,
+       FROM ai_coach_decisions WHERE created_at >= strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-7 days') AND mode != 'off'`,
   ).first<{ n: number; fallback: number | null; errors: number | null; latency: number | null }>()
     .catch((e) => { logger.warn({ module: M }, "souhrn deníku", e); return null; });
   return c.json({

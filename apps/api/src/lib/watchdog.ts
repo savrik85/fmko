@@ -148,7 +148,7 @@ export async function runWatchdog(env: Bindings): Promise<WatchdogResult> {
   // přestanou rozhodovat podle povahy. V režimu off je náhradní pravidlo záměr, nepočítá se.
   const aiCoach = await env.DB.prepare(
     `SELECT COUNT(*) AS n, COALESCE(SUM(used_fallback), 0) AS f FROM ai_coach_decisions
-      WHERE created_at > datetime('now', '-1 day') AND mode != 'off'`,
+      WHERE created_at > strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-1 day') AND mode != 'off'`,
   ).first<{ n: number; f: number }>()
     .catch((e) => { logger.warn({ module: "watchdog" }, "kontrola AI trenérů selhala", e); return null; });
   if (aiCoach && aiCoach.n >= 10 && aiCoach.f / aiCoach.n > 0.34) {
