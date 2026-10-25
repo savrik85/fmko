@@ -29,6 +29,29 @@ odpověď zkontroluje a provede stejnou službou jako u člověka. Při výpadku
 AI kluby teď mají i nespokojenost hráčů a incidenty jako lidé, jen bez jakýchkoli zpráv.
 Prodej zůstává deterministický ve spodní ceně: model rozhoduje jen nad rezervací, takže AI nejde ukecat.
 
+### Simulace 7 dní se skutečným modelem (finální kód, 25. 10. odpoledne)
+
+`backups/sim/run-sim.sh 7 backups/sim/post-deploy.sqlite final7 --ai` nad kopií stavu po nasazení
+(Workers AI přes REST, souběh 10 klubů, režim `on`):
+
+| Druh | Počet | Model | Pravidlo (výpadek) | Jen kód |
+|---|---|---|---|---|
+| trh | 123 | 81 | 4 | 38 (běhy bez čeho rozhodovat) |
+| zápas | 70 | 69 | 1 | 0 |
+| nespokojení hráči | 39 | 39 | 0 | 0 |
+| pondělní správa | 36 | 35 | 1 | 0 |
+| hlavní sponzor | 35 | 34 | 1 | 0 |
+| odpověď na nabídku | 24 | 6 | 0 | 18 (jediná přípustná možnost) |
+| nabídka přáteláku | 20 | 18 | 2 | 0 |
+| incident | 13 | 13 | 0 | 0 |
+| souboje „kdo zůstane" | 5 | 5 | 0 | 0 |
+| hráč na poptávku | 3 | 1 | 0 | 2 |
+| odpověď na přátelák | 1 | 1 | 0 | 0 |
+
+Všech 9 výpadků byl překročený čas modelu (60 s, u zápasu a týdne 120 s), rozhodlo náhradní pravidlo.
+Souboje dostaly jen převzaté kluby (Autolakovka, Kebab, Kobylisy): bývalí majitelé je dva konce
+sezóny nevyřídili, AI je vyřídila stejně, jako by musel člověk.
+
 ### Jak to vyzkoušet na localhostu
 
 1. `http://localhost:3300/admin` → Přehled: stav, chyby a varování, AI trenéři za 24 h.
