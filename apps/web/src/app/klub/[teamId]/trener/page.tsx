@@ -4,6 +4,7 @@ import Link from "next/link";
 import { notFound, permanentRedirect } from "next/navigation";
 import type { ClubWebsiteCoachPage } from "@okresni-masina/shared";
 import { CoachClient } from "./CoachClient";
+import { coachDisplayName } from "@/lib/coach-name";
 
 export const runtime = "edge";
 
@@ -44,7 +45,7 @@ export async function generateMetadata({
   const { club, coach } = result.page;
   const url = `${SITE_URL}/klub/${club.slug || club.id}/trener`;
   const desc = coach
-    ? `${coach.name}, hlavní trenér klubu ${club.name}. Bilance u klubu, rozhovory a realizační tým na oficiálním webu klubu.`
+    ? `${coachDisplayName(coach.name, coach.coachIsAi)}, hlavní trenér klubu ${club.name}. Bilance u klubu, rozhovory a realizační tým na oficiálním webu klubu.`
     : `Realizační tým klubu ${club.name} na oficiálním webu klubu.`;
   return {
     metadataBase: new URL(SITE_URL),

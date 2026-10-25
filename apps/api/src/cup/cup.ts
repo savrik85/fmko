@@ -132,8 +132,8 @@ export async function createCup(db: D1Database, seasonNumber: number): Promise<{
   if (existing) return { created: false, cupId: existing.id };
 
   const teamsRes = await db.prepare(
-    "SELECT t.id, t.name, t.primary_color, t.user_id, CAST(COALESCE(ROUND(AVG(p.overall_rating)), 30) AS INTEGER) AS strength FROM teams t LEFT JOIN players p ON p.team_id = t.id AND p.status = 'active' WHERE t.team_type = 'senior' AND t.league_id IS NOT NULL AND t.name NOT LIKE 'DELETED-%' GROUP BY t.id",
-  ).all<{ id: string; name: string; primary_color: string | null; user_id: string; strength: number }>()
+    "SELECT t.id, t.name, t.primary_color, CAST(COALESCE(ROUND(AVG(p.overall_rating)), 30) AS INTEGER) AS strength FROM teams t LEFT JOIN players p ON p.team_id = t.id AND p.status = 'active' WHERE t.team_type = 'senior' AND t.league_id IS NOT NULL AND t.name NOT LIKE 'DELETED-%' GROUP BY t.id",
+  ).all<{ id: string; name: string; primary_color: string | null; strength: number }>()
     .catch((e) => { logger.warn({ module: M }, "load teams for cup", e); return { results: [] as any[] }; });
   const real = teamsRes.results;
   if (real.length < 2) return { created: false };
@@ -164,14 +164,12 @@ export async function createCup(db: D1Database, seasonNumber: number): Promise<{
     participants.push({ id: crypto.randomUUID(), team_id: null, name: nm, strength, is_big_club: 1, primary_color: null });
   }
 
-  // Los hlavního pavouku (3. kolo): lidé první, real-vs-real + big-vs-big seskupené — lidé nenarazí
-  // na velkoklub hned po předkolech (a real týmy zůstanou spolu).
-  const humanIds = new Set(real.filter((t) => t.user_id !== "ai").map((t) => t.id));
+  // Los hlavního pavouku (3. kolo): real-vs-real + big-vs-big seskupené, real týmy zůstanou spolu.
+  // Nasazení je neutrální: lidské a AI kluby se losují dohromady (dřív šli lidé první, aby lichý
+  // zbytek proti velkoklubu byl vždy AI). Platí od poháru, který se losuje po rolloveru.
   const shuf = <T,>(arr: T[]): T[] => { for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(rng.random() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; } return arr; };
-  const realHuman = shuf(participants.filter((p) => p.is_big_club === 0 && p.team_id !== null && humanIds.has(p.team_id)));
-  const realAi = shuf(participants.filter((p) => p.is_big_club === 0 && !(p.team_id !== null && humanIds.has(p.team_id))));
   const bigs = shuf(participants.filter((p) => p.is_big_club === 1));
-  const orderedReal = [...realHuman, ...realAi]; // lidské první → případný lichý zbytek je AI
+  const orderedReal = shuf(participants.filter((p) => p.is_big_club === 0));
 
   const order: CupTeamRow[] = [];
   const realPairs = Math.floor(orderedReal.length / 2);

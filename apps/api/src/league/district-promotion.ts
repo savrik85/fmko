@@ -42,9 +42,14 @@ export interface LeagueMovement {
 
 export const NO_LEAGUE_MOVEMENT: LeagueMovement = { promotion: false, relegation: false };
 
-/** Ligy, mezi kterými se postupuje a sestupuje (stejný výběr pro přesuny i pro sliby sponzorům). */
+/**
+ * Ligy, mezi kterými se postupuje a sestupuje (stejný výběr pro přesuny i pro sliby sponzorům).
+ * `promotion_enabled = 0` ligu vyřadí: okres, kde ji má přebor nebo III. třída, se nepřehazuje
+ * a postup ani nesestup nejde slíbit (III. třída Prachatice zatím bez postupu, spec část 2).
+ */
 const MOVEMENT_LEAGUES_SQL = `COALESCE(league_type, 'senior') = 'senior' AND status = 'active'
-        AND level IN ('okresni_prebor', 'okresni_soutez')`;
+        AND level IN ('okresni_prebor', 'okresni_soutez')
+        AND COALESCE(promotion_enabled, 1) = 1`;
 
 /**
  * Má liga postup, nebo sestup? Jen okres s přeborem i III. třídou si je prohazuje

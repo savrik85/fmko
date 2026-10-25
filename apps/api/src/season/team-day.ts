@@ -395,8 +395,8 @@ export async function processTeamDay(
     // ── Klubová reputace: komunita a útlum (pondělí) ──
     // Rodáci v kádru a přízeň obce hýbou reputací obousměrně, útlum sráží kluby,
     // které měsíc nic nedokázaly. Bez záporné složky reputace jen roste — proto
-    // dnes většina týmů sedí přesně na výchozí 50.
-    if (newDayOfWeek === 1 && team.user_id !== "ai") {
+    // dnes většina týmů sedí přesně na výchozí 50. Platí pro lidské i AI kluby.
+    if (newDayOfWeek === 1) {
       try {
         const { applyMonthlyCommunityReputation, applyReputationDecay } = await import("./reputation-sources");
         const { mapVillageSize } = await import("./finance-processor");
@@ -533,8 +533,8 @@ export async function processTeamDay(
         // zápase, jinak by zeď zaplavily hlášky k jedné prohře.
         const forma = await formaKlubu(env.DB, teamId);
         if (forma.zapasu >= 5) {
-          const { prispevkyKHre } = await import("../fans/fan-feed");
-          const taktika = (team.tactic as string | null) ?? null;
+          const { playedTactic, prispevkyKHre } = await import("../fans/fan-feed");
+          const taktika = await playedTactic(env.DB, teamId);
           await prispevkyKHre(env.DB, {
             teamId, taktika, golyPoslednich5: forma.goly,
             zapasu: forma.zapasu, gameDate: newGameDate,
@@ -547,7 +547,10 @@ export async function processTeamDay(
     // override default mapping, smart-skip se kontroluje u top loop a tady musíme
     // replikovat stejné podmínky, aby se náklad netáhl při skipnutém tréninku) ──
     const costPlan = parseTrainingPlan(team.training_plan as string | null, teamId);
-    if ((team.training_type || costPlan) && newDayOfWeek >= 1 && newDayOfWeek <= 5) {
+    // AI klub bez nastaveného typu trénuje výchozí kondici (daily-tick), takže za ni i platí.
+    const { teamTrainingType } = await import("./training");
+    const costTrainingType = teamTrainingType(team.training_type as string | null, team.user_id);
+    if ((costTrainingType || costPlan) && newDayOfWeek >= 1 && newDayOfWeek <= 5) {
       const sessions = (team.training_sessions as number) ?? 2;
       const trainingDayMap: Record<number, number[]> = {
         1: [2], 2: [2, 4], 3: [1, 3, 5], 4: [1, 2, 4, 5], 5: [1, 2, 3, 4, 5],

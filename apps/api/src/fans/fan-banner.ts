@@ -20,6 +20,7 @@ import {
 } from "../engine/fan-banner-ai";
 import { zkontrolujChoral } from "../engine/fan-chant-inspirace";
 import type { Bindings } from "../index";
+import { playedTactic } from "./fan-feed";
 import { rivaloveKlubu } from "./fan-rivalries";
 import type { FanGroupRow } from "./fan-group-generator";
 import type { FanGroupKind } from "../engine/fan-groups";
@@ -70,8 +71,8 @@ export async function prepoctiTransparent(
       .catch((e) => { logger.warn({ module: M }, "trenér pro transparent", e); return null; }),
     rivaloveKlubu(db, teamId, gameDate, 1),
     formaKlubu(db, teamId),
-    db.prepare("SELECT tactic FROM teams WHERE id = ?").bind(teamId).first<{ tactic: string | null }>()
-      .catch((e) => { logger.warn({ module: M }, "taktika pro transparent", e); return null; }),
+    // Kotel soudí, co tým hraje: taktika z poslední sestavy.
+    playedTactic(db, teamId),
   ]);
 
   // Na plachtě se klub i rival jmenují podle obce. Celý název nese sponzora.
@@ -89,7 +90,7 @@ export async function prepoctiTransparent(
     rival: rivalove[0] && rivalObec ? { nazev: rivalObec, heat: rivalove[0].heat } : null,
     serie: forma.serie,
     golyPoslednich5: forma.goly,
-    taktika: taktika?.tactic ?? null,
+    taktika,
     kind: parta.kind as FanGroupKind,
     obec: obce.get(teamId) ?? null,
   };

@@ -11,6 +11,7 @@
 import React from "react";
 import { EntityLink } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
+import { coachDisplayName } from "@/lib/coach-name";
 
 export const GOLD = "#C4A035";
 export const GOLD_SOFT = "#FBF6E6";
@@ -95,14 +96,17 @@ export function Portrait({ avatar, name, size = 44, ring = GOLD }: {
  * Klub bez trenéra se podepíše sám sebou. „Neznámý trenér" na prvním řádku
  * vypadal jako chyba dat, a přitom je to jen klub, kterému nikdo nešéfuje.
  */
-export function PersonLine({ managerName, teamId, teamName, note }: {
-  managerName: string | null; teamId: string; teamName: string; note?: React.ReactNode;
+export function PersonLine({ managerName, coachIsAi = false, teamId, teamName, note }: {
+  managerName: string | null;
+  /** Trenér AI klubu: za jméno se přidá štítek „(AI)“. */
+  coachIsAi?: boolean;
+  teamId: string; teamName: string; note?: React.ReactNode;
 }) {
   const klub = <EntityLink type="team" id={teamId}>{teamName}</EntityLink>;
   return (
     <div className="min-w-0">
       <div className="text-base font-semibold leading-tight break-words">
-        {managerName ?? klub}
+        {managerName ? coachDisplayName(managerName, coachIsAi) : klub}
       </div>
       <div className="text-sm text-muted leading-tight break-words">
         {managerName ? klub : "klub bez trenéra"}

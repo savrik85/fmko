@@ -2,13 +2,14 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import { coachDisplayName } from "@/lib/coach-name";
 
 // ═══ Types ═══
 
 interface Departure { name: string; age: number; position: string; kind: "retirement" | "family" | "decision"; reason: string; wasCaptain?: boolean }
 interface DuelPlayer { playerId: string; name: string; position: string; age: number; overallRating: number }
 interface Duel { a: DuelPlayer; b: DuelPlayer; story: string }
-interface Award { id?: string | null; name?: string | null; teamName?: string | null; reason?: string | null; goals?: number }
+interface Award { id?: string | null; name?: string | null; coachIsAi?: boolean; teamName?: string | null; reason?: string | null; goals?: number }
 interface BestEleven { playerId: string; name: string; position: string; teamName: string }
 interface SeasonStats {
   matchesPlayed: number; totalGoals: number; goalsPerMatch: number;
@@ -36,8 +37,8 @@ interface RecapData {
   trophy: { place: number; title: string } | null;
   seasonStats: SeasonStats;
   relationships?: {
-    rival?: { teamName: string; managerName: string | null; heat: number; moment: string | null; verdict: string } | null;
-    ally?: { teamName: string; managerName: string | null; respect: number } | null;
+    rival?: { teamName: string; managerName: string | null; coachIsAi?: boolean; heat: number; moment: string | null; verdict: string } | null;
+    ally?: { teamName: string; managerName: string | null; coachIsAi?: boolean; respect: number } | null;
     favorite?: { name: string; position: string; value: number } | null;
     blackSheep?: { name: string; position: string; value: number } | null;
     clubFact?: string | null;
@@ -314,7 +315,7 @@ function Recap({ data, onEnter }: { data: RecapData; onEnter: (leaving?: string[
                 {rel?.rival && (
                   <div className="se-rel-card rival">
                     <div className="se-rel-label">💢 Největší rival</div>
-                    <div className="se-rel-name">{rel.rival.managerName ?? rel.rival.teamName}</div>
+                    <div className="se-rel-name">{rel.rival.managerName ? coachDisplayName(rel.rival.managerName, rel.rival.coachIsAi === true) : rel.rival.teamName}</div>
                     {rel.rival.managerName && <div className="se-rel-team">{rel.rival.teamName}</div>}
                     <div className="se-rel-verdict">{rel.rival.verdict}</div>
                     {rel.rival.moment && <div className="se-rel-moment">„{rel.rival.moment}"</div>}
@@ -323,7 +324,7 @@ function Recap({ data, onEnter }: { data: RecapData; onEnter: (leaving?: string[
                 {rel?.ally && (
                   <div className="se-rel-card ally">
                     <div className="se-rel-label">🤝 Spojenec na lavičce</div>
-                    <div className="se-rel-name">{rel.ally.managerName ?? rel.ally.teamName}</div>
+                    <div className="se-rel-name">{rel.ally.managerName ? coachDisplayName(rel.ally.managerName, rel.ally.coachIsAi === true) : rel.ally.teamName}</div>
                     {rel.ally.managerName && <div className="se-rel-team">{rel.ally.teamName}</div>}
                     <div className="se-rel-verdict">Vzájemný respekt — člověk, co ti drží place.</div>
                   </div>
@@ -513,7 +514,7 @@ function AwardCard({ icon, label, a, extra, mine }: { icon: string; label: strin
   return (
     <div className={`se-award${mine ? " mine" : ""}`}>
       <div className="se-award-label">{icon} {label}{mine ? <span className="se-award-mine"> · tvůj hráč</span> : null}</div>
-      <div className="se-award-name">{a.name}{extra ? <span className="se-award-extra"> · {extra}</span> : null}</div>
+      <div className="se-award-name">{coachDisplayName(a.name, a.coachIsAi === true)}{extra ? <span className="se-award-extra"> · {extra}</span> : null}</div>
       {a.teamName && <div className="se-award-team">{a.teamName}</div>}
       {a.reason && <div className="se-award-reason">„{a.reason}"</div>}
     </div>

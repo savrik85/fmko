@@ -136,6 +136,13 @@ async function handleMessage(body: AnyQueueMessage, env: Bindings): Promise<RunO
       return { status: result.teams > 0 ? "done" : "skipped", matches: result.teams };
     }
 
+    case "ai_coach": {
+      // AI trenér: jeden klub = jedna zpráva, nárok v DB hlídá duplicitní doručení.
+      const { handleAiCoachMessage } = await import("../ai-coach/jobs");
+      const result = await handleAiCoachMessage(env, body);
+      return { status: result.status };
+    }
+
     case "selftest_fail": {
       // Ověření retry + DLQ. Musí HODIT, aby se uplatnil max_retries a zpráva
       // po vyčerpání pokusů spadla do dead-letter fronty.

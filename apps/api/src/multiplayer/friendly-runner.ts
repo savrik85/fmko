@@ -45,7 +45,13 @@ async function cancelForClash(db: D1Database, m: DueFriendly, reason: string, na
     db.prepare("DELETE FROM matches WHERE id = ? AND status = 'lineups_open'").bind(m.id),
   ]);
   const { sendSystemSMS } = await import("../messaging/system-sms");
+  // AI klubu se nepíše.
+  const owners = await db.prepare("SELECT id, user_id FROM teams WHERE id IN (?, ?)").bind(m.home_team_id, m.away_team_id)
+    .all<{ id: string; user_id: string | null }>()
+    .catch((e) => { logger.warn({ module: "friendly-runner" }, "majitelé klubů zrušeného přáteláku", e); return { results: [] as Array<{ id: string; user_id: string | null }> }; });
+  const aiTeams = new Set(owners.results.filter((r) => r.user_id === "ai").map((r) => r.id));
   for (const [tid, oid] of [[m.home_team_id, m.away_team_id], [m.away_team_id, m.home_team_id]]) {
+    if (aiTeams.has(tid)) continue;
     await sendSystemSMS(db, tid, "Sportovní ředitel",
       `↩️ Přátelák s ${names[oid] ?? "soupeřem"} se dnes nehraje: ${reason}${m.stake ? " Sázka se vrátila." : ""}`);
   }
@@ -379,7 +385,7 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
         logger.warn({ module: "friendly-runner" }, "apply chemistry post-friendly", e);
       }
 
-      // Concession + finance processing (jen pro lidské týmy)
+      // Concession + finance processing (oba týmy, lidské i AI: stejné vstupné, občerstvení a náklady)
       try {
         const { processMatchDayFinances } = await import("../season/finance-processor");
         const gameDate = new Date().toISOString().split("T")[0];
@@ -388,15 +394,8 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
         const homeResult = result.homeScore > result.awayScore ? "win" : result.homeScore < result.awayScore ? "loss" : "draw";
         const awayResult = homeResult === "win" ? "loss" : homeResult === "loss" ? "win" : "draw";
 
-        const homeTeamRow = await db.prepare("SELECT user_id FROM teams WHERE id = ?").bind(homeTeamId).first<{ user_id: string }>().catch((e) => { logger.warn({ module: "friendly-runner" }, "fetch home team user_id", e); return null; });
-        const awayTeamRow = await db.prepare("SELECT user_id FROM teams WHERE id = ?").bind(awayTeamId).first<{ user_id: string }>().catch((e) => { logger.warn({ module: "friendly-runner" }, "fetch away team user_id", e); return null; });
-
-        if (homeTeamRow?.user_id && homeTeamRow.user_id !== "ai") {
-          await processMatchDayFinances(db, homeTeamId, matchId, !isNeutral, homeResult, attendance, gameDate, 50, true);
-        }
-        if (awayTeamRow?.user_id && awayTeamRow.user_id !== "ai") {
-          await processMatchDayFinances(db, awayTeamId, matchId, false, awayResult, attendance, gameDate, 50, true);
-        }
+        await processMatchDayFinances(db, homeTeamId, matchId, !isNeutral, homeResult, attendance, gameDate, 50, true);
+        await processMatchDayFinances(db, awayTeamId, matchId, false, awayResult, attendance, gameDate, 50, true);
       } catch (e) {
         logger.error({ module: "friendly-runner" }, "Finance processing failed", e);
       }

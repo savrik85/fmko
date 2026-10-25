@@ -5,6 +5,7 @@ import { ROLE_DEFS, type ClubWebsiteCoachPage } from "@okresni-masina/shared";
 import { ClubSubpageShell, type Skin } from "../templates/skins";
 import { ManagerFace } from "../ManagerFace";
 import { formatDate } from "../templates/shared";
+import { coachDisplayName } from "@/lib/coach-name";
 
 type StaffMember = ClubWebsiteCoachPage["staff"][number];
 type CoachInterview = ClubWebsiteCoachPage["interviews"][number];
@@ -86,6 +87,8 @@ export function CoachClient({ page, siteUrl }: { page: ClubWebsiteCoachPage; sit
     ? [coach.age !== null ? ageLabel(coach.age) : null, coach.birthplace ? `rodiště ${coach.birthplace}` : null].filter(Boolean)
     : [];
   const metaCareer = coach ? [licence, coach.background].filter(Boolean) : [];
+  // Trenér AI klubu má za jménem štítek „(AI)“, jinak web vypadá stejně jako u lidského klubu.
+  const coachName = coach ? coachDisplayName(coach.name, coach.coachIsAi) : null;
 
   return (
     <ClubSubpageShell
@@ -93,7 +96,7 @@ export function CoachClient({ page, siteUrl }: { page: ClubWebsiteCoachPage; sit
       teamSlugs={page.teamSlugs ?? {}}
       siteUrl={siteUrl}
       path="/trener"
-      shareTitle={coach ? `${coach.name}, trenér · ${club.name}` : `Realizační tým · ${club.name}`}
+      shareTitle={coachName ? `${coachName}, trenér · ${club.name}` : `Realizační tým · ${club.name}`}
     >
       {(skin, clubPath) => {
         const pad = skin.frame ? "p-3" : "";
@@ -109,7 +112,7 @@ export function CoachClient({ page, siteUrl }: { page: ClubWebsiteCoachPage; sit
                 )}
                 <div className="min-w-0">
                   <div className={skin.kicker}>{coach ? "Hlavní trenér" : "Trenér a realizační tým"}</div>
-                  <h1 className={skin.name}>{coach ? coach.name : club.name}</h1>
+                  <h1 className={skin.name}>{coachName ?? club.name}</h1>
                   {metaPersonal.length > 0 && <div className={skin.meta}>{capitalize(metaPersonal.join(" · "))}</div>}
                   {metaCareer.length > 0 && <div className={skin.meta}>{metaCareer.join(" · ")}</div>}
                   {coach?.since && <div className={skin.meta}>U klubu od {formatDate(coach.since)}</div>}

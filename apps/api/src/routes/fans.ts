@@ -715,7 +715,7 @@ fansRouter.post("/admin/fan-daily", requireAdmin, async (c) => {
   const { tikKampani, dopadSplneneKampane } = await import("../fans/fan-campaigns");
   const { prepoctiTransparent, formaKlubu } = await import("../fans/fan-banner");
   const {
-    prispevkyKOblibencum, prispevkyKeKampani, prispevekKTransparentu, prispevkyKHre,
+    playedTactic, prispevkyKOblibencum, prispevkyKeKampani, prispevekKTransparentu, prispevkyKHre,
   } = await import("../fans/fan-feed");
 
   const zmeny = await prepoctiOblibence(c.env.DB, teamId, party, gameDate);
@@ -764,11 +764,9 @@ fansRouter.post("/admin/fan-daily", requireAdmin, async (c) => {
   }
 
   const forma = await formaKlubu(c.env.DB, teamId);
-  const taktika = await c.env.DB.prepare("SELECT tactic FROM teams WHERE id = ?")
-    .bind(teamId).first<{ tactic: string | null }>()
-    .catch((e) => { logger.warn({ module: M }, "taktika pro dev tick", e); return null; });
+  const taktika = await playedTactic(c.env.DB, teamId);
   const hraPrispevky = await prispevkyKHre(c.env.DB, {
-    teamId, taktika: taktika?.tactic ?? null, golyPoslednich5: forma.goly,
+    teamId, taktika, golyPoslednich5: forma.goly,
     zapasu: forma.zapasu, gameDate,
   });
 

@@ -589,7 +589,7 @@ function GesceHeader({ gesce, state, avatars }: {
           <Portrait avatar={slot.holder ? avatars[slot.holder.teamId] : null} name={slot.holder?.managerName} size={44}
             ring={slot.holder ? GOLD : "var(--color-muted-light)"} />
           {slot.holder ? (
-            <PersonLine managerName={slot.holder.managerName}
+            <PersonLine managerName={slot.holder.managerName} coachIsAi={slot.holder.coachIsAi}
               teamId={slot.holder.teamId} teamName={slot.holder.teamName}
               note={
                 slot.holder.status === "suspended"

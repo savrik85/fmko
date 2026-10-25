@@ -648,20 +648,23 @@ async function ageYouth(db: D1Database, _ctx: RolloverContext, key: ProgressKey)
 }
 
 /**
- * 12. Dospívání a růst dorostu lidských klubů, po dávkách. Musí být tady, ne ve fázi
+ * 12. Dospívání a růst dorostu všech klubů (lidských i AI), po dávkách. Musí být tady, ne ve fázi
  * departures: ta běží jen pro senior ligy. Přírůstek se počítá z nového věku, proto až po
  * stárnutí. Dospívání se přičítá, takže dvakrát nesmí: kurzor se zapíše PŘED zápisy
  * dorostu (vzor departures). Pád uprostřed dorostu radši znamená chybějící přírůstek než dvojitý.
+ * Zprávu o tom, kdo vyrostl, dostane jen lidský klub.
  */
 async function matureYouthChunk(
   db: D1Database, ctx: RolloverContext, key: ProgressKey, progress: ProgressRow | null,
 ): Promise<PhaseOutcome> {
   const cursor = parseCursor<{ teams: string[] }>(progress?.cursor, { teams: [] });
   const processed = new Set(cursor.teams);
-  const teams = (await db.prepare(
-    `SELECT t.id FROM teams t JOIN teams rodic ON rodic.id = t.parent_team_id
-      WHERE t.team_type = 'u21' AND rodic.user_id != 'ai' ORDER BY t.id`,
-  ).all<{ id: string }>()).results.map((r) => r.id);
+  const rows = (await db.prepare(
+    `SELECT t.id, rodic.user_id AS club_user_id FROM teams t JOIN teams rodic ON rodic.id = t.parent_team_id
+      WHERE t.team_type = 'u21' ORDER BY t.id`,
+  ).all<{ id: string; club_user_id: string | null }>()).results;
+  const teams = rows.map((r) => r.id);
+  const humanClub = new Set(rows.filter((r) => !!r.club_user_id && r.club_user_id !== "ai").map((r) => r.id));
 
   const { dospejMladeHrace, oznamDospivani } = await import("./dospivani");
   const { growYoungPlayers } = await import("./body-drift");
@@ -670,7 +673,7 @@ async function matureYouthChunk(
     await writeProgress(db, key, "pending", JSON.stringify({ teams: [...processed] }));
     try {
       const grown = await dospejMladeHrace(db, teamId);
-      if (grown.length > 0) await oznamDospivani(db, teamId, grown);
+      if (grown.length > 0 && humanClub.has(teamId)) await oznamDospivani(db, teamId, grown);
       // Dorost do 18 let vyroste (postava, část 2).
       const gd = await db.prepare("SELECT game_date FROM teams WHERE id = ?").bind(teamId).first<{ game_date: string | null }>();
       await growYoungPlayers(db, teamId, gd?.game_date ?? ctx.startIso);
@@ -747,14 +750,20 @@ async function rolloverLeagueCalendar(
   if (teamIds.length < 2) return { rolled: false, matchesCreated: 0 };
 
   const { generateSchedule } = await import("../league/schedule");
-  const { generateSeasonCalendar } = await import("./calendar");
+  const { generateSeasonCalendar, parseMatchWeekdays } = await import("./calendar");
   const rng = createRng(cryptoSeed());
 
+  // Hrací dny ligy (III. třída Prachatice hraje ve středu a v neděli); bez nich pondělí a čtvrtek.
+  const leagueDays = await db.prepare("SELECT match_weekdays FROM leagues WHERE id = ?").bind(leagueId)
+    .first<{ match_weekdays: string | null }>()
+    .catch((e) => { logger.warn({ module: "season-rollover" }, `hrací dny ligy ${leagueId}`, e); return null; });
+
   const schedule = generateSchedule(rng, teamIds.length);
-  // Krátká předsezóna — generátor sám posune o +2 dny a snapne na ligové pondělí,
-  // takže první zápas padne 2-8 dní po konci sezóny (max ~týden, žádných 10-15 dní čekání).
+  // Krátká předsezóna — generátor sám posune o +5 dní a snapne na nejbližší hrací den ligy,
+  // takže první zápas padne 5-8 dní po konci sezóny (max ~týden, žádných 10-15 dní čekání).
   const { totalRounds } = await import("../league/schedule");
-  const calendar = generateSeasonCalendar(leagueId, newNum, startDate, totalRounds(teamIds.length));
+  const calendar = generateSeasonCalendar(leagueId, newNum, startDate, totalRounds(teamIds.length),
+    parseMatchWeekdays(leagueDays?.match_weekdays));
 
   for (const entry of calendar.entries) {
     await db.prepare(

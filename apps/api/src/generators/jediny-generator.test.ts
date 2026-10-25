@@ -11,7 +11,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRng } from "./rng";
-import { createPlayer, aiTeamShift, MARKET_SHIFT } from "./create-player";
+import { createPlayer, MARKET_SHIFT } from "./create-player";
 import { generatePlayerSkills, flattenGeneratedSkills, generateFieldSkills } from "../skills/generator";
 import type { VillageInfo } from "./player";
 
@@ -40,7 +40,8 @@ describe("jediný generátor hráčů", () => {
     // Tabulky s novými hráči. `remove-player.ts` vrací do volných hráčů existujícího hráče
     // (nic negeneruje), podpisy a přestupy kopírují už vygenerovaného. `virtual-purchase.ts`
     // zapisuje hráče z inzerátu nebo hlášení skauta, který vznikl přes createPlayer dřív.
-    const VYJIMKY = new Set(["transfers/remove-player.ts", "routes/game.ts", "transfers/virtual-purchase.ts"]);
+    // `services/transfer-actions.ts` je podpis volného hráče přesunutý z routes/game.ts (kopíruje ho).
+    const VYJIMKY = new Set(["transfers/remove-player.ts", "routes/game.ts", "transfers/virtual-purchase.ts", "services/transfer-actions.ts"]);
     const vznikHrace = /INSERT INTO (?:players|free_agents|player_offers|cup_club_players)\b/;
     const bezGeneratoru = VSECHNY
       .filter((f) => vznikHrace.test(f.kod) && !VYJIMKY.has(f.path))
@@ -60,7 +61,7 @@ describe("jediný generátor hráčů", () => {
     const names = { surnameData: { surnames: { Novák: 1 }, female_forms: {} }, firstnameData: { male: { "1990s": { Jan: 1 }, "1980s": { Jan: 1 } }, female: {} } };
     for (let i = 0; i < 200; i++) {
       const position = (["GK", "DEF", "MID", "FWD"] as const)[i % 4];
-      const p = createPlayer(rng, { position, village, names, shift: i % 2 ? MARKET_SHIFT : aiTeamShift(rng) });
+      const p = createPlayer(rng, { position, village, names, shift: i % 2 ? MARKET_SHIFT : -rng.int(6, 12) });
       for (const klic of ["speed", "technique", "shooting", "passing", "heading", "defense", "stamina", "strength", "vision", "creativity", "setPieces", "experience"]) {
         expect(p.skills[klic], `${position}.${klic}`).toBeGreaterThanOrEqual(klic === "experience" ? 0 : 1);
         if (klic !== "experience") expect(p.skillsMax[klic]?.maxPotential, `${position}.${klic} strop`).toBeGreaterThanOrEqual(p.skills[klic]);

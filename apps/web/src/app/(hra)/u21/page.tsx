@@ -417,11 +417,10 @@ export default function U21Page() {
                           {(["home", "away"] as const).map((side) => {
                             const id = side === "home" ? m.homeTeamId : m.awayTeamId;
                             const name = side === "home" ? m.homeName : m.awayName;
-                            const ai = side === "home" ? m.homeIsAi : m.awayIsAi;
                             const score = side === "home" ? m.homeScore : m.awayScore;
                             return <div key={side} className="flex items-center gap-2 text-sm">
                               <span className="shrink-0"><BadgePreview primary={(side === "home" ? m.homeColor : m.awayColor) || "#2D5F2D"} secondary={(side === "home" ? m.homeSecondary : m.awaySecondary) || "#FFFFFF"} pattern={((side === "home" ? m.homeBadge : m.awayBadge) as BadgePattern) || "shield"} initials={ini(name)} size={20} /></span>
-                              <span className={`min-w-0 flex-1 break-words ${id === u21TeamId ? "font-bold text-pitch-600" : "text-ink"}`}>{id && !ai ? <Link href={`/tym/${id}`} className="hover:underline">{name}</Link> : name}</span>
+                              <span className={`min-w-0 flex-1 break-words ${id === u21TeamId ? "font-bold text-pitch-600" : "text-ink"}`}>{id ? <Link href={`/tym/${id}`} className="hover:underline">{name}</Link> : name}</span>
                               <span className="w-6 shrink-0 text-center font-bold tabular-nums">{m.status === "simulated" ? score ?? "—" : "—"}</span>
                             </div>;
                           })}
@@ -450,8 +449,8 @@ export default function U21Page() {
 
 function NextMatchBanner({ data, gameDate }: { data: { round: LeagueRound; m: LeagueRound["matches"][number]; isHome: boolean }; gameDate: string | null }) {
   const { round, m, isHome } = data;
-  const us = isHome ? { name: m.homeName, color: m.homeColor, secondary: m.homeSecondary, badge: m.homeBadge, id: m.homeTeamId, isAi: m.homeIsAi } : { name: m.awayName, color: m.awayColor, secondary: m.awaySecondary, badge: m.awayBadge, id: m.awayTeamId, isAi: m.awayIsAi };
-  const opp = isHome ? { name: m.awayName, color: m.awayColor, secondary: m.awaySecondary, badge: m.awayBadge, id: m.awayTeamId, isAi: m.awayIsAi } : { name: m.homeName, color: m.homeColor, secondary: m.homeSecondary, badge: m.homeBadge, id: m.homeTeamId, isAi: m.homeIsAi };
+  const us = isHome ? { name: m.homeName, color: m.homeColor, secondary: m.homeSecondary, badge: m.homeBadge, id: m.homeTeamId } : { name: m.awayName, color: m.awayColor, secondary: m.awaySecondary, badge: m.awayBadge, id: m.awayTeamId };
+  const opp = isHome ? { name: m.awayName, color: m.awayColor, secondary: m.awaySecondary, badge: m.awayBadge, id: m.awayTeamId } : { name: m.homeName, color: m.homeColor, secondary: m.homeSecondary, badge: m.homeBadge, id: m.homeTeamId };
   const date = round.scheduledAt ? new Date(round.scheduledAt) : null;
   const dateLabel = date ? date.toLocaleDateString("cs", { weekday: "long", day: "numeric", month: "numeric" }) : "—";
   const timeLabel = date ? date.toLocaleTimeString("cs", { hour: "2-digit", minute: "2-digit" }) : "";
@@ -480,7 +479,7 @@ function NextMatchBanner({ data, gameDate }: { data: { round: LeagueRound; m: Le
           {inDaysLabel && <span className="font-semibold text-pitch-600">{inDaysLabel}</span>}
         </div>
         <div className="mt-1 text-sm font-semibold text-ink break-words">
-          {opp.id && !opp.isAi ? <Link href={`/tym/${opp.id}`} className="hover:underline">{opp.name}</Link> : opp.name}
+          {opp.id ? <Link href={`/tym/${opp.id}`} className="hover:underline">{opp.name}</Link> : opp.name}
           <span className="font-normal text-muted"> · {isHome ? "doma" : "venku"}</span>
         </div>
       </div>
@@ -495,10 +494,10 @@ function NextMatchBanner({ data, gameDate }: { data: { round: LeagueRound; m: Le
       </div>
       <div className="flex-1 flex items-center justify-center gap-4 w-full">
         <div className="flex-1 flex items-center justify-end gap-2 min-w-0">
-          {us.id && !us.isAi ? (
+          {us.id ? (
             <Link href={`/tym/${us.id}`} className="truncate font-medium hover:text-pitch-600 transition-colors">{us.name}</Link>
           ) : (
-            <span className={`truncate font-medium ${us.isAi ? "text-muted" : ""}`}>{us.name}</span>
+            <span className="truncate font-medium">{us.name}</span>
           )}
           <BadgePreview
             primary={us.color || "#2D5F2D"}
@@ -520,10 +519,10 @@ function NextMatchBanner({ data, gameDate }: { data: { round: LeagueRound; m: Le
             initials={ini(opp.name)}
             size={32}
           />
-          {opp.id && !opp.isAi ? (
+          {opp.id ? (
             <Link href={`/tym/${opp.id}`} className="truncate font-medium hover:text-pitch-600 transition-colors">{opp.name}</Link>
           ) : (
-            <span className={`truncate font-medium ${opp.isAi ? "text-muted" : ""}`}>{opp.name}</span>
+            <span className="truncate font-medium">{opp.name}</span>
           )}
         </div>
       </div>
@@ -604,12 +603,13 @@ function StandingsTable({ standings, ownTeamId }: { standings: Standing[]; ownTe
                     initials={ini(s.team)}
                     size={22}
                   />
-                  {s.teamId && !s.isAi ? (
+                  {/* AI klub je odkaz jako každý jiný klub, rozdíl je jen štítek u trenéra. */}
+                  {s.teamId ? (
                     <Link href={`/tym/${s.teamId}`} className="break-words hover:text-pitch-600 transition-colors">
                       {s.team.replace(/ U21$/, "")}
                     </Link>
                   ) : (
-                    <span className={s.isAi ? "text-muted" : ""}>{s.team.replace(/ U21$/, "")}</span>
+                    <span>{s.team.replace(/ U21$/, "")}</span>
                   )}
                 </div>
                 <div className="mt-1 pl-7 text-[10px] font-normal text-muted sm:hidden">{s.wins} V · {s.draws} R · {s.losses} P</div>

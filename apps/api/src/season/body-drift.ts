@@ -334,10 +334,17 @@ export async function processDailyBodyDrift(
 
     // Páky manažera (část 3): vybavení „Váha a jídelníček“ (U21 bere vybavení áčka),
     // plány hubnutí kondičního trenéra a sliby z SMS (life_context.dietPledgeUntil).
-    const teamRows = await db.prepare(`SELECT id, team_type, parent_team_id FROM teams WHERE id IN (${ph})`)
-      .bind(...teamIds).all<{ id: string; team_type: string | null; parent_team_id: string | null }>()
-      .catch((e) => { logger.warn({ module: M }, "load teams for equipment", e); return { results: [] as { id: string; team_type: string | null; parent_team_id: string | null }[] }; });
+    type TeamRow = { id: string; user_id: string | null; parent_user_id: string | null; team_type: string | null; parent_team_id: string | null };
+    const teamRows = await db.prepare(
+      `SELECT t.id, t.user_id, parent.user_id AS parent_user_id, t.team_type, t.parent_team_id
+         FROM teams t LEFT JOIN teams parent ON parent.id = t.parent_team_id
+        WHERE t.id IN (${ph})`,
+    ).bind(...teamIds).all<TeamRow>()
+      .catch((e) => { logger.warn({ module: M }, "load teams for equipment", e); return { results: [] as TeamRow[] }; });
     const ownerOf = new Map(teamRows.results.map((t) => [t.id, t.team_type === "u21" && t.parent_team_id ? t.parent_team_id : t.id]));
+    // Postava se mění i hráčům AI klubů, SMS od štábu ale dostane jen člověk (U21 přes áčko).
+    const isHumanUser = (u: string | null) => !!u && u !== "ai";
+    const smsTeams = new Set(teamRows.results.filter((t) => isHumanUser(t.user_id) || isHumanUser(t.parent_user_id)).map((t) => t.id));
     const owners = [...new Set(teamIds.map((id) => ownerOf.get(id) ?? id))];
     const equipRows = await db.prepare(
       `SELECT team_id, nutrition, nutrition_condition FROM equipment WHERE team_id IN (${owners.map(() => "?").join(",")})`,
@@ -416,7 +423,10 @@ export async function processDailyBodyDrift(
       await db.batch(batch).then((rs) => { result.logged += rs.reduce((s, r) => s + (r.meta?.changes ?? 0), 0); })
         .catch((e) => logger.warn({ module: M }, "insert weight log", e));
     }
-    result.sms += await sendWeightAlerts(db, players.results, newWeights, injured, gameDate, ph, teamIds);
+    const smsPlayers = players.results.filter((p) => smsTeams.has(p.team_id));
+    if (smsPlayers.length > 0) {
+      result.sms += await sendWeightAlerts(db, smsPlayers, newWeights, injured, gameDate, ph, teamIds);
+    }
   }
   return result;
 }

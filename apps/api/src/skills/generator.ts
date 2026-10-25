@@ -84,7 +84,7 @@ export function prostorPodleVeku(vek: number): { min: number; max: number } {
 
 /**
  * Rozsahy úrovně posunuté o `shift` bodů. Kladný posun = lepší hráči (trh, celebrity),
- * záporný = slabší (AI kluby). Průměry i stropy se posouvají stejně, aby kladný posun
+ * záporný = slabší. Průměry i stropy se posouvají stejně, aby kladný posun
  * nenarazil na strop a hráč opravdu vyšel o tolik lepší.
  */
 function shiftedRange(villageSize: string, shift: number): LeagueLevelRange {
@@ -356,7 +356,7 @@ export interface PlayerSkillsOptions {
   age: number;
   /** Úroveň dovedností: hamlet | village | town | small_city | city. */
   level: string;
-  /** Posun úrovně v bodech: AI kluby záporný, trh kladný. */
+  /** Posun úrovně v bodech: záporný slabší, trh kladný. */
   shift?: number;
   /** Místo `shift`: hráč má v průměru vyjít na tohle hodnocení. */
   targetRating?: number;

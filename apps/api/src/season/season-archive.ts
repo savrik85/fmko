@@ -82,23 +82,33 @@ export async function archiveLeagueSeason(db: D1Database, leagueId: string, seas
   if (aw) {
     const mgrTeamId = aw.manager_of_season_team_id as string | null;
     let mgrName: string | null = null;
+    // Trenér AI klubu: web za jméno přidá štítek „(AI)“. Ukládá se do snímku, protože
+    // klub může později převzít člověk a pak by živý dotaz ukázal jiného trenéra.
+    let mgrIsAi = false;
     if (mgrTeamId) {
-      const m = await db.prepare("SELECT m.name FROM managers m JOIN teams t ON t.id = m.team_id WHERE m.team_id = ? AND m.user_id = t.user_id")
-        .bind(mgrTeamId).first<{ name: string }>()
+      const m = await db.prepare("SELECT m.name, m.user_id FROM managers m JOIN teams t ON t.id = m.team_id WHERE m.team_id = ? AND m.user_id = t.user_id")
+        .bind(mgrTeamId).first<{ name: string; user_id: string }>()
         .catch((e) => { logger.warn({ module: "season-archive" }, "resolve manager", e); return null; });
       mgrName = m?.name ?? teamName.get(mgrTeamId) ?? null;
+      mgrIsAi = m?.user_id === "ai";
     }
     let reasons: Record<string, string> = {};
-    try { reasons = JSON.parse((aw.reasons as string) ?? "{}"); } catch { reasons = {}; }
+    try { reasons = JSON.parse((aw.reasons as string) ?? "{}"); } catch (e) {
+      logger.warn({ module: "season-archive" }, "parse award reasons", e);
+      reasons = {};
+    }
     let bestEleven: unknown[] = [];
-    try { bestEleven = JSON.parse((aw.best_eleven as string) ?? "[]"); } catch { bestEleven = []; }
+    try { bestEleven = JSON.parse((aw.best_eleven as string) ?? "[]"); } catch (e) {
+      logger.warn({ module: "season-archive" }, "parse best eleven", e);
+      bestEleven = [];
+    }
     awardsSnapshot = {
       champion: aw.champion_team_id ? { teamId: aw.champion_team_id, name: teamName.get(aw.champion_team_id as string) ?? null } : null,
       runnerUp: aw.runner_up_team_id ? { teamId: aw.runner_up_team_id, name: teamName.get(aw.runner_up_team_id as string) ?? null } : null,
       third: aw.third_team_id ? { teamId: aw.third_team_id, name: teamName.get(aw.third_team_id as string) ?? null } : null,
       playerOfSeason: { id: aw.player_of_season_id, name: await playerName(db, aw.player_of_season_id as string | null), teamName: await playerTeamName(db, aw.player_of_season_id as string | null), reason: reasons.playerOfSeason ?? null },
       topScorer: { id: aw.top_scorer_id, name: await playerName(db, aw.top_scorer_id as string | null), teamName: await playerTeamName(db, aw.top_scorer_id as string | null), goals: aw.top_scorer_goals ?? 0 },
-      managerOfSeason: { teamId: mgrTeamId, name: mgrName, teamName: mgrTeamId ? teamName.get(mgrTeamId as string) ?? null : null, reason: reasons.managerOfSeason ?? null },
+      managerOfSeason: { teamId: mgrTeamId, name: mgrName, coachIsAi: mgrIsAi, teamName: mgrTeamId ? teamName.get(mgrTeamId as string) ?? null : null, reason: reasons.managerOfSeason ?? null },
       discovery: { id: aw.discovery_of_season_id, name: await playerName(db, aw.discovery_of_season_id as string | null), teamName: await playerTeamName(db, aw.discovery_of_season_id as string | null), reason: reasons.discovery ?? null },
       bestEleven,
     };

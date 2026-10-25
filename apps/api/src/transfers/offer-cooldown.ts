@@ -24,6 +24,7 @@ export interface OfferRetryBlock {
 interface ClosedOfferRow {
   status: string;
   resolved_at: string | null;
+  to_team_id: string;
   /** Klub (A-tým), který udělal poslední tah. */
   last_action_club: string | null;
   /** Klub (A-tým), který nabídku stáhl nebo jednání ukončil; bez záznamu systém. */
@@ -43,6 +44,15 @@ function retryBlockReason(row: ClosedOfferRow, buyerClubTeamId: string): RetryBl
   return null;
 }
 
+/**
+ * Vede klub (soupisku) AI trenér? `SELECT *`, ať dotaz funguje i nad databází bez sloupce
+ * `user_id` (starší testovací schémata); bez něj se klub bere jako lidský, jako dřív.
+ */
+async function isAiClub(db: D1Database, teamId: string): Promise<boolean> {
+  const row = await db.prepare("SELECT * FROM teams WHERE id = ?").bind(teamId).first<Record<string, unknown>>();
+  return row?.user_id === "ai";
+}
+
 /** Blokace další nabídky klubu na hráče, nebo `null`, když nabídnout jde hned. */
 export async function offerRetryBlock(
   db: D1Database,
@@ -52,7 +62,7 @@ export async function offerRetryBlock(
 ): Promise<OfferRetryBlock | null> {
   const since = new Date(now.getTime() - OFFER_RETRY_COOLDOWN_DAYS * DAY_MS).toISOString();
   const rows = await db.prepare(
-    `SELECT o.status, o.resolved_at,
+    `SELECT o.status, o.resolved_at, o.to_team_id,
             COALESCE(la.parent_team_id, la.id, o.last_action_by) AS last_action_club,
             (SELECT COALESCE(wt.parent_team_id, wt.id, e.team_id)
                FROM transfer_offer_events e
@@ -72,6 +82,8 @@ export async function offerRetryBlock(
   for (const row of rows.results) {
     const reason = retryBlockReason(row, buyerClubTeamId);
     if (!reason || !row.resolved_at) continue;
+    // AI klub mlčel (výpadek, režim nanečisto): kupec za to nemůže a hráč AI klubu se nezlobí.
+    if (reason === "seller_silent" && await isAiClub(db, row.to_team_id)) continue;
     const unblockAt = new Date(row.resolved_at).getTime() + OFFER_RETRY_COOLDOWN_DAYS * DAY_MS;
     return { daysLeft: Math.max(1, Math.ceil((unblockAt - now.getTime()) / DAY_MS)), reason };
   }

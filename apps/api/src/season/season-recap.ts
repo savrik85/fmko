@@ -229,11 +229,11 @@ function villageVerdict(favor: number): string {
   return "Vesnice je zklamaná. U výčepu se hučí, že to chce změnu.";
 }
 
-async function teamAndManager(db: D1Database, teamId: string): Promise<{ name: string; mgr: string | null }> {
-  const r = await db.prepare("SELECT t.name AS name, m.name AS mgr FROM teams t LEFT JOIN managers m ON m.team_id = t.id AND m.user_id = t.user_id WHERE t.id = ?")
-    .bind(teamId).first<{ name: string; mgr: string | null }>()
+async function teamAndManager(db: D1Database, teamId: string): Promise<{ name: string; mgr: string | null; mgrIsAi: boolean }> {
+  const r = await db.prepare("SELECT t.name AS name, m.name AS mgr, m.user_id AS mgr_user_id FROM teams t LEFT JOIN managers m ON m.team_id = t.id AND m.user_id = t.user_id WHERE t.id = ?")
+    .bind(teamId).first<{ name: string; mgr: string | null; mgr_user_id: string | null }>()
     .catch((e) => { logger.warn({ module: M }, "team+manager", e); return null; });
-  return { name: r?.name ?? "?", mgr: r?.mgr ?? null };
+  return { name: r?.name ?? "?", mgr: r?.mgr ?? null, mgrIsAi: r?.mgr_user_id === "ai" };
 }
 
 async function computeClubFact(db: D1Database, teamId: string): Promise<string | null> {
@@ -271,18 +271,22 @@ async function buildRecapExtras(db: D1Database, teamId: string) {
     if (r.respect > 0 && (!allyRow || r.respect > allyRow.respect)) allyRow = { other, respect: r.respect };
   }
 
-  let rival: { teamName: string; managerName: string | null; heat: number; moment: string | null; verdict: string } | null = null;
+  // coachIsAi: web za jméno trenéra přidá štítek „(AI)“.
+  let rival: { teamName: string; managerName: string | null; coachIsAi: boolean; heat: number; moment: string | null; verdict: string } | null = null;
   if (rivalRow) {
     const n = await teamAndManager(db, rivalRow.other);
     let moment: string | null = null;
-    try { const h = JSON.parse(rivalRow.history) as { text: string }[]; if (h.length) moment = h[h.length - 1].text; } catch { moment = null; }
+    try { const h = JSON.parse(rivalRow.history) as { text: string }[]; if (h.length) moment = h[h.length - 1].text; } catch (e) {
+      logger.warn({ module: M }, "rival history", e);
+      moment = null;
+    }
     const verdict = rivalRow.heat >= 40 ? "Krev by tekla proudem." : rivalRow.heat >= 20 ? "Pořádná řežba." : "Lehké pošťuchování.";
-    rival = { teamName: n.name, managerName: n.mgr, heat: rivalRow.heat, moment, verdict };
+    rival = { teamName: n.name, managerName: n.mgr, coachIsAi: n.mgrIsAi, heat: rivalRow.heat, moment, verdict };
   }
-  let ally: { teamName: string; managerName: string | null; respect: number } | null = null;
+  let ally: { teamName: string; managerName: string | null; coachIsAi: boolean; respect: number } | null = null;
   if (allyRow) {
     const n = await teamAndManager(db, allyRow.other);
-    ally = { teamName: n.name, managerName: n.mgr, respect: allyRow.respect };
+    ally = { teamName: n.name, managerName: n.mgr, coachIsAi: n.mgrIsAi, respect: allyRow.respect };
   }
 
   // 2) Kabina (coach_relationship) — miláček + černá ovce (jen když je rozdíl výrazný)

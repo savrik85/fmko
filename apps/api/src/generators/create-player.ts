@@ -132,14 +132,6 @@ export function createPlayer(rng: Rng, opts: CreatePlayerOptions): CreatedPlayer
 }
 
 /**
- * AI kluby jsou o 6–12 bodů slabší než stejně velká obec lidského hráče — počítač
- * nemá trenéra, který by kádr pilně tréninkem zvedal.
- */
-export function aiTeamShift(rng: Rng): number {
-  return -rng.int(6, 12);
-}
-
-/**
  * Dospělí hráči zvenku (volní hráči, tipy od hospodského, kapitána, starosty) jsou o 15 bodů
  * nad obcí, odkud jsou: hrávali jinde a vyšší soutěž. Vychází to na průměr ~42 v obci, tedy
  * stejně, jako trh měl na produkci před sjednocením generátorů (volní 41,9, nabídky 41–44).

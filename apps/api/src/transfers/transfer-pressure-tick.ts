@@ -55,12 +55,12 @@ export async function executeTransferPressureTick(
     logger.error({ module: "transfer-pressure" }, "offer expiry failed", e);
   }
 
-  // ── 2. CPU nabídky od virtuálních klubů ──
+  // ── 2. CPU nabídky od virtuálních klubů (na hráče lidských i AI klubů) ──
   try {
     const { generateAiOffers } = await import("./virtual-teams");
     const rng = createRng(cryptoSeed());
     const leagues = await env.DB.prepare(
-      "SELECT l.id, l.district FROM leagues l JOIN teams t ON t.league_id = l.id WHERE t.user_id != 'ai' GROUP BY l.id"
+      "SELECT l.id, l.district FROM leagues l JOIN teams t ON t.league_id = l.id GROUP BY l.id"
     ).all().catch((e) => { logger.warn({ module: "transfer-pressure" }, "fetch leagues", e); return { results: [] }; });
     for (const lg of leagues.results) {
       const offers = await generateAiOffers(env.DB, lg.district as string, lg.id as string, rng);
@@ -71,11 +71,12 @@ export async function executeTransferPressureTick(
   }
 
   // ── 2b. Poptávky klubů mimo hru (jednou za okres, U21 soutěže pod okresem áčka) ──
+  // Okresy se seniorskými kluby ve hře, lidskými i AI: AI kluby k poptávkám nabízejí hráče taky.
   try {
     const { generateClubDemands } = await import("./demands");
     const rng = createRng(cryptoSeed());
     const districts = await env.DB.prepare(
-      "SELECT DISTINCT l.district FROM leagues l JOIN teams t ON t.league_id = l.id WHERE t.user_id IS NOT NULL AND t.user_id != 'ai' AND t.parent_team_id IS NULL",
+      "SELECT DISTINCT l.district FROM leagues l JOIN teams t ON t.league_id = l.id WHERE t.user_id IS NOT NULL AND t.parent_team_id IS NULL",
     ).all<{ district: string }>();
     for (const d of districts.results) {
       if (d.district) result.clubDemands += await generateClubDemands(env.DB, d.district, rng);

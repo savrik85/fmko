@@ -38,7 +38,8 @@ export async function resolveTransferSearchContext(
 }
 
 /**
- * Hráči soupeřů z vybrané A-ligy i její navázané U21 ligy.
+ * Hráči soupeřů z vybrané A-ligy i její navázané U21 ligy, lidských i AI klubů
+ * (AI kluby jsou od 2026-10-25 na trhu jako ostatní).
  *
  * Filtrování jména, věku a pozice probíhá až ve webu, proto tento dotaz nesmí
  * ořezat výsledky pevným limitem — nízké ratingy U21 by se k hledání nedostaly.
@@ -58,7 +59,6 @@ export async function findTransferSearchPlayerRows(
        WHERE id = ? OR (parent_league_id = ? AND league_type = 'u21')
      )
        AND COALESCE(t.parent_team_id, t.id) != ?
-       AND t.user_id != 'ai'
        AND (p.status IS NULL OR p.status = 'active')
      ORDER BY p.overall_rating DESC`,
   ).bind(targetLeagueId, targetLeagueId, requestingTeamId).all<TransferSearchPlayerRow>();

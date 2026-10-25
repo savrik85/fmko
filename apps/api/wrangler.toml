@@ -48,6 +48,10 @@ crons = [
   "20 17 * * *",
   # Telefon každou hodinu: zprávy „jen tak" a odložené zprávy hráčů (messaging/casual-messages.ts).
   "30 * * * *",
+  # AI trenéři (ai-coach/jobs.ts): sestavy a pondělní správa ráno, sestavy odpoledne, hodinová práce.
+  "0 7 * * *",
+  "45 12 * * *",
+  "15 * * * *",
 ]
 
 # ── Fronty (produkce) ──
@@ -62,12 +66,15 @@ queue = "prales-match-rounds"
 binding = "REPORTS_QUEUE"
 queue = "prales-reports"
 
+# Od 2026-10-25 se v pondělí a ve čtvrtek v 18:00 hrají čtyři kola naráz (přebory Prachatice,
+# Prahy a ČB + U21 III. třídy), proto 4. Zprávy AI trenérů (ai_coach) jdou do stejné fronty,
+# ale v 18:xx v Praze se nezařazují, kolům sloty neberou.
 [[queues.consumers]]
 queue = "prales-match-rounds"
 max_batch_size = 1
 max_batch_timeout = 5
 max_retries = 3
-max_concurrency = 3
+max_concurrency = 4
 dead_letter_queue = "prales-match-dlq"
 
 [[queues.consumers]]
@@ -200,4 +207,8 @@ crons = [
   "20 17 * * *",
   # Telefon každou hodinu: zprávy „jen tak" a odložené zprávy hráčů (messaging/casual-messages.ts).
   "30 * * * *",
+  # AI trenéři (ai-coach/jobs.ts): sestavy a pondělní správa ráno, sestavy odpoledne, hodinová práce.
+  "0 7 * * *",
+  "45 12 * * *",
+  "15 * * * *",
 ]

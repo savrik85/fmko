@@ -238,9 +238,10 @@ const GERMAN_CLUB_LETTERS = [
 ];
 
 /**
- * CPU nabídky od virtuálních klubů — spravedlivě per tým: každý lidský tým v lize
+ * CPU nabídky od virtuálních klubů — spravedlivě per tým: každý tým v lize (lidský i AI)
  * se posuzuje samostatně se stejnou šancí, cílí se na top hráče JEHO kádru
- * (hvězdy slabších týmů jsou v ohrožení stejně jako hvězdy lídra).
+ * (hvězdy slabších týmů jsou v ohrožení stejně jako hvězdy lídra). AI klub na nabídku
+ * odpoví sám (ai-coach/transfer-replies.ts), hráč mu do Kabiny nepíše.
  */
 export async function generateAiOffers(
   db: D1Database,
@@ -252,12 +253,12 @@ export async function generateAiOffers(
   const teams = await getVirtualTeamsForDistrict(db, district);
   if (teams.length === 0) return 0;
 
-  const humanTeams = await db.prepare(
-    "SELECT id FROM teams WHERE league_id = ? AND user_id != 'ai'"
-  ).bind(leagueId).all().catch((e) => { logger.warn({ module: "virtual-teams" }, "fetch human teams", e); return { results: [] }; });
+  const leagueTeams = await db.prepare(
+    "SELECT id FROM teams WHERE league_id = ?"
+  ).bind(leagueId).all().catch((e) => { logger.warn({ module: "virtual-teams" }, "fetch league teams", e); return { results: [] }; });
 
   let created = 0;
-  for (const ht of humanTeams.results) {
+  for (const ht of leagueTeams.results) {
     try {
       created += await maybeOfferForTeam(db, ht.id as string, teams, rng, opts);
     } catch (e) {
@@ -425,6 +426,14 @@ async function maybeOfferForTeam(
     }),
     interest?.level ?? null, offerReplyDeadline(),
   ).run();
+
+  // AI klub nabídku vyřídí sám, zprávy hráčů (slib, Kabina) dostávají jen lidští trenéři.
+  const owner = await db.prepare("SELECT user_id FROM teams WHERE id = ?").bind(targetTeamId).first<{ user_id: string | null }>()
+    .catch((e) => { logger.warn({ module: "virtual-teams" }, "typ klubu u CPU nabídky", e); return null; });
+  if (owner?.user_id === "ai") {
+    logger.info({ module: "virtual-teams" }, `AI offer to AI club: ${virtualTeam.name} → ${target.first_name} ${target.last_name} (${target.overall_rating}) for ${offerPrice} Kč`);
+    return 1;
+  }
 
   // Hráč, kterému trenér slíbil prodej, mu to připomene.
   const { remindTransferPromise } = await import("./promises");

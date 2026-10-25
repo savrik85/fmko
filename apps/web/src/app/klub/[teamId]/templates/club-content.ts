@@ -11,6 +11,7 @@ import type {
   ClubWebsiteHistoryCupRun,
   ClubWebsiteHistoryTrophy,
 } from "@okresni-masina/shared";
+import { coachDisplayName } from "@/lib/coach-name";
 
 export type Interview = ClubWebsiteData["interviews"][number];
 export type NewsItem = ClubWebsiteData["news"][number];
@@ -93,8 +94,10 @@ export const AWARD_TITLES: Record<ClubWebsiteHistoryAward["kind"], string> = {
 /** Ocenění po sezónách; nejlepší jedenáctka sloučená do jednoho řádku se jmény. */
 export function awardsBySeason(h: ClubWebsiteHistory) {
   const seasons = [...new Set(h.awards.map((a) => a.seasonNumber))].sort((a, b) => b - a);
+  // Trenér sezóny z AI klubu má za jménem štítek „(AI)“ ve všech šablonách naráz.
+  const awards = h.awards.map((a) => (a.name && a.coachIsAi ? { ...a, name: coachDisplayName(a.name, true) } : a));
   return seasons.map((seasonNumber) => {
-    const list = h.awards.filter((a) => a.seasonNumber === seasonNumber);
+    const list = awards.filter((a) => a.seasonNumber === seasonNumber);
     return {
       seasonNumber,
       leagueName: list[0]?.leagueName ?? "",

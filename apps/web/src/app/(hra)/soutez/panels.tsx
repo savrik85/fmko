@@ -9,6 +9,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { apiAction, apiFetch } from "@/lib/api";
+import { coachDisplayName } from "@/lib/coach-name";
 import { Modal } from "@/components/ui";
 import { EntityLink } from "@/components/ui";
 import { licenceLabel } from "@okresni-masina/shared";
@@ -251,7 +252,7 @@ export function VedeniPanel({ state, elections, avatars, board, teamId, onChange
                   <div className="section-label mb-0" style={{ fontSize: "0.6875rem" }}>{r.label}</div>
                   {r.holder ? (
                     <PersonLine
-                      managerName={r.holder.managerName}
+                      managerName={r.holder.managerName} coachIsAi={r.holder.coachIsAi}
                       teamId={r.holder.teamId} teamName={r.holder.teamName}
                       note={suspended ? <span className="text-danger">pravomoc pozastavena</span> : undefined}
                     />
@@ -697,7 +698,7 @@ function GrantForm({ data, teamId, onClose, onSaved }: {
               <select className="select w-full mt-1" value={target} onChange={(e) => setTarget(e.target.value)}>
                 {cile.map((t) => (
                   <option key={t.teamId} value={t.teamId}>
-                    {t.managerName ? `${t.managerName} (${t.teamName})` : t.teamName}
+                    {t.managerName ? `${coachDisplayName(t.managerName, t.coachIsAi === true)} (${t.teamName})` : t.teamName}
                     {t.vMinusu ? ", v mínusu" : ""}
                   </option>
                 ))}

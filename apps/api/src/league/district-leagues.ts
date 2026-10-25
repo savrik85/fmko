@@ -8,13 +8,16 @@
  *
  * Pravidlo:
  *   1. Senior ligy okresu v aktivní sezóně seřazené od nejvyšší úrovně.
- *   2. Nový manažer převezme AI tým v nejvyšší lize, která ho má.
+ *   2. Nový manažer převezme AI tým v nejvyšší lize, která ho má. Počítá se jen AI tým,
+ *      který nová registrace smí přepsat: původní AI klub, nebo převzatý lidský klub,
+ *      jehož bývalý vlastník je 90 dní neaktivní (ai-clubs/owner-activity.ts).
  *   3. Žádná liga ještě není → založí se okresní přebor.
  *   4. Všechny ligy plné a nižší soutěž chybí → založí se III. třída z obcí okresu,
  *      které nepoužívá žádný senior tým (ani obec hráče). Velikost 14, minimum 12.
  *   5. Jinak je okres plný.
  */
 
+import { overwritableAiTeamSql } from "../ai-clubs/owner-activity";
 import { logger } from "../lib/logger";
 
 export type DistrictLeagueLevel = "okresni_prebor" | "okresni_soutez";
@@ -40,6 +43,7 @@ export interface DistrictLeague {
   id: string;
   name: string;
   level: string;
+  /** AI týmy, které smí přepsat nová registrace (převzatý klub chráněný pro návrat vlastníka se nepočítá). */
   aiTeams: number;
   teams: number;
 }
@@ -57,16 +61,17 @@ export function districtLeagueName(district: string, level: DistrictLeagueLevel)
 
 /** Senior ligy okresu v dané sezóně, od nejvyšší úrovně. */
 export async function listDistrictSeniorLeagues(
-  db: D1Database, district: string, seasonId: string,
+  db: D1Database, district: string, seasonId: string, now: Date = new Date(),
 ): Promise<DistrictLeague[]> {
+  const overwritable = await overwritableAiTeamSql(db, "t", now);
   const rows = await db.prepare(
     `SELECT l.id, l.name, l.level,
-            (SELECT COUNT(*) FROM teams t WHERE t.league_id = l.id AND t.user_id = 'ai') AS ai_teams,
+            (SELECT COUNT(*) FROM teams t WHERE t.league_id = l.id AND ${overwritable.sql}) AS ai_teams,
             (SELECT COUNT(*) FROM teams t WHERE t.league_id = l.id) AS teams
        FROM leagues l
       WHERE l.district = ? AND l.season_id = ? AND l.status = 'active'
         AND COALESCE(l.league_type, 'senior') = 'senior'`,
-  ).bind(district, seasonId).all<{ id: string; name: string; level: string; ai_teams: number; teams: number }>();
+  ).bind(overwritable.bind, district, seasonId).all<{ id: string; name: string; level: string; ai_teams: number; teams: number }>();
 
   return rows.results
     .map((r) => ({ id: r.id, name: r.name, level: r.level, aiTeams: r.ai_teams, teams: r.teams }))
@@ -100,9 +105,9 @@ export async function freeDistrictVillages(
  * za plný, dokud se do III. třídy aspoň teoreticky vejde.
  */
 export async function resolveDistrictSlot(
-  db: D1Database, district: string, seasonId: string, playerVillageId: string | null,
+  db: D1Database, district: string, seasonId: string, playerVillageId: string | null, now: Date = new Date(),
 ): Promise<DistrictSlot> {
-  const leagues = await listDistrictSeniorLeagues(db, district, seasonId);
+  const leagues = await listDistrictSeniorLeagues(db, district, seasonId, now);
 
   if (leagues.length === 0) {
     return { kind: "create", level: "okresni_prebor", name: districtLeagueName(district, "okresni_prebor"), size: LOWER_LEAGUE_SIZE, villageIds: null };

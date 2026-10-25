@@ -31,10 +31,28 @@ import {
 } from "@okresni-masina/shared";
 import { standFacilities } from "../stadium/stands-model";
 import { roundName } from "../cup/cup";
+import { loadManagerRow } from "../coach/ai-manager";
 
 export const clubWebsiteRouter = new Hono<{ Bindings: Bindings }>();
 
 const MODULE = { module: "club-website" };
+
+/** Řádek trenéra klubu tak, jak ho web klubu potřebuje (`SELECT *` z `managers`). */
+interface ClubCoachRow {
+  id: string; user_id: string; name: string; age: number; reputation: number; avatar: string;
+  licence_level: number | null; bio: string | null; birthplace: string | null;
+  backstory: string | null; created_at: string | null;
+}
+
+/**
+ * Trenér klubu podle `managers.team_id`, přednostně lidský (stejně jako profil trenéra ve hře).
+ *
+ * Dřív se hledal přes `t.user_id = m.user_id`. Všechny AI kluby mají `user_id = 'ai'`,
+ * takže web AI klubu ukázal náhodného AI trenéra z úplně jiného klubu.
+ */
+async function loadClubCoach(db: D1Database, teamId: string): Promise<ClubCoachRow | null> {
+  return (await loadManagerRow(db, teamId)) as ClubCoachRow | null;
+}
 
 function formatPlayerPositionCZ(pos: string): string {
   const p = (pos || "").toUpperCase();
@@ -821,13 +839,7 @@ clubWebsiteRouter.get("/:id/website", async (c) => {
       .bind(teamId).first<{ name: string; image_url: string | null; story: string | null }>()
       .catch(warnNull("fetch mascot")),
     ensureWebsiteRow(db, teamId),
-    db.prepare(
-      `SELECT m.name, m.age, m.reputation, m.avatar, m.licence_level, m.bio, m.birthplace
-       FROM managers m JOIN teams t ON t.user_id = m.user_id WHERE t.id = ?`,
-    ).bind(teamId).first<{
-      name: string; age: number; reputation: number; avatar: string;
-      licence_level: number | null; bio: string | null; birthplace: string | null;
-    }>().catch(warnNull("fetch manager")),
+    loadClubCoach(db, teamId),
     db.prepare(
       `SELECT id, role, profession, first_name, last_name, gender, age, avatar, description
        FROM staff_members WHERE team_id = ? ORDER BY role ASC`,
@@ -1151,6 +1163,7 @@ clubWebsiteRouter.get("/:id/website", async (c) => {
     website: publicWebsite(website),
     manager: managerRow ? {
       name: managerRow.name,
+      coachIsAi: managerRow.user_id === "ai",
       age: managerRow.age,
       reputation: managerRow.reputation,
       avatar: parseAvatar(managerRow.avatar, "manager"),
@@ -2052,12 +2065,7 @@ async function programTeam(
   const [team, coach, form, scorer, roster] = await Promise.all([
     db.prepare("SELECT t.id, t.name, v.name AS village FROM teams t LEFT JOIN villages v ON v.id = t.village_id WHERE t.id = ?")
       .bind(teamId).first<{ id: string; name: string; village: string | null }>(),
-    db.prepare("SELECT m.name FROM managers m JOIN teams t ON t.user_id = m.user_id WHERE t.id = ?")
-      .bind(teamId).first<{ name: string }>()
-      .catch((e) => {
-        logger.warn(MODULE, "program: coach", e);
-        return null;
-      }),
+    loadClubCoach(db, teamId),
     db.prepare(
       `SELECT home_team_id, home_score, away_score FROM matches
        WHERE (home_team_id = ? OR away_team_id = ?) AND status = 'simulated' AND league_id IS NOT NULL
@@ -2095,6 +2103,7 @@ async function programTeam(
     name: team.name,
     village: team.village,
     coachName: coach?.name ?? null,
+    coachIsAi: coach?.user_id === "ai",
     position: st?.pos ?? null,
     points: st?.points ?? null,
     played: st?.played ?? null,
@@ -2250,16 +2259,7 @@ clubWebsiteRouter.get("/:id/website/coach", async (c) => {
   if (!club) return c.json({ error: "Klub nenalezen" }, 404);
 
   const [manager, staffRows] = await Promise.all([
-    db.prepare(
-      `SELECT m.id, m.name, m.age, m.avatar, m.bio, m.birthplace, m.backstory, m.licence_level, m.created_at
-       FROM managers m JOIN teams t ON t.user_id = m.user_id WHERE t.id = ?`,
-    ).bind(teamId).first<{
-      id: string; name: string; age: number | null; avatar: string; bio: string | null; birthplace: string | null;
-      backstory: string | null; licence_level: number | null; created_at: string | null;
-    }>().catch((e) => {
-      logger.warn(MODULE, "coach page: manager", e);
-      return null;
-    }),
+    loadClubCoach(db, teamId),
     db.prepare(
       `SELECT id, role, first_name, last_name, age, avatar, description FROM staff_members WHERE team_id = ? ORDER BY role`,
     ).bind(teamId).all<{
@@ -2322,6 +2322,7 @@ clubWebsiteRouter.get("/:id/website/coach", async (c) => {
     coach: manager
       ? {
         name: manager.name,
+        coachIsAi: manager.user_id === "ai",
         age: manager.age,
         birthplace: manager.birthplace,
         bio: manager.bio,

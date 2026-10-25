@@ -26,7 +26,7 @@ beforeAll(async () => {
     "CREATE TABLE users (id TEXT PRIMARY KEY, email TEXT)",
     "CREATE TABLE villages (id TEXT PRIMARY KEY, district TEXT)",
     `CREATE TABLE teams (id TEXT PRIMARY KEY, name TEXT NOT NULL, user_id TEXT, parent_team_id TEXT,
-       team_type TEXT, village_id TEXT)`,
+       team_type TEXT, village_id TEXT, ai_former_user_id TEXT)`,
     `CREATE TABLE challenges (id TEXT PRIMARY KEY, challenger_team_id TEXT, challenged_team_id TEXT, status TEXT,
        stake INTEGER NOT NULL DEFAULT 0, stake_status TEXT)`,
     `CREATE TABLE transfer_offers (id TEXT PRIMARY KEY, from_team_id TEXT, to_team_id TEXT, offer_type TEXT,
@@ -43,6 +43,13 @@ beforeAll(async () => {
        ('y2', 'Druhý klub Y', 'u-y', NULL, 'senior', 'v-pt'),
        ('ai1', 'AI klub', 'ai', NULL, 'senior', 'v-pt'),
        ('ai2', 'Jiný AI klub', 'ai', NULL, 'senior', 'v-pt')`,
+    // Opuštěné kluby, které převzal AI trenér: první patřil majiteli klubu X, další dva
+    // majiteli klubů Y a Y2. Skupina od admina převzetím nezmizí (stejná kontrola jako výš).
+    `INSERT INTO teams (id, name, user_id, parent_team_id, team_type, village_id, ai_former_user_id) VALUES
+       ('taken-x', 'Převzatý od X', 'ai', NULL, 'senior', 'v-pt', 'u-x'),
+       ('taken-x-u21', 'Převzatý od X U21', 'ai', 'taken-x', 'u21', 'v-pt', NULL),
+       ('taken-y', 'Převzatý od Y', 'ai', NULL, 'senior', 'v-pt', 'u-y'),
+       ('taken-y2', 'Druhý převzatý od Y', 'ai', NULL, 'senior', 'v-pt', 'u-y')`,
     "INSERT INTO club_links (team_id, group_id, note) VALUES ('vys', 'g1', '13 přáteláků'), ('rez', 'g1', NULL)",
     `INSERT INTO challenges (id, challenger_team_id, challenged_team_id, status, stake, stake_status) VALUES
        ('c1', 'vys', 'rez', 'played', 0, NULL), ('c2', 'rez', 'vys', 'played', 1000, 'paid'),
@@ -79,6 +86,19 @@ describe("propojené kluby", () => {
     expect(await areClubsLinked(db, "ai1", "ai2")).toBe(false);
     expect(await areClubsLinked(db, "virtual_ai", "vys")).toBe(false);
     expect(await areClubsLinked(db, "vys", null)).toBe(false);
+  });
+
+  it("klub převzatý AI trenérem zůstává propojený s kluby bývalého vlastníka", async () => {
+    // Bývalý vlastník přes AI klub nepřeleje hráče ani peníze do svého nového klubu.
+    expect(await areClubsLinked(db, "taken-x", "x")).toBe(true);
+    expect(await areClubsLinked(db, "x", "taken-x-u21")).toBe(true);
+    expect(await areClubsLinked(db, "taken-y", "y2")).toBe(true);
+    // Dva převzaté kluby téhož člověka jsou propojené i mezi sebou.
+    expect(await areClubsLinked(db, "taken-y", "taken-y2")).toBe(true);
+    // Cizí kluby a AI kluby bez převzetí propojené nejsou.
+    expect(await areClubsLinked(db, "taken-x", "y")).toBe(false);
+    expect(await areClubsLinked(db, "taken-x", "taken-y")).toBe(false);
+    expect(await areClubsLinked(db, "taken-x", "ai1")).toBe(false);
   });
 
   it("soupisky propojených klubů obsahují i U21, ale ne vlastní klub", async () => {

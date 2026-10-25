@@ -70,10 +70,12 @@ beforeAll(async () => {
       ('pt-same-owner', 'user-praha', 'TJ Druhý klub', 'l-pt', 'v-pt'),
       ('pt-lower', 'user-lower', 'Sokol Dolní', 'l-pt-lower', 'v-pt');
     INSERT INTO players (id, team_id, first_name, last_name, age, position, overall_rating) VALUES
-      ('p-human', 'pt-human', 'Karel', 'Lidský', 24, 'MID', 55);
-    INSERT INTO transfer_listings (id, player_id, team_id, asking_price, league_id, status, expires_at, is_ai_listing, ai_player_data) VALUES
-      ('listing-human', 'p-human', 'pt-human', 5000, 'l-pt', 'active', '${FUTURE}', 0, NULL),
-      ('listing-ai', 'virtual_ai', 'virtual_ai', 800, 'l-pt', 'active', '${FUTURE}', 1, '{"firstName":"Virtuální","lastName":"Hráč","age":30,"position":"DEF","overallRating":40}');
+      ('p-human', 'pt-human', 'Karel', 'Lidský', 24, 'MID', 55),
+      ('p-ai-club', 'pt-ai', 'Pavel', 'Lhotský', 27, 'DEF', 48);
+    INSERT INTO transfer_listings (id, player_id, team_id, asking_price, league_id, status, expires_at, is_ai_listing, ai_player_data, created_at) VALUES
+      ('listing-human', 'p-human', 'pt-human', 5000, 'l-pt', 'active', '${FUTURE}', 0, NULL, '2026-10-20 10:00:00'),
+      ('listing-ai-club', 'p-ai-club', 'pt-ai', 7000, 'l-pt', 'active', '${FUTURE}', 0, NULL, '2026-10-19 10:00:00'),
+      ('listing-ai', 'virtual_ai', 'virtual_ai', 800, 'l-pt', 'active', '${FUTURE}', 1, '{"firstName":"Virtuální","lastName":"Hráč","age":30,"position":"DEF","overallRating":40}', '2026-10-18 10:00:00');
     INSERT INTO free_agents (id, district, first_name, last_name, age, position, source, released_from_team_id, village_id, expires_at) VALUES
       ('fa-home', 'Praha', 'Domácí', 'Generovaný', 22, 'FWD', 'generated', NULL, 'v-praha', '${FUTURE}'),
       ('fa-generated', 'Prachatice', 'Cizí', 'Generovaný', 22, 'FWD', 'generated', NULL, 'v-pt', '${FUTURE}'),
@@ -109,21 +111,22 @@ async function callRoute(path: string, options: { method?: string; token?: strin
 }
 
 describe("trh napříč ligami", () => {
-  it("volní hráči: z cizího okresu jen propuštění lidským klubem jiného majitele", async () => {
+  it("volní hráči: z cizího okresu jen propuštění klubem ve hře (i AI) jiného majitele", async () => {
     const res = await callRoute("/teams/praha-human/free-agents");
     expect(res.status).toBe(200);
     const { freeAgents } = await res.json() as { freeAgents: Array<{ id: string; origin: string | null }> };
-    expect(freeAgents.map((fa) => fa.id).sort()).toEqual(["fa-home", "fa-released-human"]);
+    expect(freeAgents.map((fa) => fa.id).sort()).toEqual(["fa-home", "fa-released-ai", "fa-released-human"]);
     expect(freeAgents.find((fa) => fa.id === "fa-home")?.origin).toBeNull();
     expect(freeAgents.find((fa) => fa.id === "fa-released-human")?.origin).toBe("Prachatice");
+    expect(freeAgents.find((fa) => fa.id === "fa-released-ai")?.origin).toBe("Prachatice");
   });
 
-  it("na prodej: z cizí ligy jen inzeráty lidských klubů, se štítkem okresu", async () => {
+  it("na prodej: z cizí ligy inzeráty klubů ve hře (lidských i AI), bez klubů mimo hru", async () => {
     const res = await callRoute("/teams/praha-human/market");
     expect(res.status).toBe(200);
     const { listings } = await res.json() as { listings: Array<{ id: string; origin: string | null }> };
-    expect(listings.map((l) => l.id)).toEqual(["listing-human"]);
-    expect(listings[0].origin).toBe("Prachatice");
+    expect(listings.map((l) => l.id)).toEqual(["listing-human", "listing-ai-club"]);
+    expect(listings.every((l) => l.origin === "Prachatice")).toBe(true);
   });
 
   it("jiná soutěž v tomtéž okrese má štítek se soutěží", async () => {
@@ -135,8 +138,8 @@ describe("trh napříč ligami", () => {
   it("vlastní liga dál vidí i inzeráty cizích klubů", async () => {
     const res = await callRoute("/teams/pt-human/market");
     const { listings } = await res.json() as { listings: Array<{ id: string; origin: string | null }> };
-    expect(listings.map((l) => l.id)).toEqual(["listing-ai"]);
-    expect(listings[0].origin ?? null).toBeNull();
+    expect(listings.map((l) => l.id)).toEqual(["listing-ai-club", "listing-ai"]);
+    expect(listings.every((l) => (l.origin ?? null) === null)).toBe(true);
   });
 
   it("hráče propuštěného z jiného vlastního klubu v jiném okrese podepsat nejde", async () => {

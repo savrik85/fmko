@@ -15,6 +15,7 @@ import { RelationCard, RelationsOverview } from "@/components/relations/Relation
 import { isLightColor, bestTextOn } from "@/lib/team-color";
 import { coachAttributeEffects, licenceCap, LICENCE_LEVELS } from "@okresni-masina/shared";
 import { LicenceBadge } from "@/components/manager/LicenceBadge";
+import { coachDisplayName } from "@/lib/coach-name";
 
 type CoachTab = "prehled" | "kabina" | "treneri" | "vzdelani" | "historie";
 const TAB_KEYS: CoachTab[] = ["prehled", "kabina", "treneri", "vzdelani", "historie"];
@@ -73,7 +74,7 @@ export default function ManagerDetailPage() {
       apiFetch<ManagerProfile>(`/api/teams/${managerId}/manager`).catch((e) => { console.error("manager profile load:", e); return null; }),
       apiFetch<Team>(`/api/teams/${managerId}`).catch((e) => { console.error("manager team load:", e); return null; }),
       apiFetch<AchievementsPayload>(`/api/teams/${managerId}/achievements`).catch((e) => { console.error("achievements load:", e); return null; }),
-      apiFetch<{ entries: Array<{ teamId: string; isHuman: boolean }> }>(`/api/hall-of-fame`).catch((e) => { console.error("hof load:", e); return null; }),
+      apiFetch<{ entries: Array<{ teamId: string }> }>(`/api/hall-of-fame`).catch((e) => { console.error("hof load:", e); return null; }),
       apiFetch<{ items: AttrHistoryItem[] }>(`/api/teams/${managerId}/manager/history?limit=25`).catch((e) => { console.error("manager history load:", e); return null; }),
     ]).then(([mgr, t, ach, hof, hist]) => {
       setManager(mgr);
@@ -81,9 +82,9 @@ export default function ManagerDetailPage() {
       setAchievements(ach);
       setAttrHistory(hist?.items ?? []);
       if (hof) {
-        const humans = hof.entries.filter((e) => e.isHuman);
-        const idx = humans.findIndex((e) => e.teamId === managerId);
-        if (idx >= 0) setHofRank({ rank: idx + 1, total: humans.length });
+        // Síň slávy řadí všechny kluby včetně AI, pořadí je stejné jako na její stránce.
+        const idx = hof.entries.findIndex((e) => e.teamId === managerId);
+        if (idx >= 0) setHofRank({ rank: idx + 1, total: hof.entries.length });
       }
       setLoading(false);
     }).catch((e) => { console.error("manager page load:", e); setLoading(false); });
@@ -91,6 +92,9 @@ export default function ManagerDetailPage() {
 
   if (loading) return <div className="min-h-dvh flex items-center justify-center"><Spinner size="lg" /></div>;
   if (!manager || !team) return <div className="page-container">Trenér nenalezen.</div>;
+
+  // Jediný viditelný rozdíl AI klubu: štítek „(AI)“ za jménem trenéra.
+  const displayName = coachDisplayName(manager.name, manager.coachIsAi === true);
 
   const color = team.primary_color || "#2D5F2D";
   const isDarkText = bestTextOn(color) === "dark";
@@ -118,7 +122,7 @@ export default function ManagerDetailPage() {
             )}
             <div className="flex-1 min-w-0">
               <h1 className={`font-heading font-extrabold ${txt} text-2xl leading-tight truncate`}>
-                {manager.name}
+                {displayName}
               </h1>
               <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                 {manager.backstory && (
@@ -202,7 +206,7 @@ export default function ManagerDetailPage() {
               )}
               <div className="flex-1 min-w-0">
                 <h1 className={`font-heading font-extrabold ${txt} text-xl leading-tight truncate`}>
-                  {manager.name}
+                  {displayName}
                 </h1>
                 <div className="flex items-center gap-2 mt-0.5">
                   <LicenceBadge level={manager.licenceLevel ?? 0} showNone />
@@ -349,7 +353,7 @@ export default function ManagerDetailPage() {
               <div className="card p-4 sm:p-5">
                 <SectionLabel>Informace</SectionLabel>
                 <div className="space-y-0">
-                  <DetailRow label="Jméno" value={manager.name} />
+                  <DetailRow label="Jméno" value={displayName} />
                   {manager.age && <DetailRow label="Věk" value={`${manager.age} let`} />}
                   {manager.birthplace && <DetailRow label="Bydliště" value={manager.birthplace} />}
                   {manager.backstory && <DetailRow label="Pozadí" value={BACKSTORY_LABELS[manager.backstory] ?? manager.backstory} />}
@@ -387,7 +391,7 @@ export default function ManagerDetailPage() {
 
         {/* ═══ Trenéři — cizí profil: karta vztahu, vlastní: přehled ve skupinách ═══ */}
         {tab === "treneri" && teamId && !isOwn && (
-          <RelationCard myTeamId={teamId} otherTeamId={managerId} otherManagerName={manager.name} />
+          <RelationCard myTeamId={teamId} otherTeamId={managerId} otherManagerName={displayName} />
         )}
         {tab === "treneri" && isOwn && teamId && <RelationsOverview teamId={teamId} />}
 

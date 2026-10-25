@@ -465,16 +465,11 @@ developmentRouter.post("/teams/:teamId/academy", async (c) => {
     return null;
   });
 
-  const povolene = ["none", "minimal", "medium", "high"];
-  if (!body?.investment || !povolene.includes(body.investment)) {
-    return c.json({ error: "Neplatná úroveň investice" }, 400);
-  }
-
-  await c.env.DB.prepare("UPDATE teams SET youth_investment = ? WHERE id = ?")
-    .bind(body.investment, teamId).run();
-
-  logger.info({ module: "development", teamId }, `akademie nastavena na ${body.investment}`);
-  return c.json({ ok: true, investment: body.investment });
+  // Povolené úrovně v services/club-settings.ts, sdílí je AI trenér.
+  const { setAcademyInvestment } = await import("../services/club-settings");
+  const res = await setAcademyInvestment(c.env.DB, teamId, body?.investment);
+  if (!res.ok) return c.json({ error: res.error }, res.status);
+  return c.json({ ok: true, investment: res.investment });
 });
 
 // GET /api/teams/:teamId/u21/rozvoj — žebříček dorostu s prognózou průrazu do áčka

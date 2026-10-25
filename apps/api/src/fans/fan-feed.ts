@@ -28,6 +28,17 @@ import type { KampanRow } from "./fan-campaigns";
 
 const M = "fan-feed";
 
+/**
+ * Taktika, kterou tým hraje: z poslední sestavy, ruční i automatické. Tabulka teams sloupec
+ * tactic nemá; dotazy na něj vracely vždy nic, a tak příspěvky ani plachty k taktice nevznikaly.
+ */
+export async function playedTactic(db: D1Database, teamId: string): Promise<string | null> {
+  const row = await db.prepare("SELECT tactic FROM lineups WHERE team_id = ? ORDER BY submitted_at DESC, id ASC LIMIT 1")
+    .bind(teamId).first<{ tactic: string | null }>()
+    .catch((e) => { logger.warn({ module: M }, `taktika týmu ${teamId}`, e); return null; });
+  return row?.tactic ?? null;
+}
+
 export interface NovyPrispevek {
   referenceId: string;
   teamId: string;

@@ -25,7 +25,7 @@ export interface ProposalKind {
 
 export interface Official {
   role: string; roleLabel: string; teamId: string; teamName: string;
-  managerName: string | null; status: string;
+  managerName: string | null; coachIsAi?: boolean; status: string;
 }
 
 export interface RoleSlot {
@@ -33,7 +33,7 @@ export interface RoleSlot {
   /** 4. pád — „napiš generálnímu sekretáři", ne „na generální sekretář". */
   labelAkuzativ: string;
   agenda: string; powers: string[];
-  holder: { teamId: string; teamName: string; managerName: string | null; status: string } | null;
+  holder: { teamId: string; teamName: string; managerName: string | null; coachIsAi?: boolean; status: string } | null;
 }
 
 export interface State {
@@ -114,12 +114,14 @@ export interface EvidenceItem { kind: string; label: string; detail: string }
 export interface DisciplineTarget {
   teamId: string; teamName: string;
   managerName: string | null;
+  /** Trenér AI klubu: za jméno patří štítek „(AI)“. */
+  coachIsAi?: boolean;
   managerAvatar: Record<string, unknown> | null;
   evidence: EvidenceItem[];
 }
 
 export interface Sanction {
-  id: string; teamId: string; teamName: string; managerName: string | null;
+  id: string; teamId: string; teamName: string; managerName: string | null; coachIsAi?: boolean;
   kind: string; amount: number; reason: string; evidence: string | null;
   issuedBy: string; status: string; gameDate: string;
 }
@@ -221,7 +223,7 @@ export interface GrantsData {
   pitchThreshold: number;
   kinds: Array<{ kind: string; label: string; targeted: boolean; seasonEnd: boolean }>;
   teams: Array<{
-    teamId: string; teamName: string; managerName: string | null;
+    teamId: string; teamName: string; managerName: string | null; coachIsAi?: boolean;
     vMinusu: boolean; hristePodHranici: boolean;
   }>;
 }

@@ -124,10 +124,15 @@ npx wrangler d1 execute prales-db-test --remote --file /tmp/query.sql
 
 ### Cron triggers
 - **Plán: Workers Paid ($5/měs)** — limit **250 cron triggers/účet**, prostor je volný
-- Produkce (`wrangler.toml` top level): **13 cronů** (0 3, 0 5, 0 6, 0 10, 0 11, 0 14, 0 16, 5 16, 20 16, 0 17, 5 17, 20 17, 30 * * * *) — můžeš přidávat další
+- Produkce (`wrangler.toml` top level): **16 cronů** (0 3, 0 5, 0 6, 0 7, 0 10, 0 11, 45 12, 0 14, 0 16, 5 16, 20 16, 0 17, 5 17, 20 17, 15 * * * *, 30 * * * *) — můžeš přidávat další
 - `30 * * * *` = Telefon každou hodinu (zprávy „jen tak" a odložené zprávy hráčů, `messaging/casual-messages.ts`).
   V `index.ts` se zpracuje hned na začátku a skončí `return`: bloky níž se řídí jen pražskou hodinou
   (pohár od poledne) a hodinový cron by je spouštěl každou hodinu.
+- **AI trenéři** (`ai-coach/jobs.ts`, od 2026-10-25), taky s `return` hned na začátku `index.ts`:
+  `0 7` sestavy na dnešní zápasy a v herní pondělí týdenní správa klubu, `45 12` chybějící sestavy,
+  `15 * * * *` hodinová práce (odpovědi na nabídky, trh, přáteláky; v 18:xx v Praze ne, fronta patří kolu).
+  Cron jen rozešle zprávy `ai_coach` do MATCH_QUEUE, jeden klub = jedna zpráva. Přepínač
+  `ai_coach_mode` v CACHE_KV (`off` | `shadow` | `on`), převzetí opuštěných klubů vypíná `ai_club_takeover = off`.
 - **Ligové kolo je v 18:00 v Praze: v létě 16:xx UTC, v zimě 17:xx UTC.** Které z dvojice
   crony hraje, rozhoduje skutečná pražská hodina (`lib/match-tick-schedule.ts`); dřív se
   v zimě hrálo v 17:00, hodinu před rozpisem (oprava 2026-10-24).
@@ -139,7 +144,7 @@ npx wrangler d1 execute prales-db-test --remote --file /tmp/query.sql
   hodinou (`Intl.DateTimeFormat` s `Europe/Prague` v `index.ts`), ne samotným cronem.
   Pohár se **neposouvá v nočním ticku** — od 2026-08-28 to `daily-tick.ts` nedělá, jinak by se
   kolo odbylo v 5 ráno, než kdokoli vstane.
-- Testing (`[env.testing.triggers]`): **od 2026-08-17 zrcadlí produkci, teď 13 cronů**.
+- Testing (`[env.testing.triggers]`): **od 2026-08-17 zrcadlí produkci, teď 16 cronů**.
   Dřívější pravidlo `crons = []` vzniklo kvůli limitu Free plánu (5/účet) a je zastaralé.
   Ověřeno přes Cloudflare API: účet je na Workers Paid, napříč workery běželo 8 cronů,
   po přidání testingu je jich 15 z 250.
