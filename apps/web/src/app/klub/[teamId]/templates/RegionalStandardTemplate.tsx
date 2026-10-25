@@ -20,6 +20,7 @@ import { BadgePreview, JerseyPreview, ShortsPreview, SocksPreview } from "@/comp
 import type { BadgePattern } from "@/components/ui";
 import { ClubScarf } from "@/components/team/club-scarf";
 import { ManagerFace } from "../ManagerFace";
+import { coachDisplayName } from "@/lib/coach-name";
 import { TacticalPitch } from "../TacticalPitch";
 import { StadiumPhotoCard } from "../StadiumPhotoCard";
 import { ClubAudioPlayer } from "../ClubAudioPlayer";
@@ -1287,7 +1288,7 @@ export function RegionalStandardTemplate({
                       <div className="text-sm font-heading font-bold uppercase text-[var(--club-ink)]">Hlavní trenér</div>
                       <div className="font-heading font-extrabold text-base text-slate-900 break-words">
                         <Link href={`${base}/trener`} className="hover:underline">
-                          {manager.name}
+                          {coachDisplayName(manager.name, manager.coachIsAi)}
                         </Link>
                       </div>
                       <div className="text-sm text-slate-500">{manager.age} let · Licence {manager.licence}</div>

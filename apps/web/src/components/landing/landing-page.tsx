@@ -34,7 +34,7 @@ const MOMENTS = [
   ["Kabina", "Každý hráč má práci, povahu a vlastní život. Útočník má ranní směnu, brankář včera zavíral hospodu. Na hřišti se to pozná."],
   ["Zápas", "Sestava, taktika a střídání. Zápas sleduješ s komentářem, který patří na okres, a po něm tě čeká rozhovor pro místní noviny."],
   ["Klub", "Jméno, barvy, dres i stadion. Jednáš s místními firmami o sponzoringu, hlídáš rozpočet a staráš se o fanoušky."],
-  ["Liga", "Vaše soutěž má předsedu, schůze a hlasování. Pod přeborem hraje III. třída, nejlepší postupují, nejhorší padají."],
+  ["Liga", "Vaše soutěž má předsedu, schůze a hlasování. Pod přeborem hraje III. třída."],
 ];
 
 function czNumber(n: number): string {
@@ -110,7 +110,7 @@ export function LandingPage({ redirectPlayers = true }: { redirectPlayers?: bool
       </div>
     </section>}
 
-    <section className={styles.friends}><div><p className={styles.eyebrow}>CELÁ KABINA, JEDNA LIGA</p><h2>V kabině jste experti.<br /><em>Tak to ukažte v lize.</em></h2><p>Každý z party vede vlastní klub, všichni hrajete stejnou soutěž. Derby má dohru v kabině, na tréninku i v hospodě. Volná místa v lize zatím obsadí počítačové kluby, kamarády můžeš zvát postupně.</p><Link href="/registrace" className={styles.primary}>Zakládám ligu pro naši partu ↗</Link></div><aside><span className={styles.number}>KDO ZALOŽÍ PRVNÍ</span><h3>Zakladatel.<br />Manažer.<br /><em>Předseda.</em></h3><p>Kdo v prázdném okrese založí klub jako první, povede ligu jako předseda na první období. Rozhoduje o pravidlech soutěže a zve ostatní kluby z okolí.</p><p className={styles.micro}>Další vedení ligy určují herní pravidla a volby.</p></aside></section>
+    <section className={styles.friends}><div><p className={styles.eyebrow}>CELÁ KABINA, JEDNA LIGA</p><h2>V kabině jste experti.<br /><em>Tak to ukažte v lize.</em></h2><p>Každý z party vede vlastní klub, všichni hrajete stejnou soutěž. Derby má dohru v kabině, na tréninku i v hospodě. Volné kluby v lize zatím vedou AI trenéři, kamarády můžeš zvát postupně.</p><Link href="/registrace" className={styles.primary}>Zakládám ligu pro naši partu ↗</Link></div><aside><span className={styles.number}>KDO ZALOŽÍ PRVNÍ</span><h3>Zakladatel.<br />Manažer.<br /><em>Předseda.</em></h3><p>Kdo v prázdném okrese založí klub jako první, povede ligu jako předseda na první období. Rozhoduje o pravidlech soutěže a zve ostatní kluby z okolí.</p><p className={styles.micro}>Další vedení ligy určují herní pravidla a volby.</p></aside></section>
 
     <section id="okresy" className={styles.steps} aria-labelledby="districts-title">
       <div className={styles.sectionTop}><p className={styles.eyebrow}>OKRESY VE HŘE</p><h2 id="districts-title">Vyber svůj okres.</h2></div>
@@ -138,9 +138,9 @@ export function LandingPage({ redirectPlayers = true }: { redirectPlayers?: bool
     <section className={styles.faq}><h2>Ještě než pískneme začátek.</h2>{[
       ["Kolik to stojí?", "Nic. Hra je zdarma a hraje se v prohlížeči, na mobilu i na počítači. Nic se neinstaluje."],
       ["Kolik času to zabere?", "Pár minut denně. Zápasy se hrají dvakrát týdně v podvečer, mezi nimi řešíš trénink, sestavu, přestupy a telefon od hráčů."],
-      ["Musíme být celá parta hned od začátku?", "Nemusíte. Ligu můžeš rozjet sám a kamarády pozvat postupně. Volné kluby zatím vedou počítačoví manažeři. S vlastní partou ale mají derby úplně jiný náboj."],
+      ["Musíme být celá parta hned od začátku?", "Nemusíte. Ligu můžeš rozjet sám a kamarády pozvat postupně. Volné kluby zatím vedou AI trenéři. S vlastní partou ale mají derby úplně jiný náboj."],
       ["Jsou to skutečné kluby a hráči?", "Obce, místní příjmení i firmy jsou skutečné. Hráči, jejich příběhy a výsledky vznikají ve hře. Nejde o kopii soupisek skutečných klubů."],
-      ["Co když je naše liga plná?", "Pod přeborem se otevře III. třída. Na konci sezóny dva nejlepší postupují a dva nejhorší sestupují."],
+      ["Co když je naše liga plná?", "Pod přeborem se otevře III. třída a nový klub začne v ní."],
     ].map(([q, a]) => <details key={q}><summary>{q}</summary><p>{a}</p></details>)}</section>
 
     <section className={styles.finalCta}><p className={styles.eyebrow}>SEZÓNA ZAČÍNÁ</p><h2>Tak kdo z vás<br /><em>to vezme do ruky?</em></h2><Link href="/registrace" className={styles.primary}>Založit ligu pro kabinu ↗</Link><p>Zdarma. Jméno, e-mail, heslo a jdeš na hřiště.</p></section>

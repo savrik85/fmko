@@ -6,6 +6,7 @@ import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
 import { SectionLabel } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
+import { coachDisplayName } from "@/lib/coach-name";
 
 interface Vote {
   id: string;
@@ -22,6 +23,8 @@ interface Vote {
     team_id: string;
     team_name: string;
     manager_name: string | null;
+    /** Trenér AI klubu: za jméno patří štítek „(AI)“. */
+    coach_is_ai?: boolean;
     manager_avatar: Record<string, unknown> | null;
     answer: "ano" | "ne";
   }>;
@@ -135,7 +138,7 @@ function VoteCard({ vote, teamId, token, onVoted }: { vote: Vote; teamId: string
                         {(voter.manager_name ?? voter.team_name)[0]}
                       </div>
                     )}
-                    <span className="text-micro text-muted text-center leading-tight line-clamp-1 w-full">{voter.manager_name ?? "—"}</span>
+                    <span className="text-micro text-muted text-center leading-tight line-clamp-1 w-full">{voter.manager_name ? coachDisplayName(voter.manager_name, voter.coach_is_ai === true) : "—"}</span>
                     <span className="text-micro font-heading font-bold text-ink text-center leading-tight line-clamp-2 w-full">{voter.team_name}</span>
                   </Link>
                 ))}

@@ -64,19 +64,20 @@ const LOADERS: Record<Exclude<DataKey, "preview">, (teamId: string) => Promise<u
   pubSession: (t) => apiFetch<{ session: PubSession | null }>(`/api/teams/${t}/pub-session`).then((d) => d.session),
   fanFeed: (t) => apiFetch<{ posts: FanPost[] }>(`/api/teams/${t}/fans/feed?limit=12`).then((d) => d.posts ?? []),
   fanGroups: (t) => apiFetch<FanGroupsData>(`/api/teams/${t}/fans/groups`),
-  hallOfFame: (t) => apiFetch<{ entries: Array<{ teamId: string; teamName: string; isHuman: boolean; total: number; gold: number; silver: number; bronze: number }> }>("/api/hall-of-fame")
+  hallOfFame: (t) => apiFetch<{ entries: Array<{ teamId: string; teamName: string; total: number; gold: number; silver: number; bronze: number }> }>("/api/hall-of-fame")
     .then((d): HallOfFameRank => {
-      const humans = (d.entries ?? []).filter((e) => e.isHuman);
-      const idx = humans.findIndex((e) => e.teamId === t);
-      const me = idx >= 0 ? humans[idx] : null;
+      // Stejné pořadí jako stránka Síně slávy: všechny kluby včetně AI.
+      const entries = d.entries ?? [];
+      const idx = entries.findIndex((e) => e.teamId === t);
+      const me = idx >= 0 ? entries[idx] : null;
       return {
         myRank: me ? idx + 1 : null,
         myTotal: me?.total ?? 0,
         myGold: me?.gold ?? 0,
         mySilver: me?.silver ?? 0,
         myBronze: me?.bronze ?? 0,
-        top3: humans.slice(0, 3).map((e, i) => ({ rank: i + 1, teamName: e.teamName, total: e.total })),
-        totalEntries: humans.length,
+        top3: entries.slice(0, 3).map((e, i) => ({ rank: i + 1, teamName: e.teamName, total: e.total })),
+        totalEntries: entries.length,
       };
     }),
   budget: (t) => apiFetch<BudgetData>(`/api/teams/${t}/budget`),

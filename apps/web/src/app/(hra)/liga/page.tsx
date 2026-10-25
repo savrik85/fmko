@@ -9,6 +9,7 @@ import { Spinner, SectionLabel, BadgePreview, PositionBadge, PageHeader, Tabs } 
 import type { BadgePattern } from "@/components/ui";
 import { PreseasonNotice } from "@/components/team/preseason-notice";
 import { LeagueStatsTab, type StatsData } from "@/components/league/league-stats";
+import { coachDisplayName } from "@/lib/coach-name";
 
 // ═══ Types ═══
 
@@ -56,7 +57,7 @@ interface AwardsSnapshot {
   champion?: { teamId: string; name: string | null } | null;
   playerOfSeason?: { id: string | null; name: string | null; reason: string | null };
   topScorer?: { id: string | null; name: string | null; goals: number };
-  managerOfSeason?: { teamId: string | null; name: string | null; reason: string | null };
+  managerOfSeason?: { teamId: string | null; name: string | null; coachIsAi?: boolean; reason: string | null };
   discovery?: { id: string | null; name: string | null; reason: string | null };
   bestEleven?: BestElevenEntry[];
 }
@@ -325,7 +326,7 @@ function PastSeasonView({ entry, myTeamId }: { entry: HistoryEntry; myTeamId: st
           {a.champion?.name && <PastAward icon="🏆" label="Mistr"><PastTeamLink teamId={a.champion.teamId} name={a.champion.name} /></PastAward>}
           {a.playerOfSeason?.name && <PastAward icon="⭐" label="Hráč sezóny" reason={a.playerOfSeason.reason}><span className="font-heading font-bold">{a.playerOfSeason.name}</span></PastAward>}
           {a.topScorer?.name && <PastAward icon="👟" label="Král střelců"><span className="font-heading font-bold">{a.topScorer.name}</span><span className="text-muted text-sm"> · {a.topScorer.goals} gólů</span></PastAward>}
-          {a.managerOfSeason?.name && <PastAward icon="🎩" label="Trenér sezóny" reason={a.managerOfSeason.reason}><span className="font-heading font-bold">{a.managerOfSeason.name}</span></PastAward>}
+          {a.managerOfSeason?.name && <PastAward icon="🎩" label="Trenér sezóny" reason={a.managerOfSeason.reason}><span className="font-heading font-bold">{coachDisplayName(a.managerOfSeason.name, a.managerOfSeason.coachIsAi === true)}</span></PastAward>}
           {a.discovery?.name && <PastAward icon="🌱" label="Objev sezóny" reason={a.discovery.reason}><span className="font-heading font-bold">{a.discovery.name}</span></PastAward>}
         </div>
       )}
@@ -549,12 +550,13 @@ function StandingsTab({ standings, teamId }: { standings: Standing[]; teamId: st
                 </td>
                 {/* Team */}
                 <td className="py-3 px-1.5" style={{ verticalAlign: "middle" }}>
-                  {row.teamId && !row.isAi ? (
+                  {/* AI klub je odkaz jako každý jiný klub, rozdíl je jen štítek u trenéra. */}
+                  {row.teamId ? (
                     <Link href={`/tym/${row.teamId}`} className={`font-heading font-bold hover:text-pitch-500 transition-colors ${row.isPlayer ? "text-pitch-600" : ""}`}>
                       {row.team}
                     </Link>
                   ) : (
-                    <span className={`font-heading font-bold ${row.isAi ? "text-muted" : ""}`}>{row.team}</span>
+                    <span className="font-heading font-bold">{row.team}</span>
                   )}
                 </td>
                 {/* Stats — hidden on mobile */}

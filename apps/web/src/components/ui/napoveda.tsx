@@ -89,7 +89,7 @@ const HELP: Record<string, HelpEntry> = {
       { heading: "Odkrytí hráče", text: "Stojí peníze. Ukáže detailní statistiky, bez odkrytí vidíš jen pozici a věk. U cizích hráčů vidíš atributy zaokrouhlené na 5 (rozmazané)." },
       { heading: "Nabídky od Místního kontaktu", text: "20% šance za kolo, že ti někdo doporučí hráče (hospoda, mládež, kamarád). Přijde SMS, hráč se objeví v přestupech." },
       { heading: "Hostování", text: "Půjčka hráče z jiného týmu na 30–90 dní. Hráč se po vypršení automaticky vrátí." },
-      { heading: "Kvalita podle velikosti obce", text: "Vesnice: základ 37. Obec: 39. Městys: 41. Město: 44. AI týmy mají kvalitu o 1 stupeň nižší." },
+      { heading: "Kvalita podle velikosti obce", text: "Vesnice: základ 37. Obec: 39. Městys: 41. Město: 44." },
       { text: "Platy hráčů: 10 + (rating/100) × 400 Kč/měsíc. Hráč s ratingem 50 stojí ~210 Kč/měsíc.", tip: true },
     ],
   },
@@ -175,7 +175,6 @@ const HELP: Record<string, HelpEntry> = {
     sections: [
       { text: "Tabulka všech týmů v tvé lize. Klikni na název pro detail týmu." },
       { heading: "Body", text: "V = 3, R = 1, P = 0. Při rovnosti bodů rozhoduje skóre." },
-      { heading: "AI týmy", text: "Počítačem řízené týmy mají kvalitu o 1 kategorii nižší než lidští hráči. Vesnické AI = základ 35 místo 37." },
     ],
   },
   "/kalendar": {
@@ -362,7 +361,7 @@ export function NapovedaOnboarding({ step }: { step: string }) {
         { heading: "Obec (500–2 000)", text: "Základ: 39. Tréninky: 400 Kč. Dotace: 10 000/měs. Vyvážený start." },
         { heading: "Městys (2 000–5 000)", text: "Základ: 41. Tréninky: 600 Kč. Dotace: 15 000/měs. Silnější liga." },
         { heading: "Město (5 000+)", text: "Základ: 44. Tréninky: 1 000 Kč. Dotace: 25 000/měs. Nejsilnější soupeři." },
-        { text: "Všechny týmy ve tvé lize budou ze stejného okresu. AI týmy mají kvalitu o 1 stupeň nižší než ty.", tip: true },
+        { text: "Všechny týmy ve tvé lize budou ze stejného okresu.", tip: true },
       ],
     },
     manager: {

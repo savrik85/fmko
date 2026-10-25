@@ -11,6 +11,7 @@ import { PreMatchCard } from "@/components/relations/RelationSection";
 import { ForeignSquad } from "./ForeignSquad";
 import { TransferOverview } from "./TransferOverview";
 import { isLightColor, readableOnLight, bestTextOn } from "@/lib/team-color";
+import { coachDisplayName } from "@/lib/coach-name";
 
 const POS_LABELS: Record<string, string> = { GK: "BRA", DEF: "OBR", MID: "ZÁL", FWD: "ÚTO" };
 const POS_ORDER: Record<string, number> = { GK: 0, DEF: 1, MID: 2, FWD: 3 };
@@ -402,7 +403,7 @@ export default function TeamPage() {
                 )}
               </div>
               <div className="min-w-0 flex-1">
-                <div className="font-heading font-bold text-lg truncate group-hover:underline">{manager.name}</div>
+                <div className="font-heading font-bold text-lg truncate group-hover:underline">{coachDisplayName(manager.name, manager.coachIsAi === true)}</div>
                 {manager.birthplace && <div className="text-sm text-muted">{manager.birthplace}</div>}
                 {manager.age && <div className="text-sm text-muted">{manager.age} let</div>}
                 <div className="flex gap-3 mt-2 text-xs">

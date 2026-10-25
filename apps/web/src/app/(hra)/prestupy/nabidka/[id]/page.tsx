@@ -13,6 +13,7 @@ import { ActionBar } from "./components/ActionBar";
 import { MessageDialog } from "./components/MessageDialog";
 import { type PlayerInterest } from "./components/InterestBadge";
 import { markSingleOfferSeen } from "@/lib/seen-offers";
+import { coachDisplayName } from "@/lib/coach-name";
 import { triggerMenuBadgesRefresh } from "@/hooks/use-menu-badges";
 import { sellOnShare, type TransferTerms } from "@okresni-masina/shared";
 import type { TermsValue } from "@/components/transfers/transfer-terms";
@@ -308,8 +309,8 @@ export default function OfferDetailPage() {
           myTeamId={teamId ?? ""}
           fromTeamId={offer.from_team_id}
           toTeamId={offer.to_team_id}
-          fromManager={fromManager ? { avatar: fromManager.avatar, name: fromManager.name } : null}
-          toManager={toManager ? { avatar: toManager.avatar, name: toManager.name } : null}
+          fromManager={fromManager ? { avatar: fromManager.avatar, name: coachDisplayName(fromManager.name, fromManager.coachIsAi === true) } : null}
+          toManager={toManager ? { avatar: toManager.avatar, name: coachDisplayName(toManager.name, toManager.coachIsAi === true) } : null}
           hasSwap={offeredPlayers.length > 0}
         />
       </div>

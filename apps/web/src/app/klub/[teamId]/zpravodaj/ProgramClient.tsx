@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import type { ClubWebsiteProgramPage, ClubWebsiteProgramTeam, ClubWebsiteTemplate } from "@okresni-masina/shared";
 import { ClubSubpageShell, type Skin } from "../templates/skins";
 import { EMPTY, PlayerLink, TeamLink, formatDate, formatDateTime } from "../templates/shared";
+import { coachDisplayName } from "@/lib/coach-name";
 
 type FormResult = "V" | "R" | "P";
 type FormBox = { base: string } & Record<FormResult, string>;
@@ -113,7 +114,7 @@ function TeamFacts({ team, skin, box, pad }: { team: ClubWebsiteProgramTeam; ski
       <table className={skin.table}>
         <tbody>
           {team.village && <FactRow skin={skin} label="Obec">{team.village}</FactRow>}
-          {team.coachName && <FactRow skin={skin} label="Trenér">{team.coachName}</FactRow>}
+          {team.coachName && <FactRow skin={skin} label="Trenér">{coachDisplayName(team.coachName, team.coachIsAi)}</FactRow>}
           <FactRow skin={skin} label="V tabulce">{standing ?? "zatím bez zápasu"}</FactRow>
           <FactRow skin={skin} label="Forma">
             {team.form.length > 0 ? (

@@ -920,7 +920,6 @@ export default function ObecPage() {
                           />
                           <span className="truncate max-w-[140px]">{t.name}</span>
                           {t.id === teamId && <span className="text-xs text-gray-500">(my)</span>}
-                          {t.user_id === "ai" && <span className="text-xs text-gray-400">(AI)</span>}
                         </span>
                       </td>
                       <td className="py-2 px-2 text-right tabular-nums font-semibold">

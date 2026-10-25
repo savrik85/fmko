@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { BadgePreview, type BadgePattern } from "@/components/ui/badge-preview";
+import { coachDisplayName } from "@/lib/coach-name";
 
 export interface TeamSummary {
   id: string;
@@ -23,6 +24,8 @@ export interface TeamSummary {
 export interface ManagerSummary {
   id: string;
   name: string;
+  /** Trenér AI klubu: za jméno patří štítek „(AI)“. */
+  coachIsAi?: boolean;
   avatar: Record<string, unknown>;
   coaching: number;
   motivation: number;
@@ -59,7 +62,7 @@ export function TeamSide({
           <div className="font-heading font-bold text-base truncate max-w-full">{manager.name}</div>
         ) : manager ? (
           <Link href={`/manazer/${team.id}`} className="font-heading font-bold text-base hover:text-pitch-500 underline decoration-pitch-500/20 transition-colors truncate max-w-full">
-            {manager.name}
+            {coachDisplayName(manager.name, manager.coachIsAi === true)}
           </Link>
         ) : (
           <div className="font-heading font-bold text-base text-muted italic">{team.is_virtual ? "Cizí klub" : "bez trenéra"}</div>

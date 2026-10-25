@@ -409,8 +409,9 @@ export default function PlayerDetailPage() {
   // takže bez téhle výjimky by na svého hráče nabízel přestup a přidával si ho do
   // sledovaných — obojí sám sobě.
   const jsemKmenovyKlub = !!player?.loan?.isParentClub;
-  const isForeignHumanPlayer = !isOwnPlayer && !jsemKmenovyKlub && playerTeam && playerTeam.user_id !== "ai";
-  const canSendOffer = isForeignHumanPlayer || isLoanedToUs;
+  // Nabídka jde na hráče kteréhokoli cizího klubu, AI kluby nevyjímaje.
+  const isForeignClubPlayer = !isOwnPlayer && !jsemKmenovyKlub && !!playerTeam;
+  const canSendOffer = isForeignClubPlayer || isLoanedToUs;
 
   useEffect(() => {
     if (!prefillOffer || !canSendOffer) return;
