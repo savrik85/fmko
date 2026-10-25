@@ -7,8 +7,8 @@ import type { Bindings } from "../index";
 import { gameExpiry } from "../lib/game-time";
 import { logger } from "../lib/logger";
 import { seedFromString } from "../lib/seed";
-import { sendSystemSMS } from "../messaging/system-sms";
 import { nactiIncidentniAbsence } from "./absence-hracu";
+import { sendIncidentSystemSms } from "./club-messages";
 import { oznamIncident, zapisIncident } from "./dopady";
 import { promluvil, sanceHroziciho } from "./hrozi";
 import { smsIncidentu } from "./incident-db";
@@ -90,7 +90,7 @@ export async function vyhodnotHrozici(env: Bindings, stav: StavKlubu): Promise<n
         stav.kadr.map((h) => ({ playerId: h.id, role: "kadr" as const, fact: fakt, ochota: 50, until }))))
         .catch((e) => logger.warn({ module: M }, `znalost nesplněné hrozby ${r.id}`, e));
     }
-    await sendSystemSMS(db, stav.teamId, SMS_ROLE_KUSTOD, `🍺 ${fakt}`, smsIncidentu(r.id))
+    await sendIncidentSystemSms(db, stav.teamId, SMS_ROLE_KUSTOD, `🍺 ${fakt}`, smsIncidentu(r.id))
       .catch((e) => logger.warn({ module: M }, `SMS nesplněné hrozby ${r.id}`, e));
   }
   return stalo;

@@ -193,3 +193,30 @@ describe("sestava z rozhodnutí", () => {
     expect(text).toContain("UNAVAILABLE (cannot play): P21 MID injured");
   });
 });
+
+describe("slib místa v sestavě (nespokojený hráč)", () => {
+  it("slíbený hráč hraje od začátku, i když ho model šetří, a stáhnout ho jde až po poločase", () => {
+    // P19 (záložník 42) by se do základu jinak nedostal.
+    const plain = assembleLineup(context(), fallbackMatchDecision(context()), squadIds(context()));
+    expect(plain.players.some((p) => p.playerId === "player-19")).toBe(false);
+
+    const ctx = context({ promisedStarters: ["P19"] });
+    const decision = {
+      ...fallbackMatchDecision(ctx),
+      rest: ["P19"],
+      mustStart: [],
+      plan: [
+        { fromMinute: 30, when: "minute" as const, action: "sub" as const, out: "P19", in: "P13" },
+        { fromMinute: 60, when: "minute" as const, action: "sub" as const, out: "P19", in: "P13" },
+      ],
+    };
+    const lineup = assembleLineup(ctx, decision, squadIds(ctx));
+    expectLegalLineup(ctx, lineup);
+    expect(lineup.players.some((p) => p.playerId === "player-19")).toBe(true);
+    expect(lineup.matchPlan.map((r) => r.fromMinute)).toEqual([60]);
+    expect(lineup.notes.join(" ")).toContain("slíbený hráč musí odehrát aspoň 45 minut");
+    // Náhradní pravidlo slíbeného hráče nešetří a počítá s ním, model o slibu ví z promptu.
+    expect(fallbackMatchDecision(ctx).mustStart[0]).toBe("P19");
+    expect(renderMatchPrompt(ctx)).toContain("PROMISES: you promised P19 a starting place");
+  });
+});

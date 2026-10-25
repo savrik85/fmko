@@ -13,6 +13,7 @@ import { seedFromString } from "../lib/seed";
 import { sendSystemSMS } from "../messaging/system-sms";
 import { recordTransaction } from "../season/finance-processor";
 import { denPlus, prikazAbsence } from "./absence-hracu";
+import { clubReceivesMessages } from "./club-messages";
 import { uzavriProsleIncidenty } from "./dopady";
 import { SLOUPCE_INCIDENTU, smsIncidentu, type IncidentRadek } from "./incident-db";
 import { nazevIncidentu } from "./katalog";
@@ -45,7 +46,9 @@ async function prechodZPolicie(db: D1Database, id: string, nastav: string, param
   return (r?.meta?.changes ?? 0) > 0;
 }
 
+/** SMS a notifikace s výsledkem šetření. AI klub se nic nedozví (club-messages.ts). */
 async function oznamVysledek(env: Bindings, teamId: string, incidentId: string, zprava: string): Promise<void> {
+  if (!(await clubReceivesMessages(env.DB, teamId))) return;
   await sendSystemSMS(env.DB, teamId, SMS_ROLE_POLICIE, `🚓 ${zprava}`, smsIncidentu(incidentId))
     .catch((e) => logger.warn({ module: M }, `SMS policie ${incidentId}`, e));
   await createNotification(

@@ -1,11 +1,12 @@
 /**
  * Admin AI trenérů: deník rozhodnutí, přepínač režimu a ruční spuštění úlohy.
  *
- * GET  /api/admin/ai-coach/decisions?teamId=&kind=&limit=   poslední rozhodnutí
+ * GET  /api/admin/ai-coach/decisions?teamId=&kind=&only=errors|fallback&limit=   poslední rozhodnutí
  * GET  /api/admin/ai-coach/clubs                            AI kluby s povahou a chybovostí
+ * GET  /api/admin/ai-coach/status                           stav pro přehled (24 h, chyby, převzetí)
  * GET  /api/admin/ai-coach/mode                             režim po oblastech
  * POST /api/admin/ai-coach/mode                             { mode } nebo { match, weekly, market }
- * POST /api/admin/ai-coach/run?teamId=&task=match|weekly|hourly&dryRun=1
+ * POST /api/admin/ai-coach/run?teamId=&task=match|weekly|hourly|market&dryRun=1   (market = trh hned, bez dryRun)
  */
 
 import { Hono } from "hono";
@@ -37,6 +38,9 @@ function parseJson(raw: unknown): unknown {
 adminAiCoachRouter.get("/decisions", async (c) => {
   const teamId = c.req.query("teamId") || null;
   const kind = c.req.query("kind") || null;
+  // only=errors: jen rozhodnutí s chybou, only=fallback: jen ta bez modelu.
+  const only = c.req.query("only");
+  const onlyFilter = only === "errors" || only === "fallback" ? only : null;
   const full = c.req.query("full") === "1";
   const limit = Math.max(1, Math.min(200, Number(c.req.query("limit") ?? 50) || 50));
   const rows = await c.env.DB.prepare(
@@ -44,8 +48,9 @@ adminAiCoachRouter.get("/decisions", async (c) => {
             d.used_fallback, d.error, d.tokens_in, d.tokens_out, d.latency_ms, d.created_at${full ? ", d.input_summary" : ""}
        FROM ai_coach_decisions d LEFT JOIN teams t ON t.id = d.team_id
       WHERE (?1 IS NULL OR d.team_id = ?1) AND (?2 IS NULL OR d.kind = ?2)
+        AND (?4 IS NULL OR (?4 = 'errors' AND d.error IS NOT NULL) OR (?4 = 'fallback' AND d.used_fallback = 1))
       ORDER BY d.created_at DESC LIMIT ?3`,
-  ).bind(teamId, kind, limit).all<Record<string, unknown>>()
+  ).bind(teamId, kind, limit, onlyFilter).all<Record<string, unknown>>()
     .catch((e) => { logger.error({ module: M }, "načtení deníku", e); return null; });
   if (!rows) return c.json({ error: "Deník se nepodařilo načíst" }, 500);
   return c.json({
@@ -126,6 +131,16 @@ adminAiCoachRouter.get("/clubs", async (c) => {
   });
 });
 
+adminAiCoachRouter.get("/status", async (c) => {
+  const { loadCoachStatus } = await import("../ai-coach/status");
+  try {
+    return c.json(await loadCoachStatus(c.env.DB, c.env.CACHE_KV, new Date()));
+  } catch (e) {
+    logger.error({ module: M }, "stav AI trenérů", e);
+    return c.json({ error: "Stav AI trenérů se nepodařilo načíst" }, 500);
+  }
+});
+
 adminAiCoachRouter.get("/mode", async (c) => {
   const raw = await c.env.CACHE_KV.get(COACH_MODE_KEY)
     .catch((e) => { logger.warn({ module: M }, "čtení přepínače", e); return null; });
@@ -151,11 +166,27 @@ const TASKS: readonly CoachTask[] = ["match", "weekly", "hourly"];
 
 adminAiCoachRouter.post("/run", async (c) => {
   const teamId = c.req.query("teamId");
-  const task = c.req.query("task") as CoachTask | undefined;
+  const rawTask = c.req.query("task");
   const dryRun = c.req.query("dryRun") === "1";
   const model = c.req.query("model") || undefined;
   if (!teamId) return c.json({ error: "Chybí teamId" }, 400);
-  if (!task || !TASKS.includes(task)) return c.json({ error: "task musí být match, weekly nebo hourly" }, 400);
+
+  // Trh hned, mimo rozvrh (hodina, denní šance): na vyzkoušení nákupů a prodeje. Řídí se režimem
+  // oblasti trh, nanečisto jde jen přes režim shadow (trh vlastní „nanečisto" nemá).
+  if (rawTask === "market") {
+    if (dryRun) return c.json({ error: "Trh nanečisto jde jen přes režim shadow v oblasti trh" }, 400);
+    const { runTransferMarket } = await import("../ai-coach/transfer-market");
+    try {
+      const result = await runTransferMarket(c.env, teamId, new Date(), { ignoreSchedule: true, model });
+      return c.json({ ok: true, task: "market", result });
+    } catch (e) {
+      logger.error({ module: M, teamId }, "ruční trh AI klubu selhal", e);
+      return c.json({ error: "Trh selhal, podrobnosti jsou v logu" }, 500);
+    }
+  }
+
+  const task = rawTask as CoachTask | undefined;
+  if (!task || !TASKS.includes(task)) return c.json({ error: "task musí být match, weekly, hourly nebo market" }, 400);
 
   const { currentGameDay, runAiCoachTask, taskDay } = await import("../ai-coach/jobs");
   const gameDay = await currentGameDay(c.env.DB);

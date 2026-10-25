@@ -13,8 +13,8 @@ import { gameExpiry } from "../lib/game-time";
 import { logger } from "../lib/logger";
 import { seedFromString } from "../lib/seed";
 import { getOrCreatePlayerConversation } from "../messaging/ai-player-spawn";
-import { sendPlayerSMS } from "../messaging/system-sms";
 import { denPlus } from "./absence-hracu";
+import { clubReceivesMessages, sendIncidentPlayerSms } from "./club-messages";
 import { smsIncidentu } from "./incident-db";
 import { nazevIncidentu } from "./katalog";
 import { OKNO_VLIVU_DNI } from "./nastaveni";
@@ -32,6 +32,8 @@ export async function ozviSeObvineni(
   // Bez modelu by hráč napsal a na odpověď trenéra už by nikdo nereagoval.
   if (!(await isAiEnabled(env))) return 0;
   const db = env.DB;
+  // AI trenér s hráči nepíše, vlákno křivdy by nikdo nečetl.
+  if (!(await clubReceivesMessages(db, t.teamId))) return 0;
   const den = opts.denObvineni ?? denPlus(t.gameDate, -1);
 
   const rows = await db.prepare(
@@ -79,7 +81,7 @@ async function otevriKrivdu(db: D1Database, teamId: string, inc: RadekIncidentu,
   if ((narok?.meta?.changes ?? 0) === 0) return false;
 
   const rng = createRng(seedFromString(`krivda|${inc.id}|${playerId}`));
-  await sendPlayerSMS(db, teamId, ref, text(rng, "krivda_obvineny", { nazev: nazevIncidentu(inc.kind) }), smsIncidentu(inc.id))
+  await sendIncidentPlayerSms(db, teamId, ref, text(rng, "krivda_obvineny", { nazev: nazevIncidentu(inc.kind) }), smsIncidentu(inc.id))
     .catch((e) => logger.warn({ module: M }, `SMS křivdy ${inc.id}`, e));
   return true;
 }

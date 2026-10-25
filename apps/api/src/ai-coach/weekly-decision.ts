@@ -2,14 +2,22 @@
  * Týdenní správa AI klubu: čisté funkce bez databáze (rozhodnutí, kontrola, plán akcí).
  *
  * Model nebo náhradní pravidlo vybírá z nabídky (trénink, vstupné, trávník, stavby,
- * vybavení, zaměstnanci, akademie, bannery, přesuny s U21). Kód hlídá rozpočet: placené
- * akce se berou jen do výše peněz nad rezervou, kterou si trenér drží podle šetrnosti.
+ * vybavení, zaměstnanci, akademie, bannery, přesuny s U21, občerstvení). Kód hlídá rozpočet:
+ * placené akce se berou jen do výše peněz nad rezervou, kterou si trenér drží podle šetrnosti.
  *
  * Přestupní kurz na týden (kupovat / držet / prodávat, posty k posílení, koho nabídnout)
  * volí taky model, ale nic se podle něj hned neprovede: řídí se jím denní práce na trhu
  * (`transfer-market.ts`). Ceny dál počítá jen kód (spec 3.7).
+ *
+ * Bufet (provoz, kvalita, cena a sklad u každého produktu) má vlastní meze a kontrolu
+ * v `concession-decision.ts`; sklad se platí z peněz nad rezervou spolu s ostatními nákupy.
  */
 
+import {
+  concessionPurchases, concessionSchema, concessionSettingActions, concessionTopUpPlan, fallbackConcessions,
+  fixedConcessions, hasConcessionChoice, renderConcessionPrompt, validateConcessions,
+  type ConcessionAction, type ConcessionContext, type ConcessionDecision, type ConcessionTopUpPlan,
+} from "./concession-decision";
 import type { AiCoachProfile } from "./profile";
 
 export const TRAINING_FOCUS = ["conditioning", "technique", "tactics", "match_practice", "mixed"] as const;
@@ -124,6 +132,8 @@ export interface WeeklyContext {
   banners: { active: number; max: number; offers: BannerOption[] };
   u21: { exists: boolean; aTeamSize: number; promote: U21MoveOption[]; sendDown: U21MoveOption[] };
   transfers: { squadSize: number; targetSize: number; needs: TransferNeedInfo[]; surplus: SurplusOption[] };
+  /** Bufet: provoz, produkty, kvality a meze cen i nákupu (concession-decision.ts). */
+  concessions: ConcessionContext;
 }
 
 export interface WeeklyDecision {
@@ -140,10 +150,12 @@ export interface WeeklyDecision {
   promote: string[];
   sendDown: string[];
   transfers: { stance: TransferStance; focus: TransferPosition[]; sell: string[] };
+  concessions: ConcessionDecision;
   reasoning: string;
 }
 
 export type WeeklyAction =
+  | ConcessionAction
   | { kind: "training"; focus: TrainingFocus; intensity: TrainingIntensityChoice; sessions: number; approach: TrainingApproachChoice }
   | { kind: "ticket_price"; price: number; from: number }
   | { kind: "pitch_care_mode"; mode: Exclude<PitchCareChoice, "keep"> }
@@ -164,6 +176,8 @@ export interface WeeklyPlan {
   totalCost: number;
   /** Přestupní kurz pro trh na tento týden. */
   transfers: TransferPlan;
+  /** Bufet na týden: podle něj se sklad dorovná před domácím zápasem (concessions.ts). */
+  concessions: ConcessionTopUpPlan;
 }
 
 const MAX_STADIUM = 2;
@@ -285,7 +299,8 @@ export function fallbackWeeklyDecision(ctx: WeeklyContext): WeeklyDecision {
   return {
     training: { focus, intensity, sessions, approach },
     ticketPrice, pitchMaintenance, pitchCareMode, stadium, equipmentUpgrades, equipmentRepairs, hire, academy, banners,
-    promote, sendDown, transfers: fallbackTransfers(ctx), reasoning: "fallback rule",
+    promote, sendDown, transfers: fallbackTransfers(ctx), concessions: fallbackConcessions(ctx.concessions, p),
+    reasoning: "fallback rule",
   };
 }
 
@@ -409,19 +424,24 @@ export function validateWeeklyDecision(raw: unknown, ctx: WeeklyContext): Weekly
       promote: sets.promote as string[],
       sendDown: sets.sendDown as string[],
       transfers: validateTransfers(r.transfers, ctx, rejected),
+      concessions: validateConcessions(r.concessions, ctx.concessions, ctx.profile, rejected),
       reasoning: typeof r.reasoning === "string" ? r.reasoning.slice(0, 600) : "",
     },
   };
 }
 
 /**
- * Z rozhodnutí udělá seznam akcí. Placené akce jdou v pořadí opravy → trávník → nábor →
- * vybavení → stavby a berou se jen do výše `spendable` (peníze nad rezervou).
+ * Z rozhodnutí udělá seznam akcí. Placené akce jdou v pořadí opravy → trávník → sklad bufetu →
+ * nábor → vybavení → stavby a berou se jen do výše `spendable` (peníze nad rezervou).
  */
 export function planWeeklyActions(ctx: WeeklyContext, d: WeeklyDecision): WeeklyPlan {
   const actions: WeeklyAction[] = [];
   const skipped: WeeklyPlan["skipped"] = [];
   actions.push({ kind: "training", ...d.training });
+  // Rozhodnutí z doby před bufetem (uložené plány, testy) ho nemá: bufet zůstane, jak je.
+  const concessions = d.concessions ?? fixedConcessions(ctx.concessions);
+  // Provoz, kvalita a cena nic nestojí a jdou před nákupem: sklad se kupuje do zvolené kvality.
+  actions.push(...concessionSettingActions(ctx.concessions, concessions));
 
   if (d.ticketPrice !== "keep") {
     const price = nextTicketPrice(ctx.fans.ticketPrice, ctx.fans.villageBasePrice, d.ticketPrice);
@@ -477,6 +497,16 @@ export function planWeeklyActions(ctx: WeeklyContext, d: WeeklyDecision): Weekly
     const m = PITCH_MAINTENANCE_COST[d.pitchMaintenance];
     if (pay(`pitch:${d.pitchMaintenance}`, m.cost)) actions.push({ kind: "pitch_maintenance", level: d.pitchMaintenance, cost: m.cost });
   }
+  // Sklad bufetu: co se vejde do peněz nad rezervou, přednostně produkty s největším ziskem.
+  // Zboží se prodá do týdne, proto jde před nábor a stavby.
+  for (const purchase of concessionPurchases(ctx.concessions, concessions)) {
+    const item = `stock:${purchase.key}`;
+    const quantity = Math.min(purchase.quantity, Math.floor(Math.max(0, left) / purchase.unitCost));
+    if (quantity < purchase.quantity) skipped.push({ item, reason: `rezerva (koupí ${quantity} z ${purchase.quantity} ks)` });
+    if (quantity <= 0) continue;
+    const cost = quantity * purchase.unitCost;
+    if (pay(item, cost)) actions.push({ kind: "concession_stock", key: purchase.key, tier: purchase.tier, quantity, unitCost: purchase.unitCost, cost });
+  }
   for (const key of d.hire) {
     const o = ctx.staff.candidates.find((x) => x.key === key);
     if (!o) continue;
@@ -509,7 +539,10 @@ export function planWeeklyActions(ctx: WeeklyContext, d: WeeklyDecision): Weekly
     focus: course.focus,
     sellIds: course.sell.map((k) => surplusById.get(k)).filter((id): id is string => !!id),
   };
-  return { actions, skipped, totalCost: total, transfers };
+  return {
+    actions, skipped, totalCost: total, transfers,
+    concessions: concessionTopUpPlan(ctx.concessions, concessions, ctx.profile, ctx.finance.reserve),
+  };
 }
 
 /**
@@ -542,7 +575,7 @@ export function buildTrainingPlan(
 
 export const WEEKLY_SYSTEM_PROMPT = [
   "You are the head coach and manager of an amateur Czech district football club in a football management game.",
-  "Every Monday you run the club: training, ticket price, pitch, stadium, equipment, staff, youth academy, sponsors, squad moves between the A-team and the U21 team and your transfer course for the week.",
+  "Every Monday you run the club: training, ticket price, pitch, refreshment stand, stadium, equipment, staff, youth academy, sponsors, squad moves between the A-team and the U21 team and your transfer course for the week.",
   "Decide like a sensible real club manager with YOUR personality. Spend money only on things that help the club; never risk the club's finances.",
   "You only choose among the listed options (by their keys). The game checks every rule and the money reserve itself.",
   "Answer with exactly one JSON object and nothing else.",
@@ -585,6 +618,8 @@ export function renderWeeklyPrompt(ctx: WeeklyContext): string {
   L.push(`FANS: satisfaction ${ctx.fans.satisfaction}/100. Ticket price ${ctx.fans.ticketPrice} CZK (village standard ${ctx.fans.villageBasePrice} CZK)${ctx.fans.daysSinceTicketChange !== null ? `, last changed ${ctx.fans.daysSinceTicketChange} days ago` : ""}. Options: keep / lower / raise (by about 10 %). Fans dislike price rises, especially when unhappy.`);
   L.push(`PITCH: condition ${ctx.pitch.condition}/100 (${ctx.pitch.type}), drops about 1 point a day without a mower${ctx.pitch.hasMower ? " (you have a mower)" : ""}. Maintenance now: none / basic (+10, 1,600 CZK) / thorough (+25, 3,000 CZK) / renovation (+50, 5,000 CZK). Pitch care mode (heating/irrigation on match days): ${ctx.pitch.careMode}${ctx.pitch.hasCareEquipment ? "" : " (you own no heating or irrigation)"}; options keep / auto / manual / off.`);
   L.push("");
+  L.push(...renderConcessionPrompt(ctx.concessions));
+  L.push("");
   L.push("STADIUM UPGRADES you can build now (key: facility level, cost, effect):");
   L.push(ctx.stadium.length ? ctx.stadium.map((o) => `${o.key}: ${o.label}, ${czk(o.cost)}, ${o.detail}`).join("\n") : "(none)");
   L.push("EQUIPMENT UPGRADES (key: item level, cost, effect):");
@@ -611,8 +646,11 @@ export function renderWeeklyPrompt(ctx: WeeklyContext): string {
   L.push(t.surplus.length ? t.surplus.map((o) => `${o.key}: ${o.label}`).join("\n") : "(none)");
   L.push("Transfer course for this week (your scouts then work on it every day; the game sets all prices and never overpays): buy = look for a player for your weak positions within the money above your reserve; hold = no purchases unless a starting position is empty; sell = put surplus players on the transfer list, no purchases unless a starting position is empty. focus = up to 2 positions to strengthen first. sell = up to 3 surplus keys to list first.");
   L.push("");
-  L.push("DECIDE (JSON keys): training {focus, intensity, sessions 1-5, approach}, ticketPrice, pitchMaintenance, pitchCareMode, stadium (keys, max 2), equipmentUpgrades (keys, max 3), equipmentRepairs (keys), hire (candidate keys, max 1), academy, banners (offer keys), promote (keys, max 2), sendDown (keys, max 2), transfers {stance buy/hold/sell, focus (positions GK/DEF/MID/FWD, max 2), sell (surplus keys, max 3)}, reasoning (max 40 words).");
-  L.push("Paid items are executed in the order repairs, pitch, hiring, equipment, stadium and stop when the money above the reserve runs out.");
+  const concessionKeys = hasConcessionChoice(ctx.concessions)
+    ? `, concessions {mode ${ctx.concessions.modeOptions.join("/")}, products {${ctx.concessions.products.map((p) => p.key).join(", ")}: each {tier, price, buy}}}`
+    : "";
+  L.push(`DECIDE (JSON keys): training {focus, intensity, sessions 1-5, approach}, ticketPrice, pitchMaintenance, pitchCareMode, stadium (keys, max 2), equipmentUpgrades (keys, max 3), equipmentRepairs (keys), hire (candidate keys, max 1), academy, banners (offer keys), promote (keys, max 2), sendDown (keys, max 2), transfers {stance buy/hold/sell, focus (positions GK/DEF/MID/FWD, max 2), sell (surplus keys, max 3)}${concessionKeys}, reasoning (max 40 words).`);
+  L.push("Paid items are executed in the order repairs, pitch, refreshment stock, hiring, equipment, stadium and stop when the money above the reserve runs out.");
   return L.join("\n");
 }
 
@@ -621,6 +659,8 @@ export function weeklyDecisionSchema(ctx: WeeklyContext): Record<string, unknown
   const arr = (keys: string[]) => (keys.length
     ? { type: "array", items: { type: "string", enum: keys } }
     : { type: "array", items: { type: "string" }, maxItems: 0 });
+  // Bufet jen tam, kde je co rozhodnout (vlastní provoz chce aspoň L1 občerstvení).
+  const concessions = concessionSchema(ctx.concessions);
   return {
     type: "object",
     additionalProperties: false,
@@ -657,8 +697,12 @@ export function weeklyDecisionSchema(ctx: WeeklyContext): Record<string, unknown
         },
         required: ["stance", "focus", "sell"],
       },
+      ...(concessions ? { concessions } : {}),
       reasoning: { type: "string" },
     },
-    required: ["training", "ticketPrice", "pitchMaintenance", "pitchCareMode", "stadium", "equipmentUpgrades", "equipmentRepairs", "hire", "academy", "banners", "promote", "sendDown", "transfers", "reasoning"],
+    required: [
+      "training", "ticketPrice", "pitchMaintenance", "pitchCareMode", "stadium", "equipmentUpgrades", "equipmentRepairs", "hire",
+      "academy", "banners", "promote", "sendDown", "transfers", ...(concessions ? ["concessions"] : []), "reasoning",
+    ],
   };
 }

@@ -41,8 +41,10 @@ vi.setConfig({ testTimeout: 30_000, hookTimeout: 60_000 });
 import { gameRouter } from "../routes/game";
 import { replyToTransferOffers } from "./transfer-replies";
 import { runTransferMarket } from "./transfer-market";
-import { openingAsk, reservationPrice } from "./valuation";
+import { openingAsk, reservationPrice, VALUATION_WINDOW_DAYS, valuationWindow } from "./valuation";
 import { analyzeSquad, loadClubSquad } from "./squad";
+import { COACH_MODEL } from "./llm";
+import { requiredLoanFee } from "./transfer-decision";
 import type { AiCoachProfile } from "./profile";
 
 let miniflare: Miniflare;
@@ -61,6 +63,60 @@ const PROFILE: AiCoachProfile = {
 
 /** Čas, kdy už uplynula každá lidská prodleva (max 20 h), ale lhůta (3 dny) ne. */
 const later = (hours = 21) => new Date(Date.now() + hours * HOUR);
+
+/**
+ * Jako `later`, ale aspoň `spanHours` před koncem 14denního okna ocenění: rezervace se mezi
+ * několika běhy testu nezmění (jinak by občas padl na přelomu okna).
+ */
+function laterInWindow(spanHours: number): Date {
+  const t = later();
+  const windowEnd = (valuationWindow(t) + 1) * VALUATION_WINDOW_DAYS * 86_400_000;
+  return t.getTime() + spanHours * HOUR < windowEnd ? t : new Date(windowEnd + HOUR);
+}
+
+interface FakeModelInput {
+  messages: Array<{ role: string; content: string }>;
+  response_format?: { json_schema: { schema: { properties: { action: { enum: string[] }; amount: { minimum?: number; maximum?: number } } } } };
+}
+
+interface FakeAi {
+  calls: number;
+  prompts: string[];
+  run: (model: string, input: unknown) => Promise<unknown>;
+}
+
+/** Workers AI nanečisto: vrátí odpověď (nebo ji spočítá ze vstupu) a počítá volání. */
+function fakeAi(answer: unknown): FakeAi {
+  const ai: FakeAi = {
+    calls: 0,
+    prompts: [],
+    run: async (_model, input) => {
+      ai.calls++;
+      const req = input as FakeModelInput;
+      ai.prompts.push(req.messages[1]?.content ?? "");
+      const reply = typeof answer === "function" ? (answer as (r: FakeModelInput) => unknown)(req) : answer;
+      return { choices: [{ message: { content: JSON.stringify(reply) } }], usage: { prompt_tokens: 10, completion_tokens: 5 } };
+    },
+  };
+  return ai;
+}
+
+function withAi(ai: FakeAi | { run: (...args: unknown[]) => Promise<unknown> }): Bindings {
+  return { ...env, AI: ai } as unknown as Bindings;
+}
+
+interface DecisionRow {
+  mode: string; model: string | null; used_fallback: number; error: string | null; actions: string; executed: string;
+  tokens_in: number | null; tokens_out: number | null; raw_output: string | null; input_summary: string | null;
+}
+
+/** Poslední zápis deníku k nabídce. */
+async function decisionFor(ref: string): Promise<DecisionRow | null> {
+  return db.prepare(
+    `SELECT mode, model, used_fallback, error, actions, executed, tokens_in, tokens_out, raw_output, input_summary
+       FROM ai_coach_decisions WHERE context_ref = ? ORDER BY created_at DESC, rowid DESC LIMIT 1`,
+  ).bind(ref).first<DecisionRow>();
+}
 
 async function executeStatements(sql: string) {
   for (const statement of sql.split(";").map((part) => part.trim()).filter(Boolean)) {
@@ -368,8 +424,10 @@ describe("člověk kupuje od AI klubu", () => {
     await replyToTransferOffers(env, "ai-club", later(), PROFILE);
     expect((await offerRow(offer.offerId))?.status).toBe("rejected");
     expect((await smsTo("human")).some((b) => b.includes("odmítl"))).toBe(true);
-    // Odmítnutí AI klubu nekazí hráči náladu přes zprávy (to je jen u lidí).
-    expect(sideEffects.applyOfferRejectionImpact).not.toHaveBeenCalled();
+    // Odmítnutí AI klubu hráče naštve stejně jako u člověka (spec AI klubů 3.2). Zprávy AI klubu
+    // applyOfferRejectionImpact nepíše, to hlídá ai-club-unrest.db.test.ts.
+    expect(sideEffects.applyOfferRejectionImpact).toHaveBeenCalledTimes(1);
+    expect(sideEffects.applyOfferRejectionImpact).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ id: offer.offerId }), "reject", expect.anything());
     const retry = await offerFromHuman({ playerId, amount: lowball + 5000 });
     expect(retry.status).toBe(429);
   });
@@ -550,6 +608,492 @@ describe("člověk kupuje od AI klubu", () => {
     expect((await offerRow("v-low"))?.status).toBe("rejected");
     expect((await offerRow("v-high"))?.status).toBe("accepted");
     expect(await db.prepare("SELECT id FROM players WHERE id = 'ai-fwd4'").first()).toBeNull();
+  });
+});
+
+describe("o nabídce na hráče AI klubu rozhoduje model, kód hlídá", () => {
+  const reservationOf = async (playerId: string, when: Date) => {
+    const squad = await analysisNow();
+    return reservationPrice({ marketValue: mvOf(playerId), importance: squad.importanceOf(playerId), profile: PROFILE, playerId, now: when });
+  };
+  const askOf = async (playerId: string, when: Date) => {
+    const squad = await analysisNow();
+    return openingAsk({ marketValue: mvOf(playerId), importance: squad.importanceOf(playerId), profile: PROFILE, playerId, now: when });
+  };
+  const teamOf = async (playerId: string) =>
+    (await db.prepare("SELECT team_id FROM players WHERE id = ?").bind(playerId).first<{ team_id: string }>())?.team_id;
+
+  it("model přijme nabídku mezi rezervací a požadavkem a přijetí se provede jako mezi lidmi", async () => {
+    const playerId = "ai-mid4";
+    const when = later();
+    const reservation = await reservationOf(playerId, when);
+    const ai = fakeAi({ action: "accept", amount: 0, reason: "Fair money for a backup." });
+    const offer = await offerFromHuman({ playerId, amount: reservation });
+    const before = { human: await budgetOf("human"), ai: await budgetOf("ai-club") };
+    expect(await replyToTransferOffers(withAi(ai), "ai-club", when, PROFILE)).toBe(1);
+    expect(ai.calls).toBe(1);
+    expect((await offerRow(offer.offerId))?.status).toBe("accepted");
+    expect(await budgetOf("ai-club")).toBe(before.ai + reservation);
+    expect(await budgetOf("human")).toBe(before.human - reservation);
+    expect(await teamOf(playerId)).toBe("human");
+    const log = await decisionFor(offer.offerId);
+    expect(log).toMatchObject({ mode: "on", model: COACH_MODEL, used_fallback: 0, error: null, tokens_in: 10, tokens_out: 5 });
+    expect(JSON.parse(log!.executed)).toBe("accepted");
+    expect(JSON.parse(log!.actions)).toMatchObject({
+      kind: "accept", reason: "model", decidedBy: "model", reasoning: "Fair money for a backup.", allowed: ["accept", "counter", "reject"],
+    });
+    // Model dostal čísla, povahu a možnosti; žádný text, který píšou lidé (název klubu).
+    expect(ai.prompts[0]).toContain(`your minimum ${reservation.toLocaleString("en-US")} CZK`);
+    expect(ai.prompts[0]).toContain("a club run by a human manager, from your district");
+    expect(ai.prompts[0]).not.toContain("FK Testov");
+    expect(log!.input_summary).toContain("OPTIONS:");
+  });
+
+  it("přijetí pod rezervací model neprosadí: rozhodne náhradní pravidlo a pošle protinávrh nad rezervací", async () => {
+    const playerId = "ai-mid3";
+    const when = later();
+    const reservation = await reservationOf(playerId, when);
+    const ai = fakeAi({ action: "accept", amount: 0, reason: "Take the money." });
+    const offer = await offerFromHuman({ playerId, amount: Math.ceil(reservation * 0.9 / 100) * 100 });
+    await replyToTransferOffers(withAi(ai), "ai-club", when, PROFILE);
+    expect(ai.calls).toBe(1);
+    const row = await offerRow(offer.offerId);
+    expect(row?.status).toBe("countered");
+    expect(row?.counter_amount).toBeGreaterThanOrEqual(reservation);
+    expect(await teamOf(playerId)).toBe("ai-club");
+    const log = await decisionFor(offer.offerId);
+    expect(log).toMatchObject({ used_fallback: 1, model: COACH_MODEL });
+    expect(log!.error).toContain("nepřípustná akce");
+    expect(log!.raw_output).toContain("accept");
+    expect(JSON.parse(log!.actions)).toMatchObject({ kind: "counter", decidedBy: "fallback", allowed: ["counter", "reject"] });
+  });
+
+  it("protinávrh modelu mimo meze neprojde, pod rezervací ani nad požadavkem", async () => {
+    const when = later();
+    const midReservation = await reservationOf("ai-mid3", when);
+    const fwdReservation = await reservationOf("ai-fwd3", when);
+    const ai = fakeAi((req: FakeModelInput) => (req.messages[1].content.includes("PLAYER: FWD")
+      ? { action: "counter", amount: 9_000_000, reason: "Greedy." }
+      : { action: "counter", amount: Math.floor(midReservation * 0.5 / 100) * 100, reason: "Cheap." }));
+    const mid = await offerFromHuman({ playerId: "ai-mid3", amount: Math.ceil(midReservation * 0.9 / 100) * 100 });
+    const fwd = await offerFromHuman({ playerId: "ai-fwd3", amount: Math.ceil(fwdReservation * 0.9 / 100) * 100 });
+    await replyToTransferOffers(withAi(ai), "ai-club", when, PROFILE);
+    expect(ai.calls).toBe(2);
+    for (const [offer, reservation] of [[mid, midReservation], [fwd, fwdReservation]] as const) {
+      const row = await offerRow(offer.offerId);
+      expect(row?.status).toBe("countered");
+      expect(row?.counter_amount).toBeGreaterThanOrEqual(reservation);
+      expect(row?.counter_amount).toBeLessThan(9_000_000);
+      const log = await decisionFor(offer.offerId);
+      expect(log?.used_fallback).toBe(1);
+      expect(log?.error).toContain("mimo meze");
+    }
+  });
+
+  it("protinávrh modelu v mezích odejde přesně a člověk ho může přijmout", async () => {
+    const playerId = "ai-def4";
+    const when = later();
+    const reservation = await reservationOf(playerId, when);
+    const counterAt = Math.min(reservation + 500, await askOf(playerId, when));
+    const ai = fakeAi({ action: "counter", amount: counterAt, reason: "Meet me in the middle." });
+    const offer = await offerFromHuman({ playerId, amount: Math.ceil(reservation * 0.9 / 100) * 100 });
+    await replyToTransferOffers(withAi(ai), "ai-club", when, PROFILE);
+    expect(await offerRow(offer.offerId)).toMatchObject({ status: "countered", counter_amount: counterAt, last_action_by: "ai-club" });
+    const log = await decisionFor(offer.offerId);
+    expect(log?.used_fallback).toBe(0);
+    expect(JSON.parse(log!.actions)).toMatchObject({ kind: "counter", reason: "model", ask: counterAt, decidedBy: "model" });
+    const accept = await callRoute(`/teams/human/offers/${offer.offerId}/accept`, { method: "POST", token: "human-token", body: {} });
+    expect(accept.status).toBe(200);
+    expect(await teamOf(playerId)).toBe("human");
+  });
+
+  it("pod 60 % tržní hodnoty odmítne kód, model se vůbec neptá", async () => {
+    const ai = fakeAi({ action: "accept", amount: 0, reason: "Any money is good money." });
+    const playerId = "ai-def3";
+    const offer = await offerFromHuman({ playerId, amount: Math.floor(mvOf(playerId) * 0.55 / 100) * 100 });
+    await replyToTransferOffers(withAi(ai), "ai-club", later(), PROFILE);
+    expect(ai.calls).toBe(0);
+    expect((await offerRow(offer.offerId))?.status).toBe("rejected");
+    const log = await decisionFor(offer.offerId);
+    expect(log).toMatchObject({ model: null, used_fallback: 0, error: null, raw_output: null, tokens_in: null });
+    expect(JSON.parse(log!.actions)).toMatchObject({ kind: "reject", reason: "hard_floor", decidedBy: "guard", allowed: ["reject"] });
+  });
+
+  it("nabídku ve výši vlastního protinávrhu AI přijme kód bez modelu", async () => {
+    const playerId = "ai-mid2";
+    const when = laterInWindow(3);
+    const reservation = await reservationOf(playerId, when);
+    const counterAt = Math.min(reservation + 300, await askOf(playerId, when));
+    const ai = fakeAi({ action: "counter", amount: counterAt, reason: "My price." });
+    const offer = await offerFromHuman({ playerId, amount: Math.ceil(reservation * 0.9 / 100) * 100 });
+    await replyToTransferOffers(withAi(ai), "ai-club", when, PROFILE);
+    expect((await offerRow(offer.offerId))?.counter_amount).toBe(counterAt);
+    // Člověk místo přijetí pošle protinávrh přesně ve výši požadavku AI: AI své slovo dodrží.
+    const counter = await callRoute(`/teams/human/offers/${offer.offerId}/counter`, { method: "POST", token: "human-token", body: { amount: counterAt } });
+    expect(counter.status).toBe(200);
+    await replyToTransferOffers(withAi(ai), "ai-club", new Date(when.getTime() + HOUR), PROFILE);
+    expect(ai.calls).toBe(1);
+    expect((await offerRow(offer.offerId))?.status).toBe("accepted");
+    const log = await decisionFor(offer.offerId);
+    expect(log).toMatchObject({ model: null, used_fallback: 0 });
+    expect(JSON.parse(log!.actions)).toMatchObject({ kind: "accept", reason: "accept_ask", decidedBy: "guard" });
+  });
+
+  it("v režimu shadow model rozhodne a zapíše, nic se neprovede a opakovaný běh se ho znovu neptá", async () => {
+    await cacheKv.put("ai_coach_mode", JSON.stringify({ market: "shadow" }));
+    const playerId = "ai-fwd4";
+    const when = laterInWindow(3);
+    const reservation = await reservationOf(playerId, when);
+    const ai = fakeAi({ action: "accept", amount: 0, reason: "Good money for a veteran." });
+    const offer = await offerFromHuman({ playerId, amount: reservation });
+    await replyToTransferOffers(withAi(ai), "ai-club", when, PROFILE);
+    expect(ai.calls).toBe(1);
+    expect((await offerRow(offer.offerId))?.status).toBe("pending");
+    expect(await teamOf(playerId)).toBe("ai-club");
+    const log = await decisionFor(offer.offerId);
+    expect(log).toMatchObject({ mode: "shadow", model: COACH_MODEL, used_fallback: 0 });
+    expect(JSON.parse(log!.executed)).toBe("shadow");
+    expect(JSON.parse(log!.actions)).toMatchObject({ kind: "accept", decidedBy: "model" });
+    await replyToTransferOffers(withAi(ai), "ai-club", new Date(when.getTime() + HOUR), PROFILE);
+    expect(ai.calls).toBe(1);
+    expect((await db.prepare("SELECT COUNT(*) AS n FROM ai_coach_decisions WHERE context_ref = ?").bind(offer.offerId).first<{ n: number }>())?.n).toBe(1);
+    // Po přepnutí na `on` se model zeptá znovu a přijetí se provede.
+    await cacheKv.put("ai_coach_mode", "on");
+    await replyToTransferOffers(withAi(ai), "ai-club", new Date(when.getTime() + 2 * HOUR), PROFILE);
+    expect(ai.calls).toBe(2);
+    expect((await offerRow(offer.offerId))?.status).toBe("accepted");
+  });
+
+  it("ani povolný model nepustí hráče pod rezervací: stažení a nová nabídka cenu nesrazí", async () => {
+    const playerId = "ai-mid2";
+    const when = laterInWindow(10);
+    const reservation = await reservationOf(playerId, when);
+    // Nejpovolnější model: kde smí, přijme, jinak nabídne nejnižší protinávrh, který schéma dovolí.
+    const ai = fakeAi((req: FakeModelInput) => {
+      const props = req.response_format!.json_schema.schema.properties;
+      if (props.action.enum.includes("accept")) return { action: "accept", amount: 0, reason: "Fine." };
+      if (props.action.enum.includes("counter")) return { action: "counter", amount: props.amount.minimum, reason: "Lowest I can go." };
+      return { action: "reject", amount: 0, reason: "No." };
+    });
+    let amount = Math.ceil(reservation * 0.8 / 100) * 100;
+    const asks: number[] = [];
+    let finalStatus = "";
+    for (let round = 0; round < 8; round++) {
+      const offer = await offerFromHuman({ playerId, amount });
+      if (offer.status !== 200) { finalStatus = `blocked:${offer.status}`; break; }
+      await replyToTransferOffers(withAi(ai), "ai-club", new Date(when.getTime() + round * HOUR), PROFILE);
+      const row = await offerRow(offer.offerId);
+      if (row?.status !== "countered") { finalStatus = row?.status ?? "missing"; break; }
+      asks.push(row.counter_amount!);
+      const withdraw = await callRoute(`/teams/human/offers/${offer.offerId}`, { method: "DELETE", token: "human-token", body: {} });
+      expect(withdraw.status).toBe(200);
+      amount += 200;
+    }
+    expect(finalStatus).toBe("rejected");
+    // Povolný model šel hned na rezervaci a níž se nedostal: strop protinávrhu dřívější požadavky jen snižují.
+    expect(asks.length).toBeGreaterThan(0);
+    expect(asks.every((a) => a === reservation)).toBe(true);
+    // Poslední kolo (došla trpělivost, zbylo jen odmítnutí) rozhodl kód, model se už neptal.
+    expect(ai.calls).toBe(asks.length);
+    expect(await teamOf(playerId)).toBe("ai-club");
+  });
+
+  it("hostování: model smí chtít jen požadovaný poplatek a protinávrh odejde přesně na něj", async () => {
+    const playerId = "ai-mid4";
+    expect((await analysisNow()).importanceOf(playerId)).toBe("rotation");
+    const age = AI_SQUAD.find(([id]) => id === playerId)![3];
+    const fee = requiredLoanFee({ marketValue: mvOf(playerId), age, importance: "rotation", loanDays: 30 })!;
+    const ai = fakeAi({ action: "counter", amount: fee, reason: "Pay the usual fee." });
+    const offer = await offerFromHuman({ playerId, amount: 0, offerType: "loan", loanDuration: 30 });
+    expect(offer.status).toBe(200);
+    await replyToTransferOffers(withAi(ai), "ai-club", later(), PROFILE);
+    expect(ai.calls).toBe(1);
+    expect(await offerRow(offer.offerId)).toMatchObject({ status: "countered", counter_amount: fee });
+    expect(ai.prompts[0]).toContain("loan for 30 days");
+  });
+
+  it("v režimu off i při výpadku modelu rozhodne náhradní pravidlo", async () => {
+    await cacheKv.put("ai_coach_mode", JSON.stringify({ market: "off" }));
+    const ai = fakeAi({ action: "reject", amount: 0, reason: "Never." });
+    const when = later();
+    const first = await offerFromHuman({ playerId: "ai-mid4", amount: await reservationOf("ai-mid4", when) });
+    await replyToTransferOffers(withAi(ai), "ai-club", when, PROFILE);
+    expect(ai.calls).toBe(0);
+    expect(["accepted", "countered"]).toContain((await offerRow(first.offerId))?.status);
+    expect(await decisionFor(first.offerId)).toMatchObject({ mode: "off", model: null, used_fallback: 1 });
+
+    await cacheKv.put("ai_coach_mode", "on");
+    const broken = { run: async () => { throw new Error("8005: Internal server error"); } };
+    const second = await offerFromHuman({ playerId: "ai-fwd3", amount: await reservationOf("ai-fwd3", when) });
+    await replyToTransferOffers(withAi(broken), "ai-club", when, PROFILE);
+    expect(["accepted", "countered"]).toContain((await offerRow(second.offerId))?.status);
+    const log = await decisionFor(second.offerId);
+    expect(log).toMatchObject({ used_fallback: 1, model: COACH_MODEL });
+    expect(log!.error).toContain("8005");
+  });
+});
+
+describe("AI klub jako kupující: model navrhuje, kód hlídá", () => {
+  const BUYER_PROFILE: AiCoachProfile = { ...PROFILE, ambition: 80, thrift: 20 };
+  const fwdValue = () => marketValue(58, 25, "FWD");
+  const num = (s: string) => Number(s.replace(/,/g, ""));
+
+  /** AI klub bez útočníků poslal nabídku na útočníka člověka. */
+  async function sendAiOffer(id: string, playerId: string, amount: number) {
+    await db.prepare("UPDATE players SET team_id = 'third' WHERE id IN ('ai-fwd1', 'ai-fwd2', 'ai-fwd3', 'ai-fwd4')").run();
+    await db.batch([
+      db.prepare(`INSERT INTO transfer_offers (id, player_id, from_team_id, to_team_id, offer_amount, status, expires_at, last_action_by)
+        VALUES (?, ?, 'ai-club', 'human', ?, 'pending', ?, 'ai-club')`).bind(id, playerId, amount, new Date(Date.now() + 3 * 86_400_000).toISOString()),
+      db.prepare("INSERT INTO transfer_offer_events (id, offer_id, team_id, event_type, amount) VALUES (?, ?, 'ai-club', 'offer', ?)").bind(`${id}-e`, id, amount),
+    ]);
+  }
+  const humanCounter = (id: string, body: Record<string, unknown>) =>
+    callRoute(`/teams/human/offers/${id}/counter`, { method: "POST", token: "human-token", body });
+  const negotiationRow = (id: string) => db.prepare("SELECT status, counter_amount, sell_on_pct, last_action_by FROM transfer_offers WHERE id = ?")
+    .bind(id).first<{ status: string; counter_amount: number | null; sell_on_pct: number; last_action_by: string | null }>();
+  const counterRange = (prompt: string) => {
+    const m = prompt.match(/offer between ([\d,]+) CZK and ([\d,]+) CZK/);
+    return m ? { min: num(m[1]), max: num(m[2]) } : null;
+  };
+  const limitOf = (prompt: string) => num(prompt.match(/your limit for this player is ([\d,]+) CZK/)![1]);
+  const kindOf = async (ref: string) => (await db.prepare("SELECT kind FROM ai_coach_decisions WHERE context_ref = ?").bind(ref).first<{ kind: string }>())?.kind;
+
+  it("jednání o nákupu: model přihodí v mezích a protinávrh odejde přesně", async () => {
+    const bid = Math.round(fwdValue() * 0.85 / 100) * 100;
+    await sendAiOffer("ai-offer", "h-fwd", bid);
+    expect((await humanCounter("ai-offer", { amount: Math.round(fwdValue() * 1.3 / 100) * 100 })).status).toBe(200);
+    let chosen = 0;
+    const ai = fakeAi((req: FakeModelInput) => {
+      const range = counterRange(req.messages[1].content)!;
+      chosen = Math.floor((range.min + range.max) / 2 / 100) * 100;
+      return { action: "counter", amount: chosen, reason: "Meet me halfway." };
+    });
+    await replyToTransferOffers(withAi(ai), "ai-club", later(), BUYER_PROFILE);
+    expect(ai.calls).toBe(1);
+    expect(chosen).toBeGreaterThan(bid);
+    expect(await negotiationRow("ai-offer")).toMatchObject({ status: "countered", counter_amount: chosen, sell_on_pct: 0, last_action_by: "ai-club" });
+    expect(await kindOf("ai-offer")).toBe("transfer_negotiation");
+    const log = await decisionFor("ai-offer");
+    expect(log).toMatchObject({ mode: "on", model: COACH_MODEL, used_fallback: 0, tokens_in: 10 });
+    expect(JSON.parse(log!.actions)).toMatchObject({ kind: "counter", amount: chosen, decidedBy: "model" });
+    expect(JSON.parse(log!.executed)).toBe("countered");
+  });
+
+  it("jednání o nákupu: protinávrh nad strop ani neznámá akce neprojdou, rozhodne pravidlo a nad strop nejde", async () => {
+    for (const [id, answer] of [["over", { action: "counter", amount: 9_000_000, reason: "Whatever it takes." }], ["unknown", { action: "buy", amount: 0, reason: "?" }]] as const) {
+      await db.prepare("DELETE FROM transfer_offers").run();
+      await db.prepare("DELETE FROM transfer_offer_events").run();
+      const bid = Math.round(fwdValue() * 0.85 / 100) * 100;
+      const ask = Math.round(fwdValue() * 1.3 / 100) * 100;
+      await sendAiOffer(id, "h-fwd", bid);
+      expect((await humanCounter(id, { amount: ask })).status).toBe(200);
+      let limit = 0;
+      const ai = fakeAi((req: FakeModelInput) => { limit = limitOf(req.messages[1].content); return answer; });
+      await replyToTransferOffers(withAi(ai), "ai-club", later(), BUYER_PROFILE);
+      expect(ai.calls).toBe(1);
+      const row = await negotiationRow(id);
+      // Pravidlo bere do stropu, přihodí do stropu, nebo jednání ukončí: nad strop nikdy.
+      if (row?.status === "accepted") expect(ask).toBeLessThanOrEqual(limit);
+      else if (row?.status === "countered") expect(row.counter_amount).toBeLessThanOrEqual(limit);
+      else expect(row?.status).toBe("withdrawn");
+      const log = await decisionFor(id);
+      expect(log).toMatchObject({ used_fallback: 1, error: "neplatná odpověď modelu" });
+      expect(JSON.parse(log!.actions).decidedBy).toBe("fallback");
+    }
+  });
+
+  it("hostování, o které AI požádala: o protinávrhu poplatku rozhoduje model", async () => {
+    await db.prepare("DELETE FROM transfer_offers").run();
+    await db.prepare("DELETE FROM transfer_offer_events").run();
+    await sendAiOffer("ai-loan", "h-fwd", 0);
+    await db.prepare("UPDATE transfer_offers SET offer_type = 'loan', loan_duration = 30 WHERE id = 'ai-loan'").run();
+    expect((await humanCounter("ai-loan", { amount: 50_000 })).status).toBe(200);
+    const ai = fakeAi(() => ({ action: "withdraw", amount: 0, reason: "The loan fee is far too high." }));
+    await replyToTransferOffers(withAi(ai), "ai-club", later(), BUYER_PROFILE);
+    expect(ai.calls).toBe(1);
+    expect((await negotiationRow("ai-loan"))?.status).toBe("withdrawn");
+    const log = await decisionFor("ai-loan");
+    expect(log).toMatchObject({ model: COACH_MODEL, used_fallback: 0 });
+    expect(JSON.parse(log!.actions)).toMatchObject({ kind: "withdraw", decidedBy: "model" });
+  });
+
+  it("jednání o nákupu v režimu shadow: model rozhodne a zapíše, nic se neprovede", async () => {
+    await cacheKv.put("ai_coach_mode", JSON.stringify({ market: "shadow" }));
+    const ask = Math.round(fwdValue() * 1.3 / 100) * 100;
+    await sendAiOffer("ai-offer", "h-fwd", Math.round(fwdValue() * 0.85 / 100) * 100);
+    expect((await humanCounter("ai-offer", { amount: ask })).status).toBe(200);
+    const ai = fakeAi({ action: "withdraw", amount: 0, reason: "Too much." });
+    await replyToTransferOffers(withAi(ai), "ai-club", later(), BUYER_PROFILE);
+    expect(ai.calls).toBe(1);
+    expect(await negotiationRow("ai-offer")).toMatchObject({ status: "countered", counter_amount: ask, last_action_by: "human" });
+    const log = await decisionFor("ai-offer");
+    expect(log).toMatchObject({ mode: "shadow", model: COACH_MODEL, used_fallback: 0 });
+    expect(JSON.parse(log!.executed)).toBe("shadow");
+    expect(JSON.parse(log!.actions)).toMatchObject({ kind: "withdraw", decidedBy: "model" });
+  });
+
+  it("jednání o nákupu: procenta z dalšího prodeje AI nepřijme ani na pokyn modelu a bez prostoru rozhodne kód sám", async () => {
+    const bid = Math.round(fwdValue() * 0.85 / 100) * 100;
+    await sendAiOffer("sell-on", "h-fwd", bid);
+    expect((await humanCounter("sell-on", { amount: bid + 1000, sellOnPct: 15 })).status).toBe(200);
+    const ai = fakeAi({ action: "accept", amount: 0, reason: "Deal." });
+    await replyToTransferOffers(withAi(ai), "ai-club", later(), BUYER_PROFILE);
+    expect(ai.calls).toBe(1);
+    const row = await negotiationRow("sell-on");
+    expect(row?.status).not.toBe("accepted");
+    if (row?.status === "countered") expect(row).toMatchObject({ sell_on_pct: 0, last_action_by: "ai-club" });
+    expect((await db.prepare("SELECT team_id FROM players WHERE id = 'h-fwd'").first<{ team_id: string }>())?.team_id).toBe("human");
+    expect((await decisionFor("sell-on"))?.used_fallback).toBe(1);
+
+    // AI už nabídla víc, než dnes smí, a člověk chce ještě víc: zbývá jen odejít, model se neptá.
+    await db.batch([playerInsert("h-fwd2", "human", "FWD", 55, 26)]);
+    const high = marketValue(55, 26, "FWD") * 3;
+    await sendAiOffer("only-withdraw", "h-fwd2", high);
+    expect((await humanCounter("only-withdraw", { amount: high + 50_000 })).status).toBe(200);
+    await replyToTransferOffers(withAi(ai), "ai-club", later(42), BUYER_PROFILE);
+    expect(ai.calls).toBe(1);
+    expect((await negotiationRow("only-withdraw"))?.status).toBe("withdrawn");
+    const log = await decisionFor("only-withdraw");
+    expect(log).toMatchObject({ used_fallback: 0, raw_output: null });
+    expect(JSON.parse(log!.actions)).toMatchObject({ kind: "withdraw", decidedBy: "guard" });
+  });
+
+  /** AI klub bez útočníků hledá útočníka a člověk mu nabídne dva. */
+  async function pitchSetup(maxPrice = 200_000): Promise<string> {
+    await db.prepare("UPDATE players SET team_id = 'third' WHERE id IN ('ai-fwd1', 'ai-fwd2', 'ai-fwd3', 'ai-fwd4')").run();
+    await db.batch([playerInsert("h-fwd2", "human", "FWD", 55, 26)]);
+    const { createDemand } = await import("../transfers/demands");
+    const demand = await createDemand(db, "ai-club", {
+      position: "FWD", ageMin: 18, ageMax: 30, role: "starter", maxPrice, note: null, minRating: 50, skills: [],
+    });
+    if (!demand.ok) throw new Error(demand.error);
+    for (const playerId of ["h-fwd", "h-fwd2"]) {
+      const res = await callRoute(`/teams/human/demands/${demand.id}/pitch`, { method: "POST", token: "human-token", body: { playerId } });
+      expect(res.status).toBe(200);
+    }
+    return demand.id;
+  }
+  const pitchesOf = async (demandId: string) => (await db.prepare(
+    "SELECT player_id, status, offer_id, reply FROM transfer_demand_pitches WHERE demand_id = ? ORDER BY player_id",
+  ).bind(demandId).all<{ player_id: string; status: string; offer_id: string | null; reply: string | null }>()).results;
+  const aiOffers = async () => (await db.prepare(
+    "SELECT player_id, offer_amount, status FROM transfer_offers WHERE from_team_id = 'ai-club' ORDER BY player_id",
+  ).all<{ player_id: string; offer_amount: number; status: string }>()).results;
+  /** Vhodní hráči z popisu pro model: klíč → hodnocení a meze nabídky. */
+  const pitchLines = (prompt: string) => {
+    const out = new Map<string, { rating: number; min: number; max: number }>();
+    for (const m of prompt.matchAll(/- "(P\d+)": \w+, age \d+, rating (\d+), [^;]+; you may offer ([\d,]+) CZK to ([\d,]+) CZK\./g)) {
+      out.set(m[1], { rating: Number(m[2]), min: num(m[3]), max: num(m[4]) });
+    }
+    return out;
+  };
+  const ratingOf: Record<string, number> = { "h-fwd": 58, "h-fwd2": 55 };
+
+  it("poptávka: model vybere z nabídnutých hráčů, nabídka odejde za zvolenou částku a ostatní dostanou odmítnutí", async () => {
+    const demandId = await pitchSetup();
+    let chosen = 0;
+    const ai = fakeAi((req: FakeModelInput) => {
+      const [key, line] = [...pitchLines(req.messages[1].content)].find(([, l]) => l.rating === 55)!;
+      chosen = Math.floor((line.min + line.max) / 2 / 100) * 100;
+      return { offers: [{ player: key, amount: chosen }], reason: "The 55 is the better value." };
+    });
+    await replyToTransferOffers(withAi(ai), "ai-club", later(), BUYER_PROFILE);
+    expect(ai.calls).toBe(1);
+    expect(pitchLines(ai.prompts[0]).size).toBe(2);
+    expect(await aiOffers()).toEqual([{ player_id: "h-fwd2", offer_amount: chosen, status: "pending" }]);
+    const [first, second] = await pitchesOf(demandId);
+    expect(first).toMatchObject({ player_id: "h-fwd", status: "declined", offer_id: null });
+    expect(second).toMatchObject({ player_id: "h-fwd2", status: "accepted" });
+    for (const p of [first, second]) {
+      expect(p.reply).toBeTruthy();
+      expect(p.reply).not.toContain("—");
+    }
+    expect(await kindOf(demandId)).toBe("demand_pitch");
+    const log = await decisionFor(demandId);
+    expect(log).toMatchObject({ mode: "on", model: COACH_MODEL, used_fallback: 0 });
+    expect(JSON.parse(log!.actions)).toMatchObject({
+      decidedBy: "model", reasoning: "The 55 is the better value.", offers: [{ playerId: "h-fwd2", amount: chosen }],
+    });
+  });
+
+  it("poptávka: neznámý hráč v odpovědi modelu neprojde, rozhodne pravidlo s první nabídkou v mezích", async () => {
+    const demandId = await pitchSetup();
+    let bounds = new Map<string, { rating: number; min: number; max: number }>();
+    const ai = fakeAi((req: FakeModelInput) => {
+      bounds = pitchLines(req.messages[1].content);
+      return { offers: [{ player: "P9", amount: 30_000 }], reason: "Someone else." };
+    });
+    await replyToTransferOffers(withAi(ai), "ai-club", later(), BUYER_PROFILE);
+    expect(ai.calls).toBe(1);
+    const offers = await aiOffers();
+    expect(offers.length).toBeGreaterThan(0);
+    for (const o of offers) {
+      const line = [...bounds.values()].find((l) => l.rating === ratingOf[o.player_id])!;
+      expect(o.offer_amount).toBeGreaterThanOrEqual(line.min);
+      expect(o.offer_amount).toBeLessThanOrEqual(line.max);
+    }
+    const log = await decisionFor(demandId);
+    expect(log).toMatchObject({ used_fallback: 1 });
+    expect(log!.error).toContain("neznámý hráč");
+  });
+
+  it("poptávka v režimu shadow: model vybere a zapíše, nabídka neodejde a opakovaný běh se ho znovu neptá", async () => {
+    await cacheKv.put("ai_coach_mode", JSON.stringify({ market: "shadow" }));
+    const demandId = await pitchSetup();
+    const ai = fakeAi((req: FakeModelInput) => {
+      const [key, line] = [...pitchLines(req.messages[1].content)][0];
+      return { offers: [{ player: key, amount: line.min }], reason: "Cheap and good." };
+    });
+    const when = later();
+    await replyToTransferOffers(withAi(ai), "ai-club", when, BUYER_PROFILE);
+    expect(ai.calls).toBe(1);
+    expect(await aiOffers()).toEqual([]);
+    expect((await pitchesOf(demandId)).map((p) => p.status)).toEqual(["pitched", "pitched"]);
+    const log = await decisionFor(demandId);
+    expect(log).toMatchObject({ mode: "shadow", model: COACH_MODEL, used_fallback: 0 });
+    expect(JSON.parse(log!.executed)).toBe("shadow");
+    expect(JSON.parse(log!.actions)).toMatchObject({ decidedBy: "model" });
+    await replyToTransferOffers(withAi(ai), "ai-club", new Date(when.getTime() + HOUR), BUYER_PROFILE);
+    expect(ai.calls).toBe(1);
+    expect((await db.prepare("SELECT COUNT(*) AS n FROM ai_coach_decisions WHERE context_ref = ?").bind(demandId).first<{ n: number }>())?.n).toBe(1);
+  });
+
+  it("poptávka: meze kódu platí, ať model řekne cokoli; na jedno volné místo jde jedna nabídka a druhý hráč počká", async () => {
+    // Neobchodník smí mít rozjetý jen jeden obchod.
+    const profile = { ...BUYER_PROFILE, trading: 30 };
+    const demandId = await pitchSetup();
+    let bounds = new Map<string, { rating: number; min: number; max: number }>();
+    const ai = fakeAi((req: FakeModelInput) => {
+      bounds = pitchLines(req.messages[1].content);
+      return { offers: [...bounds.keys()].map((player) => ({ player, amount: 100 })), reason: "Lowball them all." };
+    });
+    await replyToTransferOffers(withAi(ai), "ai-club", later(), profile);
+    expect(ai.calls).toBe(1);
+    const log = await decisionFor(demandId);
+    expect(log?.used_fallback).toBe(1);
+    expect(log!.error).toContain("mimo meze");
+    const offers = await aiOffers();
+    expect(offers).toHaveLength(1);
+    const line = [...bounds.values()].find((l) => l.rating === ratingOf[offers[0].player_id])!;
+    expect(offers[0].offer_amount).toBeGreaterThanOrEqual(line.min);
+    expect(offers[0].offer_amount).toBeLessThanOrEqual(line.max);
+    const statuses = (await pitchesOf(demandId)).map((p) => p.status).sort();
+    expect(statuses).toEqual(["accepted", "pitched"]);
+    expect(JSON.parse(log!.actions).deferred).toHaveLength(1);
+  });
+
+  it("poptávka bez vhodného hráče (na nikoho AI nemá): odmítne kód, model se neptá", async () => {
+    const demandId = await pitchSetup(1000);
+    const ai = fakeAi({ offers: [], reason: "x" });
+    await replyToTransferOffers(withAi(ai), "ai-club", later(), BUYER_PROFILE);
+    expect(ai.calls).toBe(0);
+    expect(await aiOffers()).toEqual([]);
+    const pitches = await pitchesOf(demandId);
+    expect(pitches.map((p) => p.status)).toEqual(["declined", "declined"]);
+    expect(pitches.every((p) => !!p.reply)).toBe(true);
+    const log = await decisionFor(demandId);
+    expect(log).toMatchObject({ model: null, used_fallback: 0, raw_output: null });
+    expect(JSON.parse(log!.actions)).toMatchObject({ decidedBy: "guard", offers: [], eligible: [] });
   });
 });
 

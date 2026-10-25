@@ -15,6 +15,7 @@ import { sendSystemSMS } from "../messaging/system-sms";
 import { poskodZarizeni } from "../stadium/stadium-damage";
 import { ensureGlobalFavor } from "../villages/officials-store";
 import { denBazaru } from "./bazar";
+import { clubReceivesMessages, sendIncidentSystemSms } from "./club-messages";
 import { posunKadru } from "./hraci";
 import { smsIncidentu } from "./incident-db";
 import { KATALOG_PODLE_KIND } from "./katalog";
@@ -313,8 +314,12 @@ async function provedZtratu(db: D1Database, stav: StavKlubu, incidentId: string,
   return null;
 }
 
-/** SMS od kustoda (s tím, co se hned zjistilo) a notifikace. Selhání oznámení incident nezvrací. */
+/**
+ * SMS od kustoda (s tím, co se hned zjistilo) a notifikace. Selhání oznámení incident nezvrací.
+ * AI klub se nic nedozví (club-messages.ts), incident za něj řeší AI trenér (ai-coach/incidents.ts).
+ */
 export async function oznamIncident(env: Bindings, teamId: string, navrh: NavrhIncidentu, zapsany: ZapsanyIncident): Promise<void> {
+  if (!(await clubReceivesMessages(env.DB, teamId))) return;
   const def = KATALOG_PODLE_KIND.get(navrh.kind);
   const emoji = def?.emoji ?? "❗";
   await sendSystemSMS(env.DB, teamId, SMS_ROLE_KUSTOD, `${emoji} ${[navrh.text, ...zapsany.nalezeneStopy].join(" ")}`, smsIncidentu(zapsany.id));
@@ -353,7 +358,7 @@ export async function uzavriProsleIncidenty(
     const sablona = r.culprit_revealed === 1
       ? TEXTY.lhuta_znamy[0]
       : r.category === "kradez" ? TEXTY.lhuta_kradez[0] : TEXTY.lhuta_poskozeni[0];
-    await sendSystemSMS(db, t.teamId, SMS_ROLE_KUSTOD, vypln(sablona, { nazev }), smsIncidentu(r.id));
+    await sendIncidentSystemSms(db, t.teamId, SMS_ROLE_KUSTOD, vypln(sablona, { nazev }), smsIncidentu(r.id));
   }
   return prosle.results.length;
 }

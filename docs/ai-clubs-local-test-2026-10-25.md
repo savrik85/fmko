@@ -7,6 +7,59 @@ web `http://localhost:3300`. Nic se nepushovalo, do produkční ani testovací D
 Simulace více dní: `backups/sim/sim-ai.ts` (skutečný denní tick, AI trenéři, pohár, kola lig a přáteláky
 nad `node:sqlite`, hodiny simulace přes podvržený `Date`).
 
+## Rozhodování modelem (doplněno 25. 10. odpoledne)
+
+V noci rozhodoval model jen sestavu a pondělní správu, hodinové části jely pravidlem. Teď rozhoduje
+Workers AI všude, kde je víc přípustných možností. Kód připraví možnosti a meze, model vybere, kód
+odpověď zkontroluje a provede stejnou službou jako u člověka. Při výpadku, nesmyslné odpovědi, režimu
+`off` nebo bez bindingu rozhodne náhradní pravidlo podle povahy (`usedFallback` v deníku).
+
+| Rozhodnutí | Model vybírá | Kód hlídá | Druh v deníku |
+|---|---|---|---|
+| Zápas | formace, taktika, tvrdost, koho šetřit, kapitán, exekutoři, střídání | skladba jedenáctky, slib základu (hraje vždy) | `match` |
+| Pondělní správa | trénink, vstupné, trávník, stadion, vybavení, zaměstnanci, akademie, plachty, U21, přestupní kurz, bufet (pronájem nebo vlastní prodej, kvalita, cena, nákup zboží) | rezerva, ceny, pravidla služeb, zboží jen z peněz nad rezervou; před domácím zápasem doplnění skladu | `weekly`, `concession_topup` |
+| Hlavní sponzor | kterou firmu oslovit (nebo nikoho) | dostupnost firmy, exkluzivita, podpis úvodní nabídky | `main_sponsor` |
+| Přáteláky | přijmout výzvu; jestli, kdy, kde a o kolik vypsat nabídku | soutěž den před a po, max. 2, sázka a náklady v mezích povahy | `friendly_reply`, `friendly_offer` |
+| Nákup | kterého hráče (přestup, volný, hostování, poptávka), výše nabídky, odpovědi na protinávrhy (i klubům mimo hru), koho vzít z hráčů nabídnutých na poptávku | strop ceny, rezerva, limity obchodů, propojené kluby, žádná procenta z dalšího prodeje | `transfer_market`, `transfer_negotiation`, `demand_pitch` |
+| Prodej | přijmout, protinávrh, odmítnout | rezervace pevná 14 dní, 60 % tržní hodnoty, nic pod rezervací ani při opakovaných nabídkách | `transfer_reply` |
+| Nespokojení hráči | dohoda za hráče (prémie, mzda, rozhovor, slib místa, odchod) nebo čekat | peníze nad rezervou, slib místa max. 2 a sestava ho dodrží | `unrest` |
+| Incidenty v klubu | vyšetřování (policie, obvinění), trest, záloha na mzdu | stejné možnosti jako člověk, posledního brankáře nevyhodí | `incident` |
+| Konec sezóny | kdo ze souboje zůstane | aspoň jeden brankář zůstane | `season_duels` |
+
+AI kluby teď mají i nespokojenost hráčů a incidenty jako lidé, jen bez jakýchkoli zpráv.
+Prodej zůstává deterministický ve spodní ceně: model rozhoduje jen nad rezervací, takže AI nejde ukecat.
+
+### Simulace 7 dní se skutečným modelem (finální kód, 25. 10. odpoledne)
+
+`backups/sim/run-sim.sh 7 backups/sim/post-deploy.sqlite final7 --ai` nad kopií stavu po nasazení
+(Workers AI přes REST, souběh 10 klubů, režim `on`):
+
+| Druh | Počet | Model | Pravidlo (výpadek) | Jen kód |
+|---|---|---|---|---|
+| trh | 123 | 81 | 4 | 38 (běhy bez čeho rozhodovat) |
+| zápas | 70 | 69 | 1 | 0 |
+| nespokojení hráči | 39 | 39 | 0 | 0 |
+| pondělní správa | 36 | 35 | 1 | 0 |
+| hlavní sponzor | 35 | 34 | 1 | 0 |
+| odpověď na nabídku | 24 | 6 | 0 | 18 (jediná přípustná možnost) |
+| nabídka přáteláku | 20 | 18 | 2 | 0 |
+| incident | 13 | 13 | 0 | 0 |
+| souboje „kdo zůstane" | 5 | 5 | 0 | 0 |
+| hráč na poptávku | 3 | 1 | 0 | 2 |
+| odpověď na přátelák | 1 | 1 | 0 | 0 |
+
+Všech 9 výpadků byl překročený čas modelu (60 s, u zápasu a týdne 120 s), rozhodlo náhradní pravidlo.
+Souboje dostaly jen převzaté kluby (Autolakovka, Kebab, Kobylisy): bývalí majitelé je dva konce
+sezóny nevyřídili, AI je vyřídila stejně, jako by musel člověk.
+
+### Jak to vyzkoušet na localhostu
+
+1. `http://localhost:3300/admin` → Přehled: stav, chyby a varování, AI trenéři za 24 h.
+2. AI kluby → Detail klubu → Spustit úlohu (nanečisto) → Deník rozhodnutí: model, odůvodnění, Podrobnosti.
+3. Výzva na přátelák AI klubu (Přáteláky), nabídka na hráče AI klubu (Přestupy): AI odpoví s lidskou prodlevou,
+   v deníku je `friendly_reply` / `transfer_reply` s rozhodnutím modelu.
+4. „Trh hned" v detailu klubu: nákupy a prodej AI klubu mimo rozvrh.
+
 ## Výchozí stav (kopie produkce před změnami)
 
 | Liga | AI kluby: síla jedenáctky | Lidské kluby: síla jedenáctky |

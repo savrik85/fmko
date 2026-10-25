@@ -262,6 +262,8 @@ export async function loadMatchContext(db: D1Database, teamId: string, fixture: 
 
   const squad: SquadPlayer[] = [];
   const unavailable: UnavailablePlayer[] = [];
+  // Komu AI trenér slíbil místo v sestavě (dohoda s nespokojeným hráčem): hraje, dokud se slib nevyhodnotí.
+  const promisedStarters: string[] = [];
   let n = 0;
   for (const row of rows.results) {
     if (!isSlot(row.position)) continue;
@@ -283,6 +285,8 @@ export async function loadMatchContext(db: D1Database, teamId: string, fixture: 
       continue;
     }
     const life = parseObj(row.life_context, "life_context", row.id);
+    const pledge = (life.transferUnrest as { pledge?: { type?: string } | null } | undefined)?.pledge;
+    if (pledge?.type === "minutes") promisedStarters.push(key);
     const st = statOf.get(row.id);
     const yellow = st?.yellow_cards ?? 0;
     squad.push({
@@ -368,6 +372,7 @@ export async function loadMatchContext(db: D1Database, teamId: string, fixture: 
     unavailable,
     currentRoles: { penaltyTakerId: team.penalty_taker_id, freekickTakerId: team.freekick_taker_id },
     lastLineup: last ?? null,
+    promisedStarters,
   };
   // Síla vlastního týmu na stejné škále jako soupeř: průměr hodnocení nejlepších jedenácti dostupných.
   const top = [...squad].sort((a, b) => b.rating - a.rating).slice(0, 11);
@@ -459,7 +464,8 @@ export async function prepareAiLineup(
     return { used: "fallback", lineupId: null };
   }
 
-  const decided = await decideMatch(env, ctx, { useModel: mode !== "off", model: opts.model });
+  // Bez dostupných hráčů nemá model z čeho vybírat: schéma by mělo prázdný výčet a Workers AI ho odmítne.
+  const decided = await decideMatch(env, ctx, { useModel: mode !== "off" && ctx.squad.length > 0, model: opts.model });
   const squadIds = new Set([...ctx.squad.map((p) => p.id), ...ctx.unavailable.map((p) => p.id)]);
   let lineup = fillWithExcused(ctx, assembleLineup(ctx, decided.decision, squadIds));
   let error = decided.error;
@@ -555,8 +561,12 @@ export async function findTodaysFixtures(db: D1Database, teamId: string, gameDay
       if (plays) out.push({ calendarId: cal.id, kind: "league" });
     }
   }
+  // Stejný výběr jako pohárový tick (cup/cup.ts maybeAdvanceCup): jen aktuální kolo aktivního poháru
+  // aktivní sezóny. Neodehrané zápasy starých pohárů (na testingu po resetech) se už nikdy hrát nebudou.
   const cups = await db.prepare(
     `SELECT cm.id FROM cup_matches cm
+       JOIN cup_competitions cc ON cc.id = cm.cup_id AND cc.status = 'active' AND cm.round = cc.current_round
+        AND cc.season_number = (SELECT MAX(number) FROM seasons WHERE status = 'active')
        JOIN cup_teams my ON my.cup_id = cm.cup_id AND my.team_id = ? AND my.id IN (cm.home_cup_team_id, cm.away_cup_team_id)
       WHERE cm.status = 'scheduled' AND cm.scheduled_at IS NOT NULL AND substr(cm.scheduled_at, 1, 10) <= ?`,
   ).bind(teamId, gameDay).all<{ id: string }>()

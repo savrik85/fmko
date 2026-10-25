@@ -1,7 +1,7 @@
 /**
  * Týdenní správa AI klubu (pondělí po týdenních financích).
  *
- * Trenér projde klub jako člověk: trénink, vstupné, trávník, stavby, vybavení,
+ * Trenér projde klub jako člověk: trénink, vstupné, trávník, bufet, stavby, vybavení,
  * zaměstnance, akademii, bannery a přesuny mezi áčkem a U21. Volí model (nebo
  * náhradní pravidlo podle povahy), kód hlídá rezervu a všechno provede stejnými
  * službami jako lidský manažer (apps/api/src/services).
@@ -13,10 +13,13 @@ import { logger } from "../lib/logger";
 import { getEquipmentOptions, repairEquipment, upgradeEquipment } from "../services/equipment";
 import { listBannerOffers, MAX_BANNERS, signSponsorContract } from "../services/banner-sponsors";
 import { setAcademyInvestment, setTicketPrice } from "../services/club-settings";
+import { restockConcession, setConcessionMode, setConcessionProduct } from "../services/concessions";
 import { hireStaff, listStaffMarket, loadCoachLicence, requiredLicence } from "../services/staff-hire";
 import { getStadiumUpgradeOptions, maintainPitch, setPitchCareMode, upgradeStadiumFacility } from "../services/stadium";
 import { setTrainingPlan } from "../services/training";
 import { promotePlayerFromU21, sendPlayerToU21 } from "../services/u21-moves";
+import { CONCESSION_WINDOW_DAYS } from "./concession-decision";
+import { loadConcessionContext } from "./concessions";
 import { logDecision, type DecisionMode } from "./decision-log";
 import { callCoachModel, COACH_MODEL } from "./llm";
 import { readCoachMode } from "./mode";
@@ -35,10 +38,14 @@ const MAX_SURPLUS_OPTIONS = 8;
 
 const M = "ai-coach-weekly";
 
-/** Pravidelné výdaje klubu (z nich se počítá rezerva). Jednorázové nákupy sem nepatří. */
+/**
+ * Pravidelné výdaje klubu (z nich se počítá rezerva). Jednorázové nákupy sem nepatří a nákup
+ * do bufetu taky ne: zboží se prodá do týdne a zaplatí se z tržby. Kdyby se počítal, rezerva by
+ * rostla s každým nákupem o několik týdnů nákupů a na další sklad by nezbylo.
+ */
 const RUNNING_COST_TYPES = [
   "wage", "staff_wage", "training_cost", "match_expense", "pitch_maintenance", "pitch_repair", "youth_academy",
-  "competition_fee", "cash_loan_repayment", "concession_wholesale", "equipment_expense", "bus_subsidy", "transfer_installment",
+  "competition_fee", "cash_loan_repayment", "equipment_expense", "bus_subsidy", "transfer_installment",
 ];
 
 const POSITION_DEPTH: Record<string, number> = { GK: 2, DEF: 6, MID: 6, FWD: 4 };
@@ -64,10 +71,11 @@ function addDays(day: string, n: number): string {
 async function weeklyFinance(db: D1Database, teamId: string, gameDay: string, u21Id: string | null): Promise<{ running: number; income: number }> {
   const since = addDays(gameDay, -28);
   const placeholders = RUNNING_COST_TYPES.map(() => "?").join(",");
+  // Příjem bufetu jen čistý: tržba minus nákup zboží (nákup není v provozních nákladech).
   const row = await db.prepare(
     `SELECT
        COALESCE(SUM(CASE WHEN amount < 0 AND type IN (${placeholders}) THEN -amount ELSE 0 END), 0) AS running,
-       COALESCE(SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END), 0) AS income,
+       COALESCE(SUM(CASE WHEN amount > 0 THEN amount WHEN type = 'concession_wholesale' THEN amount ELSE 0 END), 0) AS income,
        MIN(game_date) AS first_day
      FROM transactions WHERE team_id = ? AND game_date >= ?`,
   ).bind(...RUNNING_COST_TYPES, teamId, since).first<{ running: number; income: number; first_day: string | null }>()
@@ -264,6 +272,10 @@ export async function loadWeeklyContext(db: D1Database, teamId: string, gameDayO
 
   const effectivePrice = fans && fans.base_ticket_price > 0 ? fans.base_ticket_price : villageBase;
   const youthWeekly = { none: 0, minimal: 1500, medium: 5000, high: 12000 }[(team.youth_investment ?? "none") as "none"] ?? 0;
+  // Bufet: domácí zápasy do příští pondělní správy, sklad jen z peněz nad rezervou.
+  const concessions = await loadConcessionContext(db, teamId, {
+    gameDay, days: CONCESSION_WINDOW_DAYS, spendable: Math.max(0, team.budget - reserve),
+  });
   return {
     teamId,
     teamName: team.name,
@@ -315,6 +327,7 @@ export async function loadWeeklyContext(db: D1Database, teamId: string, gameDayO
       needs: analysis.needs.map((n) => ({ position: n.position, need: Math.round(n.need * 100) / 100, missing: n.missing, startersAverage: n.startersAverage })),
       surplus,
     },
+    concessions,
   };
 }
 
@@ -336,7 +349,8 @@ export async function decideWeekly(env: Pick<Bindings, "AI">, ctx: WeeklyContext
   const res = await callCoachModel(env, {
     system: WEEKLY_SYSTEM_PROMPT,
     user: renderWeeklyPrompt(ctx),
-    maxTokens: 1500,
+    // Blok bufetu (čtyři produkty) přidá do odpovědi zhruba 150 tokenů.
+    maxTokens: 1800,
     schema: { name: "weekly_decision", schema: weeklyDecisionSchema(ctx) },
     model: opts.model,
     reasoningEffort: opts.reasoningEffort,
@@ -408,6 +422,23 @@ async function executeAction(db: D1Database, teamId: string, ctx: WeeklyContext,
         const res = await upgradeStadiumFacility(db, teamId, a.facility);
         return { ok: res.ok, detail: res.ok ? `${a.facility} -> ${res.newLevel}, ${res.cost} Kč` : res.error };
       }
+      case "concession_mode": {
+        const res = await setConcessionMode(db, teamId, a.mode);
+        return { ok: res.ok, detail: res.ok ? `${a.from} -> ${res.mode}` : res.error };
+      }
+      case "concession_product": {
+        const res = await setConcessionProduct(db, teamId, a.key, { qualityLevel: a.tier, sellPrice: a.price });
+        return { ok: res.ok, detail: res.ok ? `${a.key} L${a.fromTier} ${a.fromPrice} Kč -> L${res.qualityLevel} ${res.sellPrice} Kč` : res.error };
+      }
+      case "concession_stock": {
+        // Sklad se prodává jen ve vlastním provozu: když se provoz nepřepnul, zboží se nekupuje.
+        const stadium = await db.prepare("SELECT concession_mode FROM stadiums WHERE team_id = ?").bind(teamId)
+          .first<{ concession_mode: string | null }>()
+          .catch((e) => { logger.warn({ module: M, teamId }, "provoz bufetu před nákupem", e); return null; });
+        if (stadium?.concession_mode !== "self") return { ok: false, detail: "bufet nemá vlastní provoz" };
+        const res = await restockConcession(db, teamId, a.key, a.quantity, { expectedLevel: a.tier });
+        return { ok: res.ok, detail: res.ok ? `${a.key} L${res.level} +${res.quantity} ks, ${res.totalCost} Kč` : res.error };
+      }
     }
   } catch (e) {
     logger.warn({ module: M, teamId }, `akce ${a.kind} selhala`, e);
@@ -450,15 +481,18 @@ export async function runWeeklyReview(env: Bindings, teamId: string, now: Date, 
       executed.push({ action: a.kind, ok: r.ok, detail: r.detail });
       if (r.ok && "cost" in a) spent += a.cost;
     }
-    // Hlavní sponzor: stejné jednání jako u člověka, podpis úvodní nabídky majitele.
-    // Peníze klub dostává, nic neplatí, proto mimo rezervu a model.
-    const main = await maybeSignMainSponsor(db, teamId, ctx.profile)
-      .catch((e) => {
-        logger.warn({ module: M, teamId }, "hlavní sponzor", e);
-        return null;
-      });
-    if (main?.signed) executed.push({ action: "main_sponsor", ok: true, detail: main.detail });
   }
+  // Hlavní sponzor: firmu vybere model z firem, se kterými jde teď jednat, a podepíše se úvodní
+  // nabídka majitele stejným jednáním jako u člověka. Peníze klub dostává, nic neplatí, proto
+  // mimo rezervu. Vlastní záznam v deníku (main_sponsor); v režimu shadow a nanečisto jen rozhodne.
+  const main = await maybeSignMainSponsor(db, teamId, ctx.profile, {
+    mode, dryRun: opts.dryRun, ai: env, model: opts.model, contextRef: `week:${ctx.gameDay}`,
+    club: { league: ctx.league, weeklyRunningCost: ctx.finance.weeklyRunningCost, weeklyIncome: ctx.finance.weeklyIncome },
+  }).catch((e) => {
+    logger.warn({ module: M, teamId }, "hlavní sponzor", e);
+    return null;
+  });
+  if (main?.signed) executed.push({ action: "main_sponsor", ok: true, detail: main.detail });
 
   await logDecision(db, {
     teamId,
@@ -468,8 +502,12 @@ export async function runWeeklyReview(env: Bindings, teamId: string, now: Date, 
     contextRef: `week:${ctx.gameDay}`,
     inputSummary: renderWeeklyPrompt(ctx),
     rawOutput: decided.raw,
-    // `transferPlan` čte denní práce na trhu (transfer-market.ts), `at` je čas rozhodnutí z hodin hry.
-    actions: { decision: decided.decision, rejected: decided.rejected, plan: plan.actions, skipped: plan.skipped, transferPlan: plan.transfers, at: now.toISOString() },
+    // `transferPlan` čte denní práce na trhu (transfer-market.ts), `concessionPlan` dorovnání skladu
+    // před domácím zápasem (concessions.ts), `at` je čas rozhodnutí z hodin hry.
+    actions: {
+      decision: decided.decision, rejected: decided.rejected, plan: plan.actions, skipped: plan.skipped,
+      transferPlan: plan.transfers, concessionPlan: plan.concessions, at: now.toISOString(),
+    },
     executed: executed.length ? executed : null,
     usedFallback: decided.used === "fallback",
     error: decided.error,

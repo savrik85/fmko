@@ -13,8 +13,8 @@ import { gameExpiry } from "../lib/game-time";
 import { logger } from "../lib/logger";
 import { applyReputationDelta } from "../lib/reputation";
 import { seedFromString } from "../lib/seed";
-import { sendSystemSMS } from "../messaging/system-sms";
 import { removePlayer } from "../transfers/remove-player";
+import { sendIncidentSystemSms } from "./club-messages";
 import { zapisIncident } from "./dopady";
 import { smsIncidentu } from "./incident-db";
 import { SANCE_UTEKU, SMS_ROLE_KUSTOD, UTEK_MAX_VERNOST, UTEK_MIN_ROZPOCET, UTEK_REPUTACE } from "./nastaveni";
@@ -138,7 +138,7 @@ export async function provedUtek(env: Bindings, stav: StavKlubu, kdo: HracKlubu,
     payload: { co: kdo.jmeno }, gameDate: stav.gameDate, referenceId: `${id}-udalost`,
   }).catch((e) => { logger.error({ module: M }, `klubová událost útěku ${id}`, e); return null; });
 
-  await sendSystemSMS(env.DB, stav.teamId, SMS_ROLE_KUSTOD, text(rng, "sms_utek", hodnoty), smsIncidentu(id))
+  await sendIncidentSystemSms(env.DB, stav.teamId, SMS_ROLE_KUSTOD, text(rng, "sms_utek", hodnoty), smsIncidentu(id))
     .catch((e) => { logger.error({ module: M }, `SMS o útěku ${id}`, e); return null; });
 
   logger.info({ module: M, teamId: stav.teamId }, `útěk s penězi, hráč ${kdo.id}, částka ${castka}`);

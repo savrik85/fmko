@@ -7,9 +7,9 @@ import { createRng } from "../generators/rng";
 import type { Bindings } from "../index";
 import { logger } from "../lib/logger";
 import { seedFromString } from "../lib/seed";
-import { sendSystemSMS } from "../messaging/system-sms";
 import { zavolejPolicii, type VysledekAkce } from "./akce";
 import { cenaKradenehoZbozi, jePoznatelne, jmenoProdejce, kradeneZbozi, lzeNahlasit } from "./bazar";
+import { sendIncidentSystemSms } from "./club-messages";
 import { nactiIncident, smsIncidentu } from "./incident-db";
 import { BONUS_POLICIE, KRADENE_INZERAT_DNI, PRODEJNE_KRADEZE, SMS_ROLE_KUSTOD, SMS_ROLE_POLICIE } from "./nastaveni";
 import { nactiZtraty } from "./popis";
@@ -93,7 +93,7 @@ export async function vystavKradeneZbozi(
           bonusPolicie: BONUS_POLICIE.bazar, nalezena: true, text: text(rng, "stopa_bazar", { vec }),
         }], t.gameDate)).catch((e) => logger.warn({ module: M }, `stopa bazaru ${inc.id}`, e));
       }
-      await sendSystemSMS(db, t.teamId, SMS_ROLE_KUSTOD, `🛒 ${text(rng, "bazar_poznano", { vec })}`, smsIncidentu(inc.id))
+      await sendIncidentSystemSms(db, t.teamId, SMS_ROLE_KUSTOD, `🛒 ${text(rng, "bazar_poznano", { vec })}`, smsIncidentu(inc.id))
         .catch((e) => logger.warn({ module: M }, `SMS bazaru ${inc.id}`, e));
     }
   }
@@ -124,7 +124,7 @@ export async function poNakupuKradeneho(
     // Nepoznatelné zboží se vrací potichu: SMS „věci jsou zpátky" by klubu prozradila, že šlo
     // právě o jeho ukradené věci, ačkoli je poznat neměl mít jak.
     if (jePoznatelne(n.kategorie, n.uroven)) {
-      await sendSystemSMS(db, inc.team_id, SMS_ROLE_KUSTOD, `🛒 ${text(rng, "bazar_vraceno", { vec })}`, smsIncidentu(inc.id))
+      await sendIncidentSystemSms(db, inc.team_id, SMS_ROLE_KUSTOD, `🛒 ${text(rng, "bazar_vraceno", { vec })}`, smsIncidentu(inc.id))
         .catch((e) => logger.warn({ module: M }, `SMS vrácení ${inc.id}`, e));
     }
     return "vraceno";
@@ -138,7 +138,7 @@ export async function poNakupuKradeneho(
       zdroj: "bazar", ukazujeNa: null, podezreli: null, drzitel: null, sila: 1, bonusPolicie: 0, nalezena: true, text: zprava,
     }], n.gameDate, 2)).catch((e) => logger.warn({ module: M }, `stopa nákupu kradeného zboží ${inc.id}`, e));
   }
-  await sendSystemSMS(db, inc.team_id, SMS_ROLE_KUSTOD, `🛒 ${zprava}`, smsIncidentu(inc.id))
+  await sendIncidentSystemSms(db, inc.team_id, SMS_ROLE_KUSTOD, `🛒 ${zprava}`, smsIncidentu(inc.id))
     .catch((e) => logger.warn({ module: M }, `SMS nákupu kradeného zboží ${inc.id}`, e));
   return "koupil_jiny";
 }
@@ -188,7 +188,7 @@ export async function nahlasKradeneZbozi(
   if ((await stahniInzerat(db, listingId)) === 0) return { ok: false, kod: 409, chyba: "Inzerát už v bazaru není" };
   const rng = createRng(seedFromString(`bazar-policie|${inc.id}`));
   const vec = CATEGORY_LABELS[inzerat.category] ?? inzerat.category;
-  await sendSystemSMS(db, teamId, SMS_ROLE_POLICIE, `🚓 ${text(rng, "policie_bazar", { vec })}`, smsIncidentu(inc.id))
+  await sendIncidentSystemSms(db, teamId, SMS_ROLE_POLICIE, `🚓 ${text(rng, "policie_bazar", { vec })}`, smsIncidentu(inc.id))
     .catch((e) => logger.warn({ module: M }, `SMS policie k inzerátu ${inc.id}`, e));
   return { ok: true, vysledekOn: inc.police_result_on };
 }

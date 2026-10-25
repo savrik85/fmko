@@ -82,6 +82,17 @@ export async function clubStepFor(
   return { step: "stronger_team", note: `${teamName} hraje ${league}, to není vyšší soutěž než ta tvoje. Netvrď, že bys tam hrál lepší soutěž.` };
 }
 
+/**
+ * Vede klub AI trenér? Truc jeho hráčů běží podle stejných pravidel, jen bez zpráv (spec AI
+ * klubů 3.2): žádná SMS, rozhovor ani oznámení. Při chybě čtení se zprávy pošlou jako dřív,
+ * ať lidský klub o nic nepřijde.
+ */
+async function isAiClub(db: D1Database, clubTeamId: string): Promise<boolean> {
+  const row = await db.prepare("SELECT user_id FROM teams WHERE id = ?").bind(clubTeamId).first<{ user_id: string | null }>()
+    .catch((e) => { logger.warn({ module: "rejection-impact" }, `typ klubu ${clubTeamId}`, e); return null; });
+  return row?.user_id === "ai";
+}
+
 export function parseUnrest(lifeContext: string | null | undefined): TransferUnrest | null {
   try {
     const lc = lifeContext ? JSON.parse(lifeContext) : {};
@@ -162,6 +173,8 @@ export async function applyOfferRejectionImpact(
   ).bind(playerId, sellerClubTeamId).first<Record<string, unknown>>()
     .catch((e) => { logger.warn({ module: "rejection-impact" }, "load player", e); return null; });
   if (!player) return;
+  // AI klub: stejný dopad na hráče, ale žádná SMS, rozhovor ani oznámení.
+  const silent = await isAiClub(db, sellerClubTeamId);
 
   // Jméno nabízejícího klubu
   let teamName = "Neznámý klub";
@@ -219,7 +232,7 @@ export async function applyOfferRejectionImpact(
       const newMorale = clamp(morale + 2, 0, 100);
       await db.prepare("UPDATE players SET life_context = json_set(life_context, '$.morale', ?) WHERE id = ?")
         .bind(newMorale, playerId).run().catch((e) => logger.warn({ module: "rejection-impact" }, "loyal morale boost", e));
-      await sendPlayerSMS(db, sellerClubTeamId, playerRef, pick(REJECTED_SMS_LOYAL).replace("{team}", teamName));
+      if (!silent) await sendPlayerSMS(db, sellerClubTeamId, playerRef, pick(REJECTED_SMS_LOYAL).replace("{team}", teamName));
     }
     return;
   }
@@ -295,6 +308,13 @@ export async function applyOfferRejectionImpact(
     referenceId: offer.id ? `offer-reject-${offer.id as string}-${playerId}` : null,
   });
 
+  // AI klubu se nepíše: truc, nálada i vztah k trenérovi platí, SMS, rozhovor a oznámení ne.
+  if (silent) {
+    logger.info({ module: "rejection-impact" },
+      `${trigger} (AI klub, bez zpráv): ${playerRef.firstName} ${playerRef.lastName} interest=${level} morale ${morale}→${newMorale} unrest ${unrest.level}→${newLevel}`);
+    return;
+  }
+
   // SMS od hráče — naštvání podle tempera; při porušeném slibu vždy nejostřejší
   const pool = brokenTransferPledge || temper > 65 ? REJECTED_SMS_WANTS_HOT : REJECTED_SMS_WANTS;
   const smsBody = brokenReleasePledge
@@ -358,17 +378,22 @@ function pick<T>(arr: T[]): T {
  * Denní zpracování trucu (volané z transfer pressure ticku):
  * decay, fake injury, fyzio nápověda, zázračné uzdravení, kontrola slibů.
  * Jeden SELECT + malé množství cílených UPDATE (trucujících hráčů je jednotky).
+ *
+ * Platí i pro AI kluby (spec AI klubů 3.2): truc opadá, sliby se vyhodnocují a hráč může
+ * předstírat zranění stejně jako u člověka, jen AI klub nedostane žádnou zprávu.
  */
 export async function processTransferUnrest(db: D1Database): Promise<number> {
   const rows = await db.prepare(
     `SELECT p.id, p.first_name, p.last_name, p.nickname, p.avatar, p.team_id,
             COALESCE(owner_team.parent_team_id, owner_team.id, t.parent_team_id, t.id) AS club_team_id,
+            (SELECT club.user_id FROM teams club
+              WHERE club.id = COALESCE(owner_team.parent_team_id, owner_team.id, t.parent_team_id, t.id)) AS club_user_id,
             p.personality, p.life_context,
             (SELECT COUNT(*) FROM injuries i WHERE i.player_id = p.id AND i.days_remaining > 0) as active_injuries,
             (SELECT COUNT(*) FROM injuries i WHERE i.player_id = p.id AND i.is_fake = 1 AND i.days_remaining > 0) as active_fake
      FROM players p JOIN teams t ON p.team_id = t.id
      LEFT JOIN teams owner_team ON owner_team.id = p.loan_from_team_id
-     WHERE t.user_id != 'ai' AND json_extract(p.life_context, '$.transferUnrest') IS NOT NULL`
+     WHERE json_extract(p.life_context, '$.transferUnrest') IS NOT NULL`
   ).all<Record<string, unknown>>()
     .catch((e) => { logger.warn({ module: "rejection-impact" }, "load unrest players", e); return { results: [] as Record<string, unknown>[] }; });
 
@@ -401,6 +426,9 @@ async function processUnrestPlayer(db: D1Database, row: Record<string, unknown>)
   };
   const hasFakeInjury = ((row.active_fake as number) ?? 0) > 0;
   const nowIso = new Date().toISOString();
+  // AI klub: stejná mechanika, žádné SMS (hráč ani fyzioterapeut AI trenérovi nepíšou).
+  const silent = row.club_user_id === "ai";
+  const sms = async (body: string) => { if (!silent) await sendPlayerSMS(db, clubTeamId, playerRef, body); };
 
   // 1) Kontrola slibu minut (pledge 'minutes') — 2 ze 3 zápasů týmu od slibu v základu (45+ min)
   let pledgeBroken = false;
@@ -410,7 +438,7 @@ async function processUnrestPlayer(db: D1Database, row: Record<string, unknown>)
       unrest.pledge = null;
       await resolvePromises(db, playerId, ["minutes"], "kept");
       unrest.level = clamp(unrest.level - 10, 0, 100);
-      await sendPlayerSMS(db, clubTeamId, playerRef, "Trenére, díky že jste dodržel slovo s tou sestavou. Vážím si toho.");
+      await sms("Trenére, díky že jste dodržel slovo s tou sestavou. Vážím si toho.");
     } else if (verdict === "broken") {
       pledgeBroken = true;
       unrest.pledge = null;
@@ -418,7 +446,7 @@ async function processUnrestPlayer(db: D1Database, row: Record<string, unknown>)
       unrest.level = clamp(unrest.level + 35, 0, 100);
       const morale: number = typeof lc.morale === "number" ? lc.morale : 50;
       lc.morale = clamp(morale - 8, 0, 100);
-      await sendPlayerSMS(db, clubTeamId, playerRef, "Sliboval jste mi místo v sestavě, trenére. A já zase sedím. Tohle nemá cenu.");
+      await sms("Sliboval jste mi místo v sestavě, trenére. A já zase sedím. Tohle nemá cenu.");
     }
   } else if ((unrest.pledge?.type === "transfer" || unrest.pledge?.type === "release") && new Date(unrest.pledge.deadline) < new Date()) {
     // Slib prodeje vypršel bez další nabídky — smazat (porušení řeší applyOfferRejectionImpact)
@@ -437,14 +465,14 @@ async function processUnrestPlayer(db: D1Database, row: Record<string, unknown>)
   if (unrest.level <= 0 && !unrest.pledge) {
     await db.prepare("UPDATE players SET life_context = json_remove(life_context, '$.transferUnrest') WHERE id = ?")
       .bind(playerId).run().catch((e) => logger.warn({ module: "rejection-impact" }, "remove unrest", e));
-    if (hasFakeInjury) await healFakeInjury(db, clubTeamId, playerRef);
+    if (hasFakeInjury) await healFakeInjury(db, clubTeamId, playerRef, silent);
     return;
   }
 
   // 4) Zázračné uzdravení — truc klesl pod 40, fake injury ztratila smysl
   if (hasFakeInjury && unrest.level < 40) {
-    await healFakeInjury(db, clubTeamId, playerRef);
-  } else if (hasFakeInjury && !unrest.fakeInjuryHintSent && unrest.fakeInjuryAt
+    await healFakeInjury(db, clubTeamId, playerRef, silent);
+  } else if (!silent && hasFakeInjury && !unrest.fakeInjuryHintSent && unrest.fakeInjuryAt
     && (Date.now() - new Date(unrest.fakeInjuryAt).getTime()) >= 3 * DAY_MS) {
     // 5) Fyzio nápověda 3. den — manažer dostane stopu, že zranění je podezřelé
     await sendSystemSMS(db, clubTeamId, "Fyzioterapeut",
@@ -463,7 +491,7 @@ async function processUnrestPlayer(db: D1Database, row: Record<string, unknown>)
         "INSERT INTO injuries (id, player_id, team_id, type, description, severity, days_remaining, days_total, is_fake) VALUES (?, ?, ?, ?, ?, 'stredni', ?, ?, 1)"
       ).bind(crypto.randomUUID(), playerId, rosterTeamId, inj.type, inj.description, days, days).run()
         .catch((e) => logger.warn({ module: "rejection-impact" }, "insert fake injury", e));
-      await sendPlayerSMS(db, clubTeamId, playerRef, inj.smsText);
+      await sms(inj.smsText);
       unrest.fakeInjuryUsed = true;
       unrest.fakeInjuryAt = nowIso;
       unrest.level = clamp(Math.min(unrest.level, 55), 0, 100);
@@ -477,14 +505,16 @@ async function processUnrestPlayer(db: D1Database, row: Record<string, unknown>)
     .catch((e) => logger.warn({ module: "rejection-impact" }, "save unrest", e));
 }
 
-/** Smaže fake injury a pošle zprávu o zázračném uzdravení. */
+/** Smaže fake injury a pošle zprávu o zázračném uzdravení (AI klubu ne, `silent`). */
 async function healFakeInjury(
   db: D1Database,
   teamId: string,
   playerRef: { id: string; firstName: string; lastName: string; nickname?: string | null; avatar?: string | null },
+  silent: boolean,
 ): Promise<void> {
   await db.prepare("DELETE FROM injuries WHERE player_id = ? AND is_fake = 1").bind(playerRef.id).run()
     .catch((e) => logger.warn({ module: "rejection-impact" }, "heal fake injury", e));
+  if (silent) return;
   await sendPlayerSMS(db, teamId, playerRef, "Trenére, dobrá zpráva, cítím se najednou mnohem líp. Můžu zase naskočit do tréninku.");
 }
 
