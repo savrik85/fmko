@@ -80,7 +80,7 @@ export function TeamSide({
             <span className="font-heading font-bold text-sm truncate">{team.name}</span>
           </div>
         ) : (
-        <Link href={`/klub/${team.id}`} className={`flex items-center gap-2 group ${isRight ? "flex-row-reverse" : ""}`}>
+        <Link href={`/tym/${team.id}`} className={`flex items-center gap-2 group ${isRight ? "flex-row-reverse" : ""}`}>
           <BadgePreview
             primary={team.primary_color}
             secondary={team.secondary_color}
