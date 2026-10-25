@@ -275,7 +275,8 @@ async function replyAsSeller(ctx: RunContext, offer: OfferRow, buyerClubTeamId: 
   const player = await loadPlayer(db, offer.player_id);
   if (!player) {
     const res = ctx.mode === "shadow" ? null : await rejectTransferOffer(ctx.env, club.teamId, offer.id);
-    await log(ctx, { contextRef: offer.id, inputSummary: `player ${offer.player_id} missing`, actions: { kind: "reject", reason: "player_missing" }, executed: res?.ok ? "rejected" : "shadow" });
+    const executed = ctx.mode === "shadow" ? "shadow" : res?.ok ? "rejected" : "failed";
+    await log(ctx, { contextRef: offer.id, inputSummary: `player ${offer.player_id} missing`, actions: { kind: "reject", reason: "player_missing" }, executed, error: res && !res.ok ? res.error : null });
     return true;
   }
   const mv = playerValue(player);
