@@ -32,6 +32,7 @@ export const KIND_LABELS: Record<string, string> = {
   main_sponsor: "hlavní sponzor",
   unrest: "nespokojený hráč",
   incident: "incident v klubu",
+  season_duels: "kdo zůstane",
 };
 
 export interface StatusClub {
