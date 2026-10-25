@@ -17,7 +17,7 @@ odpověď zkontroluje a provede stejnou službou jako u člověka. Při výpadku
 | Rozhodnutí | Model vybírá | Kód hlídá | Druh v deníku |
 |---|---|---|---|
 | Zápas | formace, taktika, tvrdost, koho šetřit, kapitán, exekutoři, střídání | skladba jedenáctky, slib základu (hraje vždy) | `match` |
-| Pondělní správa | trénink, vstupné, trávník, stadion, vybavení, zaměstnanci, akademie, plachty, U21, přestupní kurz | rezerva, ceny, pravidla služeb | `weekly` |
+| Pondělní správa | trénink, vstupné, trávník, stadion, vybavení, zaměstnanci, akademie, plachty, U21, přestupní kurz, bufet (pronájem nebo vlastní prodej, kvalita, cena, nákup zboží) | rezerva, ceny, pravidla služeb, zboží jen z peněz nad rezervou; před domácím zápasem doplnění skladu | `weekly`, `concession_topup` |
 | Hlavní sponzor | kterou firmu oslovit (nebo nikoho) | dostupnost firmy, exkluzivita, podpis úvodní nabídky | `main_sponsor` |
 | Přáteláky | přijmout výzvu; jestli, kdy, kde a o kolik vypsat nabídku | soutěž den před a po, max. 2, sázka a náklady v mezích povahy | `friendly_reply`, `friendly_offer` |
 | Nákup | kterého hráče (přestup, volný, hostování, poptávka), výše nabídky, odpovědi na protinávrhy (i klubům mimo hru), koho vzít z hráčů nabídnutých na poptávku | strop ceny, rezerva, limity obchodů, propojené kluby, žádná procenta z dalšího prodeje | `transfer_market`, `transfer_negotiation`, `demand_pitch` |
