@@ -236,15 +236,27 @@ export async function callCoachModel(env: Pick<Bindings, "AI">, req: CoachModelR
     return { json: null, raw: "", model, latencyMs: 0, error: "chybí binding AI" };
   }
 
+  const timeoutMs = req.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const input = buildModelInput(model, req);
   let res: unknown;
   try {
-    res = await withTimeout(
-      ai.run(model, buildModelInput(model, req), { tags: ["ai-coach"] }),
-      req.timeoutMs ?? DEFAULT_TIMEOUT_MS,
-    );
-  } catch (e) {
-    logger.warn({ module: "ai-coach-llm" }, `volání modelu ${model} selhalo`, e);
-    return { json: null, raw: "", model, latencyMs: Date.now() - started, error: String((e as Error)?.message ?? e).slice(0, 500) };
+    res = await withTimeout(ai.run(model, input, { tags: ["ai-coach"] }), timeoutMs);
+  } catch (first) {
+    // Přechodná chyba platformy (5017, 8008, výpadek sítě) přijde do pár vteřin: jednou zopakovat.
+    // Vlastní překročený čas ani pomalou chybu ne, to by úlohu jen protáhlo.
+    const elapsed = Date.now() - started;
+    const message = String((first as Error)?.message ?? first);
+    if (message.startsWith("timeout") || elapsed > 30_000) {
+      logger.warn({ module: "ai-coach-llm" }, `volání modelu ${model} selhalo`, first);
+      return { json: null, raw: "", model, latencyMs: elapsed, error: message.slice(0, 500) };
+    }
+    logger.warn({ module: "ai-coach-llm" }, `volání modelu ${model} selhalo, zkouším znovu`, first);
+    try {
+      res = await withTimeout(ai.run(model, input, { tags: ["ai-coach"] }), Math.max(10_000, timeoutMs - elapsed));
+    } catch (e) {
+      logger.warn({ module: "ai-coach-llm" }, `volání modelu ${model} selhalo i podruhé`, e);
+      return { json: null, raw: "", model, latencyMs: Date.now() - started, error: String((e as Error)?.message ?? e).slice(0, 500) };
+    }
   }
 
   const out = extractModelOutput(res);

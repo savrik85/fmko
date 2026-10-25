@@ -86,6 +86,22 @@ describe("volání modelu", () => {
     expect(res.error).toContain("8008");
   });
 
+  it("přechodnou chybu platformy jednou zopakuje", async () => {
+    let calls = 0;
+    const env = {
+      AI: {
+        run: async () => {
+          calls++;
+          if (calls === 1) throw new Error("5017: Failed to fetch configuration");
+          return { choices: [{ message: { content: '{"ok":1}' } }] };
+        },
+      } as unknown as Ai,
+    };
+    const res = await callCoachModel(env, req);
+    expect(calls).toBe(2);
+    expect(res.json).toEqual({ ok: 1 });
+  });
+
   it("překročený čas vrátí null", async () => {
     const env = { AI: { run: () => new Promise((resolve) => setTimeout(() => resolve({ response: "{}" }), 200)) } as unknown as Ai };
     const res = await callCoachModel(env, { ...req, timeoutMs: 20 });
