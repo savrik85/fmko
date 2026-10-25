@@ -6,7 +6,8 @@
  * - dá na trh přebytečné hráče (cena z `valuation.ts`, nikdy pod rezervací),
  * - nabídne přebytečného hráče k cizí poptávce,
  * - na nejslabší nebo nejtenčí post pošle nabídku (inzerát nebo přímo hráči v lize),
- *   když nic nenajde, založí poptávku,
+ *   o hráči klubu mimo hru (inzerát, hlášení skauta) jedná jako člověk (outside-buy.ts),
+ *   když nic nenajde, pošle skauta bez práce hledat a založí poptávku,
  * - šetrný trenér si na tenký post radši půjčí mladého hráče,
  * - pod minimem kádru podepíše volného hráče.
  *
@@ -26,6 +27,9 @@ import { claimCoachTask } from "./claims";
 import { logDecision, type DecisionMode } from "./decision-log";
 import type { HourlyHook } from "./hourly-hooks";
 import { readCoachMode } from "./mode";
+import {
+  loadScoutReportCandidates, maybeStartScoutTask, negotiateOutsidePurchase, outsideCandidateFromListing, type OutsideCandidate,
+} from "./outside-buy";
 import { ensureAiProfile, type AiCoachProfile } from "./profile";
 import { MAX_SQUAD, SIGNING_SQUAD_THRESHOLD, TARGET_SENIOR_SQUAD, type PositionNeed } from "./squad";
 import { loadAiClubState, pragueDay, pragueHour, type AiClubState } from "./transfer-club";
@@ -107,7 +111,7 @@ export function buyThreshold(position: string, plan: WeeklyTransferPlan | null):
 }
 
 export interface MarketAction {
-  kind: "list" | "pitch" | "offer" | "bid" | "loan_request" | "demand" | "sign_free_agent";
+  kind: "list" | "pitch" | "offer" | "bid" | "loan_request" | "demand" | "sign_free_agent" | "outside_buy" | "scout_task";
   playerId?: string;
   listingId?: string;
   demandId?: string;
@@ -253,6 +257,8 @@ interface BuyCandidate {
   listingId: string | null;
   askingPrice: number | null;
   sellerIsAi: boolean;
+  /** Hráč klubu mimo hru (inzerát nebo hlášení skauta): kupuje se jednáním, ne nabídkou. */
+  outside?: OutsideCandidate;
 }
 
 /** Kandidáti na post: inzeráty klubů ve hře a hráči soupeřů v lize (bez vlastních a hostujících). */
@@ -263,7 +269,18 @@ async function buyCandidates(env: Bindings, club: AiClubState, need: PositionNee
     const listings = await findVisibleListings(db, { id: club.teamId, leagueId: club.leagueId })
       .catch((e) => { logger.warn({ module: M }, "inzeráty pro nákup", e); return [] as Record<string, unknown>[]; });
     for (const l of listings) {
-      if (l.is_ai_listing || !l.player_id || l.position !== need.position) continue;
+      if (l.is_ai_listing) {
+        // Inzerát klubu mimo hru: vidí ho jen jeho liga, kupuje se jednáním jako u člověka.
+        const o = outsideCandidateFromListing(l);
+        if (o && o.position === need.position && o.rating >= need.minRating) {
+          out.set(`outside:${o.sourceId}`, {
+            playerId: `outside:${o.sourceId}`, teamId: "", leagueId: null, rating: o.rating, age: o.age, position: o.position,
+            marketValue: marketValue(o.rating, o.age, o.position), listingId: null, askingPrice: o.askingPrice, sellerIsAi: false, outside: o,
+          });
+        }
+        continue;
+      }
+      if (!l.player_id || l.position !== need.position) continue;
       const rating = Number(l.overall_rating) || 0;
       if (rating < need.minRating) continue;
       out.set(l.player_id as string, {
@@ -293,6 +310,14 @@ async function buyCandidates(env: Bindings, club: AiClubState, need: PositionNee
         sellerIsAi: owners.get(r.team_id)?.userId === "ai",
       });
     }
+  }
+  // Hlášení vlastního skauta o hráčích klubů mimo hru (střed odhadu, jak ho vidí i člověk).
+  for (const o of await loadScoutReportCandidates(db, club.teamId, now)) {
+    if (o.position !== need.position || o.rating < need.minRating) continue;
+    out.set(`outside:${o.sourceId}`, {
+      playerId: `outside:${o.sourceId}`, teamId: "", leagueId: null, rating: o.rating, age: o.age, position: o.position,
+      marketValue: marketValue(o.rating, o.age, o.position), listingId: null, askingPrice: o.askingPrice, sellerIsAi: false, outside: o,
+    });
   }
   // Obchody mezi AI kluby jsou vzácné: hráče jiného AI klubu AI zvažuje jen některé dny.
   const aiDay = stableUnit(`ai-to-ai|${club.teamId}|${pragueDay(now)}`) < AI_TO_AI_CHANCE;
@@ -336,11 +361,20 @@ async function buyForNeed(env: Bindings, club: AiClubState, now: Date, mode: Dec
   let attempts = 0;
   for (const c of priced) {
     if (attempts >= MAX_OFFER_ATTEMPTS) break;
-    if (await hasOpenOfferFor(db, c.playerId, club.teamId) || !(await cooldownFree(db, c.playerId, club.teamId))) continue;
+    if (!c.outside && (await hasOpenOfferFor(db, c.playerId, club.teamId) || !(await cooldownFree(db, c.playerId, club.teamId)))) continue;
     attempts++;
     if (mode === "shadow") {
-      actions.push({ kind: c.listingId ? "bid" : "offer", playerId: c.playerId, listingId: c.listingId ?? undefined, amount: c.amount, position: need.position, result: "shadow" });
+      actions.push({ kind: c.outside ? "outside_buy" : c.listingId ? "bid" : "offer", playerId: c.playerId, listingId: c.listingId ?? undefined, amount: c.amount, position: need.position, result: "shadow" });
       return;
+    }
+    if (c.outside) {
+      const res = await negotiateOutsidePurchase(db, club, c.outside, c.amount, c.maxPrice, now);
+      actions.push({
+        kind: "outside_buy", playerId: c.playerId, amount: res.result === "signed" ? res.amount : c.amount, position: need.position,
+        result: res.result, error: res.result === "signed" ? undefined : res.detail,
+      });
+      if (res.result === "signed") return;
+      continue;
     }
     if (c.listingId) {
       const res = await placeListingBid(env, club.teamId, c.listingId, { amount: c.amount });
@@ -368,7 +402,17 @@ async function buyForNeed(env: Bindings, club: AiClubState, now: Date, mode: Dec
     }
   }
 
-  // Nic vhodného na trhu: poptávka (nejvýš jedna na post).
+  // Nic vhodného na trhu: skaut bez práce vyjede hledat po klubech mimo hru (jako u člověka).
+  if (mode === "shadow") {
+    actions.push({ kind: "scout_task", position: need.position, result: "shadow" });
+  } else {
+    const team = await db.prepare("SELECT game_date FROM teams WHERE id = ?").bind(club.teamId).first<{ game_date: string | null }>()
+      .catch((e) => { logger.warn({ module: M }, "herní datum pro skauta", e); return null; });
+    const scout = await maybeStartScoutTask(db, club, need.position, (team?.game_date ?? now.toISOString()).slice(0, 10));
+    if (scout.started) actions.push({ kind: "scout_task", position: need.position, amount: scout.radiusKm, result: "started" });
+  }
+
+  // A poptávka (nejvýš jedna na post), ať se ozvou i kluby ve hře.
   const existing = await db.prepare("SELECT 1 AS x FROM transfer_demands WHERE team_id = ? AND position = ? AND status = 'active' AND expires_at > ? LIMIT 1")
     .bind(club.teamId, need.position, now.toISOString()).first<{ x: number }>()
     .catch((e) => { logger.warn({ module: M }, "vlastní poptávky", e); return null; });
