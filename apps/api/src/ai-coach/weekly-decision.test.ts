@@ -124,6 +124,12 @@ describe("týdenní správa nepřekročí rezervu", () => {
     expect(investOf(builder)).toBeGreaterThan(investOf(saver));
   });
 
+  it("volná místa na bannery se doplní nejlepšími nabídkami, i když je model nevybral", () => {
+    const plan = planWeeklyActions(context(100_000), { ...everything, banners: [] });
+    const signed = plan.actions.filter((a) => a.kind === "banner").map((a) => ("key" in a ? a.key : ""));
+    expect(signed).toEqual(["B1", "B2"]);
+  });
+
   it("bannery jen do volných míst", () => {
     const plan = planWeeklyActions(context(100_000), everything);
     expect(plan.actions.filter((a) => a.kind === "banner")).toHaveLength(2);

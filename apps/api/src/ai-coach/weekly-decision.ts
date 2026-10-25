@@ -364,6 +364,13 @@ export function planWeeklyActions(ctx: WeeklyContext, d: WeeklyDecision): Weekly
     if (actions.filter((a) => a.kind === "banner").length >= freeSlots) { skipped.push({ item: key, reason: "plné bannery" }); continue; }
     actions.push({ kind: "banner", key, sponsorName: o.ref, sponsorType: o.sponsorType, monthly: o.monthly, seasons: o.seasons });
   }
+  // Banner jen přináší peníze a nic nestojí: volná místa doplní nejlepší zbylé nabídky
+  // (měření: model občas nechal místo prázdné bez důvodu).
+  for (const o of ctx.banners.offers) {
+    if (actions.filter((a) => a.kind === "banner").length >= freeSlots) break;
+    if (actions.some((a) => a.kind === "banner" && a.key === o.key)) continue;
+    actions.push({ kind: "banner", key: o.key, sponsorName: o.ref, sponsorType: o.sponsorType, monthly: o.monthly, seasons: o.seasons });
+  }
 
   let squad = ctx.u21.aTeamSize;
   for (const key of d.promote) {
@@ -507,7 +514,7 @@ export function renderWeeklyPrompt(ctx: WeeklyContext): string {
   L.push("Roles: asistent (faster player development), maser (better daily recovery), lekar (shorter injuries), kondicni_trener (less fatigue), spravce_hriste (pitch keeps condition), trener_mladeze (youth development), trener_brankaru (goalkeepers), psycholog (morale), obsluha (refreshment sales), sef_fanklubu (fans), ekonom (finances), skaut (scouting).");
   L.push("");
   L.push(`YOUTH ACADEMY now: ${ctx.academy.current}. Options keep / none / minimal (1,500 CZK a month) / medium (5,000) / high (12,000); more investment = more and better youth graduates at season end.`);
-  L.push(`BANNER SPONSORS: ${ctx.banners.active}/${ctx.banners.max} used. Offers (key: company, monthly payment, seasons); banners only bring money:`);
+  L.push(`BANNER SPONSORS: ${ctx.banners.active}/${ctx.banners.max} used. Offers (key: company, monthly payment, seasons); banners only bring money, free slots are filled with the best offers you do not pick:`);
   L.push(ctx.banners.offers.length ? ctx.banners.offers.map((o) => `${o.key}: ${o.label}, ${czk(o.monthly)}/month, ${o.seasons} season(s)`).join("\n") : "(none)");
   L.push("");
   L.push(`U21: ${ctx.u21.exists ? `A-team has ${ctx.u21.aTeamSize} players.` : "the club has no U21 team."}`);
