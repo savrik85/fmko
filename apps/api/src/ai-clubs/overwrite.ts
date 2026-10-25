@@ -5,7 +5,7 @@
  * místo v lize: id týmu, odehrané zápasy, tabulka a místo v poháru. Všechno ostatní z AI klubu
  * zmizí, aby si hráč všechno rozjel podle sebe: hráči (i jejich statistiky, vztahy, zranění),
  * zaměstnanci (vrací se do poolu), sponzoři, rozjednané přestupy a nabídky, inzeráty, poptávky,
- * přáteláky, deník AI trenéra, stadion a vybavení (založí se nové).
+ * přáteláky, deník AI trenéra, incidenty v klubu, stadion a vybavení (založí se nové).
  *
  * Peníze se nikomu nestrhnou ani nepřipíšou: rozjednané přestupy se stáhnou, splátky a procenta
  * z přestupů s AI klubem propadnou, složené sázky přáteláků se vrátí. Hráč, kterého si mezitím
@@ -258,6 +258,12 @@ export async function wipeAiClubForNewcomer(db: D1Database, teamId: string, opts
   // ── Deník a nároky AI trenéra ──
   await runStatement(db, "deník AI trenéra", "DELETE FROM ai_coach_decisions WHERE team_id = ?", teamId);
   await runStatement(db, "nároky AI trenéra", "DELETE FROM ai_coach_claims WHERE team_id = ?", teamId);
+
+  // ── Incidenty AI klubu (krádeže, škody, situace hráčů): nový klub je nezdědí ──
+  // Id týmu zůstává, bez úklidu by nový trenér viděl otevřené případy hráčů, kteří už nejsou.
+  for (const table of ["club_incident_absences", "club_incident_knowledge", "club_incident_clues", "club_incidents"]) {
+    await runStatement(db, table, `DELETE FROM ${table} WHERE team_id = ?`, teamId);
+  }
 
   // ── Stadion, vybavení, sestavy: nový klub začíná od nuly ──
   await runStatement(db, "inzeráty vybavení",

@@ -1,6 +1,10 @@
 /**
  * Incidenty jednoho klubu za jeden herní den (spec Část 6b, fáze 1 a 2).
- * Volá `processTeamDay`. AI kluby a rezervy U21 se ve fázi 1 přeskakují.
+ * Volá `processTeamDay`. Rezervy U21 se přeskakují.
+ *
+ * AI klubům se incidenty dějí stejně jako lidským (spec AI klubů 3.2), jen bez zpráv:
+ * SMS a notifikace jim nepošle `club-messages.ts` a rozhodnutí za ně udělá AI trenér
+ * (`ai-coach/incidents.ts`) stejnými službami, jaké volá člověk.
  */
 
 import { createRng } from "../generators/rng";
@@ -21,7 +25,7 @@ import { zpracujVysetrovani } from "./vysetrovani-den";
 const M = "incidents-den";
 
 export async function zpracujIncidentyDne(env: Bindings, team: Record<string, unknown>, gameDate: string): Promise<void> {
-  if (team.user_id === "ai" || team.team_type === "u21") return;
+  if (team.team_type === "u21") return;
   const teamId = team.id as string;
 
   const sezona = await env.DB.prepare("SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1")

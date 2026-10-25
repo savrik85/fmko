@@ -13,10 +13,10 @@ import { gameExpiry } from "../lib/game-time";
 import { logger } from "../lib/logger";
 import { seedFromString } from "../lib/seed";
 import { getOrCreatePlayerConversation } from "../messaging/ai-player-spawn";
-import { sendPlayerSMS } from "../messaging/system-sms";
 import { recordTransaction } from "../season/finance-processor";
 import type { VysledekAkce } from "./akce";
 import { denPlus, dluhyZretezenaId, prikazAbsence } from "./absence-hracu";
+import { clubReceivesMessages, sendIncidentPlayerSms } from "./club-messages";
 import { idIncidentu, zapisIncident } from "./dopady";
 import { posunHrace } from "./hraci";
 import { herniDatum, nactiIncident, smsIncidentu } from "./incident-db";
@@ -131,16 +131,17 @@ export async function zalozSituaci(env: Bindings, stav: StavKlubu, navrh: NavrhI
   }
 
   if (hrac) {
-    await sendPlayerSMS(db, stav.teamId, ref(hrac), text(rng, `sms_situace_${navrh.kind}` as KlicTextu), smsIncidentu(id))
+    await sendIncidentPlayerSms(db, stav.teamId, ref(hrac), text(rng, `sms_situace_${navrh.kind}` as KlicTextu), smsIncidentu(id))
       .catch((e) => logger.warn({ module: M }, `SMS situace ${id}`, e));
     if (navrh.kind === "dluhy") await otevriVlaknoZalohy(env, stav.teamId, subjectId, hrac);
   }
   return id;
 }
 
-/** Vlákno `zadost_o_zalohu` (spec 17d). Bez zapnutého modelu se hráč jen ozve SMS. */
+/** Vlákno `zadost_o_zalohu` (spec 17d). Bez zapnutého modelu se hráč jen ozve SMS. AI klubu se nepíše. */
 async function otevriVlaknoZalohy(env: Bindings, teamId: string, playerId: string, hrac: RadekHrace): Promise<void> {
   if (!(await isAiEnabled(env))) return;
+  if (!(await clubReceivesMessages(env.DB, teamId))) return;
   const convId = await getOrCreatePlayerConversation(env.DB, teamId, ref(hrac))
     .catch((e) => { logger.warn({ module: M }, `konverzace o záloze ${playerId}`, e); return null; });
   if (!convId) return;
@@ -266,7 +267,7 @@ export async function propadleZalohy(env: Bindings, t: { teamId: string; gameDat
       .catch((e) => logger.warn({ module: M }, `dopad propadlé zálohy ${r.id}`, e));
     const hrac = await nactiHrace(db, t.teamId, r.subject_player_id);
     if (hrac) {
-      await sendPlayerSMS(db, t.teamId, ref(hrac), text(createRng(seedFromString(`zaloha|${r.id}`)), "zaloha_propadla"), smsIncidentu(r.id))
+      await sendIncidentPlayerSms(db, t.teamId, ref(hrac), text(createRng(seedFromString(`zaloha|${r.id}`)), "zaloha_propadla"), smsIncidentu(r.id))
         .catch((e) => logger.warn({ module: M }, `SMS propadlé zálohy ${r.id}`, e));
     }
   }
@@ -327,7 +328,7 @@ export async function rozhodniZalohu(
     : { morale: ODMITNUTA_ZALOHA_MORALKA, vztah: ODMITNUTA_ZALOHA_VZTAH, description: "Nedostal zálohu na mzdu" }))
     .catch((e) => logger.warn({ module: M }, `dopad zálohy ${incidentId}`, e));
   if (hrac) {
-    await sendPlayerSMS(db, teamId, ref(hrac), text(rng, akce === "pujcit" ? "zaloha_pujcena" : "zaloha_odmitnuta"), smsIncidentu(incidentId))
+    await sendIncidentPlayerSms(db, teamId, ref(hrac), text(rng, akce === "pujcit" ? "zaloha_pujcena" : "zaloha_odmitnuta"), smsIncidentu(incidentId))
       .catch((e) => logger.warn({ module: M }, `SMS o záloze ${incidentId}`, e));
   }
   return { ok: true, castka };
