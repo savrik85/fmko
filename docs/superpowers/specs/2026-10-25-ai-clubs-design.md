@@ -304,8 +304,12 @@ Druhá, paralelní implementace pravidel pro AI nesmí vzniknout. Jen tak AI nem
   některé lepší, některé horší.
 - **III. třída** (můj odhad, ne fotbalová data): síla nejlepší jedenáctky rovnoměrně mezi nejslabším
   klubem přeboru Prachatice minus 12 a nejslabším klubem přeboru (dnes zhruba 39–51). Stadion,
-  vybavení a zaměstnanci o stupeň skromnější než medián přeboru, rozpočet zhruba polovina dolního
-  kvartilu přeboru.
+  vybavení a zaměstnanci o stupeň skromnější než medián přeboru.
+- **Rozpočet III. třídy a ČB** (oprava 25. 10. po zkoušce nanečisto): startovní rozpočet nového
+  lidského klubu podle obce (nad 5 000 obyvatel 80 000, nad 1 000 40 000, jinak 20 000, pravidlo
+  z `routes/teams.ts`) × (1 + p). Původní odhad „polovina dolního kvartilu přeboru“ dal všem
+  klubům 10 000 Kč: lidské kluby mají na účtu málo, protože peníze utrácejí, a AI klub by
+  nezaplatil mzdy.
 - **Veličiny**: průměr nejlepší jedenáctky a osmnáctky, velikost a věková skladba kádru, úrovně
   jednotlivých částí stadionu, stav a typ trávníku, úrovně vybavení, počet a složení zaměstnanců,
   rozpočet, reputace, sehranost formací a taktik.

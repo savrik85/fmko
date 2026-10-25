@@ -9,6 +9,7 @@
  */
 
 import { logger } from "../lib/logger";
+import { hasLastActivityColumn } from "./owner-activity";
 
 const M = "reclaim-club";
 
@@ -88,6 +89,17 @@ export async function reclaimClub(db: D1Database, userId: string, teamId: string
     await db.prepare("DELETE FROM manager_attr_log WHERE team_id = ? AND julianday(created_at) >= julianday(?)")
       .bind(teamId, team.ai_since).run()
       .catch((e) => logger.warn({ module: M, teamId }, "úklid deníku vlastností AI trenéra", e));
+  }
+
+  // Návrat je aktivita: bez ní by noční převzetí klub hned vzalo zpátky, kdyby se poslední
+  // aktivita nestihla zapsat přes /auth/me (zapisuje se nejvýš jednou za 5 minut).
+  await db.prepare("UPDATE users SET last_login_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?")
+    .bind(userId).run()
+    .catch((e) => logger.warn({ module: M, teamId }, "zápis aktivity po návratu ke klubu", e));
+  if (await hasLastActivityColumn(db)) {
+    await db.prepare("UPDATE users SET last_activity_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?")
+      .bind(userId).run()
+      .catch((e) => logger.warn({ module: M, teamId }, "zápis poslední aktivity po návratu ke klubu", e));
   }
 
   logger.info({ module: M, teamId }, `vlastník ${userId} se vrátil ke klubu`);

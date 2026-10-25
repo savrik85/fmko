@@ -23,7 +23,7 @@ const DAY_MS = 86_400_000;
 
 const activityColumnCache = new WeakMap<D1Database, boolean>();
 
-async function hasLastActivityColumn(db: D1Database): Promise<boolean> {
+export async function hasLastActivityColumn(db: D1Database): Promise<boolean> {
   const cached = activityColumnCache.get(db);
   if (cached !== undefined) return cached;
   const found = await db.prepare("SELECT 1 AS x FROM pragma_table_info('users') WHERE name = 'last_activity_at'")

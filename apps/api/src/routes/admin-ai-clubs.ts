@@ -21,6 +21,10 @@
  *
  * POST /api/admin/ai-clubs/u21-ai-managers?dryRun=1
  *   Smaže AI trenéry, kteří omylem vznikli u U21 týmů (trenér patří áčku).
+ *
+ * POST /api/admin/ai-clubs/takeover?dryRun=1
+ *   Převzetí opuštěných klubů hned, bez čekání na noční tick (3.1). `dryRun=1` jen vypíše,
+ *   koho by AI převzala. Přepínač `ai_club_takeover` hlídá jen noční tick, tohle je ruční akce.
  */
 
 import { Hono } from "hono";
@@ -28,6 +32,7 @@ import type { Bindings } from "../index";
 import { requireAdmin, requireAuth } from "../auth/middleware";
 import { applyLeveling, LEVELING_MODES, planLeveling, type LevelingMode } from "../ai-clubs/leveling";
 import { cryptoSeed } from "../generators/rng";
+import { findAbandonedClubs, runAbandonedClubTakeover } from "../ai-clubs/abandoned";
 import { openDistrictRegistration } from "../ai-clubs/district-opening";
 import { backfillClubFacilities } from "../ai-clubs/facilities-backfill";
 import { cleanupU21AiManagers } from "../ai-clubs/u21-manager-cleanup";
@@ -125,5 +130,23 @@ adminAiClubsRouter.post("/u21-ai-managers", async (c) => {
   } catch (e) {
     logger.error({ module: M }, "úklid AI trenérů u U21", e);
     return c.json({ error: "Úklid selhal, podrobnosti jsou v logu" }, 500);
+  }
+});
+
+adminAiClubsRouter.post("/takeover", async (c) => {
+  const now = new Date();
+  try {
+    const candidates = await findAbandonedClubs(c.env.DB, now);
+    const names = await Promise.all(candidates.map(async (club) => {
+      const row = await c.env.DB.prepare("SELECT name FROM teams WHERE id = ?").bind(club.teamId).first<{ name: string }>()
+        .catch((e) => { logger.warn({ module: M }, `jméno klubu ${club.teamId}`, e); return null; });
+      return { teamId: club.teamId, name: row?.name ?? club.teamId };
+    }));
+    if (isDryRun(c.req.query("dryRun"))) return c.json({ dryRun: true, clubs: names });
+    const taken = await runAbandonedClubTakeover(c.env.DB, now);
+    return c.json({ dryRun: false, clubs: names, taken });
+  } catch (e) {
+    logger.error({ module: M }, "ruční převzetí opuštěných klubů", e);
+    return c.json({ error: "Převzetí selhalo, podrobnosti jsou v logu" }, 500);
   }
 });

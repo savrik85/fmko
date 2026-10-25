@@ -382,6 +382,9 @@ describe("návrat vlastníka", () => {
     expect(coaches.results).toEqual([{ id: "coach-u-back", user_id: "u-back", name: "Václav Navrátilec" }]);
     expect((await getSession(env.SESSION_KV, token))?.teamId).toBe(club);
 
+    // Návrat je aktivita: noční převzetí klub hned znovu nevezme.
+    expect((await findAbandonedClubs(db, new Date())).map((c) => c.teamId)).not.toContain(club);
+
     // Podruhé to nejde, nabídka zmizela.
     const again = await app.request("/api/teams/reclaim", {
       method: "POST",
