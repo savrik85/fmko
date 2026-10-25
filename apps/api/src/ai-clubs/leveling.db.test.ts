@@ -298,4 +298,17 @@ describe("narovnání AI klubů v lize s lidmi", () => {
     const missing = await app.request("/api/admin/ai-clubs/level?leagueId=nope&mode=league-humans&dryRun=1", { method: "POST", headers: { Authorization: `Bearer ${adminToken}` } }, env);
     expect(missing.status).toBe(404);
   });
+
+  it("vzor z jiné ligy: lidé z vzorové ligy, jen pro league-humans, neznámá vzorová liga 404", async () => {
+    const adminToken = await createSession(env.SESSION_KV, "admin", "admin@example.test", null);
+    const call = (query: string) => app.request(`/api/admin/ai-clubs/level?${query}`, { method: "POST", headers: { Authorization: `Bearer ${adminToken}` } }, env);
+    const before = await snapshot();
+    const ok = await call(`leagueId=${LEAGUE}&mode=league-humans&refLeagueId=${U21_LEAGUE}&seed=42&dryRun=1`);
+    expect(ok.status).toBe(200);
+    const body = await ok.json() as { plan: LevelingPlan };
+    expect(body.plan.reference.leagueIds).toEqual([U21_LEAGUE]);
+    expect(await snapshot()).toEqual(before);
+    expect((await call(`leagueId=${LEAGUE}&mode=newcomer&refLeagueId=${U21_LEAGUE}&dryRun=1`)).status).toBe(400);
+    expect((await call(`leagueId=${LEAGUE}&mode=league-humans&refLeagueId=nope&dryRun=1`)).status).toBe(404);
+  });
 });

@@ -6,6 +6,7 @@
  *   pro každý klub), bez něj se plán rovnou provede. Stejné `seed` dá stejný plán, takže se
  *   nanečisto zkontrolovaný plán provede beze změny. Bez `seed` se vylosuje a vrátí v plánu.
  *   Volitelně `teamIds=a,b` jen pro vybrané kluby. U21 liga se narovná stejným voláním.
+ *   Volitelně `refLeagueId` (jen league-humans): vzorem jsou lidé z jiné ligy (ČB podle Prahy).
  *
  * POST /api/admin/ai-clubs/lower-league?district=Prachatice&seed=&dryRun=1
  *   III. třída okresu uprostřed sezóny (část 2): 14 AI klubů z největších obcí bez klubu,
@@ -67,12 +68,18 @@ adminAiClubsRouter.post("/level", async (c) => {
   if (rawSeed !== undefined && rawSeed !== "" && parsedSeed === null) return c.json({ error: "seed musí být celé číslo 0 až 4294967295" }, 400);
   const seed = parsedSeed ?? cryptoSeed();
   const teamIds = c.req.query("teamIds")?.split(",").map((s) => s.trim()).filter(Boolean);
+  const referenceLeagueId = c.req.query("refLeagueId") || undefined;
+  if (referenceLeagueId && mode !== "league-humans") return c.json({ error: "refLeagueId jde jen s režimem league-humans" }, 400);
 
   const league = await c.env.DB.prepare("SELECT id FROM leagues WHERE id = ?").bind(leagueId).first<{ id: string }>();
   if (!league) return c.json({ error: "Liga neexistuje" }, 404);
+  if (referenceLeagueId) {
+    const ref = await c.env.DB.prepare("SELECT id FROM leagues WHERE id = ?").bind(referenceLeagueId).first<{ id: string }>();
+    if (!ref) return c.json({ error: "Vzorová liga neexistuje" }, 404);
+  }
 
   try {
-    const plan = await planLeveling(c.env.DB, { leagueId, mode, seed, teamIds });
+    const plan = await planLeveling(c.env.DB, { leagueId, mode, seed, teamIds, referenceLeagueId });
     if (isDryRun(c.req.query("dryRun"))) return c.json({ dryRun: true, plan });
     const result = await applyLeveling(c.env.DB, plan);
     return c.json({ dryRun: false, plan, result });

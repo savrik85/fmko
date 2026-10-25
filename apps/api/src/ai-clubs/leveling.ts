@@ -876,9 +876,13 @@ async function loadLeague(db: D1Database, leagueId: string): Promise<LeagueRow |
   ).bind(leagueId).first<LeagueRow>();
 }
 
-/** Ligy, jejichž aktivní lidské kluby tvoří vzor. */
-async function referenceLeagueIds(db: D1Database, league: LeagueRow, mode: LevelingMode): Promise<string[]> {
-  if (mode === "league-humans") return [league.id];
+/**
+ * Ligy, jejichž aktivní lidské kluby tvoří vzor. `referenceLeagueId` u režimu league-humans bere
+ * lidi z jiné ligy: v lize s jediným lidským klubem by všechny AI kluby vyšly stejně silné
+ * (ČB s Řeznictvím), se vzorem z Prahy dostanou stejný rozptyl jako lidé tam.
+ */
+async function referenceLeagueIds(db: D1Database, league: LeagueRow, mode: LevelingMode, referenceLeagueId?: string): Promise<string[]> {
+  if (mode === "league-humans") return [referenceLeagueId ?? league.id];
   if (mode === "newcomer") {
     const rows = await db.prepare(
       `SELECT id FROM leagues WHERE COALESCE(league_type, 'senior') = ? AND level = 'okresni_prebor'
@@ -1279,6 +1283,8 @@ export interface PlanLevelingOptions {
   teamIds?: string[];
   /** Od kdy se počítá 30 dní aktivity vzoru (testy). */
   now?: Date;
+  /** Režim league-humans: vzorem jsou lidé z této ligy místo narovnávané (viz referenceLeagueIds). */
+  referenceLeagueId?: string;
 }
 
 /** Tabulka před a po pro každý narovnávaný klub. Nic nezapisuje. */
@@ -1287,7 +1293,10 @@ export async function planLeveling(db: D1Database, opts: PlanLevelingOptions): P
   const league = await loadLeague(db, opts.leagueId);
   if (!league) throw new Error(`Liga ${opts.leagueId} neexistuje`);
 
-  const leagueIds = await referenceLeagueIds(db, league, opts.mode);
+  if (opts.referenceLeagueId && !(await loadLeague(db, opts.referenceLeagueId))) {
+    throw new Error(`Vzorová liga ${opts.referenceLeagueId} neexistuje`);
+  }
+  const leagueIds = await referenceLeagueIds(db, league, opts.mode, opts.referenceLeagueId);
   const ref = await loadReference(db, leagueIds, opts.now ?? new Date());
   const plan: LevelingPlan = {
     leagueId: league.id, mode: opts.mode, seed: opts.seed,
