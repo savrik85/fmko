@@ -17,7 +17,7 @@ import {
   type CoachArea, type CoachMode, type CoachStatus,
 } from "./ai-coach-shared";
 
-type CoachTask = "match" | "weekly" | "hourly";
+type CoachTask = "match" | "weekly" | "hourly" | "market";
 type DecisionFilter = "all" | "errors" | "fallback";
 
 interface CoachProfile {
@@ -84,6 +84,7 @@ const TASKS: Array<{ key: CoachTask; label: string }> = [
   { key: "match", label: "Sestava na dnešek" },
   { key: "weekly", label: "Týdenní správa" },
   { key: "hourly", label: "Hodinová práce" },
+  { key: "market", label: "Trh hned" },
 ];
 
 const DECISION_FILTERS: Array<{ key: DecisionFilter; label: string }> = [
@@ -313,12 +314,16 @@ function ClubDetail({ club, onRan }: { club: CoachClub; onRan: () => void }) {
   const [output, setOutput] = useState<string | null>(null);
   const p = club.profile;
 
+  // Trh nemá vlastní „nanečisto": řídí se režimem oblasti Trh (Nanečisto jen zapíše do deníku).
+  const asDryRun = dryRun && task !== "market";
   const run = async () => {
-    if (!dryRun && !confirm("Spustit úlohu AI trenéra naostro? Provede se jako z cronu (sestava, nákupy, nábor).")) return;
+    if (!asDryRun && !confirm(task === "market"
+      ? "Pustit trh AI klubu hned? V režimu Zapnuto opravdu nakupuje a prodává, v režimu Nanečisto jen zapíše do deníku."
+      : "Spustit úlohu AI trenéra naostro? Provede se jako z cronu (sestava, nákupy, nábor).")) return;
     setBusy(true);
     setOutput("Běží… (model může přemýšlet i dvě minuty)");
     try {
-      const r = await apiFetch<unknown>(`/api/admin/ai-coach/run?teamId=${encodeURIComponent(club.teamId)}&task=${task}${dryRun ? "&dryRun=1" : ""}`, { method: "POST" });
+      const r = await apiFetch<unknown>(`/api/admin/ai-coach/run?teamId=${encodeURIComponent(club.teamId)}&task=${task}${asDryRun ? "&dryRun=1" : ""}`, { method: "POST" });
       setOutput(JSON.stringify(r, null, 2));
       onRan();
     } catch (e) {
@@ -362,10 +367,14 @@ function ClubDetail({ club, onRan }: { club: CoachClub; onRan: () => void }) {
               </button>
             ))}
           </div>
-          <label className="flex items-center gap-2 text-sm mb-3">
-            <input type="checkbox" checked={dryRun} onChange={(e) => setDryRun(e.target.checked)} />
-            Nanečisto (jen rozhodnout a zapsat do deníku)
-          </label>
+          {task === "market" ? (
+            <p className="text-sm text-muted mb-3">Trh se řídí režimem oblasti Trh: Nanečisto jen zapíše do deníku, Zapnuto opravdu obchoduje.</p>
+          ) : (
+            <label className="flex items-center gap-2 text-sm mb-3">
+              <input type="checkbox" checked={dryRun} onChange={(e) => setDryRun(e.target.checked)} />
+              Nanečisto (jen rozhodnout a zapsat do deníku)
+            </label>
+          )}
           <button onClick={run} disabled={busy}
             className="px-4 py-2 rounded-soft bg-pitch-500 text-white font-heading font-bold text-sm disabled:opacity-50">
             {busy ? "Běží…" : "Spustit"}

@@ -6,7 +6,7 @@
  * GET  /api/admin/ai-coach/status                           stav pro přehled (24 h, chyby, převzetí)
  * GET  /api/admin/ai-coach/mode                             režim po oblastech
  * POST /api/admin/ai-coach/mode                             { mode } nebo { match, weekly, market }
- * POST /api/admin/ai-coach/run?teamId=&task=match|weekly|hourly&dryRun=1
+ * POST /api/admin/ai-coach/run?teamId=&task=match|weekly|hourly|market&dryRun=1   (market = trh hned, bez dryRun)
  */
 
 import { Hono } from "hono";
@@ -166,11 +166,27 @@ const TASKS: readonly CoachTask[] = ["match", "weekly", "hourly"];
 
 adminAiCoachRouter.post("/run", async (c) => {
   const teamId = c.req.query("teamId");
-  const task = c.req.query("task") as CoachTask | undefined;
+  const rawTask = c.req.query("task");
   const dryRun = c.req.query("dryRun") === "1";
   const model = c.req.query("model") || undefined;
   if (!teamId) return c.json({ error: "Chybí teamId" }, 400);
-  if (!task || !TASKS.includes(task)) return c.json({ error: "task musí být match, weekly nebo hourly" }, 400);
+
+  // Trh hned, mimo rozvrh (hodina, denní šance): na vyzkoušení nákupů a prodeje. Řídí se režimem
+  // oblasti trh, nanečisto jde jen přes režim shadow (trh vlastní „nanečisto" nemá).
+  if (rawTask === "market") {
+    if (dryRun) return c.json({ error: "Trh nanečisto jde jen přes režim shadow v oblasti trh" }, 400);
+    const { runTransferMarket } = await import("../ai-coach/transfer-market");
+    try {
+      const result = await runTransferMarket(c.env, teamId, new Date(), { ignoreSchedule: true, model });
+      return c.json({ ok: true, task: "market", result });
+    } catch (e) {
+      logger.error({ module: M, teamId }, "ruční trh AI klubu selhal", e);
+      return c.json({ error: "Trh selhal, podrobnosti jsou v logu" }, 500);
+    }
+  }
+
+  const task = rawTask as CoachTask | undefined;
+  if (!task || !TASKS.includes(task)) return c.json({ error: "task musí být match, weekly, hourly nebo market" }, 400);
 
   const { currentGameDay, runAiCoachTask, taskDay } = await import("../ai-coach/jobs");
   const gameDay = await currentGameDay(c.env.DB);
