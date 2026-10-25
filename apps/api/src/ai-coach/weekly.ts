@@ -20,6 +20,7 @@ import { promotePlayerFromU21, sendPlayerToU21 } from "../services/u21-moves";
 import { logDecision, type DecisionMode } from "./decision-log";
 import { callCoachModel, COACH_MODEL } from "./llm";
 import { readCoachMode } from "./mode";
+import { maybeSignMainSponsor } from "./main-sponsor";
 import { ensureAiProfile } from "./profile";
 import {
   buildTrainingPlan, computeReserve, fallbackWeeklyDecision, planWeeklyActions, renderWeeklyPrompt, reserveWeeksFor,
@@ -40,7 +41,7 @@ const POSITION_DEPTH: Record<string, number> = { GK: 2, DEF: 6, MID: 6, FWD: 4 }
 
 export interface WeeklyResult {
   used: "model" | "fallback";
-  executed: Array<{ action: WeeklyAction["kind"]; ok: boolean; detail: string }>;
+  executed: Array<{ action: WeeklyAction["kind"] | "main_sponsor"; ok: boolean; detail: string }>;
   skipped: Array<{ item: string; reason: string }>;
   spent: number;
   mode: DecisionMode;
@@ -427,6 +428,14 @@ export async function runWeeklyReview(env: Bindings, teamId: string, now: Date, 
       executed.push({ action: a.kind, ok: r.ok, detail: r.detail });
       if (r.ok && "cost" in a) spent += a.cost;
     }
+    // Hlavní sponzor: stejné jednání jako u člověka, podpis úvodní nabídky majitele.
+    // Peníze klub dostává, nic neplatí, proto mimo rezervu a model.
+    const main = await maybeSignMainSponsor(db, teamId, ctx.profile)
+      .catch((e) => {
+        logger.warn({ module: M, teamId }, "hlavní sponzor", e);
+        return null;
+      });
+    if (main?.signed) executed.push({ action: "main_sponsor", ok: true, detail: main.detail });
   }
 
   await logDecision(db, {
