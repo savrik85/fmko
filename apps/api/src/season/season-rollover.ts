@@ -747,14 +747,20 @@ async function rolloverLeagueCalendar(
   if (teamIds.length < 2) return { rolled: false, matchesCreated: 0 };
 
   const { generateSchedule } = await import("../league/schedule");
-  const { generateSeasonCalendar } = await import("./calendar");
+  const { generateSeasonCalendar, parseMatchWeekdays } = await import("./calendar");
   const rng = createRng(cryptoSeed());
 
+  // Hrací dny ligy (III. třída Prachatice hraje ve středu a v neděli); bez nich pondělí a čtvrtek.
+  const leagueDays = await db.prepare("SELECT match_weekdays FROM leagues WHERE id = ?").bind(leagueId)
+    .first<{ match_weekdays: string | null }>()
+    .catch((e) => { logger.warn({ module: "season-rollover" }, `hrací dny ligy ${leagueId}`, e); return null; });
+
   const schedule = generateSchedule(rng, teamIds.length);
-  // Krátká předsezóna — generátor sám posune o +2 dny a snapne na ligové pondělí,
-  // takže první zápas padne 2-8 dní po konci sezóny (max ~týden, žádných 10-15 dní čekání).
+  // Krátká předsezóna — generátor sám posune o +5 dní a snapne na nejbližší hrací den ligy,
+  // takže první zápas padne 5-8 dní po konci sezóny (max ~týden, žádných 10-15 dní čekání).
   const { totalRounds } = await import("../league/schedule");
-  const calendar = generateSeasonCalendar(leagueId, newNum, startDate, totalRounds(teamIds.length));
+  const calendar = generateSeasonCalendar(leagueId, newNum, startDate, totalRounds(teamIds.length),
+    parseMatchWeekdays(leagueDays?.match_weekdays));
 
   for (const entry of calendar.entries) {
     await db.prepare(

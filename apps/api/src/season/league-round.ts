@@ -127,28 +127,20 @@ export async function readLeagueGameDate(db: D1Database, leagueId: string): Prom
 /**
  * Ligy, které mají dnes naplánované kolo. Používá producent fronty i stará smyčka.
  *
- * `legacyExcludeDistrictLike` existuje JEN pro starou smyčku (režim "loop"), kde se natvrdo
- * vylučovaly České Budějovice, protože 6 lig přeteklo limit workeru. Ve frontovém režimu
- * se nepředává — každá liga má vlastní invokaci, takže obcházení limitu není potřeba.
- * Až padne stará cesta (fáze 2), zmizí i tenhle parametr.
+ * Žádná liga se nevylučuje. Stará smyčka (režim "loop") dřív natvrdo vynechávala České
+ * Budějovice, protože 6 lig v jedné invokaci přeteklo limit workeru; od spuštění ligy ČB
+ * (2026-10-25) se ČB hraje v obou režimech. Produkce jede frontou, kde má každá liga
+ * vlastní invokaci.
  */
 export async function findLeaguesWithDueRound(
   db: D1Database,
-  opts: { legacyExcludeDistrictLike?: string } = {},
 ): Promise<Array<{ leagueId: string; gameDate: string }>> {
-  // Filtruje se podle OKRESU, ne podle názvu ligy. Název je proměnlivý — soutěž se
-  // po přijetí sponzora přejmenuje (např. na „Gambrinus liga") a filtr na jméno by
-  // tiše přestal platit; tick by přetekl limit workeru a neodsimuloval by NIC.
-  // `leagues.district` se naopak nemění nikdy (U21 ho jen rozšiřuje o sufix " U21").
-  const exclude = opts.legacyExcludeDistrictLike;
-  const stmt = db.prepare(
+  const rows = await db.prepare(
     `SELECT t.league_id AS league_id, MAX(t.game_date) AS max_game_date
        FROM teams t JOIN leagues l ON t.league_id = l.id
       WHERE t.league_id IS NOT NULL AND t.game_date IS NOT NULL
-        ${exclude ? "AND l.district NOT LIKE ?" : ""}
       GROUP BY t.league_id`,
-  );
-  const rows = await (exclude ? stmt.bind(exclude) : stmt).all<{
+  ).all<{
     league_id: string | null;
     max_game_date: string | null;
   }>();
@@ -406,6 +398,21 @@ async function sendMatchResultNotifications(
 }
 
 /**
+ * Psát o kole AI články (report kola, Prales Ultras)? Jen v lize, kde hraje aspoň jeden
+ * člověk (spec 2026-10-25, část 2): o lize samých AI klubů (nová III. třída) by se psalo
+ * za kredit modelu, ale nikdo by to nečetl. Když dotaz selže, píše se jako dřív.
+ */
+export async function shouldWriteRoundReports(db: D1Database, leagueId: string): Promise<boolean> {
+  const human = await db.prepare("SELECT 1 AS yes FROM teams WHERE league_id = ? AND user_id != 'ai' LIMIT 1")
+    .bind(leagueId).first<{ yes: number }>()
+    .catch((e) => {
+      logger.warn({ module: "league-round" }, `lidský klub v lize ${leagueId}`, e);
+      return { yes: 1 };
+    });
+  return !!human;
+}
+
+/**
  * AI články. Ve frontovém režimu se jen zařadí zpráva (vlastní rozpočet i retry),
  * ve starém režimu se pustí přes ctx.waitUntil jako dosud.
  */
@@ -417,18 +424,7 @@ async function dispatchRoundReports(
   standingsBefore: StandingEntry[],
   opts: LeagueRoundOpts,
 ): Promise<void> {
-  // Ligu jen s AI kluby nikdo nečte: report kola a Prales Ultras by jen pálily Gemini.
-  // Jakmile do ligy přijde člověk, články se píšou zase.
-  const hasHuman = await env.DB
-    .prepare("SELECT 1 FROM teams WHERE league_id = ? AND user_id != 'ai' LIMIT 1")
-    .bind(leagueId)
-    .first()
-    .catch((e) => {
-      logger.warn({ module: "league-round" }, "reports human check", e);
-      return null;
-    });
-  if (!hasHuman) return;
-
+  if (!(await shouldWriteRoundReports(env.DB, leagueId))) return;
   // Rozhoduje poskytovatel, ne holý Gemini klíč — v režimu "workers-ai" se články
   // generují i bez něj, v režimu "off" se nezařadí vůbec (a fronta zůstane prázdná).
   const { readAiProvider } = await import("../lib/ai-provider");

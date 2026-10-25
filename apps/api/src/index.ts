@@ -34,6 +34,7 @@ import clubPrefixRouter from "./routes/club-prefix";
 import { clubWebsiteRouter } from "./routes/club-website";
 import { squadAnalysisRouter } from "./routes/squad-analysis";
 import { menuBadgesRouter } from "./routes/menu-badges";
+import { adminAiClubsRouter } from "./routes/admin-ai-clubs";
 // transfers endpoints are in gameRouter
 import { recoverStuckRounds } from "./multiplayer/match-runner";
 import { executeDailyTick } from "./season/daily-tick";
@@ -147,6 +148,7 @@ app.route("/api", tournamentRouter);
 app.route("/api", clubPrefixRouter);
 app.route("/api", squadAnalysisRouter);
 app.route("/api", menuBadgesRouter);
+app.route("/api/admin/ai-clubs", adminAiClubsRouter);
 
 export default {
   fetch: app.fetch,
@@ -387,14 +389,11 @@ export default {
         } else {
           // ── STARÁ CESTA (režim "loop") ──
           // Všechny ligy v JEDNÉ invokaci = jeden sdílený rozpočet CPU a subrequestů.
-          // Proto se tu pořád vylučují České Budějovice: bez toho tick přeteče limit
-          // a neodsimuluje NIC. Vyloučení i celá tahle větev padnou ve fázi 2,
-          // až se frontový režim ověří na produkci.
+          // České Budějovice se od spuštění ligy ČB (2026-10-25) nevylučují, hrají se
+          // v obou režimech; produkce jede frontou, kde má každá liga vlastní invokaci.
           const { findLeaguesWithDueRound, processLeagueRound, processLeagueMaintenance } =
             await import("./season/league-round");
-          const leagues = await findLeaguesWithDueRound(env.DB, {
-            legacyExcludeDistrictLike: "České Budějovice%",
-          });
+          const leagues = await findLeaguesWithDueRound(env.DB);
           for (const lg of leagues) {
             const r = await processLeagueRound(env, lg.leagueId, { ctx });
             totalMatches += r.matches;

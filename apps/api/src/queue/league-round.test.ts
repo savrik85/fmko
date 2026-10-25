@@ -199,25 +199,32 @@ describe("findLeaguesWithDueRound", () => {
     expect(out.map((o) => o.leagueId)).toEqual(["a", "d"]);
   });
 
-  it("bez legacy filtru NEVYLUČUJE žádnou ligu podle jména", async () => {
+  it("NEVYLUČUJE žádnou ligu, ani České Budějovice (hrají se v obou režimech)", async () => {
     const { findLeaguesWithDueRound } = await import("../season/league-round");
     const db = new FakeD1([{ match: /FROM teams t JOIN leagues l/, all: [] }]);
 
     await findLeaguesWithDueRound(db as unknown as D1Database);
 
     expect(db.queries[0].sql).not.toContain("NOT LIKE");
+    expect(db.queries[0].sql).not.toContain("district");
     expect(db.queries[0].params).toEqual([]);
   });
+});
 
-  it("s legacy filtrem doplní podmínku i parametr", async () => {
-    const { findLeaguesWithDueRound } = await import("../season/league-round");
-    const db = new FakeD1([{ match: /FROM teams t JOIN leagues l/, all: [] }]);
+describe("shouldWriteRoundReports", () => {
+  it("liga s člověkem dostane AI články, liga samých AI klubů ne", async () => {
+    const { shouldWriteRoundReports } = await import("../season/league-round");
+    const withHuman = new FakeD1([{ match: /user_id != 'ai'/, first: { yes: 1 } }]);
+    expect(await shouldWriteRoundReports(withHuman as unknown as D1Database, "liga-a")).toBe(true);
+    expect(withHuman.queries[0].params).toEqual(["liga-a"]);
+    const aiOnly = new FakeD1([]);
+    expect(await shouldWriteRoundReports(aiOnly as unknown as D1Database, "liga-b")).toBe(false);
+  });
 
-    await findLeaguesWithDueRound(db as unknown as D1Database, { legacyExcludeDistrictLike: "České Budějovice%" });
-
-    // Filtruje se podle okresu, ne podle názvu — název se přejmenováním sponzorem mění.
-    expect(db.queries[0].sql).toContain("l.district NOT LIKE ?");
-    expect(db.queries[0].params).toEqual(["České Budějovice%"]);
+  it("když dotaz selže, články se píšou jako dřív", async () => {
+    const { shouldWriteRoundReports } = await import("../season/league-round");
+    const broken = { prepare: () => ({ bind: () => ({ first: () => Promise.reject(new Error("D1 down")) }) }) };
+    expect(await shouldWriteRoundReports(broken as unknown as D1Database, "liga-c")).toBe(true);
   });
 });
 
