@@ -95,6 +95,11 @@ export function bonusAmount(unrest: Pick<TransferUnrest, "offer">): number {
   return Math.max(1_000, Math.min(50_000, Math.round(base / 100) * 100));
 }
 
+/** Týdenní odměny po zvýšení o třetinu (dohoda „Zvednout odměny“). */
+export function raisedWage(weeklyWage: number): number {
+  return Math.round(weeklyWage * 1.3);
+}
+
 /** Pivo s trenérem. */
 export const PERSONAL_TALK_COST = 500;
 /** Do kdy po odmítnutí jde klubu zavolat (pak už má jiného hráče). */
@@ -118,6 +123,47 @@ export interface UnrestContext {
    */
   ownedHere: boolean;
   now?: Date;
+}
+
+/** Co služba o hráči čte, aby poskládala `UnrestContext` (stejně pro routu i AI trenéra). */
+export interface UnrestPlayerFacts {
+  personality: unknown;
+  coach_relationship: unknown;
+  captain_id: unknown;
+  loan_from_team_id: unknown;
+  /** Klub soupisky, kde hráč je (`COALESCE(parent_team_id, id)` jeho týmu). */
+  current_club_id: unknown;
+}
+
+/** Kontext pro výběr dohod z řádku hráče: tytéž výchozí hodnoty pro routu i AI trenéra. */
+export function unrestContextFor(
+  player: UnrestPlayerFacts, playerId: string, teamId: string, seasonNumber: number | null, now?: Date,
+): UnrestContext {
+  const pers = (() => {
+    try {
+      return (JSON.parse(player.personality as string) ?? {}) as Record<string, number | undefined>;
+    } catch (e) {
+      logger.warn({ module: "unrest" }, `nečitelná povaha hráče ${playerId}`, e);
+      return {};
+    }
+  })();
+  return {
+    seasonNumber,
+    patriotism: pers.patriotism ?? 50,
+    discipline: pers.discipline ?? 50,
+    leadership: pers.leadership ?? 30,
+    coachRelationship: (player.coach_relationship as number | null) ?? 50,
+    isCaptain: player.captain_id === playerId,
+    ownedHere: player.loan_from_team_id == null && player.current_club_id === teamId,
+    now,
+  };
+}
+
+/** Číslo běžící sezóny (raise_wage jde jednou za sezónu), null = žádná neběží. */
+export async function activeSeasonNumber(db: D1Database): Promise<number | null> {
+  const row = await db.prepare("SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1")
+    .first<{ number: number }>().catch((e) => { logger.warn({ module: "unrest" }, "load season", e); return null; });
+  return row?.number ?? null;
 }
 
 function teamNameOf(unrest: Pick<TransferUnrest, "offer" | "teamName">): string {
@@ -265,15 +311,28 @@ export function unrestMoodQuote(playerId: string, level: number, teamName?: stri
   return quote.replace("{team}", teamName ?? "jinam");
 }
 
+export interface UnrestActionOptions {
+  /**
+   * Bez textů (AI trenér, spec AI klubů 3.2): žádná SMS trenéra ani odpověď hráče, rozhovor
+   * v telefonu se nezohledňuje. Efekty dohody jsou stejné jako u člověka.
+   */
+  silent?: boolean;
+  /** Okamžik dohody (den mezi dohodami, lhůty slibů). Výchozí je teď. */
+  now?: Date;
+}
+
 export async function performUnrestAction(
   db: D1Database,
   env: { GEMINI_API_KEY?: string },
   teamId: string,
   playerId: string,
   actionId: string,
+  opts: UnrestActionOptions = {},
 ): Promise<UnrestTalkResult> {
   const action = UNREST_ACTIONS.find((a) => a.id === actionId);
   if (!action) return { ok: false, error: "Neznámá akce", status: 400 };
+  const silent = opts.silent === true;
+  const now = opts.now ?? new Date();
 
   const player = await db.prepare(
     `SELECT p.id, p.team_id, p.loan_from_team_id, p.first_name, p.last_name, p.nationality, p.nickname, p.avatar, p.personality, p.life_context,
@@ -292,7 +351,8 @@ export async function performUnrestAction(
 
   // Rozhovor v telefonu: dohodu jde uzavřít i uprostřed rozhovoru po zatrhnutém přestupu
   // (je to tah trenéra, hráč na ni v rozhovoru odpoví). Jiný rozhovor ji blokuje.
-  const conv = await db.prepare(
+  // Bez textů (AI trenér) se telefon neřeší: AI trenér nepíše a rozhovory nevede.
+  const conv = silent ? null : await db.prepare(
     // Stejná konverzace jako v Telefonu: při starých duplikátech nejstarší (ai-player-spawn.ts).
     "SELECT id, ai_thread_active, ai_thread_state FROM conversations WHERE team_id = ? AND type = 'player' AND participant_id = ? ORDER BY created_at, rowid LIMIT 1",
   ).bind(teamId, playerId).first<{ id: string; ai_thread_active: number; ai_thread_state: string | null }>()
@@ -312,26 +372,18 @@ export async function performUnrestAction(
   if (!unrest || unrest.level <= 0) return { ok: false, error: "Hráč zrovna netrucuje, není co řešit", status: 409 };
 
   // Limit 1 dohoda / hráč / den
-  const cooldown = dealCooldownText(unrest);
+  const cooldown = dealCooldownText(unrest, now);
   if (cooldown) return { ok: false, error: cooldown, status: 429 };
 
-  const pers = (() => { try { return JSON.parse(player.personality as string) ?? {}; } catch { return {}; } })();
-  const seasonRow = await db.prepare("SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1")
-    .first<{ number: number }>().catch((e) => { logger.warn({ module: "unrest" }, "load season", e); return null; });
-  const seasonNumber = seasonRow?.number ?? null;
-  const coachRel: number = (player.coach_relationship as number) ?? 50;
-  const ctx: UnrestContext = {
-    seasonNumber, patriotism: pers.patriotism ?? 50, discipline: pers.discipline ?? 50, leadership: pers.leadership ?? 30,
-    coachRelationship: coachRel, isCaptain: player.captain_id === playerId,
-    ownedHere: player.loan_from_team_id == null && player.current_club_id === teamId,
-  };
+  const seasonNumber = await activeSeasonNumber(db);
+  const ctx = unrestContextFor(player as unknown as UnrestPlayerFacts, playerId, teamId, seasonNumber, now);
   if (!availableActions(unrest, lc, ctx).some((a) => a.id === action.id)) {
     return { ok: false, error: "Tahle dohoda teď nejde, vyber jinou.", status: 409 };
   }
 
   // ── Deterministické efekty ──
   const morale: number = typeof lc.morale === "number" ? lc.morale : 50;
-  const nowIso = new Date().toISOString();
+  const nowIso = now.toISOString();
   const team = await db.prepare("SELECT game_date FROM teams WHERE id = ?").bind(teamId).first<{ game_date: string | null }>()
     .catch((e) => { logger.warn({ module: "unrest" }, "herní den klubu", e); return null; });
   const gameDate = team?.game_date ?? nowIso;
@@ -357,7 +409,7 @@ export async function performUnrestAction(
     case "raise_wage": {
       unrestDelta = -40; moraleDelta = 10;
       const oldWage = (player.weekly_wage as number) ?? 0;
-      const newWage = Math.round(oldWage * 1.3);
+      const newWage = raisedWage(oldWage);
       dbUpdates.push(db.prepare("UPDATE players SET weekly_wage = ? WHERE id = ?").bind(newWage, playerId));
       lc.wageRaisedSeason = seasonNumber;
       effects.push(`Týdenní odměny ${oldWage} → ${newWage} Kč (trvale)`);
@@ -365,14 +417,14 @@ export async function performUnrestAction(
     }
     case "promise_minutes": {
       unrestDelta = -25; moraleDelta = 5;
-      unrest.pledge = { type: "minutes", madeAt: nowIso, deadline: new Date(Date.now() + 21 * DAY_MS).toISOString() };
+      unrest.pledge = { type: "minutes", madeAt: nowIso, deadline: new Date(now.getTime() + 21 * DAY_MS).toISOString() };
       dbUpdates.push(promiseInsert(db, { clubTeamId: teamId, playerId, type: "minutes", madeAt: nowIso, deadline: unrest.pledge.deadline }));
       effects.push("Slib: 2 ze 3 příštích zápasů v základu");
       break;
     }
     case "promise_transfer": {
       unrestDelta = -35; moraleDelta = 3;
-      unrest.pledge = { type: "transfer", madeAt: nowIso, deadline: new Date(Date.now() + 30 * DAY_MS).toISOString() };
+      unrest.pledge = { type: "transfer", madeAt: nowIso, deadline: new Date(now.getTime() + 30 * DAY_MS).toISOString() };
       dbUpdates.push(promiseInsert(db, { clubTeamId: teamId, playerId, type: "transfer", madeAt: nowIso, deadline: unrest.pledge.deadline }));
       effects.push("Slib: při další dobré nabídce ho pustíš (platí 30 dní)");
       break;
@@ -411,7 +463,7 @@ export async function performUnrestAction(
       const offerId = await recreateOffer(db, teamId, player, unrest);
       if (!offerId) return { ok: false, error: "Klub už o hráče nestojí.", status: 409 };
       unrestDelta = -20; moraleDelta = 5;
-      unrest.pledge = { type: "release", madeAt: nowIso, deadline: new Date(Date.now() + 4 * DAY_MS).toISOString(), offerId };
+      unrest.pledge = { type: "release", madeAt: nowIso, deadline: new Date(now.getTime() + 4 * DAY_MS).toISOString(), offerId };
       dbUpdates.push(promiseInsert(db, {
         clubTeamId: teamId, playerId, type: "release", madeAt: nowIso, deadline: unrest.pledge.deadline, offerId, club: teamNameOf(unrest),
       }));
@@ -459,6 +511,11 @@ export async function performUnrestAction(
     await db.prepare("DELETE FROM injuries WHERE player_id = ? AND is_fake = 1").bind(playerId).run()
       .catch((e) => logger.warn({ module: "unrest" }, "heal fake injury", e));
     effects.push("Zázračné uzdravení, od zítřka může trénovat");
+  }
+
+  if (silent) {
+    logger.info({ module: "unrest" }, `unrest deal ${action.id} bez textů: ${name} ${playerRef.lastName} outcome=${outcome} level ${unrest.level}→${newLevel}`);
+    return { ok: true, outcome, effects, unrestLevel: newLevel };
   }
 
   // ── Zprávy do telefonu: trenér (šablona) + odpověď hráče ──
