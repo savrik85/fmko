@@ -126,9 +126,23 @@ export async function isTakeoverEnabled(kv: KVNamespace | undefined): Promise<bo
   return raw !== "off";
 }
 
-/** Denní kontrola: převezme všechny opuštěné kluby. Vrací počet převzatých. */
-export async function runAbandonedClubTakeover(db: D1Database, now: Date): Promise<number> {
+/**
+ * Brzda: víc opuštěných klubů naráz je podezřelé (typicky rozbité sledování aktivity, ne
+ * hromadný odchod hráčů). Takové převzetí se neprovede samo, ohlásí ho hlídač
+ * (`lib/watchdog.ts`) a admin ho může potvrdit ručně (`force`).
+ */
+export const MAX_TAKEOVERS_PER_RUN = 5;
+
+/**
+ * Denní kontrola: převezme opuštěné kluby. Vrací počet převzatých. Nad brzdou
+ * `MAX_TAKEOVERS_PER_RUN` nepřevezme nikoho, jen s `force` (ruční potvrzení v adminu).
+ */
+export async function runAbandonedClubTakeover(db: D1Database, now: Date, opts: { force?: boolean } = {}): Promise<number> {
   const clubs = await findAbandonedClubs(db, now);
+  if (clubs.length > MAX_TAKEOVERS_PER_RUN && !opts.force) {
+    logger.error({ module: M }, `převzetí zabrzděno: ${clubs.length} opuštěných klubů naráz (brzda ${MAX_TAKEOVERS_PER_RUN}), čeká na ruční potvrzení`);
+    return 0;
+  }
   let taken = 0;
   for (const club of clubs) {
     try {

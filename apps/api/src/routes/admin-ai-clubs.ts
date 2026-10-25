@@ -32,7 +32,7 @@ import type { Bindings } from "../index";
 import { requireAdmin, requireAuth } from "../auth/middleware";
 import { applyLeveling, LEVELING_MODES, planLeveling, type LevelingMode } from "../ai-clubs/leveling";
 import { cryptoSeed } from "../generators/rng";
-import { findAbandonedClubs, runAbandonedClubTakeover } from "../ai-clubs/abandoned";
+import { findAbandonedClubs, MAX_TAKEOVERS_PER_RUN, runAbandonedClubTakeover } from "../ai-clubs/abandoned";
 import { openDistrictRegistration } from "../ai-clubs/district-opening";
 import { backfillClubFacilities } from "../ai-clubs/facilities-backfill";
 import { cleanupU21AiManagers } from "../ai-clubs/u21-manager-cleanup";
@@ -142,8 +142,13 @@ adminAiClubsRouter.post("/takeover", async (c) => {
         .catch((e) => { logger.warn({ module: M }, `jméno klubu ${club.teamId}`, e); return null; });
       return { teamId: club.teamId, name: row?.name ?? club.teamId };
     }));
-    if (isDryRun(c.req.query("dryRun"))) return c.json({ dryRun: true, clubs: names });
-    const taken = await runAbandonedClubTakeover(c.env.DB, now);
+    if (isDryRun(c.req.query("dryRun"))) return c.json({ dryRun: true, clubs: names, brake: MAX_TAKEOVERS_PER_RUN });
+    // Nad brzdou jen s výslovným force=1: admin viděl seznam a převzetí potvrzuje.
+    const force = c.req.query("force") === "1";
+    if (candidates.length > MAX_TAKEOVERS_PER_RUN && !force) {
+      return c.json({ error: `Opuštěných klubů je ${candidates.length}, víc než brzda ${MAX_TAKEOVERS_PER_RUN}. Zkontroluj seznam a potvrď force=1.`, clubs: names }, 409);
+    }
+    const taken = await runAbandonedClubTakeover(c.env.DB, now, { force });
     return c.json({ dryRun: false, clubs: names, taken });
   } catch (e) {
     logger.error({ module: M }, "ruční převzetí opuštěných klubů", e);
