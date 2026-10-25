@@ -316,8 +316,17 @@ Druhá, paralelní implementace pravidel pro AI nesmí vzniknout. Jen tak AI nem
 - **Hráči**: stávající hráči zůstanou, vlastnosti se jim zvednou tak, aby kádr trefil cíl (poměrně,
   s respektem k postům, celkové hodnocení přepočítat jediným vzorcem `overallRatingFromFlat`).
   Chybějící hráči do cílové velikosti kádru se vytvoří jediným generátorem hráčů.
+- **Strop dovedností** (oprava 25. 10. po 96denní simulaci): strop jde s dovedností nahoru, aby hráč
+  dál rostl, ale v Praze ne celý. Lidé mají hráče vytrénované ke stropu (rezerva 5–18 bodů na
+  dovednost, silné kluby nejmenší), AI s rezervou z generátoru (20–25) rostlo 2–3× rychleji.
+  Rezerva AI klubu proto míří na rezervu lidských klubů podobné síly (opačný percentil). Strop
+  nikdy neklesne pod původní. Nižší soutěž a nováčci beze změny (soupeří s čerstvými kádry).
+- **AI trenér** (doplněno 25. 10.): koučování, motivace, taktika, disciplína a práce s mládeží na
+  percentil klubu ze vzoru lidských trenérů áček, jen nahoru. Lidský trenér převzatého klubu je
+  při převzetí odpojený a čeká na návrat vlastníka, toho se narovnání netýká.
 - **Stadion, vybavení, zaměstnanci, rozpočet, reputace**: jednorázový zápis bez plateb. Sponzory
-  narovnání nevkládá, AI trenér je podepíše běžnou cestou.
+  narovnání nevkládá, AI trenér je podepíše běžnou cestou (hlavního sponzora v pondělní správě,
+  když klub žádného nemá: stejné jednání a podpis jako u člověka, včetně přejmenování a −3 reputace).
 - **Provedení**: admin endpoint nanečisto (tabulka před a po pro každý klub) → souhlas uživatele →
   naostro. Na produkci se záložkou Time Travel.
 
