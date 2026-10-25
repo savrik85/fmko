@@ -691,6 +691,10 @@ export async function runScheduledMatches(
                 ];
                 for (const [setup, tid, isHuman, lineup, myPower, oppPower] of sides) {
                     if (isHuman) continue;
+                    // Sestavu AI klubu připravil AI trenér (ai-coach/match.ts) a tvrdost zvolil sám
+                    // i s ohledem na sudího. Automat rozhoduje jen u automatické sestavy.
+                    const lineupRow = tid === homeTeamId ? homeLineupRow : awayLineupRow;
+                    if (lineupRow && lineupRow.is_auto === 0) continue;
                     setup.hardness = decideAiHardness({
                         squadAggression: avg(lineup, "aggression"),
                         refStrictness: referee.profile.strictness,

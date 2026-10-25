@@ -1,0 +1,3 @@
+# Sestavené skripty a výsledky měření do gitu nepatří.
+*.mjs
+*.json

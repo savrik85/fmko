@@ -176,75 +176,15 @@ staffRouter.get("/teams/:teamId/staff/market", async (c) => {
 staffRouter.post("/teams/:teamId/staff/:staffId/hire", async (c) => {
   const teamId = c.req.param("teamId");
   const staffId = c.req.param("staffId");
-  const body = await c.req.json<{ role?: string }>().catch(() => ({} as { role?: string }));
-  const role = body.role as StaffRole | undefined;
+  const body = await c.req.json<{ role?: string }>().catch((e) => {
+    logger.warn({ module: "staff" }, "parse hire body", e);
+    return {} as { role?: string };
+  });
 
-  if (!role || !(role in ROLE_DEFS)) return c.json({ error: "Neplatná role" }, 400);
-
-  const team = await c.env.DB.prepare(
-    "SELECT v.district FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?"
-  ).bind(teamId).first<{ district: string }>()
-    .catch((e) => { logger.warn({ module: "staff" }, "hire load district", e); return null; });
-  if (!team) return c.json({ error: "Tým nenalezen" }, 404);
-
-  const cand = await c.env.DB.prepare(`SELECT ${STAFF_COLS} FROM staff_members WHERE id = ?`)
-    .bind(staffId).first<StaffRow>()
-    .catch((e) => { logger.warn({ module: "staff" }, "hire load candidate", e); return null; });
-  if (!cand) return c.json({ error: "Kandidát nenalezen" }, 404);
-  if (cand.team_id) return c.json({ error: "Tenhle člověk už někde dělá." }, 409);
-  if (cand.district !== team.district) return c.json({ error: "Kandidát není z tvého okresu." }, 400);
-
-  // Špičkoví lidé nejdou pod trenéra bez papírů (licence trenéra, fáze 3).
-  const needed = requiredLicence(cand);
-  if (needed > 0 && (await loadCoachLicence(c.env.DB, teamId)) < needed) {
-    return c.json({
-      error: `${cand.first_name} ${cand.last_name} chce pracovat jen pod trenérem s licencí ${licenceLabel(needed)} nebo vyšší.`,
-    }, 403);
-  }
-
-  // Slot obsazený?
-  if (role === "skaut") {
-    const coachLicence = await loadCoachLicence(c.env.DB, teamId);
-    const maxScouts = maxScoutsForLicence(coachLicence);
-    const scoutCountRow = await c.env.DB.prepare("SELECT COUNT(*) as count FROM staff_members WHERE team_id = ? AND role = 'skaut'")
-      .bind(teamId).first<{ count: number }>()
-      .catch((e) => { logger.warn({ module: "staff" }, "hire check scout slots", e); return null; });
-    const count = scoutCountRow?.count ?? 0;
-    if (count >= maxScouts) {
-      return c.json({ error: `Máš už plný počet skautů (${maxScouts}). Pro dalšího potřebuješ vyšší trenérskou licenci.` }, 409);
-    }
-  } else {
-    const occupied = await c.env.DB.prepare("SELECT id FROM staff_members WHERE team_id = ? AND role = ?")
-      .bind(teamId, role).first<{ id: string }>()
-      .catch((e) => { logger.warn({ module: "staff" }, "hire check slot", e); return null; });
-    if (occupied) return c.json({ error: `Slot „${ROLE_DEFS[role].label}" je už obsazený. Nejdřív propusť současného.` }, 409);
-  }
-
-  // Rozpočet
-  const allowed = await assertPurchaseAllowed(c.env.DB, teamId, cand.signing_fee);
-  if (!allowed.ok) return c.json({ error: allowed.reason }, 400);
-
-  const gameDate = await loadGameDate(c.env.DB, teamId);
-
-  // Race-safe claim: jen pokud je pořád volný
-  let claimError: unknown = null;
-  const claim = await c.env.DB.prepare(
-    "UPDATE staff_members SET team_id = ?, role = ?, hired_at = ?, listed_until = NULL WHERE id = ? AND team_id IS NULL"
-  ).bind(teamId, role, gameDate, staffId).run()
-    .catch((e) => {
-      claimError = e;
-      logger.error({ module: "staff" }, "hire claim failed", e);
-      return null;
-    });
-  if (claimError || !claim) {
-    return c.json({ error: "Nábor se nezdařil kvůli systémové chybě. Zkus to prosím znovu." }, 500);
-  }
-  if ((claim.meta?.changes ?? 0) === 0) {
-    return c.json({ error: "Někdo tě předběhl, kandidáta už najal jiný tým." }, 409);
-  }
-
-  await recordTransaction(c.env.DB, teamId, "staff_signing", -cand.signing_fee,
-    `Podpisné: ${cand.first_name} ${cand.last_name} (${ROLE_DEFS[role].label})`, gameDate, staffId);
+  // Pravidla náboru (licence, sloty, rozpočet, souběh) v services/staff-hire.ts, sdílí je AI trenér.
+  const { hireStaff } = await import("../services/staff-hire");
+  const res = await hireStaff(c.env.DB, teamId, staffId, body.role);
+  if (!res.ok) return c.json({ error: res.error }, res.status);
 
   const hired = await c.env.DB.prepare(`SELECT ${STAFF_COLS} FROM staff_members WHERE id = ?`)
     .bind(staffId).first<StaffRow>();

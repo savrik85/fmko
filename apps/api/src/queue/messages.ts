@@ -7,8 +7,25 @@
  * Viz docs/analyza-fronty-2026-08-16.md, riziko 4.1.
  */
 
+/** Úloha AI trenéra: sestava na dnešní zápasy, pondělní správa klubu, hodinová práce. */
+export type CoachTask = "match" | "weekly" | "hourly";
+
+/**
+ * Úloha AI trenéra pro jeden klub (ai-coach/jobs.ts). `day` je herní den (u hodinové
+ * úlohy s hodinou), konzumer podle něj zahodí zastaralou zprávu a zabere nárok,
+ * takže duplicitní doručení nic neudělá.
+ */
+export interface AiCoachQueueMessage {
+  kind: "ai_coach";
+  teamId: string;
+  task: CoachTask;
+  day: string;
+  enqueuedAt: string;
+}
+
 /** Zprávy zápasové fronty (MATCH_QUEUE). */
 export type MatchQueueMessage =
+  | AiCoachQueueMessage
   | {
       kind: "league_round";
       leagueId: string;

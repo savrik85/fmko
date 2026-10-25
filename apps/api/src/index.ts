@@ -35,6 +35,7 @@ import { clubWebsiteRouter } from "./routes/club-website";
 import { squadAnalysisRouter } from "./routes/squad-analysis";
 import { menuBadgesRouter } from "./routes/menu-badges";
 import { adminAiClubsRouter } from "./routes/admin-ai-clubs";
+import { adminAiCoachRouter } from "./routes/admin-ai-coach";
 // transfers endpoints are in gameRouter
 import { recoverStuckRounds } from "./multiplayer/match-runner";
 import { executeDailyTick } from "./season/daily-tick";
@@ -149,6 +150,7 @@ app.route("/api", clubPrefixRouter);
 app.route("/api", squadAnalysisRouter);
 app.route("/api", menuBadgesRouter);
 app.route("/api/admin/ai-clubs", adminAiClubsRouter);
+app.route("/api/admin/ai-coach", adminAiCoachRouter);
 
 export default {
   fetch: app.fetch,
@@ -183,6 +185,44 @@ export default {
         log("info", `telefon: ${r.casual} zpráv jen tak, odložené ${r.followUps.delivered} doručeno / ${r.followUps.cancelled} zrušeno / ${r.followUps.retried} znovu`);
       } catch (e: any) {
         log("error", "hodinový běh telefonu selhal", e);
+      }
+      return;
+    }
+
+    // ── AI TRENÉŘI (ai-coach/jobs.ts): vlastní crony, končí hned tady ──
+    // Cron jen rozešle zprávy do fronty (jeden klub = jedna zpráva), model nikdy nezdrží tick.
+    //   0 7   sestavy na dnešní zápasy (pohár se hraje už od poledne) a v herní pondělí týdenní správa,
+    //   45 12 sestavy na dnešní zápasy, které ráno ještě nebyly (přátelák domluvený přes den),
+    //   15 *  hodinová práce (přáteláky, přestupy), přes den i chybějící sestavy; v 18:xx v Praze ne,
+    //         fronta patří kolu.
+    // Bloky níž se řídí pražskou hodinou (pohár od poledne), tyhle crony by je spouštěly navíc.
+    if (cron === "0 7 * * *" || cron === "45 12 * * *" || cron === "15 * * * *") {
+      try {
+        const { enqueueAiCoachJobs } = await import("./ai-coach/jobs");
+        const now = new Date();
+        if (cron === "15 * * * *") {
+          const { pragueHour: hourNow } = await import("./lib/match-tick-schedule");
+          const hour = hourNow();
+          // Přes den (8 až 17 v Praze) i sestavy na zápasy, které přibyly po ránu (přátelák domluvený
+          // odpoledne). Už připravené zápasy úloha přeskočí podle nároku, model se nevolá.
+          if (hour !== null && hour >= 8 && hour <= 17) {
+            const m = await enqueueAiCoachJobs(env, "match", now);
+            if (m.teams > 0) log("info", `AI trenéři sestavy (hodinově): ${m.teams} klubů, ${m.queued} do fronty, ${m.inline} hned`);
+          }
+          if (hour !== 18) {
+            const r = await enqueueAiCoachJobs(env, "hourly", now);
+            log("info", `AI trenéři hodinově: ${r.queued} do fronty, ${r.inline} hned${r.skipped ? ` (${r.skipped})` : ""}`);
+          }
+        } else {
+          const m = await enqueueAiCoachJobs(env, "match", now);
+          log("info", `AI trenéři sestavy: ${m.teams} klubů, ${m.queued} do fronty, ${m.inline} hned${m.skipped ? ` (${m.skipped})` : ""}`);
+          if (cron === "0 7 * * *") {
+            const w = await enqueueAiCoachJobs(env, "weekly", now);
+            log("info", `AI trenéři týdenní správa: ${w.teams} klubů, ${w.queued} do fronty, ${w.inline} hned${w.skipped ? ` (${w.skipped})` : ""}`);
+          }
+        }
+      } catch (e: any) {
+        log("error", "úlohy AI trenérů selhaly", e);
       }
       return;
     }

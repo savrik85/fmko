@@ -5,6 +5,7 @@ import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
 import { pocet } from "@/lib/referee-info";
 import { SectionLabel } from "@/components/ui";
+import { AiCoachSection } from "./ai-coach-section";
 
 interface SeedTable { key: string; label: string; count: number; editable: boolean; districts?: string[] }
 interface SeedRow { [key: string]: unknown }
@@ -139,6 +140,10 @@ export default function AdminPage() {
 
       <Rozbalovaci nazev="Trh hráčů" ikona="📊" popis="Kolik lidí vytvořila hra a kolik jich pustili manažeři">
         <TrhSection />
+      </Rozbalovaci>
+
+      <Rozbalovaci nazev="AI trenéři" ikona="🤖" popis="Režim, povaha trenérů, deník rozhodnutí">
+        <AiCoachSection />
       </Rozbalovaci>
 
       <Rozbalovaci nazev="Propojené kluby" ikona="🔗" popis="Stejný majitel, podezřelé dvojice">

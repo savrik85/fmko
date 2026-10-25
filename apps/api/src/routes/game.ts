@@ -12,6 +12,12 @@ import { getSeasonalEventsForWeek, type SeasonalEventDef } from "../season/seaso
 import { logger } from "../lib/logger";
 import { validateMatchPlan, parseStoredPlan } from "../lib/match-plan-validation";
 import { validateBench, parseStoredBench, benchColumn } from "../lib/lineup-bench";
+import { saveLineup, setTeamRoles, VALID_TACTICS, VALID_HARDNESS, VALID_FORMATIONS } from "../services/lineup";
+import { setTrainingPlan } from "../services/training";
+import { repairEquipment, upgradeEquipment } from "../services/equipment";
+import { maintainPitch, setPitchCareMode, upgradeStadiumFacility } from "../services/stadium";
+import { computeBannerOffers, MAX_BANNERS, signSponsorContract } from "../services/banner-sponsors";
+import { setTicketPrice } from "../services/club-settings";
 import { stropyZDovednosti, talentPodleVeku } from "../skills/stropy-z-dovednosti";
 import { mustSeason } from "../lib/season";
 import { MAX_CLUB_NAME_LENGTH, NAME_TAKEN_ERROR, renameClub } from "../lib/club-rename";
@@ -154,9 +160,6 @@ async function onPlayerTransferred(db: D1Database, playerId: string, newTeamId: 
   await initNewcomerCoachRelation(db, newTeamId, playerId);
 }
 
-// Povolené typy tréninku — drží sync s TrainingType v season/training.ts.
-const VALID_TRAINING_TYPES: string[] = ["conditioning", "technique", "tactics", "match_practice"];
-const VALID_INTENSITIES: string[] = ["light", "normal", "hard"];
 
 // GET /api/teams/:id/training — get training plan + simulate a session preview
 gameRouter.get("/teams/:teamId/training", async (c) => {
@@ -205,58 +208,12 @@ gameRouter.get("/teams/:teamId/training", async (c) => {
   });
 });
 
-// POST /api/teams/:id/training — set training plan
+// POST /api/teams/:id/training — set training plan (pravidla v services/training.ts, sdílí je AI trenér)
 gameRouter.post("/teams/:teamId/training", async (c) => {
   const teamId = c.req.param("teamId");
   const body = await c.req.json<{ type: string; approach: string; sessionsPerWeek: number; trainingDays?: number[] | null; trainingPlan?: Record<string, string> | null }>();
-  // Neznámý typ nebo přístup by denní tick neodtrénoval (tým s „kondice“ netrénoval půl roku).
-  const { isTrainingApproach, isTrainingType } = await import("../season/training");
-  if (!isTrainingType(body.type) || !isTrainingApproach(body.approach)) {
-    return c.json({ error: "Neplatný typ tréninku nebo přístup" }, 400);
-  }
-
-  // Validace trainingDays: pole 1-5, unikatni, max 5 polozek. null/undefined → default mapping podle sessionsPerWeek.
-  let trainingDaysJson: string | null = null;
-  if (Array.isArray(body.trainingDays)) {
-    const validated = Array.from(new Set(body.trainingDays.filter((d): d is number => typeof d === "number" && d >= 0 && d <= 6))).sort();
-    if (validated.length > 0) {
-      trainingDaysJson = JSON.stringify(validated);
-    }
-  }
-
-  // Týdenní plán: den (1-5) → typ tréninku. Prázdný plán = null → platí jednotný type pro
-  // dny z trainingDays (původní chování). Neznámý typ nebo den se zahodí.
-  let trainingPlanJson: string | null = null;
-  if (body.trainingPlan && typeof body.trainingPlan === "object" && !Array.isArray(body.trainingPlan)) {
-    const plan: Record<number, { type: string; intensity: string }> = {};
-    for (const [k, v] of Object.entries(body.trainingPlan)) {
-      const day = Number(k);
-      if (!Number.isInteger(day) || day < 0 || day > 6) continue;
-      // Přijímáme obojí: holý typ (starší klient) i {type, intensity}.
-      const type = typeof v === "string" ? v : (v as { type?: string })?.type;
-      const rawIntensity = typeof v === "string" ? "normal" : (v as { intensity?: string })?.intensity;
-      if (typeof type !== "string" || !VALID_TRAINING_TYPES.includes(type)) continue;
-      const intensity = VALID_INTENSITIES.includes(rawIntensity ?? "normal") ? (rawIntensity ?? "normal") : "normal";
-      plan[day] = { type, intensity };
-    }
-    if (Object.keys(plan).length > 0) {
-      trainingPlanJson = JSON.stringify(plan);
-      // Dny plánu drží training_days v souladu — čte je řada dalších míst (náklady, U21, FE).
-      trainingDaysJson = JSON.stringify(Object.keys(plan).map(Number).sort((a, b) => a - b));
-    }
-  }
-
-  // Počet tréninků týdně = počet tréninkových dnů. Jedna pravda: dny určují, kolikrát se
-  // trénuje, kolik to stojí i jak rychle hráči rostou. Dřív šlo nastavit "2x týdně" a k tomu
-  // pět tréninkových dnů — tým pak platil za dva tréninky a odtrénoval deset.
-  // Bez explicitních dnů zůstává původní cesta: počet z těla → dny z default mapy.
-  const explicitDays = trainingDaysJson ? (JSON.parse(trainingDaysJson) as number[]).length : 0;
-  const sessionsPerWeek = explicitDays > 0 ? explicitDays : body.sessionsPerWeek;
-
-  await c.env.DB.prepare(
-    "UPDATE teams SET training_type = ?, training_approach = ?, training_sessions = ?, training_days = ?, training_plan = ? WHERE id = ?"
-  ).bind(body.type, body.approach, sessionsPerWeek, trainingDaysJson, trainingPlanJson, teamId).run().catch((e) => logger.warn({ module: "game" }, "update training plan", e));
-
+  const res = await setTrainingPlan(c.env.DB, teamId, body);
+  if (!res.ok) return c.json({ error: res.error }, res.status);
   return c.json({ ok: true });
 });
 
@@ -1456,91 +1413,22 @@ gameRouter.get("/teams/:teamId/equipment", async (c) => {
   });
 });
 
-// POST /api/teams/:id/equipment/upgrade
+// POST /api/teams/:id/equipment/upgrade (pravidla v services/equipment.ts, sdílí je AI trenér)
 gameRouter.post("/teams/:teamId/equipment/upgrade", async (c) => {
   const teamId = c.req.param("teamId");
   const body = await c.req.json<{ category: string }>();
-  const { getUpgradeOptions, CATEGORIES, CATEGORY_LABELS } = await import("../equipment/equipment-generator");
-
-  // Whitelist PŘED jakýmkoli SQL — název kategorie se níž interpoluje do stringu.
-  if (!CATEGORIES.includes(body.category as any)) return c.json({ error: "Invalid category" }, 400);
-
-  const equip = await c.env.DB.prepare("SELECT * FROM equipment WHERE team_id = ?").bind(teamId).first<Record<string, unknown>>();
-  if (!equip) return c.json({ error: "Equipment not found" }, 404);
-
-  const team = await c.env.DB.prepare("SELECT budget, reputation FROM teams WHERE id = ?").bind(teamId).first<{ budget: number; reputation: number }>();
-  if (!team) return c.json({ error: "Team not found" }, 404);
-
-  const matchCount = await c.env.DB.prepare(
-    "SELECT COUNT(*) as cnt FROM matches WHERE (home_team_id = ? OR away_team_id = ?) AND status = 'simulated'"
-  ).bind(teamId, teamId).first<{ cnt: number }>().catch((e) => { logger.warn({ module: "game" }, "count matches for equipment upgrade", e); return null; });
-
-  const levels: Record<string, number> = {};
-  for (const cat of CATEGORIES) levels[cat] = (equip[cat] as number) ?? 0;
-
-  // Aktuální sezóna — bez ní by season-gate pro Lv3 (season 2+) padal i v pozdějších sezónách.
-  const upgradeSeason = await c.env.DB.prepare("SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1")
-    .first<{ number: number }>().catch((e) => { logger.warn({ module: "game" }, "fetch season for equip upgrade", e); return null; });
-
-  const upgrades = getUpgradeOptions(levels, team.reputation, matchCount?.cnt ?? 0, mustSeason(upgradeSeason?.number));
-  const upgrade = upgrades.find((u) => u.category === body.category);
-  if (!upgrade) return c.json({ error: "No upgrade available" }, 400);
-  if (upgrade.locked) return c.json({ error: upgrade.lockReason ?? "Zamčeno" }, 400);
-  if (team.budget < upgrade.cost) return c.json({ error: "Nedostatek peněz" }, 400);
-
-  await recordTransaction(c.env.DB, teamId, "equipment_upgrade", -upgrade.cost,
-    `Vylepšení vybavení: ${CATEGORY_LABELS[body.category] ?? body.category} → úroveň ${upgrade.nextLevel}`, new Date().toISOString());
-  await c.env.DB.prepare(
-    `UPDATE equipment SET ${body.category} = ?, ${body.category}_condition = 100 WHERE team_id = ?`
-  ).bind(upgrade.nextLevel, teamId).run();
-
-  // Inzerát v bazaru se váže na konkrétní level — po upgradu už nesedí, takže padá.
-  // Kupující by jinak zaplatil za starou úroveň a guard v nákupu by ho stejně odmítl.
-  await c.env.DB.prepare(
-    "UPDATE equipment_listings SET status = 'withdrawn', resolved_at = ? WHERE team_id = ? AND category = ? AND status = 'active'"
-  ).bind(new Date().toISOString(), teamId, body.category).run()
-    .catch((e) => logger.warn({ module: "game" }, "withdraw equipment listing after upgrade", e));
-
-  return c.json({ ok: true, cost: upgrade.cost, newLevel: upgrade.nextLevel });
+  const res = await upgradeEquipment(c.env.DB, teamId, body.category);
+  if (!res.ok) return c.json({ error: res.error }, res.status);
+  return c.json({ ok: true, cost: res.cost, newLevel: res.newLevel });
 });
 
 // POST /api/teams/:id/equipment/repair
 gameRouter.post("/teams/:teamId/equipment/repair", async (c) => {
   const teamId = c.req.param("teamId");
   const body = await c.req.json<{ category: string }>();
-  const { CATEGORIES, CATEGORY_LABELS, getRepairCost, REPAIR_THRESHOLD } = await import("../equipment/equipment-generator");
-
-  if (!CATEGORIES.includes(body.category as any)) return c.json({ error: "Invalid category" }, 400);
-
-  const equip = await c.env.DB.prepare("SELECT * FROM equipment WHERE team_id = ?").bind(teamId).first<Record<string, unknown>>();
-  if (!equip) return c.json({ error: "Equipment not found" }, 404);
-
-  const level = (equip[body.category] as number) ?? 0;
-  if (level === 0) return c.json({ error: "Nothing to repair" }, 400);
-
-  const condition = (equip[`${body.category}_condition`] as number) ?? 50;
-  // Práh hlídal jen getRepairOptions, endpoint ne — přes API šlo „opravit" stav 99 %.
-  if (condition >= REPAIR_THRESHOLD) {
-    return c.json({ error: `${CATEGORY_LABELS[body.category]} je ve stavu ${condition} %, opravovat není co` }, 400);
-  }
-
-  // Cena podle hodnoty kusu a toho, jak je sešlý — ne plochých level × 500.
-  const cost = getRepairCost(body.category, level, condition);
-  const team = await c.env.DB.prepare("SELECT budget FROM teams WHERE id = ?").bind(teamId).first<{ budget: number }>();
-  if (!team || team.budget < cost) return c.json({ error: "Nedostatek peněz" }, 400);
-
-  // Guard na stav: mezi zobrazenou cenou a zápisem mohla zasáhnout noční degradace.
-  const repaired = await c.env.DB.prepare(
-    `UPDATE equipment SET ${body.category}_condition = 100 WHERE team_id = ? AND ${body.category}_condition = ?`
-  ).bind(teamId, condition).run();
-  if (repaired.meta.changes === 0) {
-    return c.json({ error: "Stav vybavení se mezitím změnil, načti stránku znovu" }, 409);
-  }
-
-  await recordTransaction(c.env.DB, teamId, "equipment_expense", -cost,
-    `Oprava vybavení: ${CATEGORY_LABELS[body.category]} (ze stavu ${condition} %)`, new Date().toISOString());
-
-  return c.json({ ok: true, cost });
+  const res = await repairEquipment(c.env.DB, teamId, body.category);
+  if (!res.ok) return c.json({ error: res.error }, res.status);
+  return c.json({ ok: true, cost: res.cost });
 });
 
 // GET /api/teams/:id/stadium — get stadium info (auto-create if missing)
@@ -1913,102 +1801,11 @@ async function stavSektoru(
 gameRouter.post("/teams/:teamId/stadium/upgrade", async (c) => {
   const teamId = c.req.param("teamId");
   const body = await c.req.json<{ facility: string }>();
-
-  const stadium = await c.env.DB.prepare(
-    "SELECT * FROM stadiums WHERE team_id = ?"
-  ).bind(teamId).first<Record<string, unknown>>();
-  if (!stadium) return c.json({ error: "Stadium not found" }, 404);
-
-  const team = await c.env.DB.prepare(
-    "SELECT budget, reputation FROM teams WHERE id = ?"
-  ).bind(teamId).first<{ budget: number; reputation: number }>();
-  if (!team) return c.json({ error: "Team not found" }, 404);
-
-  const matchCount = await c.env.DB.prepare(
-    "SELECT COUNT(*) as cnt FROM matches WHERE (home_team_id = ? OR away_team_id = ?) AND status = 'simulated'"
-  ).bind(teamId, teamId).first<{ cnt: number }>().catch((e) => { logger.warn({ module: "game" }, "count matches for stadium upgrade", e); return null; });
-
-  const seasonRow = await c.env.DB.prepare(
-    "SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1"
-  ).first<{ number: number }>().catch((e) => { logger.warn({ module: "game" }, "fetch season for stadium upgrade", e); return null; });
-  const seasonNum = mustSeason(seasonRow?.number);
-
-  const { getUpgradeOptions } = await import("../stadium/stadium-generator");
-  const facilities: Record<string, number> = {
-    changing_rooms: stadium.changing_rooms as number ?? 0,
-    showers: stadium.showers as number ?? 0,
-    refreshments: stadium.refreshments as number ?? 0,
-    lighting: stadium.lighting as number ?? 0,
-    stands: stadium.stands as number ?? 0,
-    stand_main: stadium.stand_main as number ?? 0,
-    stand_opposite: stadium.stand_opposite as number ?? 0,
-    stand_goal_west: stadium.stand_goal_west as number ?? 0,
-    stand_goal_east: stadium.stand_goal_east as number ?? 0,
-    stand_ext_capacity: stadium.stand_ext_capacity as number ?? 0,
-    roof: stadium.roof as number ?? 0,
-    ultras_stand: stadium.ultras_stand as number ?? 0,
-    toilets: stadium.toilets as number ?? 0,
-    parking: stadium.parking as number ?? 0,
-    fence: stadium.fence as number ?? 0,
-    entrance_gate: stadium.entrance_gate as number ?? 0,
-    security: stadium.security as number ?? 0,
-    cage: stadium.cage as number ?? 0,
-    vip_box: stadium.vip_box as number ?? 0,
-  };
-
+  // Pravidla stavby (ceny, zámky, atomický zámek) v services/stadium.ts, sdílí je AI trenér.
   const ignoreProgressLocks = await ignoreStadiumProgressLocks(c.env.CACHE_KV, teamId, c.req.url, c.req.header("origin"));
-  const upgrades = getUpgradeOptions(
-    facilities,
-    team.reputation,
-    matchCount?.cnt ?? 0,
-    seasonNum,
-    ignoreProgressLocks,
-  );
-  const upgrade = upgrades.find((u) => u.facility === body.facility);
-  if (!upgrade) return c.json({ error: "No upgrade available" }, 400);
-  if (upgrade.locked) return c.json({ error: upgrade.lockReason ?? "Zamčeno" }, 400);
-  if (team.budget < upgrade.cost) return c.json({ error: "Nedostatek peněz" }, 400);
-
-  // Atomický zámek proti dvojímu odeslání: podmíněný UPDATE sedne, jen když sloupec
-  // ještě drží currentLevel. `body.facility` je tu bezpečné interpolovat — `upgrade`
-  // výš se najde jen pro klíč, který skutečně vyšel z FACILITY_LABELS (whitelist).
-  // Dřív se nejdřív strhly peníze a teprve pak zapsala úroveň (dvě oddělené
-  // operace): dvojklik/dvojitý submit tak stihl zaúčtovat cenu dvakrát a zapsat
-  // level jen jednou. Teď zámek prohraje druhý běh BEZ účtování.
-  const { claimStadiumUpgrade } = await import("../stadium/upgrade-claim");
-  if (!(await claimStadiumUpgrade(c.env.DB, teamId, body.facility, upgrade.currentLevel, upgrade.nextLevel))) {
-    return c.json({ error: "Stavba už probíhá, načti stránku znovu" }, 409);
-  }
-
-  // Teprve po úspěšném zámku strhnout peníze. Do popisu jde český název zařízení,
-  // ne klíč sloupce — v historii transakcí to čte hráč, ne databáze.
-  const { FACILITY_LABELS } = await import("../stadium/stadium-generator");
-  try {
-    await recordTransaction(c.env.DB, teamId, "stadium_upgrade", -upgrade.cost,
-      `Vylepšení stadionu: ${FACILITY_LABELS[body.facility] ?? body.facility}`, new Date().toISOString());
-  } catch (e) {
-    // Level je už zapsaný (zámek prošel) — klub by jinak dostal upgrade zadarmo
-    // a nikdo by se to nedozvěděl. Nesmí to zmizet v prázdném catchi.
-    logger.error({ module: "game", teamId }, `stadium upgrade ${body.facility}: level zapsán, ale strhnutí ${upgrade.cost} Kč selhalo`, e);
-  }
-
-  // Kotel si všimne, když dostane lepší sektor. Ostatní vybavení ho nezajímá.
-  if (body.facility === "ultras_stand") {
-    const { recordClubEvent } = await import("../fans/club-events");
-    await recordClubEvent(c.env.DB, {
-      teamId, kind: "vylepseni_kotle", severity: Math.min(1, 0.5 + upgrade.nextLevel * 0.2),
-      payload: { co: upgrade.effect },
-      referenceId: `fan-ultras-${teamId}-l${upgrade.nextLevel}`,
-    });
-  }
-
-  // Kapacita se do sloupce capacity NEZAPISUJE — sloupec drží základ stadionu a bonus
-  // tribun se přičítá při čtení (match-runner, cup, GET /stadium) z úrovně stands.
-  // Dřívější `capacity += [50,150,300][level]` počítal bonus dvakrát (a kumulativně
-  // absolutně: L0→L3 přičetl 500 místo 300), zatímco obecní spolufinancování
-  // nepřičítalo nic — tři různé kapacity podle cesty upgradu.
-
-  return c.json({ ok: true, cost: upgrade.cost, newLevel: upgrade.nextLevel });
+  const res = await upgradeStadiumFacility(c.env.DB, teamId, body.facility, { ignoreProgressLocks });
+  if (!res.ok) return c.json({ error: res.error }, res.status);
+  return c.json({ ok: true, cost: res.cost, newLevel: res.newLevel });
 });
 
 // POST /api/teams/:id/stadium/extension — postaví přístavbu tribuny do místa, nebo ji vylepší
@@ -2203,45 +2000,19 @@ gameRouter.post("/teams/:teamId/stadium/visual-upgrade", async (c) => {
 gameRouter.post("/teams/:teamId/stadium/maintain-pitch", async (c) => {
   const teamId = c.req.param("teamId");
   const body = await c.req.json<{ level: "basic" | "thorough" | "renovation" }>();
-
-  // Ceny musí sedět s nabídkou v `GET /stadium` výš, jinak by tlačítko slibovalo
-  // jinou částku, než se strhne.
-  const costs: Record<string, { cost: number; improvement: number; label: string }> = {
-    basic:      { cost: 1600, improvement: 10, label: "Základní údržba (+10%)" },
-    thorough:   { cost: 3000, improvement: 25, label: "Důkladná údržba (+25%)" },
-    renovation: { cost: 5000, improvement: 50, label: "Renovace trávníku (+50%)" },
-  };
-
-  const action = costs[body.level];
-  if (!action) return c.json({ error: "Invalid level" }, 400);
-
-  const team = await c.env.DB.prepare("SELECT budget FROM teams WHERE id = ?")
-    .bind(teamId).first<{ budget: number }>();
-  if (!team || team.budget < action.cost) return c.json({ error: "Nedostatek peněz" }, 400);
-
-  await recordTransaction(c.env.DB, teamId, "pitch_repair", -action.cost,
-    `Údržba hřiště: +${action.improvement}% kondice`, new Date().toISOString());
-  await c.env.DB.prepare(
-    "UPDATE stadiums SET pitch_condition = MIN(100, pitch_condition + ?) WHERE team_id = ?"
-  ).bind(action.improvement, teamId).run();
-
-  return c.json({ ok: true, cost: action.cost, improvement: action.improvement });
+  // Ceny musí sedět s nabídkou v `GET /stadium` výš (services/stadium.ts PITCH_MAINTENANCE).
+  const res = await maintainPitch(c.env.DB, teamId, body.level);
+  if (!res.ok) return c.json({ error: res.error }, res.status);
+  return c.json({ ok: true, cost: res.cost, improvement: res.improvement });
 });
 
 // POST /api/teams/:id/stadium/pitch-care-mode — jak se má péče o trávník zapínat
 gameRouter.post("/teams/:teamId/stadium/pitch-care-mode", async (c) => {
   const teamId = c.req.param("teamId");
   const body = await c.req.json<{ mode: string }>();
-
-  const { PITCH_CARE_MODES, PITCH_CARE_MODE_LABEL } = await import("../stadium/pitch-care");
-  if (!PITCH_CARE_MODES.includes(body.mode as never)) {
-    return c.json({ error: "Neznámý režim péče o hřiště." }, 400);
-  }
-
-  await c.env.DB.prepare("UPDATE stadiums SET pitch_care_mode = ? WHERE team_id = ?")
-    .bind(body.mode, teamId).run();
-
-  return c.json({ ok: true, mode: body.mode, label: PITCH_CARE_MODE_LABEL[body.mode as never] });
+  const res = await setPitchCareMode(c.env.DB, teamId, body.mode);
+  if (!res.ok) return c.json({ error: res.error }, res.status);
+  return c.json({ ok: true, mode: res.mode, label: res.label });
 });
 
 // POST /api/teams/:id/stadium/pitch-care-order — objednávka péče na nejbližší domácí zápas
@@ -2359,32 +2130,8 @@ gameRouter.get("/teams/:teamId/roles", async (c) => {
 gameRouter.post("/teams/:teamId/roles", async (c) => {
   const teamId = c.req.param("teamId");
   const body = await c.req.json<{ captainId?: string; penaltyTakerId?: string; freekickTakerId?: string }>();
-
-  const updates: string[] = [];
-  const binds: unknown[] = [];
-
-  // Ověřit že přiřazované hráče ID patří do týmu (nenastavit cizího hráče jako kapitána)
-  const idsToCheck = [body.captainId, body.penaltyTakerId, body.freekickTakerId].filter((id): id is string => !!id);
-  if (idsToCheck.length > 0) {
-    const placeholders = idsToCheck.map(() => "?").join(",");
-    const validCount = await c.env.DB.prepare(
-      `SELECT COUNT(*) as cnt FROM players WHERE team_id = ? AND id IN (${placeholders})`
-    ).bind(teamId, ...idsToCheck).first<{ cnt: number }>().catch((e) => { logger.warn({ module: "game" }, "validate role player ids", e); return null; });
-    if (!validCount || validCount.cnt !== idsToCheck.length) {
-      return c.json({ error: "Hráč nenáleží do týmu" }, 400);
-    }
-  }
-
-  if (body.captainId !== undefined) { updates.push("captain_id = ?"); binds.push(body.captainId || null); }
-  if (body.penaltyTakerId !== undefined) { updates.push("penalty_taker_id = ?"); binds.push(body.penaltyTakerId || null); }
-  if (body.freekickTakerId !== undefined) { updates.push("freekick_taker_id = ?"); binds.push(body.freekickTakerId || null); }
-
-  if (updates.length > 0) {
-    binds.push(teamId);
-    await c.env.DB.prepare(`UPDATE teams SET ${updates.join(", ")} WHERE id = ?`)
-      .bind(...binds).run().catch((e) => logger.warn({ module: "game" }, "update team roles", e));
-  }
-
+  const res = await setTeamRoles(c.env.DB, teamId, body);
+  if (!res.ok) return c.json({ error: res.error }, res.status);
   return c.json({ ok: true });
 });
 
@@ -2504,57 +2251,20 @@ gameRouter.get("/teams/:teamId/sponsors", async (c) => {
   const seasonForSeed = await c.env.DB.prepare("SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1").first<{ number: number }>().catch((e) => { logger.warn({ module: "sponsors" }, "fetch season for seed", e); return null; });
   const seedSeason = mustSeason(seasonForSeed?.number);
 
-  const repMod = team.reputation / 50;
-  const sizeMod = team.size === "mesto" ? 1.3 : team.size === "mestys" ? 1.1 : team.size === "obec" ? 1.0 : 0.8;
-  // Stable seed: same team + same season = same offers
+  // Stable seed: same team + same season = same offers (výpočet sdílí AI trenér, services/banner-sponsors.ts)
   const { seedFromString } = await import("../lib/seed");
-  const rng = createRng(seedFromString(teamId + "sponsors" + seedSeason));
-
-  // Zamíchej pool per tým (stabilně dle seedu) — jinak všechny týmy v okrese dostávají
-  // stejné sponzory (první podle abecedy) a mají tak pořád ty samé.
-  const shuffledSponsors = [...sponsorRows.results];
-  for (let i = shuffledSponsors.length - 1; i > 0; i--) {
-    const j = Math.floor(rng.random() * (i + 1));
-    [shuffledSponsors[i], shuffledSponsors[j]] = [shuffledSponsors[j], shuffledSponsors[i]];
-  }
-
-  type Offer = {
-    sponsorId: number;
-    sponsorName: string; sponsorType: string;
-    monthlyAmount: number; winBonus: number;
-    seasons: number; earlyTerminationFee: number;
-    requirement?: string;
-  };
 
   // Hlavní sponzor a název stadionu se vyjednávají s majitelem firmy (routes/sponsors.ts,
   // sponsors/negotiation*.ts). Pevné nabídky zůstaly jen u bannerů.
   const { mainSponsorBlock } = await import("../sponsors/exclusivity");
 
   // Banner offers — vždy 12 možných, malé částky, bez naming/win bonus
-  const MAX_BANNERS = 6;
-  const bannerOffers: Offer[] = [];
-  // Firma, která už klubu dělá hlavního sponzora, sponzora stadionu nebo jiný banner, se v
-  // nabídkách bannerů znovu nenabízí (párovaní přes sponsor_id, bez něj záložně přes jméno).
-  const activeSponsorIds = new Set<number>();
-  const activeSponsorNamesFallback = new Set<string>();
-  for (const activeRow of activeRows.results) {
-    const sid = (activeRow.sponsor_id as number | null) ?? null;
-    if (sid != null) activeSponsorIds.add(sid);
-    else activeSponsorNamesFallback.add(activeRow.sponsor_name as string);
-  }
-  const bannerPool = shuffledSponsors.filter((s) =>
-    !activeSponsorIds.has(s.id as number) && !activeSponsorNamesFallback.has(s.name as string));
-  for (let i = 0; i < Math.min(12, bannerPool.length); i++) {
-    const s = bannerPool[i];
-    const monthly = Math.round(rng.int(s.monthly_min as number, s.monthly_max as number) * repMod * sizeMod * 0.8);
-    const seasons = rng.int(1, 2);
-    const terminationFee = Math.round(monthly * seasons * 1.5);
-    bannerOffers.push({
-      sponsorId: s.id as number, sponsorName: s.name as string, sponsorType: s.type as string,
-      monthlyAmount: monthly, winBonus: 0, seasons, earlyTerminationFee: terminationFee,
-    });
-  }
-  bannerOffers.sort((a, b) => b.monthlyAmount - a.monthlyAmount);
+  const bannerOffers = computeBannerOffers({
+    teamId, seedSeason, reputation: team.reputation, size: team.size,
+    sponsorRows: sponsorRows.results as Array<Record<string, unknown>>,
+    activeRows: activeRows.results as Array<Record<string, unknown>>,
+    seedFromString,
+  });
 
   // Obor chráněný slibem exkluzivity se v nabídkách bannerů neukazuje.
   const { exclusiveSectors } = await import("../sponsors/promise-runs");
@@ -2672,90 +2382,10 @@ gameRouter.post("/teams/:teamId/sponsors/sign", async (c) => {
     seasons: number; earlyTerminationFee: number;
     isNamingRights?: boolean;
   }>();
-
-  const category = body.category || "main";
-  // Hlavní sponzor a název stadionu se podepisují po jednání s majitelem firmy
-  // (POST /teams/:teamId/sponsors/negotiations/:id/accept). Tady už jen bannery.
-  // Přetypování záměrně: zúžení `category` na "banner" by rozbilo zbylá porovnání níž (TS2367).
-  if ((category as string) !== "banner") {
-    return c.json({ error: "Hlavního sponzora a název stadionu teď vyjednáváš s majitelem firmy na stránce sponzora" }, 400);
-  }
-  const MAX_BANNERS = 6;
-
-  // Check no active contract in this category (banner: max 8 současně)
-  const allActive = await c.env.DB.prepare(
-    "SELECT id, category, sponsor_id, sponsor_name FROM sponsor_contracts WHERE team_id = ? AND status = 'active'"
-  ).bind(teamId).all().catch((e) => { logger.warn({ module: "game" }, "fetch active contracts for signing", e); return { results: [] }; });
-
-  if (category === "banner") {
-    const bannerCount = allActive.results.filter((r) => r.category === "banner").length;
-    if (bannerCount >= MAX_BANNERS) {
-      return c.json({ error: `Maximální počet bannerů (${MAX_BANNERS}) je dosažen` }, 400);
-    }
-  } else {
-    const existing = allActive.results.find((r) => (r.category || "main") === category);
-    if (existing) return c.json({ error: `Už máš aktivní smlouvu pro ${category === "main" ? "hlavního sponzora" : "stadion"}` }, 400);
-  }
-
-  // Anti-podvrh: klient NESMÍ určovat ekonomické hodnoty. Ověř je proti serverovým mezím sponzora
-  // (rng.int nikdy nepřekročí monthly_max × přesné multiplikátory z generování) + fee dopočítej serverově.
-  const econ = await c.env.DB.prepare(
-    "SELECT t.reputation, v.size, v.district FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?"
-  ).bind(teamId).first<{ reputation: number; size: string; district: string }>()
-    .catch((e) => { logger.warn({ module: "game" }, "sponsor econ lookup", e); return null; });
-  if (!econ) return c.json({ error: "Tým nenalezen" }, 404);
-  const spBounds = await c.env.DB.prepare("SELECT id, name, type, monthly_max, win_bonus_max FROM district_sponsors WHERE district = ?")
-    .bind(econ.district).all<{ id: number; name: string; type: string; monthly_max: number; win_bonus_max: number }>()
-    .catch((e) => { logger.warn({ module: "game" }, "sponsor bounds lookup", e); return { results: [] as { id: number; name: string; type: string; monthly_max: number; win_bonus_max: number }[] }; });
-  const cleanSp = (nm: string) => nm.replace(/\s*s\.r\.o\.?\s*/gi, "").trim();
-  const baseName = category === "stadium" ? body.sponsorName.replace(/\s+Arena$/i, "").trim() : body.sponsorName;
-  const spRow = category === "stadium"
-    ? spBounds.results.find((r) => cleanSp(r.name) === baseName)
-    : spBounds.results.find((r) => r.name === body.sponsorName);
-  if (!spRow) return c.json({ error: "Neplatný sponzor pro tento okres" }, 400);
-  // Firma, která klubu už dělá hlavního sponzora, sponzora stadionu nebo jiný banner, se znovu
-  // podepsat nedá (párování přes sponsor_id, bez něj záložně přes jméno) — GET /sponsors ji ze
-  // stejného důvodu z nabídek bannerů vynechá (bannerPool výš).
-  const alreadySponsors = allActive.results.some((r) => {
-    const sid = (r.sponsor_id as number | null) ?? null;
-    return sid != null ? sid === spRow.id : r.sponsor_name === body.sponsorName;
-  });
-  if (alreadySponsors) return c.json({ error: `${body.sponsorName} už tvůj klub sponzoruje, další smlouvu s ní podepsat nejde` }, 409);
-  // Slib „exkluzivita oboru" u hlavního sponzora nebo stadionu: banner stejného oboru nejde.
-  // Není to porušení slibu, podpis se prostě zakáže s vysvětlením.
-  if (category === "banner") {
-    const { exclusiveSectors } = await import("../sponsors/promise-runs");
-    const { sectorBlockMessage } = await import("../sponsors/promise-eval");
-    const holder = (await exclusiveSectors(c.env.DB, teamId)).get(spRow.type);
-    if (holder) return c.json({ error: sectorBlockMessage(holder, "sign") }, 409);
-  }
-  const repMod = econ.reputation / 50;
-  const sizeMod = econ.size === "mesto" ? 1.3 : econ.size === "mestys" ? 1.1 : econ.size === "obec" ? 1.0 : 0.8;
-  const catMult = category === "main" ? 3 : category === "stadium" ? 1.5 : 0.8;
-  const maxMonthly = Math.ceil(spRow.monthly_max * repMod * sizeMod * catMult) + 1;
-  const maxWinBonus = category === "main" ? Math.ceil(spRow.win_bonus_max * repMod * 2) + 1 : 0;
-  const maxSeasons = category === "banner" ? 2 : 3;
-  if (!Number.isFinite(body.monthlyAmount) || body.monthlyAmount < 0 || body.monthlyAmount > maxMonthly) return c.json({ error: "Neplatná výše sponzoringu" }, 400);
-  if (!Number.isFinite(body.winBonus) || body.winBonus < 0 || body.winBonus > maxWinBonus) return c.json({ error: "Neplatný bonus za výhru" }, 400);
-  if (!Number.isInteger(body.seasons) || body.seasons < 1 || body.seasons > maxSeasons) return c.json({ error: "Neplatná délka smlouvy" }, 400);
-  // earlyTerminationFee se NEbere od klienta — dopočítej serverově dle skutečných hodnot.
-  const validatedTerminationFee = Math.round(body.monthlyAmount * body.seasons * (category === "banner" ? 1.5 : 2));
-
-  // Hlavní sponzor: vložit jen pokud ho mezitím nepodepsal jiný klub (atomicky v jednom příkazu).
-  const { MAIN_SPONSOR_FREE_SQL, mainSponsorFreeParams } = await import("../sponsors/exclusivity");
-  const id = crypto.randomUUID();
-  const ins = await c.env.DB.prepare(
-    `INSERT INTO sponsor_contracts (id, team_id, sponsor_name, sponsor_type, monthly_amount, win_bonus,
-      seasons_total, seasons_remaining, early_termination_fee, is_naming_rights, category, sponsor_id)
-     SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-     WHERE ? != 'main' OR ${MAIN_SPONSOR_FREE_SQL}`
-  ).bind(id, teamId, body.sponsorName, spRow.type, body.monthlyAmount, body.winBonus,
-    body.seasons, body.seasons, validatedTerminationFee, body.isNamingRights ? 1 : 0, category, spRow.id,
-    category, ...mainSponsorFreeParams(spRow.id, teamId),
-  ).run();
-  if (!ins.meta.changes) return c.json({ error: `${body.sponsorName} právě podepsal s jiným klubem` }, 409);
-
-  return c.json({ ok: true, contractId: id });
+  // Pravidla podpisu (meze sponzora, exkluzivita, max bannerů) v services/banner-sponsors.ts, sdílí je AI trenér.
+  const res = await signSponsorContract(c.env.DB, teamId, body);
+  if (!res.ok) return c.json({ error: res.error }, res.status);
+  return c.json({ ok: true, contractId: res.contractId });
 });
 
 // POST /api/teams/:teamId/sponsors/renew — prodloužení stávající smlouvy za aktuální podmínky
@@ -4576,126 +4206,15 @@ gameRouter.get("/teams/:teamId/lineup/:calendarId", async (c) => {
   });
 });
 
-// Whitelist taktik a formací — drží sync se shared/engine. Neplatné hodnoty by jinak crashly engine.
-const VALID_TACTICS = ["offensive", "balanced", "defensive", "long_ball", "possession", "pressing"] as const;
-// Tvrdost hry — whitelist stejně jako u taktiky, DB CHECK constraint na ni nemá.
-const VALID_HARDNESS = ["fair", "normal", "hard"] as const;
-const VALID_FORMATIONS = ["4-4-2", "4-3-3", "3-5-2", "4-5-1", "5-3-2", "3-4-3"] as const;
+// Whitelisty taktik, tvrdosti a formací žijí ve službě sestavy (services/lineup.ts),
+// stejné kontroly používá i AI trenér.
 
 // POST save lineup for next match
 gameRouter.post("/teams/:teamId/lineup", async (c) => {
   const teamId = c.req.param("teamId");
   const body = await c.req.json<{ calendarId: string; formation: string; tactic: string; hardness?: string; captainId?: string; presetSlot?: "A" | "B" | "C" | null; matchPlan?: unknown; bench?: unknown; players: Array<{ playerId: string; matchPosition: string }> }>();
-
-  if (!body.players || body.players.length !== 11) return c.json({ error: "Sestava musí mít přesně 11 hráčů" }, 400);
-  const gkCount = body.players.filter((p) => p.matchPosition === "GK").length;
-  if (gkCount !== 1) return c.json({ error: "Sestava musí mít přesně 1 brankáře" }, 400);
-  if (!VALID_TACTICS.includes(body.tactic as typeof VALID_TACTICS[number])) {
-    return c.json({ error: `Neplatná taktika "${body.tactic}"` }, 400);
-  }
-  const hardness = body.hardness ?? "normal";
-  if (!VALID_HARDNESS.includes(hardness as typeof VALID_HARDNESS[number])) {
-    return c.json({ error: `Neplatná tvrdost hry "${body.hardness}"` }, 400);
-  }
-  if (!VALID_FORMATIONS.includes(body.formation as typeof VALID_FORMATIONS[number])) {
-    return c.json({ error: `Neplatná formace "${body.formation}"` }, 400);
-  }
-
-  // Validate players belong to team and are available
-  const playerIds = body.players.map((p) => p.playerId);
-  if (new Set(playerIds).size !== playerIds.length) {
-    return c.json({ error: "Sestava obsahuje duplicitního hráče" }, 400);
-  }
-  const placeholders = playerIds.map(() => "?").join(",");
-  // Turnajový zápas: ligová stopka v turnaji neplatí, hlídá se turnajová.
-  const tournamentMatch = await c.env.DB.prepare(
-    "SELECT tournament_id FROM tournament_matches WHERE id = ? AND (home_team_id = ? OR away_team_id = ?)"
-  ).bind(body.calendarId, teamId, teamId).first<{ tournament_id: string }>()
-    .catch((e) => { logger.warn({ module: "game" }, "turnajový zápas pro uložení sestavy", e); return null; });
-  const validPlayers = await c.env.DB.prepare(
-    `SELECT p.id FROM players p LEFT JOIN injuries i ON p.id = i.player_id AND i.days_remaining > 0
-     WHERE p.id IN (${placeholders}) AND p.team_id = ? AND (p.status IS NULL OR p.status = 'active')
-     AND i.id IS NULL${tournamentMatch ? "" : " AND (p.suspended_matches IS NULL OR p.suspended_matches = 0)"}`
-  ).bind(...playerIds, teamId).all().catch((e) => { logger.warn({ module: "game" }, "validate lineup players", e); return { results: [] }; });
-
-  const validIds = new Set(validPlayers.results.map((r) => r.id as string));
-  if (tournamentMatch) {
-    const { loadTournamentSuspensions } = await import("../tournament/match");
-    const susp = await loadTournamentSuspensions(c.env.DB, tournamentMatch.tournament_id, [teamId]);
-    for (const id of susp.keys()) validIds.delete(id);
-  }
-  const invalid = playerIds.filter((id) => !validIds.has(id));
-  if (invalid.length > 0) {
-    return c.json({ error: `${invalid.length} hráč(ů) není dostupných (zranění, suspendace nebo nepatří do týmu)` }, 400);
-  }
-  // Pozn.: Generátorové absence (Práce/Osobní/Zdraví/Jiné) záměrně NEblokujeme — default lineup fallback
-  // i staré uložené sestavy mohou obsahovat dnes omluvené hráče. Match-runner je auto-substituuje při simulaci
-  // (buildMatchPlayers s matchKey seedem). Blokovat save by znamenalo že user nemůže uložit preset který má
-  // omluvence, i když UI už absentní substituuje v apply-preset.
-
-  // Captain musí být v lineupu (pokud je vyplněn). Jinak nullify.
-  const captainId = body.captainId && playerIds.includes(body.captainId) ? body.captainId : null;
-
-  // Pokyny na lavičce — střídání se smí odkazovat jen na hráče z jedenáctky
-  // (ven) a ze zbytku kádru (dovnitř), proto potřebujeme celý kádr, ne jen sestavu.
-  const squadRows = await c.env.DB.prepare(
-    "SELECT id FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active')"
-  ).bind(teamId).all<{ id: string }>()
-    .catch((e) => { logger.warn({ module: "game" }, "kádr pro validaci pokynů", e); return { results: [] }; });
-  const planCheck = validateMatchPlan(body.matchPlan, {
-    starterIds: new Set(playerIds),
-    squadIds: new Set(squadRows.results.map((r) => r.id)),
-  });
-  if (!planCheck.ok) return c.json({ error: planCheck.error }, 400);
-  const matchPlanJson = JSON.stringify(planCheck.plan);
-
-  const benchCheck = validateBench(body.bench, {
-    starterIds: new Set(playerIds),
-    squadIds: new Set(squadRows.results.map((r) => r.id)),
-  });
-  if (!benchCheck.ok) return c.json({ error: benchCheck.error }, 400);
-  const benchJson = benchColumn(benchCheck.bench);
-
-  // Upsert lineup
-  const existing = await c.env.DB.prepare("SELECT id FROM lineups WHERE team_id = ? AND calendar_id = ?")
-    .bind(teamId, body.calendarId).first<{ id: string }>();
-
-  // Preset slot: jen A/B/C formát validujeme, existenci presetu NE — preset tabulka je oddělená
-  // a FE může chtít označit lineup "Sestava A" i pokud slot A zatím nemá uložený preset
-  // (teprve se ukládá). Nullifikace pak způsobovala že UI rozpis ukazoval "Bez sestavy"
-  // přestože lineup byl uložen.
-  const presetSlot: string | null = body.presetSlot && ["A","B","C"].includes(body.presetSlot)
-    ? body.presetSlot : null;
-  if (existing) {
-    await c.env.DB.prepare("UPDATE lineups SET formation = ?, tactic = ?, hardness = ?, players_data = ?, captain_id = ?, preset_slot = ?, match_plan = ?, bench_data = ?, is_auto = 0, submitted_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?")
-      .bind(body.formation, body.tactic, hardness, JSON.stringify(body.players), captainId, presetSlot, matchPlanJson, benchJson, existing.id).run();
-  } else {
-    const id = crypto.randomUUID();
-    await c.env.DB.prepare("INSERT INTO lineups (id, team_id, calendar_id, formation, tactic, hardness, players_data, captain_id, preset_slot, match_plan, bench_data, is_auto, submitted_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))")
-      .bind(id, teamId, body.calendarId, body.formation, body.tactic, hardness, JSON.stringify(body.players), captainId, presetSlot, matchPlanJson, benchJson).run();
-  }
-
-  // Auto-upsert do lineup_presets když user ukládá sestavu s presetSlot A/B/C.
-  // Dřív preset vznikal jen přes explicitní PUT /lineup-presets/{slot}, takže běžný save lineupu
-  // s "presetSlot=A" preset A nevytvořil → UI rozpisu ukazoval "Sestava A prázdná". User myslí
-  // že jedna akce "Uložit Sestavu A" naplní slot i zápas naráz — to je teď skutečné chování.
-  if (presetSlot) {
-    await c.env.DB.prepare(
-      `INSERT INTO lineup_presets (team_id, slot, formation, tactic, hardness, captain_id, players_data, match_plan, bench_data, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ','now'))
-       ON CONFLICT(team_id, slot) DO UPDATE SET
-         formation = excluded.formation,
-         tactic = excluded.tactic,
-         hardness = excluded.hardness,
-         captain_id = excluded.captain_id,
-         players_data = excluded.players_data,
-         match_plan = excluded.match_plan,
-         bench_data = excluded.bench_data,
-         updated_at = excluded.updated_at`
-    ).bind(teamId, presetSlot, body.formation, body.tactic, hardness, captainId, JSON.stringify(body.players), matchPlanJson, benchJson)
-      .run().catch((e) => logger.warn({ module: "game" }, "auto-upsert preset", e));
-  }
-
+  const res = await saveLineup(c.env.DB, teamId, body);
+  if (!res.ok) return c.json({ error: res.error }, res.status);
   return c.json({ ok: true });
 });
 
@@ -10081,44 +9600,9 @@ gameRouter.patch("/teams/:teamId/fans/ticket-price", async (c) => {
     logger.warn({ module: "game" }, "parse ticket-price body", e);
     return { baseTicketPrice: 0 };
   });
-  const price = Math.max(0, Math.min(500, Math.round(body.baseTicketPrice ?? 0)));
-
-  const { ensureFansRow } = await import("../season/fans-processor");
-  const { getBaseTicketPrice, mapVillageSize } = await import("../season/finance-processor");
-  await ensureFansRow(c.env.DB, teamId);
-
-  // Starou cenu je potřeba znát dřív, než ji přepíšeme — bez ní by fanoušci
-  // nepoznali, jestli jsi zdražil nebo zlevnil.
-  //
-  // Nula v `base_ticket_price` neznamená vstup zdarma, ale „platí sazba obce".
-  // Kdyby se brala doslova, první nastavení ceny by fanoušky minulo — a přitom
-  // skok z obecní třicetikoruny na stovku je přesně to, co je naštve nejvíc.
-  const ulozena = (await c.env.DB.prepare("SELECT base_ticket_price FROM fans WHERE team_id = ?")
-    .bind(teamId).first<{ base_ticket_price: number }>()
-    .catch((e) => { logger.warn({ module: "game" }, "stará cena vstupného", e); return null; }))?.base_ticket_price ?? 0;
-  const velikostObce = (await c.env.DB.prepare(
-    "SELECT v.size FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?",
-  ).bind(teamId).first<{ size: string }>()
-    .catch((e) => { logger.warn({ module: "game" }, "velikost obce pro cenu", e); return null; }))?.size;
-  const stara = ulozena > 0 ? ulozena : getBaseTicketPrice(mapVillageSize(velikostObce ?? "village"));
-
-  await c.env.DB.prepare(
-    "UPDATE fans SET base_ticket_price = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE team_id = ?",
-  ).bind(price, teamId).run().catch((e) => logger.warn({ module: "game" }, "update ticket price", e));
-
-  if (stara > 0 && price !== stara) {
-    const { recordClubEvent } = await import("../fans/club-events");
-    const { silaZmenyCeny } = await import("../engine/fan-reactions");
-    const rozdil = price > stara ? "Zdraženo" : "Zlevněno";
-    await recordClubEvent(c.env.DB, {
-      teamId,
-      kind: price > stara ? "zdrazeni_vstupneho" : "zlevneni_vstupneho",
-      severity: silaZmenyCeny(stara, price),
-      payload: { co: `${rozdil} z ${stara} na ${price} Kč` },
-    });
-  }
-
-  return c.json({ ok: true, baseTicketPrice: price });
+  // Pravidla (rozsah ceny, reakce fanoušků) v services/club-settings.ts, sdílí je AI trenér.
+  const res = await setTicketPrice(c.env.DB, teamId, body.baseTicketPrice ?? 0);
+  return c.json({ ok: true, baseTicketPrice: res.baseTicketPrice });
 });
 
 // GET /api/teams/:id/concession — mód + stav produktů (+ katalog pro UI)
