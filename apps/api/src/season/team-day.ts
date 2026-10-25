@@ -533,8 +533,8 @@ export async function processTeamDay(
         // zápase, jinak by zeď zaplavily hlášky k jedné prohře.
         const forma = await formaKlubu(env.DB, teamId);
         if (forma.zapasu >= 5) {
-          const { prispevkyKHre } = await import("../fans/fan-feed");
-          const taktika = (team.tactic as string | null) ?? null;
+          const { playedTactic, prispevkyKHre } = await import("../fans/fan-feed");
+          const taktika = await playedTactic(env.DB, teamId);
           await prispevkyKHre(env.DB, {
             teamId, taktika, golyPoslednich5: forma.goly,
             zapasu: forma.zapasu, gameDate: newGameDate,

@@ -20,7 +20,9 @@ beforeAll(async () => {
   });
   db = await miniflare.getD1Database("DB");
   await db.exec("CREATE TABLE villages (id TEXT PRIMARY KEY, name TEXT, district TEXT)");
-  await db.exec("CREATE TABLE teams (id TEXT PRIMARY KEY, name TEXT, village_id TEXT, tactic TEXT, league_id TEXT)");
+  // Jako skutečné schéma: teams sloupec tactic nemá, taktiku nese sestava.
+  await db.exec("CREATE TABLE teams (id TEXT PRIMARY KEY, name TEXT, village_id TEXT, league_id TEXT)");
+  await db.exec("CREATE TABLE lineups (id TEXT PRIMARY KEY, team_id TEXT, tactic TEXT, submitted_at TEXT, is_auto INTEGER DEFAULT 0)");
   await db.exec("CREATE TABLE stadiums (team_id TEXT PRIMARY KEY, ultras_text TEXT, ultras_text_duvod TEXT, ultras_stand INTEGER)");
   await db.exec("CREATE TABLE fan_campaigns (team_id TEXT, kind TEXT, target_name TEXT, status TEXT)");
   await db.exec("CREATE TABLE fan_group_players (group_id TEXT, player_id TEXT, stance TEXT)");
@@ -31,7 +33,7 @@ beforeAll(async () => {
   await db.exec("CREATE TABLE ultras_reports (league_id TEXT, photos_json TEXT)");
   await db.batch([
     db.prepare("INSERT INTO villages VALUES ('v1', 'Podolí', 'Praha')"),
-    db.prepare("INSERT INTO teams VALUES ('t1', 'FK Rohlík Podolí', 'v1', NULL, 'l1')"),
+    db.prepare("INSERT INTO teams VALUES ('t1', 'FK Rohlík Podolí', 'v1', 'l1')"),
     db.prepare("INSERT INTO stadiums VALUES ('t1', NULL, NULL, 1)"),
   ]);
 });
@@ -92,5 +94,23 @@ describe("plachta po domácím zápase", () => {
     expect(after!.ultras_text_duvod).toBe(before!.ultras_text_duvod);
     // Nová plachta na zápase ještě nevisela, takže druhý den visí dál.
     expect(await prepoctiTransparent(db, "t1", [kotel], "2026-10-01")).toBeNull();
+  });
+});
+
+describe("plachta k taktice", () => {
+  it("kotel soudí taktiku z poslední sestavy: nakopávaný fotbal bez gólů dostane výtku", async () => {
+    const kotelT9 = { ...kotel, id: "g9", team_id: "t9" };
+    await db.batch([
+      db.prepare("INSERT INTO villages VALUES ('v9', 'Lhenice', 'Prachatice')"),
+      db.prepare("INSERT INTO teams VALUES ('t9', 'SK Lhenice', 'v9', 'l9')"),
+      db.prepare("INSERT INTO stadiums VALUES ('t9', NULL, NULL, 1)"),
+      // Starší sestava hrála presink, poslední nakopávané míče: platí poslední.
+      db.prepare("INSERT INTO lineups VALUES ('lu-old', 't9', 'pressing', '2026-09-20T10:00:00Z', 0)"),
+      db.prepare("INSERT INTO lineups VALUES ('lu-new', 't9', 'long_ball', '2026-09-27T10:00:00Z', 1)"),
+    ]);
+    await prepoctiTransparent(db, "t9", [kotelT9], "2026-09-28");
+    const row = await db.prepare("SELECT ultras_text, ultras_text_duvod FROM stadiums WHERE team_id = 't9'")
+      .first<{ ultras_text: string; ultras_text_duvod: string }>();
+    expect(row).toEqual({ ultras_text: "ŽÁDNÝ KECY, MAKAT!", ultras_text_duvod: "Kotel nesnáší nakopávaný fotbal." });
   });
 });
