@@ -133,6 +133,13 @@ beforeAll(async () => {
                 VALUES ('st-b', 'team-human-b', 90, 'natural', 1, 2, 1, 0, 1, 1, 1, 1, 1, 2)`),
     db.prepare("INSERT INTO equipment (id, team_id, balls, jerseys, training_cones, first_aid, balls_condition) VALUES ('eq-a', 'team-human-a', 3, 3, 2, 2, 95)"),
     db.prepare("INSERT INTO equipment (id, team_id, balls, jerseys, training_cones, first_aid, balls_condition) VALUES ('eq-b', 'team-human-b', 2, 2, 1, 1, 85)"),
+    // Lidští trenéři (vzor pro AI trenéry) a odpojený trenér bývalého majitele převzatého klubu.
+    db.prepare(`INSERT INTO managers (id, user_id, team_id, name, backstory, avatar, coaching, motivation, tactics, discipline, youth_development)
+                VALUES ('mgr-a', 'user-a', 'team-human-a', 'Petr Novák', '', '{}', 70, 60, 66, 72, 50)`),
+    db.prepare(`INSERT INTO managers (id, user_id, team_id, name, backstory, avatar, coaching, motivation, tactics, discipline, youth_development)
+                VALUES ('mgr-b', 'user-b', 'team-human-b', 'Jan Dvořák', '', '{}', 60, 50, 56, 62, 44)`),
+    db.prepare(`INSERT INTO managers (id, user_id, team_id, name, backstory, avatar, coaching, motivation, tactics, discipline, youth_development)
+                VALUES ('mgr-gone', 'user-gone', NULL, 'Karel Pryč', '', '{}', 30, 30, 30, 30, 30)`),
   ]);
   const roles = ["asistent", "trener_mladeze", "trener_brankaru", "kondicni_trener", "maser", "lekar", "spravce_hriste", "skaut", "obsluha", "ekonom", "skaut"];
   const staff: D1PreparedStatement[] = [];
@@ -210,6 +217,23 @@ describe("narovnání AI klubů v lize s lidmi", () => {
     expect(await count("SELECT COUNT(*) AS n FROM reputation_log WHERE team_id = 'team-ai-a' AND source = 'admin'")).toBe(1);
     // Lidských klubů se narovnání nedotklo.
     expect(await count("SELECT COUNT(*) AS n FROM staff_members WHERE team_id IN ('team-human-a', 'team-human-b')")).toBe(18);
+
+    // AI trenér má vlastnosti aspoň na cíli z lidských trenérů (60–70 koučování), lidští ani odpojený trenér se nemění.
+    expect(result.managersRaised).toBe(2);
+    for (const club of plan.clubs) {
+      expect(club.target.manager?.coaching).toBeGreaterThanOrEqual(60);
+      expect(club.target.manager?.coaching).toBeLessThanOrEqual(70);
+      const m = (await db.prepare("SELECT coaching, motivation, tactics, discipline, youth_development FROM managers WHERE team_id = ? AND user_id = 'ai'")
+        .bind(club.teamId).first<Record<string, number>>())!;
+      for (const [attr, target] of Object.entries(club.target.manager ?? {})) expect(m[attr], attr).toBeGreaterThanOrEqual(target);
+    }
+    const humans = await db.prepare("SELECT id, coaching, discipline FROM managers WHERE id IN ('mgr-a', 'mgr-b', 'mgr-gone') ORDER BY id")
+      .all<{ id: string; coaching: number; discipline: number }>();
+    expect(humans.results).toEqual([
+      { id: "mgr-a", coaching: 70, discipline: 72 },
+      { id: "mgr-b", coaching: 60, discipline: 62 },
+      { id: "mgr-gone", coaching: 30, discipline: 30 },
+    ]);
   });
 
   it("druhé provedení už nic nezvedá (jen nahoru, nic dvakrát)", async () => {
@@ -223,6 +247,7 @@ describe("narovnání AI klubů v lize s lidmi", () => {
     expect(result.playersRaised).toBe(0);
     expect(result.playersCreated).toBe(0);
     expect(result.staffHired).toBe(0);
+    expect(result.managersRaised).toBe(0);
     expect(await snapshot()).toEqual(before);
   });
 

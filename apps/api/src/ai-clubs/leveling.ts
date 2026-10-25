@@ -84,6 +84,8 @@ const MAX_SKILL = 100;
 const MAX_POTENTIAL = 99;
 const FAMILIARITY_FLOOR = 15;
 const STAFF_ATTRS = ["coaching", "medicine", "maintenance", "judgement", "communication", "work_rate", "charm"] as const;
+/** Vlastnosti trenéra, které se srovnají se vzorem. Reputaci trenéra dělají výsledky, licenci kurzy. */
+const MANAGER_ATTRS = ["coaching", "motivation", "tactics", "discipline", "youth_development"] as const;
 const LEVELING_REPUTATION_TEXT = "Srovnání podmínek v soutěži";
 
 /** Části stadionu, které se narovnávají (úrovně 0–3). `stands` je odvozené maximum stran. */
@@ -140,6 +142,8 @@ export interface LevelingTargets {
    * null = strop jde s dovedností celý (nižší soutěž a nováčci soupeří s čerstvými kádry).
    */
   headroom?: number | null;
+  /** Vlastnosti AI trenéra (koučování, motivace, …). U21 prázdné: rezerva hraje pod trenérem áčka. */
+  manager?: Record<string, number>;
 }
 
 export interface ClubSummary {
@@ -156,6 +160,8 @@ export interface ClubSummary {
   formationFamiliarity: Record<string, number>;
   /** Průměrná rezerva hráčů do stropu dovedností (bod na dovednost); po narovnání jen stávající hráči. */
   headroom: number;
+  /** Vlastnosti trenéra áčka. U21 prázdné. */
+  manager: Record<string, number>;
 }
 
 export interface LevelingPlanClub {
@@ -198,6 +204,7 @@ export interface LevelingResult {
   playersRaised: number;
   playersCreated: number;
   staffHired: number;
+  managersRaised: number;
   failedStatements: number;
 }
 
@@ -620,6 +627,10 @@ interface ClubState {
   /** Formace, jejichž sehranost se zvedá (oblíbené AI trenéra, u U21 nejsehranější). */
   formations: string[];
   coachLicence: number;
+  /** Trenér klubu (přednostně lidský). Převzatý klub má lidského trenéra odpojeného, vede ho AI. */
+  managerId: string | null;
+  managerIsAi: boolean;
+  managerAttrs: Record<string, number>;
 }
 
 function parseJson<T extends object>(raw: string | null | undefined, what: string): T {
@@ -726,7 +737,7 @@ function groupByTeam<T extends { team_id?: unknown }>(rows: T[]): Map<string, T[
   return map;
 }
 
-async function loadClubStates(db: D1Database, teamIds: readonly string[], withManagers: boolean): Promise<ClubState[]> {
+async function loadClubStates(db: D1Database, teamIds: readonly string[]): Promise<ClubState[]> {
   const teams = await selectByTeams<TeamRow>(db, (ph) =>
     `SELECT t.id, t.name, t.user_id, COALESCE(t.team_type, 'senior') AS team_type, t.budget, t.reputation,
             t.formation_familiarity, t.ai_former_user_id, t.game_date,
@@ -745,12 +756,10 @@ async function loadClubStates(db: D1Database, teamIds: readonly string[], withMa
   const staff = groupByTeam(await selectByTeams<{ team_id: string; role: string }>(db, (ph) =>
     `SELECT team_id, role FROM staff_members WHERE team_id IN (${ph}) AND role IS NOT NULL`, teamIds, "zaměstnanci"));
   // Přednostně lidský trenér, stejně jako `loadManagerRow`.
-  const managers = groupByTeam(withManagers
-    ? await selectByTeams<Record<string, unknown>>(db, (ph) =>
-      `SELECT team_id, user_id, ai_profile, tactics, youth_development, discipline, motivation, licence_level
-         FROM managers WHERE team_id IN (${ph})
-        ORDER BY CASE WHEN user_id = 'ai' THEN 1 ELSE 0 END, created_at DESC`, teamIds, "trenéři")
-    : []);
+  const managers = groupByTeam(await selectByTeams<Record<string, unknown>>(db, (ph) =>
+    `SELECT id, team_id, user_id, ai_profile, coaching, tactics, youth_development, discipline, motivation, licence_level
+       FROM managers WHERE team_id IN (${ph})
+      ORDER BY CASE WHEN user_id = 'ai' THEN 1 ELSE 0 END, created_at DESC`, teamIds, "trenéři"));
 
   const states: ClubState[] = [];
   for (const t of teams) {
@@ -794,6 +803,11 @@ async function loadClubStates(db: D1Database, teamIds: readonly string[], withMa
       staffRoles: (staff.get(t.id) ?? []).map((s) => String(s.role)).sort(),
       formations: teamType === "senior" && t.user_id === "ai" ? predictedFormations(t.id, manager) : [bestFormation],
       coachLicence: typeof manager?.licence_level === "number" ? manager.licence_level : 0,
+      managerId: typeof manager?.id === "string" ? manager.id : null,
+      managerIsAi: manager?.user_id === "ai",
+      managerAttrs: Object.fromEntries(MANAGER_ATTRS
+        .filter((attr) => typeof manager?.[attr] === "number")
+        .map((attr) => [attr, manager![attr] as number])),
     });
   }
   return states.sort((a, b) => a.teamId.localeCompare(b.teamId));
@@ -816,6 +830,7 @@ function summarize(state: ClubState): ClubSummary {
     reputation: state.reputation,
     formationFamiliarity: { ...state.familiarity },
     headroom: headroomOrZero(squadHeadroom(state.members)),
+    manager: isU21 ? {} : { ...state.managerAttrs },
   };
 }
 
@@ -847,6 +862,8 @@ interface ReferenceStats {
   familiarity: [number[], number[]];
   /** Průměrná rezerva hráčů do stropu dovedností po klubech vzoru. */
   headroom: number[];
+  /** Vlastnosti lidských trenérů áček vzoru. */
+  manager: Record<string, number[]>;
 }
 
 function activeSince(now: Date): string {
@@ -892,12 +909,12 @@ async function loadReference(db: D1Database, leagueIds: readonly string[], now: 
         AND u.last_activity_at IS NOT NULL AND u.last_activity_at >= ?
       ORDER BY t.id`,
   ).bind(...leagueIds, activeSince(now)).all<{ id: string }>()).results;
-  const states = await loadClubStates(db, teamRows.map((r) => r.id), false);
+  const states = await loadClubStates(db, teamRows.map((r) => r.id));
 
   const stats: ReferenceStats = {
     teams: states.length, top11: [], top18: [], squadSize: [], depthGap: 0, top18Gap: 0, ages: [],
     stadium: {}, pitchCondition: [], pitchType: [], equipment: {}, staffCount: [], staffSlots: [],
-    budget: [], reputation: [], familiarity: [[], []], headroom: [],
+    budget: [], reputation: [], familiarity: [[], []], headroom: [], manager: {},
   };
   const depthGaps: number[] = [];
   const top18Gaps: number[] = [];
@@ -928,6 +945,9 @@ async function loadReference(db: D1Database, leagueIds: readonly string[], now: 
     }
     if (s.hasEquipmentRow) {
       for (const [key, value] of Object.entries(s.equipment)) (stats.equipment[key] ??= []).push(value);
+    }
+    if (s.teamType === "senior" && s.managerId && !s.managerIsAi) {
+      for (const [attr, value] of Object.entries(s.managerAttrs)) (stats.manager[attr] ??= []).push(value);
     }
     if (s.teamType === "senior") {
       stats.staffCount.push(s.staffRoles.length);
@@ -979,6 +999,7 @@ function targetsFor(
 
   const stadium: Record<string, number> = {};
   const equipment: Record<string, number> = {};
+  const manager: Record<string, number> = {};
   let staffRoles: string[] = [];
   let pitchCondition = before.pitchCondition;
   let pitchType = before.pitchType;
@@ -1011,6 +1032,10 @@ function targetsFor(
     }
     const rep = quantile(ref.reputation, percentile);
     if (Number.isFinite(rep)) reputation = clampInt(rep, 0, 100);
+    for (const attr of MANAGER_ATTRS) {
+      const q = quantile(ref.manager[attr] ?? [], percentile);
+      if (Number.isFinite(q)) manager[attr] = clampInt(q, 1, 99);
+    }
   }
 
   const squad = quantile(ref.squadSize, percentile);
@@ -1028,6 +1053,7 @@ function targetsFor(
       formationFamiliarity: familiarity,
       newPlayerRating: round1(Math.max(1, top11 - ref.depthGap)),
       headroom: Number.isFinite(headroom) ? round1(headroom) : null,
+      manager,
     },
   };
 }
@@ -1054,6 +1080,8 @@ interface ClubChanges {
   budget: number | null;
   reputation: number | null;
   familiarity: Record<string, number> | null;
+  /** Zvednuté vlastnosti AI trenéra. */
+  manager: Record<string, number> | null;
   after: ClubSummary;
 }
 
@@ -1194,6 +1222,14 @@ function computeClubChanges(club: ClubState, targets: LevelingTargets, seed: num
   });
   const familiarityChanged = Object.entries(familiarity).some(([f, v]) => v !== club.familiarity[f]);
 
+  // 8. AI trenér jen nahoru. Lidský trenér převzatého klubu je odpojený a čeká na návrat vlastníka.
+  const manager: Record<string, number> = {};
+  if (!isU21 && club.managerId && club.managerIsAi) {
+    for (const [attr, target] of Object.entries(targets.manager ?? {})) {
+      if (target > (club.managerAttrs[attr] ?? 0)) manager[attr] = target;
+    }
+  }
+
   const { pitch_condition: pitchCondition, ...stadiumAfter } = nextStadium;
   const after: ClubSummary = {
     top11: round1(topAverage(ratingsAfter, 11)),
@@ -1208,6 +1244,7 @@ function computeClubChanges(club: ClubState, targets: LevelingTargets, seed: num
     reputation: reputation ?? club.reputation,
     formationFamiliarity: familiarity,
     headroom: headroomOrZero(squadHeadroom(membersAfter)),
+    manager: isU21 ? {} : { ...club.managerAttrs, ...manager },
   };
 
   return {
@@ -1215,6 +1252,7 @@ function computeClubChanges(club: ClubState, targets: LevelingTargets, seed: num
     budget: budget !== null && budget !== club.budget ? budget : null,
     reputation: reputation !== null && reputation !== club.reputation ? reputation : null,
     familiarity: familiarityChanged ? familiarity : null,
+    manager: Object.keys(manager).length > 0 ? manager : null,
     after,
   };
 }
@@ -1285,7 +1323,7 @@ export async function planLeveling(db: D1Database, opts: PlanLevelingOptions): P
     teamIds = leagueTeams.filter((t) => t.user_id === "ai").map((t) => t.id);
   }
 
-  const clubs = await loadClubStates(db, teamIds, true);
+  const clubs = await loadClubStates(db, teamIds);
   const units = stratifiedUnits(createRng(opts.seed), clubs.length);
   const names = await namesForDistricts(db, clubs.map((c) => c.villageDistrict));
   clubs.forEach((club, i) => {
@@ -1338,7 +1376,7 @@ type Bindable = string | number | null;
  * takže opakované provedení nic nezhorší.
  */
 export async function applyLeveling(db: D1Database, plan: LevelingPlan): Promise<LevelingResult> {
-  const result: LevelingResult = { clubs: 0, playersRaised: 0, playersCreated: 0, staffHired: 0, failedStatements: 0 };
+  const result: LevelingResult = { clubs: 0, playersRaised: 0, playersCreated: 0, staffHired: 0, managersRaised: 0, failedStatements: 0 };
   if (plan.clubs.length === 0) return result;
 
   const targetsById = new Map(plan.clubs.map((c) => [c.teamId, c.target]));
@@ -1348,7 +1386,7 @@ export async function applyLeveling(db: D1Database, plan: LevelingPlan): Promise
     await ensureEquipmentRow(db, c.teamId);
     await ensureAiProfile(db, c.teamId);
   }
-  const clubs = await loadClubStates(db, plan.clubs.map((c) => c.teamId), true);
+  const clubs = await loadClubStates(db, plan.clubs.map((c) => c.teamId));
   const ages = agesFromProfile(plan.reference.ageProfile);
   const names = await namesForDistricts(db, clubs.map((c) => c.villageDistrict));
   const season = await db.prepare("SELECT id FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1")
@@ -1492,6 +1530,14 @@ export async function applyLeveling(db: D1Database, plan: LevelingPlan): Promise
     }
     if (changes.familiarity) {
       teamStmts.push(db.prepare("UPDATE teams SET formation_familiarity = ? WHERE id = ?").bind(JSON.stringify(changes.familiarity), club.teamId));
+    }
+    if (changes.manager && club.managerId) {
+      // MAX: jen nahoru, i kdyby se trenér mezi plánem a provedením zlepšil sám.
+      const cols = Object.entries(changes.manager).filter(([attr]) => (MANAGER_ATTRS as readonly string[]).includes(attr));
+      teamStmts.push(db.prepare(
+        `UPDATE managers SET ${cols.map(([attr]) => `${attr} = MAX(${attr}, ?)`).join(", ")} WHERE id = ? AND user_id = 'ai'`,
+      ).bind(...cols.map(([, value]) => value), club.managerId));
+      result.managersRaised++;
     }
   }
 
