@@ -231,12 +231,13 @@ export async function listDemands(db: D1Database, teamId: string) {
   const [mineRes, managersRes, clubsRes, pitchableRes] = await Promise.all([
     db.prepare("SELECT * FROM transfer_demands WHERE team_id = ? AND status = 'active' AND expires_at > ? ORDER BY created_at DESC")
       .bind(me.clubTeamId, now).all<DemandRow>(),
-    // Poptávky manažerů ze všech okresů, kromě vlastních a týmů téhož majitele.
+    // Poptávky klubů ve hře (lidských i AI) ze všech okresů, kromě vlastních a týmů téhož
+    // majitele. AI kluby nejsou jeden majitel, jejich poptávky vidí i jiný AI klub.
     db.prepare(
       `SELECT d.*, t.name AS team_name, l.district AS league_district, l.name AS league_name
        FROM transfer_demands d JOIN teams t ON t.id = d.team_id LEFT JOIN leagues l ON l.id = d.league_id
        WHERE d.team_id IS NOT NULL AND d.status = 'active' AND d.expires_at > ? AND d.team_id != ?
-         AND (t.user_id IS NULL OR t.user_id != ?)
+         AND (t.user_id IS NULL OR t.user_id = 'ai' OR t.user_id != ?)
        ORDER BY CASE WHEN d.league_id = ? THEN 0 ELSE 1 END, d.created_at DESC LIMIT 60`,
     ).bind(now, me.clubTeamId, me.userId ?? "", me.leagueId ?? "").all<DemandRow & { team_name: string; league_district: string | null; league_name: string | null }>(),
     // Kluby mimo hru z okresu. Obsazená poptávka zůstane vidět tomu, komu klub poslal nabídku,
@@ -406,7 +407,8 @@ export async function pitchPlayer(db: D1Database, teamId: string, demandId: stri
   if (demand.team_id) {
     if (demand.team_id === me.clubTeamId) return { ok: false, error: "Vlastní poptávce hráče nenabídneš." };
     const owner = await db.prepare("SELECT user_id FROM teams WHERE id = ?").bind(demand.team_id).first<{ user_id: string | null }>();
-    if (owner?.user_id && owner.user_id === me.userId) return { ok: false, error: "Mezi vlastními týmy se hráči přes poptávky nenabízejí." };
+    // Dva AI kluby nemají stejného majitele (převzatý klub hlídá propojení níž).
+    if (owner?.user_id && owner.user_id !== "ai" && owner.user_id === me.userId) return { ok: false, error: "Mezi vlastními týmy se hráči přes poptávky nenabízejí." };
     if (await areClubsLinked(db, me.clubTeamId, demand.team_id)) return { ok: false, error: LINKED_CLUBS_ERRORS.demandPitch };
   } else if (demand.district !== me.district) {
     return { ok: false, error: "Tahle poptávka je z jiného okresu." };
@@ -444,9 +446,14 @@ export async function pitchPlayer(db: D1Database, teamId: string, demandId: stri
   const capError = `K jedné poptávce můžeš nabídnout nejvýš ${MAX_PITCHES_PER_DEMAND} hráče.`;
   if (demand.team_id) {
     if (!(await insertPitch(db, { id: pitchId, demandId, teamId: me.clubTeamId, playerId, status: "pitched" }))) return { ok: false, error: capError };
-    await sendSystemSMS(db, demand.team_id, SMS_ROLE,
-      `${me.name} ti k poptávce na ${summary} nabízí hráče ${playerName} (${player.age} let). Když o něj stojíš, pošli nabídku z jeho profilu.`,
-      { type: "demand", demandId, playerId });
+    // AI klub zprávu nedostává, nabídnutého hráče posoudí sám (ai-coach/transfer-replies.ts).
+    const demandOwner = await db.prepare("SELECT user_id FROM teams WHERE id = ?").bind(demand.team_id).first<{ user_id: string | null }>()
+      .catch((e) => { logger.warn({ module: "demands" }, "typ klubu poptávky", e); return null; });
+    if (demandOwner?.user_id !== "ai") {
+      await sendSystemSMS(db, demand.team_id, SMS_ROLE,
+        `${me.name} ti k poptávce na ${summary} nabízí hráče ${playerName} (${player.age} let). Když o něj stojíš, pošli nabídku z jeho profilu.`,
+        { type: "demand", demandId, playerId });
+    }
     return { ok: true, status: "pitched", message: "Nabídnuto. Manažer dostal zprávu." };
   }
 
@@ -539,15 +546,15 @@ function percentile(sorted: number[], p: number): number {
 const CLUB_FLOOR_GAP: Record<DemandRole, number> = { starter: 6, squad: 12, prospect: 18 };
 
 /**
- * Jak dobrého hráče klub chce: podle kádrů lidských týmů v okrese, ne pevné číslo
- * (rating není stovková škála a brankáři mají nafouknutý). Do základu ~ 70. percentil
+ * Jak dobrého hráče klub chce: podle kádrů klubů ve hře v okrese (lidských i AI), ne pevné
+ * číslo (rating není stovková škála a brankáři mají nafouknutý). Do základu ~ 70. percentil
  * postu, do kádru ~ 40. percentil, talent ~ 75. percentil hráčů do 20 let. Nejníž
  * o CLUB_FLOOR_GAP pod sílou klubu: na testu slabé kádry dávaly poptávky „do 1 000 Kč“.
  */
 export async function demandRatingThreshold(db: D1Database, district: string, position: DemandPosition, role: DemandRole, clubRating: number): Promise<number> {
   const rows = await db.prepare(
     `SELECT p.overall_rating AS r, p.age, t.parent_team_id FROM players p JOIN teams t ON t.id = p.team_id JOIN leagues l ON l.id = t.league_id
-     WHERE (l.district = ? OR l.district = ?) AND t.user_id IS NOT NULL AND t.user_id != 'ai' AND p.position = ?
+     WHERE (l.district = ? OR l.district = ?) AND t.user_id IS NOT NULL AND p.position = ?
        AND (p.status IS NULL OR p.status = 'active')`,
   ).bind(district, `${district} U21`, position).all<{ r: number; age: number; parent_team_id: string | null }>()
     .catch((e) => { logger.warn({ module: "demands" }, "hodnocení kádrů okresu", e); return { results: [] as Array<{ r: number; age: number; parent_team_id: string | null }> }; });
@@ -576,9 +583,9 @@ export async function generateClubDemands(db: D1Database, district: string, rng:
 
   const { getVirtualTeamsForDistrict, germanClubsNear } = await import("./virtual-teams");
   const czech = await getVirtualTeamsForDistrict(db, district);
-  // Bavorské kluby v dosahu: vzdálenost se měří od obce lidského týmu okresu.
+  // Bavorské kluby v dosahu: vzdálenost se měří od obce klubu okresu (lidského i AI).
   const anchor = await db.prepare(
-    "SELECT t.id FROM teams t JOIN leagues l ON l.id = t.league_id WHERE l.district = ? AND t.user_id IS NOT NULL AND t.user_id != 'ai' AND t.parent_team_id IS NULL LIMIT 1",
+    "SELECT t.id FROM teams t JOIN leagues l ON l.id = t.league_id WHERE l.district = ? AND t.user_id IS NOT NULL AND t.parent_team_id IS NULL ORDER BY CASE WHEN t.user_id = 'ai' THEN 1 ELSE 0 END LIMIT 1",
   ).bind(district).first<{ id: string }>();
   const german = anchor ? await germanClubsNear(db, anchor.id) : [];
   const busy = new Set(active.results.map((r) => parseClub(r.club_data)?.name).filter(Boolean));

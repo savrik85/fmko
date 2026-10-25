@@ -48,6 +48,20 @@ function isHumanUser(userId: string | null): userId is string {
 }
 
 /**
+ * Majitel klubu: lidský účet, a u klubu, který převzal AI trenér (opuštěný klub, spec 3.1),
+ * jeho bývalý vlastník. Ten se ke klubu může vrátit, takže přes AI klub nesmí přelévat
+ * hráče ani peníze do svých ostatních klubů. `SELECT *`, ať kontrola funguje i nad
+ * databází bez sloupce `ai_former_user_id` (klub bez převzetí ho prostě nemá).
+ */
+async function ownerOf(db: D1Database, club: ClubRow): Promise<string | null> {
+  if (isHumanUser(club.user_id)) return club.user_id;
+  if (club.user_id !== "ai") return null;
+  const row = await db.prepare("SELECT * FROM teams WHERE id = ?").bind(club.club_team_id).first<Record<string, unknown>>();
+  const former = row?.ai_former_user_id;
+  return typeof former === "string" && isHumanUser(former) ? former : null;
+}
+
+/**
  * Patří dvě soupisky propojeným klubům?
  *
  * Bez try/catch schválně: přestup, který proklouzne kvůli chybě čtení,
@@ -58,7 +72,13 @@ export async function areClubsLinked(db: D1Database, teamA: string | null | unde
   const [a, b] = await Promise.all([clubOf(db, teamA), clubOf(db, teamB)]);
   if (!a || !b || a.club_team_id === b.club_team_id) return false;
   if (isHumanUser(a.user_id) && a.user_id === b.user_id) return true;
-  return a.group_id != null && a.group_id === b.group_id;
+  // Převzatý klub zůstává ve své skupině `club_links` (zápis admina se nemaže).
+  if (a.group_id != null && a.group_id === b.group_id) return true;
+  // Bez zápisu: klub převzatý AI trenérem dál patří bývalému vlastníkovi. Dva AI kluby
+  // bez převzetí propojené nejsou, AI kluby nejsou jeden majitel.
+  if (a.user_id !== "ai" && b.user_id !== "ai") return false;
+  const [ownerA, ownerB] = await Promise.all([ownerOf(db, a), ownerOf(db, b)]);
+  return ownerA != null && ownerA === ownerB;
 }
 
 /** A-týmy propojené s klubem, kam patří `teamId` (parametr ?1), bez klubu samotného. */

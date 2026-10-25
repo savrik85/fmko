@@ -110,9 +110,9 @@ export async function maintainFreeAgentPool(
   await db.prepare("DELETE FROM free_agents WHERE expires_at < ?")
     .bind(gameDate.toISOString()).run().catch((e) => logger.warn({ module: "free-agent-pool" }, "expire/insert", e));
 
-  // 2. Find districts with active human teams
+  // 2. Okresy, kde hrají kluby (lidské i AI: AI kluby podepisují volné hráče jako lidé)
   const districts = await db.prepare(
-    "SELECT DISTINCT v.district FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.user_id != 'ai'"
+    "SELECT DISTINCT v.district FROM teams t JOIN villages v ON t.village_id = v.id"
   ).all().catch((e) => { logger.warn({ module: "free-agent-pool" }, "query", e); return { results: [] }; });
 
   let generated = 0;
