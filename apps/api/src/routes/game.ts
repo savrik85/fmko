@@ -6908,34 +6908,10 @@ gameRouter.post("/teams/:teamId/season-recap/decide", async (c) => {
   const body = await c.req.json<{ leaving: string[] }>().catch((e) => { logger.warn({ module: "game.ts" }, "parse decide body", e); return null; });
   const leaving = Array.isArray(body?.leaving) ? body!.leaving : [];
 
-  const row = await c.env.DB.prepare("SELECT season_number, data FROM season_recap WHERE team_id = ? AND seen = 0 ORDER BY season_number DESC LIMIT 1")
-    .bind(teamId).first<{ season_number: number; data: string }>()
-    .catch((e) => { logger.warn({ module: "game.ts" }, "load recap for decide", e); return null; });
-  if (!row) return c.json({ error: "Recap nenalezen" }, 404);
-
-  let data: Record<string, any> = {};
-  try { data = JSON.parse(row.data); } catch (e) { logger.warn({ module: "game.ts" }, "parse recap data for decide", e); }
-  const duels: Array<{ a: { playerId: string; name: string; position: string; age: number; overallRating: number }; b: { playerId: string; name: string; position: string; age: number; overallRating: number } }> = data?.decision?.duels ?? [];
-
-  if (duels.length > 0) {
-    const byId = new Map<string, { name: string; position: string; age: number; overallRating: number }>();
-    for (const d of duels) { byId.set(d.a.playerId, d.a); byId.set(d.b.playerId, d.b); }
-    const toRemove = leaving.filter((id) => byId.has(id)).slice(0, duels.length);
-
-    const { removePlayer } = await import("../transfers/remove-player");
-    const removed: Array<Record<string, unknown>> = [];
-    for (const id of toRemove) {
-      const info = byId.get(id)!;
-      const r = await removePlayer(c.env.DB, id, "quit", { toFreeAgent: false, teamId });
-      if (r.ok) removed.push({ name: info.name, age: info.age, position: info.position, overallRating: info.overallRating, kind: "decision", reason: "Trenér se rozhodl dát mu sbohem." });
-    }
-    data.decision = null;
-    data.departures = removed;
-  }
-
-  await c.env.DB.prepare("UPDATE season_recap SET data = ?, seen = 1 WHERE team_id = ? AND season_number = ?")
-    .bind(JSON.stringify(data), teamId, row.season_number).run()
-    .catch((e) => logger.warn({ module: "game.ts" }, "update recap after decide", e));
+  // Stejná služba rozhoduje souboje i za AI trenéra (ai-coach/season-duels.ts).
+  const { decideSeasonDuels } = await import("../season/season-duels");
+  const result = await decideSeasonDuels(c.env.DB, teamId, leaving);
+  if (!result.ok) return c.json({ error: result.error }, result.status);
   return c.json({ ok: true });
 });
 
