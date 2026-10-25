@@ -1103,6 +1103,64 @@ export default function TransfersPage() {
     };
   });
 
+  const searchRows: BrowseRow[] = filteredSearch.slice(0, VYPIS_MAX).map((p) => ({
+    id: p.id, firstName: p.firstName, lastName: p.lastName, nickname: p.nickname ?? null, age: p.age,
+    position: p.position as BrowseRow["position"], rating: p.overallRating, skills: p.skills ?? {}, avatar: p.avatar,
+    club: { id: p.teamId, name: p.isOwnTeam ? `${p.teamName} (tvůj)` : p.teamName },
+  }));
+
+  // Podpis volného hráče: rozhoduje hráč, stejně jako dřív z karty.
+  const signFreeAgent = async (fa: FreeAgent) => {
+    const ok = await confirm({
+      title: `Podepsat ${fa.firstName} ${fa.lastName}?`,
+      description: `${fa.position}, ${fa.age} let, rating ${fa.overallRating} ${fa.occupation}`,
+      details: [
+        { label: "Mzda", value: `${formatCZK(fa.weeklyWage)}/týd`, color: "text-ink" },
+        { label: "Registrace", value: `-${formatCZK(500)}`, color: "text-card-red" },
+      ],
+      confirmLabel: "Podepsat",
+    });
+    if (!ok || !teamId) return;
+    let errMessage: string | null = null;
+    const res = await apiFetch<{ success: boolean; decision: { accepted: boolean; probability: number; explanation: string }; player?: Player }>(
+      `/api/teams/${teamId}/free-agents/${fa.id}/sign`,
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ offeredWage: fa.weeklyWage }) },
+    ).catch((e: Error) => {
+      console.error("Transfer action failed:", e);
+      errMessage = e.message || "Nepodařilo se podepsat hráče";
+      return null;
+    });
+    // Stejná událost jako u apiAction, jinak neúspěšné podpisy v analytice chybí.
+    trackEvent("game_action", { action: "Podpis volného hráče", result: errMessage ? "failed" : "success", error: errMessage, path: window.location.pathname });
+    if (errMessage) {
+      showError("Podpis se nezdařil", errMessage);
+    } else if (res) {
+      if (res.success && res.player) setRevealPlayer(res.player);
+      else await confirm({ title: "Odmítl", description: res.decision.explanation, confirmLabel: "OK" });
+      await refresh();
+    }
+  };
+
+  const freeAgentRows: BrowseRow[] = filteredAgents.map((fa) => ({
+    id: fa.id, firstName: fa.firstName, lastName: fa.lastName, nickname: fa.nickname ?? null, age: fa.age,
+    position: fa.position as BrowseRow["position"], rating: fa.overallRating,
+    skills: fa.skills as BrowseRow["skills"], avatar: fa.avatar,
+    clubLabel: `${formatCZK(fa.weeklyWage)}/týd${fa.distanceKm !== null ? ` · ${fa.distanceKm} km` : ""}`,
+    tag: (fa.origin || fa.isCelebrity) ? (
+      <span className="text-sm">
+        <OriginBadge origin={fa.origin} />
+        {fa.isCelebrity && <span className="font-heading font-bold text-amber-700">⭐ {fa.personality?.celebrityType === "fallen_star" ? "Padlá hvězda" : fa.personality?.celebrityType === "glass_man" ? "Skleněný muž" : "Celebrita"}</span>}
+      </span>
+    ) : undefined,
+    action: (
+      <button onClick={() => signFreeAgent(fa)}
+        className="py-1.5 px-4 rounded-soft text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">
+        Podepsat
+      </button>
+    ),
+    onOpen: () => signFreeAgent(fa),
+  }));
+
   return (
     <div className="page-container space-y-5">
       {confirmDialog}
@@ -1499,63 +1557,12 @@ export default function TransfersPage() {
                   <span className="text-micro text-muted">zobrazeno prvních {VYPIS_MAX}</span>
                 )}
               </div>
-              <div className="space-y-2">
-                {filteredSearch.slice(0, VYPIS_MAX).map((p) => {
-                  const isExpanded = searchExpandedSkills.has(p.id);
-                  return (
-                    <div key={p.id} className={`card p-3 ${p.isOwnTeam ? "ring-1 ring-pitch-500/20" : ""}`}>
-                      <div className="flex items-center gap-3">
-                        <div className="shrink-0 w-10 h-10 rounded-full bg-gray-100">
-                          {p.avatar && Object.keys(p.avatar).length > 0
-                            ? <FaceAvatar faceConfig={p.avatar} size={40} className="rounded-full" />
-                            : <div className="w-full h-full flex items-center justify-center font-heading font-bold text-xs text-muted">{p.firstName[0]}{p.lastName[0]}</div>}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <Link href={`/hrac/${p.id}`} className="font-heading font-bold text-base hover:text-pitch-500 underline decoration-pitch-500/20 transition-colors truncate">
-                              {p.firstName} {p.lastName}
-                            </Link>
-                            {nationalityFlag((p as { nationality?: string }).nationality) && <span title={(p as { nationality?: string }).nationality}>{nationalityFlag((p as { nationality?: string }).nationality)}</span>}
-                            <PositionBadge position={p.position as "GK" | "DEF" | "MID" | "FWD"} />
-                            <span className="text-sm font-heading font-bold tabular-nums">{p.overallRating}</span>
-                          </div>
-                          <div className="flex flex-wrap gap-x-3 text-xs text-muted">
-                            <span>{p.age} let</span>
-                            <Link href={`/tym/${p.teamId}`} className="hover:text-pitch-500 transition-colors">
-                              {p.teamName}{p.isOwnTeam ? " (tvůj)" : ""}
-                            </Link>
-                            <span>{formatCZK(p.weeklyWage)}/týd</span>
-                          </div>
-                        </div>
-                        <button onClick={() => {
-                          const next = new Set(searchExpandedSkills);
-                          if (next.has(p.id)) next.delete(p.id); else next.add(p.id);
-                          setSearchExpandedSkills(next);
-                        }} className="shrink-0 text-xs text-muted hover:text-pitch-500 transition-colors font-heading">
-                          {isExpanded ? "▾" : "▸"}
-                        </button>
-                      </div>
-                      {isExpanded && p.skills && (
-                        <div className="mt-2 pt-2 border-t border-gray-100">
-                          {!p.isOwnTeam && (
-                            <p className="text-xs text-amber-600 mb-1.5 italic">⚠ Odhad — přesné hodnoty znáš jen u svých hráčů</p>
-                          )}
-                          <div className="grid grid-cols-3 gap-x-4 gap-y-1 text-sm">
-                            {[["Rych", "speed"], ["Tech", "technique"], ["Stř", "shooting"],
-                              ["Přih", "passing"], ["Obr", "defense"], ["Výd", "stamina"],
-                              ["Hlav", "heading"], ["Síla", "strength"], ["Bra", "goalkeeping"]].map(([label, key]) => (
-                              <div key={key} className="flex justify-between">
-                                <span className="text-muted text-xs">{label}</span>
-                                <span className={`font-heading font-bold tabular-nums text-xs ${skillColor(p.skills[key] ?? 0)}`}>{!p.isOwnTeam ? "~" : ""}{p.skills[key] ?? "—"}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+              {filteredSearch.length > 0 && (
+                <div className="card p-4 sm:p-5">
+                  <PlayerBrowseTable rows={searchRows} color={clubColor} onColorText={clubColorText} ratingColor={clubRatingColor}
+                    columns={{ club: true, value: false }} defaultSort="rating" />
+                </div>
+              )}
 
               {filteredSearch.length === 0 && (
                 <div className="card p-6 text-center text-muted">
@@ -1811,152 +1818,9 @@ export default function TransfersPage() {
               )}
             </div>
           ) : (
-            <div className="space-y-3">
-              {filteredAgents.map((fa) => {
-                const isExpanded = expandedSkills.has(fa.id);
-                return (
-                  <div key={fa.id} className={`card relative p-3 ${fa.isCelebrity ? "ring-2 ring-gold-400 bg-amber-50/30" : ""}`}>
-                    <div className="flex items-start gap-2.5">
-                      {/* FaceAvatar se vykresluje na výšku size × 1,2. Do 40px
-                          kolečka proto patří size 33, ne 40 — jinak se ořízne
-                          brada. Stejné pravidlo platí všude, kde je avatar
-                          v kolečku s pevnou velikostí. */}
-                      <div className="shrink-0 w-10 h-10 rounded-full overflow-hidden bg-gray-100 flex items-center justify-center">
-                        {fa.avatar && Object.keys(fa.avatar).length > 0
-                          ? <FaceAvatar faceConfig={fa.avatar} size={33} />
-                          : <span className="font-heading font-bold text-sm text-muted">{fa.firstName[0]}{fa.lastName[0]}</span>}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        {/* Jméno má vlastní řádek a odznak s věkem a ratingem
-                            druhý. Dřív byly všechny v jednom `flex-wrap` a
-                            zalomení záviselo na délce jména — „Daniel Svoboda"
-                            vytlačil odznak dolů a jeho karta byla o 4 px vyšší
-                            než sousední. Teď mají všechny stejnou výšku. */}
-                        <div className="truncate font-heading font-bold text-base pr-24">
-                          {fa.firstName} {fa.lastName}
-                          {nationalityFlag(fa.nationality) && <span className="ml-1" title={fa.nationality}>{nationalityFlag(fa.nationality)}</span>}
-                        </div>
-                        <div className="flex items-center gap-2 mb-0.5 pr-24 overflow-hidden">
-                          <PositionBadge position={fa.position as "GK" | "DEF" | "MID" | "FWD"} />
-                          <span className="text-sm text-muted whitespace-nowrap">{fa.age} let</span>
-                          <span className="text-sm font-heading font-bold tabular-nums">{fa.overallRating}</span>
-                          {fa.isCelebrity && (
-                            <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-micro font-heading font-bold uppercase bg-amber-50 text-amber-700 border border-amber-200 truncate">
-                              ⭐ {fa.personality?.celebrityType === "fallen_star" ? "Padlá hvězda" : fa.personality?.celebrityType === "glass_man" ? "Skleněný muž" : "Celebrita"}
-                            </span>
-                          )}
-                        </div>
-                        {/* Údaje na jednom řádku oddělené tečkami. Dřív měly
-                            vlastní řádek každý (povolání / mzda / km + obec)
-                            a karta kvůli tomu měřila skoro 190 px. */}
-                        <div className="flex items-center gap-2">
-                          <div className="flex-1 min-w-0 text-sm text-muted truncate">
-                            <OriginBadge origin={fa.origin} />
-                            {fa.occupation}
-                            {" · "}<span className="font-heading font-bold text-ink">{formatCZK(fa.weeklyWage)}/týd</span>
-                            {fa.distanceKm !== null && <>{" · "}{fa.distanceKm} km</>}
-                            {fa.villageName && <>{" · "}{fa.villageName}</>}
-                            {fa.source === "released" && <>{" · "}<span className="text-gold-600">Propuštěn</span></>}
-                          </div>
-                          {/* Rozbalení dovedností jako šipka — textové tlačítko
-                              mělo na dotyku vlastní řádek 44 px navíc. */}
-                          <button
-                            onClick={() => toggleSkills(fa.id)}
-                            aria-label={isExpanded ? "Skrýt dovednosti" : "Zobrazit dovednosti"}
-                            aria-expanded={isExpanded}
-                            className="shrink-0 min-w-11 min-h-11 -my-2 flex items-center justify-center text-pitch-500 hover:text-pitch-600 transition-colors"
-                          >
-                            <span aria-hidden="true" className="text-xs">{isExpanded ? "▲" : "▼"}</span>
-                          </button>
-                        </div>
-                        {isExpanded && (
-                          <div className="mt-2 grid grid-cols-3 gap-x-4 gap-y-1 text-sm tabular-nums">
-                            {fa.position === "GK" && (
-                              <div>
-                                <span className="text-muted font-heading">Bra </span>
-                                <span className={skillColor(fa.skills?.goalkeeping ?? 0)}>{fa.skills?.goalkeeping ?? "—"}</span>
-                              </div>
-                            )}
-                            <div>
-                              <span className="text-muted font-heading">Rych </span>
-                              <span className={skillColor(fa.skills?.speed ?? 0)}>{fa.skills?.speed ?? "—"}</span>
-                            </div>
-                            <div>
-                              <span className="text-muted font-heading">Tech </span>
-                              <span className={skillColor(fa.skills?.technique ?? 0)}>{fa.skills?.technique ?? "—"}</span>
-                            </div>
-                            {fa.position !== "GK" && (
-                              <div>
-                                <span className="text-muted font-heading">Stř </span>
-                                <span className={skillColor(fa.skills?.shooting ?? 0)}>{fa.skills?.shooting ?? "—"}</span>
-                              </div>
-                            )}
-                            <div>
-                              <span className="text-muted font-heading">Přih </span>
-                              <span className={skillColor(fa.skills?.passing ?? 0)}>{fa.skills?.passing ?? "—"}</span>
-                            </div>
-                            <div>
-                              <span className="text-muted font-heading">Obr </span>
-                              <span className={skillColor(fa.skills?.defense ?? 0)}>{fa.skills?.defense ?? "—"}</span>
-                            </div>
-                            <div>
-                              <span className="text-muted font-heading">Výd </span>
-                              <span className={skillColor(fa.physical?.stamina ?? 0)}>{fa.physical?.stamina ?? "—"}</span>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                      <button
-                        onClick={async () => {
-                          const ok = await confirm({
-                            title: `Podepsat ${fa.firstName} ${fa.lastName}?`,
-                            description: `${fa.position}, ${fa.age} let, rating ${fa.overallRating} ${fa.occupation}`,
-                            details: [
-                              { label: "Mzda", value: `${formatCZK(fa.weeklyWage)}/týd`, color: "text-ink" },
-                              { label: "Registrace", value: `-${formatCZK(500)}`, color: "text-card-red" },
-                            ],
-                            confirmLabel: "Podepsat",
-                          });
-                          if (!ok || !teamId) return;
-                          let errMessage: string | null = null;
-                          const res = await apiFetch<{ success: boolean; decision: { accepted: boolean; probability: number; explanation: string }; player?: Player }>(
-                            `/api/teams/${teamId}/free-agents/${fa.id}/sign`,
-                            { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ offeredWage: fa.weeklyWage }) },
-                          ).catch((e: Error) => {
-                            console.error("Transfer action failed:", e);
-                            errMessage = e.message || "Nepodařilo se podepsat hráče";
-                            return null;
-                          });
-                          // Stejná událost jako u apiAction, jinak neúspěšné podpisy v analytice chybí.
-                          trackEvent("game_action", {
-                            action: "Podpis volného hráče",
-                            result: errMessage ? "failed" : "success",
-                            error: errMessage,
-                            path: window.location.pathname,
-                          });
-                          if (errMessage) {
-                            showError("Podpis se nezdařil", errMessage);
-                          } else if (res) {
-                            if (res.success && res.player) {
-                              setRevealPlayer(res.player);
-                            } else {
-                              await confirm({
-                                title: "Odmítl",
-                                description: res.decision.explanation,
-                                confirmLabel: "OK",
-                              });
-                            }
-                            await refresh();
-                          }
-                        }}
-                        className="absolute top-3 right-3 px-3 min-h-9 rounded-control text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors"
-                      >
-                        Podepsat
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
+            <div className="card p-4 sm:p-5">
+              <PlayerBrowseTable rows={freeAgentRows} color={clubColor} onColorText={clubColorText} ratingColor={clubRatingColor}
+                columns={{ club: true, action: true, value: false }} defaultSort="rating" />
             </div>
           )}
         </div>
@@ -1977,7 +1841,7 @@ export default function TransfersPage() {
             ) : (
               <div className="card p-4 sm:p-5">
                 <PlayerBrowseTable rows={listingRows} color={clubColor} onColorText={clubColorText} ratingColor={clubRatingColor}
-                  columns={{ club: true, price: true, action: true }} defaultSort="rating" />
+                  columns={{ club: true, price: true, action: true, value: false }} defaultSort="rating" />
               </div>
             )}
           </div>

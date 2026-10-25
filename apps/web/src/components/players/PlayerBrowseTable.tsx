@@ -118,7 +118,7 @@ export function PlayerBrowseTable({ rows, color, onColorText, ratingColor, colum
   color: string;
   onColorText: string;
   ratingColor: string;
-  columns: { club?: boolean; condition?: boolean; form?: boolean; watchedSince?: boolean; price?: boolean; action?: boolean };
+  columns: { club?: boolean; condition?: boolean; form?: boolean; watchedSince?: boolean; price?: boolean; action?: boolean; value?: boolean };
   onRemove?: (row: BrowseRow) => void;
   emptyText?: string;
   /** Výchozí řazení (pozice vzestupně, ostatní sestupně). */
@@ -128,7 +128,8 @@ export function PlayerBrowseTable({ rows, color, onColorText, ratingColor, colum
   const [filter, setFilter] = useState<PosFilter>("all");
   const [sortKey, setSortKey] = useState<SortKey>(defaultSort);
   const [sortDir, setSortDir] = useState<SortDir>(defaultSort === "position" ? "asc" : "desc");
-  const mobileSorts = columns.price ? [...MOBILE_SORTS, PRICE_SORT] : MOBILE_SORTS;
+  const showValue = columns.value !== false;
+  const mobileSorts = [...MOBILE_SORTS.filter((m) => showValue || m.key !== "value"), ...(columns.price ? [PRICE_SORT] : [])];
 
   const sortBy = (key: SortKey) => {
     if (sortKey === key) { setSortDir(sortDir === "asc" ? "desc" : "asc"); return; }
@@ -210,7 +211,7 @@ export function PlayerBrowseTable({ rows, color, onColorText, ratingColor, colum
               {columns.condition && header("condition", "Kon", "w-14 text-center", "Kondice")}
               {columns.form && <th className="pb-2 pr-2 text-sm font-heading font-bold uppercase text-muted whitespace-nowrap" title="Zápasy · góly · asistence · průměrná známka">Forma</th>}
               {columns.price && header("price", "Cena", "w-28 text-right", "Cena z inzerátu")}
-              {header("value", columns.price ? "Tržní" : "Cena", "w-32 text-right", "Tržní cena (odhad)")}
+              {showValue && header("value", "Cena", "w-32 text-right", "Tržní cena (odhad)")}
               <th className="pb-2 pr-2 text-sm font-heading font-bold uppercase text-muted text-center w-20">Stav</th>
               {columns.watchedSince && <th className="pb-2 pr-2 text-sm font-heading font-bold uppercase text-muted whitespace-nowrap">Sleduji od</th>}
               {onRemove && <th className="pb-2 pr-4 sm:pr-5" />}
@@ -251,7 +252,7 @@ export function PlayerBrowseTable({ rows, color, onColorText, ratingColor, colum
                 {columns.price && (
                   <td className="py-2 pr-2 text-right tabular-nums font-heading font-bold whitespace-nowrap">{r.price != null ? formatPrice(r.price) : "—"}</td>
                 )}
-                <td className={`py-2 pr-2 text-right tabular-nums whitespace-nowrap ${columns.price ? "text-muted" : "font-heading font-bold"}`}>{formatValue(rowValue(r))}</td>
+                {showValue && <td className="py-2 pr-2 text-right tabular-nums whitespace-nowrap font-heading font-bold">{formatValue(rowValue(r))}</td>}
                 <td className="py-2 pr-2 text-center whitespace-nowrap">
                   {r.injury
                     ? <span className="text-sm font-heading font-bold text-card-red" title={r.injury.type ?? "Zranění"}>🩹 {r.injury.daysRemaining} d</span>
@@ -279,8 +280,10 @@ export function PlayerBrowseTable({ rows, color, onColorText, ratingColor, colum
               <div className="flex-1 min-w-0">
                 <div className="font-heading font-bold text-base truncate">{r.firstName} {r.lastName}</div>
                 <div className="text-sm text-muted tabular-nums truncate">
-                  {columns.club && (r.club || r.clubLabel) ? `${r.club?.name ?? r.clubLabel} · ` : ""}{r.age} let
-                  {columns.price ? "" : ` · ${formatValue(rowValue(r))}`}
+                  {/* Věk první: dlouhé jméno klubu ho jinak na mobilu usekne. */}
+                  <span className="font-heading font-bold text-ink">{r.age} let</span>
+                  {columns.club && (r.club || r.clubLabel) ? ` · ${r.club?.name ?? r.clubLabel}` : ""}
+                  {columns.price || !showValue ? "" : ` · ${formatValue(rowValue(r))}`}
                 </div>
                 {r.tag && <div className="mt-0.5">{r.tag}</div>}
               </div>
@@ -309,7 +312,6 @@ export function PlayerBrowseTable({ rows, color, onColorText, ratingColor, colum
               <div className="flex items-center justify-between gap-2 mt-2">
                 <div className="text-sm tabular-nums min-w-0">
                   {columns.price && r.price != null && <span className="font-heading font-bold text-ink">{formatPrice(r.price)}</span>}
-                  <span className="text-muted">{columns.price && r.price != null ? " · tržní " : ""}{formatValue(rowValue(r))}</span>
                 </div>
                 {columns.action && <div className="shrink-0" onClick={(e) => e.stopPropagation()}>{r.action}</div>}
               </div>
