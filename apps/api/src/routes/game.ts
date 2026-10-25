@@ -5613,13 +5613,14 @@ gameRouter.get("/teams/:teamId/offers/:offerId", async (c) => {
 
   const fetchManager = async (tId: string) => {
     const row = await c.env.DB.prepare(
-      "SELECT id, name, backstory, avatar, age, coaching, motivation, tactics, youth_development, discipline, reputation FROM managers WHERE team_id = ? LIMIT 1"
+      "SELECT id, user_id, name, backstory, avatar, age, coaching, motivation, tactics, youth_development, discipline, reputation FROM managers WHERE team_id = ? ORDER BY CASE WHEN user_id = 'ai' THEN 1 ELSE 0 END LIMIT 1"
     ).bind(tId).first<Record<string, unknown>>().catch((e) => { logger.warn({ module: "game" }, "fetch manager for offer detail", e); return null; });
     if (!row) return null;
     let avatar = {};
     try { avatar = row.avatar ? JSON.parse(row.avatar as string) : {}; } catch (e) { logger.warn({ module: "game" }, "parse manager avatar", e); }
     return {
       id: row.id, name: row.name, backstory: row.backstory, avatar,
+      coachIsAi: row.user_id === "ai",
       age: row.age,
       coaching: row.coaching ?? 40,
       motivation: row.motivation ?? 40,
