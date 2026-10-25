@@ -13,12 +13,14 @@ import { Hono } from "hono";
 import { teamsRouter } from "./teams";
 import { clubWebsiteRouter } from "./club-website";
 import { gameRouter } from "./game";
+import competitionRouter from "./competition";
 import type { Bindings } from "../index";
 
 const app = new Hono<{ Bindings: Bindings }>();
 app.route("/api/teams", teamsRouter);
 app.route("/api/teams", clubWebsiteRouter);
 app.route("/api", gameRouter);
+app.route("/api", competitionRouter);
 
 let mf: Miniflare;
 let env: Bindings;
@@ -107,6 +109,18 @@ describe("příznak coachIsAi u jména trenéra", () => {
     expect(ai?.managerName).toBe("Bohumil Strojový");
     expect(ai?.coachIsAi).toBe(true);
     expect(entries.find((e) => e.teamId === "team-human")?.coachIsAi).toBe(false);
+  });
+});
+
+describe("soutěž: disciplinárka nabízí AI kluby s příznakem u trenéra", () => {
+  it("kluby soutěže mají u jména trenéra coachIsAi podle jeho řádku v managers", async () => {
+    const { targets } = await getJson("/api/competition/league-test/discipline") as {
+      targets: Array<{ teamId: string; managerName: string | null; coachIsAi: boolean }>;
+    };
+    const ai = targets.find((t) => t.teamId === "team-ai-b");
+    expect(ai?.managerName).toBe("Bohumil Strojový");
+    expect(ai?.coachIsAi).toBe(true);
+    expect(targets.find((t) => t.teamId === "team-human")?.coachIsAi).toBe(false);
   });
 });
 
