@@ -34,6 +34,10 @@ vi.mock("../transfers/player-agency", () => ({
   haversineKm: () => 10,
 }));
 
+// Scénáře projdou celou cestu přes routy, služby a SQLite (i osm kol smlouvání): pod zátěží
+// stroje 5 s nestačí, proto vlastní limit jako u ostatních pomalých DB testů.
+vi.setConfig({ testTimeout: 30_000, hookTimeout: 60_000 });
+
 import { gameRouter } from "../routes/game";
 import { replyToTransferOffers } from "./transfer-replies";
 import { runTransferMarket } from "./transfer-market";

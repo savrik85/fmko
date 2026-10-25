@@ -116,4 +116,17 @@ describe("offerRetryBlock — kdy smí kupec na stejného hráče nabídnout zno
     await closedOffer("o3", { status: "withdrawn", resolvedAt: "2026-10-24T08:00:00Z", withdrawnBy: "buyer" });
     expect(await offerRetryBlock(db, "p1", "buyer", NOW)).toEqual({ daysLeft: 9, reason: "ended_by_seller" });
   });
+
+  it("mlčení AI klubu (výpadek, režim nanečisto) kupce neblokuje, odmítnutí AI ano", async () => {
+    await db.prepare("ALTER TABLE teams ADD COLUMN user_id TEXT").run();
+    await db.prepare("INSERT INTO teams (id, name, parent_team_id, user_id) VALUES ('ai-seller', 'Sokol AI', NULL, 'ai')").run();
+    await db.prepare(
+      "INSERT INTO transfer_offers (id, player_id, from_team_id, to_team_id, status, last_action_by, resolved_at) VALUES ('o1', 'p1', 'buyer', 'ai-seller', 'expired', 'buyer', '2026-10-23T10:00:00Z')",
+    ).run();
+    expect(await offerRetryBlock(db, "p1", "buyer", NOW)).toBeNull();
+    await db.prepare(
+      "INSERT INTO transfer_offers (id, player_id, from_team_id, to_team_id, status, last_action_by, resolved_at) VALUES ('o2', 'p1', 'buyer', 'ai-seller', 'rejected', 'ai-seller', '2026-10-23T11:00:00Z')",
+    ).run();
+    expect((await offerRetryBlock(db, "p1", "buyer", NOW))?.reason).toBe("rejected");
+  });
 });
