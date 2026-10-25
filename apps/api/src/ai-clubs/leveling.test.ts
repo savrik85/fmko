@@ -4,8 +4,8 @@ import { createPlayer } from "../generators/create-player";
 import type { VillageInfo } from "../generators/player";
 import { overallRatingFromFlat } from "../skills/generator";
 import {
-  findSkillShift, leveledFinance, measureNewcomerTop11, newPlayerPositions, quantile, shiftMember,
-  stratifiedUnits, topAverage, TOP11_TOLERANCE, type SquadMember,
+  findSkillShift, leveledFinance, measureNewcomerTop11, modestBudgetTarget, newClubBudget, newPlayerPositions,
+  quantile, shiftMember, stratifiedUnits, topAverage, TOP11_TOLERANCE, type SquadMember,
 } from "./leveling";
 
 const village: VillageInfo = { region_code: "CZ031", category: "obec", population: 900, district: "Prachatice" };
@@ -92,6 +92,66 @@ describe("posun dovedností kádru", () => {
     }
   });
 
+  it("strop se posune s dovedností, hráči zůstane stejný prostor k růstu", () => {
+    // Typický hráč AI klubu: trénink zvedl plochou rychlost nad `skills_max.current`.
+    const player: SquadMember = {
+      id: "typical", position: "MID", age: 24,
+      skills: { speed: 21, technique: 41, passing: 30, vision: 28, stamina: 25, strength: 30, shooting: 22, heading: 20, defense: 18, creativity: 33, setPieces: 20, goalkeeping: 1, experience: 30 },
+      physical: { stamina: 25, strength: 30 },
+      skillsMax: {
+        speed: { current: 18, maxPotential: 47 }, technique: { current: 40, maxPotential: 47 },
+        passing: { current: 30, maxPotential: 52 }, vision: { current: 25, maxPotential: 44 },
+        stamina: { current: 25, maxPotential: 41 }, strength: { current: 28, maxPotential: 45 },
+        shooting: { current: 22, maxPotential: 40 }, heading: { current: 20, maxPotential: 35 },
+        defense: { current: 18, maxPotential: 30 }, creativity: { current: 30, maxPotential: 50 },
+        setPieces: { current: 20, maxPotential: 38 }, experience: { current: 20, maxPotential: 100 },
+      },
+      hiddenTalent: 20, rating: 28,
+    };
+    const s = shiftMember(player, 12);
+    const max = (key: string) => (s.skillsMax[key] as { current: number; maxPotential: number });
+    // Posun z ploché hodnoty: rychlost 21 → 33, strop 47 → 59 (prostor 26 jako předtím).
+    expect(s.skills.speed).toBe(33);
+    expect(max("speed")).toEqual({ current: 33, maxPotential: 59 });
+    expect(max("technique")).toEqual({ current: 53, maxPotential: 59 });
+    for (const key of ["passing", "vision", "stamina", "strength", "shooting", "heading", "defense", "creativity", "setPieces"]) {
+      const before = (player.skillsMax[key] as { maxPotential: number }).maxPotential - (player.skills[key] as number);
+      expect(max(key).maxPotential - max(key).current, key).toBe(before);
+    }
+    // Zkušenost se neposouvá, jen se dorovná current na plochou hodnotu.
+    expect(max("experience")).toEqual({ current: 30, maxPotential: 100 });
+  });
+
+  it("strop nad 99 nezvedne, vyšší strop nesníží a hodnocení nepustí přes strop Pralesu", () => {
+    const high: SquadMember = {
+      id: "high", position: "FWD", age: 26,
+      skills: { speed: 80, technique: 92, shooting: 70, passing: 60, heading: 60, defense: 30, vision: 60, creativity: 60, setPieces: 50, stamina: 60, strength: 60, goalkeeping: 1, experience: 50 },
+      physical: { stamina: 60, strength: 60 },
+      skillsMax: {
+        speed: { current: 80, maxPotential: 95 }, technique: { current: 92, maxPotential: 100 },
+        shooting: { current: 70, maxPotential: 80 }, passing: { current: 60, maxPotential: 75 },
+        heading: { current: 60, maxPotential: 70 }, defense: { current: 30, maxPotential: 40 },
+        vision: { current: 60, maxPotential: 72 }, creativity: { current: 60, maxPotential: 75 },
+        setPieces: { current: 50, maxPotential: 60 }, stamina: { current: 60, maxPotential: 70 },
+        strength: { current: 60, maxPotential: 70 }, experience: { current: 50, maxPotential: 100 },
+      },
+      hiddenTalent: 30, rating: 64,
+    };
+    const s = shiftMember(high, 10);
+    const max = (key: string) => (s.skillsMax[key] as { current: number; maxPotential: number });
+    expect(max("speed").maxPotential).toBeLessThanOrEqual(99);
+    expect(max("technique").maxPotential).toBe(100);
+    for (const [key, entry] of Object.entries(high.skillsMax)) {
+      expect(max(key).maxPotential, key).toBeGreaterThanOrEqual((entry as { maxPotential: number }).maxPotential);
+      expect(max(key).maxPotential, key).toBeGreaterThanOrEqual(max(key).current);
+    }
+    // Vážený průměr stropů (nejvyšší možné hodnocení) nejde přes 85, kde to dovolí původní stropy.
+    const ceiling = overallRatingFromFlat("FWD", {}, {}, 0, Object.fromEntries(
+      Object.entries(s.skillsMax).map(([k, e]) => [k, { current: (e as { maxPotential: number }).maxPotential }]),
+    ));
+    expect(ceiling!).toBeLessThanOrEqual(85);
+  });
+
   it("síla s posunem neklesá (binární hledání má smysl)", () => {
     const members = squad(11);
     let last = -Infinity;
@@ -109,6 +169,20 @@ describe("rozpočet a reputace", () => {
     expect(leveledFinance(30_000, 86_000, true)).toBe(86_000);
     expect(leveledFinance(204_000, 86_000, false)).toBe(86_000);
     expect(leveledFinance(30_000, 86_000, false)).toBe(86_000);
+  });
+
+  it("nižší soutěž a nováčci: startovní rozpočet nového klubu v obci × (1 + percentil)", () => {
+    // Stejné hranice jako POST /api/teams: nad 5 000 obyvatel 80 000, nad 1 000 40 000, jinak 20 000.
+    expect(newClubBudget(11_049)).toBe(80_000);
+    expect(newClubBudget(2_744)).toBe(40_000);
+    expect(newClubBudget(1_000)).toBe(20_000);
+    expect(newClubBudget(400)).toBe(20_000);
+    expect(modestBudgetTarget(2_744, 0)).toBe(40_000);
+    expect(modestBudgetTarget(2_744, 0.2)).toBe(48_000);
+    expect(modestBudgetTarget(400, 0.35)).toBe(27_000);
+    expect(modestBudgetTarget(6_000, 0.123)).toBe(89_800);
+    // Rozpočet nikdy pod startovní rozpočet nového klubu (dřív končil na podlaze 10 000).
+    for (const p of [0, 0.1, 0.35]) expect(modestBudgetTarget(300, p)).toBeGreaterThanOrEqual(20_000);
   });
 });
 

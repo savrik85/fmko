@@ -8,8 +8,8 @@
  *    takže se kluby rozprostřou středem tabulky.
  *  - `below-league` (III. třída): aktivní lidské kluby přeboru téhož okresu. Nejlepší
  *    jedenáctka mezi nejslabším klubem přeboru minus 12 a nejslabším klubem přeboru,
- *    zázemí a kádr z dolní třetiny přeboru (percentil 0–35 %), rozpočet polovina dolního
- *    kvartilu přeboru.
+ *    zázemí a kádr z dolní třetiny přeboru (percentil 0–35 %). Rozpočet = startovní
+ *    rozpočet nového klubu v obci × (1 + percentil), ne z přeboru: lidé peníze proinvestují.
  *  - `newcomer` (ČB): jako `below-league`, vzorem jsou aktivní lidské kluby všech přeborů
  *    a spodní hranice síly je nově založený lidský klub v obci AI klubu.
  *
@@ -26,7 +26,7 @@
  * požadavku Workeru.
  */
 
-import { maxScoutsForLicence, staffRequiredLicence, type StaffRole } from "@okresni-masina/shared";
+import { maxScoutsForLicence, ratingWeightsFor, staffRequiredLicence, type StaffRole } from "@okresni-masina/shared";
 import { ensureAiProfile, generateAiProfile, parseAiProfile } from "../ai-coach/profile";
 import { FIRSTNAMES } from "../data/czech-names";
 import { getDistrictDataFromDB } from "../data/districts";
@@ -43,6 +43,7 @@ import { createRng, type Rng } from "../generators/rng";
 import { logger } from "../lib/logger";
 import { planSquadNumbers } from "../players/squad-numbers";
 import { overallRatingFromFlat, type PlayerPositionCode } from "../skills/generator";
+import { PRALES_MAX_RATING } from "../skills/limits";
 import { generateStadium } from "../stadium/stadium-generator";
 import { ensureStadiumRow } from "../stadium/stadium-service";
 import { legacyStandsToSides } from "../stadium/stands-model";
@@ -62,9 +63,7 @@ const LEAGUE_HUMANS_RANGE: [number, number] = [0.15, 0.85];
 const MODEST_MAX_PERCENTILE = 0.35;
 /** III. třída: nejlepší jedenáctka až o tolik pod nejslabším klubem přeboru. */
 const BELOW_LEAGUE_TOP11_GAP = 12;
-/** Rozpočet nižší soutěže: polovina dolního kvartilu vzoru. */
-const MODEST_BUDGET_SHARE = 0.5;
-/** AI klub nezačíná prakticky bez peněz, i kdyby vzor měl rozpočty v minusu. */
+/** AI klub v Praze nezačíná prakticky bez peněz, i kdyby vzor měl rozpočty v minusu. */
 export const MIN_LEVELED_BUDGET = 10_000;
 /** Kádr se nenafukuje přes míru (mzdy). */
 const MAX_SQUAD_SIZE = 32;
@@ -75,6 +74,8 @@ export const TOP11_TOLERANCE = 0.5;
 /** Zápisy po dávkách, ať se 14 klubů vejde do jednoho požadavku Workeru. */
 const BATCH_SIZE = 80;
 const MAX_SKILL = 100;
+/** Strop zvednutý narovnáním nejvýš sem (vyšší strop, který hráč už měl, zůstává). */
+const MAX_POTENTIAL = 99;
 const FAMILIARITY_FLOOR = 15;
 const STAFF_ATTRS = ["coaching", "medicine", "maintenance", "judgement", "communication", "work_rate", "charm"] as const;
 const LEVELING_REPUTATION_TEXT = "Srovnání podmínek v soutěži";
@@ -285,8 +286,39 @@ function shiftValue(value: number, shift: number, unit: number): number {
 }
 
 /**
- * Hráč po aditivním posunu plochých dovedností. Výdrž a síla jdou i do `physical`,
- * `skills_max.current` se dorovná a strop nikdy nezůstane pod dnešní hodnotou.
+ * Stropy zvednuté narovnáním stáhne tak, aby nejvyšší možné hodnocení (vážený průměr stropů
+ * podle postu) nepřesáhlo `PRALES_MAX_RATING`, stejně jako generátor u nového hráče
+ * (`capToPralesMax`). Strop nikdy neklesne pod dnešní hodnotu ani pod strop před narovnáním.
+ */
+function capRaisedPotential(position: string, skillsMax: Record<string, unknown>, floors: ReadonlyMap<string, number>): void {
+  const weights = ratingWeightsFor(position);
+  let sum = 0;
+  let weight = 0;
+  let movable = 0;
+  for (const [key, w] of Object.entries(weights)) {
+    const cap = (skillsMax[key] as { maxPotential?: unknown } | undefined)?.maxPotential;
+    if (typeof cap !== "number") continue;
+    sum += cap * w;
+    weight += w;
+    if (floors.has(key)) movable += w;
+  }
+  if (weight === 0 || movable === 0) return;
+  const excess = sum / weight - PRALES_MAX_RATING;
+  if (excess <= 0) return;
+  const cut = Math.ceil((excess * weight) / movable);
+  for (const [key, floor] of floors) {
+    if (!(key in weights)) continue;
+    const e = skillsMax[key] as { maxPotential: number };
+    skillsMax[key] = { ...e, maxPotential: Math.max(floor, e.maxPotential - cut) };
+  }
+}
+
+/**
+ * Hráč po aditivním posunu plochých dovedností. Výdrž a síla jdou i do `physical`.
+ * `skills_max.current` se dorovná na novou plochou hodnotu (trénink píše jen do `skills`,
+ * takže se před narovnáním liší) a strop se posune o stejný kus jako dovednost (nejvýš
+ * na 99), aby hráči zůstal prostor k růstu: AI klub se pak tréninkem dál zlepšuje.
+ * Strop nikdy nezůstane pod dnešní hodnotou ani neklesne pod původní.
  * Hodnocení jen přes `overallRatingFromFlat` a nikdy nižší než dosavadní.
  */
 export function shiftMember(m: SquadMember, shift: number): ShiftedMember {
@@ -306,20 +338,38 @@ export function shiftMember(m: SquadMember, shift: number): ShiftedMember {
   }
 
   const skillsMax: Record<string, unknown> = {};
+  // Klíč → nejnižší strop, na který ho smí stáhnout `capRaisedPotential`.
+  const raisedFloors = new Map<string, number>();
   for (const [key, entry] of Object.entries(m.skillsMax)) {
-    const flat = typeof skills[key] === "number" ? skills[key] as number : null;
+    const before = typeof m.skills[key] === "number" ? m.skills[key] as number : null;
+    const after = typeof skills[key] === "number" ? skills[key] as number : null;
     const shiftable = isShiftable(key, m.position);
     if (entry && typeof entry === "object" && typeof (entry as { current?: unknown }).current === "number") {
       const e = entry as { current: number; maxPotential?: unknown };
-      const current = flat ?? (shiftable ? shiftValue(e.current, shift, ditherUnit(m.id, key)) : e.current);
-      const cap = typeof e.maxPotential === "number" ? e.maxPotential : current;
-      skillsMax[key] = { ...e, current, maxPotential: Math.max(cap, current) };
+      let current: number;
+      let increase: number;
+      if (after !== null && before !== null) {
+        current = after;
+        increase = after - before;
+      } else if (shiftable) {
+        current = shiftValue(e.current, shift, ditherUnit(m.id, key));
+        increase = current - e.current;
+      } else {
+        current = e.current;
+        increase = 0;
+      }
+      const oldCap = typeof e.maxPotential === "number" ? e.maxPotential : current;
+      const shiftedCap = increase > 0 ? Math.min(MAX_POTENTIAL, oldCap + increase) : oldCap;
+      const cap = Math.max(oldCap, current, shiftedCap);
+      skillsMax[key] = { ...e, current, maxPotential: cap };
+      if (cap > oldCap) raisedFloors.set(key, Math.max(oldCap, current));
     } else if (typeof entry === "number") {
-      skillsMax[key] = flat !== null ? Math.max(entry, flat) : shiftable ? shiftValue(entry, shift, ditherUnit(m.id, key)) : entry;
+      skillsMax[key] = after !== null ? Math.max(entry, after) : shiftable ? shiftValue(entry, shift, ditherUnit(m.id, key)) : entry;
     } else {
       skillsMax[key] = entry;
     }
   }
+  capRaisedPotential(m.position, skillsMax, raisedFloors);
 
   const computed = overallRatingFromFlat(m.position, skills, physical, m.hiddenTalent, skillsMax);
   return { skills, physical, skillsMax, rating: Math.max(m.rating, computed ?? m.rating) };
@@ -879,10 +929,12 @@ function targetsFor(
     if (Number.isFinite(staffCount)) {
       staffRoles = ref.staffSlots.slice(0, clampInt(staffCount, 0, ref.staffSlots.length)).map((s) => s.split("#")[0]).sort();
     }
-    const rawBudget = mode === "league-humans"
-      ? quantile(ref.budget, percentile)
-      : MODEST_BUDGET_SHARE * quantile(ref.budget, 0.25);
-    if (Number.isFinite(rawBudget)) budget = Math.max(MIN_LEVELED_BUDGET, Math.round(rawBudget / 100) * 100);
+    if (mode === "league-humans") {
+      const rawBudget = quantile(ref.budget, percentile);
+      if (Number.isFinite(rawBudget)) budget = Math.max(MIN_LEVELED_BUDGET, Math.round(rawBudget / 100) * 100);
+    } else {
+      budget = modestBudgetTarget(club.villagePopulation, percentile);
+    }
     const rep = quantile(ref.reputation, percentile);
     if (Number.isFinite(rep)) reputation = clampInt(rep, 0, 100);
   }
@@ -925,6 +977,20 @@ interface ClubChanges {
   reputation: number | null;
   familiarity: Record<string, number> | null;
   after: ClubSummary;
+}
+
+/** Startovní rozpočet nového lidského klubu podle počtu obyvatel obce (jako `POST /api/teams`). */
+export function newClubBudget(population: number): number {
+  return population > 5000 ? 80_000 : population > 1000 ? 40_000 : 20_000;
+}
+
+/**
+ * Rozpočet AI klubu nižší soutěže a nováčků: startovní rozpočet nového klubu v jeho obci
+ * × (1 + percentil). Lidé v přeborech peníze proinvestují, takže kvartil jejich rozpočtů
+ * je tak malý, že by z něj AI klub nezaplatil ani dva týdny mezd.
+ */
+export function modestBudgetTarget(population: number, percentile: number): number {
+  return Math.round((newClubBudget(population) * (1 + percentile)) / 100) * 100;
 }
 
 /**
