@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch } from "@/lib/api";
-import { coachDisplayName } from "@/lib/coach-name";
+import { CoachName } from "@/components/manager/coach-name";
 
 // ═══ Types ═══
 
@@ -315,7 +315,7 @@ function Recap({ data, onEnter }: { data: RecapData; onEnter: (leaving?: string[
                 {rel?.rival && (
                   <div className="se-rel-card rival">
                     <div className="se-rel-label">💢 Největší rival</div>
-                    <div className="se-rel-name">{rel.rival.managerName ? coachDisplayName(rel.rival.managerName, rel.rival.coachIsAi === true) : rel.rival.teamName}</div>
+                    <div className="se-rel-name">{rel.rival.managerName ? <CoachName name={rel.rival.managerName} isAi={rel.rival.coachIsAi === true} /> : rel.rival.teamName}</div>
                     {rel.rival.managerName && <div className="se-rel-team">{rel.rival.teamName}</div>}
                     <div className="se-rel-verdict">{rel.rival.verdict}</div>
                     {rel.rival.moment && <div className="se-rel-moment">„{rel.rival.moment}"</div>}
@@ -324,7 +324,7 @@ function Recap({ data, onEnter }: { data: RecapData; onEnter: (leaving?: string[
                 {rel?.ally && (
                   <div className="se-rel-card ally">
                     <div className="se-rel-label">🤝 Spojenec na lavičce</div>
-                    <div className="se-rel-name">{rel.ally.managerName ? coachDisplayName(rel.ally.managerName, rel.ally.coachIsAi === true) : rel.ally.teamName}</div>
+                    <div className="se-rel-name">{rel.ally.managerName ? <CoachName name={rel.ally.managerName} isAi={rel.ally.coachIsAi === true} /> : rel.ally.teamName}</div>
                     {rel.ally.managerName && <div className="se-rel-team">{rel.ally.teamName}</div>}
                     <div className="se-rel-verdict">Vzájemný respekt — člověk, co ti drží place.</div>
                   </div>
@@ -514,7 +514,7 @@ function AwardCard({ icon, label, a, extra, mine }: { icon: string; label: strin
   return (
     <div className={`se-award${mine ? " mine" : ""}`}>
       <div className="se-award-label">{icon} {label}{mine ? <span className="se-award-mine"> · tvůj hráč</span> : null}</div>
-      <div className="se-award-name">{coachDisplayName(a.name, a.coachIsAi === true)}{extra ? <span className="se-award-extra"> · {extra}</span> : null}</div>
+      <div className="se-award-name"><CoachName name={a.name} isAi={a.coachIsAi === true} />{extra ? <span className="se-award-extra"> · {extra}</span> : null}</div>
       {a.teamName && <div className="se-award-team">{a.teamName}</div>}
       {a.reason && <div className="se-award-reason">„{a.reason}"</div>}
     </div>

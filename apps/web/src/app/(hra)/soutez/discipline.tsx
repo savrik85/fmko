@@ -9,7 +9,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { apiAction, apiFetch } from "@/lib/api";
-import { coachDisplayName } from "@/lib/coach-name";
+import { CoachName } from "@/components/manager/coach-name";
 import { EntityLink, Modal } from "@/components/ui";
 import { Empty, OpenProposalNote, Ornament, PersonLine, Portrait, Rozbaleni, StatusPill, czk, plural } from "./ui";
 import type { DisciplineData, PitchData, PitchRow, Sanction, State } from "./types";
@@ -134,7 +134,7 @@ function SanctionRow({ s, teamId, onChanged, canAppeal }: {
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="text-base font-semibold break-words">
-            {s.managerName ? coachDisplayName(s.managerName, s.coachIsAi === true) : s.teamName} · {czk(s.amount)}
+            {s.managerName ? <CoachName name={s.managerName} isAi={s.coachIsAi === true} /> : s.teamName} · {czk(s.amount)}
           </div>
           <div className="text-sm text-muted break-words">{s.reason}</div>
         </div>
@@ -238,7 +238,7 @@ function FineForm({ data, teamId, isChair, onClose, onSaved }: {
           <select className="select w-full mt-1" value={target} onChange={(e) => setTarget(e.target.value)}>
             {targets.map((t) => (
               <option key={t.teamId} value={t.teamId}>
-                {t.managerName ? `${coachDisplayName(t.managerName, t.coachIsAi === true)} (${t.teamName})` : t.teamName}
+                {t.managerName ? <><CoachName name={t.managerName} isAi={t.coachIsAi === true} /> ({t.teamName})</> : t.teamName}
                 {t.evidence.length > 0 ? ` ${t.evidence.length}×` : ""}
               </option>
             ))}

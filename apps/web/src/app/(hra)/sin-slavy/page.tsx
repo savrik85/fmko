@@ -7,7 +7,7 @@ import { apiFetch } from "@/lib/api";
 import { Spinner, BadgePreview } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import type { BadgePattern } from "@/components/ui";
-import { coachDisplayName } from "@/lib/coach-name";
+import { CoachName } from "@/components/manager/coach-name";
 
 interface HofEntry {
   rank: number;
@@ -19,7 +19,7 @@ interface HofEntry {
   isHuman: boolean;
   managerId: string | null;
   managerName: string | null;
-  /** Trenér AI klubu: za jméno patří štítek „(AI)“. */
+  /** Trenér AI klubu: k jménu patří odznak s robotem. */
   coachIsAi?: boolean;
   managerAvatar: Record<string, unknown> | null;
   villageName: string | null;
@@ -93,7 +93,7 @@ export default function HallOfFamePage() {
                             {e.managerName[0]}
                           </div>
                         )}
-                        <span className="font-heading font-bold truncate text-xs sm:text-sm">{coachDisplayName(e.managerName, e.coachIsAi === true)}</span>
+                        <span className="font-heading font-bold truncate text-xs sm:text-sm"><CoachName name={e.managerName} isAi={e.coachIsAi === true} /></span>
                       </Link>
                     ) : (
                       <span className="text-muted italic">—</span>

@@ -11,7 +11,7 @@
 import React from "react";
 import { EntityLink } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
-import { coachDisplayName } from "@/lib/coach-name";
+import { CoachName } from "@/components/manager/coach-name";
 
 export const GOLD = "#C4A035";
 export const GOLD_SOFT = "#FBF6E6";
@@ -98,7 +98,7 @@ export function Portrait({ avatar, name, size = 44, ring = GOLD }: {
  */
 export function PersonLine({ managerName, coachIsAi = false, teamId, teamName, note }: {
   managerName: string | null;
-  /** Trenér AI klubu: za jméno se přidá štítek „(AI)“. */
+  /** Trenér AI klubu: k jménu se přidá odznak s robotem. */
   coachIsAi?: boolean;
   teamId: string; teamName: string; note?: React.ReactNode;
 }) {
@@ -106,7 +106,7 @@ export function PersonLine({ managerName, coachIsAi = false, teamId, teamName, n
   return (
     <div className="min-w-0">
       <div className="text-base font-semibold leading-tight break-words">
-        {managerName ? coachDisplayName(managerName, coachIsAi) : klub}
+        {managerName ? <CoachName name={managerName} isAi={coachIsAi} /> : klub}
       </div>
       <div className="text-sm text-muted leading-tight break-words">
         {managerName ? klub : "klub bez trenéra"}

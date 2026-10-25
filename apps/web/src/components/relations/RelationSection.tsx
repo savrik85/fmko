@@ -13,7 +13,7 @@ import { apiFetch, showError } from "@/lib/api";
 import { SectionLabel, Spinner } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { LicenceBadge } from "@/components/manager/LicenceBadge";
-import { coachDisplayName } from "@/lib/coach-name";
+import { CoachName } from "@/components/manager/coach-name";
 
 interface RelationMoment {
   date: string;
@@ -531,7 +531,7 @@ function PeerRow({ r }: { r: RelationListItem }) {
       )}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 min-w-0">
-          <Link href={`/manazer/${r.teamId}`} className="entity-link text-base font-heading font-bold truncate">{coachDisplayName(r.managerName, r.isAi)}</Link>
+          <Link href={`/manazer/${r.teamId}`} className="entity-link text-base font-heading font-bold truncate"><CoachName name={r.managerName} isAi={r.isAi} /></Link>
           <LicenceBadge level={r.licenceLevel ?? 0} />
         </div>
         <Link href={`/tym/${r.teamId}`} className="text-sm text-muted hover:text-ink flex items-center gap-1.5 min-w-0">
