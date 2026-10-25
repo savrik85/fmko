@@ -31,8 +31,12 @@ import { FIRSTNAMES } from "../data/czech-names";
 import { deriveLicenceLevel, type ManagerBackstory } from "@okresni-masina/shared";
 import { logger } from "../lib/logger";
 import { playerBodyView } from "../generators/physicals";
-import { updateSessionTeamId } from "../auth/session";
+import { getSession, getTokenFromRequest, updateSessionTeamId } from "../auth/session";
+import { findReclaimableClub, reclaimClub } from "../ai-clubs/reclaim";
 import { STAND_COLUMNS, standFacilities, type StandSide } from "../stadium/stands-model";
+import { ensureStadiumRow } from "../stadium/stadium-service";
+import { ensureEquipmentRow } from "../equipment/equipment-service";
+import { pickOverwritableAiTeam, wipeAiClubForNewcomer } from "../ai-clubs/overwrite";
 
 const teamsRouter = new Hono<{ Bindings: Bindings }>();
 
@@ -400,10 +404,13 @@ teamsRouter.post("/", async (c) => {
   const runningSeason = await getRunningSeason(c.env.DB, season.number);
   if (slot.kind === "join") {
     const existingLeague = { id: slot.league.id, name: slot.league.name };
-    // ── JOIN existing league: replace a random AI team ──
-    const aiTeam = await c.env.DB.prepare(
-      "SELECT id FROM teams WHERE league_id = ? AND user_id = 'ai' ORDER BY RANDOM() LIMIT 1"
-    ).bind(existingLeague.id).first<{ id: string }>();
+    // ── JOIN existing league: replace an AI team ──
+    // Přednost má původní AI klub. Převzatý lidský klub jen tehdy, když je jeho bývalý vlastník
+    // 90 dní neaktivní, do té doby se k němu může vrátit (ai-clubs/overwrite.ts).
+    const aiTeamId = await pickOverwritableAiTeam(c.env.DB, existingLeague.id, new Date());
+    const aiTeam = aiTeamId
+      ? await c.env.DB.prepare("SELECT id, name FROM teams WHERE id = ?").bind(aiTeamId).first<{ id: string; name: string }>()
+      : null;
 
     if (aiTeam) {
       // TAKEOVER: Reuse AI team ID — just update its identity to the human player
@@ -413,17 +420,22 @@ teamsRouter.post("/", async (c) => {
       // Keep AI team ID — just update its identity to human player
       // Delete the new team we created earlier (line 159) — we'll use AI team instead
       const origTeamId = teamId;
-      await c.env.DB.prepare("UPDATE teams SET name = ?, user_id = ?, village_id = ?, primary_color = ?, secondary_color = ?, badge_pattern = ?, jersey_pattern = ?, budget = ?, reputation = 50, stadium_name = ? WHERE id = ?")
+      // Jen dokud tým vede AI: dvě souběžná zakládání nesmí dostat tentýž klub.
+      const takeover = await c.env.DB.prepare("UPDATE teams SET name = ?, user_id = ?, village_id = ?, primary_color = ?, secondary_color = ?, badge_pattern = ?, jersey_pattern = ?, budget = ?, reputation = 50, stadium_name = ? WHERE id = ? AND user_id = 'ai'")
         .bind(body.name, userId, body.villageId, body.primaryColor ?? "#2D5F2D", body.secondaryColor ?? "#FFF", body.badgePattern ?? "shield", body.jerseyPattern ?? "solid",
           village.size === "small_city" || village.size === "city" ? 80000 : village.size === "town" || village.size === "village" ? 40000 : 20000,
           body.stadiumName ?? null, oldId).run();
+      if ((takeover.meta?.changes ?? 0) === 0) {
+        logger.error({ module: "teams" }, `league_full race condition (AI tým ${oldId} mezitím převzal někdo jiný) for team ${teamId}`);
+        return c.json({ error: "league_full", message: LEAGUE_FULL_MESSAGE }, 409);
+      }
       teamId = oldId;
 
       // Rezerva jde s áčkem. Bez tohohle zůstane U21 na původním vlastníkovi,
       // ten pak nemůže založit nový klub (systém mu tvrdí, že vede U21)
       // a nový majitel áčka svoji rezervu naopak neřídí.
       await c.env.DB.prepare(
-        "UPDATE teams SET user_id = ? WHERE parent_team_id = ? AND COALESCE(team_type,'senior') = 'u21'",
+        "UPDATE teams SET user_id = ?, ai_since = NULL, ai_former_user_id = NULL WHERE parent_team_id = ? AND COALESCE(team_type,'senior') = 'u21'",
       ).bind(userId, oldId).run()
         .catch((e) => logger.warn({ module: "teams" }, "převod U21 při převzetí klubu", e));
 
@@ -433,16 +445,11 @@ teamsRouter.post("/", async (c) => {
         .bind(body.name, body.primaryColor ?? "#2D5F2D", teamId).run()
         .catch((e) => logger.warn({ module: "teams" }, "sync cup_teams identity on takeover", e));
 
-      // 1. Delete OLD AI players first (they are under teamId = oldId)
-      const aiPlayers = await c.env.DB.prepare("SELECT id FROM players WHERE team_id = ?").bind(teamId).all();
-      for (const ap of aiPlayers.results) {
-        for (const t of ["relationships", "match_player_stats", "player_stats", "player_contracts", "injuries", "training_log"]) {
-          const col = t === "relationships" ? "player_a_id" : "player_id";
-          await c.env.DB.prepare(`DELETE FROM ${t} WHERE ${col} = ?`).bind(ap.id).run().catch((e) => logger.warn({ module: "teams" }, "db op failed", e));
-          if (t === "relationships") await c.env.DB.prepare("DELETE FROM relationships WHERE player_b_id = ?").bind(ap.id).run().catch((e) => logger.warn({ module: "teams" }, "db op failed", e));
-        }
-      }
-      await c.env.DB.prepare("DELETE FROM players WHERE team_id = ?").bind(teamId).run().catch((e) => logger.warn({ module: "teams" }, "db op failed", e));
+      // 1. Celý starý AI klub pryč: hráči (kromě cizích na hostování), zaměstnanci zpět do poolu,
+      //    sponzoři, rozjednané přestupy, inzeráty, poptávky, přáteláky, deník AI trenéra, stadion,
+      //    vybavení, telefon a transakce (ai-clubs/overwrite.ts). PŘED přesunem nových hráčů.
+      await wipeAiClubForNewcomer(c.env.DB, teamId, { previousName: aiTeam.name, now: new Date() })
+        .catch((e) => logger.error({ module: "teams" }, `úklid přepsaného AI klubu ${teamId}`, e));
 
       // 2. Move newly generated players + manager from origTeamId → teamId (oldId)
       await c.env.DB.prepare("UPDATE players SET team_id = ? WHERE team_id = ?").bind(teamId, origTeamId).run().catch((e) => logger.warn({ module: "teams" }, "db op failed", e));
@@ -451,34 +458,10 @@ teamsRouter.post("/", async (c) => {
       await c.env.DB.prepare("DELETE FROM managers WHERE team_id = ?").bind(teamId).run().catch((e) => logger.warn({ module: "teams" }, "delete AI manager on takeover", e));
       await c.env.DB.prepare("UPDATE managers SET team_id = ? WHERE team_id = ?").bind(teamId, origTeamId).run().catch((e) => logger.warn({ module: "teams" }, "db op failed", e));
 
-      // Clean old AI equipment/stadium/conversations/messages/sponsor relationships (human gets fresh start)
-      const oldConvIds = await c.env.DB.prepare("SELECT id FROM conversations WHERE team_id = ?").bind(teamId).all().catch((e) => { logger.warn({ module: "teams" }, "load AI conversations on takeover", e); return { results: [] }; });
-      for (const conv of oldConvIds.results) {
-        await c.env.DB.prepare("DELETE FROM messages WHERE conversation_id = ?").bind(conv.id).run().catch((e) => logger.warn({ module: "teams" }, "db op failed", e));
-      }
-      // sponsor_favor_log před sponsor_team_favor — deník popisuje změny náklonnosti,
-      // AI historie majitelů firem se nemá dědit na nového lidského hráče.
-      for (const t of ["sponsor_requests", "sponsor_owner_sms", "sponsor_favor_log", "sponsor_team_favor", "sponsor_invitations", "sponsor_pub_encounters", "equipment", "stadiums", "conversations", "sponsor_contracts", "transactions"]) {
-        await c.env.DB.prepare(`DELETE FROM ${t} WHERE team_id = ?`).bind(teamId).run().catch((e) => logger.warn({ module: "teams" }, "db op failed", e));
-      }
-
-      // Create fresh stadium for the new human player
-      {
-        const { generateStadium } = await import("../stadium/stadium-generator");
-        const { createRng } = await import("../generators/rng");
-        let seed = 0;
-        for (let i = 0; i < teamId.length; i++) seed = ((seed << 5) - seed + teamId.charCodeAt(i)) | 0;
-        const rng = createRng(Math.abs(seed));
-        const villageSize = (village as any).size as string || "small";
-        const config = generateStadium(rng, villageSize);
-        await c.env.DB.prepare(
-          // Plachtu píše kotel. Sloupec už nikdo nečte, ale ať v datech nelže.
-                    `INSERT INTO stadiums (id, team_id, capacity, pitch_condition, pitch_type, changing_rooms, showers, refreshments, lighting, stands, parking, fence, ultras_text_mode)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'fanousci')`
-        ).bind(uuid(), teamId, config.capacity, config.pitchCondition, config.pitchType,
-          config.changingRooms, config.showers, config.refreshments, config.lighting,
-          config.stands, config.parking, config.fence).run().catch((e) => logger.warn({ module: "teams" }, "db op failed", e));
-      }
+      // Nový stadion a vybavení pro nového majitele. Startovní stadion se počítá ze stejného
+      // id týmu a z obce nového klubu (village_id je už přepsané), stejně jako dřív tady.
+      await ensureStadiumRow(c.env.DB, teamId);
+      await ensureEquipmentRow(c.env.DB, teamId);
 
       // Delete the duplicate team row created at line 159
       // First clean any FK references to origTeamId — move sponsor to takeover team, delete rest
@@ -831,6 +814,10 @@ teamsRouter.post("/", async (c) => {
     }
   }
 
+  // Stadion a vybavení od založení klubu, ne až při prvním otevření stránky.
+  await ensureStadiumRow(c.env.DB, teamId);
+  await ensureEquipmentRow(c.env.DB, teamId);
+
   // Přízeň obce hned od založení klubu. Dřív vznikala až při první návštěvě stránky
   // obce a do té doby reakce obce (výtržnosti, konec sezóny, proslov) tiše nic nedělaly.
   try {
@@ -909,6 +896,41 @@ teamsRouter.post("/", async (c) => {
     logger.error({ module: "teams", step }, "team creation failed", e);
     return c.json({ error: e.message, step }, 500);
   }
+});
+
+// ── Návrat ke klubu, který mezitím vedl AI trenér (ai-clubs/reclaim.ts) ──
+// Musí být před GET /:id, jinak by "reclaim-offer" chytila routa detailu týmu.
+
+// GET /api/teams/reclaim-offer — klub, ke kterému se přihlášený bývalý vlastník může vrátit
+teamsRouter.get("/reclaim-offer", async (c) => {
+  const token = getTokenFromRequest(c);
+  const session = token ? await getSession(c.env.SESSION_KV, token) : null;
+  if (!session) return c.json({ error: "Musíš být přihlášen" }, 401);
+  const club = await findReclaimableClub(c.env.DB, String(session.userId));
+  return c.json({ club: club ? { teamId: club.teamId, name: club.name } : null });
+});
+
+// POST /api/teams/reclaim { teamId? } — vrátit se ke klubu, i se svým trenérem
+teamsRouter.post("/reclaim", async (c) => {
+  const token = getTokenFromRequest(c);
+  const session = token ? await getSession(c.env.SESSION_KV, token) : null;
+  if (!token || !session) return c.json({ error: "Musíš být přihlášen" }, 401);
+  const userId = String(session.userId);
+  const body = await c.req.json<{ teamId?: string }>()
+    .catch((e): { teamId?: string } => { logger.warn({ module: "teams" }, "nečitelné tělo návratu ke klubu", e); return {}; });
+
+  const offer = await findReclaimableClub(c.env.DB, userId);
+  const teamId = typeof body.teamId === "string" && body.teamId ? body.teamId : offer?.teamId;
+  if (!teamId) return c.json({ error: "Žádný klub, ke kterému by ses mohl vrátit." }, 404);
+  if (!(await reclaimClub(c.env.DB, userId, teamId))) {
+    return c.json({ error: "Ke klubu se už vrátit nejde." }, 409);
+  }
+
+  // Session drží teamId (push, část rout). Stejně jako po založení klubu.
+  await updateSessionTeamId(c.env.SESSION_KV, token, teamId)
+    .catch((e) => logger.warn({ module: "teams" }, "updateSessionTeamId (reclaim)", e));
+  const team = await c.env.DB.prepare("SELECT name FROM teams WHERE id = ?").bind(teamId).first<{ name: string }>();
+  return c.json({ id: teamId, name: team?.name ?? "" });
 });
 
 // GET /api/teams/:id

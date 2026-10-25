@@ -175,9 +175,11 @@ export async function developSquadAndManager(
   const declined = entries.filter((e) => e.delta < 0).sort((a, b) => a.delta - b.delta).slice(0, 3);
 
   // ── Trenér ──
+  // Lidský i AI trenér se rozvíjí stejně. Trenér musí patřit majiteli klubu: odpojený lidský
+  // trenér převzatého klubu (team_id NULL) ani cizí řádek se nerozvíjí.
   let manager: ManagerDev | null = null;
   const mgr = await db.prepare(
-    "SELECT m.id, m.name, m.age, m.coaching, m.motivation, m.tactics, m.youth_development, m.discipline FROM managers m JOIN teams t ON t.id = m.team_id WHERE m.team_id = ? AND m.user_id = t.user_id AND t.user_id != 'ai'",
+    "SELECT m.id, m.name, m.age, m.coaching, m.motivation, m.tactics, m.youth_development, m.discipline FROM managers m JOIN teams t ON t.id = m.team_id WHERE m.team_id = ? AND m.user_id = t.user_id",
   ).bind(teamId).first<{ id: string; name: string; age: number | null; coaching: number; motivation: number; tactics: number; youth_development: number; discipline: number }>()
     .catch((e) => { logger.warn({ module: M }, "load manager", e); return null; });
 

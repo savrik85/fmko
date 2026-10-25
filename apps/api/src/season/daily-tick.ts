@@ -247,8 +247,10 @@ export async function executeDailyTick(
   // ── Training (Mon-Fri, if plan is set) ──
   // U21 týmy zdědí training_type/approach/sessions od parent A-týmu — manažer nastaví trénink
   // pro klub jednou a aplikuje se na obě squady.
+  // Trénují i AI kluby (ty v soutěži), podle stejných pravidel. Bez vlastního plánu mají
+  // výchozí (kondice, dvakrát týdně, vyváženě), viz teamTrainingType.
   const teams = await env.DB.prepare(
-    `SELECT t.id, t.league_id,
+    `SELECT t.id, t.league_id, t.user_id,
             COALESCE(t.training_type, parent.training_type) as training_type,
             COALESCE(t.training_approach, parent.training_approach) as training_approach,
             COALESCE(t.training_sessions, parent.training_sessions) as training_sessions,
@@ -257,7 +259,7 @@ export async function executeDailyTick(
             COALESCE(t.parent_team_id, t.id) as club_id
        FROM teams t
        LEFT JOIN teams parent ON parent.id = t.parent_team_id
-      WHERE t.user_id != 'ai'`
+      WHERE t.user_id != 'ai' OR t.league_id IS NOT NULL`
   ).all();
 
   // Týmy, které dnes hrají — v den zápasu se netrénuje. Jedním dotazem přes
@@ -335,8 +337,8 @@ export async function executeDailyTick(
         : (trainingDayMap[sessionsForTeam] ?? trainingDayMap[2]);
     const isTeamTrainingDay = teamTrainingDays.includes(dayOfWeek);
     // Typ pro DNEŠNÍ den — z plánu, jinak jednotný týmový typ.
-    const rawTrainingType = dayPlan?.[dayOfWeek]?.type ?? (team.training_type as string | null);
-    const { storedTrainingType, storedTrainingApproach } = await import("./training");
+    const { storedTrainingType, storedTrainingApproach, teamTrainingType } = await import("./training");
+    const rawTrainingType = dayPlan?.[dayOfWeek]?.type ?? teamTrainingType(team.training_type as string | null, team.user_id);
     const todayTrainingType = storedTrainingType(rawTrainingType);
     const trainingApproach = storedTrainingApproach(team.training_approach);
     if (rawTrainingType && rawTrainingType !== todayTrainingType) {
@@ -1476,10 +1478,11 @@ export async function executeDailyTick(
   }
 
   // ── Player quitting check ──
+  // Platí i pro AI kluby. Zprávu do zpravodaje dostane jen lidský klub, AI klubu nikdo nepíše.
   try {
     const quitRng = createRng(now.getTime() + 9999);
     const activePlayers = await env.DB.prepare(
-      "SELECT p.id, p.first_name, p.last_name, p.age, p.personality, p.life_context, t.name as team_name, t.league_id FROM players p JOIN teams t ON p.team_id = t.id WHERE p.status = 'active' AND t.user_id != 'ai'"
+      "SELECT p.id, p.first_name, p.last_name, p.age, p.personality, p.life_context, t.name as team_name, t.league_id, t.user_id FROM players p JOIN teams t ON p.team_id = t.id WHERE p.status = 'active'"
     ).all().catch((e) => { logger.warn({ module: "daily-tick" }, "fetch active players for quit check", e); return { results: [] }; });
 
     for (const row of activePlayers.results) {
@@ -1491,6 +1494,7 @@ export async function executeDailyTick(
       if (patriotism < 25 && morale < 20 && quitRng.random() < 0.05) {
         await env.DB.prepare("UPDATE players SET status = 'quit' WHERE id = ?").bind(row.id).run();
         events.push({ type: "day", description: `${row.first_name} ${row.last_name} přestal chodit na tréninky` });
+        if (row.user_id === "ai") continue;
 
         // News
         const { createTransferNews } = await import("../transfers/transfer-news");

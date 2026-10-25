@@ -241,6 +241,23 @@ export default {
       }
     }
 
+    // ── OPUŠTĚNÉ KLUBY: po denním ticku převezme AI trenér kluby, jejichž vlastník je 45 dní
+    // neaktivní (ai-clubs/abandoned.ts). Jen ze skutečného cronu, ne z ručního spuštění.
+    // Vypnout jde v CACHE_KV klíčem ai_club_takeover = "off".
+    if (cron === "0 3 * * *") {
+      try {
+        const { isTakeoverEnabled, runAbandonedClubTakeover } = await import("./ai-clubs/abandoned");
+        if (await isTakeoverEnabled(env.CACHE_KV)) {
+          const taken = await runAbandonedClubTakeover(env.DB, new Date());
+          if (taken > 0) log("info", `opuštěné kluby: ${taken} převzal AI trenér`);
+        } else {
+          log("info", "převzetí opuštěných klubů je vypnuté (ai_club_takeover = off)");
+        }
+      } catch (e: any) {
+        log("error", "převzetí opuštěných klubů selhalo", e);
+      }
+    }
+
     // ── CUP TICK: pohár se hraje od poledne pražského času ──
     // Cloudflare umí crony jen v UTC, takže poledne v Praze padá na jinou hodinu v létě
     // (10:00 UTC) a v zimě (11:00 UTC). Proto jsou v plánu obě a rozhoduje se tady podle

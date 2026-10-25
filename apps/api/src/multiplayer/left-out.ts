@@ -1,8 +1,9 @@
 /**
  * Hráči, kteří se nevešli ani na lavičku.
  *
- * Po ligovém nebo pohárovém zápase lidského týmu (ne U21, tam sestavu skládá automat) klesne morálka každému zdravému hráči,
+ * Po ligovém nebo pohárovém zápase (ne U21, tam sestavu skládá automat) klesne morálka každému zdravému hráči,
  * který na zápas nejel. Nejvýš jeden z nich (ten nejnaštvanější) napíše trenérovi SMS.
+ * U AI klubu platí morálka i vztah k trenérovi stejně, SMS (a s ní truc) jen u lidského.
  * Omluvení, zranění a suspendovaní se nezlobí, o zápas nepřišli kvůli trenérovi.
  *
  * Kdo nejel, určuje `buildMatchPlayers` (match-runner.ts): `leftOutIds` jsou zdraví
@@ -256,10 +257,13 @@ export async function reactToLeftOut(
       WHERE t.id = ?`,
   ).bind(teamId)
     .first<{ user_id: string | null; game_date: string | null; team_type: string | null; motivation: number | null }>();
-  if (!team || team.user_id === "ai") return;
+  if (!team) return;
   // Sestavu U21 skládá vždy automat (copyOrCreateLineup), trenér do ní nesahá.
   // Vyčítat mu, že hráče nevzal, by nedávalo smysl.
   if (team.team_type === "u21") return;
+  // AI klub: morálka a vztah k trenérovi platí stejně, jen trenérovi nikdo nepíše
+  // a bez SMS nevzniká ani truc (ten končí přemlouváním v Telefonu).
+  const writesToCoach = team.user_id !== "ai";
   const coachMotivation = team.motivation ?? 40;
   const gameDay = (team.game_date ?? new Date().toISOString()).slice(0, 10);
 
@@ -338,6 +342,7 @@ export async function reactToLeftOut(
     ];
   });
   if (stmts.length > 0) await db.batch(stmts);
+  if (!writesToCoach) return;
 
   const rng = createRng(seedFromString(`left-out:${matchId}:${teamId}`));
   const complaint = pickComplainer(leftOut, bench, rng);

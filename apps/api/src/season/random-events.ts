@@ -71,7 +71,8 @@ function pickWeighted<T extends { weight?: number }>(items: T[], rand: () => num
  * Volá se POUZE z daily-tick.ts, který je idempotentní per herní den.
  */
 export async function applyRandomLifeEvents(db: D1Database): Promise<{ applied: number }> {
-  // Aktivní hráči lidských týmů (AI týmů je zbytečné fluffovat), kteří nejsou v cooldownu.
+  // Aktivní hráči všech klubů, lidských i AI (stejná pravidla), kteří nejsou v cooldownu.
+  // Událost mění jen kondici a zapíše se do jejího deníku, nikomu se nepíše.
   //
   // Cooldown se vyhodnocuje přímo v SQL. Dřív šel samostatným dotazem s `IN (?, ?, …)`
   // přes id všech hráčů. D1 povoluje jen omezený počet vázaných parametrů na dotaz,
@@ -80,7 +81,7 @@ export async function applyRandomLifeEvents(db: D1Database): Promise<{ applied: 
   const players = await db.prepare(
     `SELECT p.id, p.team_id, p.first_name, p.last_name, json_extract(p.life_context, '$.condition') as cond
      FROM players p JOIN teams t ON p.team_id = t.id
-     WHERE (p.status IS NULL OR p.status = 'active') AND t.user_id != 'ai'
+     WHERE (p.status IS NULL OR p.status = 'active')
        AND NOT EXISTS (
          SELECT 1 FROM condition_log cl
          WHERE cl.player_id = p.id AND cl.source = 'event'
