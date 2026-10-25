@@ -51,6 +51,7 @@ beforeAll(async () => {
     db.prepare("INSERT INTO teams (id, user_id, village_id, name, league_id) VALUES ('team-ai-b', 'ai', ?, 'TJ Stroje', 'league-test')").bind(aiVillageB),
     db.prepare("INSERT INTO teams (id, user_id, village_id, name, league_id) VALUES ('team-ai-c', 'ai', ?, 'Sokol Automat', 'league-test')").bind(aiVillageC),
     db.prepare("INSERT INTO teams (id, user_id, village_id, name, league_id) VALUES ('team-ai-other', 'ai', ?, 'FK Jinde', 'league-other')").bind(otherVillage),
+    db.prepare("INSERT INTO teams (id, user_id, village_id, name, team_type, parent_team_id) VALUES ('team-ai-b-u21', 'ai', ?, 'TJ Stroje U21', 'u21', 'team-ai-b')").bind(aiVillageB),
     // Trenér cizího AI klubu je v tabulce první: starý dotaz přes user_id by vzal právě jeho.
     db.prepare("INSERT INTO managers (id, user_id, team_id, name, backstory, avatar) VALUES ('mgr-ai-other', 'ai', 'team-ai-other', 'Otakar Odjinud', 'hospodsky', '{}')"),
     db.prepare("INSERT INTO managers (id, user_id, team_id, name, backstory, avatar) VALUES ('mgr-human', 'user-human', 'team-human', 'Karel Lidský', 'hospodsky', '{}')"),
@@ -90,6 +91,12 @@ describe("příznak coachIsAi u jména trenéra", () => {
     const human = await getJson("/api/teams/team-human/manager");
     expect(human.name).toBe("Karel Lidský");
     expect(human.coachIsAi).toBe(false);
+  });
+
+  it("U21 AI klubu vlastního trenéra nemá a otevřením profilu žádný nevznikne (jako U21 lidského klubu)", async () => {
+    expect(await getJson("/api/teams/team-ai-b-u21/manager")).toBeNull();
+    const rows = await env.DB.prepare("SELECT COUNT(*) AS n FROM managers WHERE team_id = 'team-ai-b-u21'").first<{ n: number }>();
+    expect(rows?.n).toBe(0);
   });
 
   it("síň slávy ukazuje AI kluby s příznakem u trenéra", async () => {

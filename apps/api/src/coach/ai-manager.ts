@@ -37,6 +37,8 @@ function seedFromTeamId(teamId: string): number {
  * `INSERT OR IGNORE` + nové načtení: dva souběžné požadavky nevytvoří dva
  * řádky (unikátní index na team_id) a oba vrátí toho, který v DB skutečně je.
  * Pro lidský klub bez trenéra vrací null — toho zakládá registrace, ne tahle funkce.
+ * U21 tým vlastního trenéra nemá (trenér patří áčku), stejně jako U21 lidského klubu.
+ * Dřív stačilo otevřít profil AI U21 týmu a vznikl mu trenér navíc.
  */
 export async function ensureAiManager(
   db: D1Database,
@@ -45,13 +47,13 @@ export async function ensureAiManager(
   const existing = await loadManagerRow(db, teamId);
   if (existing) return existing;
 
-  const team = await db.prepare("SELECT user_id FROM teams WHERE id = ?")
-    .bind(teamId).first<{ user_id: string }>()
+  const team = await db.prepare("SELECT user_id, parent_team_id FROM teams WHERE id = ?")
+    .bind(teamId).first<{ user_id: string; parent_team_id: string | null }>()
     .catch((e) => {
       logger.warn({ module: "ai-manager" }, `load team ${teamId}`, e);
       return null;
     });
-  if (!team || team.user_id !== "ai") return null;
+  if (!team || team.user_id !== "ai" || team.parent_team_id) return null;
 
   const mgr = generateAiManager(createRng(seedFromTeamId(teamId)));
   await db.prepare(
