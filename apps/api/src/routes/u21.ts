@@ -7,6 +7,7 @@ import { Hono } from "hono";
 import type { Bindings } from "../index";
 import { requireTeamOwnership } from "../auth/middleware";
 import { logger } from "../lib/logger";
+import { promotePlayerFromU21, sendPlayerToU21 } from "../services/u21-moves";
 
 const u21Router = new Hono<{ Bindings: Bindings }>();
 
@@ -84,35 +85,15 @@ u21Router.get("/teams/:teamId/u21/players", async (c) => {
 u21Router.post("/teams/:teamId/players/:playerId/send-to-u21", async (c) => {
   const teamId = c.req.param("teamId");
   const playerId = c.req.param("playerId");
-  const body = await c.req.json<{ mode?: string }>().catch(() => ({} as { mode?: string }));
+  const body = await c.req.json<{ mode?: string }>().catch((e) => {
+    logger.warn({ module: "u21" }, "parse send-to-u21 body", e);
+    return {} as { mode?: string };
+  });
   const mode = body.mode === "next_match" ? "next_match" : "permanent";
-
-  const player = await c.env.DB.prepare(
-    "SELECT id, team_id, age, status, loan_from_team_id, next_match_return FROM players WHERE id = ?"
-  ).bind(playerId).first<{ id: string; team_id: string; age: number; status: string | null; loan_from_team_id: string | null; next_match_return: number }>();
-  if (!player) return c.json({ error: "Hráč nenalezen" }, 404);
-  if (player.team_id !== teamId) return c.json({ error: "Hráč nepatří k tomuto týmu" }, 400);
-  if (player.age > 21) return c.json({ error: "Hráč je starší 21 let" }, 400);
-  if (player.loan_from_team_id) return c.json({ error: "Hostující hráč nemůže do U21" }, 400);
-  if (player.next_match_return) return c.json({ error: "Hráč už čeká na návrat z U21" }, 400);
-
-  const u21Team = await c.env.DB.prepare(
-    "SELECT id FROM teams WHERE parent_team_id = ? AND team_type = 'u21'"
-  ).bind(teamId).first<{ id: string }>();
-  if (!u21Team) return c.json({ error: "U21 tým neexistuje" }, 404);
-
-  if (mode === "next_match") {
-    await c.env.DB.prepare(
-      "UPDATE players SET team_id = ?, parent_club_id = ?, next_match_return = 1 WHERE id = ?"
-    ).bind(u21Team.id, teamId, playerId).run();
-  } else {
-    await c.env.DB.prepare(
-      "UPDATE players SET team_id = ?, parent_club_id = NULL, next_match_return = 0 WHERE id = ?"
-    ).bind(u21Team.id, playerId).run();
-  }
-
-  logger.info({ module: "u21", teamId, playerId, mode }, "player sent to U21");
-  return c.json({ ok: true, mode });
+  // Pravidla přesunu v services/u21-moves.ts, sdílí je AI trenér.
+  const res = await sendPlayerToU21(c.env.DB, teamId, playerId, mode);
+  if (!res.ok) return c.json({ error: res.error }, res.status);
+  return c.json({ ok: true, mode: res.mode });
 });
 
 /**
@@ -121,23 +102,8 @@ u21Router.post("/teams/:teamId/players/:playerId/send-to-u21", async (c) => {
 u21Router.post("/teams/:teamId/u21/players/:playerId/promote", async (c) => {
   const teamId = c.req.param("teamId");
   const playerId = c.req.param("playerId");
-
-  const u21Team = await c.env.DB.prepare(
-    "SELECT id FROM teams WHERE parent_team_id = ? AND team_type = 'u21'"
-  ).bind(teamId).first<{ id: string }>();
-  if (!u21Team) return c.json({ error: "U21 tým neexistuje" }, 404);
-
-  const player = await c.env.DB.prepare(
-    "SELECT id, team_id FROM players WHERE id = ?"
-  ).bind(playerId).first<{ id: string; team_id: string }>();
-  if (!player) return c.json({ error: "Hráč nenalezen" }, 404);
-  if (player.team_id !== u21Team.id) return c.json({ error: "Hráč není v U21" }, 400);
-
-  await c.env.DB.prepare(
-    "UPDATE players SET team_id = ?, parent_club_id = NULL, next_match_return = 0 WHERE id = ?"
-  ).bind(teamId, playerId).run();
-
-  logger.info({ module: "u21", teamId, playerId }, "player promoted from U21");
+  const res = await promotePlayerFromU21(c.env.DB, teamId, playerId);
+  if (!res.ok) return c.json({ error: res.error }, res.status);
   return c.json({ ok: true });
 });
 
