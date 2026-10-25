@@ -2,11 +2,19 @@
  * Rozhodnutí AI trenéra v přestupovém jednání. Čisté funkce bez databáze: stejný vstup
  * dá vždy stejné rozhodnutí, nikdo není zvýhodněný (lidský ani AI kupující).
  *
- * Prodávající AI (spec 3.7): nabídka nad požadavkem projde, mírně pod rezervací přijde
- * protinávrh a postupné ustupování podle trpělivosti, hluboko pod rezervací odmítnutí.
- * Pod 60 % tržní hodnoty nikdy nic. Kola smlouvání se počítají přes všechna jednání téhož
- * kupujícího o témže hráči ve 14denním okně, takže stažením a novou nabídkou se AI
- * „nevynuluje“.
+ * Prodávající AI (spec 3.7), model navrhuje, kód hlídá:
+ * - `sellerOptions`: kód spočítá ceny a pojistky a z nich přípustné akce (přijmout, protinávrh
+ *   v mezích, odmítnout). Když zbývá jediná (blokovaný hráč, pod 60 % tržní hodnoty, nabídka
+ *   za vlastní požadavek, žádný prostor pro protinávrh), rozhodne kód bez modelu.
+ * - Jinak volí model (transfer-reply-decision.ts) a bez něj náhradní pravidlo `decideSellerReply`:
+ *   nabídka nad požadavkem projde, mírně pod rezervací přijde protinávrh a postupné ustupování
+ *   podle trpělivosti, hluboko pod rezervací odmítnutí.
+ * - `sellerGuardViolation` před provedením: pod rezervací AI nic nepřijme a protinávrh pod ni
+ *   nikdy nejde, ať rozhodl kdokoli. Pod 60 % tržní hodnoty nikdy nic.
+ *
+ * Kola smlouvání se počítají přes všechna jednání téhož kupujícího o témže hráči ve 14denním
+ * okně a požadavek AI vůči němu nikdy neroste, takže stažením a novou nabídkou se AI
+ * „nevynuluje“ a cenu z ní nejde vylovit ani opakovaným ptaním modelu.
  */
 
 import { transferTermsError, type TransferTerms } from "@okresni-masina/shared";
@@ -48,7 +56,11 @@ export type SellerReplyReason =
   | "concede"
   | "loan_needed"
   | "loan_ok"
-  | "loan_fee_low";
+  | "loan_fee_low"
+  /** Vybral model z přípustných možností. */
+  | "model"
+  /** Pojistka zastavila rozhodnutí pod rezervací (nemá nastat, viz `sellerGuardViolation`). */
+  | "guard";
 
 export interface SellerDecisionInput {
   offerId: string;
@@ -96,14 +108,46 @@ export function requiredLoanFee(input: { marketValue: number; age: number; impor
   return ceil100(input.marketValue * 0.03 * months);
 }
 
-export function decideSellerReply(input: SellerDecisionInput): SellerDecision {
+/** Ceny, ze kterých vychází náhradní pravidlo i přípustné možnosti (obojí počítá stejně). */
+interface SellerPrices {
+  /** Čistá hodnota návrhu pro AI klub (`netSaleValue`). */
+  value: number;
+  /** Rezervace, nad limitem obchodů s přirážkou. */
+  reservation: number;
+  /** Cena z inzerátu, když platí (oporu za ni AI nepustí). */
+  listed: number | null;
+  /** Nejnižší požadavek, který AI tomuto kupujícímu v okně řekla, nebo null. */
+  previousAsk: number | null;
+  /** Současný požadavek: první požadavek, po protinávrhu nejnižší dřívější, nikdy pod rezervací. */
+  currentAsk: number;
+}
+
+function sellerPrices(input: SellerDecisionInput): SellerPrices {
   // Čistá hodnota: peníze (splátky diskontované, procenta pro AI nic) a hráči na výměnu,
   // minus to, co AI klub z prodeje odvede (doložka, nedoplacené splátky).
   const value = netSaleValue(input.terms, input.swapValue, input.saleCosts ?? NO_SALE_COSTS);
-  const baseReservation = reservationPrice({
-    marketValue: input.marketValue, importance: input.importance, profile: input.profile, playerId: input.playerId, now: input.now,
-  });
+  const valuation = { marketValue: input.marketValue, importance: input.importance, profile: input.profile, playerId: input.playerId, now: input.now };
+  const baseReservation = reservationPrice(valuation);
   const reservation = input.overDealLimit ? ceil100(baseReservation * OVER_LIMIT_MARKUP) : baseReservation;
+  // Hráč, který se mezitím stal oporou (zranění, prodeje), za cenu z inzerátu nejde.
+  const listed = input.listedPrice && input.listedPrice > 0 && input.importance !== "key" ? input.listedPrice : null;
+  const ask0 = Math.max(reservation, listed ?? openingAsk(valuation) * (input.overDealLimit ? OVER_LIMIT_MARKUP : 1));
+  // AI se k vyšší ceně nevrací: platí nejnižší požadavek, který už tomuto kupujícímu řekla.
+  const previousAsk = input.previousAsks.length > 0 ? Math.min(...input.previousAsks) : null;
+  const currentAsk = Math.max(reservation, previousAsk ?? ask0);
+  return { value, reservation, listed, previousAsk, currentAsk };
+}
+
+/** Kolik protinávrhů AI v jednání ještě snese; kupující, který nepřidal, ubere kolo navíc. */
+function counterRoundsLeft(input: SellerDecisionInput, value: number): number {
+  const lastBid = input.previousBids.length > 0 ? input.previousBids[input.previousBids.length - 1] : 0;
+  const noProgress = lastBid > 0 && value <= lastBid;
+  return maxCounterRounds(input.profile) - input.previousAsks.length - input.priorBreakOffs - (noProgress ? 1 : 0);
+}
+
+/** Náhradní pravidlo prodávajícího (bez modelu, nebo když model odpoví nesmysl). */
+export function decideSellerReply(input: SellerDecisionInput): SellerDecision {
+  const { value, reservation, listed, currentAsk } = sellerPrices(input);
 
   if (input.block) return { kind: "reject", reason: "blocked", value, reservation, block: input.block };
 
@@ -112,16 +156,9 @@ export function decideSellerReply(input: SellerDecisionInput): SellerDecision {
   // Pevná pojistka: pod 60 % tržní hodnoty nic, ani se splátkami, procenty nebo výměnou.
   if (isBelowHardFloor(value, input.marketValue)) return { kind: "reject", reason: "hard_floor", value, reservation };
 
-  // Hráč, který se mezitím stal oporou (zranění, prodeje), za cenu z inzerátu nejde.
-  const listed = input.listedPrice && input.listedPrice > 0 && input.importance !== "key" ? input.listedPrice : null;
-  // Cena z inzerátu platí: kdo ji nabídne (v současné hodnotě), má souhlas.
-  if (listed && value >= listed && !input.overDealLimit) return { kind: "accept", reason: "accept_ask", value, reservation };
-
-  const ask0 = Math.max(reservation, listed ?? openingAsk({
-    marketValue: input.marketValue, importance: input.importance, profile: input.profile, playerId: input.playerId, now: input.now,
-  }) * (input.overDealLimit ? OVER_LIMIT_MARKUP : 1));
-  // AI se k vyšší ceně nevrací: platí nejnižší požadavek, který už tomuto kupujícímu řekla.
-  const currentAsk = Math.max(reservation, input.previousAsks.length > 0 ? Math.min(...input.previousAsks) : ask0);
+  // Cena z inzerátu platí: kdo ji nabídne (v současné hodnotě), má souhlas. Pod rezervaci ale ne:
+  // inzerát mohl zůstat z doby, kdy hráč přebýval, a pod rezervaci AI nikdy neprodá (spec 3.7).
+  if (listed && value >= listed && value >= reservation && !input.overDealLimit) return { kind: "accept", reason: "accept_ask", value, reservation };
 
   if (value >= currentAsk) return { kind: "accept", reason: "accept_ask", value, reservation };
 
@@ -142,10 +179,7 @@ export function decideSellerReply(input: SellerDecisionInput): SellerDecision {
   if (value < reservation * INSULT_RATIO) return { kind: "reject", reason: "insulting", value, reservation };
   if (input.virtualBuyer) return { kind: "reject", reason: "below_reservation", value, reservation };
 
-  const lastBid = input.previousBids.length > 0 ? input.previousBids[input.previousBids.length - 1] : 0;
-  const noProgress = lastBid > 0 && value <= lastBid;
-  const roundsLeft = maxCounterRounds(input.profile) - input.previousAsks.length - input.priorBreakOffs - (noProgress ? 1 : 0);
-  if (roundsLeft <= 0) return { kind: "reject", reason: "out_of_patience", value, reservation };
+  if (counterRoundsLeft(input, value) <= 0) return { kind: "reject", reason: "out_of_patience", value, reservation };
 
   const step = Math.max(currentAsk * MIN_STEP_PCT, (currentAsk - value) * concessionRate(input.profile));
   const ask = Math.max(reservation, ceil100(currentAsk - step));
@@ -179,6 +213,128 @@ function counterTerms(ask: number, input: SellerDecisionInput): TransferTerms | 
   // Výměna bez doplatku: nula jde, kladná částka musí být aspoň 100 Kč.
   if (lump.amount === 0 && input.swapValue <= 0) return null;
   return transferTermsError(lump) ? null : lump;
+}
+
+export type SellerAction = "accept" | "counter" | "reject";
+
+/** Co kód AI prodávajícímu dovolí (spec 3.7). Model smí vybrat jen z `actions`. */
+export interface SellerOptions {
+  /** Čistá hodnota návrhu pro AI klub (u hostování poplatek). */
+  value: number;
+  /** Rezervace (u hostování požadovaný poplatek): pod ni AI nic nepřijme ani nenabídne. */
+  reservation: number;
+  /** Současný požadavek AI vůči tomuto kupujícímu (u hostování požadovaný poplatek). */
+  currentAsk: number;
+  /** Nejnižší cena, ke které se AI už zavázala (inzerát, dřívější protinávrh), nebo null. */
+  committedAsk: number | null;
+  /** Kolik protinávrhů AI ještě snese. */
+  roundsLeft: number;
+  /** Přípustné akce v pořadí přijmout, protinávrh, odmítnout; odmítnout jde vždy. */
+  actions: SellerAction[];
+  /** Meze protinávrhu v čisté hodnotě pro AI klub (po stovkách), když je protinávrh přípustný. */
+  counter: { min: number; max: number } | null;
+  /** Zbyla jediná přípustná možnost: rozhodne kód bez modelu. */
+  forced: SellerDecision | null;
+}
+
+/**
+ * Přípustné akce AI prodávajícího. Přijmout jde jen od rezervace, protinávrh jen klubu ve hře,
+ * dokud AI má trpělivost, a jen mezi rezervací (a víc, než kupující nabídl) a současným
+ * požadavkem. Nabídku za cenu, ke které se AI zavázala (inzerát, vlastní protinávrh), AI vždy
+ * přijme: odmítnout vlastní slovo by bylo podvodem na kupujícím.
+ */
+export function sellerOptions(input: SellerDecisionInput): SellerOptions {
+  const rule = decideSellerReply(input);
+  if (input.offerType === "loan") return loanOptions(input, rule);
+  const { value, reservation, listed, previousAsk, currentAsk } = sellerPrices(input);
+  const roundsLeft = counterRoundsLeft(input, value);
+  const commitments = [listed, previousAsk].filter((v): v is number => v !== null);
+  const committedAsk = commitments.length > 0 ? Math.min(...commitments) : null;
+  const base = { value, reservation, currentAsk, committedAsk, roundsLeft };
+  const only = (decision: SellerDecision): SellerOptions => ({ ...base, actions: [decision.kind], counter: null, forced: decision });
+
+  if (input.block) return only({ kind: "reject", reason: "blocked", value, reservation, block: input.block });
+  if (isBelowHardFloor(value, input.marketValue)) return only({ kind: "reject", reason: "hard_floor", value, reservation });
+  if (committedAsk !== null && value >= Math.max(reservation, committedAsk)) return only({ kind: "accept", reason: "accept_ask", value, reservation });
+
+  const actions: SellerAction[] = [];
+  if (value >= reservation) actions.push("accept");
+  const min = Math.max(reservation, floor100(value) + 100);
+  const max = floor100(currentAsk);
+  const counter = !input.virtualBuyer && roundsLeft > 0 && min <= max && counterTerms(min, input) !== null && counterTerms(max, input) !== null
+    ? { min, max }
+    : null;
+  if (counter) actions.push("counter");
+  actions.push("reject");
+  // Přijmout ani smlouvat nejde (klub mimo hru, došla trpělivost): odmítnutí s důvodem pravidla.
+  if (actions.length === 1) return only(rule.kind === "reject" ? rule : { kind: "reject", reason: "below_reservation", value, reservation });
+  return { ...base, actions, counter, forced: null };
+}
+
+/** Hostování: přijmout od požadovaného poplatku, protinávrh jen přesně na něj. */
+function loanOptions(input: SellerDecisionInput, rule: SellerDecision): SellerOptions {
+  const fee = input.terms.amount;
+  const required = requiredLoanFee({
+    marketValue: input.marketValue, age: input.age, importance: input.importance, loanDays: input.loanDays ?? 30,
+  });
+  const reservation = required ?? 0;
+  const roundsLeft = maxCounterRounds(input.profile) - input.previousAsks.length;
+  const base = { value: fee, reservation, currentAsk: reservation, committedAsk: null, roundsLeft };
+  const only = (decision: SellerDecision): SellerOptions => ({ ...base, actions: [decision.kind], counter: null, forced: decision });
+
+  if (input.block) return only({ kind: "reject", reason: "blocked", value: fee, reservation, block: input.block });
+  if (required === null) return only({ kind: "reject", reason: "loan_needed", value: fee, reservation });
+
+  const actions: SellerAction[] = [];
+  if (fee >= required) actions.push("accept");
+  const counter = !input.virtualBuyer && fee < required && roundsLeft > 0 ? { min: required, max: required } : null;
+  if (counter) actions.push("counter");
+  actions.push("reject");
+  if (actions.length === 1) return only(rule.kind === "reject" ? rule : { kind: "reject", reason: "loan_fee_low", value: fee, reservation });
+  return { ...base, actions, counter, forced: null };
+}
+
+/** Volba modelu: akce a u protinávrhu částka v čisté hodnotě pro AI klub (po stovkách). */
+export interface SellerChoice {
+  action: SellerAction;
+  amount: number;
+}
+
+/**
+ * Rozhodnutí z volby modelu, nebo null, když volba není přípustná (akce mimo nabídku,
+ * protinávrh mimo meze, podmínky nejdou sestavit). Pak rozhodne náhradní pravidlo.
+ */
+export function sellerDecisionFromChoice(input: SellerDecisionInput, options: SellerOptions, choice: SellerChoice): SellerDecision | null {
+  if (!options.actions.includes(choice.action)) return null;
+  const { value, reservation } = options;
+  if (choice.action === "accept") return { kind: "accept", reason: "model", value, reservation };
+  if (choice.action === "reject") return { kind: "reject", reason: "model", value, reservation };
+  const range = options.counter;
+  const ask = choice.amount;
+  if (!range || !Number.isInteger(ask) || ask % 100 !== 0 || ask < range.min || ask > range.max) return null;
+  const terms = input.offerType === "loan"
+    ? { amount: ask, upfrontPct: 100, installments: 0, sellOnPct: 0 }
+    : counterTerms(ask, input);
+  if (!terms) return null;
+  return { kind: "counter", reason: "model", value, reservation, ask, terms };
+}
+
+/**
+ * Poslední pojistka před provedením, ať rozhodl model, pravidlo, nebo kód (spec 3.7): kde
+ * zbylo jen odmítnutí (blokovaný hráč, pod 60 % tržní hodnoty), nic jiného neprojde, pod
+ * rezervací AI nic nepřijme a protinávrh nikdy nejde pod rezervaci. Vrací důvod porušení, nebo null.
+ */
+export function sellerGuardViolation(input: SellerDecisionInput, options: SellerOptions, decision: SellerDecision): string | null {
+  if (decision.kind === "reject") return null;
+  if (options.forced && options.forced.kind === "reject") return `přípustné je jen odmítnutí (${options.forced.reason})`;
+  if (decision.kind === "accept") {
+    return options.value >= options.reservation ? null : `přijetí pod rezervací (${options.value} < ${options.reservation})`;
+  }
+  if (input.virtualBuyer) return "s klubem mimo hru se nesmlouvá";
+  const counterValue = input.offerType === "loan"
+    ? decision.terms.amount
+    : netSaleValue(decision.terms, input.swapValue, input.saleCosts ?? NO_SALE_COSTS);
+  return counterValue >= options.reservation ? null : `protinávrh pod rezervací (${counterValue} < ${options.reservation})`;
 }
 
 export type BuyerReplyReason = "accept_within_max" | "raise" | "no_sell_on" | "too_expensive" | "out_of_patience";
