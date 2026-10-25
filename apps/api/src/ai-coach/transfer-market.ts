@@ -95,14 +95,17 @@ async function hasOpenOfferFor(db: D1Database, playerId: string, clubTeamId: str
   return !!row;
 }
 
-/** Podíl meziligového poplatku, který kupující zaplatí navíc k ceně (0,2 = 20 %). */
-async function adminFeeShare(db: D1Database, buyerLeagueId: string | null, sellerTeamId: string): Promise<number> {
-  const seller = await db.prepare("SELECT league_id FROM teams WHERE id = ?").bind(sellerTeamId).first<{ league_id: string | null }>()
-    .catch((e) => { logger.warn({ module: M }, `liga prodávajícího ${sellerTeamId}`, e); return null; });
+/** Podíl meziligového poplatku, který kupující zaplatí navíc k ceně (0,2 = 20 %), podle ligy prodávajícího. */
+async function adminFeeShare(db: D1Database, buyerLeagueId: string | null, sellerLeagueId: string | null, cache: Map<string, number>): Promise<number> {
+  const key = sellerLeagueId ?? "-";
+  const cached = cache.get(key);
+  if (cached !== undefined) return cached;
   const { computeTransferLevies } = await import("../competition/transfer-levy");
-  const levies = await computeTransferLevies(db, { buyerLeagueId, sellerLeagueId: seller?.league_id, amount: 100_000, isLoan: false })
+  const levies = await computeTransferLevies(db, { buyerLeagueId, sellerLeagueId, amount: 100_000, isLoan: false })
     .catch((e) => { logger.warn({ module: M }, "poplatky z přestupu", e); return null; });
-  return levies ? levies.adminFee / 100_000 : 0;
+  const share = levies ? levies.adminFee / 100_000 : 0;
+  cache.set(key, share);
+  return share;
 }
 
 /** Inzeráty na přebytečné hráče, dokud je volné místo pro rozjeté obchody. */
@@ -175,6 +178,7 @@ async function pitchSurplus(env: Bindings, club: AiClubState, now: Date, mode: D
 interface BuyCandidate {
   playerId: string;
   teamId: string;
+  leagueId: string | null;
   rating: number;
   age: number;
   position: string;
@@ -196,28 +200,30 @@ async function buyCandidates(env: Bindings, club: AiClubState, need: PositionNee
       const rating = Number(l.overall_rating) || 0;
       if (rating < need.minRating) continue;
       out.set(l.player_id as string, {
-        playerId: l.player_id as string, teamId: l.team_id as string, rating, age: Number(l.age) || 25, position: l.position as string,
+        playerId: l.player_id as string, teamId: l.team_id as string, leagueId: (l.league_id as string | null) ?? null,
+        rating, age: Number(l.age) || 25, position: l.position as string,
         marketValue: marketValue(rating, Number(l.age) || 25, l.position as string),
         listingId: l.id as string, askingPrice: Number(l.asking_price) || null, sellerIsAi: l.team_user_id === "ai",
       });
     }
     const rows = await findTransferSearchPlayerRows(db, club.leagueId, club.teamId)
       .catch((e) => { logger.warn({ module: M }, "hledání hráčů pro nákup", e); return []; });
-    const teamIds = Array.from(new Set(rows.map((r) => r.team_id)));
-    const owners = new Map<string, string | null>();
+    const fitting = rows.filter((r) => r.position === need.position && r.overall_rating >= need.minRating && !out.has(r.id));
+    const teamIds = Array.from(new Set(fitting.map((r) => r.team_id)));
+    const owners = new Map<string, { userId: string | null; leagueId: string | null }>();
     for (let i = 0; i < teamIds.length; i += 90) {
       const chunk = teamIds.slice(i, i + 90);
-      const res = await db.prepare(`SELECT id, user_id FROM teams WHERE id IN (${chunk.map(() => "?").join(",")})`)
-        .bind(...chunk).all<{ id: string; user_id: string | null }>()
-        .catch((e) => { logger.warn({ module: M }, "majitelé klubů kandidátů", e); return { results: [] as { id: string; user_id: string | null }[] }; });
-      for (const r of res.results) owners.set(r.id, r.user_id);
+      const res = await db.prepare(`SELECT id, user_id, league_id FROM teams WHERE id IN (${chunk.map(() => "?").join(",")})`)
+        .bind(...chunk).all<{ id: string; user_id: string | null; league_id: string | null }>()
+        .catch((e) => { logger.warn({ module: M }, "majitelé klubů kandidátů", e); return { results: [] as { id: string; user_id: string | null; league_id: string | null }[] }; });
+      for (const r of res.results) owners.set(r.id, { userId: r.user_id, leagueId: r.league_id });
     }
-    for (const r of rows) {
-      if (r.position !== need.position || r.overall_rating < need.minRating || out.has(r.id)) continue;
+    for (const r of fitting) {
       out.set(r.id, {
-        playerId: r.id, teamId: r.team_id, rating: r.overall_rating, age: r.age, position: r.position,
+        playerId: r.id, teamId: r.team_id, leagueId: owners.get(r.team_id)?.leagueId ?? null,
+        rating: r.overall_rating, age: r.age, position: r.position,
         marketValue: marketValue(r.overall_rating, r.age, r.position), listingId: null, askingPrice: null,
-        sellerIsAi: owners.get(r.team_id) === "ai",
+        sellerIsAi: owners.get(r.team_id)?.userId === "ai",
       });
     }
   }
@@ -236,8 +242,9 @@ async function buyForNeed(env: Bindings, club: AiClubState, now: Date, mode: Dec
 
   const candidates = await buyCandidates(env, club, need, now);
   const priced: Array<BuyCandidate & { maxPrice: number; amount: number }> = [];
+  const feeShares = new Map<string, number>();
   for (const c of candidates) {
-    const feeShare = await adminFeeShare(db, club.leagueId, c.teamId);
+    const feeShare = await adminFeeShare(db, club.leagueId, c.leagueId, feeShares);
     const maxPrice = Math.floor(maxBuyPrice({
       marketValue: c.marketValue, need: need.need, profile: club.profile, playerId: c.playerId, now, spendable: club.spendable,
     }) / (1 + feeShare) / 100) * 100;
