@@ -902,6 +902,21 @@ describe("AI klub jako kupující: model navrhuje, kód hlídá", () => {
     }
   });
 
+  it("hostování, o které AI požádala: o protinávrhu poplatku rozhoduje model", async () => {
+    await db.prepare("DELETE FROM transfer_offers").run();
+    await db.prepare("DELETE FROM transfer_offer_events").run();
+    await sendAiOffer("ai-loan", "h-fwd", 0);
+    await db.prepare("UPDATE transfer_offers SET offer_type = 'loan', loan_duration = 30 WHERE id = 'ai-loan'").run();
+    expect((await humanCounter("ai-loan", { amount: 50_000 })).status).toBe(200);
+    const ai = fakeAi(() => ({ action: "withdraw", amount: 0, reason: "The loan fee is far too high." }));
+    await replyToTransferOffers(withAi(ai), "ai-club", later(), BUYER_PROFILE);
+    expect(ai.calls).toBe(1);
+    expect((await negotiationRow("ai-loan"))?.status).toBe("withdrawn");
+    const log = await decisionFor("ai-loan");
+    expect(log).toMatchObject({ model: COACH_MODEL, used_fallback: 0 });
+    expect(JSON.parse(log!.actions)).toMatchObject({ kind: "withdraw", decidedBy: "model" });
+  });
+
   it("jednání o nákupu v režimu shadow: model rozhodne a zapíše, nic se neprovede", async () => {
     await cacheKv.put("ai_coach_mode", JSON.stringify({ market: "shadow" }));
     const ask = Math.round(fwdValue() * 1.3 / 100) * 100;

@@ -619,17 +619,37 @@ async function replyAsBuyer(ctx: RunContext, offer: OfferRow, sellerClubTeamId: 
   const need = club.analysis.needs.find((n) => n.position === player.position)?.need ?? 0.3;
   const amount = currentAmount(offer);
 
-  if (offer.offer_type === "loan") {
-    // Hostování zatím jen pravidlem: popis jednání v buy-model.ts počítá s cenou přestupu.
-    const maxFee = maxLoanFee(mv, offer.loan_duration ?? 30, need, club.spendable);
-    const kind = amount <= maxFee ? "accept" : "withdraw";
-    const result = await execute(kind);
-    await log(ctx, {
-      kind: "transfer_negotiation", contextRef: offer.id, inputSummary: `loan ${player.position} ${player.overall_rating} fee=${amount} max=${maxFee}`,
-      actions: { kind, reason: kind === "accept" ? "fee_within_max" : "fee_too_high", decidedBy: "rules" },
-      executed: result.executed, error: result.error, outcome: { by: "guard", trace: { ...NO_TRACE, model: "rules" } },
+  const events = await db.prepare(
+    `SELECT e.event_type, e.amount FROM transfer_offer_events e LEFT JOIN teams t ON t.id = e.team_id
+      WHERE e.offer_id = ? AND COALESCE(t.parent_team_id, t.id, e.team_id) = ? ORDER BY julianday(e.created_at), e.rowid`,
+  ).bind(offer.id, club.teamId).all<{ event_type: string; amount: number | null }>();
+  const own = events.results.filter((e) => e.event_type === "offer" || e.event_type === "counter");
+  // Starší nabídka bez záznamu tahů: poslední vlastní návrh je částka nabídky.
+  const ownBids = own.length > 0 ? own.map((e) => e.amount ?? 0) : [offer.offer_amount];
+  const rounds = events.results.filter((e) => e.event_type === "counter").length;
+  const seller = await describeClub(ctx, sellerClubTeamId);
+
+  // Model navrhuje v mezích kódu (strop, bez procent, nad vlastní poslední návrh), pravidlo
+  // `decideBuyerReply` rozhoduje bez modelu. Čas běhu na model sdílí s odpověďmi na nabídky.
+  const decideAndExecute = async (maxPrice: number, loanDays: number | null): Promise<boolean> => {
+    const { reply: decision, ...outcome } = await decideBuyerReplyByModel({
+      teamName: club.name, profile: club.profile, spendable: club.spendable,
+      player: { position: player.position, age: player.age, rating: player.overall_rating, ratingRange: null, estimatedValue: mv },
+      seller: seller.managedBy === "computer" ? "ai" : "human",
+      listedPrice: null, terms: termsOf(offer, amount), maxPrice, ownBids, rounds, loanDays,
+    }, { useModel: ctx.mode !== "off", ai: ctx.env, budget: { left: Date.now() > ctx.modelDeadline ? 0 : 1 } });
+    const result = await execute(decision.kind, decision.kind === "counter" ? decision.terms : undefined);
+    await logNegotiationDecision(db, {
+      teamId: club.teamId, mode: ctx.mode, contextRef: offer.id, ctx: outcome.ctx, outcome,
+      executed: result.error ? { result: result.executed, error: result.error } : result.executed,
     });
     return true;
+  };
+
+  if (offer.offer_type === "loan") {
+    // Poplatek za hostování, o které AI požádala: model v mezích stropu podle potřeby a délky.
+    const loanDays = offer.loan_duration ?? 30;
+    return decideAndExecute(maxLoanFee(mv, loanDays, need, club.spendable), loanDays);
   }
 
   // Meziligový poplatek platí kupující navíc: strop ceny se o něj sníží.
@@ -643,30 +663,7 @@ async function replyAsBuyer(ctx: RunContext, offer: OfferRow, sellerClubTeamId: 
     marketValue: mv, need, profile: club.profile, playerId: player.id, now: ctx.now, spendable: club.spendable,
   }) / (1 + feeShare) / 100) * 100;
 
-  const events = await db.prepare(
-    `SELECT e.event_type, e.amount FROM transfer_offer_events e LEFT JOIN teams t ON t.id = e.team_id
-      WHERE e.offer_id = ? AND COALESCE(t.parent_team_id, t.id, e.team_id) = ? ORDER BY julianday(e.created_at), e.rowid`,
-  ).bind(offer.id, club.teamId).all<{ event_type: string; amount: number | null }>();
-  const own = events.results.filter((e) => e.event_type === "offer" || e.event_type === "counter");
-  // Starší nabídka bez záznamu tahů: poslední vlastní návrh je částka nabídky.
-  const ownBids = own.length > 0 ? own.map((e) => e.amount ?? 0) : [offer.offer_amount];
-  const rounds = events.results.filter((e) => e.event_type === "counter").length;
-  const seller = await describeClub(ctx, sellerClubTeamId);
-
-  // Model navrhuje v mezích kódu (strop, bez procent, nad vlastní poslední návrh), pravidlo
-  // `decideBuyerReply` rozhoduje bez modelu. Čas běhu na model sdílí s odpověďmi na nabídky.
-  const { reply: decision, ...outcome } = await decideBuyerReplyByModel({
-    teamName: club.name, profile: club.profile, spendable: club.spendable,
-    player: { position: player.position, age: player.age, rating: player.overall_rating, ratingRange: null, estimatedValue: mv },
-    seller: seller.managedBy === "computer" ? "ai" : "human",
-    listedPrice: null, terms: termsOf(offer, amount), maxPrice, ownBids, rounds,
-  }, { useModel: ctx.mode !== "off", ai: ctx.env, budget: { left: Date.now() > ctx.modelDeadline ? 0 : 1 } });
-  const result = await execute(decision.kind, decision.kind === "counter" ? decision.terms : undefined);
-  await logNegotiationDecision(db, {
-    teamId: club.teamId, mode: ctx.mode, contextRef: offer.id, ctx: outcome.ctx, outcome,
-    executed: result.error ? { result: result.executed, error: result.error } : result.executed,
-  });
-  return true;
+  return decideAndExecute(maxPrice, null);
 }
 
 /** Staré příhozy (`transfer_bids`) na inzeráty AI klubu: posoudí se jako nabídka hotově. */
