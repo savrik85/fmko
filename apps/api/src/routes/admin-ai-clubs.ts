@@ -6,6 +6,12 @@
  *   pro každý klub), bez něj se plán rovnou provede. Stejné `seed` dá stejný plán, takže se
  *   nanečisto zkontrolovaný plán provede beze změny. Bez `seed` se vylosuje a vrátí v plánu.
  *   Volitelně `teamIds=a,b` jen pro vybrané kluby. U21 liga se narovná stejným voláním.
+ *
+ * POST /api/admin/ai-clubs/lower-league?district=Prachatice&seed=&dryRun=1
+ *   III. třída okresu uprostřed sezóny (část 2): 14 AI klubů z největších obcí bez klubu,
+ *   U21, rozpis středa a neděle do posledního kola přeboru, bez postupu a sestupu,
+ *   narovnání. `dryRun=1` vrátí obce, jména klubů a rozpis. Opakované volání dokončí
+ *   rozdělanou ligu (např. po překročení limitu dotazů).
  */
 
 import { Hono } from "hono";
@@ -13,6 +19,7 @@ import type { Bindings } from "../index";
 import { requireAdmin, requireAuth } from "../auth/middleware";
 import { applyLeveling, LEVELING_MODES, planLeveling, type LevelingMode } from "../ai-clubs/leveling";
 import { cryptoSeed } from "../generators/rng";
+import { createLowerLeague, LowerLeagueError } from "../league/lower-league-setup";
 import { logger } from "../lib/logger";
 
 const M = "admin-ai-clubs";
@@ -55,5 +62,24 @@ adminAiClubsRouter.post("/level", async (c) => {
   } catch (e) {
     logger.error({ module: M }, `narovnání ligy ${leagueId} (${mode})`, e);
     return c.json({ error: "Narovnání selhalo, podrobnosti jsou v logu" }, 500);
+  }
+});
+
+adminAiClubsRouter.post("/lower-league", async (c) => {
+  const district = c.req.query("district")?.trim();
+  if (!district) return c.json({ error: "Chybí district" }, 400);
+  const rawSeed = c.req.query("seed");
+  const parsedSeed = parseSeed(rawSeed);
+  if (rawSeed !== undefined && rawSeed !== "" && parsedSeed === null) return c.json({ error: "seed musí být celé číslo 0 až 4294967295" }, 400);
+  const seed = parsedSeed ?? cryptoSeed();
+  const dryRun = isDryRun(c.req.query("dryRun"));
+
+  try {
+    const result = await createLowerLeague(c.env.DB, { district, seed, dryRun });
+    return c.json({ seed, ...result });
+  } catch (e) {
+    if (e instanceof LowerLeagueError) return c.json({ error: e.message }, 400);
+    logger.error({ module: M }, `založení III. třídy v okrese ${district}`, e);
+    return c.json({ error: "Založení III. třídy selhalo, podrobnosti jsou v logu. Opakované volání rozdělanou ligu dokončí." }, 500);
   }
 });

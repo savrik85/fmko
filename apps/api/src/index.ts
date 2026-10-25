@@ -389,14 +389,11 @@ export default {
         } else {
           // ── STARÁ CESTA (režim "loop") ──
           // Všechny ligy v JEDNÉ invokaci = jeden sdílený rozpočet CPU a subrequestů.
-          // Proto se tu pořád vylučují České Budějovice: bez toho tick přeteče limit
-          // a neodsimuluje NIC. Vyloučení i celá tahle větev padnou ve fázi 2,
-          // až se frontový režim ověří na produkci.
+          // České Budějovice se od spuštění ligy ČB (2026-10-25) nevylučují, hrají se
+          // v obou režimech; produkce jede frontou, kde má každá liga vlastní invokaci.
           const { findLeaguesWithDueRound, processLeagueRound, processLeagueMaintenance } =
             await import("./season/league-round");
-          const leagues = await findLeaguesWithDueRound(env.DB, {
-            legacyExcludeDistrictLike: "České Budějovice%",
-          });
+          const leagues = await findLeaguesWithDueRound(env.DB);
           for (const lg of leagues) {
             const r = await processLeagueRound(env, lg.leagueId, { ctx });
             totalMatches += r.matches;
