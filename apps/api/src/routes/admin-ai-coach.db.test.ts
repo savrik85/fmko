@@ -32,6 +32,8 @@ beforeAll(async () => {
     "INSERT INTO leagues VALUES ('lg1', 'Přebor Prahy')",
     "INSERT INTO teams VALUES ('ai-1', 'Meteor Žižkov', 'ai', NULL, 'lg1', 50000, 50, '2026-11-02T16:00:00.000Z')",
     "INSERT INTO managers VALUES ('m1', 'ai', 'ai-1', 'Karel Trenér', NULL, 40, 50, 45, 50)",
+    // Stav pro přehled počítá jen áčka (U21 vynechá).
+    "ALTER TABLE teams ADD COLUMN team_type TEXT",
   ]) await db.prepare(sql).run();
   const migration = readFileSync(resolve(__dirname, "../../migrations/0276_ai_clubs.sql"), "utf8");
   for (const stmt of migration.split(";").map((x) => x.replace(/^--.*$/gm, "").trim()).filter((x) => /^CREATE/i.test(x))) {
@@ -84,6 +86,26 @@ describe("admin AI trenérů", () => {
     const body = await res.json() as { decisions: Array<{ id: string; reasoning: string; usedFallback: boolean; teamName: string }> };
     expect(body.decisions).toHaveLength(1);
     expect(body.decisions[0]).toMatchObject({ id: "d2", reasoning: "save money", usedFallback: true, teamName: "Meteor Žižkov" });
+  });
+
+  it("deník: jen chyby, jen bez modelu, neznámý filtr se ignoruje", async () => {
+    const ids = async (query: string) => {
+      const res = await call(`/decisions?${query}`, "admin-token");
+      return ((await res.json()) as { decisions: Array<{ id: string }> }).decisions.map((d) => d.id).sort();
+    };
+    expect(await ids("only=errors")).toEqual(["d2"]);
+    expect(await ids("only=fallback")).toEqual(["d2"]);
+    expect(await ids("only=whatever")).toEqual(["d1", "d2"]);
+  });
+
+  it("stav pro přehled: hráč bez admina ho neuvidí, admin dostane souhrn za 24 hodin", async () => {
+    expect((await call("/status", "player-token")).status).toBe(403);
+    const res = await call("/status", "admin-token");
+    expect(res.status).toBe(200);
+    const body = await res.json() as { clubs: { total: number }; last24h: { decisions: number; errors: number }; recentErrors: Array<{ id: string }> };
+    expect(body.clubs.total).toBe(1);
+    expect(body.last24h).toMatchObject({ decisions: 2, errors: 1 });
+    expect(body.recentErrors.map((e) => e.id)).toEqual(["d2"]);
   });
 
   it("seznam AI klubů s povahou trenéra a chybovostí", async () => {
