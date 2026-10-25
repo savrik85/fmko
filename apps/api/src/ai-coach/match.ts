@@ -463,6 +463,8 @@ export async function prepareAiLineup(
   const squadIds = new Set([...ctx.squad.map((p) => p.id), ...ctx.unavailable.map((p) => p.id)]);
   let lineup = fillWithExcused(ctx, assembleLineup(ctx, decided.decision, squadIds));
   let error = decided.error;
+  let used = decided.used;
+  let replacedBy: MatchDecision | null = null;
 
   const execute = mode !== "shadow" && !opts.dryRun;
   let lineupId: string | null = null;
@@ -483,7 +485,9 @@ export async function prepareAiLineup(
     if (!saved.ok && decided.used === "model") {
       // Rozhodnutí modelu neprošlo kontrolou služby: zkusit náhradní pravidlo.
       error = `uložení podle modelu odmítnuto: ${saved.error}`;
-      lineup = fillWithExcused(ctx, assembleLineup(ctx, fallbackMatchDecision(ctx), squadIds));
+      used = "fallback";
+      replacedBy = fallbackMatchDecision(ctx);
+      lineup = fillWithExcused(ctx, assembleLineup(ctx, replacedBy, squadIds));
       saved = await saveLineup(db, teamId, {
         calendarId: fixture.calendarId, formation: lineup.formation, tactic: lineup.tactic, hardness: lineup.hardness,
         captainId: lineup.captainId, matchPlan: lineup.matchPlan, bench: lineup.bench.length > 0 ? lineup.bench : null, players: lineup.players,
@@ -512,16 +516,19 @@ export async function prepareAiLineup(
     contextRef: `${fixture.kind}:${fixture.calendarId}`,
     inputSummary: renderMatchPrompt(ctx),
     rawOutput: decided.raw,
-    actions: { decision: decided.decision, rejected: decided.rejected, planned: summarizeLineup(ctx, lineup), formations: formationOptions(ctx) },
+    actions: {
+      decision: decided.decision, rejected: decided.rejected, ...(replacedBy ? { replacedBy } : {}),
+      planned: summarizeLineup(ctx, lineup), formations: formationOptions(ctx),
+    },
     executed,
-    usedFallback: decided.used === "fallback",
+    usedFallback: used === "fallback",
     error,
     tokensIn: decided.tokensIn,
     tokensOut: decided.tokensOut,
     latencyMs: decided.latencyMs,
   });
 
-  return { used: decided.used, lineupId };
+  return { used, lineupId };
 }
 
 /**
