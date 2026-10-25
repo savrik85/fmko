@@ -424,8 +424,10 @@ describe("člověk kupuje od AI klubu", () => {
     await replyToTransferOffers(env, "ai-club", later(), PROFILE);
     expect((await offerRow(offer.offerId))?.status).toBe("rejected");
     expect((await smsTo("human")).some((b) => b.includes("odmítl"))).toBe(true);
-    // Odmítnutí AI klubu nekazí hráči náladu přes zprávy (to je jen u lidí).
-    expect(sideEffects.applyOfferRejectionImpact).not.toHaveBeenCalled();
+    // Odmítnutí AI klubu hráče naštve stejně jako u člověka (spec AI klubů 3.2). Zprávy AI klubu
+    // applyOfferRejectionImpact nepíše, to hlídá ai-club-unrest.db.test.ts.
+    expect(sideEffects.applyOfferRejectionImpact).toHaveBeenCalledTimes(1);
+    expect(sideEffects.applyOfferRejectionImpact).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ id: offer.offerId }), "reject", expect.anything());
     const retry = await offerFromHuman({ playerId, amount: lowball + 5000 });
     expect(retry.status).toBe(429);
   });

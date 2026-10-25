@@ -9,10 +9,12 @@
  * vybere jednu dohodu, nebo počká. Bez modelu (výpadek, nesmysl, režim off, chybějící binding)
  * rozhodne náhradní pravidlo podle povahy (unrest-decision.ts).
  *
- * Slib místa v sestavě a slib prodeje AI trenér nedává: jeho sestava ani odpovědi na nabídky
- * o slibech nevědí a sliby AI klubů hra nevyhodnocuje (`processTransferUnrest` AI kluby
- * přeskakuje), takže by hráče uklidnily zadarmo. „Pustit ho“ AI dodrží hned: nabídku,
- * kterou klub po telefonu pošle znovu, rovnou přijme stejnou službou jako člověk.
+ * Sliby hra vyhodnocuje AI klubům stejně jako lidem (`processTransferUnrest`). Slib místa
+ * v sestavě AI trenér dodrží: jeho sestava slíbeného hráče postaví vždy (ai-coach/match.ts),
+ * proto ho nabízí jen hráči áčka, který může hrát, a nejvýš dvěma hráčům naráz. Slib prodeje
+ * nedává: odpovědi na nabídky (transfer-replies.ts) se řídí cenou a slib by porušily.
+ * „Pustit ho“ AI dodrží hned: nabídku, kterou klub po telefonu pošle znovu, rovnou přijme
+ * stejnou službou jako člověk.
  *
  * AI klubu se nic nepíše: žádná SMS, zpráva ani oznámení.
  */
@@ -55,8 +57,10 @@ const MAX_PLAYERS_PER_RUN = 6;
 export const RAISE_COVER_WEEKS = 26;
 /** Hodinová úloha nesmí stát: na model se čeká nejvýš minutu. */
 const MODEL_TIMEOUT_MS = 60_000;
-/** Sliby, které by AI trenér nedodržel ani mu je hra nevyhodnotí (viz hlavička souboru). */
-const AI_UNSUPPORTED_DEALS: ReadonlySet<UnrestActionId> = new Set(["promise_minutes", "promise_transfer"]);
+/** Slib, který by AI trenér nedodržel (viz hlavička souboru). */
+const AI_UNSUPPORTED_DEALS: ReadonlySet<UnrestActionId> = new Set(["promise_transfer"]);
+/** Kolika hráčům áčka může mít AI trenér naráz slíbené místo v sestavě (každý slib oslabí sestavu). */
+export const MAX_MINUTES_PROMISES = 2;
 
 export interface UnrestCoachOpts {
   /** Režim přepínače. `shadow` rozhodne a zapíše do deníku, ale nic neprovede. */
@@ -185,12 +189,39 @@ async function releaseOption(db: D1Database, club: AiClubState, row: UnhappyRow,
   return { id: "release", cost: 0, weeklyCost: 0, sale: { club: offerClubName(unrest), amount: offer.amount } };
 }
 
+/**
+ * Kolika hráčům áčka AI klub právě slíbil místo v sestavě (slib v `life_context`, ne jen
+ * v historii `player_promises`: podle něj hra slib vyhodnocuje a sestava ho plní).
+ */
+async function countMinutesPromises(db: D1Database, teamId: string): Promise<number> {
+  const row = await db.prepare(
+    `SELECT COUNT(*) AS n FROM players WHERE team_id = ?
+        AND (CASE WHEN json_valid(life_context) THEN json_extract(life_context, '$.transferUnrest.pledge.type') END) = 'minutes'`,
+  ).bind(teamId).first<{ n: number }>()
+    .catch((e) => { logger.warn({ module: M, teamId }, "běžící sliby místa v sestavě", e); return null; });
+  // Bez čísla se radši nic dalšího neslibuje.
+  return row?.n ?? MAX_MINUTES_PROMISES;
+}
+
+/**
+ * Místo v sestavě slíbí AI trenér jen hráči, kterého jeho sestava opravdu postaví: hráč
+ * áčka (U21 skládá automat), ne na hostování, zdravý, a jen když nemá slíbeno už víc hráčů.
+ */
+function canPromiseMinutes(club: AiClubState, row: UnhappyRow, minutesPromises: number): boolean {
+  if (minutesPromises >= MAX_MINUTES_PROMISES) return false;
+  if (row.team_id !== club.teamId || row.roster_parent_id != null || row.loan_from_team_id != null) return false;
+  const member = club.members.find((m) => m.id === row.id);
+  return !!member && !member.injured;
+}
+
 /** Meze AI klubu nad pravidly služby: na co klub má (z peněz nad rezervou) a koho smí pustit. */
 async function guardDeal(
-  db: D1Database, club: AiClubState, row: UnhappyRow, unrest: TransferUnrest, id: UnrestActionId,
+  db: D1Database, club: AiClubState, row: UnhappyRow, unrest: TransferUnrest, id: UnrestActionId, minutesPromises: number,
 ): Promise<UnrestOption | null> {
   if (AI_UNSUPPORTED_DEALS.has(id)) return null;
   switch (id) {
+    case "promise_minutes":
+      return canPromiseMinutes(club, row, minutesPromises) ? { id, cost: 0, weeklyCost: 0 } : null;
     case "bonus": {
       const cost = bonusAmount(unrest);
       return cost <= club.spendable ? { id, cost, weeklyCost: 0 } : null;
@@ -211,7 +242,7 @@ async function guardDeal(
 
 /** Hráči, o kterých je dnes co rozhodnout: aspoň jedna přípustná dohoda (čekání je vždy). */
 async function buildCandidates(
-  db: D1Database, club: AiClubState, rows: UnhappyRow[], seasonNumber: number | null, now: Date,
+  db: D1Database, club: AiClubState, rows: UnhappyRow[], seasonNumber: number | null, minutesPromises: number, now: Date,
 ): Promise<UnrestCandidate[]> {
   const unhappy = rows
     .map((row) => {
@@ -230,7 +261,7 @@ async function buildCandidates(
     const ctx = unrestContextFor(row, row.id, club.teamId, seasonNumber, now);
     const options: UnrestOption[] = [];
     for (const deal of availableActions(unrest, lc, ctx)) {
-      const option = await guardDeal(db, club, row, unrest, deal.id)
+      const option = await guardDeal(db, club, row, unrest, deal.id, minutesPromises)
         .catch((e) => { logger.warn({ module: M, teamId: club.teamId, playerId: row.id }, `kontrola dohody ${deal.id}`, e); return null; });
       if (option) options.push(option);
     }
@@ -273,12 +304,13 @@ async function completeRelease(env: Bindings, teamId: string, playerId: string):
 
 /** Provede rozhodnutí přes službu. Peníze se hlídají znovu: mohly padnout na dřívější dohodu. */
 async function executeDecisions(
-  env: Bindings, club: AiClubState, ctx: UnrestDecisionContext, decisions: UnrestPlayerDecision[], now: Date,
+  env: Bindings, club: AiClubState, ctx: UnrestDecisionContext, decisions: UnrestPlayerDecision[], minutesPromises: number, now: Date,
 ): Promise<UnrestExecution[]> {
   const byKey = new Map(ctx.players.map((p) => [p.key, p]));
   const executed: UnrestExecution[] = [];
   let committed = 0;
   let captaincyGiven = false;
+  let promises = minutesPromises;
   for (const d of decisions) {
     if (d.action === "wait") continue;
     const player = byKey.get(d.key);
@@ -295,6 +327,11 @@ async function executeDecisions(
       executed.push({ ...base, ok: false, error: "kapitánskou pásku dnes už dostal jiný hráč" });
       continue;
     }
+    // Víc slibů místa v sestavě naráz by sestavu rozebralo (každý slíbený hráč hraje vždy).
+    if (option.id === "promise_minutes" && promises >= MAX_MINUTES_PROMISES) {
+      executed.push({ ...base, ok: false, error: `místo v sestavě má slíbeno už ${promises} hráčů` });
+      continue;
+    }
     try {
       const res = await performUnrestAction(env.DB, env, club.teamId, player.playerId, option.id, { silent: true, now });
       if (!res.ok) {
@@ -303,6 +340,7 @@ async function executeDecisions(
       }
       committed += needed;
       if (option.id === "captaincy") captaincyGiven = true;
+      if (option.id === "promise_minutes") promises++;
       const entry: UnrestExecution = { ...base, ok: true, level: res.unrestLevel };
       if (option.id === "release") Object.assign(entry, await completeRelease(env, club.teamId, player.playerId));
       executed.push(entry);
@@ -336,7 +374,8 @@ export async function resolveUnhappyPlayers(
   if (rows.length === 0) return emptyResult("nothing");
   const club = await loadAiClubState(db, teamId, profile, now);
   if (!club) return emptyResult("not_ai");
-  const players = await buildCandidates(db, club, rows, await activeSeasonNumber(db), now);
+  const minutesPromises = await countMinutesPromises(db, teamId);
+  const players = await buildCandidates(db, club, rows, await activeSeasonNumber(db), minutesPromises, now);
   if (players.length === 0) return emptyResult("nothing");
 
   const gameDay = (team.game_date ?? now.toISOString()).slice(0, 10);
@@ -365,7 +404,7 @@ export async function resolveUnhappyPlayers(
     if (typeof r === "string") reasoning = r.trim().slice(0, 300);
   }
   const decisions = resolveUnrestDecisions(ctx, validation);
-  const executed = mode === "shadow" ? [] : await executeDecisions(env, club, ctx, decisions, now);
+  const executed = mode === "shadow" ? [] : await executeDecisions(env, club, ctx, decisions, minutesPromises, now);
 
   const rejected = validation?.rejected ?? [];
   const error = [trace.error, rejected.length > 0 ? `zahozeno: ${rejected.join("; ")}` : null].filter(Boolean).join("; ") || null;

@@ -50,8 +50,9 @@ export async function expireIdleOffers(env: Bindings, now: Date = new Date()): P
     if ((closed?.meta.changes ?? 0) === 0) continue;
     expired++;
 
-    // Dopad na hráče žije ve zprávách lidskému trenérovi; AI klub odpovídá do lhůty sám.
-    if (sellerSilent && !(await isAiTeam(db, scope?.sellerClubTeamId ?? offer.to_team_id))) {
+    // Mlčení prodávajícího je odmítnutí, i u AI klubu (stejná pravidla, jen bez zpráv:
+    // applyOfferRejectionImpact AI klubu nic nepíše).
+    if (sellerSilent) {
       await applyOfferRejectionImpact(db, offer, "expire", env)
         .catch((e) => logger.warn({ module: "offer-expiry" }, `impact ${offer.id}`, e));
     }

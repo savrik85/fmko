@@ -126,7 +126,7 @@ function optionText(o: UnrestOption, p: UnrestCandidate): string {
     case "raise_wage":
       return `raise his weekly wage by 30 % for good (${czk(p.weeklyWage)} to ${czk(p.weeklyWage + o.weeklyCost)} a week, once a season); calms him strongly`;
     case "promise_minutes":
-      return "promise him a starting place: he must start 2 of your next 3 matches, otherwise he gets even angrier";
+      return "promise him a starting place: your lineup will start him in your next matches until he has started 2 of 3, even where a better player would play; calms him";
     case "promise_transfer":
       return "promise to sell him when the next decent offer comes within 30 days; refusing such an offer later makes him furious";
     case "captaincy":

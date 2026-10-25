@@ -262,6 +262,8 @@ export async function loadMatchContext(db: D1Database, teamId: string, fixture: 
 
   const squad: SquadPlayer[] = [];
   const unavailable: UnavailablePlayer[] = [];
+  // Komu AI trenér slíbil místo v sestavě (dohoda s nespokojeným hráčem): hraje, dokud se slib nevyhodnotí.
+  const promisedStarters: string[] = [];
   let n = 0;
   for (const row of rows.results) {
     if (!isSlot(row.position)) continue;
@@ -283,6 +285,8 @@ export async function loadMatchContext(db: D1Database, teamId: string, fixture: 
       continue;
     }
     const life = parseObj(row.life_context, "life_context", row.id);
+    const pledge = (life.transferUnrest as { pledge?: { type?: string } | null } | undefined)?.pledge;
+    if (pledge?.type === "minutes") promisedStarters.push(key);
     const st = statOf.get(row.id);
     const yellow = st?.yellow_cards ?? 0;
     squad.push({
@@ -368,6 +372,7 @@ export async function loadMatchContext(db: D1Database, teamId: string, fixture: 
     unavailable,
     currentRoles: { penaltyTakerId: team.penalty_taker_id, freekickTakerId: team.freekick_taker_id },
     lastLineup: last ?? null,
+    promisedStarters,
   };
   // Síla vlastního týmu na stejné škále jako soupeř: průměr hodnocení nejlepších jedenácti dostupných.
   const top = [...squad].sort((a, b) => b.rating - a.rating).slice(0, 11);

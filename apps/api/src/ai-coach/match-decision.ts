@@ -83,6 +83,11 @@ export interface MatchContext {
   unavailable: UnavailablePlayer[];
   currentRoles: { penaltyTakerId: string | null; freekickTakerId: string | null };
   lastLineup: { formation: string; tactic: string } | null;
+  /**
+   * Klíče dostupných hráčů, kterým trenér slíbil místo v sestavě (dohoda s nespokojeným
+   * hráčem). Slib se plní vždy: hrají od začátku, ať model rozhodne cokoli.
+   */
+  promisedStarters?: string[];
 }
 
 /** Pokyn na lavičce, jak ho píše model (ploché pole, kód ho převede na MatchPlanRule). */
@@ -128,6 +133,8 @@ export interface AssembledLineup {
 
 const MAX_REST = 6;
 const MAX_MUST_START = 3;
+/** Kolik minut musí slíbený hráč odehrát, aby se zápas počítal do slibu (checkMinutesPledge). */
+const PROMISED_MINUTES = 45;
 const PLAN_WHEN = ["losing", "drawing", "winning", "minute", "down_a_man", "up_a_man", "tired"] as const;
 const PLAN_ACTIONS = ["tactic", "hardness", "sub"] as const;
 
@@ -329,21 +336,24 @@ export function fallbackMatchDecision(ctx: MatchContext): MatchDecision {
   const friendly = ctx.fixture.kind === "friendly";
   const gap = strengthGap(ctx);
 
+  // Slíbené místo v sestavě (dohoda s nespokojeným hráčem) má přednost: hráč hraje a nešetří se.
+  const promised = (ctx.promisedStarters ?? []).filter((k) => ctx.squad.some((pl) => pl.key === k));
+
   // Koho šetřit: unavení, u přáteláku i ti, kdo hrají za dva dny soutěž.
   const restThreshold = 55 - (p.risk - 50) / 5 + (friendly ? 12 : 0);
   const rest: string[] = [];
   for (const pl of [...ctx.squad].sort((a, b) => a.condition - b.condition)) {
     if (rest.length >= MAX_REST) break;
-    if (pl.condition >= restThreshold) continue;
+    if (pl.condition >= restThreshold || promised.includes(pl.key)) continue;
     const others = ctx.squad.filter((o) => o.position === pl.position && o.key !== pl.key && !rest.includes(o.key));
     if (others.length >= formationQuotas("4-4-2")[pl.position]) rest.push(pl.key);
   }
 
-  // Komu dát šanci: mládežník v přáteláku nebo proti slabšímu soupeři.
-  const mustStart: string[] = [];
+  // Komu dát šanci: slíbení hráči, pak mládežník v přáteláku nebo proti slabšímu soupeři.
+  const mustStart: string[] = [...promised];
   if (p.youthFocus >= 60 && (friendly || gap <= -8)) {
     const formation0 = bestFormation(ctx);
-    const xi = new Set(pickEleven(ctx.squad, formation0, { exclude: new Set(rest) }).picks.map((x) => x.player.key));
+    const xi = new Set(pickEleven(ctx.squad, formation0, { exclude: new Set(rest), include: mustStart }).picks.map((x) => x.player.key));
     const youngsters = ctx.squad
       .filter((pl) => pl.age <= 21 && !xi.has(pl.key) && !rest.includes(pl.key) && pl.position !== "GK")
       .sort((a, b) => b.rating - a.rating)
@@ -550,9 +560,14 @@ function toPlanRule(rule: DecisionPlanRule, index: number, idOf: Map<string, str
  */
 export function assembleLineup(ctx: MatchContext, decision: MatchDecision, squadIds: Set<string>): AssembledLineup {
   const notes: string[] = [];
+  // Slib místa v sestavě se plní vždy (nespokojený hráč, unhappy-players.ts): hráč jde do
+  // základu jako první, šetřit ho nejde a stáhnout až po poločase, slib chce 45 minut.
+  const promised = (ctx.promisedStarters ?? []).filter((k) => ctx.squad.some((p) => p.key === k));
+  const overridden = decision.rest.filter((k) => promised.includes(k));
+  if (overridden.length > 0) notes.push(`slib místa v sestavě: ${overridden.join(", ")} hraje i přes šetření`);
   const { picks, notes: pickNotes } = pickEleven(ctx.squad, decision.formation, {
-    exclude: new Set(decision.rest),
-    include: decision.mustStart,
+    exclude: new Set(decision.rest.filter((k) => !promised.includes(k))),
+    include: [...promised, ...decision.mustStart.filter((k) => !promised.includes(k))],
   });
   notes.push(...pickNotes);
   const xiKeys = new Set(picks.map((x) => x.player.key));
@@ -576,6 +591,10 @@ export function assembleLineup(ctx: MatchContext, decision: MatchDecision, squad
   decision.plan.forEach((rule, i) => {
     if (rule.action === "sub") {
       if (!rule.out || !xiKeys.has(rule.out)) { notes.push(`střídání ${rule.out} → ${rule.in}: hráč nehraje od začátku`); return; }
+      if (promised.includes(rule.out) && rule.fromMinute < PROMISED_MINUTES) {
+        notes.push(`střídání ${rule.out} → ${rule.in}: slíbený hráč musí odehrát aspoň ${PROMISED_MINUTES} minut`);
+        return;
+      }
       const incoming = rule.in ? byKey.get(rule.in) : undefined;
       if (!incoming || xiKeys.has(incoming.key)) { notes.push(`střídání ${rule.out} → ${rule.in}: střídající už hraje`); return; }
       if (!bench.includes(incoming)) {
@@ -692,6 +711,7 @@ export function renderMatchPrompt(ctx: MatchContext): string {
     const xiSlot = defaultXi.get(pl.key);
     const flags = [
       xiSlot ? (xiSlot === pl.position ? "XI" : `XI as ${xiSlot}`) : "",
+      ctx.promisedStarters?.includes(pl.key) ? "promised a start" : "",
       pl.oneYellowFromBan ? "one yellow from ban" : "",
       pl.condition < 60 ? "tired" : "",
       pl.leadership >= 65 ? "leader" : "",
@@ -701,6 +721,10 @@ export function renderMatchPrompt(ctx: MatchContext): string {
   }
   if (ctx.unavailable.length > 0) {
     lines.push(`UNAVAILABLE (cannot play): ${ctx.unavailable.map((u) => `${u.key} ${u.position} ${u.reason}`).join(", ")}.`);
+  }
+  const promised = (ctx.promisedStarters ?? []).filter((k) => ctx.squad.some((p) => p.key === k));
+  if (promised.length > 0) {
+    lines.push(`PROMISES: you promised ${promised.join(", ")} a starting place (2 of the next 3 matches). The engine starts them and keeps them on for at least ${PROMISED_MINUTES} minutes, so do not rest or substitute them early; plan the rest of the team around them.`);
   }
   lines.push("");
   lines.push("DECIDE (JSON keys):");

@@ -204,6 +204,9 @@ function pick(pool: string[], seed: string): string {
 
 interface ReminderPlayer { id: string; first_name: string; last_name: string; nickname: string | null; avatar: string | null }
 
+/** Připomínky jen lidským klubům: AI trenérovi hráči nepíšou (spec AI klubů 3.2), slib platí dál. */
+const HUMAN_CLUB_JOIN = "JOIN teams club ON club.id = pr.team_id AND COALESCE(club.user_id, '') != 'ai'";
+
 /**
  * Den před zápasem: hráč se slíbeným místem v sestavě se ozve (jednou na zápas).
  * `rosterTeamId` je kádr, který hraje (áčko nebo U21).
@@ -211,7 +214,7 @@ interface ReminderPlayer { id: string; first_name: string; last_name: string; ni
 export async function remindMinutesPromises(db: D1Database, rosterTeamId: string, matchKey: string): Promise<number> {
   const rows = await db.prepare(
     `SELECT pr.id AS promise_id, pr.team_id AS club_id, p.id, p.first_name, p.last_name, p.nickname, p.avatar
-       FROM player_promises pr JOIN players p ON p.id = pr.player_id
+       FROM player_promises pr JOIN players p ON p.id = pr.player_id ${HUMAN_CLUB_JOIN}
       WHERE p.team_id = ? AND pr.status = 'active' AND pr.type = 'minutes' AND COALESCE(pr.last_reminder_key, '') != ?`,
   ).bind(rosterTeamId, matchKey).all<ReminderPlayer & { promise_id: string; club_id: string }>()
     .catch((e) => { logger.warn({ module: M }, "sliby sestavy před zápasem", e); return { results: [] as Array<ReminderPlayer & { promise_id: string; club_id: string }> }; });
@@ -230,7 +233,7 @@ export async function remindTransferPromise(db: D1Database, playerId: string, bu
   if (!promise || promise.type !== "transfer") return;
   const r = await db.prepare(
     `SELECT pr.team_id AS club_id, pr.last_reminder_key, p.id, p.first_name, p.last_name, p.nickname, p.avatar
-       FROM player_promises pr JOIN players p ON p.id = pr.player_id WHERE pr.id = ?`,
+       FROM player_promises pr JOIN players p ON p.id = pr.player_id ${HUMAN_CLUB_JOIN} WHERE pr.id = ?`,
   ).bind(promise.id).first<ReminderPlayer & { club_id: string; last_reminder_key: string | null }>()
     .catch((e) => { logger.warn({ module: M }, "hráč se slibem prodeje", e); return null; });
   if (!r || r.last_reminder_key === offerKey) return;
@@ -244,7 +247,7 @@ export async function remindTransferPromise(db: D1Database, playerId: string, bu
 export async function remindReleasePromise(db: D1Database, offerId: string, buyerName: string): Promise<void> {
   const r = await db.prepare(
     `SELECT pr.id AS promise_id, pr.team_id AS club_id, pr.last_reminder_key, p.id, p.first_name, p.last_name, p.nickname, p.avatar
-       FROM player_promises pr JOIN players p ON p.id = pr.player_id
+       FROM player_promises pr JOIN players p ON p.id = pr.player_id ${HUMAN_CLUB_JOIN}
       WHERE pr.status = 'active' AND pr.type = 'release' AND json_extract(pr.details, '$.offerId') = ?`,
   ).bind(offerId).first<ReminderPlayer & { promise_id: string; club_id: string; last_reminder_key: string | null }>()
     .catch((e) => { logger.warn({ module: M }, "slib pustit ho u nabídky", e); return null; });

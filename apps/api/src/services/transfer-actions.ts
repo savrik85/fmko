@@ -1303,9 +1303,9 @@ export async function rejectTransferOffer(
   ).bind(message, offerId, offer.status, offer.last_action_by).run();
   if (rejected.meta.changes === 0) return fail(409, "Nabídku mezitím vyřešil někdo jiný");
 
-  // Dopad na hráče — jen když nabídku odmítl VLASTNÍK hráče (prodávající). U AI klubu ne:
-  // dopad žije ve zprávách hráče trenérovi a truc AI klubů se dnes nezpracovává.
-  if (scope.role === "seller" && !(await isAiTeam(db, scope.sellerClubTeamId))) {
+  // Dopad na hráče — jen když nabídku odmítl VLASTNÍK hráče (prodávající). I u AI klubu:
+  // truc platí stejně, jen bez zpráv (applyOfferRejectionImpact AI klubu nic nepíše).
+  if (scope.role === "seller") {
     const { applyOfferRejectionImpact } = await import("../transfers/offer-rejection-impact");
     await inBackground(opts, applyOfferRejectionImpact(db, offer, "reject", {
       GEMINI_API_KEY: env.GEMINI_API_KEY,
@@ -1461,9 +1461,9 @@ export async function withdrawTransferOffer(
     .bind(crypto.randomUUID(), offerId, scope.actorClubTeamId, withdrawMessage).run()
     .catch((e) => logger.warn({ module: "game" }, "insert withdraw event", e));
 
-  // Prodávající, který jednání ukončí, hráče nepustil: dopad jako u odmítnutí.
+  // Prodávající, který jednání ukončí, hráče nepustil: dopad jako u odmítnutí (i u AI klubu, bez zpráv).
   // Jinak šla nespokojenost hráče, který chtěl odejít, obejít ukončením místo odmítnutí.
-  if (scope.role === "seller" && !(await isAiTeam(db, scope.sellerClubTeamId))) {
+  if (scope.role === "seller") {
     const { applyOfferRejectionImpact } = await import("../transfers/offer-rejection-impact");
     await inBackground(opts, applyOfferRejectionImpact(db, offer, "reject", {
       GEMINI_API_KEY: env.GEMINI_API_KEY,
