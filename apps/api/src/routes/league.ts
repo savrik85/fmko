@@ -4,8 +4,17 @@
 
 import { Hono } from "hono";
 import type { Bindings } from "../index";
+import { leagueMovement, NO_LEAGUE_MOVEMENT, type LeagueMovement } from "../league/district-promotion";
 import { logger } from "../lib/logger";
 import { mustSeason } from "../lib/season";
+
+/** Postup a sestup, které liga opravdu má (tabulka podle nich barví pozice a ukazuje legendu). */
+async function movementFor(db: D1Database, leagueId: string): Promise<LeagueMovement> {
+  return leagueMovement(db, leagueId).catch((e) => {
+    logger.warn({ module: "league" }, `postup a sestup ligy ${leagueId}`, e);
+    return NO_LEAGUE_MOVEMENT;
+  });
+}
 
 const leagueRouter = new Hono<{ Bindings: Bindings }>();
 
@@ -142,6 +151,7 @@ leagueRouter.get("/teams/:teamId/standings", async (c) => {
     leagueLevel: leagueInfo?.level ?? "okresni_prebor",
     season: mustSeason(leagueInfo?.season_number),
     standings,
+    movement: await movementFor(c.env.DB, leagueId),
   });
 });
 
@@ -495,7 +505,10 @@ leagueRouter.get("/leagues/:leagueId/standings", async (c) => {
   standings.sort((a, b) => (b.points - a.points) || ((b.gf - b.ga) - (a.gf - a.ga)) || (b.gf - a.gf));
   standings.forEach((s, i) => { (s as Record<string, unknown>).pos = i + 1; });
 
-  return c.json({ leagueName: leagueInfo.name, leagueLevel: leagueInfo.level, season: leagueInfo.season_number, standings });
+  return c.json({
+    leagueName: leagueInfo.name, leagueLevel: leagueInfo.level, season: leagueInfo.season_number, standings,
+    movement: await movementFor(c.env.DB, c.req.param("leagueId")),
+  });
 });
 
 // GET /api/leagues/:leagueId/results — výsledky zápasů

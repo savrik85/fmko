@@ -33,6 +33,9 @@ interface LeagueRound {
 // ═══ Helpers ═══
 
 const FORM_COLORS: Record<string, string> = { W: "bg-pitch-400", D: "bg-gold-500", L: "bg-card-red" };
+
+interface LeagueMovement { promotion: boolean; relegation: boolean }
+const NO_MOVEMENT: LeagueMovement = { promotion: false, relegation: false };
 const FORM_LABELS: Record<string, string> = { W: "V", D: "R", L: "P" };
 
 function ini(n: string) { return n.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase(); }
@@ -94,6 +97,8 @@ function LigaPage() {
   const [leagueName, setLeagueName] = useState("");
   const [seasonNum, setSeasonNum] = useState<number | null>(null);
   const [standings, setStandings] = useState<Standing[]>([]);
+  // Postup a sestup, které liga opravdu má (III. třída a přebor bez postupu je nemají).
+  const [movement, setMovement] = useState<LeagueMovement>(NO_MOVEMENT);
   const [rounds, setRounds] = useState<LeagueRound[]>([]);
   const [statsData, setStatsData] = useState<StatsData | null>(null);
   const [newsArticles, setNewsArticles] = useState<NewsArticle[]>([]);
@@ -124,11 +129,12 @@ function LigaPage() {
   // Load own league standings on mount
   useEffect(() => {
     if (!teamId) return;
-    apiFetch<{ leagueName: string; season?: number; standings: Standing[] }>(`/api/teams/${teamId}/standings`)
+    apiFetch<{ leagueName: string; season?: number; standings: Standing[]; movement?: LeagueMovement }>(`/api/teams/${teamId}/standings`)
       .then((data) => {
         setLeagueName(data.leagueName);
         setSeasonNum(data.season ?? null);
         setStandings(data.standings);
+        setMovement(data.movement ?? NO_MOVEMENT);
         setLoadingStandings(false);
         setLoadedTabs((s) => new Set(s).add("tabulka"));
       })
@@ -142,11 +148,12 @@ function LigaPage() {
     setLoadedTabs(new Set());
     setRounds([]);
     setStatsData(null);
-    apiFetch<{ leagueName: string; season?: number; standings: Standing[] }>(`/api/leagues/${selectedLeagueId}/standings`)
+    apiFetch<{ leagueName: string; season?: number; standings: Standing[]; movement?: LeagueMovement }>(`/api/leagues/${selectedLeagueId}/standings`)
       .then((data) => {
         setLeagueName(data.leagueName);
         setSeasonNum(data.season ?? null);
         setStandings(data.standings);
+        setMovement(data.movement ?? NO_MOVEMENT);
         setLoadingStandings(false);
         setLoadedTabs((s) => new Set(s).add("tabulka"));
       })
@@ -193,11 +200,13 @@ function LigaPage() {
       if (teamId) {
         setLoadingStandings(true);
         setLoadedTabs(new Set());
-        apiFetch<{ leagueName: string; season?: number; standings: Standing[] }>(`/api/teams/${teamId}/standings`)
+        apiFetch<{ leagueName: string; season?: number; standings: Standing[]; movement?: LeagueMovement }>(`/api/teams/${teamId}/standings`)
           .then((data) => {
             setLeagueName(data.leagueName);
             setSeasonNum(data.season ?? null);
             setStandings(data.standings);
+            setMovement(data.movement ?? NO_MOVEMENT);
+        setMovement(data.movement ?? NO_MOVEMENT);
             setLoadingStandings(false);
             setLoadedTabs((s) => new Set(s).add("tabulka"));
           })
@@ -283,7 +292,7 @@ function LigaPage() {
       />
 
       {/* Tab content */}
-      {tab === "tabulka" && <StandingsTab standings={standings} teamId={teamId!} />}
+      {tab === "tabulka" && <StandingsTab standings={standings} teamId={teamId!} movement={movement} />}
       {!isOtherLeague && tab === "rozpis" && <ScheduleTab rounds={rounds} loaded={loadedTabs.has("rozpis")} teamId={teamId!} showAll />}
       {!isOtherLeague && tab === "vysledky" && <ScheduleTab rounds={rounds} loaded={loadedTabs.has("vysledky")} teamId={teamId!} showAll={false} />}
       {!isOtherLeague && tab === "statistiky" && <LeagueStatsTab data={statsData} loaded={loadedTabs.has("statistiky")} />}
@@ -468,7 +477,7 @@ function ArticleBody({ article }: { article: NewsArticle }) {
 type SortKey = "pos" | "team" | "played" | "wins" | "draws" | "losses" | "gd" | "points";
 type SortDir = "asc" | "desc";
 
-function StandingsTab({ standings, teamId }: { standings: Standing[]; teamId: string }) {
+function StandingsTab({ standings, teamId, movement }: { standings: Standing[]; teamId: string; movement: LeagueMovement }) {
   const [sortKey, setSortKey] = useState<SortKey>("pos");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
 
@@ -528,8 +537,8 @@ function StandingsTab({ standings, teamId }: { standings: Standing[]; teamId: st
         </thead>
         <tbody>
           {sorted.map((row, idx) => {
-            const isPromo = row.pos <= 2;
-            const isRel = row.pos >= totalTeams - 1;
+            const isPromo = movement.promotion && row.pos <= 2;
+            const isRel = movement.relegation && row.pos >= totalTeams - 1;
             return (
               <tr key={row.teamId ?? row.pos}
                 className={`border-b border-gray-50 transition-colors ${
@@ -584,11 +593,13 @@ function StandingsTab({ standings, teamId }: { standings: Standing[]; teamId: st
           })}
         </tbody>
       </table>
-      {/* Legend */}
-      <div className="flex items-center gap-4 px-4 py-2 border-t border-gray-100 text-xs text-muted">
-        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-pitch-500" /> Postup</span>
-        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-card-red" /> Sestup</span>
-      </div>
+      {/* Legenda jen pro postup a sestup, které liga opravdu má */}
+      {(movement.promotion || movement.relegation) && (
+        <div className="flex items-center gap-4 px-4 py-2 border-t border-gray-100 text-xs text-muted">
+          {movement.promotion && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-pitch-500" /> Postup</span>}
+          {movement.relegation && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-card-red" /> Sestup</span>}
+        </div>
+      )}
     </div>
   );
 }
