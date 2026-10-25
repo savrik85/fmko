@@ -13,6 +13,7 @@ import type { Bindings } from "../index";
 import { logger } from "../lib/logger";
 import type { AiCoachQueueMessage, CoachTask } from "../queue/messages";
 import { claimCoachTask, releaseCoachTask } from "./claims";
+import { topUpConcessions } from "./concessions";
 import { HOURLY_HOOKS } from "./hourly-hooks";
 import { findTodaysFixtures, prepareAiLineup } from "./match";
 import { ensureAiProfile } from "./profile";
@@ -173,6 +174,14 @@ export async function runAiCoachTask(
         if (useClaims) await releaseCoachTask(db, teamId, claimKey, gameDay);
         throw e;
       }
+    }
+    // Bufet: před dnešním domácím zápasem dorovná sklad podle pondělního plánu (concessions.ts).
+    // Opakované doručení nic dalšího nekoupí (sklad už stačí), nanečisto se nekupuje.
+    if (!opts.dryRun) {
+      await topUpConcessions(env, teamId, now).catch((e) => {
+        logger.warn({ module: M, teamId }, "dorovnání bufetu před zápasem", e);
+        return null;
+      });
     }
     const allDuplicate = done.every((d) => "status" in d && d.status === "duplicate");
     return { status: allDuplicate ? "duplicate" : "done", detail: done };

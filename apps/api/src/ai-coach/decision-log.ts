@@ -15,7 +15,8 @@ export interface DecisionEntry {
   /**
    * Druh rozhodnutí: `match`, `weekly`, `transfer_reply`, `transfer_market` (běh trhu: nouzový podpis,
    * inzeráty, nabídka k poptávce, skaut, výběr hráče; jeden zápis za běh), `transfer_negotiation` (tah
-   * AI kupujícího v jednání o ceně, i o poplatku za hostování), `friendly_offer`, `friendly_reply`.
+   * AI kupujícího v jednání o ceně, i o poplatku za hostování), `friendly_offer`, `friendly_reply`,
+   * `concession_topup` (dorovnání skladu bufetu před domácím zápasem podle pondělního plánu).
    */
   kind: string;
   mode: DecisionMode;

@@ -23,6 +23,7 @@ export const MODE_LABEL: Record<CoachMode, string> = { off: "bez modelu", shadow
 export const KIND_LABELS: Record<string, string> = {
   match: "zápas",
   weekly: "týden",
+  concession_topup: "doplnění bufetu",
   transfer_reply: "odpověď na nabídku",
   transfer_market: "trh",
   transfer_negotiation: "jednání o nákupu",
