@@ -16,7 +16,8 @@ import { Hono } from "hono";
 import { teamsRouter } from "../routes/teams";
 import { createSession, getSession } from "../auth/session";
 import { resolveDistrictSlot } from "../league/district-leagues";
-import { findAbandonedClubs, isTakeoverEnabled, runAbandonedClubTakeover, takeOverAbandonedClub } from "./abandoned";
+import { findAbandonedClubs, isTakeoverEnabled, MAX_TAKEOVERS_PER_RUN, runAbandonedClubTakeover, takeOverAbandonedClub } from "./abandoned";
+import { runWatchdog } from "../lib/watchdog";
 import { pickOverwritableAiTeam } from "./overwrite";
 import { findReclaimableClub } from "./reclaim";
 import type { Bindings } from "../index";
@@ -181,6 +182,34 @@ describe("převzetí opuštěného klubu AI trenérem", () => {
     // Vlastník se mezitím přihlásil: převzetí neproběhne, i když ho někdo zavolá přímo.
     await makeHuman(recentTeam, "u-recent", 0);
     expect(await takeOverAbandonedClub(db, recentTeam, new Date())).toBe(false);
+  }, 180_000);
+
+  it("víc opuštěných klubů naráz zabrzdí noční převzetí; hlídač to ohlásí, admin ho potvrdí ručně", async () => {
+    await freshDb();
+    const { aiTeams } = await foundLeague();
+    const gone = aiTeams.slice(0, MAX_TAKEOVERS_PER_RUN + 1);
+    for (const [i, id] of gone.entries()) await makeHuman(id, `u-gone-${i}`, 50);
+    expect((await findAbandonedClubs(db, new Date())).length).toBe(gone.length);
+
+    // Noční běh: nikoho nepřevezme a zaloguje proč.
+    const braked = await withLogs(() => runAbandonedClubTakeover(db, new Date()));
+    expect(braked.result).toBe(0);
+    expect(braked.problems.some((l) => l.includes("převzetí zabrzděno"))).toBe(true);
+    expect(await count("SELECT COUNT(*) AS n FROM teams WHERE ai_former_user_id IS NOT NULL")).toBe(0);
+
+    // Hlídač: brzda, AI trenéři bez jediného rozhodnutí za 24 h a AI klub v mínusu.
+    const aiInDebt = aiTeams[aiTeams.length - 1];
+    await db.prepare("UPDATE teams SET budget = -5000 WHERE id = ?").bind(aiInDebt).run();
+    const watch = await runWatchdog(env);
+    const codes = watch.problemy.map((p) => p.kod);
+    expect(codes).toEqual(expect.arrayContaining(["ai_takeover_brake", "ai_coach_silent", "ai_club_debt"]));
+    expect(watch.problemy.find((p) => p.kod === "ai_takeover_brake")?.hodnota).toBe(`${gone.length} klubů`);
+
+    // Ruční potvrzení převezme všechny.
+    expect(await runAbandonedClubTakeover(db, new Date(), { force: true })).toBe(gone.length);
+    // Vypnutý přepínač: brzdu hlídač nehlásí (převzetí stejně neběží).
+    await env.CACHE_KV.put("ai_club_takeover", "off");
+    expect((await runWatchdog(env)).problemy.map((p) => p.kod)).not.toContain("ai_takeover_brake");
   }, 180_000);
 });
 

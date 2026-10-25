@@ -159,6 +159,65 @@ export async function runWatchdog(env: Bindings): Promise<WatchdogResult> {
     });
   }
 
+  // ── 8. AI trenéři mlčí ──
+  // AI kluby v soutěži jsou, trenéři nejsou vypnutí, a přesto za 24 h žádné rozhodnutí:
+  // neběží cron nebo fronta. Trh a odpovědi se zapisují denně, takže ticho není normální.
+  const aiClubs = await scalar(
+    env.DB,
+    "SELECT COUNT(*) AS n FROM teams WHERE user_id = 'ai' AND parent_team_id IS NULL AND league_id IS NOT NULL",
+    "AI kluby v soutěži",
+  );
+  if (aiClubs && aiClubs > 0 && aiCoach && aiCoach.n === 0) {
+    const { readAllCoachModes } = await import("../ai-coach/mode");
+    const modes = await readAllCoachModes(env.CACHE_KV);
+    const decisionsAny = await scalar(
+      env.DB,
+      "SELECT COUNT(*) AS n FROM ai_coach_decisions WHERE created_at > strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-1 day')",
+      "rozhodnutí AI trenérů za 24 h",
+    );
+    if (Object.values(modes).some((m) => m !== "off") && decisionsAny === 0) {
+      problemy.push({
+        kod: "ai_coach_silent",
+        popis: "AI trenéři za 24 hodin nic nerozhodli, ačkoli nejsou vypnutí (neběží cron nebo fronta)",
+        hodnota: `${aiClubs} AI klubů`,
+      });
+    }
+  }
+
+  // ── 9. AI klub v mínusu ──
+  // AI si drží rezervu, záporný rozpočet znamená chybu v jeho hospodaření.
+  const aiDebt = await env.DB.prepare(
+    `SELECT name, budget FROM teams WHERE user_id = 'ai' AND parent_team_id IS NULL AND league_id IS NOT NULL AND budget < 0
+      ORDER BY budget LIMIT 5`,
+  ).all<{ name: string; budget: number }>()
+    .catch((e) => { logger.warn({ module: "watchdog" }, "kontrola rozpočtů AI klubů selhala", e); return null; });
+  if (aiDebt && aiDebt.results.length > 0) {
+    problemy.push({
+      kod: "ai_club_debt",
+      popis: "AI klub je v mínusu",
+      hodnota: aiDebt.results.map((t) => `${t.name} ${t.budget} Kč`).join(", "),
+    });
+  }
+
+  // ── 10. Převzetí opuštěných klubů zabrzděné ──
+  // Víc opuštěných klubů naráz noční převzetí neprovede (ai-clubs/abandoned.ts) a čeká na
+  // ruční potvrzení. Bez hlášení by brzda tiše držela a nikdo by o ní nevěděl.
+  try {
+    const { findAbandonedClubs, isTakeoverEnabled, MAX_TAKEOVERS_PER_RUN } = await import("../ai-clubs/abandoned");
+    if (await isTakeoverEnabled(env.CACHE_KV)) {
+      const waiting = await findAbandonedClubs(env.DB, new Date());
+      if (waiting.length > MAX_TAKEOVERS_PER_RUN) {
+        problemy.push({
+          kod: "ai_takeover_brake",
+          popis: `Převzetí opuštěných klubů zabrzděno (víc než ${MAX_TAKEOVERS_PER_RUN} naráz), zkontroluj seznam v adminu a potvrď ručně`,
+          hodnota: `${waiting.length} klubů`,
+        });
+      }
+    }
+  } catch (e) {
+    logger.warn({ module: "watchdog" }, "kontrola převzetí klubů selhala", e);
+  }
+
   return { ok: problemy.length === 0, problemy };
 }
 

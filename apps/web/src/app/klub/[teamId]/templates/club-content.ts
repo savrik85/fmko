@@ -94,7 +94,7 @@ export const AWARD_TITLES: Record<ClubWebsiteHistoryAward["kind"], string> = {
 /** Ocenění po sezónách; nejlepší jedenáctka sloučená do jednoho řádku se jmény. */
 export function awardsBySeason(h: ClubWebsiteHistory) {
   const seasons = [...new Set(h.awards.map((a) => a.seasonNumber))].sort((a, b) => b - a);
-  // Trenér sezóny z AI klubu má za jménem štítek „(AI)“ ve všech šablonách naráz.
+  // Trenér sezóny z AI klubu má za jménem robota 🤖 ve všech šablonách naráz.
   const awards = h.awards.map((a) => (a.name && a.coachIsAi ? { ...a, name: coachDisplayName(a.name, true) } : a));
   return seasons.map((seasonNumber) => {
     const list = awards.filter((a) => a.seasonNumber === seasonNumber);

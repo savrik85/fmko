@@ -6,6 +6,7 @@ import { WidgetSkeleton, WidgetError } from "../widget-frame";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { bestTextOn } from "@/lib/team-color";
 import { coachDisplayName } from "@/lib/coach-name";
+import { CoachName } from "@/components/manager/coach-name";
 import {
   RadarChart, LineChart, HBarChart, DivergingBar, Gauge,
   ChartEmpty, ChartHero, PRIMARY, DIVERGING, STATUS, seriesColor, compactCZK, fullCZK,
@@ -38,7 +39,7 @@ export function ManagerCardWidget({ data, teamId }: WidgetProps) {
           </div>
         )}
         <div className="min-w-0 flex-1">
-          <div className="font-heading font-bold group-hover:underline truncate">{coachDisplayName(manager.name, manager.coachIsAi === true)}</div>
+          <div className="font-heading font-bold group-hover:underline truncate"><CoachName name={manager.name} isAi={manager.coachIsAi === true} /></div>
           {manager.birthplace && <div className="text-sm text-muted">{manager.birthplace}</div>}
         </div>
       </div>

@@ -87,7 +87,7 @@ export function CoachClient({ page, siteUrl }: { page: ClubWebsiteCoachPage; sit
     ? [coach.age !== null ? ageLabel(coach.age) : null, coach.birthplace ? `rodiště ${coach.birthplace}` : null].filter(Boolean)
     : [];
   const metaCareer = coach ? [licence, coach.background].filter(Boolean) : [];
-  // Trenér AI klubu má za jménem štítek „(AI)“, jinak web vypadá stejně jako u lidského klubu.
+  // Trenér AI klubu má za jménem robota 🤖, jinak web vypadá stejně jako u lidského klubu.
   const coachName = coach ? coachDisplayName(coach.name, coach.coachIsAi) : null;
 
   return (

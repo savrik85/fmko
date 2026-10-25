@@ -15,7 +15,7 @@ import { RelationCard, RelationsOverview } from "@/components/relations/Relation
 import { isLightColor, bestTextOn } from "@/lib/team-color";
 import { coachAttributeEffects, licenceCap, LICENCE_LEVELS } from "@okresni-masina/shared";
 import { LicenceBadge } from "@/components/manager/LicenceBadge";
-import { coachDisplayName } from "@/lib/coach-name";
+import { CoachName } from "@/components/manager/coach-name";
 
 type CoachTab = "prehled" | "kabina" | "treneri" | "vzdelani" | "historie";
 const TAB_KEYS: CoachTab[] = ["prehled", "kabina", "treneri", "vzdelani", "historie"];
@@ -93,8 +93,9 @@ export default function ManagerDetailPage() {
   if (loading) return <div className="min-h-dvh flex items-center justify-center"><Spinner size="lg" /></div>;
   if (!manager || !team) return <div className="page-container">Trenér nenalezen.</div>;
 
-  // Jediný viditelný rozdíl AI klubu: štítek „(AI)“ za jménem trenéra.
-  const displayName = coachDisplayName(manager.name, manager.coachIsAi === true);
+  // Jediný viditelný rozdíl AI klubu: odznak s robotem u jména trenéra.
+  const isAiCoach = manager.coachIsAi === true;
+  const displayName = <CoachName name={manager.name} isAi={isAiCoach} />;
 
   const color = team.primary_color || "#2D5F2D";
   const isDarkText = bestTextOn(color) === "dark";
@@ -391,7 +392,7 @@ export default function ManagerDetailPage() {
 
         {/* ═══ Trenéři — cizí profil: karta vztahu, vlastní: přehled ve skupinách ═══ */}
         {tab === "treneri" && teamId && !isOwn && (
-          <RelationCard myTeamId={teamId} otherTeamId={managerId} otherManagerName={displayName} />
+          <RelationCard myTeamId={teamId} otherTeamId={managerId} otherManagerName={manager.name} />
         )}
         {tab === "treneri" && isOwn && teamId && <RelationsOverview teamId={teamId} />}
 

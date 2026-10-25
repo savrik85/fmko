@@ -9,7 +9,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { apiAction, apiFetch } from "@/lib/api";
-import { coachDisplayName } from "@/lib/coach-name";
+import { CoachName } from "@/components/manager/coach-name";
 import { Modal } from "@/components/ui";
 import { EntityLink } from "@/components/ui";
 import { licenceLabel } from "@okresni-masina/shared";
@@ -698,7 +698,7 @@ function GrantForm({ data, teamId, onClose, onSaved }: {
               <select className="select w-full mt-1" value={target} onChange={(e) => setTarget(e.target.value)}>
                 {cile.map((t) => (
                   <option key={t.teamId} value={t.teamId}>
-                    {t.managerName ? `${coachDisplayName(t.managerName, t.coachIsAi === true)} (${t.teamName})` : t.teamName}
+                    {t.managerName ? <><CoachName name={t.managerName} isAi={t.coachIsAi === true} /> ({t.teamName})</> : t.teamName}
                     {t.vMinusu ? ", v mínusu" : ""}
                   </option>
                 ))}

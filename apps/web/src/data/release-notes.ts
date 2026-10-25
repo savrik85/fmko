@@ -16,7 +16,7 @@ export const RELEASE_NOTES: ReleaseNote[] = [
     emoji: "🤖",
     title: "AI trenéři a nové soutěže",
     items: [
-      "Kluby bez manažera vedou AI trenéři, každý se svou povahou. Skládají sestavu, trénují, starají se o stadion, shánějí sponzory a kupují i prodávají hráče stejně jako ty. Poznáš je podle štítku (AI) u trenéra.",
+      "Kluby bez manažera vedou AI trenéři, každý se svou povahou. Skládají sestavu, trénují, starají se o stadion, shánějí sponzory a kupují i prodávají hráče stejně jako ty. Poznáš je podle robota 🤖 u jména trenéra.",
       "Klub, do kterého se manažer 45 dní nepřihlásí, převezme AI trenér. Po návratu ti hra při přihlášení nabídne vzít si ho zpátky i s tvým trenérem.",
       "V Českých Budějovicích se otevírá okresní přebor: kdo se přihlásí, dostane vlastní klub místo jednoho z AI klubů. V Prachaticích začíná III. třída ze 14 menších obcí, hraje se ve středu a v neděli, zatím bez postupu a sestupu.",
     ],

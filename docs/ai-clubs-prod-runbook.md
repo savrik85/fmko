@@ -34,6 +34,22 @@ Cherry-pick schválených commitů z větve `worktree-ai-clubs` ve worktree na `
 Pozn.: III. třída se musí založit včas. Rozpis začíná nejbližší středou nebo nedělí aspoň dva dny po
 založení a musí se vejít do posledního kola přeboru (28. 1. 2027); když se nevejde, doplní páteční kola.
 
+## Náhled na localhostu (stav po nasazení)
+
+Noční záloha z R2 (`prales-backups/denni/prod-YYYY-MM-DD.sql.gz`, ne export přes den) → SQLite →
+migrace 0276 → soubor podložený lokální D1 (`backups/local-state/v3/d1/...`) → lokální KV
+`ai_club_takeover = off`, `ai_coach_mode = shadow` → kroky 2a–i přes lokální admin
+(`http://localhost:8790`) se stejným seedem → `ai_club_takeover = on`. Hotovo 25. 10. ze zálohy
+01:20 UTC: kroky sedí na tabulku výše (33/46, 2 trenéři U21, 3 převzaté, III. třída 26 kol st/ne).
+
+## Testing (25. 10.)
+
+Na testingu `c618f71e` (obsah větve jedním commitem nad testingem). Migrace 0276 na `prales-db-test`,
+`ai_club_takeover = off` (převzetí by tam vzalo 25 klubů včetně testovacích účtů T1–T5).
+Narovnání: Kofola liga a U21, ČB a U21, Český Krumlov a U21, III. třída a U21 (`below-league`).
+III. třída na testingu vznikla registrací 29. 9.: dostala st/ne a vypnutý postup, rozpis až
+rolloverem (sezóna na testingu končí 30. 11. a 26 kol se nevejde).
+
 ## 3. Po nasazení
 
 - Admin → „AI trenéři“: deník rozhodnutí, chybovost modelu, povaha trenérů. Hlídač provozu hlásí,

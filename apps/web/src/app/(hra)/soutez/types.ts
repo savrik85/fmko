@@ -114,7 +114,7 @@ export interface EvidenceItem { kind: string; label: string; detail: string }
 export interface DisciplineTarget {
   teamId: string; teamName: string;
   managerName: string | null;
-  /** Trenér AI klubu: za jméno patří štítek „(AI)“. */
+  /** Trenér AI klubu: k jménu patří odznak s robotem. */
   coachIsAi?: boolean;
   managerAvatar: Record<string, unknown> | null;
   evidence: EvidenceItem[];
