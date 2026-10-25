@@ -290,7 +290,7 @@ describe("lidský klub", () => {
     expect(texts[0].body).toContain("Trucování ti nepomůže");
   }, 60_000);
 
-  it("hodinová úloha má nespokojené hráče jako poslední část", () => {
-    expect(HOURLY_HOOKS.map((h) => h.name)).toEqual(["transfer_replies", "transfer_market", "friendlies", "unrest"]);
+  it("hodinová úloha řeší nespokojené hráče až po přestupech a přátelácích, pak incidenty a souboje konce sezóny", () => {
+    expect(HOURLY_HOOKS.map((h) => h.name)).toEqual(["transfer_replies", "transfer_market", "friendlies", "unrest", "incidents", "season_duels"]);
   });
 });
