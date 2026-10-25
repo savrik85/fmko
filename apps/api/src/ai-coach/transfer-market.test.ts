@@ -1,8 +1,22 @@
 import { describe, expect, it } from "vitest";
 import { generateAiProfile } from "./profile";
-import { AI_TO_AI_CHANCE, marketDayChance, marketHour } from "./transfer-market";
+import { AI_TO_AI_CHANCE, buyThreshold, marketDayChance, marketHour } from "./transfer-market";
 import { monthlyDealLimit, openDealLimit } from "./valuation";
 import { pragueDay, pragueHour, parseDbTime } from "./transfer-club";
+
+describe("přestupní kurz z pondělní správy", () => {
+  it("bez kurzu kupuje od potřeby 0,3, s kurzem „kupovat“ na vybraný post dřív", () => {
+    expect(buyThreshold("FWD", null)).toBe(0.3);
+    const buy = { stance: "buy" as const, focus: ["FWD"], sellIds: [] };
+    expect(buyThreshold("FWD", buy)).toBe(0.15);
+    expect(buyThreshold("DEF", buy)).toBe(0.3);
+  });
+
+  it("„držet“ a „prodávat“ kupují jen na prázdné místo v základu", () => {
+    expect(buyThreshold("FWD", { stance: "hold", focus: ["FWD"], sellIds: [] })).toBe(0.65);
+    expect(buyThreshold("MID", { stance: "sell", focus: [], sellIds: ["p1"] })).toBe(0.65);
+  });
+});
 
 describe("rozvrh AI klubu na trhu", () => {
   it("každý klub se na trh dívá v jinou hodinu mezi 9 a 19 a vždy ve stejnou", () => {

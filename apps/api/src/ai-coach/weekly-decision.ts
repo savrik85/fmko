@@ -4,6 +4,10 @@
  * Model nebo náhradní pravidlo vybírá z nabídky (trénink, vstupné, trávník, stavby,
  * vybavení, zaměstnanci, akademie, bannery, přesuny s U21). Kód hlídá rozpočet: placené
  * akce se berou jen do výše peněz nad rezervou, kterou si trenér drží podle šetrnosti.
+ *
+ * Přestupní kurz na týden (kupovat / držet / prodávat, posty k posílení, koho nabídnout)
+ * volí taky model, ale nic se podle něj hned neprovede: řídí se jím denní práce na trhu
+ * (`transfer-market.ts`). Ceny dál počítá jen kód (spec 3.7).
  */
 
 import type { AiCoachProfile } from "./profile";
@@ -22,6 +26,14 @@ export const PITCH_CARE_CHOICES = ["keep", "auto", "manual", "off"] as const;
 export type PitchCareChoice = typeof PITCH_CARE_CHOICES[number];
 export const ACADEMY_CHOICES = ["keep", "none", "minimal", "medium", "high"] as const;
 export type AcademyChoice = typeof ACADEMY_CHOICES[number];
+export const TRANSFER_STANCES = ["buy", "hold", "sell"] as const;
+export type TransferStance = typeof TRANSFER_STANCES[number];
+export const TRANSFER_POSITIONS = ["GK", "DEF", "MID", "FWD"] as const;
+export type TransferPosition = typeof TRANSFER_POSITIONS[number];
+const MAX_TRANSFER_FOCUS = 2;
+const MAX_TRANSFER_SELL = 3;
+/** Od jaké potřeby postu kupuje náhradní pravidlo (stejně jako trh bez kurzu). */
+const FALLBACK_BUY_NEED = 0.3;
 
 export const PITCH_MAINTENANCE_COST: Record<Exclude<PitchMaintenanceChoice, "none">, { cost: number; improvement: number }> = {
   basic: { cost: 1600, improvement: 10 },
@@ -62,6 +74,28 @@ export interface U21MoveOption {
   label: string;
 }
 
+export interface TransferNeedInfo {
+  position: TransferPosition;
+  /** 0–1 jako `PositionNeed.need` (squad.ts). */
+  need: number;
+  missing: number;
+  startersAverage: number;
+}
+
+/** Přebytečný hráč, kterého jde dát na přestupovou listinu. */
+export interface SurplusOption {
+  key: string;
+  playerId: string;
+  label: string;
+}
+
+export interface TransferPlan {
+  stance: TransferStance;
+  focus: TransferPosition[];
+  /** Id hráčů z `sell` (klíče přeložené přes kontext), trh je vystaví přednostně. */
+  sellIds: string[];
+}
+
 export interface WeeklyContext {
   teamId: string;
   teamName: string;
@@ -89,6 +123,7 @@ export interface WeeklyContext {
   academy: { current: string; weeklyCostNow: number };
   banners: { active: number; max: number; offers: BannerOption[] };
   u21: { exists: boolean; aTeamSize: number; promote: U21MoveOption[]; sendDown: U21MoveOption[] };
+  transfers: { squadSize: number; targetSize: number; needs: TransferNeedInfo[]; surplus: SurplusOption[] };
 }
 
 export interface WeeklyDecision {
@@ -104,6 +139,7 @@ export interface WeeklyDecision {
   banners: string[];
   promote: string[];
   sendDown: string[];
+  transfers: { stance: TransferStance; focus: TransferPosition[]; sell: string[] };
   reasoning: string;
 }
 
@@ -126,6 +162,8 @@ export interface WeeklyPlan {
   skipped: Array<{ item: string; reason: string }>;
   /** Kolik stojí placené akce dohromady (musí být ≤ spendable). */
   totalCost: number;
+  /** Přestupní kurz pro trh na tento týden. */
+  transfers: TransferPlan;
 }
 
 const MAX_STADIUM = 2;
@@ -247,7 +285,41 @@ export function fallbackWeeklyDecision(ctx: WeeklyContext): WeeklyDecision {
   return {
     training: { focus, intensity, sessions, approach },
     ticketPrice, pitchMaintenance, pitchCareMode, stadium, equipmentUpgrades, equipmentRepairs, hire, academy, banners,
-    promote, sendDown, reasoning: "fallback rule",
+    promote, sendDown, transfers: fallbackTransfers(ctx), reasoning: "fallback rule",
+  };
+}
+
+/**
+ * Přestupní kurz bez modelu, stejně jako se trh choval bez kurzu: kupuje, kde je potřeba
+ * aspoň 0,3 a jsou peníze, přeplněný kádr obchodník pročišťuje, jinak drží.
+ */
+export function fallbackTransfers(ctx: WeeklyContext): WeeklyDecision["transfers"] {
+  const t = ctx.transfers;
+  const urgent = t.needs.filter((n) => n.need >= FALLBACK_BUY_NEED);
+  const stance: TransferStance = urgent.length > 0 && ctx.finance.spendable > 0 ? "buy"
+    : t.squadSize > t.targetSize && ctx.profile.trading >= 40 ? "sell"
+      : "hold";
+  return { stance, focus: urgent.slice(0, MAX_TRANSFER_FOCUS).map((n) => n.position), sell: [] };
+}
+
+/** Přestupní blok je samostatný: chybný nebo chybějící nahradí náhradní kurz, zbytek týdne platí. */
+function validateTransfers(raw: unknown, ctx: WeeklyContext, rejected: string[]): WeeklyDecision["transfers"] {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    rejected.push("transfers: chybí, platí náhradní kurz");
+    return fallbackTransfers(ctx);
+  }
+  const r = raw as Record<string, unknown>;
+  const stance = pick(r.stance, TRANSFER_STANCES, "transfers.stance");
+  if (typeof stance === "object") {
+    rejected.push(`${stance.error}, platí náhradní kurz`);
+    return fallbackTransfers(ctx);
+  }
+  const focus = keys(r.focus, "transfers.focus", new Set(TRANSFER_POSITIONS), MAX_TRANSFER_FOCUS, rejected);
+  const sell = keys(r.sell, "transfers.sell", new Set(ctx.transfers.surplus.map((o) => o.key)), MAX_TRANSFER_SELL, rejected);
+  return {
+    stance,
+    focus: Array.isArray(focus) ? focus as TransferPosition[] : [],
+    sell: Array.isArray(sell) ? sell : [],
   };
 }
 
@@ -336,6 +408,7 @@ export function validateWeeklyDecision(raw: unknown, ctx: WeeklyContext): Weekly
       banners: sets.banners as string[],
       promote: sets.promote as string[],
       sendDown: sets.sendDown as string[],
+      transfers: validateTransfers(r.transfers, ctx, rejected),
       reasoning: typeof r.reasoning === "string" ? r.reasoning.slice(0, 600) : "",
     },
   };
@@ -428,7 +501,15 @@ export function planWeeklyActions(ctx: WeeklyContext, d: WeeklyDecision): Weekly
     const o = ctx.stadium.find((x) => x.key === key);
     if (o && investPay(key, o.cost)) actions.push({ kind: "stadium_upgrade", key, facility: o.ref, cost: o.cost });
   }
-  return { actions, skipped, totalCost: total };
+  // Rozhodnutí z doby před přestupním kurzem (uložené plány, testy) ho nemá: platí náhradní.
+  const course = d.transfers ?? fallbackTransfers(ctx);
+  const surplusById = new Map(ctx.transfers.surplus.map((o) => [o.key, o.playerId]));
+  const transfers: TransferPlan = {
+    stance: course.stance,
+    focus: course.focus,
+    sellIds: course.sell.map((k) => surplusById.get(k)).filter((id): id is string => !!id),
+  };
+  return { actions, skipped, totalCost: total, transfers };
 }
 
 /**
@@ -461,7 +542,7 @@ export function buildTrainingPlan(
 
 export const WEEKLY_SYSTEM_PROMPT = [
   "You are the head coach and manager of an amateur Czech district football club in a football management game.",
-  "Every Monday you run the club: training, ticket price, pitch, stadium, equipment, staff, youth academy, sponsors and squad moves between the A-team and the U21 team.",
+  "Every Monday you run the club: training, ticket price, pitch, stadium, equipment, staff, youth academy, sponsors, squad moves between the A-team and the U21 team and your transfer course for the week.",
   "Decide like a sensible real club manager with YOUR personality. Spend money only on things that help the club; never risk the club's finances.",
   "You only choose among the listed options (by their keys). The game checks every rule and the money reserve itself.",
   "Answer with exactly one JSON object and nothing else.",
@@ -482,6 +563,8 @@ export function styleText(p: AiCoachProfile): string {
   else if (p.ambition <= 30) parts.push("you think long term and accept a modest season");
   if (p.youthFocus >= 70) parts.push("you believe in youth and the academy");
   else if (p.youthFocus <= 30) parts.push("you trust experienced players more than youngsters");
+  if (p.trading >= 70) parts.push("you like doing transfer deals and keep the squad lean");
+  else if (p.trading <= 30) parts.push("you rarely buy or sell players");
   return parts.length ? `${parts.join("; ")}.` : "a balanced, pragmatic manager.";
 }
 
@@ -490,7 +573,7 @@ export function renderWeeklyPrompt(ctx: WeeklyContext): string {
   const f = ctx.finance;
   const L: string[] = [];
   L.push("YOUR PERSONALITY (0-100):");
-  L.push(`ambition ${p.ambition}, thrift ${p.thrift}, building (stadium and equipment) ${p.building}, youth focus ${p.youthFocus}, risk ${p.risk}, patience ${p.patience}. Favourite tactic: ${p.favouriteTactic}.`);
+  L.push(`ambition ${p.ambition}, thrift ${p.thrift}, building (stadium and equipment) ${p.building}, youth focus ${p.youthFocus}, risk ${p.risk}, patience ${p.patience}, trading ${p.trading}. Favourite tactic: ${p.favouriteTactic}.`);
   L.push("");
   L.push(`CLUB ${ctx.teamName}: ${ctx.league.position ? `table position ${ctx.league.position}/${ctx.league.teams}, ${ctx.league.points} pts after ${ctx.league.played} matches` : "season just started"}. Reputation ${ctx.reputation}/100.`);
   L.push(`MONEY: budget ${czk(ctx.budget)}. Weekly running costs about ${czk(f.weeklyRunningCost)}, weekly income about ${czk(f.weeklyIncome)}. You keep a reserve of ${f.reserveWeeks} weeks of running costs = ${czk(f.reserve)}. Money you may spend this week: ${czk(f.spendable)}, of which at most ${czk(investBudgetFor(p, f.spendable))} on stadium and new equipment (your building appetite).`);
@@ -521,7 +604,14 @@ export function renderWeeklyPrompt(ctx: WeeklyContext): string {
   if (ctx.u21.promote.length) L.push(`Promote from U21 to the A-team: ${ctx.u21.promote.map((o) => `${o.key} ${o.label}`).join("; ")}.`);
   if (ctx.u21.sendDown.length) L.push(`Send from the A-team down to U21 for playing time: ${ctx.u21.sendDown.map((o) => `${o.key} ${o.label}`).join("; ")}.`);
   L.push("");
-  L.push("DECIDE (JSON keys): training {focus, intensity, sessions 1-5, approach}, ticketPrice, pitchMaintenance, pitchCareMode, stadium (keys, max 2), equipmentUpgrades (keys, max 3), equipmentRepairs (keys), hire (candidate keys, max 1), academy, banners (offer keys), promote (keys, max 2), sendDown (keys, max 2), reasoning (max 40 words).");
+  const t = ctx.transfers;
+  L.push(`TRANSFERS: A-team squad ${t.squadSize} players (you want about ${t.targetSize}; on match days a few players are always missing).`);
+  L.push(`Weak positions (need 0-1, starters' average rating): ${t.needs.length ? t.needs.map((n) => `${n.position} need ${n.need.toFixed(2)}, starters ${n.startersAverage}${n.missing > 0 ? `, ${n.missing} player(s) short` : ""}`).join("; ") : "none, every position is covered"}.`);
+  L.push("Surplus players you could put on the transfer list (key: position, age, rating):");
+  L.push(t.surplus.length ? t.surplus.map((o) => `${o.key}: ${o.label}`).join("\n") : "(none)");
+  L.push("Transfer course for this week (your scouts then work on it every day; the game sets all prices and never overpays): buy = look for a player for your weak positions within the money above your reserve; hold = no purchases unless a starting position is empty; sell = put surplus players on the transfer list, no purchases unless a starting position is empty. focus = up to 2 positions to strengthen first. sell = up to 3 surplus keys to list first.");
+  L.push("");
+  L.push("DECIDE (JSON keys): training {focus, intensity, sessions 1-5, approach}, ticketPrice, pitchMaintenance, pitchCareMode, stadium (keys, max 2), equipmentUpgrades (keys, max 3), equipmentRepairs (keys), hire (candidate keys, max 1), academy, banners (offer keys), promote (keys, max 2), sendDown (keys, max 2), transfers {stance buy/hold/sell, focus (positions GK/DEF/MID/FWD, max 2), sell (surplus keys, max 3)}, reasoning (max 40 words).");
   L.push("Paid items are executed in the order repairs, pitch, hiring, equipment, stadium and stop when the money above the reserve runs out.");
   return L.join("\n");
 }
@@ -557,8 +647,18 @@ export function weeklyDecisionSchema(ctx: WeeklyContext): Record<string, unknown
       banners: arr(ctx.banners.offers.map((o) => o.key)),
       promote: arr(ctx.u21.promote.map((o) => o.key)),
       sendDown: arr(ctx.u21.sendDown.map((o) => o.key)),
+      transfers: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          stance: { type: "string", enum: [...TRANSFER_STANCES] },
+          focus: { type: "array", items: { type: "string", enum: [...TRANSFER_POSITIONS] }, maxItems: MAX_TRANSFER_FOCUS },
+          sell: arr(ctx.transfers.surplus.map((o) => o.key)),
+        },
+        required: ["stance", "focus", "sell"],
+      },
       reasoning: { type: "string" },
     },
-    required: ["training", "ticketPrice", "pitchMaintenance", "pitchCareMode", "stadium", "equipmentUpgrades", "equipmentRepairs", "hire", "academy", "banners", "promote", "sendDown", "reasoning"],
+    required: ["training", "ticketPrice", "pitchMaintenance", "pitchCareMode", "stadium", "equipmentUpgrades", "equipmentRepairs", "hire", "academy", "banners", "promote", "sendDown", "transfers", "reasoning"],
   };
 }

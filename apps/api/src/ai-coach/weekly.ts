@@ -22,12 +22,16 @@ import { callCoachModel, COACH_MODEL } from "./llm";
 import { readCoachMode } from "./mode";
 import { maybeSignMainSponsor } from "./main-sponsor";
 import { ensureAiProfile } from "./profile";
+import { analyzeSquad, loadClubSquad, TARGET_SENIOR_SQUAD } from "./squad";
 import {
   buildTrainingPlan, computeReserve, fallbackWeeklyDecision, planWeeklyActions, renderWeeklyPrompt, reserveWeeksFor,
   validateWeeklyDecision, weeklyDecisionSchema, WEEKLY_SYSTEM_PROMPT,
-  type BannerOption, type PricedOption, type RepairChoice, type StaffCandidateOption, type U21MoveOption, type WeeklyAction,
-  type WeeklyContext, type WeeklyDecision,
+  type BannerOption, type PricedOption, type RepairChoice, type StaffCandidateOption, type SurplusOption, type U21MoveOption,
+  type WeeklyAction, type WeeklyContext, type WeeklyDecision,
 } from "./weekly-decision";
+
+/** Kolik přebytečných hráčů model uvidí k vystavení. */
+const MAX_SURPLUS_OPTIONS = 8;
 
 const M = "ai-coach-weekly";
 
@@ -246,6 +250,18 @@ export async function loadWeeklyContext(db: D1Database, teamId: string, gameDayO
     }
   }
 
+  // Přestupy: stejný rozbor kádru, jakým se řídí trh (potřeby postů, kdo je navíc a jde pustit).
+  const analysis = analyzeSquad(
+    await loadClubSquad(db, teamId).catch((e) => { logger.warn({ module: M, teamId }, "kádr pro přestupy", e); return []; }),
+    profile,
+  );
+  const surplus: SurplusOption[] = analysis.members
+    .filter((m) => !m.isU21Roster && !m.loanedIn && analysis.importanceOf(m.id) === "surplus" && analysis.sellBlock(m.id) === null)
+    .sort((a, b) => (b.age - a.age) || (a.rating - b.rating))
+    .slice(0, MAX_SURPLUS_OPTIONS)
+    // L jako listina: S už má stadion a model by si klíče spletl.
+    .map((m, i) => ({ key: `L${i + 1}`, playerId: m.id, label: `${m.position} ${m.age}y rating ${m.rating}` }));
+
   const effectivePrice = fans && fans.base_ticket_price > 0 ? fans.base_ticket_price : villageBase;
   const youthWeekly = { none: 0, minimal: 1500, medium: 5000, high: 12000 }[(team.youth_investment ?? "none") as "none"] ?? 0;
   return {
@@ -293,6 +309,12 @@ export async function loadWeeklyContext(db: D1Database, teamId: string, gameDayO
     academy: { current: team.youth_investment ?? "none", weeklyCostNow: Math.round(youthWeekly / 4.3) },
     banners: { active: bannerData?.activeBanners ?? 0, max: MAX_BANNERS, offers },
     u21: { exists: !!u21, aTeamSize: squad.length, promote, sendDown },
+    transfers: {
+      squadSize: analysis.seniorOwnCount,
+      targetSize: TARGET_SENIOR_SQUAD,
+      needs: analysis.needs.map((n) => ({ position: n.position, need: Math.round(n.need * 100) / 100, missing: n.missing, startersAverage: n.startersAverage })),
+      surplus,
+    },
   };
 }
 
@@ -446,7 +468,8 @@ export async function runWeeklyReview(env: Bindings, teamId: string, now: Date, 
     contextRef: `week:${ctx.gameDay}`,
     inputSummary: renderWeeklyPrompt(ctx),
     rawOutput: decided.raw,
-    actions: { decision: decided.decision, rejected: decided.rejected, plan: plan.actions, skipped: plan.skipped, at: now.toISOString() },
+    // `transferPlan` čte denní práce na trhu (transfer-market.ts), `at` je čas rozhodnutí z hodin hry.
+    actions: { decision: decided.decision, rejected: decided.rejected, plan: plan.actions, skipped: plan.skipped, transferPlan: plan.transfers, at: now.toISOString() },
     executed: executed.length ? executed : null,
     usedFallback: decided.used === "fallback",
     error: decided.error,

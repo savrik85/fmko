@@ -51,6 +51,11 @@ function context(budget: number, p: AiCoachProfile = profile()): WeeklyContext {
       promote: [{ key: "U1", playerId: "young-1", label: "MID 19y rating 41" }],
       sendDown: [{ key: "Y1", playerId: "young-2", label: "DEF 18y rating 22" }],
     },
+    transfers: {
+      squadSize: 21, targetSize: 24,
+      needs: [{ position: "FWD", need: 0.42, missing: 1, startersAverage: 44 }, { position: "DEF", need: 0.12, missing: 0, startersAverage: 50 }],
+      surplus: [{ key: "L1", playerId: "old-1", label: "MID 35y rating 38" }, { key: "L2", playerId: "old-2", label: "DEF 33y rating 40" }],
+    },
   };
 }
 
@@ -67,6 +72,7 @@ const everything: WeeklyDecision = {
   banners: ["B1", "B2", "B3"],
   promote: ["U1"],
   sendDown: ["Y1"],
+  transfers: { stance: "sell", focus: ["FWD"], sell: ["L2"] },
   reasoning: "all in",
 };
 
@@ -160,6 +166,39 @@ describe("kontrola odpovědi modelu", () => {
     expect(validateWeeklyDecision({ ...everything, ticketPrice: "double" }, context(100_000)).ok).toBe(false);
   });
 
+  it("přestupní kurz: platný projde a hráči z listiny se v plánu přeloží na id", () => {
+    const r = validateWeeklyDecision(everything, context(100_000));
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.decision.transfers).toEqual({ stance: "sell", focus: ["FWD"], sell: ["L2"] });
+    expect(planWeeklyActions(context(100_000), r.decision).transfers).toEqual({ stance: "sell", focus: ["FWD"], sellIds: ["old-2"] });
+  });
+
+  it("chybný přestupní kurz nahradí náhradní, zbytek týdne platí; cizí klíče a posty se zahodí", () => {
+    const bad = validateWeeklyDecision({ ...everything, transfers: { stance: "panic", focus: [], sell: [] } }, context(100_000));
+    expect(bad.ok).toBe(true);
+    if (bad.ok) {
+      // Náhradní kurz: FWD má potřebu 0,42 a jsou peníze → kupovat, posílit útok.
+      expect(bad.decision.transfers).toEqual({ stance: "buy", focus: ["FWD"], sell: [] });
+      expect(bad.decision.stadium).toEqual(["S1", "S2"]);
+      expect(bad.rejected.some((x) => x.includes("transfers.stance"))).toBe(true);
+    }
+    const missing = validateWeeklyDecision({ ...everything, transfers: undefined }, context(100_000));
+    if (missing.ok) expect(missing.decision.transfers.stance).toBe("buy");
+    const foreign = validateWeeklyDecision({ ...everything, transfers: { stance: "hold", focus: ["KEEPER", "MID"], sell: ["S1", "L1"] } }, context(100_000));
+    expect(foreign.ok).toBe(true);
+    if (foreign.ok) expect(foreign.decision.transfers).toEqual({ stance: "hold", focus: ["MID"], sell: ["L1"] });
+  });
+
+  it("náhradní kurz: bez peněz nad rezervou drží, přeplněný kádr obchodník prodává", () => {
+    expect(fallbackWeeklyDecision(context(0)).transfers.stance).toBe("hold");
+    const crowded = { ...context(0, profile({ trading: 70 })) };
+    crowded.transfers = { ...crowded.transfers, squadSize: 27, needs: [] };
+    expect(fallbackWeeklyDecision(crowded).transfers.stance).toBe("sell");
+    const lean = { ...crowded, transfers: { ...crowded.transfers, squadSize: 22 } };
+    expect(fallbackWeeklyDecision(lean).transfers.stance).toBe("hold");
+  });
+
   it("počet tréninků mimo 1 až 5 se srovná do mezí, rozhodnutí platí", () => {
     const r = validateWeeklyDecision({ ...everything, training: { ...everything.training, sessions: 0 } }, context(100_000));
     expect(r.ok).toBe(true);
@@ -192,5 +231,7 @@ describe("tréninkový plán a vstupné", () => {
     expect(text).toContain("Money you may spend this week");
     expect(text).toContain("S1: changing_rooms 0->1");
     expect(text).toContain("C1: asistent");
+    expect(text).toContain("L1: MID 35y rating 38");
+    expect(text).toContain("FWD need 0.42");
   });
 });

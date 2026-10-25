@@ -617,6 +617,36 @@ describe("AI klub na trhu", () => {
     expect(await budgetOf("ai-club")).toBe(150_000 - 500);
   });
 
+  it("pondělní kurz „držet“ zastaví nákup na post, kde nic nechybí; kurz nanečisto se nepočítá", async () => {
+    // Útok bez dvou nejlepších: potřeba kolem 0,58, kupovalo by se, ale místo v základu není prázdné.
+    await db.prepare("UPDATE players SET team_id = 'third' WHERE id IN ('ai-fwd1', 'ai-fwd2')").run();
+    const plan = { stance: "hold", focus: [], sellIds: [] };
+    await db.prepare("INSERT INTO ai_coach_decisions (id, team_id, kind, mode, actions) VALUES ('weekly-1', 'ai-club', 'weekly', 'on', ?)")
+      .bind(JSON.stringify({ transferPlan: plan, at: new Date().toISOString() })).run();
+    const profile = { ...PROFILE, ambition: 80, thrift: 20 };
+    const bought = (r: Awaited<ReturnType<typeof runTransferMarket>>) => r.actions.some((a) => (a.kind === "offer" || a.kind === "bid") && a.result === "sent");
+
+    expect(bought(await runTransferMarket(env, "ai-club", later(), { profile, ignoreSchedule: true }))).toBe(false);
+    await db.prepare("UPDATE ai_coach_decisions SET mode = 'shadow' WHERE id = 'weekly-1'").run();
+    const res = await runTransferMarket(env, "ai-club", later(), { profile, ignoreSchedule: true });
+    expect(bought(res)).toBe(true);
+    expect(res.actions.find((a) => a.kind === "offer")?.position).toBe("FWD");
+  });
+
+  it("pondělní kurz „prodávat“ vystaví hráče, kterého trenér vybral, i když kádr není přeplněný", async () => {
+    const profile = { ...PROFILE, trading: 40 };
+    const listedBy = async () => (await runTransferMarket(env, "ai-club", later(), { profile, ignoreSchedule: true })).actions
+      .filter((a) => a.kind === "list" && a.result === "listed").map((a) => a.playerId);
+    // 20 hráčů a neobchodník: bez kurzu nikoho nevystaví.
+    expect(await listedBy()).toEqual([]);
+    await db.prepare("INSERT INTO ai_coach_decisions (id, team_id, kind, mode, actions) VALUES ('weekly-2', 'ai-club', 'weekly', 'on', ?)")
+      .bind(JSON.stringify({ transferPlan: { stance: "sell", focus: [], sellIds: ["ai-fwd4"] }, at: new Date().toISOString() })).run();
+    const listed = await listedBy();
+    // Vybraný útočník jde první, i když nejstarší z přebytku je obránce ai-ext2.
+    expect(listed[0]).toBe("ai-fwd4");
+    expect(listed).toContain("ai-ext2");
+  });
+
   it("přeplněný kádr vystaví přebytek, ale koho za 30 dní dvakrát nikdo nekoupil, toho znovu nenabízí", async () => {
     // 20 hráčů + 6 navíc = 26, nad cílem 24.
     const extra: Array<[string, string, number, number]> = [

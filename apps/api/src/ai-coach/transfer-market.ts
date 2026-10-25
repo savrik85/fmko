@@ -53,6 +53,58 @@ const MAX_OFFER_ATTEMPTS = 3;
 /** Hráče, jehož inzerát tolikrát propadl bez prodeje za posledních `UNSOLD_WINDOW_DAYS`, AI znovu nevystaví. */
 const MAX_UNSOLD_LISTINGS = 2;
 const UNSOLD_WINDOW_DAYS = 30;
+/** Potřeba postu, od které AI kupuje (bez přestupního kurzu i s kurzem „kupovat“). */
+const BUY_NEED = 0.3;
+/** Post, který trenér v pondělí určil k posílení: stačí menší potřeba. */
+const FOCUS_NEED = 0.15;
+/** S kurzem „držet“ nebo „prodávat“ kupuje jen na prázdné místo v základu (potřeba ≥ 0,65, squad.ts). */
+const URGENT_NEED = 0.65;
+/** Přestupní kurz z pondělní správy platí nejvýš tolik dní, pak trh jede bez něj. */
+const PLAN_MAX_AGE_DAYS = 8;
+
+/** Přestupní kurz, který trenér zvolil v pondělní správě (weekly-decision.ts). */
+export interface WeeklyTransferPlan {
+  stance: "buy" | "hold" | "sell";
+  focus: string[];
+  sellIds: string[];
+}
+
+/**
+ * Kurz z poslední pondělní správy, která se opravdu provedla (ne nanečisto), nejvýš 8 dní
+ * starý podle hodin hry (`actions.at`). Bez kurzu (nový klub, výpadek) trh rozhoduje jako dřív.
+ */
+export async function loadWeeklyTransferPlan(db: D1Database, teamId: string, now: Date): Promise<WeeklyTransferPlan | null> {
+  const rows = await db.prepare(
+    `SELECT CASE WHEN json_valid(actions) THEN json_extract(actions, '$.transferPlan') END AS plan,
+            CASE WHEN json_valid(actions) THEN json_extract(actions, '$.at') END AS at
+       FROM ai_coach_decisions
+      WHERE team_id = ? AND kind = 'weekly' AND mode != 'shadow'
+      ORDER BY created_at DESC LIMIT 3`,
+  ).bind(teamId).all<{ plan: string | null; at: string | null }>()
+    .catch((e) => { logger.warn({ module: M }, `přestupní kurz klubu ${teamId}`, e); return { results: [] as { plan: string | null; at: string | null }[] }; });
+  const since = new Date(now.getTime() - PLAN_MAX_AGE_DAYS * 86_400_000).toISOString();
+  const row = rows.results.find((r) => r.plan && r.at && r.at >= since);
+  if (!row?.plan) return null;
+  try {
+    const p = JSON.parse(row.plan) as Partial<WeeklyTransferPlan>;
+    if (p.stance !== "buy" && p.stance !== "hold" && p.stance !== "sell") return null;
+    return {
+      stance: p.stance,
+      focus: Array.isArray(p.focus) ? p.focus.filter((x): x is string => typeof x === "string") : [],
+      sellIds: Array.isArray(p.sellIds) ? p.sellIds.filter((x): x is string => typeof x === "string") : [],
+    };
+  } catch (e) {
+    logger.warn({ module: M }, `nečitelný přestupní kurz klubu ${teamId}`, e);
+    return null;
+  }
+}
+
+/** Od jaké potřeby AI na post kupuje podle kurzu (bez kurzu `BUY_NEED`). */
+export function buyThreshold(position: string, plan: WeeklyTransferPlan | null): number {
+  if (!plan) return BUY_NEED;
+  if (plan.stance !== "buy") return URGENT_NEED;
+  return plan.focus.includes(position) ? FOCUS_NEED : BUY_NEED;
+}
 
 export interface MarketAction {
   kind: "list" | "pitch" | "offer" | "bid" | "loan_request" | "demand" | "sign_free_agent";
@@ -112,7 +164,7 @@ async function adminFeeShare(db: D1Database, buyerLeagueId: string | null, selle
 }
 
 /** Inzeráty na přebytečné hráče, dokud je volné místo pro rozjeté obchody. */
-async function listSurplus(env: Bindings, club: AiClubState, now: Date, mode: DecisionMode, actions: MarketAction[]): Promise<void> {
+async function listSurplus(env: Bindings, club: AiClubState, now: Date, mode: DecisionMode, actions: MarketAction[], plan: WeeklyTransferPlan | null): Promise<void> {
   const db = env.DB;
   const active = await db.prepare(
     "SELECT player_id FROM transfer_listings WHERE team_id = ? AND status = 'active'",
@@ -121,9 +173,11 @@ async function listSurplus(env: Bindings, club: AiClubState, now: Date, mode: De
   const listed = new Set(active.results.map((r) => r.player_id));
   let slots = openDealLimit(club.profile) - listed.size;
   if (slots <= 0) return;
-  // Trh pročišťuje hlavně přeplněný kádr; obchodník prodává přebytek i jinak.
+  // Trh pročišťuje hlavně přeplněný kádr; obchodník a kurz „prodávat“ prodávají přebytek i jinak.
   const crowded = club.analysis.seniorOwnCount > TARGET_SENIOR_SQUAD;
-  if (!crowded && club.profile.trading < 50) return;
+  if (!crowded && club.profile.trading < 50 && plan?.stance !== "sell") return;
+  // Koho trenér v pondělí vybral, ten jde na listinu první (i při kurzu „držet“, když se vystavuje).
+  const chosen = new Set(plan?.sellIds ?? []);
 
   // Koho nikdo nechce, toho člověk taky nenabízí donekonečna. Podle konce platnosti, ne vzniku
   // inzerátu: `created_at` píše databáze, konec platnosti stejné hodiny jako `now`.
@@ -138,8 +192,8 @@ async function listSurplus(env: Bindings, club: AiClubState, now: Date, mode: De
   const candidates = club.members
     .filter((m) => !m.isU21Roster && !m.loanedIn && !listed.has(m.id) && !unsoldIds.has(m.id) && club.analysis.importanceOf(m.id) === "surplus")
     .filter((m) => club.analysis.sellBlock(m.id) === null)
-    // Nejdřív starší a slabší, mladé si mládežník nechá.
-    .sort((a, b) => (b.age - a.age) || (a.rating - b.rating));
+    // Nejdřív hráči, které trenér v pondělí vybral, pak starší a slabší; mladé si mládežník nechá.
+    .sort((a, b) => (Number(chosen.has(b.id)) - Number(chosen.has(a.id))) || (b.age - a.age) || (a.rating - b.rating));
   for (const m of candidates) {
     if (slots <= 0) break;
     if (m.age <= 21 && club.profile.youthFocus >= 50) continue;
@@ -245,12 +299,18 @@ async function buyCandidates(env: Bindings, club: AiClubState, need: PositionNee
   return Array.from(out.values()).filter((c) => aiDay || !c.sellerIsAi);
 }
 
-/** Na nejpotřebnější post pošle jednu nabídku (inzerát, nebo přímo), jinak založí poptávku. */
-async function buyForNeed(env: Bindings, club: AiClubState, now: Date, mode: DecisionMode, actions: MarketAction[]): Promise<void> {
+/**
+ * Na nejpotřebnější post pošle jednu nabídku (inzerát, nebo přímo), jinak založí poptávku.
+ * Pondělní kurz určuje, od jaké potřeby a na které posty nejdřív (`buyThreshold`).
+ */
+async function buyForNeed(env: Bindings, club: AiClubState, now: Date, mode: DecisionMode, actions: MarketAction[], plan: WeeklyTransferPlan | null): Promise<void> {
   const db = env.DB;
   if (club.analysis.seniorOwnCount >= MAX_SQUAD - 1 || club.spendable <= 0) return;
   if (!canOpenDeal(club, await openOutgoingOffers(db, club.teamId))) return;
-  const need = club.analysis.needs.find((n) => n.need >= 0.3);
+  const focus = plan?.stance === "buy" ? plan.focus : [];
+  const need = [...club.analysis.needs]
+    .sort((a, b) => (Number(focus.includes(b.position)) - Number(focus.includes(a.position))) || (b.need - a.need))
+    .find((n) => n.need >= buyThreshold(n.position, plan));
   if (!need) return;
 
   const candidates = await buyCandidates(env, club, need, now);
@@ -380,13 +440,14 @@ export async function runTransferMarket(env: Bindings, teamId: string, now: Date
   }
   const club = await loadAiClubState(db, teamId, profile, now);
   if (!club) return { skipped: "not_ai_club", mode, actions: [] };
+  const plan = await loadWeeklyTransferPlan(db, teamId, now);
 
   const actions: MarketAction[] = [];
   const steps: Array<[string, () => Promise<void>]> = [
     ["free_agents", () => signFreeAgents(env, club, now, mode, actions)],
-    ["list", () => listSurplus(env, club, now, mode, actions)],
+    ["list", () => listSurplus(env, club, now, mode, actions, plan)],
     ["pitch", () => pitchSurplus(env, club, now, mode, actions)],
-    ["buy", () => buyForNeed(env, club, now, mode, actions)],
+    ["buy", () => buyForNeed(env, club, now, mode, actions, plan)],
   ];
   const errors: string[] = [];
   for (const [name, step] of steps) {
@@ -401,7 +462,8 @@ export async function runTransferMarket(env: Bindings, teamId: string, now: Date
   await logDecision(db, {
     teamId, kind: "transfer_market", mode, model: "rules", contextRef: pragueDay(now),
     inputSummary: `budget=${club.budget} reserve=${club.reserve} spendable=${club.spendable} squad=${club.analysis.seniorOwnCount}`
-      + ` deals30=${club.dealsLast30}/${club.dealLimit} needs=${club.analysis.needs.map((n) => `${n.position}:${n.need.toFixed(2)}`).join(",") || "-"}`,
+      + ` deals30=${club.dealsLast30}/${club.dealLimit} needs=${club.analysis.needs.map((n) => `${n.position}:${n.need.toFixed(2)}`).join(",") || "-"}`
+      + ` course=${plan ? `${plan.stance}${plan.focus.length ? `:${plan.focus.join("+")}` : ""}` : "-"}`,
     actions: actions.map(({ result: _r, error: _e, ...a }) => a),
     executed: actions.map((a) => ({ kind: a.kind, result: a.result, error: a.error })),
     usedFallback: false,
