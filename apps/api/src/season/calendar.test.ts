@@ -46,6 +46,11 @@ describe("hrací dny podle ligy", () => {
     expect(gap).toBeGreaterThanOrEqual(7);
   });
 
+  it("neplatné dny nezacyklí generátor, platí pondělí a čtvrtek", () => {
+    const c = generateSeasonCalendar("L", 3, new Date("2026-10-21T18:00:00Z"), 4, [7, -1]);
+    expect(c.entries.map((e) => e.matchDay)).toEqual(["monday", "thursday", "monday", "thursday"]);
+  });
+
   it("match_weekdays z ligy: \"3,0\" je středa a neděle, prázdné nebo nesmysl pondělí a čtvrtek", () => {
     expect(parseMatchWeekdays("3,0")).toEqual([3, 0]);
     expect(parseMatchWeekdays(" 3, 0 ,3")).toEqual([3, 0]);

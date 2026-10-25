@@ -83,7 +83,9 @@ export function generateSeasonCalendar(
   rounds = 30,
   weekdays: readonly number[] = DEFAULT_MATCH_WEEKDAYS,
 ): SeasonCalendar {
-  const days = new Set(weekdays.length > 0 ? weekdays : DEFAULT_MATCH_WEEKDAYS);
+  // Jen platné dny 0–6, jinak by hledání hracího dne nikdy neskončilo.
+  const valid = weekdays.filter((d) => Number.isInteger(d) && d >= 0 && d <= 6);
+  const days = new Set(valid.length > 0 ? valid : DEFAULT_MATCH_WEEKDAYS);
   const entries: CalendarEntry[] = [];
   // Liga hraje 2× týdně (např. po + čt) → sezóna může začít kterýmkoli hracím dnem. První
   // kolo = nejbližší ligový den aspoň 5 dní po startu → pauza po konci sezóny je 5-8 dní.
