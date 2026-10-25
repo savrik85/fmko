@@ -144,6 +144,15 @@ export function computeReserve(profile: AiCoachProfile, weeklyRunningCost: numbe
   return Math.max(MIN_RESERVE, Math.round(reserveWeeksFor(profile) * weeklyRunningCost));
 }
 
+/**
+ * Kolik z peněz nad rezervou smí jít tento týden na stavby a nové vybavení: podle chuti
+ * stavět (15 % u „nestavitele", 100 % u stavitele). Opravy, trávník a nábor jdou mimo.
+ * Díky tomu se kluby rozcházejí podle povahy, ať rozhoduje kterýkoli model.
+ */
+export function investBudgetFor(profile: AiCoachProfile, spendable: number): number {
+  return Math.round(Math.max(0, spendable) * (0.15 + 0.85 * profile.building / 100));
+}
+
 /** Nová cena vstupného po zdražení nebo zlevnění o desetinu (na pětikoruny, v mezích obce). */
 export function nextTicketPrice(current: number, villageBase: number, choice: TicketChoice): number {
   if (choice === "keep") return current;
@@ -391,13 +400,21 @@ export function planWeeklyActions(ctx: WeeklyContext, d: WeeklyDecision): Weekly
     if (o.cost + o.weeklyWage * 6 > left) { skipped.push({ item: key, reason: "rezerva (podpisné a mzda)" }); continue; }
     if (pay(key, o.cost)) actions.push({ kind: "hire", key, staffId: o.ref, role: o.role, cost: o.cost, weeklyWage: o.weeklyWage });
   }
+  // Stavby a nové vybavení jen do investičního rozpočtu podle chuti stavět.
+  let invest = investBudgetFor(ctx.profile, ctx.finance.spendable);
+  const investPay = (item: string, cost: number): boolean => {
+    if (cost > invest) { skipped.push({ item, reason: `investiční rozpočet (zbývá ${Math.round(invest)} Kč)` }); return false; }
+    if (!pay(item, cost)) return false;
+    invest -= cost;
+    return true;
+  };
   for (const key of d.equipmentUpgrades) {
     const o = ctx.equipmentUpgrades.find((x) => x.key === key);
-    if (o && pay(key, o.cost)) actions.push({ kind: "equipment_upgrade", key, category: o.ref, cost: o.cost });
+    if (o && investPay(key, o.cost)) actions.push({ kind: "equipment_upgrade", key, category: o.ref, cost: o.cost });
   }
   for (const key of d.stadium) {
     const o = ctx.stadium.find((x) => x.key === key);
-    if (o && pay(key, o.cost)) actions.push({ kind: "stadium_upgrade", key, facility: o.ref, cost: o.cost });
+    if (o && investPay(key, o.cost)) actions.push({ kind: "stadium_upgrade", key, facility: o.ref, cost: o.cost });
   }
   return { actions, skipped, totalCost: total };
 }
@@ -442,6 +459,20 @@ function czk(n: number): string {
   return `${Math.round(n).toLocaleString("en-US")} CZK`;
 }
 
+/** Povaha slovy, ať ji model bere jako styl, ne jako čísla. */
+export function styleText(p: AiCoachProfile): string {
+  const parts: string[] = [];
+  if (p.thrift >= 70) parts.push("you hate spending money and buy only what clearly pays off");
+  else if (p.thrift <= 30) parts.push("you are happy to spend when it helps the team");
+  if (p.building >= 70) parts.push("you love improving the stadium and equipment");
+  else if (p.building <= 30) parts.push("you spend on stadium and equipment only when something is broken or essential");
+  if (p.ambition >= 70) parts.push("you want results now");
+  else if (p.ambition <= 30) parts.push("you think long term and accept a modest season");
+  if (p.youthFocus >= 70) parts.push("you believe in youth and the academy");
+  else if (p.youthFocus <= 30) parts.push("you trust experienced players more than youngsters");
+  return parts.length ? `${parts.join("; ")}.` : "a balanced, pragmatic manager.";
+}
+
 export function renderWeeklyPrompt(ctx: WeeklyContext): string {
   const p = ctx.profile;
   const f = ctx.finance;
@@ -450,7 +481,8 @@ export function renderWeeklyPrompt(ctx: WeeklyContext): string {
   L.push(`ambition ${p.ambition}, thrift ${p.thrift}, building (stadium and equipment) ${p.building}, youth focus ${p.youthFocus}, risk ${p.risk}, patience ${p.patience}. Favourite tactic: ${p.favouriteTactic}.`);
   L.push("");
   L.push(`CLUB ${ctx.teamName}: ${ctx.league.position ? `table position ${ctx.league.position}/${ctx.league.teams}, ${ctx.league.points} pts after ${ctx.league.played} matches` : "season just started"}. Reputation ${ctx.reputation}/100.`);
-  L.push(`MONEY: budget ${czk(ctx.budget)}. Weekly running costs about ${czk(f.weeklyRunningCost)}, weekly income about ${czk(f.weeklyIncome)}. You keep a reserve of ${f.reserveWeeks} weeks of running costs = ${czk(f.reserve)}. Money you may spend this week: ${czk(f.spendable)}.`);
+  L.push(`MONEY: budget ${czk(ctx.budget)}. Weekly running costs about ${czk(f.weeklyRunningCost)}, weekly income about ${czk(f.weeklyIncome)}. You keep a reserve of ${f.reserveWeeks} weeks of running costs = ${czk(f.reserve)}. Money you may spend this week: ${czk(f.spendable)}, of which at most ${czk(investBudgetFor(p, f.spendable))} on stadium and new equipment (your building appetite).`);
+  L.push(`YOUR STYLE: ${styleText(p)}`);
   L.push("");
   L.push(`TRAINING now: ${ctx.training.type}, ${ctx.training.sessions} sessions/week, approach ${ctx.training.approach}. Matches are played on weekdays ${ctx.training.matchWeekdays.join(",")} (0 = Sunday). Squad ${ctx.training.squadSize} players (${ctx.training.youngPlayers} aged 21 or less), average condition ${ctx.training.avgCondition}, injured ${ctx.training.injured}.`);
   L.push("Training focus: conditioning (stamina, speed, strength), technique (technique, shooting, creativity, set pieces), tactics (passing, defence, vision), match_practice (shooting, heading, goalkeeping), mixed (rotate all). Intensity: light (recovery), normal, hard (+45 % growth but tiring and more injuries). Each session costs a few hundred CZK. Approach: strict / balanced / relaxed (players' mood).");

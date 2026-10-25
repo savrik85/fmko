@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { generateAiProfile, type AiCoachProfile } from "./profile";
 import {
-  buildTrainingPlan, computeReserve, fallbackWeeklyDecision, nextTicketPrice, planWeeklyActions, renderWeeklyPrompt,
+  buildTrainingPlan, computeReserve, fallbackWeeklyDecision, investBudgetFor, nextTicketPrice, planWeeklyActions, renderWeeklyPrompt,
   reserveWeeksFor, validateWeeklyDecision, MIN_RESERVE,
   type WeeklyContext, type WeeklyDecision,
 } from "./weekly-decision";
@@ -112,6 +112,16 @@ describe("týdenní správa nepřekročí rezervu", () => {
         expect(plan.totalCost).toBeLessThanOrEqual(ctx.finance.spendable);
       }
     }
+  });
+
+  it("stavby a vybavení jen do investičního rozpočtu podle chuti stavět", () => {
+    const builder = context(400_000, profile({ building: 95, thrift: 20 }));
+    const saver = context(400_000, profile({ building: 5, thrift: 20 }));
+    const investOf = (ctx: WeeklyContext) => planWeeklyActions(ctx, everything).actions
+      .filter((a) => a.kind === "stadium_upgrade" || a.kind === "equipment_upgrade")
+      .reduce((s, a) => s + ("cost" in a ? a.cost : 0), 0);
+    expect(investOf(saver)).toBeLessThanOrEqual(investBudgetFor(saver.profile, saver.finance.spendable));
+    expect(investOf(builder)).toBeGreaterThan(investOf(saver));
   });
 
   it("bannery jen do volných míst", () => {
