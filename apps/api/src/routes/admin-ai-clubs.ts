@@ -12,6 +12,15 @@
  *   U21, rozpis středa a neděle do posledního kola přeboru, bez postupu a sestupu,
  *   narovnání. `dryRun=1` vrátí obce, jména klubů a rozpis. Opakované volání dokončí
  *   rozdělanou ligu (např. po překročení limitu dotazů).
+ *
+ * POST /api/admin/ai-clubs/open-district?district=České Budějovice&dryRun=1
+ *   Spuštění ligy okresu: otevře okres registracím (část 1).
+ *
+ * POST /api/admin/ai-clubs/facilities?dryRun=1
+ *   Řádek stadionu a vybavení všem klubům v ligách, které ho ještě nemají.
+ *
+ * POST /api/admin/ai-clubs/u21-ai-managers?dryRun=1
+ *   Smaže AI trenéry, kteří omylem vznikli u U21 týmů (trenér patří áčku).
  */
 
 import { Hono } from "hono";
@@ -19,6 +28,9 @@ import type { Bindings } from "../index";
 import { requireAdmin, requireAuth } from "../auth/middleware";
 import { applyLeveling, LEVELING_MODES, planLeveling, type LevelingMode } from "../ai-clubs/leveling";
 import { cryptoSeed } from "../generators/rng";
+import { openDistrictRegistration } from "../ai-clubs/district-opening";
+import { backfillClubFacilities } from "../ai-clubs/facilities-backfill";
+import { cleanupU21AiManagers } from "../ai-clubs/u21-manager-cleanup";
 import { createLowerLeague, LowerLeagueError } from "../league/lower-league-setup";
 import { logger } from "../lib/logger";
 
@@ -81,5 +93,37 @@ adminAiClubsRouter.post("/lower-league", async (c) => {
     if (e instanceof LowerLeagueError) return c.json({ error: e.message }, 400);
     logger.error({ module: M }, `založení III. třídy v okrese ${district}`, e);
     return c.json({ error: "Založení III. třídy selhalo, podrobnosti jsou v logu. Opakované volání rozdělanou ligu dokončí." }, 500);
+  }
+});
+
+adminAiClubsRouter.post("/open-district", async (c) => {
+  const district = c.req.query("district")?.trim();
+  if (!district) return c.json({ error: "Chybí district" }, 400);
+  try {
+    const result = await openDistrictRegistration(c.env.DB, district, isDryRun(c.req.query("dryRun")));
+    return c.json(result);
+  } catch (e) {
+    logger.error({ module: M }, `otevření okresu ${district}`, e);
+    return c.json({ error: "Otevření okresu selhalo, podrobnosti jsou v logu" }, 500);
+  }
+});
+
+adminAiClubsRouter.post("/facilities", async (c) => {
+  try {
+    const result = await backfillClubFacilities(c.env.DB, isDryRun(c.req.query("dryRun")));
+    return c.json(result);
+  } catch (e) {
+    logger.error({ module: M }, "doplnění stadionů a vybavení", e);
+    return c.json({ error: "Doplnění selhalo, podrobnosti jsou v logu" }, 500);
+  }
+});
+
+adminAiClubsRouter.post("/u21-ai-managers", async (c) => {
+  try {
+    const result = await cleanupU21AiManagers(c.env.DB, isDryRun(c.req.query("dryRun")));
+    return c.json(result);
+  } catch (e) {
+    logger.error({ module: M }, "úklid AI trenérů u U21", e);
+    return c.json({ error: "Úklid selhal, podrobnosti jsou v logu" }, 500);
   }
 });
