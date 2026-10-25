@@ -178,7 +178,7 @@ export function PlayerBrowseTable({ rows, color, onColorText, ratingColor, colum
   return (
     <div>
       <div className="flex flex-wrap items-center gap-2 mb-4">
-        <div className="flex gap-2 overflow-x-auto">
+        <div className="flex flex-wrap gap-1.5 md:gap-2">
           {(["all", "GK", "DEF", "MID", "FWD"] as PosFilter[]).map((pos) => (
             <button key={pos} onClick={() => setFilter(pos)}
               className={`shrink-0 px-3 py-1.5 rounded-full text-sm font-heading font-bold transition-colors ${filter === pos ? "text-white" : "bg-gray-100 text-muted hover:bg-gray-200"}`}
@@ -279,12 +279,14 @@ export function PlayerBrowseTable({ rows, color, onColorText, ratingColor, colum
               {avatar(r, 36)}
               <div className="flex-1 min-w-0">
                 <div className="font-heading font-bold text-base truncate">{r.firstName} {r.lastName}</div>
-                <div className="text-sm text-muted tabular-nums truncate">
-                  {/* Věk první: dlouhé jméno klubu ho jinak na mobilu usekne. */}
+                <div className="text-sm text-muted tabular-nums">
                   <span className="font-heading font-bold text-ink">{r.age} let</span>
-                  {columns.club && (r.club || r.clubLabel) ? ` · ${r.club?.name ?? r.clubLabel}` : ""}
                   {columns.price || !showValue ? "" : ` · ${formatValue(rowValue(r))}`}
                 </div>
+                {/* Klub na vlastním řádku celý: vedle věku se dlouhé jméno usekávalo. */}
+                {columns.club && (r.club || r.clubLabel) && (
+                  <div className="text-sm text-muted leading-snug break-words">{r.club?.name ?? r.clubLabel}</div>
+                )}
                 {r.tag && <div className="mt-0.5">{r.tag}</div>}
               </div>
               <span className={`px-2 py-1 rounded-soft font-heading font-bold text-base tabular-nums shrink-0 ${onColorText}`} style={{ backgroundColor: color }}>

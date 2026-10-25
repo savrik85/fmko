@@ -1558,7 +1558,7 @@ export default function TransfersPage() {
                 )}
               </div>
               {filteredSearch.length > 0 && (
-                <div className="card p-4 sm:p-5">
+                <div className="md:p-5 md:bg-[var(--color-surface)] md:rounded-[var(--radius-card)] md:shadow-[var(--shadow-card)]">
                   <PlayerBrowseTable rows={searchRows} color={clubColor} onColorText={clubColorText} ratingColor={clubRatingColor}
                     columns={{ club: true, value: false }} defaultSort="rating" />
                 </div>
@@ -1818,7 +1818,7 @@ export default function TransfersPage() {
               )}
             </div>
           ) : (
-            <div className="card p-4 sm:p-5">
+            <div className="md:p-5 md:bg-[var(--color-surface)] md:rounded-[var(--radius-card)] md:shadow-[var(--shadow-card)]">
               <PlayerBrowseTable rows={freeAgentRows} color={clubColor} onColorText={clubColorText} ratingColor={clubRatingColor}
                 columns={{ club: true, action: true, value: false }} defaultSort="rating" />
             </div>
@@ -1839,7 +1839,7 @@ export default function TransfersPage() {
             {listings.length === 0 ? (
               <div className="card p-6 text-center text-muted">Nikdo momentálně nenabízí hráče.</div>
             ) : (
-              <div className="card p-4 sm:p-5">
+              <div className="md:p-5 md:bg-[var(--color-surface)] md:rounded-[var(--radius-card)] md:shadow-[var(--shadow-card)]">
                 <PlayerBrowseTable rows={listingRows} color={clubColor} onColorText={clubColorText} ratingColor={clubRatingColor}
                   columns={{ club: true, price: true, action: true, value: false }} defaultSort="rating" />
               </div>
