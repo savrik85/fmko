@@ -5667,7 +5667,7 @@ gameRouter.get("/hall-of-fame", async (c) => {
     `SELECT
        t.id as team_id, t.name as team_name, t.primary_color, t.secondary_color, t.badge_pattern,
        t.user_id as user_id,
-       m.id as manager_id, m.name as manager_name, m.avatar as manager_avatar,
+       m.id as manager_id, m.name as manager_name, m.avatar as manager_avatar, m.user_id as manager_user_id,
        v.name as village_name,
        COUNT(ta.achievement_key) as total,
        COALESCE(SUM(CASE WHEN ta.tier = 'gold' THEN 1 ELSE 0 END), 0) as gold,
@@ -5693,6 +5693,7 @@ gameRouter.get("/hall-of-fame", async (c) => {
     isHuman: (r.user_id as string) !== "ai",
     managerId: r.manager_id as string | null,
     managerName: r.manager_name as string | null,
+    coachIsAi: r.manager_user_id === "ai",
     managerAvatar: (() => {
       try { return r.manager_avatar ? JSON.parse(r.manager_avatar as string) : null; }
       catch (e) { logger.warn({ module: "game" }, "parse manager avatar for hof", e); return null; }

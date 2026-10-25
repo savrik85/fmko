@@ -49,25 +49,29 @@ votesRouter.get("/votes", async (c) => {
   // Načíst všechny hlasující týmy + manažery najednou (veřejná data)
   const allVoters = await c.env.DB.prepare(
     `SELECT b.vote_id, b.team_id, b.answer, t.name as team_name,
-     m.name as manager_name, m.avatar as manager_avatar
+     m.name as manager_name, m.avatar as manager_avatar, m.user_id as manager_user_id
      FROM prales_vote_ballots b
      JOIN teams t ON b.team_id = t.id
      LEFT JOIN managers m ON m.team_id = t.id
      ORDER BY b.voted_at ASC`
   ).all().catch((e) => { logger.warn({ module: "votes" }, "fetch voters", e); return { results: [] }; });
 
-  const votersByVote: Record<string, Array<{ team_id: string; team_name: string; manager_name: string | null; manager_avatar: Record<string, unknown> | null; answer: string }>> = {};
+  const votersByVote: Record<string, Array<{ team_id: string; team_name: string; manager_name: string | null; coach_is_ai: boolean; manager_avatar: Record<string, unknown> | null; answer: string }>> = {};
   for (const r of allVoters.results) {
     const vid = r.vote_id as string;
     if (!votersByVote[vid]) votersByVote[vid] = [];
     let avatarParsed: Record<string, unknown> | null = null;
     if (r.manager_avatar) {
-      try { avatarParsed = JSON.parse(r.manager_avatar as string); } catch { avatarParsed = null; }
+      try { avatarParsed = JSON.parse(r.manager_avatar as string); } catch (e) {
+        logger.warn({ module: "votes" }, `parse voter avatar ${r.team_id as string}`, e);
+        avatarParsed = null;
+      }
     }
     votersByVote[vid].push({
       team_id: r.team_id as string,
       team_name: r.team_name as string,
       manager_name: r.manager_name as string | null,
+      coach_is_ai: r.manager_user_id === "ai",
       manager_avatar: avatarParsed,
       answer: r.answer as string,
     });
@@ -88,6 +92,7 @@ votesRouter.get("/votes", async (c) => {
       team_id: v.team_id,
       team_name: v.team_name,
       manager_name: v.manager_name,
+      coach_is_ai: v.coach_is_ai,
       manager_avatar: v.manager_avatar,
       answer: v.answer,
     })),

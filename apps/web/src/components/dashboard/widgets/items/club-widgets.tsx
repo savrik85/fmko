@@ -5,6 +5,7 @@
 import { WidgetSkeleton, WidgetError } from "../widget-frame";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { bestTextOn } from "@/lib/team-color";
+import { coachDisplayName } from "@/lib/coach-name";
 import {
   RadarChart, LineChart, HBarChart, DivergingBar, Gauge,
   ChartEmpty, ChartHero, PRIMARY, DIVERGING, STATUS, seriesColor, compactCZK, fullCZK,
@@ -37,7 +38,7 @@ export function ManagerCardWidget({ data, teamId }: WidgetProps) {
           </div>
         )}
         <div className="min-w-0 flex-1">
-          <div className="font-heading font-bold group-hover:underline truncate">{manager.name}</div>
+          <div className="font-heading font-bold group-hover:underline truncate">{coachDisplayName(manager.name, manager.coachIsAi === true)}</div>
           {manager.birthplace && <div className="text-sm text-muted">{manager.birthplace}</div>}
         </div>
       </div>
@@ -68,7 +69,7 @@ export function ManagerRadarWidget({ data }: WidgetProps) {
   return (
     <RadarChart
       axes={MANAGER_AXES.map((a) => a.label)}
-      series={[{ label: manager.name, values: MANAGER_AXES.map((a) => manager[a.key] ?? 40), color: PRIMARY }]}
+      series={[{ label: coachDisplayName(manager.name, manager.coachIsAi === true), values: MANAGER_AXES.map((a) => manager[a.key] ?? 40), color: PRIMARY }]}
     />
   );
 }

@@ -365,6 +365,8 @@ export interface ManagerProfile {
   id: string;
   userId?: string;
   name: string;
+  /** Trenér AI klubu: za jméno patří štítek „(AI)“ (`coachDisplayName`). */
+  coachIsAi?: boolean;
   backstory: string;
   avatar: Record<string, unknown>;
   age?: number;

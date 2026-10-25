@@ -60,6 +60,8 @@ export interface ClubWebsiteProgramTeam {
   name: string;
   village: string | null;
   coachName: string | null;
+  /** Trenér AI klubu: web za jméno přidá štítek „(AI)“. */
+  coachIsAi: boolean;
   position: number | null;
   points: number | null;
   played: number | null;
@@ -101,6 +103,8 @@ export interface ClubWebsiteCoachPage {
   teamSlugs: Record<string, string>;
   coach: {
     name: string;
+    /** Trenér AI klubu: web za jméno přidá štítek „(AI)“. */
+    coachIsAi: boolean;
     age: number | null;
     birthplace: string | null;
     bio: string | null;

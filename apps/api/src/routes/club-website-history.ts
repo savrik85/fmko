@@ -136,7 +136,7 @@ interface StandingEntry {
 interface AwardsSnapshot {
   playerOfSeason?: { id?: string | null; name?: string | null; teamName?: string | null; reason?: string | null } | null;
   topScorer?: { id?: string | null; name?: string | null; teamName?: string | null; goals?: number | null } | null;
-  managerOfSeason?: { teamId?: string | null; name?: string | null; teamName?: string | null; reason?: string | null } | null;
+  managerOfSeason?: { teamId?: string | null; name?: string | null; coachIsAi?: boolean; teamName?: string | null; reason?: string | null } | null;
   discovery?: { id?: string | null; name?: string | null; teamName?: string | null; reason?: string | null } | null;
   bestEleven?: Array<{ playerId?: string | null; name?: string | null; position?: string | null; teamName?: string | null }> | null;
 }
@@ -350,7 +350,10 @@ export async function loadClubHistory(db: D1Database, teamId: string): Promise<C
     if (mos?.teamId === teamId) {
       // U klubu bez lidského manažera archiv místo jména trenéra uloží název klubu
       const mgrName = mos.name && mos.name !== mos.teamName && mos.name !== clubName ? mos.name : null;
-      pendingAwards.push({ ...base, kind: "manager_of_season", playerId: null, name: mgrName, detail: cleanText(mos.reason) });
+      pendingAwards.push({
+        ...base, kind: "manager_of_season", playerId: null, name: mgrName,
+        coachIsAi: mos.coachIsAi === true, detail: cleanText(mos.reason),
+      });
     }
     const disc = aw.discovery;
     if (disc?.name && ours(disc.teamName)) {

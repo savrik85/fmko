@@ -275,6 +275,8 @@ export interface ClubWebsiteData {
   };
   manager: {
     name: string;
+    /** Trenér AI klubu: web za jméno přidá štítek „(AI)“. */
+    coachIsAi: boolean;
     age: number;
     reputation: number;
     avatar: Record<string, unknown>;
@@ -471,6 +473,8 @@ export interface ClubWebsiteHistoryAward {
   playerId: string | null;
   /** Jméno oceněného; null = nedochovalo se (např. trenér klubu bez lidského manažera). */
   name: string | null;
+  /** Trenér sezóny vedl AI klub: web za jméno přidá štítek „(AI)“. */
+  coachIsAi?: boolean;
   /** Upřesnění: počet gólů, post v jedenáctce nebo zdůvodnění poroty. */
   detail: string | null;
 }

@@ -22,6 +22,7 @@ import { BadgePreview, JerseyPreview, ShortsPreview, SocksPreview } from "@/comp
 import type { BadgePattern } from "@/components/ui";
 import { ClubScarf } from "@/components/team/club-scarf";
 import { ManagerFace } from "../ManagerFace";
+import { coachDisplayName } from "@/lib/coach-name";
 import { TacticalPitch } from "../TacticalPitch";
 import { ClubAudioPlayer } from "../ClubAudioPlayer";
 import { StadiumPhotoCard } from "../StadiumPhotoCard";
@@ -1070,7 +1071,7 @@ export function Retro2004Template({
                       <div className="text-sm text-[var(--club-ink)] font-bold uppercase">Hlavní trenér</div>
                       <div className="font-bold text-base text-[var(--club-ink)] break-words">
                         <Link href={`${base}/trener`} className="hover:underline">
-                          {manager.name}
+                          {coachDisplayName(manager.name, manager.coachIsAi)}
                         </Link>
                       </div>
                       <div className="text-gray-600 text-sm">Věk {manager.age} let · Licence {manager.licence}</div>

@@ -7,6 +7,7 @@ import { apiFetch } from "@/lib/api";
 import { Spinner, BadgePreview } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import type { BadgePattern } from "@/components/ui";
+import { coachDisplayName } from "@/lib/coach-name";
 
 interface HofEntry {
   rank: number;
@@ -18,6 +19,8 @@ interface HofEntry {
   isHuman: boolean;
   managerId: string | null;
   managerName: string | null;
+  /** Trenér AI klubu: za jméno patří štítek „(AI)“. */
+  coachIsAi?: boolean;
   managerAvatar: Record<string, unknown> | null;
   villageName: string | null;
   total: number;
@@ -39,8 +42,8 @@ export default function HallOfFamePage() {
 
   if (loading) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner size="lg" /></div>;
 
-  const filtered = entries.filter((e) => e.isHuman);
-  const reranked = filtered.map((e, i) => ({ ...e, displayRank: i + 1 }));
+  // AI kluby patří do žebříčku jako každý jiný klub, liší se jen štítkem u trenéra.
+  const reranked = entries.map((e, i) => ({ ...e, displayRank: i + 1 }));
 
   return (
     <div className="page-container pb-24 space-y-4">
@@ -90,7 +93,7 @@ export default function HallOfFamePage() {
                             {e.managerName[0]}
                           </div>
                         )}
-                        <span className="font-heading font-bold truncate text-xs sm:text-sm">{e.managerName}</span>
+                        <span className="font-heading font-bold truncate text-xs sm:text-sm">{coachDisplayName(e.managerName, e.coachIsAi === true)}</span>
                       </Link>
                     ) : (
                       <span className="text-muted italic">—</span>
