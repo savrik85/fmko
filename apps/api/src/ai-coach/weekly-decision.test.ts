@@ -129,7 +129,15 @@ describe("kontrola odpovědi modelu", () => {
     expect(validateWeeklyDecision({ ...everything, stadium: ["S9"] }, context(100_000)).ok).toBe(false);
     expect(validateWeeklyDecision({ ...everything, hire: ["staff-1"] }, context(100_000)).ok).toBe(false);
     expect(validateWeeklyDecision({ ...everything, academy: "elite" }, context(100_000)).ok).toBe(false);
-    expect(validateWeeklyDecision({ ...everything, training: { ...everything.training, sessions: 9 } }, context(100_000)).ok).toBe(false);
+  });
+
+  it("počet tréninků mimo 1 až 5 se srovná do mezí, rozhodnutí platí", () => {
+    const r = validateWeeklyDecision({ ...everything, training: { ...everything.training, sessions: 0 } }, context(100_000));
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.decision.training.sessions).toBe(1);
+    const r9 = validateWeeklyDecision({ ...everything, training: { ...everything.training, sessions: 9 } }, context(100_000));
+    if (r9.ok) expect(r9.decision.training.sessions).toBe(5);
+    expect(validateWeeklyDecision({ ...everything, training: { ...everything.training, sessions: "hodně" } }, context(100_000)).ok).toBe(false);
   });
 });
 

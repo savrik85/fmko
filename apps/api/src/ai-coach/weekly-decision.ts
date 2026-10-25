@@ -283,8 +283,8 @@ export function validateWeeklyDecision(raw: unknown, ctx: WeeklyContext): Weekly
   if (typeof intensity === "object") return { ok: false, reason: intensity.error };
   const approach = pick(t.approach, TRAINING_APPROACH, "training.approach");
   if (typeof approach === "object") return { ok: false, reason: approach.error };
-  const sessions = Number(t.sessions);
-  if (!Number.isInteger(sessions) || sessions < 1 || sessions > 5) return { ok: false, reason: `training.sessions: ${String(t.sessions)}` };
+  const rawSessions = Number(t.sessions);
+  if (!Number.isFinite(rawSessions)) return { ok: false, reason: `training.sessions: ${String(t.sessions)}` };
   const ticketPrice = pick(r.ticketPrice, TICKET_CHOICES, "ticketPrice");
   if (typeof ticketPrice === "object") return { ok: false, reason: ticketPrice.error };
   const pitchMaintenance = pick(r.pitchMaintenance, PITCH_MAINTENANCE_CHOICES, "pitchMaintenance");
@@ -295,6 +295,9 @@ export function validateWeeklyDecision(raw: unknown, ctx: WeeklyContext): Weekly
   if (typeof academy === "object") return { ok: false, reason: academy.error };
 
   const rejected: string[] = [];
+  // Počet tréninků mimo 1–5 (model chtěl volný týden nebo trénink denně) se srovná do mezí.
+  const sessions = Math.max(1, Math.min(5, Math.round(rawSessions)));
+  if (sessions !== rawSessions) rejected.push(`training.sessions ${rawSessions} upraveno na ${sessions}`);
   const sets = {
     stadium: keys(r.stadium, "stadium", new Set(ctx.stadium.map((o) => o.key)), MAX_STADIUM, rejected),
     equipmentUpgrades: keys(r.equipmentUpgrades, "equipmentUpgrades", new Set(ctx.equipmentUpgrades.map((o) => o.key)), MAX_EQUIPMENT, rejected),
@@ -491,7 +494,7 @@ export function weeklyDecisionSchema(ctx: WeeklyContext): Record<string, unknown
         properties: {
           focus: { type: "string", enum: [...TRAINING_FOCUS] },
           intensity: { type: "string", enum: [...TRAINING_INTENSITY] },
-          sessions: { type: "integer" },
+          sessions: { type: "integer", minimum: 1, maximum: 5 },
           approach: { type: "string", enum: [...TRAINING_APPROACH] },
         },
         required: ["focus", "intensity", "sessions", "approach"],
