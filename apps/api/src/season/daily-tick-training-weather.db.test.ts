@@ -112,7 +112,10 @@ describe("počasí na tréninku v denním ticku", () => {
       console.warn("denní tick po tréninku skončil chybou (chybí tabulky):", tickError instanceof Error ? tickError.message : tickError);
     }
 
-    expect(trainingCalls.length, "tick tým vůbec netrénoval").toBe(1);
-    expect(trainingCalls[0][7]).toBe(weather);
+    // Trénuje i AI tým 'seed' (bez hráčů, výchozí plán), měří se trénink týmu t1 se třemi hráči.
+    const t1Calls = trainingCalls.filter((args) => (args[1] as unknown[]).length === 3);
+    expect(t1Calls.length, "tick tým vůbec netrénoval").toBe(1);
+    expect(t1Calls[0][7]).toBe(weather);
+    for (const call of trainingCalls) expect(call[7]).toBe(weather);
   });
 });

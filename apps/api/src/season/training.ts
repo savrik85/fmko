@@ -49,6 +49,19 @@ export function storedTrainingApproach(raw: unknown): TrainingApproach {
   return isTrainingApproach(raw) ? raw : "balanced";
 }
 
+/** Výchozí trénink klubu bez vlastního nastavení, stejný jako v GET /teams/:id/training. */
+export const DEFAULT_TRAINING_TYPE: TrainingType = "conditioning";
+
+/**
+ * Typ tréninku, podle kterého tick trénuje a účtuje. AI klub bez nastaveného typu trénuje
+ * výchozí kondici (dny a počet tréninků doplní tick z výchozí mapy). Lidský klub bez typu
+ * netrénuje, jako dosud: nic si nenastavil.
+ */
+export function teamTrainingType(raw: string | null | undefined, userId: unknown): string | null {
+  if (raw) return raw;
+  return userId === "ai" ? DEFAULT_TRAINING_TYPE : null;
+}
+
 const CELEB_TRAINING_EXCUSES = [
   "Dnes má rehabilitaci u svého fyzioterapeuta",
   "Běhá si sám v parku, má vlastní program",

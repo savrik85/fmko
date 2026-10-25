@@ -333,7 +333,8 @@ async function runWrapPhase(
         return done ? "done" : "in_progress";
       }
       case "academy": {
-        // Odchovanci z akademie — jen lidské kluby, AI do mládeže nesype.
+        // Odchovanci z akademie: každý klub, který do ní za sezónu platil, lidský i AI.
+        // Zprávu o ročníku dostane jen lidský klub.
         // Fáze je idempotentní přes kurzor: kdo je odbavený, ten se znovu nevychová.
         const prog = await getProgress(db, leagueId, seasonNumber, phase);
         let processed: string[] = [];
@@ -343,9 +344,10 @@ async function runWrapPhase(
 
         const teamsRes = await db.prepare(
           // I klub, který akademii před koncem zrušil: ročník se řídí tím, co za sezónu zaplatil
-          "SELECT id FROM teams WHERE league_id = ? AND user_id != 'ai' AND parent_team_id IS NULL AND (youth_investment != 'none' OR youth_paid_base > 0)",
-        ).bind(leagueId).all<{ id: string }>()
-          .catch((e) => { logger.warn({ module: "end-season" }, "load teams for academy", e); return { results: [] as { id: string }[] }; });
+          "SELECT id, user_id FROM teams WHERE league_id = ? AND parent_team_id IS NULL AND (youth_investment != 'none' OR youth_paid_base > 0)",
+        ).bind(leagueId).all<{ id: string; user_id: string | null }>()
+          .catch((e) => { logger.warn({ module: "end-season" }, "load teams for academy", e); return { results: [] as { id: string; user_id: string | null }[] }; });
+        const humanTeams = new Set(teamsRes.results.filter((r) => !!r.user_id && r.user_id !== "ai").map((r) => r.id));
 
         const seasonRow = await db.prepare("SELECT id FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1")
           .first<{ id: string }>()
@@ -360,7 +362,7 @@ async function runWrapPhase(
           await setProgress(db, leagueId, seasonNumber, phase, "pending", JSON.stringify([...processedSet]));
           const odchovanci = await graduateAcademyClass(db, tid, seasonRow?.id ?? null)
             .catch((e) => { logger.warn({ module: "end-season", teamId: tid }, "academy graduation", e); return []; });
-          if (odchovanci.length > 0) await notifyAcademyGraduates(db, tid, odchovanci);
+          if (odchovanci.length > 0 && humanTeams.has(tid)) await notifyAcademyGraduates(db, tid, odchovanci);
           // Nová sezóna počítá platby od nuly
           await db.prepare("UPDATE teams SET youth_paid_base = 0, youth_paid_weeks = 0 WHERE id = ?").bind(tid).run()
             .catch((e) => logger.warn({ module: "end-season", teamId: tid }, "reset youth paid counters", e));

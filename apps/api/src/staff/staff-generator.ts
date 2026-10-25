@@ -232,21 +232,23 @@ export function generateStaffCandidate(
   };
 }
 
-// Cíl volných kandidátů škáluje s počtem lidských týmů v okrese (sdílený trh — víc týmů = víc lidí).
-const POOL_PER_TEAM = 8;   // kandidátů na lidský tým v okrese
+// Cíl volných kandidátů škáluje s počtem klubů v okrese (sdílený trh — víc týmů = víc lidí).
+// Počítají se lidské i AI kluby: AI klub najímá ze stejného poolu za stejných podmínek.
+const POOL_PER_TEAM = 8;   // kandidátů na klub v okrese
 const POOL_MIN = 30;       // minimum i pro malý okres
 const POOL_MAX = 200;      // strop
-const LISTED_WEEKS = 4;    // za jak dlouho kandidát z poolu zmizí
+/** Za jak dlouho kandidát z poolu zmizí. */
+export const STAFF_LISTED_WEEKS = 4;
 
-function poolTargetFor(humanTeams: number): number {
-  return Math.max(POOL_MIN, Math.min(POOL_MAX, humanTeams * POOL_PER_TEAM));
+export function poolTargetFor(clubs: number): number {
+  return Math.max(POOL_MIN, Math.min(POOL_MAX, clubs * POOL_PER_TEAM));
 }
 
 /**
- * Údržba poolu zaměstnanců: expirace starých, doplnění nových — per okres s lidským týmem.
+ * Údržba poolu zaměstnanců: expirace starých, doplnění nových — per okres s klubem.
  * Voláno z pondělního bloku daily-ticku. Vrací počet nově vygenerovaných.
  *
- * Garantuje minimální kvótu skautů (1,5 skauta na lidský tým), aby si každý klub
+ * Garantuje minimální kvótu skautů (1,5 skauta na klub), aby si každý klub
  * mohl najmout až dva skauty bez vyčerpání trhu.
  */
 export async function maintainStaffPool(db: D1Database, rng: Rng, gameDate: Date): Promise<number> {
@@ -255,27 +257,27 @@ export async function maintainStaffPool(db: D1Database, rng: Rng, gameDate: Date
     .bind(gameDate.toISOString()).run()
     .catch((e) => logger.warn({ module: "staff-pool" }, "expire", e));
 
-  // 2. Okresy s lidským týmem + počet lidských týmů (áček)
+  // 2. Okresy s klubem + počet klubů (áček, lidských i AI) v ligách
   const districts = await db.prepare(
-    "SELECT v.district, COUNT(DISTINCT t.id) as teams FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.user_id != 'ai' AND t.parent_team_id IS NULL GROUP BY v.district"
+    "SELECT v.district, COUNT(DISTINCT t.id) as teams FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.parent_team_id IS NULL AND (t.user_id <> 'ai' OR t.league_id IS NOT NULL) GROUP BY v.district"
   ).all<{ district: string; teams: number }>()
     .catch((e) => { logger.warn({ module: "staff-pool" }, "districts", e); return { results: [] as { district: string; teams: number }[] }; });
 
-  const listedUntil = new Date(gameDate.getTime() + LISTED_WEEKS * 7 * 24 * 3600 * 1000).toISOString();
+  const listedUntil = new Date(gameDate.getTime() + STAFF_LISTED_WEEKS * 7 * 24 * 3600 * 1000).toISOString();
   let generated = 0;
 
   for (const row of districts.results) {
     const district = row.district;
-    const humanTeams = row.teams ?? 1;
-    const target = poolTargetFor(humanTeams);
+    const clubs = row.teams ?? 1;
+    const target = poolTargetFor(clubs);
 
     const poolCount = await db.prepare(
       "SELECT COUNT(*) as cnt FROM staff_members WHERE district = ? AND team_id IS NULL"
     ).bind(district).first<{ cnt: number }>()
       .catch((e) => { logger.warn({ module: "staff-pool" }, "count", e); return { cnt: 0 }; });
 
-    // Kvóta skautů: aspoň 1.5 volného skauta na lidský tým (min 5)
-    const minScoutsTarget = Math.max(5, Math.round(humanTeams * 1.5));
+    // Kvóta skautů: aspoň 1.5 volného skauta na klub (min 5)
+    const minScoutsTarget = Math.max(5, Math.round(clubs * 1.5));
     const scoutCount = await db.prepare(
       "SELECT COUNT(*) as cnt FROM staff_members WHERE district = ? AND team_id IS NULL AND profession = 'skaut'"
     ).bind(district).first<{ cnt: number }>()

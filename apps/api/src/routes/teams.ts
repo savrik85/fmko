@@ -33,6 +33,8 @@ import { logger } from "../lib/logger";
 import { playerBodyView } from "../generators/physicals";
 import { updateSessionTeamId } from "../auth/session";
 import { STAND_COLUMNS, standFacilities, type StandSide } from "../stadium/stands-model";
+import { ensureStadiumRow } from "../stadium/stadium-service";
+import { ensureEquipmentRow } from "../equipment/equipment-service";
 
 const teamsRouter = new Hono<{ Bindings: Bindings }>();
 
@@ -462,23 +464,10 @@ teamsRouter.post("/", async (c) => {
         await c.env.DB.prepare(`DELETE FROM ${t} WHERE team_id = ?`).bind(teamId).run().catch((e) => logger.warn({ module: "teams" }, "db op failed", e));
       }
 
-      // Create fresh stadium for the new human player
-      {
-        const { generateStadium } = await import("../stadium/stadium-generator");
-        const { createRng } = await import("../generators/rng");
-        let seed = 0;
-        for (let i = 0; i < teamId.length; i++) seed = ((seed << 5) - seed + teamId.charCodeAt(i)) | 0;
-        const rng = createRng(Math.abs(seed));
-        const villageSize = (village as any).size as string || "small";
-        const config = generateStadium(rng, villageSize);
-        await c.env.DB.prepare(
-          // Plachtu píše kotel. Sloupec už nikdo nečte, ale ať v datech nelže.
-                    `INSERT INTO stadiums (id, team_id, capacity, pitch_condition, pitch_type, changing_rooms, showers, refreshments, lighting, stands, parking, fence, ultras_text_mode)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'fanousci')`
-        ).bind(uuid(), teamId, config.capacity, config.pitchCondition, config.pitchType,
-          config.changingRooms, config.showers, config.refreshments, config.lighting,
-          config.stands, config.parking, config.fence).run().catch((e) => logger.warn({ module: "teams" }, "db op failed", e));
-      }
+      // Nový stadion a vybavení pro nového majitele. Startovní stadion se počítá ze stejného
+      // id týmu a z obce nového klubu (village_id je už přepsané), stejně jako dřív tady.
+      await ensureStadiumRow(c.env.DB, teamId);
+      await ensureEquipmentRow(c.env.DB, teamId);
 
       // Delete the duplicate team row created at line 159
       // First clean any FK references to origTeamId — move sponsor to takeover team, delete rest
@@ -830,6 +819,10 @@ teamsRouter.post("/", async (c) => {
       logger.error({ module: "teams" }, "U21 backfill při tvorbě ligy selhal", e);
     }
   }
+
+  // Stadion a vybavení od založení klubu, ne až při prvním otevření stránky.
+  await ensureStadiumRow(c.env.DB, teamId);
+  await ensureEquipmentRow(c.env.DB, teamId);
 
   // Přízeň obce hned od založení klubu. Dřív vznikala až při první návštěvě stránky
   // obce a do té doby reakce obce (výtržnosti, konec sezóny, proslov) tiše nic nedělaly.
