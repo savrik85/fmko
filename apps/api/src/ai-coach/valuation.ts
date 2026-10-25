@@ -151,15 +151,21 @@ export interface MaxBuyInput {
 }
 
 /**
+ * Strop nákupu vůči tržní hodnotě: 75. percentil poměru zaplaceno / tržní cena u lidských
+ * přestupů (1,35). Ani zoufale potřebný post AI nepřinutí přeplatit víc než rozumný člověk.
+ */
+export const MAX_BUY_TO_VALUE = 1.35;
+
+/**
  * Kolik AI nejvýš zaplatí: tržní hodnota × potřeba postu × ambice (šetrný méně) × šum,
- * vždy jen do toho, co klubu zbude nad rezervou na provoz.
+ * nejvýš MAX_BUY_TO_VALUE tržní hodnoty a jen do toho, co klubu zbude nad rezervou na provoz.
  */
 export function maxBuyPrice(input: MaxBuyInput): number {
   const mv = Math.max(MIN_PRICE, input.marketValue);
   const needFactor = 0.8 + 0.45 * clamp(input.need, 0, 1);
   const styleFactor = clamp(0.9 + (input.profile.ambition / 100) * 0.3 - (input.profile.thrift / 100) * 0.12, 0.78, 1.2);
   const noise = clamp(valuationNoise(input.playerId, input.now, "buy"), 0.92, 1.08);
-  const price = mv * needFactor * styleFactor * noise;
+  const price = Math.min(mv * needFactor * styleFactor * noise, mv * MAX_BUY_TO_VALUE);
   return Math.max(0, floor100(Math.min(price, Math.max(0, input.spendable))));
 }
 

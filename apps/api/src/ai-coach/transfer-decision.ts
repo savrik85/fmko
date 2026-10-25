@@ -104,8 +104,10 @@ export function decideSellerReply(input: SellerDecisionInput): SellerDecision {
 
   if (input.offerType === "loan") return decideLoan(input, value, reservation);
 
-  // Pevná pojistka: pod 60 % tržní hodnoty nic, ani se splátkami, procenty nebo výměnou.
-  if (isBelowHardFloor(value, input.marketValue)) return { kind: "reject", reason: "hard_floor", value, reservation };
+  // Pevná pojistka: pod 60 % tržní hodnoty nic, ani se splátkami nebo výměnou. Počítá se jen
+  // jistá část: procenta z dalšího prodeje jsou jen naděje, pojistku obejít nesmí.
+  const guaranteed = presentValue({ ...input.terms, sellOnPct: 0 }, input.marketValue) + input.swapValue;
+  if (isBelowHardFloor(guaranteed, input.marketValue)) return { kind: "reject", reason: "hard_floor", value, reservation };
 
   // Hráč, který se mezitím stal oporou (zranění, prodeje), za cenu z inzerátu nejde.
   const listed = input.listedPrice && input.listedPrice > 0 && input.importance !== "key" ? input.listedPrice : null;

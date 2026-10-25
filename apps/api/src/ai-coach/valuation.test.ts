@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { marketValue, type TransferTerms } from "@okresni-masina/shared";
 import { generateAiProfile, type AiCoachProfile } from "./profile";
 import {
-  HARD_FLOOR_RATIO, IMPORTANCE_MULTIPLIER, VALUATION_WINDOW_DAYS, budgetReserve, maxBuyPrice, openingAsk, presentCost,
+  HARD_FLOOR_RATIO, IMPORTANCE_MULTIPLIER, MAX_BUY_TO_VALUE, VALUATION_WINDOW_DAYS, budgetReserve, maxBuyPrice, openingAsk, presentCost,
   presentValue, reservationPrice, swapPlayerValue, valuationWindow, type SquadImportance,
 } from "./valuation";
 import { analyzeSquad, type SquadMember } from "./squad";
@@ -129,6 +129,28 @@ describe("pokusy AI klub obrat", () => {
         const listed = decideSellerReply(sellerInput({ terms: cash(lowball), marketValue: mv, importance, profile: p, listedPrice: lowball }));
         expect(listed.kind).toBe("reject");
       }
+    }
+  });
+
+  it("60% pojistku nejde obejít procenty z dalšího prodeje: počítá se jen jistá část", () => {
+    const mv = 30_000;
+    const cashPart = Math.floor(mv * 0.59 / 100) * 100;
+    // Nejmírnější prodávající (přebytečný hráč, obchodník bez ambicí, nejnižší šum by stačil).
+    const soft = profile({ ambition: 0, trading: 100 });
+    for (let i = 0; i < 40; i++) {
+      const d = decideSellerReply(sellerInput({
+        terms: { amount: cashPart, upfrontPct: 100, installments: 0, sellOnPct: 50 },
+        marketValue: mv, importance: "surplus", profile: soft, playerId: `soft-${i}`,
+      }));
+      expect(d).toMatchObject({ kind: "reject", reason: "hard_floor" });
+    }
+  });
+
+  it("ani zoufale potřebný post AI nepřinutí zaplatit víc než 1,35 tržní hodnoty", () => {
+    const greedy = profile({ ambition: 100, thrift: 0 });
+    for (let i = 0; i < 50; i++) {
+      const max = maxBuyPrice({ marketValue: 20_000, need: 1, profile: greedy, playerId: `p-${i}`, now: NOW, spendable: 10_000_000 });
+      expect(max).toBeLessThanOrEqual(20_000 * MAX_BUY_TO_VALUE);
     }
   });
 
