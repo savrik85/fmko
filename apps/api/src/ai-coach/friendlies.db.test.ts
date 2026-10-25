@@ -78,6 +78,7 @@ beforeAll(async () => {
     team("ai-1", "ai", villages[2].id, "TJ Netolice", 60_000),
     team("ai-2", "ai", villages[3].id, "SK Stachy", 60_000),
     team("ai-3", "ai", villages[4].id, "FK Zdíkov", 60_000),
+    team("ai-4", "ai", villages[5].id, "Slavoj Vimperk", 60_000),
   ]);
 }, 120_000);
 
@@ -199,4 +200,102 @@ describe("nabídka termínu od AI klubu", () => {
     await setGameDay("2027-03-01");
     expect(await maybeOfferFriendly(db, "ai-1", bold, new Date("2027-03-01T01:00:00.000Z"))).toBe(false);
   }, 120_000);
+});
+
+/** Falešný Workers AI: odpověď podle zadání, počítá volání. */
+function fakeAi(answer: (prompt: string) => unknown) {
+  let calls = 0;
+  const binding = {
+    AI: {
+      run: async (_model: string, input: { messages: Array<{ role: string; content: string }> }) => {
+        calls++;
+        const prompt = input.messages.find((m) => m.role === "user")?.content ?? "";
+        return { choices: [{ message: { content: JSON.stringify(answer(prompt)) } }], usage: { prompt_tokens: 120, completion_tokens: 15 } };
+      },
+    },
+  } as unknown as Pick<Bindings, "AI">;
+  return { binding, calls: () => calls };
+}
+
+interface LoggedDecision { used_fallback: number; model: string | null; error: string | null; actions: string }
+
+async function lastDecision(teamId: string, kind: string): Promise<LoggedDecision | null> {
+  return db.prepare("SELECT used_fallback, model, error, actions FROM ai_coach_decisions WHERE team_id = ? AND kind = ? ORDER BY created_at DESC, rowid DESC LIMIT 1")
+    .bind(teamId, kind).first<LoggedDecision>();
+}
+
+describe("o přátelácích rozhoduje model, kód hlídá meze", () => {
+  it("výzvu v mezích odmítne model a v deníku je jeho rozhodnutí", async () => {
+    await setGameDay(TODAY);
+    const r = await sendChallenge(db, "human", "ai-4", { date: addDays(TODAY, 1) }, { now: NOON });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const ai = fakeAi(() => ({ accept: false, reason: "We play a cup match soon and need rest." }));
+    expect(await respondToFriendlyChallenges(db, "ai-4", profile(), NOON, { ai: ai.binding })).toBe(1);
+    expect(ai.calls()).toBe(1);
+    const ch = await db.prepare("SELECT status FROM challenges WHERE id = ?").bind(r.challengeId).first<{ status: string }>();
+    expect(ch?.status).toBe("declined");
+    const logged = await lastDecision("ai-4", "friendly_reply");
+    expect(logged?.used_fallback).toBe(0);
+    expect(logged?.model).toBeTruthy();
+    expect(JSON.parse(logged!.actions)).toMatchObject({ accept: false, decidedBy: "model" });
+  }, 60_000);
+
+  it("nesmyslná odpověď modelu: přijme náhradní pravidlo a deník to přizná", async () => {
+    await setGameDay(TODAY);
+    const r = await sendChallenge(db, "other", "ai-4", { date: addDays(TODAY, 1) }, { now: NOON });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const ai = fakeAi(() => ({ verdict: "maybe" }));
+    expect(await respondToFriendlyChallenges(db, "ai-4", profile({ thrift: 40, risk: 50 }), NOON, { ai: ai.binding })).toBe(1);
+    const ch = await db.prepare("SELECT status FROM challenges WHERE id = ?").bind(r.challengeId).first<{ status: string }>();
+    expect(ch?.status).toBe("accepted");
+    const logged = await lastDecision("ai-4", "friendly_reply");
+    expect(logged?.used_fallback).toBe(1);
+    expect(logged?.error).toBeTruthy();
+  }, 60_000);
+
+  it("vysokou sázku odmítne kód a model se vůbec neptá", async () => {
+    await setGameDay(addDays(TODAY, 10));
+    const r = await sendChallenge(db, "other", "ai-2", { date: addDays(TODAY, 11), stake: 5_000 }, { now: NOON });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const ai = fakeAi(() => ({ accept: true, reason: "yes" }));
+    expect(await respondToFriendlyChallenges(db, "ai-2", profile({ thrift: 90, risk: 20 }), NOON, { ai: ai.binding })).toBe(1);
+    expect(ai.calls()).toBe(0);
+    const ch = await db.prepare("SELECT status FROM challenges WHERE id = ?").bind(r.challengeId).first<{ status: string }>();
+    expect(ch?.status).toBe("declined");
+    const logged = await lastDecision("ai-2", "friendly_reply");
+    expect(logged?.used_fallback).toBe(0);
+    expect(JSON.parse(logged!.actions)).toMatchObject({ accept: false, reason: "stake_too_high", decidedBy: "guard" });
+  }, 60_000);
+
+  it("vlastní nabídku vypíše s termínem, místem a sázkou od modelu; když model nechce, nevypíše nic", async () => {
+    const bold = profile({ ambition: 100, risk: 100, thrift: 20 });
+    // Přátelák domluvený v předchozím testu se odehrál (s domluveným přátelákem nabídku nevypisuje).
+    await db.prepare("UPDATE matches SET status = 'simulated' WHERE id IN (SELECT match_id FROM challenges WHERE challenged_team_id = 'ai-4' AND match_id IS NOT NULL)").run();
+    // Model nejdřív odmítne vypsat, napodruhé vybere poslední termín, neutrální hřiště a nejvyšší sázku.
+    let asked = 0;
+    let chosen: { date: string; stake: number } | null = null;
+    const ai = fakeAi((prompt) => {
+      asked++;
+      const dates = [...prompt.matchAll(/- "(\d{4}-\d{2}-\d{2})"/g)].map((m) => m[1]);
+      const stakes = (prompt.match(/STAKES[^:]*: ([\d, ]+)\./)?.[1] ?? "0").split(",").map((x) => Number(x.trim()));
+      chosen = { date: dates[dates.length - 1], stake: Math.max(...stakes) };
+      return asked === 1
+        ? { post: false, date: dates[0], venue: "poster", stake: 0, reason: "No need now." }
+        : { post: true, date: chosen.date, venue: "neutral", stake: chosen.stake, reason: "Good practice before the cup." };
+    });
+    let posted = false;
+    for (let i = 0; i < 200 && !posted; i++) {
+      await setGameDay(addDays("2027-06-01", i));
+      posted = await maybeOfferFriendly(db, "ai-4", bold, NOON, { ai: ai.binding });
+    }
+    expect(asked).toBe(2);
+    expect(posted).toBe(true);
+    const offer = await db.prepare("SELECT match_date, venue, stake FROM friendly_offers WHERE team_id = 'ai-4' AND status = 'open'")
+      .first<{ match_date: string; venue: string; stake: number }>();
+    expect(offer).toEqual({ match_date: chosen!.date, venue: "neutral", stake: chosen!.stake });
+    expect(await count("SELECT COUNT(*) AS n FROM ai_coach_decisions WHERE team_id = 'ai-4' AND kind = 'friendly_offer' AND used_fallback = 0")).toBe(2);
+  }, 180_000);
 });
