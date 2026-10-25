@@ -105,6 +105,12 @@ Rozpis III. třídy: 26 kol ve středy a neděle 18:00, 28. 10. 2026 až 24. 1. 
 | `a56e2f33` | Narovnání v Praze srovná rezervu do stropu dovedností podle lidí | AI hráči měli rezervu z generátoru a rostli 2–3× rychleji než lidé |
 | `22071200` | AI trh: cílový kádr 24, neprodejné hráče znovu nevystavuje | s cílem 20 bylo AI trvale přeplněné, 91 hráčů vystavilo 730× |
 | `912dc916` | Narovnání srovná vlastnosti AI trenérů s lidskými | v Praze o 3–10 bodů slabší (koučování zrychluje trénink, disciplína docházku) |
+| `6230210e` | Přestupní kurz týdne volí model v pondělní správě (kupovat / držet / prodávat, posty, koho vystavit), trh se jím řídí | přestupy byly celé na pravidlech, model do nich nezasahoval; ceny dál jen kód |
+
+Přestupní kurz se skutečným Workers AI (12 klubů z Prahy, ČB a III. třídy, kopie po nastavení):
+11 rozhodl model, 1 náhradní pravidlo (limit 120 s), žádný chybný přestupní blok. Kurzy:
+kupovat 2 (Řeporyje „aim to buy a better GK“ při potřebě brankáře 0,34), držet 5, prodávat 5.
+Kód modelu nedovolí koupit tam, kde potřeba skoro není (Hluboká chtěla brankáře při potřebě 0,03).
 
 ## Známé rozdíly (záměr, nebo na později)
 

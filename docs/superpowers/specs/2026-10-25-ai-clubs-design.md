@@ -281,6 +281,12 @@ Druhá, paralelní implementace pravidel pro AI nesmí vzniknout. Jen tak AI nem
 - **Splátky, procenta z dalšího přestupu a výměny** přepočítá na dnešní hodnotu. Splátky AI bere
   jen s přirážkou, malá záloha není cesta, jak AI obejít.
 - **Objem** jako u člověka: počet přestupů za měsíc omezuje povaha (obchodní aktivita).
+- **Přestupní kurz** (doplněno 25. 10.): v pondělní správě model zvolí kurz na týden (kupovat /
+  držet / prodávat), až 2 posty k posílení a až 3 přebytečné hráče k vystavení. Denní práce na
+  trhu se jím řídí: „kupovat“ bere vybraný post už od menší potřeby, „držet“ a „prodávat“ kupují
+  jen na prázdné místo v základu. Ceny a pojistky počítá dál jen kód.
+- **Kádr** (oprava 25. 10.): AI chce v áčku 24 hráčů jako lidé (ne 20) a hráče, kterého za 30 dní
+  dvakrát nikdo nekoupil, znovu nevystaví.
 - **Obchody mezi AI kluby** povolené, ale vzácné.
 - AI nikoho nezvýhodňuje. Komisař pro integritu sleduje i obchody s AI kluby
   (`competition/integrity.ts`). AI kluby nejsou „propojené“ s lidmi, výjimkou je převzatý klub, který

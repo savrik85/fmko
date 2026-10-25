@@ -44,3 +44,5 @@ založení a musí se vejít do posledního kola přeboru (28. 1. 2027); když s
   → „FK O2 Žižkov“), každý za −3 reputace jako člověk. Hráči to uvidí v Novinkách.
 - Po měsíci přeměřit růst: síla jedenáctky AI klubů v Praze proti lidem (v simulaci AI +2,8 až +5,1
   za 96 dní) a počet AI inzerátů na trhu (v simulaci kolem 1,5 na klub).
+- V deníku rozhodnutí: pondělní správa má přestupní kurz (`decision.transfers`), denní trh ho
+  vypisuje v souhrnu (`course=buy:GK`, `course=-` = bez kurzu). Kurz z režimu nanečisto trh ignoruje.
