@@ -450,15 +450,18 @@ export async function runWeeklyReview(env: Bindings, teamId: string, now: Date, 
       executed.push({ action: a.kind, ok: r.ok, detail: r.detail });
       if (r.ok && "cost" in a) spent += a.cost;
     }
-    // Hlavní sponzor: stejné jednání jako u člověka, podpis úvodní nabídky majitele.
-    // Peníze klub dostává, nic neplatí, proto mimo rezervu a model.
-    const main = await maybeSignMainSponsor(db, teamId, ctx.profile)
-      .catch((e) => {
-        logger.warn({ module: M, teamId }, "hlavní sponzor", e);
-        return null;
-      });
-    if (main?.signed) executed.push({ action: "main_sponsor", ok: true, detail: main.detail });
   }
+  // Hlavní sponzor: firmu vybere model z firem, se kterými jde teď jednat, a podepíše se úvodní
+  // nabídka majitele stejným jednáním jako u člověka. Peníze klub dostává, nic neplatí, proto
+  // mimo rezervu. Vlastní záznam v deníku (main_sponsor); v režimu shadow a nanečisto jen rozhodne.
+  const main = await maybeSignMainSponsor(db, teamId, ctx.profile, {
+    mode, dryRun: opts.dryRun, ai: env, model: opts.model, contextRef: `week:${ctx.gameDay}`,
+    club: { league: ctx.league, weeklyRunningCost: ctx.finance.weeklyRunningCost, weeklyIncome: ctx.finance.weeklyIncome },
+  }).catch((e) => {
+    logger.warn({ module: M, teamId }, "hlavní sponzor", e);
+    return null;
+  });
+  if (main?.signed) executed.push({ action: "main_sponsor", ok: true, detail: main.detail });
 
   await logDecision(db, {
     teamId,
