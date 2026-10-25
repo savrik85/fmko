@@ -29,7 +29,7 @@ Cherry-pick schválených commitů z větve `worktree-ai-clubs` ve worktree na `
 | f | `/api/admin/ai-clubs/level?leagueId=9513dc13-4a13-487e-9547-4a1ec755dd6c&mode=newcomer&seed=…&dryRun=1` | ČB |
 | g | totéž pro U21 ČB `d1b45b99-6154-4334-a17f-bf853d594686` | |
 | h | `/api/admin/ai-clubs/lower-league?district=Prachatice&seed=…&dryRun=1` | 14 obcí, 26 kol st/ne do 28. 1. |
-| i | `/api/admin/ai-clubs/open-district?district=České Budějovice&dryRun=1` | `preparing` → `ready`. **Předtím rozhodnout** o testovacím klubu FK Řeznictví Černý (účet `tvuj@`, síla 60,8 proti AI 34–46): nechat, smazat (mazání = dvojitý souhlas), nebo předat AI |
+| i | `/api/admin/ai-clubs/open-district?district=České Budějovice&dryRun=1` | `preparing` → `ready`. **Předtím** odebrat z ligy testovací klub FK Řeznictví Černý (účet `tvuj@`, síla 60,8 proti AI 34–46): do ligy nepatří (rozhodnutí uživatele 25. 10.). Smazání dat na produ až po dvojím souhlasu |
 
 Pozn.: III. třída se musí založit včas. Rozpis začíná nejbližší středou nebo nedělí aspoň dva dny po
 založení a musí se vejít do posledního kola přeboru (28. 1. 2027); když se nevejde, doplní páteční kola.

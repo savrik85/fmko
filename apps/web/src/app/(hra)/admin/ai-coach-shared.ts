@@ -27,6 +27,10 @@ export const KIND_LABELS: Record<string, string> = {
   transfer_market: "trh",
   friendly_offer: "nabídka přáteláku",
   friendly_reply: "odpověď na přátelák",
+  transfer_negotiation: "jednání o nákupu",
+  main_sponsor: "hlavní sponzor",
+  unrest: "nespokojený hráč",
+  incident: "incident v klubu",
 };
 
 export interface StatusClub {
