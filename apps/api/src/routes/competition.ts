@@ -64,6 +64,9 @@ const MANAGER_NAME = (alias: string) =>
   `(SELECT mm.name FROM managers mm WHERE mm.team_id = ${alias} ORDER BY mm.created_at LIMIT 1)`;
 const MANAGER_AVATAR = (alias: string) =>
   `(SELECT mm.avatar FROM managers mm WHERE mm.team_id = ${alias} ORDER BY mm.created_at LIMIT 1)`;
+/** Vede klub AI trenér (1/0)? Stejný řádek jako `MANAGER_NAME`; web za jméno přidá štítek „(AI)“. */
+const MANAGER_IS_AI = (alias: string) =>
+  `(SELECT CASE WHEN mm.user_id = 'ai' THEN 1 ELSE 0 END FROM managers mm WHERE mm.team_id = ${alias} ORDER BY mm.created_at LIMIT 1)`;
 
 /**
  * Patří tenhle klub přihlášenému uživateli?
@@ -142,13 +145,14 @@ async function competitionState(c: { env: Bindings; json: (b: unknown, s?: numbe
 
   const officials = await c.env.DB.prepare(
     `SELECT o.role, o.team_id, o.status, o.used_suspend, t.name AS team_name,
-            ${MANAGER_NAME("o.team_id")} AS manager_name
+            ${MANAGER_NAME("o.team_id")} AS manager_name,
+            ${MANAGER_IS_AI("o.team_id")} AS manager_is_ai
        FROM competition_officials o
        JOIN teams t ON t.id = o.team_id
       WHERE o.league_id = ? AND o.season_number = ? AND o.status IN ('active','suspended')`
   ).bind(leagueId, meta.season_number).all<{
     role: string; team_id: string; status: string; used_suspend: number;
-    team_name: string; manager_name: string | null;
+    team_name: string; manager_name: string | null; manager_is_ai: number | null;
   }>()
     .catch((e) => { logger.warn({ module: M }, "funkcionáři", e); return { results: [] }; });
 
@@ -191,7 +195,8 @@ async function competitionState(c: { env: Bindings; json: (b: unknown, s?: numbe
     officials: officials.results.map((o) => ({
       role: o.role,
       roleLabel: ROLE_LABEL[o.role as OfficialRole] ?? o.role,
-      teamId: o.team_id, teamName: o.team_name, managerName: o.manager_name, status: o.status,
+      teamId: o.team_id, teamName: o.team_name, managerName: o.manager_name,
+      coachIsAi: o.manager_is_ai === 1, status: o.status,
     })),
     // Kolikrát už prezident pravomoc pozastavil. Strop na to není, ale číslo je
     // vidět — ať kluby poznají prezidenta, který si vyřizuje účty.
@@ -207,7 +212,7 @@ async function competitionState(c: { env: Bindings; json: (b: unknown, s?: numbe
         holder: holder
           ? {
               teamId: holder.team_id, teamName: holder.team_name,
-              managerName: holder.manager_name, status: holder.status,
+              managerName: holder.manager_name, coachIsAi: holder.manager_is_ai === 1, status: holder.status,
             }
           : null,
       };
@@ -829,9 +834,12 @@ competitionRouter.get("/competition/:leagueId/discipline", async (c) => {
   const clubs = await c.env.DB.prepare(
     `SELECT t.id, t.name,
             ${MANAGER_NAME("t.id")} AS manager_name,
-            ${MANAGER_AVATAR("t.id")} AS manager_avatar
+            ${MANAGER_AVATAR("t.id")} AS manager_avatar,
+            ${MANAGER_IS_AI("t.id")} AS manager_is_ai
        FROM teams t WHERE t.league_id = ? ORDER BY t.name`
-  ).bind(leagueId).all<{ id: string; name: string; manager_name: string | null; manager_avatar: string | null }>()
+  ).bind(leagueId).all<{
+    id: string; name: string; manager_name: string | null; manager_avatar: string | null; manager_is_ai: number | null;
+  }>()
     .catch((e) => { logger.warn({ module: M }, "kluby soutěže", e); return { results: [] }; });
 
   // Důkazy se sbírají pro každý klub zvlášť — formulář pak nenabídne skutek,
@@ -842,13 +850,15 @@ competitionRouter.get("/competition/:leagueId/discipline", async (c) => {
     targets.push({
       teamId: club.id, teamName: club.name,
       managerName: club.manager_name,
+      coachIsAi: club.manager_is_ai === 1,
       managerAvatar: safeJson(club.manager_avatar),
       evidence: await collectEvidence(c.env.DB, club.id, limity),
     });
   }
 
   const sanctions = await c.env.DB.prepare(
-    `SELECT s.*, t.name AS team_name, ${MANAGER_NAME("s.team_id")} AS manager_name
+    `SELECT s.*, t.name AS team_name, ${MANAGER_NAME("s.team_id")} AS manager_name,
+            ${MANAGER_IS_AI("s.team_id")} AS manager_is_ai
        FROM competition_sanctions s
        JOIN teams t ON t.id = s.team_id
       WHERE s.league_id = ? AND s.season_number = ?
@@ -865,6 +875,7 @@ competitionRouter.get("/competition/:leagueId/discipline", async (c) => {
     targets,
     sanctions: sanctions.results.map((s) => ({
       id: s.id, teamId: s.team_id, teamName: s.team_name, managerName: s.manager_name,
+      coachIsAi: s.manager_is_ai === 1,
       kind: s.kind, amount: s.amount, reason: s.reason, evidence: s.evidence,
       issuedBy: s.issued_by, status: s.status, gameDate: s.game_date,
     })),
@@ -1525,12 +1536,14 @@ competitionRouter.get("/teams/:teamId/competition/grants", async (c) => {
   const kluby = await c.env.DB.prepare(
     `SELECT t.id, t.name, t.budget,
             (SELECT s.pitch_condition FROM stadiums s WHERE s.team_id = t.id) AS pitch,
-            ${MANAGER_NAME("t.id")} AS manager_name
+            ${MANAGER_NAME("t.id")} AS manager_name,
+            ${MANAGER_IS_AI("t.id")} AS manager_is_ai
        FROM teams t
       WHERE t.league_id = ? AND t.team_type = 'senior' AND t.parent_team_id IS NULL
       ORDER BY t.name`
   ).bind(leagueId).all<{
     id: string; name: string; budget: number; pitch: number | null; manager_name: string | null;
+    manager_is_ai: number | null;
   }>().catch((e) => { logger.warn({ module: M }, "kluby pro dotaci", e); return { results: [] }; });
 
   const prah = rules.min_pitch_condition > 0 ? rules.min_pitch_condition : 30;
@@ -1544,6 +1557,7 @@ competitionRouter.get("/teams/:teamId/competition/grants", async (c) => {
     })),
     teams: kluby.results.map((t) => ({
       teamId: t.id, teamName: t.name, managerName: t.manager_name,
+      coachIsAi: t.manager_is_ai === 1,
       vMinusu: t.budget < 0,
       hristePodHranici: t.pitch !== null && t.pitch < prah,
     })),

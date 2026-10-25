@@ -275,6 +275,8 @@ export interface ClubWebsiteData {
   };
   manager: {
     name: string;
+    /** Trenér AI klubu: web za jméno přidá štítek „(AI)“. */
+    coachIsAi: boolean;
     age: number;
     reputation: number;
     avatar: Record<string, unknown>;

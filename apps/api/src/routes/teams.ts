@@ -1221,6 +1221,8 @@ teamsRouter.get("/:id/manager", async (c) => {
     id: row.id,
     userId: row.user_id,
     name: row.name,
+    // Web podle toho přidá za jméno štítek „(AI)“ (jediný viditelný rozdíl AI klubu).
+    coachIsAi: row.user_id === "ai",
     backstory: row.backstory,
     avatar: JSON.parse(row.avatar as string),
     age: row.age,
@@ -1386,6 +1388,7 @@ teamsRouter.patch("/:id/manager", async (c) => {
     id: updated.id,
     userId: updated.user_id,
     name: updated.name,
+    coachIsAi: updated.user_id === "ai",
     backstory: updated.backstory,
     avatar: JSON.parse(updated.avatar as string),
     age: updated.age,
@@ -1401,13 +1404,15 @@ teamsRouter.patch("/:id/manager", async (c) => {
 });
 
 // GET /api/teams/:id/league-teams — all teams in same league
+// Včetně AI klubů: šipky na profilu klubu a stadionu procházejí celou ligu,
+// AI klub je pro hráče stejný klub jako každý jiný.
 teamsRouter.get("/:id/league-teams", async (c) => {
   const team = await c.env.DB.prepare("SELECT league_id FROM teams WHERE id = ?")
     .bind(c.req.param("id")).first<{ league_id: string }>();
   if (!team?.league_id) return c.json([]);
 
   const result = await c.env.DB.prepare(
-    "SELECT t.id, t.name, t.primary_color, t.secondary_color, v.name as village_name, v.district FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.league_id = ? AND t.user_id != 'ai' ORDER BY t.name"
+    "SELECT t.id, t.name, t.primary_color, t.secondary_color, v.name as village_name, v.district FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.league_id = ? ORDER BY t.name"
   ).bind(team.league_id).all();
   return c.json(result.results);
 });
