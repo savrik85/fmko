@@ -679,8 +679,10 @@ export function renderMatchPrompt(ctx: MatchContext): string {
     lines.push(`- ${o.formation}: strength ${o.strength.toFixed(1)}, out of position ${o.outOfPosition}, familiarity ${o.familiarity}`);
   }
   const ref = bestFormation(ctx);
-  lines.push(`TACTIC OPTIONS for ${ref} (fit 0.70 poor .. 1.15 excellent x synergy with the formation; other formations change synergy):`);
-  lines.push(tacticOptions(ctx, ref).map((t) => `${t.tactic} fit ${t.fit.toFixed(2)} syn ${t.synergy.toFixed(2)}`).join("; "));
+  lines.push("TACTIC EFFECTIVENESS by formation (how well this squad can play it: fit x formation synergy; 1.00 = neutral, below 0.90 = a real handicap, above 1.05 = a real advantage):");
+  for (const formation of FORMATIONS) {
+    lines.push(`- ${formation}: ${tacticOptions(ctx, formation).map((t) => `${t.tactic} ${(t.fit * t.synergy).toFixed(2)}`).join(", ")}`);
+  }
   lines.push("Tactics: offensive = more attack, weaker defence; defensive = parks the bus, counters; long_ball = suits tall strong forwards; possession = needs technical passing midfield; pressing = high work rate, drains stamina faster; balanced = neutral.");
   lines.push(`HARDNESS: fair / normal / hard. Hard = more fouls and cards, intimidates soft opponents; it pays off only with an aggressive strong squad and a lenient referee. Rule-based suggestion: ${ruleHardness(ctx)}.`);
   lines.push("");
@@ -705,6 +707,7 @@ export function renderMatchPrompt(ctx: MatchContext): string {
   lines.push('formation, tactic, hardness, captain (key), rest (keys to keep OUT of the starting XI, e.g. tired players or key men before a big match; max 6), mustStart (keys you insist on starting, e.g. to give a youngster a chance; max 3), penaltyTaker (key), freekickTaker (key), plan (0-5 in-game rules), reasoning (max 30 words).');
   lines.push('Plan rule: {"fromMinute": 1-90, "when": "losing"|"winning"|"drawing"|"minute"|"down_a_man"|"up_a_man"|"tired", "byAtLeast": 1-3 (losing/winning only), "below": 10-60 (tired only, condition threshold), "action": "tactic"|"hardness"|"sub", "tactic": ..., "hardness": ..., "out": key of a starter, "in": key of a non-starter}.');
   lines.push("The engine starts the strongest XI for your formation by itself: use mustStart only to force in players it would leave out, and rest only for players you deliberately keep out. It also fills the bench (max 7); a substitution rule needs a starter out and a non-starter in.");
+  lines.push("Remember: every fit regular you rest and every weaker player you force in lowers your chances today. A real manager rotates in friendlies, against much weaker opponents or before a more important match within two days; in other league and cup matches he fields his best side, in his own style.");
   return lines.join("\n");
 }
 
