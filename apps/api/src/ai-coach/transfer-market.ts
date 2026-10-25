@@ -351,18 +351,22 @@ async function signFreeAgents(env: Bindings, club: AiClubState, now: Date, mode:
 export async function runTransferMarket(env: Bindings, teamId: string, now: Date = new Date(), opts: RunOptions = {}): Promise<MarketResult> {
   const db = env.DB;
   const mode = await readCoachMode(env.CACHE_KV, "market");
-  const profile = opts.profile ?? await ensureAiProfile(db, teamId);
-  const club = await loadAiClubState(db, teamId, profile, now);
-  if (!club) return { skipped: "not_ai_club", mode, actions: [] };
+  // Hodinová úloha běží u každého klubu: rozvrh se pozná bez načítání kádru.
+  const team = await db.prepare("SELECT user_id, parent_team_id FROM teams WHERE id = ?").bind(teamId)
+    .first<{ user_id: string; parent_team_id: string | null }>();
+  if (!team || team.user_id !== "ai" || team.parent_team_id) return { skipped: "not_ai_club", mode, actions: [] };
+  if (!opts.ignoreSchedule && pragueHour(now) < marketHour(teamId)) return { skipped: "not_yet", mode, actions: [] };
 
+  const profile = opts.profile ?? await ensureAiProfile(db, teamId);
   if (!opts.ignoreSchedule) {
-    if (pragueHour(now) < marketHour(teamId)) return { skipped: "not_yet", mode, actions: [] };
     const day = pragueDay(now);
     if (!(await claimCoachTask(db, teamId, claimTask(mode, "transfer_market"), day))) return { skipped: "done_today", mode, actions: [] };
     if (stableUnit(`market-day|${teamId}|${day}`) >= marketDayChance(profile)) {
       return { skipped: "quiet_day", mode, actions: [] };
     }
   }
+  const club = await loadAiClubState(db, teamId, profile, now);
+  if (!club) return { skipped: "not_ai_club", mode, actions: [] };
 
   const actions: MarketAction[] = [];
   const steps: Array<[string, () => Promise<void>]> = [

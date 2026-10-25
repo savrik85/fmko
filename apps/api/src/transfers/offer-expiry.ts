@@ -15,6 +15,8 @@ import { isAiTeam } from "../services/transfer-actions";
 
 /** Kolik nabídek se zpracuje za jeden tick (D1 limity), zbytek přijde na řadu příště. */
 const EXPIRY_BATCH_LIMIT = 20;
+/** Kolik nabídek v okně připomínek projít, aby se dostalo i na lidi za nabídkami, kde je na tahu AI. */
+const REMINDER_SCAN_LIMIT = EXPIRY_BATCH_LIMIT * 5;
 const SMS_ROLE = "Sportovní ředitel";
 
 type OfferRow = Record<string, unknown> & {
@@ -70,15 +72,18 @@ const REMINDER_WINDOW_HOURS = 36;
 export async function remindIdleOffers(env: Bindings, now: Date = new Date()): Promise<number> {
   const db = env.DB;
   const windowEnd = new Date(now.getTime() + REMINDER_WINDOW_HOURS * 3600000).toISOString();
+  // Projde víc nabídek, než kolik připomene: na tahu může být AI klub (ten připomínku nedostává)
+  // a takové nabídky nesmí vytlačit připomínky lidem.
   const due = await db.prepare(
     `SELECT * FROM transfer_offers
       WHERE status IN ('pending', 'countered') AND expires_at >= ? AND expires_at < ?
       ORDER BY expires_at ASC LIMIT ?`,
-  ).bind(now.toISOString(), windowEnd, EXPIRY_BATCH_LIMIT).all<OfferRow>()
+  ).bind(now.toISOString(), windowEnd, REMINDER_SCAN_LIMIT).all<OfferRow>()
     .catch((e) => { logger.warn({ module: "offer-expiry" }, "fetch offers to remind", e); return { results: [] as OfferRow[] }; });
 
   let reminded = 0;
   for (const offer of due.results) {
+    if (reminded >= EXPIRY_BATCH_LIMIT) break;
     const key = `offer-reminder:${offer.id}:${offer.expires_at}`;
     const already = await env.CACHE_KV.get(key)
       .catch((e) => { logger.warn({ module: "offer-expiry" }, "read reminder flag", e); return null; });

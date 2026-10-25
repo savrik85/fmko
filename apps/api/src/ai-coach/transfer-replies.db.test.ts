@@ -445,6 +445,65 @@ describe("člověk kupuje od AI klubu", () => {
     expect(await budgetOf("former-new")).toBe(300_000);
   });
 
+  it("souběžné protinávrhy kádr nerozeberou: oba brankáři ani hráči pod minimum najednou", async () => {
+    const when = later();
+    const squad = await analysisNow();
+    const nearReservation = (playerId: string) => Math.ceil(reservationPrice({
+      marketValue: mvOf(playerId), importance: squad.importanceOf(playerId), profile: PROFILE, playerId, now: when,
+    }) * 0.9 / 100) * 100;
+    // Kádr na hraně: 17 hráčů áčka (minimum je 16).
+    await db.prepare("DELETE FROM players WHERE id IN ('ai-ext1', 'ai-ext2', 'ai-def6')").run();
+    const gk1 = await offerFromHuman({ playerId: "ai-gk1", amount: nearReservation("ai-gk1") });
+    const gk2 = await offerFromHuman({ playerId: "ai-gk2", amount: nearReservation("ai-gk2") });
+    const def5 = await offerFromHuman({ playerId: "ai-def5", amount: nearReservation("ai-def5") });
+    await replyToTransferOffers(env, "ai-club", when, PROFILE);
+    const statuses = await Promise.all([gk1, gk2, def5].map(async (o) => (await offerRow(o.offerId))?.status));
+    // Nanejvýš jeden protinávrh: další hráč by s ním dohromady porušil pojistku kádru.
+    expect(statuses.filter((s) => s === "countered" || s === "accepted").length).toBe(1);
+    // Člověk přijme, co jde: AI má pořád brankáře a aspoň 16 hráčů.
+    for (const o of [gk1, gk2, def5]) {
+      if ((await offerRow(o.offerId))?.status === "countered") {
+        await callRoute(`/teams/human/offers/${o.offerId}/accept`, { method: "POST", token: "human-token", body: {} });
+      }
+    }
+    const left = await db.prepare("SELECT COUNT(*) AS n, SUM(CASE WHEN position = 'GK' THEN 1 ELSE 0 END) AS gk FROM players WHERE team_id = 'ai-club'")
+      .first<{ n: number; gk: number }>();
+    expect(left!.gk).toBeGreaterThanOrEqual(1);
+    expect(left!.n).toBeGreaterThanOrEqual(16);
+  });
+
+  it("protinávrh AI, který mezitím přestal jít (kádr se změnil), se při přijetí neprovede", async () => {
+    const when = later();
+    const squad = await analysisNow();
+    const amount = Math.ceil(reservationPrice({ marketValue: mvOf("ai-gk1"), importance: squad.importanceOf("ai-gk1"), profile: PROFILE, playerId: "ai-gk1", now: when }) * 0.9 / 100) * 100;
+    const offer = await offerFromHuman({ playerId: "ai-gk1", amount });
+    await replyToTransferOffers(env, "ai-club", when, PROFILE);
+    expect((await offerRow(offer.offerId))?.status).toBe("countered");
+    // Druhý brankář mezitím z klubu odešel: přijetím by AI zůstala bez brankáře.
+    await db.prepare("DELETE FROM players WHERE id = 'ai-gk2'").run();
+    const before = await budgetOf("human");
+    const accept = await callRoute(`/teams/human/offers/${offer.offerId}/accept`, { method: "POST", token: "human-token", body: {} });
+    expect(accept.status).toBe(409);
+    expect((await offerRow(offer.offerId))?.status).toBe("withdrawn");
+    expect((await db.prepare("SELECT team_id FROM players WHERE id = 'ai-gk1'").first<{ team_id: string }>())?.team_id).toBe("ai-club");
+    expect(await budgetOf("human")).toBe(before);
+  });
+
+  it("hráče s doložkou pro kupujícího AI za rezervaci nepustí: zpětný odkup s procenty nevynese", async () => {
+    const playerId = "ai-mid4";
+    const when = later();
+    const squad = await analysisNow();
+    const ask = openingAsk({ marketValue: mvOf(playerId), importance: squad.importanceOf(playerId), profile: PROFILE, playerId, now: when });
+    // AI klub hráče kdysi koupil od člověka s doložkou 50 % z dalšího prodeje.
+    await db.prepare(`INSERT INTO sell_on_clauses (id, offer_id, player_id, player_name, beneficiary_team_id, owner_team_id, pct)
+      VALUES ('clause', 'old', ?, 'Hráč', 'human', 'ai-club', 50)`).bind(playerId).run();
+    const offer = await offerFromHuman({ playerId, amount: ask });
+    await replyToTransferOffers(env, "ai-club", when, PROFILE);
+    const row = await offerRow(offer.offerId);
+    expect(row?.status).not.toBe("accepted");
+    if (row?.status === "countered") expect(row.counter_amount).toBeGreaterThanOrEqual(ask * 1.9);
+  });
+
   it("v režimu shadow AI jen zapíše rozhodnutí do deníku a nabídku nechá", async () => {
     await cacheKv.put("ai_coach_mode", JSON.stringify({ market: "shadow" }));
     const offer = await offerFromHuman({ playerId: "ai-fwd4", amount: 200_000 });

@@ -11,7 +11,10 @@
  *   na produkci (medián 1,03, p75 1,35, p90 1,87; stejná data jako `transfers/ai-seller.ts`),
  * - diskont splátek 2,06 % týdně: bankovní půjčka 15 % na ~13 týdnů (jako cizí kluby),
  *   k tomu srážka 10 % z odložené části za riziko, takže splátky AI bere jen s přirážkou,
- * - procenta z dalšího prodeje: šance, že se hráč dál prodá, a čekání na to jsou odhad.
+ * - procenta z dalšího prodeje, která kupující nabízí, AI nepočítá vůbec: jestli se hráč dál
+ *   prodá, rozhoduje kupující, a kdo chce AI obrat, ten ho dál neprodá,
+ * - naopak doložku a nedoplacené splátky, které AI klub za hráče dluží, si AI z prodeje odečte
+ *   (`settleOnResale` je z ceny hned zaplatí), takže zpětný odkup s doložkou nic nevynese.
  */
 
 import { marketValue, transferSchedule, type TransferTerms } from "@okresni-masina/shared";
@@ -26,9 +29,6 @@ export const VALUATION_WINDOW_DAYS = 14;
 export const WEEKLY_DISCOUNT = 0.0206;
 /** Srážka z odložené části: kupující nemusí splatit, peníze přijdou pozdě. */
 export const INSTALLMENT_RISK_HAIRCUT = 0.1;
-/** Odhad, jak často se hráč s doložkou opravdu prodá dál, a kolik ta platba za čekání ztratí. */
-export const SELL_ON_RESALE_CHANCE = 0.3;
-export const SELL_ON_TIME_DISCOUNT = 0.75;
 /** Hráč na výměnu, kterého AI klub využije (bude hrát), a hráč, kterého by musel zase udat. */
 export const SWAP_USEFUL_RATIO = 0.6;
 export const SWAP_JUNK_RATIO = 0.15;
@@ -132,8 +132,8 @@ export function openingAsk(input: ReservationInput): number {
 }
 
 /**
- * Cena, pod kterou AI hráče nepustí, se splněním pevné pojistky: nikdy pod 60 % tržní hodnoty.
- * Kontroluje se zvlášť i u výsledné hodnoty nabídky (viz `isBelowHardFloor`).
+ * Pevná pojistka: čistá hodnota prodeje (`netSaleValue`) nikdy pod 60 % tržní hodnoty.
+ * Kontroluje se při odpovědi AI i při přijetí jejího protinávrhu kupujícím.
  */
 export function isBelowHardFloor(value: number, marketValueOfPlayer: number): boolean {
   return value < Math.max(MIN_PRICE, marketValueOfPlayer) * HARD_FLOOR_RATIO;
@@ -178,35 +178,35 @@ export function openingBid(maxPrice: number, marketValueOfPlayer: number, profil
 }
 
 /**
- * Současná hodnota návrhu pro prodávajícího: záloha hned, splátky diskontované a se srážkou
- * za riziko, procenta z dalšího prodeje jako očekávaná budoucí platba z tržní hodnoty hráče.
- *
- * `marketValueOfPlayer` slouží jen k ocenění procent z dalšího prodeje.
+ * Současná hodnota peněz z návrhu pro prodávajícího: záloha hned, splátky diskontované a se
+ * srážkou za riziko. Procenta z dalšího prodeje se nepočítají (rozhoduje o nich kupující).
  */
-export function presentValue(terms: TransferTerms, marketValueOfPlayer: number): number {
+export function presentValue(terms: TransferTerms): number {
   const s = transferSchedule(terms);
   let value = s.upfront;
   for (let i = 1; i <= s.installments; i++) {
     const payment = i === s.installments ? s.lastInstallment : s.installmentAmount;
     value += (payment / Math.pow(1 + WEEKLY_DISCOUNT, i)) * (1 - INSTALLMENT_RISK_HAIRCUT);
   }
-  return Math.round(value + sellOnValue(terms.sellOnPct, marketValueOfPlayer));
+  return Math.round(value);
 }
 
-/** Kolik návrh skutečně stojí kupujícího: splátky diskontované (bez srážky), procenta jako očekávaný náklad. */
-export function presentCost(terms: TransferTerms, marketValueOfPlayer: number): number {
-  const s = transferSchedule(terms);
-  let cost = s.upfront;
-  for (let i = 1; i <= s.installments; i++) {
-    const payment = i === s.installments ? s.lastInstallment : s.installmentAmount;
-    cost += payment / Math.pow(1 + WEEKLY_DISCOUNT, i);
-  }
-  return Math.round(cost + sellOnValue(terms.sellOnPct, marketValueOfPlayer));
+/** Co AI klub z prodeje odvede jiným: doložka o procentech a nedoplacené splátky za hráče. */
+export interface SaleCosts {
+  /** Procenta z ceny prodeje pro klub, kterému AI klub hráče dřív odkoupil s doložkou. */
+  sellOnPct: number;
+  /** Zbytek splátek, které AI klub za hráče ještě dluží (doplatí se z prodeje hned). */
+  remainingDebt: number;
+  /** Tržní hodnota hráčů na výměnu: procenta z doložky se platí i z nich. */
+  swapMarketValue: number;
 }
 
-function sellOnValue(pct: number, marketValueOfPlayer: number): number {
-  if (!(pct > 0)) return 0;
-  return (pct / 100) * Math.max(0, marketValueOfPlayer) * SELL_ON_RESALE_CHANCE * SELL_ON_TIME_DISCOUNT;
+export const NO_SALE_COSTS: SaleCosts = { sellOnPct: 0, remainingDebt: 0, swapMarketValue: 0 };
+
+/** Kolik AI klubu z prodeje opravdu zůstane: peníze a hráči na výměnu minus doložka a dluh. */
+export function netSaleValue(terms: TransferTerms, swapValue: number, costs: SaleCosts = NO_SALE_COSTS): number {
+  const owed = (Math.max(0, costs.sellOnPct) / 100) * (terms.amount + Math.max(0, costs.swapMarketValue)) + Math.max(0, costs.remainingDebt);
+  return Math.round(presentValue(terms) + swapValue - owed);
 }
 
 /**
@@ -218,24 +218,25 @@ export function swapPlayerValue(p: { marketValue: number; useful: boolean }): nu
 }
 
 /**
- * Podmínky protinávrhu s požadovanou současnou hodnotou: drží strukturu kupujícího (záloha,
- * počet splátek, procenta) a dopočítá cenu. Když to se splátkami nejde, chce všechno hned.
+ * Podmínky protinávrhu s požadovanou čistou hodnotou (`netSaleValue`): drží strukturu kupujícího
+ * (záloha, počet splátek; procenta, která sám nabídl, nechá) a dopočítá cenu.
  */
-export function termsForValue(value: number, structure: TransferTerms, marketValueOfPlayer: number, swapValue = 0): TransferTerms {
-  const needed = Math.max(0, value - swapValue);
-  const lump: TransferTerms = { amount: ceil100(needed), upfrontPct: 100, installments: 0, sellOnPct: 0 };
-  if (structure.installments === 0 && structure.sellOnPct === 0) return lump;
+export function termsForValue(value: number, structure: TransferTerms, swapValue = 0, costs: SaleCosts = NO_SALE_COSTS): TransferTerms {
+  const p = Math.max(0, costs.sellOnPct) / 100;
+  const needed = Math.max(0, value - swapValue + p * Math.max(0, costs.swapMarketValue) + Math.max(0, costs.remainingDebt));
   const probe = 100_000;
-  const sellOnPart = sellOnValue(structure.sellOnPct, marketValueOfPlayer);
-  const factor = (presentValue({ ...structure, amount: probe, sellOnPct: 0 }, marketValueOfPlayer)) / probe;
-  if (!(factor > 0)) return lump;
+  const factor = structure.installments > 0 ? presentValue({ ...structure, amount: probe }) / probe : 1;
+  // Peníze, které AI z každé koruny ceny zůstanou: současná hodnota minus procenta z doložky.
+  const kept = factor - p;
+  const lumpKept = 1 - p;
+  const usable = kept > 0.05 ? { factor: kept, structure } : { factor: lumpKept, structure: { ...structure, upfrontPct: 100, installments: 0 } };
   const terms: TransferTerms = {
-    amount: ceil100(Math.max(0, needed - sellOnPart) / factor),
-    upfrontPct: structure.upfrontPct,
-    installments: structure.installments,
+    amount: ceil100(needed / usable.factor),
+    upfrontPct: usable.structure.upfrontPct,
+    installments: usable.structure.installments,
     sellOnPct: structure.sellOnPct,
   };
-  for (let i = 0; i < 40 && presentValue(terms, marketValueOfPlayer) + swapValue < value; i++) terms.amount += 100;
+  for (let i = 0; i < 200 && netSaleValue(terms, swapValue, costs) < value; i++) terms.amount += 100;
   return terms;
 }
 

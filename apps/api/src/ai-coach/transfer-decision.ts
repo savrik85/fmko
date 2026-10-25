@@ -15,12 +15,13 @@ import {
   concessionRate,
   isBelowHardFloor,
   maxCounterRounds,
+  netSaleValue,
+  NO_SALE_COSTS,
   openingAsk,
-  presentCost,
-  presentValue,
   reservationPrice,
   stableUnit,
   termsForValue,
+  type SaleCosts,
   type SquadImportance,
 } from "./valuation";
 import type { SellBlockReason } from "./squad";
@@ -76,6 +77,8 @@ export interface SellerDecisionInput {
   overDealLimit: boolean;
   /** Cena z inzerátu AI klubu, když je hráč na trhu. */
   listedPrice?: number | null;
+  /** Doložka a dluh, které AI klub z prodeje zaplatí (bez nich nic). */
+  saleCosts?: SaleCosts;
 }
 
 export type SellerDecision =
@@ -94,7 +97,9 @@ export function requiredLoanFee(input: { marketValue: number; age: number; impor
 }
 
 export function decideSellerReply(input: SellerDecisionInput): SellerDecision {
-  const value = presentValue(input.terms, input.marketValue) + input.swapValue;
+  // Čistá hodnota: peníze (splátky diskontované, procenta pro AI nic) a hráči na výměnu,
+  // minus to, co AI klub z prodeje odvede (doložka, nedoplacené splátky).
+  const value = netSaleValue(input.terms, input.swapValue, input.saleCosts ?? NO_SALE_COSTS);
   const baseReservation = reservationPrice({
     marketValue: input.marketValue, importance: input.importance, profile: input.profile, playerId: input.playerId, now: input.now,
   });
@@ -104,10 +109,8 @@ export function decideSellerReply(input: SellerDecisionInput): SellerDecision {
 
   if (input.offerType === "loan") return decideLoan(input, value, reservation);
 
-  // Pevná pojistka: pod 60 % tržní hodnoty nic, ani se splátkami nebo výměnou. Počítá se jen
-  // jistá část: procenta z dalšího prodeje jsou jen naděje, pojistku obejít nesmí.
-  const guaranteed = presentValue({ ...input.terms, sellOnPct: 0 }, input.marketValue) + input.swapValue;
-  if (isBelowHardFloor(guaranteed, input.marketValue)) return { kind: "reject", reason: "hard_floor", value, reservation };
+  // Pevná pojistka: pod 60 % tržní hodnoty nic, ani se splátkami, procenty nebo výměnou.
+  if (isBelowHardFloor(value, input.marketValue)) return { kind: "reject", reason: "hard_floor", value, reservation };
 
   // Hráč, který se mezitím stal oporou (zranění, prodeje), za cenu z inzerátu nejde.
   const listed = input.listedPrice && input.listedPrice > 0 && input.importance !== "key" ? input.listedPrice : null;
@@ -167,23 +170,24 @@ function decideLoan(input: SellerDecisionInput, value: number, reservation: numb
   };
 }
 
-/** Protinávrh s požadovanou hodnotou ve struktuře kupujícího; neplatné podmínky → hotově. */
+/** Protinávrh s požadovanou čistou hodnotou ve struktuře kupujícího; neplatné podmínky → hotově. */
 function counterTerms(ask: number, input: SellerDecisionInput): TransferTerms | null {
-  const structured = termsForValue(ask, input.terms, input.marketValue, input.swapValue);
+  const costs = input.saleCosts ?? NO_SALE_COSTS;
+  const structured = termsForValue(ask, input.terms, input.swapValue, costs);
   if (!transferTermsError(structured)) return structured;
-  const lump: TransferTerms = { amount: ceil100(Math.max(0, ask - input.swapValue)), upfrontPct: 100, installments: 0, sellOnPct: 0 };
+  const lump = termsForValue(ask, { amount: 0, upfrontPct: 100, installments: 0, sellOnPct: 0 }, input.swapValue, costs);
   // Výměna bez doplatku: nula jde, kladná částka musí být aspoň 100 Kč.
   if (lump.amount === 0 && input.swapValue <= 0) return null;
   return transferTermsError(lump) ? null : lump;
 }
 
-export type BuyerReplyReason = "accept_within_max" | "raise" | "too_expensive" | "out_of_patience";
+export type BuyerReplyReason = "accept_within_max" | "raise" | "no_sell_on" | "too_expensive" | "out_of_patience";
 
 export interface BuyerDecisionInput {
   /** Protinávrh prodávajícího. */
   terms: TransferTerms;
   marketValue: number;
-  /** Strop AI v současné hodnotě nákladu (`maxBuyPrice`). */
+  /** Strop AI v hotovosti (`maxBuyPrice`). */
   maxPrice: number;
   /** Poslední vlastní návrh AI (částka hotově). */
   lastOwnBid: number;
@@ -197,13 +201,25 @@ export type BuyerDecision =
   | { kind: "counter"; reason: BuyerReplyReason; cost: number; terms: TransferTerms }
   | { kind: "withdraw"; reason: BuyerReplyReason; cost: number };
 
-/** Kupující AI na protinávrh prodávajícího: vejde se do stropu → bere, jinak přidá, nebo odejde. */
+/**
+ * Kupující AI na protinávrh prodávajícího: vejde se do stropu → bere, jinak přidá, nebo odejde.
+ *
+ * Počítá se celá cena v korunách (splátky nezlevní: strop se nedá obejít rozložením ceny)
+ * a procenta z dalšího prodeje AI nedává nikdy. Jinak by šlo hráče AI prodat s doložkou
+ * a odkoupit zpátky za polovic, protože doložka by vrátila část ceny prodávajícímu.
+ */
 export function decideBuyerReply(input: BuyerDecisionInput): BuyerDecision {
-  const cost = presentCost(input.terms, input.marketValue);
-  if (cost <= input.maxPrice) return { kind: "accept", reason: "accept_within_max", cost };
+  const cost = input.terms.amount;
+  const wantsSellOn = input.terms.sellOnPct > 0;
+  if (!wantsSellOn && cost <= input.maxPrice) return { kind: "accept", reason: "accept_within_max", cost };
   if (input.rounds >= maxCounterRounds(input.profile)) return { kind: "withdraw", reason: "out_of_patience", cost };
   // Prodávající chce o víc než čtvrtinu nad strop: na to AI nemá, jednání ukončí.
   if (cost > input.maxPrice * 1.25) return { kind: "withdraw", reason: "too_expensive", cost };
+  if (wantsSellOn && cost <= input.maxPrice) {
+    // Částka by šla, doložka ne: AI nabídne totéž hotově a bez procent.
+    const amount = Math.max(100, floor100(cost));
+    return { kind: "counter", reason: "no_sell_on", cost, terms: { amount, upfrontPct: 100, installments: 0, sellOnPct: 0 } };
+  }
   const eagerness = 0.35 + (input.profile.ambition / 100) * 0.3;
   const raised = floor100(Math.min(input.maxPrice, input.lastOwnBid + (cost - input.lastOwnBid) * eagerness));
   if (raised <= input.lastOwnBid) return { kind: "withdraw", reason: "too_expensive", cost };

@@ -29,7 +29,8 @@ import { ensureAiProfile, type AiCoachProfile } from "./profile";
 import { analyzeSquad, MAX_SQUAD, type SquadAnalysis, type SquadPosition } from "./squad";
 import { decideBuyerReply, decideSellerReply, type SellerDecision } from "./transfer-decision";
 import { loadAiClubState, parseDbTime, type AiClubState } from "./transfer-club";
-import { maxBuyPrice, openDealLimit, openingBid, presentValue, stableUnit, swapPlayerValue } from "./valuation";
+import { loadCommittedPlayerIds, loadSaleCosts, loadSwapPlayersForValue, squadForSale, swapValueFor } from "./transfer-guard";
+import { maxBuyPrice, netSaleValue, openDealLimit, openingBid, stableUnit, termsForValue, type SaleCosts } from "./valuation";
 
 const M = "ai-transfer-replies";
 const HOUR_MS = 3_600_000;
@@ -84,13 +85,15 @@ interface PlayerRow {
   team_id: string; loan_from_team_id: string | null; status: string | null;
 }
 
+type SwapSummary = ReturnType<typeof swapValueFor>;
+
 interface RunContext {
   env: Bindings;
   mode: DecisionMode;
   now: Date;
   club: AiClubState;
   /** Hodnota hráčů na výměnu podle nabídky (cache v rámci běhu). */
-  swapValues: Map<string, { value: number; players: Array<{ position: string; rating: number }> }>;
+  swapValues: Map<string, SwapSummary>;
 }
 
 function termsOf(offer: { upfront_pct?: number | null; installments?: number | null; sell_on_pct?: number | null }, amount: number): TransferTerms {
@@ -125,22 +128,11 @@ async function lastAction(db: D1Database, offer: OfferRow, now: Date): Promise<{
   return { at, key: `${row?.n ?? 0}|${offer.status}|${offer.last_action_by ?? "-"}|${at.toISOString()}` };
 }
 
-/** Hodnota hráčů na výměnu pro AI klub a jejich posty (pro minimum kádru a náhradu opory). */
-async function swapValueOf(ctx: RunContext, offerId: string, analysis: SquadAnalysis): Promise<{ value: number; players: Array<{ position: string; rating: number }> }> {
+/** Hodnota hráčů na výměnu pro AI klub, jejich tržní hodnota a posty (cache v rámci běhu). */
+async function swapValueOf(ctx: RunContext, offerId: string, analysis: SquadAnalysis): Promise<SwapSummary> {
   const cached = ctx.swapValues.get(offerId);
   if (cached) return cached;
-  const rows = await ctx.env.DB.prepare(
-    `SELECT p.position, p.overall_rating, p.age FROM transfer_offer_swap_players s JOIN players p ON p.id = s.player_id
-      WHERE s.offer_id = ? ORDER BY s.sort_order`,
-  ).bind(offerId).all<{ position: string; overall_rating: number; age: number }>();
-  let value = 0;
-  for (const r of rows.results) {
-    value += swapPlayerValue({
-      marketValue: marketValue(r.overall_rating, r.age, r.position),
-      useful: analysis.isUseful({ position: r.position, rating: r.overall_rating, age: r.age }),
-    });
-  }
-  const out = { value, players: rows.results.map((r) => ({ position: r.position, rating: r.overall_rating })) };
+  const out = swapValueFor(await loadSwapPlayersForValue(ctx.env.DB, offerId), analysis);
   ctx.swapValues.set(offerId, out);
   return out;
 }
@@ -157,7 +149,7 @@ interface NegotiationHistory {
  */
 async function negotiationHistory(
   ctx: RunContext,
-  args: { playerId: string; buyerClubTeamId: string; marketValue: number; currentOfferId: string; analysis: SquadAnalysis },
+  args: { playerId: string; buyerClubTeamId: string; currentOfferId: string; analysis: SquadAnalysis; costs: SaleCosts },
 ): Promise<NegotiationHistory> {
   if (args.buyerClubTeamId === "virtual_ai") return { previousAsks: [], previousBids: [], priorBreakOffs: 0 };
   const since = new Date(ctx.now.getTime() - HISTORY_DAYS * DAY_MS).toISOString();
@@ -181,7 +173,8 @@ async function negotiationHistory(
   let breakOffs = 0;
   for (const r of rows.results) {
     const swap = await swapValueOf(ctx, r.offer_id, args.analysis);
-    const value = presentValue(termsOf(r, r.amount ?? 0), args.marketValue) + swap.value;
+    // Stejná čistá hodnota jako v rozhodnutí, ať se požadavky AI porovnávají se stejným metrem.
+    const value = netSaleValue(termsOf(r, r.amount ?? 0), swap.value, { ...args.costs, swapMarketValue: swap.marketValue });
     if (r.club_id === ctx.club.teamId) {
       if (r.event_type === "counter") asks.push(value);
       if (r.event_type === "reject" || r.event_type === "withdraw") breakOffs++;
@@ -224,16 +217,34 @@ async function planReplacement(ctx: RunContext, player: PlayerRow): Promise<void
   if (res && !res.ok) logger.info({ module: M }, `náhrada za ${player.id} bez poptávky: ${res.error}`);
 }
 
+/** Chyba služby, kterou má smysl zkusit znovu příští hodinu (výpadek), ne trest pro protistranu. */
+export class RetryLaterError extends Error {}
+
+/**
+ * Co dělat, když služba akci AI nepřijala: 500 = zkusit příště (nárok se uvolní), 409/410 =
+ * jednání se mezitím pohnulo nebo skončilo (nic), jinak (kupující nemá peníze, hráč už
+ * nepatří klubu, propojené kluby) jednání ukončit, ať nabídka nevisí.
+ */
+function failureOutcome(res: { status: number; error: string }): "retry" | "settled" | "close" {
+  if (res.status >= 500) return "retry";
+  if (res.status === 409 || res.status === 410) return "settled";
+  return "close";
+}
+
 /** Provede rozhodnutí prodávajícího přes služby. V režimu shadow nic neprovede. */
-async function executeSellerDecision(ctx: RunContext, offer: OfferRow, decision: SellerDecision, swapValue: number): Promise<{ executed: string; error?: string }> {
+async function executeSellerDecision(ctx: RunContext, offer: OfferRow, decision: SellerDecision, swapValue: number, costs: SaleCosts): Promise<{ executed: string; error?: string }> {
   if (ctx.mode === "shadow") return { executed: "shadow" };
   const { env, club } = ctx;
+  const closeAfter = async (res: { status: number; error: string }, what: string): Promise<{ executed: string; error?: string }> => {
+    const outcome = failureOutcome(res);
+    if (outcome === "retry") throw new RetryLaterError(`${what}: ${res.error}`);
+    if (outcome === "settled") return { executed: `${what}_settled_meanwhile`, error: res.error };
+    const rej = await rejectTransferOffer(env, club.teamId, offer.id);
+    return { executed: rej.ok ? `rejected_after_failed_${what}` : "failed", error: res.error };
+  };
   if (decision.kind === "accept") {
     const res = await acceptTransferOffer(env, club.teamId, offer.id);
-    if (res.ok) return { executed: "accepted" };
-    // Přijetí neprošlo (kupující nemá peníze, hráč mezitím odešel): odmítnout, ať nabídka nevisí.
-    const rej = await rejectTransferOffer(env, club.teamId, offer.id);
-    return { executed: rej.ok ? "rejected_after_failed_accept" : "failed", error: res.error };
+    return res.ok ? { executed: "accepted" } : closeAfter(res, "accept");
   }
   if (decision.kind === "counter") {
     const t = decision.terms;
@@ -241,19 +252,20 @@ async function executeSellerDecision(ctx: RunContext, offer: OfferRow, decision:
       amount: t.amount, upfrontPct: t.upfrontPct, installments: t.installments, sellOnPct: t.sellOnPct,
     });
     if (res.ok) return { executed: "countered" };
-    // Splátky by kupující neutáhl nebo nesedí podmínky: stejná hodnota hotově.
-    if (t.installments > 0 || t.sellOnPct > 0) {
-      const lump: TransferTerms = { amount: ceil100(Math.max(0, decision.ask - swapValue)), upfrontPct: 100, installments: 0, sellOnPct: 0 };
+    // Splátky by kupující neutáhl nebo nesedí podmínky: stejná čistá hodnota hotově.
+    if (failureOutcome(res) === "close" && t.installments > 0) {
+      const lump = termsForValue(decision.ask, { amount: 0, upfrontPct: 100, installments: 0, sellOnPct: t.sellOnPct }, swapValue, costs);
       if (!transferTermsError(lump) && (lump.amount > 0 || swapValue > 0)) {
         const retry = await counterTransferOffer(env, club.teamId, offer.id, { ...lump });
         if (retry.ok) return { executed: "countered_lump_sum" };
       }
     }
-    const rej = await rejectTransferOffer(env, club.teamId, offer.id);
-    return { executed: rej.ok ? "rejected_after_failed_counter" : "failed", error: res.error };
+    return closeAfter(res, "counter");
   }
   const rej = await rejectTransferOffer(env, club.teamId, offer.id);
-  return rej.ok ? { executed: "rejected" } : { executed: "failed", error: rej.error };
+  if (rej.ok) return { executed: "rejected" };
+  if (failureOutcome(rej) === "retry") throw new RetryLaterError(`reject: ${rej.error}`);
+  return { executed: "failed", error: rej.error };
 }
 
 /** AI klub je prodávající (nebo vlastník hostovaného hráče) a je na tahu. */
@@ -267,17 +279,20 @@ async function replyAsSeller(ctx: RunContext, offer: OfferRow, buyerClubTeamId: 
     return true;
   }
   const mv = playerValue(player);
-  // Hráč půjčený jinam (odkup z hostování) v kádru teď není: posoudí se, jako by se vrátil.
-  const analysis = club.members.some((m) => m.id === player.id)
+  // Hráči, na které už běží protinávrh AI, se počítají jako prodaní: kupující je může přijmout
+  // kdykoli a všechny najednou. Hráč půjčený jinam (odkup z hostování) se posoudí na své soupisce.
+  const committed = await loadCommittedPlayerIds(db, club.teamId, offer.id);
+  const inSquad = club.members.some((m) => m.id === player.id);
+  const analysis = inSquad && ![...committed].some((id) => id !== player.id && club.members.some((m) => m.id === id))
     ? club.analysis
-    : analyzeSquad([...club.members, {
-      id: player.id, position: player.position as SquadPosition, rating: player.overall_rating, age: player.age,
-      rosterTeamId: club.teamId, isU21Roster: false, loanedIn: false, injured: false,
-    }], club.profile);
+    : analyzeSquad(squadForSale(club.members, player, club.teamId, committed), club.profile);
   const importance = analysis.importanceOf(player.id);
+  // Prostředky výměny se ocení až nad kádrem po odečtení protinávrhů, ať „užitečný“ sedí.
+  ctx.swapValues.clear();
   const swap = await swapValueOf(ctx, offer.id, analysis);
-  const block = analysis.sellBlock(player.id, swap.players);
-  const history = await negotiationHistory(ctx, { playerId: player.id, buyerClubTeamId, marketValue: mv, currentOfferId: offer.id, analysis });
+  const block = analysis.sellBlock(player.id, swap.incoming);
+  const costs = await loadSaleCosts(db, club.teamId, player.id, swap.marketValue);
+  const history = await negotiationHistory(ctx, { playerId: player.id, buyerClubTeamId, currentOfferId: offer.id, analysis, costs });
   const listing = await db.prepare("SELECT asking_price FROM transfer_listings WHERE player_id = ? AND team_id = ? AND status = 'active'")
     .bind(player.id, club.teamId).first<{ asking_price: number }>()
     .catch((e) => { logger.warn({ module: M }, `inzerát hráče ${player.id}`, e); return null; });
@@ -301,8 +316,9 @@ async function replyAsSeller(ctx: RunContext, offer: OfferRow, buyerClubTeamId: 
     priorBreakOffs: history.priorBreakOffs,
     overDealLimit: club.overDealLimit,
     listedPrice: listing?.asking_price ?? null,
+    saleCosts: costs,
   });
-  const result = await executeSellerDecision(ctx, offer, decision, swap.value);
+  const result = await executeSellerDecision(ctx, offer, decision, swap.value, costs);
   if (result.executed === "accepted" && importance === "key" && offer.offer_type !== "loan") await planReplacement(ctx, player);
   await log(ctx, {
     contextRef: offer.id,
@@ -324,20 +340,25 @@ async function replyAsBuyer(ctx: RunContext, offer: OfferRow, sellerClubTeamId: 
   const player = await loadPlayer(db, offer.player_id);
   const execute = async (kind: "accept" | "counter" | "withdraw", terms?: TransferTerms): Promise<{ executed: string; error?: string }> => {
     if (ctx.mode === "shadow") return { executed: "shadow" };
+    const withdrawAfter = async (res: { status: number; error: string }, what: string) => {
+      const outcome = failureOutcome(res);
+      if (outcome === "retry") throw new RetryLaterError(`${what}: ${res.error}`);
+      if (outcome === "settled") return { executed: `${what}_settled_meanwhile`, error: res.error };
+      const w = await withdrawTransferOffer(ctx.env, club.teamId, offer.id);
+      return { executed: w.ok ? `withdrawn_after_failed_${what}` : "failed", error: res.error };
+    };
     if (kind === "accept") {
       const res = await acceptTransferOffer(ctx.env, club.teamId, offer.id);
-      if (res.ok) return { executed: "accepted" };
-      const w = await withdrawTransferOffer(ctx.env, club.teamId, offer.id);
-      return { executed: w.ok ? "withdrawn_after_failed_accept" : "failed", error: res.error };
+      return res.ok ? { executed: "accepted" } : withdrawAfter(res, "accept");
     }
     if (kind === "counter" && terms) {
       const res = await counterTransferOffer(ctx.env, club.teamId, offer.id, { ...terms });
-      if (res.ok) return { executed: "countered" };
-      const w = await withdrawTransferOffer(ctx.env, club.teamId, offer.id);
-      return { executed: w.ok ? "withdrawn_after_failed_counter" : "failed", error: res.error };
+      return res.ok ? { executed: "countered" } : withdrawAfter(res, "counter");
     }
     const w = await withdrawTransferOffer(ctx.env, club.teamId, offer.id);
-    return w.ok ? { executed: "withdrawn" } : { executed: "failed", error: w.error };
+    if (w.ok) return { executed: "withdrawn" };
+    if (failureOutcome(w) === "retry") throw new RetryLaterError(`withdraw: ${w.error}`);
+    return { executed: "failed", error: w.error };
   };
 
   if (!player || club.analysis.seniorOwnCount + 1 > MAX_SQUAD) {
@@ -417,18 +438,21 @@ async function replyToLegacyBids(ctx: RunContext, budget: { left: number }): Pro
     if (!player) continue;
     const mv = playerValue(player);
     const amount = bid.counter_amount ?? bid.amount;
+    const committed = await loadCommittedPlayerIds(db, club.teamId, bid.id);
+    const analysis = analyzeSquad(squadForSale(club.members, player, club.teamId, committed), club.profile);
+    const costs = await loadSaleCosts(db, club.teamId, player.id, 0);
     const decision = decideSellerReply({
       offerId: bid.id, offerType: "transfer", terms: { amount, upfrontPct: 100, installments: 0, sellOnPct: 0 },
-      marketValue: mv, age: player.age, importance: club.analysis.importanceOf(player.id), block: club.analysis.sellBlock(player.id),
+      marketValue: mv, age: player.age, importance: analysis.importanceOf(player.id), block: analysis.sellBlock(player.id),
       profile: club.profile, playerId: player.id, now: ctx.now, swapValue: 0, virtualBuyer: false,
       previousAsks: bid.last_action_by === club.teamId && bid.counter_amount ? [bid.counter_amount] : [],
-      previousBids: [], priorBreakOffs: 0, overDealLimit: club.overDealLimit, listedPrice: bid.asking_price,
+      previousBids: [], priorBreakOffs: 0, overDealLimit: club.overDealLimit, listedPrice: bid.asking_price, saleCosts: costs,
     });
     let executed = "shadow";
     let error: string | undefined;
     if (ctx.mode !== "shadow") {
       const res = decision.kind === "accept" ? await acceptListingBid(ctx.env, club.teamId, bid.id)
-        : decision.kind === "counter" ? await counterListingBid(ctx.env, club.teamId, bid.id, { amount: ceil100(decision.ask) })
+        : decision.kind === "counter" ? await counterListingBid(ctx.env, club.teamId, bid.id, { amount: decision.terms.amount })
         : await rejectListingBid(ctx.env, club.teamId, bid.id);
       executed = res.ok ? decision.kind : "failed";
       if (!res.ok) {

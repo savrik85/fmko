@@ -471,6 +471,21 @@ export async function acceptListingBid(env: Bindings, actorTeamId: string, bidId
   // Counter_amount má přednost (jako u offers)
   const amount = (bid.counter_amount != null ? (bid.counter_amount as number) : (bid.amount as number));
 
+  // Kupující přijímá protinávrh AI klubu: pojistky AI se ověří nad dnešním kádrem (jako u nabídek).
+  if (buyerTeamId === actorTeamId && await isAiTeam(db, sellerTeamId)) {
+    const { aiSellerGuard } = await import("../ai-coach/transfer-guard");
+    const sellerClubTeamId = await resolveClubTeamId(db, sellerTeamId) ?? sellerTeamId;
+    const block = await aiSellerGuard(db, {
+      sellerClubTeamId, playerId, offerId: bidId, offerType: "transfer",
+      terms: { amount, upfrontPct: 100, installments: 0, sellOnPct: 0 },
+    });
+    if (block) {
+      await db.prepare("UPDATE transfer_bids SET status = 'rejected' WHERE id = ? AND status IN ('pending','countered')").bind(bidId).run();
+      logger.info({ module: M }, `AI klub ${sellerTeamId} ukončil příhoz ${bidId} při přijetí: ${block}`);
+      return fail(409, "Prodávající klub hráče pustit už nemůže, jednání ukončil.");
+    }
+  }
+
   const buyer = await db.prepare("SELECT budget, name, game_date FROM teams WHERE id = ?").bind(buyerTeamId).first<{ budget: number; name: string; game_date: string }>();
   if (!buyer) return fail(400, "Kupující nenalezen");
 
@@ -685,6 +700,26 @@ export async function acceptTransferOffer(
     for (const r of swapRows) {
       const sellOn = await swapSellOnError(db, r, "Na výměnu jít nemůže.");
       if (sellOn) return fail(409, sellOn);
+    }
+  }
+  // AI klub jako prodávající: kupující přijímá protinávrh AI, který mohl ležet až tři dny.
+  // Kádr se mezitím mohl změnit (přijaté jiné protinávrhy, přesuny do U21), proto se pojistky
+  // AI (poslední brankář, minimum kádru, opora bez náhrady, 60 % tržní hodnoty) ověří znovu.
+  if (scope.role === "buyer" && await isAiTeam(db, sellerTeamId)) {
+    const { aiSellerGuard } = await import("../ai-coach/transfer-guard");
+    const block = await aiSellerGuard(db, { sellerClubTeamId: sellerTeamId, playerId, offerId, terms, offerType });
+    if (block) {
+      const closed = await db.prepare(
+        `UPDATE transfer_offers SET status = 'withdrawn', resolved_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+         WHERE id = ? AND status = ? AND last_action_by IS ?`,
+      ).bind(offerId, offer.status, offer.last_action_by ?? null).run();
+      if (closed.meta.changes === 1) {
+        await db.prepare("INSERT INTO transfer_offer_events (id, offer_id, team_id, event_type, amount, message) VALUES (?, ?, ?, 'withdraw', NULL, NULL)")
+          .bind(crypto.randomUUID(), offerId, sellerTeamId).run()
+          .catch((e) => logger.warn({ module: M }, "událost ukončení jednání AI klubem", e));
+      }
+      logger.info({ module: M }, `AI klub ${sellerTeamId} ukončil jednání ${offerId} při přijetí: ${block}`);
+      return fail(409, "Prodávající klub hráče pustit už nemůže, jednání ukončil.");
     }
   }
   // Procenta z příštího přestupu se u výměny počítají z doplatku i z tržní ceny hráčů, kteří

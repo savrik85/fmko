@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { marketValue, type TransferTerms } from "@okresni-masina/shared";
 import { generateAiProfile, type AiCoachProfile } from "./profile";
 import {
-  HARD_FLOOR_RATIO, IMPORTANCE_MULTIPLIER, MAX_BUY_TO_VALUE, VALUATION_WINDOW_DAYS, budgetReserve, maxBuyPrice, openingAsk, presentCost,
-  presentValue, reservationPrice, swapPlayerValue, valuationWindow, type SquadImportance,
+  HARD_FLOOR_RATIO, IMPORTANCE_MULTIPLIER, MAX_BUY_TO_VALUE, VALUATION_WINDOW_DAYS, budgetReserve, maxBuyPrice, netSaleValue, openingAsk,
+  presentValue, reservationPrice, swapPlayerValue, termsForValue, valuationWindow, type SquadImportance,
 } from "./valuation";
 import { analyzeSquad, type SquadMember } from "./squad";
 import { decideBuyerReply, decideSellerReply, INSULT_RATIO, requiredLoanFee, type SellerDecisionInput } from "./transfer-decision";
@@ -85,18 +85,23 @@ describe("ocenění hráče AI trenérem", () => {
   it("splátky s 10% zálohou mají nižší současnou hodnotu než hotovost (AI je bere jen s přirážkou)", () => {
     const amount = 60_000;
     const instalments: TransferTerms = { amount, upfrontPct: 10, installments: 20, sellOnPct: 0 };
-    expect(presentValue(instalments, 30_000)).toBeLessThan(presentValue(cash(amount), 30_000));
+    expect(presentValue(instalments)).toBeLessThan(presentValue(cash(amount)));
     // Aspoň čtvrtina dolů: přirážka za splátky není symbolická.
-    expect(presentValue(instalments, 30_000)).toBeLessThan(amount * 0.8);
-    // Pro kupujícího jsou splátky levnější, ale bez srážky za riziko.
-    expect(presentCost(instalments, 30_000)).toBeGreaterThan(presentValue(instalments, 30_000));
+    expect(presentValue(instalments)).toBeLessThan(amount * 0.8);
   });
 
-  it("procenta z dalšího prodeje mají malou, ale kladnou cenu", () => {
+  it("procenta z dalšího prodeje nabízená kupujícím pro AI nemají cenu (kupující rozhoduje, jestli prodá)", () => {
     const withSellOn: TransferTerms = { amount: 20_000, upfrontPct: 100, installments: 0, sellOnPct: 50 };
-    const extra = presentValue(withSellOn, 20_000) - 20_000;
-    expect(extra).toBeGreaterThan(0);
-    expect(extra).toBeLessThan(20_000 * 0.15);
+    expect(presentValue(withSellOn)).toBe(20_000);
+  });
+
+  it("doložku a nedoplacené splátky, které AI klub z prodeje zaplatí, si AI odečte", () => {
+    const costs = { sellOnPct: 50, remainingDebt: 3_000, swapMarketValue: 0 };
+    expect(netSaleValue(cash(20_000), 0, costs)).toBe(20_000 - 10_000 - 3_000);
+    // Protinávrh je vyšší tak, aby AI po zaplacení doložky a dluhu zůstala požadovaná částka.
+    const terms = termsForValue(12_000, cash(0), 0, costs);
+    expect(netSaleValue(terms, 0, costs)).toBeGreaterThanOrEqual(12_000);
+    expect(terms.amount).toBeGreaterThanOrEqual(30_000);
   });
 
   it("strop nákupu respektuje rezervu na provoz a šetrný trenér platí míň", () => {
@@ -264,8 +269,23 @@ describe("pokusy AI klub obrat", () => {
     expect(d.kind).toBe("counter");
     if (d.kind === "counter") {
       expect(d.terms.installments).toBe(6);
-      expect(presentValue(d.terms, mv)).toBeGreaterThanOrEqual(d.ask);
+      expect(netSaleValue(d.terms, 0)).toBeGreaterThanOrEqual(d.ask);
     }
+  });
+
+  it("zpětný odkup hráče s doložkou pro kupujícího nevynese: AI chce čistou rezervaci", () => {
+    const mv = 20_000;
+    const p = profile();
+    const reservation = reservationPrice({ marketValue: mv, importance: "surplus", profile: p, playerId: "player-1", now: NOW });
+    // Kupující dostane z ceny 50 % zpátky přes doložku: nabídka ve výši rezervace nestačí.
+    const costs = { sellOnPct: 50, remainingDebt: 0, swapMarketValue: 0 };
+    const d = decideSellerReply(sellerInput({ terms: cash(reservation), marketValue: mv, importance: "surplus", profile: p, saleCosts: costs }));
+    expect(d.kind).not.toBe("accept");
+    if (d.kind === "counter") expect(netSaleValue(d.terms, 0, costs)).toBeGreaterThanOrEqual(reservation);
+    // Dvojnásobek už AI po zaplacení doložky rezervaci nechá.
+    const ok = decideSellerReply(sellerInput({ terms: cash(reservation * 2 + 200), marketValue: mv, importance: "surplus", profile: p, saleCosts: costs }));
+    expect(["accept", "counter"]).toContain(ok.kind);
+    expect(ok.value).toBeGreaterThanOrEqual(reservation);
   });
 
   it("klub mimo hru nesmlouvá: pod rezervací odmítnutí, nad ní přijetí", () => {
@@ -299,6 +319,18 @@ describe("hostování a nákup", () => {
     }
     expect(decideBuyerReply({ ...base, terms: cash(40_000) }).kind).toBe("withdraw");
     expect(decideBuyerReply({ ...base, rounds: 9, terms: cash(24_000) }).kind).toBe("withdraw");
+  });
+
+  it("kupující AI nepřistoupí na procenta z dalšího prodeje a splátkami se strop neobejde", () => {
+    const p = profile();
+    const base = { marketValue: 20_000, maxPrice: 22_000, lastOwnBid: 17_000, rounds: 0, profile: p };
+    // Stejná částka s doložkou: AI nabídne totéž bez procent.
+    const sellOn = decideBuyerReply({ ...base, terms: { amount: 21_000, upfrontPct: 100, installments: 0, sellOnPct: 50 } });
+    expect(sellOn).toMatchObject({ kind: "counter", reason: "no_sell_on", terms: { amount: 21_000, sellOnPct: 0 } });
+    // 10 % záloha a 20 splátek: počítá se celá cena, ne její současná hodnota.
+    const stretched = decideBuyerReply({ ...base, terms: { amount: 26_000, upfrontPct: 10, installments: 20, sellOnPct: 0 } });
+    expect(stretched.kind).not.toBe("accept");
+    expect(decideBuyerReply({ ...base, terms: { amount: 21_000, upfrontPct: 30, installments: 5, sellOnPct: 0 } }).kind).toBe("accept");
   });
 });
 
