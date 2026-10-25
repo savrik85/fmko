@@ -287,6 +287,12 @@ Druhá, paralelní implementace pravidel pro AI nesmí vzniknout. Jen tak AI nem
   jen na prázdné místo v základu. Ceny a pojistky počítá dál jen kód.
 - **Kádr** (oprava 25. 10.): AI chce v áčku 24 hráčů jako lidé (ne 20) a hráče, kterého za 30 dní
   dvakrát nikdo nekoupil, znovu nevystaví.
+- **Kluby mimo hru** (hotovo 25. 10., `ai-coach/outside-buy.ts`): inzerát klubu mimo hru v lize
+  a hlášení vlastního skauta jsou kandidáti jako ostatní, jedná se stejnou službou jako u člověka
+  (`startAiNegotiation` / `counterAiNegotiation` / `signAiNegotiation`). Z hlášení AI vidí jen střed
+  zamlženého odhadu. Protinávrh do stropu podepíše, nad strop jednou nabídne strop a jinak stáhne.
+  Skaut bez práce vyjede na hledaný post hned, jak je díra v kádru (2 týdny, okruh podle povahy,
+  cestovné jen z peněz nad rezervou).
 - **Obchody mezi AI kluby** povolené, ale vzácné.
 - AI nikoho nezvýhodňuje. Komisař pro integritu sleduje i obchody s AI kluby
   (`competition/integrity.ts`). AI kluby nejsou „propojené“ s lidmi, výjimkou je převzatý klub, který
