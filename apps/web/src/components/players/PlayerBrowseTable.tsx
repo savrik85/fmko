@@ -1,16 +1,17 @@
 "use client";
 
 /**
- * Tabulka hráčů na procházení — kádr cizího týmu, sledovaní hráči.
+ * Tabulka hráčů na procházení — kádr cizího týmu, sledovaní hráči, hráči na prodej.
  *
  * Počítač: řaditelná tabulka. Mobil: seznam bez sloupců navíc; u každého hráče čtyři
  * klíčové dovednosti jeho pozice s popiskem a výběr řazení nad seznamem.
  *
  * Dovednosti a kondici cizích hráčů posílá API už zaokrouhlené. Tržní cena je jen odhad
- * zaokrouhlený na tisíce, stejně jako v profilu hráče.
+ * zaokrouhlený na tisíce, stejně jako v profilu hráče. U hráčů na prodej je navíc cena
+ * z inzerátu a tlačítko nabídky.
  */
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { marketValue, marketValueEstimate } from "@okresni-masina/shared";
@@ -20,7 +21,7 @@ import { FaceAvatar } from "@/components/players/face-avatar";
 type Position = "GK" | "DEF" | "MID" | "FWD";
 type SkillKey = "speed" | "technique" | "shooting" | "passing" | "heading" | "defense" | "goalkeeping";
 type PosFilter = "all" | Position;
-type SortKey = "position" | "name" | "club" | "age" | "rating" | SkillKey | "condition" | "value";
+type SortKey = "position" | "name" | "club" | "age" | "rating" | SkillKey | "condition" | "value" | "price";
 type SortDir = "asc" | "desc";
 
 export interface BrowseRow {
@@ -42,6 +43,12 @@ export interface BrowseRow {
   onOpen?: () => void;
   /** Text místo klubu, když hráč žádný nemá (třeba „volný hráč"). */
   clubLabel?: string;
+  /** Cena z inzerátu (sloupec `price`). */
+  price?: number | null;
+  /** Štítek za jménem (třeba okres hráče z jiné soutěže). */
+  tag?: ReactNode;
+  /** Tlačítko u hráče (sloupec `action`), třeba nabídka na hráče z trhu. */
+  action?: ReactNode;
 }
 
 const POS_LABELS: Record<Position, string> = { GK: "BRA", DEF: "OBR", MID: "ZÁL", FWD: "ÚTO" };
@@ -71,9 +78,11 @@ const MOBILE_SORTS: Array<{ key: SortKey; label: string }> = [
   { key: "value", label: "Tržní cena" },
   { key: "age", label: "Věk" },
 ];
+const PRICE_SORT: { key: SortKey; label: string } = { key: "price", label: "Cena" };
 
 const rowValue = (r: BrowseRow) => marketValueEstimate(marketValue(r.rating, r.age, r.position));
 const formatValue = (v: number) => `cca ${v.toLocaleString("cs")} Kč`;
+const formatPrice = (v: number) => `${v.toLocaleString("cs")} Kč`;
 const skillShort = (k: SkillKey) => SKILL_COLUMNS.find((c) => c.key === k)?.short ?? k;
 const formatForm = (f: NonNullable<BrowseRow["form"]>) =>
   `${f.matches} z · ${f.goals} g · ${f.assists} a${f.matches > 0 ? ` · ${f.avgRating.toFixed(1)}` : ""}`;
@@ -94,28 +103,32 @@ function sortValue(r: BrowseRow, key: SortKey): number | string {
   switch (key) {
     case "position": return POS_ORDER[r.position] ?? 9;
     case "name": return r.lastName;
-    case "club": return r.club?.name ?? "";
+    case "club": return r.club?.name ?? r.clubLabel ?? "";
     case "age": return r.age;
     case "rating": return r.rating;
     case "condition": return r.condition ?? 0;
     case "value": return rowValue(r);
+    case "price": return r.price ?? 0;
     default: return r.skills[key] ?? 0;
   }
 }
 
-export function PlayerBrowseTable({ rows, color, onColorText, ratingColor, columns, onRemove, emptyText }: {
+export function PlayerBrowseTable({ rows, color, onColorText, ratingColor, columns, onRemove, emptyText, defaultSort = "position" }: {
   rows: BrowseRow[];
   color: string;
   onColorText: string;
   ratingColor: string;
-  columns: { club?: boolean; condition?: boolean; form?: boolean; watchedSince?: boolean };
+  columns: { club?: boolean; condition?: boolean; form?: boolean; watchedSince?: boolean; price?: boolean; action?: boolean };
   onRemove?: (row: BrowseRow) => void;
   emptyText?: string;
+  /** Výchozí řazení (pozice vzestupně, ostatní sestupně). */
+  defaultSort?: SortKey;
 }) {
   const router = useRouter();
   const [filter, setFilter] = useState<PosFilter>("all");
-  const [sortKey, setSortKey] = useState<SortKey>("position");
-  const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [sortKey, setSortKey] = useState<SortKey>(defaultSort);
+  const [sortDir, setSortDir] = useState<SortDir>(defaultSort === "position" ? "asc" : "desc");
+  const mobileSorts = columns.price ? [...MOBILE_SORTS, PRICE_SORT] : MOBILE_SORTS;
 
   const sortBy = (key: SortKey) => {
     if (sortKey === key) { setSortDir(sortDir === "asc" ? "desc" : "asc"); return; }
@@ -178,7 +191,7 @@ export function PlayerBrowseTable({ rows, color, onColorText, ratingColor, colum
           Řadit
           <select value={sortKey} onChange={(e) => { const k = e.target.value as SortKey; setSortKey(k); setSortDir(k === "position" ? "asc" : "desc"); }}
             className="text-sm font-heading font-bold text-ink bg-gray-100 rounded-soft px-2 py-1.5">
-            {MOBILE_SORTS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+            {mobileSorts.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
           </select>
         </label>
       </div>
@@ -196,10 +209,12 @@ export function PlayerBrowseTable({ rows, color, onColorText, ratingColor, colum
               {SKILL_COLUMNS.map((c) => header(c.key, c.short, "w-11 text-center", c.label))}
               {columns.condition && header("condition", "Kon", "w-14 text-center", "Kondice")}
               {columns.form && <th className="pb-2 pr-2 text-sm font-heading font-bold uppercase text-muted whitespace-nowrap" title="Zápasy · góly · asistence · průměrná známka">Forma</th>}
-              {header("value", "Cena", "w-32 text-right", "Tržní cena (odhad)")}
+              {columns.price && header("price", "Cena", "w-28 text-right", "Cena z inzerátu")}
+              {header("value", columns.price ? "Tržní" : "Cena", "w-32 text-right", "Tržní cena (odhad)")}
               <th className="pb-2 pr-2 text-sm font-heading font-bold uppercase text-muted text-center w-20">Stav</th>
               {columns.watchedSince && <th className="pb-2 pr-2 text-sm font-heading font-bold uppercase text-muted whitespace-nowrap">Sleduji od</th>}
               {onRemove && <th className="pb-2 pr-4 sm:pr-5" />}
+              {columns.action && <th className="pb-2 pr-4 sm:pr-5" />}
             </tr>
           </thead>
           <tbody>
@@ -213,6 +228,7 @@ export function PlayerBrowseTable({ rows, color, onColorText, ratingColor, colum
                     <div className="min-w-0">
                       <span className="font-heading font-bold text-base truncate block">{r.firstName} {r.lastName}</span>
                       {r.nickname && <span className="text-sm text-gold-500 block">&bdquo;{r.nickname}&ldquo;</span>}
+                      {r.tag && <span className="block">{r.tag}</span>}
                     </div>
                   </div>
                 </td>
@@ -232,7 +248,10 @@ export function PlayerBrowseTable({ rows, color, onColorText, ratingColor, colum
                 ))}
                 {columns.condition && <td className="py-2 pr-2 text-center tabular-nums text-muted">{r.condition ?? "—"} %</td>}
                 {columns.form && <td className="py-2 pr-2 tabular-nums text-muted whitespace-nowrap">{r.form ? formatForm(r.form) : "—"}</td>}
-                <td className="py-2 pr-2 text-right tabular-nums font-heading font-bold whitespace-nowrap">{formatValue(rowValue(r))}</td>
+                {columns.price && (
+                  <td className="py-2 pr-2 text-right tabular-nums font-heading font-bold whitespace-nowrap">{r.price != null ? formatPrice(r.price) : "—"}</td>
+                )}
+                <td className={`py-2 pr-2 text-right tabular-nums whitespace-nowrap ${columns.price ? "text-muted" : "font-heading font-bold"}`}>{formatValue(rowValue(r))}</td>
                 <td className="py-2 pr-2 text-center whitespace-nowrap">
                   {r.injury
                     ? <span className="text-sm font-heading font-bold text-card-red" title={r.injury.type ?? "Zranění"}>🩹 {r.injury.daysRemaining} d</span>
@@ -240,6 +259,9 @@ export function PlayerBrowseTable({ rows, color, onColorText, ratingColor, colum
                 </td>
                 {columns.watchedSince && <td className="py-2 pr-2 text-muted whitespace-nowrap">{r.watchedSince ? formatDay(r.watchedSince) : "—"}</td>}
                 {onRemove && <td className="py-2 pr-4 sm:pr-5 text-right">{removeButton(r)}</td>}
+                {columns.action && (
+                  <td className="py-2 pr-4 sm:pr-5 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>{r.action}</td>
+                )}
               </tr>
             ))}
           </tbody>
@@ -257,8 +279,10 @@ export function PlayerBrowseTable({ rows, color, onColorText, ratingColor, colum
               <div className="flex-1 min-w-0">
                 <div className="font-heading font-bold text-base truncate">{r.firstName} {r.lastName}</div>
                 <div className="text-sm text-muted tabular-nums truncate">
-                  {columns.club && (r.club || r.clubLabel) ? `${r.club?.name ?? r.clubLabel} · ` : ""}{r.age} let · {formatValue(rowValue(r))}
+                  {columns.club && (r.club || r.clubLabel) ? `${r.club?.name ?? r.clubLabel} · ` : ""}{r.age} let
+                  {columns.price ? "" : ` · ${formatValue(rowValue(r))}`}
                 </div>
+                {r.tag && <div className="mt-0.5">{r.tag}</div>}
               </div>
               <span className={`px-2 py-1 rounded-soft font-heading font-bold text-base tabular-nums shrink-0 ${onColorText}`} style={{ backgroundColor: color }}>
                 {r.rating}
@@ -279,6 +303,15 @@ export function PlayerBrowseTable({ rows, color, onColorText, ratingColor, colum
               <div className="flex items-center justify-between gap-2 mt-1.5 text-sm text-muted">
                 <span className="tabular-nums">{columns.form && r.form ? `Forma: ${formatForm(r.form)}` : ""}</span>
                 {removeButton(r)}
+              </div>
+            ) : null}
+            {columns.price || columns.action ? (
+              <div className="flex items-center justify-between gap-2 mt-2">
+                <div className="text-sm tabular-nums min-w-0">
+                  {columns.price && r.price != null && <span className="font-heading font-bold text-ink">{formatPrice(r.price)}</span>}
+                  <span className="text-muted">{columns.price && r.price != null ? " · tržní " : ""}{formatValue(rowValue(r))}</span>
+                </div>
+                {columns.action && <div className="shrink-0" onClick={(e) => e.stopPropagation()}>{r.action}</div>}
               </div>
             ) : null}
           </div>

@@ -2,7 +2,7 @@
 
 import { marketValue, formatTermsSummary, termsFromRow, sellOnShare } from "@okresni-masina/shared";
 import { MoneyInput } from "@/components/ui/money-input";
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
@@ -14,6 +14,7 @@ import { PlayerRevealCard } from "@/components/players/reveal-card";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { isLightColor, bestTextOn, readableOnLight } from "@/lib/team-color";
 import { WatchlistTab } from "./WatchlistTab";
+import { PlayerBrowseTable, type BrowseRow } from "@/components/players/PlayerBrowseTable";
 import { ObligationsTab } from "./ObligationsTab";
 import { DemandsTab } from "./DemandsTab";
 import { OriginBadge } from "@/components/transfers/origin-badge";
@@ -565,6 +566,12 @@ interface MarketListing {
   myActiveOfferId?: string | null;
   myActiveOfferAmount?: number | null;
   myActiveOfferStatus?: string | null;
+  /** Hráč klubu mimo hru: nemá profil, o ceně se jedná s klubem. */
+  isAiListing?: boolean;
+  /** Dovednosti zaokrouhlené na pětky (cizí hráč). */
+  skills?: Record<string, number>;
+  injuryDays?: number | null;
+  myNegotiationId?: string | null;
 }
 
 /** Štítek „odkud“ u hráče z jiného okresu nebo soutěže — stejný na Volných i na Prodeji. */
@@ -1008,6 +1015,93 @@ export default function TransfersPage() {
     ["squad", "Můj tým", quitCount],
     ["demands", "Poptávky", 0],
   ];
+
+  const clubColor = primaryColor || "#2D5F2D";
+  const clubColorText = bestTextOn(clubColor) === "light" ? "text-white border border-transparent" : "text-gray-900 border border-gray-300";
+  const clubRatingColor = readableOnLight(clubColor);
+
+  // Nabídka na hráče z trhu: z tlačítka i z kliknutí na hráče klubu mimo hru (ten profil nemá).
+  const openListingBid = (l: MarketListing) => setPriceDialog({
+    title: `Nabídnout za ${l.playerName}`,
+    description: l.isAiListing
+      ? `Požadovaná cena: ${formatCZK(l.askingPrice)}. O ceně se s klubem dá jednat, předseda odpoví hned.`
+      : `Požadovaná cena: ${formatCZK(l.askingPrice)}`,
+    defaultPrice: l.askingPrice,
+    // Splátky jdou u obou; procenta a výměna jen s lidským klubem.
+    payment: { allowSellOn: !l.isAiListing },
+    negotiate: l.isAiListing ? undefined : (price) => {
+      setPriceDialog(null);
+      router.push(`/hrac/${l.playerId}?nabidka=${price}`);
+    },
+    onConfirm: async (price, terms) => {
+      if (!teamId) return;
+      let res: { ok: boolean; rejected?: boolean; explanation?: string; error?: string; offerId?: string; negotiationId?: string; alreadyExists?: boolean } | null = null;
+      let errorMsg: string | null = null;
+      try {
+        res = await apiFetch(`/api/teams/${teamId}/market/${l.id}/bid`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ amount: price, ...terms }),
+        });
+      } catch (e: any) {
+        errorMsg = e?.message ?? String(e);
+      }
+      setPriceDialog(null);
+      if (errorMsg) {
+        showError("Nabídka se nezdařila", errorMsg);
+      } else if (res?.rejected) {
+        await confirm({ title: "Odmítl přestup", description: res.explanation ?? "Hráč nemá zájem." });
+      } else if (res?.negotiationId) {
+        // Cizí klub: cena se vyjednává, otevři jednání
+        router.push(`/prestupy/jednani/${res.negotiationId}`);
+        return;
+      } else if (res?.offerId) {
+        // Lidsky listing -> vytvorena nabidka, otevri jednani
+        router.push(`/prestupy/nabidka/${res.offerId}`);
+        return;
+      }
+      await refresh();
+    },
+  });
+
+  const listingAction = (l: MarketListing): ReactNode => l.myNegotiationId ? (
+    <Link href={`/prestupy/jednani/${l.myNegotiationId}`}
+      className="inline-block py-1.5 px-4 rounded-soft text-sm font-heading font-bold bg-ink text-white hover:bg-ink/80 transition-colors">
+      Jednáš o něm →
+    </Link>
+  ) : l.myActiveOfferId ? (
+    <Link href={`/prestupy/nabidka/${l.myActiveOfferId}`}
+      className="inline-block py-1.5 px-4 rounded-soft text-sm font-heading font-bold bg-ink text-white hover:bg-ink/80 transition-colors">
+      Probíhá jednání →
+    </Link>
+  ) : l.myBidAmount ? (
+    <span className="inline-block py-1.5 px-4 rounded-soft text-sm font-heading font-bold bg-pitch-50 text-pitch-600">
+      Nabídnuto {formatCZK(l.myBidAmount)}
+    </span>
+  ) : (
+    <button onClick={() => openListingBid(l)}
+      className="py-1.5 px-4 rounded-soft text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">
+      Nabídnout
+    </button>
+  );
+
+  const listingRows: BrowseRow[] = listings.map((l) => {
+    const [firstName, ...rest] = l.playerName.split(" ");
+    let avatar: Record<string, unknown> | null = null;
+    try {
+      avatar = typeof l.avatar === "string" ? JSON.parse(l.avatar) : l.avatar;
+    } catch (e) {
+      console.warn("Avatar hráče na trhu nejde přečíst:", e);
+    }
+    return {
+      id: l.id, firstName, lastName: rest.join(" "), age: l.playerAge, position: l.position as BrowseRow["position"],
+      rating: l.overallRating, skills: l.skills ?? {}, avatar,
+      injury: l.injuryDays ? { type: null, daysRemaining: l.injuryDays } : null,
+      clubLabel: l.teamName, price: l.askingPrice,
+      tag: l.origin ? <OriginBadge origin={l.origin} /> : undefined,
+      action: listingAction(l),
+      onOpen: l.isAiListing ? () => openListingBid(l) : () => router.push(`/hrac/${l.playerId}`),
+    };
+  });
 
   return (
     <div className="page-container space-y-5">
@@ -1881,125 +1975,9 @@ export default function TransfersPage() {
             {listings.length === 0 ? (
               <div className="card p-6 text-center text-muted">Nikdo momentálně nenabízí hráče.</div>
             ) : (
-              <div className="space-y-3">
-                {listings.map((l) => {
-                  const lAvatar = (() => { try { return typeof l.avatar === "string" ? JSON.parse(l.avatar) : l.avatar; } catch { return null; } })();
-                  return (
-                  <div key={l.id} className="card p-4">
-                    <div className="flex items-center gap-3">
-                      {lAvatar && Object.keys(lAvatar).length > 0
-                        ? <FaceAvatar faceConfig={lAvatar} size={40} className="rounded-full shrink-0" />
-                        : <div className="w-10 h-10 rounded-full bg-gray-100 shrink-0" />}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-0.5 flex-wrap">
-                          {(l as any).isAiListing
-                            ? <span className="font-heading font-bold">{l.playerName}</span>
-                            : <Link href={`/hrac/${l.playerId}`} className="font-heading font-bold hover:text-pitch-500 underline decoration-pitch-500/20 transition-colors">{l.playerName}</Link>
-                          }
-                          {nationalityFlag(l.nationality) && <span title={l.nationality}>{nationalityFlag(l.nationality)}</span>}
-                          <PositionBadge position={l.position as "GK" | "DEF" | "MID" | "FWD"} />
-                          <span className="text-sm text-muted">{l.playerAge} let</span>
-                          <span className="text-sm font-heading font-bold tabular-nums">{l.overallRating}</span>
-                        </div>
-                        <div className="text-xs text-muted">
-                          <OriginBadge origin={l.origin} />
-                          <span className="font-heading font-bold text-ink">{formatCZK(l.askingPrice)}</span> — {l.teamName}
-                          {(l as any).injuryDays > 0 && (
-                            <span className="ml-2 text-card-red font-heading font-bold">🩹 Zraněný ({(l as any).injuryDays}d)</span>
-                          )}
-                        </div>
-                        {(l as any).skills && Object.keys((l as any).skills).length > 0 && (
-                          <button onClick={() => toggleSkills(l.id)} className="text-sm font-heading font-bold text-pitch-500 hover:text-pitch-600 transition-colors mt-1">
-                            Dovednosti {expandedSkills.has(l.id) ? "▲" : "▼"}
-                          </button>
-                        )}
-                        {expandedSkills.has(l.id) && (l as any).skills && (() => {
-                          const s = (l as any).skills as Record<string, number>;
-                          const isGK = l.position === "GK";
-                          return (
-                            <div className="mt-2 grid grid-cols-3 gap-x-4 gap-y-1 text-sm tabular-nums">
-                              {isGK && <div><span className="text-muted font-heading">Bra </span><span className={skillColor(s.goalkeeping ?? 0)}>{s.goalkeeping ?? "—"}</span></div>}
-                              <div><span className="text-muted font-heading">Rych </span><span className={skillColor(s.speed ?? 0)}>{s.speed ?? "—"}</span></div>
-                              <div><span className="text-muted font-heading">Tech </span><span className={skillColor(s.technique ?? 0)}>{s.technique ?? "—"}</span></div>
-                              {!isGK && <div><span className="text-muted font-heading">Stř </span><span className={skillColor(s.shooting ?? 0)}>{s.shooting ?? "—"}</span></div>}
-                              <div><span className="text-muted font-heading">Přih </span><span className={skillColor(s.passing ?? 0)}>{s.passing ?? "—"}</span></div>
-                              <div><span className="text-muted font-heading">Obr </span><span className={skillColor(s.defense ?? 0)}>{s.defense ?? "—"}</span></div>
-                              <div><span className="text-muted font-heading">Výd </span><span className={skillColor(s.stamina ?? 0)}>{s.stamina ?? "—"}</span></div>
-                            </div>
-                          );
-                        })()}
-                      </div>
-                      {(l as any).myNegotiationId ? (
-                        <Link
-                          href={`/prestupy/jednani/${(l as any).myNegotiationId}`}
-                          className="shrink-0 py-1.5 px-4 rounded-soft text-sm font-heading font-bold bg-ink text-white hover:bg-ink/80 transition-colors"
-                        >
-                          Jednáš o něm →
-                        </Link>
-                      ) : l.myActiveOfferId ? (
-                        <Link
-                          href={`/prestupy/nabidka/${l.myActiveOfferId}`}
-                          className="shrink-0 py-1.5 px-4 rounded-soft text-sm font-heading font-bold bg-ink text-white hover:bg-ink/80 transition-colors"
-                        >
-                          Probíhá jednání{l.myActiveOfferAmount ? ` (${formatCZK(l.myActiveOfferAmount)})` : ""} →
-                        </Link>
-                      ) : l.myBidAmount ? (
-                        <span className="shrink-0 py-1.5 px-4 rounded-soft text-sm font-heading font-bold bg-pitch-50 text-pitch-600">
-                          Nabídnuto {formatCZK(l.myBidAmount)}
-                        </span>
-                      ) : (
-                        <button
-                          onClick={() => {
-                            setPriceDialog({
-                              title: `Nabídnout za ${l.playerName}`,
-                              description: (l as any).isAiListing
-                                ? `Požadovaná cena: ${formatCZK(l.askingPrice)}. O ceně se s klubem dá jednat, předseda odpoví hned.`
-                                : `Požadovaná cena: ${formatCZK(l.askingPrice)}`,
-                              defaultPrice: l.askingPrice,
-                              // Splátky jdou u obou; procenta a výměna jen s lidským klubem.
-                              payment: { allowSellOn: !(l as any).isAiListing },
-                              negotiate: (l as any).isAiListing ? undefined : (price) => {
-                                setPriceDialog(null);
-                                router.push(`/hrac/${l.playerId}?nabidka=${price}`);
-                              },
-                              onConfirm: async (price, terms) => {
-                                if (!teamId) return;
-                                let res: { ok: boolean; rejected?: boolean; explanation?: string; error?: string; offerId?: string; negotiationId?: string; alreadyExists?: boolean } | null = null;
-                                let errorMsg: string | null = null;
-                                try {
-                                  res = await apiFetch(`/api/teams/${teamId}/market/${l.id}/bid`, {
-                                    method: "POST", headers: { "Content-Type": "application/json" },
-                                    body: JSON.stringify({ amount: price, ...terms }),
-                                  });
-                                } catch (e: any) {
-                                  errorMsg = e?.message ?? String(e);
-                                }
-                                setPriceDialog(null);
-                                if (errorMsg) {
-                                  showError("Nabídka se nezdařila", errorMsg);
-                                } else if (res?.rejected) {
-                                  await confirm({ title: "Odmítl přestup", description: res.explanation ?? "Hráč nemá zájem." });
-                                } else if (res?.negotiationId) {
-                                  // Cizí klub: cena se vyjednává, otevři jednání
-                                  router.push(`/prestupy/jednani/${res.negotiationId}`);
-                                  return;
-                                } else if (res?.offerId) {
-                                  // Lidsky listing -> vytvorena nabidka, otevri jednani
-                                  router.push(`/prestupy/nabidka/${res.offerId}`);
-                                  return;
-                                }
-                                await refresh();
-                              },
-                            });
-                          }}
-                          className="shrink-0 py-1.5 px-4 rounded-soft text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors"
-                        >
-                          Nabídnout
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ); })}
+              <div className="card p-4 sm:p-5">
+                <PlayerBrowseTable rows={listingRows} color={clubColor} onColorText={clubColorText} ratingColor={clubRatingColor}
+                  columns={{ club: true, price: true, action: true }} defaultSort="rating" />
               </div>
             )}
           </div>

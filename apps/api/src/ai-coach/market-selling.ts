@@ -87,7 +87,7 @@ export async function listSurplus(
     for (const m of candidates) {
       if (rulePicks.length >= slots) break;
       if (m.age <= 21 && club.profile.youthFocus >= 50) continue;
-      rulePicks.push({ id: m.id, price: openingAsk({ marketValue: valueOf(m), importance: "surplus", profile: club.profile, playerId: m.id, now }) });
+      rulePicks.push({ id: m.id, price: openingAsk({ marketValue: valueOf(m), age: m.age, importance: "surplus", profile: club.profile, playerId: m.id, now }) });
     }
   }
 
@@ -97,7 +97,7 @@ export async function listSurplus(
     key: `s${i + 1}`, member: m,
     option: {
       key: `s${i + 1}`, position: m.position, age: m.age, rating: m.rating, marketValue: valueOf(m), chosen: chosen.has(m.id),
-      ...listingPriceBounds(reservationPrice({ marketValue: valueOf(m), importance: "surplus", profile: club.profile, playerId: m.id, now })),
+      ...listingPriceBounds(reservationPrice({ marketValue: valueOf(m), age: m.age, importance: "surplus", profile: club.profile, playerId: m.id, now })),
     },
   }));
   const ctx: ListingContext = {

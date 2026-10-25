@@ -30,7 +30,7 @@ function sellerInput(over: Partial<SellerDecisionInput> & { terms: TransferTerms
   };
 }
 
-const valuation = { marketValue: MV, importance: "rotation" as SquadImportance, profile: profile(), playerId: "player-1", now: NOW };
+const valuation = { marketValue: MV, age: 25, importance: "rotation" as SquadImportance, profile: profile(), playerId: "player-1", now: NOW };
 const R = reservationPrice(valuation);
 const ASK = openingAsk(valuation);
 const round100 = (v: number) => Math.ceil(v / 100) * 100;
@@ -114,7 +114,7 @@ describe("přípustné možnosti AI prodávajícího", () => {
       const p = generateAiProfile(`club-${i}`, null);
       const mv = 2_000 + Math.round(rng.random() * 60_000);
       const importance = importances[i % 3];
-      const r = reservationPrice({ marketValue: mv, importance, profile: p, playerId: `pl-${i}`, now: NOW });
+      const r = reservationPrice({ marketValue: mv, age: 25, importance, profile: p, playerId: `pl-${i}`, now: NOW });
       const amount = Math.max(100, round100(r * (0.4 + rng.random() * 1.4)));
       const installments = rng.random() < 0.3;
       const terms: TransferTerms = installments

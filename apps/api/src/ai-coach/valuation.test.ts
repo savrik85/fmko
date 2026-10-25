@@ -49,7 +49,7 @@ describe("ocenění hráče AI trenérem", () => {
       const p = generateAiProfile(`team-${i}`, null);
       const mv = 500 + i * 517;
       for (const importance of IMPORTANCES) {
-        const r = reservationPrice({ marketValue: mv, importance, profile: p, playerId: `p-${i}`, now: NOW });
+        const r = reservationPrice({ age: 25, marketValue: mv, importance, profile: p, playerId: `p-${i}`, now: NOW });
         expect(r).toBeGreaterThanOrEqual(mv * HARD_FLOOR_RATIO);
       }
     }
@@ -58,7 +58,7 @@ describe("ocenění hráče AI trenérem", () => {
   it("opora stojí víc než hráč do rotace a ten víc než přebytečný", () => {
     const p = profile();
     const [key, rotation, surplus] = IMPORTANCES.map((importance) =>
-      reservationPrice({ marketValue: 30_000, importance, profile: p, playerId: "x", now: NOW }));
+      reservationPrice({ age: 25, marketValue: 30_000, importance, profile: p, playerId: "x", now: NOW }));
     expect(key).toBeGreaterThan(rotation);
     expect(rotation).toBeGreaterThan(surplus);
     expect(IMPORTANCE_MULTIPLIER.key).toBeGreaterThan(IMPORTANCE_MULTIPLIER.surplus);
@@ -69,16 +69,16 @@ describe("ocenění hráče AI trenérem", () => {
     const windowStart = new Date(valuationWindow(NOW) * VALUATION_WINDOW_DAYS * DAY);
     const sameWindow = [0, 1, 5, 9, 13].map((d) => new Date(windowStart.getTime() + d * DAY + 3_600_000));
     for (const playerId of ["a", "b", "c", "d"]) {
-      const values = sameWindow.map((now) => reservationPrice({ marketValue: 25_000, importance: "rotation", profile: p, playerId, now }));
+      const values = sameWindow.map((now) => reservationPrice({ age: 25, marketValue: 25_000, importance: "rotation", profile: p, playerId, now }));
       expect(new Set(values).size).toBe(1);
-      const asks = sameWindow.map((now) => openingAsk({ marketValue: 25_000, importance: "rotation", profile: p, playerId, now }));
+      const asks = sameWindow.map((now) => openingAsk({ age: 25, marketValue: 25_000, importance: "rotation", profile: p, playerId, now }));
       expect(new Set(asks).size).toBe(1);
     }
     // Za další okno se cena posune (šum se mění), u některého z hráčů určitě.
     const next = new Date(windowStart.getTime() + VALUATION_WINDOW_DAYS * DAY + 3_600_000);
     const changed = ["a", "b", "c", "d", "e", "f"].some((playerId) =>
-      reservationPrice({ marketValue: 25_000, importance: "rotation", profile: p, playerId, now: sameWindow[0] })
-        !== reservationPrice({ marketValue: 25_000, importance: "rotation", profile: p, playerId, now: next }));
+      reservationPrice({ age: 25, marketValue: 25_000, importance: "rotation", profile: p, playerId, now: sameWindow[0] })
+        !== reservationPrice({ age: 25, marketValue: 25_000, importance: "rotation", profile: p, playerId, now: next }));
     expect(changed).toBe(true);
   });
 
@@ -161,7 +161,7 @@ describe("pokusy AI klub obrat", () => {
 
   it("urážlivá nabídka hluboko pod rezervací se odmítne hned, bez protinávrhu", () => {
     const input = sellerInput({ terms: cash(15_000), marketValue: 20_000, importance: "rotation" });
-    const reservation = reservationPrice({ marketValue: 20_000, importance: "rotation", profile: input.profile, playerId: input.playerId, now: NOW });
+    const reservation = reservationPrice({ age: 25, marketValue: 20_000, importance: "rotation", profile: input.profile, playerId: input.playerId, now: NOW });
     expect(15_000).toBeLessThan(reservation * INSULT_RATIO);
     expect(decideSellerReply(input).kind).toBe("reject");
   });
@@ -169,7 +169,7 @@ describe("pokusy AI klub obrat", () => {
   it("opakované smlouvání nikdy nesrazí cenu pod rezervaci a trpělivost dojde", () => {
     const p = profile({ patience: 50 });
     const mv = 20_000;
-    const reservation = reservationPrice({ marketValue: mv, importance: "rotation", profile: p, playerId: "player-1", now: NOW });
+    const reservation = reservationPrice({ age: 25, marketValue: mv, importance: "rotation", profile: p, playerId: "player-1", now: NOW });
     const asks: number[] = [];
     const bids: number[] = [];
     let bid = Math.ceil(reservation * 0.85 / 100) * 100;
@@ -191,7 +191,7 @@ describe("pokusy AI klub obrat", () => {
   it("stažení a nová nabídka AI nevynuluje: dřívější kola se počítají", () => {
     const p = profile({ patience: 0 });
     const mv = 20_000;
-    const reservation = reservationPrice({ marketValue: mv, importance: "rotation", profile: p, playerId: "player-1", now: NOW });
+    const reservation = reservationPrice({ age: 25, marketValue: mv, importance: "rotation", profile: p, playerId: "player-1", now: NOW });
     const bid = Math.ceil(reservation * 0.9 / 100) * 100;
     const fresh = decideSellerReply(sellerInput({ terms: cash(bid), marketValue: mv, profile: p }));
     expect(fresh.kind).toBe("counter");
@@ -251,7 +251,7 @@ describe("pokusy AI klub obrat", () => {
   it("nad limitem obchodů za měsíc chce AI víc, ale pojistky platí dál", () => {
     const mv = 20_000;
     const p = profile();
-    const reservation = reservationPrice({ marketValue: mv, importance: "surplus", profile: p, playerId: "player-1", now: NOW });
+    const reservation = reservationPrice({ age: 25, marketValue: mv, importance: "surplus", profile: p, playerId: "player-1", now: NOW });
     const normal = decideSellerReply(sellerInput({ terms: cash(reservation), marketValue: mv, importance: "surplus", profile: p }));
     expect(["accept", "counter"]).toContain(normal.kind);
     const limited = decideSellerReply(sellerInput({ terms: cash(reservation), marketValue: mv, importance: "surplus", profile: p, overDealLimit: true }));
@@ -261,9 +261,9 @@ describe("pokusy AI klub obrat", () => {
   it("nabídka na úrovni požadavku projde, protinávrh drží strukturu kupujícího", () => {
     const mv = 20_000;
     const p = profile();
-    const ask = openingAsk({ marketValue: mv, importance: "rotation", profile: p, playerId: "player-1", now: NOW });
+    const ask = openingAsk({ age: 25, marketValue: mv, importance: "rotation", profile: p, playerId: "player-1", now: NOW });
     expect(decideSellerReply(sellerInput({ terms: cash(ask), marketValue: mv, profile: p })).kind).toBe("accept");
-    const reservation = reservationPrice({ marketValue: mv, importance: "rotation", profile: p, playerId: "player-1", now: NOW });
+    const reservation = reservationPrice({ age: 25, marketValue: mv, importance: "rotation", profile: p, playerId: "player-1", now: NOW });
     const instalments: TransferTerms = { amount: Math.ceil(reservation * 0.9 / 100) * 100, upfrontPct: 30, installments: 6, sellOnPct: 0 };
     const d = decideSellerReply(sellerInput({ terms: instalments, marketValue: mv, profile: p }));
     expect(d.kind).toBe("counter");
@@ -276,7 +276,7 @@ describe("pokusy AI klub obrat", () => {
   it("zpětný odkup hráče s doložkou pro kupujícího nevynese: AI chce čistou rezervaci", () => {
     const mv = 20_000;
     const p = profile();
-    const reservation = reservationPrice({ marketValue: mv, importance: "surplus", profile: p, playerId: "player-1", now: NOW });
+    const reservation = reservationPrice({ age: 25, marketValue: mv, importance: "surplus", profile: p, playerId: "player-1", now: NOW });
     // Kupující dostane z ceny 50 % zpátky přes doložku: nabídka ve výši rezervace nestačí.
     const costs = { sellOnPct: 50, remainingDebt: 0, swapMarketValue: 0 };
     const d = decideSellerReply(sellerInput({ terms: cash(reservation), marketValue: mv, importance: "surplus", profile: p, saleCosts: costs }));
@@ -291,7 +291,7 @@ describe("pokusy AI klub obrat", () => {
   it("klub mimo hru nesmlouvá: pod rezervací odmítnutí, nad ní přijetí", () => {
     const mv = 20_000;
     const p = profile();
-    const reservation = reservationPrice({ marketValue: mv, importance: "rotation", profile: p, playerId: "player-1", now: NOW });
+    const reservation = reservationPrice({ age: 25, marketValue: mv, importance: "rotation", profile: p, playerId: "player-1", now: NOW });
     expect(decideSellerReply(sellerInput({ terms: cash(reservation - 1000), marketValue: mv, profile: p, virtualBuyer: true })).kind).toBe("reject");
     expect(decideSellerReply(sellerInput({ terms: cash(reservation + 100), marketValue: mv, profile: p, virtualBuyer: true })).kind).toBe("accept");
   });

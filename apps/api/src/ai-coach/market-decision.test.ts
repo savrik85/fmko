@@ -32,7 +32,7 @@ describe("inzeráty modelem: koho a za kolik, cena nikdy pod rezervací", () => 
   it("rozpětí ceny je od rezervace do 1,5násobku a rezervace nikdy není pod pevnou pojistkou", () => {
     expect(listingPriceBounds(2700)).toEqual({ minPrice: 2700, maxPrice: 4100 });
     for (const mv of [500, 2600, 11_000, 40_000]) {
-      const reservation = reservationPrice({ marketValue: mv, importance: "surplus", profile: PROFILE, playerId: `p-${mv}`, now: new Date("2026-10-25T10:00:00Z") });
+      const reservation = reservationPrice({ marketValue: mv, age: 29, importance: "surplus", profile: PROFILE, playerId: `p-${mv}`, now: new Date("2026-10-25T10:00:00Z") });
       expect(listingPriceBounds(reservation).minPrice).toBeGreaterThanOrEqual(mv * HARD_FLOOR_RATIO);
     }
   });

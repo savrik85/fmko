@@ -15,6 +15,19 @@ describe("tržní hodnota", () => {
     expect(marketValue(45, 27, "GK")).toBeLessThan(marketValue(45, 27, "DEF"));
   });
 
+  it("úroveň cen k 25. 10.: sedí na poslední skutečné obchody mezi lidmi", () => {
+    // 22. 10. obránce 18 let, hodnocení 52, za 125 000; 30. 9.–25. 10. medián do 21 let 2,21× tvaru z 3. 10.
+    expect(marketValue(52, 18, "DEF")).toBeGreaterThan(90_000);
+    expect(marketValue(52, 18, "DEF")).toBeLessThan(150_000);
+    // 8. 10. záložník 30 let, hodnocení 51, za 17 000.
+    expect(marketValue(51, 30, "MID")).toBeGreaterThan(12_000);
+    expect(marketValue(51, 30, "MID")).toBeLessThan(26_000);
+  });
+
+  it("mezi 21 a 22 lety cena skočí: do 21 let hráč může hrát za U21", () => {
+    expect(marketValue(50, 21, "MID")).toBeGreaterThan(marketValue(50, 22, "MID") * 5);
+  });
+
   it("drží se mezi minimem a stropem", () => {
     expect(marketValue(1, 40, "GK")).toBe(500);
     expect(marketValue(99, 18, "MID")).toBe(MARKET_VALUE_MAX);
