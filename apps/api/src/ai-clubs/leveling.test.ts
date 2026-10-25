@@ -5,7 +5,7 @@ import type { VillageInfo } from "../generators/player";
 import { overallRatingFromFlat } from "../skills/generator";
 import {
   findCapShare, findSkillShift, leveledFinance, measureNewcomerTop11, memberHeadroom, modestBudgetTarget, newClubBudget,
-  newPlayerPositions, quantile, shiftMember, squadHeadroom, stratifiedUnits, topAverage, TOP11_TOLERANCE, type SquadMember,
+  newPlayerPositions, populationRankedUnits, quantile, shiftMember, squadHeadroom, stratifiedUnits, topAverage, TOP11_TOLERANCE, type SquadMember,
 } from "./leveling";
 
 const village: VillageInfo = { region_code: "CZ031", category: "obec", population: 900, district: "Prachatice" };
@@ -264,5 +264,22 @@ describe("noví hráči a rozprostření klubů", () => {
     expect(city).toBeGreaterThan(hamlet);
     expect(measureNewcomerTop11("village", 99)).toBe(measureNewcomerTop11("village", 99));
     expect(measureNewcomerTop11("village", 99, "u21")).toBeLessThan(measureNewcomerTop11("village", 99));
+  });
+});
+
+describe("pořadí síly podle velikosti obce", () => {
+  it("větší obec dostane vyšší pásmo, podobně velké rozhodne los", () => {
+    // ČB: krajské město, malé město, vesnice, osada.
+    const populations = [1_800, 94_463, 510, 8_088, 1_900, 4_688];
+    const units = populationRankedUnits(createRng(20261025), populations);
+    expect(units).toHaveLength(populations.length);
+    for (const u of units) expect(u).toBeGreaterThanOrEqual(0);
+    for (const u of units) expect(u).toBeLessThan(1);
+    // České Budějovice nejvýš, osada Záboří nejníž, Týn nad Dříteň.
+    expect(units[1]).toBe(Math.max(...units));
+    expect(units[2]).toBe(Math.min(...units));
+    expect(units[3]).toBeGreaterThan(units[0]);
+    // Každé pásmo jednou (stejně jako stratifiedUnits).
+    expect(units.map((u) => Math.floor(u * populations.length)).sort()).toEqual([0, 1, 2, 3, 4, 5]);
   });
 });

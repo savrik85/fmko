@@ -253,6 +253,25 @@ export function stratifiedUnits(rng: Rng, n: number): number[] {
   return strata.map((s) => (s + rng.random()) / Math.max(1, n));
 }
 
+/**
+ * Jednotky jako `stratifiedUnits`, ale silnější díl dostane větší obec: kluby se seřadí podle
+ * počtu obyvatel (v logaritmu, s trochou losu, ať o pořadí podobně velkých obcí rozhodne náhoda)
+ * a nejvyšší pásmo připadne největší. Jinak by nejsilnější cíl mohl padnout na vesnici
+ * s 1 800 obyvateli a krajské město by dostalo slabší klub (ČB, 25. 10.).
+ */
+export function populationRankedUnits(rng: Rng, populations: readonly number[]): number[] {
+  const n = populations.length;
+  const order = populations
+    .map((pop, i) => ({ i, key: Math.log10(Math.max(1, pop)) + (rng.random() - 0.5) * POPULATION_JITTER }))
+    .sort((a, b) => a.key - b.key);
+  const units = new Array<number>(n);
+  order.forEach((o, rank) => { units[o.i] = (rank + rng.random()) / Math.max(1, n); });
+  return units;
+}
+
+/** Los v pořadí podle velikosti obce: ±0,15 v logaritmu, tedy zhruba ±40 % obyvatel. */
+const POPULATION_JITTER = 0.3;
+
 /** Stejný hash z textu jako `ensureStadiumRow`, `ensureAiManager` a další (semínko z id týmu). */
 function seedFromText(text: string): number {
   let seed = 0;
@@ -1333,7 +1352,7 @@ export async function planLeveling(db: D1Database, opts: PlanLevelingOptions): P
   }
 
   const clubs = await loadClubStates(db, teamIds);
-  const units = stratifiedUnits(createRng(opts.seed), clubs.length);
+  const units = populationRankedUnits(createRng(opts.seed), clubs.map((c) => c.villagePopulation));
   const names = await namesForDistricts(db, clubs.map((c) => c.villageDistrict));
   clubs.forEach((club, i) => {
     const newcomerTop11 = opts.mode === "newcomer"
