@@ -34,9 +34,9 @@ interface ModelProfile {
 }
 
 const MODEL_PROFILES: Record<string, ModelProfile> = {
-  "@cf/openai/gpt-oss-120b": { reasoningBudget: 6000, extra: { reasoning_effort: "high" }, schema: true },
-  "@cf/nvidia/nemotron-3-120b-a12b": { reasoningBudget: 6000, schema: true },
-  "@cf/qwen/qwen3.8-27b": { reasoningBudget: 6000, schema: true },
+  "@cf/openai/gpt-oss-120b": { reasoningBudget: 12000, extra: { reasoning_effort: "high" }, schema: true },
+  "@cf/nvidia/nemotron-3-120b-a12b": { reasoningBudget: 12000, schema: true },
+  "@cf/qwen/qwen3.8-27b": { reasoningBudget: 12000, schema: true },
   "@cf/meta/llama-4-scout-17b-16e-instruct": { reasoningBudget: 0, schema: true },
   "@cf/moonshotai/kimi-k2.5": { reasoningBudget: 4000, schema: true },
 };
@@ -57,6 +57,8 @@ export interface CoachModelRequest {
   timeoutMs?: number;
   /** Jiný model než COACH_MODEL (srovnání modelů, admin). */
   model?: string;
+  /** Síla úvahy u modelů, které ji umí (gpt-oss); bez ní platí profil modelu. */
+  reasoningEffort?: "low" | "medium" | "high";
 }
 
 export interface CoachModelResult {
@@ -126,6 +128,8 @@ export function extractModelOutput(res: unknown): ExtractedOutput {
   return { text: "", object: null, tokensIn, tokensOut };
 }
 
+const CODE_FENCE = new RegExp("\u0060{3}(?:json)?\\s*([\\s\\S]*?)\u0060{3}", "i");
+
 /** První vyvážený objekt `{…}` v textu (respektuje řetězce a escapování). */
 function firstJsonObject(text: string): string | null {
   const start = text.indexOf("{");
@@ -172,7 +176,8 @@ export function parseModelJson(raw: unknown): Record<string, unknown> | null {
   if (!text) return null;
 
   const candidates: string[] = [text];
-  const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  // Blok kódu ```json … ``` (zpětné apostrofy přes \u0060, ať je kontrola odkazů nebere jako řetězec).
+  const fence = text.match(CODE_FENCE);
   if (fence) candidates.push(fence[1].trim());
   const obj = firstJsonObject(text);
   if (obj) candidates.push(obj);
@@ -208,6 +213,7 @@ export function buildModelInput(model: string, req: CoachModelRequest): Record<s
     temperature: req.temperature ?? 0.6,
     ...(profile.extra ?? {}),
   };
+  if (req.reasoningEffort && "reasoning_effort" in input) input.reasoning_effort = req.reasoningEffort;
   if (req.schema && profile.schema) {
     input.response_format = {
       type: "json_schema",
@@ -222,7 +228,8 @@ export function buildModelInput(model: string, req: CoachModelRequest): Record<s
  * vrátí `json: null` a důvod v `error`, volající pak použije náhradní pravidlo.
  */
 export async function callCoachModel(env: Pick<Bindings, "AI">, req: CoachModelRequest): Promise<CoachModelResult> {
-  const model = req.model ?? COACH_MODEL;
+  // Prázdný řetězec (nevyplněný parametr v adminu) znamená výchozí model.
+  const model = req.model || COACH_MODEL;
   const started = Date.now();
   const ai = env.AI as unknown as AiRunner | undefined;
   if (!ai) {

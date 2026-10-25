@@ -389,7 +389,7 @@ function summarizeLineup(ctx: MatchContext, l: AssembledLineup): Record<string, 
 }
 
 /** Rozhodne (model nebo náhradní pravidlo) bez ukládání. Pro admina a srovnání modelů. */
-export async function decideMatch(env: Pick<Bindings, "AI">, ctx: MatchContext, opts: { useModel: boolean; model?: string }): Promise<{
+export async function decideMatch(env: Pick<Bindings, "AI">, ctx: MatchContext, opts: { useModel: boolean; model?: string; reasoningEffort?: "low" | "medium" | "high"; timeoutMs?: number }): Promise<{
   decision: MatchDecision;
   used: "model" | "fallback";
   raw: string | null;
@@ -409,6 +409,8 @@ export async function decideMatch(env: Pick<Bindings, "AI">, ctx: MatchContext, 
     maxTokens: 1200,
     schema: { name: "match_decision", schema: matchDecisionSchema(ctx) },
     model: opts.model,
+    reasoningEffort: opts.reasoningEffort,
+    timeoutMs: opts.timeoutMs,
   });
   const base = { raw: res.raw, model: res.model, tokensIn: res.tokensIn ?? null, tokensOut: res.tokensOut ?? null, latencyMs: res.latencyMs };
   if (!res.json) {

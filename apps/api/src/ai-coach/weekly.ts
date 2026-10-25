@@ -172,7 +172,7 @@ export async function loadWeeklyContext(db: D1Database, teamId: string, gameDayO
   const equipmentUpgrades: PricedOption[] = (equipment?.upgrades ?? [])
     .filter((o) => !o.locked && o.cost <= team.budget)
     .sort((a, b) => a.cost - b.cost)
-    .slice(0, 14)
+    .slice(0, 20)
     .map((o, i) => ({ key: `E${i + 1}`, ref: o.category, label: `${o.category} ${o.currentLevel}->${o.nextLevel}`, cost: o.cost, detail: o.effect }));
   const equipmentRepairs: RepairChoice[] = (equipment?.repairs ?? []).map((o, i) => ({
     key: `R${i + 1}`, ref: o.category, label: `${o.category} level ${o.level}`, cost: o.cost, detail: `state ${o.condition} %`, condition: o.condition,
@@ -296,7 +296,7 @@ export async function loadWeeklyContext(db: D1Database, teamId: string, gameDayO
 }
 
 /** Rozhodne týdenní správu (model nebo náhradní pravidlo) bez provedení. */
-export async function decideWeekly(env: Pick<Bindings, "AI">, ctx: WeeklyContext, opts: { useModel: boolean; model?: string }): Promise<{
+export async function decideWeekly(env: Pick<Bindings, "AI">, ctx: WeeklyContext, opts: { useModel: boolean; model?: string; reasoningEffort?: "low" | "medium" | "high"; timeoutMs?: number }): Promise<{
   decision: WeeklyDecision;
   used: "model" | "fallback";
   raw: string | null;
@@ -316,6 +316,8 @@ export async function decideWeekly(env: Pick<Bindings, "AI">, ctx: WeeklyContext
     maxTokens: 1500,
     schema: { name: "weekly_decision", schema: weeklyDecisionSchema(ctx) },
     model: opts.model,
+    reasoningEffort: opts.reasoningEffort,
+    timeoutMs: opts.timeoutMs,
   });
   const base = { raw: res.raw, model: res.model, tokensIn: res.tokensIn ?? null, tokensOut: res.tokensOut ?? null, latencyMs: res.latencyMs };
   if (!res.json) return { ...base, decision: fallbackWeeklyDecision(ctx), used: "fallback", error: res.error ?? "bez odpovědi", rejected: [] };
