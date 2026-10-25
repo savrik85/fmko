@@ -91,7 +91,7 @@ function pickCtx(over: Partial<BuyPickContext> = {}): BuyPickContext {
         estimatedValue: 7000, askingPrice: 8000, feePct: 0, minBid: 4900, maxBid: 9500,
       },
     ],
-    loans: [{ key: "l1", seller: "ai", position: "DEF", age: 19, rating: 39, days: 45 }],
+    loans: [{ key: "l1", seller: "ai", position: "DEF", age: 19, rating: 39 }],
     demand: { maxPrice: 9000, ageMin: 18, ageMax: 33 },
     tried: [],
     ...over,
@@ -111,7 +111,11 @@ describe("výběr hráče modelem: model navrhuje, kód hlídá", () => {
     expect(validateBuyPick({ choice: "c3", bid: 7000, reason: "" }, ctx)).toBeNull();
     expect(validateBuyPick("c1", ctx)).toBeNull();
     expect(validateBuyPick({ choice: "none", bid: 0, reason: "save money" }, ctx)).toEqual({ kind: "none", reason: "save money" });
-    expect(validateBuyPick({ choice: "l1", bid: 0, reason: "" }, ctx)).toEqual({ kind: "loan", key: "l1", reason: "" });
+    // Hostování jen na nabízenou dobu: jinak neplatí.
+    expect(validateBuyPick({ choice: "l1", bid: 0, loanDays: 60, reason: "" }, ctx)).toEqual({ kind: "loan", key: "l1", days: 60, reason: "" });
+    expect(validateBuyPick({ choice: "l1", bid: 0, loanDays: "90", reason: "" }, ctx)).toMatchObject({ kind: "loan", days: 90 });
+    expect(validateBuyPick({ choice: "l1", bid: 0, loanDays: 75, reason: "" }, ctx)).toBeNull();
+    expect(validateBuyPick({ choice: "l1", bid: 0, reason: "" }, ctx)).toBeNull();
     expect(validateBuyPick({ choice: "demand", bid: 0, reason: "" }, ctx)).toEqual({ kind: "demand", reason: "" });
     // Poptávku jde vybrat jen tehdy, když ji kód nabídl.
     expect(validateBuyPick({ choice: "demand", bid: 0, reason: "" }, pickCtx({ demand: null }))).toBeNull();
@@ -120,7 +124,10 @@ describe("výběr hráče modelem: model navrhuje, kód hlídá", () => {
   it("výčet možností ve schématu není nikdy prázdný a bez kandidátů se model neptá", () => {
     const schema = buyPickSchema(pickCtx()) as { properties: { choice: { enum: string[] } }; required: string[] };
     expect(schema.properties.choice.enum).toEqual(["c1", "c2", "l1", "demand", "none"]);
-    expect(schema.required).toEqual(["choice", "bid", "reason"]);
+    // S hostováním model volí i délku ze sady kódu (0 = nejde o hostování).
+    expect((schema.properties as unknown as Record<string, { enum?: number[] }>).loanDays?.enum).toEqual([0, 30, 45, 60, 90]);
+    expect(schema.required).toEqual(["choice", "bid", "loanDays", "reason"]);
+    expect((buyPickSchema(pickCtx({ loans: [] })) as { required: string[] }).required).toEqual(["choice", "bid", "reason"]);
     const empty = pickCtx({ candidates: [], loans: [], demand: null });
     expect(buyChoiceKeys(empty)).toEqual(["none"]);
     expect(hasBuyChoice(empty)).toBe(false);
@@ -135,7 +142,8 @@ describe("výběr hráče modelem: model navrhuje, kód hlídá", () => {
     expect(prompt).toContain("Transfer-listed by a club managed by a human player for 9,000 CZK");
     expect(prompt).toContain("Bid between 6,300 CZK and 9,000 CZK.");
     expect(prompt).toContain("rating about 42 (your scout's estimate 38-46)");
-    expect(prompt).toContain('"l1": ask a club managed by another computer coach to loan you DEF, age 19, rating 39 for 45 days');
+    expect(prompt).toContain('"l1": ask a club managed by another computer coach to loan you DEF, age 19, rating 39 without a fee for 30, 45, 60, 90 days (you choose)');
+    expect(prompt).toContain('"loanDays": for a loan one of 30, 45, 60, 90, otherwise 0');
     expect(prompt).toContain('"demand": post a public wanted ad');
     expect(prompt).toContain("ALREADY TRIED TODAY WITHOUT A DEAL:");
     expect(prompt).toContain("the club broke off the talks");
@@ -299,5 +307,50 @@ describe("odpověď AI kupujícího na protinávrh klubu ve hře", () => {
     const second = await decideBuyerReplyByModel(buyerReply(), { useModel: true, ai: ai.env, budget });
     expect(second).toMatchObject({ by: "fallback", trace: { error: "došel limit volání modelu za běh" }, reply: { kind: "accept" } });
     expect(ai.calls()).toBe(1);
+  });
+
+  it("svou cenu AI dodrží: chce-li prodávající nejvýš poslední nabídku AI, kód přijme bez modelu", async () => {
+    const cash = (amount: number, sellOnPct = 0) => ({ amount, upfrontPct: 100, installments: 0, sellOnPct });
+    const ai = fakeAi({ action: "withdraw", amount: 0, reason: "changed my mind" });
+    const same = await decideBuyerReplyByModel(buyerReply({ terms: cash(5000), ownBids: [4000, 5000], rounds: 1 }), { useModel: true, ai: ai.env });
+    expect(same).toMatchObject({ by: "guard", decision: { kind: "accept", reason: "own_price" }, reply: { kind: "accept", cost: 5000 } });
+    // Strop se mezitím posunul pod nabídku: vlastní cena platí dál.
+    const movedMax = await decideBuyerReplyByModel(buyerReply({ terms: cash(4800), maxPrice: 4500, ownBids: [5000] }), { useModel: true, ai: ai.env });
+    expect(movedMax).toMatchObject({ by: "guard", reply: { kind: "accept", cost: 4800 } });
+    expect(ai.calls()).toBe(0);
+    // Procenta z dalšího prodeje ani za vlastní cenu: o tom už rozhoduje model v mezích.
+    const sellOn = await decideBuyerReplyByModel(buyerReply({ terms: cash(5000, 10), ownBids: [5000] }), { useModel: true, ai: ai.env });
+    expect(sellOn.by).toBe("model");
+    expect(sellOn.reply.kind).toBe("withdraw");
+    expect(ai.calls()).toBe(1);
+  });
+
+  it("hostování, o které AI požádala: model zaplatí poplatek do stropu, přihodí v mezích, nebo žádost stáhne", async () => {
+    const loan = (fee: number, over: Partial<BuyerReplyInput> = {}) => buyerReply({
+      loanDays: 45, terms: { amount: fee, upfrontPct: 100, installments: 0, sellOnPct: 0 }, maxPrice: 1200, ownBids: [0], rounds: 0, ...over,
+    });
+    const counter = await decideBuyerReplyByModel(loan(1500), { useModel: true, ai: fakeAi({ action: "counter", amount: 900, reason: "half" }).env });
+    expect(counter).toMatchObject({ by: "model", reply: { kind: "counter", terms: { amount: 900, upfrontPct: 100, installments: 0, sellOnPct: 0 } } });
+    expect(counter.ctx).toMatchObject({ loanDays: 45, canAccept: false, counter: { min: 100, max: 1200 } });
+    const prompt = renderBuyNegotiationPrompt(counter.ctx);
+    expect(prompt).toContain("LOAN TALKS: you asked a club managed by a human player to lend you MID, age 25, rating 45");
+    expect(prompt).toContain("for 45 days");
+    expect(prompt).toContain("the club now asks a loan fee of 1,500 CZK");
+    expect(prompt).toContain("your limit for this loan is 1,200 CZK");
+    expect(prompt).not.toContain('"accept"');
+
+    // Poplatek nad strop přijmout nejde, protinávrh nad strop taky ne: rozhodne pravidlo (stáhnout).
+    for (const answer of [{ action: "accept", amount: 0, reason: "" }, { action: "counter", amount: 1300, reason: "" }]) {
+      const res = await decideBuyerReplyByModel(loan(1500), { useModel: true, ai: fakeAi(answer).env });
+      expect(res).toMatchObject({ by: "fallback", reply: { kind: "withdraw" } });
+    }
+    const fair = await decideBuyerReplyByModel(loan(1000), { useModel: true, ai: fakeAi({ action: "accept", amount: 0, reason: "fair fee" }).env });
+    expect(fair).toMatchObject({ by: "model", reply: { kind: "accept", cost: 1000 } });
+    // Bez modelu pravidlo: poplatek do stropu zaplatí, jinak žádost stáhne.
+    expect((await decideBuyerReplyByModel(loan(1000), { useModel: false })).reply).toMatchObject({ kind: "accept", cost: 1000 });
+    expect((await decideBuyerReplyByModel(loan(1500), { useModel: false })).reply).toMatchObject({ kind: "withdraw" });
+    // Klub chce poplatek, který AI sama nabídla: přijme kód.
+    expect(await decideBuyerReplyByModel(loan(800, { ownBids: [0, 800], rounds: 1 }), { useModel: true, ai: fakeAi({ action: "withdraw", amount: 0, reason: "" }).env }))
+      .toMatchObject({ by: "guard", reply: { kind: "accept", cost: 800 } });
   });
 });

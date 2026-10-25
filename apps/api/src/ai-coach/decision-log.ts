@@ -13,8 +13,9 @@ export type DecisionMode = "on" | "shadow" | "off";
 export interface DecisionEntry {
   teamId: string;
   /**
-   * Druh rozhodnutí: `match`, `weekly`, `transfer_reply`, `transfer_market` (běh trhu s výběrem hráče),
-   * `transfer_negotiation` (tah AI kupujícího v jednání o ceně), `friendly_offer`, `friendly_reply`.
+   * Druh rozhodnutí: `match`, `weekly`, `transfer_reply`, `transfer_market` (běh trhu: nouzový podpis,
+   * inzeráty, nabídka k poptávce, skaut, výběr hráče; jeden zápis za běh), `transfer_negotiation` (tah
+   * AI kupujícího v jednání o ceně, i o poplatku za hostování), `friendly_offer`, `friendly_reply`.
    */
   kind: string;
   mode: DecisionMode;

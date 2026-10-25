@@ -51,9 +51,10 @@ export interface BuyLoanOption {
   position: string;
   age: number;
   rating: number;
-  /** Délka hostování (dny), kterou zvolil kód. */
-  days: number;
 }
+
+/** Délky hostování, ze kterých model vybírá (služba dovolí 7 až 180 dní). */
+export const LOAN_DURATIONS = [30, 45, 60, 90] as const;
 
 export interface BuyNeedInfo {
   position: string;
@@ -89,7 +90,7 @@ export const BUY_DEMAND = "demand";
 
 export type BuyPickDecision =
   | { kind: "buy"; key: string; bid: number; reason: string }
-  | { kind: "loan"; key: string; reason: string }
+  | { kind: "loan"; key: string; days: number; reason: string }
   | { kind: "demand"; reason: string }
   | { kind: "none"; reason: string };
 
@@ -101,42 +102,44 @@ export const BUY_SYSTEM_PROMPT = [
   "Answer with exactly one JSON object and nothing else.",
 ].join(" ");
 
-const POSITION_TEXT: Record<string, string> = { GK: "goalkeeper", DEF: "defender", MID: "midfielder", FWD: "forward" };
+// Společné kousky popisu pro model, používá je i market-decision.ts.
 
-const SELLER_TEXT: Record<BuySeller, string> = {
+export const POSITION_TEXT: Record<string, string> = { GK: "goalkeeper", DEF: "defender", MID: "midfielder", FWD: "forward" };
+
+export const SELLER_TEXT: Record<BuySeller, string> = {
   human: "a club managed by a human player",
   ai: "a club managed by another computer coach",
   outside: "a club outside the game",
   none: "nobody",
 };
 
-function czk(n: number): string {
+export function czk(n: number): string {
   return `${Math.round(n).toLocaleString("en-US")} CZK`;
 }
 
-function cleanReason(v: unknown): string {
+export function cleanReason(v: unknown): string {
   return typeof v === "string" ? v.trim().slice(0, 300) : "";
 }
 
 /** Celé číslo z odpovědi modelu (číslo i číselný řetězec), jinak null. */
-function toAmount(v: unknown): number | null {
+export function toAmount(v: unknown): number | null {
   const n = typeof v === "string" && v.trim() !== "" ? Number(v) : v;
   if (typeof n !== "number" || !Number.isFinite(n)) return null;
   return Math.round(n);
 }
 
-function isRecord(raw: unknown): raw is Record<string, unknown> {
+export function isRecord(raw: unknown): raw is Record<string, unknown> {
   return !!raw && typeof raw === "object" && !Array.isArray(raw);
 }
 
-function playerText(p: { position: string; age: number; rating: number; ratingRange: { lo: number; hi: number } | null }): string {
+export function playerText(p: { position: string; age: number; rating: number; ratingRange: { lo: number; hi: number } | null }): string {
   const rating = p.ratingRange
     ? `rating about ${p.rating} (your scout's estimate ${p.ratingRange.lo}-${p.ratingRange.hi})`
     : `rating ${p.rating}`;
   return `${p.position}, age ${p.age}, ${rating}`;
 }
 
-function personalityLines(p: AiCoachProfile): string[] {
+export function personalityLines(p: AiCoachProfile): string[] {
   return [
     "YOUR PERSONALITY (0-100):",
     `ambition ${p.ambition}, thrift ${p.thrift}, risk ${p.risk}, patience ${p.patience}, trading ${p.trading}, youth focus ${p.youthFocus}.`,
@@ -205,8 +208,9 @@ export function renderBuyPickPrompt(ctx: BuyPickContext): string {
     lines.push("PLAYERS YOU CAN GO FOR: none on the market fits your need and money right now.");
   }
   lines.push("", "OTHER OPTIONS:");
+  const durations = LOAN_DURATIONS.join(", ");
   for (const l of ctx.loans) {
-    lines.push(`- "${l.key}": ask ${SELLER_TEXT[l.seller]} to loan you ${playerText({ ...l, ratingRange: null })} for ${l.days} days without a fee; the club decides.`);
+    lines.push(`- "${l.key}": ask ${SELLER_TEXT[l.seller]} to loan you ${playerText({ ...l, ratingRange: null })} without a fee for ${durations} days (you choose); the club decides.`);
   }
   if (ctx.demand) {
     lines.push(`- "${BUY_DEMAND}": post a public wanted ad for a ${pos} aged ${ctx.demand.ageMin}-${ctx.demand.ageMax}, up to ${czk(ctx.demand.maxPrice)}; clubs can offer you players over the next days.`);
@@ -215,29 +219,33 @@ export function renderBuyPickPrompt(ctx: BuyPickContext): string {
   if (ctx.tried.length > 0) {
     lines.push("", "ALREADY TRIED TODAY WITHOUT A DEAL:", ...ctx.tried.map((t) => `- ${t}`));
   }
+  const loanDays = ctx.loans.length > 0 ? `, "loanDays": for a loan one of ${durations}, otherwise 0` : "";
   lines.push(
     "",
-    'Return {"choice": one of the keys, "bid": your bid in CZK inside the chosen player\'s range (the weekly wage for a free agent; 0 for a loan, the wanted ad or none), "reason": "one short English sentence"}.',
+    `Return {"choice": one of the keys, "bid": your bid in CZK inside the chosen player's range (the weekly wage for a free agent; 0 for a loan, the wanted ad or none)${loanDays}, "reason": "one short English sentence"}.`,
   );
   return lines.join("\n");
 }
 
 export function buyPickSchema(ctx: Pick<BuyPickContext, "candidates" | "loans" | "demand">): Record<string, unknown> {
+  const loans = ctx.loans.length > 0;
   return {
     type: "object",
     properties: {
       choice: { type: "string", enum: buyChoiceKeys(ctx) },
       bid: { type: "integer" },
+      ...(loans ? { loanDays: { type: "integer", enum: [0, ...LOAN_DURATIONS] } } : {}),
       reason: { type: "string" },
     },
-    required: ["choice", "bid", "reason"],
+    required: loans ? ["choice", "bid", "loanDays", "reason"] : ["choice", "bid", "reason"],
     additionalProperties: false,
   };
 }
 
 /**
- * Model smí vybrat jen nabídnutou možnost a nabídnout jen v rozpětí kandidáta.
- * Cokoli jiného (neznámý klíč, částka mimo rozpětí, nesmysl) vrátí null a rozhodne pravidlo.
+ * Model smí vybrat jen nabídnutou možnost, nabídnout jen v rozpětí kandidáta a hostování jen
+ * na nabídnutou dobu. Cokoli jiného (neznámý klíč, částka mimo rozpětí, nesmysl) vrátí null
+ * a rozhodne pravidlo.
  */
 export function validateBuyPick(raw: unknown, ctx: Pick<BuyPickContext, "candidates" | "loans" | "demand">): BuyPickDecision | null {
   if (!isRecord(raw)) return null;
@@ -246,7 +254,11 @@ export function validateBuyPick(raw: unknown, ctx: Pick<BuyPickContext, "candida
   if (choice === BUY_NONE) return { kind: "none", reason };
   if (choice === BUY_DEMAND) return ctx.demand ? { kind: "demand", reason } : null;
   const loan = ctx.loans.find((l) => l.key === choice);
-  if (loan) return { kind: "loan", key: loan.key, reason };
+  if (loan) {
+    const days = toAmount(raw.loanDays);
+    if (days === null || !(LOAN_DURATIONS as readonly number[]).includes(days)) return null;
+    return { kind: "loan", key: loan.key, days, reason };
+  }
   const cand = ctx.candidates.find((c) => c.key === choice);
   if (!cand) return null;
   const bid = toAmount(raw.bid);
@@ -303,9 +315,11 @@ export interface BuyNegotiationContext extends NegotiationBounds {
   /** Co teď chce prodávající (celá cena v Kč). */
   ask: number;
   askTerms: AskTerms;
-  /** Strop AI pro tohoto hráče (`maxBuyPrice` po meziligovém poplatku). */
+  /** Strop AI pro tohoto hráče (`maxBuyPrice` po meziligovém poplatku), u hostování strop poplatku. */
   maxPrice: number;
   countersLeft: number;
+  /** Hostování, o které AI požádala: délka ve dnech; částky jsou poplatek za hostování. Jinak přestup (null). */
+  loanDays?: number | null;
 }
 
 export type BuyNegotiationDecision =
@@ -324,7 +338,30 @@ function askText(ask: number, t: AskTerms): string {
   return parts.join(", ");
 }
 
+/** Hostování: o poplatku za půjčení hráče se jedná stejně, jen jinými slovy. */
+function renderLoanNegotiationPrompt(ctx: BuyNegotiationContext, days: number): string {
+  const lines: string[] = [
+    ...personalityLines(ctx.profile),
+    "",
+    `CLUB ${ctx.teamName}: you can spend at most ${czk(ctx.spendable)} on transfers.`,
+    `LOAN TALKS: you asked ${SELLER_TEXT[ctx.seller]} to lend you ${playerText(ctx.player)}, estimated value ${czk(ctx.player.estimatedValue)}, for ${days} days.`,
+    `- the loan fees you offered so far: ${ctx.ownBids.length ? ctx.ownBids.map(czk).join(", ") : "none"}`,
+    `- the club now asks a loan fee of ${czk(ctx.ask)}`,
+    `- your limit for this loan is ${czk(ctx.maxPrice)}: you never pay more. After the loan the player goes back to his club.`,
+    "",
+    "OPTIONS:",
+  ];
+  if (ctx.canAccept) lines.push(`- "accept": pay the loan fee of ${czk(ctx.ask)}.`);
+  if (ctx.counter) {
+    lines.push(`- "counter": offer a loan fee between ${czk(ctx.counter.min)} and ${czk(ctx.counter.max)}; the club may agree, ask again or end the talks. You can counter at most ${ctx.countersLeft} more time(s).`);
+  }
+  lines.push('- "withdraw": drop the loan request.');
+  lines.push("", 'Return {"action": one of the options, "amount": your counter-offer of the loan fee in CZK (0 unless you counter), "reason": "one short English sentence"}.');
+  return lines.join("\n");
+}
+
 export function renderBuyNegotiationPrompt(ctx: BuyNegotiationContext): string {
+  if (ctx.loanDays != null) return renderLoanNegotiationPrompt(ctx, ctx.loanDays);
   const lines: string[] = [
     ...personalityLines(ctx.profile),
     "",

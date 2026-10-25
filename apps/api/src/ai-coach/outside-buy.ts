@@ -14,7 +14,9 @@
  * „kupovat“), stejným zadáním jako člověk (`createScoutAssignment`, platí se cestovné).
  */
 
-import { marketValue, SCOUT_AGE_MAX, SCOUT_AGE_MIN, scoutWeeklyCost, type TransferTerms } from "@okresni-masina/shared";
+import {
+  marketValue, SCOUT_AGE_MAX, SCOUT_AGE_MIN, SCOUT_POSITIONS, SCOUT_RADIUS_TIERS, scoutWeeklyCost, type TransferTerms,
+} from "@okresni-masina/shared";
 import { logger } from "../lib/logger";
 import {
   counterAiNegotiation, signAiNegotiation, startAiNegotiation, withdrawAiNegotiation,
@@ -201,37 +203,69 @@ export function scoutAgesFor(profile: AiClubState["profile"]): { ageMin: number;
     : { ageMin: Math.max(SCOUT_AGE_MIN, 19), ageMax: Math.min(SCOUT_AGE_MAX, 31) };
 }
 
+/** Jak dlouho skaut AI klubu na úkolu jezdí (týdny, cestovné se platí každý týden). */
+export const SCOUT_TASK_WEEKS = 2;
+
+export interface ScoutSituation {
+  /** Skaut bez úkolu (první podle nástupu), nebo null. */
+  freeScoutId: string | null;
+  /** Posty, které už některý skaut hledá: druhého na totéž AI neposílá. */
+  busy: Set<string>;
+}
+
+/** Skauti klubu: kdo je bez úkolu a na které posty už někdo jede. */
+export async function loadScoutSituation(db: D1Database, teamId: string): Promise<{ ok: true; situation: ScoutSituation } | { ok: false; reason: string }> {
+  const scouts = await loadTeamScouts(db, teamId);
+  if (scouts.length === 0) return { ok: false, reason: "bez skauta" };
+  let freeScoutId: string | null = null;
+  const busy = new Set<string>();
+  for (const s of scouts) {
+    const active = await loadActiveAssignment(db, teamId, s.id)
+      .catch((e) => { logger.warn({ module: M, teamId }, "úkol skauta", e); return undefined; });
+    if (active === undefined) return { ok: false, reason: "úkoly skautů nejdou načíst" };
+    if (!active) {
+      if (!freeScoutId) freeScoutId = s.id;
+      continue;
+    }
+    if (active.position) busy.add(active.position);
+    for (const p of SCOUT_POSITIONS) if ((active.positions ?? "").includes(`"${p}"`)) busy.add(p);
+  }
+  return { ok: true, situation: { freeScoutId, busy } };
+}
+
+/** Okruhy, na jejichž cestovné za celý úkol stačí peníze nad rezervou. */
+export function affordableScoutRadii(spendable: number, weeks = SCOUT_TASK_WEEKS): Array<{ km: number; weeklyCost: number }> {
+  return SCOUT_RADIUS_TIERS.filter((t) => spendable >= t.weeklyCost * weeks).map((t) => ({ km: t.km, weeklyCost: t.weeklyCost }));
+}
+
+/** Pošle skauta na úkol stejným zadáním jako člověk (`createScoutAssignment`). */
+export async function startScoutTask(
+  db: D1Database, teamId: string, scoutId: string,
+  task: { position: string; radiusKm: number; ageMin: number; ageMax: number }, gameDate: string,
+): Promise<{ started: true; position: string; radiusKm: number } | { started: false; reason: string }> {
+  const res = await createScoutAssignment(db, {
+    teamId, staffId: scoutId, positions: [task.position], ageMin: task.ageMin, ageMax: task.ageMax,
+    radiusKm: task.radiusKm, weeks: SCOUT_TASK_WEEKS, gameDate,
+  });
+  if (!res.ok) return { started: false, reason: res.error };
+  return { started: true, position: task.position, radiusKm: task.radiusKm };
+}
+
 /**
- * Skaut bez práce dostane úkol na post, kde klub hledá posilu. Dva týdny, cestovné musí
- * pokrýt peníze nad rezervou. Vrací post, na který skaut vyjel, nebo důvod, proč ne.
+ * Pravidlo bez modelu: skaut bez práce dostane úkol na post, kde klub hledá posilu, okruh a věk
+ * podle povahy. Dva týdny, cestovné musí pokrýt peníze nad rezervou. Vrací post, na který skaut
+ * vyjel, nebo důvod, proč ne.
  */
 export async function maybeStartScoutTask(
   db: D1Database, club: Pick<AiClubState, "teamId" | "profile" | "spendable">, position: string, gameDate: string,
 ): Promise<{ started: true; position: string; radiusKm: number } | { started: false; reason: string }> {
-  const scouts = await loadTeamScouts(db, club.teamId);
-  if (scouts.length === 0) return { started: false, reason: "bez skauta" };
-  // Úkol na tenhle post už jeden skaut má: druhého na totéž neposílat.
-  let free: (typeof scouts)[number] | null = null;
-  for (const s of scouts) {
-    const active = await loadActiveAssignment(db, club.teamId, s.id)
-      .catch((e) => { logger.warn({ module: M, teamId: club.teamId }, "úkol skauta", e); return undefined; });
-    if (active === undefined) return { started: false, reason: "úkoly skautů nejdou načíst" };
-    if (active && (active.position === position || (active.positions ?? "").includes(`"${position}"`))) {
-      return { started: false, reason: "skaut už post hledá" };
-    }
-    if (!active && !free) free = s;
-  }
-  const scout = free;
-  if (!scout) return { started: false, reason: "všichni skauti pracují" };
+  const loaded = await loadScoutSituation(db, club.teamId);
+  if (!loaded.ok) return { started: false, reason: loaded.reason };
+  if (loaded.situation.busy.has(position)) return { started: false, reason: "skaut už post hledá" };
+  const scoutId = loaded.situation.freeScoutId;
+  if (!scoutId) return { started: false, reason: "všichni skauti pracují" };
   const radiusKm = scoutRadiusFor(club.profile);
-  const weeks = 2;
   const weeklyCost = scoutWeeklyCost(radiusKm) ?? 0;
-  if (club.spendable < weeklyCost * weeks) return { started: false, reason: "na cestovné nejsou peníze nad rezervou" };
-  const ages = scoutAgesFor(club.profile);
-  const res = await createScoutAssignment(db, {
-    teamId: club.teamId, staffId: scout.id, positions: [position], ageMin: ages.ageMin, ageMax: ages.ageMax,
-    radiusKm, weeks, gameDate,
-  });
-  if (!res.ok) return { started: false, reason: res.error };
-  return { started: true, position, radiusKm };
+  if (club.spendable < weeklyCost * SCOUT_TASK_WEEKS) return { started: false, reason: "na cestovné nejsou peníze nad rezervou" };
+  return startScoutTask(db, club.teamId, scoutId, { position, radiusKm, ...scoutAgesFor(club.profile) }, gameDate);
 }

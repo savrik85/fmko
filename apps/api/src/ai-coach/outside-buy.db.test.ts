@@ -273,6 +273,20 @@ async function count(sql: string, ...binds: unknown[]): Promise<number> {
   return (await db.prepare(sql).bind(...binds).first<{ n: number }>())?.n ?? 0;
 }
 
+/** Lidský klub v lize AI klubu (založí se jednou) a v něm hráč. */
+async function insertHumanClubPlayer(playerId: string, position: string, rating: number, age: number): Promise<void> {
+  const village = (await db.prepare("SELECT id FROM villages WHERE district = 'Prachatice' AND id != 'p06' ORDER BY id LIMIT 1").first<{ id: string }>())!.id;
+  await db.batch([
+    db.prepare("INSERT OR IGNORE INTO users (id, email, password_hash) VALUES ('u-human', 'human@example.test', 'x')"),
+    db.prepare("INSERT OR IGNORE INTO teams (id, user_id, village_id, name, budget, league_id, team_type, game_date) VALUES ('human-club', 'u-human', ?, 'Jiskra Lhenice', 50000, ?, 'senior', ?)")
+      .bind(village, LEAGUE, GAME_DATE),
+    db.prepare(
+      `INSERT INTO players (id, team_id, first_name, last_name, age, position, overall_rating, skills, physical, personality, life_context, avatar, status)
+       VALUES (?, 'human-club', 'Petr', 'Hráč', ?, ?, ?, ?, '{}', '{}', '{}', '{}', 'active')`,
+    ).bind(playerId, age, position, rating, JSON.stringify(SKILLS)),
+  ]);
+}
+
 /** Odpověď na výběr: dokud je hráč `c1` v nabídce, vezme ho za `bid`, pak už nic; v jednání odejde. */
 function pickC1(bid: number) {
   return ({ name, choices }: FakeCall) => name === "buy_pick"
@@ -366,16 +380,7 @@ describe("AI klub vybírá posilu modelem: model navrhuje, kód hlídá", () => 
   });
 
   it("přímá nabídka hráči lidského klubu v lize: částku z rozpětí pošle stejnou službou jako člověk", async () => {
-    const village = (await db.prepare("SELECT id FROM villages WHERE district = 'Prachatice' AND id != 'p06' ORDER BY id LIMIT 1").first<{ id: string }>())!.id;
-    await db.batch([
-      db.prepare("INSERT OR IGNORE INTO users (id, email, password_hash) VALUES ('u-human', 'human@example.test', 'x')"),
-      db.prepare("INSERT INTO teams (id, user_id, village_id, name, budget, league_id, team_type, game_date) VALUES ('human-club', 'u-human', ?, 'Jiskra Lhenice', 50000, ?, 'senior', ?)")
-        .bind(village, LEAGUE, GAME_DATE),
-      db.prepare(
-        `INSERT INTO players (id, team_id, first_name, last_name, age, position, overall_rating, skills, physical, personality, life_context, avatar, status)
-         VALUES ('h-mid', 'human-club', 'Petr', 'Záložník', 26, 'MID', 40, ?, '{}', '{}', '{}', '{}', 'active')`,
-      ).bind(JSON.stringify(SKILLS)),
-    ]);
+    await insertHumanClubPlayer("h-mid", "MID", 40, 26);
     // 80 % tržní hodnoty: nad urážlivou mezí (70 %) a pod stropem (aspoň 90 %).
     const bid = Math.floor((marketValue(40, 26, "MID") * 0.8) / 100) * 100;
     const ai = fakeAi(pickC1(bid));
@@ -384,6 +389,35 @@ describe("AI klub vybírá posilu modelem: model navrhuje, kód hlídá", () => 
     expect(res.actions.find((a) => a.kind === "offer")).toMatchObject({ playerId: "h-mid", amount: bid, result: "sent", decidedBy: "model" });
     const offer = await db.prepare("SELECT from_team_id, to_team_id, offer_amount, status FROM transfer_offers WHERE player_id = 'h-mid'").first();
     expect(offer).toEqual({ from_team_id: AI_CLUB, to_team_id: "human-club", offer_amount: bid, status: "pending" });
+  });
+
+  it("hostování: model vybere hráče i délku ze sady kódu, žádost jde stejnou službou jako u člověka", async () => {
+    await insertHumanClubPlayer("h-young", "MID", 40, 19);
+    const ai = fakeAi(({ name, choices }) => name === "buy_pick" && choices.includes("l1")
+      ? { choice: "l1", bid: 0, loanDays: 90, reason: "borrow a youngster" }
+      : { choice: "none", bid: 0, loanDays: 0, reason: "" });
+    const res = await runMarket(marketEnv(ai.binding));
+    const pick = ai.calls.find((c) => c.name === "buy_pick");
+    expect(pick?.prompt).toContain("without a fee for 30, 45, 60, 90 days (you choose)");
+    expect(res.actions.find((a) => a.kind === "loan_request")).toMatchObject({ playerId: "h-young", loanDays: 90, result: "sent", decidedBy: "model" });
+    const offer = await db.prepare("SELECT offer_type, loan_duration, offer_amount, from_team_id FROM transfer_offers WHERE player_id = 'h-young'").first();
+    expect(offer).toEqual({ offer_type: "loan", loan_duration: 90, offer_amount: 0, from_team_id: AI_CLUB });
+  });
+
+  it("hostování na dobu mimo sadu neplatí: šetrný trenér si podle pravidla půjčí na 30 až 60 dní", async () => {
+    // Málo peněz nad rezervou: mladého hráče koupit nejde, zbývá hostování.
+    await db.prepare("UPDATE teams SET budget = 15000 WHERE id = ?").bind(AI_CLUB).run();
+    await insertHumanClubPlayer("h-young", "MID", 40, 19);
+    const ai = fakeAi(({ name }) => name === "buy_pick"
+      ? { choice: "l1", bid: 0, loanDays: 75, reason: "odd length" }
+      : { action: "withdraw", amount: 0, reason: "" });
+    const res = await runTransferMarket(marketEnv(ai.binding), AI_CLUB, new Date(), { profile: { ...PROFILE, thrift: 70 }, ignoreSchedule: true });
+    expect(res.actions.find((a) => a.kind === "loan_request")).toMatchObject({ playerId: "h-young", result: "sent", decidedBy: "fallback" });
+    const offer = await db.prepare("SELECT offer_type, loan_duration FROM transfer_offers WHERE player_id = 'h-young'").first<{ offer_type: string; loan_duration: number }>();
+    expect(offer?.offer_type).toBe("loan");
+    expect(offer!.loan_duration).toBeGreaterThanOrEqual(30);
+    expect(offer!.loan_duration).toBeLessThanOrEqual(60);
+    expect((await marketLog()).used_fallback).toBe(1);
   });
 
   it("volný hráč na post: model nabídne mzdu z rozpětí, podpis jde přes stejnou službu", async () => {

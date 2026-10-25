@@ -3,18 +3,18 @@
  *
  * Jednou denně v hodinu, kterou má každý klub jinou (jako člověk, co se na trh podívá
  * po práci), a jen v některé dny podle obchodní aktivity:
- * - dá na trh přebytečné hráče (cena z `valuation.ts`, nikdy pod rezervací),
- * - nabídne přebytečného hráče k cizí poptávce,
+ * - pod minimem kádru (nebo bez hráče na postu) podepíše volného hráče,
+ * - dá na trh přebytečné hráče a nabídne je k cizím poptávkám (market-selling.ts),
+ * - skauta bez práce pošle hledat posilu (outside-buy.ts),
  * - na nejslabší nebo nejtenčí post shání posilu: inzerát nebo přímá nabídka hráči v lize,
  *   jednání s klubem mimo hru (inzerát, hlášení skauta; outside-buy.ts), volný hráč, hostování,
- *   nebo poptávka; skauta bez práce hned pošle hledat na ten post,
- * - pod minimem kádru podepíše volného hráče.
+ *   nebo poptávka.
  *
- * Model navrhuje, kód hlídá (buy-decision.ts, buy-model.ts): jestli a na jaký post kupovat
- * rozhoduje kód (potřeba, pondělní kurz, rezerva, limity), kód sestaví užší výběr dostupných
- * hráčů s rozpětím nabídky (strop `maxBuyPrice`) a model vybere hráče a částku, hostování,
- * poptávku, nebo nic. Bez modelu (výpadek, režim off, neplatná odpověď) platí pravidlo:
- * hlášení vlastního skauta první, pak nejvíc kvality za peníze, šetrný trenér hostování, poptávka.
+ * Model navrhuje, kód hlídá (buy-decision.ts, market-decision.ts, buy-model.ts): jestli a na jaký
+ * post kupovat rozhoduje kód (potřeba, pondělní kurz, rezerva, limity) a kód sestaví přípustné
+ * možnosti s mezemi. Model z nich vybere: koho podepsat a za jakou mzdu, koho vystavit a za kolik,
+ * komu nabídnout hráče, kam poslat skauta, koho koupit a za kolik, jak dlouho si hráče půjčit.
+ * Bez modelu (výpadek, režim off, neplatná odpověď, došel limit volání) platí dosavadní pravidla.
  *
  * Všechno přes stejné služby jako člověk. Limity: počet obchodů za měsíc a rozjetých
  * nabídek podle obchodní aktivity, rezerva na provoz podle šetrnosti. Obchody mezi
@@ -23,9 +23,8 @@
 
 import type { Bindings } from "../index";
 import { marketValue } from "@okresni-masina/shared";
-import { createRng } from "../generators/rng";
 import { logger } from "../lib/logger";
-import { createTransferOffer, FREE_AGENT_SIGNING_FEE, listPlayerOnMarket, placeListingBid, signFreeAgent } from "../services/transfer-actions";
+import { createTransferOffer, FREE_AGENT_SIGNING_FEE, placeListingBid, signFreeAgent } from "../services/transfer-actions";
 import { AI_SELLER } from "../transfers/ai-seller";
 import type { DemandInput } from "../transfers/demands";
 import { findVisibleFreeAgents, findVisibleListings } from "../transfers/market-visibility";
@@ -34,19 +33,28 @@ import {
   BUY_DEMAND, minimumBid,
   type BuyCandidateOption, type BuyLoanOption, type BuyPickContext, type BuyPickDecision,
 } from "./buy-decision";
-import { decideBuyPick, type DecidedBy, type ModelTrace, type ModelUse } from "./buy-model";
+import {
+  decideBuyPick, decideByModel, newMarketTrace, recordDecision, type DecidedBy, type MarketTrace, type ModelUse,
+} from "./buy-model";
 import { claimCoachTask } from "./claims";
 import { logDecision, type DecisionMode } from "./decision-log";
 import type { HourlyHook } from "./hourly-hooks";
+import {
+  emergencySigningSchema, hasScoutChoice, MARKET_SYSTEM_PROMPT, marketClubLine, renderEmergencySigningPrompt, renderScoutPrompt, SCOUT_AGE_BANDS,
+  scoutAgeBandOf, scoutSchema, validateEmergencySigning, validateScout, wageBounds,
+  type EmergencySigningContext, type EmergencySigningDecision, type ScoutContext, type ScoutDecision,
+} from "./market-decision";
+import { listSurplus, pitchSurplus } from "./market-selling";
 import { readCoachMode } from "./mode";
 import {
-  loadScoutReportCandidates, maybeStartScoutTask, negotiateOutsidePurchase, outsideCandidateFromListing, type OutsideCandidate,
+  affordableScoutRadii, loadScoutReportCandidates, loadScoutSituation, negotiateOutsidePurchase, outsideCandidateFromListing,
+  SCOUT_TASK_WEEKS, scoutAgesFor, scoutRadiusFor, startScoutTask, type OutsideCandidate,
 } from "./outside-buy";
 import { ensureAiProfile, type AiCoachProfile } from "./profile";
 import { MAX_SQUAD, SIGNING_SQUAD_THRESHOLD, TARGET_SENIOR_SQUAD, type PositionNeed } from "./squad";
 import { loadAiClubState, pragueDay, pragueHour, type AiClubState } from "./transfer-club";
 import { canOpenDeal, claimTask, openOutgoingOffers } from "./transfer-replies";
-import { hashString, maxBuyPrice, openDealLimit, openingAsk, openingBid, stableUnit } from "./valuation";
+import { maxBuyPrice, openingBid, stableUnit } from "./valuation";
 
 const M = "ai-transfer-market";
 
@@ -66,9 +74,6 @@ export const AI_TO_AI_CHANCE = 0.2;
 const MIN_MAX_TO_VALUE = 0.9;
 /** Nejvýš tolik pokusů o nabídku za den (služba může odmítnout: pauza po odmítnutí, propojení). */
 const MAX_OFFER_ATTEMPTS = 3;
-/** Hráče, jehož inzerát tolikrát propadl bez prodeje za posledních `UNSOLD_WINDOW_DAYS`, AI znovu nevystaví. */
-const MAX_UNSOLD_LISTINGS = 2;
-const UNSOLD_WINDOW_DAYS = 30;
 /** Potřeba postu, od které AI kupuje (bez přestupního kurzu i s kurzem „kupovat“). */
 const BUY_NEED = 0.3;
 /** Post, který trenér v pondělí určil k posílení: stačí menší potřeba. */
@@ -123,13 +128,18 @@ export function buyThreshold(position: string, plan: WeeklyTransferPlan | null):
 }
 
 export interface MarketAction {
-  kind: "list" | "pitch" | "offer" | "bid" | "loan_request" | "demand" | "sign_free_agent" | "outside_buy" | "scout_task" | "no_buy";
+  kind:
+    | "list" | "pitch" | "offer" | "bid" | "loan_request" | "demand" | "sign_free_agent" | "outside_buy" | "scout_task"
+    // Model rozhodl, že dnes nic: nekoupí, nevystaví, nenabídne, skauta nepošle.
+    | "no_buy" | "no_list" | "no_pitch" | "no_scout";
   playerId?: string;
   listingId?: string;
   demandId?: string;
   amount?: number;
+  /** Délka hostování (dny) u žádosti o hostování. */
+  loanDays?: number;
   position?: string;
-  /** Kdo o nákupu rozhodl: model, náhradní pravidlo, nebo kód (nebylo z čeho vybírat). */
+  /** Kdo o akci rozhodl: model, náhradní pravidlo, nebo kód (nebylo z čeho vybírat). */
   decidedBy?: DecidedBy;
   /** Zdůvodnění modelu (u pravidla „rules“). */
   reason?: string;
@@ -150,37 +160,6 @@ interface RunOptions {
   ignoreSchedule?: boolean;
   /** Jiný model než COACH_MODEL (srovnání, admin). */
   model?: string;
-}
-
-/** Souhrn volání modelu za běh trhu (výběry hráče) pro jeden zápis do deníku. */
-interface PickTrace {
-  model: string | null;
-  raws: string[];
-  prompts: string[];
-  errors: string[];
-  tokensIn: number;
-  tokensOut: number;
-  latencyMs: number;
-  calls: number;
-  /** Rozhodlo aspoň jednou pravidlo místo modelu (výpadek, off, neplatná odpověď). */
-  usedFallback: boolean;
-}
-
-function newPickTrace(): PickTrace {
-  return { model: null, raws: [], prompts: [], errors: [], tokensIn: 0, tokensOut: 0, latencyMs: 0, calls: 0, usedFallback: false };
-}
-
-function recordPick(sum: PickTrace, by: DecidedBy, t: ModelTrace): void {
-  if (by === "fallback") sum.usedFallback = true;
-  if (t.error) sum.errors.push(`výběr: ${t.error}`);
-  if (!t.model) return;
-  sum.model = t.model;
-  sum.calls++;
-  if (t.raw) sum.raws.push(t.raw);
-  if (t.prompt) sum.prompts.push(t.prompt);
-  sum.tokensIn += t.tokensIn ?? 0;
-  sum.tokensOut += t.tokensOut ?? 0;
-  sum.latencyMs += t.latencyMs ?? 0;
 }
 
 function floor1000(v: number): number {
@@ -214,85 +193,6 @@ async function adminFeeShare(db: D1Database, buyerLeagueId: string | null, selle
   const share = levies ? levies.adminFee / 100_000 : 0;
   cache.set(key, share);
   return share;
-}
-
-/** Inzeráty na přebytečné hráče, dokud je volné místo pro rozjeté obchody. */
-async function listSurplus(env: Bindings, club: AiClubState, now: Date, mode: DecisionMode, actions: MarketAction[], plan: WeeklyTransferPlan | null): Promise<void> {
-  const db = env.DB;
-  const active = await db.prepare(
-    "SELECT player_id FROM transfer_listings WHERE team_id = ? AND status = 'active'",
-  ).bind(club.teamId).all<{ player_id: string }>()
-    .catch((e) => { logger.warn({ module: M }, `inzeráty klubu ${club.teamId}`, e); return { results: [] as { player_id: string }[] }; });
-  const listed = new Set(active.results.map((r) => r.player_id));
-  let slots = openDealLimit(club.profile) - listed.size;
-  if (slots <= 0) return;
-  // Trh pročišťuje hlavně přeplněný kádr; obchodník a kurz „prodávat“ prodávají přebytek i jinak.
-  const crowded = club.analysis.seniorOwnCount > TARGET_SENIOR_SQUAD;
-  if (!crowded && club.profile.trading < 50 && plan?.stance !== "sell") return;
-  // Koho trenér v pondělí vybral, ten jde na listinu první (i při kurzu „držet“, když se vystavuje).
-  const chosen = new Set(plan?.sellIds ?? []);
-
-  // Koho nikdo nechce, toho člověk taky nenabízí donekonečna. Podle konce platnosti, ne vzniku
-  // inzerátu: `created_at` píše databáze, konec platnosti stejné hodiny jako `now`.
-  const unsold = await db.prepare(
-    `SELECT player_id FROM transfer_listings WHERE team_id = ? AND status = 'expired' AND expires_at >= ?
-      GROUP BY player_id HAVING COUNT(*) >= ?`,
-  ).bind(club.teamId, new Date(now.getTime() - UNSOLD_WINDOW_DAYS * 86_400_000).toISOString(), MAX_UNSOLD_LISTINGS)
-    .all<{ player_id: string }>()
-    .catch((e) => { logger.warn({ module: M }, `neprodané inzeráty klubu ${club.teamId}`, e); return { results: [] as { player_id: string }[] }; });
-  const unsoldIds = new Set(unsold.results.map((r) => r.player_id));
-
-  const candidates = club.members
-    .filter((m) => !m.isU21Roster && !m.loanedIn && !listed.has(m.id) && !unsoldIds.has(m.id) && club.analysis.importanceOf(m.id) === "surplus")
-    .filter((m) => club.analysis.sellBlock(m.id) === null)
-    // Nejdřív hráči, které trenér v pondělí vybral, pak starší a slabší; mladé si mládežník nechá.
-    .sort((a, b) => (Number(chosen.has(b.id)) - Number(chosen.has(a.id))) || (b.age - a.age) || (a.rating - b.rating));
-  for (const m of candidates) {
-    if (slots <= 0) break;
-    if (m.age <= 21 && club.profile.youthFocus >= 50) continue;
-    const mv = marketValue(m.rating, m.age, m.position);
-    const price = openingAsk({ marketValue: mv, importance: "surplus", profile: club.profile, playerId: m.id, now });
-    if (mode === "shadow") {
-      actions.push({ kind: "list", playerId: m.id, amount: price, result: "shadow" });
-    } else {
-      const res = await listPlayerOnMarket(env, club.teamId, m.id, price);
-      actions.push({ kind: "list", playerId: m.id, amount: price, result: res.ok ? "listed" : "failed", error: res.ok ? undefined : res.error });
-    }
-    slots--;
-  }
-}
-
-/** Přebytečného hráče nabídne k poptávce (klubu mimo hru z okresu nebo klubu ve hře). */
-async function pitchSurplus(env: Bindings, club: AiClubState, now: Date, mode: DecisionMode, actions: MarketAction[]): Promise<void> {
-  if (club.profile.trading < 30) return;
-  const db = env.DB;
-  const surplus = club.members.filter((m) => !m.loanedIn && club.analysis.importanceOf(m.id) === "surplus" && club.analysis.sellBlock(m.id) === null);
-  if (surplus.length === 0) return;
-  const demands = await db.prepare(
-    `SELECT d.id, d.position, d.age_min, d.age_max, d.min_rating, d.team_id
-       FROM transfer_demands d
-      WHERE d.status = 'active' AND d.expires_at > ? AND (d.team_id IS NULL OR d.team_id != ?)
-        AND ((d.team_id IS NULL AND d.district = ?) OR d.team_id IS NOT NULL)
-        AND NOT EXISTS (SELECT 1 FROM transfer_demand_pitches dp WHERE dp.demand_id = d.id AND dp.team_id = ?)
-      ORDER BY d.created_at DESC LIMIT 30`,
-  ).bind(now.toISOString(), club.teamId, club.district ?? "", club.teamId).all<{
-    id: string; position: string; age_min: number; age_max: number; min_rating: number | null; team_id: string | null;
-  }>().catch((e) => { logger.warn({ module: M }, "poptávky pro nabídnutí hráče", e); return { results: [] }; });
-
-  for (const d of demands.results) {
-    // U klubu ve hře poptávka hodnocení hlídá sama, u klubu mimo hru je práh skrytý.
-    const fit = surplus.find((m) => m.position === d.position && m.age >= d.age_min && m.age <= d.age_max
-      && (d.team_id == null || m.rating >= (d.min_rating ?? 0)));
-    if (!fit) continue;
-    if (mode === "shadow") {
-      actions.push({ kind: "pitch", playerId: fit.id, demandId: d.id, result: "shadow" });
-      return;
-    }
-    const { pitchPlayer } = await import("../transfers/demands");
-    const res = await pitchPlayer(db, club.teamId, d.id, fit.id, createRng(hashString(`pitch|${club.teamId}|${d.id}|${pragueDay(now)}`)));
-    actions.push({ kind: "pitch", playerId: fit.id, demandId: d.id, result: res.ok ? res.status : "failed", error: res.ok ? undefined : res.error });
-    return;
-  }
 }
 
 interface BuyCandidate {
@@ -383,15 +283,15 @@ const MAX_LOAN_OPTIONS = 2;
 /** Kolikrát se trenér za den nejvýš zeptá modelu (po nevydařeném pokusu zkusí jinou možnost). */
 const MAX_MODEL_PICKS = 3;
 /**
- * Volání modelu za běh trhu dohromady (výběr i tahy v jednání). Jedno trvá až desítky sekund
- * a hodinová úloha ve frontě obsluhuje i odpovědi na nabídky a přáteláky, proto strop;
- * po vyčerpání dokončí den pravidlo.
+ * Volání modelu za běh trhu dohromady (nouzový podpis, inzeráty, nabídka k poptávce, skaut,
+ * výběr i tahy v jednání). Jedno trvá až desítky sekund a hodinová úloha ve frontě obsluhuje
+ * i odpovědi na nabídky a přáteláky, proto strop; po vyčerpání dokončí den pravidlo.
  */
-const MAX_MODEL_CALLS_PER_RUN = 6;
+const MAX_MODEL_CALLS_PER_RUN = 8;
 /** Kroky pravidla: pokusy o koupi, pak hostování a poptávka. */
 const MAX_PICK_STEPS = MAX_OFFER_ATTEMPTS + 2;
-/** Volnému hráči trenér přidá na mzdě nejvýš čtvrtinu (ambice 100 v pravidle). */
-const MAX_WAGE_PREMIUM = 0.25;
+/** Kolik volných hráčů model nejvýš uvidí při nouzovém podpisu. */
+const MAX_EMERGENCY_AGENTS = 6;
 const DAY_MS = 86_400_000;
 
 /** Možnost z užšího výběru: co vidí model a co potřebuje kód k provedení. */
@@ -546,7 +446,7 @@ async function buildBuyOptions(
         option: {
           key: `c${shortlist.length + 1}`, route: "free_agent", seller: "none", position: need.position, age, rating, ratingRange: null,
           estimatedValue: marketValue(rating, age, need.position), askingPrice: askWage, feePct: 0,
-          minBid: askWage, maxBid: Math.round(askWage * (1 + MAX_WAGE_PREMIUM)),
+          minBid: wageBounds(askWage).minWage, maxBid: wageBounds(askWage).maxWage,
         },
         cand: null, freeAgentId: a.id, ruleBid: freeAgentWage(askWage, club.profile), ruleRank: null,
       });
@@ -554,7 +454,7 @@ async function buildBuyOptions(
     }
   }
 
-  // Hostování: mladý hráč klubu ve hře na tenký post (bez poplatku, délku volí kód).
+  // Hostování: mladý hráč klubu ve hře na tenký post (bez poplatku, délku volí model z `LOAN_DURATIONS`).
   const loans: LoanEntry[] = [];
   if (need.missing > 0) {
     const young = candidates.filter((c) => c.age <= 21 && !c.listingId && !c.outside).sort((a, b) => b.rating - a.rating);
@@ -562,7 +462,7 @@ async function buildBuyOptions(
       if (loans.length >= MAX_LOAN_OPTIONS) break;
       if (!(await inGameCandidateOpen(db, club.teamId, c))) continue;
       loans.push({
-        option: { key: `l${loans.length + 1}`, seller: c.sellerIsAi ? "ai" : "human", position: c.position, age: c.age, rating: c.rating, days: loanDays(club.teamId, c.playerId) },
+        option: { key: `l${loans.length + 1}`, seller: c.sellerIsAi ? "ai" : "human", position: c.position, age: c.age, rating: c.rating },
         playerId: c.playerId,
       });
     }
@@ -595,15 +495,16 @@ function pickContext(
 
 /**
  * Náhradní pravidlo (bez modelu): kandidáti v pořadí kódu za částku pravidla, pak si šetrný
- * trenér na tenký post půjčí mladého hráče, jinak poptávka. Volné hráče pravidlo při potřebě nebere.
+ * trenér na tenký post půjčí mladého hráče (30 až 60 dní, pevně pro hráče), jinak poptávka.
+ * Volné hráče pravidlo při potřebě nebere.
  */
-function rulePick(ctx: BuyPickContext, options: BuyOptions, profile: AiCoachProfile, need: PositionNeed): BuyPickDecision {
+function rulePick(ctx: BuyPickContext, options: BuyOptions, club: AiClubState, need: PositionNeed): BuyPickDecision {
   const open = new Set(ctx.candidates.map((c) => c.key));
   const next = options.shortlist.find((e) => e.ruleRank !== null && open.has(e.option.key));
   if (next) return { kind: "buy", key: next.option.key, bid: next.ruleBid, reason: "rules" };
   const loan = options.ruleLoan;
-  if (need.missing > 0 && profile.thrift >= 60 && loan && ctx.loans.some((l) => l.key === loan.option.key)) {
-    return { kind: "loan", key: loan.option.key, reason: "rules" };
+  if (need.missing > 0 && club.profile.thrift >= 60 && loan && ctx.loans.some((l) => l.key === loan.option.key)) {
+    return { kind: "loan", key: loan.option.key, days: loanDays(club.teamId, loan.playerId), reason: "rules" };
   }
   if (ctx.demand) return { kind: "demand", reason: "rules" };
   return { kind: "none", reason: "rules" };
@@ -613,7 +514,9 @@ function rulePick(ctx: BuyPickContext, options: BuyOptions, profile: AiCoachProf
 function shadowAction(d: BuyPickDecision, options: BuyOptions, position: string, by: DecidedBy): MarketAction {
   const meta = { position, decidedBy: by, reason: d.reason, result: "shadow" };
   if (d.kind === "demand") return { kind: "demand", amount: options.demand?.cap, ...meta };
-  if (d.kind === "loan") return { kind: "loan_request", playerId: options.loans.find((l) => l.option.key === d.key)?.playerId, amount: 0, ...meta };
+  if (d.kind === "loan") {
+    return { kind: "loan_request", playerId: options.loans.find((l) => l.option.key === d.key)?.playerId, amount: 0, loanDays: d.days, ...meta };
+  }
   const entry = d.kind === "buy" ? options.shortlist.find((e) => e.option.key === d.key) : undefined;
   if (!entry || d.kind !== "buy") return { kind: "no_buy", ...meta };
   if (!entry.cand) return { kind: "sign_free_agent", playerId: entry.freeAgentId ?? undefined, amount: d.bid, ...meta };
@@ -651,8 +554,11 @@ async function executeBuyPick(
   if (d.kind === "loan") {
     const loan = options.loans.find((l) => l.option.key === d.key);
     if (!loan) return { done: false };
-    const res = await createTransferOffer(env, club.teamId, { playerId: loan.playerId, amount: 0, offerType: "loan", loanDuration: loan.option.days });
-    actions.push({ kind: "loan_request", playerId: loan.playerId, amount: 0, ...meta, result: res.ok ? "sent" : "failed", error: res.ok ? undefined : res.error });
+    const res = await createTransferOffer(env, club.teamId, { playerId: loan.playerId, amount: 0, offerType: "loan", loanDuration: d.days });
+    actions.push({
+      kind: "loan_request", playerId: loan.playerId, amount: 0, loanDays: d.days, ...meta,
+      result: res.ok ? "sent" : "failed", error: res.ok ? undefined : res.error,
+    });
     return res.ok ? { done: true } : { done: false, tried: `"${d.key}" (loan of a ${loan.option.position} aged ${loan.option.age}): the request could not be sent` };
   }
   const entry = options.shortlist.find((e) => e.option.key === d.key);
@@ -686,6 +592,62 @@ async function executeBuyPick(
 }
 
 /**
+ * Skaut bez práce vyjede po klubech mimo hru hned, jak je díra v kádru (jako u člověka), nabídky
+ * klubům ve hře jdou vedle toho; hlášení pak přijdou jako další kandidáti. Kód nabídne posty, kde
+ * klub posilu hledá a žádný skaut na nich nejede, okruhy, na které jsou peníze nad rezervou,
+ * a pásma věku. Jestli, kam a koho hledat, vybere model; bez něj pravidlo (nejpotřebnější post,
+ * okruh a věk podle povahy).
+ */
+async function scoutForNeeds(
+  env: Bindings, club: AiClubState, needs: PositionNeed[], now: Date, mode: DecisionMode, actions: MarketAction[],
+  plan: WeeklyTransferPlan | null, trace: MarketTrace, use: ModelUse,
+): Promise<void> {
+  const db = env.DB;
+  const loaded = await loadScoutSituation(db, club.teamId);
+  if (!loaded.ok) return;
+  const scoutId = loaded.situation.freeScoutId;
+  if (!scoutId) return;
+  const busy = loaded.situation.busy;
+  const ctx: ScoutContext = {
+    ...marketClubLine(club, plan, TARGET_SENIOR_SQUAD), weeks: SCOUT_TASK_WEEKS,
+    positions: needs.filter((n) => !busy.has(n.position)).map((n) => ({ position: n.position, need: n.need, missing: n.missing })),
+    radii: affordableScoutRadii(club.spendable), busy: [...busy],
+  };
+  if (!hasScoutChoice(ctx)) return;
+  const rule = (): ScoutDecision => {
+    const position = needs[0]?.position;
+    const radiusKm = scoutRadiusFor(club.profile);
+    const ages = scoutAgeBandOf(scoutAgesFor(club.profile));
+    if (!position || busy.has(position) || !ctx.radii.some((r) => r.km === radiusKm) || !ages) return { send: false, reason: "rules" };
+    return { send: true, position, radiusKm, ages, reason: "rules" };
+  };
+  const decided = await decideByModel({
+    name: "scout_task", system: MARKET_SYSTEM_PROMPT, maxTokens: 300,
+    prompt: () => renderScoutPrompt(ctx), schema: () => scoutSchema(ctx), validate: (raw) => validateScout(raw, ctx), rule,
+  }, use);
+  recordDecision(trace, "skaut", decided.by, decided.trace);
+  const d = decided.decision;
+  const meta = { decidedBy: decided.by, reason: d.reason };
+  if (!d.send) {
+    if (decided.by === "model") actions.push({ kind: "no_scout", ...meta, result: "none" });
+    return;
+  }
+  if (mode === "shadow") {
+    actions.push({ kind: "scout_task", position: d.position, amount: d.radiusKm, ...meta, result: "shadow" });
+    return;
+  }
+  const band = SCOUT_AGE_BANDS.find((b) => b.key === d.ages) ?? SCOUT_AGE_BANDS[1];
+  const team = await db.prepare("SELECT game_date FROM teams WHERE id = ?").bind(club.teamId).first<{ game_date: string | null }>()
+    .catch((e) => { logger.warn({ module: M }, "herní datum pro skauta", e); return null; });
+  const res = await startScoutTask(db, club.teamId, scoutId, { position: d.position, radiusKm: d.radiusKm, ageMin: band.ageMin, ageMax: band.ageMax },
+    (team?.game_date ?? now.toISOString()).slice(0, 10));
+  actions.push({
+    kind: "scout_task", position: d.position, amount: d.radiusKm, ...meta,
+    result: res.started ? "started" : "failed", error: res.started ? undefined : res.reason,
+  });
+}
+
+/**
  * Na nejpotřebnější post shání posilu. Jestli a na jaký post, rozhoduje kód: pondělní kurz určuje,
  * od jaké potřeby a na které posty nejdřív (`buyThreshold`), k tomu rezerva a limity obchodů.
  * Koho a za kolik vybere model z užšího výběru (bez modelu pravidlo). Když pokus nevyjde (klub
@@ -694,26 +656,18 @@ async function executeBuyPick(
  */
 async function buyForNeed(
   env: Bindings, club: AiClubState, now: Date, mode: DecisionMode, actions: MarketAction[], plan: WeeklyTransferPlan | null,
-  picks: PickTrace, use: ModelUse,
+  trace: MarketTrace, use: ModelUse,
 ): Promise<void> {
   const db = env.DB;
   if (club.analysis.seniorOwnCount >= MAX_SQUAD - 1 || club.spendable <= 0) return;
   const focus = plan?.stance === "buy" ? plan.focus : [];
-  const need = [...club.analysis.needs]
+  const needs = [...club.analysis.needs]
     .sort((a, b) => (Number(focus.includes(b.position)) - Number(focus.includes(a.position))) || (b.need - a.need))
-    .find((n) => n.need >= buyThreshold(n.position, plan));
+    .filter((n) => n.need >= buyThreshold(n.position, plan));
+  const need = needs[0];
   if (!need) return;
 
-  // Skaut bez práce vyjede po klubech mimo hru hned, jak je díra v kádru (jako u člověka),
-  // nabídky klubům ve hře jdou vedle toho. Hlášení pak přijdou jako další kandidáti.
-  if (mode === "shadow") {
-    actions.push({ kind: "scout_task", position: need.position, result: "shadow" });
-  } else {
-    const team = await db.prepare("SELECT game_date FROM teams WHERE id = ?").bind(club.teamId).first<{ game_date: string | null }>()
-      .catch((e) => { logger.warn({ module: M }, "herní datum pro skauta", e); return null; });
-    const scout = await maybeStartScoutTask(db, club, need.position, (team?.game_date ?? now.toISOString()).slice(0, 10));
-    if (scout.started) actions.push({ kind: "scout_task", position: need.position, amount: scout.radiusKm, result: "started" });
-  }
+  await scoutForNeeds(env, club, needs, now, mode, actions, plan, trace, use);
 
   if (!canOpenDeal(club, await openOutgoingOffers(db, club.teamId))) return;
   const candidates = await buyCandidates(env, club, need, now);
@@ -728,10 +682,10 @@ async function buyForNeed(
   for (let step = 0; step < MAX_PICK_STEPS; step++) {
     if (modelOk && modelPicks >= MAX_MODEL_PICKS) return;
     const ctx = pickContext(club, need, plan, options, tried, triedLines, buyAttempts);
-    const decided = await decideBuyPick(ctx, () => rulePick(ctx, options, club.profile, need), { ...use, useModel: modelOk });
+    const decided = await decideBuyPick(ctx, () => rulePick(ctx, options, club, need), { ...use, useModel: modelOk });
     // Kromě „nic“ nebylo z čeho vybírat.
     if (decided.by === "guard") return;
-    recordPick(picks, decided.by, decided.trace);
+    recordDecision(trace, "výběr", decided.by, decided.trace);
     if (decided.trace.model) modelPicks++;
     if (decided.by === "fallback") modelOk = false;
     const d = decided.decision;
@@ -752,28 +706,61 @@ async function buyForNeed(
   }
 }
 
-/** Pod minimem kádru: podepíše nejlepšího dostupného volného hráče na nejpotřebnější post. */
-async function signFreeAgents(env: Bindings, club: AiClubState, now: Date, mode: DecisionMode, actions: MarketAction[]): Promise<void> {
+/**
+ * Pod minimem kádru (nebo když na postu nikdo není) musí klub podepsat volného hráče: to hlídá
+ * kód, stejně jako peníze na registraci a limit obchodů. Kterého a za jakou mzdu (od toho, co hráč
+ * chce, nejvýš o čtvrtinu víc) vybere model; bez něj pravidlo: nejlepší hráč na prázdný nebo
+ * nejpotřebnější post, ambiciózní trenér přidá na mzdě.
+ */
+async function signFreeAgents(
+  env: Bindings, club: AiClubState, now: Date, mode: DecisionMode, actions: MarketAction[], plan: WeeklyTransferPlan | null,
+  trace: MarketTrace, use: ModelUse,
+): Promise<void> {
   const emptyPosition = club.analysis.needs.find((n) => n.startersAverage === 0);
-  if (club.analysis.seniorOwnCount >= SIGNING_SQUAD_THRESHOLD && !emptyPosition) return;
+  const belowMinimum = club.analysis.seniorOwnCount < SIGNING_SQUAD_THRESHOLD;
+  if (!belowMinimum && !emptyPosition) return;
   if (club.overDealLimit || club.budget < FREE_AGENT_SIGNING_FEE + club.reserve / 4) return;
   if (!club.district) return;
   const agents = await findVisibleFreeAgents(env.DB, { id: club.teamId, district: club.district, userId: club.userId })
     .catch((e) => { logger.warn({ module: M }, "volní hráči", e); return [] as Record<string, unknown>[]; });
+  // Pořadí pravidla: prázdný post, jinak posty podle potřeby; pod minimem kádru pak kdokoli.
+  // Volní hráči jsou seřazení od nejlepšího, takže první je hráč, kterého by vzalo pravidlo.
   const order = emptyPosition ? [emptyPosition.position] : club.analysis.needs.map((n) => n.position);
-  const pick = order.map((pos) => agents.find((a) => a.position === pos)).find(Boolean)
-    ?? (club.analysis.seniorOwnCount < SIGNING_SQUAD_THRESHOLD ? agents[0] : undefined);
+  const preferred = order.flatMap((pos) => agents.filter((a) => a.position === pos));
+  const pool = [...preferred, ...(belowMinimum ? agents.filter((a) => !preferred.includes(a)) : [])]
+    .filter((a) => typeof a.id === "string").slice(0, MAX_EMERGENCY_AGENTS);
+  if (pool.length === 0) return;
+
+  const options = pool.map((a, i) => {
+    const askWage = Number(a.weekly_wage) || 50;
+    return {
+      key: `a${i + 1}`, position: String(a.position), age: Number(a.age) || 25, rating: Number(a.overall_rating) || 0, askWage, ...wageBounds(askWage),
+    };
+  });
+  const ctx: EmergencySigningContext = {
+    ...marketClubLine(club, plan, TARGET_SENIOR_SQUAD), minSquad: SIGNING_SQUAD_THRESHOLD, emptyPosition: emptyPosition?.position ?? null,
+    needs: club.analysis.needs.map((n) => ({ position: n.position, need: n.need, missing: n.missing })), agents: options,
+  };
+  const rule = (): EmergencySigningDecision => ({ key: options[0].key, wage: freeAgentWage(options[0].askWage, club.profile), reason: "rules" });
+  const decided = await decideByModel({
+    name: "emergency_signing", system: MARKET_SYSTEM_PROMPT, maxTokens: 300,
+    prompt: () => renderEmergencySigningPrompt(ctx), schema: () => emergencySigningSchema(ctx),
+    validate: (raw) => validateEmergencySigning(raw, ctx), rule,
+  }, use);
+  recordDecision(trace, "volný hráč", decided.by, decided.trace);
+  const d = decided.decision;
+  const pick = pool[options.findIndex((o) => o.key === d.key)];
   if (!pick) return;
-  const wage = freeAgentWage(Number(pick.weekly_wage) || 50, club.profile);
+  const base = {
+    kind: "sign_free_agent" as const, playerId: pick.id as string, amount: d.wage, position: pick.position as string,
+    decidedBy: decided.by, reason: d.reason,
+  };
   if (mode === "shadow") {
-    actions.push({ kind: "sign_free_agent", playerId: pick.id as string, amount: wage, position: pick.position as string, result: "shadow" });
+    actions.push({ ...base, result: "shadow" });
     return;
   }
-  const res = await signFreeAgent(env, club.teamId, pick.id as string, wage);
-  actions.push({
-    kind: "sign_free_agent", playerId: pick.id as string, amount: wage, position: pick.position as string,
-    result: res.ok ? (res.success ? "signed" : "refused") : "failed", error: res.ok ? undefined : res.error,
-  });
+  const res = await signFreeAgent(env, club.teamId, pick.id as string, d.wage);
+  actions.push({ ...base, result: res.ok ? (res.success ? "signed" : "refused") : "failed", error: res.ok ? undefined : res.error });
 }
 
 /**
@@ -805,13 +792,13 @@ export async function runTransferMarket(env: Bindings, teamId: string, now: Date
   const plan = await loadWeeklyTransferPlan(db, teamId, now);
 
   const actions: MarketAction[] = [];
-  const picks = newPickTrace();
+  const trace = newMarketTrace();
   const use: ModelUse = { useModel: mode !== "off", ai: env, model: opts.model, budget: { left: MAX_MODEL_CALLS_PER_RUN } };
   const steps: Array<[string, () => Promise<void>]> = [
-    ["free_agents", () => signFreeAgents(env, club, now, mode, actions)],
-    ["list", () => listSurplus(env, club, now, mode, actions, plan)],
-    ["pitch", () => pitchSurplus(env, club, now, mode, actions)],
-    ["buy", () => buyForNeed(env, club, now, mode, actions, plan, picks, use)],
+    ["free_agents", () => signFreeAgents(env, club, now, mode, actions, plan, trace, use)],
+    ["list", () => listSurplus(env, club, now, mode, actions, plan, trace, use)],
+    ["pitch", () => pitchSurplus(env, club, now, mode, actions, plan, trace, use)],
+    ["buy", () => buyForNeed(env, club, now, mode, actions, plan, trace, use)],
   ];
   const errors: string[] = [];
   for (const [name, step] of steps) {
@@ -823,22 +810,22 @@ export async function runTransferMarket(env: Bindings, teamId: string, now: Date
     }
   }
 
-  // Jeden zápis za běh: akce všech kroků, k nim výběr hráče modelem (prompt, odpověď, tokeny).
-  const allErrors = [...errors, ...picks.errors];
+  // Jeden zápis za běh: akce všech kroků, k nim všechna rozhodnutí modelu (prompty, odpovědi, tokeny).
+  const allErrors = [...errors, ...trace.errors];
   await logDecision(db, {
-    teamId, kind: "transfer_market", mode, model: picks.model ?? "rules", contextRef: pragueDay(now),
+    teamId, kind: "transfer_market", mode, model: trace.model ?? "rules", contextRef: pragueDay(now),
     inputSummary: `budget=${club.budget} reserve=${club.reserve} spendable=${club.spendable} squad=${club.analysis.seniorOwnCount}`
       + ` deals30=${club.dealsLast30}/${club.dealLimit} needs=${club.analysis.needs.map((n) => `${n.position}:${n.need.toFixed(2)}`).join(",") || "-"}`
       + ` course=${plan ? `${plan.stance}${plan.focus.length ? `:${plan.focus.join("+")}` : ""}` : "-"}`
-      + (picks.prompts.length > 0 ? `\n\n${picks.prompts.join("\n---\n")}` : ""),
-    rawOutput: picks.raws.length > 0 ? picks.raws.join("\n---\n") : null,
+      + (trace.prompts.length > 0 ? `\n\n${trace.prompts.join("\n---\n")}` : ""),
+    rawOutput: trace.raws.length > 0 ? trace.raws.join("\n---\n") : null,
     actions: actions.map(({ result: _r, error: _e, ...a }) => a),
     executed: actions.map((a) => ({ kind: a.kind, result: a.result, error: a.error })),
-    usedFallback: picks.usedFallback,
+    usedFallback: trace.usedFallback,
     error: allErrors.length > 0 ? allErrors.join("; ") : null,
-    tokensIn: picks.calls > 0 ? picks.tokensIn : null,
-    tokensOut: picks.calls > 0 ? picks.tokensOut : null,
-    latencyMs: picks.calls > 0 ? picks.latencyMs : null,
+    tokensIn: trace.calls > 0 ? trace.tokensIn : null,
+    tokensOut: trace.calls > 0 ? trace.tokensOut : null,
+    latencyMs: trace.calls > 0 ? trace.latencyMs : null,
   });
   return { skipped: null, mode, actions };
 }
