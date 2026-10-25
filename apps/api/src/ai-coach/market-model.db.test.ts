@@ -274,7 +274,7 @@ describe("inzeráty na přebytečné hráče: koho a za kolik, nikdy pod rezerva
   beforeEach(async () => { await seedFullSquad(); });
 
   const reservationOf = (id: string, position: string, age: number, now: Date, profile = PROFILE) =>
-    reservationPrice({ marketValue: marketValue(40, age, position), importance: "surplus", profile, playerId: id, now });
+    reservationPrice({ marketValue: marketValue(40, age, position), age, importance: "surplus", profile, playerId: id, now });
 
   async function listings(): Promise<Array<{ player_id: string; asking_price: number }>> {
     return (await db.prepare("SELECT player_id, asking_price FROM transfer_listings WHERE team_id = ? AND status = 'active' ORDER BY player_id")
@@ -310,8 +310,8 @@ describe("inzeráty na přebytečné hráče: koho a za kolik, nikdy pod rezerva
       await db.prepare("DELETE FROM transfer_listings").run();
       const res = await runMarket(fakeAi({ transfer_listing: answer }), now, trader);
       const expected = [
-        { player_id: "sur-def", asking_price: openingAsk({ marketValue: marketValue(40, 31, "DEF"), importance: "surplus", profile: trader, playerId: "sur-def", now }) },
-        { player_id: "sur-gk", asking_price: openingAsk({ marketValue: marketValue(40, 33, "GK"), importance: "surplus", profile: trader, playerId: "sur-gk", now }) },
+        { player_id: "sur-def", asking_price: openingAsk({ marketValue: marketValue(40, 31, "DEF"), age: 31, importance: "surplus", profile: trader, playerId: "sur-def", now }) },
+        { player_id: "sur-gk", asking_price: openingAsk({ marketValue: marketValue(40, 33, "GK"), age: 33, importance: "surplus", profile: trader, playerId: "sur-gk", now }) },
       ];
       expect(await listings()).toEqual(expected);
       for (const l of expected) expect(l.asking_price).toBeGreaterThanOrEqual(reservationOf(l.player_id, l.player_id === "sur-gk" ? "GK" : "DEF", l.player_id === "sur-gk" ? 33 : 31, now, trader));

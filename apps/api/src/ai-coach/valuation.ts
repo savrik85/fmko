@@ -46,6 +46,18 @@ export const IMPORTANCE_MULTIPLIER: Record<SquadImportance, number> = {
   surplus: 0.95,
 };
 
+/**
+ * AI prodává podle horní čtvrtiny cen mezi lidmi, ne podle mediánu (uživatel 25. 10.: inzeráty
+ * a protinávrhy AI „furt levný“): kdo koupí za medián, prodá dráž a AI ošidí. Poměr 75. percentilu
+ * k mediánu ceny / tržní hodnoty u přestupů mezi lidmi (hodnocení ze dne prodeje, po přeměření
+ * tržní hodnoty 25. 10.): od 22 let 1,41–1,52 (okna 60 a 120 dní), do 21 let 1,2 (30 dní, mladí
+ * zdražují a starší okna jsou pod dnešní úrovní). Násobky podle postavení v kádru se tím posunou
+ * o stupeň: přebytečný hráč za 75. percentil, rotace kolem 90. percentilu, opora nad něj.
+ */
+export function upperMarketFactor(age: number): number {
+  return age <= 21 ? 1.2 : 1.5;
+}
+
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 const ceil100 = (v: number) => Math.ceil(v / 100) * 100;
 const floor100 = (v: number) => Math.floor(v / 100) * 100;
@@ -102,6 +114,8 @@ export function playerMarketValue(p: { overallRating: number; age: number; posit
 
 export interface ReservationInput {
   marketValue: number;
+  /** Věk hráče: AI chce horní čtvrtinu cen jeho věkové skupiny (`upperMarketFactor`). */
+  age: number;
   importance: SquadImportance;
   profile: AiCoachProfile;
   playerId: string;
@@ -110,11 +124,12 @@ export interface ReservationInput {
 
 /**
  * Skrytá rezervační cena: pod ni AI klub hráče neprodá. Tržní hodnota × význam v kádru
- * × povaha × šum, nikdy pod HARD_FLOOR_RATIO tržní hodnoty.
+ * × horní čtvrtina trhu × povaha × šum, nikdy pod HARD_FLOOR_RATIO tržní hodnoty.
  */
 export function reservationPrice(input: ReservationInput): number {
   const mv = Math.max(MIN_PRICE, input.marketValue);
   const raw = mv * IMPORTANCE_MULTIPLIER[input.importance]
+    * upperMarketFactor(input.age)
     * sellerPersonalityFactor(input.profile)
     * valuationNoise(input.playerId, input.now, "sell");
   return ceil100(Math.max(raw, mv * HARD_FLOOR_RATIO, MIN_PRICE));

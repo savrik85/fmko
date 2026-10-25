@@ -354,13 +354,17 @@ function mvOf(id: string): number {
   return marketValue(p[2], p[3], p[1]);
 }
 
+function ageOf(id: string): number {
+  return AI_SQUAD.find(([pid]) => pid === id)![3];
+}
+
 describe("člověk kupuje od AI klubu", () => {
   it("nabídka nad požadavkem projde až po lidské prodlevě a přesune peníze i hráče jako mezi lidmi", async () => {
     const squad = await analysisNow();
     const playerId = "ai-mid4";
     const importance = squad.importanceOf(playerId);
     const when = later();
-    const ask = openingAsk({ marketValue: mvOf(playerId), importance, profile: PROFILE, playerId, now: when });
+    const ask = openingAsk({ marketValue: mvOf(playerId), age: ageOf(playerId), importance, profile: PROFILE, playerId, now: when });
     const offer = await offerFromHuman({ playerId, amount: ask });
     expect(offer.status).toBe(200);
     // AI klubu nepřišla SMS ani oznámení, odpoví sám.
@@ -400,7 +404,7 @@ describe("člověk kupuje od AI klubu", () => {
     const playerId = "ai-mid3";
     const when = later();
     const squad = await analysisNow();
-    const reservation = reservationPrice({ marketValue: mvOf(playerId), importance: squad.importanceOf(playerId), profile: PROFILE, playerId, now: when });
+    const reservation = reservationPrice({ marketValue: mvOf(playerId), age: ageOf(playerId), importance: squad.importanceOf(playerId), profile: PROFILE, playerId, now: when });
     const bid = Math.ceil(reservation * 0.9 / 100) * 100;
     const offer = await offerFromHuman({ playerId, amount: bid });
     await replyToTransferOffers(env, "ai-club", when, PROFILE);
@@ -436,7 +440,7 @@ describe("člověk kupuje od AI klubu", () => {
     const playerId = "ai-mid2";
     const when = later();
     const squad = await analysisNow();
-    const reservation = reservationPrice({ marketValue: mvOf(playerId), importance: squad.importanceOf(playerId), profile: PROFILE, playerId, now: when });
+    const reservation = reservationPrice({ marketValue: mvOf(playerId), age: ageOf(playerId), importance: squad.importanceOf(playerId), profile: PROFILE, playerId, now: when });
     let amount = Math.ceil(reservation * 0.8 / 100) * 100;
     const asks: number[] = [];
     let finalStatus = "";
@@ -465,7 +469,7 @@ describe("člověk kupuje od AI klubu", () => {
     const squad = await analysisNow();
     const cashPlayer = "ai-fwd3";
     const instPlayer = "ai-def4";
-    const priceFor = (playerId: string) => openingAsk({ marketValue: mvOf(playerId), importance: squad.importanceOf(playerId), profile: PROFILE, playerId, now: when });
+    const priceFor = (playerId: string) => openingAsk({ marketValue: mvOf(playerId), age: ageOf(playerId), importance: squad.importanceOf(playerId), profile: PROFILE, playerId, now: when });
     const instAmount = priceFor(instPlayer);
     const inst = await offerFromHuman({ playerId: instPlayer, amount: instAmount, upfrontPct: 10, installments: 20 });
     expect(inst.status).toBe(200);
@@ -511,7 +515,7 @@ describe("člověk kupuje od AI klubu", () => {
     const when = later();
     const squad = await analysisNow();
     const nearReservation = (playerId: string) => Math.ceil(reservationPrice({
-      marketValue: mvOf(playerId), importance: squad.importanceOf(playerId), profile: PROFILE, playerId, now: when,
+      marketValue: mvOf(playerId), age: ageOf(playerId), importance: squad.importanceOf(playerId), profile: PROFILE, playerId, now: when,
     }) * 0.9 / 100) * 100;
     // Kádr na hraně: 17 hráčů áčka (minimum je 16).
     await db.prepare("DELETE FROM players WHERE id IN ('ai-ext1', 'ai-ext2', 'ai-def6')").run();
@@ -537,7 +541,7 @@ describe("člověk kupuje od AI klubu", () => {
   it("protinávrh AI, který mezitím přestal jít (kádr se změnil), se při přijetí neprovede", async () => {
     const when = later();
     const squad = await analysisNow();
-    const amount = Math.ceil(reservationPrice({ marketValue: mvOf("ai-gk1"), importance: squad.importanceOf("ai-gk1"), profile: PROFILE, playerId: "ai-gk1", now: when }) * 0.9 / 100) * 100;
+    const amount = Math.ceil(reservationPrice({ marketValue: mvOf("ai-gk1"), age: ageOf("ai-gk1"), importance: squad.importanceOf("ai-gk1"), profile: PROFILE, playerId: "ai-gk1", now: when }) * 0.9 / 100) * 100;
     const offer = await offerFromHuman({ playerId: "ai-gk1", amount });
     await replyToTransferOffers(env, "ai-club", when, PROFILE);
     expect((await offerRow(offer.offerId))?.status).toBe("countered");
@@ -555,7 +559,7 @@ describe("člověk kupuje od AI klubu", () => {
     const playerId = "ai-mid4";
     const when = later();
     const squad = await analysisNow();
-    const ask = openingAsk({ marketValue: mvOf(playerId), importance: squad.importanceOf(playerId), profile: PROFILE, playerId, now: when });
+    const ask = openingAsk({ marketValue: mvOf(playerId), age: ageOf(playerId), importance: squad.importanceOf(playerId), profile: PROFILE, playerId, now: when });
     // AI klub hráče kdysi koupil od člověka s doložkou 50 % z dalšího prodeje.
     await db.prepare(`INSERT INTO sell_on_clauses (id, offer_id, player_id, player_name, beneficiary_team_id, owner_team_id, pct)
       VALUES ('clause', 'old', ?, 'Hráč', 'human', 'ai-club', 50)`).bind(playerId).run();
@@ -614,11 +618,11 @@ describe("člověk kupuje od AI klubu", () => {
 describe("o nabídce na hráče AI klubu rozhoduje model, kód hlídá", () => {
   const reservationOf = async (playerId: string, when: Date) => {
     const squad = await analysisNow();
-    return reservationPrice({ marketValue: mvOf(playerId), importance: squad.importanceOf(playerId), profile: PROFILE, playerId, now: when });
+    return reservationPrice({ marketValue: mvOf(playerId), age: ageOf(playerId), importance: squad.importanceOf(playerId), profile: PROFILE, playerId, now: when });
   };
   const askOf = async (playerId: string, when: Date) => {
     const squad = await analysisNow();
-    return openingAsk({ marketValue: mvOf(playerId), importance: squad.importanceOf(playerId), profile: PROFILE, playerId, now: when });
+    return openingAsk({ marketValue: mvOf(playerId), age: ageOf(playerId), importance: squad.importanceOf(playerId), profile: PROFILE, playerId, now: when });
   };
   const teamOf = async (playerId: string) =>
     (await db.prepare("SELECT team_id FROM players WHERE id = ?").bind(playerId).first<{ team_id: string }>())?.team_id;

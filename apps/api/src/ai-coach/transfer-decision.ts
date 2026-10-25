@@ -126,7 +126,7 @@ function sellerPrices(input: SellerDecisionInput): SellerPrices {
   // Čistá hodnota: peníze (splátky diskontované, procenta pro AI nic) a hráči na výměnu,
   // minus to, co AI klub z prodeje odvede (doložka, nedoplacené splátky).
   const value = netSaleValue(input.terms, input.swapValue, input.saleCosts ?? NO_SALE_COSTS);
-  const valuation = { marketValue: input.marketValue, importance: input.importance, profile: input.profile, playerId: input.playerId, now: input.now };
+  const valuation = { marketValue: input.marketValue, age: input.age, importance: input.importance, profile: input.profile, playerId: input.playerId, now: input.now };
   const baseReservation = reservationPrice(valuation);
   const reservation = input.overDealLimit ? ceil100(baseReservation * OVER_LIMIT_MARKUP) : baseReservation;
   // Hráč, který se mezitím stal oporou (zranění, prodeje), za cenu z inzerátu nejde.
