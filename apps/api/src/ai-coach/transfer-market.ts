@@ -366,8 +366,12 @@ async function buyForNeed(env: Bindings, club: AiClubState, now: Date, mode: Dec
     if (amount > maxPrice) continue;
     priced.push({ ...c, maxPrice, amount });
   }
-  // Nejvíc kvality za peníze; při shodě lepší hráč.
-  priced.sort((a, b) => ((b.rating - need.minRating + 1) / b.amount) - ((a.rating - need.minRating + 1) / a.amount) || b.rating - a.rating);
+  // Hlášení vlastního skauta první (je to jeho práce na hledaný post a za deset dní propadne),
+  // pak nejvíc kvality za peníze; při shodě lepší hráč.
+  const ownReport = (c: BuyCandidate) => Number(c.outside?.source === "scout_report");
+  priced.sort((a, b) => (ownReport(b) - ownReport(a))
+    || ((b.rating - need.minRating + 1) / b.amount) - ((a.rating - need.minRating + 1) / a.amount)
+    || b.rating - a.rating);
 
   let attempts = 0;
   for (const c of priced) {
