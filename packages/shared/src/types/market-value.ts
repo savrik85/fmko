@@ -10,17 +10,29 @@
  *   věk:    16–21 ×2,87 | 22–25 ×0,98 | 26–29 ×1 | 30–33 ×0,79 | 34+ ×0,29
  *   pozice: ZÁL ×1 | ÚTO ×0,80 | OBR ×0,74 | BRA ×0,32 (brankáři mají nafouknuté hodnocení)
  *
- * Strop 150 000: nejdražší skutečný obchod byl za 100 000 a mladí s hodnocením 50+
- * v datech nejsou, model je tam jen dopočítaný.
+ * Úroveň cen 25. 10. 2026 (uživatel: „cena hráčů stoupá, starší data budou zkreslovat“):
+ * 128 přestupů mezi lidmi od začátku 2. sezóny, hodnocení a věk ze dne prodeje (noční zálohy
+ * z R2 + `training_log`). Tvar výše drží: přefitovaný sklon hodnocení ani plynulý věk předpověď
+ * nezlepšily (leave-one-out), skok mezi 21 a 22 lety je v cenách skutečný. Ceny ale rostou, hlavně
+ * u mladých: za posledních 30 dní lidé platili za hráče do 21 let medián 2,21× vzorce (11 obchodů),
+ * za starší 1,13× (16 obchodů). Proto úroveň ×1,13 pro všechny a věk do 21 let ×5,61 (= 2,87 · 2,21 / 1,13).
+ * Přeměření: `apps/api/scripts/market-fit/collect-sales.py` (postup v hlavičce). Po úpravě má okno
+ * posledních 30 dní vycházet kolem ×1,00 (25. 10.: ×1,00 do 21 let, ×1,02 starší).
+ *
+ * Strop 190 000 = 1,5× nejdražšího skutečného obchodu (125 000), stejně jako dřív (100 000 → 150 000).
+ * Mladí s hodnocením nad 53 v datech nejsou, model je tam jen dopočítaný; se starým stropem by po
+ * zdražení mladých stála většina dobrých mladíků stejně.
  */
 export const MARKET_VALUE_MIN = 500;
-export const MARKET_VALUE_MAX = 150_000;
+export const MARKET_VALUE_MAX = 190_000;
 
-const LN_BASE = 4.4246;
+/** Úroveň cen proti tvaru z 3. 10.: medián posledních 30 dní k 25. 10. u hráčů od 22 let. */
+const PRICE_LEVEL = 1.13;
+const LN_BASE = 4.4246 + Math.log(PRICE_LEVEL);
 const PER_RATING_POINT = 0.10893;
 
 export function marketValueAgeFactor(age: number): number {
-  if (age <= 21) return 2.87;
+  if (age <= 21) return 5.61;
   if (age <= 25) return 0.98;
   if (age <= 29) return 1;
   if (age <= 33) return 0.79;
@@ -34,7 +46,7 @@ export function marketValue(overallRating: number, age: number, position?: strin
 }
 
 /**
- * Tentýž vzorec bez stropu 150 000. Jen pro ocenění budoucího hráče (cizí klub cení klenot
+ * Tentýž vzorec bez stropu. Jen pro ocenění budoucího hráče (cizí klub cení klenot
  * podle toho, kým bude): hráč s hodnocením 80+ v datech přestupů není, strop by ho uřízl
  * na cenu průměrného talentu.
  */
