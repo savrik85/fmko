@@ -135,10 +135,23 @@ describe("kontrola odpovědi modelu", () => {
     expect(validateWeeklyDecision(everything, context(100_000)).ok).toBe(true);
   });
 
-  it("položka mimo nabídku shodí rozhodnutí", () => {
-    expect(validateWeeklyDecision({ ...everything, stadium: ["S9"] }, context(100_000)).ok).toBe(false);
-    expect(validateWeeklyDecision({ ...everything, hire: ["staff-1"] }, context(100_000)).ok).toBe(false);
+  it("položka mimo nabídku se zahodí, zbytek rozhodnutí platí; nic mimo nabídku se neprovede", () => {
+    const r = validateWeeklyDecision({ ...everything, stadium: ["S9", "S1"], hire: ["staff-1"], promote: ["Y1"] }, context(100_000));
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.decision.stadium).toEqual(["S1"]);
+      expect(r.decision.hire).toEqual([]);
+      expect(r.decision.promote).toEqual([]);
+      expect(r.rejected.some((x) => x.includes("S9"))).toBe(true);
+      const plan = planWeeklyActions(context(400_000), r.decision);
+      expect(plan.actions.some((a) => a.kind === "hire")).toBe(false);
+      expect(plan.actions.some((a) => a.kind === "promote")).toBe(false);
+    }
+  });
+
+  it("neznámá volba výčtu (akademie, vstupné) shodí rozhodnutí", () => {
     expect(validateWeeklyDecision({ ...everything, academy: "elite" }, context(100_000)).ok).toBe(false);
+    expect(validateWeeklyDecision({ ...everything, ticketPrice: "double" }, context(100_000)).ok).toBe(false);
   });
 
   it("počet tréninků mimo 1 až 5 se srovná do mezí, rozhodnutí platí", () => {

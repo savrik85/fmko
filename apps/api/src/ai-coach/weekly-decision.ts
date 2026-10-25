@@ -268,7 +268,12 @@ function keys(raw: unknown, field: string, valid: ReadonlySet<string>, max: numb
   const out: string[] = [];
   for (const k of raw) {
     if (typeof k !== "string") return { error: `${field} obsahuje neplatnou hodnotu` };
-    if (!valid.has(k)) return { error: `${field}: neznámá volba ${k}` };
+    // Položky týdne jsou nezávislé: volba mimo nabídku (třeba klíč z jiného seznamu) se jen
+    // zahodí, provést jde stejně jen to, co v nabídce je. Zbytek rozhodnutí platí.
+    if (!valid.has(k)) {
+      rejected.push(`${field}: neznámá volba ${k}`);
+      continue;
+    }
     if (!out.includes(k)) out.push(k);
   }
   if (out.length > max) {
@@ -515,7 +520,10 @@ export function renderWeeklyPrompt(ctx: WeeklyContext): string {
 }
 
 export function weeklyDecisionSchema(ctx: WeeklyContext): Record<string, unknown> {
-  const arr = (keys: string[]) => ({ type: "array", items: keys.length ? { type: "string", enum: keys } : { type: "string" } });
+  // Prázdná nabídka = prázdný seznam (jinak by model mohl napsat klíč z jiného seznamu).
+  const arr = (keys: string[]) => (keys.length
+    ? { type: "array", items: { type: "string", enum: keys } }
+    : { type: "array", items: { type: "string" }, maxItems: 0 });
   return {
     type: "object",
     additionalProperties: false,
