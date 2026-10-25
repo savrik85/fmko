@@ -112,6 +112,17 @@ Přestupní kurz se skutečným Workers AI (12 klubů z Prahy, ČB a III. tříd
 kupovat 2 (Řeporyje „aim to buy a better GK“ při potřebě brankáře 0,34), držet 5, prodávat 5.
 Kód modelu nedovolí koupit tam, kde potřeba skoro není (Hluboká chtěla brankáře při potřebě 0,03).
 
+Celá cesta v simulaci 3 dní se skutečným modelem (čerstvé nastavení `setup.ts`): pondělní správu
+rozhodl model u 34 z 35 klubů (držet 18, prodávat 16, každý s výběrem hráčů na listinu), 1 náhradní
+pravidlo; trh od pondělí kurz čte (`course=hold`, `course=sell:FWD`, …). Kde byla díra v kádru
+(brankář 0,34–0,43, útočník 0,47), model držel s odůvodněním „no budget for spending“ a díru
+zalepil povýšením z U21 (10 povýšení). Všech 34 klubů bez hlavního sponzora ho v pondělí podepsalo,
+žádná akce týdne neselhala.
+
+Celá sada testů API: při souběhu všech souborů padá 11 databázových souborů na `EADDRNOTAVAIL`
+(Miniflare vyčerpá lokální porty, zvlášť když vedle běží simulace); každý z nich samostatně projde
+(mimo jiné přestupy AI 21 testů, splátky 34, rollover, III. třída, převzetí).
+
 ## Známé rozdíly (záměr, nebo na později)
 
 - Trucování po nenominaci u AI klubů nevzniká (končí přemlouváním v Telefonu, AI trenér nepíše);
