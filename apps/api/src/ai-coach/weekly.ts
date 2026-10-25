@@ -413,6 +413,16 @@ export async function runWeeklyReview(env: Bindings, teamId: string, now: Date, 
   let spent = 0;
   if (mode !== "shadow" && !opts.dryRun) {
     for (const a of plan.actions) {
+      // Model přemýšlí i minutu a mezitím se rozpočet může změnit (přestup, pokuta).
+      // Placená akce proto znovu ověří, že po ní zůstane rezerva.
+      if ("cost" in a && a.cost > 0) {
+        const current = await db.prepare("SELECT budget FROM teams WHERE id = ?").bind(teamId).first<{ budget: number }>()
+          .catch((e) => { logger.warn({ module: M, teamId }, "rozpočet před nákupem", e); return null; });
+        if (!current || current.budget - a.cost < ctx.finance.reserve) {
+          executed.push({ action: a.kind, ok: false, detail: `rezerva: rozpočet ${current?.budget ?? "?"} Kč, cena ${a.cost} Kč` });
+          continue;
+        }
+      }
       const r = await executeAction(db, teamId, ctx, a);
       executed.push({ action: a.kind, ok: r.ok, detail: r.detail });
       if (r.ok && "cost" in a) spent += a.cost;
