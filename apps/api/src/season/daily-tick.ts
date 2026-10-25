@@ -247,8 +247,8 @@ export async function executeDailyTick(
   // ── Training (Mon-Fri, if plan is set) ──
   // U21 týmy zdědí training_type/approach/sessions od parent A-týmu — manažer nastaví trénink
   // pro klub jednou a aplikuje se na obě squady.
-  // Trénují i AI kluby, podle stejných pravidel. Bez vlastního plánu mají výchozí
-  // (kondice, dvakrát týdně, vyváženě), viz teamTrainingType.
+  // Trénují i AI kluby (ty v soutěži), podle stejných pravidel. Bez vlastního plánu mají
+  // výchozí (kondice, dvakrát týdně, vyváženě), viz teamTrainingType.
   const teams = await env.DB.prepare(
     `SELECT t.id, t.league_id, t.user_id,
             COALESCE(t.training_type, parent.training_type) as training_type,
@@ -258,7 +258,8 @@ export async function executeDailyTick(
             COALESCE(t.training_plan, parent.training_plan) as training_plan,
             COALESCE(t.parent_team_id, t.id) as club_id
        FROM teams t
-       LEFT JOIN teams parent ON parent.id = t.parent_team_id`
+       LEFT JOIN teams parent ON parent.id = t.parent_team_id
+      WHERE t.user_id != 'ai' OR t.league_id IS NOT NULL`
   ).all();
 
   // Týmy, které dnes hrají — v den zápasu se netrénuje. Jedním dotazem přes

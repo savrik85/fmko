@@ -54,7 +54,7 @@ interface ReclaimOffer {
 }
 
 /** Bývalý vlastník klubu, který mezitím vedl AI trenér, se může vrátit místo zakládání nového. */
-function ReclaimCard({ offer, busy, error, onReclaim }: { offer: ReclaimOffer; busy: boolean; error: string; onReclaim: () => void }) {
+function ReclaimCard({ offer, busy, error, onReclaim, newClubBelow }: { offer: ReclaimOffer; busy: boolean; error: string; onReclaim: () => void; newClubBelow: boolean }) {
   return (
     <div className="card p-5 w-full max-w-lg mx-auto text-left">
       <p className="font-heading font-bold text-lg mb-1">Tvůj klub na tebe čeká</p>
@@ -66,7 +66,7 @@ function ReclaimCard({ offer, busy, error, onReclaim }: { offer: ReclaimOffer; b
         {busy ? "Vracíme tě ke klubu..." : `Vrátit se ke klubu ${offer.name}`}
       </button>
       {error && <p className="text-sm text-card-red mt-3">{error}</p>}
-      <p className="text-sm text-muted mt-3">Nebo níž založ úplně nový klub.</p>
+      {newClubBelow && <p className="text-sm text-muted mt-3">Nebo níž založ úplně nový klub.</p>}
     </div>
   );
 }
@@ -245,7 +245,7 @@ export default function OnboardingPage() {
 
   if (!access || (access.districts.length === 0 && !state.createdTeamId)) {
     return <main className="min-h-dvh bg-paper flex flex-col items-center justify-center gap-4 p-6">
-      {reclaim && <ReclaimCard offer={reclaim} busy={reclaiming} error={reclaimError} onReclaim={handleReclaim} />}
+      {reclaim && <ReclaimCard offer={reclaim} busy={reclaiming} error={reclaimError} onReclaim={handleReclaim} newClubBelow={false} />}
       <div className="card p-8 max-w-lg text-center">
         <h1 className="text-h1 mb-4">{access ? "Tvůj okres se chystá na výkop" : "Ověřujeme tvůj okres"}</h1>
         <p className="mb-5">{accessError || (access ? "Týmy odemkneme po dokončení místních dat a založení prvního klubu zakladatelem ligy. Zatím dej dohromady partu kamarádů." : "Načítáme připravené okresy pro založení týmu.")}</p>
@@ -271,7 +271,7 @@ export default function OnboardingPage() {
         {/* Návrat ke klubu, který mezitím vedl AI trenér, nad běžným založením */}
         {step === 1 && reclaim && !state.createdTeamId && (
           <div className="px-4 pt-4">
-            <ReclaimCard offer={reclaim} busy={reclaiming} error={reclaimError} onReclaim={handleReclaim} />
+            <ReclaimCard offer={reclaim} busy={reclaiming} error={reclaimError} onReclaim={handleReclaim} newClubBelow />
           </div>
         )}
 
