@@ -8,7 +8,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { Miniflare } from "miniflare";
 import type { Bindings } from "../index";
 import type { AiCoachQueueMessage } from "../queue/messages";
-import { handleAiCoachMessage } from "./jobs";
+import { enqueueAiCoachJobs, handleAiCoachMessage, isGameMonday } from "./jobs";
 import { COACH_MODE_KEY } from "./mode";
 
 let miniflare: Miniflare;
@@ -197,6 +197,25 @@ describe("AI trenér: sestava na dnešní zápas", () => {
     const res = await handleAiCoachMessage(env(), { ...matchMsg, day: "2026-11-01" });
     expect(res.status).toBe("stale");
     expect(await savedLineup()).toBeNull();
+  });
+
+  it("cron bez fronty připraví sestavu hned a podruhé už klub nezařadí", async () => {
+    await kv.put(COACH_MODE_KEY, "off");
+    const now = new Date(`${DAY}T12:45:00.000Z`);
+    const first = await enqueueAiCoachJobs(env(), "match", now);
+    expect(first.teams).toBe(1);
+    expect(first.inline).toBe(1);
+    expect(await savedLineup()).not.toBeNull();
+    const second = await enqueueAiCoachJobs(env(), "match", now);
+    expect(second.teams).toBe(0);
+  });
+
+  it("týdenní správa se mimo herní pondělí nezařadí", async () => {
+    const res = await enqueueAiCoachJobs(env(), "weekly", new Date(`${DAY}T07:00:00.000Z`));
+    // 2. 11. 2026 je pondělí: zařadí se (bez fronty hned). Úterý by se přeskočilo.
+    expect(res.skipped).toBeNull();
+    expect(isGameMonday("2026-11-02")).toBe(true);
+    expect(isGameMonday("2026-11-03")).toBe(false);
   });
 
   it("lidský klub AI trenér nespravuje", async () => {

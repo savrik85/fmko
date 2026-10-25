@@ -68,9 +68,16 @@ export async function enqueueAiCoachJobs(env: Bindings, task: CoachTask, now: Da
 
   let teams = await listAiClubs(env.DB);
   if (task === "match") {
+    // Jen kluby, které dnes hrají a mají aspoň jeden zápas ještě bez připravené sestavy (bez nároku).
     const withFixture: string[] = [];
     for (const id of teams) {
-      if ((await findTodaysFixtures(env.DB, id, gameDay)).length > 0) withFixture.push(id);
+      const fixtures = await findTodaysFixtures(env.DB, id, gameDay);
+      if (fixtures.length === 0) continue;
+      const claimed = await env.DB.prepare("SELECT task FROM ai_coach_claims WHERE team_id = ? AND day = ?")
+        .bind(id, gameDay).all<{ task: string }>()
+        .catch((e) => { logger.warn({ module: M, teamId: id }, "nároky na dnešní sestavy", e); return { results: [] as Array<{ task: string }> }; });
+      const done = new Set(claimed.results.map((r) => r.task));
+      if (fixtures.some((f) => !done.has(`match:${f.calendarId}`))) withFixture.push(id);
     }
     teams = withFixture;
   }
