@@ -17,6 +17,12 @@
  * Rozpočet a reputace jdou na cíl i dolů, ale jen původním AI klubům; klubu převzatému
  * od člověka (`ai_former_user_id`) se nic nebere, vlastník se k němu může vrátit.
  *
+ * Strop dovedností (`skills_max.maxPotential`) jde s dovedností nahoru, aby hráč mohl dál
+ * růst. V lize s lidmi ale ne celý: lidé mají hráče vytrénované blízko stropu (Praha 10/2026:
+ * rezerva 8–21 bodů na dovednost, nejsilnější kluby nejmenší), AI hráč by s rezervou
+ * z generátoru (20–25) rostl rychleji a za pár měsíců lidem utekl. Rezerva klubu proto míří
+ * na rezervu lidských klubů podobné síly (opačný percentil). Strop nikdy neklesne pod původní.
+ *
  * U21 tým se narovnává stejným voláním s id U21 ligy (vzorem jsou lidské U21 týmy).
  * U rezervy se zvedají jen hráči a sehranost: zázemí, rozpočet i reputaci nese áčko.
  *
@@ -129,6 +135,11 @@ export interface LevelingTargets {
   formationFamiliarity: number[];
   /** Na jaké hodnocení vzniknou chybějící hráči (úroveň hloubky kádru). */
   newPlayerRating: number;
+  /**
+   * Průměrná rezerva stávajících hráčů do stropu dovedností po narovnání (jen liga s lidmi).
+   * null = strop jde s dovedností celý (nižší soutěž a nováčci soupeří s čerstvými kádry).
+   */
+  headroom?: number | null;
 }
 
 export interface ClubSummary {
@@ -143,6 +154,8 @@ export interface ClubSummary {
   budget: number;
   reputation: number;
   formationFamiliarity: Record<string, number>;
+  /** Průměrná rezerva hráčů do stropu dovedností (bod na dovednost); po narovnání jen stávající hráči. */
+  headroom: number;
 }
 
 export interface LevelingPlanClub {
@@ -154,6 +167,8 @@ export interface LevelingPlanClub {
   percentile: number;
   /** Posun plochých dovedností stávajících hráčů v bodech. */
   skillShift: number;
+  /** Kolik z posunu dovedností dostane i strop (1 = celý posun, 0 = strop zůstane). */
+  capShare: number;
   newPlayers: number;
   before: ClubSummary;
   target: LevelingTargets;
@@ -169,6 +184,8 @@ export interface LevelingPlan {
     activeDays: typeof REFERENCE_ACTIVE_DAYS;
     leagueIds: string[];
     top11: { min: number; median: number; max: number } | null;
+    /** Rezerva hráčů vzoru do stropu dovedností (průměr klubu). */
+    headroom: { min: number; median: number; max: number } | null;
     /** Věková skladba vzoru (věk → počet hráčů), z ní se losuje věk nových hráčů. */
     ageProfile: Record<string, number>;
   };
@@ -274,6 +291,32 @@ function isShiftable(key: string, position: string): boolean {
 }
 
 /**
+ * Průměrná rezerva hráče do stropu (bodů na dovednost) přes dovednosti, které trénink zvedá.
+ * Hodnota z plochého `skills` (trénink píše tam), jinak `skills_max.current`. null = bez stropů.
+ */
+export function memberHeadroom(m: Pick<SquadMember, "position" | "skills" | "skillsMax">): number | null {
+  let sum = 0;
+  let n = 0;
+  for (const [key, entry] of Object.entries(m.skillsMax)) {
+    if (!isShiftable(key, m.position) || !entry || typeof entry !== "object") continue;
+    const e = entry as { current?: unknown; maxPotential?: unknown };
+    if (typeof e.maxPotential !== "number") continue;
+    const flat = m.skills[key];
+    const value = typeof flat === "number" ? flat : typeof e.current === "number" ? e.current : null;
+    if (value === null) continue;
+    sum += Math.max(0, e.maxPotential - value);
+    n++;
+  }
+  return n > 0 ? sum / n : null;
+}
+
+/** Průměrná rezerva kádru (průměr hráčů, kteří stropy mají). Prázdný kádr = NaN. */
+export function squadHeadroom(members: ReadonlyArray<Pick<SquadMember, "position" | "skills" | "skillsMax">>): number {
+  const values = members.map(memberHeadroom).filter((v): v is number => v !== null);
+  return values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : NaN;
+}
+
+/**
  * Hodnota dovednosti po posunu. Celá část posunu jde všem, zlomek jen části dovedností
  * (podle pevného čísla hráče a dovednosti), takže síla kádru roste plynule, ne po skocích
  * o celý bod u všech najednou.
@@ -316,12 +359,12 @@ function capRaisedPotential(position: string, skillsMax: Record<string, unknown>
 /**
  * Hráč po aditivním posunu plochých dovedností. Výdrž a síla jdou i do `physical`.
  * `skills_max.current` se dorovná na novou plochou hodnotu (trénink píše jen do `skills`,
- * takže se před narovnáním liší) a strop se posune o stejný kus jako dovednost (nejvýš
- * na 99), aby hráči zůstal prostor k růstu: AI klub se pak tréninkem dál zlepšuje.
- * Strop nikdy nezůstane pod dnešní hodnotou ani neklesne pod původní.
+ * takže se před narovnáním liší) a strop se posune o `capShare` z přírůstku dovednosti
+ * (1 = o stejný kus, nejvýš na 99), aby hráči zůstal prostor k růstu: AI klub se pak
+ * tréninkem dál zlepšuje. Strop nikdy nezůstane pod dnešní hodnotou ani neklesne pod původní.
  * Hodnocení jen přes `overallRatingFromFlat` a nikdy nižší než dosavadní.
  */
-export function shiftMember(m: SquadMember, shift: number): ShiftedMember {
+export function shiftMember(m: SquadMember, shift: number, capShare = 1): ShiftedMember {
   if (shift <= 0) return { skills: m.skills, physical: m.physical, skillsMax: m.skillsMax, rating: m.rating };
 
   const skills: Record<string, unknown> = {};
@@ -359,7 +402,7 @@ export function shiftMember(m: SquadMember, shift: number): ShiftedMember {
         increase = 0;
       }
       const oldCap = typeof e.maxPotential === "number" ? e.maxPotential : current;
-      const shiftedCap = increase > 0 ? Math.min(MAX_POTENTIAL, oldCap + increase) : oldCap;
+      const shiftedCap = increase > 0 ? Math.min(MAX_POTENTIAL, oldCap + Math.round(increase * capShare)) : oldCap;
       const cap = Math.max(oldCap, current, shiftedCap);
       skillsMax[key] = { ...e, current, maxPotential: cap };
       if (cap > oldCap) raisedFloors.set(key, Math.max(oldCap, current));
@@ -393,6 +436,28 @@ export function findSkillShift(members: readonly SquadMember[], target: number, 
   }
   const best = Math.abs(at(lo) - target) < Math.abs(at(hi) - target) ? lo : hi;
   return Math.round(best * 10_000) / 10_000;
+}
+
+/**
+ * Jaký díl posunu dovedností dostane i strop, aby průměrná rezerva kádru po narovnání
+ * trefila `targetHeadroom`. Rezervu jen ubírá (kádr s menší rezervou dostane celý posun, 1)
+ * a strop nikdy nestáhne pod původní (víc než 0 nejde). Hodnocení na stropu nezávisí,
+ * takže posun dovedností z `findSkillShift` platí dál. Bez cíle = 1.
+ */
+export function findCapShare(members: readonly SquadMember[], shift: number, targetHeadroom: number | null | undefined): number {
+  if (shift <= 0 || members.length === 0 || targetHeadroom === null || targetHeadroom === undefined || !Number.isFinite(targetHeadroom)) return 1;
+  const at = (share: number) => squadHeadroom(members.map((m) => ({ position: m.position, ...shiftMember(m, shift, share) })));
+  if (!(at(1) > targetHeadroom)) return 1;
+  if (at(0) >= targetHeadroom) return 0;
+  let lo = 0;
+  let hi = 1;
+  for (let i = 0; i < 25; i++) {
+    const mid = (lo + hi) / 2;
+    if (at(mid) < targetHeadroom) lo = mid;
+    else hi = mid;
+  }
+  const best = Math.abs(at(lo) - targetHeadroom) < Math.abs(at(hi) - targetHeadroom) ? lo : hi;
+  return Math.round(best * 1000) / 1000;
 }
 
 /**
@@ -750,7 +815,12 @@ function summarize(state: ClubState): ClubSummary {
     budget: state.budget,
     reputation: state.reputation,
     formationFamiliarity: { ...state.familiarity },
+    headroom: headroomOrZero(squadHeadroom(state.members)),
   };
+}
+
+function headroomOrZero(value: number): number {
+  return Number.isFinite(value) ? round1(value) : 0;
 }
 
 // ── Vzor ──────────────────────────────────────────────────────────────────
@@ -775,6 +845,8 @@ interface ReferenceStats {
   budget: number[];
   reputation: number[];
   familiarity: [number[], number[]];
+  /** Průměrná rezerva hráčů do stropu dovedností po klubech vzoru. */
+  headroom: number[];
 }
 
 function activeSince(now: Date): string {
@@ -825,7 +897,7 @@ async function loadReference(db: D1Database, leagueIds: readonly string[], now: 
   const stats: ReferenceStats = {
     teams: states.length, top11: [], top18: [], squadSize: [], depthGap: 0, top18Gap: 0, ages: [],
     stadium: {}, pitchCondition: [], pitchType: [], equipment: {}, staffCount: [], staffSlots: [],
-    budget: [], reputation: [], familiarity: [[], []],
+    budget: [], reputation: [], familiarity: [[], []], headroom: [],
   };
   const depthGaps: number[] = [];
   const top18Gaps: number[] = [];
@@ -841,6 +913,8 @@ async function loadReference(db: D1Database, leagueIds: readonly string[], now: 
     top18Gaps.push(top11 - top18);
     if (ratings.length > 11) depthGaps.push(top11 - topAverage(ratings.slice(11), ratings.length));
     stats.ages.push(...s.members.map((m) => m.age));
+    const headroom = squadHeadroom(s.members);
+    if (Number.isFinite(headroom)) stats.headroom.push(headroom);
     stats.budget.push(s.budget);
     stats.reputation.push(s.reputation);
     const fam = Object.values(s.familiarity).sort((a, b) => b - a);
@@ -942,6 +1016,8 @@ function targetsFor(
   const squad = quantile(ref.squadSize, percentile);
   const familiarity = [quantile(ref.familiarity[0], percentile), quantile(ref.familiarity[1], percentile)]
     .map((v) => (Number.isFinite(v) ? round1(v) : FAMILIARITY_FLOOR));
+  // Silnější lidský klub má hráče vytrénované blíž stropu: rezerva z opačného percentilu.
+  const headroom = mode === "league-humans" ? quantile(ref.headroom, 1 - percentile) : NaN;
   return {
     percentile: Math.round(percentile * 1000) / 1000,
     targets: {
@@ -951,6 +1027,7 @@ function targetsFor(
       stadium, pitchCondition, pitchType, equipment, staffRoles, budget, reputation,
       formationFamiliarity: familiarity,
       newPlayerRating: round1(Math.max(1, top11 - ref.depthGap)),
+      headroom: Number.isFinite(headroom) ? round1(headroom) : null,
     },
   };
 }
@@ -965,6 +1042,7 @@ interface NewPlayerDraft {
 
 interface ClubChanges {
   shift: number;
+  capShare: number;
   raised: Array<{ id: string; shifted: ShiftedMember; wage: number }>;
   newPlayers: NewPlayerDraft[];
   /** Změněné sloupce `stadiums` (úrovně, `pitch_condition`). */
@@ -1045,11 +1123,14 @@ function computeClubChanges(club: ClubState, targets: LevelingTargets, seed: num
 
   // 2. Jeden posun dovedností stávajících hráčů, aby nejlepší jedenáctka trefila cíl.
   const shift = findSkillShift(club.members, targets.top11, newPlayers.map((p) => p.created.rating));
+  const capShare = findCapShare(club.members, shift, targets.headroom);
   const raised: ClubChanges["raised"] = [];
   const ratingsAfter: number[] = newPlayers.map((p) => p.created.rating);
+  const membersAfter: Array<Pick<SquadMember, "position" | "skills" | "skillsMax">> = [];
   for (const m of club.members) {
-    const shifted = shiftMember(m, shift);
+    const shifted = shiftMember(m, shift, capShare);
     ratingsAfter.push(shifted.rating);
+    membersAfter.push({ position: m.position, skills: shifted.skills, skillsMax: shifted.skillsMax });
     if (shift > 0) {
       const oldWage = club.meta.get(m.id)?.wage ?? 0;
       raised.push({ id: m.id, shifted, wage: Math.max(oldWage, wageFor(shifted.rating, club.teamType)) });
@@ -1126,10 +1207,11 @@ function computeClubChanges(club: ClubState, targets: LevelingTargets, seed: num
     budget: budget ?? club.budget,
     reputation: reputation ?? club.reputation,
     formationFamiliarity: familiarity,
+    headroom: headroomOrZero(squadHeadroom(membersAfter)),
   };
 
   return {
-    shift, raised, newPlayers, stadium, pitchType, equipment, hireRoles,
+    shift, capShare, raised, newPlayers, stadium, pitchType, equipment, hireRoles,
     budget: budget !== null && budget !== club.budget ? budget : null,
     reputation: reputation !== null && reputation !== club.reputation ? reputation : null,
     familiarity: familiarityChanged ? familiarity : null,
@@ -1176,6 +1258,9 @@ export async function planLeveling(db: D1Database, opts: PlanLevelingOptions): P
       top11: ref.top11.length > 0
         ? { min: round1(Math.min(...ref.top11)), median: round1(median(ref.top11)), max: round1(Math.max(...ref.top11)) }
         : null,
+      headroom: ref.headroom.length > 0
+        ? { min: round1(Math.min(...ref.headroom)), median: round1(median(ref.headroom)), max: round1(Math.max(...ref.headroom)) }
+        : null,
       ageProfile: ageProfileOf(ref.ages),
     },
     clubs: [],
@@ -1211,7 +1296,7 @@ export async function planLeveling(db: D1Database, opts: PlanLevelingOptions): P
     const changes = computeClubChanges(club, targets, opts.seed, ref.ages, names.get(club.villageDistrict)!);
     plan.clubs.push({
       teamId: club.teamId, name: club.name, teamType: club.teamType, takenOver: club.takenOver,
-      percentile, skillShift: changes.shift, newPlayers: changes.newPlayers.length,
+      percentile, skillShift: changes.shift, capShare: changes.capShare, newPlayers: changes.newPlayers.length,
       before: summarize(club), target: targets, after: changes.after,
     });
   });

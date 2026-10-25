@@ -4,8 +4,8 @@ import { createPlayer } from "../generators/create-player";
 import type { VillageInfo } from "../generators/player";
 import { overallRatingFromFlat } from "../skills/generator";
 import {
-  findSkillShift, leveledFinance, measureNewcomerTop11, modestBudgetTarget, newClubBudget, newPlayerPositions,
-  quantile, shiftMember, stratifiedUnits, topAverage, TOP11_TOLERANCE, type SquadMember,
+  findCapShare, findSkillShift, leveledFinance, measureNewcomerTop11, memberHeadroom, modestBudgetTarget, newClubBudget,
+  newPlayerPositions, quantile, shiftMember, squadHeadroom, stratifiedUnits, topAverage, TOP11_TOLERANCE, type SquadMember,
 } from "./leveling";
 
 const village: VillageInfo = { region_code: "CZ031", category: "obec", population: 900, district: "Prachatice" };
@@ -160,6 +160,60 @@ describe("posun dovedností kádru", () => {
       expect(v).toBeGreaterThanOrEqual(last);
       last = v;
     }
+  });
+});
+
+describe("rezerva do stropu dovedností", () => {
+  const player: SquadMember = {
+    id: "reserve", position: "MID", age: 25,
+    skills: { speed: 30, technique: 40, passing: 35, goalkeeping: 1, experience: 20 },
+    physical: {},
+    skillsMax: {
+      speed: { current: 30, maxPotential: 50 }, technique: { current: 38, maxPotential: 46 },
+      passing: { current: 35, maxPotential: 35 }, goalkeeping: { current: 1, maxPotential: 40 },
+      experience: { current: 20, maxPotential: 100 },
+    },
+    hiddenTalent: 20, rating: 35,
+  };
+
+  it("měří jen dovednosti, které trénink zvedá, z ploché hodnoty", () => {
+    // Rychlost 20, technika 6 (plochá 40, ne current 38), přihrávky 0; zkušenost a chytání hráče v poli ne.
+    expect(memberHeadroom(player)).toBeCloseTo(26 / 3, 5);
+    expect(memberHeadroom({ ...player, skillsMax: {} })).toBeNull();
+    expect(squadHeadroom([])).toBeNaN();
+  });
+
+  it("strop dostane jen díl přírůstku, nikdy neklesne pod původní ani pod dovednost", () => {
+    const half = shiftMember(player, 10, 0.5);
+    const cap = (s: ReturnType<typeof shiftMember>, key: string) => (s.skillsMax[key] as { maxPotential: number }).maxPotential;
+    expect(half.skills.speed).toBe(40);
+    expect(cap(half, "speed")).toBe(55);
+    expect(cap(half, "technique")).toBe(51);
+    const none = shiftMember(player, 10, 0);
+    expect(cap(none, "speed")).toBe(50);
+    // Technika 50 je nad původním stropem 46: strop jde na dovednost, ne pod ni.
+    expect(cap(none, "technique")).toBe(50);
+    expect(cap(none, "passing")).toBe(45);
+    // Hodnocení na stropu nezávisí.
+    expect(none.rating).toBe(shiftMember(player, 10).rating);
+  });
+
+  it("díl stropu trefí cílovou rezervu kádru a rezervu jen ubírá", () => {
+    const members = squad(21);
+    const shift = 12;
+    const full = squadHeadroom(members.map((m) => ({ position: m.position, ...shiftMember(m, shift) })));
+    const target = full / 2;
+    const share = findCapShare(members, shift, target);
+    expect(share).toBeGreaterThan(0);
+    expect(share).toBeLessThan(1);
+    const after = squadHeadroom(members.map((m) => ({ position: m.position, ...shiftMember(m, shift, share) })));
+    expect(Math.abs(after - target)).toBeLessThan(0.5);
+    // Kádr s menší rezervou, než je cíl, dostane celý posun; bez cíle nebo bez posunu taky.
+    expect(findCapShare(members, shift, full + 5)).toBe(1);
+    expect(findCapShare(members, shift, null)).toBe(1);
+    expect(findCapShare(members, 0, 1)).toBe(1);
+    // Pod rezervu, kterou dává samotný původní strop, nejde.
+    expect(findCapShare(members, shift, 0)).toBe(0);
   });
 });
 
