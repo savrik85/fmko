@@ -48,6 +48,10 @@ crons = [
   "20 17 * * *",
   # Telefon každou hodinu: zprávy „jen tak" a odložené zprávy hráčů (messaging/casual-messages.ts).
   "30 * * * *",
+  # AI trenéři (ai-coach/jobs.ts): sestavy a pondělní správa ráno, sestavy odpoledne, hodinová práce.
+  "0 7 * * *",
+  "45 12 * * *",
+  "15 * * * *",
 ]
 
 # ── Fronty (produkce) ──
@@ -200,4 +204,8 @@ crons = [
   "20 17 * * *",
   # Telefon každou hodinu: zprávy „jen tak" a odložené zprávy hráčů (messaging/casual-messages.ts).
   "30 * * * *",
+  # AI trenéři (ai-coach/jobs.ts): sestavy a pondělní správa ráno, sestavy odpoledne, hodinová práce.
+  "0 7 * * *",
+  "45 12 * * *",
+  "15 * * * *",
 ]
