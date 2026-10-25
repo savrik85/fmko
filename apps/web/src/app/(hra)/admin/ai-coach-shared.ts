@@ -25,6 +25,7 @@ export const KIND_LABELS: Record<string, string> = {
   weekly: "týden",
   transfer_reply: "odpověď na nabídku",
   transfer_market: "trh",
+  transfer_negotiation: "jednání o koupi",
   friendly_offer: "nabídka přáteláku",
   friendly_reply: "odpověď na přátelák",
   transfer_negotiation: "jednání o nákupu",
