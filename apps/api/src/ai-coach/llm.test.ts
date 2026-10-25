@@ -67,7 +67,7 @@ describe("volání modelu", () => {
   it("uvažující model dostane rozpočet na úvahu a sílu úvahy, schéma jde do response_format", () => {
     const input = buildModelInput("@cf/openai/gpt-oss-120b", { ...req, schema: { name: "x", schema: { type: "object" } } });
     expect(input.max_tokens).toBeGreaterThan(100);
-    expect(input.reasoning_effort).toBe("high");
+    expect(input.reasoning_effort).toBe("medium");
     expect((input.response_format as { type: string }).type).toBe("json_schema");
   });
 

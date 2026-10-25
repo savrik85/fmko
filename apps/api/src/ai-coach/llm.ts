@@ -12,7 +12,13 @@
 import type { Bindings } from "../index";
 import { logger } from "../lib/logger";
 
-/** Model vybraný měřením (docs/ai-coach-model-eval-2026-10-25.md). */
+/**
+ * Model vybraný měřením (docs/ai-coach-model-eval-2026-10-25.md): gpt-oss-120b se střední silou
+ * úvahy. Na 56 zápasových a 36 týdenních rozhodnutích z kopie produkce byl ze všech kandidátů
+ * nejspolehlivější (žádný překročený čas), nejlépe držel povahu trenéra a jeho sestavy byly
+ * v simulaci enginem nejblíž silnému náhradnímu pravidlu. Úvaha „high" přemýšlela třikrát déle
+ * bez měřitelného zisku a 4 % odpovědí nestihla.
+ */
 export const COACH_MODEL = "@cf/openai/gpt-oss-120b";
 
 /** Kandidáti ze srovnání; jen modely hostované Cloudflarem (kryjí je startupové kredity). */
@@ -34,7 +40,8 @@ interface ModelProfile {
 }
 
 const MODEL_PROFILES: Record<string, ModelProfile> = {
-  "@cf/openai/gpt-oss-120b": { reasoningBudget: 12000, extra: { reasoning_effort: "high" }, schema: true },
+  // Medium spotřebuje na úvahu kolem 1 700 tokenů; rozpočet je velkorysý, ať úvaha nikdy nedojde.
+  "@cf/openai/gpt-oss-120b": { reasoningBudget: 12000, extra: { reasoning_effort: "medium" }, schema: true },
   "@cf/nvidia/nemotron-3-120b-a12b": { reasoningBudget: 12000, schema: true },
   "@cf/qwen/qwen3.8-27b": { reasoningBudget: 12000, schema: true },
   "@cf/meta/llama-4-scout-17b-16e-instruct": { reasoningBudget: 0, schema: true },
@@ -43,8 +50,11 @@ const MODEL_PROFILES: Record<string, ModelProfile> = {
 
 const DEFAULT_PROFILE: ModelProfile = { reasoningBudget: 4000, schema: false };
 
-/** Jak dlouho se na model čeká. Úloha běží ve frontě, zápas ani tick na ni nečekají. */
-export const DEFAULT_TIMEOUT_MS = 90_000;
+/**
+ * Jak dlouho se na model čeká. Úloha běží ve frontě, zápas ani tick na ni nečekají.
+ * gpt-oss medium odpovídal do 42 s (90. percentil 37 s); platforma sama končí kolem 120 s.
+ */
+export const DEFAULT_TIMEOUT_MS = 120_000;
 
 export interface CoachModelRequest {
   system: string;
