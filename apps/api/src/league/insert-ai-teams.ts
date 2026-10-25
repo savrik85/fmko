@@ -6,7 +6,7 @@
 import type { Rng } from "../generators/rng";
 import type { LeagueSetup } from "./league-generator";
 import type { GeneratedPlayer } from "../generators/player";
-import { createPlayer, levelFromVillageSize, aiTeamShift } from "../generators/create-player";
+import { createPlayer, levelFromVillageSize } from "../generators/create-player";
 import { generateDescription } from "../generators/description-generator";
 import { logger } from "../lib/logger";
 import { mustSeason } from "../lib/season";
@@ -52,11 +52,11 @@ export async function insertAITeamsIntoDB(
         const apId = crypto.randomUUID();
         aiPlayerIds.push(apId);
         const apNickname = (ap as GeneratedPlayer & { nickname?: string | null }).nickname ?? "";
-        // Úroveň podle obce TOHOTO AI klubu (dřív se brala obec lidského hráče) a slabší o AI posun.
+        // Úroveň podle obce TOHOTO AI klubu (dřív se brala obec lidského hráče), stejně jako
+        // u lidského klubu. Srážka pro AI kluby (6–12 bodů) skončila 2026-10-25.
         const apCreated = createPlayer(rng, {
           identity: ap, position: ap.position as "GK" | "DEF" | "MID" | "FWD",
           level: levelFromVillageSize((aiVillage?.category as string | undefined) ?? villageSize),
-          shift: aiTeamShift(rng),
         });
         const apSkills = apCreated.skills;
         const apPhysical = apCreated.physical;

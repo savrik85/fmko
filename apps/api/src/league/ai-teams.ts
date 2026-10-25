@@ -53,6 +53,10 @@ function generateTeamName(rng: Rng, villageName: string, usedNames: Set<string>)
 
 /**
  * Generate all AI teams for a league from villages in the district.
+ *
+ * Obce se berou od největší (dřív náhodně): fotbal hrají spíš větší obce a nižší soutěž
+ * tak dostane obce, které by tým opravdu postavily. AI klub vzniká stejně jako lidský,
+ * z obce své skutečné velikosti (dřív se mu kategorie o stupeň snižovala).
  */
 export function generateAITeams(
   rng: Rng,
@@ -63,19 +67,17 @@ export function generateAITeams(
   usedNames: Set<string>,
 ): AITeam[] {
   const teams: AITeam[] = [];
-  const availableVillages = [...districtVillages];
-  rng.shuffle(availableVillages);
+  const availableVillages = [...districtVillages]
+    .sort((a, b) => (b.population ?? 0) - (a.population ?? 0) || a.name.localeCompare(b.name, "cs"));
 
   const colorPool = [...JERSEY_COLORS];
   rng.shuffle(colorPool);
 
   for (let i = 0; i < count && i < availableVillages.length; i++) {
     const village = availableVillages[i];
-    // AI teams are slightly weaker — downgrade category by one level
-    const aiCategoryMap: Record<string, string> = { mesto: "mestys", mestys: "obec", obec: "vesnice", vesnice: "vesnice" };
     const villageInfo: VillageInfo = {
       region_code: village.region_code,
-      category: (aiCategoryMap[village.category] ?? village.category) as VillageInfo["category"],
+      category: village.category as VillageInfo["category"],
       population: village.population,
     };
 
