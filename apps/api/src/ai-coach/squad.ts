@@ -17,8 +17,12 @@ export const MIN_SENIOR_SQUAD = 16;
 export const MIN_U21_SQUAD = 12;
 /** Pod tolik hráčů áčka AI podepisuje volné hráče. */
 export const SIGNING_SQUAD_THRESHOLD = MIN_SENIOR_SQUAD;
-/** Kolik hráčů chce mít AI v áčku. */
-export const TARGET_SENIOR_SQUAD = 20;
+/**
+ * Kolik hráčů chce mít AI v áčku. Lidé drží 25–29 (Praha a Prachatice 10/2026), protože
+ * na zápas vždycky pár hráčů nemůže, a narovnání dává AI kádr podle nich. S cílem 20 bylo
+ * AI trvale „přeplněné“ a dokola vystavovalo tytéž neprodejné veterány.
+ */
+export const TARGET_SENIOR_SQUAD = 24;
 /** Strop soupisky (stejný jako u podpisu volného hráče). */
 export const MAX_SQUAD = 30;
 

@@ -50,6 +50,9 @@ export const AI_TO_AI_CHANCE = 0.2;
 const MIN_MAX_TO_VALUE = 0.9;
 /** Nejvýš tolik pokusů o nabídku za den (služba může odmítnout: pauza po odmítnutí, propojení). */
 const MAX_OFFER_ATTEMPTS = 3;
+/** Hráče, jehož inzerát tolikrát propadl bez prodeje za posledních `UNSOLD_WINDOW_DAYS`, AI znovu nevystaví. */
+const MAX_UNSOLD_LISTINGS = 2;
+const UNSOLD_WINDOW_DAYS = 30;
 
 export interface MarketAction {
   kind: "list" | "pitch" | "offer" | "bid" | "loan_request" | "demand" | "sign_free_agent";
@@ -122,8 +125,18 @@ async function listSurplus(env: Bindings, club: AiClubState, now: Date, mode: De
   const crowded = club.analysis.seniorOwnCount > TARGET_SENIOR_SQUAD;
   if (!crowded && club.profile.trading < 50) return;
 
+  // Koho nikdo nechce, toho člověk taky nenabízí donekonečna. Podle konce platnosti, ne vzniku
+  // inzerátu: `created_at` píše databáze, konec platnosti stejné hodiny jako `now`.
+  const unsold = await db.prepare(
+    `SELECT player_id FROM transfer_listings WHERE team_id = ? AND status = 'expired' AND expires_at >= ?
+      GROUP BY player_id HAVING COUNT(*) >= ?`,
+  ).bind(club.teamId, new Date(now.getTime() - UNSOLD_WINDOW_DAYS * 86_400_000).toISOString(), MAX_UNSOLD_LISTINGS)
+    .all<{ player_id: string }>()
+    .catch((e) => { logger.warn({ module: M }, `neprodané inzeráty klubu ${club.teamId}`, e); return { results: [] as { player_id: string }[] }; });
+  const unsoldIds = new Set(unsold.results.map((r) => r.player_id));
+
   const candidates = club.members
-    .filter((m) => !m.isU21Roster && !m.loanedIn && !listed.has(m.id) && club.analysis.importanceOf(m.id) === "surplus")
+    .filter((m) => !m.isU21Roster && !m.loanedIn && !listed.has(m.id) && !unsoldIds.has(m.id) && club.analysis.importanceOf(m.id) === "surplus")
     .filter((m) => club.analysis.sellBlock(m.id) === null)
     // Nejdřív starší a slabší, mladé si mládežník nechá.
     .sort((a, b) => (b.age - a.age) || (a.rating - b.rating));

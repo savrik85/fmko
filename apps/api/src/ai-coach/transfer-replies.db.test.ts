@@ -617,6 +617,34 @@ describe("AI klub na trhu", () => {
     expect(await budgetOf("ai-club")).toBe(150_000 - 500);
   });
 
+  it("přeplněný kádr vystaví přebytek, ale koho za 30 dní dvakrát nikdo nekoupil, toho znovu nenabízí", async () => {
+    // 20 hráčů + 6 navíc = 26, nad cílem 24.
+    const extra: Array<[string, string, number, number]> = [
+      ["ai-x1", "DEF", 37, 34], ["ai-x2", "MID", 36, 35], ["ai-x3", "FWD", 35, 33],
+      ["ai-x4", "DEF", 36, 32], ["ai-x5", "MID", 35, 31], ["ai-x6", "GK", 35, 34],
+    ];
+    await db.batch(extra.map(([id, pos, rating, age]) => playerInsert(id, "ai-club", pos, rating, age)));
+    // Nejstaršího z přebytku (ai-x2) už dvakrát nikdo nekoupil, inzeráty propadly před 8 a 16 dny.
+    const endedDaysAgo = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString();
+    const oldListing = (n: number, days: number) => db.prepare(
+      `INSERT INTO transfer_listings (id, player_id, team_id, asking_price, league_id, status, expires_at)
+       VALUES (?, 'ai-x2', 'ai-club', 3000, 'league-a', 'expired', ?)`,
+    ).bind(`old-listing-${n}`, endedDaysAgo(days));
+    await db.batch([oldListing(1, 8), oldListing(2, 16)]);
+
+    const profile = { ...PROFILE, trading: 40 };
+    const listedBy = async () => (await runTransferMarket(env, "ai-club", later(), { profile, ignoreSchedule: true })).actions
+      .filter((a) => a.kind === "list" && a.result === "listed").map((a) => a.playerId);
+    const first = await listedBy();
+    expect(first.length).toBeGreaterThan(0);
+    expect(first).not.toContain("ai-x2");
+
+    // Po měsíci ho zkusí znovu.
+    await db.prepare("DELETE FROM transfer_listings WHERE status = 'active'").run();
+    await db.prepare("UPDATE transfer_listings SET expires_at = ? WHERE player_id = 'ai-x2'").bind(endedDaysAgo(40)).run();
+    expect(await listedBy()).toContain("ai-x2");
+  });
+
   it("člověk nabídne hráče k poptávce AI klubu a AI pošle nabídku, nebo slušně odmítne", async () => {
     await db.prepare("UPDATE players SET team_id = 'third' WHERE id IN ('ai-fwd1', 'ai-fwd2', 'ai-fwd3', 'ai-fwd4')").run();
     const { createDemand } = await import("../transfers/demands");
