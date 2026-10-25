@@ -61,16 +61,17 @@ afterAll(async () => {
 });
 
 describe("vyhledávání hráčů pro přestupy", () => {
-  it("zahrne soupeřův A-tým i navázanou U21 a vyloučí cizí scope", async () => {
+  it("zahrne soupeřův A-tým i navázanou U21 a hráče AI klubů, vyloučí cizí scope", async () => {
     const rows = await findTransferSearchPlayerRows(db, "league-a", "own-a");
     const ids = new Set(rows.map((row) => row.id));
 
     expect(ids).toContain("rival-senior-player");
     expect(ids).toContain("rival-u21-player");
+    // AI kluby jsou od 2026-10-25 na trhu jako ostatní kluby.
+    expect(ids).toContain("ai-player");
     expect(ids).not.toContain("own-senior-player");
     expect(ids).not.toContain("own-u21-player");
     expect(ids).not.toContain("inactive-u21-player");
-    expect(ids).not.toContain("ai-player");
     expect(ids).not.toContain("other-player");
   });
 

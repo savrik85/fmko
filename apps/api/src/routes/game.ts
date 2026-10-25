@@ -5220,24 +5220,10 @@ gameRouter.get("/teams/:teamId/free-agents", async (c) => {
     ).bind(teamId).first<{ reputation: number; user_id: string; district: string; lat: number; lng: number }>();
     if (!team) return c.json({ error: "Tým nenalezen" }, 404);
 
-    // Z jiných okresů jen hráči, které propustil lidský klub. Vygenerované zůstávají
-    // ve svém okrese, jinak by je okresy s víc manažery vyzobaly ostatním. Hráči
-    // propuštění z dalšího klubu téhož majitele se nenabízejí (viz podpis).
-    const agents = await c.env.DB.prepare(
-      `SELECT fa.*, v.lat as v_lat, v.lng as v_lon, v.name as village_name
-         FROM free_agents fa
-         LEFT JOIN villages v ON fa.village_id = v.id
-         LEFT JOIN teams rt ON rt.id = fa.released_from_team_id
-        WHERE fa.expires_at > strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
-          AND (fa.district = ?
-               OR (fa.source IN ('released', 'quit') AND rt.user_id IS NOT NULL AND rt.user_id != 'ai' AND rt.user_id != ?))
-        ORDER BY fa.overall_rating DESC`
-    ).bind(team.district, team.user_id).all();
-
-    // Filter out agents who rejected this team
-    const filtered = agents.results.filter((fa) => {
-      try { const rej = JSON.parse((fa.rejected_by as string) ?? "[]"); return !rej.includes(teamId); } catch (e) { logger.warn({ module: "game" }, "parse rejected_by", e); return true; }
-    });
+    // Z jiných okresů jen hráči, které propustil klub ve hře (lidský i AI) jiného majitele.
+    // Vygenerovaní zůstávají ve svém okrese. Pravidla sdílí s AI trenérem market-visibility.ts.
+    const { findVisibleFreeAgents } = await import("../transfers/market-visibility");
+    const filtered = await findVisibleFreeAgents(c.env.DB, { id: teamId, district: team.district, userId: team.user_id });
 
     const result = filtered.map((fa) => {
       let distKm: number | null = null;
@@ -5622,27 +5608,10 @@ gameRouter.get("/teams/:teamId/market", async (c) => {
   ).bind(teamId).first<{ league_id: string; district: string | null }>();
   if (!team) return c.json({ error: "Tým nenalezen" }, 404);
 
-  // Z ostatních soutěží jen inzeráty lidských klubů. Hráči cizích klubů (is_ai_listing)
-  // se nabízejí jen ve své lize, jinak by je soutěže s víc manažery vyzobaly ostatním.
-  const listings = await c.env.DB.prepare(
-    `SELECT tl.id, tl.player_id, tl.asking_price, tl.expires_at, tl.is_ai_listing, tl.ai_player_data, tl.rejected_by,
-     tl.league_id, l.name as league_name, l.district as league_district,
-     p.first_name, p.last_name, p.age, p.position, p.overall_rating, p.avatar as player_avatar, p.skills, p.nationality,
-     t.name as team_name, i.days_remaining as injury_days
-     FROM transfer_listings tl
-     LEFT JOIN players p ON tl.player_id = p.id AND tl.is_ai_listing = 0
-     LEFT JOIN teams t ON tl.team_id = t.id AND tl.is_ai_listing = 0
-     LEFT JOIN leagues l ON l.id = tl.league_id
-     LEFT JOIN injuries i ON p.id = i.player_id AND i.days_remaining > 0 AND tl.is_ai_listing = 0
-     WHERE tl.status = 'active' AND tl.team_id != ?
-       AND (tl.league_id = ? OR (tl.is_ai_listing = 0 AND t.user_id IS NOT NULL AND t.user_id != 'ai'))
-     ORDER BY CASE WHEN tl.league_id = ? THEN 0 ELSE 1 END, tl.created_at DESC`
-  ).bind(teamId, team.league_id, team.league_id).all();
-
-  // Filter out listings where this team was rejected (same as free agents)
-  listings.results = listings.results.filter((l) => {
-    try { const rej = JSON.parse((l.rejected_by as string) ?? "[]"); return !rej.includes(teamId); } catch (e) { logger.warn({ module: "game" }, "parse rejected_by in market filter", e); return true; }
-  });
+  // Z ostatních soutěží inzeráty klubů ve hře (lidských i AI). Hráči klubů mimo hru
+  // (is_ai_listing) se nabízejí jen ve své lize. Pravidla sdílí s AI trenérem market-visibility.ts.
+  const { findVisibleListings } = await import("../transfers/market-visibility");
+  const listings = { results: await findVisibleListings(c.env.DB, { id: teamId, leagueId: team.league_id }) };
 
   const myListings = await c.env.DB.prepare(
     `SELECT tl.id, tl.player_id, tl.asking_price, tl.expires_at,

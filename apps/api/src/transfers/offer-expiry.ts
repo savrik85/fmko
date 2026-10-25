@@ -11,6 +11,7 @@ import { sendSystemSMS } from "../messaging/system-sms";
 import { applyOfferRejectionImpact } from "./offer-rejection-impact";
 import { resolveOfferClubScope } from "./offer-club-scope";
 import { computeInterestForOffer, interestOfferOf } from "./player-interest";
+import { isAiTeam } from "../services/transfer-actions";
 
 /** Kolik nabídek se zpracuje za jeden tick (D1 limity), zbytek přijde na řadu příště. */
 const EXPIRY_BATCH_LIMIT = 20;
@@ -47,7 +48,8 @@ export async function expireIdleOffers(env: Bindings, now: Date = new Date()): P
     if ((closed?.meta.changes ?? 0) === 0) continue;
     expired++;
 
-    if (sellerSilent) {
+    // Dopad na hráče žije ve zprávách lidskému trenérovi; AI klub odpovídá do lhůty sám.
+    if (sellerSilent && !(await isAiTeam(db, scope?.sellerClubTeamId ?? offer.to_team_id))) {
       await applyOfferRejectionImpact(db, offer, "expire", env)
         .catch((e) => logger.warn({ module: "offer-expiry" }, `impact ${offer.id}`, e));
     }
@@ -87,7 +89,7 @@ export async function remindIdleOffers(env: Bindings, now: Date = new Date()): P
     if (!scope) continue;
     const sellerOnTurn = scope.onTurn;
     const onTurnTeamId = sellerOnTurn ? scope.sellerClubTeamId : scope.buyerClubTeamId;
-    if (onTurnTeamId === "virtual_ai") continue;
+    if (onTurnTeamId === "virtual_ai" || await isAiTeam(db, onTurnTeamId)) continue;
 
     const names = await offerNames(db, offer, scope.buyerClubTeamId, scope.sellerClubTeamId);
     const deadline = new Date(offer.expires_at).toLocaleString("cs-CZ", {
@@ -153,21 +155,22 @@ async function notifyExpiry(
   db: D1Database, offer: OfferRow, buyerClubTeamId: string, sellerClubTeamId: string, sellerSilent: boolean,
 ): Promise<void> {
   const { playerName, deal, isVirtualBuyer, buyerName, sellerName } = await offerNames(db, offer, buyerClubTeamId, sellerClubTeamId);
+  // AI klub telefon nemá, zprávy dostávají jen lidské kluby.
+  const smsToHuman = async (teamId: string, body: string) => {
+    if (await isAiTeam(db, teamId)) return;
+    await sendSystemSMS(db, teamId, SMS_ROLE, body);
+  };
 
   if (sellerSilent) {
-    await sendSystemSMS(db, sellerClubTeamId, SMS_ROLE,
-      `⌛ Na nabídku od ${buyerName} na ${deal} ${playerName} jsi neodpověděl, propadla.`);
+    await smsToHuman(sellerClubTeamId, `⌛ Na nabídku od ${buyerName} na ${deal} ${playerName} jsi neodpověděl, propadla.`);
     if (!isVirtualBuyer) {
-      await sendSystemSMS(db, buyerClubTeamId, SMS_ROLE,
-        `⌛ ${sellerName} na tvou nabídku na ${deal} ${playerName} neodpověděl, propadla.`);
+      await smsToHuman(buyerClubTeamId, `⌛ ${sellerName} na tvou nabídku na ${deal} ${playerName} neodpověděl, propadla.`);
     }
     return;
   }
   if (isVirtualBuyer) return;
-  await sendSystemSMS(db, buyerClubTeamId, SMS_ROLE,
-    `⌛ Na protinabídku od ${sellerName} na ${deal} ${playerName} jsi neodpověděl, propadla.`);
-  await sendSystemSMS(db, sellerClubTeamId, SMS_ROLE,
-    `⌛ ${buyerName} na tvou protinabídku na ${deal} ${playerName} neodpověděl, propadla.`);
+  await smsToHuman(buyerClubTeamId, `⌛ Na protinabídku od ${sellerName} na ${deal} ${playerName} jsi neodpověděl, propadla.`);
+  await smsToHuman(sellerClubTeamId, `⌛ ${buyerName} na tvou protinabídku na ${deal} ${playerName} neodpověděl, propadla.`);
 }
 
 async function teamName(db: D1Database, teamId: string): Promise<string | null> {
