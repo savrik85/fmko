@@ -6,6 +6,7 @@
  */
 
 import type { Bindings } from "../index";
+import { friendliesHourlyHook } from "./friendlies";
 import type { AiCoachProfile } from "./profile";
 
 export type HourlyHook = (env: Bindings, teamId: string, profile: AiCoachProfile, now: Date) => Promise<void>;
@@ -15,4 +16,6 @@ export interface HourlyHookEntry {
   run: HourlyHook;
 }
 
-export const HOURLY_HOOKS: HourlyHookEntry[] = [];
+export const HOURLY_HOOKS: HourlyHookEntry[] = [
+  { name: "friendlies", run: friendliesHourlyHook },
+];
