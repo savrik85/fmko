@@ -170,7 +170,7 @@ describe("nespokojený hráč AI klubu", () => {
 
   it("dohodu mimo nabídku zahodí a rozhodne náhradní pravidlo podle povahy", async () => {
     await setUnrest("ai-2-star", unhappy(60));
-    // Slib prodeje AI trenér dávat nesmí, takže v nabídce není.
+    // Slib prodeje se nabízí jen hráči, který chce do lepšího klubu; tenhle chtěl peníze, takže v nabídce není.
     const { env } = fakeAi({ decisions: [{ player: "P1", action: "promise_transfer", reason: "Let him dream." }], reasoning: "" });
     const res = await resolveUnhappyPlayers(env, "ai-2", profile({ thrift: 30 }), NOW, { mode: "on", ai: env });
 
@@ -290,7 +290,7 @@ describe("lidský klub", () => {
     expect(texts[0].body).toContain("Trucování ti nepomůže");
   }, 60_000);
 
-  it("hodinová úloha řeší nespokojené hráče až po přestupech a přátelácích, pak incidenty a souboje konce sezóny", () => {
-    expect(HOURLY_HOOKS.map((h) => h.name)).toEqual(["transfer_replies", "transfer_market", "friendlies", "unrest", "incidents", "season_duels"]);
+  it("hodinová úloha řeší nespokojené hráče až po přestupech a přátelácích, pak incidenty, souboje konce sezóny a nabídky místních hráčů", () => {
+    expect(HOURLY_HOOKS.map((h) => h.name)).toEqual(["transfer_replies", "transfer_market", "friendlies", "unrest", "incidents", "season_duels", "player_offers"]);
   });
 });

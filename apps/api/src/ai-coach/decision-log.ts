@@ -16,7 +16,11 @@ export interface DecisionEntry {
    * Druh rozhodnutí: `match`, `weekly`, `transfer_reply`, `transfer_market` (běh trhu: nouzový podpis,
    * inzeráty, nabídka k poptávce, skaut, výběr hráče; jeden zápis za běh), `transfer_negotiation` (tah
    * AI kupujícího v jednání o ceně, i o poplatku za hostování), `friendly_offer`, `friendly_reply`,
-   * `concession_topup` (dorovnání skladu bufetu před domácím zápasem podle pondělního plánu).
+   * `concession_topup` (dorovnání skladu bufetu před domácím zápasem podle pondělního plánu),
+   * `main_sponsor` a `stadium_sponsor` (výběr firmy k jednání), `sponsor_negotiation` (tah v jednání se sponzorem),
+   * `player_offer` (podpis nebo odmítnutí místních hráčů z nabídek; jeden zápis za den),
+   * `promise_listing` (inzerát hráče, kterému AI slíbila prodej),
+   * `sponsor_invite` (koho pozvat do VIP lóže na nejbližší domácí zápas).
    */
   kind: string;
   mode: DecisionMode;

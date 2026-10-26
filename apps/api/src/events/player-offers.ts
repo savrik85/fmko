@@ -1,6 +1,6 @@
 /**
  * Organické nabídky hráčů — kamarád, hospodský, dorost, doporučení.
- * Generují se jako between-round events a přijdou jako SMS.
+ * Generují se jako between-round events a lidskému klubu přijdou jako SMS (AI klubu ne).
  */
 
 import type { Rng } from "../generators/rng";
@@ -60,12 +60,24 @@ const SOURCES = [
 export type OfferSource = (typeof SOURCES)[number]["source"];
 
 /**
- * Komu denní tick posílá nabídky: jen lidským áčkům s herním datem a okresem.
+ * Komu denní tick posílá nabídky: áčkům s herním datem a okresem, lidským i AI klubům.
+ * AI klub nabídku dostane stejně jako člověk, jen bez SMS (spec AI klubů 3.2); podepsat,
+ * nebo odmítnout rozhodne AI trenér stejnou službou (ai-coach/player-offers.ts).
  * U21 ne — starosta i hospodský nabízejí dospělé chlapy (starosta 28–42 let) a do U21 nepatří.
  * Ruční hromadné generování v adminu U21 vynechává taky (`parent_team_id IS NULL`).
  */
 export function receivesPlayerOffers(team: Record<string, unknown>): boolean {
-  return team.user_id !== "ai" && team.team_type !== "u21" && !!team.game_date && !!team.village_district;
+  return team.team_type !== "u21" && !!team.game_date && !!team.village_district;
+}
+
+/**
+ * Vede klub AI trenér? Jemu se nabídka nepíše. Při chybě čtení se SMS pošle jako dřív,
+ * ať lidský klub o nabídku nepřijde.
+ */
+async function isAiClub(db: D1Database, teamId: string): Promise<boolean> {
+  const row = await db.prepare("SELECT user_id FROM teams WHERE id = ?").bind(teamId).first<{ user_id: string | null }>()
+    .catch((e) => { logger.warn({ module: "player-offers", teamId }, "typ klubu pro SMS o nabídce", e); return null; });
+  return row?.user_id === "ai";
 }
 
 /** Věk, pro který platí cíl „4–12 bodů pod průměrem áčka". Mladší kluk vyjde slabší podle věkové křivky. */
@@ -165,6 +177,17 @@ export async function generatePlayerOffer(
 
   logger.info({ module: "player-offers", teamId }, `new offer: ${player.firstName} ${player.lastName} (${pos}, ${overallRating}) from ${sourceType.source}`);
 
+  const result = {
+    offerId,
+    source: sourceType.source,
+    senderName: sourceType.senderName,
+    senderTitle: sourceType.senderTitle,
+    message,
+    playerName: `${player.firstName} ${player.lastName}`,
+  };
+  // AI klubu se nepíše: nabídku najde jeho trenér sám (ai-coach/player-offers.ts).
+  if (await isAiClub(db, teamId)) return result;
+
   // Pošli SMS notifikaci — najdi nebo vytvoř konverzaci pro tohoto odesílatele
   try {
     const posLabel: Record<string, string> = { GK: "BRA", DEF: "OBR", MID: "ZÁL", FWD: "ÚTO" };
@@ -188,12 +211,5 @@ export async function generatePlayerOffer(
     logger.warn({ module: "player-offers" }, "SMS notification failed", e);
   }
 
-  return {
-    offerId,
-    source: sourceType.source,
-    senderName: sourceType.senderName,
-    senderTitle: sourceType.senderTitle,
-    message,
-    playerName: `${player.firstName} ${player.lastName}`,
-  };
+  return result;
 }

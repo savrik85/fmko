@@ -220,3 +220,28 @@ describe("slib místa v sestavě (nespokojený hráč)", () => {
     expect(renderMatchPrompt(ctx)).toContain("PROMISES: you promised P19 a starting place");
   });
 });
+
+describe("kapitán klubu (páska z dohody s nespokojeným hráčem)", () => {
+  it("když hraje od začátku, pásku nosí on, ať model chce kohokoli", () => {
+    // P3 (obránce 58) hraje v základu, model by kapitánem udělal brankáře P1.
+    const ctx = context({ clubCaptain: "P3" });
+    const lineup = assembleLineup(ctx, { ...fallbackMatchDecision(ctx), captain: "P1" }, squadIds(ctx));
+    expectLegalLineup(ctx, lineup);
+    expect(lineup.players.some((p) => p.playerId === "player-3")).toBe(true);
+    expect(lineup.captainId).toBe("player-3");
+    expect(lineup.notes.join(" ")).toContain("kapitán klubu P3 hraje, pásku nosí on");
+    expect(fallbackMatchDecision(ctx).captain).toBe("P3");
+    expect(renderMatchPrompt(ctx)).toContain("CAPTAIN: P3 is your club captain.");
+  });
+
+  it("když nehraje (šetří se, je zraněný), kapitána vybírá model", () => {
+    const ctx = context({ clubCaptain: "P3" });
+    const rested = assembleLineup(ctx, { ...fallbackMatchDecision(ctx), rest: ["P3"], captain: "P1" }, squadIds(ctx));
+    expect(rested.players.some((p) => p.playerId === "player-3")).toBe(false);
+    expect(rested.captainId).toBe("player-1");
+
+    const injured = context({ clubCaptain: "P21" });
+    expect(assembleLineup(injured, { ...fallbackMatchDecision(injured), captain: "P1" }, squadIds(injured)).captainId).toBe("player-1");
+    expect(renderMatchPrompt(injured)).toContain("CAPTAIN: your club captain P21 cannot play today");
+  });
+});

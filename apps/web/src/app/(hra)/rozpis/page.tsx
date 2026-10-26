@@ -7,6 +7,7 @@ import { apiFetch, showError } from "@/lib/api";
 import { Spinner, SectionLabel, BadgePreview, PageHeader, useConfirm, Tabs } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 import { PreseasonNotice } from "@/components/team/preseason-notice";
+import { TeamName } from "@/components/manager/team-name";
 
 interface ScheduleMatch {
   id: string;
@@ -15,12 +16,14 @@ interface ScheduleMatch {
   status: string;
   homeTeamId: string;
   homeName: string;
+  homeIsAi?: boolean;
   homeColor: string;
   homeSecondary: string;
   homeBadge: string;
   homeScore: number | null;
   awayTeamId: string;
   awayName: string;
+  awayIsAi?: boolean;
   awayColor: string;
   awaySecondary: string;
   awayBadge: string;
@@ -53,12 +56,14 @@ interface LeagueRound {
     status: string;
     homeTeamId: string;
     homeName: string;
+    homeIsAi?: boolean;
     homeColor: string;
     homeSecondary: string;
     homeBadge: string;
     homeScore: number | null;
     awayTeamId: string;
     awayName: string;
+    awayIsAi?: boolean;
     awayColor: string;
     awaySecondary: string;
     awayBadge: string;
@@ -194,7 +199,7 @@ export default function SchedulePage() {
                     {nextHome.promoted ? "Zápas je propagovaný" : "Propagace dalšího zápasu"}
                   </div>
                   <div className="text-xs sm:text-sm text-muted mt-0.5 leading-tight">
-                    vs {nextHome.awayName} · {nextHome.isCup ? `🏆 ${nextHome.roundName ?? "Pohár"} · ` : ""}{formatDate(nextHome.scheduledAt)}
+                    vs <TeamName name={nextHome.awayName} isAi={nextHome.awayIsAi === true} /> · {nextHome.isCup ? `🏆 ${nextHome.roundName ?? "Pohár"} · ` : ""}{formatDate(nextHome.scheduledAt)}
                     {nextHome.promoted && nextHome.promotionCost
                       ? <span className="hidden sm:inline"> — zaplaceno {nextHome.promotionCost.toLocaleString("cs")} Kč</span>
                       : null}
@@ -287,8 +292,8 @@ function MatchRow({ match: m, myTeamId, canEditLineup }: { match: ScheduleMatch;
 
   // Opponent info for mobile layout
   const opp = m.isHome
-    ? { name: m.awayName, color: m.awayColor, secondary: m.awaySecondary, badge: m.awayBadge }
-    : { name: m.homeName, color: m.homeColor, secondary: m.homeSecondary, badge: m.homeBadge };
+    ? { name: m.awayName, isAi: m.awayIsAi === true, color: m.awayColor, secondary: m.awaySecondary, badge: m.awayBadge }
+    : { name: m.homeName, isAi: m.homeIsAi === true, color: m.homeColor, secondary: m.homeSecondary, badge: m.homeBadge };
   const oppInitials = opp.name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase();
 
   const isClickable = isPlayed || canEditLineup;
@@ -314,7 +319,7 @@ function MatchRow({ match: m, myTeamId, canEditLineup }: { match: ScheduleMatch;
         <BadgePreview primary={opp.color} secondary={opp.secondary} pattern={opp.badge as BadgePattern}
           initials={oppInitials} size={22} />
         <div className="flex-1 min-w-0">
-          <div className="text-sm font-heading font-bold truncate">{opp.name}</div>
+          <div className="text-sm font-heading font-bold truncate"><TeamName name={opp.name} isAi={opp.isAi} /></div>
           <div className="text-micro text-muted font-heading">{m.isTournament ? m.roundName : m.isHome ? "doma" : "venku"}</div>
         </div>
         {isPlayed ? (
@@ -346,7 +351,7 @@ function MatchRow({ match: m, myTeamId, canEditLineup }: { match: ScheduleMatch;
 
         <div className="flex-1 min-w-0 flex items-center gap-2 justify-end">
           <span className={`text-sm font-heading truncate ${m.homeTeamId === myTeamId ? "font-bold" : ""}`}>
-            {m.homeName}
+            <TeamName name={m.homeName} isAi={m.homeIsAi === true} />
           </span>
           <BadgePreview primary={m.homeColor} secondary={m.homeSecondary} pattern={m.homeBadge as BadgePattern}
             initials={m.homeName.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase()} size={22} />
@@ -367,7 +372,7 @@ function MatchRow({ match: m, myTeamId, canEditLineup }: { match: ScheduleMatch;
           <BadgePreview primary={m.awayColor} secondary={m.awaySecondary} pattern={m.awayBadge as BadgePattern}
             initials={m.awayName.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase()} size={22} />
           <span className={`text-sm font-heading truncate ${m.awayTeamId === myTeamId ? "font-bold" : ""}`}>
-            {m.awayName}
+            <TeamName name={m.awayName} isAi={m.awayIsAi === true} />
           </span>
         </div>
 
@@ -410,7 +415,7 @@ function LeagueMatchRow({ match: m, myTeamId }: {
     <div className={`card flex items-center gap-3 px-4 py-3 ${isMyMatch ? "ring-1 ring-pitch-400/30 bg-pitch-500/[0.03]" : ""} ${isPlayed ? "hover:bg-gray-50 transition-colors" : ""}`}>
       <div className="flex-1 min-w-0 flex items-center gap-2 justify-end">
         <span className={`text-sm font-heading truncate ${m.homeTeamId === myTeamId ? "font-bold text-pitch-600" : ""}`}>
-          {m.homeName}
+          <TeamName name={m.homeName} isAi={m.homeIsAi === true} />
         </span>
         <BadgePreview primary={m.homeColor} secondary={m.homeSecondary} pattern={m.homeBadge as BadgePattern}
           initials={m.homeName.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase()} size={22} />
@@ -428,7 +433,7 @@ function LeagueMatchRow({ match: m, myTeamId }: {
         <BadgePreview primary={m.awayColor} secondary={m.awaySecondary} pattern={m.awayBadge as BadgePattern}
           initials={m.awayName.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase()} size={22} />
         <span className={`text-sm font-heading truncate ${m.awayTeamId === myTeamId ? "font-bold text-pitch-600" : ""}`}>
-          {m.awayName}
+          <TeamName name={m.awayName} isAi={m.awayIsAi === true} />
         </span>
       </div>
     </div>

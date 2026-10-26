@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   advanceOptions, clueLine, fallbackIncidentDecision, incidentDecisionSchema, incidentOptions, investigateOptions,
-  punishOptions, renderIncidentPrompt, validateIncidentDecision,
-  type AdvanceFacts, type IncidentClub, type IncidentDecisionContext, type IncidentFacts, type InvestigateFacts,
-  type PunishFacts,
+  punishOptions, renderIncidentPrompt, stolenItemText, threatOptions, trustWord, validateIncidentDecision,
+  type AdvanceFacts, type AskCandidate, type IncidentClub, type IncidentDecisionContext, type IncidentFacts,
+  type InvestigateFacts, type PunishFacts, type ThreatFacts,
 } from "./incident-decision";
 import { incidentDecisionDue, reactionDelayDays } from "./incidents";
 import { generateAiProfile, type AiCoachProfile } from "./profile";
@@ -25,7 +25,20 @@ function investigate(over: Partial<InvestigateFacts> = {}): InvestigateFacts {
   return {
     stage: "investigate", incidentId: "inc-1", kind: "vloupani_sklad", description: "a break-in", category: "kradez",
     severity: 2, damage: 3000, daysToDeadline: 5, clues: [], suspects: [], accusationsLeft: 2, canAccuse: true,
-    policeAvailable: true, policeFailed: false, policeChance: 0.3, ...over,
+    policeAvailable: true, policeFailed: false, policeChance: 0.3, policeInvestigating: false, policeResultInDays: null,
+    askCandidates: [], askedNames: [], listing: null, ...over,
+  };
+}
+
+function candidate(id: string, over: Partial<AskCandidate> = {}): AskCandidate {
+  return { ...player(id), reason: "suspect", linkedTo: null, trust: "neutral", ...over };
+}
+
+function threat(over: Partial<ThreatFacts> = {}): ThreatFacts {
+  return {
+    stage: "threat", incidentId: "inc-4", kind: "vloupani_sklad", description: "a break-in", category: "kradez",
+    severity: 1, damage: 0, daysToDeadline: 2, player: { ...player("t"), trust: "good" },
+    threat: "break into the equipment store and help himself", ...over,
   };
 }
 
@@ -97,6 +110,53 @@ describe("možnosti AI trenéra u incidentu", () => {
     expect(text).not.toContain("culprit_player_id");
   });
 
+  it("vyšetřování: nahlásit poznaný inzerát a zeptat se hráčů, kteří připadají v úvahu", () => {
+    const facts = investigate({
+      suspects: [player("a")],
+      askCandidates: [candidate("a"), candidate("r", { reason: "rival", linkedTo: "Hráč a" })],
+      listing: { listingId: "bazar-1", item: stolenItemText("jerseys"), startsPolice: true },
+    });
+    const opts = investigateOptions(facts);
+    expect(opts.map((o) => o.key)).toEqual(["police", "report_listing", "accuse_1", "ask_1", "ask_2", "wait"]);
+    expect(opts[1].action).toEqual({ type: "report_listing", listingId: "bazar-1" });
+    expect(opts[1].text).toContain("the police take over the case");
+    expect(opts[1].text).toContain("club jerseys");
+    expect(opts[3].action).toEqual({ type: "ask", playerId: "a" });
+    expect(opts[4].text).toContain("does not get on with suspect Hráč a");
+    // Inzerát, který policie už šetří: jen se zajistí.
+    const secured = investigateOptions(investigate({ listing: { listingId: "bazar-1", item: "trophies", startsPolice: false } }));
+    expect(secured.find((o) => o.key === "report_listing")?.text).toContain("become part of the police investigation");
+  });
+
+  it("když šetří policie: obvinit ani volat nejde, ptát se a čekat na výsledek ano", () => {
+    const facts = investigate({
+      canAccuse: false, policeAvailable: false, policeInvestigating: true, policeResultInDays: 3, daysToDeadline: null,
+      suspects: [player("a")], askCandidates: [candidate("a")], askedNames: ["Hráč b"],
+    });
+    const opts = investigateOptions(facts);
+    expect(opts.map((o) => o.key)).toEqual(["ask_1", "wait"]);
+    expect(opts[1].text).toBe("Do nothing and wait for the police result (in 3 days).");
+    const text = renderIncidentPrompt(ctx(facts));
+    expect(text).toContain("The police are investigating the case and report back in 3 days.");
+    expect(text).toContain("ALREADY ASKED: Hráč b");
+    expect(text).not.toContain("Accusations left");
+    expect(text).not.toContain("left to decide");
+  });
+
+  it("řeči z hospody: promluvit si s ním, nebo to nechat být", () => {
+    const opts = threatOptions(threat());
+    expect(opts.map((o) => o.action)).toEqual([{ type: "talk" }, { type: "wait" }]);
+    expect(opts[0].text).toContain("his relationship with you is good");
+    const text = renderIncidentPrompt(ctx(threat()));
+    expect(text).toContain("SITUATION: in the pub, Hráč t (MID, age 25, rating 40, a rotation player) said while drunk that he would break into the equipment store");
+    expect(text).toContain("You have 2 days left to decide.");
+    expect(text).not.toContain("INCIDENT:");
+  });
+
+  it("vztah k trenérovi slovy", () => {
+    expect([trustWord(80), trustWord(65), trustWord(50), trustWord(35), trustWord(10)]).toEqual(["good", "good", "neutral", "poor", "poor"]);
+  });
+
   it("stopa jednou větou: na koho ukazuje, mezi kým, nebo jen že něco viděla", () => {
     const name = (id: string) => `N${id}`;
     expect(clueLine({ zdroj: "spravce", ukazujeNa: "x", podezreli: null, sila: 2 }, name)).toBe("your groundsman points at Nx");
@@ -113,6 +173,27 @@ describe("náhradní pravidlo podle povahy", () => {
     const afterPolice = investigate({ policeAvailable: false, policeFailed: true, suspects: [player("a"), player("b")] });
     expect(fallbackIncidentDecision(ctx(afterPolice, club({ profile: profile({ risk: 80 }) }))).key).toBe("accuse_1");
     expect(fallbackIncidentDecision(ctx(afterPolice, club({ profile: profile({ risk: 20 }) }))).key).toBe("wait");
+  });
+
+  it("vyšetřování: inzerát nahlásí dřív než policii, a než někoho obviní naslepo, zeptá se", () => {
+    const listing = { listingId: "bazar-1", item: "club jerseys", startsPolice: true };
+    expect(fallbackIncidentDecision(ctx(investigate({ suspects: [player("a")], listing }))).key).toBe("report_listing");
+    // Přímá stopa pořád vyhrává: obvinění s ní pachatele usvědčí.
+    expect(fallbackIncidentDecision(ctx(investigate({ suspects: [player("a", { directClue: true })], listing }))).key).toBe("accuse_1");
+    const asking = investigate({ policeAvailable: false, policeFailed: true, suspects: [player("a")], askCandidates: [candidate("a")] });
+    expect(fallbackIncidentDecision(ctx(asking, club({ profile: profile({ risk: 90 }) }))).key).toBe("ask_1");
+    expect(fallbackIncidentDecision(ctx(asking, club({ profile: profile({ risk: 10 }) }))).key).toBe("ask_1");
+    // Poslední den před lhůtou odvážný trenér obviní, opatrný se pořád ptá.
+    const lastDay = { ...asking, daysToDeadline: 1 };
+    expect(fallbackIncidentDecision(ctx(lastDay, club({ profile: profile({ risk: 90 }) }))).key).toBe("accuse_1");
+    expect(fallbackIncidentDecision(ctx(lastDay, club({ profile: profile({ risk: 10 }) }))).key).toBe("ask_1");
+    // Když šetří policie a jde jen se ptát.
+    const duringPolice = investigate({ canAccuse: false, policeAvailable: false, policeInvestigating: true, askCandidates: [candidate("x", { reason: "trusted" })] });
+    expect(fallbackIncidentDecision(ctx(duringPolice)).key).toBe("ask_1");
+  });
+
+  it("řeči z hospody: promluví si s ním", () => {
+    expect(fallbackIncidentDecision(ctx(threat())).key).toBe("talk");
   });
 
   it("trest: vážný průšvih vyhodí, oporu potrestá penězi, trpělivý drobnost odpustí", () => {
@@ -134,9 +215,16 @@ describe("náhradní pravidlo podle povahy", () => {
   });
 
   it("náhradní pravidlo vrací vždy nabídnutou možnost", () => {
-    for (const facts of [investigate(), punish(), advance(), punish({ allowed: ["nechat_byt", "odpustit"] })]) {
+    const listing = { listingId: "bazar-1", item: "trophies", startsPolice: false };
+    for (const facts of [
+      investigate(), punish(), advance(), punish({ allowed: ["nechat_byt", "odpustit"] }), threat(),
+      investigate({ canAccuse: false, policeAvailable: false, policeInvestigating: true, listing }),
+      investigate({ policeAvailable: false, askCandidates: [candidate("q", { reason: "friend", linkedTo: "X" })] }),
+    ]) {
       const c = ctx(facts);
       expect(c.options.map((o) => o.key)).toContain(fallbackIncidentDecision(c).key);
+      // Schéma pro model nikdy nemá prázdný výčet.
+      expect((incidentDecisionSchema(c) as { properties: { choice: { enum: string[] } } }).properties.choice.enum.length).toBeGreaterThan(0);
     }
   });
 });

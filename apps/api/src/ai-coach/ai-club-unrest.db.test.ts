@@ -19,11 +19,14 @@ vi.mock("../transfers/player-interest", async (importOriginal) => ({
   computeInterestForOffer: interest.computeInterestForOffer,
 }));
 
+import { marketValue } from "@okresni-masina/shared";
 import { rejectTransferOffer } from "../services/transfer-actions";
 import { expireIdleOffers } from "../transfers/offer-expiry";
 import { processTransferUnrest } from "../transfers/offer-rejection-impact";
 import { prepareAiLineup } from "./match";
 import { generateAiProfile, type AiCoachProfile } from "./profile";
+import { promiseListingBounds } from "./sale-promise-decision";
+import { replyToTransferOffers } from "./transfer-replies";
 import { resolveUnhappyPlayers } from "./unhappy-players";
 
 let mf: Miniflare;
@@ -86,6 +89,19 @@ async function lifeOf(playerId: string): Promise<Record<string, any>> {
 
 async function count(sql: string, ...binds: unknown[]): Promise<number> {
   return (await db.prepare(sql).bind(...binds).first<{ n: number }>())?.n ?? 0;
+}
+
+async function budgetOf(teamId: string): Promise<number> {
+  return (await db.prepare("SELECT budget FROM teams WHERE id = ?").bind(teamId).first<{ budget: number }>())!.budget;
+}
+
+async function captainOf(teamId: string): Promise<string | null> {
+  return (await db.prepare("SELECT captain_id FROM teams WHERE id = ?").bind(teamId).first<{ captain_id: string | null }>())?.captain_id ?? null;
+}
+
+async function savedLineup(lineupId: string | null): Promise<{ xi: string[]; captainId: string | null }> {
+  const row = await db.prepare("SELECT players_data, captain_id FROM lineups WHERE id = ?").bind(lineupId).first<{ players_data: string; captain_id: string | null }>();
+  return { xi: (JSON.parse(row!.players_data) as Array<{ playerId: string }>).map((p) => p.playerId), captainId: row!.captain_id };
 }
 
 /** Všechno, co by AI klub dostal do telefonu nebo do oznámení. */
@@ -174,6 +190,8 @@ beforeEach(async () => {
     db.prepare("DELETE FROM transfer_offers"),
     db.prepare("DELETE FROM player_promises"),
     db.prepare("DELETE FROM coach_relation_log"),
+    // Dohody s hráči běží jednou za herní den a všechny testy hrají týž den.
+    db.prepare("DELETE FROM ai_coach_claims"),
   ]);
 });
 
@@ -280,6 +298,104 @@ describe("slib místa v sestavě od AI trenéra", () => {
     // 50 − 25 (slib) − 10 (dodržený slib) − 3 (denní útlum).
     expect(after.transferUnrest.level).toBe(12);
     expect(await count("SELECT COUNT(*) AS n FROM player_promises WHERE player_id = 'ai-1-weak' AND type = 'minutes' AND status = 'kept'")).toBe(1);
+    expect(await textsTo("ai-1")).toBe(0);
+  }, 120_000);
+});
+
+describe("kapitánská páska z dohody s nespokojeným hráčem", () => {
+  it("dohodnutý kapitán nosí pásku v AI sestavě, když hraje; když nehraje, kapitána vybere model", async () => {
+    // mid1 (záložník 55, nejlepší hráč kádru, v zápase P1) je rozený vůdce a chce do lepšího klubu.
+    await db.prepare("UPDATE players SET personality = ? WHERE id = 'ai-1-mid1'").bind(JSON.stringify({ ...PERSONALITY, leadership: 70 })).run();
+    await setLife("ai-1-mid1", unhappy(50, { reasons: ["better_club"] }));
+    const unrestModel = fakeAi({ decisions: [{ player: "P1", action: "captaincy", reason: "Make him our leader." }], reasoning: "" });
+    const decided = await resolveUnhappyPlayers(unrestModel.env, "ai-1", profile(), NOW, { mode: "on", ai: unrestModel.env });
+    expect(unrestModel.prompts[0]).toContain('"captaincy"');
+    expect(decided.executed).toEqual([expect.objectContaining({ action: "captaincy", ok: true })]);
+    expect(await captainOf("ai-1")).toBe("ai-1-mid1");
+
+    await db.batch([1, 2].flatMap((i) => [
+      db.prepare("INSERT INTO season_calendar (id, league_id, season_number, game_week, match_day, scheduled_at, status) VALUES (?, 'lg-1', 3, ?, 'monday', ?, 'scheduled')")
+        .bind(`cal-cap-${i}`, 10 + i, new Date(NOW.getTime() + (10 + i) * DAY_MS).toISOString()),
+      db.prepare("INSERT INTO matches (id, league_id, calendar_id, home_team_id, away_team_id, status) VALUES (?, 'lg-1', ?, 'ai-1', 'human', 'scheduled')")
+        .bind(`m-cap-${i}`, `cal-cap-${i}`),
+    ]));
+    // Model by pásku dal obránci def1 (P4), dohodnutý kapitán ale hraje: nosí ji on.
+    // P4 i P5 jsou k dispozici na oba zápasy (omluvenky jsou pevné podle klíče zápasu).
+    const matchModel = fakeAi({
+      formation: "4-4-2", tactic: "balanced", hardness: "normal", captain: "P4", rest: [], mustStart: [],
+      penaltyTaker: "P4", freekickTaker: "P5", plan: [], reasoning: "best side",
+    });
+    const first = await prepareAiLineup(matchModel.env, "ai-1", { calendarId: "cal-cap-1", kind: "league" });
+    expect(first.used).toBe("model");
+    const withCaptain = await savedLineup(first.lineupId);
+    expect(withCaptain.xi).toEqual(expect.arrayContaining(["ai-1-mid1", "ai-1-def1"]));
+    expect(withCaptain.captainId).toBe("ai-1-mid1");
+    expect(matchModel.prompts[0]).toContain("CAPTAIN: P1 is your club captain.");
+
+    // Zraněný kapitán nehraje: pásku dostane ten, koho vybral model.
+    await db.prepare(
+      "INSERT INTO injuries (id, player_id, team_id, type, description, severity, days_remaining, days_total) VALUES ('inj-captain', 'ai-1-mid1', 'ai-1', 'sval', 'Natažený sval', 'lehke', 5, 5)",
+    ).run();
+    const second = await prepareAiLineup(matchModel.env, "ai-1", { calendarId: "cal-cap-2", kind: "league" });
+    expect(second.used).toBe("model");
+    const withoutCaptain = await savedLineup(second.lineupId);
+    expect(withoutCaptain.xi).not.toContain("ai-1-mid1");
+    expect(withoutCaptain.captainId).toBe("ai-1-def1");
+    expect(matchModel.prompts[1]).toContain("CAPTAIN: your club captain P1 cannot play today");
+    expect(await textsTo("ai-1")).toBe(0);
+
+    // Další test počítá s původní povahou a bez kapitána.
+    await db.batch([
+      db.prepare("UPDATE players SET personality = ? WHERE id = 'ai-1-mid1'").bind(JSON.stringify(PERSONALITY)),
+      db.prepare("UPDATE teams SET captain_id = NULL WHERE id = 'ai-1'"),
+    ]);
+  }, 120_000);
+});
+
+describe("slib prodeje od AI trenéra", () => {
+  it("AI slíbí prodej, hráče hned vystaví, první slušnou nabídku přijme bez smlouvání a slib je dodržený", async () => {
+    // fwd3 (útočník 39, 29 let) chce do lepšího klubu; v 4-4-2 je třetí útočník, pojistky kádru ho pustí.
+    await setLife("ai-1-fwd3", unhappy(60, { reasons: ["better_club"] }));
+    const value = marketValue(39, 29, "FWD");
+    const { minPrice, maxPrice } = promiseListingBounds(value);
+    const askingPrice = Math.round((minPrice + maxPrice) / 200) * 100;
+    const model = fakeAi((prompt: string) => prompt.includes("PLAYER you promised to sell")
+      ? { price: askingPrice, reason: "Let him go quickly." }
+      : { decisions: [{ player: "P1", action: "promise_transfer", reason: "He wants a bigger club." }], reasoning: "" });
+    const decided = await resolveUnhappyPlayers(model.env, "ai-1", profile(), NOW, { mode: "on", ai: model.env });
+
+    expect(model.prompts[0]).toContain('"promise_transfer": promise to sell him at the next decent offer within 30 days');
+    expect(decided.executed).toEqual([
+      expect.objectContaining({ action: "promise_transfer", ok: true, listingId: expect.any(String), listingPrice: askingPrice }),
+    ]);
+    expect((await lifeOf("ai-1-fwd3")).transferUnrest.pledge).toMatchObject({ type: "transfer", madeAt: NOW.toISOString() });
+    expect(await count("SELECT COUNT(*) AS n FROM player_promises WHERE player_id = 'ai-1-fwd3' AND team_id = 'ai-1' AND type = 'transfer' AND status = 'active'")).toBe(1);
+    // Hráč je na trhu za cenu, kterou v mezích slibu vybral model.
+    expect(model.prompts[1]).toContain("PLAYER you promised to sell: FWD, age 29, rating 39");
+    expect(await count("SELECT COUNT(*) AS n FROM transfer_listings WHERE player_id = 'ai-1-fwd3' AND team_id = 'ai-1' AND status = 'active' AND asking_price = ?", askingPrice)).toBe(1);
+    expect(await count("SELECT COUNT(*) AS n FROM ai_coach_decisions WHERE team_id = 'ai-1' AND kind = 'promise_listing' AND used_fallback = 0")).toBe(1);
+
+    // Lidský klub nabídne slušnou částku (nad 60 % tržní hodnoty), ale pod tím, za kolik by AI hráče jinak pustila.
+    const fair = Math.ceil((value * 0.7) / 100) * 100;
+    await db.prepare(
+      `INSERT INTO transfer_offers (id, player_id, from_team_id, to_team_id, offer_amount, offer_type, status, expires_at, last_action_by, created_at)
+       VALUES ('o-promise', 'ai-1-fwd3', 'human', 'ai-1', ?, 'transfer', 'pending', ?, 'human', ?)`,
+    ).bind(fair, FUTURE, new Date(NOW.getTime() - DAY_MS).toISOString()).run();
+    const budgetBefore = await budgetOf("ai-1");
+    const promptsBefore = model.prompts.length;
+    expect(await replyToTransferOffers(model.env, "ai-1", NOW, profile())).toBe(1);
+
+    // Kód přijal sám (slib nechává jedinou možnost), model se na nabídku neptal.
+    expect(model.prompts).toHaveLength(promptsBefore);
+    expect(await count("SELECT COUNT(*) AS n FROM transfer_offers WHERE id = 'o-promise' AND status = 'accepted'")).toBe(1);
+    expect(await count("SELECT COUNT(*) AS n FROM players WHERE id = 'ai-1-fwd3' AND team_id = 'human'")).toBe(1);
+    expect(await budgetOf("ai-1")).toBe(budgetBefore + fair);
+    const reply = await db.prepare("SELECT actions FROM ai_coach_decisions WHERE team_id = 'ai-1' AND kind = 'transfer_reply' AND context_ref = 'o-promise'")
+      .first<{ actions: string }>();
+    expect(JSON.parse(reply!.actions)).toMatchObject({ kind: "accept", reason: "sale_promise", decidedBy: "guard" });
+    // Hráč odešel: hra slib uzavřela jako dodržený, inzerát je prodaný.
+    expect(await count("SELECT COUNT(*) AS n FROM player_promises WHERE player_id = 'ai-1-fwd3' AND team_id = 'ai-1' AND type = 'transfer' AND status = 'kept'")).toBe(1);
+    expect(await count("SELECT COUNT(*) AS n FROM transfer_listings WHERE player_id = 'ai-1-fwd3' AND status = 'sold'")).toBe(1);
     expect(await textsTo("ai-1")).toBe(0);
   }, 120_000);
 });

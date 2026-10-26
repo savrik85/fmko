@@ -473,12 +473,14 @@ matchesRouter.get("/teams/:teamId/schedule", async (c) => {
     homeColor: row.home_color || "#2D5F2D",
     homeSecondary: row.home_secondary || "#FFFFFF",
     homeBadge: row.home_badge || "shield",
+    homeIsAi: row.home_user_id === "ai",
     homeScore: row.home_score,
     awayTeamId: row.away_team_id,
     awayName: row.away_name,
     awayColor: row.away_color || "#2D5F2D",
     awaySecondary: row.away_secondary || "#FFFFFF",
     awayBadge: row.away_badge || "shield",
+    awayIsAi: row.away_user_id === "ai",
     awayScore: row.away_score,
     scheduledAt: row.scheduled_at || row.simulated_at || row.created_at,
     gameWeek: row.game_week,
@@ -509,6 +511,7 @@ matchesRouter.get("/teams/:teamId/schedule", async (c) => {
          cm.home_cup_team_id, cm.promoted, cm.promotion_cost, cm.promotion_boost, cc.total_rounds,
          ht.name AS home_name, ht.primary_color AS home_color, ht.team_id AS home_real_id,
          at.name AS away_name, at.primary_color AS away_color, at.team_id AS away_real_id,
+         (SELECT user_id FROM teams WHERE id = ht.team_id) AS home_user_id, (SELECT user_id FROM teams WHERE id = at.team_id) AS away_user_id,
          myct.id AS my_cup_team_id,
          (SELECT COUNT(*) FROM lineups l WHERE l.team_id = ? AND l.calendar_id = cm.id) AS has_lineup
        FROM cup_matches cm
@@ -526,12 +529,14 @@ matchesRouter.get("/teams/:teamId/schedule", async (c) => {
         round: null, // ne ligové kolo → FE nezobrazí "X. kolo", použije roundName
         status: row.status as string,
         homeTeamId: (row.home_real_id as string | null), // velkoklub nemá reálný tým → null
+        homeIsAi: row.home_user_id === "ai",
         homeName: row.home_name as string,
         homeColor: (row.home_color as string) || "#2D5F2D",
         homeSecondary: "#FFFFFF",
         homeBadge: "shield",
         homeScore: row.home_score as number | null,
         awayTeamId: (row.away_real_id as string | null),
+        awayIsAi: row.away_user_id === "ai",
         awayName: row.away_name as string,
         awayColor: (row.away_color as string) || "#2D5F2D",
         awaySecondary: "#FFFFFF",
@@ -569,6 +574,7 @@ matchesRouter.get("/teams/:teamId/schedule", async (c) => {
          m.home_score, m.away_score, m.home_pens, m.away_pens, t.name AS tournament_name, e.group_code,
          ht.name AS home_name, ht.primary_color AS home_color, ht.secondary_color AS home_secondary, ht.badge_pattern AS home_badge,
          at.name AS away_name, at.primary_color AS away_color, at.secondary_color AS away_secondary, at.badge_pattern AS away_badge,
+         ht.user_id AS home_user_id, at.user_id AS away_user_id,
          (SELECT COUNT(*) FROM lineups l WHERE l.team_id = ? AND l.calendar_id = m.id) AS has_lineup
        FROM tournament_matches m
        JOIN tournaments t ON t.id = m.tournament_id AND t.status IN ('drawn', 'running')
@@ -590,12 +596,14 @@ matchesRouter.get("/teams/:teamId/schedule", async (c) => {
         status: row.status as string,
         homeTeamId: row.home_team_id as string,
         homeName: row.home_name as string,
+        homeIsAi: row.home_user_id === "ai",
         homeColor: (row.home_color as string) || "#2D5F2D",
         homeSecondary: (row.home_secondary as string) || "#FFFFFF",
         homeBadge: (row.home_badge as string) || "shield",
         homeScore: row.home_score as number | null,
         awayTeamId: row.away_team_id as string,
         awayName: row.away_name as string,
+        awayIsAi: row.away_user_id === "ai",
         awayColor: (row.away_color as string) || "#2D5F2D",
         awaySecondary: (row.away_secondary as string) || "#FFFFFF",
         awayBadge: (row.away_badge as string) || "shield",

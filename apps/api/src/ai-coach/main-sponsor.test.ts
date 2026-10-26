@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { optionCheckOrder, rankSponsorCandidates, type SponsorCandidate } from "./main-sponsor";
 import {
-  mainSponsorSchema, NO_SPONSOR_CHOICE, renderMainSponsorPrompt, validateMainSponsorChoice,
+  mainSponsorSchema, NO_SPONSOR_CHOICE, renderMainSponsorPrompt, sponsorChoiceSystemPrompt, validateMainSponsorChoice,
   type MainSponsorContext, type MainSponsorOption,
 } from "./main-sponsor-decision";
 import { generateAiProfile } from "./profile";
@@ -62,7 +62,7 @@ const OPTIONS: MainSponsorOption[] = [
 
 function context(over: Partial<MainSponsorContext> = {}): MainSponsorContext {
   return {
-    teamName: "Sokol Testov", profile: generateAiProfile("team-d", null), budget: 80_000, reputation: 45,
+    category: "main", teamName: "Sokol Testov", profile: generateAiProfile("team-d", null), budget: 80_000, reputation: 45,
     league: { position: 3, teams: 14, points: 20, played: 10 }, weeklyRunningCost: 9_000, weeklyIncome: 7_000,
     options: OPTIONS,
     ...over,
@@ -115,5 +115,19 @@ describe("výběr hlavního sponzora modelem", () => {
     expect(prompt).toContain("CLUB Sokol Testov: reputation 45/100.");
     expect(prompt).toContain("MONEY: budget 80,000 CZK.");
     expect(prompt).not.toContain("Weekly running costs");
+  });
+
+  it("model ví, že úvodní nabídku může podepsat, nebo smlouvat", () => {
+    expect(sponsorChoiceSystemPrompt("main")).toContain("You can sign it or negotiate better terms");
+    expect(sponsorChoiceSystemPrompt("main")).not.toContain("you sign it as it is");
+  });
+
+  it("název stadionu: jiný popis situace, peněz a prodloužení než u hlavního sponzora", () => {
+    const prompt = renderMainSponsorPrompt(context({ category: "stadium" }));
+    expect(prompt).toContain("money for naming your stadium");
+    expect(prompt).toContain("your previous stadium sponsor, renewing keeps the stadium name");
+    expect(prompt).toContain("then the stadium brings no sponsor money until next Monday");
+    expect(prompt).not.toContain("club name");
+    expect(sponsorChoiceSystemPrompt("stadium")).toContain("Your stadium has no naming sponsor");
   });
 });

@@ -251,3 +251,43 @@ describe("popis pro model", () => {
     expect(prompt).not.toContain('"counter"');
   });
 });
+
+describe("slib prodeje nespokojenému hráči", () => {
+  // Slušná nabídka nad pevnou pojistkou (60 % tržní hodnoty), ale hluboko pod rezervací.
+  const FAIR = round100(MV * 0.65);
+
+  it("slušný přestup kód přijme sám, i pod rezervací, nad limitem obchodů a po vlastním protinávrhu", () => {
+    expect(FAIR).toBeLessThan(R);
+    const plain = sellerOptions(sellerInput({ terms: cash(FAIR) }));
+    expect(plain.actions).not.toContain("accept");
+
+    const input = sellerInput({ terms: cash(FAIR), salePromise: true, overDealLimit: true, previousAsks: [ASK] });
+    const o = sellerOptions(input);
+    expect(o.actions).toEqual(["accept"]);
+    expect(o.forced).toMatchObject({ kind: "accept", reason: "sale_promise" });
+    expect(sellerGuardViolation(input, o, o.forced!)).toBeNull();
+    expect(decideSellerReply(input)).toMatchObject({ kind: "accept", reason: "sale_promise" });
+    // Klub mimo hru taky: slib platí pro každého kupce.
+    expect(sellerOptions({ ...input, virtualBuyer: true }).forced).toMatchObject({ kind: "accept", reason: "sale_promise" });
+  });
+
+  it("pod 60 % tržní hodnoty ani se slibem ne; pojistky kádru platí, jen opora bez náhrady slib nepřebije", () => {
+    const lowball = sellerOptions(sellerInput({ terms: cash(Math.floor(MV * 0.55 / 100) * 100), salePromise: true }));
+    expect(lowball.forced).toMatchObject({ kind: "reject", reason: "hard_floor" });
+    const lastKeeper = sellerOptions(sellerInput({ terms: cash(MV), salePromise: true, block: "last_goalkeeper" }));
+    expect(lastKeeper.forced).toMatchObject({ kind: "reject", reason: "blocked", block: "last_goalkeeper" });
+    const minSquad = sellerOptions(sellerInput({ terms: cash(MV), salePromise: true, block: "min_squad" }));
+    expect(minSquad.forced).toMatchObject({ kind: "reject", reason: "blocked" });
+    const keyPlayer = sellerOptions(sellerInput({ terms: cash(FAIR), salePromise: true, importance: "key", block: "key_without_replacement" }));
+    expect(keyPlayer.forced).toMatchObject({ kind: "accept", reason: "sale_promise" });
+    // Bez slibu opora bez náhrady dál neodejde.
+    expect(sellerOptions(sellerInput({ terms: cash(MV * 3), importance: "key", block: "key_without_replacement" })).forced)
+      .toMatchObject({ kind: "reject", reason: "blocked" });
+  });
+
+  it("hostování slib prodeje nemění: rozhoduje se jako bez něj", () => {
+    const loan = { offerType: "loan" as const, loanDays: 30, terms: cash(500) };
+    expect(sellerOptions(sellerInput({ ...loan, salePromise: true }))).toEqual(sellerOptions(sellerInput(loan)));
+    expect(decideSellerReply(sellerInput({ ...loan, salePromise: true }))).toEqual(decideSellerReply(sellerInput(loan)));
+  });
+});

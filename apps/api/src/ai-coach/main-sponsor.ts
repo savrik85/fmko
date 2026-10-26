@@ -1,18 +1,20 @@
 /**
- * Hlavní sponzor AI klubu.
+ * Hlavní sponzor a název stadionu AI klubu.
  *
  * Lidský manažer otevře jednání s místní firmou, majitel udělá úvodní nabídku a manažer ji
- * podepíše, nebo smlouvá. AI trenér jde stejnou cestou (`openNegotiation` + `signNegotiation`):
- * když klub hlavního sponzora nemá, osloví v pondělní správě firmu z vlastního okresu a podepíše
- * úvodní nabídku majitele. Bez SMS a hospody, jen jednání a podpis, stejná pravidla (okres,
- * exkluzivita, přednost, cooldown, změna jednou za sezónu).
+ * podepíše, nebo smlouvá. AI trenér jde stejnou cestou: když klub v kategorii sponzora nemá,
+ * osloví v pondělní správě firmu z vlastního okresu (`openNegotiation`) a jednání vede tah po
+ * tahu (sponsor-negotiation.ts: podepsat, vlastní návrh, odejít) stejnými funkcemi jako člověk.
+ * Bez SMS a hospody, stejná pravidla (okres, exkluzivita hlavního sponzora, přednost, cooldown,
+ * změna hlavního sponzora jednou za sezónu).
  *
  * Model navrhuje, kód hlídá (main-sponsor-decision.ts): kód nabídne jen firmy, se kterými jde teď
  * jednat (stejná kontrola jako u člověka), s odhadem peněz, jaký manažer vidí u firmy na webu.
  * Model vybere, kterou oslovit, nebo že tento týden nikoho. Když vybraná firma mezitím jednat
- * nejde nebo její nabídku nejde podepsat, pokračuje se v pořadí náhradního pravidla. Bez modelu
+ * nejde nebo její podmínky nejde podepsat, pokračuje se v pořadí náhradního pravidla. Bez modelu
  * (výpadek, neplatná odpověď, režim off) rozhodne pořadí podle povahy: ambiciózní trenér jde
- * za firmou s největším rozpočtem, ostatní spíš za firmou, která klub má nejradši.
+ * za firmou s největším rozpočtem, ostatní spíš za firmou, která klub má nejradši; jednání pak
+ * podepíše úvodní nabídku majitele.
  */
 
 import type { Bindings } from "../index";
@@ -21,20 +23,20 @@ import { budgetEstimateRange, sponsorBudgetB } from "../sponsors/budget";
 import { blockedMainSponsorIds } from "../sponsors/exclusivity";
 import { ensureSponsorOwners, getFavorsForTeam, type SponsorOwner } from "../sponsors/favor";
 import { DEFAULT_FAVOR } from "../sponsors/favor-math";
-import { BASE_WILLINGNESS, WILLINGNESS_CAP } from "../sponsors/negotiation";
+import { BASE_WILLINGNESS, WILLINGNESS_CAP, type NegotiationCategory } from "../sponsors/negotiation";
 import {
-  activeSeason, categoryContracts, closeNegotiation, loadNegotiationTeam, negotiationAvailability, openNegotiation, teamGameDate,
+  activeSeason, categoryContracts, loadNegotiationTeam, negotiationAvailability, openNegotiation, teamGameDate,
   type NegotiationSponsor, type NegotiationTeam,
 } from "../sponsors/negotiation-db";
-import { signNegotiation } from "../sponsors/signing";
 import { logDecision } from "./decision-log";
 import { callCoachModel } from "./llm";
 import {
-  MAIN_SPONSOR_SYSTEM_PROMPT, mainSponsorSchema, NO_SPONSOR_CHOICE, renderMainSponsorPrompt, validateMainSponsorChoice,
+  mainSponsorSchema, NO_SPONSOR_CHOICE, renderMainSponsorPrompt, sponsorChoiceSystemPrompt, validateMainSponsorChoice,
   type MainSponsorClubInfo, type MainSponsorContext, type MainSponsorDecision, type MainSponsorOption,
 } from "./main-sponsor-decision";
 import type { CoachMode } from "./mode";
 import type { AiCoachProfile } from "./profile";
+import { MAX_MODEL_TURNS, negotiateWithOwner, shadowFirstTurn, type TalksModelUse, type TalksResult } from "./sponsor-negotiation";
 
 const M = "ai-coach-main-sponsor";
 /** Kolik firem za jednu pondělní správu nejvýš osloví. */
@@ -50,6 +52,10 @@ const MAX_OPTIONS = 8;
 const MAX_AVAILABILITY_CHECKS = 16;
 /** Výběr firmy je krátké rozhodnutí: pondělní správa na model nemá čekat dlouho. */
 const MODEL_TIMEOUT_MS = 60_000;
+
+/** Druh záznamu v deníku a název schématu pro výběr firmy podle kategorie. */
+const CHOICE_KIND: Record<NegotiationCategory, string> = { main: "main_sponsor", stadium: "stadium_sponsor" };
+const CATEGORY_LABEL: Record<NegotiationCategory, string> = { main: "hlavní sponzor", stadium: "sponzor stadionu" };
 
 export interface MainSponsorResult {
   signed: boolean;
@@ -88,8 +94,8 @@ export function rankSponsorCandidates(candidates: SponsorCandidate[], profile: A
 }
 
 /**
- * V jakém pořadí ověřit, se kterými firmami jde jednat: nejdřív `firstId` (dosavadní hlavní
- * sponzor, prodloužení), pak střídavě z každého seznamu (pořadí pravidla, peníze, náklonnost)
+ * V jakém pořadí ověřit, se kterými firmami jde jednat: nejdřív `firstId` (dosavadní sponzor
+ * v kategorii, prodloužení), pak střídavě z každého seznamu (pořadí pravidla, peníze, náklonnost)
  * bez opakování. Model tak uvidí firmy z obou konců, ne jen to, co by vybralo pravidlo.
  */
 export function optionCheckOrder<T extends { id: number }>(lists: T[][], firstId: number | null): T[] {
@@ -125,8 +131,8 @@ async function decideWithModel(
 ): Promise<{ decision: MainSponsorDecision | null; trace: ModelTrace }> {
   const prompt = renderMainSponsorPrompt(ctx);
   const res = await callCoachModel(ai, {
-    system: MAIN_SPONSOR_SYSTEM_PROMPT, user: prompt, maxTokens: 300,
-    schema: { name: "main_sponsor", schema: mainSponsorSchema(ctx) }, model, timeoutMs: MODEL_TIMEOUT_MS,
+    system: sponsorChoiceSystemPrompt(ctx.category), user: prompt, maxTokens: 300,
+    schema: { name: CHOICE_KIND[ctx.category], schema: mainSponsorSchema(ctx) }, model, timeoutMs: MODEL_TIMEOUT_MS,
   });
   const trace: ModelTrace = {
     model: res.model, raw: res.raw, error: res.error ?? null, tokensIn: res.tokensIn ?? null, tokensOut: res.tokensOut ?? null,
@@ -143,50 +149,68 @@ interface Approach {
   signed: { sponsor: NegotiationSponsor; contractId: string; newTeamName: string | null } | null;
   /** Firmy, se kterými se jednalo (jednat šlo), v pořadí. */
   tried: string[];
+  /** Jak skončilo poslední jednání (null = žádné se neotevřelo). */
+  last: TalksResult["outcome"] | null;
 }
 
 /**
  * Osloví firmy v daném pořadí stejnou cestou jako člověk: kontrola, jestli jde jednat, otevření
- * jednání a podpis úvodní nabídky majitele. Nejvýš MAX_ATTEMPTS firem, se kterými jednat šlo.
+ * jednání a jednání tah po tahu. Nejvýš MAX_ATTEMPTS firem, se kterými jednat šlo. Další firma
+ * přijde na řadu, jen když jednání selže (podmínky nejde podepsat); když od něj odejde AI nebo
+ * majitel, tento týden už nikdo.
  */
 async function approachInOrder(
-  db: D1Database, team: NegotiationTeam, season: number, order: NegotiationSponsor[],
+  db: D1Database, team: NegotiationTeam, season: number, order: NegotiationSponsor[], category: NegotiationCategory,
+  profile: AiCoachProfile, use: TalksModelUse,
 ): Promise<Approach> {
   const tried: string[] = [];
+  let last: TalksResult["outcome"] | null = null;
   for (const sponsor of order) {
     if (tried.length >= MAX_ATTEMPTS) break;
-    const availability = await negotiationAvailability(db, team, sponsor, "main", season);
+    const availability = await negotiationAvailability(db, team, sponsor, category, season);
     if (!availability.canOpen) continue;
     tried.push(sponsor.name);
 
-    const opened = await openNegotiation(db, team.id, sponsor.id, "main");
+    const opened = await openNegotiation(db, team.id, sponsor.id, category);
     if (!opened.ok) {
       logger.info({ module: M, teamId: team.id }, `jednání s ${sponsor.name} nejde otevřít: ${opened.error}`);
       continue;
     }
-    const signed = await signNegotiation(db, team.id, opened.id);
-    if (signed.ok) {
-      logger.info({ module: M, teamId: team.id }, `hlavní sponzor ${sponsor.name} podepsán (smlouva ${signed.contractId})`);
-      return { signed: { sponsor, contractId: signed.contractId, newTeamName: signed.newTeamName }, tried };
+    const talks = await negotiateWithOwner(db, team.id, opened.id, profile, use);
+    last = talks.outcome;
+    if (talks.outcome === "signed" && talks.contractId) {
+      logger.info({ module: M, teamId: team.id }, `${CATEGORY_LABEL[category]} ${sponsor.name} podepsán (smlouva ${talks.contractId})`);
+      return { signed: { sponsor, contractId: talks.contractId, newTeamName: talks.newTeamName }, tried, last };
     }
-    // Úvodní nabídka nejde podepsat (např. sliby, které klub nesplní): jednání se zavře,
-    // ať nevisí, a zkusí se další firma.
-    await closeNegotiation(db, team.id, opened.id);
-    logger.info({ module: M, teamId: team.id }, `úvodní nabídka ${sponsor.name} nejde podepsat: ${signed.error}`);
+    logger.info({ module: M, teamId: team.id }, `${CATEGORY_LABEL[category]} ${sponsor.name}: bez dohody (${talks.outcome}: ${talks.detail})`);
+    if (talks.outcome !== "failed") break;
   }
-  return { signed: null, tried };
+  return { signed: null, tried, last };
 }
 
 export async function maybeSignMainSponsor(
   db: D1Database, teamId: string, profile: AiCoachProfile, opts: MainSponsorOpts = {},
+): Promise<MainSponsorResult> {
+  return maybeSignSponsor(db, teamId, profile, "main", opts);
+}
+
+/** Název stadionu: stejná cesta jako hlavní sponzor, jen bez exkluzivity a přejmenování klubu. */
+export async function maybeSignStadiumSponsor(
+  db: D1Database, teamId: string, profile: AiCoachProfile, opts: MainSponsorOpts = {},
+): Promise<MainSponsorResult> {
+  return maybeSignSponsor(db, teamId, profile, "stadium", opts);
+}
+
+async function maybeSignSponsor(
+  db: D1Database, teamId: string, profile: AiCoachProfile, category: NegotiationCategory, opts: MainSponsorOpts,
 ): Promise<MainSponsorResult> {
   const mode = opts.mode ?? "on";
   // Režim off: bez modelu, ale provede. Shadow a nanečisto: rozhodne (i modelem), nic neprovede.
   const logMode: CoachMode = opts.dryRun ? "shadow" : mode;
   const team = await loadNegotiationTeam(db, teamId);
   if (!team) return { signed: false, detail: "tým nenalezen" };
-  const contracts = await categoryContracts(db, teamId, "main");
-  if (contracts.active) return { signed: false, detail: `hlavní sponzor už je: ${contracts.active.sponsor_name}` };
+  const contracts = await categoryContracts(db, teamId, category);
+  if (contracts.active) return { signed: false, detail: `${CATEGORY_LABEL[category]} už je: ${contracts.active.sponsor_name}` };
 
   const rows = await db.prepare("SELECT id, name, type, district, monthly_max FROM district_sponsors WHERE district = ?")
     .bind(team.district).all<NegotiationSponsor>()
@@ -199,11 +223,14 @@ export async function maybeSignMainSponsor(
   const favors = await getFavorsForTeam(db, teamId);
   // Hlavní sponzor jiného klubu a přednostní jednání s jiným klubem jedním dotazem (stejné
   // pravidlo jako mainSponsorBlock); zbytek pravidel ověří negotiationAvailability níž.
-  const blocked = await blockedMainSponsorIds(db, team.district, teamId, season)
-    .catch((e) => {
-      logger.warn({ module: M, teamId }, "obsazené firmy okresu", e);
-      return new Set<number>();
-    });
+  // Název stadionu exkluzivní není (stadion se sdílet smí).
+  const blocked = category === "main"
+    ? await blockedMainSponsorIds(db, team.district, teamId, season)
+      .catch((e) => {
+        logger.warn({ module: M, teamId }, "obsazené firmy okresu", e);
+        return new Set<number>();
+      })
+    : new Set<number>();
   const pool = rows.results.filter((r) => !blocked.has(r.id));
   const byId = new Map(pool.map((r) => [r.id, r]));
   const sponsorsOf = (ids: number[]): NegotiationSponsor[] => ids.flatMap((id) => byId.get(id) ?? []);
@@ -216,7 +243,7 @@ export async function maybeSignMainSponsor(
   // Nabídka pro model: firmy, se kterými jde teď jednat, se stejným odhadem peněz jako na webu.
   const favorOf = (id: number) => favors.get(id) ?? DEFAULT_FAVOR;
   const budgetOf = (s: NegotiationSponsor) => sponsorBudgetB({
-    monthlyMax: s.monthly_max, reputation: team.reputation, villageSize: team.size, category: "main", favor: favorOf(s.id),
+    monthlyMax: s.monthly_max, reputation: team.reputation, villageSize: team.size, category, favor: favorOf(s.id),
   });
   const byMoney = [...pool].sort((a, b) => budgetOf(b) - budgetOf(a) || a.id - b.id);
   const byFavor = [...pool].sort((a, b) => favorOf(b.id) - favorOf(a.id) || budgetOf(b) - budgetOf(a) || a.id - b.id);
@@ -225,7 +252,7 @@ export async function maybeSignMainSponsor(
   for (const sponsor of optionCheckOrder([ranked, byMoney, byFavor], contracts.lastExpired?.sponsor_id ?? null)) {
     if (available.length >= MAX_OPTIONS || checks >= MAX_AVAILABILITY_CHECKS) break;
     checks++;
-    const availability = await negotiationAvailability(db, team, sponsor, "main", season);
+    const availability = await negotiationAvailability(db, team, sponsor, category, season);
     if (availability.canOpen) available.push({ sponsor, renewal: availability.isRenewal });
   }
   // Není z čeho vybírat: model se neptá, do deníku se nic nepíše.
@@ -250,7 +277,7 @@ export async function maybeSignMainSponsor(
     .sort((a, b) => b.monthlyHigh - a.monthlyHigh || a.sponsorId - b.sponsorId)
     .map((o, i) => ({ key: `F${i + 1}`, ...o }));
   const ctx: MainSponsorContext = {
-    teamName: team.name, profile, budget: team.budget, reputation: team.reputation,
+    category, teamName: team.name, profile, budget: team.budget, reputation: team.reputation,
     league: opts.club?.league ?? null, weeklyRunningCost: opts.club?.weeklyRunningCost ?? null, weeklyIncome: opts.club?.weeklyIncome ?? null,
     options,
   };
@@ -271,8 +298,9 @@ export async function maybeSignMainSponsor(
     ? ranked
     : pickedId == null ? [] : [...sponsorsOf([pickedId]), ...ranked.filter((s) => s.id !== pickedId)];
 
+  const contextRef = opts.contextRef ?? teamGameDate(team).slice(0, 10);
   const log = (executed: Record<string, unknown> | null) => logDecision(db, {
-    teamId, kind: "main_sponsor", mode: logMode, model: trace.model, contextRef: opts.contextRef ?? teamGameDate(team).slice(0, 10),
+    teamId, kind: CHOICE_KIND[category], mode: logMode, model: trace.model, contextRef,
     inputSummary: trace.prompt ?? `firmy: ${options.map((o) => `${o.key} ${o.name} (${o.monthlyLow}-${o.monthlyHigh})`).join(", ")}`,
     rawOutput: trace.raw,
     actions: {
@@ -283,23 +311,33 @@ export async function maybeSignMainSponsor(
     tokensIn: trace.tokensIn, tokensOut: trace.tokensOut, latencyMs: trace.latencyMs,
   });
 
+  // Tahy v jednání: model jen v režimu on/shadow s bindingem. Každé jednání má celý počet tahů:
+  // když podpis selže (firmu mezitím vzal jiný klub) a AI jde k další firmě, rozhoduje dál model,
+  // ne pravidlo (simulace 25. 10.: další firmu podepsalo pravidlo, protože model tahy vyčerpal).
+  const talksUse: TalksModelUse = { mode, ai: opts.ai, model: opts.model, turnsLeft: { n: MAX_MODEL_TURNS * MAX_ATTEMPTS } };
+
   if (logMode === "shadow") {
     await log(null);
-    return { signed: false, detail: `nanečisto: ${chosen?.name ?? "tento týden nikoho"}` };
+    // Nanečisto i první tah jednání s vybranou firmou nad úvodní nabídkou, jak by ji majitel dal.
+    const sponsor = chosen ? byId.get(chosen.sponsorId) ?? null : null;
+    const firstMove = sponsor && chosen
+      ? await shadowFirstTurn(db, { team, sponsor, category, season, renewal: chosen.renewal, profile, use: talksUse, contextRef })
+      : null;
+    return { signed: false, detail: `nanečisto: ${chosen?.name ?? "tento týden nikoho"}${firstMove ? `, první tah ${firstMove.move}` : ""}` };
   }
   if (order.length === 0) {
     await log({ signed: false, tried: [] });
     return { signed: false, detail: "tento týden nikoho" };
   }
 
-  const approach = await approachInOrder(db, team, season, order);
+  const approach = await approachInOrder(db, team, season, order, category, profile, talksUse);
   const signed = approach.signed;
   await log(signed
     ? {
       signed: true, sponsorId: signed.sponsor.id, sponsorName: signed.sponsor.name, contractId: signed.contractId,
       newTeamName: signed.newTeamName, asChosen: signed.sponsor.id === choice.sponsorId, tried: approach.tried,
     }
-    : { signed: false, tried: approach.tried });
+    : { signed: false, tried: approach.tried, ...(approach.last ? { talks: approach.last } : {}) });
   if (signed) {
     return { signed: true, detail: signed.newTeamName ? `${signed.sponsor.name}, nový název ${signed.newTeamName}` : signed.sponsor.name };
   }

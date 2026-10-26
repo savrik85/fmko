@@ -59,8 +59,11 @@ describe("receivesPlayerOffers", () => {
     expect(receivesPlayerOffers({ ...senior, team_type: "u21" })).toBe(false);
   });
 
-  it("AI tým a tým bez herního data nebo okresu ne", () => {
-    expect(receivesPlayerOffers({ ...senior, user_id: "ai" })).toBe(false);
+  it("AI klub nabídky dostává jako člověk (zadání 25. 10.), jen bez SMS", () => {
+    expect(receivesPlayerOffers({ ...senior, user_id: "ai" })).toBe(true);
+  });
+
+  it("tým bez herního data nebo okresu ne", () => {
     expect(receivesPlayerOffers({ ...senior, game_date: null })).toBe(false);
     expect(receivesPlayerOffers({ ...senior, village_district: null })).toBe(false);
   });
