@@ -558,7 +558,7 @@ interface FreeAgent {
 
 interface MarketListing {
   id: string; playerId: string; askingPrice: number; playerName: string; nationality?: string;
-  playerAge: number; position: string; overallRating: number; teamName: string;
+  playerAge: number; position: string; overallRating: number; teamName: string; teamIsAi?: boolean;
   /** Okres inzerátu lidského klubu z jiné soutěže (u soutěže téhož okresu její název). */
   origin?: string | null;
   expiresAt: string; avatar: Record<string, unknown>;
@@ -908,7 +908,7 @@ export default function TransfersPage() {
   interface SearchPlayer {
     id: string; firstName: string; lastName: string; nickname?: string;
     age: number; position: string; overallRating: number; weeklyWage: number;
-    squadNumber?: number; teamId: string; teamName: string; isOwnTeam: boolean;
+    squadNumber?: number; teamId: string; teamName: string; isOwnTeam: boolean; teamIsAi?: boolean;
     skills: Record<string, number>; physical: Record<string, unknown>; avatar: Record<string, unknown>;
   }
   const [searchPlayers, setSearchPlayers] = useState<SearchPlayer[]>([]);
@@ -1096,7 +1096,7 @@ export default function TransfersPage() {
       id: l.id, firstName, lastName: rest.join(" "), age: l.playerAge, position: l.position as BrowseRow["position"],
       rating: l.overallRating, skills: l.skills ?? {}, avatar,
       injury: l.injuryDays ? { type: null, daysRemaining: l.injuryDays } : null,
-      clubLabel: l.teamName, price: l.askingPrice,
+      clubLabel: l.teamName, clubIsAi: l.teamIsAi === true, price: l.askingPrice,
       tag: l.origin ? <OriginBadge origin={l.origin} /> : undefined,
       action: listingAction(l),
       onOpen: l.isAiListing ? () => openListingBid(l) : () => router.push(`/hrac/${l.playerId}`),
@@ -1106,7 +1106,7 @@ export default function TransfersPage() {
   const searchRows: BrowseRow[] = filteredSearch.slice(0, VYPIS_MAX).map((p) => ({
     id: p.id, firstName: p.firstName, lastName: p.lastName, nickname: p.nickname ?? null, age: p.age,
     position: p.position as BrowseRow["position"], rating: p.overallRating, skills: p.skills ?? {}, avatar: p.avatar,
-    club: { id: p.teamId, name: p.isOwnTeam ? `${p.teamName} (tvůj)` : p.teamName },
+    club: { id: p.teamId, name: p.isOwnTeam ? `${p.teamName} (tvůj)` : p.teamName }, clubIsAi: p.teamIsAi === true,
   }));
 
   // Podpis volného hráče: rozhoduje hráč, stejně jako dřív z karty.

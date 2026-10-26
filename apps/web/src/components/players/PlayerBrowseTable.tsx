@@ -17,6 +17,7 @@ import { useRouter } from "next/navigation";
 import { marketValue, marketValueEstimate } from "@okresni-masina/shared";
 import { PositionBadge } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
+import { TeamName } from "@/components/manager/team-name";
 
 type Position = "GK" | "DEF" | "MID" | "FWD";
 type SkillKey = "speed" | "technique" | "shooting" | "passing" | "heading" | "defense" | "goalkeeping";
@@ -43,6 +44,8 @@ export interface BrowseRow {
   onOpen?: () => void;
   /** Text místo klubu, když hráč žádný nemá (třeba „volný hráč"). */
   clubLabel?: string;
+  /** Klub vede AI trenér: u názvu klubu robot. */
+  clubIsAi?: boolean;
   /** Cena z inzerátu (sloupec `price`). */
   price?: number | null;
   /** Štítek za jménem (třeba okres hráče z jiné soutěže). */
@@ -237,8 +240,8 @@ export function PlayerBrowseTable({ rows, color, onColorText, ratingColor, colum
                 {columns.club && (
                   <td className="py-2 pr-2 whitespace-nowrap">
                     {r.club
-                      ? <Link href={`/tym/${r.club.id}`} onClick={(e) => e.stopPropagation()} className="hover:underline">{r.club.name}</Link>
-                      : <span className="text-muted">{r.clubLabel ?? "bez klubu"}</span>}
+                      ? <Link href={`/tym/${r.club.id}`} onClick={(e) => e.stopPropagation()} className="hover:underline"><TeamName name={r.club.name} isAi={r.clubIsAi === true} /></Link>
+                      : <span className="text-muted"><TeamName name={r.clubLabel ?? "bez klubu"} isAi={r.clubIsAi === true} /></span>}
                   </td>
                 )}
                 <td className="py-2 pr-2 text-center tabular-nums text-muted">{r.age}</td>
@@ -286,7 +289,7 @@ export function PlayerBrowseTable({ rows, color, onColorText, ratingColor, colum
                 </div>
                 {/* Klub na vlastním řádku celý: vedle věku se dlouhé jméno usekávalo. */}
                 {columns.club && (r.club || r.clubLabel) && (
-                  <div className="text-sm text-muted leading-snug break-words">{r.club?.name ?? r.clubLabel}</div>
+                  <div className="text-sm text-muted leading-snug break-words"><TeamName name={r.club?.name ?? r.clubLabel ?? ""} isAi={r.clubIsAi === true} /></div>
                 )}
                 {r.tag && <div className="mt-0.5">{r.tag}</div>}
               </div>

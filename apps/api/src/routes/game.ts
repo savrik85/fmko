@@ -4807,7 +4807,7 @@ gameRouter.get("/teams/:teamId/search-players", async (c) => {
         nationality: (r.nationality as string) ?? "CZ",
         age: r.age, position: r.position, overallRating: r.overall_rating, weeklyWage: r.weekly_wage,
         squadNumber: r.squad_number,
-        teamId: r.team_id, teamName: r.team_name, isOwnTeam: isOwn,
+        teamId: r.team_id, teamName: r.team_name, isOwnTeam: isOwn, teamIsAi: r.team_user_id === "ai",
         skills, physical,
         avatar: (() => { try { return JSON.parse(r.avatar as string); } catch (e) { logger.warn({ module: "game" }, "parse player avatar", e); return {}; } })(),
       };
@@ -5214,7 +5214,7 @@ gameRouter.get("/teams/:teamId/market", async (c) => {
       return {
         id: l.id, playerId: l.player_id, askingPrice: l.asking_price, isAiListing: false,
         playerName: `${l.first_name} ${l.last_name}`, nationality: (l.nationality as string) ?? "CZ", playerAge: l.age, position: l.position,
-        overallRating: l.overall_rating, teamName: l.team_name, expiresAt: l.expires_at,
+        overallRating: l.overall_rating, teamName: l.team_name, teamIsAi: l.team_user_id === "ai", expiresAt: l.expires_at,
         // Štítek „odkud“ jako u volných hráčů: okres, a jen u jiné soutěže téhož okresu
         // (III. třída proti přeboru) název soutěže.
         origin: l.league_id === team.league_id ? null

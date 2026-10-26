@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { BadgePreview, type BadgePattern } from "@/components/ui/badge-preview";
 import { CoachName } from "@/components/manager/coach-name";
+import { TeamName } from "@/components/manager/team-name";
 
 export interface TeamSummary {
   id: string;
@@ -89,7 +90,7 @@ export function TeamSide({
             initials={initials}
             size={32}
           />
-          <span className="font-heading font-bold text-sm group-hover:text-pitch-500 transition-colors truncate">{team.name}</span>
+          <span className="font-heading font-bold text-sm group-hover:text-pitch-500 transition-colors min-w-0"><TeamName name={team.name} isAi={manager?.coachIsAi === true} /></span>
         </Link>
         )}
         {team.is_virtual && team.city && (
