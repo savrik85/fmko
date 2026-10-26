@@ -26,10 +26,10 @@ Cherry-pick schválených commitů z větve `worktree-ai-clubs` ve worktree na `
 | c | `ai_club_takeover` → `on`, počkat na noční tick (nebo ručně) | převezme Autolakovku, Kebab, Kobylisy (k 25. 10.) |
 | d | `/api/admin/ai-clubs/level?leagueId=dbd9bd42-3c72-44af-b21b-215bc3ef7ec9&mode=league-humans&seed=…&dryRun=1` | Praha, tabulka před a po; `after.headroom` AI 8–14 (lidé 5–18), `after.manager` nahoru, naostro `managersRaised` 7 z 8 (v kopii z 25. 10. byla Ladronka už na cíli) |
 | e | totéž pro U21 Prahy `b483bf66-861e-4619-a600-b68d73445d22` | |
-| f | `/api/admin/ai-clubs/level?leagueId=9513dc13-4a13-487e-9547-4a1ec755dd6c&mode=newcomer&seed=…&dryRun=1` | ČB |
-| g | totéž pro U21 ČB `d1b45b99-6154-4334-a17f-bf853d594686` | |
+| f | `/api/admin/ai-clubs/level?leagueId=9513dc13-4a13-487e-9547-4a1ec755dd6c&mode=league-humans&refLeagueId=dbd9bd42-3c72-44af-b21b-215bc3ef7ec9&seed=…&dryRun=1` | ČB podle lidí z Prahy (uživatel 25. 10.: srovnat jako Praha). Silnější cíl dostane větší obec. Na kopii: Rapid ČB 65,3 … Záboří 50,6, Řeznictví 60,8 páté |
+| g | totéž pro U21 ČB `d1b45b99-6154-4334-a17f-bf853d594686` se vzorem U21 Prahy `refLeagueId=b483bf66-861e-4619-a600-b68d73445d22` | |
 | h | `/api/admin/ai-clubs/lower-league?district=Prachatice&seed=…&dryRun=1` | 14 obcí, 26 kol st/ne do 28. 1. |
-| i | `/api/admin/ai-clubs/open-district?district=České Budějovice&dryRun=1` | `preparing` → `ready`. **Předtím** odebrat z ligy testovací klub FK Řeznictví Černý (účet `tvuj@`, síla 60,8 proti AI 34–46): do ligy nepatří (rozhodnutí uživatele 25. 10.). Smazání dat na produ až po dvojím souhlasu |
+| i | `/api/admin/ai-clubs/open-district?district=České Budějovice&dryRun=1` | `preparing` → `ready`. Klub FK Řeznictví Černý (účet `tvuj@`, síla 60,8 proti AI 34–46) v lize **zůstává** (rozhodnutí uživatele 25. 10.), nic se nemaže |
 
 Pozn.: III. třída se musí založit včas. Rozpis začíná nejbližší středou nebo nedělí aspoň dva dny po
 založení a musí se vejít do posledního kola přeboru (28. 1. 2027); když se nevejde, doplní páteční kola.

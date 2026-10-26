@@ -1145,9 +1145,11 @@ export default function TransfersPage() {
     id: fa.id, firstName: fa.firstName, lastName: fa.lastName, nickname: fa.nickname ?? null, age: fa.age,
     position: fa.position as BrowseRow["position"], rating: fa.overallRating,
     skills: fa.skills as BrowseRow["skills"], avatar: fa.avatar,
-    clubLabel: `${formatCZK(fa.weeklyWage)}/týd${fa.distanceKm !== null ? ` · ${fa.distanceKm} km` : ""}`,
-    tag: (fa.origin || fa.isCelebrity) ? (
+    clubLabel: [fa.occupation, `${formatCZK(fa.weeklyWage)}/týd`, fa.distanceKm !== null ? `${fa.distanceKm} km` : null, fa.villageName]
+      .filter(Boolean).join(" · "),
+    tag: (fa.origin || fa.isCelebrity || fa.source === "released") ? (
       <span className="text-sm">
+        {fa.source === "released" && <span className="font-heading font-bold text-gold-600 mr-1.5">Propuštěn</span>}
         <OriginBadge origin={fa.origin} />
         {fa.isCelebrity && <span className="font-heading font-bold text-amber-700">⭐ {fa.personality?.celebrityType === "fallen_star" ? "Padlá hvězda" : fa.personality?.celebrityType === "glass_man" ? "Skleněný muž" : "Celebrita"}</span>}
       </span>
@@ -1558,7 +1560,7 @@ export default function TransfersPage() {
                 )}
               </div>
               {filteredSearch.length > 0 && (
-                <div className="card p-4 sm:p-5">
+                <div className="md:p-5 md:bg-[var(--color-surface)] md:rounded-[var(--radius-card)] md:shadow-[var(--shadow-card)]">
                   <PlayerBrowseTable rows={searchRows} color={clubColor} onColorText={clubColorText} ratingColor={clubRatingColor}
                     columns={{ club: true, value: false }} defaultSort="rating" />
                 </div>
@@ -1818,7 +1820,7 @@ export default function TransfersPage() {
               )}
             </div>
           ) : (
-            <div className="card p-4 sm:p-5">
+            <div className="md:p-5 md:bg-[var(--color-surface)] md:rounded-[var(--radius-card)] md:shadow-[var(--shadow-card)]">
               <PlayerBrowseTable rows={freeAgentRows} color={clubColor} onColorText={clubColorText} ratingColor={clubRatingColor}
                 columns={{ club: true, action: true, value: false }} defaultSort="rating" />
             </div>
@@ -1839,7 +1841,7 @@ export default function TransfersPage() {
             {listings.length === 0 ? (
               <div className="card p-6 text-center text-muted">Nikdo momentálně nenabízí hráče.</div>
             ) : (
-              <div className="card p-4 sm:p-5">
+              <div className="md:p-5 md:bg-[var(--color-surface)] md:rounded-[var(--radius-card)] md:shadow-[var(--shadow-card)]">
                 <PlayerBrowseTable rows={listingRows} color={clubColor} onColorText={clubColorText} ratingColor={clubRatingColor}
                   columns={{ club: true, price: true, action: true, value: false }} defaultSort="rating" />
               </div>

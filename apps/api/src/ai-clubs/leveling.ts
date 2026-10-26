@@ -253,6 +253,25 @@ export function stratifiedUnits(rng: Rng, n: number): number[] {
   return strata.map((s) => (s + rng.random()) / Math.max(1, n));
 }
 
+/**
+ * Jednotky jako `stratifiedUnits`, ale silnější díl dostane větší obec: kluby se seřadí podle
+ * počtu obyvatel (v logaritmu, s trochou losu, ať o pořadí podobně velkých obcí rozhodne náhoda)
+ * a nejvyšší pásmo připadne největší. Jinak by nejsilnější cíl mohl padnout na vesnici
+ * s 1 800 obyvateli a krajské město by dostalo slabší klub (ČB, 25. 10.).
+ */
+export function populationRankedUnits(rng: Rng, populations: readonly number[]): number[] {
+  const n = populations.length;
+  const order = populations
+    .map((pop, i) => ({ i, key: Math.log10(Math.max(1, pop)) + (rng.random() - 0.5) * POPULATION_JITTER }))
+    .sort((a, b) => a.key - b.key);
+  const units = new Array<number>(n);
+  order.forEach((o, rank) => { units[o.i] = (rank + rng.random()) / Math.max(1, n); });
+  return units;
+}
+
+/** Los v pořadí podle velikosti obce: ±0,15 v logaritmu, tedy zhruba ±40 % obyvatel. */
+const POPULATION_JITTER = 0.3;
+
 /** Stejný hash z textu jako `ensureStadiumRow`, `ensureAiManager` a další (semínko z id týmu). */
 function seedFromText(text: string): number {
   let seed = 0;
@@ -876,9 +895,13 @@ async function loadLeague(db: D1Database, leagueId: string): Promise<LeagueRow |
   ).bind(leagueId).first<LeagueRow>();
 }
 
-/** Ligy, jejichž aktivní lidské kluby tvoří vzor. */
-async function referenceLeagueIds(db: D1Database, league: LeagueRow, mode: LevelingMode): Promise<string[]> {
-  if (mode === "league-humans") return [league.id];
+/**
+ * Ligy, jejichž aktivní lidské kluby tvoří vzor. `referenceLeagueId` u režimu league-humans bere
+ * lidi z jiné ligy: v lize s jediným lidským klubem by všechny AI kluby vyšly stejně silné
+ * (ČB s Řeznictvím), se vzorem z Prahy dostanou stejný rozptyl jako lidé tam.
+ */
+async function referenceLeagueIds(db: D1Database, league: LeagueRow, mode: LevelingMode, referenceLeagueId?: string): Promise<string[]> {
+  if (mode === "league-humans") return [referenceLeagueId ?? league.id];
   if (mode === "newcomer") {
     const rows = await db.prepare(
       `SELECT id FROM leagues WHERE COALESCE(league_type, 'senior') = ? AND level = 'okresni_prebor'
@@ -1279,6 +1302,8 @@ export interface PlanLevelingOptions {
   teamIds?: string[];
   /** Od kdy se počítá 30 dní aktivity vzoru (testy). */
   now?: Date;
+  /** Režim league-humans: vzorem jsou lidé z této ligy místo narovnávané (viz referenceLeagueIds). */
+  referenceLeagueId?: string;
 }
 
 /** Tabulka před a po pro každý narovnávaný klub. Nic nezapisuje. */
@@ -1287,7 +1312,10 @@ export async function planLeveling(db: D1Database, opts: PlanLevelingOptions): P
   const league = await loadLeague(db, opts.leagueId);
   if (!league) throw new Error(`Liga ${opts.leagueId} neexistuje`);
 
-  const leagueIds = await referenceLeagueIds(db, league, opts.mode);
+  if (opts.referenceLeagueId && !(await loadLeague(db, opts.referenceLeagueId))) {
+    throw new Error(`Vzorová liga ${opts.referenceLeagueId} neexistuje`);
+  }
+  const leagueIds = await referenceLeagueIds(db, league, opts.mode, opts.referenceLeagueId);
   const ref = await loadReference(db, leagueIds, opts.now ?? new Date());
   const plan: LevelingPlan = {
     leagueId: league.id, mode: opts.mode, seed: opts.seed,
@@ -1324,7 +1352,7 @@ export async function planLeveling(db: D1Database, opts: PlanLevelingOptions): P
   }
 
   const clubs = await loadClubStates(db, teamIds);
-  const units = stratifiedUnits(createRng(opts.seed), clubs.length);
+  const units = populationRankedUnits(createRng(opts.seed), clubs.map((c) => c.villagePopulation));
   const names = await namesForDistricts(db, clubs.map((c) => c.villageDistrict));
   clubs.forEach((club, i) => {
     const newcomerTop11 = opts.mode === "newcomer"
