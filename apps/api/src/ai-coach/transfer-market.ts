@@ -482,7 +482,7 @@ function pickContext(
   return {
     teamName: club.name, profile: club.profile, budget: club.budget, reserve: club.reserve, spendable: club.spendable,
     squadSize: club.analysis.seniorOwnCount, targetSquad: TARGET_SENIOR_SQUAD, strength: club.analysis.top11Average,
-    need: { position: need.position, need: need.need, missing: need.missing, minRating: need.minRating, startersAverage: need.startersAverage },
+    need: { position: need.position, need: need.need, missing: need.missing, minRating: need.minRating, startersAverage: need.startersAverage, upgrade: need.upgrade },
     course: plan ? { stance: plan.stance, focus: plan.focus } : null,
     candidates: buyAttempts < MAX_OFFER_ATTEMPTS ? options.shortlist.filter((e) => !tried.has(e.option.key)).map((e) => e.option) : [],
     loans: options.loans.filter((l) => !tried.has(l.option.key)).map((l) => l.option),
@@ -663,7 +663,8 @@ async function buyForNeed(
   const focus = plan?.stance === "buy" ? plan.focus : [];
   const needs = [...club.analysis.needs]
     .sort((a, b) => (Number(focus.includes(b.position)) - Number(focus.includes(a.position))) || (b.need - a.need))
-    .filter((n) => n.need >= buyThreshold(n.position, plan));
+    // Zlepšení základu jde i s kurzem „držet“ nebo „prodávat“: koupit, nebo nic, rozhodne model.
+    .filter((n) => n.need >= (n.upgrade ? BUY_NEED : buyThreshold(n.position, plan)));
   const need = needs[0];
   if (!need) return;
 

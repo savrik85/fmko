@@ -54,7 +54,17 @@ export interface PositionNeed {
   minRating: number;
   /** Průměr základní sestavy na postu. */
   startersAverage: number;
+  /**
+   * Post je plný, ale nejslabší hráč základu jde vylepšit (uživatel 26. 10.: „ať kupujou i lepší
+   * hráče do základu“). Kupuje se jen hráč aspoň o UPGRADE_MIN_GAIN lepší.
+   */
+  upgrade?: boolean;
 }
+
+/** O kolik musí být posila lepší než nejslabší hráč základu na postu, aby se vyplatila. */
+export const UPGRADE_MIN_GAIN = 5;
+/** Potřeba na zlepšení základu: stejná jako běžný nákup (transfer-market BUY_NEED). */
+export const UPGRADE_NEED = 0.3;
 
 export interface SquadAnalysis {
   formation: Formation;
@@ -190,7 +200,18 @@ export function analyzeSquad(members: SquadMember[], profile: AiCoachProfile): S
     const startersAverage = average(list.slice(0, slots[p]).map((m) => m.rating));
     const gap = list.length === 0 ? 10 : top11Average - startersAverage;
     const need = Math.max(0, Math.min(1, missing * 0.35 + Math.max(0, gap - 2) * 0.06 + (list.length < slots[p] ? 0.3 : 0)));
-    if (need <= 0) continue;
+    if (need <= 0) {
+      // Plný post: posila do základu, když by byla lepší než jeho nejslabší hráč.
+      const starters = list.slice(0, slots[p]);
+      if (starters.length >= slots[p] && starters.length > 0) {
+        const weakest = Math.min(...starters.map((m) => m.rating));
+        needs.push({
+          position: p, need: UPGRADE_NEED, missing: 0, minRating: weakest + UPGRADE_MIN_GAIN,
+          startersAverage: Math.round(startersAverage * 10) / 10, upgrade: true,
+        });
+      }
+      continue;
+    }
     // Posila má být aspoň tak dobrá jako průměr základu na postu (u prázdného postu jako tým).
     const minRating = Math.round(list.length >= slots[p] ? Math.max(startersAverage, top11Average - 4) : Math.max(1, top11Average - 8));
     needs.push({ position: p, need, missing, minRating, startersAverage: Math.round(startersAverage * 10) / 10 });
