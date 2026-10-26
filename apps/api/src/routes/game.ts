@@ -7175,6 +7175,33 @@ gameRouter.post("/admin/backfill-departed-avatars", async (c) => {
   return c.json({ ok: true, updated: stmts.length });
 });
 
+// POST /api/admin/transfer-offers/reject-without-cooldown — prodávající klub nabídky normálně
+// odmítne (SMS, oznámení, dopad na hráče jako vždy), jen kupce nestihne lhůta na další nabídku.
+// Po opravě dat hráčů, na které už nabídky běžely. Body: { offerIds: string[], message?: string }.
+gameRouter.post("/admin/transfer-offers/reject-without-cooldown", async (c) => {
+  const body = await c.req.json<{ offerIds?: unknown; message?: unknown }>()
+    .catch((e) => { logger.warn({ module: "game.ts" }, "reject without cooldown body", e); return null; });
+  const offerIds = Array.isArray(body?.offerIds) ? body.offerIds.filter((x): x is string => typeof x === "string") : [];
+  if (offerIds.length === 0) return c.json({ error: "Chybí offerIds" }, 400);
+  const message = typeof body?.message === "string" && body.message.trim() ? body.message.trim() : null;
+  const { rejectTransferOffer } = await import("../services/transfer-actions");
+  const { resolveClubTeamId } = await import("../transfers/offer-club-scope");
+  const results: Array<{ offerId: string; ok: boolean; error?: string }> = [];
+  for (const offerId of offerIds) {
+    const offer = await c.env.DB.prepare("SELECT to_team_id FROM transfer_offers WHERE id = ?").bind(offerId)
+      .first<{ to_team_id: string }>()
+      .catch((e) => { logger.warn({ module: "game.ts", offerId }, "load offer for reject without cooldown", e); return null; });
+    const seller = offer ? await resolveClubTeamId(c.env.DB, offer.to_team_id) : null;
+    if (!seller) { results.push({ offerId, ok: false, error: "Nabídka nenalezena" }); continue; }
+    const r = await rejectTransferOffer(c.env, seller, offerId, { message });
+    if (!r.ok) { results.push({ offerId, ok: false, error: r.error }); continue; }
+    await c.env.DB.prepare("UPDATE transfer_offers SET cooldown_waived = 1 WHERE id = ?").bind(offerId).run()
+      .catch((e) => logger.error({ module: "game.ts", offerId }, "waive offer cooldown", e));
+    results.push({ offerId, ok: true });
+  }
+  return c.json({ results });
+});
+
 // POST /api/admin/cup/create — vytvoří pohár pro aktuální sezónu.
 gameRouter.post("/admin/cup/create", async (c) => {
   const { createCup } = await import("../cup/cup");

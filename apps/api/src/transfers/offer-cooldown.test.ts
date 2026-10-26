@@ -19,7 +19,8 @@ beforeAll(async () => {
     `CREATE TABLE transfer_offers (
       id TEXT PRIMARY KEY, player_id TEXT NOT NULL, from_team_id TEXT NOT NULL, to_team_id TEXT NOT NULL,
       offer_amount INTEGER NOT NULL DEFAULT 1000, status TEXT NOT NULL, last_action_by TEXT,
-      expires_at TEXT NOT NULL DEFAULT '2026-10-30T00:00:00Z', resolved_at TEXT)`,
+      expires_at TEXT NOT NULL DEFAULT '2026-10-30T00:00:00Z', resolved_at TEXT,
+      cooldown_waived INTEGER NOT NULL DEFAULT 0)`,
     `CREATE TABLE transfer_offer_events (
       id TEXT PRIMARY KEY, offer_id TEXT NOT NULL, team_id TEXT NOT NULL, event_type TEXT NOT NULL,
       amount INTEGER, message TEXT, created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')))`,
@@ -55,6 +56,13 @@ async function closedOffer(id: string, o: {
 }
 
 describe("offerRetryBlock — kdy smí kupec na stejného hráče nabídnout znovu", () => {
+  it("odmítnutí bez lhůty (cooldown_waived) neblokuje, obyčejné odmítnutí ano", async () => {
+    await closedOffer("w1", { status: "rejected", resolvedAt: "2026-10-23T09:00:00Z", lastActionBy: "seller" });
+    expect(await offerRetryBlock(db, "p1", "buyer", NOW)).not.toBeNull();
+    await db.prepare("UPDATE transfer_offers SET cooldown_waived = 1 WHERE id = 'w1'").run();
+    expect(await offerRetryBlock(db, "p1", "buyer", NOW)).toBeNull();
+  });
+
   it("kupec, který nabídku sám stáhl, může nabídnout hned", async () => {
     await closedOffer("o1", { status: "withdrawn", resolvedAt: "2026-10-23T09:00:00Z", withdrawnBy: "buyer" });
     expect(await offerRetryBlock(db, "p1", "buyer", NOW)).toBeNull();

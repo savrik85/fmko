@@ -5,7 +5,8 @@ import type { VillageInfo } from "../generators/player";
 import { overallRatingFromFlat } from "../skills/generator";
 import {
   findCapShare, findSkillShift, leveledFinance, measureNewcomerTop11, memberHeadroom, modestBudgetTarget, newClubBudget,
-  newPlayerPositions, populationRankedUnits, quantile, shiftMember, squadHeadroom, stratifiedUnits, topAverage, TOP11_TOLERANCE, type SquadMember,
+  lowerToRating, newPlayerPositions, populationRankedUnits, quantile, shiftMember, squadHeadroom, stratifiedUnits, topAverage,
+  TOP11_TOLERANCE, youthGroup, youthRatingCaps, type SquadMember,
 } from "./leveling";
 
 const village: VillageInfo = { region_code: "CZ031", category: "obec", population: 900, district: "Prachatice" };
@@ -199,7 +200,8 @@ describe("rezerva do stropu dovedností", () => {
   });
 
   it("díl stropu trefí cílovou rezervu kádru a rezervu jen ubírá", () => {
-    const members = squad(21);
+    // Dospělí: dorostencům se strop nezvedá vůbec, díl na ně nepůsobí.
+    const members = squad(21).map((m) => ({ ...m, age: Math.max(20, m.age) }));
     const shift = 12;
     const full = squadHeadroom(members.map((m) => ({ position: m.position, ...shiftMember(m, shift) })));
     const target = full / 2;
@@ -281,5 +283,65 @@ describe("pořadí síly podle velikosti obce", () => {
     expect(units[3]).toBeGreaterThan(units[0]);
     // Každé pásmo jednou (stejně jako stratifiedUnits).
     expect(units.map((u) => Math.floor(u * populations.length)).sort()).toEqual([0, 1, 2, 3, 4, 5]);
+  });
+});
+
+describe("dorostenci nevyjdou lepší než lidští vrstevníci", () => {
+  it("skupiny: dospělý žádná, hráč v poli rok po roce, brankář po pásmech", () => {
+    expect(youthGroup(20, "MID")).toBeNull();
+    expect(youthGroup(19, "GK")).toBe("gk-18-19");
+    expect(youthGroup(16, "GK")).toBe("gk-15-17");
+    expect(youthGroup(17, "DEF")).toBe("age-17");
+    expect(youthGroup(15, "FWD")).toBe("age-16");
+  });
+
+  it("strop podle percentilu: nejlepší dorostenec klubu dostane nejlepšího lidského, bez vzoru nic", () => {
+    const players = [
+      { id: "a", age: 16, position: "MID", rating: 55 },
+      { id: "b", age: 17, position: "DEF", rating: 45 },
+      { id: "c", age: 16, position: "FWD", rating: 30 },
+      { id: "gk", age: 16, position: "GK", rating: 50 },
+      { id: "adult", age: 25, position: "MID", rating: 60 },
+    ];
+    const caps = youthRatingCaps(players.map((p) => ({ ...p, age: p.id === "adult" ? 25 : 16 })), { "age-16": [20, 30, 40, 50] });
+    expect(caps.get("a")).toBe(50);
+    expect(caps.get("b")).toBe(35);
+    expect(caps.get("c")).toBe(20);
+    expect(caps.has("gk")).toBe(false);
+    expect(caps.has("adult")).toBe(false);
+  });
+
+  it("snížení: dovednosti i strop o stejný kus, hodnocení na cíl, zkušenost a chytání v poli beze změny", () => {
+    const [m] = squad(31).filter((p) => p.position === "MID");
+    const target = m.rating - 6;
+    const low = lowerToRating(m, target);
+    expect(low.rating).toBeLessThanOrEqual(target);
+    expect(low.rating).toBeGreaterThanOrEqual(target - 1);
+    expect(low.skills.goalkeeping).toBe(m.skills.goalkeeping);
+    expect(low.skills.experience).toBe(m.skills.experience);
+    for (const key of ["speed", "technique", "passing"]) {
+      const before = m.skillsMax[key] as { maxPotential: number };
+      const after = low.skillsMax[key] as { maxPotential: number };
+      const drop = (m.skills[key] as number) - (low.skills[key] as number);
+      expect(drop).toBeGreaterThan(0);
+      expect(after.maxPotential).toBe(Math.max(low.skills[key] as number, before.maxPotential - drop));
+    }
+    // Pod cílem se nesnižuje.
+    expect(lowerToRating(m, m.rating + 5).rating).toBe(m.rating);
+  });
+
+  it("posun kádru dorostence nad strop nezvedne a strop dovedností mu nepřidá", () => {
+    const members = squad(32).map((m, i) => (i < 4 ? { ...m, age: 17 } : { ...m, age: 26 }));
+    const caps = new Map(members.slice(0, 4).map((m) => [m.id, m.rating]));
+    const shift = findSkillShift(members, topAverage(members.map((m) => m.rating), 11) + 5, [], caps);
+    expect(shift).toBeGreaterThan(0);
+    const youth = members[0];
+    const shifted = shiftMember(youth, 10, 1);
+    for (const [key, e] of Object.entries(youth.skillsMax)) {
+      if (!e || typeof e !== "object") continue;
+      const before = (e as { maxPotential: number }).maxPotential;
+      const after = (shifted.skillsMax[key] as { maxPotential: number }).maxPotential;
+      expect(after).toBe(Math.max(before, typeof shifted.skills[key] === "number" ? shifted.skills[key] as number : before));
+    }
   });
 });

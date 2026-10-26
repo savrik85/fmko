@@ -23,6 +23,12 @@
  * z generátoru (20–25) rostl rychleji a za pár měsíců lidem utekl. Rezerva klubu proto míří
  * na rezervu lidských klubů podobné síly (opačný percentil). Strop nikdy neklesne pod původní.
  *
+ * Dorostenci (do 19 let) nesmí po narovnání vyjít lepší než lidští vrstevníci: hráč v poli
+ * se srovnává se stejně starými lidskými dorostenci celé hry (áčko i U21), brankáři po pásmech
+ * 15–17 a 18–19. AI dorostenec dostane nejvýš hodnocení lidského vrstevníka na stejném percentilu. Kdo je nad, tomu se dovednosti i strop sníží o stejný
+ * kus. Strop se dorostencům při posunu nezvedá. Plošný posun dřív dělal AI dorostence o 5–10
+ * bodů lepší než lidské (prod 10/2026, opraveno daty, záloha v backups/ai-youth-leveling-2026-10-26).
+ *
  * U21 tým se narovnává stejným voláním s id U21 ligy (vzorem jsou lidské U21 týmy).
  * U rezervy se zvedají jen hráči a sehranost: zázemí, rozpočet i reputaci nese áčko.
  *
@@ -82,6 +88,8 @@ const BATCH_SIZE = 80;
 const MAX_SKILL = 100;
 /** Strop zvednutý narovnáním nejvýš sem (vyšší strop, který hráč už měl, zůstává). */
 const MAX_POTENTIAL = 99;
+/** Do kolika let je hráč dorostenec, kterého hlídá strop podle lidských vrstevníků. */
+export const YOUTH_MAX_AGE = 19;
 const FAMILIARITY_FLOOR = 15;
 const STAFF_ATTRS = ["coaching", "medicine", "maintenance", "judgement", "communication", "work_rate", "charm"] as const;
 /** Vlastnosti trenéra, které se srovnají se vzorem. Reputaci trenéra dělají výsledky, licenci kurzy. */
@@ -194,6 +202,8 @@ export interface LevelingPlan {
     headroom: { min: number; median: number; max: number } | null;
     /** Věková skladba vzoru (věk → počet hráčů), z ní se losuje věk nových hráčů. */
     ageProfile: Record<string, number>;
+    /** Hodnocení lidských dorostenců vzoru po skupinách (`youthGroup`), seřazená. */
+    youthRatings?: Record<string, number[]>;
   };
   clubs: LevelingPlanClub[];
   warnings: string[];
@@ -236,6 +246,77 @@ export function topAverage(ratings: readonly number[], count: number): number {
   if (ratings.length === 0) return 0;
   const top = [...ratings].sort((a, b) => b - a).slice(0, count);
   return top.reduce((sum, r) => sum + r, 0) / top.length;
+}
+
+/** Skupina dorostence pro srovnání s lidskými vrstevníky; dospělý = null. */
+export function youthGroup(age: number, position: string): string | null {
+  if (age > YOUTH_MAX_AGE) return null;
+  // Brankářů je u lidí málo, proto pásma. Hráči v poli rok po roce, áčko i U21 dohromady.
+  if (position === "GK") return age <= 17 ? "gk-15-17" : "gk-18-19";
+  return `age-${Math.max(16, age)}`;
+}
+
+/**
+ * Nejvyšší hodnocení dorostenců klubu: v každé skupině percentil dorostence mezi vrstevníky
+ * v klubu → hodnocení lidí vzoru na stejném percentilu. Skupina bez lidského vzoru strop nemá.
+ */
+export function youthRatingCaps(
+  players: ReadonlyArray<{ id: string; age: number; position: string; rating: number }>,
+  reference: Readonly<Record<string, readonly number[]>>,
+): Map<string, number> {
+  const groups = new Map<string, Array<{ id: string; rating: number }>>();
+  for (const p of players) {
+    const g = youthGroup(p.age, p.position);
+    if (!g || !(reference[g]?.length)) continue;
+    (groups.get(g) ?? groups.set(g, []).get(g)!).push({ id: p.id, rating: p.rating });
+  }
+  const caps = new Map<string, number>();
+  for (const [g, list] of groups) {
+    const ref = [...reference[g]].sort((a, b) => a - b);
+    list.sort((a, b) => a.rating - b.rating || a.id.localeCompare(b.id));
+    list.forEach((p, i) => {
+      const q = list.length > 1 ? i / (list.length - 1) : 0.5;
+      caps.set(p.id, Math.round(quantile(ref, q)));
+    });
+  }
+  return caps;
+}
+
+/**
+ * Hráč snížený na `target`: všechny dovednosti (u hráče v poli bez chytání) o stejný kus,
+ * strop o tentýž kus, takže mu zůstane stejná rezerva k růstu. Zkušenost se nemění.
+ */
+export function lowerToRating(
+  p: { position: string; skills: Record<string, unknown>; physical: Record<string, unknown>; skillsMax: Record<string, unknown>; hiddenTalent: number; rating: number },
+  target: number,
+): ShiftedMember {
+  if (p.rating <= target) return { skills: p.skills, physical: p.physical, skillsMax: p.skillsMax, rating: p.rating };
+  const skip = new Set(p.position === "GK" ? ["experience"] : ["goalkeeping", "experience"]);
+  const at = (d: number): ShiftedMember => {
+    const skills: Record<string, unknown> = { ...p.skills };
+    const physical: Record<string, unknown> = { ...p.physical };
+    const skillsMax: Record<string, unknown> = { ...p.skillsMax };
+    for (const [key, value] of Object.entries(p.skills)) {
+      if (skip.has(key) || typeof value !== "number") continue;
+      const next = Math.max(1, Math.round(value - d));
+      skills[key] = next;
+      if (typeof physical[key] === "number") physical[key] = next;
+      const e = skillsMax[key] as { current?: unknown; maxPotential?: unknown } | undefined;
+      if (e && typeof e === "object" && typeof e.maxPotential === "number") {
+        skillsMax[key] = { ...e, current: next, maxPotential: Math.max(next, Math.round(e.maxPotential - (value - next))) };
+      }
+    }
+    const rating = overallRatingFromFlat(p.position, skills, physical, p.hiddenTalent, skillsMax) ?? p.rating;
+    return { skills, physical, skillsMax, rating };
+  };
+  let lo = 0;
+  let hi = MAX_SHIFT;
+  for (let i = 0; i < 30; i++) {
+    const mid = (lo + hi) / 2;
+    if (at(mid).rating > target) lo = mid;
+    else hi = mid;
+  }
+  return at(hi);
 }
 
 function round1(v: number): number {
@@ -428,7 +509,8 @@ export function shiftMember(m: SquadMember, shift: number, capShare = 1): Shifte
         increase = 0;
       }
       const oldCap = typeof e.maxPotential === "number" ? e.maxPotential : current;
-      const shiftedCap = increase > 0 ? Math.min(MAX_POTENTIAL, oldCap + Math.round(increase * capShare)) : oldCap;
+      const share = m.age <= YOUTH_MAX_AGE ? 0 : capShare;
+      const shiftedCap = increase > 0 ? Math.min(MAX_POTENTIAL, oldCap + Math.round(increase * share)) : oldCap;
       const cap = Math.max(oldCap, current, shiftedCap);
       skillsMax[key] = { ...e, current, maxPotential: cap };
       if (cap > oldCap) raisedFloors.set(key, Math.max(oldCap, current));
@@ -448,9 +530,14 @@ export function shiftMember(m: SquadMember, shift: number, capShare = 1): Shifte
  * Jeden posun dovedností pro celý kádr, aby průměr nejlepší jedenáctky trefil cíl
  * (±`TOP11_TOLERANCE`). Binární hledání, síla s posunem neklesá. Klub, který už na cíli
  * je, dostane 0 (narovnání nikdy nesnižuje). `fixedRatings` = noví hráči, ti se neposouvají.
+ * `ratingCaps` = strop hodnocení dorostenců (`youthRatingCaps`), nad něj je posun nezvedne.
  */
-export function findSkillShift(members: readonly SquadMember[], target: number, fixedRatings: readonly number[] = []): number {
-  const at = (shift: number) => topAverage([...members.map((m) => shiftMember(m, shift).rating), ...fixedRatings], 11);
+export function findSkillShift(
+  members: readonly SquadMember[], target: number, fixedRatings: readonly number[] = [],
+  ratingCaps: ReadonlyMap<string, number> = new Map(),
+): number {
+  const rated = (m: SquadMember, shift: number) => Math.min(shiftMember(m, shift).rating, ratingCaps.get(m.id) ?? Infinity);
+  const at = (shift: number) => topAverage([...members.map((m) => rated(m, shift)), ...fixedRatings], 11);
   if (members.length === 0 || at(0) >= target - TOP11_TOLERANCE) return 0;
   let lo = 0;
   let hi = MAX_SHIFT;
@@ -883,6 +970,8 @@ interface ReferenceStats {
   headroom: number[];
   /** Vlastnosti lidských trenérů áček vzoru. */
   manager: Record<string, number[]>;
+  /** Hodnocení lidských dorostenců vzoru po skupinách (`youthGroup`), seřazená. */
+  youthRatings: Record<string, number[]>;
 }
 
 function activeSince(now: Date): string {
@@ -937,7 +1026,7 @@ async function loadReference(db: D1Database, leagueIds: readonly string[], now: 
   const stats: ReferenceStats = {
     teams: states.length, top11: [], top18: [], squadSize: [], depthGap: 0, top18Gap: 0, ages: [],
     stadium: {}, pitchCondition: [], pitchType: [], equipment: {}, staffCount: [], staffSlots: [],
-    budget: [], reputation: [], familiarity: [[], []], headroom: [], manager: {},
+    budget: [], reputation: [], familiarity: [[], []], headroom: [], manager: {}, youthRatings: {},
   };
   const depthGaps: number[] = [];
   const top18Gaps: number[] = [];
@@ -985,6 +1074,18 @@ async function loadReference(db: D1Database, leagueIds: readonly string[], now: 
     }
   }
   stats.ages.sort((a, b) => a - b);
+  // Vzor dorostenců: všichni lidští dorostenci hry (áčka i U21). V jedné soutěži jich je málo
+  // a šestnáctiletí jsou skoro jen v U21, takže vzor z narovnávaných lig by nic neřekl.
+  const youthRows = await db.prepare(
+    `SELECT p.age, p.position, p.overall_rating FROM players p JOIN teams t ON t.id = p.team_id
+      WHERE t.user_id != 'ai' AND p.age <= ? AND (p.status IS NULL OR p.status = 'active')`,
+  ).bind(YOUTH_MAX_AGE).all<{ age: number; position: string; overall_rating: number }>()
+    .catch((e) => { logger.error({ module: M }, "vzor lidských dorostenců", e); return { results: [] as { age: number; position: string; overall_rating: number }[] }; });
+  for (const r of youthRows.results) {
+    const g = youthGroup(r.age, r.position);
+    if (g) (stats.youthRatings[g] ??= []).push(r.overall_rating);
+  }
+  for (const list of Object.values(stats.youthRatings)) list.sort((a, b) => a - b);
   stats.depthGap = depthGaps.length > 0 ? median(depthGaps) : 8;
   stats.top18Gap = top18Gaps.length > 0 ? median(top18Gaps) : 3;
   const slotOrder = (slot: string) => {
@@ -1148,7 +1249,10 @@ function playerSeed(seed: number, teamId: string): number {
 }
 
 /** Spočítá všechno, co narovnání klubu změní. Nic nezapisuje; stejné vstupy = stejný výsledek. */
-function computeClubChanges(club: ClubState, targets: LevelingTargets, seed: number, ages: readonly number[], names: NameData): ClubChanges {
+function computeClubChanges(
+  club: ClubState, targets: LevelingTargets, seed: number, ages: readonly number[], names: NameData,
+  youthReference: Readonly<Record<string, readonly number[]>> = {},
+): ClubChanges {
   const isU21 = club.teamType === "u21";
 
   // 1. Chybějící hráči do cílové velikosti kádru, jediným generátorem na úroveň hloubky kádru.
@@ -1172,17 +1276,42 @@ function computeClubChanges(club: ClubState, targets: LevelingTargets, seed: num
     return { position, created, wage: wageFor(created.rating, club.teamType) };
   });
 
+  // Dorostenci nesmí vyjít lepší než lidští vrstevníci: strop hodnocení podle percentilu.
+  const newIdOf = (i: number) => `new:${i}`;
+  const youthCaps = youthRatingCaps([
+    ...club.members.map((m) => ({ id: m.id, age: m.age, position: m.position, rating: m.rating })),
+    ...newPlayers.map((p, i) => ({ id: newIdOf(i), age: p.created.age, position: p.position, rating: p.created.rating })),
+  ], youthReference);
+  newPlayers.forEach((p, i) => {
+    const cap = youthCaps.get(newIdOf(i));
+    if (cap === undefined || p.created.rating <= cap) return;
+    const low = lowerToRating({ ...p.created, position: p.position }, cap);
+    p.created = {
+      ...p.created, rating: low.rating,
+      skills: low.skills as CreatedPlayer["skills"],
+      physical: low.physical as CreatedPlayer["physical"],
+      skillsMax: low.skillsMax as CreatedPlayer["skillsMax"],
+    };
+    p.wage = wageFor(low.rating, club.teamType);
+  });
+
   // 2. Jeden posun dovedností stávajících hráčů, aby nejlepší jedenáctka trefila cíl.
-  const shift = findSkillShift(club.members, targets.top11, newPlayers.map((p) => p.created.rating));
+  const shift = findSkillShift(club.members, targets.top11, newPlayers.map((p) => p.created.rating), youthCaps);
   const capShare = findCapShare(club.members, shift, targets.headroom);
   const raised: ClubChanges["raised"] = [];
   const ratingsAfter: number[] = newPlayers.map((p) => p.created.rating);
   const membersAfter: Array<Pick<SquadMember, "position" | "skills" | "skillsMax">> = [];
   for (const m of club.members) {
-    const shifted = shiftMember(m, shift, capShare);
+    let shifted = shiftMember(m, shift, capShare);
+    const cap = youthCaps.get(m.id);
+    const lowered = cap !== undefined && shifted.rating > cap;
+    if (lowered) shifted = lowerToRating({ ...m, ...shifted }, cap);
     ratingsAfter.push(shifted.rating);
     membersAfter.push({ position: m.position, skills: shifted.skills, skillsMax: shifted.skillsMax });
-    if (shift > 0) {
+    if (lowered) {
+      // Snížený dorostenec si nechá dosavadní mzdu, narovnání nikomu nebere peníze.
+      raised.push({ id: m.id, shifted, wage: club.meta.get(m.id)?.wage ?? wageFor(shifted.rating, club.teamType) });
+    } else if (shift > 0) {
       const oldWage = club.meta.get(m.id)?.wage ?? 0;
       raised.push({ id: m.id, shifted, wage: Math.max(oldWage, wageFor(shifted.rating, club.teamType)) });
     }
@@ -1328,6 +1457,7 @@ export async function planLeveling(db: D1Database, opts: PlanLevelingOptions): P
         ? { min: round1(Math.min(...ref.headroom)), median: round1(median(ref.headroom)), max: round1(Math.max(...ref.headroom)) }
         : null,
       ageProfile: ageProfileOf(ref.ages),
+      youthRatings: ref.youthRatings,
     },
     clubs: [],
     warnings,
@@ -1359,7 +1489,7 @@ export async function planLeveling(db: D1Database, opts: PlanLevelingOptions): P
       ? measureNewcomerTop11(club.villageSize, (opts.seed ^ seedFromText(`newcomer:${club.villageSize}`)) >>> 0, club.teamType)
       : null;
     const { percentile, targets } = targetsFor(ref, opts.mode, units[i], club, newcomerTop11);
-    const changes = computeClubChanges(club, targets, opts.seed, ref.ages, names.get(club.villageDistrict)!);
+    const changes = computeClubChanges(club, targets, opts.seed, ref.ages, names.get(club.villageDistrict)!, ref.youthRatings);
     plan.clubs.push({
       teamId: club.teamId, name: club.name, teamType: club.teamType, takenOver: club.takenOver,
       percentile, skillShift: changes.shift, capShare: changes.capShare, newPlayers: changes.newPlayers.length,
@@ -1432,7 +1562,7 @@ export async function applyLeveling(db: D1Database, plan: LevelingPlan): Promise
     const targets = targetsById.get(club.teamId);
     if (!targets) continue;
     const clubNames = names.get(club.villageDistrict)!;
-    const changes = computeClubChanges(club, targets, plan.seed, ages, clubNames);
+    const changes = computeClubChanges(club, targets, plan.seed, ages, clubNames, plan.reference.youthRatings ?? {});
     // Bydliště, přezdívky, popisy a zaměstnanci z vlastního semínka, ať neposunou losování hráčů.
     const extras = createRng((plan.seed ^ seedFromText(`extras:${club.teamId}`)) >>> 0);
     result.clubs++;
