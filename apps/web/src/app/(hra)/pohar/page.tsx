@@ -7,11 +7,12 @@ import { apiFetch } from "@/lib/api";
 import { Spinner, SectionLabel, PageHeader, Tabs, useTabParam } from "@/components/ui";
 import { FixtureGroup, FixtureRow, type FixtureCrest, type FixtureSide } from "@/components/match/fixture-row";
 import { RoundPager } from "@/components/match/round-pager";
+import { TeamName } from "@/components/manager/team-name";
 
 // Pořadí určuje i výchozí záložku — první je ta bez ?tab= v adrese.
 const TAB_KEYS = ["pavouk", "strelci"] as const;
 
-interface Side { name: string; color: string | null; isBig: boolean; teamId: string | null; strength: number; cupTeamId?: string; crest?: FixtureCrest | null }
+interface Side { name: string; color: string | null; isBig: boolean; isAi?: boolean; teamId: string | null; strength: number; cupTeamId?: string; crest?: FixtureCrest | null }
 interface BracketMatch {
   id?: string; scheduledAt?: string | null;
   bracketPos: number; home: Side | null; away: Side | null;
@@ -57,6 +58,7 @@ function fixtureSide(s: Side | null): FixtureSide {
     color: s.color,
     crest: s.crest ?? null,
     italic: s.isBig,
+    isAi: s.isAi === true,
   };
 }
 
@@ -256,7 +258,7 @@ export default function PoharPage() {
                     {byes.map((b, i) => (
                       <span key={b.cupTeamId ?? i}>
                         {i > 0 && ", "}
-                        {b.teamId ? <Link href={`/tym/${b.teamId}`} className="hover:underline">{b.name}</Link> : b.name}
+                        {b.teamId ? <Link href={`/tym/${b.teamId}`} className="hover:underline"><TeamName name={b.name} isAi={b.isAi === true} /></Link> : b.name}
                       </span>
                     ))}
                   </div>

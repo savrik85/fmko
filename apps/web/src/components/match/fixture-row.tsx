@@ -12,6 +12,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { BadgePreview, type BadgePattern } from "@/components/ui";
+import { TeamName } from "@/components/manager/team-name";
 
 export interface FixtureCrest {
   pattern: string | null;
@@ -29,6 +30,8 @@ export interface FixtureSide {
   crest?: FixtureCrest | null;
   /** Vygenerovaný klub bez týmu ve hře (pohárový velkoklub). */
   italic?: boolean;
+  /** Klub vede AI trenér: za jménem malý robot. */
+  isAi?: boolean;
 }
 
 export interface FixtureScore {
@@ -78,8 +81,8 @@ function Name({ side, state, align }: { side: FixtureSide; state: "win" | "loss"
   const tone = state === "win" ? "font-bold text-ink" : state === "loss" ? "font-medium text-ink/55" : "font-semibold text-ink";
   const cls = `min-w-0 truncate text-base leading-tight ${tone} ${side.italic ? "italic" : ""} ${align === "right" ? "sm:text-right" : ""}`;
   return side.href
-    ? <Link href={side.href} className={`${cls} hover:underline`}>{side.name}</Link>
-    : <span className={cls}>{side.name}</span>;
+    ? <Link href={side.href} className={`${cls} hover:underline`}><TeamName name={side.name} isAi={!!side.isAi} /></Link>
+    : <span className={cls}><TeamName name={side.name} isAi={!!side.isAi} /></span>;
 }
 
 /** Tabule: od sm vodorovně „2 : 1", na mobilu čísla pod sebou u svých týmů. */

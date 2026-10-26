@@ -6914,10 +6914,10 @@ gameRouter.get("/teams/:teamId/cup", async (c) => {
   const teamsRes = await c.env.DB.prepare(
     `SELECT ct.id, ct.team_id, ct.name, ct.strength, ct.is_big_club, ct.primary_color, ct.eliminated_round,
             t.badge_pattern, COALESCE(t.badge_primary_color, t.primary_color) AS badge_primary, COALESCE(t.badge_secondary_color, t.secondary_color) AS badge_secondary,
-            t.badge_initials, t.badge_symbol
+            t.badge_initials, t.badge_symbol, t.user_id
        FROM cup_teams ct LEFT JOIN teams t ON t.id = ct.team_id
       WHERE ct.cup_id = ?`
-  ).bind(cup.id).all<{ id: string; team_id: string | null; name: string; strength: number; is_big_club: number; primary_color: string | null; eliminated_round: number | null; badge_pattern: string | null; badge_primary: string | null; badge_secondary: string | null; badge_initials: string | null; badge_symbol: string | null }>()
+  ).bind(cup.id).all<{ id: string; team_id: string | null; name: string; strength: number; is_big_club: number; primary_color: string | null; eliminated_round: number | null; badge_pattern: string | null; badge_primary: string | null; badge_secondary: string | null; badge_initials: string | null; badge_symbol: string | null; user_id: string | null }>()
     .catch((e) => { logger.warn({ module: "game.ts" }, "load cup teams", e); return { results: [] as any[] }; });
   const tmap = new Map(teamsRes.results.map((t) => [t.id, t]));
   const ctOf = (id: string | null) => (id ? tmap.get(id) : null);
@@ -6927,7 +6927,7 @@ gameRouter.get("/teams/:teamId/cup", async (c) => {
     const crest = t.badge_pattern
       ? { pattern: t.badge_pattern, primary: t.badge_primary, secondary: t.badge_secondary, initials: t.badge_initials, symbol: t.badge_symbol }
       : null;
-    return { name: t.name, color: t.primary_color, isBig: !!t.is_big_club, teamId: t.team_id, strength: t.strength, cupTeamId: t.id, crest };
+    return { name: t.name, color: t.primary_color, isBig: !!t.is_big_club, isAi: t.user_id === "ai", teamId: t.team_id, strength: t.strength, cupTeamId: t.id, crest };
   };
 
   const matchesRes = await c.env.DB.prepare("SELECT id, round, bracket_pos, home_cup_team_id, away_cup_team_id, home_score, away_score, home_pens, away_pens, winner_cup_team_id, status, upset, scheduled_at FROM cup_matches WHERE cup_id = ? ORDER BY round, bracket_pos")
