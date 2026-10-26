@@ -403,6 +403,33 @@ export async function notifyPostMatchArticle(
   } catch (e) {
     logger.warn({ module: M }, "notifikace o vydaném pozápasovém článku", e);
   }
+  await notifyLeagueAboutArticle(db, teamId, headline);
+}
+
+/**
+ * Ostatním lidským klubům ligy SMS, že vyšel rozhovor s cizím trenérem (uživatel 26. 10.:
+ * „ať chodí SMS od Zpravodaje, když vyjde rozhovor s nějakým trenérem“). AI kluby SMS nečtou.
+ */
+async function notifyLeagueAboutArticle(db: D1Database, teamId: string, headline: string): Promise<void> {
+  const author = await db.prepare(
+    `SELECT t.name AS team_name, t.league_id, m.name AS coach_name
+       FROM teams t LEFT JOIN managers m ON m.team_id = t.id WHERE t.id = ?`,
+  ).bind(teamId).first<{ team_name: string; league_id: string | null; coach_name: string | null }>()
+    .catch((e) => { logger.warn({ module: M }, "autor rozhovoru pro SMS lize", e); return null; });
+  if (!author?.league_id) return;
+  const recipients = await db.prepare(
+    `SELECT id FROM teams
+      WHERE league_id = ? AND id != ? AND parent_team_id IS NULL
+        AND user_id IS NOT NULL AND user_id != 'ai'`,
+  ).bind(author.league_id, teamId).all<{ id: string }>()
+    .catch((e) => { logger.warn({ module: M }, "kluby ligy pro SMS o rozhovoru", e); return { results: [] as { id: string }[] }; });
+  const coach = author.coach_name ? `s trenérem ${author.coach_name} (${author.team_name})` : `z klubu ${author.team_name}`;
+  const body = `📰 Ve Zpravodaji vyšel rozhovor ${coach}: „${headline}"`;
+  const { sendSystemSMS } = await import("../messaging/system-sms");
+  for (const r of recipients.results) {
+    await sendSystemSMS(db, r.id, "Redakce Zpravodaje", body)
+      .catch((e) => logger.warn({ module: M, teamId: r.id }, "SMS o rozhovoru jiného trenéra", e));
+  }
 }
 
 // ── Článek a dopady ──────────────────────────────────────────────────────────
