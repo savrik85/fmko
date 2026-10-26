@@ -180,7 +180,7 @@ describe("rollover po fázích", () => {
     expect(await count(db, "SELECT COUNT(*) AS n FROM village_history WHERE event_type = 'election_held'")).toBe(elections);
   }, 300_000);
 
-  it("kurzy právě skončené sezóny zůstanou, hlídač kurzů z nich měří ještě tři týdny", async () => {
+  it("kurzy všech sezón zůstanou (historie kurzů pro hlídač a přeměření modelu)", async () => {
     const { db } = await freshWorld();
     for (const season of [0, 1]) {
       await db.prepare(
@@ -190,7 +190,7 @@ describe("rollover po fázích", () => {
     }
     await rolloverAllLeagues(db, 1);
     expect(await count(db, "SELECT COUNT(*) AS n FROM bet_odds WHERE season_number = 1")).toBe(1);
-    expect(await count(db, "SELECT COUNT(*) AS n FROM bet_odds WHERE season_number = 0")).toBe(0);
+    expect(await count(db, "SELECT COUNT(*) AS n FROM bet_odds WHERE season_number = 0")).toBe(1);
   }, 300_000);
 
   it("fáze, která se přerušila uprostřed a nesmí běžet dvakrát, se znovu nepustí a rollover jde dál", async () => {
