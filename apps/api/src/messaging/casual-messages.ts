@@ -158,7 +158,9 @@ async function spawnCasualForTeam(
     const kind = situations.get(player.id);
     player.zivotniSituace = kind ? { kind, label: nazevSituace(kind) } : undefined;
     const time = playerTimeContext(player, now);
-    if (time.situace === "spi") continue;
+    // Ručně vynucené téma z hospody (narozeniny trenéra v noci) píše i ten, kdo by jinak spal:
+    // sedí s partou v hospodě, o tom zpráva je.
+    if (time.situace === "spi" && !(forced?.atPub)) continue;
     const ambience = pickAmbience({
       drunk: false, situation: time.situace, drinksAt: time.kdePije, occupation: player.occupation,
       urban: team.urban ?? false, seed: player.id,
