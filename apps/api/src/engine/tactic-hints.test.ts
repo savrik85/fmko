@@ -73,7 +73,7 @@ describe("tipy k sestavě podle podmínek", () => {
     const s = tacticHints({ weather: "snow", ...zaklad, weatherResist: 0.45 });
     const varovani = (h: typeof bez) => h.filter((x) => x.tone === "warning").length;
     expect(varovani(s)).toBeLessThanOrEqual(varovani(bez));
-    expect(s.map((h) => h.label)).toContain("Zimní výbava zabírá");
+    expect(s.map((h) => h.label)).toContain("Výbava lavičky zabírá");
   });
 
   it("varování jdou první, info poslední", () => {
@@ -95,5 +95,16 @@ describe("tipy k sestavě podle podmínek", () => {
   it("chybějící údaje o hřišti tipy nerozbijí", () => {
     expect(() => tacticHints({ weather: "rain" })).not.toThrow();
     expect(tacticHints({ weather: "rain" }).length).toBeGreaterThan(0);
+  });
+  it("vítr ve 23 °C není vedro: tip o únavě říká vítr, výbava lavičky ne zimní", () => {
+    const labels = tacticHints({ weather: "wind", temperature: 23, weatherResist: 0.27 }).map((h) => h.label);
+    expect(labels).toContain("Vítr trochu ubere síly");
+    expect(labels).not.toContain("Vedro trochu ubere síly");
+    expect(labels).toContain("Výbava lavičky zabírá");
+  });
+
+  it("vedro jen za slunce od 25 °C", () => {
+    expect(tacticHints({ weather: "sunny", temperature: 28 }).map((h) => h.label)).toContain("Vedro trochu ubere síly");
+    expect(tacticHints({ weather: "sunny", temperature: 18 }).map((h) => h.label)).toContain("Počasí trochu ubere síly");
   });
 });

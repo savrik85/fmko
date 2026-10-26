@@ -3938,6 +3938,7 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
     pitchMoisture: pitchRow?.pitch_moisture ?? null,
     tactic: lineup?.tactic ?? null,
     weatherResist: winter ? (winter.winter_gear ?? 0) * ((winter.winter_gear_condition ?? 50) / 100) * 0.15 : 0,
+    temperature: forecast.temperature,
   });
 
   return c.json({

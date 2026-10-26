@@ -30,8 +30,22 @@ export interface TacticHintInput {
   pitchMoisture?: number | null;
   /** Zvolená taktika, pokud už je sestava uložená. */
   tactic?: string | null;
-  /** Zimní výbava lavičky 0–0,45 — tlumí postihy počasí. */
+  /** Výbava lavičky 0–0,45 — tlumí postihy počasí. */
   weatherResist?: number;
+  /** Teplota na zápas (°C), když je předpověď. */
+  temperature?: number | null;
+}
+
+/** Od kolika stupňů je slunečno „vedro“. */
+const HEAT_FROM_C = 25;
+
+/** Čím počasí ubírá síly: tip o únavě musí sedět na skutečné počasí (vítr ve 23 °C není vedro). */
+function drainCause(weather: Weather, temperature: number | null | undefined): string {
+  if (weather === "wind") return "Vítr";
+  if (weather === "rain") return "Déšť";
+  if (weather === "snow") return "Sníh";
+  if (weather === "sunny" && (temperature == null || temperature >= HEAT_FROM_C)) return "Vedro";
+  return "Počasí";
 }
 
 /** Vrací tipy seřazené: nejdřív varování, pak příležitosti, pak info. */
@@ -89,7 +103,7 @@ export function tacticHints(input: TacticHintInput): TacticHint[] {
   } else if (drain > 1.0) {
     hints.push({
       tone: "info",
-      label: "Vedro trochu ubere",
+      label: `${drainCause(input.weather, input.temperature)} trochu ubere síly`,
       detail: "Není to dramatické, ale v závěru to bude znát. Čerství střídající se hodí.",
     });
   }
@@ -124,11 +138,11 @@ export function tacticHints(input: TacticHintInput): TacticHint[] {
     });
   }
 
-  // ── Zimní výbava ──
+  // ── Výbava lavičky ──
   if (resist > 0 && (mods.techniqueMod < 1 || mods.conditionDrainMod > 1)) {
     hints.push({
       tone: "info",
-      label: "Zimní výbava zabírá",
+      label: "Výbava lavičky zabírá",
       detail: `Vybavení lavičky tlumí postihy počasí zhruba o ${Math.round(resist * 100)} %.`,
     });
   }
