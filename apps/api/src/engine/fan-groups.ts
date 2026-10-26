@@ -230,8 +230,9 @@ export function fanLeaderArchetypeLabel(key: string, gender?: string): string {
  * stejná konvence jako `SKALY` ve `stadium/stadium-generator.ts`.
  */
 export const FAN_SKALY = {
-  /** Šance, že skupina s agresivitou 100 a nulovým heatem něco provede na domácím zápase. */
-  BASE_RATE: 0.06,
+  /** Šance, že skupina s agresivitou 100 a nulovým heatem něco provede na domácím zápase.
+   *  0,06 dávalo výtržnost zhruba na každém 12. zápase (říjen 2026, 12 ze 147), uživatel chtěl víc. */
+  BASE_RATE: 0.12,
   /** Nad tuhle šanci se jedna skupina za jeden zápas nedostane — jinak by derby
    *  s naštvaným kotlem znamenalo výtržnost pokaždé a hráč by ztratil pocit, že to ovlivní. */
   MAX_RATE: 0.45,

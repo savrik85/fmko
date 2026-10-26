@@ -21,8 +21,9 @@ const M = "fan-groups";
 
 /** O kolik se nálada za herní den posune k cíli. Rychleji než loajalita, pomaleji než výsledek. */
 export const MOOD_DRIFT_PER_DAY = 4;
-/** Křivda vyprchává sama, ale pomalu — jinak by stačilo počkat týden a zapomene se všechno. */
-export const HEAT_DECAY_PER_DAY = 1;
+/** Křivda vyprchává sama, ale pomalu — jinak by stačilo počkat týden a zapomene se všechno.
+ *  Půl bodu za den (dřív 1): po prodeji opory nebo sérii proher se bouří déle. */
+export const HEAT_DECAY_PER_DAY = 0.5;
 
 /**
  * Kam nálada party směřuje.
