@@ -12,6 +12,7 @@ import { ForeignSquad } from "./ForeignSquad";
 import { TransferOverview } from "./TransferOverview";
 import { isLightColor, readableOnLight, bestTextOn } from "@/lib/team-color";
 import { CoachName } from "@/components/manager/coach-name";
+import { TeamName } from "@/components/manager/team-name";
 
 const POS_LABELS: Record<string, string> = { GK: "BRA", DEF: "OBR", MID: "ZÁL", FWD: "ÚTO" };
 const POS_ORDER: Record<string, number> = { GK: 0, DEF: 1, MID: 2, FWD: 3 };
@@ -198,7 +199,7 @@ export default function TeamPage() {
               initials={team.badge_initials || team.name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()}
               symbol={team.badge_symbol} size={56} />
             <div className="flex-1 min-w-0">
-              <h1 className={`font-heading font-extrabold ${txt} text-2xl leading-tight truncate`}>{team.name}</h1>
+              <h1 className={`font-heading font-extrabold ${txt} text-2xl leading-tight truncate`}><TeamName name={team.name} isAi={manager?.coachIsAi === true} /></h1>
               <div className={`${txtMuted} text-sm mt-0.5`}>
                 <span className={light ? "text-gray-700" : "text-white/80"}>{team.village_name}</span>
                 {" "}&middot; {team.district}
@@ -269,7 +270,7 @@ export default function TeamPage() {
                 initials={team.badge_initials || team.name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()}
                 symbol={team.badge_symbol} size={44} />
               <div className="flex-1 min-w-0">
-                <h1 className={`font-heading font-extrabold ${txt} text-xl leading-tight truncate`}>{team.name}</h1>
+                <h1 className={`font-heading font-extrabold ${txt} text-xl leading-tight truncate`}><TeamName name={team.name} isAi={manager?.coachIsAi === true} /></h1>
                 <div className={`${txtMuted} text-sm`}>
                   <span className={light ? "text-gray-700" : "text-white/80"}>{team.village_name}</span>
                   {" "}&middot; {team.district}

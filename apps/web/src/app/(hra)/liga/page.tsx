@@ -10,6 +10,7 @@ import type { BadgePattern } from "@/components/ui";
 import { PreseasonNotice } from "@/components/team/preseason-notice";
 import { LeagueStatsTab, type StatsData } from "@/components/league/league-stats";
 import { CoachName } from "@/components/manager/coach-name";
+import { TeamName } from "@/components/manager/team-name";
 
 // ═══ Types ═══
 
@@ -562,10 +563,10 @@ function StandingsTab({ standings, teamId, movement }: { standings: Standing[]; 
                   {/* AI klub je odkaz jako každý jiný klub, rozdíl je jen štítek u trenéra. */}
                   {row.teamId ? (
                     <Link href={`/tym/${row.teamId}`} className={`font-heading font-bold hover:text-pitch-500 transition-colors ${row.isPlayer ? "text-pitch-600" : ""}`}>
-                      {row.team}
+                      <TeamName name={row.team} isAi={row.isAi === true} />
                     </Link>
                   ) : (
-                    <span className="font-heading font-bold">{row.team}</span>
+                    <span className="font-heading font-bold"><TeamName name={row.team} isAi={row.isAi === true} /></span>
                   )}
                 </td>
                 {/* Stats — hidden on mobile */}

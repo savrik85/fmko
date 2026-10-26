@@ -14,6 +14,8 @@ export interface TransferSearchPlayerRow {
   nationality: string | null;
   team_id: string;
   team_name: string;
+  /** Vlastník klubu (u U21 vlastník áčka), "ai" = AI klub. */
+  team_user_id: string | null;
 }
 
 export interface TransferSearchContext {
@@ -52,7 +54,8 @@ export async function findTransferSearchPlayerRows(
   const rows = await db.prepare(
     `SELECT p.id, p.first_name, p.last_name, p.nickname, p.age, p.position, p.overall_rating, p.weekly_wage,
      p.skills, p.physical, p.avatar, p.squad_number, p.nationality,
-     t.id as team_id, t.name as team_name
+     t.id as team_id, t.name as team_name,
+     COALESCE((SELECT pt.user_id FROM teams pt WHERE pt.id = t.parent_team_id), t.user_id) as team_user_id
      FROM players p JOIN teams t ON p.team_id = t.id
      WHERE t.league_id IN (
        SELECT id FROM leagues
