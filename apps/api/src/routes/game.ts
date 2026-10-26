@@ -6971,6 +6971,12 @@ gameRouter.get("/teams/:teamId/cup", async (c) => {
   }
   const rounds = [...roundsMap.entries()].sort(([a], [b]) => a - b).map(([round, matches]) => ({ round, roundName: roundName(round, cup.total_rounds), matches }));
   const winner = cup.winner_team_id ? side(cup.winner_team_id) : null;
+  // Volný los: tým, který v 1. kole nehraje a do poháru vstoupí až ve 2. kole.
+  const firstRoundIds = new Set(matchesRes.results.filter((m) => m.round === 1)
+    .flatMap((m) => [m.home_cup_team_id, m.away_cup_team_id]).filter((x): x is string => !!x));
+  const byeTeams = firstRoundIds.size > 0
+    ? teamsRes.results.filter((t) => !firstRoundIds.has(t.id)).sort((a, b) => b.strength - a.strength)
+    : [];
 
   // Pohárové statistiky — střelci/asistence/karty z match_player_stats (reální hráči i velkokluby).
   const statsRes = await c.env.DB.prepare(
@@ -6993,8 +6999,9 @@ gameRouter.get("/teams/:teamId/cup", async (c) => {
   }));
 
   return c.json({
-    cup: { name: cup.name, seasonNumber: cup.season_number, status: cup.status, totalRounds: cup.total_rounds, currentRound: cup.current_round, winner },
-    myTeam: myCt ? { name: myCt.name, eliminatedRound: myCt.eliminated_round, alive: myCt.eliminated_round == null && cup.status === "active", isChampion: cup.winner_team_id === myCt.id } : null,
+    cup: { name: cup.name, seasonNumber: cup.season_number, status: cup.status, totalRounds: cup.total_rounds, currentRound: cup.current_round, winner, teamCount: teamsRes.results.length },
+    myTeam: myCt ? { name: myCt.name, eliminatedRound: myCt.eliminated_round, alive: myCt.eliminated_round == null && cup.status === "active", isChampion: cup.winner_team_id === myCt.id, hasBye: byeTeams.some((t) => t.id === myCt.id) } : null,
+    byes: byeTeams.map((t) => side(t.id)),
     myMatches,
     rounds,
     prizes: cupPrizeTable(cup.total_rounds),

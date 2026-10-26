@@ -178,17 +178,17 @@ describe("popisky", () => {
 
   // roundName potřebuje celkový počet kol soutěže (proposal.ts:204), tady jako volitelný
   // parametr cupTotalRounds. Testováno na kolech 2, 3 a total−2 s total 7 (DEFAULT_CUP_ROUNDS),
-  // aby to pokrylo předkolo, obyčejné číslované kolo i pojmenované kolo (čtvrtfinále).
+  // aby to pokrylo obyčejná číslovaná kola i pojmenované kolo (čtvrtfinále).
   it("pohárové kolo: stejné pojmenování jako při podpisu (roundName)", () => {
-    expect(promiseLabel("cup_round", { round: 2 }, 7)).toBe("v poháru aspoň 2. předkolo");
-    expect(promiseLabel("cup_round", { round: 3 }, 7)).toBe("v poháru aspoň 1. kolo");
+    expect(promiseLabel("cup_round", { round: 2 }, 7)).toBe("v poháru aspoň 2. kolo");
+    expect(promiseLabel("cup_round", { round: 3 }, 7)).toBe("v poháru aspoň 3. kolo");
     expect(promiseLabel("cup_round", { round: 5 }, 7)).toBe("v poháru aspoň čtvrtfinále");
     // Bez třetího argumentu použije výchozí DEFAULT_CUP_ROUNDS, což je 7.
     expect(promiseLabel("cup_round", { round: 5 })).toBe("v poháru aspoň čtvrtfinále");
 
     expect(promiseActualText("cup_round", 0, 7)).toBe("klub v poháru nehrál");
-    expect(promiseActualText("cup_round", 2, 7)).toBe("2. předkolo");
-    expect(promiseActualText("cup_round", 3, 7)).toBe("1. kolo");
+    expect(promiseActualText("cup_round", 2, 7)).toBe("2. kolo");
+    expect(promiseActualText("cup_round", 3, 7)).toBe("3. kolo");
     expect(promiseActualText("cup_round", 5, 7)).toBe("čtvrtfinále");
   });
 

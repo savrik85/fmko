@@ -1,5 +1,7 @@
 /**
- * Celorepublikový amatérský pohár — KO soutěž napříč všemi ligami + generované velkokluby.
+ * Celorepublikový amatérský pohár — KO soutěž všech skutečných seniorských týmů napříč ligami.
+ * Do sezóny 3 se pole doplňovalo vymyšlenými velkokluby a slabými předkolovými týmy; jejich
+ * kádry (cup_club_players) a silová simulace tu zůstávají kvůli starším ročníkům.
  * Silová simulace (bez sestav) s šancí na překvapení (giant-killing).
  */
 
@@ -14,7 +16,6 @@ import { matchInjuryDays } from "../injuries/injury-generator";
 /** Odměna za VÝHRU kola podle hloubky (od finále). Platí pro libovolný počet kol. */
 const CUP_PRIZE_BY_DEPTH = [240000, 120000, 72000, 42000, 24000, 15000, 9000];
 export function cupPrize(round: number, totalRounds: number): number {
-  if (round <= 2) return 2000; // předkolo proti slabým amatérům — jen symbolická odměna
   return CUP_PRIZE_BY_DEPTH[Math.min(Math.max(0, totalRounds - round), CUP_PRIZE_BY_DEPTH.length - 1)];
 }
 /** Reputace za výhru kola (trenér + tým). Pohár je prestižnější než liga —
@@ -64,32 +65,16 @@ const M = "cup";
 const CUP_NAME = "Český amatérský pohár";
 const HOME_ADV = 3;
 
-const BIG_CLUB_PREFIX = ["FC", "Sparta", "Slávia", "Viktoria", "Baník", "Tatran", "Sokol", "Union", "Dynamo", "Slovan", "Spartak", "Lokomotiva", "Jiskra", "Real", "Inter", "Dukla", "Slavoj", "AC", "FK", "SK"];
-// Reálná česká města seřazená dle velikosti (největší první) — velkokluby jsou z měst,
-// síla klubu roste s velikostí města (Praha nejsilnější, menší města slabší).
-const BIG_CITIES = [
-  "Praha", "Brno", "Ostrava", "Plzeň", "Liberec", "Olomouc", "České Budějovice", "Hradec Králové",
-  "Ústí nad Labem", "Pardubice", "Zlín", "Havířov", "Kladno", "Most", "Opava", "Frýdek-Místek",
-  "Karviná", "Jihlava", "Teplice", "Děčín", "Karlovy Vary", "Jablonec nad Nisou", "Mladá Boleslav", "Prostějov",
-  "Přerov", "Chomutov", "Třebíč", "Třinec", "Tábor", "Znojmo", "Příbram", "Kolín",
-  "Cheb", "Trutnov", "Písek", "Kroměříž", "Šumperk", "Vsetín", "Uherské Hradiště", "Břeclav",
-  "Hodonín", "Český Těšín", "Litoměřice", "Havlíčkův Brod", "Nový Jičín", "Krnov", "Sokolov", "Vyškov",
-  "Náchod", "Bohumín", "Klatovy", "Žďár nad Sázavou", "Jindřichův Hradec", "Kutná Hora", "Blansko", "Strakonice",
-  "Rakovník", "Benešov", "Jičín", "Chrudim", "Beroun", "Mělník", "Valašské Meziříčí", "Kopřivnice",
-];
-
 function nextPow2(n: number): number { let p = 1; while (p < n) p <<= 1; return p; }
 
-/** Název kola. Kola 1-2 = předkola (slabé týmy), hlavní pavouk od kola 3 (číslován od 1). */
+/** Název kola: od konce finále, semifinále, čtvrtfinále, osmifinále, dřív „N. kolo“. */
 export function roundName(round: number, totalRounds: number): string {
-  if (round === 1) return "1. předkolo";
-  if (round === 2) return "2. předkolo";
   const fromEnd = totalRounds - round;
   if (fromEnd === 0) return "Finále";
   if (fromEnd === 1) return "Semifinále";
   if (fromEnd === 2) return "Čtvrtfinále";
   if (fromEnd === 3) return "Osmifinále";
-  return `${round - 2}. kolo`;
+  return `${round}. kolo`;
 }
 
 function samplePoisson(lambda: number, rng: Rng): number {
@@ -125,7 +110,34 @@ function simMatch(sH: number, sA: number, rng: Rng): { hg: number; ag: number; h
 
 interface CupTeamRow { id: string; team_id: string | null; name: string; strength: number; is_big_club: number; primary_color: string | null }
 
-/** Vytvoří pohár pro danou sezónu: los všech senior týmů + doplnění velkokluby na mocninu 2. */
+/**
+ * Rozvržení pavouka jen ze skutečných týmů: pavouk na nejbližší mocninu dvou, chybějící místa
+ * jsou volné losy do 2. kola. 56 týmů → pavouk 64, 6 kol, 8 volných losů, v 1. kole 24 zápasů.
+ */
+export function cupBracketPlan(teamCount: number): { rounds: number; byes: number } {
+  if (teamCount < 2) return { rounds: 0, byes: 0 };
+  const size = nextPow2(teamCount);
+  return { rounds: Math.round(Math.log2(size)), byes: size - teamCount };
+}
+
+/**
+ * Pořadí 2. kola, když v 1. kole byly volné losy: každý tým s volným losem dostane jednoho
+ * vítěze 1. kola (vítěz hraje doma, jako menší klub proti nasazenému), zbylí vítězové hrají
+ * spolu v pořadí pavouka. Vrací id po dvojicích: [domácí, hosté, domácí, hosté, …].
+ */
+export function secondRoundOrder(winnersByPos: string[], byeTeamIds: string[]): string[] {
+  const order: string[] = [];
+  const paired = Math.min(byeTeamIds.length, winnersByPos.length);
+  for (let i = 0; i < paired; i++) order.push(winnersByPos[i], byeTeamIds[i]);
+  for (let i = paired; i < winnersByPos.length; i++) order.push(winnersByPos[i]);
+  for (let i = paired; i < byeTeamIds.length; i++) order.push(byeTeamIds[i]);
+  return order;
+}
+
+/**
+ * Vytvoří pohár pro danou sezónu jen ze skutečných seniorských týmů (lidé i AI kluby).
+ * Do mocniny dvou se nedoplňuje vymyšlenými kluby: nejsilnější týmy dostanou volný los do 2. kola.
+ */
 export async function createCup(db: D1Database, seasonNumber: number): Promise<{ created: boolean; cupId?: string; teams?: number; rounds?: number }> {
   const existing = await db.prepare("SELECT id FROM cup_competitions WHERE season_number = ? LIMIT 1").bind(seasonNumber).first<{ id: string }>()
     .catch((e) => { logger.warn({ module: M }, "guard cup", e); return null; });
@@ -139,66 +151,19 @@ export async function createCup(db: D1Database, seasonNumber: number): Promise<{
   if (real.length < 2) return { created: false };
 
   const rng = createRng((seasonNumber * 2654435761) >>> 0);
-  const seedBracket = nextPow2(real.length);            // hlavní pavouk (od 3. kola): reálné týmy + velkokluby
-  const PRELIM_ROUNDS = 2;                                // 2 předkola se slabými týmy → lidé mají velkou šanci odehrát aspoň 2 kola
-  const totalRounds = Math.round(Math.log2(seedBracket)) + PRELIM_ROUNDS;
+  const { rounds: totalRounds, byes } = cupBracketPlan(real.length);
   const cupId = crypto.randomUUID();
   const roundDates = await cupRoundDates(db, seasonNumber, totalRounds);
 
-  // Účastníci hlavního pavouku (od 3. kola): reálné týmy + velkokluby (doplnění na mocninu 2).
-  const participants: CupTeamRow[] = real.map((t) => ({
+  const allTeams: CupTeamRow[] = real.map((t) => ({
     id: crypto.randomUUID(), team_id: t.id, name: t.name, strength: t.strength, is_big_club: 0, primary_color: t.primary_color,
   }));
-  const usedNames = new Set<string>();
-  const bigCount = seedBracket - participants.length;
-  for (let i = 0; i < bigCount; i++) {
-    const rank = i % BIG_CITIES.length;           // pořadí města dle velikosti (0 = největší)
-    const city = BIG_CITIES[rank];
-    let nm = `${BIG_CLUB_PREFIX[Math.floor(rng.random() * BIG_CLUB_PREFIX.length)]} ${city}`;
-    let g = 0;
-    while (usedNames.has(nm) && g++ < 30) nm = `${BIG_CLUB_PREFIX[Math.floor(rng.random() * BIG_CLUB_PREFIX.length)]} ${city}`;
-    usedNames.add(nm);
-    // Síla ~ velikost města: největší ~68, nejmenší z listu ~44 (+ malý rozptyl).
-    const base = Math.round(68 - (rank / (BIG_CITIES.length - 1)) * 24);
-    const strength = Math.max(42, Math.min(70, base + Math.floor(rng.random() * 5) - 2));
-    participants.push({ id: crypto.randomUUID(), team_id: null, name: nm, strength, is_big_club: 1, primary_color: null });
-  }
-
-  // Los hlavního pavouku (3. kolo): real-vs-real + big-vs-big seskupené, real týmy zůstanou spolu.
-  // Nasazení je neutrální: lidské a AI kluby se losují dohromady (dřív šli lidé první, aby lichý
-  // zbytek proti velkoklubu byl vždy AI). Platí od poháru, který se losuje po rolloveru.
   const shuf = <T,>(arr: T[]): T[] => { for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(rng.random() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; } return arr; };
-  const bigs = shuf(participants.filter((p) => p.is_big_club === 1));
-  const orderedReal = shuf(participants.filter((p) => p.is_big_club === 0));
-
-  const order: CupTeamRow[] = [];
-  const realPairs = Math.floor(orderedReal.length / 2);
-  for (let i = 0; i < realPairs * 2; i++) order.push(orderedReal[i]);
-  const bigPairs = Math.floor(bigs.length / 2);
-  for (let i = 0; i < bigPairs * 2; i++) order.push(bigs[i]);
-  if (orderedReal.length % 2 === 1) order.push(orderedReal[orderedReal.length - 1]);
-  if (bigs.length % 2 === 1) order.push(bigs[bigs.length - 1]);
-
-  // 2 PŘEDKOLA: každý seed dostane 3 vyloženě slabé amatérské týmy (síla ~8-18, bez kádru → rychlý
-  // silový výsledek). Sub-pavouk [seed, slabý, slabý, slabý] → seed hraje 2 kola proti slabým a
-  // skoro jistě postoupí do 3. kola (hlavní pavouk). Reální hráči tak mají velkou šanci odehrát ≥2 kola.
-  const WEAK_A = ["TJ", "SK", "FC", "Sokol", "Slavoj", "Tatran", "Jiskra", "Baník"];
-  const WEAK_B = ["Dolní Lhota", "Horní Ves", "Kozojedy", "Trnávka", "Zadní Chlum", "Kravaře", "Suchdol", "Blaťany", "Ořechov", "Bahňany", "Vlčí Důl", "Mokrá", "Podhájí", "Křemže", "Zálesí", "Nová Ves"];
-  const weakTeams: CupTeamRow[] = [];
-  for (let i = 0; i < order.length * 3; i++) {
-    let nm = `${WEAK_A[Math.floor(rng.random() * WEAK_A.length)]} ${WEAK_B[Math.floor(rng.random() * WEAK_B.length)]}`;
-    let g = 0;
-    while (usedNames.has(nm) && g++ < 60) nm = `${WEAK_A[Math.floor(rng.random() * WEAK_A.length)]} ${WEAK_B[Math.floor(rng.random() * WEAK_B.length)]} ${String.fromCharCode(66 + (g % 8))}`;
-    usedNames.add(nm);
-    // Vyloženě slabí amatéři (síla 4-10) — velký odstup i od nejslabšího lidského týmu, ať lidé skoro jistě projdou.
-    weakTeams.push({ id: crypto.randomUUID(), team_id: null, name: nm, strength: 4 + Math.floor(rng.random() * 7), is_big_club: 0, primary_color: null });
-  }
-  // ×4 pavouk: [seed, slabý, slabý, slabý] pro každý seed → 2 předkola pak hlavní pavouk.
-  const bracketOrder: CupTeamRow[] = [];
-  for (let i = 0; i < order.length; i++) {
-    bracketOrder.push(order[i], weakTeams[i * 3], weakTeams[i * 3 + 1], weakTeams[i * 3 + 2]);
-  }
-  const allTeams = [...participants, ...weakTeams];
+  // Volný los mají nejsilnější kluby (nasazení), shodu síly rozhodne los.
+  const bySeed = shuf([...allTeams]).sort((a, b) => b.strength - a.strength);
+  const byeIds = new Set(bySeed.slice(0, byes).map((t) => t.id));
+  // 1. kolo: zbylé týmy proti sobě, lidské a AI kluby se losují dohromady.
+  const bracketOrder = shuf(allTeams.filter((t) => !byeIds.has(t.id)));
 
   // Insert competition + teams. D1 NENÍ transakční napříč dotazy → po vložení ověříme počty a při
   // neúplnosti celý pohár smažeme + hodíme chybu (raději žádný pohár než rozbitý pavouk s dangling id).
@@ -237,7 +202,7 @@ export async function createCup(db: D1Database, seasonNumber: number): Promise<{
     throw new Error("createCup: neúplné vytvoření poháru, zrušeno (viz error log)");
   }
 
-  logger.info({ module: M }, `cup created s=${seasonNumber} teams=${allTeams.length} (${participants.length} seedů + ${weakTeams.length} slabých) rounds=${totalRounds}`);
+  logger.info({ module: M }, `cup created s=${seasonNumber} teams=${allTeams.length} (${byes} volných losů) rounds=${totalRounds}`);
   return { created: true, cupId, teams: allTeams.length, rounds: totalRounds };
 }
 
@@ -1180,11 +1145,33 @@ export async function simulateCupRound(db: D1Database, cupId: string): Promise<{
   // Vygeneruj další kolo: vítěz pozice i → další kolo pozice floor(i/2), home pokud i sudé
   winnersAll.sort((a, b) => a.pos - b.pos);
   const nextByPos = new Map<number, { home?: string; away?: string }>();
-  for (const w of winnersAll) {
-    const np = Math.floor(w.pos / 2);
-    const slot = nextByPos.get(np) ?? {};
-    if (w.pos % 2 === 0) slot.home = w.teamId; else slot.away = w.teamId;
-    nextByPos.set(np, slot);
+  // Po 1. kole přibudou týmy s volným losem (v 1. kole nehrály), nasazení od nejsilnějšího.
+  const byesRes = round === 1
+    ? await db.prepare(
+      `SELECT ct.id FROM cup_teams ct WHERE ct.cup_id = ?
+         AND NOT EXISTS (SELECT 1 FROM cup_matches m WHERE m.cup_id = ct.cup_id AND m.round = 1
+                           AND (m.home_cup_team_id = ct.id OR m.away_cup_team_id = ct.id))
+       ORDER BY ct.strength DESC, ct.id`,
+    ).bind(cupId).all<{ id: string }>()
+      .catch((e) => { logger.error({ module: M }, "load cup byes", e); return null; })
+    : { results: [] as { id: string }[] };
+  if (!byesRes) {
+    // Bez seznamu volných losů by 2. kolo vzniklo bez nich → vrátit kolo a zkusit příště.
+    await db.prepare("UPDATE cup_competitions SET current_round = ? WHERE id = ? AND current_round = ?")
+      .bind(round, cupId, round + 1).run()
+      .catch((e) => logger.error({ module: M }, "rollback bump round (byes)", e));
+    return { ok: false, round };
+  }
+  if (byesRes.results.length > 0) {
+    const order = secondRoundOrder(winnersAll.map((w) => w.teamId), byesRes.results.map((b) => b.id));
+    for (let i = 0; i < order.length; i += 2) nextByPos.set(i / 2, { home: order[i], away: order[i + 1] });
+  } else {
+    for (const w of winnersAll) {
+      const np = Math.floor(w.pos / 2);
+      const slot = nextByPos.get(np) ?? {};
+      if (w.pos % 2 === 0) slot.home = w.teamId; else slot.away = w.teamId;
+      nextByPos.set(np, slot);
+    }
   }
   const roundDates = await cupRoundDates(db, cup.season_number, cup.total_rounds);
   const nextDate = roundDates[round] ?? null; // datum kola round+1 (0-indexováno)

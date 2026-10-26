@@ -306,7 +306,7 @@ export default {
     // do poledne nedostanou samy od sebe.
     // Manuální trigger (!cron) pohár posune vždy — tam si o běh říká člověk.
     // Zbylé ticky (14, 16, 16:05) dají dohromady 12 dávek po 48 zápasech denně, takže i
-    // největší kolo (128 zápasů v 1. předkole) je hotové hned tím poledním.
+    // největší kolo (1. kolo, u 56 týmů 24 zápasů) je hotové ještě ten den.
     // Předčasně se nic neodehraje — maybeAdvanceCup simuluje jen kola, jejichž termín už nastal,
     // a herní datum se posouvá výhradně v nočním ticku.
     // Když by převod časové zóny z jakéhokoli důvodu selhal, radši kolo pustíme podle

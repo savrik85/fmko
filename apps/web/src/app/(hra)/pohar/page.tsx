@@ -38,8 +38,9 @@ interface Scorer {
   goals: number; assists: number; yellow: number; red: number; apps: number;
 }
 interface CupData {
-  cup: { name: string; seasonNumber: number; status: string; totalRounds: number; currentRound: number; winner: Side | null } | null;
-  myTeam: { name: string; eliminatedRound: number | null; alive: boolean; isChampion: boolean } | null;
+  cup: { name: string; seasonNumber: number; status: string; totalRounds: number; currentRound: number; winner: Side | null; teamCount?: number } | null;
+  myTeam: { name: string; eliminatedRound: number | null; alive: boolean; isChampion: boolean; hasBye?: boolean } | null;
+  byes?: (Side | null)[];
   myMatches: MyMatch[];
   rounds: { round: number; roundName: string; matches: BracketMatch[] }[];
   prizes?: { round: number; roundName: string; prize: number }[];
@@ -110,6 +111,7 @@ export default function PoharPage() {
   }
 
   const { cup, myTeam, myMatches, rounds } = data;
+  const byes = (data.byes ?? []).filter((b): b is Side => !!b);
   const myCtName = myTeam?.name;
   const matchIsMine = (m: BracketMatch) => !!myCtName && (m.home?.name === myCtName || m.away?.name === myCtName);
   const prizeByRound = new Map((data.prizes ?? []).map((p) => [p.round, p.prize]));
@@ -117,7 +119,7 @@ export default function PoharPage() {
 
   return (
     <>
-      <PageHeader compact name={cup.name} detail={`Sezóna ${cup.seasonNumber} · ${cup.status === "finished" ? "ukončeno" : `${rounds.find((r) => r.round === cup.currentRound)?.roundName ?? "probíhá"}`} · ${rounds[0]?.matches.length ? rounds[0].matches.length * 2 : ""} týmů`}>{null}</PageHeader>
+      <PageHeader compact name={cup.name} detail={`Sezóna ${cup.seasonNumber} · ${cup.status === "finished" ? "ukončeno" : `${rounds.find((r) => r.round === cup.currentRound)?.roundName ?? "probíhá"}`} · ${cup.teamCount ?? (rounds[0]?.matches.length ?? 0) * 2} týmů`}>{null}</PageHeader>
       <div className="page-container space-y-5">
 
       {/* Vítěz (stejný highlight jako jinde v projektu) */}
@@ -156,7 +158,9 @@ export default function PoharPage() {
             note={myEarnings > 0 ? `${status}, vyděláno ${myEarnings.toLocaleString("cs")} Kč` : status}
           >
             {myMatches.length === 0 ? (
-              <div className="px-4 py-4 text-sm text-muted text-center">Zatím bez zápasu, čeká se na los.</div>
+              <div className="px-4 py-4 text-sm text-muted text-center">
+                {myTeam.hasBye ? "Volný los, do poháru vstupujete až ve 2. kole." : "Zatím bez zápasu, čeká se na los."}
+              </div>
             ) : myMatches.map((m) => {
               const e = entryById.get(m.matchId);
               if (!e) return null;
@@ -246,6 +250,17 @@ export default function PoharPage() {
                 note={`${r.matches.length} ${r.matches.length === 1 ? "zápas" : r.matches.length < 5 ? "zápasy" : "zápasů"}`}
               >
                 {ordered.map((m, i) => <TieRow key={m.id ?? i} m={m} mine={matchIsMine(m)} />)}
+                {r.round === 1 && byes.length > 0 && (
+                  <div className="px-4 py-3 text-sm border-t border-gray-100">
+                    <span className="font-heading font-bold">Volný los do 2. kola: </span>
+                    {byes.map((b, i) => (
+                      <span key={b.cupTeamId ?? i}>
+                        {i > 0 && ", "}
+                        {b.teamId ? <Link href={`/tym/${b.teamId}`} className="hover:underline">{b.name}</Link> : b.name}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </FixtureGroup>
             );
           }}
