@@ -6048,6 +6048,10 @@ gameRouter.post("/admin/transfer-installments/run", async (c) => {
 gameRouter.post("/admin/generate-youth-offer-all", async (c) => {
   const dryRun = c.req.query("dryRun") === "1";
   const sourceParam = c.req.query("source") ?? "youth";
+  // ?age=16 = všem stejně starý kluk, ?all=1 = i klubům, které už mají dvě čekající nabídky.
+  const ageParam = Number(c.req.query("age"));
+  const forcedAge = Number.isInteger(ageParam) && ageParam >= 15 && ageParam <= 45 ? ageParam : undefined;
+  const ignorePendingLimit = c.req.query("all") === "1";
   // U `random` se forceSource nepředá vůbec a generatePlayerOffer si zdroj vylosuje sám
   // (stejně jako v daily-ticku) — proto undefined, ne nějaká vlastní náhoda tady.
   const source = sourceParam === "random"
@@ -6062,7 +6066,7 @@ gameRouter.post("/admin/generate-youth-offer-all", async (c) => {
   ).all<{ id: string; name: string; game_date: string; district: string; population: number; size: string; pending: number }>()
     .catch((e) => { logger.error({ module: "game" }, "load teams for youth offers", e); return { results: [] as never[] }; });
 
-  const eligible = teams.results.filter((t) => t.pending < 2);
+  const eligible = teams.results.filter((t) => ignorePendingLimit || t.pending < 2);
   if (dryRun) {
     return c.json({
       ok: true, dryRun: true, source: sourceParam,
@@ -6082,7 +6086,8 @@ gameRouter.post("/admin/generate-youth-offer-all", async (c) => {
       population: t.population ?? 500,
       district: t.district,
     };
-    const r = await generatePlayerOffer(c.env.DB, createRng(cryptoSeed()), t.id, t.district, villageInfo, t.game_date, source)
+    const r = await generatePlayerOffer(c.env.DB, createRng(cryptoSeed()), t.id, t.district, villageInfo, t.game_date, source,
+      { age: forcedAge, ignorePendingLimit })
       .catch((e) => { logger.warn({ module: "game" }, `youth offer for ${t.id}`, e); return null; });
     results.push({ team: t.name, player: r?.playerName, source: r?.source, ok: !!r });
   }
