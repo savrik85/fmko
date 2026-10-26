@@ -11,6 +11,10 @@
  *   podle trpělivosti, hluboko pod rezervací odmítnutí.
  * - `sellerGuardViolation` před provedením: pod rezervací AI nic nepřijme a protinávrh pod ni
  *   nikdy nejde, ať rozhodl kdokoli. Pod 60 % tržní hodnoty nikdy nic.
+ * - Slib prodeje (`salePromise`, dohoda s nespokojeným hráčem): AI ho dodrží. Přestup od 60 %
+ *   tržní hodnoty přijme kód hned, bez protinávrhu nahoru a bez modelu; rezervací je po dobu
+ *   slibu pevná pojistka. Pojistky kádru (poslední brankář, minimum kádru, strop soupisky)
+ *   platí dál, jen opora bez náhrady slib nepřebije: slíbit ji AI mohla jen s náhradou.
  *
  * Kola smlouvání se počítají přes všechna jednání téhož kupujícího o témže hráči ve 14denním
  * okně a požadavek AI vůči němu nikdy neroste, takže stažením a novou nabídkou se AI
@@ -21,8 +25,10 @@ import { transferTermsError, type TransferTerms } from "@okresni-masina/shared";
 import type { AiCoachProfile } from "./profile";
 import {
   concessionRate,
+  HARD_FLOOR_RATIO,
   isBelowHardFloor,
   maxCounterRounds,
+  MIN_PRICE,
   netSaleValue,
   NO_SALE_COSTS,
   openingAsk,
@@ -57,6 +63,8 @@ export type SellerReplyReason =
   | "loan_needed"
   | "loan_ok"
   | "loan_fee_low"
+  /** Slib prodeje nespokojenému hráči: přestup od 60 % tržní hodnoty AI přijme. */
+  | "sale_promise"
   /** Vybral model z přípustných možností. */
   | "model"
   /** Pojistka zastavila rozhodnutí pod rezervací (nemá nastat, viz `sellerGuardViolation`). */
@@ -91,6 +99,11 @@ export interface SellerDecisionInput {
   listedPrice?: number | null;
   /** Doložka a dluh, které AI klub z prodeje zaplatí (bez nich nic). */
   saleCosts?: SaleCosts;
+  /**
+   * AI hráči slíbila prodej při další slušné nabídce (dohoda s nespokojeným hráčem, slib ještě
+   * běží). Platí jen pro přestup, hostování prodej není.
+   */
+  salePromise?: boolean;
 }
 
 export type SellerDecision =
@@ -122,13 +135,34 @@ interface SellerPrices {
   currentAsk: number;
 }
 
+/** Slib prodeje se týká jen přestupu: hostování hráče z klubu natrvalo nepustí. */
+function promisedSale(input: SellerDecisionInput): boolean {
+  return input.salePromise === true && input.offerType === "transfer";
+}
+
+/**
+ * Pojistka kádru, která platí i při slibu prodeje. Oporu bez náhrady AI slíbit nemohla (slib
+ * dostal jen hráč, kterého pojistky pustily), a když náhrada mezitím odešla, slovo platí dál.
+ */
+function effectiveBlock(input: SellerDecisionInput): SellBlockReason | null {
+  if (promisedSale(input) && input.block === "key_without_replacement") return null;
+  return input.block;
+}
+
+/** Nejnižší čistá hodnota, kterou AI přijme: pevná pojistka 60 % tržní hodnoty (`isBelowHardFloor`). */
+function hardFloorValue(marketValue: number): number {
+  return Math.ceil(Math.max(MIN_PRICE, marketValue) * HARD_FLOOR_RATIO);
+}
+
 function sellerPrices(input: SellerDecisionInput): SellerPrices {
   // Čistá hodnota: peníze (splátky diskontované, procenta pro AI nic) a hráči na výměnu,
   // minus to, co AI klub z prodeje odvede (doložka, nedoplacené splátky).
   const value = netSaleValue(input.terms, input.swapValue, input.saleCosts ?? NO_SALE_COSTS);
   const valuation = { marketValue: input.marketValue, age: input.age, importance: input.importance, profile: input.profile, playerId: input.playerId, now: input.now };
   const baseReservation = reservationPrice(valuation);
-  const reservation = input.overDealLimit ? ceil100(baseReservation * OVER_LIMIT_MARKUP) : baseReservation;
+  // Při slibu prodeje AI vezme každou slušnou nabídku: rezervací je pevná pojistka (ani limit obchodů ji nezvedne).
+  const reservation = promisedSale(input) ? hardFloorValue(input.marketValue)
+    : input.overDealLimit ? ceil100(baseReservation * OVER_LIMIT_MARKUP) : baseReservation;
   // Hráč, který se mezitím stal oporou (zranění, prodeje), za cenu z inzerátu nejde.
   const listed = input.listedPrice && input.listedPrice > 0 && input.importance !== "key" ? input.listedPrice : null;
   const ask0 = Math.max(reservation, listed ?? openingAsk(valuation) * (input.overDealLimit ? OVER_LIMIT_MARKUP : 1));
@@ -149,12 +183,16 @@ function counterRoundsLeft(input: SellerDecisionInput, value: number): number {
 export function decideSellerReply(input: SellerDecisionInput): SellerDecision {
   const { value, reservation, listed, currentAsk } = sellerPrices(input);
 
-  if (input.block) return { kind: "reject", reason: "blocked", value, reservation, block: input.block };
+  const block = effectiveBlock(input);
+  if (block) return { kind: "reject", reason: "blocked", value, reservation, block };
 
   if (input.offerType === "loan") return decideLoan(input, value, reservation);
 
   // Pevná pojistka: pod 60 % tržní hodnoty nic, ani se splátkami, procenty nebo výměnou.
   if (isBelowHardFloor(value, input.marketValue)) return { kind: "reject", reason: "hard_floor", value, reservation };
+
+  // Slib prodeje: slušnou nabídku AI přijme, ať je kupující kdokoli a cena pod požadavkem.
+  if (promisedSale(input)) return { kind: "accept", reason: "sale_promise", value, reservation };
 
   // Cena z inzerátu platí: kdo ji nabídne (v současné hodnotě), má souhlas. Pod rezervaci ale ne:
   // inzerát mohl zůstat z doby, kdy hráč přebýval, a pod rezervaci AI nikdy neprodá (spec 3.7).
@@ -253,8 +291,11 @@ export function sellerOptions(input: SellerDecisionInput): SellerOptions {
   const base = { value, reservation, currentAsk, committedAsk, roundsLeft };
   const only = (decision: SellerDecision): SellerOptions => ({ ...base, actions: [decision.kind], counter: null, forced: decision });
 
-  if (input.block) return only({ kind: "reject", reason: "blocked", value, reservation, block: input.block });
+  const block = effectiveBlock(input);
+  if (block) return only({ kind: "reject", reason: "blocked", value, reservation, block });
   if (isBelowHardFloor(value, input.marketValue)) return only({ kind: "reject", reason: "hard_floor", value, reservation });
+  // Slib prodeje: protinávrh nahoru ani odmítnutí by slovo porušily, zbývá jen přijmout.
+  if (promisedSale(input)) return only({ kind: "accept", reason: "sale_promise", value, reservation });
   if (committedAsk !== null && value >= Math.max(reservation, committedAsk)) return only({ kind: "accept", reason: "accept_ask", value, reservation });
 
   const actions: SellerAction[] = [];

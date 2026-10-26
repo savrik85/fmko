@@ -3,6 +3,10 @@
  *
  * Každá akce si nejdřív hlídaným UPDATE zabere přechod stavu a teprve po
  * úspěchu provede následky. Dvojklik ani souběh je tak nezdvojí.
+ *
+ * „Zeptat se" a „Promluvit si" jdou u člověka přes chat. AI trenér nepíše, proto má tytéž
+ * akce bez konverzace (`askWithoutChat`, `talkWithoutChat`): stejné podmínky a stejné
+ * následky ve hře, jaké člověku zapíše jeho zpráva hráči.
  */
 
 import { createRng } from "../generators/rng";
@@ -16,6 +20,7 @@ import { removePlayer } from "../transfers/remove-player";
 import { denPlus, prikazAbsence } from "./absence-hracu";
 import { sendIncidentPlayerSms, sendIncidentSystemSms } from "./club-messages";
 import { posunHrace, posunKadru, posunKamaradu } from "./hraci";
+import { zaznamenejPromluvu } from "./hrozi-db";
 import { herniDatum, jeRecidivista, nactiHraceKadru, nactiIncident, pozdejsi, proAkce, smsIncidentu } from "./incident-db";
 import { nazevIncidentu } from "./katalog";
 import {
@@ -28,6 +33,8 @@ import { text, TEXTY, vypln } from "./texty";
 import { castkaPokuty, castkaSrazky, hodnotaSkody, jeOblibeny } from "./tresty";
 import type { AkceTrestu, Obvineni, VysledekObvineni } from "./typy";
 import { dostupneAkce, lzeVyslychat, nactiObvineni, rozhodniObvineni } from "./vysetrovani";
+import { vyslechni } from "./vyslech";
+import type { VysledekVyslechu } from "./znalosti";
 import { nastavTema } from "./zprava-trenera";
 
 const M = "incidents-akce";
@@ -181,6 +188,40 @@ export async function promluvSi(
   if (inc.status !== "hrozi" || !inc.culprit_player_id) return { ok: false, kod: 409, chyba: "Tady už není o čem mluvit" };
   const r = await otevriRozhovor(db, teamId, incidentId, inc.culprit_player_id, gameDate);
   return !r.ok && r.kod === 400 ? { ok: false, kod: 409, chyba: "Hráč už v kádru není" } : r;
+}
+
+/**
+ * „Zeptat se" bez chatu (AI trenér). Stejné podmínky jako `zeptejSe` a stejný výsledek, jaký člověku
+ * zapíše jeho zpráva v konverzaci (`zpracujZpravuTrenera` → `vyslechni`): uložený výsledek výslechu,
+ * nalezená stopa, přiznání pachatele i posun vztahů. Konverzace ani téma nevznikají.
+ * `answer` je `null`, když hráč k incidentu nic neví (žádná role svědka, kamaráda, rivala ani pachatele).
+ */
+export async function askWithoutChat(
+  env: Bindings, teamId: string, incidentId: string, playerId: string,
+): Promise<VysledekAkce<{ answer: VysledekVyslechu | null }>> {
+  const db = env.DB;
+  const [inc, gameDate] = await Promise.all([nactiIncident(db, teamId, incidentId), herniDatum(db, teamId)]);
+  if (!inc || !gameDate) return NENALEZENO;
+  if (!lzeVyslychat(proAkce(inc, false))) return { ok: false, kod: 409, chyba: "Na tenhle incident se už ptát nejde" };
+  if (!(await nactiHraceKadru(db, teamId, playerId))) return { ok: false, kod: 400, chyba: "Hráč není v kádru" };
+  const answer = await vyslechni(db, { teamId, incidentId, playerId, gameDate });
+  return { ok: true, answer: answer?.vysledek ?? null };
+}
+
+/**
+ * „Promluvit si" bez chatu (AI trenér). Stejné podmínky jako `promluvSi` a stejný výsledek jako trenérova
+ * zpráva hráči, který v hospodě ohlásil čin: rozhovor se zapíše k incidentu (`zaznamenejPromluvu`)
+ * a šance, že čin opravdu udělá, klesne (`sanceHroziciho`).
+ */
+export async function talkWithoutChat(env: Bindings, teamId: string, incidentId: string): Promise<VysledekAkce> {
+  const db = env.DB;
+  const [inc, gameDate] = await Promise.all([nactiIncident(db, teamId, incidentId), herniDatum(db, teamId)]);
+  if (!inc || !gameDate) return NENALEZENO;
+  if (inc.status !== "hrozi" || !inc.culprit_player_id) return { ok: false, kod: 409, chyba: "Tady už není o čem mluvit" };
+  if (!(await nactiHraceKadru(db, teamId, inc.culprit_player_id))) return { ok: false, kod: 409, chyba: "Hráč už v kádru není" };
+  const recorded = await zaznamenejPromluvu(db, { teamId, incidentId, playerId: inc.culprit_player_id, den: gameDate.slice(0, 10) });
+  // Stav jsme ověřili těsně předtím, nezapsaný rozhovor je tedy skoro vždy chyba databáze: ať se dá zopakovat.
+  return recorded ? { ok: true } : { ok: false, kod: 500, chyba: "Rozhovor se nepodařilo zapsat" };
 }
 
 /** SMS, kterou pachatel odpoví na trest. U ostatních trestů hráč nepíše. */

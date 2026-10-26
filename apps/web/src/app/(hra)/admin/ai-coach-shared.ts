@@ -31,7 +31,12 @@ export const KIND_LABELS: Record<string, string> = {
   friendly_offer: "nabídka přáteláku",
   friendly_reply: "odpověď na přátelák",
   main_sponsor: "hlavní sponzor",
+  stadium_sponsor: "sponzor stadionu",
+  sponsor_negotiation: "jednání se sponzorem",
+  sponsor_invite: "pozvání majitelů",
   unrest: "nespokojený hráč",
+  promise_listing: "inzerát slíbeného prodeje",
+  player_offer: "nabídka místního hráče",
   incident: "incident v klubu",
   season_duels: "kdo zůstane",
 };

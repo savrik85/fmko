@@ -8,6 +8,7 @@
 import type { Bindings } from "../index";
 import { friendliesHourlyHook } from "./friendlies";
 import { incidentsHourlyHook } from "./incidents";
+import { playerOffersHourlyHook } from "./player-offers";
 import type { AiCoachProfile } from "./profile";
 import { seasonDuelsHourlyHook } from "./season-duels";
 import { transferMarketHourlyHook } from "./transfer-market";
@@ -30,4 +31,5 @@ export const HOURLY_HOOKS: HourlyHookEntry[] = [
   { name: "unrest", run: unrestHourlyHook },
   { name: "incidents", run: incidentsHourlyHook },
   { name: "season_duels", run: seasonDuelsHourlyHook },
+  { name: "player_offers", run: playerOffersHourlyHook },
 ];

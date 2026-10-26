@@ -1441,9 +1441,10 @@ export async function executeDailyTick(
   try {
     const { generatePlayerOffer, receivesPlayerOffers } = await import("../events/player-offers");
     const sizeMap: Record<string, string> = { hamlet: "vesnice", village: "obec", town: "mestys", small_city: "mesto", city: "mesto" };
-    const humanTeams = allTeams.results.filter(receivesPlayerOffers);
+    // Lidské i AI kluby: AI klub nabídku dostane bez SMS a rozhodne o ní jeho trenér.
+    const offerTeams = allTeams.results.filter(receivesPlayerOffers);
 
-    for (const team of humanTeams) {
+    for (const team of offerTeams) {
       const teamId = team.id as string;
       const offerRng = createRng(teamSeed(teamId, now.getTime(), "player-offers"));
       // ~14% per day ≈ 1 nabídka týdně

@@ -47,6 +47,8 @@ export interface RoundResponse {
   progressMonths?: number;
   /** Kolo odmítnutí bylo zároveň urážkou (nad 1,5 × ochoty). U "walked_away" pak platí obě pokuty náklonnosti (−3 i −5). */
   insulted?: boolean;
+  /** Co majiteli na návrhu konkrétně vadí (complaintFor, wishComplaint), u přijetí ne. */
+  complaint?: string;
 }
 
 /** Odpovědi, ve kterých majitel sám dává podmínky k podpisu (response.counter). */
@@ -438,6 +440,47 @@ export async function buildNegotiationContext(db: D1Database, i: {
 
 export type Fail = { error: string; status: 400 | 404 | 409 | 410 };
 
+/** Co jednání při otevření dostane: majitel, náklonnost, rozpočet, přání, kontext a úvodní nabídka. */
+export interface NegotiationDraft {
+  owner: SponsorOwner;
+  favor: number;
+  budgetB: number;
+  wishes: PromiseKind[];
+  ctx: NegotiationContext;
+  rounds: NegotiationRound[];
+  patience: number;
+  expiresGameDate: string;
+}
+
+/**
+ * Jednání, jak by vzniklo teď (bez zápisu do sponsor_negotiations): openNegotiation ho uloží,
+ * AI trenér v režimu nanečisto podle něj jen rozhodne první tah. Dostupnost firmy neověřuje.
+ */
+export async function draftNegotiation(
+  db: D1Database, team: NegotiationTeam, sponsor: NegotiationSponsor, category: NegotiationCategory, season: number,
+): Promise<NegotiationDraft | Fail> {
+  const owner = await ensureSponsorOwner(db, sponsor.id);
+  if (!owner) return { error: "Majitel nenalezen", status: 404 };
+  const favor = await getFavor(db, sponsor.id, team.id);
+  const budgetB = sponsorBudgetB({ monthlyMax: sponsor.monthly_max, reputation: team.reputation, villageSize: team.size, category, favor });
+  const sleeve = category === "stadium" ? await sleeveHeldBySponsor(db, team.id, sponsor.id) : false;
+  const movement = await leagueMovement(db, team.league_id);
+  const wishes = ownerWishes({
+    sponsorId: sponsor.id, teamId: team.id, season, personality: owner.personality, sponsorType: sponsor.type, category,
+    sleeveHeldBySponsor: sleeve, leagueMovement: movement,
+  });
+  const ctx = await buildNegotiationContext(db, {
+    team, sponsor, category, season, personality: owner.personality, wishes, budgetB, leagueMovement: movement,
+  });
+  const gameDate = teamGameDate(team);
+  return {
+    owner, favor, budgetB, wishes, ctx,
+    rounds: openingRounds(ctx, owner.personality, gameDate, team.id),
+    patience: initialPatience(favor),
+    expiresGameDate: gameExpiry(gameDate, NEGOTIATION_DAYS),
+  };
+}
+
 /** Otevře jednání, nebo vrátí id už běžícího se stejnou firmou a kategorií. */
 export async function openNegotiation(
   db: D1Database, teamId: string, sponsorId: number, category: NegotiationCategory,
@@ -451,20 +494,8 @@ export async function openNegotiation(
   if (av.openId) return { ok: true, id: av.openId };
   if (!av.canOpen) return { ok: false, error: av.reason ?? "S touhle firmou teď jednat nejde", status: 409 };
 
-  const owner = await ensureSponsorOwner(db, sponsorId);
-  if (!owner) return { ok: false, error: "Majitel nenalezen", status: 404 };
-  const favor = await getFavor(db, sponsorId, teamId);
-  const budgetB = sponsorBudgetB({ monthlyMax: sponsor.monthly_max, reputation: team.reputation, villageSize: team.size, category, favor });
-  const sleeve = category === "stadium" ? await sleeveHeldBySponsor(db, teamId, sponsorId) : false;
-  const movement = await leagueMovement(db, team.league_id);
-  const wishes = ownerWishes({
-    sponsorId, teamId, season, personality: owner.personality, sponsorType: sponsor.type, category, sleeveHeldBySponsor: sleeve,
-    leagueMovement: movement,
-  });
-  const ctx = await buildNegotiationContext(db, {
-    team, sponsor, category, season, personality: owner.personality, wishes, budgetB, leagueMovement: movement,
-  });
-  const rounds = openingRounds(ctx, owner.personality, teamGameDate(team), teamId);
+  const draft = await draftNegotiation(db, team, sponsor, category, season);
+  if ("error" in draft) return { ok: false, ...draft };
   const id = crypto.randomUUID();
   // Jedno běžící jednání na klub, firmu a kategorii: podmíněný INSERT ustojí i dvojklik
   // (úvodní nabídka je součástí téhož INSERTu, druhá tedy nevznikne).
@@ -473,15 +504,15 @@ export async function openNegotiation(
      SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?
      WHERE NOT EXISTS (SELECT 1 FROM sponsor_negotiations WHERE team_id = ? AND sponsor_id = ? AND category = ? AND status IN ('open','accepted'))`,
   ).bind(
-    id, teamId, sponsorId, category, JSON.stringify(wishes), budgetB, initialPatience(favor),
-    gameExpiry(teamGameDate(team), NEGOTIATION_DAYS), JSON.stringify(rounds), teamId, sponsorId, category,
+    id, teamId, sponsorId, category, JSON.stringify(draft.wishes), draft.budgetB, draft.patience,
+    draft.expiresGameDate, JSON.stringify(draft.rounds), teamId, sponsorId, category,
   ).run();
   if ((ins.meta?.changes ?? 0) !== 1) {
     const again = await findActiveNegotiation(db, teamId, sponsorId, category, teamGameDate(team));
     if (again) return { ok: true, id: again.id };
     return { ok: false, error: "Jednání se nepodařilo otevřít, zkus to znovu", status: 409 };
   }
-  logger.info({ module: "sponsors", teamId }, `jednání ${id}: sponzor ${sponsorId}, ${category}, B=${budgetB}, přání ${wishes.join(",")}`);
+  logger.info({ module: "sponsors", teamId }, `jednání ${id}: sponzor ${sponsorId}, ${category}, B=${draft.budgetB}, přání ${draft.wishes.join(",")}`);
   return { ok: true, id };
 }
 

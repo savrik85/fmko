@@ -16,14 +16,17 @@ odpověď zkontroluje a provede stejnou službou jako u člověka. Při výpadku
 
 | Rozhodnutí | Model vybírá | Kód hlídá | Druh v deníku |
 |---|---|---|---|
-| Zápas | formace, taktika, tvrdost, koho šetřit, kapitán, exekutoři, střídání | skladba jedenáctky, slib základu (hraje vždy) | `match` |
+| Zápas | formace, taktika, tvrdost, koho šetřit, kapitán, exekutoři, střídání | skladba jedenáctky, slib základu (hraje vždy), kapitán z dohody nosí pásku, kdykoli hraje | `match` |
 | Pondělní správa | trénink, vstupné, trávník, stadion, vybavení, zaměstnanci, akademie, plachty, U21, přestupní kurz, bufet (pronájem nebo vlastní prodej, kvalita, cena, nákup zboží) | rezerva, ceny, pravidla služeb, zboží jen z peněz nad rezervou; před domácím zápasem doplnění skladu | `weekly`, `concession_topup` |
-| Hlavní sponzor | kterou firmu oslovit (nebo nikoho) | dostupnost firmy, exkluzivita, podpis úvodní nabídky | `main_sponsor` |
+| Hlavní sponzor a název stadionu | kterou firmu oslovit (nebo nikoho), pak každý tah jednání: podepsat, vlastní návrh (peníze, délka, sliby), odejít | meze z toho, co vidí člověk (odhad rozpočtu firmy, délka podle sezóny), jen sliby, které AI dodrží (exkluzivita oboru, logo na rukávu, výsledky se šancí aspoň 70 %), nejvýš 2 vlastní návrhy; tahy stejnou službou jako tlačítka | `main_sponsor`, `stadium_sponsor`, `sponsor_negotiation` |
+| Pozvání do VIP lóže | koho z místních majitelů firem pozvat na nejbližší domácí zápas (nebo nikoho) | jen s použitelnou VIP lóží, nejvýš tolik hostů, kolik dovolí úroveň lóže, dar z peněz nad rezervou, majitel jen jednou za den; stejná služba jako tlačítko | `sponsor_invite` |
+| Nabídky místních hráčů | podepsat, nebo odmítnout hráče od hospodského, starosty, z dorostu (jednou za herní den) | strop soupisky, registrace a mzda na sezónu z peněz nad rezervou; stejná služba jako u člověka, bez SMS | `player_offer` |
+| Slib prodeje | cena inzerátu hráče, kterému AI slíbila prodej (60–100 % tržní hodnoty) | slib jen hráči, kterého pustí pojistky kádru, a do limitu obchodů; přestup od 60 % tržní hodnoty pak přijme bez protinávrhu | `promise_listing` |
 | Přáteláky | přijmout výzvu; jestli, kdy, kde a o kolik vypsat nabídku | soutěž den před a po, max. 2, sázka a náklady v mezích povahy | `friendly_reply`, `friendly_offer` |
 | Nákup | kterého hráče (přestup, volný, hostování, poptávka), výše nabídky, odpovědi na protinávrhy (i klubům mimo hru), koho vzít z hráčů nabídnutých na poptávku | strop ceny, rezerva, limity obchodů, propojené kluby, žádná procenta z dalšího prodeje | `transfer_market`, `transfer_negotiation`, `demand_pitch` |
 | Prodej | přijmout, protinávrh, odmítnout | rezervace pevná 14 dní, 60 % tržní hodnoty, nic pod rezervací ani při opakovaných nabídkách | `transfer_reply` |
 | Nespokojení hráči | dohoda za hráče (prémie, mzda, rozhovor, slib místa, odchod) nebo čekat | peníze nad rezervou, slib místa max. 2 a sestava ho dodrží | `unrest` |
-| Incidenty v klubu | vyšetřování (policie, obvinění), trest, záloha na mzdu | stejné možnosti jako člověk, posledního brankáře nevyhodí | `incident` |
+| Incidenty v klubu | vyšetřování (policie, obvinění, otázka hráči, nahlášení poznaného inzerátu z bazaru), trest, záloha na mzdu, rozhovor s tím, kdo v hospodě ohlásil čin | stejné možnosti jako člověk, posledního brankáře nevyhodí; otázku a rozhovor provede bez chatu se stejnými následky (`askWithoutChat`, `talkWithoutChat`), koho se zeptat nabídne jen podle stop a vztahů v kabině, kdo co ví, model nevidí | `incident` |
 | Konec sezóny | kdo ze souboje zůstane | aspoň jeden brankář zůstane | `season_duels` |
 
 AI kluby teď mají i nespokojenost hráčů a incidenty jako lidé, jen bez jakýchkoli zpráv.

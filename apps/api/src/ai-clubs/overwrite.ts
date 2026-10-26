@@ -223,6 +223,8 @@ export async function wipeAiClubForNewcomer(db: D1Database, teamId: string, opts
       WHERE status = 'pending' AND (team_id = ? OR listing_id IN (SELECT id FROM transfer_listings WHERE team_id = ?))`, teamId, teamId);
   await runStatement(db, "inzeráty", "UPDATE transfer_listings SET status = 'withdrawn' WHERE status = 'active' AND team_id = ?", teamId);
   await runStatement(db, "poptávky", "UPDATE transfer_demands SET status = 'withdrawn' WHERE status = 'active' AND team_id = ?", teamId);
+  // Místní hráči nabídnutí AI klubu (hospodský, starosta…) nový klub nezdědí.
+  await runStatement(db, "nabídky místních hráčů", "UPDATE player_offers SET status = 'expired' WHERE status = 'pending' AND team_id = ?", teamId);
   await runStatement(db, "nabídnutí k poptávkám", "DELETE FROM transfer_demand_pitches WHERE team_id = ?", teamId);
   await runStatement(db, "splátky", `UPDATE transfer_installments SET status = 'settled', closed_at = ?
       WHERE status = 'active' AND ? IN (buyer_team_id, seller_team_id)`, nowIso, teamId);

@@ -16,6 +16,8 @@
  * pod 60 % tržní hodnoty, nabídka za vlastní požadavek, bez prostoru pro protinávrh), rozhodne
  * kód bez modelu. Jinak vybere model (transfer-reply-decision.ts) přijetí, protinávrh v mezích,
  * nebo odmítnutí; při výpadku, nesmyslu, režimu off a bez bindingu AI náhradní pravidlo.
+ * Hráč, kterému AI slíbila prodej (sale-promise.ts), je výjimka: přestup od 60 % tržní hodnoty
+ * kód přijme sám, bez protinávrhu nahoru, ať AI slib nezlomí.
  *
  * Jako kupující: na protinávrh prodávajícího model přijme (do stropu z peněz nad rezervou,
  * nikdy s procenty z dalšího prodeje), přihodí v mezích, nebo nabídku stáhne (`decideBuyerReplyByModel`,
@@ -44,6 +46,7 @@ import {
   type PitchCandidate, type PitchContext, type PitchDecision, type PitchOptions,
 } from "./demand-pitch-decision";
 import { decideBuyerReplyByModel, logNegotiationDecision } from "./buy-model";
+import { activeSalePromise } from "./sale-promise";
 import {
   decideSellerReply, sellerDecisionFromChoice, sellerGuardViolation, sellerOptions,
   type SellerDecision, type SellerDecisionInput, type SellerOptions,
@@ -539,6 +542,8 @@ async function replyAsSeller(ctx: RunContext, offer: OfferRow, buyerClubTeamId: 
   const listing = await db.prepare("SELECT asking_price FROM transfer_listings WHERE player_id = ? AND team_id = ? AND status = 'active'")
     .bind(player.id, club.teamId).first<{ asking_price: number }>()
     .catch((e) => { logger.warn({ module: M }, `inzerát hráče ${player.id}`, e); return null; });
+  // Slib prodeje nespokojenému hráči: AI ho dodrží, slušný přestup přijme (transfer-decision.ts).
+  const salePromise = offer.offer_type !== "loan" && (await activeSalePromise(db, player.id, ctx.now)) !== null;
 
   const input: SellerDecisionInput = {
     offerId: offer.id,
@@ -560,6 +565,7 @@ async function replyAsSeller(ctx: RunContext, offer: OfferRow, buyerClubTeamId: 
     overDealLimit: club.overDealLimit,
     listedPrice: listing?.asking_price ?? null,
     saleCosts: costs,
+    salePromise,
   };
   const sale = await decideSale(ctx, input, { player, analysis, buyerClubTeamId, offerId: offer.id });
   const result = await executeSellerDecision(ctx, offer, sale.decision, swap.value, costs);
@@ -701,6 +707,7 @@ async function replyToLegacyBids(ctx: RunContext, budget: { left: number }): Pro
       profile: club.profile, playerId: player.id, now: ctx.now, swapValue: 0, virtualBuyer: false,
       previousAsks: bid.last_action_by === club.teamId && bid.counter_amount ? [bid.counter_amount] : [],
       previousBids: [], priorBreakOffs: 0, overDealLimit: club.overDealLimit, listedPrice: bid.asking_price, saleCosts: costs,
+      salePromise: (await activeSalePromise(db, player.id, ctx.now)) !== null,
     };
     const sale = await decideSale(ctx, input, { player, analysis, buyerClubTeamId: bid.buyer_team_id, offerId: null });
     const decision = sale.decision;

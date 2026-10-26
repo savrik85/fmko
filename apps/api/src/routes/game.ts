@@ -19,6 +19,7 @@ import { maintainPitch, setPitchCareMode, upgradeStadiumFacility } from "../serv
 import { computeBannerOffers, MAX_BANNERS, signSponsorContract } from "../services/banner-sponsors";
 import { setTicketPrice } from "../services/club-settings";
 import { restockConcession, setConcessionMode, setConcessionProduct } from "../services/concessions";
+import { acceptPlayerOffer, rejectPlayerOffer } from "../services/player-offer-actions";
 import { mustSeason } from "../lib/season";
 import { MAX_CLUB_NAME_LENGTH, NAME_TAKEN_ERROR, renameClub } from "../lib/club-rename";
 import { getSession, getTokenFromRequest } from "../auth/session";
@@ -5983,93 +5984,16 @@ gameRouter.get("/teams/:teamId/player-offers", async (c) => {
 });
 
 // POST /api/teams/:teamId/player-offers/:offerId/accept — sign the offered player
+// Stejnou službou podepisuje nabídky i AI trenér (ai-coach/player-offers.ts).
 gameRouter.post("/teams/:teamId/player-offers/:offerId/accept", async (c) => {
-  const teamId = c.req.param("teamId");
-  const offerId = c.req.param("offerId");
-
-  const offer = await c.env.DB.prepare("SELECT * FROM player_offers WHERE id = ? AND team_id = ? AND status = 'pending'")
-    .bind(offerId, teamId).first<Record<string, unknown>>();
-  if (!offer) return c.json({ error: "Nabídka nenalezena" }, 404);
-
-  // Atomicky claimni offer — pokud někdo souběžně už přijal, claim selže a nevytvoříme duplicitního hráče.
-  const claim = await c.env.DB.prepare("UPDATE player_offers SET status = 'accepted' WHERE id = ? AND team_id = ? AND status = 'pending'")
-    .bind(offerId, teamId).run();
-  if (claim.meta.changes === 0) {
-    return c.json({ error: "Nabídka už byla zpracována" }, 409);
-  }
-
-  const playerId = crypto.randomUUID();
-  // Skrytý talent z nabídky se musí propsat do sloupce hidden_talent — jinak by
-  // zobrazený badge "✨ Talent" byl fikce (dřívější bug: INSERT ho zahazoval → default 0).
-  const offerPersonality = (() => { try { return JSON.parse((offer.personality as string) ?? "{}"); } catch (e) { logger.warn({ module: "game" }, "parse offer personality", e); return {}; } })();
-  const hiddenTalent = Math.max(0, Math.round(offerPersonality.hiddenTalent ?? 0));
-  // Strop rozvoje (skills_max) dodal při vzniku nabídky společný generátor a leží
-  // v `life_context.skillsMax`. Starší nabídky (před sjednocením generátorů) ho nemají,
-  // pro ty zůstává dřívější dopočet z talentu.
-  const offerLifeContext = (() => { try { return JSON.parse((offer.life_context as string) ?? "{}"); } catch (e) { logger.warn({ module: "game" }, "parse offer life_context", e); return {}; } })();
-  const { skillsMax: generatedSkillsMax, ...lifeContextWithoutCaps } = offerLifeContext as { skillsMax?: Record<string, { current: number; maxPotential: number }> } & Record<string, unknown>;
-  const offerSkills = (() => { try { return JSON.parse((offer.skills as string) ?? "{}"); } catch (e) { logger.warn({ module: "game" }, "parse offer skills", e); return {}; } })();
-  const skillsMax: Record<string, { current: number; maxPotential: number }> = generatedSkillsMax ?? {};
-  if (!generatedSkillsMax) {
-    const headroom = 10 + Math.round(hiddenTalent * 0.6); // talent 0 → +10, talent 65 → +49
-    for (const [attr, val] of Object.entries(offerSkills)) {
-      if (typeof val !== "number") continue;
-      skillsMax[attr] = { current: val, maxPotential: Math.min(100, val + headroom) };
-    }
-  }
-  await c.env.DB.prepare(
-    `INSERT INTO players (id, team_id, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, weekly_wage, status, nationality, hidden_talent, skills_max)
-     VALUES (?, ?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)`
-  ).bind(playerId, teamId, offer.first_name, offer.last_name, offer.age, offer.position, offer.overall_rating,
-    offer.skills, offer.physical, offer.personality, JSON.stringify(lifeContextWithoutCaps), offer.avatar, offer.weekly_wage,
-    (offer.nationality as string) ?? "CZ", hiddenTalent, JSON.stringify(skillsMax)).run();
-
-  // Set residence
-  const { generateResidence } = await import("../generators/residence");
-  const teamVillage = await c.env.DB.prepare("SELECT v.name, v.size, v.district FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?")
-    .bind(teamId).first<{ name: string; size: string; district: string }>().catch((e) => { logger.warn({ module: "game" }, "db op failed", e); return null; });
-  if (teamVillage) {
-    const resRng = createRng(cryptoSeed());
-    const res = generateResidence(resRng, teamVillage.name, teamVillage.size, teamVillage.district);
-    await c.env.DB.prepare("UPDATE players SET residence = ?, commute_km = ? WHERE id = ?")
-      .bind(res.residence, res.commuteKm, playerId).run().catch((e) => logger.warn({ module: "game" }, "db op failed", e));
-  }
-
-  // Vazby na spoluhráče — dorostenec z vesnice většinou někoho zná
-  const { attachNewcomerRelations } = await import("../transfers/attach-relations");
-  await attachNewcomerRelations(c.env.DB, teamId, playerId);
-  const { initNewcomerCoachRelation } = await import("../lib/coach-relation");
-  await initNewcomerCoachRelation(c.env.DB, teamId, playerId);
-
-  // Contract
-  const season = await c.env.DB.prepare("SELECT id FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1").first<{ id: string }>().catch((e) => { logger.warn({ module: "game" }, "db op failed", e); return null; });
-  await c.env.DB.prepare("INSERT INTO player_contracts (id, player_id, team_id, season_id, join_type, fee, is_active) VALUES (?, ?, ?, ?, ?, 0, 1)")
-    .bind(crypto.randomUUID(), playerId, teamId, mustSeason(season?.id), offer.source).run().catch((e) => logger.warn({ module: "game" }, "db op failed", e));
-
-  // Registration fee
-  const team = await c.env.DB.prepare("SELECT game_date FROM teams WHERE id = ?").bind(teamId).first<{ game_date: string }>().catch((e) => { logger.warn({ module: "game" }, "db op failed", e); return null; });
-  await recordTransaction(c.env.DB, teamId, "signing_fee", -500, `Registrace: ${offer.first_name} ${offer.last_name}`, team?.game_date ?? new Date().toISOString());
-
-  // Return full player data for reveal card
-  const newPlayer = await c.env.DB.prepare("SELECT * FROM players WHERE id = ?").bind(playerId).first<Record<string, unknown>>();
-  const playerData = newPlayer ? {
-    ...newPlayer,
-    skills: JSON.parse((newPlayer.skills as string) ?? "{}"),
-    physical: JSON.parse((newPlayer.physical as string) ?? "{}"),
-    personality: JSON.parse((newPlayer.personality as string) ?? "{}"),
-    lifeContext: JSON.parse((newPlayer.life_context as string) ?? "{}"),
-    avatar: JSON.parse((newPlayer.avatar as string) ?? "{}"),
-  } : null;
-
-  return c.json({ ok: true, player: playerData });
+  const res = await acceptPlayerOffer(c.env.DB, c.req.param("teamId"), c.req.param("offerId"));
+  if (!res.ok) return c.json({ error: res.error }, res.status);
+  return c.json({ ok: true, player: res.player });
 });
 
 // POST /api/teams/:teamId/player-offers/:offerId/reject
 gameRouter.post("/teams/:teamId/player-offers/:offerId/reject", async (c) => {
-  const offerId = c.req.param("offerId");
-  const teamId = c.req.param("teamId");
-  await c.env.DB.prepare("UPDATE player_offers SET status = 'rejected' WHERE id = ? AND team_id = ?").bind(offerId, teamId).run();
-  return c.json({ ok: true });
+  return c.json(await rejectPlayerOffer(c.env.DB, c.req.param("teamId"), c.req.param("offerId")));
 });
 
 // ── TEMP: Admin — manuální generování player offer pro testování ──

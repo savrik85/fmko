@@ -5,6 +5,7 @@
  * komu dát šanci, kapitána, exekutory standardek a pokyny na lavičce. Jedenáctku
  * a lavičku podle obsazení postů skládá kód (`assembleLineup`) a výsledek kontroluje
  * stejnými pravidly jako lidskou sestavu (`validateMatchPlan`, `validateBench`).
+ * Kapitán klubu (`teams.captain_id`, páska z dohody s hráčem) nosí pásku vždy, když hraje.
  */
 
 import { MAX_PLAN_RULES, PLAN_CONDITION_MAX, PLAN_CONDITION_MIN, PLAN_MINUTE_MAX, PLAN_MINUTE_MIN, type MatchPlanRule } from "@okresni-masina/shared";
@@ -88,6 +89,11 @@ export interface MatchContext {
    * hráčem). Slib se plní vždy: hrají od začátku, ať model rozhodne cokoli.
    */
   promisedStarters?: string[];
+  /**
+   * Klíč kapitána klubu (`teams.captain_id`, třeba z dohody s nespokojeným hráčem), dostupného
+   * i nedostupného. Když hraje od začátku, pásku nosí on; model volí kapitána jen pro zápas bez něj.
+   */
+  clubCaptain?: string | null;
 }
 
 /** Pokyn na lavičce, jak ho píše model (ploché pole, kód ho převede na MatchPlanRule). */
@@ -371,7 +377,9 @@ export function fallbackMatchDecision(ctx: MatchContext): MatchDecision {
   if (friendly && hardness === "hard") hardness = "normal";
 
   const xiPlayers = ctx.squad.filter((pl) => xiKeys.has(pl.key));
-  const captain = bestBy(xiPlayers, (pl) => pl.leadership * 2 + pl.age / 2)?.key ?? null;
+  const captain = ctx.clubCaptain && xiKeys.has(ctx.clubCaptain)
+    ? ctx.clubCaptain
+    : bestBy(xiPlayers, (pl) => pl.leadership * 2 + pl.age / 2)?.key ?? null;
   const currentPen = ctx.squad.find((pl) => pl.id === ctx.currentRoles.penaltyTakerId);
   const currentFk = ctx.squad.find((pl) => pl.id === ctx.currentRoles.freekickTakerId);
   const penaltyTaker = currentPen?.key ?? bestBy(xiPlayers, (pl) => pl.shooting * 0.6 + pl.setPieces * 0.4)?.key ?? null;
@@ -628,10 +636,15 @@ export function assembleLineup(ctx: MatchContext, decision: MatchDecision, squad
   }
 
   const xiPlayers = picks.map((x) => x.player);
-  const captain = decision.captain && xiKeys.has(decision.captain)
-    ? byKey.get(decision.captain)!
-    : bestBy(xiPlayers, (p) => p.leadership * 2 + p.age / 2);
-  if (decision.captain && !xiKeys.has(decision.captain)) notes.push(`kapitán ${decision.captain} nehraje, kapitánem je ${captain?.key}`);
+  // Kapitán klubu (páska z dohody s nespokojeným hráčem platí): když hraje, nosí ji on.
+  const clubCaptain = ctx.clubCaptain && xiKeys.has(ctx.clubCaptain) ? byKey.get(ctx.clubCaptain) : undefined;
+  const captain = clubCaptain
+    ?? (decision.captain && xiKeys.has(decision.captain) ? byKey.get(decision.captain)! : bestBy(xiPlayers, (p) => p.leadership * 2 + p.age / 2));
+  if (clubCaptain && decision.captain && decision.captain !== clubCaptain.key) {
+    notes.push(`kapitán klubu ${clubCaptain.key} hraje, pásku nosí on (model chtěl ${decision.captain})`);
+  } else if (!clubCaptain && decision.captain && !xiKeys.has(decision.captain)) {
+    notes.push(`kapitán ${decision.captain} nehraje, kapitánem je ${captain?.key}`);
+  }
 
   const taker = (key: string | null, current: string | null, score: (p: SquadPlayer) => number): string | null => {
     if (key && byKey.has(key)) return byKey.get(key)!.id;
@@ -711,6 +724,7 @@ export function renderMatchPrompt(ctx: MatchContext): string {
     const xiSlot = defaultXi.get(pl.key);
     const flags = [
       xiSlot ? (xiSlot === pl.position ? "XI" : `XI as ${xiSlot}`) : "",
+      ctx.clubCaptain === pl.key ? "club captain" : "",
       ctx.promisedStarters?.includes(pl.key) ? "promised a start" : "",
       pl.oneYellowFromBan ? "one yellow from ban" : "",
       pl.condition < 60 ? "tired" : "",
@@ -725,6 +739,11 @@ export function renderMatchPrompt(ctx: MatchContext): string {
   const promised = (ctx.promisedStarters ?? []).filter((k) => ctx.squad.some((p) => p.key === k));
   if (promised.length > 0) {
     lines.push(`PROMISES: you promised ${promised.join(", ")} a starting place (2 of the next 3 matches). The engine starts them and keeps them on for at least ${PROMISED_MINUTES} minutes, so do not rest or substitute them early; plan the rest of the team around them.`);
+  }
+  if (ctx.clubCaptain) {
+    lines.push(ctx.squad.some((p) => p.key === ctx.clubCaptain)
+      ? `CAPTAIN: ${ctx.clubCaptain} is your club captain. Whenever he starts he wears the armband (the engine sees to it), so your captain choice only counts if he does not start.`
+      : `CAPTAIN: your club captain ${ctx.clubCaptain} cannot play today, so choose today's captain.`);
   }
   lines.push("");
   lines.push("DECIDE (JSON keys):");

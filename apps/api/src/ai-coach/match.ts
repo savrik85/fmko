@@ -223,9 +223,9 @@ async function daysToNextCompetitive(db: D1Database, teamId: string, leagueId: s
 /** Načte všechno, co trenér před zápasem ví. Null = zápas nebo tým nejde najít. */
 export async function loadMatchContext(db: D1Database, teamId: string, fixture: CoachFixture): Promise<MatchContext | null> {
   const team = await db.prepare(
-    `SELECT t.id, t.name, t.league_id, t.village_id, t.penalty_taker_id, t.freekick_taker_id, t.formation_familiarity
+    `SELECT t.id, t.name, t.league_id, t.village_id, t.penalty_taker_id, t.freekick_taker_id, t.captain_id, t.formation_familiarity
        FROM teams t WHERE t.id = ?`,
-  ).bind(teamId).first<{ id: string; name: string; league_id: string | null; village_id: string | null; penalty_taker_id: string | null; freekick_taker_id: string | null; formation_familiarity: string | null }>()
+  ).bind(teamId).first<{ id: string; name: string; league_id: string | null; village_id: string | null; penalty_taker_id: string | null; freekick_taker_id: string | null; captain_id: string | null; formation_familiarity: string | null }>()
     .catch((e) => { logger.warn({ module: M, teamId }, "tým", e); return null; });
   if (!team) return null;
   const info = await loadFixtureInfo(db, teamId, fixture);
@@ -264,12 +264,15 @@ export async function loadMatchContext(db: D1Database, teamId: string, fixture: 
   const unavailable: UnavailablePlayer[] = [];
   // Komu AI trenér slíbil místo v sestavě (dohoda s nespokojeným hráčem): hraje, dokud se slib nevyhodnotí.
   const promisedStarters: string[] = [];
+  // Kapitán klubu (páska z dohody s nespokojeným hráčem): když hraje, nosí ji on.
+  let clubCaptain: string | null = null;
   let n = 0;
   for (const row of rows.results) {
     if (!isSlot(row.position)) continue;
     n++;
     const key = `P${n}`;
     const name = `${row.first_name} ${row.last_name}`;
+    if (team.captain_id && row.id === team.captain_id) clubCaptain = key;
     if (!available.has(row.id)) {
       unavailable.push({
         key, id: row.id, name, position: row.position,
@@ -373,6 +376,7 @@ export async function loadMatchContext(db: D1Database, teamId: string, fixture: 
     currentRoles: { penaltyTakerId: team.penalty_taker_id, freekickTakerId: team.freekick_taker_id },
     lastLineup: last ?? null,
     promisedStarters,
+    clubCaptain,
   };
   // Síla vlastního týmu na stejné škále jako soupeř: průměr hodnocení nejlepších jedenácti dostupných.
   const top = [...squad].sort((a, b) => b.rating - a.rating).slice(0, 11);

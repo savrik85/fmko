@@ -60,4 +60,11 @@ describe("odchod z dorostu", () => {
     expect(v.povyseni.map((p) => p.jmeno)).toEqual(["Jakub Klenot"]);
     expect(v.seniorSquadSize).toBeUndefined();
   });
+
+  it("AI klub s místem v áčku: všichni přerostlí jdou do áčka stejně jako u člověka", async () => {
+    await db.prepare("DELETE FROM players WHERE id IN ('A-0', 'A-1', 'A-2')").run();
+    const v = await dorostovyCyklus(db, "A21", createRng(3));
+    expect(v.povyseni.map((p) => p.jmeno).sort()).toEqual(["Filip Slabý", "Jakub Klenot", "Jakub Lepší"]);
+    expect(v.propusteni).toHaveLength(0);
+  });
 });

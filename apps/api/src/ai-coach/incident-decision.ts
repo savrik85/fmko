@@ -1,13 +1,16 @@
 /**
- * Rozhodnutí AI trenéra o incidentech v klubu (krádeže, škody, dluhy hráčů). Čisté funkce bez
- * databáze: nabídka přípustných možností, popis situace pro model, schéma odpovědi, kontrola
- * odpovědi a náhradní pravidlo podle povahy.
+ * Rozhodnutí AI trenéra o incidentech v klubu (krádeže, škody, dluhy hráčů, řeči z hospody). Čisté
+ * funkce bez databáze: nabídka přípustných možností, popis situace pro model, schéma odpovědi,
+ * kontrola odpovědi a náhradní pravidlo podle povahy.
  *
- * Možnosti jsou ty, které má člověk (`dostupneAkce` v incidents/vysetrovani.ts), jen bez chatu
- * (výslech a rozhovor jdou přes zprávy a AI trenér nepíše) a bez zjevného sebepoškození: obvinit
- * jde jen podezřelé ze stop, posledního brankáře nejde vyřadit ani vyhodit a vyhodit nejde hráče,
- * kterého klub pustit nesmí (hostující, minimum kádru). Provede je ai-coach/incidents.ts stejnými
- * službami jako routa (incidents/akce.ts, incidents/situace-db.ts).
+ * Možnosti jsou ty, které má člověk (`dostupneAkce`, `lzeVyslychat` v incidents/vysetrovani.ts,
+ * `lzeNahlasit` v incidents/bazar.ts), jen bez zjevného sebepoškození: obvinit jde jen podezřelé ze
+ * stop, posledního brankáře nejde vyřadit ani vyhodit a vyhodit nejde hráče, kterého klub pustit
+ * nesmí (hostující, minimum kádru). Výslech a rozhovor, které člověk vede v chatu, má AI trenér bez
+ * zpráv se stejnými následky (`askWithoutChat`, `talkWithoutChat` v incidents/akce.ts). Koho se
+ * zeptat, kód nabídne jen podle toho, co vidí i člověk: podezřelé ze stop, jejich kamarády a rivaly
+ * a hráče, kteří trenérovi věří. Kdo co ví, model nikdy nedostane. Provede je ai-coach/incidents.ts
+ * stejnými službami jako routa (incidents/akce.ts, incidents/bazar-db.ts, incidents/situace-db.ts).
  */
 
 import type { AkceTrestu } from "../incidents/typy";
@@ -15,11 +18,14 @@ import type { AiCoachProfile } from "./profile";
 import type { SquadImportance } from "./valuation";
 import { styleText } from "./weekly-decision";
 
-export type IncidentStage = "investigate" | "punish" | "advance";
+export type IncidentStage = "investigate" | "punish" | "advance" | "threat";
 
 export type IncidentAction =
   | { type: "police" }
   | { type: "accuse"; playerId: string }
+  | { type: "ask"; playerId: string }
+  | { type: "report_listing"; listingId: string }
+  | { type: "talk" }
   | { type: "wait" }
   | { type: "punish"; punishment: AkceTrestu; matches?: number }
   | { type: "advance"; lend: boolean };
@@ -44,6 +50,34 @@ export interface IncidentPlayer {
 export interface IncidentSuspect extends IncidentPlayer {
   /** Nalezená stopa ukazuje přímo na něj, ne jen mezi víc podezřelých. */
   directClue: boolean;
+}
+
+/** Vztah hráče k trenérovi slovy (`coach_relationship`, člověk ho vidí v profilu hráče). */
+export type CoachTrust = "good" | "neutral" | "poor";
+
+export function trustWord(coachRelationship: number): CoachTrust {
+  return coachRelationship >= 65 ? "good" : coachRelationship <= 35 ? "poor" : "neutral";
+}
+
+/** Proč by se ho trenér zeptal: podezřelý, rival nebo kamarád podezřelého, hráč, který mu věří. */
+export type AskReason = "suspect" | "rival" | "friend" | "trusted";
+
+export interface AskCandidate extends IncidentPlayer {
+  reason: AskReason;
+  /** Podezřelý, se kterým se nesnáší nebo kamarádí (`rival`, `friend`), jinak null. */
+  linkedTo: string | null;
+  /** U podezřelého: nalezená stopa ukazuje přímo na něj. */
+  directClue: boolean;
+  trust: CoachTrust;
+}
+
+/** Poznaný inzerát s ukradenými věcmi v bazaru, který jde nahlásit policii (`lzeNahlasit`). */
+export interface StolenListing {
+  listingId: string;
+  /** Co v inzerátu je, anglicky. */
+  item: string;
+  /** Policie na incidentu ještě nešetřila: nahlášení jí předá případ. Jinak se inzerát jen zajistí k šetření. */
+  startsPolice: boolean;
 }
 
 export interface IncidentClub {
@@ -81,6 +115,16 @@ export interface InvestigateFacts extends IncidentBase {
   policeFailed: boolean;
   /** Šance policie 0–1 (`sancePolicie` v incidents/vysetrovani.ts). */
   policeChance: number;
+  /** Případ právě šetří policie: obvinit ani volat policii nejde, ptát se a nahlásit inzerát ano. */
+  policeInvestigating: boolean;
+  /** Za kolik dní přijde výsledek policie, když šetří, jinak null. */
+  policeResultInDays: number | null;
+  /** Koho se trenér může zeptat, od nejslibnějšího. Prázdné, když se ptát nejde. */
+  askCandidates: AskCandidate[];
+  /** Koho se už ptal (co mu kdo prozradil, je mezi stopami). */
+  askedNames: string[];
+  /** Poznaný inzerát s ukradenými věcmi, který jde nahlásit, jinak null. */
+  listing: StolenListing | null;
 }
 
 export interface PunishFacts extends IncidentBase {
@@ -103,7 +147,15 @@ export interface AdvanceFacts extends IncidentBase {
   advanceMax: number;
 }
 
-export type IncidentFacts = InvestigateFacts | PunishFacts | AdvanceFacts;
+/** Hráč v hospodě ohlásil čin (spec incidentů 9a); jestli ho udělá, se ukáže po lhůtě. */
+export interface ThreatFacts extends IncidentBase {
+  stage: "threat";
+  player: IncidentPlayer & { trust: CoachTrust };
+  /** Co řekl, že udělá, anglicky. */
+  threat: string;
+}
+
+export type IncidentFacts = InvestigateFacts | PunishFacts | AdvanceFacts | ThreatFacts;
 
 export interface IncidentDecisionContext {
   club: IncidentClub;
@@ -128,6 +180,27 @@ export const INCIDENT_KIND_TEXT: Record<string, string> = {
   vandal: "vandals damaged the ground",
   dluhy: "a player is in debt",
 };
+
+/** Co hráč v hospodě ohlásil (`CINY_HRACE` v incidents/katalog.ts), anglicky jako „said he would …". */
+export const THREAT_KIND_TEXT: Record<string, string> = {
+  vloupani_sklad: "break into the equipment store and help himself",
+  vitrina: "take the trophies from the clubhouse cabinet",
+  dodavka_pujcena: "take the club van for a ride without asking",
+  koleje_trakturek: "drive the mower across the pitch",
+  kopnute_dvere: "kick a door in at the clubhouse",
+};
+
+/** Věci, které okradený klub v bazaru pozná (`jePoznatelne` v incidents/bazar.ts), anglicky. */
+const STOLEN_ITEM_TEXT: Record<string, string> = {
+  jerseys: "club jerseys",
+  team_van: "club van",
+  trophy_case: "trophies",
+  fan_drums: "fans' drums and flags",
+};
+
+export function stolenItemText(category: string): string {
+  return STOLEN_ITEM_TEXT[category] ?? "stolen equipment";
+}
 
 const CLUE_SOURCE: Record<string, string> = {
   kamera: "the security camera",
@@ -183,17 +256,60 @@ export function investigateOptions(f: InvestigateFacts): IncidentOption[] {
       text: `Call the police (free). They investigate for 3 to 7 days; your estimate of their chance to solve it: ${chanceWord(f.policeChance)}. If one of your players did it, he will miss an interrogation day and a court day.`,
     });
   }
+  if (f.listing) {
+    const item = f.listing.item;
+    out.push({
+      key: "report_listing", action: { type: "report_listing", listingId: f.listing.listingId },
+      text: f.listing.startsPolice
+        ? `Report the second-hand market listing with your ${item} to the police (free): the police take over the case for 3 to 7 days (your estimate of their chance to solve it: ${chanceWord(f.policeChance)}) and the listing is taken down, so nobody else can buy your ${item}. If one of your players did it, he will miss an interrogation day and a court day.`
+        : `Report the second-hand market listing with your ${item} to the police: the listing is taken down and your ${item} become part of the police investigation, so nobody else can buy them.`,
+    });
+  }
   if (f.canAccuse) {
     f.suspects.forEach((s, i) => out.push({
       key: `accuse_${i + 1}`, action: { type: "accuse", playerId: s.playerId },
       text: `Accuse ${playerLine(s)}. ${s.directClue ? "A clue points straight at him." : `He is one of ${f.suspects.length} suspects the clues point at.`} If he did it, the clues convict him; if he is innocent, his morale drops by 12 and his trust in you by 20, his friends lose 3 morale and the rest of the squad 2.`,
     }));
   }
+  f.askCandidates.forEach((c, i) => out.push({
+    key: `ask_${i + 1}`, action: { type: "ask", playerId: c.playerId }, text: askText(c),
+  }));
   out.push({
     key: "wait", action: { type: "wait" },
-    text: `Do nothing for now. If nobody is caught by the deadline${f.daysToDeadline !== null ? ` (${plural(f.daysToDeadline, "day")})` : ""}, the case is closed as unsolved.`,
+    text: f.policeInvestigating
+      ? `Do nothing and wait for the police result${f.policeResultInDays !== null ? ` (in ${plural(f.policeResultInDays, "day")})` : ""}.`
+      : `Do nothing for now. If nobody is caught by the deadline${f.daysToDeadline !== null ? ` (${plural(f.daysToDeadline, "day")})` : ""}, the case is closed as unsolved.`,
   });
   return out;
+}
+
+/** Možnost „zeptat se" jednou větou podle toho, proč by se ho trenér ptal. Nikdy neprozradí, kdo co ví. */
+function askText(c: AskCandidate): string {
+  const who = playerLine(c);
+  const trust = `his relationship with you is ${c.trust}`;
+  switch (c.reason) {
+    case "suspect":
+      return `Ask ${who} about it in private (it costs nothing). He is ${c.directClue ? "the player a clue points at" : "one of the suspects"}: if he did it, he may own up${c.directClue ? ", more likely with the clue against him" : ""}, the more so the better he gets on with you (${trust}); if he did not, he can only tell you what he knows.`;
+    case "rival":
+      return `Ask ${who} whether he knows anything (it costs nothing). He does not get on with suspect ${c.linkedTo ?? "the suspect"}, so if he knows something, he will probably tell you; ${trust}.`;
+    case "friend":
+      return `Ask ${who} whether he knows anything (it costs nothing). He is a close friend of suspect ${c.linkedTo ?? "the suspect"}: he may well know, but friends tend to cover for each other; ${trust}.`;
+    case "trusted":
+      return `Ask ${who} whether he saw or heard anything (it costs nothing). You have no suspect yet; he gets on well with you, so he would tell you if he knew.`;
+  }
+}
+
+export function threatOptions(f: ThreatFacts): IncidentOption[] {
+  return [
+    {
+      key: "talk", action: { type: "talk" },
+      text: `Have a word with him and tell him not to do anything stupid (it costs nothing). That makes it much less likely that he really does it, the more so the better he gets on with you (his relationship with you is ${f.player.trust}).`,
+    },
+    {
+      key: "wait", action: { type: "wait" },
+      text: "Leave it: drunk talk often comes to nothing, but he may really do it.",
+    },
+  ];
 }
 
 export function punishOptions(f: PunishFacts, club: Pick<IncidentClub, "matchesNext7Days">): IncidentOption[] {
@@ -260,12 +376,13 @@ export function advanceOptions(f: AdvanceFacts): IncidentOption[] {
 export function incidentOptions(facts: IncidentFacts, club: IncidentClub): IncidentOption[] {
   if (facts.stage === "investigate") return investigateOptions(facts);
   if (facts.stage === "punish") return punishOptions(facts, club);
+  if (facts.stage === "threat") return threatOptions(facts);
   return advanceOptions(facts);
 }
 
 export const INCIDENT_SYSTEM_PROMPT = [
   "You are the head coach and manager of an amateur Czech district football club in a football management game.",
-  "Something happened at your club and you decide how to deal with it: a theft, damage at the ground, or a player in money trouble.",
+  "Something happened at your club and you decide how to deal with it: a theft, damage at the ground, a player in money trouble, or a player who threatened something in the pub.",
   "Think like a sensible real manager with YOUR personality: discipline and fairness, the mood in the dressing room, money and the next matches.",
   "The game has already checked the rules, so every listed option is allowed.",
   "Answer with exactly one JSON object and nothing else.",
@@ -284,13 +401,20 @@ export function renderIncidentPrompt(ctx: IncidentDecisionContext): string {
   ];
   if (facts.stage === "advance") {
     L.push(`SITUATION: ${playerLine(facts.player)} is in debt and asks you for an advance on his wages.`);
+  } else if (facts.stage === "threat") {
+    L.push(`SITUATION: in the pub, ${playerLine(facts.player)} said while drunk that he would ${facts.threat}. Nobody knows yet whether he means it.`);
   } else {
     L.push(`INCIDENT: ${facts.description} (${facts.category === "kradez" ? "theft" : "damage"}), seriousness ${facts.severity}/3, damage worth about ${czk(facts.damage)}.`);
   }
   if (facts.daysToDeadline !== null) L.push(`You have ${plural(facts.daysToDeadline, "day")} left to decide.`);
   if (facts.stage === "investigate") {
     L.push(facts.clues.length > 0 ? `CLUES FOUND:\n${facts.clues.map((c) => `- ${c}`).join("\n")}` : "CLUES FOUND: none so far.");
-    L.push(`Accusations left: ${facts.accusationsLeft} of 2.${facts.policeFailed ? " The police already investigated and found nothing." : ""}`);
+    if (facts.policeInvestigating) {
+      L.push(`The police are investigating the case${facts.policeResultInDays !== null ? ` and report back in ${plural(facts.policeResultInDays, "day")}` : ""}. Until then you cannot accuse anyone, but you can still ask your players.`);
+    } else {
+      L.push(`Accusations left: ${facts.accusationsLeft} of 2.${facts.policeFailed ? " The police already investigated and found nothing." : ""}`);
+    }
+    if (facts.askedNames.length > 0) L.push(`ALREADY ASKED: ${facts.askedNames.join(", ")} (anything they told you is among the clues above).`);
   } else if (facts.stage === "punish") {
     const c = facts.culprit;
     L.push(`CULPRIT (known): ${playerLine(c)}, weekly wage ${czk(c.weeklyWage)}${c.repeatOffender ? ", a repeat offender (another incident in the last two months)" : ""}.`);
@@ -329,12 +453,15 @@ export function validateIncidentDecision(raw: unknown, ctx: IncidentDecisionCont
  * Náhradní pravidlo podle povahy (výpadek modelu, neplatná odpověď, režim off). Vrací vždy
  * některou z nabídnutých možností.
  *
- * - Vyšetřování: stopa ukazuje přímo na hráče → obvinit ho; jinak policie, je-li ještě k mání;
- *   po policii odvážný trenér obviní podezřelého, opatrný to nechá být.
+ * - Vyšetřování: stopa ukazuje přímo na hráče → obvinit ho; poznaný inzerát s ukradenými věcmi →
+ *   nahlásit (policie a k tomu stažený inzerát); jinak policie, je-li ještě k mání; pak se zeptat
+ *   nejslibnějšího hráče; teprve potom (nebo poslední den před lhůtou) odvážný trenér obviní
+ *   podezřelého, opatrný to nechá být.
  * - Trest: vážný průšvih nebo recidiva → vyhodit, když nejde o oporu; oporu a oblíbence trenér
  *   nevyřadí (peníze, nebo odpuštění); šetrný strhává ze mzdy, ostatní dávají pokutu; trpělivý
  *   drobnost odpustí; kde peníze nejdou, vyřadit na zápas nebo dva.
  * - Záloha: půjčit, když na ni klub má nad rezervou a trenér není škudlil (oporu podrží i škudlil).
+ * - Řeči z hospody: promluvit si s ním (nic to nestojí a šanci, že to udělá, to výrazně sníží).
  */
 export function fallbackIncidentDecision(ctx: IncidentDecisionContext): IncidentOption {
   const pick = (key: string): IncidentOption | null => ctx.options.find((o) => o.key === key) ?? null;
@@ -346,11 +473,21 @@ export function fallbackIncidentDecision(ctx: IncidentDecisionContext): Incident
     const direct = f.suspects.findIndex((s) => s.directClue);
     const accuseDirect = direct >= 0 ? pick(`accuse_${direct + 1}`) : null;
     if (accuseDirect) return accuseDirect;
+    const report = pick("report_listing");
+    if (report) return report;
     const police = pick("police");
     if (police) return police;
-    if (p.risk >= 60) return pick("accuse_1") ?? idle;
-    return idle;
+    // Poslední den před lhůtou už odvážný trenér nečeká, co kdo řekne, a obviní.
+    const lastDay = f.daysToDeadline !== null && f.daysToDeadline <= 1;
+    const riskyAccuse = p.risk >= 60 ? pick("accuse_1") : null;
+    if (lastDay && riskyAccuse) return riskyAccuse;
+    // Kandidáti na otázku jsou seřazení od nejslibnějšího (podezřelý s přímou stopou první).
+    const ask = pick("ask_1");
+    if (ask) return ask;
+    return riskyAccuse ?? idle;
   }
+
+  if (f.stage === "threat") return pick("talk") ?? idle;
 
   if (f.stage === "advance") {
     const affordable = ctx.club.budget - f.advanceMax >= ctx.club.reserve;

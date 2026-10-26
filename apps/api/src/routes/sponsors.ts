@@ -7,26 +7,19 @@ import type { Bindings } from "../index";
 import { requireTeamOwnership } from "../auth/middleware";
 import { getSession, getTokenFromRequest } from "../auth/session";
 import { logger } from "../lib/logger";
-import { gameExpiry, isGameExpired } from "../lib/game-time";
+import { isGameExpired } from "../lib/game-time";
 import { budgetEstimateRange, sponsorBudgetB } from "../sponsors/budget";
-import {
-  DEFAULT_FAVOR, FAVOR_REASONS, invitationAcceptance, invitationAcceptedDelta, invitationGiftCost, PUB_BEER_FAVOR, pubBeerCost,
-  WALKED_AWAY_FAVOR,
-} from "../sponsors/favor-math";
+import { DEFAULT_FAVOR, FAVOR_REASONS, invitationGiftCost, PUB_BEER_FAVOR, pubBeerCost } from "../sponsors/favor-math";
 import {
   applySponsorFavorDelta, ensureSponsorOwner, ensureSponsorOwners, getFavor, getFavorsForTeam,
 } from "../sponsors/favor";
-import {
-  afterReject, BASE_WILLINGNESS, complaintFor, COOLDOWN_DAYS, evaluateRound, INSULT_FAVOR, WILLINGNESS_CAP, wishComplaint,
-} from "../sponsors/negotiation";
+import { inviteSponsorOwner, nextHomeMatch } from "../sponsors/invitations";
+import { BASE_WILLINGNESS, WILLINGNESS_CAP } from "../sponsors/negotiation";
 import {
   closeNegotiation, loadNegotiationSponsor, loadNegotiationState, loadNegotiationTeam, negotiationAvailability, openNegotiation,
-  pendingTerms, saveRound, teamGameDate, type NegotiationRound, type NegotiationStatus,
 } from "../sponsors/negotiation-db";
-import { ownerResponse, type ResponseKind } from "../sponsors/negotiation-texts";
+import { proposeRound } from "../sponsors/negotiation-round";
 import { averageFavor, countBands, pickExtremes, rankAmongClubs, seasonAtDate, type FirmFavor } from "../sponsors/overview";
-import type { OwnerPersonality } from "../sponsors/owners";
-import { validateProposal } from "../sponsors/proposal";
 import { signNegotiation, viewWithClawback } from "../sponsors/signing";
 
 export const sponsorsRouter = new Hono<{ Bindings: Bindings }>();
@@ -52,13 +45,6 @@ async function assertTeamOwner(
   return own ? null : { error: "Přístup odepřen", status: 403 };
 }
 
-const STATUS_ERRORS: Record<Exclude<NegotiationStatus, "open">, { error: string; status: 409 | 410 }> = {
-  accepted: { error: "Majitel už návrh přijal, zbývá podepsat", status: 409 },
-  walked_away: { error: "Majitel od jednání odešel", status: 409 },
-  expired: { error: "Jednání vypršelo", status: 410 },
-  signed: { error: "Smlouva už je podepsaná", status: 409 },
-};
-
 interface TeamCtx { id: string; reputation: number; district: string; size: string; name: string }
 
 async function loadTeam(db: D1Database, teamId: string): Promise<TeamCtx | null> {
@@ -66,32 +52,6 @@ async function loadTeam(db: D1Database, teamId: string): Promise<TeamCtx | null>
     `SELECT t.id, t.reputation, t.name, v.district, v.size FROM teams t JOIN villages v ON v.id = t.village_id WHERE t.id = ?`,
   ).bind(teamId).first<TeamCtx>();
 }
-
-/**
- * Nejbližší domácí ligový zápas klubu, který ještě vůbec nezačal.
- *
- * `match-runner.ts` má životní cyklus zápasu 'scheduled' → 'lineups_open' (kolo je
- * zamčené, běží/čeká na simulaci) → 'simulated'. Pozvánky obce (`routes/villages.ts`)
- * berou `status != 'simulated'`, což pustí i 'lineups_open' — pozvat majitele firmy by
- * pak šlo i v okamžiku, kdy se kolo právě dohrává. Tady chceme jen 'scheduled'.
- */
-async function nextHomeMatch(db: D1Database, teamId: string) {
-  return db.prepare(
-    `SELECT m.id, sc.scheduled_at, aw.name AS opponent_name
-     FROM matches m
-     JOIN season_calendar sc ON sc.id = m.calendar_id
-     JOIN teams aw ON aw.id = m.away_team_id
-     WHERE m.home_team_id = ? AND m.status = 'scheduled' AND sc.scheduled_at >= date('now', '-1 day')
-     ORDER BY sc.scheduled_at ASC LIMIT 1`,
-  ).bind(teamId).first<{ id: string; scheduled_at: string; opponent_name: string }>();
-}
-
-const REJECT_REASONS: Record<OwnerPersonality, string[]> = {
-  patriot: ["Ten den mám zabijačku u bratra, příště určitě.", "Na hřiště rád, ale teď to nevyjde."],
-  businessman: ["Mám jednání v Praze, nestihnu to.", "Pošlete mi termíny na další měsíc, ozvu se."],
-  fan: ["Po tom, jak jste hráli minule? Letos ne.", "Mám lístky na ligu, sorry."],
-  cautious: ["Nejdřív se chci podívat, jak to u vás funguje.", "Radši počkám, až se to u vás usadí."],
-};
 
 // GET /api/sponsors/:id?teamId= — sponzor jako entita + majitel + náklonnost klubu
 sponsorsRouter.get("/sponsors/:sponsorId", async (c) => {
@@ -374,90 +334,23 @@ sponsorsRouter.get("/teams/:teamId/sponsor-history", async (c) => {
   });
 });
 
-// POST /api/teams/:teamId/sponsor-owners/:sponsorId/invite — pozvat majitele na domácí zápas
+// POST /api/teams/:teamId/sponsor-owners/:sponsorId/invite — pozvat majitele na domácí zápas.
+// Pravidla, šance, dárek a náklonnost: služba sdílená s AI trenérem (sponsors/invitations.ts).
 sponsorsRouter.post("/teams/:teamId/sponsor-owners/:sponsorId/invite", async (c) => {
-  const db = c.env.DB;
   const teamId = c.req.param("teamId");
   const sponsorId = Number(c.req.param("sponsorId"));
   const body = await c.req.json<{ matchId?: string }>()
     .catch((e) => { logger.warn({ module: "sponsors", teamId }, "parse invite body", e); return null; });
   if (!Number.isInteger(sponsorId) || !body?.matchId) return c.json({ error: "Chybí sponzor nebo zápas" }, 400);
 
-  const team = await loadTeam(db, teamId);
-  if (!team) return c.json({ error: "Tým nenalezen" }, 404);
-  const sponsor = await db.prepare("SELECT id, district FROM district_sponsors WHERE id = ?")
-    .bind(sponsorId).first<{ id: number; district: string }>();
-  if (!sponsor) return c.json({ error: "Sponzor nenalezen" }, 404);
-  if (sponsor.district !== team.district) return c.json({ error: "Zvát jde jen firmy z vlastního okresu" }, 400);
-
-  const match = await nextHomeMatch(db, teamId);
-  if (!match || match.id !== body.matchId) return c.json({ error: "Zvát jde jen na nejbližší domácí zápas" }, 400);
-  const matchDay = match.scheduled_at.slice(0, 10);
-
-  const taken = await db.prepare(
-    `SELECT 1 FROM sponsor_invitations WHERE sponsor_id = ? AND match_day = ? AND status IN ('accepted','attended') AND team_id != ?`,
-  ).bind(sponsorId, matchDay, teamId).first();
-  if (taken) return c.json({ error: "Majitel už ten den přijal pozvání jiného klubu" }, 409);
-
-  const owner = await ensureSponsorOwner(db, sponsorId);
-  if (!owner) return c.json({ error: "Majitel nenalezen" }, 404);
-  const favor = await getFavor(db, sponsorId, teamId);
-  const giftCost = invitationGiftCost(favor);
-
-  const budget = await db.prepare("SELECT budget, game_date FROM teams WHERE id = ?")
-    .bind(teamId).first<{ budget: number; game_date: string | null }>();
-  if (!budget || budget.budget < giftCost) return c.json({ error: "Na dárek nemáš peníze" }, 400);
-
-  const recent = await db.prepare(
-    `SELECT home_team_id, home_score, away_score FROM matches
-     WHERE (home_team_id = ? OR away_team_id = ?) AND status = 'simulated' ORDER BY simulated_at DESC LIMIT 5`,
-  ).bind(teamId, teamId).all<{ home_team_id: string; home_score: number; away_score: number }>();
-  const recentLosses = recent.results.filter((m) => {
-    const ours = m.home_team_id === teamId ? m.home_score : m.away_score;
-    const theirs = m.home_team_id === teamId ? m.away_score : m.home_score;
-    return ours < theirs;
-  }).length;
-
-  // Lóže dělá z pozvání zážitek. Když se úroveň nenačte, zve se jako bez lóže.
-  // Bez tribun (stands < 1) je efektivní úroveň 0, i kdyby v DB zůstal vip_box > 0
-  // po tom, co výtržnosti tribuny zbořily pod stojící lóží (viz calculateFacilityEffects).
-  const vipRow = await db.prepare("SELECT vip_box, stands FROM stadiums WHERE team_id = ?")
-    .bind(teamId).first<{ vip_box: number | null; stands: number | null }>()
-    .catch((e) => { logger.warn({ module: "sponsors", teamId }, "load vip box for invite", e); return null; });
-  const vipBoxEffectiveLevel = (vipRow?.stands ?? 0) >= 1 ? (vipRow?.vip_box ?? 0) : 0;
-
-  const probability = invitationAcceptance({
-    favor, personality: owner.personality, recentLosses, noise: (Math.random() - 0.5) * 0.2,
-    vipBoxLevel: vipBoxEffectiveLevel,
-  });
-  const accepted = Math.random() < probability;
-  const reasons = REJECT_REASONS[owner.personality];
-  const rejectReason = accepted ? null : reasons[Math.floor(Math.random() * reasons.length)];
-
-  try {
-    await db.prepare(
-      `INSERT INTO sponsor_invitations (id, sponsor_id, team_id, match_id, match_day, status, gift_cost, reject_reason)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).bind(crypto.randomUUID(), sponsorId, teamId, match.id, matchDay, accepted ? "accepted" : "declined", giftCost, rejectReason).run();
-  } catch (e) {
-    // Unikátní index: už pozváno na tenhle zápas, nebo slot mezitím obsadil jiný klub.
-    logger.warn({ module: "sponsors", teamId }, `insert sponsor invitation sponsor=${sponsorId}`, e);
-    return c.json({ error: "Tohohle majitele už na ten zápas zvát nejde" }, 409);
-  }
-
-  const { recordTransaction } = await import("../season/finance-processor");
-  await recordTransaction(db, teamId, "event", -giftCost, `Pozvání ${owner.firstName} ${owner.lastName} na zápas`,
-    budget.game_date ?? new Date().toISOString());
-  if (accepted) {
-    await applySponsorFavorDelta(db, sponsorId, teamId, invitationAcceptedDelta(owner.personality), FAVOR_REASONS.invitationAccepted);
-  }
-
+  const res = await inviteSponsorOwner(c.env.DB, teamId, sponsorId, body.matchId);
+  if (!res.ok) return c.json({ error: res.error }, res.status);
   return c.json({
-    status: accepted ? "accepted" : "declined",
-    giftCost,
-    probability: Math.round(probability * 100) / 100,
-    rejectReason,
-    favor: await getFavor(db, sponsorId, teamId),
+    status: res.status,
+    giftCost: res.giftCost,
+    probability: res.probability,
+    rejectReason: res.rejectReason,
+    favor: res.favor,
   });
 });
 
@@ -522,88 +415,19 @@ sponsorsRouter.get("/teams/:teamId/sponsors/negotiations/:negotiationId", async 
   return c.json(await viewWithClawback(c.env.DB, st));
 });
 
-const MAX_NEGOTIATION_ROUNDS = 30;
-
 // POST /api/teams/:teamId/sponsors/negotiations/:negotiationId/propose: návrh klubu, odpověď majitele.
 // Klient posílá jen návrh; cenu, ochotu i protinabídku počítá server z vlastního kontextu.
+// Stav, strop kol, validace, odpověď majitele a zápis kola dělá služba sdílená s AI trenérem
+// (sponsors/negotiation-round.ts).
 sponsorsRouter.post("/teams/:teamId/sponsors/negotiations/:negotiationId/propose", async (c) => {
   const db = c.env.DB;
   const teamId = c.req.param("teamId");
   const st = await loadNegotiationState(db, teamId, c.req.param("negotiationId"));
   if ("error" in st) return c.json({ error: st.error }, st.status);
-  // Návrh jde poslat i do jednání ve stavu 'accepted': nový návrh nahradí přijaté podmínky
-  // (další kolo pak počítá stejně jako z 'open' — přijetí zůstává 'accepted', protinabídka
-  // nebo odmítnutí se vrací do 'open', dojití trpělivosti na 'walked_away').
-  if (st.neg.status !== "open" && st.neg.status !== "accepted") {
-    const e = STATUS_ERRORS[st.neg.status];
-    return c.json({ error: e.error }, e.status);
-  }
-  // Protinabídky trpělivost neberou, strop kol drží JSON kol v rozumné velikosti.
-  if (st.neg.rounds.length >= MAX_NEGOTIATION_ROUNDS) {
-    return c.json({ error: "Majitel už o tom nechce dál mluvit, přijmi jeho poslední nabídku, nebo to nech být" }, 409);
-  }
   const raw = await c.req.json<unknown>()
     .catch((e) => { logger.warn({ module: "sponsors", teamId }, "parse negotiation proposal", e); return null; });
-  const valid = validateProposal(raw, st.ctx);
-  if (!valid.ok) return c.json({ error: valid.error }, 400);
-
-  const outcome = evaluateRound(valid.proposal, st.ctx);
-  const gameDate = teamGameDate(st.team);
-  let status: NegotiationStatus = "open";
-  let patience = st.neg.patience;
-  let cooldown = st.neg.cooldownUntil;
-  let kind: ResponseKind;
-  if (outcome.kind === "accept") {
-    status = "accepted";
-    kind = "accept";
-  } else if (outcome.kind === "counter_money" || outcome.kind === "counter_wish") {
-    kind = outcome.kind;
-  } else {
-    const after = afterReject(patience);
-    patience = after.patience;
-    kind = outcome.insulted ? "insulted" : "reject";
-    if (after.walkedAway) {
-      status = "walked_away";
-      kind = "walked_away";
-      cooldown = gameExpiry(gameDate, COOLDOWN_DAYS);
-    }
-  }
-  const wish = outcome.kind === "counter_wish" ? outcome.wish : undefined;
-  const counter = outcome.kind === "counter_money" || outcome.kind === "counter_wish" ? outcome.counter : undefined;
-  // Co majiteli konkrétně vadí: u protinabídky za přání je to rovnou ten chybějící slib
-  // (stejný jako `wish`), jinak položka nejvíc zvednutá oproti poslední dohodě (complaintFor).
-  // Nikdy pro accept.
-  const complaint = outcome.kind === "counter_wish"
-    ? wishComplaint(outcome.wish).text
-    : outcome.kind !== "accept" ? complaintFor(valid.proposal, st.ctx, pendingTerms(st.neg))?.text : undefined;
-  const round: NegotiationRound = {
-    proposal: valid.proposal,
-    response: {
-      kind,
-      text: ownerResponse(st.owner.personality, kind, st.neg.rounds.length, wish),
-      gameDate,
-      // Postup sezóny, se kterým majitel přijal nebo spočítal protinabídku: podpis podle něj ověřuje cenu.
-      ...(outcome.kind !== "reject" ? { progressMonths: st.ctx.seasonProgressMonths } : {}),
-      ...(counter ? { counter } : {}),
-      ...(wish ? { wish } : {}),
-      ...(outcome.kind === "reject" && outcome.insulted ? { insulted: true } : {}),
-      ...(complaint ? { complaint } : {}),
-    },
-  };
-  const saved = await saveRound(db, st.neg, round, { status, patience, cooldownUntil: cooldown });
-  if (!saved) return c.json({ error: "Návrh se právě zpracovává, načti stránku znovu" }, 409);
-
-  // Nabídka nad 1,5 × ochoty majitele urazí (spec: náklonnost −3), zapisuje se do deníku.
-  if (outcome.kind === "reject" && outcome.insulted) {
-    await applySponsorFavorDelta(db, st.sponsor.id, teamId, INSULT_FAVOR, FAVOR_REASONS.negotiationInsult)
-      .catch((e) => { logger.error({ module: "sponsors", teamId }, `urážka při jednání ${st.neg.id} se nezapsala do náklonnosti`, e); });
-  }
-  // Trpělivost došla, majitel odchází bez dohody (spec: náklonnost −5, navíc k urážce, když se sešly obě).
-  if (status === "walked_away") {
-    await applySponsorFavorDelta(db, st.sponsor.id, teamId, WALKED_AWAY_FAVOR, FAVOR_REASONS.walkedAway)
-      .catch((e) => { logger.error({ module: "sponsors", teamId }, `odchod od jednání ${st.neg.id} se nezapsal do náklonnosti`, e); });
-  }
-  logger.info({ module: "sponsors", teamId }, `jednání ${st.neg.id}: kolo ${st.neg.rounds.length + 1}, ${kind}, trpělivost ${patience}`);
+  const res = await proposeRound(db, st, raw);
+  if (!res.ok) return c.json({ error: res.error }, res.status);
 
   const fresh = await loadNegotiationState(db, teamId, st.neg.id);
   if ("error" in fresh) return c.json({ error: fresh.error }, fresh.status);

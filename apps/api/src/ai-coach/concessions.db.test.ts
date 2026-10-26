@@ -115,7 +115,10 @@ interface FakeAi {
   env: Bindings;
 }
 
-/** Workers AI: pondělní správě odpoví `weekly`, hlavnímu sponzorovi „nikoho“, ostatním prázdným objektem. */
+/**
+ * Workers AI: pondělní správě odpoví `weekly`, výběru hlavního sponzora i sponzora stadionu „nikoho“
+ * (peníze ze smlouvy by rozhodily rozpočet), ostatním prázdným objektem.
+ */
 function fakeAi(weekly: unknown, onWeekly?: () => Promise<void>): FakeAi {
   const weeklyPrompts: string[] = [];
   const weeklySchemas: Array<Record<string, unknown>> = [];
@@ -128,7 +131,7 @@ function fakeAi(weekly: unknown, onWeekly?: () => Promise<void>): FakeAi {
         weeklySchemas.push(input.response_format?.json_schema?.schema ?? {});
         if (onWeekly) await onWeekly();
         answer = weekly;
-      } else if (name === "main_sponsor") {
+      } else if (name === "main_sponsor" || name === "stadium_sponsor") {
         answer = { choice: "none", reason: "not this week" };
       }
       return { choices: [{ message: { content: JSON.stringify(answer) } }], usage: { prompt_tokens: 10, completion_tokens: 5 } };

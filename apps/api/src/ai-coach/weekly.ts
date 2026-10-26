@@ -23,7 +23,8 @@ import { loadConcessionContext } from "./concessions";
 import { logDecision, type DecisionMode } from "./decision-log";
 import { callCoachModel, COACH_MODEL } from "./llm";
 import { readCoachMode } from "./mode";
-import { maybeSignMainSponsor } from "./main-sponsor";
+import { maybeSignMainSponsor, maybeSignStadiumSponsor } from "./main-sponsor";
+import { maybeInviteSponsorOwners } from "./sponsor-invites";
 import { ensureAiProfile } from "./profile";
 import { analyzeSquad, loadClubSquad, TARGET_SENIOR_SQUAD } from "./squad";
 import {
@@ -52,7 +53,7 @@ const POSITION_DEPTH: Record<string, number> = { GK: 2, DEF: 6, MID: 6, FWD: 4 }
 
 export interface WeeklyResult {
   used: "model" | "fallback";
-  executed: Array<{ action: WeeklyAction["kind"] | "main_sponsor"; ok: boolean; detail: string }>;
+  executed: Array<{ action: WeeklyAction["kind"] | "main_sponsor" | "stadium_sponsor" | "sponsor_invite"; ok: boolean; detail: string }>;
   skipped: Array<{ item: string; reason: string }>;
   spent: number;
   mode: DecisionMode;
@@ -482,17 +483,34 @@ export async function runWeeklyReview(env: Bindings, teamId: string, now: Date, 
       if (r.ok && "cost" in a) spent += a.cost;
     }
   }
-  // Hlavní sponzor: firmu vybere model z firem, se kterými jde teď jednat, a podepíše se úvodní
-  // nabídka majitele stejným jednáním jako u člověka. Peníze klub dostává, nic neplatí, proto
-  // mimo rezervu. Vlastní záznam v deníku (main_sponsor); v režimu shadow a nanečisto jen rozhodne.
-  const main = await maybeSignMainSponsor(db, teamId, ctx.profile, {
+  // Hlavní sponzor a název stadionu: firmu vybere model z firem, se kterými jde teď jednat, a jednání
+  // (podepsat, smlouvat, odejít) vede tah po tahu stejnými funkcemi jako u člověka. Peníze klub
+  // dostává, nic neplatí, proto mimo rezervu. Vlastní záznamy v deníku (main_sponsor, stadium_sponsor,
+  // sponsor_negotiation); v režimu shadow a nanečisto jen rozhodne.
+  const sponsorOpts = {
     mode, dryRun: opts.dryRun, ai: env, model: opts.model, contextRef: `week:${ctx.gameDay}`,
     club: { league: ctx.league, weeklyRunningCost: ctx.finance.weeklyRunningCost, weeklyIncome: ctx.finance.weeklyIncome },
-  }).catch((e) => {
+  };
+  const main = await maybeSignMainSponsor(db, teamId, ctx.profile, sponsorOpts).catch((e) => {
     logger.warn({ module: M, teamId }, "hlavní sponzor", e);
     return null;
   });
   if (main?.signed) executed.push({ action: "main_sponsor", ok: true, detail: main.detail });
+  const stadiumSponsor = await maybeSignStadiumSponsor(db, teamId, ctx.profile, sponsorOpts).catch((e) => {
+    logger.warn({ module: M, teamId }, "sponzor stadionu", e);
+    return null;
+  });
+  if (stadiumSponsor?.signed) executed.push({ action: "stadium_sponsor", ok: true, detail: stadiumSponsor.detail });
+  // Majitelé firem do VIP lóže na nejbližší domácí zápas: koho pozvat volí model (jen s lóží, dárky
+  // nad rezervou), pozvání provede stejná služba jako u člověka. Vlastní záznam v deníku (sponsor_invite).
+  const invites = await maybeInviteSponsorOwners(db, teamId, ctx.profile, {
+    mode, dryRun: opts.dryRun, ai: env, model: opts.model, contextRef: `week:${ctx.gameDay}`, reserve: ctx.finance.reserve,
+  }).catch((e) => {
+    logger.warn({ module: M, teamId }, "pozvání majitelů do lóže", e);
+    return null;
+  });
+  for (const i of invites?.invited ?? []) executed.push({ action: "sponsor_invite", ok: i.ok, detail: `${i.name}: ${i.detail}` });
+  spent += invites?.spent ?? 0;
 
   await logDecision(db, {
     teamId,

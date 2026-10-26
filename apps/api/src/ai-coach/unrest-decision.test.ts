@@ -57,4 +57,22 @@ describe("náhradní pravidlo podle povahy", () => {
     expect(fallbackUnrestChoice(player({ importance: "key", options: [release] }), profile({ trading: 90 }))).toBe("wait");
     expect(fallbackUnrestChoice(player({ importance: "surplus" }), profile({ thrift: 20, trading: 10 }))).toBe("wait");
   });
+
+  it("když „pustit ho“ nejde, obchodník slíbí prodej hráči, bez kterého se obejde; opoře ne", () => {
+    const promise = { id: "promise_transfer" as const, cost: 0, weeklyCost: 0, promise: { marketValue: 20_000, minPrice: 12_000 } };
+    const wantsOut = { reasons: ["better_club" as const], options: [promise] };
+    expect(fallbackUnrestChoice(player({ ...wantsOut, importance: "rotation" }), profile({ trading: 70 }))).toBe("promise_transfer");
+    expect(fallbackUnrestChoice(player({ ...wantsOut, importance: "surplus" }), profile({ trading: 40 }))).toBe("promise_transfer");
+    expect(fallbackUnrestChoice(player({ ...wantsOut, importance: "key" }), profile({ trading: 90 }))).toBe("wait");
+    expect(fallbackUnrestChoice(player({ ...wantsOut, importance: "rotation" }), profile({ trading: 20 }))).toBe("wait");
+  });
+});
+
+describe("slib prodeje v popisu pro model", () => {
+  it("model ví, že hráč půjde na trh a slušná nabídka od 60 % tržní hodnoty se přijme", () => {
+    const promise = { id: "promise_transfer" as const, cost: 0, weeklyCost: 0, promise: { marketValue: 20_000, minPrice: 12_000 } };
+    const prompt = renderUnrestPrompt(ctx([player({ reasons: ["better_club"], options: [promise] })]));
+    expect(prompt).toContain('"promise_transfer": promise to sell him at the next decent offer within 30 days');
+    expect(prompt).toContain("you accept the first transfer offer of at least 12,000 CZK (his market value is 20,000 CZK)");
+  });
 });

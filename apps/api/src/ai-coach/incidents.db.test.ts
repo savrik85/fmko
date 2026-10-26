@@ -9,10 +9,12 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
 import { Miniflare } from "miniflare";
 import { wipeAiClubForNewcomer } from "../ai-clubs/overwrite";
-import { rozhodni } from "../incidents/akce";
+import { promluvSi, rozhodni, zeptejSe } from "../incidents/akce";
+import { nahlasKradeneZbozi } from "../incidents/bazar-db";
 import { zpracujIncidentyDne } from "../incidents/denni-krok";
 import { oznamIncident } from "../incidents/dopady";
 import type { NavrhIncidentu } from "../incidents/typy";
+import { zpracujZpravuTrenera } from "../incidents/zprava-trenera";
 import type { Bindings } from "../index";
 import { handleAiIncidents } from "./incidents";
 import { generateAiProfile, type AiCoachProfile } from "./profile";
@@ -117,6 +119,90 @@ async function insertClue(incidentId: string, pointsTo: string): Promise<void> {
     `INSERT INTO club_incident_clues (id, incident_id, team_id, source, points_to_player_id, suspects, holder_player_id, strength, police_bonus, text, found, found_on)
      VALUES (?, ?, ?, 'spravce', ?, NULL, NULL, 2, 0.1, 'Správce ho viděl u skladu.', 1, ?)`,
   ).bind(`${incidentId}-spravce-1`, incidentId, AI, pointsTo, CREATED).run();
+}
+
+interface ClueFixture {
+  id: string;
+  incidentId: string;
+  teamId: string;
+  source: string;
+  pointsTo?: string | null;
+  suspects?: string[] | null;
+  holder?: string | null;
+  strength?: number;
+  found: boolean;
+  text?: string;
+}
+
+async function insertClueRow(c: ClueFixture): Promise<void> {
+  await db.prepare(
+    `INSERT INTO club_incident_clues (id, incident_id, team_id, source, points_to_player_id, suspects, holder_player_id, strength, police_bonus, text, found, found_on)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0.1, ?, ?, ?)`,
+  ).bind(
+    c.id, c.incidentId, c.teamId, c.source, c.pointsTo ?? null, c.suspects ? JSON.stringify(c.suspects) : null, c.holder ?? null,
+    c.strength ?? 1, c.text ?? "Soused viděl u skladu dva kluky z kádru.", c.found ? 1 : 0, c.found ? CREATED : null,
+  ).run();
+}
+
+async function insertKnowledge(incidentId: string, playerId: string, teamId: string, role: string, willingness: number): Promise<void> {
+  await db.prepare(
+    `INSERT INTO club_incident_knowledge (incident_id, player_id, team_id, role, fact, willingness, until, season_number)
+     VALUES (?, ?, ?, ?, 'Ví, kdo byl ve skladu.', ?, ?, 1)`,
+  ).bind(incidentId, playerId, teamId, role, willingness, DEADLINE).run();
+}
+
+/**
+ * Krádež ve skladu, pachatel hráč 7: soused viděl hráče 7 a 8 (nalezená stopa, oba podezřelí),
+ * rival hráče 7 (hráč 11) ví víc (skrytá stopa a ochota 100, řekne to vždy, když se ho trenér zeptá).
+ */
+async function setUpAskScenario(incidentId: string, teamId: string, prefix: "ai" | "hu"): Promise<void> {
+  const p = (n: number) => `${prefix}-p${n}`;
+  await insertIncident({ id: incidentId, teamId, culpritId: p(7) });
+  await insertClueRow({ id: `${incidentId}-soused-1`, incidentId, teamId, source: "soused", suspects: [p(7), p(8)], found: true });
+  await insertClueRow({
+    id: `${incidentId}-rival-1`, incidentId, teamId, source: "rival", pointsTo: p(7), holder: p(11), strength: 2, found: false,
+    text: "Rival ví, že ve skladu byl hráč sedm.",
+  });
+  await insertKnowledge(incidentId, p(11), teamId, "rival", 100);
+  await insertKnowledge(incidentId, p(7), teamId, "pachatel", 0);
+  await db.prepare("INSERT INTO relationships (id, player_a_id, player_b_id, type, strength) VALUES (?, ?, ?, 'rivals', 60)")
+    .bind(`rel-${incidentId}`, p(7), p(11)).run();
+}
+
+const STOLEN_JERSEYS = [{ typ: "vybaveni", kategorie: "jerseys", uroven: 2, stav: 80, urovniDolu: 1 }];
+
+/** Inzerát s ukradenými dresy úrovně 2 (okradený klub je pozná) v bazaru ligy. */
+async function insertStolenListing(id: string, incidentId: string): Promise<void> {
+  await db.prepare(
+    `INSERT INTO equipment_listings (id, team_id, league_id, category, level, condition_at_listing, price, status, expires_at, is_ai_listing, seller_name, incident_id)
+     VALUES (?, NULL, ?, 'jerseys', 2, 80, 900, 'active', '2099-01-01T00:00:00.000Z', 0, 'Láďa, Volary', ?)`,
+  ).bind(id, LEAGUE, incidentId).run();
+}
+
+async function listingStatus(id: string): Promise<string | null> {
+  return (await db.prepare("SELECT status FROM equipment_listings WHERE id = ?").bind(id).first<{ status: string }>())?.status ?? null;
+}
+
+async function interrogation(incidentId: string, playerId: string): Promise<string | null> {
+  return (await db.prepare(
+    "SELECT interrogation FROM club_incident_knowledge WHERE incident_id = ? AND player_id = ? AND role IN ('svedek', 'kamarad', 'rival', 'pachatel')",
+  ).bind(incidentId, playerId).first<{ interrogation: string | null }>())?.interrogation ?? null;
+}
+
+async function clueFound(id: string): Promise<number | null> {
+  return (await db.prepare("SELECT found FROM club_incident_clues WHERE id = ?").bind(id).first<{ found: number }>())?.found ?? null;
+}
+
+async function claimTasks(teamId: string): Promise<string[]> {
+  return (await db.prepare("SELECT task FROM ai_coach_claims WHERE team_id = ? ORDER BY task").bind(teamId).all<{ task: string }>())
+    .results.map((r) => r.task);
+}
+
+/** AI klub nesmí dostat žádnou zprávu, notifikaci ani konverzaci s hráčem. */
+async function expectSilentAiClub(): Promise<void> {
+  expect(await messagesOf(AI)).toEqual([]);
+  expect(await count("SELECT COUNT(*) AS n FROM conversations WHERE team_id = ?", AI)).toBe(0);
+  expect(await count("SELECT COUNT(*) AS n FROM notifications WHERE team_id = ?", AI)).toBe(0);
 }
 
 /** Úklid mezi testy: všechny tabulky s vazbou na tým nebo hráče, několik průchodů kvůli cizím klíčům. */
@@ -341,5 +427,217 @@ describe("zprávy o incidentech: lidský klub beze změny, AI klub nic", () => {
     await wipeAiClubForNewcomer(db, AI, { previousName: "TJ Netolice", now: NOON });
     expect(await count("SELECT COUNT(*) AS n FROM club_incidents WHERE team_id = ?", AI)).toBe(0);
     expect(await count("SELECT COUNT(*) AS n FROM club_incident_clues WHERE team_id = ?", AI)).toBe(0);
+  }, 60_000);
+});
+
+describe("AI trenér se ptá hráčů bez chatu (u člověka „Zeptat se\")", () => {
+  it("model se zeptá rivala podezřelého: řekne, co ví, stopa se najde, další den trenér obviní pachatele", async () => {
+    await setUpAskScenario("inc-ask", AI, "ai");
+    const ai = fakeAi({ choice: "ask_3", reason: "His rival will talk." });
+
+    const res = await handleAiIncidents(env(), AI, profile(), NOON, { mode: "on", ai: ai.binding });
+
+    expect(res.decisions).toEqual([{ incidentId: "inc-ask", stage: "investigate", choice: "ask_3", decidedBy: "model", executed: true }]);
+    // Nabídka: podezřelí ze stop, pak jejich rival podle vztahů v kabině. Kdo co ví, model nevidí.
+    expect(ai.prompts[0]).toMatch(/- ask_1: Ask Jan Hráč7 \(MID[^)]*\) about it in private/);
+    expect(ai.prompts[0]).toMatch(/- ask_2: Ask Jan Hráč8 \(MID[^)]*\) about it in private/);
+    expect(ai.prompts[0]).toMatch(/- ask_3: Ask Jan Hráč11 \(MID[^)]*\) whether he knows anything/);
+    expect(ai.prompts[0]).toContain("does not get on with suspect Jan Hráč7");
+    expect(ai.prompts[0]).not.toContain("Rival ví");
+    expect(ai.prompts[0]).not.toContain("a rival in the squad points at");
+    // Stejné následky jako po zprávě člověka v chatu: uložený výslech, nalezená stopa, rivalita sílí.
+    expect(await interrogation("inc-ask", "ai-p11")).toBe("prozradil");
+    expect(await clueFound("inc-ask-rival-1")).toBe(1);
+    expect((await db.prepare("SELECT strength FROM relationships WHERE id = 'rel-inc-ask'").first<{ strength: number }>())?.strength).toBe(75);
+    expect(await claimTasks(AI)).toContain("incident-ask:inc-ask:ai-p11");
+    const log = await decisions(AI);
+    expect(JSON.parse(log[0].executed ?? "{}")).toMatchObject({ ok: true, answer: "prozradil", action: "ask_3" });
+    await expectSilentAiClub();
+
+    // Další den: stopa ukazuje přímo na hráče 7, náhradní pravidlo ho obviní a usvědčí.
+    await setGameDay("2026-11-03");
+    const next = await handleAiIncidents(env(), AI, profile(), NOON, { mode: "off" });
+    expect(next.decisions).toEqual([{ incidentId: "inc-ask", stage: "investigate", choice: "accuse_1", decidedBy: "fallback", executed: true }]);
+    expect((await incident("inc-ask"))?.culprit_revealed).toBe(1);
+    // Otázka hráči je nová fáze vyšetřování, proto se o incidentu rozhodlo znovu.
+    const accusation = await db.prepare(
+      "SELECT context_ref, input_summary FROM ai_coach_decisions WHERE team_id = ? AND json_extract(actions, '$.choice') = 'accuse_1'",
+    ).bind(AI).first<{ context_ref: string; input_summary: string }>();
+    expect(accusation?.context_ref).toBe("inc-ask:investigate:otevreny:a0:p-:c2:q1:l0");
+    const secondPrompt = accusation?.input_summary ?? "";
+    expect(secondPrompt).toContain("ALREADY ASKED: Jan Hráč11");
+    expect(secondPrompt).not.toContain("Ask Jan Hráč11");
+    expect(ai.prompts).toHaveLength(1);
+    await expectSilentAiClub();
+  }, 60_000);
+
+  it("neplatná odpověď: náhradní pravidlo se zeptá podezřelého dřív, než by obvinilo naslepo, a ten se přizná", async () => {
+    await insertIncident({ id: "inc-conf", culpritId: "ai-p5" });
+    await db.prepare("UPDATE club_incidents SET police_success = 0 WHERE id = 'inc-conf'").run();
+    await insertClueRow({ id: "inc-conf-soused-1", incidentId: "inc-conf", teamId: AI, source: "soused", suspects: ["ai-p5", "ai-p6"], found: true });
+    await insertKnowledge("inc-conf", "ai-p5", AI, "pachatel", 0);
+    // Ukázněný klidný kluk, který trenérovi věří: se stopou na sebe se přizná vždy (sancePriznani nad 100).
+    await db.prepare("UPDATE players SET personality = ?, coach_relationship = 100 WHERE id = 'ai-p5'")
+      .bind(JSON.stringify({ leadership: 30, discipline: 100, temper: 0, alcohol: 30, patriotism: 50 })).run();
+    const ai = fakeAi({ choice: "shoot him", reason: "no" });
+
+    const res = await handleAiIncidents(env(), AI, profile({ risk: 90 }), NOON, { mode: "on", ai: ai.binding });
+
+    expect(res.decisions).toEqual([{ incidentId: "inc-conf", stage: "investigate", choice: "ask_1", decidedBy: "fallback", executed: true }]);
+    expect(await interrogation("inc-conf", "ai-p5")).toBe("priznal");
+    expect((await incident("inc-conf"))?.culprit_revealed).toBe(1);
+    expect(await clueFound("inc-conf-priznani-1")).toBe(1);
+    expect((await decisions(AI))[0]).toMatchObject({ used_fallback: 1, error: "neplatná odpověď modelu" });
+    await expectSilentAiClub();
+  }, 60_000);
+
+  it("režim shadow: rozhodne se zeptat, ale nic neprovede ani si nic nezapamatuje", async () => {
+    await setUpAskScenario("inc-ask-s", AI, "ai");
+    const ai = fakeAi({ choice: "ask_3", reason: "His rival will talk." });
+
+    const res = await handleAiIncidents(env(), AI, profile(), NOON, { mode: "shadow", ai: ai.binding });
+
+    expect(res.decisions).toEqual([{ incidentId: "inc-ask-s", stage: "investigate", choice: "ask_3", decidedBy: "model", executed: false }]);
+    expect(await interrogation("inc-ask-s", "ai-p11")).toBeNull();
+    expect(await clueFound("inc-ask-s-rival-1")).toBe(0);
+    expect((await claimTasks(AI)).filter((t) => t.startsWith("incident-ask:"))).toEqual([]);
+    expect((await decisions(AI))[0]).toMatchObject({ mode: "shadow", executed: null });
+    await expectSilentAiClub();
+  }, 60_000);
+
+  it("člověk se dál ptá přes chat: konverzace s tématem a výslech až jeho zprávou", async () => {
+    await setUpAskScenario("inc-h-ask", HUMAN, "hu");
+
+    const open = await zeptejSe(env(), HUMAN, "inc-h-ask", "hu-p11");
+    expect(open.ok).toBe(true);
+    if (!open.ok) return;
+    expect(await count("SELECT COUNT(*) AS n FROM conversations WHERE team_id = ? AND type = 'player' AND participant_id = 'hu-p11'", HUMAN)).toBe(1);
+    // Samotné otevření konverzace nic nevyslýchá.
+    expect(await interrogation("inc-h-ask", "hu-p11")).toBeNull();
+
+    const reply = await zpracujZpravuTrenera(db, { teamId: HUMAN, convId: open.conversationId, playerId: "hu-p11", text: "Nevíš, kdo vykradl sklad?" });
+    expect(reply).toEqual({ incidentId: "inc-h-ask", vyslech: "prozradil" });
+    expect(await clueFound("inc-h-ask-rival-1")).toBe(1);
+    expect((await handleAiIncidents(env(), HUMAN, profile(), NOON)).skipped).toBe("not_ai");
+  }, 60_000);
+});
+
+describe("AI trenér si promluví s hráčem, který v hospodě ohlásil čin (u člověka „Promluvit si\")", () => {
+  it("model si s ním promluví: rozhovor se zapíše k hrozbě jako po zprávě člověka, druhý den už není o čem rozhodovat", async () => {
+    await insertIncident({ id: "inc-threat", status: "hrozi", severity: 1, culpritId: "ai-p9", loss: [] });
+    const ai = fakeAi({ choice: "talk", reason: "Better safe than sorry." });
+
+    const res = await handleAiIncidents(env(), AI, profile(), NOON, { mode: "on", ai: ai.binding });
+
+    expect(res.decisions).toEqual([{ incidentId: "inc-threat", stage: "threat", choice: "talk", decidedBy: "model", executed: true }]);
+    expect(ai.prompts[0]).toContain("SITUATION: in the pub, Jan Hráč9");
+    expect(ai.prompts[0]).toContain("- talk: Have a word with him");
+    expect(JSON.parse((await incident("inc-threat"))?.resolution_data ?? "{}")).toEqual({ promluvil: TODAY });
+    await expectSilentAiClub();
+
+    await setGameDay("2026-11-03");
+    expect((await handleAiIncidents(env(), AI, profile(), NOON, { mode: "on", ai: ai.binding })).decisions).toEqual([]);
+    expect(ai.prompts).toHaveLength(1);
+  }, 60_000);
+
+  it("neplatná odpověď: náhradní pravidlo si s ním promluví", async () => {
+    await insertIncident({ id: "inc-threat-f", status: "hrozi", severity: 1, culpritId: "ai-p9", loss: [] });
+    const ai = fakeAi({ choice: "buy him a beer" });
+
+    const res = await handleAiIncidents(env(), AI, profile(), NOON, { mode: "on", ai: ai.binding });
+
+    expect(res.decisions).toEqual([{ incidentId: "inc-threat-f", stage: "threat", choice: "talk", decidedBy: "fallback", executed: true }]);
+    expect(JSON.parse((await incident("inc-threat-f"))?.resolution_data ?? "{}")).toEqual({ promluvil: TODAY });
+    expect((await decisions(AI))[0]).toMatchObject({ used_fallback: 1, error: "neplatná odpověď modelu" });
+    await expectSilentAiClub();
+  }, 60_000);
+
+  it("režim shadow: rozhodne si promluvit, ale nic nezapíše", async () => {
+    await insertIncident({ id: "inc-threat-s", status: "hrozi", severity: 1, culpritId: "ai-p9", loss: [] });
+    const ai = fakeAi({ choice: "talk", reason: "Better safe than sorry." });
+
+    const res = await handleAiIncidents(env(), AI, profile(), NOON, { mode: "shadow", ai: ai.binding });
+
+    expect(res.decisions).toEqual([{ incidentId: "inc-threat-s", stage: "threat", choice: "talk", decidedBy: "model", executed: false }]);
+    expect((await incident("inc-threat-s"))?.resolution_data).toBeNull();
+    await expectSilentAiClub();
+  }, 60_000);
+
+  it("člověk si dál promluví přes chat: rozhovor se zapíše až jeho zprávou", async () => {
+    await insertIncident({ id: "inc-h-threat", teamId: HUMAN, status: "hrozi", severity: 1, culpritId: "hu-p9", loss: [] });
+
+    const open = await promluvSi(env(), HUMAN, "inc-h-threat");
+    expect(open.ok).toBe(true);
+    if (!open.ok) return;
+    expect((await incident("inc-h-threat"))?.resolution_data).toBeNull();
+
+    await zpracujZpravuTrenera(db, { teamId: HUMAN, convId: open.conversationId, playerId: "hu-p9", text: "Nedělej blbosti." });
+    expect(JSON.parse((await incident("inc-h-threat"))?.resolution_data ?? "{}")).toEqual({ promluvil: TODAY });
+  }, 60_000);
+});
+
+describe("AI trenér nahlásí poznaný inzerát s ukradenými věcmi policii (u člověka v bazaru)", () => {
+  it("model nahlásí inzerát: policie převezme případ, inzerát zmizí z bazaru, AI klub nedostane zprávu", async () => {
+    await insertIncident({ id: "inc-bazar", culpritType: "cizi", loss: STOLEN_JERSEYS });
+    await insertClueRow({ id: "inc-bazar-bazar-1", incidentId: "inc-bazar", teamId: AI, source: "bazar", found: true, text: "V bazaru se objevily vaše dresy." });
+    await insertStolenListing("listing-ai", "inc-bazar");
+    const ai = fakeAi({ choice: "report_listing", reason: "Get the jerseys back." });
+
+    const res = await handleAiIncidents(env(), AI, profile(), NOON, { mode: "on", ai: ai.binding });
+
+    expect(res.decisions).toEqual([{ incidentId: "inc-bazar", stage: "investigate", choice: "report_listing", decidedBy: "model", executed: true }]);
+    expect(ai.prompts[0]).toContain("- report_listing: Report the second-hand market listing with your club jerseys to the police (free): the police take over the case");
+    expect(ai.prompts[0]).toContain("- police: Call the police");
+    const row = await db.prepare("SELECT status, police_result_on FROM club_incidents WHERE id = 'inc-bazar'").first<{ status: string; police_result_on: string | null }>();
+    expect(row?.status).toBe("policie");
+    expect(row?.police_result_on).not.toBeNull();
+    expect(await listingStatus("listing-ai")).toBe("withdrawn");
+    await expectSilentAiClub();
+  }, 60_000);
+
+  it("neplatná odpověď, když už šetří policie: náhradní pravidlo inzerát zajistí, pak už není o čem rozhodovat", async () => {
+    await insertIncident({ id: "inc-bazar-p", status: "policie", culpritType: "cizi", loss: STOLEN_JERSEYS, policeResultOn: "2026-11-05T16:00:00.000Z" });
+    await insertStolenListing("listing-p", "inc-bazar-p");
+    const ai = fakeAi({ choice: "call my cousin" });
+
+    const res = await handleAiIncidents(env(), AI, profile(), NOON, { mode: "on", ai: ai.binding });
+
+    expect(res.decisions).toEqual([{ incidentId: "inc-bazar-p", stage: "investigate", choice: "report_listing", decidedBy: "fallback", executed: true }]);
+    expect(ai.prompts[0]).toContain("The police are investigating the case and report back in 3 days.");
+    expect(ai.prompts[0]).toContain("become part of the police investigation");
+    expect(ai.prompts[0]).not.toContain("- police:");
+    expect(await listingStatus("listing-p")).toBe("withdrawn");
+    expect((await incident("inc-bazar-p"))?.status).toBe("policie");
+    await expectSilentAiClub();
+
+    // Inzerát je pryč a ptát se není koho: zbývá jen čekat, model se znovu neptá.
+    await setGameDay("2026-11-03");
+    expect((await handleAiIncidents(env(), AI, profile(), NOON, { mode: "on", ai: ai.binding })).decisions).toEqual([]);
+    expect(ai.prompts).toHaveLength(1);
+  }, 60_000);
+
+  it("režim shadow: rozhodne se nahlásit, ale inzerát zůstane a policie nepřijede", async () => {
+    await insertIncident({ id: "inc-bazar-s", culpritType: "cizi", loss: STOLEN_JERSEYS });
+    await insertStolenListing("listing-s", "inc-bazar-s");
+    const ai = fakeAi({ choice: "report_listing", reason: "Get the jerseys back." });
+
+    const res = await handleAiIncidents(env(), AI, profile(), NOON, { mode: "shadow", ai: ai.binding });
+
+    expect(res.decisions).toEqual([{ incidentId: "inc-bazar-s", stage: "investigate", choice: "report_listing", decidedBy: "model", executed: false }]);
+    expect(await listingStatus("listing-s")).toBe("active");
+    expect((await incident("inc-bazar-s"))?.status).toBe("otevreny");
+    await expectSilentAiClub();
+  }, 60_000);
+
+  it("člověk nahlásí inzerát v bazaru jako dřív a dostane SMS od policie", async () => {
+    await insertIncident({ id: "inc-h-bazar", teamId: HUMAN, culpritType: "cizi", loss: STOLEN_JERSEYS });
+    await insertStolenListing("listing-h", "inc-h-bazar");
+
+    const r = await nahlasKradeneZbozi(env(), HUMAN, "listing-h");
+
+    expect(r.ok).toBe(true);
+    expect((await incident("inc-h-bazar"))?.status).toBe("policie");
+    expect(await listingStatus("listing-h")).toBe("withdrawn");
+    expect((await messagesOf(HUMAN)).some((m) => m.startsWith("🚓"))).toBe(true);
   }, 60_000);
 });

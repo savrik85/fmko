@@ -25,6 +25,8 @@ export interface UnrestOption {
   weeklyCost: number;
   /** „Pustit ho“: kdo hráče koupí a za kolik. */
   sale?: { club: string; amount: number };
+  /** Slib prodeje: tržní hodnota hráče a od kolika AI přestup přijme (60 % tržní hodnoty). */
+  promise?: { marketValue: number; minPrice: number };
 }
 
 export interface UnrestCandidate {
@@ -128,7 +130,7 @@ function optionText(o: UnrestOption, p: UnrestCandidate): string {
     case "promise_minutes":
       return "promise him a starting place: your lineup will start him in your next matches until he has started 2 of 3, even where a better player would play; calms him";
     case "promise_transfer":
-      return "promise to sell him when the next decent offer comes within 30 days; refusing such an offer later makes him furious";
+      return `promise to sell him at the next decent offer within 30 days: he goes on your transfer list and you accept the first transfer offer of at least ${czk(o.promise?.minPrice ?? 0)} (his market value is ${czk(o.promise?.marketValue ?? 0)}), so he will most likely leave; calms him strongly`;
     case "captaincy":
       return "make him team captain (the current captain loses the armband); keeps an ambitious player";
     case "personal_talk":
@@ -248,16 +250,16 @@ export function validateUnrestDecision(raw: unknown, ctx: UnrestDecisionContext)
 
 /**
  * Náhradní pravidlo podle povahy. Skoro klidného hráče nechá být, obchodník pustí hráče,
- * bez kterého se obejde, apel a páska jdou zadarmo, trpělivý trenér slibuje a mluví,
- * šetrný platí jen oporám (skrblík ani těm) a přebytečnému hráči nedá nic, co stojí peníze.
+ * bez kterého se obejde (hned, nebo slibem prodeje při další nabídce), apel a páska jdou
+ * zadarmo, trpělivý trenér slibuje a mluví, šetrný platí jen oporám (skrblík ani těm)
+ * a přebytečnému hráči nedá nic, co stojí peníze.
  */
 export function fallbackUnrestChoice(p: UnrestCandidate, profile: AiCoachProfile): UnrestChoice {
   const legal = new Set(p.options.map((o) => o.id));
   if (p.level < CALM_ENOUGH_LEVEL) return "wait";
-  if (legal.has("release") && p.importance !== "key"
-    && (profile.trading >= 55 || (p.importance === "surplus" && profile.trading >= 35))) {
-    return "release";
-  }
+  const letsGo = p.importance !== "key" && (profile.trading >= 55 || (p.importance === "surplus" && profile.trading >= 35));
+  if (letsGo && legal.has("release")) return "release";
+  if (letsGo && legal.has("promise_transfer")) return "promise_transfer";
   const needed = p.importance !== "surplus";
   const patient = profile.patience >= 60 || (profile.youthFocus >= 60 && p.age <= 21);
   const pays = p.importance === "key" ? profile.thrift < 80 : needed && p.level >= ANGRY_LEVEL && profile.thrift < 50;

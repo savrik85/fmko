@@ -47,6 +47,12 @@ const CHECK_TO_WATCHDOG: Record<string, string> = {
 const AI_WATCHDOG_CODES = new Set(["ai_coach_fallback", "ai_coach_silent", "ai_club_debt", "ai_takeover_brake"]);
 const REFRESH_MS = 120_000;
 
+/** Přepínače provozu lidsky: jak se hrají kola (`match_tick_mode`) a kdo píše texty (`ai_provider`). */
+const PROCESSING_LABEL: Record<string, string> = { queue: "kola se hrají přes frontu", loop: "kola se hrají v jednom běhu cronu" };
+const TEXTS_LABEL: Record<string, string> = {
+  gemini: "texty píše Gemini", "workers-ai": "texty píše Workers AI", off: "generované texty vypnuté",
+};
+
 const LEVEL_STYLE: Record<IssueLevel, { icon: string; label: string; text: string }> = {
   error: { icon: "⛔", label: "Chyba", text: "text-card-red" },
   warning: { icon: "⚠️", label: "Varování", text: "text-gold-700" },
@@ -332,7 +338,7 @@ export function DashboardSection({ onOpenTab }: { onOpenTab: (tab: AdminTab) => 
                 <div className="font-heading font-bold text-xl">{banner.title}</div>
                 <div className="text-sm">
                   Herní den {health?.hodiny.herniDatum?.slice(0, 10) ?? "—"}
-                  {health && <> · zpracování {health.rezim.zpracovani} · AI texty {health.rezim.aiPoskytovatel}</>}
+                  {health && <> · {PROCESSING_LABEL[health.rezim.zpracovani] ?? `kola: ${health.rezim.zpracovani}`} · {TEXTS_LABEL[health.rezim.aiPoskytovatel] ?? `texty: ${health.rezim.aiPoskytovatel}`}, AI trenéři Workers AI</>}
                 </div>
               </div>
             </div>
