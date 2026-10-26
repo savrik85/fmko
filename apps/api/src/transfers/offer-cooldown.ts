@@ -8,6 +8,9 @@
  * a mlčení prodávajícího do konce lhůty. Kupec, který svou nabídku stáhl nebo nechal
  * propadnout protinávrh, hráči nijak neublížil a může nabídnout hned znovu. Stejně tak
  * nabídka, kterou uklidil systém (hráč mezitím odešel), stažení kupce nemá.
+ *
+ * Nabídka s `cooldown_waived = 1` neblokuje vůbec: odmítnutí po opravě dat hráčů, kdy kupec
+ * nabízel na hráče, který se mu pak pod rukama změnil.
  */
 
 export const OFFER_RETRY_COOLDOWN_DAYS = 10;
@@ -74,6 +77,7 @@ export async function offerRetryBlock(
       WHERE o.player_id = ?
         AND o.from_team_id IN (SELECT id FROM teams WHERE id = ? OR parent_team_id = ?)
         AND o.status IN ('rejected', 'expired', 'withdrawn')
+        AND COALESCE(o.cooldown_waived, 0) = 0
         AND o.resolved_at > ?
       ORDER BY o.resolved_at DESC`,
   ).bind(playerId, buyerClubTeamId, buyerClubTeamId, since).all<ClosedOfferRow>();
