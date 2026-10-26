@@ -107,12 +107,14 @@ export async function generatePlayerOffer(
   gameDate: string,
   /** Vynutit konkrétní zdroj nabídky (jinak se losuje). Používá admin hromadné generování. */
   forceSource?: OfferSource,
+  /** Admin hromadné generování: pevný věk a nabídka i klubu, který už má dvě čekající. */
+  opts: { age?: number; ignorePendingLimit?: boolean } = {},
 ): Promise<{ offerId: string; source: string; senderName: string; senderTitle: string; message: string; playerName: string } | null> {
   // Check pending offers — max 2 at a time
   const pending = await db.prepare("SELECT COUNT(*) as cnt FROM player_offers WHERE team_id = ? AND status = 'pending'")
     .bind(teamId).first<{ cnt: number }>()
     .catch((e) => { logger.warn({ module: "player-offers", teamId }, "count pending offers", e); return { cnt: 0 }; });
-  if ((pending?.cnt ?? 0) >= 2) return null;
+  if (!opts.ignorePendingLimit && (pending?.cnt ?? 0) >= 2) return null;
 
   // Pick source type
   const sourceType = (forceSource ? SOURCES.find((s) => s.source === forceSource) : undefined) ?? rng.pick(SOURCES);
@@ -128,7 +130,7 @@ export async function generatePlayerOffer(
   // Brankáři vzácně (~4 %) — trh i nabídky nemají být zaplavené gólmany
   const pos = rng.weighted({ GK: 1, DEF: 8, MID: 8, FWD: 7 }) as typeof positions[number];
 
-  const age = rng.int(ageRange[0], ageRange[1]);
+  const age = opts.age ?? rng.int(ageRange[0], ageRange[1]);
   const isYouth = sourceType.source === "youth";
   const level = levelFromCategory(villageInfo.category);
 
