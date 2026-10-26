@@ -168,7 +168,7 @@ beforeAll(async () => {
       created_at TEXT NOT NULL DEFAULT (datetime('now')), resolved_at TEXT, offer_type TEXT NOT NULL DEFAULT 'transfer',
       loan_duration INTEGER, last_action_by TEXT, offered_player_id TEXT, target_squad TEXT NOT NULL DEFAULT 'senior',
       player_interest INTEGER, virtual_team_data TEXT, upfront_pct INTEGER NOT NULL DEFAULT 100, installments INTEGER NOT NULL DEFAULT 0,
-      sell_on_pct INTEGER NOT NULL DEFAULT 0
+      sell_on_pct INTEGER NOT NULL DEFAULT 0, cooldown_waived INTEGER NOT NULL DEFAULT 0
     );
     CREATE TABLE transfer_offer_events (
       id TEXT PRIMARY KEY, offer_id TEXT NOT NULL, team_id TEXT NOT NULL, event_type TEXT NOT NULL, amount INTEGER, message TEXT,
