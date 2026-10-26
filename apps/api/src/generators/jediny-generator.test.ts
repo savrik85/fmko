@@ -40,8 +40,10 @@ describe("jediný generátor hráčů", () => {
     // Tabulky s novými hráči. `remove-player.ts` vrací do volných hráčů existujícího hráče
     // (nic negeneruje), podpisy a přestupy kopírují už vygenerovaného. `virtual-purchase.ts`
     // zapisuje hráče z inzerátu nebo hlášení skauta, který vznikl přes createPlayer dřív.
-    // `services/transfer-actions.ts` je podpis volného hráče přesunutý z routes/game.ts (kopíruje ho).
-    const VYJIMKY = new Set(["transfers/remove-player.ts", "routes/game.ts", "transfers/virtual-purchase.ts", "services/transfer-actions.ts"]);
+    // `services/transfer-actions.ts` je podpis volného hráče přesunutý z routes/game.ts (kopíruje ho),
+    // `services/player-offer-actions.ts` podpis hráče z nabídky (hospodský, dorost) přesunutý taky
+    // z routes/game.ts: kopíruje hráče, který vznikl v nabídce přes createPlayer.
+    const VYJIMKY = new Set(["transfers/remove-player.ts", "routes/game.ts", "transfers/virtual-purchase.ts", "services/transfer-actions.ts", "services/player-offer-actions.ts"]);
     const vznikHrace = /INSERT INTO (?:players|free_agents|player_offers|cup_club_players)\b/;
     const bezGeneratoru = VSECHNY
       .filter((f) => vznikHrace.test(f.kod) && !VYJIMKY.has(f.path))
