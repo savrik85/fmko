@@ -69,10 +69,12 @@ export interface ScheduleMatch {
   round: number | null;
   status: string;
   homeName: string;
+  homeIsAi?: boolean;
   homeColor?: string;
   homeSecondary?: string;
   homeBadge?: string;
   awayName: string;
+  awayIsAi?: boolean;
   awayColor?: string;
   awaySecondary?: string;
   awayBadge?: string;

@@ -10,6 +10,7 @@ import { WidgetSkeleton, WidgetError } from "../widget-frame";
 import type { WidgetProps, ScheduleMatch } from "../types";
 import { rowsForHeight, ROW_PX } from "../widget-heights";
 import { initials } from "./shared";
+import { TeamName } from "@/components/manager/team-name";
 
 // ── Dnešní program ──────────────────────────────────────────────────────────
 
@@ -37,6 +38,7 @@ export function TodayProgramWidget({ data }: WidgetProps) {
   })();
 
   const matchOpponent = nextMatch ? (nextMatch.isHome ? nextMatch.awayName : nextMatch.homeName) : null;
+  const matchOpponentIsAi = nextMatch ? (nextMatch.isHome ? nextMatch.awayIsAi : nextMatch.homeIsAi) === true : false;
   const dayName = gameDate ? gameDate.toLocaleDateString("cs", { weekday: "long" }) : "";
   // Pohár se hraje v poledne pražského času (cup tick v index.ts), liga a přáteláky v 18:00.
   // Uložený `scheduled_at` pohárového zápasu (16:00 UTC) skutečný výkop neříká.
@@ -54,7 +56,7 @@ export function TodayProgramWidget({ data }: WidgetProps) {
         <div className="text-sm text-muted">
           {dayName && <span className="capitalize">{dayName}</span>}
           {isMatchDay && matchOpponent && (
-            <span> · <span className="font-heading font-bold text-pitch-600">{matchOpponent}</span> · {kickoff}</span>
+            <span> · <span className="font-heading font-bold text-pitch-600"><TeamName name={matchOpponent} isAi={matchOpponentIsAi} /></span> · {kickoff}</span>
           )}
           {isTrainingDay && !isMatchDay && <span> · Trénink dle plánu</span>}
           {!isTrainingDay && !isMatchDay && <span> · Regenerace, žádný program</span>}
@@ -120,7 +122,7 @@ export function NextMatchWidget({ data, teamId }: WidgetProps) {
   const oppBadge = ((nextMatch.isHome ? nextMatch.awayBadge : nextMatch.homeBadge) as BadgePattern) || "shield";
 
   const myTeamData = {
-    id: teamId, name: team.name,
+    id: teamId, name: team.name, isAi: false,
     color: team.badge_primary_color || color,
     secondary: team.badge_secondary_color || team.secondary_color || "#FFF",
     badge: (team.badge_pattern as BadgePattern) || "shield",
@@ -129,7 +131,8 @@ export function NextMatchWidget({ data, teamId }: WidgetProps) {
   const oppTeamData = {
     id: (nextMatch.isHome ? preview?.away?.id : preview?.home?.id)
       ?? (nextMatch.isHome ? nextMatch.awayTeamId : nextMatch.homeTeamId) ?? "",
-    name: oppName, color: oppColor, secondary: oppSecondary, badge: oppBadge,
+    name: oppName, isAi: (nextMatch.isHome ? nextMatch.awayIsAi : nextMatch.homeIsAi) === true,
+    color: oppColor, secondary: oppSecondary, badge: oppBadge,
     customInitials: null as string | null, symbol: null as string | null, pos: opp,
   };
   const homeTeam = nextMatch.isHome ? myTeamData : oppTeamData;
@@ -171,7 +174,7 @@ export function NextMatchWidget({ data, teamId }: WidgetProps) {
                 <BadgePreview primary={homeTeam.color} secondary={homeTeam.secondary} pattern={homeTeam.badge}
                   initials={homeTeam.customInitials || initials(homeTeam.name)} symbol={homeTeam.symbol} size={38} />
               </div>
-              <div className="font-heading font-bold text-sm leading-tight">{homeTeam.name}</div>
+              <div className="font-heading font-bold text-sm leading-tight"><TeamName name={homeTeam.name} isAi={homeTeam.isAi} /></div>
               {/* Pohár tabulku nemá — cup-preview posílá position 0, jinak by karta hlásila „0. místo". */}
               {homeTeam.pos && homeTeam.pos.position > 0 && (
                 <div className="text-micro text-white/40 tabular-nums leading-tight">{homeTeam.pos.position}. místo</div>
@@ -187,7 +190,7 @@ export function NextMatchWidget({ data, teamId }: WidgetProps) {
                 <BadgePreview primary={awayTeam.color} secondary={awayTeam.secondary} pattern={awayTeam.badge}
                   initials={awayTeam.customInitials || initials(awayTeam.name)} symbol={awayTeam.symbol} size={38} />
               </div>
-              <div className="font-heading font-bold text-sm leading-tight">{awayTeam.name}</div>
+              <div className="font-heading font-bold text-sm leading-tight"><TeamName name={awayTeam.name} isAi={awayTeam.isAi} /></div>
               {awayTeam.pos && awayTeam.pos.position > 0 && (
                 <div className="text-micro text-white/40 tabular-nums leading-tight">{awayTeam.pos.position}. místo</div>
               )}
@@ -339,6 +342,7 @@ export function FixturesWidget({ data, height }: WidgetProps) {
         <div className="space-y-2">
           {upcoming.map((m) => {
             const opp = m.isHome ? m.awayName : m.homeName;
+            const oppIsAi = (m.isHome ? m.awayIsAi : m.homeIsAi) === true;
             const date = m.scheduledAt ? new Date(m.scheduledAt).toLocaleDateString("cs", { day: "numeric", month: "numeric" }) : "";
             // Rozpis vrací calendarId pro ligový zápas, u přáteláku je id = match.id
             const switchId = m.calendarId ?? m.id;
@@ -347,7 +351,7 @@ export function FixturesWidget({ data, height }: WidgetProps) {
                 <span className="text-sm text-muted tabular-nums w-5" title={m.roundName ?? undefined}>
                   {m.round != null ? `${m.round}.` : m.isCup || m.isTournament ? "🏆" : ""}
                 </span>
-                <span className="text-sm font-heading font-bold flex-1 truncate">{opp}</span>
+                <span className="text-sm font-heading font-bold flex-1 min-w-0"><TeamName name={opp} isAi={oppIsAi} /></span>
                 {/* Turnaj je na neutrální půdě: ani doma, ani venku. */}
                 {!m.isTournament && (
                   <span className={`text-micro font-heading font-bold uppercase ${m.isHome ? "text-pitch-600" : "text-muted"}`}>{m.isHome ? "D" : "V"}</span>
