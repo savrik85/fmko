@@ -48,6 +48,12 @@ export const PHOTO_SCENES: Record<string, PhotoScene> = {
     alt: "přípitek v hospodě po výhře, nad stolem zvednuté půllitry",
     portrait: false,
   },
+  pub_toast: {
+    id: "pub_toast",
+    prompt: `${PHONE_PHOTO} Close-up of many hands raising plain dimpled glass mugs of lager with no print in a cheerful toast over a long wooden table in a small village pub in South Bohemia, a few small plain shot glasses on the table, faces out of the frame, warm yellow lamps, evening. ${NO_TEXT}`,
+    alt: "přípitek v hospodě, nad stolem zvednuté půllitry",
+    portrait: false,
+  },
   injury: {
     id: "injury",
     prompt: `${PHONE_PHOTO} First-person view looking down at his own leg resting on a footstool, the ankle wrapped in a beige elastic bandage with a blue ice pack on top, grey tracksuit trousers rolled up, living room carpet, evening lamp light. ${NO_TEXT}`,

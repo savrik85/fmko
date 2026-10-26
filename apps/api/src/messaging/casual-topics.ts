@@ -292,6 +292,24 @@ export const CASUAL_TOPICS: CasualTopic[] = [
     fit: () => 0,
   },
   {
+    // Jen ruční odeslání z adminu (`/admin/casual-message?topic=casual_coach_birthday`):
+    // datum narození trenéra hra nezná, kdy má narozeniny, ví jen ten, kdo zprávu posílá.
+    id: "casual_coach_birthday",
+    label: "Narozeniny trenéra",
+    category: "casual",
+    expectedTurns: 3,
+    minRelation: 50,
+    description: `${JUST_BECAUSE} Trenér má dneska narozeniny. Sedíš s partou z týmu v hospodě a píšeš mu za celou kabinu: `
+      + "přejete mu všechno nejlepší, posíláš fotku, jak na jeho zdraví zvedáte půllitry, a zveš ho, ať se staví, "
+      + "že dneska platí kabina. Mluv v množném čísle za kluky („všichni ti přejem“), srdečně a po vesnicku, bez kýče.",
+    weight: () => 0,
+    photo: "pub_toast",
+    atPub: true,
+    invite: "pub",
+    minAge: 18,
+    fit: () => 0,
+  },
+  {
     id: "casual_hangover",
     label: "Ráno po hospodě",
     category: "casual",
