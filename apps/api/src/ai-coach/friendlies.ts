@@ -54,8 +54,12 @@ const OFFER_DAYS_TO = 10;
 /** Přes den, ne v noci: v kolik hodin (Praha) trenér odpovídá a vypisuje nabídky. */
 const DAY_FROM_HOUR = 8;
 const DAY_TO_HOUR = 20;
-/** Soutěžní zápasy, které model u termínu vidí (den před a po kód vylučuje sám). */
-const NEARBY_OFFSETS = [-3, -2, 2, 3];
+/**
+ * Soutěžní zápasy, které model u termínu vidí. U odpovědi na výzvu kód vylučuje jen tentýž den,
+ * den před a po zvažuje model (liga po a čt, dřív zbyla jen sobota). Vlastní nabídky AI klub
+ * dál vypisuje jen na klidné dny, i bez soutěžního zápasu den před a po.
+ */
+const NEARBY_OFFSETS = [-3, -2, -1, 1, 2, 3];
 const OFFER_VENUES: OfferVenue[] = ["poster", "neutral", "taker"];
 /** Model na přátelák nemá přemýšlet dlouho: hodinová úloha nesmí stát. */
 const MODEL_TIMEOUT_MS = 60_000;
@@ -198,7 +202,10 @@ export async function checkChallenge(
   const ourCosts = quote ? sumCosts(quote.costs.opponent) : 0;
   const decline = (reason: Extract<FriendlyDecision, { accept: false }>["reason"]): ChallengeCheck => ({ decision: { accept: false, reason }, terms, ourCosts });
   if (terms.stake > maxFriendlyStake(profile)) return decline("stake_too_high");
-  if (await competitiveNearby(db, team.id, terms.date)) return decline("competitive_nearby");
+  // Jen soutěžní zápas v tentýž den. Den před a po vidí model v `nearby` a rozhodne sám:
+  // dřív kód odmítal i ty, takže při lize v pondělí a ve čtvrtek AI klub přijal jen sobotu
+  // (prod 2026-10-27, Fezko vyzval čtyři AI kluby na úterý a všechny čtyři odmítl kód).
+  if (await findBusy(db, team.id, terms.date, { competitiveOnly: true })) return decline("competitive_nearby");
   if (await upcomingFriendlies(db, team.id) >= MAX_UPCOMING_FRIENDLIES) return decline("busy_with_friendlies");
   if (terms.stake + ourCosts > friendlySpendLimit(team.budget, profile)) return decline("too_expensive");
   return { decision: { accept: true, reason: "fits" }, terms, ourCosts };
