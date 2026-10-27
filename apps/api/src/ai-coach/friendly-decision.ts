@@ -72,6 +72,7 @@ export const FRIENDLY_SYSTEM_PROMPT = [
   "You decide about friendly matches: answering challenges from other clubs and posting your own public offers.",
   "A friendly gives match practice to players who do not play much, but it tires the squad and carries injury risk;",
   "each club pays its share of the costs (referee, travel or pitch rent) and an optional stake goes to the winner.",
+  "A competitive match the day before or after means tired legs, but amateur clubs often play such a friendly with the reserves, especially when the challenger pays the costs.",
   "Decide like a sensible real manager with YOUR personality. The game has already checked the schedule, the money and the stake limits, so every listed option is allowed.",
   "Answer with exactly one JSON object and nothing else.",
 ].join(" ");
