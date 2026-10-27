@@ -4,7 +4,8 @@
  * Redaktoři byli se všemi zadobře a ptali se jen na formu a sestavu. Mají umět
  * i konfrontaci a bulvár, ale nesmí si nic vymýšlet. Proto dostávají hotové věty
  * složené z dat (hospoda, krádeže, pokuty, dluhy, prodeje, sliby, trenérova
- * vlastní slova z minula) a k nim jména, která v nich smí použít. Domýšlet
+ * vlastní slova z minula, nespokojený hráč, sponzoři, ostuda v poháru) a k nim
+ * jména, která v nich smí použít. Domýšlet
  * smí jen otázkou, nikdy tvrzením.
  *
  * Věty jsou ve třetí osobě („trenér slíbil…"), protože předzápasový rozhovor vyká
@@ -21,7 +22,7 @@ const M = "press-scandals";
 
 export type ScandalKind =
   | "pub" | "club_incident" | "sanction" | "debt" | "sale" | "purchase"
-  | "promise" | "own_words" | "same_owner" | "fans";
+  | "promise" | "own_words" | "same_owner" | "fans" | "unrest" | "sponsor" | "cup";
 
 export interface Scandal {
   /** Klíč konkrétní kauzy. Podle něj se tatáž kauza neotevírá v dalších rozhovorech znovu. */
@@ -62,10 +63,10 @@ const PUB_TYPES: Record<string, number> = {
 
 /** Co koho z redakce láká. Násobí váhu kauzy. */
 const STYLE_AFFINITY: Record<JournalistStyle, Partial<Record<ScandalKind, number>>> = {
-  bulvar: { pub: 2, club_incident: 1.8, same_owner: 1.5, debt: 1.5, fans: 1.3, sale: 1.2 },
-  vycurany: { own_words: 2.2, promise: 1.8, same_owner: 1.5, pub: 1.2 },
-  seriozni: { own_words: 1.5, sanction: 1.8, debt: 1.6, sale: 1.5, purchase: 1.5, pub: 0.4 },
-  patriot: { fans: 2, sale: 1.5, pub: 0.6 },
+  bulvar: { pub: 2, club_incident: 1.8, same_owner: 1.5, debt: 1.5, fans: 1.3, sale: 1.2, unrest: 1.6, sponsor: 1.5, cup: 1.4 },
+  vycurany: { own_words: 2.2, promise: 1.8, same_owner: 1.5, pub: 1.2, unrest: 1.6, sponsor: 1.3 },
+  seriozni: { own_words: 1.5, sanction: 1.8, debt: 1.6, sale: 1.5, purchase: 1.5, pub: 0.4, sponsor: 1.4, cup: 1.2 },
+  patriot: { fans: 2, sale: 1.5, pub: 0.6, sponsor: 2, cup: 1.5, unrest: 1.2 },
 };
 
 export function formatCzk(n: number): string {
@@ -447,6 +448,139 @@ async function fanScandals(db: D1Database, teamId: string): Promise<Scandal[]> {
   return out;
 }
 
+/**
+ * Hráč, který chtěl pryč a klub ho nepustil (`life_context.transferUnrest`). Jen kdo je
+ * opravdu naštvaný (od 40), tichá nespokojenost do novin nepatří.
+ */
+async function unrestScandals(db: D1Database, teamId: string): Promise<Scandal[]> {
+  const row = await db.prepare(
+    `SELECT id, first_name, last_name,
+            CAST(json_extract(life_context, '$.transferUnrest.level') AS INTEGER) AS level,
+            json_extract(life_context, '$.transferUnrest.teamName') AS wanted_team,
+            json_extract(life_context, '$.transferUnrest.since') AS since
+     FROM players
+     WHERE team_id = ? AND (status IS NULL OR status = 'active')
+       AND CAST(json_extract(life_context, '$.transferUnrest.level') AS INTEGER) >= 40
+     ORDER BY level DESC LIMIT 1`,
+  ).bind(teamId).first<{ id: string; first_name: string; last_name: string; level: number; wanted_team: string | null; since: string | null }>()
+    .catch((e) => { logger.warn({ module: M }, "nespokojený hráč", e); return null; });
+  if (!row) return [];
+  const name = `${row.first_name} ${row.last_name}`;
+  const mood = row.level >= 70 ? "je hodně naštvaný" : "je nespokojený";
+  return [{
+    ref: `unrest:${row.id}:${dayOf(row.since)}`, kind: "unrest",
+    fact: row.wanted_team
+      ? `${name} chtěl přestoupit do týmu ${row.wanted_team}, klub ho nepustil a hráč ${mood}.`
+      : `${name} chce z klubu odejít a ${mood}.`,
+    names: [name], weight: row.level >= 70 ? 7 : 5,
+  }];
+}
+
+/**
+ * Sponzoři: klub nebo stadion přejmenovaný po sponzorovi (`club_events`) a slib sponzorovi,
+ * který klub nesplnil. Přejmenování nese staré jméno z novinky o přejmenování.
+ */
+async function sponsorScandals(db: D1Database, teamId: string, gameDate: string): Promise<Scandal[]> {
+  const out: Scandal[] = [];
+  const renames = await db.prepare(
+    `SELECT id, kind, payload FROM club_events
+     WHERE team_id = ? AND kind IN ('prejmenovani_klubu', 'prejmenovani_stadionu')
+       AND substr(COALESCE(game_date, created_at), 1, 10) >= date(?, '-21 days')
+     ORDER BY created_at DESC LIMIT 2`,
+  ).bind(teamId, gameDate).all<{ id: string; kind: string; payload: string | null }>()
+    .catch((e) => { logger.warn({ module: M }, "přejmenování po sponzorovi", e); return { results: [] }; });
+  for (const r of renames.results ?? []) {
+    if (r.kind === "prejmenovani_klubu") {
+      const team = await db.prepare("SELECT name, league_id FROM teams WHERE id = ?").bind(teamId)
+        .first<{ name: string; league_id: string | null }>()
+        .catch((e) => { logger.warn({ module: M }, "název klubu", e); return null; });
+      if (!team) continue;
+      const news = await db.prepare(
+        `SELECT headline FROM news WHERE league_id = ? AND type = 'rename' AND headline LIKE ?
+         ORDER BY created_at DESC LIMIT 1`,
+      ).bind(team.league_id ?? "", `% mění název na ${team.name}`).first<{ headline: string }>()
+        .catch((e) => { logger.warn({ module: M }, "novinka o přejmenování", e); return null; });
+      const oldName = news?.headline.split(" mění název na ")[0]?.trim() || null;
+      out.push({
+        ref: `sponsor:rename:${r.id}`, kind: "sponsor",
+        fact: oldName
+          ? `Klub se nedávno přejmenoval podle hlavního sponzora: z ${oldName} je teď ${team.name}.`
+          : `Klub nedávno vzal do názvu jméno hlavního sponzora, teď se jmenuje ${team.name}.`,
+        names: [], weight: 5,
+      });
+    } else {
+      let what: string | null = null;
+      try { what = r.payload ? (JSON.parse(r.payload) as { co?: string }).co ?? null : null; } catch (e) {
+        logger.warn({ module: M }, "přejmenování stadionu", e);
+      }
+      if (!what) continue;
+      out.push({
+        ref: `sponsor:stadium:${r.id}`, kind: "sponsor",
+        fact: `Stadion klubu nese nově jméno sponzora: ${what}.`,
+        names: [], weight: 3,
+      });
+    }
+  }
+
+  const broken = await db.prepare(
+    `SELECT sp.id, sp.kind, sp.params, sp.penalty, sc.sponsor_name
+     FROM sponsor_promises sp LEFT JOIN sponsor_contracts sc ON sc.id = sp.contract_id
+     WHERE sp.team_id = ? AND sp.status = 'broken'
+       AND substr(sp.resolved_at, 1, 10) >= date(?, '-21 days')
+     ORDER BY sp.resolved_at DESC LIMIT 1`,
+  ).bind(teamId, gameDate).first<{ id: string; kind: string; params: string | null; penalty: number | null; sponsor_name: string | null }>()
+    .catch((e) => { logger.warn({ module: M }, "nesplněný slib sponzorovi", e); return null; });
+  if (broken) {
+    const { isPromiseKind } = await import("../sponsors/promise-kinds");
+    const { promiseLabel } = await import("../sponsors/promise-eval");
+    let label: string | null = null;
+    try {
+      label = isPromiseKind(broken.kind) ? promiseLabel(broken.kind, broken.params ? JSON.parse(broken.params) : {}) : null;
+    } catch (e) {
+      logger.warn({ module: M }, "popis slibu sponzorovi", e);
+    }
+    const sponsor = broken.sponsor_name ? `sponzorovi ${broken.sponsor_name}` : "sponzorovi";
+    const penalty = broken.penalty && broken.penalty > 0 ? `, za porušení zaplatil ${formatCzk(broken.penalty)}` : "";
+    out.push({
+      ref: `sponsor:promise:${broken.id}`, kind: "sponsor",
+      fact: `Klub slíbil ${sponsor}${label ? ` ${label}` : " splnit podmínku smlouvy"} a slib nesplnil${penalty}.`,
+      names: [], weight: 6,
+    });
+  }
+  return out;
+}
+
+/** Ostuda v poháru: vyřazení výrazně slabším soupeřem (`cup_matches.upset`). */
+async function cupScandals(db: D1Database, teamId: string, gameDate: string): Promise<Scandal[]> {
+  const row = await db.prepare(
+    `SELECT cm.id, cm.round, c.total_rounds, cm.home_score, cm.away_score, cm.home_pens, cm.away_pens,
+            cm.home_cup_team_id = me.id AS is_home, w.name AS winner
+     FROM cup_matches cm
+     JOIN cup_competitions c ON c.id = cm.cup_id
+     JOIN cup_teams me ON me.cup_id = cm.cup_id AND me.team_id = ?
+     JOIN cup_teams w ON w.id = cm.winner_cup_team_id
+     WHERE cm.upset = 1 AND cm.status = 'simulated'
+       AND (cm.home_cup_team_id = me.id OR cm.away_cup_team_id = me.id) AND cm.winner_cup_team_id != me.id
+       AND substr(cm.scheduled_at, 1, 10) >= date(?, '-21 days')
+     ORDER BY cm.scheduled_at DESC LIMIT 1`,
+  ).bind(teamId, gameDate).first<{
+    id: string; round: number; total_rounds: number; home_score: number; away_score: number;
+    home_pens: number | null; away_pens: number | null; is_home: number; winner: string;
+  }>().catch((e) => { logger.warn({ module: M }, "vyřazení z poháru", e); return null; });
+  if (!row) return [];
+  const { roundName } = await import("../cup/cup");
+  const own = row.is_home ? row.home_score : row.away_score;
+  const opp = row.is_home ? row.away_score : row.home_score;
+  const pens = row.home_pens != null && row.away_pens != null
+    ? ` po penaltách ${row.is_home ? row.home_pens : row.away_pens}:${row.is_home ? row.away_pens : row.home_pens}`
+    : "";
+  return [{
+    ref: `cup:upset:${row.id}`, kind: "cup",
+    fact: `Klub vypadl z poháru (${roundName(row.round, row.total_rounds).toLowerCase()}) s výrazně slabším týmem ${row.winner}, prohrál ${own}:${opp}${pens}.`,
+    names: [], weight: 7,
+  }];
+}
+
 // ── Sběr a výběr ─────────────────────────────────────────────────────────────
 
 /**
@@ -473,6 +607,9 @@ export async function loadScandals(
     ownWordsScandal(db, teamId, opts.calendarId ?? null),
     sameOwnerScandal(db, teamId, opts.opponentTeamId ?? null),
     fanScandals(db, teamId),
+    unrestScandals(db, teamId),
+    sponsorScandals(db, teamId, gameDate),
+    cupScandals(db, teamId, gameDate),
   ]);
   // Věty skládají i texty od hráčů (názvy klubů, důvody pokut z návrhů,
   // trenérova slova) a jdou do promptu. Bez oddělovačů a zalomení se z nich
