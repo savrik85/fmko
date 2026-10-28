@@ -7,11 +7,14 @@
  *
  * Kandidovat může každý klub s hlasovacím právem. Jediné omezení je, že jeden klub
  * může zastávat nejvýš jednu funkci — o zbytku rozhodnou voliči.
+ *
+ * `leagueId` je tu vždy ŘÍDÍCÍ soutěž okresu (rules.ts, governingLeagueId):
+ * funkcionáři a volby grémia přeboru a III. třídy jsou společné a visí u přeboru.
  */
 
 import { logger } from "../lib/logger";
 import { FULL_BOARD_CLUBS, ROLE_LABEL, type OfficialRole } from "./defaults";
-import { countHumanClubs, listVoters } from "./rules";
+import { countHumanClubs, districtLeagueIds, listVoters, sqlPlaceholders } from "./rules";
 
 const M = "competition-officials";
 
@@ -669,9 +672,12 @@ export async function notifyElectionsOpened(db: D1Database, leagueId: string, se
   ).bind(leagueId, seasonNumber).all<{ role: OfficialRole }>()
     .catch((e) => { logger.warn({ module: M }, "otevřené volby pro oznámení", e); return { results: [] as Array<{ role: OfficialRole }> }; });
   if (open.results.length === 0) return 0;
+  // Volí celý okres — přebor i III. třída mají jedno grémium.
+  const ids = await districtLeagueIds(db, leagueId);
   const teams = await db.prepare(
-    "SELECT id FROM teams WHERE league_id = ? AND user_id IS NOT NULL AND user_id != 'ai' AND parent_team_id IS NULL",
-  ).bind(leagueId).all<{ id: string }>()
+    `SELECT id FROM teams WHERE league_id IN (${sqlPlaceholders(ids)})
+        AND user_id IS NOT NULL AND user_id != 'ai' AND parent_team_id IS NULL`,
+  ).bind(...ids).all<{ id: string }>()
     .catch((e) => { logger.warn({ module: M }, "kluby pro oznámení voleb", e); return { results: [] as Array<{ id: string }> }; });
   const roles = open.results.map((r) => ROLE_LABEL[r.role]).join(", ");
   const meeting = nextMeetingAfter(gameDate);

@@ -11,6 +11,7 @@
  */
 
 import { logger } from "../lib/logger";
+import { districtLeagueIds, governingLeagueId, sqlPlaceholders } from "./rules";
 
 const M = "competition-referee-roster";
 
@@ -44,10 +45,12 @@ export const MIN_USABLE_FOR_ROUND = 15;
 export async function pausedIds(
   db: D1Database, leagueId: string, seasonNumber: number, gameWeek: number,
 ): Promise<Set<string>> {
+  // Stopky dává komisař grémia okresu — platí v přeboru i ve III. třídě.
+  const governingId = await governingLeagueId(db, leagueId);
   const rows = await db.prepare(
     `SELECT referee_id FROM competition_referee_suspensions
       WHERE league_id = ? AND season_number = ? AND ? BETWEEN from_week AND until_week`
-  ).bind(leagueId, seasonNumber, gameWeek).all<{ referee_id: string }>()
+  ).bind(governingId, seasonNumber, gameWeek).all<{ referee_id: string }>()
     .catch((e) => { logger.warn({ module: M }, "seznam stopek", e); return { results: [] }; });
   return new Set(rows.results.map((r) => r.referee_id));
 }
@@ -63,12 +66,13 @@ export interface ActivePause {
 export async function activePauses(
   db: D1Database, leagueId: string, seasonNumber: number, gameWeek: number,
 ): Promise<ActivePause[]> {
+  const governingId = await governingLeagueId(db, leagueId);
   const rows = await db.prepare(
     `SELECT referee_id, from_week, until_week, reason
        FROM competition_referee_suspensions
       WHERE league_id = ? AND season_number = ? AND until_week >= ?
       ORDER BY until_week`
-  ).bind(leagueId, seasonNumber, gameWeek).all<{
+  ).bind(governingId, seasonNumber, gameWeek).all<{
     referee_id: string; from_week: number; until_week: number; reason: string;
   }>().catch((e) => { logger.warn({ module: M }, "běžící stopky", e); return { results: [] }; });
 
@@ -154,6 +158,7 @@ export interface PauseOpts {
  * kolech je zpátky. Je to napomenutí, ne konec kariéry.
  */
 export async function applyRefereePause(db: D1Database, opts: PauseOpts): Promise<boolean> {
+  opts = { ...opts, leagueId: await governingLeagueId(db, opts.leagueId) };
   const untilWeek = opts.fromWeek + PAUSE_WEEKS - 1;
 
   const res = await db.prepare(
@@ -185,6 +190,8 @@ export async function applyRefereePause(db: D1Database, opts: PauseOpts): Promis
 
 export interface OpenRound {
   calendarId: string;
+  /** Soutěž, které kolo patří — grémium je okresní, kolo má jen jedna soutěž. */
+  leagueId: string;
   gameWeek: number;
   seasonNumber: number;
   scheduledAt: string;
@@ -197,28 +204,33 @@ export interface OpenRound {
  * Delegace proběhne dva herní dny před výkopem, takže tohle okno se otevře
  * automaticky a zavře se výkopem. Kolo bez delegace se nevrací: měnit se dá
  * jen to, co už los rozdal.
+ *
+ * Komisař rozhodčích je okresní, takže kolo hledá ve všech soutěžích grémia
+ * (přebor i III. třída) a vrací to, které se hraje nejdřív.
  */
 export async function upcomingRound(
   db: D1Database, leagueId: string,
 ): Promise<OpenRound | null> {
+  const ids = await districtLeagueIds(db, leagueId);
   const row = await db.prepare(
-    `SELECT sc.id AS calendar_id, sc.game_week, sc.season_number, sc.scheduled_at,
+    `SELECT sc.id AS calendar_id, sc.league_id, sc.game_week, sc.season_number, sc.scheduled_at,
             COUNT(m.id) AS matches
        FROM season_calendar sc
        JOIN matches m ON m.calendar_id = sc.id AND m.referee_id IS NOT NULL
-      WHERE sc.league_id = ? AND sc.status = 'scheduled'
+      WHERE sc.league_id IN (${sqlPlaceholders(ids)}) AND sc.status = 'scheduled'
         AND sc.season_number = (SELECT MAX(x.season_number) FROM season_calendar x WHERE x.league_id = sc.league_id)
       GROUP BY sc.id
-      ORDER BY sc.scheduled_at
+      ORDER BY sc.scheduled_at, sc.league_id
       LIMIT 1`
-  ).bind(leagueId).first<{
-    calendar_id: string; game_week: number; season_number: number;
+  ).bind(...ids).first<{
+    calendar_id: string; league_id: string | null; game_week: number; season_number: number;
     scheduled_at: string; matches: number;
   }>().catch((e) => { logger.warn({ module: M }, "nejbližší obsazené kolo", e); return null; });
 
   if (!row) return null;
   return {
-    calendarId: row.calendar_id, gameWeek: row.game_week, seasonNumber: row.season_number,
+    calendarId: row.calendar_id, leagueId: row.league_id ?? leagueId,
+    gameWeek: row.game_week, seasonNumber: row.season_number,
     scheduledAt: row.scheduled_at, matches: row.matches,
   };
 }
@@ -342,6 +354,8 @@ export async function swapReferee(db: D1Database, opts: {
   matchId: string; fromRefereeId: string | null; toRefereeId: string;
   reason: string; teamId: string; ownMatch: boolean; gameDate: string;
 }): Promise<SwapResult> {
+  // Výměnu zapisuje grémium okresu, ať byl zápas přeboru, nebo III. třídy.
+  opts = { ...opts, leagueId: await governingLeagueId(db, opts.leagueId) };
   const res = await db.prepare(
     "UPDATE matches SET referee_id = ? WHERE id = ? AND calendar_id = ?"
   ).bind(opts.toRefereeId, opts.matchId, opts.round.calendarId).run()

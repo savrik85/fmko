@@ -1,6 +1,10 @@
 /**
  * Týdenní zasedání grémia soutěže.
  *
+ * Zasedá jen ŘÍDÍCÍ soutěž okresu (rules.ts): grémium přeboru rozhoduje i za
+ * III. třídu, volí a hlasují kluby obou soutěží. Peníze (kauce, pokuty, dotace)
+ * ale jdou z a do pokladny soutěže, ve které klub hraje.
+ *
  * Běží ve středu z denního ticku. Středa je jediný den bez kolize: liga hraje
  * pondělí a čtvrtek, pohár v sobotu, vesnický týdenní cyklus v pondělí a delegace
  * rozhodčích ve středu míří na pátek, kde se nehraje.
@@ -70,6 +74,23 @@ export async function runCompetitionMeetings(
   let meetings = 0, closed = 0, passed = 0;
   for (const row of leagues.results) {
     try {
+      // Řádek III. třídy je jen značka otevřené pokladny — zasedá grémium okresu
+      // u přeboru. Pokladně se jen srovná cache, jako by ji srovnala schůze.
+      const { governingLeagueId } = await import("./rules");
+      const governingId = await governingLeagueId(db, row.league_id);
+      if (governingId !== row.league_id) {
+        // Návrhy, které III. třída otevřela ještě s vlastním grémiem, by tu visely
+        // navždy (i s kaucí). Projedná je grémium okresu. Odvolání funkcionáře
+        // a sponzor se týkají vedení a nabídek III. třídy, ty grémium okresu
+        // rozhodnout nemůže; propadnou se starými mandáty při rolloveru.
+        await db.prepare(
+          `UPDATE competition_proposals SET league_id = ?
+            WHERE league_id = ? AND status = 'open' AND kind NOT IN ('recall','sponsor')`
+        ).bind(governingId, row.league_id).run()
+          .catch((e) => logger.warn({ module: M }, `převod otevřených návrhů ${row.league_id} na grémium okresu`, e));
+        await recomputeBalance(db, row.league_id, gameDate);
+        continue;
+      }
       const out = await runOneMeeting(db, row.league_id, gameDate);
       if (!out) continue;
       meetings++; closed += out.closed; passed += out.passed;
@@ -537,8 +558,12 @@ async function applyImmediateEffect(
 
 async function refundDeposit(db: D1Database, p: OpenProposal, gameDate: string): Promise<void> {
   const refId = `dep-refund-${p.id}`;
+  // Kauci vrací pokladna, která ji přijala — u klubu z III. třídy to je pokladna
+  // III. třídy, i když návrh visí u grémia přeboru.
+  const { ledgerLeagueOf } = await import("./ledger");
+  const treasuryLeagueId = (await ledgerLeagueOf(db, `dep-${p.id}`)) ?? p.league_id;
   const out = await recordCompetitionEntry(db, {
-    leagueId: p.league_id, seasonNumber: p.season_number, type: "deposit",
+    leagueId: treasuryLeagueId, seasonNumber: p.season_number, type: "deposit",
     amount: -p.deposit, description: "Vrácení kauce za přijatý návrh",
     teamId: p.proposed_by_team_id, gameDate, referenceId: refId,
   });

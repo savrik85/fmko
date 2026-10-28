@@ -13,6 +13,7 @@
 
 import { logger } from "../lib/logger";
 import { recordCompetitionEntry } from "./ledger";
+import { districtLeagueIds, sqlPlaceholders, treasuryLeagueForTeam } from "./rules";
 
 const M = "competition-grants";
 
@@ -72,8 +73,13 @@ export async function payGrants(db: D1Database, opts: {
       .catch((e) => { logger.warn({ module: M }, "kontrola dotace", e); return null; });
     if (uz) continue;
 
+    // Dotaci odhlasuje grémium okresu, vyplácí ji ale pokladna soutěže, ve které
+    // klub hraje. Klub z III. třídy, jejíž pokladna ještě není otevřená, dostane
+    // peníze z pokladny řídící soutěže.
+    const treasuryLeagueId = await treasuryLeagueForTeam(db, p.teamId, opts.leagueId, true);
+
     await recordCompetitionEntry(db, {
-      leagueId: opts.leagueId, seasonNumber: opts.seasonNumber, type: "grant",
+      leagueId: treasuryLeagueId, seasonNumber: opts.seasonNumber, type: "grant",
       amount: -amount, description: popis, teamId: p.teamId,
       gameDate: opts.gameDate, referenceId: refId,
     });
@@ -86,7 +92,9 @@ export async function payGrants(db: D1Database, opts: {
         (id, league_id, season_number, proposal_id, team_id, kind, amount, game_date)
        VALUES (?,?,?,?,?,?,?,?)`
     ).bind(
-      crypto.randomUUID(), opts.leagueId, opts.seasonNumber, opts.referenceKey,
+      // Evidence dotace patří k pokladně, ze které odešla: z ní se pak půjčka
+      // splácí (repayLoans při odměnách za umístění téže soutěže).
+      crypto.randomUUID(), treasuryLeagueId, opts.seasonNumber, opts.referenceKey,
       p.teamId, opts.kind, amount, opts.gameDate,
     ).run().catch((e) => logger.warn({ module: M }, "evidence dotace", e));
 
@@ -112,13 +120,15 @@ export async function prijemci(db: D1Database, opts: {
   // Cílená dotace jednomu klubu — půjčka, cena, cestovné.
   if (opts.targetTeamId) return [{ teamId: opts.targetTeamId, amount: opts.amount }];
 
+  // Dotace grémia okresu jde klubům všech jeho soutěží.
+  const ids = await districtLeagueIds(db, opts.leagueId);
   const kluby = await db.prepare(
     `SELECT t.id,
             (SELECT s.pitch_condition FROM stadiums s WHERE s.team_id = t.id) AS pitch
        FROM teams t
-      WHERE t.league_id = ? AND t.team_type = 'senior' AND t.parent_team_id IS NULL
+      WHERE t.league_id IN (${sqlPlaceholders(ids)}) AND t.team_type = 'senior' AND t.parent_team_id IS NULL
       ORDER BY t.id`
-  ).bind(opts.leagueId).all<{ id: string; pitch: number | null }>()
+  ).bind(...ids).all<{ id: string; pitch: number | null }>()
     .catch((e) => { logger.warn({ module: M }, "příjemci dotace", e); return { results: [] }; });
 
   // Dotace na hřiště jde jen tam, kde je co spravovat. Kdyby ji dostali všichni,

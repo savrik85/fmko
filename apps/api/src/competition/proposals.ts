@@ -14,7 +14,7 @@ import {
   type CompetitionRules, type Gesce, type ProposalSpec,
 } from "./defaults";
 import { checkBudget } from "./projection";
-import { countAllClubs, listVoters } from "./rules";
+import { countAllClubs, districtLeagueIds, listVoters, sqlPlaceholders } from "./rules";
 
 const M = "competition-proposals";
 
@@ -59,10 +59,14 @@ export async function voterStats(
       const voted = new Set(rows.results.map((r) => r.team_id));
       // Klub, který vstoupil až po nejstarší sledované schůzi, nemohl hlasovat — bereme ho jako aktivní.
       const oldest = dates[dates.length - 1];
+      const ids = await districtLeagueIds(db, leagueId);
       const fresh = await db.prepare(
-        "SELECT id FROM teams WHERE league_id = ? AND created_at > ?"
-      ).bind(leagueId, oldest).all<{ id: string }>()
-        .catch(() => ({ results: [] as Array<{ id: string }> }));
+        `SELECT id FROM teams WHERE league_id IN (${sqlPlaceholders(ids)}) AND created_at > ?`
+      ).bind(...ids, oldest).all<{ id: string }>()
+        .catch((e) => {
+          logger.warn({ module: M }, `nové kluby grémia ${leagueId}`, e);
+          return { results: [] as Array<{ id: string }> };
+        });
       for (const f of fresh.results) voted.add(f.id);
 
       const filtered = voters.filter((v) => voted.has(v));
@@ -111,6 +115,13 @@ export async function validateProposal(opts: {
   balance: number;
   kind: string;
   value: number;
+  /**
+   * Pokladny, které ten sazebník ponesou. Grémium okresu odhlasuje jeden sazebník
+   * pro přebor i III. třídu, ale každá z nich ho platí ze své pokladny, takže
+   * strop musí vyjít každé zvlášť. Když chybí, kontroluje se jen `leagueId`
+   * s `balance` a `level`.
+   */
+  treasuries?: Array<{ name: string; level: string; teams: number; balance: number }>;
 }): Promise<Validation> {
   const spec = PROPOSAL_KINDS[opts.kind];
   if (!spec) return { ok: false, error: "Neznámý typ návrhu." };
@@ -128,22 +139,28 @@ export async function validateProposal(opts: {
 
   let budgetNote: string | null = null;
   if (BUDGET_KINDS.has(opts.kind) && spec.rulesField) {
-    const teams = await countAllClubs(opts.db, opts.leagueId);
     const zaklad = opts.budgetBase ?? opts.currentRules;
     const proposed: CompetitionRules = { ...zaklad, [spec.rulesField]: opts.value };
-    const check = checkBudget({
-      rules: proposed, teams, level: opts.level, balance: opts.balance,
-    });
-    if (!check.ok) {
-      // U návrhu na startovné by věta „zvedněte startovné" zněla jako výsměch —
-      // navrhovatel ho zvedá právě teď, jen málo.
-      const rada = opts.kind === "entry_fee"
-        ? `Aby to vyšlo, muselo by být aspoň ${czk(check.requiredEntryFee)}.`
-        : `Zvedněte startovné na ${czk(check.requiredEntryFee)}, nebo sežeňte sponzora.`;
-      return { ok: false, error: `Návrh nelze podat, pokladně by chybělo ${czk(check.deficit)}. ${rada}` };
+    const budgets = opts.treasuries?.length
+      ? opts.treasuries
+      : [{ name: "", level: opts.level, teams: await countAllClubs(opts.db, opts.leagueId), balance: opts.balance }];
+
+    let delta = 0;
+    for (const p of budgets) {
+      const check = checkBudget({ rules: proposed, teams: p.teams, level: p.level, balance: p.balance });
+      if (!check.ok) {
+        // U návrhu na startovné by věta „zvedněte startovné" zněla jako výsměch —
+        // navrhovatel ho zvedá právě teď, jen málo.
+        const rada = opts.kind === "entry_fee"
+          ? `Aby to vyšlo, muselo by být aspoň ${czk(check.requiredEntryFee)}.`
+          : `Zvedněte startovné na ${czk(check.requiredEntryFee)}, nebo sežeňte sponzora.`;
+        // Se dvěma pokladnami musí být jasné, které z nich by chybělo.
+        const which = budgets.length > 1 && p.name ? ` (${p.name})` : "";
+        return { ok: false, error: `Návrh nelze podat, pokladně${which} by chybělo ${czk(check.deficit)}. ${rada}` };
+      }
+      const current = checkBudget({ rules: zaklad, teams: p.teams, level: p.level, balance: p.balance });
+      delta += check.projected - current.projected;
     }
-    const current = checkBudget({ rules: zaklad, teams, level: opts.level, balance: opts.balance });
-    const delta = check.projected - current.projected;
     budgetNote = delta === 0
       ? "Na rozpočet soutěže to nemá vliv."
       : `Dopad na rozpočet soutěže: ${delta > 0 ? "+" : "−"}${czk(Math.abs(delta))} za sezónu.`;

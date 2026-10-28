@@ -12,7 +12,7 @@
 import { logger } from "../lib/logger";
 import { DEFAULT_RULES } from "./defaults";
 import { recordCompetitionEntry } from "./ledger";
-import { loadRules } from "./rules";
+import { governingLeagueId, loadRules } from "./rules";
 
 const M = "competition-transfer";
 
@@ -70,8 +70,12 @@ export async function computeTransferLevies(db: D1Database, opts: {
   const mladez = await jeMladeznicka(db, opts.buyerLeagueId, opts.sellerLeagueId);
   if (mladez) return none;
 
+  // Přebor a III. třída téhož okresu mají jedno grémium, přestup mezi nimi je
+  // proto přestup UVNITŘ soutěže: meziligový poplatek se neplatí, odvod ano
+  // (do pokladny soutěže prodávajícího, viz recordTransferLevies).
   const crossLeague = !!(opts.buyerLeagueId && opts.sellerLeagueId
-    && opts.buyerLeagueId !== opts.sellerLeagueId);
+    && opts.buyerLeagueId !== opts.sellerLeagueId
+    && (await governingLeagueId(db, opts.buyerLeagueId)) !== (await governingLeagueId(db, opts.sellerLeagueId)));
 
   if (crossLeague) {
     const season = opts.buyerLeagueId ? await seasonOf(db, opts.buyerLeagueId) : null;

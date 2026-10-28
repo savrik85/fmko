@@ -11,7 +11,7 @@
 import { logger } from "../lib/logger";
 import { PROPOSAL_KINDS } from "./defaults";
 import { formatRuleValue } from "./proposals";
-import { loadRules } from "./rules";
+import { governingLeagueId, loadRules } from "./rules";
 
 const M = "season-rule-changes";
 
@@ -30,6 +30,8 @@ export async function seasonRuleChanges(
 ): Promise<SeasonRuleChange[]> {
   const rules = await loadRules(db, leagueId, seasonNumber);
   if (!rules) return [];
+  // Návrhy visí u grémia okresu, ať se ptá přebor, nebo III. třída.
+  leagueId = await governingLeagueId(db, leagueId);
 
   const { results } = await db.prepare(
     `SELECT kind, payload, effective_from_season FROM competition_proposals

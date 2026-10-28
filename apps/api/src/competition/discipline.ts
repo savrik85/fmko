@@ -13,7 +13,8 @@
 
 import { logger } from "../lib/logger";
 import { QUALIFIED_MAJORITY, SIMPLE_MAJORITY } from "./defaults";
-import { recordCompetitionEntry } from "./ledger";
+import { ledgerLeagueOf, recordCompetitionEntry } from "./ledger";
+import { governingLeagueId, treasuryLeagueForTeam } from "./rules";
 
 const M = "competition-discipline";
 
@@ -323,6 +324,9 @@ export async function canFine(
 ): Promise<FineCheck> {
   const offence = OFFENCES[kind];
   if (!offence) return { ok: false, reason: "Neznámý skutek." };
+  // Sankce i návrhy vede grémium okresu u řídící soutěže — strop pokut platí
+  // za celý okres, ne zvlášť za přebor a III. třídu.
+  leagueId = await governingLeagueId(db, leagueId);
 
   // Pokuty z kontroly pravidel se do stropu nepočítají — jinak by stačilo dvakrát
   // porušit pravidlo a klub by byl na zbytek sezóny nedotknutelný pro hlasování.
@@ -399,13 +403,19 @@ export async function issueSanction(db: D1Database, opts: IssueSanctionOpts): Pr
   const amount = Math.max(0, Math.round(opts.amount));
   if (amount <= 0) return null;
 
+  // `opts.leagueId` může být soutěž zápasu (výtržnost v III. třídě) i grémium.
+  // Sankce patří grémiu okresu (odvolání, strop pokut, vývěska), peníze pokladně
+  // soutěže, ve které potrestaný klub hraje.
+  const governingId = await governingLeagueId(db, opts.leagueId);
+  const treasuryLeagueId = await treasuryLeagueForTeam(db, opts.teamId, opts.leagueId);
+
   const res = await db.prepare(
     `INSERT OR IGNORE INTO competition_sanctions
       (id, league_id, season_number, team_id, kind, amount, reason, evidence,
        issued_by, issued_by_team_id, proposal_id, appeal_deadline_gd, game_date, reference_id)
      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
   ).bind(
-    id, opts.leagueId, opts.seasonNumber, opts.teamId, opts.kind, amount,
+    id, governingId, opts.seasonNumber, opts.teamId, opts.kind, amount,
     opts.reason, opts.evidence, opts.issuedBy, opts.issuedByTeamId,
     opts.proposalId, null, opts.gameDate, opts.referenceId ?? null,
   ).run().catch((e) => { logger.error({ module: M }, "zápis sankce", e); return null; });
@@ -420,7 +430,7 @@ export async function issueSanction(db: D1Database, opts: IssueSanctionOpts): Pr
   ).catch((e) => logger.error({ module: M }, `stržení pokuty klubu ${opts.teamId}`, e));
 
   await recordCompetitionEntry(db, {
-    leagueId: opts.leagueId, seasonNumber: opts.seasonNumber, type: "sanction",
+    leagueId: treasuryLeagueId, seasonNumber: opts.seasonNumber, type: "sanction",
     amount, description: `Pokuta: ${opts.reason}`, teamId: opts.teamId,
     gameDate: opts.gameDate, referenceId: `sanc-${id}`,
   });
@@ -434,7 +444,7 @@ export async function issueSanction(db: D1Database, opts: IssueSanctionOpts): Pr
     logger.warn({ module: M }, "SMS o pokutě", e);
   }
 
-  await afterSanction(db, opts.leagueId, opts.teamId, opts.seasonNumber);
+  await afterSanction(db, governingId, opts.teamId, opts.seasonNumber);
   return id;
 }
 
@@ -483,8 +493,10 @@ export async function refundSanction(
     .catch((e) => { logger.warn({ module: M }, "zrušení sankce", e); return null; });
   if (!locked || (locked.meta?.changes ?? 0) === 0) return false;
 
+  // Vrací pokladna, do které pokuta přitekla — sankce sama visí u grémia okresu.
+  const treasuryLeagueId = (await ledgerLeagueOf(db, `sanc-${s.id}`)) ?? s.league_id;
   const entry = await recordCompetitionEntry(db, {
-    leagueId: s.league_id, seasonNumber: s.season_number, type: "sanction",
+    leagueId: treasuryLeagueId, seasonNumber: s.season_number, type: "sanction",
     amount: -s.amount, description: `Vrácení pokuty po odvolání: ${s.reason}`,
     teamId: s.team_id, gameDate, referenceId: `sanc-refund-${s.id}`,
   });
@@ -525,6 +537,7 @@ export async function canChairFine(
 
   // Prezident, který zastupuje neobsazenou disciplinárku, čerpá vlastní počítadlo.
   const role = asPresident ? "predseda" : "disciplinarni";
+  leagueId = await governingLeagueId(db, leagueId);
   const used = await db.prepare(
     `SELECT used_fines FROM competition_officials
       WHERE league_id = ? AND role = ? AND team_id = ? AND season_number = ? AND status = 'active'`

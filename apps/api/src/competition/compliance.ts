@@ -17,6 +17,7 @@ import { licenceLabel } from "@okresni-masina/shared";
 import { logger } from "../lib/logger";
 import { issueSanction } from "./discipline";
 import type { CompetitionRules } from "./defaults";
+import { districtLeagueIds, sqlPlaceholders } from "./rules";
 
 const M = "competition-compliance";
 
@@ -42,6 +43,8 @@ interface TeamState {
  * vlastní soupisku i hřiště rodičovského klubu a pokutovat ho dvakrát nedává smysl.
  */
 async function loadTeams(db: D1Database, leagueId: string): Promise<TeamState[]> {
+  // Pravidla grémia okresu platí pro kluby všech jeho soutěží.
+  const ids = await districtLeagueIds(db, leagueId);
   const rows = await db.prepare(
     `SELECT t.id, t.name,
             (SELECT s.pitch_condition FROM stadiums s WHERE s.team_id = t.id) AS pitch,
@@ -49,8 +52,8 @@ async function loadTeams(db: D1Database, leagueId: string): Promise<TeamState[]>
             CASE WHEN t.user_id = 'ai' THEN NULL
                  ELSE (SELECT m.licence_level FROM managers m WHERE m.team_id = t.id) END AS licence
        FROM teams t
-      WHERE t.league_id = ? AND t.team_type = 'senior' AND t.parent_team_id IS NULL`
-  ).bind(leagueId).all<{ id: string; name: string; pitch: number | null; squad: number; licence: number | null }>()
+      WHERE t.league_id IN (${sqlPlaceholders(ids)}) AND t.team_type = 'senior' AND t.parent_team_id IS NULL`
+  ).bind(...ids).all<{ id: string; name: string; pitch: number | null; squad: number; licence: number | null }>()
     .catch((e) => { logger.warn({ module: M }, `kluby soutěže ${leagueId}`, e); return { results: [] }; });
   return rows.results;
 }
@@ -185,13 +188,14 @@ export async function pitchOverview(
     .catch((e) => { logger.warn({ module: M }, "pravidla pro přehled hřišť", e); return null; });
   const limit = rules?.min_pitch_condition ?? 0;
 
+  const ids = await districtLeagueIds(db, leagueId);
   const rows = await db.prepare(
     `SELECT t.id, t.name, s.pitch_condition AS pitch, s.capacity
        FROM teams t
        LEFT JOIN stadiums s ON s.team_id = t.id
-      WHERE t.league_id = ? AND t.team_type = 'senior' AND t.parent_team_id IS NULL
+      WHERE t.league_id IN (${sqlPlaceholders(ids)}) AND t.team_type = 'senior' AND t.parent_team_id IS NULL
       ORDER BY s.pitch_condition ASC NULLS LAST, t.name`
-  ).bind(leagueId).all<{ id: string; name: string; pitch: number | null; capacity: number | null }>()
+  ).bind(...ids).all<{ id: string; name: string; pitch: number | null; capacity: number | null }>()
     .catch((e) => { logger.warn({ module: M }, "stav hřišť soutěže", e); return { results: [] }; });
 
   return {

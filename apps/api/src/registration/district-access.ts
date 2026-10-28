@@ -32,20 +32,24 @@ export async function appointFounder(db: D1Database, userId: string, teamId: str
      WHERE d.founder_team_id IS NULL AND d.status = 'ready'`
   ).bind(userId, teamId).first<{ district: string; founder_request_id: string; league_id: string; season_number: number; game_date: string | null }>();
   if (!founder) return;
+  // Mandát patří grémiu okresu, které sedí u přeboru — i když zakladatel začíná
+  // ve III. třídě.
+  const { governingLeagueId } = await import("../competition/rules");
+  const leagueId = await governingLeagueId(db, founder.league_id);
   const mandateId = `founder:${founder.founder_request_id}`;
   await db.batch([
     db.prepare(`INSERT OR IGNORE INTO competition_officials
       (id, league_id, role, team_id, season_number, elected_game_date)
       SELECT ?, ?, 'predseda', ?, ?, ? WHERE NOT EXISTS (
         SELECT 1 FROM competition_officials WHERE league_id = ? AND role = 'predseda' AND season_number = ?
-      )`).bind(mandateId, founder.league_id, teamId, founder.season_number, founder.game_date, founder.league_id, founder.season_number),
+      )`).bind(mandateId, leagueId, teamId, founder.season_number, founder.game_date, leagueId, founder.season_number),
     db.prepare(`UPDATE district_registrations SET founder_team_id = ? WHERE district = ? AND founder_team_id IS NULL
       AND EXISTS (SELECT 1 FROM competition_officials WHERE id = ? AND team_id = ?)`)
       .bind(teamId, founder.district, mandateId, teamId),
     db.prepare(`UPDATE competition_elections SET status = 'decided', winner_team_id = ?, closed_game_date = ?,
       result_note = 'První mandát zakladatele ligy.' WHERE league_id = ? AND role = 'predseda' AND season_number = ?
       AND status = 'open' AND EXISTS (SELECT 1 FROM competition_officials WHERE id = ? AND team_id = ?)`)
-      .bind(teamId, founder.game_date, founder.league_id, founder.season_number, mandateId, teamId),
+      .bind(teamId, founder.game_date, leagueId, founder.season_number, mandateId, teamId),
   ]);
 }
 

@@ -108,9 +108,10 @@ describe("revize účetnictví přes routu", () => {
   const COMMISSIONER_RULES = [
     ...BASE_RULES,
     { sql: /FROM competition_officials\s+WHERE league_id = \? AND role = \?/, first: { team_id: "t1", status: "active" } },
-    { sql: /SELECT id, name FROM teams WHERE id = \? AND league_id = \? AND parent_team_id IS NULL/, first: { id: "t2", name: "FK Cíl" } },
+    // Komisař je okresní: cíl se hledá ve všech soutěžích grémia (league_id IN (...)).
+    { sql: /SELECT id, name FROM teams WHERE id = \? AND league_id IN \(\?\) AND parent_team_id IS NULL/, first: { id: "t2", name: "FK Cíl" } },
     { sql: /SELECT game_date FROM teams WHERE id = \?/, first: { game_date: "2026-10-23T16:00:00.000Z" } },
-    { sql: /SELECT id, name, budget FROM teams WHERE id = \? AND league_id = \?/, first: { id: "t2", name: "FK Cíl", budget: 12_000 } },
+    { sql: /SELECT id, name, budget, league_id FROM teams WHERE id = \? AND league_id IN \(\?\)/, first: { id: "t2", name: "FK Cíl", budget: 12_000, league_id: "l1" } },
   ];
 
   it("první revize v sezóně pošle klubu SMS a vrátí účetnictví", async () => {

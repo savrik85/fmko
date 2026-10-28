@@ -41,10 +41,21 @@ export interface State {
     id: string; name: string; district: string; level: string;
     seasonNumber: number; sponsoredName: string | null;
   };
+  /**
+   * Soutěž, jejíž pokladnu stav ukazuje (balance, freeBalance, subsidy, …).
+   * Grémium (`league`) je okresní, pokladna je ale per soutěž, ledger se čte přes tohle id.
+   */
+  ownLeague?: { id: string; name: string; level: string; treasuryOpen: boolean };
+  /** Soutěže, které grémium vede, řídící první (přebor, III. třída). */
+  districtLeagues?: Array<{ id: string; name: string; level: string }>;
   enabled: boolean;
   threshold: number;
+  /** Lidské kluby celého okresu (všech soutěží grémia). */
   humanClubs: number;
+  /** Kluby soutěže, jejíž pokladnu stav ukazuje. */
   totalClubs: number;
+  /** Kluby všech soutěží grémia. */
+  districtTotalClubs?: number;
   balance: number;
   freeBalance: number;
   outstanding: { placement: number; bonus: number; referees: number; total: number };
