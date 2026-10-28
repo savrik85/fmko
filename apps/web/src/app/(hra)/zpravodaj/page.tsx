@@ -72,7 +72,18 @@ interface Article {
   teamId?: string | null;
   photos?: UltrasPhoto[];
   journalist?: Journalist;
+  /** Režim „celý okres“: z jaké soutěže článek je (Přebor, III. třída). */
+  leagueLabel?: string;
 }
+
+/** Štítek soutěže u titulku, jen když se čte celý okres. */
+function LeagueTag({ a }: { a: { leagueLabel?: string } }) {
+  if (!a.leagueLabel) return null;
+  return <span className="inline-block align-middle mr-2 px-1.5 py-0.5 rounded-sm bg-ink/10 text-ink/70 font-heading font-bold uppercase tracking-wide text-[11px] leading-none">{a.leagueLabel}</span>;
+}
+
+/** Hodnota výběru „celý okres“ (všechny soutěže okresu dohromady). */
+const DISTRICT = "district";
 
 /** Parse **bold** markdown in text */
 function renderMarkdown(text: string): React.ReactNode {
@@ -183,7 +194,7 @@ export default function NewsPage() {
   // League picker for viewing other league's news
   const [allLeagues, setAllLeagues] = useState<LeagueOption[]>([]);
   const [selectedLeagueId, setSelectedLeagueId] = useState<string | null>(null);
-  const isOtherLeague = selectedLeagueId !== null;
+  const isOtherLeague = selectedLeagueId !== null && selectedLeagueId !== DISTRICT;
 
   useEffect(() => {
     apiFetch<{ leagues: LeagueOption[] }>("/api/leagues")
@@ -233,16 +244,39 @@ export default function NewsPage() {
 
   // Redakce se řídí tím, čí zpravodaj zrovna čteš.
   useEffect(() => {
-    const ligaId = selectedLeagueId ?? team?.league_id;
+    const ligaId = selectedLeagueId && selectedLeagueId !== DISTRICT ? selectedLeagueId : team?.league_id;
     if (!ligaId) return;
     apiFetch<{ journalists: Redaktor[] }>(`/api/leagues/${ligaId}/journalists`)
       .then((d) => setRedakce(d.journalists ?? []))
       .catch((e) => { console.error("načtení redakce:", e); });
   }, [selectedLeagueId, team?.league_id]);
 
+  // Celý okres: vlastní zpravodaj + zpravodaje ostatních soutěží okresu, dohromady podle data.
+  useEffect(() => {
+    if (selectedLeagueId !== DISTRICT || !teamId || !team) return;
+    const others = allLeagues.filter((l) => l.district === team.district && l.id !== team.league_id);
+    const label = (name: string) => name.replace(` ${team.district}`, "").trim();
+    const own = allLeagues.find((l) => l.id === team.league_id);
+    setLoading(true);
+    Promise.all([
+      apiFetch<{ articles: Article[]; season: number }>(`/api/teams/${teamId}/news`)
+        .then((d) => ({ d, label: own ? label(own.name) : "" })),
+      ...others.map((l) => apiFetch<{ articles: Article[]; season: number }>(`/api/leagues/${l.id}/news`)
+        .then((d) => ({ d, label: label(l.name) }))),
+    ]).then((parts) => {
+      const seen = new Set<string>();
+      const merged = parts.flatMap(({ d, label: lab }) => d.articles.map((a) => ({ ...a, leagueLabel: lab })))
+        .filter((a) => (seen.has(a.id) ? false : (seen.add(a.id), true)))
+        .sort((x, y) => (y.date ?? "").localeCompare(x.date ?? ""));
+      setArticles(merged);
+      setSeason(parts[0]?.d.season ?? 1);
+      setLoading(false);
+    }).catch((e) => { console.error("načtení zpravodaje okresu:", e); setLoading(false); });
+  }, [selectedLeagueId, teamId, team, allLeagues]);
+
   // Load other league news when selected
   useEffect(() => {
-    if (!selectedLeagueId) return;
+    if (!selectedLeagueId || selectedLeagueId === DISTRICT) return;
     setLoading(true);
     apiFetch<{ articles: Article[]; season: number }>(`/api/leagues/${selectedLeagueId}/news`)
       .then((data) => {
@@ -363,8 +397,8 @@ export default function NewsPage() {
   const miscArticles = otherArticles;
 
   const today = new Date().toLocaleDateString("cs", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
-  const selectedLeague = selectedLeagueId ? allLeagues.find(l => l.id === selectedLeagueId) : null;
-  const district = isOtherLeague ? (selectedLeague?.district || "Praha") : (team.district || "");
+  const selectedLeague = selectedLeagueId && selectedLeagueId !== DISTRICT ? allLeagues.find(l => l.id === selectedLeagueId) : null;
+  const district = selectedLeague ? (selectedLeague.district || "Praha") : (team.district || "");
   const newspaperName = district === "Praha" ? "Pražský Zpravodaj" : `Okresní Zpravodaj`;
 
   // Číslo vydání = kolo, ke kterému se váže nejčerstvější článek z redakce.
@@ -383,7 +417,10 @@ export default function NewsPage() {
             onChange={(e) => handleLeagueChange(e.target.value)}
             className="bg-transparent border-b border-ink/30 px-1 py-0.5 font-heading font-bold focus:outline-none focus:border-ink"
           >
-            <option value="own">Můj okres</option>
+            <option value="own">Moje soutěž</option>
+            {team?.district && allLeagues.filter((l) => l.district === team.district).length > 1 && (
+              <option value={DISTRICT}>Celý okres {team.district}</option>
+            )}
             {allLeagues.map((l) => (
               <option key={l.id} value={l.id}>{l.name}</option>
             ))}
@@ -428,7 +465,7 @@ export default function NewsPage() {
                   <div>
                     <Kicker>{rubrikaProTyp(leadStory.type)}</Kicker>
                     <h2 className="np-titulek text-3xl sm:text-[2.6rem] text-center mb-3">
-                      {leadStory.headline}
+                      <LeagueTag a={leadStory} />{leadStory.headline}
                     </h2>
                     <Podpis clanek={leadStory} stred />
                     <div className="np-text np-sloupce np-sloupce-3 np-iniciala text-[15px] mt-3">
@@ -449,7 +486,7 @@ export default function NewsPage() {
                     <div className="divide-y divide-ink/10">
                       {promotionArticles.slice(0, 3).map((p) => (
                         <div key={p.id} id={`news-${p.id}`} className="py-3 first:pt-0">
-                          <h4 className="np-titulek text-base mb-1.5">{p.headline}</h4>
+                          <h4 className="np-titulek text-base mb-1.5"><LeagueTag a={p} />{p.headline}</h4>
                           <p className="np-text text-[13px] whitespace-pre-line">{p.body}</p>
                           <div className="flex items-center justify-between mt-2">
                             <span className="text-micro text-muted italic">{timeAgo(p.date)}</span>
@@ -468,7 +505,7 @@ export default function NewsPage() {
           {secondaryStory && (
             <section id={`news-${secondaryStory.id}`} className="border-t border-ink/20 pt-6">
               <Kicker>{rubrikaProTyp(secondaryStory.type)}</Kicker>
-              <h2 className="np-titulek text-2xl sm:text-3xl text-center mb-2">{secondaryStory.headline}</h2>
+              <h2 className="np-titulek text-2xl sm:text-3xl text-center mb-2"><LeagueTag a={secondaryStory} />{secondaryStory.headline}</h2>
               <Podpis clanek={secondaryStory} stred />
               <div className="np-text np-sloupce np-sloupce-2 text-[15px] mt-3">
                 <NovinoveOdstavce body={secondaryStory.body} />
@@ -480,7 +517,7 @@ export default function NewsPage() {
           {roundSummaryStory && (
             <section id={`news-${roundSummaryStory.id}`} className="border-t border-ink/20 pt-6">
               <Kicker>🏆 Hráč a trenér kola</Kicker>
-              <h2 className="np-titulek text-2xl sm:text-3xl text-center mb-2">{roundSummaryStory.headline}</h2>
+              <h2 className="np-titulek text-2xl sm:text-3xl text-center mb-2"><LeagueTag a={roundSummaryStory} />{roundSummaryStory.headline}</h2>
               <Podpis clanek={roundSummaryStory} stred />
               <div className="np-text np-sloupce np-sloupce-2 text-[15px] mt-3">
                 <NovinoveOdstavce body={roundSummaryStory.body} />
@@ -496,7 +533,7 @@ export default function NewsPage() {
           {ultrasReports.map((ur) => (
             <section key={ur.id} id={`news-${ur.id}`} className="border-t border-ink/20 pt-6">
               <Kicker>🔥 Prales Ultras</Kicker>
-              <h2 className="np-titulek text-2xl sm:text-3xl text-center mb-2">{ur.headline}</h2>
+              <h2 className="np-titulek text-2xl sm:text-3xl text-center mb-2"><LeagueTag a={ur} />{ur.headline}</h2>
               <Podpis clanek={ur} stred />
               <div className="np-text np-sloupce np-sloupce-2 text-[15px] mt-3">
                 <NovinoveOdstavce body={ur.body} />
@@ -645,7 +682,7 @@ export default function NewsPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6">
                 {transferArticles.slice(0, 9).map((t) => (
                   <div key={t.id} id={`news-${t.id}`} className="py-3 border-b border-ink/10">
-                    <h4 className="np-titulek text-[15px] mb-1">{t.headline}</h4>
+                    <h4 className="np-titulek text-[15px] mb-1"><LeagueTag a={t} />{t.headline}</h4>
                     <p className="np-text text-[13px] line-clamp-3">{t.body}</p>
                     <div className="flex items-center justify-between mt-1.5">
                       <span className="text-micro text-muted italic">{timeAgo(t.date)}</span>
@@ -665,7 +702,7 @@ export default function NewsPage() {
                 {/* Výsledky kola */}
                 {roundArticles.map((article) => (
                   <section key={article.id}>
-                    <Kicker>⚽ {article.headline}</Kicker>
+                    <Kicker><LeagueTag a={article} />⚽ {article.headline}</Kicker>
                     <RoundResults body={article.body} />
                     <div className="text-micro text-muted italic mt-2">{timeAgo(article.date)}</div>
                   </section>
@@ -680,7 +717,7 @@ export default function NewsPage() {
                         <ArticleWrapper key={article.id} article={article}>
                           <div id={`news-${article.id}`} className="pb-3 mb-3 border-b border-ink/10 break-inside-avoid-column">
                             <h4 className="np-titulek text-[15px] mb-1">
-                              <span className="mr-1">{article.icon}</span>{article.headline}
+                              <LeagueTag a={article} /><span className="mr-1">{article.icon}</span>{article.headline}
                             </h4>
                             <p className="np-text text-[13px]">{article.body}</p>
                             <div className="flex items-center justify-between mt-1">
@@ -899,7 +936,7 @@ function Rozhovor({
 
   return (
     <article id={`news-${clanek.id}`} className="py-6 first:pt-0">
-      <h3 className="np-titulek text-2xl sm:text-[1.75rem] mb-2">{clanek.headline}</h3>
+      <h3 className="np-titulek text-2xl sm:text-[1.75rem] mb-2"><LeagueTag a={clanek} />{clanek.headline}</h3>
       <div className="flex items-center gap-2 mb-4 pb-2 border-b border-ink/10">
         <span className="text-micro uppercase tracking-[0.15em] font-heading font-bold text-muted">
           Rozhovor

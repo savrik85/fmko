@@ -194,8 +194,12 @@ function buildCuriosities(matches: Record<string, unknown>[]) {
 leagueRouter.get("/teams/:teamId/league-stats", async (c) => {
   const teamId = c.req.param("teamId");
 
-  const team = await c.env.DB.prepare("SELECT league_id FROM teams WHERE id = ?")
-    .bind(teamId).first<{ league_id: string | null }>();
+  // `?leagueId=` = statistiky jiné soutěže (Liga → přepínač soutěží); jinak vlastní liga klubu.
+  const overrideLeagueId = c.req.query("leagueId");
+  const team = overrideLeagueId
+    ? { league_id: overrideLeagueId }
+    : await c.env.DB.prepare("SELECT league_id FROM teams WHERE id = ?")
+      .bind(teamId).first<{ league_id: string | null }>();
   if (!team?.league_id) return c.json({ topScorers: [], topAssists: [] });
 
   // Get active season
