@@ -66,6 +66,22 @@ async function runStatement(db: D1Database, label: string, sql: string, ...binds
   return res?.meta?.changes ?? 0;
 }
 
+/** Všechny odehrané zápasy klubu (liga, pohár, turnaj) označí jako viděné jeho stranou. */
+export async function markPlayedMatchesSeen(db: D1Database, teamId: string, nowIso: string): Promise<void> {
+  for (const table of ["matches", "tournament_matches"]) {
+    await runStatement(db, `viděné zápasy (${table}, domácí)`,
+      `UPDATE ${table} SET home_seen_at = ? WHERE home_team_id = ? AND home_seen_at IS NULL AND status = 'simulated'`, nowIso, teamId);
+    await runStatement(db, `viděné zápasy (${table}, hosté)`,
+      `UPDATE ${table} SET away_seen_at = ? WHERE away_team_id = ? AND away_seen_at IS NULL AND status = 'simulated'`, nowIso, teamId);
+  }
+  await runStatement(db, "viděné pohárové zápasy (domácí)",
+    `UPDATE cup_matches SET home_seen_at = ? WHERE home_seen_at IS NULL AND status = 'simulated'
+      AND home_cup_team_id IN (SELECT id FROM cup_teams WHERE team_id = ?)`, nowIso, teamId);
+  await runStatement(db, "viděné pohárové zápasy (hosté)",
+    `UPDATE cup_matches SET away_seen_at = ? WHERE away_seen_at IS NULL AND status = 'simulated'
+      AND away_cup_team_id IN (SELECT id FROM cup_teams WHERE team_id = ?)`, nowIso, teamId);
+}
+
 /** SMS lidskému klubu (u U21 jeho áčku, schránku má klub). AI klubu se nepíše. */
 async function smsHuman(db: D1Database, teamId: string, body: string): Promise<void> {
   const club = await db.prepare(
@@ -214,6 +230,11 @@ export async function wipeAiClubForNewcomer(db: D1Database, teamId: string, opts
   // ── Hráči ──
   await settleLoans(db, teamId, opts, summary);
   summary.playersDeleted = await deleteOwnPlayers(db, teamId, nowIso);
+
+  // ── Odehrané zápasy AI klubu nový trenér „viděl“ ──
+  // AI klub zápasy nikdy neotvírá, takže by novému trenérovi hned po registraci naskočil
+  // zápasový den k zápasu, který neodehrál on (test 2026-10-28, pohár SK Čkyně).
+  await markPlayedMatchesSeen(db, teamId, nowIso);
 
   // ── Přestupy: nikomu se nic nestrhne ani nepřipíše ──
   summary.offersWithdrawn = await runStatement(db, "rozjednané přestupy",
