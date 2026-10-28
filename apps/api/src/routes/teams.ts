@@ -421,7 +421,9 @@ teamsRouter.post("/", async (c) => {
       // Delete the new team we created earlier (line 159) — we'll use AI team instead
       const origTeamId = teamId;
       // Jen dokud tým vede AI: dvě souběžná zakládání nesmí dostat tentýž klub.
-      const takeover = await c.env.DB.prepare("UPDATE teams SET name = ?, user_id = ?, village_id = ?, primary_color = ?, secondary_color = ?, badge_pattern = ?, jersey_pattern = ?, budget = ?, reputation = 50, stadium_name = ? WHERE id = ? AND user_id = 'ai'")
+      // Značky „jednou za sezónu“ (hlavní sponzor, zkratka) patří AI klubu, novému trenérovi ne:
+      // jinak mu hra odmítla podepsat sponzora, protože ho AI klub už v sezóně měnil (prod 2026-10-28).
+      const takeover = await c.env.DB.prepare("UPDATE teams SET name = ?, user_id = ?, village_id = ?, primary_color = ?, secondary_color = ?, badge_pattern = ?, jersey_pattern = ?, budget = ?, reputation = 50, stadium_name = ?, last_main_sponsor_change_season = NULL, prefix_changed_season = NULL WHERE id = ? AND user_id = 'ai'")
         .bind(body.name, userId, body.villageId, body.primaryColor ?? "#2D5F2D", body.secondaryColor ?? "#FFF", body.badgePattern ?? "shield", body.jerseyPattern ?? "solid",
           village.size === "small_city" || village.size === "city" ? 80000 : village.size === "town" || village.size === "village" ? 40000 : 20000,
           body.stadiumName ?? null, oldId).run();
