@@ -289,7 +289,7 @@ export function PlayerBrowseTable({ rows, color, onColorText, ratingColor, colum
                 </div>
                 {/* Klub na vlastním řádku celý: vedle věku se dlouhé jméno usekávalo. */}
                 {columns.club && (r.club || r.clubLabel) && (
-                  <div className="text-sm text-muted leading-snug break-words"><TeamName name={r.club?.name ?? r.clubLabel ?? ""} isAi={r.clubIsAi === true} /></div>
+                  <div className="text-sm text-muted leading-snug break-words"><TeamName name={r.club?.name ?? r.clubLabel ?? ""} isAi={r.clubIsAi === true} wrap /></div>
                 )}
                 {r.tag && <div className="mt-0.5">{r.tag}</div>}
               </div>
