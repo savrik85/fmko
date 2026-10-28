@@ -434,9 +434,14 @@ teamsRouter.post("/", async (c) => {
       // Rezerva jde s áčkem. Bez tohohle zůstane U21 na původním vlastníkovi,
       // ten pak nemůže založit nový klub (systém mu tvrdí, že vede U21)
       // a nový majitel áčka svoji rezervu naopak neřídí.
+      // Jméno, obec a barvy jdou s áčkem, jinak by U21 dál nesla jméno a obec AI klubu
+      // (test 2026-10-28: SK Onšovice s rezervou „FK Fezko Strážný U21“ ve Strážném).
       await c.env.DB.prepare(
-        "UPDATE teams SET user_id = ?, ai_since = NULL, ai_former_user_id = NULL WHERE parent_team_id = ? AND COALESCE(team_type,'senior') = 'u21'",
-      ).bind(userId, oldId).run()
+        `UPDATE teams SET user_id = ?, ai_since = NULL, ai_former_user_id = NULL, name = ?, village_id = ?,
+                primary_color = ?, secondary_color = ?, badge_pattern = ?, jersey_pattern = ?
+          WHERE parent_team_id = ? AND COALESCE(team_type,'senior') = 'u21'`,
+      ).bind(userId, `${body.name} U21`, body.villageId, body.primaryColor ?? "#2D5F2D", body.secondaryColor ?? "#FFF",
+        body.badgePattern ?? "shield", body.jerseyPattern ?? "solid", oldId).run()
         .catch((e) => logger.warn({ module: "teams" }, "převod U21 při převzetí klubu", e));
 
       // Sync jméno + barvu do aktivního poháru — převzatý AI tým je v cup_teams pod starým
