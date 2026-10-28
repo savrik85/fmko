@@ -6906,6 +6906,27 @@ async function activeSeasonNumber(db: D1Database): Promise<number> {
 }
 
 // GET /api/teams/:teamId/cup — pohár aktuální sezóny: pavouk + cesta daného týmu.
+// GET /api/teams/:teamId/first-week — karta „První týden“ na Přehledu. Zároveň průvodce
+// posune: splněný krok hned pošle další úkol od kapitána, splněné všechno vyplatí odměnu.
+gameRouter.get("/teams/:teamId/first-week", async (c) => {
+  const teamId = c.req.param("teamId");
+  // GET průvodce posouvá (posílá SMS, vyplácí odměnu), proto jen vlastník klubu.
+  const denied = await requireOwnedTeamRead(c, teamId);
+  if (denied) return denied;
+  const { advanceFirstWeekGuide } = await import("../onboarding/first-week");
+  const state = await advanceFirstWeekGuide(c.env.DB, teamId, new Date(), c.env.CACHE_KV)
+    .catch((e) => { logger.warn({ module: "game.ts" }, "průvodce prvním týdnem", e); return null; });
+  return c.json(state ?? { active: false, startedAt: null, steps: [], rewardPaid: false });
+});
+
+// POST /api/teams/:teamId/first-week/visit?step=stadium|equipment — trenér otevřel stránku kroku,
+// který se splní podíváním. Vlastnictví hlídá middleware /teams/:teamId/*.
+gameRouter.post("/teams/:teamId/first-week/visit", async (c) => {
+  const { recordGuideVisit } = await import("../onboarding/first-week");
+  await recordGuideVisit(c.env.CACHE_KV, c.req.param("teamId"), c.req.query("step") ?? "");
+  return c.json({ ok: true });
+});
+
 gameRouter.get("/teams/:teamId/cup", async (c) => {
   const teamId = c.req.param("teamId");
   const seasonNum = await activeSeasonNumber(c.env.DB);

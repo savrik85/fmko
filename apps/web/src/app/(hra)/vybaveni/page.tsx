@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTeam } from "@/context/team-context";
+import { useGuideVisit } from "@/components/team/first-week-guide";
 import { apiAction, apiFetch, type Team } from "@/lib/api";
 import { Spinner, SectionLabel, useConfirm, LockDetail, Tabs } from "@/components/ui";
 import { amenityDetail, withAmenityNote } from "@/lib/amenity-outlook";
@@ -36,6 +37,7 @@ export default function EquipmentPageWrapper() {
 
 function EquipmentPage() {
   const { teamId } = useTeam();
+  useGuideVisit("equipment");
   const router = useRouter();
   const searchParams = useSearchParams();
 
