@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { clientOnly } from "@/components/client-only";
 import { useTeam } from "@/context/team-context";
+import { useGuideVisit } from "@/components/team/first-week-guide";
 import { apiFetch, type Team } from "@/lib/api";
 import { Spinner, SectionLabel, useConfirm, LockDetail, type LockDetailData } from "@/components/ui";
 import { StadiumView } from "@/components/stadium/stadium-view";
@@ -467,6 +468,7 @@ const SURROUND_SURFACES = [
 ];
 
 export default function StadiumPage() {
+  useGuideVisit("stadium");
   const { teamId } = useTeam();
   const [stadium, setStadium] = useState<StadiumData | null>(null);
   const [team, setTeam] = useState<Team | null>(null);

@@ -186,6 +186,14 @@ export default {
       } catch (e: any) {
         log("error", "hodinový běh telefonu selhal", e);
       }
+      // Průvodce prvním týdnem: kapitán pošle další úkol, nebo starosta odměnu.
+      try {
+        const { advanceAllFirstWeekGuides } = await import("./onboarding/first-week");
+        const n = await advanceAllFirstWeekGuides(env.DB, new Date(), env.CACHE_KV);
+        if (n > 0) log("info", `průvodce prvním týdnem: ${n} klubů`);
+      } catch (e: any) {
+        log("error", "průvodce prvním týdnem selhal", e);
+      }
       return;
     }
 

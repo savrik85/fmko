@@ -608,6 +608,12 @@ teamsRouter.post("/", async (c) => {
       await backfillYesterdayPubSession(c.env.DB, teamId, gameDateStr);
     } catch (e) { logger.warn({ module: "teams" }, "pub backfill (join)", e); }
 
+    // Průvodce prvním týdnem: kapitán pošle první úkol (onboarding/first-week.ts).
+    {
+      const { startFirstWeekGuide } = await import("../onboarding/first-week");
+      await startFirstWeekGuide(c.env.DB, teamId).catch((e) => logger.warn({ module: "teams" }, "průvodce prvním týdnem (join)", e));
+    }
+
     await appointFounder(c.env.DB, userId, teamId);
 
     // Update KV session so teamId is no longer null (fixes post-onboarding auth)
@@ -879,6 +885,11 @@ teamsRouter.post("/", async (c) => {
     const { backfillYesterdayPubSession } = await import("../season/pub");
     await backfillYesterdayPubSession(c.env.DB, teamId, new Date().toISOString().slice(0, 10));
   } catch (e) { logger.warn({ module: "teams" }, "pub backfill (create)", e); }
+
+  {
+    const { startFirstWeekGuide } = await import("../onboarding/first-week");
+    await startFirstWeekGuide(c.env.DB, teamId).catch((e) => logger.warn({ module: "teams" }, "průvodce prvním týdnem (create)", e));
+  }
 
   await appointFounder(c.env.DB, userId, teamId);
 

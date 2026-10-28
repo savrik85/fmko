@@ -742,6 +742,15 @@ export default function ConversationPage() {
                             </Link>
                           )}
                           {/* Pozvánka a potvrzení přihlášky od pořadatele turnaje. */}
+                          {/* Úkol od kapitána v prvním týdnu (průvodce): vede rovnou na stránku úkolu. */}
+                          {msg.metadata?.type === "guide" && typeof msg.metadata.href === "string" && msg.metadata.href.startsWith("/") && (
+                            <Link
+                              href={msg.metadata.href}
+                              className={WA_LINK_BUTTON}
+                            >
+                              {typeof msg.metadata.label === "string" ? msg.metadata.label : "Otevřít"}
+                            </Link>
+                          )}
                           {msg.metadata?.type === "tournament" && (
                             <Link
                               href="/turnaj"
