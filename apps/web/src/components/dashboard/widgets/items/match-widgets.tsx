@@ -174,7 +174,7 @@ export function NextMatchWidget({ data, teamId }: WidgetProps) {
                 <BadgePreview primary={homeTeam.color} secondary={homeTeam.secondary} pattern={homeTeam.badge}
                   initials={homeTeam.customInitials || initials(homeTeam.name)} symbol={homeTeam.symbol} size={38} />
               </div>
-              <div className="font-heading font-bold text-sm leading-tight"><TeamName name={homeTeam.name} isAi={homeTeam.isAi} /></div>
+              <div className="font-heading font-bold text-sm leading-tight"><TeamName name={homeTeam.name} isAi={homeTeam.isAi} wrap /></div>
               {/* Pohár tabulku nemá — cup-preview posílá position 0, jinak by karta hlásila „0. místo". */}
               {homeTeam.pos && homeTeam.pos.position > 0 && (
                 <div className="text-micro text-white/40 tabular-nums leading-tight">{homeTeam.pos.position}. místo</div>
@@ -190,7 +190,7 @@ export function NextMatchWidget({ data, teamId }: WidgetProps) {
                 <BadgePreview primary={awayTeam.color} secondary={awayTeam.secondary} pattern={awayTeam.badge}
                   initials={awayTeam.customInitials || initials(awayTeam.name)} symbol={awayTeam.symbol} size={38} />
               </div>
-              <div className="font-heading font-bold text-sm leading-tight"><TeamName name={awayTeam.name} isAi={awayTeam.isAi} /></div>
+              <div className="font-heading font-bold text-sm leading-tight"><TeamName name={awayTeam.name} isAi={awayTeam.isAi} wrap /></div>
               {awayTeam.pos && awayTeam.pos.position > 0 && (
                 <div className="text-micro text-white/40 tabular-nums leading-tight">{awayTeam.pos.position}. místo</div>
               )}
