@@ -85,7 +85,7 @@ export default function LigaPageWrapper() {
   return <Suspense><LigaPage /></Suspense>;
 }
 
-interface LeagueOption { id: string; name: string; district: string; team_count: number }
+interface LeagueOption { id: string; name: string; district: string; level?: string; team_count: number }
 
 function LigaPage() {
   const ctx = useTeam();
@@ -110,6 +110,8 @@ function LigaPage() {
   const [allLeagues, setAllLeagues] = useState<LeagueOption[]>([]);
   const [selectedLeagueId, setSelectedLeagueId] = useState<string | null>(null);
   const isOtherLeague = selectedLeagueId !== null;
+  // Název vlastní ligy z prvního načtení: podle něj se pozná „moje“ soutěž mezi záložkami okresu.
+  const [ownLeagueName, setOwnLeagueName] = useState<string | null>(null);
 
   // Season picker (archiv minulých sezón)
   const [history, setHistory] = useState<HistoryEntry[]>([]);
@@ -133,6 +135,7 @@ function LigaPage() {
     apiFetch<{ leagueName: string; season?: number; standings: Standing[]; movement?: LeagueMovement }>(`/api/teams/${teamId}/standings`)
       .then((data) => {
         setLeagueName(data.leagueName);
+        setOwnLeagueName(data.leagueName);
         setSeasonNum(data.season ?? null);
         setStandings(data.standings);
         setMovement(data.movement ?? NO_MOVEMENT);
@@ -161,24 +164,25 @@ function LigaPage() {
       .catch(() => setLoadingStandings(false));
   }, [selectedLeagueId]);
 
-  // Load own league tabs (schedule, stats) — only when viewing own league
+  // Rozpis a statistiky: vlastní liga, nebo vybraná cizí (`?leagueId=`).
   useEffect(() => {
-    if (!teamId || isOtherLeague) return;
+    if (!teamId) return;
+    const leagueQuery = selectedLeagueId ? `?leagueId=${encodeURIComponent(selectedLeagueId)}` : "";
     if ((tab === "rozpis" || tab === "vysledky") && !loadedTabs.has("rozpis")) {
-      apiFetch<{ rounds: LeagueRound[] }>(`/api/teams/${teamId}/league-schedule`)
+      apiFetch<{ rounds: LeagueRound[] }>(`/api/teams/${teamId}/league-schedule${leagueQuery}`)
         .then((data) => {
           setRounds(data.rounds);
           setLoadedTabs((s) => { const n = new Set(s); n.add("rozpis"); n.add("vysledky"); return n; });
         }).catch((e) => console.error("fetch league-schedule:", e));
     }
     if (tab === "statistiky" && !loadedTabs.has("statistiky")) {
-      apiFetch<StatsData>(`/api/teams/${teamId}/league-stats`)
+      apiFetch<StatsData>(`/api/teams/${teamId}/league-stats${leagueQuery}`)
         .then((data) => {
           setStatsData(data);
           setLoadedTabs((s) => new Set(s).add("statistiky"));
         }).catch((e) => console.error("fetch league-stats:", e));
     }
-  }, [tab, teamId, loadedTabs, isOtherLeague]);
+  }, [tab, teamId, loadedTabs, selectedLeagueId]);
 
   // Load zpravodaj for other league
   useEffect(() => {
@@ -234,6 +238,27 @@ function LigaPage() {
     <div className="page-container space-y-5">
       {!isOtherLeague && <PreseasonNotice />}
 
+      {/* Soutěže mého okresu: přebor a III. třída jedním klepnutím. */}
+      {(() => {
+        const district = allLeagues.filter((l) => l.district === ctx.district);
+        if (district.length < 2) return null;
+        const ownId = district.find((l) => l.name === ownLeagueName)?.id ?? null;
+        return (
+          <div className="flex flex-wrap gap-2" role="group" aria-label={`Soutěže okresu ${ctx.district}`}>
+            {district.map((l) => {
+              const active = selectedLeagueId ? selectedLeagueId === l.id : l.id === ownId;
+              return (
+                <button key={l.id} type="button" aria-pressed={active}
+                  onClick={() => handleLeagueChange(l.id === ownId ? "own" : l.id)}
+                  className={`px-3 py-1.5 rounded-full text-sm font-heading font-bold transition-colors ${active ? "bg-pitch-600 text-white" : "bg-white text-ink border border-gray-200 hover:bg-gray-50"}`}>
+                  {l.name}{l.id === ownId ? " (moje)" : ""}
+                </button>
+              );
+            })}
+          </div>
+        );
+      })()}
+
       {/* Přepínače — liga + sezóna na jednom řádku */}
       {/* Dva sloupce: na 375 px se popisek + select vedle sebe nevesly
           a každý filtr zabral celý řádek, tedy ~110 px než začal obsah. */}
@@ -284,7 +309,7 @@ function LigaPage() {
         onChange={changeTab}
         ariaLabel="Liga"
         items={(isOtherLeague
-          ? (["tabulka", "zpravodaj"] as Tab[])
+          ? (["tabulka", "rozpis", "vysledky", "statistiky", "zpravodaj"] as Tab[])
           : (["tabulka", "rozpis", "vysledky", "statistiky"] as Tab[])
         ).map((key) => ({
           key,
@@ -294,9 +319,9 @@ function LigaPage() {
 
       {/* Tab content */}
       {tab === "tabulka" && <StandingsTab standings={standings} teamId={teamId!} movement={movement} />}
-      {!isOtherLeague && tab === "rozpis" && <ScheduleTab rounds={rounds} loaded={loadedTabs.has("rozpis")} teamId={teamId!} showAll />}
-      {!isOtherLeague && tab === "vysledky" && <ScheduleTab rounds={rounds} loaded={loadedTabs.has("vysledky")} teamId={teamId!} showAll={false} />}
-      {!isOtherLeague && tab === "statistiky" && <LeagueStatsTab data={statsData} loaded={loadedTabs.has("statistiky")} />}
+      {tab === "rozpis" && <ScheduleTab rounds={rounds} loaded={loadedTabs.has("rozpis")} teamId={teamId!} showAll />}
+      {tab === "vysledky" && <ScheduleTab rounds={rounds} loaded={loadedTabs.has("vysledky")} teamId={teamId!} showAll={false} />}
+      {tab === "statistiky" && <LeagueStatsTab data={statsData} loaded={loadedTabs.has("statistiky")} />}
       {isOtherLeague && tab === "zpravodaj" && (
         !loadedTabs.has("zpravodaj") ? <div className="flex justify-center py-8"><Spinner /></div> : (
           <div className="space-y-3">
