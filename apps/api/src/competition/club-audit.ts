@@ -10,6 +10,7 @@
 import { logger } from "../lib/logger";
 import { concessionNoSalePrice, getDefaultSellPrice, getProductCatalog, type ProductKey } from "../season/concession-catalog";
 import { listinaPrestupu } from "./integrity";
+import { districtLeagueIds, sqlPlaceholders } from "./rules";
 
 const M = "competition-club-audit";
 
@@ -160,10 +161,15 @@ export function auditFlags(opts: {
 export async function loadClubAudit(
   db: D1Database, opts: { leagueId: string; seasonNumber: number; targetTeamId: string; gameDate: string },
 ): Promise<ClubAudit | null> {
-  const team = await db.prepare("SELECT id, name, budget FROM teams WHERE id = ? AND league_id = ?")
-    .bind(opts.targetTeamId, opts.leagueId).first<{ id: string; name: string; budget: number }>()
+  // Komisař je okresní: smí do klubu přeboru i III. třídy. Bufet a sázky se ale
+  // poměřují se zbytkem VLASTNÍ soutěže klubu, ta je pro něj srovnatelná.
+  const ids = await districtLeagueIds(db, opts.leagueId);
+  const team = await db.prepare(
+    `SELECT id, name, budget, league_id FROM teams WHERE id = ? AND league_id IN (${sqlPlaceholders(ids)})`
+  ).bind(opts.targetTeamId, ...ids).first<{ id: string; name: string; budget: number; league_id: string | null }>()
     .catch((e) => { logger.warn({ module: M }, `klub k revizi ${opts.targetTeamId}`, e); return null; });
   if (!team) return null;
+  const ownLeagueId = team.league_id ?? opts.leagueId;
 
   const since = windowStart(opts.gameDate);
 
@@ -187,8 +193,8 @@ export async function loadClubAudit(
         WHERE team_id = ? AND game_date >= ? ORDER BY game_date DESC, created_at DESC LIMIT 300`
     ).bind(team.id, since).all<{ type: string; amount: number; description: string | null; game_date: string | null }>()
       .catch((e) => { logger.warn({ module: M }, `položky účetnictví ${team.id}`, e); return { results: [] }; }),
-    concessionPerMatch(db, opts.leagueId, since),
-    bettingNet(db, opts.leagueId, since),
+    concessionPerMatch(db, ownLeagueId, since),
+    bettingNet(db, ownLeagueId, since),
     listinaPrestupu(db, opts.leagueId, opts.seasonNumber),
     db.prepare(
       "SELECT product_key, quality_level, sell_price FROM concession_products WHERE team_id = ? AND quality_level > 0"
@@ -222,8 +228,10 @@ export async function loadClubAudit(
 export async function findAuditTarget(
   db: D1Database, leagueId: string, targetTeamId: string,
 ): Promise<{ id: string; name: string } | null> {
-  return db.prepare("SELECT id, name FROM teams WHERE id = ? AND league_id = ? AND parent_team_id IS NULL")
-    .bind(targetTeamId, leagueId).first<{ id: string; name: string }>();
+  const ids = await districtLeagueIds(db, leagueId);
+  return db.prepare(
+    `SELECT id, name FROM teams WHERE id = ? AND league_id IN (${sqlPlaceholders(ids)}) AND parent_team_id IS NULL`
+  ).bind(targetTeamId, ...ids).first<{ id: string; name: string }>();
 }
 
 /**
@@ -250,15 +258,17 @@ export interface AuditTarget { teamId: string; name: string; auditedAt: string |
 export async function listAuditTargets(
   db: D1Database, leagueId: string, seasonNumber: number, auditorTeamId: string,
 ): Promise<AuditTarget[]> {
+  // Revize vede grémium okresu (`leagueId` = řídící soutěž), kluby jsou z celého okresu.
+  const ids = await districtLeagueIds(db, leagueId);
   const rows = await db.prepare(
     `SELECT t.id, t.name, a.game_date AS audited_at
        FROM teams t
        LEFT JOIN competition_audits a
          ON a.target_team_id = t.id AND a.league_id = ? AND a.season_number = ?
-      WHERE t.league_id = ? AND t.parent_team_id IS NULL AND t.id != ?
+      WHERE t.league_id IN (${sqlPlaceholders(ids)}) AND t.parent_team_id IS NULL AND t.id != ?
         AND t.user_id IS NOT NULL AND t.user_id != 'ai'
       ORDER BY t.name`
-  ).bind(leagueId, seasonNumber, leagueId, auditorTeamId).all<{ id: string; name: string; audited_at: string | null }>()
+  ).bind(leagueId, seasonNumber, ...ids, auditorTeamId).all<{ id: string; name: string; audited_at: string | null }>()
     .catch((e) => { logger.warn({ module: M }, `kluby k revizi ${leagueId}`, e); return { results: [] }; });
   return rows.results.map((r) => ({ teamId: r.id, name: r.name, auditedAt: r.audited_at }));
 }

@@ -170,7 +170,8 @@ async function delegateCalendar(db: D1Database, cal: CalendarRow): Promise<numbe
   }
 
   // Soutěž si mohla některé sudí vyškrtnout z listiny nebo jim dát stopku. Obojí
-  // je per soutěž — pool patří okresu a sdílí ho i U21, která o tom nehlasovala.
+  // je per grémium okresu (přebor a III. třída společně, funkce si řídící soutěž
+  // dohledají samy) — pool patří okresu a sdílí ho i U21, která o tom nehlasovala.
   //
   // Pojistka: kdyby po filtru zbyla necelá polovina, filtr se ignoruje a jen se
   // zaloguje. Prázdná listina by delegaci shodila do nouzového ventilu a jeden

@@ -5,6 +5,11 @@
  * competition_governance je jen cache pro rychlé čtení; schůze ho jednou týdně
  * přepočítá, takže případný rozjezd se sám srovná.
  *
+ * Pokladna je per SKUTEČNÁ soutěž, i když grémium sdílí celý okres (rules.ts).
+ * III. třída má vlastní řádek competition_governance jako značku otevřené
+ * pokladny, takže cache funguje i u ní. Soutěž bez řádku cache nemá (UPDATE nic
+ * nenajde) a zůstatek se čte jen ze součtu ledgeru, což všichni čtenáři dělají.
+ *
  * IDEMPOTENCE stojí výhradně na partial UNIQUE indexu nad reference_id. Fronty
  * doručují „aspoň jednou", takže každý zápis odvozený od zápasu, kola nebo sezóny
  * MUSÍ mít stabilní reference_id — jinak se odměna zaúčtuje dvakrát.
@@ -101,6 +106,19 @@ export async function recordCompetitionEntry(
   }
 
   return { written: true, balance: updated?.balance_cache ?? null };
+}
+
+/**
+ * Do které pokladny se pohyb s daným klíčem zapsal. Grémium je okresní, ale
+ * pokladny jsou per soutěž: kauci i pokutu proto vrací ta pokladna, která je
+ * přijala, ne ta, u které grémium sedí.
+ */
+export async function ledgerLeagueOf(db: D1Database, referenceId: string): Promise<string | null> {
+  const row = await db.prepare(
+    "SELECT league_id FROM competition_ledger WHERE reference_id = ? LIMIT 1"
+  ).bind(referenceId).first<{ league_id: string }>()
+    .catch((e) => { logger.warn({ module: M }, `pokladna pohybu ${referenceId}`, e); return null; });
+  return row?.league_id ?? null;
 }
 
 /** Autoritativní zůstatek — součet celého ledgeru, ne cache. */

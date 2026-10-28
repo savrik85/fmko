@@ -12,7 +12,7 @@
 import { logger } from "../lib/logger";
 import { readBalance } from "./ledger";
 import { GRANT_LABEL, SURPLUS_MAX_PCT, payGrants, seasonAwards, type GrantKind } from "./grants";
-import { loadGovernance } from "./rules";
+import { governingLeagueId, treasuryOpen } from "./rules";
 
 const M = "competition-season-grants";
 
@@ -40,14 +40,17 @@ export async function paySeasonEndGrants(db: D1Database, opts: {
   level: string;
   gameDate: string;
 }): Promise<SeasonGrantResult[]> {
-  const gov = await loadGovernance(db, opts.leagueId);
-  if (!gov?.enabled) return [];
+  // Ceny a přebytek odhlasuje grémium okresu (návrhy visí u řídící soutěže),
+  // vyplácí je ale každá soutěž zvlášť: ceny jejím klubům z její pokladny.
+  // Soutěž bez otevřené pokladny nemá z čeho platit.
+  if (!(await treasuryOpen(db, opts.leagueId))) return [];
+  const governingId = await governingLeagueId(db, opts.leagueId);
 
   const passed = await db.prepare(
     `SELECT id, payload FROM competition_proposals
       WHERE league_id = ? AND kind = 'grant' AND status = 'passed' AND season_number = ?
       ORDER BY closed_at ASC`
-  ).bind(opts.leagueId, opts.seasonNumber).all<PassedGrant>()
+  ).bind(governingId, opts.seasonNumber).all<PassedGrant>()
     .catch((e) => { logger.warn({ module: M }, "schválené dotace", e); return { results: [] }; });
 
   const out: SeasonGrantResult[] = [];

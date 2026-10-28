@@ -148,7 +148,7 @@ function volniDb({ pool, tenDen = [], bans = [], pauses = [] }: {
 }
 
 const ROUND: OpenRound = {
-  calendarId: "cal-1", gameWeek: 6, seasonNumber: 3,
+  calendarId: "cal-1", leagueId: "L1", gameWeek: 6, seasonNumber: 3,
   scheduledAt: "2026-09-06T14:00:00Z", matches: 7,
 };
 

@@ -47,7 +47,9 @@ import {
   subsidyFor, teamImpact,
 } from "../competition/projection";
 import {
-  countAllClubs, countHumanClubs, loadGovernance, loadLeagueMeta, playedMatches, resolveRules,
+  countAllClubs, countHumanClubs, districtLeagueIds, districtLeagues, governingLeagueId,
+  loadGovernance, loadLeagueMeta, loadOwnGovernance, playedMatches, resolveRules,
+  sqlPlaceholders, treasuryLeagueForTeam, treasuryOpen,
 } from "../competition/rules";
 
 const M = "competition";
@@ -114,33 +116,96 @@ async function ballotCounts(db: D1Database, ids: string[]): Promise<Record<strin
 }
 
 /** Liga, ve které klub hraje. FE zná jen teamId, ne leagueId. */
-async function leagueOfTeam(db: D1Database, teamId: string): Promise<string | null> {
+async function ownLeagueOfTeam(db: D1Database, teamId: string): Promise<string | null> {
   const row = await db.prepare("SELECT league_id FROM teams WHERE id = ?")
     .bind(teamId).first<{ league_id: string | null }>()
     .catch((e) => { logger.warn({ module: M }, "liga týmu", e); return null; });
   return row?.league_id ?? null;
 }
 
+/**
+ * Grémium, pod které klub patří: řídící soutěž jeho okresu. Přebor a III. třída
+ * mají jedno grémium (competition/rules.ts), takže všechno kolem vedení, voleb,
+ * návrhů a sankcí se klíčuje tímhle id. Pokladna je naopak per vlastní soutěž
+ * klubu (ownLeagueOfTeam).
+ */
+async function leagueOfTeam(db: D1Database, teamId: string): Promise<string | null> {
+  const own = await ownLeagueOfTeam(db, teamId);
+  return own ? governingLeagueId(db, own) : null;
+}
+
+/** Soutěž, ve které klub hraje, kvůli mezím důkazů (začátek sezóny je per soutěž). */
+async function evidenceLimitsForTeam(
+  db: D1Database, teamId: string, fallbackLeagueId: string, seasonNumber: number,
+) {
+  return evidenceLimitsFor(db, (await ownLeagueOfTeam(db, teamId)) ?? fallbackLeagueId, seasonNumber);
+}
+
+interface TreasuryState {
+  leagueId: string;
+  name: string;
+  level: string;
+  teams: number;
+  played: number;
+  balance: number;
+  free: number;
+}
+
+/**
+ * Otevřené pokladny soutěží pod grémiem, řídící první. Sazebník je okresní, ale
+ * každá pokladna ho nese sama, takže rozpočtový strop musí vyjít každé zvlášť.
+ */
+async function treasuryStates(
+  db: D1Database, governingId: string, rules: CompetitionRules, fallbackLevel: string,
+): Promise<TreasuryState[]> {
+  const out: TreasuryState[] = [];
+  for (const l of await districtLeagues(db, governingId)) {
+    if (l.id !== governingId && !(await treasuryOpen(db, l.id))) continue;
+    const level = l.level || fallbackLevel;
+    const [teams, played, balance] = await Promise.all([
+      countAllClubs(db, l.id), playedMatches(db, l.id), readBalance(db, l.id),
+    ]);
+    out.push({
+      leagueId: l.id, name: l.name, level, teams, played, balance,
+      free: freeBalance(balance, rules, teams, level, played),
+    });
+  }
+  return out;
+}
+
 // ── Stav soutěže ────────────────────────────────────────────────────────────
 // Alias podle týmu — frontend nemá leagueId po ruce.
 competitionRouter.get("/teams/:teamId/competition", async (c) => {
-  const leagueId = await leagueOfTeam(c.env.DB, c.req.param("teamId"));
-  if (!leagueId) return c.json({ error: "Tým není v soutěži" }, 404);
-  return competitionState(c as never, leagueId);
+  const own = await ownLeagueOfTeam(c.env.DB, c.req.param("teamId"));
+  if (!own) return c.json({ error: "Tým není v soutěži" }, 404);
+  return competitionState(c as never, await governingLeagueId(c.env.DB, own), own);
 });
 
-competitionRouter.get("/competition/:leagueId", async (c) => competitionState(c as never, c.req.param("leagueId")));
+competitionRouter.get("/competition/:leagueId", async (c) => {
+  const own = c.req.param("leagueId");
+  return competitionState(c as never, await governingLeagueId(c.env.DB, own), own);
+});
 
-async function competitionState(c: { env: Bindings; json: (b: unknown, s?: number) => Response }, leagueId: string) {
+/**
+ * Stav grémia okresu a pokladny jedné soutěže. `leagueId` je řídící soutěž
+ * (vedení, sazebník, hlasování), `ownLeagueId` soutěž, jejíž pokladnu hráč vidí:
+ * jeho vlastní, nebo ta z URL.
+ */
+async function competitionState(
+  c: { env: Bindings; json: (b: unknown, s?: number) => Response }, leagueId: string, ownLeagueId: string,
+) {
   const meta = await loadLeagueMeta(c.env.DB, leagueId);
   if (!meta) return c.json({ error: "Soutěž nenalezena" }, 404);
+  const ownMeta = ownLeagueId === leagueId ? meta : (await loadLeagueMeta(c.env.DB, ownLeagueId)) ?? meta;
 
-  const gov = await loadGovernance(c.env.DB, leagueId);
+  const gov = await loadOwnGovernance(c.env.DB, leagueId);
   const rules = await resolveRules(c.env.DB, leagueId, meta.season_number);
-  const [humans, teams, balance] = await Promise.all([
+  const [humans, teams, balance, district, ownOpen] = await Promise.all([
     countHumanClubs(c.env.DB, leagueId),
-    countAllClubs(c.env.DB, leagueId),
-    readBalance(c.env.DB, leagueId),
+    countAllClubs(c.env.DB, ownMeta.id),
+    readBalance(c.env.DB, ownMeta.id),
+    districtLeagues(c.env.DB, leagueId),
+    treasuryOpen(c.env.DB, ownMeta.id),
   ]);
 
   const officials = await c.env.DB.prepare(
@@ -157,30 +222,46 @@ async function competitionState(c: { env: Bindings; json: (b: unknown, s?: numbe
     .catch((e) => { logger.warn({ module: M }, "funkcionáři", e); return { results: [] }; });
 
   const stats = await voterStats(c.env.DB, leagueId);
-  const played = await playedMatches(c.env.DB, leagueId);
-  const outstanding = outstandingCommitments(rules, teams, meta.level, played);
-  const free = freeBalance(balance, rules, teams, meta.level, played);
+  const districtTotal = district.length > 1
+    ? (await Promise.all(district.map((l) => countAllClubs(c.env.DB, l.id)))).reduce((s, n) => s + n, 0)
+    : teams;
+  // Pokladna, závazky i dotace jsou soutěže, jejíž pokladnu hráč vidí.
+  const played = await playedMatches(c.env.DB, ownMeta.id);
+  const outstanding = outstandingCommitments(rules, teams, ownMeta.level, played);
+  const free = freeBalance(balance, rules, teams, ownMeta.level, played);
   // Projekce i strop musí počítat se sazebníkem, který bude PŘÍŠTÍ sezónu platit,
   // ne s dnešním — jinak by o už odhlasovaných změnách nevěděly.
   const pristiRules = await nextSeasonRules(c.env.DB, leagueId, rules, meta.season_number + 1);
-  const projection = checkBudget({ rules: pristiRules, teams, level: meta.level, balance: free });
+  const projection = checkBudget({ rules: pristiRules, teams, level: ownMeta.level, balance: free });
 
   return c.json({
+    // Grémium: řídící soutěž okresu. Přes její id jdou návrhy, volby, sankce,
+    // rozhodčí, zasedání i sponzor.
     league: {
       id: meta.id, name: meta.name, district: meta.district,
       level: meta.level, seasonNumber: meta.season_number,
       sponsoredName: gov?.sponsor_name ? `${gov.sponsor_name} liga` : null,
       originalName: gov?.original_name ?? null,
     },
+    // Soutěž, jejíž pokladnu stav ukazuje (balance, freeBalance, subsidy, …).
+    // Pokladna je per soutěž, ledger se proto čte přes tohle id.
+    ownLeague: {
+      id: ownMeta.id, name: ownMeta.name, level: ownMeta.level, treasuryOpen: ownOpen,
+    },
+    // Všechny soutěže, které grémium vede (řídící první).
+    districtLeagues: district.map((l) => ({
+      id: l.id, name: l.name || (l.id === meta.id ? meta.name : l.id), level: l.level,
+    })),
     enabled: !!gov?.enabled,
     threshold: MIN_HUMAN_CLUBS,
     humanClubs: humans,
     totalClubs: teams,
+    districtTotalClubs: districtTotal,
     balance,
     freeBalance: free,
     outstanding,
     playedMatches: played,
-    subsidy: subsidyFor(teams, meta.level),
+    subsidy: subsidyFor(teams, ownMeta.level),
     rules,
     // Co bude platit příští sezónu, až se přijaté návrhy promítnou.
     nextRules: pristiRules,
@@ -254,7 +335,7 @@ competitionRouter.get("/competition/:leagueId/ledger", async (c) => {
 
 // ── Návrhy ──────────────────────────────────────────────────────────────────
 competitionRouter.get("/competition/:leagueId/proposals", async (c) => {
-  const leagueId = c.req.param("leagueId");
+  const leagueId = await governingLeagueId(c.env.DB, c.req.param("leagueId"));
   const myTeam = await currentTeam(c as never);
 
   const rows = await c.env.DB.prepare(
@@ -327,12 +408,13 @@ function safeJson(raw: string | null | undefined): Record<string, unknown> {
 
 // ── Zápisy ze schůzí ────────────────────────────────────────────────────────
 competitionRouter.get("/competition/:leagueId/meetings", async (c) => {
+  const leagueId = await governingLeagueId(c.env.DB, c.req.param("leagueId"));
   const rows = await c.env.DB.prepare(
     `SELECT id, game_date, season_number, proposals_closed, proposals_passed,
             attendance, balance_after, summary
        FROM competition_meetings WHERE league_id = ?
       ORDER BY game_date DESC LIMIT 20`
-  ).bind(c.req.param("leagueId")).all<Record<string, unknown>>()
+  ).bind(leagueId).all<Record<string, unknown>>()
     .catch((e) => { logger.warn({ module: M }, "zápisy ze schůzí", e); return { results: [] }; });
 
   return c.json({
@@ -356,13 +438,14 @@ competitionRouter.get("/competition/:leagueId/meetings", async (c) => {
  */
 competitionRouter.get("/competition/:leagueId/decisions", async (c) => {
   const limit = Math.min(Number(c.req.query("limit")) || 12, 50);
+  const leagueId = await governingLeagueId(c.env.DB, c.req.param("leagueId"));
 
   const rows = await c.env.DB.prepare(
     `SELECT game_date, season_number, summary
        FROM competition_meetings
       WHERE league_id = ? AND summary IS NOT NULL
       ORDER BY game_date DESC LIMIT 12`
-  ).bind(c.req.param("leagueId")).all<{ game_date: string; season_number: number; summary: string }>()
+  ).bind(leagueId).all<{ game_date: string; season_number: number; summary: string }>()
     .catch((e) => { logger.warn({ module: M }, "vývěska grémia", e); return { results: [] }; });
 
   const decisions: Array<Record<string, unknown>> = [];
@@ -567,8 +650,9 @@ competitionRouter.post("/teams/:teamId/competition/proposals", async (c) => {
     .catch((e) => { logger.warn({ module: M }, "tým", e); return null; });
   if (!team?.league_id) return c.json({ error: "Tým není v soutěži" }, 404);
 
-  const leagueId = team.league_id;
-  const gov = await loadGovernance(c.env.DB, leagueId);
+  // Návrh patří grémiu okresu, i když ho podává klub z III. třídy.
+  const leagueId = await governingLeagueId(c.env.DB, team.league_id);
+  const gov = await loadOwnGovernance(c.env.DB, leagueId);
   if (!gov?.enabled) return c.json({ error: "Tahle soutěž zatím samosprávu nemá." }, 403);
 
   const meta = await loadLeagueMeta(c.env.DB, leagueId);
@@ -589,20 +673,19 @@ competitionRouter.post("/teams/:teamId/competition/proposals", async (c) => {
   }
 
   const rules = await resolveRules(c.env.DB, leagueId, meta.season_number);
-  const teamsInLeague = await countAllClubs(c.env.DB, leagueId);
-  const played = await playedMatches(c.env.DB, leagueId);
   // Do stropu vstupuje jen VOLNÝ zůstatek — letošní odměny za umístění se z pokladny
-  // teprve zaplatí, takže se z nich nesmí financovat trvalé zvýšení sazeb.
-  const free = freeBalance(
-    await readBalance(c.env.DB, leagueId), rules, teamsInLeague, meta.level, played,
-  );
+  // teprve zaplatí, takže se z nich nesmí financovat trvalé zvýšení sazeb. Sazebník
+  // je okresní, takže strop musí vyjít každé otevřené pokladně okresu zvlášť.
+  const treasuries = await treasuryStates(c.env.DB, leagueId, rules, meta.level);
+  const governingTreasury = treasuries.find((t) => t.leagueId === leagueId);
   // Základ stropu je sazebník příští sezóny, ne ten dnešní: co už kluby
   // odhlasovaly, rozpočet zatěžuje, i když to zatím neplatí.
   const baseRules = await nextSeasonRules(c.env.DB, leagueId, rules, meta.season_number + 1);
   const v = await validateProposal({
     db: c.env.DB, leagueId, level: meta.level, seasonNumber: meta.season_number,
     currentRules: rules, budgetBase: baseRules,
-    balance: free, kind: body.kind, value: Number(body.value),
+    balance: governingTreasury?.free ?? 0, kind: body.kind, value: Number(body.value),
+    treasuries: treasuries.map((t) => ({ name: t.name, level: t.level, teams: t.teams, balance: t.free })),
   });
   if (!v.ok) return c.json({ error: v.error }, 400);
 
@@ -635,8 +718,9 @@ competitionRouter.post("/teams/:teamId/competition/proposals", async (c) => {
     "Kauce za návrh na schůzi vedení soutěže", gameDate, `dep-${id}`,
   ).catch((e) => logger.warn({ module: M }, "stržení kauce", e));
 
+  // Kauce jde do pokladny soutěže navrhovatele; vrací ji ta samá (meeting.ts).
   await recordCompetitionEntry(c.env.DB, {
-    leagueId, seasonNumber: meta.season_number, type: "deposit",
+    leagueId: await treasuryLeagueForTeam(c.env.DB, teamId, leagueId), seasonNumber: meta.season_number, type: "deposit",
     amount: PROPOSAL_DEPOSIT, description: "Kauce za podaný návrh",
     teamId, gameDate, referenceId: `dep-${id}`,
   });
@@ -735,10 +819,13 @@ competitionRouter.delete("/teams/:teamId/competition/proposals/:id", async (c) =
 
 // ── Admin ───────────────────────────────────────────────────────────────────
 competitionRouter.post("/admin/competition/:leagueId/enable", async (c) => {
-  const leagueId = c.req.param("leagueId");
+  // Zapíná se grémium celého okresu: řádek samosprávy a sazebník u řídící soutěže,
+  // pokladna (dotace, startovné) u každé soutěže okresu zvlášť.
+  const leagueId = await governingLeagueId(c.env.DB, c.req.param("leagueId"));
   const meta = await loadLeagueMeta(c.env.DB, leagueId);
   if (!meta) return c.json({ error: "Soutěž nenalezena" }, 404);
 
+  // Práh počítá lidské kluby celého okresu (přebor + III. třída).
   const humans = await countHumanClubs(c.env.DB, leagueId);
   const force = c.req.query("force") === "1";
   if (humans < MIN_HUMAN_CLUBS && !force) {
@@ -746,8 +833,6 @@ competitionRouter.post("/admin/competition/:leagueId/enable", async (c) => {
       error: `Soutěž má jen ${humans} lidských klubů, potřeba je ${MIN_HUMAN_CLUBS}. Přepiš přes ?force=1.`,
     }, 400);
   }
-
-  const teams = await countAllClubs(c.env.DB, leagueId);
 
   // Zapnutí uprostřed rozehrané sezóny nesmí stát kluby ani korunu. Startovné je
   // pro klub neutrální jen přes celou sezónu — zaplatí 15 000 a stejně tolik
@@ -758,101 +843,127 @@ competitionRouter.post("/admin/competition/:leagueId/enable", async (c) => {
   // Zbytek rozehrané sezóny financuje celý svazová dotace: odměny za umístění
   // v plné výši (vyplácejí se bez ohledu na to, kdy samospráva začala) plus
   // prémie a rozhodčí za zápasy, které ještě zbývají odehrát.
-  const odehrano = await playedMatches(c.env.DB, leagueId);
-  const { entryFee, subsidy, midSeason: uprostredSezony } = enableCost(teams, meta.level, odehrano);
-
   const gameDate = await c.env.DB.prepare(
     "SELECT MAX(game_date) AS d FROM teams WHERE league_id = ?"
   ).bind(leagueId).first<{ d: string | null }>().then((r) => r?.d ?? new Date().toISOString())
-    .catch(() => new Date().toISOString());
-
-  await c.env.DB.prepare(
-    `INSERT INTO competition_governance (league_id, enabled, enabled_from_season, original_name)
-     VALUES (?, 1, ?, ?)
-     ON CONFLICT(league_id) DO UPDATE SET enabled = 1, enabled_from_season = COALESCE(competition_governance.enabled_from_season, excluded.enabled_from_season)`
-  ).bind(leagueId, meta.season_number, meta.name).run();
-
-  // Sazebník pro rozehranou sezónu založíme výchozí, aby se dalo hned testovat.
-  // Za normálního provozu vzniká výhradně při rolloveru.
-  const ruleFields = Object.keys(DEFAULT_RULES) as Array<keyof typeof DEFAULT_RULES>;
-  const ruleCols = ["id", "league_id", "season_number", ...ruleFields, "subsidy_total"];
-  await c.env.DB.prepare(
-    `INSERT OR IGNORE INTO competition_rules (${ruleCols.join(", ")})
-     VALUES (${ruleCols.map(() => "?").join(",")})`
-  ).bind(
-    crypto.randomUUID(), leagueId, meta.season_number,
-    ...ruleFields.map((f) => DEFAULT_RULES[f]),
-    subsidy,
-  ).run();
-
-  await recordCompetitionEntry(c.env.DB, {
-    leagueId, seasonNumber: meta.season_number, type: "subsidy", amount: subsidy,
-    description: `Svazová dotace na ${meta.season_number}. sezónu`,
-    gameDate, referenceId: `sub-${leagueId}-${meta.season_number}`,
-  });
-
-  // Startovné se vybírá stejně jako při rolloveru — bez něj by pokladna vypadala
-  // chudší, než ve skutečnosti bude, a rozpočtový strop by zbytečně kousal.
-  const clubs = await c.env.DB.prepare("SELECT id FROM teams WHERE league_id = ?")
-    .bind(leagueId).all<{ id: string }>()
-    .catch((e) => { logger.warn({ module: M }, "kluby soutěže", e); return { results: [] }; });
+    .catch((e) => { logger.warn({ module: M }, "herní datum soutěže", e); return new Date().toISOString(); });
 
   const { recordTransaction } = await import("../season/finance-processor");
-  let collected = 0;
-  // Uprostřed sezóny se startovné nevybírá vůbec — přijde na řadu až rollover.
-  for (const club of uprostredSezony ? [] : clubs.results) {
-    const refId = `fee-${meta.season_number}-${club.id}`;
-    const entry = await recordCompetitionEntry(c.env.DB, {
-      leagueId, seasonNumber: meta.season_number, type: "entry_fee",
-      amount: entryFee, description: "Startovné do soutěže",
-      teamId: club.id, gameDate, referenceId: refId,
+  const perLeague: Array<{ leagueId: string; totalClubs: number; subsidy: number; entryFeesCollected: number }> = [];
+
+  for (const l of await districtLeagues(c.env.DB, leagueId)) {
+    const lm = l.id === leagueId ? meta : await loadLeagueMeta(c.env.DB, l.id);
+    if (!lm) continue;
+    const teams = await countAllClubs(c.env.DB, l.id);
+    const played = await playedMatches(c.env.DB, l.id);
+    const { entryFee, subsidy, midSeason } = enableCost(teams, lm.level, played);
+
+    // U řídící soutěže je to řádek grémia, u III. třídy jen značka otevřené pokladny.
+    await c.env.DB.prepare(
+      `INSERT INTO competition_governance (league_id, enabled, enabled_from_season, original_name)
+       VALUES (?, 1, ?, ?)
+       ON CONFLICT(league_id) DO UPDATE SET enabled = 1, enabled_from_season = COALESCE(competition_governance.enabled_from_season, excluded.enabled_from_season)`
+    ).bind(l.id, lm.season_number, lm.name).run();
+
+    if (l.id === leagueId) {
+      // Sazebník pro rozehranou sezónu založíme výchozí, aby se dalo hned testovat.
+      // Za normálního provozu vzniká výhradně při rolloveru. Je jeden za okres.
+      const ruleFields = Object.keys(DEFAULT_RULES) as Array<keyof typeof DEFAULT_RULES>;
+      const ruleCols = ["id", "league_id", "season_number", ...ruleFields, "subsidy_total"];
+      await c.env.DB.prepare(
+        `INSERT OR IGNORE INTO competition_rules (${ruleCols.join(", ")})
+         VALUES (${ruleCols.map(() => "?").join(",")})`
+      ).bind(
+        crypto.randomUUID(), leagueId, meta.season_number,
+        ...ruleFields.map((f) => DEFAULT_RULES[f]),
+        subsidy,
+      ).run();
+    }
+
+    await recordCompetitionEntry(c.env.DB, {
+      leagueId: l.id, seasonNumber: lm.season_number, type: "subsidy", amount: subsidy,
+      description: `Svazová dotace na ${lm.season_number}. sezónu`,
+      gameDate, referenceId: `sub-${l.id}-${lm.season_number}`,
     });
-    if (!entry.written) continue;   // už zaplaceno v dřívějším běhu
-    collected++;
-    await recordTransaction(
-      c.env.DB, club.id, "competition_fee", -entryFee,
-      `Startovné do soutěže (${meta.season_number}. sezóna)`, gameDate, refId,
-    ).catch((e) => logger.warn({ module: M }, `startovné klubu ${club.id}`, e));
+
+    // Startovné se vybírá stejně jako při rolloveru — bez něj by pokladna vypadala
+    // chudší, než ve skutečnosti bude, a rozpočtový strop by zbytečně kousal.
+    // Uprostřed sezóny se nevybírá vůbec, přijde na řadu až rollover.
+    const clubs = midSeason ? { results: [] as Array<{ id: string }> } : await c.env.DB.prepare(
+      "SELECT id FROM teams WHERE league_id = ?"
+    ).bind(l.id).all<{ id: string }>()
+      .catch((e) => { logger.warn({ module: M }, "kluby soutěže", e); return { results: [] as Array<{ id: string }> }; });
+
+    let collected = 0;
+    for (const club of clubs.results) {
+      const refId = `fee-${lm.season_number}-${club.id}`;
+      const entry = await recordCompetitionEntry(c.env.DB, {
+        leagueId: l.id, seasonNumber: lm.season_number, type: "entry_fee",
+        amount: entryFee, description: "Startovné do soutěže",
+        teamId: club.id, gameDate, referenceId: refId,
+      });
+      if (!entry.written) continue;   // už zaplaceno v dřívějším běhu
+      collected++;
+      await recordTransaction(
+        c.env.DB, club.id, "competition_fee", -entryFee,
+        `Startovné do soutěže (${lm.season_number}. sezóna)`, gameDate, refId,
+      ).catch((e) => logger.warn({ module: M }, `startovné klubu ${club.id}`, e));
+    }
+    perLeague.push({ leagueId: l.id, totalClubs: teams, subsidy, entryFeesCollected: collected });
   }
 
   // Bez vyhlášených voleb by soutěž zůstala napořád bez vedení.
   const electionsOpened = await openElections(c.env.DB, leagueId, meta.season_number, gameDate);
 
   return c.json({
-    ok: true, humanClubs: humans, totalClubs: teams, subsidy,
-    entryFeesCollected: collected, electionsOpened,
+    ok: true, governingLeagueId: leagueId, humanClubs: humans,
+    totalClubs: perLeague.reduce((s, l) => s + l.totalClubs, 0),
+    subsidy: perLeague.reduce((s, l) => s + l.subsidy, 0),
+    entryFeesCollected: perLeague.reduce((s, l) => s + l.entryFeesCollected, 0),
+    electionsOpened,
     balance: await readBalance(c.env.DB, leagueId),
+    leagues: perLeague,
   });
 });
 
 // ── Disciplinární rada ──────────────────────────────────────────────────────
 competitionRouter.get("/competition/:leagueId/discipline", async (c) => {
-  const leagueId = c.req.param("leagueId");
+  const leagueId = await governingLeagueId(c.env.DB, c.req.param("leagueId"));
   const meta = await loadLeagueMeta(c.env.DB, leagueId);
   if (!meta) return c.json({ error: "Soutěž nenalezena" }, 404);
 
+  // Disciplinárka grémia okresu soudí kluby přeboru i III. třídy.
+  const ids = await districtLeagueIds(c.env.DB, leagueId);
   const clubs = await c.env.DB.prepare(
-    `SELECT t.id, t.name,
+    `SELECT t.id, t.name, t.league_id,
             ${MANAGER_NAME("t.id")} AS manager_name,
             ${MANAGER_AVATAR("t.id")} AS manager_avatar,
             ${MANAGER_IS_AI("t.id")} AS manager_is_ai
-       FROM teams t WHERE t.league_id = ? ORDER BY t.name`
-  ).bind(leagueId).all<{
-    id: string; name: string; manager_name: string | null; manager_avatar: string | null; manager_is_ai: number | null;
+       FROM teams t WHERE t.league_id IN (${sqlPlaceholders(ids)}) ORDER BY t.name`
+  ).bind(...ids).all<{
+    id: string; name: string; league_id: string; manager_name: string | null;
+    manager_avatar: string | null; manager_is_ai: number | null;
   }>()
     .catch((e) => { logger.warn({ module: M }, "kluby soutěže", e); return { results: [] }; });
 
   // Důkazy se sbírají pro každý klub zvlášť — formulář pak nenabídne skutek,
-  // který se nedá doložit. Hranice stavu hřiště je ta, kterou si soutěž odhlasovala.
-  const limity = await evidenceLimitsFor(c.env.DB, leagueId, meta.season_number);
+  // který se nedá doložit. Hranice stavu hřiště je ta, kterou si soutěž odhlasovala,
+  // okno „za sezónu" začíná podle soutěže, ve které klub hraje.
+  const limitsByLeague = new Map<string, Awaited<ReturnType<typeof evidenceLimitsFor>>>();
   const targets = [];
   for (const club of clubs.results) {
+    const clubLeagueId = club.league_id ?? leagueId;
+    let limits = limitsByLeague.get(clubLeagueId);
+    if (!limits) {
+      limits = await evidenceLimitsFor(c.env.DB, clubLeagueId, meta.season_number);
+      limitsByLeague.set(clubLeagueId, limits);
+    }
     targets.push({
       teamId: club.id, teamName: club.name,
       managerName: club.manager_name,
       coachIsAi: club.manager_is_ai === 1,
       managerAvatar: safeJson(club.manager_avatar),
-      evidence: await collectEvidence(c.env.DB, club.id, limity),
+      evidence: await collectEvidence(c.env.DB, club.id, limits),
     });
   }
 
@@ -940,7 +1051,7 @@ competitionRouter.post("/teams/:teamId/competition/sanctions", async (c) => {
   // Bez důkazu se dá podat jen volná položka — a ta má tvrdší podmínky.
   let evidence: string | null = null;
   if (!offence.freeText) {
-    const found = (await collectEvidence(c.env.DB, body.targetTeamId, await evidenceLimitsFor(c.env.DB, leagueId, meta.season_number))).find((e) => e.kind === body.offence);
+    const found = (await collectEvidence(c.env.DB, body.targetTeamId, await evidenceLimitsForTeam(c.env.DB, body.targetTeamId, leagueId, meta.season_number))).find((e) => e.kind === body.offence);
     if (!found) return c.json({ error: "Tenhle skutek se u toho klubu nedá doložit." }, 400);
     evidence = found.detail;
   } else if (!body.note || body.note.trim().length < 10) {
@@ -972,7 +1083,7 @@ competitionRouter.post("/teams/:teamId/competition/sanctions", async (c) => {
     "Kauce za návrh na pokutu", gameDate, `dep-${id}`,
   ).catch((e) => logger.warn({ module: M }, "stržení kauce", e));
   await recordCompetitionEntry(c.env.DB, {
-    leagueId, seasonNumber: meta.season_number, type: "deposit",
+    leagueId: await treasuryLeagueForTeam(c.env.DB, teamId, leagueId), seasonNumber: meta.season_number, type: "deposit",
     amount: PROPOSAL_DEPOSIT, description: "Kauce za návrh na pokutu",
     teamId, gameDate, referenceId: `dep-${id}`,
   });
@@ -1012,6 +1123,9 @@ competitionRouter.post("/teams/:teamId/competition/sanctions/:id/appeal", async 
 
   const gameDate = await currentGameDate(c.env.DB, teamId);
   const id = crypto.randomUUID();
+  // Odvolání projedná grémium okresu. Starší pokuta III. třídy z doby, kdy měla
+  // vlastní grémium, visí pod jejím id, schůze ale zasedá jen u přeboru.
+  const appealLeagueId = await governingLeagueId(c.env.DB, s.league_id);
 
   await c.env.DB.prepare(
     `INSERT INTO competition_proposals
@@ -1019,7 +1133,7 @@ competitionRouter.post("/teams/:teamId/competition/sanctions/:id/appeal", async 
        majority, quorum, opened_game_date, deposit)
      VALUES (?,?,?,'appeal','disciplinarni',?,?,?,?,?,?,?,0)`
   ).bind(
-    id, s.league_id, s.season_number,
+    id, appealLeagueId, s.season_number,
     `Odvolání proti pokutě ${s.amount.toLocaleString("cs")} Kč`,
     s.reason, JSON.stringify({ sanctionId: s.id }), teamId, 0.5, 0.5, gameDate,
   ).run();
@@ -1063,7 +1177,7 @@ competitionRouter.post("/teams/:teamId/competition/sanctions/direct", async (c) 
 
   let evidence: string | null = null;
   if (!offence.freeText) {
-    const found = (await collectEvidence(c.env.DB, body.targetTeamId, await evidenceLimitsFor(c.env.DB, leagueId, meta.season_number))).find((e) => e.kind === body.offence);
+    const found = (await collectEvidence(c.env.DB, body.targetTeamId, await evidenceLimitsForTeam(c.env.DB, body.targetTeamId, leagueId, meta.season_number))).find((e) => e.kind === body.offence);
     if (!found) return c.json({ error: "Tenhle skutek se u toho klubu nedá doložit." }, 400);
     evidence = found.detail;
   }
@@ -1087,7 +1201,7 @@ competitionRouter.post("/teams/:teamId/competition/sanctions/direct", async (c) 
 
 // ── Komise rozhodčích ───────────────────────────────────────────────────────
 competitionRouter.get("/competition/:leagueId/referees", async (c) => {
-  const leagueId = c.req.param("leagueId");
+  const leagueId = await governingLeagueId(c.env.DB, c.req.param("leagueId"));
   const meta = await loadLeagueMeta(c.env.DB, leagueId);
   if (!meta) return c.json({ error: "Soutěž nenalezena" }, 404);
 
@@ -1104,10 +1218,11 @@ competitionRouter.get("/competition/:leagueId/referees", async (c) => {
   // Obsazení i stopky se váží ke KONKRÉTNÍMU kolu — tomu nejbližšímu, které už
   // má delegaci a ještě se nehrálo. Mimo sezónu žádné takové není a komisař
   // nemá do čeho mluvit.
+  // Nejbližší obsazené kolo kterékoli soutěže grémia (přebor i III. třída).
   const round = await upcomingRound(c.env.DB, leagueId);
   const [delegation, volni, swaps, paused, pauses] = round
     ? await Promise.all([
-      delegationOf(c.env.DB, round.calendarId, leagueId, meta.season_number),
+      delegationOf(c.env.DB, round.calendarId, round.leagueId, meta.season_number),
       freeForRound(c.env.DB, leagueId, meta.season_number, meta.district, round),
       swapsInRound(c.env.DB, round.calendarId),
       pausedIds(c.env.DB, leagueId, meta.season_number, round.gameWeek),
@@ -1132,6 +1247,7 @@ competitionRouter.get("/competition/:leagueId/referees", async (c) => {
     round: round && {
       calendarId: round.calendarId, gameWeek: round.gameWeek,
       matches: round.matches, scheduledAt: round.scheduledAt,
+      leagueId: round.leagueId,
     },
     delegation,
     // Náhradníci: kdo v ten den nikde nepíská a není vyškrtnutý ani se stopkou.
@@ -1177,7 +1293,7 @@ competitionRouter.post("/teams/:teamId/competition/referee-swap", async (c) => {
   const round = await upcomingRound(c.env.DB, leagueId);
   if (!round) return c.json({ error: "Žádné obsazené kolo teď nečeká na výkop." }, 409);
 
-  const zapas = (await delegationOf(c.env.DB, round.calendarId, leagueId, meta.season_number))
+  const zapas = (await delegationOf(c.env.DB, round.calendarId, round.leagueId, meta.season_number))
     .find((m) => m.matchId === body.matchId);
   if (!zapas) return c.json({ error: "Takový zápas v nejbližším kole není." }, 404);
 
@@ -1342,7 +1458,7 @@ competitionRouter.post("/teams/:teamId/competition/referee-bans", async (c) => {
     "Kauce za návrh na vyškrtnutí rozhodčího", gameDate, `dep-${id}`,
   ).catch((e) => logger.warn({ module: M }, "stržení kauce", e));
   await recordCompetitionEntry(c.env.DB, {
-    leagueId, seasonNumber: meta.season_number, type: "deposit",
+    leagueId: await treasuryLeagueForTeam(c.env.DB, teamId, leagueId), seasonNumber: meta.season_number, type: "deposit",
     amount: PROPOSAL_DEPOSIT, description: "Kauce za návrh na vyškrtnutí rozhodčího",
     teamId, gameDate, referenceId: `dep-${id}`,
   });
@@ -1452,26 +1568,51 @@ competitionRouter.post("/teams/:teamId/competition/grants", async (c) => {
     }, 409);
   }
 
-  const rules = await resolveRules(c.env.DB, leagueId, meta.season_number);
-  const teamsInLeague = await countAllClubs(c.env.DB, leagueId);
-  const played = await playedMatches(c.env.DB, leagueId);
-  const free = freeBalance(
-    await readBalance(c.env.DB, leagueId), rules, teamsInLeague, meta.level, played,
-  );
-  if (amount > free) {
-    return c.json({
-      error: `Na tohle soutěž nemá. Volných peněz je ${Math.max(0, free).toLocaleString("cs")} Kč — `
-        + "zbytek pokladny padne na odměny rozehrané sezóny.",
-    }, 400);
-  }
-
   // Půjčka jen klubu v mínusu, cílené dotace potřebují cíl.
   const cileno = kind === "loan" || kind === "travel" || kind === "award";
   if (cileno && !body?.targetTeamId) return c.json({ error: "Chybí klub, kterému to má jít." }, 400);
   if (body?.targetTeamId && !voters.voters.includes(body.targetTeamId)) {
-    const jeVSouteZi = await c.env.DB.prepare("SELECT 1 FROM teams WHERE id = ? AND league_id = ?")
-      .bind(body.targetTeamId, leagueId).first().catch((e) => { logger.warn({ module: M }, "klub v soutěži", e); return null; });
-    if (!jeVSouteZi) return c.json({ error: "Takový klub v soutěži není." }, 404);
+    const districtIds = await districtLeagueIds(c.env.DB, leagueId);
+    const inDistrict = await c.env.DB.prepare(
+      `SELECT 1 FROM teams WHERE id = ? AND league_id IN (${sqlPlaceholders(districtIds)})`
+    ).bind(body.targetTeamId, ...districtIds).first()
+      .catch((e) => { logger.warn({ module: M }, "klub v soutěži", e); return null; });
+    if (!inDistrict) return c.json({ error: "Takový klub v soutěži není." }, 404);
+  }
+
+  // Dotaci odhlasuje grémium okresu, vyplácí ji ale pokladna soutěže, ve které
+  // klub hraje (grants.ts). Strop proto musí vyjít každé pokladně, která bude platit.
+  const rules = await resolveRules(c.env.DB, leagueId, meta.season_number);
+  const treasuries = await treasuryStates(c.env.DB, leagueId, rules, meta.level);
+  const needs = new Map<string, number>();
+  if (kind === "award" || kind === "surplus") {
+    // Ceny a přebytek se vyplácejí na konci sezóny v každé soutěži zvlášť
+    // z její vlastní pokladny (season-grants.ts).
+    for (const t of treasuries) needs.set(t.leagueId, amount);
+  } else {
+    const { prijemci } = await import("../competition/grants");
+    const payments = await prijemci(c.env.DB, {
+      leagueId, kind, amount, targetTeamId: body?.targetTeamId ?? null,
+      pitchThreshold: rules.min_pitch_condition > 0 ? rules.min_pitch_condition : 30,
+    });
+    for (const p of payments) {
+      const payer = await treasuryLeagueForTeam(c.env.DB, p.teamId, leagueId, true);
+      needs.set(payer, (needs.get(payer) ?? 0) + p.amount);
+    }
+    // Dnes by ji nikdo nedostal (třeba všechna hřiště jsou v pořádku): strop se
+    // hlídá aspoň u pokladny grémia, jako dřív.
+    if (needs.size === 0) needs.set(leagueId, amount);
+  }
+  for (const [payer, need] of needs) {
+    const t = treasuries.find((x) => x.leagueId === payer);
+    const free = t?.free ?? 0;
+    if (need > free) {
+      const which = treasuries.length > 1 && t?.name ? ` v pokladně ${t.name}` : "";
+      return c.json({
+        error: `Na tohle soutěž nemá. Volných peněz je${which} ${Math.max(0, free).toLocaleString("cs")} Kč, `
+          + "zbytek pokladny padne na odměny rozehrané sezóny.",
+      }, 400);
+    }
   }
   if (kind === "loan" && body?.targetTeamId) {
     const t = await c.env.DB.prepare("SELECT budget, name FROM teams WHERE id = ?")
@@ -1510,7 +1651,7 @@ competitionRouter.post("/teams/:teamId/competition/grants", async (c) => {
     "Kauce za návrh na dotaci", gameDate, `dep-${id}`,
   ).catch((e) => logger.warn({ module: M }, "stržení kauce", e));
   await recordCompetitionEntry(c.env.DB, {
-    leagueId, seasonNumber: meta.season_number, type: "deposit",
+    leagueId: await treasuryLeagueForTeam(c.env.DB, teamId, leagueId), seasonNumber: meta.season_number, type: "deposit",
     amount: PROPOSAL_DEPOSIT, description: "Kauce za podaný návrh",
     teamId, gameDate, referenceId: `dep-${id}`,
   });
@@ -1527,21 +1668,27 @@ competitionRouter.get("/teams/:teamId/competition/grants", async (c) => {
   if (!meta) return c.json({ error: "Soutěž nenalezena" }, 404);
 
   const rules = await resolveRules(c.env.DB, leagueId, meta.season_number);
-  const teamsInLeague = await countAllClubs(c.env.DB, leagueId);
-  const played = await playedMatches(c.env.DB, leagueId);
+  // Volné peníze pokladny vlastní soutěže klubu: z ní se jejím klubům vyplácí.
+  // Zavřená pokladna III. třídy neplatí nic, za ni platí pokladna grémia.
+  const ownLeagueId = await treasuryLeagueForTeam(c.env.DB, teamId, leagueId, true);
+  const ownMeta = ownLeagueId === leagueId ? meta : (await loadLeagueMeta(c.env.DB, ownLeagueId)) ?? meta;
+  const teamsInLeague = await countAllClubs(c.env.DB, ownLeagueId);
+  const played = await playedMatches(c.env.DB, ownLeagueId);
   const free = freeBalance(
-    await readBalance(c.env.DB, leagueId), rules, teamsInLeague, meta.level, played,
+    await readBalance(c.env.DB, ownLeagueId), rules, teamsInLeague, ownMeta.level, played,
   );
 
+  // Dotace grémia okresu jde klubům přeboru i III. třídy.
+  const districtIds = await districtLeagueIds(c.env.DB, leagueId);
   const kluby = await c.env.DB.prepare(
     `SELECT t.id, t.name, t.budget,
             (SELECT s.pitch_condition FROM stadiums s WHERE s.team_id = t.id) AS pitch,
             ${MANAGER_NAME("t.id")} AS manager_name,
             ${MANAGER_IS_AI("t.id")} AS manager_is_ai
        FROM teams t
-      WHERE t.league_id = ? AND t.team_type = 'senior' AND t.parent_team_id IS NULL
+      WHERE t.league_id IN (${sqlPlaceholders(districtIds)}) AND t.team_type = 'senior' AND t.parent_team_id IS NULL
       ORDER BY t.name`
-  ).bind(leagueId).all<{
+  ).bind(...districtIds).all<{
     id: string; name: string; budget: number; pitch: number | null; manager_name: string | null;
     manager_is_ai: number | null;
   }>().catch((e) => { logger.warn({ module: M }, "kluby pro dotaci", e); return { results: [] }; });
@@ -1567,7 +1714,8 @@ competitionRouter.get("/teams/:teamId/competition/grants", async (c) => {
 
 // ── Sponzor ─────────────────────────────────────────────────────────────────
 competitionRouter.get("/competition/:leagueId/sponsor", async (c) => {
-  const leagueId = c.req.param("leagueId");
+  // Sponzora vybírá grémium okresu a přejmenovává se jen řídící soutěž.
+  const leagueId = await governingLeagueId(c.env.DB, c.req.param("leagueId"));
   const meta = await loadLeagueMeta(c.env.DB, leagueId);
   if (!meta) return c.json({ error: "Soutěž nenalezena" }, 404);
 
@@ -1795,7 +1943,7 @@ competitionRouter.post("/teams/:teamId/competition/board", async (c) => {
 
 // ── Volby předsedů ──────────────────────────────────────────────────────────
 competitionRouter.get("/competition/:leagueId/elections", async (c) => {
-  const leagueId = c.req.param("leagueId");
+  const leagueId = await governingLeagueId(c.env.DB, c.req.param("leagueId"));
   const meta = await loadLeagueMeta(c.env.DB, leagueId);
   if (!meta) return c.json({ error: "Soutěž nenalezena" }, 404);
 
@@ -1878,6 +2026,11 @@ competitionRouter.post("/teams/:teamId/competition/elections/:id/candidacy", asy
     .catch((e) => { logger.warn({ module: M }, "volba", e); return null; });
   if (!el) return c.json({ error: "Volba nenalezena" }, 404);
   if (el.status !== "open") return c.json({ error: "Volba už je uzavřená." }, 409);
+  // Stará volba III. třídy z doby jejího vlastního grémia se už nikdy neuzavře,
+  // zasedá jen grémium okresu u přeboru. Propadne s koncem sezóny.
+  if ((await governingLeagueId(c.env.DB, el.league_id)) !== el.league_id) {
+    return c.json({ error: "Tuhle volbu už vede grémium okresu. Kandidovat můžeš ve volbách okresu." }, 409);
+  }
 
   const check = await canRunFor(c.env.DB, el.league_id, teamId, el.role as OfficialRole, el.season_number);
   if (!check.ok) return c.json({ error: check.reason }, 403);
@@ -1925,6 +2078,9 @@ competitionRouter.post("/teams/:teamId/competition/elections/:id/vote", async (c
     .catch((e) => { logger.warn({ module: M }, "volba", e); return null; });
   if (!el) return c.json({ error: "Volba nenalezena" }, 404);
   if (el.status !== "open") return c.json({ error: "Volba už je uzavřená." }, 409);
+  if ((await governingLeagueId(c.env.DB, el.league_id)) !== el.league_id) {
+    return c.json({ error: "Tuhle volbu už vede grémium okresu. Hlasuj ve volbách okresu." }, 409);
+  }
 
   const voters = await voterStats(c.env.DB, el.league_id);
   if (!voters.voters.includes(teamId)) {
@@ -1964,7 +2120,7 @@ competitionRouter.get("/teams/:teamId/competition/candidacy-check", async (c) =>
 });
 
 competitionRouter.post("/admin/competition/:leagueId/elections", async (c) => {
-  const leagueId = c.req.param("leagueId");
+  const leagueId = await governingLeagueId(c.env.DB, c.req.param("leagueId"));
   const meta = await loadLeagueMeta(c.env.DB, leagueId);
   if (!meta) return c.json({ error: "Soutěž nenalezena" }, 404);
   const gameDate = await c.env.DB.prepare("SELECT MAX(game_date) AS d FROM teams WHERE league_id = ?")
@@ -1981,7 +2137,7 @@ competitionRouter.post("/admin/competition/:leagueId/elections", async (c) => {
  */
 /** Ruční vypsání sponzorských nabídek. Za provozu je vypisuje rollover. */
 competitionRouter.post("/admin/competition/:leagueId/sponsor-offers", async (c) => {
-  const leagueId = c.req.param("leagueId");
+  const leagueId = await governingLeagueId(c.env.DB, c.req.param("leagueId"));
   const meta = await loadLeagueMeta(c.env.DB, leagueId);
   if (!meta) return c.json({ error: "Soutěž nenalezena" }, 404);
 
@@ -2007,7 +2163,7 @@ competitionRouter.post("/admin/competition/:leagueId/sponsor-offers", async (c) 
  * voleb, účast a pokladna ze zasedání.
  */
 competitionRouter.post("/admin/competition/:leagueId/regenerate-minutes", async (c) => {
-  const leagueId = c.req.param("leagueId");
+  const leagueId = await governingLeagueId(c.env.DB, c.req.param("leagueId"));
   const meta = await loadLeagueMeta(c.env.DB, leagueId);
   if (!meta) return c.json({ error: "Soutěž nenalezena" }, 404);
 
@@ -2084,7 +2240,7 @@ competitionRouter.post("/admin/competition/:leagueId/regenerate-minutes", async 
 });
 
 competitionRouter.post("/admin/competition/:leagueId/meeting", async (c) => {
-  const leagueId = c.req.param("leagueId");
+  const leagueId = await governingLeagueId(c.env.DB, c.req.param("leagueId"));
   const gameDate = await c.env.DB.prepare(
     "SELECT MAX(game_date) AS d FROM teams WHERE league_id = ?"
   ).bind(leagueId).first<{ d: string | null }>().then((r) => r?.d)
@@ -2107,7 +2263,7 @@ competitionRouter.post("/admin/competition/:leagueId/meeting", async (c) => {
  * zpátky z návrhů podle `closed_game_date`, nic nepřehlasovává.
  */
 competitionRouter.post("/admin/competition/:leagueId/rebuild-meeting", async (c) => {
-  const leagueId = c.req.param("leagueId");
+  const leagueId = await governingLeagueId(c.env.DB, c.req.param("leagueId"));
   const gameDate = c.req.query("gameDate");
   if (!gameDate) return c.json({ error: "Chybí gameDate" }, 400);
   const notify = c.req.query("notify") === "1";

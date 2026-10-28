@@ -17,7 +17,9 @@ import { recomputeBalance, recordCompetitionEntry } from "./ledger";
 import { applyTermReputation, notifyElectionsOpened, openElections } from "./officials";
 import { subsidyFor } from "./projection";
 import { nextSeasonRules } from "./proposals";
-import { countAllClubs, countHumanClubs, loadGovernance, loadRules } from "./rules";
+import {
+  countAllClubs, countHumanClubs, governingLeagueId, loadOwnGovernance, loadRules, loadTreasuryRules,
+} from "./rules";
 
 const M = "competition-rollover";
 const PHASE = "governance_rollover";
@@ -58,16 +60,22 @@ export async function applyGovernanceRollover(
   const out: GovernanceRolloverResult = { leagues: 0, enabled: 0, disabled: 0, feesCollected: 0 };
 
   // Kandidáti: seniorské soutěže, které samosprávu už mají, plus ty, co na práh nově dosáhly.
+  // Přebor jde před III. třídou: sazebník okresu vzniká u řídící soutěže a nižší
+  // soutěž z něj teprve vybírá startovné.
   const leagues = await db.prepare(
     `SELECT l.id, l.level FROM leagues l
-      WHERE COALESCE(l.league_type,'senior') = 'senior'`
+      WHERE COALESCE(l.league_type,'senior') = 'senior'
+      ORDER BY CASE l.level WHEN 'okresni_prebor' THEN 0 ELSE 1 END, l.id`
   ).all<{ id: string; level: string }>()
     .catch((e) => { logger.warn({ module: M }, "seznam soutěží", e); return { results: [] }; });
 
   for (const league of leagues.results) {
     try {
       if (await markerDone(db, league.id, newSeason)) continue;
-      const changed = await rolloverOne(db, league.id, league.level, newSeason, startDate, out);
+      const governingId = await governingLeagueId(db, league.id);
+      const changed = governingId === league.id
+        ? await rolloverOne(db, league.id, league.level, newSeason, startDate, out)
+        : await rolloverMember(db, league.id, league.level, governingId, newSeason, startDate, out);
       if (changed) out.leagues++;
       await setMarker(db, league.id, newSeason);
     } catch (e) {
@@ -79,11 +87,86 @@ export async function applyGovernanceRollover(
   return out;
 }
 
+/**
+ * Nižší soutěž okresu (III. třída). Grémium, sazebník, volby i sponzor patří
+ * řídící soutěži; tady se jen otevře vlastní pokladna, vybere dotace a startovné
+ * podle společného sazebníku a dosluhují věci, které soutěž měla, než se grémia
+ * sloučila (mandáty, sponzor).
+ */
+async function rolloverMember(
+  db: D1Database, leagueId: string, level: string, governingId: string, newSeason: number,
+  startDate: string, out: GovernanceRolloverResult,
+): Promise<boolean> {
+  const own = await loadOwnGovernance(db, leagueId);
+  // Práh za celý okres — stejné číslo jako u řídící soutěže.
+  const humans = await countHumanClubs(db, leagueId);
+
+  // Mandáty a volby z doby, kdy měla soutěž vlastní grémium, dosluhují vždy.
+  // Nové se volí už jen u řídící soutěže.
+  await endOfficialTerms(db, leagueId, newSeason, startDate);
+  // Rozjednané návrhy z té doby: odvolání funkcionáře a sponzora už nemá kdo
+  // rozhodnout, propadají. Ostatní projedná grémium okresu (stejně jako schůze
+  // v meeting.ts, tady pro případ, že se do rolloveru nesešla).
+  await db.prepare(
+    `UPDATE competition_proposals
+        SET status = 'withdrawn', closed_game_date = ?,
+            result_note = 'Návrh propadl, soutěž teď vede grémium okresu.'
+      WHERE league_id = ? AND status = 'open' AND kind IN ('recall','sponsor')`
+  ).bind(startDate, leagueId).run()
+    .catch((e) => logger.warn({ module: M }, `propadnutí starých návrhů ${leagueId}`, e));
+  await db.prepare(
+    "UPDATE competition_proposals SET league_id = ?, opened_game_date = ? WHERE league_id = ? AND status = 'open'"
+  ).bind(governingId, startDate, leagueId).run()
+    .catch((e) => logger.warn({ module: M }, `převod otevřených návrhů ${leagueId} na grémium okresu`, e));
+
+  if (humans < MIN_HUMAN_CLUBS) {
+    if (own?.enabled) {
+      await db.prepare("UPDATE competition_governance SET enabled = 0 WHERE league_id = ?")
+        .bind(leagueId).run()
+        .catch((e) => logger.warn({ module: M }, `zavření pokladny ${leagueId}`, e));
+      out.disabled++;
+      return true;
+    }
+    return false;
+  }
+
+  // Sazebník okresu musí existovat dřív, než se podle něj vybere startovné. Když
+  // rollover řídící soutěže spadl, marker téhle soutěže se nezapíše a zkusí se znovu.
+  if (!(await loadRules(db, governingId, newSeason))) {
+    throw new Error(`sazebník grémia ${governingId} na ${newSeason}. sezónu zatím neexistuje`);
+  }
+
+  if (!own) {
+    const name = await db.prepare("SELECT name FROM leagues WHERE id = ?")
+      .bind(leagueId).first<{ name: string }>()
+      .catch((e) => { logger.warn({ module: M }, "název soutěže", e); return null; });
+    await db.prepare(
+      `INSERT INTO competition_governance (league_id, enabled, enabled_from_season, original_name)
+       VALUES (?, 1, ?, ?)`
+    ).bind(leagueId, newSeason, name?.name ?? null).run()
+      .catch((e) => logger.warn({ module: M }, `otevření pokladny ${leagueId}`, e));
+    out.enabled++;
+  } else if (!own.enabled) {
+    await db.prepare("UPDATE competition_governance SET enabled = 1 WHERE league_id = ?")
+      .bind(leagueId).run()
+      .catch((e) => logger.warn({ module: M }, `otevření pokladny ${leagueId}`, e));
+    out.enabled++;
+  }
+
+  await collectMoney(db, leagueId, level, newSeason, startDate, out);
+  // Sponzor, kterého si soutěž podepsala ještě s vlastním grémiem, dostane smlouvu
+  // dohrát. Nového už vybírá jen řídící soutěž.
+  await settleSponsor(db, leagueId, newSeason, startDate);
+  await recomputeBalance(db, leagueId, startDate);
+  return true;
+}
+
 async function rolloverOne(
   db: D1Database, leagueId: string, level: string, newSeason: number,
   startDate: string, out: GovernanceRolloverResult,
 ): Promise<boolean> {
-  const gov = await loadGovernance(db, leagueId);
+  const gov = await loadOwnGovernance(db, leagueId);
+  // Práh i velikost vedení počítá lidské kluby celého okresu (přebor + III. třída).
   const humans = await countHumanClubs(db, leagueId);
   const qualifies = humans >= MIN_HUMAN_CLUBS;
 
@@ -129,7 +212,7 @@ async function rolloverOne(
   // nedostane — přijmout jde jen jednu smlouvu.
   try {
     const { generateOffers } = await import("./sponsors");
-    const stav = await loadGovernance(db, leagueId);
+    const stav = await loadOwnGovernance(db, leagueId);
     if (!stav?.sponsor_name) {
       const okres = await db.prepare("SELECT district FROM leagues WHERE id = ?")
         .bind(leagueId).first<{ district: string }>()
@@ -162,6 +245,9 @@ async function buildRules(
     .filter((f) => base[f] !== pred[f])
     .map((f) => ({ kind: String(f), value: base[f] }));
 
+  // subsidy_total je jen záznam dotace ŘÍDÍCÍ soutěže (nikde se nečte). Sazebník
+  // je sice okresní, dotaci ale dostává každá pokladna zvlášť podle svých klubů
+  // a úrovně a počítá se až při výběru (collectMoney).
   const teams = await countAllClubs(db, leagueId);
   const subsidy = subsidyFor(teams, level);
 
@@ -188,7 +274,9 @@ async function collectMoney(
   db: D1Database, leagueId: string, level: string, newSeason: number,
   gameDate: string, out: GovernanceRolloverResult,
 ): Promise<void> {
-  const rules = await loadRules(db, leagueId, newSeason);
+  // Společný sazebník okresu, peníze ale jdou do pokladny téhle soutěže: dotace
+  // podle jejích klubů a úrovně, startovné od jejích klubů.
+  const rules = await loadTreasuryRules(db, leagueId, newSeason);
   if (!rules) return;
 
   const teams = await countAllClubs(db, leagueId);
@@ -224,7 +312,9 @@ async function collectMoney(
 async function settleSponsor(
   db: D1Database, leagueId: string, newSeason: number, gameDate: string,
 ): Promise<void> {
-  const gov = await loadGovernance(db, leagueId);
+  // Vlastní řádek soutěže: sponzor řídící soutěže se vypořádává u ní, dosluhující
+  // sponzor III. třídy u III. třídy.
+  const gov = await loadOwnGovernance(db, leagueId);
   if (!gov?.sponsor_name) return;
 
   const stillValid = (gov.sponsor_until_season ?? 0) >= newSeason && gov.sponsor_satisfaction >= 30;

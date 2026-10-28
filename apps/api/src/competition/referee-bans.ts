@@ -1,9 +1,11 @@
 /**
  * Vyškrtávání rozhodčích z listiny soutěže.
  *
- * Ban je PER SOUTĚŽ, ne per okres: pool patří okresu a sdílí ho i U21, která
+ * Ban je PER GRÉMIUM, ne per okres: pool patří okresu a sdílí ho i U21, která
  * o vyškrtnutí nehlasovala. Řádek v `referees` se proto nikdy nemaže ani nemění —
- * filtruje se až při delegaci.
+ * filtruje se až při delegaci. Grémium je ale společné pro přebor i III. třídu
+ * (rules.ts), takže sudí vyškrtnutý za zápas přeboru nepíská ani III. třídu.
+ * Každá funkce si proto řídící soutěž dohledá sama, ať jí kdo předá kteroukoli.
  *
  * Listina se po vyškrtnutí NEDOPLŇUJE. Kdo v kole píská druhý zápas, jde do něj
  * unavený. Kluby si vyhozením kartového cvoka koupí utahané sudí — a to je celý
@@ -12,6 +14,7 @@
 
 import { logger } from "../lib/logger";
 import { recordCompetitionEntry } from "./ledger";
+import { districtLeagueIds, governingLeagueId, sqlPlaceholders } from "./rules";
 
 const M = "competition-referee-bans";
 
@@ -59,6 +62,7 @@ export async function countUsable(
 ): Promise<number> {
   const { normalizeDistrict } = await import("../referees/referee-generator");
   const base = normalizeDistrict(district);
+  leagueId = await governingLeagueId(db, leagueId);
   const row = await db.prepare(
     `SELECT COUNT(*) AS n FROM referees r
       WHERE r.district = ? AND r.status = 'active'
@@ -74,10 +78,11 @@ export async function countUsable(
 export async function bannedIds(
   db: D1Database, leagueId: string, seasonNumber: number,
 ): Promise<Set<string>> {
+  const governingId = await governingLeagueId(db, leagueId);
   const rows = await db.prepare(
     `SELECT referee_id FROM competition_referee_bans
       WHERE league_id = ? AND ? BETWEEN season_number AND COALESCE(until_season, season_number)`
-  ).bind(leagueId, seasonNumber).all<{ referee_id: string }>()
+  ).bind(governingId, seasonNumber).all<{ referee_id: string }>()
     .catch((e) => { logger.warn({ module: M }, "seznam banů", e); return { results: [] }; });
   return new Set(rows.results.map((r) => r.referee_id));
 }
@@ -99,6 +104,7 @@ export interface ApplyBanOpts {
  * a kolegové z okresu se za něj postaví u navrhovatele. Vyhodit někoho není zadarmo.
  */
 export async function applyRefereeBan(db: D1Database, opts: ApplyBanOpts): Promise<boolean> {
+  opts = { ...opts, leagueId: await governingLeagueId(db, opts.leagueId) };
   const res = await db.prepare(
     `INSERT OR IGNORE INTO competition_referee_bans
       (id, league_id, referee_id, season_number, until_season, reason, source)
@@ -195,16 +201,22 @@ export async function refereeStandings(
   const { normalizeDistrict, refereeFullName } = await import("../referees/referee-generator");
   const base = normalizeDistrict(district);
 
+  // Známky ze všech soutěží grémia: sudí, který zpackal III. třídu, je pro
+  // grémium okresu stejný problém jako ten z přeboru.
+  const ids = await districtLeagueIds(db, leagueId);
   const rows = await db.prepare(
     `SELECT r.id, r.first_name, r.last_name, r.nickname, r.archetype,
             COALESCE(s.matches, 0) AS matches,
             CASE WHEN COALESCE(s.matches,0) > 0 THEN s.grade_sum / s.matches ELSE NULL END AS avg_grade
        FROM referees r
-       LEFT JOIN referee_stats s
-              ON s.referee_id = r.id AND s.season_number = ? AND s.league_id = ?
+       LEFT JOIN (SELECT referee_id, SUM(matches) AS matches, SUM(grade_sum) AS grade_sum
+                    FROM referee_stats
+                   WHERE season_number = ? AND league_id IN (${sqlPlaceholders(ids)})
+                   GROUP BY referee_id) s
+              ON s.referee_id = r.id
       WHERE r.district = ? AND r.status = 'active'
       ORDER BY avg_grade DESC NULLS LAST, r.last_name`
-  ).bind(seasonNumber, leagueId, base).all<{
+  ).bind(seasonNumber, ...ids, base).all<{
     id: string; first_name: string; last_name: string; nickname: string | null;
     archetype: string; matches: number; avg_grade: number | null;
   }>().catch((e) => { logger.warn({ module: M }, "listina se známkami", e); return { results: [] }; });
@@ -228,9 +240,10 @@ export async function refereeStandings(
 export async function expiredBans(
   db: D1Database, leagueId: string, seasonNumber: number,
 ): Promise<number> {
+  const governingId = await governingLeagueId(db, leagueId);
   const row = await db.prepare(
     "SELECT COUNT(*) AS n FROM competition_referee_bans WHERE league_id = ? AND COALESCE(until_season, season_number) < ?"
-  ).bind(leagueId, seasonNumber).first<{ n: number }>()
+  ).bind(governingId, seasonNumber).first<{ n: number }>()
     .catch((e) => { logger.warn({ module: M }, "počet propadlých banů", e); return null; });
   return row?.n ?? 0;
 }

@@ -382,7 +382,12 @@ bettingRouter.delete("/teams/:teamId/bets/comments/:commentId", async (c) => {
 
 // ── Komisař pro integritu soutěže ───────────────────────────────────────────
 
-/** Liga a sezóna klubu — společný začátek všech endpointů komisaře. */
+/**
+ * Liga a sezóna klubu — společný začátek všech endpointů komisaře.
+ *
+ * `leagueId` je grémium okresu (řídící soutěž), u kterého komisař sedí a kam
+ * se zapisují sankce a čerpání pravomocí. Komisař dohlíží na přebor i III. třídu.
+ */
 async function ligaASezona(
   db: D1Database, teamId: string,
 ): Promise<{ leagueId: string; seasonNumber: number } | null> {
@@ -393,7 +398,8 @@ async function ligaASezona(
   ).bind(teamId).first<{ league_id: string | null; season_number: number | null }>()
     .catch((e) => { logger.warn({ module: M }, "liga klubu", e); return null; });
   if (!row?.league_id || !row.season_number) return null;
-  return { leagueId: row.league_id, seasonNumber: row.season_number };
+  const { governingLeagueId } = await import("../competition/rules");
+  return { leagueId: await governingLeagueId(db, row.league_id), seasonNumber: row.season_number };
 }
 
 /** Kniha sázek celé soutěže. Vidí ji jen komisař a prezident. */
@@ -434,10 +440,15 @@ bettingRouter.post("/teams/:teamId/betting/bans", async (c) => {
   const smi = await muzeZablokovat(c.env.DB, kde.leagueId, teamId, cil, kde.seasonNumber);
   if (!smi.ok) return c.json({ error: smi.reason }, 403);
 
+  // Kola počítá soutěž, ve které klub hraje: zákaz se při sázce porovnává s jejím
+  // kolem a III. třída nemusí mít odehraný stejný počet kol jako přebor.
+  const targetLeague = await c.env.DB.prepare("SELECT league_id FROM teams WHERE id = ?")
+    .bind(cil).first<{ league_id: string | null }>()
+    .catch((e) => { logger.warn({ module: M }, "soutěž klubu se zákazem", e); return null; });
   const kolo = await c.env.DB.prepare(
     `SELECT COALESCE(MAX(game_week), 0) AS gw FROM season_calendar
       WHERE league_id = ? AND season_number = ? AND status = 'simulated'`
-  ).bind(kde.leagueId, kde.seasonNumber).first<{ gw: number }>()
+  ).bind(targetLeague?.league_id ?? kde.leagueId, kde.seasonNumber).first<{ gw: number }>()
     .catch((e) => { logger.warn({ module: M }, "aktuální kolo", e); return null; });
 
   const doKola = (kolo?.gw ?? 0) + kol;
@@ -498,11 +509,14 @@ bettingRouter.post("/teams/:teamId/betting/tickets/:ticketId/confiscate", async 
   const duvod = String(body.reason ?? "").trim();
   if (duvod.length < 10) return c.json({ error: "Napiš, proč tu výhru zabavuješ. Aspoň větu." }, 400);
 
-  // Zámek: zabavit jde jen vyhraný tiket, a jen jednou.
+  // Zámek: zabavit jde jen vyhraný tiket, a jen jednou. Tiket z kterékoli soutěže
+  // grémia okresu; zabavená výhra jde do pokladny soutěže, kde se sázelo.
+  const { districtLeagueIds, sqlPlaceholders } = await import("../competition/rules");
+  const districtIds = await districtLeagueIds(c.env.DB, kde.leagueId);
   const tiket = await c.env.DB.prepare(
-    `SELECT team_id, payout FROM bet_tickets
-      WHERE id = ? AND league_id = ? AND status = 'won' AND payout > 0`
-  ).bind(ticketId, kde.leagueId).first<{ team_id: string; payout: number }>()
+    `SELECT team_id, payout, league_id FROM bet_tickets
+      WHERE id = ? AND league_id IN (${sqlPlaceholders(districtIds)}) AND status = 'won' AND payout > 0`
+  ).bind(ticketId, ...districtIds).first<{ team_id: string; payout: number; league_id: string }>()
     .catch((e) => { logger.error({ module: M }, "načtení tiketu k zabavení", e); return null; });
 
   if (!tiket) return c.json({ error: "Takový vyhraný tiket v téhle soutěži není." }, 404);
@@ -527,7 +541,7 @@ bettingRouter.post("/teams/:teamId/betting/tickets/:ticketId/confiscate", async 
   await recordTransaction(c.env.DB, tiket.team_id, "bet_confiscated", -tiket.payout,
     "Zabavená výhra ze sázky", gameDate, `bet-confiscate-${ticketId}`);
   await recordCompetitionEntry(c.env.DB, {
-    leagueId: kde.leagueId, seasonNumber: kde.seasonNumber, type: "bet_confiscated",
+    leagueId: tiket.league_id ?? kde.leagueId, seasonNumber: kde.seasonNumber, type: "bet_confiscated",
     amount: tiket.payout, description: "Zabavená výhra ze sázky", teamId: tiket.team_id,
     gameDate, referenceId: `bet-confiscate-${ticketId}`,
   });

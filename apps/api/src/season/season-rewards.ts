@@ -15,7 +15,7 @@ import type { StandingEntry } from "../stats/standings";
 import { logger } from "../lib/logger";
 import { DEFAULT_RULES } from "../competition/defaults";
 import { readBalance, recordCompetitionEntry } from "../competition/ledger";
-import { loadRules } from "../competition/rules";
+import { loadTreasuryRules } from "../competition/rules";
 import { scaledRewards } from "../competition/projection";
 
 export interface SeasonRewardResult {
@@ -50,7 +50,10 @@ export async function applySeasonRewards(
   const results: SeasonRewardResult[] = [];
 
   // Soutěž se samosprávou platí odměny ze své pokladny a podle svého sazebníku.
-  const rules = leagueId ? await loadRules(db, leagueId, seasonNumber) : null;
+  // Sazebník je společný pro grémium okresu, pokladna ale soutěže samotné. Soutěž,
+  // která pokladnu ještě nemá otevřenou (III. třída před rolloverem), platí jako
+  // bez samosprávy, jinak by odměny z prázdné pokladny krátila na nulu.
+  const rules = leagueId ? await loadTreasuryRules(db, leagueId, seasonNumber) : null;
 
   // Když v pokladně nezbývá na plnou výplatu, krátí se VŠEM stejným poměrem.
   // Je to okamžitý a čitelný následek vlastního rozhodnutí: kluby si odhlasovaly

@@ -10,6 +10,7 @@
 
 import { logger } from "../lib/logger";
 import { actsFor, presidentOf } from "./officials";
+import { districtLeagueIds, sqlPlaceholders } from "./rules";
 import { estimateMarketValue } from "../season/economy";
 import { loadSwapPlayers, swapPlayerName, czechList, type SwapPlayerBrief } from "../transfers/swap-players";
 
@@ -55,15 +56,17 @@ export interface ZaznamKnihy {
 export async function knihaSazek(
   db: D1Database, leagueId: string, seasonNumber: number, limit = 60,
 ): Promise<ZaznamKnihy[]> {
+  // Komisař je okresní: vidí tikety klubů přeboru i III. třídy.
+  const leagueIds = await districtLeagueIds(db, leagueId);
   const tikety = await db.prepare(
     `SELECT t.id, t.team_id, t.stake, t.total_odds_x100, t.payout, t.status,
             tm.name AS team_name, sc.game_week
        FROM bet_tickets t
        JOIN teams tm ON tm.id = t.team_id
        LEFT JOIN season_calendar sc ON sc.id = t.calendar_id
-      WHERE t.league_id = ? AND t.season_number = ? AND t.status <> 'pending'
+      WHERE t.league_id IN (${sqlPlaceholders(leagueIds)}) AND t.season_number = ? AND t.status <> 'pending'
       ORDER BY t.created_at DESC LIMIT ?`
-  ).bind(leagueId, seasonNumber, limit).all<Record<string, unknown>>()
+  ).bind(...leagueIds, seasonNumber, limit).all<Record<string, unknown>>()
     .catch((e) => { logger.error({ module: M }, `kniha sázek ligy ${leagueId}`, e); return { results: [] }; });
 
   if (tikety.results.length === 0) return [];
@@ -138,6 +141,8 @@ export interface ZaznamPrestupu {
 export async function listinaPrestupu(
   db: D1Database, leagueId: string, seasonNumber: number, limit = 60,
 ): Promise<ZaznamPrestupu[]> {
+  const ids = await districtLeagueIds(db, leagueId);
+  const ph = sqlPlaceholders(ids);
   const rows = await db.prepare(
     `SELECT o.id, o.offer_amount, o.counter_amount, o.offer_type, o.resolved_at,
             p.first_name, p.last_name, p.id AS player_id, p.overall_rating, p.age, p.position,
@@ -148,9 +153,9 @@ export async function listinaPrestupu(
        LEFT JOIN teams fromT ON fromT.id = o.from_team_id
        JOIN teams toT ON toT.id = o.to_team_id
       WHERE o.status = 'accepted'
-        AND (toT.league_id = ? OR fromT.league_id = ?)
+        AND (toT.league_id IN (${ph}) OR fromT.league_id IN (${ph}))
       ORDER BY o.resolved_at DESC LIMIT ?`
-  ).bind(leagueId, leagueId, limit).all<Record<string, unknown>>()
+  ).bind(...ids, ...ids, limit).all<Record<string, unknown>>()
     .catch((e) => { logger.error({ module: M }, `listina přestupů ${leagueId}`, e); return { results: [] }; });
 
   const swapsByOffer = await loadSwapPlayers(db, rows.results.map((r) => r.id as string))

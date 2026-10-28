@@ -127,7 +127,11 @@ export default function SoutezPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [gesce, setGesce] = useState<string>("hospodarska");
 
+  // Grémium je okresní (přebor + III. třída) a sedí u řídící soutěže. Návrhy,
+  // volby, sankce, rozhodčí i zápisy jdou přes její id, pokladna přes id vlastní
+  // soutěže klubu.
   const leagueId = state?.league.id ?? null;
+  const treasuryLeagueId = state?.ownLeague?.id ?? leagueId;
 
   const loadState = useCallback(() => {
     if (!teamId) return;
@@ -212,8 +216,8 @@ export default function SoutezPage() {
 
   useEffect(() => {
     if (!leagueId) return;
-    if (tab === "pokladna" && !ledger) {
-      apiFetch<{ entries: LedgerEntry[]; summary: Array<{ type: string; total: number }> }>(`/api/competition/${leagueId}/ledger`)
+    if (tab === "pokladna" && !ledger && treasuryLeagueId) {
+      apiFetch<{ entries: LedgerEntry[]; summary: Array<{ type: string; total: number }> }>(`/api/competition/${treasuryLeagueId}/ledger`)
         .then(setLedger).catch((e) => console.error("načtení pokladny:", e));
     }
     if (tab === "zapisy" && meetings.length === 0) {
@@ -221,7 +225,7 @@ export default function SoutezPage() {
         .then((d) => setMeetings(d.meetings ?? [])).catch((e) => console.error("načtení zápisů:", e));
     }
     if (tab === "zasedani" && gesce === "rozhodcich" && !referees) loadReferees();
-  }, [tab, gesce, leagueId, ledger, meetings.length, referees, loadReferees]);
+  }, [tab, gesce, leagueId, treasuryLeagueId, ledger, meetings.length, referees, loadReferees]);
 
   /** Portréty trenérů podle klubu — sdílené napříč volbami, vedením i disciplinárkou. */
   const avatars = useMemo(() => {
@@ -355,6 +359,13 @@ export default function SoutezPage() {
   }
 
   const displayName = state.league.sponsoredName ?? state.league.name;
+  // Grémium vede všechny seniorské soutěže okresu. Bez téhle věty by hráč
+  // z III. třídy nepoznal, proč u něj visí jméno přeboru.
+  const districtLeagueNames = (state.districtLeagues ?? []).map((l) => l.name).filter(Boolean);
+  const sharedNote = districtLeagueNames.length > 1
+    ? `Grémium okresu ${state.league.district}: ${districtLeagueNames.slice(0, -1).join(", ")} a ${districtLeagueNames[districtLeagueNames.length - 1]}.`
+    : null;
+  const ownLeagueName = state.ownLeague && state.ownLeague.id !== state.league.id ? state.ownLeague.name : null;
 
   return (
     // Grémium se čte jako dokument, ne jako tabulka. Bez stropu šířky se na širokém
@@ -368,8 +379,14 @@ export default function SoutezPage() {
           <div className="text-2xl font-heading leading-tight break-words">{displayName}</div>
           <div className="text-sm text-muted mt-1">
             okres {state.league.district} · {state.league.seasonNumber}. sezóna ·{" "}
-            {state.humanClubs} z {state.totalClubs} klubů má trenéra
+            {state.humanClubs} z {state.districtTotalClubs ?? state.totalClubs} klubů má trenéra
           </div>
+          {sharedNote && (
+            <div className="text-sm mt-1">
+              {sharedNote}
+              {ownLeagueName && ` Pokladnu má každá soutěž svoji. Tady vidíš tu svoji: ${ownLeagueName}.`}
+            </div>
+          )}
 
           {state.enabled ? (
             <div className="mt-4 grid grid-cols-3 gap-3">
