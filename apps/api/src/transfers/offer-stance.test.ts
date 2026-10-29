@@ -26,7 +26,10 @@ afterAll(async () => { await miniflare.dispose(); });
 
 beforeEach(async () => {
   vi.clearAllMocks();
-  for (const t of ["teams", "players"]) await db.prepare(`DROP TABLE IF EXISTS ${t}`).run();
+  for (const t of ["teams", "players", "messages", "conversations", "transfer_offers"]) await db.prepare(`DROP TABLE IF EXISTS ${t}`).run();
+  await db.prepare("CREATE TABLE conversations (id TEXT PRIMARY KEY, team_id TEXT, participant_id TEXT)").run();
+  await db.prepare("CREATE TABLE messages (id TEXT PRIMARY KEY, conversation_id TEXT, sender_type TEXT, body TEXT, sent_at TEXT)").run();
+  await db.prepare("CREATE TABLE transfer_offers (id TEXT PRIMARY KEY, created_at TEXT)").run();
   await db.prepare("CREATE TABLE teams (id TEXT PRIMARY KEY, name TEXT, parent_team_id TEXT)").run();
   await db.prepare(
     `CREATE TABLE players (id TEXT PRIMARY KEY, first_name TEXT, last_name TEXT, nickname TEXT, avatar TEXT, team_id TEXT,
@@ -57,6 +60,28 @@ describe("co hráč o nabídce řekl v SMS", () => {
     expect(lc.offerStance).toBeUndefined();
     expect(lc.morale).toBe(60);
     expect(fx.sendPlayerSMS).not.toHaveBeenCalled();
+  });
+
+  it("trenér s ním o nabídce psal: výčitka bez „bez jediného slova“", async () => {
+    await withStance({ stance: "leave", at: new Date().toISOString(), offerIds: ["o1"] });
+    const hourAgo = new Date(Date.now() - 3600_000).toISOString();
+    await db.prepare("INSERT INTO transfer_offers VALUES ('o1', ?)").bind(new Date(Date.now() - 7200_000).toISOString().replace("T", " ").slice(0, 19)).run();
+    await db.prepare("INSERT INTO conversations VALUES ('c1', 'sts', 'p1')").run();
+    await db.prepare("INSERT INTO messages VALUES ('m1', 'c1', 'user', 'Rozmysli to', ?)").bind(hourAgo).run();
+    await applyOfferRejectionImpact(db, offer, "reject");
+    const body = (fx.sendPlayerSMS.mock.calls[0] as unknown[])[3] as string;
+    expect(body).toMatch(/o tom mluvili|Psali jsme/);
+    expect(body).not.toContain("bez jediného slova");
+  });
+
+  it("zpráva trenéra z doby před nabídkou se nepočítá", async () => {
+    await withStance({ stance: "leave", at: new Date().toISOString(), offerIds: ["o1"] });
+    await db.prepare("INSERT INTO transfer_offers VALUES ('o1', ?)").bind(new Date(Date.now() - 3600_000).toISOString()).run();
+    await db.prepare("INSERT INTO conversations VALUES ('c1', 'sts', 'p1')").run();
+    await db.prepare("INSERT INTO messages VALUES ('m1', 'c1', 'user', 'Ahoj', ?)").bind(new Date(Date.now() - 7200_000).toISOString()).run();
+    await applyOfferRejectionImpact(db, offer, "reject");
+    const body = (fx.sendPlayerSMS.mock.calls[0] as unknown[])[3] as string;
+    expect(body).not.toMatch(/o tom mluvili|Psali jsme/);
   });
 
   it("postoj platí týden a jen pro nabídky, o kterých věděl", () => {

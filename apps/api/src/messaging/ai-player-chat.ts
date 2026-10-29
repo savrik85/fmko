@@ -257,7 +257,9 @@ function replyFlagFields(player: PlayerSnapshot): { schema: string; rules: strin
     rules: [
       "- write_later: true JEN když v téhle zprávě trenérovi slibuješ, že se ozveš později (teď nemáš čas). Jinak false.",
       ...(offers
-        ? ["- transfer_stance: \"stay\", když v téhle zprávě jasně říkáš, že zůstaneš nebo ať trenér nabídku odmítne; \"leave\", když jasně chceš odejít nebo ať ji přijme; jinak \"none\"."]
+        // Dohoda „teď zůstanu, na jaře mě pustíš“ dřív spadla do "none" a platilo staré "leave",
+        // takže odmítnutí hráče potrestalo, i když s ním souhlasil (Tomáš Bláha, prod 2026-10-29).
+        ? ["- transfer_stance: \"stay\", když v téhle zprávě jasně říkáš, že zůstaneš nebo ať trenér nabídku odmítne, i když jen výměnou za slib (pustí tě později, víc peněz, místo v sestavě), na který jsi kývl; \"leave\", když jasně chceš odejít nebo ať ji přijme; jinak \"none\"."]
         : []),
     ],
   };
