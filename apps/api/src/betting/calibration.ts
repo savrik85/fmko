@@ -40,7 +40,9 @@ export const CALIBRATION_DAYS = 21;
 // enginu (engine-transition.ts) — hlídá se jen to, co od té doby běží.
 // 2026-10-26: úroveň gólů se smršťuje k přehrání (LEVEL_PRIOR_MATCHES). Lístek na první
 // kolo sezóny 3 (po 26. 10.) přepíše denní tick ten den ráno už novým modelem.
-export const MODEL_SINCE = "2026-10-26";
+// 2026-10-30: úroveň gólů jen z kol aktuální sezóny, zvlášť pro domácí a hosty,
+// a prior přeměřený na sezóně 3 (AI kluby v Budějovicích, výhoda domácích v Praze).
+export const MODEL_SINCE = "2026-10-30";
 
 /** Pod tolik vyhodnocených tipů se trh neposuzuje, je to jen šum. */
 export const CALIBRATION_MIN_N = 50;
