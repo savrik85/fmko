@@ -3,7 +3,7 @@ import {
   BASE_HOME_GOALS, BASE_AWAY_GOALS, DISPERSION_C, MARGIN, MIN_ODDS_X100, MAX_ODDS_X100,
   expectedGoals, formAdjustment, goalDistribution, outcomeProbabilities, totalsProbabilities,
   doubleChanceProbabilities,
-  goalLevel, LEVEL_MIN, LEVEL_MAX, LEVEL_HALF_LIFE_ROUNDS, LEVEL_PRIOR_MATCHES, LEVEL_WINDOW_ROUNDS,
+  goalLevel, goalLevels, LEVEL_MIN, LEVEL_MAX, LEVEL_HALF_LIFE_ROUNDS, LEVEL_PRIOR_MATCHES, LEVEL_WINDOW_ROUNDS,
   scorerShares, availability, scorerProbability, MAX_SHARE, type ScorerInput,
   applyMargin, toOddsX100, marketOdds, singleSideOdds, combineOddsX100, capPayout,
 } from "./odds-model";
@@ -188,6 +188,54 @@ describe("úroveň gólů se smršťuje k přehrání nového enginu", () => {
     const vysoka = expectedGoals({ strength: 36, form: 0 }, { strength: 30, form: 0 }, 1.8);
     expect(vysoka.home).toBeCloseTo(zaklad.home * 1.8, 10);
     expect(vysoka.away).toBeCloseTo(zaklad.away * 1.8, 10);
+  });
+});
+
+describe("úroveň gólů zvlášť pro domácí a pro hosty", () => {
+  const sideRound = (homeGoals: number, awayGoals: number, roundsAgo = 0) =>
+    Array.from({ length: 7 }, () => ({
+      homeGoals, awayGoals, expectedHome: BASE_HOME_GOALS, expectedAway: BASE_AWAY_GOALS, roundsAgo,
+    }));
+
+  it("každá strana se měří ze svých gólů", () => {
+    const sixRounds = [0, 1, 2, 3, 4, 5].flatMap((r) => sideRound(2 * BASE_HOME_GOALS, 0.5 * BASE_AWAY_GOALS, r));
+    const l = goalLevels(sixRounds, { level: 1.3, roundsAgo: LEVEL_WINDOW_ROUNDS });
+    expect(l.home).toBeCloseTo(2, 10);
+    expect(l.away).toBeCloseTo(0.5, 10);
+  });
+
+  it("obě strany se smršťují ke stejnému prioru stejnou vahou jako goalLevel", () => {
+    const samples = sideRound(3, 1);
+    const prior = { level: 1.3, roundsAgo: 1 };
+    const l = goalLevels(samples, prior);
+    expect(l.home).toBeCloseTo(goalLevel(samples.map((s) => ({ goals: s.homeGoals, expected: s.expectedHome, roundsAgo: 0 })), prior), 12);
+    expect(l.away).toBeCloseTo(goalLevel(samples.map((s) => ({ goals: s.awayGoals, expected: s.expectedAway, roundsAgo: 0 })), prior), 12);
+    // Bez zápasů platí prior pro obě strany.
+    expect(goalLevels([], prior)).toEqual({ home: 1.3, away: 1.3 });
+  });
+
+  it("stejná úroveň pro obě strany dá totéž co jedno číslo", () => {
+    const a = expectedGoals({ strength: 36, form: 0 }, { strength: 30, form: 0 }, 1.4);
+    const b = expectedGoals({ strength: 36, form: 0 }, { strength: 30, form: 0 }, { home: 1.4, away: 1.4 });
+    expect(b).toEqual(a);
+  });
+
+  it("Praha 2026-10: doma 1,71 a venku 0,74 zlevní výhru domácích", () => {
+    // Šest kol vyrovnaných zápasů, domácí dají 1,71× a hosté 0,74× gólů modelu.
+    const samples = [0, 1, 2, 3, 4, 5].flatMap((r) => sideRound(1.71 * BASE_HOME_GOALS, 0.74 * BASE_AWAY_GOALS, r));
+    const split = goalLevels(samples);
+    const total = goalLevel(samples.map((s) => ({
+      goals: s.homeGoals + s.awayGoals, expected: s.expectedHome + s.expectedAway, roundsAgo: s.roundsAgo,
+    })));
+    expect(split.home).toBeCloseTo(1.71, 10);
+    expect(split.away).toBeCloseTo(0.74, 10);
+
+    const even = { strength: 50, form: 0 };
+    const [homeOld] = marketOdds(Object.values(outcomeProbabilities(expectedGoals(even, even, total))));
+    const [homeNew, , awayNew] = marketOdds(Object.values(outcomeProbabilities(expectedGoals(even, even, split))));
+    const [, , awayOld] = marketOdds(Object.values(outcomeProbabilities(expectedGoals(even, even, total))));
+    expect(homeNew).toBeLessThan(homeOld);
+    expect(awayNew).toBeGreaterThan(awayOld);
   });
 });
 

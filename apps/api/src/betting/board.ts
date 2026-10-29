@@ -21,7 +21,7 @@ import {
   doubleChanceProbabilities,
   scorerShares, scorerProbability,
   marketOdds, singleSideOdds, MAX_ODDS_X100,
-  goalLevel, LEVEL_WINDOW_ROUNDS, type LevelSample, type Lambdas,
+  goalLevels, LEVEL_WINDOW_ROUNDS, type SideLevelSample, type GoalLevels, type Lambdas,
 } from "./odds-model";
 import {
   HANDICAP_LINES, TEAM_TOTAL_LINES, GOAL_BANDS, BTTS_YES, BTTS_NO,
@@ -303,25 +303,36 @@ async function loadScorers(
 }
 
 /**
- * Úroveň gólů soutěže z jejích posledních odehraných kol (viz goalLevel).
+ * Úroveň gólů soutěže z jejích posledních odehraných kol, zvlášť pro domácí
+ * a pro hosty (viz goalLevels).
  *
- * Kola se berou napříč sezónami: league_id se recykluje, a na začátku nového
- * ročníku je lepší úroveň z konce minulého než žádná. Síla týmů je dnešní,
- * ne tehdejší. Za šest kol se kádry pohnou o pár bodů, na úroveň to nemá vliv.
+ * Jen kola AKTUÁLNÍ sezóny ligy. Dřív se brala napříč sezónami (league_id se
+ * recykluje) s tím, že úroveň z konce minulého ročníku je lepší než žádná. Nebyla:
+ * na 1. kolo sezóny 3 (26. 10. 2026) šlo do Budějovic jako „poslední kolo" 26. kolo
+ * sezóny 2 z 12. 10., kdy dvanáct ze čtrnácti klubů hrálo se sestavami od automatu
+ * a padlo 2,86 gólu na zápas. Úroveň spadla na 0,96, model čekal 3,19 gólu a padlo
+ * 5,86, protože od 25. 10. ty kluby vedou AI trenéři. Mezi sezónami se mění kádry
+ * (letní skok, postupy), majitelé i trenéři, takže na začátku ročníku platí jen
+ * prior z engine-transition.ts.
+ *
+ * Síla týmů je dnešní, ne tehdejší. Za šest kol se kádry pohnou o pár bodů,
+ * na úroveň to nemá vliv.
  *
  * Úroveň se smršťuje k přehrání nového enginu (engine-transition.ts) jako k prioru, který
  * „hrál" těsně před nejstarším kolem v okně. Dřív ho jedno kolo zahodilo celé.
  */
-export async function loadGoalLevel(db: D1Database, leagueId: string): Promise<number> {
+export async function loadGoalLevel(db: D1Database, leagueId: string): Promise<GoalLevels> {
   // Jen kola odehraná na enginu podle rolí; do prvního z nich úroveň z přehrání
   // nového enginu (engine-transition.ts), ne z „hokejových“ kol starého.
   const priorLevel = engineFallbackLevel(leagueId);
+  const prior: GoalLevels = { home: priorLevel, away: priorLevel };
   const kola = await db.prepare(
     `SELECT id FROM season_calendar WHERE league_id = ? AND status = 'simulated' AND scheduled_at >= ?
+        AND season_number = (SELECT MAX(season_number) FROM season_calendar WHERE league_id = ?)
       ORDER BY scheduled_at DESC LIMIT ?`
-  ).bind(leagueId, ENGINE_SINCE, LEVEL_WINDOW_ROUNDS).all<{ id: string }>()
+  ).bind(leagueId, ENGINE_SINCE, leagueId, LEVEL_WINDOW_ROUNDS).all<{ id: string }>()
     .catch((e) => { logger.warn({ module: M }, `odehraná kola ligy ${leagueId}`, e); return { results: [] }; });
-  if (kola.results.length === 0) return priorLevel;
+  if (kola.results.length === 0) return prior;
   const stari = new Map(kola.results.map((k, i) => [k.id, i]));
 
   const zapasy = await db.prepare(
@@ -332,25 +343,27 @@ export async function loadGoalLevel(db: D1Database, leagueId: string): Promise<n
     home_team_id: string; away_team_id: string; home_score: number; away_score: number; calendar_id: string;
   }>().catch((e) => { logger.warn({ module: M }, `zápasy pro úroveň gólů ligy ${leagueId}`, e); return { results: [] }; });
   // Kolo bez výsledků nic neříká: platí přehrání, ne referenční úroveň testovací databáze.
-  if (zapasy.results.length === 0) return priorLevel;
+  if (zapasy.results.length === 0) return prior;
 
   const tymy = [...new Set(zapasy.results.flatMap((z) => [z.home_team_id, z.away_team_id]))];
   const sily = await loadStrengths(db, tymy);
 
-  const vzorky: LevelSample[] = zapasy.results.map((z) => {
+  const vzorky: SideLevelSample[] = zapasy.results.map((z) => {
     const l = expectedGoals(
       { strength: sily.get(z.home_team_id) ?? 30, form: 0 },
       { strength: sily.get(z.away_team_id) ?? 30, form: 0 },
     );
     return {
-      goals: z.home_score + z.away_score,
-      expected: l.home + l.away,
+      homeGoals: z.home_score,
+      awayGoals: z.away_score,
+      expectedHome: l.home,
+      expectedAway: l.away,
       roundsAgo: stari.get(z.calendar_id) ?? LEVEL_WINDOW_ROUNDS,
     };
   });
   // Prior stojí těsně před nejstarším kolem v okně. S plným oknem (šest kol) je mimo
   // a platí jen data, jako před zavedením prioru.
-  return goalLevel(vzorky, { level: priorLevel, roundsAgo: kola.results.length });
+  return goalLevels(vzorky, { level: priorLevel, roundsAgo: kola.results.length });
 }
 
 type MatchOddsRow = Omit<OddsRow, "leagueId" | "seasonNumber" | "calendarId">;
@@ -443,8 +456,8 @@ export function matchOdds(input: {
   /** Góly týmu na odehraný ligový zápas v sezóně. 0 = ještě nehrál. */
   homeGoalsPerMatch: number;
   awayGoalsPerMatch: number;
-  /** Úroveň gólů soutěže z goalLevel. */
-  goalLevel: number;
+  /** Úroveň gólů soutěže z goalLevel, nebo zvlášť domácí a hosté z goalLevels. */
+  goalLevel: number | GoalLevels;
 }): Array<Omit<OddsRow, "leagueId" | "seasonNumber" | "calendarId">> {
   const lambdas = expectedGoals(
     { strength: input.homeStrength, form: input.homeForm },
@@ -569,7 +582,7 @@ export async function generateBoard(
     loadScorers(db, teamIds, seasonId),
     loadGoalLevel(db, leagueId),
   ]);
-  logger.info({ module: M }, `úroveň gólů ligy ${leagueId}: ${level.toFixed(2)}`);
+  logger.info({ module: M }, `úroveň gólů ligy ${leagueId}: doma ${level.home.toFixed(2)}, venku ${level.away.toFixed(2)}`);
 
   // Góly na zápas z tabulky, tedy jen z ligy, stejně jako player_stats hráčů.
   const golyNaZapas = (teamId: string): number => {

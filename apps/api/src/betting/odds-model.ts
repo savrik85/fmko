@@ -120,18 +120,27 @@ export interface Lambdas {
   away: number;
 }
 
+/** Úroveň gólů soutěže zvlášť pro domácí a pro hosty (viz goalLevels). */
+export interface GoalLevels {
+  home: number;
+  away: number;
+}
+
 /**
  * Očekávané góly obou týmů.
  *
  * `level` je úroveň gólů soutěže z goalLevel: 1 = referenční data, na kterých
- * jsou nafitované báze, 1,8 = soutěž, kde padá o 80 % gólů víc.
+ * jsou nafitované báze, 1,8 = soutěž, kde padá o 80 % gólů víc. Jako GoalLevels
+ * (z goalLevels) násobí góly domácích a hostů každá svou úrovní, tím nese i výhodu
+ * domácích naměřenou v té soutěži.
  */
-export function expectedGoals(home: TeamInput, away: TeamInput, level = 1): Lambdas {
+export function expectedGoals(home: TeamInput, away: TeamInput, level: number | GoalLevels = 1): Lambdas {
+  const levels = typeof level === "number" ? { home: level, away: level } : level;
   const raw = (home.strength + home.form) - (away.strength + away.form);
   const d = clamp(STRENGTH_SHRINK * raw, -STRENGTH_CAP, STRENGTH_CAP);
   return {
-    home: level * BASE_HOME_GOALS * Math.exp(STRENGTH_K * d),
-    away: level * BASE_AWAY_GOALS * Math.exp(-STRENGTH_K * d),
+    home: levels.home * BASE_HOME_GOALS * Math.exp(STRENGTH_K * d),
+    away: levels.away * BASE_AWAY_GOALS * Math.exp(-STRENGTH_K * d),
   };
 }
 
@@ -227,6 +236,37 @@ export function goalLevel(samples: LevelSample[], prior?: LevelPrior): number {
   const dataLevel = actual / expected;
   if (!prior || priorWeight <= 0) return clamp(dataLevel, LEVEL_MIN, LEVEL_MAX);
   return clamp((priorWeight * prior.level + matches * dataLevel) / (priorWeight + matches), LEVEL_MIN, LEVEL_MAX);
+}
+
+export interface SideLevelSample {
+  /** Góly domácích, které v zápase skutečně padly. */
+  homeGoals: number;
+  awayGoals: number;
+  /** Góly domácích a hostů, které by zápasu dal model při úrovni 1. */
+  expectedHome: number;
+  expectedAway: number;
+  /** Kolik kol zpátky se hrálo. 0 = poslední odehrané kolo. */
+  roundsAgo: number;
+}
+
+/**
+ * Úroveň gólů soutěže zvlášť pro domácí a pro hosty.
+ *
+ * Model má jedinou výhodu domácích pro všechny soutěže (poměr BASE_HOME_GOALS
+ * a BASE_AWAY_GOALS), engine ji ale počítá z fanoušků a kotle každého klubu
+ * (homeAdvantageFromFanbase), takže se mezi soutěžemi liší. V Praze v sezóně 3
+ * vyšlo doma 1,71 a venku 0,74, ve druhém kole vyhráli domácí sedmkrát ze sedmi
+ * i jako outsideři a výhra domácích se vyplácela 2,7 až 3,9 Kč na korunu.
+ *
+ * Obě strany se měří stejně jako goalLevel, se stejným priorem, poločasem i oknem.
+ * Prior je pro obě strany stejná úroveň z přehrání, výhodu domácích tedy na začátku
+ * sezóny nese jen tvar modelu a teprve data ji posunou.
+ */
+export function goalLevels(samples: SideLevelSample[], prior?: LevelPrior): GoalLevels {
+  return {
+    home: goalLevel(samples.map((s) => ({ goals: s.homeGoals, expected: s.expectedHome, roundsAgo: s.roundsAgo })), prior),
+    away: goalLevel(samples.map((s) => ({ goals: s.awayGoals, expected: s.expectedAway, roundsAgo: s.roundsAgo })), prior),
+  };
 }
 
 /**
