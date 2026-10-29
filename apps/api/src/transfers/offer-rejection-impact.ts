@@ -112,6 +112,11 @@ const REJECTED_SMS_WANTS_HOT: string[] = [
   "To si děláte srandu?! {team} mě chtěl a vy to hodíte do koše bez jediného slova?!",
   "Tak takhle teda ne, trenére. {team} byla moje šance a vy jste mi ji sebral. Uvidíme, jak se vám bude hrát beze mě.",
 ];
+// Trenér s hráčem o nabídce psal, takže „bez jediného slova“ by nebyla pravda.
+const REJECTED_SMS_WANTS_TALKED: string[] = [
+  "Trenére, vím, že jsme o tom mluvili, ale stejně mě štve, že jste {team} odmítl. Tohle si budu pamatovat.",
+  "Psali jsme si o tom, já vím. Ale {team} byla moje šance a vy jste ji zařízl. Zklamání, trenére.",
+];
 const REJECTED_SMS_LOYAL: string[] = [
   "Trenére, díky, že jste tu nabídku odmítl. Jsem tady doma a jinam nechci.",
   "Trenére, slyšel jsem o té nabídce. Dobře, že jste ji poslal k šípku. Já svůj dres nevyměním.",
@@ -316,7 +321,9 @@ export async function applyOfferRejectionImpact(
   }
 
   // SMS od hráče — naštvání podle tempera; při porušeném slibu vždy nejostřejší
-  const pool = brokenTransferPledge || temper > 65 ? REJECTED_SMS_WANTS_HOT : REJECTED_SMS_WANTS;
+  const pool = brokenTransferPledge ? REJECTED_SMS_WANTS_HOT
+    : await coachWroteAboutOffer(db, sellerClubTeamId, playerId, offer.id as string | undefined) ? REJECTED_SMS_WANTS_TALKED
+    : temper > 65 ? REJECTED_SMS_WANTS_HOT : REJECTED_SMS_WANTS;
   const smsBody = brokenReleasePledge
     ? `Volal jste do ${teamName}, že mě pustíte, a teď to zase zaříznete? S vámi jsem skončil, trenére.`
     : brokenTransferPledge
@@ -368,6 +375,29 @@ export async function applyOfferRejectionImpact(
 
   logger.info({ module: "rejection-impact" },
     `${trigger}: ${playerRef.firstName} ${playerRef.lastName} interest=${level} morale ${morale}→${newMorale} unrest ${unrest.level}→${newLevel}`);
+}
+
+/**
+ * Psal trenér hráči od příchodu nabídky (nejvýš za posledních 24 hodin)? Pak spolu nabídku
+ * nejspíš probrali a odmítnutí nepřišlo „bez jediného slova“.
+ */
+export async function coachWroteAboutOffer(
+  db: D1Database,
+  clubTeamId: string,
+  playerId: string,
+  offerId: string | undefined,
+): Promise<boolean> {
+  if (!offerId) return false;
+  const row = await db.prepare(
+    `SELECT 1 AS hit FROM messages m
+       JOIN conversations c ON c.id = m.conversation_id
+       JOIN transfer_offers o ON o.id = ?
+      WHERE c.team_id = ? AND c.participant_id = ? AND m.sender_type = 'user'
+        AND julianday(m.sent_at) >= MAX(julianday(o.created_at), julianday('now') - 1)
+      LIMIT 1`,
+  ).bind(offerId, clubTeamId, playerId).first<{ hit: number }>()
+    .catch((e) => { logger.warn({ module: "rejection-impact" }, "zprávy trenéra o nabídce", e); return null; });
+  return !!row;
 }
 
 function pick<T>(arr: T[]): T {
