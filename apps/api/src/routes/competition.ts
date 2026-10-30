@@ -19,7 +19,8 @@ import {
 } from "../competition/defaults";
 import { readBalance, recordCompetitionEntry, seasonSummary } from "../competition/ledger";
 import {
-  GRANT_LABEL, GRANT_MAX, GRANT_MIN, SURPLUS_MAX_PCT, type GrantKind,
+  GRANT_LABEL, GRANT_MAX, GRANT_MIN, OWN_GRANT_KINDS, OWN_GRANT_MAX, OWN_GRANT_NOTE_MIN, OWN_GRANT_TITLE,
+  SURPLUS_MAX_PCT, type GrantKind,
 } from "../competition/grants";
 import {
   actsFor, canRunFor, openElections, presidentOf, resignOfficial, rolesFor, suspendOfficial,
@@ -1537,15 +1538,26 @@ competitionRouter.post("/teams/:teamId/competition/referee-bans/direct", async (
 competitionRouter.post("/teams/:teamId/competition/grants", async (c) => {
   const teamId = c.req.param("teamId");
   const body = await c.req.json<{
-    kind?: string; amount?: number; targetTeamId?: string; note?: string;
+    kind?: string; amount?: number; targetTeamId?: string; note?: string; forOwnClub?: boolean;
   }>().catch((e) => { logger.warn({ module: M }, "neplatné tělo návrhu z pokladny", e); return null; });
 
   const kind = String(body?.kind ?? "") as GrantKind;
   const amount = Math.round(Number(body?.amount));
   if (!GRANT_LABEL[kind]) return c.json({ error: "Neznámý druh dotace." }, 400);
-  if (!Number.isFinite(amount) || amount < GRANT_MIN || amount > GRANT_MAX) {
+  // Žádost o dotaci pro vlastní klub: peníze jdou žadateli, o žádosti hlasuje zasedání
+  // jako o každém návrhu. Bez důvodu ji nikdo nepodpoří, proto je povinný.
+  const forOwnClub = body?.forOwnClub === true;
+  if (body) body.targetTeamId = forOwnClub ? teamId : body.targetTeamId;
+  if (forOwnClub && !OWN_GRANT_KINDS.includes(kind)) {
+    return c.json({ error: "Pro vlastní klub jde žádat o dotaci na vybavení, na opravu hřiště nebo na cestovné." }, 400);
+  }
+  if (forOwnClub && (body?.note ?? "").trim().length < OWN_GRANT_NOTE_MIN) {
+    return c.json({ error: "Napiš, na co přesně peníze potřebuješ. Bez důvodu žádost nikdo nepodpoří." }, 400);
+  }
+  const maxAmount = forOwnClub ? OWN_GRANT_MAX : GRANT_MAX;
+  if (!Number.isFinite(amount) || amount < GRANT_MIN || amount > maxAmount) {
     return c.json({
-      error: `Částka musí být mezi ${GRANT_MIN.toLocaleString("cs")} a ${GRANT_MAX.toLocaleString("cs")} Kč.`,
+      error: `Částka musí být mezi ${GRANT_MIN.toLocaleString("cs")} a ${maxAmount.toLocaleString("cs")} Kč.`,
     }, 400);
   }
 
@@ -1630,8 +1642,10 @@ competitionRouter.post("/teams/:teamId/competition/grants", async (c) => {
 
   const gameDate = await currentGameDate(c.env.DB, teamId);
   const id = crypto.randomUUID();
-  const titul = `${GRANT_LABEL[kind]}: ${amount.toLocaleString("cs")} Kč`
-    + (cil ? ` ${cil.name}` : kind === "pitch" ? " klubům pod hranicí" : " rovným dílem");
+  const proposalTitle = forOwnClub
+    ? `${OWN_GRANT_TITLE[kind]}: ${amount.toLocaleString("cs")} Kč pro ${cil?.name ?? "klub"}`
+    : `${GRANT_LABEL[kind]}: ${amount.toLocaleString("cs")} Kč`
+      + (cil ? ` ${cil.name}` : kind === "pitch" ? " klubům pod hranicí" : " rovným dílem");
 
   await c.env.DB.prepare(
     `INSERT INTO competition_proposals
@@ -1639,8 +1653,8 @@ competitionRouter.post("/teams/:teamId/competition/grants", async (c) => {
        target_team_id, majority, quorum, opened_game_date, deposit, effective_from_season)
      VALUES (?,?,?,'grant','hospodarska',?,?,?,?,?,?,?,?,?,?)`
   ).bind(
-    id, leagueId, meta.season_number, titul, (body?.note ?? "").slice(0, 500),
-    JSON.stringify({ grantKind: kind, amount, targetTeamId: body?.targetTeamId ?? null }),
+    id, leagueId, meta.season_number, proposalTitle, (body?.note ?? "").slice(0, 500),
+    JSON.stringify({ grantKind: kind, amount, targetTeamId: body?.targetTeamId ?? null, ...(forOwnClub ? { request: true } : {}) }),
     teamId, body?.targetTeamId ?? null, 0.5, 0.5, gameDate, PROPOSAL_DEPOSIT,
     kind === "award" || kind === "surplus" ? meta.season_number : null,
   ).run();
@@ -1697,6 +1711,7 @@ competitionRouter.get("/teams/:teamId/competition/grants", async (c) => {
   return c.json({
     freeBalance: Math.max(0, free),
     min: GRANT_MIN, max: GRANT_MAX, surplusMaxPct: SURPLUS_MAX_PCT,
+    ownMax: OWN_GRANT_MAX, ownNoteMin: OWN_GRANT_NOTE_MIN, ownKinds: OWN_GRANT_KINDS,
     kinds: (Object.keys(GRANT_LABEL) as GrantKind[]).map((k) => ({
       kind: k, label: GRANT_LABEL[k],
       targeted: k === "loan" || k === "travel" || k === "award",

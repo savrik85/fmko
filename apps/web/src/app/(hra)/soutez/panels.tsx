@@ -580,14 +580,19 @@ export function GrantsPanel({ data, teamId, myOpen, onChanged }: {
   onChanged: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [ownOpen, setOwnOpen] = useState(false);
+  const canRequestOwn = (data.ownKinds?.length ?? 0) > 0;
 
   return (
     <div className="card p-5">
       <Ornament right={`volných ${czk(data.freeBalance)}`}>Dotace klubům</Ornament>
       <p className="text-sm text-muted">
-        Soutěž může rozdat část pokladny zpátky klubům — na vybavení, na opravu hřiště,
+        Soutěž může rozdat část pokladny zpátky klubům: na vybavení, na opravu hřiště,
         jako cenu nebo jako bezúročnou půjčku tomu, kdo je v mínusu. Rozdává se jen
         z volných peněz; zbytek padne na odměny za umístění.
+      </p>
+      <p className="text-sm text-muted mt-2">
+        O dotaci může požádat i každý klub sám pro sebe. Rozhodne hlasování na zasedání.
       </p>
 
       {myOpen ? (
@@ -599,9 +604,16 @@ export function GrantsPanel({ data, teamId, myOpen, onChanged }: {
           Volných peněz je {czk(data.freeBalance)} — na dotaci to nestačí.
         </p>
       ) : (
-        <button className="btn btn-lg btn-primary w-full mt-3" onClick={() => setOpen(true)}>
-          Navrhnout dotaci
-        </button>
+        <div className="mt-3 space-y-2">
+          {canRequestOwn && (
+            <button className="btn btn-lg btn-primary w-full" onClick={() => setOwnOpen(true)}>
+              Požádat o dotaci pro svůj klub
+            </button>
+          )}
+          <button className={`btn btn-lg w-full ${canRequestOwn ? "btn-secondary" : "btn-primary"}`} onClick={() => setOpen(true)}>
+            Navrhnout dotaci pro kluby soutěže
+          </button>
+        </div>
       )}
 
       {open && (
@@ -611,7 +623,98 @@ export function GrantsPanel({ data, teamId, myOpen, onChanged }: {
           onSaved={() => { setOpen(false); onChanged(); }}
         />
       )}
+      {ownOpen && (
+        <OwnGrantForm
+          data={data} teamId={teamId}
+          onClose={() => setOwnOpen(false)}
+          onSaved={() => { setOwnOpen(false); onChanged(); }}
+        />
+      )}
     </div>
+  );
+}
+
+/**
+ * Žádost o dotaci pro vlastní klub. Peníze jdou žadateli, pokud žádost projde
+ * na zasedání. Odůvodnění je povinné, jinak nemají ostatní kluby podle čeho hlasovat.
+ */
+function OwnGrantForm({ data, teamId, onClose, onSaved }: {
+  data: GrantsData; teamId: string; onClose: () => void; onSaved: () => void;
+}) {
+  const kinds = data.kinds.filter((k) => data.ownKinds?.includes(k.kind));
+  const max = Math.min(data.ownMax ?? data.max, data.freeBalance);
+  const noteMin = data.ownNoteMin ?? 15;
+  const [kind, setKind] = useState(kinds[0]?.kind ?? "equipment");
+  const [amount, setAmount] = useState(String(Math.min(max, Math.max(data.min, 10_000))));
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const value = Number(amount);
+  const amountOk = Number.isFinite(value) && value >= data.min && value <= max;
+  const noteOk = note.trim().length >= noteMin;
+
+  const submit = async () => {
+    setSaving(true);
+    const ok = await apiAction(
+      apiFetch(`/api/teams/${teamId}/competition/grants`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind, amount: value, note, forOwnClub: true }),
+      }),
+      "Žádost se nepodařilo podat",
+    );
+    setSaving(false);
+    if (ok) onSaved();
+  };
+
+  return (
+    <Modal isOpen onClose={onClose} title="Žádost o dotaci" zavritKlikemVedle={false}>
+      <div className="p-5 space-y-4">
+        <div className="text-lg font-heading">Žádost o dotaci pro svůj klub</div>
+        <p className="text-sm text-muted">
+          O žádosti hlasují kluby na nejbližším zasedání. Když projde, peníze přijdou z pokladny soutěže tvému klubu.
+        </p>
+
+        <div>
+          <label className="text-sm text-muted">Na co</label>
+          <select className="select w-full mt-1" value={kind} onChange={(e) => setKind(e.target.value)}>
+            {kinds.map((k) => <option key={k.kind} value={k.kind}>{k.label}</option>)}
+          </select>
+        </div>
+
+        <div>
+          <label className="text-sm text-muted">Kolik ({czk(data.min)} až {czk(max)})</label>
+          <input className="input w-full mt-1 tabular-nums" type="number" step="1000"
+            min={data.min} max={max} value={amount} onChange={(e) => setAmount(e.target.value)} />
+          {!amountOk && amount !== "" && (
+            <div className="text-sm mt-1" style={{ color: "#A32B1F" }}>
+              Částka musí být mezi {czk(data.min)} a {czk(max)}.
+            </div>
+          )}
+        </div>
+
+        <div>
+          <label className="text-sm text-muted">Na co přesně peníze potřebuješ</label>
+          <textarea className="input w-full mt-1" rows={3} maxLength={500}
+            value={note} onChange={(e) => setNote(e.target.value)}
+            placeholder="Třeba: po zimě nám odešla závlaha a hřiště je samý hrbol." />
+          {!noteOk && (
+            <div className="text-sm text-muted mt-1">Napiš aspoň pár slov, podle toho budou kluby hlasovat.</div>
+          )}
+        </div>
+
+        <p className="text-sm text-muted">
+          Za podání se skládá kauce {czk(500)}. Vrátí se, až žádost projde.
+        </p>
+
+        <div className="flex gap-2">
+          <button className="btn btn-lg btn-secondary flex-1" onClick={onClose}>Zrušit</button>
+          <button className="btn btn-lg btn-primary flex-1"
+            disabled={saving || !amountOk || !noteOk || kinds.length === 0} onClick={submit}>
+            {saving ? "Podávám…" : "Podat žádost"}
+          </button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 

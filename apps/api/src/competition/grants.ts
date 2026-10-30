@@ -35,6 +35,20 @@ export const GRANT_MAX = 300_000;
 /** Z přebytku se rozdělí nejvýš tolik — zbytek musí soutěži zůstat. */
 export const SURPLUS_MAX_PCT = 60;
 
+/**
+ * Žádost o dotaci pro vlastní klub. Žádat může každý klub s hlasem, rozhoduje zasedání.
+ * Strop je nižší než u dotace všem: jeden klub si nemá odhlasovat půlku pokladny.
+ */
+export const OWN_GRANT_KINDS: readonly GrantKind[] = ["equipment", "pitch", "travel"];
+export const OWN_GRANT_MAX = 50_000;
+/** Nejkratší odůvodnění žádosti ve znacích. */
+export const OWN_GRANT_NOTE_MIN = 15;
+export const OWN_GRANT_TITLE: Partial<Record<GrantKind, string>> = {
+  equipment: "Žádost o dotaci na vybavení",
+  pitch: "Žádost o dotaci na opravu hřiště",
+  travel: "Žádost o příspěvek na cestovné",
+};
+
 export interface GrantPayment {
   teamId: string;
   amount: number;
