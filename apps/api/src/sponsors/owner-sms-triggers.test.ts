@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { FalesnaD1, jakoD1 } from "../incidents/testovaci-d1";
-import { enqueueAfterMatchSms, enqueueLosingStreakSms, enqueueMatchEveSms, enqueueSeasonEndSms } from "./owner-sms-triggers";
+import { enqueueAfterMatchSms, enqueueLosingStreakSms, enqueueMatchEveSms, enqueueScandalSms, enqueueSeasonEndSms } from "./owner-sms-triggers";
 
 const HERNI_DEN = { sql: /SELECT game_date FROM teams WHERE id = \?/, first: { game_date: "2026-09-10T16:00:00.000Z" } };
 const VZTAH = { sql: /WITH rel AS/, all: [{ sponsor_id: 7, favor: 60, has_contract: 1, is_main: 1 }] };
@@ -140,5 +140,32 @@ describe("enqueueSeasonEndSms", () => {
     const n = await enqueueSeasonEndSms(jakoD1(db), 5, "2026-09-10", [{ team_id: "t1", sponsor_id: 7 }]);
     expect(n).toBe(1);
     expect(zarazene(db)[0].params[4]).toBe("season:5:t2");
+  });
+});
+
+describe("enqueueScandalSms", () => {
+  const cautiousOwner = {
+    sql: /FROM sponsor_owners WHERE sponsor_id IN/,
+    all: [{ sponsor_id: 7, first_name: "Otta", last_name: "Marek", age: 55, face_config: "{}", personality: "cautious" }],
+  };
+  const incident = (row: Record<string, unknown> | null) => ({ sql: /FROM club_incidents/, first: row });
+
+  it("SMS nese popisek incidentu a hledá jen včerejšek a dnešek, nejzávažnější první", async () => {
+    const db = new FalesnaD1([incident({ id: "inc-1", kind: "vitrina" }), VZTAH, cautiousOwner]);
+    expect(await enqueueScandalSms(jakoD1(db), "t1", "2026-10-30")).toBe(true);
+    const [ins] = zarazene(db);
+    expect(ins.params[4]).toBe("scandal:inc-1");
+    expect(JSON.parse(String(ins.params[6]))).toEqual({ incident: "krádež pohárů z vitríny" });
+    const query = db.dotazy.find((d) => /FROM club_incidents/.test(d.sql));
+    expect(query?.sql).toMatch(/BETWEEN 0 AND 1/);
+    expect(query?.sql).toMatch(/ORDER BY severity DESC/);
+    expect(query?.params).not.toContain("tombola");
+    expect(query?.params).toContain("vitrina");
+  });
+
+  it("incident bez popisku nic nezařadí", async () => {
+    const db = new FalesnaD1([incident({ id: "inc-2", kind: "tombola" }), VZTAH, cautiousOwner]);
+    expect(await enqueueScandalSms(jakoD1(db), "t1", "2026-10-30")).toBe(false);
+    expect(zarazene(db)).toHaveLength(0);
   });
 });
