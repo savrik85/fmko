@@ -30,7 +30,7 @@ import {
 } from "../competition/board";
 import {
   CHAIR_FINE_LIMIT, FINE_MAX, FINE_MIN, OFFENCES,
-  canChairFine, canFine, collectEvidence, evidenceLimitsFor, issueSanction,
+  canChairFine, canFine, collectEvidence, evidenceLimitsFor, issueSanction, pitchEvidenceLabel,
 } from "../competition/discipline";
 import {
   MIN_ACTIVE_REFEREES, canBanReferee, refereeStandings,
@@ -978,9 +978,13 @@ competitionRouter.get("/competition/:leagueId/discipline", async (c) => {
   ).bind(leagueId, meta.season_number).all<Record<string, unknown>>()
     .catch((e) => { logger.warn({ module: M }, "seznam sankcí", e); return { results: [] }; });
 
+  // OFFENCES má u hřiště výchozí třicítku. Hranice se ale hlasuje (okres Prachatice
+  // má 80) a karta návrhu musí ukázat tu, podle které se důkaz opravdu sbírá.
+  const pitchThreshold = (await evidenceLimitsFor(c.env.DB, leagueId, meta.season_number)).pitchThreshold;
   return c.json({
     offences: Object.values(OFFENCES).map((o) => ({
-      kind: o.kind, label: o.label, evidenceLabel: o.evidenceLabel,
+      kind: o.kind, label: o.label,
+      evidenceLabel: o.kind === "pitch" ? pitchEvidenceLabel(pitchThreshold) : o.evidenceLabel,
       majority: o.majority, freeText: !!o.freeText,
     })),
     limits: { min: FINE_MIN, max: FINE_MAX, chairLimit: CHAIR_FINE_LIMIT },
