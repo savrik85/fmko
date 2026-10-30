@@ -120,7 +120,7 @@ export function IntegrityPanel({ state, teamId, jsemKomisar, onChanged }: {
                   ? "Jeden obchod stojí za pohled."
                   : `${podezrele.length} ${plural(podezrele.length, "obchod", "obchody", "obchodů")} stojí za pohled.`}{" "}
                 <span className="text-muted">
-                  Není to obvinění — jen upozornění, že se něco vymyká.
+                  Není to obvinění, jen upozornění, že se něco vymyká.
                 </span>
               </span>
             )}
@@ -233,7 +233,7 @@ export function IntegrityPanel({ state, teamId, jsemKomisar, onChanged }: {
       <Modal isOpen={!!zabavit} onClose={() => setZabavit(null)} title="Zabavit výhru" zavritKlikemVedle={false}>
         <div className="p-4 space-y-3">
           <p className="text-sm leading-snug">
-            Tiket č. {zabavit?.cislo} klubu <b>{zabavit?.teamName}</b> — výhra{" "}
+            Tiket č. {zabavit?.cislo} klubu <b>{zabavit?.teamName}</b>, výhra{" "}
             <b>{czk(zabavit?.payout ?? 0)}</b>. Peníze půjdou do pokladny soutěže
             a klub dostane zprávu i s tvým odůvodněním.
           </p>
@@ -266,7 +266,7 @@ export function IntegrityPanel({ state, teamId, jsemKomisar, onChanged }: {
             </label>
             <select id="cil-zakazu" value={cil} onChange={(e) => setCil(e.target.value)}
                     className="select w-full mt-1 text-sm">
-              <option value="">— vyber klub —</option>
+              <option value="">Vyber klub</option>
               {[...new Map(data.tickets.filter((t) => t.teamId !== teamId)
                 .map((t) => [t.teamId, t.teamName])).entries()]
                 .map(([id, nazev]) => <option key={id} value={id}>{nazev}</option>)}

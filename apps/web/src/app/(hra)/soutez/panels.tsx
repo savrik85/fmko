@@ -100,7 +100,7 @@ export function PokladnaPanel({ state, ledger }: {
           <Row label="Bilance" value={signed(p.income - p.cost.total)} strong />
         </div>
         <p className="text-sm text-muted mt-2">
-          Pokuty se do projekce nepočítají — na příjem z vlastní hlouposti se plánovat nedá.
+          Pokuty se do projekce nepočítají. Na příjem z vlastní hlouposti se plánovat nedá.
         </p>
       </div>
 
@@ -134,7 +134,7 @@ export function PokladnaPanel({ state, ledger }: {
       <div className="card p-5">
         <Ornament>Pokuty, které padají samy</Ornament>
         <p className="text-sm text-muted mb-2">
-          Tyhle částky nikdo neschvaluje po jedné — udělí se automaticky a rovnou putují do pokladny.
+          Tyhle částky nikdo neschvaluje po jedné. Udělí se automaticky a rovnou putují do pokladny.
         </p>
         <Row label="Za kritiku rozhodčího" value={czk(state.rules.fine_referee_abuse)} />
         <Row label="Za nepořádek (svazová)" value={czk(state.rules.fine_admin)} />
@@ -301,14 +301,14 @@ export function VedeniPanel({ state, elections, avatars, board, teamId, onChange
           <div className="mt-4 rounded-lg p-3 text-sm" style={{ background: "rgba(196,160,53,0.14)" }}>
             <div className="font-semibold">Jsi prezident soutěže.</div>
             Při rovnosti hlasů rozhoduje tvůj hlas, zastupuješ každou neobsazenou funkci
-            a kdykoli můžeš jinému předsedovi pozastavit pravomoc — tím rovnou
+            a kdykoli můžeš jinému předsedovi pozastavit pravomoc. Tím rovnou
             otevřeš hlasování o jeho odvolání. Když neprojde, pravomoc se mu vrátí
             a ty přijdeš o pět bodů reputace.
           </div>
         )}
         <p className="text-sm text-muted mt-4">
           Soutěž s devíti a více kluby s trenérem má všechny čtyři odbory. Menší jen prezidenta
-          a generálního sekretáře — pokuty i škrtání rozhodčích se tam řeší vždycky hlasováním.
+          a generálního sekretáře. Pokuty i škrtání rozhodčích se tam řeší vždycky hlasováním.
           Jeden trenér může zastávat nejvýš jednu funkci.
         </p>
       </div>
@@ -452,7 +452,7 @@ export function VedeniPanel({ state, elections, avatars, board, teamId, onChange
                     <PersonLine managerName={e.winnerManager} teamId={e.winnerTeamId}
                       teamName={e.winnerName ?? "?"} note={e.resultNote ?? undefined} />
                   ) : (
-                    <div className="text-base text-muted">neobsazeno — {e.resultNote}</div>
+                    <div className="text-base text-muted">neobsazeno: {e.resultNote}</div>
                   )}
                 </div>
               </div>
@@ -488,7 +488,7 @@ function SuspendForm({ role, teamId, onClose, onSaved }: {
   return (
     <Modal isOpen onClose={onClose} title="Pozastavit pravomoc" zavritKlikemVedle={false}>
       <div className="p-5 space-y-4">
-        <div className="text-lg font-heading">Pozastavit pravomoc — {role.label}</div>
+        <div className="text-lg font-heading">Pozastavit pravomoc: {role.label}</div>
 
         <div className="rounded-lg p-3 text-sm" style={{ background: "#FBEAE8" }}>
           <div className="font-semibold">Není to jen tak.</div>
@@ -540,7 +540,7 @@ function ResignForm({ role, teamId, hrozbaOdvolani, onClose, onSaved }: {
   return (
     <Modal isOpen onClose={onClose} title="Rezignovat na funkci" zavritKlikemVedle={false}>
       <div className="p-5 space-y-4">
-        <div className="text-lg font-heading">Rezignovat — {role.label}</div>
+        <div className="text-lg font-heading">Rezignovat: {role.label}</div>
 
         <p className="text-sm">
           Funkce se uvolní okamžitě, bez hlasování. Do nejbližšího zasedání ji zastupuje
@@ -553,7 +553,7 @@ function ResignForm({ role, teamId, hrozbaOdvolani, onClose, onSaved }: {
           tři body reputace; kdo odslouží půlku, odchází bez postihu.
           {hrozbaOdvolani && (
             <div className="mt-2 font-semibold">
-              Zrovna teď se o tvém odvolání hlasuje — demise se proto počítá jako odvolání
+              Zrovna teď se o tvém odvolání hlasuje. Demise se proto počítá jako odvolání
               a přijdeš o deset bodů reputace.
             </div>
           )}
@@ -601,7 +601,7 @@ export function GrantsPanel({ data, teamId, myOpen, onChanged }: {
         </div>
       ) : data.freeBalance < data.min ? (
         <p className="text-sm mt-3" style={{ color: "#A32B1F" }}>
-          Volných peněz je {czk(data.freeBalance)} — na dotaci to nestačí.
+          Volných peněz je {czk(data.freeBalance)}, na dotaci to nestačí.
         </p>
       ) : (
         <div className="mt-3 space-y-2">

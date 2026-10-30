@@ -60,8 +60,8 @@ export function DisciplinePanel({ data, state, teamId, isChair, myOpen, onChange
         </div>
         <p className="text-sm text-muted mt-3">
           Návrh jde podat jen na skutek, který se dá doložit z dat. Důkaz uvidí všichni
-          hlasující. Jeden klub schytá nejvýš dvě pokuty za sezónu a o vlastní pokutě nehlasuje —
-          místo toho má právo na obhajobu.
+          hlasující. Jeden klub schytá nejvýš dvě pokuty za sezónu a o vlastní pokutě nehlasuje.
+          Místo toho má právo na obhajobu.
         </p>
       </div>
 
@@ -263,14 +263,14 @@ function FineForm({ data, teamId, isChair, onClose, onSaved }: {
           </select>
           {nicNelzeDolozit && (
             <div className="text-sm text-muted mt-1">
-              Tenhle klub nemá v datech nic, co by šlo doložit. Zbývá nesportovní chování —
+              Tenhle klub nemá v datech nic, co by šlo doložit. Zbývá nesportovní chování,
               tam ale rozhoduje zasedání a při neúspěchu přijdeš o kauci.
             </div>
           )}
           {evidence
             ? <div className="text-sm mt-1">Doloženo: {evidence.detail}</div>
             : spec?.freeText
-              ? <div className="text-sm text-muted mt-1">Bez důkazu — rozhodne zasedání, a proto je potřeba dvoutřetinová většina.</div>
+              ? <div className="text-sm text-muted mt-1">Bez důkazu rozhoduje zasedání, a proto je potřeba dvoutřetinová většina.</div>
               : null}
         </div>
 
@@ -297,7 +297,7 @@ function FineForm({ data, teamId, isChair, onClose, onSaved }: {
             <input type="checkbox" checked={direct} onChange={(e) => setDirect(e.target.checked)} className="mt-1" />
             <span>
               Uložit rovnou z titulu předsedy disciplinární rady (do {czk(data.limits.chairLimit)}).
-              Bez hlasování — a klub se proti tomu může odvolat.
+              Bez hlasování. Klub se proti tomu může odvolat.
             </span>
           </label>
         )}

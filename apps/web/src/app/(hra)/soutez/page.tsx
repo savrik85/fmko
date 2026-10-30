@@ -407,7 +407,7 @@ export default function SoutezPage() {
                 <>
                   <div className="font-semibold text-base">Samospráva se spustí od příští sezóny.</div>
                   <p className="mt-1 text-muted">
-                    Podmínku máte splněnou — {state.humanClubs} klubů s trenérem, potřeba je{" "}
+                    Podmínku máte splněnou: {state.humanClubs} klubů s trenérem, potřeba je{" "}
                     {state.threshold}. Na přelomu sezóny dostane soutěž vlastní pokladnu, vypíšou se
                     volby do vedení a kluby začnou rozhodovat o odměnách, pokutách i pravidlech.
                     Do té doby běží všechno postaru.
@@ -561,7 +561,7 @@ export default function SoutezPage() {
             <div className="font-semibold text-base">Grémium zasedá každou středu.</div>
             <p className="mt-1 text-muted">
               Návrhy i hlasy můžeš podávat kdykoli až do jeho zahájení. Během zasedání vidíš jen
-              kolik klubů už hlasovalo — kdo jak hlasoval se odkryje až v zápisu. Změny odměn
+              kolik klubů už hlasovalo. Kdo jak hlasoval, se odkryje až v zápisu. Změny odměn
               a sazeb platí vždy až od příští sezóny, nikdy na rozehranou.
             </p>
           </div>
@@ -614,12 +614,12 @@ function GesceHeader({ gesce, state, avatars }: {
               teamId={slot.holder.teamId} teamName={slot.holder.teamName}
               note={
                 slot.holder.status === "suspended"
-                  ? <span className="text-danger">pravomoc pozastavena — odbor vede prezident</span>
+                  ? <span className="text-danger">pravomoc pozastavena, odbor vede prezident</span>
                   : slot.label.toLowerCase()
               } />
           ) : (
             <div className="text-sm text-muted">
-              Odbor nemá zvoleného vedoucího ({slot.label.toLowerCase()}) — rozhoduje o něm
+              Odbor nemá zvoleného vedoucího ({slot.label.toLowerCase()}), rozhoduje o něm
               hlasování klubů.
             </div>
           )}
@@ -687,7 +687,7 @@ function ProposalCard({ p, myTeamId, avatars, onVote, onWithdraw, onDefend, canV
             {jsemDotceny ? (
               <div className="space-y-2">
                 <div className="text-sm">
-                  O návrhu, který se týká tvého klubu, nehlasuješ. Můžeš ale napsat obhajobu —
+                  O návrhu, který se týká tvého klubu, nehlasuješ. Můžeš ale napsat obhajobu,
                   uvidí ji všichni před hlasováním.
                 </div>
                 {!p.defence && (
@@ -715,7 +715,7 @@ function ProposalCard({ p, myTeamId, avatars, onVote, onWithdraw, onDefend, canV
 
             {p.myAnswer && (
               <div className="text-sm text-muted">
-                Tvůj hlas: {ANSWER_LABEL[p.myAnswer]} — do zahájení zasedání ho můžeš změnit.
+                Tvůj hlas: {ANSWER_LABEL[p.myAnswer]}. Do zahájení zasedání ho můžeš změnit.
               </div>
             )}
             {mine && (

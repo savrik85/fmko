@@ -443,7 +443,7 @@ export async function issueSanction(db: D1Database, opts: IssueSanctionOpts): Pr
   try {
     const { sendSystemSMS } = await import("../messaging/system-sms");
     await sendSystemSMS(db, opts.teamId, "Disciplinární rada",
-      `Byla vám uložena pokuta ${amount.toLocaleString("cs")} Kč — ${opts.reason}. `
+      `Byla vám uložena pokuta ${amount.toLocaleString("cs")} Kč: ${opts.reason}. `
       + `Proti rozhodnutí se můžeš odvolat na nejbližším zasedání grémia.`);
   } catch (e) {
     logger.warn({ module: M }, "SMS o pokutě", e);
@@ -516,7 +516,7 @@ export async function refundSanction(
   try {
     const { sendSystemSMS } = await import("../messaging/system-sms");
     await sendSystemSMS(db, s.team_id, "Disciplinární rada",
-      `Odvolání vyhověno — pokuta ${s.amount.toLocaleString("cs")} Kč vám byla vrácena.`);
+      `Odvolání vyhověno, pokuta ${s.amount.toLocaleString("cs")} Kč vám byla vrácena.`);
   } catch (e) {
     logger.warn({ module: M }, "SMS o vrácení pokuty", e);
   }

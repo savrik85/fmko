@@ -329,7 +329,7 @@ export async function applyTermReputation(
     const { applyManagerAttrDelta } = await import("../lib/manager-attrs");
     await applyManagerAttrDelta(
       db, teamId, "reputation", delta, "competition_office",
-      `${ROLE_LABEL[role]} — ${outcome === "term_ended" ? "odsloužený mandát" : outcome === "recalled" ? "odvolání" : "demise"}`,
+      `${ROLE_LABEL[role]}: ${outcome === "term_ended" ? "odsloužený mandát" : outcome === "recalled" ? "odvolání" : "demise"}`,
       { referenceId: `office-${seasonNumber}-${role}-${teamId}-${outcome}`, gameDate },
     );
   } catch (e) {

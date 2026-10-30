@@ -42,7 +42,7 @@ export function RefereesPanel({ data, state, teamId, myOpen, jeKomisar, onChange
         <Ornament right={`${data.usable} použitelných`}>Listina okresu</Ornament>
         <p className="text-sm text-muted">
           Listinu sdílí celý okres včetně U21. Vyškrtnutí platí jen pro tuhle soutěž a jen
-          do konce sezóny — pak se sudí vrátí, a bude si pamatovat, kdo zvedl ruku.
+          do konce sezóny. Pak se sudí vrátí a bude si pamatovat, kdo zvedl ruku.
           Vyškrtnout jich jde kolik chcete, dokud na listině zbyde aspoň {data.minList};
           nedoplňuje se, takže kdo pak píská dvakrát v jednom dni, jde do zápasu unavený.
         </p>
@@ -58,7 +58,7 @@ export function RefereesPanel({ data, state, teamId, myOpen, jeKomisar, onChange
           </Ornament>
           <p className="text-sm text-muted">
             {muzeObsazovat
-              ? `Delegace proběhla losem. Vyměnit můžeš ${data.maxSwaps} ${plural(data.maxSwaps, "rozhodčího", "rozhodčí", "rozhodčích")} za kolo — zatím jsi vyměnil ${data.swapsUsed}. Každá výměna je vidět i s tím, koho jsi odvolal.`
+              ? `Delegace proběhla losem. Vyměnit můžeš ${data.maxSwaps} ${plural(data.maxSwaps, "rozhodčího", "rozhodčí", "rozhodčích")} za kolo, zatím jsi vyměnil ${data.swapsUsed}. Každá výměna je vidět i s tím, koho jsi odvolal.`
               : "Kdo píská nejbližší kolo. Delegace proběhla losem; do obsazení může zasáhnout komisař rozhodčích."}
           </p>
 
@@ -207,7 +207,7 @@ function PauseForm({ referee, teamId, weeks, fromWeek, maxPauses, onClose, onSav
   return (
     <Modal isOpen onClose={onClose} title="Stopka rozhodčímu" zavritKlikemVedle={false}>
       <div className="p-5 space-y-4">
-        <div className="text-lg font-heading">Stopka na {weeks} kola — {referee.name}</div>
+        <div className="text-lg font-heading">Stopka na {weeks} kola: {referee.name}</div>
         <p className="text-sm text-muted">
           Rozhoduješ z titulu komisaře rozhodčích. Sudí vypadne z delegace na kola{" "}
           {fromWeek}–{fromWeek + weeks - 1} a pak se vrátí sám. V zápisu bude stát tvoje
@@ -225,13 +225,13 @@ function PauseForm({ referee, teamId, weeks, fromWeek, maxPauses, onClose, onSav
 
         <div className="rounded-lg p-3 text-sm" style={{ background: "#FBEAE8" }}>
           <div className="font-semibold">Zapamatuje si to.</div>
-          Míň než u vyškrtnutí — po třech kolech je zpátky a bude pískat i tvoje zápasy.
+          Míň než u vyškrtnutí, po třech kolech je zpátky a bude pískat i tvoje zápasy.
           Listina se mezitím nedoplňuje, takže ostatní odpískají o něco víc.
         </div>
 
         <div>
           <label className="text-sm text-muted">
-            Odůvodnění (povinné — přečte si ho celá soutěž)
+            Odůvodnění (povinné, přečte si ho celá soutěž)
           </label>
           <textarea className="input w-full mt-1" rows={3} maxLength={200}
             value={note} onChange={(e) => setNote(e.target.value)}
@@ -288,7 +288,7 @@ function BanForm({ referee, teamId, deposit, jeKomisar, onClose, onSaved }: {
     <Modal isOpen onClose={onClose} title="Vyškrtnutí rozhodčího" zavritKlikemVedle={false}>
       <div className="p-5 space-y-4">
         <div className="text-lg font-heading">
-          {primo ? "Vyškrtnout" : "Navrhnout vyškrtnutí"} — {referee.name}
+          {primo ? "Vyškrtnout" : "Navrhnout vyškrtnutí"}: {referee.name}
         </div>
         <p className="text-sm text-muted">
           {primo
@@ -311,7 +311,7 @@ function BanForm({ referee, teamId, deposit, jeKomisar, onClose, onSaved }: {
           <div className="font-semibold">Nebude to zadarmo.</div>
           Po sezóně se vrátí a bude si pamatovat, kdo hlasoval pro. Kolegové z okresní
           komise si zapamatují navrhovatele. A protože se listina nedoplňuje, začnou
-          sudí pískat dva zápasy denně — unavení.
+          sudí pískat dva zápasy denně, unavení.
         </div>
 
         <div>
@@ -332,7 +332,7 @@ function BanForm({ referee, teamId, deposit, jeKomisar, onClose, onSaved }: {
           <label className="flex items-start gap-2 text-sm">
             <input type="checkbox" checked={primo} onChange={(e) => setPrimo(e.target.checked)} className="mt-1" />
             <span>
-              Vyškrtnout rovnou z titulu komisaře rozhodčích. Bez hlasování a bez kauce —
+              Vyškrtnout rovnou z titulu komisaře rozhodčích. Bez hlasování a bez kauce,
               odpovědnost je tvoje a kluby tě za ni můžou odvolat.
             </span>
           </label>
@@ -456,12 +456,12 @@ function SwapForm({ match, teamId, volni, gameWeek, onClose, onSaved }: {
           <label className="text-sm text-muted">Kdo bude pískat místo něj</label>
           {serazeni.length === 0 ? (
             <p className="text-sm mt-1" style={{ color: "#A32B1F" }}>
-              Ten den nemá nikdo z listiny volno. Vyměnit se nedá — všichni už někde pískají.
+              Ten den nemá nikdo z listiny volno. Vyměnit se nedá, všichni už někde pískají.
             </p>
           ) : (
             <select className="select w-full mt-1" value={refereeId}
               onChange={(e) => setRefereeId(e.target.value)}>
-              <option value="">— vyber rozhodčího —</option>
+              <option value="">Vyber rozhodčího</option>
               {serazeni.map((r) => (
                 <option key={r.refereeId} value={r.refereeId}>
                   {r.name}{r.avgGrade !== null ? ` · známka ${r.avgGrade.toFixed(2)}` : " · zatím bez známky"}
@@ -472,13 +472,13 @@ function SwapForm({ match, teamId, volni, gameWeek, onClose, onSaved }: {
         </div>
 
         <div className="rounded-lg p-3 text-sm" style={{ background: "var(--color-paper)" }}>
-          Odvolaný sudí si to zapamatuje — míň než u stopky, protože pískat bude dál,
+          Odvolaný sudí si to zapamatuje, míň než u stopky, protože pískat bude dál,
           jen ne tenhle zápas.
         </div>
 
         <div>
           <label className="text-sm text-muted">
-            Odůvodnění (povinné — přečte si ho celá soutěž)
+            Odůvodnění (povinné, přečte si ho celá soutěž)
           </label>
           <textarea className="input w-full mt-1" rows={3} maxLength={200}
             value={note} onChange={(e) => setNote(e.target.value)}
