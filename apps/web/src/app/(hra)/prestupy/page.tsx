@@ -561,6 +561,8 @@ interface MarketListing {
   playerAge: number; position: string; overallRating: number; teamName: string; teamIsAi?: boolean;
   /** Okres inzerátu lidského klubu z jiné soutěže (u soutěže téhož okresu její název). */
   origin?: string | null;
+  /** Inzerát klubu z jiného okresu (ne jen z jiné soutěže téhož okresu). */
+  otherDistrict?: boolean;
   expiresAt: string; avatar: Record<string, unknown>;
   myBidAmount?: number | null;
   myActiveOfferId?: string | null;
@@ -657,6 +659,39 @@ const DEFAULT_FILTERS: FAFilters = {
 };
 
 const PRESETS_KEY = "fmko-transfer-filters";
+const OWN_DISTRICT_KEY = "fmko-transfer-own-district";
+
+function loadOwnDistrictOnly(): boolean {
+  try {
+    return localStorage.getItem(OWN_DISTRICT_KEY) === "1";
+  } catch (e) {
+    console.warn("Načtení filtru okresu se nezdařilo:", e);
+    return false;
+  }
+}
+
+function saveOwnDistrictOnly(on: boolean) {
+  try {
+    localStorage.setItem(OWN_DISTRICT_KEY, on ? "1" : "0");
+  } catch (e) {
+    console.warn("Uložení filtru okresu se nezdařilo:", e);
+  }
+}
+
+/** Přepínač „Jen můj okres“ na Prodeji i Volných, stejný vzhled jako „Filtrovat“. */
+function OwnDistrictToggle({ on, onChange }: { on: boolean; onChange: (on: boolean) => void }) {
+  return (
+    <button
+      onClick={() => onChange(!on)}
+      aria-pressed={on}
+      className={`shrink-0 px-3 min-h-9 rounded-control font-heading font-bold text-sm transition-colors ${
+        on ? "bg-pitch-500 text-white" : "bg-surface text-muted hover:text-ink"
+      }`}
+    >
+      Jen můj okres
+    </button>
+  );
+}
 
 function loadPresets(): FilterPreset[] {
   try {
@@ -781,12 +816,16 @@ export default function TransfersPage() {
   const [showPresetInput, setShowPresetInput] = useState(false);
   const [expandedSkills, setExpandedSkills] = useState<Set<string>>(new Set());
 
-  useEffect(() => { setPresets(loadPresets()); }, []);
+  const [ownDistrictOnly, setOwnDistrictOnlyState] = useState(false);
+  const setOwnDistrictOnly = (on: boolean) => { setOwnDistrictOnlyState(on); saveOwnDistrictOnly(on); };
+
+  useEffect(() => { setPresets(loadPresets()); setOwnDistrictOnlyState(loadOwnDistrictOnly()); }, []);
 
   const activeCount = countActiveFilters(filters);
 
   const filteredAgents = useMemo(() => {
     let list = freeAgents.filter((fa) => {
+      if (ownDistrictOnly && fa.origin) return false;
       if (filters.position !== "all" && fa.position !== filters.position) return false;
       if (fa.overallRating < filters.ratingMin) return false;
       if (fa.overallRating > filters.ratingMax) return false;
@@ -813,9 +852,12 @@ export default function TransfersPage() {
     });
 
     return list;
-  }, [freeAgents, filters]);
+  }, [freeAgents, filters, ownDistrictOnly]);
 
-  const isFiltered = activeCount > 0;
+  const isFiltered = activeCount > 0 || (ownDistrictOnly && freeAgents.some((fa) => fa.origin));
+  const visibleListings = ownDistrictOnly ? listings.filter((l) => !l.otherDistrict) : listings;
+  const hasForeignAgents = freeAgents.some((fa) => fa.origin);
+  const hasForeignListings = listings.some((l) => l.otherDistrict);
 
   /** `initial`: první načtení stránky. Odznaky menu se při něm obnovují samy (změna stránky). */
   const refresh = async ({ initial = false }: { initial?: boolean } = {}) => {
@@ -894,6 +936,7 @@ export default function TransfersPage() {
 
   const resetFilters = () => {
     setFilters({ ...DEFAULT_FILTERS });
+    setOwnDistrictOnly(false);
   };
 
   const toggleSkills = (id: string) => {
@@ -1084,7 +1127,7 @@ export default function TransfersPage() {
     </button>
   );
 
-  const listingRows: BrowseRow[] = listings.map((l) => {
+  const listingRows: BrowseRow[] = visibleListings.map((l) => {
     const [firstName, ...rest] = l.playerName.split(" ");
     let avatar: Record<string, unknown> | null = null;
     try {
@@ -1215,8 +1258,8 @@ export default function TransfersPage() {
           dense
           items={[
             { key: "hledani", label: "Hledat", count: null },
-            { key: "na-prodej", label: "Prodej", count: listings.length || null },
-            { key: "volni", label: "Volní", count: freeAgents.length || null },
+            { key: "na-prodej", label: "Prodej", count: visibleListings.length || null },
+            { key: "volni", label: "Volní", count: (ownDistrictOnly ? freeAgents.filter((fa) => !fa.origin).length : freeAgents.length) || null },
             { key: "sledovani", label: "Sledovaní", count: watchCount || null },
           ]}
         />
@@ -1606,6 +1649,8 @@ export default function TransfersPage() {
                 : `(${freeAgents.length} ${hraciTvar(freeAgents.length)})`
               }
             </SectionLabel>
+            <div className="flex items-center gap-2">
+            {(hasForeignAgents || ownDistrictOnly) && <OwnDistrictToggle on={ownDistrictOnly} onChange={setOwnDistrictOnly} />}
             <button
               onClick={() => setFilterOpen(!filterOpen)}
               aria-expanded={filterOpen}
@@ -1615,6 +1660,7 @@ export default function TransfersPage() {
             >
               Filtrovat{activeCount > 0 ? ` (${activeCount})` : ""}
             </button>
+            </div>
           </div>
 
           {/* Filter panel */}
@@ -1803,7 +1849,7 @@ export default function TransfersPage() {
             </div>
           </div>
 
-          {freeAgents.some((fa) => fa.origin) && (
+          {filteredAgents.some((fa) => fa.origin) && (
             <p className="text-sm text-muted">
               Hráči se štítkem jsou z jiného okresu. Stěhovat se k tobě se jim chce méně.
             </p>
@@ -1832,14 +1878,21 @@ export default function TransfersPage() {
       {tab === "hledat" && hledatSub === "na-prodej" && (
         <div className="space-y-5">
           <div>
-            <SectionLabel>Na trhu ({listings.length})</SectionLabel>
-            {listings.some((l) => l.origin) && (
+            <div className="flex items-center justify-between gap-2">
+              <SectionLabel>
+                Na trhu ({visibleListings.length === listings.length ? listings.length : `${visibleListings.length} z ${listings.length}`})
+              </SectionLabel>
+              {(hasForeignListings || ownDistrictOnly) && <OwnDistrictToggle on={ownDistrictOnly} onChange={setOwnDistrictOnly} />}
+            </div>
+            {visibleListings.some((l) => l.origin) && (
               <p className="text-sm text-muted mb-2">
                 Hráči se štítkem jsou z jiné soutěže. Za přestup odtamtud platíš navíc meziligový poplatek.
               </p>
             )}
-            {listings.length === 0 ? (
-              <div className="card p-6 text-center text-muted">Nikdo momentálně nenabízí hráče.</div>
+            {visibleListings.length === 0 ? (
+              <div className="card p-6 text-center text-muted">
+                {listings.length > 0 ? "Z tvého okresu teď nikdo hráče nenabízí." : "Nikdo momentálně nenabízí hráče."}
+              </div>
             ) : (
               <div className="md:p-5 md:bg-[var(--color-surface)] md:rounded-[var(--radius-card)] md:shadow-[var(--shadow-card)]">
                 <PlayerBrowseTable rows={listingRows} color={clubColor} onColorText={clubColorText} ratingColor={clubRatingColor}

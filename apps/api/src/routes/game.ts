@@ -5222,6 +5222,8 @@ gameRouter.get("/teams/:teamId/market", async (c) => {
         origin: l.league_id === team.league_id ? null
           : l.league_district !== team.district ? ((l.league_district as string | null) ?? null)
           : ((l.league_name as string | null) ?? null),
+        // Filtr „Jen můj okres“: III. třída téhož okresu se počítá za vlastní.
+        otherDistrict: l.league_id !== team.league_id && l.league_district !== team.district,
         injuryDays: (l.injury_days as number) ?? null,
         avatar: (() => { try { return JSON.parse(l.player_avatar as string); } catch (e) { logger.warn({ module: "game" }, `parse market avatar: ${e}`); return {}; } })(),
         skills: (() => { try { const s = JSON.parse(l.skills as string); const blur = (v: number) => Math.round(v / 5) * 5; return Object.fromEntries(Object.entries(s).map(([k, v]) => [k, typeof v === "number" ? blur(v) : v])); } catch { return {}; } })(),
