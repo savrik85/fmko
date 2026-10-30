@@ -216,7 +216,7 @@ export function OpenProposalNote({ p }: { p: { title: string } }) {
     <div className="card p-5 text-sm" style={{ background: "var(--color-paper)" }}>
       <div className="font-semibold text-base">V tomhle odboru už návrh máš.</div>
       <p className="mt-1 text-muted break-words">
-        „{p.title}“ — další sem podáš, až se o něm bude hlasovat. Stáhnout ho můžeš
+        „{p.title}“. Další sem podáš, až se o něm bude hlasovat. Stáhnout ho můžeš
         u samotného návrhu. V ostatních odborech ti to nebrání.
       </p>
     </div>

@@ -53,7 +53,7 @@ export function DisciplinePanel({ data, state, teamId, isChair, myOpen, onChange
           {data.offences.map((o) => (
             <div key={o.kind} className="text-sm">
               <span className="font-semibold">{o.label}</span>
-              <span className="text-muted"> — {o.evidenceLabel}</span>
+              <span className="text-muted">: {o.evidenceLabel}</span>
               {o.majority > 0.5 && <span className="text-muted"> · dvoutřetinová většina</span>}
             </div>
           ))}

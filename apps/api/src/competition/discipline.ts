@@ -119,6 +119,11 @@ export const OFFENCES: Record<string, Offence> = {
  */
 export const DEFAULT_PITCH_THRESHOLD = 30;
 
+/** Popisek důkazu u neudržovaného hřiště s hranicí, kterou si soutěž odhlasovala. */
+export function pitchEvidenceLabel(threshold: number): string {
+  return `stav trávníku pod ${threshold}`;
+}
+
 /** Meze, podle kterých se sbírají důkazy — obojí si soutěž odhlasovala. */
 export interface EvidenceLimits {
   /** Hranice stavu hřiště. Odhlasované `min_pitch_condition` má přednost. */
