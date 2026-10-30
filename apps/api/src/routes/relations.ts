@@ -4,6 +4,7 @@
  * GET  /teams/:teamId/relations            — přehled vztahů týmu v lize
  * GET  /teams/:teamId/relations/:otherId   — detail vztahu + dostupné interakce
  * POST /teams/:teamId/relations/:otherId/interact — provedení interakce
+ * GET  /teams/:teamId/family               — příbuzní trenéra (veřejné, profil trenéra)
  */
 
 import { Hono } from "hono";
@@ -290,6 +291,13 @@ relationsRouter.get("/teams/:teamId/relations", async (c) => {
   }).sort((a, b) => (Math.abs(b.respect) + b.heat) - (Math.abs(a.respect) + a.heat));
 
   return c.json({ relations });
+});
+
+// GET /teams/:teamId/family — kdo z trenérů je trenérovi tohohle klubu bratr.
+// Mimo /relations/*, kde se hlídá vlastnictví: rodina je vidět i na cizím profilu.
+relationsRouter.get("/teams/:teamId/family", async (c) => {
+  const { familyOfTeam } = await import("../community/manager-family");
+  return c.json({ family: await familyOfTeam(c.env.DB, c.req.param("teamId")) });
 });
 
 // ────────────────────────────────────────────────────────────────────────────

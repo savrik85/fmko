@@ -358,11 +358,14 @@ async function generateOne(
   const opponentLine = opponentName
     ? `${opponentName}${opponentManagerName ? ` (trenér ${opponentManagerName})` : ""}`
     : "(soupeř neznámý)";
-  const relationHint = relation && relation.heat >= 40
+  const familyHint = relation?.family
+    ? ` ${relation.family}, rodinný souboj, klidně to s nadsázkou zmiň.`
+    : "";
+  const relationHint = familyHint + (relation && relation.heat >= 40
     ? ` Vztah klubů je VYHROCENÝ (${relation.label}), klidně si do soupeře pořádně rýpni.`
     : relation && relation.respect >= 30
       ? ` Kluby se respektují (${relation.label}), špičkování ať je kamarádské, ne jedovaté.`
-      : "";
+      : "");
 
   // Rozhovor vede konkrétní redaktor — jeho povaha určuje, na co se ptá a jak píše.
   const { redaktorProRubriku, pokynyProRedaktora, sentimentKeKlubu } = await import("./journalists");

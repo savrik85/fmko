@@ -11,7 +11,7 @@ import type { BadgePattern } from "@/components/ui";
 import { EditManagerModal } from "@/components/manager/EditManagerModal";
 import { CoachKabinaTab } from "@/components/manager/CoachKabinaTab";
 import { CoachEducationTab } from "@/components/manager/CoachEducationTab";
-import { RelationCard, RelationsOverview } from "@/components/relations/RelationSection";
+import { FamilyCard, RelationCard, RelationsOverview } from "@/components/relations/RelationSection";
 import { isLightColor, bestTextOn } from "@/lib/team-color";
 import { coachAttributeEffects, licenceCap, LICENCE_LEVELS } from "@okresni-masina/shared";
 import { LicenceBadge } from "@/components/manager/LicenceBadge";
@@ -391,6 +391,7 @@ export default function ManagerDetailPage() {
         {tab === "kabina" && isOwn && teamId && <CoachKabinaTab teamId={teamId} />}
 
         {/* ═══ Trenéři — cizí profil: karta vztahu, vlastní: přehled ve skupinách ═══ */}
+        {tab === "treneri" && <FamilyCard teamId={managerId} />}
         {tab === "treneri" && teamId && !isOwn && (
           <RelationCard myTeamId={teamId} otherTeamId={managerId} otherManagerName={manager.name} />
         )}

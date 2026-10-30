@@ -512,6 +512,44 @@ export function PostMatchGestureCard({ myTeamId, opponentTeamId, opponentName, m
   );
 }
 
+/* ── Rodina: bratři mezi trenéry (vlastní i cizí profil) ────────────────── */
+
+interface FamilyMember {
+  kind: string;
+  label: string;
+  managerName: string;
+  teamId: string;
+  teamName: string;
+}
+
+export function FamilyCard({ teamId }: { teamId: string }) {
+  const [family, setFamily] = useState<FamilyMember[]>([]);
+
+  useEffect(() => {
+    apiFetch<{ family: FamilyMember[] }>(`/api/teams/${teamId}/family`)
+      .then((res) => setFamily(res.family))
+      .catch((e) => console.error("family load:", e));
+  }, [teamId]);
+
+  // Většina trenérů v okrese příbuzné nemá, prázdnou kartu nemá smysl ukazovat.
+  if (family.length === 0) return null;
+
+  return (
+    <div className="card p-4 sm:p-5">
+      <SectionLabel>Rodina</SectionLabel>
+      {family.map((f) => (
+        <div key={f.teamId} className="py-2 border-b border-gray-50 last:border-b-0">
+          <div className="text-base">
+            <span className="text-muted">{f.label}: </span>
+            <Link href={`/manazer/${f.teamId}`} className="entity-link font-heading font-bold">{f.managerName}</Link>
+          </div>
+          <Link href={`/tym/${f.teamId}`} className="text-sm text-muted hover:text-ink">{f.teamName}</Link>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /* ── Přehled všech vztahů (vlastní profil) ─────────────────────────────── */
 
 const GROUPS: Array<{ key: RelationListItem["group"]; title: string; empty: string }> = [
