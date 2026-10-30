@@ -16,7 +16,7 @@ import { nactiZnalostiHrace } from "../incidents/znalosti-db";
 import { nazevSituace } from "../incidents/situace";
 import { logger } from "../lib/logger";
 import { seedFromString } from "../lib/seed";
-import { pickAmbience, recordVoiceMessage, voicePreviewText } from "./voice-message";
+import { pickAmbience, recordVoiceMessage, voicePreviewText, type RecordedVoiceMessage } from "./voice-message";
 import { PHOTO_CHANCE, PHOTO_SCENES, generatePlayerPhoto, historyBody, pickPhotoScene } from "./player-photo";
 import { coachRelationStmts } from "../lib/coach-relation";
 import { weightTalkFromState } from "../season/weight-talk";
@@ -50,6 +50,12 @@ export interface MessageDraft {
   text: string;
   /** Fotka ke konceptu (R2 klíč a popis), ostré odeslání pošle tutéž. */
   photo?: { key: string; alt: string } | null;
+  /**
+   * Hlasovka namluvená nanečisto (`voice/<messageId>.wav` v R2). Ostré odeslání ji
+   * pošle beze změny, ať trenér dostane přesně tu nahrávku, kterou šlo předem slyšet.
+   */
+  messageId?: string;
+  voice?: RecordedVoiceMessage | null;
 }
 const DRAFT_TTL_SECONDS = 86400;
 const draftKey = (teamId: string) => `message_draft:${teamId}`;
@@ -456,7 +462,7 @@ export async function applyAiPlayerThreads(
   db: D1Database,
   env: { GEMINI_API_KEY?: string; CACHE_KV?: KVNamespace; AI?: Ai; SEED_DATA?: R2Bucket },
   /** Ruční spuštění z adminu: jen jeden tým, bez losu a cooldownu, volitelně rovnou hlasovka a pevné téma. */
-  manual?: { teamId: string; forceVoice?: boolean; scenarioId?: string; dryRun?: boolean },
+  manual?: { teamId: string; forceVoice?: boolean; scenarioId?: string; dryRun?: boolean; drunk?: boolean },
 ): Promise<{ spawned: number; skipped: number; draft?: MessageDraft }> {
   // Ptáme se přepínače, ne klíče. Dokud tu stála holá podmínka na
   // `GEMINI_API_KEY`, nezaložilo se jediné vlákno nikde, kde se jede přes
@@ -497,6 +503,7 @@ export async function applyAiPlayerThreads(
       const forcedScenario = manual?.scenarioId ? getScenarioById(manual.scenarioId) : null;
       const result = await spawnForTeam(db, env, team.id, {
         forceVoice: manual?.forceVoice ?? false, forcedScenario, dryRun: manual?.dryRun ?? false,
+        drunk: manual?.drunk ?? false,
       });
       if (result?.sent) spawned++; else skipped++;
       if (result && manual?.dryRun) draft = result.draft;
@@ -515,13 +522,16 @@ export async function applyAiPlayerThreads(
  *
  * `dryRun` jen vybere hráče a nechá napsat text, uloží ho jako koncept do KV
  * a nic nepošle. Ostré ruční odeslání se stejným tématem pak koncept použije,
- * takže odejde přesně to, co bylo vidět nanečisto.
+ * takže odejde přesně to, co bylo vidět nanečisto. S `forceVoice` se nanečisto
+ * namluví i hlasovka, ať jde předem poslechnout.
+ *
+ * `drunk` je jen pro ruční rozeslání: hráč volá opilý z hospody bez ohledu na téma.
  */
 async function spawnForTeam(
   db: D1Database,
   env: { GEMINI_API_KEY?: string; CACHE_KV?: KVNamespace; SEED_DATA?: R2Bucket; AI?: Ai },
   teamId: string,
-  opts: { forceVoice?: boolean; forcedScenario?: AiScenario | null; dryRun?: boolean } = {},
+  opts: { forceVoice?: boolean; forcedScenario?: AiScenario | null; dryRun?: boolean; drunk?: boolean } = {},
 ): Promise<{ sent: boolean; draft: MessageDraft } | null> {
   const forcedScenario = opts.forcedScenario ?? null;
   // 0. Poslední odehraný zápas + série výsledků — kontext pro scénáře (výhra/prohra,
@@ -614,9 +624,10 @@ async function spawnForTeam(
     : startedAt;
   if (scenario.atPub) player.atPub = true;
 
-  const messageId = uuid();
+  const messageId = (draftPlayer && saved?.messageId) || uuid();
   // Z hospody: kdo se přiznává k pivu, nebo kdo rád pije a zrovna slaví.
-  const drunk = scenario.id === "alcohol_struggle"
+  const drunk = opts.drunk === true
+    || scenario.id === "alcohol_struggle"
     || (player.alcohol > 70 && (scenario.category === "positive" || scenario.id === "personal_milestone"));
   // Kde hráč podle textu zprávy je (v práci, doma, v hospodě): podle toho zvuk pod hlasovkou i fotka z práce.
   const timeContext = playerTimeContext(player, writtenAt);
@@ -656,6 +667,29 @@ async function spawnForTeam(
     throw e;
   }
 
+  // 6. Místo SMS hlasovka (voice-message.ts): nanejvýš 2 týdně na tým a jen přes Gemini.
+  //    Text zůstává v těle zprávy jako přepis, z něj AI bere kontext pro další odpovědi.
+  //    Zpráva s fotkou je SMS s popiskem, hlasovka k ní nejde. Koncept nese svou nahrávku.
+  const playerRow = playersRow.results.find((r) => r.id === player.id)!;
+  const recorded = draftPlayer && saved?.voice
+    ? saved.voice
+    : photo || (opts.dryRun && !opts.forceVoice) ? null : await recordVoiceMessage(db, env, {
+      teamId,
+      messageId,
+      scene: scenario.description,
+      body: initialBody,
+      drunk,
+      ambience,
+      force: opts.forceVoice ?? false,
+      player: {
+        id: player.id,
+        firstName: player.firstName,
+        age: Number(playerRow.age ?? 25),
+        nationality: (playerRow.nationality as string | null) ?? null,
+        lifeContext: (playerRow.life_context as string | null) ?? null,
+      },
+    });
+
   const draft: MessageDraft = {
     playerId: player.id,
     playerName: `${player.firstName} ${player.lastName}`,
@@ -663,6 +697,8 @@ async function spawnForTeam(
     scenarioId: scenario.id,
     text: initialBody,
     photo,
+    messageId,
+    voice: recorded,
   };
   if (opts.dryRun) {
     await env.CACHE_KV?.put(draftKey(teamId), JSON.stringify(draft), { expirationTtl: DRAFT_TTL_SECONDS })
@@ -670,8 +706,7 @@ async function spawnForTeam(
     return { sent: false, draft };
   }
 
-  // 6. Najdi/vytvoř player conversation, vlož zprávu, nastav state
-  const playerRow = playersRow.results.find((r) => r.id === player.id)!;
+  // 7. Najdi/vytvoř player conversation, vlož zprávu, nastav state
   const convId = await getOrCreatePlayerConversation(db, teamId, {
     id: player.id,
     firstName: player.firstName,
@@ -694,25 +729,6 @@ async function spawnForTeam(
   };
   const senderName = `${player.firstName} ${player.lastName}`;
 
-  // 7. Místo SMS hlasovka (voice-message.ts): nanejvýš 2 týdně na tým a jen přes Gemini.
-  //    Text zůstává v těle zprávy jako přepis, z něj AI bere kontext pro další odpovědi.
-  //    Zpráva s fotkou je SMS s popiskem, hlasovka k ní nejde.
-  const recorded = photo ? null : await recordVoiceMessage(db, env, {
-    teamId,
-    messageId,
-    scene: scenario.description,
-    body: initialBody,
-    drunk,
-    ambience,
-    force: opts.forceVoice ?? false,
-    player: {
-      id: player.id,
-      firstName: player.firstName,
-      age: Number(playerRow.age ?? 25),
-      nationality: (playerRow.nationality as string | null) ?? null,
-      lifeContext: (playerRow.life_context as string | null) ?? null,
-    },
-  });
   const voice = recorded?.meta ?? null;
   // U hlasovky je tělem zprávy přepis toho, co zaznělo (u opilé se liší od SMS).
   const body = recorded?.transcript ?? initialBody;

@@ -7309,7 +7309,12 @@ gameRouter.post("/admin/spawn-ai-chats", async (c) => {
   // `&scenario=coach_relationship_voice` vynutí téma (ukázková hlasovka podle vztahu k trenérovi).
   // `&dryRun=1` jen ukáže a uloží koncept (hráč + text), ostré odeslání ho pak pošle beze změny.
   const manual = teamId
-    ? { teamId, forceVoice: c.req.query("voice") === "1", scenarioId: c.req.query("scenario"), dryRun: c.req.query("dryRun") === "1" }
+    ? {
+      teamId, forceVoice: c.req.query("voice") === "1", scenarioId: c.req.query("scenario"), dryRun: c.req.query("dryRun") === "1",
+      // `&drunk=1` hráč volá opilý z hospody. S `voice=1&dryRun=1` se hlasovka namluví nanečisto
+      // (R2 `voice/<draft.messageId>.wav`) a ostré odeslání pošle tutéž nahrávku.
+      drunk: c.req.query("drunk") === "1",
+    }
     : undefined;
   const r = await applyAiPlayerThreads(c.env.DB, c.env, manual)
     .catch((e) => { logger.error({ module: "game.ts" }, "manual ai chat spawn", e); return null; });
