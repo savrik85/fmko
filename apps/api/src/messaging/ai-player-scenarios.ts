@@ -158,6 +158,22 @@ export const AI_PLAYER_SCENARIOS: AiScenario[] = [
     atPub: true,
     invite: "pub",
   },
+  // Jen ruční rozeslání z adminu (opilá hlasovka z hospody, `drunk=1`), náhodný spawn ho nevybere.
+  {
+    id: "pub_voice",
+    label: "Opilá hlasovka z hospody",
+    category: "personal",
+    expectedTurns: 2,
+    description:
+      "Sedíš večer s partou z týmu v hospodě, máš v sobě dost piv a nahráváš trenérovi hlasovku. Mluvíš od srdce, jak to "
+      + "na opilce chodí, a řekneš mu, jak to mezi vámi vidíš. Podle vztahu s trenérem: když je dobrý, vyznáš se mu, jak je "
+      + "dobrej trenér a že za ním stojíš; když je špatný, vyklopíš, co tě na něm štve, klidně sprostě; když je kolem středu, "
+      + "řekneš mu narovinu, co bys od něj chtěl. Klidně ho pozvi, ať přijde na pivo. O žádném konkrétním zápase, výsledku "
+      + "ani tabulce nemluv.",
+    weight: () => 0,
+    writtenAtUtcHour: 19,
+    atPub: true,
+  },
   // Jen ruční rozeslání z adminu (ukázková hlasovka pro všechny), náhodný spawn ho nevybere.
   {
     id: "coach_relationship_voice",
