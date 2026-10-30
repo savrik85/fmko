@@ -191,6 +191,7 @@ describe("opilá hlasovka", () => {
 
   it("oslovení trenére z opilé řeči mizí bez zbytků čárek", () => {
     expect(withoutCoachAddress("Trenére, makám.")).toBe("Makám.");
+    expect(spokenText("ale… *škyt* pojď na jedno 🍺")).toBe("ale… pojď na jedno");
     expect(withoutCoachAddress("Čau trenére, chci hrát.")).toBe("Čau, chci hrát.");
     expect(withoutCoachAddress("Víte, trenére, já nevím.")).toBe("Víte, já nevím.");
     expect(withoutCoachAddress("Díky, trenére!")).toBe("Díky!");
