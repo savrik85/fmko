@@ -137,6 +137,8 @@ export interface RelationPromptContext {
   heat: number;
   label: string;
   moments: string[]; // poslední ~3 události mezi kluby, lidsky čitelné
+  /** Trenéři jsou příbuzní („Trenéři … jsou bratři"), viz manager-family.ts. */
+  family: string | null;
 }
 
 export async function getRelationPromptContext(
@@ -152,12 +154,18 @@ export async function getRelationPromptContext(
       logger.warn({ module: "manager-relations" }, "load relation prompt ctx", e);
       return null;
     });
-  if (!row || (row.respect === 0 && row.heat === 0)) return null;
+  const { familyLineBetweenTeams } = await import("./manager-family");
+  const family = await familyLineBetweenTeams(db, teamA, teamB);
+  // Bratři jsou téma i bez jediné společné události.
+  if (!family && (!row || (row.respect === 0 && row.heat === 0))) return null;
+  const respect = row?.respect ?? 0;
+  const heat = row?.heat ?? 0;
   return {
-    respect: row.respect,
-    heat: row.heat,
-    label: relationLabel(row.respect, row.heat),
-    moments: parseHistory(row.history).slice(0, 3).map((m) => m.text),
+    respect,
+    heat,
+    label: relationLabel(respect, heat),
+    moments: row ? parseHistory(row.history).slice(0, 3).map((m) => m.text) : [],
+    family,
   };
 }
 

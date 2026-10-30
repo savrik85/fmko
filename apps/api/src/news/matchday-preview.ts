@@ -283,6 +283,9 @@ export async function generateMatchdayPreview(
     } else if (p.isLocalDerby) {
       lines.push(`  🔥 DERBY, mezi kluby (a hlavně trenéry) to dlouhodobě vře, zápas roku pro obě vesnice`);
     }
+    if (p.relation?.family) {
+      lines.push(`  👬 BRATRSKÉ DERBY: ${p.relation.family}. Rodinný souboj, kdo bude mít po zápase u nedělního oběda navrch`);
+    }
     if (p.relation) {
       lines.push(`  Vztah trenérů: ${p.relation.label} (interní info, popisuj slovně, NIKDY necituj číselné hodnoty vztahu)`);
       if (p.relation.moments.length) {

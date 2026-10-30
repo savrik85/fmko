@@ -239,6 +239,7 @@ export async function generateAiRoundReport(
     try {
       const { getRelationPromptContext } = await import("../community/manager-relations");
       const rel = await getRelationPromptContext(db, m.home_team_id as string, m.away_team_id as string);
+      if (rel?.family) line += `\n  • ${rel.family} → bratrské derby, klidně to v reportu zmiň`;
       if (rel && (rel.heat >= 30 || Math.abs(rel.respect) >= 30)) {
         line += `\n  • vztah trenérů: ${rel.label}${rel.moments.length ? ` — nedávno: ${rel.moments.slice(0, 2).join("; ")}` : ""} → klidně to v reportu okomentuj (slovně, NIKDY necituj číselné hodnoty vztahu)`;
       }
