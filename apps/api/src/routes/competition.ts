@@ -669,7 +669,7 @@ competitionRouter.post("/teams/:teamId/competition/proposals", async (c) => {
   const uzMam = await otevrenyNavrhVGesci(c.env.DB, leagueId, teamId, gesceNavrhu);
   if (uzMam) {
     return c.json({
-      error: `V tomhle odboru už na programu návrh máš — „${uzMam}". Počkej, až se projedná, nebo ho stáhni.`,
+      error: `V tomhle odboru už na programu návrh máš: „${uzMam}". Počkej, až se projedná, nebo ho stáhni.`,
     }, 409);
   }
 
@@ -1076,7 +1076,7 @@ competitionRouter.post("/teams/:teamId/competition/sanctions", async (c) => {
      VALUES (?,?,?,'sanction','disciplinarni',?,?,?,?,?,?,?,?,?,?)`
   ).bind(
     id, leagueId, meta.season_number,
-    `Pokuta ${amount.toLocaleString("cs")} Kč — ${target?.name ?? "klub"} (${offence.label})`,
+    `Pokuta ${amount.toLocaleString("cs")} Kč: ${target?.name ?? "klub"} (${offence.label})`,
     reason,
     JSON.stringify({ offence: body.offence, amount, evidence, reason }),
     teamId, body.targetTeamId, evidence, offence.majority, 0.5, gameDate, PROPOSAL_DEPOSIT,
@@ -1580,7 +1580,7 @@ competitionRouter.post("/teams/:teamId/competition/grants", async (c) => {
   const uzMam = await otevrenyNavrhVGesci(c.env.DB, leagueId, teamId, "hospodarska");
   if (uzMam) {
     return c.json({
-      error: `U generálního sekretáře už na programu návrh máš — „${uzMam}". Počkej, až se projedná, nebo ho stáhni.`,
+      error: `U generálního sekretáře už na programu návrh máš: „${uzMam}". Počkej, až se projedná, nebo ho stáhni.`,
     }, 409);
   }
 
@@ -1810,7 +1810,7 @@ competitionRouter.post("/teams/:teamId/competition/sponsor-offers/:id/propose", 
      VALUES (?,?,?,'sponsor','soutez',?,?,?,?,?,?,?,0,?)`
   ).bind(
     id, leagueId, meta.season_number,
-    `Přijetí sponzora ${offer.name} — soutěž se přejmenuje na „${sponzorovanyNazev(offer.name)}"`,
+    `Přijetí sponzora ${offer.name}, soutěž se přejmenuje na „${sponzorovanyNazev(offer.name)}"`,
     `${offer.amount.toLocaleString("cs")} Kč za sezónu na ${offer.seasons} `
       + `${offer.seasons === 1 ? "sezónu" : offer.seasons <= 4 ? "sezóny" : "sezón"}.`,
     JSON.stringify({ offerId, name: offer.name, amount: offer.amount, seasons: offer.seasons }),

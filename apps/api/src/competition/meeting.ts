@@ -378,7 +378,7 @@ async function closeProposal(
     // nehlasuje dvakrát, ale jeho hlas rozhoduje, když se grémium nedohodne.
     const forIt = presidentVote === "pro";
     status = forIt ? "passed" : "rejected";
-    note = `${forIt ? "Přijato" : "Zamítnuto"} ${pro}:${proti} — při rovnosti rozhodl prezident soutěže.`;
+    note = `${forIt ? "Přijato" : "Zamítnuto"} ${pro}:${proti}, při rovnosti rozhodl prezident soutěže.`;
   } else {
     status = "rejected";
     note = pro === proti && pro > 0
