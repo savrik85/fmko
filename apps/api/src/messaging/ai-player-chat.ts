@@ -169,7 +169,14 @@ export function popisZdravi(player: PlayerSnapshot): string {
   return `Zdraví: jsi zraněný${popis}, ${dny} nemůžeš hrát.`;
 }
 
-export function buildSystemPrompt(player: PlayerSnapshot, team: TeamContext, kdy: Date = new Date()): string {
+/**
+ * `spoken`: text se namluví jako hlasovka. Opilý hráč pak nepíše bez diakritiky:
+ * model by „trenere ty me pekne seres" přečetl jako cizinec a opilost do řeči
+ * stejně přidá drunkSpeech (voice-message.ts).
+ */
+export function buildSystemPrompt(
+  player: PlayerSnapshot, team: TeamContext, kdy: Date = new Date(), opts: { spoken?: boolean } = {},
+): string {
   const positionLabel: Record<string, string> = {
     GK: "brankář",
     DEF: "obránce",
@@ -222,9 +229,11 @@ export function buildSystemPrompt(player: PlayerSnapshot, team: TeamContext, kdy
       : "- Krátce: 1-2 věty, do 200 znaků.",
     // Opakuje se schválně i tady, mezi ostatními pravidly stylu. Model má sklon
     // instrukci o opilosti ze začátku promptu přejít a napsat slušnou větu.
-    cas.podnapilost >= 3
-      ? "- NEJDŮLEŽITĚJŠÍ PRAVIDLO: piš úplně bez diakritiky a s překlepy, jako když se do klávesnice trefuješ opilý. Místo trenére napiš trenere, místo neděli napiš nedeli, klidně zdvoj písmeno (dikyy) nebo vynech mezeru. Žádná tečka na konci."
-      : "",
+    cas.podnapilost >= 3 && opts.spoken
+      ? "- NEJDŮLEŽITĚJŠÍ PRAVIDLO: nahráváš trenérovi HLASOVKU, text je přepis toho, co řekneš nahlas. Piš správnou češtinou s háčky a čárkami, bez překlepů. Opilost ať je znát z toho, co a jak říkáš: plácáš, ztrácíš nit, opakuješ se, smíchy se zakuckáš."
+      : cas.podnapilost >= 3
+        ? "- NEJDŮLEŽITĚJŠÍ PRAVIDLO: piš úplně bez diakritiky a s překlepy, jako když se do klávesnice trefuješ opilý. Místo trenére napiš trenere, místo neděli napiš nedeli, klidně zdvoj písmeno (dikyy) nebo vynech mezeru. Žádná tečka na konci."
+        : "",
     "- UKAZUJ EMOCE: když tě něco štve, dej to najevo (sarkasmus, frustrace, povzdech). Když jsi rád, projev to. Nebuď monotónní.",
     "- NIKDY se neopakuj, nepoužívej stejné fráze nebo slova jako v předchozí své zprávě.",
     pravidloEmoji(player.age, player.temper, cas.podnapilost),
@@ -413,8 +422,10 @@ export async function generateInitialMessage(
   kdy: Date = new Date(),
   /** Fotka, kterou hráč k SMS přikládá (popis česky). Text k ní má sedět jako popisek. */
   photo?: { alt: string },
+  /** Z textu bude hlasovka (ruční rozeslání s `voice=1`), viz buildSystemPrompt. */
+  spoken = false,
 ): Promise<string> {
-  const system = buildSystemPrompt(player, team, kdy);
+  const system = buildSystemPrompt(player, team, kdy, { spoken });
   const contextLine = team.lastMatchResult ? ` Poslední zápas: ${team.lastMatchResult}.` : "";
   const positionLine = team.leaguePosition ? ` Tým je v lize na ${team.leaguePosition}. místě.` : "";
 

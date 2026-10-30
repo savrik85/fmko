@@ -97,3 +97,12 @@ describe("příští zápas", () => {
     expect(buildSystemPrompt(player(), { teamName: "SK Budvar Spůle" })).toContain("Termín dalšího zápasu neznáš");
   });
 });
+
+describe("opilá hlasovka", () => {
+  it("text pro hlasovku je s diakritikou, opilá SMS bez ní", () => {
+    const drunk = player({ atPub: true } as Partial<PlayerSnapshot>);
+    const team = { teamName: "SK Budvar Spůle" };
+    expect(buildSystemPrompt(drunk, team, new Date("2026-10-30T19:00:00Z"), { spoken: true })).toContain("s háčky a čárkami");
+    expect(buildSystemPrompt(drunk, team, new Date("2026-10-30T19:00:00Z"))).toContain("bez diakritiky");
+  });
+});
