@@ -20,6 +20,7 @@ vi.mock("./ai-player-spawn", () => ({
     id: r.id, firstName: "Jan", lastName: "Svědek", temper: 50, leadership: 50, morale: 50, coachRelationship: 50,
   })),
   loadTeamContext: vi.fn(async () => ({ teamName: "TJ Dvory" })),
+  loadLastMatchContext: vi.fn(async () => ({ matchId: null, lastOutcome: null, teamStreak: 0, squad: null, stats: new Map() })),
   pockejNezDopise: vi.fn(async () => undefined),
   nactiSituaceTymu: vi.fn(async () => new Map()),
   loadLastOwnMessageAt: vi.fn(async () => undefined),

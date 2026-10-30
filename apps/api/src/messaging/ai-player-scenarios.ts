@@ -47,6 +47,11 @@ export interface PlayerSnapshot {
   lastMatchOutcome?: "win" | "loss" | "draw" | null;
   /** Nastoupil do něj tenhle hráč? Kdo nehrál, nemá co hodnotit svůj výkon. */
   playedLastMatch?: boolean;
+  /**
+   * Kde byl v posledním zápase: hrál, seděl na lavičce, nebo nebyl v nominaci.
+   * `undefined` = nevíme (sestava u zápasu chybí nebo tým nehrál).
+   */
+  lastMatchSquad?: "played" | "bench" | "out";
   lastMatchGoals?: number;
   lastMatchAssists?: number;
   lastMatchRedCard?: boolean;

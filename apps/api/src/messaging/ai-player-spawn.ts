@@ -21,6 +21,7 @@ import { PHOTO_CHANCE, PHOTO_SCENES, generatePlayerPhoto, historyBody, pickPhoto
 import { coachRelationStmts } from "../lib/coach-relation";
 import { weightTalkFromState } from "../season/weight-talk";
 import { coachStreak, leftOnReadChance, markCoachMessagesRead, readDelayMs } from "./left-on-read";
+import { describeNextMatch } from "./next-match";
 import {
   generateInitialMessage,
   generateReply,
@@ -156,10 +157,90 @@ export function recentInjuryFrom(raw: unknown, now = Date.now()): PlayerSnapshot
   return { description: typeof r.description === "string" ? r.description : "", volno: r.volno === true, fake: r.fake === true };
 }
 
+/** Poslední odehraný zápas týmu: výsledek, série, nominace a statistiky hráčů. */
+export interface LastMatchContext {
+  matchId: string | null;
+  lastOutcome: "win" | "loss" | "draw" | null;
+  teamStreak: number;
+  /** Kdo byl v nominaci podle sestavy uložené u zápasu. null = sestava uložená není. */
+  squad: { starters: Set<string>; subs: Set<string> } | null;
+  /** Statistiky z toho zápasu podle id hráče, sloupce last_* jako čte `loadPlayerSnapshot`. */
+  stats: Map<string, Record<string, unknown>>;
+}
+
+/**
+ * Jeden zdroj pro všechny cesty, kde hráč píše. Dřív ho načítalo jen zakládání vlákna,
+ * odpovědi znaly jen výsledek týmu a hráč pak tvrdil, že hrál, i když nebyl ani v nominaci.
+ */
+export async function loadLastMatchContext(db: D1Database, teamId: string): Promise<LastMatchContext> {
+  const recent = await db.prepare(
+    `SELECT m.id, m.home_team_id, m.home_score, m.away_score, m.home_lineup_data, m.away_lineup_data
+       FROM matches m
+      WHERE (m.home_team_id = ? OR m.away_team_id = ?) AND m.status = 'simulated'
+      ORDER BY m.simulated_at DESC LIMIT 5`,
+  ).bind(teamId, teamId).all<{
+    id: string; home_team_id: string; home_score: number | null; away_score: number | null;
+    home_lineup_data: string | null; away_lineup_data: string | null;
+  }>()
+    .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "load recent matches", e); return { results: [] as never[] }; });
+
+  const outcomeOf = (row: { home_team_id: string; home_score: number | null; away_score: number | null }): "win" | "loss" | "draw" => {
+    const isHome = row.home_team_id === teamId;
+    const my = (isHome ? row.home_score : row.away_score) ?? 0;
+    const opp = (isHome ? row.away_score : row.home_score) ?? 0;
+    return my > opp ? "win" : my < opp ? "loss" : "draw";
+  };
+
+  // Série: kolik zápasů po sobě tým vyhrál (+) nebo prohrál (−)
+  let teamStreak = 0;
+  for (const r of recent.results) {
+    const o = outcomeOf(r);
+    if (o === "draw") break;
+    if (teamStreak === 0) teamStreak = o === "win" ? 1 : -1;
+    else if ((teamStreak > 0) === (o === "win")) teamStreak += o === "win" ? 1 : -1;
+    else break;
+  }
+
+  const last = recent.results[0];
+  if (!last) return { matchId: null, lastOutcome: null, teamStreak, squad: null, stats: new Map() };
+  const lastOutcome = last.home_score != null ? outcomeOf(last) : null;
+
+  let squad: LastMatchContext["squad"] = null;
+  const rawLineup = last.home_team_id === teamId ? last.home_lineup_data : last.away_lineup_data;
+  if (rawLineup) {
+    try {
+      const lineup = JSON.parse(rawLineup) as { starters?: Array<{ id?: string }>; subs?: Array<{ id?: string }> };
+      squad = {
+        starters: new Set((lineup.starters ?? []).map((p) => p.id ?? "").filter(Boolean)),
+        subs: new Set((lineup.subs ?? []).map((p) => p.id ?? "").filter(Boolean)),
+      };
+    } catch (e) {
+      logger.warn({ module: "ai-player-spawn" }, `nečitelná sestava zápasu ${last.id}`, e);
+    }
+  }
+
+  const statRows = await db.prepare(
+    `SELECT player_id, minutes_played AS last_minutes, goals AS last_goals, assists AS last_assists,
+            yellow_cards AS last_yellow, red_cards AS last_red, rating AS last_rating
+       FROM match_player_stats WHERE match_id = ?`,
+  ).bind(last.id).all<Record<string, unknown>>()
+    .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "statistiky posledního zápasu", e); return { results: [] as Array<Record<string, unknown>> }; });
+  const stats = new Map(statRows.results.map((r) => [r.player_id as string, r]));
+
+  return { matchId: last.id, lastOutcome, teamStreak, squad, stats };
+}
+
 export function loadPlayerSnapshot(
   row: Record<string, unknown>,
-  matchCtx?: { lastOutcome: "win" | "loss" | "draw" | null; teamStreak: number },
+  matchCtx?: LastMatchContext,
 ): PlayerSnapshot {
+  const lastStats = matchCtx?.stats.get(row.id as string) ?? {};
+  const playedLastMatch = lastStats.last_minutes != null && (lastStats.last_minutes as number) > 0;
+  const lastMatchSquad: PlayerSnapshot["lastMatchSquad"] = !matchCtx?.lastOutcome ? undefined
+    : playedLastMatch ? "played"
+    : !matchCtx.squad ? undefined
+    : matchCtx.squad.subs.has(row.id as string) || matchCtx.squad.starters.has(row.id as string) ? "bench"
+    : "out";
   const personality = (() => {
     try { return JSON.parse((row.personality as string) ?? "{}"); } catch { return {}; }
   })();
@@ -192,14 +273,15 @@ export function loadPlayerSnapshot(
     transferTalk: transferTalkFrom(lifeContext.transferUnrest),
     injury: parseInjury(row.injury),
     recentInjury: recentInjuryFrom(lifeContext.lastInjury),
-    // Kontext posledního zápasu — hráč, který nenastoupil, má last_minutes NULL.
+    // Kontext posledního zápasu — hráč, který nenastoupil, nemá v match_player_stats minuty.
     lastMatchOutcome: matchCtx?.lastOutcome ?? null,
-    playedLastMatch: row.last_minutes != null && (row.last_minutes as number) > 0,
-    lastMatchGoals: (row.last_goals as number) ?? 0,
-    lastMatchAssists: (row.last_assists as number) ?? 0,
-    lastMatchRedCard: ((row.last_red as number) ?? 0) > 0,
-    lastMatchYellow: ((row.last_yellow as number) ?? 0) > 0,
-    lastMatchRating: (row.last_rating as number) ?? undefined,
+    playedLastMatch,
+    lastMatchSquad,
+    lastMatchGoals: (lastStats.last_goals as number) ?? 0,
+    lastMatchAssists: (lastStats.last_assists as number) ?? 0,
+    lastMatchRedCard: ((lastStats.last_red as number) ?? 0) > 0,
+    lastMatchYellow: ((lastStats.last_yellow as number) ?? 0) > 0,
+    lastMatchRating: (lastStats.last_rating as number) ?? undefined,
     teamStreak: matchCtx?.teamStreak ?? 0,
   };
 }
@@ -285,6 +367,23 @@ export async function loadTeamContext(db: D1Database, teamId: string): Promise<T
     lastMatchResult = `${verdict} ${my}:${opp} ${isHome ? "doma s" : "venku s"} ${oppName}`;
   }
 
+  // Příští mistrovský zápas. Staré neodehrané zápasy z minulých sezón v DB zůstaly
+  // jako 'scheduled', proto jen termíny od teď dál.
+  const nm = await db.prepare(
+    `SELECT m.home_team_id, c.scheduled_at, ht.name AS home_name, at.name AS away_name
+       FROM matches m
+       JOIN season_calendar c ON c.id = m.calendar_id
+       JOIN teams ht ON ht.id = m.home_team_id
+       JOIN teams at ON at.id = m.away_team_id
+      WHERE (m.home_team_id = ? OR m.away_team_id = ?) AND m.status IN ('scheduled', 'lineups_open')
+        AND c.scheduled_at >= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-1 hour')
+      ORDER BY c.scheduled_at LIMIT 1`,
+  ).bind(teamId, teamId).first<{ home_team_id: string; scheduled_at: string; home_name: string; away_name: string }>()
+    .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "loadTeamContext next match", e); return null; });
+  const nextMatch = nm
+    ? describeNextMatch(new Date(nm.scheduled_at), nm.home_team_id === teamId, nm.home_team_id === teamId ? nm.away_name : nm.home_name)
+    : undefined;
+
   // Pozice v tabulce
   let leaguePosition: number | undefined;
   if (row?.league_id) {
@@ -309,6 +408,7 @@ export async function loadTeamContext(db: D1Database, teamId: string): Promise<T
     urban: row?.district === "Praha" || ["town", "small_city", "city"].includes(row?.village_size ?? ""),
     managerName: row?.manager_name ?? undefined,
     lastMatchResult,
+    nextMatch,
     leaguePosition,
     squadNames: squad.results.map((r) => `${r.first_name} ${r.last_name}`),
   };
@@ -426,39 +526,8 @@ async function spawnForTeam(
   const forcedScenario = opts.forcedScenario ?? null;
   // 0. Poslední odehraný zápas + série výsledků — kontext pro scénáře (výhra/prohra,
   //    góly, karty). Dřív scénáře o výhře padaly i po prohře, protože o zápase nevěděly.
-  const lastMatch = await db.prepare(
-    `SELECT m.id, m.home_team_id, m.home_score, m.away_score
-       FROM matches m
-      WHERE (m.home_team_id = ? OR m.away_team_id = ?) AND m.status = 'simulated'
-      ORDER BY m.simulated_at DESC LIMIT 1`,
-  ).bind(teamId, teamId).first<{ id: string; home_team_id: string; home_score: number; away_score: number }>()
-    .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "load last match", e); return null; });
-
-  const outcomeOf = (row: { home_team_id: string; home_score: number; away_score: number }): "win" | "loss" | "draw" => {
-    const isHome = row.home_team_id === teamId;
-    const my = isHome ? row.home_score : row.away_score;
-    const opp = isHome ? row.away_score : row.home_score;
-    return my > opp ? "win" : my < opp ? "loss" : "draw";
-  };
-  const lastOutcome = lastMatch && lastMatch.home_score != null ? outcomeOf(lastMatch) : null;
-
-  // Série: kolik zápasů po sobě tým vyhrál (+) nebo prohrál (−)
-  const recentMatches = await db.prepare(
-    `SELECT m.home_team_id, m.home_score, m.away_score
-       FROM matches m
-      WHERE (m.home_team_id = ? OR m.away_team_id = ?) AND m.status = 'simulated'
-      ORDER BY m.simulated_at DESC LIMIT 5`,
-  ).bind(teamId, teamId).all<{ home_team_id: string; home_score: number; away_score: number }>()
-    .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "load recent matches", e); return { results: [] as never[] }; });
-
-  let teamStreak = 0;
-  for (const r of recentMatches.results) {
-    const o = outcomeOf(r);
-    if (o === "draw") break;
-    if (teamStreak === 0) teamStreak = o === "win" ? 1 : -1;
-    else if ((teamStreak > 0) === (o === "win")) teamStreak += o === "win" ? 1 : -1;
-    else break;
-  }
+  //    Statistiky z něj ukážou góly, karty i to, jestli hráč vůbec nastoupil.
+  const matchCtx = await loadLastMatchContext(db, teamId);
 
   // 1. Načti aktivní hráče s recent stats (last 30 dní)
   const playersRow = await db.prepare(
@@ -466,9 +535,6 @@ async function spawnForTeam(
             p.personality, p.life_context, p.coach_relationship, p.is_celebrity,
             COALESCE(stats.recent_minutes, 0) as recent_minutes,
             COALESCE(stats.recent_rating_avg, 6.5) as recent_rating_avg,
-            last.minutes_played AS last_minutes, last.goals AS last_goals,
-            last.assists AS last_assists, last.yellow_cards AS last_yellow,
-            last.red_cards AS last_red, last.rating AS last_rating,
             ${INJURY_COLUMN}
      FROM players p
      LEFT JOIN (
@@ -478,12 +544,8 @@ async function spawnForTeam(
        WHERE mps.team_id = ? AND m.status = 'simulated' AND m.simulated_at >= datetime('now', '-30 days')
        GROUP BY mps.player_id
      ) stats ON stats.player_id = p.id
-     -- Statistiky z POSLEDNÍHO odehraného zápasu — z nich se poznají góly, karty i to,
-     -- jestli hráč vůbec nastoupil. Bez toho scénáře reagovaly naslepo.
-     LEFT JOIN match_player_stats last
-            ON last.player_id = p.id AND last.match_id = ?
      WHERE p.team_id = ? AND (p.status IS NULL OR p.status = 'active')`,
-  ).bind(teamId, lastMatch?.id ?? "", teamId).all<Record<string, unknown>>()
+  ).bind(teamId, teamId).all<Record<string, unknown>>()
     .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "load players for spawn", e); return { results: [] }; });
 
   if (playersRow.results.length === 0) return null;
@@ -491,7 +553,7 @@ async function spawnForTeam(
   // 2. Vážený výběr hráče: 60 % "potřeba" (nízká morale, málo minut, vysoký temper), 40 % random
   const situace = await nactiSituaceTymu(db, teamId);
   const snapshots = playersRow.results.map((r) => {
-    const snap = loadPlayerSnapshot(r, { lastOutcome, teamStreak });
+    const snap = loadPlayerSnapshot(r, matchCtx);
     const kind = situace.get(snap.id);
     snap.zivotniSituace = kind ? { kind, label: nazevSituace(kind) } : undefined;
     return snap;
@@ -527,7 +589,7 @@ async function spawnForTeam(
   //     naslepo a ať víme, čí vztah po rozhovoru upravit.
   let subject: { id: string; name: string } | null = null;
   if (scenario.id === "team_chemistry" || scenario.id === "assist_teamwork") {
-    subject = await pickSubjectTeammate(db, teamId, player.id, scenario.id, lastMatch?.id ?? null);
+    subject = await pickSubjectTeammate(db, teamId, player.id, scenario.id, matchCtx.matchId);
   }
 
   // 4. Načti team context
@@ -537,6 +599,7 @@ async function spawnForTeam(
   if (forcedScenario) {
     player.lastMatchOutcome = undefined;
     player.playedLastMatch = undefined;
+    player.lastMatchSquad = undefined;
     teamCtx.lastMatchResult = undefined;
     teamCtx.leaguePosition = undefined;
   }
@@ -800,7 +863,7 @@ async function handleAiPlayerReplyInner(
     return;
   }
 
-  // Načti hráče (recent stats nejsou pro reply potřeba)
+  // Načti hráče (recent stats nejsou pro reply potřeba, poslední zápas ano)
   const playerRow = await db.prepare(
     `SELECT p.id, p.first_name, p.last_name, p.nationality, p.age, p.position, p.team_id, p.loan_from_team_id, p.personality, p.life_context, p.coach_relationship, p.is_celebrity,
             ${INJURY_COLUMN}
@@ -838,7 +901,10 @@ async function handleAiPlayerReplyInner(
     return;
   }
 
-  const player = loadPlayerSnapshot(playerRow);
+  // Účast v posledním zápase jen u hráče z kádru, se kterým se píše. Hostující nebo hráč
+  // z U21 hrál jinou soutěž a výsledek týmu by se mu připsal stejně špatně jako dřív.
+  const replyMatchCtx = playerRow.team_id === conv.team_id ? await loadLastMatchContext(db, conv.team_id) : undefined;
+  const player = loadPlayerSnapshot(playerRow, replyMatchCtx);
   // Pozvánka z hospody: v celé konverzaci sedí v hospodě a píše opile, i když už je pozdě.
   if (scenario.atPub) player.atPub = true;
   player.znalostiIncidentu = await nactiZnalostiHrace(db, {

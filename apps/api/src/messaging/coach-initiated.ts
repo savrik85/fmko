@@ -23,7 +23,7 @@ import {
 } from "./ai-player-chat";
 import { coachStreak, leftOnReadChance, markCoachMessagesRead, readDelayMs } from "./left-on-read";
 import {
-  INJURY_COLUMN, afterPlayerReply, loadLastOwnMessageAt, loadPlayerSnapshot, loadTeamContext, nactiSituaceTymu,
+  INJURY_COLUMN, afterPlayerReply, loadLastMatchContext, loadLastOwnMessageAt, loadPlayerSnapshot, loadTeamContext, nactiSituaceTymu,
   pockejNezDopise, scheduleRetryReply,
 } from "./ai-player-spawn";
 import { loadChatMemory } from "./player-memory";
@@ -80,7 +80,8 @@ export async function startCoachThread(
       return false;
     }
 
-    const player = loadPlayerSnapshot(row);
+    // Bez účasti v posledním zápase si hráč z výsledku týmu domyslel, že hrál.
+    const player = loadPlayerSnapshot(row, await loadLastMatchContext(db, opts.teamId));
     const situaceKind = (await nactiSituaceTymu(db, opts.teamId)).get(opts.playerId);
     player.zivotniSituace = situaceKind ? { kind: situaceKind, label: nazevSituace(situaceKind) } : undefined;
     const team = await loadTeamContext(db, opts.teamId);
@@ -272,8 +273,9 @@ export async function replyInSquadGroup(
     if (rows.results.length === 0) return false;
 
     const situace = await nactiSituaceTymu(db, opts.teamId);
+    const matchCtx = await loadLastMatchContext(db, opts.teamId);
     const kadr = rows.results.map((r) => {
-      const snap = loadPlayerSnapshot(r);
+      const snap = loadPlayerSnapshot(r, matchCtx);
       const kind = situace.get(snap.id);
       snap.zivotniSituace = kind ? { kind, label: nazevSituace(kind) } : undefined;
       return snap;
