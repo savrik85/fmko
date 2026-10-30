@@ -205,6 +205,10 @@ export default function SoutezPage() {
   // Disciplinárka nese avatary všech trenérů, takže se hodí i pro volby a vedení.
   useEffect(loadDiscipline, [loadDiscipline]);
   useEffect(loadBoard, [loadBoard]);
+  // Dotace a sponzor se dřív načetly až po první akci na stránce, takže panel
+  // „Dotace klubům" při otevření grémia nikdo neviděl (od 2026-08-21).
+  useEffect(loadGrants, [loadGrants]);
+  useEffect(loadSponsor, [loadSponsor]);
 
   // Odklepnutí zasedání po zobrazení stránky soutěže — odznak grémia se hned smaže.
   useEffect(() => {

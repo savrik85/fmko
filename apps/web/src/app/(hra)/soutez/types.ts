@@ -231,6 +231,8 @@ export interface SponsorData {
 export interface GrantsData {
   freeBalance: number;
   min: number; max: number; surplusMaxPct: number;
+  /** Žádost o dotaci pro vlastní klub: strop, nejkratší odůvodnění a druhy. Starší API je neposílá. */
+  ownMax?: number; ownNoteMin?: number; ownKinds?: string[];
   pitchThreshold: number;
   kinds: Array<{ kind: string; label: string; targeted: boolean; seasonEnd: boolean }>;
   teams: Array<{
