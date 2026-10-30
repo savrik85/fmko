@@ -35,12 +35,34 @@ export function isReplyTone(v: unknown): v is ReplyTone {
 /**
  * Proměnné šablon: `{skore}` z pohledu domácích („2:1"), `{serie}` = počet proher v řadě,
  * `{slib}` = popisek slibu v 1. pádě (`promiseLabel`), v šablonách vždy za dvojtečkou.
+ * `{incident}` = co se v klubu stalo (`SCANDAL_INCIDENT_LABELS`), 1. pád, za dvojtečkou nebo za „jako".
  */
 export interface OwnerSmsVars {
   skore?: string;
   serie?: number;
   slib?: string;
+  incident?: string;
 }
+
+/**
+ * Průšvihy, kvůli kterým se ozve opatrný majitel, a jak o nich mluví (1. pád, malým písmenem).
+ * Dřív psal „Slyšel jsem, co se u vás stalo" a nikdo nevěděl, o co jde (2026-10-30).
+ * Chybí tu záměrně okradená tombola, oslava v kabině a vybraná kasa: aféra to pro firmu není.
+ */
+export const SCANDAL_INCIDENT_LABELS: Readonly<Record<string, string>> = {
+  vloupani_sklad: "vloupání do skladu",
+  vitrina: "krádež pohárů z vitríny",
+  dodavka_pujcena: "klubová dodávka půjčená bez dovolení",
+  dodavka_ukradena: "ukradená klubová dodávka",
+  kradez_kamery: "ukradené kamery z areálu",
+  kopnute_dvere: "vykopnuté dveře v klubovně",
+  koleje_trakturek: "hřiště rozryté od traktůrku",
+  pozar_grilu: "požár od klubového grilu",
+  svetlice: "světlice na hřišti",
+  zpronevera_ekonoma: "zpronevěra klubových peněz",
+  utek_s_penezi: "útěk s klubovými penězi",
+  vandal: "řádění vandalů v areálu",
+};
 
 type Pools = Partial<Record<OwnerPersonality, readonly string[]>>;
 
@@ -245,11 +267,11 @@ export const OWNER_SMS_TEXTS: Record<OwnerSmsOccasion, Pools> = {
   },
   scandal: {
     cautious: [
-      "Slyšel jsem, co se u vás stalo. Tohle mi dělá velké starosti. Jak to řešíte?",
-      "Ta aféra v klubu mě znepokojuje. Nechci být spojovaný s průšvihy.",
-      "Co se to u vás děje? Potřebuji vědět, že to máte pod kontrolou.",
-      "Lidi už o tom mluví. Moje firma si nemůže dovolit ostudu. Co s tím?",
-      "Tohle je přesně to, čeho se bojím. Vysvětlíte mi to?",
+      "Slyšel jsem, co se u vás stalo: {incident}. Tohle mi dělá velké starosti. Jak to řešíte?",
+      "Ta aféra v klubu mě znepokojuje: {incident}. Nechci být spojovaný s průšvihy.",
+      "Co se to u vás děje? Všude se mluví jen o jednom: {incident}. Potřebuji vědět, že to máte pod kontrolou.",
+      "Lidi už o tom mluví: {incident}. Moje firma si nemůže dovolit ostudu. Co s tím?",
+      "Tohle je přesně to, čeho se bojím: {incident}. Vysvětlíte mi to?",
     ],
   },
   promise_kept: {
@@ -328,14 +350,15 @@ export function proherTvar(n: number): string {
 
 function fill(t: string, vars: OwnerSmsVars): string {
   const serie = vars.serie === undefined ? "" : proherTvar(vars.serie);
-  return t.replace(/\{skore\}/g, vars.skore ?? "").replace(/\{serie\}/g, serie).replace(/\{slib\}/g, vars.slib ?? "");
+  return t.replace(/\{skore\}/g, vars.skore ?? "").replace(/\{serie\}/g, serie).replace(/\{slib\}/g, vars.slib ?? "")
+    .replace(/\{incident\}/g, vars.incident ?? "");
 }
 
 /**
  * Text SMS. Deterministicky podle `seedKey` (reference spouštěče), s vynecháním
  * textů, které klub nedávno dostal (`recent` = vyrenderovaná těla). `null` = majitel
  * s touhle povahou k téhle příležitosti nepíše, nebo chybí proměnná šablony (chybějící
- * `{skore}`, `{serie}` i `{slib}` — nikdy se nedoplňuje výchozí hodnota).
+ * `{skore}`, `{serie}`, `{slib}` i `{incident}` — nikdy se nedoplňuje výchozí hodnota).
  */
 export function renderOwnerSms(
   occasion: OwnerSmsOccasion, personality: OwnerPersonality, vars: OwnerSmsVars, seedKey: string, recent: readonly string[],
@@ -345,6 +368,7 @@ export function renderOwnerSms(
   if (pool.some((t) => t.includes("{skore}")) && vars.skore === undefined) return null;
   if (pool.some((t) => t.includes("{serie}")) && vars.serie === undefined) return null;
   if (pool.some((t) => t.includes("{slib}")) && vars.slib === undefined) return null;
+  if (pool.some((t) => t.includes("{incident}")) && vars.incident === undefined) return null;
   const rendered = pool.map((t) => fill(t, vars));
   const fresh = rendered.filter((t) => !recent.includes(t));
   return createRng(seedFromString(seedKey)).pick(fresh.length > 0 ? fresh : rendered);
@@ -481,8 +505,30 @@ export const OWNER_REPLY_BACK: Record<OwnerPersonality, Record<ReplyMood, Record
  */
 export function ownerReplyBack(
   personality: OwnerPersonality, occasion: OwnerSmsOccasion, favorDelta: number, seedKey: string,
+  vars: OwnerSmsVars = {},
 ): string {
   const mood = occasionReplyMood(occasion);
   const direction = favorDelta > 0 ? "up" : favorDelta < 0 ? "down" : "neutral";
-  return createRng(seedFromString(seedKey)).pick(OWNER_REPLY_BACK[personality][mood][direction]);
+  const rng = createRng(seedFromString(seedKey));
+  if (occasion === "scandal" && vars.incident) return fill(rng.pick(SCANDAL_REPLY_BACK[direction]), vars);
+  return rng.pick(OWNER_REPLY_BACK[personality][mood][direction]);
 }
+
+/**
+ * Odpověď majitele po průšvihu, když ji nenapíše model: vrací se ke stejné věci,
+ * ne obecné „beru na vědomí, že situaci řešíte". Píše jen opatrný majitel, proto vyká.
+ */
+const SCANDAL_REPLY_BACK: Record<"up" | "down" | "neutral", readonly string[]> = {
+  up: [
+    "Děkuji, to mě uklidnilo. Hlavně ať se něco jako {incident} už neopakuje.",
+    "Jsem rád, že to berete vážně. Něco jako {incident} si moje firma nemůže dovolit.",
+  ],
+  down: [
+    "To mě moc neuklidnilo. Něco jako {incident} se v klubu stávat nemá.",
+    "Tak to mám ještě větší obavy. Něco jako {incident} nesmí být normální.",
+  ],
+  neutral: [
+    "Dobře, budu to sledovat. Něco jako {incident} si znovu dovolit nemůžeme.",
+    "Rozumím. Uvidíme, jestli se něco jako {incident} ještě zopakuje.",
+  ],
+};

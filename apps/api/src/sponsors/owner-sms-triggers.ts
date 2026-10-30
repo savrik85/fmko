@@ -10,6 +10,7 @@ import {
 import {
   addDays, LOSING_STREAK_MIN, leadingLosses, occasionForResult, pickRelationshipOwner, seasonVerdict,
 } from "./owner-sms-rules";
+import { SCANDAL_INCIDENT_LABELS } from "./owner-sms-texts";
 
 const M = "owner-sms";
 
@@ -86,18 +87,27 @@ export async function enqueueLosingStreakSms(db: D1Database, teamId: string, tod
   });
 }
 
-/** Průšvih v klubu (krádež, poškození): ozve se jen opatrný majitel. */
+/**
+ * Průšvih v klubu (krádež, poškození): ozve se jen opatrný majitel a řekne, o co jde.
+ * Jen včerejší nebo dnešní incident, ze souběžných ten nejzávažnější. Dřív bral okno
+ * ±2 dny a text nevěděl, co se stalo, takže trenér netušil, na co sponzor reaguje.
+ */
 export async function enqueueScandalSms(db: D1Database, teamId: string, today: string): Promise<boolean> {
+  const kinds = Object.keys(SCANDAL_INCIDENT_LABELS);
   const inc = await db.prepare(
-    `SELECT id FROM club_incidents
+    `SELECT id, kind FROM club_incidents
      WHERE team_id = ? AND category IN ('kradez','poskozeni') AND status != 'hrozi' AND severity >= 2
-       AND ABS(julianday(substr(game_date, 1, 10)) - julianday(?)) <= 2
-     ORDER BY game_date DESC LIMIT 1`,
-  ).bind(teamId, today.slice(0, 10)).first<{ id: string }>();
-  if (!inc) return false;
+       AND kind IN (${kinds.map(() => "?").join(", ")})
+       AND julianday(?) - julianday(substr(game_date, 1, 10)) BETWEEN 0 AND 1
+     ORDER BY severity DESC, game_date DESC LIMIT 1`,
+  ).bind(teamId, ...kinds, today.slice(0, 10)).first<{ id: string; kind: string }>();
+  const incident = inc ? SCANDAL_INCIDENT_LABELS[inc.kind] : undefined;
+  if (!inc || !incident) return false;
   const owner = pickRelationshipOwner(await loadRelationshipOwners(db, teamId), { only: "cautious" });
   if (!owner) return false;
-  return enqueueOwnerSms(db, { sponsorId: owner.sponsorId, teamId, occasion: "scandal", referenceId: `scandal:${inc.id}`, day: today });
+  return enqueueOwnerSms(db, {
+    sponsorId: owner.sponsorId, teamId, occasion: "scandal", referenceId: `scandal:${inc.id}`, day: today, vars: { incident },
+  });
 }
 
 /** Hlavní sponzor: nový se přivítá, odcházející se rozloučí. Routy doručují hned. */

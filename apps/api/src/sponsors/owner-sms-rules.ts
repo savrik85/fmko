@@ -26,7 +26,8 @@ export interface OccasionRule {
 export const OCCASION_RULES: Record<OwnerSmsOccasion, OccasionRule> = {
   riot: { expectsReply: true, priority: 1, deliverDays: 2 },
   sponsor_terminates: { expectsReply: false, priority: 2, deliverDays: 3 },
-  scandal: { expectsReply: true, priority: 3, deliverDays: 3 },
+  // Den, ne tři: o průšvihu majitel píše hned, za tři dny by nebylo jasné, o co jde.
+  scandal: { expectsReply: true, priority: 3, deliverDays: 1 },
   promise_broken: { expectsReply: true, priority: 4, deliverDays: 3 },
   main_lost: { expectsReply: true, priority: 5, deliverDays: 3 },
   after_loss: { expectsReply: true, priority: 6, deliverDays: 1 },

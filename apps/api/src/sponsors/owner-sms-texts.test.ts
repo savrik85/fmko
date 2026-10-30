@@ -5,10 +5,10 @@
 import { describe, expect, it } from "vitest";
 import { OWNER_PERSONALITIES } from "./owners";
 import {
-  OWNER_REPLY_BACK, OWNER_SMS_OCCASIONS, OWNER_SMS_TEXTS, ownerReplyBack, proherTvar, renderOwnerSms, replyOptions,
+  OWNER_REPLY_BACK, OWNER_SMS_OCCASIONS, OWNER_SMS_TEXTS, SCANDAL_INCIDENT_LABELS, ownerReplyBack, proherTvar, renderOwnerSms, replyOptions,
 } from "./owner-sms-texts";
 
-const VARS = { skore: "2:1", serie: 4, slib: "umístění do 3. místa" };
+const VARS = { skore: "2:1", serie: 4, slib: "umístění do 3. místa", incident: "krádež pohárů z vitríny" };
 
 describe("OWNER_SMS_TEXTS", () => {
   it("každá příležitost má pro každou povahu aspoň tři věty (skandál jen opatrný)", () => {
@@ -29,7 +29,7 @@ describe("OWNER_SMS_TEXTS", () => {
       for (const p of OWNER_PERSONALITIES) {
         for (const t of OWNER_SMS_TEXTS[o][p] ?? []) {
           const out = renderOwnerSms(o, p, VARS, `test|${t}`, (OWNER_SMS_TEXTS[o][p] ?? []).filter((x) => x !== t)
-            .map((x) => x.replace("{skore}", "2:1").replace("{serie}", "4 prohry").replace("{slib}", "umístění do 3. místa")));
+            .map((x) => x.replace("{skore}", "2:1").replace("{serie}", "4 prohry").replace("{slib}", "umístění do 3. místa").replace("{incident}", "krádež pohárů z vitríny")));
           expect(out, `${o}/${p}`).not.toBeNull();
           expect(out).not.toMatch(/[{}]/);
           expect(out).not.toContain("—");
@@ -192,5 +192,31 @@ describe("oslovení trenéra", () => {
         }
       }
     }
+  });
+});
+
+describe("průšvih: majitel řekne, o co jde", () => {
+  it("každá věta o skandálu jmenuje incident", () => {
+    for (const t of OWNER_SMS_TEXTS.scandal.cautious ?? []) expect(t).toContain("{incident}");
+    const out = renderOwnerSms("scandal", "cautious", { incident: "klubová dodávka půjčená bez dovolení" }, "scandal:inc-1", []);
+    expect(out).toContain("klubová dodávka půjčená bez dovolení");
+  });
+
+  it("bez popisku incidentu se nepošle obecná věta", () => {
+    expect(renderOwnerSms("scandal", "cautious", {}, "scandal:inc-1", [])).toBeNull();
+  });
+
+  it("tombola, oslava v kabině a vybraná kasa nejsou aféra", () => {
+    for (const kind of ["tombola", "oslava_v_kabine", "kasa_obcerstveni"]) expect(SCANDAL_INCIDENT_LABELS[kind]).toBeUndefined();
+  });
+
+  it("záložní odpověď majitele se vrací ke stejné věci", () => {
+    for (const delta of [2, 0, -3]) {
+      const back = ownerReplyBack("cautious", "scandal", delta, `owner-reply|${delta}`, { incident: "krádež pohárů z vitríny" });
+      expect(back).toContain("krádež pohárů z vitríny");
+      expect(back).not.toMatch(/[{}—]/);
+    }
+    // Bez popisku (staré SMS) zůstane obecná věta.
+    expect(ownerReplyBack("cautious", "scandal", 2, "owner-reply|old")).not.toMatch(/[{}]/);
   });
 });

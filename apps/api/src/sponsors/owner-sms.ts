@@ -234,8 +234,8 @@ export async function handleOwnerSmsReply(
     const claim = await db.prepare(
       `UPDATE sponsor_owner_sms SET status = 'replied', reply_tone = ?
        WHERE id = ? AND status = 'awaiting' AND team_id = ?
-       RETURNING occasion`,
-    ).bind(tone, state.smsId, conv.team_id).all<{ occasion: string }>();
+       RETURNING occasion, vars`,
+    ).bind(tone, state.smsId, conv.team_id).all<{ occasion: string; vars: string | null }>();
     if (claim.results.length !== 1) {
       // Vlákno přežilo svou SMS (vypršela, nahradila ji novější, nebo ji deliverOwnerSmsForTeam
       // zahodil po chybě doručení): jen ho zavřít, bez dopadu na náklonnost.
@@ -267,7 +267,7 @@ export async function handleOwnerSmsReply(
       const written = writeReply
         ? await writeReply(delta).catch((e) => { logger.warn({ module: M }, `odpověď majitele modelem (sms ${state.smsId})`, e); return null; })
         : null;
-      const back = written ?? ownerReplyBack(personality, occasion, delta, `owner-reply|${state.smsId}`);
+      const back = written ?? ownerReplyBack(personality, occasion, delta, `owner-reply|${state.smsId}`, parseVars(claim.results[0].vars));
       const senderName = owner ? `${owner.firstName} ${owner.lastName}` : "Majitel firmy";
       const reason = tone === "dismissive" ? FAVOR_REASONS.smsDismissed : FAVOR_REASONS.smsReply;
 
