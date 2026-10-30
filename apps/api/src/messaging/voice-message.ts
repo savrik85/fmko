@@ -100,9 +100,13 @@ export function pickPlayerVoice(playerId: string, age: number, stored?: unknown)
   return { name: pool[h % pool.length], trait: VOICE_TRAITS[Math.floor(h / pool.length) % VOICE_TRAITS.length] };
 }
 
-/** Text k namluvení: bez emoji, které by model buď přečetl, nebo zakoktal. */
+/**
+ * Text k namluvení: bez emoji, které by model buď přečetl, nebo zakoktal, a bez
+ * scénických poznámek v hvězdičkách („*škyt*"), které by přečetl nahlas.
+ */
 export function spokenText(body: string): string {
   return body
+    .replace(/\*[^*\n]{1,40}\*/g, "")
     .replace(/[\p{Extended_Pictographic}\u{FE0F}\u{200D}]/gu, "")
     .replace(/\s{2,}/g, " ")
     .trim();
