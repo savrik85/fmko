@@ -658,7 +658,7 @@ async function spawnForTeam(
   try {
     initialBody = draftPlayer && saved
       ? saved.text
-      : await generateInitialMessage(env, player, scenario, teamCtx, writtenAt, photo ? { alt: photo.alt } : undefined);
+      : await generateInitialMessage(env, player, scenario, teamCtx, writtenAt, photo ? { alt: photo.alt } : undefined, opts.forceVoice === true && !photo);
   } catch (e) {
     if (e instanceof GeminiUnavailableError) {
       logger.warn({ module: "ai-player-spawn" }, `Gemini unavailable for ${player.firstName}: ${e.message}`);
