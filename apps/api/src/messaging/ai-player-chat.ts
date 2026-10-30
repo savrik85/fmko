@@ -46,6 +46,8 @@ export interface TeamContext {
   villageName?: string;
   leaguePosition?: number;
   lastMatchResult?: string;
+  /** Příští mistrovský zápas, např. „dnes (čtvrtek 29. 10.) v 18:00 venku s X“. Bez něj hráč tvrdil, že se nehraje. */
+  nextMatch?: string;
   managerName?: string;
   /** Jména spoluhráčů — bez nich si model vymýšlí neexistující hráče. */
   squadNames?: string[];
@@ -115,11 +117,18 @@ function buildPersonalityHints(p: PlayerSnapshot): string {
  * Co se hráči stalo v posledním zápase. Bez toho by scénář o gólu nebo červené kartě
  * psal naslepo a model si počty i vlastní výkon domyslel.
  */
-function buildLastMatchFacts(p: PlayerSnapshot): string {
+export function buildLastMatchFacts(p: PlayerSnapshot, lastMatchResult?: string): string {
   if (!p.lastMatchOutcome) return "";
-  const verdict = p.lastMatchOutcome === "win" ? "vyhráli jsme" : p.lastMatchOutcome === "loss" ? "prohráli jsme" : "remizovali jsme";
+  const verdict = lastMatchResult
+    ?? (p.lastMatchOutcome === "win" ? "vyhráli jsme" : p.lastMatchOutcome === "loss" ? "prohráli jsme" : "remizovali jsme");
   if (p.playedLastMatch === false) {
-    return `- V posledním zápase (${verdict}) jsi NEHRÁL, seděl jsi na lavičce. Nemluv o svém výkonu, góly ani karty jsi mít nemohl.`;
+    // Dřív tu stálo vždycky „seděl jsi na lavičce", i u hráče, kterého trenér vůbec nenominoval.
+    const where = p.lastMatchSquad === "bench"
+      ? "jen jsi seděl na lavičce a nenastoupil jsi"
+      : p.lastMatchSquad === "out"
+        ? "nebyl jsi ani na lavičce, trenér tě do nominace nedal"
+        : "nenastoupil jsi";
+    return `- V posledním zápase (${verdict}) jsi NEHRÁL, ${where}. NIKDY netvrď, že jsi hrál nebo byl na hřišti. Nemluv o svém výkonu, góly ani karty jsi mít nemohl.`;
   }
   const bits: string[] = [];
   if ((p.lastMatchGoals ?? 0) > 0) bits.push(`dal jsi ${p.lastMatchGoals} ${p.lastMatchGoals === 1 ? "gól" : (p.lastMatchGoals ?? 0) < 5 ? "góly" : "gólů"}`);
@@ -228,11 +237,15 @@ export function buildSystemPrompt(player: PlayerSnapshot, team: TeamContext, kdy
     team.lastMatchResult
       ? `- Poslední zápas: ${team.lastMatchResult}. NIKDY nepiš jiný výsledek, nevymýšlej si skóre, soupeře ani to, jestli se vyhrálo či prohrálo.`
       : "- O posledním zápase nic nevíš. NEZMIŇUJ žádný výsledek, skóre ani soupeře.",
+    team.nextMatch
+      ? `- Příští mistrovský zápas: ${team.nextMatch}.`
+      : "- Termín dalšího zápasu neznáš.",
     team.leaguePosition ? `- Tým je v tabulce na ${team.leaguePosition}. místě.` : "",
     team.squadNames && team.squadNames.length > 0
       ? `- Spoluhráči (JEDINÁ povolená jména, o kterých smíš mluvit): ${team.squadNames.join(", ")}. NIKOHO jiného nejmenuj — žádná vymyšlená jména.`
       : "- Jména spoluhráčů neznáš. NIKOHO nejmenuj.",
-    buildLastMatchFacts(player),
+    buildLastMatchFacts(player, team.lastMatchResult),
+    "- O termínech zápasů, sestavě a o tom, kdo hrál, víš JEN to, co stojí v těchto faktech. NEVYMÝŠLEJ si, kdy se hraje, že se nehraje, ani kdo nastoupil. Když to nevíš, řekni to nebo se zeptej trenéra.",
     team.subjectPlayerName
       ? `- Konverzace je o konkrétním spoluhráči: ${team.subjectPlayerName}. Mluv VÝHRADNĚ o něm, nikoho jiného nejmenuj.`
       : "",

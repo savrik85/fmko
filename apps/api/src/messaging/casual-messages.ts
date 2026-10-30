@@ -130,7 +130,7 @@ async function spawnCasualForTeam(
   clock: { hour: number; weekday: number; month: number },
   manual?: { topicId?: string; dryRun?: boolean },
 ): Promise<{ sent: boolean; draft?: CasualDraft } | null> {
-  const { INJURY_COLUMN, loadPlayerSnapshot, loadTeamContext, nactiSituaceTymu, getOrCreatePlayerConversation } = await import("./ai-player-spawn");
+  const { INJURY_COLUMN, loadLastMatchContext, loadPlayerSnapshot, loadTeamContext, nactiSituaceTymu, getOrCreatePlayerConversation } = await import("./ai-player-spawn");
 
   const rows = await db.prepare(
     `SELECT p.id, p.first_name, p.last_name, p.nationality, p.nickname, p.avatar, p.age, p.position,
@@ -146,12 +146,13 @@ async function spawnCasualForTeam(
   const situations = await nactiSituaceTymu(db, teamId);
   const recentTopics = manual ? [] : await readRecentTopics(env.CACHE_KV, teamId);
   const team = await loadTeamContext(db, teamId);
+  const matchCtx = await loadLastMatchContext(db, teamId);
   const forced = manual?.topicId ? CASUAL_TOPICS.find((t) => t.id === manual.topicId) ?? null : null;
 
   // Kandidáti: hráč × téma, které mu teď sedí. Kamarád trenéra píše častěji než ten, kdo ho jen bere.
   const candidates: Array<{ player: PlayerSnapshot; row: Record<string, unknown>; topic: CasualTopic; ctx: CasualContext; weight: number }> = [];
   for (const row of rows.results) {
-    const player = loadPlayerSnapshot(row);
+    const player = loadPlayerSnapshot(row, matchCtx);
     // Zraněný nejde na ryby ani na houby; ozve se s tím, co řeší, jinými cestami.
     if (player.injury && !player.injury.volno) continue;
     if (!manual && wroteCasualRecently(row.life_context, now)) continue;

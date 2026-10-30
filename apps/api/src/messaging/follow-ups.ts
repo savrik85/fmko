@@ -191,7 +191,7 @@ async function deliverOne(db: D1Database, env: FollowUpEnv, row: FollowUpRow, no
   if (postpone) return { postpone };
   if (row.kind === "retry_reply") return retryReply(db, env, row);
 
-  const { INJURY_COLUMN, loadPlayerSnapshot, loadTeamContext } = await import("./ai-player-spawn");
+  const { INJURY_COLUMN, loadLastMatchContext, loadPlayerSnapshot, loadTeamContext } = await import("./ai-player-spawn");
   const playerRow = await db.prepare(
     `SELECT p.id, p.first_name, p.last_name, p.nationality, p.age, p.position, p.team_id, p.loan_from_team_id,
             p.personality, p.life_context, p.coach_relationship, p.is_celebrity, ${INJURY_COLUMN}
@@ -209,7 +209,8 @@ async function deliverOne(db: D1Database, env: FollowUpEnv, row: FollowUpRow, no
     return "cancelled";
   }
 
-  const player = loadPlayerSnapshot(playerRow);
+  // Účast v posledním zápase jen u hráče z tohohle kádru, jinak hrál jinou soutěž.
+  const player = loadPlayerSnapshot(playerRow, playerRow.team_id === row.team_id ? await loadLastMatchContext(db, row.team_id) : undefined);
   const memory = await loadChatMemory(db, player, { teamId: row.team_id, convId: row.conversation_id });
   const team = await loadTeamContext(db, row.team_id);
   const history = await loadHistory(db, row.conversation_id);
