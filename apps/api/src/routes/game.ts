@@ -6109,6 +6109,24 @@ gameRouter.post("/admin/villages/coords", async (c) => {
   return c.json({ ok: true, requested: updates.length, changed });
 });
 
+// Zajímavosti obcí (profil obce). Body: { updates: [{ id, facts: string[] }] }. Dlouhé pomlčky se nahradí čárkou.
+gameRouter.post("/admin/villages/facts", async (c) => {
+  const body = await c.req.json<{ updates?: Array<{ id?: unknown; facts?: unknown }> }>()
+    .catch((e) => { logger.warn({ module: "game" }, "tělo zajímavostí obcí", e); return null; });
+  const updates = (body?.updates ?? []).flatMap((u) => {
+    if (typeof u.id !== "string" || !Array.isArray(u.facts)) return [];
+    const facts = u.facts.filter((f): f is string => typeof f === "string" && f.trim().length > 0)
+      .map((f) => f.trim().replace(/\s*[\u2014\u2013]\s*/g, ", ").slice(0, 200)).slice(0, 6);
+    return facts.length ? [{ id: u.id, facts }] : [];
+  });
+  if (!updates.length || updates.length > 150) return c.json({ error: "Žádné platné zajímavosti (nebo víc než 150 obcí)" }, 400);
+  const res = await c.env.DB.batch(updates.map((u) =>
+    c.env.DB.prepare("UPDATE villages SET flavor_facts = ? WHERE id = ?").bind(JSON.stringify(u.facts), u.id)));
+  const changed = res.reduce((a, r) => a + (r.meta.changes ?? 0), 0);
+  logger.info({ module: "game" }, `zajímavosti obcí: ${changed} z ${updates.length}`);
+  return c.json({ ok: true, requested: updates.length, changed });
+});
+
 // Okresní akce (pouť, bál, dožínky…): spouští se ručně, když něco vymyslíme.
 // Body: { district, title, place, description, eventDate? } — pozvánka jde lidským trenérům okresu.
 gameRouter.post("/admin/district-events", async (c) => {

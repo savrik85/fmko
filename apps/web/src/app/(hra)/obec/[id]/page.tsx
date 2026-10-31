@@ -280,7 +280,7 @@ export default function VillageProfilePage() {
         )}
       </div>
 
-      <div className="grid gap-4 md:grid-cols-[1fr_300px]">
+      <div className="grid gap-4 md:grid-cols-[1fr_300px] md:items-start">
         <Card>
           <CardBody className="space-y-3">
             <div>
@@ -296,7 +296,7 @@ export default function VillageProfilePage() {
             )}
           </CardBody>
         </Card>
-        <DistrictMap villages={[mapVillage]} selectedId={null} onSelect={() => undefined} className="h-[220px] md:h-full min-h-[220px] shadow-[var(--shadow-card)]" />
+        <DistrictMap villages={[mapVillage]} selectedId={null} onSelect={() => undefined} className="h-[220px] shadow-[var(--shadow-card)]" />
       </div>
 
       {data.officials.length > 0 && (

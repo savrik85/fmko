@@ -503,7 +503,7 @@ function OwnVillage() {
   return (
     <div className="space-y-6 p-4">
       {/* Hlavička jako v profilu obce: kde jsme, jak nás obec bere, mapa */}
-      <div className="grid gap-4 md:grid-cols-[1fr_300px]">
+      <div className="grid gap-4 md:grid-cols-[1fr_300px] md:items-start">
         <Card>
           <CardBody className="space-y-4">
             <div className="flex flex-wrap items-start justify-between gap-2">
@@ -532,7 +532,7 @@ function OwnVillage() {
             )}
           </CardBody>
         </Card>
-        <DistrictMap villages={[mapVillage]} selectedId={null} onSelect={() => undefined} className="h-[220px] md:h-full min-h-[220px] shadow-[var(--shadow-card)]" />
+        <DistrictMap villages={[mapVillage]} selectedId={null} onSelect={() => undefined} className="h-[240px] shadow-[var(--shadow-card)]" />
       </div>
 
       {/* Co čeká na rozhodnutí: hospoda, investice, petice */}
