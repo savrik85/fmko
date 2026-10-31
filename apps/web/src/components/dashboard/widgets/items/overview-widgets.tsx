@@ -106,7 +106,8 @@ export function HallOfFameWidget({ data }: WidgetProps) {
 export function EventsWidget({ data, height }: WidgetProps) {
   if (data.events.loading) return <WidgetSkeleton />;
   if (data.events.error) return <WidgetError />;
-  const events = (data.events.data ?? []).filter((e) => !e.resolved).slice(0, rowsForHeight(height, ROW_PX.list, 32));
+  // API vrací `status`, ne `resolved`: dřív filtr nepouštěl pryč nic a widget ukazoval i proběhlé.
+  const events = (data.events.data ?? []).filter((e) => e.status !== "resolved").slice(0, rowsForHeight(height, ROW_PX.list, 32));
   if (events.length === 0) return <ChartEmpty>Nic se nechystá.</ChartEmpty>;
 
   return (
@@ -116,7 +117,7 @@ export function EventsWidget({ data, height }: WidgetProps) {
           <li key={e.id} className="flex items-center gap-2.5 py-1.5 border-b border-gray-50 last:border-b-0">
             <span className="text-lg shrink-0">{e.icon ?? "📅"}</span>
             <span className="text-sm font-heading font-bold flex-1 truncate">{e.title ?? e.headline ?? "Událost"}</span>
-            {e.gameWeek != null && <span className="text-micro text-muted shrink-0">{e.gameWeek}. týden</span>}
+            {e.gameWeek != null && <span className="text-micro text-muted shrink-0">{e.gameWeek}. kolo</span>}
           </li>
         ))}
       </ul>

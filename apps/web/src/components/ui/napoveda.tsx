@@ -164,9 +164,10 @@ const HELP: Record<string, HelpEntry> = {
     title: "Události",
     icon: "\u{1F4C5}",
     sections: [
-      { text: "Náhodné události mezi zápasy. Mohou být pozitivní i negativní." },
-      { heading: "Pozitivní", text: "Sponzorský dar, dotace od obce, bonus za dobré výsledky. Zvyšují rozpočet nebo reputaci." },
-      { heading: "Negativní", text: "Krádež, poškození vybavení, pokuta, vandalismus. Čím nižší rozpočet, tím vyšší riziko." },
+      { text: "Deník klubu: co čeká na tvoje rozhodnutí a co se klubu stalo." },
+      { heading: "Rozhodnutí", text: "Zabijačka, ples, kontrola ze svazu… Na volbu máš dvě kola, pak propadne." },
+      { heading: "Okresní akce", text: "Pouť, bál a podobně. Pozvánka přijde do telefonu, co se na akci stalo tvým lidem, najdeš tady." },
+      { heading: "Deník", text: "Všechno, co se klubu stalo: tvoje rozhodnutí, události mezi koly (pokuty, dary, zranění) i to, co propadlo." },
     ],
   },
   "/liga": {

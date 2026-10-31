@@ -44,6 +44,23 @@ export interface EventEffect {
   toLeague?: boolean;
 }
 
+/** Popisek dopadu pro deník v Událostech. `budget` = částka po přepočtu sazebníkem soutěže. */
+export function betweenRoundEffectLabel(e: EventEffect, budget: number | null): string | null {
+  const v = e.value ?? 0;
+  const sign = (n: number) => `${n > 0 ? "+" : ""}${n}`;
+  switch (e.type) {
+    case "morale": return v ? `${sign(v)} nálada kabiny` : null;
+    case "condition": return v ? `${sign(v)} kondice` : null;
+    case "reputation": return v ? `${sign(v)} reputace` : null;
+    case "budget": {
+      const kc = budget ?? v;
+      return kc ? `${kc > 0 ? "+" : "−"}${Math.abs(kc).toLocaleString("cs-CZ")} Kč` : null;
+    }
+    case "injury": return e.duration ? `zranění na ${e.duration} ${e.duration === 1 ? "kolo" : e.duration < 5 ? "kola" : "kol"}` : "zranění";
+    case "player_leave": return "hráč chce odejít";
+  }
+}
+
 interface EventRule {
   category: EventCategory;
   title: string;
