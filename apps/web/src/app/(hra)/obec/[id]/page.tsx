@@ -31,7 +31,7 @@ interface Club {
   recentHomeMatches: Array<{ id: string; home: string; away: string; score: string; attendance: number | null }>;
 }
 
-type RecordMatch = { id: string; home: string; away: string; score: string; attendance: number | null } | null;
+type RecordMatch = { id: string; home: string; away: string; homeId: string; awayId: string; score: string; attendance: number | null } | null;
 
 interface Records {
   homeMatches: number;
@@ -173,19 +173,34 @@ function ClubCard({ club }: { club: Club }) {
   );
 }
 
-function RecordRow({ label, value, match }: { label: string; value: string; match?: RecordMatch }) {
+const LINK = "underline decoration-pitch-500/30 hover:text-pitch-600";
+
+function RecordRow({ label, value, match }: { label: string; value: React.ReactNode; match?: RecordMatch }) {
   return (
     <li className="flex items-baseline justify-between gap-3 py-1.5 border-b border-gray-100 last:border-b-0">
-      <span className="text-sm text-ink-light">{label}</span>
+      <span className="text-sm text-ink-light shrink-0">{label}</span>
       <span className="text-sm text-right min-w-0">
         <span className="font-heading font-bold tabular-nums">{value}</span>
         {match && (
-          <Link href={`/zapas/${match.id}`} className="block text-xs text-muted hover:text-pitch-600 truncate">
-            {match.home} {match.score} {match.away}
-          </Link>
+          <span className="block text-xs text-ink-light">
+            <Link href={`/tym/${match.homeId}`} className={LINK}>{match.home}</Link>
+            {" "}<Link href={`/zapas/${match.id}`} className={`font-heading font-bold tabular-nums ${LINK}`}>{match.score}</Link>{" "}
+            <Link href={`/tym/${match.awayId}`} className={LINK}>{match.away}</Link>
+          </span>
         )}
       </span>
     </li>
+  );
+}
+
+function PlayerValue({ p }: { p: VillageProfile["residents"][number] }) {
+  return (
+    <>
+      <Link href={`/hrac/${p.id}`} className={LINK}>{p.name}</Link>, {p.age} let
+      <span className="block text-xs font-normal text-ink-light">
+        <Link href={`/tym/${p.teamId}`} className={LINK}>{p.teamName}</Link>
+      </span>
+    </>
   );
 }
 
@@ -212,8 +227,8 @@ function RecordsCard({ records, residents }: { records: Records; residents: Vill
             {r.biggestWin && <RecordRow label="Nejvyšší domácí výhra" value={r.biggestWin.score} match={r.biggestWin} />}
             {r.mostGoals && <RecordRow label="Nejvíc gólů v zápase" value={r.mostGoals.score} match={r.mostGoals} />}
             {residents.length > 0 && <RecordRow label="Hráčů z obce v okrese" value={String(residents.length)} />}
-            {oldest && residents.length > 1 && <RecordRow label="Nejstarší hráč odtud" value={`${oldest.name}, ${oldest.age} let`} />}
-            {youngest && residents.length > 1 && <RecordRow label="Nejmladší hráč odtud" value={`${youngest.name}, ${youngest.age} let`} />}
+            {oldest && residents.length > 1 && <RecordRow label="Nejstarší hráč odtud" value={<PlayerValue p={oldest} />} />}
+            {youngest && residents.length > 1 && <RecordRow label="Nejmladší hráč odtud" value={<PlayerValue p={youngest} />} />}
           </ul>
         </CardBody>
       </Card>
@@ -391,7 +406,9 @@ export default function VillageProfilePage() {
                         <Avatar face={p.avatar} size={34} fallback={p.name} />
                         <div className="min-w-0 text-sm">
                           <Link href={`/hrac/${p.id}`} className="font-heading font-bold leading-tight hover:text-pitch-600 underline decoration-pitch-500/20">{p.name}</Link>
-                          <div className="text-xs text-muted truncate">{POS_LABEL[p.position] ?? p.position} · {p.age} let · {p.teamName}</div>
+                          <div className="text-xs text-muted truncate">
+                            {POS_LABEL[p.position] ?? p.position} · {p.age} let · <Link href={`/tym/${p.teamId}`} className="hover:text-pitch-600 underline decoration-pitch-500/20">{p.teamName}</Link>
+                          </div>
                         </div>
                       </li>
                     ))}
