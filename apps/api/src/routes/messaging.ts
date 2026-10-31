@@ -703,6 +703,12 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
         }
       }).catch((e) => logger.warn({ module: "messaging" }, "odpověď majitele firmy", e)));
     }
+  } else if (conv?.type === "system" && conv.participant_id?.startsWith("de-")) {
+    // Pozvánka na okresní akci (pouť, bál…): přijdu s hráči / sám / nepřijdu.
+    const { handleDistrictEventReply } = await import("../events/district-event-db");
+    const optionId = typeof body.optionId === "string" ? body.optionId : null;
+    await handleDistrictEventReply(c.env.DB, convId, teamId, body.body.trim(), optionId)
+      .catch((e) => logger.warn({ module: "messaging" }, "odpověď na pozvánku na okresní akci", e));
   } else if (conv?.type === "system" && conv.ai_thread_active === 1) {
     const { handleFanLeaderReply } = await import("../fans/fan-leader-reply");
     await handleFanLeaderReply(c.env.DB, convId, body.body.trim())

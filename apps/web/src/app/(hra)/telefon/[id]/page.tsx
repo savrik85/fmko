@@ -160,7 +160,7 @@ function isGroupChatId(id: string): boolean {
   return id === "global" || id.startsWith("league:");
 }
 
-/** Hotová odpověď na SMS od majitele firmy (`messages.metadata.options`). */
+/** Hotová odpověď na SMS od majitele firmy nebo na pozvánku na okresní akci (`messages.metadata.options`). */
 interface OwnerOption {
   id: string;
   label: string;
@@ -169,7 +169,7 @@ interface OwnerOption {
 
 function ownerOptionsOf(msg: Message | undefined): OwnerOption[] {
   const meta = msg?.metadata;
-  if (!meta || meta.type !== "sponsor_owner" || !Array.isArray(meta.options)) return [];
+  if (!meta || (meta.type !== "sponsor_owner" && meta.type !== "district_event") || !Array.isArray(meta.options)) return [];
   return (meta.options as unknown[]).filter((o): o is OwnerOption => {
     const x = o as Partial<OwnerOption> | null;
     return !!x && typeof x.id === "string" && typeof x.label === "string" && typeof x.text === "string";
@@ -468,7 +468,7 @@ export default function ConversationPage() {
       setChannel(fresh.channel ?? null);
       setReplyHint(fresh.replyHint ? { text: fresh.replyHint, href: fresh.replyHintHref, label: fresh.replyHintLabel } : null);
     } catch (e) {
-      console.error("odpověď majiteli firmy:", e);
+      console.error("hotová odpověď na SMS:", e);
       setMessages((prev) => prev.filter((m) => m.id !== tmpId));
       setCreditError("Odpověď se nepodařilo odeslat.");
     }

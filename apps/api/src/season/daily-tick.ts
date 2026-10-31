@@ -1140,6 +1140,15 @@ export async function executeDailyTick(
     logger.error({ module: "daily-tick" }, "pub sessions", e);
   }
 
+  // ── Okresní akce (pouť, bál…), jejichž den nastal: scény od modelu a následky ──
+  try {
+    const { resolveDueDistrictEvents } = await import("../events/district-event-db");
+    const n = await resolveDueDistrictEvents(env, todayKey);
+    if (n > 0) events.push({ type: "recovery", description: `Okresní akce: ${n} vyhodnoceno` });
+  } catch (e) {
+    logger.error({ module: "daily-tick" }, "district events", e);
+  }
+
   // ── Postava: denní změna váhy (po hospodě, ať se počítá i dnešní večer) ──
   try {
     const { processDailyBodyDrift } = await import("./body-drift");

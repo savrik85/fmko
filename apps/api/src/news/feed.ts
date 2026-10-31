@@ -29,6 +29,7 @@ const KVOTY: Record<string, number> = {
   season_wrap: 1,
   // Zasedání je jednou týdně a zápis je dlouhý — dva vedle sebe by noviny zavalily.
   governance_minutes: 1,
+  district_event: 1,
 };
 const KVOTA_OSTATNI = 2;
 
@@ -56,6 +57,7 @@ export const NEWS_ICONS: Record<string, string> = {
   matchday_preview: "\u{1F52E}",
   announcement: "\u{1F4E3}",
   story: "\u{1F4D6}",
+  district_event: "\u{1F3A1}",
 };
 
 export function newsIcon(type: string): string {

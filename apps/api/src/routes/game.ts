@@ -964,6 +964,14 @@ gameRouter.get("/teams/:teamId/seasonal-events", async (c) => {
   });
 });
 
+// GET /api/teams/:id/district-events — okresní akce klubu (pouť, bál…) pro stránku Události
+gameRouter.get("/teams/:teamId/district-events", async (c) => {
+  const { loadTeamDistrictEvents } = await import("../events/district-event-db");
+  const events = await loadTeamDistrictEvents(c.env.DB, c.req.param("teamId"))
+    .catch((e) => { logger.warn({ module: "game" }, "okresní akce klubu", e); return []; });
+  return c.json({ events });
+});
+
 // POST /api/teams/:id/seasonal-events/:eventId/choose — make a choice
 gameRouter.post("/teams/:teamId/seasonal-events/:eventId/choose", async (c) => {
   const teamId = c.req.param("teamId");
@@ -6045,6 +6053,41 @@ gameRouter.post("/admin/transfer-installments/run", async (c) => {
   const { processTransferInstallments } = await import("../transfers/installments");
   const paid = await processTransferInstallments(c.env.DB, teamId, gameDate);
   return c.json({ ok: true, teamId, gameDate, paid });
+});
+
+// Okresní akce (pouť, bál, dožínky…): spouští se ručně, když něco vymyslíme.
+// Body: { district, title, place, description, eventDate? } — pozvánka jde lidským trenérům okresu.
+gameRouter.post("/admin/district-events", async (c) => {
+  const body = await c.req.json<{ district?: string; title?: string; place?: string; description?: string; eventDate?: string }>()
+    .catch((e) => { logger.warn({ module: "game" }, "tělo okresní akce", e); return null; });
+  const district = body?.district?.trim();
+  const title = body?.title?.trim();
+  const place = body?.place?.trim();
+  const description = body?.description?.trim() ?? "";
+  if (!district || !title || !place) return c.json({ error: "Chybí district, title nebo place" }, 400);
+  const { announceDistrictEvent } = await import("../events/district-event-db");
+  try {
+    return c.json({ ok: true, ...await announceDistrictEvent(c.env, { district, title, place, description, eventDate: body?.eventDate }) });
+  } catch (e) {
+    logger.warn({ module: "game" }, "ohlášení okresní akce", e);
+    return c.json({ error: e instanceof Error ? e.message : String(e) }, 400);
+  }
+});
+
+gameRouter.get("/admin/district-events", async (c) => {
+  const rows = await c.env.DB.prepare(
+    `SELECT e.id, e.district, e.title, e.place, e.event_date, e.status, e.attempts,
+            (SELECT COUNT(*) FROM district_event_teams dt WHERE dt.event_id = e.id) AS invited,
+            (SELECT GROUP_CONCAT(COALESCE(dt.choice, '-'), ',') FROM district_event_teams dt WHERE dt.event_id = e.id) AS choices
+       FROM district_events e ORDER BY e.created_at DESC LIMIT 20`,
+  ).all();
+  return c.json({ events: rows.results });
+});
+
+// Vyhodnotit akci hned (test); jinak ji vyhodnotí denní tick v den akce.
+gameRouter.post("/admin/district-events/:eventId/resolve", async (c) => {
+  const { resolveDistrictEvent } = await import("../events/district-event-db");
+  return c.json(await resolveDistrictEvent(c.env, c.req.param("eventId")));
 });
 
 gameRouter.post("/admin/generate-youth-offer-all", async (c) => {

@@ -19,6 +19,8 @@ export type CoachRelationSource =
   | "pub"
   // Trenér přišel na pozvání z SMS (messaging/follow-ups.ts).
   | "invite"
+  // Okresní akce (pouť, bál…), events/district-event-db.ts.
+  | "district_event"
   | "incident"
   | "left_out"
   | "arrival"
