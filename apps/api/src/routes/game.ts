@@ -966,8 +966,12 @@ gameRouter.get("/teams/:teamId/seasonal-events", async (c) => {
 
 // GET /api/teams/:id/district-events — okresní akce klubu (pouť, bál…) pro stránku Události
 gameRouter.get("/teams/:teamId/district-events", async (c) => {
+  const teamId = c.req.param("teamId");
+  // Kdo kam šel a co se jeho lidem stalo, je soukromé: GET obchází ownership middleware.
+  const denied = await requireOwnedTeamRead(c, teamId);
+  if (denied) return denied;
   const { loadTeamDistrictEvents } = await import("../events/district-event-db");
-  const events = await loadTeamDistrictEvents(c.env.DB, c.req.param("teamId"))
+  const events = await loadTeamDistrictEvents(c.env.DB, teamId)
     .catch((e) => { logger.warn({ module: "game" }, "okresní akce klubu", e); return []; });
   return c.json({ events });
 });
