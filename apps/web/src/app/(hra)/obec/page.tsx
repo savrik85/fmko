@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
-import { Card, CardBody, CardHeader, Spinner, SectionLabel, Badge, Modal, Button, Tabs, useTabParam } from "@/components/ui";
+import { Card, CardBody, Spinner, SectionLabel, Modal, Button, Tabs, useTabParam } from "@/components/ui";
+import { DistrictMap, clubBadgeSvg, villageSizeLabel, type MapVillage } from "@/components/map/DistrictMap";
 import { DistrictVillages } from "./DistrictVillages";
 import { FaceAvatar } from "@/components/players/face-avatar";
 
@@ -53,6 +55,8 @@ interface VillageDetail {
   region: string;
   population: number;
   size: string;
+  lat: number;
+  lng: number;
   flavor_facts: string | null;
 }
 
@@ -216,14 +220,6 @@ const PERSONALITY_DESC: Record<Personality, string> = {
   populista: "Reaguje na nálady a gesta",
 };
 
-const SIZE_LABEL: Record<string, string> = {
-  hamlet: "Vesnička",
-  village: "Vesnice",
-  town: "Městys",
-  small_city: "Menší město",
-  city: "Město",
-};
-
 // České názvy cílů investičních nabídek obce (target_facility / type)
 const INVESTMENT_TARGET_LABEL: Record<string, string> = {
   showers: "Sprchy",
@@ -374,7 +370,7 @@ function OwnVillage() {
         },
       );
       let msg = "";
-      if (action === "ignore") msg = "Ignoroval(a) jsi NPC.";
+      if (action === "ignore") msg = "Nechal jsi ho být.";
       else if (res.outcome === "scandal") msg = `Skandál! ${res.officialName} odešel znechucen.`;
       else msg = `Pivo s ${res.officialName}, přízeň +${res.favorDelta}, cena ${res.beerCost} Kč.`;
       setToast(msg);
@@ -402,7 +398,7 @@ function OwnVillage() {
         },
       );
       const msg = res.action === "accept"
-        ? `Hotovo — obec přispěla ${res.offeredAmount?.toLocaleString("cs")} Kč.`
+        ? `Hotovo, obec přispěla ${res.offeredAmount?.toLocaleString("cs")} Kč.`
         : "Nabídka odmítnuta.";
       setToast(msg);
       setTimeout(() => setToast(null), 4000);
@@ -492,121 +488,158 @@ function OwnVillage() {
   }
 
 
+  const facts = parseFacts(village.flavor_facts);
+  const myTeam = teams.find((t) => t.id === teamId) ?? null;
+  const mapVillage: MapVillage = {
+    id: village.id, name: village.name, population: village.population, size: village.size,
+    lat: village.lat, lng: village.lng, events: 0,
+    clubs: teams.map((t) => ({
+      id: t.id, name: t.name, isAi: t.user_id === "ai", leagueName: null, primaryColor: t.primary_color, secondaryColor: t.secondary_color,
+      badge: { pattern: null, primary: null, secondary: null, initials: null, symbol: null },
+    })),
+  };
+  const waiting = pubEncounters.length + investments.length + petitions.length;
+
   return (
-    <div className="space-y-6 p-4 max-w-5xl mx-auto">
-      {/* Jak to s obcí funguje — onboarding */}
-      <details className="card p-4 sm:p-5 group">
-        <summary className="cursor-pointer font-heading font-bold text-sm flex items-center justify-between">
-          <span>💡 Jak to s obcí funguje</span>
-          <span className="text-xs text-muted group-open:hidden">rozbalit</span>
-          <span className="text-xs text-muted hidden group-open:inline">sbalit</span>
-        </summary>
-        <div className="mt-3 space-y-3 text-sm leading-relaxed">
-          <p>
-            Klub funguje v rámci obce a její radnice. <strong>Globální přízeň obce</strong> (0–100) ovlivňuje, kolik dotace dostaneš každý měsíc — od poloviny (favor 0, ×0.50) až po jeden a půl násobek (favor 100, ×1.50). Dlouhodobě je to tisíce korun rozdíl.
-          </p>
-
-          <p>V <strong>zastupitelstvu</strong> jsou starosta + 3 zastupitelé. Každý má svou osobnost (sportovec, podnikatel, aktivista, tradicionalista, populista) a vztah s tebou (0–100). Když má obec víc týmů, zastupitelé se rozhodují podle přízně k tobě vs. ostatním klubům — vidíš to v řádku „Týmy v obci".</p>
-
-          <p className="pt-1">Co s nimi můžeš dělat:</p>
-          <ul className="space-y-1.5 ml-4 list-disc">
-            <li><strong>Brigády</strong> 🛠️ — obec vyhlásí veřejnou výpomoc (úklid, oprava plotu, kulturák…). Vezmeš ji se 3-7 hráči, kteří ztratí kondici a morálku, ale klub získá přízeň. Žádné peníze, jen vztah.</li>
-            <li><strong>Pozvánky na zápas</strong> 🎟️ — dárek + pozvání na domácí zápas. Přijetí není zaručené, závisí na osobnosti a tvém vztahu. Když přijdou, atmosféra na stadionu roste. Cena se platí vždy, i když odmítnou.</li>
-            <li><strong>Hospoda</strong> 🍺 — někdy se zastupitel objeví v hospodě. Můžeš ho pozvat na pivo (+2 až +4 přízeň podle osobnosti), ale aktivista by se mohl naštvat → skandál.</li>
-            <li><strong>Petice občanů</strong> 📜 — občas pošlou petici (dětský den, oprava šaten…). Vyhovíš → zaplatíš a získáš přízeň. Ignoruješ → po 14 dnech klesne přízeň.</li>
-            <li><strong>Investice obce</strong> 💰 — když máš dostatek přízně, obec ti spolufinancuje modernizaci stadionu (50–70 % částky). Aktivuje se automaticky.</li>
-          </ul>
-
-          <p className="pt-1"><strong>Místní hrdost</strong> 🏡 — kolik rodáků z obce máš v kádru a jak hrají. Když místní zaboduje (hat-trick / hráč zápasu), přízeň skočí nahoru a celý kádr dostane +5 morálku. Pokud místní hráče prodáš, sportovec a tradicionalista to neodpustí.</p>
-
-          {/* Volby pouští konec sezóny (season-rollover.ts) pro všechny obce naráz a přízeň
-              se všem vrací na 50 (villages/municipal-elections.ts). Mandát se neobhajuje. */}
-          <p><strong>Volby</strong> 🗳️: na konci každé sezóny proběhnou komunální volby a vymění se celé vedení obce. Přízeň obce i nových zastupitelů pak začíná u všech klubů znovu na 50.</p>
-
-          <p><strong>Krize</strong> ⚠️ — když přízeň klesne pod 20, obec se otočí proti klubu. Vandalismus, sponzor exit, kontrola. Cesta zpět je dlouhá — brigády, petice, charity.</p>
-
-          <p className="pt-2 text-xs text-muted italic">
-            Všechno, co dělají ostatní týmy v obci, vidíš transparentně — kdo vzal jakou brigádu, kdo pozval starostu, kdo dostal investiční nabídku. Není to o tajné konspiraci, je to vesnice.
-          </p>
-        </div>
-      </details>
-
-      {/* Hero */}
-      <Card>
-        <CardBody>
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div>
-              <div className="text-xs uppercase tracking-wider text-gray-500">{SIZE_LABEL[village.size] ?? village.size}</div>
-              <h1 className="text-3xl font-bold mt-1">{village.name}</h1>
-              <div className="text-gray-600 mt-1">
-                {village.district}, {village.region} · {village.population.toLocaleString("cs")} obyv.
+    <div className="space-y-6 p-4">
+      {/* Hlavička jako v profilu obce: kde jsme, jak nás obec bere, mapa */}
+      <div className="grid gap-4 md:grid-cols-[1fr_300px]">
+        <Card>
+          <CardBody className="space-y-4">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <h1 className="font-heading font-bold text-2xl leading-tight">{village.name}</h1>
+                <div className="text-sm text-muted">
+                  {villageSizeLabel(village.size)} · {village.population.toLocaleString("cs-CZ")} obyvatel · okres {village.district}
+                </div>
               </div>
+              <Link href={`/obec/${village.id}`} className="text-sm font-heading font-bold text-pitch-700 hover:text-pitch-500">
+                Veřejný profil obce →
+              </Link>
             </div>
-            <div className="md:w-72 w-full">
-              <div className="text-sm text-gray-600 mb-1">Globální přízeň obce</div>
-              <div className="flex items-baseline gap-2 mb-2">
-                <span className="text-4xl font-bold tabular-nums">{favor.global.favor}</span>
-                <span className="text-gray-500">/ 100 · {favorLabel(favor.global.favor)}</span>
+            <div className="rounded-xl bg-surface p-3">
+              <div className="flex items-baseline justify-between gap-2 mb-2">
+                <span className="text-sm text-ink-light">Jak nás obec bere</span>
+                <span className="font-heading font-bold">{favorLabel(favor.global.favor)} <span className="text-muted font-normal tabular-nums text-sm">{favor.global.favor}/100</span></span>
               </div>
               <FavorBar value={favor.global.favor} label="" />
-              <div className="text-xs text-gray-500 mt-1">
-                Násobič dotace: ×{(0.5 + favor.global.favor / 100).toFixed(2)}
-              </div>
+              <div className="text-xs text-muted mt-1.5">Dotace od obce ×{(0.5 + favor.global.favor / 100).toFixed(2)}</div>
             </div>
+            {facts.length > 0 && (
+              <ul className="space-y-1.5 text-sm text-ink-light">
+                {facts.map((f, i) => <li key={i} className="flex gap-2"><span aria-hidden>·</span><span>{f}</span></li>)}
+              </ul>
+            )}
+          </CardBody>
+        </Card>
+        <DistrictMap villages={[mapVillage]} selectedId={null} onSelect={() => undefined} className="h-[220px] md:h-full min-h-[220px] shadow-[var(--shadow-card)]" />
+      </div>
+
+      {/* Co čeká na rozhodnutí: hospoda, investice, petice */}
+      {waiting > 0 && (
+        <div>
+          <SectionLabel>Čeká na tebe</SectionLabel>
+          <div className="space-y-3">
+            {pubEncounters.map((p) => (
+              <div key={p.id} className="card border-2 border-amber-300 bg-amber-50 p-4">
+                <div className="flex items-start gap-3">
+                  <FaceAvatar faceConfig={parseFace(p.face_config)} size={52} className="shrink-0 rounded-full bg-white overflow-hidden" />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-xs text-muted">🍺 V hospodě · {ROLE_LABEL[p.role]}</div>
+                    <div className="font-heading font-bold">{p.first_name} {p.last_name}</div>
+                    <p className="text-sm text-ink-light mt-0.5">Zaškoupil si pivo a čeká, jestli ho přemluvíš na další. Buď se sblížíte, nebo je z toho skandál.</p>
+                    <div className="text-xs text-muted mt-1">{PERSONALITY_LABEL[p.personality]} · vyprší {formatDay(p.expires_at)}</div>
+                  </div>
+                </div>
+                <div className="flex justify-end gap-2 mt-3">
+                  <Button variant="secondary" size="sm" disabled={respondingPubId === p.id} onClick={() => respondPub(p.id, "ignore")}>Nechat být</Button>
+                  <Button size="sm" disabled={respondingPubId === p.id} onClick={() => respondPub(p.id, "invite_beer")}>Pozvat na pivo</Button>
+                </div>
+              </div>
+            ))}
+            {investments.map((i) => (
+              <div key={i.id} className="card border-2 border-green-200 bg-green-50 p-4">
+                <div className="text-xs text-muted">💰 Obec nabízí investici</div>
+                <div className="font-heading font-bold">{investmentTargetLabel(i.target_facility, i.type)}</div>
+                <Chips items={[
+                  { text: `obec dá ${i.offered_amount.toLocaleString("cs-CZ")} Kč`, tone: "good" },
+                  { text: `ty doplatíš ${i.required_contribution.toLocaleString("cs-CZ")} Kč`, tone: "bad" },
+                  ...(i.political_cost > 0 ? [{ text: `opozice −${i.political_cost} přízeň`, tone: "bad" as const }] : []),
+                ]} />
+                <div className="flex items-center justify-between gap-2 mt-3">
+                  <span className="text-xs text-muted">vyprší {formatDay(i.expires_at)}</span>
+                  <div className="flex gap-2">
+                    <Button variant="secondary" size="sm" disabled={respondingInvId === i.id} onClick={() => respondInvestment(i.id, "decline")}>Odmítnout</Button>
+                    <Button size="sm" disabled={respondingInvId === i.id} onClick={() => respondInvestment(i.id, "accept")}>Přijmout</Button>
+                  </div>
+                </div>
+              </div>
+            ))}
+            {petitions.map((p) => (
+              <div key={p.id} className="card border-2 border-amber-200 bg-amber-50/60 p-4">
+                <div className="text-xs text-muted">📜 Petice občanů</div>
+                <div className="font-heading font-bold">{p.title}</div>
+                <p className="text-sm text-ink-light mt-0.5">{p.description}</p>
+                <Chips items={[
+                  { text: `−${p.cost_money.toLocaleString("cs-CZ")} Kč`, tone: "bad" },
+                  { text: `+${p.reward_favor} přízeň`, tone: "good" },
+                  { text: `když ji přejdeš ${p.ignore_penalty} přízeň`, tone: "neutral" },
+                ]} />
+                <div className="flex items-center justify-between gap-2 mt-3">
+                  <span className="text-xs text-muted">vyprší {formatDay(p.expires_at)}</span>
+                  <div className="flex gap-2">
+                    <Button variant="secondary" size="sm" disabled={respondingPetitionId === p.id} onClick={() => respondPetition(p.id, "ignore")}>Přejít</Button>
+                    <Button size="sm" disabled={respondingPetitionId === p.id} onClick={() => respondPetition(p.id, "accept")}>Vyhovět</Button>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
-        </CardBody>
-      </Card>
+        </div>
+      )}
 
       {/* Zastupitelstvo */}
       <div>
         <SectionLabel>Zastupitelstvo</SectionLabel>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2">
+        <div className="grid gap-3 sm:grid-cols-2">
           {officials.map((o) => {
-            const officialFavor = favor.perOfficial.find((p) => p.officialId === o.id);
-            const f = officialFavor?.favor ?? 50;
+            const f = favor.perOfficial.find((p) => p.officialId === o.id)?.favor ?? 50;
+            const rivals = teams.filter((t) => t.id !== teamId);
             return (
               <Card key={o.id}>
                 <CardBody>
-                  <div className="flex gap-4">
-                    <FaceAvatar faceConfig={o.faceConfig} size={88} />
+                  <div className="flex gap-3">
+                    <FaceAvatar faceConfig={o.faceConfig} size={64} className="shrink-0 rounded-full bg-surface overflow-hidden" />
                     <div className="flex-1 min-w-0">
-                      <div className="text-xs uppercase tracking-wider text-gray-500">
-                        {ROLE_LABEL[o.role]}
-                      </div>
-                      <div className="font-semibold text-base mt-0.5 truncate">
-                        {o.firstName} {o.lastName}
-                      </div>
-                      <div className="text-sm text-gray-600 truncate">
-                        {o.age} let · {o.occupation}
-                      </div>
-                      <div className="mt-2">
-                        <Badge>{PERSONALITY_LABEL[o.personality]}</Badge>
-                      </div>
-                      <div className="mt-3 space-y-1.5">
-                        {teams.map((t) => {
-                          const tf = t.id === teamId ? f : (favorMatrix[t.id]?.[o.id] ?? 50);
-                          const isUs = t.id === teamId;
+                      <div className="text-xs text-muted">{ROLE_LABEL[o.role]}</div>
+                      <div className="font-heading font-bold leading-tight">{o.firstName} {o.lastName}</div>
+                      <div className="text-xs text-muted truncate">{o.age} let · {o.occupation}</div>
+                      <span className="inline-block mt-1 text-xs font-medium px-1.5 py-0.5 rounded bg-surface text-ink-light" title={PERSONALITY_DESC[o.personality]}>
+                        {PERSONALITY_LABEL[o.personality]}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="mt-3 space-y-1.5">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-ink-light">K nám</span>
+                      <span className="font-heading font-bold">{favorLabel(f)}</span>
+                    </div>
+                    <FavorBar value={f} label="" />
+                    {rivals.length > 0 && (
+                      <ul className="pt-1 space-y-1">
+                        {rivals.map((t) => {
+                          const tf = favorMatrix[t.id]?.[o.id] ?? 50;
                           return (
-                            <div key={t.id} className="flex items-center gap-2 text-xs">
-                              <span
-                                className="inline-block w-2 h-2 rounded-full border border-gray-200 shrink-0"
-                                style={{ backgroundColor: t.primary_color }}
-                              />
-                              <span className={`truncate flex-1 ${isUs ? "font-semibold" : "text-gray-600"}`}>
-                                {t.name}{isUs && " (my)"}
-                              </span>
-                              <span className="tabular-nums text-gray-500 w-10 text-right">{tf}/100</span>
-                              <div className="h-1.5 w-16 rounded-full bg-gray-100 overflow-hidden shrink-0">
-                                <div className={`h-full ${favorColor(tf)}`} style={{ width: `${Math.max(0, Math.min(100, tf))}%` }} />
-                              </div>
-                            </div>
+                            <li key={t.id} className="flex items-center gap-2 text-xs text-muted">
+                              <span className="inline-block w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: t.primary_color }} aria-hidden />
+                              <span className="truncate flex-1">{t.name}</span>
+                              <span>{favorLabel(tf)}</span>
+                            </li>
                           );
                         })}
-                      </div>
-                      <div className="text-xs text-gray-500 mt-2" title={PERSONALITY_DESC[o.personality]}>
-                        {termRemaining(o.termEndAt)} · {PERSONALITY_DESC[o.personality]}
-                      </div>
-                    </div>
+                      </ul>
+                    )}
+                    <div className="text-xs text-muted pt-1">{PERSONALITY_DESC[o.personality]}. {termRemaining(o.termEndAt)}.</div>
                   </div>
                 </CardBody>
               </Card>
@@ -615,450 +648,206 @@ function OwnVillage() {
         </div>
       </div>
 
-      {/* NPC v hospodě */}
-      {pubEncounters.length > 0 && (
-        <Card>
-          <CardHeader>
-            <SectionLabel>Náhodné setkání v hospodě</SectionLabel>
-            <div className="text-xs text-gray-500 mt-1">
-              Zastupitel se objevil v hospodě. Můžeš ho pozvat na pivo (cena podle nálady) — buď to posílí vztah, nebo bude skandál.
-            </div>
-          </CardHeader>
-          <CardBody>
-            <div className="space-y-3">
-              {pubEncounters.map((p) => {
-                let face: Record<string, unknown> = {};
-                try { face = JSON.parse(p.face_config); } catch { face = {}; }
-                return (
-                  <div key={p.id} className="flex items-center gap-3 border border-amber-300 bg-amber-50/40 rounded-soft p-3">
-                    <FaceAvatar faceConfig={face} size={64} />
-                    <div className="flex-1 min-w-0">
-                      <div className="text-xs uppercase tracking-wider text-gray-500">{ROLE_LABEL[p.role]}</div>
-                      <div className="font-semibold text-sm">{p.first_name} {p.last_name}</div>
-                      <div className="text-xs text-gray-600 mt-0.5">
-                        Zaškoupil si pivo a podívá se, jestli ho přemluvíš na další.
-                      </div>
-                      <div className="text-xs text-gray-500 mt-1">
-                        Vyprší {new Date(p.expires_at).toLocaleDateString("cs")} · {PERSONALITY_LABEL[p.personality]}
-                      </div>
-                    </div>
-                    <div className="flex flex-col gap-1 shrink-0">
-                      <Button
-                        size="sm"
-                        disabled={respondingPubId === p.id}
-                        onClick={() => respondPub(p.id, "invite_beer")}
-                      >
-                        Pozvat na pivo
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        disabled={respondingPubId === p.id}
-                        onClick={() => respondPub(p.id, "ignore")}
-                      >
-                        Ignorovat
-                      </Button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </CardBody>
-        </Card>
-      )}
-
       {/* Pozvánky na zápas */}
       {upcoming?.match && (
-        <Card>
-          <CardHeader>
-            <SectionLabel>Pozvi zastupitele na zápas</SectionLabel>
-            <div className="text-xs text-gray-500 mt-1">
-              {upcoming.match.home_name} vs {upcoming.match.away_name} · {new Date(upcoming.match.scheduled_at).toLocaleString("cs", { weekday: "short", day: "numeric", month: "numeric" })}
-              {" "}přijetí pozvánky není zaručené, závisí na vztahu, povaze a tvém týmu. Cena dárku se platí vždy.
-            </div>
-          </CardHeader>
-          <CardBody>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {upcoming.officials.map((o) => {
-                const myInv = upcoming.myInvitations.find((i) => i.official_id === o.id);
-                const slotTakenByOther = o.slot_taken_by && o.slot_taken_by !== teamId;
-                const slotTakenByMe = o.slot_taken_by === teamId;
-                const giftCost = Math.max(300, 500 + (50 - o.favor) * 10);
-                const isInviting = invitingOfficialId === o.id;
-
-                let statusEl: React.ReactNode = null;
-                if (slotTakenByMe) {
-                  statusEl = <Badge>Přijal pozvání ✓</Badge>;
-                } else if (slotTakenByOther) {
-                  statusEl = <span className="text-xs text-gray-500">Pozván {o.slot_taken_by_name}</span>;
-                } else if (myInv?.status === "declined") {
+        <div>
+          <SectionLabel>Pozvi zastupitele na zápas</SectionLabel>
+          <Card>
+            <CardBody className="space-y-3">
+              <p className="text-sm text-ink-light">
+                <span className="font-heading font-bold text-ink">{upcoming.match.home_name} vs. {upcoming.match.away_name}</span>
+                {" · "}{new Date(upcoming.match.scheduled_at).toLocaleDateString("cs-CZ", { weekday: "long", day: "numeric", month: "numeric" })}.
+                {" "}Jestli přijde, záleží na vztahu a povaze. Dárek platíš vždy.
+              </p>
+              <ul className="divide-y divide-gray-100">
+                {upcoming.officials.map((o) => {
+                  const myInv = upcoming.myInvitations.find((i) => i.official_id === o.id);
+                  const slotTakenByOther = o.slot_taken_by && o.slot_taken_by !== teamId;
+                  const slotTakenByMe = o.slot_taken_by === teamId;
+                  const giftCost = Math.max(300, 500 + (50 - o.favor) * 10);
+                  const isInviting = invitingOfficialId === o.id;
                   let reason: string | null = null;
-                  if (myInv.attendance_effects) {
+                  if (myInv?.status === "declined" && myInv.attendance_effects) {
                     try { reason = (JSON.parse(myInv.attendance_effects) as { rejectReason?: string }).rejectReason ?? null; }
-                    catch { reason = null; }
+                    catch (e) { console.warn("Důvod odmítnutí pozvánky:", e); }
                   }
-                  statusEl = (
-                    <div className="text-right max-w-[180px]">
-                      <span className="text-xs text-card-red">Odmítl pozvání</span>
-                      {reason && (
-                        <div className="text-micro text-gray-500 italic mt-0.5 leading-tight">„{reason}"</div>
-                      )}
-                    </div>
+                  return (
+                    <li key={o.id} className="flex items-center justify-between gap-3 py-2.5">
+                      <div className="min-w-0">
+                        <div className="text-xs text-muted">{ROLE_LABEL[o.role as OfficialRole]}</div>
+                        <div className="text-sm font-heading font-bold truncate">{o.first_name} {o.last_name}</div>
+                        <div className="text-xs text-muted">{favorLabel(o.favor)} · {PERSONALITY_LABEL[o.personality as Personality]}</div>
+                      </div>
+                      <div className="text-right shrink-0 max-w-[55%]">
+                        {slotTakenByMe ? <span className="text-xs font-medium px-1.5 py-0.5 rounded bg-pitch-50 text-pitch-700">Přijde ✓</span>
+                          : slotTakenByOther ? <span className="text-xs text-muted">Jde k {o.slot_taken_by_name}</span>
+                          : myInv?.status === "declined" ? (
+                            <span className="block text-xs text-card-red">Odmítl{reason && <span className="block text-muted italic">„{reason}"</span>}</span>
+                          ) : (
+                            <Button size="sm" disabled={isInviting || !!myInv} onClick={() => handleInvite(o.id)}>
+                              {isInviting ? "…" : myInv ? "Pozváno" : "Pozvat"}
+                            </Button>
+                          )}
+                        {!slotTakenByMe && !slotTakenByOther && !myInv && <div className="text-xs text-muted mt-0.5">dárek {giftCost.toLocaleString("cs-CZ")} Kč</div>}
+                      </div>
+                    </li>
                   );
-                }
-
-                return (
-                  <div key={o.id} className="border border-gray-200 rounded-soft p-3 flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="text-xs uppercase tracking-wider text-gray-500">{ROLE_LABEL[o.role as OfficialRole]}</div>
-                      <div className="text-sm font-semibold truncate">{o.first_name} {o.last_name}</div>
-                      <div className="text-xs text-gray-500">přízeň {o.favor}/100 · {PERSONALITY_LABEL[o.personality as Personality]}</div>
-                    </div>
-                    <div className="text-right shrink-0 space-y-1">
-                      {statusEl ?? (
-                        <>
-                          <Button
-                            size="sm"
-                            disabled={isInviting || !!myInv}
-                            onClick={() => handleInvite(o.id)}
-                          >
-                            {isInviting ? "..." : myInv ? "Pozváno" : `Pozvat (${giftCost} Kč)`}
-                          </Button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </CardBody>
-        </Card>
-      )}
-
-      {/* Investiční nabídky obce */}
-      {investments.length > 0 && (
-        <Card>
-          <CardHeader>
-            <SectionLabel>Investiční nabídky obce</SectionLabel>
-            <div className="text-xs text-gray-500 mt-1">
-              Obec nabízí spolufinancování modernizace stadionu. Zaplatíš jen zbytek, dostaneš upgrade.
-            </div>
-          </CardHeader>
-          <CardBody>
-            <div className="space-y-3">
-              {investments.map((i) => (
-                <div key={i.id} className="border border-pitch-300 bg-pitch-50/30 rounded-soft p-3">
-                  <div className="flex justify-between items-start gap-3">
-                    <div className="min-w-0">
-                      <div className="font-semibold text-sm">{investmentTargetLabel(i.target_facility, i.type)}</div>
-                      <div className="text-xs text-gray-700 mt-0.5">
-                        Obec uhradí {i.offered_amount.toLocaleString("cs")} Kč, ty doplatíš {i.required_contribution.toLocaleString("cs")} Kč.
-                      </div>
-                      <div className="text-xs text-gray-500 mt-1">
-                        Vyprší {new Date(i.expires_at).toLocaleDateString("cs")}
-                        {i.political_cost > 0 && ` · politická cena: -${i.political_cost} u opozičních zastupitelů`}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex justify-end gap-2 mt-2">
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      disabled={respondingInvId === i.id}
-                      onClick={() => respondInvestment(i.id, "decline")}
-                    >
-                      Odmítnout
-                    </Button>
-                    <Button
-                      size="sm"
-                      disabled={respondingInvId === i.id}
-                      onClick={() => respondInvestment(i.id, "accept")}
-                    >
-                      Přijmout
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardBody>
-        </Card>
-      )}
-
-      {/* Petice občanů */}
-      {petitions.length > 0 && (
-        <Card>
-          <CardHeader>
-            <SectionLabel>Petice občanů</SectionLabel>
-            <div className="text-xs text-gray-500 mt-1">
-              Občané posílají žádosti — když vyhovíš, zaplatíš a získáš přízeň. Ignoruj a po expiraci ti přízeň klesne.
-            </div>
-          </CardHeader>
-          <CardBody>
-            <div className="space-y-3">
-              {petitions.map((p) => (
-                <div key={p.id} className="border border-amber-200 bg-amber-50/40 rounded-soft p-3">
-                  <div className="flex justify-between items-start gap-3">
-                    <div className="min-w-0">
-                      <div className="font-semibold text-sm">{p.title}</div>
-                      <div className="text-xs text-gray-700 mt-0.5">{p.description}</div>
-                      <div className="text-xs text-gray-500 mt-1">
-                        Vyprší {new Date(p.expires_at).toLocaleDateString("cs")}
-                      </div>
-                    </div>
-                    <div className="text-right text-xs space-y-0.5 shrink-0">
-                      <div className="text-card-red">-{p.cost_money.toLocaleString("cs")} Kč</div>
-                      <div className="text-pitch-700">+{p.reward_favor} přízeň</div>
-                      <div className="text-gray-500">při ignorování {p.ignore_penalty}</div>
-                    </div>
-                  </div>
-                  <div className="flex justify-end gap-2 mt-2">
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      disabled={respondingPetitionId === p.id}
-                      onClick={() => respondPetition(p.id, "ignore")}
-                    >
-                      Ignorovat
-                    </Button>
-                    <Button
-                      size="sm"
-                      disabled={respondingPetitionId === p.id}
-                      onClick={() => respondPetition(p.id, "accept")}
-                    >
-                      Vyhovět
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardBody>
-        </Card>
+                })}
+              </ul>
+            </CardBody>
+          </Card>
+        </div>
       )}
 
       {/* Brigády */}
-      <Card>
-        <CardHeader>
-          <SectionLabel>Brigády vyhlášené obcí</SectionLabel>
-          <div className="text-xs text-gray-500 mt-1">
-            Hráči ztratí kondici a morálku, ale tým získá přízeň obce. Slot je sdílený s ostatními týmy v obci — kdo dřív přijde.
-          </div>
-        </CardHeader>
-        <CardBody>
-          {brigades.length === 0 ? (
-            <div className="text-sm text-gray-500 italic">Žádné aktuální brigády. Nové se vyhlásí v pondělí.</div>
-          ) : (
-            <div className="space-y-3">
-              {brigades.map((b) => {
-                const isOpen = b.status === "open";
-                const isMine = b.taken_team_name && teams.find((t) => t.id === teamId)?.name === b.taken_team_name;
-                return (
-                  <div key={b.id} className={`border rounded-soft p-3 ${isOpen ? "border-pitch-300 bg-pitch-50/30" : "border-gray-200 bg-gray-50/40 opacity-80"}`}>
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex-1 min-w-0">
-                        <div className="font-semibold text-sm">{b.title}</div>
-                        <div className="text-xs text-gray-600 mt-0.5">{b.description}</div>
-                        {b.offering_official_name && (
-                          <div className="text-xs text-gray-500 mt-1">
-                            Vyhlásil: {b.offering_official_name}
-                          </div>
-                        )}
-                      </div>
-                      <div className="text-right text-xs space-y-0.5 shrink-0">
-                        <div className="font-semibold text-pitch-700">+{b.reward_favor} přízeň</div>
-                        <div className="text-card-red">-{b.condition_drain} kondice</div>
-                        {b.morale_change !== 0 && (
-                          <div className={b.morale_change > 0 ? "text-pitch-600" : "text-card-red"}>
-                            {b.morale_change > 0 ? "+" : ""}{b.morale_change} morálka
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between mt-3">
-                      <div className="text-xs text-gray-500">
-                        {b.required_player_count} hráčů · {b.duration_hours} h
-                        {!isOpen && b.taken_team_name && (
-                          <span className="ml-2 font-medium">
-                            · Vzal {isMine ? "náš tým" : b.taken_team_name}
-                            {b.taken_at && ` (${new Date(b.taken_at).toLocaleDateString("cs")})`}
-                          </span>
-                        )}
-                      </div>
-                      {isOpen && (
-                        <Button onClick={() => setTakeBrigade(b)} size="sm">
-                          Vzít brigádu
-                        </Button>
-                      )}
-                    </div>
+      <div>
+        <SectionLabel>Brigády pro obec</SectionLabel>
+        {brigades.length === 0 ? (
+          <Card><CardBody><p className="text-sm text-muted">Teď žádná brigáda není. Nové obec vyhlašuje v pondělí.</p></CardBody></Card>
+        ) : (
+          <div className="space-y-3">
+            {brigades.map((b) => {
+              const isOpen = b.status === "open";
+              const isMine = !!b.taken_team_name && myTeam?.name === b.taken_team_name;
+              return (
+                <div key={b.id} className={`card p-4 ${isOpen ? "border-2 border-green-200 bg-green-50" : "opacity-70"}`}>
+                  <div className="text-xs text-muted">🛠️ {b.offering_official_name ? `Vyhlásil ${b.offering_official_name}` : "Obec"} · {b.required_player_count} hráčů · {b.duration_hours} h</div>
+                  <div className="font-heading font-bold">{b.title}</div>
+                  <p className="text-sm text-ink-light mt-0.5">{b.description}</p>
+                  <Chips items={[
+                    { text: `+${b.reward_favor} přízeň`, tone: "good" },
+                    { text: `−${b.condition_drain} kondice`, tone: "bad" },
+                    ...(b.morale_change !== 0 ? [{ text: `${b.morale_change > 0 ? "+" : ""}${b.morale_change} nálada`, tone: (b.morale_change > 0 ? "good" : "bad") as "good" | "bad" }] : []),
+                  ]} />
+                  <div className="flex items-center justify-between gap-2 mt-3">
+                    <span className="text-xs text-muted">
+                      {isOpen ? "Kdo dřív přijde, ten bere. Ostatní kluby v obci ji vidí taky." : `Vzal ${isMine ? "náš klub" : b.taken_team_name ?? "jiný klub"}${b.taken_at ? `, ${formatDay(b.taken_at)}` : ""}`}
+                    </span>
+                    {isOpen && <Button size="sm" onClick={() => setTakeBrigade(b)}>Vzít brigádu</Button>}
                   </div>
-                );
-              })}
-            </div>
-          )}
-        </CardBody>
-      </Card>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
-      {/* Týmy v obci — vždy viditelné (i pokud je jen jeden), s matricí favor per NPC */}
-      <Card>
-        <CardHeader>
-          <SectionLabel>Týmy v obci</SectionLabel>
-          <div className="text-xs text-gray-500 mt-1">
-            {teams.length === 1
-              ? "V obci je jen jeden tým, žádná konkurence."
-              : `${teams.length} týmů soutěží o přízeň zastupitelstva. Vidíš obliby všech týmů u každého zastupitele.`}
-          </div>
-        </CardHeader>
-        <CardBody>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="text-left text-xs uppercase tracking-wider text-gray-500">
-                <tr>
-                  <th className="py-2 pr-3 sticky left-0 bg-white">Tým</th>
-                  <th className="py-2 px-2 text-right">Globální</th>
-                  {officials.map((o) => (
-                    <th key={o.id} className="py-2 px-2 text-right whitespace-nowrap">
-                      {ROLE_LABEL[o.role]}<br/>
-                      <span className="text-micro font-normal normal-case text-gray-400">
-                        {o.firstName.charAt(0)}. {o.lastName}
-                      </span>
-                    </th>
-                  ))}
-                  <th className="py-2 pl-2 text-right">Rep</th>
-                </tr>
-              </thead>
-              <tbody>
-                {teams
-                  .slice()
-                  .sort((a, b) => b.global_favor - a.global_favor)
-                  .map((t) => (
-                    <tr key={t.id} className={t.id === teamId ? "font-semibold bg-pitch-50/30" : ""}>
-                      <td className="py-2 pr-3 sticky left-0 bg-inherit">
-                        <span className="inline-flex items-center gap-2">
-                          <span
-                            className="inline-block w-3 h-3 rounded-full border border-gray-200 shrink-0"
-                            style={{ backgroundColor: t.primary_color }}
-                          />
-                          <span className="truncate max-w-[140px]">{t.name}</span>
-                          {t.id === teamId && <span className="text-xs text-gray-500">(my)</span>}
-                        </span>
-                      </td>
-                      <td className="py-2 px-2 text-right tabular-nums font-semibold">
-                        {t.global_favor}
-                      </td>
-                      {officials.map((o) => {
-                        const f = favorMatrix[t.id]?.[o.id] ?? 50;
-                        return (
-                          <td key={o.id} className="py-2 px-2 text-right tabular-nums">
-                            <span className={
-                              f >= 70 ? "text-pitch-700"
-                              : f >= 40 ? "text-gray-700"
-                              : "text-card-red"
-                            }>
-                              {f}
-                            </span>
-                          </td>
-                        );
-                      })}
-                      <td className="py-2 pl-2 text-right tabular-nums text-gray-500">
-                        {t.reputation}
-                      </td>
-                    </tr>
-                  ))}
-              </tbody>
-            </table>
-          </div>
-        </CardBody>
-      </Card>
-
-      {/* Historie obce */}
-      <Card>
-        <CardHeader>
-          <SectionLabel>Historie obce</SectionLabel>
-          <div className="text-xs text-gray-500 mt-1">
-            Vidíš i akce konkurenčních týmů — žádné tajnosti.
-          </div>
-        </CardHeader>
-        <CardBody>
-          {feed.length === 0 ? (
-            <div className="text-sm text-gray-500 italic">Zatím žádné události. Brigády a další akce se objeví po zavedení Sprintu B.</div>
-          ) : (
+      {/* Kluby v obci */}
+      <div>
+        <SectionLabel>{teams.length === 1 ? "Klub v obci" : `Kluby v obci (${teams.length})`}</SectionLabel>
+        <Card>
+          <CardBody>
+            {teams.length === 1 && <p className="text-sm text-muted mb-2">V obci jsme jediný klub, o přízeň radnice se nedělíme.</p>}
             <ul className="divide-y divide-gray-100">
-              {feed.map((e) => (
-                <li key={e.id} className="py-2 text-sm">
-                  <div className="flex justify-between items-baseline gap-2">
-                    <span>{e.description}</span>
-                    <span className="text-xs text-gray-500 shrink-0">{new Date(e.created_at).toLocaleDateString("cs")}</span>
+              {[...teams].sort((a, b) => b.global_favor - a.global_favor).map((t) => (
+                <li key={t.id} className="flex items-center gap-3 py-2.5">
+                  <span className="shrink-0" dangerouslySetInnerHTML={{ __html: clubBadgeSvg(mapVillage.clubs.find((c) => c.id === t.id)!, 30) }} />
+                  <div className="min-w-0 flex-1">
+                    <Link href={`/tym/${t.id}`} className={`font-heading font-bold text-sm hover:text-pitch-600 ${t.id === teamId ? "text-pitch-700" : ""}`}>
+                      {t.name}{t.id === teamId && " (my)"}
+                    </Link>
+                    <div className="mt-1 max-w-[220px]"><FavorBar value={t.global_favor} label="" /></div>
                   </div>
-                  {(e.team_name || e.official_name) && (
-                    <div className="text-xs text-gray-500 mt-0.5">
-                      {e.team_name && <span>tým: {e.team_name}</span>}
-                      {e.team_name && e.official_name && <span> · </span>}
-                      {e.official_name && <span>zastupitel: {e.official_name}</span>}
-                    </div>
-                  )}
+                  <span className="text-sm font-heading font-bold shrink-0">{favorLabel(t.global_favor)}</span>
                 </li>
               ))}
             </ul>
-          )}
-        </CardBody>
-      </Card>
+          </CardBody>
+        </Card>
+      </div>
 
       {/* Místní hrdost */}
       {localPride && (
-        <Card>
-          <CardHeader>
-            <SectionLabel>Místní hrdost</SectionLabel>
-            <div className="text-xs text-gray-500 mt-1">
-              Rodáci z {localPride.villageName} v kádru. Pokud jich víc nastoupí do zápasu, obec to ocení (+favor po každém zápase).
-            </div>
-          </CardHeader>
-          <CardBody>
-            {localPride.totalLocalCount === 0 ? (
-              <div className="text-sm text-gray-500 italic">
-                Zatím žádný hráč z {localPride.villageName} v kádru. Zvaž nábor mládeže nebo přestup místního talentu.
-              </div>
-            ) : (
-              <>
-                <div className="grid grid-cols-3 gap-3 mb-3 text-center">
-                  <div className="bg-gray-50 rounded-soft p-2">
-                    <div className="text-2xl font-bold tabular-nums">{localPride.totalLocalCount}</div>
-                    <div className="text-xs text-gray-500">rodáků v kádru</div>
-                  </div>
-                  <div className="bg-gray-50 rounded-soft p-2">
-                    <div className="text-2xl font-bold tabular-nums">{localPride.recentStartersTotal}</div>
-                    <div className="text-xs text-gray-500">nastoupilo (90 dní)</div>
-                  </div>
-                  <div className="bg-gray-50 rounded-soft p-2">
-                    <div className="text-2xl font-bold tabular-nums">{localPride.avgRating ?? "—"}</div>
-                    <div className="text-xs text-gray-500">průměrný rating</div>
-                  </div>
-                </div>
-                <table className="w-full text-sm">
-                  <thead className="text-left text-xs uppercase tracking-wider text-gray-500">
-                    <tr>
-                      <th className="py-1.5">Hráč</th>
-                      <th className="py-1.5 text-right">Pos / Rat</th>
-                      <th className="py-1.5 text-right">Zápasů</th>
-                      <th className="py-1.5 text-right">G+A</th>
-                      <th className="py-1.5 text-right">Známka</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {localPride.locals.map((p) => (
-                      <tr key={p.id} className="border-t border-gray-100">
-                        <td className="py-1.5">{p.firstName} {p.lastName}</td>
-                        <td className="py-1.5 text-right tabular-nums">{p.position} {p.overallRating}</td>
-                        <td className="py-1.5 text-right tabular-nums">{p.recentStarts}</td>
-                        <td className="py-1.5 text-right tabular-nums">{p.recentGoals}+{p.recentAssists}</td>
-                        <td className="py-1.5 text-right tabular-nums">{p.recentAvgRating ?? "—"}</td>
-                      </tr>
+        <div>
+          <SectionLabel>Místní hrdost</SectionLabel>
+          <Card>
+            <CardBody className="space-y-3">
+              <p className="text-sm text-ink-light">Kluci z {localPride.villageName} v kádru. Čím víc jich hraje, tím víc to obec ocení.</p>
+              {localPride.totalLocalCount === 0 ? (
+                <p className="text-sm text-muted">Zatím tu nemáme žádného místního. Zkus nábor mládeže nebo přestup kluka odsud.</p>
+              ) : (
+                <>
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    {[
+                      { v: localPride.totalLocalCount, l: "místních v kádru" },
+                      { v: localPride.recentStartersTotal, l: "startů za 90 dní" },
+                      { v: localPride.avgRating ?? "?", l: "průměrný rating" },
+                    ].map((x) => (
+                      <div key={x.l} className="rounded-xl bg-surface p-2">
+                        <div className="text-2xl font-heading font-bold tabular-nums">{x.v}</div>
+                        <div className="text-xs text-muted">{x.l}</div>
+                      </div>
                     ))}
-                  </tbody>
-                </table>
-              </>
+                  </div>
+                  <ul className="divide-y divide-gray-100">
+                    {localPride.locals.map((p) => (
+                      <li key={p.id} className="flex items-center justify-between gap-2 py-2 text-sm">
+                        <Link href={`/hrac/${p.id}`} className="font-heading font-bold hover:text-pitch-600 underline decoration-pitch-500/20 truncate">
+                          {p.firstName} {p.lastName}
+                        </Link>
+                        <span className="text-xs text-muted shrink-0 tabular-nums">
+                          {p.position} {p.overallRating} · {p.recentStarts} zápasů · {p.recentGoals}+{p.recentAssists}{p.recentAvgRating ? ` · známka ${p.recentAvgRating}` : ""}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            </CardBody>
+          </Card>
+        </div>
+      )}
+
+      {/* Kronika obce */}
+      <div>
+        <SectionLabel>Kronika obce</SectionLabel>
+        <Card>
+          <CardBody>
+            {feed.length === 0 ? (
+              <p className="text-sm text-muted">Zatím se v obci nic nezapsalo.</p>
+            ) : (
+              <ul className="space-y-2.5">
+                {feed.map((e) => (
+                  <li key={e.id} className="flex items-start gap-2.5 text-sm">
+                    <span className="shrink-0 leading-5" aria-hidden>{CHRONICLE_ICON[e.event_type] ?? "\u{1F4DC}"}</span>
+                    <div className="min-w-0">
+                      <p className="leading-snug">{withoutLongDash(e.description)}</p>
+                      <div className="text-xs text-muted">
+                        {formatDay(e.game_date || e.created_at)}
+                        {e.team_name && ` · ${e.team_name}`}
+                        {e.official_name && ` · ${e.official_name}`}
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
             )}
           </CardBody>
         </Card>
-      )}
+      </div>
+
+      {/* Jak to s obcí funguje */}
+      <details className="card p-4 sm:p-5 group">
+        <summary className="cursor-pointer font-heading font-bold text-sm flex items-center justify-between">
+          <span>💡 Jak to s obcí funguje</span>
+          <span className="text-xs text-muted group-open:hidden">rozbalit</span>
+          <span className="text-xs text-muted hidden group-open:inline">sbalit</span>
+        </summary>
+        <div className="mt-3 space-y-3 text-sm leading-relaxed text-ink-light">
+          <p>Klub žije v obci a s její radnicí. <strong className="text-ink">Přízeň obce</strong> rozhoduje o dotaci: při nejhorším dostaneš polovinu, při nejlepším jeden a půl násobek. Za sezónu jsou to tisíce korun.</p>
+          <p>V <strong className="text-ink">zastupitelstvu</strong> sedí starosta a tři zastupitelé. Každý má svou povahu a svůj vztah k tobě. Když je v obci víc klubů, rozhodují se podle toho, koho mají radši.</p>
+          <ul className="space-y-1.5 ml-4 list-disc">
+            <li><strong className="text-ink">Brigády</strong> 🛠️: obec potřebuje pomoct (úklid, plot, kulturák). Pošleš 3 až 7 hráčů, ti ztratí kondici, klub získá přízeň.</li>
+            <li><strong className="text-ink">Pozvánky na zápas</strong> 🎟️: dárek a pozvání na domácí zápas. Přijdou podle povahy a vztahu, dárek platíš vždy.</li>
+            <li><strong className="text-ink">Hospoda</strong> 🍺: zastupitel se občas objeví v hospodě. Pivo vás sblíží, aktivista se ale umí naštvat.</li>
+            <li><strong className="text-ink">Petice</strong> 📜: občané žádají třeba dětský den. Vyhovíš a zaplatíš, nebo přejdeš a přízeň klesne.</li>
+            <li><strong className="text-ink">Investice</strong> 💰: při dobré přízni obec zaplatí větší část modernizace stadionu.</li>
+          </ul>
+          <p><strong className="text-ink">Místní hrdost</strong> 🏡: místní v kádru a jejich výkony obec sleduje. Hat-trick místního zvedne přízeň, prodej místního jí ublíží.</p>
+          <p><strong className="text-ink">Volby</strong> 🗳️: na konci každé sezóny se vymění celé vedení obce a přízeň u všech klubů začíná znovu napůl.</p>
+          <p><strong className="text-ink">Krize</strong> ⚠️: když přízeň spadne hodně nízko, obec se otočí proti klubu. Cesta zpátky vede přes brigády a petice.</p>
+        </div>
+      </details>
 
       {toast && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[var(--z-sheet)] bg-gray-900 text-white px-4 py-2 rounded-soft shadow-lg text-sm">
@@ -1079,6 +868,61 @@ function OwnVillage() {
       )}
     </div>
   );
+}
+
+const CHRONICLE_ICON: Record<string, string> = {
+  election_held: "\u{1F5F3}\uFE0F",
+  local_sensation: "\u2B50",
+  petition_ignored: "\u{1F4DD}",
+  petition_accepted: "\u{1F4DD}",
+  investment_offered: "\u{1F4B0}",
+  investment_accepted: "\u{1F3D7}\uFE0F",
+  brigade_completed: "\u{1F528}",
+  brigade_taken: "\u{1F528}",
+  pub_scandal: "\u{1F37A}",
+};
+
+const CHIP_TONE: Record<string, string> = {
+  good: "bg-pitch-50 text-pitch-700",
+  bad: "bg-red-50 text-card-red",
+  neutral: "bg-white/70 text-ink-light",
+};
+
+function Chips({ items }: { items: Array<{ text: string; tone: "good" | "bad" | "neutral" }> }) {
+  return (
+    <div className="flex flex-wrap gap-1 mt-2">
+      {items.map((c) => <span key={c.text} className={`text-xs font-medium px-1.5 py-0.5 rounded ${CHIP_TONE[c.tone]}`}>{c.text}</span>)}
+    </div>
+  );
+}
+
+function formatDay(d: string): string {
+  return new Date(d).toLocaleDateString("cs-CZ", { day: "numeric", month: "numeric" });
+}
+
+/** Starší zápisy v kronice mají dlouhé pomlčky; v textech pro hráče je nechceme. */
+function withoutLongDash(s: string): string {
+  return s.replace(/\s*[\u2014\u2013]\s*/g, ", ");
+}
+
+function parseFacts(raw: string | null): string[] {
+  if (!raw) return [];
+  try {
+    const v = JSON.parse(raw) as unknown;
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string").map(withoutLongDash) : [];
+  } catch (e) {
+    console.warn("Zajímavosti obce:", e);
+    return [];
+  }
+}
+
+function parseFace(raw: string): Record<string, unknown> {
+  try {
+    return JSON.parse(raw) as Record<string, unknown>;
+  } catch (e) {
+    console.warn("Obličej zastupitele:", e);
+    return {};
+  }
 }
 
 interface BrigadeTakeDialogProps {
