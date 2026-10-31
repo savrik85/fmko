@@ -18,6 +18,7 @@ interface Club {
   position: number | null;
   teamsInLeague: number | null;
   points: number | null;
+  fans: number | null;
   colors: { primary: string; secondary: string };
   badge: MapVillage["clubs"][number]["badge"];
   coach: { name: string; avatar: Face } | null;
@@ -96,7 +97,7 @@ function Avatar({ face, size, fallback }: { face: Face; size: number; fallback: 
 
 function stadiumChips(s: Club["stadium"]): string[] {
   const chips: string[] = [];
-  if (s.capacity) chips.push(`${s.capacity.toLocaleString("cs-CZ")} diváků`);
+  if (s.capacity) chips.push(`kapacita ${s.capacity.toLocaleString("cs-CZ")} diváků`);
   if (s.pitchType) chips.push(PITCH_LABEL[s.pitchType] ?? s.pitchType);
   if (s.stands) chips.push(s.roof ? "krytá tribuna" : "tribuna");
   if (s.lighting) chips.push("osvětlení");
@@ -120,6 +121,9 @@ function ClubCard({ club }: { club: Club }) {
             <div className="text-sm text-muted">
               {[club.leagueName, club.position && club.teamsInLeague ? `${club.position}. místo z ${club.teamsInLeague}` : null]
                 .filter(Boolean).join(" · ") || "bez soutěže"}
+            </div>
+            <div className="text-sm text-muted">
+              {club.fans != null && <>📣 <span className="font-heading font-bold text-ink">{club.fans.toLocaleString("cs-CZ")}</span> fanoušků</>}
             </div>
           </div>
         </div>

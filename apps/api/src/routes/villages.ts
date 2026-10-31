@@ -4,6 +4,7 @@
 
 import { logger } from "../lib/logger";
 import { isGameExpired } from "../lib/game-time";
+import { STAND_COLUMNS, standFacilities } from "../stadium/stands-model";
 import { Hono } from "hono";
 import type { Bindings } from "../index";
 
@@ -375,6 +376,7 @@ villagesRouter.get("/:id/profile", async (c) => {
             t.badge_secondary_color, t.badge_initials, t.badge_symbol, t.stadium_name, t.reputation,
             l.name AS league_name, m.name AS coach_name, m.avatar AS coach_avatar,
             s.capacity, s.pitch_type, s.pitch_condition, s.lighting, s.stands, s.roof, s.changing_rooms, s.refreshments, s.parking,
+            s.vip_box, ${STAND_COLUMNS.split(", ").map((col) => `s.${col}`).join(", ")},
             (SELECT viewpoint || '|' || version FROM team_stadium_photos p WHERE p.team_id = t.id ORDER BY created_at DESC LIMIT 1) AS photo
        FROM teams t LEFT JOIN leagues l ON l.id = t.league_id LEFT JOIN managers m ON m.team_id = t.id
        LEFT JOIN stadiums s ON s.team_id = t.id
@@ -383,6 +385,9 @@ villagesRouter.get("/:id/profile", async (c) => {
   ).bind(id).all<Record<string, string | number | null>>();
 
   const { calculateStandings } = await import("../stats/standings");
+  // Kapacita stejně jako v profilu klubu: základ plus tribuny a VIP lóže (sloupec sám je jen základ).
+  const { calculateFacilityEffects } = await import("../stadium/stadium-generator");
+  const { loadFanbaseAggregate } = await import("../season/fanbase-helpers");
   const clubs = [];
   for (const t of clubRows.results) {
     const teamId = t.id as string;
@@ -397,17 +402,24 @@ villagesRouter.get("/:id/profile", async (c) => {
         ORDER BY m.simulated_at DESC LIMIT 3`,
     ).bind(teamId).all<{ id: string; home_score: number; away_score: number; attendance: number | null; home_name: string; away_name: string; simulated_at: string }>()
       .catch((e) => { logger.warn({ module: "villages" }, "zápasy na hřišti obce", e); return { results: [] }; });
+    // Fanoušci celkem stejně jako na stránce Fanoušci: domácí, z propagace i z okolních obcí.
+    const fans = await loadFanbaseAggregate(c.env.DB, teamId)
+      .then((f) => f.agg.total)
+      .catch((e) => { logger.warn({ module: "villages" }, "fanoušci klubu pro profil obce", e); return null; });
     const [vp, version] = String(t.photo ?? "").split("|");
     let coachAvatar: Record<string, unknown> | null = null;
     try { coachAvatar = t.coach_avatar ? JSON.parse(String(t.coach_avatar)) : null; } catch (e) { logger.warn({ module: "villages" }, "avatar trenéra", e); }
     clubs.push({
       id: teamId, name: t.name, isAi: t.user_id === "ai", leagueName: t.league_name,
-      position: position?.pos ?? null, teamsInLeague: standings.length || null, points: position?.points ?? null,
+      position: position?.pos ?? null, teamsInLeague: standings.length || null, points: position?.points ?? null, fans,
       colors: { primary: t.primary_color, secondary: t.secondary_color },
       badge: { pattern: t.badge_pattern, primary: t.badge_primary_color, secondary: t.badge_secondary_color, initials: t.badge_initials, symbol: t.badge_symbol },
       coach: t.coach_name ? { name: t.coach_name, avatar: coachAvatar } : null,
       stadium: {
-        name: t.stadium_name, capacity: t.capacity, pitchType: t.pitch_type, pitchCondition: t.pitch_condition,
+        name: t.stadium_name,
+        capacity: t.capacity == null ? null
+          : (t.capacity as number) + calculateFacilityEffects({ ...standFacilities(t as never), vip_box: (t.vip_box as number) ?? 0 }).capacityBonus,
+        pitchType: t.pitch_type, pitchCondition: t.pitch_condition,
         lighting: t.lighting, stands: t.stands, roof: t.roof, changingRooms: t.changing_rooms, refreshments: t.refreshments, parking: t.parking,
         photoUrl: vp && version ? `/api/teams/${teamId}/website/stadium-photo/${vp}?v=${version}` : null,
       },
