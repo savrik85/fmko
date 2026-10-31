@@ -7,6 +7,7 @@ import { API_BASE, apiFetch } from "@/lib/api";
 import { Card, CardBody, SectionLabel, Spinner } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { DistrictMap, clubBadgeSvg, villageSizeLabel, type MapVillage } from "@/components/map/DistrictMap";
+import { StadiumPreview } from "./StadiumPreview";
 
 type Face = Record<string, unknown> | null;
 
@@ -136,9 +137,11 @@ function ClubCard({ club }: { club: Club }) {
         )}
 
         <div className="rounded-xl bg-surface overflow-hidden">
-          {club.stadium.photoUrl && (
+          {club.stadium.photoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={`${API_BASE}${club.stadium.photoUrl}`} alt={`Stadion ${club.stadium.name ?? club.name}`} className="w-full aspect-[16/9] object-cover" loading="lazy" />
+          ) : (
+            <StadiumPreview teamId={club.id} alt={`Stadion ${club.stadium.name ?? club.name}`} />
           )}
           <div className="p-3">
             <div className="font-heading font-bold text-sm">🏟️ {club.stadium.name ?? "Hřiště"}</div>
