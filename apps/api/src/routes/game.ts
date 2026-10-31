@@ -6094,6 +6094,21 @@ gameRouter.post("/admin/transfer-installments/run", async (c) => {
   return c.json({ ok: true, teamId, gameDate, paid });
 });
 
+// Oprava souřadnic obcí (mapa okresu). Body: { updates: [{ id, lat, lng }] }. Jen body v Česku.
+gameRouter.post("/admin/villages/coords", async (c) => {
+  const body = await c.req.json<{ updates?: Array<{ id?: unknown; lat?: unknown; lng?: unknown }> }>()
+    .catch((e) => { logger.warn({ module: "game" }, "tělo opravy souřadnic", e); return null; });
+  const updates = (body?.updates ?? []).filter((u): u is { id: string; lat: number; lng: number } =>
+    typeof u.id === "string" && typeof u.lat === "number" && typeof u.lng === "number"
+    && u.lat >= 48.5 && u.lat <= 51.1 && u.lng >= 12.0 && u.lng <= 18.9);
+  if (!updates.length || updates.length > 100) return c.json({ error: "Žádné platné souřadnice (nebo víc než 100)" }, 400);
+  const res = await c.env.DB.batch(updates.map((u) =>
+    c.env.DB.prepare("UPDATE villages SET lat = ?, lng = ? WHERE id = ?").bind(u.lat, u.lng, u.id)));
+  const changed = res.reduce((a, r) => a + (r.meta.changes ?? 0), 0);
+  logger.info({ module: "game" }, `souřadnice obcí: ${changed} z ${updates.length}`);
+  return c.json({ ok: true, requested: updates.length, changed });
+});
+
 // Okresní akce (pouť, bál, dožínky…): spouští se ručně, když něco vymyslíme.
 // Body: { district, title, place, description, eventDate? } — pozvánka jde lidským trenérům okresu.
 gameRouter.post("/admin/district-events", async (c) => {
