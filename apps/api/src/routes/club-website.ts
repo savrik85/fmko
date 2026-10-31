@@ -716,8 +716,8 @@ function bannerSponsorNames(rows: Array<{ sponsor_name: string; category: string
     .slice(0, 8);
 }
 
-/** Totéž jako GET /website, jen pro ověření nahrávané fotky (bez ostatních dat webu). */
-async function loadStadiumRender(db: D1Database, teamId: string) {
+/** Totéž jako GET /website, jen pro ověření nahrávané fotky (bez ostatních dat webu). Používá i profil obce. */
+export async function loadStadiumRender(db: D1Database, teamId: string) {
   const [team, stadium, extensions, sponsors] = await Promise.all([
     db.prepare(
       `SELECT name, primary_color, secondary_color, badge_pattern, badge_primary_color, badge_secondary_color,

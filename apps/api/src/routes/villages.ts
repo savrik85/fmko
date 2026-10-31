@@ -5,6 +5,7 @@
 import { logger } from "../lib/logger";
 import { isGameExpired } from "../lib/game-time";
 import { STAND_COLUMNS, standFacilities } from "../stadium/stands-model";
+import { loadStadiumRender } from "./club-website";
 import { Hono } from "hono";
 import type { Bindings } from "../index";
 
@@ -377,7 +378,7 @@ villagesRouter.get("/:id/profile", async (c) => {
             l.name AS league_name, m.name AS coach_name, m.avatar AS coach_avatar,
             s.capacity, s.pitch_type, s.pitch_condition, s.lighting, s.stands, s.roof, s.changing_rooms, s.refreshments, s.parking,
             s.vip_box, ${STAND_COLUMNS.split(", ").map((col) => `s.${col}`).join(", ")},
-            (SELECT viewpoint || '|' || version FROM team_stadium_photos p WHERE p.team_id = t.id ORDER BY created_at DESC LIMIT 1) AS photo
+            (SELECT GROUP_CONCAT(viewpoint || '|' || version, ',') FROM team_stadium_photos p WHERE p.team_id = t.id) AS photos
        FROM teams t LEFT JOIN leagues l ON l.id = t.league_id LEFT JOIN managers m ON m.team_id = t.id
        LEFT JOIN stadiums s ON s.team_id = t.id
       WHERE t.village_id = ? AND t.parent_team_id IS NULL AND COALESCE(t.team_type, 'senior') != 'u21' AND t.name NOT LIKE 'DELETED%'
@@ -406,7 +407,14 @@ villagesRouter.get("/:id/profile", async (c) => {
     const fans = await loadFanbaseAggregate(c.env.DB, teamId)
       .then((f) => f.agg.total)
       .catch((e) => { logger.warn({ module: "villages" }, "fanoušci klubu pro profil obce", e); return null; });
-    const [vp, version] = String(t.photo ?? "").split("|");
+    // Fotka platí jen pro současnou podobu stadionu (stejně jako na klubovém webu): po přestavbě
+    // nebo změně 3D modelu by ukazovala starý stadion. Přednost má celkový pohled.
+    const stored = String(t.photos ?? "").split(",").filter(Boolean).map((x) => x.split("|") as [string, string]);
+    const current = stored.length
+      ? await loadStadiumRender(c.env.DB, teamId).catch((e) => { logger.warn({ module: "villages" }, "otisk stadionu pro fotku", e); return null; })
+      : null;
+    const valid = current ? stored.filter(([, ver]) => ver === current.version) : [];
+    const [vp, version] = valid.find(([v]) => v === "overview") ?? valid[0] ?? [];
     let coachAvatar: Record<string, unknown> | null = null;
     try { coachAvatar = t.coach_avatar ? JSON.parse(String(t.coach_avatar)) : null; } catch (e) { logger.warn({ module: "villages" }, "avatar trenéra", e); }
     clubs.push({
