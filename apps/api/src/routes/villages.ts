@@ -459,16 +459,19 @@ villagesRouter.get("/:id/profile", async (c) => {
 
   // Rekordy hřiště: všechny domácí zápasy klubů obce (bez U21).
   const clubIds = clubs.map((cl) => cl.id as string);
-  type MatchRow = { id: string; home_score: number; away_score: number; attendance: number | null; home_name: string; away_name: string };
+  type MatchRow = { id: string; home_score: number; away_score: number; attendance: number | null; home_name: string; away_name: string; home_team_id: string; away_team_id: string };
   const homeMatches = clubIds.length
     ? await c.env.DB.prepare(
-      `SELECT m.id, m.home_score, m.away_score, m.attendance, ht.name AS home_name, at.name AS away_name
+      `SELECT m.id, m.home_score, m.away_score, m.attendance, ht.name AS home_name, at.name AS away_name, m.home_team_id, m.away_team_id
          FROM matches m JOIN teams ht ON ht.id = m.home_team_id JOIN teams at ON at.id = m.away_team_id
         WHERE m.home_team_id IN (${clubIds.map(() => "?").join(",")}) AND m.status = 'simulated' AND m.parent_match_id IS NULL`,
     ).bind(...clubIds).all<MatchRow>().catch((e) => { logger.warn({ module: "villages" }, "rekordy hřiště", e); return { results: [] as MatchRow[] }; })
     : { results: [] as MatchRow[] };
   const hm = homeMatches.results;
-  const asMatch = (m: MatchRow | undefined) => m ? { id: m.id, home: m.home_name, away: m.away_name, score: `${m.home_score}:${m.away_score}`, attendance: m.attendance } : null;
+  const asMatch = (m: MatchRow | undefined) => m ? {
+    id: m.id, home: m.home_name, away: m.away_name, homeId: m.home_team_id, awayId: m.away_team_id,
+    score: `${m.home_score}:${m.away_score}`, attendance: m.attendance,
+  } : null;
   const topAttendance = [...hm].filter((m) => m.attendance).sort((a, b) => (b.attendance ?? 0) - (a.attendance ?? 0))[0];
   const biggestWin = [...hm].filter((m) => m.home_score > m.away_score)
     .sort((a, b) => (b.home_score - b.away_score) - (a.home_score - a.away_score) || b.home_score - a.home_score)[0];
