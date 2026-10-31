@@ -239,7 +239,7 @@ export function Interviews() {
                           <blockquote className="mb-2 border-l-4 border-line-strong pl-3 text-sm italic text-ink-light">
                             „{ctx.opponentStatement.quote}"
                             {ctx.opponentManagerName && (
-                              <span className="not-italic text-xs text-muted block mt-0.5">— {ctx.opponentManagerName}, před zápasem</span>
+                              <span className="not-italic text-xs text-muted block mt-0.5">{ctx.opponentManagerName}, před zápasem</span>
                             )}
                           </blockquote>
                         )}
@@ -311,7 +311,7 @@ export function Interviews() {
       {interviewDone && interviews.length === 0 && (
         <div className="card p-4 bg-pitch-50 border border-pitch-200 text-sm text-pitch-700">
           <div className="font-heading font-medium">
-            ✅ Odpovědi odeslány — článek vyjde ve{" "}
+            ✅ Odpovědi odeslány, článek vyjde ve{" "}
             <Link href="/zpravodaj" className="underline hover:text-pitch-900">Zpravodaji</Link>.
           </div>
           {interviewEffects && (
