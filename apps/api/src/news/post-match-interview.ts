@@ -349,8 +349,8 @@ async function notifyPostMatchInterview(db: D1Database, teamId: string, ctx: Pos
     ).bind(teamId, ctx.matchId).first<{ id: string }>();
 
     const body = ctx.incident
-      ? `📰 Po zápase s ${ctx.opponentName} se ptá redaktor Zpravodaje, hlavně na tu situaci v ${ctx.incident.minute}. minutě. Odpověz ve svých Událostech.`
-      : `📰 Po zápase s ${ctx.opponentName} (${ctx.ownScore}:${ctx.oppScore}) chce Zpravodaj rozhovor. Odpověz ve svých Událostech.`;
+      ? `📰 Po zápase s ${ctx.opponentName} se ptá redaktor Zpravodaje, hlavně na tu situaci v ${ctx.incident.minute}. minutě. Otázky otevřeš tlačítkem pod zprávou.`
+      : `📰 Po zápase s ${ctx.opponentName} (${ctx.ownScore}:${ctx.oppScore}) chce Zpravodaj rozhovor. Otázky otevřeš tlačítkem pod zprávou.`;
 
     await db.prepare(
       `INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, metadata, sent_at)

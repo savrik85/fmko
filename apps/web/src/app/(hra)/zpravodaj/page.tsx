@@ -7,6 +7,7 @@ import { API_BASE, apiFetch, apiAction, type Team } from "@/lib/api";
 import { Spinner } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { EntityLink } from "@/components/ui/entity-link";
+import { InterviewInvites } from "./Interviews";
 
 interface Classified {
   id: string;
@@ -407,6 +408,7 @@ export default function NewsPage() {
 
   return (
     <div className="page-container">
+      <InterviewInvites />
 
       {/* Výběr okresu — decentní, nad hlavičkou listu */}
       {allLeagues.length > 1 && (

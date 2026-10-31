@@ -641,7 +641,7 @@ export async function tryCreateInterviewRequest(
         .run();
     }
 
-    const msgBody = `📰 Redaktor Zpravodaje se chce zeptat před zápasem s ${opponentName}. Odpověz na 4 otázky ve svých Událostech, článek vyjde ve Zpravodaji.`;
+    const msgBody = `📰 Redaktor Zpravodaje se chce zeptat před zápasem s ${opponentName}. Otázky otevřeš tlačítkem pod zprávou, článek vyjde ve Zpravodaji.`;
     const msgId = crypto.randomUUID();
 
     await db
