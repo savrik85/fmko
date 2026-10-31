@@ -298,6 +298,17 @@ villagesRouter.get("/district/:district/map", async (c) => {
       .bind(district).all<{ place: string }>()
       .catch((e) => { logger.warn({ module: "villages" }, "okresní akce pro mapu", e); return { results: [] as { place: string }[] }; }),
   ]);
+  // Ukazují se jen obce, ke kterým něco je: klub, akce, kronika, fanoušci, hráči nebo trenéři odtud.
+  const linked = await c.env.DB.prepare(
+    `SELECT v.id FROM villages v WHERE v.district = ? AND (
+       EXISTS (SELECT 1 FROM village_history h WHERE h.village_id = v.id)
+       OR EXISTS (SELECT 1 FROM bus_satellite_fans b WHERE b.village_id = v.id)
+       OR EXISTS (SELECT 1 FROM managers m WHERE m.team_id IS NOT NULL AND (m.birthplace_village_id = v.id OR (m.birthplace_village_id IS NULL AND m.birthplace = v.name)))
+       OR EXISTS (SELECT 1 FROM players p JOIN teams t ON t.id = p.team_id JOIN villages tv ON tv.id = t.village_id
+                  WHERE p.residence = v.name AND tv.district = v.district AND (p.status IS NULL OR p.status = 'active')))`,
+  ).bind(district).all<{ id: string }>()
+    .catch((e) => { logger.warn({ module: "villages" }, "obce se záznamy", e); return { results: [] as { id: string }[] }; });
+  const linkedIds = new Set(linked.results.map((r) => r.id));
   const byVillage = new Map<string, Array<Record<string, unknown>>>();
   for (const t of clubs.results) {
     const list = byVillage.get(t.village_id) ?? [];
@@ -314,11 +325,13 @@ villagesRouter.get("/district/:district/map", async (c) => {
   return c.json({
     district,
     districts: districts.results.map((d) => d.district),
-    villages: villages.results.map((v) => ({
-      ...v,
-      clubs: byVillage.get(v.id) ?? [],
-      events: events.results.filter((e) => placeMentions(e.place, v.name)).length,
-    })),
+    villages: villages.results
+      .map((v) => ({
+        ...v,
+        clubs: byVillage.get(v.id) ?? [],
+        events: events.results.filter((e) => placeMentions(e.place, v.name)).length,
+      }))
+      .filter((v) => v.clubs.length > 0 || v.events > 0 || linkedIds.has(v.id)),
   });
 });
 
