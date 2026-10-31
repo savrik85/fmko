@@ -6169,6 +6169,8 @@ gameRouter.post("/admin/generate-youth-offer-all", async (c) => {
   const ageParam = Number(c.req.query("age"));
   const forcedAge = Number.isInteger(ageParam) && ageParam >= 15 && ageParam <= 45 ? ageParam : undefined;
   const ignorePendingLimit = c.req.query("all") === "1";
+  // ?leagueId= jen klubům jedné ligy (třeba nováčkům v nové soutěži).
+  const leagueId = c.req.query("leagueId") ?? null;
   // U `random` se forceSource nepředá vůbec a generatePlayerOffer si zdroj vylosuje sám
   // (stejně jako v daily-ticku) — proto undefined, ne nějaká vlastní náhoda tady.
   const source = sourceParam === "random"
@@ -6179,8 +6181,9 @@ gameRouter.post("/admin/generate-youth-offer-all", async (c) => {
     `SELECT t.id, t.name, t.game_date, v.district, v.population, v.size,
             (SELECT COUNT(*) FROM player_offers po WHERE po.team_id = t.id AND po.status = 'pending') AS pending
        FROM teams t JOIN villages v ON v.id = t.village_id
-      WHERE t.user_id != 'ai' AND t.parent_team_id IS NULL AND t.game_date IS NOT NULL`,
-  ).all<{ id: string; name: string; game_date: string; district: string; population: number; size: string; pending: number }>()
+      WHERE t.user_id != 'ai' AND t.parent_team_id IS NULL AND t.game_date IS NOT NULL
+        AND (? IS NULL OR t.league_id = ?)`,
+  ).bind(leagueId, leagueId).all<{ id: string; name: string; game_date: string; district: string; population: number; size: string; pending: number }>()
     .catch((e) => { logger.error({ module: "game" }, "load teams for youth offers", e); return { results: [] as never[] }; });
 
   const eligible = teams.results.filter((t) => ignorePendingLimit || t.pending < 2);
