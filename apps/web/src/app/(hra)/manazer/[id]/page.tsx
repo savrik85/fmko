@@ -138,7 +138,9 @@ export default function ManagerDetailPage() {
                 {manager.birthplace && (
                   <>
                     <span className={txtSoft}>&middot;</span>
-                    <span className={`${txtMuted} text-sm`}>{manager.birthplace}</span>
+                    {manager.birthplaceVillageId
+                      ? <Link href={`/obec/${manager.birthplaceVillageId}`} className={`${txtMuted} text-sm underline decoration-current/30 hover:decoration-current`}>{manager.birthplace}</Link>
+                      : <span className={`${txtMuted} text-sm`}>{manager.birthplace}</span>}
                   </>
                 )}
                 <span className={txtSoft}>&middot;</span>
@@ -255,7 +257,9 @@ export default function ManagerDetailPage() {
               {manager.birthplace && (
                 <>
                   <span className={txtSoft}>&middot;</span>
-                  <span className={`${txtMuted}`}>{manager.birthplace}</span>
+                  {manager.birthplaceVillageId
+                    ? <Link href={`/obec/${manager.birthplaceVillageId}`} className={`${txtMuted} underline decoration-current/30 hover:decoration-current`}>{manager.birthplace}</Link>
+                    : <span className={`${txtMuted}`}>{manager.birthplace}</span>}
                 </>
               )}
               <span className={txtSoft}>&middot;</span>
@@ -356,7 +360,9 @@ export default function ManagerDetailPage() {
                 <div className="space-y-0">
                   <DetailRow label="Jméno" value={displayName} />
                   {manager.age && <DetailRow label="Věk" value={`${manager.age} let`} />}
-                  {manager.birthplace && <DetailRow label="Bydliště" value={manager.birthplace} />}
+                  {manager.birthplace && <DetailRow label="Bydliště" value={manager.birthplaceVillageId
+                    ? <Link href={`/obec/${manager.birthplaceVillageId}`} className="underline decoration-pitch-500/30 hover:text-pitch-600">{manager.birthplace}</Link>
+                    : manager.birthplace} />}
                   {manager.backstory && <DetailRow label="Pozadí" value={BACKSTORY_LABELS[manager.backstory] ?? manager.backstory} />}
                   <DetailRow label="Licence" value={<LicenceBadge level={manager.licenceLevel ?? 0} showNone />} />
                   <DetailRow label="Reputace" value={<span className="tabular-nums">{manager.reputation ?? 30} / 75</span>} />

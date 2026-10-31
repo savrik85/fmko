@@ -359,12 +359,12 @@ teamsRouter.post("/", async (c) => {
     const mgrAttrs = generateManagerAttributes(body.managerBackstory, rng);
     // Licence podle vlastností z příběhu (bývalý hráč s koučinkem 65 má uznanou praxi na C).
     await c.env.DB.prepare(
-      "INSERT INTO managers (id, user_id, team_id, name, backstory, avatar, age, coaching, motivation, tactics, youth_development, discipline, reputation, bio, birthplace, licence_level) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO managers (id, user_id, team_id, name, backstory, avatar, age, coaching, motivation, tactics, youth_development, discipline, reputation, bio, birthplace, licence_level, birthplace_village_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT id FROM villages WHERE name = ? LIMIT 1))"
     ).bind(uuid(), userId, teamId, body.managerName, body.managerBackstory,
       JSON.stringify(body.managerAvatar ?? {}),
       mgrAttrs.age, mgrAttrs.coaching, mgrAttrs.motivation, mgrAttrs.tactics,
       mgrAttrs.youthDevelopment, mgrAttrs.discipline, mgrAttrs.reputation, mgrAttrs.bio,
-      mgrAttrs.birthplace, deriveLicenceLevel(mgrAttrs),
+      mgrAttrs.birthplace, deriveLicenceLevel(mgrAttrs), mgrAttrs.birthplace,
     ).run().catch((e) => logger.warn({ module: "teams" }, "insert manager profile", e));
   }
 
@@ -1274,6 +1274,7 @@ teamsRouter.get("/:id/manager", async (c) => {
     reputation: row.reputation ?? 30,
     bio: row.bio,
     birthplace: row.birthplace,
+    birthplaceVillageId: await birthplaceVillageId(c.env.DB, row),
     licenceLevel: row.licence_level ?? 0,
     licenceSource: row.licence_source ?? "derived",
     licenceObtainedAt: row.licence_obtained_at ?? null,
@@ -1334,7 +1335,7 @@ teamsRouter.patch("/:id/manager", async (c) => {
   if (manager.user_id !== userId) return c.json({ error: "Not your manager" }, 403);
 
   // Parse body
-  let body: { name?: unknown; bio?: unknown; avatar?: unknown; age?: unknown; birthplace?: unknown };
+  let body: { name?: unknown; bio?: unknown; avatar?: unknown; age?: unknown; birthplace?: unknown; birthplaceVillageId?: unknown };
   try { body = await c.req.json(); } catch (e) {
     logger.warn({ module: "teams" }, "parse manager PATCH body", e);
     return c.json({ error: "Invalid JSON" }, 400);
@@ -1384,9 +1385,23 @@ teamsRouter.patch("/:id/manager", async (c) => {
     ageToUpdate = body.age;
   }
 
-  // Validace birthplace — string 0-50 znaku, prazdny = null
+  // Bydliště je obec ze hry: profil obce podle id pozná, kdo tam bydlí. Volný text zůstal
+  // jen pro starší klienty a uloží id, když se název shoduje s obcí.
   let birthplaceToUpdate: string | null | undefined = undefined;
-  if (body.birthplace !== undefined) {
+  let birthplaceVillageToUpdate: string | null | undefined = undefined;
+  if (body.birthplaceVillageId !== undefined) {
+    if (body.birthplaceVillageId === null) {
+      birthplaceToUpdate = null;
+      birthplaceVillageToUpdate = null;
+    } else {
+      if (typeof body.birthplaceVillageId !== "string") return c.json({ error: "birthplaceVillageId must be string or null" }, 400);
+      const village = await c.env.DB.prepare("SELECT id, name FROM villages WHERE id = ?").bind(body.birthplaceVillageId)
+        .first<{ id: string; name: string }>();
+      if (!village) return c.json({ error: "Obec nenalezena" }, 400);
+      birthplaceToUpdate = village.name;
+      birthplaceVillageToUpdate = village.id;
+    }
+  } else if (body.birthplace !== undefined) {
     if (body.birthplace === null) {
       birthplaceToUpdate = null;
     } else {
@@ -1395,6 +1410,10 @@ teamsRouter.patch("/:id/manager", async (c) => {
       if (trimmed.length > 50) return c.json({ error: "birthplace max 50 characters" }, 400);
       birthplaceToUpdate = trimmed || null;
     }
+    const byName = birthplaceToUpdate
+      ? await c.env.DB.prepare("SELECT id FROM villages WHERE name = ? LIMIT 1").bind(birthplaceToUpdate).first<{ id: string }>()
+      : null;
+    birthplaceVillageToUpdate = byName?.id ?? null;
   }
 
   // Update — COALESCE drz puvodni hodnoty kdyz field neni v body.
@@ -1405,7 +1424,8 @@ teamsRouter.patch("/:id/manager", async (c) => {
        bio = CASE WHEN ? = 1 THEN ? ELSE bio END,
        avatar = COALESCE(?, avatar),
        age = COALESCE(?, age),
-       birthplace = CASE WHEN ? = 1 THEN ? ELSE birthplace END
+       birthplace = CASE WHEN ? = 1 THEN ? ELSE birthplace END,
+       birthplace_village_id = CASE WHEN ? = 1 THEN ? ELSE birthplace_village_id END
      WHERE id = ? AND user_id != 'ai'`
   ).bind(
     nameToUpdate,
@@ -1415,6 +1435,8 @@ teamsRouter.patch("/:id/manager", async (c) => {
     ageToUpdate,
     birthplaceToUpdate === undefined ? 0 : 1,
     birthplaceToUpdate === undefined ? null : birthplaceToUpdate,
+    birthplaceVillageToUpdate === undefined ? 0 : 1,
+    birthplaceVillageToUpdate === undefined ? null : birthplaceVillageToUpdate,
     manager.id,
   ).run();
 
@@ -1440,6 +1462,7 @@ teamsRouter.patch("/:id/manager", async (c) => {
     reputation: updated.reputation ?? 30,
     bio: updated.bio,
     birthplace: updated.birthplace,
+    birthplaceVillageId: await birthplaceVillageId(c.env.DB, updated),
   });
 });
 
@@ -3781,3 +3804,12 @@ teamsRouter.get("/:id/match/:mid/bus", async (c) => {
 });
 
 export { teamsRouter };
+
+/** Obec bydliště trenéra: uložené id, u starších trenérů dohledané podle názvu. */
+async function birthplaceVillageId(db: D1Database, row: Record<string, unknown>): Promise<string | null> {
+  if (row.birthplace_village_id) return row.birthplace_village_id as string;
+  if (!row.birthplace) return null;
+  const v = await db.prepare("SELECT id FROM villages WHERE name = ? LIMIT 1").bind(row.birthplace as string).first<{ id: string }>()
+    .catch((e) => { logger.warn({ module: "teams" }, "obec bydliště trenéra", e); return null; });
+  return v?.id ?? null;
+}

@@ -57,11 +57,11 @@ export async function ensureAiManager(
 
   const mgr = generateAiManager(createRng(seedFromTeamId(teamId)));
   await db.prepare(
-    "INSERT OR IGNORE INTO managers (id, user_id, team_id, name, backstory, avatar, age, coaching, motivation, tactics, youth_development, discipline, reputation, bio, birthplace, licence_level) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    "INSERT OR IGNORE INTO managers (id, user_id, team_id, name, backstory, avatar, age, coaching, motivation, tactics, youth_development, discipline, reputation, bio, birthplace, licence_level, birthplace_village_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT id FROM villages WHERE name = ? LIMIT 1))",
   ).bind(crypto.randomUUID(), "ai", teamId, mgr.name, mgr.backstory, JSON.stringify(mgr.avatar),
     mgr.age, mgr.coaching, mgr.motivation, mgr.tactics,
     mgr.youthDevelopment, mgr.discipline, mgr.reputation, mgr.bio, mgr.birthplace,
-    deriveLicenceLevel(mgr),
+    deriveLicenceLevel(mgr), mgr.birthplace,
   ).run().catch((e) => logger.warn({ module: "ai-manager" }, `persist AI manager ${teamId}`, e));
 
   return loadManagerRow(db, teamId);
