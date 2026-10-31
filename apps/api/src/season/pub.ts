@@ -1274,7 +1274,7 @@ export async function createCoachLedSession(
   gameDate: string,
   choice: "all" | "one" | "invited",
   opts: { inviterId?: string } = {},
-): Promise<{ ok: true; attendeesCount: number; incidentsCount: number } | { ok: false; reason: string }> {
+): Promise<{ ok: true; attendeesCount: number; incidentsCount: number; stories: string[] } | { ok: false; reason: string }> {
   // Načti aktivní non-injured non-suspended hráče
   const players = await db.prepare(
     `SELECT p.id, p.first_name, p.last_name,
@@ -1423,7 +1423,7 @@ export async function createCoachLedSession(
       .catch((e) => logger.warn({ module: "pub" }, "zápis incidentů z návštěvy s trenérem", e));
   }
 
-  return { ok: true, attendeesCount: attendees.length, incidentsCount: incidents.length };
+  return { ok: true, attendeesCount: attendees.length, incidentsCount: incidents.length, stories: incidents.map((i) => i.text).filter(Boolean) };
 }
 
 /**

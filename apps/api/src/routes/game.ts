@@ -865,9 +865,15 @@ gameRouter.get("/teams/:teamId/wages", async (c) => {
   });
 });
 
+/** Kolik kol po události má trenér na rozhodnutí; pak propadne. */
+const DECISION_WINDOW = 2;
+
 // GET /api/teams/:id/seasonal-events — all seasonal events (pending = with choices, resolved = past)
 gameRouter.get("/teams/:teamId/seasonal-events", async (c) => {
   const teamId = c.req.param("teamId");
+  // Události klubu (a co zvolil) jsou soukromé, GET obchází ownership middleware.
+  const denied = await requireOwnedTeamRead(c, teamId);
+  if (denied) return denied;
 
   // Get events from DB
   const team = await c.env.DB.prepare("SELECT t.league_id, v.district FROM teams t JOIN villages v ON t.village_id=v.id WHERE t.id = ?").bind(teamId).first<{ league_id: string; district: string }>();
@@ -890,6 +896,17 @@ gameRouter.get("/teams/:teamId/seasonal-events", async (c) => {
   const currentGameWeek = (lastCalRes.results[0] as { gw: number | null } | undefined)?.gw ?? 0;
   const hasTemplateSet = (seededRes.results?.length ?? 0) > 0;
 
+  // Rozhodnutí, na které trenér nesáhl do DECISION_WINDOW kol, propadne. Dřív šlo letní
+  // soustředění koupit ještě ve 20. kole a náhodné události se hromadily bez konce.
+  const lapsed = (dbEvents.results as Record<string, unknown>[]).filter((r) =>
+    r.status === "pending" && r.choices && currentGameWeek - (r.game_week as number) >= DECISION_WINDOW);
+  if (lapsed.length > 0) {
+    await c.env.DB.batch(lapsed.map((r) => c.env.DB.prepare(
+      "UPDATE seasonal_events SET status = 'resolved', chosen_choice_id = 'missed' WHERE id = ? AND status = 'pending'",
+    ).bind(r.id as string))).catch((e) => logger.warn({ module: "game" }, "propadlá rozhodnutí", e));
+    for (const r of lapsed) { r.status = "resolved"; r.chosen_choice_id = "missed"; }
+  }
+
   if (hasTemplateSet) {
     const events = (dbEvents.results as Record<string, unknown>[]).map((row) => ({
       id: row.id,
@@ -900,8 +917,9 @@ gameRouter.get("/teams/:teamId/seasonal-events", async (c) => {
       choices: row.choices ? JSON.parse(row.choices as string) : null,
       gameWeek: row.game_week,
       status: row.status,
+      chosenChoiceId: (row.chosen_choice_id as string | null) ?? null,
     }));
-    return c.json({ events, currentGameWeek });
+    return c.json({ events, currentGameWeek, decisionWindow: DECISION_WINDOW });
   }
 
   // Tým ještě události nemá — vygenerovat mu VLASTNÍ sadu ze šablon.
@@ -909,7 +927,7 @@ gameRouter.get("/teams/:teamId/seasonal-events", async (c) => {
   // a zbylých 13 dostalo 400 "Already resolved".
   // Šablony na týden nezávisí na rng (getSeasonalEventsForWeek jen filtruje podle týdne),
   // takže tu žádný seed nepotřebujeme.
-  const allEvents: Array<SeasonalEventDef & { id: string; status: string }> = [];
+  const allEvents: Array<SeasonalEventDef & { id: string; status: string; chosenChoiceId: string | null }> = [];
   const seedStmts: D1PreparedStatement[] = [];
 
   for (let week = 0; week <= 30; week++) {
@@ -919,16 +937,18 @@ gameRouter.get("/teams/:teamId/seasonal-events", async (c) => {
       // Deterministické id (tým+sezóna+týden+index) + INSERT OR IGNORE → dvě souběžná první načtení
       // (obě vidí prázdno) nevloží duplicity.
       const id = `se-${teamId}-s${seasonStr}-w${week}-${idx}`;
-      // Status je vždy 'pending'. Události bez voleb vyřeší automaticky denní tick — dřív
-      // dostávaly 'active' a jejich efekty se nikdy neaplikovaly, přestože je UI slibovalo.
+      // Události bez voleb vyřeší automaticky denní tick — dřív dostávaly 'active' a jejich
+      // efekty se nikdy neaplikovaly, přestože je UI slibovalo. Kdo stránku poprvé otevře
+      // v půlce sezóny, nedostane naráz všechna minulá rozhodnutí: co je za oknem, propadlo.
+      const missed = currentGameWeek - ev.gameWeek >= DECISION_WINDOW;
       seedStmts.push(c.env.DB.prepare(
-        "INSERT OR IGNORE INTO seasonal_events (id, team_id, league_id, type, title, description, effects, choices, season, game_week, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')"
+        "INSERT OR IGNORE INTO seasonal_events (id, team_id, league_id, type, title, description, effects, choices, season, game_week, status, chosen_choice_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
       ).bind(id, teamId, team.league_id, ev.type, ev.title, ev.description,
         JSON.stringify(ev.effects), ev.choices ? JSON.stringify(ev.choices) : null,
-        seasonStr, ev.gameWeek,
+        seasonStr, ev.gameWeek, missed ? "resolved" : "pending", missed ? "missed" : null,
       ));
 
-      allEvents.push({ ...ev, id, status: "pending" });
+      allEvents.push({ ...ev, id, status: missed ? "resolved" : "pending", chosenChoiceId: missed ? "missed" : null });
     }
   }
 
@@ -950,17 +970,19 @@ gameRouter.get("/teams/:teamId/seasonal-events", async (c) => {
     choices: row.choices ? JSON.parse(row.choices as string) : null,
     gameWeek: row.game_week as number,
     status: row.status as string,
+    chosenChoiceId: (row.chosen_choice_id as string | null) ?? null,
   }));
 
   const seeded = allEvents.map((ev) => ({
     id: ev.id, type: ev.type, title: ev.title, description: ev.description,
     effects: ev.effects, choices: ev.choices ?? null,
-    gameWeek: ev.gameWeek, status: ev.status,
+    gameWeek: ev.gameWeek, status: ev.status, chosenChoiceId: ev.chosenChoiceId,
   }));
 
   return c.json({
     events: [...existing, ...seeded].sort((a, b) => a.gameWeek - b.gameWeek),
     currentGameWeek,
+    decisionWindow: DECISION_WINDOW,
   });
 });
 
@@ -988,15 +1010,25 @@ gameRouter.post("/teams/:teamId/seasonal-events/:eventId/choose", async (c) => {
   if (!event) return c.json({ error: "Událost nenalezena" }, 404);
   if (event.status !== "pending") return c.json({ error: "Už je vyřešená" }, 400);
 
-  const choices = JSON.parse(event.choices as string) as Array<{ id: string; label?: string; effects: Array<{ type: string; value: number }> }>;
+  const choices = JSON.parse(event.choices as string) as Array<{ id: string; label?: string; effects: Array<{ type: string; value: number; chance?: number }> }>;
   const choice = choices.find((ch) => ch.id === body.choiceId);
   if (!choice) return c.json({ error: "Invalid choice" }, 400);
+
+  const week = await c.env.DB.prepare(
+    "SELECT MAX(game_week) AS gw FROM season_calendar WHERE league_id = ? AND status = 'simulated' AND season_number = ?",
+  ).bind(event.league_id as string, Number(event.season)).first<{ gw: number | null }>()
+    .catch((e) => { logger.warn({ module: "game" }, "herní týden pro volbu události", e); return null; });
+  if ((week?.gw ?? 0) - (event.game_week as number) >= DECISION_WINDOW) {
+    await c.env.DB.prepare("UPDATE seasonal_events SET status = 'resolved', chosen_choice_id = 'missed' WHERE id = ? AND status = 'pending'")
+      .bind(eventId).run().catch((e) => logger.warn({ module: "game" }, "propadlá událost", e));
+    return c.json({ error: "Na rozhodnutí už je pozdě, propadlo." }, 400);
+  }
 
   // Atomický claim — zabraňuje double-apply při souběžných requestech.
   // WHERE status = 'pending' zajistí že jen první request proběhne.
   const claimed = await c.env.DB.prepare(
-    "UPDATE seasonal_events SET status = 'resolved' WHERE id = ? AND team_id = ? AND status = 'pending'"
-  ).bind(eventId, teamId).run().catch((e) => { logger.warn({ module: "game" }, "claim seasonal event", e); return { meta: { changes: 0 } }; });
+    "UPDATE seasonal_events SET status = 'resolved', chosen_choice_id = ? WHERE id = ? AND team_id = ? AND status = 'pending'"
+  ).bind(choice.id, eventId, teamId).run().catch((e) => { logger.warn({ module: "game" }, "claim seasonal event", e); return { meta: { changes: 0 } }; });
   if (claimed.meta.changes === 0) return c.json({ error: "Už je vyřešená" }, 400);
 
   // Aplikace efektů je sdílená s automatickým resolverem v denním ticku
@@ -1009,12 +1041,12 @@ gameRouter.post("/teams/:teamId/seasonal-events/:eventId/choose", async (c) => {
   const eventTeamDate = await c.env.DB.prepare("SELECT game_date FROM teams WHERE id = ?")
     .bind(teamId).first<{ game_date: string | null }>()
     .catch((e) => { logger.warn({ module: "game" }, "load game date for event effects", e); return null; });
-  await applyEventEffects(
+  const appliedEffects = await applyEventEffects(
     c.env.DB, teamId, choice.effects, choiceLabel,
     eventTeamDate?.game_date ?? new Date().toISOString(), `sev-${eventId}`,
   );
 
-  return c.json({ ok: true, appliedEffects: choice.effects });
+  return c.json({ ok: true, choiceId: choice.id, appliedEffects });
 });
 
 // POST /api/teams/:id/pub-visit — vzít kluky do hospody (cooldown 2 herní dny)
@@ -1041,6 +1073,8 @@ gameRouter.post("/teams/:teamId/pub-visit", async (c) => {
   }
 
   const gameDate = team.game_date.slice(0, 10); // YYYY-MM-DD
+  // Co se v hospodě stalo, ať to trenér vidí hned (dřív přišlo jen `{ ok }` a karta mlčela).
+  let session: { attendees: number; stories: string[] } = { attendees: 0, stories: [] };
 
   if (body.choice === "no") {
     // Trenér zakázal hospodu — žádná pub_session, jen morale penalty.
@@ -1052,6 +1086,7 @@ gameRouter.post("/teams/:teamId/pub-visit", async (c) => {
     const { createCoachLedSession } = await import("../season/pub");
     const result = await createCoachLedSession(c.env.DB, teamId, gameDate, body.choice);
     if (!result.ok) return c.json({ error: result.reason }, 400);
+    session = { attendees: result.attendeesCount, stories: result.stories };
 
     // Cost (mimo session — peněženka týmu)
     const cost = body.choice === "all" ? -1500 : -500;
@@ -1069,7 +1104,7 @@ gameRouter.post("/teams/:teamId/pub-visit", async (c) => {
     team.game_date,
   ).run().catch((e) => logger.warn({ module: "game" }, "record pub cooldown event", e));
 
-  return c.json({ ok: true, choice: body.choice });
+  return c.json({ ok: true, choice: body.choice, ...session });
 });
 
 // GET /api/teams/:id/pub-status — cooldown check

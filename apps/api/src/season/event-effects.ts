@@ -13,6 +13,8 @@ export interface EventEffect {
   type: string;
   value: number;
   description?: string;
+  /** Šance 0–1, že efekt nastane (riskantní volba). Bez ní nastane vždy. */
+  chance?: number;
 }
 
 /**
@@ -53,10 +55,14 @@ export async function applyEventEffects(
   label: string,
   gameDate: string,
   referenceId?: string,
-): Promise<void> {
+): Promise<EventEffect[]> {
   const { recordTransaction } = await import("./finance-processor");
+  const applied: EventEffect[] = [];
 
   for (const [i, effect] of effects.entries()) {
+    // Riskantní volba: efekt nastane jen s danou šancí. Co nenastalo, se nevrací.
+    if (effect.chance !== undefined && Math.random() >= effect.chance) continue;
+    applied.push(effect);
     if (effect.type === "budget") {
       await recordTransaction(db, teamId, "event", effect.value, `Událost: ${label}`, gameDate)
         .catch((e) => logger.warn({ module: "event-effects" }, "record event transaction", e));
@@ -135,6 +141,7 @@ export async function applyEventEffects(
         .catch((e) => logger.warn({ module: "event-effects" }, "update pitch condition from event", e));
     }
   }
+  return applied;
 }
 
 /**

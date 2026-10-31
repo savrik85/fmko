@@ -5,13 +5,14 @@ import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, apiAction } from "@/lib/api";
 import { Card, CardBody, Spinner, SectionLabel, useConfirm } from "@/components/ui";
-import { FaceAvatar } from "@/components/players/face-avatar";
 import { DistrictEvents } from "./DistrictEvents";
+import { Interviews } from "./Interviews";
 
 interface EventEffect {
   type: string;
   value: number;
   description: string;
+  chance?: number;
 }
 
 interface EventChoice {
@@ -29,79 +30,16 @@ interface SeasonalEvent {
   choices: EventChoice[] | null;
   gameWeek: number;
   status: "pending" | "active" | "resolved";
+  /** Id zvolené možnosti, `missed` = propadlo, `auto` = stalo se samo. */
+  chosenChoiceId: string | null;
 }
-
-interface Tazatel {
-  id: string;
-  name: string;
-  style: string;
-  bio: string;
-  sentiment: number;
-  vztah: string;
-  avatar: Record<string, unknown> | null;
-}
-
-/** Fakta ze zápasu — hráč nemá odpovídat po paměti. */
-interface PostMatchContext {
-  teamName: string;
-  opponentName: string;
-  opponentManagerName: string | null;
-  ownScore: number;
-  oppScore: number;
-  outcome: "win" | "draw" | "loss";
-  ownCards: number;
-  oppCards: number;
-  ownReds: number;
-  oppReds: number;
-  ownPenalties: number;
-  oppPenalties: number;
-  refereeName: string | null;
-  incident: { minute: number; kind: string; severity: string; text: string } | null;
-  opponentStatement: { quote: string; tone: string } | null;
-}
-
-interface AppliedEffects {
-  refereeRespect: number;
-  refereeName: string | null;
-  fine: number;
-  squadMorale: number;
-  fans: number;
-  reputation: number;
-  postoj: "kritika" | "neutral" | "obhajoba";
-  sila: number;
-}
-
-interface CoachInterview {
-  id: string;
-  gameWeek: number;
-  questions: string[];
-  expiresAt: string;
-  journalist?: Tazatel | null;
-  kind?: "pre_match" | "post_match" | "season_wrap";
-  topics?: string[];
-  context?: PostMatchContext | null;
-}
-
-/** Jak vztah redaktora ke klubu obarvit — ať je na první pohled vidět, na čem jsi. */
-function vztahStyl(sentiment: number): string {
-  if (sentiment >= 25) return "text-pitch-600";
-  if (sentiment > -25) return "text-muted";
-  return "text-card-red";
-}
-
-const STYL_REDAKTORA: Record<string, string> = {
-  bulvar: "bulvární pero",
-  seriozni: "seriózní pero",
-  vycurany: "vyčůrané pero",
-  patriot: "srdcař okresu",
-};
 
 const EVENT_ICONS: Record<string, string> = {
   zabijacka: "\u{1F416}",
   ples: "\u{1F483}",
   vanocni_turnaj: "\u{1F384}",
   silvestr: "\u{1F386}",
-  letni_soustredeni: "\u26FA",
+  letni_soustredeni: "⛺",
   obecni_zpravodaj: "\u{1F4F0}",
   den_obce: "\u{1F3AA}",
   pout: "\u{1F3A0}",
@@ -109,14 +47,14 @@ const EVENT_ICONS: Record<string, string> = {
   sponzorsky_den: "\u{1F454}",
   konec_skoly: "\u{1F393}",
   hospoda: "\u{1F37A}",
-  pratele: "\u26BD",
+  pratele: "⚽",
   adhoc_brigada: "\u{1F528}",
   stolni_fotbalek: "\u{1F3AF}",
-  sponzor_vecere: "\u{1F37D}\uFE0F",
+  sponzor_vecere: "\u{1F37D}️",
   obecni_slavnost: "\u{1F3AA}",
-  exligovec: "\u2B50",
+  exligovec: "⭐",
   narozeniny: "\u{1F382}",
-  vylet_zapas: "\u{1F3DF}\uFE0F",
+  vylet_zapas: "\u{1F3DF}️",
   kontrola_svaz: "\u{1F4CB}",
 };
 
@@ -139,122 +77,105 @@ const EVENT_COLORS: Record<string, string> = {
   kontrola_svaz: "bg-gray-100 border-gray-300",
 };
 
-function effectColor(type: string, value: number): string {
-  if (type === "budget" && value > 0) return "text-pitch-500";
-  if (type === "budget" && value < 0) return "text-card-red";
-  if (type === "morale" && value > 0) return "text-pitch-500";
-  if (type === "morale" && value < 0) return "text-card-red";
-  if (type === "reputation") return "text-gold-600";
-  return "text-ink";
+const EFFECT_NAMES: Record<string, string> = {
+  budget: "Peníze",
+  morale: "Nálada",
+  reputation: "Reputace",
+  condition: "Kondice",
+  stamina: "Výdrž",
+  stamina_boost: "Výdrž",
+  experience: "Zkušenosti",
+  alcohol_event: "Kocovina",
+  pitch_condition: "Trávník",
+  injury: "Zranění",
+  player_leave: "Hráč",
+};
+
+function effectTone(e: EventEffect): "good" | "bad" | "neutral" {
+  if (e.chance !== undefined) return "neutral";
+  if (e.type === "alcohol_event" || e.type === "injury" || e.type === "player_leave") return "bad";
+  if (e.value > 0) return "good";
+  if (e.value < 0) return "bad";
+  return "neutral";
 }
 
-/** Tóny odpovědí — klíče musí sedět s ANSWER_TONES v apps/api/src/news/answer-tone.ts. */
-const TONY_ODPOVEDI: Array<{ key: string; label: string }> = [
-  { key: "normalni", label: "Normálně" },
-  { key: "nadsazka", label: "S nadsázkou" },
-  { key: "ironie", label: "Ironicky" },
-  { key: "nastvane", label: "Naštvaně" },
-  { key: "pokorne", label: "Pokorně" },
-];
+const TONE_TEXT: Record<string, string> = {
+  good: "text-pitch-600",
+  bad: "text-card-red",
+  neutral: "text-ink-light",
+};
+
+const TONE_CHIP: Record<string, string> = {
+  good: "bg-pitch-50 text-pitch-700",
+  bad: "bg-red-50 text-card-red",
+  neutral: "bg-surface text-ink-light",
+};
+
+function kola(n: number): string {
+  return n === 1 ? "kolo" : n >= 2 && n <= 4 ? "kola" : "kol";
+}
+
+function EffectChips({ effects }: { effects: EventEffect[] }) {
+  if (!effects.length) return null;
+  return (
+    <div className="flex flex-wrap gap-1 mt-1.5">
+      {effects.map((e, i) => (
+        <span key={i} className={`text-xs font-medium px-1.5 py-0.5 rounded ${TONE_CHIP[effectTone(e)]}`}>{e.description}</span>
+      ))}
+    </div>
+  );
+}
 
 export default function EventsPage() {
   const { teamId } = useTeam();
   const [events, setEvents] = useState<SeasonalEvent[]>([]);
   const [currentGameWeek, setCurrentGameWeek] = useState(0);
+  const [decisionWindow, setDecisionWindow] = useState(2);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [choosing, setChoosing] = useState<string | null>(null);
   const [appliedEffects, setAppliedEffects] = useState<Record<string, EventEffect[]>>({});
-  const [interviews, setInterviews] = useState<CoachInterview[]>([]);
-  const [interviewAnswers, setInterviewAnswers] = useState<Record<string, string[]>>({});
-  const [interviewTones, setInterviewTones] = useState<Record<string, string[]>>({});
-  const [interviewSubmitting, setInterviewSubmitting] = useState<string | null>(null);
-  const [interviewDone, setInterviewDone] = useState<string | null>(null);
-  // Skutečné dopady pozápasové odpovědi — hráč má vidět, co si koupil.
-  const [interviewEffects, setInterviewEffects] = useState<AppliedEffects | null>(null);
 
   useEffect(() => {
     if (!teamId) return;
-    apiFetch<{ events: SeasonalEvent[]; currentGameWeek: number }>(`/api/teams/${teamId}/seasonal-events`)
-      .then((d) => { setEvents(d.events); setCurrentGameWeek(d.currentGameWeek ?? 0); setLoading(false); })
-      .catch((e) => { console.error("seasonal-events fetch:", e); setLoading(false); });
-    apiFetch<{ interviews: CoachInterview[] }>(`/api/teams/${teamId}/coach-interviews`)
-      .then((d) => setInterviews(d.interviews ?? []))
-      .catch((e) => { console.error("coach-interviews fetch:", e); });
+    apiFetch<{ events: SeasonalEvent[]; currentGameWeek: number; decisionWindow?: number }>(`/api/teams/${teamId}/seasonal-events`)
+      .then((d) => {
+        setEvents(d.events);
+        setCurrentGameWeek(d.currentGameWeek ?? 0);
+        if (d.decisionWindow) setDecisionWindow(d.decisionWindow);
+        setLoading(false);
+      })
+      .catch((e) => { console.error("seasonal-events fetch:", e); setLoadError(true); setLoading(false); });
   }, [teamId]);
-
-  const handleInterviewAnswer = (interviewId: string, idx: number, value: string) => {
-    setInterviewAnswers((prev) => {
-      const cur = prev[interviewId] ?? [];
-      const next = [...cur];
-      next[idx] = value;
-      return { ...prev, [interviewId]: next };
-    });
-  };
-
-  const handleInterviewTone = (interviewId: string, idx: number, tone: string) => {
-    setInterviewTones((prev) => {
-      const next = [...(prev[interviewId] ?? [])];
-      next[idx] = tone;
-      return { ...prev, [interviewId]: next };
-    });
-  };
-
-  const handleInterviewSubmit = async (interview: CoachInterview) => {
-    if (!teamId || interviewSubmitting) return;
-    const answers = interviewAnswers[interview.id] ?? [];
-    if (answers.filter((a) => a?.trim()).length < interview.questions.length) return;
-    setInterviewSubmitting(interview.id);
-    // Odpověď endpointu nese zaúčtované efekty — apiAction je zahazuje, proto holder.
-    const vysledek: { effects: AppliedEffects | null } = { effects: null };
-    const ok = await apiAction(
-      apiFetch<{ effects?: AppliedEffects | null }>(`/api/teams/${teamId}/coach-interviews/${interview.id}/answer`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          answers,
-          tones: interview.questions.map((_, i) => interviewTones[interview.id]?.[i] ?? "normalni"),
-        }),
-      }).then((r) => { vysledek.effects = r?.effects ?? null; }),
-      "Odeslání odpovědí se nezdařilo");
-    if (ok) {
-      setInterviews((prev) => prev.filter((iv) => iv.id !== interview.id));
-      setInterviewDone(interview.id);
-      setInterviewEffects(vysledek.effects);
-    }
-    setInterviewSubmitting(null);
-  };
-
-  const handleInterviewDecline = async (interviewId: string) => {
-    if (!teamId) return;
-    if (await apiAction(apiFetch(`/api/teams/${teamId}/coach-interviews/${interviewId}/decline`, { method: "POST" }), "Odmítnutí rozhovoru se nezdařilo")) {
-      setInterviews((prev) => prev.filter((iv) => iv.id !== interviewId));
-    }
-  };
 
   const { confirm, dialog: confirmDialog } = useConfirm();
 
-  const handleChoice = async (eventId: string, choiceId: string, choiceLabel: string, effects: EventEffect[]) => {
+  const handleChoice = async (ev: SeasonalEvent, choice: EventChoice) => {
     if (!teamId || choosing) return;
     const ok = await confirm({
       title: "Potvrdit rozhodnutí?",
-      description: choiceLabel,
-      details: effects.map((e) => ({
-        label: e.type === "budget" ? "Rozpočet" : e.type === "morale" ? "Morálka" : e.type === "reputation" ? "Reputace" : e.type,
+      description: choice.label,
+      details: choice.effects.map((e) => ({
+        label: EFFECT_NAMES[e.type] ?? "Dopad",
         value: e.description,
-        color: e.value >= 0 ? "text-pitch-500" : "text-card-red",
+        color: TONE_TEXT[effectTone(e)],
       })),
       confirmLabel: "Potvrdit",
     });
     if (!ok) return;
-    setChoosing(eventId);
-    try {
-      const res = await apiFetch<{ ok: boolean; appliedEffects: EventEffect[] }>(
-        `/api/teams/${teamId}/seasonal-events/${eventId}/choose`,
-        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ choiceId }) },
-      );
-      setEvents((prev) => prev.map((e) => e.id === eventId ? { ...e, status: "resolved" } : e));
-      setAppliedEffects((prev) => ({ ...prev, [eventId]: res.appliedEffects }));
-    } catch (e) { console.error("resolve seasonal event:", e); }
+    setChoosing(ev.id);
+    const result: { applied: EventEffect[] | null } = { applied: null };
+    const done = await apiAction(
+      apiFetch<{ ok: boolean; appliedEffects: EventEffect[] }>(
+        `/api/teams/${teamId}/seasonal-events/${ev.id}/choose`,
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ choiceId: choice.id }) },
+      ).then((r) => { result.applied = r.appliedEffects; }),
+      "Rozhodnutí se nepodařilo uložit",
+    );
+    if (done) {
+      setEvents((prev) => prev.map((e) => e.id === ev.id ? { ...e, status: "resolved", chosenChoiceId: choice.id } : e));
+      if (result.applied) setAppliedEffects((prev) => ({ ...prev, [ev.id]: result.applied! }));
+    }
     setChoosing(null);
   };
 
@@ -262,170 +183,61 @@ export default function EventsPage() {
 
   // K rozhodnutí jsou jen události s volbami. Události bez voleb jsou taky "pending",
   // ale vyřeší je denní tick sám — do sekce "čeká na tebe" nepatří.
-  const pending = events.filter((e) => e.status === "pending" && e.choices !== null && e.gameWeek <= currentGameWeek);
-  const upcoming = events.filter((e) => e.status !== "resolved" && e.gameWeek > currentGameWeek);
-  // Okresní akce (pouť, bál…) mají vlastní sekci (DistrictEvents); starší záznamy z testu sem nepatří.
-  const past = events.filter((e) => e.type !== "district_event").filter((e) =>
-    e.status === "resolved"
-    || (e.status === "active" && e.gameWeek <= currentGameWeek)
-    || (e.status === "pending" && e.choices === null && e.gameWeek <= currentGameWeek));
+  const pending = events
+    .filter((e) => e.status === "pending" && e.choices !== null && e.gameWeek <= currentGameWeek)
+    .sort((a, b) => a.gameWeek - b.gameWeek);
+  // Dopředu se ukáže jen nejbližší akce, ne celý zbytek sezóny.
+  const upcoming = events
+    .filter((e) => e.status !== "resolved" && e.gameWeek > currentGameWeek)
+    .sort((a, b) => a.gameWeek - b.gameWeek);
+  const nextWeek = upcoming[0]?.gameWeek;
+  const soon = upcoming.filter((e) => e.gameWeek === nextWeek);
+  // Okresní akce mají vlastní sekci; starší záznamy z testu sem nepatří.
+  const diary = events
+    .filter((e) => e.type !== "district_event" && e.type !== "hospoda_action")
+    .filter((e) => e.status === "resolved" || (e.status !== "pending" && e.gameWeek <= currentGameWeek))
+    .sort((a, b) => b.gameWeek - a.gameWeek);
+  const diaryByWeek = diary.reduce<Array<{ week: number; items: SeasonalEvent[] }>>((acc, e) => {
+    const last = acc[acc.length - 1];
+    if (last && last.week === e.gameWeek) last.items.push(e);
+    else acc.push({ week: e.gameWeek, items: [e] });
+    return acc;
+  }, []);
 
   return (
-    <div className="page-container space-y-5">
+    <div className="page-container space-y-6">
       {confirmDialog}
 
-      {/* Permanent actions */}
-      <PubAction teamId={teamId} />
-
-      {/* Rozhovor kola */}
-      {interviews.length > 0 && (
+      {pending.length > 0 && (
         <div>
-          <SectionLabel>📰 Zpravodaj žádá o rozhovor</SectionLabel>
+          <SectionLabel>Čeká na tvoje rozhodnutí</SectionLabel>
           <div className="space-y-4">
-            {interviews.map((iv) => {
-              const answers = interviewAnswers[iv.id] ?? [];
-              const allFilled = iv.questions.every((_, i) => answers[i]?.trim());
-              const expiryDate = new Date(iv.expiresAt);
-              const expiryStr = expiryDate.toLocaleDateString("cs", { weekday: "long", day: "numeric", month: "numeric" });
-              const jePo = iv.kind === "post_match";
-              const ctx = iv.context ?? null;
+            {pending.map((ev) => {
+              const left = decisionWindow - (currentGameWeek - ev.gameWeek);
               return (
-                <div key={iv.id} id={`rozhovor-${iv.id}`} className={`card border-2 p-5 ${jePo ? "bg-sky-50 border-sky-300" : "bg-amber-50 border-amber-300"}`}>
-                  <div className="flex items-start justify-between gap-3 mb-4">
+                <div key={ev.id} className={`card border-2 p-4 sm:p-5 ${EVENT_COLORS[ev.type] ?? "bg-surface border-gray-200"}`}>
+                  <div className="flex items-start gap-3">
+                    <span className="text-3xl leading-none shrink-0" aria-hidden>{EVENT_ICONS[ev.type] ?? "\u{1F4C5}"}</span>
                     <div className="min-w-0">
-                      <h3 className="font-heading font-bold text-lg">
-                        {jePo && ctx
-                          ? `🎙️ Po zápase · ${ctx.teamName} ${ctx.ownScore}:${ctx.oppScore} ${ctx.opponentName}`
-                          : `🎙️ Rozhovor kola · Týden ${iv.gameWeek}`}
-                      </h3>
-                      {iv.journalist ? (
-                        <div className="flex items-start gap-3 mt-2">
-                          {iv.journalist.avatar && (
-                            <FaceAvatar
-                              faceConfig={iv.journalist.avatar}
-                              size={52}
-                              className="border border-ink/30 bg-white shrink-0"
-                            />
-                          )}
-                          <div className="min-w-0">
-                            <div className="text-base font-heading font-bold">
-                              {iv.journalist.name}
-                              <span className="text-sm text-muted font-normal ml-2">
-                                {STYL_REDAKTORA[iv.journalist.style] ?? "redakce"}
-                              </span>
-                            </div>
-                            <div className="text-sm mt-0.5">
-                              Vztah k tobě:{" "}
-                              <span className={`font-heading font-bold ${vztahStyl(iv.journalist.sentiment)}`}>
-                                {iv.journalist.vztah}
-                              </span>
-                              <span className="text-xs text-muted ml-1 tabular-nums">
-                                ({iv.journalist.sentiment > 0 ? "+" : ""}{iv.journalist.sentiment})
-                              </span>
-                            </div>
-                            <p className="text-xs text-ink-light italic mt-0.5">{iv.journalist.bio}</p>
-                          </div>
-                        </div>
-                      ) : (
-                        <p className="text-sm text-ink-light mt-1">
-                          {jePo
-                            ? "Redaktor Okresního zpravodaje se chce zeptat na odehraný zápas."
-                            : "Redaktor Okresního zpravodaje se chce zeptat před nadcházejícím zápasem."}
-                        </p>
-                      )}
-                      <div className="text-xs text-muted mt-2">Vyprší: {expiryStr}</div>
+                      <h3 className="font-heading font-bold text-lg leading-tight">{ev.title}</h3>
+                      <p className="text-sm text-ink-light mt-1">{ev.description}</p>
+                      <div className={`text-xs mt-1.5 font-heading font-bold ${left <= 1 ? "text-card-red" : "text-muted"}`}>
+                        {left <= 1 ? "Rozhodni se ještě před dalším kolem, pak to propadne." : `Na rozhodnutí máš ${left} ${kola(left)}.`}
+                      </div>
                     </div>
                   </div>
-                  {jePo && ctx && (
-                    <div className="mb-4 space-y-3">
-                      {/* Faktový pruh — ať se nikdo nemusí vracet do detailu zápasu. */}
-                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-ink-light">
-                        {ctx.refereeName && <span>Rozhodčí: <span className="font-heading font-bold text-ink">{ctx.refereeName}</span></span>}
-                        <span>Karty: <span className="font-heading font-bold text-ink tabular-nums">{ctx.ownCards}:{ctx.oppCards}</span></span>
-                        {(ctx.ownReds > 0 || ctx.oppReds > 0) && (
-                          <span>Červené: <span className="font-heading font-bold text-card-red tabular-nums">{ctx.ownReds}:{ctx.oppReds}</span></span>
-                        )}
-                        {(ctx.ownPenalties > 0 || ctx.oppPenalties > 0) && (
-                          <span>Penalty: <span className="font-heading font-bold text-ink tabular-nums">{ctx.ownPenalties}:{ctx.oppPenalties}</span></span>
-                        )}
-                      </div>
-                      {ctx.incident && (
-                        <div className="rounded-xl border border-card-red/40 bg-card-red/5 px-3 py-2">
-                          <div className="text-sm font-heading font-bold">⚠️ Sporná situace · {ctx.incident.minute}. minuta</div>
-                          <p className="text-sm mt-0.5">{ctx.incident.text}</p>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  <div className="space-y-4">
-                    {iv.questions.map((q, i) => (
-                      <div key={i}>
-                        {jePo && ctx?.opponentStatement && iv.topics?.[i] === "vyrok_soupere" && (
-                          <blockquote className="mb-2 border-l-4 border-line-strong pl-3 text-sm italic text-ink-light">
-                            „{ctx.opponentStatement.quote}"
-                            {ctx.opponentManagerName && (
-                              <span className="not-italic text-xs text-muted block mt-0.5">— {ctx.opponentManagerName}, před zápasem</span>
-                            )}
-                          </blockquote>
-                        )}
-                        <label className="block text-sm font-heading font-bold mb-1">{q}</label>
-                        <textarea
-                          value={answers[i] ?? ""}
-                          onChange={(e) => handleInterviewAnswer(iv.id, i, e.target.value)}
-                          maxLength={500}
-                          rows={3}
-                          placeholder="Vaše odpověď..."
-                          className="w-full rounded-xl border border-line bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-pitch-500/30 resize-none"
-                        />
-                        <div className="flex items-start justify-between gap-2 mt-1">
-                          <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Tón odpovědi">
-                            {TONY_ODPOVEDI.map((t) => {
-                              const vybrany = (interviewTones[iv.id]?.[i] ?? "normalni") === t.key;
-                              return (
-                                <button
-                                  key={t.key}
-                                  type="button"
-                                  role="radio"
-                                  aria-checked={vybrany}
-                                  onClick={() => handleInterviewTone(iv.id, i, t.key)}
-                                  className={`rounded-full border px-2.5 py-0.5 text-sm transition-colors ${
-                                    vybrany
-                                      ? "bg-ink text-white border-ink"
-                                      : "bg-white border-line text-ink-light hover:border-line-strong"
-                                  }`}
-                                >
-                                  {t.label}
-                                </button>
-                              );
-                            })}
-                          </div>
-                          <div className="text-xs text-muted mt-1 shrink-0 tabular-nums">{(answers[i] ?? "").length}/500</div>
-                        </div>
-                      </div>
+                  <div className="space-y-2 mt-3">
+                    {ev.choices!.map((ch) => (
+                      <button
+                        key={ch.id}
+                        onClick={() => handleChoice(ev, ch)}
+                        disabled={choosing === ev.id}
+                        className="w-full text-left p-3 rounded-xl bg-white/80 hover:bg-white transition-colors border border-transparent hover:border-pitch-500/30 disabled:opacity-50"
+                      >
+                        <div className="font-heading font-bold text-sm">{ch.label}</div>
+                        <EffectChips effects={ch.effects} />
+                      </button>
                     ))}
-                  </div>
-                  <p className="text-sm text-ink-light mt-3">
-                    Tón u odpovědi říká redaktorovi, jak ji myslíš. Ironii pak nevezme doslova.
-                  </p>
-                  {jePo && ctx?.refereeName && (
-                    <p className="text-xs text-ink-light mt-1">
-                      Co tady řekneš o rozhodčím, si {ctx.refereeName} zapamatuje do příštího vzájemného zápasu.
-                    </p>
-                  )}
-                  <div className="flex items-center justify-between mt-4">
-                    <button
-                      onClick={() => handleInterviewDecline(iv.id)}
-                      className="text-xs text-muted hover:text-ink-light transition-colors"
-                    >
-                      Odmítnout rozhovor
-                    </button>
-                    <button
-                      onClick={() => handleInterviewSubmit(iv)}
-                      disabled={!allFilled || interviewSubmitting === iv.id}
-                      className="btn-primary text-sm px-4 py-2 disabled:opacity-40"
-                    >
-                      {interviewSubmitting === iv.id ? "Odesílám…" : "Odeslat odpovědi"}
-                    </button>
                   </div>
                 </div>
               );
@@ -433,167 +245,122 @@ export default function EventsPage() {
           </div>
         </div>
       )}
-      {interviewDone && interviews.length === 0 && (
-        <div className="card p-4 bg-pitch-50 border border-pitch-200 text-sm text-pitch-700">
-          <div className="font-heading font-medium">
-            ✅ Odpovědi odeslány — článek vyjde ve{" "}
-            <Link href="/zpravodaj" className="underline hover:text-pitch-900">Zpravodaji</Link>.
-          </div>
-          {interviewEffects && (
-            <ul className="mt-2 space-y-0.5 text-ink">
-              {interviewEffects.refereeRespect !== 0 && (
-                <li>
-                  {interviewEffects.refereeRespect < 0 ? "🧑‍⚖️ " : "🤝 "}
-                  {interviewEffects.refereeName ?? "Rozhodčí"} si to zapamatoval{" "}
-                  <span className="tabular-nums font-heading font-bold">
-                    ({interviewEffects.refereeRespect > 0 ? "+" : ""}{interviewEffects.refereeRespect})
-                  </span>
-                </li>
-              )}
-              {interviewEffects.fine > 0 && (
-                <li>💸 Pokuta disciplinární komise: <span className="tabular-nums font-heading font-bold">{interviewEffects.fine.toLocaleString("cs")} Kč</span></li>
-              )}
-              {interviewEffects.squadMorale !== 0 && (
-                <li>💪 Morálka kabiny <span className="tabular-nums font-heading font-bold">{interviewEffects.squadMorale > 0 ? "+" : ""}{interviewEffects.squadMorale}</span></li>
-              )}
-              {interviewEffects.fans !== 0 && (
-                <li>📣 Fanoušci <span className="tabular-nums font-heading font-bold">{interviewEffects.fans > 0 ? "+" : ""}{interviewEffects.fans}</span></li>
-              )}
-              {interviewEffects.reputation !== 0 && (
-                <li>⭐ Reputace klubu <span className="tabular-nums font-heading font-bold">{interviewEffects.reputation > 0 ? "+" : ""}{interviewEffects.reputation}</span></li>
-              )}
-            </ul>
-          )}
-        </div>
-      )}
+
+      <Interviews />
 
       <DistrictEvents teamId={teamId} />
 
-      {/* Pending — needs decision */}
-      {pending.length > 0 && (
-        <div>
-          <SectionLabel>Čeká na rozhodnutí</SectionLabel>
-          <div className="space-y-4">
-            {pending.map((ev) => (
-              <div key={ev.id} className={`card border-2 p-5 ${EVENT_COLORS[ev.type] ?? "bg-surface border-gray-200"}`}>
-                <div className="flex items-start gap-3 mb-3">
-                  <span className="text-3xl">{EVENT_ICONS[ev.type] ?? "\u{1F3C6}"}</span>
-                  <div>
-                    <h3 className="font-heading font-bold text-lg">{ev.title}</h3>
-                    <p className="text-sm text-ink-light mt-1">{ev.description}</p>
-                    <div className="text-xs text-muted mt-1">Týden {ev.gameWeek}</div>
-                  </div>
-                </div>
-
-                {appliedEffects[ev.id] ? (
-                  <div className="bg-white/60 rounded-xl p-3 mt-3">
-                    <div className="text-sm font-heading font-bold text-pitch-500 mb-1">Rozhodnuto!</div>
-                    {appliedEffects[ev.id].map((eff, i) => (
-                      <div key={i} className={`text-sm font-medium ${effectColor(eff.type, eff.value)}`}>
-                        {eff.description}
-                      </div>
-                    ))}
-                  </div>
-                ) : ev.choices && (
-                  <div className="space-y-2 mt-3">
-                    {ev.choices.map((ch) => (
-                      <button
-                        key={ch.id}
-                        onClick={() => handleChoice(ev.id, ch.id, ch.label, ch.effects)}
-                        disabled={choosing === ev.id}
-                        className="w-full text-left p-3 rounded-xl bg-white/70 hover:bg-white transition-colors border border-transparent hover:border-pitch-500/20"
-                      >
-                        <div className="font-heading font-bold text-sm">{ch.label}</div>
-                        <div className="flex flex-wrap gap-3 mt-1">
-                          {ch.effects.map((eff, i) => (
-                            <span key={i} className={`text-xs font-medium ${effectColor(eff.type, eff.value)}`}>
-                              {eff.description}
-                            </span>
-                          ))}
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Upcoming events */}
-      {upcoming.length > 0 && (
-        <div>
-          <SectionLabel>Nadcházející</SectionLabel>
-          <div className="space-y-2">
-            {upcoming.map((ev) => (
-              <Card key={ev.id}>
-                <CardBody>
-                  <div className="flex items-center gap-3">
-                    <span className="text-2xl">{EVENT_ICONS[ev.type] ?? "\u{1F3C6}"}</span>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-heading font-bold text-sm">{ev.title}</div>
-                      <div className="text-xs text-muted">Týden {ev.gameWeek}</div>
-                    </div>
-                    <div className="text-xs text-muted italic">za {ev.gameWeek - currentGameWeek} {ev.gameWeek - currentGameWeek === 1 ? "kolo" : "kol"}</div>
-                  </div>
-                </CardBody>
-              </Card>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Past events */}
-      {past.length > 0 && (
-        <div>
-          <SectionLabel>Proběhlé</SectionLabel>
-          <div className="space-y-2">
-            {past.map((ev) => (
-              <Card key={ev.id}>
-                <CardBody>
-                  <div className="flex items-center gap-3">
-                    <span className="text-2xl shrink-0">{EVENT_ICONS[ev.type] ?? "\u{1F3C6}"}</span>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-heading font-bold text-sm">{ev.title}</div>
-                      <div className="text-xs text-muted">Týden {ev.gameWeek}</div>
-                      {(appliedEffects[ev.id] ?? ev.effects).length > 0 && (
-                        <div className="flex flex-wrap gap-2 mt-1">
-                          {(appliedEffects[ev.id] ?? ev.effects).map((eff, i) => (
-                            <span key={i} className={`text-xs font-medium ${effectColor(eff.type, eff.value)}`}>
-                              {eff.description}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </CardBody>
-              </Card>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {events.length === 0 && (
+      {loadError && (
         <Card>
           <CardBody>
-            <p className="text-center text-muted py-4">Zatím žádné události v této sezóně.</p>
+            <p className="text-center text-card-red py-2">Události se nepodařilo načíst. Zkus stránku obnovit.</p>
           </CardBody>
         </Card>
       )}
+
+      {soon.length > 0 && (
+        <div>
+          <SectionLabel>Brzy</SectionLabel>
+          <div className="space-y-2">
+            {soon.map((ev) => {
+              const inRounds = ev.gameWeek - currentGameWeek;
+              return (
+                <Card key={ev.id}>
+                  <CardBody>
+                    <div className="flex items-center gap-3">
+                      <span className="text-2xl shrink-0" aria-hidden>{EVENT_ICONS[ev.type] ?? "\u{1F4C5}"}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-heading font-bold text-sm">{ev.title}</div>
+                        <div className="text-xs text-muted">{ev.description}</div>
+                      </div>
+                      <div className="text-xs text-muted shrink-0">za {inRounds} {kola(inRounds)}</div>
+                    </div>
+                  </CardBody>
+                </Card>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {diaryByWeek.length > 0 && (
+        <div>
+          <SectionLabel>Deník klubu</SectionLabel>
+          <Card>
+            <CardBody className="space-y-5">
+              {diaryByWeek.map(({ week, items }) => (
+                <div key={week}>
+                  <div className="text-xs font-heading font-bold uppercase tracking-wide text-muted mb-2">
+                    {week === 0 ? "Před sezónou" : `${week}. kolo`}
+                  </div>
+                  <ul className="space-y-3">
+                    {items.map((ev) => <DiaryItem key={ev.id} ev={ev} applied={appliedEffects[ev.id]} />)}
+                  </ul>
+                </div>
+              ))}
+            </CardBody>
+          </Card>
+        </div>
+      )}
+
+      {!loadError && events.length === 0 && (
+        <Card>
+          <CardBody>
+            <p className="text-center text-muted py-4">Zatím se v klubu nic nestalo.</p>
+          </CardBody>
+        </Card>
+      )}
+
+      <PubAction teamId={teamId} />
     </div>
   );
 }
 
-/* ── Pub Action ── */
+/** Jedna položka deníku: co se stalo a jak to dopadlo. */
+function DiaryItem({ ev, applied }: { ev: SeasonalEvent; applied?: EventEffect[] }) {
+  const chosen = ev.choices?.find((c) => c.id === ev.chosenChoiceId) ?? null;
+  const missed = ev.chosenChoiceId === "missed";
+  const effects = applied ?? (chosen ? chosen.effects : missed ? [] : ev.effects);
+  const icon = ev.type === "between_round" ? null : (EVENT_ICONS[ev.type] ?? "\u{1F4C5}");
+  return (
+    <li className={`flex items-start gap-3 ${missed ? "opacity-60" : ""}`}>
+      {icon && <span className="text-xl leading-none shrink-0 mt-0.5" aria-hidden>{icon}</span>}
+      <div className="min-w-0 flex-1">
+        <div className="font-heading font-bold text-sm leading-tight">{ev.title}</div>
+        {ev.type === "between_round" && <p className="text-sm text-ink-light mt-0.5">{ev.description}</p>}
+        {chosen && <div className="text-sm text-ink-light mt-0.5">Rozhodl jsi: <span className="text-ink font-medium">{chosen.label}</span></div>}
+        {missed && <div className="text-sm text-muted mt-0.5">{ev.choices ? "Nerozhodl ses včas, propadlo." : "Prošlo bez tebe."}</div>}
+        <EffectChips effects={effects} />
+      </div>
+    </li>
+  );
+}
+
+/* ── Hospoda ── */
+
+interface PubResult {
+  choice: "all" | "one" | "no";
+  attendees: number;
+  stories: string[];
+}
+
+const PUB_CHOICES: Array<{ id: "all" | "one" | "no"; label: string; hint: string; effects: Array<{ text: string; tone: "good" | "bad" }> }> = [
+  { id: "all", label: "Celý tým jde", hint: "Pijáci můžou přebrat a ráno mít kocovinu.", effects: [
+    { text: "+8 nálada", tone: "good" }, { text: "−15 kondice", tone: "bad" }, { text: "−1 500 Kč", tone: "bad" },
+  ] },
+  { id: "one", label: "Pozvat na pivo kluka s nejhorší náladou", hint: "", effects: [
+    { text: "+3 nálada", tone: "good" }, { text: "−5 kondice", tone: "bad" }, { text: "−500 Kč", tone: "bad" },
+  ] },
+  { id: "no", label: "Zakázat hospodu", hint: "", effects: [{ text: "−3 nálada celé kabině", tone: "bad" }] },
+];
 
 function PubAction({ teamId }: { teamId: string | null }) {
   const [available, setAvailable] = useState(false);
   const [daysLeft, setDaysLeft] = useState(0);
   const [open, setOpen] = useState(false);
-  const [result, setResult] = useState<Array<{ type: string; value: number; description: string }> | null>(null);
+  const [result, setResult] = useState<PubResult | null>(null);
   const [sending, setSending] = useState(false);
+  const { confirm, dialog } = useConfirm();
 
   useEffect(() => {
     if (!teamId) return;
@@ -604,80 +371,76 @@ function PubAction({ teamId }: { teamId: string | null }) {
 
   const visit = async (choice: "all" | "one" | "no") => {
     if (!teamId || sending) return;
+    if (choice === "no" && !(await confirm({ title: "Zakázat hospodu?", description: "Celé kabině klesne nálada.", confirmLabel: "Zakázat" }))) return;
     setSending(true);
-    setAvailable(false);
-    try {
-      const res = await apiFetch<{ ok: boolean; effects: Array<{ type: string; value: number; description: string }> }>(
-        `/api/teams/${teamId}/pub-visit`,
-        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ choice }) },
-      );
-      setResult(res.effects);
+    const holder: { r: PubResult | null } = { r: null };
+    const ok = await apiAction(
+      apiFetch<PubResult & { ok: boolean }>(`/api/teams/${teamId}/pub-visit`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ choice }),
+      }).then((r) => { holder.r = { choice, attendees: r.attendees ?? 0, stories: r.stories ?? [] }; }),
+      "Do hospody to dnes nevyšlo",
+    );
+    if (ok && holder.r) {
+      setResult(holder.r);
+      setAvailable(false);
+      setDaysLeft(2);
       setOpen(false);
-    } catch (e) {
-      console.error("pub-visit:", e);
-      setAvailable(true);
     }
     setSending(false);
   };
 
   return (
     <div>
-      <SectionLabel>Akce</SectionLabel>
+      {dialog}
+      <SectionLabel>Hospoda</SectionLabel>
       <Card>
         <CardBody>
           <div className="flex items-center gap-3">
-            <span className="text-2xl shrink-0">🍺</span>
+            <span className="text-2xl shrink-0" aria-hidden>🍺</span>
             <div className="flex-1 min-w-0">
-              <div className="font-heading font-bold text-sm">Posezení v hospodě</div>
-              <div className="text-xs text-muted">Vezmi kluky na pivo. Morálka nahoru, kondice dolů.</div>
-              {result && (
-                <div className="flex flex-wrap gap-2 mt-1">
-                  {result.map((eff, i) => (
-                    <span key={i} className={`text-xs font-medium ${eff.value >= 0 ? "text-pitch-500" : "text-card-red"}`}>
-                      {eff.description}
-                    </span>
-                  ))}
-                </div>
-              )}
+              <div className="font-heading font-bold text-sm">Posezení s klukama</div>
+              <div className="text-xs text-muted">Nálada nahoru, kondice dolů. Jednou za dva dny.</div>
             </div>
             {available && !result ? (
-              <button onClick={() => setOpen(!open)}
-                className="px-3 py-1.5 bg-amber-500 text-white rounded-soft font-heading font-bold text-xs shrink-0">
+              <button onClick={() => setOpen(!open)} aria-expanded={open}
+                className="px-3 min-h-9 bg-amber-500 text-white rounded-control font-heading font-bold text-sm shrink-0">
                 Do hospody
               </button>
-            ) : (
-              <span className="text-xs text-muted italic shrink-0">
-                {result ? "Hotovo" : `za ${daysLeft} ${daysLeft === 1 ? "den" : "dny"}`}
+            ) : !result && (
+              <span className="text-xs text-muted shrink-0">
+                {daysLeft > 0 ? `znovu za ${daysLeft} ${daysLeft === 1 ? "den" : "dny"}` : "dnes už ne"}
               </span>
             )}
           </div>
+
+          {result && (
+            <div className="mt-3 pt-3 border-t border-gray-100 space-y-1.5 text-sm">
+              <div className="font-heading font-bold">
+                {result.choice === "no" ? "Hospoda je zakázaná, kluci brblají." : `Šlo ${result.attendees} ${result.attendees === 1 ? "kluk" : result.attendees < 5 ? "kluci" : "kluků"}.`}
+              </div>
+              {result.stories.map((s, i) => <p key={i} className="text-ink-light">{s}</p>)}
+              {result.choice !== "no" && (
+                <Link href="/hospoda" className="inline-block text-pitch-700 underline decoration-pitch-500/30 hover:text-pitch-500">
+                  Celý večer v Hospodě
+                </Link>
+              )}
+            </div>
+          )}
+
           {open && (
             <div className="space-y-2 mt-3 pt-3 border-t border-gray-100">
-              <button onClick={() => visit("all")} disabled={sending}
-                className="w-full text-left p-3 rounded-xl bg-amber-50 hover:bg-amber-100 transition-colors border border-amber-200">
-                <div className="font-heading font-bold text-sm">Celý tým jde</div>
-                <div className="flex flex-wrap gap-2 mt-1">
-                  <span className="text-xs font-medium text-pitch-500">+8 morálka</span>
-                  <span className="text-xs font-medium text-card-red">-15 kondice</span>
-                  <span className="text-xs font-medium text-card-red">-1 500 Kč</span>
-                </div>
-              </button>
-              <button onClick={() => visit("one")} disabled={sending}
-                className="w-full text-left p-3 rounded-xl bg-amber-50/50 hover:bg-amber-50 transition-colors border border-amber-100">
-                <div className="font-heading font-bold text-sm">Jen jedno pivo</div>
-                <div className="flex flex-wrap gap-2 mt-1">
-                  <span className="text-xs font-medium text-pitch-500">+3 morálka</span>
-                  <span className="text-xs font-medium text-card-red">-5 kondice</span>
-                  <span className="text-xs font-medium text-card-red">-500 Kč</span>
-                </div>
-              </button>
-              <button onClick={() => visit("no")} disabled={sending}
-                className="w-full text-left p-3 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors border border-gray-200">
-                <div className="font-heading font-bold text-sm">Zakázat</div>
-                <div className="flex flex-wrap gap-2 mt-1">
-                  <span className="text-xs font-medium text-card-red">-3 morálka</span>
-                </div>
-              </button>
+              {PUB_CHOICES.map((c) => (
+                <button key={c.id} onClick={() => visit(c.id)} disabled={sending}
+                  className="w-full text-left p-3 rounded-xl bg-amber-50 hover:bg-amber-100 transition-colors border border-amber-200 disabled:opacity-50">
+                  <div className="font-heading font-bold text-sm">{c.label}</div>
+                  {c.hint && <div className="text-xs text-muted mt-0.5">{c.hint}</div>}
+                  <div className="flex flex-wrap gap-1 mt-1.5">
+                    {c.effects.map((e, i) => (
+                      <span key={i} className={`text-xs font-medium px-1.5 py-0.5 rounded ${TONE_CHIP[e.tone]}`}>{e.text}</span>
+                    ))}
+                  </div>
+                </button>
+              ))}
             </div>
           )}
         </CardBody>

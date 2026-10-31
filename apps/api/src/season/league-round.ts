@@ -557,6 +557,8 @@ async function runBetweenRoundEvents(
         const brEvents = generateBetweenRoundEvents(brRng, squad, td?.budget ?? 0, td?.reputation ?? 50, lastWon, gameWeek, teamDistrict?.district, attendanceRates);
 
         for (const ev of brEvents) {
+          // Co se klubu doopravdy stalo, pro deník v Událostech (peníze až po přepočtu sazebníkem).
+          let budgetApplied: number | null = null;
           if (ev.effect) {
             const eff = ev.effect;
             if (eff.type === "morale" && eff.value) {
@@ -577,6 +579,7 @@ async function runBetweenRoundEvents(
               const scaled = eff.toLeague && compRules
                 ? -Math.round(Math.abs(eff.value) * (compRules.fine_admin / 900))
                 : eff.value;
+              budgetApplied = scaled;
               const eventGameDate = td?.game_date ?? new Date().toISOString();
               await recordTransaction(db, humanTeamId, "event", scaled, ev.title, eventGameDate).catch((e) =>
                 logger.warn({ module: "league-round" }, "budget effect failed", e),
@@ -688,6 +691,21 @@ async function runBetweenRoundEvents(
             .bind(`${ev.emoji} ${ev.title}`, roleConvId)
             .run()
             .catch((e) => logger.warn({ module: "league-round" }, "Failed to update conversation unread", e));
+
+          const { betweenRoundEffectLabel } = await import("../events/between-rounds");
+          const label = ev.effect ? betweenRoundEffectLabel(ev.effect, budgetApplied) : null;
+          await db
+            .prepare(
+              `INSERT INTO seasonal_events (id, team_id, league_id, type, title, description, effects, choices, season, game_week, status, chosen_choice_id)
+               VALUES (?, ?, ?, 'between_round', ?, ?, ?, NULL, ?, ?, 'resolved', 'auto')`,
+            )
+            .bind(
+              crypto.randomUUID(), humanTeamId, leagueId, `${ev.emoji} ${ev.title}`, ev.description,
+              JSON.stringify(label ? [{ type: ev.effect!.type, value: budgetApplied ?? ev.effect!.value ?? 0, description: label }] : []),
+              String(seasonRow?.n ?? ""), gameWeek,
+            )
+            .run()
+            .catch((e) => logger.warn({ module: "league-round" }, "událost mezi koly do deníku", e));
         }
       }
     }
@@ -728,7 +746,7 @@ async function runAdhocEvents(env: Bindings, db: D1Database, leagueId: string, g
         )
         .bind(
           crypto.randomUUID(), ht.id, ht.league_id, adhocEvent.type, adhocEvent.title, adhocEvent.description,
-          JSON.stringify(adhocEvent.effects), JSON.stringify(adhocEvent.choices), String(adhocSeasonN), adhocEvent.gameWeek,
+          JSON.stringify(adhocEvent.effects), adhocEvent.choices ? JSON.stringify(adhocEvent.choices) : null, String(adhocSeasonN), adhocEvent.gameWeek,
         )
         .run()
         .catch((e) => logger.warn({ module: "league-round" }, "adhoc event insert failed", e));

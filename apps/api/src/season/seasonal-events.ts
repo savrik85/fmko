@@ -11,8 +11,8 @@ export interface SeasonalEventDef {
   title: string;
   description: string;
   gameWeek: number; // Kdy v sezóně se event spustí
-  effects: Array<{ type: string; value: number; description: string }>;
-  choices?: Array<{ id: string; label: string; effects: Array<{ type: string; value: number; description: string }> }>;
+  effects: Array<{ type: string; value: number; description: string; chance?: number }>;
+  choices?: Array<{ id: string; label: string; effects: Array<{ type: string; value: number; description: string; chance?: number }> }>;
 }
 
 const EVENT_TEMPLATES: SeasonalEventDef[] = [
@@ -31,7 +31,7 @@ const EVENT_TEMPLATES: SeasonalEventDef[] = [
         label: "Velká zabijačka (víc peněz, víc kocoviny)",
         effects: [
           { type: "budget", value: 10000, description: "+10 000 Kč" },
-          { type: "alcohol_event", value: 1, description: "Hráči s alkohol > 60 mají 50% šanci na absenci příští zápas" },
+          { type: "alcohol_event", value: 1, description: "Kocovina pijákům (−20 kondice)" },
         ],
       },
       {
@@ -95,7 +95,7 @@ const EVENT_TEMPLATES: SeasonalEventDef[] = [
     gameWeek: 17,
     effects: [
       { type: "morale", value: 10, description: "+10 morálka" },
-      { type: "alcohol_event", value: 1, description: "Celý tým má kocovinu (ale je to tradice)" },
+      { type: "alcohol_event", value: 1, description: "Kocovina pijákům (−20 kondice), je to tradice" },
     ],
   },
   {
@@ -182,7 +182,7 @@ const EVENT_TEMPLATES: SeasonalEventDef[] = [
         label: "Dát volno, ať si užijou",
         effects: [
           { type: "morale", value: 8, description: "+8 morálka" },
-          { type: "alcohol_event", value: 1, description: "Kocovina příští den" },
+          { type: "alcohol_event", value: 1, description: "Kocovina pijákům (−20 kondice)" },
         ],
       },
       {
@@ -417,7 +417,7 @@ const ADHOC_EVENT_POOL: SeasonalEventDef[] = [
       { id: "big", label: "Velká oslava", effects: [
         { type: "morale", value: 10, description: "+10 morálka" },
         { type: "condition", value: -20, description: "-20 kondice" },
-        { type: "alcohol_event", value: 1, description: "Kocovina příští den" },
+        { type: "alcohol_event", value: 1, description: "Kocovina pijákům (−20 kondice)" },
       ]},
       { id: "small", label: "Skromná gratulace", effects: [
         { type: "morale", value: 3, description: "+3 morálka" },
@@ -458,7 +458,7 @@ const ADHOC_EVENT_POOL: SeasonalEventDef[] = [
         { type: "budget", value: -1000, description: "-1 000 Kč" },
       ]},
       { id: "risk", label: "Nechat jak to je (riskantní)", effects: [
-        { type: "budget", value: -2000, description: "-2 000 Kč (pokuta, pokud se nelíbí)" },
+        { type: "budget", value: -3000, chance: 0.5, description: "50% šance na pokutu 3 000 Kč" },
       ]},
       { id: "lunch", label: "Pozvat na oběd", effects: [
         { type: "budget", value: -500, description: "-500 Kč" },
@@ -544,7 +544,7 @@ const ADHOC_EVENT_POOL_PRAHA: SeasonalEventDef[] = [
     gameWeek: 0,
     effects: [],
     choices: [
-      { id: "big", label: "Velká oslava", effects: [{ type: "morale", value: 10, description: "+10 morálka" }, { type: "condition", value: -20, description: "-20 kondice" }, { type: "alcohol_event", value: 1, description: "Kocovina" }] },
+      { id: "big", label: "Velká oslava", effects: [{ type: "morale", value: 10, description: "+10 morálka" }, { type: "condition", value: -20, description: "-20 kondice" }, { type: "alcohol_event", value: 1, description: "Kocovina pijákům (−20 kondice)" }] },
       { id: "small", label: "Skromná gratulace", effects: [{ type: "morale", value: 3, description: "+3 morálka" }] },
       { id: "skip", label: "Ignorovat", effects: [{ type: "morale", value: -5, description: "-5 morálka" }] },
     ],
