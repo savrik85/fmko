@@ -103,12 +103,14 @@ export async function announceDistrictEvent(env: Env, input: AnnounceInput): Pro
   return { eventId, invited: teams.length, invitation };
 }
 
-async function postSystemMessage(db: D1Database, convId: string, sender: string, body: string, unread: boolean): Promise<void> {
+async function postSystemMessage(
+  db: D1Database, convId: string, sender: string, body: string, unread: boolean, metadata?: Record<string, unknown>,
+): Promise<void> {
   await db.batch([
     db.prepare(
-      `INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, sent_at)
-       VALUES (?, ?, 'system', ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ','now'))`,
-    ).bind(crypto.randomUUID(), convId, sender, body),
+      `INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, metadata, sent_at)
+       VALUES (?, ?, 'system', ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ','now'))`,
+    ).bind(crypto.randomUUID(), convId, sender, body, metadata ? JSON.stringify(metadata) : null),
     db.prepare(
       `UPDATE conversations SET last_message_text = ?, last_message_at = strftime('%Y-%m-%dT%H:%M:%SZ','now'),
          unread_count = unread_count + ? WHERE id = ?`,
@@ -324,7 +326,9 @@ export async function resolveDistrictEvent(env: Env, eventId: string, rng: Rng =
     const sms = scenes.length
       ? `Co se dělo: ${lines.join(" ")}${effects.length ? `\n\nNásledky: ${effects.join("; ")}.` : ""}`
       : description;
-    await postSystemMessage(db, t.conv_id, label, sms, true).catch((e) => logger.warn({ module: M }, "SMS po akci", e));
+    // Tlačítko pod zprávou vede na kartu akce s avatary a následky (telefon: metadata.type „guide").
+    await postSystemMessage(db, t.conv_id, label, `${sms}\n\nDetail najdeš v Událostech.`, true, { type: "guide", href: "/udalosti", label: "Otevřít Události" })
+      .catch((e) => logger.warn({ module: M }, "SMS po akci", e));
     await db.prepare("UPDATE conversations SET ai_thread_active = 0 WHERE id = ?").bind(t.conv_id).run()
       .catch((e) => logger.warn({ module: M }, "zavřít vlákno akce", e));
   }
