@@ -137,14 +137,14 @@ export function DistrictVillages() {
       {data && villages.length > withClubs.length && (
         <div>
           <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-            <SectionLabel>Ostatní obce</SectionLabel>
-            <input
+            <SectionLabel>Další obce</SectionLabel>
+            {villages.length - withClubs.length > 12 && <input
               type="search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Hledat obec"
               className="min-h-9 px-3 rounded-control border border-gray-200 bg-white text-sm w-full sm:w-56"
-            />
+            />}
           </div>
           <div className="flex flex-wrap gap-1.5">
             {others.map((v) => (
