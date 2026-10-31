@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
-import { Card, CardBody, CardHeader, Spinner, SectionLabel, Badge, Modal, Button } from "@/components/ui";
+import { Card, CardBody, CardHeader, Spinner, SectionLabel, Badge, Modal, Button, Tabs, useTabParam } from "@/components/ui";
+import { DistrictVillages } from "./DistrictVillages";
 import { FaceAvatar } from "@/components/players/face-avatar";
 
 type OfficialRole = "starosta" | "mistostarosta" | "zastupitel_1" | "zastupitel_2";
@@ -286,7 +287,25 @@ function termRemaining(termEndAt: string): string {
   return new Date(termEndAt).getTime() > Date.now() ? "Ve funkci do konce sezóny" : "Funkční období skončilo";
 }
 
+/** Stránka Obec: správa vlastní obce a prohlížení obcí okresu s mapou. */
 export default function ObecPage() {
+  const [tab, setTab] = useTabParam(["obec", "okres"] as const);
+  return (
+    <div className="max-w-5xl mx-auto">
+      <div className="px-4 pt-4">
+        <Tabs
+          value={tab}
+          onChange={setTab}
+          ariaLabel="Obec"
+          items={[{ key: "obec", label: "Moje obec", count: null }, { key: "okres", label: "Obce okresu", count: null }]}
+        />
+      </div>
+      {tab === "obec" ? <OwnVillage /> : <div className="p-4"><DistrictVillages /></div>}
+    </div>
+  );
+}
+
+function OwnVillage() {
   const { teamId: ctxTeamId } = useTeam();
   // Authentický teamId získáme z /api/auth/me — chrání před nekonzistentním
   // localStorage (om_team z jiného přihlášení než aktuální om_token).

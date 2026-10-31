@@ -176,6 +176,8 @@ export interface Team {
   /** Kluby se stejným majitelem, propojení zapisuje admin. */
   sameOwnerClubs?: Array<{ id: string; name: string }>;
   village_name: string;
+  /** Obec klubu (profil obce na /obec/[id]). */
+  village_id?: string;
   population: number;
   size: string;
   district: string;
@@ -378,6 +380,8 @@ export interface ManagerProfile {
   reputation?: number;
   bio?: string;
   birthplace?: string;
+  /** Obec bydliště (profil na /obec/[id]); u starších trenérů dohledaná podle názvu. */
+  birthplaceVillageId?: string | null;
   licenceLevel?: number;
   licenceSource?: "derived" | "course" | "ai_upgrade";
   licenceObtainedAt?: string | null;

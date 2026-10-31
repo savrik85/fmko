@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { apiFetch, showError, type Team, type Player, type TeamMatchResults, type ManagerProfile } from "@/lib/api";
 import { useTeam } from "@/context/team-context";
@@ -201,7 +202,7 @@ export default function TeamPage() {
             <div className="flex-1 min-w-0">
               <h1 className={`font-heading font-extrabold ${txt} text-2xl leading-tight truncate`}><TeamName name={team.name} isAi={manager?.coachIsAi === true} /></h1>
               <div className={`${txtMuted} text-sm mt-0.5`}>
-                <span className={light ? "text-gray-700" : "text-white/80"}>{team.village_name}</span>
+                <Link href={`/obec/${team.village_id}`} className={`${light ? "text-gray-700" : "text-white/80"} underline decoration-current/30 hover:decoration-current`}>{team.village_name}</Link>
                 {" "}&middot; {team.district}
               </div>
               {leaguePos && leagueName && (
@@ -361,7 +362,7 @@ export default function TeamPage() {
             <JerseyPreview primary={color} secondary={team.secondary_color || "#FFF"} pattern={team.jersey_pattern as string} size={60} />
           </div>
           <div className="grid grid-cols-2 gap-y-3 gap-x-6">
-            <InfoRow label="Vesnice" value={team.village_name} />
+            <InfoRow label="Vesnice" value={<Link href={`/obec/${team.village_id}`} className="underline decoration-pitch-500/30 hover:text-pitch-600">{team.village_name}</Link>} />
             <InfoRow label="Okres" value={team.district} />
             <InfoRow label="Region" value={team.region} />
             <InfoRow label="Populace" value={team.population.toLocaleString("cs")} />

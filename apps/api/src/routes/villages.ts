@@ -278,6 +278,210 @@ villagesRouter.get("/invitations", async (c) => {
 // ── /:id (musí být po static GET routes výše) ─────────────────────────────
 
 // GET /api/villages/:id — detail
+// GET /api/villages/district/:district/map — obce okresu na mapu: souřadnice, kluby, kolik tu bylo akcí
+villagesRouter.get("/district/:district/map", async (c) => {
+  const district = c.req.param("district");
+  const [villages, clubs, events] = await Promise.all([
+    c.env.DB.prepare("SELECT id, name, population, size, lat, lng FROM villages WHERE district = ? ORDER BY population DESC")
+      .bind(district).all<{ id: string; name: string; population: number; size: string; lat: number; lng: number }>(),
+    c.env.DB.prepare(
+      `SELECT t.id, t.name, t.village_id, t.user_id, t.primary_color, t.secondary_color, l.name AS league_name,
+              t.badge_pattern, t.badge_primary_color, t.badge_secondary_color, t.badge_initials, t.badge_symbol
+         FROM teams t JOIN villages v ON v.id = t.village_id LEFT JOIN leagues l ON l.id = t.league_id
+        WHERE v.district = ? AND t.parent_team_id IS NULL AND COALESCE(t.team_type, 'senior') != 'u21'
+          AND t.name NOT LIKE 'DELETED%'`,
+    ).bind(district).all<{
+      id: string; name: string; village_id: string; user_id: string; primary_color: string; secondary_color: string; league_name: string | null;
+      badge_pattern: string | null; badge_primary_color: string | null; badge_secondary_color: string | null; badge_initials: string | null; badge_symbol: string | null;
+    }>(),
+    c.env.DB.prepare("SELECT place FROM district_events WHERE district = ? AND status = 'done'")
+      .bind(district).all<{ place: string }>()
+      .catch((e) => { logger.warn({ module: "villages" }, "okresní akce pro mapu", e); return { results: [] as { place: string }[] }; }),
+  ]);
+  const byVillage = new Map<string, Array<Record<string, unknown>>>();
+  for (const t of clubs.results) {
+    const list = byVillage.get(t.village_id) ?? [];
+    list.push({
+      id: t.id, name: t.name, isAi: t.user_id === "ai", leagueName: t.league_name, primaryColor: t.primary_color, secondaryColor: t.secondary_color,
+      badge: { pattern: t.badge_pattern, primary: t.badge_primary_color, secondary: t.badge_secondary_color, initials: t.badge_initials, symbol: t.badge_symbol },
+    });
+    byVillage.set(t.village_id, list);
+  }
+  const districts = await c.env.DB.prepare(
+    `SELECT v.district FROM villages v WHERE EXISTS (SELECT 1 FROM teams t WHERE t.village_id = v.id AND t.parent_team_id IS NULL)
+      GROUP BY v.district ORDER BY v.district`,
+  ).all<{ district: string }>().catch((e) => { logger.warn({ module: "villages" }, "okresy s kluby", e); return { results: [] }; });
+  return c.json({
+    district,
+    districts: districts.results.map((d) => d.district),
+    villages: villages.results.map((v) => ({
+      ...v,
+      clubs: byVillage.get(v.id) ?? [],
+      events: events.results.filter((e) => placeMentions(e.place, v.name)).length,
+    })),
+  });
+});
+
+// GET /api/villages/:id/profile — profil obce na prohlížení: starosta, kluby a stadiony, akce, kdo tu bydlí
+villagesRouter.get("/:id/profile", async (c) => {
+  const id = c.req.param("id");
+  const village = await c.env.DB.prepare("SELECT id, name, district, region, population, size, lat, lng, flavor_facts FROM villages WHERE id = ?")
+    .bind(id).first<{ id: string; name: string; district: string; region: string; population: number; size: string; lat: number; lng: number; flavor_facts: string | null }>();
+  if (!village) return c.json({ error: "Obec nenalezena" }, 404);
+
+  const officials = await c.env.DB.prepare(
+    `SELECT role, first_name, last_name, age, occupation, face_config, personality FROM village_officials WHERE village_id = ?
+      ORDER BY CASE role WHEN 'starosta' THEN 0 WHEN 'mistostarosta' THEN 1 ELSE 2 END`,
+  ).bind(id).all<{ role: string; first_name: string; last_name: string; age: number; occupation: string; face_config: string; personality: string }>()
+    .catch((e) => { logger.warn({ module: "villages" }, "zastupitelstvo obce", e); return { results: [] }; });
+
+  // Trenéři, kteří tu bydlí: podle id obce, u starších jen podle názvu.
+  const coachesFrom = await c.env.DB.prepare(
+    `SELECT m.name, m.avatar, m.team_id, t.name AS team_name, t.user_id FROM managers m LEFT JOIN teams t ON t.id = m.team_id
+      WHERE (m.birthplace_village_id = ? OR (m.birthplace_village_id IS NULL AND m.birthplace = ?)) AND m.team_id IS NOT NULL LIMIT 12`,
+  ).bind(village.id, village.name).all<{ name: string; avatar: string | null; team_id: string; team_name: string | null; user_id: string | null }>()
+    .catch((e) => { logger.warn({ module: "villages" }, "trenéři z obce", e); return { results: [] }; });
+
+  // Kronika: volby, místní senzace, investice, petice, brigády.
+  const chronicle = await c.env.DB.prepare(
+    `SELECT h.event_type, h.description, h.game_date, t.name AS team_name FROM village_history h LEFT JOIN teams t ON t.id = h.team_id
+      WHERE h.village_id = ? ORDER BY h.game_date DESC, h.created_at DESC LIMIT 15`,
+  ).bind(id).all<{ event_type: string; description: string; game_date: string; team_name: string | null }>()
+    .catch((e) => { logger.warn({ module: "villages" }, "kronika obce", e); return { results: [] }; });
+
+  // Odkud fanoušci jezdí autobusem: kterým klubům obec fandí.
+  const busFans = await c.env.DB.prepare(
+    `SELECT b.team_id, t.name AS team_name, b.casual_count + b.regular_count + b.hardcore_count AS fans
+       FROM bus_satellite_fans b JOIN teams t ON t.id = b.team_id
+      WHERE b.village_id = ? AND b.casual_count + b.regular_count + b.hardcore_count > 0 ORDER BY fans DESC LIMIT 6`,
+  ).bind(id).all<{ team_id: string; team_name: string; fans: number }>()
+    .catch((e) => { logger.warn({ module: "villages" }, "fanoušci z obce", e); return { results: [] }; });
+
+  const clubRows = await c.env.DB.prepare(
+    `SELECT t.id, t.name, t.user_id, t.league_id, t.primary_color, t.secondary_color, t.badge_pattern, t.badge_primary_color,
+            t.badge_secondary_color, t.badge_initials, t.badge_symbol, t.stadium_name, t.reputation,
+            l.name AS league_name, m.name AS coach_name, m.avatar AS coach_avatar,
+            s.capacity, s.pitch_type, s.pitch_condition, s.lighting, s.stands, s.roof, s.changing_rooms, s.refreshments, s.parking,
+            (SELECT viewpoint || '|' || version FROM team_stadium_photos p WHERE p.team_id = t.id ORDER BY created_at DESC LIMIT 1) AS photo
+       FROM teams t LEFT JOIN leagues l ON l.id = t.league_id LEFT JOIN managers m ON m.team_id = t.id
+       LEFT JOIN stadiums s ON s.team_id = t.id
+      WHERE t.village_id = ? AND t.parent_team_id IS NULL AND COALESCE(t.team_type, 'senior') != 'u21' AND t.name NOT LIKE 'DELETED%'
+      ORDER BY t.reputation DESC`,
+  ).bind(id).all<Record<string, string | number | null>>();
+
+  const { calculateStandings } = await import("../stats/standings");
+  const clubs = [];
+  for (const t of clubRows.results) {
+    const teamId = t.id as string;
+    const standings = t.league_id
+      ? await calculateStandings(c.env.DB, t.league_id as string).catch((e) => { logger.warn({ module: "villages" }, "tabulka pro profil obce", e); return []; })
+      : [];
+    const position = standings.find((x) => x.teamId === teamId);
+    const recent = await c.env.DB.prepare(
+      `SELECT m.id, m.home_score, m.away_score, m.home_team_id, m.attendance, m.simulated_at, ht.name AS home_name, at.name AS away_name
+         FROM matches m JOIN teams ht ON ht.id = m.home_team_id JOIN teams at ON at.id = m.away_team_id
+        WHERE m.home_team_id = ? AND m.status = 'simulated' AND m.parent_match_id IS NULL
+        ORDER BY m.simulated_at DESC LIMIT 3`,
+    ).bind(teamId).all<{ id: string; home_score: number; away_score: number; attendance: number | null; home_name: string; away_name: string; simulated_at: string }>()
+      .catch((e) => { logger.warn({ module: "villages" }, "zápasy na hřišti obce", e); return { results: [] }; });
+    const [vp, version] = String(t.photo ?? "").split("|");
+    let coachAvatar: Record<string, unknown> | null = null;
+    try { coachAvatar = t.coach_avatar ? JSON.parse(String(t.coach_avatar)) : null; } catch (e) { logger.warn({ module: "villages" }, "avatar trenéra", e); }
+    clubs.push({
+      id: teamId, name: t.name, isAi: t.user_id === "ai", leagueName: t.league_name,
+      position: position?.pos ?? null, teamsInLeague: standings.length || null, points: position?.points ?? null,
+      colors: { primary: t.primary_color, secondary: t.secondary_color },
+      badge: { pattern: t.badge_pattern, primary: t.badge_primary_color, secondary: t.badge_secondary_color, initials: t.badge_initials, symbol: t.badge_symbol },
+      coach: t.coach_name ? { name: t.coach_name, avatar: coachAvatar } : null,
+      stadium: {
+        name: t.stadium_name, capacity: t.capacity, pitchType: t.pitch_type, pitchCondition: t.pitch_condition,
+        lighting: t.lighting, stands: t.stands, roof: t.roof, changingRooms: t.changing_rooms, refreshments: t.refreshments, parking: t.parking,
+        photoUrl: vp && version ? `/api/teams/${teamId}/website/stadium-photo/${vp}?v=${version}` : null,
+      },
+      recentHomeMatches: recent.results.map((m) => ({
+        id: m.id, home: m.home_name, away: m.away_name, score: `${m.home_score}:${m.away_score}`, attendance: m.attendance,
+      })),
+    });
+  }
+
+  const events = await c.env.DB.prepare(
+    "SELECT id, title, place, event_date, report FROM district_events WHERE district = ? AND status = 'done' ORDER BY event_date DESC LIMIT 20",
+  ).bind(village.district).all<{ id: string; title: string; place: string; event_date: string; report: string | null }>()
+    .catch((e) => { logger.warn({ module: "villages" }, "akce v obci", e); return { results: [] }; });
+  const villageEvents = events.results.filter((e) => placeMentions(e.place, village.name)).map((e) => {
+    type Report = { headline?: string; body?: string; scenes?: Array<{ text: string }> };
+    let report: Report | null = null;
+    try { report = e.report ? (JSON.parse(e.report) as { report: Report | null }).report : null; } catch (err) { logger.warn({ module: "villages" }, "reportáž akce", err); }
+    return { id: e.id, title: e.title, place: e.place, date: e.event_date, headline: report?.headline ?? null, body: report?.body ?? null, scenes: (report?.scenes ?? []).slice(0, 3).map((x) => x.text) };
+  });
+
+  // Kdo tu bydlí: hráči klubů okresu s bydlištěm v obci (bydliště je název obce).
+  const residents = await c.env.DB.prepare(
+    `SELECT p.id, p.first_name, p.last_name, p.age, p.position, p.avatar, t.id AS team_id, t.name AS team_name
+       FROM players p JOIN teams t ON t.id = p.team_id JOIN villages v ON v.id = t.village_id
+      WHERE p.residence = ? AND v.district = ? AND (p.status IS NULL OR p.status = 'active')
+      ORDER BY p.age DESC LIMIT 24`,
+  ).bind(village.name, village.district).all<{ id: string; first_name: string; last_name: string; age: number; position: string; avatar: string; team_id: string; team_name: string }>()
+    .catch((e) => { logger.warn({ module: "villages" }, "hráči z obce", e); return { results: [] }; });
+
+  // Rekordy hřiště: všechny domácí zápasy klubů obce (bez U21).
+  const clubIds = clubs.map((cl) => cl.id as string);
+  type MatchRow = { id: string; home_score: number; away_score: number; attendance: number | null; home_name: string; away_name: string };
+  const homeMatches = clubIds.length
+    ? await c.env.DB.prepare(
+      `SELECT m.id, m.home_score, m.away_score, m.attendance, ht.name AS home_name, at.name AS away_name
+         FROM matches m JOIN teams ht ON ht.id = m.home_team_id JOIN teams at ON at.id = m.away_team_id
+        WHERE m.home_team_id IN (${clubIds.map(() => "?").join(",")}) AND m.status = 'simulated' AND m.parent_match_id IS NULL`,
+    ).bind(...clubIds).all<MatchRow>().catch((e) => { logger.warn({ module: "villages" }, "rekordy hřiště", e); return { results: [] as MatchRow[] }; })
+    : { results: [] as MatchRow[] };
+  const hm = homeMatches.results;
+  const asMatch = (m: MatchRow | undefined) => m ? { id: m.id, home: m.home_name, away: m.away_name, score: `${m.home_score}:${m.away_score}`, attendance: m.attendance } : null;
+  const topAttendance = [...hm].filter((m) => m.attendance).sort((a, b) => (b.attendance ?? 0) - (a.attendance ?? 0))[0];
+  const biggestWin = [...hm].filter((m) => m.home_score > m.away_score)
+    .sort((a, b) => (b.home_score - b.away_score) - (a.home_score - a.away_score) || b.home_score - a.home_score)[0];
+  const mostGoals = [...hm].sort((a, b) => (b.home_score + b.away_score) - (a.home_score + a.away_score))[0];
+  const records = {
+    homeMatches: hm.length,
+    wins: hm.filter((m) => m.home_score > m.away_score).length,
+    draws: hm.filter((m) => m.home_score === m.away_score).length,
+    losses: hm.filter((m) => m.home_score < m.away_score).length,
+    goalsFor: hm.reduce((a, m) => a + m.home_score, 0),
+    goalsAgainst: hm.reduce((a, m) => a + m.away_score, 0),
+    averageAttendance: hm.some((m) => m.attendance) ? Math.round(hm.reduce((a, m) => a + (m.attendance ?? 0), 0) / hm.filter((m) => m.attendance).length) : null,
+    topAttendance: asMatch(topAttendance),
+    biggestWin: asMatch(biggestWin),
+    mostGoals: mostGoals && mostGoals.home_score + mostGoals.away_score > 0 ? asMatch(mostGoals) : null,
+  };
+
+  let facts: unknown = null;
+  try { facts = village.flavor_facts ? JSON.parse(village.flavor_facts) : null; } catch (e) { logger.warn({ module: "villages" }, "zajímavosti obce", e); }
+  const face = (raw: string | null): Record<string, unknown> | null => {
+    if (!raw) return null;
+    try { return JSON.parse(raw) as Record<string, unknown>; } catch (e) { logger.warn({ module: "villages" }, "obličej v profilu obce", e); return null; }
+  };
+
+  return c.json({
+    village: { id: village.id, name: village.name, district: village.district, region: village.region, population: village.population, size: village.size, lat: village.lat, lng: village.lng, facts },
+    officials: officials.results.map((o) => ({
+      role: o.role, name: `${o.first_name} ${o.last_name}`, age: o.age, occupation: o.occupation, personality: o.personality, face: face(o.face_config),
+    })),
+    coachesFrom: coachesFrom.results.map((m) => ({
+      name: m.name, avatar: face(m.avatar), teamId: m.team_id, teamName: m.team_name, isAi: m.user_id === "ai",
+    })),
+    // Starší zápisy kroniky mají dlouhé pomlčky, v textech pro hráče je nechceme.
+    chronicle: chronicle.results.map((h) => ({ type: h.event_type, text: h.description.replace(/\s*[\u2014\u2013]\s*/g, ", "), date: h.game_date, teamName: h.team_name })),
+    busFans: busFans.results.map((b) => ({ teamId: b.team_id, teamName: b.team_name, fans: b.fans })),
+    clubs,
+    records,
+    events: villageEvents,
+    residents: residents.results.map((p) => {
+      let avatar: Record<string, unknown> | null = null;
+      try { avatar = JSON.parse(p.avatar); } catch (e) { logger.warn({ module: "villages" }, "avatar hráče z obce", e); }
+      return { id: p.id, name: `${p.first_name} ${p.last_name}`, age: p.age, position: p.position, avatar, teamId: p.team_id, teamName: p.team_name };
+    }),
+  });
+});
+
 villagesRouter.get("/:id", async (c) => {
   const id = c.req.param("id");
   const result = await c.env.DB.prepare("SELECT * FROM villages WHERE id = ?").bind(id).first();
@@ -1250,3 +1454,9 @@ villagesRouter.post("/admin/run-elections", requireAdmin, async (c) => {
 });
 
 export { villagesRouter };
+
+/** Koná se akce v obci? Místo je volný text („sokolovna Kunratice“), hledá se název obce jako celé slovo. */
+function placeMentions(place: string, villageName: string): boolean {
+  const esc = villageName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(^|[\\s,])${esc}($|[\\s,])`, "i").test(place);
+}

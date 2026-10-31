@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { clientOnly } from "@/components/client-only";
 import { apiFetch, type ManagerProfile } from "@/lib/api";
 import { generateManagerFace } from "@/lib/manager-avatar";
@@ -25,7 +25,9 @@ export function EditManagerModal({ manager, teamId, onClose, onSaved }: Props) {
   const [name, setName] = useState(manager.name);
   const [bio, setBio] = useState(manager.bio ?? "");
   const [age, setAge] = useState<string>(manager.age != null ? String(manager.age) : "");
-  const [birthplace, setBirthplace] = useState(manager.birthplace ?? "");
+  // Bydliště se vybírá ze seznamu obcí, aby ho šlo spárovat s profilem obce.
+  const [place, setPlace] = useState<{ id: string | null; name: string }>({ id: manager.birthplaceVillageId ?? null, name: manager.birthplace ?? "" });
+  const placeChanged = place.id !== (manager.birthplaceVillageId ?? null) || (!place.id && !place.name && !!manager.birthplace);
   const [avatar, setAvatar] = useState<Record<string, unknown>>(manager.avatar);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -35,8 +37,7 @@ export function EditManagerModal({ manager, teamId, onClose, onSaved }: Props) {
   const bioValid = bio.trim().length <= BIO_MAX;
   const ageNum = age === "" ? null : Number(age);
   const ageValid = ageNum === null || (Number.isInteger(ageNum) && ageNum >= 18 && ageNum <= 80);
-  const birthplaceValid = birthplace.trim().length <= 50;
-  const canSave = nameValid && bioValid && ageValid && birthplaceValid && !saving;
+  const canSave = nameValid && bioValid && ageValid && !saving;
 
   const randomize = () => setAvatar(generateManagerFace());
 
@@ -53,7 +54,7 @@ export function EditManagerModal({ manager, teamId, onClose, onSaved }: Props) {
           bio: bio.trim() || null,
           avatar,
           ...(ageNum !== null ? { age: ageNum } : {}),
-          birthplace: birthplace.trim() || null,
+          ...(placeChanged ? { birthplaceVillageId: place.id } : {}),
         }),
       });
       onSaved(updated);
@@ -137,18 +138,7 @@ export function EditManagerModal({ manager, teamId, onClose, onSaved }: Props) {
               <label className="block text-micro text-muted font-heading uppercase tracking-wide mb-1">
                 Bydliště
               </label>
-              <input
-                type="text"
-                value={birthplace}
-                onChange={(e) => setBirthplace(e.target.value)}
-                maxLength={50}
-                className="w-full px-3 py-2 border border-gray-200 rounded-soft text-sm focus:outline-none focus:border-pitch-500"
-                placeholder="Strakonice"
-              />
-              <div className="mt-1 flex items-baseline justify-between text-micro">
-                <span className="text-muted-light">max 50 znaků</span>
-                <span className="tabular-nums text-muted-light">{birthplace.length}/50</span>
-              </div>
+              <VillagePicker value={place} onChange={setPlace} />
             </div>
           </div>
 
@@ -191,5 +181,68 @@ export function EditManagerModal({ manager, teamId, onClose, onSaved }: Props) {
           </Button>
         </div>
     </Sheet>
+  );
+}
+
+interface VillageOption { id: string; name: string; district: string }
+
+/** Výběr obce ze hry: napíšeš začátek názvu a vybereš ze seznamu. */
+function VillagePicker({ value, onChange }: { value: { id: string | null; name: string }; onChange: (v: { id: string | null; name: string }) => void }) {
+  const [query, setQuery] = useState("");
+  const [options, setOptions] = useState<VillageOption[]>([]);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    const q = query.trim();
+    if (q.length < 2) { setOptions([]); return; }
+    const timer = setTimeout(() => {
+      apiFetch<VillageOption[]>(`/api/villages?search=${encodeURIComponent(q)}`)
+        .then((rows) => setOptions(rows.slice(0, 8)))
+        .catch((e) => console.error("Hledání obce se nezdařilo:", e));
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [query]);
+
+  if (value.id && !open) {
+    return (
+      <div className="flex items-center gap-2 min-h-[38px] px-3 border border-gray-200 rounded-soft text-sm">
+        <span className="flex-1 min-w-0 truncate font-heading font-bold">{value.name}</span>
+        <button type="button" onClick={() => { setOpen(true); setQuery(""); }} className="text-micro text-pitch-700 hover:text-pitch-500">Změnit</button>
+        <button type="button" onClick={() => onChange({ id: null, name: "" })} className="text-micro text-muted hover:text-card-red" aria-label="Smazat bydliště">×</button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative">
+      <input
+        type="search"
+        value={query}
+        onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        className="w-full px-3 py-2 border border-gray-200 rounded-soft text-sm focus:outline-none focus:border-pitch-500"
+        placeholder={value.name ? `${value.name} (vyber ze seznamu)` : "Začni psát obec"}
+        aria-label="Bydliště"
+        autoComplete="off"
+      />
+      {open && options.length > 0 && (
+        <ul className="absolute z-10 mt-1 w-full max-h-56 overflow-auto rounded-soft border border-gray-200 bg-white shadow-lg">
+          {options.map((o) => (
+            <li key={o.id}>
+              <button
+                type="button"
+                onClick={() => { onChange({ id: o.id, name: o.name }); setOpen(false); setQuery(""); }}
+                className="w-full text-left px-3 py-2 text-sm hover:bg-pitch-50"
+              >
+                <span className="font-heading font-bold">{o.name}</span> <span className="text-muted">· {o.district}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="mt-1 text-micro text-muted-light">
+        {value.name && !value.id ? "Teď to je jen text. Vyber obec ze seznamu, ať je vidět i v profilu obce." : "Obec ze hry"}
+      </div>
+    </div>
   );
 }
