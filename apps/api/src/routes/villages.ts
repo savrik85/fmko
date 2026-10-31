@@ -468,6 +468,8 @@ villagesRouter.get("/:id/profile", async (c) => {
 
   let facts: unknown = null;
   try { facts = village.flavor_facts ? JSON.parse(village.flavor_facts) : null; } catch (e) { logger.warn({ module: "villages" }, "zajímavosti obce", e); }
+  // Zajímavosti mají v datech dlouhé pomlčky, v textech pro hráče je nechceme.
+  if (Array.isArray(facts)) facts = facts.map((f) => typeof f === "string" ? f.replace(/\s*[\u2014\u2013]\s*/g, ", ") : f);
   const face = (raw: string | null): Record<string, unknown> | null => {
     if (!raw) return null;
     try { return JSON.parse(raw) as Record<string, unknown>; } catch (e) { logger.warn({ module: "villages" }, "obličej v profilu obce", e); return null; }
