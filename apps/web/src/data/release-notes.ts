@@ -12,6 +12,15 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    date: "2026-10-31",
+    emoji: "🗺️",
+    title: "Obce okresu",
+    items: [
+      "Na stránce Obec je nová záložka Obce okresu s mapou. U každé obce najdeš zajímavosti, zastupitelstvo, kluby se stadiony a fanoušky, rekordy hřiště, hráče a trenéry, kteří tam bydlí, i kroniku obce. Obcemi se dá listovat šipkami.",
+      "Bydliště trenéra si teď vybereš ze seznamu obcí a v profilu obce tě pak najdou.",
+    ],
+  },
+  {
     date: "2026-10-25",
     emoji: "🤖",
     title: "AI trenéři a nové soutěže",
