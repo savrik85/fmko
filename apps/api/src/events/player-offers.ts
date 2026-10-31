@@ -94,6 +94,27 @@ export function youthOfferShift(level: string, position: "GK" | "DEF" | "MID" | 
   return Math.max(0, shiftForRating(level, position, YOUTH_TARGET_AGE, Math.round(squadAverage) - rng.int(4, 12)));
 }
 
+/** Jak často kapitán přivede někoho, kdo jedenáctku posílí. */
+export const CAPTAIN_STAR_CHANCE = 0.15;
+
+/**
+ * Posun dospělého hráče z tipu podle nejlepší jedenáctky klubu. Kapitán zná kluky, kteří
+ * někde opravdu hráli: obvykle 0–10 bodů pod jedenáctkou, v 15 % nad ní. Starosta nabízí
+ * staršího chlapa, slušného, ale 5–15 bodů pod jedenáctkou. Hospodský zůstává náhodou z obce.
+ * Nikdy hůř než tržní posun, takže slabý klub dostane stejné hráče jako dřív.
+ */
+export function adultOfferShift(
+  source: OfferSource, level: string, position: "GK" | "DEF" | "MID" | "FWD", age: number,
+  topElevenAverage: number | null | undefined, rng: Rng,
+): number {
+  if (!topElevenAverage || (source !== "friend" && source !== "recommendation")) return MARKET_SHIFT;
+  const top = Math.round(topElevenAverage);
+  const target = source === "friend"
+    ? (rng.random() < CAPTAIN_STAR_CHANCE ? top + rng.int(1, 6) : top - rng.int(0, 10))
+    : top - rng.int(5, 15);
+  return Math.max(MARKET_SHIFT, shiftForRating(level, position, age, target));
+}
+
 /**
  * Generate a player offer for a team. Returns null if conditions not met.
  * Called from daily-tick between-round events.
@@ -134,7 +155,16 @@ export async function generatePlayerOffer(
   const isYouth = sourceType.source === "youth";
   const level = levelFromCategory(villageInfo.category);
 
-  // Kluk z dorostu se srovná s áčkem, dospělý zvenku má tržní posun (viz MARKET_SHIFT).
+  // Kluk z dorostu se srovná s áčkem, tip kapitána a starosty s nejlepší jedenáctkou,
+  // hospodský má tržní posun (viz MARKET_SHIFT).
+  const squadBased = sourceType.source === "friend" || sourceType.source === "recommendation";
+  const topElevenAverage = squadBased
+    ? (await db.prepare(
+        `SELECT AVG(overall_rating) AS avg FROM (SELECT overall_rating FROM players
+         WHERE team_id = ? AND (status IS NULL OR status = 'active') ORDER BY overall_rating DESC LIMIT 11)`,
+      ).bind(teamId).first<{ avg: number | null }>()
+        .catch((e) => { logger.warn({ module: "player-offers", teamId }, "load top eleven for offer", e); return null; }))?.avg
+    : null;
   const squadAverage = isYouth
     ? (await db.prepare("SELECT AVG(overall_rating) AS avg FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active')")
         .bind(teamId).first<{ avg: number | null }>()
@@ -142,7 +172,7 @@ export async function generatePlayerOffer(
     : null;
   const created = createPlayer(rng, {
     position: pos, village: villageInfo, names: { surnameData, firstnameData }, age, level,
-    shift: isYouth ? youthOfferShift(level, pos, squadAverage, rng) : MARKET_SHIFT,
+    shift: isYouth ? youthOfferShift(level, pos, squadAverage, rng) : adultOfferShift(sourceType.source, level, pos, age, topElevenAverage, rng),
     keepLevelCaps: isYouth,
   });
   const player = created.identity;
