@@ -1181,7 +1181,7 @@ function generateIncidents(attendees: PubAttendee[], rivalsMap: Map<string, Set<
  * Aplikuje effects pub incidentů (kondice, morale, zranění, condition_log).
  * Single source of truth: incident.effects[]. Generator je vyrobil, applier jen aplikuje.
  */
-async function applyIncidentEffects(
+export async function applyIncidentEffects(
   db: D1Database,
   incidents: PubIncident[],
 ): Promise<D1PreparedStatement[]> {

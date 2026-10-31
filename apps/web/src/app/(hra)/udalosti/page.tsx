@@ -6,6 +6,7 @@ import { useTeam } from "@/context/team-context";
 import { apiFetch, apiAction } from "@/lib/api";
 import { Card, CardBody, Spinner, SectionLabel, useConfirm } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
+import { DistrictEvents } from "./DistrictEvents";
 
 interface EventEffect {
   type: string;
@@ -263,7 +264,8 @@ export default function EventsPage() {
   // ale vyřeší je denní tick sám — do sekce "čeká na tebe" nepatří.
   const pending = events.filter((e) => e.status === "pending" && e.choices !== null && e.gameWeek <= currentGameWeek);
   const upcoming = events.filter((e) => e.status !== "resolved" && e.gameWeek > currentGameWeek);
-  const past = events.filter((e) =>
+  // Okresní akce (pouť, bál…) mají vlastní sekci (DistrictEvents); starší záznamy z testu sem nepatří.
+  const past = events.filter((e) => e.type !== "district_event").filter((e) =>
     e.status === "resolved"
     || (e.status === "active" && e.gameWeek <= currentGameWeek)
     || (e.status === "pending" && e.choices === null && e.gameWeek <= currentGameWeek));
@@ -464,6 +466,8 @@ export default function EventsPage() {
           )}
         </div>
       )}
+
+      <DistrictEvents teamId={teamId} />
 
       {/* Pending — needs decision */}
       {pending.length > 0 && (
