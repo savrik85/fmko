@@ -677,11 +677,11 @@ export default function ConversationPage() {
                               </span>
                             </div>
                           )}
-                          {/* Žádost o rozhovor chodí SMS, ale formulář je na Událostech. */}
+                          {/* Žádost o rozhovor chodí SMS, formulář je na stránce rozhovoru ve Zpravodaji. */}
                           {msg.metadata?.type === "interview_request"
                             && otevreneRozhovory.has(String(msg.metadata.interviewId ?? "")) && (
                             <Link
-                              href={`/udalosti#rozhovor-${String(msg.metadata.interviewId ?? "")}`}
+                              href={`/zpravodaj/rozhovor/${encodeURIComponent(String(msg.metadata.interviewId ?? ""))}`}
                               className={WA_LINK_BUTTON}
                             >
                               Otevřít rozhovor

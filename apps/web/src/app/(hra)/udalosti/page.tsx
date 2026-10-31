@@ -6,7 +6,6 @@ import { useTeam } from "@/context/team-context";
 import { apiFetch, apiAction } from "@/lib/api";
 import { Card, CardBody, Spinner, SectionLabel, useConfirm } from "@/components/ui";
 import { DistrictEvents } from "./DistrictEvents";
-import { Interviews } from "./Interviews";
 
 interface EventEffect {
   type: string;
@@ -245,8 +244,6 @@ export default function EventsPage() {
           </div>
         </div>
       )}
-
-      <Interviews />
 
       <DistrictEvents teamId={teamId} />
 

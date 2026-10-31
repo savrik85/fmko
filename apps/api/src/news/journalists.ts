@@ -266,7 +266,7 @@ export async function redaktorProRubriku(
  * Dřív seed stál jen na týmu, takže každého trenéra zpovídal pořád tentýž
  * (vyčůraný) redaktor a vztah s ním po pár kolech vyšplhal na maximum. Teď se
  * mezi rozhovory střídá bulvár, vyčůraný i seriózní. Seed je z týmu, kola a
- * druhu rozhovoru, takže otázky, článek i karta v Událostech vyjdou na
+ * druhu rozhovoru, takže otázky, článek i karta rozhovoru vyjdou na
  * stejného člověka, aniž by se musel ukládat.
  */
 export function journalistForInterview(

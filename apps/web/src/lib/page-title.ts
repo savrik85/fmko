@@ -66,6 +66,7 @@ const PREFIX_TITLES: Array<[string, string]> = [
   ["/manazer/", "Profil trenéra"],
   ["/rozhodci/", "Rozhodčí"],
   ["/redakce/", "Redakce"],
+  ["/zpravodaj/rozhovor/", "Rozhovor pro Zpravodaj"],
   ["/pohar/tym/", "Tým v poháru"],
   ["/prestupy/nabidka/", "Nabídka"],
   ["/prestupy/jednani/", "Jednání"],

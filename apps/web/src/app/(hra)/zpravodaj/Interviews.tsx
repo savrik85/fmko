@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, apiAction } from "@/lib/api";
-import { SectionLabel } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 
 /** Rozhovory pro Zpravodaj: před zápasem, po zápase, na konci sezóny. */
@@ -82,9 +81,63 @@ const TONY_ODPOVEDI: Array<{ key: string; label: string }> = [
   { key: "pokorne", label: "Pokorně" },
 ];
 
-export function Interviews() {
-  const { teamId } = useTeam();
+/** Otevřené rozhovory klubu. Sdílené načtení pro pozvánky ve Zpravodaji i stránku rozhovoru. */
+function useOpenInterviews(teamId: string | null) {
   const [interviews, setInterviews] = useState<CoachInterview[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  useEffect(() => {
+    if (!teamId) return;
+    apiFetch<{ interviews: CoachInterview[] }>(`/api/teams/${teamId}/coach-interviews`)
+      .then((d) => setInterviews(d.interviews ?? []))
+      .catch((e) => { console.error("coach-interviews fetch:", e); })
+      .finally(() => setLoaded(true));
+  }, [teamId]);
+  return { interviews, setInterviews, loaded };
+}
+
+const KIND_TEXT: Record<string, string> = {
+  pre_match: "před zápasem",
+  post_match: "po zápase",
+  season_wrap: "na konec sezóny",
+};
+
+/** Krátké pozvánky do Zpravodaje: kdo chce rozhovor a do kdy. Odpovídá se na vlastní stránce. */
+export function InterviewInvites() {
+  const { teamId } = useTeam();
+  const { interviews } = useOpenInterviews(teamId);
+  if (!interviews.length) return null;
+  return (
+    <div className="mb-4 space-y-2">
+      {interviews.map((iv) => (
+        <Link
+          key={iv.id}
+          href={`/zpravodaj/rozhovor/${iv.id}`}
+          className="flex items-center gap-3 rounded-card border border-amber-300 bg-amber-50 px-3 py-2.5 hover:bg-amber-100 transition-colors"
+        >
+          {iv.journalist?.avatar
+            ? <FaceAvatar faceConfig={iv.journalist.avatar} size={36} className="shrink-0 rounded-full bg-white" />
+            : <span className="text-2xl shrink-0" aria-hidden>🎙️</span>}
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-heading font-bold leading-tight">
+              {iv.journalist?.name ?? "Redaktor"} chce rozhovor {KIND_TEXT[iv.kind ?? "pre_match"]}
+            </div>
+            <div className="text-xs text-muted">
+              {iv.questions.length} {iv.questions.length === 1 ? "otázka" : iv.questions.length < 5 ? "otázky" : "otázek"} · vyprší{" "}
+              {new Date(iv.expiresAt).toLocaleDateString("cs", { weekday: "long", day: "numeric", month: "numeric" })}
+            </div>
+          </div>
+          <span className="shrink-0 text-sm font-heading font-bold text-pitch-700">Odpovědět</span>
+        </Link>
+      ))}
+    </div>
+  );
+}
+
+/** Jeden rozhovor k vyplnění (stránka /zpravodaj/rozhovor/[id]). */
+export function InterviewForm({ interviewId }: { interviewId: string }) {
+  const { teamId } = useTeam();
+  const { interviews: all, setInterviews, loaded } = useOpenInterviews(teamId);
+  const interviews = all.filter((iv) => iv.id === interviewId);
   const [interviewAnswers, setInterviewAnswers] = useState<Record<string, string[]>>({});
   const [interviewTones, setInterviewTones] = useState<Record<string, string[]>>({});
   const [interviewSubmitting, setInterviewSubmitting] = useState<string | null>(null);
@@ -92,17 +145,6 @@ export function Interviews() {
   // Skutečné dopady pozápasové odpovědi — hráč má vidět, co si koupil.
   const [interviewEffects, setInterviewEffects] = useState<AppliedEffects | null>(null);
 
-  useEffect(() => {
-    if (!teamId) return;
-    apiFetch<{ interviews: CoachInterview[] }>(`/api/teams/${teamId}/coach-interviews`)
-      .then((d) => {
-        setInterviews(d.interviews ?? []);
-        // Odkaz z telefonu (#rozhovor-…) míří na kartu, která se vykreslí až po načtení.
-        const hash = window.location.hash.slice(1);
-        if (hash) requestAnimationFrame(() => document.getElementById(hash)?.scrollIntoView({ behavior: "smooth", block: "start" }));
-      })
-      .catch((e) => { console.error("coach-interviews fetch:", e); });
-  }, [teamId]);
 
   const handleInterviewAnswer = (interviewId: string, idx: number, value: string) => {
     setInterviewAnswers((prev) => {
@@ -155,10 +197,14 @@ export function Interviews() {
 
   return (
     <>
-      {/* Rozhovor kola */}
+      {loaded && interviews.length === 0 && !interviewDone && (
+        <div className="card p-5 text-center text-muted">
+          Tenhle rozhovor už není otevřený.{" "}
+          <Link href="/zpravodaj" className="text-pitch-700 underline">Zpět do Zpravodaje</Link>
+        </div>
+      )}
       {interviews.length > 0 && (
         <div>
-          <SectionLabel>📰 Zpravodaj žádá o rozhovor</SectionLabel>
           <div className="space-y-4">
             {interviews.map((iv) => {
               const answers = interviewAnswers[iv.id] ?? [];
