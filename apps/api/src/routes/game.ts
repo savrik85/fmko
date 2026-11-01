@@ -6162,6 +6162,12 @@ gameRouter.post("/admin/district-events/:eventId/resolve", async (c) => {
   return c.json(await resolveDistrictEvent(c.env, c.req.param("eventId")));
 });
 
+// SMS od Zpravodaje o vydané reportáži (dodatečně k akci vyhodnocené dřív). Kdo ji má, ten ji nedostane znovu.
+gameRouter.post("/admin/district-events/:eventId/notify", async (c) => {
+  const { notifyDistrictEventArticle } = await import("../events/district-event-db");
+  return c.json({ ok: true, ...await notifyDistrictEventArticle(c.env.DB, c.req.param("eventId")) });
+});
+
 gameRouter.post("/admin/generate-youth-offer-all", async (c) => {
   const dryRun = c.req.query("dryRun") === "1";
   const sourceParam = c.req.query("source") ?? "youth";
