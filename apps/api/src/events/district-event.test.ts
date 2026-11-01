@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { createRng } from "../generators/rng";
 import {
   classifyEventReply, LIMITS, pickAttendance, promptKeys, sanitizeEventReport, buildEventPrompt,
-  type EventPlayer, type EventTeamInput,
+  articleSms, type EventPlayer, type EventTeamInput,
 } from "./district-event";
 
 function player(id: string, teamId: string, alcohol = 50): EventPlayer {
@@ -120,5 +120,15 @@ describe("kdo ve scéně je", () => {
     });
     const r = sanitizeEventReport({ scenes: [{ text: "Vlasák dal trenéru Novotnému srdce.", who: ["C1"] }] }, keys);
     expect(r!.scenes[0].teamIds).toEqual(["K"]);
+  });
+});
+
+describe("SMS od Zpravodaje o reportáži z akce", () => {
+  it("pojmenuje akci, nese titulek a tlačítko vede rovnou na článek", () => {
+    const sms = articleSms("Pouť", "Vacov", "Pouť ve Vacově přinesla rvačky", "n1");
+    expect(sms.text).toContain("Pouť, Vacov");
+    expect(sms.text).toContain("„Pouť ve Vacově přinesla rvačky“");
+    expect(sms.text).not.toMatch(/[—–]/);
+    expect(sms.metadata).toEqual({ type: "guide", href: "/zpravodaj?article=n1", label: "Otevřít Zpravodaj", newsId: "n1" });
   });
 });

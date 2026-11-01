@@ -15,7 +15,7 @@ import { applyIncidentEffects, type PubEffect, type PubIncident } from "../seaso
 import { applyRelationEvent, getRelation, shiftSquadMorale } from "../community/manager-relations";
 import { activeSeasonNumber } from "../transfers/unrest";
 import {
-  buildEventPrompt, buildInvitationPrompt, cleanInvitation, classifyEventReply, effectLabel,
+  articleSms, buildEventPrompt, buildInvitationPrompt, cleanInvitation, classifyEventReply, effectLabel,
   EVENT_CONFIRMATIONS, EVENT_REPLY_OPTIONS, isEventChoice, pickAttendance, plainInvitation, promptKeys,
   sanitizeEventReport, type CoachPairInfo, type EventChoice, type EventPlayer, type EventReport,
   type EventScene, type EventTeamInput,
@@ -335,8 +335,63 @@ export async function resolveDistrictEvent(env: Env, eventId: string, rng: Rng =
 
   await db.prepare("UPDATE district_events SET status = 'done', report = ? WHERE id = ?")
     .bind(JSON.stringify({ attendance: { coaches: attendance.coaches, players: attendance.players.map((p) => p.id) }, report }), eventId).run();
+  if (report) {
+    await notifyDistrictEventArticle(db, eventId)
+      .catch((e) => logger.warn({ module: M }, "SMS od Zpravodaje o reportáži", e));
+  }
   logger.info({ module: M }, `akce ${label} vyhodnocena: ${report?.scenes.length ?? 0} scén, ${attendance.coaches.length} trenérů, ${attendance.players.length} hráčů`);
   return { ok: true, scenes: report?.scenes.length ?? 0 };
+}
+
+const NEWS_DESK = "Redakce Zpravodaje";
+
+/**
+ * SMS od Redakce Zpravodaje všem lidským klubům lig, kam reportáž z akce vyšla, s tlačítkem
+ * rovnou na článek (uživatel 1. 11.: „musí vyjít od zpravodaje SMS“, jinak ji nikdo nenajde).
+ * Klub, který SMS k té reportáži už má, se přeskočí, takže jde pustit znovu z adminu.
+ */
+export async function notifyDistrictEventArticle(db: D1Database, eventId: string): Promise<{ sent: number; skipped: number }> {
+  const ev = await db.prepare("SELECT title, place, report, season_number, created_at FROM district_events WHERE id = ? AND status = 'done'")
+    .bind(eventId).first<{ title: string; place: string; report: string | null; season_number: number; created_at: string }>();
+  let headline: string | null = null;
+  try {
+    headline = ev?.report ? (JSON.parse(ev.report) as { report: EventReport | null }).report?.headline ?? null : null;
+  } catch (e) {
+    logger.warn({ module: M }, `reportáž akce ${eventId} pro SMS`, e);
+  }
+  if (!ev || !headline) return { sent: 0, skipped: 0 };
+
+  const articles = await db.prepare(
+    "SELECT id, league_id FROM news WHERE type = 'district_event' AND headline = ? AND season_number = ? AND created_at >= ?",
+  ).bind(headline, ev.season_number, ev.created_at).all<{ id: string; league_id: string }>();
+  const newsByLeague = new Map(articles.results.map((a) => [a.league_id, a.id]));
+  if (!newsByLeague.size) return { sent: 0, skipped: 0 };
+
+  const leagueIds = [...newsByLeague.keys()];
+  const recipients = await db.prepare(
+    `SELECT id, league_id FROM teams
+      WHERE league_id IN (${leagueIds.map(() => "?").join(",")})
+        AND parent_team_id IS NULL AND user_id IS NOT NULL AND user_id != 'ai'`,
+  ).bind(...leagueIds).all<{ id: string; league_id: string }>();
+
+  const newsIds = [...newsByLeague.values()];
+  const already = await db.prepare(
+    `SELECT DISTINCT c.team_id FROM conversations c JOIN messages m ON m.conversation_id = c.id
+      WHERE c.type = 'system' AND c.title = ?
+        AND json_extract(m.metadata, '$.newsId') IN (${newsIds.map(() => "?").join(",")})`,
+  ).bind(NEWS_DESK, ...newsIds).all<{ team_id: string }>();
+  const notified = new Set(already.results.map((r) => r.team_id));
+
+  const { sendSystemSMS } = await import("../messaging/system-sms");
+  let sent = 0;
+  for (const t of recipients.results) {
+    if (notified.has(t.id)) continue;
+    const sms = articleSms(ev.title, ev.place, headline, newsByLeague.get(t.league_id)!);
+    await sendSystemSMS(db, t.id, NEWS_DESK, sms.text, sms.metadata);
+    sent++;
+  }
+  logger.info({ module: M }, `SMS o reportáži z akce ${eventId}: ${sent} klubům, ${notified.size} už ji mělo`);
+  return { sent, skipped: notified.size };
 }
 
 /** Denní tick: vyhodnotit akce, jejichž den nastal. */

@@ -393,6 +393,17 @@ export function classifyEventReply(text: string): EventChoice {
   return "alone";
 }
 
+/** SMS od Redakce Zpravodaje, že vyšla reportáž z akce. Tlačítko pod ní otevře rovnou článek. */
+export function articleSms(title: string, place: string, headline: string, newsId: string): {
+  text: string;
+  metadata: { type: "guide"; href: string; label: string; newsId: string };
+} {
+  return {
+    text: `📰 Ve Zpravodaji vyšla reportáž z okresní akce ${title}, ${place}: „${headline}“`.replace(LONG_DASH, ", "),
+    metadata: { type: "guide", href: `/zpravodaj?article=${newsId}`, label: "Otevřít Zpravodaj", newsId },
+  };
+}
+
 export function isEventChoice(v: unknown): v is EventChoice {
   return typeof v === "string" && (EVENT_CHOICES as readonly string[]).includes(v);
 }

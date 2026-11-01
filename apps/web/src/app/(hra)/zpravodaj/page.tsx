@@ -236,7 +236,8 @@ export default function NewsPage() {
     const el = document.getElementById(`news-${targetId}`);
     if (el) {
       setTimeout(() => {
-        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        // Dlouhý článek (reportáž z akce) od titulku, jinak by odkaz ze SMS skočil doprostřed textu.
+        el.scrollIntoView({ behavior: "smooth", block: el.offsetHeight > window.innerHeight * 0.8 ? "start" : "center" });
         el.classList.add("ring-2", "ring-pitch-500", "ring-offset-2", "rounded-soft");
         setTimeout(() => el.classList.remove("ring-2", "ring-pitch-500", "ring-offset-2", "rounded-soft"), 3000);
       }, 100);
@@ -266,8 +267,10 @@ export default function NewsPage() {
         .then((d) => ({ d, label: label(l.name) }))),
     ]).then((parts) => {
       const seen = new Set<string>();
+      // Reportáž z okresní akce vychází v každé lize okresu zvlášť (jiné id); ukázat ji jen jednou.
+      const key = (a: Article) => (a.type === "district_event" ? `district_event:${a.headline}` : a.id);
       const merged = parts.flatMap(({ d, label: lab }) => d.articles.map((a) => ({ ...a, leagueLabel: lab })))
-        .filter((a) => (seen.has(a.id) ? false : (seen.add(a.id), true)))
+        .filter((a) => (seen.has(key(a)) ? false : (seen.add(key(a)), true)))
         .sort((x, y) => (y.date ?? "").localeCompare(x.date ?? ""));
       setArticles(merged);
       setSeason(parts[0]?.d.season ?? 1);
@@ -380,10 +383,16 @@ export default function NewsPage() {
   const gremiumArticles = articles.filter((a) => a.type === "governance_minutes");
   const openerArticles = articles.filter((a) => a.type === "season_opener");
   const wrapArticles = articles.filter((a) => a.type === "season_wrap");
+  // Reportáž z okresní akce (pouť, bál…) je týden nahoře nad úvodníkem, pak spadne do drobných zpráv.
+  // Dřív rovnou končila v drobných zprávách na konci listu a nikdo ji nenašel.
+  const districtEventStory = articles.find(
+    (a) => a.type === "district_event" && Date.now() - new Date(a.date).getTime() < 7 * 24 * 3600 * 1000,
+  ) ?? null;
   const leadStory = [openerArticles[0], gremiumArticles[0], previewArticles[0], aiReportArticles[0], matchArticles[0]]
     .filter(Boolean)
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]
-    || standingArticles[0] || articles.find((a) => !["ultras_report", "round_summary"].includes(a.type));
+    || standingArticles[0]
+    || articles.find((a) => !["ultras_report", "round_summary"].includes(a.type) && a.id !== districtEventStory?.id);
   // Druhý hlavní článek — kolem přelomu sezóny je to ohlédnutí za sezónou (season_wrap),
   // jinak ai_report (podle toho, co není lead).
   const secondaryStory =
@@ -393,7 +402,7 @@ export default function NewsPage() {
   // Ostatní drobnosti — bez typů z hlavních sekcí a bez duplicit s lead/secondary (podle id)
   const otherArticles = articles.filter(
     (a) => !["match", "round_results", "round_summary", "standing", "ai_report", "matchday_preview", "promotion", "transfer", "celebrity_arrival", "celebrity_signing", "interview", "player_interview", "post_match_interview", "ultras_report", "governance_minutes"].includes(a.type)
-      && a.id !== leadStory?.id && a.id !== secondaryStory?.id,
+      && a.id !== leadStory?.id && a.id !== secondaryStory?.id && a.id !== districtEventStory?.id,
   );
   const miscArticles = otherArticles;
 
@@ -458,6 +467,23 @@ export default function NewsPage() {
         </div>
       ) : (
         <div className="space-y-8">
+
+          {/* ═══ Z okresu: reportáž z okresní akce, první věc na listu ═══ */}
+          {districtEventStory && (
+            <section id={`news-${districtEventStory.id}`} className="border-b border-ink/20 pb-6">
+              <Kicker>{rubrikaProTyp(districtEventStory.type)}</Kicker>
+              <h2 className="np-titulek text-3xl sm:text-[2.6rem] text-center mb-3">
+                <LeagueTag a={districtEventStory} />{districtEventStory.headline}
+              </h2>
+              <div className="np-text np-sloupce np-sloupce-3 np-iniciala text-[15px] mt-3">
+                <NovinoveOdstavce body={districtEventStory.body} />
+              </div>
+              <div className="flex items-center justify-center gap-3 mt-4">
+                <span className="text-micro text-muted italic">{timeAgo(districtEventStory.date)}</span>
+                <ShareButton articleId={districtEventStory.id} />
+              </div>
+            </section>
+          )}
 
           {/* ═══ Úvodník + placená propagace ═══ */}
           {leadStory && (
@@ -1005,6 +1031,7 @@ function rubrikaProTyp(type: string): string {
     case "ai_report": return "Komentář kola";
     case "match": return "Zápasová zpráva";
     case "standing": return "Tabulka";
+    case "district_event": return "🎡 Z okresu";
     default: return "Aktualita";
   }
 }
