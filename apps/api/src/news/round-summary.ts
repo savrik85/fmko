@@ -174,11 +174,14 @@ export async function generateRoundSummary(
     return `- [player_id=${c.playerId}] ${c.firstName} ${c.lastName} (${c.position}, ${c.teamName}${myPos ? ` [${myPos}.]` : ""}) — rating ${c.rating.toFixed(1)}, ${c.goals} gól(ů), ${c.assists} asist., ${c.minutesPlayed} min. Zápas: ${outcome} ${c.ownScore}:${c.oppScore} ${c.isHome ? "doma vs" : "venku u"} ${c.oppTeamName}${oppPos ? ` [${oppPos}.]` : ""}${upset}`;
   });
 
+  // Pověst trenérů (štítky z vlastností) jako podklad, ne povinná zmínka (news/coach-context.ts).
+  const { coachReputationByTeam, coachReputationNote, COACH_REPUTATION_RULE } = await import("./coach-context");
+  const reputation = await coachReputationByTeam(db, results.flatMap((r) => [r.homeTeamId, r.awayTeamId]));
   const resultLines = results.map((r) => {
     const hPos = posMap.get(r.homeTeamId);
     const aPos = posMap.get(r.awayTeamId);
-    const homeMgr = r.homeManagerName ? `, trenér ${r.homeManagerName}` : "";
-    const awayMgr = r.awayManagerName ? ` / ${r.awayManagerName}` : "";
+    const homeMgr = r.homeManagerName ? `, trenér ${r.homeManagerName}${coachReputationNote(reputation.get(r.homeTeamId))}` : "";
+    const awayMgr = r.awayManagerName ? ` / ${r.awayManagerName}${coachReputationNote(reputation.get(r.awayTeamId))}` : "";
     const upset = hPos != null && aPos != null && (
       (r.homeScore > r.awayScore && hPos - aPos >= 3) ||
       (r.awayScore > r.homeScore && aPos - hPos >= 3)
@@ -225,6 +228,7 @@ PRAVIDLA:
 - body je KRÁTKÝ (60-100 slov) — vyhlášení, ne článek o kole
 - body = 2 souvislé odstavce běžného textu oddělené \n, BEZ číslování, odrážek a nadpisů
 - Žádné jiné hráče než oceněného
+${COACH_REPUTATION_RULE}
 - Česky, přirozený tón`;
 
   // 7. Call Gemini

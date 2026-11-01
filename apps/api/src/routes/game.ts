@@ -6692,9 +6692,11 @@ gameRouter.post("/teams/:teamId/coach-interviews/:interviewId/answer", async (c)
     );
   } else {
     const { generateInterviewArticle } = await import("../news/interview-generator");
+    const { coachReputationByTeam } = await import("../news/coach-context");
+    const reputation = (await coachReputationByTeam(c.env.DB, [teamId])).get(teamId) ?? [];
     article = await generateInterviewArticle(
       (c.env as any).GEMINI_API_KEY, qa, managerRow.manager_name, managerRow.team_name, opponentName,
-      redaktor ? pokynyProRedaktora(redaktor, vztahKeKlubu) : undefined, tones,
+      redaktor ? pokynyProRedaktora(redaktor, vztahKeKlubu) : undefined, tones, reputation,
     );
   }
 

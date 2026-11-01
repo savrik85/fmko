@@ -32,6 +32,9 @@ interface MatchPreview {
   awayInjured: string[];
   homeManager: string | null;
   awayManager: string | null;
+  /** Pověst trenéra ze štítků (Taktik, Lajdák…), podklad pro redaktora (news/coach-context.ts). */
+  homeManagerNote?: string;
+  awayManagerNote?: string;
   /** Veřejný výrok trenéra k tomuhle zápasu (i od AI). */
   homeStatement: { quote: string; tone: string } | null;
   awayStatement: { quote: string; tone: string } | null;
@@ -199,6 +202,8 @@ export async function generateMatchdayPreview(
 
   // Nasbírat data pro všechny zápasy
   const previews: MatchPreview[] = [];
+  const { coachReputationByTeam, coachReputationNote, COACH_REPUTATION_RULE } = await import("./coach-context");
+  const reputation = await coachReputationByTeam(db, matchRows.results.flatMap((m) => [m.home_team_id as string, m.away_team_id as string]));
   for (const m of matchRows.results) {
     const homeTeamId = m.home_team_id as string;
     const awayTeamId = m.away_team_id as string;
@@ -253,6 +258,8 @@ export async function generateMatchdayPreview(
       awayInjured: awayInj,
       homeManager: homeMng,
       awayManager: awayMng,
+      homeManagerNote: coachReputationNote(reputation.get(homeTeamId)),
+      awayManagerNote: coachReputationNote(reputation.get(awayTeamId)),
       homeStatement, awayStatement,
       homeInterviewQuote: homeQuote,
       awayInterviewQuote: awayQuote,
@@ -307,8 +314,8 @@ export async function generateMatchdayPreview(
     if (p.awayTopPlayers.length > 0) lines.push(`  Klíčoví hráči ${p.awayName}: ${p.awayTopPlayers.join(", ")}`);
     if (p.homeInjured.length > 0) lines.push(`  Zranění ${p.homeName}: ${p.homeInjured.join(", ")}`);
     if (p.awayInjured.length > 0) lines.push(`  Zranění ${p.awayName}: ${p.awayInjured.join(", ")}`);
-    if (p.homeManager) lines.push(`  Trenér ${p.homeName}: ${p.homeManager}`);
-    if (p.awayManager) lines.push(`  Trenér ${p.awayName}: ${p.awayManager}`);
+    if (p.homeManager) lines.push(`  Trenér ${p.homeName}: ${p.homeManager}${p.homeManagerNote ?? ""}`);
+    if (p.awayManager) lines.push(`  Trenér ${p.awayName}: ${p.awayManager}${p.awayManagerNote ?? ""}`);
     if (p.homeInterviewQuote) lines.push(`  Citát trenéra ${p.homeManager ?? "domácích"}: „${p.homeInterviewQuote}"`);
     if (p.awayInterviewQuote) lines.push(`  Citát trenéra ${p.awayManager ?? "hostů"}: „${p.awayInterviewQuote}"`);
     if (p.homeStatement) lines.push(`  Výrok trenéra ${p.homeManager ?? "domácích"} do novin: „${p.homeStatement.quote}"`);
@@ -365,6 +372,7 @@ ABSOLUTNÍ PRAVIDLA (porušení = článek k ničemu):
 - NEPREDIKUJ konkrétní výsledek čísly (nepiš "Lišov vyhraje 3:1"). Můžeš naznačit favorita.
 - Piš o tom co BUDE — zápasy se ještě nehrály. Nepiš minulým časem o nadcházejícím kole.
 - Když si nejsi jistý přiřazením, radši hráče nezmiňuj vůbec. Článek bez hráčů je lepší než článek se špatně přiřazenými hráči.
+${COACH_REPUTATION_RULE}
 
 Styl:
 - Česky, styl místního ${isPraha ? "pražského" : "okresního"} zpravodaje, 250-400 slov
