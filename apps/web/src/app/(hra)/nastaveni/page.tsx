@@ -23,9 +23,9 @@ const PREF_LABELS: { key: keyof NotifPrefs; label: string; desc: string; icon: s
   { key: "match_reminder", icon: "📋", label: "Sestava před zápasem",       desc: "Připomenutí den předem" },
   { key: "transfer",       icon: "🤝", label: "Přestupy",                   desc: "Nabídka nebo odpověď na přestup" },
   { key: "challenge",      icon: "⚡", label: "Výzvy",                      desc: "Výzva od jiného týmu" },
-  { key: "event",          icon: "🎉", label: "Sezónní eventy",             desc: "Speciální příležitosti v sezoně" },
-  { key: "season",         icon: "🏆", label: "Konec sezóny",               desc: "Postup, sestup, finální tabulka" },
-  { key: "system",         icon: "⚙️", label: "Systémové zprávy",           desc: "Technické a herní oznámení" },
+  // `event` je společný typ pro všechno ostatní: sezónní události, incidenty, sázky i hlídač.
+  // Typy `season` a `system` hra nikdy neposílá, jejich přepínače nic neřídily (skryté).
+  { key: "event",          icon: "🎉", label: "Události a ostatní",         desc: "Sezónní události, incidenty, sázky a další zprávy klubu" },
 ];
 
 const ENABLE_FAILURE_TEXT: Partial<Record<EnablePushResult, string>> = {
