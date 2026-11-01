@@ -437,6 +437,11 @@ export async function pitchPlayer(db: D1Database, teamId: string, demandId: stri
   const mine = await db.prepare("SELECT player_id FROM transfer_demand_pitches WHERE demand_id = ? AND team_id = ?")
     .bind(demandId, me.clubTeamId).all<{ player_id: string }>();
   if (mine.results.some((r) => r.player_id === playerId)) return { ok: false, error: "Tohohle hráče už jsi nabídl." };
+  {
+    const { registrationLockError } = await import("./registration-window");
+    const lock = await registrationLockError(db, [playerId]);
+    if (lock) return { ok: false, error: lock };
+  }
   if (mine.results.length >= MAX_PITCHES_PER_DEMAND) return { ok: false, error: `K jedné poptávce můžeš nabídnout nejvýš ${MAX_PITCHES_PER_DEMAND} hráče.` };
 
   const playerName = `${player.first_name} ${player.last_name}`;

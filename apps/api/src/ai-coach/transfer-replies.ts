@@ -480,12 +480,15 @@ async function executeSellerDecision(ctx: RunContext, offer: OfferRow, decision:
     const outcome = failureOutcome(res);
     if (outcome === "retry") throw new RetryLaterError(`${what}: ${res.error}`);
     if (outcome === "settled") return { executed: `${what}_settled_meanwhile`, error: res.error };
-    // Klub by prodal, jen kupující nemá na zálohu a poplatek: bez blokace kupce a bez truc hráče,
-    // ať se kupující dozví proč a může přijít znovu, až peníze bude mít.
-    const buyerCannotPay = res.reason === "buyer_funds";
-    const rej = await rejectTransferOffer(env, club.teamId, offer.id, buyerCannotPay
-      ? { message: "Dohodli bychom se, ale na zálohu a poplatek teď nemáte. Až budete mít, ozvěte se znovu.", buyerCannotPay: true }
-      : {});
+    // Klub by prodal, jen obchod teď nejde (kupující nemá na zálohu a poplatek, hráč je
+    // v registrační lhůtě): bez blokace kupce a bez truc hráče, ať se kupující dozví proč
+    // a může přijít znovu.
+    const rej = await rejectTransferOffer(env, club.teamId, offer.id,
+      res.reason === "buyer_funds"
+        ? { message: "Dohodli bychom se, ale na zálohu a poplatek teď nemáte. Až budete mít, ozvěte se znovu.", notSellersChoice: true }
+        : res.reason === "registration_window"
+          ? { message: `Dohodli bychom se, jenže ${res.error}`, notSellersChoice: true }
+          : {});
     return { executed: rej.ok ? `rejected_after_failed_${what}` : "failed", error: res.error };
   };
   if (decision.kind === "accept") {
