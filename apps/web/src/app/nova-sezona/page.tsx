@@ -11,7 +11,7 @@ interface WelcomeData {
   teamName: string;
   firstMatch: string | null;
   squadSize: number;
-  cup: { name: string; rounds: number; myStrength: number | null; bigMin: number; bigMax: number; realAvg: number } | null;
+  cup: { name: string; rounds: number; myStrength: number | null; bigMin: number; bigMax: number; realAvg: number; guests?: number } | null;
   news: { icon: string; title: string; text: string }[];
   ruleChanges?: { kind: string; label: string; change: string; note: string | null; fromThisSeason: boolean }[];
 }
@@ -74,7 +74,9 @@ export default function NovaSezonaPage() {
             <span className="font-heading font-bold">🏆 {data.cup.name}</span>: tvoje síla <b>{data.cup.myStrength ?? "?"}</b>, průměrný klub v poháru <b>{data.cup.realAvg}</b>.
             {data.cup.bigMax > 0
               ? <> Hrají i velkokluby z měst, mají sílu <b>{data.cup.bigMin}–{data.cup.bigMax}</b>.</>
-              : <> Velkokluby z měst letos nehrají, jen kluby ze soutěží.</>}
+              : (data.cup.guests ?? 0) > 0
+                ? <> Doplňuje ho {data.cup.guests} amatérských klubů z jiných okresů, aby 1. kolo hráli všichni.</>
+                : <> Velkokluby z měst letos nehrají, jen kluby ze soutěží.</>}
           </div>
         )}
 

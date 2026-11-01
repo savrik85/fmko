@@ -7057,14 +7057,16 @@ gameRouter.get("/teams/:teamId/season-welcome", async (c) => {
     .catch((e) => { logger.warn({ module: "game.ts" }, "welcome squad", e); return null; });
 
   // Pohár — síla soupeřů vs tvoje.
-  let cup: { name: string; rounds: number; myStrength: number | null; bigMin: number; bigMax: number; realAvg: number } | null = null;
+  let cup: { name: string; rounds: number; myStrength: number | null; bigMin: number; bigMax: number; realAvg: number; guests: number } | null = null;
   const cupRow = await c.env.DB.prepare("SELECT id, name, total_rounds FROM cup_competitions WHERE season_number = ? AND status = 'active' LIMIT 1").bind(seasonNumber).first<{ id: string; name: string; total_rounds: number }>()
     .catch((e) => { logger.warn({ module: "game.ts" }, "welcome cup", e); return null; });
   if (cupRow) {
     const mine = await c.env.DB.prepare("SELECT strength FROM cup_teams WHERE cup_id = ? AND team_id = ?").bind(cupRow.id, teamId).first<{ strength: number }>().catch((e) => { logger.warn({ module: "game.ts" }, "welcome cup mine", e); return null; });
     const big = await c.env.DB.prepare("SELECT MIN(strength) mn, MAX(strength) mx FROM cup_teams WHERE cup_id = ? AND is_big_club = 1").bind(cupRow.id).first<{ mn: number; mx: number }>().catch((e) => { logger.warn({ module: "game.ts" }, "welcome cup big", e); return null; });
     const real = await c.env.DB.prepare("SELECT ROUND(AVG(strength)) a FROM cup_teams WHERE cup_id = ? AND is_big_club = 0").bind(cupRow.id).first<{ a: number }>().catch((e) => { logger.warn({ module: "game.ts" }, "welcome cup real", e); return null; });
-    cup = { name: cupRow.name, rounds: cupRow.total_rounds, myStrength: mine?.strength ?? null, bigMin: big?.mn ?? 0, bigMax: big?.mx ?? 0, realAvg: real?.a ?? 0 };
+    // Hosté: amatérské kluby z jiných okresů, kterými se pavouk doplní, ať 1. kolo hrají všichni.
+    const guests = await c.env.DB.prepare("SELECT COUNT(*) n FROM cup_teams WHERE cup_id = ? AND team_id IS NULL AND is_big_club = 0").bind(cupRow.id).first<{ n: number }>().catch((e) => { logger.warn({ module: "game.ts" }, "welcome cup guests", e); return null; });
+    cup = { name: cupRow.name, rounds: cupRow.total_rounds, myStrength: mine?.strength ?? null, bigMin: big?.mn ?? 0, bigMax: big?.mx ?? 0, realAvg: real?.a ?? 0, guests: guests?.n ?? 0 };
   }
 
   const news = seasonNumber === 2 ? [
@@ -7629,6 +7631,21 @@ gameRouter.post("/admin/cup/notify-draw", async (c) => {
   const { notifyCupDraw } = await import("../cup/cup-news");
   const sent = await notifyCupDraw(c.env.DB, cup.id, round);
   return c.json({ ok: true, cupId: cup.id, round, sent });
+});
+
+// POST /api/admin/cup/redraw — přelosuje 1. kolo aktivního poháru, dokud se nehrálo (hosté,
+// ať hrají všichni), a rozešle SMS o losu. Mění data poháru: na produ jen se souhlasem.
+gameRouter.post("/admin/cup/redraw", async (c) => {
+  const cup = await c.env.DB.prepare("SELECT id FROM cup_competitions WHERE season_number = ? AND status = 'active' LIMIT 1")
+    .bind(await activeSeasonNumber(c.env.DB)).first<{ id: string }>()
+    .catch((e) => { logger.warn({ module: "game.ts" }, "aktivní pohár pro přelosování", e); return null; });
+  if (!cup) return c.json({ error: "Žádný aktivní pohár" }, 404);
+  const { redrawFirstRound } = await import("../cup/cup");
+  const r = await redrawFirstRound(c.env.DB, cup.id);
+  if (!r.ok) return c.json({ error: r.error }, 409);
+  const { notifyCupDraw } = await import("../cup/cup-news");
+  const sms = await notifyCupDraw(c.env.DB, cup.id, 1);
+  return c.json({ ...r, cupId: cup.id, sms });
 });
 
 // POST /api/admin/cup/advance — odsimuluje aktuální kolo poháru.
