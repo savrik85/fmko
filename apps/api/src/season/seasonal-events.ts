@@ -43,7 +43,8 @@ const EVENT_TEMPLATES: SeasonalEventDef[] = [
       },
       {
         id: "skip",
-        label: "Letos ne (hráči s vysokým patriotismem budou zklamaní)",
+        // Zklamání dopadne na celou kabinu (−5 morálky všem), ne jen na patrioty.
+        label: "Letos ne (kluci budou zklamaní)",
         effects: [
           { type: "morale", value: -5, description: "-5 morálka" },
         ],
@@ -569,7 +570,8 @@ const ADHOC_EVENT_POOL_PRAHA: SeasonalEventDef[] = [
     effects: [],
     choices: [
       { id: "fix", label: "Rychle uklidit", effects: [{ type: "budget", value: -1000, description: "-1 000 Kč" }] },
-      { id: "risk", label: "Nechat jak to je", effects: [{ type: "budget", value: -2000, description: "-2 000 Kč (pokuta)" }] },
+      // Pokuta je jistá, ne riziko jako u kontroly okresního svazu.
+      { id: "risk", label: "Nechat jak to je a zaplatit pokutu", effects: [{ type: "budget", value: -2000, description: "-2 000 Kč (pokuta)" }] },
       { id: "lunch", label: "Pozvat na oběd", effects: [{ type: "budget", value: -500, description: "-500 Kč" }, { type: "reputation", value: 2, description: "+2 reputace" }] },
     ],
   },
