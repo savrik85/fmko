@@ -68,6 +68,8 @@ export function FMSidebar() {
     notesUnseen,
     gremiumCount,
     betsCount,
+    pendingEvents,
+    pendingVillage,
   } = badges;
 
   const isActive = (href: string) => {
@@ -165,6 +167,9 @@ export function FMSidebar() {
                       {!expanded && item.href === "/hlasovani" && unvotedCount > 0 && (
                         <span className="absolute top-0.5 right-1 w-1.5 h-1.5 rounded-full bg-amber-500" />
                       )}
+                      {!expanded && ((item.href === "/udalosti" && pendingEvents > 0) || (item.href === "/obec" && pendingVillage > 0)) && (
+                        <span className="absolute top-0.5 right-1 w-1.5 h-1.5 rounded-full bg-amber-500" />
+                      )}
                       {expanded && (
                         <span className="text-[13px] font-medium whitespace-nowrap leading-none">
                           {item.label}
@@ -185,6 +190,12 @@ export function FMSidebar() {
                           )}
                           {item.href === "/sazky" && betsCount > 0 && (
                             <span className="ml-1.5 bg-card-red text-white text-micro font-bold px-1.5 py-0.5 rounded-full">{betsCount}</span>
+                          )}
+                          {item.href === "/udalosti" && pendingEvents > 0 && (
+                            <span className="ml-1.5 bg-amber-500 text-white text-micro font-bold px-1.5 py-0.5 rounded-full">{pendingEvents}</span>
+                          )}
+                          {item.href === "/obec" && pendingVillage > 0 && (
+                            <span className="ml-1.5 bg-amber-500 text-white text-micro font-bold px-1.5 py-0.5 rounded-full">{pendingVillage}</span>
                           )}
                         </span>
                       )}

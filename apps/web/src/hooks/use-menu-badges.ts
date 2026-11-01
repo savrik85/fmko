@@ -15,6 +15,10 @@ export interface MenuBadgesState {
   gremiumToVote: number;
   gremiumUnseenMeetings: number;
   betsCount: number;
+  /** Rozhodnutí s termínem: sezónní události a okresní akce bez odpovědi. */
+  pendingEvents: number;
+  /** Rozhodnutí obce: petice, hospoda, investice. */
+  pendingVillage: number;
   notesUnseen: boolean;
   moreBadgeCount: number;
   isLoading: boolean;
@@ -36,6 +40,8 @@ let globalState: MenuBadgesState = {
   gremiumToVote: 0,
   gremiumUnseenMeetings: 0,
   betsCount: 0,
+  pendingEvents: 0,
+  pendingVillage: 0,
   notesUnseen: false,
   moreBadgeCount: 0,
   isLoading: true,
@@ -47,6 +53,11 @@ let lastFetchTeamId: string | null = null;
 let isFetching = false;
 /** Vynucené obnovení, které přišlo během běžícího načítání, se pustí hned po něm. */
 let queuedRefresh: { teamId: string; token: string | null } | null = null;
+
+/** Součet odznaků schovaných na mobilu pod „Více“. */
+function moreCount(s: Pick<MenuBadgesState, "unvotedCount" | "gremiumCount" | "betsCount" | "incomingOffers" | "pendingEvents" | "pendingVillage" | "notesUnseen">): number {
+  return s.unvotedCount + s.gremiumCount + s.betsCount + s.incomingOffers + s.pendingEvents + s.pendingVillage + (s.notesUnseen ? 1 : 0);
+}
 
 function notifyListeners() {
   listeners.forEach((listener) => listener(globalState));
@@ -76,13 +87,14 @@ export async function fetchMenuBadges(teamId: string, token: string | null, opti
   try {
     const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
 
-    const [convsRes, offersRes, votesRes, gremiumRes, betsRes] = await Promise.allSettled([
+    const [convsRes, offersRes, votesRes, gremiumRes, betsRes, decisionsRes] = await Promise.allSettled([
       apiFetch<Array<{ unreadCount: number }>>(`/api/teams/${teamId}/conversations`),
       // Jen pole pro odznak. Plné /offers je těžké a při zápasovém kole padalo.
       apiFetch<OffersPayload>(`/api/teams/${teamId}/menu-badges/offers`),
       apiFetch<Array<{ status: string; my_answer: string | null }>>("/api/votes", { headers }),
       apiFetch<{ toVote: number; unseenMeetings: number }>(`/api/teams/${teamId}/competition/pending`),
       apiFetch<{ unseen: number }>(`/api/teams/${teamId}/bets/pending`),
+      apiFetch<{ events: number; village: number }>(`/api/teams/${teamId}/pending-decisions`),
     ]);
 
     const unreadMessages =
@@ -109,10 +121,14 @@ export async function fetchMenuBadges(teamId: string, token: string | null, opti
     const betsCount =
       betsRes.status === "fulfilled" ? betsRes.value.unseen ?? 0 : globalState.betsCount;
 
+    const pendingEvents =
+      decisionsRes.status === "fulfilled" ? decisionsRes.value.events ?? 0 : globalState.pendingEvents;
+    const pendingVillage =
+      decisionsRes.status === "fulfilled" ? decisionsRes.value.village ?? 0 : globalState.pendingVillage;
+
     const notesUnseen = hasUnseenNotes();
 
-    const moreBadgeCount =
-      unvotedCount + gremiumCount + betsCount + incomingOffers + (notesUnseen ? 1 : 0);
+    const moreBadgeCount = moreCount({ unvotedCount, gremiumCount, betsCount, incomingOffers, pendingEvents, pendingVillage, notesUnseen });
 
     globalState = {
       unreadMessages,
@@ -122,6 +138,8 @@ export async function fetchMenuBadges(teamId: string, token: string | null, opti
       gremiumToVote: toVote,
       gremiumUnseenMeetings: unseenMeetings,
       betsCount,
+      pendingEvents,
+      pendingVillage,
       notesUnseen,
       moreBadgeCount,
       isLoading: false,
@@ -144,12 +162,7 @@ export async function fetchMenuBadges(teamId: string, token: string | null, opti
  */
 export function setIncomingOffersCount(count: number) {
   if (globalState.incomingOffers === count) return;
-  const moreBadgeCount =
-    globalState.unvotedCount +
-    globalState.gremiumCount +
-    globalState.betsCount +
-    count +
-    (globalState.notesUnseen ? 1 : 0);
+  const moreBadgeCount = moreCount({ ...globalState, incomingOffers: count });
   globalState = { ...globalState, incomingOffers: count, moreBadgeCount };
   notifyListeners();
 }

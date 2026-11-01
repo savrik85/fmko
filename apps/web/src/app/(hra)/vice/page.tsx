@@ -91,6 +91,12 @@ function getTileBadge(href: string, badges: MenuBadgesState): TileBadge | null {
   if (href === "/soutez" && badges.gremiumCount > 0) {
     return { type: "count", count: badges.gremiumCount, bg: "bg-card-red" };
   }
+  if (href === "/udalosti" && badges.pendingEvents > 0) {
+    return { type: "count", count: badges.pendingEvents, bg: "bg-amber-500" };
+  }
+  if (href === "/obec" && badges.pendingVillage > 0) {
+    return { type: "count", count: badges.pendingVillage, bg: "bg-amber-500" };
+  }
   if (href === "/hlasovani" && badges.unvotedCount > 0) {
     return { type: "count", count: badges.unvotedCount, bg: "bg-amber-500" };
   }
