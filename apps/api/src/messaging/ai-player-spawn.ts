@@ -11,6 +11,7 @@
  *                            po odpovědi trenéra (generuje další reply nebo resolution).
  */
 
+import { pushPhoneMessage, type OptionalPushKeys } from "../community/phone-push";
 import { transferTalkFrom } from "../transfers/unrest-reasons";
 import { nactiZnalostiHrace } from "../incidents/znalosti-db";
 import { nazevSituace } from "../incidents/situace";
@@ -460,7 +461,7 @@ export async function getOrCreatePlayerConversation(
  */
 export async function applyAiPlayerThreads(
   db: D1Database,
-  env: { GEMINI_API_KEY?: string; CACHE_KV?: KVNamespace; AI?: Ai; SEED_DATA?: R2Bucket },
+  env: { GEMINI_API_KEY?: string; CACHE_KV?: KVNamespace; AI?: Ai; SEED_DATA?: R2Bucket } & OptionalPushKeys,
   /** Ruční spuštění z adminu: jen jeden tým, bez losu a cooldownu, volitelně rovnou hlasovka a pevné téma. */
   manual?: { teamId: string; forceVoice?: boolean; scenarioId?: string; dryRun?: boolean; drunk?: boolean },
 ): Promise<{ spawned: number; skipped: number; draft?: MessageDraft }> {
@@ -529,7 +530,7 @@ export async function applyAiPlayerThreads(
  */
 async function spawnForTeam(
   db: D1Database,
-  env: { GEMINI_API_KEY?: string; CACHE_KV?: KVNamespace; SEED_DATA?: R2Bucket; AI?: Ai },
+  env: { GEMINI_API_KEY?: string; CACHE_KV?: KVNamespace; SEED_DATA?: R2Bucket; AI?: Ai } & OptionalPushKeys,
   teamId: string,
   opts: { forceVoice?: boolean; forcedScenario?: AiScenario | null; dryRun?: boolean; drunk?: boolean } = {},
 ): Promise<{ sent: boolean; draft: MessageDraft } | null> {
@@ -777,6 +778,10 @@ async function spawnForTeam(
   }
 
   logger.info({ module: "ai-player-spawn", teamId }, `spawned AI thread: ${player.firstName} ${player.lastName} → ${scenario.id}${voice ? ` (hlasovka ${voice.durationSec} s, ${voice.voice})` : ""}${photo ? " (fotka)" : ""}`);
+  await pushPhoneMessage(db, env, {
+    teamId, convId, sender: senderName,
+    text: photo ? `📷 ${initialBody}` : voice ? "🎤 Hlasová zpráva" : initialBody,
+  });
   return { sent: true, draft };
 }
 

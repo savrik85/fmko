@@ -13,6 +13,7 @@
  * dělá (chat-kontext.ts): nespí a u „ozvu se pak" ani nestojí v práci.
  */
 
+import { pushPhoneMessage, type OptionalPushKeys } from "../community/phone-push";
 import { logger } from "../lib/logger";
 import { seedFromString } from "../lib/seed";
 import { smenaProPovolani } from "../generators/occupations";
@@ -178,7 +179,7 @@ async function postponeIfBusy(db: D1Database, row: FollowUpRow, now: Date): Prom
   return null;
 }
 
-export interface FollowUpEnv {
+export interface FollowUpEnv extends OptionalPushKeys {
   GEMINI_API_KEY?: string;
   CACHE_KV?: KVNamespace;
   AI?: Ai;
@@ -294,6 +295,7 @@ async function deliverOne(db: D1Database, env: FollowUpEnv, row: FollowUpRow, no
   }
   await db.batch(stmts);
   logger.info({ module: M, teamId: row.team_id }, `odložená zpráva ${row.kind}: ${player.firstName} ${player.lastName}${photo ? " (fotka)" : ""}`);
+  await pushPhoneMessage(db, env, { teamId: row.team_id, convId: row.conversation_id, sender: `${player.firstName} ${player.lastName}`, text: generated.body });
   return "delivered";
 }
 

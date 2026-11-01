@@ -7,6 +7,7 @@
 
 import type { Bindings } from "../index";
 import { logger } from "../lib/logger";
+import { pushEnvOf, type OptionalPushKeys } from "../community/phone-push";
 import { aiContextFromEnv, generateText } from "../lib/ai-provider";
 import { parseModelJson } from "../ai-coach/llm";
 import { createRng, cryptoSeed, type Rng } from "../generators/rng";
@@ -26,7 +27,7 @@ const M = "district-event";
 const MAX_ATTEMPTS = 3;
 export const EVENT_PARTICIPANT_PREFIX = "de-";
 
-type Env = Pick<Bindings, "DB" | "CACHE_KV" | "GEMINI_API_KEY" | "AI" | "AI_GATEWAY_URL">;
+type Env = Pick<Bindings, "DB" | "CACHE_KV" | "GEMINI_API_KEY" | "AI" | "AI_GATEWAY_URL"> & OptionalPushKeys;
 
 export interface AnnounceInput {
   district: string;
@@ -84,8 +85,10 @@ export async function announceDistrictEvent(env: Env, input: AnnounceInput): Pro
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     ).bind(eventId, input.district, input.title, input.place, input.description, invitation, eventDate, season),
   ];
+  const convIds = new Map<string, string>();
   for (const t of teams) {
     const convId = crypto.randomUUID();
+    convIds.set(t.id, convId);
     stmts.push(
       db.prepare(
         `INSERT INTO conversations (id, team_id, type, title, participant_id, ai_thread_active, pinned, unread_count, last_message_text, last_message_at, created_at)
@@ -100,7 +103,40 @@ export async function announceDistrictEvent(env: Env, input: AnnounceInput): Pro
   }
   await db.batch(stmts);
   logger.info({ module: M }, `ohlášena akce ${sender} (${input.district}) na ${eventDate}, pozváno ${teams.length} klubů`);
+
+  // Pozvánka dřív ležela jen v Telefonu a 9 z 22 klubů na pouť neodpovědělo: push hned.
+  const { createNotification } = await import("../community/notifications");
+  const pushEnv = pushEnvOf(db, env);
+  for (const t of teams) {
+    await createNotification(db, t.id, "event", `🎪 ${input.title}`,
+      `Pozvánka (${input.place}) je v Telefonu. Akce je zítra, odpověď stihni do večera.`,
+      `/telefon/${convIds.get(t.id)}`, pushEnv,
+    ).catch((e) => logger.warn({ module: M, teamId: t.id }, "upozornění na okresní akci", e));
+  }
   return { eventId, invited: teams.length, invitation };
+}
+
+/**
+ * Večerní připomínka (19:00 v Praze, hodinový běh Telefonu) těm, kdo na pozvánku ještě
+ * neodpověděli. Akce se vyhodnotí v nočním ticku, takže je to poslední šance.
+ */
+export async function remindUnansweredDistrictEvents(db: D1Database, env: OptionalPushKeys): Promise<number> {
+  const rows = await db.prepare(
+    `SELECT dt.team_id, dt.conv_id, e.title, e.place FROM district_event_teams dt
+       JOIN district_events e ON e.id = dt.event_id
+      WHERE e.status = 'announced' AND dt.choice IS NULL`,
+  ).all<{ team_id: string; conv_id: string; title: string; place: string }>()
+    .catch((e) => { logger.warn({ module: M }, "nezodpovězené pozvánky", e); return { results: [] as Array<{ team_id: string; conv_id: string; title: string; place: string }> }; });
+  const { createNotification } = await import("../community/notifications");
+  const pushEnv = pushEnvOf(db, env);
+  let sent = 0;
+  for (const r of rows.results) {
+    await createNotification(db, r.team_id, "event", `🎪 Dnes naposled: ${r.title}`,
+      `Akce (${r.place}) je zítra a od tebe zatím nic. Odpověz v Telefonu ještě dnes.`, `/telefon/${r.conv_id}`, pushEnv,
+    ).then(() => { sent++; })
+      .catch((e) => logger.warn({ module: M, teamId: r.team_id }, "připomínka okresní akce", e));
+  }
+  return sent;
 }
 
 async function postSystemMessage(

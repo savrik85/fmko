@@ -494,6 +494,13 @@ const PETITION_TEMPLATES: PetitionTemplate[] = [
   },
 ];
 
+/** Nové rozhodnutí obce pro trenéra (upozornění, `village/decision-alerts.ts`). */
+export interface CreatedVillageDecision {
+  teamId: string;
+  title: string;
+  expiresAt: string;
+}
+
 /**
  * Vygeneruje 1 petici pro každý lidský tým, který nemá aktivní petici a
  * od minulé uplynulo > 25 dní. Idempotentní per (team_id, week).
@@ -501,7 +508,7 @@ const PETITION_TEMPLATES: PetitionTemplate[] = [
 export async function generateMonthlyPetitions(
   db: D1Database,
   gameDate: string,
-): Promise<{ generated: number }> {
+): Promise<{ generated: number; created: CreatedVillageDecision[] }> {
   const eligibleTeams = await db.prepare(
     `SELECT t.id as team_id, t.village_id FROM teams t
      WHERE t.user_id != 'ai' AND t.parent_team_id IS NULL
@@ -519,6 +526,7 @@ export async function generateMonthlyPetitions(
   // Herní čas — expirace se porovnává proti gameDate, ne proti reálnému datu.
   const expiresAt = gameExpiry(gameDate, 14); // 14 herních dní na odpověď
 
+  const created: CreatedVillageDecision[] = [];
   for (const t of eligibleTeams.results ?? []) {
     const seed = hashSeed(`${t.team_id}|${gameDate.slice(0, 7)}`);
     const rng = createRng(seed);
@@ -536,12 +544,13 @@ export async function generateMonthlyPetitions(
         expiresAt, gameDate,
       ).run();
       generated++;
+      created.push({ teamId: t.team_id, title: template.title, expiresAt });
     } catch (e) {
       logger.warn({ module: "village-processor" }, `insert petition for team ${t.team_id}`, e);
     }
   }
 
-  return { generated };
+  return { generated, created };
 }
 
 interface InvestmentTemplate {
@@ -588,7 +597,8 @@ const INVESTMENT_TEMPLATES: InvestmentTemplate[] = [
 export async function generateMonthlyInvestments(
   db: D1Database,
   gameDate: string,
-): Promise<{ generated: number }> {
+): Promise<{ generated: number; created: CreatedVillageDecision[] }> {
+  const created: CreatedVillageDecision[] = [];
   // Pro každou obec najdi top-favor lidský tým a zkontroluj jestli má favor ≥ threshold
   const villages = await db.prepare(
     `SELECT DISTINCT v.id FROM villages v
@@ -643,6 +653,7 @@ export async function generateMonthlyInvestments(
         expiresAt, template.politicalCost, gameDate,
       ).run();
       generated++;
+      created.push({ teamId: topTeam.team_id, title: template.title, expiresAt });
 
       // Audit history
       const teamName = await db.prepare("SELECT name FROM teams WHERE id = ?")
@@ -660,7 +671,7 @@ export async function generateMonthlyInvestments(
       logger.warn({ module: "village-processor" }, `insert investment for ${topTeam.team_id}`, e);
     }
   }
-  return { generated };
+  return { generated, created };
 }
 
 /**
@@ -670,7 +681,8 @@ export async function generateMonthlyInvestments(
 export async function generatePubEncounters(
   db: D1Database,
   gameDate: string,
-): Promise<{ generated: number }> {
+): Promise<{ generated: number; created: CreatedVillageDecision[] }> {
+  const created: CreatedVillageDecision[] = [];
   const teams = await db.prepare(
     `SELECT t.id as team_id, t.village_id FROM teams t
      WHERE t.user_id != 'ai' AND t.parent_team_id IS NULL
@@ -690,8 +702,8 @@ export async function generatePubEncounters(
 
   for (const t of teams.results ?? []) {
     const officials = await db.prepare(
-      "SELECT id, personality FROM village_officials WHERE village_id = ?"
-    ).bind(t.village_id).all<{ id: string; personality: string }>();
+      "SELECT id, personality, first_name, last_name FROM village_officials WHERE village_id = ?"
+    ).bind(t.village_id).all<{ id: string; personality: string; first_name: string | null; last_name: string | null }>();
     if ((officials.results ?? []).length === 0) continue;
 
     const seed = hashSeed(`${t.team_id}|pub|${gameDate.slice(0, 10)}`);
@@ -717,11 +729,14 @@ export async function generatePubEncounters(
          VALUES (?, ?, ?, ?, 'active', ?, ?)`
       ).bind(id, t.village_id, t.team_id, officialId, expiresAt, gameDate).run();
       generated++;
+      const official = officials.results?.find((o) => o.id === officialId);
+      const who = official ? `${official.first_name ?? ""} ${official.last_name ?? ""}`.trim() : "";
+      created.push({ teamId: t.team_id, title: who ? `${who} sedí v hospodě` : "Zastupitel sedí v hospodě", expiresAt });
     } catch (e) {
       logger.warn({ module: "village-processor" }, `insert pub encounter for team ${t.team_id}`, e);
     }
   }
-  return { generated };
+  return { generated, created };
 }
 
 interface CrisisEvent {
