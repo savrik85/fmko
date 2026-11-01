@@ -7559,6 +7559,20 @@ gameRouter.post("/admin/phone-hourly", async (c) => {
   return c.json({ ok: true, ...r });
 });
 
+// POST /api/admin/cup/notify-draw?round= — SMS o losu kola lidským klubům (bez round aktuální kolo).
+// Pro kolo vylosované dřív, než se SMS o losu posílaly. Opakované volání pošle SMS znovu.
+gameRouter.post("/admin/cup/notify-draw", async (c) => {
+  const cup = await c.env.DB.prepare("SELECT id, current_round FROM cup_competitions WHERE season_number = ? AND status = 'active' LIMIT 1")
+    .bind(await activeSeasonNumber(c.env.DB)).first<{ id: string; current_round: number }>()
+    .catch((e) => { logger.warn({ module: "game.ts" }, "aktivní pohár pro los", e); return null; });
+  if (!cup) return c.json({ error: "Žádný aktivní pohár" }, 404);
+  const round = Number(c.req.query("round") ?? cup.current_round);
+  if (!Number.isInteger(round) || round < 1) return c.json({ error: "Neplatné kolo" }, 400);
+  const { notifyCupDraw } = await import("../cup/cup-news");
+  const sent = await notifyCupDraw(c.env.DB, cup.id, round);
+  return c.json({ ok: true, cupId: cup.id, round, sent });
+});
+
 // POST /api/admin/cup/advance — odsimuluje aktuální kolo poháru.
 gameRouter.post("/admin/cup/advance", async (c) => {
   const cup = await c.env.DB.prepare("SELECT id FROM cup_competitions WHERE season_number = ? AND status = 'active' LIMIT 1")
@@ -7566,7 +7580,7 @@ gameRouter.post("/admin/cup/advance", async (c) => {
     .catch((e) => { logger.warn({ module: "game.ts" }, "load active cup", e); return null; });
   if (!cup) return c.json({ error: "Žádný aktivní pohár" }, 404);
   const { simulateCupRound } = await import("../cup/cup");
-  const r = await simulateCupRound(c.env.DB, cup.id);
+  const r = await simulateCupRound(c.env.DB, cup.id, c.env);
   return c.json(r);
 });
 

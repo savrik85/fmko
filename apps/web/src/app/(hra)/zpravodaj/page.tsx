@@ -268,7 +268,8 @@ export default function NewsPage() {
     ]).then((parts) => {
       const seen = new Set<string>();
       // Reportáž z okresní akce vychází v každé lize okresu zvlášť (jiné id); ukázat ji jen jednou.
-      const key = (a: Article) => (a.type === "district_event" ? `district_event:${a.headline}` : a.id);
+      // Totéž platí pro článek o pohárovém kole: vychází v každé lize, odkud někdo hrál.
+      const key = (a: Article) => (a.type === "district_event" || a.type === "cup_round" ? `${a.type}:${a.headline}` : a.id);
       const merged = parts.flatMap(({ d, label: lab }) => d.articles.map((a) => ({ ...a, leagueLabel: lab })))
         .filter((a) => (seen.has(key(a)) ? false : (seen.add(key(a)), true)))
         .sort((x, y) => (y.date ?? "").localeCompare(x.date ?? ""));
@@ -388,11 +389,15 @@ export default function NewsPage() {
   const districtEventStory = articles.find(
     (a) => a.type === "district_event" && Date.now() - new Date(a.date).getTime() < 7 * 24 * 3600 * 1000,
   ) ?? null;
+  // Pohárové kolo: vlastní rubrika nahoře na tři dny, pak spadne do drobných zpráv.
+  const cupStory = articles.find(
+    (a) => a.type === "cup_round" && Date.now() - new Date(a.date).getTime() < 3 * 24 * 3600 * 1000,
+  ) ?? null;
   const leadStory = [openerArticles[0], gremiumArticles[0], previewArticles[0], aiReportArticles[0], matchArticles[0]]
     .filter(Boolean)
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]
     || standingArticles[0]
-    || articles.find((a) => !["ultras_report", "round_summary"].includes(a.type) && a.id !== districtEventStory?.id);
+    || articles.find((a) => !["ultras_report", "round_summary"].includes(a.type) && a.id !== districtEventStory?.id && a.id !== cupStory?.id);
   // Druhý hlavní článek — kolem přelomu sezóny je to ohlédnutí za sezónou (season_wrap),
   // jinak ai_report (podle toho, co není lead).
   const secondaryStory =
@@ -402,7 +407,7 @@ export default function NewsPage() {
   // Ostatní drobnosti — bez typů z hlavních sekcí a bez duplicit s lead/secondary (podle id)
   const otherArticles = articles.filter(
     (a) => !["match", "round_results", "round_summary", "standing", "ai_report", "matchday_preview", "promotion", "transfer", "celebrity_arrival", "celebrity_signing", "interview", "player_interview", "post_match_interview", "ultras_report", "governance_minutes"].includes(a.type)
-      && a.id !== leadStory?.id && a.id !== secondaryStory?.id && a.id !== districtEventStory?.id,
+      && a.id !== leadStory?.id && a.id !== secondaryStory?.id && a.id !== districtEventStory?.id && a.id !== cupStory?.id,
   );
   const miscArticles = otherArticles;
 
@@ -481,6 +486,21 @@ export default function NewsPage() {
               <div className="flex items-center justify-center gap-3 mt-4">
                 <span className="text-micro text-muted italic">{timeAgo(districtEventStory.date)}</span>
                 <ShareButton articleId={districtEventStory.id} />
+              </div>
+            </section>
+          )}
+
+          {/* ═══ Pohár: výsledky dohraného kola ═══ */}
+          {cupStory && (
+            <section id={`news-${cupStory.id}`} className="border-b border-ink/20 pb-6">
+              <Kicker>{rubrikaProTyp(cupStory.type)}</Kicker>
+              <h2 className="np-titulek text-2xl sm:text-3xl text-center mb-3">{cupStory.headline}</h2>
+              <div className="np-text np-sloupce np-sloupce-2 text-[15px] mt-3">
+                <NovinoveOdstavce body={cupStory.body} />
+              </div>
+              <div className="flex items-center justify-center gap-3 mt-4">
+                <span className="text-micro text-muted italic">{timeAgo(cupStory.date)}</span>
+                <ShareButton articleId={cupStory.id} />
               </div>
             </section>
           )}
@@ -1032,6 +1052,7 @@ function rubrikaProTyp(type: string): string {
     case "match": return "Zápasová zpráva";
     case "standing": return "Tabulka";
     case "district_event": return "🎡 Z okresu";
+    case "cup_round": return "🏆 Pohár";
     default: return "Aktualita";
   }
 }
