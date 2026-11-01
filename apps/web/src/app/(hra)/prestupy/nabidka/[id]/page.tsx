@@ -171,43 +171,47 @@ export default function OfferDetailPage() {
   const playerName = player ? `${player.first_name} ${player.last_name}` : "hráče";
 
   const accept = async (message: string) => {
-    if (await apiAction(apiFetch(`/api/teams/${teamId}/offers/${offer.id}/accept`, {
+    await apiAction(apiFetch(`/api/teams/${teamId}/offers/${offer.id}/accept`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message: message || undefined }),
-    }), "Přijetí nabídky se nezdařilo")) {
-      await refresh();
-    }
+    }), "Přijetí nabídky se nezdařilo");
+    // I po chybě znovu načíst: nabídku mohla mezitím vyřídit druhá strana nebo jiné okno
+    // a stránka by dál ukazovala tlačítka ke stavu, který už neplatí.
+    await refresh();
   };
 
   const counter = async (amount: number, message: string, counterTerms: TermsValue | null) => {
-    if (await apiAction(apiFetch(`/api/teams/${teamId}/offers/${offer.id}/counter`, {
+    await apiAction(apiFetch(`/api/teams/${teamId}/offers/${offer.id}/counter`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ amount, message: message || undefined, ...(counterTerms ?? {}) }),
-    }), "Protinabídka se nezdařila")) {
-      await refresh();
-    }
+    }), "Protinabídka se nezdařila");
+    // I po chybě znovu načíst: nabídku mohla mezitím vyřídit druhá strana nebo jiné okno
+    // a stránka by dál ukazovala tlačítka ke stavu, který už neplatí.
+    await refresh();
   };
 
   const reject = async (message: string) => {
-    if (await apiAction(apiFetch(`/api/teams/${teamId}/offers/${offer.id}/reject`, {
+    await apiAction(apiFetch(`/api/teams/${teamId}/offers/${offer.id}/reject`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message: message || undefined }),
-    }), "Odmítnutí se nezdařilo")) {
-      await refresh();
-    }
+    }), "Odmítnutí se nezdařilo");
+    // I po chybě znovu načíst: nabídku mohla mezitím vyřídit druhá strana nebo jiné okno
+    // a stránka by dál ukazovala tlačítka ke stavu, který už neplatí.
+    await refresh();
   };
 
   const withdraw = async (message: string) => {
-    if (await apiAction(apiFetch(`/api/teams/${teamId}/offers/${offer.id}`, {
+    await apiAction(apiFetch(`/api/teams/${teamId}/offers/${offer.id}`, {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message: message || undefined }),
-    }), "Stažení se nezdařilo")) {
-      await refresh();
-    }
+    }), "Stažení se nezdařilo");
+    // I po chybě znovu načíst: nabídku mohla mezitím vyřídit druhá strana nebo jiné okno
+    // a stránka by dál ukazovala tlačítka ke stavu, který už neplatí.
+    await refresh();
   };
 
   const defaultCounterAmount = role === "seller"
