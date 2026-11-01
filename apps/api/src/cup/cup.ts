@@ -136,8 +136,22 @@ export function secondRoundOrder(winnersByPos: string[], byeTeamIds: string[]): 
 }
 
 /**
+ * Kdo dostane volný los do 2. kola: rozhodne los, ne síla. Dřív je dostávalo
+ * nejsilnějších osm klubů, takže silní měli kolo zdarma a slabší hráli o zápas víc
+ * (uživatel 11-01: „losy losem“).
+ */
+export function pickByeTeamIds(teamIds: readonly string[], byes: number, rng: Rng): Set<string> {
+  const pool = [...teamIds];
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(rng.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  return new Set(pool.slice(0, Math.max(0, byes)));
+}
+
+/**
  * Vytvoří pohár pro danou sezónu jen ze skutečných seniorských týmů (lidé i AI kluby).
- * Do mocniny dvou se nedoplňuje vymyšlenými kluby: nejsilnější týmy dostanou volný los do 2. kola.
+ * Do mocniny dvou se nedoplňuje vymyšlenými kluby: volný los do 2. kola dostanou kluby losem.
  */
 export async function createCup(db: D1Database, seasonNumber: number): Promise<{ created: boolean; cupId?: string; teams?: number; rounds?: number }> {
   const existing = await db.prepare("SELECT id FROM cup_competitions WHERE season_number = ? LIMIT 1").bind(seasonNumber).first<{ id: string }>()
@@ -160,9 +174,7 @@ export async function createCup(db: D1Database, seasonNumber: number): Promise<{
     id: crypto.randomUUID(), team_id: t.id, name: t.name, strength: t.strength, is_big_club: 0, primary_color: t.primary_color,
   }));
   const shuf = <T,>(arr: T[]): T[] => { for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(rng.random() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; } return arr; };
-  // Volný los mají nejsilnější kluby (nasazení), shodu síly rozhodne los.
-  const bySeed = shuf([...allTeams]).sort((a, b) => b.strength - a.strength);
-  const byeIds = new Set(bySeed.slice(0, byes).map((t) => t.id));
+  const byeIds = pickByeTeamIds(allTeams.map((t) => t.id), byes, rng);
   // 1. kolo: zbylé týmy proti sobě, lidské a AI kluby se losují dohromady.
   const bracketOrder = shuf(allTeams.filter((t) => !byeIds.has(t.id)));
 
@@ -1154,13 +1166,14 @@ export async function simulateCupRound(db: D1Database, cupId: string, env: Optio
   // Vygeneruj další kolo: vítěz pozice i → další kolo pozice floor(i/2), home pokud i sudé
   winnersAll.sort((a, b) => a.pos - b.pos);
   const nextByPos = new Map<number, { home?: string; away?: string }>();
-  // Po 1. kole přibudou týmy s volným losem (v 1. kole nehrály), nasazení od nejsilnějšího.
+  // Po 1. kole přibudou týmy s volným losem (v 1. kole nehrály). Pořadí podle id (náhodné uuid),
+  // ne podle síly: volný los je věc losu, nasazení silných by losování obcházelo.
   const byesRes = round === 1
     ? await db.prepare(
       `SELECT ct.id FROM cup_teams ct WHERE ct.cup_id = ?
          AND NOT EXISTS (SELECT 1 FROM cup_matches m WHERE m.cup_id = ct.cup_id AND m.round = 1
                            AND (m.home_cup_team_id = ct.id OR m.away_cup_team_id = ct.id))
-       ORDER BY ct.strength DESC, ct.id`,
+       ORDER BY ct.id`,
     ).bind(cupId).all<{ id: string }>()
       .catch((e) => { logger.error({ module: M }, "load cup byes", e); return null; })
     : { results: [] as { id: string }[] };
