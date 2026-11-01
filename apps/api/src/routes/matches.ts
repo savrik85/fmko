@@ -439,6 +439,10 @@ matchesRouter.get("/teams/:teamId/schedule", async (c) => {
 
   // Get all matches involving this team
   // LEFT JOIN na lineups (per-calendar) — pro nadcházející zobrazí explicitně uloženou sestavu
+  //
+  // Přátelák nemá kolo v kalendáři (calendar_id NULL), takže ho filtr na sezónu kalendáře
+  // dřív vyřadil celý a v Rozpisu chyběl. Patří do sezóny, když je až po posledním kole
+  // té předchozí: přípravné přáteláky v létě se tak počítají k nové sezóně.
   const result = await c.env.DB.prepare(
     `SELECT m.*,
        ht.name as home_name, ht.primary_color as home_color, ht.secondary_color as home_secondary, ht.badge_pattern as home_badge, ht.user_id as home_user_id, ht.village_id as home_village_id,
@@ -451,9 +455,15 @@ matchesRouter.get("/teams/:teamId/schedule", async (c) => {
      LEFT JOIN season_calendar sc ON m.calendar_id = sc.id
      LEFT JOIN lineups l ON l.team_id = ? AND l.calendar_id = COALESCE(m.calendar_id, m.id)
      WHERE (m.home_team_id = ? OR m.away_team_id = ?)
-       AND sc.season_number = (SELECT MAX(sc2.season_number) FROM season_calendar sc2 WHERE sc2.league_id = m.league_id)
+       AND (
+         sc.season_number = (SELECT MAX(sc2.season_number) FROM season_calendar sc2 WHERE sc2.league_id = m.league_id)
+         OR (m.calendar_id IS NULL AND m.created_at > COALESCE(
+           (SELECT MAX(sc3.scheduled_at) FROM season_calendar sc3
+             WHERE sc3.league_id = ? AND sc3.season_number < (SELECT MAX(sc4.season_number) FROM season_calendar sc4 WHERE sc4.league_id = ?)),
+           ''))
+       )
      ORDER BY COALESCE(sc.scheduled_at, m.created_at) ASC`
-  ).bind(teamId, teamId, teamId).all().catch((e) => { logger.warn({ module: "matches" }, "fetch team schedule", e); return { results: [] }; });
+  ).bind(teamId, teamId, teamId, team.league_id, team.league_id).all().catch((e) => { logger.warn({ module: "matches" }, "fetch team schedule", e); return { results: [] }; });
 
   // Default fallback — poslední user-saved lineup (použije se pro zápasy bez explicit per-calendar)
   const defaultLineup = await c.env.DB.prepare(

@@ -40,6 +40,8 @@ interface ScheduleMatch {
   isDefaultLineup?: boolean;
   defaultPresetSlot?: "A" | "B" | "C" | null;
   isLocalDerby?: boolean;
+  /** Domluvený přátelák (bez kola v kalendáři). Sestava se otevře až v den zápasu. */
+  isFriendly?: boolean;
   isCup?: boolean;
   /** Turnaj P-Mobile: neutrální půda, nejde propagovat. */
   isTournament?: boolean;
@@ -166,7 +168,7 @@ export default function SchedulePage() {
   const upcoming = matches.filter((m) => m.status !== "simulated");
   const upcomingIds = new Set(upcoming.map((m) => m.id));
 
-  const nextHome = upcoming.find((m) => m.isHome && !m.isTournament); // ligový i pohárový domácí zápas lze propagovat, turnaj ne
+  const nextHome = upcoming.find((m) => m.isHome && !m.isTournament && !m.isFriendly); // ligový i pohárový domácí zápas lze propagovat, turnaj a přátelák ne
 
   return (
     <>
@@ -296,9 +298,14 @@ function MatchRow({ match: m, myTeamId, canEditLineup }: { match: ScheduleMatch;
     : { name: m.homeName, isAi: m.homeIsAi === true, color: m.homeColor, secondary: m.homeSecondary, badge: m.homeBadge };
   const oppInitials = opp.name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase();
 
-  const isClickable = isPlayed || canEditLineup;
+  // Přátelák na pozdější den čeká jako „scheduled": sestava se mu otevře až v den zápasu.
+  const lineupLater = !isPlayed && m.isFriendly === true && m.status === "scheduled";
+  const canEdit = canEditLineup && !lineupLater;
+  const isClickable = isPlayed || canEdit;
   // Decentní info o zvolené sestavě pro nadcházející zápas
-  const lineupInfo = !isPlayed && canEditLineup
+  const lineupInfo = lineupLater
+    ? { label: "Sestava v den zápasu", color: "text-muted" }
+    : !isPlayed && canEdit
     ? (m.presetSlot
         ? { label: `Sestava ${m.presetSlot}`, color: "text-pitch-600" }
         : m.hasLineup
@@ -307,20 +314,20 @@ function MatchRow({ match: m, myTeamId, canEditLineup }: { match: ScheduleMatch;
             ? { label: m.defaultPresetSlot ? `Sestava ${m.defaultPresetSlot} (výchozí)` : "Sestava (výchozí) ✓", color: "text-muted" }
             : { label: "⚠ Bez sestavy", color: "text-card-red" })
     : null;
-  const linkLabel = isPlayed ? "Přehled" : canEditLineup ? (lineupInfo?.label ?? "Sestava") : null;
+  const linkLabel = isPlayed ? "Přehled" : canEdit ? (lineupInfo?.label ?? "Sestava") : lineupInfo?.label ?? null;
   const linkColor = isPlayed ? "text-pitch-600" : (lineupInfo?.color ?? "text-pitch-600");
   const inner = (
     <div className={`card px-3 py-3 md:px-4 shadow-lg ${m.isLocalDerby ? "border-l-4 border-l-red-600" : ""} ${isClickable ? "hover:bg-gray-50 transition-colors" : ""}`}>
       {/* Mobile layout */}
       <div className="flex md:hidden items-center gap-2">
         <div className="shrink-0 w-6 text-center text-xs text-muted font-heading">
-          {m.isLocalDerby ? <span title="Místní derby" className="text-red-600">🏘️</span> : m.isCup || m.isTournament ? <span title={m.roundName ?? "Pohár"} className="text-gold-600">🏆</span> : (m.round ? `${m.round}.` : "")}
+          {m.isFriendly ? <span title="Přátelák">🤝</span> : m.isLocalDerby ? <span title="Místní derby" className="text-red-600">🏘️</span> : m.isCup || m.isTournament ? <span title={m.roundName ?? "Pohár"} className="text-gold-600">🏆</span> : (m.round ? `${m.round}.` : "")}
         </div>
         <BadgePreview primary={opp.color} secondary={opp.secondary} pattern={opp.badge as BadgePattern}
           initials={oppInitials} size={22} />
         <div className="flex-1 min-w-0">
           <div className="text-sm font-heading font-bold truncate"><TeamName name={opp.name} isAi={opp.isAi} /></div>
-          <div className="text-micro text-muted font-heading">{m.isTournament ? m.roundName : m.isHome ? "doma" : "venku"}</div>
+          <div className="text-micro text-muted font-heading">{m.isTournament ? m.roundName : m.isFriendly ? (m.isHome ? "přátelák doma" : "přátelák venku") : m.isHome ? "doma" : "venku"}</div>
         </div>
         {isPlayed ? (
           <>
@@ -340,7 +347,9 @@ function MatchRow({ match: m, myTeamId, canEditLineup }: { match: ScheduleMatch;
       {/* Desktop layout */}
       <div className="hidden md:flex items-center gap-3">
         <div className="shrink-0 w-8 text-center">
-          {m.isLocalDerby ? (
+          {m.isFriendly ? (
+            <div className="text-sm" title="Přátelák">🤝</div>
+          ) : m.isLocalDerby ? (
             <div className="text-sm text-red-600" title="Místní derby">🏘️</div>
           ) : m.isCup || m.isTournament ? (
             <div className="text-sm text-gold-600" title={m.roundName ?? "Pohár"}>🏆</div>
@@ -396,7 +405,7 @@ function MatchRow({ match: m, myTeamId, canEditLineup }: { match: ScheduleMatch;
 
   // Odehraný zápas (i pohárový — má vlastní detail endpoint) → detail zápasu
   if (isPlayed) return <Link href={`/zapas/${m.id}`}>{inner}</Link>;
-  if (canEditLineup) {
+  if (canEdit) {
     // Pro friendly (calendarId=null) i pohár použij m.id/calendarId — BE next-match to mapuje jako calendarId
     const switchId = m.calendarId ?? m.id;
     return <Link href={`/zapas?calendarId=${switchId}`}>{inner}</Link>;
