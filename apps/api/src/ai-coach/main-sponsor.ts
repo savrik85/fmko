@@ -201,6 +201,23 @@ export async function maybeSignStadiumSponsor(
   return maybeSignSponsor(db, teamId, profile, "stadium", opts);
 }
 
+/**
+ * Firmy, které už dávají jméno stadionu jinému klubu okresu. Člověku se název stadionu sdílet
+ * smí, AI klub si takovou firmu ale nevybere: model bere největší firmu okresu a bez tohohle
+ * by po jediném pondělí hrálo osm pražských klubů v „Rohlík Areně" a osm budějovických
+ * v „E.ON Areně" (pondělní správa nad kopií produ 1. 11. 2026).
+ */
+async function stadiumNamedElsewhereIds(db: D1Database, district: string, teamId: string): Promise<Set<number>> {
+  const rows = await db.prepare(
+    `SELECT DISTINCT sc.sponsor_id AS id FROM sponsor_contracts sc
+       JOIN teams t ON t.id = sc.team_id
+       JOIN villages v ON v.id = t.village_id
+      WHERE sc.category = 'stadium' AND sc.status = 'active' AND sc.sponsor_id IS NOT NULL
+        AND sc.team_id != ? AND v.district = ?`,
+  ).bind(teamId, district).all<{ id: number }>();
+  return new Set(rows.results.map((r) => r.id));
+}
+
 async function maybeSignSponsor(
   db: D1Database, teamId: string, profile: AiCoachProfile, category: NegotiationCategory, opts: MainSponsorOpts,
 ): Promise<MainSponsorResult> {
@@ -223,14 +240,19 @@ async function maybeSignSponsor(
   const favors = await getFavorsForTeam(db, teamId);
   // Hlavní sponzor jiného klubu a přednostní jednání s jiným klubem jedním dotazem (stejné
   // pravidlo jako mainSponsorBlock); zbytek pravidel ověří negotiationAvailability níž.
-  // Název stadionu exkluzivní není (stadion se sdílet smí).
+  // Název stadionu exkluzivní není (člověk ho sdílet smí), AI klub si ale firmu, která už
+  // jmenuje stadion jiného klubu okresu, nevybere (stadiumNamedElsewhereIds).
   const blocked = category === "main"
     ? await blockedMainSponsorIds(db, team.district, teamId, season)
       .catch((e) => {
         logger.warn({ module: M, teamId }, "obsazené firmy okresu", e);
         return new Set<number>();
       })
-    : new Set<number>();
+    : await stadiumNamedElsewhereIds(db, team.district, teamId)
+      .catch((e) => {
+        logger.warn({ module: M, teamId }, "firmy se jménem jiného stadionu okresu", e);
+        return new Set<number>();
+      });
   const pool = rows.results.filter((r) => !blocked.has(r.id));
   const byId = new Map(pool.map((r) => [r.id, r]));
   const sponsorsOf = (ids: number[]): NegotiationSponsor[] => ids.flatMap((id) => byId.get(id) ?? []);

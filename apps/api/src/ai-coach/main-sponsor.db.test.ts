@@ -692,6 +692,22 @@ describe("název stadionu AI klubu", () => {
     expect(json<Record<string, unknown>>(turns[1].executed)).toMatchObject({ result: "signed", sleeveLogo: true });
   }, 60_000);
 
+  it("firma, která už jmenuje stadion jiného klubu okresu, v nabídce není, ani když ji model napíše", async () => {
+    // Lidský klub hraje v „Pekárna Kubát Areně". Člověku se název sdílet smí, AI klub druhou
+    // arénu stejné firmy nechce: bez toho by velká firma pojmenovala půlku stadionů v lize.
+    await db.prepare(
+      `INSERT INTO sponsor_contracts (id, team_id, sponsor_name, sponsor_type, monthly_amount, seasons_total, seasons_remaining, category, sponsor_id, negotiation_id)
+       VALUES ('c-human-stadium', 'human', 'Pekárna Kubát Arena', 'bakery', 3000, 2, 2, 'stadium', ?, 'n-human-stadium')`,
+    ).bind(BAKERY).run();
+    const ai = fakeAi(choosing("Pekárna Kubát"));
+    await maybeSignStadiumSponsor(db, TEAM, PROFILE, { ai: aiEnv(ai), mode: "shadow" });
+
+    const choiceCall = ai.calls.find((c) => c.schemaName === "stadium_sponsor");
+    expect(choiceCall?.user).not.toContain("Pekárna Kubát");
+    expect(choiceCall?.user).toContain("Pivovar Testov");
+    await db.prepare("DELETE FROM sponsor_contracts WHERE id = 'c-human-stadium'").run();
+  }, 60_000);
+
   it("klub se sponzorem stadionu nic neřeší: model se neptá", async () => {
     await db.prepare(
       `INSERT INTO sponsor_contracts (id, team_id, sponsor_name, sponsor_type, monthly_amount, seasons_total, seasons_remaining, category, sponsor_id, negotiation_id)
