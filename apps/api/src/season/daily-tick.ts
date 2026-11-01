@@ -17,6 +17,7 @@ import { overallRatingFromFlat } from "../skills/generator";
 import { injuryPronenessOf } from "../injuries/proneness";
 import { isBodyType } from "../generators/physicals";
 import { injuryReturnCondition } from "../injuries/injury-generator";
+import { maintainU21Pitches, U21_TEAMS_SQL } from "../stadium/u21-groundskeeper";
 
 export interface DailyTickEvent {
   type: "training" | "training_skipped" | "recovery" | "injury_healed" | "pitch" | "morale" | "match" | "day" | "loan_return";
@@ -811,11 +812,12 @@ export async function executeDailyTick(
   // Pitch degradation
   // Kluby se sekačkou (mower) jedou vlastním průchodem níž — tady se vynechají,
   // stejný idiom jako u grilu. Bez toho by jim trávník klesal dvakrát.
+  // U21 hřiště drží správce (`stadium/u21-groundskeeper.ts`), denní úbytek se jim nepočítá.
   await env.DB.prepare(
-    "UPDATE stadiums SET pitch_condition = MAX(5, pitch_condition - 1) WHERE pitch_type = 'natural' AND team_id NOT IN (SELECT team_id FROM equipment WHERE mower > 0)"
+    `UPDATE stadiums SET pitch_condition = MAX(5, pitch_condition - 1) WHERE pitch_type = 'natural' AND team_id NOT IN (SELECT team_id FROM equipment WHERE mower > 0) AND team_id NOT IN (${U21_TEAMS_SQL})`
   ).run();
   await env.DB.prepare(
-    "UPDATE stadiums SET pitch_condition = MAX(10, pitch_condition - 1) WHERE pitch_type = 'hybrid' AND (ABS(RANDOM()) % 2 = 0) AND team_id NOT IN (SELECT team_id FROM equipment WHERE mower > 0)"
+    `UPDATE stadiums SET pitch_condition = MAX(10, pitch_condition - 1) WHERE pitch_type = 'hybrid' AND (ABS(RANDOM()) % 2 = 0) AND team_id NOT IN (SELECT team_id FROM equipment WHERE mower > 0) AND team_id NOT IN (${U21_TEAMS_SQL})`
   ).run();
 
   // Vlhkost půdy podle počasí DNEŠNÍHO dne, ne jen po zápase.
@@ -918,6 +920,14 @@ export async function executeDailyTick(
     }
   } catch (e) {
     logger.warn({ module: "daily-tick" }, "mower pitch care", e);
+  }
+
+  // Správce U21 hřiště: až po mrazu a sekačce, ať den končí spraveným trávníkem.
+  try {
+    const maintained = await maintainU21Pitches(env.DB);
+    if (maintained > 0) events.push({ type: "pitch", description: `Správce U21 hřišť dnes pracoval na ${maintained}` });
+  } catch (e) {
+    logger.warn({ module: "daily-tick" }, "spravce u21 hriste", e);
   }
 
   // Equipment condition degradation (slow — 1-2 points per day for used items).
