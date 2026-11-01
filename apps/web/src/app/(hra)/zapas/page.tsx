@@ -485,7 +485,10 @@ function MatchPage() {
     sel[slot] = playerId;
     setSelected(sel);
     if (benchIds?.includes(playerId)) {
-      setBenchIds(outgoing
+      // Vystřídaný už na lavičce být může: automat ho při změně rozestavení nebo náhradě
+      // omluveného postavil do základu a z lavičky ho nevyřadil. Podruhé ho tam nepsat,
+      // jinak uložení spadne na „Na lavičce je někdo dvakrát".
+      setBenchIds(outgoing && !benchIds.includes(outgoing)
         ? benchIds.map((id) => (id === playerId ? outgoing : id))
         : benchIds.filter((id) => id !== playerId));
     }

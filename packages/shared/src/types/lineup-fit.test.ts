@@ -57,6 +57,10 @@ describe("lavička srovnaná na sestavu", () => {
     expect(benchForLineup(["b2", "s1", "sold", "b1"], lineup)).toEqual(["b2", "b1"]);
   });
 
+  it("hráče zapsaného dvakrát nechá na lavičce jednou", () => {
+    expect(benchForLineup(["b1", "b2", "b1"], lineup)).toEqual(["b1", "b2"]);
+  });
+
   it("z lavičky, ze které nikdo nezbyl, je prázdný seznam, ne automat", () => {
     expect(benchForLineup(["sold"], lineup)).toEqual([]);
   });
