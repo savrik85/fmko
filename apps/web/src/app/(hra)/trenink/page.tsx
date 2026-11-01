@@ -20,9 +20,10 @@ const INTENSITIES: Array<{ key: TrainingIntensity; short: string; title: string 
 
 const TRAINING_TYPES: Array<{ key: TrainingType; label: string; icon: string; desc: string; skills: string }> = [
   { key: "conditioning", label: "Kondice", icon: "🏃", desc: "Fyzická příprava", skills: "Výdrž, Rychlost, Síla" },
-  { key: "technique", label: "Technika", icon: "⚽", desc: "Práce s míčem", skills: "Technika, Střelba, Kreativita, Standardky" },
-  { key: "tactics", label: "Taktika", icon: "🧠", desc: "Herní systém", skills: "Přihrávky, Obrana, Přehled + Chemie" },
-  { key: "match_practice", label: "Zápasová praxe", icon: "🎯", desc: "Modelové situace", skills: "Střelba, Hlavičky, Brankář" },
+  // Atributy podle `TRAINING_EFFECTS` v api/src/season/training.ts (výdrž se trénuje i u techniky a taktiky).
+  { key: "technique", label: "Technika", icon: "⚽", desc: "Práce s míčem", skills: "Technika, Střelba, Kreativita, Standardky, trochu Výdrž" },
+  { key: "tactics", label: "Taktika", icon: "🧠", desc: "Herní systém", skills: "Přihrávky, Obrana, Přehled, trochu Výdrž" },
+  { key: "match_practice", label: "Zápasová praxe", icon: "🎯", desc: "Modelové situace", skills: "Střelba, Hlavičky, Brankář, Rychlost" },
 ];
 
 const APPROACHES: Array<{ key: TrainingApproach; label: string; desc: string }> = [
@@ -734,9 +735,7 @@ export default function TrainingPage() {
                     {totalUpgrades > 0 && (
                       <span className="px-1.5 py-0.5 rounded bg-pitch-50 text-pitch-600 text-micro font-heading font-bold">+{totalUpgrades} zlepšení</span>
                     )}
-                    {result.teamChemistry > 0 && (
-                      <span className="px-1.5 py-0.5 rounded bg-pitch-50 text-pitch-600 text-micro font-heading font-bold">🤝 +{result.teamChemistry} chemie</span>
-                    )}
+                    {/* „+N chemie“ z taktického tréninku se nikam nezapisovalo, štítek sliboval nic. */}
                     {absentList.length > 0 && (
                       <span className="px-1.5 py-0.5 rounded bg-red-50 text-card-red text-micro font-heading font-bold">{absentList.length} chyběl{absentList.length === 1 ? "" : absentList.length < 5 ? "i" : "o"}</span>
                     )}
@@ -1008,7 +1007,7 @@ export default function TrainingPage() {
       )}
 
       <p className="text-xs text-muted text-center">
-        Tréninky probíhají automaticky Po–Pá
+        Tréninky probíhají automaticky ve dnech z tvého plánu, v den zápasu se netrénuje
       </p>
     </div>
   );
