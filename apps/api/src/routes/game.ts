@@ -684,6 +684,9 @@ gameRouter.get("/teams/:teamId/budget", async (c) => {
          WHERE l.season_id = ?
            AND (m.home_team_id = ? OR m.away_team_id = ?)
            AND m.status = 'scheduled'
+           -- Jen aktuální sezóna: liga má jeden řádek pro všechny sezóny a neodehrané
+           -- pozůstatky starších sezón by prognóze přidaly desítky zápasů navíc.
+           AND sc.season_number = (SELECT MAX(sc2.season_number) FROM season_calendar sc2 WHERE sc2.league_id = sc.league_id)
          ORDER BY sc.scheduled_at`
       ).bind(teamId, remainingInfo.seasonId, teamId, teamId).all<{ scheduled_at: string; is_home: number }>()
         .catch((e) => { logger.warn({ module: "game" }, "load scheduled match dates", e); return { results: [] as { scheduled_at: string; is_home: number }[] }; })
