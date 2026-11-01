@@ -44,7 +44,21 @@ interface BudgetData {
     in4Weeks: number;
     inSeason: number;
     series?: { week: number; budget: number }[];
+    /** Týdnů do posledního zápasu sezóny. */
+    seasonWeeksLeft?: number;
+    /** Ostatní pravidelné výdaje týdně (události, skaut, úkoly, poplatky soutěži, akademie). */
+    otherRunningPerWeek?: number;
+    /** Zápasové dny v prognóze: průměr posledních zápasů a kolik jich zbývá. */
+    matchDays?: { perHome: number | null; perAway: number | null; homeSample: number; awaySample: number; homeLeft: number; awayLeft: number };
   };
+  /** Účet posledního domácího zápasu (vstupné, bufet, tombola, výdaje…). */
+  lastHomeMatch?: {
+    opponent: string;
+    attendance: number | null;
+    lines: Array<{ label: string; amount: number; detail: string | null }>;
+    wholesaleEstimate: number;
+    total: number;
+  } | null;
   loan: ActiveLoan | null;
   remainingMatches: number;
   purchaseBlocked: boolean;
@@ -269,6 +283,8 @@ function OverviewTab({ data, transactions, txnTotal, txnFilter, onFilter }: {
         </div>
       </div>
 
+      {data.lastHomeMatch && <LastHomeMatchCard account={data.lastHomeMatch} />}
+
       <HistorySection
         transactions={transactions}
         total={txnTotal}
@@ -478,7 +494,7 @@ function ForecastTab({ data }: { data: BudgetData }) {
   return (
     <div className="space-y-5">
       <div className="card p-4 sm:p-5">
-        <SectionLabel>Vývoj rozpočtu (16 týdnů)</SectionLabel>
+        <SectionLabel>Vývoj rozpočtu do konce sezóny</SectionLabel>
         <div className="mt-4 relative h-44 bg-gradient-to-b from-gray-50 to-white rounded-soft overflow-hidden">
           {(() => {
             const W = 100;
@@ -535,10 +551,8 @@ function ForecastTab({ data }: { data: BudgetData }) {
         </div>
         <div className="flex justify-between text-micro text-muted mt-1 px-2">
           <span>dnes</span>
-          <span>4 týd</span>
-          <span>8 týd</span>
-          <span>12 týd</span>
-          <span>konec sezóny</span>
+          <span>{Math.round((points.length - 1) / 2)} týd</span>
+          <span>{(data.forecast.seasonWeeksLeft ?? 0) > 0 ? "konec sezóny" : `${points.length - 1} týd`}</span>
         </div>
       </div>
 
@@ -560,10 +574,63 @@ function ForecastTab({ data }: { data: BudgetData }) {
           {data.loan && (
             <li>• Splátka <span className="font-heading font-bold text-ink tabular-nums">{formatCZK(data.loan.perMatchInstallment)}</span> × {data.loan.installmentsRemaining} zápasů = {formatCZK(data.loan.remaining)} do doplacení</li>
           )}
-          <li>• Bez nepravidelných příjmů (vstupné, bufet, přestupy, bonusy)</li>
+          {data.forecast.matchDays && (data.forecast.matchDays.homeLeft + data.forecast.matchDays.awayLeft) > 0 && (
+            <li>
+              • Zápasové dny (vstupné, bufet, tombola, výdaje, autobus) podle posledních zápasů: doma{" "}
+              <span className="font-heading font-bold text-ink tabular-nums">{data.forecast.matchDays.perHome == null ? "zatím bez údajů" : `${data.forecast.matchDays.perHome >= 0 ? "+" : ""}${formatCZK(data.forecast.matchDays.perHome)}`}</span>
+              {" "}× {data.forecast.matchDays.homeLeft}, venku{" "}
+              <span className="font-heading font-bold text-ink tabular-nums">{data.forecast.matchDays.perAway == null ? "zatím bez údajů" : `${data.forecast.matchDays.perAway >= 0 ? "+" : ""}${formatCZK(data.forecast.matchDays.perAway)}`}</span>
+              {" "}× {data.forecast.matchDays.awayLeft}
+            </li>
+          )}
+          {(data.forecast.otherRunningPerWeek ?? 0) !== 0 && (
+            <li>
+              • Ostatní pravidelné výdaje (události, skaut, úkoly zaměstnanců, poplatky soutěži, akademie) podle posledních 4 týdnů:{" "}
+              <span className="font-heading font-bold text-ink tabular-nums">{formatCZK(data.forecast.otherRunningPerWeek ?? 0)}</span> týdně
+            </li>
+          )}
+          <li>• Bez přestupů, odměn za umístění a sázek</li>
           <li>• Bez jednorázových nákupů (upgrady, inzeráty, registrace)</li>
           <li>• Zbývá zápasových dní v sezóně: <span className="font-heading font-bold text-ink tabular-nums">{data.remainingMatches}</span></li>
         </ul>
+      </div>
+    </div>
+  );
+}
+
+/** Kolik vynesl poslední domácí zápas: položky z účetnictví zápasu a odhad zboží do bufetu. */
+function LastHomeMatchCard({ account }: { account: NonNullable<BudgetData["lastHomeMatch"]> }) {
+  return (
+    <div className="card p-4 sm:p-5">
+      <SectionLabel>Poslední domácí zápas{account.opponent ? ` proti ${account.opponent}` : ""}</SectionLabel>
+      {account.attendance != null && <div className="text-xs text-muted mt-0.5">Diváků: {account.attendance}</div>}
+      <div className="mt-3 space-y-1.5">
+        {account.lines.map((l) => (
+          <div key={l.label} className="flex items-baseline justify-between gap-3 text-sm">
+            <span className="min-w-0">
+              <span className="font-heading font-bold text-ink">{l.label}</span>
+              {l.detail && <span className="block text-micro text-muted truncate">{l.detail}</span>}
+            </span>
+            <span className={`tabular-nums font-heading font-bold shrink-0 ${l.amount >= 0 ? "text-pitch-600" : "text-card-red"}`}>
+              {l.amount >= 0 ? "+" : ""}{formatCZK(l.amount)}
+            </span>
+          </div>
+        ))}
+        {account.wholesaleEstimate !== 0 && (
+          <div className="flex items-baseline justify-between gap-3 text-sm">
+            <span className="min-w-0">
+              <span className="font-heading font-bold text-ink">Zboží do bufetu</span>
+              <span className="block text-micro text-muted">odhad: nákupy za 4 týdny rozpočtené na domácí zápasy</span>
+            </span>
+            <span className="tabular-nums font-heading font-bold shrink-0 text-card-red">{formatCZK(account.wholesaleEstimate)}</span>
+          </div>
+        )}
+      </div>
+      <div className="mt-3 pt-2 border-t border-gray-100 flex items-baseline justify-between">
+        <span className="font-heading font-bold text-sm">Zápas vynesl</span>
+        <span className={`tabular-nums font-heading font-[800] text-lg ${account.total >= 0 ? "text-pitch-600" : "text-card-red"}`}>
+          {account.total >= 0 ? "+" : ""}{formatCZK(account.total)}
+        </span>
       </div>
     </div>
   );

@@ -637,7 +637,6 @@ gameRouter.get("/teams/:teamId/budget", async (c) => {
   }));
 
   const reputation = (team.reputation as number) ?? 50;
-  const WEEKS_PER_SEASON = 16;
 
   // All amounts calculated as WEEKLY (= per 7 game days) — zrcadlí processWeeklyFinances.
   // Příjmy počítá jedna funkce i pro strop splátek přestupů, ať se čísla nerozejdou.
@@ -679,20 +678,30 @@ gameRouter.get("/teams/:teamId/budget", async (c) => {
   // příští týden spočítáme kolik splátek do té doby proběhne.
   const matchDatesRows = remainingInfo.seasonId
     ? await c.env.DB.prepare(
-        `SELECT sc.scheduled_at FROM matches m
+        `SELECT sc.scheduled_at, CASE WHEN m.home_team_id = ? THEN 1 ELSE 0 END AS is_home FROM matches m
          JOIN season_calendar sc ON m.calendar_id = sc.id
          JOIN leagues l ON sc.league_id = l.id
          WHERE l.season_id = ?
            AND (m.home_team_id = ? OR m.away_team_id = ?)
            AND m.status = 'scheduled'
          ORDER BY sc.scheduled_at`
-      ).bind(remainingInfo.seasonId, teamId, teamId).all<{ scheduled_at: string }>()
-        .catch((e) => { logger.warn({ module: "game" }, "load scheduled match dates", e); return { results: [] as { scheduled_at: string }[] }; })
-    : { results: [] as { scheduled_at: string }[] };
+      ).bind(teamId, remainingInfo.seasonId, teamId, teamId).all<{ scheduled_at: string; is_home: number }>()
+        .catch((e) => { logger.warn({ module: "game" }, "load scheduled match dates", e); return { results: [] as { scheduled_at: string; is_home: number }[] }; })
+    : { results: [] as { scheduled_at: string; is_home: number }[] };
 
-  const matchTimestamps = (matchDatesRows.results ?? [])
-    .map((r) => new Date(r.scheduled_at).getTime())
-    .filter((t) => !Number.isNaN(t));
+  const remainingMatchList = (matchDatesRows.results ?? [])
+    .map((r) => ({ ts: new Date(r.scheduled_at).getTime(), home: r.is_home === 1 }))
+    .filter((m) => !Number.isNaN(m.ts));
+  const matchTimestamps = remainingMatchList.map((m) => m.ts);
+
+  // Zápasové dny (vstupné, bufet, tombola, výdaje, autobus): průměr posledních zápasů.
+  // Dřív v prognóze chyběly úplně a ta pokrývala asi třetinu skutečného výsledku.
+  const { matchDayAverages, lastHomeMatchAccount, otherRunningCostsPerWeek } = await import("../season/match-day-economics");
+  const [matchDays, lastHomeMatch, otherRunningPerWeek] = await Promise.all([
+    matchDayAverages(c.env.DB, teamId),
+    lastHomeMatchAccount(c.env.DB, teamId),
+    otherRunningCostsPerWeek(c.env.DB, teamId),
+  ]);
 
   const perMatchInstallment = activeLoan?.per_match_installment ?? 0;
   const installmentsRemaining = activeLoan
@@ -730,14 +739,24 @@ gameRouter.get("/teams/:teamId/budget", async (c) => {
   const nextTransferInstallmentsOut = instDeals.results.filter((d) => d.buyer_team_id === teamId).reduce((s2, d) => s2 + instAfterWeeks(d, 1), 0);
   const nextTransferInstallmentsIn = instDeals.results.filter((d) => d.buyer_team_id !== teamId).reduce((s2, d) => s2 + instAfterWeeks(d, 1), 0);
 
-  // Forecast series: 17 bodů (dnes + 16 týdnů)
-  const forecastSeries = Array.from({ length: WEEKS_PER_SEASON + 1 }, (_, w) => ({
+  const matchDaysAfterWeeks = (weeks: number): number => {
+    const cutoff = now + weeks * WEEK_MS;
+    return remainingMatchList
+      .filter((m) => m.ts <= cutoff)
+      .reduce((sum, m) => sum + ((m.home ? matchDays.home : matchDays.away) ?? 0), 0);
+  };
+
+  // Délka sezóny podle zbývajícího rozpisu (dřív napevno 16 týdnů, sezóna 3 jich má 14).
+  const lastMatchTs = matchTimestamps.length ? Math.max(...matchTimestamps) : now;
+  const seasonWeeksLeft = Math.max(0, Math.ceil((lastMatchTs - now) / WEEK_MS));
+  const horizon = Math.min(20, Math.max(4, seasonWeeksLeft));
+  const forecastSeries = Array.from({ length: horizon + 1 }, (_, w) => ({
     week: w,
-    budget: (team.budget as number) + weeklyNet * w - loanDrainAfterWeeks(w) + transferInstallmentsAfterWeeks(w),
+    budget: (team.budget as number) + (weeklyNet + otherRunningPerWeek) * w - loanDrainAfterWeeks(w) + transferInstallmentsAfterWeeks(w) + matchDaysAfterWeeks(w),
   }));
 
   const in4Weeks = forecastSeries[4]?.budget ?? (team.budget as number);
-  const inSeason = forecastSeries[WEEKS_PER_SEASON]?.budget ?? (team.budget as number);
+  const inSeason = forecastSeries[Math.min(seasonWeeksLeft, horizon)]?.budget ?? (team.budget as number);
 
   // Bankrot: první týden kde budget < 0
   const bankruptIdx = forecastSeries.findIndex((p, i) => i > 0 && p.budget < 0);
@@ -789,7 +808,17 @@ gameRouter.get("/teams/:teamId/budget", async (c) => {
       in4Weeks,
       inSeason,
       series: forecastSeries,
+      seasonWeeksLeft,
+      /** Události, skaut, úkoly zaměstnanců, poplatky soutěži, akademie… (průměr 4 týdnů, týdně). */
+      otherRunningPerWeek,
+      matchDays: {
+        perHome: matchDays.home, perAway: matchDays.away,
+        homeSample: matchDays.homeSample, awaySample: matchDays.awaySample,
+        homeLeft: remainingMatchList.filter((m) => m.home).length,
+        awayLeft: remainingMatchList.filter((m) => !m.home).length,
+      },
     },
+    lastHomeMatch,
     loan: activeLoan ? {
       id: activeLoan.id,
       principal: activeLoan.principal,
