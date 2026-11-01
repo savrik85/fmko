@@ -223,6 +223,92 @@ export function coachAttributeEffects(m: {
   ];
 }
 
+// ── Štítky trenéra (jako u hráčů, `apps/web/src/lib/characteristics.ts`) ──
+
+export interface CoachTag {
+  key: string;
+  label: string;
+  emoji: string;
+  color: "green" | "gold" | "red" | "blue" | "purple" | "muted";
+  /** Co vlastnost ve hře opravdu dělá, se stejnými čísly jako profil trenéra. */
+  description: string;
+}
+
+/**
+ * Prahy štítků: zhruba horních a dolních 15 % trenérů v okrese (kopie produ 11/2026,
+ * 59 trenérů). Pevné hodnoty, protože účinek vlastností je absolutní, ne relativní.
+ */
+export const COACH_TAG_THRESHOLDS = {
+  coaching: { high: 62, low: 42 },
+  motivation: { high: 61, low: 35 },
+  tactics: { high: 59, low: 40 },
+  youthDevelopment: { high: 55, low: 38 },
+  discipline: { high: 55, low: 37 },
+  reputation: { high: 58, low: 22 },
+} as const;
+
+/**
+ * Štítky z vlastností trenéra: výrazně dobrá i slabá stránka, nejvýraznější první.
+ * Popisky říkají jen to, co hra opravdu dělá (stejné výpočty jako `coachAttributeEffects`).
+ */
+export function coachTags(m: {
+  coaching: number; motivation: number; tactics: number; youthDevelopment: number; discipline: number; reputation: number; licence?: number;
+}, maxTags = 3): CoachTag[] {
+  const T = COACH_TAG_THRESHOLDS;
+  const found: Array<CoachTag & { strength: number }> = [];
+  const add = (tag: CoachTag, strength: number) => found.push({ ...tag, strength });
+  const card = pct(disciplineCardMul(m.discipline) * disciplineFoulMul(m.discipline) - 1);
+
+  if (m.coaching >= T.coaching.high) {
+    add({ key: "coaching_high", label: "Brusič", emoji: "🛠️", color: "green",
+      description: `Hráči se pod ním na tréninku zlepšují rychleji (šance ${fmtMul(coachingTrainingMul(m.coaching))}).` }, m.coaching - T.coaching.high);
+  } else if (m.coaching <= T.coaching.low) {
+    add({ key: "coaching_low", label: "Trénink naprázdno", emoji: "🐌", color: "red",
+      description: `Na tréninku hráče moc neposune (šance na zlepšení ${fmtMul(coachingTrainingMul(m.coaching))}).` }, T.coaching.low - m.coaching);
+  }
+  if (m.motivation >= T.motivation.high) {
+    add({ key: "motivation_high", label: "Motivátor", emoji: "📣", color: "green",
+      description: `Před výkopem zvedne morálku sestavy o ${motivationMoraleBonus(m.motivation)} a nenominovaní u něj méně trucují.` }, m.motivation - T.motivation.high);
+  } else if (m.motivation <= T.motivation.low) {
+    add({ key: "motivation_low", label: "Kabinu nezvedne", emoji: "😶", color: "red",
+      description: motivationMoraleBonus(m.motivation) > 0
+        ? `Před výkopem přidá morálce sestavy jen +${motivationMoraleBonus(m.motivation)} a nenominovaní u něj trucují víc.`
+        : "Před výkopem morálku sestavy nezvedne a nenominovaní u něj trucují víc." }, T.motivation.low - m.motivation);
+  }
+  if (m.tactics >= T.tactics.high) {
+    add({ key: "tactics_high", label: "Taktik", emoji: "🧠", color: "blue",
+      description: `Přihrávky a obrana sestavy v zápase ${signed(tacticsMatchBonus(m.tactics))}, tým se na formaci sehraje rychleji (${fmtMul(tacticsFamiliarityMul(m.tactics))}).` }, m.tactics - T.tactics.high);
+  } else if (m.tactics <= T.tactics.low) {
+    add({ key: "tactics_low", label: "Bez plánu", emoji: "🌀", color: "red",
+      description: `Taktikou sestavě nepřidá (přihrávky a obrana ${signed(tacticsMatchBonus(m.tactics))}) a tým se sehrává pomaleji.` }, T.tactics.low - m.tactics);
+  }
+  if (m.youthDevelopment >= T.youthDevelopment.high) {
+    add({ key: "youth_high", label: "Vychovatel", emoji: "🌱", color: "green",
+      description: `Hráči do 22 let pod ním rostou rychleji (trénink ${fmtMul(youthTrainingMul(m.youthDevelopment))}, z odehraných minut ${signed(pct(youthMatchGrowthMod(m.youthDevelopment)))} %).` }, m.youthDevelopment - T.youthDevelopment.high);
+  } else if (m.youthDevelopment <= T.youthDevelopment.low) {
+    add({ key: "youth_low", label: "Na mladé není", emoji: "🧓", color: "gold",
+      description: `Hráči do 22 let pod ním rostou pomaleji (z odehraných minut ${signed(pct(youthMatchGrowthMod(m.youthDevelopment)))} %).` }, T.youthDevelopment.low - m.youthDevelopment);
+  }
+  if (m.discipline >= T.discipline.high) {
+    add({ key: "discipline_high", label: "Pevná ruka", emoji: "🎖️", color: "blue",
+      description: `Lepší docházka na trénink, žluté karty ${signed(card)} %, méně průšvihů v hospodě.` }, m.discipline - T.discipline.high);
+  } else if (m.discipline <= T.discipline.low) {
+    add({ key: "discipline_low", label: "Lajdák", emoji: "🍻", color: "red",
+      description: `Horší docházka na trénink, žluté karty ${signed(card)} %, víc průšvihů v hospodě.` }, T.discipline.low - m.discipline);
+  }
+  if (m.reputation >= T.reputation.high) {
+    add({ key: "reputation_high", label: "Velké jméno", emoji: "🏆", color: "gold",
+      description: "Volní hráči podepisují ochotněji a hráči jiných klubů k němu chtějí přestoupit." }, m.reputation - T.reputation.high);
+  } else if (m.reputation <= T.reputation.low) {
+    add({ key: "reputation_low", label: "Zatím bez jména", emoji: "🆕", color: "muted",
+      description: "Hráči k němu zatím přestupují zdráhavěji, reputace roste výhrami a umístěním." }, T.reputation.low - m.reputation);
+  }
+  return found
+    .sort((a, b) => b.strength - a.strength)
+    .slice(0, maxTags)
+    .map(({ strength: _s, ...tag }) => tag);
+}
+
 // ── Licence ──
 
 export type LicenceLevel = 0 | 1 | 2 | 3 | 4;

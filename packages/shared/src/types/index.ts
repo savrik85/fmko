@@ -64,6 +64,7 @@ export type {
   CourseStatus,
   ExamRules,
   CoachAwayImpact,
+  CoachTag,
 } from "./coach";
 export {
   coachRelationBand,
@@ -85,6 +86,8 @@ export {
   coachTransferPull,
   coachSigningFactor,
   coachAttributeEffects,
+  coachTags,
+  COACH_TAG_THRESHOLDS,
   LICENCE_LEVELS,
   MAX_LICENCE,
   licenceLabel,
