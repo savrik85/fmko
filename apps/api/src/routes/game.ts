@@ -32,6 +32,7 @@ import { injuryPronenessOf } from "../injuries/proneness";
 import { isBodyType } from "../generators/physicals";
 import { MAX_ACTIVE_INSTALLMENT_DEALS, CPU_CLUB_ID, clubPrefixOf, sponsorWeeklyPayout, transferSchedule, termsFromRow, splitPlanByLineup, benchForLineup } from "@okresni-masina/shared";
 import { sendPhoneSMS } from "../messaging/phone-sms";
+import { pragueKickoffIso } from "../lib/match-tick-schedule";
 import {
   acceptListingBid, acceptTransferOffer, counterListingBid, counterTransferOffer, createTransferOffer, listPlayerOnMarket,
   onPlayerTransferred, placeListingBid, rejectListingBid, rejectTransferOffer, signFreeAgent, withdrawListing, withdrawTransferOffer,
@@ -3826,7 +3827,8 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
       upcomingMatches.push({
         calendarId: u.match_id as string, // pro přátelák používáme match.id (FE switch logika tomu rozumí)
         gameWeek: null,
-        scheduledAt: u.created_at as string,
+        // Hraje se s ligovým kolem v 18:00 v Praze, created_at nese 16:00 UTC (v zimě by ukázal 17:00).
+        scheduledAt: pragueKickoffIso(String(u.created_at).slice(0, 10)),
         opponentName: (u.home_team_id === teamId ? u.away_name : u.home_name) as string,
         isHome: u.home_team_id === teamId,
         hasLineup: (u.has_lineup as number) > 0,

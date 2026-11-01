@@ -397,7 +397,7 @@ function MatchRow({ match: m, myTeamId, canEditLineup }: { match: ScheduleMatch;
       {/* Link centered at bottom — compact, no divider */}
       {linkLabel && (
         <div className="mt-1 text-center">
-          <span className={`text-xs font-heading font-bold ${linkColor}`}>{linkLabel} →</span>
+          <span className={`text-xs font-heading font-bold ${linkColor}`}>{linkLabel}{isClickable ? " →" : ""}</span>
         </div>
       )}
     </div>

@@ -31,6 +31,20 @@ export function pragueHour(at: Date = new Date()): number | null {
 }
 
 /**
+ * Výkop v 18:00 pražského času daného dne (YYYY-MM-DD) jako ISO v UTC. Přáteláky mají v
+ * `matches.created_at` napevno 16:00 UTC, hrají se ale s ligovým kolem, takže v zimě
+ * Rozpis i Zápas ukazovaly 17:00. Bez známé pražské hodiny vrátí 16:00 UTC jako dřív.
+ */
+export function pragueKickoffIso(day: string): string {
+  const noon = new Date(`${day}T12:00:00.000Z`);
+  if (Number.isNaN(noon.getTime())) return `${day}T16:00:00.000Z`;
+  const hourAtNoon = pragueHour(noon);
+  if (hourAtNoon === null) return `${day}T16:00:00.000Z`;
+  const offsetHours = hourAtNoon - 12;
+  return new Date(noon.getTime() + (MATCH_HOUR_PRAGUE - 12 - offsetHours) * 3_600_000).toISOString();
+}
+
+/**
  * Hraje tenhle cron ligové kolo? Ruční spuštění (bez cronu) vždy. Bez známé pražské
  * hodiny jede postaru jen 16:xx UTC, ať kolo radši proběhne o hodinu dřív než vůbec.
  */
