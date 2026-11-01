@@ -8,13 +8,22 @@ name: Záloha produkční DB
 #        takže klon prod → test se bez exportu neobejde
 #     3. smazání databáze jako takové
 #
-# Ruční spuštění: Actions → „Záloha produkční DB" → Run workflow.
+# Export po dobu běhu (asi minutu) zamkne databázi a hráčům padají dotazy (503). Proto se
+# smí dělat jen v noci, mimo herní crony (3, 5, 6, 7, 10–17 UTC) i večerní provoz.
+#
+# Ruční spuštění: Actions → „Záloha produkční DB" → Run workflow (proběhne hned, bez hlídání hodiny).
 
 on:
   schedule:
-    # 01:20 UTC — mimo všechny herní crony (3, 5, 6, 10, 14, 16 UTC),
-    # aby export nečetl databázi uprostřed zápasového nebo denního ticku.
-    - cron: "20 1 * * *"
+    # GitHub plánované běhy zpožďuje o hodiny: v 10/2026 se běh z 01:20 UTC spouštěl
+    # 05:59–07:38 UTC, přímo v okně ranního článku, sestav AI klubů a pondělní správy.
+    # Proto několik pokusů večer a v noci a hlídač níž: zálohuje první běh, který přijde
+    # do nočního okna (22:00–02:59 UTC), a ostatní ten den skončí hned, bez exportu.
+    - cron: "50 19 * * *"
+    - cron: "50 20 * * *"
+    - cron: "50 21 * * *"
+    - cron: "50 22 * * *"
+    - cron: "50 0 * * *"
   workflow_dispatch:
 
 # Dvě zálohy najednou nedávají smysl a jen by se praly o stejný soubor.
@@ -27,20 +36,58 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      - name: Noční okno
+        id: window
+        run: |
+          set -euo pipefail
+          HOUR=$(date -u +%H)
+          # Záloha „noci na X" nese datum X: běh ve 22:00 UTC 1. 11. i ve 2:00 UTC 2. 11. je prod-2026-11-02.
+          STAMP=$(date -u -d "+4 hours" +%Y-%m-%d)
+          echo "STAMP=$STAMP" >> "$GITHUB_ENV"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "Ruční spuštění, hodina se nehlídá."
+            echo "run=1" >> "$GITHUB_OUTPUT"
+          elif [ "$HOUR" = "22" ] || [ "$HOUR" = "23" ] || [ "$HOUR" = "00" ] || [ "$HOUR" = "01" ] || [ "$HOUR" = "02" ]; then
+            echo "Běh v $HOUR UTC, v nočním okně."
+            echo "run=1" >> "$GITHUB_OUTPUT"
+          else
+            echo "Běh v $HOUR UTC je mimo noční okno (22–02 UTC), export by zamkl databázi hráčům. Končím."
+            echo "run=0" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/checkout@v4
+        if: steps.window.outputs.run == '1'
       - uses: actions/setup-node@v4
+        if: steps.window.outputs.run == '1'
         with:
           node-version: 20
           cache: npm
       - run: npm ci
+        if: steps.window.outputs.run == '1'
+
+      - name: Už je dnešní noc zálohovaná?
+        id: done
+        if: steps.window.outputs.run == '1' && github.event_name == 'schedule'
+        working-directory: apps/api
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          # Neexistující objekt = wrangler skončí chybou, to je tu očekávaný stav.
+          if npx wrangler r2 object get "prales-backups/denni/prod-$STAMP.sql.gz" --file /tmp/existujici.gz --remote > /dev/null 2>&1 \
+             && gzip -t /tmp/existujici.gz; then
+            echo "Záloha prod-$STAMP už v R2 je, další export by jen znovu zamkl databázi."
+            echo "skip=1" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=0" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Export produkční D1
+        if: steps.window.outputs.run == '1' && steps.done.outputs.skip != '1'
         working-directory: apps/api
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
           set -euo pipefail
-          STAMP=$(date -u +%Y-%m-%d)
           npx wrangler d1 export prales-db-prod --remote --output "prod-$STAMP.sql"
           ls -lh "prod-$STAMP.sql"
           # Prázdný nebo pahýlovitý export je horší než žádný — tvářil by se jako záloha.
@@ -51,9 +98,9 @@ jobs:
           fi
           gzip -9 "prod-$STAMP.sql"
           ls -lh "prod-$STAMP.sql.gz"
-          echo "STAMP=$STAMP" >> "$GITHUB_ENV"
 
       - name: Nahrát do R2
+        if: steps.window.outputs.run == '1' && steps.done.outputs.skip != '1'
         working-directory: apps/api
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -62,12 +109,13 @@ jobs:
           npx wrangler r2 object put "prales-backups/denni/prod-$STAMP.sql.gz" \
             --file "prod-$STAMP.sql.gz" --remote
           # První v měsíci se ukládá i do dlouhodobé složky — denní se po 35 dnech mažou.
-          if [ "$(date -u +%d)" = "01" ]; then
+          if [ "${STAMP:8:2}" = "01" ]; then
             npx wrangler r2 object put "prales-backups/mesicni/prod-$STAMP.sql.gz" \
               --file "prod-$STAMP.sql.gz" --remote
           fi
 
       - name: Ověřit, že záloha v R2 opravdu je
+        if: steps.window.outputs.run == '1' && steps.done.outputs.skip != '1'
         working-directory: apps/api
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

@@ -32,13 +32,18 @@ Proto denní export do R2 bucketu `prales-backups`:
 
 | Cesta | Obsah | Retence |
 |---|---|---|
-| `denni/prod-YYYY-MM-DD.sql.gz` | každý den 01:20 UTC | 35 dní (lifecycle pravidlo) |
+| `denni/prod-YYYY-MM-DD.sql.gz` | každou noc mezi 22:00 a 02:59 UTC, datum = noc „na“ ten den | 35 dní (lifecycle pravidlo) |
 | `mesicni/prod-YYYY-MM-DD.sql.gz` | první v měsíci | neomezeně |
 
 Velikost: ~88 MB syrově, ~13 MB po gzipu. Náklad na R2 je v řádu haléřů měsíčně.
 
-Čas 01:20 UTC je zvolený schválně — leží mimo všechny herní crony
-(3, 5, 6, 10, 14, 16 UTC), takže export nečte databázi uprostřed ticku.
+Export po dobu běhu (asi minutu) zamkne databázi a hráčům padají dotazy (503), proto se smí
+dělat jen v noci mimo herní crony (3, 5, 6, 7, 10–17 UTC) i večerní provoz.
+
+GitHub plánované běhy zpožďuje o hodiny: v 10/2026 se běh z 01:20 UTC spouštěl až 05:59–07:38 UTC,
+přímo v okně ranního článku, sestav AI klubů a pondělní správy. Workflow proto má pět plánovaných
+pokusů (19:50, 20:50, 21:50, 22:50 a 0:50 UTC) a hlídač: zálohuje první běh, který přijde do okna
+22:00–02:59 UTC, ostatní skončí hned (mimo okno, nebo už je ta noc v R2). Ruční spuštění hodinu nehlídá.
 
 ## ⚠️ Workflow musí být na `main`
 
