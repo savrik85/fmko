@@ -31,3 +31,18 @@ export async function maintainU21Pitches(db: D1Database): Promise<number> {
   ).bind(U21_PITCH_TARGET, U21_PITCH_DAILY_CARE, U21_PITCH_TARGET).run();
   return res.meta?.changes ?? 0;
 }
+
+/**
+ * Jednorázové srovnání: zanedbaná U21 hřiště rovnou na udržovaný stav (admin, se souhlasem).
+ * Bez `teamId` všechna U21 hřiště, s ním jen jedno (ověření na testu). Lepší trávník nesráží.
+ */
+export async function liftU21Pitches(db: D1Database, teamId?: string): Promise<number> {
+  const res = await db.prepare(
+    `UPDATE stadiums SET pitch_condition = ?
+      WHERE team_id IN (${U21_TEAMS_SQL})
+        AND COALESCE(pitch_type, 'natural') != 'artificial'
+        AND pitch_condition < ?
+        AND (? IS NULL OR team_id = ?)`,
+  ).bind(U21_PITCH_TARGET, U21_PITCH_TARGET, teamId ?? null, teamId ?? null).run();
+  return res.meta?.changes ?? 0;
+}

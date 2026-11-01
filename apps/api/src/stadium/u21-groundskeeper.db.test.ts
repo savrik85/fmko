@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { Miniflare } from "miniflare";
-import { maintainU21Pitches, U21_PITCH_TARGET } from "./u21-groundskeeper";
+import { liftU21Pitches, maintainU21Pitches, U21_PITCH_TARGET } from "./u21-groundskeeper";
 
 /**
  * U21 hřiště nikdo neudržoval: denní tick ubíral, opravy mířily na áčko.
@@ -67,6 +67,27 @@ describe("správce U21 hřiště", () => {
     await maintainU21Pitches(db);
     expect(await pitch("plastic")).toBe(40);
     expect(await pitch("unknown")).toBe(43);
+  });
+
+  it("jednorázové zvednutí srovná zanedbaná U21 hřiště na 70, áčko, umělku ani lepší trávník nemění", async () => {
+    await team("u21", "u21", 31);
+    await team("good", "u21", 85);
+    await team("plastic", "u21", 40, "artificial");
+    await team("senior", "senior", 20);
+    expect(await liftU21Pitches(db)).toBe(1);
+    expect(await pitch("u21")).toBe(U21_PITCH_TARGET);
+    expect(await pitch("good")).toBe(85);
+    expect(await pitch("plastic")).toBe(40);
+    expect(await pitch("senior")).toBe(20);
+    expect(await liftU21Pitches(db)).toBe(0);
+  });
+
+  it("s teamId zvedne jen jedno U21 hřiště", async () => {
+    await team("a", "u21", 30);
+    await team("b", "u21", 30);
+    expect(await liftU21Pitches(db, "a")).toBe(1);
+    expect(await pitch("a")).toBe(U21_PITCH_TARGET);
+    expect(await pitch("b")).toBe(30);
   });
 
   it("za dva týdny dožene zanedbané hřiště na udržovaný stav", async () => {
