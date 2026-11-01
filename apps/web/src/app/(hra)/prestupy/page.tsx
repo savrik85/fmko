@@ -2366,7 +2366,9 @@ export default function TransfersPage() {
                             : `Za ${o.first_name} ${o.last_name}: ${podminky}`) + srazka;
                           const ok = await confirm({ title: "Přijmout nabídku?", description: desc, confirmLabel: "Přijmout" });
                           if (!ok || !teamId) return;
-                          if (await apiAction(apiFetch(`/api/teams/${teamId}/offers/${o.id}/accept`, { method: "POST" }), "Přijetí nabídky se nezdařilo")) await refresh();
+                          // Obnovit i po chybě: nabídku mohla mezitím vyřídit druhá strana nebo jiné okno.
+                          await apiAction(apiFetch(`/api/teams/${teamId}/offers/${o.id}/accept`, { method: "POST" }), "Přijetí nabídky se nezdařilo");
+                          await refresh();
                         }} className="py-1.5 px-4 rounded-soft text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">
                           Přijmout
                         </button>
