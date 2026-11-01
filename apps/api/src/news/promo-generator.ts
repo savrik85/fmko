@@ -43,12 +43,12 @@ async function loadTopPlayers(
        FROM players p
        WHERE p.team_id = ?
          AND p.id NOT IN (
-           SELECT player_id FROM injuries WHERE team_id = ? AND days_remaining > 0
+           SELECT player_id FROM injuries WHERE days_remaining > 0
          )
        ORDER BY p.overall_rating DESC
        LIMIT ?`,
     )
-    .bind(teamId, teamId, limit)
+    .bind(teamId, limit)
     .all<{
       id: string;
       first_name: string;
@@ -104,7 +104,7 @@ async function loadInjuredKeyPlayers(
               i.type as injury_type, i.severity
        FROM injuries i
        JOIN players p ON p.id = i.player_id
-       WHERE i.team_id = ? AND i.days_remaining > 0
+       WHERE p.team_id = ? AND i.days_remaining > 0
        ORDER BY p.overall_rating DESC`,
     )
     .bind(teamId)

@@ -1005,8 +1005,10 @@ teamsRouter.get("/:id/players", async (c) => {
     "SELECT * FROM players WHERE team_id = ? AND (status IS NULL OR status != 'released') ORDER BY CASE position WHEN 'GK' THEN 0 WHEN 'DEF' THEN 1 WHEN 'MID' THEN 2 WHEN 'FWD' THEN 3 END, overall_rating DESC"
   ).bind(teamId).all();
 
+  // Zranění patří hráči, ne týmu: `injuries.team_id` je tým, kde se zranil, a po přesunu
+  // mezi áčkem a U21 se nemění. Podle něj by zraněný hráč vypadal zdravý.
   const activeInjuries = await c.env.DB.prepare(
-    "SELECT player_id, type, days_remaining FROM injuries WHERE team_id = ? AND days_remaining > 0"
+    "SELECT player_id, type, days_remaining FROM injuries WHERE days_remaining > 0 AND player_id IN (SELECT id FROM players WHERE team_id = ?)"
   ).bind(teamId).all<{ player_id: string; type: string; days_remaining: number }>()
     .catch((e) => { logger.warn({ module: "teams" }, "fetch team injuries", e); return { results: [] }; });
   const injuryByPlayer = new Map(activeInjuries.results.map((r) => [r.player_id, { type: r.type, daysRemaining: r.days_remaining }]));

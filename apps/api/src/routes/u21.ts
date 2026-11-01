@@ -54,8 +54,9 @@ u21Router.get("/teams/:teamId/u21/players", async (c) => {
   ).bind(u21Team.id).all<Record<string, unknown>>();
 
   // Zranění a absence potřebuje tabulka atributů U21, stejně jako kádr áčka.
+  // Podle hráčů, ne `injuries.team_id`: hráč zraněný v áčku si zranění nese i do U21.
   const activeInjuries = await c.env.DB.prepare(
-    "SELECT player_id, type, days_remaining FROM injuries WHERE team_id = ? AND days_remaining > 0"
+    "SELECT player_id, type, days_remaining FROM injuries WHERE days_remaining > 0 AND player_id IN (SELECT id FROM players WHERE team_id = ?)"
   ).bind(u21Team.id).all<{ player_id: string; type: string; days_remaining: number }>()
     .catch((e) => { logger.warn({ module: "u21" }, "fetch u21 injuries", e); return { results: [] }; });
   const injuryByPlayer = new Map(activeInjuries.results.map((r) => [r.player_id, { type: r.type, daysRemaining: r.days_remaining }]));

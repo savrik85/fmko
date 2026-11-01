@@ -68,9 +68,9 @@ async function loadTopPlayers(db: D1Database, teamId: string, limit = 3): Promis
      FROM players p
      WHERE p.team_id = ?
        AND (p.status IS NULL OR p.status = 'active')
-       AND p.id NOT IN (SELECT player_id FROM injuries WHERE team_id = ? AND days_remaining > 0)
+       AND p.id NOT IN (SELECT player_id FROM injuries WHERE days_remaining > 0)
      ORDER BY p.overall_rating DESC LIMIT ?`
-  ).bind(teamId, teamId, limit).all()
+  ).bind(teamId, limit).all()
     .catch((e) => { logger.warn({ module: "matchday-preview" }, "load top players", e); return { results: [] }; });
   return rows.results.map((r) =>
     `${r.first_name} ${r.last_name} (${r.position}, rating ${r.overall_rating})`
@@ -81,7 +81,7 @@ async function loadInjured(db: D1Database, teamId: string): Promise<string[]> {
   const rows = await db.prepare(
     `SELECT p.first_name, p.last_name, i.days_remaining
      FROM injuries i JOIN players p ON i.player_id = p.id
-     WHERE i.team_id = ? AND i.days_remaining > 0
+     WHERE p.team_id = ? AND i.days_remaining > 0
      ORDER BY p.overall_rating DESC LIMIT 3`
   ).bind(teamId).all()
     .catch((e) => { logger.warn({ module: "matchday-preview" }, "load injured", e); return { results: [] }; });
