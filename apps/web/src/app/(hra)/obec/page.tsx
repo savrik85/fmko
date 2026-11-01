@@ -1,5 +1,6 @@
 "use client";
 
+import { triggerMenuBadgesRefresh } from "@/hooks/use-menu-badges";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
@@ -376,6 +377,7 @@ function OwnVillage() {
       setToast(msg);
       setTimeout(() => setToast(null), 5000);
       if (villageId) await refresh(villageId);
+      triggerMenuBadgesRefresh();
     } catch (e: unknown) {
       const m = e instanceof Error ? e.message : "Chyba";
       setToast(`Hospoda: ${m}`);
@@ -403,6 +405,7 @@ function OwnVillage() {
       setToast(msg);
       setTimeout(() => setToast(null), 4000);
       if (villageId) await refresh(villageId);
+      triggerMenuBadgesRefresh();
     } catch (e: unknown) {
       const m = e instanceof Error ? e.message : "Chyba";
       setToast(`Investice: ${m}`);
@@ -422,6 +425,7 @@ function OwnVillage() {
         body: JSON.stringify({ action }),
       });
       if (villageId) await refresh(villageId);
+      triggerMenuBadgesRefresh();
     } catch (e: unknown) {
       const m = e instanceof Error ? e.message : "Chyba";
       setToast(`Petice: ${m}`);
@@ -450,6 +454,7 @@ function OwnVillage() {
       setToast(msg);
       setTimeout(() => setToast(null), 7000);
       if (villageId) await refresh(villageId);
+      triggerMenuBadgesRefresh();
     } catch (e: unknown) {
       const m = e instanceof Error ? e.message : "Chyba";
       setToast(`Pozvánka selhala: ${m}`);
@@ -863,6 +868,7 @@ function OwnVillage() {
           onSuccess={async () => {
             setTakeBrigade(null);
             if (villageId) await refresh(villageId);
+      triggerMenuBadgesRefresh();
           }}
         />
       )}

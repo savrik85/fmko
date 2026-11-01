@@ -8,7 +8,7 @@ import type { Bindings } from "../index";
 import { createRng, cryptoSeed } from "../generators/rng";
 import { executeDailyTick } from "../season/daily-tick";
 import { recordTransaction } from "../season/finance-processor";
-import { getSeasonalEventsForWeek, type SeasonalEventDef } from "../season/seasonal-events";
+import { DECISION_WINDOW, getSeasonalEventsForWeek, type SeasonalEventDef } from "../season/seasonal-events";
 import { logger } from "../lib/logger";
 import { validateMatchPlan, parseStoredPlan } from "../lib/match-plan-validation";
 import { validateBench, parseStoredBench, benchColumn } from "../lib/lineup-bench";
@@ -871,8 +871,50 @@ gameRouter.get("/teams/:teamId/wages", async (c) => {
   });
 });
 
-/** Kolik kol po události má trenér na rozhodnutí; pak propadne. */
-const DECISION_WINDOW = 2;
+
+// GET /api/teams/:id/pending-decisions — kolik rozhodnutí s termínem čeká (odznaky Události a Obec v menu)
+gameRouter.get("/teams/:teamId/pending-decisions", async (c) => {
+  const teamId = c.req.param("teamId");
+  const denied = await requireOwnedTeamRead(c, teamId);
+  if (denied) return denied;
+  const db = c.env.DB;
+  const team = await db.prepare("SELECT t.league_id, v.district FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?")
+    .bind(teamId).first<{ league_id: string | null; district: string | null }>()
+    .catch((e) => { logger.warn({ module: "game" }, "tým pro odznaky rozhodnutí", e); return null; });
+  if (!team) return c.json({ events: 0, village: 0 });
+
+  const seasonNum = await activeSeasonNumber(db);
+  const seasonStr = String(seasonNum);
+  const [weekRow, seeded, pendingEvents, district, village] = await Promise.all([
+    team.league_id
+      ? db.prepare("SELECT MAX(game_week) AS gw FROM season_calendar WHERE league_id = ? AND status = 'simulated' AND season_number = ?")
+        .bind(team.league_id, seasonNum).first<{ gw: number | null }>()
+      : Promise.resolve(null),
+    db.prepare("SELECT 1 AS x FROM seasonal_events WHERE team_id = ? AND season = ? AND id LIKE ? LIMIT 1")
+      .bind(teamId, seasonStr, `se-${teamId}-s${seasonStr}-%`).first<{ x: number }>(),
+    db.prepare(
+      "SELECT game_week FROM seasonal_events WHERE team_id = ? AND season = ? AND status = 'pending' AND choices IS NOT NULL AND type != 'hospoda_action'",
+    ).bind(teamId, seasonStr).all<{ game_week: number }>(),
+    db.prepare(
+      `SELECT COUNT(*) AS n FROM district_event_teams dt JOIN district_events e ON e.id = dt.event_id
+        WHERE dt.team_id = ? AND e.status = 'announced' AND dt.choice IS NULL`,
+    ).bind(teamId).first<{ n: number }>(),
+    db.prepare(
+      `SELECT (SELECT COUNT(*) FROM village_petitions WHERE team_id = ?1 AND status = 'active')
+            + (SELECT COUNT(*) FROM village_pub_encounters WHERE team_id = ?1 AND status = 'active')
+            + (SELECT COUNT(*) FROM village_investments WHERE team_id = ?1 AND status = 'offered') AS n`,
+    ).bind(teamId).first<{ n: number }>(),
+  ]).catch((e) => { logger.warn({ module: "game" }, "odznaky rozhodnutí", e); return [null, null, { results: [] }, null, null] as const; });
+
+  const gw = weekRow?.gw ?? 0;
+  const open = (week: number) => week <= gw && gw - week < DECISION_WINDOW;
+  // Kdo Události ještě neotevřel, nemá šablonové události v databázi: spočítat je ze šablon.
+  const templateOpen = seeded ? 0 : Array.from({ length: DECISION_WINDOW }, (_, i) => gw - i)
+    .filter((w) => w >= 0)
+    .reduce((n, w) => n + getSeasonalEventsForWeek(w, team.district ?? undefined).filter((e) => e.choices?.length).length, 0);
+  const events = (pendingEvents?.results ?? []).filter((r) => open(r.game_week)).length + templateOpen + (district?.n ?? 0);
+  return c.json({ events, village: village?.n ?? 0 });
+});
 
 // GET /api/teams/:id/seasonal-events — all seasonal events (pending = with choices, resolved = past)
 gameRouter.get("/teams/:teamId/seasonal-events", async (c) => {

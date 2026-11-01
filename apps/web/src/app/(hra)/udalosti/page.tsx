@@ -1,5 +1,6 @@
 "use client";
 
+import { triggerMenuBadgesRefresh } from "@/hooks/use-menu-badges";
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
@@ -174,6 +175,7 @@ export default function EventsPage() {
     if (done) {
       setEvents((prev) => prev.map((e) => e.id === ev.id ? { ...e, status: "resolved", chosenChoiceId: choice.id } : e));
       if (result.applied) setAppliedEffects((prev) => ({ ...prev, [ev.id]: result.applied! }));
+      triggerMenuBadgesRefresh();
     }
     setChoosing(null);
   };
