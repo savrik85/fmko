@@ -794,7 +794,7 @@ export async function processMatchDayFinances(
 
     const totalReward = sponsorBonus + leagueBonus + fanBonus;
     if (totalReward > 0) {
-      const resultLabel = result === "win" ? "výhra" : result === "draw" ? "remíza" : "prohra";
+      const resultLabel = result === "win" ? "výhru" : result === "draw" ? "remízu" : "prohru";
       await recordTransaction(db, teamId, "match_reward", totalReward,
         `Bonusy za ${resultLabel}${sponsorBonus > 0 ? ` (sponzoři ${sponsorBonus} Kč)` : ""}`,
         gameDate, matchId);
