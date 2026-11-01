@@ -6124,6 +6124,16 @@ gameRouter.post("/admin/transfer-installments/run", async (c) => {
   return c.json({ ok: true, teamId, gameDate, paid });
 });
 
+// Jednorázové zvednutí zanedbaných U21 hřišť na udržovaný stav (správce pak drží, u21-groundskeeper.ts).
+// ?teamId= jen jedno U21 hřiště. Opakované volání nic nezmění.
+gameRouter.post("/admin/u21-pitches/lift", async (c) => {
+  const { liftU21Pitches, U21_PITCH_TARGET } = await import("../stadium/u21-groundskeeper");
+  const teamId = c.req.query("teamId") || undefined;
+  const lifted = await liftU21Pitches(c.env.DB, teamId);
+  logger.info({ module: "game" }, `U21 hřiště zvednutá na ${U21_PITCH_TARGET}: ${lifted}`);
+  return c.json({ ok: true, lifted, target: U21_PITCH_TARGET, teamId: teamId ?? null });
+});
+
 // Oprava souřadnic obcí (mapa okresu). Body: { updates: [{ id, lat, lng }] }. Jen body v Česku.
 gameRouter.post("/admin/villages/coords", async (c) => {
   const body = await c.req.json<{ updates?: Array<{ id?: unknown; lat?: unknown; lng?: unknown }> }>()
