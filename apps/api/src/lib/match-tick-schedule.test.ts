@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isMatchTickNow, isRoundRecoveryTickNow, pragueHour } from "./match-tick-schedule";
+import { isMatchTickNow, isRoundRecoveryTickNow, pragueHour, pragueKickoffIso } from "./match-tick-schedule";
 
 describe("pragueHour — hodina v Praze z okamžiku v UTC", () => {
   it("v létě (SELČ) je 16:00 UTC v Praze 18 hodin", () => {
@@ -65,5 +65,17 @@ describe("isRoundRecoveryTickNow — dohrání zaseklých kol v 18:20 pražskéh
 
   it("zápasové crony dohrání nespouští", () => {
     expect(isRoundRecoveryTickNow("0 16 * * *", 18)).toBe(false);
+  });
+});
+
+describe("pragueKickoffIso — přátelák v 18:00 pražského času", () => {
+  it("v zimě 17:00 UTC", () => {
+    expect(pragueKickoffIso("2026-11-05")).toBe("2026-11-05T17:00:00.000Z");
+  });
+  it("v létě 16:00 UTC", () => {
+    expect(pragueKickoffIso("2026-07-12")).toBe("2026-07-12T16:00:00.000Z");
+  });
+  it("nesmysl jako den vrátí dosavadních 16:00 UTC", () => {
+    expect(pragueKickoffIso("bez-data")).toBe("bez-dataT16:00:00.000Z");
   });
 });

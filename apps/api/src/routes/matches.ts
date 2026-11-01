@@ -9,6 +9,7 @@ import { getSession, getTokenFromRequest } from "../auth/session";
 import { logger } from "../lib/logger";
 import { mustSeason } from "../lib/season";
 import { STAND_COLUMNS, standFacilities, type StandSide } from "../stadium/stands-model";
+import { pragueKickoffIso } from "../lib/match-tick-schedule";
 
 const matchesRouter = new Hono<{ Bindings: Bindings }>();
 
@@ -492,7 +493,9 @@ matchesRouter.get("/teams/:teamId/schedule", async (c) => {
     awayBadge: row.away_badge || "shield",
     awayIsAi: row.away_user_id === "ai",
     awayScore: row.away_score,
-    scheduledAt: row.scheduled_at || row.simulated_at || row.created_at,
+    // Přátelák bez výsledku: výkop s ligovým kolem v 18:00 v Praze (created_at nese 16:00 UTC).
+    scheduledAt: row.scheduled_at || row.simulated_at
+      || (row.calendar_id === null ? pragueKickoffIso(String(row.created_at).slice(0, 10)) : row.created_at),
     gameWeek: row.game_week,
     isFriendly: row.calendar_id === null,
     isCup: false,
