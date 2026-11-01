@@ -86,15 +86,32 @@ describe("přípustné možnosti AI prodávajícího", () => {
     expect(sellerOptions(sellerInput({ terms: cash(R + 200), previousAsks: asks, previousBids: bids })).actions).toEqual(["accept", "reject"]);
   });
 
-  it("starý inzerát pod dnešní rezervací se nepřijme: AI chce aspoň rezervaci (model i pravidlo)", () => {
-    const stale = R - 1000;
-    const input = sellerInput({ terms: cash(stale), listedPrice: stale });
-    const o = sellerOptions(input);
+  it("cena z inzerátu je závazná, i když ji AI dnes počítá níž než rezervaci (rotace, limit obchodů)", () => {
+    // Vystavený jako přebytek, dnes v rotaci: rezervace v odpovědi vyšla znovu a výš.
+    const listed = R - 1000;
+    for (const over of [{}, { overDealLimit: true }]) {
+      const input = sellerInput({ terms: cash(listed), listedPrice: listed, ...over });
+      expect(sellerOptions(input).forced).toMatchObject({ kind: "accept", reason: "accept_ask" });
+      expect(decideSellerReply(input)).toMatchObject({ kind: "accept", reason: "accept_ask" });
+    }
+  });
+
+  it("pod cenou inzerátu smlouvá nejvýš na cenu inzerátu, ne na vlastní vyšší rezervaci", () => {
+    const listed = R - 1000;
+    const bid = listed - 2000;
+    const o = sellerOptions(sellerInput({ terms: cash(bid), listedPrice: listed }));
     expect(o.forced).toBeNull();
-    expect(o.actions).toEqual(["counter", "reject"]);
-    expect(o.counter).toEqual({ min: R, max: R });
-    const rule = decideSellerReply(input);
-    expect(rule).toMatchObject({ kind: "counter", ask: R });
+    expect(o.reservation).toBe(listed);
+    expect(o.counter).toEqual({ min: listed, max: listed });
+  });
+
+  it("z hráče, který se mezitím stal oporou, se cena inzerátu nebere", () => {
+    const key = reservationPrice({ ...valuation, importance: "key" });
+    const listed = round100(key / 2);
+    const o = sellerOptions(sellerInput({ terms: cash(listed), listedPrice: listed, importance: "key" }));
+    expect(o.forced).toBeNull();
+    expect(o.reservation).toBe(key);
+    expect(o.actions).not.toContain("accept");
   });
 
   it("hostování: opora jen odmítnutí, pod poplatkem protinávrh přesně na poplatek, od poplatku přijetí", () => {
