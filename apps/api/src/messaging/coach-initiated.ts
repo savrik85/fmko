@@ -48,7 +48,7 @@ const MAX_VYMEN = 30;
 
 /** Dotaz na hráče ve tvaru, jaký očekává `loadPlayerSnapshot`. */
 const PLAYER_SELECT = `
-  SELECT p.id, p.first_name, p.last_name, p.nationality, p.nickname, p.avatar, p.age, p.position,
+  SELECT p.id, p.team_id, p.first_name, p.last_name, p.nationality, p.nickname, p.avatar, p.age, p.position,
          p.personality, p.life_context, p.coach_relationship, p.is_celebrity,
          0 AS recent_minutes, 6.5 AS recent_rating_avg,
          ${INJURY_COLUMN}
@@ -71,9 +71,10 @@ export async function startCoachThread(
   },
 ): Promise<boolean> {
   try {
+    // Áčko i U21 téhož klubu: SMS U21 klukovi dřív končila tady a kredit byl pryč.
     const row = await db
-      .prepare(`${PLAYER_SELECT} WHERE p.id = ? AND p.team_id = ?`)
-      .bind(opts.playerId, opts.teamId)
+      .prepare(`${PLAYER_SELECT} WHERE p.id = ? AND (p.team_id = ? OR p.team_id IN (SELECT id FROM teams WHERE parent_team_id = ? AND team_type = 'u21'))`)
+      .bind(opts.playerId, opts.teamId, opts.teamId)
       .first<Record<string, unknown>>();
     if (!row) {
       logger.warn({ module: M }, `hráč ${opts.playerId} není v kádru ${opts.teamId}`);
@@ -81,7 +82,9 @@ export async function startCoachThread(
     }
 
     // Bez účasti v posledním zápase si hráč z výsledku týmu domyslel, že hrál.
-    const player = loadPlayerSnapshot(row, await loadLastMatchContext(db, opts.teamId));
+    // U21 kluk hrál jinou soutěž, výsledek áčka mu nepatří (stejně jako v `handleAiPlayerReply`).
+    const matchCtx = row.team_id === opts.teamId ? await loadLastMatchContext(db, opts.teamId) : undefined;
+    const player = loadPlayerSnapshot(row, matchCtx);
     const situaceKind = (await nactiSituaceTymu(db, opts.teamId)).get(opts.playerId);
     player.zivotniSituace = situaceKind ? { kind: situaceKind, label: nazevSituace(situaceKind) } : undefined;
     const team = await loadTeamContext(db, opts.teamId);
