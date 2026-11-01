@@ -641,7 +641,7 @@ async function aplikujDopady(
         await sendSystemSMS(
           db, opts.homeTeamId, "Správce hřiště", "Správce hřiště",
           `🔧 Po zápase je rozbité tohle: ${rozbite.label}. Nefunguje to. `
-          + `Oprava vyjde na ${rozbite.cost.toLocaleString("cs-CZ")} Kč — najdeš ji na Stadionu.`,
+          + `Oprava vyjde na ${rozbite.cost.toLocaleString("cs-CZ")} Kč, najdeš ji na Stadionu.`,
         ).catch((e) => { logger.warn({ module: M }, "SMS o rozbitém zařízení", e); });
       }
     } catch (e) {

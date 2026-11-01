@@ -953,7 +953,7 @@ const LEGEND_EXCUSES = [
   // Životní styl
   "Nestíhá, zůstal na afterparty", "Jede na dovolenou (uprostřed sezóny)",
   "Zaspání, včerejší degustace vín se protáhla", "Říká že auto je v servisu a nechce jet autobusem",
-  "Má oběd s kamarádem z reprezentace", "Dnes slaví narozeniny — 'kluci to zvládnou beze mě'",
+  "Má oběd s kamarádem z reprezentace", "Dnes slaví narozeniny, prý „kluci to zvládnou beze mě“",
   "Jede na premiéru do kina", "Natáčí podcast o fotbale",
   "Má event v rooftop baru na Žižkově", "Má meeting s agentem v centru",
 ];

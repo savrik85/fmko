@@ -981,7 +981,7 @@ async function resolveStammtisch(
     }
 
     const allyLine = newAllies.length
-      ? `🏅 Trvalý spojenec: ${newAllies.join(", ")} — partnerství zpečetěné u třetího pivního stolu.`
+      ? `🏅 Trvalý spojenec: ${newAllies.join(", ")}. Partnerství zpečetěné u třetího pivního stolu.`
       : null;
     const hostMorningText = morningAfterText(hostMorning);
 

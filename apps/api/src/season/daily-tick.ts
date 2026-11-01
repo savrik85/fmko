@@ -1612,7 +1612,7 @@ export async function executeDailyTick(
       for (const listing of expiring.results) {
         const label = CATEGORY_LABELS[listing.category] ?? listing.category;
         await sendSystemSMS(env.DB, listing.team_id, "Kustod",
-          `📦 Inzerát na ${label} (úroveň ${listing.level}) vypršel — za ${listing.price.toLocaleString("cs")} Kč se nikdo neozval. Zkus jít s cenou dolů, nebo to vem do zastavárny.`)
+          `📦 Inzerát na ${label} (úroveň ${listing.level}) vypršel. Za ${listing.price.toLocaleString("cs")} Kč se nikdo neozval. Zkus jít s cenou dolů, nebo to vem do zastavárny.`)
           .catch((e) => logger.warn({ module: "daily-tick" }, "sms expired equipment listing", e));
       }
     }
