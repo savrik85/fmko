@@ -96,7 +96,7 @@ export async function holdMunicipalElections(db: D1Database): Promise<{
   // Článek do Zpravodaje per liga (jen ligy s lidským týmem).
   const leagues = await db.prepare(
     `SELECT DISTINCT t.league_id as id FROM teams t
-     WHERE t.user_id != 'ai' AND t.league_id IS NOT NULL`
+     WHERE t.user_id != 'ai' AND t.league_id IS NOT NULL AND t.parent_team_id IS NULL`
   ).all<{ id: string }>();
 
   const headline = "Komunální volby: v obcích se mění vedení";
