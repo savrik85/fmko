@@ -104,6 +104,20 @@ function condC(v: number): string {
   if (v >= 50) return "text-gold-600";
   return "text-card-red";
 }
+/** Štítek formy: jen výrazná forma (±0,35 a víc), jinak nic, ať sestava není přeplácaná. */
+function FormBadge({ form }: { form: number | undefined }) {
+  if (form === undefined || Math.abs(form) < 0.35) return null;
+  const good = form > 0;
+  return (
+    <span
+      className={`ml-1 text-micro font-heading font-bold px-1 rounded ${good ? "bg-pitch-50 text-pitch-700" : "bg-red-50 text-card-red"}`}
+      title={good ? "V posledních zápasech hraje nad svůj průměr, útok týmu to posílí." : "V posledních zápasech hraje pod svůj průměr, útok týmu to oslabí."}
+    >
+      {good ? "forma ↑" : "forma ↓"}
+    </span>
+  );
+}
+
 function moraleIcon(v: number): string {
   if (v >= 80) return "😊";
   if (v >= 60) return "🙂";
@@ -227,6 +241,8 @@ function MatchPage() {
   const [rolesSavedAt, setRolesSavedAt] = useState<number | null>(null);
   const [rolesError, setRolesError] = useState<string | null>(null);
   const [formationFam, setFormationFam] = useState<Record<string, number>>({});
+  /** Forma hráčů −1 až +1 z posledních zápasů (engine/form.ts), štítek u jména. */
+  const [playerForms, setPlayerForms] = useState<Record<string, number>>({});
   const [presets, setPresets] = useState<Record<string, { formation: string; tactic: string; hardness?: string; captainId: string | null; players: Array<{ playerId: string; matchPosition: string }>; matchPlan?: MatchPlanRule[]; bench?: string[] | null; updatedAt: string } | null>>({ A: null, B: null, C: null });
   const [activePreset, setActivePreset] = useState<"A" | "B" | "C" | null>(null);
   const [lineupSource, setLineupSource] = useState<"explicit" | "default" | null>(null);
@@ -243,6 +259,9 @@ function MatchPage() {
     apiFetch<{ tactic: Record<string, number>; formation: Record<string, number> }>(`/api/teams/${teamId}/tactic-chemistry`)
       .then((d) => { setFormationFam(d.formation ?? {}); })
       .catch((e) => console.warn("load chemistry:", e));
+    apiFetch<{ forms: Record<string, number> }>(`/api/teams/${teamId}/player-form`)
+      .then((d) => setPlayerForms(d.forms ?? {}))
+      .catch((e) => console.warn("load player form:", e));
     // Načti presety
     apiFetch<{ presets: typeof presets }>(`/api/teams/${teamId}/lineup-presets`)
       .then((d) => setPresets(d.presets ?? { A: null, B: null, C: null }))
@@ -1106,6 +1125,7 @@ function MatchPage() {
                                 <div className="flex items-center gap-1">
                                   <span className="font-heading font-bold text-sm">{isOOP && <span className="text-gold-500 mr-1">⚠️</span>}{p.lastName}</span>
                                   <PositionBadge position={p.position as Pos} />
+                                  <FormBadge form={playerForms[p.id]} />
                                   {(p as any).hangover && <span title="Ranní kocovina po výhře (−15 kondice)">🍺</span>}
                                 </div>
                                 <div className="text-xs text-muted">{p.firstName} · {p.age} let</div>
@@ -1166,6 +1186,7 @@ function MatchPage() {
                             <div className="flex items-center gap-1.5">
                               <div className="min-w-0">
                                 <span className="font-heading font-bold text-sm leading-tight">{player.lastName}</span>
+                                <FormBadge form={playerForms[player.id]} />
                                 <div className="text-xs text-muted">{player.firstName} · {player.age} let</div>
                               </div>
                               {captainId === player.id && (
@@ -1247,6 +1268,7 @@ function MatchPage() {
                                 <div className="flex items-center gap-1">
                                   <span className="font-heading font-bold text-sm leading-tight">{p.lastName}</span>
                                   <PositionBadge position={p.position as Pos} />
+                                  <FormBadge form={playerForms[p.id]} />
                                   {(p as any).hangover && <span title="Ranní kocovina po výhře (−15 kondice)">🍺</span>}
                                 </div>
                                 {note
