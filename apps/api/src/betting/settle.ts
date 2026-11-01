@@ -231,7 +231,7 @@ async function oznam(
       ? `Tiket č. ${cislo} je vyhraný. Vklad ${kc(t.stake)}, kurz ${ku(oddsX100)}, výplata ${kc(payout)}. Peníze máš na klubovém účtu.`
       : `Tiket č. ${cislo}, všech ${legs.length} tipů sedlo. Kurz ${ku(oddsX100)}, výplata ${kc(payout)}.`;
     if (anulovane > 0) {
-      sms += ` ${anulovane === 1 ? "Jeden tip se anuloval" : `${anulovane} tipy se anulovaly`} — hráč nenastoupil, kurz o něj klesl.`;
+      sms += ` ${anulovane === 1 ? "Jeden tip se anuloval" : `${anulovane} tipy se anulovaly`}, hráč nenastoupil a kurz o něj klesl.`;
     }
   } else if (status === "void") {
     titulek = "🎫 Tiket anulován";

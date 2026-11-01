@@ -342,7 +342,7 @@ export default function HospodaPage() {
       {/* Sessions history */}
       {sessions.length === 0 ? (
         <div className="card p-4 sm:p-5">
-          <p className="text-sm text-muted">Zatím žádné hospodské večery — počkej na první daily-tick.</p>
+          <p className="text-sm text-muted">Zatím žádné hospodské večery. První přijde s novým herním dnem.</p>
         </div>
       ) : (
         <div className="space-y-3">

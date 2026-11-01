@@ -289,7 +289,7 @@ export async function dopadSplneneKampane(
     const { sendSystemSMS } = await import("../lib/sms");
     await sendSystemSMS(
       db, k.team_id, "Kapitán", "Kapitán týmu",
-      `😬 Kluci to řeší v kabině — na tribuně se skanduje „${k.target_name} ven". `
+      `😬 Kluci to řeší v kabině, na tribuně se skanduje „${k.target_name} ven". `
       + `${k.target_name} je z toho úplně mimo. Tohle se musí nějak vyřešit.`,
     ).catch((e) => { logger.warn({ module: M }, "SMS o kampani proti hráči", e); });
     return;

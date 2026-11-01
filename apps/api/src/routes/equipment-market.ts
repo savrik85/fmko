@@ -618,7 +618,7 @@ equipmentMarketRouter.post("/teams/:teamId/equipment-market/:listingId/buy", asy
   await Promise.all([
     sendSystemSMS(c.env.DB, teamId, "Kustod",
       buyerSmsText +
-      (sellerCondition < REPAIR_THRESHOLD ? ` Chce to opravit — ${getRepairCost(category, listing.level, sellerCondition).toLocaleString("cs")} Kč.` : ""))
+      (sellerCondition < REPAIR_THRESHOLD ? ` Chce to opravit, oprava za ${getRepairCost(category, listing.level, sellerCondition).toLocaleString("cs")} Kč.` : ""))
       .catch((e) => logger.warn({ module: MODULE }, "sms buyer", e)),
     ...(notifySeller && listing.team_id ? [
       sendSystemSMS(c.env.DB, listing.team_id, "Kustod",
