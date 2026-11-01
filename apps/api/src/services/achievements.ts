@@ -55,6 +55,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { key: "season_finished", icon: "🎂", title: "Výročí sezóny", desc: "Dokončit celou sezónu", tier: "silver" },
   { key: "champion", icon: "🏅", title: "Šampion kraje", desc: "Vyhrát krajský přebor", tier: "gold" },
   { key: "season_champion", icon: "🏆", title: "Mistr sezóny", desc: "Vyhrát svou ligu", tier: "gold" },
+  { key: "cup_winner", icon: "🥇", title: "Pohárový král", desc: "Vyhrát Český amatérský pohár", tier: "gold" },
 ];
 
 const BY_KEY: Record<string, AchievementDef> = {};
@@ -232,6 +233,11 @@ export async function awardLeagueChampion(db: D1Database, leagueId: string, seas
   if (!row?.champion_team_id || row.level !== "krajsky_prebor") return null;
   await award(db, row.champion_team_id, "champion", { leagueId, seasonNumber });
   return row.champion_team_id;
+}
+
+/** Vítěz Českého amatérského poháru (cup/cup-news.ts). Idempotentní. */
+export async function awardCupWinnerAchievement(db: D1Database, teamId: string, meta: { cupId: string; seasonNumber: number }): Promise<boolean> {
+  return award(db, teamId, "cup_winner", meta);
 }
 
 /** Konec sezóny — dokončení sezóny (všem) + mistr (vítězi). Idempotentní. */

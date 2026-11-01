@@ -335,7 +335,7 @@ export default {
     if (isCupTick) {
       try {
         const { maybeAdvanceCup } = await import("./cup/cup");
-        const batches = await maybeAdvanceCup(env.DB);
+        const batches = await maybeAdvanceCup(env.DB, env);
         if (batches > 0) log("info", `cup tick: ${batches} dávek`);
       } catch (e: any) {
         log("error", "cup tick failed", e);

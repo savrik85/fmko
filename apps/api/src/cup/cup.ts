@@ -5,6 +5,7 @@
  * Silová simulace (bez sestav) s šancí na překvapení (giant-killing).
  */
 
+import type { OptionalPushKeys } from "../community/phone-push";
 import { CUP_HOUR_PRAGUE, pragueKickoffIso } from "../lib/match-tick-schedule";
 import { createRng, type Rng } from "../generators/rng";
 import { logger } from "../lib/logger";
@@ -203,6 +204,7 @@ export async function createCup(db: D1Database, seasonNumber: number): Promise<{
   }
 
   logger.info({ module: M }, `cup created s=${seasonNumber} teams=${allTeams.length} (${byes} volných losů) rounds=${totalRounds}`);
+  await announceCupDraw(db, cupId, 1);
   return { created: true, cupId, teams: allTeams.length, rounds: totalRounds };
 }
 
@@ -929,7 +931,7 @@ export async function cupTieWeather(
 }
 
 /** Odsimuluje aktuální kolo poháru a vygeneruje další kolo z vítězů (nebo ukončí pohár ve finále). */
-export async function simulateCupRound(db: D1Database, cupId: string): Promise<{ ok: boolean; round?: number; finished?: boolean; winner?: string }> {
+export async function simulateCupRound(db: D1Database, cupId: string, env: OptionalPushKeys = {}): Promise<{ ok: boolean; round?: number; finished?: boolean; winner?: string }> {
   const cup = await db.prepare("SELECT total_rounds, current_round, status, season_number FROM cup_competitions WHERE id = ?").bind(cupId)
     .first<{ total_rounds: number; current_round: number; status: string; season_number: number }>()
     .catch((e) => { logger.warn({ module: M }, "load cup", e); return null; });
@@ -1130,6 +1132,7 @@ export async function simulateCupRound(db: D1Database, cupId: string): Promise<{
     const fin = await db.prepare("UPDATE cup_competitions SET status='finished', winner_team_id=? WHERE id=? AND status='active'").bind(champ, cupId).run()
       .catch((e) => { logger.warn({ module: M }, "finish cup", e); return null; });
     if ((fin?.meta?.changes ?? 0) !== 1) return { ok: true, round };
+    await announceCupRound(db, env, cupId, round, champ);
     return { ok: true, round, finished: true, winner: champ ?? undefined };
   }
 
@@ -1200,14 +1203,29 @@ export async function simulateCupRound(db: D1Database, cupId: string): Promise<{
     return { ok: false, round };
   }
 
+  // Kolo je uzavřené a další vylosované: zprávy jen jednou, z invokace, která kolo uzavřela.
+  await announceCupRound(db, env, cupId, round, null);
+  await announceCupDraw(db, cupId, round + 1);
   return { ok: true, round };
+}
+
+async function announceCupDraw(db: D1Database, cupId: string, round: number): Promise<void> {
+  const { notifyCupDraw } = await import("./cup-news");
+  await notifyCupDraw(db, cupId, round)
+    .catch((e) => logger.error({ module: M }, `SMS o losu ${round}. kola poháru ${cupId}`, e));
+}
+
+async function announceCupRound(db: D1Database, env: OptionalPushKeys, cupId: string, round: number, champion: string | null): Promise<void> {
+  const { afterCupRoundClosed } = await import("./cup-news");
+  await afterCupRoundClosed(db, env, cupId, round, champion)
+    .catch((e) => logger.error({ module: M }, `zprávy po kole ${round} poháru ${cupId}`, e));
 }
 
 /**
  * Auto-postup poháru: pokud aktuální kolo aktivního poháru má naplánované datum
  * <= herní den, odsimuluj ho (i víc kol dozadu, kdyby se hra opozdila). Volá se z daily-ticku.
  */
-export async function maybeAdvanceCup(db: D1Database): Promise<number> {
+export async function maybeAdvanceCup(db: D1Database, env: OptionalPushKeys = {}): Promise<number> {
   const season = await db.prepare("SELECT MAX(number) AS n FROM seasons WHERE status = 'active'").first<{ n: number }>()
     .catch((e) => { logger.warn({ module: M }, "advance: season", e); return null; });
   if (!season?.n) return 0;
@@ -1237,7 +1255,7 @@ export async function maybeAdvanceCup(db: D1Database): Promise<number> {
       .bind(cup.id, cup.current_round).first<{ d: string | null }>()
       .catch((e) => { logger.warn({ module: M }, "advance: round date", e); return null; });
     if (!cur?.d || cur.d > gd.d) break; // kolo ještě nemá nadejít / už je dohrané
-    await simulateCupRound(db, cup.id);
+    await simulateCupRound(db, cup.id, env);
     advanced++;
   }
   if (advanced > 0) logger.info({ module: M }, `cup auto-advanced ${advanced} kol (s=${season.n})`);
