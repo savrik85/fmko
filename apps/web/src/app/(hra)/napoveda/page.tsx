@@ -26,7 +26,7 @@ export default function NapovedaPage() {
   return (
     <div className="page-container space-y-4">
       <div className="card p-4">
-        <h1 className="font-heading font-[800] text-2xl mb-1">📖 Nápověda — jak hra funguje</h1>
+        <h1 className="font-heading font-[800] text-2xl mb-1">📖 Nápověda: jak hra funguje</h1>
         <p className="text-sm text-muted">
           Vše, co rozhoduje o výsledku zápasu. Atributy hráčů, taktiky, formace, kondice a další faktory.
         </p>
@@ -108,7 +108,7 @@ export default function NapovedaPage() {
         </h2>
         <p className="text-sm text-muted">
           Třetí osa vedle formace a taktiky. Vyplatí se ji volit podle toho, kdo bude zápas
-          pískat — rozhodčí se deleguje dva herní dny předem, takže to stihneš.
+          pískat. Rozhodčí se deleguje dva herní dny předem, takže to stihneš.
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
           {(Object.keys(HARDNESS_INFO) as HardnessKey[]).map((key) => {
@@ -124,11 +124,11 @@ export default function NapovedaPage() {
         <div className="text-sm space-y-1.5 border-t border-gray-100 pt-3">
           <p><span className="font-heading font-bold">Zisk z tvrdé hry není pevný.</span> Škálují ho tři věci:
             jestli na ni máš kádr (agresivita, síla, pracovitost), jak přísný je sudí, a kolik hráčů už má
-            žlutou. Riziko se naproti tomu neškáluje — fauly a karty přijdou v plné výši, i když tvrdou
+            žlutou. Riziko se naproti tomu neškáluje: fauly a karty přijdou v plné výši, i když tvrdou
             hru neumíš. Technický kádr si tím tedy spíš uškodí.</p>
           <p><span className="font-heading font-bold">Červená karta nově opravdu oslabuje.</span> Dřív se
             síla týmu počítala průměrem, takže vyloučení nebylo znát. Teď každý chybějící hráč ubere z útoku
-            i z obrany, a útok padá víc — deset lidí ubrání skoro totéž, ale dopředu už nemá kdo běhat.</p>
+            i z obrany, a útok padá víc. Deset lidí ubrání skoro totéž, ale dopředu už nemá kdo běhat.</p>
           <p><span className="font-heading font-bold">Tvrdá hra zraňuje.</span> Víc soupeře než vlastní
             hráče, ale obě strany na to doplácejí.</p>
         </div>
@@ -171,15 +171,16 @@ export default function NapovedaPage() {
           <div>
             <div className="font-heading font-bold text-sm">Kondice (0–100 %)</div>
             <p className="text-muted text-xs leading-relaxed">
-              Hráč pod 60 % kondice hraje až na 60 % své síly. Regeneruje se denně podle staminy:
-              vysoká stamina (≥75) = +18 %/den, nízká (&lt;25) = +7 %/den. Klesá po zápase a tréninku.
-              Tip: rotuj hráče s nízkou staminou, ať se nevyčerpají.
+              Unavený hráč hraje slabší: s plnou kondicí naplno, úplně vyčerpaný zhruba na 85 % své síly.
+              Kondice klesá po zápase a tréninku a denně se vrací podle staminy: +20 % (stamina 75 a víc),
+              +16 % (50+), +13 % (25+), +10 % (pod 25). Hráči do 21 let mají +3 % navíc, nad 35 let −3 %.
+              Mezi koly se kondice většinou vrátí skoro celá, šetřit má smysl hlavně po zranění nebo při zápasech den po dni.
             </p>
           </div>
           <div>
             <div className="font-heading font-bold text-sm">Morálka (0–100)</div>
             <p className="text-muted text-xs leading-relaxed">
-              Ovlivňuje výkon v zápase — sebevědomý tým si vytváří víc šancí a líp zakončuje. Každý vstřelený
+              Ovlivňuje výkon v zápase: sebevědomý tým si vytváří víc šancí a líp zakončuje. Každý vstřelený
               gól zvedne morálku týmu o +2 až +4 (dle vůdcovství), inkasovaný ji sebere o −1 až −3. Denně se
               táhne k 50 (nad 55 klesá, pod 45 roste). Příliš nízká morálka + nízký patriotismus = riziko odchodu hráče.
             </p>
@@ -270,8 +271,8 @@ export default function NapovedaPage() {
           </div>
           <div className="text-sm text-muted mt-3 space-y-1">
             <p>
-              <strong className="text-ink">Po zápase</strong> se hodnota přičte ke spokojenosti fanoušků
-              — pro srovnání: výhra je +6, prohra −5. <strong className="text-ink">Loajalita</strong> je
+              <strong className="text-ink">Po zápase</strong> se hodnota přičte ke spokojenosti fanoušků,
+              pro srovnání: výhra je +6, prohra −5. <strong className="text-ink">Loajalita</strong> je
               hladina, ke které se spokojenost každý den o bod vrací.
             </p>
             <p>
@@ -292,7 +293,7 @@ export default function NapovedaPage() {
       {/* ═══ DVĚ REPUTACE ═══ */}
       <section className="card p-4 space-y-3">
         <h2 className="font-heading font-bold text-lg flex items-center gap-2">
-          ⭐ <span>Dvě reputace — nepleť si je</span>
+          ⭐ <span>Dvě reputace, nepleť si je</span>
         </h2>
 
         <div className="border border-gray-200 rounded-soft p-3">
@@ -300,7 +301,7 @@ export default function NapovedaPage() {
           <p className="text-sm text-muted leading-relaxed mb-2">
             Jak moc se o klubu v okrese ví. Ovlivňuje návštěvnost, podporu místních podnikatelů
             (reputace × 100 Kč měsíčně), počet i velikost sponzorských nabídek, výnos bufetu,
-            ochotu hráčů k tobě přestoupit — a <strong className="text-ink">odemyká vyšší úrovně
+            ochotu hráčů k tobě přestoupit a <strong className="text-ink">odemyká vyšší úrovně
             stadionu a vybavení</strong>.
           </p>
           <p className="text-sm text-muted leading-relaxed mb-2">
@@ -315,7 +316,7 @@ export default function NapovedaPage() {
           </p>
           <p className="text-sm text-muted leading-relaxed">
             <strong className="text-ink">Samotná výhra zápasu ji nezvedne.</strong> Nad 55 bodů se
-            zisky krátí — čím jsi výš, tím dráž se stoupá. Kompletní rozpis i historii najdeš
+            zisky krátí: čím jsi výš, tím dráž se stoupá. Kompletní rozpis i historii najdeš
             v sekci <Link href="/reputace" className="text-pitch-600 underline">Reputace</Link>.
           </p>
         </div>
@@ -325,7 +326,7 @@ export default function NapovedaPage() {
           <p className="text-sm text-muted leading-relaxed">
             Tvoje osobní jméno v okrese, ne jméno klubu. <strong className="text-ink">Ta</strong> roste
             výhrami (+1, výhra o tři a víc gólů +2) a klesá prohrami. Spolu s motivací určuje, jak
-            trenéra berou fanoušci — viz tabulka výš.
+            trenéra berou fanoušci (viz tabulka výš).
           </p>
         </div>
       </section>
@@ -342,7 +343,8 @@ export default function NapovedaPage() {
           <div>
             <div className="font-heading font-bold text-sm">Počasí</div>
             <p className="text-muted text-xs">
-              Déšť: technika 0.8×, zranění 1.3×. Sníh: technika 0.7×, zranění 1.4×. Při dešti zvaž taktiku Nakopávané.
+              Déšť: technika 0,8×, zranění 1,45×. Sníh: technika 0,7×, zranění 1,6×. Vítr: technika 0,9×,
+              dlouhé míče trpí. Při dešti a sněhu zvaž taktiku Nakopávané, ve větru ne.
             </p>
           </div>
         </div>
