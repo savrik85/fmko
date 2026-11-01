@@ -139,6 +139,10 @@ export interface AssembledLineup {
 
 const MAX_REST = 6;
 const MAX_MUST_START = 3;
+/** Od jaké kondice je hráč fit: bez důvodu k rotaci ho trenér v soutěži nešetří. */
+export const FIT_CONDITION = 70;
+/** Kolik fit hráčů smí trenér posadit v soutěžním zápase bez důvodu k rotaci (vlastní styl). */
+export const MAX_FIT_REST = 1;
 /** Kolik minut musí slíbený hráč odehrát, aby se zápas počítal do slibu (checkMinutesPledge). */
 const PROMISED_MINUTES = 45;
 const PLAN_WHEN = ["losing", "drawing", "winning", "minute", "down_a_man", "up_a_man", "tired"] as const;
@@ -286,6 +290,17 @@ export function tacticOptions(ctx: MatchContext, formation: Formation): Array<{ 
 
 function strengthGap(ctx: MatchContext): number {
   return ctx.opponent.strength === null ? 0 : ctx.opponent.strength - ctx.own.strength;
+}
+
+/**
+ * Je dnes důvod rotovat? Přátelák, mnohem slabší soupeř, nebo další soutěžní zápas do dvou
+ * dnů. Jinak skutečný trenér posílá nejlepší sestavu: v 47 % ligových rozhodnutí přitom
+ * model posadil pět a víc hráčů i s kondicí 100 (jedenáctka 52,2 místo 55,3).
+ */
+export function rotationAllowed(ctx: MatchContext): boolean {
+  return ctx.fixture.kind === "friendly"
+    || strengthGap(ctx) <= -8
+    || (ctx.daysToNextMatch !== null && ctx.daysToNextMatch <= 2);
 }
 
 /** Tvrdost podle stejného pravidla jako dřív u AI týmů (sudí, agresivita, karty, síla soupeře). */
@@ -521,6 +536,16 @@ export function validateMatchDecision(raw: unknown, ctx: MatchContext): Decision
   }
   const conflicted = mustStart.filter((k) => rest.includes(k));
   if (conflicted.length > 0) rejected.push(`šetřit i nasadit zároveň: ${conflicted.join(", ")}`);
+  let restKeys = rest.filter((k) => !conflicted.includes(k));
+  // Bez důvodu k rotaci smí model šetřit unavené a nejvýš jednoho fit hráče (meze hlídá kód).
+  if (!rotationAllowed(ctx)) {
+    const condition = new Map(ctx.squad.map((p) => [p.key, p.condition]));
+    const dropped = restKeys.filter((k) => (condition.get(k) ?? 0) >= FIT_CONDITION).slice(MAX_FIT_REST);
+    if (dropped.length > 0) {
+      rejected.push(`šetření fit hráčů bez důvodu k rotaci: ${dropped.join(", ")}`);
+      restKeys = restKeys.filter((k) => !dropped.includes(k));
+    }
+  }
 
   return {
     ok: true,
@@ -530,7 +555,7 @@ export function validateMatchDecision(raw: unknown, ctx: MatchContext): Decision
       tactic: r.tactic as Tactic,
       hardness: r.hardness as Hardness,
       captain: captain as string | null,
-      rest: rest.filter((k) => !conflicted.includes(k)),
+      rest: restKeys,
       mustStart,
       penaltyTaker: penaltyTaker as string | null,
       freekickTaker: freekickTaker as string | null,
@@ -751,6 +776,9 @@ export function renderMatchPrompt(ctx: MatchContext): string {
   lines.push('Plan rule: {"fromMinute": 1-90, "when": "losing"|"winning"|"drawing"|"minute"|"down_a_man"|"up_a_man"|"tired", "byAtLeast": 1-3 (losing/winning only), "below": 10-60 (tired only, condition threshold), "action": "tactic"|"hardness"|"sub", "tactic": ..., "hardness": ..., "out": key of a starter, "in": key of a non-starter}.');
   lines.push("The engine starts the strongest XI for your formation by itself: use mustStart only to force in players it would leave out, and rest only for players you deliberately keep out. It also fills the bench (max 7); a substitution rule needs a starter out and a non-starter in.");
   lines.push("Remember: every fit regular you rest and every weaker player you force in lowers your chances today. A real manager rotates in friendlies, against much weaker opponents or before a more important match within two days; in other league and cup matches he fields his best side, in his own style.");
+  if (!rotationAllowed(ctx)) {
+    lines.push(`TODAY there is no reason to rotate (competitive match, opponent not much weaker, next match not within two days): rest only tired players (condition below ${FIT_CONDITION}) and at most ${MAX_FIT_REST} fit player; further fit players in rest are ignored.`);
+  }
   return lines.join("\n");
 }
 

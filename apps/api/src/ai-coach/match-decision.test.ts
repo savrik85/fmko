@@ -118,6 +118,31 @@ describe("kontrola rozhodnutí modelu", () => {
     expect(validateMatchDecision({ ...valid, tactic: "tiki_taka" }, context()).ok).toBe(false);
   });
 
+  it("v lize bez důvodu k rotaci zůstanou ze šetřených unavení a jeden fit hráč", () => {
+    const ctx = context({}, { 3: { condition: 55 }, 9: { condition: 62 } });
+    const r = validateMatchDecision({ ...valid, rest: ["P3", "P4", "P9", "P10", "P15"] }, ctx);
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.decision.rest).toEqual(["P3", "P4", "P9"]);
+      expect(r.rejected).toContain("šetření fit hráčů bez důvodu k rotaci: P10, P15");
+    }
+    expect(renderMatchPrompt(ctx)).toContain("no reason to rotate");
+  });
+
+  it("v přáteláku, proti mnohem slabšímu a před zápasem do dvou dnů smí rotovat", () => {
+    const rest = ["P3", "P4", "P10", "P15"];
+    for (const over of [
+      { fixture: { ...context().fixture, kind: "friendly" as const } },
+      { opponent: { ...context().opponent, strength: 40 } },
+      { daysToNextMatch: 2 },
+    ]) {
+      const ctx = context(over);
+      const r = validateMatchDecision({ ...valid, rest }, ctx);
+      expect(r.ok && r.decision.rest).toEqual(rest);
+      expect(renderMatchPrompt(ctx)).not.toContain("no reason to rotate");
+    }
+  });
+
   it("chybný pokyn na lavičce se jen zahodí", () => {
     const r = validateMatchDecision({ ...valid, plan: [{ fromMinute: 95, when: "losing", action: "tactic", tactic: "offensive" }] }, context());
     expect(r.ok).toBe(true);
