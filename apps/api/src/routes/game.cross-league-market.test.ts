@@ -51,12 +51,12 @@ beforeAll(async () => {
     CREATE TABLE transfer_listings (
       id TEXT PRIMARY KEY, player_id TEXT NOT NULL, team_id TEXT NOT NULL, asking_price INTEGER NOT NULL,
       league_id TEXT NOT NULL, status TEXT NOT NULL, expires_at TEXT NOT NULL, is_ai_listing INTEGER NOT NULL DEFAULT 0,
-      ai_player_data TEXT, rejected_by TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      ai_player_data TEXT, rejected_by TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL DEFAULT (datetime('now')), deal_type TEXT NOT NULL DEFAULT 'transfer', loan_days INTEGER, loan_playing_time TEXT
     );
     CREATE TABLE transfer_bids (id TEXT PRIMARY KEY, listing_id TEXT NOT NULL, team_id TEXT NOT NULL, amount INTEGER NOT NULL, status TEXT NOT NULL);
     CREATE TABLE transfer_offers (
       id TEXT PRIMARY KEY, player_id TEXT NOT NULL, from_team_id TEXT NOT NULL, offer_amount INTEGER NOT NULL,
-      counter_amount INTEGER, status TEXT NOT NULL
+      counter_amount INTEGER, status TEXT NOT NULL, loan_playing_time TEXT, listing_id TEXT
     );
     CREATE TABLE ai_negotiations (id TEXT PRIMARY KEY, team_id TEXT NOT NULL, listing_id TEXT, status TEXT NOT NULL);
 

@@ -17,6 +17,8 @@ import { WatchlistTab } from "./WatchlistTab";
 import { PlayerBrowseTable, type BrowseRow } from "@/components/players/PlayerBrowseTable";
 import { ObligationsTab } from "./ObligationsTab";
 import { DemandsTab } from "./DemandsTab";
+import { LoansTab } from "./LoansTab";
+import { loanTermsLine } from "@/lib/loans";
 import { OriginBadge } from "@/components/transfers/origin-badge";
 import { AiNegotiationsList } from "@/components/transfers/AiNegotiationsList";
 import { termsNote, TransferTermsFields, PLAIN_TERMS, type TermsValue } from "@/components/transfers/transfer-terms";
@@ -30,8 +32,8 @@ type Tab = "overview" | "hledat" | "offers" | "squad" | "demands" | LegacyTab;
 type LegacyTab = "search" | "free_agents" | "market" | "sledovani" | "zavazky";
 // Pořadí určuje i výchozí záložku — první je ta bez ?tab= v adrese.
 const TAB_KEYS = ["overview", "hledat", "offers", "squad", "demands", "search", "free_agents", "market", "sledovani", "zavazky"] as const;
-const HLEDAT_SUBTABS = ["hledani", "na-prodej", "volni", "sledovani"] as const;
-const SQUAD_SUBTABS = ["hraci", "zavazky"] as const;
+const HLEDAT_SUBTABS = ["hledani", "na-prodej", "na-hostovani", "volni", "sledovani"] as const;
+const SQUAD_SUBTABS = ["hraci", "hostovani", "zavazky"] as const;
 
 interface TransfersOverview {
   stats: {
@@ -574,6 +576,10 @@ interface MarketListing {
   skills?: Record<string, number>;
   injuryDays?: number | null;
   myNegotiationId?: string | null;
+  /** Inzerát na hostování: délka, poplatek (askingPrice) a podmínka hraní. */
+  dealType?: "transfer" | "loan";
+  loanDays?: number | null;
+  loanPlayingTime?: string | null;
 }
 
 /** Štítek „odkud“ u hráče z jiného okresu nebo soutěže — stejný na Volných i na Prodeji. */
@@ -581,6 +587,11 @@ interface MyListing {
   id: string; playerId: string; askingPrice: number; playerName: string;
   playerAge: number; position: string; overallRating: number; expiresAt: string;
   bids: Array<{ id: string; amount: number; bidderName: string; teamId: string }>;
+  dealType?: "transfer" | "loan";
+  loanDays?: number | null;
+  loanPlayingTime?: string | null;
+  /** Žádosti o hostování z tohoto inzerátu: půjčující každou potvrdí, nebo odmítne. */
+  loanRequests?: Array<{ offerId: string; teamId: string; teamName: string; leagueName: string | null }>;
 }
 
 interface PlayerOffer {
@@ -855,7 +866,11 @@ export default function TransfersPage() {
   }, [freeAgents, filters, ownDistrictOnly]);
 
   const isFiltered = activeCount > 0 || (ownDistrictOnly && freeAgents.some((fa) => fa.origin));
-  const visibleListings = ownDistrictOnly ? listings.filter((l) => !l.otherDistrict) : listings;
+  const visibleAll = ownDistrictOnly ? listings.filter((l) => !l.otherDistrict) : listings;
+  // Prodej a hostování mají každý svou podzáložku.
+  const visibleListings = visibleAll.filter((l) => l.dealType !== "loan");
+  const loanListings = visibleAll.filter((l) => l.dealType === "loan");
+  const saleTotal = listings.filter((l) => l.dealType !== "loan").length;
   const hasForeignAgents = freeAgents.some((fa) => fa.origin);
   const hasForeignListings = listings.some((l) => l.otherDistrict);
 
@@ -1106,7 +1121,36 @@ export default function TransfersPage() {
     },
   });
 
-  const listingAction = (l: MarketListing): ReactNode => l.myNegotiationId ? (
+  // Žádost o hostování: podmínky určil půjčující, žádost je převezme a čeká na jeho potvrzení.
+  const requestLoan = async (l: MarketListing) => {
+    if (!teamId) return;
+    const ok = await confirm({
+      title: `Požádat o hostování: ${l.playerName}`,
+      description: `${l.teamName} rozhodne, jestli žádost přijme. ${l.loanPlayingTime && l.loanPlayingTime !== "none"
+        ? "Podmínku hraní hra hlídá: když ji nebudete plnit, klub si hráče může stáhnout."
+        : ""}`.trim(),
+      details: [{ label: "Podmínky", value: loanTermsLine(l), color: "text-ink" }],
+      confirmLabel: "Požádat",
+    });
+    if (!ok) return;
+    try {
+      const res = await apiFetch<{ ok: boolean; offerId?: string }>(`/api/teams/${teamId}/market/${l.id}/bid`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ amount: l.askingPrice }),
+      });
+      if (res.offerId) { router.push(`/prestupy/nabidka/${res.offerId}`); return; }
+      await refresh();
+    } catch (e) {
+      console.error("žádost o hostování:", e);
+      showError("Žádost se nezdařila", (e as Error)?.message || "Zkus to prosím znovu.");
+    }
+  };
+
+  const listingAction = (l: MarketListing): ReactNode => l.dealType === "loan" && !l.myActiveOfferId ? (
+    <button onClick={() => requestLoan(l)}
+      className="py-1.5 px-4 rounded-soft text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">
+      Chci ho
+    </button>
+  ) : l.myNegotiationId ? (
     <Link href={`/prestupy/jednani/${l.myNegotiationId}`}
       className="inline-block py-1.5 px-4 rounded-soft text-sm font-heading font-bold bg-ink text-white hover:bg-ink/80 transition-colors">
       Jednáš o něm →
@@ -1127,7 +1171,7 @@ export default function TransfersPage() {
     </button>
   );
 
-  const listingRows: BrowseRow[] = visibleListings.map((l) => {
+  const toListingRow = (l: MarketListing): BrowseRow => {
     const [firstName, ...rest] = l.playerName.split(" ");
     let avatar: Record<string, unknown> | null = null;
     try {
@@ -1140,11 +1184,112 @@ export default function TransfersPage() {
       rating: l.overallRating, skills: l.skills ?? {}, avatar,
       injury: l.injuryDays ? { type: null, daysRemaining: l.injuryDays } : null,
       clubLabel: l.teamName, clubIsAi: l.teamIsAi === true, price: l.askingPrice,
-      tag: l.origin ? <OriginBadge origin={l.origin} /> : undefined,
+      tag: l.dealType === "loan" ? (
+        <span className="inline-flex flex-wrap items-center gap-1">
+          {l.origin && <OriginBadge origin={l.origin} />}
+          <span className="text-xs font-heading font-bold px-2 py-0.5 rounded-full bg-pitch-50 text-pitch-700">{loanTermsLine(l)}</span>
+        </span>
+      ) : l.origin ? <OriginBadge origin={l.origin} /> : undefined,
       action: listingAction(l),
       onOpen: l.isAiListing ? () => openListingBid(l) : () => router.push(`/hrac/${l.playerId}`),
     };
-  });
+  };
+  const listingRows: BrowseRow[] = visibleListings.map(toListingRow);
+  const loanRows: BrowseRow[] = loanListings.map(toListingRow);
+
+  // Moje inzeráty: prodej v podzáložce Prodej, hostování (se žádostmi) v podzáložce Hostování.
+  const renderMyListings = (items: MyListing[], title: string): ReactNode => items.length === 0 ? null : (
+              <div>
+                <SectionLabel>{title} ({items.length})</SectionLabel>
+                <div className="space-y-3">
+                  {items.map((l) => {
+                    const mlAvatar = (() => { try { const a = (l as any).avatar; return typeof a === "string" ? JSON.parse(a) : a; } catch { return null; } })();
+                    return (
+                    <div key={l.id} className="card p-4">
+                      <div className="flex items-center gap-3 mb-2">
+                        {mlAvatar && Object.keys(mlAvatar).length > 0
+                          ? <FaceAvatar faceConfig={mlAvatar} size={40} className="rounded-full shrink-0" />
+                          : <div className="w-10 h-10 rounded-full bg-gray-100 shrink-0" />}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <Link href={`/hrac/${l.playerId}`} className="font-heading font-bold hover:text-pitch-500 underline decoration-pitch-500/20 transition-colors">
+                              {l.playerName}
+                            </Link>
+                            <PositionBadge position={l.position as "GK" | "DEF" | "MID" | "FWD"} />
+                            <span className="text-sm text-muted">{l.playerAge} let</span>
+                          </div>
+                          {l.dealType === "loan" ? (
+                            <div className="text-xs text-muted">Na hostování: <span className="font-heading font-bold text-ink">{loanTermsLine(l)}</span></div>
+                          ) : (
+                            <div className="text-xs text-muted">Cena: <span className="font-heading font-bold text-ink">{formatCZK(l.askingPrice)}</span></div>
+                          )}
+                        </div>
+                        <button
+                          onClick={async () => {
+                            if (!teamId) return;
+                            if (await apiAction(apiFetch(`/api/teams/${teamId}/listings/${l.id}`, { method: "DELETE" }), "Stažení inzerátu se nezdařilo")) await refresh();
+                          }}
+                          className="shrink-0 py-1 px-3 rounded-soft text-xs font-heading font-bold bg-gray-100 text-muted hover:bg-gray-200 transition-colors"
+                        >
+                          Stáhnout
+                        </button>
+                      </div>
+                      {l.dealType === "loan" && (
+                        <div className="border-t border-gray-100 pt-2">
+                          {(l.loanRequests ?? []).length === 0 ? (
+                            <p className="text-sm text-muted">Zatím nikdo nepožádal.</p>
+                          ) : (
+                            <div className="space-y-2">
+                              <p className="text-sm text-muted">Žádosti ({l.loanRequests!.length}). Přijmeš jednu, ostatní dostanou odmítnutí.</p>
+                              {l.loanRequests!.map((r) => (
+                                <div key={r.offerId} className="flex items-center justify-between gap-3">
+                                  <div className="text-sm min-w-0">
+                                    <span className="font-heading font-bold">{r.teamName}</span>
+                                    {r.leagueName && <span className="text-muted"> · {r.leagueName}</span>}
+                                  </div>
+                                  <Link href={`/prestupy/nabidka/${r.offerId}`}
+                                    className="shrink-0 py-1 px-3 rounded-soft text-xs font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">
+                                    Rozhodnout
+                                  </Link>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {l.bids.length > 0 && (
+                        <div className="border-t border-gray-100 pt-2 space-y-2">
+                          {l.bids.map((b) => (
+                            <div key={b.id} className="flex items-center justify-between gap-3">
+                              <div className="text-sm">
+                                <span className="font-heading font-bold">{b.bidderName}</span>
+                                <span className="text-muted"> nabízí </span>
+                                <span className="font-heading font-bold text-pitch-500">{formatCZK(b.amount)}</span>
+                              </div>
+                              <div className="flex gap-2">
+                                <button onClick={async () => {
+                                  const ok = await confirm({ title: `Přijmout nabídku ${formatCZK(b.amount)}?`, description: `Od: ${b.bidderName}`, confirmLabel: "Přijmout" });
+                                  if (!ok || !teamId) return;
+                                  if (await apiAction(apiFetch(`/api/teams/${teamId}/bids/${b.id}/accept`, { method: "POST" }), "Přijetí nabídky se nezdařilo")) await refresh();
+                                }} className="py-1 px-3 rounded-soft text-xs font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">
+                                  Přijmout
+                                </button>
+                                <button onClick={async () => {
+                                  if (!teamId) return;
+                                  if (await apiAction(apiFetch(`/api/teams/${teamId}/bids/${b.id}/reject`, { method: "POST" }), "Odmítnutí nabídky se nezdařilo")) await refresh();
+                                }} className="py-1 px-3 rounded-soft text-xs font-heading font-bold bg-gray-100 text-muted hover:bg-gray-200 transition-colors">
+                                  Odmítnout
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ); })}
+                </div>
+              </div>
+  );
 
   const searchRows: BrowseRow[] = filteredSearch.slice(0, VYPIS_MAX).map((p) => ({
     id: p.id, firstName: p.firstName, lastName: p.lastName, nickname: p.nickname ?? null, age: p.age,
@@ -1259,6 +1404,7 @@ export default function TransfersPage() {
           items={[
             { key: "hledani", label: "Hledat", count: null },
             { key: "na-prodej", label: "Prodej", count: visibleListings.length || null },
+            { key: "na-hostovani", label: "Hostování", count: loanListings.length || null },
             { key: "volni", label: "Volní", count: (ownDistrictOnly ? freeAgents.filter((fa) => !fa.origin).length : freeAgents.length) || null },
             { key: "sledovani", label: "Sledovaní", count: watchCount || null },
           ]}
@@ -1271,6 +1417,7 @@ export default function TransfersPage() {
           ariaLabel="Můj tým"
           items={[
             { key: "hraci", label: "Hráči", count: quitCount || null },
+            { key: "hostovani", label: "Hostování", count: null },
             { key: "zavazky", label: "Závazky", count: null },
           ]}
         />
@@ -1880,7 +2027,7 @@ export default function TransfersPage() {
           <div>
             <div className="flex items-center justify-between gap-2">
               <SectionLabel>
-                Na trhu ({visibleListings.length === listings.length ? listings.length : `${visibleListings.length} z ${listings.length}`})
+                Na trhu ({visibleListings.length === saleTotal ? saleTotal : `${visibleListings.length} z ${saleTotal}`})
               </SectionLabel>
               {(hasForeignListings || ownDistrictOnly) && <OwnDistrictToggle on={ownDistrictOnly} onChange={setOwnDistrictOnly} />}
             </div>
@@ -1891,7 +2038,7 @@ export default function TransfersPage() {
             )}
             {visibleListings.length === 0 ? (
               <div className="card p-6 text-center text-muted">
-                {listings.length > 0 ? "Z tvého okresu teď nikdo hráče nenabízí." : "Nikdo momentálně nenabízí hráče."}
+                {saleTotal > 0 ? "Z tvého okresu teď nikdo hráče nenabízí." : "Nikdo momentálně nenabízí hráče."}
               </div>
             ) : (
               <div className="md:p-5 md:bg-[var(--color-surface)] md:rounded-[var(--radius-card)] md:shadow-[var(--shadow-card)]">
@@ -1901,73 +2048,33 @@ export default function TransfersPage() {
             )}
           </div>
 
-          {myListings.length > 0 && (
-            <div>
-              <SectionLabel>Moje inzerce ({myListings.length})</SectionLabel>
-              <div className="space-y-3">
-                {myListings.map((l) => {
-                  const mlAvatar = (() => { try { const a = (l as any).avatar; return typeof a === "string" ? JSON.parse(a) : a; } catch { return null; } })();
-                  return (
-                  <div key={l.id} className="card p-4">
-                    <div className="flex items-center gap-3 mb-2">
-                      {mlAvatar && Object.keys(mlAvatar).length > 0
-                        ? <FaceAvatar faceConfig={mlAvatar} size={40} className="rounded-full shrink-0" />
-                        : <div className="w-10 h-10 rounded-full bg-gray-100 shrink-0" />}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <Link href={`/hrac/${l.playerId}`} className="font-heading font-bold hover:text-pitch-500 underline decoration-pitch-500/20 transition-colors">
-                            {l.playerName}
-                          </Link>
-                          <PositionBadge position={l.position as "GK" | "DEF" | "MID" | "FWD"} />
-                          <span className="text-sm text-muted">{l.playerAge} let</span>
-                        </div>
-                        <div className="text-xs text-muted">Cena: <span className="font-heading font-bold text-ink">{formatCZK(l.askingPrice)}</span></div>
-                      </div>
-                      <button
-                        onClick={async () => {
-                          if (!teamId) return;
-                          if (await apiAction(apiFetch(`/api/teams/${teamId}/listings/${l.id}`, { method: "DELETE" }), "Stažení inzerátu se nezdařilo")) await refresh();
-                        }}
-                        className="shrink-0 py-1 px-3 rounded-soft text-xs font-heading font-bold bg-gray-100 text-muted hover:bg-gray-200 transition-colors"
-                      >
-                        Stáhnout
-                      </button>
-                    </div>
-                    {l.bids.length > 0 && (
-                      <div className="border-t border-gray-100 pt-2 space-y-2">
-                        {l.bids.map((b) => (
-                          <div key={b.id} className="flex items-center justify-between gap-3">
-                            <div className="text-sm">
-                              <span className="font-heading font-bold">{b.bidderName}</span>
-                              <span className="text-muted"> nabízí </span>
-                              <span className="font-heading font-bold text-pitch-500">{formatCZK(b.amount)}</span>
-                            </div>
-                            <div className="flex gap-2">
-                              <button onClick={async () => {
-                                const ok = await confirm({ title: `Přijmout nabídku ${formatCZK(b.amount)}?`, description: `Od: ${b.bidderName}`, confirmLabel: "Přijmout" });
-                                if (!ok || !teamId) return;
-                                if (await apiAction(apiFetch(`/api/teams/${teamId}/bids/${b.id}/accept`, { method: "POST" }), "Přijetí nabídky se nezdařilo")) await refresh();
-                              }} className="py-1 px-3 rounded-soft text-xs font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">
-                                Přijmout
-                              </button>
-                              <button onClick={async () => {
-                                if (!teamId) return;
-                                if (await apiAction(apiFetch(`/api/teams/${teamId}/bids/${b.id}/reject`, { method: "POST" }), "Odmítnutí nabídky se nezdařilo")) await refresh();
-                              }} className="py-1 px-3 rounded-soft text-xs font-heading font-bold bg-gray-100 text-muted hover:bg-gray-200 transition-colors">
-                                Odmítnout
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ); })}
-              </div>
-            </div>
-          )}
+          {renderMyListings(myListings.filter((l) => l.dealType !== "loan"), "Moje inzerce")}
         </div>
       )}
+
+      {tab === "hledat" && hledatSub === "na-hostovani" && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <SectionLabel>Hráči k zapůjčení ({loanListings.length})</SectionLabel>
+            {(hasForeignListings || ownDistrictOnly) && <OwnDistrictToggle on={ownDistrictOnly} onChange={setOwnDistrictOnly} />}
+          </div>
+          <p className="text-sm text-muted">
+            Kluby tu nabízejí hráče na hostování. Podmínky určuje klub, který hráče půjčuje, a tvou žádost musí potvrdit.
+            Když je u hráče podmínka hraní, hra ji hlídá: když ji nebudeš plnit, klub si ho může stáhnout.
+          </p>
+          {loanRows.length === 0 ? (
+            <div className="card p-6 text-center text-muted">Teď nikdo nenabízí hráče na hostování.</div>
+          ) : (
+            <div className="md:p-5 md:bg-[var(--color-surface)] md:rounded-[var(--radius-card)] md:shadow-[var(--shadow-card)]">
+              <PlayerBrowseTable rows={loanRows} color={clubColor} onColorText={clubColorText} ratingColor={clubRatingColor}
+                columns={{ club: true, price: true, action: true, value: false }} defaultSort="rating" />
+            </div>
+          )}
+          {renderMyListings(myListings.filter((l) => l.dealType === "loan"), "Moje nabídky na hostování")}
+        </div>
+      )}
+
+      {tab === "squad" && squadSub === "hostovani" && teamId && <LoansTab teamId={teamId} />}
 
       {/* ═══ TAB: Nabídky ═══ */}
       {tab === "offers" && (

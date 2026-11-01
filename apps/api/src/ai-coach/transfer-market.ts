@@ -218,6 +218,9 @@ async function buyCandidates(env: Bindings, club: AiClubState, need: PositionNee
     const listings = await findVisibleListings(db, { id: club.teamId, leagueId: club.leagueId })
       .catch((e) => { logger.warn({ module: M }, "inzeráty pro nákup", e); return [] as Record<string, unknown>[]; });
     for (const l of listings) {
+      // Hráče k zapůjčení nechává AI lidským klubům: hostování je hlavně pomoc nováčkům
+      // z nižší soutěže a AI by je vyzobala dřív, než si inzerátu někdo všimne.
+      if (l.deal_type === "loan") continue;
       if (l.is_ai_listing) {
         // Inzerát klubu mimo hru: vidí ho jen jeho liga, kupuje se jednáním jako u člověka.
         const o = outsideCandidateFromListing(l);

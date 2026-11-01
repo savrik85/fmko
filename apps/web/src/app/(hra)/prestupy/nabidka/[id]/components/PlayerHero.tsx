@@ -1,5 +1,6 @@
 "use client";
 
+import { LOAN_PLAYING_TIME_LABEL, type LoanPlayingTime } from "@/lib/loans";
 import Link from "next/link";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { PositionBadge } from "@/components/ui";
@@ -39,7 +40,7 @@ function positionSkills(pos: string, skills: Record<string, number>): Array<[str
 }
 
 export function PlayerHero({
-  player, offeredPlayers, currentAmount, offerType, loanDuration,
+  player, offeredPlayers, currentAmount, offerType, loanDuration, loanPlayingTime,
   crossLeague, adminFee, terms, sellerName, message, playerInterest,
 }: {
   player: PlayerSummary;
@@ -47,6 +48,8 @@ export function PlayerHero({
   currentAmount: number;
   offerType: "transfer" | "loan";
   loanDuration: number | null;
+  /** Podmínka hraní u hostování z inzerátu ('starter' | 'regular' | 'none'). */
+  loanPlayingTime?: string | null;
   crossLeague: boolean;
   adminFee: number;
   terms: TransferTerms;
@@ -121,6 +124,11 @@ export function PlayerHero({
         <div className="font-heading font-[900] text-3xl tabular-nums text-pitch-500 mt-1">
           {currentAmount > 0 ? `${currentAmount.toLocaleString("cs")} Kč` : offeredPlayers.length > 0 ? "Bez doplatku" : "Zdarma"}
         </div>
+        {offerType === "loan" && loanPlayingTime && loanPlayingTime !== "none" && (
+          <div className="mt-1 text-sm">
+            Podmínka: <span className="font-heading font-bold">{LOAN_PLAYING_TIME_LABEL[loanPlayingTime as LoanPlayingTime]?.toLowerCase()}</span>
+          </div>
+        )}
         {offerType === "transfer" && (terms.installments > 0 || terms.sellOnPct > 0) ? (
           <div className="mt-2 w-[280px] max-w-full text-left">
             <TermsBreakdown terms={terms} adminFee={crossLeague ? adminFee : 0} sellOnFor={sellerName} />

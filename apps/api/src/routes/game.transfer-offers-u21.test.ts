@@ -168,7 +168,7 @@ beforeAll(async () => {
       virtual_team_data TEXT,
       upfront_pct INTEGER NOT NULL DEFAULT 100,
       installments INTEGER NOT NULL DEFAULT 0,
-      sell_on_pct INTEGER NOT NULL DEFAULT 0
+      sell_on_pct INTEGER NOT NULL DEFAULT 0, loan_playing_time TEXT, listing_id TEXT
     );
 
     CREATE TABLE transfer_offer_events (
@@ -231,7 +231,7 @@ beforeAll(async () => {
       league_id TEXT NOT NULL,
       status TEXT NOT NULL,
       expires_at TEXT NOT NULL,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      created_at TEXT NOT NULL DEFAULT (datetime('now')), deal_type TEXT NOT NULL DEFAULT 'transfer', loan_days INTEGER, loan_playing_time TEXT
     );
 
     CREATE TABLE transfer_bids (

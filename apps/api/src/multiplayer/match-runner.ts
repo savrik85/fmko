@@ -1461,7 +1461,7 @@ interface BuildResult {
     players: MatchPlayer[];
     idMap: Map<number, string>;
     positionMap: Map<string, string>;
-    absentNames: Array<{ name: string; reason: string; smsText: string }>;
+    absentNames: Array<{ playerId: string; name: string; reason: string; smsText: string }>;
     /** Všech (nejvýš 18) hráčů, kteří na zápas jeli. */
     matchSquadIds: string[];
     /** Náhradníci, kteří jeli (osmnáctka bez základu). */
@@ -1488,11 +1488,14 @@ export async function buildMatchPlayers(
     // (stejný filtr jako v SMS — jinak by RNG indexoval do různě velkých polí a absence by se lišily)
     const injuredIds = new Set<string>();
     const suspendedIds = new Set<string>();
-    const absentInfo: Array<{ name: string; reason: string; smsText: string }> = [];
+    // playerId: přehled hostování (transfers/loan-agreements.ts) podle něj pozná, že hráč
+    // v zápase chyběl a do podmínky hraní se zápas nepočítá. Jméno zůstává pro zprávy a FE.
+    const absentInfo: Array<{ playerId: string; name: string; reason: string; smsText: string }> = [];
     for (const r of rows.results) {
         if ((r.suspended_matches as number) > 0) {
             suspendedIds.add(r.id as string);
             absentInfo.push({
+                playerId: r.id as string,
                 name: `${r.first_name} ${r.last_name}`,
                 reason: "Stopka za karty",
                 smsText: `Mám stopku, nesmím hrát.`
@@ -1516,6 +1519,7 @@ export async function buildMatchPlayers(
         const popis = surovy ? surovy.charAt(0).toLocaleLowerCase("cs") + surovy.slice(1) : "";
         const volno = (ir.osobni_volno as number) === 1;
         absentInfo.push({
+            playerId: r.id as string,
             name: `${r.first_name} ${r.last_name}`,
             reason: volno ? "Osobní volno" : "Zranění",
             smsText: volno
@@ -1584,7 +1588,7 @@ export async function buildMatchPlayers(
             absentIds = new Set(allAbsences.map((a) => healthyRows[a.playerIndex]?.id as string).filter(Boolean));
             for (const a of allAbsences) {
                 const r = healthyRows[a.playerIndex];
-                if (r) absentInfo.push({name: `${r.first_name} ${r.last_name}`, reason: a.reason, smsText: a.smsText});
+                if (r) absentInfo.push({playerId: r.id as string, name: `${r.first_name} ${r.last_name}`, reason: a.reason, smsText: a.smsText});
             }
         } catch (e) {
             logger.warn({module: "match-runner"}, "absence generation", e);

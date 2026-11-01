@@ -20,7 +20,7 @@ import { injuryReturnCondition } from "../injuries/injury-generator";
 import { maintainU21Pitches, U21_TEAMS_SQL } from "../stadium/u21-groundskeeper";
 
 export interface DailyTickEvent {
-  type: "training" | "training_skipped" | "recovery" | "injury_healed" | "pitch" | "morale" | "match" | "day" | "loan_return";
+  type: "training" | "training_skipped" | "recovery" | "injury_healed" | "pitch" | "morale" | "match" | "day" | "loan_return" | "loan_breach";
   description: string;
   data?: unknown;
 }
@@ -1554,6 +1554,8 @@ export async function executeDailyTick(
       const loanTeamId = p.team_id as string;
       await env.DB.prepare("UPDATE players SET team_id = ?, loan_from_team_id = NULL, loan_until = NULL WHERE id = ?")
         .bind(originalTeamId, playerId).run();
+      const { closeLoanAgreements } = await import("../transfers/loan-agreements");
+      await closeLoanAgreements(env.DB, playerId, "ended");
       // Close loan contract
       await env.DB.prepare("UPDATE player_contracts SET is_active = 0, left_at = ?, leave_type = 'loan_end' WHERE player_id = ? AND team_id = ? AND join_type = 'loan' AND is_active = 1")
         .bind(now.toISOString(), playerId, loanTeamId).run().catch((e) => logger.warn({ module: "daily-tick" }, "close loan contract", e));
@@ -1578,6 +1580,17 @@ export async function executeDailyTick(
     logger.error({ module: "daily-tick" }, "loan return check failed", e);
   }
 
+  // ── Hostování: podmínka hraní ──
+  // Půjčujícímu klubu se jednou ozve, když hostující klub přestal plnit podmínku hraní
+  // (transfers/loan-agreements.ts). Uzavře i záznamy hráčů, kteří už nehostují.
+  try {
+    const { checkLoanAgreements } = await import("../transfers/loan-agreements");
+    const res = await checkLoanAgreements(env.DB);
+    if (res.breaches > 0) events.push({ type: "loan_breach", description: `${res.breaches} hostování neplní podmínku hraní` });
+  } catch (e) {
+    logger.error({ module: "daily-tick" }, "loan agreements check failed", e);
+  }
+
   // Celebrity spawn moved to match tick (index.ts) to avoid D1 query limit in daily tick
 
   // ── Transfer expiry cleanup ──
@@ -1596,6 +1609,12 @@ export async function executeDailyTick(
       .catch((e) => logger.warn({ module: "daily-tick" }, "expire coach_interviews", e));
     await env.DB.prepare("UPDATE transfer_bids SET status = 'withdrawn' WHERE status = 'pending' AND listing_id IN (SELECT id FROM transfer_listings WHERE status != 'active')")
       .run().catch((e) => logger.warn({ module: "daily-tick" }, "withdraw bids for expired listings", e));
+    // Žádosti o hostování z inzerátu, který vypršel: půjčující je nepotvrdil, takže padají.
+    await env.DB.prepare(
+      `UPDATE transfer_offers SET status = 'rejected', reject_message = 'Inzerát na hostování vypršel.', resolved_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+        WHERE status IN ('pending','countered') AND listing_id IS NOT NULL
+          AND listing_id IN (SELECT id FROM transfer_listings WHERE status = 'expired' AND deal_type = 'loan')`,
+    ).run().catch((e) => logger.warn({ module: "daily-tick" }, "reject loan requests for expired listings", e));
   } catch (e) {
     logger.error({ module: "daily-tick" }, "transfer expiry failed", e);
   }
