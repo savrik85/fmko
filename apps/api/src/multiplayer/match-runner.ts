@@ -11,6 +11,7 @@ import {experienceGainChance} from "../skills/training";
 import type {MatchPlayer, TeamSetup, Weather, Hardness} from "../engine/types";
 import {
     calculatePlayerRatings,
+    playedTeamsMap,
     extractStatsFromEvents,
     updatePlayerStats,
     saveMatchPlayerStats,
@@ -1019,7 +1020,9 @@ export async function runScheduledMatches(
                 }
 
                 // Calculate per-player ratings + určit MVP (Hráč zápasu)
-                const ratings = calculatePlayerRatings(result.events, fullIdMap, 1, result.homeScore, result.awayScore, playerPositions);
+                const playedTeams = playedTeamsMap(result.playerMinutes,
+                    [...homeLineup, ...homeSubs].map((p) => p.id), [...awayLineup, ...awaySubs].map((p) => p.id), 1, 2);
+                const ratings = calculatePlayerRatings(result.events, fullIdMap, 1, result.homeScore, result.awayScore, playerPositions, playedTeams);
                 const momPlayerId = determineManOfMatch(ratings);
                 await saveMatchMom(db, matchId, momPlayerId);
 

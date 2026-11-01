@@ -51,8 +51,31 @@ export interface MatchPlayerStatsEntry {
 }
 
 /**
+ * Za který tým kdo v zápase hrál (engine id hráče → engine id týmu), jen ti, kdo opravdu
+ * nastoupili: základ a střídající, kteří šli na hřiště (`playerMinutes` z enginu).
+ * Náhradník, který jen seděl, v mapě není, a bonus za výsledek proto nedostane.
+ */
+export function playedTeamsMap(
+  playerMinutes: Record<number, unknown> | undefined,
+  homeEngineIds: Iterable<number>,
+  awayEngineIds: Iterable<number>,
+  homeTeamEngineId: number,
+  awayTeamEngineId: number,
+): Map<number, number> {
+  const played = new Map<number, number>();
+  if (!playerMinutes) return played;
+  for (const id of homeEngineIds) if (playerMinutes[id]) played.set(id, homeTeamEngineId);
+  for (const id of awayEngineIds) if (playerMinutes[id]) played.set(id, awayTeamEngineId);
+  return played;
+}
+
+/**
  * Vypočítá individuální hodnocení hráčů (1.0–10.0) na základě match eventů.
  * Základ 6.0, góly/asistence přidávají, karty/fauly odečítají.
+ *
+ * Bonus za výsledek a čisté konto patří všem, kdo nastoupili (`playedTeams`). Dřív se tým
+ * hráče poznal jen z jeho událostí, takže brankář po výhře 3:0 bez zákroku a obránce bez
+ * bloku zůstali na základu a forma (počítaná z hodnocení) je táhla dolů.
  */
 export function calculatePlayerRatings(
   events: MatchEvent[],
@@ -61,6 +84,7 @@ export function calculatePlayerRatings(
   homeScore: number,
   awayScore: number,
   playerPositions?: Map<number, string>,
+  playedTeams?: Map<number, number>,
 ): Record<string, number> {
   const ratings: Record<string, number> = {};
   const goals: Record<string, number> = {};
@@ -78,6 +102,11 @@ export function calculatePlayerRatings(
     cards[dbId] = 0;
     fouls[dbId] = 0;
     chances[dbId] = 0;
+  }
+
+  for (const [engineId, teamEngineId] of playedTeams ?? []) {
+    const dbId = playerIdMap.get(engineId);
+    if (dbId) teamMap[dbId] = teamEngineId;
   }
 
   for (const event of events) {
