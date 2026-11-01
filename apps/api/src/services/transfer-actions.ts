@@ -65,14 +65,21 @@ const CLOSED_OFFER_LABEL: Record<string, string> = {
 };
 
 /**
- * Nabídka mezi čekajícími není. Když existuje a je už vyřízená (třeba ji druhá strana nebo
- * jiné okno mezitím přijalo), řekne to; jinak vrátí původní chybu.
+ * Nabídka mezi čekajícími není. Když existuje, je už vyřízená (třeba ji druhá strana nebo
+ * jiné okno mezitím přijalo) a týká se klubu, který se ptá, řekne to. Cizímu klubu stav
+ * neprozradí a vrátí původní chybu.
  */
-async function missingOfferFail(db: D1Database, offerId: string, status: TransferActionStatus, error: string): Promise<TransferActionFailure> {
-  const row = await db.prepare("SELECT status FROM transfer_offers WHERE id = ?").bind(offerId).first<{ status: string }>()
+async function missingOfferFail(
+  db: D1Database, actorTeamId: string, offerId: string, status: TransferActionStatus, error: string,
+): Promise<TransferActionFailure> {
+  const row = await db.prepare("SELECT status, from_team_id, to_team_id, last_action_by FROM transfer_offers WHERE id = ?")
+    .bind(offerId).first<{ status: string; from_team_id: string; to_team_id: string; last_action_by: string | null }>()
     .catch((e) => { logger.warn({ module: "game" }, "stav vyřízené nabídky", e); return null; });
   const label = row ? CLOSED_OFFER_LABEL[row.status] : undefined;
-  return label ? fail(409, `Tahle nabídka už je ${label}.`) : fail(status, error);
+  if (!row || !label) return fail(status, error);
+  const scope = await resolveOfferClubScope(db, actorTeamId, row)
+    .catch((e) => { logger.warn({ module: "game" }, "strana vyřízené nabídky", e); return null; });
+  return scope?.role ? fail(409, `Tahle nabídka už je ${label}.`) : fail(status, error);
 }
 
 /**
@@ -765,7 +772,7 @@ export async function acceptTransferOffer(
     `SELECT * FROM transfer_offers
      WHERE id = ? AND status IN ('pending','countered')`
   ).bind(offerId).first<Record<string, unknown>>();
-  if (!offer) return missingOfferFail(db, offerId, 409, "Nabídka nenalezena nebo nejsi na tahu");
+  if (!offer) return missingOfferFail(db, actorTeamId, offerId, 409, "Nabídka nenalezena nebo nejsi na tahu");
   const scope = await resolveOfferClubScope(db, actorTeamId, offer);
   if (!scope?.role || !scope.onTurn) return fail(409, "Nabídka nenalezena nebo nejsi na tahu");
   if (offer.expires_at && new Date(offer.expires_at as string) < new Date()) return fail(410, "Nabídka vypršela");
@@ -1429,7 +1436,7 @@ export async function rejectTransferOffer(
      FROM transfer_offers WHERE id = ? AND status IN ('pending','countered')`
   ).bind(offerId).first<OfferForReply>()
     .catch((e) => { logger.warn({ module: "game" }, "fetch offer for reject", e); return null; });
-  if (!offer) return missingOfferFail(db, offerId, 404, "Nabídka nenalezena");
+  if (!offer) return missingOfferFail(db, actorTeamId, offerId, 404, "Nabídka nenalezena");
   const scope = await resolveOfferClubScope(db, actorTeamId, offer);
   if (!scope?.role) return fail(404, "Nabídka nenalezena");
   if (!scope.onTurn) return fail(409, "Nejsi na tahu");
@@ -1494,7 +1501,7 @@ export async function counterTransferOffer(env: Bindings, actorTeamId: string, o
   const offer = await db.prepare(
     "SELECT player_id, from_team_id, to_team_id, status, last_action_by, expires_at, offer_type, upfront_pct, installments, sell_on_pct FROM transfer_offers WHERE id = ? AND status IN ('pending','countered')"
   ).bind(offerId).first<{ player_id: string; from_team_id: string; to_team_id: string; status: string; last_action_by: string | null; expires_at: string; offer_type: string | null; upfront_pct: number | null; installments: number | null; sell_on_pct: number | null }>();
-  if (!offer) return missingOfferFail(db, offerId, 404, "Nabídka nenalezena");
+  if (!offer) return missingOfferFail(db, actorTeamId, offerId, 404, "Nabídka nenalezena");
   // Nula jde jen u výměny hráčů — hráči za hráče bez doplatku.
   if (body.amount === 0) {
     const hasSwap = await db.prepare("SELECT 1 FROM transfer_offer_swap_players WHERE offer_id = ? LIMIT 1")
