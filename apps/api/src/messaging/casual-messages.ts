@@ -38,8 +38,12 @@ const PLAYER_COOLDOWN_DAYS = 10;
 const TOPIC_REPEAT_DAYS = 14;
 /** Píše se jen klubům, kde byl manažer ve hře nedávno. Opuštěnému telefonu by to bylo k ničemu. */
 const ACTIVE_MANAGER_DAYS = 3;
-/** Jak dlouho platí pozvání: na „jdu" za dva dny už se nečeká. */
-const INVITE_TTL_SECONDS = 6 * 3600;
+/**
+ * Jak dlouho platí pozvání: na „jdu" za dva dny už se nečeká, do druhého dne ale ano.
+ * Pozvánky chodí 7–22 h a trenér odpovídá často až druhý den. Dřív to bylo 6 hodin,
+ * takže pět ze sedmi „jdu" na produkci přišlo pozdě a zůstalo bez následku.
+ */
+const INVITE_TTL_SECONDS = 36 * 3600;
 
 const inviteKey = (convId: string) => `open_invite:${convId}`;
 const recentTopicsKey = (teamId: string) => `casual_topics:${teamId}`;
