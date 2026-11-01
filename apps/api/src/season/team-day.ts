@@ -194,6 +194,29 @@ export async function processTeamDay(
         }
       } catch (e) { logger.warn({ module: "daily-tick" }, "day_before attendance failed", e); }
 
+      // ── Pohár zítra: stejná připomínka jako u ligy (dřív žádná, pohár se hraje v poledne) ──
+      try {
+        const tomorrowDay = new Date(newGameDate);
+        tomorrowDay.setDate(tomorrowDay.getDate() + 1);
+        const cupTomorrow = await env.DB.prepare(
+          `SELECT cm.round, cc.total_rounds, CASE WHEN hc.team_id = ?1 THEN ac.name ELSE hc.name END AS opponent
+             FROM cup_matches cm
+             JOIN cup_competitions cc ON cc.id = cm.cup_id AND cc.status = 'active'
+             JOIN cup_teams hc ON hc.id = cm.home_cup_team_id
+             JOIN cup_teams ac ON ac.id = cm.away_cup_team_id
+            WHERE cm.status = 'scheduled' AND substr(cm.scheduled_at, 1, 10) = ?2 AND (hc.team_id = ?1 OR ac.team_id = ?1)
+            LIMIT 1`,
+        ).bind(teamId, tomorrowDay.toISOString().slice(0, 10)).first<{ round: number; total_rounds: number; opponent: string }>();
+        if (cupTomorrow) {
+          const { roundName } = await import("../cup/cup");
+          const { createNotification } = await import("../community/notifications");
+          await createNotification(env.DB, teamId, "match_reminder", "Zítra hrajeme pohár! Nastav sestavu",
+            `${roundName(cupTomorrow.round, cupTomorrow.total_rounds)} proti ${cupTomorrow.opponent}, výkop ve 12:00.`, "/zapas",
+            { VAPID_PUBLIC_KEY: env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: env.VAPID_SUBJECT, DB: env.DB },
+          );
+        }
+      } catch (e) { logger.warn({ module: "daily-tick", teamId }, "připomínka poháru", e); }
+
       // ── Interview před zápasem — 2 dny dopředu, každý lidský trenér dostane svůj rozhovor ──
       const interviewLeagueId = team.league_id as string | null;
       if (interviewLeagueId) {
