@@ -192,14 +192,14 @@ export function buildMatchSummary(input: BuildInput): MatchSummary | null {
   // 2b. Tvrdost hry — dává smysl zmínit jen když se od normálu odchýlila,
   // a hlavně tehdy, když ji sudí trestal nebo naopak toleroval.
   if (ownLineup.hardness && ownLineup.hardness !== "normal") {
-    const ownCards = events.filter((e) => e.type === "card" && playerIsInLineup(e, ownLineup)).length;
+    const ownCards = events.filter((e) => e.type === "card" && eventOfSide(e, isOwnHome)).length;
     if (ownLineup.hardness === "hard") {
       const impact: Impact = ownCards >= 3 ? "MEDIUM_NEGATIVE" : outcome === "WIN" ? "MEDIUM_POSITIVE" : "LOW_NEGATIVE";
       candidates.push({
         type: "tactic",
         label: "Tvrdost hry",
         description: ownCards >= 3
-          ? `Šli jste do těla a sudí to trestal ${ownCards} karet je daň, kterou jste zaplatili.`
+          ? `Šli jste do těla a sudí to trestal. ${ownCards} ${ownCards < 5 ? "karty jsou daň" : "karet je daň"}, kterou jste zaplatili.`
           : "Šli jste do těla. Souboje jste vyhrávali a soupeř se do vápna dostával hůř.",
         impact,
       });
@@ -217,8 +217,8 @@ export function buildMatchSummary(input: BuildInput): MatchSummary | null {
 
   // 3. Karty a disciplína — type "card" + detail "red"
   const isRedCard = (e: MatchEvent): boolean => e.type === "card" && e.detail === "red";
-  const ownRed = events.filter((e) => isRedCard(e) && playerIsInLineup(e, ownLineup)).length;
-  const oppRed = events.filter((e) => isRedCard(e) && playerIsInLineup(e, oppLineup)).length;
+  const ownRed = events.filter((e) => isRedCard(e) && eventOfSide(e, isOwnHome)).length;
+  const oppRed = events.filter((e) => isRedCard(e) && eventOfSide(e, !isOwnHome)).length;
   if (ownRed > 0 || oppRed > 0) {
     const netRed = oppRed - ownRed;
     if (Math.abs(netRed) >= 1) {
@@ -297,14 +297,16 @@ function strongLines(own: { gk: number; def: number; mid: number; fwd: number },
   return lines.filter(([k]) => own[k] - opp[k] > 0.5).map(([, l]) => l);
 }
 
-function playerIsInLineup(event: MatchEvent, lineup: LineupData): boolean {
-  const ids = new Set([...lineup.starters, ...lineup.subs].map((p) => p.id));
-  // MatchEvent.playerId může být engineId (number) nebo dbId. Posíláme dbId v lineup,
-  // takže porovnání musí ladit s tím, jak match-runner ukládá events.
-  // Pro tuto JIT funkci stačí kontrolovat existenci jako string match.
-  const eventPlayerId = (event as { playerId?: string | number }).playerId;
-  if (eventPlayerId == null) return false;
-  return ids.has(String(eventPlayerId));
+/**
+ * Patří událost danému týmu? Engine píše domácím `teamId` 1 a hostům 2 (match-runner, pohár,
+ * turnaj). Dřív se porovnávalo `playerId` události s id hráčů v sestavě, jenže událost nese
+ * id z enginu (11, 104…) a sestava UUID z databáze. Shoda nevyšla nikdy, takže „Co rozhodlo"
+ * nenašlo jedinou kartu ani vyloučení.
+ */
+const HOME_ENGINE_TEAM_ID = 1;
+const AWAY_ENGINE_TEAM_ID = 2;
+function eventOfSide(event: MatchEvent, home: boolean): boolean {
+  return event.teamId === (home ? HOME_ENGINE_TEAM_ID : AWAY_ENGINE_TEAM_ID);
 }
 
 function round1(v: number): number {
