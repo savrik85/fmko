@@ -121,7 +121,7 @@ beforeAll(async () => {
       ('w2', 'scout-b', 'p-watched', '2026-10-02 10:00:00')
   `);
 
-  for (const [token, userId, teamId] of [["seller-token", "u-seller", "seller"], ["a-token", "u-a", "scout-a"]]) {
+  for (const [token, userId, teamId] of [["seller-token", "u-seller", "seller"], ["a-token", "u-a", "scout-a"], ["b-token", "u-b", "scout-b"]]) {
     await sessionKv.put(`session:${token}`, JSON.stringify({ userId, email: `${userId}@test.local`, teamId, createdAt: FUTURE }));
   }
 
@@ -172,12 +172,17 @@ describe("propuštění sledovaného hráče", () => {
     expect(await watchedIds("scout-a")).toEqual([freeAgentId]);
     expect(await watchedIds("scout-b")).toEqual([freeAgentId]);
 
-    const res = await callRoute("/teams/scout-a/watchlist");
+    const res = await callRoute("/teams/scout-a/watchlist", { token: "a-token" });
     const { players } = await res.json() as { players: Array<{ id: string; lastName: string; freeAgent?: boolean; teamId: string | null; watchedSince: string }> };
     expect(players).toHaveLength(1);
     expect(players[0]).toMatchObject({ id: freeAgentId, lastName: "Sledovaný", freeAgent: true, teamId: null });
     // Sleduje ho pořád od původního dne, ne od propuštění.
     expect(players[0].watchedSince).toBe("2026-10-01 10:00:00");
+  });
+
+  it("cizí ani nepřihlášený seznam sledovaných neuvidí", async () => {
+    expect((await callRoute("/teams/scout-b/watchlist")).status).toBe(401);
+    expect((await callRoute("/teams/scout-b/watchlist", { token: "a-token" })).status).toBe(403);
   });
 
   it("po podpisu sleduje dál hráče v novém klubu", async () => {
@@ -188,7 +193,7 @@ describe("propuštění sledovaného hráče", () => {
     const { playerId } = await res.json() as { playerId: string };
 
     expect(await watchedIds("scout-b")).toEqual([playerId]);
-    const list = await callRoute("/teams/scout-b/watchlist");
+    const list = await callRoute("/teams/scout-b/watchlist", { token: "b-token" });
     const { players } = await list.json() as { players: Array<{ id: string; teamId: string | null; freeAgent?: boolean }> };
     expect(players).toHaveLength(1);
     expect(players[0]).toMatchObject({ id: playerId, teamId: "scout-a" });

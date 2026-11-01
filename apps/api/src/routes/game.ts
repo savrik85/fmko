@@ -1023,6 +1023,18 @@ gameRouter.post("/teams/:teamId/seasonal-events/:eventId/choose", async (c) => {
       .bind(eventId).run().catch((e) => logger.warn({ module: "game" }, "propadlá událost", e));
     return c.json({ error: "Na rozhodnutí už je pozdě, propadlo." }, 400);
   }
+  // Událost z rozpisu sezóny, která ještě nenastala (Události ji ukazují jako „za N kol"
+  // bez tlačítek). Dřív šla přes API zvolit dopředu, třeba velká zabijačka hned v 1. kole.
+  if ((event.game_week as number) > (week?.gw ?? 0)) {
+    return c.json({ error: "Tahle událost ještě nenastala." }, 400);
+  }
+  // Jistý výdaj volby (bez šance) musí klub zaplatit z toho, co má.
+  const certainCost = choice.effects
+    .filter((ef) => ef.type === "budget" && ef.value < 0 && ef.chance === undefined)
+    .reduce((sum, ef) => sum - ef.value, 0);
+  const { spendBlockedMessage } = await import("../season/finance-processor");
+  const blocked = await spendBlockedMessage(c.env.DB, teamId, certainCost);
+  if (blocked) return c.json({ error: blocked }, 400);
 
   // Atomický claim — zabraňuje double-apply při souběžných requestech.
   // WHERE status = 'pending' zajistí že jen první request proběhne.
@@ -1083,6 +1095,9 @@ gameRouter.post("/teams/:teamId/pub-visit", async (c) => {
     ).bind(teamId).run().catch((e) => logger.warn({ module: "game" }, "apply no-pub morale penalty", e));
   } else {
     // "all" / "one" — vytvoř coach-led pub_session (effects přes incident.effects, condition_log, hangover...)
+    const { spendBlockedMessage } = await import("../season/finance-processor");
+    const blocked = await spendBlockedMessage(c.env.DB, teamId, body.choice === "all" ? 1500 : 500);
+    if (blocked) return c.json({ error: blocked }, 400);
     const { createCoachLedSession } = await import("../season/pub");
     const result = await createCoachLedSession(c.env.DB, teamId, gameDate, body.choice);
     if (!result.ok) return c.json({ error: result.reason }, 400);
@@ -4986,6 +5001,9 @@ gameRouter.get("/teams/:teamId/achievements", async (c) => {
 // List watched players with enriched data (known attrs, last matches, transfers)
 gameRouter.get("/teams/:teamId/watchlist", async (c) => {
   const teamId = c.req.param("teamId");
+  // Soukromý seznam klubu: requireTeamOwnership GET propouští, dřív ho viděl kdokoli i bez přihlášení.
+  const denied = await requireOwnedTeamRead(c, teamId);
+  if (denied) return denied;
 
   const rows = await c.env.DB.prepare(
     `SELECT w.player_id, w.created_at as watched_since,
@@ -6012,6 +6030,9 @@ gameRouter.delete("/teams/:teamId/offers/:offerId", async (c) => {
 // GET /api/teams/:teamId/player-offers — pending offers
 gameRouter.get("/teams/:teamId/player-offers", async (c) => {
   const teamId = c.req.param("teamId");
+  // Soukromý seznam klubu: requireTeamOwnership GET propouští, dřív ho viděl kdokoli i bez přihlášení.
+  const denied = await requireOwnedTeamRead(c, teamId);
+  if (denied) return denied;
   // expires_at je v HERNÍM čase (player-offers.ts počítá z game_date) → filtrovat
   // proti hernímu datu týmu, ne reálnému 'now' (při offsetu nabídky mizely/přežívaly).
   const teamClock = await c.env.DB.prepare("SELECT game_date FROM teams WHERE id = ?")
