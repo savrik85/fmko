@@ -169,6 +169,16 @@ async function approachInOrder(
     if (tried.length >= MAX_ATTEMPTS) break;
     const availability = await negotiationAvailability(db, team, sponsor, category, season);
     if (!availability.canOpen) continue;
+    // Pondělní správa běží pro víc klubů najednou a model volí firmu i desítky vteřin. Mezitím
+    // mohl stejnou firmu na stadion podepsat jiný AI klub okresu, proto se to ověří znovu.
+    if (category === "stadium") {
+      const namedElsewhere = await stadiumNamedElsewhereIds(db, team.district, team.id)
+        .catch((e) => {
+          logger.warn({ module: M, teamId: team.id }, "firmy se jménem jiného stadionu před jednáním", e);
+          return new Set<number>();
+        });
+      if (namedElsewhere.has(sponsor.id)) continue;
+    }
     tried.push(sponsor.name);
 
     const opened = await openNegotiation(db, team.id, sponsor.id, category);
