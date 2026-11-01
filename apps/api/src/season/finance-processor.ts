@@ -1004,11 +1004,17 @@ export async function countRemainingMatchDays(
   if (!season) return { remainingMatches: 0, seasonId: null };
 
   const row = await db.prepare(
+    // Jen ligové zápasy aktuální sezóny (splátka půjčky se strhává po ligovém zápase).
+    // Liga má jeden řádek pro všechny sezóny a v rozpisu zůstávají neodehrané zápasy starších
+    // sezón: kluby z Českobudějovicka měly „zbývá 50“ místo 24 a půjčka by se jim rozložila
+    // do zápasů, které se nikdy nehrají.
     `SELECT COUNT(*) as cnt FROM matches m
      JOIN leagues l ON m.league_id = l.id
+     JOIN season_calendar sc ON sc.id = m.calendar_id
      WHERE l.season_id = ?
        AND (m.home_team_id = ? OR m.away_team_id = ?)
-       AND m.status = 'scheduled'`
+       AND m.status = 'scheduled'
+       AND sc.season_number = (SELECT MAX(sc2.season_number) FROM season_calendar sc2 WHERE sc2.league_id = sc.league_id)`
   ).bind(season.id, teamId, teamId).first<{ cnt: number }>().catch((e) => {
     logger.warn({ module: "finance" }, "count remaining matches", e);
     return null;
