@@ -203,14 +203,22 @@ export interface CreateOfferInput {
   upfrontPct?: number;
   installments?: number;
   sellOnPct?: number;
-  /** Podmínka hraní u hostování (z inzerátu na hostování). */
-  loanPlayingTime?: string | null;
-  /** Inzerát, ze kterého žádost o hostování vznikla. */
-  listingId?: string | null;
+}
+
+/**
+ * Žádost o hostování z inzerátu. Jen pro serverové volání z `placeListingBid`, které
+ * poplatek, délku i podmínku hraní bere z inzerátu. Z veřejného těla `/offers` se to
+ * nečte: přímá nabídka by se jinak dala přilepit k cizímu inzerátu s horšími podmínkami.
+ */
+interface LoanListingRequest {
+  listingId: string;
+  playingTime: string;
 }
 
 /** POST /teams/:teamId/offers — nabídka na hráče jiného klubu (lidského i AI). */
-export async function createTransferOffer(env: Bindings, actorTeamId: string, body: CreateOfferInput): Promise<TransferActionResult<{ offerId: string }>> {
+export async function createTransferOffer(
+  env: Bindings, actorTeamId: string, body: CreateOfferInput, fromListing?: LoanListingRequest,
+): Promise<TransferActionResult<{ offerId: string }>> {
   const db = env.DB;
   const buyerClubTeamId = await resolveClubTeamId(db, actorTeamId);
   if (!buyerClubTeamId) return fail(404, "Kupující tým nenalezen");
@@ -280,8 +288,8 @@ export async function createTransferOffer(env: Bindings, actorTeamId: string, bo
     return fail(400, "Délka hostování musí být 7–180 dní");
   }
   const { parsePlayingTime } = await import("../transfers/loan-agreements");
-  const loanPlayingTime = offerType === "loan" ? parsePlayingTime(body.loanPlayingTime) : null;
-  if (body.loanPlayingTime != null && offerType === "loan" && !loanPlayingTime) return fail(400, "Neznámá podmínka hraní");
+  const listingRequest = offerType === "loan" ? fromListing ?? null : null;
+  const loanPlayingTime = listingRequest ? parsePlayingTime(listingRequest.playingTime) ?? "none" : null;
 
   // Hráči na výměnu: jen v úvodní nabídce a jen u trvalého přestupu, vlastní, nezranění, ne chtěný hráč.
   if (swapPlayerIds.length > 0) {
@@ -316,7 +324,7 @@ export async function createTransferOffer(env: Bindings, actorTeamId: string, bo
   await db.batch([
     db.prepare("INSERT INTO transfer_offers (id, player_id, from_team_id, to_team_id, offer_amount, message, expires_at, offer_type, loan_duration, last_action_by, target_squad, player_interest, upfront_pct, installments, sell_on_pct, loan_playing_time, listing_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
       .bind(id, body.playerId, buyerClubTeamId, targetOwnerId, body.amount, body.message ?? null, offerReplyDeadline(), offerType, loanDuration, buyerClubTeamId, targetSquad, interest?.level ?? null, terms.upfrontPct, terms.installments, terms.sellOnPct,
-        loanPlayingTime, offerType === "loan" ? (body.listingId ?? null) : null),
+        loanPlayingTime, listingRequest?.listingId ?? null),
     ...insertSwapPlayersStmts(db, id, swapPlayerIds),
   ]);
 
@@ -351,9 +359,9 @@ export async function createTransferOffer(env: Bindings, actorTeamId: string, bo
       `📩 ${buyerTeam?.name ?? "Neznámý klub"} chce odkoupit ${pName} (aktuálně u nich na hostování) za ${body.amount.toLocaleString("cs")} Kč.`
     ).catch((e) => logger.warn({ module: "game" }, "db op failed", e));
   } else if (offerType === "loan") {
-    const fromListing = body.listingId ? " z vašeho inzerátu" : "";
+    const fromListingNote = listingRequest ? " z vašeho inzerátu" : "";
     await sendPhoneSMS(db, recipientClubId, SMS_ROLE, SMS_ROLE,
-      `📩 Žádost o hostování${fromListing} od ${buyerTeam?.name ?? "neznámého klubu"}: ${pName}.${body.amount > 0 ? ` Poplatek ${body.amount.toLocaleString("cs")} Kč.` : ""} Bez vašeho potvrzení nikam nejde, podívejte se na to v přestupech.`
+      `📩 Žádost o hostování${fromListingNote} od ${buyerTeam?.name ?? "neznámého klubu"}: ${pName}.${body.amount > 0 ? ` Poplatek ${body.amount.toLocaleString("cs")} Kč.` : ""} Bez vašeho potvrzení nikam nejde, podívejte se na to v přestupech.`
     ).catch((e) => logger.warn({ module: "game" }, "db op failed", e));
   } else {
     await sendPhoneSMS(db, recipientClubId, SMS_ROLE, SMS_ROLE,
@@ -396,8 +404,8 @@ export async function placeListingBid(env: Bindings, actorTeamId: string, listin
   if (loanListing) {
     const res = await createTransferOffer(env, actorTeamId, {
       playerId: loanListing.player_id, amount: loanListing.asking_price, offerType: "loan",
-      loanDuration: loanListing.loan_days ?? 30, loanPlayingTime: loanListing.loan_playing_time ?? "none", listingId,
-    });
+      loanDuration: loanListing.loan_days ?? 30,
+    }, { listingId, playingTime: loanListing.loan_playing_time ?? "none" });
     if (!res.ok) {
       if (res.status === 409 && res.offerId) return { ok: true, kind: "offer", offerId: res.offerId, alreadyExists: true };
       return res;
