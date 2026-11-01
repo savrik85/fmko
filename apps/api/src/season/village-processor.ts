@@ -504,7 +504,7 @@ export async function generateMonthlyPetitions(
 ): Promise<{ generated: number }> {
   const eligibleTeams = await db.prepare(
     `SELECT t.id as team_id, t.village_id FROM teams t
-     WHERE t.user_id != 'ai'
+     WHERE t.user_id != 'ai' AND t.parent_team_id IS NULL
        AND NOT EXISTS (
          SELECT 1 FROM village_petitions vp
          WHERE vp.team_id = t.id AND vp.status = 'active'
@@ -593,7 +593,7 @@ export async function generateMonthlyInvestments(
   const villages = await db.prepare(
     `SELECT DISTINCT v.id FROM villages v
      JOIN teams t ON t.village_id = v.id
-     WHERE t.user_id != 'ai'`
+     WHERE t.user_id != 'ai' AND t.parent_team_id IS NULL`
   ).all<{ id: string }>();
 
   let generated = 0;
@@ -606,7 +606,7 @@ export async function generateMonthlyInvestments(
       `SELECT t.id as team_id, COALESCE(vtf.favor, 50) as favor
        FROM teams t
        LEFT JOIN village_team_favor vtf ON vtf.team_id = t.id AND vtf.official_id IS NULL
-       WHERE t.village_id = ? AND t.user_id != 'ai'
+       WHERE t.village_id = ? AND t.user_id != 'ai' AND t.parent_team_id IS NULL
        ORDER BY favor DESC LIMIT 1`
     ).bind(v.id).first<{ team_id: string; favor: number }>();
 
@@ -673,7 +673,7 @@ export async function generatePubEncounters(
 ): Promise<{ generated: number }> {
   const teams = await db.prepare(
     `SELECT t.id as team_id, t.village_id FROM teams t
-     WHERE t.user_id != 'ai'
+     WHERE t.user_id != 'ai' AND t.parent_team_id IS NULL
        AND NOT EXISTS (
          SELECT 1 FROM village_pub_encounters vpe
          WHERE vpe.team_id = t.id AND vpe.status = 'active'
@@ -765,7 +765,7 @@ export async function processCrisisEvents(
   const teamsInCrisis = await db.prepare(
     `SELECT t.id as team_id, vtf.village_id, vtf.favor FROM village_team_favor vtf
      JOIN teams t ON t.id = vtf.team_id
-     WHERE vtf.official_id IS NULL AND vtf.favor < 20 AND t.user_id != 'ai'
+     WHERE vtf.official_id IS NULL AND vtf.favor < 20 AND t.user_id != 'ai' AND t.parent_team_id IS NULL
        AND NOT EXISTS (
          SELECT 1 FROM village_history vh
          WHERE vh.team_id = vtf.team_id AND vh.event_type = 'crisis_event'

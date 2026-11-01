@@ -30,7 +30,7 @@ votesRouter.get("/votes", async (c) => {
     `SELECT v.id, v.title, v.description, v.status, v.created_at, v.closed_at,
      (SELECT COUNT(*) FROM prales_vote_ballots b WHERE b.vote_id = v.id AND b.answer = 'ano') as ano_count,
      (SELECT COUNT(*) FROM prales_vote_ballots b WHERE b.vote_id = v.id AND b.answer = 'ne') as ne_count,
-     (SELECT COUNT(*) FROM teams WHERE user_id != 'ai' AND user_id IS NOT NULL) as total_teams
+     (SELECT COUNT(*) FROM teams WHERE user_id != 'ai' AND user_id IS NOT NULL AND parent_team_id IS NULL) as total_teams
      FROM prales_votes v
      ORDER BY CASE WHEN v.status = 'open' THEN 0 ELSE 1 END, v.created_at DESC`
   ).all().catch((e) => { logger.warn({ module: "votes" }, "fetch votes", e); return { results: [] }; });
