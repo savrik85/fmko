@@ -4954,6 +4954,8 @@ gameRouter.get("/hall-of-fame", async (c) => {
      LEFT JOIN managers m ON m.team_id = t.id
      LEFT JOIN villages v ON v.id = t.village_id
      LEFT JOIN team_achievements ta ON ta.team_id = t.id
+     -- Rezervy U21 nejsou samostatné kluby, polovina žebříčku byly „U21“ s trenérem „—“.
+     WHERE t.parent_team_id IS NULL
      GROUP BY t.id
      ORDER BY gold DESC, silver DESC, bronze DESC, t.name ASC
      LIMIT 100`
