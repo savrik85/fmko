@@ -160,11 +160,15 @@ function sellerPrices(input: SellerDecisionInput): SellerPrices {
   const value = netSaleValue(input.terms, input.swapValue, input.saleCosts ?? NO_SALE_COSTS);
   const valuation = { marketValue: input.marketValue, age: input.age, importance: input.importance, profile: input.profile, playerId: input.playerId, now: input.now };
   const baseReservation = reservationPrice(valuation);
-  // Při slibu prodeje AI vezme každou slušnou nabídku: rezervací je pevná pojistka (ani limit obchodů ji nezvedne).
-  const reservation = promisedSale(input) ? hardFloorValue(input.marketValue)
-    : input.overDealLimit ? ceil100(baseReservation * OVER_LIMIT_MARKUP) : baseReservation;
   // Hráč, který se mezitím stal oporou (zranění, prodeje), za cenu z inzerátu nejde.
   const listed = input.listedPrice && input.listedPrice > 0 && input.importance !== "key" ? input.listedPrice : null;
+  // Při slibu prodeje AI vezme každou slušnou nabídku: rezervací je pevná pojistka (ani limit obchodů ji nezvedne).
+  const ownReservation = promisedSale(input) ? hardFloorValue(input.marketValue)
+    : input.overDealLimit ? ceil100(baseReservation * OVER_LIMIT_MARKUP) : baseReservation;
+  // Cena z inzerátu je veřejný slib: kdo ji nabídne, hráče dostane, i když ho AI mezitím
+  // počítá do rotace nebo je přes měsíční limit obchodů. Dřív rezervace v odpovědi vyšla
+  // znovu a výš (na produ 80 ze 104 odpovědí nad cenou inzerátu, průměrně 1,5×).
+  const reservation = listed !== null ? Math.min(ownReservation, listed) : ownReservation;
   const ask0 = Math.max(reservation, listed ?? openingAsk(valuation) * (input.overDealLimit ? OVER_LIMIT_MARKUP : 1));
   // AI se k vyšší ceně nevrací: platí nejnižší požadavek, který už tomuto kupujícímu řekla.
   const previousAsk = input.previousAsks.length > 0 ? Math.min(...input.previousAsks) : null;
@@ -194,9 +198,9 @@ export function decideSellerReply(input: SellerDecisionInput): SellerDecision {
   // Slib prodeje: slušnou nabídku AI přijme, ať je kupující kdokoli a cena pod požadavkem.
   if (promisedSale(input)) return { kind: "accept", reason: "sale_promise", value, reservation };
 
-  // Cena z inzerátu platí: kdo ji nabídne (v současné hodnotě), má souhlas. Pod rezervaci ale ne:
-  // inzerát mohl zůstat z doby, kdy hráč přebýval, a pod rezervaci AI nikdy neprodá (spec 3.7).
-  if (listed && value >= listed && value >= reservation && !input.overDealLimit) return { kind: "accept", reason: "accept_ask", value, reservation };
+  // Cena z inzerátu platí: kdo ji nabídne (v současné hodnotě), má souhlas. Rezervace je
+  // u vystaveného hráče nejvýš cena inzerátu (`sellerPrices`), opora na inzerát nejde.
+  if (listed && value >= listed) return { kind: "accept", reason: "accept_ask", value, reservation };
 
   if (value >= currentAsk) return { kind: "accept", reason: "accept_ask", value, reservation };
 
