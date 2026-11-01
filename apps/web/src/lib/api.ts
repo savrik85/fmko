@@ -241,8 +241,10 @@ export interface Player {
     isParentClub: boolean;
     /** Dívá se klub, u kterého hráč zrovna hostuje. */
     isBorrower: boolean;
-    /** Povolat zpět jde jen z kmenového klubu a jen u hostování zdarma. */
+    /** Stáhnout zpátky smí kmenový klub (na přehledu hostování, s pravidly o poplatku). */
     canRecall: boolean;
+    /** Záznam hostování pro odkaz na přehled; u starého hostování může chybět. */
+    agreementId?: string | null;
   } | null;
   squad_number?: number | null;
   weekly_wage?: number | null;

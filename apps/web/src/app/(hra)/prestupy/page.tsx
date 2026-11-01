@@ -2700,27 +2700,11 @@ export default function TransfersPage() {
                   {p.days_left > 0 ? `zpět za ${p.days_left} ${dnySlovem(p.days_left)}` : "vrací se"}
                   {" · "}{new Date(p.loan_until).toLocaleDateString("cs")}
                 </span>
-                {/* Povolat zpět jde jen u hostování zdarma — u placeného si klub dobu zaplatil. */}
-                {p.loan_fee === 0 ? (
-                  <button
-                    onClick={async () => {
-                      const ok = await confirm({
-                        title: "Povolat hráče zpět?",
-                        description: `${p.first_name} ${p.last_name} se ihned vrátí z ${p.loan_team_name} do tvého kádru.`,
-                        confirmLabel: "Povolat zpět",
-                      });
-                      if (!ok || !teamId) return;
-                      if (await apiAction(apiFetch(`/api/teams/${teamId}/loans/${p.id}/recall`, { method: "POST" }), "Povolání hráče zpět se nezdařilo")) await refresh();
-                    }}
-                    className="shrink-0 py-1 px-3 rounded-soft text-sm font-heading font-bold bg-pitch-500/10 text-pitch-600 hover:bg-pitch-500/20 transition-colors"
-                  >
-                    Povolat zpět
-                  </button>
-                ) : (
-                  <span className="shrink-0 text-sm text-muted">
-                    placené ({p.loan_fee.toLocaleString("cs")} Kč)
-                  </span>
-                )}
+                {/* Jak hraje a stažení zpátky (s pravidly o poplatku) jsou v přehledu hostování. */}
+                <Link href="/prestupy?tab=squad&tym=hostovani"
+                  className="shrink-0 py-1 px-3 rounded-soft text-sm font-heading font-bold bg-pitch-500/10 text-pitch-600 hover:bg-pitch-500/20 transition-colors">
+                  Přehled hostování
+                </Link>
               </div>
             ))}
           </div>
