@@ -1049,15 +1049,28 @@ matchesRouter.get("/teams/:teamId/match-summary/:matchId", async (c) => {
   const teamId = c.req.param("teamId");
   const matchId = c.req.param("matchId");
 
-  const row = await c.env.DB.prepare(
-    "SELECT home_team_id, away_team_id, home_score, away_score, home_lineup_data, away_lineup_data, player_ratings, events, status FROM matches WHERE id = ?"
-  ).bind(matchId).first<{
+  type SummaryRow = {
     home_team_id: string; away_team_id: string;
     home_score: number; away_score: number;
     home_lineup_data: string | null; away_lineup_data: string | null;
     player_ratings: string | null; events: string | null;
     status: string;
-  }>();
+  };
+  let factorTable = "matches";
+  let row = await c.env.DB.prepare(
+    "SELECT home_team_id, away_team_id, home_score, away_score, home_lineup_data, away_lineup_data, player_ratings, events, status FROM matches WHERE id = ?"
+  ).bind(matchId).first<SummaryRow>();
+  if (!row) {
+    // Pohár: stejná data v cup_matches, kluby přes cup_teams (velkoklub nemá team_id).
+    row = await c.env.DB.prepare(
+      `SELECT COALESCE(hc.team_id, '') AS home_team_id, COALESCE(ac.team_id, '') AS away_team_id, cm.home_score, cm.away_score,
+              cm.home_lineup_data, cm.away_lineup_data, cm.player_ratings, cm.events, cm.status
+         FROM cup_matches cm JOIN cup_teams hc ON hc.id = cm.home_cup_team_id JOIN cup_teams ac ON ac.id = cm.away_cup_team_id
+        WHERE cm.id = ?`,
+    ).bind(matchId).first<SummaryRow>()
+      .catch((e) => { logger.warn({ module: "matches" }, "pohárový zápas pro souhrn", e); return null; });
+    factorTable = "cup_matches";
+  }
   if (!row) return c.json({ error: "match_not_found" }, 404);
   if (row.status !== "simulated") return c.json({ error: "match_not_simulated" }, 400);
 
@@ -1078,7 +1091,16 @@ matchesRouter.get("/teams/:teamId/match-summary/:matchId", async (c) => {
       isOwnHome,
     });
     if (!summary) return c.json({ error: "missing_lineup_data" }, 400);
-    return c.json(summary);
+    // „Čím se zápas lámal“: zvlášť, ať zápas bez sloupce nebo bez faktorů (starší) report nerozbije.
+    const factorRow = await c.env.DB.prepare(`SELECT factors FROM ${factorTable} WHERE id = ?`).bind(matchId)
+      .first<{ factors: string | null }>()
+      .catch((e) => { logger.warn({ module: "matches" }, "faktory zápasu", e); return null; });
+    const { factorBreakdown, parseMatchFactors } = await import("../engine/match-factors");
+    const factors = parseMatchFactors(factorRow?.factors);
+    const breakdown = factors
+      ? factorBreakdown(isOwnHome ? factors.home : factors.away, isOwnHome ? factors.away : factors.home)
+      : null;
+    return c.json({ ...summary, breakdown });
   } catch (e) {
     logger.warn({ module: "matches" }, "build match summary", e);
     return c.json({ error: "summary_failed" }, 500);

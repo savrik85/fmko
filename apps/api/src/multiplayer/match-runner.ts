@@ -833,6 +833,11 @@ export async function runScheduledMatches(
                     `zápas ${matchId} už odsimuloval jiný běh, přeskakuji (kolo ${calendarId})`);
                 continue;
             }
+            // „Čím se zápas lámal“ zvlášť: bez sloupce (migrace 0282) přijde jen o rozpis, ne o výsledek.
+            if (result.factors) {
+                await db.prepare("UPDATE matches SET factors = ? WHERE id = ?").bind(JSON.stringify(result.factors), matchId).run()
+                    .catch((e) => logger.warn({module: "match-runner"}, `faktory zápasu ${matchId}`, e));
+            }
 
             // Sponzoři, VIP lóže a trávník — jen áčko.
             if (clubSideEffects) {

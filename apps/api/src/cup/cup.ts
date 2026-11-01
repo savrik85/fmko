@@ -798,6 +798,10 @@ async function simulateCupTie(
       cupIncidents.length > 0 ? JSON.stringify(cupIncidents) : null, result.refereeGrade,
       cupMatchId,
     ).run().catch((e) => logger.warn({ module: M }, "save cup match detail", e));
+    if (result.factors) {
+      await db.prepare("UPDATE cup_matches SET factors = ? WHERE id = ?").bind(JSON.stringify(result.factors), cupMatchId).run()
+        .catch((e) => logger.warn({ module: M }, `faktory pohárového zápasu ${cupMatchId}`, e));
+    }
 
     // Pohár se hraje na hřišti domácího — pokud je domácí reálný klub, trávník to stojí.
     // U velkoklubu (homeReal == null) se nehraje na našem hřišti, takže nic.
