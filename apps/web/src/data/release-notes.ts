@@ -12,6 +12,17 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    date: "2026-11-01",
+    emoji: "🔁",
+    title: "Hostování přes trh",
+    items: [
+      "Hráče, který u tebe nehraje, můžeš nabídnout na hostování. Na jeho profilu klikni na Na hostování a vyber délku, poplatek (klidně zdarma) a podmínku: hraje v základu, pravidelně nastupuje, nebo bez podmínky.",
+      "Hráče k zapůjčení najdeš v Přestupech pod Hledat → Hostování. Požádáš o něj a klub, který ho půjčuje, žádost potvrdí, nebo odmítne. Bez jeho potvrzení hráč nikam nejde. Kluby z nižší soutěže v okrese dostanou o novém hráči k zapůjčení SMS.",
+      "V Přestupech pod Můj tým → Hostování máš přehled o půjčených hráčích: každý zápas s minutami a známkou, jak se mu zlepšuje rating a dovednosti, jak chodí na trénink, v jaké je kondici a náladě.",
+      "Podmínku hraní hlídá hra. Počítají se ligové zápasy, ve kterých hráč mohl hrát. Klub, který si ho půjčil, dostane den před zápasem varování. Když podmínku nesplní, můžeš si hráče stáhnout zpátky a poplatek ti zůstane.",
+    ],
+  },
+  {
     date: "2026-10-31",
     emoji: "🗺️",
     title: "Obce okresu",
