@@ -42,6 +42,8 @@ export interface TransferActionFailure {
   offerId?: string;
   /** Za kolik dní jde nabídnout znovu (429). */
   retryInDays?: number;
+  /** Přijetí padlo na penězích kupujícího (záloha, poplatek), ne na vůli prodávajícího. */
+  reason?: "buyer_funds";
 }
 
 export type TransferActionResult<T extends object = Record<never, never>> = ({ ok: true } & T) | TransferActionFailure;
@@ -51,8 +53,44 @@ export interface TransferActionOptions {
   waitUntil?: (promise: Promise<unknown>) => void;
 }
 
-function fail(status: TransferActionStatus, error: string, extra: Partial<Pick<TransferActionFailure, "offerId" | "retryInDays">> = {}): TransferActionFailure {
+function fail(status: TransferActionStatus, error: string, extra: Partial<Pick<TransferActionFailure, "offerId" | "retryInDays" | "reason">> = {}): TransferActionFailure {
   return { ok: false, status, error, ...extra };
+}
+
+/**
+ * Kolik bude kupující potřebovat hned při přijetí: zálohu (u jednorázové platby celou cenu)
+ * a k ní meziligový poplatek. Stejný výpočet jako přijetí (`acceptTransferOffer`), aby nabídka,
+ * kterou kupující nezaplatí, vůbec nevznikla. Dřív se při založení hlídala jen záloha:
+ * AI klub nabídku přijal, přijetí spadlo na poplatku a nabídka skončila odmítnutím
+ * s desetidenní blokací kupce. Vrací text chyby, nebo `null`.
+ */
+async function upfrontShortfall(db: D1Database, opts: {
+  buyerClubTeamId: string; sellerRosterTeamId: string; terms: TransferTerms; isLoan: boolean;
+}): Promise<string | null> {
+  const payNow = transferSchedule(opts.terms).upfront;
+  const buyer = await db.prepare("SELECT budget, league_id FROM teams WHERE id = ?")
+    .bind(opts.buyerClubTeamId).first<{ budget: number; league_id: string | null }>();
+  if (!buyer) return "Kupující tým nenalezen";
+  let adminFee = 0;
+  if (!opts.isLoan && opts.terms.amount > 0) {
+    const seller = await db.prepare("SELECT league_id FROM teams WHERE id = ?")
+      .bind(opts.sellerRosterTeamId).first<{ league_id: string | null }>()
+      .catch((e) => { logger.warn({ module: "game" }, "soutěž prodávajícího pro poplatek", e); return null; });
+    const { computeTransferLevies } = await import("../competition/transfer-levy");
+    adminFee = (await computeTransferLevies(db, {
+      buyerLeagueId: buyer.league_id, sellerLeagueId: seller?.league_id, amount: opts.terms.amount, isLoan: false,
+    })).adminFee;
+  }
+  const needed = payNow + adminFee;
+  if (needed <= 0 || buyer.budget >= needed) return null;
+  const have = buyer.budget.toLocaleString("cs");
+  if (adminFee > 0) {
+    const what = opts.terms.installments > 0 ? "záloha" : "cena";
+    return `Nedostatek peněz. Máte ${have} Kč, při přijetí bude potřeba ${needed.toLocaleString("cs")} Kč (${what} ${payNow.toLocaleString("cs")} Kč a administrační poplatek ${adminFee.toLocaleString("cs")} Kč za přestup z jiné soutěže).`;
+  }
+  return opts.terms.installments > 0
+    ? `Nedostatek peněz na zálohu. Máte ${have} Kč, záloha je ${payNow.toLocaleString("cs")} Kč.`
+    : `Nedostatek peněz. Máte ${have} Kč, nabízíte ${opts.terms.amount.toLocaleString("cs")} Kč.`;
 }
 
 async function inBackground(opts: TransferActionOptions | undefined, promise: Promise<unknown>): Promise<void> {
@@ -226,16 +264,10 @@ export async function createTransferOffer(env: Bindings, actorTeamId: string, bo
       ?? await installmentBudgetError(db, buyerClubTeamId, weeklyInstallment(terms));
     if (limitError) return fail(400, limitError);
   }
-  // Kupující potřebuje peníze jen na zálohu (u jednorázové platby je záloha celá cena).
-  const payNow = transferSchedule(terms).upfront;
-  if (payNow > 0) {
-    const team = await db.prepare("SELECT budget FROM teams WHERE id = ?").bind(buyerClubTeamId).first<{ budget: number }>();
-    if (!team || team.budget < payNow) {
-      return fail(400, terms.installments > 0
-        ? `Nedostatek peněz na zálohu. Máte ${team?.budget?.toLocaleString("cs") ?? 0} Kč, záloha je ${payNow.toLocaleString("cs")} Kč.`
-        : `Nedostatek peněz. Máte ${team?.budget?.toLocaleString("cs") ?? 0} Kč, nabízíte ${body.amount.toLocaleString("cs")} Kč.`);
-    }
-  }
+  // Kupující potřebuje peníze na zálohu (u jednorázové platby je záloha celá cena)
+  // a na meziligový poplatek, který se platí hned při přijetí.
+  const shortfall = await upfrontShortfall(db, { buyerClubTeamId, sellerRosterTeamId: targetOwnerId, terms, isLoan: offerType === "loan" });
+  if (shortfall) return fail(400, shortfall);
 
   if (offerType === "loan" && (!loanDuration || loanDuration < 7 || loanDuration > 180)) {
     return fail(400, "Délka hostování musí být 7–180 dní");
@@ -405,6 +437,16 @@ export async function placeListingBid(env: Bindings, actorTeamId: string, listin
     return fail(400, "Nemůžeš nabízet na vlastního hráče");
   }
   if (await areClubsLinked(db, buyerClubTeamId, listingInfo.seller_team_id)) return fail(403, LINKED_CLUBS_ERRORS.transfer);
+
+  // Z inzerátu vzniká stejná nabídka jako přímá, proto platí i stejná pravidla. Dřív tu chyběla
+  // blokace po odmítnutí: přes inzerát šlo na jednoho hráče poslat šest nabídek za tři dny
+  // a každé odmítnutí mu znovu srazilo náladu.
+  const { offerRetryBlock, offerRetryBlockMessage } = await import("../transfers/offer-cooldown");
+  const retryBlock = await offerRetryBlock(db, listingInfo.player_id, buyerClubTeamId)
+    .catch((e) => { logger.warn({ module: "game" }, "check offer cooldown from market", e); return null; });
+  if (retryBlock) return fail(429, offerRetryBlockMessage(retryBlock), { retryInDays: retryBlock.daysLeft });
+  const shortfall = await upfrontShortfall(db, { buyerClubTeamId, sellerRosterTeamId: listingInfo.seller_team_id, terms, isLoan: false });
+  if (shortfall) return fail(400, shortfall);
 
   // Idempotence — pokud už existuje aktivní offer od tohoto týmu na tohoto hráče, vrátit ho
   const existing = await db.prepare(
@@ -929,7 +971,8 @@ export async function acceptTransferOffer(
     const what = terms.installments > 0 ? `záloha ${payNow.toLocaleString("cs")} Kč` : `cena ${amount.toLocaleString("cs")} Kč`;
     return fail(400, adminFee > 0
       ? `Kupující nemá dostatek prostředků (${what} + administrační poplatek ${adminFee.toLocaleString("cs")} Kč)`
-      : terms.installments > 0 ? `Kupující nemá dostatek prostředků na zálohu (${payNow.toLocaleString("cs")} Kč)` : "Kupující nemá dostatek prostředků");
+      : terms.installments > 0 ? `Kupující nemá dostatek prostředků na zálohu (${payNow.toLocaleString("cs")} Kč)` : "Kupující nemá dostatek prostředků",
+      { reason: "buyer_funds" });
   }
   if (offerType !== "loan" && terms.installments > 0) {
     const limitError = await installmentLimitError(db, buyerTeamId)
@@ -1028,7 +1071,7 @@ export async function acceptTransferOffer(
       await releaseOfferClaim();
       return fail(400, adminFee > 0
         ? `Kupující nemá dostatek prostředků (cena ${amount.toLocaleString("cs")} Kč + administrační poplatek ${adminFee.toLocaleString("cs")} Kč)`
-        : "Kupující nemá dostatek prostředků");
+        : "Kupující nemá dostatek prostředků", { reason: "buyer_funds" });
     }
 
     // Hráči na výměnu — ověř, že všichni stále patří kupujícímu (race-safe).
@@ -1280,7 +1323,15 @@ export async function rejectTransferOffer(
   env: Bindings,
   actorTeamId: string,
   offerId: string,
-  input: { message?: string | null } = {},
+  input: {
+    message?: string | null;
+    /**
+     * Prodávající by souhlasil, jen kupující nemá na zálohu nebo poplatek. Takové odmítnutí
+     * kupce neblokuje (`cooldown_waived`) a hráči nebere náladu: o odchod nepřišel kvůli
+     * vůli klubu.
+     */
+    buyerCannotPay?: boolean;
+  } = {},
   opts?: TransferActionOptions,
 ): Promise<TransferActionResult> {
   const db = env.DB;
@@ -1298,14 +1349,15 @@ export async function rejectTransferOffer(
 
   const rejected = await db.prepare(
     `UPDATE transfer_offers
-     SET status = 'rejected', reject_message = ?, resolved_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+     SET status = 'rejected', reject_message = ?, resolved_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now'),
+         cooldown_waived = CASE WHEN ? = 1 THEN 1 ELSE cooldown_waived END
      WHERE id = ? AND status = ? AND last_action_by IS ?`
-  ).bind(message, offerId, offer.status, offer.last_action_by).run();
+  ).bind(message, input.buyerCannotPay ? 1 : 0, offerId, offer.status, offer.last_action_by).run();
   if (rejected.meta.changes === 0) return fail(409, "Nabídku mezitím vyřešil někdo jiný");
 
   // Dopad na hráče — jen když nabídku odmítl VLASTNÍK hráče (prodávající). I u AI klubu:
   // truc platí stejně, jen bez zpráv (applyOfferRejectionImpact AI klubu nic nepíše).
-  if (scope.role === "seller") {
+  if (scope.role === "seller" && !input.buyerCannotPay) {
     const { applyOfferRejectionImpact } = await import("../transfers/offer-rejection-impact");
     await inBackground(opts, applyOfferRejectionImpact(db, offer, "reject", {
       GEMINI_API_KEY: env.GEMINI_API_KEY,

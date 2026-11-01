@@ -476,11 +476,16 @@ function failureOutcome(res: { status: number; error: string }): "retry" | "sett
 async function executeSellerDecision(ctx: RunContext, offer: OfferRow, decision: SellerDecision, swapValue: number, costs: SaleCosts): Promise<{ executed: string; error?: string }> {
   if (ctx.mode === "shadow") return { executed: "shadow" };
   const { env, club } = ctx;
-  const closeAfter = async (res: { status: number; error: string }, what: string): Promise<{ executed: string; error?: string }> => {
+  const closeAfter = async (res: { status: number; error: string; reason?: string }, what: string): Promise<{ executed: string; error?: string }> => {
     const outcome = failureOutcome(res);
     if (outcome === "retry") throw new RetryLaterError(`${what}: ${res.error}`);
     if (outcome === "settled") return { executed: `${what}_settled_meanwhile`, error: res.error };
-    const rej = await rejectTransferOffer(env, club.teamId, offer.id);
+    // Klub by prodal, jen kupující nemá na zálohu a poplatek: bez blokace kupce a bez truc hráče,
+    // ať se kupující dozví proč a může přijít znovu, až peníze bude mít.
+    const buyerCannotPay = res.reason === "buyer_funds";
+    const rej = await rejectTransferOffer(env, club.teamId, offer.id, buyerCannotPay
+      ? { message: "Dohodli bychom se, ale na zálohu a poplatek teď nemáte. Až budete mít, ozvěte se znovu.", buyerCannotPay: true }
+      : {});
     return { executed: rej.ok ? `rejected_after_failed_${what}` : "failed", error: res.error };
   };
   if (decision.kind === "accept") {

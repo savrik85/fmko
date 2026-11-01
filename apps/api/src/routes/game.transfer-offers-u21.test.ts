@@ -154,6 +154,7 @@ beforeAll(async () => {
       counter_amount INTEGER,
       message TEXT,
       reject_message TEXT,
+      cooldown_waived INTEGER NOT NULL DEFAULT 0,
       status TEXT NOT NULL DEFAULT 'pending',
       expires_at TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
