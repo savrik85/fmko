@@ -466,7 +466,7 @@ async function simulateCupTie(
 ): Promise<{ hg: number; ag: number; hp: number; ap: number; homeWin: boolean; upset: boolean }> {
   const { buildMatchPlayers } = await import("../multiplayer/match-runner");
   const { simulateMatch } = await import("../engine/simulation");
-  const { calculatePlayerRatings, extractStatsFromEvents, saveMatchPlayerStats, determineManOfMatch, saveMatchMom } = await import("../stats/update-stats");
+  const { calculatePlayerRatings, playedTeamsMap, extractStatsFromEvents, saveMatchPlayerStats, determineManOfMatch, saveMatchMom } = await import("../stats/update-stats");
 
   const homeReal = realTeamOf.get(homeCupTeamId) ?? null;
   const awayReal = realTeamOf.get(awayCupTeamId) ?? null;
@@ -647,7 +647,9 @@ async function simulateCupTie(
   const enginePos = new Map<number, string>();        // engineId → pozice (pro výpočet ratingů)
   for (const p of [...homePre, ...homeSubs, ...awayPre, ...awaySubs]) enginePos.set(p.id, p.matchPosition ?? p.position);
 
-  const ratings = calculatePlayerRatings(result.events, fullIdMap, 1, result.homeScore, result.awayScore, enginePos);
+  const playedTeams = playedTeamsMap(result.playerMinutes,
+    [...homePre, ...homeSubs].map((p) => p.id), [...awayPre, ...awaySubs].map((p) => p.id), 1, 2);
+  const ratings = calculatePlayerRatings(result.events, fullIdMap, 1, result.homeScore, result.awayScore, enginePos, playedTeams);
   const homeStarterIds = homePre.map((p) => homeBuild.idMap.get(p.id) ?? "").filter(Boolean);
   const awayStarterIds = awayPre.map((p) => awayBuild.idMap.get(p.id) ?? "").filter(Boolean);
   const homeUpdates = extractStatsFromEvents(result.events, homeBuild.idMap, homeStarterIds, ratings, result.playerMinutes);
