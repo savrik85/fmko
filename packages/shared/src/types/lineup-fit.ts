@@ -42,8 +42,20 @@ export function splitPlanByLineup(
   return { kept, dropped };
 }
 
-/** Lavička bez hráčů ze základu a bez těch, kdo v kádru nejsou. `null` (vybírá automat) zůstává. */
+/**
+ * Lavička bez hráčů ze základu, bez těch, kdo v kádru nejsou, a každý hráč jen jednou.
+ * `null` (vybírá automat) zůstává.
+ *
+ * Duplicitu umí vyrobit web: automat postaví náhradníka do základu a z lavičky ho nevyřadí,
+ * a když ho trenér pak vymění za jiného náhradníka, zapíše se na lavičku podruhé. Server
+ * takovou lavičku odmítne („Na lavičce je někdo dvakrát"), proto se čistí tady.
+ */
 export function benchForLineup(bench: readonly string[] | null, lineup: LineupIds): string[] | null {
   if (!bench) return null;
-  return bench.filter((id) => lineup.squadIds.has(id) && !lineup.starterIds.has(id));
+  const seen = new Set<string>();
+  return bench.filter((id) => {
+    if (seen.has(id) || !lineup.squadIds.has(id) || lineup.starterIds.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
 }
