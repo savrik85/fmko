@@ -11,6 +11,7 @@ import { ROLE_DEFS, type StaffRole } from "@okresni-masina/shared";
 import type { Bindings } from "../index";
 import { logger } from "../lib/logger";
 import { getEquipmentOptions, repairEquipment, upgradeEquipment } from "../services/equipment";
+import { nactiPoskozeni, opravVybaveni } from "../stadium/stadium-damage";
 import { listBannerOffers, MAX_BANNERS, signSponsorContract } from "../services/banner-sponsors";
 import { setAcademyInvestment, setTicketPrice } from "../services/club-settings";
 import { restockConcession, setConcessionMode, setConcessionProduct } from "../services/concessions";
@@ -191,6 +192,15 @@ export async function loadWeeklyContext(db: D1Database, teamId: string, gameDayO
   const equipmentRepairs: RepairChoice[] = (equipment?.repairs ?? []).map((o, i) => ({
     key: `R${i + 1}`, ref: o.category, label: `${o.category} level ${o.level}`, cost: o.cost, detail: `state ${o.condition} %`, condition: o.condition,
   }));
+  // Škody na stadionu (výtržnosti, rozbité šatny): dřív je AI nikdy neopravila, uměla jen vybavení.
+  const damage = await nactiPoskozeni(db, teamId)
+    .catch((e) => { logger.warn({ module: M, teamId }, "škody na stadionu", e); return []; });
+  for (const d of damage) {
+    equipmentRepairs.push({
+      key: `R${equipmentRepairs.length + 1}`, ref: d.facility, label: `${d.facility} damaged, ${d.levels} level${d.levels > 1 ? "s" : ""} down`,
+      cost: d.repair_cost, detail: "broken, repair restores the level", condition: 0, damageId: d.id,
+    });
+  }
 
   // Zaměstnanci: obsazené role a nejlepší kandidáti na volné role (jen ti, kdo půjdou pod licenci trenéra).
   const hired = await db.prepare("SELECT role FROM staff_members WHERE team_id = ? AND role IS NOT NULL").bind(teamId).all<{ role: string }>()
@@ -406,6 +416,10 @@ async function executeAction(db: D1Database, teamId: string, ctx: WeeklyContext,
       case "equipment_repair": {
         const res = await repairEquipment(db, teamId, a.category);
         return { ok: res.ok, detail: res.ok ? `${a.category} ${res.cost} Kč` : res.error };
+      }
+      case "stadium_repair": {
+        const res = await opravVybaveni(db, { teamId, damageId: a.damageId, gameDate: ctx.gameDay });
+        return { ok: res.ok, detail: res.ok ? `${res.label} -> ${res.novaUroven}, ${res.cost} Kč` : res.duvod };
       }
       case "pitch_maintenance": {
         const res = await maintainPitch(db, teamId, a.level);

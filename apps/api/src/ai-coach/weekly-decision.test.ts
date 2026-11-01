@@ -151,6 +151,23 @@ describe("týdenní správa nepřekročí rezervu", () => {
     });
   }
 
+  it("škodu na stadionu opraví jako vybavení: v nabídce, náhradní pravidlo ji vezme, akce je oprava stadionu", () => {
+    const base = context(80_000);
+    const ctx: WeeklyContext = {
+      ...base,
+      equipmentRepairs: [
+        ...base.equipmentRepairs,
+        { key: "R2", ref: "stand_main", label: "stand_main damaged, 1 level down", cost: 17_000, detail: "broken", condition: 0, damageId: "dmg-1" },
+      ],
+    };
+    expect(renderWeeklyPrompt(ctx)).toContain("R2: stand_main damaged");
+    const rule = fallbackWeeklyDecision(ctx);
+    expect(rule.equipmentRepairs).toContain("R2");
+    const plan = planWeeklyActions(ctx, rule);
+    expect(plan.actions).toContainEqual({ kind: "stadium_repair", key: "R2", damageId: "dmg-1", cost: 17_000 });
+    expect(plan.actions).toContainEqual({ kind: "equipment_repair", key: "R1", category: "jerseys", cost: 600 });
+  });
+
   it("bez peněz nad rezervou se nic placeného neprovede, bezplatné ano", () => {
     const ctx = context(5_000);
     const plan = planWeeklyActions(ctx, everything);
