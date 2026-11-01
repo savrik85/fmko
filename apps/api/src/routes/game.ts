@@ -204,9 +204,14 @@ gameRouter.get("/teams/:teamId/players/:playerId/training-log", async (c) => {
   const teamId = c.req.param("teamId");
   const playerId = c.req.param("playerId");
 
+  // Trénink v áčku i v U21 je jeden klub. Záznam nese tým, kde hráč ten den trénoval,
+  // takže kluk povýšený z U21 by jinak hlásil „Zatím žádné záznamy“.
   const rows = await c.env.DB.prepare(
-    "SELECT attribute, old_value, new_value, change, training_type, game_date, created_at FROM training_log WHERE player_id = ? AND team_id = ? ORDER BY created_at DESC LIMIT 50"
-  ).bind(playerId, teamId).all().catch((e) => { logger.warn({ module: "game" }, "fetch training log", e); return { results: [] }; });
+    `SELECT attribute, old_value, new_value, change, training_type, game_date, created_at FROM training_log
+      WHERE player_id = ?
+        AND team_id IN (SELECT id FROM teams WHERE id = ? OR parent_team_id = ? OR id = (SELECT parent_team_id FROM teams WHERE id = ?))
+      ORDER BY created_at DESC LIMIT 50`
+  ).bind(playerId, teamId, teamId, teamId).all().catch((e) => { logger.warn({ module: "game" }, "fetch training log", e); return { results: [] }; });
 
   return c.json({ log: rows.results });
 });
@@ -2151,7 +2156,7 @@ gameRouter.get("/teams/:teamId/injuries", async (c) => {
   const result = await c.env.DB.prepare(
     `SELECT i.*, p.first_name, p.last_name, p.nickname, p.position, p.avatar
      FROM injuries i JOIN players p ON i.player_id = p.id
-     WHERE i.team_id = ? AND i.days_remaining > 0
+     WHERE p.team_id = ? AND i.days_remaining > 0
      ORDER BY i.days_remaining ASC`
   ).bind(teamId).all().catch((e) => { logger.warn({ module: "game" }, "fetch injuries", e); return { results: [] }; });
 

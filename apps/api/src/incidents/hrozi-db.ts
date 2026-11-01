@@ -44,7 +44,7 @@ export async function vyhodnotHrozici(env: Bindings, stav: StavKlubu): Promise<n
   if (!rows || rows.results.length === 0) return 0;
 
   const absence = await nactiIncidentniAbsence(db, stav.teamId, stav.den);
-  const zraneni = await db.prepare("SELECT DISTINCT player_id FROM injuries WHERE team_id = ? AND days_remaining > 0")
+  const zraneni = await db.prepare("SELECT DISTINCT player_id FROM injuries WHERE days_remaining > 0 AND player_id IN (SELECT id FROM players WHERE team_id = ?)")
     .bind(stav.teamId).all<{ player_id: string }>()
     .catch((e) => { logger.warn({ module: M }, `zranění ${stav.teamId}`, e); return { results: [] as Array<{ player_id: string }> }; });
   const zraneny = new Set(zraneni.results.map((r) => r.player_id));

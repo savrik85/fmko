@@ -241,7 +241,7 @@ export async function loadSquadAnalysisInput(db: D1Database, teamId: string): Pr
     db.prepare(
       `SELECT DISTINCT player_id FROM injuries
         WHERE days_remaining > 0 AND COALESCE(osobni_volno, 0) = 0
-          AND (team_id = ? OR team_id IN (SELECT id FROM teams WHERE league_id = ?))`,
+          AND player_id IN (SELECT id FROM players WHERE team_id = ? OR team_id IN (SELECT id FROM teams WHERE league_id = ?))`,
     ).bind(teamId, team.league_id ?? "").all<{ player_id: string }>()
       .catch((e) => { logger.warn({ module: M, teamId }, "injuries", e); return { results: [] as Array<{ player_id: string }> }; }),
     loadSavedFormation(db, teamId),

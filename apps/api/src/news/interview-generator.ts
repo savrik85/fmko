@@ -145,7 +145,7 @@ async function loadInjuredText(db: D1Database, teamId: string): Promise<string |
       `SELECT p.first_name, p.last_name, i.type as injury_type
        FROM injuries i
        JOIN players p ON p.id = i.player_id
-       WHERE i.team_id = ? AND i.days_remaining > 0 AND p.overall_rating >= 55
+       WHERE p.team_id = ? AND i.days_remaining > 0 AND p.overall_rating >= 55
        ORDER BY p.overall_rating DESC LIMIT 3`,
     )
     .bind(teamId)
