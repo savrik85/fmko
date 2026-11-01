@@ -301,6 +301,8 @@ export async function processLeagueRound(
       prof.mark("udalosti-mezi-koly");
       await runAdhocEvents(env, db, leagueId, gameWeek);
       prof.mark("adhoc-udalosti");
+      await notifySeasonalDecisions(env, db, leagueId, gameWeek);
+      prof.mark("sezonni-rozhodnuti");
     }
     await cleanupMatchDayConversations(db, calendarId);
     prof.mark("uklid-konverzaci");
@@ -711,6 +713,31 @@ async function runBetweenRoundEvents(
     }
   } catch (e) {
     logger.error({ module: "league-round" }, "between-round events failed", e);
+  }
+}
+
+/**
+ * Sezónní událost s volbou nastala (její kolo se právě odehrálo). Dřív vznikla potichu až
+ * při otevření Událostí a kdo tam nezašel, o ní nevěděl, dokud po dvou kolech nepropadla.
+ */
+async function notifySeasonalDecisions(env: Bindings, db: D1Database, leagueId: string, gameWeek: number): Promise<void> {
+  try {
+    const { DECISION_WINDOW, getSeasonalEventsForWeek } = await import("./seasonal-events");
+    const teams = await db
+      .prepare("SELECT t.id, v.district FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.league_id = ? AND t.user_id <> 'ai' AND t.parent_team_id IS NULL")
+      .bind(leagueId)
+      .all<{ id: string; district: string | null }>();
+    const { createNotification } = await import("../community/notifications");
+    const pushEnv = { VAPID_PUBLIC_KEY: env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: env.VAPID_SUBJECT, DB: db };
+    for (const t of teams.results) {
+      for (const ev of getSeasonalEventsForWeek(gameWeek, t.district ?? undefined).filter((e) => e.choices?.length)) {
+        await createNotification(db, t.id, "event", `📅 ${ev.title}`,
+          `Čeká na tvoje rozhodnutí. Máš na něj ${DECISION_WINDOW} kola, pak propadne.`, "/udalosti", pushEnv,
+        ).catch((e) => logger.warn({ module: "league-round" }, `upozornění na sezónní rozhodnutí ${t.id}`, e));
+      }
+    }
+  } catch (e) {
+    logger.error({ module: "league-round" }, "sezónní rozhodnutí", e);
   }
 }
 

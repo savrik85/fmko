@@ -12,6 +12,7 @@
  * z pokladny, po akci hráč poděkuje s fotkou a vztah se zlepší (follow-ups.ts).
  */
 
+import { pushPhoneMessage } from "../community/phone-push";
 import { logger } from "../lib/logger";
 import { seedFromString } from "../lib/seed";
 import { carryWeightTalk } from "../season/weight-talk";
@@ -66,6 +67,12 @@ export async function runPhoneHourly(
 ): Promise<{ casual: number; followUps: { delivered: number; cancelled: number; retried: number } }> {
   const followUps = await deliverDueFollowUps(db, env, now);
   const casual = await spawnCasualMessages(db, env, now);
+  // Okresní akce se vyhodnotí v noci: v 19 h připomenout těm, kdo neodpověděli.
+  if (pragueClock(now).hour === 19) {
+    const { remindUnansweredDistrictEvents } = await import("../events/district-event-db");
+    await remindUnansweredDistrictEvents(db, env)
+      .catch((e) => logger.warn({ module: M }, "připomínka okresních akcí", e));
+  }
   return { casual: casual.sent, followUps };
 }
 
@@ -265,6 +272,7 @@ async function spawnCasualForTeam(
   ]);
   if (topic.invite) await openInvite(env.CACHE_KV, convId, { kind: topic.invite, topicId: topic.id, teamId, playerId: player.id, playerFirstName: player.firstName });
   await rememberTopic(env.CACHE_KV, teamId, topic.id);
+  await pushPhoneMessage(db, env, { teamId, convId, sender: `${player.firstName} ${player.lastName}`, text: photo ? `📷 ${text}` : voice ? "🎤 Hlasová zpráva" : text });
   logger.info({ module: M, teamId }, `zpráva jen tak: ${player.firstName} ${player.lastName} → ${topic.id}${photo ? " (fotka)" : voice ? " (hlasovka)" : ""}`);
   return { sent: true, draft };
 }

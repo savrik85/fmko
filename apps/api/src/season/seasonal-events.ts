@@ -690,6 +690,9 @@ const EVENT_TEMPLATES_PRAHA: SeasonalEventDef[] = [
  * Get events that should trigger for a given game week.
  * District-aware: Praha gets urban events, rest gets rural.
  */
+/** Kolik kol po události má trenér na rozhodnutí; pak propadne. */
+export const DECISION_WINDOW = 2;
+
 export function getSeasonalEventsForWeek(
   gameWeek: number,
   district?: string,

@@ -167,20 +167,30 @@ export async function executeDailyTick(
     if (expiredPub > 0) {
       logger.info({ module: "daily-tick" }, `${expiredPub} pub encounters vypršelo`);
     }
+    {
+      const { remindExpiringVillageDecisions } = await import("../villages/decision-alerts");
+      const reminded = await remindExpiringVillageDecisions(env.DB, env, effectiveDate.toISOString());
+      if (reminded > 0) logger.info({ module: "daily-tick" }, `připomínky rozhodnutí obce: ${reminded}`);
+    }
     if (dayOfWeek === 1) {
       const { generated, skipped } = await generateWeeklyBrigades(env.DB, effectiveDate.toISOString());
       logger.info({ module: "daily-tick" }, `brigády: ${generated} nových, ${skipped} obcí přeskočeno`);
-      const petitionRes = await generateMonthlyPetitions(env.DB, effectiveDate.toISOString());
+      const { notifyNewVillageDecisions } = await import("../villages/decision-alerts");
+      const dayIso = effectiveDate.toISOString();
+      const petitionRes = await generateMonthlyPetitions(env.DB, dayIso);
       if (petitionRes.generated > 0) {
         logger.info({ module: "daily-tick" }, `petice: ${petitionRes.generated} nových`);
+        await notifyNewVillageDecisions(env.DB, env, "petition", petitionRes.created, dayIso);
       }
-      const invRes = await generateMonthlyInvestments(env.DB, effectiveDate.toISOString());
+      const invRes = await generateMonthlyInvestments(env.DB, dayIso);
       if (invRes.generated > 0) {
         logger.info({ module: "daily-tick" }, `investice: ${invRes.generated} nových`);
+        await notifyNewVillageDecisions(env.DB, env, "investment", invRes.created, dayIso);
       }
-      const pubRes = await generatePubEncounters(env.DB, effectiveDate.toISOString());
+      const pubRes = await generatePubEncounters(env.DB, dayIso);
       if (pubRes.generated > 0) {
         logger.info({ module: "daily-tick" }, `pub encounters: ${pubRes.generated} nových`);
+        await notifyNewVillageDecisions(env.DB, env, "pub", pubRes.created, dayIso);
       }
       // Volby: každý zastupitel s prošlým mandátem → šance na výměnu
       const elRes = await processElections(env.DB, effectiveDate.toISOString());
