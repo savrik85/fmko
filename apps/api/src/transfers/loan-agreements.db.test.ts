@@ -123,4 +123,19 @@ describe("hlídání podmínky hostování", () => {
     expect(row).toMatchObject({ playing_time: "none", fee: 1500, started_at: "2026-10-30T16:00:00.000Z", start_rating: 45 });
     expect(row?.baseline_at).toBeTruthy();
   });
+
+  it("doplní i hostování hráče půjčeného z U21 klubu", async () => {
+    await db.prepare("DELETE FROM loan_agreements").run();
+    await db.batch([
+      db.prepare("INSERT INTO teams (id, name, parent_team_id, game_date, training_attendance, user_id) VALUES ('lender-u21', 'FK Přebor U21', ?, '2026-11-10T16:00:00.000Z', '{}', 'u1')").bind(LENDER),
+      db.prepare("UPDATE players SET loan_from_team_id = 'lender-u21' WHERE id = ?").bind(PLAYER),
+    ]);
+    expect(await ensureLoanAgreements(db, LENDER)).toBe(1);
+    const row = await db.prepare("SELECT lender_team_id FROM loan_agreements").first<{ lender_team_id: string }>();
+    expect(row?.lender_team_id).toBe("lender-u21");
+    await db.batch([
+      db.prepare("DELETE FROM teams WHERE id = 'lender-u21'"),
+      db.prepare("UPDATE players SET loan_from_team_id = ? WHERE id = ?").bind(LENDER, PLAYER),
+    ]);
+  });
 });

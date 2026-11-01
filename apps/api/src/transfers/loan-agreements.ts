@@ -234,8 +234,10 @@ export async function closeLoanAgreements(
  * bodem „teď“ (`baseline_at`), takže vývoj se ukazuje od dneška, ne od začátku hostování.
  */
 export async function ensureLoanAgreements(db: D1Database, lenderOrBorrowerTeamId?: string): Promise<number> {
+  // Celý klub: hráč půjčený z U21 má v `loan_from_team_id` id rezervy, ne áčka.
+  const clubTeams = "(SELECT id FROM teams WHERE id = ? OR parent_team_id = ?)";
   const scope = lenderOrBorrowerTeamId
-    ? "AND (p.loan_from_team_id = ? OR p.team_id = ?)"
+    ? `AND (p.loan_from_team_id IN ${clubTeams} OR p.team_id IN ${clubTeams})`
     : "";
   const stmt = db.prepare(
     `SELECT p.id, p.team_id, p.loan_from_team_id, p.loan_until,
@@ -249,7 +251,8 @@ export async function ensureLoanAgreements(db: D1Database, lenderOrBorrowerTeamI
       WHERE p.loan_from_team_id IS NOT NULL ${scope}
         AND NOT EXISTS (SELECT 1 FROM loan_agreements la WHERE la.player_id = p.id AND la.status = 'active')`,
   );
-  const rows = await (lenderOrBorrowerTeamId ? stmt.bind(lenderOrBorrowerTeamId, lenderOrBorrowerTeamId) : stmt)
+  const t = lenderOrBorrowerTeamId;
+  const rows = await (t ? stmt.bind(t, t, t, t) : stmt)
     .all<{ id: string; team_id: string; loan_from_team_id: string; loan_until: string | null; joined_at: string | null; fee: number | null }>()
     .catch((e) => { logger.warn({ module: M }, "hostování bez záznamu", e); return { results: [] }; });
   let created = 0;
@@ -701,6 +704,22 @@ export async function loanReport(db: D1Database, viewerTeamId: string, agreement
   };
 }
 
+/**
+ * Záznam hostování podle jeho id, nebo podle id hráče: tak volá starší tlačítko „Povolat
+ * zpět“ (profil, Závazky). Hostování bez záznamu se nejdřív doplní.
+ */
+async function findAgreementForRecall(db: D1Database, actorClub: string, id: string): Promise<LoanAgreementRow | null> {
+  const byId = await loadAgreement(db, id);
+  if (byId) return byId;
+  const byPlayer = () => db.prepare("SELECT * FROM loan_agreements WHERE player_id = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1")
+    .bind(id).first<LoanAgreementRow>()
+    .catch((e) => { logger.warn({ module: M }, "hostování podle hráče", e); return null; });
+  const found = await byPlayer();
+  if (found) return found;
+  await ensureLoanAgreements(db, actorClub);
+  return byPlayer();
+}
+
 export type RecallResult = { ok: true; refund: number } | { ok: false; status: 400 | 403 | 404 | 409; error: string };
 
 /**
@@ -708,10 +727,10 @@ export type RecallResult = { ok: true; refund: number } | { ok: false; status: 4
  * hraní porušil, poplatek zůstává půjčujícímu. Jinak půjčující vrátí poměrnou část
  * poplatku za dny, které hráč u hostujícího klubu už nebude.
  */
-export async function recallLoan(db: D1Database, actorTeamId: string, agreementId: string): Promise<RecallResult> {
-  const a = await loadAgreement(db, agreementId);
-  if (!a) return { ok: false, status: 404, error: "Hostování nenalezeno" };
+export async function recallLoan(db: D1Database, actorTeamId: string, agreementOrPlayerId: string): Promise<RecallResult> {
   const actorClub = await clubOf(db, actorTeamId);
+  const a = await findAgreementForRecall(db, actorClub, agreementOrPlayerId);
+  if (!a) return { ok: false, status: 404, error: "Hostování nenalezeno" };
   if (actorClub !== await clubOf(db, a.lender_team_id)) return { ok: false, status: 403, error: "Stáhnout hráče může jen klub, který ho půjčil" };
   if (a.status !== "active" || !(await stillOnLoan(db, a))) return { ok: false, status: 409, error: "Hráč už na hostování není" };
 
@@ -771,6 +790,20 @@ export async function recallLoan(db: D1Database, actorTeamId: string, agreementI
       .catch((rollbackError) => logger.error({ module: M }, "vrácení hráče po chybě stažení", rollbackError));
     return { ok: false, status: 409, error: "Stažení se nepodařilo, zkus to znovu" };
   }
+
+  // Stejné dozvuky jako každý návrat z hostování: vztahy a poptávky po přesunu hráče
+  // a zpráva do přestupových novinek soutěže kmenového klubu.
+  const { onPlayerTransferred } = await import("../services/transfer-actions");
+  await onPlayerTransferred(db, a.player_id, a.lender_team_id, { permanent: false })
+    .catch((e) => logger.warn({ module: M }, "dozvuky návratu z hostování", e));
+  const lenderLeague = await db.prepare("SELECT t.league_id, c.name FROM teams t JOIN teams c ON c.id = COALESCE(t.parent_team_id, t.id) WHERE t.id = ?")
+    .bind(a.lender_team_id).first<{ league_id: string | null; name: string }>()
+    .catch((e) => { logger.warn({ module: M }, "soutěž kmenového klubu", e); return null; });
+  const { createTransferNews } = await import("./transfer-news");
+  await createTransferNews(db, lenderLeague?.league_id ?? "", null, "loan_return", {
+    playerName: name, playerAge: 0, playerPosition: "", teamName: lenderLeague?.name ?? lender.name,
+    fromTeamName: borrower.name, toTeamName: lenderLeague?.name ?? lender.name, fee: 0,
+  }).catch((e) => logger.warn({ module: M }, "novinka o návratu z hostování", e));
 
   if (!(await isAiClub(db, a.borrower_team_id))) {
     const why = breached && a.playing_time !== "none"

@@ -1098,7 +1098,18 @@ teamsRouter.get("/:id/players/:playerId", async (c) => {
   const isOwn = divakovo && row.team_id === teamId;
   // Kmenový klub hráče na hostování — pořád je to jeho hráč, takže žádné rozmazávání
   // atributů. Akce v UI ale zůstávají na `isOwn`, ten hráč teď hraje jinde.
-  const isParentClub = divakovo && !!row.loan_from_team_id && row.loan_from_team_id === teamId;
+  // Porovnává se KLUB: hráč půjčený z U21 má v `loan_from_team_id` id rezervy, a kdyby
+  // se bral jen přesný tým, kmenový klub by svého hráče viděl jako cizího (nabídka,
+  // sledování, skaut, zamlžené dovednosti).
+  let isParentClub = false;
+  if (divakovo && row.loan_from_team_id) {
+    const { resolveClubTeamId: clubOfTeam } = await import("../transfers/offer-club-scope");
+    const [ownerClub, viewerClub] = await Promise.all([
+      clubOfTeam(c.env.DB, row.loan_from_team_id as string),
+      clubOfTeam(c.env.DB, teamId),
+    ]).catch((e) => { logger.warn({ module: "teams" }, "kmenový klub hostujícího hráče", e); return [null, null] as const; });
+    isParentClub = !!ownerClub && ownerClub === (viewerClub ?? teamId);
+  }
   // Hráč mé U21 je taky můj: v URL je áčko, hráč má ale `team_id` rezervy. Bez toho
   // profil vlastního U21 hráče ukazoval dovednosti na pětky a bez mzdy jako u soupeře.
   // Stejně jako `isParentClub` jen ruší zamlžení, akce v UI zůstávají na `isOwn`.
@@ -1168,6 +1179,8 @@ teamsRouter.get("/:id/players/:playerId", async (c) => {
     borrowerTeamId: string; borrowerTeamName: string;
     until: string; daysLeft: number; fee: number;
     isParentClub: boolean; isBorrower: boolean; canRecall: boolean;
+    /** Záznam hostování pro odkaz na přehled (transfers/loan-agreements.ts). */
+    agreementId: string | null;
   } | null = null;
   if (row.loan_from_team_id) {
     const ownerTeamId = row.loan_from_team_id as string;
@@ -1187,13 +1200,19 @@ teamsRouter.get("/:id/players/:playerId", async (c) => {
       ? Math.max(0, Math.ceil((new Date(until).getTime() - new Date(dnesHerne).getTime()) / 86400000))
       : 0;
     const fee = smlouva?.fee ?? 0;
+    const agreement = (isParentClub || isOwn) ? await c.env.DB.prepare(
+      "SELECT id FROM loan_agreements WHERE player_id = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1",
+    ).bind(row.id as string).first<{ id: string }>()
+      .catch((e) => { logger.warn({ module: "teams" }, "záznam hostování hráče", e); return null; }) : null;
     loan = {
       ownerTeamId, ownerTeamName: owner?.name ?? "",
       borrowerTeamId, borrowerTeamName: borrower?.name ?? "",
       until: until ?? "", daysLeft: zbyva, fee,
       isParentClub, isBorrower: isOwn,
-      // Povolat zpět smí jen kmenový klub a jen když hostování nic nestálo.
-      canRecall: isParentClub && fee === 0,
+      // Stáhnout zpátky smí kmenový klub kdykoli; o poplatku rozhoduje podmínka hraní
+      // (při porušení zůstane celý, jinak se vrací poměrná část), viz přehled hostování.
+      canRecall: isParentClub,
+      agreementId: agreement?.id ?? null,
     };
   }
 

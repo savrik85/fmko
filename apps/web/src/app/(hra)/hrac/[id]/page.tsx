@@ -673,11 +673,6 @@ export default function PlayerDetailPage() {
                   ? ` · hostování za ${player.loan.fee.toLocaleString("cs")} Kč`
                   : " · hostování zdarma"}
               </div>
-              {player.loan.isParentClub && !player.loan.canRecall && (
-                <div className={`${txtMuted} text-sm mt-1`}>
-                  Placené hostování se předčasně ukončit nedá — dohodnutou dobu si klub zaplatil.
-                </div>
-              )}
             </div>
           )}
 
@@ -715,24 +710,13 @@ export default function PlayerDetailPage() {
                     {offerOpen ? "✕ Zavřít" : isLoanedToUs ? "💰 Odkoupit" : "🤝 Nabídka"}
                   </button>
                 ))}
-                {/* Povolat zpět — kmenový klub u hostování zdarma */}
-                {player.loan?.canRecall && (
-                  <button onClick={async () => {
-                    if (!teamId || !player) return;
-                    const ok = await confirm({
-                      title: "Povolat hráče zpět?",
-                      description: `${player.first_name} ${player.last_name} se ihned vrátí z hostování v ${player.loan?.borrowerTeamName ?? "klubu"} do tvého kádru.`,
-                      confirmLabel: "Povolat zpět",
-                    });
-                    if (!ok) return;
-                    if (await apiAction(apiFetch(`/api/teams/${teamId}/loans/${player.id}/recall`, { method: "POST" }), "Povolání hráče zpět se nezdařilo")) {
-                      router.refresh();
-                      window.location.reload();
-                    }
-                  }}
+                {/* Kmenový klub: jak hráč na hostování hraje a stažení zpátky jsou na přehledu
+                    hostování (tam je vidět i podmínka hraní a kolik by se vracelo z poplatku). */}
+                {player.loan?.isParentClub && (
+                  <Link href={player.loan.agreementId ? `/prestupy/hostovani/${player.loan.agreementId}` : "/prestupy?tab=squad&tym=hostovani"}
                     className={`${btnBase} min-w-[150px] ${btnNeutral}`}>
-                    📥 Povolat zpět
-                  </button>
+                    📋 Přehled hostování
+                  </Link>
                 )}
                 {/* Ukončit hostování — jen pokud je hráč u nás na hostování */}
                 {isLoanedToUs && (

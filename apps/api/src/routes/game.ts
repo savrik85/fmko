@@ -5324,7 +5324,8 @@ gameRouter.get("/teams/:teamId/loans/:agreementId", async (c) => {
   return c.json(res);
 });
 
-// Půjčující stáhne hráče z hostování.
+// Půjčující stáhne hráče z hostování. `:agreementId` smí být i id hráče: tak volají
+// starší tlačítka „Povolat zpět“ (dřív samostatná cesta se stejným tvarem adresy).
 gameRouter.post("/teams/:teamId/loans/:agreementId/recall", async (c) => {
   const { recallLoan } = await import("../transfers/loan-agreements");
   const res = await recallLoan(c.env.DB, c.req.param("teamId"), c.req.param("agreementId"));
@@ -6104,6 +6105,8 @@ async function vratZHostovani(
     .run().catch((e) => logger.warn({ module: "game" }, "close loan contract failed", e));
 
   await onPlayerTransferred(db, player.id, ownerRosterTeamId, { permanent: false });
+  const { closeLoanAgreements } = await import("../transfers/loan-agreements");
+  await closeLoanAgreements(db, player.id, iniciator === "kmenovy" ? "recalled" : "ended");
 
   const borrower = await db.prepare("SELECT name FROM teams WHERE id = ?").bind(borrowerTeamId).first<{ name: string }>();
   const owner = await db.prepare("SELECT name, league_id FROM teams WHERE id = ?").bind(ownerClubTeamId).first<{ name: string; league_id: string }>();
@@ -6151,34 +6154,8 @@ gameRouter.post("/teams/:teamId/loans/:playerId/terminate", async (c) => {
   return c.json({ ok: true });
 });
 
-// POST /teams/:teamId/loans/:playerId/recall — kmenový klub si bere hráče zpět.
-//
-// Jen u hostování zdarma. Za zaplacené hostování si klub koupil hráče na dohodnutou
-// dobu; vzít mu ho uprostřed by znamenalo řešit vracení poplatku, a to je jednání
-// mezi kluby, ne tlačítko.
-gameRouter.post("/teams/:teamId/loans/:playerId/recall", async (c) => {
-  const teamId = c.req.param("teamId");
-  const player = await nactiHostujicihoHrace(c.env.DB, c.req.param("playerId"));
-  if (!player) return c.json({ error: "Hráč nenalezen" }, 404);
-  if (!player.loan_from_team_id) return c.json({ error: "Hráč není na hostování" }, 400);
-  const ownerClubTeamId = await resolveClubTeamId(c.env.DB, player.loan_from_team_id);
-  const actorClubTeamId = await resolveClubTeamId(c.env.DB, teamId);
-  if (!ownerClubTeamId || ownerClubTeamId !== actorClubTeamId) return c.json({ error: "Nejsi kmenový klub hráče" }, 403);
-
-  const smlouva = await c.env.DB.prepare(
-    "SELECT fee FROM player_contracts WHERE player_id = ? AND team_id = ? AND join_type = 'loan' AND is_active = 1 ORDER BY joined_at DESC LIMIT 1"
-  ).bind(player.id, player.team_id).first<{ fee: number | null }>()
-    .catch((e) => { logger.warn({ module: "game" }, "poplatek za hostovani", e); return null; });
-  const poplatek = smlouva?.fee ?? 0;
-  if (poplatek > 0) {
-    return c.json({
-      error: `Hostování bylo za ${poplatek.toLocaleString("cs")} Kč. Předčasně povolat jde jen hráče, který šel zadarmo.`,
-    }, 400);
-  }
-
-  await vratZHostovani(c.env.DB, { ...player, loan_from_team_id: player.loan_from_team_id }, "kmenovy");
-  return c.json({ ok: true });
-});
+// Stažení hráče kmenovým klubem obstarává POST /teams/:teamId/loans/:id/recall výš
+// (transfers/loan-agreements.ts `recallLoan`): přijme id hostování i id hráče.
 
 gameRouter.delete("/teams/:teamId/offers/:offerId", async (c) => {
   const body = await c.req.json<{ message?: string }>().catch((e) => { logger.warn({ module: "game" }, "neplatné tělo odpovědi na nabídku", e); return {}; });
