@@ -63,6 +63,8 @@ export interface PricedOption {
 
 export interface RepairChoice extends PricedOption {
   condition: number;
+  /** Škoda na stadionu (`stadium_damage`), ne opotřebené vybavení. */
+  damageId?: string;
 }
 
 export interface StaffCandidateOption extends PricedOption {
@@ -164,6 +166,7 @@ export type WeeklyAction =
   | { kind: "promote"; key: string; playerId: string }
   | { kind: "send_down"; key: string; playerId: string }
   | { kind: "equipment_repair"; key: string; category: string; cost: number }
+  | { kind: "stadium_repair"; key: string; damageId: string; cost: number }
   | { kind: "pitch_maintenance"; level: Exclude<PitchMaintenanceChoice, "none">; cost: number }
   | { kind: "hire"; key: string; staffId: string; role: string; cost: number; weeklyWage: number }
   | { kind: "equipment_upgrade"; key: string; category: string; cost: number }
@@ -491,7 +494,10 @@ export function planWeeklyActions(ctx: WeeklyContext, d: WeeklyDecision): Weekly
   };
   for (const key of d.equipmentRepairs) {
     const o = ctx.equipmentRepairs.find((x) => x.key === key);
-    if (o && pay(key, o.cost)) actions.push({ kind: "equipment_repair", key, category: o.ref, cost: o.cost });
+    if (!o || !pay(key, o.cost)) continue;
+    actions.push(o.damageId
+      ? { kind: "stadium_repair", key, damageId: o.damageId, cost: o.cost }
+      : { kind: "equipment_repair", key, category: o.ref, cost: o.cost });
   }
   if (d.pitchMaintenance !== "none") {
     const m = PITCH_MAINTENANCE_COST[d.pitchMaintenance];
@@ -624,7 +630,7 @@ export function renderWeeklyPrompt(ctx: WeeklyContext): string {
   L.push(ctx.stadium.length ? ctx.stadium.map((o) => `${o.key}: ${o.label}, ${czk(o.cost)}, ${o.detail}`).join("\n") : "(none)");
   L.push("EQUIPMENT UPGRADES (key: item level, cost, effect):");
   L.push(ctx.equipmentUpgrades.length ? ctx.equipmentUpgrades.map((o) => `${o.key}: ${o.label}, ${czk(o.cost)}, ${o.detail}`).join("\n") : "(none)");
-  L.push("EQUIPMENT REPAIRS (key: item, cost, state):");
+  L.push("REPAIRS of worn equipment and of stadium damage (key: item, cost, state):");
   L.push(ctx.equipmentRepairs.length ? ctx.equipmentRepairs.map((o) => `${o.key}: ${o.label}, ${czk(o.cost)}, ${o.detail}`).join("\n") : "(none)");
   L.push("");
   L.push(`STAFF hired: ${ctx.staff.hiredRoles.length ? ctx.staff.hiredRoles.join(", ") : "nobody"}. Candidates (key: role, name, quality 1-20, weekly wage, signing fee):`);
