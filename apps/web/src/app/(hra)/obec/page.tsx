@@ -711,7 +711,7 @@ function OwnVillage() {
               const isMine = !!b.taken_team_name && myTeam?.name === b.taken_team_name;
               return (
                 <div key={b.id} className={`card p-4 ${isOpen ? "border-2 border-green-200 bg-green-50" : "opacity-70"}`}>
-                  <div className="text-xs text-muted">🛠️ {b.offering_official_name ? `Vyhlásil ${b.offering_official_name}` : "Obec"} · {b.required_player_count} hráčů · {b.duration_hours} h</div>
+                  <div className="text-xs text-muted">🛠️ {b.offering_official_name ? `Vyhlásil ${b.offering_official_name}` : "Obec"} · {b.required_player_count} hráčů</div>
                   <div className="font-heading font-bold">{b.title}</div>
                   <p className="text-sm text-ink-light mt-0.5">{b.description}</p>
                   <Chips items={[
