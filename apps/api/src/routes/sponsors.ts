@@ -371,6 +371,14 @@ sponsorsRouter.post("/teams/:teamId/sponsor-owners/pub/:encId", async (c) => {
     return c.json({ error: "Setkání už není aktivní" }, 410);
   }
 
+  // Pivo se platí, takže na něj klub musí mít dřív, než se setkání zabere.
+  if (body.action === "beer") {
+    const owner = await ensureSponsorOwner(db, enc.sponsor_id);
+    const { spendBlockedMessage } = await import("../season/finance-processor");
+    const blocked = owner ? await spendBlockedMessage(db, teamId, pubBeerCost(owner.personality)) : null;
+    if (blocked) return c.json({ error: blocked }, 400);
+  }
+
   const claim = await db.prepare("UPDATE sponsor_pub_encounters SET status = ? WHERE id = ? AND status = 'active'")
     .bind(body.action === "beer" ? "beer" : "ignored", encId).run();
   if (!claim.meta.changes) return c.json({ error: "Setkání už není aktivní" }, 410);

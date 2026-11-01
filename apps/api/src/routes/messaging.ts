@@ -926,14 +926,16 @@ messagingRouter.get("/teams/:teamId/unread-count", async (c) => {
 
 // POST /api/teams/:teamId/mark-read/:convId — označit jako přečtené
 messagingRouter.post("/teams/:teamId/mark-read/:convId", async (c) => {
+  const teamId = c.req.param("teamId");
   const convId = c.req.param("convId");
 
+  // Jen vlastní konverzace. Dřív šlo podle id přečíst (vynulovat) cizí vlákno.
   await c.env.DB.prepare(
-    "UPDATE messages SET read = 1 WHERE conversation_id = ? AND read = 0"
-  ).bind(convId).run().catch((e) => logger.warn({ module: "messaging" }, "mark-read messages", e));
+    "UPDATE messages SET read = 1 WHERE conversation_id = (SELECT id FROM conversations WHERE id = ? AND team_id = ?) AND read = 0"
+  ).bind(convId, teamId).run().catch((e) => logger.warn({ module: "messaging" }, "mark-read messages", e));
   await c.env.DB.prepare(
-    "UPDATE conversations SET unread_count = 0 WHERE id = ?"
-  ).bind(convId).run().catch((e) => logger.warn({ module: "messaging" }, "mark-read reset unread", e));
+    "UPDATE conversations SET unread_count = 0 WHERE id = ? AND team_id = ?"
+  ).bind(convId, teamId).run().catch((e) => logger.warn({ module: "messaging" }, "mark-read reset unread", e));
 
   return c.json({ ok: true });
 });

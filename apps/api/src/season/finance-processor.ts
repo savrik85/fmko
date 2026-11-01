@@ -237,6 +237,22 @@ const PURCHASE_TYPES = new Set<TransactionType>([
 ]);
 
 /**
+ * Výdaj, o kterém rozhodl hráč (pozvání, hospoda, petice, volba události): klub na něj musí mít.
+ *
+ * Zákaz nákupů v mínusu (`PURCHASE_TYPES` v `recordTransaction`) hlídá jen už záporný zůstatek,
+ * ne to, jestli do mínusu klub dostane teprve tenhle výdaj. Typ `event` v něm navíc není vůbec,
+ * protože ho strhávají i systémové události, které se zastavit nesmí. Proto se hráčem zvolené
+ * výdaje typu `event` hlídají tady, před zápisem. Vrací hlášku pro hráče, nebo `null`.
+ */
+export async function spendBlockedMessage(db: D1Database, teamId: string, cost: number): Promise<string | null> {
+  if (cost <= 0) return null;
+  const row = await db.prepare("SELECT budget FROM teams WHERE id = ?").bind(teamId).first<{ budget: number }>();
+  if (!row) return "Tým nenalezen";
+  if (row.budget >= cost) return null;
+  return `Na tohle teď klub nemá peníze. Na účtu je ${row.budget.toLocaleString("cs")} Kč, stojí to ${cost.toLocaleString("cs")} Kč.`;
+}
+
+/**
  * Zaznamená finanční transakci a aktualizuje rozpočet.
  * Toto je JEDINÝ způsob jak měnit teams.budget.
  *

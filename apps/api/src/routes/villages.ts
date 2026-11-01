@@ -148,6 +148,9 @@ villagesRouter.get("/upcoming-match", async (c) => {
 villagesRouter.get("/petitions", async (c) => {
   const teamId = c.req.query("teamId");
   if (!teamId) return c.json({ error: "teamId required" }, 400);
+  // Rozhodnutí klubu jsou soukromá: dřív je viděl kdokoli, kdo znal id týmu, i bez přihlášení.
+  const denied = await requireOwnedTeamRead(c, teamId);
+  if (denied) return denied;
   const rows = await c.env.DB.prepare(
     `SELECT * FROM village_petitions WHERE team_id = ? AND status = 'active'
      ORDER BY expires_at ASC`
@@ -240,6 +243,9 @@ villagesRouter.get("/local-pride", async (c) => {
 villagesRouter.get("/pub-encounters", async (c) => {
   const teamId = c.req.query("teamId");
   if (!teamId) return c.json({ error: "teamId required" }, 400);
+  // Rozhodnutí klubu jsou soukromá: dřív je viděl kdokoli, kdo znal id týmu, i bez přihlášení.
+  const denied = await requireOwnedTeamRead(c, teamId);
+  if (denied) return denied;
   const rows = await c.env.DB.prepare(
     `SELECT vpe.*, vo.first_name, vo.last_name, vo.role, vo.personality, vo.face_config
      FROM village_pub_encounters vpe
@@ -254,6 +260,9 @@ villagesRouter.get("/pub-encounters", async (c) => {
 villagesRouter.get("/investments", async (c) => {
   const teamId = c.req.query("teamId");
   if (!teamId) return c.json({ error: "teamId required" }, 400);
+  // Rozhodnutí klubu jsou soukromá: dřív je viděl kdokoli, kdo znal id týmu, i bez přihlášení.
+  const denied = await requireOwnedTeamRead(c, teamId);
+  if (denied) return denied;
   const rows = await c.env.DB.prepare(
     `SELECT * FROM village_investments
      WHERE team_id = ? AND status = 'offered'
@@ -559,6 +568,9 @@ villagesRouter.get("/:id/favor", async (c) => {
   const villageId = c.req.param("id");
   const teamId = c.req.query("teamId");
   if (!teamId) return c.json({ error: "teamId required" }, 400);
+  // Rozhodnutí klubu jsou soukromá: dřív je viděl kdokoli, kdo znal id týmu, i bez přihlášení.
+  const denied = await requireOwnedTeamRead(c, teamId);
+  if (denied) return denied;
 
   const global = await ensureGlobalFavor(c.env.DB, villageId, teamId);
   const perOfficial = await c.env.DB.prepare(
@@ -635,14 +647,14 @@ villagesRouter.get("/:id/brigades", async (c) => {
 });
 
 // POST /api/villages/brigades/:brigadeId/take — vzít brigádu (Sprint B)
-import { requireAuth, requireAdmin } from "../auth/middleware";
+import { requireAuth, requireAdmin, requireOwnedTeamRead } from "../auth/middleware";
 villagesRouter.post("/brigades/:brigadeId/take", requireAuth, async (c) => {
   const brigadeId = c.req.param("brigadeId");
   const session = c.get("session" as never) as { userId: string; teamId: string | null };
   // Session.teamId v KV může být zastaralé (po znovu-založení týmu).
   // Single source of truth = teams.user_id.
   const teamRowAuth = await c.env.DB.prepare(
-    "SELECT id FROM teams WHERE user_id = ? AND name NOT LIKE 'DELETED%' LIMIT 1"
+    "SELECT id FROM teams WHERE user_id = ? AND name NOT LIKE 'DELETED%' AND parent_team_id IS NULL LIMIT 1"
   ).bind(session.userId).first<{ id: string }>();
   if (!teamRowAuth) return c.json({ error: "Nemáš tým" }, 400);
   session.teamId = teamRowAuth.id;
@@ -663,6 +675,12 @@ villagesRouter.post("/brigades/:brigadeId/take", requireAuth, async (c) => {
     expires_at: string;
   }>();
   if (!brigade) return c.json({ error: "Brigáda už není dostupná" }, 409);
+  // Brigády nabízí obec svým klubům. Dřív šla vzít brigáda kterékoli obce podle id.
+  const brigadeTeamVillage = await c.env.DB.prepare("SELECT village_id FROM teams WHERE id = ?")
+    .bind(session.teamId).first<{ village_id: string | null }>();
+  if (!brigadeTeamVillage?.village_id || brigadeTeamVillage.village_id !== brigade.village_id) {
+    return c.json({ error: "Brigáda patří jiné obci" }, 403);
+  }
 
   // expires_at je HERNÍ čas — porovnávat s reálným datem znamená, že kontrola
   // při posunutém game_clock.offset_days nikdy nesedí.
@@ -852,7 +870,7 @@ villagesRouter.post("/petitions/:petitionId/respond", requireAuth, async (c) => 
   // Session.teamId v KV může být zastaralé (po znovu-založení týmu).
   // Single source of truth = teams.user_id.
   const teamRowAuth = await c.env.DB.prepare(
-    "SELECT id FROM teams WHERE user_id = ? AND name NOT LIKE 'DELETED%' LIMIT 1"
+    "SELECT id FROM teams WHERE user_id = ? AND name NOT LIKE 'DELETED%' AND parent_team_id IS NULL LIMIT 1"
   ).bind(session.userId).first<{ id: string }>();
   if (!teamRowAuth) return c.json({ error: "Nemáš tým" }, 400);
   session.teamId = teamRowAuth.id;
@@ -881,7 +899,9 @@ villagesRouter.post("/petitions/:petitionId/respond", requireAuth, async (c) => 
 
   if (body.action === "accept") {
     if (petition.cost_money > 0) {
-      const { recordTransaction: rec } = await import("../season/finance-processor");
+      const { recordTransaction: rec, spendBlockedMessage } = await import("../season/finance-processor");
+      const blocked = await spendBlockedMessage(c.env.DB, session.teamId, petition.cost_money);
+      if (blocked) return c.json({ error: blocked }, 400);
       await rec(
         c.env.DB, session.teamId, "event", -petition.cost_money,
         `Petice: ${petition.title}`, gameDate,
@@ -953,7 +973,7 @@ villagesRouter.post("/invitations", requireAuth, async (c) => {
   // Session.teamId v KV může být zastaralé (po znovu-založení týmu).
   // Single source of truth = teams.user_id.
   const teamRowAuth = await c.env.DB.prepare(
-    "SELECT id FROM teams WHERE user_id = ? AND name NOT LIKE 'DELETED%' LIMIT 1"
+    "SELECT id FROM teams WHERE user_id = ? AND name NOT LIKE 'DELETED%' AND parent_team_id IS NULL LIMIT 1"
   ).bind(session.userId).first<{ id: string }>();
   if (!teamRowAuth) return c.json({ error: "Nemáš tým" }, 400);
   session.teamId = teamRowAuth.id;
@@ -1000,6 +1020,12 @@ villagesRouter.post("/invitations", requireAuth, async (c) => {
     personality: string; role: string; favor: number;
   }>();
   if (!official) return c.json({ error: "Zastupitel neexistuje" }, 404);
+  // Zvát jde zastupitele vlastní obce. Dřív šel pozvat kdokoli z okresu podle id.
+  const ownVillage = await c.env.DB.prepare("SELECT village_id FROM teams WHERE id = ?")
+    .bind(session.teamId).first<{ village_id: string | null }>();
+  if (!ownVillage?.village_id || ownVillage.village_id !== official.village_id) {
+    return c.json({ error: "Zvát jde jen zastupitele vaší obce" }, 403);
+  }
 
   // Slot lock: pokud už NPC přijal pozvánku jiného týmu na tento matchday, blokuj
   const conflicting = await c.env.DB.prepare(
@@ -1057,6 +1083,11 @@ villagesRouter.post("/invitations", requireAuth, async (c) => {
 
   const accepted = Math.random() < p;
   const status = accepted ? "accepted" : "declined";
+  // Dárek se platí i při odmítnutí, takže klub na něj musí mít předem.
+  const { spendBlockedMessage } = await import("../season/finance-processor");
+  const blocked = await spendBlockedMessage(c.env.DB, session.teamId, giftCost);
+  if (blocked) return c.json({ error: blocked }, 400);
+
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
 
@@ -1169,7 +1200,7 @@ villagesRouter.post("/pub-encounters/:encId/respond", requireAuth, async (c) => 
   const encId = c.req.param("encId");
   const session = c.get("session" as never) as { userId: string; teamId: string | null };
   const teamRowAuth = await c.env.DB.prepare(
-    "SELECT id FROM teams WHERE user_id = ? AND name NOT LIKE 'DELETED%' LIMIT 1"
+    "SELECT id FROM teams WHERE user_id = ? AND name NOT LIKE 'DELETED%' AND parent_team_id IS NULL LIMIT 1"
   ).bind(session.userId).first<{ id: string }>();
   if (!teamRowAuth) return c.json({ error: "Nemáš tým" }, 400);
 
@@ -1208,7 +1239,9 @@ villagesRouter.post("/pub-encounters/:encId/respond", requireAuth, async (c) => 
   // invite_beer
   const beerCost = enc.personality === "tradicionalista" ? 350 : enc.personality === "populista" ? 250 : 400;
 
-  const { recordTransaction: rec } = await import("../season/finance-processor");
+  const { recordTransaction: rec, spendBlockedMessage } = await import("../season/finance-processor");
+  const blocked = await spendBlockedMessage(c.env.DB, teamRowAuth.id, beerCost);
+  if (blocked) return c.json({ error: blocked }, 400);
   await rec(
     c.env.DB, teamRowAuth.id, "event", -beerCost,
     `Pivo s ${enc.first_name} ${enc.last_name}`, gameDate,
@@ -1333,7 +1366,7 @@ villagesRouter.post("/investments/:invId/respond", requireAuth, async (c) => {
   const invId = c.req.param("invId");
   const session = c.get("session" as never) as { userId: string; teamId: string | null };
   const teamRowAuth = await c.env.DB.prepare(
-    "SELECT id FROM teams WHERE user_id = ? AND name NOT LIKE 'DELETED%' LIMIT 1"
+    "SELECT id FROM teams WHERE user_id = ? AND name NOT LIKE 'DELETED%' AND parent_team_id IS NULL LIMIT 1"
   ).bind(session.userId).first<{ id: string }>();
   if (!teamRowAuth) return c.json({ error: "Nemáš tým" }, 400);
 
