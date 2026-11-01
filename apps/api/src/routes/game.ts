@@ -5004,8 +5004,10 @@ gameRouter.post("/teams/:teamId/free-agents/:faId/sign", async (c) => {
 
 // List player on transfer market
 gameRouter.post("/teams/:teamId/players/:playerId/list", async (c) => {
-  const body = await c.req.json<{ askingPrice: number }>();
-  const res = await listPlayerOnMarket(c.env, c.req.param("teamId"), c.req.param("playerId"), body.askingPrice);
+  const body = await c.req.json<{ askingPrice: number; dealType?: string; loanDays?: number; playingTime?: string }>();
+  // dealType 'loan' = inzerát na hostování (délka, poplatek, podmínka hraní).
+  const loan = body.dealType === "loan" ? { days: Number(body.loanDays), playingTime: String(body.playingTime ?? "") } : null;
+  const res = await listPlayerOnMarket(c.env, c.req.param("teamId"), c.req.param("playerId"), body.askingPrice, loan);
   return res.ok ? c.json({ ok: true, listingId: res.listingId }) : transferError(c, res);
 });
 
@@ -5300,6 +5302,36 @@ gameRouter.delete("/teams/:teamId/listings/:listingId", async (c) => {
   return c.json({ ok: true });
 });
 
+// ═══ HOSTOVÁNÍ: přehled půjčených hráčů, podrobnosti, stažení ═══
+
+// Koho klub půjčil a koho má půjčeného (transfers/loan-agreements.ts).
+gameRouter.get("/teams/:teamId/loans", async (c) => {
+  const teamId = c.req.param("teamId");
+  const denied = await requireOwnedTeamRead(c, teamId);
+  if (denied) return denied;
+  const { loanOverview } = await import("../transfers/loan-agreements");
+  return c.json(await loanOverview(c.env.DB, teamId));
+});
+
+// Podrobný přehled jednoho hostování: zápasy, vývoj, trénink, stav podmínky hraní.
+gameRouter.get("/teams/:teamId/loans/:agreementId", async (c) => {
+  const teamId = c.req.param("teamId");
+  const denied = await requireOwnedTeamRead(c, teamId);
+  if (denied) return denied;
+  const { loanReport } = await import("../transfers/loan-agreements");
+  const res = await loanReport(c.env.DB, teamId, c.req.param("agreementId"));
+  if ("error" in res) return c.json({ error: res.error }, res.status);
+  return c.json(res);
+});
+
+// Půjčující stáhne hráče z hostování.
+gameRouter.post("/teams/:teamId/loans/:agreementId/recall", async (c) => {
+  const { recallLoan } = await import("../transfers/loan-agreements");
+  const res = await recallLoan(c.env.DB, c.req.param("teamId"), c.req.param("agreementId"));
+  if (!res.ok) return c.json({ error: res.error }, res.status);
+  return c.json({ ok: true, refund: res.refund });
+});
+
 // Browse transfer market
 gameRouter.get("/teams/:teamId/market", async (c) => {
   const teamId = c.req.param("teamId");
@@ -5314,10 +5346,20 @@ gameRouter.get("/teams/:teamId/market", async (c) => {
   const listings = { results: await findVisibleListings(c.env.DB, { id: teamId, leagueId: team.league_id }) };
 
   const myListings = await c.env.DB.prepare(
-    `SELECT tl.id, tl.player_id, tl.asking_price, tl.expires_at,
+    `SELECT tl.id, tl.player_id, tl.asking_price, tl.expires_at, tl.deal_type, tl.loan_days, tl.loan_playing_time,
      p.first_name, p.last_name, p.age, p.position, p.overall_rating, p.avatar as player_avatar
      FROM transfer_listings tl JOIN players p ON tl.player_id = p.id WHERE tl.team_id = ? AND tl.status = 'active'`
   ).bind(teamId).all();
+
+  // Žádosti o hostování z mých inzerátů: půjčující je vidí vedle sebe a vybere si.
+  const loanListingIds = myListings.results.filter((l) => l.deal_type === "loan").map((l) => l.id as string);
+  const loanRequests = loanListingIds.length === 0 ? [] : (await c.env.DB.prepare(
+    `SELECT o.id, o.listing_id, o.from_team_id, t.name AS team_name, l.name AS league_name, o.created_at
+       FROM transfer_offers o JOIN teams t ON t.id = o.from_team_id LEFT JOIN leagues l ON l.id = t.league_id
+      WHERE o.listing_id IN (${loanListingIds.map(() => "?").join(",")}) AND o.status IN ('pending','countered')
+      ORDER BY o.created_at`,
+  ).bind(...loanListingIds).all<{ id: string; listing_id: string; from_team_id: string; team_name: string; league_name: string | null; created_at: string }>()
+    .catch((e) => { logger.warn({ module: "game" }, "žádosti o hostování k inzerátům", e); return { results: [] }; })).results;
 
   const myListingIds = myListings.results.map((l) => l.id as string);
   let bids: Record<string, unknown>[] = [];
@@ -5392,6 +5434,8 @@ gameRouter.get("/teams/:teamId/market", async (c) => {
       const activeOffer = myOffersByPlayer[l.player_id as string] ?? null;
       return {
         id: l.id, playerId: l.player_id, askingPrice: l.asking_price, isAiListing: false,
+        dealType: l.deal_type === "loan" ? "loan" : "transfer",
+        loanDays: (l.loan_days as number | null) ?? null, loanPlayingTime: (l.loan_playing_time as string | null) ?? null,
         playerName: `${l.first_name} ${l.last_name}`, nationality: (l.nationality as string) ?? "CZ", playerAge: l.age, position: l.position,
         overallRating: l.overall_rating, teamName: l.team_name, teamIsAi: l.team_user_id === "ai", expiresAt: l.expires_at,
         // Štítek „odkud“ jako u volných hráčů: okres, a jen u jiné soutěže téhož okresu
@@ -5412,6 +5456,11 @@ gameRouter.get("/teams/:teamId/market", async (c) => {
     }),
     myListings: myListings.results.map((l) => ({
       id: l.id, playerId: l.player_id, askingPrice: l.asking_price,
+      dealType: l.deal_type === "loan" ? "loan" : "transfer",
+      loanDays: (l.loan_days as number | null) ?? null, loanPlayingTime: (l.loan_playing_time as string | null) ?? null,
+      loanRequests: loanRequests.filter((r) => r.listing_id === l.id).map((r) => ({
+        offerId: r.id, teamId: r.from_team_id, teamName: r.team_name, leagueName: r.league_name,
+      })),
       playerName: `${l.first_name} ${l.last_name}`, playerAge: l.age, position: l.position,
       overallRating: l.overall_rating, expiresAt: l.expires_at,
       avatar: (() => { try { return JSON.parse(l.player_avatar as string); } catch (e) { logger.warn({ module: "game" }, `parse myListing avatar: ${e}`); return {}; } })(),
@@ -5880,6 +5929,8 @@ gameRouter.get("/teams/:teamId/offers/:offerId", async (c) => {
       to_team_id: scope.sellerClubTeamId,
       offer_type: offer.offer_type ?? "transfer",
       loan_duration: offer.loan_duration,
+      // Podmínka hraní z inzerátu na hostování (transfers/loan-agreements.ts).
+      loan_playing_time: offer.loan_playing_time ?? null,
       offer_amount: offer.offer_amount,
       counter_amount: offer.counter_amount,
       message: offer.message,

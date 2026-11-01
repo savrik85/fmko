@@ -168,7 +168,7 @@ beforeAll(async () => {
       created_at TEXT NOT NULL DEFAULT (datetime('now')), resolved_at TEXT, offer_type TEXT NOT NULL DEFAULT 'transfer',
       loan_duration INTEGER, last_action_by TEXT, offered_player_id TEXT, target_squad TEXT NOT NULL DEFAULT 'senior',
       player_interest INTEGER, virtual_team_data TEXT, upfront_pct INTEGER NOT NULL DEFAULT 100, installments INTEGER NOT NULL DEFAULT 0,
-      sell_on_pct INTEGER NOT NULL DEFAULT 0, cooldown_waived INTEGER NOT NULL DEFAULT 0
+      sell_on_pct INTEGER NOT NULL DEFAULT 0, cooldown_waived INTEGER NOT NULL DEFAULT 0, loan_playing_time TEXT, listing_id TEXT
     );
     CREATE TABLE transfer_offer_events (
       id TEXT PRIMARY KEY, offer_id TEXT NOT NULL, team_id TEXT NOT NULL, event_type TEXT NOT NULL, amount INTEGER, message TEXT,
@@ -198,7 +198,7 @@ beforeAll(async () => {
     CREATE TABLE transfer_listings (
       id TEXT PRIMARY KEY, player_id TEXT NOT NULL, team_id TEXT NOT NULL, asking_price INTEGER NOT NULL, league_id TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'active', expires_at TEXT NOT NULL, is_ai_listing INTEGER NOT NULL DEFAULT 0, ai_player_data TEXT,
-      rejected_by TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      rejected_by TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), deal_type TEXT NOT NULL DEFAULT 'transfer', loan_days INTEGER, loan_playing_time TEXT
     );
     CREATE TABLE transfer_bids (
       id TEXT PRIMARY KEY, listing_id TEXT NOT NULL, team_id TEXT NOT NULL, amount INTEGER NOT NULL, counter_amount INTEGER,

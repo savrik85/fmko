@@ -26,6 +26,7 @@ interface OfferDetail {
     to_team_id: string;
     offer_type: "transfer" | "loan";
     loan_duration: number | null;
+    loan_playing_time?: string | null;
     offer_amount: number;
     counter_amount: number | null;
     message: string | null;
@@ -237,6 +238,7 @@ export default function OfferDetailPage() {
                 currentAmount={currentAmount}
                 offerType={offer.offer_type}
                 loanDuration={offer.loan_duration}
+                loanPlayingTime={offer.loan_playing_time ?? null}
                 crossLeague={crossLeague}
                 adminFee={adminFee}
                 terms={terms}
@@ -283,6 +285,7 @@ export default function OfferDetailPage() {
               currentAmount={currentAmount}
               offerType={offer.offer_type}
               loanDuration={offer.loan_duration}
+                loanPlayingTime={offer.loan_playing_time ?? null}
               crossLeague={crossLeague}
               adminFee={adminFee}
               terms={terms}

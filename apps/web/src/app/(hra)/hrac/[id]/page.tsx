@@ -19,6 +19,9 @@ import { attributeImportance, coachRelationBand, marketValue, marketValueEstimat
 import { MoneyInput } from "@/components/ui/money-input";
 import { TransferTermsFields, PLAIN_TERMS, type TermsValue } from "@/components/transfers/transfer-terms";
 import { PlayerObligationsCard } from "@/components/transfers/player-obligations";
+import { LoanStatusCard } from "@/components/transfers/loan-status-card";
+import { LoanListingDialog, type LoanListingValue } from "@/components/transfers/loan-listing-dialog";
+import { loanTermsLine } from "@/lib/loans";
 import { formatLogDate, RelationTrend } from "@/components/manager/CoachKabinaTab";
 import { attrBg, attrValue, withBody, bodyNote, formatKg, formatKgChange, WEIGHT_CATEGORY, type WeightCategoryKey } from "@/lib/player-attrs";
 
@@ -154,8 +157,9 @@ export default function PlayerDetailPage() {
   const [swapSlots, setSwapSlots] = useState<(string | null)[]>([null]);
   const swapPlayerIds = swapSlots.filter((id): id is string => !!id);
   const [offerTerms, setOfferTerms] = useState<TermsValue>(PLAIN_TERMS);
-  const [myListing, setMyListing] = useState<{ listingId: string; askingPrice: number } | null>(null);
+  const [myListing, setMyListing] = useState<MyListingState | null>(null);
   const [priceDialogOpen, setPriceDialogOpen] = useState(false);
+  const [loanDialogOpen, setLoanDialogOpen] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [isWatched, setIsWatched] = useState(false);
   const [watchLoading, setWatchLoading] = useState(false);
@@ -263,9 +267,9 @@ export default function PlayerDetailPage() {
           setMySquad(mine);
         } else {
           // Own player — check if already listed on market
-          const market = await apiFetch<{ myListings: Array<{ id: string; playerId: string; askingPrice: number }> }>(`/api/teams/${teamId}/market`).catch((e) => { console.error("market fetch:", e); return null; });
+          const market = await apiFetch<{ myListings: MyListingRow[] }>(`/api/teams/${teamId}/market`).catch((e) => { console.error("market fetch:", e); return null; });
           const found = market?.myListings?.find((l) => l.playerId === playerId);
-          if (found) setMyListing({ listingId: found.id, askingPrice: found.askingPrice });
+          if (found) setMyListing(toMyListing(found));
         }
 
         // Profile extras (personality + relationships) — only for own players
@@ -284,9 +288,24 @@ export default function PlayerDetailPage() {
 
   const refreshListing = async () => {
     if (!teamId) return;
-    const market = await apiFetch<{ myListings: Array<{ id: string; playerId: string; askingPrice: number }> }>(`/api/teams/${teamId}/market`).catch((e) => { console.error("market refresh:", e); return null; });
+    const market = await apiFetch<{ myListings: MyListingRow[] }>(`/api/teams/${teamId}/market`).catch((e) => { console.error("market refresh:", e); return null; });
     const found = market?.myListings?.find((l) => l.playerId === playerId);
-    setMyListing(found ? { listingId: found.id, askingPrice: found.askingPrice } : null);
+    setMyListing(found ? toMyListing(found) : null);
+  };
+
+  // Inzerát na hostování: délka, poplatek a podmínka hraní (transfers/loan-agreements.ts).
+  const listOnLoan = async (v: LoanListingValue) => {
+    if (!teamId || !player || actionLoading) return;
+    setActionLoading(true);
+    const ok = await apiAction(apiFetch(`/api/teams/${teamId}/players/${playerId}/list`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ askingPrice: v.fee, dealType: "loan", loanDays: v.days, playingTime: v.playingTime }),
+    }), "Nabídnutí na hostování se nezdařilo");
+    if (ok) {
+      setLoanDialogOpen(false);
+      await refreshListing();
+    }
+    setActionLoading(false);
   };
 
   const listOnMarket = async (price: number) => {
@@ -306,8 +325,10 @@ export default function PlayerDetailPage() {
   const withdrawFromMarket = async () => {
     if (!teamId || !myListing || actionLoading) return;
     const ok = await confirm({
-      title: "Stáhnout z trhu?",
-      description: `${player?.first_name} ${player?.last_name} se vrátí zpět do tvého kádru.`,
+      title: myListing.dealType === "loan" ? "Stáhnout nabídku hostování?" : "Stáhnout z trhu?",
+      description: myListing.dealType === "loan"
+        ? "Inzerát zmizí z trhu a žádosti, které k němu přišly, dostanou odmítnutí."
+        : `${player?.first_name} ${player?.last_name} se vrátí zpět do tvého kádru.`,
       confirmLabel: "Stáhnout",
     });
     if (!ok) return;
@@ -766,8 +787,10 @@ export default function PlayerDetailPage() {
                 {isOwnPlayer && !isLoanedToUs && (myListing ? (
                   <>
                     <div className={`${btnBase} ${btnListing}`}>
-                      <span>🏷️</span>
-                      <span>Na trhu za {myListing.askingPrice.toLocaleString("cs")} Kč</span>
+                      <span>{myListing.dealType === "loan" ? "🤝" : "🏷️"}</span>
+                      <span>{myListing.dealType === "loan"
+                        ? `Na hostování · ${loanTermsLine(myListing)}`
+                        : `Na trhu za ${myListing.askingPrice.toLocaleString("cs")} Kč`}</span>
                     </div>
                     <button onClick={withdrawFromMarket} disabled={actionLoading}
                       className={`${btnBase} min-w-[140px] disabled:opacity-50 ${btnNeutral}`}>
@@ -775,10 +798,16 @@ export default function PlayerDetailPage() {
                     </button>
                   </>
                 ) : (
-                  <button onClick={() => setPriceDialogOpen(true)} disabled={actionLoading}
-                    className={`${btnBase} disabled:opacity-50 ${btnNeutral}`}>
-                    🏷️ Na trh
-                  </button>
+                  <>
+                    <button onClick={() => setPriceDialogOpen(true)} disabled={actionLoading}
+                      className={`${btnBase} disabled:opacity-50 ${btnNeutral}`}>
+                      🏷️ Na trh
+                    </button>
+                    <button onClick={() => setLoanDialogOpen(true)} disabled={actionLoading}
+                      className={`${btnBase} disabled:opacity-50 ${btnNeutral}`}>
+                      🤝 Na hostování
+                    </button>
+                  </>
                 ))}
                 {isOwnPlayer && !isLoanedToUs && (
                   <button onClick={releasePlayer} disabled={actionLoading}
@@ -1178,6 +1207,7 @@ export default function PlayerDetailPage() {
 
       {/* Splátky a procenta z přestupu. Server vrací jen závazky mého klubu, u cizího hráče
           tak karta vyskočí jen tehdy, když mi za něj někdo splácí nebo mám procenta. */}
+      {teamId && <LoanStatusCard teamId={teamId} playerId={playerId} />}
       {teamId && <PlayerObligationsCard teamId={teamId} playerId={playerId} />}
 
       {/* Podrobný rozpad potenciálu po dovednostech — patří dolů, ne do hlavičky */}
@@ -1942,6 +1972,15 @@ export default function PlayerDetailPage() {
         loading={actionLoading}
       />
     )}
+    {loanDialogOpen && player && (
+      <LoanListingDialog
+        playerName={`${player.first_name} ${player.last_name}`}
+        playerLine={`${player.position}, ${player.age} let, rating ${player.overall_rating}`}
+        onClose={() => setLoanDialogOpen(false)}
+        onConfirm={listOnLoan}
+        loading={actionLoading}
+      />
+    )}
     {scoutDialogOpen && player && (
       <ScoutPlayerDialog
         player={player}
@@ -1953,6 +1992,21 @@ export default function PlayerDetailPage() {
     )}
     </>
   );
+}
+
+/** Můj inzerát hráče na trhu: prodej, nebo hostování s podmínkami. */
+interface MyListingRow {
+  id: string; playerId: string; askingPrice: number;
+  dealType?: "transfer" | "loan"; loanDays?: number | null; loanPlayingTime?: string | null;
+}
+interface MyListingState {
+  listingId: string; askingPrice: number; dealType: "transfer" | "loan"; loanDays: number | null; loanPlayingTime: string | null;
+}
+function toMyListing(l: MyListingRow): MyListingState {
+  return {
+    listingId: l.id, askingPrice: l.askingPrice, dealType: l.dealType === "loan" ? "loan" : "transfer",
+    loanDays: l.loanDays ?? null, loanPlayingTime: l.loanPlayingTime ?? null,
+  };
 }
 
 function PlayerPriceDialog({ player, onClose, onConfirm, loading }: {

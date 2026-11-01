@@ -732,6 +732,24 @@ export default function ConversationPage() {
                               Otevřít grémium
                             </Link>
                           )}
+                          {/* Hostování s podmínkou hraní: varování, porušení, stažení zpátky. */}
+                          {msg.metadata?.type === "loan" && typeof msg.metadata.agreementId === "string" && (
+                            <Link
+                              href={`/prestupy/hostovani/${encodeURIComponent(msg.metadata.agreementId)}`}
+                              className={WA_LINK_BUTTON}
+                            >
+                              Otevřít hostování
+                            </Link>
+                          )}
+                          {/* Nový hráč k zapůjčení na trhu. */}
+                          {msg.metadata?.type === "loan_market" && (
+                            <Link
+                              href="/prestupy?tab=hledat&hledat=na-hostovani"
+                              className={WA_LINK_BUTTON}
+                            >
+                              Hráči k zapůjčení
+                            </Link>
+                          )}
                           {/* Někdo mi nabídl hráče k poptávce. */}
                           {msg.metadata?.type === "demand" && (
                             <Link

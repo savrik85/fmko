@@ -203,6 +203,10 @@ export interface CreateOfferInput {
   upfrontPct?: number;
   installments?: number;
   sellOnPct?: number;
+  /** Podmínka hraní u hostování (z inzerátu na hostování). */
+  loanPlayingTime?: string | null;
+  /** Inzerát, ze kterého žádost o hostování vznikla. */
+  listingId?: string | null;
 }
 
 /** POST /teams/:teamId/offers — nabídka na hráče jiného klubu (lidského i AI). */
@@ -275,6 +279,9 @@ export async function createTransferOffer(env: Bindings, actorTeamId: string, bo
   if (offerType === "loan" && (!loanDuration || loanDuration < 7 || loanDuration > 180)) {
     return fail(400, "Délka hostování musí být 7–180 dní");
   }
+  const { parsePlayingTime } = await import("../transfers/loan-agreements");
+  const loanPlayingTime = offerType === "loan" ? parsePlayingTime(body.loanPlayingTime) : null;
+  if (body.loanPlayingTime != null && offerType === "loan" && !loanPlayingTime) return fail(400, "Neznámá podmínka hraní");
 
   // Hráči na výměnu: jen v úvodní nabídce a jen u trvalého přestupu, vlastní, nezranění, ne chtěný hráč.
   if (swapPlayerIds.length > 0) {
@@ -307,8 +314,9 @@ export async function createTransferOffer(env: Bindings, actorTeamId: string, bo
   const id = crypto.randomUUID();
   // Nabídka a hráči na výměnu vznikají naráz, jinak by mohla viset nabídka bez slíbených hráčů.
   await db.batch([
-    db.prepare("INSERT INTO transfer_offers (id, player_id, from_team_id, to_team_id, offer_amount, message, expires_at, offer_type, loan_duration, last_action_by, target_squad, player_interest, upfront_pct, installments, sell_on_pct) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-      .bind(id, body.playerId, buyerClubTeamId, targetOwnerId, body.amount, body.message ?? null, offerReplyDeadline(), offerType, loanDuration, buyerClubTeamId, targetSquad, interest?.level ?? null, terms.upfrontPct, terms.installments, terms.sellOnPct),
+    db.prepare("INSERT INTO transfer_offers (id, player_id, from_team_id, to_team_id, offer_amount, message, expires_at, offer_type, loan_duration, last_action_by, target_squad, player_interest, upfront_pct, installments, sell_on_pct, loan_playing_time, listing_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .bind(id, body.playerId, buyerClubTeamId, targetOwnerId, body.amount, body.message ?? null, offerReplyDeadline(), offerType, loanDuration, buyerClubTeamId, targetSquad, interest?.level ?? null, terms.upfrontPct, terms.installments, terms.sellOnPct,
+        loanPlayingTime, offerType === "loan" ? (body.listingId ?? null) : null),
     ...insertSwapPlayersStmts(db, id, swapPlayerIds),
   ]);
 
@@ -343,8 +351,9 @@ export async function createTransferOffer(env: Bindings, actorTeamId: string, bo
       `📩 ${buyerTeam?.name ?? "Neznámý klub"} chce odkoupit ${pName} (aktuálně u nich na hostování) za ${body.amount.toLocaleString("cs")} Kč.`
     ).catch((e) => logger.warn({ module: "game" }, "db op failed", e));
   } else if (offerType === "loan") {
+    const fromListing = body.listingId ? " z vašeho inzerátu" : "";
     await sendPhoneSMS(db, recipientClubId, SMS_ROLE, SMS_ROLE,
-      `📩 ${buyerTeam?.name ?? "Neznámý klub"} má zájem o hostování ${pName}.${body.amount > 0 ? ` Nabízí poplatek ${body.amount.toLocaleString("cs")} Kč.` : ""} Podívejte se na to v přestupech.`
+      `📩 Žádost o hostování${fromListing} od ${buyerTeam?.name ?? "neznámého klubu"}: ${pName}.${body.amount > 0 ? ` Poplatek ${body.amount.toLocaleString("cs")} Kč.` : ""} Bez vašeho potvrzení nikam nejde, podívejte se na to v přestupech.`
     ).catch((e) => logger.warn({ module: "game" }, "db op failed", e));
   } else {
     await sendPhoneSMS(db, recipientClubId, SMS_ROLE, SMS_ROLE,
@@ -378,6 +387,23 @@ export type ListingBidResult = TransferActionResult<
 /** POST /teams/:teamId/market/:listingId/bid — z inzerátu klubu ve hře vznikne nabídka, u klubu mimo hru jednání. */
 export async function placeListingBid(env: Bindings, actorTeamId: string, listingId: string, body: ListingBidInput): Promise<ListingBidResult> {
   const db = env.DB;
+  // Inzerát na hostování: podmínky (délka, poplatek, podmínka hraní) určil půjčující,
+  // žádost je převezme beze změny. Vznikne běžná nabídka hostování, kterou musí potvrdit.
+  const loanListing = await db.prepare(
+    "SELECT player_id, asking_price, loan_days, loan_playing_time FROM transfer_listings WHERE id = ? AND status = 'active' AND deal_type = 'loan'",
+  ).bind(listingId).first<{ player_id: string; asking_price: number; loan_days: number | null; loan_playing_time: string | null }>()
+    .catch((e) => { logger.warn({ module: "game" }, "inzerát na hostování", e); return null; });
+  if (loanListing) {
+    const res = await createTransferOffer(env, actorTeamId, {
+      playerId: loanListing.player_id, amount: loanListing.asking_price, offerType: "loan",
+      loanDuration: loanListing.loan_days ?? 30, loanPlayingTime: loanListing.loan_playing_time ?? "none", listingId,
+    });
+    if (!res.ok) {
+      if (res.status === 409 && res.offerId) return { ok: true, kind: "offer", offerId: res.offerId, alreadyExists: true };
+      return res;
+    }
+    return { ok: true, kind: "offer", offerId: res.offerId };
+  }
   if (!body.amount || body.amount <= 0 || !Number.isInteger(body.amount)) return fail(400, "Nabídka musí být kladné celé číslo");
   if (body.amount > MAX_TRANSFER_AMOUNT) return fail(400, `Částka může být nejvýš ${MAX_TRANSFER_AMOUNT.toLocaleString("cs")} Kč.`);
 
@@ -1031,6 +1057,13 @@ export async function acceptTransferOffer(
 
     const loanCore = [
       db.prepare("UPDATE transfer_offers SET status = 'accepted', resolved_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?").bind(offerId),
+      // Ostatní žádosti z inzerátu na hostování půjčující nepřijal: dostanou odmítnutí.
+      db.prepare(
+        `UPDATE transfer_offers SET status = 'rejected', reject_message = 'Hráč odešel na hostování jinam.', resolved_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+         WHERE player_id = ? AND id != ? AND status IN ('pending','countered') AND listing_id IS NOT NULL`,
+      ).bind(playerId, offerId),
+      // Inzerát hráče (na hostování i na prodej) přijetím hostování končí.
+      db.prepare("UPDATE transfer_listings SET status = 'sold' WHERE player_id = ? AND status = 'active'").bind(playerId),
       db.prepare(
         `UPDATE transfer_offers SET status = 'withdrawn', resolved_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
          WHERE player_id = ? AND id != ? AND status IN ('pending','countered')`,
@@ -1070,6 +1103,15 @@ export async function acceptTransferOffer(
       await db.batch(rollback).catch((rollbackError) => logger.error({ module: "game" }, "rollback failed loan offer", rollbackError));
       return fail(500, "Hostování se nepodařilo dokončit, zkus to znovu");
     }
+
+    // Záznam hostování pro přehled půjčujícího a hlídání podmínky hraní. Mimo atomický
+    // batch: když se nepovede, hostování platí dál a záznam doplní ensureLoanAgreements.
+    const { createLoanAgreement, parsePlayingTime } = await import("../transfers/loan-agreements");
+    await createLoanAgreement(db, {
+      offerId, playerId, lenderTeamId: sellerRosterTeamId, borrowerTeamId: buyerTeamId,
+      playingTime: parsePlayingTime(offer.loan_playing_time), fee: amount,
+      startedAt: gameDate, until: loanUntil.toISOString(),
+    });
 
     const { createTransferNews } = await import("../transfers/transfer-news");
     await createTransferNews(db, seller?.league_id ?? "", null, "loan_completed", {
@@ -1254,6 +1296,11 @@ export async function acceptTransferOffer(
       rollback.push(...swapRollbackStmts(swapMoves));
       await db.batch(rollback).catch((rollbackError) => logger.error({ module: "game" }, "rollback failed transfer offer", rollbackError));
       return fail(500, "Přestup se nepodařilo dokončit, zkus to znovu");
+    }
+
+    if (isBuyoutAccept) {
+      const { closeLoanAgreements } = await import("../transfers/loan-agreements");
+      await closeLoanAgreements(db, playerId, "bought");
     }
 
     // Výnos do pokladny soutěže. Idempotentní přes reference_id odvozené z nabídky.
@@ -1562,9 +1609,29 @@ export async function withdrawTransferOffer(
 // ═══ Inzerát ═══
 
 /** POST /teams/:teamId/players/:playerId/list — vystavit hráče na trh. */
-export async function listPlayerOnMarket(env: Bindings, teamId: string, playerId: string, askingPrice: number): Promise<TransferActionResult<{ listingId: string }>> {
+/** Inzerát na hostování: délka, podmínka hraní. Poplatek je `askingPrice` (smí být 0). */
+export interface LoanListingInput {
+  days: number;
+  playingTime: string;
+}
+
+export async function listPlayerOnMarket(
+  env: Bindings, teamId: string, playerId: string, askingPrice: number, loan?: LoanListingInput | null,
+): Promise<TransferActionResult<{ listingId: string }>> {
   const db = env.DB;
-  if (!Number.isInteger(askingPrice) || askingPrice <= 0 || askingPrice > MAX_TRANSFER_AMOUNT) {
+  const {
+    LOAN_DAYS_MIN, LOAN_DAYS_MAX, LOAN_LISTING_DAYS, parsePlayingTime, announceLoanListing,
+  } = await import("../transfers/loan-agreements");
+  const playingTime = loan ? parsePlayingTime(loan.playingTime) : null;
+  if (loan) {
+    if (!Number.isInteger(loan.days) || loan.days < LOAN_DAYS_MIN || loan.days > LOAN_DAYS_MAX) {
+      return fail(400, `Délka hostování musí být ${LOAN_DAYS_MIN} až ${LOAN_DAYS_MAX} dní.`);
+    }
+    if (!playingTime) return fail(400, "Vyber podmínku hraní.");
+    if (!Number.isInteger(askingPrice) || askingPrice < 0 || askingPrice > MAX_TRANSFER_AMOUNT) {
+      return fail(400, `Poplatek musí být celé číslo od 0 do ${MAX_TRANSFER_AMOUNT.toLocaleString("cs")} Kč.`);
+    }
+  } else if (!Number.isInteger(askingPrice) || askingPrice <= 0 || askingPrice > MAX_TRANSFER_AMOUNT) {
     return fail(400, `Cena musí být celé číslo od 1 do ${MAX_TRANSFER_AMOUNT.toLocaleString("cs")} Kč.`);
   }
 
@@ -1596,12 +1663,22 @@ export async function listPlayerOnMarket(env: Bindings, teamId: string, playerId
   if (!listingTeam) return fail(404, "Tým nenalezen");
 
   const expiresAt = new Date();
-  expiresAt.setDate(expiresAt.getDate() + 7);
+  expiresAt.setDate(expiresAt.getDate() + (loan ? LOAN_LISTING_DAYS : 7));
   const id = crypto.randomUUID();
 
   await db.prepare(
-    "INSERT INTO transfer_listings (id, player_id, team_id, asking_price, league_id, expires_at) VALUES (?, ?, ?, ?, ?, ?)"
-  ).bind(id, playerId, teamId, askingPrice, listingTeam.league_id, expiresAt.toISOString()).run();
+    "INSERT INTO transfer_listings (id, player_id, team_id, asking_price, league_id, expires_at, deal_type, loan_days, loan_playing_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+  ).bind(id, playerId, teamId, askingPrice, listingTeam.league_id, expiresAt.toISOString(),
+    loan ? "loan" : "transfer", loan ? loan.days : null, playingTime).run();
+
+  if (loan && playingTime) {
+    // Kluby nižší soutěže v okrese se o hráči k zapůjčení dozví SMS (nejvýš jedna za den).
+    await announceLoanListing(db, {
+      listingTeamId: teamId, playerName: `${player.first_name} ${player.last_name}`, position: player.position as string,
+      age: player.age as number, loanDays: loan.days, fee: askingPrice, playingTime,
+    }).catch((e) => logger.warn({ module: "game" }, "zpráva o hráči k zapůjčení", e));
+    return { ok: true, listingId: id };
+  }
 
   const { createTransferNews } = await import("../transfers/transfer-news");
   await createTransferNews(db, listingTeam.league_id, teamId, "player_listed", {
@@ -1615,8 +1692,15 @@ export async function listPlayerOnMarket(env: Bindings, teamId: string, playerId
 /** DELETE /teams/:teamId/listings/:listingId — stáhnout inzerát (rozjednané příhozy se zamítnou). */
 export async function withdrawListing(env: Bindings, teamId: string, listingId: string): Promise<TransferActionResult> {
   const db = env.DB;
-  await db.prepare("UPDATE transfer_listings SET status = 'withdrawn' WHERE id = ? AND team_id = ?").bind(listingId, teamId).run();
+  const res = await db.prepare("UPDATE transfer_listings SET status = 'withdrawn' WHERE id = ? AND team_id = ?").bind(listingId, teamId).run();
   await db.prepare("UPDATE transfer_bids SET status = 'rejected' WHERE listing_id = ? AND status = 'pending'").bind(listingId).run().catch((e) => logger.warn({ module: "game" }, "reject bids on listing withdrawal", e));
+  // Žádosti o hostování z tohohle inzerátu padají spolu s ním.
+  if ((res.meta.changes ?? 0) > 0) {
+    await db.prepare(
+      `UPDATE transfer_offers SET status = 'rejected', reject_message = 'Klub inzerát na hostování stáhl.', resolved_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+        WHERE listing_id = ? AND status IN ('pending','countered')`,
+    ).bind(listingId).run().catch((e) => logger.warn({ module: "game" }, "reject loan requests on listing withdrawal", e));
+  }
   return { ok: true };
 }
 
