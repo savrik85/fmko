@@ -336,6 +336,8 @@ export async function generateInterviewArticle(
   opponentName: string,
   pokynyRedaktora?: string,
   tones: AnswerTone[] = [],
+  /** Pověst trenéra ze štítků (news/coach-context.ts), jen podklad. */
+  coachReputation: readonly string[] = [],
 ): Promise<{ headline: string; body: string; reakce?: { posun: number; duvod: string } } | null> {
   const qaPairs = qa
     .map((pair, i) => {
@@ -347,7 +349,8 @@ export async function generateInterviewArticle(
 
   const prompt = `${pokynyRedaktora ?? "Jsi bulvárnější redaktor Okresního zpravodaje, regionálního plátku, který žije vesnickým fotbalem."} Dostal jsi přepis rozhovoru s trenérem
 ${managerName} z týmu ${teamName} před zápasem s ${opponentName}. Sestav z toho novinový článek.
-
+${coachReputation.length ? `Pověst trenéra v okrese: ${coachReputation.join(", ")}. Je to jen podklad: zmiň ji nanejvýš jednou a jen když přirozeně sedí k tomu, co říká; většinou ji vynech.
+` : ""}
 KONTEXT — důležité pochopit:
 Tohle je okresní přebor. Vesnický fotbal. Rivalita mezi vesnicemi a manažery je přirozená a čtenáři ji milují. Narážky mezi trenéry, bulvární špeky, hospodské povídačky, náznaky o zákulisí soupeře, ironie a sarkasmus — to všechno patří do novin, ne do koše. Pokud trenér řekne něco peprného, pikantního nebo provokativního, NEŠKRTAT. Dát tomu prostor — klidně to zarámovat jako "překvapivé prohlášení", "bombu", "bulvární exkluzivitu" — ale NIKDY to úplně nevynechat.
 

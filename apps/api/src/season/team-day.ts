@@ -342,7 +342,9 @@ export async function processTeamDay(
               const tones = parseStoredTones(pendingArticle.answer_tones, answers.length);
               const qa = questions.map((q, i) => ({ q, a: answers[i] ?? "", tone: tones[i] }));
               const { generateInterviewArticle } = await import("../news/interview-generator");
-              const article = await generateInterviewArticle((env as any).GEMINI_API_KEY, qa, managerRow.manager_name, managerRow.team_name, opponentName, undefined, tones);
+              const { coachReputationByTeam } = await import("../news/coach-context");
+              const reputation = (await coachReputationByTeam(env.DB, [teamId])).get(teamId) ?? [];
+              const article = await generateInterviewArticle((env as any).GEMINI_API_KEY, qa, managerRow.manager_name, managerRow.team_name, opponentName, undefined, tones, reputation);
               if (article) {
                 const newsId = crypto.randomUUID();
                 const managerAvatar = (() => { try { return managerRow.manager_avatar ? JSON.parse(managerRow.manager_avatar) : null; } catch { return null; } })();
