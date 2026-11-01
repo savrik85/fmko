@@ -43,6 +43,8 @@ interface MatchInfo {
   away_team_id: string;
   isHome: boolean;
   weather: WeatherType;
+  /** Teplota dne zápasu z API; null = neznámá (turnaj), pak se neukazuje. */
+  temperature: number | null;
   stadium_name: string | null;
   pitch_condition: number;
   pitch_type: string;
@@ -102,6 +104,7 @@ export default function MatchDayPage() {
           away_team_id: r.away_team_id as string,
           isHome: homeTeamId === teamId,
           weather: validWeather,
+          temperature: typeof r.temperature === "number" ? r.temperature : null,
           stadium_name: (r.stadium_name as string) ?? null,
           pitch_condition: (r.pitch_condition as number) ?? 85,
           pitch_type: (venueLook?.pitch_type as string) ?? (r.pitch_type as string) ?? "natural",
@@ -252,7 +255,7 @@ export default function MatchDayPage() {
                       {match.isHome ? `vs ${match.away_name}` : `@ ${match.home_name}`}
                     </div>
                     <div className="text-[10px] text-white/70">
-                      {weatherCfg.label} · {weatherCfg.defaultTemp}°C · {match.isHome ? "Doma" : "Venku"}
+                      {weatherCfg.label}{match.temperature !== null ? ` · ${match.temperature}°C` : ""} · {match.isHome ? "Doma" : "Venku"}
                     </div>
                   </div>
                 </button>
@@ -274,7 +277,7 @@ export default function MatchDayPage() {
                   <div className="flex items-center gap-2 text-white">
                     <span className="text-base">{weatherCfg.icon}</span>
                     <span className="text-xs font-heading font-bold text-white/90">
-                      {weatherCfg.label} · {weatherCfg.defaultTemp}°C
+                      {weatherCfg.label}{match.temperature !== null ? ` · ${match.temperature}°C` : ""}
                     </span>
                     <span className="text-[10px] text-white/40 font-mono">
                       (Trávník: {match.pitch_condition}%)
@@ -417,8 +420,12 @@ export default function MatchDayPage() {
                   <div className="min-w-0">
                     <div className="text-xs font-heading font-bold flex items-center gap-2 text-white">
                       <span>{weatherCfg.label}</span>
-                      <span className="text-white/40">·</span>
-                      <span className="text-amber-400 font-mono">{weatherCfg.defaultTemp}°C</span>
+                      {match.temperature !== null && (
+                        <>
+                          <span className="text-white/40">·</span>
+                          <span className="text-amber-400 font-mono">{match.temperature}°C</span>
+                        </>
+                      )}
                     </div>
                     <div className="text-micro text-white/70 truncate">{weatherCfg.desc}</div>
                   </div>

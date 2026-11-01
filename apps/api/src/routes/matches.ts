@@ -919,7 +919,8 @@ matchesRouter.get("/matches/:id", async (c) => {
   const row = await c.env.DB.prepare(
     `SELECT m.*,
        ht.name as home_name, ht.primary_color as home_color, ht.badge_pattern as home_badge, ht.secondary_color as home_secondary, ht.village_id as home_village_id,
-       at.name as away_name, at.primary_color as away_color, at.badge_pattern as away_badge, at.secondary_color as away_secondary, at.village_id as away_village_id
+       at.name as away_name, at.primary_color as away_color, at.badge_pattern as away_badge, at.secondary_color as away_secondary, at.village_id as away_village_id,
+       (SELECT sc.scheduled_at FROM season_calendar sc WHERE sc.id = m.calendar_id) AS calendar_at
      FROM matches m
      LEFT JOIN teams ht ON m.home_team_id = ht.id
      LEFT JOIN teams at ON m.away_team_id = at.id
@@ -927,6 +928,7 @@ matchesRouter.get("/matches/:id", async (c) => {
   ).bind(c.req.param("id")).first<Record<string, unknown>>();
   if (!row) return c.json({ error: "Match not found" }, 404);
   const isLocalDerby = !!row.home_village_id && row.home_village_id === row.away_village_id;
+  const temperature = await matchDayTemperature(c.env.DB, (row.calendar_at ?? row.simulated_at) as string | null);
 
   const homeLineup = JSON.parse((row.home_lineup_data as string) ?? "null");
   const awayLineup = JSON.parse((row.away_lineup_data as string) ?? "null");
@@ -967,8 +969,21 @@ matchesRouter.get("/matches/:id", async (c) => {
     away_lineup_data: awayLineup,
     absences: JSON.parse((row.absences as string) ?? "[]"),
     isLocalDerby,
+    temperature,
   });
 });
+
+/**
+ * Teplota dne zápasu ze stejného zdroje jako počasí (`season-weather.ts`). Obrazovka
+ * Zápasový den dřív ukazovala pevnou teplotu podle druhu počasí, v listopadu „22 °C“.
+ */
+async function matchDayTemperature(db: D1Database, day: string | null): Promise<number | null> {
+  if (!day) return null;
+  const { resolveWeatherForDate } = await import("../season/season-weather");
+  const w = await resolveWeatherForDate(db, day)
+    .catch((e) => { logger.warn({ module: "matches" }, `teplota dne zápasu ${day}`, e); return null; });
+  return w?.temperature ?? null;
+}
 
 
 // GET /api/cup-matches/:id — detail pohárového zápasu (stejný tvar jako /matches/:id).
@@ -1024,6 +1039,7 @@ matchesRouter.get("/cup-matches/:id", async (c) => {
     away_lineup_data: awayLineup,
     absences: JSON.parse((row.absences as string) ?? "[]"),
     isLocalDerby: false,
+    temperature: await matchDayTemperature(c.env.DB, (row.scheduled_at ?? row.simulated_at) as string | null),
   });
 });
 
