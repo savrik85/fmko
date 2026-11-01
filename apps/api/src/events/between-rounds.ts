@@ -190,7 +190,8 @@ const EVENT_RULES: EventRule[] = [
       return {
         // Kádr skleněných mužů se zraní častěji, odolný kádr zhruba o polovinu méně.
         prob: Math.min(1, meanProneness / 50),
-        description: `${player.firstName} ${player.lastName} si na tréninku přivodil ${popis}. Bude chybět ${duration} ${duration === 1 ? "kolo" : duration < 5 ? "kola" : "kol"}.`,
+        // Délka je v týdnech (`league-round.ts` zapisuje duration × 7 dní), liga hraje dvakrát týdně.
+        description: `${player.firstName} ${player.lastName} si na tréninku přivodil ${popis}. Bude chybět ${duration} ${duration === 1 ? "týden" : duration < 5 ? "týdny" : "týdnů"}.`,
         effect: { type: "injury", playerIndex: idx, duration, popisZraneni: popis },
       };
     },
