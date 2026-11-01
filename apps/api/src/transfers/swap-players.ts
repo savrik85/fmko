@@ -82,6 +82,9 @@ export async function swapPlayersError(
       "Na výměnu ho dát nejde, můžeš ho prodat.");
     if (sellOn) return { status: 400, error: sellOn };
   }
+  const { registrationLockError } = await import("./registration-window");
+  const lock = await registrationLockError(db, ids);
+  if (lock) return { status: 400, error: lock };
   return null;
 }
 

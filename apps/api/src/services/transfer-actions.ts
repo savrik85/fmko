@@ -42,8 +42,11 @@ export interface TransferActionFailure {
   offerId?: string;
   /** Za kolik dní jde nabídnout znovu (429). */
   retryInDays?: number;
-  /** Přijetí padlo na penězích kupujícího (záloha, poplatek), ne na vůli prodávajícího. */
-  reason?: "buyer_funds";
+  /**
+   * Přijetí padlo na něčem, co nechtěl prodávající: na penězích kupujícího (záloha, poplatek),
+   * nebo na registrační lhůtě hráče (`transfers/registration-window.ts`).
+   */
+  reason?: "buyer_funds" | "registration_window";
 }
 
 export type TransferActionResult<T extends object = Record<never, never>> = ({ ok: true } & T) | TransferActionFailure;
@@ -510,6 +513,12 @@ export async function acceptListingBid(env: Bindings, actorTeamId: string, bidId
   if (sellerTeamId !== actorTeamId && buyerTeamId !== actorTeamId) return fail(403, "Nemáš přístup k této nabídce");
   if (await areClubsLinked(db, buyerTeamId, sellerTeamId)) return fail(403, LINKED_CLUBS_ERRORS.transfer);
   const playerId = bid.player_id as string;
+  {
+    // Registrační lhůta: příhoz mohl přijít dřív, než se hráč do inzerátu dostal mimo pravidla.
+    const { registrationLockError } = await import("../transfers/registration-window");
+    const lock = await registrationLockError(db, [playerId]);
+    if (lock) return fail(400, lock);
+  }
   // Counter_amount má přednost (jako u offers)
   const amount = (bid.counter_amount != null ? (bid.counter_amount as number) : (bid.amount as number));
 
@@ -743,6 +752,14 @@ export async function acceptTransferOffer(
       const sellOn = await swapSellOnError(db, r, "Na výměnu jít nemůže.");
       if (sellOn) return fail(409, sellOn);
     }
+  }
+  {
+    // Registrační lhůta pro hráče získaného za pár stovek: prodat, vyměnit ani půjčit ho
+    // hned nejde. Hlídá se tady, protože sem vedou všechny cesty (nabídka, poptávka, protinávrh).
+    const { registrationLockError } = await import("../transfers/registration-window");
+    // 400, ne 409: AI klub pak jednání ukončí (`failureOutcome`), místo aby to zkoušel každou hodinu.
+    const lock = await registrationLockError(db, [playerId, ...swapPlayerIds]);
+    if (lock) return fail(400, lock, { reason: "registration_window" });
   }
   // AI klub jako prodávající: kupující přijímá protinávrh AI, který mohl ležet až tři dny.
   // Kádr se mezitím mohl změnit (přijaté jiné protinávrhy, přesuny do U21), proto se pojistky
@@ -1326,11 +1343,11 @@ export async function rejectTransferOffer(
   input: {
     message?: string | null;
     /**
-     * Prodávající by souhlasil, jen kupující nemá na zálohu nebo poplatek. Takové odmítnutí
-     * kupce neblokuje (`cooldown_waived`) a hráči nebere náladu: o odchod nepřišel kvůli
-     * vůli klubu.
+     * Prodávající by souhlasil, jen obchod teď nejde: kupující nemá na zálohu nebo poplatek,
+     * nebo je hráč v registrační lhůtě. Takové odmítnutí kupce neblokuje (`cooldown_waived`)
+     * a hráči nebere náladu: o odchod nepřišel kvůli vůli klubu.
      */
-    buyerCannotPay?: boolean;
+    notSellersChoice?: boolean;
   } = {},
   opts?: TransferActionOptions,
 ): Promise<TransferActionResult> {
@@ -1352,12 +1369,12 @@ export async function rejectTransferOffer(
      SET status = 'rejected', reject_message = ?, resolved_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now'),
          cooldown_waived = CASE WHEN ? = 1 THEN 1 ELSE cooldown_waived END
      WHERE id = ? AND status = ? AND last_action_by IS ?`
-  ).bind(message, input.buyerCannotPay ? 1 : 0, offerId, offer.status, offer.last_action_by).run();
+  ).bind(message, input.notSellersChoice ? 1 : 0, offerId, offer.status, offer.last_action_by).run();
   if (rejected.meta.changes === 0) return fail(409, "Nabídku mezitím vyřešil někdo jiný");
 
   // Dopad na hráče — jen když nabídku odmítl VLASTNÍK hráče (prodávající). I u AI klubu:
   // truc platí stejně, jen bez zpráv (applyOfferRejectionImpact AI klubu nic nepíše).
-  if (scope.role === "seller" && !input.buyerCannotPay) {
+  if (scope.role === "seller" && !input.notSellersChoice) {
     const { applyOfferRejectionImpact } = await import("../transfers/offer-rejection-impact");
     await inBackground(opts, applyOfferRejectionImpact(db, offer, "reject", {
       GEMINI_API_KEY: env.GEMINI_API_KEY,
@@ -1561,6 +1578,9 @@ export async function listPlayerOnMarket(env: Bindings, teamId: string, playerId
   ).bind(playerId, teamId, teamId).first<Record<string, unknown>>();
   if (!player) return fail(404, "Hráč nenalezen");
   if (player.loan_from_team_id) return fail(400, "Hostující hráč nemůže být vylistován na trh");
+  const { registrationLockError } = await import("../transfers/registration-window");
+  const lock = await registrationLockError(db, [playerId]);
+  if (lock) return fail(400, lock);
 
   // Check if already listed
   const existing = await db.prepare(
