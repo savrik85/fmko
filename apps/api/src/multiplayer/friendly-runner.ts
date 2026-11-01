@@ -322,6 +322,10 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
         result.possessionHome,
         matchId,
       ).run();
+      if (result.factors) {
+        await db.prepare("UPDATE matches SET factors = ? WHERE id = ?").bind(JSON.stringify(result.factors), matchId).run()
+          .catch((e) => logger.warn({ module: "friendly-runner" }, `faktory přáteláku ${matchId}`, e));
+      }
 
       // Přátelák trávník opotřebuje stejně jako mistrák — hraje se na něm taky.
       {

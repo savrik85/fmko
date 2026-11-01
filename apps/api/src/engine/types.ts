@@ -1,3 +1,4 @@
+import type { TeamMatchFactors } from "./match-factors";
 import type { MatchEvent, EventType, GoalSource } from "@okresni-masina/shared";
 import type { RefereeProfile, RefereeIncident } from "./referee";
 import type { Hardness } from "./hardness";
@@ -153,6 +154,8 @@ export interface MatchResult {
   refereeIncidents: RefereeIncident[];
   /** Známka rozhodčího za zápas, 1,0–5,0. */
   refereeGrade: number;
+  /** Průměrné vlivy na šance obou týmů (forma, morálka, sehranost…), engine/match-factors.ts. */
+  factors?: { home: TeamMatchFactors; away: TeamMatchFactors };
 }
 
 export { MatchEvent, EventType, GoalSource };

@@ -15,8 +15,19 @@ interface SummaryFactor {
   oppValue?: number;
 }
 
+/** „Čím se zápas lámal“: vliv na útok v procentech (+6 = o 6 % silnější), z enginu. */
+interface BreakdownItem {
+  key: string;
+  label: string;
+  own: number;
+  opp: number;
+  edge: number;
+}
+
 interface MatchSummary {
   factors: SummaryFactor[];
+  /** Chybí u zápasů odehraných před 11/2026. */
+  breakdown?: BreakdownItem[] | null;
   ownStrength: { gk: number; def: number; mid: number; fwd: number };
   opponentStrength: { gk: number; def: number; mid: number; fwd: number };
   ownTactic: string;
@@ -116,6 +127,30 @@ export function MatchBreakdown({ teamId, matchId }: Props) {
                 <p className="text-[12px] leading-relaxed">{f.description}</p>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Čím se zápas lámal: vlivy, se kterými engine počítal šance obou týmů */}
+        {summary.breakdown && summary.breakdown.length > 0 && (
+          <div className="pt-2 border-t border-gray-100">
+            <div className="text-micro text-muted font-heading uppercase tracking-wide mb-1.5">
+              Čím se zápas lámal (vliv na útok)
+            </div>
+            <div className="space-y-1">
+              {summary.breakdown.slice(0, 5).map((b) => (
+                <div key={b.key} className="flex items-baseline justify-between gap-2 text-[12px]">
+                  <span className="font-heading font-bold text-ink">{b.label}</span>
+                  <span className="flex items-baseline gap-2 tabular-nums">
+                    <span className={b.own > 0 ? "text-pitch-600 font-bold" : b.own < 0 ? "text-card-red font-bold" : "text-muted"}>
+                      {b.own > 0 ? "+" : ""}{b.own} %
+                    </span>
+                    <span className="text-muted">vs</span>
+                    <span className="text-muted">{b.opp > 0 ? "+" : ""}{b.opp} %</span>
+                  </span>
+                </div>
+              ))}
+            </div>
+            <p className="text-micro text-muted mt-1.5">Vlevo tvůj tým, vpravo soupeř. Kladné číslo útok posílilo, záporné oslabilo.</p>
           </div>
         )}
 

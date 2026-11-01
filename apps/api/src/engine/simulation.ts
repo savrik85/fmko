@@ -4,6 +4,7 @@
  * 90minutový cyklus simulace fotbalového zápasu pro okresní fotbal.
  */
 
+import { addSample, finalizeFactors, newAccumulator, type TeamMatchFactors } from "./match-factors";
 import type { Rng } from "../generators/rng";
 import { wetnessFromMoisture, drynessFromMoisture } from "../stadium/pitch-moisture";
 import type { MatchEvent, EventType, GoalSource } from "@okresni-masina/shared";
@@ -209,6 +210,8 @@ export function calcChanceProb(
   pitchCondition?: number | null,
   /** Nasáklost půdy 0–100 (50 = normál). Bahno i vyprahlá zem mění, jak se hraje. */
   pitchMoisture?: number | null,
+  /** Sběr průměrných vlivů útočícího týmu pro report „Čím se zápas lámal“ (bez náhody). */
+  factorSink?: (sample: Omit<TeamMatchFactors, "condition">) => void,
 ): number {
   // Defensive — pokud se neznámá tactic prolomi (data corruption), použij balanced
   const tacticMod = TACTIC_MODS[attacking.tactic] ?? TACTIC_MODS.balanced;
@@ -267,6 +270,12 @@ export function calcChanceProb(
 
   const tacticRatio = effMod(tacticMod.attackMod, attEff)
     / effMod((TACTIC_MODS[defending.tactic] ?? TACTIC_MODS.balanced).defenseMod, defEff);
+  factorSink?.({
+    form: formFactor, morale: attMoraleMod, familiarity: famMod, chemistry: chemMod,
+    // Hra po zemi tvoří zhruba pětinu útoku (viz výš), vliv na útok je tedy pětinový.
+    ground: 1 + (groundFactor - 1) * 0.2,
+    tactic: tacticRatio * effMod(tacticMod.chanceMod, attEff), intimidation: 1 - intimidation,
+  });
 
   const skillRatio = defenseSkill > 0 ? attackSkill / defenseSkill : MAX_CHANCE / BASE_CHANCE;
   // Nakopávaný balon těží z počasí i z rozbitého hřiště — obojí sráží hru po zemi.
@@ -761,6 +770,9 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
 
   // Accumulate per-minute possession to compute final 0-100 figure
   let homePossSum = 0;
+  // Průměrné vlivy na šance obou týmů (engine/match-factors.ts).
+  const homeFactors = newAccumulator();
+  const awayFactors = newAccumulator();
 
   function addEvent(
     minute: number,
@@ -1234,12 +1246,14 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
 
     // Check for chance
     const attackForm = isHomePossession ? homeForm : awayForm;
+    let chanceSample: Omit<TeamMatchFactors, "condition"> | null = null;
     const chanceProb = calcChanceProb(attacking, defending, weather, attackForm, ref, {
       attacking: yellowCards, defending: yellowCards,
-    }, config.pitchCondition, config.pitchMoisture);
+    }, config.pitchCondition, config.pitchMoisture, (s) => { chanceSample = s; });
     // Reduce chance probability when condition is low
     // Low condition has significant impact — floor at 0.45
     const conditionMod = Math.max(0.45, teamAvg(attacking.lineup, "condition") / 100);
+    if (chanceSample) addSample(isHomePossession ? homeFactors : awayFactors, { ...(chanceSample as Omit<TeamMatchFactors, "condition">), condition: conditionMod });
     const adjustedChanceProb = chanceProb * conditionMod;
 
     if (rng.random() < adjustedChanceProb) {
@@ -1756,5 +1770,6 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
     possessionHome,
     refereeIncidents,
     refereeGrade,
+    factors: { home: finalizeFactors(homeFactors), away: finalizeFactors(awayFactors) },
   };
 }
