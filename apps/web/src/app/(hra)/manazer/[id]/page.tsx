@@ -13,7 +13,7 @@ import { CoachKabinaTab } from "@/components/manager/CoachKabinaTab";
 import { CoachEducationTab } from "@/components/manager/CoachEducationTab";
 import { FamilyCard, RelationCard, RelationsOverview } from "@/components/relations/RelationSection";
 import { isLightColor, bestTextOn } from "@/lib/team-color";
-import { coachAttributeEffects, licenceCap, LICENCE_LEVELS } from "@okresni-masina/shared";
+import { coachAttributeEffects, coachTags, licenceCap, LICENCE_LEVELS } from "@okresni-masina/shared";
 import { LicenceBadge } from "@/components/manager/LicenceBadge";
 import { CoachName } from "@/components/manager/coach-name";
 
@@ -331,6 +331,34 @@ export default function ManagerDetailPage() {
         />
 
         {/* ═══ Přehled: vlastnosti, informace, bio ═══ */}
+        {tab === "prehled" && (() => {
+          // Štítky trenéra jako u hráčů: výrazné stránky z vlastností, popis = skutečný účinek.
+          const tags = coachTags({
+            coaching: manager.coaching ?? 40, motivation: manager.motivation ?? 40, tactics: manager.tactics ?? 40,
+            youthDevelopment: manager.youthDevelopment ?? 40, discipline: manager.discipline ?? 40,
+            reputation: manager.reputation ?? 30, licence: manager.licenceLevel ?? 0,
+          });
+          if (tags.length === 0) return null;
+          const COLORS: Record<string, string> = {
+            green: "bg-pitch-50 text-pitch-600 border-pitch-200",
+            gold: "bg-amber-50 text-amber-700 border-amber-200",
+            red: "bg-red-50 text-card-red border-red-200",
+            blue: "bg-blue-50 text-blue-700 border-blue-200",
+            purple: "bg-purple-50 text-purple-700 border-purple-200",
+            muted: "bg-gray-50 text-muted border-gray-200",
+          };
+          return (
+            <div className="flex flex-wrap gap-2 mb-4">
+              {tags.map((t) => (
+                <div key={t.key} title={t.description}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-sm font-heading font-bold ${COLORS[t.color] ?? COLORS.muted}`}>
+                  <span>{t.emoji}</span>
+                  <span>{t.label}</span>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
         {tab === "prehled" && (
           <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-5">
 
