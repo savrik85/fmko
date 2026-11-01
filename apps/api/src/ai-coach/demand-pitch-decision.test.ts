@@ -25,10 +25,12 @@ describe("hráči nabídnutí k poptávce: meze kódu", () => {
     const o = pitchOptions([
       candidate({ pitchId: "ok" }),
       candidate({ pitchId: "misfit", fits: false }),
-      // Strop pod 90 % tržní hodnoty: nabídka by urážela.
-      candidate({ pitchId: "pricey", maxPrice: 17_000 }),
+      // Strop pod 70 % tržní hodnoty: ani první nabídka by nešla.
+      candidate({ pitchId: "pricey", maxPrice: 13_900, openingBid: 13_900 }),
+      // Strop poptávky pod tržní hodnotou nevadí: od 70 % do stropu (dřív filtr „aspoň 90 %“ hráče vyřadil).
+      candidate({ pitchId: "cheap", maxPrice: 16_000, openingBid: 14_000 }),
     ], 2, 100_000);
-    expect(o.eligible).toEqual([{ pitchId: "ok", min: 14_000, max: 26_000 }]);
+    expect(o.eligible).toEqual([{ pitchId: "ok", min: 14_000, max: 26_000 }, { pitchId: "cheap", min: 14_000, max: 16_000 }]);
     expect(o.slots).toBe(2);
     // Strop nikdy nad peníze nad rezervou.
     expect(pitchOptions([candidate({ pitchId: "ok" })], 2, 22_050).eligible[0].max).toBe(22_000);

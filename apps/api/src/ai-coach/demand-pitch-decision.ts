@@ -15,9 +15,13 @@ import type { AiCoachProfile } from "./profile";
 import { MIN_PRICE } from "./valuation";
 import { styleText } from "./weekly-decision";
 
-/** Na hráče, za kterého AI nedá aspoň 90 % tržní hodnoty, nabídku neposílá (byla by urážka). */
-export const MIN_MAX_TO_VALUE = 0.9;
-/** Nejnižší nabídka na nabídnutého hráče: 70 % tržní hodnoty, jako dno první nabídky (`openingBid`). */
+/**
+ * Nejnižší nabídka na nabídnutého hráče: 70 % tržní hodnoty, jako dno první nabídky (`openingBid`).
+ * Je to i jediná podmínka ceny: na koho AI má aspoň tolik, toho vzít smí. Strop poptávky je
+ * veřejný, hráče k ní nabízí manažer, který ho zná. Dřív navíc platilo „strop aspoň 90 % tržní
+ * hodnoty“, jenže nákupní strop AI bývá 0,8–1,0× hodnoty a strop poptávky se počítá z hráče
+ * o dva body nad minimem: na produ 12 nabídnutých hráčů, 12 odmítnutých kódem, model nerozhodl nic.
+ */
 export const MIN_OFFER_TO_VALUE = 0.7;
 
 const floor100 = (v: number) => Math.floor(v / 100) * 100;
@@ -68,7 +72,7 @@ export function pitchOptions(candidates: PitchCandidate[], slots: number, budget
   const eligible: PitchBounds[] = [];
   for (const c of candidates) {
     if (!c.fits) continue;
-    if (c.maxPrice < MIN_PRICE || c.maxPrice < c.marketValue * MIN_MAX_TO_VALUE || c.openingBid > c.maxPrice) continue;
+    if (c.maxPrice < MIN_PRICE || c.openingBid > c.maxPrice) continue;
     const min = Math.max(MIN_PRICE, floor100(c.marketValue * MIN_OFFER_TO_VALUE));
     const max = floor100(Math.min(c.maxPrice, budget));
     if (min <= max) eligible.push({ pitchId: c.pitchId, min, max });
