@@ -70,7 +70,11 @@ export default function NovaSezonaPage() {
 
         {data.cup && (
           <div className="bg-white/10 rounded-xl p-4 mb-6 text-sm leading-relaxed">
-            <span className="font-heading font-bold">🏆 {data.cup.name}</span>: tvoje síla <b>{data.cup.myStrength ?? "?"}</b>, velkokluby z měst mají <b>{data.cup.bigMin}–{data.cup.bigMax}</b>. V 1. kole na velkoklub nenarazíš, máš šanci projít.
+            {/* Od 3. sezóny hrají pohár jen skutečné kluby: dřív tu stálo „velkokluby mají 0–0“. */}
+            <span className="font-heading font-bold">🏆 {data.cup.name}</span>: tvoje síla <b>{data.cup.myStrength ?? "?"}</b>, průměrný klub v poháru <b>{data.cup.realAvg}</b>.
+            {data.cup.bigMax > 0
+              ? <> Hrají i velkokluby z měst, mají sílu <b>{data.cup.bigMin}–{data.cup.bigMax}</b>.</>
+              : <> Velkokluby z měst letos nehrají, jen kluby ze soutěží.</>}
           </div>
         )}
 
