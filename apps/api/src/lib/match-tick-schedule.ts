@@ -35,13 +35,25 @@ export function pragueHour(at: Date = new Date()): number | null {
  * `matches.created_at` napevno 16:00 UTC, hrají se ale s ligovým kolem, takže v zimě
  * Rozpis i Zápas ukazovaly 17:00. Bez známé pražské hodiny vrátí 16:00 UTC jako dřív.
  */
-export function pragueKickoffIso(day: string): string {
+export function pragueKickoffIso(day: string, hourInPrague: number = MATCH_HOUR_PRAGUE): string {
   const noon = new Date(`${day}T12:00:00.000Z`);
   if (Number.isNaN(noon.getTime())) return `${day}T16:00:00.000Z`;
   const hourAtNoon = pragueHour(noon);
   if (hourAtNoon === null) return `${day}T16:00:00.000Z`;
   const offsetHours = hourAtNoon - 12;
-  return new Date(noon.getTime() + (MATCH_HOUR_PRAGUE - 12 - offsetHours) * 3_600_000).toISOString();
+  return new Date(noon.getTime() + (hourInPrague - 12 - offsetHours) * 3_600_000).toISOString();
+}
+
+/** Pohár se hraje v poledne v Praze (index.ts pouští kolo ve 12:xx). */
+export const CUP_HOUR_PRAGUE = 12;
+
+/**
+ * Výkop pohárového zápasu. Kola se dřív ukládala na 16:00 UTC, takže Rozpis ukazoval
+ * 17:00/18:00, kdy bylo dávno dohráno. Platí i pro už uložená kola: bere se jen den.
+ */
+export function cupKickoffIso(scheduledAt: string | null | undefined): string | null {
+  if (!scheduledAt) return null;
+  return pragueKickoffIso(scheduledAt.slice(0, 10), CUP_HOUR_PRAGUE);
 }
 
 /**

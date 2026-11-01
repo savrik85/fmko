@@ -5,6 +5,7 @@
  * Silová simulace (bez sestav) s šancí na překvapení (giant-killing).
  */
 
+import { CUP_HOUR_PRAGUE, pragueKickoffIso } from "../lib/match-tick-schedule";
 import { createRng, type Rng } from "../generators/rng";
 import { logger } from "../lib/logger";
 import { experienceGainChance } from "../skills/training";
@@ -51,8 +52,7 @@ export async function cupRoundDates(db: D1Database, seasonNumber: number, totalR
     const frac = r / totalRounds; // r = totalRounds → 1.0 → konec ligy (finále)
     const d = new Date(startMs + frac * (endMs - startMs));
     while (d.getUTCDay() !== 6) d.setUTCDate(d.getUTCDate() + 1); // snap na sobotu (pohárový den)
-    d.setUTCHours(16, 0, 0, 0);
-    dates.push(d.toISOString());
+    dates.push(pragueKickoffIso(d.toISOString().slice(0, 10), CUP_HOUR_PRAGUE));
   }
   // Zajisti přísně rostoucí (snap mohl kola slepit) — posuň duplicity o týden.
   for (let i = 1; i < dates.length; i++) {

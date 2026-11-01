@@ -9,7 +9,7 @@ import { getSession, getTokenFromRequest } from "../auth/session";
 import { logger } from "../lib/logger";
 import { mustSeason } from "../lib/season";
 import { STAND_COLUMNS, standFacilities, type StandSide } from "../stadium/stands-model";
-import { pragueKickoffIso } from "../lib/match-tick-schedule";
+import { cupKickoffIso, pragueKickoffIso } from "../lib/match-tick-schedule";
 
 const matchesRouter = new Hono<{ Bindings: Bindings }>();
 
@@ -291,7 +291,7 @@ matchesRouter.get("/teams/:teamId/cup-preview/:cupMatchId", async (c) => {
     round: null,
     isCup: true,
     roundName: roundName(cm.round, cm.total_rounds),
-    scheduledAt: cm.scheduled_at,
+    scheduledAt: cupKickoffIso(cm.scheduled_at as string | null),
     isHome: home.ct.team_id === teamId,
     isLocalDerby: false,
     home: home.team,
@@ -555,7 +555,7 @@ matchesRouter.get("/teams/:teamId/schedule", async (c) => {
         awaySecondary: "#FFFFFF",
         awayBadge: "shield",
         awayScore: row.away_score as number | null,
-        scheduledAt: (row.scheduled_at as string | null) ?? "",
+        scheduledAt: cupKickoffIso(row.scheduled_at as string | null) ?? "",
         gameWeek: null,
         isFriendly: false,
         isCup: true,

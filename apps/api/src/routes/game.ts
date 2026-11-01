@@ -32,7 +32,7 @@ import { injuryPronenessOf } from "../injuries/proneness";
 import { isBodyType } from "../generators/physicals";
 import { MAX_ACTIVE_INSTALLMENT_DEALS, CPU_CLUB_ID, clubPrefixOf, sponsorWeeklyPayout, transferSchedule, termsFromRow, splitPlanByLineup, benchForLineup } from "@okresni-masina/shared";
 import { sendPhoneSMS } from "../messaging/phone-sms";
-import { pragueKickoffIso } from "../lib/match-tick-schedule";
+import { cupKickoffIso, pragueKickoffIso } from "../lib/match-tick-schedule";
 import {
   acceptListingBid, acceptTransferOffer, counterListingBid, counterTransferOffer, createTransferOffer, listPlayerOnMarket,
   onPlayerTransferred, placeListingBid, rejectListingBid, rejectTransferOffer, signFreeAgent, withdrawListing, withdrawTransferOffer,
@@ -3568,7 +3568,7 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
           match = cupM;
           isCup = true;
           calendarId = cupM.id as string;
-          scheduledAt = cupM.scheduled_at as string | null;
+          scheduledAt = cupKickoffIso(cupM.scheduled_at as string | null);
           const { roundName } = await import("../cup/cup");
           cupRoundName = roundName(cupM.round as number, cupM.total_rounds as number);
         } else {
@@ -3653,7 +3653,7 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
         match = nextCup;
         isCup = true;
         calendarId = nextCup.id as string;
-        scheduledAt = nextCup.scheduled_at as string | null;
+        scheduledAt = cupKickoffIso(nextCup.scheduled_at as string | null);
         const { roundName } = await import("../cup/cup");
         cupRoundName = roundName(nextCup.round as number, nextCup.total_rounds as number);
       } else if (leagueCand) {
@@ -3902,7 +3902,7 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
         upcomingMatches.push({
           calendarId: u.id as string,
           gameWeek: null,
-          scheduledAt: (u.scheduled_at as string | null) ?? "",
+          scheduledAt: cupKickoffIso(u.scheduled_at as string | null) ?? "",
           opponentName: (isHome ? u.away_name : u.home_name) as string,
           isHome,
           hasLineup: (u.has_lineup as number) > 0,

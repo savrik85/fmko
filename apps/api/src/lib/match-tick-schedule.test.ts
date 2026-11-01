@@ -79,3 +79,12 @@ describe("pragueKickoffIso — přátelák v 18:00 pražského času", () => {
     expect(pragueKickoffIso("bez-data")).toBe("bez-dataT16:00:00.000Z");
   });
 });
+
+describe("výkop poháru v poledne v Praze", () => {
+  it("uložené 16:00 UTC i nové kolo ukáže 12:00 pražského času", async () => {
+    const { cupKickoffIso } = await import("./match-tick-schedule");
+    expect(cupKickoffIso("2026-11-07T16:00:00.000Z")).toBe("2026-11-07T11:00:00.000Z");
+    expect(cupKickoffIso("2026-07-11T16:00:00.000Z")).toBe("2026-07-11T10:00:00.000Z");
+    expect(cupKickoffIso(null)).toBeNull();
+  });
+});
