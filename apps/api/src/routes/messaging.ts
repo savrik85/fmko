@@ -447,9 +447,11 @@ messagingRouter.post("/teams/:teamId/conversations/:convId/voice-note", async (c
 messagingRouter.post("/teams/:teamId/player-conversation/:playerId", async (c) => {
   const teamId = c.req.param("teamId");
   const playerId = c.req.param("playerId");
+  // Hráč áčka nebo U21 téhož klubu: telefon má trenér jeden, U21 kluci v něm taky jsou.
   const player = await c.env.DB.prepare(
-    "SELECT id, first_name, last_name, nickname, avatar FROM players WHERE id = ? AND team_id = ?"
-  ).bind(playerId, teamId).first<Record<string, unknown>>()
+    `SELECT id, first_name, last_name, nickname, avatar FROM players
+      WHERE id = ? AND (team_id = ? OR team_id IN (SELECT id FROM teams WHERE parent_team_id = ? AND team_type = 'u21'))`
+  ).bind(playerId, teamId, teamId).first<Record<string, unknown>>()
     .catch((e) => { logger.warn({ module: "messaging" }, "load player for conversation", e); return null; });
   if (!player) return c.json({ error: "Hráč nenalezen" }, 404);
 
