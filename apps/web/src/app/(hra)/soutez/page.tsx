@@ -279,18 +279,24 @@ export default function SoutezPage() {
     () => proposals.filter((p) => p.status !== "open" && p.gesce === gesce), [proposals, gesce]);
   const openAll = useMemo(() => proposals.filter((p) => p.status === "open"), [proposals]);
 
+  // Člen grémia (činná funkce) limit nemá, zrcadlí holdsActiveOffice() na serveru.
+  const holdsOffice = useMemo(
+    () => !!state?.officials.find((o) => o.teamId === teamId && o.status === "active"),
+    [state, teamId]);
+
   // Limit je per odbor: v každém můžeš mít jeden rozjednaný návrh. Tlačítko
   // proto mizí jen v tom odboru, kde už návrh visí — jinde zůstává.
   // Odvolání předsedy se nepočítá, klub si ho nevybral (zakládá ho pozastavení
   // pravomoci a je vedené na prezidenta).
   const myOpenByGesce = useMemo(() => {
     const m: Record<string, { title: string }> = {};
+    if (holdsOffice) return m;
     for (const p of openAll) {
       if (p.proposedByTeamId !== teamId || p.kind === "recall") continue;
       if (!m[p.gesce]) m[p.gesce] = { title: p.title };
     }
     return m;
-  }, [openAll, teamId]);
+  }, [openAll, teamId, holdsOffice]);
 
   const isChair = useMemo(
     () => !!state?.officials.find((o) => o.role === "disciplinarni" && o.teamId === teamId && o.status === "active"),
