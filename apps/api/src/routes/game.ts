@@ -872,6 +872,35 @@ gameRouter.get("/teams/:teamId/wages", async (c) => {
 });
 
 
+// GET /api/teams/:id/player-form — forma hráčů klubu −1 až +1 (engine/form.ts), pro štítek v sestavě.
+// Dřív forma hýbala zápasem o ±10 %, ale nikde nebyla vidět.
+gameRouter.get("/teams/:teamId/player-form", async (c) => {
+  const teamId = c.req.param("teamId");
+  const denied = await requireOwnedTeamRead(c, teamId);
+  if (denied) return denied;
+  const { FORM_BASELINE, playerFormFromRatings } = await import("../engine/form");
+  const rows = await c.env.DB.prepare(
+    `SELECT player_id, rating FROM (
+       SELECT s.player_id, s.rating, ROW_NUMBER() OVER (PARTITION BY s.player_id ORDER BY s.created_at DESC) AS rn
+         FROM match_player_stats s
+        WHERE s.minutes_played >= 20
+          AND s.player_id IN (SELECT id FROM players WHERE team_id IN (SELECT id FROM teams WHERE id = ?1 OR parent_team_id = ?1))
+     ) WHERE rn <= ${FORM_BASELINE} ORDER BY player_id, rn`,
+  ).bind(teamId).all<{ player_id: string; rating: number }>()
+    .catch((e) => { logger.warn({ module: "game" }, "forma hráčů", e); return { results: [] as Array<{ player_id: string; rating: number }> }; });
+  const byPlayer = new Map<string, number[]>();
+  for (const r of rows.results) {
+    const list = byPlayer.get(r.player_id);
+    if (list) list.push(r.rating); else byPlayer.set(r.player_id, [r.rating]);
+  }
+  const forms: Record<string, number> = {};
+  for (const [id, ratings] of byPlayer) {
+    const f = playerFormFromRatings(ratings);
+    if (f !== 0) forms[id] = Math.round(f * 100) / 100;
+  }
+  return c.json({ forms });
+});
+
 // GET /api/teams/:id/pending-decisions — kolik rozhodnutí s termínem čeká (odznaky Události a Obec v menu)
 gameRouter.get("/teams/:teamId/pending-decisions", async (c) => {
   const teamId = c.req.param("teamId");
