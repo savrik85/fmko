@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createRng } from "../generators/rng";
-import { cupBracketPlan, cupPrize, pickByeTeamIds, roundName, secondRoundOrder } from "./cup";
+import { cupBracketPlan, cupPrize, firstRoundOrder, guestCount, guestTeams, pickByeTeamIds, roundName, secondRoundOrder } from "./cup";
 
 describe("pohár jen ze skutečných týmů", () => {
   it("56 týmů: pavouk 64, 6 kol, 8 volných losů", () => {
@@ -58,6 +58,36 @@ describe("volný los losem, ne podle síly", () => {
     // Podle síly by to bylo 200 × 8 = 1600. Losem ~ 200 × 8 × 8/56 ≈ 229.
     expect(strongest).toBeLessThan(400);
     expect(counts.size).toBeGreaterThan(50);
+  });
+});
+
+describe("hosté doplní pavouk, ať 1. kolo hrají všichni", () => {
+  it("56 klubů: 8 hostů do 64; velká mezera se nedoplňuje (volné losy losem)", () => {
+    expect(guestCount(56)).toBe(8);
+    expect(guestCount(64)).toBe(0);
+    expect(guestCount(40)).toBe(0); // chybí 24, to by byla třetina pole cizích
+    expect(guestCount(30)).toBe(2);
+  });
+
+  it("hosté mají různá jména a sílu kolem průměru poháru", () => {
+    const g = guestTeams(8, 48.7, createRng(5));
+    expect(new Set(g.map((t) => t.name)).size).toBe(8);
+    for (const t of g) {
+      expect(t.team_id).toBeNull();
+      expect(Math.abs(t.strength - 49)).toBeLessThanOrEqual(3);
+    }
+  });
+
+  it("každý host hraje venku u skutečného klubu, hosté se nepotkají, všichni hrají jednou", () => {
+    const real = Array.from({ length: 56 }, (_, i) => `r${i}`);
+    const guests = Array.from({ length: 8 }, (_, i) => `g${i}`);
+    const order = firstRoundOrder(real, guests, createRng(11));
+    expect(order).toHaveLength(64);
+    expect(new Set(order).size).toBe(64);
+    for (let i = 0; i < order.length; i += 2) {
+      expect(order[i].startsWith("r")).toBe(true); // domácí je vždy skutečný klub
+    }
+    expect(order.filter((x, i) => i % 2 === 1 && x.startsWith("g"))).toHaveLength(8);
   });
 });
 
