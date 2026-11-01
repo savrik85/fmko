@@ -51,11 +51,16 @@ describe("registrační lhůta levně získaného hráče", () => {
     expect(await registrationLockedUntil(db, "old", NOW)).toBeNull();
   });
 
-  it("koupený, vlastní odchovanec ani hráč z dřívější smlouvy lhůtu nemají", async () => {
+  it("koupený, hráč původního kádru ani hráč z dřívější smlouvy lhůtu nemají", async () => {
     await signed("bought", "transfer", "2026-10-31T16:00:00.000Z");
-    await signed("youth", "youth", "2026-10-31 15:16:53");
+    await signed("original", "generated", "2026-10-31 15:16:53");
     await signed("gone", "friend", "2026-10-31 07:33:20", 0);
-    expect(await registrationLockError(db, ["bought", "youth", "gone"], NOW)).toBeNull();
+    expect(await registrationLockError(db, ["bought", "original", "gone"], NOW)).toBeNull();
+  });
+
+  it("tip na mladého hráče za 500 Kč (`youth`) lhůtu má, i když se zapisuje jako odchovanec", async () => {
+    await signed("tip-youth", "youth", "2026-10-31 15:16:53");
+    expect(await registrationLockedUntil(db, "tip-youth", NOW)).toBe("2026-11-14T15:16:53Z");
   });
 
   it("ve výměně se ozve první hráč v lhůtě", async () => {

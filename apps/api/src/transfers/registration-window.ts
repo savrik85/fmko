@@ -6,7 +6,7 @@
  * za 287 tis. Kč, 14 z nich do 14 dnů, hráči z hospody průměrně po 1,8 dne.
  *
  * Lhůta platí pro prodej, výměnu i hostování (i poplatek za hostování je výdělek).
- * Hráče koupené přestupem ani vlastní odchovance se netýká.
+ * Hráčů koupených přestupem ani původního kádru se netýká.
  */
 
 import { logger } from "../lib/logger";
@@ -16,8 +16,12 @@ const M = "registration-window";
 /** Kolik dní po příchodu nejde levně získaného hráče prodat ani vyměnit. */
 export const REGISTRATION_DAYS = 14;
 
-/** Příchody za pár stovek (`player_contracts.join_type`). */
-export const CHEAP_JOIN_TYPES = ["free_agent", "pub", "friend", "recommendation"] as const;
+/**
+ * Příchody za pár stovek (`player_contracts.join_type`). Tip na mladého hráče se zapisuje
+ * jako `youth`, stejně jako odchovanec z akademie: rozlišit je nejde, takže lhůtu má i čerstvý
+ * odchovanec (ten se stejně hned neprodává).
+ */
+export const CHEAP_JOIN_TYPES = ["free_agent", "pub", "friend", "recommendation", "youth"] as const;
 
 const CHEAP_IN = CHEAP_JOIN_TYPES.map((t) => `'${t}'`).join(", ");
 
