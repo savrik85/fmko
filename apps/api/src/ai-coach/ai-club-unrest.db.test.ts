@@ -38,7 +38,9 @@ const DAY_MS = 86_400_000;
 const NOW = new Date("2026-11-02T11:30:00.000Z");
 const GAME_DAY = "2026-11-02";
 const GRAFENAU = JSON.stringify({ name: "SV Grafenau", rating: 60, country: "DE" });
-const FUTURE = new Date(NOW.getTime() + 2 * DAY_MS).toISOString();
+// Přijetí nabídky porovnává platnost se skutečným časem, ne s NOW testu. Od pevného
+// data by test po dvou dnech začal padat, proto platnost běží od pozdějšího z obou časů.
+const FUTURE = new Date(Math.max(NOW.getTime(), Date.now()) + 2 * DAY_MS).toISOString();
 
 /** Kádr áčka: 18 hráčů, `weak` (MID 20) se do základu jinak nedostane. */
 const SQUAD: Array<[string, string, number, number]> = [
