@@ -54,6 +54,31 @@ export interface QualityInput {
   /** Trenérova (manažerova) dovednost „mládež“ 0–100. */
   managerYouth: number;
   squadSize: number;
+  /** Úrovně klubového vybavení 0–3, které využívají i žáci (Vybavení). */
+  equipment?: YouthEquipment;
+}
+
+/** Klubové vybavení, které pomáhá žákům: míče, tréninkové pomůcky, zimní výbava, dodávka. */
+export interface YouthEquipment {
+  balls: number;
+  training_cones: number;
+  winter_gear: number;
+  team_van: number;
+}
+
+/** Co které vybavení žákům dá (do UI slovy, do výpočtu `equipmentQualityBonus`, `quitChance`). */
+export const YOUTH_EQUIPMENT: { key: keyof YouthEquipment; label: string; effect: string }[] = [
+  { key: "balls", label: "Míče", effect: "víc míčů, víc kontaktů s míčem: kluci rostou rychleji" },
+  { key: "training_cones", label: "Tréninkové pomůcky", effect: "kužely, branky, žebříky: lepší trénink" },
+  { key: "winter_gear", label: "Zimní výbava", effect: "trénují i v zimě" },
+  { key: "team_van", label: "Klubová dodávka", effect: "odvoz na zápasy: méně kluků skončí" },
+];
+
+/** Bonus ke kvalitě přípravy z vybavení: míče a pomůcky po 0,03 za úroveň, zimní výbava 0,03. */
+export function equipmentQualityBonus(e: YouthEquipment | undefined): number {
+  if (!e) return 0;
+  const lvl = (n: number) => Math.max(0, Math.min(3, n || 0));
+  return 0.03 * (lvl(e.balls) + lvl(e.training_cones) + lvl(e.winter_gear));
 }
 
 /**
@@ -68,7 +93,7 @@ export function programQuality(i: QualityInput): number {
   else if (i.coach === "parent") base = 0.6;
   else return 0;
   const manager = (Math.max(0, Math.min(100, i.managerYouth)) / 100) * 0.15;
-  const q = base + manager;
+  const q = base + manager + equipmentQualityBonus(i.equipment);
   return i.squadSize < MIN_SQUAD ? q * 0.5 : q;
 }
 
@@ -103,11 +128,15 @@ export function estimatedTalent(talent: number, age: number, offset: number, sta
   return Math.max(0, Math.min(100, Math.round(talent + offset * base * sharp)));
 }
 
+/**
+ * Slova trenéra podle odhadu talentu. Hranice sedí na rozložení talentu z generátoru:
+ * běžný kluk z obce má kolem 20 (`generateHiddenTalent`), klenot 70–95.
+ */
 export function verdictText(estimate: number): string {
   if (estimate >= 70) return "Takovýho kluka tu dlouho nebylo. Z toho může být hvězda okresu.";
-  if (estimate >= 50) return "Má na krajskej přebor, když vydrží.";
-  if (estimate >= 35) return "Do áčka se dostane, na to vemte jed.";
-  if (estimate >= 20) return "Na béčko nebo lavičku áčka.";
+  if (estimate >= 45) return "Má na krajskej přebor, když vydrží.";
+  if (estimate >= 25) return "Do áčka se dostane, na to vemte jed.";
+  if (estimate >= 12) return "Na béčko nebo lavičku áčka.";
   return "Spíš pro radost, ale kluk dobrej.";
 }
 
@@ -120,7 +149,7 @@ export function commitmentText(commitment: number): string {
 /** Do dorostu o kategorii výš smí kluk od 13 let (starší žák v mladším dorostu). */
 export const PLAY_UP_AGE = 13;
 /** Od jakého odhadu trenér sám doporučí, aby kluk hrál o kategorii výš. */
-export const PLAY_UP_ESTIMATE = 50;
+export const PLAY_UP_ESTIMATE = 45;
 
 export function canPlayUp(age: number): boolean {
   return age >= PLAY_UP_AGE;
@@ -143,8 +172,8 @@ export const QUIT_BASE = 0.08;
 export const QUIT_NO_COMPETITION = 0.15;
 export const QUIT_NO_COACH = 0.10;
 
-export function quitChance(commitment: number, playsCompetition: boolean, hasCoach: boolean): number {
-  let chance = QUIT_BASE;
+export function quitChance(commitment: number, playsCompetition: boolean, hasCoach: boolean, vanLevel = 0): number {
+  let chance = QUIT_BASE - 0.02 * Math.max(0, Math.min(3, vanLevel));
   if (!playsCompetition) chance += QUIT_NO_COMPETITION;
   if (!hasCoach) chance += QUIT_NO_COACH;
   if (commitment < 40) chance += 0.15;
@@ -203,4 +232,61 @@ export function qualityText(q: number, coach: CoachType | null): string {
   if (q >= 0.8) return "Slušná příprava.";
   if (q >= 0.55) return "Příprava na koleně.";
   return "Kluci spíš jen kopou do míče.";
+}
+
+/** Kam to kluk dotáhne: stupnice potenciálu (odhad talentu 0–100) slovy. */
+export const POTENTIAL_SCALE: { from: number; label: string }[] = [
+  { from: 0, label: "pro radost" },
+  { from: 12, label: "béčko" },
+  { from: 25, label: "áčko" },
+  { from: 45, label: "krajský přebor" },
+  { from: 70, label: "hvězda okresu" },
+];
+
+/** Rozpětí trenérova odhadu: čím mladší kluk a horší úsudek, tím širší. */
+export function estimateRange(estimate: number, age: number, staffJudgement: number | null): { low: number; high: number } {
+  const sharp = staffJudgement === null ? 1 : 1 - (Math.max(0, Math.min(20, staffJudgement)) / 20) * 0.5;
+  const spread = Math.max(6, Math.max(0, 16 - age) * 5 * sharp);
+  return { low: Math.max(0, Math.round(estimate - spread)), high: Math.min(100, Math.round(estimate + spread)) };
+}
+
+/** Silné a slabé stránky slovy podle dovedností, které ke kluku patří na jeho pozici. */
+const SKILL_WORDS: Record<string, { strong: string; weak: string }> = {
+  speed: { strong: "rychlý", weak: "pomalý" },
+  shooting: { strong: "dobrý střelec", weak: "neumí vystřelit" },
+  heading: { strong: "hlavičkář", weak: "nehlavičkuje" },
+  technique: { strong: "míč ho poslouchá", weak: "technicky těžkopádný" },
+  creativity: { strong: "vymyslí něco navíc", weak: "hraje jednoduše" },
+  stamina: { strong: "vydrží běhat celý zápas", weak: "brzo dojde" },
+  strength: { strong: "silový, nedá se odstrčit", weak: "slabý do soubojů" },
+  passing: { strong: "dobrá přihrávka", weak: "přihrávky mu utíkají" },
+  vision: { strong: "vidí hřiště", weak: "hraje se sklopenou hlavou" },
+  defense: { strong: "dobře brání", weak: "dozadu moc nechodí" },
+  goalkeeping: { strong: "skvělé reflexy", weak: "v bráně nejistý" },
+};
+
+const POSITION_SKILLS: Record<string, string[]> = {
+  GK: ["goalkeeping", "strength", "passing", "vision"],
+  DEF: ["defense", "heading", "strength", "speed", "passing", "stamina"],
+  MID: ["passing", "vision", "technique", "creativity", "stamina", "speed", "shooting"],
+  FWD: ["shooting", "speed", "heading", "technique", "creativity", "strength"],
+};
+
+/** Dvě nejlepší a jedna nejslabší dovednost kluka na jeho pozici, slovy. */
+export function strengthsOf(position: string, skills: Record<string, number>): { strengths: string[]; weakness: string | null } {
+  const keys = (POSITION_SKILLS[position] ?? POSITION_SKILLS.MID).filter((k) => typeof skills[k] === "number");
+  if (keys.length < 3) return { strengths: [], weakness: null };
+  const sorted = [...keys].sort((a, b) => skills[b] - skills[a]);
+  return {
+    strengths: sorted.slice(0, 2).map((k) => SKILL_WORDS[k]?.strong).filter((x): x is string => !!x),
+    weakness: SKILL_WORDS[sorted[sorted.length - 1]]?.weak ?? null,
+  };
+}
+
+/** Jak dobrý je trenér mládeže z trhu, slovy podle efektivity v roli (0–20). */
+export function staffQualityText(effectiveness: number): string {
+  if (effectiveness >= 15) return "výborný, kluky posune nejvíc";
+  if (effectiveness >= 11) return "dobrý";
+  if (effectiveness >= 7) return "průměrný";
+  return "slabší";
 }

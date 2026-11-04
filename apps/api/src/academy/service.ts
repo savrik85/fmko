@@ -20,7 +20,8 @@ import {
   type CoachType, YOUNGEST_AGE, OLDEST_AGE, MIN_SQUAD, UPKEEP_WEEKLY, VOLUNTEER_MIN_AGE, expectedKidsPerYear, rollKids,
   programQuality, weeklyProgress, estimatedTalent, verdictText, commitmentText, canPlayUp, recommendsPlayUp,
   REOFFER_DAYS, firstOfferDay, quitChance, talentShiftAt13, pickTraits, positionVisible, GRADUATE_WAGE_FACTOR,
-  youthTransferFee, distanceKm, qualityText, PLAY_UP_ESTIMATE,
+  youthTransferFee, distanceKm, qualityText, PLAY_UP_ESTIMATE, estimateRange, strengthsOf, staffQualityText,
+  YOUTH_EQUIPMENT, POTENTIAL_SCALE, type YouthEquipment,
 } from "./rules";
 
 const M = "academy";
@@ -129,6 +130,14 @@ async function loadVolunteer(db: D1Database, teamId: string, playerId: string | 
   return { name: `${row.first_name} ${row.last_name}`, leadership: parseJson<{ leadership?: number }>(row.personality, {}, "personality").leadership ?? 40 };
 }
 
+/** Úrovně klubového vybavení, které využívají i žáci (tabulka `equipment`). */
+async function loadYouthEquipment(db: D1Database, teamId: string): Promise<YouthEquipment> {
+  const row = await db.prepare("SELECT balls, training_cones, winter_gear, team_van FROM equipment WHERE team_id = ?")
+    .bind(teamId).first<YouthEquipment>()
+    .catch((e) => { logger.warn({ module: M, teamId }, "load youth equipment", e); return null; });
+  return { balls: row?.balls ?? 0, training_cones: row?.training_cones ?? 0, winter_gear: row?.winter_gear ?? 0, team_van: row?.team_van ?? 0 };
+}
+
 interface CoachState {
   type: CoachType | null;
   name: string | null;
@@ -140,18 +149,19 @@ interface CoachState {
 /** Kdo žáky vede a jak dobrá je příprava. Trenér, který zmizel (hráč odešel, zaměstnanec skončil), se nepočítá. */
 async function coachState(db: D1Database, club: ClubRow, squadSize: number): Promise<CoachState> {
   const managerYouth = await loadManagerYouth(db, club.id);
+  const equipment = await loadYouthEquipment(db, club.id);
   const type = club.academy_coach_type as CoachType | null;
   if (type === "staff") {
     const staff = await loadStaffYouthCoach(db, club.id);
     if (staff) {
       return { type, name: staff.name, judgement: staff.judgement,
-        quality: programQuality({ coach: type, staffEffectiveness: staff.effectiveness, managerYouth, squadSize }) };
+        quality: programQuality({ coach: type, staffEffectiveness: staff.effectiveness, managerYouth, squadSize, equipment }) };
     }
   } else if (type === "volunteer") {
     const v = await loadVolunteer(db, club.id, club.academy_coach_player_id);
-    if (v) return { type, name: v.name, judgement: null, quality: programQuality({ coach: type, volunteerLeadership: v.leadership, managerYouth, squadSize }) };
+    if (v) return { type, name: v.name, judgement: null, quality: programQuality({ coach: type, volunteerLeadership: v.leadership, managerYouth, squadSize, equipment }) };
   } else if (type === "parent" && club.academy_coach_name) {
-    return { type, name: club.academy_coach_name, judgement: null, quality: programQuality({ coach: type, managerYouth, squadSize }) };
+    return { type, name: club.academy_coach_name, judgement: null, quality: programQuality({ coach: type, managerYouth, squadSize, equipment }) };
   }
   return { type: null, name: null, judgement: null, quality: 0 };
 }
@@ -537,6 +547,7 @@ export async function seasonEndAcademy(db: D1Database, rng: Rng, teamId: string,
   const prospects = await activeProspects(db, teamId);
   const coach = await coachState(db, club, prospects.length);
   const playsCompetition = prospects.length >= MIN_SQUAD;
+  const vanLevel = (await loadYouthEquipment(db, teamId)).team_van;
   const u21 = await db.prepare("SELECT 1 AS ok FROM teams WHERE parent_team_id = ? AND team_type = 'u21'").bind(teamId).first<{ ok: number }>()
     .catch((e) => { logger.warn({ module: M, teamId }, "check u21", e); return null; });
 
@@ -553,7 +564,7 @@ export async function seasonEndAcademy(db: D1Database, rng: Rng, teamId: string,
       else if (res.ok) promoted.push(name);
       continue;
     }
-    if (rng.random() < quitChance(p.commitment, playsCompetition, coach.type !== null)) {
+    if (rng.random() < quitChance(p.commitment, playsCompetition, coach.type !== null, vanLevel)) {
       const res = await db.prepare("UPDATE youth_prospects SET status = 'quit', left_at = ?, next_offer_on = NULL WHERE id = ? AND status = 'active'").bind(day(gameDate), p.id).run();
       if (res.meta.changes === 0) continue;
       await db.prepare("UPDATE player_offers SET status = 'expired' WHERE prospect_id = ? AND status = 'pending'").bind(p.id).run();
@@ -628,9 +639,16 @@ export async function loadAcademyView(db: D1Database, teamId: string) {
   const offered = new Set(pending.results.map((r) => r.prospect_id));
   const u21 = await db.prepare("SELECT 1 AS ok FROM teams WHERE parent_team_id = ? AND team_type = 'u21'").bind(teamId).first<{ ok: number }>()
     .catch((e) => { logger.warn({ module: M, teamId }, "check u21", e); return null; });
+  const equipment = await loadYouthEquipment(db, teamId);
+  const staffMarket = club.academy_upkeep && coach.type !== "staff" ? await youthCoachMarket(db, club) : [];
+  const profiles = new Map<string, { strengths: string[]; weakness: string | null }>();
+  for (const p of prospects) profiles.set(p.id, await prospectProfile(db, p, club));
 
   return {
     founded: !!club.academy_upkeep,
+    potentialScale: POTENTIAL_SCALE,
+    equipment: YOUTH_EQUIPMENT.map((e) => ({ ...e, level: equipment[e.key] ?? 0 })),
+    staffMarket,
     village: club.village_name,
     /** Kolik kluků obec dá na ročník, slovy počítá UI. */
     expectedPerYear: Math.round(expectedKidsPerYear(club.population ?? 0) * 10) / 10,
@@ -643,9 +661,17 @@ export async function loadAcademyView(db: D1Database, teamId: string) {
     nextSummer: prospects.filter((p) => p.age >= OLDEST_AGE).length,
     prospects: prospects.map((p) => {
       const estimate = estimatedTalent(p.hidden_talent, p.age, p.estimate_offset, coach.judgement);
+      const range = estimateRange(estimate, p.age, coach.judgement);
+      const profile = profiles.get(p.id);
       return {
         id: p.id, name: `${p.first_name} ${p.last_name}`, age: p.age,
-        position: positionVisible(p.age) ? p.position : null,
+        position: p.position,
+        /** U mladších žáků se pozice teprve hledá. */
+        positionSure: positionVisible(p.age),
+        strengths: coach.type ? profile?.strengths ?? [] : [],
+        weakness: coach.type ? profile?.weakness ?? null : null,
+        /** Trenérův odhad potenciálu 0–100 (v UI jen pás na slovní stupnici). Null bez trenéra. */
+        potential: coach.type ? { estimate, low: range.low, high: range.high } : null,
         traits: parseJson<string[]>(p.traits, [], "traits"),
         verdict: coach.type ? verdictText(estimate) : null,
         /** Trenér ho bere jako nadějného (doporučil by ho o kategorii výš). */
@@ -656,6 +682,54 @@ export async function loadAcademyView(db: D1Database, teamId: string) {
       };
     }),
   };
+}
+
+/**
+ * Silné a slabé stránky kluka: dovednosti, jaké by měl jako hráč (stejný generátor, pevné
+ * semínko kluka, ať se mezi načteními nemění).
+ */
+async function prospectProfile(db: D1Database, p: ProspectRow, club: ClubRow): Promise<{ strengths: string[]; weakness: string | null }> {
+  try {
+    const identity = await prospectIdentity(db, p.identity_seed, club, p.position);
+    identity.age = p.age;
+    const created = createPlayer(createRng(p.identity_seed ^ 0x5bd1e995), {
+      identity, position: p.position as "GK" | "DEF" | "MID" | "FWD", level: levelFromVillageSize(club.size),
+      academy: { current: Math.round(p.progress_current), cap: Math.round(p.progress_cap) + p.gem_cap, talent: [0, 0], gemChance: 0 },
+      hiddenTalent: p.hidden_talent,
+    });
+    return strengthsOf(p.position, created.skills);
+  } catch (e) {
+    logger.warn({ module: M, teamId: club.id }, "prospect profile", e);
+    return { strengths: [], weakness: null };
+  }
+}
+
+/** Volní trenéři mládeže z okresu, nejlepší v roli napřed (najímá se přes staff/hire). */
+async function youthCoachMarket(db: D1Database, club: ClubRow) {
+  type Row = StaffEffectRow & { id: string; first_name: string; last_name: string; age: number; weekly_wage: number; signing_fee: number; description: string | null };
+  const res = await db.prepare(
+    `SELECT id, role, coaching, medicine, maintenance, judgement, communication, work_rate, charm, first_name, last_name, age, weekly_wage, signing_fee, description
+       FROM staff_members WHERE district = ? AND team_id IS NULL`,
+  ).bind(club.district).all<Row>()
+    .catch((e) => { logger.warn({ module: M, teamId: club.id }, "youth coach market", e); return { results: [] as Row[] }; });
+  // Stejná podmínka licence jako při najímání (services/staff-hire.ts): kdo by pod trenérem
+  // bez papírů nešel, se ukáže s důvodem, ne až chybou po kliknutí.
+  const { requiredLicence, loadCoachLicence } = await import("../services/staff-hire");
+  const { licenceLabel } = await import("@okresni-masina/shared");
+  const licence = await loadCoachLicence(db, club.id);
+  return res.results
+    .map((r) => ({ r, eff: rowEffectiveness(r, "trener_mladeze") }))
+    .sort((a, b) => b.eff - a.eff)
+    .slice(0, 5)
+    .map(({ r, eff }) => {
+      const needed = requiredLicence(r);
+      return {
+        id: r.id, name: `${r.first_name} ${r.last_name}`, age: r.age, quality: staffQualityText(eff),
+        weeklyWage: r.weekly_wage, signingFee: r.signing_fee, description: r.description ?? "",
+        /** Proč ho najmout nejde (licence trenéra), null = jde. */
+        blockedReason: needed > 0 && licence < needed ? `Chce trenéra s licencí ${licenceLabel(needed)} nebo vyšší.` : null,
+      };
+    });
 }
 
 // ── AI kluby a přechod ze staré akademie ──────────────────────────────────────
