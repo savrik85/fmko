@@ -44,11 +44,11 @@ export const UPKEEP_PER_KID = 50;
  */
 export const ACADEMY_LEVELS = {
   modest: { label: "Skromná", base: 200, perKid: 30, growth: 0.7, quit: 0.06, attract: 0.8, poachBonus: -5,
-    text: "Jen to nejnutnější. Kluci rostou pomaleji a víc jich skončí." },
+    text: "Jen startovné a cesty na zápasy. Kluci rostou pomaleji a víc jich skončí." },
   standard: { label: "Běžná", base: UPKEEP_BASE, perKid: UPKEEP_PER_KID, growth: 1, quit: 0, attract: 1, poachBonus: 0,
-    text: "Dresy, míče, startovné a cesty na zápasy." },
+    text: "Startovné, cesty na zápasy a dresy pro žáky." },
   ambitious: { label: "Ambiciózní", base: 500, perKid: 90, growth: 1.45, quit: -0.05, attract: 1.3, poachBonus: 10,
-    text: "Letní soustředění, turnaje a lepší dresy. Kluci rostou rychleji, méně jich skončí a láká to i kluky odjinud." },
+    text: "Navíc letní soustředění a turnaje. Kluci rostou rychleji, méně jich skončí a láká to i kluky odjinud." },
 } as const;
 export type AcademyLevel = keyof typeof ACADEMY_LEVELS;
 
@@ -118,7 +118,7 @@ export interface YouthEquipment {
 
 /** Co které vybavení žákům dá (do UI slovy, do výpočtu `equipmentQualityBonus`, `quitChance`). */
 export const YOUTH_EQUIPMENT: { key: keyof YouthEquipment; label: string; effect: string }[] = [
-  { key: "balls", label: "Míče", effect: "víc míčů, víc kontaktů s míčem: kluci rostou rychleji" },
+  { key: "balls", label: "Míče", effect: "víc míčů na tréninku: kluci rostou rychleji" },
   { key: "training_cones", label: "Tréninkové pomůcky", effect: "kužely, branky, žebříky: lepší trénink" },
   { key: "winter_gear", label: "Zimní výbava", effect: "trénují i v zimě" },
   { key: "team_van", label: "Klubová dodávka", effect: "odvoz na zápasy: méně kluků skončí" },
