@@ -40,6 +40,8 @@ interface AcademyData {
   village: string;
   expectedPerYear: number;
   weeklyCost: number;
+  upkeepBase: number;
+  upkeepPerKid: number;
   minSquad: number;
   playsCompetition: boolean;
   hasU21: boolean;
@@ -190,7 +192,7 @@ export function AcademyCard({ teamId }: { teamId: string }) {
             ? ` Na okresní soutěž je potřeba ${data.minSquad} kluků, tolik jich obec sama nedá. Žáci budou jen trénovat.`
             : ` Na okresní soutěž (${data.minSquad} kluků) to stačí.`}
         </p>
-        <p className="text-sm text-muted">Provoz stojí {kc(data.weeklyCost)} týdně (dresy, míče, startovné, cesty). Pak vybereš trenéra.</p>
+        <p className="text-sm text-muted">Provoz stojí {kc(data.upkeepBase)} týdně a {kc(data.upkeepPerKid)} za každého kluka (dresy, startovné, míče, cesty na zápasy). Pak vybereš trenéra.</p>
         <button onClick={() => post("found", `/api/teams/${teamId}/academy/found`, undefined, "Akademii se nepodařilo založit")} disabled={busy !== null} className="btn btn-primary btn-md w-full sm:w-auto disabled:opacity-40">
           {busy === "found" ? "Zakládám…" : "Založit akademii"}
         </button>
@@ -253,7 +255,7 @@ export function AcademyCard({ teamId }: { teamId: string }) {
             <li>Potenciál kluka odhaduje trenér. U mladších se plete víc, u čtrnáctiletých míň, placený trenér mládeže nejmíň.</li>
             <li>Každé léto jdou čtrnáctiletí do {data.hasU21 ? "tvého dorostu (U21)" : "dorostu jiného klubu, ty dostaneš odstupné"}. {data.hasU21 ? "Nadějného kluka od 13 let ti trenér doporučí do dorostu dřív, dát ho tam můžeš i sám." : "Dřív to nejde, protože vlastní dorost nemáš."}</li>
             <li>Podle pravidel FAČR smí kluk do dorostu od 13 let, za muže (áčko) až od 15 let.</li>
-            <li>Provoz stojí {kc(data.weeklyCost)} týdně.</li>
+            <li>Provoz stojí {kc(data.upkeepBase)} týdně a {kc(data.upkeepPerKid)} za každého kluka.</li>
           </ul>
         </details>
       </section>
@@ -261,63 +263,6 @@ export function AcademyCard({ teamId }: { teamId: string }) {
       {!data.coach.type && (
         <p className="card p-4 text-sm border-l-4 border-gold-500 bg-gold-50" role="alert">Žáci nemají trenéra, takže netrénují a víc jich skončí. Vyber trenéra níž.</p>
       )}
-
-      <section className="space-y-3" aria-label="Kluci podle ročníků">
-        <h2 className="font-heading font-bold text-base px-1">Kluci podle ročníků</h2>
-        {data.prospects.length === 0 && <p className="card p-4 text-sm text-muted">Zatím tu nejsou žádní kluci. Noví přijdou v létě.</p>}
-        {AGE_GROUPS.map((g) => {
-          const kids = data.prospects.filter((p) => p.age === g.age);
-          if (kids.length === 0) return null;
-          const promisingCount = kids.filter((p) => p.promising).length;
-          return (
-            <details key={g.age} className="card overflow-hidden" open>
-              <summary className="bg-surface-2 px-3 py-2.5 cursor-pointer min-h-11 flex flex-wrap items-baseline justify-between gap-x-3">
-                <span className="text-sm font-heading font-bold"><span aria-hidden="true" className="mr-1.5 text-muted">▾</span>{g.label}</span>
-                <span className="text-xs text-muted">{boysText(kids.length)}{promisingCount ? `, nadějní ${promisingCount}` : ""}{g.note ? ` · ${g.note}` : ""}</span>
-              </summary>
-              <ul className="grid grid-cols-1 md:grid-cols-2 bg-white">
-                {kids.map((p) => (
-                  <li key={p.id} className="p-3 space-y-2 border-t border-gray-200 md:odd:border-r">
-                    <div className="flex items-center gap-3">
-                      {p.avatar && (
-                        <div className="shrink-0 w-12 h-12 rounded-full overflow-hidden bg-surface-2 flex items-center justify-center">
-                          <FaceAvatar faceConfig={p.avatar} size={40} />
-                        </div>
-                      )}
-                      <div className="min-w-0 flex-1 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                        <span className="font-heading font-bold text-ink">
-                          {p.name}
-                          {p.promising && <span className="ml-2 align-middle rounded-full bg-pitch-50 px-2 py-0.5 text-xs font-bold text-pitch-600">nadějný</span>}
-                        </span>
-                        <span className="text-sm text-ink">{p.age} let · {p.positionSure ? POSITION_CS[p.position] ?? p.position : `nejspíš ${POSITION_CS[p.position] ?? p.position}`}</span>
-                      </div>
-                    </div>
-                    {(p.strengths.length > 0 || p.weakness) && (
-                      <div className="flex flex-wrap gap-1.5">
-                        {p.strengths.map((s) => <span key={s} className="rounded-full bg-pitch-50 px-2 py-0.5 text-xs font-semibold text-pitch-600">{s}</span>)}
-                        {p.weakness && <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-muted">{p.weakness}</span>}
-                      </div>
-                    )}
-                    {p.potential && <PotentialBar potential={p.potential} scale={data.potentialScale} />}
-                    {p.verdict && <p className="text-sm text-ink">„{p.verdict}“</p>}
-                    <p className="text-xs text-muted">{p.traits.join(", ")}{p.traits.length ? " · " : ""}{p.mood}</p>
-                    {p.offered && <p className="text-sm text-muted">Trenér ho doporučil do dorostu, nabídku najdeš v Přestupy → Nabídky.</p>}
-                    {p.canPlayUp && (
-                      <button
-                        onClick={() => post(p.id, `/api/teams/${teamId}/academy/prospects/${p.id}/promote`, undefined, "Kluka se nepodařilo dát do dorostu")}
-                        disabled={busy !== null}
-                        className="btn btn-secondary min-h-11 px-3 disabled:opacity-40"
-                      >
-                        {busy === p.id ? "Pracuju…" : "Dát do dorostu hned"}
-                      </button>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </details>
-          );
-        })}
-      </section>
 
       <section className="card p-4 sm:p-5 space-y-3">
         <h2 className="font-heading font-bold text-base">Kde vzít nové kluky</h2>
@@ -328,7 +273,7 @@ export function AcademyCard({ teamId }: { teamId: string }) {
           ) : (
             <li>V okolí do 6 km není obec bez akademie, odkud by chodili další kluci.</li>
           )}
-          <li>Nadějné kluky můžeš přetáhnout z jiných klubů, viz níž.</li>
+          <li>Nadějné kluky můžeš přetáhnout z jiných klubů, hned pod tímhle.</li>
         </ul>
         <div className="rounded-soft border border-gray-200 bg-white p-3 space-y-2">
           <p className="text-sm"><strong className="font-heading text-ink">Náborový den ve škole</strong></p>
@@ -422,6 +367,63 @@ export function AcademyCard({ teamId }: { teamId: string }) {
         </section>
       )}
 
+      <section className="space-y-3" aria-label="Kluci podle ročníků">
+        <h2 className="font-heading font-bold text-base px-1">Kluci podle ročníků</h2>
+        {data.prospects.length === 0 && <p className="card p-4 text-sm text-muted">Zatím tu nejsou žádní kluci. Noví přijdou v létě.</p>}
+        {AGE_GROUPS.map((g) => {
+          const kids = data.prospects.filter((p) => p.age === g.age);
+          if (kids.length === 0) return null;
+          const promisingCount = kids.filter((p) => p.promising).length;
+          return (
+            <details key={g.age} className="card overflow-hidden" open>
+              <summary className="bg-surface-2 px-3 py-2.5 cursor-pointer min-h-11 flex flex-wrap items-baseline justify-between gap-x-3">
+                <span className="text-sm font-heading font-bold"><span aria-hidden="true" className="mr-1.5 text-muted">▾</span>{g.label}</span>
+                <span className="text-xs text-muted">{boysText(kids.length)}{promisingCount ? `, nadějní ${promisingCount}` : ""}{g.note ? ` · ${g.note}` : ""}</span>
+              </summary>
+              <ul className="grid grid-cols-1 md:grid-cols-2 bg-white">
+                {kids.map((p) => (
+                  <li key={p.id} className="p-3 space-y-2 border-t border-gray-200 md:odd:border-r">
+                    <div className="flex items-center gap-3">
+                      {p.avatar && (
+                        <div className="shrink-0 w-12 h-12 rounded-full overflow-hidden bg-surface-2 flex items-center justify-center">
+                          <FaceAvatar faceConfig={p.avatar} size={40} />
+                        </div>
+                      )}
+                      <div className="min-w-0 flex-1 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                        <span className="font-heading font-bold text-ink">
+                          {p.name}
+                          {p.promising && <span className="ml-2 align-middle rounded-full bg-pitch-50 px-2 py-0.5 text-xs font-bold text-pitch-600">nadějný</span>}
+                        </span>
+                        <span className="text-sm text-ink">{p.age} let · {p.positionSure ? POSITION_CS[p.position] ?? p.position : `nejspíš ${POSITION_CS[p.position] ?? p.position}`}</span>
+                      </div>
+                    </div>
+                    {(p.strengths.length > 0 || p.weakness) && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {p.strengths.map((s) => <span key={s} className="rounded-full bg-pitch-50 px-2 py-0.5 text-xs font-semibold text-pitch-600">{s}</span>)}
+                        {p.weakness && <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-muted">{p.weakness}</span>}
+                      </div>
+                    )}
+                    {p.potential && <PotentialBar potential={p.potential} scale={data.potentialScale} />}
+                    {p.verdict && <p className="text-sm text-ink">„{p.verdict}“</p>}
+                    <p className="text-xs text-muted">{p.traits.join(", ")}{p.traits.length ? " · " : ""}{p.mood}</p>
+                    {p.offered && <p className="text-sm text-muted">Trenér ho doporučil do dorostu, nabídku najdeš v Přestupy → Nabídky.</p>}
+                    {p.canPlayUp && (
+                      <button
+                        onClick={() => post(p.id, `/api/teams/${teamId}/academy/prospects/${p.id}/promote`, undefined, "Kluka se nepodařilo dát do dorostu")}
+                        disabled={busy !== null}
+                        className="btn btn-secondary min-h-11 px-3 disabled:opacity-40"
+                      >
+                        {busy === p.id ? "Pracuju…" : "Dát do dorostu hned"}
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </details>
+          );
+        })}
+      </section>
+
       {options && (
         <section className="card p-4 sm:p-5 space-y-3">
           <h2 className="font-heading font-bold text-base">Trenér žáků</h2>
@@ -507,7 +509,7 @@ export function AcademyCard({ teamId }: { teamId: string }) {
       </section>
 
       <section className="card p-4 sm:p-5 space-y-2">
-        <p className="text-sm text-muted">Provoz akademie tě stojí {kc(data.weeklyCost)} týdně.</p>
+        <p className="text-sm text-muted">Provoz akademie tě stojí {kc(data.weeklyCost)} týdně ({kc(data.upkeepBase)} základ a {kc(data.upkeepPerKid)} za každého z {data.prospects.length} kluků).</p>
         {confirmClose ? (
           <div className="flex flex-wrap gap-2">
             <button onClick={() => post("close", `/api/teams/${teamId}/academy/close`, undefined, "Akademii se nepodařilo zrušit")} disabled={busy !== null} className="btn btn-secondary min-h-11 px-3 disabled:opacity-40">
