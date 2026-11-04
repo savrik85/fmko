@@ -79,9 +79,26 @@ describe("přetahování", () => {
     expect((await poachAction(db, createRng(6), "big", others[1].id, "invite", GAME_DATE)).ok).toBe(false);
   });
 
+  it("souběžné kliknutí na stejnou akci zájem nezdvojí", async () => {
+    const kid = (await prospects("small"))[0];
+    const before = await db.prepare("SELECT interest FROM youth_poach WHERE prospect_id = ? AND to_team_id = 'big'").bind(kid.id).first<{ interest: number }>();
+    const res = await Promise.all([1, 2, 3].map(() => poachAction(db, createRng(10), "big", kid.id, "promise", GAME_DATE)));
+    expect(res.filter((r) => r.ok).length).toBe(1);
+    const after = await db.prepare("SELECT interest, actions FROM youth_poach WHERE prospect_id = ? AND to_team_id = 'big'").bind(kid.id).first<{ interest: number; actions: string }>();
+    expect(after!.interest).toBe(Math.min(100, before!.interest + 15));
+    expect(JSON.parse(after!.actions).filter((a: string) => a === "promise").length).toBe(1);
+  });
+
+  it("propojené kluby (stejný majitel) si kluky přetahovat nemůžou", async () => {
+    const near = await db.prepare("SELECT village_id FROM teams WHERE id = 'small'").first<{ village_id: string }>();
+    await db.prepare("INSERT INTO teams (id, user_id, village_id, name, budget, reputation, game_date, league_id, academy_upkeep) VALUES ('sister', 'u-b', ?, 'Sestra', 100000, 50, ?, 'lg', 1)").bind(near!.village_id, GAME_DATE).run();
+    const kid = (await prospects("small"))[2];
+    const res = await poachAction(db, createRng(11), "sister", kid.id, "invite", GAME_DATE);
+    expect(res.ok).toBe(false);
+  });
+
   it("v létě kluk se zájmem přestoupí za odstupné, bez zájmu zůstane", async () => {
     const [kid, second] = await prospects("small");
-    await poachAction(db, createRng(7), "big", kid.id, "promise", GAME_DATE);
     await poachAction(db, createRng(7), "big", kid.id, "boots", GAME_DATE);
     // Druhého kluka jeho klub ubrání: zájem pod hranicí
     const incoming = (await loadAcademyView(db, "small"))!.poach!.incoming;
