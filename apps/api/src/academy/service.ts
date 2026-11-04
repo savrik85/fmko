@@ -438,17 +438,20 @@ export async function promoteProspect(db: D1Database, teamId: string, prospectId
 
 /** Přijetí nabídky z akademie: kluk je teď hráč, u žáků končí. Volá `acceptPlayerOffer`. */
 export async function markProspectPromoted(db: D1Database, prospectId: string, playerId: string, gameDate: string): Promise<void> {
-  await db.prepare("UPDATE youth_prospects SET status = 'promoted', player_id = ?, left_at = ?, next_offer_on = NULL WHERE id = ?")
-    .bind(playerId, day(gameDate), prospectId).run();
+  // Status zabírá už `acceptPlayerOffer` (atomicky, status = 'active'); tady jen datum odchodu
+  await db.prepare("UPDATE youth_prospects SET left_at = ? WHERE id = ? AND player_id = ?")
+    .bind(day(gameDate), prospectId, playerId).run();
 }
 
 /** Kluk odchází na trh jako volný hráč: z vlastní vůle klubu, nebo protože mu je přes šestnáct. */
-async function releaseToMarket(db: D1Database, club: ClubRow, p: ProspectRow, status: "released" | "aged_out", gameDate: string): Promise<void> {
-  await db.prepare("UPDATE player_offers SET status = 'expired' WHERE prospect_id = ? AND status = 'pending'").bind(p.id).run();
-  await db.prepare("UPDATE youth_prospects SET status = ?, left_at = ?, next_offer_on = NULL WHERE id = ?")
+async function releaseToMarket(db: D1Database, club: ClubRow, p: ProspectRow, status: "released" | "aged_out", gameDate: string): Promise<boolean> {
+  // Zabrat atomicky: kluk, kterého mezitím někdo vzal do dorostu nebo pustil, na trh podruhé nejde
+  const claim = await db.prepare("UPDATE youth_prospects SET status = ?, left_at = ?, next_offer_on = NULL WHERE id = ? AND status = 'active'")
     .bind(status, day(gameDate), p.id).run();
+  if (claim.meta.changes === 0) return false;
+  await db.prepare("UPDATE player_offers SET status = 'expired' WHERE prospect_id = ? AND status = 'pending'").bind(p.id).run();
   // Dvanáctiletý na trh nepatří, odchází prostě domů
-  if (p.age < 15) return;
+  if (p.age < 15) return true;
   const { created, personality, weeklyWage } = await buildGraduate(db, p, club.district);
   const expires = new Date(`${day(gameDate)}T12:00:00Z`);
   expires.setUTCDate(expires.getUTCDate() + 14);
@@ -463,6 +466,7 @@ async function releaseToMarket(db: D1Database, club: ClubRow, p: ProspectRow, st
     created.nationality, Math.round(weeklyWage / GRADUATE_WAGE_FACTOR), club.id, p.home_village_id, expires.toISOString(),
     JSON.stringify(created.skillsMax), created.hiddenTalent,
   ).run();
+  return true;
 }
 
 /** Klub kluka pustí (stránka Žáci). Od patnácti jde na trh, mladší odchází domů. */
@@ -473,7 +477,9 @@ export async function releaseProspect(db: D1Database, teamId: string, prospectId
     .bind(prospectId, teamId).first<ProspectRow>();
   if (!p) return { ok: false, status: 404, error: "Kluk u žáků není" };
   const team = await db.prepare("SELECT game_date FROM teams WHERE id = ?").bind(teamId).first<{ game_date: string | null }>();
-  await releaseToMarket(db, club, p, "released", team?.game_date ?? new Date().toISOString());
+  if (!(await releaseToMarket(db, club, p, "released", team?.game_date ?? new Date().toISOString()))) {
+    return { ok: false, status: 409, error: "Kluk už u žáků není" };
+  }
   return { ok: true, released: true };
 }
 
@@ -543,15 +549,15 @@ export async function seasonEndAcademy(db: D1Database, rng: Rng, teamId: string,
   for (const p of prospects) {
     const name = `${p.first_name} ${p.last_name}`;
     if (p.age >= 16) {
-      await releaseToMarket(db, club, p, "aged_out", gameDate);
-      left.push(name);
+      if (await releaseToMarket(db, club, p, "aged_out", gameDate)) left.push(name);
       continue;
     }
     const home = p.home_village_id ? homes.get(p.home_village_id) : undefined;
     const km = home ? distanceKm(club, home) : 0;
     if (!program.upkeep || rng.random() < quitChance(p.commitment, km, program.bus)) {
+      const res = await db.prepare("UPDATE youth_prospects SET status = 'quit', left_at = ?, next_offer_on = NULL WHERE id = ? AND status = 'active'").bind(day(gameDate), p.id).run();
+      if (res.meta.changes === 0) continue;
       await db.prepare("UPDATE player_offers SET status = 'expired' WHERE prospect_id = ? AND status = 'pending'").bind(p.id).run();
-      await db.prepare("UPDATE youth_prospects SET status = 'quit', left_at = ?, next_offer_on = NULL WHERE id = ?").bind(day(gameDate), p.id).run();
       quit.push(name);
       continue;
     }
@@ -560,7 +566,7 @@ export async function seasonEndAcademy(db: D1Database, rng: Rng, teamId: string,
     const commitment = Math.max(10, Math.min(95, p.commitment + rng.int(-12, 10)));
     const estimate = estimatedTalent(talent, age, p.estimate_offset, trainer?.judgement ?? null);
     const nextOffer = p.next_offer_on ?? (canPromote(age, estimate) ? addDays(gameDate, firstOfferDay(rng, FALLBACK_SEASON_DAYS)) : null);
-    await db.prepare("UPDATE youth_prospects SET age = ?, hidden_talent = ?, commitment = ?, next_offer_on = ? WHERE id = ?")
+    await db.prepare("UPDATE youth_prospects SET age = ?, hidden_talent = ?, commitment = ?, next_offer_on = ? WHERE id = ? AND status = 'active'")
       .bind(age, talent, commitment, nextOffer, p.id).run();
     if (age === 16) lastYear.push(name);
   }

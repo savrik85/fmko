@@ -103,6 +103,31 @@ describe("žáci", () => {
     expect((await db.prepare("SELECT status FROM youth_prospects WHERE id = ?").bind(kid.id).first<{ status: string }>())!.status).toBe("promoted");
   });
 
+  it("dvě souběžná vytažení stejného kluka založí jen jednoho hráče", async () => {
+    const extra = await recruitClass(db, createRng(21), "club", GAME_DATE);
+    const kid = extra[0] ?? (await prospects("club"))[0];
+    await db.prepare("UPDATE youth_prospects SET age = 15 WHERE id = ?").bind(kid.id).run();
+    const results = await Promise.all([promoteProspect(db, "club", kid.id), promoteProspect(db, "club", kid.id)]);
+    expect(results.filter((r) => r.ok).length).toBe(1);
+    const players = await db.prepare("SELECT COUNT(*) AS n FROM players WHERE first_name = ? AND last_name = ? AND raised_by_team_id = 'club'")
+      .bind(kid.first_name, kid.last_name).first<{ n: number }>();
+    expect(players!.n).toBe(1);
+  });
+
+  it("nabídku kluka, kterého klub mezitím pustil, už přijmout nejde", async () => {
+    const extra = await recruitClass(db, createRng(22), "club", GAME_DATE);
+    const kid = extra[0] ?? (await prospects("club"))[0];
+    await db.prepare("UPDATE youth_prospects SET age = 15 WHERE id = ?").bind(kid.id).run();
+    const offer = await createProspectOffer(db, "club", kid.id, GAME_DATE, { notify: false });
+    expect(offer.ok).toBe(true);
+    if (!offer.ok) return;
+    // Pustit ho zvenku tak, jak by to udělal souběžný požadavek mezi nabídkou a přijetím
+    await db.prepare("UPDATE youth_prospects SET status = 'released' WHERE id = ?").bind(kid.id).run();
+    const res = await acceptPlayerOffer(db, "club", offer.offerId);
+    expect(res.ok).toBe(false);
+    expect((await releaseProspect(db, "club", kid.id)).ok).toBe(false);
+  });
+
   it("puštěný patnáctiletý jde na trh jako volný hráč", async () => {
     const kid = (await prospects("club"))[0];
     if (!kid) return;
