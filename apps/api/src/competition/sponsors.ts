@@ -14,6 +14,7 @@
 import { logger } from "../lib/logger";
 import { createRng } from "../generators/rng";
 import { seedFromString } from "../lib/seed";
+import { recordCompetitionEntry } from "./ledger";
 
 const M = "competition-sponsors";
 
@@ -148,17 +149,48 @@ function safeParse(v: string): string[] {
   catch { return []; }
 }
 
+/** Klíč platby sponzora za sezónu. Sdílí ho přijetí i rollover, aby se žádná sezóna nezaplatila dvakrát. */
+export function sponsorPaymentRef(leagueId: string, seasonNumber: number): string {
+  return `spon-${leagueId}-${seasonNumber}`;
+}
+
 /**
- * Přijetí nabídky: přejmenování soutěže a zápis smlouvy.
+ * Sponzorské plnění za jednu sezónu do pokladny soutěže, když ji smlouva pokrývá.
+ * Idempotentní přes reference_id, opakované volání nic nepřipíše.
+ */
+export async function paySponsorSeason(db: D1Database, opts: {
+  leagueId: string;
+  seasonNumber: number;
+  gameDate: string;
+}): Promise<{ paid: boolean; name: string | null; amount: number }> {
+  const gov = await db.prepare(
+    "SELECT sponsor_name, sponsor_amount, sponsor_until_season FROM competition_governance WHERE league_id = ?"
+  ).bind(opts.leagueId).first<{ sponsor_name: string | null; sponsor_amount: number; sponsor_until_season: number | null }>()
+    .catch((e) => { logger.warn({ module: M }, `smlouva sponzora ${opts.leagueId}`, e); return null; });
+  if (!gov?.sponsor_name || !gov.sponsor_amount) return { paid: false, name: gov?.sponsor_name ?? null, amount: 0 };
+  if ((gov.sponsor_until_season ?? 0) < opts.seasonNumber) return { paid: false, name: gov.sponsor_name, amount: 0 };
+
+  const out = await recordCompetitionEntry(db, {
+    leagueId: opts.leagueId, seasonNumber: opts.seasonNumber, type: "sponsor", amount: gov.sponsor_amount,
+    description: `Sponzorské plnění ${gov.sponsor_name}`,
+    gameDate: opts.gameDate, referenceId: sponsorPaymentRef(opts.leagueId, opts.seasonNumber),
+  });
+  return { paid: out.written, name: gov.sponsor_name, amount: gov.sponsor_amount };
+}
+
+/**
+ * Přijetí nabídky: přejmenování soutěže, zápis smlouvy a plnění za běžící sezónu.
  *
- * Peníze NEtečou hned — sponzorské plnění se připisuje při rolloveru na začátku
- * každé sezóny, kterou smlouva pokrývá (viz rollover.ts). Přijetí je podpis,
- * ne výplata.
+ * Smlouva běžící sezónu pokrývá (sponsor_until_season = tahle sezóna + délka − 1)
+ * a soutěž už nese jméno sponzora, proto za ni peníze tečou hned. Další sezóny
+ * připisuje rollover na jejich začátku (viz rollover.ts). Dřív se platilo jen
+ * při rolloveru a běžící sezóna zůstala nezaplacená.
  */
 export async function acceptOffer(db: D1Database, opts: {
   leagueId: string;
   offerId: string;
   seasonNumber: number;
+  gameDate: string;
 }): Promise<{ ok: boolean; reason?: string; name?: string }> {
   const offer = await db.prepare(
     "SELECT * FROM competition_sponsor_offers WHERE id = ? AND league_id = ?"
@@ -217,6 +249,13 @@ export async function acceptOffer(db: D1Database, opts: {
     "UPDATE competition_sponsor_offers SET status = 'rejected' WHERE league_id = ? AND season_number = ? AND status = 'open'"
   ).bind(opts.leagueId, opts.seasonNumber).run()
     .catch((e) => logger.warn({ module: M }, "uzavření ostatních nabídek", e));
+
+  const payment = await paySponsorSeason(db, {
+    leagueId: opts.leagueId, seasonNumber: opts.seasonNumber, gameDate: opts.gameDate,
+  });
+  if (!payment.paid) {
+    logger.warn({ module: M }, `soutěž ${opts.leagueId}: plnění sponzora ${name} za ${opts.seasonNumber}. sezónu se nezapsalo`);
+  }
 
   logger.info({ module: M }, `soutěž ${opts.leagueId}: sponzor ${name}, nový název „${novyNazev}"`);
   return { ok: true, name };
