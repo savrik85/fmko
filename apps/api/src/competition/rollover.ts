@@ -17,6 +17,7 @@ import { recomputeBalance, recordCompetitionEntry } from "./ledger";
 import { applyTermReputation, notifyElectionsOpened, openElections } from "./officials";
 import { subsidyFor } from "./projection";
 import { nextSeasonRules } from "./proposals";
+import { sponsorPaymentRef } from "./sponsors";
 import {
   countAllClubs, countHumanClubs, governingLeagueId, loadOwnGovernance, loadRules, loadTreasuryRules,
 } from "./rules";
@@ -308,8 +309,12 @@ async function collectMoney(
   }
 }
 
-/** Sponzorské plnění, nebo návrat k původnímu názvu, když smlouva skončila. */
-async function settleSponsor(
+/**
+ * Sponzorské plnění, nebo návrat k původnímu názvu, když smlouva skončila.
+ * Za sezónu, ve které se sponzor podepsal, už zaplatil při přijetí (acceptOffer),
+ * tady se platí jen sezóny, které smlouva pokrývá dál. Exportované kvůli testu.
+ */
+export async function settleSponsor(
   db: D1Database, leagueId: string, newSeason: number, gameDate: string,
 ): Promise<void> {
   // Vlastní řádek soutěže: sponzor řídící soutěže se vypořádává u ní, dosluhující
@@ -322,7 +327,7 @@ async function settleSponsor(
     await recordCompetitionEntry(db, {
       leagueId, seasonNumber: newSeason, type: "sponsor", amount: gov.sponsor_amount,
       description: `Sponzorské plnění ${gov.sponsor_name}`,
-      gameDate, referenceId: `spon-${leagueId}-${newSeason}`,
+      gameDate, referenceId: sponsorPaymentRef(leagueId, newSeason),
     });
     return;
   }

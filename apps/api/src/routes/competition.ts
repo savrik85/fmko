@@ -2191,6 +2191,28 @@ competitionRouter.post("/admin/competition/:leagueId/sponsor-offers", async (c) 
 });
 
 /**
+ * Doplacení sponzorského plnění za běžící sezónu. Sponzor schválený před opravou
+ * 2026-11-04 za ni nezaplatil, protože se platilo jen při rolloveru. Idempotentní
+ * stejným klíčem jako přijetí a rollover, druhé volání nic nepřipíše.
+ */
+competitionRouter.post("/admin/competition/:leagueId/sponsor-payment", async (c) => {
+  const leagueId = await governingLeagueId(c.env.DB, c.req.param("leagueId"));
+  const meta = await loadLeagueMeta(c.env.DB, leagueId);
+  if (!meta) return c.json({ error: "Soutěž nenalezena" }, 404);
+
+  const gameDate = await c.env.DB.prepare("SELECT MAX(game_date) AS d FROM teams WHERE league_id = ?")
+    .bind(leagueId).first<{ d: string | null }>().then((r) => r?.d)
+    .catch((e) => { logger.warn({ module: M }, "herní datum soutěže", e); return null; });
+
+  const { paySponsorSeason } = await import("../competition/sponsors");
+  const out = await paySponsorSeason(c.env.DB, {
+    leagueId, seasonNumber: meta.season_number, gameDate: gameDate ?? new Date().toISOString(),
+  });
+  const balance = await readBalance(c.env.DB, leagueId);
+  return c.json({ ok: true, leagueId, seasonNumber: meta.season_number, ...out, balance });
+});
+
+/**
  * Přepíše článek o posledním zasedání podle aktuálního kódu.
  *
  * Zápis se generuje jednou, při zasedání. Když se text zlepší až potom — třeba

@@ -507,7 +507,7 @@ async function applyImmediateEffect(
     if (p.kind === "sponsor" && payload.offerId) {
       const { acceptOffer } = await import("./sponsors");
       const out = await acceptOffer(db, {
-        leagueId: p.league_id, offerId: String(payload.offerId), seasonNumber: p.season_number,
+        leagueId: p.league_id, offerId: String(payload.offerId), seasonNumber: p.season_number, gameDate,
       });
       if (!out.ok) logger.warn({ module: M }, `přijetí sponzora: ${out.reason}`);
       return out.ok;
