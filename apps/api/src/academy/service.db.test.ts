@@ -150,16 +150,29 @@ describe("družstvo žáků", () => {
       oldest = [{ ...any, age: 14 }];
     }
     await seasonEndAcademy(db, createRng(5), "nou21", GAME_DATE);
+    // Soused ho nemusí vzít: dostane nabídku, odstupné se zatím neplatí
+    const offer = await db.prepare("SELECT id FROM player_offers WHERE team_id = 'club' AND status = 'pending' AND prospect_id = ?")
+      .bind(oldest[0].id).first<{ id: string }>();
+    expect(offer).not.toBeNull();
+    const before = await db.prepare("SELECT COUNT(*) AS n FROM transactions WHERE team_id = 'nou21' AND type = 'transfer_income'").first<{ n: number }>();
+    expect(before!.n).toBe(0);
+    const res = await acceptPlayerOffer(db, "club", offer!.id);
+    expect(res.ok).toBe(true);
     const player = await db.prepare("SELECT team_id, raised_by_team_id FROM players WHERE first_name = ? AND last_name = ?")
       .bind(oldest[0].first_name, oldest[0].last_name).first();
     expect(player).toEqual({ team_id: "club-u21", raised_by_team_id: "nou21" });
     const fee = await db.prepare("SELECT SUM(amount) AS s FROM transactions WHERE team_id = 'nou21' AND type = 'transfer_income'").first<{ s: number }>();
-    expect(fee!.s).toBe(8_000 * oldest.length);
+    expect(fee!.s).toBe(8_000);
+    const paid = await db.prepare("SELECT SUM(amount) AS s FROM transactions WHERE team_id = 'club' AND type = 'transfer_fee'").first<{ s: number }>();
+    expect(paid!.s).toBe(-8_000);
   });
 
-  it("zrušení: kluci končí", async () => {
+  it("zrušení: kluci končí a založit znovu jde až příští sezónu", async () => {
     const res = await closeYouthTeam(db, "nou21", GAME_DATE);
     expect(res.ok).toBe(true);
+    expect((await prospects("nou21")).length).toBe(0);
+    const again = await foundYouthTeam(db, createRng(6), "nou21", GAME_DATE);
+    expect(again.ok).toBe(false);
     expect((await prospects("nou21")).length).toBe(0);
   });
 
