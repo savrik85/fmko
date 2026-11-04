@@ -44,11 +44,11 @@ export const UPKEEP_PER_KID = 50;
  */
 export const ACADEMY_LEVELS = {
   modest: { label: "Skromná", base: 200, perKid: 30, growth: 0.7, quit: 0.06, attract: 0.8, poachBonus: -5,
-    text: "Jen startovné a cesty na zápasy. Kluci rostou pomaleji a víc jich skončí." },
+    text: "Jen startovné a cesty na zápasy. Žáci rostou pomaleji a víc jich skončí." },
   standard: { label: "Běžná", base: UPKEEP_BASE, perKid: UPKEEP_PER_KID, growth: 1, quit: 0, attract: 1, poachBonus: 0,
     text: "Startovné, cesty na zápasy a dresy pro žáky." },
   ambitious: { label: "Ambiciózní", base: 500, perKid: 90, growth: 1.45, quit: -0.05, attract: 1.3, poachBonus: 10,
-    text: "Navíc letní soustředění a turnaje. Kluci rostou rychleji, méně jich skončí a láká to i kluky odjinud." },
+    text: "Navíc letní soustředění a turnaje. Žáci rostou rychleji, méně jich skončí a láká to i žáky odjinud." },
 } as const;
 export type AcademyLevel = keyof typeof ACADEMY_LEVELS;
 
@@ -118,10 +118,10 @@ export interface YouthEquipment {
 
 /** Co které vybavení žákům dá (do UI slovy, do výpočtu `equipmentQualityBonus`, `quitChance`). */
 export const YOUTH_EQUIPMENT: { key: keyof YouthEquipment; label: string; effect: string }[] = [
-  { key: "balls", label: "Míče", effect: "víc míčů na tréninku: kluci rostou rychleji" },
+  { key: "balls", label: "Míče", effect: "víc míčů na tréninku: žáci rostou rychleji" },
   { key: "training_cones", label: "Tréninkové pomůcky", effect: "kužely, branky, žebříky: lepší trénink" },
   { key: "winter_gear", label: "Zimní výbava", effect: "trénují i v zimě" },
-  { key: "team_van", label: "Klubová dodávka", effect: "odvoz na zápasy: méně kluků skončí" },
+  { key: "team_van", label: "Klubová dodávka", effect: "odvoz na zápasy: méně žáků skončí" },
 ];
 
 /** Bonus ke kvalitě přípravy z vybavení: míče a pomůcky po 0,03 za úroveň, zimní výbava 0,03. */
@@ -291,7 +291,7 @@ export function qualityText(q: number, coach: CoachType | null): string {
   if (q >= 1.05) return "Příprava jako v krajském klubu.";
   if (q >= 0.8) return "Slušná příprava.";
   if (q >= 0.55) return "Příprava na koleně.";
-  return "Kluci spíš jen kopou do míče.";
+  return "Žáci spíš jen kopou do míče.";
 }
 
 /** Kam to kluk dotáhne: stupnice potenciálu (odhad talentu 0–100) slovy. */
@@ -345,7 +345,7 @@ export function strengthsOf(position: string, skills: Record<string, number>): {
 
 /** Jak dobrý je trenér mládeže z trhu, slovy podle efektivity v roli (0–20). */
 export function staffQualityText(effectiveness: number): string {
-  if (effectiveness >= 15) return "výborný, kluky posune nejvíc";
+  if (effectiveness >= 15) return "výborný, žáky posune nejvíc";
   if (effectiveness >= 11) return "dobrý";
   if (effectiveness >= 7) return "průměrný";
   return "slabší";
