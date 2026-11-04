@@ -641,7 +641,7 @@ export async function loadAcademyView(db: D1Database, teamId: string) {
     .catch((e) => { logger.warn({ module: M, teamId }, "check u21", e); return null; });
   const equipment = await loadYouthEquipment(db, teamId);
   const staffMarket = club.academy_upkeep && coach.type !== "staff" ? await youthCoachMarket(db, club) : [];
-  const profiles = new Map<string, { strengths: string[]; weakness: string | null }>();
+  const profiles = new Map<string, { strengths: string[]; weakness: string | null; avatar: Record<string, unknown> | null }>();
   for (const p of prospects) profiles.set(p.id, await prospectProfile(db, p, club));
 
   return {
@@ -668,6 +668,8 @@ export async function loadAcademyView(db: D1Database, teamId: string) {
         position: p.position,
         /** U mladších žáků se pozice teprve hledá. */
         positionSure: positionVisible(p.age),
+        /** Dětský obličej (facesjs), pevný pro kluka. */
+        avatar: profile?.avatar ?? null,
         strengths: coach.type ? profile?.strengths ?? [] : [],
         weakness: coach.type ? profile?.weakness ?? null : null,
         /** Trenérův odhad potenciálu 0–100 (v UI jen pás na slovní stupnici). Null bez trenéra. */
@@ -688,7 +690,7 @@ export async function loadAcademyView(db: D1Database, teamId: string) {
  * Silné a slabé stránky kluka: dovednosti, jaké by měl jako hráč (stejný generátor, pevné
  * semínko kluka, ať se mezi načteními nemění).
  */
-async function prospectProfile(db: D1Database, p: ProspectRow, club: ClubRow): Promise<{ strengths: string[]; weakness: string | null }> {
+async function prospectProfile(db: D1Database, p: ProspectRow, club: ClubRow): Promise<{ strengths: string[]; weakness: string | null; avatar: Record<string, unknown> | null }> {
   try {
     const identity = await prospectIdentity(db, p.identity_seed, club, p.position);
     identity.age = p.age;
@@ -697,10 +699,14 @@ async function prospectProfile(db: D1Database, p: ProspectRow, club: ClubRow): P
       academy: { current: Math.round(p.progress_current), cap: Math.round(p.progress_cap) + p.gem_cap, talent: [0, 0], gemChance: 0 },
       hiddenTalent: p.hidden_talent,
     });
-    return strengthsOf(p.position, created.skills);
+    const { generatePlayerFace } = await import("../routes/teams");
+    // Obličej podle věku: stejné semínko, takže kluk vypadá pořád stejně, jen v létě o rok starší
+    const faceRng = createRng(p.identity_seed ^ 0x2c1b3c6d);
+    const avatar = generatePlayerFace({ age: p.age, bodyType: identity.bodyType, ethnicity: identity.ethnicity }, () => faceRng.random());
+    return { ...strengthsOf(p.position, created.skills), avatar };
   } catch (e) {
     logger.warn({ module: M, teamId: club.id }, "prospect profile", e);
-    return { strengths: [], weakness: null };
+    return { strengths: [], weakness: null, avatar: null };
   }
 }
 
