@@ -369,7 +369,10 @@ export default function U21Page() {
                 }))}
                 statsMap={statsMap}
                 growthMap={growthMap}
-                renderActions={(p) => (
+                renderActions={(p) => p.age < 15 ? (
+                  // FAČR: za muže až od 15 let
+                  <span className="text-xs text-muted">Do áčka až v 15 letech</span>
+                ) : (
                   <button
                     disabled={busy === p.id}
                     onClick={() => {

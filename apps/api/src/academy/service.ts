@@ -441,6 +441,15 @@ async function loadProspect(db: D1Database, teamId: string, prospectId: string):
     .bind(prospectId, teamId).first<ProspectRow>();
 }
 
+/** Bez dorostu nemá kluk kam o kategorii výš: za muže smí až od 15 let (FAČR). */
+const NO_U21_ERROR = "Klub nemá dorost (U21) a za muže smí kluk až od 15 let. V létě ve čtrnácti půjde do dorostu jiného klubu.";
+
+async function hasU21Team(db: D1Database, teamId: string): Promise<boolean> {
+  const row = await db.prepare("SELECT 1 AS ok FROM teams WHERE parent_team_id = ? AND team_type = 'u21'").bind(teamId).first<{ ok: number }>()
+    .catch((e) => { logger.warn({ module: M, teamId }, "check u21", e); return null; });
+  return !!row;
+}
+
 /** Trenér žáků doporučí kluka o kategorii výš: SMS a nabídka v Přestupy → Nabídky. */
 export async function recommendPlayUp(db: D1Database, teamId: string, prospectId: string, gameDate: string): Promise<ServiceResult<{ offerId: string }>> {
   const club = await loadClub(db, teamId);
@@ -448,6 +457,7 @@ export async function recommendPlayUp(db: D1Database, teamId: string, prospectId
   const p = await loadProspect(db, teamId, prospectId);
   if (!p) return { ok: false, status: 404, error: "Kluk u žáků není" };
   if (!canPlayUp(p.age)) return { ok: false, status: 409, error: "Do dorostu smí kluk až od 13 let" };
+  if (!(await hasU21Team(db, teamId))) return { ok: false, status: 409, error: NO_U21_ERROR };
   const coach = await coachState(db, club, MIN_SQUAD);
   const estimate = estimatedTalent(p.hidden_talent, p.age, p.estimate_offset, coach.judgement);
   const offerId = await insertProspectOffer(db, club, p, teamId, `${p.first_name} ${p.last_name} by mohl hrát o kategorii výš. ${verdictText(estimate)}`, gameDate);
@@ -468,6 +478,7 @@ export async function promoteProspect(db: D1Database, teamId: string, prospectId
   const p = await loadProspect(db, teamId, prospectId);
   if (!p) return { ok: false, status: 404, error: "Kluk u žáků není" };
   if (!canPlayUp(p.age)) return { ok: false, status: 409, error: "Do dorostu smí kluk až od 13 let" };
+  if (!(await hasU21Team(db, teamId))) return { ok: false, status: 409, error: NO_U21_ERROR };
   const team = await db.prepare("SELECT game_date FROM teams WHERE id = ?").bind(teamId).first<{ game_date: string | null }>();
   const offerId = await insertProspectOffer(db, club, p, teamId, `${p.first_name} ${p.last_name} jde do dorostu.`, team?.game_date ?? new Date().toISOString());
   const { acceptPlayerOffer } = await import("../services/player-offer-actions");
@@ -615,6 +626,7 @@ export async function dailyAcademy(db: D1Database, teamId: string, gameDate: str
   const due = await db.prepare(
     `SELECT p.id FROM youth_prospects p JOIN teams t ON t.id = p.team_id
       WHERE p.team_id = ? AND t.academy_upkeep = 1 AND t.academy_coach_type IS NOT NULL AND p.status = 'active'
+        AND EXISTS (SELECT 1 FROM teams u WHERE u.parent_team_id = t.id AND u.team_type = 'u21')
         AND p.next_offer_on IS NOT NULL AND p.next_offer_on <= ?
         AND NOT EXISTS (SELECT 1 FROM player_offers o WHERE o.prospect_id = p.id AND o.status = 'pending')
       ORDER BY p.next_offer_on LIMIT 1`,
@@ -679,7 +691,8 @@ export async function loadAcademyView(db: D1Database, teamId: string) {
         /** Trenér ho bere jako nadějného (doporučil by ho o kategorii výš). */
         promising: !!coach.type && estimate >= PLAY_UP_ESTIMATE,
         mood: commitmentText(p.commitment),
-        canPlayUp: canPlayUp(p.age),
+        /** O kategorii výš jen do vlastního dorostu: za muže smí kluk až od 15 let. */
+        canPlayUp: canPlayUp(p.age) && !!u21,
         offered: offered.has(p.id),
       };
     }),
