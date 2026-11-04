@@ -2,7 +2,6 @@ import { SPONSOR_PAYOUT_MULTIPLIER } from "@okresni-masina/shared";
 import { logger } from "../lib/logger";
 import type { Weather } from "../engine/types";
 import { recordCompetitionEntry } from "../competition/ledger";
-import { youthMonthlyCost, youthWeeklyBaseCost, YOUTH_LABELS, type YouthInvestment } from "./youth";
 import type { CompetitionRules } from "../competition/defaults";
 /**
  * Centrální finanční procesor — jediný způsob jak měnit rozpočet týmu.
@@ -369,25 +368,14 @@ export async function processWeeklyFinances(
   await recordTransaction(db, teamId, "equipment_expense", -weeklyEquipment,
     `Amortizace vybavení`, gameDate);
 
-  // 3b. Mládežnická akademie — kdo chce odchovance, musí na ně sypat celý rok.
-  // Náklad se strhává průběžně, absolvent přijde až na konci sezóny.
-  const akademie = await db.prepare("SELECT youth_investment FROM teams WHERE id = ?")
-    .bind(teamId).first<{ youth_investment: string | null }>()
-    .catch((e) => { logger.warn({ module: "finance-processor", teamId }, "load youth investment", e); return null; });
-  const investice = (akademie?.youth_investment ?? "none") as YouthInvestment;
-  if (investice !== "none") {
-    const mesicni = youthMonthlyCost(investice);
-    const tydenni = Math.round((mesicni / 4.3) * staffFx.opsCostMul);
-    if (tydenni > 0) {
-      await recordTransaction(db, teamId, "youth_academy", -tydenni,
-        `Mládežnická akademie (${YOUTH_LABELS[investice]})`, gameDate);
-    }
+  // 3b. Žáci: zázemí (provoz, hala, autobus) a týdenní růst kluků podle kvality přípravy.
+  // Trenér mládeže se platí jako zaměstnanec. Návrh: docs/youth-academy-redesign-2026-11-04.md.
+  try {
+    const { weeklyAcademy } = await import("../academy/service");
+    await weeklyAcademy(db, teamId, gameDate, staffFx.opsCostMul);
+  } catch (e) {
+    logger.warn({ module: "finance-processor", teamId }, "weekly academy", e);
   }
-  // Počítadlo pro ročník odchovanců: týden se započítá vždy, i bez platby, aby přepnutí
-  // na velkorysou těsně před koncem sezóny nevydalo za celý rok (paidYouthLevel).
-  await db.prepare("UPDATE teams SET youth_paid_base = youth_paid_base + ?, youth_paid_weeks = youth_paid_weeks + 1 WHERE id = ?")
-    .bind(youthWeeklyBaseCost(investice), teamId).run()
-    .catch((e) => logger.warn({ module: "finance-processor", teamId }, "youth paid counters", e));
 
   // ── PŘÍJMY ──
 

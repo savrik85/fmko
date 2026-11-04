@@ -52,13 +52,18 @@ export async function setTicketPrice(db: D1Database, teamId: string, rawPrice: n
 export const ACADEMY_LEVELS = ["none", "minimal", "medium", "high"] as const;
 export type AcademyLevel = typeof ACADEMY_LEVELS[number];
 
-/** Úroveň investice do akademie (platí se týdně ve financích). */
+/**
+ * Zázemí žáků jako jedna úroveň (AI trenér): none = žáci zavření, minimal = provoz,
+ * medium = provoz a hala, high = provoz, hala a autobus. Člověk nastavuje položky zvlášť
+ * (academy/service.ts, setAcademyProgram).
+ */
 export async function setAcademyInvestment(db: D1Database, teamId: string, investment: unknown): Promise<{ ok: true; investment: AcademyLevel } | ServiceError> {
   if (typeof investment !== "string" || !(ACADEMY_LEVELS as readonly string[]).includes(investment)) {
     return { ok: false, status: 400, error: "Neplatná úroveň investice" };
   }
-  await db.prepare("UPDATE teams SET youth_investment = ? WHERE id = ?")
-    .bind(investment, teamId).run();
-  logger.info({ module: "development", teamId }, `akademie nastavena na ${investment}`);
+  const { setAcademyProgram, programFromLevel } = await import("../academy/service");
+  const res = await setAcademyProgram(db, teamId, programFromLevel(investment as AcademyLevel));
+  if (!res.ok) return { ok: false, status: res.status === 409 ? 400 : res.status, error: res.error };
+  logger.info({ module: "development", teamId }, `zázemí žáků nastaveno na ${investment}`);
   return { ok: true, investment: investment as AcademyLevel };
 }

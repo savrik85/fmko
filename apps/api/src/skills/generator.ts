@@ -339,8 +339,8 @@ function capToPralesMax(position: PlayerPositionCode, values: Record<string, Ski
 
 /** Šance na klenot u kluka do 21 let: talent 70–95 a strop o 12–25 výš. */
 export const GEM_CHANCE = 0.07;
-const GEM_TALENT: [number, number] = [70, 95];
-const GEM_EXTRA_CAP: [number, number] = [12, 25];
+export const GEM_TALENT: [number, number] = [70, 95];
+export const GEM_EXTRA_CAP: [number, number] = [12, 25];
 
 /** Co k běžnému klukovi přidá placená akademie (viz `YOUTH_BONUS` v season/youth.ts). */
 export interface AcademyBonus {

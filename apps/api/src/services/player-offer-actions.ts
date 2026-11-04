@@ -59,12 +59,19 @@ export async function acceptPlayerOffer(db: D1Database, teamId: string, offerId:
       skillsMax[attr] = { current: val, maxPotential: Math.min(100, val + headroom) };
     }
   }
+  // Kluk z vlastní akademie jde do dorostu (U21), bez U21 rovnou do áčka. Klub ho vychoval.
+  const prospectId = (offer.prospect_id as string | null) ?? null;
+  const u21 = prospectId
+    ? await db.prepare("SELECT id FROM teams WHERE parent_team_id = ? AND team_type = 'u21'").bind(teamId).first<{ id: string }>()
+        .catch((e) => { logger.warn({ module: M, teamId }, "load u21 for academy offer", e); return null; })
+    : null;
+  const targetTeamId = u21?.id ?? teamId;
   await db.prepare(
-    `INSERT INTO players (id, team_id, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, weekly_wage, status, nationality, hidden_talent, skills_max)
-     VALUES (?, ?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)`
-  ).bind(playerId, teamId, offer.first_name, offer.last_name, offer.age, offer.position, offer.overall_rating,
+    `INSERT INTO players (id, team_id, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, weekly_wage, status, nationality, hidden_talent, skills_max, raised_by_team_id)
+     VALUES (?, ?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)`
+  ).bind(playerId, targetTeamId, offer.first_name, offer.last_name, offer.age, offer.position, offer.overall_rating,
     offer.skills, offer.physical, offer.personality, JSON.stringify(lifeContextWithoutCaps), offer.avatar, offer.weekly_wage,
-    (offer.nationality as string) ?? "CZ", hiddenTalent, JSON.stringify(skillsMax)).run();
+    (offer.nationality as string) ?? "CZ", hiddenTalent, JSON.stringify(skillsMax), prospectId ? teamId : null).run();
 
   // Set residence
   const { generateResidence } = await import("../generators/residence");
@@ -79,17 +86,22 @@ export async function acceptPlayerOffer(db: D1Database, teamId: string, offerId:
 
   // Vazby na spoluhráče — dorostenec z vesnice většinou někoho zná
   const { attachNewcomerRelations } = await import("../transfers/attach-relations");
-  await attachNewcomerRelations(db, teamId, playerId);
+  await attachNewcomerRelations(db, targetTeamId, playerId);
   const { initNewcomerCoachRelation } = await import("../lib/coach-relation");
-  await initNewcomerCoachRelation(db, teamId, playerId);
+  await initNewcomerCoachRelation(db, targetTeamId, playerId);
 
   // Contract
   const season = await db.prepare("SELECT id FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1").first<{ id: string }>().catch((e) => { logger.warn({ module: M }, "db op failed", e); return null; });
   await db.prepare("INSERT INTO player_contracts (id, player_id, team_id, season_id, join_type, fee, is_active) VALUES (?, ?, ?, ?, ?, 0, 1)")
-    .bind(crypto.randomUUID(), playerId, teamId, mustSeason(season?.id), offer.source).run().catch((e) => logger.warn({ module: M }, "db op failed", e));
+    .bind(crypto.randomUUID(), playerId, targetTeamId, mustSeason(season?.id), offer.source).run().catch((e) => logger.warn({ module: M }, "db op failed", e));
 
   // Registration fee
   const team = await db.prepare("SELECT game_date FROM teams WHERE id = ?").bind(teamId).first<{ game_date: string }>().catch((e) => { logger.warn({ module: M }, "db op failed", e); return null; });
+  if (prospectId) {
+    const { markProspectPromoted } = await import("../academy/service");
+    await markProspectPromoted(db, prospectId, playerId, team?.game_date ?? new Date().toISOString())
+      .catch((e) => logger.warn({ module: M, teamId }, "mark prospect promoted", e));
+  }
   await recordTransaction(db, teamId, "signing_fee", -PLAYER_OFFER_SIGNING_FEE, `Registrace: ${offer.first_name} ${offer.last_name}`, team?.game_date ?? new Date().toISOString());
 
   // Return full player data for reveal card

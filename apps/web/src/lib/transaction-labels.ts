@@ -60,7 +60,7 @@ export const TXN_LABELS: Record<string, string> = {
   incident_loss: "Ukradená hotovost",
   incident_gift: "Dar klubu",
   fan_relations: "Fanoušci a kotel",
-  raffle_income: "Tombola", youth_academy: "Mládežnická akademie",
+  raffle_income: "Tombola", youth_academy: "Žáci (akademie)",
   equipment_purchase: "Nákup vybavení z bazaru", equipment_sale: "Prodej vybavení do bazaru",
   equipment_pawn: "Výkup v zastavárně", competition_fee: "Poplatek soutěži",
   competition_deposit: "Kauce za návrh", competition_grant: "Dotace ze soutěže",

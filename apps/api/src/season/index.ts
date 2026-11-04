@@ -1,5 +1,3 @@
-export { tryGraduateYouth, youthMonthlyCost } from "./youth";
-export type { YouthInvestment, YouthConfig, YouthGraduate } from "./youth";
 export { simulateTraining } from "./training";
 export type { TrainingType, TrainingApproach, TrainingPlan, TrainingResult } from "./training";
 export { generateSponsors, calculateMatchIncome, calculateMatchExpenses, calculateMonthlyBudget, calculateMatchReward, calculateTrainingCost, calculateRepairCost } from "./economy";

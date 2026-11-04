@@ -1476,8 +1476,9 @@ export async function executeDailyTick(
     for (const team of offerTeams) {
       const teamId = team.id as string;
       const offerRng = createRng(teamSeed(teamId, now.getTime(), "player-offers"));
-      // ~14% per day ≈ 1 nabídka týdně
-      if (offerRng.random() > 0.14) continue;
+      // Dřív 14 % denně ze čtyř zdrojů. Dorost (čtvrtina nabídek) teď chodí z akademie,
+      // takže 10,5 % drží stejně dospělých nabídek jako dřív (~0,75 týdně).
+      if (offerRng.random() > 0.105) continue;
 
       const district = team.village_district as string;
       const villageInfo = {
@@ -1493,6 +1494,25 @@ export async function executeDailyTick(
     }
   } catch (e) {
     logger.error({ module: "daily-tick" }, "player offer generation failed", e);
+  }
+
+  // ── Žáci: trenér mládeže průběžně nabízí kluky do dorostu, občas se přihlásí nový kluk ──
+  // Nahrazuje dřívější náhodné nabídky „Trenéra dorostu“ (player-offers.ts je už nelosuje).
+  try {
+    const { dailyAcademy } = await import("../academy/service");
+    const { receivesPlayerOffers } = await import("../events/player-offers");
+    let offered = 0;
+    let walkIns = 0;
+    for (const team of allTeams.results.filter(receivesPlayerOffers)) {
+      const teamId = team.id as string;
+      const res = await dailyAcademy(env.DB, createRng(teamSeed(teamId, now.getTime(), "academy")), teamId, team.game_date as string)
+        .catch((e) => { logger.warn({ module: "daily-tick", teamId }, "daily academy", e); return { offered: 0, walkIns: 0 }; });
+      offered += res.offered;
+      walkIns += res.walkIns;
+    }
+    if (offered + walkIns > 0) logger.info({ module: "daily-tick" }, `žáci: ${offered} nabídek do dorostu, ${walkIns} nových kluků`);
+  } catch (e) {
+    logger.error({ module: "daily-tick" }, "academy daily failed", e);
   }
 
   // ── Free agent pool maintenance ──

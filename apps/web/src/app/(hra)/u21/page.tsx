@@ -291,7 +291,7 @@ export default function U21Page() {
           { key: "tabulka", label: "Tabulka" },
           { key: "rozpis", label: "Rozpis" },
           { key: "statistiky", label: "Statistiky" },
-          { key: "akademie", label: "Akademie" },
+          { key: "akademie", label: "Žáci" },
         ]}
       />
 

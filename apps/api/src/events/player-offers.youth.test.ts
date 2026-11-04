@@ -10,8 +10,10 @@
 import { describe, it, expect } from "vitest";
 import { createRng } from "../generators/rng";
 import { youthOfferShift } from "./player-offers";
-import { generatePlayerSkills, overallRatingFromFlat } from "../skills/generator";
-import { YOUTH_BONUS } from "../season/youth";
+import { generatePlayerSkills, overallRatingFromFlat, GEM_CHANCE } from "../skills/generator";
+
+/** Kluk po čtyřech letech u žáků při průměrné přípravě (q = 1, academy/rules.ts). */
+const GRADUATE_AFTER_FOUR_YEARS = { current: 6, cap: 12, talent: [0, 0] as [number, number], gemChance: GEM_CHANCE };
 
 const POZICE = ["GK", "DEF", "MID", "FWD"] as const;
 
@@ -47,7 +49,7 @@ describe("nabídka kluka z dorostu", () => {
     expect(mladsi / 800).toBeLessThan(starsi / 800 - 3);
   });
 
-  it("strop hvězdy má méně kluků než odchovanců z velkorysé akademie", () => {
+  it("strop hvězdy má méně kluků než odchovanců, kteří prošli žáky", () => {
     const rng = createRng(9);
     let zNabidky = 0;
     let zAkademie = 0;
@@ -55,7 +57,7 @@ describe("nabídka kluka z dorostu", () => {
       const n = nabidka(rng, i, 16 + (i % 4), 49);
       if (stropHodnoceni(n.pos, n.skillsMax) >= 75) zNabidky++;
       const pos = POZICE[i % 4];
-      const a = generatePlayerSkills(rng, { position: pos, age: 16 + (i % 3), level: "village", academy: YOUTH_BONUS.high });
+      const a = generatePlayerSkills(rng, { position: pos, age: 16 + (i % 3), level: "village", academy: GRADUATE_AFTER_FOUR_YEARS });
       if (stropHodnoceni(pos, a.skillsMax) >= 75) zAkademie++;
     }
     expect(zNabidky).toBeLessThan(zAkademie);
