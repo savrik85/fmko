@@ -48,8 +48,12 @@ function uuid(): string {
  * Generate a facesjs-compatible config on the server.
  * No DOM needed — just a JSON object that facesjs display() can render on the client.
  */
-export function generatePlayerFace(player: { age: number; bodyType: string; ethnicity?: "white" | "asian" | "brown" }): Record<string, unknown> {
-  const r = () => Math.random();
+export function generatePlayerFace(
+  player: { age: number; bodyType: string; ethnicity?: "white" | "asian" | "brown" },
+  /** Pevné losování (žáci mají mít stejný obličej při každém načtení). */
+  rand: () => number = Math.random,
+): Record<string, unknown> {
+  const r = rand;
   const pick = <T,>(arr: T[]): T => arr[Math.floor(r() * arr.length)];
 
   // Pleť + vlasy dle etnika (barvy ověřené z facesjs generate({race})).
@@ -99,6 +103,32 @@ export function generatePlayerFace(player: { age: number; bodyType: string; ethn
   if (player.age > 20 && r() < 0.35) facialHairId = pick(facialHairIds);
 
   const skinColor = pick(skinColors);
+
+  // Kluk do 14 let (žáci v akademii): kulatější hubený obličej, větší uši, malý nos, žádné
+  // vrásky ani vousy, občas pihy nebo ruměnec, menší postava a rozcuchané vlasy
+  if (player.age < 15) {
+    const kidFatness = 0.15 + r() * 0.25;
+    return {
+      fatness: kidFatness,
+      teamColors: ["#2D5F2D", "#FFFFFF", "#1E4A1E"],
+      hairBg: { id: "none" },
+      body: { id: pick(["body", "body2", "body3"]), color: skinColor, size: 0.8 + r() * 0.08 },
+      jersey: { id: "jersey" },
+      ear: { id: pick(earIds), size: 0.9 + r() * 0.3 },
+      head: { id: pick(["head1", "head3", "head8", "head12", "head14"]), shave: "rgba(0,0,0,0)", fatness: kidFatness },
+      eyeLine: { id: "none" },
+      smileLine: { id: "none" },
+      miscLine: { id: r() < 0.3 ? pick(["freckles1", "freckles2"]) : r() < 0.3 ? "blush" : "none" },
+      facialHair: { id: "none" },
+      eye: { id: pick(["eye1", "eye3", "eye6", "eye9", "eye13"]), angle: -2 + r() * 4 },
+      eyebrow: { id: pick(["eyebrow2", "eyebrow3", "eyebrow7", "eyebrow13"]), angle: -3 + r() * 6 },
+      hair: { id: pick(["curly", "shaggy1", "emo", "spike4", "tall-fade", "crop-fade2"]), color: pick(hairColors), flip: r() < 0.5 },
+      mouth: { id: pick(["smile", "smile2", "smile3", "smile-closed", "mouth", "closed"]), flip: r() < 0.5 },
+      nose: { id: pick(["small", "nose1", "nose2", "nose6"]), flip: r() < 0.5, size: 0.45 + r() * 0.25 },
+      glasses: { id: r() < 0.06 ? "glasses1" : "none" },
+      accessories: { id: "none" },
+    };
+  }
 
   return {
     fatness,

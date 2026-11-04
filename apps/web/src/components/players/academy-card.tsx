@@ -13,6 +13,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { apiFetch, apiAction } from "@/lib/api";
+import { FaceAvatar } from "@/components/players/face-avatar";
 
 type CoachType = "volunteer" | "parent" | "staff";
 
@@ -22,6 +23,7 @@ interface Prospect {
   age: number;
   position: string;
   positionSure: boolean;
+  avatar: Record<string, unknown> | null;
   traits: string[];
   strengths: string[];
   weakness: string | null;
@@ -259,15 +261,22 @@ export function AcademyCard({ teamId }: { teamId: string }) {
                 <span className="text-sm font-heading font-bold"><span aria-hidden="true" className="mr-1.5 text-muted">▾</span>{g.label}</span>
                 <span className="text-xs text-muted">{boysText(kids.length)}{promisingCount ? `, nadějní ${promisingCount}` : ""}{g.note ? ` · ${g.note}` : ""}</span>
               </summary>
-              <ul className="grid grid-cols-1 md:grid-cols-2 gap-px bg-gray-200">
+              <ul className="grid grid-cols-1 md:grid-cols-2 bg-white">
                 {kids.map((p) => (
-                  <li key={p.id} className="bg-white p-3 space-y-2">
-                    <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                      <span className="font-heading font-bold text-ink">
-                        {p.name}
-                        {p.promising && <span className="ml-2 align-middle rounded-full bg-pitch-50 px-2 py-0.5 text-xs font-bold text-pitch-600">nadějný</span>}
-                      </span>
-                      <span className="text-sm text-ink">{p.age} let · {p.positionSure ? POSITION_CS[p.position] ?? p.position : `nejspíš ${POSITION_CS[p.position] ?? p.position}`}</span>
+                  <li key={p.id} className="p-3 space-y-2 border-t border-gray-200 md:odd:border-r">
+                    <div className="flex items-center gap-3">
+                      {p.avatar && (
+                        <div className="shrink-0 w-12 h-12 rounded-full overflow-hidden bg-surface-2 flex items-center justify-center">
+                          <FaceAvatar faceConfig={p.avatar} size={40} />
+                        </div>
+                      )}
+                      <div className="min-w-0 flex-1 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                        <span className="font-heading font-bold text-ink">
+                          {p.name}
+                          {p.promising && <span className="ml-2 align-middle rounded-full bg-pitch-50 px-2 py-0.5 text-xs font-bold text-pitch-600">nadějný</span>}
+                        </span>
+                        <span className="text-sm text-ink">{p.age} let · {p.positionSure ? POSITION_CS[p.position] ?? p.position : `nejspíš ${POSITION_CS[p.position] ?? p.position}`}</span>
+                      </div>
                     </div>
                     {(p.strengths.length > 0 || p.weakness) && (
                       <div className="flex flex-wrap gap-1.5">
