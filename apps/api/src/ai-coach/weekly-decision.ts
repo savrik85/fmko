@@ -32,7 +32,7 @@ export const PITCH_MAINTENANCE_CHOICES = ["none", "basic", "thorough", "renovati
 export type PitchMaintenanceChoice = typeof PITCH_MAINTENANCE_CHOICES[number];
 export const PITCH_CARE_CHOICES = ["keep", "auto", "manual", "off"] as const;
 export type PitchCareChoice = typeof PITCH_CARE_CHOICES[number];
-export const ACADEMY_CHOICES = ["keep", "none", "minimal", "medium", "high"] as const;
+export const ACADEMY_CHOICES = ["keep", "none", "volunteer", "parent", "staff"] as const;
 export type AcademyChoice = typeof ACADEMY_CHOICES[number];
 export const TRANSFER_STANCES = ["buy", "hold", "sell"] as const;
 export type TransferStance = typeof TRANSFER_STANCES[number];
@@ -50,12 +50,10 @@ export const PITCH_MAINTENANCE_COST: Record<Exclude<PitchMaintenanceChoice, "non
 };
 
 /**
- * Zázemí žáků jako jedna volba (academy/rules.ts): none = žáci zavření, minimal = provoz,
- * medium = provoz a hala, high = provoz, hala a autobus. Týdenní cena bez trenéra mládeže.
+ * Družstvo žáků jako jedna volba (academy/service.ts): none = žáky nemít, jinak kdo je trénuje.
+ * Týdenní provoz je u všech stejný (UPKEEP_WEEKLY), placený trenér mládeže bere navíc svůj plat.
  */
-export const ACADEMY_WEEKLY_COST: Record<Exclude<AcademyChoice, "keep">, number> = { none: 0, minimal: 600, medium: 1300, high: 1800 };
-/** Nábor najednou nejvýš v tolika okolních obcích (MAX_RECRUIT_VILLAGES). */
-const MAX_ACADEMY_RECRUIT = 4;
+export const ACADEMY_WEEKLY_COST: Record<Exclude<AcademyChoice, "keep">, number> = { none: 0, volunteer: 400, parent: 400, staff: 400 };
 
 export interface PricedOption {
   key: string;
@@ -138,12 +136,14 @@ export interface WeeklyContext {
   academy: {
     current: Exclude<AcademyChoice, "keep">;
     weeklyCostNow: number;
-    /** Kolik má klub žáků (12–15 let). */
+    /** Kolik má klub žáků (11–14 let). */
     prospects: number;
-    /** Okolní obce pro letní nábor (klíč V1…): jméno, km, kolik kluků za ročník slibují. */
-    villages: { key: string; villageId: string; label: string }[];
-    /** Klíče obcí, kde klub teď nabírá. */
-    recruitNow: string[];
+    /** Kolik kluků na ročník obec dá (po založení přijdou kluci po čtyřech ročnících). */
+    expectedPerYear: number;
+    /** Má hráče áčka od 28 let, který by žáky vedl. */
+    canVolunteer: boolean;
+    /** Má najatého trenéra mládeže. */
+    canStaff: boolean;
   };
   banners: { active: number; max: number; offers: BannerOption[] };
   u21: { exists: boolean; aTeamSize: number; promote: U21MoveOption[]; sendDown: U21MoveOption[] };
@@ -162,8 +162,6 @@ export interface WeeklyDecision {
   equipmentRepairs: string[];
   hire: string[];
   academy: AcademyChoice;
-  /** Obce pro letní nábor (klíče z `academy.villages`). Chybí = beze změny. */
-  academyRecruit?: string[];
   banners: string[];
   promote: string[];
   sendDown: string[];
@@ -178,7 +176,6 @@ export type WeeklyAction =
   | { kind: "ticket_price"; price: number; from: number }
   | { kind: "pitch_care_mode"; mode: Exclude<PitchCareChoice, "keep"> }
   | { kind: "academy"; level: Exclude<AcademyChoice, "keep"> }
-  | { kind: "academy_recruit"; villageIds: string[] }
   | { kind: "banner"; key: string; sponsorName: string; sponsorType: string; monthly: number; seasons: number }
   | { kind: "promote"; key: string; playerId: string }
   | { kind: "send_down"; key: string; playerId: string }
@@ -306,10 +303,10 @@ export function fallbackWeeklyDecision(ctx: WeeklyContext): WeeklyDecision {
     .slice(0, 1)
     .map((cand) => cand.key);
 
-  const academyTarget: Exclude<AcademyChoice, "keep"> = p.youthFocus >= 75 ? "medium" : p.youthFocus >= 45 ? "minimal" : "none";
+  const academyTarget: Exclude<AcademyChoice, "keep"> = p.youthFocus < 45 ? "none"
+    : ctx.academy.canStaff ? "staff" : ctx.academy.canVolunteer ? "volunteer" : "parent";
   const affordable = ACADEMY_WEEKLY_COST[academyTarget] <= Math.max(0, ctx.finance.weeklyIncome - ctx.finance.weeklyRunningCost) + spend / 30;
   const academy: AcademyChoice = academyTarget === ctx.academy.current ? "keep" : affordable ? academyTarget : "keep";
-  const academyRecruit = academyTarget === "none" ? [] : ctx.academy.villages.slice(0, p.youthFocus >= 75 ? 3 : 2).map((v) => v.key);
 
   const freeSlots = Math.max(0, ctx.banners.max - ctx.banners.active);
   const banners = ctx.banners.offers.slice(0, freeSlots).map((b) => b.key);
@@ -319,7 +316,7 @@ export function fallbackWeeklyDecision(ctx: WeeklyContext): WeeklyDecision {
 
   return {
     training: { focus, intensity, sessions, approach },
-    ticketPrice, pitchMaintenance, pitchCareMode, stadium, equipmentUpgrades, equipmentRepairs, hire, academy, academyRecruit, banners,
+    ticketPrice, pitchMaintenance, pitchCareMode, stadium, equipmentUpgrades, equipmentRepairs, hire, academy, banners,
     promote, sendDown, transfers: fallbackTransfers(ctx), concessions: fallbackConcessions(ctx.concessions, p),
     reasoning: "fallback rule",
   };
@@ -428,7 +425,6 @@ export function validateWeeklyDecision(raw: unknown, ctx: WeeklyContext): Weekly
     banners: keys(r.banners, "banners", new Set(ctx.banners.offers.map((o) => o.key)), ctx.banners.max, rejected),
     promote: keys(r.promote, "promote", new Set(ctx.u21.promote.map((o) => o.key)), MAX_U21_MOVES, rejected),
     sendDown: keys(r.sendDown, "sendDown", new Set(ctx.u21.sendDown.map((o) => o.key)), MAX_U21_MOVES, rejected),
-    academyRecruit: keys(r.academyRecruit, "academyRecruit", new Set(ctx.academy.villages.map((o) => o.key)), MAX_ACADEMY_RECRUIT, rejected),
   };
   for (const v of Object.values(sets)) if (!Array.isArray(v)) return { ok: false, reason: v.error };
 
@@ -438,7 +434,6 @@ export function validateWeeklyDecision(raw: unknown, ctx: WeeklyContext): Weekly
     decision: {
       training: { focus, intensity, sessions, approach },
       ticketPrice, pitchMaintenance, pitchCareMode, academy,
-      ...(r.academyRecruit === undefined ? {} : { academyRecruit: sets.academyRecruit as string[] }),
       stadium: sets.stadium as string[],
       equipmentUpgrades: sets.equipmentUpgrades as string[],
       equipmentRepairs: sets.equipmentRepairs as string[],
@@ -471,13 +466,11 @@ export function planWeeklyActions(ctx: WeeklyContext, d: WeeklyDecision): Weekly
     if (price !== ctx.fans.ticketPrice) actions.push({ kind: "ticket_price", price, from: ctx.fans.ticketPrice });
   }
   if (d.pitchCareMode !== "keep" && d.pitchCareMode !== ctx.pitch.careMode) actions.push({ kind: "pitch_care_mode", mode: d.pitchCareMode });
-  if (d.academy !== "keep" && d.academy !== ctx.academy.current) actions.push({ kind: "academy", level: d.academy });
-  if (d.academyRecruit) {
-    const wanted = [...new Set(d.academyRecruit)].sort();
-    if (wanted.join() !== [...ctx.academy.recruitNow].sort().join()) {
-      const ids = wanted.map((k) => ctx.academy.villages.find((v) => v.key === k)?.villageId).filter((x): x is string => !!x);
-      actions.push({ kind: "academy_recruit", villageIds: ids });
-    }
+  if (d.academy !== "keep" && d.academy !== ctx.academy.current) {
+    // Kód hlídá meze: placený trenér jen najatý, dobrovolník jen když je kdo
+    const allowed = (d.academy !== "staff" || ctx.academy.canStaff) && (d.academy !== "volunteer" || ctx.academy.canVolunteer);
+    if (allowed) actions.push({ kind: "academy", level: d.academy });
+    else skipped.push({ item: `academy ${d.academy}`, reason: d.academy === "staff" ? "nemá trenéra mládeže" : "nemá hráče od 28 let" });
   }
 
   const freeSlots = Math.max(0, ctx.banners.max - ctx.banners.active);
@@ -664,8 +657,7 @@ export function renderWeeklyPrompt(ctx: WeeklyContext): string {
   L.push(ctx.staff.candidates.length ? ctx.staff.candidates.map((o) => `${o.key}: ${o.role}, ${o.label}, ${o.detail}, wage ${czk(o.weeklyWage)}/week, signing ${czk(o.cost)}`).join("\n") : "(none)");
   L.push("Roles: asistent (faster player development), maser (better daily recovery), lekar (shorter injuries), kondicni_trener (less fatigue), spravce_hriste (pitch keeps condition), trener_mladeze (youth development), trener_brankaru (goalkeepers), psycholog (morale), obsluha (refreshment sales), sef_fanklubu (fans), ekonom (finances), skaut (scouting).");
   L.push("");
-  L.push(`YOUTH ACADEMY (the club's own boys aged 12-15, ${ctx.academy.prospects} now): ${ctx.academy.current}. Options keep / none (close it, boys leave at season end) / minimal (running costs, ${czk(ACADEMY_WEEKLY_COST.minimal)}/week) / medium (+ winter hall, ${czk(ACADEMY_WEEKLY_COST.medium)}/week, boys develop faster) / high (+ bus, ${czk(ACADEMY_WEEKLY_COST.high)}/week, boys from other villages quit less). A trener_mladeze makes the boys develop better. From age 15 the youth coach offers boys to the U21 during the season; they come only from the academy.`);
-  L.push(`ACADEMY RECRUITMENT next summer (village keys, max ${MAX_ACADEMY_RECRUIT}, ${czk(1000)} each, the home village is always included): ${ctx.academy.villages.length ? ctx.academy.villages.map((v) => `${v.key}: ${v.label}`).join("; ") : "(no villages nearby)"}. Now recruiting in: ${ctx.academy.recruitNow.length ? ctx.academy.recruitNow.join(", ") : "home village only"}.`);
+  L.push(`YOUTH TEAM (the club's own boys aged 11-14 from the village, ${ctx.academy.prospects} now; the village gives about ${ctx.academy.expectedPerYear.toFixed(1)} boys a year, 9 are needed to play the district youth league): ${ctx.academy.current}. Options keep / none (no youth team, boys quit) / volunteer (an A-team player aged 28+ coaches them for free but misses some A-team training${ctx.academy.canVolunteer ? "" : ", NOT AVAILABLE"}) / parent (a boy's father coaches, average) / staff (the hired trener_mladeze, best${ctx.academy.canStaff ? "" : ", NOT AVAILABLE: hire one first"}). Running costs ${czk(ACADEMY_WEEKLY_COST.volunteer)}/week. Every summer the 14-year-olds move up to the U21; the coach also recommends talented boys aged 13+ during the season.`);
   L.push(`BANNER SPONSORS: ${ctx.banners.active}/${ctx.banners.max} used. Offers (key: company, monthly payment, seasons); banners only bring money, free slots are filled with the best offers you do not pick:`);
   L.push(ctx.banners.offers.length ? ctx.banners.offers.map((o) => `${o.key}: ${o.label}, ${czk(o.monthly)}/month, ${o.seasons} season(s)`).join("\n") : "(none)");
   L.push("");
@@ -683,7 +675,7 @@ export function renderWeeklyPrompt(ctx: WeeklyContext): string {
   const concessionKeys = hasConcessionChoice(ctx.concessions)
     ? `, concessions {mode ${ctx.concessions.modeOptions.join("/")}, products {${ctx.concessions.products.map((p) => p.key).join(", ")}: each {tier, price, buy}}}`
     : "";
-  L.push(`DECIDE (JSON keys): training {focus, intensity, sessions 1-5, approach}, ticketPrice, pitchMaintenance, pitchCareMode, stadium (keys, max 2), equipmentUpgrades (keys, max 3), equipmentRepairs (keys), hire (candidate keys, max 1), academy, academyRecruit (village keys, max 4), banners (offer keys), promote (keys, max 2), sendDown (keys, max 2), transfers {stance buy/hold/sell, focus (positions GK/DEF/MID/FWD, max 2), sell (surplus keys, max 3)}${concessionKeys}, reasoning (max 40 words).`);
+  L.push(`DECIDE (JSON keys): training {focus, intensity, sessions 1-5, approach}, ticketPrice, pitchMaintenance, pitchCareMode, stadium (keys, max 2), equipmentUpgrades (keys, max 3), equipmentRepairs (keys), hire (candidate keys, max 1), academy, banners (offer keys), promote (keys, max 2), sendDown (keys, max 2), transfers {stance buy/hold/sell, focus (positions GK/DEF/MID/FWD, max 2), sell (surplus keys, max 3)}${concessionKeys}, reasoning (max 40 words).`);
   L.push("Paid items are executed in the order repairs, pitch, refreshment stock, hiring, equipment, stadium and stop when the money above the reserve runs out.");
   return L.join("\n");
 }
@@ -718,7 +710,6 @@ export function weeklyDecisionSchema(ctx: WeeklyContext): Record<string, unknown
       equipmentRepairs: arr(ctx.equipmentRepairs.map((o) => o.key)),
       hire: arr(ctx.staff.candidates.map((o) => o.key)),
       academy: { type: "string", enum: [...ACADEMY_CHOICES] },
-      academyRecruit: arr(ctx.academy.villages.map((o) => o.key)),
       banners: arr(ctx.banners.offers.map((o) => o.key)),
       promote: arr(ctx.u21.promote.map((o) => o.key)),
       sendDown: arr(ctx.u21.sendDown.map((o) => o.key)),
@@ -737,7 +728,7 @@ export function weeklyDecisionSchema(ctx: WeeklyContext): Record<string, unknown
     },
     required: [
       "training", "ticketPrice", "pitchMaintenance", "pitchCareMode", "stadium", "equipmentUpgrades", "equipmentRepairs", "hire",
-      "academy", "academyRecruit", "banners", "promote", "sendDown", "transfers", ...(concessions ? ["concessions"] : []), "reasoning",
+      "academy", "banners", "promote", "sendDown", "transfers", ...(concessions ? ["concessions"] : []), "reasoning",
     ],
   };
 }

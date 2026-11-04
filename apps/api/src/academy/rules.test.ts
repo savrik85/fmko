@@ -1,50 +1,20 @@
 import { describe, it, expect } from "vitest";
 import { createRng } from "../generators/rng";
 import {
-  programWeeklyCost, programQuality, weeklyProgress, expectedKidsFromVillage, estimatedTalent, canPromote, quitChance,
-  rollKids, WEEKS_PER_SEASON, MAX_KIDS_PER_VILLAGE, verdictText, talentShiftAt14,
+  programQuality, weeklyProgress, expectedKidsPerYear, estimatedTalent, canPlayUp, recommendsPlayUp, quitChance,
+  rollKids, WEEKS_PER_SEASON, MAX_KIDS_PER_YEAR, MIN_SQUAD, verdictText, talentShiftAt13, youthTransferFee,
 } from "./rules";
-import { programLevel, programFromLevel } from "./service";
 
-const fullProgram = { upkeep: true, hall: true, bus: true };
-
-describe("zázemí žáků", () => {
-  it("bez provozu se neplatí nic a nikdo neroste", () => {
-    expect(programWeeklyCost({ upkeep: false, hall: true, bus: true })).toBe(0);
-    expect(programQuality({ program: { upkeep: false, hall: true, bus: true }, trainerEffectiveness: 20, managerYouth: 100, squadSize: 15 })).toBe(0);
+describe("kolik kluků obec dá", () => {
+  it("osada do 500 obyvatel kluka jednou za dva roky, medián klubů (2 300) 3–4 na ročník", () => {
+    expect(expectedKidsPerYear(400)).toBeCloseTo(0.6, 1);
+    expect(expectedKidsPerYear(2300)).toBeGreaterThan(3);
+    expect(expectedKidsPerYear(2300)).toBeLessThan(4);
+    expect(expectedKidsPerYear(80_000)).toBe(MAX_KIDS_PER_YEAR);
   });
 
-  it("plný program stojí 1 800 Kč týdně, méně než dřívější velkorysá akademie (2 791)", () => {
-    expect(programWeeklyCost(fullProgram)).toBe(1800);
-  });
-
-  it("čtyři roky průměrné přípravy dají zhruba dřívější velkorysou akademii (+6 / +12)", () => {
-    const q = programQuality({ program: { upkeep: true, hall: true, bus: false }, trainerEffectiveness: 10, managerYouth: 40, squadSize: 12 });
-    const perWeek = weeklyProgress(q);
-    expect(perWeek.current * WEEKS_PER_SEASON * 4).toBeGreaterThan(5);
-    expect(perWeek.current * WEEKS_PER_SEASON * 4).toBeLessThan(8);
-    expect(perWeek.cap * WEEKS_PER_SEASON * 4).toBeGreaterThan(10);
-    expect(perWeek.cap * WEEKS_PER_SEASON * 4).toBeLessThan(16);
-  });
-
-  it("dobrý trenér, hala a dost kluků dávají lepší přípravu než holý provoz", () => {
-    const bare = programQuality({ program: { upkeep: true, hall: false, bus: false }, trainerEffectiveness: null, managerYouth: 0, squadSize: 12 });
-    const best = programQuality({ program: fullProgram, trainerEffectiveness: 18, managerYouth: 80, squadSize: 12 });
-    const fewKids = programQuality({ program: fullProgram, trainerEffectiveness: 18, managerYouth: 80, squadSize: 5 });
-    expect(best).toBeGreaterThan(bare + 0.4);
-    expect(fewKids).toBeLessThan(best);
-  });
-});
-
-describe("nábor", () => {
-  it("osada skoro nic, obec s 2 000 obyvateli asi 1,6 kluka, víc než strop nikdy", () => {
-    expect(expectedKidsFromVillage(60, 0)).toBeLessThan(0.1);
-    expect(expectedKidsFromVillage(2000, 0)).toBeCloseTo(1.6, 1);
-    expect(expectedKidsFromVillage(50_000, 0)).toBe(MAX_KIDS_PER_VILLAGE);
-  });
-
-  it("o kluky z obce s vlastním klubem se dělí", () => {
-    expect(expectedKidsFromVillage(2000, 1)).toBeCloseTo(0.8, 1);
+  it("obec s 1 500 obyvateli dá po čtyřech ročnících zhruba družstvo (9 kluků)", () => {
+    expect(expectedKidsPerYear(1500) * 4).toBeCloseTo(MIN_SQUAD, 0);
   });
 
   it("losování počtu drží střední hodnotu", () => {
@@ -56,11 +26,40 @@ describe("nábor", () => {
   });
 });
 
-describe("odhad trenéra", () => {
-  it("ve dvanácti se plete víc než v patnácti, dobrý trenér míň", () => {
-    expect(Math.abs(estimatedTalent(40, 12, 1, null) - 40)).toBe(24);
-    expect(Math.abs(estimatedTalent(40, 15, 1, null) - 40)).toBe(6);
-    expect(Math.abs(estimatedTalent(40, 12, 1, 20) - 40)).toBe(12);
+describe("trenér a příprava", () => {
+  it("bez trenéra žáci netrénují", () => {
+    expect(programQuality({ coach: null, managerYouth: 80, squadSize: 15 })).toBe(0);
+  });
+
+  it("placený trenér je lepší než táta a dobrovolník s průměrným vůdcovstvím", () => {
+    const staff = programQuality({ coach: "staff", staffEffectiveness: 12, managerYouth: 40, squadSize: 12 });
+    const parent = programQuality({ coach: "parent", managerYouth: 40, squadSize: 12 });
+    const volunteer = programQuality({ coach: "volunteer", volunteerLeadership: 40, managerYouth: 40, squadSize: 12 });
+    expect(staff).toBeGreaterThan(parent);
+    expect(staff).toBeGreaterThan(volunteer);
+  });
+
+  it("bez soutěže (pod 9 kluků) je příprava poloviční", () => {
+    const full = programQuality({ coach: "parent", managerYouth: 40, squadSize: 12 });
+    const few = programQuality({ coach: "parent", managerYouth: 40, squadSize: 5 });
+    expect(few).toBeCloseTo(full / 2, 5);
+  });
+
+  it("čtyři roky u placeného trenéra dají zhruba +6 k dovednostem a +12 ke stropu", () => {
+    const q = programQuality({ coach: "staff", staffEffectiveness: 10, managerYouth: 40, squadSize: 12 });
+    const perWeek = weeklyProgress(q);
+    expect(perWeek.current * WEEKS_PER_SEASON * 4).toBeGreaterThan(5);
+    expect(perWeek.current * WEEKS_PER_SEASON * 4).toBeLessThan(8);
+    expect(perWeek.cap * WEEKS_PER_SEASON * 4).toBeGreaterThan(10);
+    expect(perWeek.cap * WEEKS_PER_SEASON * 4).toBeLessThan(16);
+  });
+});
+
+describe("odhad trenéra a kategorie výš", () => {
+  it("v jedenácti se plete víc než ve čtrnácti, placený trenér s dobrým úsudkem míň", () => {
+    expect(Math.abs(estimatedTalent(40, 11, 1, null) - 40)).toBe(25);
+    expect(Math.abs(estimatedTalent(40, 14, 1, null) - 40)).toBe(10);
+    expect(Math.abs(estimatedTalent(40, 11, 1, 20) - 40)).toBe(13);
   });
 
   it("slova sedí na odhad", () => {
@@ -68,18 +67,19 @@ describe("odhad trenéra", () => {
     expect(verdictText(10)).toContain("pro radost");
   });
 
-  it("do dorostu od patnácti, výjimečný talent už ve čtrnácti", () => {
-    expect(canPromote(14, 50)).toBe(false);
-    expect(canPromote(14, 75)).toBe(true);
-    expect(canPromote(15, 0)).toBe(true);
+  it("o kategorii výš od 13 let, trenér sám jen nadějného", () => {
+    expect(canPlayUp(12)).toBe(false);
+    expect(canPlayUp(13)).toBe(true);
+    expect(recommendsPlayUp(13, 30)).toBe(false);
+    expect(recommendsPlayUp(13, 60)).toBe(true);
   });
 
-  it("ve čtrnácti asi desetina kluků rozkvete a desetina vyhoří", () => {
+  it("ve třinácti asi desetina kluků rozkvete a desetina vyhoří", () => {
     const rng = createRng(11);
     let bloom = 0;
     let burnout = 0;
     for (let i = 0; i < 5000; i++) {
-      const d = talentShiftAt14(rng);
+      const d = talentShiftAt13(rng);
       if (d > 0) bloom++;
       if (d < 0) burnout++;
     }
@@ -88,21 +88,15 @@ describe("odhad trenéra", () => {
   });
 });
 
-describe("odchody", () => {
-  it("bez autobusu končí víc kluků z dalekých obcí", () => {
-    expect(quitChance(70, 6, false)).toBeGreaterThan(quitChance(70, 6, true));
-    expect(quitChance(70, 1, false)).toBe(quitChance(70, 1, true));
+describe("odchody a odstupné", () => {
+  it("bez soutěže a bez trenéra končí víc kluků", () => {
+    expect(quitChance(70, false, true)).toBeGreaterThan(quitChance(70, true, true));
+    expect(quitChance(70, true, false)).toBeGreaterThan(quitChance(70, true, true));
   });
 
-  it("kluk, kterého to nebaví, končí častěji", () => {
-    expect(quitChance(30, 0, true)).toBeGreaterThan(quitChance(80, 0, true));
-  });
-});
-
-describe("úroveň zázemí pro AI trenéra", () => {
-  it("převod tam a zpět sedí", () => {
-    for (const level of ["none", "minimal", "medium", "high"] as const) {
-      expect(programLevel(programFromLevel(level))).toBe(level);
-    }
+  it("odstupné za staršího žáka podle soutěže áčka klubu, kam jde (FAČR § 23)", () => {
+    expect(youthTransferFee("okresni_prebor")).toBe(8_000);
+    expect(youthTransferFee("okresni_soutez")).toBe(6_500);
+    expect(youthTransferFee(null)).toBe(8_000);
   });
 });

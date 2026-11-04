@@ -84,7 +84,7 @@ function context(budget: number, p: AiCoachProfile = profile()): WeeklyContext {
         { key: "C2", ref: "staff-2", role: "maser", label: "Iva Masérka", detail: "medicine 9", cost: 2_000, weeklyWage: 500 },
       ],
     },
-    academy: { current: "none", weeklyCostNow: 0, prospects: 0, villages: [{ key: "V1", villageId: "v-1", label: "Lhota, 3 km, ~1 boys a year" }], recruitNow: [] },
+    academy: { current: "none", weeklyCostNow: 0, prospects: 0, expectedPerYear: 2, canVolunteer: true, canStaff: false },
     banners: {
       active: 4, max: 6,
       offers: [
@@ -117,7 +117,7 @@ const everything: WeeklyDecision = {
   equipmentUpgrades: ["E1", "E2", "E3"],
   equipmentRepairs: ["R1"],
   hire: ["C1"],
-  academy: "high",
+  academy: "volunteer",
   banners: ["B1", "B2", "B3"],
   promote: ["U1"],
   sendDown: ["Y1"],

@@ -387,7 +387,7 @@ developmentRouter.get("/teams/:teamId/players/:playerId/development", async (c) 
 
 // ── Mládežnická akademie ─────────────────────────────────────────────────────
 
-// GET /api/teams/:teamId/academy — žáci, zázemí a obce pro nábor (academy/service.ts)
+// GET /api/teams/:teamId/academy — družstvo žáků, trenér a kluci (academy/service.ts)
 developmentRouter.get("/teams/:teamId/academy", async (c) => {
   const teamId = c.req.param("teamId");
   const odmitnuto = await overSiVlastnictvi(c, teamId);
@@ -398,48 +398,47 @@ developmentRouter.get("/teams/:teamId/academy", async (c) => {
   return c.json(view);
 });
 
-async function academyBody(c: { req: { json: <T>() => Promise<T> } }, teamId: string): Promise<Record<string, unknown> | null> {
-  return c.req.json<Record<string, unknown>>().catch((e) => {
-    logger.warn({ module: "development", teamId }, "parse academy body", e);
+// POST /api/teams/:teamId/academy/found — založit družstvo žáků (kluci 11–14 let z obce hned)
+developmentRouter.post("/teams/:teamId/academy/found", async (c) => {
+  const teamId = c.req.param("teamId");
+  const { foundYouthTeam } = await import("../academy/service");
+  const { createRng, cryptoSeed } = await import("../generators/rng");
+  const team = await c.env.DB.prepare("SELECT game_date FROM teams WHERE id = ?").bind(teamId).first<{ game_date: string | null }>();
+  const res = await foundYouthTeam(c.env.DB, createRng(cryptoSeed()), teamId, team?.game_date ?? new Date().toISOString());
+  if (!res.ok) return c.json({ error: res.error }, res.status);
+  return c.json({ ok: true, created: res.created });
+});
+
+// POST /api/teams/:teamId/academy/close — zrušit družstvo žáků (kluci končí)
+developmentRouter.post("/teams/:teamId/academy/close", async (c) => {
+  const teamId = c.req.param("teamId");
+  const { closeYouthTeam } = await import("../academy/service");
+  const team = await c.env.DB.prepare("SELECT game_date FROM teams WHERE id = ?").bind(teamId).first<{ game_date: string | null }>();
+  const res = await closeYouthTeam(c.env.DB, teamId, team?.game_date ?? new Date().toISOString());
+  if (!res.ok) return c.json({ error: res.error }, res.status);
+  return c.json({ ok: true, quit: res.quit });
+});
+
+// POST /api/teams/:teamId/academy/coach — trenér žáků { type: volunteer | parent | staff, playerId? }
+developmentRouter.post("/teams/:teamId/academy/coach", async (c) => {
+  const teamId = c.req.param("teamId");
+  const body = await c.req.json<Record<string, unknown>>().catch((e) => {
+    logger.warn({ module: "development", teamId }, "parse academy coach body", e);
     return null;
   });
-}
-
-// POST /api/teams/:teamId/academy/program — zázemí žáků { upkeep, hall, bus }
-developmentRouter.post("/teams/:teamId/academy/program", async (c) => {
-  const teamId = c.req.param("teamId");
-  const { setAcademyProgram } = await import("../academy/service");
-  const res = await setAcademyProgram(c.env.DB, teamId, await academyBody(c, teamId));
+  const { setYouthCoach } = await import("../academy/service");
+  const res = await setYouthCoach(c.env.DB, teamId, body);
   if (!res.ok) return c.json({ error: res.error }, res.status);
-  return c.json({ ok: true, program: res.program });
+  return c.json({ ok: true, coach: res.coach });
 });
 
-// POST /api/teams/:teamId/academy/recruitment — obce pro letní nábor { villageIds }
-developmentRouter.post("/teams/:teamId/academy/recruitment", async (c) => {
-  const teamId = c.req.param("teamId");
-  const { setRecruitVillages } = await import("../academy/service");
-  const body = await academyBody(c, teamId);
-  const res = await setRecruitVillages(c.env.DB, teamId, body?.villageIds);
-  if (!res.ok) return c.json({ error: res.error }, res.status);
-  return c.json({ ok: true, villageIds: res.villageIds });
-});
-
-// POST /api/teams/:teamId/academy/prospects/:prospectId/promote — vytáhnout kluka do dorostu
+// POST /api/teams/:teamId/academy/prospects/:prospectId/promote — kluk od 13 let do dorostu dřív
 developmentRouter.post("/teams/:teamId/academy/prospects/:prospectId/promote", async (c) => {
   const teamId = c.req.param("teamId");
   const { promoteProspect } = await import("../academy/service");
   const res = await promoteProspect(c.env.DB, teamId, c.req.param("prospectId"));
   if (!res.ok) return c.json({ error: res.error }, res.status);
   return c.json({ ok: true, playerId: res.playerId });
-});
-
-// POST /api/teams/:teamId/academy/prospects/:prospectId/release — pustit kluka
-developmentRouter.post("/teams/:teamId/academy/prospects/:prospectId/release", async (c) => {
-  const teamId = c.req.param("teamId");
-  const { releaseProspect } = await import("../academy/service");
-  const res = await releaseProspect(c.env.DB, teamId, c.req.param("prospectId"));
-  if (!res.ok) return c.json({ error: res.error }, res.status);
-  return c.json({ ok: true });
 });
 
 // GET /api/teams/:teamId/u21/rozvoj — žebříček dorostu s prognózou průrazu do áčka

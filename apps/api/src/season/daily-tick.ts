@@ -521,7 +521,10 @@ export async function executeDailyTick(
         );
         // Životní situace (spec 17b): kdo je bez práce nebo se rozvádí, chodí radši na trénink; dluhy naopak berou čas.
         const druhy = await nactiDruhyHracu(env.DB, teamId, effectiveDate.toISOString());
-        const situaceHracu = hraciIds.map((id) => druhy.get(id));
+        // Dobrovolník z áčka, který trénuje žáky, chodí na trénink áčka méně (academy/service.ts)
+        const { volunteerCoachId } = await import("../academy/service");
+        const youthCoachId = await volunteerCoachId(env.DB, teamId);
+        const situaceHracu = hraciIds.map((id) => id === youthCoachId ? [...(druhy.get(id) ?? []), "youth_coach"] : druhy.get(id));
         // Individuální plány (úkoly trenéra mládeže a trenéra brankářů, staff/staff-tasks.ts).
         const { loadIndividualTrainingMuls } = await import("../staff/staff-tasks");
         const planMuls = await loadIndividualTrainingMuls(env.DB, teamId);
@@ -1496,21 +1499,19 @@ export async function executeDailyTick(
     logger.error({ module: "daily-tick" }, "player offer generation failed", e);
   }
 
-  // ── Žáci: trenér mládeže průběžně nabízí kluky do dorostu, občas se přihlásí nový kluk ──
+  // ── Žáci: trenér žáků průběžně doporučuje kluky o kategorii výš do dorostu ──
   // Nahrazuje dřívější náhodné nabídky „Trenéra dorostu“ (player-offers.ts je už nelosuje).
   try {
     const { dailyAcademy } = await import("../academy/service");
     const { receivesPlayerOffers } = await import("../events/player-offers");
     let offered = 0;
-    let walkIns = 0;
     for (const team of allTeams.results.filter(receivesPlayerOffers)) {
       const teamId = team.id as string;
-      const res = await dailyAcademy(env.DB, createRng(teamSeed(teamId, now.getTime(), "academy")), teamId, team.game_date as string)
-        .catch((e) => { logger.warn({ module: "daily-tick", teamId }, "daily academy", e); return { offered: 0, walkIns: 0 }; });
+      const res = await dailyAcademy(env.DB, teamId, team.game_date as string)
+        .catch((e) => { logger.warn({ module: "daily-tick", teamId }, "daily academy", e); return { offered: 0 }; });
       offered += res.offered;
-      walkIns += res.walkIns;
     }
-    if (offered + walkIns > 0) logger.info({ module: "daily-tick" }, `žáci: ${offered} nabídek do dorostu, ${walkIns} nových kluků`);
+    if (offered > 0) logger.info({ module: "daily-tick" }, `žáci: ${offered} doporučení o kategorii výš`);
   } catch (e) {
     logger.error({ module: "daily-tick" }, "academy daily failed", e);
   }

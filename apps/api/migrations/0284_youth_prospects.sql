@@ -1,5 +1,5 @@
--- Žáci: nová mládežnická akademie (docs/youth-academy-redesign-2026-11-04.md).
--- Kluci 12–15 let, které klub vychovává; hráči se z nich stanou až přijetím do dorostu.
+-- Žáci: družstvo mladších a starších žáků (docs/youth-academy-redesign-2026-11-04.md).
+-- Kluci 11–14 let, které klub vychovává; hráči se z nich stanou postupem do dorostu (U21).
 CREATE TABLE IF NOT EXISTS youth_prospects (
   id TEXT PRIMARY KEY,
   team_id TEXT NOT NULL,
@@ -26,11 +26,14 @@ CREATE TABLE IF NOT EXISTS youth_prospects (
 CREATE INDEX IF NOT EXISTS idx_youth_prospects_team ON youth_prospects(team_id, status);
 CREATE INDEX IF NOT EXISTS idx_youth_prospects_offer ON youth_prospects(status, next_offer_on);
 
--- Zázemí žáků (provoz, hala, autobus) a obce, kde klub v létě nabírá (kromě vlastní)
+-- Družstvo žáků: provoz (dresy, míče, startovné) a trenér. Trenér je dobrovolník z áčka
+-- ('volunteer', academy_coach_player_id), táta jednoho z kluků ('parent', jméno a kluk)
+-- nebo placený trenér mládeže ze zaměstnanců ('staff').
 ALTER TABLE teams ADD COLUMN academy_upkeep INTEGER NOT NULL DEFAULT 0;
-ALTER TABLE teams ADD COLUMN academy_hall INTEGER NOT NULL DEFAULT 0;
-ALTER TABLE teams ADD COLUMN academy_bus INTEGER NOT NULL DEFAULT 0;
-ALTER TABLE teams ADD COLUMN academy_recruit_villages TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE teams ADD COLUMN academy_coach_type TEXT;
+ALTER TABLE teams ADD COLUMN academy_coach_player_id TEXT;
+ALTER TABLE teams ADD COLUMN academy_coach_name TEXT;
+ALTER TABLE teams ADD COLUMN academy_coach_prospect_id TEXT;
 
 -- Nabídka do dorostu od trenéra mládeže ukazuje na kluka u žáků
 ALTER TABLE player_offers ADD COLUMN prospect_id TEXT;
