@@ -432,6 +432,19 @@ developmentRouter.post("/teams/:teamId/academy/coach", async (c) => {
   return c.json({ ok: true, coach: res.coach });
 });
 
+// POST /api/teams/:teamId/academy/level — kolik klub do akademie dává { level: modest | standard | ambitious }
+developmentRouter.post("/teams/:teamId/academy/level", async (c) => {
+  const teamId = c.req.param("teamId");
+  const body = await c.req.json<{ level?: unknown }>().catch((e) => {
+    logger.warn({ module: "development", teamId }, "parse academy level body", e);
+    return null;
+  });
+  const { setAcademyLevel } = await import("../academy/service");
+  const res = await setAcademyLevel(c.env.DB, teamId, body?.level);
+  if (!res.ok) return c.json({ error: res.error }, res.status);
+  return c.json({ ok: true, level: res.level });
+});
+
 // POST /api/teams/:teamId/academy/recruit-day — náborový den ve škole (jednou za sezónu)
 developmentRouter.post("/teams/:teamId/academy/recruit-day", async (c) => {
   const teamId = c.req.param("teamId");

@@ -3,6 +3,7 @@ import { createRng } from "../generators/rng";
 import {
   programQuality, weeklyProgress, expectedKidsPerYear, estimatedTalent, canPlayUp, recommendsPlayUp, quitChance,
   rollKids, WEEKS_PER_SEASON, MAX_KIDS_PER_YEAR, MIN_SQUAD, verdictText, talentShiftAt13, youthTransferFee,
+  upkeepWeekly, ACADEMY_LEVELS, academyLevelOf, coachSonAge, COACH_SON_CHANCE,
 } from "./rules";
 
 describe("kolik kluků obec dá", () => {
@@ -98,5 +99,39 @@ describe("odchody a odstupné", () => {
     expect(youthTransferFee("okresni_prebor")).toBe(8_000);
     expect(youthTransferFee("okresni_soutez")).toBe(6_500);
     expect(youthTransferFee(null)).toBe(8_000);
+  });
+});
+
+describe("úroveň akademie", () => {
+  it("skromná je levnější a horší, ambiciózní dražší a lepší", () => {
+    expect(upkeepWeekly(12, "modest")).toBe(560);
+    expect(upkeepWeekly(12, "standard")).toBe(900);
+    expect(upkeepWeekly(12, "ambitious")).toBe(1580);
+    expect(ACADEMY_LEVELS.modest.growth).toBeLessThan(1);
+    expect(ACADEMY_LEVELS.ambitious.growth).toBeGreaterThan(1);
+    expect(quitChance(70, true, true, 0, ACADEMY_LEVELS.modest.quit)).toBeGreaterThan(quitChance(70, true, true, 0, ACADEMY_LEVELS.ambitious.quit));
+  });
+
+  it("neznámá úroveň je běžná", () => {
+    expect(academyLevelOf(null)).toBe("standard");
+    expect(academyLevelOf("elite")).toBe("standard");
+  });
+});
+
+describe("syn trenéra", () => {
+  it("má ho zhruba 45 % trenérů, pevně podle trenéra, a roste s ním", () => {
+    let withSon = 0;
+    for (let i = 0; i < 2000; i++) if (coachSonAge(`m-${i}`, 60) !== null) withSon++;
+    expect(withSon / 2000).toBeCloseTo(COACH_SON_CHANCE, 1);
+    const id = Array.from({ length: 200 }, (_, i) => `m-${i}`).find((x) => coachSonAge(x, 45) !== null)!;
+    expect(coachSonAge(id, 46)).toBe(coachSonAge(id, 45)! + 1);
+    expect(coachSonAge(id, 45)).toBe(coachSonAge(id, 45));
+  });
+
+  it("dvacetiletý trenér syna v žácích nemá", () => {
+    for (let i = 0; i < 200; i++) {
+      const age = coachSonAge(`m-${i}`, 20);
+      expect(age === null || age < 0).toBe(true);
+    }
   });
 });

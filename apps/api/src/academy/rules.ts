@@ -35,8 +35,49 @@ export const MIN_SQUAD = 9;
 export const UPKEEP_BASE = 300;
 export const UPKEEP_PER_KID = 50;
 
-export function upkeepWeekly(squadSize: number): number {
-  return UPKEEP_BASE + UPKEEP_PER_KID * Math.max(0, squadSize);
+/**
+ * Kolik klub do akademie dává. Běžná je výchozí (300 + 50 Kč za kluka). Skromná šetří, ale
+ * kluci rostou pomaleji a víc jich skončí. Ambiciózní platí letní soustředění, turnaje
+ * a lepší dresy: rychlejší růst, méně odchodů, víc kluků z okolí a lákaní kluci mají větší zájem.
+ * Simulace 6 sezón (2026-11-05): s růstem 0,85 / 1,2 dala skromná i ambiciózní skoro stejný
+ * strop odchovanců (58 / 60), ambiciózní se za trojnásobnou cenu nevyplatila; proto 0,7 / 1,45.
+ */
+export const ACADEMY_LEVELS = {
+  modest: { label: "Skromná", base: 200, perKid: 30, growth: 0.7, quit: 0.06, attract: 0.8, poachBonus: -5,
+    text: "Jen to nejnutnější. Kluci rostou pomaleji a víc jich skončí." },
+  standard: { label: "Běžná", base: UPKEEP_BASE, perKid: UPKEEP_PER_KID, growth: 1, quit: 0, attract: 1, poachBonus: 0,
+    text: "Dresy, míče, startovné a cesty na zápasy." },
+  ambitious: { label: "Ambiciózní", base: 500, perKid: 90, growth: 1.45, quit: -0.05, attract: 1.3, poachBonus: 10,
+    text: "Letní soustředění, turnaje a lepší dresy. Kluci rostou rychleji, méně jich skončí a láká to i kluky odjinud." },
+} as const;
+export type AcademyLevel = keyof typeof ACADEMY_LEVELS;
+
+export function academyLevelOf(raw: string | null | undefined): AcademyLevel {
+  return raw === "modest" || raw === "ambitious" ? raw : "standard";
+}
+
+export function upkeepWeekly(squadSize: number, level: AcademyLevel = "standard"): number {
+  const l = ACADEMY_LEVELS[level];
+  return l.base + l.perKid * Math.max(0, squadSize);
+}
+
+// ── Syn trenéra ───────────────────────────────────────────────────────────────
+
+/** Jak často má trenér syna v klubu (pevně podle trenéra, ne náhodně při každém načtení). */
+export const COACH_SON_CHANCE = 0.45;
+
+/**
+ * Věk trenérova syna, nebo null, když syna nemá. Rozhodne se pevně z id trenéra: jestli syna
+ * má a v kolika letech se mu narodil (25–35). Syn roste s trenérem, takže se do akademie
+ * dostane, až mu bude 11, a to jen jednou.
+ */
+export function coachSonAge(managerId: string, managerAge: number): number | null {
+  let h = 2166136261;
+  for (let i = 0; i < managerId.length; i++) h = Math.imul(h ^ managerId.charCodeAt(i), 16777619) >>> 0;
+  if ((h % 1000) / 1000 >= COACH_SON_CHANCE) return null;
+  const fatherAt = 25 + ((h >>> 10) % 11);
+  const age = managerAge - fatherAt;
+  return age >= 0 ? age : null;
 }
 
 export function expectedKidsPerYear(population: number): number {
@@ -187,8 +228,8 @@ export const QUIT_BASE = 0.08;
 export const QUIT_NO_COMPETITION = 0.15;
 export const QUIT_NO_COACH = 0.10;
 
-export function quitChance(commitment: number, playsCompetition: boolean, hasCoach: boolean, vanLevel = 0): number {
-  let chance = QUIT_BASE - 0.02 * Math.max(0, Math.min(3, vanLevel));
+export function quitChance(commitment: number, playsCompetition: boolean, hasCoach: boolean, vanLevel = 0, levelQuit = 0): number {
+  let chance = QUIT_BASE - 0.02 * Math.max(0, Math.min(3, vanLevel)) + levelQuit;
   if (!playsCompetition) chance += QUIT_NO_COMPETITION;
   if (!hasCoach) chance += QUIT_NO_COACH;
   if (commitment < 40) chance += 0.15;

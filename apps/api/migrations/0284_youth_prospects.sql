@@ -20,6 +20,8 @@ CREATE TABLE IF NOT EXISTS youth_prospects (
   next_offer_on TEXT,
   -- Číslo sezóny, na jejímž konci kluk už zestárl (konec sezóny ho nezpracuje dvakrát)
   aged_season INTEGER,
+  -- Syn trenéra (manažera) klubu: drží s klubem, nikdo ho nepřetáhne
+  coach_son INTEGER NOT NULL DEFAULT 0,
   player_id TEXT,
   joined_at TEXT NOT NULL,
   left_at TEXT,
@@ -40,6 +42,8 @@ ALTER TABLE teams ADD COLUMN academy_coach_prospect_id TEXT;
 ALTER TABLE teams ADD COLUMN academy_founded_season INTEGER;
 -- Číslo sezóny posledního náborového dne (jednou za sezónu)
 ALTER TABLE teams ADD COLUMN academy_recruit_day_season INTEGER;
+-- Kolik klub do akademie dává: 'modest' | 'standard' | 'ambitious' (academy/rules.ts, ACADEMY_LEVELS)
+ALTER TABLE teams ADD COLUMN academy_level TEXT NOT NULL DEFAULT 'standard';
 
 -- Přetahování nadějných žáků mezi kluby: zájem kluka (a rodičů) o klub, který ho láká.
 -- V létě (fáze academy) kluk se zájmem nad hranicí přestoupí za tabulkové odstupné.
