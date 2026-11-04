@@ -384,10 +384,10 @@ export default function NewsPage() {
   const gremiumArticles = articles.filter((a) => a.type === "governance_minutes");
   const openerArticles = articles.filter((a) => a.type === "season_opener");
   const wrapArticles = articles.filter((a) => a.type === "season_wrap");
-  // Reportáž z okresní akce (pouť, bál…) je týden nahoře nad úvodníkem, pak spadne do drobných zpráv.
-  // Dřív rovnou končila v drobných zprávách na konci listu a nikdo ji nenašel.
+  // Reportáž z okresní akce (pouť, bál…) je tři dny nahoře nad úvodníkem, pak spadne do drobných zpráv.
+  // Dřív rovnou končila v drobných zprávách na konci listu a nikdo ji nenašel; týden nahoře byl moc dlouho.
   const districtEventStory = articles.find(
-    (a) => a.type === "district_event" && Date.now() - new Date(a.date).getTime() < 7 * 24 * 3600 * 1000,
+    (a) => a.type === "district_event" && Date.now() - new Date(a.date).getTime() < 3 * 24 * 3600 * 1000,
   ) ?? null;
   // Pohárové kolo: vlastní rubrika nahoře na tři dny, pak spadne do drobných zpráv.
   const cupStory = articles.find(
