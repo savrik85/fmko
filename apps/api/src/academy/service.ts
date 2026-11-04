@@ -957,27 +957,40 @@ export async function poachAction(db: D1Database, rng: Rng, teamId: string, pros
   if (!from || from.district !== club.district || distanceKm(club, from) > POACH_RADIUS_KM) {
     return { ok: false, status: 400, error: `Lákat jde jen kluky z klubů do ${POACH_RADIUS_KM} km` };
   }
+  // Kluby stejného majitele nebo propojené by si přes přetahování posílaly kluky a odstupné
+  const { areClubsLinked } = await import("../competition/club-links");
+  if (await areClubsLinked(db, teamId, from.id)) return { ok: false, status: 409, error: "Mezi propojenými kluby se kluci přetahovat nedají" };
   const seasonNumber = await currentSeasonNumber(db);
   if (await recentlyPoached(db, p.id, seasonNumber)) return { ok: false, status: 409, error: "Kluk teprve přestoupil, rok ho nech být" };
 
   let poach = await db.prepare("SELECT * FROM youth_poach WHERE prospect_id = ? AND to_team_id = ? AND season_number = ? AND status = 'active'")
     .bind(p.id, teamId, seasonNumber).first<PoachRow>();
   if (!poach) {
-    const count = await db.prepare("SELECT COUNT(*) AS n FROM youth_poach WHERE to_team_id = ? AND season_number = ? AND status = 'active'")
-      .bind(teamId, seasonNumber).first<{ n: number }>();
-    if ((count?.n ?? 0) >= MAX_POACH_PER_SEASON) return { ok: false, status: 409, error: `Za sezónu jde lákat nejvýš ${MAX_POACH_PER_SEASON} kluky` };
+    // Limit za sezónu atomicky: dvě souběžná nová lákání nepřelezou MAX_POACH_PER_SEASON
     const id = crypto.randomUUID();
-    const interest = await baseInterestFor(db, p, from, club);
-    await db.prepare("INSERT INTO youth_poach (id, prospect_id, from_team_id, to_team_id, season_number, interest) VALUES (?, ?, ?, ?, ?, ?)")
-      .bind(id, p.id, from.id, teamId, seasonNumber, interest).run();
-    poach = { id, prospect_id: p.id, from_team_id: from.id, to_team_id: teamId, season_number: seasonNumber, interest, actions: "[]", status: "active" };
+    const base = await baseInterestFor(db, p, from, club);
+    const inserted = await db.prepare(
+      `INSERT INTO youth_poach (id, prospect_id, from_team_id, to_team_id, season_number, interest)
+       SELECT ?, ?, ?, ?, ?, ?
+        WHERE (SELECT COUNT(*) FROM youth_poach WHERE to_team_id = ? AND season_number = ? AND status = 'active') < ?
+          AND NOT EXISTS (SELECT 1 FROM youth_poach WHERE prospect_id = ? AND to_team_id = ? AND season_number = ? AND status = 'active')`,
+    ).bind(id, p.id, from.id, teamId, seasonNumber, base, teamId, seasonNumber, MAX_POACH_PER_SEASON, p.id, teamId, seasonNumber).run();
+    poach = await db.prepare("SELECT * FROM youth_poach WHERE prospect_id = ? AND to_team_id = ? AND season_number = ? AND status = 'active'")
+      .bind(p.id, teamId, seasonNumber).first<PoachRow>();
+    // Nevložilo se a ani souběžný požadavek stejného kluka nezaložil: plný limit
+    if (!poach) return { ok: false, status: 409, error: `Za sezónu jde lákat nejvýš ${MAX_POACH_PER_SEASON} kluky` };
+    if (inserted.meta.changes === 0 && poach.id !== id) logger.info({ module: M, teamId }, "poach založil souběžný požadavek");
   }
-  const done = parseJson<string[]>(poach.actions, [], "poach actions");
-  if (done.includes(action)) return { ok: false, status: 409, error: "Tohle už jsi zkusil" };
+  // Akce atomicky a relativně: každá jen jednou, souběžné kliknutí zájem nezdvojí
   const def = POACH_ACTIONS[action as PoachAction];
+  const applied = await db.prepare(
+    `UPDATE youth_poach SET interest = MAX(0, MIN(100, interest + ?)), actions = json_insert(actions, '$[#]', ?)
+      WHERE id = ? AND status = 'active' AND NOT EXISTS (SELECT 1 FROM json_each(youth_poach.actions) WHERE value = ?)`,
+  ).bind(def.interest, action, poach.id, action).run();
+  if (applied.meta.changes === 0) return { ok: false, status: 409, error: "Tohle už jsi zkusil" };
+  // Peníze až po úspěšné akci
   if (def.cost > 0) await recordTransaction(db, teamId, "youth_academy", -def.cost, `Příspěvek rodičům na kopačky: ${p.first_name} ${p.last_name}`, gameDate);
-  const interest = Math.max(0, Math.min(100, poach.interest + def.interest));
-  await db.prepare("UPDATE youth_poach SET interest = ?, actions = ? WHERE id = ?").bind(interest, JSON.stringify([...done, action]), poach.id).run();
+  const interest = (await db.prepare("SELECT interest FROM youth_poach WHERE id = ?").bind(poach.id).first<{ interest: number }>())?.interest ?? 0;
 
   const name = `${p.first_name} ${p.last_name}`;
   if (action === "invite" && isHuman(from)) {
@@ -993,10 +1006,12 @@ export async function poachAction(db: D1Database, rng: Rng, teamId: string, pros
 export async function defendPoach(db: D1Database, teamId: string, poachId: string): Promise<ServiceResult<{ interest: string }>> {
   const poach = await db.prepare("SELECT * FROM youth_poach WHERE id = ? AND from_team_id = ? AND status = 'active'").bind(poachId, teamId).first<PoachRow>();
   if (!poach) return { ok: false, status: 404, error: "O tvého kluka se nikdo nezajímá" };
-  const done = parseJson<string[]>(poach.actions, [], "poach actions");
-  if (done.includes("defend")) return { ok: false, status: 409, error: "S rodiči už jsi mluvil" };
-  const interest = Math.max(0, poach.interest + POACH_ACTIONS.defend.interest);
-  await db.prepare("UPDATE youth_poach SET interest = ?, actions = ? WHERE id = ?").bind(interest, JSON.stringify([...done, "defend"]), poach.id).run();
+  const applied = await db.prepare(
+    `UPDATE youth_poach SET interest = MAX(0, MIN(100, interest + ?)), actions = json_insert(actions, '$[#]', 'defend')
+      WHERE id = ? AND status = 'active' AND NOT EXISTS (SELECT 1 FROM json_each(youth_poach.actions) WHERE value = 'defend')`,
+  ).bind(POACH_ACTIONS.defend.interest, poach.id).run();
+  if (applied.meta.changes === 0) return { ok: false, status: 409, error: "S rodiči už jsi mluvil" };
+  const interest = (await db.prepare("SELECT interest FROM youth_poach WHERE id = ?").bind(poach.id).first<{ interest: number }>())?.interest ?? 0;
   return { ok: true, interest: interestText(interest) };
 }
 
@@ -1010,7 +1025,9 @@ async function resolvePoaches(db: D1Database, club: ClubRow, gameDate: string): 
   for (const y of rows) {
     const p = await db.prepare("SELECT * FROM youth_prospects WHERE id = ?").bind(y.prospect_id).first<ProspectRow>();
     const to = await loadClub(db, y.to_team_id);
-    if (!p || p.status !== "active" || p.team_id !== club.id || !to || y.interest < POACH_THRESHOLD || !to.academy_upkeep) {
+    const { areClubsLinked } = await import("../competition/club-links");
+    const linked = to ? await areClubsLinked(db, club.id, to.id) : false;
+    if (!p || p.status !== "active" || p.team_id !== club.id || !to || y.interest < POACH_THRESHOLD || !to.academy_upkeep || linked) {
       await db.prepare("UPDATE youth_poach SET status = 'failed' WHERE id = ?").bind(y.id).run();
       continue;
     }
