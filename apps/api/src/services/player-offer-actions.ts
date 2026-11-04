@@ -41,6 +41,19 @@ export async function acceptPlayerOffer(db: D1Database, teamId: string, offerId:
   }
 
   const playerId = crypto.randomUUID();
+
+  // Kluk z akademie: zabrat ho atomicky dřív, než vznikne hráč. Dvě souběžná přijetí (ruční
+  // vytažení a nabídka trenéra) nebo přijetí po jeho odchodu by jinak založily hráče navíc.
+  const claimedProspect = (offer.prospect_id as string | null) ?? null;
+  if (claimedProspect) {
+    const prospectClaim = await db.prepare(
+      "UPDATE youth_prospects SET status = 'promoted', player_id = ?, next_offer_on = NULL WHERE id = ? AND team_id = ? AND status = 'active'",
+    ).bind(playerId, claimedProspect, teamId).run();
+    if (prospectClaim.meta.changes === 0) {
+      await db.prepare("UPDATE player_offers SET status = 'expired' WHERE id = ?").bind(offerId).run();
+      return { ok: false, status: 409, error: "Kluk už u žáků není" };
+    }
+  }
   // Skrytý talent z nabídky se musí propsat do sloupce hidden_talent — jinak by
   // zobrazený badge "✨ Talent" byl fikce (dřívější bug: INSERT ho zahazoval → default 0).
   const offerPersonality = (() => { try { return JSON.parse((offer.personality as string) ?? "{}"); } catch (e) { logger.warn({ module: M }, "parse offer personality", e); return {}; } })();
