@@ -26,6 +26,7 @@ interface Prospect {
   age: number;
   position: string;
   positionSure: boolean;
+  coachSon: boolean;
   avatar: Record<string, unknown> | null;
   traits: string[];
   strengths: string[];
@@ -43,6 +44,8 @@ interface AcademyData {
   village: string;
   expectedPerYear: number;
   weeklyCost: number;
+  level: "modest" | "standard" | "ambitious";
+  levels: { key: "modest" | "standard" | "ambitious"; label: string; text: string; base: number; perKid: number; weekly: number }[];
   upkeepBase: number;
   upkeepPerKid: number;
   minSquad: number;
@@ -286,13 +289,35 @@ export function AcademyCard({ teamId }: { teamId: string }) {
               <li>Potenciál kluka odhaduje trenér. U mladších se plete víc, u čtrnáctiletých míň, placený trenér mládeže nejmíň.</li>
               <li>Každé léto jdou čtrnáctiletí do {data.hasU21 ? "tvého dorostu (U21)" : "dorostu jiného klubu, ty dostaneš odstupné"}. {data.hasU21 ? "Nadějného kluka od 13 let ti trenér doporučí do dorostu dřív, dát ho tam můžeš i sám." : "Dřív to nejde, protože vlastní dorost nemáš."}</li>
               <li>Podle pravidel FAČR smí kluk do dorostu od 13 let, za muže (áčko) až od 15 let.</li>
-              <li>Provoz stojí {kc(data.upkeepBase)} týdně a {kc(data.upkeepPerKid)} za každého kluka.</li>
+              <li>Kolik do akademie dáváš, si vybereš: skromná šetří, ale kluci rostou pomaleji a víc jich skončí; ambiciózní platí soustředění a turnaje, kluci rostou rychleji a láká to i kluky odjinud.</li>
             </ul>
           </details>
         </section>
   
-        <section className="card p-4 sm:p-5 space-y-2">
-          <p className="text-sm text-muted">Provoz akademie tě stojí {kc(data.weeklyCost)} týdně ({kc(data.upkeepBase)} základ a {kc(data.upkeepPerKid)} za každého z {data.prospects.length} kluků).</p>
+        <section className="card p-4 sm:p-5 space-y-3">
+          <h2 className="font-heading font-bold text-base">Kolik do akademie dáváš</h2>
+        <ul className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {data.levels.map((l) => {
+            const active = l.key === data.level;
+            return (
+              <li key={l.key} className="flex flex-col">
+                <button
+                  onClick={() => { if (!active) post(`level:${l.key}`, `/api/teams/${teamId}/academy/level`, { level: l.key }, "Úroveň akademie se nepodařilo změnit"); }}
+                  disabled={busy !== null}
+                  aria-pressed={active}
+                  className={`w-full flex-1 text-left rounded-soft border p-3 min-h-11 transition-colors ${active ? "border-pitch-500 bg-pitch-50" : "border-gray-200 bg-white hover:border-pitch-500"}`}
+                >
+                  <span className="flex items-baseline justify-between gap-2">
+                    <span className="font-heading font-bold text-sm text-ink">{l.label}{active ? " (teď)" : ""}</span>
+                  </span>
+                  <span className="block text-xs text-muted mt-1">{l.text}</span>
+                </button>
+                <p className="text-xs text-muted mt-1 px-1">{kc(l.base)} + {kc(l.perKid)} za kluka, teď {kc(l.weekly)} týdně</p>
+              </li>
+            );
+          })}
+        </ul>
+        <p className="text-sm text-muted">Provoz akademie tě teď stojí {kc(data.weeklyCost)} týdně za {boysText(data.prospects.length).toLowerCase()}.</p>
           {confirmClose ? (
             <div className="flex flex-wrap gap-2">
               <button onClick={() => post("close", `/api/teams/${teamId}/academy/close`, undefined, "Akademii se nepodařilo zrušit")} disabled={busy !== null} className="btn btn-secondary min-h-11 px-3 disabled:opacity-40">
@@ -334,6 +359,7 @@ export function AcademyCard({ teamId }: { teamId: string }) {
                           <span className="font-heading font-bold text-ink">
                             {p.name}
                             {p.promising && <span className="ml-2 align-middle rounded-full bg-pitch-50 px-2 py-0.5 text-xs font-bold text-pitch-600">nadějný</span>}
+                          {p.coachSon && <span className="ml-2 align-middle rounded-full bg-gold-50 px-2 py-0.5 text-xs font-bold text-gold-700">syn trenéra</span>}
                           </span>
                           <span className="text-sm text-ink">{p.age} let · {p.positionSure ? POSITION_CS[p.position] ?? p.position : `nejspíš ${POSITION_CS[p.position] ?? p.position}`}</span>
                         </div>

@@ -8,13 +8,13 @@ import { afterAll, beforeAll, describe, it } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
 import { Miniflare } from "miniflare";
 import { createRng } from "../generators/rng";
-import { foundYouthTeam, setYouthCoach, weeklyAcademy, seasonEndAcademy, recruitDay } from "./service";
+import { foundYouthTeam, setYouthCoach, weeklyAcademy, seasonEndAcademy, recruitDay, setAcademyLevel } from "./service";
 
 let mf: Miniflare;
 let db: D1Database;
 const GAME_DATE = "2026-11-02T05:00:00.000Z";
 
-interface Club { id: string; label: string; pop: number; coach: "volunteer" | "parent" | "staff"; recruit: boolean }
+interface Club { id: string; label: string; pop: number; coach: "volunteer" | "parent" | "staff"; recruit: boolean; level: "modest" | "standard" | "ambitious" }
 const clubs: Club[] = [];
 
 beforeAll(async () => {
@@ -30,14 +30,16 @@ beforeAll(async () => {
     db.prepare("INSERT INTO leagues (id, season_id, district, name, level) VALUES ('lg', 'sim', 'Prachatice', 'OP', 'okresni_prebor')"),
   ]);
   const pick = async (lo: number, hi: number) => db.prepare("SELECT id, population FROM villages WHERE district = 'Prachatice' AND lat IS NOT NULL AND population BETWEEN ? AND ? ORDER BY population LIMIT 1").bind(lo, hi).first<{ id: string; population: number }>();
-  const specs: [string, number, number, Club["coach"], boolean][] = [
-    ["osada+táta", 100, 500, "parent", false],
-    ["obec+dobrovolník", 1200, 2000, "volunteer", false],
-    ["obec+trenér+nábor", 2001, 3500, "staff", true],
-    ["městys+trenér+nábor", 3501, 9000, "staff", true],
+  const specs: [string, number, number, Club["coach"], boolean, Club["level"]][] = [
+    ["osada+táta", 100, 500, "parent", false, "standard"],
+    ["obec+dobrovolník", 1200, 2000, "volunteer", false, "standard"],
+    ["obec+trenér skromná", 2001, 3500, "staff", false, "modest"],
+    ["obec+trenér běžná", 2001, 3500, "staff", false, "standard"],
+    ["obec+trenér ambiciózní", 2001, 3500, "staff", false, "ambitious"],
+    ["městys+trenér+nábor ambiciózní", 3501, 9000, "staff", true, "ambitious"],
   ];
   let i = 0;
-  for (const [label, lo, hi, coach, recruit] of specs) {
+  for (const [label, lo, hi, coach, recruit, level] of specs) {
     const v = await pick(lo, hi);
     if (!v) continue;
     const id = `c${i++}`;
@@ -49,7 +51,7 @@ beforeAll(async () => {
       await db.prepare(`INSERT INTO staff_members (id, district, team_id, role, profession, first_name, last_name, gender, age, coaching, medicine, maintenance, judgement, communication, work_rate, charm, weekly_wage, signing_fee, avatar, description)
         VALUES (?, 'Prachatice', ?, 'trener_mladeze', 'trener_mladeze', 'Karel', 'Trenér', 'm', 45, 12, 5, 5, 12, 12, 10, 8, 250, 1000, '{}', '')`).bind(`${id}-staff`, id).run();
     }
-    clubs.push({ id, label, pop: v.population, coach, recruit });
+    clubs.push({ id, label, pop: v.population, coach, recruit, level });
   }
 }, 180_000);
 
@@ -61,6 +63,7 @@ describe.skipIf(!process.env.ACADEMY_SIM)("bilance akademie", () => {
     for (const c of clubs) {
       await foundYouthTeam(db, rng, c.id, GAME_DATE);
       await setYouthCoach(db, c.id, c.coach === "volunteer" ? { type: "volunteer", playerId: `${c.id}-vet` } : { type: c.coach });
+      await setAcademyLevel(db, c.id, c.level);
     }
     const rows: string[] = [];
     for (let season = 1; season <= 6; season++) {

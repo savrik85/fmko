@@ -6,7 +6,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
 import { Miniflare } from "miniflare";
 import { createRng } from "../generators/rng";
-import { foundYouthTeam, setYouthCoach, recruitDay, seasonEndAcademy, poachAction, defendPoach, loadAcademyView, type ProspectRow } from "./service";
+import { foundYouthTeam, setYouthCoach, recruitDay, seasonEndAcademy, poachAction, defendPoach, loadAcademyView, setAcademyLevel, weeklyAcademy, type ProspectRow } from "./service";
+import { coachSonAge } from "./rules";
 
 let mf: Miniflare;
 let db: D1Database;
@@ -135,5 +136,42 @@ describe("přetahování", () => {
     // Rok ho nikdo přetahovat nemůže
     await db.prepare("INSERT INTO teams (id, user_id, village_id, name, budget, reputation, game_date, league_id, academy_upkeep) SELECT 'third', 'u-b', village_id, 'Slavoj', 100000, 50, game_date, 'lg', 1 FROM teams WHERE id = 'small'").run();
     expect((await poachAction(db, createRng(9), "third", kid.id, "invite", GAME_DATE)).ok).toBe(false);
+  });
+});
+
+describe("úroveň akademie a syn trenéra", () => {
+  it("úroveň mění týdenní cenu i růst kluků", async () => {
+    expect((await setAcademyLevel(db, "big", "elite")).ok).toBe(false);
+    const kids = (await prospects("big")).length;
+    expect((await setAcademyLevel(db, "big", "ambitious")).ok).toBe(true);
+    const before = (await prospects("big"))[0];
+    await weeklyAcademy(db, "big", GAME_DATE, 1);
+    const tx = await db.prepare("SELECT amount FROM transactions WHERE team_id = 'big' AND type = 'youth_academy' ORDER BY rowid DESC LIMIT 1").first<{ amount: number }>();
+    expect(tx!.amount).toBe(-(500 + 90 * kids));
+    const ambitiousStep = (await prospects("big")).find((k) => k.id === before.id)!.progress_current - before.progress_current;
+    await setAcademyLevel(db, "big", "modest");
+    const mid = (await prospects("big")).find((k) => k.id === before.id)!;
+    await weeklyAcademy(db, "big", GAME_DATE, 1);
+    const modestStep = (await prospects("big")).find((k) => k.id === before.id)!.progress_current - mid.progress_current;
+    expect(ambitiousStep).toBeGreaterThan(modestStep);
+  });
+
+  it("syn trenéra přijde při založení, jen jednou, a přetáhnout nejde", async () => {
+    // Trenér, jehož syn je teď v žácích (12 let)
+    const managerId = Array.from({ length: 500 }, (_, i) => `mgr-${i}`).find((id) => coachSonAge(id, 42) === 12)!;
+    const v = await db.prepare("SELECT village_id FROM teams WHERE id = 'small'").first<{ village_id: string }>();
+    await db.prepare("INSERT INTO teams (id, user_id, village_id, name, budget, reputation, game_date, league_id) VALUES ('family', 'u-a', ?, 'Rodinný', 100000, 50, ?, 'lg')").bind(v!.village_id, GAME_DATE).run();
+    await db.prepare("INSERT INTO managers (id, user_id, team_id, name, backstory, avatar, age) VALUES (?, 'u-a', 'family', 'Josef Kopecký', '', '{}', 42)").bind(managerId).run();
+    expect((await foundYouthTeam(db, createRng(30), "family", GAME_DATE)).ok).toBe(true);
+    const son = await db.prepare("SELECT id, last_name, age, commitment FROM youth_prospects WHERE team_id = 'family' AND coach_son = 1").first<{ id: string; last_name: string; age: number; commitment: number }>();
+    expect(son).toMatchObject({ last_name: "Kopecký", age: 12, commitment: 95 });
+    const view = await loadAcademyView(db, "family");
+    expect(view!.prospects.find((p) => p.id === son!.id)!.coachSon).toBe(true);
+    // Na konci sezóny se znovu nepřidá
+    await setYouthCoach(db, "family", { type: "parent" });
+    await seasonEndAcademy(db, createRng(31), "family", GAME_DATE);
+    const sons = await db.prepare("SELECT COUNT(*) AS n FROM youth_prospects WHERE team_id = 'family' AND coach_son = 1").first<{ n: number }>();
+    expect(sons!.n).toBe(1);
+    expect((await poachAction(db, createRng(32), "big", son!.id, "invite", GAME_DATE)).ok).toBe(false);
   });
 });
