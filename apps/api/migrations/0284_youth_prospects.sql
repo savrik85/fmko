@@ -36,6 +36,25 @@ ALTER TABLE teams ADD COLUMN academy_coach_name TEXT;
 ALTER TABLE teams ADD COLUMN academy_coach_prospect_id TEXT;
 -- Číslo sezóny, kdy klub žáky naposledy založil: založit jde nejvýš jednou za sezónu
 ALTER TABLE teams ADD COLUMN academy_founded_season INTEGER;
+-- Číslo sezóny posledního náborového dne (jednou za sezónu)
+ALTER TABLE teams ADD COLUMN academy_recruit_day_season INTEGER;
+
+-- Přetahování nadějných žáků mezi kluby: zájem kluka (a rodičů) o klub, který ho láká.
+-- V létě (fáze academy) kluk se zájmem nad hranicí přestoupí za tabulkové odstupné.
+CREATE TABLE IF NOT EXISTS youth_poach (
+  id TEXT PRIMARY KEY,
+  prospect_id TEXT NOT NULL,
+  from_team_id TEXT NOT NULL,
+  to_team_id TEXT NOT NULL,
+  season_number INTEGER NOT NULL,
+  interest INTEGER NOT NULL,
+  -- JSON pole provedených akcí: invite, promise, boots, defend
+  actions TEXT NOT NULL DEFAULT '[]',
+  status TEXT NOT NULL DEFAULT 'active',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_youth_poach_to ON youth_poach(to_team_id, status);
+CREATE INDEX IF NOT EXISTS idx_youth_poach_prospect ON youth_poach(prospect_id, status);
 
 -- Nabídka do dorostu od trenéra mládeže ukazuje na kluka u žáků
 ALTER TABLE player_offers ADD COLUMN prospect_id TEXT;

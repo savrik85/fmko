@@ -157,3 +157,15 @@ v obcích do 8 km, hala, autobus, nábor jen dvanáctiletých a pouštění na t
    do města a vrací se domů (bod 6). Je to stejný mechanismus, jen jednou lákáš ty
    a jednou klub z města.
 3. Sdružené družstvo se sousedem.
+
+## Stav 2026-11-04 (postaveno, zatím jen lokálně)
+
+- Akademie (Mládež → Akademie): kluci 11–14 let, trenér (dobrovolník, táta, placený trenér
+  mládeže s najímáním přímo v Akademii), klubové vybavení zrychluje růst, dodávka snižuje odchody.
+- U kluka: věk, pozice, silné a slabé stránky slovy, pás potenciálu s rozpětím odhadu, dětský avatar.
+- Noví kluci: letní ročník z obce, kluci z obcí do 6 km bez akademie (nejvýš 4 za léto),
+  náborový den ve škole (1 500 Kč, jednou za sezónu), přetahování z klubů do 15 km
+  (pozvat, slíbit dorost a odvoz, kopačky 2 000 Kč; v létě přestup od zájmu 60 za tabulkové
+  odstupné; nejvýš 2 kluci za sezónu, rok ochrana; obrana „promluvit s rodiči“).
+- Věk podle FAČR: do dorostu od 13, za muže od 15.
+- AI kluby zatím nelákají ani se nebrání (chybí rozhodnutí přes model).

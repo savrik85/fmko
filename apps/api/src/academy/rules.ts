@@ -296,3 +296,97 @@ export function staffQualityText(effectiveness: number): string {
   if (effectiveness >= 7) return "průměrný";
   return "slabší";
 }
+
+// ── Kde vzít nové kluky ───────────────────────────────────────────────────────
+
+/** Náborový den ve škole: jednou za sezónu, s trenérem žáků. */
+export const RECRUIT_DAY_COST = 1500;
+
+/**
+ * Kolik kluků (11–12 let) přivede náborový den: zhruba polovina ročníku obce navíc,
+ * nejméně „možná jeden“, nejvýš 3. Dobrý trenér děti nadchne víc.
+ */
+export function recruitDayExpected(population: number, quality: number): number {
+  const base = Math.min(3, Math.max(0.6, expectedKidsPerYear(population) * 0.6));
+  return Math.min(3, base * (0.7 + 0.3 * Math.min(1.3, Math.max(0, quality))));
+}
+
+/** Kluci z obcí bez vlastní akademie chodí do akademie v okolí: do téhle vzdálenosti. */
+export const NEIGHBOR_RADIUS_KM = 6;
+/** Z okolních obcí přijde za léto nejvýš tolik kluků (velké obce by jinak zaplavily družstvo). */
+export const NEIGHBOR_MAX_PER_YEAR = 4;
+/** Víc kluků družstvo žáků neuživí: nábor ani okolní obce nikoho dalšího nepřivedou. */
+export const MAX_SQUAD = 30;
+/** Jaký díl ročníku obce bez akademie vůbec chce hrát fotbal jinde (dojíždění). */
+export const NEIGHBOR_SHARE = 0.5;
+
+/** Kolik jedenáctiletých z obce bez akademie přijde k jednomu klubu s akademií v okolí. */
+export function neighborKidsExpected(population: number, academiesAround: number): number {
+  return (expectedKidsPerYear(population) * NEIGHBOR_SHARE) / Math.max(1, academiesAround);
+}
+
+// ── Přetahování nadějných žáků ────────────────────────────────────────────────
+
+/** O kolik klubů dál jde lákat (km mezi obcemi). */
+export const POACH_RADIUS_KM = 15;
+/** Kolik cizích kluků může klub za sezónu lákat. */
+export const MAX_POACH_PER_SEASON = 2;
+/** Od jakého zájmu kluk v létě přestoupí. */
+export const POACH_THRESHOLD = 60;
+/** Akce a co udělají se zájmem. Kopačky stojí peníze a můžou prasknout. */
+export const POACH_ACTIONS = {
+  invite: { interest: 15, cost: 0 },
+  promise: { interest: 15, cost: 0 },
+  boots: { interest: 25, cost: 2000, scandalChance: 0.3 },
+  defend: { interest: -20, cost: 0 },
+} as const;
+export type PoachAction = keyof typeof POACH_ACTIONS;
+
+/** Úrovně soutěží od nejvyšší, pro srovnání „kdo hraje výš“. */
+const LEAGUE_RANK: Record<string, number> = {
+  krajsky_prebor: 5, i_a_trida: 4, i_b_trida: 3, okresni_prebor: 2, okresni_soutez: 1, iv_trida: 0,
+};
+
+export interface PoachInput {
+  /** Jeho klub nemá dorost: v patnácti stejně musí jinam. */
+  fromHasU21: boolean;
+  fromLeague: string | null;
+  toLeague: string | null;
+  /** Kvalita přípravy u jeho klubu a u lákajícího (programQuality). */
+  fromQuality: number;
+  toQuality: number;
+  distanceKm: number;
+  /** Chuť kluka (commitment) u vlastního klubu 0–100. */
+  commitment: number;
+}
+
+/** Výchozí zájem kluka o lákající klub 0–100 (bez akcí). V UI jen slovy. */
+export function poachBaseInterest(i: PoachInput): number {
+  let v = 20;
+  if (!i.fromHasU21) v += 25;
+  const diff = (LEAGUE_RANK[i.toLeague ?? ""] ?? 1) - (LEAGUE_RANK[i.fromLeague ?? ""] ?? 1);
+  v += Math.max(-10, Math.min(20, diff * 10));
+  v += Math.round((i.toQuality - i.fromQuality) * 25);
+  v -= Math.round(Math.max(0, i.distanceKm - 3) * 2);
+  v -= Math.round((i.commitment - 50) * 0.4);
+  return Math.max(0, Math.min(100, v));
+}
+
+export function interestText(interest: number): string {
+  if (interest >= POACH_THRESHOLD) return "chce k vám, v létě přestoupí";
+  if (interest >= 45) return "váhá, ještě trochu a půjde";
+  if (interest >= 25) return "poslouchá, ale drží se svého klubu";
+  return "nemá zájem";
+}
+
+/**
+ * Tabulkové odstupné za kluka podle věkové kategorie a soutěže klubu, kam jde
+ * (Přestupní řád FAČR § 23): mladší žáci (do 12 let) mají nižší sazbu než starší.
+ */
+const YOUNGER_FEE: Record<string, number> = {
+  krajsky_prebor: 12_500, i_a_trida: 10_000, i_b_trida: 8_000, okresni_prebor: 6_500, okresni_soutez: 5_000, iv_trida: 4_000,
+};
+export function youthFeeByAge(age: number, leagueLevel: string | null | undefined): number {
+  if (age >= 13) return youthTransferFee(leagueLevel);
+  return (leagueLevel && YOUNGER_FEE[leagueLevel]) || 6_500;
+}
