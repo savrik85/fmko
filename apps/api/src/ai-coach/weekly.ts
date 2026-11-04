@@ -107,15 +107,32 @@ async function lastTicketChange(db: D1Database, teamId: string, gameDay: string)
   return row ? Math.max(0, daysBetween(row.created_at, gameDay)) : null;
 }
 
+/** Žáci pro týdenní správu: zázemí jako jedna úroveň, počet kluků a okolní obce pro nábor. */
+async function loadAcademyContext(db: D1Database, teamId: string): Promise<WeeklyContext["academy"]> {
+  const { recruitVillagesForTeam, programLevel } = await import("../academy/service");
+  const { ACADEMY_WEEKLY_COST } = await import("./weekly-decision");
+  const data = await recruitVillagesForTeam(db, teamId)
+    .catch((e) => { logger.warn({ module: M, teamId }, "žáci pro týdenní správu", e); return null; });
+  if (!data) return { current: "none", weeklyCostNow: 0, prospects: 0, villages: [], recruitNow: [] };
+  const villages = data.villages.filter((v) => !v.own).slice(0, 8)
+    .map((v, i) => ({ key: `V${i + 1}`, villageId: v.id, label: `${v.name}, ${v.km} km, ~${v.expectedKids} boys a year`, selected: v.selected }));
+  const current = programLevel(data.program);
+  return {
+    current, weeklyCostNow: ACADEMY_WEEKLY_COST[current], prospects: data.prospects,
+    villages: villages.map(({ selected: _s, ...v }) => v),
+    recruitNow: villages.filter((v) => v.selected).map((v) => v.key),
+  };
+}
+
 /** Načte všechno, co trenér v pondělí potřebuje vědět. Null = tým nejde najít. */
 export async function loadWeeklyContext(db: D1Database, teamId: string, gameDayOverride?: string): Promise<WeeklyContext | null> {
   const team = await db.prepare(
     `SELECT t.id, t.name, t.budget, t.reputation, t.league_id, t.game_date, t.training_type, t.training_approach, t.training_sessions,
-            t.youth_investment, v.size AS village_size
+            v.size AS village_size
        FROM teams t LEFT JOIN villages v ON v.id = t.village_id WHERE t.id = ?`,
   ).bind(teamId).first<{
     id: string; name: string; budget: number; reputation: number; league_id: string | null; game_date: string | null;
-    training_type: string | null; training_approach: string | null; training_sessions: number | null; youth_investment: string | null; village_size: string | null;
+    training_type: string | null; training_approach: string | null; training_sessions: number | null; village_size: string | null;
   }>().catch((e) => { logger.warn({ module: M, teamId }, "tým", e); return null; });
   if (!team) return null;
   const gameDay = (gameDayOverride ?? team.game_date ?? new Date().toISOString()).slice(0, 10);
@@ -282,7 +299,7 @@ export async function loadWeeklyContext(db: D1Database, teamId: string, gameDayO
     .map((m, i) => ({ key: `L${i + 1}`, playerId: m.id, label: `${m.position} ${m.age}y rating ${m.rating}` }));
 
   const effectivePrice = fans && fans.base_ticket_price > 0 ? fans.base_ticket_price : villageBase;
-  const youthWeekly = { none: 0, minimal: 1500, medium: 5000, high: 12000 }[(team.youth_investment ?? "none") as "none"] ?? 0;
+  const academy = await loadAcademyContext(db, teamId);
   // Bufet: domácí zápasy do příští pondělní správy, sklad jen z peněz nad rezervou.
   const concessions = await loadConcessionContext(db, teamId, {
     gameDay, days: CONCESSION_WINDOW_DAYS, spendable: Math.max(0, team.budget - reserve),
@@ -329,7 +346,7 @@ export async function loadWeeklyContext(db: D1Database, teamId: string, gameDayO
     equipmentUpgrades,
     equipmentRepairs,
     staff: { hiredRoles, candidates },
-    academy: { current: team.youth_investment ?? "none", weeklyCostNow: Math.round(youthWeekly / 4.3) },
+    academy,
     banners: { active: bannerData?.activeBanners ?? 0, max: MAX_BANNERS, offers },
     u21: { exists: !!u21, aTeamSize: squad.length, promote, sendDown },
     transfers: {
@@ -397,6 +414,11 @@ async function executeAction(db: D1Database, teamId: string, ctx: WeeklyContext,
       case "academy": {
         const res = await setAcademyInvestment(db, teamId, a.level);
         return { ok: res.ok, detail: res.ok ? res.investment : res.error };
+      }
+      case "academy_recruit": {
+        const { setRecruitVillages } = await import("../academy/service");
+        const res = await setRecruitVillages(db, teamId, a.villageIds);
+        return { ok: res.ok, detail: res.ok ? `${res.villageIds.length} obcí` : res.error };
       }
       case "banner": {
         const res = await signSponsorContract(db, teamId, {

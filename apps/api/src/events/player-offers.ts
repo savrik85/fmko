@@ -1,5 +1,5 @@
 /**
- * Organické nabídky hráčů — kamarád, hospodský, dorost, doporučení.
+ * Organické nabídky hráčů — kamarád, hospodský, doporučení (dorost chodí z akademie, academy/service.ts).
  * Generují se jako between-round events a lidskému klubu přijdou jako SMS (AI klubu ne).
  */
 
@@ -138,7 +138,10 @@ export async function generatePlayerOffer(
   if (!opts.ignorePendingLimit && (pending?.cnt ?? 0) >= 2) return null;
 
   // Pick source type
-  const sourceType = (forceSource ? SOURCES.find((s) => s.source === forceSource) : undefined) ?? rng.pick(SOURCES);
+  // Dorost už nechodí náhodou: kluky do dorostu nabízí trenér mládeže z vlastních žáků
+  // (academy/service.ts). Zdroj `youth` zůstává jen pro ruční admin generování.
+  const sourceType = (forceSource ? SOURCES.find((s) => s.source === forceSource) : undefined)
+    ?? rng.pick(SOURCES.filter((s) => s.source !== "youth"));
   const ageRange = sourceType.ageRange ?? [18, 38];
   const message = rng.pick(sourceType.messages);
 
