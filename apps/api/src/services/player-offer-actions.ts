@@ -48,7 +48,7 @@ export async function acceptPlayerOffer(db: D1Database, teamId: string, offerId:
   if (claimedProspect) {
     // Bez team_id: kluka z klubu bez dorostu bere nejbližší klub s dorostem (academy/service.ts)
     const prospectClaim = await db.prepare(
-      "UPDATE youth_prospects SET status = 'promoted', player_id = ?, next_offer_on = NULL WHERE id = ? AND status = 'active'",
+      "UPDATE youth_prospects SET status = 'promoted', player_id = ?, next_offer_on = NULL WHERE id = ? AND status IN ('active', 'leaving')",
     ).bind(playerId, claimedProspect).run();
     if (prospectClaim.meta.changes === 0) {
       await db.prepare("UPDATE player_offers SET status = 'expired' WHERE id = ?").bind(offerId).run();
@@ -117,9 +117,15 @@ export async function acceptPlayerOffer(db: D1Database, teamId: string, offerId:
   // Registration fee
   const team = await db.prepare("SELECT game_date FROM teams WHERE id = ?").bind(teamId).first<{ game_date: string }>().catch((e) => { logger.warn({ module: M }, "db op failed", e); return null; });
   if (prospectId) {
-    const { markProspectPromoted } = await import("../academy/service");
-    await markProspectPromoted(db, prospectId, playerId, team?.game_date ?? new Date().toISOString())
+    const { markProspectPromoted, chargeYouthTransferFee } = await import("../academy/service");
+    const when = team?.game_date ?? new Date().toISOString();
+    await markProspectPromoted(db, prospectId, playerId, when)
       .catch((e) => logger.warn({ module: M, teamId }, "mark prospect promoted", e));
+    // Kluk z cizích žáků (klub bez dorostu): odstupné jeho klubu, až teď při přijetí
+    if (raisedBy && raisedBy !== teamId) {
+      await chargeYouthTransferFee(db, raisedBy, teamId, `${offer.first_name} ${offer.last_name}`, when)
+        .catch((e) => logger.warn({ module: M, teamId }, "youth transfer fee", e));
+    }
   }
   await recordTransaction(db, teamId, "signing_fee", -PLAYER_OFFER_SIGNING_FEE, `Registrace: ${offer.first_name} ${offer.last_name}`, team?.game_date ?? new Date().toISOString());
 

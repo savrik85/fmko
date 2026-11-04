@@ -219,8 +219,17 @@ function playUpDay(rng: Rng, p: Pick<ProspectRow, "age" | "hidden_talent" | "est
 export async function foundYouthTeam(db: D1Database, rng: Rng, teamId: string, gameDate: string, extraYears = 0): Promise<ServiceResult<{ created: number }>> {
   const club = await loadClub(db, teamId);
   if (!club) return { ok: false, status: 404, error: "Tým nenalezen" };
-  const claim = await db.prepare("UPDATE teams SET academy_upkeep = 1 WHERE id = ? AND academy_upkeep = 0").bind(teamId).run();
-  if (claim.meta.changes === 0) return { ok: false, status: 409, error: "Žáky už máš" };
+  // Nejvýš jednou za sezónu: založit, poslat starší kluky do dorostu, zrušit a založit znovu
+  // by jinak dávalo hráče zadarmo dokola
+  const season = await db.prepare("SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1").first<{ number: number }>()
+    .catch((e) => { logger.warn({ module: M, teamId }, "active season", e); return null; });
+  const seasonNumber = season?.number ?? 0;
+  const claim = await db.prepare(
+    "UPDATE teams SET academy_upkeep = 1, academy_founded_season = ? WHERE id = ? AND academy_upkeep = 0 AND (academy_founded_season IS NULL OR academy_founded_season < ?)",
+  ).bind(seasonNumber, teamId, seasonNumber).run();
+  if (claim.meta.changes === 0) {
+    return { ok: false, status: 409, error: club.academy_upkeep ? "Žáky už máš" : "Žáky jde letos založit jen jednou, znovu až příští sezónu" };
+  }
 
   const seasonDays = await remainingSeasonDays(db, club.league_id, gameDate);
   const coach = await coachState(db, club, MIN_SQUAD);
@@ -493,16 +502,28 @@ async function graduate(db: D1Database, club: ClubRow, p: ProspectRow, gameDate:
     await db.prepare("UPDATE youth_prospects SET status = 'quit', left_at = ?, next_offer_on = NULL WHERE id = ? AND status = 'active'").bind(day(gameDate), p.id).run();
     return { ok: false, to: null, fee: 0 };
   }
-  const offerId = await insertProspectOffer(db, club, p, target.id, `${p.first_name} ${p.last_name} přichází z ${club.village_name}, kde nemají dorost.`, gameDate);
-  const res = await acceptPlayerOffer(db, target.id, offerId);
-  if (!res.ok) return { ok: false, to: null, fee: 0 };
-  const fee = youthTransferFee(target.level);
-  await recordTransaction(db, club.id, "transfer_income", fee, `Odstupné za odchovance: ${p.first_name} ${p.last_name} (${target.name})`, gameDate);
-  await recordTransaction(db, target.id, "transfer_fee", -fee, `Odstupné za dorostence: ${p.first_name} ${p.last_name} (${club.village_name})`, gameDate);
+  // Soused ho nemusí vzít: dostane nabídku a odstupné zaplatí, až když ji přijme
+  // (acceptPlayerOffer → chargeYouthTransferFee). Kluk mezitím u žáků už není.
+  await insertProspectOffer(db, club, p, target.id, `${p.first_name} ${p.last_name} (${p.age}) z ${club.village_name}, kde nemají dorost, by chtěl k vám. Když ho vezmeš, zaplatíš jejich klubu odstupné ${youthTransferFee(target.level).toLocaleString("cs")} Kč.`, gameDate);
+  await db.prepare("UPDATE youth_prospects SET status = 'leaving', next_offer_on = NULL WHERE id = ? AND status = 'active'").bind(p.id).run();
   if (isHuman({ user_id: target.user_id })) {
-    await academySms(db, target.id, `${club.village_name} nemá dorost, tak k vám přešel ${p.first_name} ${p.last_name} (${p.age}). Odstupné ${fee.toLocaleString("cs")} Kč šlo jejich klubu. Najdeš ho v U21.`);
+    await academySms(db, target.id, `${club.village_name} nemá dorost a ${p.first_name} ${p.last_name} (${p.age}) by chtěl hrát u vás. Nabídku najdeš v Přestupy → Nabídky, odstupné ${youthTransferFee(target.level).toLocaleString("cs")} Kč by šlo jejich klubu.`);
   }
-  return { ok: true, to: target.name, fee };
+  return { ok: true, to: target.name, fee: youthTransferFee(target.level) };
+}
+
+/**
+ * Odstupné za kluka, kterého si vzal klub s dorostem od klubu, kde dorost nemají
+ * (Přestupní řád FAČR, § 23). Volá `acceptPlayerOffer`, platí se jen při přijetí.
+ */
+export async function chargeYouthTransferFee(db: D1Database, fromTeamId: string, toTeamId: string, playerName: string, gameDate: string): Promise<number> {
+  const row = await db.prepare("SELECT t.name, l.level FROM teams t LEFT JOIN leagues l ON l.id = t.league_id WHERE t.id = ?")
+    .bind(toTeamId).first<{ name: string; level: string | null }>();
+  const from = await db.prepare("SELECT name FROM teams WHERE id = ?").bind(fromTeamId).first<{ name: string }>();
+  const fee = youthTransferFee(row?.level);
+  await recordTransaction(db, fromTeamId, "transfer_income", fee, `Odstupné za odchovance: ${playerName} (${row?.name ?? "jiný klub"})`, gameDate);
+  await recordTransaction(db, toTeamId, "transfer_fee", -fee, `Odstupné za dorostence: ${playerName} (${from?.name ?? "jiný klub"})`, gameDate);
+  return fee;
 }
 
 /**
@@ -570,7 +591,7 @@ export async function seasonEndAcademy(db: D1Database, rng: Rng, teamId: string,
   if (!isHuman(club)) return;
   const parts: string[] = [];
   if (promoted.length) parts.push(`Do dorostu postoupili: ${promoted.join(", ")}.`);
-  if (transferred.length) parts.push(`Dorost nemáme, tak přešli jinam: ${transferred.join(", ")}. Odstupné celkem ${feeTotal.toLocaleString("cs")} Kč.`);
+  if (transferred.length) parts.push(`Dorost nemáme, tak chtějí jinam: ${transferred.join(", ")}. Když je tam vezmou, dostaneme odstupné, celkem až ${feeTotal.toLocaleString("cs")} Kč.`);
   if (quit.length) parts.push(`Skončili: ${quit.join(", ")}.`);
   if (newKids.length) parts.push(`Noví jedenáctiletí: ${newKids.join(", ")}.`);
   else if (club.academy_upkeep) parts.push("Nových kluků z obce letos nepřišlo.");

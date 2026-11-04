@@ -34,6 +34,8 @@ ALTER TABLE teams ADD COLUMN academy_coach_type TEXT;
 ALTER TABLE teams ADD COLUMN academy_coach_player_id TEXT;
 ALTER TABLE teams ADD COLUMN academy_coach_name TEXT;
 ALTER TABLE teams ADD COLUMN academy_coach_prospect_id TEXT;
+-- Číslo sezóny, kdy klub žáky naposledy založil: založit jde nejvýš jednou za sezónu
+ALTER TABLE teams ADD COLUMN academy_founded_season INTEGER;
 
 -- Nabídka do dorostu od trenéra mládeže ukazuje na kluka u žáků
 ALTER TABLE player_offers ADD COLUMN prospect_id TEXT;
