@@ -49,21 +49,22 @@ export async function setTicketPrice(db: D1Database, teamId: string, rawPrice: n
   return { ok: true, baseTicketPrice: price };
 }
 
-export const ACADEMY_LEVELS = ["none", "minimal", "medium", "high"] as const;
+export const ACADEMY_LEVELS = ["none", "volunteer", "parent", "staff"] as const;
 export type AcademyLevel = typeof ACADEMY_LEVELS[number];
 
 /**
- * Zázemí žáků jako jedna úroveň (AI trenér): none = žáci zavření, minimal = provoz,
- * medium = provoz a hala, high = provoz, hala a autobus. Člověk nastavuje položky zvlášť
- * (academy/service.ts, setAcademyProgram).
+ * Družstvo žáků jednou volbou (AI trenér): none = zrušit, jinak založit (když není) a dát
+ * trenéra: dobrovolník z áčka, táta jednoho z kluků, nebo placený trenér mládeže.
+ * Člověk nastavuje na stránce Žáci (academy/service.ts).
  */
 export async function setAcademyInvestment(db: D1Database, teamId: string, investment: unknown): Promise<{ ok: true; investment: AcademyLevel } | ServiceError> {
   if (typeof investment !== "string" || !(ACADEMY_LEVELS as readonly string[]).includes(investment)) {
-    return { ok: false, status: 400, error: "Neplatná úroveň investice" };
+    return { ok: false, status: 400, error: "Neplatná volba žáků" };
   }
-  const { setAcademyProgram, programFromLevel } = await import("../academy/service");
-  const res = await setAcademyProgram(db, teamId, programFromLevel(investment as AcademyLevel));
+  const { applyYouthChoice } = await import("../academy/service");
+  const team = await db.prepare("SELECT game_date FROM teams WHERE id = ?").bind(teamId).first<{ game_date: string | null }>();
+  const res = await applyYouthChoice(db, teamId, investment as AcademyLevel, team?.game_date ?? new Date().toISOString());
   if (!res.ok) return { ok: false, status: res.status === 409 ? 400 : res.status, error: res.error };
-  logger.info({ module: "development", teamId }, `zázemí žáků nastaveno na ${investment}`);
+  logger.info({ module: "development", teamId }, `žáci: ${investment}`);
   return { ok: true, investment: investment as AcademyLevel };
 }

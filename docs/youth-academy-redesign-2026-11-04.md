@@ -1,196 +1,159 @@
-# Žáci: nová mládežnická akademie (návrh 2026-11-04)
+# Žáci: mládež podle skutečného okresního fotbalu (návrh v2, 2026-11-04)
 
-Nahrazuje posuvník investice (Žádná / Symbolická / Solidní / Velkorysá). Místo něj má klub
-vlastní **žáky**: partu kluků od 12 do 15 let se jmény. Hráč je sleduje roky a v šestnácti
-rozhodne, koho vezme do dorostu.
+Nahrazuje první verzi tohoto návrhu (nábor dvanáctiletých, čekání tři sezóny na prvního
+hráče). Ta šla proti tomu, jak mládež na vesnici opravdu funguje.
 
-## Proč měnit (data z produ)
+## Jak to funguje ve skutečnosti
 
-- První ročník (21. 10.): 36 kluků z velkorysé akademie mělo hodnocení 38,9. Kluci z nabídek
-  dorostu, kteří jsou zdarma, měli 39,5. Akademie přidává jen skrytý talent (+12) a strop (+6),
-  který se projeví za 3–4 sezóny. Hráč tak vidí, že platí 45 000 Kč za sezónu za totéž, co mu
-  přijde zadarmo.
-- Solidní a symbolická úroveň nabídky dorostu nepřebijí. Za 2. sezónu přišlo 171 nabídek
-  dorostu, asi 5 na klub, a 85 jich kluby přijaly.
-- Trenérova dovednost „mládež“ akademii neovlivňuje. Trenér mládeže (51 klubů ho má, plat
-  ~212 Kč/týden) zrychluje jen trénink U21.
-- Hráč nic nerozhoduje a nic nevidí. Jednou za sezónu mu z ničeho nic vypadne kluk.
+- **Kategorie podle ročníku (FAČR 2026/27):** přípravka 7–10 let, mladší žáci 11–12,
+  starší žáci 13–14, mladší dorost 15–16, starší dorost 17–18. Za muže smí kluk od 15 let.
+  Každý může hrát i o kategorii výš.
+- **Problém vesnice nejsou peníze, ale lidi:** chybí trenéři a děti. Na Rychnovsku nemá
+  polovina z 32 klubů ani jeden dětský tým. Kdo nemá dost dětí, dá se se sousedem dohromady
+  do sdruženého družstva (nejvýš dva kluby).
+- **Áčka stárnou,** protože je nemá kdo doplňovat. Kluby bez mládeže žijí z hráčů z okolí.
+- **Peníze:** dorostenec může 1.–14. června přestoupit i bez souhlasu klubu a nový klub
+  zaplatí tabulkové odstupné. Za klub z okresního přeboru je to 8 000 Kč za kluka
+  ve 14–15 letech, 13 000 Kč v 16–17 a 16 000 Kč v 18–19 letech. Velké peníze jsou jen
+  u profesionální smlouvy (tréninková kompenzace 15 000 Kč za každý rok mezi 12 a 15 lety
+  v nižších soutěžích).
 
-## 1. Žáci jako entita
+Zdroje: výkladové stanovisko FAČR k nastupování 2026/27, Přestupní řád FAČR od 1. 6. 2025,
+Deník (Beroun, Rychnov), Prostějovský Večerník, fotbal-straznice.cz.
 
-Nová tabulka `youth_prospects` (kluci 12–15 let nejsou hráči, nehrají zápasy áčka ani U21):
+## Hra v jedné větě
 
-| Sloupec | Význam |
-|---|---|
-| `team_id` | klub |
-| `first_name`, `last_name`, `age` | jméno z generátoru jmen okresu |
-| `home_village_id` | obec, odkud dojíždí (pro autobus a mapu) |
-| `position` | ve 12 letech neurčená, ustálí se ve 13–14 |
-| `hidden_talent` | skrytý, generuje se jako u ostatních (`talentForAge`, klenot 7 % = `GEM_CHANCE`) |
-| `progress_current`, `progress_cap` | nastřádaný náskok z let v akademii (viz bod 3) |
-| `traits` | 1–2 slovní rysy („rychlej“, „bojí se hlavičkovat“, „brácha hraje za áčko“) |
-| `commitment` | chuť pokračovat 0–100, slovy v UI |
-| `status` | `active` / `quit` / `poached` / `promoted` / `released` |
+Klub buď má družstvo žáků, nebo nemá. Mít ho stojí hlavně trenéra a dost kluků z obce,
+málo peněz. Každé léto postoupí nejstarší ročník do dorostu (U21), takže áčko dostává
+vlastní kluky každý rok.
 
-Velikost party: 12–20 kluků. Do 9 kluků žáci nemůžou hrát okresní soutěž a rostou pomaleji
-(bod 3). Nad 20 se nikdo nový nepřihlásí.
+## 1. Družstvo žáků
 
-## 2. Nábor (jednou za léto)
+- Kluci 11–14 let (mladší a starší žáci) z vlastní obce, rovnou po čtyřech ročnících.
+  Kdo družstvo založí, vidí partu hned, žádné čekání.
+- **Kolik kluků:** na ročník `populace × 0,0015` (zhruba 1 % dětí v ročníku, polovina kluci,
+  třetina z nich hraje fotbal). Na produ to dává:
+  - osada do 500 obyvatel: kluk každé druhé léto, celkem 2–3 kluci, na družstvo málo,
+  - obec s 1 500 obyvateli: 2 kluci na ročník, celkem kolem 9,
+  - obec s 2 300 obyvateli (medián klubů na produ): 3–4 kluci na ročník, kolem 14.
+  Zhruba polovina klubů tak sama družstvo nedá dohromady, jako ve skutečnosti.
+- **Na soutěž je potřeba 9 kluků.** Pod 9 družstvo nehraje a kluci rostou jen tréninkem
+  (pomaleji) a víc jich skončí.
 
-Ve fázi `academy` na konci sezóny vybere hráč obce, kde udělá nábor. Vlastní obec je v náboru
-vždy. Další obce do 8 km se přidávají za jednorázový poplatek **1 000 Kč** (leták, náborový
-den na hřišti).
+## 2. Trenér žáků
 
-Počet nových dvanáctiletých z jedné obce: `min(3, populace × 0,0008)`. Když v obci nebo v jejím
-okolí nabírá i jiný klub, kluci se dělí. Celý ročník je nejvýš 6 kluků.
+Bez trenéra žáci nejsou. Tři možnosti:
+- **Dobrovolník z áčka:** starší hráč áčka (od 28 let, s vůdcovstvím). Je zadarmo,
+  ale bere mu to čas, takže občas vynechá trénink áčka. Kvalitu určuje jeho vůdcovství.
+- **Táta jednoho z kluků:** objeví se sám (SMS), je zadarmo a průměrný. Když jeho kluk
+  postoupí do dorostu nebo skončí, trenér odejde s ním.
+- **Placený trenér mládeže** (stávající role zaměstnance): nejlepší příprava, bere plat.
 
-Odhad nad skutečnými obcemi klubů na produ:
+## 3. Peníze
 
-| Obec klubu | Jen vlastní obec | + 2 okolní obce | + 4 okolní obce |
-|---|---|---|---|
-| do 500 obyv. (8 klubů) | 0,1 | 2,7 | 3,9 |
-| 500–2 000 (10) | 1,1 | 3,9 | 4,7 |
-| 2 000–5 000 (6) | 2,7 | 6,2 | 6 (strop) |
-| nad 5 000 (7) | 3,0 | 6 (strop) | 6 (strop) |
+Málo, ale nějaké: provoz žáků **400 Kč týdně** (dresy, míče, startovné, cesty na zápasy).
+Bez něj družstvo nehraje. Hala a autobus z první verze odpadají, ve skutečnosti o nich
+vesnice nerozhoduje.
 
-Osada bez náboru v okolí tedy žáky mít nebude. Tím mapa obcí dostává herní smysl.
+## 4. Sdružené družstvo se sousedem
 
-## 3. Růst: za co klub platí
+- Kdo nemá 9 kluků, může se spojit s klubem z obce do 10 km (lidským i AI). Kluci z obou
+  obcí hrají spolu a trenéra dává jeden z klubů.
+- Klub navrhne spojení SMS. Lidský soused souhlasí v telefonu, AI soused rozhoduje přes model.
+- Každý kluk patří dál svému klubu a v létě postoupí do dorostu svého klubu.
+- Spojení jde zrušit vždy k létu.
 
-Peníze jdou do konkrétních věcí, každou lze zrušit zvlášť:
+## 5. Postup do dorostu
 
-| Položka | Kč/týden | Co dělá |
-|---|---|---|
-| Provoz žáků (dresy, míče, startovné) | 600 | bez něj žáci nefungují, je to vypínač celé akademie |
-| Trenér mládeže (stávající role) | ~150–330 | kvalita přípravy; dnes jen U21, nově vede i žáky |
-| Hala na zimu | 700 | bez ní žáci přes zimu nerostou (−30 % růstu) |
-| Autobus na zápasy | 500 | bez něj kluci z obcí dál než 3 km častěji končí |
+- **Každé léto** se všichni čtrnáctiletí přesunou do U21 svého klubu jako hráči
+  (`join_type = 'youth'`, vychovaný klubem). Áčko tak každý rok dostane jeden ročník.
+- Klub bez U21 dorost nemá. Kluci pak odejdou do nejbližšího klubu s dorostem a klub
+  dostane tabulkové odstupné (8 000 Kč za kluka).
+- **Během sezóny** (průběžné nabídky, jak sis přál): trenér žáků doporučí výjimečného
+  třináctiletého nebo čtrnáctiletého, aby hrál o kategorii výš. Přijde SMS a nabídka
+  v Přestupy → Nabídky. Přijetím jde kluk do U21 dřív.
+- Kluk od 15 let v U21 může naskočit i za áčko, to už ve hře funguje (promote/send down).
 
-Plný program vyjde asi na 2 000 Kč/týden, levněji než dnešní velkorysá úroveň (2 791 Kč).
-Placení je ale rozložené a každá položka má viditelný účinek.
+## 6. Talent z vesnice
 
-Každou sezónu přidá kluk v akademii:
+- Každé léto (1.–14. června) si o nejlepšího kluka z dorostu nebo žáků může říct klub
+  z vyšší soutěže v okolí. Přijde SMS od rodičů: „Kubu chtějí v Prachaticích.“
+- Kluka můžeš přemlouvat (podle vztahu a patriotismu), nebo ho pustit. Když odejde,
+  dostaneš tabulkové odstupné podle věku a soutěže.
+- Když se ve městě neprosadí, ve 19–20 letech se s velkou šancí vrátí domů jako volný hráč
+  se silným patriotismem a napíše ti SMS.
 
-```
-kvalita q = 0,6 + trenér mládeže (0–0,4 podle efektivity) + hala 0,15
-            + trenérova „mládež“ (0–0,15) − 0,25 když je žáků méně než 9
-progress_current += 1,5 × q
-progress_cap     += 3   × q
-```
+## 6b. Přetahování nadějných žáků mezi kluby
 
-Čtyři roky při q = 1 dají náskok +6 k dovednostem a +12 ke stropu, zhruba jako dnešní
-velkorysá úroveň (+5 / +14). Špičkový program (q ≈ 1,3) dá +8 / +16, ubohý (q ≈ 0,5) dá
-+3 / +6. V šestnácti se hráč vytvoří společným generátorem (`createPlayer` s `academy` bonusem
-z `progress_*`), takže zůstává jediný vzorec.
+Ve skutečnosti se kluci mezi kluby přetahují pořád: větší klub v okolí, lepší trenér,
+dorost, který malá vesnice nemá, nebo táta, co dojíždí do práce do města. Přestoupit
+bez souhlasu klubu jde jen 1.–14. června a nový klub zaplatí tabulkové odstupné.
 
-**Hvězdy.** Každý ročník je zhruba 4 kluci, při 7 % klenotů je to ~0,3 klenotu za rok, tedy
-jedna hvězda za 3–4 sezóny. To sedí s původním cílem: „šance na hvězdu, ale ať není hvězda
-každý“.
+**Jak se o klukovi dozvíš (nikdy ne čísly):**
+- výsledky žákovské soutěže ve Zpravodaji: „Za Lhenice dal pět gólů Kuba Novák“,
+- drby v hospodě a od hráčů: „Brácha říkal, že v Ktiši mají kluka, co kope jak dospělej“,
+- skaut na úkolu (stávající skauting) přinese slovní odhad jako u dospělých.
 
-**Pozdní květ a vyhoření.** Ve 14 letech dostane 10 % kluků talent +20 až +35 a 10 % kluků −20.
-Zázračné dítě ve 12 tak nemusí vydržet a z průměrného kluka může něco vyrůst.
+**Jak ho lákáš (během sezóny):**
+- **Pozvat na trénink** (SMS rodičům): kluk přijde, trenér řekne, co si o něm myslí.
+- **Mluvit s rodiči:** co jim slíbíš (bude hrát dorost, dostane šanci v áčku, odvoz
+  na trénink). Slib se pak hlídá jako sliby hráčům, nesplněný kazí vztah.
+- **Příspěvek na kopačky nebo benzín** rodičům: zabírá nejvíc, ale je to šedá zóna.
+  Když to praskne, píše o tom Zpravodaj (stávající kauzy redaktorů) a soused se zlobí.
 
-## 4. Co hráč vidí (bez čísel)
+**Co rozhoduje, jestli kluk přejde** (zájem rodičů 0–100, v UI jen slovy):
+- jeho klub nemá dorost (U21), takže v patnácti stejně musí jinam: velký plus,
+- vyšší soutěž tvého áčka nebo dorostu než u jeho klubu,
+- lepší trenér žáků nebo dorostu,
+- vzdálenost: kdo má jezdit 10 km, nechce, pokud mu neslíbíš odvoz,
+- kamarádi: když od vás už jeden kluk z jeho party hraje, jde snáz,
+- patriotismus a vztah k vlastnímu klubu ho drží doma.
 
-Trenér mládeže hodnotí každého kluka slovy: „z toho bude krajskej přebor“, „na béčko“,
-„spíš pro radost“. Ve 12 letech se trenér plete hodně (šum ±25 talentu). Každý rok se šum
-zmenšuje a lepší trenér (`judgement`) odhaduje přesněji. Ve 15 letech už je odhad spolehlivý.
+**Letní okno 1.–14. června:** kluk se zájmem nad hranicí přestoupí. Platíš tabulkové
+odstupné podle jeho věku a soutěže tvého áčka (okresní přebor 8 000 / 13 000 /
+16 000 Kč), peníze dostane jeho klub. Mimo okno jde jen přestup se souhlasem klubu
+(stávající vyjednávání přestupů, smluvené odstupné).
 
-Nová stránka **Žáci** (pod U21):
-- party po ročnících (12, 13, 14, 15) se jménem, obcí, pozicí, slovy trenéra a náladou,
-- zázemí (provoz, trenér, hala, autobus) s cenou mimo tlačítka,
-- mapa náboru s obcemi v dosahu 8 km.
+**Druhá strana: o tvoje kluky se zajímají jiní.**
+- Trenér nebo táta ti napíše: „Za Matějem byli z Netolic, rodiče váhají.“
+- Můžeš s rodiči mluvit, něco slíbit, zlepšit trenéra, nebo kluka nechat jít a vzít odstupné.
+- Kdo sousedovi přetáhne kluka, zhorší si s ním vztah (stávající vztahy manažerů)
+  a rivalita se propíše do derby.
 
-## 5. Postup do dorostu průběžně (rozhodnuto 2026-11-04)
+**Meze, ať to nezaplaví hru:** jeden klub láká nejvýš 2 kluky za sezónu. Kluk, kterého
+někdo přetáhl, se rok přetahovat nedá. AI kluby lákají a brání se přes model, kód hlídá meze.
 
-Kluci nepostupují najednou na konci sezóny, ale během celé sezóny. Tento průběžný tok
-nahrazuje dnešní náhodné nabídky dorostu.
+## 7. Co hráč vidí
 
-**Doporučení trenéra.** Každý kluk od 15 let (výjimečný talent od 14) dostane den, kdy ho
-trenér mládeže považuje za připraveného. Ten den se rozloží rovnoměrně přes týdny sezóny.
-Trenér pak pošle nabídku stávající cestou `player_offers` (`source = 'academy'`, odesílatel
-Trenér mládeže, s vazbou na `prospect_id`). Ročník má zhruba 4 kluky, takže nabídka přijde asi
-jednou za 3–4 týdny. Dnes chodí asi 5 náhodných nabídek dorostu za sezónu.
+Stránka **U21 → Žáci**:
+- trenér (kdo to je, jak je dobrý slovy),
+- kluci po ročnících se jménem, pozicí od 13 let, rysem a slovy trenéra, kam to dotáhne,
+- jestli družstvo hraje soutěž (9 kluků), případně návrh spojení se sousedem,
+- kolik kluků příští léto postoupí do dorostu.
 
-Na nabídku může hráč odpovědět třemi způsoby:
-- **Vzít**: vznikne hráč v U21, nebo v áčku, když klub U21 nemá (`join_type = 'youth'`,
-  `raised_by_team_id`).
-- **Ještě nechat u žáků**: kluk zůstane, trenér ho nabídne znovu za pár týdnů. Jde to jen do
-  16 let.
-- **Pustit**: kluk jde na trh jako volný hráč a může si ho vzít soused nebo AI klub.
+## 8. AI kluby
 
-Mlčení se počítá jako „ještě nechat“. Kluk, kterého klub nevezme do konce sezóny, ve které mu
-je 16, odchází. Trenér na to předem upozorní SMS.
+Rozhodnutí AI klubu jdou přes model a kód hlídá meze: jestli má žáky, kdo je trénuje,
+spojení se sousedem, přemlouvání talentu.
 
-**Hráč to má pod kontrolou.** Na stránce Žáci může kohokoli od 15 let vytáhnout do dorostu sám,
-kdykoli a bez čekání na trenéra. Trenér k tomu řekne slovy, jestli je kluk připravený.
+## 9. Přechod
 
-Když se puštěný kluk později prosadí jinde, napíše o tom Zpravodaj („Kluk, kterého Lhota
-pustila, jí dal dva góly“).
+- Staré úrovně investice zmizí.
+- Kluby, které platily starou akademii, dostanou družstvo žáků hned i s placeným trenérem
+  mládeže, pokud ho mají, jinak s dobrovolníkem z áčka.
+- Ostatní kluby žáky nemají, dokud si je nezaloží.
 
-## 6. Události (SMS v konverzaci „Žáci“ od trenéra mládeže)
+## 10. Co zůstane z první verze kódu
 
-Nejvýš jedna týdně, s volbou pro hráče:
-- **Zpráva o klukovi**: krátká zmínka o jednom klukovi („Matěj dal hattrick, ale doma má
-  problém se školou“).
-- **Kopačky**: rodiče chtějí příspěvek 1 500–3 000 Kč. Když hráč nezaplatí, kluk ztratí chuť
-  (`commitment`).
-- **Přetahování**: klub do 10 km s lepším programem láká nejlepšího kluka. Hráč může zaplatit,
-  promluvit s rodiči (šance podle vztahu) nebo kluka pustit.
-- **Konec**: kluk chce skončit (hokej, holky, škola). Základ je 8 % za rok, víc bez autobusu
-  nebo při malé chuti.
-- **Výsledky žáků**: jednou za čas jen výsledek a střelec („Žáci prohráli v Netolicích 3:5,
-  Kubík dal dva“). Simulovaná soutěž žáků není potřeba.
+Tabulka kluků (`youth_prospects`), růst podle kvality přípravy, slova trenéra, přijetí
+do U21 přes nabídku s atomickým zabráním kluka, AI rozhodnutí přes model. Odpadá nábor
+v obcích do 8 km, hala, autobus, nábor jen dvanáctiletých a pouštění na trh.
 
-## 7. Co z odchovance klub má
+## Fáze
 
-- Stránka **Odchovanci klubu**: kdo z žáků prošel, kde hraje, hodnocení slovy, zápasy za áčko
-  a za kolik se prodal. Tím se odpovídá na otázku, jestli se akademie vyplatila.
-- **Výchovné**: při přestupu odchovance mezi dvěma jinými kluby dostane 10 % poplatku klub,
-  který ho vychoval (`raised_by_team_id`, transakce `youth_training_fee`).
-- **Fanoušci**: odchovanec v základní sestavě áčka zvedá spokojenost fanoušků (napojení na
-  stávající spokojenost).
-- **Plat**: první smlouva o 30 % nižší, patriotismus vyšší (to už dnes platí).
-
-## 8. Konec náhodných nabídek dorostu (rozhodnuto 2026-11-04)
-
-Náhodné nabídky „Trenéra dorostu“ (`source = 'youth'` v `events/player-offers.ts`) se vypnou
-všem klubům. Dorost bude chodit jen z vlastních žáků (bod 5). Klub bez akademie dorostence
-nedostane. Zbývají mu nabídky od kamarádů, z hospody a na doporučení, trh a volní hráči,
-mezi kterými jsou i kluci puštění z cizích akademií.
-
-Nabídky dorostu, které už čekají na odpověď, doběhnou podle dosavadních pravidel.
-
-## 9. AI kluby
-
-Podle pravidla „AI kluby: vše přes model“ rozhoduje AI klub o náboru, zázemí, kopačkách
-a o rozhodnutí v šestnácti přes Workers AI v týdenní správě klubu (`ai-coach/weekly.ts`).
-Kód hlídá jen meze: rozpočet, kapacitu U21 a obce v dosahu.
-
-## 10. Přechod z dnešní akademie
-
-- Posuvník `youth_investment` a počítadla `youth_paid_*` zmizí. Řádek ve financích nahradí
-  položky zázemí.
-- Kluby, které teď platí, dostanou při spuštění rozjetou partu, aby investice nepropadla:
-  - velkorysá: 14 kluků ve všech ročnících, provoz i hala zapnuté, náskok za 2 roky,
-  - solidní: 10 kluků, provoz zapnutý, náskok za 1 rok,
-  - symbolická: 6 kluků ve věku 12–13,
-  - žádná: nic, první nábor hned při spuštění.
-- Kluci, kteří už z akademie vyšli, zůstávají. Dostanou zpětně `raised_by_team_id`.
-
-## 11. Fáze
-
-1. **Základ**: tabulka žáků, nábor, zázemí a růst, stránka Žáci, průběžné nabídky z akademie
-   a vypnutí náhodných nabídek dorostu, přechod. Bez toho to nedává smysl.
-2. **Život**: SMS trenéra, kopačky, přetahování, konce, výsledky žáků.
-3. **Návratnost**: Odchovanci klubu, výchovné, fanoušci, Zpravodaj o puštěných klucích.
-
-Před fází 1 projede simulace nad kopií produ 6 sezón (nábor, růst, odchody) a z ní se doladí
-koeficienty (0,0008 na obyvatele, q, 8 % odchodů).
-
-## Rozhodnutí (2026-11-04)
-
-1. Žáky vede **stávající trenér mládeže**, jeden člověk pro U21 i žáky.
-2. Náhodné nabídky dorostu se vypnou. Dorost chodí **průběžně z akademie** (body 5 a 8).
-3. Hlavní nábor je v létě. Během sezóny se občas přihlásí kluk sám, v průměru jeden za sezónu,
-   jen z obcí, kde klub nabíral. Celý přísun tak má hráč pod kontrolou.
+1. Družstvo žáků (založení, kluci 11–14 hned, trenér ze tří možností, 9 kluků na soutěž),
+   letní postup do U21, průběžná doporučení o kategorii výš, přechod.
+2. Přetahování nadějných žáků mezi kluby (bod 6b) a talent z vesnice, který odchází
+   do města a vrací se domů (bod 6). Je to stejný mechanismus, jen jednou lákáš ty
+   a jednou klub z města.
+3. Sdružené družstvo se sousedem.

@@ -202,7 +202,8 @@ export const VAHA_DLUHU = 2.0;
 export const VAHA_ODMITNUTE_ZALOHY = 1.5;
 
 /** Docházka na trénink podle situace (spec 17b). Kdo nemá práci nebo utekl z domova, chodí radši na hřiště. */
-export const TRENINK_SITUACE: Record<string, number> = { prisel_o_praci: 0.15, rozvod: 0.15, dluhy: -0.15 };
+/** `youth_coach`: hráč áčka, který trénuje žáky, má na trénink áčka méně času (academy/service.ts). */
+export const TRENINK_SITUACE: Record<string, number> = { prisel_o_praci: 0.15, rozvod: 0.15, dluhy: -0.15, youth_coach: -0.12 };
 
 /** Zápas (spec 17c). Platí jen pro ten jeden zápas, do DB se to nepropisuje. */
 export const ZAPAS_ROZVOD_MORALKA = -5;

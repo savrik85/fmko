@@ -46,9 +46,10 @@ export async function acceptPlayerOffer(db: D1Database, teamId: string, offerId:
   // vytažení a nabídka trenéra) nebo přijetí po jeho odchodu by jinak založily hráče navíc.
   const claimedProspect = (offer.prospect_id as string | null) ?? null;
   if (claimedProspect) {
+    // Bez team_id: kluka z klubu bez dorostu bere nejbližší klub s dorostem (academy/service.ts)
     const prospectClaim = await db.prepare(
-      "UPDATE youth_prospects SET status = 'promoted', player_id = ?, next_offer_on = NULL WHERE id = ? AND team_id = ? AND status = 'active'",
-    ).bind(playerId, claimedProspect, teamId).run();
+      "UPDATE youth_prospects SET status = 'promoted', player_id = ?, next_offer_on = NULL WHERE id = ? AND status = 'active'",
+    ).bind(playerId, claimedProspect).run();
     if (prospectClaim.meta.changes === 0) {
       await db.prepare("UPDATE player_offers SET status = 'expired' WHERE id = ?").bind(offerId).run();
       return { ok: false, status: 409, error: "Kluk už u žáků není" };
@@ -74,6 +75,11 @@ export async function acceptPlayerOffer(db: D1Database, teamId: string, offerId:
   }
   // Kluk z vlastní akademie jde do dorostu (U21), bez U21 rovnou do áčka. Klub ho vychoval.
   const prospectId = (offer.prospect_id as string | null) ?? null;
+  // Vychoval ho klub, u jehož žáků byl, i když teď jde jinam
+  const raisedBy = prospectId
+    ? (await db.prepare("SELECT team_id FROM youth_prospects WHERE id = ?").bind(prospectId).first<{ team_id: string }>()
+        .catch((e) => { logger.warn({ module: M, teamId }, "load prospect club", e); return null; }))?.team_id ?? teamId
+    : null;
   const u21 = prospectId
     ? await db.prepare("SELECT id FROM teams WHERE parent_team_id = ? AND team_type = 'u21'").bind(teamId).first<{ id: string }>()
         .catch((e) => { logger.warn({ module: M, teamId }, "load u21 for academy offer", e); return null; })
@@ -84,7 +90,7 @@ export async function acceptPlayerOffer(db: D1Database, teamId: string, offerId:
      VALUES (?, ?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)`
   ).bind(playerId, targetTeamId, offer.first_name, offer.last_name, offer.age, offer.position, offer.overall_rating,
     offer.skills, offer.physical, offer.personality, JSON.stringify(lifeContextWithoutCaps), offer.avatar, offer.weekly_wage,
-    (offer.nationality as string) ?? "CZ", hiddenTalent, JSON.stringify(skillsMax), prospectId ? teamId : null).run();
+    (offer.nationality as string) ?? "CZ", hiddenTalent, JSON.stringify(skillsMax), raisedBy).run();
 
   // Set residence
   const { generateResidence } = await import("../generators/residence");
