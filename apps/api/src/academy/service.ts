@@ -20,7 +20,7 @@ import {
   type CoachType, YOUNGEST_AGE, OLDEST_AGE, MIN_SQUAD, UPKEEP_WEEKLY, VOLUNTEER_MIN_AGE, expectedKidsPerYear, rollKids,
   programQuality, weeklyProgress, estimatedTalent, verdictText, commitmentText, canPlayUp, recommendsPlayUp,
   REOFFER_DAYS, firstOfferDay, quitChance, talentShiftAt13, pickTraits, positionVisible, GRADUATE_WAGE_FACTOR,
-  youthTransferFee, distanceKm, qualityText,
+  youthTransferFee, distanceKm, qualityText, PLAY_UP_ESTIMATE,
 } from "./rules";
 
 const M = "academy";
@@ -648,6 +648,8 @@ export async function loadAcademyView(db: D1Database, teamId: string) {
         position: positionVisible(p.age) ? p.position : null,
         traits: parseJson<string[]>(p.traits, [], "traits"),
         verdict: coach.type ? verdictText(estimate) : null,
+        /** Trenér ho bere jako nadějného (doporučil by ho o kategorii výš). */
+        promising: !!coach.type && estimate >= PLAY_UP_ESTIMATE,
         mood: commitmentText(p.commitment),
         canPlayUp: canPlayUp(p.age),
         offered: offered.has(p.id),

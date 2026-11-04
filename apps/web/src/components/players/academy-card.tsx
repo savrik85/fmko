@@ -24,6 +24,7 @@ interface Prospect {
   mood: string;
   canPlayUp: boolean;
   offered: boolean;
+  promising: boolean;
 }
 
 interface AcademyData {
@@ -146,47 +147,72 @@ export function AcademyCard({ teamId }: { teamId: string }) {
 
   return (
     <div className="space-y-4">
-      <section className="card p-4 sm:p-5 space-y-3">
+      <section className="card p-4 sm:p-5 space-y-4">
         <div>
           <h2 className="font-heading font-bold text-base">Akademie</h2>
-          <p className="text-sm text-muted mt-1">
-            Kluci od 11 do 14 let z obce {data.village}. Každé léto postoupí čtrnáctiletí do {data.hasU21 ? "dorostu" : "dorostu jiného klubu, protože vlastní dorost nemáš (za každého dostaneš odstupné)"}.
-            Nadějné kluky od 13 let ti trenér doporučí o kategorii výš už během sezóny.
-          </p>
+          <p className="text-sm text-muted mt-1">Družstvo žáků z obce {data.village}. Odtud ti každé léto přibudou vlastní kluci do dorostu.</p>
         </div>
-        <p className="text-sm">
-          <strong className="font-heading text-ink">{boysText(data.prospects.length)}</strong>
-          {" · "}{data.playsCompetition ? "hrají okresní soutěž" : `na okresní soutěž chybí ${data.minSquad - data.prospects.length}, jen trénují`}
-          {" · "}{data.coach.quality}
-        </p>
-        <p className="text-sm text-muted">
-          Trenér: {data.coach.name ? <><strong className="text-ink font-heading">{data.coach.name}</strong> ({COACH_CS[data.coach.type!]})</> : "nikdo"}.
-          {data.nextSummer > 0 && ` Příští léto postoupí ${boysText(data.nextSummer).toLowerCase()}.`}
-        </p>
+        <dl className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+          <div className="rounded-soft border border-gray-200 bg-white p-3">
+            <dt className="text-xs text-muted">Kluci</dt>
+            <dd className="font-heading font-bold text-ink">{boysText(data.prospects.length)}</dd>
+            <dd className="text-xs text-muted">{data.playsCompetition ? "hrají okresní soutěž" : `na soutěž chybí ${data.minSquad - data.prospects.length}`}</dd>
+          </div>
+          <div className="rounded-soft border border-gray-200 bg-white p-3">
+            <dt className="text-xs text-muted">Trenér</dt>
+            <dd className="font-heading font-bold text-ink">{data.coach.name ?? "Nikdo"}</dd>
+            <dd className="text-xs text-muted">{data.coach.type ? COACH_CS[data.coach.type] : "bez trenéra netrénují"}</dd>
+          </div>
+          <div className="rounded-soft border border-gray-200 bg-white p-3">
+            <dt className="text-xs text-muted">Příprava</dt>
+            <dd className="font-heading font-bold text-ink">{data.coach.quality.replace(/\.$/, "")}</dd>
+          </div>
+          <div className="rounded-soft border border-gray-200 bg-white p-3">
+            <dt className="text-xs text-muted">Příští léto do dorostu</dt>
+            <dd className="font-heading font-bold text-ink">{boysText(data.nextSummer)}</dd>
+            <dd className="text-xs text-muted">{data.hasU21 ? "do tvého U21" : "do jiného klubu za odstupné"}</dd>
+          </div>
+        </dl>
+        {data.prospects.some((p) => p.promising) && (
+          <p className="text-sm">
+            <strong className="font-heading text-ink">Nadějní podle trenéra:</strong>{" "}
+            {data.prospects.filter((p) => p.promising).map((p) => `${p.name} (${p.age})`).join(", ")}
+          </p>
+        )}
+        <details className="text-sm">
+          <summary className="cursor-pointer font-heading font-bold text-pitch-600 min-h-11 flex items-center gap-1.5">Jak akademie funguje <span aria-hidden="true">▾</span></summary>
+          <ul className="mt-1 space-y-1.5 text-muted list-disc pl-5">
+            <li>Kluci jsou z tvé obce, od 11 do 14 let. Každé léto přijde nový ročník jedenáctiletých, kolik jich je, záleží na velikosti obce.</li>
+            <li>Na okresní soutěž je potřeba {data.minSquad} kluků. Bez soutěže rostou pomaleji a víc jich skončí.</li>
+            <li>Jak rychle kluci rostou, určuje trenér: nejlepší je placený trenér mládeže, dobrovolník z áčka a táta jsou zadarmo.</li>
+            <li>Každé léto jdou čtrnáctiletí do {data.hasU21 ? "tvého dorostu (U21)" : "dorostu jiného klubu, ty dostaneš odstupné"}.</li>
+            <li>Nadějného kluka od 13 let ti trenér doporučí do dorostu dřív. Můžeš ho tam dát i sám.</li>
+            <li>Provoz stojí {kc(data.weeklyCost)} týdně.</li>
+          </ul>
+        </details>
       </section>
 
-      {!data.coach.type && (
-        <p className="card p-4 text-sm border-l-4 border-gold-500 bg-gold-50" role="alert">
-          Žáci nemají trenéra, takže netrénují a víc jich skončí. Vyber trenéra níž.
-        </p>
-      )}
-
       <section className="space-y-3" aria-label="Kluci podle ročníků">
+        <h2 className="font-heading font-bold text-base px-1">Kluci podle ročníků</h2>
         {data.prospects.length === 0 && <p className="card p-4 text-sm text-muted">Zatím tu nejsou žádní kluci. Noví přijdou v létě.</p>}
         {AGE_GROUPS.map((g) => {
           const kids = data.prospects.filter((p) => p.age === g.age);
           if (kids.length === 0) return null;
+          const promisingCount = kids.filter((p) => p.promising).length;
           return (
-            <div key={g.age} className="card overflow-hidden">
-              <div className="bg-surface-2 px-3 py-2">
-                <h3 className="text-sm font-heading font-bold">{g.label}</h3>
-                {g.note && <p className="text-xs text-muted">{g.note}</p>}
-              </div>
+            <details key={g.age} className="card overflow-hidden" open={g.age === 14}>
+              <summary className="bg-surface-2 px-3 py-2.5 cursor-pointer min-h-11 flex flex-wrap items-baseline justify-between gap-x-3">
+                <span className="text-sm font-heading font-bold"><span aria-hidden="true" className="mr-1.5 text-muted">▾</span>{g.label}</span>
+                <span className="text-xs text-muted">{boysText(kids.length)}{promisingCount ? `, nadějní ${promisingCount}` : ""}{g.note ? ` · ${g.note}` : ""}</span>
+              </summary>
               <ul className="divide-y divide-gray-200">
                 {kids.map((p) => (
                   <li key={p.id} className="p-3 space-y-1.5">
                     <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                      <span className="font-heading font-bold text-ink">{p.name}</span>
+                      <span className="font-heading font-bold text-ink">
+                        {p.name}
+                        {p.promising && <span className="ml-2 align-middle text-xs font-bold text-pitch-600">nadějný</span>}
+                      </span>
                       <span className="text-sm text-muted">{p.position ? POSITION_CS[p.position] ?? p.position : "hraje všude"} · {p.mood}</span>
                     </div>
                     {p.traits.length > 0 && <p className="text-sm text-muted">{p.traits.join(", ")}</p>}
@@ -204,7 +230,7 @@ export function AcademyCard({ teamId }: { teamId: string }) {
                   </li>
                 ))}
               </ul>
-            </div>
+            </details>
           );
         })}
       </section>

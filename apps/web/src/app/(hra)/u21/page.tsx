@@ -8,6 +8,7 @@ import { apiFetch } from "@/lib/api";
 import { Spinner, PositionBadge, BadgePreview, useConfirm, Tabs, useTabParam } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { U21Rozvoj } from "@/components/players/u21-rozvoj";
+import { YouthSectionNav } from "@/components/players/youth-section-nav";
 import { U21Attributes } from "@/components/players/u21-attributes";
 import type { BadgePattern } from "@/components/ui";
 
@@ -284,6 +285,7 @@ export default function U21Page() {
 
   return (
     <div className="p-3 sm:p-4 md:p-6 space-y-3 max-w-7xl mx-auto w-full">
+      <YouthSectionNav />
       {/* Tabs */}
       <Tabs
         value={tab}
