@@ -245,7 +245,7 @@ export function AcademyCard({ teamId }: { teamId: string }) {
           { key: "kluci", label: "Kluci" },
           { key: "novi", label: "Noví kluci", count: data.poach?.incoming.length || null },
           { key: "trener", label: "Trenér" },
-          { key: "vybaveni", label: "Vybavení" },
+          { key: "vybaveni", label: "Vybavení klubu" },
         ]}
       />
       {tab === "prehled" && (
@@ -285,7 +285,7 @@ export function AcademyCard({ teamId }: { teamId: string }) {
             <ul className="mt-1 space-y-1.5 text-muted list-disc pl-5">
               <li>Kluci jsou z tvé obce, od 11 do 14 let. Každé léto přijde nový ročník jedenáctiletých, kolik jich je, záleží na velikosti obce.</li>
               <li>Na okresní soutěž je potřeba {data.minSquad} kluků. Bez soutěže rostou pomaleji a víc jich skončí.</li>
-              <li>Jak rychle kluci rostou, určuje trenér a vybavení. Nejlepší je placený trenér mládeže, dobrovolník z áčka a táta jsou zadarmo.</li>
+              <li>Jak rychle kluci rostou, určuje trenér, úroveň akademie a klubové vybavení. Nejlepší je placený trenér mládeže, dobrovolník z áčka a táta jsou zadarmo.</li>
               <li>Potenciál kluka odhaduje trenér. U mladších se plete víc, u čtrnáctiletých míň, placený trenér mládeže nejmíň.</li>
               <li>Každé léto jdou čtrnáctiletí do {data.hasU21 ? "tvého dorostu (U21)" : "dorostu jiného klubu, ty dostaneš odstupné"}. {data.hasU21 ? "Nadějného kluka od 13 let ti trenér doporučí do dorostu dřív, dát ho tam můžeš i sám." : "Dřív to nejde, protože vlastní dorost nemáš."}</li>
               <li>Podle pravidel FAČR smí kluk do dorostu od 13 let, za muže (áčko) až od 15 let.</li>
@@ -296,6 +296,7 @@ export function AcademyCard({ teamId }: { teamId: string }) {
   
         <section className="card p-4 sm:p-5 space-y-3">
           <h2 className="font-heading font-bold text-base">Kolik do akademie dáváš</h2>
+          <p className="text-sm text-muted">Týdenní provoz žáků: startovné, cesty na zápasy, dresy a u ambiciózní i soustředění a turnaje. Vybavení (míče, pomůcky) je zvlášť, patří celému klubu.</p>
         <ul className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {data.levels.map((l) => {
             const active = l.key === data.level;
@@ -571,8 +572,11 @@ export function AcademyCard({ teamId }: { teamId: string }) {
       {tab === "vybaveni" && (
         <>
         <section className="card p-4 sm:p-5 space-y-3">
-          <h2 className="font-heading font-bold text-base">Vybavení pro žáky</h2>
-          <p className="text-sm text-muted">Žáci používají klubové vybavení. Čím lepší, tím rychleji rostou. Kupuje se ve Vybavení.</p>
+          <h2 className="font-heading font-bold text-base">Klubové vybavení, které žáci využívají</h2>
+          <p className="text-sm text-muted">
+            Tohle není součást akademie a týdně se za to neplatí. Je to vybavení celého klubu, které koupíš jednou ve Vybavení
+            a používá ho áčko i žáci. Čím lepší, tím rychleji žáci rostou.
+          </p>
           <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {data.equipment.map((e) => (
               <li key={e.key} className="rounded-soft border border-gray-200 bg-white p-3">
