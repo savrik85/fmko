@@ -268,16 +268,16 @@ export function estimateRange(estimate: number, age: number, staffJudgement: num
 /** Silné a slabé stránky slovy podle dovedností, které ke kluku patří na jeho pozici. */
 const SKILL_WORDS: Record<string, { strong: string; weak: string }> = {
   speed: { strong: "rychlý", weak: "pomalý" },
-  shooting: { strong: "dobrý střelec", weak: "neumí vystřelit" },
-  heading: { strong: "hlavičkář", weak: "nehlavičkuje" },
-  technique: { strong: "míč ho poslouchá", weak: "technicky těžkopádný" },
-  creativity: { strong: "vymyslí něco navíc", weak: "hraje jednoduše" },
-  stamina: { strong: "vydrží běhat celý zápas", weak: "brzo dojde" },
-  strength: { strong: "silový, nedá se odstrčit", weak: "slabý do soubojů" },
-  passing: { strong: "dobrá přihrávka", weak: "přihrávky mu utíkají" },
-  vision: { strong: "vidí hřiště", weak: "hraje se sklopenou hlavou" },
-  defense: { strong: "dobře brání", weak: "dozadu moc nechodí" },
-  goalkeeping: { strong: "skvělé reflexy", weak: "v bráně nejistý" },
+  shooting: { strong: "dobrý střelec", weak: "slabá střela" },
+  heading: { strong: "hlavičkář", weak: "slabý v hlavičkách" },
+  technique: { strong: "dobrá technika", weak: "slabá technika" },
+  creativity: { strong: "nápaditý", weak: "málo nápaditý" },
+  stamina: { strong: "vydrží celý zápas", weak: "rychle se unaví" },
+  strength: { strong: "silný v soubojích", weak: "slabý v soubojích" },
+  passing: { strong: "dobrá přihrávka", weak: "nepřesné přihrávky" },
+  vision: { strong: "přehled ve hře", weak: "nemá přehled ve hře" },
+  defense: { strong: "dobře brání", weak: "slabý v obraně" },
+  goalkeeping: { strong: "skvělé reflexy", weak: "nejistý v bráně" },
 };
 
 const POSITION_SKILLS: Record<string, string[]> = {
