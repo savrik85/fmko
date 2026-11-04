@@ -54,6 +54,19 @@ interface AcademyData {
   potentialScale: { from: number; label: string }[];
   nextSummer: number;
   prospects: Prospect[];
+  recruitDay: { available: boolean; used: boolean; cost: number; expected: number };
+  neighbors: { name: string; km: number; expected: number }[];
+  neighborMax: number;
+  poach: {
+    remaining: number;
+    bootsCost: number;
+    targets: {
+      prospectId: string; name: string; age: number; club: string; position: string; km: number;
+      strengths: string[]; avatar: Record<string, unknown> | null; verdict: string; protected: boolean;
+      interest: string | null; done: string[];
+    }[];
+    incoming: { poachId: string; name: string; age: number; club: string; interest: string; defended: boolean }[];
+  } | null;
 }
 
 const POSITION_CS: Record<string, string> = { GK: "brankář", DEF: "obránce", MID: "záložník", FWD: "útočník" };
@@ -305,6 +318,109 @@ export function AcademyCard({ teamId }: { teamId: string }) {
           );
         })}
       </section>
+
+      <section className="card p-4 sm:p-5 space-y-3">
+        <h2 className="font-heading font-bold text-base">Kde vzít nové kluky</h2>
+        <ul className="text-sm text-muted list-disc pl-5 space-y-1">
+          <li>Každé léto přijde ročník jedenáctiletých z obce {data.village}: {perYearText(data.expectedPerYear)}.</li>
+          {data.neighbors.length > 0 ? (
+            <li>Z okolních obcí bez akademie: {data.neighbors.slice(0, 5).map((n) => `${n.name} (${n.km.toLocaleString("cs")} km, ${perYearText(n.expected).replace(" za rok", "")})`).join(", ")}. Přijdou v létě, nejvýš {data.neighborMax} kluci.</li>
+          ) : (
+            <li>V okolí do 6 km není obec bez akademie, odkud by chodili další kluci.</li>
+          )}
+          <li>Nadějné kluky můžeš přetáhnout z jiných klubů, viz níž.</li>
+        </ul>
+        <div className="rounded-soft border border-gray-200 bg-white p-3 space-y-2">
+          <p className="text-sm"><strong className="font-heading text-ink">Náborový den ve škole</strong></p>
+          <p className="text-sm text-muted">
+            Jednou za sezónu, stojí {kc(data.recruitDay.cost)}. Přijdou kluci 11–12 let, čekej {perYearText(data.recruitDay.expected).replace(" za rok", "")}. S lepším trenérem jich přijde víc.
+          </p>
+          {data.recruitDay.used ? (
+            <p className="text-sm text-muted">Letos už byl, další příští sezónu.</p>
+          ) : !data.coach.type ? (
+            <p className="text-sm text-muted">Nábor potřebuje trenéra žáků.</p>
+          ) : (
+            <button onClick={() => post("recruit", `/api/teams/${teamId}/academy/recruit-day`, undefined, "Náborový den se nepodařil")} disabled={busy !== null} className="btn btn-primary min-h-11 px-3 disabled:opacity-40">
+              {busy === "recruit" ? "Pořádám…" : "Uspořádat náborový den"}
+            </button>
+          )}
+        </div>
+      </section>
+
+      {data.poach && data.poach.incoming.length > 0 && (
+        <section className="card p-4 sm:p-5 space-y-3 border-l-4 border-gold-500">
+          <h2 className="font-heading font-bold text-base">O tvé kluky se zajímají</h2>
+          <ul className="space-y-2">
+            {data.poach.incoming.map((y) => (
+              <li key={y.poachId} className="rounded-soft border border-gray-200 bg-white p-3 space-y-2">
+                <p className="text-sm"><strong className="font-heading text-ink">{y.name}</strong> ({y.age}): láká ho {y.club}. Kluk {y.interest}.</p>
+                {y.defended ? <p className="text-sm text-muted">S rodiči jsi už mluvil.</p> : (
+                  <button onClick={() => post(`defend:${y.poachId}`, `/api/teams/${teamId}/academy/poach-defense/${y.poachId}`, undefined, "Rozhovor s rodiči se nepovedl")} disabled={busy !== null} className="btn btn-secondary min-h-11 px-3 disabled:opacity-40">
+                    Promluvit s rodiči
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+          <p className="text-xs text-muted">Kdo má v létě zájem „chce k vám“, přestoupí a ty dostaneš tabulkové odstupné.</p>
+        </section>
+      )}
+
+      {data.poach && (
+        <section className="card p-4 sm:p-5 space-y-3">
+          <h2 className="font-heading font-bold text-base">Nadějní kluci v okolí</h2>
+          <p className="text-sm text-muted">
+            Trenér slyšel o těchhle klucích z klubů do 15 km. Pozvi je na trénink, slib rodičům dorost a odvoz na zápasy, nebo jim dej na kopačky.
+            Kdo bude mít v létě zájem, přestoupí a zaplatíš jeho klubu tabulkové odstupné. Za sezónu můžeš lákat ještě {data.poach.remaining} {data.poach.remaining === 1 ? "kluka" : "kluky"}.
+            Kopačky stojí {kc(data.poach.bootsCost)} a když to praskne, mluví se o tom v obci.
+          </p>
+          {data.poach.targets.length === 0 ? <p className="text-sm text-muted">V okolí teď není nikdo nadějný.</p> : (
+            <ul className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              {data.poach.targets.map((t) => {
+                const started = t.interest !== null;
+                const canStart = started || data.poach!.remaining > 0;
+                const action = (a: string, label: string) => (
+                  <button
+                    key={a}
+                    onClick={() => post(`poach:${t.prospectId}:${a}`, `/api/teams/${teamId}/academy/poach/${t.prospectId}`, { action: a }, "Lákání se nepovedlo")}
+                    disabled={busy !== null || t.done.includes(a) || t.protected || !canStart}
+                    className="btn btn-secondary min-h-11 px-3 text-sm disabled:opacity-40"
+                  >
+                    {t.done.includes(a) ? `${label} ✓` : label}
+                  </button>
+                );
+                return (
+                  <li key={t.prospectId} className="rounded-soft border border-gray-200 bg-white p-3 space-y-2">
+                    <div className="flex items-center gap-3">
+                      {t.avatar && (
+                        <div className="shrink-0 w-12 h-12 rounded-full overflow-hidden bg-surface-2 flex items-center justify-center"><FaceAvatar faceConfig={t.avatar} size={40} /></div>
+                      )}
+                      <div className="min-w-0">
+                        <p className="font-heading font-bold text-ink">{t.name}</p>
+                        <p className="text-sm text-muted">{t.age} let · {POSITION_CS[t.position] ?? t.position} · {t.club}, {t.km.toLocaleString("cs")} km</p>
+                      </div>
+                    </div>
+                    {t.strengths.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">{t.strengths.map((x) => <span key={x} className="rounded-full bg-pitch-50 px-2 py-0.5 text-xs font-semibold text-pitch-600">{x}</span>)}</div>
+                    )}
+                    <p className="text-sm text-ink">„{t.verdict}“</p>
+                    {t.protected ? <p className="text-sm text-muted">Teprve přestoupil, rok ho nech být.</p>
+                      : started ? <p className="text-sm"><strong className="font-heading text-ink">Zájem:</strong> {t.interest}</p>
+                      : !canStart ? <p className="text-sm text-muted">Letos už lákáš dost kluků.</p> : null}
+                    {!t.protected && (
+                      <div className="flex flex-wrap gap-2">
+                        {action("invite", "Pozvat na trénink")}
+                        {action("promise", "Slíbit dorost a odvoz")}
+                        {action("boots", "Dát na kopačky")}
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+      )}
 
       {options && (
         <section className="card p-4 sm:p-5 space-y-3">

@@ -432,6 +432,41 @@ developmentRouter.post("/teams/:teamId/academy/coach", async (c) => {
   return c.json({ ok: true, coach: res.coach });
 });
 
+// POST /api/teams/:teamId/academy/recruit-day — náborový den ve škole (jednou za sezónu)
+developmentRouter.post("/teams/:teamId/academy/recruit-day", async (c) => {
+  const teamId = c.req.param("teamId");
+  const { recruitDay } = await import("../academy/service");
+  const { createRng, cryptoSeed } = await import("../generators/rng");
+  const team = await c.env.DB.prepare("SELECT game_date FROM teams WHERE id = ?").bind(teamId).first<{ game_date: string | null }>();
+  const res = await recruitDay(c.env.DB, createRng(cryptoSeed()), teamId, team?.game_date ?? new Date().toISOString());
+  if (!res.ok) return c.json({ error: res.error }, res.status);
+  return c.json({ ok: true, names: res.names });
+});
+
+// POST /api/teams/:teamId/academy/poach/:prospectId — lákat kluka z cizího klubu { action: invite | promise | boots }
+developmentRouter.post("/teams/:teamId/academy/poach/:prospectId", async (c) => {
+  const teamId = c.req.param("teamId");
+  const body = await c.req.json<{ action?: unknown }>().catch((e) => {
+    logger.warn({ module: "development", teamId }, "parse poach body", e);
+    return null;
+  });
+  const { poachAction } = await import("../academy/service");
+  const { createRng, cryptoSeed } = await import("../generators/rng");
+  const team = await c.env.DB.prepare("SELECT game_date FROM teams WHERE id = ?").bind(teamId).first<{ game_date: string | null }>();
+  const res = await poachAction(c.env.DB, createRng(cryptoSeed()), teamId, c.req.param("prospectId"), body?.action, team?.game_date ?? new Date().toISOString());
+  if (!res.ok) return c.json({ error: res.error }, res.status);
+  return c.json({ ok: true, interest: res.interest });
+});
+
+// POST /api/teams/:teamId/academy/poach-defense/:poachId — promluvit s rodiči vlastního kluka
+developmentRouter.post("/teams/:teamId/academy/poach-defense/:poachId", async (c) => {
+  const teamId = c.req.param("teamId");
+  const { defendPoach } = await import("../academy/service");
+  const res = await defendPoach(c.env.DB, teamId, c.req.param("poachId"));
+  if (!res.ok) return c.json({ error: res.error }, res.status);
+  return c.json({ ok: true, interest: res.interest });
+});
+
 // POST /api/teams/:teamId/academy/prospects/:prospectId/promote — kluk od 13 let do dorostu dřív
 developmentRouter.post("/teams/:teamId/academy/prospects/:prospectId/promote", async (c) => {
   const teamId = c.req.param("teamId");
