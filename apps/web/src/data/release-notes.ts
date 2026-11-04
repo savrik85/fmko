@@ -12,6 +12,22 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    date: "2026-11-05",
+    emoji: "⚽",
+    title: "Mládež a nová akademie",
+    items: [
+      "V menu je místo U21 položka Mládež. Nahoře na stránce přepínáš mezi U21 (dorost) a Akademií (žáci 11 až 14 let).",
+      "Akademie je tvoje družstvo žáků z obce. Založíš ji jedním tlačítkem a hned přijdou žáci ze všech čtyř ročníků. Kolik jich je, záleží na velikosti obce. Na okresní soutěž je potřeba 9 žáků, menší obec jich sama tolik nedá.",
+      "Bez trenéra žáci netrénují. Povést je může hráč áčka od 28 let (zadarmo, ale na trénink áčka chodí méně), táta jednoho ze žáků (zadarmo, průměrný), nebo placený trenér mládeže, kterého najmeš rovnou v Akademii.",
+      "Vybereš, kolik do akademie dáváš. Skromná stojí 200 Kč a 30 Kč za žáka týdně, běžná 300 Kč a 50 Kč, ambiciózní 500 Kč a 90 Kč a platí i soustředění a turnaje. Čím víc dáváš, tím rychleji žáci rostou a tím méně jich skončí. Klubové vybavení (míče, pomůcky, zimní výbava, dodávka) žákům pomáhá taky, kupuje se ve Vybavení.",
+      "U každého žáka vidíš věk, pozici, silné stránky, slabinu a pás potenciálu od „pro radost“ po „hvězdu okresu“. U mladších si trenér není jistý, u čtrnáctiletých odhadne přesněji, nejlíp placený trenér mládeže.",
+      "Každé léto postoupí čtrnáctiletí do tvého U21 a přijdou noví jedenáctiletí. Nadějného žáka od 13 let ti trenér doporučí do dorostu dřív. Podle pravidel FAČR smí žák do dorostu od 13 let, za áčko až od 15. Klub bez U21 o čtrnáctileté přijde do klubu s dorostem a dostane za ně odstupné.",
+      "Nové žáky získáš i jinak: z okolních obcí bez akademie, náborovým dnem ve škole (jednou za sezónu, 1 500 Kč), nebo přetažením nadějného žáka z klubu v okolí. Pozveš ho na trénink, slíbíš dorost a odvoz, nebo dáš rodičům na kopačky. V létě přestoupí za odstupné podle FAČR. O tvé žáky se můžou zajímat i jiné kluby a ty můžeš promluvit s rodiči.",
+      "Trenér může mít v akademii vlastního syna. Přijde sám, až mu bude 11 let, drží s klubem a nikdo ho nepřetáhne.",
+      "Kluby, které platily dřívější akademii, dostanou rozjeté družstvo žáků i s trenérem. Náhodné nabídky od trenéra dorostu už nechodí, dorost teď roste v akademii.",
+    ],
+  },
+  {
     date: "2026-11-01",
     emoji: "🔁",
     title: "Hostování přes trh",

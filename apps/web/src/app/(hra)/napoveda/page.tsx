@@ -350,6 +350,20 @@ export default function NapovedaPage() {
         </div>
       </section>
 
+      {/* ═══ MLÁDEŽ A AKADEMIE ═══ */}
+      <section className="card p-4 space-y-3">
+        <h2 className="font-heading font-bold text-lg flex items-center gap-2">
+          ⚽ <span>Mládež a akademie</span>
+        </h2>
+        <div className="space-y-2 text-sm text-muted leading-relaxed">
+          <p><strong className="text-ink">Akademie</strong> je družstvo žáků (11 až 14 let) z tvé obce. Kolik žáků obec dá, záleží na počtu obyvatel. Na okresní soutěž je potřeba 9 žáků, bez soutěže rostou pomaleji a víc jich skončí.</p>
+          <p><strong className="text-ink">Trenér</strong> je nutný: hráč áčka od 28 let (zadarmo, chodí méně na trénink áčka), táta jednoho ze žáků (zadarmo, průměrný), nebo placený trenér mládeže (nejlepší příprava a nejpřesnější odhad talentu).</p>
+          <p><strong className="text-ink">Kolik do akademie dáváš:</strong> skromná (200 Kč + 30 Kč za žáka týdně), běžná (300 Kč + 50 Kč), ambiciózní (500 Kč + 90 Kč, se soustředěním a turnaji). Víc peněz znamená rychlejší růst a méně odchodů. Klubové vybavení (míče, pomůcky, zimní výbava, dodávka) pomáhá zvlášť a kupuje se ve Vybavení.</p>
+          <p><strong className="text-ink">Do dorostu:</strong> každé léto jdou čtrnáctiletí do U21. Nadějného žáka od 13 let můžeš dát do dorostu dřív. Podle FAČR smí žák do dorostu od 13 let a za muže (áčko) až od 15. Bez U21 přejdou čtrnáctiletí do klubu s dorostem a ty dostaneš odstupné.</p>
+          <p><strong className="text-ink">Noví žáci:</strong> každé léto ročník jedenáctiletých z obce, k tomu žáci z okolních obcí bez akademie, náborový den ve škole (jednou za sezónu) a přetahování nadějných žáků z klubů do 15 km. Přestupy žáků jsou v létě za tabulkové odstupné FAČR.</p>
+        </div>
+      </section>
+
       {/* ═══ DALŠÍ ZDROJE ═══ */}
       <section className="card p-4">
         <h2 className="font-heading font-bold text-lg flex items-center gap-2 mb-2">
@@ -359,6 +373,10 @@ export default function NapovedaPage() {
           <li>
             <Link href="/kadr" className="text-pitch-600 underline">Kádr →</Link>
             <span className="text-muted text-xs ml-2">vidíš tam atributy svých hráčů (najetí myší = nápověda)</span>
+          </li>
+          <li>
+            <Link href="/akademie" className="text-pitch-600 underline">Akademie →</Link>
+            <span className="text-muted text-xs ml-2">tvoji žáci, trenér, nábor a kolik do akademie dáváš</span>
           </li>
           <li>
             <Link href="/zapas" className="text-pitch-600 underline">Sestava →</Link>
