@@ -81,7 +81,8 @@ describe("družstvo žáků", () => {
     const after = (await prospects("club")).find((p) => p.id === before.id)!;
     expect(after.progress_current).toBeGreaterThan(before.progress_current);
     const tx = await db.prepare("SELECT amount FROM transactions WHERE team_id = 'club' AND type = 'youth_academy' ORDER BY rowid DESC LIMIT 1").first<{ amount: number }>();
-    expect(tx!.amount).toBe(-400);
+    // 300 Kč základ + 50 Kč za každého kluka
+    expect(tx!.amount).toBe(-(300 + 50 * (await prospects("club")).length));
   });
 
   it("pohled ukazuje trenéra, kluky a kolik jich v létě postoupí", async () => {

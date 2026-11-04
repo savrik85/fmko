@@ -51,9 +51,10 @@ export const PITCH_MAINTENANCE_COST: Record<Exclude<PitchMaintenanceChoice, "non
 
 /**
  * Družstvo žáků jako jedna volba (academy/service.ts): none = žáky nemít, jinak kdo je trénuje.
- * Týdenní provoz je u všech stejný (UPKEEP_WEEKLY), placený trenér mládeže bere navíc svůj plat.
+ * Týdenní provoz je u všech stejný: 300 Kč + 50 Kč za kluka (academy/rules.ts, upkeepWeekly),
+ * tady odhad pro ~12 kluků. Placený trenér mládeže bere navíc svůj plat.
  */
-export const ACADEMY_WEEKLY_COST: Record<Exclude<AcademyChoice, "keep">, number> = { none: 0, volunteer: 400, parent: 400, staff: 400 };
+export const ACADEMY_WEEKLY_COST: Record<Exclude<AcademyChoice, "keep">, number> = { none: 0, volunteer: 900, parent: 900, staff: 900 };
 
 export interface PricedOption {
   key: string;
@@ -657,7 +658,7 @@ export function renderWeeklyPrompt(ctx: WeeklyContext): string {
   L.push(ctx.staff.candidates.length ? ctx.staff.candidates.map((o) => `${o.key}: ${o.role}, ${o.label}, ${o.detail}, wage ${czk(o.weeklyWage)}/week, signing ${czk(o.cost)}`).join("\n") : "(none)");
   L.push("Roles: asistent (faster player development), maser (better daily recovery), lekar (shorter injuries), kondicni_trener (less fatigue), spravce_hriste (pitch keeps condition), trener_mladeze (youth development), trener_brankaru (goalkeepers), psycholog (morale), obsluha (refreshment sales), sef_fanklubu (fans), ekonom (finances), skaut (scouting).");
   L.push("");
-  L.push(`YOUTH TEAM (the club's own boys aged 11-14 from the village, ${ctx.academy.prospects} now; the village gives about ${ctx.academy.expectedPerYear.toFixed(1)} boys a year, 9 are needed to play the district youth league): ${ctx.academy.current}. Options keep / none (no youth team, boys quit) / volunteer (an A-team player aged 28+ coaches them for free but misses some A-team training${ctx.academy.canVolunteer ? "" : ", NOT AVAILABLE"}) / parent (a boy's father coaches, average) / staff (the hired trener_mladeze, best${ctx.academy.canStaff ? "" : ", NOT AVAILABLE: hire one first"}). Running costs ${czk(ACADEMY_WEEKLY_COST.volunteer)}/week. Every summer the 14-year-olds move up to the U21; the coach also recommends talented boys aged 13+ during the season.`);
+  L.push(`YOUTH TEAM (the club's own boys aged 11-14 from the village, ${ctx.academy.prospects} now; the village gives about ${ctx.academy.expectedPerYear.toFixed(1)} boys a year, 9 are needed to play the district youth league): ${ctx.academy.current}. Options keep / none (no youth team, boys quit) / volunteer (an A-team player aged 28+ coaches them for free but misses some A-team training${ctx.academy.canVolunteer ? "" : ", NOT AVAILABLE"}) / parent (a boy's father coaches, average) / staff (the hired trener_mladeze, best${ctx.academy.canStaff ? "" : ", NOT AVAILABLE: hire one first"}). Running costs about ${czk(ACADEMY_WEEKLY_COST.volunteer)}/week (300 + 50 per boy). Every summer the 14-year-olds move up to the U21; the coach also recommends talented boys aged 13+ during the season.`);
   L.push(`BANNER SPONSORS: ${ctx.banners.active}/${ctx.banners.max} used. Offers (key: company, monthly payment, seasons); banners only bring money, free slots are filled with the best offers you do not pick:`);
   L.push(ctx.banners.offers.length ? ctx.banners.offers.map((o) => `${o.key}: ${o.label}, ${czk(o.monthly)}/month, ${o.seasons} season(s)`).join("\n") : "(none)");
   L.push("");

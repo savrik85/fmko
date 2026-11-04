@@ -17,7 +17,7 @@ import { rowEffectiveness, type StaffEffectRow } from "../staff/staff-effects";
 import { recordTransaction } from "../season/finance-processor";
 import { logger } from "../lib/logger";
 import {
-  type CoachType, YOUNGEST_AGE, OLDEST_AGE, MIN_SQUAD, UPKEEP_WEEKLY, VOLUNTEER_MIN_AGE, expectedKidsPerYear, rollKids,
+  type CoachType, YOUNGEST_AGE, OLDEST_AGE, MIN_SQUAD, UPKEEP_BASE, UPKEEP_PER_KID, upkeepWeekly, VOLUNTEER_MIN_AGE, expectedKidsPerYear, rollKids,
   programQuality, weeklyProgress, estimatedTalent, verdictText, commitmentText, canPlayUp, recommendsPlayUp,
   REOFFER_DAYS, firstOfferDay, quitChance, talentShiftAt13, pickTraits, positionVisible, GRADUATE_WAGE_FACTOR,
   youthTransferFee, distanceKm, qualityText, PLAY_UP_ESTIMATE, estimateRange, strengthsOf, staffQualityText,
@@ -360,8 +360,8 @@ export async function volunteerCoachId(db: D1Database, teamId: string): Promise<
 export async function weeklyAcademy(db: D1Database, teamId: string, gameDate: string, opsCostMul: number): Promise<void> {
   const club = await loadClub(db, teamId);
   if (!club || !club.academy_upkeep) return;
-  await recordTransaction(db, teamId, "youth_academy", -Math.round(UPKEEP_WEEKLY * opsCostMul), "Žáci (dresy, míče, startovné, cesty)", gameDate);
   const squad = (await activeProspects(db, teamId)).length;
+  await recordTransaction(db, teamId, "youth_academy", -Math.round(upkeepWeekly(squad) * opsCostMul), `Akademie (${squad} žáků: dresy, startovné, míče, cesty)`, gameDate);
   if (squad === 0) return;
   const coach = await coachState(db, club, squad);
   if (coach.quality <= 0) return;
@@ -698,7 +698,9 @@ export async function loadAcademyView(db: D1Database, teamId: string) {
     village: club.village_name,
     /** Kolik kluků obec dá na ročník, slovy počítá UI. */
     expectedPerYear: Math.round(expectedKidsPerYear(club.population ?? 0) * 10) / 10,
-    weeklyCost: UPKEEP_WEEKLY,
+    weeklyCost: upkeepWeekly(prospects.length),
+    upkeepBase: UPKEEP_BASE,
+    upkeepPerKid: UPKEEP_PER_KID,
     minSquad: MIN_SQUAD,
     playsCompetition: prospects.length >= MIN_SQUAD,
     hasU21: !!u21,

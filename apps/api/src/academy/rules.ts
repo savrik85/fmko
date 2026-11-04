@@ -27,8 +27,17 @@ export const MAX_KIDS_PER_YEAR = 6;
 /** Pod tolik kluků družstvo nehraje okresní soutěž. */
 export const MIN_SQUAD = 9;
 
-/** Týdenní provoz žáků: dresy, míče, startovné, cesty na zápasy. */
-export const UPKEEP_WEEKLY = 400;
+/**
+ * Týdenní provoz žáků: základ (míče, cesty na zápasy, rozhodčí) a za každého kluka (dresy,
+ * startovné, pojištění). Na produ (2026-11-04) má střední klub pevné výdaje ~9 900 Kč týdně
+ * a čistý výsledek jen ~+480 Kč, takže akademie stojí 8–15 % výdajů a chudší klub ji unese.
+ */
+export const UPKEEP_BASE = 300;
+export const UPKEEP_PER_KID = 50;
+
+export function upkeepWeekly(squadSize: number): number {
+  return UPKEEP_BASE + UPKEEP_PER_KID * Math.max(0, squadSize);
+}
 
 export function expectedKidsPerYear(population: number): number {
   return Math.min(MAX_KIDS_PER_YEAR, Math.max(0, population) * KIDS_PER_RESIDENT);
