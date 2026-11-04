@@ -983,7 +983,12 @@ teamsRouter.post("/reclaim", async (c) => {
 
 // GET /api/teams/:id
 /** Finance klubu vidí jen jeho vlastník; cizí manažer by z nich vyčetl, kolik soupeř unese při přestupu. */
-const PRIVATE_TEAM_FIELDS = ["budget", "phone_credit", "phone_credit_date", "youth_paid_base", "youth_paid_weeks", "youth_investment"] as const;
+const PRIVATE_TEAM_FIELDS = [
+  "budget", "phone_credit", "phone_credit_date", "youth_paid_base", "youth_paid_weeks", "youth_investment",
+  // Akademie: kdo trénuje žáky a kdy klub nabíral, cizím klubům do toho nic není
+  "academy_upkeep", "academy_coach_type", "academy_coach_player_id", "academy_coach_name", "academy_coach_prospect_id",
+  "academy_founded_season", "academy_recruit_day_season",
+] as const;
 
 teamsRouter.get("/:id", async (c) => {
   const team = await c.env.DB.prepare(

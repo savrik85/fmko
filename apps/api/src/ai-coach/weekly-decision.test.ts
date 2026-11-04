@@ -84,7 +84,7 @@ function context(budget: number, p: AiCoachProfile = profile()): WeeklyContext {
         { key: "C2", ref: "staff-2", role: "maser", label: "Iva Masérka", detail: "medicine 9", cost: 2_000, weeklyWage: 500 },
       ],
     },
-    academy: { current: "none", weeklyCostNow: 0, prospects: 0, expectedPerYear: 2, canVolunteer: true, canStaff: false },
+    academy: { current: "none", weeklyCostNow: 0, prospects: 0, expectedPerYear: 2, canVolunteer: true, canStaff: false, canFound: true },
     banners: {
       active: 4, max: 6,
       offers: [

@@ -323,8 +323,13 @@ export async function wipeAiClubForNewcomer(db: D1Database, teamId: string, opts
     `UPDATE teams SET training_type = 'conditioning', training_approach = 'balanced', training_sessions = 2,
             training_plan = NULL, last_training_at = NULL, last_training_result = NULL,
             training_attendance = '{}', formation_familiarity = '{}', tactic_familiarity = '{}',
-            youth_investment = 'none', youth_paid_base = 0, youth_paid_weeks = 0
+            youth_investment = 'none', youth_paid_base = 0, youth_paid_weeks = 0,
+            academy_upkeep = 0, academy_coach_type = NULL, academy_coach_player_id = NULL, academy_coach_name = NULL,
+            academy_coach_prospect_id = NULL, academy_founded_season = NULL, academy_recruit_day_season = NULL
       WHERE id = ?`, teamId);
+  // Akademie AI klubu: nový majitel si ji založí sám (kluci končí, lákání a nabídky z žáků propadají)
+  await runStatement(db, "žáci", "UPDATE youth_prospects SET status = 'quit', next_offer_on = NULL WHERE team_id = ? AND status IN ('active', 'leaving')", teamId);
+  await runStatement(db, "lákání žáků", "UPDATE youth_poach SET status = 'failed' WHERE status = 'active' AND (from_team_id = ? OR to_team_id = ?)", teamId, teamId);
   // Zvlášť: sloupec training_days je na produkci (přidaný ručně), v migracích chybí.
   await runStatement(db, "tréninkové dny", "UPDATE teams SET training_days = NULL WHERE id = ?", teamId);
 
