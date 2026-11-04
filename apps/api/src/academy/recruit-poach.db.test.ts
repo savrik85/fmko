@@ -107,6 +107,11 @@ describe("přetahování", () => {
     await db.prepare("UPDATE youth_poach SET interest = 80 WHERE prospect_id = ?").bind(kid.id).run();
     await db.prepare("UPDATE youth_poach SET interest = 10 WHERE prospect_id = ?").bind(second.id).run();
 
+    // Lákající klub má konec sezóny za sebou dřív: přetažený kluk se musí posunout hned
+    const bigBefore = await prospects("big");
+    await seasonEndAcademy(db, createRng(12), "big", GAME_DATE);
+    const bigAfter = await prospects("big");
+    const agedOnce = bigAfter.filter((k) => bigBefore.some((b) => b.id === k.id && b.age + 1 === k.age)).length;
     await seasonEndAcademy(db, createRng(8), "small", GAME_DATE);
     const moved = await db.prepare("SELECT team_id FROM youth_prospects WHERE id = ?").bind(kid.id).first<{ team_id: string }>();
     expect(moved!.team_id).toBe("big");
@@ -114,6 +119,19 @@ describe("přetahování", () => {
     expect(stayed!.team_id).toBe("small");
     const fee = await db.prepare("SELECT amount FROM transactions WHERE team_id = 'small' AND type = 'transfer_income'").first<{ amount: number }>();
     expect(fee!.amount).toBeGreaterThanOrEqual(6_500);
+    // Přetažený kluk zestárl právě jednou, i když jeho nový klub byl zpracovaný dřív
+    const movedRow = await db.prepare("SELECT age, aged_season, status FROM youth_prospects WHERE id = ?").bind(kid.id).first<{ age: number; aged_season: number; status: string }>();
+    expect(movedRow!.aged_season).toBe(3);
+    if (movedRow!.status === "active") expect(movedRow!.age).toBe(kid.age + 1);
+    // Druhý konec sezóny téhož klubu už nikoho nezestárne
+    expect(agedOnce).toBeGreaterThan(0);
+    const again = await prospects("big");
+    await seasonEndAcademy(db, createRng(13), "big", GAME_DATE);
+    const twice = await prospects("big");
+    for (const k of twice) {
+      const prev = again.find((a) => a.id === k.id);
+      if (prev) expect(k.age).toBe(prev.age);
+    }
     // Rok ho nikdo přetahovat nemůže
     await db.prepare("INSERT INTO teams (id, user_id, village_id, name, budget, reputation, game_date, league_id, academy_upkeep) SELECT 'third', 'u-b', village_id, 'Slavoj', 100000, 50, game_date, 'lg', 1 FROM teams WHERE id = 'small'").run();
     expect((await poachAction(db, createRng(9), "third", kid.id, "invite", GAME_DATE)).ok).toBe(false);

@@ -145,6 +145,8 @@ export interface WeeklyContext {
     canVolunteer: boolean;
     /** Má najatého trenéra mládeže. */
     canStaff: boolean;
+    /** Má akademii, nebo ji letos ještě smí založit (jednou za sezónu). */
+    canFound: boolean;
   };
   banners: { active: number; max: number; offers: BannerOption[] };
   u21: { exists: boolean; aTeamSize: number; promote: U21MoveOption[]; sendDown: U21MoveOption[] };
@@ -469,9 +471,10 @@ export function planWeeklyActions(ctx: WeeklyContext, d: WeeklyDecision): Weekly
   if (d.pitchCareMode !== "keep" && d.pitchCareMode !== ctx.pitch.careMode) actions.push({ kind: "pitch_care_mode", mode: d.pitchCareMode });
   if (d.academy !== "keep" && d.academy !== ctx.academy.current) {
     // Kód hlídá meze: placený trenér jen najatý, dobrovolník jen když je kdo
-    const allowed = (d.academy !== "staff" || ctx.academy.canStaff) && (d.academy !== "volunteer" || ctx.academy.canVolunteer);
+    const allowed = (d.academy === "none" || ctx.academy.canFound)
+      && (d.academy !== "staff" || ctx.academy.canStaff) && (d.academy !== "volunteer" || ctx.academy.canVolunteer);
     if (allowed) actions.push({ kind: "academy", level: d.academy });
-    else skipped.push({ item: `academy ${d.academy}`, reason: d.academy === "staff" ? "nemá trenéra mládeže" : "nemá hráče od 28 let" });
+    else skipped.push({ item: `academy ${d.academy}`, reason: !ctx.academy.canFound ? "akademii jde založit až příští sezónu" : d.academy === "staff" ? "nemá trenéra mládeže" : "nemá hráče od 28 let" });
   }
 
   const freeSlots = Math.max(0, ctx.banners.max - ctx.banners.active);

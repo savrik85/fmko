@@ -342,7 +342,7 @@ export const GEM_CHANCE = 0.07;
 export const GEM_TALENT: [number, number] = [70, 95];
 export const GEM_EXTRA_CAP: [number, number] = [12, 25];
 
-/** Co k běžnému klukovi přidá placená akademie (viz `YOUTH_BONUS` v season/youth.ts). */
+/** Co k běžnému klukovi přidají roky v akademii (náskok z `youth_prospects`, academy/service.ts). */
 export interface AcademyBonus {
   current: number;
   cap: number;

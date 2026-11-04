@@ -185,6 +185,16 @@ describe("družstvo žáků", () => {
     expect(still!.status).toBe("active");
   });
 
+  it("čtrnáctiletý z klubu bez dorostu, kterého soused nevzal, nezůstane viset", async () => {
+    // Nabídka propadla bez přijetí (soused odmítl nebo mlčel): kluk v 'leaving' bez nabídky
+    await db.prepare("UPDATE player_offers SET status = 'rejected' WHERE status = 'pending' AND prospect_id IN (SELECT id FROM youth_prospects WHERE team_id = 'nou21' AND status = 'leaving')").run();
+    const kid = (await prospects("nou21"))[0];
+    await db.prepare("UPDATE youth_prospects SET status = 'leaving' WHERE id = ?").bind(kid.id).run();
+    await dailyAcademy(db, "nou21", GAME_DATE);
+    const row = await db.prepare("SELECT status FROM youth_prospects WHERE id = ?").bind(kid.id).first<{ status: string }>();
+    expect(row!.status).toBe("quit");
+  });
+
   it("zrušení: kluci končí a založit znovu jde až příští sezónu", async () => {
     const res = await closeYouthTeam(db, "nou21", GAME_DATE);
     expect(res.ok).toBe(true);

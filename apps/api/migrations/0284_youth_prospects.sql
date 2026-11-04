@@ -18,6 +18,8 @@ CREATE TABLE IF NOT EXISTS youth_prospects (
   commitment INTEGER NOT NULL DEFAULT 70,
   status TEXT NOT NULL DEFAULT 'active',
   next_offer_on TEXT,
+  -- Číslo sezóny, na jejímž konci kluk už zestárl (konec sezóny ho nezpracuje dvakrát)
+  aged_season INTEGER,
   player_id TEXT,
   joined_at TEXT NOT NULL,
   left_at TEXT,

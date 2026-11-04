@@ -23,7 +23,7 @@ export const OLDEST_AGE = 14;
  */
 export const KIDS_PER_RESIDENT = 0.0015;
 /** Víc kluků na ročník družstvo nepobere (velké obce). */
-export const MAX_KIDS_PER_YEAR = 6;
+export const MAX_KIDS_PER_YEAR = 4;
 /** Pod tolik kluků družstvo nehraje okresní soutěž. */
 export const MIN_SQUAD = 9;
 
@@ -313,21 +313,22 @@ export const RECRUIT_DAY_COST = 1500;
 
 /**
  * Kolik kluků (11–12 let) přivede náborový den: zhruba polovina ročníku obce navíc,
- * nejméně „možná jeden“, nejvýš 3. Dobrý trenér děti nadchne víc.
+ * nejméně „možná jeden“, nejvýš 2. Dobrý trenér děti nadchne víc. Simulace 6 sezón
+ * (2026-11-04): s vyšší dávkou poslal městys do U21 skoro 7 kluků ročně, U21 přetékala.
  */
 export function recruitDayExpected(population: number, quality: number): number {
-  const base = Math.min(3, Math.max(0.6, expectedKidsPerYear(population) * 0.6));
-  return Math.min(3, base * (0.7 + 0.3 * Math.min(1.3, Math.max(0, quality))));
+  const base = Math.min(2, Math.max(0.6, expectedKidsPerYear(population) * 0.5));
+  return Math.min(2, base * (0.7 + 0.3 * Math.min(1.3, Math.max(0, quality))));
 }
 
 /** Kluci z obcí bez vlastní akademie chodí do akademie v okolí: do téhle vzdálenosti. */
 export const NEIGHBOR_RADIUS_KM = 6;
 /** Z okolních obcí přijde za léto nejvýš tolik kluků (velké obce by jinak zaplavily družstvo). */
-export const NEIGHBOR_MAX_PER_YEAR = 4;
+export const NEIGHBOR_MAX_PER_YEAR = 2;
 /** Víc kluků družstvo žáků neuživí: nábor ani okolní obce nikoho dalšího nepřivedou. */
-export const MAX_SQUAD = 30;
+export const MAX_SQUAD = 24;
 /** Jaký díl ročníku obce bez akademie vůbec chce hrát fotbal jinde (dojíždění). */
-export const NEIGHBOR_SHARE = 0.5;
+export const NEIGHBOR_SHARE = 0.35;
 
 /** Kolik jedenáctiletých z obce bez akademie přijde k jednomu klubu s akademií v okolí. */
 export function neighborKidsExpected(population: number, academiesAround: number): number {

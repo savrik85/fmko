@@ -165,8 +165,15 @@ export function AcademyCard({ teamId }: { teamId: string }) {
   useEffect(() => { load(); }, [load]);
 
   if (loading && !data) return <div className="card p-4 text-sm text-muted" role="status">Načítám akademii…</div>;
-  if (error) return <div className="card p-4 space-y-3" role="alert"><p className="text-sm">{error}</p><button onClick={load} className="btn btn-primary min-h-11 px-3">Zkusit znovu</button></div>;
+  // Chyba při prvním načtení schová kartu; při dalším (po akci) zůstanou poslední data a nahoře hláška
+  if (error && !data) return <div className="card p-4 space-y-3" role="alert"><p className="text-sm">{error}</p><button onClick={load} className="btn btn-primary min-h-11 px-3">Zkusit znovu</button></div>;
   if (!data) return null;
+  const errorBanner = error ? (
+    <div className="card p-3 text-sm border-l-4 border-red-400 bg-red-50 flex flex-wrap items-center justify-between gap-2" role="alert">
+      <span>{error}</span>
+      <button onClick={load} className="btn btn-secondary min-h-11 px-3">Zkusit znovu</button>
+    </div>
+  ) : null;
 
   const post = async (key: string, path: string, body: unknown, failMessage: string): Promise<boolean> => {
     if (busy) return false;
@@ -185,6 +192,7 @@ export function AcademyCard({ teamId }: { teamId: string }) {
     const total = data.expectedPerYear * 4;
     return (
       <section className="card p-4 sm:p-5 space-y-3">
+        {errorBanner}
         <h2 className="font-heading font-bold text-base">Akademie</h2>
         <p className="text-sm text-muted">
           Klub nemá akademii, tedy družstvo žáků. Když ho založíš, přijdou hned kluci od 11 do 14 let z obce {data.village}.
@@ -220,6 +228,7 @@ export function AcademyCard({ teamId }: { teamId: string }) {
 
   return (
     <div className="space-y-4">
+      {errorBanner}
       {!data.coach.type && (
         <p className="card p-4 text-sm border-l-4 border-gold-500 bg-gold-50" role="alert">Žáci nemají trenéra, takže netrénují a víc jich skončí. Vyber trenéra níž.</p>
       )}
