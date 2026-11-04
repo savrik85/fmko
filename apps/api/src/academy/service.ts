@@ -110,14 +110,14 @@ async function activeProspects(db: D1Database, teamId: string): Promise<Prospect
   return res.results;
 }
 
-async function loadStaffYouthCoach(db: D1Database, teamId: string): Promise<{ effectiveness: number; judgement: number; name: string } | null> {
+async function loadStaffYouthCoach(db: D1Database, teamId: string): Promise<{ effectiveness: number; judgement: number; name: string; weeklyWage: number } | null> {
   const row = await db.prepare(
-    `SELECT role, coaching, medicine, maintenance, judgement, communication, work_rate, charm, first_name, last_name
+    `SELECT role, coaching, medicine, maintenance, judgement, communication, work_rate, charm, first_name, last_name, weekly_wage
        FROM staff_members WHERE team_id = ? AND role = 'trener_mladeze' LIMIT 1`,
-  ).bind(teamId).first<StaffEffectRow & { first_name: string; last_name: string }>()
+  ).bind(teamId).first<StaffEffectRow & { first_name: string; last_name: string; weekly_wage: number }>()
     .catch((e) => { logger.warn({ module: M, teamId }, "load youth coach", e); return null; });
   if (!row) return null;
-  return { effectiveness: rowEffectiveness(row, "trener_mladeze"), judgement: row.judgement, name: `${row.first_name} ${row.last_name}` };
+  return { effectiveness: rowEffectiveness(row, "trener_mladeze"), judgement: row.judgement, name: `${row.first_name} ${row.last_name}`, weeklyWage: row.weekly_wage ?? 0 };
 }
 
 async function loadManagerYouth(db: D1Database, teamId: string): Promise<number> {
@@ -151,6 +151,8 @@ interface CoachState {
   quality: number;
   /** Úsudek placeného trenéra pro odhad talentu, jinak null. */
   judgement: number | null;
+  /** Týdenní plat placeného trenéra mládeže (platí se jako zaměstnanec), jinak 0. */
+  weeklyWage: number;
 }
 
 /** Kdo žáky vede a jak dobrá je příprava (trenér, vybavení a úroveň akademie). */
@@ -167,16 +169,16 @@ async function coachStateRaw(db: D1Database, club: ClubRow, squadSize: number): 
   if (type === "staff") {
     const staff = await loadStaffYouthCoach(db, club.id);
     if (staff) {
-      return { type, name: staff.name, judgement: staff.judgement,
+      return { type, name: staff.name, judgement: staff.judgement, weeklyWage: staff.weeklyWage,
         quality: programQuality({ coach: type, staffEffectiveness: staff.effectiveness, managerYouth, squadSize, equipment }) };
     }
   } else if (type === "volunteer") {
     const v = await loadVolunteer(db, club.id, club.academy_coach_player_id);
-    if (v) return { type, name: v.name, judgement: null, quality: programQuality({ coach: type, volunteerLeadership: v.leadership, managerYouth, squadSize, equipment }) };
+    if (v) return { type, name: v.name, judgement: null, weeklyWage: 0, quality: programQuality({ coach: type, volunteerLeadership: v.leadership, managerYouth, squadSize, equipment }) };
   } else if (type === "parent" && club.academy_coach_name) {
-    return { type, name: club.academy_coach_name, judgement: null, quality: programQuality({ coach: type, managerYouth, squadSize, equipment }) };
+    return { type, name: club.academy_coach_name, judgement: null, weeklyWage: 0, quality: programQuality({ coach: type, managerYouth, squadSize, equipment }) };
   }
-  return { type: null, name: null, judgement: null, quality: 0 };
+  return { type: null, name: null, judgement: null, weeklyWage: 0, quality: 0 };
 }
 
 /** Kolik dní zbývá do posledního zápasu ligy v aktuální sezóně. */
@@ -798,7 +800,12 @@ export async function loadAcademyView(db: D1Database, teamId: string) {
     minSquad: MIN_SQUAD,
     playsCompetition: prospects.length >= MIN_SQUAD,
     hasU21: !!u21,
-    coach: { type: coach.type, name: coach.name, quality: qualityText(coach.quality, coach.type), playerId: coach.type === "volunteer" ? club.academy_coach_player_id : null },
+    coach: {
+      type: coach.type, name: coach.name, quality: qualityText(coach.quality, coach.type),
+      playerId: coach.type === "volunteer" ? club.academy_coach_player_id : null,
+      /** Plat placeného trenéra mládeže: platí se zvlášť jako zaměstnanec, ne z provozu akademie. */
+      weeklyWage: coach.weeklyWage,
+    },
     coachOptions: options,
     nextSummer: prospects.filter((p) => p.age >= OLDEST_AGE).length,
     prospects: prospects.map((p) => {
@@ -1068,9 +1075,13 @@ async function poachView(db: D1Database, club: ClubRow, coach: CoachState, seaso
       WHERE y.from_team_id = ? AND y.season_number = ? AND y.status = 'active'`,
   ).bind(club.id, seasonNumber).all<IncomingRow>()
     .catch((e) => { logger.warn({ module: M, teamId: club.id }, "incoming poaches", e); return { results: [] as IncomingRow[] }; })).results;
+  const ownLevel = await clubLeagueLevel(db, club.id);
   return {
     remaining: Math.max(0, MAX_POACH_PER_SEASON - mine.length),
     bootsCost: POACH_ACTIONS.boots.cost,
+    /** Tabulkové odstupné, které zaplatíš (FAČR § 23 podle tvé soutěže): mladší a starší žák. */
+    feeYounger: youthFeeByAge(11, ownLevel),
+    feeOlder: youthFeeByAge(14, ownLevel),
     targets: out,
     incoming: incoming.map((y) => ({
       poachId: y.id, name: `${y.first_name} ${y.last_name}`, age: y.age, club: y.club_name,

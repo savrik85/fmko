@@ -259,11 +259,15 @@ export function youthTransferFee(leagueLevel: string | null | undefined): number
 /** Plat odchovance v první smlouvě proti běžnému hráči stejného hodnocení. */
 export const GRADUATE_WAGE_FACTOR = 0.7;
 
+/**
+ * Rysy kluka: povaha a rodina, NIKDY dovednosti. Dovednostní rysy („rychlej jak blesk“) si
+ * odporovaly se silnými a slabými stránkami z generátoru (kluk „rychlej“ se slabinou „pomalý“).
+ */
 export const TRAITS = [
-  "rychlej jak blesk", "bojí se hlavičkovat", "levá noha jako kladivo", "nejmenší z party, ale nejvíc běhá",
-  "vidí přihrávky, co ostatní nevidí", "o míč se pere jak o život", "brácha hraje za áčko", "táta chytal za béčko",
-  "doma ho ženou do hokeje", "učitelka si na něj stěžuje", "na trénink chodí první", "kope jen pravou",
-  "dlouhej jak tyčka", "pořád se směje", "ve škole jednička z tělocviku", "neumí prohrávat",
+  "brácha hraje za áčko", "táta chytal za béčko", "doma ho ženou do hokeje", "učitelka si na něj stěžuje",
+  "na trénink chodí první", "pořád se směje", "ve škole jednička z tělocviku", "neumí prohrávat",
+  "mamka ho vozí na každý trénink", "s míčem chodí i do školy", "kamarádí se s celou partou", "fandí Slavii",
+  "fandí Spartě", "stydí se, ale na hřišti ožije", "děda je správce hřiště", "po zápase vždycky zůstane sbírat míče",
 ] as const;
 
 export function pickTraits(rng: Rng): string[] {
