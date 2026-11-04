@@ -7,7 +7,6 @@ import { LeagueStatsTab, type StatsData } from "@/components/league/league-stats
 import { apiFetch } from "@/lib/api";
 import { Spinner, PositionBadge, BadgePreview, useConfirm, Tabs, useTabParam } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
-import { AcademyCard } from "@/components/players/academy-card";
 import { U21Rozvoj } from "@/components/players/u21-rozvoj";
 import { U21Attributes } from "@/components/players/u21-attributes";
 import type { BadgePattern } from "@/components/ui";
@@ -90,7 +89,7 @@ interface LeagueRound {
 }
 
 // Pořadí určuje i výchozí záložku — první je ta bez ?tab= v adrese.
-const TAB_KEYS = ["kadr", "atributy", "rozvoj", "tabulka", "rozpis", "statistiky", "akademie"] as const;
+const TAB_KEYS = ["kadr", "atributy", "rozvoj", "tabulka", "rozpis", "statistiky"] as const;
 
 function formatDate(iso: string | null): string {
   if (!iso) return "—";
@@ -105,6 +104,13 @@ export default function U21Page() {
   const { teamId, gameDate: ctxGameDate } = useTeam();
   const { confirm, dialog: confirmDialog } = useConfirm();
   const [tab, setTab] = useTabParam(TAB_KEYS);
+
+  // Akademie byla záložkou U21 (?tab=akademie), teď má vlastní stránku v menu Mládež
+  useEffect(() => {
+    if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("tab") === "akademie") {
+      window.location.replace("/akademie");
+    }
+  }, []);
   const [u21TeamId, setU21TeamId] = useState<string | null>(null);
   const [u21LeagueId, setU21LeagueId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -291,7 +297,6 @@ export default function U21Page() {
           { key: "tabulka", label: "Tabulka" },
           { key: "rozpis", label: "Rozpis" },
           { key: "statistiky", label: "Statistiky" },
-          { key: "akademie", label: "Žáci" },
         ]}
       />
 
@@ -442,7 +447,6 @@ export default function U21Page() {
 
       {tab === "rozvoj" && teamId && <U21Rozvoj teamId={teamId} />}
 
-      {tab === "akademie" && teamId && <AcademyCard teamId={teamId} />}
     </div>
   );
 }

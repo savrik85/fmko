@@ -720,7 +720,7 @@ export async function seedFromLegacy(db: D1Database, teamId: string, gameDate: s
 
   const club = await loadClub(db, teamId);
   if (club && isHuman(club)) {
-    await academySms(db, teamId, `Akademie se mění: místo úrovní investice má klub vlastní družstvo žáků. Máš ${founded.created} kluků od 11 do 14 let, každé léto postoupí čtrnáctiletí do dorostu. Najdeš je v U21 → Žáci, tam vybereš i trenéra.`);
+    await academySms(db, teamId, `Akademie se mění: místo úrovní investice má klub vlastní družstvo žáků. Máš ${founded.created} kluků od 11 do 14 let, každé léto postoupí čtrnáctiletí do dorostu. Najdeš je v Mládež → Akademie, tam vybereš i trenéra.`);
   }
   return { created: founded.created };
 }
