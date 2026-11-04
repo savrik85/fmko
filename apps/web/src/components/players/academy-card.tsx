@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Žáci: družstvo mladších a starších žáků (11–14 let) z vlastní obce.
+ * Mládež → Akademie: družstvo mladších a starších žáků (11–14 let) z vlastní obce.
  *
  * Klub žáky buď má, nebo ne. Mít je stojí hlavně trenéra (dobrovolník z áčka, táta jednoho
  * z kluků, nebo placený trenér mládeže) a dost kluků (9 na okresní soutěž), málo peněz.
@@ -117,9 +117,9 @@ export function AcademyCard({ teamId }: { teamId: string }) {
     const total = data.expectedPerYear * 4;
     return (
       <section className="card p-4 sm:p-5 space-y-3">
-        <h2 className="font-heading font-bold text-base">Žáci</h2>
+        <h2 className="font-heading font-bold text-base">Akademie</h2>
         <p className="text-sm text-muted">
-          Klub nemá družstvo žáků. Když ho založíš, přijdou hned kluci od 11 do 14 let z obce {data.village}.
+          Klub nemá akademii, tedy družstvo žáků. Když ho založíš, přijdou hned kluci od 11 do 14 let z obce {data.village}.
           Každé léto postoupí čtrnáctiletí do dorostu a přijdou noví jedenáctiletí.
         </p>
         <p className="text-sm">
@@ -148,7 +148,7 @@ export function AcademyCard({ teamId }: { teamId: string }) {
     <div className="space-y-4">
       <section className="card p-4 sm:p-5 space-y-3">
         <div>
-          <h2 className="font-heading font-bold text-base">Žáci</h2>
+          <h2 className="font-heading font-bold text-base">Akademie</h2>
           <p className="text-sm text-muted mt-1">
             Kluci od 11 do 14 let z obce {data.village}. Každé léto postoupí čtrnáctiletí do {data.hasU21 ? "dorostu" : "dorostu jiného klubu, protože vlastní dorost nemáš (za každého dostaneš odstupné)"}.
             Nadějné kluky od 13 let ti trenér doporučí o kategorii výš už během sezóny.

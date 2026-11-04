@@ -41,6 +41,7 @@ export function categorizePath(pathname: string): { normalizedPath: string; feat
     pathname.startsWith("/kadr") ||
     pathname.startsWith("/trenink") ||
     pathname.startsWith("/u21") ||
+    pathname.startsWith("/akademie") ||
     pathname.startsWith("/zamestnanci")
   ) {
     featureArea = "tym_a_trenink";

@@ -11,6 +11,8 @@ interface NavItem {
   label: string;
   icon: string;
   group: "main" | "club" | "league";
+  /** Podpoložky pod rozbaleným menu (Mládež → U21, Akademie). */
+  children?: { href: string; label: string }[];
 }
 
 const NAV_ITEMS: NavItem[] = [
@@ -23,7 +25,10 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/obec", label: "Obec", icon: "\u{1F3D8}\uFE0F", group: "club" },
   { href: "/reputace", label: "Reputace", icon: "\u2B50", group: "club" },
   { href: "/kadr", label: "Kádr", icon: "\u{1F465}", group: "club" },
-  { href: "/u21", label: "U21", icon: "\u{1F9D2}", group: "club" },
+  {
+    href: "/u21", label: "Mládež", icon: "\u{1F9D2}", group: "club",
+    children: [{ href: "/u21", label: "U21" }, { href: "/akademie", label: "Akademie" }],
+  },
   { href: "/trenink", label: "Tréninky", icon: "\u{1F3CB}", group: "club" },
   { href: "/zamestnanci", label: "Zaměstnanci", icon: "\u{1F454}", group: "club" },
   { href: "/prestupy", label: "Přestupy", icon: "\u{1F91D}", group: "club" },
@@ -81,6 +86,8 @@ export function FMSidebar() {
     }
     return pathname.startsWith(href);
   };
+  /** Položka s podpoložkami je aktivní, když je aktivní kterákoli z nich. */
+  const isItemActive = (item: NavItem) => item.children ? item.children.some((c) => isActive(c.href)) : isActive(item.href);
 
   const baseItems = isAdmin
     ? [...NAV_ITEMS, { href: "/admin", label: "Admin", icon: "⚙️", group: "main" as const }]
@@ -130,10 +137,10 @@ export function FMSidebar() {
                   <div className="mx-2.5 my-1 border-t border-white/5" />
                 )}
                 {groupItems.map((item) => {
-                  const active = isActive(item.href);
+                  const active = isItemActive(item);
                   return (
+                    <div key={item.href + item.label}>
                     <Link
-                      key={item.href + item.label}
                       href={item.href}
                       title={!expanded ? item.label : undefined}
                       className={`relative flex items-center gap-2.5 mx-1 my-px rounded transition-all duration-100 ${
@@ -200,6 +207,25 @@ export function FMSidebar() {
                         </span>
                       )}
                     </Link>
+                    {expanded && item.children && (
+                      <div className="ml-8 mr-1 mb-1">
+                        {item.children.map((child) => {
+                          const childActive = isActive(child.href);
+                          return (
+                            <Link
+                              key={child.href}
+                              href={child.href}
+                              className={`block rounded px-2.5 py-1 text-[12px] font-medium leading-none transition-colors ${
+                                childActive ? "text-white bg-white/10" : "text-white/35 hover:text-white/80 hover:bg-white/5"
+                              }`}
+                            >
+                              {child.label}
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    )}
+                    </div>
                   );
                 })}
               </div>
