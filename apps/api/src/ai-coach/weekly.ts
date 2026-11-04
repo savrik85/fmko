@@ -266,6 +266,8 @@ export async function loadWeeklyContext(db: D1Database, teamId: string, gameDayO
       .catch((e) => { logger.warn({ module: M, teamId }, "kádr U21", e); return { results: [] as never[] }; });
     for (const y of youth.results) {
       if (promote.length >= 3) break;
+      // FAČR: za muže až od 15 let (SENIOR_MIN_AGE v academy/rules.ts)
+      if (y.age < 15) continue;
       if (y.overall_rating > depthLine(y.position)) {
         promote.push({ key: `U${promote.length + 1}`, playerId: y.id, label: `${y.position} ${y.age}y rating ${y.overall_rating} (A-team depth line ${depthLine(y.position)})` });
       }

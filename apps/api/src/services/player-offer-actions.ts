@@ -33,6 +33,14 @@ export async function acceptPlayerOffer(db: D1Database, teamId: string, offerId:
     .bind(offerId, teamId).first<Record<string, unknown>>();
   if (!offer) return { ok: false, status: 404, error: "Nabídka nenalezena" };
 
+  // Kluk z žáků do klubu bez dorostu by šel rovnou do áčka: za muže smí až od 15 let (FAČR).
+  // Kontrola PŘED zabráním nabídky i kluka, ať kluk při odmítnutí zůstane u žáků.
+  if (offer.prospect_id && Number(offer.age) < 15) {
+    const hasU21 = await db.prepare("SELECT 1 AS ok FROM teams WHERE parent_team_id = ? AND team_type = 'u21'").bind(teamId).first<{ ok: number }>()
+      .catch((e) => { logger.warn({ module: M, teamId }, "check u21 for academy offer", e); return null; });
+    if (!hasU21) return { ok: false, status: 409, error: "Za muže smí kluk nastoupit až od 15 let a klub nemá dorost." };
+  }
+
   // Atomicky claimni offer — pokud někdo souběžně už přijal, claim selže a nevytvoříme duplicitního hráče.
   const claim = await db.prepare("UPDATE player_offers SET status = 'accepted' WHERE id = ? AND team_id = ? AND status = 'pending'")
     .bind(offerId, teamId).run();
@@ -73,7 +81,7 @@ export async function acceptPlayerOffer(db: D1Database, teamId: string, offerId:
       skillsMax[attr] = { current: val, maxPotential: Math.min(100, val + headroom) };
     }
   }
-  // Kluk z vlastní akademie jde do dorostu (U21), bez U21 rovnou do áčka. Klub ho vychoval.
+  // Kluk z žáků jde do dorostu (U21); bez U21 do áčka jen od 15 let (kontrola nahoře).
   const prospectId = (offer.prospect_id as string | null) ?? null;
   // Vychoval ho klub, u jehož žáků byl, i když teď jde jinam
   const raisedBy = prospectId

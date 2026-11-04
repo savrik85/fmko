@@ -238,7 +238,8 @@ export function AcademyCard({ teamId }: { teamId: string }) {
             <li>Na okresní soutěž je potřeba {data.minSquad} kluků. Bez soutěže rostou pomaleji a víc jich skončí.</li>
             <li>Jak rychle kluci rostou, určuje trenér a vybavení. Nejlepší je placený trenér mládeže, dobrovolník z áčka a táta jsou zadarmo.</li>
             <li>Potenciál kluka odhaduje trenér. U mladších se plete víc, u čtrnáctiletých míň, placený trenér mládeže nejmíň.</li>
-            <li>Každé léto jdou čtrnáctiletí do {data.hasU21 ? "tvého dorostu (U21)" : "dorostu jiného klubu, ty dostaneš odstupné"}. Nadějného kluka od 13 let ti trenér doporučí dřív, dát ho tam můžeš i sám.</li>
+            <li>Každé léto jdou čtrnáctiletí do {data.hasU21 ? "tvého dorostu (U21)" : "dorostu jiného klubu, ty dostaneš odstupné"}. {data.hasU21 ? "Nadějného kluka od 13 let ti trenér doporučí do dorostu dřív, dát ho tam můžeš i sám." : "Dřív to nejde, protože vlastní dorost nemáš."}</li>
+            <li>Podle pravidel FAČR smí kluk do dorostu od 13 let, za muže (áčko) až od 15 let.</li>
             <li>Provoz stojí {kc(data.weeklyCost)} týdně.</li>
           </ul>
         </details>
@@ -294,7 +295,7 @@ export function AcademyCard({ teamId }: { teamId: string }) {
                         disabled={busy !== null}
                         className="btn btn-secondary min-h-11 px-3 disabled:opacity-40"
                       >
-                        {busy === p.id ? "Pracuju…" : data.hasU21 ? "Dát do dorostu hned" : "Dát do áčka hned"}
+                        {busy === p.id ? "Pracuju…" : "Dát do dorostu hned"}
                       </button>
                     )}
                   </li>

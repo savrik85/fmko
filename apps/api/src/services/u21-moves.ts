@@ -49,10 +49,13 @@ export async function promotePlayerFromU21(db: D1Database, teamId: string, playe
   if (!u21Team) return { ok: false, status: 404, error: "U21 tým neexistuje" };
 
   const player = await db.prepare(
-    "SELECT id, team_id FROM players WHERE id = ?"
-  ).bind(playerId).first<{ id: string; team_id: string }>();
+    "SELECT id, team_id, age FROM players WHERE id = ?"
+  ).bind(playerId).first<{ id: string; team_id: string; age: number }>();
   if (!player) return { ok: false, status: 404, error: "Hráč nenalezen" };
   if (player.team_id !== u21Team.id) return { ok: false, status: 400, error: "Hráč není v U21" };
+  // FAČR: za muže až od 15 let (starší žák smí jen do dorostu)
+  const { SENIOR_MIN_AGE } = await import("../academy/rules");
+  if (player.age < SENIOR_MIN_AGE) return { ok: false, status: 400, error: `Za muže smí hráč nastoupit až od ${SENIOR_MIN_AGE} let.` };
 
   await db.prepare(
     "UPDATE players SET team_id = ?, parent_club_id = NULL, next_match_return = 0 WHERE id = ?"

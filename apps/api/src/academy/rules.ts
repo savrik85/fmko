@@ -146,6 +146,12 @@ export function commitmentText(commitment: number): string {
   return "uvažuje, že skončí";
 }
 
+/**
+ * Za muže smí hráč nastoupit až od 15 let (FAČR, výkladové stanovisko 2026/27: muži mohou
+ * nasadit ročníky 2011 a starší). Hlídá to přesun z U21 do áčka (services/u21-moves.ts).
+ */
+export const SENIOR_MIN_AGE = 15;
+
 /** Do dorostu o kategorii výš smí kluk od 13 let (starší žák v mladším dorostu). */
 export const PLAY_UP_AGE = 13;
 /** Od jakého odhadu trenér sám doporučí, aby kluk hrál o kategorii výš. */

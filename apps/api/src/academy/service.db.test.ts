@@ -7,6 +7,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { Miniflare } from "miniflare";
 import { createRng } from "../generators/rng";
 import { acceptPlayerOffer } from "../services/player-offer-actions";
+import { promotePlayerFromU21 } from "../services/u21-moves";
 import {
   foundYouthTeam, closeYouthTeam, setYouthCoach, loadCoachOptions, weeklyAcademy, recommendPlayUp, promoteProspect,
   seasonEndAcademy, dailyAcademy, loadAcademyView, seedFromLegacy, volunteerCoachId, type ProspectRow,
@@ -165,6 +166,22 @@ describe("družstvo žáků", () => {
     expect(fee!.s).toBe(8_000);
     const paid = await db.prepare("SELECT SUM(amount) AS s FROM transactions WHERE team_id = 'club' AND type = 'transfer_fee'").first<{ s: number }>();
     expect(paid!.s).toBe(-8_000);
+  });
+
+  it("FAČR: z U21 do áčka až od 15 let, klub bez dorostu kluka o kategorii výš nepošle", async () => {
+    const young = await db.prepare("SELECT id, age FROM players WHERE team_id = 'club-u21' AND age < 15 LIMIT 1").first<{ id: string; age: number }>();
+    expect(young).not.toBeNull();
+    const blocked = await promotePlayerFromU21(db, "club", young!.id);
+    expect(blocked.ok).toBe(false);
+    await db.prepare("UPDATE players SET age = 15 WHERE id = ?").bind(young!.id).run();
+    expect((await promotePlayerFromU21(db, "club", young!.id)).ok).toBe(true);
+
+    const kid = (await prospects("nou21")).find((k) => k.age >= 13) ?? (await prospects("nou21"))[0];
+    await db.prepare("UPDATE youth_prospects SET age = 13 WHERE id = ?").bind(kid.id).run();
+    expect((await promoteProspect(db, "nou21", kid.id)).ok).toBe(false);
+    expect((await recommendPlayUp(db, "nou21", kid.id, GAME_DATE)).ok).toBe(false);
+    const still = await db.prepare("SELECT status FROM youth_prospects WHERE id = ?").bind(kid.id).first<{ status: string }>();
+    expect(still!.status).toBe("active");
   });
 
   it("zrušení: kluci končí a založit znovu jde až příští sezónu", async () => {
