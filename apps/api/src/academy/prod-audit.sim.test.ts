@@ -10,7 +10,6 @@
  */
 import { afterAll, beforeAll, describe, it } from "vitest";
 import { writeFileSync } from "node:fs";
-import { openD1 } from "../../scripts/ai-coach-bench/d1-shim";
 import { createRng } from "../generators/rng";
 import { seedFromLegacy, foundYouthTeam, setYouthCoach, loadCoachOptions, loadAcademyView, weeklyAcademy, seasonEndAcademy, youthContextForTeam, type ProspectRow } from "./service";
 import { coachSonAge, OLDEST_AGE, YOUNGEST_AGE, MAX_SQUAD } from "./rules";
@@ -26,8 +25,11 @@ const flag = (s: string) => anomalies.push(s);
 const notes: string[] = [];
 const note = (s: string) => notes.push(s);
 
-beforeAll(() => {
-  if (SRC) db = openD1(SRC);
+// Shim nad node:sqlite až tady: CI bez --experimental-sqlite by jinak spadlo už při načtení souboru
+beforeAll(async () => {
+  if (!SRC) return;
+  const { openD1 } = await import("../../scripts/ai-coach-bench/d1-shim");
+  db = openD1(SRC);
 });
 
 afterAll(() => {
