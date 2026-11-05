@@ -21,6 +21,7 @@
  * zapisuje kurzor před zápisem dorostu a sponzoři s volbami běží nejvýš jednou (AT_MOST_ONCE).
  */
 
+import { alcoholAgingSql } from "../generators/alcohol-age";
 import { createRng, cryptoSeed } from "../generators/rng";
 import { logger } from "../lib/logger";
 import {
@@ -641,6 +642,13 @@ async function ageYouth(db: D1Database, _ctx: RolloverContext, key: ProgressKey)
           AND NOT EXISTS (SELECT 1 FROM season_end_progress
                            WHERE league_id = ? AND season_number = ? AND phase = ? AND status = 'done')`,
     ).bind(key.leagueId, key.seasonNumber, key.phase),
+    // Ve stejné dávce (před markerem): s věkem se projeví víc z vrozené chuti na alkohol
+    db.prepare(alcoholAgingSql(
+      `team_id IN (SELECT id FROM teams WHERE team_type = 'u21')
+        AND json_extract(COALESCE(life_context, '{}'), '$.freshAcademyGraduate') IS NULL
+        AND NOT EXISTS (SELECT 1 FROM season_end_progress
+                         WHERE league_id = ? AND season_number = ? AND phase = ? AND status = 'done')`,
+    )).bind(key.leagueId, key.seasonNumber, key.phase),
     progressStatement(db, key, "done"),
   ]);
   return { done: true, detail: `dorost o rok starší (${aged.meta?.changes ?? 0} hráčů)` };

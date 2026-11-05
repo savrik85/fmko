@@ -6,6 +6,7 @@ import type {
 } from "@okresni-masina/shared";
 import type { PreferredFoot, PreferredSide } from "../skills/types";
 import { pickOccupation } from "./occupations";
+import { alcoholForAge } from "./alcohol-age";
 import { pickForeignName, type Ethnicity } from "../data/nationalities";
 import { generatePlayerSkills, overallRatingFromFlat, type PlayerSkills } from "../skills/generator";
 
@@ -238,7 +239,8 @@ export function generatePlayer(
   const discipline = rng.int(5, 100);
   const patriotism = Math.max(1, Math.min(100,
     50 + (village.category === "vesnice" ? 20 : village.category === "obec" ? 10 : 0) + rng.int(-25, 25)));
-  const alcohol = rng.int(5, 100);
+  // Do dospělosti se z vrozeného sklonu projeví jen díl (čtrnáctiletý alkáč nedává smysl)
+  const alcohol = alcoholForAge(rng.int(5, 100), age);
   const temper = rng.int(5, 100);
 
   // Hair: older players more likely bald/gray

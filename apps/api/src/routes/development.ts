@@ -679,6 +679,24 @@ developmentRouter.post("/admin/academy/migrate", requireAdmin, async (c) => {
   return c.json({ ok: true, teams: results.length, created: results.reduce((n, r) => n + Number(r.created ?? 0), 0), results });
 });
 
+// POST /api/admin/players/young-alcohol — jednorázový přepočet alkoholu mladých hráčů (pod 19)
+// na věk (generators/alcohol-age.ts). Dřív dostal i čtrnáctiletý 5–100. Pořadí mezi hráči
+// zůstane, hodnota se jen zmenší podle věkového stropu. Podruhé už nic neudělá (značka v KV).
+developmentRouter.post("/admin/players/young-alcohol", requireAdmin, async (c) => {
+  const MARK = "young_alcohol_scaled_v1";
+  if (await c.env.CACHE_KV.get(MARK)) return c.json({ ok: true, skipped: "already done", at: await c.env.CACHE_KV.get(MARK) });
+  const { alcoholCapSql, ALCOHOL_ADULT_AGE } = await import("../generators/alcohol-age");
+  const alc = "json_extract(personality, '$.alcohol')";
+  const res = await c.env.DB.prepare(
+    `UPDATE players SET personality = json_set(personality, '$.alcohol',
+        MAX(1, CAST(ROUND(${alc} * 1.0 * ${alcoholCapSql("age")} / 100) AS INTEGER)))
+      WHERE age < ${ALCOHOL_ADULT_AGE} AND json_valid(personality) AND json_type(personality, '$.alcohol') IN ('integer', 'real')`,
+  ).run();
+  const at = new Date().toISOString();
+  await c.env.CACHE_KV.put(MARK, at);
+  return c.json({ ok: true, updated: res.meta.changes ?? 0, at });
+});
+
 // POST /api/admin/academy/daily/:teamId — denní krok akademie jednoho klubu (doporučení
 // o kategorii výš, úklid žáků bez nabídky), ať jde ověřit bez čekání na noční tick.
 developmentRouter.post("/admin/academy/daily/:teamId", requireAdmin, async (c) => {
