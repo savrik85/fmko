@@ -228,7 +228,8 @@ describe("III. třída uprostřed sezóny", () => {
     for (const club of senior.plan.clubs) {
       expect(club.target.top11).toBeGreaterThanOrEqual(min - 12 - 0.1);
       expect(club.target.top11).toBeLessThanOrEqual(min + 0.1);
-      expect(club.after.top11).toBeGreaterThanOrEqual(club.before.top11);
+      // Slabší po narovnání jen tehdy, když dorostence srazil strop podle lidských vrstevníků
+      if (club.youthLowered === 0) expect(club.after.top11).toBeGreaterThanOrEqual(club.before.top11);
       const village = (await db.prepare("SELECT v.population FROM teams t JOIN villages v ON v.id = t.village_id WHERE t.id = ?")
         .bind(club.teamId).first<{ population: number }>())!;
       expect(club.target.budget).toBe(modestBudgetTarget(village.population, club.percentile));

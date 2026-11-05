@@ -184,6 +184,8 @@ export interface LevelingPlanClub {
   /** Kolik z posunu dovedností dostane i strop (1 = celý posun, 0 = strop zůstane). */
   capShare: number;
   newPlayers: number;
+  /** Kolik stávajících dorostenců narovnání snížilo na strop podle lidských vrstevníků. */
+  youthLowered: number;
   before: ClubSummary;
   target: LevelingTargets;
   after: ClubSummary;
@@ -1194,6 +1196,7 @@ interface ClubChanges {
   shift: number;
   capShare: number;
   raised: Array<{ id: string; shifted: ShiftedMember; wage: number }>;
+  youthLowered: number;
   newPlayers: NewPlayerDraft[];
   /** Změněné sloupce `stadiums` (úrovně, `pitch_condition`). */
   stadium: Record<string, number>;
@@ -1299,6 +1302,7 @@ function computeClubChanges(
   const shift = findSkillShift(club.members, targets.top11, newPlayers.map((p) => p.created.rating), youthCaps);
   const capShare = findCapShare(club.members, shift, targets.headroom);
   const raised: ClubChanges["raised"] = [];
+  let youthLowered = 0;
   const ratingsAfter: number[] = newPlayers.map((p) => p.created.rating);
   const membersAfter: Array<Pick<SquadMember, "position" | "skills" | "skillsMax">> = [];
   for (const m of club.members) {
@@ -1309,6 +1313,7 @@ function computeClubChanges(
     ratingsAfter.push(shifted.rating);
     membersAfter.push({ position: m.position, skills: shifted.skills, skillsMax: shifted.skillsMax });
     if (lowered) {
+      youthLowered++;
       // Snížený dorostenec si nechá dosavadní mzdu, narovnání nikomu nebere peníze.
       raised.push({ id: m.id, shifted, wage: club.meta.get(m.id)?.wage ?? wageFor(shifted.rating, club.teamType) });
     } else if (shift > 0) {
@@ -1400,7 +1405,7 @@ function computeClubChanges(
   };
 
   return {
-    shift, capShare, raised, newPlayers, stadium, pitchType, equipment, hireRoles,
+    shift, capShare, raised, youthLowered, newPlayers, stadium, pitchType, equipment, hireRoles,
     budget: budget !== null && budget !== club.budget ? budget : null,
     reputation: reputation !== null && reputation !== club.reputation ? reputation : null,
     familiarity: familiarityChanged ? familiarity : null,
@@ -1493,7 +1498,7 @@ export async function planLeveling(db: D1Database, opts: PlanLevelingOptions): P
     plan.clubs.push({
       teamId: club.teamId, name: club.name, teamType: club.teamType, takenOver: club.takenOver,
       percentile, skillShift: changes.shift, capShare: changes.capShare, newPlayers: changes.newPlayers.length,
-      before: summarize(club), target: targets, after: changes.after,
+      youthLowered: changes.youthLowered, before: summarize(club), target: targets, after: changes.after,
     });
   });
   return plan;
