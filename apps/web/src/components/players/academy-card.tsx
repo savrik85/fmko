@@ -64,6 +64,7 @@ interface AcademyData {
   nextSummer: number;
   prospects: Prospect[];
   recruitDay: { available: boolean; used: boolean; cost: number; expected: number };
+  openDay: { available: boolean; used: boolean; cost: number; expected: number };
   neighbors: { name: string; km: number; expected: number }[];
   neighborPerYear: number;
   budgetWarning: { budget: number; seasonCost: number; weeks: number } | null;
@@ -487,6 +488,26 @@ export function AcademyCard({ teamId }: { teamId: string }) {
                 return names.length ? `Náborový den se povedl, přišli: ${names.join(", ")}.` : "Na náborový den nikdo nepřišel. Další příští sezónu.";
               })} disabled={busy !== null} className="btn btn-primary min-h-11 px-3 disabled:opacity-40">
                 {busy === "recruit" ? "Pořádám…" : "Uspořádat náborový den"}
+              </button>
+            )}
+          </div>
+          <div className="rounded-soft border border-gray-200 bg-white p-3 space-y-2">
+            <p className="text-sm"><strong className="font-heading text-ink">Den otevřených dveří na hřišti</strong></p>
+            <p className="text-sm text-muted">
+              Jednou za sezónu, nezávisle na náboru ve škole, stojí {kc(data.openDay.cost)} (občerstvení, míče a dresy na vyzkoušení).
+              Přijde míň dětí než ze školy, čekej {classText(data.openDay.expected)}, ale i z okolních obcí a od 11 do 14 let.
+              Chodí ty, které fotbal opravdu chtějí, takže tolik nekončí. A trenér je vidí hrát, takže jejich talent odhadne přesněji.
+            </p>
+            {data.openDay.used ? (
+              <p className="text-sm text-muted">Letos už byl, další příští sezónu.</p>
+            ) : !data.coach.type ? (
+              <p className="text-sm text-muted">Den otevřených dveří potřebuje trenéra žáků.</p>
+            ) : (
+              <button onClick={() => post("openday", `/api/teams/${teamId}/academy/open-day`, undefined, "Den otevřených dveří se nepodařil", (r) => {
+                const names = Array.isArray(r.names) ? (r.names as string[]) : [];
+                return names.length ? `Den otevřených dveří se povedl, přihlásili se: ${names.join(", ")}.` : "Na den otevřených dveří se nikdo nepřihlásil. Další příští sezónu.";
+              })} disabled={busy !== null} className="btn btn-primary min-h-11 px-3 disabled:opacity-40">
+                {busy === "openday" ? "Pořádám…" : "Uspořádat den otevřených dveří"}
               </button>
             )}
           </div>
