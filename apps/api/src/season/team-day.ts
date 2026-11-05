@@ -221,30 +221,33 @@ export async function processTeamDay(
         }
       } catch (e) { logger.warn({ module: "daily-tick", teamId }, "připomínka poháru", e); }
 
-      // ── Interview před zápasem — 2 dny dopředu, každý lidský trenér dostane svůj rozhovor ──
+      // ── Interview před zápasem: 2 dny dopředu, a den předem druhý pokus ──
+      // Každý lidský tým si rozhovor vytváří ve svém ticku sám (forceTeamId). Dřív se volal
+      // round-robin, takže tým, u kterého selhal model, blokoval celou ligu, a kolo, kterému
+      // vypadl jediný pokus 2 dny předem, zůstalo bez rozhovorů (incident 2026-11-05).
       const interviewLeagueId = team.league_id as string | null;
-      if (interviewLeagueId) {
-        try {
-          const checkDayStart2 = new Date(newGameDate);
-          checkDayStart2.setDate(checkDayStart2.getDate() + 2);
-          const cs2 = new Date(checkDayStart2); cs2.setUTCHours(0, 0, 0, 0);
-          const ce2 = new Date(checkDayStart2); ce2.setUTCHours(23, 59, 59, 999);
-          // Pozor: pro tutéž ligu můžou existovat 2 řádky se stejným scheduled_at —
-          // aktuální sezóna + osiřelý pozůstatek z minulé sezóny (bez navázaného zápasu).
-          // Bereme jen řádek s reálným zápasem (EXISTS) a preferujeme nejnovější sezónu.
-          const tomorrowCalEntry = await env.DB.prepare(
-            "SELECT sc.id, sc.game_week FROM season_calendar sc WHERE sc.league_id = ? AND sc.scheduled_at BETWEEN ? AND ? AND sc.status = 'scheduled' AND EXISTS (SELECT 1 FROM matches m WHERE m.calendar_id = sc.id) ORDER BY sc.season_number DESC LIMIT 1"
-          ).bind(interviewLeagueId, cs2.toISOString(), ce2.toISOString()).first<{ id: string; game_week: number }>()
-            .catch((e) => { logger.warn({ module: "daily-tick" }, "interview tomorrow cal lookup", e); return null; });
-          if (tomorrowCalEntry) {
-            const { tryCreateInterviewRequest } = await import("../news/interview-generator");
+      if (interviewLeagueId && team.user_id !== "ai") {
+        const { tryCreateInterviewRequest } = await import("../news/interview-generator");
+        for (const daysAhead of [2, 1]) {
+          try {
+            const day = new Date(newGameDate);
+            day.setDate(day.getDate() + daysAhead);
+            const ds = new Date(day); ds.setUTCHours(0, 0, 0, 0);
+            const de = new Date(day); de.setUTCHours(23, 59, 59, 999);
+            // Pozor: pro tutéž ligu můžou existovat 2 řádky se stejným scheduled_at —
+            // aktuální sezóna + osiřelý pozůstatek z minulé sezóny (bez navázaného zápasu).
+            // Bereme jen řádek s reálným zápasem (EXISTS) a preferujeme nejnovější sezónu.
+            const cal = await env.DB.prepare(
+              "SELECT sc.id, sc.game_week FROM season_calendar sc WHERE sc.league_id = ? AND sc.scheduled_at BETWEEN ? AND ? AND sc.status = 'scheduled' AND EXISTS (SELECT 1 FROM matches m WHERE m.calendar_id = sc.id) ORDER BY sc.season_number DESC LIMIT 1"
+            ).bind(interviewLeagueId, ds.toISOString(), de.toISOString()).first<{ id: string; game_week: number }>()
+              .catch((e) => { logger.warn({ module: "daily-tick", teamId }, `interview cal lookup +${daysAhead}`, e); return null; });
+            if (!cal) continue;
+            // Už má rozhovor (z prvního pokusu)? tryCreate to pozná sám (NOT EXISTS), nic nezdvojí
             await tryCreateInterviewRequest(env.DB, (env as any).GEMINI_API_KEY, {
-              leagueId: interviewLeagueId,
-              calendarId: tomorrowCalEntry.id,
-              gameWeek: tomorrowCalEntry.game_week,
+              leagueId: interviewLeagueId, calendarId: cal.id, gameWeek: cal.game_week, forceTeamId: teamId,
             });
-          }
-        } catch (e) { logger.warn({ module: "daily-tick" }, "interview creation failed", e); }
+          } catch (e) { logger.error({ module: "daily-tick", teamId }, `interview creation failed (+${daysAhead} dny)`, e); }
+        }
       }
 
       // ── Retry pozápasového článku ──

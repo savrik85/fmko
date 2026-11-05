@@ -37,6 +37,8 @@ export interface GeminiOpts {
    * Když chybí, volá se Google přímo.
    */
   gatewayUrl?: string;
+  /** Časový limit volání; bez něj čeká fetch, dokud Gemini neodpoví. */
+  timeoutMs?: number;
 }
 
 /**
@@ -83,6 +85,7 @@ export async function callGemini(apiKey: string, prompt: string, opts: GeminiOpt
       },
       ...(opts.safetySettings ? { safetySettings: opts.safetySettings } : {}),
     }),
+    ...(opts.timeoutMs ? { signal: AbortSignal.timeout(opts.timeoutMs) } : {}),
   }).catch((e) => { logger.warn({ module: mod }, "gemini fetch failed", e); return null; });
 
   if (!res || !res.ok) {
