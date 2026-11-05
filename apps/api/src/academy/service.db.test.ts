@@ -213,4 +213,21 @@ describe("družstvo žáků", () => {
     expect(older.every((p) => p.progress_current > 0)).toBe(true);
     expect((await seedFromLegacy(db, "legacy", GAME_DATE)).created).toBe(0);
   });
+
+  it("přechod v osadě: klub, co do akademie platil, dostane aspoň minimum žáků a brankáře", async () => {
+    const hamlet = await db.prepare("SELECT id FROM villages WHERE district = 'Prachatice' AND lat IS NOT NULL AND population < 250 ORDER BY population LIMIT 1").first<{ id: string }>();
+    await db.prepare("INSERT INTO teams (id, user_id, village_id, name, budget, reputation, game_date, youth_investment) VALUES ('hamlet', 'ai', ?, 'Družstevník', 500, 50, ?, 'medium')").bind(hamlet!.id, GAME_DATE).run();
+    const res = await seedFromLegacy(db, "hamlet", GAME_DATE);
+    const kids = await prospects("hamlet");
+    expect(res.created).toBeGreaterThanOrEqual(6);
+    expect(kids.length).toBe(res.created);
+    expect(kids.some((k) => k.position === "GK")).toBe(true);
+    // Bez hráčů áčka vede žáky táta, ne potichu dosazený trenér mládeže
+    expect((await db.prepare("SELECT academy_coach_type AS t FROM teams WHERE id = 'hamlet'").first<{ t: string }>())?.t).toBe("parent");
+    // Rozpočet 500 Kč na sezónu akademie nestačí: stránka varuje
+    const view = await loadAcademyView(db, "hamlet");
+    expect(view!.budgetWarning).not.toBeNull();
+    expect(view!.budgetWarning!.weeks).toBe(0);
+    expect((await loadAcademyView(db, "club"))!.budgetWarning).toBeNull();
+  });
 });

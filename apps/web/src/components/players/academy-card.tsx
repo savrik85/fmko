@@ -65,6 +65,8 @@ interface AcademyData {
   prospects: Prospect[];
   recruitDay: { available: boolean; used: boolean; cost: number; expected: number };
   neighbors: { name: string; km: number; expected: number }[];
+  neighborPerYear: number;
+  budgetWarning: { budget: number; seasonCost: number; weeks: number } | null;
   neighborMax: number;
   poach: {
     remaining: number;
@@ -220,8 +222,17 @@ export function AcademyCard({ teamId }: { teamId: string }) {
     return ok;
   };
 
+  const budgetBanner = data.budgetWarning ? (
+    <div className="card p-4 text-sm border-l-4 border-gold-500 bg-gold-50" role="alert">
+      {data.founded
+        ? `Na účtu je ${kc(data.budgetWarning.budget)}, sezóna akademie stojí ${kc(data.budgetWarning.seasonCost)}. Peníze ${data.budgetWarning.weeks === 0 ? "nevystačí ani na týden" : data.budgetWarning.weeks === 1 ? "vystačí na 1 týden" : data.budgetWarning.weeks < 5 ? `vystačí na ${data.budgetWarning.weeks} týdny` : `vystačí na ${data.budgetWarning.weeks} týdnů`}, pak půjde klub do mínusu.${data.level !== "modest" ? " Zvaž skromnější úroveň." : data.coach.type === "staff" ? " Ušetřit jde, když žáky povede dobrovolník z áčka místo placeného trenéra." : ""}`
+        : `Na účtu je ${kc(data.budgetWarning.budget)}, běžná akademie by za sezónu stála zhruba ${kc(data.budgetWarning.seasonCost)}. S tímhle rozpočtem by klub šel do mínusu.`}
+    </div>
+  ) : null;
+
   if (!data.founded) {
-    const total = data.expectedPerYear * 4;
+    const perYear = data.expectedPerYear + data.neighborPerYear;
+    const total = perYear * 4;
     return (
       <section className="card p-4 sm:p-5 space-y-3">
         {errorBanner}
@@ -232,15 +243,17 @@ export function AcademyCard({ teamId }: { teamId: string }) {
           Každé léto postoupí čtrnáctiletí do dorostu a přijdou noví jedenáctiletí.
         </p>
         <p className="text-sm">
-          {data.village} dá <strong className="font-heading text-ink">{data.expectedPerYear < 0.8 ? "žáka jednou za dva roky" : `${classText(data.expectedPerYear)} za rok`}</strong>.
+          {data.village} dá <strong className="font-heading text-ink">{data.expectedPerYear < 0.8 ? "žáka jednou za dva roky" : `${classText(data.expectedPerYear)} za rok`}</strong>
+          {data.neighborPerYear >= 0.3 ? <>, z okolních obcí bez akademie přijde ještě zhruba <strong className="font-heading text-ink">{data.neighborPerYear < 0.8 ? "jeden za dva roky" : `${classText(data.neighborPerYear)} za rok`}</strong> ({data.neighbors.slice(0, 3).map((n) => n.name).join(", ")})</> : null}.
           {total < data.minSquad
-            ? ` Na okresní soutěž je potřeba ${data.minSquad} žáků, tolik jich obec sama nedá. Žáci budou jen trénovat.`
+            ? ` Na okresní soutěž je potřeba ${data.minSquad} žáků, tolik jich sem nepřijde. Žáci budou jen trénovat.`
             : ` Na okresní soutěž (${data.minSquad} žáků) to stačí.`}
         </p>
         <p className="text-sm text-muted">
           Akademie se platí každý týden podle počtu žáků. Kolik do ní dáváš, vybereš po založení: skromná od {kc(data.levels[0].base)} + {kc(data.levels[0].perKid)} za žáka, běžná {kc(data.levels[1].base)} + {kc(data.levels[1].perKid)}, ambiciózní {kc(data.levels[2].base)} + {kc(data.levels[2].perKid)}.
-          Když obec dá {boysText(Math.round(data.expectedPerYear * 4)).toLowerCase()}, vyjde běžná zhruba na {kc(data.levels[1].base + data.levels[1].perKid * Math.round(data.expectedPerYear * 4))} týdně. Pak vybereš trenéra.
+          {Math.round(total) <= 1 ? "S jedním žákem" : `S ${Math.round(total)} žáky`} vyjde běžná zhruba na {kc(data.levels[1].base + data.levels[1].perKid * Math.max(1, Math.round(total)))} týdně. Pak vybereš trenéra.
         </p>
+        {budgetBanner}
         {data.canFound ? (
           <button onClick={() => post("found", `/api/teams/${teamId}/academy/found`, undefined, "Akademii se nepodařilo založit", (r) => `Akademie založena, přišlo ${boysText(Number(r.created ?? 0)).toLowerCase()}. Teď vyber trenéra.`)} disabled={busy !== null} className="btn btn-primary btn-md w-full sm:w-auto disabled:opacity-40">
           {busy === "found" ? "Zakládám…" : "Založit akademii"}
@@ -270,6 +283,7 @@ export function AcademyCard({ teamId }: { teamId: string }) {
     <div className="space-y-4">
       {errorBanner}
       {noticeBanner}
+      {budgetBanner}
       {!data.coach.type && (
         <div className="card p-4 text-sm border-l-4 border-gold-500 bg-gold-50 flex flex-wrap items-center justify-between gap-2" role="alert">
           <span>Žáci nemají trenéra, takže netrénují a víc jich skončí.</span>
