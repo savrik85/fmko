@@ -6183,6 +6183,8 @@ gameRouter.get("/teams/:teamId/player-offers", async (c) => {
   ).bind(teamId, offerCutoff).all().catch(() => ({ results: [] }));
   return c.json(offers.results.map((o) => ({
     id: o.id, source: o.source, sourceName: o.source_name, message: o.message,
+    // Žák z vlastní akademie (academy/service.ts), ne náhodný dorostenec
+    fromAcademy: !!o.prospect_id,
     firstName: o.first_name, lastName: o.last_name, age: o.age, position: o.position,
     nationality: (o.nationality as string) ?? "CZ",
     overallRating: o.overall_rating, weeklyWage: o.weekly_wage, expiresAt: o.expires_at,

@@ -37,6 +37,9 @@ beforeAll(async () => {
     ["obec+trenér běžná", 2001, 3500, "staff", false, "standard"],
     ["obec+trenér ambiciózní", 2001, 3500, "staff", false, "ambitious"],
     ["městys+trenér+nábor ambiciózní", 3501, 9000, "staff", true, "ambitious"],
+    ["obec+dobrovolník+nábor běžná", 2001, 3500, "volunteer", true, "standard"],
+    ["obec+táta+nábor běžná", 2001, 3500, "parent", true, "standard"],
+    ["obec+trenér+nábor běžná", 2001, 3500, "staff", true, "standard"],
   ];
   let i = 0;
   for (const [label, lo, hi, coach, recruit, level] of specs) {
@@ -59,7 +62,7 @@ afterAll(async () => { await mf?.dispose(); });
 
 describe.skipIf(!process.env.ACADEMY_SIM)("bilance akademie", () => {
   it("šest sezón", async () => {
-    const rng = createRng(20261104);
+    const rng = createRng(Number(process.env.SIM_SEED ?? 20261104));
     for (const c of clubs) {
       await foundYouthTeam(db, rng, c.id, GAME_DATE);
       await setYouthCoach(db, c.id, c.coach === "volunteer" ? { type: "volunteer", playerId: `${c.id}-vet` } : { type: c.coach });

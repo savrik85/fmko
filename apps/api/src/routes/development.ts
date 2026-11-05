@@ -679,6 +679,16 @@ developmentRouter.post("/admin/academy/migrate", requireAdmin, async (c) => {
   return c.json({ ok: true, teams: results.length, created: results.reduce((n, r) => n + Number(r.created ?? 0), 0), results });
 });
 
+// POST /api/admin/academy/daily/:teamId — denní krok akademie jednoho klubu (doporučení
+// o kategorii výš, úklid žáků bez nabídky), ať jde ověřit bez čekání na noční tick.
+developmentRouter.post("/admin/academy/daily/:teamId", requireAdmin, async (c) => {
+  const teamId = c.req.param("teamId");
+  const { dailyAcademy } = await import("../academy/service");
+  const team = await c.env.DB.prepare("SELECT game_date FROM teams WHERE id = ?").bind(teamId).first<{ game_date: string | null }>();
+  const res = await dailyAcademy(c.env.DB, teamId, team?.game_date ?? new Date().toISOString());
+  return c.json({ ok: true, ...res });
+});
+
 // POST /api/admin/academy/season-end/:teamId — ruční konec sezóny u žáků jednoho klubu
 // (stejné jako fáze `academy`), ať jde nábor a stárnutí ověřit bez čekání na konec ročníku.
 developmentRouter.post("/admin/academy/season-end/:teamId", requireAdmin, async (c) => {
