@@ -532,6 +532,10 @@ export async function executeDailyTick(
         const planMuls = await loadIndividualTrainingMuls(env.DB, teamId);
         const individualMul = hraciIds.map((id) => planMuls.get(id));
 
+        // Okres klubu: mladí se omlouvají diskotékou v jeho městech (events/youth-excuses.ts)
+        const districtRow = await env.DB.prepare("SELECT v.district FROM teams t JOIN villages v ON v.id = t.village_id WHERE t.id = ?")
+          .bind(team.club_id ?? teamId).first<{ district: string | null }>()
+          .catch((e) => { logger.warn({ module: "daily-tick", teamId }, "district for training excuses", e); return null; });
         const result = simulateTraining(rng, squad, {
           type: todayTrainingType ?? "conditioning",
           intensity: todayIntensity,
@@ -543,7 +547,8 @@ export async function executeDailyTick(
           // Počasí tréninkového dne — týž zdroj jako předpověď a zápas.
           trainingWeather?.weather,
           incidentniDuvody,
-          situaceHracu);
+          situaceHracu,
+          districtRow?.district ?? undefined);
 
         const attendanceWithNames = result.attendance.map((a) => ({
           playerId: playersResult.results[a.playerIndex].id as string,

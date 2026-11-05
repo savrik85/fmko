@@ -1,4 +1,5 @@
 import { SULK_TRAINING_REASONS } from "../multiplayer/left-out";
+import { isYouthAge, pickYouthTrainingReason } from "../events/youth-excuses";
 import type { Weather } from "../engine/types";
 /**
  * FMK-12: Tréninkový systém — plánování, účast, efekt na atributy.
@@ -334,6 +335,10 @@ const ABSENCE_REASONS = [
   "Tréninkové boty zapomněl v práci",
 ];
 
+/** Rodinné důvody dospělých (žena, děti, tchýně, práce) se k mladým nehodí. */
+const ADULT_ONLY_REASON = /žen|manžel|tchý|tchán|dcer|syn |malýma|povýšení|v práci|po práci|kombajn|stodol/i;
+const YOUNG_SAFE_REASONS = ABSENCE_REASONS.filter((r) => !ADULT_ONLY_REASON.test(r));
+
 const COMMUTE_ABSENCE_REASONS = [
   "Nestihl to, daleko dojíždí",
   "Auto se porouchalo cestou",
@@ -382,6 +387,8 @@ export function simulateAttendance(
   incidentniDuvody?: ReadonlyArray<string | undefined>,
   /** Běžící životní situace po indexech kádru (spec 17b). */
   situaceHracu?: ReadonlyArray<readonly string[] | undefined>,
+  /** Okres klubu: mladí jezdí za zábavou do jeho měst. */
+  district?: string,
 ): TrainingAttendance[] {
   // Trenér, který drží kázeň, dostane na trénink víc lidí. Kolem hodnoty 40 je to
   // neutrální, nahoře i dole to hýbe docházkou nejvýš o deset procentních bodů.
@@ -449,9 +456,10 @@ export function simulateAttendance(
     if (isCeleb) {
       return { playerIndex: i, attended: false, reason: rng.pick(CELEB_TRAINING_EXCUSES) };
     }
-    const reason = km > 10 && rng.random() < 0.4
+    const youthReason = isYouthAge(player.age) && rng.random() < 0.6 ? pickYouthTrainingReason(rng, player.age, district) : null;
+    const reason = youthReason ?? (km > 10 && rng.random() < 0.4
       ? rng.pick(COMMUTE_ABSENCE_REASONS)
-      : rng.pick(ABSENCE_REASONS);
+      : rng.pick(isYouthAge(player.age) ? YOUNG_SAFE_REASONS : ABSENCE_REASONS));
 
     return {
       playerIndex: i,
@@ -504,6 +512,8 @@ export function simulateTraining(
   incidentniDuvody?: ReadonlyArray<string | undefined>,
   /** Běžící životní situace po indexech kádru (`nactiDruhyHracu`). */
   situaceHracu?: ReadonlyArray<readonly string[] | undefined>,
+  /** Okres klubu (města pro omluvenky mladých). */
+  district?: string,
 ): TrainingResult {
   const allAttendance: TrainingAttendance[] = [];
   const attendanceCounts = new Map<number, number>();
@@ -515,6 +525,7 @@ export function simulateTraining(
     managerBonus.discipline,
     incidentniDuvody,
     situaceHracu,
+    district,
   );
   for (const a of session) {
     if (a.attended) attendanceCounts.set(a.playerIndex, 1);
