@@ -7515,6 +7515,18 @@ gameRouter.post("/admin/backfill-departed-avatars", async (c) => {
 // POST /api/admin/transfer-offers/reject-without-cooldown — prodávající klub nabídky normálně
 // odmítne (SMS, oznámení, dopad na hráče jako vždy), jen kupce nestihne lhůta na další nabídku.
 // Po opravě dat hráčů, na které už nabídky běžely. Body: { offerIds: string[], message?: string }.
+// Oprava dat 2026-11-05: série a truce po nenominaci patří týmu (multiplayer/left-out.ts).
+gameRouter.post("/admin/repairs/left-out-teams", async (c) => {
+  const { backfillLeftOutTeams } = await import("../multiplayer/left-out");
+  return c.json({ ok: true, ...await backfillLeftOutTeams(c.env.DB) });
+});
+
+// Oprava dat: slib sestavy vyhodnocený jako porušený neprávem (transfers/offer-rejection-impact.ts).
+gameRouter.post("/admin/players/:playerId/revert-broken-pledge", async (c) => {
+  const { revertBrokenMinutesPledge } = await import("../transfers/offer-rejection-impact");
+  return c.json({ ok: true, ...await revertBrokenMinutesPledge(c.env.DB, c.req.param("playerId")) });
+});
+
 gameRouter.post("/admin/transfer-offers/reject-without-cooldown", async (c) => {
   const body = await c.req.json<{ offerIds?: unknown; message?: unknown }>()
     .catch((e) => { logger.warn({ module: "game.ts" }, "reject without cooldown body", e); return null; });

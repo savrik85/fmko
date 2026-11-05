@@ -155,3 +155,27 @@ describe("truc a sliby po trvalém přestupu", () => {
     expect(await lifeContextOf("p1")).toEqual({ morale: 55, condition: 90 });
   });
 });
+
+// Kratochvíl (2026-11-05): slib vyhodnocený jako porušený po odchodu na hostování.
+describe("vrácení trestu za neprávem porušený slib sestavy", () => {
+  it("slib je dodržený, nálada zpátky, nespokojenost bez trestu zmizí; podruhé nic", async () => {
+    const { revertBrokenMinutesPledge } = await import("./offer-rejection-impact");
+    await promise("p1", "minutes");
+    await resolvePromises(db, "p1", ["minutes"], "expired");
+    await db.prepare("UPDATE players SET life_context = ? WHERE id = 'p1'")
+      .bind(JSON.stringify({ morale: 80, transferUnrest: { level: 35, pledge: null, reason: "rejected_offer" } })).run();
+
+    expect(await revertBrokenMinutesPledge(db, "p1")).toMatchObject({ reverted: true, morale: 88, unrestLevel: 0 });
+    expect((await listPromises(db, "p1", "A"))[0].status).toBe("kept");
+    const life = JSON.parse((await db.prepare("SELECT life_context FROM players WHERE id = 'p1'").first<{ life_context: string }>())!.life_context);
+    expect(life).toEqual({ morale: 88 });
+
+    expect(await revertBrokenMinutesPledge(db, "p1")).toEqual({ reverted: false });
+  });
+
+  it("běžící slib nechá být", async () => {
+    const { revertBrokenMinutesPledge } = await import("./offer-rejection-impact");
+    await promise("p2", "minutes");
+    expect(await revertBrokenMinutesPledge(db, "p2")).toEqual({ reverted: false });
+  });
+});
