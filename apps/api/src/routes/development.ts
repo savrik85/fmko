@@ -668,7 +668,7 @@ developmentRouter.post("/admin/academy/migrate", requireAdmin, async (c) => {
   const only = c.req.query("teamId");
   const { seedFromLegacy } = await import("../academy/service");
   const teams = await c.env.DB.prepare(
-    `SELECT id, game_date FROM teams WHERE parent_team_id IS NULL AND youth_investment IN ('minimal', 'medium', 'high')${only ? " AND id = ?" : ""}`,
+    `SELECT id, game_date FROM teams WHERE parent_team_id IS NULL AND name NOT LIKE 'DELETED%' AND youth_investment IN ('minimal', 'medium', 'high')${only ? " AND id = ?" : ""}`,
   ).bind(...(only ? [only] : [])).all<{ id: string; game_date: string | null }>();
   const results: Record<string, unknown>[] = [];
   for (const t of teams.results) {
