@@ -173,6 +173,12 @@ export interface LastMatchContext {
   squad: { starters: Set<string>; subs: Set<string> } | null;
   /** Statistiky z toho zápasu podle id hráče, sloupce last_* jako čte `loadPlayerSnapshot`. */
   stats: Map<string, Record<string, unknown>>;
+  /**
+   * Kdo v zápase chyběl a proč (`matches.absences`: omluvenky, zranění, stopky, volno).
+   * Zápasový chat s omluvenkami se po zápase maže, tohle je jediná stopa, že hráč
+   * nejel kvůli sobě, a ne proto, že ho trenér nevzal.
+   */
+  absences?: Map<string, { reason: string; text: string }>;
 }
 
 /**
@@ -181,13 +187,13 @@ export interface LastMatchContext {
  */
 export async function loadLastMatchContext(db: D1Database, teamId: string): Promise<LastMatchContext> {
   const recent = await db.prepare(
-    `SELECT m.id, m.home_team_id, m.home_score, m.away_score, m.home_lineup_data, m.away_lineup_data
+    `SELECT m.id, m.home_team_id, m.home_score, m.away_score, m.home_lineup_data, m.away_lineup_data, m.absences
        FROM matches m
       WHERE (m.home_team_id = ? OR m.away_team_id = ?) AND m.status = 'simulated'
       ORDER BY m.simulated_at DESC LIMIT 5`,
   ).bind(teamId, teamId).all<{
     id: string; home_team_id: string; home_score: number | null; away_score: number | null;
-    home_lineup_data: string | null; away_lineup_data: string | null;
+    home_lineup_data: string | null; away_lineup_data: string | null; absences: string | null;
   }>()
     .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "load recent matches", e); return { results: [] as never[] }; });
 
@@ -226,6 +232,18 @@ export async function loadLastMatchContext(db: D1Database, teamId: string): Prom
     }
   }
 
+  const absences = new Map<string, { reason: string; text: string }>();
+  if (last.absences) {
+    try {
+      const list = JSON.parse(last.absences) as Array<{ playerId?: string; teamId?: string; reason?: string; smsText?: string }>;
+      for (const a of Array.isArray(list) ? list : []) {
+        if (a.playerId && a.teamId === teamId) absences.set(a.playerId, { reason: a.reason ?? "", text: a.smsText ?? "" });
+      }
+    } catch (e) {
+      logger.warn({ module: "ai-player-spawn" }, `nečitelné absence zápasu ${last.id}`, e);
+    }
+  }
+
   const statRows = await db.prepare(
     `SELECT player_id, minutes_played AS last_minutes, goals AS last_goals, assists AS last_assists,
             yellow_cards AS last_yellow, red_cards AS last_red, rating AS last_rating
@@ -234,7 +252,7 @@ export async function loadLastMatchContext(db: D1Database, teamId: string): Prom
     .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "statistiky posledního zápasu", e); return { results: [] as Array<Record<string, unknown>> }; });
   const stats = new Map(statRows.results.map((r) => [r.player_id as string, r]));
 
-  return { matchId: last.id, lastOutcome, teamStreak, squad, stats };
+  return { matchId: last.id, lastOutcome, teamStreak, squad, stats, absences };
 }
 
 export function loadPlayerSnapshot(
@@ -243,8 +261,10 @@ export function loadPlayerSnapshot(
 ): PlayerSnapshot {
   const lastStats = matchCtx?.stats.get(row.id as string) ?? {};
   const playedLastMatch = lastStats.last_minutes != null && (lastStats.last_minutes as number) > 0;
+  const absence = playedLastMatch ? undefined : matchCtx?.absences?.get(row.id as string);
   const lastMatchSquad: PlayerSnapshot["lastMatchSquad"] = !matchCtx?.lastOutcome ? undefined
     : playedLastMatch ? "played"
+    : absence ? "absent"
     : !matchCtx.squad ? undefined
     : matchCtx.squad.subs.has(row.id as string) || matchCtx.squad.starters.has(row.id as string) ? "bench"
     : "out";
@@ -284,6 +304,7 @@ export function loadPlayerSnapshot(
     lastMatchOutcome: matchCtx?.lastOutcome ?? null,
     playedLastMatch,
     lastMatchSquad,
+    lastMatchAbsence: lastMatchSquad === "absent" ? absence : undefined,
     lastMatchGoals: (lastStats.last_goals as number) ?? 0,
     lastMatchAssists: (lastStats.last_assists as number) ?? 0,
     lastMatchRedCard: ((lastStats.last_red as number) ?? 0) > 0,
@@ -611,6 +632,7 @@ async function spawnForTeam(
     player.lastMatchOutcome = undefined;
     player.playedLastMatch = undefined;
     player.lastMatchSquad = undefined;
+    player.lastMatchAbsence = undefined;
     teamCtx.lastMatchResult = undefined;
     teamCtx.leaguePosition = undefined;
   }

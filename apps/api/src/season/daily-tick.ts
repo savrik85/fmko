@@ -443,7 +443,7 @@ export async function executeDailyTick(
             clutch: personality.clutch ?? 50,
             isCelebrity: !!(row.is_celebrity as number), celebrityType: personality.celebrityType,
             transferUnrest: lifeContext.transferUnrest?.level ?? 0,
-            leftOutSulk: isSulking(lifeContext.leftOutSulk, effectiveDate.toISOString()),
+            leftOutSulk: isSulking(lifeContext.leftOutSulk, effectiveDate.toISOString(), teamId),
           };
         });
 

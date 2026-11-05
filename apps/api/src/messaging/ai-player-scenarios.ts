@@ -48,10 +48,12 @@ export interface PlayerSnapshot {
   /** Nastoupil do něj tenhle hráč? Kdo nehrál, nemá co hodnotit svůj výkon. */
   playedLastMatch?: boolean;
   /**
-   * Kde byl v posledním zápase: hrál, seděl na lavičce, nebo nebyl v nominaci.
-   * `undefined` = nevíme (sestava u zápasu chybí nebo tým nehrál).
+   * Kde byl v posledním zápase: hrál, seděl na lavičce, nebyl v nominaci, nebo chyběl
+   * (omluvenka, zranění, stopka, volno). `undefined` = nevíme (sestava u zápasu chybí nebo tým nehrál).
    */
-  lastMatchSquad?: "played" | "bench" | "out";
+  lastMatchSquad?: "played" | "bench" | "out" | "absent";
+  /** Proč v posledním zápase chyběl (`matches.absences`), jen u `lastMatchSquad = "absent"`. */
+  lastMatchAbsence?: { reason: string; text: string };
   lastMatchGoals?: number;
   lastMatchAssists?: number;
   lastMatchRedCard?: boolean;
@@ -433,7 +435,9 @@ export const AI_PLAYER_SCENARIOS: AiScenario[] = [
     description:
       "Hráč zápas prosedel na lavičce a tým prohrál. Je přesvědčený, že kdyby dostal šanci, bylo by to jinak. Naléhá, ale drží se v mezích slušnosti.",
     weight: (p) =>
-      p.lastMatchOutcome !== "loss" || p.playedLastMatch !== false ? 0 :
+      // Jen kdo opravdu seděl na lavičce: omluvený nebo zraněný hráč by trenérovi vyčítal zápas, na který nemohl.
+      p.lastMatchOutcome !== "loss" || p.playedLastMatch !== false
+        || (p.lastMatchSquad !== undefined && p.lastMatchSquad !== "bench") ? 0 :
       w(true, 5) + w(p.recentMinutes < 90, 3) + w(p.temper > 55, 2),
   },
   {
@@ -457,7 +461,7 @@ export const AI_PLAYER_SCENARIOS: AiScenario[] = [
     category: "complaint",
     expectedTurns: 3,
     description:
-      "Trenér tě nevzal na poslední zápas, nebyl jsi ani na lavičce, a ty jsi mu to naštvaně napsal (tvoje první zpráva). Na ten zápas jsi byl zdravý, bez stopky a bez omluvenky, takže když trenér tvrdí, že jsi hrát nemohl, nepřikyvuj mu a ohraď se. Trucuješ a na tréninky teď nechodíš. Chceš vědět, proč jsi nejel a jestli s tebou trenér ještě počítá. Když ti to rozumně vysvětlí, ocení tě nebo ti slíbí férovou šanci, postupně se uklidníš a řekneš, že na trénink zase přijdeš. Když tě odbyde, zesměšní nebo ti jen vyhrožuje, naštveš se víc a na trénink dál nepůjdeš. Nevymýšlej si jména spoluhráčů, která nejsou v první zprávě.",
+      "Trenér tě nedávno nevzal na zápas, nebyl jsi ani na lavičce, a ty jsi mu to naštvaně napsal (tvoje první zpráva). Na TEN zápas jsi byl zdravý, bez stopky a bez omluvenky (jestli jsi pak na nějakém dalším chyběl kvůli sobě, říkají fakta níž, a to si pamatuješ), takže když trenér tvrdí, že jsi hrát nemohl, nepřikyvuj mu a ohraď se. Trucuješ a na tréninky teď nechodíš. Chceš vědět, proč jsi nejel a jestli s tebou trenér ještě počítá. Když ti to rozumně vysvětlí, ocení tě nebo ti slíbí férovou šanci, postupně se uklidníš a řekneš, že na trénink zase přijdeš. Když tě odbyde, zesměšní nebo ti jen vyhrožuje, naštveš se víc a na trénink dál nepůjdeš. Nevymýšlej si jména spoluhráčů, která nejsou v první zprávě.",
     weight: () => 0,
   },
   {

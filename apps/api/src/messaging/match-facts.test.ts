@@ -7,7 +7,7 @@
  */
 import { describe, it, expect } from "vitest";
 import { buildLastMatchFacts, buildSystemPrompt } from "./ai-player-chat";
-import type { PlayerSnapshot } from "./ai-player-scenarios";
+import { getScenarioById, type PlayerSnapshot } from "./ai-player-scenarios";
 import { loadPlayerSnapshot, type LastMatchContext } from "./ai-player-spawn";
 import { describeNextMatch } from "./next-match";
 
@@ -60,6 +60,39 @@ describe("účast v posledním zápase", () => {
     const unknown = buildLastMatchFacts(player({ lastMatchOutcome: "win", playedLastMatch: false }));
     expect(unknown).toContain("nenastoupil jsi");
     expect(unknown).not.toContain("lavič");
+  });
+
+  // Chlumany 2026-11-04: Říha se omluvil („Klíště…"), trenér se ptal, jak to dopadlo,
+  // a hráč odepsal „jaký klíště, vy jste mě nepostavil".
+  it("hráč, který se omluvil, ví proč nejel a trenérovi nic nevyčítá", () => {
+    const ctx = lastMatch({ absences: new Map([["outside", { reason: "Jiné", text: "Klíště. Musím k doktorovi. Asi. Pro jistotu" }]]) });
+    const s = loadPlayerSnapshot(row("outside"), ctx);
+    expect(s.lastMatchSquad).toBe("absent");
+    expect(s.lastMatchAbsence?.text).toContain("Klíště");
+    const fact = buildLastMatchFacts(s, "výhra 4:1 doma");
+    expect(fact).toContain("omluvenka zněla: „Klíště. Musím k doktorovi. Asi. Pro jistotu“");
+    expect(fact).toContain("Trenér tě nevynechal");
+    expect(fact).not.toContain("do nominace nedal");
+  });
+
+  it("zraněný a vyloučený hráč ví, proč nehrál", () => {
+    const injured = loadPlayerSnapshot(row("outside"), lastMatch({ absences: new Map([["outside", { reason: "Zranění", text: "Jsem zraněný, koleno." }]]) }));
+    expect(buildLastMatchFacts(injured)).toContain("Byl jsi zraněný");
+    const banned = loadPlayerSnapshot(row("outside"), lastMatch({ absences: new Map([["outside", { reason: "Stopka za karty", text: "Mám stopku, nesmím hrát." }]]) }));
+    expect(buildLastMatchFacts(banned)).toContain("stopku za karty");
+  });
+
+  it("na lavičku si stěžuje jen ten, kdo na ní seděl", () => {
+    const bench = getScenarioById("watched_from_bench")!;
+    const lost = { lastMatchOutcome: "loss" as const, playedLastMatch: false };
+    expect(bench.weight(player({ ...lost, lastMatchSquad: "bench" }))).toBeGreaterThan(0);
+    expect(bench.weight(player({ ...lost, lastMatchSquad: "absent", lastMatchAbsence: { reason: "Jiné", text: "Klíště" } }))).toBe(0);
+    expect(bench.weight(player({ ...lost, lastMatchSquad: "out" }))).toBe(0);
+  });
+
+  it("kdo hrál, je hráč, i když ho absence omylem uvádí", () => {
+    const ctx = lastMatch({ absences: new Map([["starter", { reason: "Jiné", text: "Nemůžu" }]]) });
+    expect(loadPlayerSnapshot(row("starter"), ctx).lastMatchSquad).toBe("played");
   });
 
   it("odpověď hráče mimo nominaci má fact v promptu", () => {

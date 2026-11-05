@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Miniflare } from "miniflare";
-import { reactToLeftOut } from "./left-out";
+import { backfillLeftOutTeams, reactToLeftOut } from "./left-out";
 
 let miniflare: Miniflare;
 let db: D1Database;
@@ -63,5 +63,45 @@ describe("reactToLeftOut", () => {
     const life = await lifeOf("a-out");
     expect(life.morale).toBeLessThan(60);
     expect(life.leftOutMatch).toBe("match-2");
+  });
+});
+
+describe("série bez nominace patří týmu", () => {
+  it("nová série si pamatuje tým", async () => {
+    expect((await lifeOf("a-out")).leftOutTeamId).toBe("a");
+  });
+
+  // Říha: poosmé bez nominace ve Spůli, po přechodu do Chlumany by psal „podeváté".
+  it("po přestupu se série počítá od nuly", async () => {
+    await db.batch([
+      db.prepare("INSERT INTO teams VALUES ('b', 'user-2', NULL, 'senior', '2026-09-28')"),
+      db.prepare("INSERT INTO players (id, team_id, first_name, last_name, position, overall_rating, personality, life_context, status) VALUES ('mover', 'b', 'Jakub', 'Říha', 'MID', 70, ?, ?, 'active')")
+        .bind(PERS, JSON.stringify({ morale: 60, leftOutStreak: 8, leftOutTeamId: "a", leftOutMatch: "old" })),
+      db.prepare("INSERT INTO players (id, team_id, first_name, last_name, position, overall_rating, personality, life_context, status) VALUES ('b-bench', 'b', 'Petr', 'Lavička', 'MID', 40, ?, ?, 'active')")
+        .bind(PERS, LIFE),
+    ]);
+    await reactToLeftOut(db, "b", "match-b1", { leftOutIds: ["mover"], benchIds: ["b-bench"], matchSquadIds: ["b-bench"] });
+    const life = await lifeOf("mover");
+    expect(life.leftOutStreak).toBe(1);
+    expect(life.leftOutTeamId).toBe("b");
+  });
+
+  it("oprava dat: starým sériím doplní tým, odešlým hráčům je smaže", async () => {
+    await db.exec("CREATE TABLE IF NOT EXISTS matches (id TEXT PRIMARY KEY, home_team_id TEXT, away_team_id TEXT)");
+    await db.batch([
+      db.prepare("INSERT INTO matches VALUES ('m-a', 'a', 'x'), ('m-gone', 'x', 'y')"),
+      db.prepare("INSERT INTO players (id, team_id, first_name, last_name, position, overall_rating, personality, life_context, status) VALUES ('old-stay', 'a', 'Jan', 'Zůstal', 'MID', 50, ?, ?, 'active')")
+        .bind(PERS, JSON.stringify({ leftOutStreak: 2, leftOutMatch: "m-a", leftOutSulk: { since: "2026-09-28", until: "2026-10-05", matchId: "m-a" } })),
+      db.prepare("INSERT INTO players (id, team_id, first_name, last_name, position, overall_rating, personality, life_context, status) VALUES ('old-gone', 'b', 'Jan', 'Odešel', 'MID', 50, ?, ?, 'active')")
+        .bind(PERS, JSON.stringify({ morale: 40, leftOutStreak: 8, leftOutMatch: "m-gone", leftOutSulk: { since: "2026-11-02", until: "2026-11-09", matchId: "m-gone" } })),
+    ]);
+    const result = await backfillLeftOutTeams(db);
+    expect(result).toMatchObject({ tagged: 1, cleared: 1 });
+    const stay = await lifeOf("old-stay");
+    expect(stay.leftOutTeamId).toBe("a");
+    expect((stay.leftOutSulk as { teamId: string }).teamId).toBe("a");
+    const gone = await lifeOf("old-gone");
+    expect(gone).toEqual({ morale: 40 });
+    expect(await backfillLeftOutTeams(db)).toMatchObject({ tagged: 0, cleared: 0 });
   });
 });

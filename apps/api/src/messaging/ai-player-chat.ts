@@ -113,6 +113,16 @@ function buildPersonalityHints(p: PlayerSnapshot): string {
   return hints.length > 0 ? hints.join(", ") : "průměrná povaha";
 }
 
+/** Proč hráč v posledním zápase chyběl, důvody z `buildMatchPlayers` (match-runner.ts). */
+function absenceReasonFact(absence: PlayerSnapshot["lastMatchAbsence"]): string {
+  if (absence?.reason === "Stopka za karty") return "Měl jsi stopku za karty a hrát jsi nesměl.";
+  if (absence?.reason === "Zranění") return `Byl jsi zraněný${absence.text ? ` (${absence.text})` : ""}.`;
+  if (absence?.reason === "Osobní volno") return "Měl jsi od trenéra osobní volno.";
+  return absence?.text
+    ? `Předem ses trenérovi omluvil, tvoje omluvenka zněla: „${absence.text}“.`
+    : "Předem ses trenérovi omluvil.";
+}
+
 /**
  * Co se hráči stalo v posledním zápase. Bez toho by scénář o gólu nebo červené kartě
  * psal naslepo a model si počty i vlastní výkon domyslel.
@@ -121,6 +131,11 @@ export function buildLastMatchFacts(p: PlayerSnapshot, lastMatchResult?: string)
   if (!p.lastMatchOutcome) return "";
   const verdict = lastMatchResult
     ?? (p.lastMatchOutcome === "win" ? "vyhráli jsme" : p.lastMatchOutcome === "loss" ? "prohráli jsme" : "remizovali jsme");
+  if (p.playedLastMatch === false && p.lastMatchSquad === "absent") {
+    // Omluvený hráč dřív dostal „trenér tě do nominace nedal" a na trenérovo „jak to dopadlo
+    // s tím klíštětem?" odepsal „jaký klíště, vy jste mě nepostavil" (Chlumany 2026-11-04).
+    return `- V posledním zápase (${verdict}) jsi NEHRÁL. ${absenceReasonFact(p.lastMatchAbsence)} Trenér tě nevynechal, na zápas jsi nemohl ty. Když se tě na to trenér ptá, víš, o čem mluví. NIKDY netvrď, že jsi hrál, ani že tě trenér nepostavil.`;
+  }
   if (p.playedLastMatch === false) {
     // Dřív tu stálo vždycky „seděl jsi na lavičce", i u hráče, kterého trenér vůbec nenominoval.
     const where = p.lastMatchSquad === "bench"
