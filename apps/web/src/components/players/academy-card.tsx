@@ -171,6 +171,13 @@ export function AcademyCard({ teamId }: { teamId: string }) {
   const [notice, setNotice] = useState<string | null>(null);
   const [tab, setTab] = useTabParam(TAB_KEYS);
 
+  // Potvrzení samo zmizí; delší text (jména žáků) vydrží déle
+  useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => setNotice(null), Math.min(12_000, 4_000 + notice.length * 40));
+    return () => clearTimeout(t);
+  }, [notice]);
+
   const load = useCallback(() => {
     setLoading(true);
     setError(null);
@@ -192,10 +199,11 @@ export function AcademyCard({ teamId }: { teamId: string }) {
       <button onClick={load} className="btn btn-secondary min-h-11 px-3">Zkusit znovu</button>
     </div>
   ) : null;
+  // Potvrzení akce plovoucí dole jako jinde ve hře (Obec): je vidět, ať je hráč na stránce kdekoli
   const noticeBanner = notice ? (
-    <div className="card p-3 text-sm border-l-4 border-pitch-500 bg-pitch-50 flex flex-wrap items-center justify-between gap-2" role="status">
+    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[var(--z-sheet)] w-[calc(100%-2rem)] max-w-md bg-gray-900 text-white px-4 py-3 rounded-soft shadow-lg text-sm flex items-start justify-between gap-3" role="status" aria-live="polite">
       <span>{notice}</span>
-      <button onClick={() => setNotice(null)} className="btn btn-secondary min-h-11 px-3">Zavřít</button>
+      <button onClick={() => setNotice(null)} className="shrink-0 text-white/80 hover:text-white font-heading font-bold min-h-6 px-1" aria-label="Zavřít">✕</button>
     </div>
   ) : null;
 
