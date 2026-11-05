@@ -1,6 +1,6 @@
 import { coachRelationBand, COACH_RELATION_BAND_ORDER, type CoachRelationBandKey } from "@okresni-masina/shared";
 import { logger } from "../lib/logger";
-import { isSulking } from "../multiplayer/left-out";
+import { isSulking, leftOutStreakFor } from "../multiplayer/left-out";
 import { getTeamGameDate } from "../community/manager-relations";
 
 /**
@@ -24,6 +24,7 @@ interface PlayerRow {
   coach_relationship: number | null;
   morale: number | null;
   left_out_streak: number | null;
+  left_out_team_id: string | null;
   sulk: string | null;
   unrest_level: number | null;
   injured_days: number | null;
@@ -99,6 +100,7 @@ export async function loadKabina(db: D1Database, teamId: string): Promise<Kabina
       `SELECT p.id, p.first_name, p.last_name, p.position, p.age, p.avatar, p.coach_relationship,
               json_extract(p.life_context, '$.morale') AS morale,
               json_extract(p.life_context, '$.leftOutStreak') AS left_out_streak,
+              json_extract(p.life_context, '$.leftOutTeamId') AS left_out_team_id,
               json_extract(p.life_context, '$.leftOutSulk') AS sulk,
               json_extract(p.life_context, '$.transferUnrest.level') AS unrest_level,
               (SELECT MAX(i.days_remaining) FROM injuries i WHERE i.player_id = p.id AND i.days_remaining > 0) AS injured_days
@@ -138,7 +140,7 @@ export async function loadKabina(db: D1Database, teamId: string): Promise<Kabina
     const relationship = r.coach_relationship ?? 50;
     const band = coachRelationBand(relationship).key;
     const morale = r.morale ?? 50;
-    const sulking = isSulking(parseJson(r.sulk, `sulk of ${r.id}`), gameDay);
+    const sulking = isSulking(parseJson(r.sulk, `sulk of ${r.id}`), gameDay, teamId);
     const unrestLevel = r.unrest_level ?? 0;
     const wantsOut = unrestLevel >= UNREST_FLAG;
     const lowMorale = morale < LOW_MORALE;
@@ -160,7 +162,7 @@ export async function loadKabina(db: D1Database, teamId: string): Promise<Kabina
       band,
       morale,
       sulking,
-      leftOutStreak: r.left_out_streak ?? 0,
+      leftOutStreak: leftOutStreakFor({ leftOutStreak: r.left_out_streak, leftOutTeamId: r.left_out_team_id }, teamId),
       unrestLevel,
       wantsOut,
       lowMorale,

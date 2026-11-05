@@ -110,13 +110,69 @@ export interface LeftOutSulk {
   since: string;
   until: string;
   matchId: string;
+  /** Tým, za který hráč nejel. Starší truce ho nemají. */
+  teamId?: string;
 }
 
-/** Trucuje hráč v daný herní den? */
-export function isSulking(sulk: unknown, gameDay: string): boolean {
+/**
+ * Trucuje hráč v daný herní den? `teamId` je tým, ve kterém hráč teď je: truc patří týmu,
+ * kde hráč nejel, a s hráčem po přestupu ani na hostování nejde. Dřív Říha trucoval
+ * za Spůli i v Chlumanech a odbyl tam trenéra, který ho ještě nikdy nevynechal (2026-11-04).
+ */
+export function isSulking(sulk: unknown, gameDay: string, teamId: string): boolean {
   if (!sulk || typeof sulk !== "object") return false;
-  const until = (sulk as Partial<LeftOutSulk>).until;
+  const { until, teamId: sulkTeamId } = sulk as Partial<LeftOutSulk>;
+  if (typeof sulkTeamId === "string" && sulkTeamId !== teamId) return false;
   return typeof until === "string" && until >= gameDay.slice(0, 10);
+}
+
+/** Kolik zápasů po sobě hráč za tenhle tým nejel. Série z jiného týmu se nepočítá. */
+export function leftOutStreakFor(life: Record<string, unknown>, teamId: string): number {
+  const team = life.leftOutTeamId;
+  if (typeof team === "string" && team !== teamId) return 0;
+  return Number(life.leftOutStreak ?? 0) || 0;
+}
+
+/**
+ * Jednorázová oprava dat (2026-11-05): série a truce z doby před `leftOutTeamId` nevědí,
+ * ke kterému týmu patří. Hráči, který je pořád v týmu, za který nejel (`leftOutMatch`),
+ * se tým doplní. Hráči, který mezitím odešel jinam (přestup, hostování), se série i truc
+ * smažou. Bez dohledatelného zápasu se nic nemění.
+ */
+export async function backfillLeftOutTeams(db: D1Database): Promise<{ tagged: number; cleared: number; skipped: number }> {
+  const rows = await db.prepare(
+    `SELECT p.id, p.team_id, m.home_team_id, m.away_team_id,
+            json_extract(p.life_context, '$.leftOutSulk') IS NOT NULL AS has_sulk
+       FROM players p
+       LEFT JOIN matches m ON m.id = json_extract(p.life_context, '$.leftOutMatch')
+      WHERE json_extract(p.life_context, '$.leftOutTeamId') IS NULL
+        AND (COALESCE(json_extract(p.life_context, '$.leftOutStreak'), 0) > 0
+             OR json_extract(p.life_context, '$.leftOutSulk') IS NOT NULL)`,
+  ).all<{ id: string; team_id: string; home_team_id: string | null; away_team_id: string | null; has_sulk: number }>();
+
+  let tagged = 0;
+  let cleared = 0;
+  let skipped = 0;
+  const stmts: D1PreparedStatement[] = [];
+  for (const r of rows.results) {
+    if (!r.home_team_id && !r.away_team_id) { skipped++; continue; }
+    if (r.home_team_id === r.team_id || r.away_team_id === r.team_id) {
+      stmts.push(r.has_sulk
+        ? db.prepare("UPDATE players SET life_context = json_set(life_context, '$.leftOutTeamId', ?, '$.leftOutSulk.teamId', ?) WHERE id = ?")
+          .bind(r.team_id, r.team_id, r.id)
+        : db.prepare("UPDATE players SET life_context = json_set(life_context, '$.leftOutTeamId', ?) WHERE id = ?")
+          .bind(r.team_id, r.id));
+      tagged++;
+    } else {
+      stmts.push(db.prepare(
+        "UPDATE players SET life_context = json_remove(life_context, '$.leftOutStreak', '$.leftOutMatch', '$.leftOutSulk') WHERE id = ?",
+      ).bind(r.id));
+      cleared++;
+    }
+  }
+  for (let i = 0; i < stmts.length; i += 50) await db.batch(stmts.slice(i, i + 50));
+  logger.info({ module: "left-out" }, `doplnění týmu u sérií bez nominace: ${tagged} označeno, ${cleared} smazáno, ${skipped} beze změny`);
+  return { tagged, cleared, skipped };
 }
 
 /** Šance, že pisatel naštvané SMS začne trucovat a vynechávat tréninky. */
@@ -315,7 +371,7 @@ export async function reactToLeftOut(
       overallRating: row.overall_rating,
       temper: Number(personality.temper ?? 40),
       discipline: Number(personality.discipline ?? 50),
-      previousStreak: Number(life.leftOutStreak ?? 0),
+      previousStreak: leftOutStreakFor(life, teamId),
       row,
       life,
     });
@@ -329,9 +385,9 @@ export async function reactToLeftOut(
     const streak = p.previousStreak + 1;
     return [
       db.prepare(
-        `UPDATE players SET life_context = json_set(life_context, '$.morale', ?, '$.leftOutStreak', ?, '$.leftOutMatch', ?)
+        `UPDATE players SET life_context = json_set(life_context, '$.morale', ?, '$.leftOutStreak', ?, '$.leftOutMatch', ?, '$.leftOutTeamId', ?)
          WHERE id = ?`,
-      ).bind(newMorale, streak, matchId, p.id),
+      ).bind(newMorale, streak, matchId, teamId, p.id),
       ...coachRelationStmts(db, {
         playerId: p.id,
         delta: -leftOutRelationDrop(p.previousStreak, coachMotivation),
@@ -362,7 +418,7 @@ export async function reactToLeftOut(
     text += ` ${SULK_SUFFIXES[Math.floor(rng.random() * SULK_SUFFIXES.length)]}`;
     const until = new Date(`${gameDay}T12:00:00Z`);
     until.setUTCDate(until.getUTCDate() + SULK_DAYS);
-    const sulk: LeftOutSulk = { since: gameDay, until: until.toISOString().slice(0, 10), matchId };
+    const sulk: LeftOutSulk = { since: gameDay, until: until.toISOString().slice(0, 10), matchId, teamId };
     await db.prepare("UPDATE players SET life_context = json_set(life_context, '$.leftOutSulk', json(?)) WHERE id = ?")
       .bind(JSON.stringify(sulk), sender.id).run();
   }

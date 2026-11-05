@@ -621,7 +621,7 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
       .catch((e) => { logger.warn({ module: "messaging" }, "truc po nenominaci", e); return null; });
     const { isSulking } = await import("../multiplayer/left-out");
     const sulk = sulkRow?.sulk ? JSON.parse(sulkRow.sulk) : null;
-    if (sulk && isSulking(sulk, sulkRow?.game_date ?? now)) {
+    if (sulk && isSulking(sulk, sulkRow?.game_date ?? now, teamId)) {
       // Nový stav nesmí zahodit výsledek domluvy o váze, který hook výše právě zapsal.
       const { carryWeightTalk } = await import("../season/weight-talk");
       const prevState = await c.env.DB.prepare("SELECT ai_thread_state FROM conversations WHERE id = ?")

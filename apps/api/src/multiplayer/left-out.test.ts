@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { createRng } from "../generators/rng";
 import {
   weakestComparableSub, moraleLoss, pickComplainer, complaintText, nthTime,
-  isSulking, sulkChance, SULK_TRAINING_REASONS,
+  isSulking, leftOutStreakFor, sulkChance, SULK_TRAINING_REASONS,
   type LeftOutPlayer, type BenchPlayer,
 } from "./left-out";
 import { simulateAttendance } from "../season/training";
@@ -94,10 +94,24 @@ describe("complaintText", () => {
 describe("truc po nenominaci", () => {
   it("trucuje do posledního dne včetně, pak už ne", () => {
     const sulk = { since: "2026-09-10", until: "2026-09-17", matchId: "m1" };
-    expect(isSulking(sulk, "2026-09-17T05:00:00.000Z")).toBe(true);
-    expect(isSulking(sulk, "2026-09-18")).toBe(false);
-    expect(isSulking(null, "2026-09-10")).toBe(false);
-    expect(isSulking({ since: "2026-09-10" }, "2026-09-10")).toBe(false);
+    expect(isSulking(sulk, "2026-09-17T05:00:00.000Z", "t1")).toBe(true);
+    expect(isSulking(sulk, "2026-09-18", "t1")).toBe(false);
+    expect(isSulking(null, "2026-09-10", "t1")).toBe(false);
+    expect(isSulking({ since: "2026-09-10" }, "2026-09-10", "t1")).toBe(false);
+  });
+
+  // Říha trucoval za Spůli a po přechodu do Chlumany odbyl nového trenéra (2026-11-04).
+  it("truc z jiného týmu v novém týmu neplatí", () => {
+    const sulk = { since: "2026-11-02", until: "2026-11-09", matchId: "m1", teamId: "spule" };
+    expect(isSulking(sulk, "2026-11-04", "spule")).toBe(true);
+    expect(isSulking(sulk, "2026-11-04", "chlumany")).toBe(false);
+  });
+
+  it("série zápasů bez nominace se po přestupu počítá od nuly", () => {
+    expect(leftOutStreakFor({ leftOutStreak: 8, leftOutTeamId: "spule" }, "spule")).toBe(8);
+    expect(leftOutStreakFor({ leftOutStreak: 8, leftOutTeamId: "spule" }, "chlumany")).toBe(0);
+    expect(leftOutStreakFor({ leftOutStreak: 3 }, "chlumany")).toBe(3);
+    expect(leftOutStreakFor({}, "chlumany")).toBe(0);
   });
 
   it("cholerik přeskočený slabším trucuje spíš než disciplinovaný kliďas", () => {
