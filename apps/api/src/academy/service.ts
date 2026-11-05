@@ -27,7 +27,7 @@ import {
   YOUTH_EQUIPMENT, POTENTIAL_SCALE, type YouthEquipment,
   RECRUIT_DAY_COST, recruitDayExpected, OPEN_DAY_COST, openDayExpected, OPEN_DAY_MAX_KIDS, OPEN_DAY_COMMITMENT_BONUS, OPEN_DAY_ESTIMATE_FACTOR, WEEKS_PER_SEASON, NEIGHBOR_RADIUS_KM, neighborKidsExpected, NEIGHBOR_MAX_PER_YEAR, MAX_SQUAD,
   POACH_RADIUS_KM, MAX_POACH_PER_SEASON, POACH_THRESHOLD, POACH_ACTIONS, type PoachAction, poachBaseInterest,
-  interestText, youthFeeByAge,
+  interestText, leavingInterestText, youthFeeByAge,
 } from "./rules";
 
 const M = "academy";
@@ -1244,7 +1244,7 @@ async function poachView(db: D1Database, club: ClubRow, coach: CoachState, seaso
     targets: out,
     incoming: incoming.map((y) => ({
       poachId: y.id, name: `${y.first_name} ${y.last_name}`, age: y.age, club: y.club_name,
-      interest: interestText(y.interest), defended: parseJson<string[]>(y.actions, [], "poach actions").includes("defend"),
+      interest: leavingInterestText(y.interest), defended: parseJson<string[]>(y.actions, [], "poach actions").includes("defend"),
     })),
   };
 }
@@ -1334,7 +1334,7 @@ export async function defendPoach(db: D1Database, teamId: string, poachId: strin
   ).bind(POACH_ACTIONS.defend.interest, poach.id).run();
   if (applied.meta.changes === 0) return { ok: false, status: 409, error: "S rodiči už jsi mluvil" };
   const interest = (await db.prepare("SELECT interest FROM youth_poach WHERE id = ?").bind(poach.id).first<{ interest: number }>())?.interest ?? 0;
-  return { ok: true, interest: interestText(interest) };
+  return { ok: true, interest: leavingInterestText(interest) };
 }
 
 /**

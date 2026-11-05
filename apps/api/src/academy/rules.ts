@@ -461,6 +461,14 @@ export function poachBaseInterest(i: PoachInput): number {
   return Math.max(0, Math.min(100, v));
 }
 
+/** Zájem vlastního žáka, kterého láká jiný klub (pohled klubu, odkud by odešel). */
+export function leavingInterestText(interest: number): string {
+  if (interest >= POACH_THRESHOLD) return "chce k nim, v létě přestoupí";
+  if (interest >= 45) return "váhá, ještě trochu a odejde";
+  if (interest >= 25) return "poslouchá je, ale drží se vás";
+  return "nemá zájem odejít";
+}
+
 export function interestText(interest: number): string {
   if (interest >= POACH_THRESHOLD) return "chce k vám, v létě přestoupí";
   if (interest >= 45) return "váhá, ještě trochu a půjde";
