@@ -230,4 +230,35 @@ describe("družstvo žáků", () => {
     expect(view!.budgetWarning!.weeks).toBe(0);
     expect((await loadAcademyView(db, "club"))!.budgetWarning).toBeNull();
   });
+
+  it("stránka akademie nečeká na desítky dotazů za sebou (každý dotaz na D1 je cesta po síti)", async () => {
+    // Každý dotaz zpomalený o 20 ms jako na Cloudflare. Se 42 dotazy za sebou to dřív trvalo přes 800 ms.
+    const DELAY = 20;
+    let queries = 0;
+    const slow = (st: D1PreparedStatement): D1PreparedStatement => new Proxy(st, {
+      get(target, prop) {
+        const v = (target as unknown as Record<string | symbol, unknown>)[prop];
+        if (prop === "bind") return (...a: unknown[]) => slow((v as (...x: unknown[]) => D1PreparedStatement).apply(target, a));
+        if (prop === "first" || prop === "all" || prop === "run") {
+          return async (...a: unknown[]) => { queries++; await new Promise((r) => setTimeout(r, DELAY)); return (v as (...x: unknown[]) => unknown).apply(target, a); };
+        }
+        return typeof v === "function" ? (v as (...x: unknown[]) => unknown).bind(target) : v;
+      },
+    });
+    const slowDb = new Proxy(db, {
+      get(target, prop) {
+        const v = (target as unknown as Record<string | symbol, unknown>)[prop];
+        if (prop === "prepare") return (sql: string) => slow((v as (q: string) => D1PreparedStatement).call(target, sql));
+        return typeof v === "function" ? (v as (...x: unknown[]) => unknown).bind(target) : v;
+      },
+    }) as D1Database;
+    await loadAcademyView(slowDb, "club"); // mezipaměť příjmení okresu
+    queries = 0;
+    const t0 = Date.now();
+    const view = await loadAcademyView(slowDb, "club");
+    const ms = Date.now() - t0;
+    expect(view!.founded).toBe(true);
+    expect(queries).toBeLessThanOrEqual(30);
+    expect(ms).toBeLessThan(300);
+  });
 });
