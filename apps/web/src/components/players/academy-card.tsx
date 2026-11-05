@@ -168,15 +168,8 @@ export function AcademyCard({ teamId }: { teamId: string }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [coachChoice, setCoachChoice] = useState<string>("");
   const [confirmClose, setConfirmClose] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
   const [tab, setTab] = useTabParam(TAB_KEYS);
 
-  // Potvrzení samo zmizí; delší text (jména žáků) vydrží déle
-  useEffect(() => {
-    if (!notice) return;
-    const t = setTimeout(() => setNotice(null), Math.min(12_000, 4_000 + notice.length * 40));
-    return () => clearTimeout(t);
-  }, [notice]);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -199,35 +192,19 @@ export function AcademyCard({ teamId }: { teamId: string }) {
       <button onClick={load} className="btn btn-secondary min-h-11 px-3">Zkusit znovu</button>
     </div>
   ) : null;
-  // Potvrzení akce plovoucí dole jako jinde ve hře (Obec): je vidět, ať je hráč na stránce kdekoli
-  const noticeBanner = notice ? (
-    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[var(--z-sheet)] w-[calc(100%-2rem)] max-w-md bg-gray-900 text-white px-4 py-3 rounded-soft shadow-lg text-sm flex items-start justify-between gap-3" role="status" aria-live="polite">
-      <span>{notice}</span>
-      <button onClick={() => setNotice(null)} className="shrink-0 text-white/80 hover:text-white font-heading font-bold min-h-6 px-1" aria-label="Zavřít">✕</button>
-    </div>
-  ) : null;
 
   /**
-   * Akce na API. `success` je potvrzení, které se po úspěchu ukáže nahoře (text, nebo funkce
-   * z odpovědi API), ať hráč ví, co se stalo.
+   * Akce na API. Jako jinde ve hře žádná zvláštní hláška: po úspěchu se stránka obnoví a výsledek
+   * je vidět na místě (zájem žáka, nový trenér, „Letos už byl“), kdo přišel, napíše trenér v SMS.
    */
-  const post = async (
-    key: string, path: string, body: unknown, failMessage: string,
-    success?: string | ((res: Record<string, unknown>) => string),
-  ): Promise<boolean> => {
+  const post = async (key: string, path: string, body: unknown, failMessage: string): Promise<boolean> => {
     if (busy) return false;
     setBusy(key);
     const request = apiFetch<Record<string, unknown>>(path, { method: "POST", body: body === undefined ? undefined : JSON.stringify(body), headers: { "Content-Type": "application/json" } });
     const ok = await apiAction(request, failMessage);
     setBusy(null);
     setConfirmClose(false);
-    if (ok) {
-      if (success) {
-        const res = await request.catch((e) => { console.error("academy action result:", e); return {} as Record<string, unknown>; });
-        setNotice(typeof success === "function" ? success(res) : success);
-      }
-      load();
-    }
+    if (ok) load();
     return ok;
   };
 
@@ -245,7 +222,6 @@ export function AcademyCard({ teamId }: { teamId: string }) {
     return (
       <section className="card p-4 sm:p-5 space-y-3">
         {errorBanner}
-        {noticeBanner}
         <h2 className="font-heading font-bold text-base">Akademie</h2>
         <p className="text-sm text-muted">
           Klub nemá akademii, tedy družstvo žáků. Když ji založíš, přijdou hned žáci od 11 do 14 let z obce {data.village}.
@@ -264,7 +240,7 @@ export function AcademyCard({ teamId }: { teamId: string }) {
         </p>
         {budgetBanner}
         {data.canFound ? (
-          <button onClick={() => post("found", `/api/teams/${teamId}/academy/found`, undefined, "Akademii se nepodařilo založit", (r) => `Akademie založena, přišlo ${boysText(Number(r.created ?? 0)).toLowerCase()}. Teď vyber trenéra.`)} disabled={busy !== null} className="btn btn-primary btn-md w-full sm:w-auto disabled:opacity-40">
+          <button onClick={() => post("found", `/api/teams/${teamId}/academy/found`, undefined, "Akademii se nepodařilo založit")} disabled={busy !== null} className="btn btn-primary btn-md w-full sm:w-auto disabled:opacity-40">
           {busy === "found" ? "Zakládám…" : "Založit akademii"}
         </button>
         ) : (
@@ -279,19 +255,18 @@ export function AcademyCard({ teamId }: { teamId: string }) {
   const saveCoach = () => {
     if (!coachChoice) return;
     const body = coachChoice.startsWith("volunteer:") ? { type: "volunteer", playerId: coachChoice.slice("volunteer:".length) } : { type: coachChoice };
-    post("coach", `/api/teams/${teamId}/academy/coach`, body, "Trenéra žáků se nepodařilo nastavit", "Trenér uložen, od teď vede žáky.");
+    post("coach", `/api/teams/${teamId}/academy/coach`, body, "Trenéra žáků se nepodařilo nastavit");
   };
   // Najmout trenéra mládeže z trhu a rovnou mu dát žáky
   const hireStaff = async (staffId: string) => {
     const ok = await post(`hire:${staffId}`, `/api/teams/${teamId}/staff/${staffId}/hire`, { role: "trener_mladeze" }, "Trenéra mládeže se nepodařilo najmout");
-    if (ok) await post("coach", `/api/teams/${teamId}/academy/coach`, { type: "staff" }, "Trenéra žáků se nepodařilo nastavit", "Trenér mládeže najat a vede žáky. Plat se strhává s ostatními zaměstnanci.");
+    if (ok) await post("coach", `/api/teams/${teamId}/academy/coach`, { type: "staff" }, "Trenéra žáků se nepodařilo nastavit");
   };
   const promising = data.prospects.filter((p) => p.promising);
 
   return (
     <div className="space-y-4">
       {errorBanner}
-      {noticeBanner}
       {budgetBanner}
       {!data.coach.type && (
         <div className="card p-4 text-sm border-l-4 border-gold-500 bg-gold-50 flex flex-wrap items-center justify-between gap-2" role="alert">
@@ -367,7 +342,7 @@ export function AcademyCard({ teamId }: { teamId: string }) {
             return (
               <li key={l.key} className="flex flex-col">
                 <button
-                  onClick={() => { if (!active) post(`level:${l.key}`, `/api/teams/${teamId}/academy/level`, { level: l.key }, "Úroveň akademie se nepodařilo změnit", `Akademie je teď ${l.label.toLowerCase()}, platí od příští týdenní uzávěrky.`); }}
+                  onClick={() => { if (!active) post(`level:${l.key}`, `/api/teams/${teamId}/academy/level`, { level: l.key }, "Úroveň akademie se nepodařilo změnit"); }}
                   disabled={busy !== null}
                   aria-pressed={active}
                   className={`w-full flex-1 text-left rounded-soft border p-3 min-h-11 transition-colors ${active ? "border-pitch-500 bg-pitch-50" : "border-gray-200 bg-white hover:border-pitch-500"}`}
@@ -388,7 +363,7 @@ export function AcademyCard({ teamId }: { teamId: string }) {
         </p>
           {confirmClose ? (
             <div className="flex flex-wrap gap-2">
-              <button onClick={() => post("close", `/api/teams/${teamId}/academy/close`, undefined, "Akademii se nepodařilo zrušit", "Akademie zrušena, žáci skončili. Znovu ji jde založit až příští sezónu.")} disabled={busy !== null} className="btn btn-secondary min-h-11 px-3 disabled:opacity-40">
+              <button onClick={() => post("close", `/api/teams/${teamId}/academy/close`, undefined, "Akademii se nepodařilo zrušit")} disabled={busy !== null} className="btn btn-secondary min-h-11 px-3 disabled:opacity-40">
                 Opravdu zrušit, žáci skončí
               </button>
               <button onClick={() => setConfirmClose(false)} className="btn btn-secondary min-h-11 px-3">Nechat</button>
@@ -448,7 +423,7 @@ export function AcademyCard({ teamId }: { teamId: string }) {
                       {p.offered && <p className="text-sm text-muted">Trenér ho doporučil do dorostu, nabídku najdeš v Přestupy → Nabídky.</p>}
                       {p.canPlayUp && (
                         <button
-                          onClick={() => post(p.id, `/api/teams/${teamId}/academy/prospects/${p.id}/promote`, undefined, "Žáka se nepodařilo dát do dorostu", `${p.name} je teď v dorostu, najdeš ho v U21.`)}
+                          onClick={() => post(p.id, `/api/teams/${teamId}/academy/prospects/${p.id}/promote`, undefined, "Žáka se nepodařilo dát do dorostu")}
                           disabled={busy !== null}
                           className="btn btn-secondary min-h-11 px-3 disabled:opacity-40"
                         >
@@ -487,14 +462,11 @@ export function AcademyCard({ teamId }: { teamId: string }) {
               Jednou za sezónu, stojí {kc(data.recruitDay.cost)}. Přijdou žáci 11–12 let, čekej {classText(data.recruitDay.expected)}. Víc dětí přivede hráč áčka (děti k němu vzhlíží) a táta (zná rodiče, přivede žáka navíc).
             </p>
             {data.recruitDay.used ? (
-              <p className="text-sm text-muted">Letos už byl, další příští sezónu.</p>
+              <p className="text-sm text-muted">Letos už byl, další příští sezónu. Kdo přišel, ti trenér napsal v SMS, nové žáky najdeš v záložce Žáci.</p>
             ) : !data.coach.type ? (
               <p className="text-sm text-muted">Nábor potřebuje trenéra žáků.</p>
             ) : (
-              <button onClick={() => post("recruit", `/api/teams/${teamId}/academy/recruit-day`, undefined, "Náborový den se nepodařil", (r) => {
-                const names = Array.isArray(r.names) ? (r.names as string[]) : [];
-                return names.length ? `Náborový den se povedl, přišli: ${names.join(", ")}.` : "Na náborový den nikdo nepřišel. Další příští sezónu.";
-              })} disabled={busy !== null} className="btn btn-primary min-h-11 px-3 disabled:opacity-40">
+              <button onClick={() => post("recruit", `/api/teams/${teamId}/academy/recruit-day`, undefined, "Náborový den se nepodařil")} disabled={busy !== null} className="btn btn-primary min-h-11 px-3 disabled:opacity-40">
                 {busy === "recruit" ? "Pořádám…" : "Uspořádat náborový den"}
               </button>
             )}
@@ -507,14 +479,11 @@ export function AcademyCard({ teamId }: { teamId: string }) {
               Chodí ty, které fotbal opravdu chtějí, takže tolik nekončí. A trenér je vidí hrát, takže jejich talent odhadne přesněji.
             </p>
             {data.openDay.used ? (
-              <p className="text-sm text-muted">Letos už byl, další příští sezónu.</p>
+              <p className="text-sm text-muted">Letos už byl, další příští sezónu. Kdo přišel, ti trenér napsal v SMS, nové žáky najdeš v záložce Žáci.</p>
             ) : !data.coach.type ? (
               <p className="text-sm text-muted">Den otevřených dveří potřebuje trenéra žáků.</p>
             ) : (
-              <button onClick={() => post("openday", `/api/teams/${teamId}/academy/open-day`, undefined, "Den otevřených dveří se nepodařil", (r) => {
-                const names = Array.isArray(r.names) ? (r.names as string[]) : [];
-                return names.length ? `Den otevřených dveří se povedl, přihlásili se: ${names.join(", ")}.` : "Na den otevřených dveří se nikdo nepřihlásil. Další příští sezónu.";
-              })} disabled={busy !== null} className="btn btn-primary min-h-11 px-3 disabled:opacity-40">
+              <button onClick={() => post("openday", `/api/teams/${teamId}/academy/open-day`, undefined, "Den otevřených dveří se nepodařil")} disabled={busy !== null} className="btn btn-primary min-h-11 px-3 disabled:opacity-40">
                 {busy === "openday" ? "Pořádám…" : "Uspořádat den otevřených dveří"}
               </button>
             )}
@@ -529,7 +498,7 @@ export function AcademyCard({ teamId }: { teamId: string }) {
                 <li key={y.poachId} className="rounded-soft border border-gray-200 bg-white p-3 space-y-2">
                   <p className="text-sm"><strong className="font-heading text-ink">{y.name}</strong> ({y.age}): láká ho {y.club}. Žák {y.interest}.</p>
                   {y.defended ? <p className="text-sm text-muted">S rodiči jsi už mluvil.</p> : (
-                    <button onClick={() => post(`defend:${y.poachId}`, `/api/teams/${teamId}/academy/poach-defense/${y.poachId}`, undefined, "Rozhovor s rodiči se nepovedl", (r) => `Mluvil jsi s rodiči. ${y.name}: ${String(r.interest ?? "")}.`)} disabled={busy !== null} className="btn btn-secondary min-h-11 px-3 disabled:opacity-40">
+                    <button onClick={() => post(`defend:${y.poachId}`, `/api/teams/${teamId}/academy/poach-defense/${y.poachId}`, undefined, "Rozhovor s rodiči se nepovedl")} disabled={busy !== null} className="btn btn-secondary min-h-11 px-3 disabled:opacity-40">
                       Promluvit s rodiči
                     </button>
                   )}
@@ -556,7 +525,7 @@ export function AcademyCard({ teamId }: { teamId: string }) {
                   const action = (a: string, label: string) => (
                     <button
                       key={a}
-                      onClick={() => post(`poach:${t.prospectId}:${a}`, `/api/teams/${teamId}/academy/poach/${t.prospectId}`, { action: a }, "Lákání se nepovedlo", (r) => `${t.name}: ${String(r.interest ?? "")}.`)}
+                      onClick={() => post(`poach:${t.prospectId}:${a}`, `/api/teams/${teamId}/academy/poach/${t.prospectId}`, { action: a }, "Lákání se nepovedlo")}
                       disabled={busy !== null || t.done.includes(a) || t.protected || !canStart}
                       className="btn btn-secondary min-h-11 px-3 text-sm disabled:opacity-40"
                     >
