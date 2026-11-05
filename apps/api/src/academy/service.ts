@@ -25,7 +25,7 @@ import {
   REOFFER_DAYS, firstOfferDay, quitChance, talentShiftAt13, pickTraits, positionVisible, GRADUATE_WAGE_FACTOR,
   youthTransferFee, distanceKm, qualityText, PLAY_UP_ESTIMATE, estimateRange, strengthsOf, staffQualityText,
   YOUTH_EQUIPMENT, POTENTIAL_SCALE, type YouthEquipment,
-  RECRUIT_DAY_COST, recruitDayExpected, WEEKS_PER_SEASON, NEIGHBOR_RADIUS_KM, neighborKidsExpected, NEIGHBOR_MAX_PER_YEAR, MAX_SQUAD,
+  RECRUIT_DAY_COST, recruitDayExpected, OPEN_DAY_COST, openDayExpected, OPEN_DAY_MAX_KIDS, OPEN_DAY_COMMITMENT_BONUS, OPEN_DAY_ESTIMATE_FACTOR, WEEKS_PER_SEASON, NEIGHBOR_RADIUS_KM, neighborKidsExpected, NEIGHBOR_MAX_PER_YEAR, MAX_SQUAD,
   POACH_RADIUS_KM, MAX_POACH_PER_SEASON, POACH_THRESHOLD, POACH_ACTIONS, type PoachAction, poachBaseInterest,
   interestText, youthFeeByAge,
 } from "./rules";
@@ -827,6 +827,9 @@ export async function loadAcademyView(db: D1Database, teamId: string) {
 
   const seasonNumber = await currentSeasonNumber(db);
   const recruitDayUsed = (await db.prepare("SELECT academy_recruit_day_season AS s FROM teams WHERE id = ?").bind(teamId).first<{ s: number | null }>())?.s === seasonNumber;
+  const openDayUsed = (await db.prepare("SELECT academy_open_day_season AS s FROM teams WHERE id = ?").bind(teamId).first<{ s: number | null }>()
+    .catch((e) => { logger.warn({ module: M, teamId }, "open day season", e); return null; }))?.s === seasonNumber;
+  const openDayInfo = club.academy_upkeep && coach.type ? await openDayExpectedFor(db, club, coach) : null;
   const poach = club.academy_upkeep ? await poachView(db, club, coach, seasonNumber) : null;
 
   const foundedSeason = (await db.prepare("SELECT academy_founded_season AS s FROM teams WHERE id = ?").bind(teamId).first<{ s: number | null }>())?.s ?? null;
@@ -850,6 +853,12 @@ export async function loadAcademyView(db: D1Database, teamId: string) {
       used: recruitDayUsed,
       cost: RECRUIT_DAY_COST,
       expected: Math.round(recruitDayExpectedFor(club, coach) * 10) / 10,
+    },
+    openDay: {
+      available: !!club.academy_upkeep && !!coach.type && !openDayUsed,
+      used: openDayUsed,
+      cost: OPEN_DAY_COST,
+      expected: Math.round((openDayInfo?.expected ?? 0) * 10) / 10,
     },
     neighborMax: NEIGHBOR_MAX_PER_YEAR,
     neighbors: neighborList.map((v) => ({ name: v.name, km: v.km, expected: Math.round(v.expected * 10) / 10 })),
@@ -1015,6 +1024,59 @@ function recruitDayExpectedFor(club: ClubRow, coach: CoachState): number {
 
 function recruitDayKids(rng: Rng, club: ClubRow, coach: CoachState): number {
   return rollKids(rng, recruitDayExpectedFor(club, coach));
+}
+
+/**
+ * Den otevřených dveří: kolik dětí čekat. Okolní obce se počítají celým ročníkem bez podílu
+ * pro dojíždění (`v.expected` už dělí mezi akademie okolí), dobrovolník a táta jako u náboru.
+ */
+async function openDayExpectedFor(db: D1Database, club: ClubRow, coach: CoachState): Promise<{ expected: number; villages: { id: string; weight: number }[] }> {
+  const neighbors = await neighborVillages(db, club);
+  const neighborSum = neighbors.reduce((n, v) => n + v.expected, 0);
+  const own = expectedKidsPerYear(club.population ?? 0);
+  const base = openDayExpected(own, neighborSum, coach.quality) * (coach.type === "volunteer" ? VOLUNTEER_ATTRACT : 1);
+  return {
+    // Ani s dobrovolníkem nebo tátou víc než OPEN_DAY_MAX_KIDS: den otevřených dveří je o kvalitě
+    expected: Math.min(OPEN_DAY_MAX_KIDS, base + (coach.type === "parent" ? PARENT_RECRUIT_EXTRA * 0.3 : 0)),
+    villages: [{ id: club.village_id, weight: own }, ...neighbors.map((v) => ({ id: v.id, weight: v.expected }))],
+  };
+}
+
+/** Den otevřených dveří na hřišti (jednou za sezónu, s trenérem žáků). */
+export async function openDay(db: D1Database, rng: Rng, teamId: string, gameDate: string): Promise<ServiceResult<{ names: string[] }>> {
+  const club = await loadClub(db, teamId);
+  if (!club) return { ok: false, status: 404, error: "Tým nenalezen" };
+  if (!club.academy_upkeep) return { ok: false, status: 409, error: "Nejdřív založ akademii" };
+  const squad = (await activeProspects(db, teamId)).length;
+  const coach = await coachState(db, club, squad);
+  if (!coach.type) return { ok: false, status: 409, error: "Den otevřených dveří potřebuje trenéra žáků" };
+  if (squad >= MAX_SQUAD) return { ok: false, status: 409, error: `Máš ${MAX_SQUAD} žáků, víc jich akademie neuživí` };
+  const seasonNumber = await currentSeasonNumber(db);
+  const claim = await db.prepare(
+    "UPDATE teams SET academy_open_day_season = ? WHERE id = ? AND (academy_open_day_season IS NULL OR academy_open_day_season < ?)",
+  ).bind(seasonNumber, teamId, seasonNumber).run();
+  if (claim.meta.changes === 0) return { ok: false, status: 409, error: "Den otevřených dveří už letos byl, další až příští sezónu" };
+  await recordTransaction(db, teamId, "youth_academy", -OPEN_DAY_COST, "Den otevřených dveří akademie", gameDate);
+
+  const { expected, villages } = await openDayExpectedFor(db, club, coach);
+  const kids = Math.min(MAX_SQUAD - squad, rollKids(rng, expected));
+  const villageNames = new Map<string, string>();
+  for (const v of await neighborVillages(db, club)) villageNames.set(v.id, v.name);
+  const names: string[] = [];
+  for (let i = 0; i < kids; i++) {
+    const villageId = villages.length ? rng.weighted(Object.fromEntries(villages.filter((v) => v.weight > 0).map((v) => [v.id, v.weight]))) : club.village_id;
+    const p = await createProspect(db, rng, club, rng.int(YOUNGEST_AGE, OLDEST_AGE), gameDate, null, villageId);
+    await db.prepare("UPDATE youth_prospects SET commitment = ?, estimate_offset = ? WHERE id = ?")
+      .bind(Math.min(95, p.commitment + OPEN_DAY_COMMITMENT_BONUS), p.estimate_offset * OPEN_DAY_ESTIMATE_FACTOR, p.id).run();
+    const from = villageNames.get(villageId);
+    names.push(`${p.first_name} ${p.last_name} (${p.age}${from ? `, ${from}` : ""})`);
+  }
+  if (isHuman(club)) {
+    await academySms(db, teamId, names.length
+      ? `Den otevřených dveří se povedl, děti si zahrály a přihlásili se: ${names.join(", ")}. Viděl jsem je hrát, takže o nich víc vím.`
+      : "Na den otevřených dveří přišlo pár dětí, zahrály si, ale nikdo se nakonec nepřihlásil. Zkusíme to příští sezónu.");
+  }
+  return { ok: true, names };
 }
 
 /** Vede žáky placený trenér mládeže? Pak má dorost (U21) a mladí v áčku jen poloviční bonus. */

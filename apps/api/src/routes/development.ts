@@ -456,6 +456,17 @@ developmentRouter.post("/teams/:teamId/academy/recruit-day", async (c) => {
   return c.json({ ok: true, names: res.names });
 });
 
+// POST /api/teams/:teamId/academy/open-day — den otevřených dveří na hřišti (jednou za sezónu)
+developmentRouter.post("/teams/:teamId/academy/open-day", async (c) => {
+  const teamId = c.req.param("teamId");
+  const { openDay } = await import("../academy/service");
+  const { createRng, cryptoSeed } = await import("../generators/rng");
+  const team = await c.env.DB.prepare("SELECT game_date FROM teams WHERE id = ?").bind(teamId).first<{ game_date: string | null }>();
+  const res = await openDay(c.env.DB, createRng(cryptoSeed()), teamId, team?.game_date ?? new Date().toISOString());
+  if (!res.ok) return c.json({ error: res.error }, res.status);
+  return c.json({ ok: true, names: res.names });
+});
+
 // POST /api/teams/:teamId/academy/poach/:prospectId — lákat kluka z cizího klubu { action: invite | promise | boots }
 developmentRouter.post("/teams/:teamId/academy/poach/:prospectId", async (c) => {
   const teamId = c.req.param("teamId");

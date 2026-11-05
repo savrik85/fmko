@@ -325,7 +325,7 @@ export async function wipeAiClubForNewcomer(db: D1Database, teamId: string, opts
             training_attendance = '{}', formation_familiarity = '{}', tactic_familiarity = '{}',
             youth_investment = 'none', youth_paid_base = 0, youth_paid_weeks = 0,
             academy_upkeep = 0, academy_coach_type = NULL, academy_coach_player_id = NULL, academy_coach_name = NULL,
-            academy_coach_prospect_id = NULL, academy_founded_season = NULL, academy_recruit_day_season = NULL
+            academy_coach_prospect_id = NULL, academy_founded_season = NULL, academy_recruit_day_season = NULL, academy_open_day_season = NULL
       WHERE id = ?`, teamId);
   // Akademie AI klubu: nový majitel si ji založí sám (kluci končí, lákání a nabídky z žáků propadají)
   await runStatement(db, "žáci", "UPDATE youth_prospects SET status = 'quit', next_offer_on = NULL WHERE team_id = ? AND status IN ('active', 'leaving')", teamId);

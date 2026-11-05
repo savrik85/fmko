@@ -6,7 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
 import { Miniflare } from "miniflare";
 import { createRng } from "../generators/rng";
-import { foundYouthTeam, setYouthCoach, recruitDay, seasonEndAcademy, poachAction, defendPoach, loadAcademyView, setAcademyLevel, weeklyAcademy, type ProspectRow } from "./service";
+import { foundYouthTeam, setYouthCoach, recruitDay, openDay, seasonEndAcademy, poachAction, defendPoach, loadAcademyView, setAcademyLevel, weeklyAcademy, type ProspectRow } from "./service";
 import { coachSonAge } from "./rules";
 
 let mf: Miniflare;
@@ -56,6 +56,35 @@ describe("náborový den", () => {
     const tx = await db.prepare("SELECT amount FROM transactions WHERE team_id = 'big' AND description LIKE 'Náborový den%'").first<{ amount: number }>();
     expect(tx!.amount).toBe(-1500);
     expect((await recruitDay(db, createRng(4), "big", GAME_DATE)).ok).toBe(false);
+  });
+
+  it("den otevřených dveří: zvlášť od náboru, dražší, žáci 11–14 se zápalem a přesnějším odhadem", async () => {
+    const view = await loadAcademyView(db, "big");
+    expect(view!.openDay.available).toBe(true);
+    expect(view!.openDay.cost).toBe(2500);
+    // Velký klub má po založení plno: pár žáků skončí, ať je pro nováčky místo
+    await db.prepare("UPDATE youth_prospects SET status = 'quit' WHERE id IN (SELECT id FROM youth_prospects WHERE team_id = 'big' AND status = 'active' AND coach_son = 0 AND id NOT IN (SELECT COALESCE(academy_coach_prospect_id, '') FROM teams WHERE id = 'big') LIMIT 8)").run();
+    const before = new Set((await prospects("big")).map((p) => p.id));
+    // Víc pokusů na čerstvém semínku nejde (jednou za sezónu), proto sezónu posouváme ručně
+    let added: ProspectRow[] = [];
+    for (let seed = 10; seed < 40 && added.length === 0; seed++) {
+      await db.prepare("UPDATE teams SET academy_open_day_season = NULL WHERE id = 'big'").run();
+      const res = await openDay(db, createRng(seed), "big", GAME_DATE);
+      expect(res.ok ? "ok" : res.error).toBe("ok");
+      added = (await prospects("big")).filter((p) => !before.has(p.id));
+    }
+    expect(added.length).toBeGreaterThan(0);
+    for (const p of added) {
+      expect(p.age).toBeGreaterThanOrEqual(11);
+      expect(p.age).toBeLessThanOrEqual(14);
+      expect(p.commitment).toBeGreaterThanOrEqual(55 + 15);
+      expect(Math.abs(p.estimate_offset)).toBeLessThanOrEqual(0.5);
+      expect(p.aged_season).toBeNull();
+    }
+    expect((await openDay(db, createRng(99), "big", GAME_DATE)).ok).toBe(false);
+    const tx = await db.prepare("SELECT COUNT(*) AS n, MIN(amount) AS a FROM transactions WHERE team_id = 'big' AND description = 'Den otevřených dveří akademie'").first<{ n: number; a: number }>();
+    expect(tx!.a).toBe(-2500);
+    expect((await loadAcademyView(db, "big"))!.openDay.used).toBe(true);
   });
 });
 

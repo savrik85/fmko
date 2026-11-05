@@ -374,6 +374,27 @@ export const RECRUIT_DAY_COST = 1500;
  * nejméně „možná jeden“, nejvýš 2. Dobrý trenér děti nadchne víc. Simulace 6 sezón
  * (2026-11-04): s vyšší dávkou poslal městys do U21 skoro 7 kluků ročně, U21 přetékala.
  */
+/**
+ * Den otevřených dveří na hřišti: dražší než nábor ve škole (občerstvení, míče a dresy na
+ * vyzkoušení), přijde míň dětí, ale z okolních obcí a jen ty, které fotbal opravdu chtějí
+ * (vyšší zápal). Trenér je vidí hrát, takže talent odhadne přesněji.
+ */
+export const OPEN_DAY_COST = 2500;
+/** O kolik má žák z dne otevřených dveří vyšší zápal než běžný nováček. */
+export const OPEN_DAY_COMMITMENT_BONUS = 15;
+/** Jak se zmenší chyba odhadu talentu (trenér ho viděl hrát). */
+export const OPEN_DAY_ESTIMATE_FACTOR = 0.5;
+
+/**
+ * Kolik dětí 11–14 let přijde: pětina ročníku obce a okolních obcí bez akademie, 0,4 až 1,2.
+ * Vždycky míň než náborový den ve škole (ten až 2), výhoda je v zápalu, věku a odhadu.
+ */
+export const OPEN_DAY_MAX_KIDS = 1.2;
+export function openDayExpected(ownPerYear: number, neighborsPerYear: number, quality: number): number {
+  const base = Math.min(OPEN_DAY_MAX_KIDS, Math.max(0.4, (ownPerYear + neighborsPerYear) * 0.2));
+  return Math.min(OPEN_DAY_MAX_KIDS, base * (0.7 + 0.3 * Math.min(1.3, Math.max(0, quality))));
+}
+
 export function recruitDayExpected(population: number, quality: number): number {
   const base = Math.min(2, Math.max(0.6, expectedKidsPerYear(population) * 0.5));
   return Math.min(2, base * (0.7 + 0.3 * Math.min(1.3, Math.max(0, quality))));
