@@ -161,55 +161,20 @@ async function loadInjuredText(db: D1Database, teamId: string): Promise<string |
 
 // ─── Gemini helper ────────────────────────────────────────────────────────────
 
-async function callGemini(
-  apiKey: string,
-  prompt: string,
-  maxTokens = 1024,
-): Promise<string | null> {
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_TEXT_MODEL}:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          maxOutputTokens: maxTokens,
-          temperature: 0.85,
-          thinkingConfig: { thinkingBudget: 0 },
-        },
-      }),
-    },
-  ).catch((e) => {
-    logger.warn({ module: "interview-generator" }, "gemini fetch failed", e);
-    return null;
+/**
+ * Gemini přes sdílený helper (AI Gateway, když je nastavená) s časovým limitem; otázky se
+ * při neúspěchu zkusí ještě jednou (generateInterviewQuestions). Dřív přímý fetch bez limitu a bez opakování: jediné pomalé nebo prázdné
+ * volání Gemini nechalo trenéra bez rozhovoru (incident 2026-11-05).
+ */
+async function callGemini(apiKey: string, prompt: string, maxTokens = 1024): Promise<string | null> {
+  const { callGemini: sharedCallGemini } = await import("./gemini-helper");
+  return sharedCallGemini(apiKey, prompt, {
+    maxOutputTokens: maxTokens, temperature: 0.85, module: "interview-generator", timeoutMs: INTERVIEW_GEMINI_TIMEOUT_MS,
   });
-
-  if (!res || !res.ok) {
-    const errBody = res ? await res.text().catch((e) => { logger.warn({ module: "interview-generator" }, "tělo chybové odpovědi Gemini", e); return ""; }) : "";
-    logger.warn(
-      { module: "interview-generator" },
-      `Gemini API error: ${res?.status} ${errBody.slice(0, 200)}`,
-    );
-    return null;
-  }
-
-  const json = (await res.json().catch((e) => {
-    logger.warn({ module: "interview-generator" }, "parse gemini response", e);
-    return null;
-  })) as {
-    candidates?: Array<{ content?: { parts?: Array<{ text?: string; thought?: boolean }> } }>;
-  } | null;
-
-  if (!json) return null;
-
-  const parts = json.candidates?.[0]?.content?.parts ?? [];
-  return parts
-    .filter((p) => !p.thought)
-    .map((p) => p.text ?? "")
-    .join("")
-    .trim();
 }
+
+const INTERVIEW_GEMINI_ATTEMPTS = 2;
+const INTERVIEW_GEMINI_TIMEOUT_MS = 25_000;
 
 // ─── Question generation ──────────────────────────────────────────────────────
 
@@ -313,17 +278,18 @@ ${opponentCtxLines || "- info nedostupné, neuváděj žádná konkrétní fakta
 
 Napiš pouze 3 otázky, každou na samostatném řádku.`;
 
-  const text = await callGemini(apiKey, prompt, 512);
-  if (!text) return null;
-
-  const questions = text
-    .split("\n")
-    .map((l) => l.trim())
-    .filter((l) => l.length > 10)
-    .slice(0, 3);
-
-  if (questions.length < 2) return null;
-  return questions;
+  // Druhý pokus i při odpovědi, ze které nejdou vytáhnout aspoň 2 otázky
+  for (let attempt = 1; attempt <= INTERVIEW_GEMINI_ATTEMPTS; attempt++) {
+    const text = await callGemini(apiKey, prompt, 512);
+    const questions = (text ?? "")
+      .split("\n")
+      .map((l) => l.trim())
+      .filter((l) => l.length > 10)
+      .slice(0, 3);
+    if (questions.length >= 2) return questions;
+    logger.warn({ module: "interview-generator" }, `otázky se nepovedly, pokus ${attempt}/${INTERVIEW_GEMINI_ATTEMPTS}`);
+  }
+  return null;
 }
 
 // ─── Article generation ───────────────────────────────────────────────────────
@@ -586,7 +552,7 @@ export async function tryCreateInterviewRequest(
     redaktor ? vztahKeKlubuText(vztah) : undefined,
   );
   if (!questions || questions.length === 0) {
-    logger.warn({ module: "interview-generator" }, "failed to generate questions", teamRow.team_id);
+    logger.error({ module: "interview-generator", teamId: teamRow.team_id }, "failed to generate questions", ctx.calendarId);
     return;
   }
 
