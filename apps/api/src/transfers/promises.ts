@@ -209,12 +209,14 @@ const HUMAN_CLUB_JOIN = "JOIN teams club ON club.id = pr.team_id AND COALESCE(cl
 
 /**
  * Den před zápasem: hráč se slíbeným místem v sestavě se ozve (jednou na zápas).
- * `rosterTeamId` je kádr, který hraje (áčko nebo U21).
+ * `rosterTeamId` je kádr, který hraje (áčko nebo U21). Jen když ten kádr patří klubu,
+ * který slib dal: hráč na hostování dřív připomínal slib Spůle před zápasem Agrokomplexu.
  */
 export async function remindMinutesPromises(db: D1Database, rosterTeamId: string, matchKey: string): Promise<number> {
   const rows = await db.prepare(
     `SELECT pr.id AS promise_id, pr.team_id AS club_id, p.id, p.first_name, p.last_name, p.nickname, p.avatar
        FROM player_promises pr JOIN players p ON p.id = pr.player_id ${HUMAN_CLUB_JOIN}
+       JOIN teams roster ON roster.id = p.team_id AND COALESCE(roster.parent_team_id, roster.id) = pr.team_id
       WHERE p.team_id = ? AND pr.status = 'active' AND pr.type = 'minutes' AND COALESCE(pr.last_reminder_key, '') != ?`,
   ).bind(rosterTeamId, matchKey).all<ReminderPlayer & { promise_id: string; club_id: string }>()
     .catch((e) => { logger.warn({ module: M }, "sliby sestavy před zápasem", e); return { results: [] as Array<ReminderPlayer & { promise_id: string; club_id: string }> }; });

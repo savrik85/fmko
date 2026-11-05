@@ -414,7 +414,7 @@ function pick<T>(arr: T[]): T {
  */
 export async function processTransferUnrest(db: D1Database): Promise<number> {
   const rows = await db.prepare(
-    `SELECT p.id, p.first_name, p.last_name, p.nickname, p.avatar, p.team_id,
+    `SELECT p.id, p.first_name, p.last_name, p.nickname, p.avatar, p.team_id, p.loan_from_team_id,
             COALESCE(owner_team.parent_team_id, owner_team.id, t.parent_team_id, t.id) AS club_team_id,
             (SELECT club.user_id FROM teams club
               WHERE club.id = COALESCE(owner_team.parent_team_id, owner_team.id, t.parent_team_id, t.id)) AS club_user_id,
@@ -460,11 +460,17 @@ async function processUnrestPlayer(db: D1Database, row: Record<string, unknown>)
   const silent = row.club_user_id === "ai";
   const sms = async (body: string) => { if (!silent) await sendPlayerSMS(db, clubTeamId, playerRef, body); };
 
-  // 1) Kontrola slibu minut (pledge 'minutes') — 2 ze 3 zápasů týmu od slibu v základu (45+ min)
+  // 1) Kontrola slibu minut (pledge 'minutes') — 2 ze 3 zápasů za klub od slibu v základu (45+ min)
   let pledgeBroken = false;
   if (unrest.pledge?.type === "minutes") {
-    const verdict = await checkMinutesPledge(db, playerId, rosterTeamId, unrest.pledge);
-    if (verdict === "kept") {
+    // Hostování slib sestavy ukončí: posoudí se zápasy za klub do odchodu, a když na
+    // dodržení nestačí, slib jen vyprší. Trenér ho pustil hrát jinam, výčitka by byla křivda.
+    const onLoanAway = row.loan_from_team_id != null;
+    const verdict = await checkMinutesPledge(db, playerId, clubTeamId, rosterTeamId, unrest.pledge, onLoanAway);
+    if (onLoanAway && verdict !== "kept") {
+      unrest.pledge = null;
+      await resolvePromises(db, playerId, ["minutes"], "expired");
+    } else if (verdict === "kept") {
       unrest.pledge = null;
       await resolvePromises(db, playerId, ["minutes"], "kept");
       unrest.level = clamp(unrest.level - 10, 0, 100);
@@ -473,9 +479,9 @@ async function processUnrestPlayer(db: D1Database, row: Record<string, unknown>)
       pledgeBroken = true;
       unrest.pledge = null;
       await resolvePromises(db, playerId, ["minutes"], "broken");
-      unrest.level = clamp(unrest.level + 35, 0, 100);
+      unrest.level = clamp(unrest.level + BROKEN_PLEDGE_UNREST, 0, 100);
       const morale: number = typeof lc.morale === "number" ? lc.morale : 50;
-      lc.morale = clamp(morale - 8, 0, 100);
+      lc.morale = clamp(morale - BROKEN_PLEDGE_MORALE, 0, 100);
       await sms("Sliboval jste mi místo v sestavě, trenére. A já zase sedím. Tohle nemá cenu.");
     }
   } else if ((unrest.pledge?.type === "transfer" || unrest.pledge?.type === "release") && new Date(unrest.pledge.deadline) < new Date()) {
@@ -548,40 +554,133 @@ async function healFakeInjury(
   await sendPlayerSMS(db, teamId, playerRef, "Trenére, dobrá zpráva, cítím se najednou mnohem líp. Můžu zase naskočit do tréninku.");
 }
 
-/**
- * Vyhodnotí slib minut: hráč měl být v základu (45+ min) ve 2 ze 3 zápasů týmu od slibu.
- * "pending" = tým ještě neodehrál 3 zápasy a slib nelze rozhodnout.
- */
-async function checkMinutesPledge(
-  db: D1Database,
-  playerId: string,
-  teamId: string,
-  pledge: { madeAt: string; deadline: string },
-): Promise<"kept" | "broken" | "pending"> {
-  const matches = await db.prepare(
-    `SELECT m.id FROM matches m
-     WHERE (m.home_team_id = ? OR m.away_team_id = ?) AND m.status = 'simulated' AND m.simulated_at > ?
-     ORDER BY m.simulated_at ASC LIMIT 3`
-  ).bind(teamId, teamId, pledge.madeAt).all<{ id: string }>()
-    .catch((e) => { logger.warn({ module: "rejection-impact" }, "pledge matches", e); return { results: [] as { id: string }[] }; });
+/** Porušený slib sestavy: o kolik vzroste nespokojenost a klesne nálada. */
+const BROKEN_PLEDGE_UNREST = 35;
+const BROKEN_PLEDGE_MORALE = 8;
 
-  if (matches.results.length < 3) {
-    // Deadline vypršel dřív, než tým odehrál 3 zápasy → posoudit co je (1-2 zápasy: stačí 1 start)
-    if (new Date(pledge.deadline) < new Date()) {
-      if (matches.results.length === 0) return "kept"; // nebylo co plnit
+/**
+ * Oprava dat: vrátí trest za slib sestavy, který hra vyhodnotila jako porušený neprávem
+ * (Kratochvíl na hostování, 2026-11-05). Slib přepíše na dodržený, náladu vrátí a nespokojenost
+ * sníží o to, co jí porušení přidalo. Podruhé nic neudělá: slib už je dodržený.
+ */
+export async function revertBrokenMinutesPledge(db: D1Database, playerId: string): Promise<{ reverted: boolean; morale?: number; unrestLevel?: number | null }> {
+  const promise = await db.prepare(
+    "SELECT id, status FROM player_promises WHERE player_id = ? AND type = 'minutes' ORDER BY made_at DESC LIMIT 1",
+  ).bind(playerId).first<{ id: string; status: string }>();
+  const player = await db.prepare("SELECT life_context FROM players WHERE id = ?").bind(playerId).first<{ life_context: string | null }>();
+  if (!promise || promise.status === "kept" || promise.status === "active" || !player) return { reverted: false };
+
+  const lc = (() => {
+    try { return JSON.parse(player.life_context ?? "{}") ?? {}; } catch (e) {
+      logger.warn({ module: "rejection-impact" }, `nečitelný life_context ${playerId}`, e);
+      return null;
+    }
+  })();
+  if (!lc) return { reverted: false };
+  const morale = clamp((typeof lc.morale === "number" ? lc.morale : 50) + BROKEN_PLEDGE_MORALE, 0, 100);
+  const unrest = lc.transferUnrest as TransferUnrest | undefined;
+  const unrestLevel = unrest ? clamp(unrest.level - BROKEN_PLEDGE_UNREST, 0, 100) : null;
+  const unrestStmt = !unrest
+    ? null
+    : unrestLevel === 0 && !unrest.pledge
+      ? db.prepare("UPDATE players SET life_context = json_remove(life_context, '$.transferUnrest') WHERE id = ?").bind(playerId)
+      : db.prepare("UPDATE players SET life_context = json_set(life_context, '$.transferUnrest.level', ?) WHERE id = ?").bind(unrestLevel, playerId);
+  await db.batch([
+    db.prepare("UPDATE player_promises SET status = 'kept', resolved_at = ? WHERE id = ?").bind(new Date().toISOString(), promise.id),
+    db.prepare("UPDATE players SET life_context = json_set(life_context, '$.morale', ?) WHERE id = ?").bind(morale, playerId),
+    ...(unrestStmt ? [unrestStmt] : []),
+  ]);
+  logger.info({ module: "rejection-impact" }, `vrácen trest za slib sestavy ${playerId}: nálada ${morale}, nespokojenost ${unrestLevel ?? "žádná"}`);
+  return { reverted: true, morale, unrestLevel };
+}
+
+/** Kolik minut musí hráč odehrát, aby se zápas počítal jako start ve slibu. */
+const PLEDGE_START_MINUTES = 45;
+
+/** Zápas klubu, který dal slib (áčko nebo U21), z pohledu slíbeného hráče. */
+export interface PledgeMatch {
+  /** Tým klubu, který v zápase hrál. */
+  teamId: string;
+  /** Hráč byl v nominaci (základ nebo lavička). */
+  inSquad: boolean;
+  /** Odehrané minuty, null = za tým nenastoupil. */
+  minutes: number | null;
+}
+
+/**
+ * Verdikt slibu minut: hráč měl být v základu (45+ min) ve 2 ze 3 příštích zápasů.
+ * Počítají se zápasy hráče za klub, který slib dal: kde byl v nominaci nebo hrál, a zápasy
+ * týmu, ve kterém je teď (tam ho trenér mohl postavit, a nepostavil). Dřív se braly zápasy
+ * týmu, kde hráč zrovna byl: Kratochvílovi po odchodu na hostování (2026-11-05) hra vyčetla
+ * dva zápasy Agrokomplexu, které se hrály před jeho příchodem, a jeho dva celé zápasy za
+ * Spůli nezapočítala.
+ *
+ * `final`: slib se musí uzavřít hned (hráč odešel na hostování), i když zápasy ještě chybí.
+ * "pending" = zápasů je zatím málo, "void" = při uzavření nebylo co posoudit.
+ */
+export function minutesPledgeVerdict(
+  matches: PledgeMatch[],
+  rosterTeamId: string,
+  opts: { deadlinePassed: boolean; final: boolean },
+): "kept" | "broken" | "pending" | "void" {
+  const counted = matches.filter((m) => m.inSquad || m.minutes != null || m.teamId === rosterTeamId).slice(0, 3);
+  if (counted.length < 3) {
+    if (opts.final) {
+      if (counted.length === 0) return "void";
+    } else if (opts.deadlinePassed) {
+      // Deadline vypršel dřív, než hráč odehrál 3 zápasy → posoudit co je (1-2 zápasy: stačí 1 start)
+      if (counted.length === 0) return "kept"; // nebylo co plnit
     } else {
       return "pending";
     }
   }
-
-  const ids = matches.results.map((m) => m.id);
-  const placeholders = ids.map(() => "?").join(",");
-  const started = await db.prepare(
-    `SELECT COUNT(*) as starts FROM match_player_stats WHERE player_id = ? AND match_id IN (${placeholders}) AND minutes_played >= 45`
-  ).bind(playerId, ...ids).first<{ starts: number }>()
-    .catch((e) => { logger.warn({ module: "rejection-impact" }, "pledge starts", e); return null; });
-
-  const starts = started?.starts ?? 0;
-  const needed = matches.results.length >= 3 ? 2 : 1;
+  const starts = counted.filter((m) => (m.minutes ?? 0) >= PLEDGE_START_MINUTES).length;
+  const needed = counted.length >= 3 ? 2 : 1;
   return starts >= needed ? "kept" : "broken";
+}
+
+/** Zápasy klubu (áčko i U21) od slibu, chronologicky, s účastí slíbeného hráče. */
+async function loadPledgeMatches(db: D1Database, playerId: string, clubTeamId: string, madeAt: string): Promise<PledgeMatch[]> {
+  const clubTeams = "(SELECT id FROM teams WHERE id = ? OR parent_team_id = ?)";
+  const rows = await db.prepare(
+    `SELECT m.home_team_id, m.away_team_id, m.home_lineup_data, m.away_lineup_data, s.minutes_played AS minutes,
+            m.home_team_id IN ${clubTeams} AS club_home
+       FROM matches m
+       LEFT JOIN match_player_stats s ON s.match_id = m.id AND s.player_id = ?
+      WHERE m.status = 'simulated' AND m.simulated_at > ?
+        AND (m.home_team_id IN ${clubTeams} OR m.away_team_id IN ${clubTeams})
+      ORDER BY m.simulated_at ASC LIMIT 30`,
+  ).bind(clubTeamId, clubTeamId, playerId, madeAt, clubTeamId, clubTeamId, clubTeamId, clubTeamId)
+    .all<{ home_team_id: string; away_team_id: string; home_lineup_data: string | null; away_lineup_data: string | null; minutes: number | null; club_home: number }>()
+    .catch((e) => {
+      logger.warn({ module: "rejection-impact" }, "pledge matches", e);
+      return { results: [] as Array<{ home_team_id: string; away_team_id: string; home_lineup_data: string | null; away_lineup_data: string | null; minutes: number | null; club_home: number }> };
+    });
+
+  return rows.results.map((r) => {
+    const home = r.club_home === 1;
+    const raw = home ? r.home_lineup_data : r.away_lineup_data;
+    let inSquad = false;
+    if (raw) {
+      try {
+        const lineup = JSON.parse(raw) as { starters?: Array<{ id?: string }>; subs?: Array<{ id?: string }> };
+        inSquad = [...(lineup.starters ?? []), ...(lineup.subs ?? [])].some((p) => p.id === playerId);
+      } catch (e) {
+        logger.warn({ module: "rejection-impact" }, "nečitelná sestava zápasu ve slibu", e);
+      }
+    }
+    return { teamId: home ? r.home_team_id : r.away_team_id, inSquad, minutes: r.minutes };
+  });
+}
+
+async function checkMinutesPledge(
+  db: D1Database,
+  playerId: string,
+  clubTeamId: string,
+  rosterTeamId: string,
+  pledge: { madeAt: string; deadline: string },
+  final: boolean,
+): Promise<"kept" | "broken" | "pending" | "void"> {
+  const matches = await loadPledgeMatches(db, playerId, clubTeamId, pledge.madeAt);
+  return minutesPledgeVerdict(matches, rosterTeamId, { deadlinePassed: new Date(pledge.deadline) < new Date(), final });
 }
