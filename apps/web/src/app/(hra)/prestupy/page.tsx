@@ -2196,6 +2196,8 @@ export default function TransfersPage() {
                     pub: "🍺", youth: "🌱", friend: "🤝", recommendation: "🏛️",
                   };
                   const isYouth = o.source === "youth";
+                  // Žák z vlastní akademie: talent ukazuje Akademie slovy trenéra, tady by ho prozradil
+                  const fromAcademy = !!(o as { fromAcademy?: boolean }).fromAcademy;
                   const hiddenTalent = (o.personality as any)?.hiddenTalent as number | undefined;
                   // expiresAt je v HERNÍM čase (player-offers.ts ho počítá z game_date),
                   // takže odpočet musí běžet proti hernímu datu. Proti reálnému času
@@ -2214,7 +2216,7 @@ export default function TransfersPage() {
                             {nationalityFlag((o as { nationality?: string }).nationality) && <span title={(o as { nationality?: string }).nationality}>{nationalityFlag((o as { nationality?: string }).nationality)}</span>}
                             <PositionBadge position={o.position as "GK" | "DEF" | "MID" | "FWD"} />
                             <span className="text-sm text-muted">{o.age} let</span>
-                            {isYouth && <span className="text-xs bg-pitch-100 text-pitch-700 px-2 py-0.5 rounded-full font-heading font-bold">Dorostenec</span>}
+                            {isYouth && <span className="text-xs bg-pitch-100 text-pitch-700 px-2 py-0.5 rounded-full font-heading font-bold">{fromAcademy ? "Žák z akademie" : "Dorostenec"}</span>}
                           </div>
                           <div className="text-xs text-muted mb-1">
                             {sourceIcon[o.source]} <span className="font-heading font-bold text-ink">{o.sourceName}</span>
@@ -2236,7 +2238,7 @@ export default function TransfersPage() {
                                 </span>
                               ));
                             })()}
-                            {isYouth && hiddenTalent !== undefined && (
+                            {isYouth && !fromAcademy && hiddenTalent !== undefined && (
                               <span className="text-xs text-amber-600 font-heading font-bold" title="Skrytý talent, talentovaný hráč roste na tréninku rychleji a má vyšší strop rozvoje">
                                 ✨ Talent {hiddenTalent >= 30 ? "vysoký" : hiddenTalent >= 18 ? "střední" : "nízký"}
                               </span>
@@ -2263,7 +2265,7 @@ export default function TransfersPage() {
                               } finally { setPlayerOfferLoading(null); }
                             }}
                             className="py-2 px-4 rounded-soft text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors disabled:opacity-50">
-                            {playerOfferLoading === o.id ? "..." : "Přijmout"}
+                            {playerOfferLoading === o.id ? "..." : fromAcademy ? "Vzít do dorostu" : "Přijmout"}
                           </button>
                           <button
                             disabled={playerOfferLoading === o.id}
@@ -2275,7 +2277,7 @@ export default function TransfersPage() {
                               setPlayerOfferLoading(null);
                             }}
                             className="py-1.5 px-3 rounded-soft text-sm font-heading font-bold bg-gray-100 text-muted hover:bg-gray-200 transition-colors disabled:opacity-50">
-                            Odmítnout
+                            {fromAcademy ? "Nechat u žáků" : "Odmítnout"}
                           </button>
                         </div>
                       </div>

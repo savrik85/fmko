@@ -83,11 +83,14 @@ describe("přetahování", () => {
   it("souběžné kliknutí na stejnou akci zájem nezdvojí", async () => {
     const kid = (await prospects("small"))[0];
     const before = await db.prepare("SELECT interest FROM youth_poach WHERE prospect_id = ? AND to_team_id = 'big'").bind(kid.id).first<{ interest: number }>();
-    const res = await Promise.all([1, 2, 3].map(() => poachAction(db, createRng(10), "big", kid.id, "promise", GAME_DATE)));
+    const res = await Promise.all([1, 2, 3].map(() => poachAction(db, createRng(10), "big", kid.id, "boots", GAME_DATE)));
     expect(res.filter((r) => r.ok).length).toBe(1);
     const after = await db.prepare("SELECT interest, actions FROM youth_poach WHERE prospect_id = ? AND to_team_id = 'big'").bind(kid.id).first<{ interest: number; actions: string }>();
-    expect(after!.interest).toBe(Math.min(100, before!.interest + 15));
-    expect(JSON.parse(after!.actions).filter((a: string) => a === "promise").length).toBe(1);
+    expect(after!.interest).toBe(Math.min(100, before!.interest + 25));
+    expect(JSON.parse(after!.actions).filter((a: string) => a === "boots").length).toBe(1);
+    // Kopačky se zaplatily jednou, ne třikrát
+    const paid = await db.prepare("SELECT COUNT(*) AS n FROM transactions WHERE team_id = 'big' AND description LIKE 'Příspěvek rodičům na kopačky%'").first<{ n: number }>();
+    expect(paid!.n).toBe(1);
   });
 
   it("propojené kluby (stejný majitel) si kluky přetahovat nemůžou", async () => {

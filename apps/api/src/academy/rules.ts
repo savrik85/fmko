@@ -95,6 +95,19 @@ export type CoachType = "volunteer" | "parent" | "staff";
 /** Dobrovolník z áčka musí být starší hráč. */
 export const VOLUNTEER_MIN_AGE = 28;
 
+/**
+ * Co který trenér žákům dá a co to stojí (aby volba byla volba, ne jen „vezmi nejlepšího“):
+ * - trenér mládeže: nejlepší příprava a odhad talentu, ale nemá čas na obojí, bonus
+ *   tréninku dorostu (U21) a mladých klesne na polovinu (`STAFF_SPLIT_U21_FACTOR`),
+ * - hráč áčka: žáci k němu vzhlíží, méně jich skončí a víc dětí přijde z okolí i na nábor,
+ *   ale on sám chodí méně na trénink áčka,
+ * - táta: průměrný, bez vedlejších účinků, zná rodiče, takže nábor přivede žáka navíc.
+ */
+export const STAFF_SPLIT_U21_FACTOR = 0.5;
+export const VOLUNTEER_QUIT_BONUS = -0.03;
+export const VOLUNTEER_ATTRACT = 1.2;
+export const PARENT_RECRUIT_EXTRA = 1;
+
 export interface QualityInput {
   coach: CoachType | null;
   /** Vůdcovství dobrovolníka z áčka 0–100. */

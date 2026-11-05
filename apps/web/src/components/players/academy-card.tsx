@@ -41,6 +41,7 @@ interface Prospect {
 
 interface AcademyData {
   founded: boolean;
+  canFound: boolean;
   village: string;
   expectedPerYear: number;
   weeklyCost: number;
@@ -53,7 +54,7 @@ interface AcademyData {
   hasU21: boolean;
   coach: { type: CoachType | null; name: string | null; quality: string; playerId: string | null; weeklyWage: number };
   coachOptions: {
-    volunteers: { playerId: string; name: string; age: number; leadership: string }[];
+    volunteers: { playerId: string; name: string; age: number; leadership: string; rating: number; role: string }[];
     parent: { name: string; prospectId: string; kid: string } | null;
     staff: { name: string } | null;
   } | null;
@@ -68,6 +69,7 @@ interface AcademyData {
   poach: {
     remaining: number;
     bootsCost: number;
+    promise: { u21: boolean; van: boolean };
     feeYounger: number;
     feeOlder: number;
     targets: {
@@ -150,7 +152,7 @@ function PotentialBar({ potential, scale }: { potential: NonNullable<Prospect["p
         {scale.map((s) => <span key={s.from} className="truncate">{SHORT_LABELS[s.label] ?? s.label}</span>)}
       </div>
       {lowLabel !== highLabel && (
-        <p className="text-xs text-muted">Trenér si zatím není jistý: od „{lowLabel}“ po „{highLabel}“.</p>
+        <p className="text-xs text-muted">Trenér si zatím není jistý, odhaduje {lowLabel} až {highLabel}.</p>
       )}
     </div>
   );
@@ -163,6 +165,7 @@ export function AcademyCard({ teamId }: { teamId: string }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [coachChoice, setCoachChoice] = useState<string>("");
   const [confirmClose, setConfirmClose] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const [tab, setTab] = useTabParam(TAB_KEYS);
 
   const load = useCallback(() => {
@@ -186,17 +189,34 @@ export function AcademyCard({ teamId }: { teamId: string }) {
       <button onClick={load} className="btn btn-secondary min-h-11 px-3">Zkusit znovu</button>
     </div>
   ) : null;
+  const noticeBanner = notice ? (
+    <div className="card p-3 text-sm border-l-4 border-pitch-500 bg-pitch-50 flex flex-wrap items-center justify-between gap-2" role="status">
+      <span>{notice}</span>
+      <button onClick={() => setNotice(null)} className="btn btn-secondary min-h-11 px-3">Zavřít</button>
+    </div>
+  ) : null;
 
-  const post = async (key: string, path: string, body: unknown, failMessage: string): Promise<boolean> => {
+  /**
+   * Akce na API. `success` je potvrzení, které se po úspěchu ukáže nahoře (text, nebo funkce
+   * z odpovědi API), ať hráč ví, co se stalo.
+   */
+  const post = async (
+    key: string, path: string, body: unknown, failMessage: string,
+    success?: string | ((res: Record<string, unknown>) => string),
+  ): Promise<boolean> => {
     if (busy) return false;
     setBusy(key);
-    const ok = await apiAction(
-      apiFetch(path, { method: "POST", body: body === undefined ? undefined : JSON.stringify(body), headers: { "Content-Type": "application/json" } }),
-      failMessage,
-    );
+    const request = apiFetch<Record<string, unknown>>(path, { method: "POST", body: body === undefined ? undefined : JSON.stringify(body), headers: { "Content-Type": "application/json" } });
+    const ok = await apiAction(request, failMessage);
     setBusy(null);
     setConfirmClose(false);
-    if (ok) load();
+    if (ok) {
+      if (success) {
+        const res = await request.catch((e) => { console.error("academy action result:", e); return {} as Record<string, unknown>; });
+        setNotice(typeof success === "function" ? success(res) : success);
+      }
+      load();
+    }
     return ok;
   };
 
@@ -205,21 +225,29 @@ export function AcademyCard({ teamId }: { teamId: string }) {
     return (
       <section className="card p-4 sm:p-5 space-y-3">
         {errorBanner}
+        {noticeBanner}
         <h2 className="font-heading font-bold text-base">Akademie</h2>
         <p className="text-sm text-muted">
-          Klub nemá akademii, tedy družstvo žáků. Když ho založíš, přijdou hned žáci od 11 do 14 let z obce {data.village}.
+          Klub nemá akademii, tedy družstvo žáků. Když ji založíš, přijdou hned žáci od 11 do 14 let z obce {data.village}.
           Každé léto postoupí čtrnáctiletí do dorostu a přijdou noví jedenáctiletí.
         </p>
         <p className="text-sm">
-          {data.village} dá <strong className="font-heading text-ink">{perYearText(data.expectedPerYear)}</strong>.
+          {data.village} dá <strong className="font-heading text-ink">{data.expectedPerYear < 0.8 ? "žáka jednou za dva roky" : `${classText(data.expectedPerYear)} za rok`}</strong>.
           {total < data.minSquad
             ? ` Na okresní soutěž je potřeba ${data.minSquad} žáků, tolik jich obec sama nedá. Žáci budou jen trénovat.`
             : ` Na okresní soutěž (${data.minSquad} žáků) to stačí.`}
         </p>
-        <p className="text-sm text-muted">Provoz stojí {kc(data.upkeepBase)} týdně a {kc(data.upkeepPerKid)} za každého žáka (dresy, startovné, míče, cesty na zápasy). Pak vybereš trenéra.</p>
-        <button onClick={() => post("found", `/api/teams/${teamId}/academy/found`, undefined, "Akademii se nepodařilo založit")} disabled={busy !== null} className="btn btn-primary btn-md w-full sm:w-auto disabled:opacity-40">
+        <p className="text-sm text-muted">
+          Akademie se platí každý týden podle počtu žáků. Kolik do ní dáváš, vybereš po založení: skromná od {kc(data.levels[0].base)} + {kc(data.levels[0].perKid)} za žáka, běžná {kc(data.levels[1].base)} + {kc(data.levels[1].perKid)}, ambiciózní {kc(data.levels[2].base)} + {kc(data.levels[2].perKid)}.
+          Když obec dá {boysText(Math.round(data.expectedPerYear * 4)).toLowerCase()}, vyjde běžná zhruba na {kc(data.levels[1].base + data.levels[1].perKid * Math.round(data.expectedPerYear * 4))} týdně. Pak vybereš trenéra.
+        </p>
+        {data.canFound ? (
+          <button onClick={() => post("found", `/api/teams/${teamId}/academy/found`, undefined, "Akademii se nepodařilo založit", (r) => `Akademie založena, přišlo ${boysText(Number(r.created ?? 0)).toLowerCase()}. Teď vyber trenéra.`)} disabled={busy !== null} className="btn btn-primary btn-md w-full sm:w-auto disabled:opacity-40">
           {busy === "found" ? "Zakládám…" : "Založit akademii"}
         </button>
+        ) : (
+          <p className="text-sm text-muted">Akademii jsi letos zrušil. Znovu ji založíš až příští sezónu.</p>
+        )}
       </section>
     );
   }
@@ -229,20 +257,24 @@ export function AcademyCard({ teamId }: { teamId: string }) {
   const saveCoach = () => {
     if (!coachChoice) return;
     const body = coachChoice.startsWith("volunteer:") ? { type: "volunteer", playerId: coachChoice.slice("volunteer:".length) } : { type: coachChoice };
-    post("coach", `/api/teams/${teamId}/academy/coach`, body, "Trenéra žáků se nepodařilo nastavit");
+    post("coach", `/api/teams/${teamId}/academy/coach`, body, "Trenéra žáků se nepodařilo nastavit", "Trenér uložen, od teď vede žáky.");
   };
   // Najmout trenéra mládeže z trhu a rovnou mu dát žáky
   const hireStaff = async (staffId: string) => {
     const ok = await post(`hire:${staffId}`, `/api/teams/${teamId}/staff/${staffId}/hire`, { role: "trener_mladeze" }, "Trenéra mládeže se nepodařilo najmout");
-    if (ok) await post("coach", `/api/teams/${teamId}/academy/coach`, { type: "staff" }, "Trenéra žáků se nepodařilo nastavit");
+    if (ok) await post("coach", `/api/teams/${teamId}/academy/coach`, { type: "staff" }, "Trenéra žáků se nepodařilo nastavit", "Trenér mládeže najat a vede žáky. Plat se strhává s ostatními zaměstnanci.");
   };
   const promising = data.prospects.filter((p) => p.promising);
 
   return (
     <div className="space-y-4">
       {errorBanner}
+      {noticeBanner}
       {!data.coach.type && (
-        <p className="card p-4 text-sm border-l-4 border-gold-500 bg-gold-50" role="alert">Žáci nemají trenéra, takže netrénují a víc jich skončí. Vyber trenéra níž.</p>
+        <div className="card p-4 text-sm border-l-4 border-gold-500 bg-gold-50 flex flex-wrap items-center justify-between gap-2" role="alert">
+          <span>Žáci nemají trenéra, takže netrénují a víc jich skončí.</span>
+          {tab !== "trener" && <button onClick={() => setTab("trener")} className="btn btn-secondary min-h-11 px-3">Vybrat trenéra</button>}
+        </div>
       )}
 
       <Tabs
@@ -254,7 +286,7 @@ export function AcademyCard({ teamId }: { teamId: string }) {
           { key: "zaci", label: "Žáci" },
           { key: "novi", label: "Noví žáci", count: data.poach?.incoming.length || null },
           { key: "trener", label: "Trenér" },
-          { key: "vybaveni", label: "Vybavení klubu" },
+          { key: "vybaveni", label: "Vybavení" },
         ]}
       />
       {tab === "prehled" && (
@@ -273,7 +305,7 @@ export function AcademyCard({ teamId }: { teamId: string }) {
             <div className="rounded-soft border border-gray-200 bg-white p-3">
               <dt className="text-xs text-muted">Trenér</dt>
               <dd className="font-heading font-bold text-ink">{data.coach.name ?? "Nikdo"}</dd>
-              <dd className="text-xs text-muted">{data.coach.type ? COACH_CS[data.coach.type] : "bez trenéra netrénují"}</dd>
+              <dd className="text-xs text-muted">{data.coach.type === "staff" ? "trenér mládeže, dorostu dává jen půlku času" : data.coach.type ? COACH_CS[data.coach.type] : "bez trenéra netrénují"}</dd>
             </div>
             <div className="rounded-soft border border-gray-200 bg-white p-3">
               <dt className="text-xs text-muted">Příprava</dt>
@@ -312,7 +344,7 @@ export function AcademyCard({ teamId }: { teamId: string }) {
             return (
               <li key={l.key} className="flex flex-col">
                 <button
-                  onClick={() => { if (!active) post(`level:${l.key}`, `/api/teams/${teamId}/academy/level`, { level: l.key }, "Úroveň akademie se nepodařilo změnit"); }}
+                  onClick={() => { if (!active) post(`level:${l.key}`, `/api/teams/${teamId}/academy/level`, { level: l.key }, "Úroveň akademie se nepodařilo změnit", `Akademie je teď ${l.label.toLowerCase()}, platí od příští týdenní uzávěrky.`); }}
                   disabled={busy !== null}
                   aria-pressed={active}
                   className={`w-full flex-1 text-left rounded-soft border p-3 min-h-11 transition-colors ${active ? "border-pitch-500 bg-pitch-50" : "border-gray-200 bg-white hover:border-pitch-500"}`}
@@ -333,7 +365,7 @@ export function AcademyCard({ teamId }: { teamId: string }) {
         </p>
           {confirmClose ? (
             <div className="flex flex-wrap gap-2">
-              <button onClick={() => post("close", `/api/teams/${teamId}/academy/close`, undefined, "Akademii se nepodařilo zrušit")} disabled={busy !== null} className="btn btn-secondary min-h-11 px-3 disabled:opacity-40">
+              <button onClick={() => post("close", `/api/teams/${teamId}/academy/close`, undefined, "Akademii se nepodařilo zrušit", "Akademie zrušena, žáci skončili. Znovu ji jde založit až příští sezónu.")} disabled={busy !== null} className="btn btn-secondary min-h-11 px-3 disabled:opacity-40">
                 Opravdu zrušit, žáci skončí
               </button>
               <button onClick={() => setConfirmClose(false)} className="btn btn-secondary min-h-11 px-3">Nechat</button>
@@ -348,6 +380,10 @@ export function AcademyCard({ teamId }: { teamId: string }) {
         <>
         <section className="space-y-3" aria-label="Žáci podle ročníků">
           <h2 className="font-heading font-bold text-base px-1">Žáci podle ročníků</h2>
+          <p className="text-sm text-muted px-1">
+            Žáka od 13 let můžeš dát do dorostu dřív: začne trénovat se staršími a hrát dorosteneckou ligu, ale přestane mu růst
+            strop, který mu akademie každý týden přidává. Čtrnáctiletí jdou do dorostu v létě sami.
+          </p>
           {data.prospects.length === 0 && <p className="card p-4 text-sm text-muted">Zatím tu nejsou žádní žáci. Noví přijdou v létě.</p>}
           {AGE_GROUPS.map((g) => {
             const kids = data.prospects.filter((p) => p.age === g.age);
@@ -389,7 +425,7 @@ export function AcademyCard({ teamId }: { teamId: string }) {
                       {p.offered && <p className="text-sm text-muted">Trenér ho doporučil do dorostu, nabídku najdeš v Přestupy → Nabídky.</p>}
                       {p.canPlayUp && (
                         <button
-                          onClick={() => post(p.id, `/api/teams/${teamId}/academy/prospects/${p.id}/promote`, undefined, "Žáka se nepodařilo dát do dorostu")}
+                          onClick={() => post(p.id, `/api/teams/${teamId}/academy/prospects/${p.id}/promote`, undefined, "Žáka se nepodařilo dát do dorostu", `${p.name} je teď v dorostu, najdeš ho v U21.`)}
                           disabled={busy !== null}
                           className="btn btn-secondary min-h-11 px-3 disabled:opacity-40"
                         >
@@ -425,14 +461,17 @@ export function AcademyCard({ teamId }: { teamId: string }) {
           <div className="rounded-soft border border-gray-200 bg-white p-3 space-y-2">
             <p className="text-sm"><strong className="font-heading text-ink">Náborový den ve škole</strong></p>
             <p className="text-sm text-muted">
-              Jednou za sezónu, stojí {kc(data.recruitDay.cost)}. Přijdou žáci 11–12 let, čekej {classText(data.recruitDay.expected)}. S lepším trenérem jich přijde víc.
+              Jednou za sezónu, stojí {kc(data.recruitDay.cost)}. Přijdou žáci 11–12 let, čekej {classText(data.recruitDay.expected)}. Víc dětí přivede hráč áčka (děti k němu vzhlíží) a táta (zná rodiče, přivede žáka navíc).
             </p>
             {data.recruitDay.used ? (
               <p className="text-sm text-muted">Letos už byl, další příští sezónu.</p>
             ) : !data.coach.type ? (
               <p className="text-sm text-muted">Nábor potřebuje trenéra žáků.</p>
             ) : (
-              <button onClick={() => post("recruit", `/api/teams/${teamId}/academy/recruit-day`, undefined, "Náborový den se nepodařil")} disabled={busy !== null} className="btn btn-primary min-h-11 px-3 disabled:opacity-40">
+              <button onClick={() => post("recruit", `/api/teams/${teamId}/academy/recruit-day`, undefined, "Náborový den se nepodařil", (r) => {
+                const names = Array.isArray(r.names) ? (r.names as string[]) : [];
+                return names.length ? `Náborový den se povedl, přišli: ${names.join(", ")}.` : "Na náborový den nikdo nepřišel. Další příští sezónu.";
+              })} disabled={busy !== null} className="btn btn-primary min-h-11 px-3 disabled:opacity-40">
                 {busy === "recruit" ? "Pořádám…" : "Uspořádat náborový den"}
               </button>
             )}
@@ -447,7 +486,7 @@ export function AcademyCard({ teamId }: { teamId: string }) {
                 <li key={y.poachId} className="rounded-soft border border-gray-200 bg-white p-3 space-y-2">
                   <p className="text-sm"><strong className="font-heading text-ink">{y.name}</strong> ({y.age}): láká ho {y.club}. Žák {y.interest}.</p>
                   {y.defended ? <p className="text-sm text-muted">S rodiči jsi už mluvil.</p> : (
-                    <button onClick={() => post(`defend:${y.poachId}`, `/api/teams/${teamId}/academy/poach-defense/${y.poachId}`, undefined, "Rozhovor s rodiči se nepovedl")} disabled={busy !== null} className="btn btn-secondary min-h-11 px-3 disabled:opacity-40">
+                    <button onClick={() => post(`defend:${y.poachId}`, `/api/teams/${teamId}/academy/poach-defense/${y.poachId}`, undefined, "Rozhovor s rodiči se nepovedl", (r) => `Mluvil jsi s rodiči. ${y.name}: ${String(r.interest ?? "")}.`)} disabled={busy !== null} className="btn btn-secondary min-h-11 px-3 disabled:opacity-40">
                       Promluvit s rodiči
                     </button>
                   )}
@@ -474,7 +513,7 @@ export function AcademyCard({ teamId }: { teamId: string }) {
                   const action = (a: string, label: string) => (
                     <button
                       key={a}
-                      onClick={() => post(`poach:${t.prospectId}:${a}`, `/api/teams/${teamId}/academy/poach/${t.prospectId}`, { action: a }, "Lákání se nepovedlo")}
+                      onClick={() => post(`poach:${t.prospectId}:${a}`, `/api/teams/${teamId}/academy/poach/${t.prospectId}`, { action: a }, "Lákání se nepovedlo", (r) => `${t.name}: ${String(r.interest ?? "")}.`)}
                       disabled={busy !== null || t.done.includes(a) || t.protected || !canStart}
                       className="btn btn-secondary min-h-11 px-3 text-sm disabled:opacity-40"
                     >
@@ -502,7 +541,7 @@ export function AcademyCard({ teamId }: { teamId: string }) {
                       {!t.protected && (
                         <div className="flex flex-wrap gap-2">
                           {action("invite", "Pozvat na trénink")}
-                          {action("promise", "Slíbit dorost a odvoz")}
+                          {(data.poach!.promise.u21 || data.poach!.promise.van) && action("promise", data.poach!.promise.u21 && data.poach!.promise.van ? "Slíbit dorost a odvoz" : data.poach!.promise.u21 ? "Slíbit dorost" : "Slíbit odvoz")}
                           {action("boots", "Dát na kopačky")}
                         </div>
                       )}
@@ -521,32 +560,45 @@ export function AcademyCard({ teamId }: { teamId: string }) {
         {options && (
           <section className="card p-4 sm:p-5 space-y-3">
             <h2 className="font-heading font-bold text-base">Trenér žáků</h2>
-            <p className="text-sm text-muted">Bez trenéra žáci nejsou. Nejlíp je posune placený trenér mládeže a nejpřesněji pozná, kdo má talent. Dobrovolník z áčka a táta jsou zadarmo.</p>
+            <p className="text-sm text-muted">Bez trenéra žáci netrénují. Každý trenér něco umí a něco stojí, vyber podle toho, co klub potřebuje víc.</p>
             <ul className="space-y-2">
               {options.staff && (
                 <li>
                   <label className="flex items-start gap-3 p-3 rounded-soft border border-gray-200 bg-white cursor-pointer min-h-11">
                     <input type="radio" name="coach" checked={coachChoice === "staff"} onChange={() => setCoachChoice("staff")} className="mt-1 h-5 w-5 accent-pitch-600" />
                     <span className="text-sm"><strong className="font-heading text-ink">{options.staff.name}</strong>, tvůj trenér mládeže{currentChoice === "staff" ? " (teď vede žáky)" : ""}
-                      <span className="block text-muted">Nejlepší příprava a nejpřesnější odhad talentu.</span></span>
+                      <span className="block text-muted"><strong className="text-pitch-600">+</strong> Žáci rostou nejrychleji a nejpřesněji pozná talent.</span>
+                      <span className="block text-muted"><strong className="text-red-700">−</strong> Nemá čas na obojí: dorost (U21) a mladí v áčku dostanou jen polovinu jeho bonusu k tréninku.</span></span>
                   </label>
                 </li>
               )}
-              {options.volunteers.map((v) => (
-                <li key={v.playerId}>
-                  <label className="flex items-start gap-3 p-3 rounded-soft border border-gray-200 bg-white cursor-pointer min-h-11">
-                    <input type="radio" name="coach" checked={coachChoice === `volunteer:${v.playerId}`} onChange={() => setCoachChoice(`volunteer:${v.playerId}`)} className="mt-1 h-5 w-5 accent-pitch-600" />
-                    <span className="text-sm"><strong className="font-heading text-ink">{v.name}</strong>, hráč áčka, {v.age} let, {v.leadership}{currentChoice === `volunteer:${v.playerId}` ? " (teď vede žáky)" : ""}
-                      <span className="block text-muted">Zadarmo, ale na trénink áčka bude chodit méně.</span></span>
-                  </label>
-                </li>
-              ))}
+              {options.volunteers.length > 0 && (
+              <li className="rounded-soft border border-gray-200 bg-white p-3 space-y-2">
+                <p className="text-sm"><strong className="font-heading text-ink">Hráč áčka</strong> (od 28 let)</p>
+                <p className="text-sm text-muted"><strong className="text-pitch-600">+</strong> Žáci k němu vzhlíží: méně jich skončí a na nábor i z okolí přijde víc dětí. Zadarmo.</p>
+                <p className="text-sm text-muted"><strong className="text-red-700">−</strong> Sám chodí méně na trénink áčka. Když vezmeš oporu, áčko to pozná.</p>
+                <ul className="space-y-1">
+                  {options.volunteers.map((v) => (
+                    <li key={v.playerId}>
+                      <label className="flex items-center gap-3 rounded-soft px-2 py-1.5 cursor-pointer min-h-11 hover:bg-surface-2">
+                        <input type="radio" name="coach" checked={coachChoice === `volunteer:${v.playerId}`} onChange={() => setCoachChoice(`volunteer:${v.playerId}`)} className="h-5 w-5 accent-pitch-600" />
+                        <span className="text-sm">
+                          <strong className="font-heading text-ink">{v.name}</strong>, {v.age} let, hodnocení {v.rating}, {v.role}, {v.leadership}
+                          {currentChoice === `volunteer:${v.playerId}` ? " (teď vede žáky)" : ""}
+                        </span>
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              </li>
+            )}
               {options.parent && (
                 <li>
                   <label className="flex items-start gap-3 p-3 rounded-soft border border-gray-200 bg-white cursor-pointer min-h-11">
                     <input type="radio" name="coach" checked={coachChoice === "parent"} onChange={() => setCoachChoice("parent")} className="mt-1 h-5 w-5 accent-pitch-600" />
                     <span className="text-sm"><strong className="font-heading text-ink">{options.parent.name}</strong>, táta jednoho ze žáků ({options.parent.kid}){currentChoice === "parent" ? " (teď vede žáky)" : ""}
-                      <span className="block text-muted">Zadarmo a průměrný. Až jeho žák u žáků skončí, skončí i on.</span></span>
+                      <span className="block text-muted"><strong className="text-pitch-600">+</strong> Zadarmo a bez vedlejších účinků. Zná rodiče, náborový den přivede žáka navíc.</span>
+                      <span className="block text-muted"><strong className="text-red-700">−</strong> Průměrná příprava. Až jeho syn u žáků skončí, skončí i on.</span></span>
                   </label>
                 </li>
               )}
@@ -558,7 +610,7 @@ export function AcademyCard({ teamId }: { teamId: string }) {
             {data.staffMarket.length > 0 && (
               <div className="pt-2 space-y-2">
                 <h3 className="font-heading font-bold text-sm">Najmout placeného trenéra mládeže</h3>
-                <p className="text-sm text-muted">Volní trenéři z okresu. Po najmutí rovnou povede žáky a bude pomáhat i dorostu (U21).</p>
+                <p className="text-sm text-muted">Volní trenéři z okresu. Po najmutí rovnou povede žáky. Když vede žáky, na dorost (U21) a mladé v áčku mu zbyde jen polovina času.</p>
                 <ul className="space-y-2">
                   {data.staffMarket.map((m) => (
                     <li key={m.id} className="rounded-soft border border-gray-200 bg-white p-3 space-y-2">

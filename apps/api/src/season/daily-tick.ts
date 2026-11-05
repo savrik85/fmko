@@ -501,7 +501,9 @@ export async function executeDailyTick(
         }
         equipMul *= staffFx.trainingMultiplier;
         equipAttendanceBonus += staffFx.trainingAttendanceBonus;
-        equipYouthMod += staffFx.youthTrainingMod;
+        // Trenér mládeže, který vede i žáky akademie, má na dorost a mladé jen polovinu času
+        const { staffSplitFactor } = await import("../academy/service");
+        equipYouthMod += staffFx.youthTrainingMod * (await staffSplitFactor(env.DB, clubId));
 
         const rng = createRng(teamSeed(teamId, now.getTime(), "training"));
         // Vzdálenost dojíždění po indexech kádru. Dřív se místo ní předávalo undefined,

@@ -131,7 +131,9 @@ export async function loadYouthMod(db: D1Database, teamId: string): Promise<numb
     .catch((e) => { logger.warn({ module: "match-growth", teamId: clubId }, "load staff", e); return { results: [] as never[] }; });
   if (staff.results.length > 0) {
     const { calculateStaffEffects } = await import("../staff/staff-effects");
-    mod += calculateStaffEffects(staff.results).youthTrainingMod;
+    // Trenér mládeže, který vede i žáky akademie, má na dorost a mladé jen polovinu času
+    const { staffSplitFactor } = await import("../academy/service");
+    mod += calculateStaffEffects(staff.results).youthTrainingMod * (await staffSplitFactor(db, clubId));
   }
 
   const equip = await db.prepare("SELECT * FROM equipment WHERE team_id = ?")
