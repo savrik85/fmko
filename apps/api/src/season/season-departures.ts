@@ -11,6 +11,7 @@
  * AI trenér rozhodovat neuměl. Byla to jiná pravidla než pro člověka (spec AI klubů 3.2, 3.4).
  */
 
+import { alcoholAgingSql } from "../generators/alcohol-age";
 import { createRng } from "../generators/rng";
 import { maintainFreeAgentPool } from "../transfers/free-agent-pool";
 import { developSquadAndManager, type DevResult } from "./season-development";
@@ -164,6 +165,11 @@ async function buildDuels(db: D1Database, teamId: string, rng: ReturnType<typeof
 async function bumpAges(db: D1Database, teamId: string): Promise<number> {
   const res = await db.prepare("UPDATE players SET age = age + 1 WHERE team_id = ? AND status = 'active'")
     .bind(teamId).run().catch((e) => { logger.warn({ module: "season-departures" }, "bump ages", e); return null; });
+  // S věkem se projeví víc z vrozené chuti na alkohol (generators/alcohol-age.ts)
+  if (res) {
+    await db.prepare(alcoholAgingSql("team_id = ? AND status = 'active'")).bind(teamId).run()
+      .catch((e) => logger.warn({ module: "season-departures", teamId }, "alcohol with age", e));
+  }
 
   // Mladí přes léto povyrostou — sami od sebe, ne jen tréninkem. Musí to být AŽ po
   // zestárnutí, protože přírůstek se váže na nový věk.

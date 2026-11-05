@@ -7,6 +7,7 @@
  * (source `youth`, `prospect_id`) a `acceptPlayerOffer`, takže hráč vzniká na jediném místě.
  */
 
+import { alcoholAfterAging } from "../generators/alcohol-age";
 import { createRng, cryptoSeed, type Rng } from "../generators/rng";
 import { generatePlayer, type VillageInfo } from "../generators/player";
 import { createPlayer, levelFromVillageSize, categoryFromVillageSize } from "../generators/create-player";
@@ -217,13 +218,16 @@ async function districtData(db: D1Database, district: string) {
   return data;
 }
 
+/** Identita se generuje jako pro šestnáctiletého (povolání, vzhled). */
+const IDENTITY_AGE = 16;
+
 /** Identita kluka: pevná pro jeho semínko, generuje se jako pro šestnáctiletého (povolání, vzhled). */
 async function prospectIdentity(db: D1Database, seed: number, club: ClubRow, position: string) {
   const info: VillageInfo = { region_code: club.district, category: categoryFromVillageSize(club.size), population: club.population ?? 500, district: club.district };
   const districtData_ = await districtData(db, club.district);
   return generatePlayer(
     createRng(seed), info, position as "GK" | "DEF" | "MID" | "FWD",
-    { surnames: districtData_.surnames, female_forms: {} }, { male: FIRSTNAMES, female: {} }, { age: 16 },
+    { surnames: districtData_.surnames, female_forms: {} }, { male: FIRSTNAMES, female: {} }, { age: IDENTITY_AGE },
   );
 }
 
@@ -487,7 +491,12 @@ async function buildGraduate(db: D1Database, p: ProspectRow, club: ClubRow) {
     academy: { current: Math.round(p.progress_current), cap: Math.round(p.progress_cap) + p.gem_cap, talent: [0, 0], gemChance: 0 },
     hiddenTalent: p.hidden_talent,
   });
-  const personality = { ...created.personality, patriotism: Math.min(100, created.personality.patriotism + rng.int(10, 20)) };
+  // Identita vzniká jako pro šestnáctiletého: alkohol přepočítat na skutečný věk žáka
+  const personality = {
+    ...created.personality,
+    patriotism: Math.min(100, created.personality.patriotism + rng.int(10, 20)),
+    alcohol: alcoholAfterAging(created.personality.alcohol, IDENTITY_AGE, p.age),
+  };
   const weeklyWage = Math.round((10 + (created.rating / 100) * 400) * GRADUATE_WAGE_FACTOR);
   return { created, personality, weeklyWage };
 }
