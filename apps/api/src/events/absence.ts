@@ -10,6 +10,7 @@
  * - occupation.overtimeRisk → profesní
  */
 
+import { isYouthAge, pickYouthExcuse } from "./youth-excuses";
 import type { Rng } from "../generators/rng";
 import { getOccupationByName, occupationMatchAbsence, pickProfessionalExcuse, type Occupation } from "../generators/occupations";
 import type { Weather } from "../engine/types";
@@ -711,6 +712,9 @@ function pickFresh<T extends { text: string }>(rng: Rng, pool: readonly T[], use
 /** Nad tímhle stropem by dodávka s řidiči absence z dojíždění vypnuly úplně. */
 const COMMUTE_MOD_CAP = 0.55;
 
+/** Jak velký díl osobních omluvenek mladých je „mladých“ (zbytek: rodina, doktor). */
+const YOUTH_EXCUSE_SHARE = 0.65;
+
 export function generateAbsences(
   rng: Rng,
   squad: PlayerForAbsence[],
@@ -804,7 +808,7 @@ export function generateAbsences(
       professional: 0.25 + (occupation?.overtimeRisk ?? 0.2) * 0.3,
 
       // Osobní: vyšší když nízká morálka nebo nízký patriotismus
-      personal: 0.30 + (100 - p.morale) / 100 * 0.15,
+      personal: 0.30 + (100 - p.morale) / 100 * 0.15 + (isYouthAge(p.age) ? 0.15 : 0),
 
       // Absurdní: vyšší když nízká disciplína + vyšší alkohol (nespolehlivý typy)
       absurd: 0.08 + (100 - p.discipline) / 100 * 0.08 + p.alcohol / 100 * 0.05,
@@ -814,7 +818,8 @@ export function generateAbsences(
         + (100 - p.stamina) / 100 * 0.06 + p.injuryProneness / 100 * 0.05,
 
       // Kocovina: závisí hlavně na alcohol atributu
-      hangover: p.alcohol > 60 ? 0.15 : p.alcohol > 40 ? 0.08 : 0.02,
+      // (patnáctiletý se z kocoviny neomlouvá)
+      hangover: p.age < 16 ? 0 : p.alcohol > 60 ? 0.15 : p.alcohol > 40 ? 0.08 : 0.02,
 
       // Doprava: vyšší pro dojíždějící hráče (klubová dodávka tlumí)
       commute: ((p.commuteKm ?? 0) > 5 ? 0.10 + (p.commuteKm ?? 0) * 0.005 : 0) * (1 - commuteMod),
@@ -847,6 +852,15 @@ export function generateAbsences(
         break;
       }
       case "personal": {
+        // Mladí: taneční, prodloužená, diskotéka ve městě okresu, škola (events/youth-excuses.ts)
+        const youth = isYouthAge(p.age) && rng.random() < YOUTH_EXCUSE_SHARE
+          ? pickYouthExcuse(rng, p.age, timing, district, usedTexts) : null;
+        if (youth) {
+          smsText = youth.text;
+          emoji = youth.emoji;
+          excuseTiming = youth.timing;
+          break;
+        }
         const applicable = PERSONAL_EXCUSES.filter((e) => p.age >= e.minAge && (timing === "any" || e.timing === timing));
         const fallback = PERSONAL_EXCUSES.filter((e) => p.age >= e.minAge);
         const pick = pickFresh(rng, applicable.length > 0 ? applicable : fallback.length > 0 ? fallback : PERSONAL_EXCUSES, usedTexts);
