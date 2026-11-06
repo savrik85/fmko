@@ -63,7 +63,7 @@ interface AcademyData {
   potentialScale: { from: number; label: string }[];
   nextSummer: number;
   prospects: Prospect[];
-  recruitDay: { available: boolean; used: boolean; cost: number; expected: number; byCoach: CoachCompare };
+  recruitDay: { available: boolean; used: boolean; repeatable: boolean; nextOn: string | null; cost: number; expected: number; byCoach: CoachCompare };
   openDay: { available: boolean; used: boolean; cost: number; expected: number; byCoach: CoachCompare };
   neighbors: { name: string; km: number; expected: number }[];
   neighborPerYear: number;
@@ -508,18 +508,25 @@ export function AcademyCard({ teamId }: { teamId: string }) {
           <div className="rounded-soft border border-gray-200 bg-white p-3 space-y-2">
             <p className="text-sm"><strong className="font-heading text-ink">Náborový den ve škole</strong></p>
             <p className="text-sm text-muted">
-              Jednou za sezónu, stojí {kc(data.recruitDay.cost)}. Přijdou žáci 11–12 let, čekej {classText(data.recruitDay.expected)}. Víc dětí přivede hráč áčka (děti k němu vzhlíží) a táta (zná rodiče, přivede žáka navíc).
+              {data.recruitDay.repeatable
+                ? `Dokud nemáš ${data.minSquad} žáků na soutěž, jde nábor opakovat jednou za týden. Pak jednou za sezónu.`
+                : "Jednou za sezónu."} Stojí {kc(data.recruitDay.cost)}. Přijdou žáci 11–12 let, čekej {classText(data.recruitDay.expected)}. Víc dětí přivede hráč áčka (děti k němu vzhlíží) a táta (zná rodiče, přivede žáka navíc).
             </p>
             <CoachCompareLine compare={data.recruitDay.byCoach} current={data.coach.type} />
             {resultBox("recruit")}
             {data.recruitDay.used ? (
-              <p className="text-sm text-muted">Letos už byl, další příští sezónu.</p>
+              <p className="text-sm text-muted">
+                {data.recruitDay.repeatable && data.recruitDay.nextOn
+                  ? `Další nábor jde od ${new Date(`${data.recruitDay.nextOn}T12:00:00Z`).toLocaleDateString("cs", { day: "numeric", month: "numeric" })}`
+                  : "Letos už byl, další příští sezónu."} Kdo přišel, ti trenér napsal v SMS, nové žáky najdeš v záložce Žáci.
+              </p>
             ) : !data.coach.type ? (
               <p className="text-sm text-muted">Nábor potřebuje trenéra žáků.</p>
             ) : (
               <button onClick={() => post("recruit", `/api/teams/${teamId}/academy/recruit-day`, undefined, "Náborový den se nepodařil", (r) => {
                 const names = Array.isArray(r.names) ? (r.names as string[]) : [];
-                return names.length ? `Náborový den se povedl, přišli: ${names.join(", ")}.` : "Na náborový den nikdo nepřišel. Další příští sezónu.";
+                const again = data.recruitDay.repeatable ? "Zkusit to jde znovu za týden." : "Další příští sezónu.";
+                return names.length ? `Náborový den se povedl, přišli: ${names.join(", ")}.` : `Na náborový den nikdo nepřišel. ${again}`;
               })} disabled={busy !== null} className="btn btn-primary min-h-11 px-3 disabled:opacity-40">
                 {busy === "recruit" ? "Pořádám…" : "Uspořádat náborový den"}
               </button>

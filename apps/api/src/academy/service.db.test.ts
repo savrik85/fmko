@@ -10,7 +10,7 @@ import { acceptPlayerOffer } from "../services/player-offer-actions";
 import { promotePlayerFromU21 } from "../services/u21-moves";
 import {
   foundYouthTeam, closeYouthTeam, setYouthCoach, loadCoachOptions, weeklyAcademy, recommendPlayUp, promoteProspect,
-  seasonEndAcademy, dailyAcademy, loadAcademyView, seedFromLegacy, volunteerCoachId, type ProspectRow,
+  seasonEndAcademy, dailyAcademy, loadAcademyView, seedFromLegacy, volunteerCoachId, recruitDay, type ProspectRow,
 } from "./service";
 
 let mf: Miniflare;
@@ -261,5 +261,33 @@ describe("družstvo žáků", () => {
     expect(view!.founded).toBe(true);
     expect(queries).toBeLessThanOrEqual(30);
     expect(ms).toBeLessThan(15 * DELAY);
+  });
+
+  it("pod 9 žáky jde nábor opakovat jednou za týden, od 9 jednou za sezónu", async () => {
+    // Osada z předchozího testu: 6 žáků, táta jako trenér
+    await db.prepare("UPDATE teams SET budget = 100000 WHERE id = 'hamlet'").run();
+    const at = (d: number) => new Date(Date.parse(GAME_DATE) + d * 86_400_000).toISOString();
+    expect((await recruitDay(db, createRng(31), "hamlet", at(0))).ok).toBe(true);
+    const again = await recruitDay(db, createRng(32), "hamlet", at(3));
+    expect(again.ok).toBe(false);
+    if (!again.ok) expect(again.error).toContain("7 dnech");
+    const view = await loadAcademyView(db, "hamlet");
+    expect(view!.recruitDay.repeatable).toBe((await prospects("hamlet")).length < 9);
+    if (view!.recruitDay.repeatable) expect(view!.recruitDay.nextOn).not.toBeNull();
+    // Po týdnu znovu (dokud je pod 9)
+    if ((await prospects("hamlet")).length < 9) expect((await recruitDay(db, createRng(33), "hamlet", at(7))).ok).toBe(true);
+    // Doplnit na 9 a víc: platí jednou za sezónu, a ta už je spotřebovaná
+    const missing = 9 - (await prospects("hamlet")).length;
+    for (let i = 0; i < missing; i++) {
+      await db.prepare(
+        `INSERT INTO youth_prospects (id, team_id, first_name, last_name, age, position, home_village_id, identity_seed, hidden_talent, gem_cap,
+           progress_current, progress_cap, estimate_offset, traits, commitment, status, joined_at)
+         SELECT ?, 'hamlet', 'Test', 'Žák', 12, 'MID', village_id, ?, 20, 0, 0, 0, 0, '[]', 70, 'active', ? FROM teams WHERE id = 'hamlet'`,
+      ).bind(`fill-${i}`, 1000 + i, GAME_DATE).run();
+    }
+    expect((await loadAcademyView(db, "hamlet"))!.recruitDay.repeatable).toBe(false);
+    const season = await recruitDay(db, createRng(34), "hamlet", at(20));
+    expect(season.ok).toBe(false);
+    if (!season.ok) expect(season.error).toContain("letos");
   });
 });
