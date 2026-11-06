@@ -29,7 +29,7 @@ import { isFromAbroad } from "./foreign";
 import { OPPONENT_ANALYSIS_BONUS_DAYS, OPPONENT_ANALYSIS_MORALE_BONUS, OPPONENT_ANALYSIS_TECHNIQUE_BONUS } from "./opponent-analysis";
 import { GAME_PLAYER_ID_SQL, gamePlayerIdOf, type ScoutReportPlayerData } from "./game-player-report";
 import { activeSeasonNumber, loadOutsideSquad, outsideClubValuation, type OutsideSquad } from "./outside-clubs";
-import { emptyWeekSms, finishedSms, reportCons, reportPros, reportSms, revisitSms, type ReportSubject } from "./report-text";
+import { emptyWeekSms, finishedSms, reachPhrase, reportCons, reportPros, reportSms, revisitSms, type ReportSubject } from "./report-text";
 
 /** Hlášení platí deset dní (odhad, spec). */
 export const SCOUT_REPORT_TTL_DAYS = 10;
@@ -41,7 +41,11 @@ export const SCOUT_MISSION_COST = 500;
 export const SCOUT_MISSION_DAYS = 2;
 /** Denní šance, že hráče z hlášení sebere jiný klub (odhad, spec). */
 export const SCOUT_SNAP_UP_DAILY_CHANCE = 0.03;
-/** Názor na potenciál dává skaut jen u mladých; u dospělých by model růstu sliboval nesmysly. */
+/**
+ * Do tohoto věku hledá skaut v okrese i „nadějné“ (dnes na sestavu nemají, dorostou).
+ * Odhad, kam to hráč dotáhne, dává při sledování konkrétního hráče u každého věku:
+ * hráči rostou i po 21 (tempo podle věku), u starších jen o pár bodů.
+ */
 const POTENTIAL_MAX_AGE = 21;
 /** Za kolik sezón musí nadějný mladík dorůst na sestavu, aby ho skaut nahlásil. */
 const PROMISING_SEASONS = 2;
@@ -517,15 +521,14 @@ async function evaluatePlayerMission(
 
   const eff = scoutEffectiveness(scout);
   const rr = ratingRange(player.overall_rating, eff, 2, a.id);
-  const pr = player.age <= POTENTIAL_MAX_AGE
-    ? potentialRange({
-        age: player.age,
-        rating: player.overall_rating,
-        position: player.position,
-        talent: player.hidden_talent ?? 0,
-        skillsMax: player.skills_max ? JSON.parse(player.skills_max) : {},
-      }, eff, 2, a.id)
-    : null;
+  // Sledování konkrétního hráče: odhad, kam to dotáhne, u každého věku (prod 2026-11-06: hráč chtěl i u 22letého)
+  const pr = potentialRange({
+    age: player.age,
+    rating: player.overall_rating,
+    position: player.position,
+    talent: player.hidden_talent ?? 0,
+    skillsMax: player.skills_max ? JSON.parse(player.skills_max) : {},
+  }, eff, 2, a.id);
 
   let pers: Record<string, number> = {};
   try { pers = player.personality ? JSON.parse(player.personality) : {}; } catch (e) { logger.warn({ module: "scouting" }, "neplatná povaha hráče v hlášení", e); }
@@ -580,7 +583,7 @@ async function evaluatePlayerMission(
   const club = player.club_name ? `, ${player.club_name}` : "";
   await sendScoutSms(db, a.team_id, sender,
     `🔍 Byl jsem se podívat na hráče ${player.first_name} ${player.last_name} (${postLabel(player.position)}${club}). `
-      + `Hodnocení odhaduju na ${rr.lo} až ${rr.hi}. Hlášení máš na stole, nabídku mu pošleš z jeho profilu.`,
+      + `Hodnocení odhaduju na ${rr.lo} až ${rr.hi}. ${pr ? `${reachPhrase(player.age, rr.hi, pr.lo, pr.hi)} ` : ""}Hlášení máš na stole, nabídku mu pošleš z jeho profilu.`,
     reportId,
   );
   return `Cestovné skauta: sledování hráče ${player.first_name} ${player.last_name}`;
@@ -729,11 +732,10 @@ async function revisit(db: D1Database, a: AssignmentRow, eff: number, sender: st
   }
   const visits = r.visits + 1;
   const rr = ratingRange(player.overallRating, eff, visits, seedKey);
-  const pr = r.age <= POTENTIAL_MAX_AGE
-    ? potentialRange({
-      age: r.age, rating: player.overallRating, position: r.position, talent: player.hiddenTalent ?? 0, skillsMax: player.skillCaps ?? {},
-    }, eff, visits, seedKey)
-    : null;
+  // Odhad, kam to dotáhne, u každého věku (jako při prvním sledování)
+  const pr = potentialRange({
+    age: r.age, rating: player.overallRating, position: r.position, talent: player.hiddenTalent ?? 0, skillsMax: player.skillCaps ?? {},
+  }, eff, visits, seedKey);
   const extended = new Date(Math.max(new Date(r.expires_at).getTime(), Date.now() + REVISIT_EXTEND_DAYS * 86_400_000)).toISOString();
   // Další návštěva zpřesní i odhad ceny. Hráč ve hře cenu klubu mimo hru nemá (game-player-report.ts).
   const askHint = r.source === "village_club" && !gamePlayerIdOf(player)
@@ -744,7 +746,7 @@ async function revisit(db: D1Database, a: AssignmentRow, eff: number, sender: st
   ).bind(visits, rr.lo, rr.hi, pr?.lo ?? null, pr?.hi ?? null, extended, askHint, r.id).run();
   await sendScoutSms(db, a.team_id, sender, revisitSms({
     name: `${player.firstName} ${player.lastName}`, ratingLo: rr.lo, ratingHi: rr.hi,
-    potentialLo: pr?.lo ?? null, potentialHi: pr?.hi ?? null, youth: isYouthScoutTask(r.age),
+    age: r.age, potentialLo: pr?.lo ?? null, potentialHi: pr?.hi ?? null, youth: isYouthScoutTask(r.age),
   }), r.id);
   return true;
 }

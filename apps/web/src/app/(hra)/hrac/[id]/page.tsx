@@ -2085,7 +2085,7 @@ function ScoutPlayerDialog({
             <div className="font-heading font-bold text-ink">Co skaut zjistí:</div>
             <ul className="list-disc list-inside space-y-0.5">
               <li>Odhad hodnocení, přesnější než z jednoho zápasu</li>
-              <li>U hráče do 21 let i strop, kam to může dotáhnout</li>
+              <li>Kam to může dotáhnout (mladý poroste, starší už jen o pár bodů)</li>
               <li>Povahové rysy (alkohol, nervy, přístup)</li>
             </ul>
             <div className="text-pitch-700 font-heading font-bold pt-1">

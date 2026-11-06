@@ -5,6 +5,7 @@
  * hráče a co se s ním dá dělat (jednat s klubem, podepsat volného hráče, podívat se znovu).
  */
 
+import { scoutReach } from "@/lib/scout-reach";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -174,9 +175,10 @@ export function ScoutReportSheet({ teamId, reportId, onClose, onChanged }: {
               </div>
               {r.potentialLo != null ? (
                 <div className="rounded-xl bg-white/70 border border-gray-100 p-3 text-center">
-                  <div className="text-sm text-muted font-heading">Dotáhne to na</div>
-                  <div className="font-heading font-[900] text-2xl tabular-nums">{ratingText(r.potentialLo, r.potentialHi)}</div>
-                  <div className="text-sm text-muted">názor skauta</div>
+                  {/* Hráči rostou i po 21, jen pomaleji: mladý rozpětí, dospělý kolik ještě přidá */}
+                  <div className="text-sm text-muted font-heading">{r.age <= 24 ? "Dotáhne to na" : "Výhled"}</div>
+                  <div className="font-heading font-[900] text-2xl tabular-nums">{scoutReach(r.age, r.ratingHi, r.potentialLo, r.potentialHi).value}</div>
+                  <div className="text-sm text-muted">{scoutReach(r.age, r.ratingHi, r.potentialLo, r.potentialHi).label}</div>
                 </div>
               ) : (
                 <div className="rounded-xl bg-white/70 border border-gray-100 p-3 text-center">

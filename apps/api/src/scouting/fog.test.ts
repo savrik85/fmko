@@ -56,6 +56,20 @@ describe("názor na potenciál", () => {
     }
   });
 
+  it("strop i po 21: dvaadvacetiletý ještě poroste, třicátník jen málo (hráči rostou i po 21)", () => {
+    const young = potentialRange({ age: 22, rating: 35, position: "MID", talent: 30, skillsMax }, 20, 3, "y22");
+    const old = potentialRange({ age: 33, rating: 35, position: "MID", talent: 30, skillsMax }, 20, 3, "y33");
+    expect(young).not.toBeNull();
+    expect(old).not.toBeNull();
+    expect(young!.hi).toBeGreaterThan(35);
+    expect(young!.hi - 35).toBeGreaterThan(old!.hi - 35);
+  });
+
+  it("u 36letého počítá jen do konce kariéry (37), ne osm sezón dopředu", () => {
+    const r = potentialRange({ age: 36, rating: 40, position: "MID", talent: 30, skillsMax }, 20, 3, "y36");
+    expect(r!.hi).toBeLessThanOrEqual(43);
+  });
+
   it("bez stropů dovedností nic neříká", () => {
     expect(potentialRange({ age: 18, rating: 35, position: "MID", talent: 30, skillsMax: {} }, 10, 1, "z")).toBeNull();
   });
