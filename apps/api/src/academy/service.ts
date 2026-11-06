@@ -842,6 +842,29 @@ export async function loadAcademyView(db: D1Database, teamId: string) {
     club.academy_upkeep ? poachView(db, club, coach, seasonNumber, { equipment, hasU21: u21 }) : Promise.resolve(null),
   ]);
   const openDayInfo = club.academy_upkeep && coach.type ? await openDayExpectedFor(db, club, coach, neighborList) : null;
+  // Kolik dětí přivede nábor a den otevřených dveří s každým trenérem, kterého klub může mít:
+  // stejný výpočet jako při losu, ať jde porovnat „hráč áčka přivede víc“ a „táta žáka navíc“
+  const byCoach = async (type: CoachType): Promise<{ recruit: number; open: number } | null> => {
+    if (!options) return null;
+    if (type === "staff" && !options.staff) return null;
+    if (type === "volunteer" && !options.volunteers[0]) return null;
+    if (type === "parent" && !options.parent) return null;
+    const pseudo: ClubRow = {
+      ...club,
+      academy_coach_type: type,
+      academy_coach_player_id: type === "volunteer" ? options.volunteers[0].playerId : null,
+      academy_coach_name: type === "parent" ? options.parent!.name : null,
+    };
+    const st = await coachState(db, pseudo, prospects.length, equipment);
+    const open = await openDayExpectedFor(db, pseudo, st, neighborList);
+    return { recruit: Math.round(recruitDayExpectedFor(pseudo, st) * 10) / 10, open: Math.round(open.expected * 10) / 10 };
+  };
+  const [altStaff, altVolunteer, altParent] = club.academy_upkeep
+    ? await Promise.all([byCoach("staff"), byCoach("volunteer"), byCoach("parent")])
+    : [null, null, null];
+  const compare = (pick: "recruit" | "open") => ({
+    staff: altStaff?.[pick] ?? null, volunteer: altVolunteer?.[pick] ?? null, parent: altParent?.[pick] ?? null,
+  });
   // Profily žáků jsou výpočet (příjmení okresu má mezipaměť), dotaz jde nejvýš jeden
   const profiles = new Map<string, { strengths: string[]; weakness: string | null; avatar: Record<string, unknown> | null }>();
   await Promise.all(prospects.map(async (p) => { profiles.set(p.id, await prospectProfile(db, p, club)); }));
@@ -866,12 +889,15 @@ export async function loadAcademyView(db: D1Database, teamId: string) {
       used: recruitDayUsed,
       cost: RECRUIT_DAY_COST,
       expected: Math.round(recruitDayExpectedFor(club, coach) * 10) / 10,
+      /** Kolik dětí v průměru s jednotlivými trenéry (null = takového trenéra klub nemá). */
+      byCoach: compare("recruit"),
     },
     openDay: {
       available: !!club.academy_upkeep && !!coach.type && !openDayUsed,
       used: openDayUsed,
       cost: OPEN_DAY_COST,
       expected: Math.round((openDayInfo?.expected ?? 0) * 10) / 10,
+      byCoach: compare("open"),
     },
     neighborMax: NEIGHBOR_MAX_PER_YEAR,
     neighbors: neighborList.map((v) => ({ name: v.name, km: v.km, expected: Math.round(v.expected * 10) / 10 })),
