@@ -7,6 +7,8 @@
  *   - automaticky při založení nové ligy (po generateSeasonCalendar)
  */
 
+import { generateResidence } from "../generators/residence";
+import { fillMissingResidences } from "../players/residence-fill";
 import type { Rng } from "../generators/rng";
 import { FIRSTNAMES } from "../data/czech-names";
 import type { VillageInfo } from "../generators/player";
@@ -194,9 +196,11 @@ export async function vygenerujDorostence(
     });
 
     const playerId = crypto.randomUUID();
+    // Dojíždění stejným pravidlem jako u ostatních hráčů; obec bydliště doplní fillMissingResidences
+    const commuteKm = generateResidence(rng, "", villageSize, village.district ?? "").commuteKm;
     playerStmts.push(
       db.prepare(
-        "INSERT INTO players (id, team_id, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, description, skills_max, hidden_talent, experience, weekly_wage, nationality) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        "INSERT INTO players (id, team_id, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, description, skills_max, hidden_talent, experience, weekly_wage, nationality, commute_km) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
       ).bind(
         playerId, teamId, base.firstName, base.lastName, "", age, position, rating,
         JSON.stringify(skills), JSON.stringify(physical), JSON.stringify(personality),
@@ -207,6 +211,7 @@ export async function vygenerujDorostence(
         created.experience,
         Math.round(5 + rating * 2), // U21 nižší mzdy
         created.nationality,
+        commuteKm,
       )
     );
 
@@ -227,6 +232,9 @@ export async function vygenerujDorostence(
   } catch (e) {
     logger.error({ module: "u21-generator" }, `batch insert contracts for U21 team ${teamId}`, e);
   }
+  // Každý hráč musí mít bydliště: skutečná obec okresu podle dojíždění
+  await fillMissingResidences(db, { teamIds: [teamId] })
+    .catch((e) => logger.error({ module: "u21-generator" }, `bydliště dorostu týmu ${teamId}`, e));
 
   return positions.length;
 }

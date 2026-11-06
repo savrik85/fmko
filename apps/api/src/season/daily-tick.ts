@@ -255,6 +255,16 @@ export async function executeDailyTick(
     logger.error({ module: "daily-tick" }, "SMS od majitelů firem selhaly", e);
   }
 
+  // ── Bydliště: hráč bez něj nebo s obcí, která v okrese není (nový hráč pražského klubu
+  // z generators/residence.ts), dostane skutečnou obec podle dojíždění. Vlastní try. ──
+  try {
+    const { fillMissingResidences } = await import("../players/residence-fill");
+    const r = await fillMissingResidences(env.DB, { limit: 200, includeUnknown: true });
+    if (r.filled > 0) logger.info({ module: "daily-tick" }, `bydliště doplněno ${r.filled} hráčům, zbývá ${r.remaining}`);
+  } catch (e) {
+    logger.error({ module: "daily-tick" }, "doplnění bydliště selhalo", e);
+  }
+
   // ── Training (Mon-Fri, if plan is set) ──
   // U21 týmy zdědí training_type/approach/sessions od parent A-týmu — manažer nastaví trénink
   // pro klub jednou a aplikuje se na obě squady.

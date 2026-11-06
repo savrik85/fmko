@@ -690,6 +690,22 @@ developmentRouter.post("/admin/academy/migrate", requireAdmin, async (c) => {
   return c.json({ ok: true, teams: results.length, created: results.reduce((n, r) => n + Number(r.created ?? 0), 0), results });
 });
 
+// POST /api/admin/players/fill-residence — doplní bydliště hráčům bez něj a nahradí vymyšlené
+// obce skutečnými (players/residence-fill.ts).
+// Dojíždění zůstane, obec podle něj. Opakovatelné: kdo bydliště má, toho přeskočí.
+developmentRouter.post("/admin/players/fill-residence", requireAdmin, async (c) => {
+  const { fillMissingResidences } = await import("../players/residence-fill");
+  let filled = 0;
+  let remaining = 0;
+  for (let round = 0; round < 10; round++) {
+    const res = await fillMissingResidences(c.env.DB, { limit: 400, includeUnknown: true });
+    filled += res.filled;
+    remaining = res.remaining;
+    if (res.filled === 0 || remaining === 0) break;
+  }
+  return c.json({ ok: true, filled, remaining });
+});
+
 // POST /api/admin/players/young-alcohol — jednorázový přepočet alkoholu mladých hráčů (pod 19)
 // na věk (generators/alcohol-age.ts). Dřív dostal i čtrnáctiletý 5–100. Pořadí mezi hráči
 // zůstane, hodnota se jen zmenší podle věkového stropu. Podruhé už nic neudělá (značka v KV).

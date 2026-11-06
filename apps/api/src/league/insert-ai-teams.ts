@@ -3,6 +3,8 @@
  * Uses db.batch() to minimize subrequests and stay within worker limits.
  */
 
+import { generateResidence } from "../generators/residence";
+import { fillMissingResidences } from "../players/residence-fill";
 import type { Rng } from "../generators/rng";
 import type { LeagueSetup } from "./league-generator";
 import type { GeneratedPlayer } from "../generators/player";
@@ -31,11 +33,13 @@ export async function insertAITeamsIntoDB(
   const playerStmts: D1PreparedStatement[] = [];
   const contractStmts: D1PreparedStatement[] = [];
   const relStmts: D1PreparedStatement[] = [];
+  const createdTeamIds: string[] = [];
 
   for (const lt of leagueSetup.teams) {
     if (lt.isPlayer) continue;
 
     const aiTeamId = crypto.randomUUID();
+    createdTeamIds.push(aiTeamId);
     const aiVillage = districtVillages.find((v) => v.code === lt.villageCode);
     const aiVillageId = (aiVillage?.code as string) ?? districtVillages[0]?.code ?? "unknown";
     const aiBudget = ((aiVillage?.population as number) ?? 500) > 5000 ? 80000
@@ -71,14 +75,16 @@ export async function insertAITeamsIntoDB(
           patriotism: apPersonality.patriotism,
         });
 
+        // Dojíždění stejným pravidlem jako u ostatních hráčů; obec bydliště doplní fillMissingResidences
+        const apCommute = generateResidence(rng, "", (aiVillage?.category as string | undefined) ?? villageSize, (aiVillage?.district as string | undefined) ?? "").commuteKm;
         playerStmts.push(
-          db.prepare("INSERT INTO players (id, team_id, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, description, skills_max, hidden_talent, experience, weekly_wage, nationality) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+          db.prepare("INSERT INTO players (id, team_id, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, description, skills_max, hidden_talent, experience, weekly_wage, nationality, commute_km) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
             .bind(apId, aiTeamId, ap.firstName, ap.lastName, apNickname, ap.age, ap.position, apRating,
               JSON.stringify(apSkills), JSON.stringify(apPhysical), JSON.stringify(apPersonality),
               JSON.stringify(apLifeContext), JSON.stringify(apCreated.avatar), apDescription,
               JSON.stringify(apCreated.skillsMax), apCreated.hiddenTalent,
               apCreated.experience,
-              Math.round(10 + apRating * 4), ap.nationality ?? "CZ")
+              Math.round(10 + apRating * 4), ap.nationality ?? "CZ", apCommute)
         );
 
         contractStmts.push(
@@ -141,4 +147,7 @@ export async function insertAITeamsIntoDB(
       logger.error({ module: "insert-ai-teams" }, `Batch insert relationships ${i}-${i + batch.length} failed`, e);
     }
   }
+  // Každý hráč musí mít bydliště: skutečná obec okresu podle dojíždění
+  await fillMissingResidences(db, { teamIds: createdTeamIds, limit: 2000 })
+    .catch((e) => logger.error({ module: "insert-ai-teams" }, "bydliště hráčů nových AI klubů", e));
 }
