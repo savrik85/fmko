@@ -121,4 +121,32 @@ describe("volání modelu", () => {
     expect(res.json).toBeNull();
     expect(res.error).toBe("chybí binding AI");
   });
+
+  it("odpověď s přemýšlením v harmony formátu: platí finální JSON, klíče bez mezer (prod 2026-11-06, Kobylisy)", async () => {
+    const raw = 'analysis: we need decide based on personality, trading high (83) ... {"action":"counter","amount":16700,"reason":" need cash"} Ensure short sentence: " need cash and he is surplus" okay.\n\nLet\'s produce final.<|end|><|start|>assistantfinal{"action":"counter"," amount":16700,"reason":" need cash and he is surplus"}<|return|>';
+    expect(parseModelJson(raw)).toEqual({ action: "counter", amount: 16700, reason: " need cash and he is surplus" });
+    expect(parseModelJson('<|channel|>analysis<|message|>hmm {"x":1} wait<|end|><|start|>assistant<|channel|>final<|message|>{"x":2}<|return|>')).toEqual({ x: 2 });
+  });
+
+  it("bez značky final vezme poslední celý objekt, ne útržek z přemýšlení", () => {
+    expect(parseModelJson('thinking {"a": } nope, then {"a":1} and finally {"a":2,"b":{"c":3}}')).toEqual({ a: 2, b: { c: 3 } });
+  });
+
+  it("nedopsanou odpověď (jen přemýšlení) zkusí jednou znovu", async () => {
+    let calls = 0;
+    const env = {
+      AI: {
+        run: async () => {
+          calls++;
+          return calls === 1
+            ? { choices: [{ message: { content: "analysis: 8,600 + 1,600 = 10,? Wait" } }] }
+            : { choices: [{ message: { content: '{"ok":2}' } }] };
+        },
+      } as unknown as Ai,
+    };
+    const res = await callCoachModel(env, req);
+    expect(calls).toBe(2);
+    expect(res.json).toEqual({ ok: 2 });
+    expect(res.error).toBeUndefined();
+  });
 });

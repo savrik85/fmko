@@ -140,9 +140,30 @@ export function extractModelOutput(res: unknown): ExtractedOutput {
 
 const CODE_FENCE = new RegExp("\u0060{3}(?:json)?\\s*([\\s\\S]*?)\u0060{3}", "i");
 
-/** První vyvážený objekt `{…}` v textu (respektuje řetězce a escapování). */
-function firstJsonObject(text: string): string | null {
-  const start = text.indexOf("{");
+/**
+ * Odpověď gpt-oss občas přijde i s přemýšlením ve formátu harmony
+ * („analysis: … <|start|>assistantfinal{…}<|return|>“). Platí jen část za poslední
+ * značkou final, v přemýšlení bývají útržky JSON, které by se četly místo odpovědi.
+ */
+const HARMONY_FINAL = /(?:<\|channel\|>final<\|message\|>|assistantfinal)/g;
+function harmonyFinal(text: string): string | null {
+  let last = -1;
+  let len = 0;
+  for (const m of text.matchAll(HARMONY_FINAL)) { last = m.index ?? -1; len = m[0].length; }
+  if (last < 0) return null;
+  return text.slice(last + len).replace(/<\|(?:return|end|call)\|>[\s\S]*$/, "").trim();
+}
+
+/** Klíče bez mezer okolo (model občas napíše `" amount"` místo `"amount"`). */
+function trimKeys(obj: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(obj)) out[k.trim()] = v;
+  return out;
+}
+
+/** Vyvážený objekt `{…}` v textu od pozice `from` (respektuje řetězce a escapování). */
+function firstJsonObject(text: string, from = 0): string | null {
+  const start = text.indexOf("{", from);
   if (start < 0) return null;
   let depth = 0;
   let inString = false;
@@ -180,10 +201,12 @@ function tryParse(text: string): unknown | null {
  * nebo první objekt v textu. Pole a skaláry neplatí (rozhodnutí je vždy objekt).
  */
 export function parseModelJson(raw: unknown): Record<string, unknown> | null {
-  if (raw && typeof raw === "object" && !Array.isArray(raw)) return raw as Record<string, unknown>;
+  if (raw && typeof raw === "object" && !Array.isArray(raw)) return trimKeys(raw as Record<string, unknown>);
   if (typeof raw !== "string") return null;
-  const text = raw.trim();
-  if (!text) return null;
+  const full = raw.trim();
+  if (!full) return null;
+  // S přemýšlením v harmony formátu platí jen finální část
+  const text = harmonyFinal(full) || full;
 
   const candidates: string[] = [text];
   // Blok kódu ```json … ``` (zpětné apostrofy přes \u0060, ať je kontrola odkazů nebere jako řetězec).
@@ -191,10 +214,17 @@ export function parseModelJson(raw: unknown): Record<string, unknown> | null {
   if (fence) candidates.push(fence[1].trim());
   const obj = firstJsonObject(text);
   if (obj) candidates.push(obj);
+  // Poslední objekt v textu (odpověď bývá na konci, před ní přemýšlení s útržky):
+  // nejdelší vyvážený objekt, který končí poslední závorkou
+  const lastBrace = text.lastIndexOf("}");
+  for (let at = text.indexOf("{"); at >= 0 && at < lastBrace; at = text.indexOf("{", at + 1)) {
+    const tail = firstJsonObject(text, at);
+    if (tail && at + tail.length === lastBrace + 1) { candidates.push(tail); break; }
+  }
 
   for (const c of candidates) {
     const parsed = tryParse(c);
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed as Record<string, unknown>;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return trimKeys(parsed as Record<string, unknown>);
   }
   return null;
 }
@@ -269,10 +299,25 @@ export async function callCoachModel(env: Pick<Bindings, "AI">, req: CoachModelR
     }
   }
 
-  const out = extractModelOutput(res);
-  const json = out.object && typeof out.object === "object" && !Array.isArray(out.object)
-    ? out.object as Record<string, unknown>
-    : parseModelJson(out.text);
+  const read = (r: unknown) => {
+    const o = extractModelOutput(r);
+    const j = o.object && typeof o.object === "object" && !Array.isArray(o.object)
+      ? trimKeys(o.object as Record<string, unknown>)
+      : parseModelJson(o.text);
+    return { out: o, json: j };
+  };
+  let { out, json } = read(res);
+  // Model se občas zamotá do přemýšlení a odpověď nedopíše (gpt-oss, týdenní správa klubu):
+  // jeden další pokus, když na něj zbývá čas. Jinak volající použije náhradní pravidlo.
+  if (!json && Date.now() - started < timeoutMs / 2) {
+    logger.warn({ module: "ai-coach-llm" }, `odpověď modelu ${model} nejde přečíst, zkouším znovu`, out.text.slice(-200));
+    try {
+      const again = read(await withTimeout(ai.run(model, input, { tags: ["ai-coach"] }), Math.max(10_000, timeoutMs - (Date.now() - started))));
+      if (again.json) ({ out, json } = again);
+    } catch (e) {
+      logger.warn({ module: "ai-coach-llm" }, `druhý pokus modelu ${model} po nečitelné odpovědi selhal`, e);
+    }
+  }
   const latencyMs = Date.now() - started;
   if (!json) {
     return {
