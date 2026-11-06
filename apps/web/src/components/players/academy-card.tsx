@@ -78,7 +78,7 @@ interface AcademyData {
     targets: {
       prospectId: string; name: string; age: number; club: string; position: string; km: number;
       strengths: string[]; avatar: Record<string, unknown> | null; verdict: string; protected: boolean;
-      interest: string | null; done: string[];
+      interest: string | null; done: string[]; crowded: boolean;
     }[];
     incoming: { poachId: string; name: string; age: number; club: string; interest: string; defended: boolean }[];
   } | null;
@@ -551,7 +551,7 @@ export function AcademyCard({ teamId }: { teamId: string }) {
                 </li>
               ))}
             </ul>
-            <p className="text-xs text-muted">Kdo má v létě zájem „chce k nim“, přestoupí a ty dostaneš tabulkové odstupné podle FAČR.</p>
+            <p className="text-xs text-muted">Žák přestoupí v létě jen do jednoho klubu, toho, kam ho to táhne nejvíc („chce k nim, v létě přestoupí“), a ty dostaneš tabulkové odstupné podle FAČR. Promluvit s rodiči může zájem snížit.</p>
           </section>
         )}
   
@@ -567,7 +567,7 @@ export function AcademyCard({ teamId }: { teamId: string }) {
               <ul className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 {data.poach.targets.map((t) => {
                   const started = t.interest !== null;
-                  const canStart = started || data.poach!.remaining > 0;
+                  const canStart = started || (data.poach!.remaining > 0 && !t.crowded);
                   const action = (a: string, label: string) => (
                     <button
                       key={a}
@@ -595,6 +595,7 @@ export function AcademyCard({ teamId }: { teamId: string }) {
                       <p className="text-sm text-ink">„{t.verdict}“</p>
                       {t.protected ? <p className="text-sm text-muted">Teprve přestoupil, rok ho nech být.</p>
                         : started && notice?.slot !== `target:${t.prospectId}` ? <p className="text-sm"><strong className="font-heading text-ink">Zájem:</strong> {t.interest}</p>
+                        : t.crowded ? <p className="text-sm text-muted">O žáka se už zajímají tři kluby, víc rodiče nechtějí.</p>
                         : !canStart ? <p className="text-sm text-muted">Letos už lákáš dost žáků.</p> : null}
                       {resultBox(`target:${t.prospectId}`)}
                       {!t.protected && (
