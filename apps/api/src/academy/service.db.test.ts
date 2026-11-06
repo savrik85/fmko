@@ -231,9 +231,10 @@ describe("družstvo žáků", () => {
     expect((await loadAcademyView(db, "club"))!.budgetWarning).toBeNull();
   });
 
-  it("stránka akademie nečeká na desítky dotazů za sebou (každý dotaz na D1 je cesta po síti)", async () => {
-    // Každý dotaz zpomalený o 20 ms jako na Cloudflare. Se 42 dotazy za sebou to dřív trvalo přes 800 ms.
-    const DELAY = 20;
+  it("stránka akademie nečeká na desítky dotazů za sebou (každý dotaz na D1 je cesta po síti)", { timeout: 30_000 }, async () => {
+    // Každý dotaz zpomalený o 100 ms: měří se, kolikrát za sebou se čeká na databázi, ne rychlost
+    // procesoru (CI je pomalejší). Se 42 dotazy za sebou to dřív trvalo přes 4 s, teď ~7 vln.
+    const DELAY = 100;
     let queries = 0;
     const slow = (st: D1PreparedStatement): D1PreparedStatement => new Proxy(st, {
       get(target, prop) {
@@ -259,6 +260,6 @@ describe("družstvo žáků", () => {
     const ms = Date.now() - t0;
     expect(view!.founded).toBe(true);
     expect(queries).toBeLessThanOrEqual(30);
-    expect(ms).toBeLessThan(300);
+    expect(ms).toBeLessThan(15 * DELAY);
   });
 });

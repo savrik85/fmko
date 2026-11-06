@@ -841,7 +841,6 @@ export async function loadAcademyView(db: D1Database, teamId: string) {
     neighborVillages(db, club.academy_upkeep ? club : { ...club, academy_upkeep: 1, academy_level: "standard" }),
     club.academy_upkeep ? poachView(db, club, coach, seasonNumber, { equipment, hasU21: u21 }) : Promise.resolve(null),
   ]);
-  const openDayInfo = club.academy_upkeep && coach.type ? await openDayExpectedFor(db, club, coach, neighborList) : null;
   // Kolik dětí přivede nábor a den otevřených dveří s každým trenérem, kterého klub může mít:
   // stejný výpočet jako při losu, ať jde porovnat „hráč áčka přivede víc“ a „táta žáka navíc“
   const byCoach = async (type: CoachType): Promise<{ recruit: number; open: number } | null> => {
@@ -859,15 +858,19 @@ export async function loadAcademyView(db: D1Database, teamId: string) {
     const open = await openDayExpectedFor(db, pseudo, st, neighborList);
     return { recruit: Math.round(recruitDayExpectedFor(pseudo, st) * 10) / 10, open: Math.round(open.expected * 10) / 10 };
   };
-  const [altStaff, altVolunteer, altParent] = club.academy_upkeep
-    ? await Promise.all([byCoach("staff"), byCoach("volunteer"), byCoach("parent")])
-    : [null, null, null];
+  // Profily žáků jsou výpočet (příjmení okresu má mezipaměť), dotaz jde nejvýš jeden.
+  // Vše souběžně: srovnání trenérů, den otevřených dveří i profily na sobě nezávisí.
+  const profiles = new Map<string, { strengths: string[]; weakness: string | null; avatar: Record<string, unknown> | null }>();
+  const [openDayInfo, altStaff, altVolunteer, altParent] = await Promise.all([
+    club.academy_upkeep && coach.type ? openDayExpectedFor(db, club, coach, neighborList) : Promise.resolve(null),
+    club.academy_upkeep ? byCoach("staff") : Promise.resolve(null),
+    club.academy_upkeep ? byCoach("volunteer") : Promise.resolve(null),
+    club.academy_upkeep ? byCoach("parent") : Promise.resolve(null),
+    Promise.all(prospects.map(async (p) => { profiles.set(p.id, await prospectProfile(db, p, club)); })),
+  ]);
   const compare = (pick: "recruit" | "open") => ({
     staff: altStaff?.[pick] ?? null, volunteer: altVolunteer?.[pick] ?? null, parent: altParent?.[pick] ?? null,
   });
-  // Profily žáků jsou výpočet (příjmení okresu má mezipaměť), dotaz jde nejvýš jeden
-  const profiles = new Map<string, { strengths: string[]; weakness: string | null; avatar: Record<string, unknown> | null }>();
-  await Promise.all(prospects.map(async (p) => { profiles.set(p.id, await prospectProfile(db, p, club)); }));
 
   const recruitDayUsed = cols?.recruit === seasonNumber;
   const openDayUsed = cols?.open === seasonNumber;
