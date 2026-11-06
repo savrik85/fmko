@@ -147,6 +147,8 @@ export interface WeeklyContext {
     canStaff: boolean;
     /** Má akademii, nebo ji letos ještě smí založit (jednou za sezónu). */
     canFound: boolean;
+    /** Akademie běží (i bez trenéra, kdy je `current` „none“, ale provoz se platí). */
+    founded?: boolean;
   };
   banners: { active: number; max: number; offers: BannerOption[] };
   u21: { exists: boolean; aTeamSize: number; promote: U21MoveOption[]; sendDown: U21MoveOption[] };
@@ -309,7 +311,9 @@ export function fallbackWeeklyDecision(ctx: WeeklyContext): WeeklyDecision {
   const academyTarget: Exclude<AcademyChoice, "keep"> = p.youthFocus < 45 ? "none"
     : ctx.academy.canStaff ? "staff" : ctx.academy.canVolunteer ? "volunteer" : "parent";
   const affordable = ACADEMY_WEEKLY_COST[academyTarget] <= Math.max(0, ctx.finance.weeklyIncome - ctx.finance.weeklyRunningCost) + spend / 30;
-  const academy: AcademyChoice = academyTarget === ctx.academy.current ? "keep" : affordable ? academyTarget : "keep";
+  // „none“ při běžící akademii bez trenéra znamená zrušit, ne nechat (jinak by ji platil navždy)
+  const sameAsNow = academyTarget === "none" ? !ctx.academy.founded : academyTarget === ctx.academy.current;
+  const academy: AcademyChoice = sameAsNow ? "keep" : affordable || academyTarget === "none" ? academyTarget : "keep";
 
   const freeSlots = Math.max(0, ctx.banners.max - ctx.banners.active);
   const banners = ctx.banners.offers.slice(0, freeSlots).map((b) => b.key);
@@ -469,7 +473,8 @@ export function planWeeklyActions(ctx: WeeklyContext, d: WeeklyDecision): Weekly
     if (price !== ctx.fans.ticketPrice) actions.push({ kind: "ticket_price", price, from: ctx.fans.ticketPrice });
   }
   if (d.pitchCareMode !== "keep" && d.pitchCareMode !== ctx.pitch.careMode) actions.push({ kind: "pitch_care_mode", mode: d.pitchCareMode });
-  if (d.academy !== "keep" && d.academy !== ctx.academy.current) {
+  const academySame = d.academy === "none" ? !ctx.academy.founded : d.academy === ctx.academy.current;
+  if (d.academy !== "keep" && !academySame) {
     // Kód hlídá meze: placený trenér jen najatý, dobrovolník jen když je kdo
     const allowed = (d.academy === "none" || ctx.academy.canFound)
       && (d.academy !== "staff" || ctx.academy.canStaff) && (d.academy !== "volunteer" || ctx.academy.canVolunteer);
@@ -661,7 +666,7 @@ export function renderWeeklyPrompt(ctx: WeeklyContext): string {
   L.push(ctx.staff.candidates.length ? ctx.staff.candidates.map((o) => `${o.key}: ${o.role}, ${o.label}, ${o.detail}, wage ${czk(o.weeklyWage)}/week, signing ${czk(o.cost)}`).join("\n") : "(none)");
   L.push("Roles: asistent (faster player development), maser (better daily recovery), lekar (shorter injuries), kondicni_trener (less fatigue), spravce_hriste (pitch keeps condition), trener_mladeze (youth development), trener_brankaru (goalkeepers), psycholog (morale), obsluha (refreshment sales), sef_fanklubu (fans), ekonom (finances), skaut (scouting).");
   L.push("");
-  L.push(`YOUTH TEAM (the club's own boys aged 11-14 from the village, ${ctx.academy.prospects} now; the village gives about ${ctx.academy.expectedPerYear.toFixed(1)} boys a year, 9 are needed to play the district youth league): ${ctx.academy.current}. Options keep / none (no youth team, boys quit) / volunteer (an A-team player aged 28+ coaches them for free: fewer boys quit and more kids join, but he misses some A-team training${ctx.academy.canVolunteer ? "" : ", NOT AVAILABLE"}) / parent (a boy's father coaches for free, average, brings one extra kid from recruitment) / staff (the hired trener_mladeze: best development, but the U21 and young A-team players then get only half of his training bonus${ctx.academy.canStaff ? "" : ", NOT AVAILABLE: hire one first"})${ctx.academy.canFound ? "" : " (the academy was closed this season and can be founded again only next season)"}. Running costs about ${czk(ACADEMY_WEEKLY_COST.volunteer)}/week (300 + 50 per boy). Every summer the 14-year-olds move up to the U21; the coach also recommends talented boys aged 13+ during the season.`);
+  L.push(`YOUTH TEAM (the club's own boys aged 11-14 from the village, ${ctx.academy.prospects} now; the village gives about ${ctx.academy.expectedPerYear.toFixed(1)} boys a year, 9 are needed to play the district youth league): ${ctx.academy.founded && ctx.academy.current === "none" ? "founded but WITHOUT a coach (the boys do not train and more of them quit, running costs are still paid)" : ctx.academy.current}. Options keep / none (no youth team, boys quit) / volunteer (an A-team player aged 28+ coaches them for free: fewer boys quit and more kids join, but he misses some A-team training${ctx.academy.canVolunteer ? "" : ", NOT AVAILABLE"}) / parent (a boy's father coaches for free, average, brings one extra kid from recruitment) / staff (the hired trener_mladeze: best development, but the U21 and young A-team players then get only half of his training bonus${ctx.academy.canStaff ? "" : ", NOT AVAILABLE: hire one first"})${ctx.academy.canFound ? "" : " (the academy was closed this season and can be founded again only next season)"}. Running costs about ${czk(ACADEMY_WEEKLY_COST.volunteer)}/week (300 + 50 per boy). Every summer the 14-year-olds move up to the U21; the coach also recommends talented boys aged 13+ during the season.`);
   L.push(`BANNER SPONSORS: ${ctx.banners.active}/${ctx.banners.max} used. Offers (key: company, monthly payment, seasons); banners only bring money, free slots are filled with the best offers you do not pick:`);
   L.push(ctx.banners.offers.length ? ctx.banners.offers.map((o) => `${o.key}: ${o.label}, ${czk(o.monthly)}/month, ${o.seasons} season(s)`).join("\n") : "(none)");
   L.push("");
