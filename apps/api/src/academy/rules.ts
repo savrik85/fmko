@@ -133,7 +133,7 @@ export interface YouthEquipment {
 export const YOUTH_EQUIPMENT: { key: keyof YouthEquipment; label: string; effect: string }[] = [
   { key: "balls", label: "Míče", effect: "víc míčů na tréninku: žáci rostou rychleji" },
   { key: "training_cones", label: "Tréninkové pomůcky", effect: "kužely, branky, žebříky: lepší trénink" },
-  { key: "winter_gear", label: "Zimní výbava", effect: "trénují i v zimě" },
+  { key: "winter_gear", label: "Zimní výbava lavičky", effect: "o něco lepší trénink" },
   { key: "team_van", label: "Klubová dodávka", effect: "odvoz na zápasy: méně žáků skončí" },
 ];
 
@@ -199,7 +199,7 @@ export function verdictText(estimate: number): string {
   if (estimate >= 70) return "Takovýho kluka tu dlouho nebylo. Z toho může být hvězda okresu.";
   if (estimate >= 45) return "Má na krajskej přebor, když vydrží.";
   if (estimate >= 25) return "Do áčka se dostane, na to vemte jed.";
-  if (estimate >= 12) return "Na béčko nebo lavičku áčka.";
+  if (estimate >= 12) return "Na lavičku áčka, když bude makat.";
   return "Spíš pro radost, ale kluk dobrej.";
 }
 
@@ -317,7 +317,7 @@ export function qualityText(q: number, coach: CoachType | null): string {
 /** Kam to kluk dotáhne: stupnice potenciálu (odhad talentu 0–100) slovy. */
 export const POTENTIAL_SCALE: { from: number; label: string }[] = [
   { from: 0, label: "pro radost" },
-  { from: 12, label: "béčko" },
+  { from: 12, label: "lavička áčka" },
   { from: 25, label: "áčko" },
   { from: 45, label: "krajský přebor" },
   { from: 70, label: "hvězda okresu" },

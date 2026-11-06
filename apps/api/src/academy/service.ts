@@ -455,7 +455,7 @@ export async function weeklyAcademy(db: D1Database, teamId: string, gameDate: st
   if (!club || !club.academy_upkeep) return;
   const squad = (await activeProspects(db, teamId)).length;
   const level = academyLevelOf(club.academy_level);
-  await recordTransaction(db, teamId, "youth_academy", -Math.round(upkeepWeekly(squad, level) * opsCostMul), `Akademie, ${ACADEMY_LEVELS[level].label.toLowerCase()} (${squad} žáků)`, gameDate);
+  await recordTransaction(db, teamId, "youth_academy", -Math.round(upkeepWeekly(squad, level) * opsCostMul), `Akademie, ${ACADEMY_LEVELS[level].label.toLowerCase()} (žáků: ${squad})`, gameDate);
   if (squad === 0) return;
   const coach = await coachState(db, club, squad);
   if (coach.quality <= 0) return;
@@ -528,9 +528,10 @@ async function insertProspectOffer(db: D1Database, club: ClubRow, p: ProspectRow
   await db.prepare(
     `INSERT INTO player_offers (id, team_id, source, source_name, message, first_name, last_name, nickname, age, position, overall_rating,
        skills, physical, personality, life_context, avatar, weekly_wage, expires_at, nationality, prospect_id)
-     VALUES (?, ?, 'youth', 'Trenér žáků', ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, 'youth', ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).bind(
-    offerId, forTeamId, message, p.first_name, p.last_name, p.age, p.position, created.rating,
+    // Cizí žák (klub bez dorostu ho nabízí sousedovi): odesílá trenér jeho klubu, ne tvůj
+    offerId, forTeamId, forTeamId === club.id ? "Trenér žáků" : `Trenér žáků z obce ${club.village_name}`, message, p.first_name, p.last_name, p.age, p.position, created.rating,
     JSON.stringify(created.skills), JSON.stringify(created.physical),
     JSON.stringify({ ...personality, hiddenTalent: created.hiddenTalent }),
     JSON.stringify({ ...created.lifeContext, morale: 60, skillsMax: created.skillsMax }),
@@ -545,7 +546,7 @@ async function loadProspect(db: D1Database, teamId: string, prospectId: string):
 }
 
 /** Bez dorostu nemá kluk kam o kategorii výš: za muže smí až od 15 let (FAČR). */
-const NO_U21_ERROR = "Klub nemá dorost (U21) a za muže smí žák až od 15 let. V létě ve čtrnácti půjde do dorostu jiného klubu.";
+const NO_U21_ERROR = "Klub nemá dorost (U21) a za muže smí žák až od 15 let. Ve čtrnácti ho trenér nabídne klubu s dorostem.";
 
 async function hasU21Team(db: D1Database, teamId: string): Promise<boolean> {
   const row = await db.prepare("SELECT 1 AS ok FROM teams WHERE parent_team_id = ? AND team_type = 'u21'").bind(teamId).first<{ ok: number }>()
@@ -569,7 +570,7 @@ export async function recommendPlayUp(db: D1Database, teamId: string, prospectId
   if (isHuman(club)) {
     const traits = parseJson<string[]>(p.traits, [], "traits").filter(knownTrait);
     await academySms(db, teamId,
-      `${p.first_name} ${p.last_name} (${p.age}, ${POSITION_CS[p.position] ?? p.position}${traits.length ? `, ${traits[0]}` : ""}) je na žáky už moc dobrej, dal bych ho do dorostu o kategorii výš. ${verdictText(estimate)} Vzít ho můžeš v Přestupy → Nabídky. Když ne, nechám ho u žáků a v létě postoupí sám.`);
+      `${p.first_name} ${p.last_name} (${p.age}, ${POSITION_CS[p.position] ?? p.position}${traits.length ? `, ${traits[0]}` : ""}) je na žáky už moc dobrej, dal bych ho do dorostu o kategorii výš. ${verdictText(estimate)} Vzít ho můžeš v Přestupy → Nabídky. Když ne, nechám ho u žáků${p.age >= 14 ? " a v létě postoupí sám" : ", do dorostu půjde, až mu bude čtrnáct"}.`);
   }
   return { ok: true, offerId };
 }
@@ -789,7 +790,11 @@ export async function seasonEndAcademy(db: D1Database, rng: Rng, teamId: string,
   if (!isHuman(club)) return;
   const parts: string[] = [];
   if (promoted.length) parts.push(`Do dorostu postoupili: ${promoted.join(", ")}.`);
-  if (transferred.length) parts.push(`Dorost nemáme, tak chtějí jinam: ${transferred.join(", ")}. Když je tam vezmou, dostaneme odstupné, celkem až ${feeTotal.toLocaleString("cs")} Kč.`);
+  if (transferred.length) {
+    const one = transferred.length === 1;
+    parts.push(`Dorost nemáme, tak jsem ${one ? "čtrnáctiletého" : "čtrnáctileté"} nabídl nejbližšímu klubu s dorostem: ${transferred.join(", ")}. `
+      + `Když ${one ? "ho" : "je"} vezmou, dostaneme odstupné ${one ? "" : "celkem až "}${feeTotal.toLocaleString("cs")} Kč. Když ne, s fotbalem skončí.`);
+  }
   if (quit.length) parts.push(`Skončili: ${quit.join(", ")}.`);
   if (newKids.length) parts.push(`Noví jedenáctiletí: ${newKids.join(", ")}.`);
   else if (club.academy_upkeep) parts.push("Nových žáků z obce letos nepřišlo.");
@@ -867,6 +872,9 @@ async function academyOpsMul(db: D1Database, teamId: string): Promise<number> {
   }
 }
 
+/** Štítky o docházce: ukazují se jen u žáka, který opravdu chodí rád (zápal od 70). */
+const ATTENDANCE_TRAITS = new Set(["na trénink chodí první", "mamka ho vozí na každý trénink"]);
+
 // ── Pohled pro stránku Žáci ───────────────────────────────────────────────────
 
 export async function loadAcademyView(db: D1Database, teamId: string) {
@@ -911,7 +919,10 @@ export async function loadAcademyView(db: D1Database, teamId: string) {
     const pseudo: ClubRow = {
       ...club,
       academy_coach_type: type,
-      academy_coach_player_id: type === "volunteer" ? options.volunteers[0].playerId : null,
+      // Hráč áčka, který žáky vede teď (jinak ten s nejlepším vůdcovstvím, kterého by vybral)
+      academy_coach_player_id: type === "volunteer"
+        ? (club.academy_coach_type === "volunteer" && club.academy_coach_player_id ? club.academy_coach_player_id : options.volunteers[0].playerId)
+        : null,
       academy_coach_name: type === "parent" ? options.parent!.name : null,
     };
     const st = await coachState(db, pseudo, prospects.length, equipment);
@@ -1018,7 +1029,10 @@ export async function loadAcademyView(db: D1Database, teamId: string) {
         weakness: coach.type ? profile?.weakness ?? null : null,
         /** Trenérův odhad potenciálu 0–100 (v UI jen pás na slovní stupnici). Null bez trenéra. */
         potential: coach.type ? { estimate, low: range.low, high: range.high } : null,
-        traits: parseJson<string[]>(p.traits, [], "traits").filter(knownTrait),
+        // Bez štítků, které by odporovaly náladě („chodí první“ u žáka, co vynechává) nebo
+        // synovi trenéra („doma ho ženou do hokeje“)
+        traits: parseJson<string[]>(p.traits, [], "traits").filter(knownTrait)
+          .filter((t) => !(p.commitment < 70 && ATTENDANCE_TRAITS.has(t)) && !(p.coach_son && t === "doma ho ženou do hokeje")),
         verdict: coach.type ? verdictText(estimate) : null,
         /** Trenér ho bere jako nadějného (doporučil by ho o kategorii výš). */
         promising: !!coach.type && estimate >= PLAY_UP_ESTIMATE,
@@ -1483,10 +1497,10 @@ export async function poachAction(db: D1Database, rng: Rng, teamId: string, pros
 
   const name = `${p.first_name} ${p.last_name}`;
   if (action === "invite" && isHuman(from)) {
-    await academySms(db, from.id, `Za ${name} byli z ${club.village_name}, pozvali ho k nim na trénink. Jestli o něj nechceš přijít, promluv s rodiči v Mládež → Akademie.`);
+    await academySms(db, from.id, `Lákají tvého žáka: ${name}. Klub z obce ${club.village_name} ho pozval k sobě na trénink. Jestli o něj nechceš přijít, promluv s rodiči v Mládež → Akademie → Noví žáci.`);
   }
   if (action === "boots" && rng.random() < POACH_ACTIONS.boots.scandalChance && isHuman(from)) {
-    await academySms(db, from.id, `Prý dali z ${club.village_name} rodičům ${name} peníze na kopačky, ať k nim žák přejde. V obci se o tom mluví.`);
+    await academySms(db, from.id, `Lákají tvého žáka: ${name}. Klub z obce ${club.village_name} prý dal jeho rodičům peníze na kopačky, ať k nim přejde.`);
   }
   const lead = (await poachLeaders(db, [p.id])).get(p.id);
   return { ok: true, interest: rivalInterestText(interest, !lead || lead.poachId === poach.id) };
@@ -1557,7 +1571,7 @@ async function resolvePoaches(db: D1Database, club: ClubRow, gameDate: string): 
     const name = `${p.first_name} ${p.last_name}`;
     await recordTransaction(db, club.id, "transfer_income", fee, `Odstupné za žáka: ${name} (${to.village_name})`, gameDate);
     await recordTransaction(db, to.id, "transfer_fee", -fee, `Odstupné za žáka: ${name} (${club.village_name})`, gameDate);
-    lost.push(`${name} do ${to.village_name}, odstupné ${fee.toLocaleString("cs")} Kč`);
+    lost.push(`${name} (k nim přestoupil klub z obce ${to.village_name}, odstupné ${fee.toLocaleString("cs")} Kč)`);
     // Nový klub mohl mít konec sezóny za sebou: kluk se posune hned (jinak by rok ztratil).
     // Když nový klub teprve přijde na řadu, `aged_season` zajistí, že ho nezpracuje podruhé.
     const toKids = await activeProspects(db, to.id);
@@ -1570,7 +1584,7 @@ async function resolvePoaches(db: D1Database, club: ClubRow, gameDate: string): 
         coach: toCoach, levelQuit: ACADEMY_LEVELS[academyLevelOf(to.academy_level)].quit, playsCompetition: toKids.length >= MIN_SQUAD, vanLevel, hasU21: toU21, seasonNumber: await currentSeasonNumber(db),
       }, gameDate).catch((e) => logger.warn({ module: M, teamId: to.id }, "advance poached prospect", e));
     }
-    if (isHuman(to)) await academySms(db, to.id, `${name} (${p.age}) k nám v létě přestoupil z ${club.village_name}. Odstupné ${fee.toLocaleString("cs")} Kč šlo jejich klubu.`);
+    if (isHuman(to)) await academySms(db, to.id, `K nám v létě přestoupil žák ${name} (${p.age}) z klubu z obce ${club.village_name}. Odstupné ${fee.toLocaleString("cs")} Kč šlo jejich klubu.`);
   }
   // Přetažené k nám v tomhle kole řeší SMS lákajícího klubu výš; tady jen souhrn vlastních ztrát
   return { poached: [], lost };
@@ -1657,7 +1671,7 @@ export async function seedFromLegacy(db: D1Database, teamId: string, gameDate: s
   if (club && isHuman(club)) {
     const coachText = coach.type === "volunteer" ? `Žáky zatím vede ${options.volunteers[0].name} z áčka` : "Žáky zatím vede jeden z tátů";
     const staffText = options.staff ? ` Můžeš je dát i svému trenérovi mládeže (${options.staff.name}), víc je naučí, ale bude mít míň času na U21.` : "";
-    await academySms(db, teamId, `Akademie se mění: místo úrovní investice má klub vlastní družstvo žáků. Máš ${founded.created} žáků od 11 do 14 let, každé léto postoupí čtrnáctiletí do dorostu. ${coachText}.${staffText} Všechno najdeš v Mládež → Akademie.`);
+    await academySms(db, teamId, `Akademie se mění: místo úrovní investice má klub vlastní družstvo žáků. Máš ${founded.created === 1 ? "1 žáka" : founded.created < 5 ? `${founded.created} žáky` : `${founded.created} žáků`} od 11 do 14 let, každé léto postoupí čtrnáctiletí do dorostu. ${coachText}.${staffText} Všechno najdeš v Mládež → Akademie.`);
   }
   return { created: founded.created };
 }

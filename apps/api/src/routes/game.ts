@@ -6178,13 +6178,21 @@ gameRouter.get("/teams/:teamId/player-offers", async (c) => {
   const teamClock = await c.env.DB.prepare("SELECT game_date FROM teams WHERE id = ?")
     .bind(teamId).first<{ game_date: string | null }>().catch((e) => { logger.warn({ module: "game" }, "load game_date for offers", e); return null; });
   const offerCutoff = teamClock?.game_date ?? new Date().toISOString();
+  // Žák z akademie: vlastní, nebo ze sousedního klubu bez dorostu (academy/service.ts graduate).
+  // Odkud je, z youth_prospects: cizí žák po odmítnutí neskončí u žáků, ale s fotbalem.
   const offers = await c.env.DB.prepare(
-    "SELECT * FROM player_offers WHERE team_id = ? AND status = 'pending' AND expires_at > ? ORDER BY created_at DESC"
-  ).bind(teamId, offerCutoff).all().catch(() => ({ results: [] }));
+    `SELECT o.*, yp.team_id AS prospect_team_id, pv.name AS prospect_village
+       FROM player_offers o
+       LEFT JOIN youth_prospects yp ON yp.id = o.prospect_id
+       LEFT JOIN teams pt ON pt.id = yp.team_id LEFT JOIN villages pv ON pv.id = pt.village_id
+      WHERE o.team_id = ? AND o.status = 'pending' AND o.expires_at > ? ORDER BY o.created_at DESC`
+  ).bind(teamId, offerCutoff).all().catch((e) => { logger.warn({ module: "game.ts", teamId }, "player offers", e); return { results: [] }; });
   return c.json(offers.results.map((o) => ({
     id: o.id, source: o.source, sourceName: o.source_name, message: o.message,
-    // Žák z vlastní akademie (academy/service.ts), ne náhodný dorostenec
+    // Žák z akademie (academy/service.ts), ne náhodný dorostenec
     fromAcademy: !!o.prospect_id,
+    /** Obec cizí akademie, odkud žák je (klub bez dorostu ho nabízí sousedovi); null = vlastní žák. */
+    academyVillage: o.prospect_id && o.prospect_team_id && o.prospect_team_id !== teamId ? o.prospect_village : null,
     firstName: o.first_name, lastName: o.last_name, age: o.age, position: o.position,
     nationality: (o.nationality as string) ?? "CZ",
     overallRating: o.overall_rating, weeklyWage: o.weekly_wage, expiresAt: o.expires_at,
