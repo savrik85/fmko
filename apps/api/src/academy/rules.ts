@@ -461,6 +461,24 @@ export function poachBaseInterest(i: PoachInput): number {
   return Math.max(0, Math.min(100, v));
 }
 
+/** Jednoho žáka smí najednou lákat nejvýš tolik klubů (víc rodičů nezvládne). */
+export const MAX_POACH_CLUBS_PER_KID = 3;
+
+/**
+ * Zájem z pohledu lákajícího klubu. Přestoupit může jen jednou: kdo není první
+ * (nejvyšší zájem), nedostane „v létě přestoupí“, i když je přes hranici.
+ */
+export function rivalInterestText(interest: number, leading: boolean): string {
+  if (interest >= POACH_THRESHOLD && !leading) return "chce k vám, ale víc ho láká jiný klub";
+  return interestText(interest);
+}
+
+/** Zájem vlastního žáka z pohledu klubu, odkud by odešel; `leader` je klub, který vede. */
+export function leavingRivalText(interest: number, leading: boolean, leader: string | null): string {
+  if (interest >= POACH_THRESHOLD && !leading) return `chce k nim, ale víc ho táhne ${leader ?? "jiný klub"}`;
+  return leavingInterestText(interest);
+}
+
 /** Zájem vlastního žáka, kterého láká jiný klub (pohled klubu, odkud by odešel). */
 export function leavingInterestText(interest: number): string {
   if (interest >= POACH_THRESHOLD) return "chce k nim, v létě přestoupí";
