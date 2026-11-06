@@ -22,7 +22,7 @@ import {
   ACADEMY_LEVELS, academyLevelOf, type AcademyLevel, coachSonAge,
   STAFF_SPLIT_U21_FACTOR, VOLUNTEER_QUIT_BONUS, VOLUNTEER_ATTRACT, PARENT_RECRUIT_EXTRA, expectedKidsPerYear, rollKids,
   programQuality, weeklyProgress, estimatedTalent, verdictText, commitmentText, canPlayUp, recommendsPlayUp,
-  REOFFER_DAYS, firstOfferDay, quitChance, talentShiftAt13, pickTraits, positionVisible, GRADUATE_WAGE_FACTOR,
+  REOFFER_DAYS, firstOfferDay, quitChance, talentShiftAt13, pickTraits, knownTrait, positionVisible, GRADUATE_WAGE_FACTOR,
   youthTransferFee, distanceKm, qualityText, PLAY_UP_ESTIMATE, estimateRange, strengthsOf, staffQualityText,
   YOUTH_EQUIPMENT, POTENTIAL_SCALE, type YouthEquipment,
   RECRUIT_DAY_COST, recruitDayExpected, OPEN_DAY_COST, openDayExpected, OPEN_DAY_MAX_KIDS, OPEN_DAY_COMMITMENT_BONUS, OPEN_DAY_ESTIMATE_FACTOR, WEEKS_PER_SEASON, NEIGHBOR_RADIUS_KM, neighborKidsExpected, NEIGHBOR_MAX_PER_YEAR, MAX_SQUAD,
@@ -557,7 +557,7 @@ export async function recommendPlayUp(db: D1Database, teamId: string, prospectId
   const rng = createRng(cryptoSeed());
   await db.prepare("UPDATE youth_prospects SET next_offer_on = ? WHERE id = ?").bind(addDays(gameDate, rng.int(REOFFER_DAYS[0], REOFFER_DAYS[1])), p.id).run();
   if (isHuman(club)) {
-    const traits = parseJson<string[]>(p.traits, [], "traits");
+    const traits = parseJson<string[]>(p.traits, [], "traits").filter(knownTrait);
     await academySms(db, teamId,
       `${p.first_name} ${p.last_name} (${p.age}, ${POSITION_CS[p.position] ?? p.position}${traits.length ? `, ${traits[0]}` : ""}) je na žáky už moc dobrej, dal bych ho do dorostu o kategorii výš. ${verdictText(estimate)} Vzít ho můžeš v Přestupy → Nabídky. Když ne, nechám ho u žáků a v létě postoupí sám.`);
   }
@@ -923,7 +923,7 @@ export async function loadAcademyView(db: D1Database, teamId: string) {
         weakness: coach.type ? profile?.weakness ?? null : null,
         /** Trenérův odhad potenciálu 0–100 (v UI jen pás na slovní stupnici). Null bez trenéra. */
         potential: coach.type ? { estimate, low: range.low, high: range.high } : null,
-        traits: parseJson<string[]>(p.traits, [], "traits"),
+        traits: parseJson<string[]>(p.traits, [], "traits").filter(knownTrait),
         verdict: coach.type ? verdictText(estimate) : null,
         /** Trenér ho bere jako nadějného (doporučil by ho o kategorii výš). */
         promising: !!coach.type && estimate >= PLAY_UP_ESTIMATE,

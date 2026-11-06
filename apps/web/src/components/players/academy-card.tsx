@@ -265,8 +265,8 @@ export function AcademyCard({ teamId }: { teamId: string }) {
           {data.village} dá <strong className="font-heading text-ink">{data.expectedPerYear < 0.8 ? "žáka jednou za dva roky" : `${classText(data.expectedPerYear)} za rok`}</strong>
           {data.neighborPerYear >= 0.3 ? <>, z okolních obcí bez akademie přijde ještě zhruba <strong className="font-heading text-ink">{data.neighborPerYear < 0.8 ? "jeden za dva roky" : `${classText(data.neighborPerYear)} za rok`}</strong> ({data.neighbors.slice(0, 3).map((n) => n.name).join(", ")})</> : null}.
           {total < data.minSquad
-            ? ` Na okresní soutěž je potřeba ${data.minSquad} žáků, tolik jich sem nepřijde. Žáci budou jen trénovat.`
-            : ` Na okresní soutěž (${data.minSquad} žáků) to stačí.`}
+            ? ` Družstvo hraje okresní soutěž žáků až od ${data.minSquad} žáků, tolik jich sem nepřijde. Žáci budou jen trénovat: rostou poloviční rychlostí a víc jich odejde.`
+            : ` To stačí na okresní soutěž žáků (od ${data.minSquad} žáků): žáci díky zápasům rostou naplno a méně jich skončí. Zápasy žáků se ve hře neukazují.`}
         </p>
         <p className="text-sm text-muted">
           Akademie se platí každý týden podle počtu žáků. Kolik do ní dáváš, vybereš po založení: skromná od {kc(data.levels[0].base)} + {kc(data.levels[0].perKid)} za žáka, běžná {kc(data.levels[1].base)} + {kc(data.levels[1].perKid)}, ambiciózní {kc(data.levels[2].base)} + {kc(data.levels[2].perKid)}.
@@ -333,7 +333,7 @@ export function AcademyCard({ teamId }: { teamId: string }) {
             <div className="rounded-soft border border-gray-200 bg-white p-3">
               <dt className="text-xs text-muted">Žáci</dt>
               <dd className="font-heading font-bold text-ink">{boysText(data.prospects.length)}</dd>
-              <dd className="text-xs text-muted">{data.playsCompetition ? "hrají okresní soutěž" : `na soutěž chybí ${data.minSquad - data.prospects.length}`}</dd>
+              <dd className="text-xs text-muted">{data.playsCompetition ? "hrají okresní soutěž žáků" : `na soutěž chybí ${data.minSquad - data.prospects.length}, jen trénují`}</dd>
             </div>
             <div className="rounded-soft border border-gray-200 bg-white p-3">
               <dt className="text-xs text-muted">Trenér</dt>
@@ -358,8 +358,8 @@ export function AcademyCard({ teamId }: { teamId: string }) {
             <summary className="cursor-pointer font-heading font-bold text-pitch-600 min-h-11 flex items-center gap-1.5">Jak akademie funguje <span aria-hidden="true">▾</span></summary>
             <ul className="mt-1 space-y-1.5 text-muted list-disc pl-5">
               <li>Žáci jsou z tvé obce, od 11 do 14 let. Každé léto přijde nový ročník jedenáctiletých, kolik jich je, záleží na velikosti obce.</li>
-              <li>Na okresní soutěž je potřeba {data.minSquad} žáků. Bez soutěže rostou pomaleji a víc jich skončí.</li>
-              <li>Jak rychle žáci rostou, určuje trenér, úroveň akademie a klubové vybavení. Nejlepší je placený trenér mládeže, dobrovolník z áčka a táta jsou zadarmo.</li>
+              <li>Od {data.minSquad} žáků hraje družstvo okresní soutěž žáků (zápasy se ve hře neukazují). Žáci díky zápasům rostou naplno a méně jich skončí. S menším počtem jen trénují: rostou poloviční rychlostí a víc jich odejde.</li>
+              <li>Jak rychle žáci rostou, určuje trenér, úroveň akademie a klubové vybavení. Placený trenér mládeže žáky naučí nejvíc, ale ubere čas dorostu (U21). Hráč áčka a táta jsou zadarmo, každý má jinou výhodu i nevýhodu, víc v záložce Trenér.</li>
               <li>Potenciál žáka odhaduje trenér. U mladších se plete víc, u čtrnáctiletých míň, placený trenér mládeže nejmíň.</li>
               <li>Každé léto jdou čtrnáctiletí do {data.hasU21 ? "tvého dorostu (U21)" : "dorostu jiného klubu, ty dostaneš odstupné"}. {data.hasU21 ? "Nadějného žáka od 13 let ti trenér doporučí do dorostu dřív, dát ho tam můžeš i sám." : "Dřív to nejde, protože vlastní dorost nemáš."}</li>
               <li>Podle pravidel FAČR smí žák do dorostu od 13 let, za muže (áčko) až od 15 let.</li>

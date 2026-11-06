@@ -276,12 +276,19 @@ export const GRADUATE_WAGE_FACTOR = 0.7;
  * Rysy kluka: povaha a rodina, NIKDY dovednosti. Dovednostní rysy („rychlej jak blesk“) si
  * odporovaly se silnými a slabými stránkami z generátoru (kluk „rychlej“ se slabinou „pomalý“).
  */
+// Jen povaha a domov, žádná tvrzení o klubu: „brácha hraje za áčko“ nebo „děda je správce
+// hřiště“ by byla nepravda (bratr v áčku ani správce ve hře nejsou)
 export const TRAITS = [
-  "brácha hraje za áčko", "táta chytal za béčko", "doma ho ženou do hokeje", "učitelka si na něj stěžuje",
+  "doma ho ženou do hokeje", "učitelka si na něj stěžuje",
   "na trénink chodí první", "pořád se směje", "ve škole jednička z tělocviku", "neumí prohrávat",
   "mamka ho vozí na každý trénink", "s míčem chodí i do školy", "kamarádí se s celou partou", "fandí Slavii",
-  "fandí Spartě", "stydí se, ale na hřišti ožije", "děda je správce hřiště", "po zápase vždycky zůstane sbírat míče",
+  "fandí Spartě", "stydí se, ale na hřišti ožije", "po zápase vždycky zůstane sbírat míče",
 ] as const;
+
+/** Štítek ze staré sady, který už žák mít nemá (vymyšlené tvrzení o klubu). */
+export function knownTrait(t: string): boolean {
+  return (TRAITS as readonly string[]).includes(t);
+}
 
 export function pickTraits(rng: Rng): string[] {
   const first = rng.pick([...TRAITS]);
