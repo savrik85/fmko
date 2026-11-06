@@ -5,6 +5,7 @@
  * a smlouvá nahoru; po dohodě kupující podepíše a teprve pak rozhoduje hráč.
  */
 
+import { scoutReach } from "@/lib/scout-reach";
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
@@ -220,7 +221,11 @@ export default function AiNegotiationPage() {
               {player.age != null && <span className="text-muted">{player.age} let</span>}
               <span className="font-heading font-bold tabular-nums">Hodnocení {ratingText(player.ratingLo, player.ratingHi)}</span>
               {player.potentialLo != null && (
-                <span className="text-muted tabular-nums">dotáhne to na {ratingText(player.potentialLo, player.potentialHi)}</span>
+                <span className="text-muted tabular-nums">
+                  {player.age != null && player.age > 24
+                    ? scoutReach(player.age, player.ratingHi, player.potentialLo, player.potentialHi).sentence
+                    : `dotáhne to na ${ratingText(player.potentialLo, player.potentialHi)}`}
+                </span>
               )}
             </div>
             <div className="text-sm text-muted mt-1">

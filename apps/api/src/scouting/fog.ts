@@ -14,6 +14,13 @@ import { stableOffset } from "../lib/scout-estimate";
 import { teoretickyStropHrace } from "../skills/vyhled-hrace";
 import { POTENTIAL_HORIZON_SEASONS, projectRating } from "./youth-growth";
 
+/** Do kolika let se s růstem počítá (stejně jako verdikt hráče v skills/verdikt.ts). */
+const CAREER_END_AGE = 37;
+/** Kolem tohoto věku hráč vrcholí: u dospělých se odhad počítá jen do té doby. */
+const PEAK_AGE = 29;
+/** Od vrcholu se odhad dívá jen tolik sezón dopředu. */
+const ADULT_MIN_SEASONS = 2;
+
 export interface Range { lo: number; hi: number }
 
 /** Efektivita skauta 1–20 → kvalita 0–1, jak ji bere `estimateSpread`. */
@@ -62,9 +69,17 @@ export function potentialRange(
   if (theoretical === null) return null;
   // Do 21 let naměřené tempo podle talentu a dospívání tak, jak ho hra opravdu dělá,
   // pak tempo podle věku (youth-growth.ts). Nikdy přes strop dovedností.
-  const reachable = projectRating(player, POTENTIAL_HORIZON_SEASONS);
+  // Mladí do 21: celý horizont. Starší rostou pomaleji a vrcholí kolem 29, takže jen do té doby,
+  // od 29 dvě sezóny dopředu (dřív by 27letému 8 sezón do 35 let sečetlo +15 bodů), a nikdy přes
+  // konec kariéry.
+  const seasons = player.age <= 21
+    ? POTENTIAL_HORIZON_SEASONS
+    : Math.min(POTENTIAL_HORIZON_SEASONS, Math.max(ADULT_MIN_SEASONS, PEAK_AGE - player.age));
+  const reachable = projectRating(player, Math.max(1, Math.min(seasons, CAREER_END_AGE - player.age)));
   // Nad strop Pralesa (85) nikdo nedoroste, ani v odhadu slabého skauta (dřív „82–98“).
-  const range = rangeAround(reachable, ratingHalfWidth(eff, visits), `${seed}:potential`, 1, PRALES_MAX_RATING);
+  // U dospělých stejná chyba skauta jako u hodnocení: rozdíl stropu a hodnocení je pak
+  // to, kolik hráč ještě přidá (jinak by druhý los nejistoty slíbil třicátníkovi +10)
+  const range = rangeAround(reachable, ratingHalfWidth(eff, visits), player.age <= 21 ? `${seed}:potential` : `${seed}:rating`, 1, PRALES_MAX_RATING);
   // Pod dnešní výkon nikdo nespadne, i kdyby skaut odhadoval sebehůř.
   return { lo: Math.max(range.lo, Math.min(player.rating, range.hi)), hi: range.hi };
 }

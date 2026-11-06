@@ -111,8 +111,22 @@ export function emptyWeekSms(rng: Rng, villageNames: string[]): string {
   ])}`;
 }
 
-export function revisitSms(r: { name: string; ratingLo: number; ratingHi: number; potentialLo: number | null; potentialHi: number | null; youth: boolean }): string {
-  const youth = r.youth && r.potentialLo != null && r.potentialHi != null ? ` Strop vidím na ${range(r.potentialLo, r.potentialHi)}.` : "";
+/**
+ * Věta skauta, kam to hráč dotáhne, podle věku: mladý poroste, ve 25–29 přidá pár bodů,
+ * od třiceti už spíš drží (hráči ve hře rostou i po 21, jen pomaleji).
+ */
+export function reachPhrase(age: number, ratingHi: number, lo: number, hi: number): string {
+  if (age <= 24) return `Dotáhnout by to mohl na ${range(lo, hi)}.`;
+  // U dospělých má strop stejnou chybu skauta jako hodnocení: rozdíl je, kolik ještě přidá
+  const gain = hi - ratingHi;
+  if (gain <= 2) return "Nahoru už moc nepůjde, spíš drží, co umí.";
+  return `Ještě přidá asi ${gain} ${gain < 5 ? "body" : "bodů"}.`;
+}
+
+export function revisitSms(r: { name: string; age?: number; ratingLo: number; ratingHi: number; potentialLo: number | null; potentialHi: number | null; youth: boolean }): string {
+  const youth = r.potentialLo == null || r.potentialHi == null ? ""
+    : r.youth ? ` Strop vidím na ${range(r.potentialLo, r.potentialHi)}.`
+    : r.age != null ? ` ${reachPhrase(r.age, r.ratingHi, r.potentialLo, r.potentialHi)}` : "";
   return `👀 Znovu jsem viděl hrát: ${r.name}. Teď odhaduju ${range(r.ratingLo, r.ratingHi)}.${youth}`;
 }
 
