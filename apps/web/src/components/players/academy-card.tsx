@@ -63,8 +63,8 @@ interface AcademyData {
   potentialScale: { from: number; label: string }[];
   nextSummer: number;
   prospects: Prospect[];
-  recruitDay: { available: boolean; used: boolean; cost: number; expected: number };
-  openDay: { available: boolean; used: boolean; cost: number; expected: number };
+  recruitDay: { available: boolean; used: boolean; cost: number; expected: number; byCoach: CoachCompare };
+  openDay: { available: boolean; used: boolean; cost: number; expected: number; byCoach: CoachCompare };
   neighbors: { name: string; km: number; expected: number }[];
   neighborPerYear: number;
   budgetWarning: { budget: number; seasonCost: number; weeks: number } | null;
@@ -99,6 +99,18 @@ const kc = (n: number) => `${n.toLocaleString("cs")} Kč`;
 function choiceKey(coach: { type: CoachType | null; playerId: string | null }): string {
   if (coach.type === "volunteer") return coach.playerId ? `volunteer:${coach.playerId}` : "";
   return coach.type ?? "";
+}
+
+/** Kolik dětí v průměru přivede akce s jednotlivými trenéry (null = takového trenéra klub nemá). */
+type CoachCompare = { staff: number | null; volunteer: number | null; parent: number | null };
+
+/** „Kolik dětí podle trenéra: táta 2,9 · hráč áčka 2,2 · trenér mládeže 1,9“, současný trenér označený. */
+function CoachCompareLine({ compare, current }: { compare: CoachCompare; current: CoachType | null }) {
+  const items = ([["parent", "táta"], ["volunteer", "hráč áčka"], ["staff", "trenér mládeže"]] as const)
+    .filter(([k]) => compare[k] !== null)
+    .map(([k, label]) => `${label} ${compare[k]!.toLocaleString("cs", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}${current === k ? " (teď)" : ""}`);
+  if (items.length < 2) return null;
+  return <p className="text-xs text-muted">Kolik žáků v průměru přijde podle trenéra: {items.join(" · ")}.</p>;
 }
 
 /** Co se při lákání stalo, za jménem žáka (výsledek u jeho karty). */
@@ -498,6 +510,7 @@ export function AcademyCard({ teamId }: { teamId: string }) {
             <p className="text-sm text-muted">
               Jednou za sezónu, stojí {kc(data.recruitDay.cost)}. Přijdou žáci 11–12 let, čekej {classText(data.recruitDay.expected)}. Víc dětí přivede hráč áčka (děti k němu vzhlíží) a táta (zná rodiče, přivede žáka navíc).
             </p>
+            <CoachCompareLine compare={data.recruitDay.byCoach} current={data.coach.type} />
             {resultBox("recruit")}
             {data.recruitDay.used ? (
               <p className="text-sm text-muted">Letos už byl, další příští sezónu.</p>
@@ -519,6 +532,7 @@ export function AcademyCard({ teamId }: { teamId: string }) {
               Přijde míň dětí než ze školy, čekej {classText(data.openDay.expected)}, ale i z okolních obcí a od 11 do 14 let.
               Chodí ty, které fotbal opravdu chtějí, takže tolik nekončí. A trenér je vidí hrát, takže jejich talent odhadne přesněji.
             </p>
+            <CoachCompareLine compare={data.openDay.byCoach} current={data.coach.type} />
             {resultBox("openday")}
             {data.openDay.used ? (
               <p className="text-sm text-muted">Letos už byl, další příští sezónu.</p>
