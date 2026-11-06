@@ -25,7 +25,7 @@ import {
   REOFFER_DAYS, firstOfferDay, quitChance, talentShiftAt13, pickTraits, knownTrait, positionVisible, GRADUATE_WAGE_FACTOR,
   youthTransferFee, distanceKm, qualityText, PLAY_UP_ESTIMATE, estimateRange, strengthsOf, staffQualityText,
   YOUTH_EQUIPMENT, POTENTIAL_SCALE, type YouthEquipment,
-  RECRUIT_DAY_COST, recruitDayExpected, OPEN_DAY_COST, openDayExpected, OPEN_DAY_MAX_KIDS, OPEN_DAY_COMMITMENT_BONUS, OPEN_DAY_ESTIMATE_FACTOR, WEEKS_PER_SEASON, NEIGHBOR_RADIUS_KM, neighborKidsExpected, NEIGHBOR_MAX_PER_YEAR, MAX_SQUAD,
+  RECRUIT_DAY_COST, RECRUIT_REPEAT_DAYS, nextRecruitDay, recruitDayExpected, OPEN_DAY_COST, openDayExpected, OPEN_DAY_MAX_KIDS, OPEN_DAY_COMMITMENT_BONUS, OPEN_DAY_ESTIMATE_FACTOR, WEEKS_PER_SEASON, NEIGHBOR_RADIUS_KM, neighborKidsExpected, NEIGHBOR_MAX_PER_YEAR, MAX_SQUAD,
   POACH_RADIUS_KM, MAX_POACH_PER_SEASON, POACH_THRESHOLD, POACH_ACTIONS, type PoachAction, poachBaseInterest,
   interestText, leavingInterestText, rivalInterestText, leavingRivalText, MAX_POACH_CLUBS_PER_KID, youthFeeByAge,
 } from "./rules";
@@ -815,7 +815,7 @@ export async function dailyAcademy(db: D1Database, teamId: string, gameDate: str
 export async function loadAcademyView(db: D1Database, teamId: string) {
   // Každý dotaz na D1 je samostatná cesta po síti (~20 ms). Dřív jich šlo 42 za sebou a stránka
   // se načítala skoro sekundu, proto co na sobě nezávisí, jde souběžně, a nic se nečte dvakrát.
-  type TeamCols = { recruit: number | null; open: number | null; founded: number | null; budget: number | null };
+  type TeamCols = { recruit: number | null; recruit_on: string | null; open: number | null; founded: number | null; budget: number | null; game_date: string | null };
   const [club, prospects, pending, u21, equipment, seasonNumber, cols] = await Promise.all([
     loadClub(db, teamId),
     activeProspects(db, teamId),
@@ -825,7 +825,7 @@ export async function loadAcademyView(db: D1Database, teamId: string) {
     hasU21Team(db, teamId),
     loadYouthEquipment(db, teamId),
     currentSeasonNumber(db),
-    db.prepare("SELECT academy_recruit_day_season AS recruit, academy_open_day_season AS open, academy_founded_season AS founded, budget FROM teams WHERE id = ?")
+    db.prepare("SELECT academy_recruit_day_season AS recruit, academy_recruit_day_on AS recruit_on, academy_open_day_season AS open, academy_founded_season AS founded, budget, game_date FROM teams WHERE id = ?")
       .bind(teamId).first<TeamCols>()
       .catch((e) => { logger.warn({ module: M, teamId }, "academy team columns", e); return null; }),
   ]);
@@ -872,7 +872,10 @@ export async function loadAcademyView(db: D1Database, teamId: string) {
     staff: altStaff?.[pick] ?? null, volunteer: altVolunteer?.[pick] ?? null, parent: altParent?.[pick] ?? null,
   });
 
-  const recruitDayUsed = cols?.recruit === seasonNumber;
+  // Pod MIN_SQUAD žáků jde nábor opakovat jednou za týden (stejná podmínka jako v recruitDay)
+  const recruitRepeatable = prospects.length < MIN_SQUAD;
+  const recruitNextOn = recruitRepeatable ? nextRecruitDay(cols?.recruit_on ?? null, cols?.game_date ?? new Date().toISOString()) : null;
+  const recruitDayUsed = recruitRepeatable ? recruitNextOn !== null : cols?.recruit === seasonNumber;
   const openDayUsed = cols?.open === seasonNumber;
   const foundedSeason = cols?.founded ?? null;
   const neighborPerYear = Math.min(NEIGHBOR_MAX_PER_YEAR, neighborList.reduce((n, v) => n + v.expected, 0));
@@ -890,6 +893,9 @@ export async function loadAcademyView(db: D1Database, teamId: string) {
     recruitDay: {
       available: !!club.academy_upkeep && !!coach.type && !recruitDayUsed,
       used: recruitDayUsed,
+      /** Pod MIN_SQUAD žáků jde nábor opakovat jednou za týden; `nextOn` = kdy znovu. */
+      repeatable: recruitRepeatable,
+      nextOn: recruitNextOn,
       cost: RECRUIT_DAY_COST,
       expected: Math.round(recruitDayExpectedFor(club, coach) * 10) / 10,
       /** Kolik dětí v průměru s jednotlivými trenéry (null = takového trenéra klub nemá). */
@@ -1148,10 +1154,21 @@ export async function recruitDay(db: D1Database, rng: Rng, teamId: string, gameD
   const affordable = await assertPurchaseAllowed(db, teamId, RECRUIT_DAY_COST);
   if (!affordable.ok) return { ok: false, status: 409, error: affordable.reason };
   const seasonNumber = await currentSeasonNumber(db);
-  const claim = await db.prepare(
-    "UPDATE teams SET academy_recruit_day_season = ? WHERE id = ? AND (academy_recruit_day_season IS NULL OR academy_recruit_day_season < ?)",
-  ).bind(seasonNumber, teamId, seasonNumber).run();
-  if (claim.meta.changes === 0) return { ok: false, status: 409, error: "Náborový den už letos byl, další až příští sezónu" };
+  const today = day(gameDate);
+  // Pod MIN_SQUAD žáků (bez soutěže) jde nábor opakovat jednou za týden, jinak jednou za sezónu.
+  // Nárok atomicky v jednom UPDATE: dvě souběžná kliknutí nábor nezdvojí.
+  const repeatable = squad < MIN_SQUAD;
+  const claim = repeatable
+    ? await db.prepare(
+      `UPDATE teams SET academy_recruit_day_season = ?, academy_recruit_day_on = ?
+        WHERE id = ? AND (academy_recruit_day_on IS NULL OR date(academy_recruit_day_on, '+' || ? || ' days') <= date(?))`,
+    ).bind(seasonNumber, today, teamId, RECRUIT_REPEAT_DAYS, today).run()
+    : await db.prepare(
+      "UPDATE teams SET academy_recruit_day_season = ?, academy_recruit_day_on = ? WHERE id = ? AND (academy_recruit_day_season IS NULL OR academy_recruit_day_season < ?)",
+    ).bind(seasonNumber, today, teamId, seasonNumber).run();
+  if (claim.meta.changes === 0) {
+    return { ok: false, status: 409, error: repeatable ? `Další nábor jde až po ${RECRUIT_REPEAT_DAYS} dnech od posledního` : "Náborový den už letos byl, další až příští sezónu" };
+  }
   await recordTransaction(db, teamId, "youth_academy", -RECRUIT_DAY_COST, "Náborový den žáků ve škole", gameDate);
   const kids = Math.min(MAX_SQUAD - squad, recruitDayKids(rng, club, coach));
   const names: string[] = [];
@@ -1162,7 +1179,9 @@ export async function recruitDay(db: D1Database, rng: Rng, teamId: string, gameD
   if (isHuman(club)) {
     await academySms(db, teamId, names.length
       ? `Náborový den ve škole se povedl, přišli noví žáci: ${names.join(", ")}.`
-      : "Na náborový den ve škole přišlo pár dětí, ale nikdo se nakonec nepřihlásil. Zkusíme to příští sezónu.");
+      : repeatable
+        ? "Na náborový den ve škole přišlo pár dětí, ale nikdo se nakonec nepřihlásil. Zkusíme to znovu za týden."
+        : "Na náborový den ve škole přišlo pár dětí, ale nikdo se nakonec nepřihlásil. Zkusíme to příští sezónu.");
   }
   return { ok: true, names };
 }

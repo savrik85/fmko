@@ -375,6 +375,17 @@ export function staffQualityText(effectiveness: number): string {
 
 /** Náborový den ve škole: jednou za sezónu, s trenérem žáků. */
 export const RECRUIT_DAY_COST = 1500;
+/** Dokud družstvo nemá MIN_SQUAD žáků na soutěž, jde nábor opakovat, nejdřív po tolika dnech. */
+export const RECRUIT_REPEAT_DAYS = 7;
+
+/** Den, kdy jde opakovaný nábor znovu (YYYY-MM-DD), nebo null, když už jde. */
+export function nextRecruitDay(lastOn: string | null, today: string): string | null {
+  if (!lastOn) return null;
+  const next = new Date(`${lastOn.slice(0, 10)}T00:00:00Z`);
+  next.setUTCDate(next.getUTCDate() + RECRUIT_REPEAT_DAYS);
+  const nextDay = next.toISOString().slice(0, 10);
+  return nextDay > today.slice(0, 10) ? nextDay : null;
+}
 
 /**
  * Kolik kluků (11–12 let) přivede náborový den: zhruba polovina ročníku obce navíc,
