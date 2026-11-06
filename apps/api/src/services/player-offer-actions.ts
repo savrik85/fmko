@@ -41,6 +41,20 @@ export async function acceptPlayerOffer(db: D1Database, teamId: string, offerId:
     if (!hasU21) return { ok: false, status: 409, error: "Za muže smí kluk nastoupit až od 15 let a klub nemá dorost." };
   }
 
+  // Žák z cizích žáků (soused bez dorostu): odstupné jeho klubu. Peníze zkontrolovat PŘED
+  // zabráním, stejně jako u nákupů jinde ve hře (finance-processor.assertPurchaseAllowed).
+  const prospectOrigin = offer.prospect_id
+    ? await db.prepare("SELECT team_id, aged_season FROM youth_prospects WHERE id = ?").bind(offer.prospect_id).first<{ team_id: string; aged_season: number | null }>()
+        .catch((e) => { logger.warn({ module: M, teamId }, "load academy prospect", e); return null; })
+    : null;
+  if (prospectOrigin && prospectOrigin.team_id !== teamId) {
+    const { youthFeeFor } = await import("../academy/service");
+    const fee = await youthFeeFor(db, teamId);
+    const { assertPurchaseAllowed } = await import("../season/finance-processor");
+    const allowed = await assertPurchaseAllowed(db, teamId, fee + PLAYER_OFFER_SIGNING_FEE);
+    if (!allowed.ok) return { ok: false, status: 409, error: allowed.reason };
+  }
+
   // Atomicky claimni offer — pokud někdo souběžně už přijal, claim selže a nevytvoříme duplicitního hráče.
   const claim = await db.prepare("UPDATE player_offers SET status = 'accepted' WHERE id = ? AND team_id = ? AND status = 'pending'")
     .bind(offerId, teamId).run();
@@ -93,10 +107,19 @@ export async function acceptPlayerOffer(db: D1Database, teamId: string, offerId:
         .catch((e) => { logger.warn({ module: M, teamId }, "load u21 for academy offer", e); return null; })
     : null;
   const targetTeamId = u21?.id ?? teamId;
+  // Nabídka čtrnáctiletého vzniká na konci sezóny, ještě před letním stárnutím. Když ji klub
+  // přijme až po přechodu do nové sezóny, stárnutí ho minulo: rok mu přidat (jinak by celou
+  // sezónu zůstal čtrnáctiletý a nesměl do áčka).
+  let age = Number(offer.age);
+  if (prospectOrigin?.aged_season != null) {
+    const current = await db.prepare("SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1").first<{ number: number }>()
+      .catch((e) => { logger.warn({ module: M, teamId }, "active season for academy offer", e); return null; });
+    if (current && current.number > prospectOrigin.aged_season) age += current.number - prospectOrigin.aged_season;
+  }
   await db.prepare(
     `INSERT INTO players (id, team_id, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, weekly_wage, status, nationality, hidden_talent, skills_max, raised_by_team_id)
      VALUES (?, ?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)`
-  ).bind(playerId, targetTeamId, offer.first_name, offer.last_name, offer.age, offer.position, offer.overall_rating,
+  ).bind(playerId, targetTeamId, offer.first_name, offer.last_name, age, offer.position, offer.overall_rating,
     offer.skills, offer.physical, offer.personality, JSON.stringify(lifeContextWithoutCaps), offer.avatar, offer.weekly_wage,
     (offer.nationality as string) ?? "CZ", hiddenTalent, JSON.stringify(skillsMax), raisedBy).run();
 
@@ -153,6 +176,7 @@ export async function acceptPlayerOffer(db: D1Database, teamId: string, offerId:
 
 /** POST /teams/:teamId/player-offers/:offerId/reject: odmítnutí nabídky. */
 export async function rejectPlayerOffer(db: D1Database, teamId: string, offerId: string): Promise<{ ok: true }> {
-  await db.prepare("UPDATE player_offers SET status = 'rejected' WHERE id = ? AND team_id = ?").bind(offerId, teamId).run();
+  // Jen čekající: přijatou nabídku by odmítnutí přepsalo a hráč by visel bez nabídky
+  await db.prepare("UPDATE player_offers SET status = 'rejected' WHERE id = ? AND team_id = ? AND status = 'pending'").bind(offerId, teamId).run();
   return { ok: true };
 }

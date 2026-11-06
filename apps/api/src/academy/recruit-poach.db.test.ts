@@ -59,11 +59,14 @@ describe("náborový den", () => {
   });
 
   it("den otevřených dveří: zvlášť od náboru, dražší, žáci 11–14 se zápalem a přesnějším odhadem", async () => {
+    // Plné družstvo (24): tlačítko se nenabídne, akce by stejně skončila na „víc jich neuživí“
+    const full = await loadAcademyView(db, "big");
+    if (full!.prospects.length >= 24) expect(full!.openDay.available).toBe(false);
+    // Velký klub má po založení plno: pár žáků skončí, ať je pro nováčky místo
+    await db.prepare("UPDATE youth_prospects SET status = 'quit' WHERE id IN (SELECT id FROM youth_prospects WHERE team_id = 'big' AND status = 'active' AND coach_son = 0 AND id NOT IN (SELECT COALESCE(academy_coach_prospect_id, '') FROM teams WHERE id = 'big') LIMIT 8)").run();
     const view = await loadAcademyView(db, "big");
     expect(view!.openDay.available).toBe(true);
     expect(view!.openDay.cost).toBe(2500);
-    // Velký klub má po založení plno: pár žáků skončí, ať je pro nováčky místo
-    await db.prepare("UPDATE youth_prospects SET status = 'quit' WHERE id IN (SELECT id FROM youth_prospects WHERE team_id = 'big' AND status = 'active' AND coach_son = 0 AND id NOT IN (SELECT COALESCE(academy_coach_prospect_id, '') FROM teams WHERE id = 'big') LIMIT 8)").run();
     const before = new Set((await prospects("big")).map((p) => p.id));
     // Víc pokusů na čerstvém semínku nejde (jednou za sezónu), proto sezónu posouváme ručně
     let added: ProspectRow[] = [];

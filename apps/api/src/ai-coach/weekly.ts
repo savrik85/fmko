@@ -117,6 +117,7 @@ async function loadAcademyContext(db: D1Database, teamId: string): Promise<Weekl
   return {
     current: data.current, weeklyCostNow: ACADEMY_WEEKLY_COST[data.current], prospects: data.prospects,
     expectedPerYear: data.expectedPerYear, canVolunteer: data.canVolunteer, canStaff: data.canStaff, canFound: data.canFound,
+    founded: data.founded,
   };
 }
 
