@@ -259,8 +259,10 @@ export default function U21Page() {
   if (!u21TeamId) {
     return (
       <div className="p-3 sm:p-4 md:p-6 space-y-3">
+        {/* I bez dorostu musí jít přepnout na Akademii (SMS žáků posílají do Mládež → Akademie) */}
+        <YouthSectionNav />
         <div className="card p-6 text-center text-gray-600">
-          Tvůj klub zatím nemá U21 tým. Kontaktuj správce hry.
+          Klub nemá dorost (U21). Žáky najdeš v Akademii.
         </div>
       </div>
     );

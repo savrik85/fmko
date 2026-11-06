@@ -38,7 +38,7 @@ export async function acceptPlayerOffer(db: D1Database, teamId: string, offerId:
   if (offer.prospect_id && Number(offer.age) < 15) {
     const hasU21 = await db.prepare("SELECT 1 AS ok FROM teams WHERE parent_team_id = ? AND team_type = 'u21'").bind(teamId).first<{ ok: number }>()
       .catch((e) => { logger.warn({ module: M, teamId }, "check u21 for academy offer", e); return null; });
-    if (!hasU21) return { ok: false, status: 409, error: "Za muže smí kluk nastoupit až od 15 let a klub nemá dorost." };
+    if (!hasU21) return { ok: false, status: 409, error: "Za muže smí žák nastoupit až od 15 let a klub nemá dorost." };
   }
 
   // Žák z cizích žáků (soused bez dorostu): odstupné jeho klubu. Peníze zkontrolovat PŘED
@@ -74,7 +74,7 @@ export async function acceptPlayerOffer(db: D1Database, teamId: string, offerId:
     ).bind(playerId, claimedProspect).run();
     if (prospectClaim.meta.changes === 0) {
       await db.prepare("UPDATE player_offers SET status = 'expired' WHERE id = ?").bind(offerId).run();
-      return { ok: false, status: 409, error: "Kluk už u žáků není" };
+      return { ok: false, status: 409, error: "Žák už u žáků není" };
     }
   }
   // Skrytý talent z nabídky se musí propsat do sloupce hidden_talent — jinak by

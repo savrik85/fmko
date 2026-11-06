@@ -98,7 +98,7 @@ describe("přetahování", () => {
     expect(invite.ok).toBe(true);
     expect((await poachAction(db, createRng(5), "big", kid.id, "invite", GAME_DATE)).ok).toBe(false);
     expect((await poachAction(db, createRng(5), "big", kid.id, "bogus", GAME_DATE)).ok).toBe(false);
-    const sms = await db.prepare("SELECT m.body FROM messages m JOIN conversations c ON c.id = m.conversation_id WHERE c.team_id = 'small' AND m.body LIKE '%pozvali ho%'").first<{ body: string }>();
+    const sms = await db.prepare("SELECT m.body FROM messages m JOIN conversations c ON c.id = m.conversation_id WHERE c.team_id = 'small' AND m.body LIKE '%pozval k sobě na trénink%'").first<{ body: string }>();
     expect(sms).not.toBeNull();
     const view = await loadAcademyView(db, "small");
     expect(view!.poach!.incoming.length).toBe(1);

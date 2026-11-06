@@ -2198,6 +2198,8 @@ export default function TransfersPage() {
                   const isYouth = o.source === "youth";
                   // Žák z vlastní akademie: talent ukazuje Akademie slovy trenéra, tady by ho prozradil
                   const fromAcademy = !!(o as { fromAcademy?: boolean }).fromAcademy;
+                  // Žák ze sousední akademie bez dorostu: po odmítnutí neskončí u žáků, ale s fotbalem
+                  const academyVillage = (o as { academyVillage?: string | null }).academyVillage ?? null;
                   const hiddenTalent = (o.personality as any)?.hiddenTalent as number | undefined;
                   // expiresAt je v HERNÍM čase (player-offers.ts ho počítá z game_date),
                   // takže odpočet musí běžet proti hernímu datu. Proti reálnému času
@@ -2216,7 +2218,7 @@ export default function TransfersPage() {
                             {nationalityFlag((o as { nationality?: string }).nationality) && <span title={(o as { nationality?: string }).nationality}>{nationalityFlag((o as { nationality?: string }).nationality)}</span>}
                             <PositionBadge position={o.position as "GK" | "DEF" | "MID" | "FWD"} />
                             <span className="text-sm text-muted">{o.age} let</span>
-                            {isYouth && <span className="text-xs bg-pitch-100 text-pitch-700 px-2 py-0.5 rounded-full font-heading font-bold">{fromAcademy ? "Žák z akademie" : "Dorostenec"}</span>}
+                            {isYouth && <span className="text-xs bg-pitch-100 text-pitch-700 px-2 py-0.5 rounded-full font-heading font-bold">{fromAcademy ? (academyVillage ? `Žák z obce ${academyVillage}` : "Žák z akademie") : "Dorostenec"}</span>}
                           </div>
                           <div className="text-xs text-muted mb-1">
                             {sourceIcon[o.source]} <span className="font-heading font-bold text-ink">{o.sourceName}</span>
@@ -2277,8 +2279,11 @@ export default function TransfersPage() {
                               setPlayerOfferLoading(null);
                             }}
                             className="py-1.5 px-3 rounded-soft text-sm font-heading font-bold bg-gray-100 text-muted hover:bg-gray-200 transition-colors disabled:opacity-50">
-                            {fromAcademy ? "Nechat u žáků" : "Odmítnout"}
+                            {fromAcademy && !academyVillage ? "Nechat u žáků" : "Odmítnout"}
                           </button>
+                          {academyVillage && (
+                            <p className="w-full text-xs text-muted">Jeho klub nemá dorost: když ho nevezmeš, nemá kde hrát a s fotbalem skončí. Za přijetí zaplatíš jeho klubu tabulkové odstupné.</p>
+                          )}
                         </div>
                       </div>
                     </div>
