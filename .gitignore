@@ -37,3 +37,6 @@ apps/api/src/**/*.js
 apps/api/src/**/*.js.map
 apps/api/src/**/*.d.ts
 apps/api/src/**/*.d.ts.map
+
+# Náhledy z brainstormingu (vizuální společník)
+.superpowers/

@@ -8,6 +8,7 @@ import { pocet } from "@/lib/referee-info";
 import { SectionLabel, Tabs, useTabParam } from "@/components/ui";
 import { AiCoachSection } from "./ai-coach-section";
 import { DashboardSection } from "./dashboard-section";
+import { SocialReportsSection } from "./social-reports-section";
 import { ADMIN_TAB_KEYS, ADMIN_TABS, type AdminTab } from "./admin-tabs";
 
 interface SeedTable { key: string; label: string; count: number; editable: boolean; districts?: string[] }
@@ -87,6 +88,7 @@ export default function AdminPage() {
             <VotesAdmin />
           </div>
           <ClubLinksSection />
+          <SocialReportsSection />
         </div>
       )}
 
