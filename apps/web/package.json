@@ -19,7 +19,7 @@
     "facesjs": "^5.0.2",
     "leaflet": "^1.9.4",
     "next": "^15.2.0",
-    "posthog-js": "^1.434.2",
+    "posthog-js": "^1.447.3",
     "postprocessing": "^6.39.5",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

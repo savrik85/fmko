@@ -1,7 +1,11 @@
 import posthog from "posthog-js";
 
 const POSTHOG_KEY = process.env.NEXT_PUBLIC_POSTHOG_KEY;
-const POSTHOG_HOST = process.env.NEXT_PUBLIC_POSTHOG_HOST || "https://eu.i.posthog.com";
+// Data jdou přes naši doménu (src/app/relay), ať je blokátory reklam nezahodí.
+// NEXT_PUBLIC_POSTHOG_HOST už se nepoužívá: s přímou adresou PostHogu by proxy obešel.
+const POSTHOG_HOST = "/relay";
+// Odkazy z knihovny do aplikace PostHogu (toolbar, nahrávky) musí vést na jeho web, ne na proxy.
+const POSTHOG_UI_HOST = "https://eu.posthog.com";
 
 let isInitialized = false;
 
@@ -146,6 +150,7 @@ export function initPostHog(): typeof posthog | null {
   try {
     posthog.init(POSTHOG_KEY, {
       api_host: POSTHOG_HOST,
+      ui_host: POSTHOG_UI_HOST,
       person_profiles: "identified_only", // Profil jen pro přihlášené, historii z doby před přihlášením k němu PostHog připojí
       capture_pageview: false, // V Next.js App Routeru sledujeme změny stránek v PostHogPageView
       capture_pageleave: true, // Měří přesný čas strávený na jednotlivých stránkách a odchody

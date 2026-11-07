@@ -76,6 +76,9 @@ const nextConfig: NextConfig = {
   // Source mapy pro PostHog Error Tracking. CI je po buildu nahraje do PostHogu
   // a z výstupu smaže, na web se nedostanou.
   productionBrowserSourceMaps: true,
+  // PostHog posílá na /relay adresy s lomítkem na konci (/e/, /flags/). Next by je
+  // přesměroval na verzi bez lomítka a každá událost by šla dvakrát.
+  skipTrailingSlashRedirect: true,
   async redirects() {
     return OLD_TO_NEW_PATHS.map(([source, destination]) => ({ source, destination, permanent: true }));
   },
