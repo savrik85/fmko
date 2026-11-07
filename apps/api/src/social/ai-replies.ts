@@ -231,7 +231,8 @@ async function repliesToday(db: D1Database): Promise<number> {
 
 /** Značky ohraničení v textu od lidí by šly použít k vylomení z bloku; zneškodní se. */
 function fence(text: string): string {
-  return text.replace(/<<</g, "<< <").replace(/>>>/g, "> >>");
+  // Celé řady: z „>>>>“ by po náhradě po třech zbylo „> >>>“.
+  return text.replace(/<{3,}/g, "<<").replace(/>{3,}/g, ">>");
 }
 
 export function buildPrompt(persona: Persona, target: ResolvedTarget, trigger: ReplyTrigger, thread: string[]): { system: string; user: string } {
