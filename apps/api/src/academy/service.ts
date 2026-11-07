@@ -974,7 +974,9 @@ export async function loadAcademyView(db: D1Database, teamId: string) {
     Promise.all(prospects.map(async (p) => { profiles.set(p.id, await prospectProfile(db, p, club)); })),
     // Plat v dorostu u žáků, které jde dát do dorostu (stejný výpočet jako nabídka)
     Promise.all(prospects.filter((p) => canPlayUp(p.age)).map(async (p) => {
-      graduateWages.set(p.id, (await buildGraduate(db, p, club)).weeklyWage);
+      // Zaokrouhleně na 50 Kč: přesný plat by prozradil skutečné hodnocení žáka, které
+      // Akademie ukazuje jen jako odhad trenéra (přesná částka je až v nabídce)
+      graduateWages.set(p.id, Math.max(50, Math.round((await buildGraduate(db, p, club)).weeklyWage / 50) * 50));
     })),
   ]);
   const compare = (pick: "recruit" | "open") => ({
