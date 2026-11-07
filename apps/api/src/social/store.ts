@@ -390,6 +390,8 @@ async function decorate(db: D1Database, items: FeedItem[], viewer: Viewer, muted
     const l = likes.get(it.key);
     views.push({
       ...it,
+      // Id uživatele ven nejde: stačí vědět, jestli je příspěvek můj.
+      userId: null,
       likeCount: l?.n ?? 0,
       liked: l?.liked ?? false,
       commentCount,
