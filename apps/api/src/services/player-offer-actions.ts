@@ -28,7 +28,12 @@ export type AcceptPlayerOfferResult =
   | PlayerOfferFailure;
 
 /** POST /teams/:teamId/player-offers/:offerId/accept: podpis nabídnutého hráče. */
-export async function acceptPlayerOffer(db: D1Database, teamId: string, offerId: string): Promise<AcceptPlayerOfferResult> {
+/**
+ * `mandatory`: letní postup vlastního žáka do dorostu. Klub ho odmítnout nemůže, registrace se
+ * proto strhne i do mínusu. Jinak se peníze na registraci kontrolují předem: dřív se strhávaly
+ * až po vzniku hráče a při záporném rozpočtu spadly (hráč vznikl, registrace ne).
+ */
+export async function acceptPlayerOffer(db: D1Database, teamId: string, offerId: string, opts: { mandatory?: boolean } = {}): Promise<AcceptPlayerOfferResult> {
   const offer = await db.prepare("SELECT * FROM player_offers WHERE id = ? AND team_id = ? AND status = 'pending'")
     .bind(offerId, teamId).first<Record<string, unknown>>();
   if (!offer) return { ok: false, status: 404, error: "Nabídka nenalezena" };
@@ -52,6 +57,10 @@ export async function acceptPlayerOffer(db: D1Database, teamId: string, offerId:
     const fee = await youthFeeFor(db, teamId);
     const { assertPurchaseAllowed } = await import("../season/finance-processor");
     const allowed = await assertPurchaseAllowed(db, teamId, fee + PLAYER_OFFER_SIGNING_FEE);
+    if (!allowed.ok) return { ok: false, status: 409, error: allowed.reason };
+  } else if (!opts.mandatory) {
+    const { assertPurchaseAllowed } = await import("../season/finance-processor");
+    const allowed = await assertPurchaseAllowed(db, teamId, PLAYER_OFFER_SIGNING_FEE);
     if (!allowed.ok) return { ok: false, status: 409, error: allowed.reason };
   }
 
@@ -158,7 +167,8 @@ export async function acceptPlayerOffer(db: D1Database, teamId: string, offerId:
         .catch((e) => logger.warn({ module: M, teamId }, "youth transfer fee", e));
     }
   }
-  await recordTransaction(db, teamId, "signing_fee", -PLAYER_OFFER_SIGNING_FEE, `Registrace: ${offer.first_name} ${offer.last_name}`, team?.game_date ?? new Date().toISOString());
+  // Hráč už vznikl: registrace nesmí spadnout a nechat přijetí napůl (kontrola peněz byla předem)
+  await recordTransaction(db, teamId, "signing_fee", -PLAYER_OFFER_SIGNING_FEE, `Registrace: ${offer.first_name} ${offer.last_name}`, team?.game_date ?? new Date().toISOString(), undefined, { allowNegative: true });
 
   // Return full player data for reveal card
   const newPlayer = await db.prepare("SELECT * FROM players WHERE id = ?").bind(playerId).first<Record<string, unknown>>();

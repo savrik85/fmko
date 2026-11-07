@@ -168,3 +168,50 @@ describe("lákání a plat v dorostu", () => {
     expect(younger.graduateWage).toBeNull();
   });
 });
+
+describe("záporný rozpočet v létě", () => {
+  it("vlastní čtrnáctiletý postoupí do dorostu i při mínusu a registrace se strhne", async () => {
+    const kid = (await prospects("big")).find((k) => !k.coach_son)!;
+    await db.prepare("UPDATE youth_prospects SET age = 14, aged_season = NULL WHERE id = ?").bind(kid.id).run();
+    await db.prepare("UPDATE youth_prospects SET aged_season = 3 WHERE team_id = 'big' AND id != ?").bind(kid.id).run();
+    await db.prepare("UPDATE teams SET budget = -1000 WHERE id = 'big'").run();
+    await seasonEndAcademy(db, createRng(60), "big", GAME_DATE);
+    const row = await db.prepare("SELECT p.status, pl.team_id FROM youth_prospects p LEFT JOIN players pl ON pl.id = p.player_id WHERE p.id = ?").bind(kid.id).first<{ status: string; team_id: string | null }>();
+    expect(row).toMatchObject({ status: "promoted", team_id: "big-u21" });
+    const fee = await db.prepare("SELECT amount FROM transactions WHERE team_id = 'big' AND description = ?").bind(`Registrace: ${kid.first_name} ${kid.last_name}`).first<{ amount: number }>();
+    expect(fee!.amount).toBe(-500);
+    const summary = await sms("big", `%Do dorostu postoupili: %${kid.first_name} ${kid.last_name}%`);
+    expect(summary).not.toBeNull();
+    expect(await sms("big", `%Skončili: %${kid.first_name} ${kid.last_name}%`)).toBeNull();
+  });
+
+  it("ruční „Dát do dorostu“ při mínusu odmítne předem a hráč nevznikne", async () => {
+    const { promoteProspect } = await import("./service");
+    const kid = (await prospects("big")).find((k) => !k.coach_son)!;
+    await db.prepare("UPDATE youth_prospects SET age = 13 WHERE id = ?").bind(kid.id).run();
+    const players = async () => (await db.prepare("SELECT COUNT(*) AS n FROM players WHERE team_id = 'big-u21'").first<{ n: number }>())!.n;
+    const before = await players();
+    const res = await promoteProspect(db, "big", kid.id);
+    expect(res.ok).toBe(false);
+    expect(await players()).toBe(before);
+    expect((await prospects("big")).some((k) => k.id === kid.id)).toBe(true);
+  });
+
+  it("lákající klub bez peněz na odstupné žáka nedostane, žák zůstává a nikdo nic neplatí", async () => {
+    const poach = await db.prepare("SELECT id, prospect_id FROM youth_poach WHERE to_team_id = 'big' AND status = 'active' LIMIT 1").first<{ id: string; prospect_id: string }>();
+    await db.prepare("UPDATE youth_poach SET interest = 90 WHERE id = ?").bind(poach!.id).run();
+    // Místo v družstvu je: přestup by neprošel jen kvůli penězům
+    await db.prepare("UPDATE youth_prospects SET status = 'quit' WHERE id IN (SELECT id FROM youth_prospects WHERE team_id = 'big' AND status = 'active' AND coach_son = 0 LIMIT 3)").run();
+    await db.prepare("UPDATE teams SET budget = -1000 WHERE id = 'big'").run();
+    await seasonEndAcademy(db, createRng(61), "small", GAME_DATE);
+    const kid = await db.prepare("SELECT team_id, first_name, last_name FROM youth_prospects WHERE id = ?").bind(poach!.prospect_id).first<{ team_id: string; first_name: string; last_name: string }>();
+    expect(kid!.team_id).toBe("small");
+    const st = await db.prepare("SELECT status FROM youth_poach WHERE id = ?").bind(poach!.id).first<{ status: string }>();
+    expect(st!.status).toBe("failed");
+    const income = await db.prepare("SELECT COUNT(*) AS n FROM transactions WHERE description LIKE 'Odstupné za žáka%'").first<{ n: number }>();
+    expect(income!.n).toBe(0);
+    expect(await sms("big", `%${kid!.first_name} ${kid!.last_name}%nemáme peníze%`)).not.toBeNull();
+    const left = await db.prepare("SELECT COUNT(*) AS n FROM youth_poach WHERE from_team_id = 'small' AND status = 'active'").first<{ n: number }>();
+    expect(left!.n).toBe(0);
+  });
+});
