@@ -494,7 +494,7 @@ export function AcademyCard({ teamId }: { teamId: string }) {
                       <p className="text-xs text-muted">{p.traits.length > 0 && <>{p.traits.join(", ")} · </>}Nálada: {p.mood}</p>
                       {p.offered && <p className="text-sm text-muted">Trenér ho doporučil do dorostu, nabídku najdeš v Přestupy → Nabídky.</p>}
                       {p.canPlayUp && p.graduateWage !== null && (
-                        <p className="text-xs text-muted">V dorostu by bral {kc(p.graduateWage)} týdně.</p>
+                        <p className="text-xs text-muted">V dorostu by bral zhruba {kc(p.graduateWage)} týdně.</p>
                       )}
                       {p.canPlayUp && (
                         <button
