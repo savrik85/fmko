@@ -35,6 +35,8 @@ interface Prospect {
   verdict: string | null;
   mood: string;
   canPlayUp: boolean;
+  /** Týdenní plat v dorostu (jen u žáka, kterého jde dát do dorostu). */
+  graduateWage: number | null;
   offered: boolean;
   promising: boolean;
 }
@@ -402,13 +404,14 @@ export function AcademyCard({ teamId }: { teamId: string }) {
         <section className="card p-4 sm:p-5 space-y-3">
           <h2 className="font-heading font-bold text-base">Kolik do akademie dáváš</h2>
           <p className="text-sm text-muted">Týdenní provoz žáků: startovné, cesty na zápasy, dresy a u ambiciózní i soustředění a turnaje. Vybavení (míče, pomůcky) je zvlášť, patří celému klubu.</p>
+          <p className="text-sm text-muted">Růst žáků se mění hned od příštího týdne. Kolik jich v létě skončí, kolik přijde z okolních obcí a jak moc láká cizí žáky, se počítá podle toho, kolik týdnů sezóny která úroveň trvala.</p>
         <ul className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {data.levels.map((l) => {
             const active = l.key === data.level;
             return (
               <li key={l.key} className="flex flex-col">
                 <button
-                  onClick={() => { if (!active) post(`level:${l.key}`, `/api/teams/${teamId}/academy/level`, { level: l.key }, "Úroveň akademie se nepodařilo změnit", `Akademie je teď ${l.label.toLowerCase()}, platí od příští týdenní uzávěrky.`); }}
+                  onClick={() => { if (!active) post(`level:${l.key}`, `/api/teams/${teamId}/academy/level`, { level: l.key }, "Úroveň akademie se nepodařilo změnit", `Akademie je teď ${l.label.toLowerCase()}, platí od příští týdenní uzávěrky. Na odchody a nové žáky v létě má vliv podle toho, kolik týdnů sezóny trvala.`); }}
                   disabled={busy !== null}
                   aria-pressed={active}
                   className={`w-full flex-1 text-left rounded-soft border p-3 min-h-11 transition-colors ${active ? "border-pitch-500 bg-pitch-50" : "border-gray-200 bg-white hover:border-pitch-500"}`}
@@ -490,6 +493,9 @@ export function AcademyCard({ teamId }: { teamId: string }) {
                       {p.potential && <PotentialBar potential={p.potential} scale={data.potentialScale} />}
                       <p className="text-xs text-muted">{p.traits.length > 0 && <>{p.traits.join(", ")} · </>}Nálada: {p.mood}</p>
                       {p.offered && <p className="text-sm text-muted">Trenér ho doporučil do dorostu, nabídku najdeš v Přestupy → Nabídky.</p>}
+                      {p.canPlayUp && p.graduateWage !== null && (
+                        <p className="text-xs text-muted">V dorostu by bral {kc(p.graduateWage)} týdně.</p>
+                      )}
                       {p.canPlayUp && (
                         <button
                           onClick={() => post(p.id, `/api/teams/${teamId}/academy/prospects/${p.id}/promote`, undefined, "Žáka se nepodařilo dát do dorostu", `${p.name} je teď v dorostu, najdeš ho v U21.`)}
