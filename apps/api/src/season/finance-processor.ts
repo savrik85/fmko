@@ -266,10 +266,12 @@ export async function recordTransaction(
   description: string,
   gameDate: string,
   referenceId?: string,
+  /** Povinná platba, kterou klub nemůže odmítnout (registrace odchovance v létě): projde i do mínusu. */
+  opts: { allowNegative?: boolean } = {},
 ): Promise<number> {
   // Safety net: záporný rozpočet + typ nákupu → hodit error.
   // Volající endpointy MAJÍ dělat vlastní pre-check s user-friendly hláškou.
-  if (amount < 0 && PURCHASE_TYPES.has(type)) {
+  if (amount < 0 && PURCHASE_TYPES.has(type) && !opts.allowNegative) {
     const pre = await db.prepare("SELECT budget FROM teams WHERE id = ?")
       .bind(teamId).first<{ budget: number }>();
     if (pre && pre.budget < 0) {
