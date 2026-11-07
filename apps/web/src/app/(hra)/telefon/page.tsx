@@ -129,6 +129,8 @@ export default function PhonePage() {
   const [adresarOtevren, setAdresarOtevren] = useState(false);
   const [oznameniOtevrena, setOznameniOtevrena] = useState(false);
   const [tribunaOtevrena, setTribunaOtevrena] = useState(false);
+  /** Příspěvek v Sockách, na který vede oznámení (`/telefon?socky=<klíč>`). */
+  const [feedFocusKey, setFeedFocusKey] = useState<string | null>(null);
   const [neprectenaOznameni, setNeprectenaOznameni] = useState(0);
   // Zámek. `true` do prvního vykreslení na klientu, jinak by při hydrataci
   // problikl odemčený telefon a hned se zamkl.
@@ -153,7 +155,36 @@ export default function PhonePage() {
   }, [teamId]);
 
   // `sessionStorage` je až na klientu, proto ne v počátečním stavu.
-  useEffect(() => { setZamceno(!jeOdemceno()); }, []);
+  // Kdo přišel z oznámení rovnou na příspěvek v Sockách, nemá narážet na zámek.
+  useEffect(() => {
+    const key = new URLSearchParams(window.location.search).get("socky");
+    if (key) {
+      setFeedFocusKey(key);
+      setTribunaOtevrena(true);
+      setZamceno(false);
+      return;
+    }
+    setZamceno(!jeOdemceno());
+  }, []);
+
+  const openFeed = (key: string) => {
+    setOznameniOtevrena(false);
+    setFeedFocusKey(key);
+    setTribunaOtevrena(true);
+    const url = new URL(window.location.href);
+    url.searchParams.set("socky", key);
+    window.history.replaceState(window.history.state, "", url);
+  };
+
+  const closeFeed = () => {
+    setTribunaOtevrena(false);
+    setFeedFocusKey(null);
+    const url = new URL(window.location.href);
+    if (url.searchParams.has("socky")) {
+      url.searchParams.delete("socky");
+      window.history.replaceState(window.history.state, "", url);
+    }
+  };
 
   const nactiOznameni = () => {
     if (!teamId) return;
@@ -196,7 +227,7 @@ export default function PhonePage() {
         <ZalozkaTelefonu
           emoji="&#128483;&#65039;"
           label="Socky"
-          onClick={() => setTribunaOtevrena(true)}
+          onClick={() => { setFeedFocusKey(null); setTribunaOtevrena(true); }}
         />
         <ZalozkaTelefonu
           emoji="&#128222;"
@@ -286,7 +317,7 @@ export default function PhonePage() {
       )}
 
       {tribunaOtevrena && teamId && (
-        <Tribuna teamId={teamId} onZavrit={() => setTribunaOtevrena(false)} />
+        <Tribuna teamId={teamId} onZavrit={closeFeed} focusKey={feedFocusKey} />
       )}
 
       {oznameniOtevrena && teamId && (
@@ -294,6 +325,7 @@ export default function PhonePage() {
           teamId={teamId}
           onZavrit={() => setOznameniOtevrena(false)}
           onZmena={nactiOznameni}
+          onOpenFeed={openFeed}
         />
       )}
 

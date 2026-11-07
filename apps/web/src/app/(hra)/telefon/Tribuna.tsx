@@ -21,6 +21,7 @@ import { useRouter } from "next/navigation";
 import { Spinner } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { apiFetch } from "@/lib/api";
+import { SocialFeed } from "./SocialFeed";
 
 export interface Prispevek {
   id: string;
@@ -87,7 +88,45 @@ function Avatar({ p }: { p: Prispevek }) {
   );
 }
 
-export function Tribuna({ teamId, onZavrit }: { teamId: string; onZavrit: () => void }) {
+/**
+ * Socky mají dvě záložky: společnou zeď všech okresů (výchozí, tam se diskutuje)
+ * a dosavadní zeď vlastních fanoušků („co si o tobě píšou“).
+ */
+export function Tribuna({ teamId, onZavrit, focusKey }: { teamId: string; onZavrit: () => void; focusKey?: string | null }) {
+  const [tab, setTab] = useState<"all" | "fans">("all");
+
+  return (
+    <div className="absolute inset-0 z-30 bg-gray-50 flex flex-col">
+      {/* Lišta */}
+      <div className="bg-[#1c1c1e] text-white px-3 py-2.5 flex items-center gap-2 shrink-0">
+        <button onClick={onZavrit} aria-label="Zpět" className="w-7 h-7 rounded-full hover:bg-white/15 flex items-center justify-center text-lg leading-none">
+          ‹
+        </button>
+        <span className="font-heading font-bold text-base">Socky</span>
+      </div>
+
+      <div className="shrink-0 bg-[#2c2c2e] text-white flex">
+        {([
+          { key: "all", label: "Všichni" },
+          { key: "fans", label: "Moji fanoušci" },
+        ] as const).map((t) => (
+          <button
+            key={t.key}
+            onClick={() => setTab(t.key)}
+            className={`flex-1 py-2 text-sm font-semibold border-b-2 ${tab === t.key ? "border-white text-white" : "border-transparent text-white/60"}`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "all" ? <SocialFeed teamId={teamId} focusKey={focusKey} /> : <FanWall teamId={teamId} />}
+    </div>
+  );
+}
+
+/** Zeď vlastních fanoušků: co o klubu píšou party, vůdci a novináři. */
+function FanWall({ teamId }: { teamId: string }) {
   const router = useRouter();
   const [posts, setPosts] = useState<Prispevek[] | null>(null);
   const [filtr, setFiltr] = useState<string>("vse");
@@ -101,16 +140,7 @@ export function Tribuna({ teamId, onZavrit }: { teamId: string; onZavrit: () => 
   const videt = (posts ?? []).filter((p) => filtr === "vse" || p.topic === filtr);
 
   return (
-    <div className="absolute inset-0 z-30 bg-gray-50 flex flex-col">
-      {/* Lišta */}
-      <div className="bg-[#1c1c1e] text-white px-3 py-2.5 flex items-center gap-2 shrink-0">
-        <button onClick={onZavrit} aria-label="Zpět" className="w-7 h-7 rounded-full hover:bg-white/15 flex items-center justify-center text-lg leading-none">
-          ‹
-        </button>
-        <span className="font-heading font-bold text-base">Socky</span>
-        <span className="ml-auto text-sm text-white/70">co si o tobě píšou</span>
-      </div>
-
+    <div className="flex-1 min-h-0 flex flex-col">
       {/* Filtry */}
       <div className="flex gap-1.5 px-3 py-2 bg-white border-b border-gray-100 overflow-x-auto shrink-0">
         {FILTRY.map((f) => (

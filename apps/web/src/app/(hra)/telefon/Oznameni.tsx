@@ -39,11 +39,13 @@ function pred(iso: string): string {
   return dny === 1 ? "včera" : `před ${dny} dny`;
 }
 
-export function Oznameni({ teamId, onZavrit, onZmena }: {
+export function Oznameni({ teamId, onZavrit, onZmena, onOpenFeed }: {
   teamId: string;
   onZavrit: () => void;
   /** Ať si seznam zpráv může přepočítat odznak. */
   onZmena: () => void;
+  /** Oznámení o komentáři v Sockách otevře příspěvek rovnou tady v telefonu. */
+  onOpenFeed?: (key: string) => void;
 }) {
   const router = useRouter();
   const [items, setItems] = useState<NotifikaceItem[] | null>(null);
@@ -77,7 +79,11 @@ export function Oznameni({ teamId, onZavrit, onZmena }: {
 
   const otevrit = async (n: NotifikaceItem) => {
     await odbavit(n.id);
-    if (n.actionUrl) router.push(n.actionUrl);
+    const feedKey = n.actionUrl?.startsWith("/telefon?socky=")
+      ? new URLSearchParams(n.actionUrl.slice("/telefon".length)).get("socky")
+      : null;
+    if (feedKey && onOpenFeed) onOpenFeed(feedKey);
+    else if (n.actionUrl) router.push(n.actionUrl);
   };
 
   const neprectene = (items ?? []).filter((n) => !n.read);
