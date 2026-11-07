@@ -1522,7 +1522,12 @@ export async function executeDailyTick(
     const { dailyAcademy } = await import("../academy/service");
     const { receivesPlayerOffers } = await import("../events/player-offers");
     let offered = 0;
-    for (const team of allTeams.results.filter(receivesPlayerOffers)) {
+    // Jen kluby, kterých se žáci týkají (akademie, nebo čtrnáctiletý čekající na souseda):
+    // dřív se denní krok s 3–4 dotazy pouštěl pro každý klub
+    const academyTeams = new Set((await env.DB.prepare(
+      "SELECT id FROM teams WHERE academy_upkeep = 1 UNION SELECT team_id FROM youth_prospects WHERE status = 'leaving'",
+    ).all<{ id: string }>()).results.map((r) => r.id));
+    for (const team of allTeams.results.filter(receivesPlayerOffers).filter((t) => academyTeams.has(t.id as string))) {
       const teamId = team.id as string;
       const res = await dailyAcademy(env.DB, teamId, team.game_date as string)
         .catch((e) => { logger.warn({ module: "daily-tick", teamId }, "daily academy", e); return { offered: 0 }; });

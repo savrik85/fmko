@@ -44,6 +44,11 @@ type WrapPhase = (typeof WRAP_PHASES)[number];
 const U21_WRAP_PHASES = ["awards", "archive"] as const satisfies readonly WrapPhase[];
 
 const DEPARTURES_CHUNK = 3;
+/**
+ * Akademie po dvou klubech: konec sezóny klubu s plným družstvem (24 žáků, postupy do dorostu
+ * vytvářejí hráče) udělá až ~250 dotazů, D1 jich na jedno spuštění povolí 1000.
+ */
+const ACADEMY_CHUNK = 2;
 
 export interface EndSeasonStepResult {
   allDone: boolean;
@@ -350,7 +355,7 @@ async function runWrapPhase(
 
         const gameDate = await getGameDate(db, leagueId);
         const { seasonEndAcademy } = await import("../academy/service");
-        const todo = teamsRes.results.map((r) => r.id).filter((id) => !processedSet.has(id)).slice(0, DEPARTURES_CHUNK);
+        const todo = teamsRes.results.map((r) => r.id).filter((id) => !processedSet.has(id)).slice(0, ACADEMY_CHUNK);
         for (const tid of todo) {
           // Kurzor PŘED zápisem: pád uprostřed radši znamená jeden přeskočený rok než dva
           processedSet.add(tid);

@@ -11,6 +11,7 @@
  */
 
 import type { Rng } from "../generators/rng";
+import { logger } from "../lib/logger";
 
 /** Nejmladší a nejstarší ročník žáků. */
 export const YOUNGEST_AGE = 11;
@@ -54,6 +55,28 @@ export type AcademyLevel = keyof typeof ACADEMY_LEVELS;
 
 export function academyLevelOf(raw: string | null | undefined): AcademyLevel {
   return raw === "modest" || raw === "ambitious" ? raw : "standard";
+}
+
+/**
+ * Roční účinky úrovně (odchody v létě, žáci z okolí, náskok při lákání) podle toho, kolik týdnů
+ * sezóny byla která úroveň, ne podle stavu v jediný den. Jinak by se vyplatilo přepnout na
+ * ambiciózní týden před létem a hned zpátky. Současná úroveň se počítá jako jeden týden navíc,
+ * takže na začátku sezóny (žádný týden za sebou) platí ona.
+ */
+export function seasonLevelEffects(weeksJson: string | null | undefined, current: AcademyLevel): { quit: number; attract: number; poachBonus: number } {
+  let weeks: Partial<Record<AcademyLevel, number>> = {};
+  try { weeks = weeksJson ? JSON.parse(weeksJson) as Partial<Record<AcademyLevel, number>> : {}; }
+  catch (e) { logger.warn({ module: "academy-rules" }, "academy_level_weeks nejde přečíst", e); weeks = {}; }
+  const counts: Record<AcademyLevel, number> = { modest: 0, standard: 0, ambitious: 0 };
+  for (const k of Object.keys(counts) as AcademyLevel[]) {
+    const n = Number(weeks[k] ?? 0);
+    counts[k] = Number.isFinite(n) && n > 0 ? n : 0;
+  }
+  counts[current] += 1;
+  const total = counts.modest + counts.standard + counts.ambitious;
+  const avg = (key: "quit" | "attract" | "poachBonus") =>
+    (Object.keys(counts) as AcademyLevel[]).reduce((s, k) => s + ACADEMY_LEVELS[k][key] * counts[k], 0) / total;
+  return { quit: avg("quit"), attract: avg("attract"), poachBonus: Math.round(avg("poachBonus")) };
 }
 
 export function upkeepWeekly(squadSize: number, level: AcademyLevel = "standard"): number {
