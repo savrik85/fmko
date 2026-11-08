@@ -480,6 +480,8 @@ export interface ResolvedTarget {
   feedKey: string;
   /** Krátce, co to je (text příspěvku nebo komentáře, titulek článku): do oznámení o lajku. */
   snippet: string;
+  /** Kdo článek napsal (jen u článku Zpravodaje s podepsaným novinářem). */
+  journalistId?: string | null;
   /** Klub, kterému patří (autor příspěvku, klub z článku). Jen lidský dostane oznámení. */
   ownerTeamId: string | null;
   ownerIsHuman: boolean;
@@ -518,15 +520,15 @@ export async function resolveTarget(db: D1Database, key: string): Promise<Resolv
 
   if (ref.kind === "news") {
     const n = await db.prepare(
-      `SELECT n.id, n.type, n.headline, n.body, n.team_id, n.league_id, l.district, t.name AS team_name,
+      `SELECT n.id, n.type, n.headline, n.body, n.team_id, n.league_id, n.journalist_id, l.district, t.name AS team_name,
               CASE WHEN t.id IS NULL THEN 0 ELSE ${HUMAN_TEAM("t")} END AS human
          FROM news n JOIN leagues l ON l.id = n.league_id LEFT JOIN teams t ON t.id = n.team_id
         WHERE n.id = ?`,
-    ).bind(ref.id).first<{ type: string; headline: string; body: string; team_id: string | null; league_id: string; district: string | null; team_name: string | null; human: number }>()
+    ).bind(ref.id).first<{ type: string; headline: string; body: string; team_id: string | null; league_id: string; journalist_id: string | null; district: string | null; team_name: string | null; human: number }>()
       .catch((e) => { logger.warn({ module: M }, "cíl: článek", e); return null; });
     if (!n || !(n.type in NEWS_CATEGORY)) return null;
     return {
-      key, kind: "news", feedKey: key, snippet: n.headline,
+      key, kind: "news", feedKey: key, snippet: n.headline, journalistId: n.journalist_id,
       ownerTeamId: n.team_id, ownerIsHuman: n.human === 1, subjectTeamId: n.team_id,
       leagueId: n.league_id, district: n.district,
       title: n.headline,
