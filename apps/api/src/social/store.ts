@@ -9,8 +9,8 @@
 import { logger } from "../lib/logger";
 import {
   FEED_NEWS_TYPES, NEWS_CATEGORY, addDays, applyMutes, buildFeedItems, normalizeTime,
-  parseTargetKey, plainText, sortFeed,
-  type FeedItem, type Mute, type NewsRow, type PostRow, type Viewer,
+  parseMentions, parseTargetKey, pickMentions, plainText, sortFeed,
+  type FeedItem, type Mention, type Mute, type NewsRow, type PostRow, type Viewer,
 } from "./feed-model";
 
 const M = "social";
@@ -47,6 +47,8 @@ export interface CommentView {
   likeCount: number;
   liked: boolean;
   mine: boolean;
+  /** Kluby označené přes @. */
+  mentions: Mention[];
 }
 
 export interface FeedItemView extends FeedItem {
@@ -107,7 +109,7 @@ const NEWS_SELECT = `SELECT n.id, n.type, n.headline, n.body, n.team_id, t.name 
 const POST_SELECT = `SELECT p.id, p.user_id, p.team_id, t.name AS team_name,
        (SELECT l.district FROM leagues l WHERE l.id = t.league_id) AS district,
        ${MANAGER_NAME("p.team_id")} AS manager_name, ${MANAGER_AVATAR("p.team_id")} AS manager_avatar,
-       p.body, p.created_at
+       p.body, p.mentions, p.created_at
   FROM social_posts p
   LEFT JOIN teams t ON t.id = p.team_id`;
 
@@ -196,6 +198,7 @@ interface CommentRow {
   author_avatar: string | null;
   reply_to_id: string | null;
   body: string;
+  mentions: string | null;
   created_at: string;
 }
 
@@ -225,6 +228,7 @@ function toCommentView(r: CommentRow, viewer: Viewer, likes: Map<string, { n: nu
     likeCount: l?.n ?? 0,
     liked: l?.liked ?? false,
     mine: r.author_kind === "manager" && r.user_id === viewer.userId,
+    mentions: parseMentions(r.mentions),
   };
 }
 
@@ -242,7 +246,7 @@ async function likeStats(db: D1Database, keys: string[], userId: string): Promis
 }
 
 const COMMENT_SELECT = `SELECT c.id, c.target_key, c.author_kind, c.user_id, c.team_id, t.name AS team_name,
-       c.author_name, c.author_avatar, c.reply_to_id, c.body, c.created_at
+       c.author_name, c.author_avatar, c.reply_to_id, c.body, c.mentions, c.created_at
   FROM social_comments c LEFT JOIN teams t ON t.id = c.team_id`;
 
 /**
@@ -304,6 +308,7 @@ export async function loadFanVoices(db: D1Database, leagueId: string, round: num
         likeCount: likes.get(key)?.n ?? 0,
         liked: likes.get(key)?.liked ?? false,
         mine: false,
+        mentions: [],
       };
     });
 }
@@ -357,7 +362,7 @@ async function decorate(db: D1Database, items: FeedItem[], viewer: Viewer, muted
     const p = await db.prepare(
       `SELECT * FROM (
          SELECT c.id, c.target_key, c.author_kind, c.user_id, c.team_id, t.name AS team_name,
-                c.author_name, c.author_avatar, c.reply_to_id, c.body, c.created_at,
+                c.author_name, c.author_avatar, c.reply_to_id, c.body, c.mentions, c.created_at,
                 ROW_NUMBER() OVER (PARTITION BY c.target_key ORDER BY c.created_at DESC, c.id DESC) AS rn
            FROM social_comments c LEFT JOIN teams t ON t.id = c.team_id
           WHERE c.target_key IN (${ph}) AND c.deleted_at IS NULL AND c.removed_at IS NULL
@@ -471,6 +476,10 @@ export async function loadFeedItem(db: D1Database, viewer: Viewer, key: string):
 export interface ResolvedTarget {
   key: string;
   kind: "post" | "news" | "bundle" | "comment" | "fanpost";
+  /** Kam vede odkaz: u komentáře příspěvek, pod kterým je, jinak cíl sám. */
+  feedKey: string;
+  /** Krátce, co to je (text příspěvku nebo komentáře, titulek článku): do oznámení o lajku. */
+  snippet: string;
   /** Klub, kterému patří (autor příspěvku, klub z článku). Jen lidský dostane oznámení. */
   ownerTeamId: string | null;
   ownerIsHuman: boolean;
@@ -499,7 +508,8 @@ export async function resolveTarget(db: D1Database, key: string): Promise<Resolv
       .catch((e) => { logger.warn({ module: M }, "cíl: příspěvek", e); return null; });
     if (!p) return null;
     return {
-      key, kind: "post", ownerTeamId: p.team_id, ownerIsHuman: p.human === 1, subjectTeamId: p.team_id,
+      key, kind: "post", feedKey: key, snippet: p.body,
+      ownerTeamId: p.team_id, ownerIsHuman: p.human === 1, subjectTeamId: p.team_id,
       leagueId: p.league_id, district: p.district,
       title: `příspěvek trenéra ${p.manager_name ?? ""} (${p.team_name ?? "klub"})`.replace("  ", " "),
       context: `Trenér ${p.manager_name ?? "neznámý"} z klubu ${p.team_name ?? "?"} napsal: „${p.body}“`,
@@ -516,7 +526,8 @@ export async function resolveTarget(db: D1Database, key: string): Promise<Resolv
       .catch((e) => { logger.warn({ module: M }, "cíl: článek", e); return null; });
     if (!n || !(n.type in NEWS_CATEGORY)) return null;
     return {
-      key, kind: "news", ownerTeamId: n.team_id, ownerIsHuman: n.human === 1, subjectTeamId: n.team_id,
+      key, kind: "news", feedKey: key, snippet: n.headline,
+      ownerTeamId: n.team_id, ownerIsHuman: n.human === 1, subjectTeamId: n.team_id,
       leagueId: n.league_id, district: n.district,
       title: n.headline,
       context: newsContext(n.type, n.headline, n.body),
@@ -527,7 +538,8 @@ export async function resolveTarget(db: D1Database, key: string): Promise<Resolv
     const rows = await transfersOfDay(db, ref.district, ref.date);
     if (rows.length === 0) return null;
     return {
-      key, kind: "bundle", ownerTeamId: null, ownerIsHuman: false, subjectTeamId: null,
+      key, kind: "bundle", feedKey: key, snippet: `přestupy dne v okrese ${ref.district}`,
+      ownerTeamId: null, ownerIsHuman: false, subjectTeamId: null,
       leagueId: rows[0].league_id, district: ref.district,
       title: `přestupy dne v okrese ${ref.district}`,
       context: `Přestupy dne v okrese ${ref.district}:\n${rows.slice(0, 15).map((r) => `- ${r.headline}`).join("\n")}`,
@@ -543,7 +555,7 @@ export async function resolveTarget(db: D1Database, key: string): Promise<Resolv
       .catch((e) => { logger.warn({ module: M }, "cíl: komentář", e); return null; });
     if (!c) return null;
     return {
-      key, kind: "comment",
+      key, kind: "comment", feedKey: c.target_key, snippet: c.body,
       ownerTeamId: c.author_kind === "manager" ? c.team_id : null,
       ownerIsHuman: c.author_kind === "manager" && c.human === 1,
       subjectTeamId: c.team_id, leagueId: null, district: null,
@@ -556,7 +568,8 @@ export async function resolveTarget(db: D1Database, key: string): Promise<Resolv
     .catch((e) => { logger.warn({ module: M }, "cíl: hlas fanouška", e); return null; });
   if (!f) return null;
   return {
-    key, kind: "fanpost", ownerTeamId: null, ownerIsHuman: false, subjectTeamId: null,
+    key, kind: "fanpost", feedKey: key, snippet: f.body,
+    ownerTeamId: null, ownerIsHuman: false, subjectTeamId: null,
     leagueId: null, district: null, title: "hlas fanouška", context: f.body,
   };
 }
@@ -593,23 +606,70 @@ export async function commentsToday(db: D1Database, userId: string): Promise<num
   return countSince(db, "social_comments", userId, today());
 }
 
-export async function insertPost(db: D1Database, viewer: Viewer, body: string): Promise<string> {
+function mentionsJson(mentions: Mention[]): string | null {
+  return mentions.length > 0 ? JSON.stringify(mentions) : null;
+}
+
+export async function insertPost(db: D1Database, viewer: Viewer, body: string, mentions: Mention[] = []): Promise<string> {
   const id = crypto.randomUUID();
-  await db.prepare("INSERT INTO social_posts (id, user_id, team_id, body) VALUES (?, ?, ?, ?)")
-    .bind(id, viewer.userId, viewer.teamId, body).run();
+  await db.prepare("INSERT INTO social_posts (id, user_id, team_id, body, mentions) VALUES (?, ?, ?, ?, ?)")
+    .bind(id, viewer.userId, viewer.teamId, body, mentionsJson(mentions)).run();
   return id;
 }
 
-export async function insertManagerComment(db: D1Database, viewer: Viewer, key: string, body: string, replyToId: string | null): Promise<{ id: string; authorName: string }> {
+/** Jméno trenéra klubu, jak ho ukazuje zeď. */
+export async function managerName(db: D1Database, teamId: string): Promise<string> {
+  const r = await db.prepare(`SELECT ${MANAGER_NAME("t.id")} AS name FROM teams t WHERE t.id = ?`)
+    .bind(teamId).first<{ name: string | null }>()
+    .catch((e) => { logger.warn({ module: M }, "jméno trenéra", e); return null; });
+  return r?.name ?? "Trenér";
+}
+
+export interface MentionableTeam {
+  teamId: string;
+  teamName: string;
+  managerName: string | null;
+  district: string | null;
+}
+
+/**
+ * Kluby, které jde označit: ty, které vede člověk (jen ten dostane oznámení).
+ * Bez U21: patří stejnému trenérovi jako áčko a v seznamu by se zdvojoval.
+ */
+export async function mentionableTeams(db: D1Database, viewerTeamId: string): Promise<MentionableTeam[]> {
+  const res = await db.prepare(
+    `SELECT t.id, t.name, ${MANAGER_NAME("t.id")} AS manager_name, l.district
+       FROM teams t LEFT JOIN leagues l ON l.id = t.league_id
+      WHERE ${HUMAN_TEAM("t")} AND t.parent_team_id IS NULL AND t.id != ?
+        AND t.name IS NOT NULL AND t.name != '' AND t.name NOT LIKE 'DELETED%'
+      ORDER BY t.name LIMIT 500`,
+  ).bind(viewerTeamId).all<{ id: string; name: string; manager_name: string | null; district: string | null }>()
+    .catch((e) => { logger.warn({ module: M }, "kluby k označení", e); return { results: [] as never[] }; });
+  return res.results.map((r) => ({ teamId: r.id, teamName: r.name, managerName: r.manager_name, district: r.district }));
+}
+
+/** Označení z požadavku ověří proti databázi: klub existuje, vede ho člověk a v textu stojí „@jméno“. */
+export async function resolveMentions(db: D1Database, body: string, ids: string[], authorTeamId: string): Promise<Mention[]> {
+  if (ids.length === 0) return [];
+  const res = await db.prepare(
+    `SELECT t.id, t.name FROM teams t WHERE t.id IN (${ids.map(() => "?").join(",")}) AND ${HUMAN_TEAM("t")}`,
+  ).bind(...ids).all<{ id: string; name: string }>()
+    .catch((e) => { logger.warn({ module: M }, "označené kluby", e); return { results: [] as never[] }; });
+  const byId = new Map(res.results.map((r) => [r.id, r.name]));
+  const candidates = ids.flatMap((id) => (byId.has(id) ? [{ teamId: id, name: byId.get(id)! }] : []));
+  return pickMentions(body, candidates, authorTeamId);
+}
+
+export async function insertManagerComment(db: D1Database, viewer: Viewer, key: string, body: string, replyToId: string | null, mentions: Mention[] = []): Promise<{ id: string; authorName: string }> {
   const who = await db.prepare(`SELECT ${MANAGER_NAME("t.id")} AS name, ${MANAGER_AVATAR("t.id")} AS avatar FROM teams t WHERE t.id = ?`)
     .bind(viewer.teamId).first<{ name: string | null; avatar: string | null }>()
     .catch((e) => { logger.warn({ module: M }, "jméno komentujícího", e); return null; });
   const id = crypto.randomUUID();
   const authorName = who?.name ?? "Trenér";
   await db.prepare(
-    `INSERT INTO social_comments (id, target_key, author_kind, user_id, team_id, author_name, author_avatar, reply_to_id, body)
-     VALUES (?, ?, 'manager', ?, ?, ?, ?, ?, ?)`,
-  ).bind(id, key, viewer.userId, viewer.teamId, authorName, who?.avatar ?? null, replyToId, body).run();
+    `INSERT INTO social_comments (id, target_key, author_kind, user_id, team_id, author_name, author_avatar, reply_to_id, body, mentions)
+     VALUES (?, ?, 'manager', ?, ?, ?, ?, ?, ?, ?)`,
+  ).bind(id, key, viewer.userId, viewer.teamId, authorName, who?.avatar ?? null, replyToId, body, mentionsJson(mentions)).run();
   return { id, authorName };
 }
 

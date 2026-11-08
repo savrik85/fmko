@@ -17,7 +17,7 @@ import { callCoachModel } from "../ai-coach/llm";
 import { createRng } from "../generators/rng";
 import { seedFromString } from "../lib/seed";
 import { insertPersonaComment, resolveTarget, type ResolvedTarget } from "./store";
-import { notifyComment } from "./notify";
+import { notifySocial } from "./notify";
 
 const M = "social-ai";
 
@@ -324,7 +324,8 @@ export async function generateAiReplies(env: Bindings, trigger: ReplyTrigger): P
     thread.push(`${persona.name}: ${body}`);
     written += 1;
     // Fanoušek odpověděl trenérovi: dozví se to on, ne majitel příspěvku.
-    await notifyComment(env, {
+    await notifySocial(env, {
+      kind: "comment",
       key: trigger.key,
       recipientTeamId: trigger.authorTeamId,
       actorTeamId: persona.teamId,
