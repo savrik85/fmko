@@ -482,6 +482,8 @@ export interface ResolvedTarget {
   snippet: string;
   /** Kdo článek napsal (jen u článku Zpravodaje s podepsaným novinářem). */
   journalistId?: string | null;
+  /** Název klubu, kterému cíl patří (u článku klub, o kterém je). */
+  ownerTeamName?: string | null;
   /** Klub, kterému patří (autor příspěvku, klub z článku). Jen lidský dostane oznámení. */
   ownerTeamId: string | null;
   ownerIsHuman: boolean;
@@ -528,7 +530,7 @@ export async function resolveTarget(db: D1Database, key: string): Promise<Resolv
       .catch((e) => { logger.warn({ module: M }, "cíl: článek", e); return null; });
     if (!n || !(n.type in NEWS_CATEGORY)) return null;
     return {
-      key, kind: "news", feedKey: key, snippet: n.headline, journalistId: n.journalist_id,
+      key, kind: "news", feedKey: key, snippet: n.headline, journalistId: n.journalist_id, ownerTeamName: n.team_name,
       ownerTeamId: n.team_id, ownerIsHuman: n.human === 1, subjectTeamId: n.team_id,
       leagueId: n.league_id, district: n.district,
       title: n.headline,

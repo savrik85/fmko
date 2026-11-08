@@ -22,7 +22,7 @@ const M = "press-scandals";
 
 export type ScandalKind =
   | "pub" | "club_incident" | "sanction" | "debt" | "sale" | "purchase"
-  | "promise" | "own_words" | "same_owner" | "fans" | "unrest" | "sponsor" | "cup";
+  | "promise" | "own_words" | "same_owner" | "fans" | "unrest" | "sponsor" | "cup" | "socky";
 
 export interface Scandal {
   /** Klíč konkrétní kauzy. Podle něj se tatáž kauza neotevírá v dalších rozhovorech znovu. */
@@ -63,10 +63,10 @@ const PUB_TYPES: Record<string, number> = {
 
 /** Co koho z redakce láká. Násobí váhu kauzy. */
 const STYLE_AFFINITY: Record<JournalistStyle, Partial<Record<ScandalKind, number>>> = {
-  bulvar: { pub: 2, club_incident: 1.8, same_owner: 1.5, debt: 1.5, fans: 1.3, sale: 1.2, unrest: 1.6, sponsor: 1.5, cup: 1.4 },
-  vycurany: { own_words: 2.2, promise: 1.8, same_owner: 1.5, pub: 1.2, unrest: 1.6, sponsor: 1.3 },
-  seriozni: { own_words: 1.5, sanction: 1.8, debt: 1.6, sale: 1.5, purchase: 1.5, pub: 0.4, sponsor: 1.4, cup: 1.2 },
-  patriot: { fans: 2, sale: 1.5, pub: 0.6, sponsor: 2, cup: 1.5, unrest: 1.2 },
+  bulvar: { pub: 2, club_incident: 1.8, same_owner: 1.5, debt: 1.5, fans: 1.3, sale: 1.2, unrest: 1.6, sponsor: 1.5, cup: 1.4, socky: 2 },
+  vycurany: { own_words: 2.2, promise: 1.8, same_owner: 1.5, pub: 1.2, unrest: 1.6, sponsor: 1.3, socky: 1.6 },
+  seriozni: { own_words: 1.5, sanction: 1.8, debt: 1.6, sale: 1.5, purchase: 1.5, pub: 0.4, sponsor: 1.4, cup: 1.2, socky: 0.5 },
+  patriot: { fans: 2, sale: 1.5, pub: 0.6, sponsor: 2, cup: 1.5, unrest: 1.2, socky: 0.8 },
 };
 
 export function formatCzk(n: number): string {
@@ -587,6 +587,73 @@ async function cupScandals(db: D1Database, teamId: string, gameDate: string): Pr
  * Všechny kauzy klubu, které se teď dají otevřít. Okna se počítají v herním čase
  * týmu, ne v reálném, protože tak běží i hospoda, smlouvy a pokuty.
  */
+/** Za kolik dní se ještě redaktor ptá na to, co trenér napsal v Sockách. */
+const SOCKY_DAYS = 7;
+
+interface SockyRow {
+  source_key: string;
+  kind: string;
+  actor_team_id: string;
+  team_a_id: string;
+  team_b_id: string;
+  body: string | null;
+  a_name: string | null;
+  b_name: string | null;
+}
+
+/**
+ * Socky: rýpnutí a urážky mezi kluby a do Zpravodaje, jak je vyhodnotil model
+ * (`social_relation_effects`). Hlavně pro bulvár; uznání kauza není.
+ */
+export async function socialScandals(db: D1Database, teamId: string, now: Date = new Date()): Promise<Scandal[]> {
+  const since = new Date(now.getTime() - SOCKY_DAYS * 86400000).toISOString();
+  const rows = await db.prepare(
+    `SELECT e.source_key, e.kind, e.actor_team_id, e.team_a_id, e.team_b_id,
+            COALESCE(c.body, p.body) AS body, ta.name AS a_name, tb.name AS b_name
+       FROM social_relation_effects e
+       LEFT JOIN social_comments c ON e.source_key LIKE 'comment:%' AND c.id = substr(e.source_key, 9)
+            AND c.deleted_at IS NULL AND c.removed_at IS NULL
+       LEFT JOIN social_posts p ON e.source_key LIKE 'post:%' AND p.id = substr(e.source_key, 6)
+            AND p.deleted_at IS NULL AND p.removed_at IS NULL
+       LEFT JOIN teams ta ON ta.id = e.team_a_id
+       LEFT JOIN teams tb ON tb.id = e.team_b_id
+      WHERE e.kind IN ('tease', 'insult', 'journalist_tease', 'journalist_insult')
+        AND (e.team_a_id = ? OR e.team_b_id = ?) AND e.created_at >= ?
+      ORDER BY e.created_at DESC LIMIT 12`,
+  ).bind(teamId, teamId, since).all<SockyRow>()
+    .catch((e) => { logger.warn({ module: M }, "Socky pro kauzy", e); return { results: [] as SockyRow[] }; });
+
+  const out: Scandal[] = [];
+  for (const r of rows.results) {
+    if (!r.body) continue;
+    const quote = `„${firstSentence(r.body, 160)}“`;
+    const insult = r.kind.endsWith("insult");
+    if (r.kind.startsWith("journalist_")) {
+      if (r.actor_team_id !== teamId) continue;
+      out.push({
+        ref: `socky:${r.source_key}`, kind: "socky", names: [],
+        fact: `Trenér v Sockách pod článkem Zpravodaje napsal o redakci: ${quote}`,
+        weight: insult ? 6 : 3,
+      });
+      continue;
+    }
+    const otherName = (r.team_a_id === teamId ? r.b_name : r.a_name) ?? null;
+    if (!otherName) continue;
+    out.push(r.actor_team_id === teamId
+      ? {
+        ref: `socky:${r.source_key}`, kind: "socky", names: [otherName],
+        fact: `Trenér v Sockách napsal na adresu klubu ${otherName}: ${quote}`,
+        weight: insult ? 6 : 4,
+      }
+      : {
+        ref: `socky:${r.source_key}`, kind: "socky", names: [otherName],
+        fact: `Trenér klubu ${otherName} si v Sockách vzal na mušku tenhle klub: ${quote}`,
+        weight: insult ? 5 : 3,
+      });
+  }
+  return out;
+}
+
 export async function loadScandals(
   db: D1Database,
   teamId: string,
@@ -610,6 +677,7 @@ export async function loadScandals(
     unrestScandals(db, teamId),
     sponsorScandals(db, teamId, gameDate),
     cupScandals(db, teamId, gameDate),
+    socialScandals(db, teamId),
   ]);
   // Věty skládají i texty od hráčů (názvy klubů, důvody pokut z návrhů,
   // trenérova slova) a jdou do promptu. Bez oddělovačů a zalomení se z nich
