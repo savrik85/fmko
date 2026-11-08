@@ -119,7 +119,9 @@ describe("zeď", () => {
   });
 
   it("starý článek, pod kterým se dnes diskutuje, je na první stránce nahoře", async () => {
-    await addNews("fresh", "interview", "Čerstvý rozhovor", "{}", daysAgo(0, 9));
+    // Čerstvý článek je ze včerejška: dnešních 9:00 by brzy ráno bylo v budoucnosti
+    // a předběhlo by komentář napsaný teď.
+    await addNews("fresh", "interview", "Čerstvý rozhovor", "{}", daysAgo(1, 9));
     await addNews("hot", "interview", "Rozhovor z předvčera", "{}", daysAgo(2, 9));
     await insertManagerComment(db, (await loadViewer(db, "t-other"))!, "news:hot", "Tohle si vyžere!", null);
     const { items } = await loadFeed(db, me);
