@@ -21,8 +21,9 @@ import { createNotification } from "../community/notifications";
 import { getTeamGameDate } from "../community/manager-relations";
 import type { PushEnv } from "../community/web-push";
 import {
-  courseLessons, courseQuestionPool, drawExam, gradeExam, publicQuestions, reviewFor,
-  type DrawnExam, type PublicQuestion, type ReviewItem,
+  courseLessons, courseParts, courseQuestionPool, drawExam, gradeExam, partForLevel, partTitle, pickCoursePart,
+  publicQuestions, reviewFor,
+  type DrawnExam, type PublicQuestion, type ReviewItem, type TakenPart,
 } from "./quiz";
 
 const M = "coach-courses";
@@ -44,6 +45,8 @@ export interface CourseRow {
   kind: CourseKind;
   attr: string | null;
   target_licence: number | null;
+  /** Díl kurzu vlastnosti (null u licence a u kurzů z doby před díly = 1. díl). */
+  part: number | null;
   points: number;
   price: number;
   retake_price: number;
@@ -95,15 +98,20 @@ interface ManagerRow {
 
 // ── Pomocné ──
 
-export function courseTitle(c: Pick<CourseRow, "kind" | "attr" | "target_licence">): string {
+type CourseNaming = Pick<CourseRow, "kind" | "attr" | "target_licence"> & { part?: number | null };
+
+/** Např. „Základní kurz: Taktika, 2. díl“. Web bere část za dvojtečkou jako název karty. */
+export function courseTitle(c: CourseNaming): string {
   if (c.kind === "licence") return `Licenční kurz ${licenceLabel(c.target_licence ?? 1)}`;
   const attr = COURSE_ATTR_LABELS[c.attr as CourseAttr] ?? c.attr ?? "";
-  return c.kind === "attr_basic" ? `Základní kurz: ${attr}` : `Pokročilý kurz: ${attr}`;
+  const kind = c.kind === "attr_basic" ? "Základní kurz" : "Pokročilý kurz";
+  return `${kind}: ${attr}, ${c.part ?? 1}. díl`;
 }
 
-function courseTopic(c: Pick<CourseRow, "kind" | "attr" | "target_licence">): string {
+/** Název skript: u kurzu vlastnosti název dílu (např. „Útočná hra“). */
+function courseTopic(c: CourseNaming): string {
   if (c.kind === "licence") return `Skripta k licenci ${licenceLabel(c.target_licence ?? 1)}`;
-  return COURSE_ATTR_TOPIC[c.attr as CourseAttr] ?? "";
+  return partTitle(c.kind, c.attr, c.part) || (COURSE_ATTR_TOPIC[c.attr as CourseAttr] ?? "");
 }
 
 function parseJson<T>(raw: string, what: string, fallback: T): T {
@@ -174,6 +182,8 @@ export interface CourseOffer {
   kind: CourseKind;
   attr: CourseAttr | null;
   targetLicence: number | null;
+  /** Díl, na který by se trenér teď přihlásil. Null u licence. */
+  part: number | null;
   title: string;
   topic: string;
   current: number | null;
@@ -202,7 +212,41 @@ async function seasonUsage(db: D1Database, teamId: string, season: number): Prom
   return { attr: row?.attr ?? 0, licence: row?.licence ?? 0 };
 }
 
-export function buildOffers(mgr: ManagerRow, usage: SeasonUsage, hasActive: boolean): CourseOffer[] {
+/** Dřívější kurz vlastnosti klubu: z něj škola pozná, které díly už trenér měl. */
+export interface PastAttrCourse {
+  kind: string;
+  attr: string | null;
+  part: number | null;
+  created_at: string;
+}
+
+async function loadPastAttrCourses(db: D1Database, teamId: string): Promise<PastAttrCourse[]> {
+  const rows = await db.prepare(
+    "SELECT kind, attr, part, created_at FROM coach_courses WHERE team_id = ? AND kind != 'licence'",
+  ).bind(teamId).all<PastAttrCourse>();
+  return rows.results;
+}
+
+/** Díl, na který škola trenéra pošle: podle úrovně vlastnosti a toho, co už měl. */
+export function nextCoursePart(
+  kind: "attr_basic" | "attr_advanced",
+  attr: CourseAttr,
+  value: number,
+  past: readonly PastAttrCourse[],
+): number {
+  const parts = courseParts(kind, attr);
+  const taken: TakenPart[] = past
+    .filter((c) => c.kind === kind && c.attr === attr)
+    .map((c) => ({ part: c.part ?? 1, createdAt: c.created_at }));
+  return pickCoursePart(parts, partForLevel(kind, value, parts), taken);
+}
+
+export function buildOffers(
+  mgr: ManagerRow,
+  usage: SeasonUsage,
+  hasActive: boolean,
+  past: readonly PastAttrCourse[] = [],
+): CourseOffer[] {
   const cap = licenceCap(mgr.licence_level);
   const common: string[] = [];
   if (hasActive) common.push("Trenér už je na jiném kurzu.");
@@ -219,15 +263,17 @@ export function buildOffers(mgr: ManagerRow, usage: SeasonUsage, hasActive: bool
       if (attrLimit) blockers.push(attrLimit);
       if (mgr.licence_level < rules.minLicence) blockers.push(`Pokročilé kurzy jsou od licence ${licenceLabel(rules.minLicence)}.`);
       if (current >= cap) blockers.push(`${COURSE_ATTR_LABELS[attr]} je na stropu tvé licence (${cap}). Nejdřív vyšší licence.`);
+      const part = nextCoursePart(kind, attr, current, past);
+      const ref = { kind, attr, target_licence: null, part };
       offers.push({
-        kind, attr, targetLicence: null,
-        title: courseTitle({ kind, attr, target_licence: null }),
-        topic: COURSE_ATTR_TOPIC[attr],
+        kind, attr, targetLicence: null, part,
+        title: courseTitle(ref),
+        topic: courseTopic(ref),
         current, cap,
         points: Math.min(rules.points, Math.max(0, cap - current)),
         price: attrCoursePrice(kind, current),
         days: rules.days,
-        lessons: courseLessons({ kind, attr, target_licence: null }).length,
+        lessons: courseLessons(ref).length,
         exam: rules.exam,
         available: blockers.length === 0,
         blockers,
@@ -242,7 +288,7 @@ export function buildOffers(mgr: ManagerRow, usage: SeasonUsage, hasActive: bool
     if (mgr.reputation < minRep) blockers.push(`Na ${licenceLabel(target)} potřebuješ reputaci aspoň ${minRep} (máš ${mgr.reputation}).`);
     if (usage.licence >= COURSE_RULES.maxLicenceCoursesPerSeason) blockers.push("Licenční kurz jde jen jednou za sezónu.");
     offers.push({
-      kind: "licence", attr: null, targetLicence: target,
+      kind: "licence", attr: null, targetLicence: target, part: null,
       title: courseTitle({ kind: "licence", attr: null, target_licence: target }),
       topic: courseTopic({ kind: "licence", attr: null, target_licence: target }),
       current: mgr.licence_level, cap: licenceCap(target),
@@ -302,9 +348,13 @@ export async function loadEducation(db: D1Database, teamId: string, isOwner: boo
   const mgr = await loadManager(db, teamId);
   if (!mgr) throw new CourseError(404, "Klub nemá trenéra.");
   const season = await currentSeason(db);
-  const [active, usage, completedRows] = await Promise.all([
+  const [active, usage, past, completedRows] = await Promise.all([
     loadActiveCourse(db, teamId),
     seasonUsage(db, teamId, season),
+    isOwner
+      ? loadPastAttrCourses(db, teamId)
+        .catch((e) => { logger.warn({ module: M }, `past courses ${teamId}`, e); return [] as PastAttrCourse[]; })
+      : Promise.resolve([] as PastAttrCourse[]),
     db.prepare(
       `SELECT * FROM coach_courses WHERE team_id = ? AND status IN ('passed','failed')
         ORDER BY created_at DESC LIMIT 12`,
@@ -322,6 +372,7 @@ export async function loadEducation(db: D1Database, teamId: string, isOwner: boo
       kind: active.kind,
       attr: active.attr,
       targetLicence: active.target_licence,
+      part: active.part,
       title: courseTitle(active),
       topic: courseTopic(active),
       status: active.status,
@@ -358,7 +409,7 @@ export async function loadEducation(db: D1Database, teamId: string, isOwner: boo
       reached: mgr.licence_level >= l.level,
     })),
     active: activeOut,
-    offers: isOwner ? buildOffers(mgr, usage, !!active) : null,
+    offers: isOwner ? buildOffers(mgr, usage, !!active, past) : null,
     // Jen vlastníkovi: jak moc trénink utrpí, když trenér odjede na kurz.
     away: isOwner ? await loadAwayPreview(db, teamId, mgr) : null,
     completed: completedRows.results.map((c) => ({
@@ -394,13 +445,15 @@ export async function startCourse(
   if (!mgr) throw new CourseError(404, "Klub nemá trenéra.");
   const season = await currentSeason(db);
   const active = await loadActiveCourse(db, teamId);
-  const offer = buildOffers(mgr, await seasonUsage(db, teamId, season), !!active)
+  // Bez historie by škola mohla poslat na díl, který trenér už měl, proto chyba nejde dál.
+  const past = await loadPastAttrCourses(db, teamId);
+  const offer = buildOffers(mgr, await seasonUsage(db, teamId, season), !!active, past)
     .find((o) => o.kind === kind && (kind === "licence" || o.attr === attr));
   if (!offer) throw new CourseError(400, "Tenhle kurz teď nabízet nejde.");
   if (active) throw new CourseError(409, "Trenér už je na jiném kurzu.");
   if (!offer.available) throw new CourseError(403, offer.blockers[0] ?? "Na kurz se teď přihlásit nejde.");
-  if (courseQuestionPool({ kind, attr, target_licence: offer.targetLicence }).length < offer.exam.questions) {
-    logger.error({ module: M }, `málo otázek pro ${kind}/${attr}/${offer.targetLicence}`);
+  if (courseQuestionPool({ kind, attr, target_licence: offer.targetLicence, part: offer.part }).length < offer.exam.questions) {
+    logger.error({ module: M }, `málo otázek pro ${kind}/${attr}/${offer.targetLicence}/díl ${offer.part}`);
     throw new CourseError(400, "Škola na tenhle kurz zatím nemá připravený test.");
   }
 
@@ -411,10 +464,10 @@ export async function startCourse(
   const id = crypto.randomUUID();
   try {
     await db.prepare(
-      `INSERT INTO coach_courses (id, team_id, manager_id, kind, attr, target_licence, points, price, retake_price,
+      `INSERT INTO coach_courses (id, team_id, manager_id, kind, attr, target_licence, part, points, price, retake_price,
                                   status, days_total, days_remaining, season_number, started_game_date)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'in_progress', ?, ?, ?, ?)`,
-    ).bind(id, teamId, mgr.id, kind, attr, offer.targetLicence, offer.points, offer.price, retakePrice(offer.price),
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'in_progress', ?, ?, ?, ?)`,
+    ).bind(id, teamId, mgr.id, kind, attr, offer.targetLicence, offer.part, offer.points, offer.price, retakePrice(offer.price),
       offer.days, offer.days, season, gameDate).run();
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
@@ -432,7 +485,8 @@ export async function startCourse(
   }
 
   await sendSystemSMS(db, teamId, SCHOOL,
-    `Vítej na kurzu „${offer.title}“. Skripta máš na profilu trenéra v záložce Vzdělání. `
+    `Vítej na kurzu „${offer.title}“${offer.part ? `, tentokrát na téma „${offer.topic}“` : ""}. `
+    + "Skripta máš na profilu trenéra v záložce Vzdělání. "
     + `Kurz trvá ${offer.days} dní a trenér zatím chybí na tréninku. Pak tě čeká test: `
     + `${offer.exam.questions} otázek, ${offer.exam.timeLimitMin} minut, projdeš s ${offer.exam.passScore} správnými.`,
   ).catch((e) => logger.warn({ module: M }, `uvítací SMS kurzu ${id}`, e));

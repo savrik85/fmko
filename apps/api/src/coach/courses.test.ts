@@ -3,7 +3,10 @@
  */
 import { describe, it, expect } from "vitest";
 import { buildOffers } from "./courses";
-import { courseLessons, courseQuestionPool, drawExam, gradeExam, publicQuestions, reviewFor } from "./quiz";
+import {
+  courseLessons, courseParts, courseQuestionPool, drawExam, gradeExam, partForLevel, pickCoursePart, publicQuestions,
+  reviewFor,
+} from "./quiz";
 
 const mgr = (over: Partial<Parameters<typeof buildOffers>[0]> = {}) => ({
   id: "m1",
@@ -66,10 +69,75 @@ describe("nabídka kurzů", () => {
 
   it("každý nabízený kurz má skripta a dost otázek na test", () => {
     for (const o of buildOffers(mgr({ licence_level: 2, reputation: 60 }), { attr: 0, licence: 0 }, false)) {
-      const ref = { kind: o.kind, attr: o.attr, target_licence: o.targetLicence };
+      const ref = { kind: o.kind, attr: o.attr, target_licence: o.targetLicence, part: o.part };
       expect(courseLessons(ref).length, o.title).toBeGreaterThan(0);
       expect(courseQuestionPool(ref).length, o.title).toBeGreaterThanOrEqual(o.exam.questions);
     }
+  });
+});
+
+describe("díly kurzů vlastností", () => {
+  const taken = (part: number, day: number) => ({ part, createdAt: `2026-10-${String(day).padStart(2, "0")}T10:00:00Z` });
+
+  it("díl podle úrovně: slabší trenér začíná od základů, lepší výš", () => {
+    const parts = [1, 2, 3, 4];
+    expect(partForLevel("attr_basic", 38, parts)).toBe(1);
+    expect(partForLevel("attr_basic", 44, parts)).toBe(1);
+    expect(partForLevel("attr_basic", 45, parts)).toBe(2);
+    expect(partForLevel("attr_basic", 52, parts)).toBe(3);
+    expect(partForLevel("attr_basic", 59, parts)).toBe(4);
+    expect(partForLevel("attr_basic", 75, parts)).toBe(4);
+    // Kurz s méně díly nepošle na neexistující díl.
+    expect(partForLevel("attr_basic", 75, [1, 2])).toBe(2);
+    expect(partForLevel("attr_advanced", 64, [1, 2])).toBe(1);
+    expect(partForLevel("attr_advanced", 65, [1, 2])).toBe(2);
+  });
+
+  it("absolvovaný díl se neopakuje, dokud jsou jiné", () => {
+    const parts = [1, 2, 3, 4];
+    expect(pickCoursePart(parts, 1, [])).toBe(1);
+    expect(pickCoursePart(parts, 1, [taken(1, 1)])).toBe(2);
+    expect(pickCoursePart(parts, 2, [taken(1, 1), taken(2, 5)])).toBe(3);
+    // Nahoře už nic nového: nejbližší nižší neviděný.
+    expect(pickCoursePart(parts, 4, [taken(4, 1)])).toBe(3);
+    expect(pickCoursePart(parts, 4, [taken(4, 1), taken(3, 2)])).toBe(2);
+    expect(pickCoursePart(parts, 3, [taken(3, 1), taken(4, 2)])).toBe(2);
+  });
+
+  it("když prošel všechny díly, dostane ten nejdávnější", () => {
+    const parts = [1, 2, 3, 4];
+    const all = [taken(1, 1), taken(2, 2), taken(3, 3), taken(4, 4)];
+    expect(pickCoursePart(parts, 4, all)).toBe(1);
+    // Díl 1 zopakovaný později: na řadě je díl 2.
+    expect(pickCoursePart(parts, 4, [...all, taken(1, 9)])).toBe(2);
+  });
+
+  it("opakovaný základní kurz dává pokaždé jiná skripta", () => {
+    for (const attr of ["coaching", "tactics", "motivation", "youth_development", "discipline"] as const) {
+      const parts = courseParts("attr_basic", attr);
+      expect(parts.length, attr).toBeGreaterThanOrEqual(4);
+      const past: Array<{ kind: string; attr: string; part: number; created_at: string }> = [];
+      const seenLessons = new Set<string>();
+      for (let i = 0; i < parts.length; i++) {
+        const offer = buildOffers(mgr({ [attr]: 40 + i * 3 }), { attr: 0, licence: 0 }, false, past)
+          .find((o) => o.kind === "attr_basic" && o.attr === attr)!;
+        expect(offer.title, attr).toContain(`${offer.part}. díl`);
+        expect(offer.topic, attr).toBeTruthy();
+        const lessons = courseLessons({ kind: "attr_basic", attr, target_licence: null, part: offer.part });
+        for (const l of lessons) {
+          expect(seenLessons.has(l.id), `${attr} ${l.id} podruhé`).toBe(false);
+          seenLessons.add(l.id);
+        }
+        past.push({ kind: "attr_basic", attr, part: offer.part!, created_at: `2026-10-0${i + 1}T10:00:00Z` });
+      }
+    }
+  });
+
+  it("starý kurz bez dílu se počítá jako 1. díl", () => {
+    const offer = buildOffers(mgr({ tactics: 40 }), { attr: 0, licence: 0 }, false, [
+      { kind: "attr_basic", attr: "tactics", part: null, created_at: "2026-09-30T10:00:00Z" },
+    ]).find((o) => o.kind === "attr_basic" && o.attr === "tactics")!;
+    expect(offer.part).toBe(2);
   });
 });
 

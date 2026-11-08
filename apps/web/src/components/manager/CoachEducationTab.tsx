@@ -11,6 +11,7 @@ import { useRouter } from "next/navigation";
 import { apiAction, apiFetch } from "@/lib/api";
 import { SectionLabel, Spinner } from "@/components/ui";
 import { useConfirm } from "@/components/ui/confirm-dialog";
+import { COURSE_ATTR_LABELS, type CourseAttr } from "@okresni-masina/shared";
 import { LicenceBadge } from "./LicenceBadge";
 
 interface ExamRules {
@@ -23,6 +24,8 @@ interface Offer {
   kind: "attr_basic" | "attr_advanced" | "licence";
   attr: string | null;
   targetLicence: number | null;
+  /** Díl kurzu vlastnosti, na který by se trenér teď přihlásil. Null u licence. */
+  part: number | null;
   title: string;
   topic: string;
   current: number | null;
@@ -74,6 +77,11 @@ interface Education {
 }
 
 const czk = (v: number) => `${v.toLocaleString("cs")} Kč`;
+
+function lessonsLabel(n: number): string {
+  if (n === 1) return "1 lekce";
+  return n >= 2 && n <= 4 ? `${n} lekce` : `${n} lekcí`;
+}
 
 function days(n: number): string {
   return n === 1 ? "1 den" : n >= 2 && n <= 4 ? `${n} dny` : `${n} dní`;
@@ -142,7 +150,7 @@ export function CoachEducationTab({ teamId, isOwn }: { teamId: string; isOwn: bo
         ...(data?.away ? awayRows(data.away, o.days) : []),
         ...(o.kind === "licence"
           ? [{ label: "Odměna", value: `licence, strop vlastností ${o.cap}`, color: "text-pitch-600" }]
-          : [{ label: "Odměna", value: `+${o.points} ${o.title.split(": ")[1] ?? ""}`, color: "text-pitch-600" }]),
+          : [{ label: "Odměna", value: `+${o.points} ${COURSE_ATTR_LABELS[o.attr as CourseAttr] ?? ""}`, color: "text-pitch-600" }]),
       ],
       confirmLabel: "Přihlásit",
     });
@@ -402,7 +410,7 @@ function OfferRow({ o, busy, onEnroll }: { o: Offer; busy: boolean; onEnroll: (o
                 +{o.points}
               </span>
             )}
-            <span className="text-xs text-muted">· {o.topic} ({o.lessons} lekcí)</span>
+            <span className="text-xs text-muted">· {o.topic} ({lessonsLabel(o.lessons)})</span>
           </div>
 
           {!isLicence && o.current !== null && (

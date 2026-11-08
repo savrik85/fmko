@@ -6,7 +6,7 @@
  */
 
 import type { CourseAttr, CourseKind } from "@okresni-masina/shared";
-import { COURSE_CONTENT } from "./course-content";
+import { COURSE_CONTENT, PART_TITLES } from "./course-content";
 import type { CourseCategory, Lesson, QuizQuestion } from "./course-content/types";
 
 /** Kurz vlastnosti se učí ze skript kategorie, která k vlastnosti patří. */
@@ -22,6 +22,8 @@ export interface CourseRef {
   kind: CourseKind;
   attr: string | null;
   target_licence: number | null;
+  /** Díl kurzu vlastnosti. Null (staré kurzy) = 1. díl. U licence se nepoužívá. */
+  part?: number | null;
 }
 
 const questionById = new Map<string, QuizQuestion>(
@@ -31,16 +33,82 @@ const lessonById = new Map<string, Lesson>(
   Object.values(COURSE_CONTENT).flatMap((c) => c.lessons).map((l) => [l.id, l]),
 );
 
+type AttrKind = "attr_basic" | "attr_advanced";
+
+/** Lekce kurzu vlastnosti daného druhu, všechny díly. */
+function attrKindLessons(kind: AttrKind, attr: string | null): Lesson[] {
+  const category = ATTR_CATEGORY[attr as CourseAttr];
+  if (!category) return [];
+  const lessons = COURSE_CONTENT[category].lessons;
+  // Pokročilý kurz má jen vlastní lekce, látku základního kurzu znovu neprobírá.
+  return kind === "attr_basic" ? lessons.filter((l) => l.difficulty <= 2) : lessons.filter((l) => l.difficulty === 3);
+}
+
+const partOf = (l: Lesson) => l.part ?? 1;
+
 /** Skripta kurzu: přesně ty lekce, ze kterých se bude v testu ptát. */
 export function courseLessons(course: CourseRef): Lesson[] {
   if (course.kind === "licence") {
     return COURSE_CONTENT.obecne.lessons.filter((l) => l.licence === course.target_licence);
   }
-  const category = ATTR_CATEGORY[course.attr as CourseAttr];
-  if (!category) return [];
-  const lessons = COURSE_CONTENT[category].lessons;
-  // Pokročilý kurz má jen vlastní lekce, látku základního kurzu znovu neprobírá.
-  return course.kind === "attr_basic" ? lessons.filter((l) => l.difficulty <= 2) : lessons.filter((l) => l.difficulty === 3);
+  const part = course.part ?? 1;
+  return attrKindLessons(course.kind, course.attr).filter((l) => partOf(l) === part);
+}
+
+/** Které díly kurz vlastnosti má, vzestupně. */
+export function courseParts(kind: AttrKind, attr: string | null): number[] {
+  return [...new Set(attrKindLessons(kind, attr).map(partOf))].sort((a, b) => a - b);
+}
+
+/** Název dílu, např. „Útočná hra“. */
+export function partTitle(kind: AttrKind, attr: string | null, part: number | null | undefined): string {
+  const category = ATTR_CATEGORY[attr as CourseAttr];
+  return (category && PART_TITLES[category]?.[kind][part ?? 1]) ?? "";
+}
+
+/**
+ * Od jaké hodnoty vlastnosti škola posílá na který díl: index + 1 = díl.
+ * Díly jsou seřazené od lehčího k těžšímu, lepší trenér začíná výš.
+ */
+export const PART_LEVELS: Record<AttrKind, readonly number[]> = {
+  attr_basic: [0, 45, 52, 59],
+  attr_advanced: [0, 65],
+};
+
+/** Díl, který odpovídá úrovni vlastnosti (bez ohledu na to, co už trenér absolvoval). */
+export function partForLevel(kind: AttrKind, value: number, parts: readonly number[]): number {
+  const byLevel = PART_LEVELS[kind].filter((from) => value >= from).length;
+  return Math.min(Math.max(byLevel, 1), parts[parts.length - 1] ?? 1);
+}
+
+export interface TakenPart {
+  part: number;
+  /** Kdy se trenér na díl přihlásil (ISO). Rozhoduje, který díl je „nejdéle neviděný“. */
+  createdAt: string;
+}
+
+/**
+ * Který díl kurzu škola nabídne. Nejdřív díl podle úrovně vlastnosti, pokud ho trenér
+ * ještě neměl, pak nejbližší vyšší neabsolvovaný, pak nejbližší nižší. Když prošel všechny,
+ * dostane ten, který viděl nejdávno (u rovnosti ten blíž úrovni). Propadlý díl se počítá
+ * jako absolvovaný: na opakování má trenér opravný termín, další kurz má přinést něco nového.
+ */
+export function pickCoursePart(parts: readonly number[], levelPart: number, taken: readonly TakenPart[]): number {
+  if (parts.length === 0) return 1;
+  const lastTaken = new Map<number, string>();
+  for (const t of taken) {
+    const prev = lastTaken.get(t.part);
+    if (!prev || t.createdAt > prev) lastTaken.set(t.part, t.createdAt);
+  }
+  const fresh = parts.filter((p) => !lastTaken.has(p));
+  const up = fresh.filter((p) => p >= levelPart);
+  if (up.length > 0) return up[0];
+  const down = fresh.filter((p) => p < levelPart);
+  if (down.length > 0) return down[down.length - 1];
+  return [...parts].sort((a, b) => {
+    const byAge = (lastTaken.get(a) ?? "").localeCompare(lastTaken.get(b) ?? "");
+    return byAge !== 0 ? byAge : Math.abs(a - levelPart) - Math.abs(b - levelPart);
+  })[0];
 }
 
 export function courseQuestionPool(course: CourseRef): QuizQuestion[] {

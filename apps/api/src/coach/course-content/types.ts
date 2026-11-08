@@ -24,6 +24,11 @@ export interface Lesson {
   difficulty: Difficulty;
   /** Jen pro `obecne`: pro kterou licenci je lekce (1 = C, 2 = UEFA B, 3 = UEFA A, 4 = UEFA Pro). */
   licence?: 1 | 2 | 3 | 4;
+  /**
+   * Díl kurzu vlastnosti. Bez hodnoty = 1. díl (původní skripta). Každý díl má vlastní lekce
+   * a otázky, trenér dostane díl podle úrovně vlastnosti a toho, co už absolvoval.
+   */
+  part?: number;
   title: string;
   /**
    * Text lekce, 150–300 slov. Odstavce oddělené prázdným řádkem, `**tučně**` pro klíčové
@@ -48,4 +53,10 @@ export interface QuizQuestion {
 export interface CategoryContent {
   lessons: Lesson[];
   questions: QuizQuestion[];
+}
+
+/** Názvy dílů kurzu vlastnosti: číslo dílu → krátký název (např. „Útočná hra“). */
+export interface PartTitles {
+  attr_basic: Record<number, string>;
+  attr_advanced: Record<number, string>;
 }
