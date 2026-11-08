@@ -7,6 +7,8 @@
  * Viz docs/analyza-fronty-2026-08-16.md, riziko 4.1.
  */
 
+import type { SocialReplyJob } from "../social/ai-replies";
+
 /** Úloha AI trenéra: sestava na dnešní zápasy, pondělní správa klubu, hodinová práce. */
 export type CoachTask = "match" | "weekly" | "hourly";
 
@@ -80,7 +82,9 @@ export type ReportQueueMessage =
       leagueId: string;
       calendarId: string;
       enqueuedAt: string;
-    };
+    }
+  // Socky: zpožděná odpověď fanouška nebo novináře pod příspěvkem manažera.
+  | SocialReplyJob;
 
 /** Režim zpracování zápasového ticku — přepínač v KV pod klíčem MATCH_TICK_MODE_KEY. */
 export type MatchTickMode = "loop" | "queue";

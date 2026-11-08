@@ -19,7 +19,7 @@ import {
   removeMute, resolveMentions, resolveTarget, softDeleteComment, softDeletePost, toggleLike,
 } from "../social/store";
 import { likedWhat, notifySocial } from "../social/notify";
-import { SOCIAL_AI_MODE_KEY, generateAiReplies, type ReplyTrigger } from "../social/ai-replies";
+import { SOCIAL_AI_MODE_KEY, scheduleAiReplies, type ReplyTrigger } from "../social/ai-replies";
 
 const M = "social-route";
 
@@ -106,9 +106,9 @@ socialRouter.post("/teams/:teamId/social/posts", async (c) => {
 
   const trigger: ReplyTrigger = {
     key, text, authorName, authorTeamId: viewer.teamId, authorTeamName: viewer.teamName,
-    commentId: null, repliedPersonaId: null,
+    commentId: null, repliedPersonaId: null, mentions,
   };
-  await runLater(c, generateAiReplies(c.env, trigger));
+  await runLater(c, scheduleAiReplies(c.env, trigger));
 
   return c.json({ ok: true, key, item: await loadFeedItem(c.env.DB, viewer, key) });
 });
@@ -157,10 +157,11 @@ socialRouter.post("/teams/:teamId/social/comments", async (c) => {
     });
   }
 
-  await runLater(c, generateAiReplies(c.env, {
+  await runLater(c, scheduleAiReplies(c.env, {
     key, text, authorName, authorTeamId: viewer.teamId, authorTeamName: viewer.teamName,
     commentId: id,
     repliedPersonaId: replyTo && replyTo.authorKind !== "manager" ? replyTo.personaId : null,
+    mentions,
   }));
 
   return c.json({ ok: true, id, comments: await loadComments(c.env.DB, key, viewer) });
