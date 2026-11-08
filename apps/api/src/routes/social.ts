@@ -22,7 +22,7 @@ import { likedWhat, notifySocial } from "../social/notify";
 import { SOCIAL_AI_MODE_KEY, aiMode, scheduleAiReplies, type ReplyTrigger } from "../social/ai-replies";
 import {
   applySocialJournalistEffects, applySocialLike, applySocialToneEffects, modelToneClassifier, relationTargets,
-  type JournalistToneInput, type ToneInput,
+  textMentionsClub, type JournalistToneInput, type ToneInput,
 } from "../social/relation-effects";
 
 const M = "social-route";
@@ -184,7 +184,8 @@ socialRouter.post("/teams/:teamId/social/comments", async (c) => {
     authorTeamId: viewer.teamId, authorName, text, sourceKey: `comment:${id}`, context: target.title,
     targetTeamIds: relationTargets(viewer.teamId, [
       ...mentions.map((m) => m.teamId),
-      target.ownerTeamId,
+      // Pod článkem jen když komentář klub jmenuje; pod příspěvkem trenéra je to odpověď jemu.
+      target.kind === "news" && !(target.ownerTeamName && textMentionsClub(text, target.ownerTeamName)) ? null : target.ownerTeamId,
       replyTo?.authorKind === "manager" ? replyTo.teamId : null,
     ]),
   }));

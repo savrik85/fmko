@@ -51,6 +51,25 @@ export function relationTargets(authorTeamId: string, candidates: Array<string |
   return out;
 }
 
+const GENERIC_NAME_WORDS = new Set(["sokol", "slavoj", "spartak", "dynamo", "hvezda", "jiskra", "tatran", "banik", "union", "sport", "fotbal", "slavia", "sparta", "viktoria", "lokomotiva"]);
+
+function foldText(s: string): string {
+  return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+}
+
+/**
+ * Jmenuje text klub? Stačí začátek výrazného slova z názvu („Kunratic“ najde
+ * „Kunraticím“ i „Kunratice“); obecná slova jako Sokol nebo Hvězda se nepočítají.
+ * Komentář pod článkem o klubu ho jinak vůbec nemusí řešit: kritika článku nebo
+ * novináře se modelu pletla s urážkou klubu.
+ */
+export function textMentionsClub(text: string, clubName: string): boolean {
+  const t = foldText(text);
+  return foldText(clubName).split(/[^a-z0-9]+/)
+    .filter((w) => w.length >= 5 && !GENERIC_NAME_WORDS.has(w))
+    .some((w) => t.includes(w.slice(0, 5)));
+}
+
 /** Kolik z delty ještě projde, když dnes už Socky dvojicí pohnuly o `usedAbs`. */
 export function capDelta(delta: number, usedAbs: number, cap = SOCIAL_DAILY_CAP): number {
   const room = Math.max(0, cap - usedAbs);
@@ -78,7 +97,8 @@ export function modelToneClassifier(env: Pick<Bindings, "AI">): ToneClassifier {
     const res = await callCoachModel(env, {
       system: [
         "Hodnotíš jeden příspěvek trenéra na sociální síti okresního fotbalu v české hře Prales.",
-        `Urči, jak vyznívá vůči ${target}.`,
+        `Urči, jak vyznívá vůči ${target}. Hodnoť jen to, co text říká přímo o něm.`,
+        "Kritika článku, novináře, rozhodčího nebo někoho jiného se nepočítá: vůči hodnocenému je to neutral.",
         "- praise: uznání, gratulace, pozvánka, pochvala, přání štěstí, poděkování.",
         "- tease: fotbalová ironie, rýpnutí, hecování, sebevědomá provokace, vtip na jeho účet.",
         "- insult: osobní urážka, sprostota, ponižování, vyhrožování.",

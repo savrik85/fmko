@@ -8,7 +8,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { Miniflare } from "miniflare";
 import {
   applySocialJournalistEffects, applySocialLike, applySocialToneEffects, capDelta, journalistShift, momentText,
-  relationTargets, type SocialTone, type ToneClassifier,
+  relationTargets, textMentionsClub, type SocialTone, type ToneClassifier,
 } from "./relation-effects";
 
 let miniflare: Miniflare;
@@ -76,6 +76,13 @@ describe("cíle a strop", () => {
     expect(capDelta(5, 8)).toBe(2);
     expect(capDelta(-8, 6)).toBe(-4);
     expect(capDelta(4, 10)).toBe(0);
+  });
+
+  it("komentář pod článkem míří na klub, jen když ho jmenuje", () => {
+    expect(textMentionsClub("Kunraticím to v sobotu nandáme", "Hvězda Kunratice")).toBe(true);
+    expect(textMentionsClub("Další bulvární blábol od paní Jelínkové", "Test Klamovka")).toBe(false);
+    expect(textMentionsClub("Hvězda zase prohrála", "Hvězda Kunratice")).toBe(false);
+    expect(textMentionsClub("Vimperk je letos silnej", "FK Engel Vimperk")).toBe(true);
   });
 
   it("záznam v historii bez rodu a s ukázkou textu", () => {
