@@ -4,7 +4,7 @@
  * málo otázek na opravný termín.
  */
 import { describe, it, expect } from "vitest";
-import { COURSE_CONTENT, ATTRIBUTE_CATEGORIES } from "./index";
+import { COURSE_CONTENT, ATTRIBUTE_CATEGORIES, PART_TITLES } from "./index";
 import type { CourseCategory } from "./types";
 
 const all = Object.values(COURSE_CONTENT);
@@ -55,19 +55,38 @@ describe("obsah trenérské školy", () => {
     }
   });
 
-  it("vlastnosti: na základní i pokročilý kurz a jejich opravné termíny je dost otázek", () => {
+  it("vlastnosti: každý díl základního i pokročilého kurzu má dost otázek na test i opravný termín", () => {
     for (const cat of ATTRIBUTE_CATEGORIES) {
       const c = COURSE_CONTENT[cat];
-      const basicLessons = new Set(c.lessons.filter((l) => l.difficulty <= 2).map((l) => l.id));
-      const advancedLessons = new Set(c.lessons.filter((l) => l.difficulty === 3).map((l) => l.id));
-      const basicPool = c.questions.filter((q) => basicLessons.has(q.lessonId));
-      const advancedPool = c.questions.filter((q) => advancedLessons.has(q.lessonId));
-      // Základní test 8 otázek + opravný 8 jiných.
-      expect(basicPool.length, cat).toBeGreaterThanOrEqual(16);
-      // Pokročilý test 10 + opravný 10 jiných, jen z lekcí pokročilého kurzu.
-      expect(advancedPool.length, cat).toBeGreaterThanOrEqual(20);
-      expect(advancedLessons.size, cat).toBeGreaterThanOrEqual(5);
+      const titles = PART_TITLES[cat];
+      expect(titles, cat).toBeDefined();
+      for (const kind of ["attr_basic", "attr_advanced"] as const) {
+        const ofKind = c.lessons.filter((l) => (kind === "attr_basic" ? l.difficulty <= 2 : l.difficulty === 3));
+        const parts = [...new Set(ofKind.map((l) => l.part ?? 1))].sort((a, b) => a - b);
+        // Díly jdou po sobě od jedničky a každý má název.
+        expect(parts, `${cat} ${kind}`).toEqual(parts.map((_, i) => i + 1));
+        for (const part of parts) {
+          const label = `${cat} ${kind} díl ${part}`;
+          expect(titles?.[kind][part], label).toBeTruthy();
+          const lessonIds = new Set(ofKind.filter((l) => (l.part ?? 1) === part).map((l) => l.id));
+          const pool = c.questions.filter((q) => lessonIds.has(q.lessonId));
+          expect(lessonIds.size, label).toBeGreaterThanOrEqual(4);
+          // Základní test 8 otázek + opravný 8 jiných, pokročilý 10 + 10.
+          expect(pool.length, label).toBeGreaterThanOrEqual(kind === "attr_basic" ? 16 : 20);
+        }
+      }
+      // Názvy nepatří k dílu, který neexistuje.
+      for (const kind of ["attr_basic", "attr_advanced"] as const) {
+        for (const part of Object.keys(titles?.[kind] ?? {}).map(Number)) {
+          const exists = c.lessons.some((l) => (l.part ?? 1) === part && (kind === "attr_basic" ? l.difficulty <= 2 : l.difficulty === 3));
+          expect(exists, `${cat} ${kind} název dílu ${part}`).toBe(true);
+        }
+      }
     }
+  });
+
+  it("licenční lekce nemají díly", () => {
+    for (const l of COURSE_CONTENT.obecne.lessons) expect(l.part, l.id).toBeUndefined();
   });
 
   it("licence: každý stupeň má vlastní skripta a aspoň 20 otázek", () => {
