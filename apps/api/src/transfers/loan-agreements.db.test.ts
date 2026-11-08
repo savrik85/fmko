@@ -99,12 +99,18 @@ describe("hlídání podmínky hostování", () => {
 
   it("den před zápasem varuje hostující klub, jednou na kolo", async () => {
     await match(1, "start");
-    await match(2, "start");
+    await match(2, "sub");
     expect(await warnLoanBorrowersBeforeMatch(db, BORROWER, "c3")).toBe(1);
     expect(await warnLoanBorrowersBeforeMatch(db, BORROWER, "c3")).toBe(0);
     const msgs = await sms(BORROWER);
     expect(msgs[0]).toContain("Slíbili jste, že Jan Novák bude hrát v základu");
     expect(msgs[0]).toContain("Když zítra nezačne v základu");
+  });
+
+  it("dva starty ze dvou nevarují: ze tří zápasů stačí dva v základu", async () => {
+    await match(1, "start");
+    await match(2, "start");
+    expect(await warnLoanBorrowersBeforeMatch(db, BORROWER, "c3")).toBe(0);
   });
 
   it("když hráč na hostování už není, záznam se uzavře", async () => {

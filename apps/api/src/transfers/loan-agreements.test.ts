@@ -18,8 +18,13 @@ describe("podmínka hraní u hostování", () => {
     expect(checkPlayingTime("none", [bench(), bench(), bench()]).state).toBe("none");
   });
 
-  it("v základu: dva starty z dvou, třetí zápas rozhodne, proto varování", () => {
-    expect(checkPlayingTime("starter", [start(), start()]).state).toBe("at_risk");
+  it("v základu: dva starty ze dvou nestraší, ze tří zápasů stačí dva", () => {
+    expect(checkPlayingTime("starter", [start(), start()]).state).toBe("pending");
+    expect(checkPlayingTime("starter", [start(), bench(), start()]).state).toBe("at_risk");
+  });
+
+  it("v základu: jedna lavička ze dvou varuje, protože třetí zápas rozhodne", () => {
+    expect(checkPlayingTime("starter", [start(), bench()]).state).toBe("at_risk");
   });
 
   it("v základu: jeden zápas se ještě nehodnotí ani nevaruje", () => {
@@ -51,7 +56,8 @@ describe("podmínka hraní u hostování", () => {
     const c = checkPlayingTime("starter", [start(), injured(), injured(), bench(), start()]);
     expect(c.eligible).toBe(3);
     expect(c.fulfilled).toBe(2);
-    expect(c.state).toBe("breached");
+    expect(c.state).toBe("at_risk");
+    expect(checkPlayingTime("starter", [start(), injured(), bench(), bench(), start()]).state).toBe("breached");
     expect(checkPlayingTime("starter", [start(), injured(), injured(), start(), start()]).state).toBe("ok");
   });
 

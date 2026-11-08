@@ -90,8 +90,13 @@ export interface PlayingTimeCheck {
   state: PlayingTimeState;
 }
 
+/**
+ * Kolik zápasů musí podmínku splnit. K nejbližšímu, ne nahoru: nahoru dávalo ze tří
+ * zápasů v základu 3 (75 % ze 3 = 2,25), takže jedna lavička na začátku hostování byla
+ * porušení a hráč s 2 ze 2 svítil „Hrozí porušení“ (Fiala, Vlachovo Březí 2026-11-08).
+ */
 function requiredFor(share: number, matches: number): number {
-  return Math.ceil(share * matches - 1e-9);
+  return Math.round(share * matches);
 }
 
 /**
