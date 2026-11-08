@@ -3828,6 +3828,23 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
       healthyPlayers.map((r) => r.id as string), incKontext.absence, "day_before",
     );
   }
+  // Co už odešlo do kabiny, platí: nový hráč (hostování, přestup) by jinak posunul los
+  // a omluvenky by se přehodily na jiné hráče (viz recordedExcuses).
+  if (phases.length > 0) {
+    const { recordedExcuses, settleAbsences } = await import("../events/match-absences");
+    const recorded = await recordedExcuses(c.env.DB, teamId, matchKey);
+    if (recorded) {
+      const ids = healthyPlayers.map((r) => r.id as string);
+      const generated = new Map(absences.flatMap((a) => (ids[a.playerIndex] ? [[ids[a.playerIndex], a] as const] : [])));
+      const settled = settleAbsences<(typeof absences)[number]>(generated, recorded, ids, (smsText) => ({
+        playerIndex: -1, category: "personal", timing: "day_before", reason: "Omluvenka", emoji: "📩", smsText,
+      }));
+      absences = ids.flatMap((id, i) => {
+        const a = settled.get(id);
+        return a ? [{ ...a, playerIndex: i }] : [];
+      });
+    }
+  }
   const absentPlayerIds = new Set(absences.map((a) => healthyPlayers[a.playerIndex]?.id as string).filter(Boolean));
 
   // Load relationships for lineup visualization
