@@ -12,6 +12,15 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    date: "2026-11-08",
+    emoji: "🗣️",
+    title: "Socky pro všechny okresy",
+    items: [
+      "V Telefonu v Sockách je nová zeď Všichni: přestupy, výsledky kol a rozhovory ze všech okresů. Můžeš je komentovat, lajkovat a psát vlastní příspěvky. Do diskuse se zapojí i fanoušci a Zpravodaj.",
+      "Když ti někdo okomentuje příspěvek nebo odpoví, přijde oznámení. Co tě nezajímá, skryješ přes ⋯ (příspěvek, klub, okres nebo celou kategorii). Zeď tvých fanoušků najdeš dál pod Moji fanoušci.",
+    ],
+  },
+  {
     date: "2026-11-05",
     emoji: "⚽",
     title: "Mládež a nová akademie",
