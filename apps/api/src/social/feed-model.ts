@@ -140,6 +140,8 @@ export interface PostRow {
   manager_name: string | null;
   manager_avatar: string | null;
   body: string;
+  /** JSON pole označených klubů (`Mention[]`). */
+  mentions: string | null;
   created_at: string;
 }
 
@@ -174,6 +176,8 @@ export interface FeedItem {
   body: string | null;
   interview: InterviewView | null;
   lines: string[];
+  /** Kluby označené v příspěvku manažera přes @. */
+  mentions: Mention[];
 }
 
 function safeJson(raw: string | null | undefined): unknown | null {
@@ -259,6 +263,7 @@ function articleItem(row: NewsRow): FeedItem {
     body: interview ? null : isResults ? null : plainText(row.body),
     interview,
     lines: isResults ? splitResults(row.body) : [],
+    mentions: [],
   };
 }
 
@@ -295,6 +300,7 @@ export function postItem(row: PostRow): FeedItem {
     body: row.body,
     interview: null,
     lines: [],
+    mentions: parseMentions(row.mentions),
   };
 }
 
@@ -343,6 +349,7 @@ export function buildFeedItems(news: NewsRow[], posts: PostRow[], viewer: Viewer
       body: null,
       interview: null,
       lines: uniqueLines(rows.map(transferLine)),
+      mentions: [],
     });
   }
   return items;
@@ -404,6 +411,44 @@ export const POSTS_PER_DAY = 15;
 export const COMMENTS_PER_DAY = 120;
 
 /** Ořízne a sjednotí text od člověka. Vrací null, když nic nezbude. */
+// ── Označení klubu (@) ──────────────────────────────────────────────────────
+
+export interface Mention {
+  teamId: string;
+  name: string;
+}
+
+/** Kolik klubů jde označit v jednom textu. */
+export const MENTIONS_MAX = 5;
+
+/** Označení uložená u příspěvku nebo komentáře. Rozbitý JSON = nic. */
+export function parseMentions(raw: string | null | undefined): Mention[] {
+  const j = safeJson(raw);
+  if (!Array.isArray(j)) return [];
+  return j.filter((m): m is Mention => !!m && typeof m.teamId === "string" && typeof m.name === "string");
+}
+
+/**
+ * Ze skutečných klubů, které poslal prohlížeč, nechá jen ty, jejichž „@jméno“
+ * v textu opravdu stojí (označení mohl autor před odesláním smazat), každý jednou.
+ */
+export function pickMentions(body: string, candidates: Mention[], authorTeamId: string): Mention[] {
+  const out: Mention[] = [];
+  for (const c of candidates) {
+    if (c.teamId === authorTeamId || out.some((m) => m.teamId === c.teamId)) continue;
+    if (!c.name || !body.includes(`@${c.name}`)) continue;
+    out.push({ teamId: c.teamId, name: c.name });
+    if (out.length >= MENTIONS_MAX) break;
+  }
+  return out;
+}
+
+/** Id klubů z požadavku: jen řetězce, bez opakování, nejvýš pár. */
+export function mentionIds(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return [...new Set(raw.filter((x): x is string => typeof x === "string" && x.length > 0 && x.length <= 64))].slice(0, MENTIONS_MAX);
+}
+
 export function cleanUserText(raw: unknown, max: number): string | null {
   if (typeof raw !== "string") return null;
   const t = raw.replace(/\r\n?/g, "\n").replace(/\n{3,}/g, "\n\n").trim();

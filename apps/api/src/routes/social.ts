@@ -11,14 +11,14 @@ import { logger } from "../lib/logger";
 import { requireAdmin, requirePrivateTeamRead, requireTeamOwnership } from "../auth/middleware";
 import {
   CATEGORY_LABELS, COMMENTS_PER_DAY, COMMENT_MAX, POSTS_PER_DAY, POST_MAX,
-  cleanUserText, parseTargetKey, type FeedCategory, type Mute,
+  cleanUserText, mentionIds, parseTargetKey, type FeedCategory, type Mention, type Mute,
 } from "../social/feed-model";
 import {
   addMute, commentsToday, insertManagerComment, insertPost, insertReport, loadComments, loadFeed,
-  loadFeedItem, loadMutes, loadReplyTarget, loadViewer, postsToday, removeMute, resolveTarget,
-  softDeleteComment, softDeletePost, toggleLike,
+  loadFeedItem, loadMutes, loadReplyTarget, loadViewer, managerName, mentionableTeams, postsToday,
+  removeMute, resolveMentions, resolveTarget, softDeleteComment, softDeletePost, toggleLike,
 } from "../social/store";
-import { notifyComment } from "../social/notify";
+import { likedWhat, notifySocial } from "../social/notify";
 import { SOCIAL_AI_MODE_KEY, generateAiReplies, type ReplyTrigger } from "../social/ai-replies";
 
 const M = "social-route";
@@ -47,6 +47,18 @@ async function runLater(c: Ctx, work: Promise<unknown>): Promise<void> {
 async function viewerOr404(c: Ctx) {
   const viewer = await loadViewer(c.env.DB, c.req.param("teamId") ?? "");
   return viewer;
+}
+
+/** Označeným klubům dá vědět. Vrací, komu už oznámení šlo. */
+async function notifyMentions(c: Ctx, mentions: Mention[], key: string, actorTeamId: string, actorName: string, body: string, title: string): Promise<Set<string>> {
+  const done = new Set<string>();
+  for (const m of mentions) {
+    await notifySocial(c.env, {
+      kind: "mention", key, recipientTeamId: m.teamId, actorTeamId, actorName, body, title, push: true,
+    });
+    done.add(m.teamId);
+  }
+  return done;
 }
 
 async function readJson<T>(c: Ctx): Promise<T | null> {
@@ -80,23 +92,22 @@ socialRouter.get("/teams/:teamId/social/comments", async (c) => {
 socialRouter.post("/teams/:teamId/social/posts", async (c) => {
   const viewer = await viewerOr404(c);
   if (!viewer) return c.json({ error: "Klub nenalezen" }, 404);
-  const body = await readJson<{ body?: unknown }>(c);
+  const body = await readJson<{ body?: unknown; mentions?: unknown }>(c);
   const text = cleanUserText(body?.body, POST_MAX);
   if (!text) return c.json({ error: "Napiš, co máš na srdci." }, 400);
   if (await postsToday(c.env.DB, viewer.userId) >= POSTS_PER_DAY) {
     return c.json({ error: `Dnes už jsi napsal ${POSTS_PER_DAY} příspěvků. Zítra zase.` }, 429);
   }
-  const id = await insertPost(c.env.DB, viewer, text);
+  const mentions = await resolveMentions(c.env.DB, text, mentionIds(body?.mentions), viewer.teamId);
+  const id = await insertPost(c.env.DB, viewer, text, mentions);
   const key = `post:${id}`;
+  const authorName = await managerName(c.env.DB, viewer.teamId);
+  await notifyMentions(c, mentions, key, viewer.teamId, authorName, text, `příspěvek trenéra ${authorName}`);
 
   const trigger: ReplyTrigger = {
-    key, text, authorName: "", authorTeamId: viewer.teamId, authorTeamName: viewer.teamName,
+    key, text, authorName, authorTeamId: viewer.teamId, authorTeamName: viewer.teamName,
     commentId: null, repliedPersonaId: null,
   };
-  const who = await c.env.DB.prepare("SELECT name FROM managers WHERE team_id = ? ORDER BY created_at LIMIT 1")
-    .bind(viewer.teamId).first<{ name: string }>()
-    .catch((e) => { logger.warn({ module: M }, "jméno autora příspěvku", e); return null; });
-  trigger.authorName = who?.name ?? "Trenér";
   await runLater(c, generateAiReplies(c.env, trigger));
 
   return c.json({ ok: true, key, item: await loadFeedItem(c.env.DB, viewer, key) });
@@ -113,7 +124,7 @@ socialRouter.delete("/teams/:teamId/social/posts/:id", async (c) => {
 socialRouter.post("/teams/:teamId/social/comments", async (c) => {
   const viewer = await viewerOr404(c);
   if (!viewer) return c.json({ error: "Klub nenalezen" }, 404);
-  const body = await readJson<{ key?: unknown; body?: unknown; replyToId?: unknown }>(c);
+  const body = await readJson<{ key?: unknown; body?: unknown; replyToId?: unknown; mentions?: unknown }>(c);
   const key = typeof body?.key === "string" ? body.key : "";
   const ref = parseTargetKey(key);
   if (!ref || ref.kind === "comment" || ref.kind === "fanpost") return c.json({ error: "Neznámý příspěvek" }, 400);
@@ -129,15 +140,19 @@ socialRouter.post("/teams/:teamId/social/comments", async (c) => {
   const replyTo = replyToId ? await loadReplyTarget(c.env.DB, replyToId, key) : null;
   if (replyToId && !replyTo) return c.json({ error: "Komentář, na který odpovídáš, už není." }, 404);
 
-  const { id, authorName } = await insertManagerComment(c.env.DB, viewer, key, text, replyTo?.id ?? null);
+  const mentions = await resolveMentions(c.env.DB, text, mentionIds(body?.mentions), viewer.teamId);
+  const { id, authorName } = await insertManagerComment(c.env.DB, viewer, key, text, replyTo?.id ?? null, mentions);
 
-  // Komu dát vědět: majiteli příspěvku a tomu, komu se odpovídá (když je to jiný trenér).
+  // Komu dát vědět: označeným, majiteli příspěvku a tomu, komu se odpovídá (když je to jiný trenér).
+  // Kdo je označený, dostane jen zmínku, ne k tomu ještě oznámení o komentáři.
+  const mentioned = await notifyMentions(c, mentions, key, viewer.teamId, authorName, text, target.title);
   const notices = new Set<string>();
   if (target.ownerIsHuman && target.ownerTeamId) notices.add(target.ownerTeamId);
   if (replyTo?.authorKind === "manager" && replyTo.teamId) notices.add(replyTo.teamId);
   for (const teamId of notices) {
-    await notifyComment(c.env, {
-      key, recipientTeamId: teamId, actorTeamId: viewer.teamId, actorName: authorName,
+    if (mentioned.has(teamId)) continue;
+    await notifySocial(c.env, {
+      kind: "comment", key, recipientTeamId: teamId, actorTeamId: viewer.teamId, actorName: authorName,
       body: text, title: target.title, push: true,
     });
   }
@@ -166,7 +181,22 @@ socialRouter.post("/teams/:teamId/social/likes", async (c) => {
   const key = typeof body?.key === "string" ? body.key : "";
   const target = await resolveTarget(c.env.DB, key);
   if (!target) return c.json({ error: "Tohle už neexistuje." }, 404);
-  return c.json(await toggleLike(c.env.DB, viewer.userId, key));
+  const result = await toggleLike(c.env.DB, viewer.userId, key);
+  // Lajk potěší autora: příspěvek, komentář trenéra, článek o jeho klubu. Bez pushe, jen v oznámeních.
+  if (result.liked && target.ownerIsHuman && target.ownerTeamId && target.ownerTeamId !== viewer.teamId) {
+    await notifySocial(c.env, {
+      kind: "like", key: target.feedKey, recipientTeamId: target.ownerTeamId, actorTeamId: viewer.teamId,
+      actorName: await managerName(c.env.DB, viewer.teamId), body: likedWhat(target.kind, target.snippet),
+      title: target.title, push: false,
+    });
+  }
+  return c.json(result);
+});
+
+socialRouter.get("/teams/:teamId/social/mentionable", async (c) => {
+  const viewer = await viewerOr404(c);
+  if (!viewer) return c.json({ error: "Klub nenalezen" }, 404);
+  return c.json({ teams: await mentionableTeams(c.env.DB, viewer.teamId) });
 });
 
 socialRouter.get("/teams/:teamId/social/mutes", async (c) => {

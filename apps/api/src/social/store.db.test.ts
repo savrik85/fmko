@@ -8,9 +8,9 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { Miniflare } from "miniflare";
 import {
   addMute, insertManagerComment, insertPost, insertPersonaComment, loadComments, loadFeed,
-  loadFeedItem, loadViewer, resolveTarget, toggleLike,
+  loadFeedItem, loadViewer, mentionableTeams, resolveMentions, resolveTarget, toggleLike,
 } from "./store";
-import { notifyComment } from "./notify";
+import { notifySocial } from "./notify";
 import type { Viewer } from "./feed-model";
 
 let miniflare: Miniflare;
@@ -35,7 +35,7 @@ beforeAll(async () => {
   db = await miniflare.getD1Database("DB");
   for (const sql of [
     "CREATE TABLE leagues (id TEXT PRIMARY KEY, name TEXT, district TEXT)",
-    "CREATE TABLE teams (id TEXT PRIMARY KEY, name TEXT, user_id TEXT, league_id TEXT)",
+    "CREATE TABLE teams (id TEXT PRIMARY KEY, name TEXT, user_id TEXT, league_id TEXT, parent_team_id TEXT)",
     "CREATE TABLE managers (id TEXT PRIMARY KEY, team_id TEXT, user_id TEXT, name TEXT, avatar TEXT, created_at TEXT)",
     `CREATE TABLE news (id TEXT PRIMARY KEY, league_id TEXT NOT NULL, team_id TEXT, type TEXT NOT NULL, headline TEXT NOT NULL,
       body TEXT NOT NULL, game_week INTEGER, created_at TEXT NOT NULL DEFAULT (datetime('now')), journalist_id TEXT, season_number INTEGER)`,
@@ -49,20 +49,23 @@ beforeAll(async () => {
       body TEXT NOT NULL, read INTEGER NOT NULL DEFAULT 0, action_url TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')))`,
   ]) await db.prepare(sql).run();
 
-  const migration = readFileSync(resolve(__dirname, "../../migrations/0288_social_feed.sql"), "utf8")
-    .replace(/--.*$/gm, "")
-    .split(";")
-    .map((s) => s.trim())
-    .filter(Boolean);
-  for (const sql of migration) await db.prepare(sql).run();
+  for (const file of ["0288_social_feed.sql", "0289_social_mentions.sql"]) {
+    const migration = readFileSync(resolve(__dirname, `../../migrations/${file}`), "utf8")
+      .replace(/--.*$/gm, "")
+      .split(";")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    for (const sql of migration) await db.prepare(sql).run();
+  }
 
   await db.batch([
     db.prepare("INSERT INTO leagues VALUES ('l1', 'Schwan liga', 'Prachatice'), ('l2', 'Přebor Prahy', 'Praha')"),
-    db.prepare(`INSERT INTO teams VALUES
-      ('t-me', 'AC Jitona Spůle', 'u-me', 'l1'),
-      ('t-other', 'FK Engel Vimperk', 'u-other', 'l1'),
-      ('t-ai', 'FK Madeta Volary', 'ai', 'l1'),
-      ('t-praha', 'AC ČEZ Klamovka', 'u-praha', 'l2')`),
+    db.prepare(`INSERT INTO teams (id, name, user_id, league_id, parent_team_id) VALUES
+      ('t-me', 'AC Jitona Spůle', 'u-me', 'l1', NULL),
+      ('t-other', 'FK Engel Vimperk', 'u-other', 'l1', NULL),
+      ('t-other-u21', 'FK Engel Vimperk U21', 'u-other', 'l1', 't-other'),
+      ('t-ai', 'FK Madeta Volary', 'ai', 'l1', NULL),
+      ('t-praha', 'AC ČEZ Klamovka', 'u-praha', 'l2', NULL)`),
     db.prepare(`INSERT INTO managers VALUES
       ('m1', 't-me', 'u-me', 'Zdeněk J.', NULL, '2026-01-01'),
       ('m2', 't-other', 'u-other', 'Petr K.', NULL, '2026-01-01'),
@@ -190,13 +193,49 @@ describe("komentáře, lajky, oznámení", () => {
 
   it("oznámení jen lidskému klubu, ne sobě, a k jedné diskusi jen jedno nepřečtené", async () => {
     const env = { DB: db, VAPID_PUBLIC_KEY: "", VAPID_PRIVATE_KEY: "", VAPID_SUBJECT: "" };
-    const base = { key: "post:x", actorName: "Petr K.", body: "Souhlas", title: "příspěvek", push: false };
-    await notifyComment(env, { ...base, recipientTeamId: "t-me", actorTeamId: "t-other" });
-    await notifyComment(env, { ...base, recipientTeamId: "t-me", actorTeamId: "t-other" });
-    await notifyComment(env, { ...base, recipientTeamId: "t-me", actorTeamId: "t-me" });
-    await notifyComment(env, { ...base, recipientTeamId: "t-ai", actorTeamId: "t-other" });
+    const base = { kind: "comment" as const, key: "post:x", actorName: "Petr K.", body: "Souhlas", title: "příspěvek", push: false };
+    await notifySocial(env, { ...base, recipientTeamId: "t-me", actorTeamId: "t-other" });
+    await notifySocial(env, { ...base, recipientTeamId: "t-me", actorTeamId: "t-other" });
+    await notifySocial(env, { ...base, recipientTeamId: "t-me", actorTeamId: "t-me" });
+    await notifySocial(env, { ...base, recipientTeamId: "t-ai", actorTeamId: "t-other" });
     const rows = await db.prepare("SELECT team_id, action_url, title FROM notifications").all<{ team_id: string; action_url: string; title: string }>();
     expect(rows.results).toEqual([{ team_id: "t-me", action_url: "/telefon?socky=post%3Ax", title: "Socky: nový komentář" }]);
+  });
+
+  it("lajk a zmínka mají vlastní oznámení vedle nepřečteného komentáře", async () => {
+    const env = { DB: db, VAPID_PUBLIC_KEY: "", VAPID_PRIVATE_KEY: "", VAPID_SUBJECT: "" };
+    const base = { key: "post:x", recipientTeamId: "t-me", actorTeamId: "t-other", actorName: "Petr K.", body: "Souhlas", title: "příspěvek", push: false };
+    await notifySocial(env, { ...base, kind: "comment" });
+    await notifySocial(env, { ...base, kind: "like" });
+    await notifySocial(env, { ...base, kind: "like" });
+    await notifySocial(env, { ...base, kind: "mention" });
+    const rows = await db.prepare("SELECT title FROM notifications ORDER BY title").all<{ title: string }>();
+    expect(rows.results.map((r) => r.title)).toEqual(["Socky: lajk", "Socky: nový komentář", "Socky: zmínka"]);
+  });
+
+  it("lajk komentáře vede na příspěvek, pod kterým komentář je", async () => {
+    const postId = await insertPost(db, me, "Ahoj");
+    const { id } = await insertManagerComment(db, (await loadViewer(db, "t-other"))!, `post:${postId}`, "Nazdar", null);
+    const t = await resolveTarget(db, `comment:${id}`);
+    expect(t).toMatchObject({ feedKey: `post:${postId}`, snippet: "Nazdar", ownerTeamId: "t-other", ownerIsHuman: true });
+  });
+
+  it("označit jde jen klub, který vede člověk a jehož @jméno je v textu; zeď označení ukáže", async () => {
+    const other = (await loadViewer(db, "t-other"))!;
+    const mentions = await resolveMentions(db, "@AC Jitona Spůle a @FK Madeta Volary, jedete?", ["t-me", "t-ai", "t-praha", "neni"], other.teamId);
+    expect(mentions).toEqual([{ teamId: "t-me", name: "AC Jitona Spůle" }]);
+    const postId = await insertPost(db, other, "@AC Jitona Spůle a @FK Madeta Volary, jedete?", mentions);
+    const item = await loadFeedItem(db, me, `post:${postId}`);
+    expect(item?.mentions).toEqual(mentions);
+    await insertManagerComment(db, me, `post:${postId}`, "@FK Engel Vimperk jasně", null, [{ teamId: "t-other", name: "FK Engel Vimperk" }]);
+    const [c] = await loadComments(db, `post:${postId}`, me);
+    expect(c.mentions).toEqual([{ teamId: "t-other", name: "FK Engel Vimperk" }]);
+  });
+
+  it("seznam k označení: kluby lidí bez vlastního, bez AI a bez U21", async () => {
+    const teams = await mentionableTeams(db, "t-me");
+    expect(teams.map((t) => t.teamId).sort()).toEqual(["t-other", "t-praha"]);
+    expect(teams.find((t) => t.teamId === "t-other")).toEqual({ teamId: "t-other", teamName: "FK Engel Vimperk", managerName: "Petr K.", district: "Prachatice" });
   });
 
   it("souhrn přestupů z odkazu v oznámení obsahuje i přestup vlastního klubu", async () => {

@@ -12,13 +12,16 @@
  * vyplave nahoru, aby se lidi neztratili mezi automatickými zprávami.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent, type ReactNode, type RefObject } from "react";
 import Link from "next/link";
 import { Spinner } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { apiFetch } from "@/lib/api";
 
 type Category = "posts" | "results" | "transfers" | "interviews" | "gossip" | "season";
+
+/** Klub označený přes @. `name` je přesně to, co stojí v textu za zavináčem. */
+export interface Mention { teamId: string; name: string }
 
 export interface FeedComment {
   id: string;
@@ -35,6 +38,7 @@ export interface FeedComment {
   likeCount: number;
   liked: boolean;
   mine: boolean;
+  mentions: Mention[];
 }
 
 export interface FeedEntry {
@@ -65,6 +69,7 @@ export interface FeedEntry {
   commentCount: number;
   comments: FeedComment[];
   mine: boolean;
+  mentions: Mention[];
 }
 
 interface MuteRow { kind: "item" | "team" | "district" | "category"; value: string; label: string }
@@ -172,6 +177,166 @@ function errorText(e: unknown, fallback: string): string {
   return m && m !== "API error" && m !== "Network error" ? m : fallback;
 }
 
+// ── Označení (@) ────────────────────────────────────────────────────────────
+
+interface MentionCandidate { teamId: string; teamName: string; managerName: string | null; district: string | null }
+
+/** Kolik návrhů se ukáže pod polem. */
+const MENTION_SUGGESTIONS = 5;
+
+/** Seznam klubů k označení se načte jednou za návštěvu, ať se při psaní netahá pořád. */
+const mentionCandidates = new Map<string, Promise<MentionCandidate[]>>();
+
+function loadMentionCandidates(teamId: string): Promise<MentionCandidate[]> {
+  let p = mentionCandidates.get(teamId);
+  if (!p) {
+    p = apiFetch<{ teams: MentionCandidate[] }>(`/api/teams/${teamId}/social/mentionable`)
+      .then((r) => r.teams)
+      .catch((e) => {
+        console.warn("kluby k označení:", e);
+        mentionCandidates.delete(teamId);
+        return [];
+      });
+    mentionCandidates.set(teamId, p);
+  }
+  return p;
+}
+
+function fold(s: string): string {
+  return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+}
+
+/** Text za zavináčem těsně před kurzorem, nebo null, když se zrovna neoznačuje. */
+function mentionQuery(value: string, caret: number): string | null {
+  const m = /(?:^|\s)@([^@\n]{0,30})$/.exec(value.slice(0, caret));
+  if (!m) return null;
+  return m[1].split(" ").length <= 4 ? m[1] : null;
+}
+
+/**
+ * Označování v poli pro psaní: po „@“ nabídne kluby (podle názvu i jména trenéra),
+ * výběr vloží „@Název klubu “ a zapamatuje si, koho. Při odeslání se pošlou jen ti,
+ * jejichž @jméno v textu pořád stojí.
+ */
+function useMentionPicker(teamId: string, text: string, setText: (s: string) => void, max: number, ref: RefObject<HTMLTextAreaElement | null>) {
+  const [picked, setPicked] = useState<Mention[]>([]);
+  const [query, setQuery] = useState<string | null>(null);
+  const [active, setActive] = useState(0);
+  const [candidates, setCandidates] = useState<MentionCandidate[] | null>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+
+  const detect = (value: string, caret: number) => {
+    const q = mentionQuery(value, caret);
+    setQuery(q);
+    setActive(0);
+    if (q !== null && candidates === null) void loadMentionCandidates(teamId).then(setCandidates);
+  };
+
+  const suggestions = query === null || !candidates ? [] : candidates
+    .filter((c) => !query || fold(c.teamName).includes(fold(query)) || (c.managerName && fold(c.managerName).includes(fold(query))))
+    .slice(0, MENTION_SUGGESTIONS);
+
+  // Pole bývá dole v telefonu: návrhy se posunou do zorného pole, jinak by je nikdo neviděl.
+  const shown = suggestions.length > 0;
+  useEffect(() => {
+    if (!shown) return;
+    listRef.current?.scrollIntoView({ block: "nearest" });
+    ref.current?.scrollIntoView({ block: "nearest" });
+  }, [shown, ref]);
+
+  const choose = (c: MentionCandidate) => {
+    const el = ref.current;
+    const caret = el?.selectionStart ?? text.length;
+    const start = caret - (query?.length ?? 0) - 1;
+    if (start < 0 || text[start] !== "@") return;
+    const insert = `@${c.teamName} `;
+    const next = (text.slice(0, start) + insert + text.slice(caret)).slice(0, max);
+    setText(next);
+    setPicked((p) => (p.some((m) => m.teamId === c.teamId) ? p : [...p, { teamId: c.teamId, name: c.teamName }]));
+    setQuery(null);
+    requestAnimationFrame(() => {
+      el?.focus();
+      const pos = Math.min(start + insert.length, next.length);
+      el?.setSelectionRange(pos, pos);
+    });
+  };
+
+  const onChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
+    const value = e.target.value.slice(0, max);
+    setText(value);
+    detect(value, e.target.selectionStart ?? value.length);
+  };
+
+  /** Vrací true, když klávesu spotřeboval výběr klubu. */
+  const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>): boolean => {
+    if (suggestions.length === 0) return false;
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      setActive((a) => (a + (e.key === "ArrowDown" ? 1 : suggestions.length - 1)) % suggestions.length);
+      return true;
+    }
+    if (e.key === "Enter" || e.key === "Tab") {
+      e.preventDefault();
+      choose(suggestions[Math.min(active, suggestions.length - 1)]);
+      return true;
+    }
+    if (e.key === "Escape") {
+      e.preventDefault();
+      setQuery(null);
+      return true;
+    }
+    return false;
+  };
+
+  const list = suggestions.length > 0 ? (
+    <ul ref={listRef} className="my-1 rounded-lg border border-gray-200 bg-white overflow-hidden" role="listbox" aria-label="Označit klub">
+      {suggestions.map((c, i) => (
+        <li key={c.teamId}>
+          <button
+            type="button"
+            role="option"
+            aria-selected={i === active}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => choose(c)}
+            className={`block w-full text-left px-3 py-2 border-b border-gray-100 last:border-b-0 ${i === active ? "bg-pitch-50" : "hover:bg-gray-50"}`}
+          >
+            <span className="block text-sm font-semibold text-ink">{c.teamName}</span>
+            <span className="block text-sm text-muted">{[c.managerName, c.district].filter(Boolean).join(" · ")}</span>
+          </button>
+        </li>
+      ))}
+    </ul>
+  ) : null;
+
+  return {
+    onChange,
+    onKeyDown,
+    onCaretMove: () => { const el = ref.current; if (el) detect(el.value, el.selectionStart ?? el.value.length); },
+    list,
+    mentionIds: (body: string) => picked.filter((m) => body.includes(`@${m.name}`)).map((m) => m.teamId),
+    reset: () => { setPicked([]); setQuery(null); },
+  };
+}
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Text příspěvku nebo komentáře se zvýrazněnými označenými kluby. */
+function MentionText({ text, mentions }: { text: string; mentions: Mention[] }) {
+  const names = mentions.filter((m) => m.name).sort((a, b) => b.name.length - a.name.length);
+  if (names.length === 0) return <>{text}</>;
+  const byName = new Map(names.map((m) => [`@${m.name}`, m.teamId]));
+  const parts = text.split(new RegExp(`(${names.map((m) => escapeRegExp(`@${m.name}`)).join("|")})`, "g"));
+  const out: ReactNode[] = parts.map((part, i) => {
+    const id = byName.get(part);
+    return id
+      ? <Link key={i} href={`/tym/${id}`} className="font-semibold text-pitch-600 hover:underline">{part}</Link>
+      : part;
+  });
+  return <>{out}</>;
+}
+
 // ── Komentáře ───────────────────────────────────────────────────────────────
 
 function CommentRow({
@@ -245,7 +410,7 @@ function CommentRow({
           <div className="text-sm text-muted leading-tight"><CommentLabel c={c} /></div>
           <p className="text-base text-ink leading-snug mt-1 whitespace-pre-wrap break-words">
             {replyName && <span className="font-semibold text-pitch-600">{replyName} </span>}
-            {c.body}
+            <MentionText text={c.body} mentions={c.mentions ?? []} />
           </p>
         </div>
         <div className="flex items-center gap-4 px-2 mt-1 text-sm text-muted">
@@ -286,6 +451,7 @@ function CommentComposer({
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const ref = useRef<HTMLTextAreaElement>(null);
+  const picker = useMentionPicker(teamId, text, setText, COMMENT_MAX, ref);
 
   useEffect(() => { if (replyTo || autoFocus) ref.current?.focus(); }, [replyTo, autoFocus]);
 
@@ -297,9 +463,10 @@ function CommentComposer({
     try {
       const r = await apiFetch<{ comments: FeedComment[] }>(`/api/teams/${teamId}/social/comments`, {
         method: "POST",
-        body: JSON.stringify({ key: targetKey, body, replyToId: replyTo?.id ?? null }),
+        body: JSON.stringify({ key: targetKey, body, replyToId: replyTo?.id ?? null, mentions: picker.mentionIds(body) }),
       });
       setText("");
+      picker.reset();
       onCancelReply();
       onPosted(r.comments);
     } catch (e) {
@@ -318,15 +485,20 @@ function CommentComposer({
           <button onClick={onCancelReply} className="text-muted hover:text-ink" aria-label="Zrušit odpověď">✕</button>
         </div>
       )}
+      {picker.list}
       <div className="flex items-end gap-2">
         <textarea
           ref={ref}
           value={text}
-          onChange={(e) => setText(e.target.value.slice(0, COMMENT_MAX))}
+          onChange={picker.onChange}
+          onClick={picker.onCaretMove}
           rows={1}
-          placeholder={replyTo ? "Napiš odpověď…" : "Napiš komentář…"}
+          placeholder={replyTo ? "Napiš odpověď…" : "Komentář… (@ označí trenéra)"}
           className="flex-1 resize-none rounded-2xl border border-gray-200 bg-white px-3 py-2 text-base text-ink placeholder:text-muted-light focus:outline-none focus:border-pitch-500"
-          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); } }}
+          onKeyDown={(e) => {
+            if (picker.onKeyDown(e)) return;
+            if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); }
+          }}
         />
         <button
           onClick={send}
@@ -514,7 +686,7 @@ function FeedCard({
           </h3>
         )}
         {item.kind === "post" && item.body && (
-          <p className="text-base text-ink leading-snug whitespace-pre-wrap break-words">{item.body}</p>
+          <p className="text-base text-ink leading-snug whitespace-pre-wrap break-words"><MentionText text={item.body} mentions={item.mentions ?? []} /></p>
         )}
         {item.kind === "article" && item.body && (
           <p className={`text-base text-ink-light leading-snug mt-1 whitespace-pre-wrap break-words ${expanded ? "" : "line-clamp-4"}`}>{item.body}</p>
@@ -589,6 +761,8 @@ function PostComposer({ teamId, onPosted }: { teamId: string; onPosted: (item: F
   const [open, setOpen] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const ref = useRef<HTMLTextAreaElement>(null);
+  const picker = useMentionPicker(teamId, text, setText, POST_MAX, ref);
 
   const send = async () => {
     const body = text.trim();
@@ -597,9 +771,10 @@ function PostComposer({ teamId, onPosted }: { teamId: string; onPosted: (item: F
     setError(null);
     try {
       const r = await apiFetch<{ item: FeedEntry | null }>(`/api/teams/${teamId}/social/posts`, {
-        method: "POST", body: JSON.stringify({ body }),
+        method: "POST", body: JSON.stringify({ body, mentions: picker.mentionIds(body) }),
       });
       setText("");
+      picker.reset();
       setOpen(false);
       onPosted(r.item);
     } catch (e) {
@@ -620,13 +795,17 @@ function PostComposer({ teamId, onPosted }: { teamId: string; onPosted: (item: F
   return (
     <div className="bg-white px-3 py-3 border-b border-gray-100">
       <textarea
+        ref={ref}
         autoFocus
         value={text}
-        onChange={(e) => setText(e.target.value.slice(0, POST_MAX))}
+        onChange={picker.onChange}
+        onClick={picker.onCaretMove}
+        onKeyDown={(e) => { picker.onKeyDown(e); }}
         rows={4}
-        placeholder="Napiš, co si myslíš o kole, přestupech nebo soupeřích. Uvidí to trenéři ze všech okresů."
+        placeholder="Napiš, co si myslíš o kole, přestupech nebo soupeřích. Uvidí to trenéři ze všech okresů. Přes @ označíš jiného trenéra."
         className="w-full resize-none rounded-lg border border-gray-200 px-3 py-2 text-base text-ink placeholder:text-muted-light focus:outline-none focus:border-pitch-500"
       />
+      {picker.list}
       <div className="flex items-center gap-2 mt-2">
         <span className="text-sm text-muted">{text.length}/{POST_MAX}</span>
         <button onClick={() => { setOpen(false); setError(null); }} className="ml-auto px-3 py-2 rounded-lg bg-gray-100 text-ink text-sm">Zrušit</button>
