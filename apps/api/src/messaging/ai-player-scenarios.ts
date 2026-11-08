@@ -54,6 +54,8 @@ export interface PlayerSnapshot {
   lastMatchSquad?: "played" | "bench" | "out" | "absent";
   /** Proč v posledním zápase chyběl (`matches.absences`), jen u `lastMatchSquad = "absent"`. */
   lastMatchAbsence?: { reason: string; text: string };
+  /** Omluvil se na dnešní nebo zítřejší zápas (stejně jako v sestavě). */
+  upcomingAbsence?: { reason: string; text: string; when: "dnes" | "zítra"; opponent: string | null };
   lastMatchGoals?: number;
   lastMatchAssists?: number;
   lastMatchRedCard?: boolean;

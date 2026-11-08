@@ -179,6 +179,58 @@ export interface LastMatchContext {
    * nejel kvůli sobě, a ne proto, že ho trenér nevzal.
    */
   absences?: Map<string, { reason: string; text: string }>;
+  /**
+   * Omluvenky na dnešní nebo zítřejší zápas, jak je hráč napsal do skupiny zápasu „⚽ vs …“.
+   * Osobní chat je dřív neznal a hráč pak trenérovi tvrdil, že je doma a fit
+   * (Linhart, Chlumany 2026-11-08).
+   */
+  upcomingAbsences?: Map<string, { reason: string; text: string; when: "dnes" | "zítra"; opponent: string | null }>;
+}
+
+/**
+ * Omluvenky z kabiny: „ne“ do skupiny zápasu za poslední dva dny k zápasu, který se ještě
+ * nehrál. Bere se text, který trenér viděl, ne nový výpočet: soutěže se starým neodehraným
+ * kolem v kalendáři (ČB, U21) by výpočet poslaly k jinému zápasu. Staré skupiny se po
+ * zápase nemažou vždycky, proto ta dvoudenní mez.
+ */
+export async function loadUpcomingAbsences(db: D1Database, teamId: string, now: Date = new Date()): Promise<LastMatchContext["upcomingAbsences"]> {
+  const since = new Date(now.getTime() - 2 * 86400000).toISOString().slice(0, 10);
+  const rows = await db.prepare(
+    `SELECT m.sender_id, m.body, json_extract(m.metadata, '$.calendarId') AS cal, c.title
+       FROM messages m JOIN conversations c ON c.id = m.conversation_id
+      WHERE c.team_id = ? AND c.type = 'squad_group' AND m.sender_type = 'player'
+        AND json_extract(m.metadata, '$.response') = 'no' AND substr(m.sent_at, 1, 10) >= ?
+      ORDER BY m.sent_at DESC LIMIT 60`,
+  ).bind(teamId, since).all<{ sender_id: string; body: string; cal: string | null; title: string | null }>()
+    .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "omluvenky z kabiny", e); return { results: [] as never[] }; });
+  if (rows.results.length === 0) return undefined;
+
+  const cals = [...new Set(rows.results.flatMap((r) => (r.cal ? [r.cal] : [])))];
+  if (cals.length === 0) return undefined;
+  const ph = cals.map(() => "?").join(",");
+  const open = await db.prepare(
+    `SELECT id, scheduled_at FROM season_calendar WHERE id IN (${ph}) AND status = 'scheduled'
+     UNION ALL SELECT id, created_at FROM matches WHERE id IN (${ph}) AND calendar_id IS NULL AND status != 'simulated'`,
+  ).bind(...cals, ...cals).all<{ id: string; scheduled_at: string }>()
+    .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "zápasy omluvenek z kabiny", e); return { results: [] as never[] }; });
+  const team = await db.prepare("SELECT game_date FROM teams WHERE id = ?").bind(teamId).first<{ game_date: string | null }>()
+    .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "herní den pro omluvenky", e); return null; });
+  const gameDay = (team?.game_date ?? now.toISOString()).slice(0, 10);
+  const whenOf = new Map<string, "dnes" | "zítra">();
+  for (const o of open.results) {
+    const days = Math.round((Date.parse(o.scheduled_at.slice(0, 10)) - Date.parse(gameDay)) / 86400000);
+    // Den předem píše hráč na zítřek; zápas ve starém kole kalendáře kabina bere jako dnešní.
+    if (days <= 1) whenOf.set(o.id, days === 1 ? "zítra" : "dnes");
+  }
+
+  const out = new Map<string, { reason: string; text: string; when: "dnes" | "zítra"; opponent: string | null }>();
+  for (const r of rows.results) {
+    const when = r.cal ? whenOf.get(r.cal) : undefined;
+    if (!when || out.has(r.sender_id)) continue;
+    const opponent = r.title?.replace(/^⚽\s*vs\s*/u, "").trim() || null;
+    out.set(r.sender_id, { reason: "", text: r.body, when, opponent });
+  }
+  return out.size > 0 ? out : undefined;
 }
 
 /**
@@ -214,8 +266,9 @@ export async function loadLastMatchContext(db: D1Database, teamId: string): Prom
     else break;
   }
 
+  const upcomingAbsences = await loadUpcomingAbsences(db, teamId);
   const last = recent.results[0];
-  if (!last) return { matchId: null, lastOutcome: null, teamStreak, squad: null, stats: new Map() };
+  if (!last) return { matchId: null, lastOutcome: null, teamStreak, squad: null, stats: new Map(), upcomingAbsences };
   const lastOutcome = last.home_score != null ? outcomeOf(last) : null;
 
   let squad: LastMatchContext["squad"] = null;
@@ -252,7 +305,7 @@ export async function loadLastMatchContext(db: D1Database, teamId: string): Prom
     .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "statistiky posledního zápasu", e); return { results: [] as Array<Record<string, unknown>> }; });
   const stats = new Map(statRows.results.map((r) => [r.player_id as string, r]));
 
-  return { matchId: last.id, lastOutcome, teamStreak, squad, stats, absences };
+  return { matchId: last.id, lastOutcome, teamStreak, squad, stats, absences, upcomingAbsences };
 }
 
 export function loadPlayerSnapshot(
@@ -305,6 +358,7 @@ export function loadPlayerSnapshot(
     playedLastMatch,
     lastMatchSquad,
     lastMatchAbsence: lastMatchSquad === "absent" ? absence : undefined,
+    upcomingAbsence: matchCtx?.upcomingAbsences?.get(row.id as string),
     lastMatchGoals: (lastStats.last_goals as number) ?? 0,
     lastMatchAssists: (lastStats.last_assists as number) ?? 0,
     lastMatchRedCard: ((lastStats.last_red as number) ?? 0) > 0,

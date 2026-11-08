@@ -6,7 +6,7 @@
  * zase, že se hraje až v pondělí.
  */
 import { describe, it, expect } from "vitest";
-import { buildLastMatchFacts, buildSystemPrompt } from "./ai-player-chat";
+import { buildLastMatchFacts, buildSystemPrompt, buildUpcomingAbsenceFacts } from "./ai-player-chat";
 import { getScenarioById, type PlayerSnapshot } from "./ai-player-scenarios";
 import { loadPlayerSnapshot, type LastMatchContext } from "./ai-player-spawn";
 import { describeNextMatch } from "./next-match";
@@ -137,5 +137,37 @@ describe("opilá hlasovka", () => {
     const team = { teamName: "SK Budvar Spůle" };
     expect(buildSystemPrompt(drunk, team, new Date("2026-10-30T19:00:00Z"), { spoken: true })).toContain("s háčky a čárkami");
     expect(buildSystemPrompt(drunk, team, new Date("2026-10-30T19:00:00Z"))).toContain("bez diakritiky");
+  });
+});
+
+describe("omluvenka na dnešní zápas", () => {
+  // Linhart (Chlumany 2026-11-08): ráno do skupiny zápasu „Došel mi benzín uprostřed lesa“,
+  // v osobním chatu pak „jakej les proboha? Jsem doma a fit“.
+  const excused = lastMatch({
+    upcomingAbsences: new Map([["outside", { reason: "", text: "Došel mi benzín uprostřed lesa, jdu pěšky na pumpu", when: "dnes" as const, opponent: "FK Dřevostroj Radhostice" }]]),
+  });
+
+  it("chat zná omluvenku, kterou hráč ráno poslal do skupiny zápasu", () => {
+    const s = loadPlayerSnapshot(row("outside"), excused);
+    expect(s.upcomingAbsence).toEqual({
+      reason: "", text: "Došel mi benzín uprostřed lesa, jdu pěšky na pumpu", when: "dnes", opponent: "FK Dřevostroj Radhostice",
+    });
+    expect(loadPlayerSnapshot(row("starter"), excused).upcomingAbsence).toBeUndefined();
+  });
+
+  it("hráč se omluvenky drží a netvrdí, že je fit a přijde", () => {
+    const fact = buildUpcomingAbsenceFacts(loadPlayerSnapshot(row("outside"), excused));
+    expect(fact).toContain("Na dnešní zápas proti FK Dřevostroj Radhostice NEPŘIJDEŠ.");
+    expect(fact).toContain("„Došel mi benzín uprostřed lesa, jdu pěšky na pumpu“");
+    expect(fact).toContain("NIKDY netvrď, že přijdeš, že jsi doma a fit");
+    const prompt = buildSystemPrompt(loadPlayerSnapshot(row("outside"), excused), { teamName: "FC GRW Chlumany" });
+    expect(prompt).toContain(fact);
+  });
+
+  it("zítřejší zápas je zítřejší a kdo se neomluvil, v promptu nic takového nemá", () => {
+    const tomorrow = lastMatch({ upcomingAbsences: new Map([["outside", { reason: "", text: "Zítra mám noční.", when: "zítra" as const, opponent: null }]]) });
+    expect(buildUpcomingAbsenceFacts(loadPlayerSnapshot(row("outside"), tomorrow))).toMatch(/^- Na zítřejší zápas NEPŘIJDEŠ\./);
+    expect(buildUpcomingAbsenceFacts(loadPlayerSnapshot(row("starter"), tomorrow))).toBe("");
+    expect(buildSystemPrompt(player(), { teamName: "FC GRW Chlumany" })).not.toContain("NEPŘIJDEŠ");
   });
 });
