@@ -17,7 +17,7 @@ export const RELEASE_NOTES: ReleaseNote[] = [
     title: "Socky pro všechny okresy",
     items: [
       "V Telefonu v Sockách je nová zeď Všichni: přestupy, výsledky kol a rozhovory ze všech okresů. Můžeš je komentovat, lajkovat a psát vlastní příspěvky. Do diskuse se zapojí i fanoušci a Zpravodaj.",
-      "Když ti někdo okomentuje příspěvek nebo odpoví, přijde oznámení. Co tě nezajímá, skryješ přes ⋯ (příspěvek, klub, okres nebo celou kategorii). Zeď tvých fanoušků najdeš dál pod Moji fanoušci.",
+      "Přes @ označíš jiného trenéra. Když tě někdo označí, okomentuje ti příspěvek, odpoví nebo dá lajk, přijde oznámení s proklikem. Co tě nezajímá, skryješ přes ⋯ (příspěvek, klub, okres nebo celou kategorii). Zeď tvých fanoušků najdeš dál pod Moji fanoušci.",
     ],
   },
   {
