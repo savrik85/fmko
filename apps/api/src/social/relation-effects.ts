@@ -107,12 +107,34 @@ function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-async function usedToday(db: D1Database, a: string, b: string): Promise<{ respect: number; heat: number }> {
-  const r = await db.prepare(
-    `SELECT COALESCE(SUM(ABS(respect)), 0) AS respect, COALESCE(SUM(ABS(heat)), 0) AS heat
-       FROM social_relation_effects WHERE team_a_id = ? AND team_b_id = ? AND substr(created_at, 1, 10) = ?`,
-  ).bind(a, b, today()).first<{ respect: number; heat: number }>();
-  return { respect: r?.respect ?? 0, heat: r?.heat ?? 0 };
+interface EffectRow {
+  a: string;
+  b: string;
+  actorTeamId: string;
+  sourceKey: string;
+  kind: string;
+  respect: number;
+  heat: number;
+}
+
+/**
+ * Zapíše posun a vrátí, kolik z něj prošlo stropem. Zbývající místo se počítá ve
+ * stejném příkazu jako zápis: dvě souběžné žádosti by jinak obě viděly plný den
+ * a strop obešly. null = tenhle zdroj už je zapsaný.
+ */
+async function recordEffect(db: D1Database, e: EffectRow): Promise<{ respect: number; heat: number } | null> {
+  const used = (col: "respect" | "heat") =>
+    `(SELECT COALESCE(SUM(ABS(${col})), 0) FROM social_relation_effects
+       WHERE team_a_id = ?2 AND team_b_id = ?3 AND substr(created_at, 1, 10) = ?9)`;
+  const row = await db.prepare(
+    `INSERT OR IGNORE INTO social_relation_effects (id, team_a_id, team_b_id, actor_team_id, source_key, kind, respect, heat)
+     SELECT ?1, ?2, ?3, ?4, ?5, ?6,
+            CASE WHEN ?7 = 0 THEN 0 ELSE (CASE WHEN ?7 > 0 THEN 1 ELSE -1 END) * MIN(ABS(?7), MAX(0, ?10 - ${used("respect")})) END,
+            MIN(ABS(?8), MAX(0, ?10 - ${used("heat")}))
+     RETURNING respect, heat`,
+  ).bind(crypto.randomUUID(), e.a, e.b, e.actorTeamId, e.sourceKey, e.kind, e.respect, e.heat, today(), SOCIAL_DAILY_CAP)
+    .first<{ respect: number; heat: number }>();
+  return row ?? null;
 }
 
 async function teamNames(db: D1Database, ids: string[]): Promise<Map<string, string>> {
@@ -150,17 +172,14 @@ export async function applySocialToneEffects(db: D1Database, classify: ToneClass
       if (done) continue;
       const tone = await classify(input.text, name, input.context);
       const effect = tone === "neutral" ? null : TONE_EFFECTS[tone];
-      const used = await usedToday(db, a, b);
-      const respect = effect ? capDelta(effect.respect, used.respect) : 0;
-      const heat = effect ? capDelta(effect.heat, used.heat) : 0;
       // I neutrální text se zapíše, ať se při dalším volání nehodnotí znovu.
-      const ins = await db.prepare(
-        `INSERT OR IGNORE INTO social_relation_effects (id, team_a_id, team_b_id, actor_team_id, source_key, kind, respect, heat)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).bind(crypto.randomUUID(), a, b, input.authorTeamId, input.sourceKey, tone, respect, heat).run();
-      if ((ins.meta?.changes ?? 0) === 0 || !effect || (respect === 0 && heat === 0)) continue;
+      const stored = await recordEffect(db, {
+        a, b, actorTeamId: input.authorTeamId, sourceKey: input.sourceKey, kind: tone,
+        respect: effect?.respect ?? 0, heat: effect?.heat ?? 0,
+      });
+      if (!stored || !effect || (stored.respect === 0 && stored.heat === 0)) continue;
       await applyRelationEvent(db, input.authorTeamId, targetId, {
-        respect, heat, icon: effect.icon, text: momentText(input.authorName, input.text),
+        respect: stored.respect, heat: stored.heat, icon: effect.icon, text: momentText(input.authorName, input.text),
       });
       moved += 1;
     } catch (e) {
@@ -185,20 +204,13 @@ export async function applySocialLike(db: D1Database, input: LikeInput): Promise
   if (input.ownerTeamId === input.likerTeamId) return false;
   try {
     const [a, b] = orderPair(input.likerTeamId, input.ownerTeamId);
-    const likedToday = await db.prepare(
-      `SELECT 1 AS x FROM social_relation_effects
-        WHERE team_a_id = ? AND team_b_id = ? AND kind = 'like' AND substr(created_at, 1, 10) = ? LIMIT 1`,
-    ).bind(a, b, today()).first<{ x: number }>();
-    if (likedToday) return false;
-    const respect = capDelta(LIKE_RESPECT, (await usedToday(db, a, b)).respect);
-    if (respect === 0) return false;
-    const ins = await db.prepare(
-      `INSERT OR IGNORE INTO social_relation_effects (id, team_a_id, team_b_id, actor_team_id, source_key, kind, respect, heat)
-       VALUES (?, ?, ?, ?, ?, 'like', ?, 0)`,
-    ).bind(crypto.randomUUID(), a, b, input.likerTeamId, `like:${input.targetKey}:${input.likerTeamId}`, respect).run();
-    if ((ins.meta?.changes ?? 0) === 0) return false;
+    // Klíč dvojice a dne: „jednou denně“ hlídá jedinečný index, ne dotaz předem.
+    const stored = await recordEffect(db, {
+      a, b, actorTeamId: input.likerTeamId, sourceKey: `like:${today()}`, kind: "like", respect: LIKE_RESPECT, heat: 0,
+    });
+    if (!stored || stored.respect === 0) return false;
     await applyRelationEvent(db, input.likerTeamId, input.ownerTeamId, {
-      respect, icon: "👍", text: `${input.likerName} dává v Sockách lajk: „${excerpt(input.snippet)}“`,
+      respect: stored.respect, icon: "👍", text: `${input.likerName} dává v Sockách lajk: „${excerpt(input.snippet)}“`,
     });
     return true;
   } catch (e) {

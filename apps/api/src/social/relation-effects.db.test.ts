@@ -106,6 +106,25 @@ describe("vyznění textu mění vztah", () => {
   });
 });
 
+describe("souběžné žádosti strop neobejdou", () => {
+  it("deset urážek naráz zapíše nejvýš strop a vztahem nepohne víc", async () => {
+    await Promise.all(Array.from({ length: 10 }, (_, i) => applySocialToneEffects(db, always("insult"), tease(100 + i))));
+    const sum = await db.prepare("SELECT SUM(ABS(respect)) AS r, SUM(heat) AS h FROM social_relation_effects").first<{ r: number; h: number }>();
+    expect(sum).toEqual({ r: 10, h: 10 });
+    // applyRelationEvent čte a zapisuje zvlášť, souběžně se část posunů ztratí; víc než strop ale nikdy.
+    const r = await relation();
+    expect(Math.abs(r!.respect)).toBeLessThanOrEqual(10);
+    expect(r!.heat).toBeLessThanOrEqual(10);
+  });
+
+  it("pět lajků naráz je jeden lajk", async () => {
+    const like = (key: string) => ({ likerTeamId: "t-spule", likerName: "Zdeněk J.", ownerTeamId: "t-kavo", targetKey: key, snippet: "x" });
+    const results = await Promise.all(["post:a", "post:b", "post:c", "post:d", "post:e"].map((k) => applySocialLike(db, like(k))));
+    expect(results.filter(Boolean)).toHaveLength(1);
+    expect(await relation()).toMatchObject({ respect: 1 });
+  });
+});
+
 describe("lajk", () => {
   const like = (key: string) => ({ likerTeamId: "t-spule", likerName: "Zdeněk J.", ownerTeamId: "t-kavo", targetKey: key, snippet: "těšíme se do Chluman" });
 
