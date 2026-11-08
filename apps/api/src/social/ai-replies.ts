@@ -58,7 +58,7 @@ export interface ReplyTrigger {
   mentions?: Mention[];
 }
 
-async function aiMode(env: Pick<Bindings, "CACHE_KV">): Promise<"on" | "off"> {
+export async function aiMode(env: Pick<Bindings, "CACHE_KV">): Promise<"on" | "off"> {
   const raw = await env.CACHE_KV?.get(SOCIAL_AI_MODE_KEY).catch((e) => {
     logger.warn({ module: M }, "čtení social_ai_mode", e);
     return null;
@@ -332,7 +332,7 @@ async function repliesToday(db: D1Database): Promise<number> {
 }
 
 /** Značky ohraničení v textu od lidí by šly použít k vylomení z bloku; zneškodní se. */
-function fence(text: string): string {
+export function fence(text: string): string {
   // Celé řady: z „>>>>“ by po náhradě po třech zbylo „> >>>“.
   return text.replace(/<{3,}/g, "<<").replace(/>{3,}/g, ">>");
 }

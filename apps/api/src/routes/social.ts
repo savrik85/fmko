@@ -19,7 +19,10 @@ import {
   removeMute, resolveMentions, resolveTarget, softDeleteComment, softDeletePost, toggleLike,
 } from "../social/store";
 import { likedWhat, notifySocial } from "../social/notify";
-import { SOCIAL_AI_MODE_KEY, scheduleAiReplies, type ReplyTrigger } from "../social/ai-replies";
+import { SOCIAL_AI_MODE_KEY, aiMode, scheduleAiReplies, type ReplyTrigger } from "../social/ai-replies";
+import {
+  applySocialLike, applySocialToneEffects, modelToneClassifier, relationTargets, type ToneInput,
+} from "../social/relation-effects";
 
 const M = "social-route";
 
@@ -59,6 +62,13 @@ async function notifyMentions(c: Ctx, mentions: Mention[], key: string, actorTea
     done.add(m.teamId);
   }
   return done;
+}
+
+/** Vyhodnocení textu pro vztahy trenérů. Bez cíle nebo s vypnutou AI nic. */
+async function relationEffects(env: Bindings, input: ToneInput): Promise<number> {
+  if (input.targetTeamIds.length === 0) return 0;
+  if (await aiMode(env) === "off") return 0;
+  return applySocialToneEffects(env.DB, modelToneClassifier(env), input);
 }
 
 async function readJson<T>(c: Ctx): Promise<T | null> {
@@ -103,6 +113,10 @@ socialRouter.post("/teams/:teamId/social/posts", async (c) => {
   const key = `post:${id}`;
   const authorName = await managerName(c.env.DB, viewer.teamId);
   await notifyMentions(c, mentions, key, viewer.teamId, authorName, text, `příspěvek trenéra ${authorName}`);
+  await runLater(c, relationEffects(c.env, {
+    authorTeamId: viewer.teamId, authorName, text, sourceKey: key, context: "nový příspěvek na zdi",
+    targetTeamIds: relationTargets(viewer.teamId, mentions.map((m) => m.teamId)),
+  }));
 
   const trigger: ReplyTrigger = {
     key, text, authorName, authorTeamId: viewer.teamId, authorTeamName: viewer.teamName,
@@ -157,6 +171,16 @@ socialRouter.post("/teams/:teamId/social/comments", async (c) => {
     });
   }
 
+  // Komentář míří na označené, na klub, jehož je příspěvek nebo článek, a na trenéra, kterému se odpovídá.
+  await runLater(c, relationEffects(c.env, {
+    authorTeamId: viewer.teamId, authorName, text, sourceKey: `comment:${id}`, context: target.title,
+    targetTeamIds: relationTargets(viewer.teamId, [
+      ...mentions.map((m) => m.teamId),
+      target.ownerTeamId,
+      replyTo?.authorKind === "manager" ? replyTo.teamId : null,
+    ]),
+  }));
+
   await runLater(c, scheduleAiReplies(c.env, {
     key, text, authorName, authorTeamId: viewer.teamId, authorTeamName: viewer.teamName,
     commentId: id,
@@ -184,12 +208,21 @@ socialRouter.post("/teams/:teamId/social/likes", async (c) => {
   if (!target) return c.json({ error: "Tohle už neexistuje." }, 404);
   const result = await toggleLike(c.env.DB, viewer.userId, key);
   // Lajk potěší autora: příspěvek, komentář trenéra, článek o jeho klubu. Bez pushe, jen v oznámeních.
-  if (result.liked && target.ownerIsHuman && target.ownerTeamId && target.ownerTeamId !== viewer.teamId) {
-    await notifySocial(c.env, {
-      kind: "like", key: target.feedKey, recipientTeamId: target.ownerTeamId, actorTeamId: viewer.teamId,
-      actorName: await managerName(c.env.DB, viewer.teamId), body: likedWhat(target.kind, target.snippet),
-      title: target.title, push: false,
-    });
+  if (result.liked && target.ownerTeamId && target.ownerTeamId !== viewer.teamId) {
+    const likerName = await managerName(c.env.DB, viewer.teamId);
+    if (target.ownerIsHuman) {
+      await notifySocial(c.env, {
+        kind: "like", key: target.feedKey, recipientTeamId: target.ownerTeamId, actorTeamId: viewer.teamId,
+        actorName: likerName, body: likedWhat(target.kind, target.snippet),
+        title: target.title, push: false,
+      });
+    }
+    // Vztah trenérů: jen lajk na to, co trenér sám napsal, ne na článek o jeho klubu.
+    if (target.kind === "post" || target.kind === "comment") {
+      await applySocialLike(c.env.DB, {
+        likerTeamId: viewer.teamId, likerName, ownerTeamId: target.ownerTeamId, targetKey: key, snippet: target.snippet,
+      });
+    }
   }
   return c.json(result);
 });
