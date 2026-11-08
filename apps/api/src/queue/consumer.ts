@@ -136,6 +136,12 @@ async function handleMessage(body: AnyQueueMessage, env: Bindings): Promise<RunO
       return { status: result.teams > 0 ? "done" : "skipped", matches: result.teams };
     }
 
+    case "social_reply": {
+      const { generateAiReplies } = await import("../social/ai-replies");
+      const written = await generateAiReplies(env, body.trigger, { slot: body.slot, replyId: body.replyId });
+      return { status: written > 0 ? "done" : "skipped" };
+    }
+
     case "ai_coach": {
       // AI trenér: jeden klub = jedna zpráva, nárok v DB hlídá duplicitní doručení.
       const { handleAiCoachMessage } = await import("../ai-coach/jobs");

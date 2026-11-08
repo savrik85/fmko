@@ -674,6 +674,8 @@ export async function insertManagerComment(db: D1Database, viewer: Viewer, key: 
 }
 
 export interface PersonaComment {
+  /** Pevné id ze zprávy ve frontě: opakované doručení stejné zprávy komentář nezdvojí. */
+  id?: string;
   key: string;
   authorKind: "fan" | "journalist";
   teamId: string | null;
@@ -685,9 +687,9 @@ export interface PersonaComment {
 }
 
 export async function insertPersonaComment(db: D1Database, c: PersonaComment): Promise<string> {
-  const id = crypto.randomUUID();
+  const id = c.id ?? crypto.randomUUID();
   await db.prepare(
-    `INSERT INTO social_comments (id, target_key, author_kind, team_id, persona_id, author_name, author_avatar, reply_to_id, body)
+    `INSERT OR IGNORE INTO social_comments (id, target_key, author_kind, team_id, persona_id, author_name, author_avatar, reply_to_id, body)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).bind(id, c.key, c.authorKind, c.teamId, c.personaId, c.authorName, c.authorAvatar, c.replyToId, c.body).run();
   return id;
