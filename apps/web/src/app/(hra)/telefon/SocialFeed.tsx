@@ -322,17 +322,86 @@ function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-/** Text příspěvku nebo komentáře se zvýrazněnými označenými kluby. */
+// ── Smajlíky ────────────────────────────────────────────────────────────────
+
+/** Napsané smajlíky jako na Facebooku: „:)“ je 🙂. Uloží se, jak je kdo napsal. */
+const EMOTICONS: Record<string, string> = {
+  ":)": "🙂", ":-)": "🙂", ":D": "😄", ":-D": "😄", "xD": "😆", "XD": "😆",
+  ";)": "😉", ";-)": "😉", ":(": "🙁", ":-(": "🙁", ":'(": "😢",
+  ":P": "😛", ":p": "😛", ":-P": "😛", ":O": "😮", ":o": "😮", "<3": "❤️",
+};
+
+// Jen samostatný smajlík: „(v 18:00)“ ani „x:D“ uprostřed slova se nepřepíše.
+const EMOTICON_RE = new RegExp(
+  `(^|\\s)(${Object.keys(EMOTICONS).sort((a, b) => b.length - a.length).map(escapeRegExp).join("|")})(?=$|\\s|[.,!?])`,
+  "g",
+);
+
+export function withEmoji(text: string): string {
+  return text.replace(EMOTICON_RE, (_m, lead: string, emo: string) => `${lead}${EMOTICONS[emo] ?? emo}`);
+}
+
+const EMOJI_PICKS = ["👍", "😂", "😄", "😉", "😮", "😢", "😡", "💪", "🔥", "👏", "⚽", "🍺"];
+
+/** Vloží text na místo kurzoru a kurzor nechá za ním. */
+function insertAtCaret(ref: RefObject<HTMLTextAreaElement | null>, text: string, value: string, setText: (s: string) => void, max: number) {
+  const el = ref.current;
+  const start = el?.selectionStart ?? value.length;
+  const end = el?.selectionEnd ?? value.length;
+  const next = (value.slice(0, start) + text + value.slice(end)).slice(0, max);
+  setText(next);
+  requestAnimationFrame(() => {
+    el?.focus();
+    const pos = Math.min(start + text.length, next.length);
+    el?.setSelectionRange(pos, pos);
+  });
+}
+
+function EmojiBar({ onPick }: { onPick: (emoji: string) => void }) {
+  return (
+    <div className="my-1 flex flex-wrap gap-1 rounded-lg border border-gray-200 bg-white p-1" role="group" aria-label="Smajlíky">
+      {EMOJI_PICKS.map((e) => (
+        <button
+          key={e}
+          type="button"
+          onMouseDown={(ev) => ev.preventDefault()}
+          onClick={() => onPick(e)}
+          className="w-10 h-10 rounded-lg text-xl hover:bg-gray-100"
+          aria-label={`Vložit ${e}`}
+        >
+          {e}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function EmojiToggle({ open, onClick }: { open: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onMouseDown={(ev) => ev.preventDefault()}
+      onClick={onClick}
+      aria-pressed={open}
+      aria-label="Smajlíky"
+      className={`shrink-0 w-10 h-10 rounded-full text-xl ${open ? "bg-pitch-50" : "hover:bg-gray-100"}`}
+    >
+      🙂
+    </button>
+  );
+}
+
+/** Text příspěvku nebo komentáře se zvýrazněnými označenými kluby a smajlíky. */
 function MentionText({ text, mentions }: { text: string; mentions: Mention[] }) {
   const names = mentions.filter((m) => m.name).sort((a, b) => b.name.length - a.name.length);
-  if (names.length === 0) return <>{text}</>;
+  if (names.length === 0) return <>{withEmoji(text)}</>;
   const byName = new Map(names.map((m) => [`@${m.name}`, m.teamId]));
   const parts = text.split(new RegExp(`(${names.map((m) => escapeRegExp(`@${m.name}`)).join("|")})`, "g"));
   const out: ReactNode[] = parts.map((part, i) => {
     const id = byName.get(part);
     return id
       ? <Link key={i} href={`/tym/${id}`} className="font-semibold text-pitch-600 hover:underline">{part}</Link>
-      : part;
+      : withEmoji(part);
   });
   return <>{out}</>;
 }
@@ -452,6 +521,7 @@ function CommentComposer({
   const [error, setError] = useState<string | null>(null);
   const ref = useRef<HTMLTextAreaElement>(null);
   const picker = useMentionPicker(teamId, text, setText, COMMENT_MAX, ref);
+  const [emojiOpen, setEmojiOpen] = useState(false);
 
   useEffect(() => { if (replyTo || autoFocus) ref.current?.focus(); }, [replyTo, autoFocus]);
 
@@ -467,6 +537,7 @@ function CommentComposer({
       });
       setText("");
       picker.reset();
+      setEmojiOpen(false);
       onCancelReply();
       onPosted(r.comments);
     } catch (e) {
@@ -486,20 +557,22 @@ function CommentComposer({
         </div>
       )}
       {picker.list}
-      <div className="flex items-end gap-2">
+      {emojiOpen && <EmojiBar onPick={(e) => insertAtCaret(ref, e, text, setText, COMMENT_MAX)} />}
+      <div className="flex items-end gap-1.5">
         <textarea
           ref={ref}
           value={text}
           onChange={picker.onChange}
           onClick={picker.onCaretMove}
           rows={1}
-          placeholder={replyTo ? "Napiš odpověď…" : "Komentář… (@ označí trenéra)"}
+          placeholder={replyTo ? "Napiš odpověď…" : "Napiš komentář…"}
           className="flex-1 resize-none rounded-2xl border border-gray-200 bg-white px-3 py-2 text-base text-ink placeholder:text-muted-light focus:outline-none focus:border-pitch-500"
           onKeyDown={(e) => {
             if (picker.onKeyDown(e)) return;
             if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); }
           }}
         />
+        <EmojiToggle open={emojiOpen} onClick={() => setEmojiOpen((o) => !o)} />
         <button
           onClick={send}
           disabled={!text.trim() || sending}
@@ -763,6 +836,7 @@ function PostComposer({ teamId, onPosted }: { teamId: string; onPosted: (item: F
   const [error, setError] = useState<string | null>(null);
   const ref = useRef<HTMLTextAreaElement>(null);
   const picker = useMentionPicker(teamId, text, setText, POST_MAX, ref);
+  const [emojiOpen, setEmojiOpen] = useState(false);
 
   const send = async () => {
     const body = text.trim();
@@ -806,7 +880,9 @@ function PostComposer({ teamId, onPosted }: { teamId: string; onPosted: (item: F
         className="w-full resize-none rounded-lg border border-gray-200 px-3 py-2 text-base text-ink placeholder:text-muted-light focus:outline-none focus:border-pitch-500"
       />
       {picker.list}
+      {emojiOpen && <EmojiBar onPick={(e) => insertAtCaret(ref, e, text, setText, POST_MAX)} />}
       <div className="flex items-center gap-2 mt-2">
+        <EmojiToggle open={emojiOpen} onClick={() => setEmojiOpen((o) => !o)} />
         <span className="text-sm text-muted">{text.length}/{POST_MAX}</span>
         <button onClick={() => { setOpen(false); setError(null); }} className="ml-auto px-3 py-2 rounded-lg bg-gray-100 text-ink text-sm">Zrušit</button>
         <button onClick={send} disabled={!text.trim() || sending} className="px-4 py-2 rounded-lg bg-pitch-600 text-white text-sm font-semibold disabled:opacity-40">
