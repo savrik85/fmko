@@ -1585,10 +1585,18 @@ export async function buildMatchPlayers(
                 healthyRows.map((r) => r.id as string), incKontext.absence, "day_before",
             );
 
-            absentIds = new Set(allAbsences.map((a) => healthyRows[a.playerIndex]?.id as string).filter(Boolean));
+            // Co už odešlo do kabiny, platí: nový hráč by jinak posunul los (viz recordedExcuses).
+            const {recordedExcuses, settleAbsences} = await import("../events/match-absences");
+            const generated = new Map<string, {reason: string; category: string; emoji: string; smsText: string}>();
             for (const a of allAbsences) {
                 const r = healthyRows[a.playerIndex];
-                if (r) absentInfo.push({playerId: r.id as string, name: `${r.first_name} ${r.last_name}`, reason: a.reason, smsText: a.smsText});
+                if (r) generated.set(r.id as string, {reason: a.reason, category: a.category, emoji: a.emoji, smsText: a.smsText});
+            }
+            const settled = settleAbsences(generated, await recordedExcuses(db, teamId, options.matchKey), healthyRows.map((r) => r.id as string));
+            absentIds = new Set(settled.keys());
+            for (const r of healthyRows) {
+                const a = settled.get(r.id as string);
+                if (a) absentInfo.push({playerId: r.id as string, name: `${r.first_name} ${r.last_name}`, reason: a.reason, smsText: a.smsText});
             }
         } catch (e) {
             logger.warn({module: "match-runner"}, "absence generation", e);

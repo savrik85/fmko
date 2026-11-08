@@ -56,6 +56,52 @@ export interface AbsencePlayerInfo {
 }
 
 /**
+ * Omluvenky, které už odešly do skupiny zápasu „⚽ vs …“: hráč → text jeho „ne“.
+ * null = ke kolu ještě žádná zpráva neodešla, platí los.
+ *
+ * Los jde po kádru seřazeném podle hodnocení, hráč po hráči. Nový hráč (hostování,
+ * přestup) posune pořadí a všem pod ním připadnou cizí losy: Linhartova omluvenka
+ * „Došel mi benzín uprostřed lesa“ pak patřila Veselému a zápas by hrál bez lidí,
+ * kteří psali, že přijdou (Chlumany 2026-11-08). Co trenér viděl v kabině, platí.
+ */
+export async function recordedExcuses(db: D1Database, teamId: string, matchKey: string): Promise<Map<string, string> | null> {
+  const r = await db.prepare(
+    `SELECT m.sender_id, m.body, json_extract(m.metadata, '$.response') AS response
+       FROM messages m JOIN conversations c ON c.id = m.conversation_id
+      WHERE c.team_id = ? AND c.type = 'squad_group' AND m.sender_type = 'player'
+        AND json_extract(m.metadata, '$.calendarId') = ?
+      ORDER BY m.sent_at`,
+  ).bind(teamId, matchKey).all<{ sender_id: string; body: string; response: string | null }>()
+    .catch((e) => { logger.warn({ module: "match-absences" }, "omluvenky z kabiny", e); return null; });
+  if (!r || r.results.length === 0) return null;
+  const out = new Map<string, string>();
+  for (const row of r.results) if (row.response === "no") out.set(row.sender_id, row.body);
+  return out;
+}
+
+/**
+ * Kdo chybí: bez zpráv v kabině podle losu, se zprávami podle nich. Omluvenky
+ * z incidentů (výslech, soud…) platí vždycky, do kabiny se nepíšou.
+ * Popis omluvenky (důvod, emoji) se vezme z losu podle textu, jinak obecný.
+ */
+export function settleAbsences<T extends AbsencePlayerInfo>(
+  generated: ReadonlyMap<string, T>,
+  recorded: ReadonlyMap<string, string> | null,
+  squadIds: readonly string[],
+  fallback: (smsText: string) => T = (smsText) => ({ reason: "Omluvenka", category: "personal", emoji: "📩", smsText }) as T,
+): Map<string, T> {
+  if (!recorded) return new Map(generated);
+  const out = new Map([...generated].filter(([, a]) => a.category === "incident"));
+  const byText = new Map([...generated.values()].map((a) => [a.smsText, a]));
+  for (const id of squadIds) {
+    const text = recorded.get(id);
+    if (text === undefined || out.has(id)) continue;
+    out.set(id, byText.get(text) ?? fallback(text));
+  }
+  return out;
+}
+
+/**
  * Načte district týmu (rural/urban/undefined). Sdílené — každé volání `generateAbsences`
  * MUSÍ předat district, jinak envFilter v absence generátoru vybere jiný pool výmluv
  * pro stejný seed → divergence mezi SMS a simulací pro stejný (match, team, phase).
@@ -254,7 +300,8 @@ export async function getAbsentPlayersMap(
       smsText: a.smsText,
     });
   }
-  return map;
+  const recorded = await recordedExcuses(db, teamId, ctx.matchKey);
+  return settleAbsences(map, recorded, healthyPlayers.map((r) => r.id as string));
 }
 
 /** Tenká wrapper pokud stačí jen ID set (používá apply-preset a POST /lineup). */
