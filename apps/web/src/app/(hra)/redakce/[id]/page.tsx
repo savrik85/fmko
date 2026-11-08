@@ -146,7 +146,7 @@ export default function ProfilRedaktora() {
         <div className="np-rubrika">Vztah ke klubům</div>
         {vztahy.length === 0 ? (
           <p className="np-text text-[15px] max-w-2xl">
-            Zatím nikoho v merku ani v oblibě. Vztah se rodí z toho, jak s ním trenéři mluví v rozhovorech.
+            Zatím nikoho v merku ani v oblibě. Vztah se rodí z toho, jak s ním trenéři mluví v rozhovorech a co mu píšou v Sockách.
           </p>
         ) : (
           <div className="divide-y divide-ink/10 max-w-2xl">

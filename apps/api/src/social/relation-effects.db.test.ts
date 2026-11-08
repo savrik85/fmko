@@ -7,8 +7,8 @@ import { resolve } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { Miniflare } from "miniflare";
 import {
-  applySocialLike, applySocialToneEffects, capDelta, momentText, relationTargets,
-  type SocialTone, type ToneClassifier,
+  applySocialJournalistEffects, applySocialLike, applySocialToneEffects, capDelta, journalistShift, momentText,
+  relationTargets, type SocialTone, type ToneClassifier,
 } from "./relation-effects";
 
 let miniflare: Miniflare;
@@ -27,6 +27,9 @@ beforeAll(async () => {
     `CREATE TABLE manager_relations (team_a_id TEXT NOT NULL, team_b_id TEXT NOT NULL, respect INTEGER NOT NULL DEFAULT 0,
       heat INTEGER NOT NULL DEFAULT 0, history TEXT NOT NULL DEFAULT '[]', updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
       PRIMARY KEY (team_a_id, team_b_id))`,
+    "CREATE TABLE journalists (id TEXT PRIMARY KEY, first_name TEXT, last_name TEXT, nickname TEXT, style TEXT)",
+    `CREATE TABLE journalist_relations (id TEXT PRIMARY KEY, journalist_id TEXT NOT NULL, team_id TEXT NOT NULL,
+      sentiment INTEGER NOT NULL DEFAULT 0, duvod TEXT NOT NULL DEFAULT '', updated_at TEXT, UNIQUE(journalist_id, team_id))`,
   ]) await db.prepare(sql).run();
   const migration = readFileSync(resolve(__dirname, "../../migrations/0291_social_relation_effects.sql"), "utf8")
     .replace(/--.*$/gm, "").split(";").map((s) => s.trim()).filter(Boolean);
@@ -35,6 +38,9 @@ beforeAll(async () => {
     // Vesnice daleko od sebe: vztah začíná na nule, bez sousedského napětí.
     db.prepare("INSERT INTO villages VALUES ('v1', 49.0, 14.0), ('v2', 50.5, 15.5)"),
     db.prepare("INSERT INTO teams VALUES ('t-spule', 'AC Jitona Spůle', 'v1'), ('t-kavo', 'FC Kávoviny Vlachovo Březí', 'v2')"),
+    db.prepare(`INSERT INTO journalists VALUES
+      ('j-ser', 'Jaromír', 'Reindl', NULL, 'seriozni'),
+      ('j-bul', 'Řehoř', 'Tesař', 'Fanda', 'bulvar')`),
   ]);
 });
 
@@ -45,6 +51,7 @@ afterAll(async () => {
 beforeEach(async () => {
   await db.prepare("DELETE FROM manager_relations").run();
   await db.prepare("DELETE FROM social_relation_effects").run();
+  await db.prepare("DELETE FROM journalist_relations").run();
 });
 
 const always = (tone: SocialTone): ToneClassifier & { calls: number } => {
@@ -135,5 +142,34 @@ describe("lajk", () => {
     const r = await relation();
     expect(r).toMatchObject({ respect: 1, heat: 0 });
     expect(JSON.parse(r!.history)[0]).toMatchObject({ icon: "👍", text: "Zdeněk J. dává v Sockách lajk: „těšíme se do Chluman“" });
+  });
+});
+
+describe("novináři", () => {
+  const sentiment = async (id: string) =>
+    (await db.prepare("SELECT sentiment, duvod FROM journalist_relations WHERE journalist_id = ? AND team_id = 't-spule'").bind(id).first<{ sentiment: number; duvod: string }>());
+  const comment = (n: number, journalistIds: string[]) => ({
+    authorTeamId: "t-spule", text: "Hlavně ať o tom nepíše pak zasse Drahomíra :D", sourceKey: `comment:j${n}`,
+    context: "Spůle hostí Vimperk v zápase o první místo", journalistIds,
+  });
+
+  it("rýpnutí seriózního novináře naštve, bulvárnímu se líbí", async () => {
+    expect(journalistShift("tease", "seriozni")).toBe(-3);
+    expect(journalistShift("tease", "bulvar")).toBe(2);
+    expect(journalistShift("insult", "bulvar")).toBe(-10);
+    expect(journalistShift("neutral", null)).toBe(0);
+    expect(await applySocialJournalistEffects(db, always("tease"), comment(1, ["j-ser", "j-bul"]))).toBe(2);
+    expect((await sentiment("j-ser"))?.sentiment).toBe(-3);
+    expect(await sentiment("j-bul")).toMatchObject({ sentiment: 2, duvod: "Socky: „Hlavně ať o tom nepíše pak zasse Drahomíra :D“" });
+  });
+
+  it("stejný komentář jen jednou a za den nejvýš strop", async () => {
+    const cls = always("insult");
+    await applySocialJournalistEffects(db, cls, comment(1, ["j-ser"]));
+    await applySocialJournalistEffects(db, cls, comment(1, ["j-ser"]));
+    expect(cls.calls).toBe(1);
+    await applySocialJournalistEffects(db, cls, comment(2, ["j-ser"]));
+    const stored = await db.prepare("SELECT SUM(respect) AS s FROM social_relation_effects WHERE team_a_id = 'j-ser'").first<{ s: number }>();
+    expect(stored?.s).toBe(-10);
   });
 });

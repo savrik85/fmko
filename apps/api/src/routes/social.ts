@@ -21,7 +21,8 @@ import {
 import { likedWhat, notifySocial } from "../social/notify";
 import { SOCIAL_AI_MODE_KEY, aiMode, scheduleAiReplies, type ReplyTrigger } from "../social/ai-replies";
 import {
-  applySocialLike, applySocialToneEffects, modelToneClassifier, relationTargets, type ToneInput,
+  applySocialJournalistEffects, applySocialLike, applySocialToneEffects, modelToneClassifier, relationTargets,
+  type JournalistToneInput, type ToneInput,
 } from "../social/relation-effects";
 
 const M = "social-route";
@@ -69,6 +70,13 @@ async function relationEffects(env: Bindings, input: ToneInput): Promise<number>
   if (input.targetTeamIds.length === 0) return 0;
   if (await aiMode(env) === "off") return 0;
   return applySocialToneEffects(env.DB, modelToneClassifier(env), input);
+}
+
+/** Komentář pod článkem novináře nebo odpověď novináři hýbe jeho vztahem ke klubu. */
+async function journalistEffects(env: Bindings, input: JournalistToneInput): Promise<number> {
+  if (input.journalistIds.length === 0) return 0;
+  if (await aiMode(env) === "off") return 0;
+  return applySocialJournalistEffects(env.DB, modelToneClassifier(env), input);
 }
 
 async function readJson<T>(c: Ctx): Promise<T | null> {
@@ -179,6 +187,14 @@ socialRouter.post("/teams/:teamId/social/comments", async (c) => {
       target.ownerTeamId,
       replyTo?.authorKind === "manager" ? replyTo.teamId : null,
     ]),
+  }));
+
+  await runLater(c, journalistEffects(c.env, {
+    authorTeamId: viewer.teamId, text, sourceKey: `comment:${id}`, context: target.title,
+    journalistIds: [
+      target.journalistId ?? null,
+      replyTo?.authorKind === "journalist" ? replyTo.personaId : null,
+    ].filter((x): x is string => !!x),
   }));
 
   await runLater(c, scheduleAiReplies(c.env, {
