@@ -1,7 +1,8 @@
 /**
  * Socky: oznámení o komentáři, lajku a označení (@).
  *
- * Dostane ho jen klub, který vede člověk, a nikdy ten, kdo to udělal.
+ * Dostane ho jen klub, který vede člověk, a nikdy ten, kdo to udělal, ani ten,
+ * kdo si klub autora nebo ten příspěvek skryl.
  * Dokud oznámení téhož druhu k téže diskusi leží nepřečtené, nové se nepřidá:
  * deset komentářů pod jedním příspěvkem je jedno oznámení, ne deset.
  */
@@ -67,6 +68,15 @@ export async function notifySocial(env: Pick<Bindings, "DB" | "VAPID_PUBLIC_KEY"
     .bind(n.recipientTeamId).first<{ human: number }>()
     .catch((e) => { logger.warn({ module: M }, "je klub lidský", e); return null; });
   if (human?.human !== 1) return;
+
+  // Kdo si klub nebo příspěvek skryl, od něj ani o něm nic dostávat nechce: jinak by
+  // skrytý klub mohl otravovat zmínkami a lajky dál, i s pushem do telefonu.
+  const muted = await db.prepare(
+    `SELECT 1 AS x FROM social_mutes m JOIN teams t ON t.user_id = m.user_id
+      WHERE t.id = ? AND ((m.kind = 'team' AND m.value = ?) OR (m.kind = 'item' AND m.value = ?)) LIMIT 1`,
+  ).bind(n.recipientTeamId, n.actorTeamId ?? "", n.key).first<{ x: number }>()
+    .catch((e) => { logger.warn({ module: M }, "skrytí u příjemce oznámení", e); return null; });
+  if (muted) return;
 
   const link = feedLink(n.key);
   const title = NOTICE_TITLES[n.kind];

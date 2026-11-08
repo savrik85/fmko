@@ -213,6 +213,19 @@ describe("komentáře, lajky, oznámení", () => {
     expect(rows.results.map((r) => r.title)).toEqual(["Socky: lajk", "Socky: nový komentář", "Socky: zmínka"]);
   });
 
+  it("od skrytého klubu ani ke skrytému příspěvku oznámení nepřijde", async () => {
+    const env = { DB: db, VAPID_PUBLIC_KEY: "", VAPID_PRIVATE_KEY: "", VAPID_SUBJECT: "" };
+    await addMute(db, me.userId, { kind: "team", value: "t-other" }, "klub FK Engel Vimperk");
+    await addMute(db, me.userId, { kind: "item", value: "post:hidden" }, "příspěvek");
+    const base = { recipientTeamId: "t-me", actorName: "Petr K.", body: "@AC Jitona Spůle", title: "příspěvek", push: true };
+    await notifySocial(env, { ...base, kind: "mention", key: "post:x", actorTeamId: "t-other" });
+    await notifySocial(env, { ...base, kind: "like", key: "post:x", actorTeamId: "t-other" });
+    await notifySocial(env, { ...base, kind: "comment", key: "post:hidden", actorTeamId: "t-praha" });
+    await notifySocial(env, { ...base, kind: "mention", key: "post:x", actorTeamId: "t-praha" });
+    const rows = await db.prepare("SELECT title FROM notifications").all<{ title: string }>();
+    expect(rows.results.map((r) => r.title)).toEqual(["Socky: zmínka"]);
+  });
+
   it("lajk komentáře vede na příspěvek, pod kterým komentář je", async () => {
     const postId = await insertPost(db, me, "Ahoj");
     const { id } = await insertManagerComment(db, (await loadViewer(db, "t-other"))!, `post:${postId}`, "Nazdar", null);
