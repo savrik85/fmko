@@ -124,6 +124,23 @@ function absenceReasonFact(absence: PlayerSnapshot["lastMatchAbsence"]): string 
 }
 
 /**
+ * Omluvenka na dnešní nebo zítřejší zápas. Ranní omluvenka jde do skupiny zápasu, osobní
+ * chat ji dřív neznal: Linhart ráno napsal „Došel mi benzín uprostřed lesa“ a na trenérovo
+ * „ať pro tebe sjedou do toho lesa“ odepsal „jakej les proboha? Jsem doma a fit“
+ * (Chlumany 2026-11-08). Hráč se omluvy drží, sestava i zápas s ní počítají.
+ */
+export function buildUpcomingAbsenceFacts(p: PlayerSnapshot): string {
+  const a = p.upcomingAbsence;
+  if (!a) return "";
+  const match = `${a.when === "dnes" ? "dnešní" : "zítřejší"} zápas${a.opponent ? ` proti ${a.opponent}` : ""}`;
+  const why = a.reason === "Stopka za karty" ? "Máš stopku za karty a hrát nesmíš."
+    : a.reason === "Zranění" ? `Jsi zraněný${a.text ? ` (${a.text})` : ""}.`
+    : a.reason === "Osobní volno" ? "Máš od trenéra osobní volno."
+    : a.text ? `Trenérovi jsi do skupiny zápasu poslal omluvenku: „${a.text}“.` : "Trenérovi ses na něj omluvil.";
+  return `- Na ${match} NEPŘIJDEŠ. ${why} Víš o tom a trenér to ví taky. Když se tě na to ptá nebo tě přemlouvá, drž se své omluvenky: klidně ji rozveď, omluv se nebo řekni, že tě to mrzí. NIKDY netvrď, že přijdeš, že jsi doma a fit, ani že nevíš, o čem trenér mluví.`;
+}
+
+/**
  * Co se hráči stalo v posledním zápase. Bez toho by scénář o gólu nebo červené kartě
  * psal naslepo a model si počty i vlastní výkon domyslel.
  */
@@ -269,6 +286,7 @@ export function buildSystemPrompt(
       ? `- Spoluhráči (JEDINÁ povolená jména, o kterých smíš mluvit): ${team.squadNames.join(", ")}. NIKOHO jiného nejmenuj — žádná vymyšlená jména.`
       : "- Jména spoluhráčů neznáš. NIKOHO nejmenuj.",
     buildLastMatchFacts(player, team.lastMatchResult),
+    buildUpcomingAbsenceFacts(player),
     "- O termínech zápasů, sestavě a o tom, kdo hrál, víš JEN to, co stojí v těchto faktech. NEVYMÝŠLEJ si, kdy se hraje, že se nehraje, ani kdo nastoupil. Když to nevíš, řekni to nebo se zeptej trenéra.",
     team.subjectPlayerName
       ? `- Konverzace je o konkrétním spoluhráči: ${team.subjectPlayerName}. Mluv VÝHRADNĚ o něm, nikoho jiného nejmenuj.`
