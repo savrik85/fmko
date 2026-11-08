@@ -69,6 +69,12 @@ const COOLDOWN_DAYS = 3;              // min 3 dny mezi thready aby se neobjevil
 const HANGOVER_CHANCE = 0.6;
 const STALE_DAYS_FOR_OFFEND = 3;      // 3 herní dny bez odpovědi trenéra
 const SAFETY_NET_DAYS = 14;           // safety net pro úplně zaseknuté thready
+/**
+ * Starší neodpovězené vlákno se zavře bez urážky. Denní úklid běží každý den, takže vlákno
+ * normálně zachytí mezi 3. a 4. dnem. Starší znamená výpadek úklidu (od září 2026 padal
+ * na vláknu předáka fanoušků) a trestat trenéra za týdny staré zprávy by bylo nefér.
+ */
+const OFFEND_MAX_DAYS = 4;
 
 interface ConvRow {
   id: string;
@@ -86,6 +92,11 @@ interface AiThreadStateData {
   max_replies: number;
   current_replies: number;
   awaiting: "coach" | "player" | "done";
+  /**
+   * Od kdy se čeká na odpověď hráče (ISO). Hodinový úklid (stuck-replies.ts) podle toho
+   * pozná odpověď, kterou worker nedokončil, a vrátí vlákno trenérovi.
+   */
+  awaiting_since?: string;
   initiated_at: string;
   player_id: string;
   /** Spoluhráč, o kterém konverzace je (konflikt / pochvala) — podle výsledku se upraví jejich vztah. */
@@ -1388,53 +1399,99 @@ async function closeThread(
 export async function expireStaleAiThreads(
   db: D1Database,
   env?: ChatEnv,
-): Promise<{ offended: number; safetyClosed: number; coachClosed: number }> {
+): Promise<{ offended: number; safetyClosed: number; coachClosed: number; quietClosed: number; failed: number }> {
   let offended = 0;
   let safetyClosed = 0;
   let coachClosed = 0;
+  let quietClosed = 0;
+  let failed = 0;
 
   // 1. Stale "awaiting coach" threads → urazit hráče
   const stale = await db.prepare(
     `SELECT id, team_id, ai_thread_state, last_message_at
      FROM conversations
      WHERE ai_thread_active = 1
-       AND last_message_at < datetime('now', ?)`,
+       -- julianday, ne porovnání textu: last_message_at je ISO s „T“ a datetime() vrací mezeru,
+       -- takže ve stejný den textové porovnání vlákno nevybralo a úklid ho odložil o den.
+       AND julianday(last_message_at) < julianday('now', ?)`,
   ).bind(`-${STALE_DAYS_FOR_OFFEND} days`).all<ConvRow>()
     .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "load stale threads", e); return { results: [] }; });
 
   for (const conv of stale.results) {
-    const state = parseState(conv.ai_thread_state);
-    if (!state) continue;
-    // Vlákno majitele firmy si hlídá vlastní lhůtu v herním čase (sponsors/owner-sms.ts).
-    if ((state as { kind?: string }).kind === "sponsor_owner") continue;
-
-    if (state.awaiting === "coach" && state.scenario_id === "coach_initiated") {
-      // Rozhovor začal trenér a pak přestal psát: to není ignorování hráče, jen konec
-      // hovoru. Žádná urážka, vyhodnotí se, co v rozhovoru padlo.
-      await closeCoachThreadQuietly(db, env, conv, state);
-      coachClosed++;
-    } else if (state.awaiting === "coach" && state.casual) {
-      // Zpráva „jen tak": neodpověděl, nic se neděje. Jinak by víc zpráv znamenalo víc povinností.
-      // Bez posunu last_message_at, ať se konverzace v seznamu nevyhoupne nahoru.
-      await db.prepare("UPDATE conversations SET ai_thread_state = ?, ai_thread_active = 0 WHERE id = ?")
-        .bind(JSON.stringify({ ...state, awaiting: "done", resolution: { morale_delta: 0, condition_delta: 0, relationship_delta: 0, summary: "Trenér neodpověděl.", tone: "neutral" } }), conv.id).run()
-        .catch((e) => logger.warn({ module: "ai-player-spawn" }, `zavření zprávy jen tak ${conv.id}`, e));
-      coachClosed++;
-    } else if (state.awaiting === "coach") {
-      // Hráč se urazí
-      await offendPlayer(db, conv, state);
-      offended++;
-    } else if (conv.last_message_at && new Date(conv.last_message_at) < new Date(Date.now() - SAFETY_NET_DAYS * 24 * 3600 * 1000)) {
-      // Safety net: zaseknutý thread → force close bez penalty
-      await closeThread(db, conv.id, state, { morale_delta: 0, condition_delta: 0, relationship_delta: 0, summary: "Konverzace přerušena (timeout).", tone: "neutral" });
-      safetyClosed++;
+    // Jedno vadné vlákno nesmí zastavit úklid ostatních (dřív celý běh spadl na prvním z nich).
+    try {
+      const result = await expireStaleThread(db, env, conv);
+      if (result === "offended") offended++;
+      else if (result === "coach_closed") coachClosed++;
+      else if (result === "quiet_closed") quietClosed++;
+      else if (result === "safety_closed") safetyClosed++;
+    } catch (e) {
+      failed++;
+      logger.warn({ module: "ai-player-spawn" }, `úklid vlákna ${conv.id}`, e);
     }
   }
 
-  if (offended > 0 || safetyClosed > 0 || coachClosed > 0) {
-    logger.info({ module: "ai-player-spawn" }, `stale check: ${offended} offended players, ${safetyClosed} safety-closed, ${coachClosed} coach chats closed`);
+  if (offended > 0 || safetyClosed > 0 || coachClosed > 0 || quietClosed > 0 || failed > 0) {
+    logger.info({ module: "ai-player-spawn" }, `stale check: ${offended} offended players, ${safetyClosed} safety-closed, ${coachClosed} coach chats closed, ${quietClosed} closed quietly, ${failed} failed`);
   }
-  return { offended, safetyClosed, coachClosed };
+  return { offended, safetyClosed, coachClosed, quietClosed, failed };
+}
+
+async function expireStaleThread(
+  db: D1Database,
+  env: ChatEnv | undefined,
+  conv: ConvRow,
+): Promise<"offended" | "coach_closed" | "quiet_closed" | "safety_closed" | "skipped"> {
+  const state = parseState(conv.ai_thread_state);
+  if (!state) return "skipped";
+  // Vlákna s `kind` patří jiným modulům a nemají hráče: majitel firmy si hlídá lhůtu sám
+  // (sponsors/owner-sms.ts), předák fanoušků čeká na odpověď trenéra (fans/fan-leader-reply.ts),
+  // zaseklé psaní majitele uvolní hodinová pojistka (stuck-replies.ts).
+  if ((state as { kind?: string }).kind || !state.player_id) return "skipped";
+
+  if (state.awaiting === "coach" && state.scenario_id === "coach_initiated") {
+    // Rozhovor začal trenér a pak přestal psát: to není ignorování hráče, jen konec
+    // hovoru. Žádná urážka, vyhodnotí se, co v rozhovoru padlo.
+    await closeCoachThreadQuietly(db, env, conv, state);
+    return "coach_closed";
+  }
+  if (state.awaiting === "coach" && state.casual) {
+    // Zpráva „jen tak": neodpověděl, nic se neděje. Jinak by víc zpráv znamenalo víc povinností.
+    await closeWithoutPenalty(db, conv.id, state, "Trenér neodpověděl.");
+    return "coach_closed";
+  }
+  if (state.awaiting === "coach") {
+    const tooOld = !!conv.last_message_at
+      && new Date(conv.last_message_at) < new Date(Date.now() - OFFEND_MAX_DAYS * 24 * 3600 * 1000);
+    // Poslední slovo měl trenér (hráčova odpověď se nedokončila, pojistka vlákno vrátila):
+    // trenér nikoho neignoroval, není se proč urážet.
+    if (tooOld || (await lastSenderType(db, conv.id)) === "user") {
+      await closeWithoutPenalty(db, conv.id, state, "Rozhovor skončil bez odpovědi.");
+      return "quiet_closed";
+    }
+    await offendPlayer(db, conv, state);
+    return "offended";
+  }
+  if (conv.last_message_at && new Date(conv.last_message_at) < new Date(Date.now() - SAFETY_NET_DAYS * 24 * 3600 * 1000)) {
+    // Safety net: zaseknutý thread → force close bez penalty
+    await closeThread(db, conv.id, state, { morale_delta: 0, condition_delta: 0, relationship_delta: 0, summary: "Konverzace přerušena (timeout).", tone: "neutral" });
+    return "safety_closed";
+  }
+  return "skipped";
+}
+
+/** Kdo v konverzaci psal naposledy (`user` = trenér, `player`, `system`). */
+async function lastSenderType(db: D1Database, convId: string): Promise<string | null> {
+  const row = await db.prepare(
+    "SELECT sender_type FROM messages WHERE conversation_id = ? ORDER BY julianday(sent_at) DESC LIMIT 1",
+  ).bind(convId).first<{ sender_type: string }>();
+  return row?.sender_type ?? null;
+}
+
+/** Zavře vlákno bez dopadu. Bez posunu last_message_at, ať se konverzace v seznamu nevyhoupne nahoru. */
+async function closeWithoutPenalty(db: D1Database, convId: string, state: AiThreadStateData, summary: string): Promise<void> {
+  await db.prepare("UPDATE conversations SET ai_thread_state = ?, ai_thread_active = 0 WHERE id = ?")
+    .bind(JSON.stringify({ ...state, awaiting: "done", resolution: { morale_delta: 0, condition_delta: 0, relationship_delta: 0, summary, tone: "neutral" } }), convId).run();
 }
 
 /**

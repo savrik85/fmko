@@ -594,7 +594,7 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
   if (conv?.type === "player" && conv.ai_thread_active === 1) {
     const updateRes = await c.env.DB.prepare(
       `UPDATE conversations
-       SET ai_thread_state = json_set(ai_thread_state, '$.awaiting', 'player')
+       SET ai_thread_state = json_set(ai_thread_state, '$.awaiting', 'player', '$.awaiting_since', strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
        WHERE id = ?
          AND ai_thread_active = 1
          AND json_extract(ai_thread_state, '$.awaiting') = 'coach'`,
@@ -636,6 +636,7 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
         max_replies: 3,
         current_replies: 0,
         awaiting: "player",
+        awaiting_since: now,
         initiated_at: now,
         player_id: conv.participant_id,
         resolution: null,
