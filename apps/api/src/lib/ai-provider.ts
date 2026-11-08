@@ -77,6 +77,26 @@ export interface GenerateOpts {
   /** Gemini safetySettings — plachty kotle bývají provokativní. */
   safetySettings?: unknown[];
   module?: string;
+  /**
+   * Časový limit volání. Po něm se vrátí null jako při výpadku modelu. Důležité tam, kde
+   * odpověď běží ve `waitUntil` po odeslané odpovědi: worker ji po ~30 s ukončí bez chyby
+   * a nic by nevrátilo stav, který volající mezitím nastavil (třeba „píše…“ v telefonu).
+   */
+  timeoutMs?: number;
+}
+
+/** Workers AI binding neumí AbortSignal: po limitu se na výsledek přestane čekat. */
+async function withTimeout<T>(work: Promise<T>, ms: number | undefined, onTimeout: () => void): Promise<T | null> {
+  if (!ms) return work;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<null>((resolve) => {
+    timer = setTimeout(() => { onTimeout(); resolve(null); }, ms);
+  });
+  try {
+    return await Promise.race([work, timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /**
@@ -99,7 +119,7 @@ export async function generateText(
       logger.warn({ module: mod }, "provider=workers-ai, ale binding AI chybí, negeneruji");
       return null;
     }
-    const res = await (ctx.ai as unknown as {
+    const res = await withTimeout((ctx.ai as unknown as {
       run: (model: string, input: unknown) => Promise<{ response?: unknown }>;
     })
       .run(WORKERS_AI_MODEL, {
@@ -110,7 +130,7 @@ export async function generateText(
       .catch((e) => {
         logger.warn({ module: mod }, "workers-ai run selhal", e);
         return null;
-      });
+      }), opts.timeoutMs, () => logger.warn({ module: mod }, `workers-ai neodpověděl do ${opts.timeoutMs} ms`));
 
     // `response` bývá string, ale u promptu, na který model odpoví JSONem,
     // přijde rovnou hotový objekt. Dokud se tu volalo `.trim()` natvrdo,
@@ -137,6 +157,7 @@ export async function generateText(
     safetySettings: opts.safetySettings,
     module: mod,
     gatewayUrl: ctx.gatewayUrl,
+    timeoutMs: opts.timeoutMs,
   });
 }
 

@@ -534,7 +534,7 @@ export async function performUnrestAction(
   // přes `handleAiPlayerReply`) a AI rozhodčí na konci dohodu vezme v úvahu.
   if (inThread) {
     const claimed = await db.prepare(
-      `UPDATE conversations SET ai_thread_state = json_set(ai_thread_state, '$.awaiting', 'player')
+      `UPDATE conversations SET ai_thread_state = json_set(ai_thread_state, '$.awaiting', 'player', '$.awaiting_since', strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
         WHERE id = ? AND ai_thread_active = 1 AND json_extract(ai_thread_state, '$.awaiting') = 'coach'`,
     ).bind(convId).run().catch((e) => { logger.warn({ module: "unrest" }, "tah trenéra v rozhovoru", e); return null; });
     if ((claimed?.meta?.changes ?? 0) > 0) {

@@ -188,6 +188,13 @@ export default {
       } catch (e: any) {
         log("error", "hodinový běh telefonu selhal", e);
       }
+      // Až po odložených zprávách: ty samy přepínají „čeká na hráče“ a odpověď hned dokončí.
+      try {
+        const { releaseStuckReplies } = await import("./messaging/stuck-replies");
+        await releaseStuckReplies(env.DB);
+      } catch (e: any) {
+        log("error", "uvolnění zaseklých odpovědí selhalo", e);
+      }
       // Průvodce prvním týdnem: kapitán pošle další úkol, nebo starosta odměnu.
       try {
         const { advanceAllFirstWeekGuides } = await import("./onboarding/first-week");
@@ -394,7 +401,7 @@ export default {
         const { applyAiPlayerThreads, expireStaleAiThreads } = await import("./messaging/ai-player-spawn");
         const spawnRes = await applyAiPlayerThreads(env.DB, env);
         const expireRes = await expireStaleAiThreads(env.DB, env);
-        log("info", `ai player chats: ${spawnRes.spawned} spawned, ${spawnRes.skipped} skipped, ${expireRes.offended} offended, ${expireRes.coachClosed} coach chats closed, ${expireRes.safetyClosed} safety closed`);
+        log("info", `ai player chats: ${spawnRes.spawned} spawned, ${spawnRes.skipped} skipped, ${expireRes.offended} offended, ${expireRes.coachClosed} coach chats closed, ${expireRes.quietClosed} closed quietly, ${expireRes.safetyClosed} safety closed, ${expireRes.failed} failed`);
       } catch (e: any) {
         log("error", "ai player chats tick failed", e);
       }

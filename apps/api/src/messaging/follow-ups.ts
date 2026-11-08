@@ -321,7 +321,7 @@ async function retryReply(db: D1Database, env: FollowUpEnv, row: FollowUpRow): P
   if (conv.ai_thread_active === 1) {
     // Stejná pojistka jako v routes/messaging.ts: odpověď generuje jen ten, kdo přepnul „čeká na hráče".
     const claimed = await db.prepare(
-      `UPDATE conversations SET ai_thread_state = json_set(ai_thread_state, '$.awaiting', 'player')
+      `UPDATE conversations SET ai_thread_state = json_set(ai_thread_state, '$.awaiting', 'player', '$.awaiting_since', strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
         WHERE id = ? AND ai_thread_active = 1 AND json_extract(ai_thread_state, '$.awaiting') = 'coach'`,
     ).bind(row.conversation_id).run();
     if ((claimed.meta?.changes ?? 0) === 0) return "cancelled";

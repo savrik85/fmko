@@ -397,6 +397,9 @@ export interface ChatEnv {
  *
  * Hází stejnou výjimku jako předtím, aby volající chybové větve zůstaly.
  */
+/** Krátké odpovědi do SMS: tohle Gemini i Workers AI běžně zvládnou s velkou rezervou. */
+const MODEL_TIMEOUT_MS = 25_000;
+
 async function callModel(
   env: ChatEnv,
   prompt: string,
@@ -413,6 +416,9 @@ async function callModel(
     temperature: opts.temperature ?? 0.85,
     json: opts.json,
     module: "ai-player-chat",
+    // Odpověď hráče běží ve waitUntil (~30 s): zaseklé volání musí skončit dřív, aby se
+    // stihla vrátit „čeká na trenéra“ a naplánovat pozdější odpověď.
+    timeoutMs: MODEL_TIMEOUT_MS,
   });
   if (!text) {
     throw new GeminiUnavailableError(`model (${ctx.provider}) nevrátil odpověď`);

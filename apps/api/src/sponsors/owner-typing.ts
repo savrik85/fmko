@@ -53,6 +53,21 @@ export async function releaseOwnerTyping(db: D1Database, convId: string): Promis
   return row?.ai_thread_active === 1;
 }
 
+/**
+ * Psaní, které nikdo nedokončil (worker skončil uprostřed `replyAfterTyping`): vrátí vláknu
+ * původní stav, jinak telefon ukazuje „píše…“ napořád. Volá hodinová pojistka (stuck-replies.ts).
+ */
+export async function releaseStuckOwnerTyping(db: D1Database, olderThanSec: number): Promise<number> {
+  const res = await db.prepare(
+    `UPDATE conversations
+     SET ai_thread_active = COALESCE(json_extract(ai_thread_state, '$.prevActive'), 0),
+         ai_thread_state = json_extract(ai_thread_state, '$.prevState')
+     WHERE json_extract(ai_thread_state, '$.kind') = ?
+       AND CAST(json_extract(ai_thread_state, '$.since') AS INTEGER) < CAST(strftime('%s', 'now') AS INTEGER) - ?`,
+  ).bind(TYPING_KIND, olderThanSec).run();
+  return res.meta?.changes ?? 0;
+}
+
 /** Čekal majitel na odpověď na svou SMS, než začal psát? (původní stav uložený v psaní) */
 async function prevActive(db: D1Database, convId: string): Promise<boolean> {
   const row = await db.prepare(
