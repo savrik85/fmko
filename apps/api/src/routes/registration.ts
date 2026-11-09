@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { REGISTRATION_DISTRICTS } from "@okresni-masina/shared";
 import type { Bindings } from "../index";
 import { requireAdmin, requireAuth } from "../auth/middleware";
@@ -9,6 +9,9 @@ import {
   DISTRICT_FULL_CODE, createCapacityLookup, districtFullMessage, listOpenDistricts,
 } from "../registration/district-capacity";
 import { logger } from "../lib/logger";
+import {
+  bumpCounters, counterKey, REGISTRATION_IP_MAX, REGISTRATION_WINDOW_SECONDS, UNKNOWN_IP,
+} from "../auth/attempt-limiter";
 
 /**
  * Neplatné tělo požadavku. Hláška chyby z JSON.parse obsahuje kus vstupu a tady
@@ -29,14 +32,23 @@ function newToken(): string {
   return Array.from(crypto.getRandomValues(new Uint8Array(32)), b => b.toString(16).padStart(2, "0")).join("");
 }
 
-/** Nejvýš 5 registrací za hodinu z jedné IP adresy (otisk, ne samotná adresa). */
-async function rateLimited(kv: KVNamespace, ip: string | undefined): Promise<boolean> {
-  if (!ip) return false;
-  const key = `registration-rate:${await hashActivationToken(ip)}:${Math.floor(Date.now() / 3600000)}`;
-  const count = Number(await kv.get(key) ?? 0);
-  if (count >= 5) return true;
-  await kv.put(key, String(count + 1), { expirationTtl: 3600 });
-  return false;
+/**
+ * Nejvýš 5 registrací za hodinu z jedné adresy. Počítadlo je atomický zápis v D1
+ * (auth/attempt-limiter.ts); v KV šlo čtení se zápisem obejít souběžnými požadavky.
+ * Bez hlavičky s adresou se počítá do společného koše, dřív se limit celý přeskočil.
+ * Vrací hotovou odpověď, když registrace dál nesmí, jinak null.
+ */
+async function rejectRateLimited(c: Context<{ Bindings: Bindings }>): Promise<Response | null> {
+  try {
+    const key = await counterKey("registration-ip", c.req.header("CF-Connecting-IP") ?? UNKNOWN_IP);
+    const count = (await bumpCounters(c.env.DB, [key], REGISTRATION_WINDOW_SECONDS)).get(key) ?? Infinity;
+    if (count > REGISTRATION_IP_MAX) return c.json({ error: "Příliš mnoho žádostí. Zkus to prosím za hodinu." }, 429);
+    return null;
+  } catch (e) {
+    logger.error({ module: "registration" }, "počítadlo registrací", e);
+    c.header("Retry-After", "30");
+    return c.json({ error: "Registraci teď nejde ověřit. Zkus to prosím za chvíli." }, 503);
+  }
 }
 
 function validPassword(password: unknown): password is string {
@@ -87,9 +99,8 @@ registrationRouter.post("/requests", async c => {
     || !(REGISTRATION_DISTRICTS as readonly string[]).includes(district)) {
     return c.json({ error: "Zkontroluj jméno (2–80 znaků), platný e-mail a výběr okresu." }, 400);
   }
-  if (await rateLimited(c.env.CACHE_KV, c.req.header("CF-Connecting-IP"))) {
-    return c.json({ error: "Příliš mnoho žádostí. Zkus to prosím za hodinu." }, 429);
-  }
+  const rateLimited = await rejectRateLimited(c);
+  if (rateLimited) return rateLimited;
   const existing = await c.env.DB.prepare("SELECT id FROM users WHERE email = ? COLLATE NOCASE").bind(email).first();
   if (existing) return c.json({ error: "Pro tento e-mail už účet existuje. Přihlas se ke svému účtu." }, 409);
   // Žádost do plného okresu je zápis na čekací listinu: žádná příprava dat ani aktivační odkaz.
@@ -127,9 +138,8 @@ registrationRouter.post("/join", async c => {
     return c.json({ error: "Zkontroluj jméno (2–80 znaků), platný e-mail a výběr okresu." }, 400);
   }
   if (!validPassword(body.password)) return c.json({ error: "Heslo musí mít 8–128 znaků, malé i velké písmeno a číslo." }, 400);
-  if (await rateLimited(c.env.CACHE_KV, c.req.header("CF-Connecting-IP"))) {
-    return c.json({ error: "Příliš mnoho žádostí. Zkus to prosím za hodinu." }, 429);
-  }
+  const rateLimited = await rejectRateLimited(c);
+  if (rateLimited) return rateLimited;
   const ready = await c.env.DB.prepare("SELECT 1 FROM district_registrations WHERE district = ? AND status = 'ready'").bind(district).first();
   if (!ready) return c.json({ error: "district_not_ready", message: "Tenhle okres ještě připravujeme. Pošli žádost a ozveme se." }, 409);
   // Plný nebo ručně zavřený okres odmítnout dřív, než vznikne účet, který by klub nezaložil.

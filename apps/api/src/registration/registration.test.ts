@@ -56,6 +56,7 @@ beforeAll(async () => {
     INSERT INTO teams VALUES ('legacy-team', 'legacy-user', 'legacy-village', 'SK Kladno', NULL, NULL, NULL);`);
   await sql(readFileSync(new URL("../../migrations/0225_district_registration.sql", import.meta.url), "utf8"));
   await sql(readFileSync(new URL("../../migrations/0151_competition_elections.sql", import.meta.url), "utf8"));
+  await sql(readFileSync(new URL("../../migrations/0295_rate_limit_counters.sql", import.meta.url), "utf8"));
   await sql(`CREATE TABLE competition_officials (id TEXT PRIMARY KEY, league_id TEXT, role TEXT, team_id TEXT, season_number INTEGER, elected_game_date TEXT, status TEXT DEFAULT 'active');
     CREATE UNIQUE INDEX official_active ON competition_officials(league_id, role, season_number) WHERE status IN ('active','suspended');`);
   adminToken = await createSession(env.SESSION_KV, "admin", "admin@example.test", null);
@@ -63,7 +64,7 @@ beforeAll(async () => {
 });
 afterAll(async () => { await mf?.dispose(); });
 beforeEach(async () => {
-  await sql(`DELETE FROM league_requests; DELETE FROM users; DELETE FROM competition_officials; DELETE FROM competition_elections;
+  await sql(`DELETE FROM rate_limit_counters; DELETE FROM league_requests; DELETE FROM users; DELETE FROM competition_officials; DELETE FROM competition_elections;
     DELETE FROM teams WHERE id <> 'legacy-team'; DELETE FROM leagues; DELETE FROM seasons;
     DELETE FROM district_surnames; DELETE FROM district_sponsors;
     DELETE FROM district_registrations WHERE district NOT IN ('Praha','Prachatice','Kladno');
@@ -226,5 +227,57 @@ describe("okamžitá registrace do připraveného okresu", () => {
     await sql(readFileSync(new URL("../../migrations/0232_open_south_districts.sql", import.meta.url), "utf8"));
     const rows = (await db.prepare("SELECT district, status FROM district_registrations WHERE district IN ('Strakonice','Písek','Český Krumlov') ORDER BY district").all()).results;
     expect(rows).toEqual([{ district: "Písek", status: "ready" }, { district: "Strakonice", status: "ready" }, { district: "Český Krumlov", status: "ready" }]);
+  });
+});
+
+describe("limit registrací z jedné adresy", () => {
+  function requestFrom(ip: string | null, email: string) {
+    return app.request("/api/registration/requests", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(ip ? { "CF-Connecting-IP": ip } : {}) },
+      body: JSON.stringify({ name: "Petr Novák", email, district: "Beroun" }),
+    }, env);
+  }
+
+  it("šestá žádost za hodinu z jedné adresy dostane 429, jiná adresa projde", async () => {
+    for (let i = 0; i < 5; i++) expect((await requestFrom("203.0.113.9", `a${i}@example.test`)).status).toBe(201);
+    const blocked = await requestFrom("203.0.113.9", "a5@example.test");
+    expect(blocked.status).toBe(429);
+    expect((await blocked.json() as { error: string }).error).toContain("Příliš mnoho žádostí");
+    expect((await requestFrom("203.0.113.10", "b0@example.test")).status).toBe(201);
+  });
+
+  it("bez hlavičky s adresou se limit nepřeskočí, počítá se společný koš", async () => {
+    for (let i = 0; i < 5; i++) expect((await requestFrom(null, `c${i}@example.test`)).status).toBe(201);
+    expect((await requestFrom(null, "c5@example.test")).status).toBe(429);
+  });
+
+  it("souběžné žádosti limit neobejdou", async () => {
+    const responses = await Promise.all(Array.from({ length: 12 }, (_, i) => requestFrom("203.0.113.11", `d${i}@example.test`)));
+    const statuses = responses.map((res) => res.status);
+    expect(statuses.filter((status) => status === 201)).toHaveLength(5);
+    expect(statuses.filter((status) => status === 429)).toHaveLength(7);
+  });
+
+  it("okamžitá registrace počítá do stejného limitu", async () => {
+    await sql("INSERT INTO district_registrations (district, status, ready_at) VALUES ('Beroun','ready','2026-09-29T00:00:00Z')");
+    const joinFrom = (email: string) => app.request("/api/registration/join", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "CF-Connecting-IP": "203.0.113.12" },
+      body: JSON.stringify({ name: "Jan Hráč", email, password: "BezpecneHeslo1", district: "Beroun" }),
+    }, env);
+    for (let i = 0; i < 5; i++) expect((await joinFrom(`e${i}@example.test`)).status).toBe(201);
+    expect((await joinFrom("e5@example.test")).status).toBe(429);
+  });
+
+  it("když počítadlo selže, registrace se odmítne", async () => {
+    await sql("ALTER TABLE rate_limit_counters RENAME TO rate_limit_counters_off");
+    try {
+      const res = await requestFrom("203.0.113.13", "f0@example.test");
+      expect(res.status).toBe(503);
+      expect(await db.prepare("SELECT 1 FROM league_requests WHERE email = 'f0@example.test'").first()).toBeNull();
+    } finally {
+      await sql("ALTER TABLE rate_limit_counters_off RENAME TO rate_limit_counters");
+    }
   });
 });
