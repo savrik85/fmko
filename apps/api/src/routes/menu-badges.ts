@@ -68,6 +68,8 @@ menuBadgesRouter.get("/teams/:teamId/menu-badges/offers", async (c) => {
   if (denied) return denied;
   const db = c.env.DB;
   const clubTeamId = await resolveClubTeamId(db, teamId) ?? teamId;
+  // Nabídka po lhůtě na odpověď se mezi aktivní nepočítá (stejně jako ve výpisu nabídek).
+  const activeSince = new Date().toISOString();
 
   // Jeden balík místo čtyř dotazů za sebou. Chybu nechytáme: web při ní nechá odznak,
   // jak byl, kdežto prázdný seznam by odznak tiše zhasnul.
@@ -75,13 +77,13 @@ menuBadgesRouter.get("/teams/:teamId/menu-badges/offers", async (c) => {
     db.prepare(
       `SELECT ${OFFER_COLUMNS}
          FROM transfer_offers o JOIN players p ON p.id = o.player_id
-        WHERE o.to_team_id IN (${CLUB_SQUADS}) AND o.status IN ('pending','countered')`,
-    ).bind(clubTeamId, clubTeamId),
+        WHERE o.to_team_id IN (${CLUB_SQUADS}) AND o.status IN ('pending','countered') AND o.expires_at > ?`,
+    ).bind(clubTeamId, clubTeamId, activeSince),
     db.prepare(
       `SELECT ${OFFER_COLUMNS}
          FROM transfer_offers o JOIN players p ON p.id = o.player_id JOIN teams t ON t.id = o.to_team_id
-        WHERE o.from_team_id IN (${CLUB_SQUADS}) AND o.status IN ('pending','countered')`,
-    ).bind(clubTeamId, clubTeamId),
+        WHERE o.from_team_id IN (${CLUB_SQUADS}) AND o.status IN ('pending','countered') AND o.expires_at > ?`,
+    ).bind(clubTeamId, clubTeamId, activeSince),
     db.prepare(
       `SELECT ${BID_COLUMNS}
          FROM transfer_bids b

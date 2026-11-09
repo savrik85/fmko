@@ -222,6 +222,15 @@ export default {
       } catch (e: any) {
         log("error", "uvolnění zaseklých odpovědí selhalo", e);
       }
+      // Přestupové nabídky po lhůtě: polední tick je uklízí jednou denně, do té doby visely
+      // jako aktivní až 24 hodin. Jeden levný dotaz, nejvýš 20 nabídek za běh.
+      try {
+        const { expireIdleOffers } = await import("./transfers/offer-expiry");
+        const n = await expireIdleOffers(env);
+        if (n > 0) log("info", `propadlé přestupové nabídky: ${n}`);
+      } catch (e: any) {
+        log("error", "propadnutí přestupových nabídek selhalo", e);
+      }
       // Průvodce prvním týdnem: kapitán pošle další úkol, nebo starosta odměnu.
       try {
         const { advanceAllFirstWeekGuides } = await import("./onboarding/first-week");

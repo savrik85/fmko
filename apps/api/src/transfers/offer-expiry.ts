@@ -37,41 +37,70 @@ export async function expireIdleOffers(env: Bindings, now: Date = new Date()): P
 
   let expired = 0;
   for (const offer of due.results) {
-    // Na tahu je ten, kdo neodpověděl. Pohled prodávajícího stačí: buď je na tahu on, nebo kupec.
-    const scope = await resolveOfferClubScope(db, offer.to_team_id, offer)
-      .catch((e) => { logger.warn({ module: "offer-expiry" }, `scope ${offer.id}`, e); return null; });
-    const sellerSilent = scope?.role === "seller" && scope.onTurn;
-
-    // Jen když se nabídka mezitím nepohnula — kdo odpověděl na poslední chvíli, má přednost.
-    const closed = await db.prepare(
-      `UPDATE transfer_offers SET status = 'expired', resolved_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
-        WHERE id = ? AND status = ? AND last_action_by IS ?`,
-    ).bind(offer.id, offer.status, offer.last_action_by).run()
-      .catch((e) => { logger.warn({ module: "offer-expiry" }, `expire ${offer.id}`, e); return null; });
-    if ((closed?.meta.changes ?? 0) === 0) continue;
-    expired++;
-
-    // Mlčení prodávajícího je odmítnutí, i u AI klubu (stejná pravidla, jen bez zpráv:
-    // applyOfferRejectionImpact AI klubu nic nepíše).
-    if (sellerSilent) {
-      await applyOfferRejectionImpact(db, offer, "expire", env)
-        .catch((e) => logger.warn({ module: "offer-expiry" }, `impact ${offer.id}`, e));
-    } else if (scope) {
-      // Na tahu byl kupec. Když mu prodávající poslal absurdní protinávrh a kupec ho nechal
-      // propadnout, je to odmítnutí prodávajícím (priced-out.ts).
-      await settleBuyerSideEnd(db, offer as unknown as EndedOffer, scope, env);
-    }
-    await notifyExpiry(db, offer, scope?.buyerClubTeamId ?? offer.from_team_id, scope?.sellerClubTeamId ?? offer.to_team_id, sellerSilent)
-      .catch((e) => logger.warn({ module: "offer-expiry" }, `notify ${offer.id}`, e));
+    if (await expireOffer(env, offer)) expired++;
   }
   return expired;
+}
+
+/** Je nabídka po lhůtě na odpověď? */
+export function isOfferOverdue(expiresAt: unknown, now: Date = new Date()): boolean {
+  if (typeof expiresAt !== "string" || !expiresAt) return false;
+  const deadline = new Date(expiresAt).getTime();
+  return Number.isFinite(deadline) && deadline < now.getTime();
+}
+
+/**
+ * Nabídka po lhůtě, na kterou někdo zrovna sahá (přijetí, protinávrh, odmítnutí, stažení,
+ * nová nabídka na téhož hráče): propadne hned, se vším, co k propadnutí patří, a akce se
+ * neprovede. Tick běží jen občas a nabídka po lhůtě do té doby visela jako aktivní, takže
+ * ji šlo odmítnout nebo stáhnout a vyhnout se tím následkům mlčení.
+ * Vrací, jestli nabídka propadla (teď, nebo už dřív).
+ */
+export async function expireOverdueOffer(env: Bindings, offerId: string, now: Date = new Date()): Promise<boolean> {
+  const offer = await env.DB.prepare("SELECT * FROM transfer_offers WHERE id = ?").bind(offerId).first<OfferRow>();
+  if (!offer) return false;
+  if (offer.status === "expired") return true;
+  if (!["pending", "countered"].includes(offer.status) || !isOfferOverdue(offer.expires_at, now)) return false;
+  await expireOffer(env, offer);
+  return true;
+}
+
+/** Propadnutí jedné nabídky: stav, dopad na hráče a zprávy. Vrací, jestli propadla právě teď. */
+async function expireOffer(env: Bindings, offer: OfferRow): Promise<boolean> {
+  const db = env.DB;
+  // Na tahu je ten, kdo neodpověděl. Pohled prodávajícího stačí: buď je na tahu on, nebo kupec.
+  const scope = await resolveOfferClubScope(db, offer.to_team_id, offer)
+    .catch((e) => { logger.warn({ module: "offer-expiry" }, `scope ${offer.id}`, e); return null; });
+  const sellerSilent = scope?.role === "seller" && scope.onTurn;
+
+  // Jen když se nabídka mezitím nepohnula — kdo odpověděl na poslední chvíli, má přednost.
+  const closed = await db.prepare(
+    `UPDATE transfer_offers SET status = 'expired', resolved_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+      WHERE id = ? AND status = ? AND last_action_by IS ?`,
+  ).bind(offer.id, offer.status, offer.last_action_by).run()
+    .catch((e) => { logger.warn({ module: "offer-expiry" }, `expire ${offer.id}`, e); return null; });
+  if ((closed?.meta.changes ?? 0) === 0) return false;
+
+  // Mlčení prodávajícího je odmítnutí, i u AI klubu (stejná pravidla, jen bez zpráv:
+  // applyOfferRejectionImpact AI klubu nic nepíše).
+  if (sellerSilent) {
+    await applyOfferRejectionImpact(db, offer, "expire", env)
+      .catch((e) => logger.warn({ module: "offer-expiry" }, `impact ${offer.id}`, e));
+  } else if (scope) {
+    // Na tahu byl kupec. Když mu prodávající poslal absurdní protinávrh a kupec ho nechal
+    // propadnout, je to odmítnutí prodávajícím (priced-out.ts).
+    await settleBuyerSideEnd(db, offer as unknown as EndedOffer, scope, env);
+  }
+  await notifyExpiry(db, offer, scope?.buyerClubTeamId ?? offer.from_team_id, scope?.sellerClubTeamId ?? offer.to_team_id, sellerSilent)
+    .catch((e) => logger.warn({ module: "offer-expiry" }, `notify ${offer.id}`, e));
+  return true;
 }
 
 /** Připomínka chodí, když do konce lhůty zbývá nejvýš tolik hodin (tick běží jednou denně v poledne). */
 const REMINDER_WINDOW_HOURS = 36;
 
 /**
- * Připomene straně na tahu, že jí končí lhůta. Tick běží jednou denně, takže okno
+ * Připomene straně na tahu, že jí končí lhůta. Připomínky běží jednou denně, takže okno
  * 36 h chytí každou nabídku jednou, 12 až 36 hodin před koncem lhůty. Proti druhé
  * připomínce při ručním spuštění ticku chrání klíč v KV (s lhůtou, protinávrh ji posouvá).
  */

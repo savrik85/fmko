@@ -84,6 +84,19 @@ async function missingOfferFail(
 }
 
 /**
+ * Nabídka po lhůtě na odpověď: propadne hned (se vším, co k propadnutí patří) a akce se
+ * neprovede. Volá ji každá akce nad nabídkou, ať se s nabídkou po lhůtě nedá nic dělat
+ * dřív, než ji uklidí tick.
+ */
+async function overdueOfferFail(env: Bindings, offerId: string, expiresAt: unknown): Promise<TransferActionFailure | null> {
+  const { isOfferOverdue, expireOverdueOffer } = await import("../transfers/offer-expiry");
+  if (!isOfferOverdue(expiresAt)) return null;
+  await expireOverdueOffer(env, offerId)
+    .catch((e) => logger.warn({ module: M }, `propadnutí nabídky ${offerId} při akci`, e));
+  return fail(410, "Nabídka propadla, lhůta na odpověď už uplynula.");
+}
+
+/**
  * Kolik bude kupující potřebovat hned při přijetí: zálohu (u jednorázové platby celou cenu)
  * a k ní meziligový poplatek. Stejný výpočet jako přijetí (`acceptTransferOffer`), aby nabídka,
  * kterou kupující nezaplatí, vůbec nevznikla. Dřív se při založení hlídala jen záloha:
@@ -331,12 +344,15 @@ export async function createTransferOffer(
 
   // Idempotence: pokud existuje aktivní nabídka od tohoto týmu na tohoto hráče, vrátit ji
   const existing = await db.prepare(
-    `SELECT id FROM transfer_offers
+    `SELECT id, expires_at FROM transfer_offers
      WHERE player_id = ?
        AND from_team_id IN (SELECT id FROM teams WHERE id = ? OR parent_team_id = ?)
        AND status IN ('pending','countered') LIMIT 1`
-  ).bind(body.playerId, buyerClubTeamId, buyerClubTeamId).first<{ id: string }>().catch((e) => { logger.warn({ module: "game" }, "check duplicate offer", e); return null; });
-  if (existing) return fail(409, "Již máte aktivní nabídku na tohoto hráče", { offerId: existing.id });
+  ).bind(body.playerId, buyerClubTeamId, buyerClubTeamId).first<{ id: string; expires_at: string | null }>().catch((e) => { logger.warn({ module: "game" }, "check duplicate offer", e); return null; });
+  // Stará nabídka po lhůtě aktivní není: propadne teď a o nové rozhodne blokace níž.
+  if (existing && !(await overdueOfferFail(env, existing.id, existing.expires_at))) {
+    return fail(409, "Již máte aktivní nabídku na tohoto hráče", { offerId: existing.id });
+  }
 
   // Anti-spam: odmítnutá nabídka kazí hráči morálku — opakovat na stejného hráče jde
   // až po 10 dnech. Vlastní stažení kupce neblokuje (pravidla v transfers/offer-cooldown.ts).
@@ -783,8 +799,10 @@ export async function acceptTransferOffer(
   ).bind(offerId).first<Record<string, unknown>>();
   if (!offer) return missingOfferFail(db, actorTeamId, offerId, 409, "Nabídka nenalezena nebo nejsi na tahu");
   const scope = await resolveOfferClubScope(db, actorTeamId, offer);
-  if (!scope?.role || !scope.onTurn) return fail(409, "Nabídka nenalezena nebo nejsi na tahu");
-  if (offer.expires_at && new Date(offer.expires_at as string) < new Date()) return fail(410, "Nabídka vypršela");
+  if (!scope?.role) return fail(409, "Nabídka nenalezena nebo nejsi na tahu");
+  const overdue = await overdueOfferFail(env, offerId, offer.expires_at);
+  if (overdue) return overdue;
+  if (!scope.onTurn) return fail(409, "Nabídka nenalezena nebo nejsi na tahu");
   // Nabídka mohla vzniknout, než admin kluby propojil. Přijetím by obchod prošel.
   if (await areClubsLinked(db, scope.buyerClubTeamId, scope.sellerClubTeamId)) return fail(403, LINKED_CLUBS_ERRORS.transfer);
 
@@ -1455,6 +1473,7 @@ export async function acceptTransferOffer(
 interface OfferForReply {
   id: string; player_id: string; from_team_id: string; to_team_id: string; offer_amount: number; counter_amount: number | null;
   offer_type: string; status: string; last_action_by: string | null; virtual_team_data: string | null;
+  expires_at: string | null;
 }
 
 /** POST /teams/:teamId/offers/:offerId/reject — odmítnout smí ten, kdo je na tahu. */
@@ -1477,13 +1496,16 @@ export async function rejectTransferOffer(
   const message = input.message ?? null;
   // Reject smí ten, kdo JE na tahu — buyer i seller.
   const offer = await db.prepare(
-    `SELECT id, player_id, from_team_id, to_team_id, offer_amount, counter_amount, offer_type, status, last_action_by, virtual_team_data
+    `SELECT id, player_id, from_team_id, to_team_id, offer_amount, counter_amount, offer_type, status, last_action_by, virtual_team_data, expires_at
      FROM transfer_offers WHERE id = ? AND status IN ('pending','countered')`
   ).bind(offerId).first<OfferForReply>()
     .catch((e) => { logger.warn({ module: "game" }, "fetch offer for reject", e); return null; });
   if (!offer) return missingOfferFail(db, actorTeamId, offerId, 404, "Nabídka nenalezena");
   const scope = await resolveOfferClubScope(db, actorTeamId, offer);
   if (!scope?.role) return fail(404, "Nabídka nenalezena");
+  // Po lhůtě už nejde ani odmítnout: nabídka propadla a mlčení má své následky.
+  const overdue = await overdueOfferFail(env, offerId, offer.expires_at);
+  if (overdue) return overdue;
   if (!scope.onTurn) return fail(409, "Nejsi na tahu");
 
   const rejected = await db.prepare(
@@ -1565,8 +1587,9 @@ export async function counterTransferOffer(env: Bindings, actorTeamId: string, o
   const scope = await resolveOfferClubScope(db, actorTeamId, offer);
   if (!scope?.role) return fail(404, "Nabídka nenalezena");
   if (scope.buyerClubTeamId === "virtual_ai") return fail(400, "Virtuální klub o ceně nejedná, ber, nebo nech být");
+  const overdue = await overdueOfferFail(env, offerId, offer.expires_at);
+  if (overdue) return overdue;
   if (!scope.onTurn) return fail(409, "Nejsi na tahu");
-  if (offer.expires_at && new Date(offer.expires_at) < new Date()) return fail(410, "Nabídka vypršela");
   if (await areClubsLinked(db, scope.buyerClubTeamId, scope.sellerClubTeamId)) return fail(403, LINKED_CLUBS_ERRORS.transfer);
 
   // Podmínky protinávrhu: co strana neposlala, zůstává z aktuálního návrhu (starší klienti posílají jen částku).
@@ -1646,12 +1669,15 @@ export async function withdrawTransferOffer(
   const withdrawMessage = input.message ?? null;
   // Stáhnout/ukončit smí kupec i prodávající, pokud je jednání aktivní.
   const offer = await db.prepare(
-    `SELECT id, player_id, from_team_id, to_team_id, offer_amount, counter_amount, offer_type, status, last_action_by, virtual_team_data
+    `SELECT id, player_id, from_team_id, to_team_id, offer_amount, counter_amount, offer_type, status, last_action_by, virtual_team_data, expires_at
      FROM transfer_offers WHERE id = ? AND status IN ('pending','countered')`
   ).bind(offerId).first<OfferForReply>();
   if (!offer) return fail(409, "Jednání nelze ukončit (nejsi součástí nebo už je vyřešené)");
   const scope = await resolveOfferClubScope(db, actorTeamId, offer);
   if (!scope?.role) return fail(409, "Jednání nelze ukončit (nejsi součástí nebo už je vyřešené)");
+  // Po lhůtě nejde ani stáhnout: kdo mlčel, nevyhne se následkům tím, že jednání dodatečně ukončí.
+  const overdue = await overdueOfferFail(env, offerId, offer.expires_at);
+  if (overdue) return overdue;
 
   const result = await db.prepare(
     "UPDATE transfer_offers SET status = 'withdrawn', resolved_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ? AND status IN ('pending','countered')"

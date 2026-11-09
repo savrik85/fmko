@@ -5616,6 +5616,9 @@ gameRouter.get("/teams/:teamId/offers", async (c) => {
        json_extract(to2.virtual_team_data, '$.name'),
        CASE WHEN json_valid(to2.message) THEN json_extract(to2.message, '$.teamName') END,
        'Neznámý klub') ELSE t.name END`;
+  // Nabídka po lhůtě na odpověď mezi aktivní nepatří, i když ji tick ještě neuklidil
+  // (lhůta je v reálném čase, viz transfers/offer-deadline.ts).
+  const activeSince = new Date().toISOString();
   const incoming = await c.env.DB.prepare(
     `SELECT to2.*, p.first_name, p.last_name, p.age, p.position, p.overall_rating, p.avatar as player_avatar, p.skills as player_skills,
      ${virtualNameSql} as from_team_name, t.league_id as from_league_id,
@@ -5628,8 +5631,8 @@ gameRouter.get("/teams/:teamId/offers", async (c) => {
      CASE WHEN to2.from_team_id = 'virtual_ai' THEN 1 ELSE 0 END as is_virtual
      FROM transfer_offers to2 JOIN players p ON to2.player_id = p.id LEFT JOIN teams t ON to2.from_team_id = t.id
      WHERE to2.to_team_id IN (SELECT id FROM teams WHERE id = ? OR parent_team_id = ?)
-       AND to2.status IN ('pending','countered') ORDER BY to2.created_at DESC`
-  ).bind(clubTeamId, clubTeamId).all();
+       AND to2.status IN ('pending','countered') AND to2.expires_at > ? ORDER BY to2.created_at DESC`
+  ).bind(clubTeamId, clubTeamId, activeSince).all();
   const myTeam = await c.env.DB.prepare("SELECT league_id FROM teams WHERE id = ?").bind(clubTeamId).first<{ league_id: string }>();
   const outgoing = await c.env.DB.prepare(
     `SELECT to2.*, p.first_name, p.last_name, p.age, p.position, p.avatar as player_avatar, p.skills as player_skills,
@@ -5643,8 +5646,8 @@ gameRouter.get("/teams/:teamId/offers", async (c) => {
      COALESCE((SELECT COALESCE(la.parent_team_id, la.id) FROM teams la WHERE la.id = to2.last_action_by), to2.last_action_by) as last_action_club_id
      FROM transfer_offers to2 JOIN players p ON to2.player_id = p.id JOIN teams t ON to2.to_team_id = t.id
      WHERE to2.from_team_id IN (SELECT id FROM teams WHERE id = ? OR parent_team_id = ?)
-       AND to2.status IN ('pending','countered') ORDER BY to2.created_at DESC`
-  ).bind(clubTeamId, clubTeamId).all();
+       AND to2.status IN ('pending','countered') AND to2.expires_at > ? ORDER BY to2.created_at DESC`
+  ).bind(clubTeamId, clubTeamId, activeSince).all();
 
   // Historie — uzavrene offery (accepted, rejected, withdrawn, expired). Kam tym patril, ta role zustava.
   // LEFT JOIN kvůli virtuálním klubům; hráč může být po prodeji virtuálnímu klubu smazán → LEFT JOIN players + fallback.
