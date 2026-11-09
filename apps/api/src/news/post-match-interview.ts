@@ -558,8 +558,10 @@ export async function applyPostMatchInterviewEffects(
      ORDER BY created_at DESC LIMIT 1`
   ).bind(interview.team_id, interview.id).first<{ analysis: string }>()
     .catch((e) => { logger.warn({ module: M }, "předchozí analýza", e); return null; });
-  const opakovana = safeParse<{ rozhodci?: { postoj?: string } }>(predchozi?.analysis ?? null, {})
-    .rozhodci?.postoj === "kritika";
+  const previousStance = safeParse<{ rozhodci?: { postoj?: string } }>(predchozi?.analysis ?? null, {})
+    .rozhodci?.postoj;
+  const opakovana = previousStance === "kritika";
+  const repeatedDefense = previousStance === "obhajoba";
 
   // Sazbu pokuty za kritiku rozhodčího si odhlasovala soutěž. Bez samosprávy platí výchozí.
   const { resolveRules } = await import("../competition/rules");
@@ -569,7 +571,7 @@ export async function applyPostMatchInterviewEffects(
     .catch((e) => { logger.warn({ module: M }, "sezóna ligy pro sazebník pokut", e); return null; });
   const compRules = await resolveRules(db, interview.league_id, seasonRow?.n ?? null);
 
-  const eff = effectsFor(stance.postoj, stance.sila, opakovana, compRules.fine_referee_abuse);
+  const eff = effectsFor(stance.postoj, stance.sila, opakovana, compRules.fine_referee_abuse, repeatedDefense);
 
   // Pokuta: deterministická podle rozhovoru, aby opakované volání nedalo jinou částku.
   const rng = createRng(seedFromString(`fine-${interview.id}`));

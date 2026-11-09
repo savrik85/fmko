@@ -13,6 +13,7 @@ import { calculateStandings, type StandingEntry } from "../stats/standings";
 import { callGemini } from "./gemini-helper";
 import { toneLine, tonePromptRule, type AnswerTone } from "./answer-tone";
 import { logger } from "../lib/logger";
+import { DATA_BLOCK_RULE, dataBlock } from "./post-match-context";
 
 function wrapCalendarId(seasonNumber: number): string {
   return `season-${seasonNumber}-wrap`;
@@ -64,7 +65,8 @@ export async function generateSeasonInterviewArticle(
 ): Promise<{ headline: string; body: string } | null> {
   const qaPairs = qa.map((p, i) => {
     const ton = toneLine(tones[i]);
-    return `Otázka ${i + 1}: ${p.q}\n${ton ? `${ton}\n` : ""}Odpověď: ${p.a}`;
+    // Odpověď je text od hráče: ohraničit a očistit, ať v ní nejdou psát pokyny modelu.
+    return `Otázka ${i + 1}: ${p.q}\n${ton ? `${ton}\n` : ""}Odpověď:\n${dataBlock(`odpoved-${i + 1}`, p.a)}`;
   }).join("\n\n");
   const tonPravidlo = tonePromptRule(tones);
   const prompt = `Jsi redaktor Okresního zpravodaje. Dostal jsi přepis ohlédnutí trenéra ${managerName} (${teamName}) za ${seasonNumber}. sezónou. Sestav novinový článek — bilanci sezóny.
@@ -79,6 +81,7 @@ PRAVIDLA:
 - Tón: bulvárnější regionální zpravodaj s humorem, ohlédnutí za sezónou
 - Čeština, bez markdown
 - PRVNÍ řádek = titulek (max 80 znaků, bez prefixu). Od druhého řádku = tělo
+- ${DATA_BLOCK_RULE}
 
 ${tonPravidlo ? `${tonPravidlo}\n\n` : ""}PŘEPIS:
 ${qaPairs}`;
