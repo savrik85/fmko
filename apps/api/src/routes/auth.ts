@@ -91,7 +91,7 @@ async function getNextMatch(db: D1Database, teamId: string, leagueId: string, ga
 import { Hono } from "hono";
 import type { Bindings } from "../index";
 import { hashPassword, verifyPassword } from "../auth/password";
-import { createSession, getSession, deleteSession, getTokenFromRequest } from "../auth/session";
+import { createSession, getSession, deleteSession, deleteAllUserSessions, getTokenFromRequest } from "../auth/session";
 import { logger } from "../lib/logger";
 import {
   attemptKey, blockedForSeconds, clearAttempts, recordAttempt,
@@ -315,8 +315,11 @@ authRouter.post("/change-password", async (c) => {
   await c.env.DB.prepare("UPDATE users SET password_hash = ? WHERE id = ?")
     .bind(newHash, session.userId).run();
 
-  // Invalidovat aktuální session — uživatel se musí znovu přihlásit
-  const { deleteSession } = await import("../auth/session");
+  // Zneplatnit všechny relace uživatele, nejen tu aktuální: token, který někdo získal
+  // se starým heslem, by jinak platil dál až 90 dní. Uživatel se přihlásí znovu.
+  await deleteAllUserSessions(c.env.SESSION_KV, session.userId)
+    .catch((e) => logger.warn({ module: "auth" }, "delete all sessions after pw change", e));
+  // Aktuální zvlášť: session z doby před seznamem relací v něm být nemusí.
   await deleteSession(c.env.SESSION_KV, token).catch((e) => logger.warn({ module: "auth" }, "delete session after pw change", e));
 
   return c.json({ ok: true });
@@ -343,6 +346,10 @@ authRouter.post("/admin/change-password", async (c) => {
   const newHash = await hashPassword(body.newPassword);
   await c.env.DB.prepare("UPDATE users SET password_hash = ? WHERE id = ?")
     .bind(newHash, body.userId).run();
+
+  // Admin mění heslo typicky u ztraceného nebo napadeného účtu: staré relace musí skončit.
+  await deleteAllUserSessions(c.env.SESSION_KV, body.userId)
+    .catch((e) => logger.warn({ module: "auth" }, "delete all sessions after admin pw change", e));
 
   return c.json({ ok: true });
 });

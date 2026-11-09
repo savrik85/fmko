@@ -27,6 +27,21 @@ export interface Session {
   createdAt: string;
   /** Kdy se session naposledy prodloužila na plných 30 dní. Starší session ho nemají, pak platí createdAt. */
   renewedAt?: string;
+  /** Session má záznam v seznamu relací uživatele (`user-session:`). Starší ho dostanou při prodloužení. */
+  indexed?: boolean;
+}
+
+/**
+ * Seznam relací uživatele: jeden klíč na session, hledá se podle předpony. Čtení session
+ * tím nezdraží (žádný dotaz navíc), platí se jedním zápisem při přihlášení. Slouží ke
+ * zneplatnění všech relací po změně hesla.
+ */
+function userSessionKey(userId: string, token: string): string {
+  return `user-session:${userId}:${token}`;
+}
+
+async function indexSession(kv: KVNamespace, userId: string, token: string, ttlSeconds: number): Promise<void> {
+  await kv.put(userSessionKey(userId, token), "1", { expirationTtl: Math.max(MIN_KV_TTL_S, ttlSeconds) });
 }
 
 /**
@@ -62,10 +77,13 @@ export async function createSession(
     teamId,
     createdAt: now,
     renewedAt: now,
+    indexed: true,
   };
   await kv.put(`session:${token}`, JSON.stringify(session), {
     expirationTtl: SESSION_TTL,
   });
+  // Záznam žije tak dlouho, jak nejdéle může žít session (prodlužování do 90 dní).
+  await indexSession(kv, userId, token, SESSION_MAX_AGE_MS / 1000);
   return token;
 }
 
@@ -96,10 +114,14 @@ async function renewIfStale(kv: KVNamespace, token: string, session: Session): P
     // Session bez čitelného data vzniku začne počítat horní hranici odteď.
     createdAt: Number.isFinite(created) ? session.createdAt : new Date(now).toISOString(),
     renewedAt: new Date(now).toISOString(),
+    indexed: true,
   };
   try {
     // Odhlášená session se nesmí zápisem vrátit (souběh s odhlášením v jiné instanci).
     if (await kv.get(`revoked:${token}`)) return;
+    // Session z doby před seznamem relací se do něj zapíše při prvním prodloužení. Dřív než
+    // session sama: kdyby zápis seznamu selhal, příznak `indexed` se neuloží a zkusí se to zítra.
+    if (!session.indexed) await indexSession(kv, session.userId, token, remainingS);
     await kv.put(`session:${token}`, JSON.stringify(renewed), { expirationTtl: Math.min(SESSION_TTL, remainingS) });
   } catch (e) {
     // Prodloužení nesmí shodit požadavek, session platí dál s dosavadní lhůtou.
@@ -153,7 +175,38 @@ export async function deleteSession(
   // Záznam o odhlášení vydrží, dokud by session mohla žít. Prodloužení v jiné instanci
   // ho před zápisem zkontroluje.
   await kv.put(`revoked:${token}`, "1", { expirationTtl: SESSION_TTL });
+  // Odhlášená session nemá v seznamu relací uživatele co dělat. Úklid nesmí odhlášení shodit.
+  try {
+    const data = await kv.get(`session:${token}`);
+    if (data) await kv.delete(userSessionKey((JSON.parse(data) as Session).userId, token));
+  } catch (e) {
+    logger.warn({ module: "session" }, "úklid seznamu relací při odhlášení", e);
+  }
   await kv.delete(`session:${token}`);
+}
+
+/**
+ * Odhlásí uživatele ze všech zařízení: po změně hesla nesmí zůstat platný token,
+ * který někdo získal se starým heslem. Vrací počet zneplatněných relací.
+ *
+ * Session vzniklé před zavedením seznamu se do něj dostanou až při prvním
+ * prodloužení (do dne od použití); do té doby je tahle funkce nevidí.
+ */
+export async function deleteAllUserSessions(kv: KVNamespace, userId: string): Promise<number> {
+  const prefix = userSessionKey(userId, "");
+  let revoked = 0;
+  let cursor: string | undefined;
+  do {
+    const page = await kv.list({ prefix, cursor });
+    for (const key of page.keys) {
+      const token = key.name.slice(prefix.length);
+      await deleteSession(kv, token);
+      await kv.delete(key.name);
+      revoked++;
+    }
+    cursor = page.list_complete ? undefined : page.cursor;
+  } while (cursor);
+  return revoked;
 }
 
 /**
