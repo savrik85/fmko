@@ -17,7 +17,8 @@ import { backfillU21ForLeague, vygenerujDorostence } from "../league/u21-generat
 import { createSession } from "../auth/session";
 import { developmentRouter } from "../routes/development";
 import {
-  ROLLOVER_PHASES, beginRollover, rolloverAllLeagues, rolloverPhaseKey, runRolloverStep,
+  PHASE_INTERRUPTED, ROLLOVER_PHASES, beginRollover, resolveRolloverPhase, rolloverAllLeagues, rolloverPhaseKey,
+  runRolloverStep,
   type RolloverPhase,
 } from "./season-rollover";
 import { runEndSeasonStep } from "./end-season";
@@ -202,7 +203,7 @@ describe("rollover po fázích", () => {
     expect(await count(db, "SELECT COUNT(*) AS n FROM bet_odds WHERE season_number = 0")).toBe(1);
   }, 300_000);
 
-  it("fáze, která se přerušila uprostřed a nesmí běžet dvakrát, se znovu nepustí a rollover jde dál", async () => {
+  async function worldBeforeSponsors(): Promise<D1Database> {
     const { db } = await freshWorld();
     await db.prepare(
       `INSERT INTO sponsor_contracts (id, team_id, sponsor_name, sponsor_type, monthly_amount, seasons_total, seasons_remaining, status, category)
@@ -213,18 +214,102 @@ describe("rollover po fázích", () => {
       if ((await readProgress(db, rolloverPhaseKey("season_close", 1)))?.status === "done") break;
       await runRolloverStep(db, 1);
     }
+    return db;
+  }
+  const remainingSeasons = async (db: D1Database) =>
+    (await db.prepare("SELECT seasons_remaining AS n FROM sponsor_contracts WHERE id = 'contract-1'").first<{ n: number }>())?.n;
+
+  it("fáze nejvýš jednou, která se přerušila uprostřed, se sama nepustí ani neuzavře: rollover čeká na ruční rozhodnutí", async () => {
+    const db = await worldBeforeSponsors();
     // Předchozí invokace fázi sponzorů zabrala a spadla.
     await writeProgress(db, rolloverPhaseKey("sponsors", 1), "claimed");
 
     const interrupted = await runRolloverStep(db, 1);
     expect(interrupted.phase).toBe("sponsors");
     expect(interrupted.status).toBe("error");
-    expect(interrupted.detail).toContain("podruhé ji nepouštím");
-    expect((await db.prepare("SELECT seasons_remaining AS n FROM sponsor_contracts WHERE id = 'contract-1'").first<{ n: number }>())?.n).toBe(3);
+    expect(interrupted.detail).toContain("Čeká na ruční rozhodnutí");
+    expect(await remainingSeasons(db)).toBe(3);
+    expect((await readProgress(db, rolloverPhaseKey("sponsors", 1)))?.status).toBe(PHASE_INTERRUPTED);
 
+    // Další kroky stojí na téže fázi, nic se nepřeskočí.
+    const again = await runRolloverStep(db, 1);
+    expect(again).toMatchObject({ phase: "sponsors", status: "error", finished: false });
+    expect((await readProgress(db, rolloverPhaseKey("governance", 1)))?.status ?? null).toBeNull();
+
+    // Náhled rozhodnutí nic nemění.
+    const preview = await resolveRolloverPhase(db, 1, "sponsors", "skip", true);
+    expect(preview).toMatchObject({ waiting: true, changed: false, status: PHASE_INTERRUPTED, lastError: "invokace spadla uprostřed fáze" });
+    expect((await readProgress(db, rolloverPhaseKey("sponsors", 1)))?.status).toBe(PHASE_INTERRUPTED);
+
+    // skip: fáze se uzavře bez dokončení a rollover doběhne.
+    expect(await resolveRolloverPhase(db, 1, "sponsors", "skip", false)).toMatchObject({ changed: true, status: "done" });
     const rest = await runUntilFinished(db, 1);
-    expect(rest.some((s) => s.phase === "sponsors")).toBe(false);
-    expect(rest.filter((s) => s.status === "error")).toEqual([]);
+    expect(rest.some((step) => step.phase === "sponsors")).toBe(false);
+    expect(rest.filter((step) => step.status === "error")).toEqual([]);
+    expect(await remainingSeasons(db)).toBe(3);
+  }, 300_000);
+
+  it("chyba uvnitř fáze sponzorů propadne, uloží se a po opravě ji retry dokončí bez dvojího odečtu", async () => {
+    const db = await worldBeforeSponsors();
+    // Odečet sezóny ze smluv spadne (zámek, limit dotazů): spoušť ho shodí.
+    await db.prepare(
+      `CREATE TRIGGER block_sponsor_decrement BEFORE UPDATE OF seasons_remaining ON sponsor_contracts
+       BEGIN SELECT RAISE(ABORT, 'databáze je dočasně nedostupná'); END`,
+    ).run();
+
+    const failed = await runRolloverStep(db, 1);
+    expect(failed).toMatchObject({ phase: "sponsors", status: "error" });
+    expect(failed.detail).toContain("odečet a expirace smluv");
+    expect(failed.detail).toContain("Čeká na ruční rozhodnutí");
+    expect(await remainingSeasons(db)).toBe(3);
+    const state = await resolveRolloverPhase(db, 1, "sponsors", null, true);
+    expect(state).toMatchObject({ waiting: true, status: PHASE_INTERRUPTED });
+    expect(state.lastError).toContain("odečet a expirace smluv");
+    // Bez rozhodnutí se fáze nespustí, ani když už je chyba pryč.
+    await db.prepare("DROP TRIGGER block_sponsor_decrement").run();
+    expect((await runRolloverStep(db, 1)).status).toBe("error");
+    expect(await remainingSeasons(db)).toBe(3);
+
+    await resolveRolloverPhase(db, 1, "sponsors", "retry", false);
+    const retried = await runRolloverStep(db, 1);
+    expect(retried).toMatchObject({ phase: "sponsors", status: "done" });
+    expect(await remainingSeasons(db)).toBe(2);
+
+    // Druhé retry už nemá o čem rozhodovat a odečet se nezopakuje, ani kdyby fáze běžela znovu.
+    expect(await resolveRolloverPhase(db, 1, "sponsors", "retry", false)).toMatchObject({ waiting: false, changed: false });
+    await writeProgress(db, rolloverPhaseKey("sponsors", 1), "pending");
+    expect((await runRolloverStep(db, 1)).status).toBe("done");
+    expect(await remainingSeasons(db)).toBe(2);
+    expect(await count(db, "SELECT COUNT(*) AS n FROM season_end_progress WHERE phase = 'rollover_part:sponsors:partnerships'")).toBe(1);
+  }, 300_000);
+
+  it("sázky: tiket zrušený minulým pokusem bez vráceného vkladu se doplatí, podruhé už ne", async () => {
+    const db = await worldBeforeSponsors();
+    const anchor = JSON.parse((await readProgress(db, { leagueId: "__global__", seasonNumber: 1, phase: "rollover" }))!.cursor!) as { start: string };
+    const ticket = db.prepare(
+      `INSERT INTO bet_tickets (id, team_id, league_id, season_number, calendar_id, stake, total_odds_x100, potential_payout, status, placed_game_date, settled_game_date)
+       VALUES (?, 'team-human-1', ?, 1, 'cal-x', ?, 200, 400, ?, '2026-10-10', ?)`,
+    );
+    await db.batch([
+      ticket.bind("ticket-open", LEAGUE, 100, "open", null),
+      // Minulý pokus tiket zrušil a spadl dřív, než vrátil vklad.
+      ticket.bind("ticket-void", LEAGUE, 250, "void", anchor.start),
+      db.prepare("UPDATE teams SET budget = 1000 WHERE id = 'team-human-1'"),
+    ]);
+    for (let i = 0; i < 6; i++) {
+      if ((await readProgress(db, rolloverPhaseKey("betting", 1)))?.status === "done") break;
+      const r = await runRolloverStep(db, 1);
+      expect(r.status).not.toBe("error");
+    }
+    const refunds = async () => count(db, "SELECT COUNT(*) AS n FROM transactions WHERE reference_id IN ('bet-payout-ticket-open', 'bet-payout-ticket-void')");
+    expect(await refunds()).toBe(2);
+    expect((await db.prepare("SELECT budget FROM teams WHERE id = 'team-human-1'").first<{ budget: number }>())?.budget).toBe(1350);
+    expect(await count(db, "SELECT COUNT(*) AS n FROM bet_tickets WHERE status = 'void' AND id LIKE 'ticket-%'")).toBe(2);
+
+    // Opakování fáze nic nezdvojí.
+    await writeProgress(db, rolloverPhaseKey("betting", 1), "pending");
+    expect((await runRolloverStep(db, 1)).status).toBe("done");
+    expect(await refunds()).toBe(2);
   }, 300_000);
 
   it("rozběhnutý rollover dokončí konec sezóny, i když už je aktivní nová sezóna", async () => {

@@ -19,6 +19,11 @@
  * Opakování: fáze jsou idempotentní (guard, INSERT OR IGNORE, markery uvnitř), nevratné
  * kroky mají zvláštní ochranu: stárnutí dorostu jde s markerem v jedné transakci, dospívání
  * zapisuje kurzor před zápisem dorostu a sponzoři s volbami běží nejvýš jednou (AT_MOST_ONCE).
+ *
+ * CHYBY SE NEPOLYKAJÍ. Fáze, která vyhodí chybu, zůstane nedokončená, chyba se uloží
+ * (`phaseErrorKey`) a další krok fázi zopakuje. Fáze „nejvýš jednou", která spadla nebo se
+ * přerušila, se sama neopakuje ani nepřeskakuje: zůstane ve stavu `interrupted`, rollover
+ * na ní stojí a čeká na ruční rozhodnutí (`resolveRolloverPhase`, POST /api/admin/rollover-phase).
  */
 
 import { alcoholAgingSql } from "../generators/alcohol-age";
@@ -65,6 +70,8 @@ export function smlouvyVyprsely(pocet: number): string {
  */
 export async function rolloverSponsorPromises(
   db: D1Database, oldSeasonNumber: number, startIso: string,
+  /** Sem se zapíšou části, které selhaly. Fáze sponzorů pak neskončí jako hotová. */
+  failures: string[] = [],
 ): Promise<Array<{ team_id: string; sponsor_id: number }>> {
   const promiseDay = startIso.slice(0, 10);
   let terminatedSponsors: Array<{ team_id: string; sponsor_id: number }> = [];
@@ -78,18 +85,21 @@ export async function rolloverSponsorPromises(
     logger.info({ module: "season-rollover" }, `sliby sponzorům: ${r.resolved} vyhodnoceno, ${r.skipped} nejde vyhodnotit, ${r.terminated} výpovědí`);
   } catch (e) {
     logger.error({ module: "season-rollover" }, "vyhodnocení sezónních slibů sponzorům", e);
+    failures.push("vyhodnocení sezónních slibů");
   }
   try {
     const { shiftPromiseDeadlinesForRollover } = await import("../sponsors/promise-runs");
     await shiftPromiseDeadlinesForRollover(db, oldSeasonNumber, promiseDay);
   } catch (e) {
     logger.error({ module: "season-rollover" }, "posun termínů slibů sponzorům", e);
+    failures.push("posun termínů slibů");
   }
   try {
     const { resetSeasonBreaches } = await import("../sponsors/promise-runs");
     await resetSeasonBreaches(db);
   } catch (e) {
     logger.error({ module: "season-rollover" }, "vynulování porušení slibů za sezónu", e);
+    failures.push("vynulování porušení slibů");
   }
   return terminatedSponsors;
 }
@@ -129,10 +139,79 @@ export type RolloverPhase = (typeof ROLLOVER_PHASES)[number];
  * Fáze, které se nesmí pustit dvakrát a idempotentní bez migrace nejdou: odečet sezóny ze
  * sponzorských smluv s +5 náklonnosti majitelů, a nové vedení obcí se SMS. Před během se
  * zapíše „claimed". Najde-li další krok fázi rozběhnutou, předchozí invokace spadla
- * uprostřed a fáze se už znovu nepouští: chybějící SMS je menší škoda než dvakrát
- * odečtená smlouva. Admin to uvidí jako chybu kroku a v logu.
+ * uprostřed. Fáze se sama znovu nepustí, ale ani se neuzavře jako hotová: přejde do stavu
+ * `interrupted` a rollover na ní stojí, dokud admin nerozhodne (`resolveRolloverPhase`):
+ * `retry` ji pustí znovu, `skip` ji uzavře bez dokončení.
  */
 const AT_MOST_ONCE: ReadonlySet<RolloverPhase> = new Set<RolloverPhase>(["sponsors", "municipal_elections"]);
+
+/** Fáze „nejvýš jednou", která spadla nebo se přerušila a čeká na ruční rozhodnutí. */
+export const PHASE_INTERRUPTED = "interrupted";
+
+/** Kde je uložená poslední chyba fáze (stav `error`, kurzor = zpráva a čas). */
+export function phaseErrorKey(key: ProgressKey): ProgressKey {
+  return { ...key, phase: `${key.phase}:error` };
+}
+
+function errorText(e: unknown): string {
+  return (e instanceof Error ? e.message : String(e)).slice(0, 300);
+}
+
+async function savePhaseError(db: D1Database, key: ProgressKey, message: string): Promise<void> {
+  await writeProgress(db, phaseErrorKey(key), "error", JSON.stringify({ message, at: new Date().toISOString() }))
+    .catch((e) => logger.error({ module: M }, `chyba fáze ${key.phase} se neuložila`, e));
+}
+
+/**
+ * Zabere část fáze, která se smí provést nejvýš jednou (vlastní řádek v season_end_progress).
+ * Vrací false, když ji už zabral dřívější pokus. Díky tomu jde přerušená fáze sponzorů
+ * bezpečně pustit znovu: hotové části se neopakují.
+ */
+async function claimRolloverPart(db: D1Database, oldSeasonNumber: number, part: string): Promise<boolean> {
+  const res = await db.prepare(
+    `INSERT OR IGNORE INTO season_end_progress (league_id, season_number, phase, status, updated_at)
+     VALUES (?, ?, ?, 'done', strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`,
+  ).bind(ROLLOVER_KEY, oldSeasonNumber, `rollover_part:${part}`).run();
+  return (res.meta?.changes ?? 0) > 0;
+}
+
+export type RolloverPhaseAction = "retry" | "skip";
+
+export interface RolloverPhaseResolution {
+  phase: RolloverPhase;
+  status: string | null;
+  lastError: string | null;
+  /** Dá se o fázi rozhodnout (je přerušená nebo zabraná spadlým krokem)? */
+  waiting: boolean;
+  /** Co se stalo (nebo by se stalo při dryRun). */
+  action: RolloverPhaseAction | null;
+  changed: boolean;
+}
+
+/**
+ * Ruční rozhodnutí o přerušené fázi „nejvýš jednou". `retry` ji vrátí do stavu, kdy ji další
+ * krok rolloveru pustí znovu (sponzoři mají části jištěné vlastními značkami, volby proběhnou
+ * celé znovu). `skip` ji uzavře jako hotovou bez dokončení. S `dryRun` jen vrátí stav.
+ */
+export async function resolveRolloverPhase(
+  db: D1Database, oldSeasonNumber: number, phase: RolloverPhase, action: RolloverPhaseAction | null, dryRun: boolean,
+): Promise<RolloverPhaseResolution> {
+  const key = rolloverPhaseKey(phase, oldSeasonNumber);
+  const row = await readProgress(db, key);
+  const error = await readProgress(db, phaseErrorKey(key));
+  const lastError = error?.cursor ? parseCursor<{ message?: string }>(error.cursor, {}).message ?? null : null;
+  const waiting = AT_MOST_ONCE.has(phase) && (row?.status === PHASE_INTERRUPTED || row?.status === "claimed");
+  const result: RolloverPhaseResolution = { phase, status: row?.status ?? null, lastError, waiting, action, changed: false };
+  if (!waiting || !action || dryRun) return result;
+  if (action === "skip") {
+    await writeProgress(db, key, "done", JSON.stringify({ skippedByAdmin: true, at: new Date().toISOString() }));
+    logger.warn({ module: M }, `rollover sezóny ${oldSeasonNumber}: fáze ${phase} uzavřena adminem bez dokončení`);
+  } else {
+    await writeProgress(db, key, "pending", JSON.stringify({ retriedByAdmin: true, at: new Date().toISOString() }));
+    logger.warn({ module: M }, `rollover sezóny ${oldSeasonNumber}: fáze ${phase} se na pokyn admina pustí znovu`);
+  }
+  return { ...result, changed: true, status: action === "skip" ? "done" : "pending" };
+}
 
 /** Kolik dorostů projde jedna invokace dospívání. Zápisy hráčů jdou v dávce, na dorost ~10 dotazů. */
 export const YOUTH_MATURATION_CHUNK = 6;
@@ -265,20 +344,35 @@ async function runPhase(
   db: D1Database, ctx: RolloverContext, phase: RolloverPhase, key: ProgressKey, progress: ProgressRow | null,
 ): Promise<RolloverStepResult> {
   const base = { finished: false, phase, newSeasonNumber: ctx.newSeason };
-  if (AT_MOST_ONCE.has(phase)) {
-    if (progress?.status === "claimed") {
-      logger.error({ module: M }, `rollover sezóny ${ctx.oldSeason}: fáze ${phase} se přerušila uprostřed, znovu se nepouští`);
-      await writeProgress(db, key, "done", JSON.stringify({ interrupted: true }));
-      return { ...base, status: "error", detail: `${phase} se minule přerušila uprostřed, podruhé ji nepouštím, zkontroluj ji ručně` };
+  const atMostOnce = AT_MOST_ONCE.has(phase);
+  const manual = `Čeká na ruční rozhodnutí: POST /api/admin/rollover-phase?season=${ctx.oldSeason}&phase=${phase}&action=retry nebo action=skip`;
+  if (atMostOnce) {
+    if (progress?.status === "claimed" || progress?.status === PHASE_INTERRUPTED) {
+      if (progress.status === "claimed") {
+        // Předchozí invokace fázi zabrala a spadla dřív, než stihla cokoli ohlásit.
+        logger.error({ module: M }, `rollover sezóny ${ctx.oldSeason}: fáze ${phase} se přerušila uprostřed, znovu se sama nepouští`);
+        await savePhaseError(db, key, "invokace spadla uprostřed fáze");
+        await writeProgress(db, key, PHASE_INTERRUPTED, progress.cursor);
+      }
+      return { ...base, status: "error", detail: `${phase} se přerušila uprostřed a nesmí běžet dvakrát. ${manual}` };
     }
-    await writeProgress(db, key, "claimed");
+    await writeProgress(db, key, "claimed", progress?.cursor ?? null);
   }
   try {
     const outcome = await PHASE_RUNNERS[phase](db, ctx, key, progress);
     return { ...base, status: outcome.done ? "done" : "in_progress", detail: outcome.detail };
   } catch (e) {
+    const message = errorText(e);
     logger.error({ module: M }, `rollover sezóny ${ctx.oldSeason}: fáze ${phase} selhala`, e);
-    return { ...base, status: "error", detail: `${phase} selhala, další krok ji zopakuje` };
+    await savePhaseError(db, key, message);
+    if (atMostOnce) {
+      // Zápis stavu nesmí spadnout potichu: bez něj by fáze zůstala „claimed" a příští krok
+      // by ji vyhodnotil stejně (přerušená), takže se nic nezopakuje ani tak.
+      await writeProgress(db, key, PHASE_INTERRUPTED, progress?.cursor ?? null)
+        .catch((writeError) => logger.error({ module: M }, `stav přerušené fáze ${phase} se nezapsal`, writeError));
+      return { ...base, status: "error", detail: `${phase} selhala (${message}) a nesmí běžet dvakrát. ${manual}` };
+    }
+    return { ...base, status: "error", detail: `${phase} selhala (${message}), další krok ji zopakuje` };
   }
 }
 
@@ -416,82 +510,119 @@ async function rolloverSponsors(db: D1Database, ctx: RolloverContext): Promise<s
   const oldSeasonNumber = ctx.oldSeason;
   const newNum = ctx.newSeason;
   const startIso = ctx.startIso;
+  // Části, které selhaly. Fáze pak neskončí jako hotová a čeká na ruční rozhodnutí;
+  // hotové části mají vlastní značku a při opakování se už neprovedou.
+  const failures: string[] = [];
+  const claim = (part: string) => claimRolloverPart(db, oldSeasonNumber, `sponsors:${part}`);
 
   // 4a. Sliby sponzorům (etapa 3), posun termínů a vynulování porušení za sezónu.
-  const promiseTerminatedSponsors = await rolloverSponsorPromises(db, oldSeasonNumber, startIso);
-
-  // Hlavní smlouvy, které teď vyprší: jejich majitelé se v kroku 4b-sms rozloučí.
-  let expiringMain: Array<{ team_id: string; sponsor_id: number }> = [];
+  //     Opakování snese (vyřízený slib se podruhé nenárokuje, posun termínů má značku).
+  const promiseTerminatedSponsors = await rolloverSponsorPromises(db, oldSeasonNumber, startIso, failures);
 
   // 4b. Sponzorské smlouvy: nová sezóna = o sezónu méně platnosti; na nule smlouva vyprší.
   //     Nabídky se generují per sezóna (seed obsahuje číslo sezóny) a škálují s reputací,
   //     takže expirovaný tým si hned může podepsat novou za aktualizovaných podmínek.
+  const contractsKey: ProgressKey = { leagueId: ROLLOVER_KEY, seasonNumber: oldSeasonNumber, phase: "rollover_part:sponsors:contracts" };
+  interface ContractsOutcome {
+    /** Vypršelé smlouvy lidských klubů (pro SMS sportovního ředitele). */
+    expiring: Array<{ team_id: string; sponsor_name: string }>;
+    /** Vypršelé hlavní smlouvy: jejich majitelé se v kroku 4b-sms rozloučí. */
+    expiringMain: Array<{ team_id: string; sponsor_id: number }>;
+    priorityLosses: Array<{ teamId: string; sponsorName: string; winnerTeamName: string }>;
+  }
+  let contracts: ContractsOutcome | null = null;
   try {
-    const expiring = await db.prepare(
-      `SELECT sc.team_id, sc.sponsor_name FROM sponsor_contracts sc
-       JOIN teams t ON t.id = sc.team_id
-       WHERE sc.status = 'active' AND sc.seasons_remaining <= 1 AND t.user_id != 'ai'`,
-    ).all<{ team_id: string; sponsor_name: string }>()
-      .catch((e) => { logger.warn({ module: M }, "load expiring sponsors", e); return { results: [] as Array<{ team_id: string; sponsor_name: string }> }; });
+    const done = await readProgress(db, contractsKey);
+    if (done?.status === "done") {
+      // Odečet už proběhl v dřívějším pokusu: kdo vypršel, je uložené u značky. Znovu se to
+      // z tabulky zjistit nedá, po odečtu by „zbývá nejvýš 1 sezóna" ukazovalo na příští rok.
+      contracts = parseCursor<ContractsOutcome>(done.cursor, { expiring: [], expiringMain: [], priorityLosses: [] });
+    } else {
+      const expiring = (await db.prepare(
+        `SELECT sc.team_id, sc.sponsor_name FROM sponsor_contracts sc
+         JOIN teams t ON t.id = sc.team_id
+         WHERE sc.status = 'active' AND sc.seasons_remaining <= 1 AND t.user_id != 'ai'`,
+      ).all<{ team_id: string; sponsor_name: string }>()).results;
 
-    // Sezóna spolupráce s hlavním sponzorem zvedne náklonnost jeho majitele (+5).
-    const { rewardSeasonPartnerships } = await import("../sponsors/hooks");
-    await rewardSeasonPartnerships(db)
-      .catch((e) => { logger.error({ module: M }, "náklonnost za sezónu spolupráce", e); });
+      // Sezóna spolupráce s hlavním sponzorem zvedne náklonnost jeho majitele (+5). Nejvýš jednou.
+      if (await claim("partnerships")) {
+        const { rewardSeasonPartnerships } = await import("../sponsors/hooks");
+        await rewardSeasonPartnerships(db)
+          .catch((e) => { logger.error({ module: M }, "náklonnost za sezónu spolupráce", e); failures.push("náklonnost za sezónu spolupráce"); });
+      }
 
-    // Hlavní sponzor je exkluzivní — kdo má u končícího sponzora přednost, se určí před expirací.
-    const { assignMainPriorities } = await import("../sponsors/exclusivity");
-    const priorityLosses = await assignMainPriorities(db, newNum)
-      .catch((e) => { logger.error({ module: M }, "přednost hlavních sponzorů", e); return []; });
+      // Hlavní sponzor je exkluzivní — kdo má u končícího sponzora přednost, se určí před expirací.
+      const { assignMainPriorities } = await import("../sponsors/exclusivity");
+      const priorityLosses = await assignMainPriorities(db, newNum)
+        .catch((e) => { logger.error({ module: M }, "přednost hlavních sponzorů", e); failures.push("přednost hlavních sponzorů"); return []; });
 
-    // Kandidáti na rozloučení se zjistí PŘED oběma UPDATE, ale do `expiringMain` (co skutečně
-    // spustí SMS „main_lost" v kroku 4b-sms) se přiřadí až PO obou — jinak by pád mezi
-    // decrementem a expirací nechal SMS odejít i za smlouvu, která ve skutečnosti nevypršela.
-    const expiringMainCandidates = (await db.prepare(
-      `SELECT sc.team_id, sc.sponsor_id FROM sponsor_contracts sc JOIN teams t ON t.id = sc.team_id
-       WHERE sc.status = 'active' AND sc.seasons_remaining <= 1 AND COALESCE(sc.category, 'main') = 'main'
-         AND sc.sponsor_id IS NOT NULL AND t.user_id != 'ai'`,
-    ).all<{ team_id: string; sponsor_id: number }>()
-      .catch((e) => { logger.warn({ module: M }, "vypršelé hlavní smlouvy pro SMS", e); return { results: [] as Array<{ team_id: string; sponsor_id: number }> }; })).results;
+      const expiringMain = (await db.prepare(
+        `SELECT sc.team_id, sc.sponsor_id FROM sponsor_contracts sc JOIN teams t ON t.id = sc.team_id
+         WHERE sc.status = 'active' AND sc.seasons_remaining <= 1 AND COALESCE(sc.category, 'main') = 'main'
+           AND sc.sponsor_id IS NOT NULL AND t.user_id != 'ai'`,
+      ).all<{ team_id: string; sponsor_id: number }>()).results;
 
-    // Odečet a expirace jednou dávkou (D1 batch = transakce): buď obojí, nebo nic.
-    await db.batch([
-      db.prepare("UPDATE sponsor_contracts SET seasons_remaining = seasons_remaining - 1 WHERE status = 'active'"),
-      db.prepare("UPDATE sponsor_contracts SET status = 'expired' WHERE status = 'active' AND seasons_remaining <= 0"),
-    ]);
-    expiringMain = expiringMainCandidates;
-
-    // Jedna zpráva na klub, ne na smlouvu. Klub se sedmi sponzory dostal sedm SMS
-    // během dvou sekund a všechny říkaly totéž — jdi na Sponzory.
-    const namesByTeam = new Map<string, string[]>();
-    for (const row of expiring.results) {
-      const names = namesByTeam.get(row.team_id) ?? [];
-      names.push(row.sponsor_name);
-      namesByTeam.set(row.team_id, names);
+      const outcome: ContractsOutcome = {
+        expiring, expiringMain,
+        priorityLosses: priorityLosses.map((l) => ({ teamId: l.teamId, sponsorName: l.sponsorName, winnerTeamName: l.winnerTeamName })),
+      };
+      // Odečet, expirace i značka jednou dávkou (D1 batch = transakce): buď všechno, nebo nic.
+      // Odečet se navíc sám zastaví o hotovou značku, takže se nezopakuje ani při souběhu.
+      await db.batch([
+        db.prepare(
+          `UPDATE sponsor_contracts SET seasons_remaining = seasons_remaining - 1
+            WHERE status = 'active'
+              AND NOT EXISTS (SELECT 1 FROM season_end_progress
+                               WHERE league_id = ? AND season_number = ? AND phase = ? AND status = 'done')`,
+        ).bind(contractsKey.leagueId, contractsKey.seasonNumber, contractsKey.phase),
+        db.prepare("UPDATE sponsor_contracts SET status = 'expired' WHERE status = 'active' AND seasons_remaining <= 0"),
+        progressStatement(db, contractsKey, "done", JSON.stringify(outcome)),
+      ]);
+      contracts = outcome;
+      logger.info({ module: M }, `sponzorské smlouvy: -1 sezóna, ${expiring.length} expirací u lidských týmů`);
     }
-    const priorityLossByTeam = new Map(priorityLosses.map((l) => [l.teamId, l]));
-    const { sendSystemSMS } = await import("../lib/sms");
-    for (const [teamId, names] of namesByTeam) {
-      const who = names.length === 1
-        ? `Smlouva s ${names[0]} vypršela`
-        : `${smlouvyVyprsely(names.length)}: ${names.join(", ")}`;
-      const loss = priorityLossByTeam.get(teamId);
-      const priorityNote = loss
-        ? ` ${loss.sponsorName} dal přednost klubu ${loss.winnerTeamName}, u nás už pokračovat nebude.`
-        : "";
-      await sendSystemSMS(db, teamId, "Sportovní ředitel", "Sportovní ředitel",
-        `📋 ${who} s koncem sezóny.${priorityNote} Mrkni na Sponzory, s firmami z okresu teď jednáš o nové smlouvě.`,
-      );
-    }
-    logger.info({ module: M }, `sponzorské smlouvy: -1 sezóna, ${expiring.results.length} expirací u lidských týmů`);
   } catch (e) {
     logger.error({ module: M }, "sponsor contracts rollover", e);
+    failures.push("odečet a expirace smluv");
+  }
+
+  // Jedna zpráva na klub, ne na smlouvu. Klub se sedmi sponzory dostal sedm SMS
+  // během dvou sekund a všechny říkaly totéž — jdi na Sponzory. Nejvýš jednou.
+  if (contracts) {
+    try {
+      if (await claim("expiry_sms")) {
+        const namesByTeam = new Map<string, string[]>();
+        for (const row of contracts.expiring) {
+          const names = namesByTeam.get(row.team_id) ?? [];
+          names.push(row.sponsor_name);
+          namesByTeam.set(row.team_id, names);
+        }
+        const priorityLossByTeam = new Map(contracts.priorityLosses.map((l) => [l.teamId, l]));
+        const { sendSystemSMS } = await import("../lib/sms");
+        for (const [teamId, names] of namesByTeam) {
+          const who = names.length === 1
+            ? `Smlouva s ${names[0]} vypršela`
+            : `${smlouvyVyprsely(names.length)}: ${names.join(", ")}`;
+          const loss = priorityLossByTeam.get(teamId);
+          const priorityNote = loss
+            ? ` ${loss.sponsorName} dal přednost klubu ${loss.winnerTeamName}, u nás už pokračovat nebude.`
+            : "";
+          await sendSystemSMS(db, teamId, "Sportovní ředitel", "Sportovní ředitel",
+            `📋 ${who} s koncem sezóny.${priorityNote} Mrkni na Sponzory, s firmami z okresu teď jednáš o nové smlouvě.`,
+          );
+        }
+      }
+    } catch (e) {
+      logger.error({ module: M }, "SMS o vypršelých smlouvách", e);
+      failures.push("SMS o vypršelých smlouvách");
+    }
   }
 
   // 4b-sms. SMS od majitelů firem. Herní čas se právě vrátil na reálné datum, lhůty
   // ze staré osy by nikdy nevypršely, proto se otevřená vlákna nejdřív tiše zavřou.
   // Pak poděkování nebo stížnost za sezónu a rozloučení majitelů vypršelých hlavních
   // smluv. Doručí je denní tick (nejvýš jedna SMS denně na klub).
+  const expiringMain = contracts?.expiringMain ?? [];
   try {
     const { closeOwnerSmsForRollover } = await import("../sponsors/owner-sms");
     const { enqueueMainSponsorSms, enqueueSeasonEndSms } = await import("../sponsors/owner-sms-triggers");
@@ -499,20 +630,27 @@ async function rolloverSponsors(db: D1Database, ctx: RolloverContext): Promise<s
     // Běží první, aby je nezablokovala chyba v úklidu SMS.
     const { closeNegotiationsForRollover } = await import("../sponsors/negotiation-db");
     await closeNegotiationsForRollover(db)
-      .catch((e) => { logger.error({ module: M }, "uzavření jednání se sponzory", e); });
-    await closeOwnerSmsForRollover(db);
-    const day = startIso.slice(0, 10);
-    // Sponzoři, kteří smlouvu vypověděli za nesplněné sliby (4a), se s verdiktem sezóny
-    // nesmí míchat stejně jako vypršelé hlavní smlouvy — vlastní SMS o výpovědi šla dřív.
-    const seasonSms = await enqueueSeasonEndSms(db, oldSeasonNumber, day, [...expiringMain, ...promiseTerminatedSponsors]);
-    for (const m of expiringMain) {
-      await enqueueMainSponsorSms(db, m.team_id, m.sponsor_id, "main_lost",
-        `main-expired:${m.team_id}:${m.sponsor_id}:s${oldSeasonNumber}`, { day });
+      .catch((e) => { logger.error({ module: M }, "uzavření jednání se sponzory", e); failures.push("uzavření jednání se sponzory"); });
+    // Úklid vláken a fronta SMS nejvýš jednou: druhý průchod by zavřel i SMS, které
+    // první průchod právě zařadil. Bez odečtu smluv se SMS neřadí, nevědělo by se, kdo končí.
+    if (contracts && await claim("owner_sms")) {
+      await closeOwnerSmsForRollover(db);
+      const day = startIso.slice(0, 10);
+      // Sponzoři, kteří smlouvu vypověděli za nesplněné sliby (4a), se s verdiktem sezóny
+      // nesmí míchat stejně jako vypršelé hlavní smlouvy — vlastní SMS o výpovědi šla dřív.
+      const seasonSms = await enqueueSeasonEndSms(db, oldSeasonNumber, day, [...expiringMain, ...promiseTerminatedSponsors]);
+      for (const m of expiringMain) {
+        await enqueueMainSponsorSms(db, m.team_id, m.sponsor_id, "main_lost",
+          `main-expired:${m.team_id}:${m.sponsor_id}:s${oldSeasonNumber}`, { day });
+      }
+      logger.info({ module: M }, `SMS majitelů: ${seasonSms} ke konci sezóny, ${expiringMain.length} rozloučení`);
     }
-    logger.info({ module: M }, `SMS majitelů: ${seasonSms} ke konci sezóny, ${expiringMain.length} rozloučení`);
   } catch (e) {
     logger.error({ module: M }, "SMS od majitelů firem", e);
+    failures.push("SMS od majitelů firem");
   }
+
+  if (failures.length > 0) throw new Error(`sponzoři: selhalo ${failures.join(", ")}`);
   return `sponzoři: ${expiringMain.length} vypršelých hlavních smluv`;
 }
 
@@ -523,18 +661,18 @@ async function rolloverSponsors(db: D1Database, ctx: RolloverContext): Promise<s
  * liga, INSERT OR IGNORE sazebníku, UNIQUE reference_id v pokladně).
  */
 async function rolloverGovernance(db: D1Database, ctx: RolloverContext): Promise<string> {
-  try {
-    const { applyGovernanceRollover } = await import("../competition/rollover");
-    const g = await applyGovernanceRollover(db, ctx.newSeason, ctx.startIso);
-    if (g.leagues > 0) {
-      logger.info({ module: M },
-        `samospráva: ${g.leagues} soutěží, ${g.enabled} zapnuto, ${g.disabled} vypnuto, startovné od ${g.feesCollected} klubů`);
-    }
-    return `samospráva: ${g.leagues} soutěží`;
-  } catch (e) {
-    logger.error({ module: M }, "rollover samosprávy soutěží selhal", e);
-    return "samospráva selhala, viz log";
+  // Chyba propadne: fáze zůstane nedokončená a další krok ji zopakuje (je idempotentní).
+  // Dřív se chyba spolkla a fáze se zapsala jako hotová, sazebník nové sezóny pak chyběl.
+  const { applyGovernanceRollover } = await import("../competition/rollover");
+  const g = await applyGovernanceRollover(db, ctx.newSeason, ctx.startIso);
+  if (g.leagues > 0) {
+    logger.info({ module: M },
+      `samospráva: ${g.leagues} soutěží, ${g.enabled} zapnuto, ${g.disabled} vypnuto, startovné od ${g.feesCollected} klubů`);
   }
+  // Soutěž, která selhala, nemá marker. Fáze proto nesmí skončit jako hotová: další krok
+  // projde jen soutěže bez markeru.
+  if (g.failed.length > 0) throw new Error(`samospráva selhala u soutěží: ${g.failed.join(", ")}`);
+  return `samospráva: ${g.leagues} soutěží`;
 }
 
 /**
@@ -543,36 +681,36 @@ async function rolloverGovernance(db: D1Database, ctx: RolloverContext): Promise
  * nevrací, ten obrat proběhl. Idempotence stojí na UPDATE ... WHERE status = 'open'.
  */
 async function rolloverBetting(db: D1Database, ctx: RolloverContext): Promise<string> {
+  // Chyba propadne a další krok fázi zopakuje. Aby opakování nic neztratilo ani nezdvojilo,
+  // berou se i tikety, které minulý pokus stihl zrušit, ale vklad už nevrátil (pád mezi
+  // zrušením a vrácením): poznají se podle chybějící transakce s referencí tiketu.
   let refunded = 0;
-  try {
-    const openTickets = await db.prepare(
-      `SELECT id, team_id, stake FROM bet_tickets WHERE status = 'open' AND season_number < ?`
-    ).bind(ctx.newSeason).all<{ id: string; team_id: string; stake: number }>();
+  const pending = await db.prepare(
+    `SELECT bt.id, bt.team_id, bt.stake FROM bet_tickets bt
+      WHERE bt.season_number < ?
+        AND (bt.status = 'open' OR (bt.status = 'void' AND bt.settled_game_date = ?))
+        AND NOT EXISTS (SELECT 1 FROM transactions tx WHERE tx.reference_id = 'bet-payout-' || bt.id)`,
+  ).bind(ctx.newSeason, ctx.startIso).all<{ id: string; team_id: string; stake: number }>();
 
-    if (openTickets.results.length > 0) {
-      const { recordTransaction } = await import("./finance-processor");
-      for (const t of openTickets.results) {
-        const gate = await db.prepare(
-          `UPDATE bet_tickets SET status = 'void', payout = stake,
-                  settled_game_date = ?, settled_at = strftime('%Y-%m-%dT%H:%M:%SZ','now')
-            WHERE id = ? AND status = 'open'`
-        ).bind(ctx.startIso, t.id).run();
-        if ((gate.meta?.changes ?? 0) === 0) continue;
-
-        await recordTransaction(db, t.team_id, "bet_refund", t.stake,
-          "Vrácený vklad, konec sezóny", ctx.startIso, `bet-payout-${t.id}`);
-        refunded++;
-      }
-      if (refunded > 0) {
-        logger.info({ module: "betting" }, `rollover: zrušeno ${refunded} otevřených tiketů, vklady vráceny`);
-      }
+  if (pending.results.length > 0) {
+    const { recordTransaction } = await import("./finance-processor");
+    for (const t of pending.results) {
+      await db.prepare(
+        `UPDATE bet_tickets SET status = 'void', payout = stake,
+                settled_game_date = ?, settled_at = strftime('%Y-%m-%dT%H:%M:%SZ','now')
+          WHERE id = ? AND status = 'open'`,
+      ).bind(ctx.startIso, t.id).run();
+      await recordTransaction(db, t.team_id, "bet_refund", t.stake,
+        "Vrácený vklad, konec sezóny", ctx.startIso, `bet-payout-${t.id}`);
+      refunded++;
     }
+    logger.info({ module: "betting" }, `rollover: zrušeno ${refunded} otevřených tiketů, vklady vráceny`);
+  }
 
-    // Kurzy se nemažou vůbec (uživatel 26. 10.: ukládat historii kurzů). Hlídač kurzů
-    // (calibration.ts) i přeměření modelu potřebují kurzy odehraných zápasů napříč koly
-    // a sezónami; zápasy starších sezón v DB zůstávají, tak ať je s čím je porovnat.
-    // Dřív se tu mazaly kurzy starších sezón a sezóna 2 tím o kurzy přišla.
-  } catch (e) { logger.error({ module: "betting" }, "úklid sázek při rolloveru selhal", e); }
+  // Kurzy se nemažou vůbec (uživatel 26. 10.: ukládat historii kurzů). Hlídač kurzů
+  // (calibration.ts) i přeměření modelu potřebují kurzy odehraných zápasů napříč koly
+  // a sezónami; zápasy starších sezón v DB zůstávají, tak ať je s čím je porovnat.
+  // Dřív se tu mazaly kurzy starších sezón a sezóna 2 tím o kurzy přišla.
   return `sázky: vráceno ${refunded} tiketů`;
 }
 
@@ -717,15 +855,12 @@ async function clearYouthFlags(db: D1Database): Promise<string> {
  * vedení znovu a poslaly druhou SMS.
  */
 async function holdElections(db: D1Database): Promise<string> {
-  try {
-    const { holdMunicipalElections } = await import("../villages/municipal-elections");
-    const r = await holdMunicipalElections(db);
-    logger.info({ module: M }, `komunální volby: ${r.villagesProcessed} obcí, ${r.teamsNotified} klubům SMS`);
-    return `komunální volby: ${r.villagesProcessed} obcí`;
-  } catch (e) {
-    logger.error({ module: M }, "komunální volby selhaly", e);
-    return "komunální volby selhaly, viz log";
-  }
+  // Chyba propadne: fáze je „nejvýš jednou", takže zůstane přerušená a čeká na ruční
+  // rozhodnutí. Dřív se chyba spolkla a volby se zapsaly jako hotové.
+  const { holdMunicipalElections } = await import("../villages/municipal-elections");
+  const r = await holdMunicipalElections(db);
+  logger.info({ module: M }, `komunální volby: ${r.villagesProcessed} obcí, ${r.teamsNotified} klubům SMS`);
+  return `komunální volby: ${r.villagesProcessed} obcí`;
 }
 
 async function rolloverLeagueCalendar(

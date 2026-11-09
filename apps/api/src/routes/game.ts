@@ -7108,6 +7108,27 @@ gameRouter.post("/game/delegate-referees", async (c) => {
   return c.json({ ok: true, delegated, calendars: cals?.results.length ?? 0, gameDate: gd.d });
 });
 
+// POST /api/admin/rollover-phase?season=N&phase=sponsors|municipal_elections&action=retry|skip
+// Ruční rozhodnutí o fázi rolloveru „nejvýš jednou“, která spadla nebo se přerušila a rollover
+// na ní stojí. retry = další krok ji pustí znovu, skip = uzavře ji bez dokončení.
+// ?dryRun=1 (výchozí) jen vrátí stav fáze a poslední chybu; ?dryRun=0 rozhodnutí zapíše.
+gameRouter.post("/admin/rollover-phase", async (c) => {
+  const season = Number(c.req.query("season"));
+  const phase = c.req.query("phase") ?? "";
+  const action = c.req.query("action") ?? null;
+  const { ROLLOVER_PHASES, resolveRolloverPhase } = await import("../season/season-rollover");
+  if (!Number.isInteger(season) || season < 1) return c.json({ error: "Chybí číslo končící sezóny (season)." }, 400);
+  if (!(ROLLOVER_PHASES as readonly string[]).includes(phase)) return c.json({ error: `Neznámá fáze. Fáze: ${ROLLOVER_PHASES.join(", ")}` }, 400);
+  if (action !== null && action !== "retry" && action !== "skip") return c.json({ error: "action je retry nebo skip." }, 400);
+  try {
+    const dryRun = c.req.query("dryRun") !== "0";
+    return c.json({ dryRun, ...(await resolveRolloverPhase(c.env.DB, season, phase as (typeof ROLLOVER_PHASES)[number], action, dryRun)) });
+  } catch (e) {
+    logger.error({ module: "game.ts" }, "rozhodnutí o fázi rolloveru", e);
+    return c.json({ error: "Stav fáze se nepodařilo načíst nebo zapsat." }, 500);
+  }
+});
+
 // POST /api/admin/end-season?force=1 — GLOBÁLNÍ chunkovaná orchestrace konce sezóny.
 // Zakončí celý ročník napříč všemi senior ligami + založí nový globální ročník.
 // Volat OPAKOVANĚ dokud allDone=true (admin tlačítko / curl loop). Jedna jednotka práce/invokaci.

@@ -30,6 +30,8 @@ export interface GovernanceRolloverResult {
   enabled: number;
   disabled: number;
   feesCollected: number;
+  /** Soutěže, jejichž přechod selhal (marker nemají, další průchod je zkusí znovu). */
+  failed: string[];
 }
 
 /** Marker fáze v season_end_progress — stejný idiom jako u ostatních fází konce sezóny. */
@@ -58,7 +60,7 @@ async function setMarker(db: D1Database, leagueId: string, season: number): Prom
 export async function applyGovernanceRollover(
   db: D1Database, newSeason: number, startDate: string,
 ): Promise<GovernanceRolloverResult> {
-  const out: GovernanceRolloverResult = { leagues: 0, enabled: 0, disabled: 0, feesCollected: 0 };
+  const out: GovernanceRolloverResult = { leagues: 0, enabled: 0, disabled: 0, feesCollected: 0, failed: [] };
 
   // Kandidáti: seniorské soutěže, které samosprávu už mají, plus ty, co na práh nově dosáhly.
   // Přebor jde před III. třídou: sazebník okresu vzniká u řídící soutěže a nižší
@@ -81,8 +83,10 @@ export async function applyGovernanceRollover(
       await setMarker(db, league.id, newSeason);
     } catch (e) {
       // Jedna rozbitá soutěž nesmí shodit přechod ostatních; marker se nenastaví,
-      // takže se to při dalším průchodu zkusí znovu.
+      // takže se to při dalším průchodu zkusí znovu. Volající se o selhání musí dozvědět,
+      // jinak by fázi rolloveru uzavřel jako hotovou a další průchod by nikdy nepřišel.
       logger.error({ module: M }, `rollover samosprávy soutěže ${league.id} selhal`, e);
+      out.failed.push(league.id);
     }
   }
   return out;
