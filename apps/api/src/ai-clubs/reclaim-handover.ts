@@ -83,7 +83,9 @@ export function handoverMessage(s: Omit<HandoverSummary, "message">): string {
  */
 export async function handOverToOwner(env: Bindings, teamId: string, aiSince: string | null): Promise<HandoverSummary> {
   const db = env.DB;
-  const since = aiSince ?? "9999-12-31T00:00:00Z";
+  // Na celé sekundy dolů: smlouvy a pohyby na účtu mají čas bez milisekund (datetime('now')),
+  // záznam ze stejné sekundy jako převzetí by jinak ze souhrnu vypadl.
+  const since = aiSince ? `${aiSince.slice(0, 19)}Z` : "9999-12-31T00:00:00Z";
   const clubTeams = "(SELECT id FROM teams WHERE id = ?1 OR parent_team_id = ?1)";
   const safe = async <T>(what: string, run: () => Promise<T>, fallback: T): Promise<T> => {
     try {
