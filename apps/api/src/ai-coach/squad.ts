@@ -181,7 +181,9 @@ export function analyzeSquad(members: SquadMember[], profile: AiCoachProfile): S
     } else {
       if (seniorOwn.length - 1 + incoming.length < MIN_SENIOR_SQUAD) return "min_squad";
     }
-    if (seniorOwn.length - (m.isU21Roster ? 0 : 1) + incoming.length > MAX_SQUAD) return "squad_full";
+    // Strop soupisky hlídá jen výměnu, která by kádr nafoukla. Čistý prodej kádr zmenšuje:
+    // klub nad stropem jinak nemohl prodat nikoho a nikdy se pod strop nedostal.
+    if (incoming.length > 0 && seniorOwn.length - (m.isU21Roster ? 0 : 1) + incoming.length > MAX_SQUAD) return "squad_full";
     if (importanceOf(playerId) === "key") {
       // Opora jde jen s plánem náhrady: v klubu (i v dorostu nebo mezi hráči na výměnu)
       // musí být někdo na stejném postu, kdo za ni nebude o moc horší.
