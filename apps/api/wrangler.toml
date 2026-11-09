@@ -6,6 +6,12 @@ compatibility_flags = ["nodejs_compat"]
 [vars]
 VAPID_SUBJECT = "mailto:admin@prales.fun"
 
+# Workers Logs i na produkci: 2026-11-09 kolo v 18:00 spadlo uprostřed (3 běhy fronty
+# naráz zmizely bez chyby v queue_runs) a bez logů nešlo poznat, jestli šlo o paměť,
+# CPU, nebo restart. Konzumer fronty a crony `wrangler tail` nezachytí.
+[observability]
+enabled = true
+
 # ═══ PRODUCTION (default — main branch) ═══
 
 [[d1_databases]]

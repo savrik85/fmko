@@ -1304,7 +1304,8 @@ gameRouter.get("/teams/:teamId/news", async (c) => {
       id: m.id as string,
       type: "match",
       headline,
-      body: `${m.round ? m.round + ". kolo " : ""}${isHome ? "Domácí zápas" : "Venku"}. ${won ? "Fanoušci slaví!" : drew ? "Spravedlivá dělba bodů." : "Příště to bude lepší."}`,
+      // Nesmí začínat číslem: Zpravodaj z prvního znaku dělá velké písmeno a z „5.“ vzniklo „5.“ přes celý řádek.
+      body: `${isHome ? "Domácí zápas" : "Zápas venku"}${m.round ? ` ${m.round}. kola` : ""}. ${won ? "Fanoušci slaví!" : drew ? "Spravedlivá dělba bodů." : "Příště to bude lepší."}`,
       icon,
       date: m.simulated_at as string ?? "",
     });

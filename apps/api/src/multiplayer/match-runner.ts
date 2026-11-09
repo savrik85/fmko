@@ -41,6 +41,20 @@ export interface MatchRunResult {
  */
 export const STALE_ROUND_LOCK_MINUTES = 15;
 
+/**
+ * Puls kola: před každým zápasem se obnoví `locked_at`. Zápas trvá kolem minuty
+ * a půl, takže kolo s pulsem starším než tohle už nikdo nehraje (běh spadl)
+ * a opakovaná zpráva fronty ho smí dohrát.
+ */
+export const ROUND_HEARTBEAT_STALE_MINUTES = 6;
+
+/** Obnoví puls rozehraného kola. Chyba nevadí, nanejvýš se kolo převezme později. */
+export async function touchRoundLock(db: D1Database, calendarId: string, now: Date = new Date()): Promise<void> {
+    await db.prepare("UPDATE season_calendar SET locked_at = ? WHERE id = ? AND status = 'lineup_locked'")
+        .bind(now.toISOString(), calendarId).run()
+        .catch((e) => logger.warn({module: "match-runner"}, `puls kola ${calendarId}`, e));
+}
+
 export interface RecoveredRound {
     calendarId: string;
     leagueId: string;
@@ -167,6 +181,7 @@ export async function runScheduledMatches(
         const matchId = match.id as string;
         const homeTeamId = match.home_team_id as string;
         const awayTeamId = match.away_team_id as string;
+        await touchRoundLock(db, calendarId);
 
         try {
             // Ensure lineups exist — copy last saved lineup or auto-generate

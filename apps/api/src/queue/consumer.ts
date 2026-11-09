@@ -15,6 +15,11 @@ import { logger } from "../lib/logger";
 
 type AnyQueueMessage = MatchQueueMessage | ReportQueueMessage;
 
+/** Za kolik sekund zkusit znovu rozehrané kolo, které má ještě puls. */
+const BUSY_RETRY_SECONDS = 240;
+/** max_retries fronty kol je 3, doručení jsou 1 až 4. */
+const BUSY_MAX_ATTEMPTS = 4;
+
 export async function handleQueueBatch(
   batch: MessageBatch<AnyQueueMessage>,
   env: Bindings,
@@ -29,6 +34,13 @@ export async function handleQueueBatch(
     try {
       const outcome = await handleMessage(body, env);
       await recordRun(env, body, message.attempts, lagMs, Date.now() - startedAt, outcome);
+      // Rozehrané kolo s pulsem: buď ho pořád hraje jiný běh, nebo ten běh právě spadl.
+      // Za 4 minuty puls zestárne a další pokus kolo dohraje (claimStaleRound). Poslední
+      // pokus se jen potvrdí, ať zpráva nekončí v DLQ; zbytek dohraje pojistka v :20.
+      if (outcome.status === "busy" && message.attempts < BUSY_MAX_ATTEMPTS) {
+        message.retry({ delaySeconds: BUSY_RETRY_SECONDS });
+        continue;
+      }
       message.ack();
     } catch (e) {
       // retry() vrátí JEN tuhle zprávu; po vyčerpání max_retries spadne do DLQ.
