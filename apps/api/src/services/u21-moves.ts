@@ -19,7 +19,9 @@ export async function sendPlayerToU21(db: D1Database, teamId: string, playerId: 
   if (!player) return { ok: false, status: 404, error: "Hráč nenalezen" };
   if (player.team_id !== teamId) return { ok: false, status: 400, error: "Hráč nepatří k tomuto týmu" };
   if (player.age > 21) return { ok: false, status: 400, error: "Hráč je starší 21 let" };
-  if (player.loan_from_team_id) return { ok: false, status: 400, error: "Hostující hráč nemůže do U21" };
+  // Hostující hráč do U21 smí: hostování s tím počítá (stillOnLoan bere i U21 klubu,
+  // který si ho půjčil) a návrat i stažení ho vrátí odkudkoli. Zápasy U21 se ale do
+  // podmínky hraní nepočítají, ta hlídá áčko.
   if (player.next_match_return) return { ok: false, status: 400, error: "Hráč už čeká na návrat z U21" };
 
   const u21Team = await db.prepare(
