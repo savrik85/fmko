@@ -120,7 +120,8 @@ export async function runWatchdog(env: Bindings): Promise<WatchdogResult> {
   // ── 5. Opakované pokusy ──
   const retry = await scalar(
     env.DB,
-    "SELECT COUNT(*) AS n FROM queue_runs WHERE attempts > 1 AND created_at > datetime('now', '-1 day')",
+    // „busy“ není porucha: zpráva jen čeká, až běžící kolo doběhne (fronta ji vrací schválně).
+    "SELECT COUNT(*) AS n FROM queue_runs WHERE attempts > 1 AND status <> 'busy' AND created_at > datetime('now', '-1 day')",
     "retry za 24 h",
   );
   if (retry && retry > 0) {

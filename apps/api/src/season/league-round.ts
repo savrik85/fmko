@@ -1049,7 +1049,7 @@ async function cleanupMatchDayConversations(db: D1Database, calendarId: string):
   try {
     const matchConvs = await db
       .prepare(
-        "SELECT c.id FROM conversations c JOIN messages m ON m.conversation_id = c.id WHERE c.team_id IN (SELECT DISTINCT home_team_id FROM matches WHERE calendar_id = ? UNION SELECT DISTINCT away_team_id FROM matches WHERE calendar_id = ?) AND c.type = 'squad_group' AND c.title LIKE '⚽ vs %' AND m.metadata LIKE ?",
+        "SELECT DISTINCT c.id FROM conversations c JOIN messages m ON m.conversation_id = c.id WHERE c.team_id IN (SELECT DISTINCT home_team_id FROM matches WHERE calendar_id = ? UNION SELECT DISTINCT away_team_id FROM matches WHERE calendar_id = ?) AND c.type = 'squad_group' AND c.title LIKE '⚽ vs %' AND m.metadata LIKE ?",
       )
       .bind(calendarId, calendarId, `%${calendarId}%`)
       .all()
@@ -1057,6 +1057,8 @@ async function cleanupMatchDayConversations(db: D1Database, calendarId: string):
         logger.warn({ module: "league-round" }, "Failed to fetch match conversations for cleanup", e);
         return { results: [] };
       });
+    // DISTINCT: spojení přes zprávy vracelo chat jednou za každou jeho zprávu a úklid ho
+    // pak mazal desítkykrát (na produ 260 až 700 dotazů a 50 až 140 s na kolo).
     for (const conv of matchConvs.results) {
       await db.prepare("DELETE FROM messages WHERE conversation_id = ?").bind(conv.id).run()
         .catch((e) => logger.warn({ module: "league-round" }, "Failed to delete match messages", e));

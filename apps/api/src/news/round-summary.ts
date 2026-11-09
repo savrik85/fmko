@@ -9,7 +9,7 @@
  *   5. Insert do news + round_awards + push notifikace lidským týmům
  */
 
-import { GEMINI_TEXT_MODEL } from "./gemini-helper";
+import { GEMINI_TEXT_MODEL, DEFAULT_GEMINI_TIMEOUT_MS } from "./gemini-helper";
 import { calculateStandings } from "../stats/standings";
 import { logger } from "../lib/logger";
 
@@ -246,6 +246,7 @@ ${COACH_REPUTATION_RULE}
           responseMimeType: "application/json",
         },
       }),
+      signal: AbortSignal.timeout(DEFAULT_GEMINI_TIMEOUT_MS),
     },
   ).catch((e) => { logger.warn({ module: "round-summary" }, "gemini fetch failed", e); return null; });
 
