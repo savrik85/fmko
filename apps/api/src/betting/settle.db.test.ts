@@ -30,9 +30,9 @@ beforeAll(async () => {
   mf = new Miniflare({ modules: true, script: "export default { fetch() { return new Response('ok'); } }", d1Databases: ["DB"] });
   db = await mf.getD1Database("DB");
   for (const sql of [
-    "CREATE TABLE teams (id TEXT PRIMARY KEY, name TEXT, budget INTEGER, game_date TEXT)",
+    "CREATE TABLE teams (id TEXT PRIMARY KEY, name TEXT, budget INTEGER, game_date TEXT, league_id TEXT)",
     "CREATE TABLE matches (id TEXT PRIMARY KEY, calendar_id TEXT, home_team_id TEXT, away_team_id TEXT, home_score INTEGER, away_score INTEGER, status TEXT)",
-    "CREATE TABLE season_calendar (id TEXT PRIMARY KEY, status TEXT, scheduled_at TEXT)",
+    "CREATE TABLE season_calendar (id TEXT PRIMARY KEY, status TEXT, scheduled_at TEXT, league_id TEXT)",
     "CREATE TABLE match_player_stats (id TEXT PRIMARY KEY, match_id TEXT, player_id TEXT, goals INTEGER)",
     "CREATE TABLE news (id TEXT PRIMARY KEY, league_id TEXT, team_id TEXT, type TEXT, headline TEXT, body TEXT, created_at TEXT)",
   ]) await db.prepare(sql).run();
@@ -53,8 +53,8 @@ beforeEach(async () => {
   }
   // Kolo po pádu: m1 a m2 odehrané (2:0 a 1:1), m3 zůstal neodehraný.
   await db.batch([
-    db.prepare("INSERT INTO teams VALUES ('me', 'Sázkař', 1000, '2026-11-09T12:00:00.000Z'), ('h', 'Domácí', 0, '2026-11-09T12:00:00.000Z')"),
-    db.prepare("INSERT INTO season_calendar VALUES ('cal-1', 'lineup_locked', ?)").bind(SCHEDULED_AT),
+    db.prepare("INSERT INTO teams VALUES ('me', 'Sázkař', 1000, '2026-11-09T12:00:00.000Z', 'L1'), ('h', 'Domácí', 0, '2026-11-09T12:00:00.000Z', 'L1')"),
+    db.prepare("INSERT INTO season_calendar VALUES ('cal-1', 'lineup_locked', ?, 'L1')").bind(SCHEDULED_AT),
     db.prepare("INSERT INTO matches VALUES ('m1', 'cal-1', 'h', 'a', 2, 0, 'simulated'), ('m2', 'cal-1', 'h', 'a', 1, 1, 'simulated'), ('m3', 'cal-1', 'h', 'a', NULL, NULL, 'scheduled')"),
     db.prepare("INSERT INTO match_player_stats VALUES ('s1', 'm1', 'striker', 1), ('s2', 'm2', 'other', 0)"),
   ]);
@@ -214,7 +214,7 @@ describe("vypořádání při neodehraném zápase", () => {
     await openTicket("won", ["m1"]);
     await openTicket("stuck", ["m3"]);
     await db.batch([
-      db.prepare("INSERT INTO season_calendar VALUES ('cal-future', 'scheduled', '2026-11-20T17:00:00.000Z')"),
+      db.prepare("INSERT INTO season_calendar VALUES ('cal-future', 'scheduled', '2026-11-20T17:00:00.000Z', 'L1')"),
       db.prepare("INSERT INTO matches VALUES ('m9', 'cal-future', 'h', 'a', NULL, NULL, 'scheduled')"),
       db.prepare(
         `INSERT INTO bet_tickets (id, team_id, league_id, season_number, calendar_id, stake, levy, total_odds_x100, potential_payout, capped, status, placed_game_date)
@@ -224,5 +224,21 @@ describe("vypořádání při neodehraném zápase", () => {
     expect(await settleOpenRounds(db, at(1))).toEqual({ rounds: 1, tickets: 1, paidOut: 200 });
     expect(await settleOpenRounds(db, at(49))).toEqual({ rounds: 1, tickets: 1, paidOut: 100 });
     expect(await ticketOf("future")).toEqual({ status: "open", payout: 0 });
+  });
+
+  it("lhůta běží v herním čase klubů, ne v reálném", async () => {
+    await openTicket("stuck", ["m3"]);
+    // Herní datum je pět hodin před termínem kola: kolo se v herním čase ještě ani nehrálo.
+    expect(await settleOpenRounds(db)).toEqual({ rounds: 0, tickets: 0, paidOut: 0 });
+
+    // Den po termínu: kolo se zametá, zápas ale ještě čeká.
+    await db.prepare("UPDATE teams SET game_date = '2026-11-10T16:00:00.000Z'").run();
+    expect(await settleOpenRounds(db)).toEqual({ rounds: 1, tickets: 0, paidOut: 0 });
+    expect(await ticketOf("stuck")).toEqual({ status: "open", payout: 0 });
+
+    // Třetí herní den po termínu (71 hodin): zápas se anuluje a vklad se vrací.
+    await db.prepare("UPDATE teams SET game_date = '2026-11-12T16:00:00.000Z'").run();
+    expect(await settleOpenRounds(db)).toEqual({ rounds: 1, tickets: 1, paidOut: 100 });
+    expect(await ticketOf("stuck")).toEqual({ status: "void", payout: 100 });
   });
 });

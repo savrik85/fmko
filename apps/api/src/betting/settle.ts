@@ -78,14 +78,21 @@ export function legState(
  * (migrations/0034_transactions.sql).
  */
 export async function settleRound(
-  db: D1Database, calendarId: string, now: number = Date.now(),
+  db: D1Database, calendarId: string,
+  /** Herní čas v ms. Výchozí je herní datum klubů kola; zadává se jen v testech. */
+  gameNow?: number,
 ): Promise<SettleSummary> {
   const kolo = await db.prepare("SELECT scheduled_at FROM season_calendar WHERE id = ?")
     .bind(calendarId).first<{ scheduled_at: string | null }>()
     .catch((e) => { logger.warn({ module: M }, `termín kola ${calendarId}`, e); return null; });
   const scheduledAt = kolo?.scheduled_at ? new Date(kolo.scheduled_at).getTime() : NaN;
+  // Lhůta běží v herním čase, stejně jako termín kola: herní datum není reálné
+  // (game_clock.offset_days) a na testovacím prostředí se liší o týdny.
+  const gameDate = await gameDateOf(db, calendarId);
+  const now = gameNow ?? new Date(gameDate).getTime();
   // Bez termínu se neanuluje nic: radši nechat tiket čekat než vrátit vklad za zápas, který se odehraje.
-  const deadlinePassed = Number.isFinite(scheduledAt) && now - scheduledAt >= VOID_AFTER_HOURS * 3_600_000;
+  const deadlinePassed = Number.isFinite(scheduledAt) && Number.isFinite(now)
+    && now - scheduledAt >= VOID_AFTER_HOURS * 3_600_000;
 
   const zapasy = await db.prepare(
     "SELECT id, status, home_score, away_score FROM matches WHERE calendar_id = ?"
@@ -123,7 +130,6 @@ export async function settleRound(
     podleTiketu.set(l.ticket_id, arr);
   }
 
-  const gameDate = await gameDateOf(db, calendarId);
   let vyplaceno = 0;
   let vyporadano = 0;
 
@@ -208,18 +214,22 @@ export async function settleRound(
  * takže kolo zaseklé po pádu drželo tikety napořád.
  */
 export async function settleOpenRounds(
-  db: D1Database, now: number = Date.now(),
+  db: D1Database,
+  /** Herní čas v ms, jen pro testy. Jinak herní datum klubů soutěže. */
+  gameNow?: number,
 ): Promise<SettleSummary & { rounds: number }> {
   const rounds = await db.prepare(
     `SELECT DISTINCT t.calendar_id FROM bet_tickets t
        JOIN season_calendar sc ON sc.id = t.calendar_id
-      WHERE t.status = 'open' AND (sc.status = 'simulated' OR sc.scheduled_at <= ?)`
-  ).bind(new Date(now).toISOString()).all<{ calendar_id: string }>()
+      WHERE t.status = 'open'
+        AND (sc.status = 'simulated'
+             OR sc.scheduled_at <= COALESCE(?, (SELECT MAX(tm.game_date) FROM teams tm WHERE tm.league_id = sc.league_id)))`
+  ).bind(gameNow === undefined ? null : new Date(gameNow).toISOString()).all<{ calendar_id: string }>()
     .catch((e) => { logger.error({ module: M }, "kola k dovypořádání", e); return { results: [] }; });
 
   let tickets = 0, paidOut = 0;
   for (const r of rounds.results) {
-    const out = await settleRound(db, r.calendar_id, now);
+    const out = await settleRound(db, r.calendar_id, gameNow);
     tickets += out.tickets;
     paidOut += out.paidOut;
   }
