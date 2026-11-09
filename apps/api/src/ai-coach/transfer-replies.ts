@@ -36,7 +36,7 @@ import {
   acceptListingBid, acceptTransferOffer, counterListingBid, counterTransferOffer, createTransferOffer, rejectListingBid,
   rejectTransferOffer, withdrawTransferOffer,
 } from "../services/transfer-actions";
-import { claimCoachTask, releaseCoachTask } from "./claims";
+import { claimCoachTask, completeCoachTask, releaseCoachTask, STALE_CLAIM_MS } from "./claims";
 import { logDecision, type DecisionMode } from "./decision-log";
 import type { HourlyHook } from "./hourly-hooks";
 import { callCoachModel } from "./llm";
@@ -1194,12 +1194,15 @@ export async function replyToTransferOffers(env: Bindings, teamId: string, now: 
     }
 
     const task = claimTask(mode, `transfer_reply:${offer.id}`);
-    if (!(await claimCoachTask(db, teamId, task, claimKey))) continue;
+    // Nárok s časem: když běh, který ho vzal, skončil natvrdo (catch níž neproběhl), převezme ho
+    // po 30 minutách další běh. Dřív taková nabídka zůstala bez odpovědi navždy.
+    if (!(await claimCoachTask(db, teamId, task, claimKey, { staleAfterMs: STALE_CLAIM_MS }))) continue;
     try {
       const done = scope.role === "seller"
         ? await replyAsSeller(ctx, offer, scope.buyerClubTeamId)
         : await replyAsBuyer(ctx, offer, scope.sellerClubTeamId);
       if (done) {
+        await completeCoachTask(db, teamId, task, claimKey);
         handled++;
         budget.left--;
         // Obchod mohl změnit kádr i peníze: další rozhodnutí počítají s novým stavem.

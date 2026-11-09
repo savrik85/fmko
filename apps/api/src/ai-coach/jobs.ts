@@ -16,7 +16,7 @@
 import type { Bindings } from "../index";
 import { logger } from "../lib/logger";
 import type { AiCoachQueueMessage, CoachTask } from "../queue/messages";
-import { claimCoachTask, releaseCoachTask } from "./claims";
+import { claimCoachTask, completeCoachTask, releaseCoachTask, STALE_CLAIM_MS } from "./claims";
 import { topUpConcessions } from "./concessions";
 import { HOURLY_HOOKS } from "./hourly-hooks";
 import { findTodaysFixtures, prepareAiLineup } from "./match";
@@ -233,7 +233,9 @@ export async function runAiCoachTask(
   }
 
   // hourly: projdou se všechny části (přáteláky, přestupy…); chyba jedné nezastaví ostatní.
-  if (useClaims && !(await claimCoachTask(db, teamId, "hourly", day))) return { status: "duplicate", detail: null };
+  // Nárok s časem: běh ukončený natvrdo nechá nárok nedokončený a opakované doručení zprávy
+  // ho po 30 minutách smí převzít (části si dvojí provedení hlídají vlastními nároky).
+  if (useClaims && !(await claimCoachTask(db, teamId, "hourly", day, { staleAfterMs: STALE_CLAIM_MS }))) return { status: "duplicate", detail: null };
   if (opts.dryRun) return { status: "done", detail: { hooks: HOURLY_HOOKS.map((h) => h.name), dryRun: true } };
   const profile = await ensureAiProfile(db, teamId);
   const results: Array<{ hook: string; ok: boolean }> = [];
@@ -246,6 +248,7 @@ export async function runAiCoachTask(
       results.push({ hook: hook.name, ok: false });
     }
   }
+  if (useClaims) await completeCoachTask(db, teamId, "hourly", day);
   return { status: "done", detail: results };
 }
 

@@ -231,7 +231,7 @@ beforeAll(async () => {
       raw_output TEXT, actions TEXT, executed TEXT, used_fallback INTEGER NOT NULL DEFAULT 0, error TEXT, tokens_in INTEGER, tokens_out INTEGER,
       latency_ms INTEGER, created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
     );
-    CREATE TABLE ai_coach_claims (team_id TEXT NOT NULL, task TEXT NOT NULL, day TEXT NOT NULL, claimed_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')), PRIMARY KEY (team_id, task, day))
+    CREATE TABLE ai_coach_claims (team_id TEXT NOT NULL, task TEXT NOT NULL, day TEXT NOT NULL, claimed_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')), done_at TEXT, PRIMARY KEY (team_id, task, day))
   `);
   await executeStatements(readFileSync(new URL("../../migrations/0268_player_promises.sql", import.meta.url), "utf8")
     .split("-- Sliby, které už běží")[0].replace(/--.*$/gm, ""));
@@ -885,6 +885,47 @@ describe("o nabídce na hráče AI klubu rozhoduje model, kód hlídá", () => {
     expect(JSON.parse(logs[0].executed)).toMatchObject({ posted: false, deferred: true });
     expect(logs[0].error).toContain("neplatná odpověď modelu");
     expect(JSON.parse(logs[1].executed)).toEqual({ posted: false });
+  });
+
+  it("nárok na odpověď po běhu ukončeném natvrdo: čerstvý se respektuje, po 30 minutách ho převezme další běh", async () => {
+    const playerId = "ai-mid4";
+    const when = later();
+    const offer = await offerFromHuman({ playerId, amount: await reservationOf(playerId, when) });
+    // Stav, který by zůstal po běhu ukončeném mezi zabráním nároku a odpovědí: nárok bez dokončení.
+    const ev = await db.prepare("SELECT COUNT(*) AS n, MAX(julianday(created_at)) AS last_jd FROM transfer_offer_events WHERE offer_id = ?")
+      .bind(offer.offerId).first<{ n: number; last_jd: number }>();
+    const row = await db.prepare("SELECT status, last_action_by FROM transfer_offers WHERE id = ?").bind(offer.offerId).first<{ status: string; last_action_by: string | null }>();
+    const at = new Date(Math.round((ev!.last_jd - 2440587.5) * 86_400_000));
+    const key = `${ev!.n}|${row!.status}|${row!.last_action_by ?? "-"}|${at.toISOString()}`;
+    const task = `transfer_reply:${offer.offerId}`;
+    const stamp = (minutesAgo: number) => new Date(Date.now() - minutesAgo * 60_000).toISOString().slice(0, 19) + "Z";
+    await db.prepare("INSERT INTO ai_coach_claims (team_id, task, day, claimed_at) VALUES ('ai-club', ?, ?, ?)").bind(task, key, stamp(10)).run();
+    const ai = fakeAi({ action: "accept", amount: 0, reason: "Fair." });
+
+    // Deset minut starý nárok: jiný běh možná ještě pracuje, nesahat.
+    expect(await replyToTransferOffers(withAi(ai), "ai-club", when, PROFILE)).toBe(0);
+    expect(ai.calls).toBe(0);
+    expect((await offerRow(offer.offerId))?.status).toBe("pending");
+
+    // Po 30 minutách ho převezme další běh a nabídka dostane odpověď.
+    await db.prepare("UPDATE ai_coach_claims SET claimed_at = ? WHERE task = ?").bind(stamp(31), task).run();
+    expect(await replyToTransferOffers(withAi(ai), "ai-club", when, PROFILE)).toBe(1);
+    expect(ai.calls).toBe(1);
+    expect((await offerRow(offer.offerId))?.status).toBe("accepted");
+    const claim = await db.prepare("SELECT done_at FROM ai_coach_claims WHERE task = ? AND day = ?").bind(task, key).first<{ done_at: string | null }>();
+    expect(claim?.done_at).toBeTruthy();
+  });
+
+  it("dokončenou odpověď nikdo nepřevezme, ani když je nárok starý (shadow se neptá znovu)", async () => {
+    await cacheKv.put("ai_coach_mode", JSON.stringify({ market: "shadow" }));
+    const playerId = "ai-mid4";
+    const when = later();
+    const offer = await offerFromHuman({ playerId, amount: await reservationOf(playerId, when) });
+    const ai = fakeAi({ action: "accept", amount: 0, reason: "Fair." });
+    expect(await replyToTransferOffers(withAi(ai), "ai-club", when, PROFILE)).toBe(1);
+    await db.prepare("UPDATE ai_coach_claims SET claimed_at = '2026-01-01T00:00:00Z' WHERE task = ?").bind(`shadow:transfer_reply:${offer.offerId}`).run();
+    expect(await replyToTransferOffers(withAi(ai), "ai-club", when, PROFILE)).toBe(0);
+    expect(ai.calls).toBe(1);
   });
 
   it("dvě nabídky na téhož hráče: model rozhoduje o lepší a vidí i druhou, horší se nepřijme dřív", async () => {
