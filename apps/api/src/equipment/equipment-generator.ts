@@ -417,6 +417,18 @@ export function getBazarPriceBand(category: string, level: number, condition: nu
   return { min, suggested, max: Math.max(min, invested) };
 }
 
+/** Strop ceny v bazaru: násobek toho, co stojí stejné vybavení nové. */
+export const BAZAR_PRICE_CAP_RATE = 1.5;
+
+/**
+ * Nejvyšší cena, za kterou jde vybavení v bazaru vystavit a koupit. Bez stropu šlo přes
+ * bazar přelít libovolnou částku mezi kluby: ojeté míče za milion nekoupí nikdo, kdo
+ * nechce prodávajícímu poslat peníze. Formulář nabízí nejvýš cenu nového, strop je nad ní.
+ */
+export function getBazarPriceCap(category: string, level: number): number {
+  return Math.round(cumulativeInvestment(category, level) * BAZAR_PRICE_CAP_RATE);
+}
+
 export interface SellOption {
   category: string;
   label: string;

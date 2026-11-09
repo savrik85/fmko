@@ -16,6 +16,7 @@ import type { Bindings } from "../index";
 import { tymyDivaka } from "../auth/divak";
 import { requireTeamOwnership } from "../auth/middleware";
 import { oznaceniInzeratu } from "../incidents/bazar";
+import { areClubsLinked, LINKED_CLUBS_ERRORS } from "../competition/club-links";
 import { logger } from "../lib/logger";
 import { mustSeason } from "../lib/season";
 import { sendSystemSMS } from "../messaging/system-sms";
@@ -27,6 +28,7 @@ import {
   checkLevelUnlock,
   cumulativeInvestment,
   getBazarPriceBand,
+  getBazarPriceCap,
   getLevelDescription,
   getPawnQuote,
   getRepairCost,
@@ -311,10 +313,16 @@ equipmentMarketRouter.post("/teams/:teamId/equipment-market/list", async (c) => 
     }
   }
 
-  // Kontroluje se JEN spodní mez. Horní strop je paternalismus — chce-li někdo za
-  // ojeté míče nesmysl, je to jeho věc, nikdo to nekoupí (přestupový trh ho taky nemá).
-  //
-  // Spodní mez ale musí zůstat: zastavárna je jediné místo, kde peníze vznikají.
+  // Horní strop: jeden a půl ceny nového vybavení. Bez něj šla přes inzerát za nesmyslnou
+  // cenu přelít libovolná částka mezi kluby (kupec, který chce poslat peníze, se najde).
+  const cap = getBazarPriceCap(category, level);
+  if (price > cap) {
+    return c.json({
+      error: `Nejvýš ${cap.toLocaleString("cs")} Kč. Víc než jeden a půl ceny nového vybavení bazar nevezme.`,
+    }, 400);
+  }
+
+  // Spodní mez musí zůstat: zastavárna je jediné místo, kde peníze vznikají.
   // Kdyby šlo vystavit pod její výkup, dá se levně koupit, hned zastavit a vyrobit
   // peníze z ničeho. Proto se mez rovná právě tomu, co zastavárna dá při stavu 100 %.
   const band = getBazarPriceBand(category, level, condition);
@@ -455,6 +463,10 @@ equipmentMarketRouter.post("/teams/:teamId/equipment-market/:listingId/buy", asy
   if (listing.status !== "active") return c.json({ error: "Nabídka už není aktivní" }, 409);
   if (listing.expires_at && listing.expires_at < now) return c.json({ error: "Nabídka vypršela" }, 409);
   if (listing.team_id === teamId) return c.json({ error: "Vlastní nabídku koupit nemůžeš" }, 400);
+  // Kluby se stejným majitelem si přes bazar peníze neposílají, stejně jako přes přestupy.
+  if (listing.team_id && await areClubsLinked(c.env.DB, teamId, listing.team_id)) {
+    return c.json({ error: LINKED_CLUBS_ERRORS.bazaar }, 403);
+  }
 
   // Kategorie jde z DB rovnou do SQL stringu — whitelist podruhé, nezávisle na vstupu z requestu.
   if (!isKnownCategory(listing.category)) {
@@ -462,6 +474,10 @@ equipmentMarketRouter.post("/teams/:teamId/equipment-market/:listingId/buy", asy
     return c.json({ error: "Poškozený záznam nabídky" }, 500);
   }
   const category = listing.category;
+  // Starší inzerát mohl vzniknout, než strop ceny platil.
+  if (listing.price > getBazarPriceCap(category, listing.level)) {
+    return c.json({ error: "Cena je nad stropem bazaru, tenhle inzerát koupit nejde." }, 400);
+  }
 
   const buyer = await c.env.DB.prepare("SELECT budget, league_id, reputation, game_date FROM teams WHERE id = ?")
     .bind(teamId).first<BuyerContext>()

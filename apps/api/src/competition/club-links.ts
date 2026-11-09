@@ -23,6 +23,7 @@ export const LINKED_CLUBS_ERRORS = {
   freeAgent: "Hráče propuštěného z klubu se stejným majitelem podepsat nemůžeš.",
   demandPitch: "Klubu se stejným majitelem hráče přes poptávku nenabídneš.",
   bet: "Na zápasy klubu se stejným majitelem se nesází.",
+  bazaar: "Kluby mají stejného majitele. Vybavení si mezi sebou v bazaru neprodávají.",
 } as const;
 
 const VIRTUAL_TEAM_ID = "virtual_ai";
