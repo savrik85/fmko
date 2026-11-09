@@ -28,7 +28,7 @@ import {
   RECRUIT_DAY_COST, RECRUIT_REPEAT_DAYS, nextRecruitDay, recruitDayExpected, OPEN_DAY_COST, openDayExpected, OPEN_DAY_MAX_KIDS, OPEN_DAY_COMMITMENT_BONUS, OPEN_DAY_ESTIMATE_FACTOR, WEEKS_PER_SEASON, NEIGHBOR_RADIUS_KM, neighborKidsExpected, NEIGHBOR_MAX_PER_YEAR, MAX_SQUAD,
   POACH_RADIUS_KM, MAX_POACH_PER_SEASON, POACH_THRESHOLD, POACH_ACTIONS, type PoachAction, poachBaseInterest,
   interestText, leavingInterestText, rivalInterestText, leavingRivalText, MAX_POACH_CLUBS_PER_KID, youthFeeByAge,
-  MIN_ACADEMY_DAYS, MIN_ACADEMY_DAYS_ERROR, playUpAllowedFrom,
+  MIN_ACADEMY_DAYS, MIN_ACADEMY_DAYS_ERROR, playUpAllowedFrom, estimateOffset,
 } from "./rules";
 
 const M = "academy";
@@ -49,7 +49,10 @@ export interface ProspectRow {
   gem_cap: number;
   progress_current: number;
   progress_cap: number;
+  /** Původní pevný šum odhadu. Odhad ho už nečte (viz `prospectEstimate`), zůstává kvůli starým řádkům. */
   estimate_offset: number;
+  /** O kolik je chyba odhadu menší (den otevřených dveří 0,5), jinak 1. */
+  estimate_precision?: number | null;
   traits: string;
   commitment: number;
   status: string;
@@ -267,9 +270,20 @@ async function createProspect(db: D1Database, rng: Rng, club: ClubRow, age: numb
   return res.meta.changes ? row : null;
 }
 
+type EstimateInput = Pick<ProspectRow, "id" | "age" | "hidden_talent" | "estimate_precision">;
+
+/**
+ * Odhad talentu žáka očima klubu `clubId` v sezóně `seasonNumber`. Šum je pevný pro žáka, klub,
+ * sezónu a úsudek odhadce (`estimateOffset`), velikost dál určuje trenér (`estimatedTalent`).
+ */
+function prospectEstimate(p: EstimateInput, clubId: string, seasonNumber: number, judgement: number | null): number {
+  const offset = estimateOffset(p.id, clubId, seasonNumber, judgement) * (p.estimate_precision ?? 1);
+  return estimatedTalent(p.hidden_talent, p.age, offset, judgement);
+}
+
 /** Den, kdy trenér doporučí kluka o kategorii výš, pokud na to podle něj má. */
-function playUpDay(rng: Rng, p: Pick<ProspectRow, "age" | "hidden_talent" | "estimate_offset">, judgement: number | null, gameDate: string, seasonDays: number): string | null {
-  const estimate = estimatedTalent(p.hidden_talent, p.age, p.estimate_offset, judgement);
+function playUpDay(rng: Rng, p: EstimateInput & { team_id: string }, seasonNumber: number, judgement: number | null, gameDate: string, seasonDays: number): string | null {
+  const estimate = prospectEstimate(p, p.team_id, seasonNumber, judgement);
   return recommendsPlayUp(p.age, estimate) ? addDays(gameDate, firstOfferDay(rng, seasonDays)) : null;
 }
 
@@ -334,7 +348,7 @@ export async function foundYouthTeam(db: D1Database, rng: Rng, teamId: string, g
     if (!p) break;
     // Žáci, co už v obci kopou, nejsou úplní začátečníci; u přechodu ze staré akademie víc
     const years = Math.min(age - YOUNGEST_AGE, 1 + extraYears);
-    const next = playUpDay(rng, p, coach.judgement, gameDate, seasonDays);
+    const next = playUpDay(rng, p, seasonNumber, coach.judgement, gameDate, seasonDays);
     await db.prepare("UPDATE youth_prospects SET progress_current = ?, progress_cap = ?, next_offer_on = ? WHERE id = ?")
       .bind(step.current * 15 * years, step.cap * 15 * years, next, p.id).run();
     created++;
@@ -586,7 +600,7 @@ export async function recommendPlayUp(db: D1Database, teamId: string, prospectId
   if (playUpAllowedFrom(p.joined_at, gameDate)) return { ok: false, status: 409, error: MIN_ACADEMY_DAYS_ERROR };
   if (!(await hasU21Team(db, teamId))) return { ok: false, status: 409, error: NO_U21_ERROR };
   const coach = await coachState(db, club, MIN_SQUAD);
-  const estimate = estimatedTalent(p.hidden_talent, p.age, p.estimate_offset, coach.judgement);
+  const estimate = prospectEstimate(p, teamId, await currentSeasonNumber(db), coach.judgement);
   const offerId = await insertProspectOffer(db, club, p, teamId, `${p.first_name} ${p.last_name} by mohl hrát o kategorii výš. ${verdictText(estimate)}`, gameDate);
   const rng = createRng(cryptoSeed());
   await db.prepare("UPDATE youth_prospects SET next_offer_on = ? WHERE id = ?").bind(addDays(gameDate, rng.int(REOFFER_DAYS[0], REOFFER_DAYS[1])), p.id).run();
@@ -737,7 +751,10 @@ async function advanceProspect(db: D1Database, rng: Rng, club: ClubRow, p: Prosp
   const age = p.age + 1;
   const talent = age === 13 ? Math.max(0, Math.min(100, p.hidden_talent + talentShiftAt13(rng))) : p.hidden_talent;
   const commitment = Math.max(10, Math.min(95, p.commitment + rng.int(-12, 10)));
-  const next = ctx.hasU21 ? playUpDay(rng, { age, hidden_talent: talent, estimate_offset: p.estimate_offset }, ctx.coach.judgement, gameDate, FALLBACK_SEASON_DAYS) : null;
+  // Doporučení je na příští sezónu: odhad se počítá s jejím číslem, ať sedí s tím, co pak ukáže stránka
+  const next = ctx.hasU21
+    ? playUpDay(rng, { id: p.id, team_id: club.id, age, hidden_talent: talent, estimate_precision: p.estimate_precision }, ctx.seasonNumber + 1, ctx.coach.judgement, gameDate, FALLBACK_SEASON_DAYS)
+    : null;
   const res = await db.prepare(`UPDATE youth_prospects SET age = ?, hidden_talent = ?, commitment = ?, next_offer_on = ?, aged_season = ? WHERE id = ? AND ${unclaimed}`)
     .bind(age, talent, commitment, next, ctx.seasonNumber, p.id, ctx.seasonNumber).run();
   return res.meta.changes ? { kind: "aged", name } : { kind: "failed", name };
@@ -1063,7 +1080,7 @@ export async function loadAcademyView(db: D1Database, teamId: string) {
     coachOptions: options,
     nextSummer: prospects.filter((p) => p.age >= OLDEST_AGE).length,
     prospects: prospects.map((p) => {
-      const estimate = estimatedTalent(p.hidden_talent, p.age, p.estimate_offset, coach.judgement);
+      const estimate = prospectEstimate(p, teamId, seasonNumber, coach.judgement);
       const range = estimateRange(estimate, p.age, coach.judgement);
       const profile = profiles.get(p.id);
       return {
@@ -1256,8 +1273,8 @@ export async function openDay(db: D1Database, rng: Rng, teamId: string, gameDate
     const villageId = villages.length ? rng.weighted(Object.fromEntries(villages.filter((v) => v.weight > 0).map((v) => [v.id, v.weight]))) : club.village_id;
     const p = await createProspect(db, rng, club, rng.int(YOUNGEST_AGE, OLDEST_AGE), gameDate, null, villageId);
     if (!p) break;
-    await db.prepare("UPDATE youth_prospects SET commitment = ?, estimate_offset = ? WHERE id = ?")
-      .bind(Math.min(95, p.commitment + OPEN_DAY_COMMITMENT_BONUS), p.estimate_offset * OPEN_DAY_ESTIMATE_FACTOR, p.id).run();
+    await db.prepare("UPDATE youth_prospects SET commitment = ?, estimate_offset = ?, estimate_precision = ? WHERE id = ?")
+      .bind(Math.min(95, p.commitment + OPEN_DAY_COMMITMENT_BONUS), p.estimate_offset * OPEN_DAY_ESTIMATE_FACTOR, OPEN_DAY_ESTIMATE_FACTOR, p.id).run();
     const from = villageNames.get(villageId);
     names.push(`${p.first_name} ${p.last_name} (${p.age}${from ? `, ${from}` : ""})`);
   }
@@ -1433,7 +1450,7 @@ async function poachView(db: D1Database, club: ClubRow, coach: CoachState, seaso
   // Trenér ví o klucích z okolí jen přibližně: odhad s jeho šumem, ukazuje se jen slovy
   const targets = rows
     .filter((r) => distanceKm(club, { lat: r.c_lat, lng: r.c_lng }) <= POACH_RADIUS_KM)
-    .map((r) => ({ r, estimate: estimatedTalent(r.hidden_talent, r.age, r.estimate_offset, coach.judgement) }))
+    .map((r) => ({ r, estimate: prospectEstimate(r, club.id, seasonNumber, coach.judgement) }))
     .filter(({ r, estimate }) => mineByProspect.has(r.id) || estimate >= 25)
     .sort((a, b) => Number(mineByProspect.has(b.r.id)) - Number(mineByProspect.has(a.r.id)) || b.estimate - a.estimate)
     .slice(0, 6);

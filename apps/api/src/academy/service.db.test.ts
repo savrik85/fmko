@@ -109,6 +109,25 @@ describe("družstvo žáků", () => {
     expect(view!.nextSummer).toBe((await prospects("club")).filter((p) => p.age === 14).length);
   });
 
+  it("odhad talentu se přepnutím trenéra tam a zpátky nemění a drží se v mezích chyby", async () => {
+    const estimates = async () => new Map((await loadAcademyView(db, "club"))!.prospects.map((p) => [p.id, p.potential?.estimate ?? null]));
+    const first = await estimates();
+    expect(await estimates()).toEqual(first);
+    // Táta místo hráče áčka: oba odhadují bez úsudku trenéra mládeže, takže vidí totéž
+    expect((await setYouthCoach(db, "club", { type: "parent" })).ok).toBe(true);
+    expect(await estimates()).toEqual(first);
+    expect((await setYouthCoach(db, "club", { type: "volunteer", playerId: "vet" })).ok).toBe(true);
+    expect(await estimates()).toEqual(first);
+    for (const p of await prospects("club")) {
+      expect(Math.abs((first.get(p.id) ?? 0) - p.hidden_talent)).toBeLessThanOrEqual((16 - p.age) * 5);
+    }
+    // Příští sezónu trenér odhaduje znovu
+    await db.prepare("UPDATE seasons SET number = 4 WHERE id = 'season-3'").run();
+    const next = await estimates();
+    await db.prepare("UPDATE seasons SET number = 3 WHERE id = 'season-3'").run();
+    expect([...next.values()]).not.toEqual([...first.values()]);
+  });
+
   it("čerstvě založená akademie: do dorostu smí žák až po 4 týdnech u žáků", async () => {
     const kid = (await prospects("club")).find((k) => k.age === 13)!;
     const blocked = await promoteProspect(db, "club", kid.id);

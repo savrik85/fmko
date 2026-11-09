@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { createRng } from "../generators/rng";
 import {
-  programQuality, weeklyProgress, expectedKidsPerYear, estimatedTalent, canPlayUp, recommendsPlayUp, quitChance,
+  programQuality, weeklyProgress, expectedKidsPerYear, estimatedTalent, estimateOffset, canPlayUp, recommendsPlayUp, quitChance,
   rollKids, WEEKS_PER_SEASON, MAX_KIDS_PER_YEAR, MIN_SQUAD, verdictText, talentShiftAt13, youthTransferFee,
   upkeepWeekly, ACADEMY_LEVELS, academyLevelOf, coachSonAge, COACH_SON_CHANCE,
 } from "./rules";
@@ -61,6 +61,48 @@ describe("odhad trenéra a kategorie výš", () => {
     expect(Math.abs(estimatedTalent(40, 11, 1, null) - 40)).toBe(25);
     expect(Math.abs(estimatedTalent(40, 14, 1, null) - 40)).toBe(10);
     expect(Math.abs(estimatedTalent(40, 11, 1, 20) - 40)).toBe(13);
+  });
+
+  it("šum odhadu je pevný pro žáka, klub, sezónu a odhadce, v rozsahu −1..1 a bez sklonu", () => {
+    expect(estimateOffset("kid-1", "club-a", 3, null)).toBe(estimateOffset("kid-1", "club-a", 3, null));
+    let sum = 0;
+    let low = 0;
+    for (let i = 0; i < 2000; i++) {
+      const o = estimateOffset(`kid-${i}`, "club-a", 3, null);
+      expect(o).toBeGreaterThanOrEqual(-1);
+      expect(o).toBeLessThanOrEqual(1);
+      sum += o;
+      if (o < 0) low++;
+    }
+    expect(Math.abs(sum / 2000)).toBeLessThan(0.05);
+    expect(low).toBeGreaterThan(900);
+    expect(low).toBeLessThan(1100);
+  });
+
+  it("přepnutí trenéra nedá druhou rovnici se stejným šumem: každý odhadce má vlastní los", () => {
+    // Dřív: E1 = T + o·b, E2 = T + o·b·s se stejným o, takže T = (E2 − s·E1) / (1 − s) vyšlo přesně
+    const talent = 40;
+    const age = 11;
+    const base = (16 - age) * 5;
+    const sharp = 0.5; // úsudek 20
+    let solved = 0;
+    for (let i = 0; i < 300; i++) {
+      const id = `kid-${i}`;
+      const layman = estimatedTalent(talent, age, estimateOffset(id, "club-a", 3, null), null);
+      const staff = estimatedTalent(talent, age, estimateOffset(id, "club-a", 3, 20), 20);
+      const guess = (staff - sharp * layman) / (1 - sharp);
+      if (Math.abs(guess - talent) <= 2) solved++;
+      // Velikost chyby dál určuje trenér
+      expect(Math.abs(layman - talent)).toBeLessThanOrEqual(base);
+      expect(Math.abs(staff - talent)).toBeLessThanOrEqual(Math.round(base * sharp));
+    }
+    // Se společným šumem by vyšlo (až na zaokrouhlení) všech 300
+    expect(solved).toBeLessThan(60);
+    // Jiný klub, jiná sezóna i jiný úsudek = jiný los
+    const a = estimateOffset("kid-1", "club-a", 3, null);
+    expect(estimateOffset("kid-1", "club-b", 3, null)).not.toBe(a);
+    expect(estimateOffset("kid-1", "club-a", 4, null)).not.toBe(a);
+    expect(estimateOffset("kid-1", "club-a", 3, 12)).not.toBe(a);
   });
 
   it("slova sedí na odhad", () => {

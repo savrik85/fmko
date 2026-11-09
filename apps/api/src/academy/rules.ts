@@ -205,13 +205,32 @@ export function talentShiftAt13(rng: Rng): number {
 
 /**
  * Šum v trenérově odhadu talentu: v 11 letech ±25, ve 14 ±10. Placený trenér se plete
- * až o polovinu méně podle úsudku (`judgement` 0–20). `offset` je pevné číslo kluka −1..1,
+ * až o polovinu méně podle úsudku (`judgement` 0–20). `offset` je číslo −1..1 z `estimateOffset`,
  * aby odhad v UI neposkakoval.
  */
 export function estimatedTalent(talent: number, age: number, offset: number, staffJudgement: number | null): number {
   const base = Math.max(0, 16 - age) * 5;
   const sharp = staffJudgement === null ? 1 : 1 - (Math.max(0, Math.min(20, staffJudgement)) / 20) * 0.5;
   return Math.max(0, Math.min(100, Math.round(talent + offset * base * sharp)));
+}
+
+/**
+ * Směr a díl chyby odhadu −1..1, pevný pro žáka, klub, sezónu a úsudek toho, kdo odhaduje.
+ *
+ * Dřív měl žák jedno pevné číslo a trenér určoval jen velikost chyby. Přepnout trenéra je
+ * zdarma, takže dvě čtení (s trenérem mládeže a bez něj) dala dvě rovnice o dvou neznámých
+ * a skrytý talent šel dopočítat přesně. Teď má každý odhadce vlastní los: druhé čtení je jen
+ * druhý nezávislý odhad. Přepnutí tam a zpátky ukáže zase totéž, nová sezóna nový odhad.
+ */
+export function estimateOffset(prospectId: string, clubId: string, seasonNumber: number, staffJudgement: number | null): number {
+  const key = `${prospectId}|${clubId}|${seasonNumber}|${staffJudgement === null ? "none" : Math.round(staffJudgement)}`;
+  let h = 2166136261;
+  for (let i = 0; i < key.length; i++) h = Math.imul(h ^ key.charCodeAt(i), 16777619) >>> 0;
+  // Domíchání (fmix32), ať se sousední klíče (sezóna 3 a 4) neliší jen o kousek
+  h ^= h >>> 16; h = Math.imul(h, 0x85ebca6b) >>> 0;
+  h ^= h >>> 13; h = Math.imul(h, 0xc2b2ae35) >>> 0;
+  h ^= h >>> 16;
+  return ((h >>> 0) / 0xffffffff) * 2 - 1;
 }
 
 /**

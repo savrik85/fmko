@@ -82,6 +82,8 @@ describe("náborový den", () => {
       expect(p.age).toBeLessThanOrEqual(14);
       expect(p.commitment).toBeGreaterThanOrEqual(55 + 15);
       expect(Math.abs(p.estimate_offset)).toBeLessThanOrEqual(0.5);
+      // Trenér ho viděl hrát: poloviční chyba odhadu
+      expect(p.estimate_precision).toBe(0.5);
       expect(p.aged_season).toBeNull();
     }
     expect((await openDay(db, createRng(99), "big", GAME_DATE)).ok).toBe(false);
