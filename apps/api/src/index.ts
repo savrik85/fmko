@@ -601,10 +601,8 @@ export default {
             const queued = await enqueueMatchdayPreviews(env);
             log("info", `matchday preview zařazeno do fronty: ${queued} článků`);
           } else {
-            const { generateMatchdayPreview } = await import("./news/matchday-preview");
-            const leagues = await env.DB.prepare(
-              "SELECT DISTINCT t.league_id, t.game_date FROM teams t WHERE t.league_id IS NOT NULL AND t.game_date IS NOT NULL AND t.user_id != 'ai'"
-            ).all();
+            const { generateMatchdayPreview, PREVIEW_LEAGUES_SQL } = await import("./news/matchday-preview");
+            const leagues = await env.DB.prepare(PREVIEW_LEAGUES_SQL).all();
             let generated = 0;
             for (const lg of leagues.results) {
               const leagueId = lg.league_id as string;

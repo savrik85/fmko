@@ -217,9 +217,8 @@ export async function enqueueMatchdayPreviews(env: Bindings): Promise<number> {
   }
 
   const enqueuedAt = new Date().toISOString();
-  const leagues = await env.DB.prepare(
-    "SELECT DISTINCT t.league_id, t.game_date FROM teams t WHERE t.league_id IS NOT NULL AND t.game_date IS NOT NULL AND t.user_id != 'ai'",
-  ).all<{ league_id: string; game_date: string }>();
+  const { PREVIEW_LEAGUES_SQL } = await import("../news/matchday-preview");
+  const leagues = await env.DB.prepare(PREVIEW_LEAGUES_SQL).all<{ league_id: string; game_date: string }>();
 
   const messages: ReportQueueMessage[] = [];
   for (const lg of leagues.results) {

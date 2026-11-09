@@ -141,6 +141,16 @@ async function loadH2H(db: D1Database, teamA: string, teamB: string): Promise<st
 }
 
 /** Hlavní funkce — generuje matchday preview pro jednu ligu + jedno kolo. */
+/**
+ * Ligy, pro které se ráno píše náhled kola: jen mužské soutěže s lidským klubem.
+ * Náhledy kol U21 se generovaly (13 za 14 dní), ale web je nikde neukazuje, takže
+ * se zatím nepíšou. Až je Zpravodaj začne zobrazovat, stačí podmínku na
+ * `league_type` zase vypustit; generátor sám U21 ligu zvládá.
+ */
+export const PREVIEW_LEAGUES_SQL = `SELECT DISTINCT t.league_id, t.game_date FROM teams t
+  WHERE t.league_id IS NOT NULL AND t.game_date IS NOT NULL AND t.user_id != 'ai'
+    AND t.league_id NOT IN (SELECT id FROM leagues WHERE league_type = 'u21')`;
+
 export async function generateMatchdayPreview(
   db: D1Database,
   geminiApiKey: string,
