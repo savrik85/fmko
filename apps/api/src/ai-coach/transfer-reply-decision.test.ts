@@ -3,7 +3,7 @@ import type { TransferTerms } from "@okresni-masina/shared";
 import { generateAiProfile, type AiCoachProfile } from "./profile";
 import type { SellBlockReason } from "./squad";
 import {
-  decideSellerReply, requiredLoanFee, sellerDecisionFromChoice, sellerGuardViolation, sellerOptions,
+  betterWaitingOffer, decideSellerReply, promiseReservation, requiredLoanFee, sellerDecisionFromChoice, sellerGuardViolation, sellerOptions,
   type SellerDecision, type SellerDecisionInput,
 } from "./transfer-decision";
 import { renderTransferReplyPrompt, transferReplySchema, validateTransferReply, type TransferReplyContext } from "./transfer-reply-decision";
@@ -270,22 +270,62 @@ describe("popis pro model", () => {
 });
 
 describe("slib prodeje nespokojenému hráči", () => {
-  // Slušná nabídka nad pevnou pojistkou (60 % tržní hodnoty), ale hluboko pod rezervací.
-  const FAIR = round100(MV * 0.65);
+  // Nad pevnou pojistkou (60 % tržní hodnoty), ale pod tržní hodnotou.
+  const LOW = round100(MV * 0.65);
 
-  it("slušný přestup kód přijme sám, i pod rezervací, nad limitem obchodů a po vlastním protinávrhu", () => {
-    expect(FAIR).toBeLessThan(R);
-    const plain = sellerOptions(sellerInput({ terms: cash(FAIR) }));
-    expect(plain.actions).not.toContain("accept");
+  it("rozhoduje model, ne kód: od tržní hodnoty smí přijmout nebo odmítnout, pod ní jen protinávrh na tržní hodnotu nebo odmítnout", () => {
+    const fair = sellerInput({ terms: cash(MV), salePromise: true, importance: "key", overDealLimit: true });
+    const o = sellerOptions(fair);
+    expect(o.forced).toBeNull();
+    expect(o.reservation).toBe(MV);
+    expect(o.currentAsk).toBe(MV);
+    expect(o.actions).toEqual(["accept", "reject"]);
+    // Bez slibu by za tržní hodnotu oporu přijmout nešlo (rezervace 1,75× a přirážka za limit).
+    expect(sellerOptions(sellerInput({ terms: cash(MV), importance: "key", overDealLimit: true })).actions).not.toContain("accept");
 
-    const input = sellerInput({ terms: cash(FAIR), salePromise: true, overDealLimit: true, previousAsks: [ASK] });
-    const o = sellerOptions(input);
-    expect(o.actions).toEqual(["accept"]);
-    expect(o.forced).toMatchObject({ kind: "accept", reason: "sale_promise" });
-    expect(sellerGuardViolation(input, o, o.forced!)).toBeNull();
-    expect(decideSellerReply(input)).toMatchObject({ kind: "accept", reason: "sale_promise" });
-    // Klub mimo hru taky: slib platí pro každého kupce.
-    expect(sellerOptions({ ...input, virtualBuyer: true }).forced).toMatchObject({ kind: "accept", reason: "sale_promise" });
+    const low = sellerInput({ terms: cash(LOW), salePromise: true });
+    const lowOptions = sellerOptions(low);
+    expect(lowOptions.forced).toBeNull();
+    expect(lowOptions.actions).toEqual(["counter", "reject"]);
+    expect(lowOptions.counter).toEqual({ min: MV, max: MV });
+    // Pojistka: přijetí pod tržní hodnotou neprojde, ani kdyby ho někdo navrhl.
+    expect(sellerGuardViolation(low, lowOptions, { kind: "accept", reason: "model", value: LOW, reservation: MV })).toContain("pod rezervací");
+    // Pravidlo (jen režim off) taky pod tržní hodnotou nepřijme.
+    expect(decideSellerReply(low).kind).not.toBe("accept");
+    // Klub mimo hru nesmlouvá: pod tržní hodnotou jen odmítnutí.
+    expect(sellerOptions({ ...low, virtualBuyer: true }).forced).toMatchObject({ kind: "reject" });
+  });
+
+  it("rezervace je tržní hodnota, nebo vyšší cena inzerátu; nižší cena inzerátu ji nesníží", () => {
+    expect(promiseReservation(MV, null)).toBe(MV);
+    expect(promiseReservation(MV, MV + 3000)).toBe(MV + 3000);
+    expect(promiseReservation(MV, MV - 5000)).toBe(MV);
+    const cheapListing = sellerOptions(sellerInput({ terms: cash(MV - 5000), salePromise: true, listedPrice: MV - 5000 }));
+    expect(cheapListing.reservation).toBe(MV);
+    expect(cheapListing.actions).not.toContain("accept");
+    // Za cenu inzerátu od tržní hodnoty výš vlastní slovo platí dál (závazek z inzerátu).
+    expect(sellerOptions(sellerInput({ terms: cash(MV + 3000), salePromise: true, listedPrice: MV + 3000 })).forced)
+      .toMatchObject({ kind: "accept", reason: "accept_ask" });
+  });
+
+  it("model se o slibu dozví v popisu situace", () => {
+    const input = sellerInput({ terms: cash(MV), salePromise: true });
+    const options = sellerOptions(input);
+    const base: TransferReplyContext = {
+      profile: profile(), budget: 50_000, spendable: 20_000, weeklyCosts: 3000, squadSize: 24, targetSquad: 24, dealsLast30: 0, dealLimit: 3,
+      overDealLimit: false, plan: null,
+      player: { position: "MID", age: 25, rating: 40, marketValue: MV, importance: "rotation", injured: false, onLoanElsewhere: false, listedPrice: null, samePosition: [41, 38], starters: 4, formation: "4-4-2" },
+      buyer: { managedBy: "human", sameDistrict: true },
+      offer: { type: "transfer", loanDays: null, terms: cash(MV), swapPlayers: [] },
+      costs: { sellOnPct: 0, remainingDebt: 0, swapMarketValue: 0 },
+      history: { previousAsks: [], previousBids: [], priorBreakOffs: 0 },
+      options,
+    };
+    expect(renderTransferReplyPrompt(base)).not.toContain("PROMISE:");
+    const prompt = renderTransferReplyPrompt({ ...base, salePromise: true, otherOffers: [MV - 1000, MV - 3000] });
+    expect(prompt).toContain("PROMISE: he was unhappy and your club promised him");
+    expect(prompt).toContain(`OTHER OFFERS for him waiting for your answer, worth to your club: ${(MV - 1000).toLocaleString("en-US")}, ${(MV - 3000).toLocaleString("en-US")} CZK`);
+    expect(prompt).not.toContain("—");
   });
 
   it("pod 60 % tržní hodnoty ani se slibem ne; pojistky kádru platí, jen opora bez náhrady slib nepřebije", () => {
@@ -295,8 +335,9 @@ describe("slib prodeje nespokojenému hráči", () => {
     expect(lastKeeper.forced).toMatchObject({ kind: "reject", reason: "blocked", block: "last_goalkeeper" });
     const minSquad = sellerOptions(sellerInput({ terms: cash(MV), salePromise: true, block: "min_squad" }));
     expect(minSquad.forced).toMatchObject({ kind: "reject", reason: "blocked" });
-    const keyPlayer = sellerOptions(sellerInput({ terms: cash(FAIR), salePromise: true, importance: "key", block: "key_without_replacement" }));
-    expect(keyPlayer.forced).toMatchObject({ kind: "accept", reason: "sale_promise" });
+    const keyPlayer = sellerOptions(sellerInput({ terms: cash(MV), salePromise: true, importance: "key", block: "key_without_replacement" }));
+    expect(keyPlayer.forced).toBeNull();
+    expect(keyPlayer.actions).toContain("accept");
     // Bez slibu opora bez náhrady dál neodejde.
     expect(sellerOptions(sellerInput({ terms: cash(MV * 3), importance: "key", block: "key_without_replacement" })).forced)
       .toMatchObject({ kind: "reject", reason: "blocked" });
@@ -306,5 +347,31 @@ describe("slib prodeje nespokojenému hráči", () => {
     const loan = { offerType: "loan" as const, loanDays: 30, terms: cash(500) };
     expect(sellerOptions(sellerInput({ ...loan, salePromise: true }))).toEqual(sellerOptions(sellerInput(loan)));
     expect(decideSellerReply(sellerInput({ ...loan, salePromise: true }))).toEqual(decideSellerReply(sellerInput(loan)));
+  });
+});
+
+describe("víc nabídek na téhož hráče", () => {
+  it("dokud čeká lepší nabídka, horší nejde přijmout: ani modelem, ani za cenu z inzerátu, ani pravidlem", () => {
+    const bid = round100((R + ASK) / 2);
+    const input = sellerInput({ terms: cash(bid), competingValues: [bid + 2000, bid - 1000] });
+    expect(betterWaitingOffer(input, bid)).toBe(bid + 2000);
+    const o = sellerOptions(input);
+    expect(o.actions).not.toContain("accept");
+    expect(sellerDecisionFromChoice(input, o, { action: "accept", amount: 0 })).toBeNull();
+    expect(sellerGuardViolation(input, o, { kind: "accept", reason: "model", value: bid, reservation: R })).toContain("čeká lepší");
+    expect(decideSellerReply(input).kind).not.toBe("accept");
+
+    const listed = sellerInput({ terms: cash(ASK), listedPrice: ASK, competingValues: [ASK + 500] });
+    expect(sellerOptions(listed).forced?.kind).not.toBe("accept");
+    expect(decideSellerReply(listed).kind).not.toBe("accept");
+  });
+
+  it("nejlepší nabídka na stole se rozhoduje jako obvykle; hostování se netýká", () => {
+    const bid = round100((R + ASK) / 2);
+    const best = sellerInput({ terms: cash(bid), competingValues: [bid - 1000, bid] });
+    expect(betterWaitingOffer(best, bid)).toBeNull();
+    expect(sellerOptions(best).actions).toEqual(["accept", "counter", "reject"]);
+    const loan = sellerInput({ offerType: "loan", loanDays: 30, terms: cash(5000), competingValues: [90_000] });
+    expect(betterWaitingOffer(loan, 5000)).toBeNull();
   });
 });

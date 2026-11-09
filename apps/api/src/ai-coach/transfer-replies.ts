@@ -16,8 +16,10 @@
  * pod 60 % tržní hodnoty, nabídka za vlastní požadavek, bez prostoru pro protinávrh), rozhodne
  * kód bez modelu. Jinak vybere model (transfer-reply-decision.ts) přijetí, protinávrh v mezích,
  * nebo odmítnutí; při výpadku, nesmyslu, režimu off a bez bindingu AI náhradní pravidlo.
- * Hráč, kterému AI slíbila prodej (sale-promise.ts), je výjimka: přestup od 60 % tržní hodnoty
- * kód přijme sám, bez protinávrhu nahoru, ať AI slib nezlomí.
+ * Hráč, kterému AI slíbila prodej (sale-promise.ts): rozhoduje taky model, jen ví o slibu
+ * a rezervací je tržní hodnota. Když model neodpoví, odpověď se odloží na další běh (pravidlo
+ * tu nerozhoduje). Když na hráče čeká víc nabídek, odpovídá se od nejlepší, model je vidí
+ * všechny a horší nabídku AI nepřijme, dokud lepší čeká.
  *
  * Jako kupující: na protinávrh prodávajícího model přijme (do stropu z peněz nad rezervou,
  * nikdy s procenty z dalšího prodeje), přihodí v mezích, nebo nabídku stáhne (`decideBuyerReplyByModel`,
@@ -48,7 +50,7 @@ import {
 import { decideBuyerReplyByModel, logNegotiationDecision } from "./buy-model";
 import { activeSalePromise } from "./sale-promise";
 import {
-  decideSellerReply, sellerDecisionFromChoice, sellerGuardViolation, sellerOptions,
+  betterWaitingOffer, decideSellerReply, sellerDecisionFromChoice, sellerGuardViolation, sellerOptions,
   type SellerDecision, type SellerDecisionInput, type SellerOptions,
 } from "./transfer-decision";
 import { loadAiClubState, parseDbTime, type AiClubState } from "./transfer-club";
@@ -159,7 +161,10 @@ interface Outcome<D, O> {
   reasoning: string | null;
 }
 
-type SaleOutcome = Outcome<SellerDecision, SellerOptions>;
+type SaleOutcome = Outcome<SellerDecision, SellerOptions> & {
+  /** Důvod, proč se teď nerozhodlo (výpadek modelu u slibu prodeje, čeká lepší nabídka): zkusí se další běh. */
+  deferred?: string;
+};
 type PitchOutcome = Outcome<PitchDecision, PitchOptions>;
 
 /** Poptávka AI klubu a hráč, kterého k ní někdo nabídl. */
@@ -216,6 +221,30 @@ async function swapValueOf(ctx: RunContext, offerId: string, analysis: SquadAnal
   const out = swapValueFor(await loadSwapPlayersForValue(ctx.env.DB, offerId), analysis);
   ctx.swapValues.set(offerId, out);
   return out;
+}
+
+/**
+ * Čisté hodnoty návrhů jiných klubů na téhož hráče, na které má AI teprve odpovědět (přestupy,
+ * nepropadlé). Stejný metr jako u rozhodované nabídky (`netSaleValue`).
+ */
+async function waitingOfferValues(
+  ctx: RunContext, player: PlayerRow, currentOfferId: string, analysis: SquadAnalysis, costs: SaleCosts,
+): Promise<number[]> {
+  const rows = await ctx.env.DB.prepare(
+    `SELECT * FROM transfer_offers
+      WHERE player_id = ? AND id != ? AND status IN ('pending', 'countered') AND COALESCE(offer_type, 'transfer') != 'loan'`,
+  ).bind(player.id, currentOfferId).all<OfferRow>()
+    .catch((e) => { logger.warn({ module: M }, `další nabídky na hráče ${player.id}`, e); return { results: [] as OfferRow[] }; });
+  const values: number[] = [];
+  for (const other of rows.results) {
+    const expiresAt = parseDbTime(other.expires_at);
+    if (expiresAt && expiresAt <= ctx.now) continue;
+    const scope = await resolveOfferClubScope(ctx.env.DB, ctx.club.teamId, other);
+    if (scope?.role !== "seller" || !scope.onTurn) continue;
+    const swap = await swapValueOf(ctx, other.id, analysis);
+    values.push(netSaleValue(termsOf(other, currentAmount(other)), swap.value, { ...costs, swapMarketValue: swap.marketValue }));
+  }
+  return values;
 }
 
 interface NegotiationHistory {
@@ -403,6 +432,8 @@ async function saleContext(ctx: RunContext, input: SellerDecisionInput, options:
       swapPlayers: swapPlayers.map((p) => ({ ...p, useful: analysis.isUseful(p) })),
     },
     costs: input.saleCosts ?? NO_SALE_COSTS,
+    salePromise: input.salePromise === true && input.offerType === "transfer",
+    otherOffers: [...(input.competingValues ?? [])].sort((a, b) => b - a),
     history: { previousAsks: input.previousAsks, previousBids: input.previousBids, priorBreakOffs: input.priorBreakOffs },
     options,
   };
@@ -410,7 +441,13 @@ async function saleContext(ctx: RunContext, input: SellerDecisionInput, options:
 
 /** Víc přípustných možností: vybere model, bez něj (nebo při nesmyslu) náhradní pravidlo. */
 async function askModel(ctx: RunContext, input: SellerDecisionInput, options: SellerOptions, facts: SaleFacts): Promise<SaleOutcome> {
-  const fallback = (trace: ModelTrace): SaleOutcome => ({ decision: decideSellerReply(input), by: "fallback", options, trace, reasoning: null });
+  const fallback = (trace: ModelTrace): SaleOutcome => {
+    const outcome: SaleOutcome = { decision: decideSellerReply(input), by: "fallback", options, trace, reasoning: null };
+    // Slib prodeje nerozhoduje pravidlo: bez odpovědi modelu se odpověď odloží (v režimu off se model neptá vůbec).
+    return input.salePromise && input.offerType === "transfer" && ctx.mode !== "off"
+      ? { ...outcome, deferred: `slib prodeje bez odpovědi modelu: ${trace.error ?? "model není k dispozici"}` }
+      : outcome;
+  };
   const answer = await consultModel(ctx, {
     system: TRANSFER_REPLY_SYSTEM_PROMPT,
     user: async () => renderTransferReplyPrompt(await saleContext(ctx, input, options, facts)),
@@ -433,6 +470,7 @@ async function decideSale(ctx: RunContext, input: SellerDecisionInput, facts: Sa
   const outcome: SaleOutcome = options.forced
     ? { decision: options.forced, by: "guard", options, trace: NO_TRACE, reasoning: null }
     : await askModel(ctx, input, options, facts);
+  if (outcome.deferred) return outcome;
   const violation = sellerGuardViolation(input, options, outcome.decision);
   if (!violation) return outcome;
   // Nemá nastat (odpověď modelu je zkontrolovaná, pravidlo pod rezervaci nejde), ale kdyby: odmítnout.
@@ -550,8 +588,9 @@ async function replyAsSeller(ctx: RunContext, offer: OfferRow, buyerClubTeamId: 
   const listing = await db.prepare("SELECT asking_price FROM transfer_listings WHERE player_id = ? AND team_id = ? AND status = 'active'")
     .bind(player.id, club.teamId).first<{ asking_price: number }>()
     .catch((e) => { logger.warn({ module: M }, `inzerát hráče ${player.id}`, e); return null; });
-  // Slib prodeje nespokojenému hráči: AI ho dodrží, slušný přestup přijme (transfer-decision.ts).
-  const salePromise = offer.offer_type !== "loan" && (await activeSalePromise(db, player.id, ctx.now)) !== null;
+  // Slib prodeje nespokojenému hráči (jen slib tohoto klubu): model o něm ví, rezervací je tržní hodnota.
+  const salePromise = offer.offer_type !== "loan" && (await activeSalePromise(db, player.id, ctx.now, club.teamId)) !== null;
+  const competingValues = offer.offer_type === "loan" ? [] : await waitingOfferValues(ctx, player, offer.id, analysis, costs);
 
   const input: SellerDecisionInput = {
     offerId: offer.id,
@@ -574,8 +613,27 @@ async function replyAsSeller(ctx: RunContext, offer: OfferRow, buyerClubTeamId: 
     listedPrice: listing?.asking_price ?? null,
     saleCosts: costs,
     salePromise,
+    competingValues,
   };
-  const sale = await decideSale(ctx, input, { player, analysis, buyerClubTeamId, offerId: offer.id });
+  // Čeká lepší nabídka jiného klubu: nejdřív se odpoví na ni (běh je řadí od nejlepší), tahle počká.
+  const offerValue = netSaleValue(input.terms, input.swapValue, costs);
+  const better = betterWaitingOffer(input, offerValue);
+  const sale: SaleOutcome = better !== null
+    ? {
+      decision: { kind: "reject", reason: "better_offer_waiting", value: offerValue, reservation: 0 },
+      by: "guard", options: sellerOptions(input), trace: NO_TRACE, reasoning: null,
+      deferred: `na hráče čeká lepší nabídka (${better} > ${offerValue})`,
+    }
+    : await decideSale(ctx, input, { player, analysis, buyerClubTeamId, offerId: offer.id });
+  if (sale.deferred) {
+    await log(ctx, {
+      kind: "transfer_reply", contextRef: offer.id,
+      inputSummary: summarizeSeller(player, importance, sale.decision, offer),
+      actions: { deferred: true, decidedBy: sale.by, allowed: sale.options.actions }, executed: "deferred", error: sale.deferred,
+      outcome: { by: "guard", trace: sale.trace },
+    });
+    throw new RetryLaterError(sale.deferred);
+  }
   const result = await executeSellerDecision(ctx, offer, sale.decision, swap.value, costs);
   if (result.executed === "accepted" && importance === "key" && offer.offer_type !== "loan") await planReplacement(ctx, player);
   await log(ctx, {
@@ -715,9 +773,15 @@ async function replyToLegacyBids(ctx: RunContext, budget: { left: number }): Pro
       profile: club.profile, playerId: player.id, now: ctx.now, swapValue: 0, virtualBuyer: false,
       previousAsks: bid.last_action_by === club.teamId && bid.counter_amount ? [bid.counter_amount] : [],
       previousBids: [], priorBreakOffs: 0, overDealLimit: club.overDealLimit, listedPrice: bid.asking_price, saleCosts: costs,
-      salePromise: (await activeSalePromise(db, player.id, ctx.now)) !== null,
+      salePromise: (await activeSalePromise(db, player.id, ctx.now, club.teamId)) !== null,
     };
     const sale = await decideSale(ctx, input, { player, analysis, buyerClubTeamId: bid.buyer_team_id, offerId: null });
+    if (sale.deferred) {
+      // Slib prodeje bez odpovědi modelu: příhoz počká na další běh.
+      await releaseCoachTask(db, club.teamId, claimTask(ctx.mode, `transfer_bid:${bid.id}`), `${bid.status}|${bid.counter_amount ?? bid.amount}`);
+      logger.warn({ module: M, teamId: club.teamId }, `příhoz ${bid.id} odložen: ${sale.deferred}`);
+      continue;
+    }
     const decision = sale.decision;
     let executed = "shadow";
     let error: string | undefined;
@@ -994,9 +1058,9 @@ export async function replyToTransferOffers(env: Bindings, teamId: string, now: 
       ORDER BY julianday(created_at) LIMIT 60`,
   ).bind(teamId, teamId, teamId, teamId).all<OfferRow>();
 
-  let handled = 0;
+  type Turn = { offer: OfferRow; scope: NonNullable<Awaited<ReturnType<typeof resolveOfferClubScope>>>; claimKey: string; due: Date; order: number };
+  const turns: Turn[] = [];
   for (const offer of offers.results) {
-    if (budget.left <= 0) break;
     const scope = await resolveOfferClubScope(db, teamId, offer);
     if (!scope?.role || !scope.onTurn) continue;
     const expiresAt = parseDbTime(offer.expires_at);
@@ -1004,10 +1068,36 @@ export async function replyToTransferOffers(env: Bindings, teamId: string, now: 
     if (expiresAt && expiresAt <= now) continue;
     const last = await lastAction(db, offer, now);
     const due = replyDueAt(last.at, expiresAt, replyDelayHours(`${offer.id}|${last.key}`, profile));
+    turns.push({ offer, scope, claimKey: last.key, due, order: turns.length });
+  }
+  // Víc nabídek na téhož hráče AI klubu: odpovídá se na všechny najednou (až přijde čas první)
+  // a od nejvyšší, ať se horší nepřijme dřív, než se rozhodne o lepší.
+  const saleGroups = new Map<string, Turn[]>();
+  for (const t of turns) {
+    if (t.scope.role !== "seller" || t.offer.offer_type === "loan") continue;
+    saleGroups.set(t.offer.player_id, [...(saleGroups.get(t.offer.player_id) ?? []), t]);
+  }
+  for (const group of saleGroups.values()) {
+    if (group.length < 2) continue;
+    const earliest = new Date(Math.min(...group.map((t) => t.due.getTime())));
+    const first = Math.min(...group.map((t) => t.order));
+    [...group].sort((a, b) => currentAmount(b.offer) - currentAmount(a.offer) || a.order - b.order)
+      .forEach((t, i) => { t.due = earliest; t.order = first + i / (group.length + 1); });
+  }
+  turns.sort((a, b) => a.order - b.order);
+
+  let handled = 0;
+  for (const { offer, scope, claimKey, due } of turns) {
+    if (budget.left <= 0) break;
     if (now < due) continue;
+    // Předchozí odpověď v tomto běhu mohla jednání uzavřít (hráč prodán jinému zájemci).
+    if (handled > 0) {
+      const live = await db.prepare("SELECT status FROM transfer_offers WHERE id = ?").bind(offer.id).first<{ status: string }>()
+        .catch((e) => { logger.warn({ module: M }, `stav nabídky ${offer.id}`, e); return null; });
+      if (live && live.status !== "pending" && live.status !== "countered") continue;
+    }
 
     const task = claimTask(mode, `transfer_reply:${offer.id}`);
-    const claimKey = last.key;
     if (!(await claimCoachTask(db, teamId, task, claimKey))) continue;
     try {
       const done = scope.role === "seller"
@@ -1021,7 +1111,8 @@ export async function replyToTransferOffers(env: Bindings, teamId: string, now: 
         if (fresh) { club = fresh; ctx.club = fresh; ctx.swapValues.clear(); }
       }
     } catch (e) {
-      logger.error({ module: M }, `odpověď AI klubu ${teamId} na nabídku ${offer.id}`, e);
+      if (e instanceof RetryLaterError) logger.warn({ module: M, teamId }, `odpověď na nabídku ${offer.id} odložena: ${e.message}`);
+      else logger.error({ module: M }, `odpověď AI klubu ${teamId} na nabídku ${offer.id}`, e);
       await releaseCoachTask(db, teamId, task, claimKey);
     }
   }

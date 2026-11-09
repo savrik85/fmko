@@ -355,7 +355,7 @@ describe("kapitánská páska z dohody s nespokojeným hráčem", () => {
 });
 
 describe("slib prodeje od AI trenéra", () => {
-  it("AI slíbí prodej, hráče hned vystaví, první slušnou nabídku přijme bez smlouvání a slib je dodržený", async () => {
+  it("AI slíbí prodej a hráče vystaví; o nabídkách rozhoduje model, pod tržní hodnotu nejde a při výpadku modelu se čeká", async () => {
     // fwd3 (útočník 39, 29 let) chce do lepšího klubu; v 4-4-2 je třetí útočník, pojistky kádru ho pustí.
     await setLife("ai-1-fwd3", unhappy(60, { reasons: ["better_club"] }));
     const value = marketValue(39, 29, "FWD");
@@ -377,24 +377,47 @@ describe("slib prodeje od AI trenéra", () => {
     expect(await count("SELECT COUNT(*) AS n FROM transfer_listings WHERE player_id = 'ai-1-fwd3' AND team_id = 'ai-1' AND status = 'active' AND asking_price = ?", askingPrice)).toBe(1);
     expect(await count("SELECT COUNT(*) AS n FROM ai_coach_decisions WHERE team_id = 'ai-1' AND kind = 'promise_listing' AND used_fallback = 0")).toBe(1);
 
-    // Lidský klub nabídne slušnou částku (nad 60 % tržní hodnoty), ale pod tím, za kolik by AI hráče jinak pustila.
-    const fair = Math.ceil((value * 0.7) / 100) * 100;
+    // Lidský klub nabídne pod tržní hodnotou (nad 60 %): dřív to kód sám přijal, teď rozhoduje model
+    // a přijmout pod tržní hodnotou nesmí.
+    const low = Math.ceil((value * 0.7) / 100) * 100;
     await db.prepare(
       `INSERT INTO transfer_offers (id, player_id, from_team_id, to_team_id, offer_amount, offer_type, status, expires_at, last_action_by, created_at)
        VALUES ('o-promise', 'ai-1-fwd3', 'human', 'ai-1', ?, 'transfer', 'pending', ?, 'human', ?)`,
-    ).bind(fair, FUTURE, new Date(NOW.getTime() - DAY_MS).toISOString()).run();
-    const budgetBefore = await budgetOf("ai-1");
-    const promptsBefore = model.prompts.length;
-    expect(await replyToTransferOffers(model.env, "ai-1", NOW, profile())).toBe(1);
+    ).bind(low, FUTURE, new Date(NOW.getTime() - DAY_MS).toISOString()).run();
 
-    // Kód přijal sám (slib nechává jedinou možnost), model se na nabídku neptal.
-    expect(model.prompts).toHaveLength(promptsBefore);
-    expect(await count("SELECT COUNT(*) AS n FROM transfer_offers WHERE id = 'o-promise' AND status = 'accepted'")).toBe(1);
+    // Výpadek modelu: o slibu nerozhodne pravidlo, odpověď se odloží na další běh.
+    expect(await replyToTransferOffers(baseEnv, "ai-1", NOW, profile())).toBe(0);
+    expect(await count("SELECT COUNT(*) AS n FROM transfer_offers WHERE id = 'o-promise' AND status = 'pending'")).toBe(1);
+    expect(await count("SELECT COUNT(*) AS n FROM ai_coach_claims WHERE team_id = 'ai-1' AND task = 'transfer_reply:o-promise'")).toBe(0);
+    expect(await count("SELECT COUNT(*) AS n FROM ai_coach_decisions WHERE team_id = 'ai-1' AND kind = 'transfer_reply' AND context_ref = 'o-promise' AND executed LIKE '%deferred%'")).toBe(1);
+
+    const replyModel = fakeAi((prompt: string) => {
+      const range = /"counter": ask for exactly ([\d,]+) CZK/.exec(prompt);
+      return { action: "counter", amount: range ? Number(range[1].replace(/,/g, "")) : 0, reason: "Fair price for a promised player." };
+    });
+    expect(await replyToTransferOffers(replyModel.env, "ai-1", NOW, profile())).toBe(1);
+    expect(replyModel.prompts).toHaveLength(1);
+    expect(replyModel.prompts[0]).toContain("PROMISE: he was unhappy and your club promised him");
+    expect(replyModel.prompts[0]).not.toContain('"accept"');
+    const countered = await db.prepare("SELECT status, counter_amount FROM transfer_offers WHERE id = 'o-promise'").first<{ status: string; counter_amount: number }>();
+    expect(countered!.status).toBe("countered");
+    // Protinávrh je rezervace slibu: tržní hodnota, nebo vyšší cena inzerátu.
+    expect(countered!.counter_amount).toBe(Math.max(Math.ceil(value / 100) * 100, askingPrice));
+    expect(await count("SELECT COUNT(*) AS n FROM players WHERE id = 'ai-1-fwd3' AND team_id = 'ai-1'")).toBe(1);
+
+    // Jiný zájemce nabídne cenu z inzerátu: vlastní slovo z inzerátu platí, hráč odchází.
+    await db.prepare(
+      `INSERT INTO transfer_offers (id, player_id, from_team_id, to_team_id, offer_amount, offer_type, status, expires_at, last_action_by, created_at)
+       VALUES ('o-promise-2', 'ai-1-fwd3', 'human', 'ai-1', ?, 'transfer', 'pending', ?, 'human', ?)`,
+    ).bind(askingPrice, FUTURE, new Date(NOW.getTime() - DAY_MS).toISOString()).run();
+    const budgetBefore = await budgetOf("ai-1");
+    expect(await replyToTransferOffers(replyModel.env, "ai-1", NOW, profile())).toBe(1);
+    expect(await count("SELECT COUNT(*) AS n FROM transfer_offers WHERE id = 'o-promise-2' AND status = 'accepted'")).toBe(1);
     expect(await count("SELECT COUNT(*) AS n FROM players WHERE id = 'ai-1-fwd3' AND team_id = 'human'")).toBe(1);
-    expect(await budgetOf("ai-1")).toBe(budgetBefore + fair);
-    const reply = await db.prepare("SELECT actions FROM ai_coach_decisions WHERE team_id = 'ai-1' AND kind = 'transfer_reply' AND context_ref = 'o-promise'")
+    expect(await budgetOf("ai-1")).toBe(budgetBefore + askingPrice);
+    const reply = await db.prepare("SELECT actions FROM ai_coach_decisions WHERE team_id = 'ai-1' AND kind = 'transfer_reply' AND context_ref = 'o-promise-2'")
       .first<{ actions: string }>();
-    expect(JSON.parse(reply!.actions)).toMatchObject({ kind: "accept", reason: "sale_promise", decidedBy: "guard" });
+    expect(JSON.parse(reply!.actions)).toMatchObject({ kind: "accept", reason: "accept_ask", decidedBy: "guard" });
     // Hráč odešel: hra slib uzavřela jako dodržený, inzerát je prodaný.
     expect(await count("SELECT COUNT(*) AS n FROM player_promises WHERE player_id = 'ai-1-fwd3' AND team_id = 'ai-1' AND type = 'transfer' AND status = 'kept'")).toBe(1);
     expect(await count("SELECT COUNT(*) AS n FROM transfer_listings WHERE player_id = 'ai-1-fwd3' AND status = 'sold'")).toBe(1);

@@ -2,10 +2,12 @@
  * Slib prodeje, který AI trenér dal nespokojenému hráči („Slíbit prodej při další nabídce“,
  * unhappy-players.ts). AI ho dodrží, jak by ho dodržel poctivý člověk:
  * - po dobu slibu je hráč na trhu. Inzerát trvá týden a slib 30 dní, proto ho AI po propadnutí
- *   vystaví znovu. Cenu vybere model mezi 60 % tržní hodnoty a tržní hodnotou (sale-promise-decision.ts),
- *   bez modelu platí tržní hodnota,
- * - odpovědi na nabídky (transfer-replies.ts) přijmou každý přestup od 60 % tržní hodnoty, bez
- *   protinávrhu nahoru (transfer-decision.ts). Pod 60 % ne: pevná pojistka platí vždy.
+ *   vystaví znovu. Cenu vybere model mezi tržní hodnotou a 115 % (sale-promise-decision.ts);
+ *   při výpadku modelu se inzerát odloží na další hodinu,
+ * - o nabídkách rozhoduje model jako jindy (transfer-replies.ts), jen ví o slibu a rezervací je
+ *   tržní hodnota, ne běžná rezervace podle významu hráče (transfer-decision.ts).
+ * Slib platí jen pro klub, který ho dal (`team_id`): slib po předchozím lidském trenérovi AI
+ * zdědí, ale i ten jde přes stejné rozhodnutí modelu, nikdy přes automat.
  * Když hráč z klubu odejde, hra slib uzavře jako dodržený (transfers/promises.ts).
  *
  * AI klubu se nic nepíše.
@@ -17,7 +19,7 @@ import { logger } from "../lib/logger";
 import { pragueHour } from "../lib/match-tick-schedule";
 import { listPlayerOnMarket } from "../services/transfer-actions";
 import { activeTransferPromise, type PlayerPromise } from "../transfers/promises";
-import { claimCoachTask } from "./claims";
+import { claimCoachTask, releaseCoachTask } from "./claims";
 import { logDecision, type DecisionMode } from "./decision-log";
 import { callCoachModel } from "./llm";
 import type { AiCoachProfile } from "./profile";
@@ -46,7 +48,8 @@ export interface SalePromiseOpts {
 export interface PromiseListingResult {
   playerId: string;
   price: number;
-  decidedBy: "model" | "fallback";
+  /** `deferred`: model neodpověděl, zkusí se to další běh. */
+  decidedBy: "model" | "fallback" | "deferred";
   /** Založený inzerát (null v režimu shadow a při chybě). */
   listingId: string | null;
   error?: string;
@@ -60,11 +63,19 @@ interface PromisedPlayerRow {
   deadline: string | null;
 }
 
-/** Běžící slib prodeje hráče (ne „pustit ho“: ten AI dodrží hned), nebo null. */
-export async function activeSalePromise(db: D1Database, playerId: string, now: Date): Promise<PlayerPromise | null> {
+/**
+ * Běžící slib prodeje hráče (ne „pustit ho“: ten AI dodrží hned), nebo null. S `clubTeamId`
+ * jen slib, který dal tenhle klub: slib z bývalého klubu hráče se na nového majitele nepřenáší.
+ */
+export async function activeSalePromise(db: D1Database, playerId: string, now: Date, clubTeamId?: string): Promise<PlayerPromise | null> {
   const promise = await activeTransferPromise(db, playerId);
   if (!promise || promise.type !== "transfer") return null;
   if (promise.deadline && new Date(promise.deadline).getTime() <= now.getTime()) return null;
+  if (clubTeamId) {
+    const owner = await db.prepare("SELECT team_id FROM player_promises WHERE id = ?").bind(promise.id).first<{ team_id: string }>()
+      .catch((e) => { logger.warn({ module: M, teamId: clubTeamId }, `klub slibu prodeje ${promise.id}`, e); return null; });
+    if (owner?.team_id !== clubTeamId) return null;
+  }
   return promise;
 }
 
@@ -101,7 +112,11 @@ interface ModelTrace {
 
 const NO_TRACE: ModelTrace = { model: null, raw: null, error: null, tokensIn: null, tokensOut: null, latencyMs: null, prompt: null };
 
-/** Vystaví hráče se slibem prodeje: cenu v mezích slibu vybere model, bez něj tržní hodnota. */
+/**
+ * Vystaví hráče se slibem prodeje: cenu v mezích slibu vybere model. Když model neodpoví
+ * (výpadek, nesmysl), hráč se nevystaví a zkusí se to příští hodinu (`deferred`); tržní hodnota
+ * bez modelu platí jen v režimu off.
+ */
 async function listPromisedPlayer(
   env: Bindings, club: AiClubState, row: PromisedPlayerRow, now: Date, mode: DecisionMode, opts: SalePromiseOpts,
 ): Promise<PromiseListingResult> {
@@ -136,6 +151,20 @@ async function listPromisedPlayer(
     } else {
       trace = { ...trace, error: trace.error ?? "neplatná odpověď modelu" };
     }
+  }
+  // Model měl rozhodnout a nerozhodl: cenu za něj kód nevybere, zkusí se to další běh.
+  if (decidedBy === "fallback" && mode !== "off") {
+    await logDecision(env.DB, {
+      teamId: club.teamId, kind: "promise_listing", mode, model: trace.model, contextRef: row.id,
+      inputSummary: trace.prompt ?? `player=${row.id} ${row.position} ${row.overall_rating} value=${value} range=${ctx.minPrice}-${ctx.maxPrice}`,
+      rawOutput: trace.raw,
+      actions: { playerId: row.id, deferred: true, minPrice: ctx.minPrice, maxPrice: ctx.maxPrice },
+      executed: { deferred: true },
+      usedFallback: false,
+      error: trace.error ?? "model není k dispozici",
+      tokensIn: trace.tokensIn, tokensOut: trace.tokensOut, latencyMs: trace.latencyMs,
+    });
+    return { playerId: row.id, price: 0, decidedBy: "deferred", listingId: null, error: trace.error ?? "model není k dispozici" };
   }
 
   let listingId: string | null = null;
@@ -187,7 +216,9 @@ export async function keepPromisedPlayersListed(
     const task = `${mode === "shadow" ? "shadow:" : ""}promise_listing:${row.id}`;
     if (!(await claimCoachTask(db, teamId, task, gameDay))) continue;
     try {
-      out.push(await listPromisedPlayer(env, club, row, now, mode, opts));
+      const res = await listPromisedPlayer(env, club, row, now, mode, opts);
+      if (res.decidedBy === "deferred") await releaseCoachTask(db, teamId, task, gameDay);
+      out.push(res);
     } catch (e) {
       logger.error({ module: M, teamId, playerId: row.id }, "inzerát hráče se slibem prodeje", e);
     }

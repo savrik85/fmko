@@ -60,6 +60,10 @@ export interface TransferReplyContext {
     swapPlayers: Array<{ position: string; age: number; rating: number; useful: boolean }>;
   };
   costs: SaleCosts;
+  /** Hráči AI slíbila prodej při další slušné nabídce a slib ještě běží. */
+  salePromise?: boolean;
+  /** Čisté hodnoty návrhů jiných klubů na téhož hráče, které čekají na odpověď, od nejvyšší. */
+  otherOffers?: number[];
   /** Jednání téhož kupujícího o hráči za 14 dní v čisté hodnotě, od nejstaršího. */
   history: { previousAsks: number[]; previousBids: number[]; priorBreakOffs: number };
   options: SellerOptions;
@@ -172,6 +176,18 @@ function historyLine(ctx: TransferReplyContext): string | null {
   return `TALKS with this club about him in the last 14 days: ${parts.length > 0 ? parts.join("; ") : "this is their first offer"}.`;
 }
 
+function promiseLine(ctx: TransferReplyContext): string | null {
+  if (!ctx.salePromise || ctx.offer.type !== "transfer") return null;
+  return "PROMISE: he was unhappy and your club promised him to let him go at the next decent offer. A manager who keeps his word sells him when a fair offer comes: accept an offer at or above your minimum, and when the offer is lower, ask for a fair price rather than ending the talks. Breaking the promise makes him furious.";
+}
+
+function otherOffersLine(ctx: TransferReplyContext): string | null {
+  if (ctx.offer.type !== "transfer") return null;
+  const others = ctx.otherOffers ?? [];
+  if (others.length === 0) return null;
+  return `OTHER OFFERS for him waiting for your answer, worth to your club: ${numbers(others)} CZK. This offer is the best one on the table; if you sell him now, the others fall through.`;
+}
+
 function optionLine(ctx: TransferReplyContext, action: SellerAction): string {
   const loan = ctx.offer.type === "loan";
   const o = ctx.options;
@@ -199,6 +215,8 @@ export function renderTransferReplyPrompt(ctx: TransferReplyContext): string {
     offerLine(ctx),
     ...(ctx.offer.type === "transfer" ? [worthLine(ctx)] : []),
     pricesLine(ctx),
+    promiseLine(ctx),
+    otherOffersLine(ctx),
     historyLine(ctx),
     "",
     "OPTIONS:",
