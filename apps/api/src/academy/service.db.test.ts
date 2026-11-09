@@ -105,6 +105,10 @@ describe("družstvo žáků", () => {
     if (!res.ok) return;
     const player = await db.prepare("SELECT team_id, raised_by_team_id, age FROM players WHERE id = ?").bind(res.playerId).first();
     expect(player).toEqual({ team_id: "club-u21", raised_by_team_id: "club", age: 13 });
+    // Čerstvý odchovanec: značka, podle které v nejbližším létě nedospívá; skryté stropy v life_context nejsou
+    const ctx = await db.prepare("SELECT json_extract(life_context, '$.freshAcademyGraduate') AS fresh, json_extract(life_context, '$.skillsMax') AS caps FROM players WHERE id = ?")
+      .bind(res.playerId).first<{ fresh: number | null; caps: string | null }>();
+    expect(ctx).toEqual({ fresh: 1, caps: null });
   });
 
   it("dvě souběžná vytažení stejného kluka založí jen jednoho hráče", async () => {

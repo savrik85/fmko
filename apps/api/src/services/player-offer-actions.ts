@@ -120,16 +120,26 @@ export async function acceptPlayerOffer(db: D1Database, teamId: string, offerId:
   // přijme až po přechodu do nové sezóny, stárnutí ho minulo: rok mu přidat (jinak by celou
   // sezónu zůstal čtrnáctiletý a nesměl do áčka).
   let age = Number(offer.age);
+  let missedSummer = false;
   if (prospectOrigin?.aged_season != null) {
     const current = await db.prepare("SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1").first<{ number: number }>()
       .catch((e) => { logger.warn({ module: M, teamId }, "active season for academy offer", e); return null; });
-    if (current && current.number > prospectOrigin.aged_season) age += current.number - prospectOrigin.aged_season;
+    if (current && current.number > prospectOrigin.aged_season) {
+      age += current.number - prospectOrigin.aged_season;
+      missedSummer = true;
+    }
   }
+  // Čerstvý odchovanec z akademie v nejbližším létě nedospívá (season/dospivani.ts): dovednosti
+  // právě dostal z generátoru podle věku a let u žáků, letní skok by přišel navíc. Značku po létě
+  // maže rollover (fáze u21_flags). Kdo vznikl až po létě ze staré nabídky, dospívání už minul.
+  const playerLifeContext: Record<string, unknown> = prospectId && !missedSummer
+    ? { ...lifeContextWithoutCaps, freshAcademyGraduate: true }
+    : lifeContextWithoutCaps;
   await db.prepare(
     `INSERT INTO players (id, team_id, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, weekly_wage, status, nationality, hidden_talent, skills_max, raised_by_team_id)
      VALUES (?, ?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)`
   ).bind(playerId, targetTeamId, offer.first_name, offer.last_name, age, offer.position, offer.overall_rating,
-    offer.skills, offer.physical, offer.personality, JSON.stringify(lifeContextWithoutCaps), offer.avatar, offer.weekly_wage,
+    offer.skills, offer.physical, offer.personality, JSON.stringify(playerLifeContext), offer.avatar, offer.weekly_wage,
     (offer.nationality as string) ?? "CZ", hiddenTalent, JSON.stringify(skillsMax), raisedBy).run();
 
   // Set residence

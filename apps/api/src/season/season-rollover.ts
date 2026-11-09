@@ -630,22 +630,21 @@ async function rollYouthSchedulesChunk(
  * 11. Stárnutí dorostu o rok, PŘESNĚ jednou: UPDATE i marker jdou jednou dávkou (D1 batch =
  * transakce) a UPDATE se navíc sám zastaví o hotový marker. Kdyby se marker zapsal až po
  * stárnutí zvlášť, pád mezi nimi by při dalším kroku nechal kluky zestárnout podruhé.
- * Senior kádry stárnou ve fázi departures. Čerstvý odchovanec z akademie (vznikl v tomhle
- * konci sezóny) nestárne a nedospívá.
+ * Senior kádry stárnou ve fázi departures. Čerstvý odchovanec z akademie stárne s ostatními
+ * (vzniká s věkem, jaký měl u žáků), jen v prvním létě nedospívá (dospivani.ts). Dřív ho značka
+ * vyřadila i ze stárnutí: to platilo pro starou akademii, kde vznikal rovnou s novým věkem.
  */
 async function ageYouth(db: D1Database, _ctx: RolloverContext, key: ProgressKey): Promise<PhaseOutcome> {
   const [aged] = await db.batch([
     db.prepare(
       `UPDATE players SET age = age + 1
         WHERE team_id IN (SELECT id FROM teams WHERE team_type = 'u21')
-          AND json_extract(COALESCE(life_context, '{}'), '$.freshAcademyGraduate') IS NULL
           AND NOT EXISTS (SELECT 1 FROM season_end_progress
                            WHERE league_id = ? AND season_number = ? AND phase = ? AND status = 'done')`,
     ).bind(key.leagueId, key.seasonNumber, key.phase),
     // Ve stejné dávce (před markerem): s věkem se projeví víc z vrozené chuti na alkohol
     db.prepare(alcoholAgingSql(
       `team_id IN (SELECT id FROM teams WHERE team_type = 'u21')
-        AND json_extract(COALESCE(life_context, '{}'), '$.freshAcademyGraduate') IS NULL
         AND NOT EXISTS (SELECT 1 FROM season_end_progress
                          WHERE league_id = ? AND season_number = ? AND phase = ? AND status = 'done')`,
     )).bind(key.leagueId, key.seasonNumber, key.phase),

@@ -129,6 +129,11 @@ describe("rollover po fázích", () => {
     const { db } = await freshWorld();
     const before = await agesById(db);
     expect(before.size).toBeGreaterThan(0);
+    // Čerstvý odchovanec z akademie: zestárne s ostatními, ale v prvním létě nedospívá
+    const fresh = await db.prepare(
+      "SELECT p.id FROM players p JOIN teams t ON t.id = p.team_id WHERE t.team_type = 'u21' AND p.age <= 19 ORDER BY p.id LIMIT 1",
+    ).first<{ id: string }>();
+    await db.prepare("UPDATE players SET life_context = json_set(COALESCE(life_context, '{}'), '$.freshAcademyGraduate', json('true')) WHERE id = ?").bind(fresh!.id).run();
 
     expect(await beginRollover(db, 1)).toBe("in_progress");
     const steps = await runUntilFinished(db, 1);
@@ -151,6 +156,10 @@ describe("rollover po fázích", () => {
 
     // Každý kluk zestárl přesně o rok, ať je teď kdekoli (v dorostu, nebo v áčku).
     for (const [id, age] of before) expect(await ageOf(db, id), id).toBe(age + 1);
+    // Odchovanec nedospěl (žádný zápis dospívání), ostatní ano, a značka je po létě pryč
+    expect(await count(db, "SELECT COUNT(*) AS n FROM training_log WHERE training_type = 'dospivani' AND player_id = ?", fresh!.id)).toBe(0);
+    expect(await count(db, "SELECT COUNT(*) AS n FROM training_log WHERE training_type = 'dospivani'")).toBeGreaterThan(0);
+    expect(await count(db, "SELECT COUNT(*) AS n FROM players WHERE json_extract(COALESCE(life_context, '{}'), '$.freshAcademyGraduate') IS NOT NULL")).toBe(0);
     // Ti, komu je teď 22, odešli do áčka a dorosty dostaly nový ročník.
     expect(await count(db, OVERAGE_IN_YOUTH)).toBe(0);
     expect(await count(db, SIXTEEN_IN_YOUTH)).toBeGreaterThan(0);
