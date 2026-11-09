@@ -29,20 +29,26 @@ export const ENGINE_SINCE = "2026-10-11";
  *
  * Je to fit na stejných zápasech, ze kterých se teď měří i data, takže na začátku
  * sezóny 4 je dobré tabulku přeměřit z celé sezóny 3.
+ *
+ * Přeměřeno znovu 2026-11-09 stejným postupem, na 35 zápasech soutěže (III. třída 28)
+ * a s novým tvarem modelu: STRENGTH_K 0,035, báze 1,93 : 1,292 a klubová výhoda
+ * domácích (odds-model.ts). Úroveň se měří proti gólům modelu při úrovni 1, a ty
+ * s menším vlivem síly vycházejí u nevyrovnaných zápasů nižší, proto čísla stoupla.
+ * Průměr skupiny: dospělí 1,42 ze 133 zápasů, U21 1,21 ze 133.
  */
 export const ENGINE_FALLBACK_LEVEL: Readonly<Record<string, number>> = {
-  "7a82b469-d4db-4ee6-b730-2ec85a68122d": 1.34, // Okresní přebor Prachatice (naměřeno 1,35)
-  "042b993a-de48-4049-a48a-c716b152f044": 1.04, // Okresní přebor Prachatice — U21 (1,00)
-  "9513dc13-4a13-487e-9547-4a1ec755dd6c": 1.39, // Okresní přebor České Budějovice (1,45)
-  "d1b45b99-6154-4334-a17f-bf853d594686": 1.11, // Okresní přebor České Budějovice — U21 (1,14)
-  "dbd9bd42-3c72-44af-b21b-215bc3ef7ec9": 1.30, // Přebor Prahy (1,28)
-  "b483bf66-861e-4619-a600-b68d73445d22": 1.12, // Přebor Prahy — U21 (1,15)
-  "5570384b-2b92-44d6-9814-62e8edc7cc40": 1.27, // III. třída Prachatice (1,14 ze 7 zápasů)
-  "2914ffa4-f6c9-44be-bbe0-fba06d80b0c8": 1.05, // III. třída Prachatice — U21 (0,98 ze 7 zápasů)
+  "7a82b469-d4db-4ee6-b730-2ec85a68122d": 1.39, // Okresní přebor Prachatice (naměřeno 1,38)
+  "042b993a-de48-4049-a48a-c716b152f044": 1.27, // Okresní přebor Prachatice — U21 (1,30)
+  "9513dc13-4a13-487e-9547-4a1ec755dd6c": 1.52, // Okresní přebor České Budějovice (1,56)
+  "d1b45b99-6154-4334-a17f-bf853d594686": 1.20, // Okresní přebor České Budějovice — U21 (1,20)
+  "dbd9bd42-3c72-44af-b21b-215bc3ef7ec9": 1.38, // Přebor Prahy (1,37)
+  "b483bf66-861e-4619-a600-b68d73445d22": 1.32, // Přebor Prahy — U21 (1,37)
+  "5570384b-2b92-44d6-9814-62e8edc7cc40": 1.38, // III. třída Prachatice (1,36)
+  "2914ffa4-f6c9-44be-bbe0-fba06d80b0c8": 1.02, // III. třída Prachatice — U21 (0,93)
 };
 
 /** Pro ligu, která v tabulce není (nová soutěž): průměr hodnot z tabulky. */
-export const ENGINE_FALLBACK_DEFAULT = 1.20;
+export const ENGINE_FALLBACK_DEFAULT = 1.31;
 
 export function engineFallbackLevel(leagueId: string): number {
   return ENGINE_FALLBACK_LEVEL[leagueId] ?? ENGINE_FALLBACK_DEFAULT;

@@ -314,6 +314,43 @@ export function homeAdvantageFromFanbase(
   return { fromFans, atmosphere, total: fromFans + atmosphere };
 }
 
+/**
+ * Meze domácí výhody v zápase. Jednotkou je podíl držení míče, o který se
+ * domácím posune hra (engine/simulation.ts calcPossession).
+ */
+export const MATCH_HOME_ADVANTAGE = {
+  /** Výhoda domácího hřiště bez fanoušků a bez kotle. */
+  base: 0.05,
+  min: 0.02,
+  max: 0.15,
+  /** Jeden bod z homeAdvantageFromFanbase().total je setina držení míče. */
+  fanbasePerPoint: 0.01,
+  fanbaseMin: -0.01,
+  fanbaseMax: 0.03,
+} as const;
+
+/**
+ * Domácí výhoda jednoho zápasu: základ + sektor kotle + fanoušci (tvrdé jádro,
+ * vyprodáno nebo prázdno, hlas part).
+ *
+ * Jeden vzorec pro engine i pro kurzový model sázkové kanceláře
+ * (betting/team-inputs.ts). Kancelář dřív znala jen průměrnou výhodu domácích
+ * v soutěži, takže klub s plným kotlem vyhrával doma častěji, než říkal kurz.
+ */
+export function matchHomeAdvantage(input: {
+  /** homeAdvantageFromFanbase().total */
+  fanbaseTotal: number;
+  /** fanGroupMatchEffects().noiseBonus */
+  noiseBonus: number;
+  /** calculateFacilityEffects().homeAdvantageBonus; 0, když kotel ve svém sektoru nestojí. */
+  ultrasAdvantage: number;
+}): number {
+  const c = MATCH_HOME_ADVANTAGE;
+  const fromFanbase = Math.max(c.fanbaseMin, Math.min(c.fanbaseMax,
+    (input.fanbaseTotal + input.noiseBonus) * c.fanbasePerPoint));
+  return Math.min(c.max, Math.max(c.min, c.base + input.ultrasAdvantage + fromFanbase));
+}
+
 // Distance modifier pro bus konverzi (bližší = vyšší konverze)
 export function distanceConversionMod(distanceKm: number): number {
   const cfg = BUS_CONFIG.DISTANCE_MOD;

@@ -42,9 +42,15 @@
  * dlouhodobě výdělečnou. Přesně ta chyba, kvůli které jsem zavrhoval Poissona.
  *
  * Naměřeno na zápasech s rozdílem síly do ±1,5: 1,742 doma / 1,480 venku.
+ *
+ * 2026-11-09: součet bází zůstává (3,222, úroveň gólů se od něj odvíjí), mění se
+ * jejich poměr. Původní poměr 1,18 je z testovací databáze; na produkci v sezóně 3
+ * (133 ligových zápasů dospělých s kurzem, 26. 10. až 9. 11.) dali domácí 2,80 gólu
+ * a hosté 1,92 a fit vyrovnaného zápasu vyšel 2,72 : 1,83, poměr 1,49 ± 0,14.
+ * S poměrem 1,18 vracela slepá sázka na domácí 176 % a na hosty 68 %.
  */
-export const BASE_HOME_GOALS = 1.742;
-export const BASE_AWAY_GOALS = 1.480;
+export const BASE_HOME_GOALS = 1.93;
+export const BASE_AWAY_GOALS = 1.292;
 
 /**
  * Vliv jednoho bodu síly na log λ.
@@ -70,8 +76,24 @@ export const BASE_AWAY_GOALS = 1.480;
  * 2. poloviny sezóny na produkci. Báze a rozptyl zůstávají — přehrání nadsazuje
  * výhodu domácích (51,5 % výher proti 48,6 % na produkci i se starým enginem)
  * a nižší rozptyl z něj by podcenil vysoké výsledky, na kterých se dřív prodělávalo.
+ *
+ * 0,085 → 0,035 (2026-11-09). Úvaha výš, že přecenit favorita je bezpečné, neplatí:
+ * kdo je přeceněný, proti tomu stojí podceněný outsider s příliš vysokým kurzem.
+ * Na 133 zápasech sezóny 3 měl model 78 zápasů s kurzem 5 a víc na jednu stranu;
+ * domácí outsider s takovým kurzem vyhrál 11 z 39 (model 9 %), venkovní favorit
+ * s kurzem pod 1,5 vyhrál 23 ze 45 (model 79 %). S 0,085 seděl model na výsledky
+ * hůř, než kdyby sílu neznal vůbec.
+ *
+ * Fit na gólech těch zápasů (Poisson, strop rozdílu 10): 0,032 ± 0,008 se silou
+ * z dnešních nejlepších jedenácti a 0,039 se silou sestav, které skutečně nastoupily.
+ * Síla podle dostupných hráčů a uložené sestavy (team-inputs.ts) leží mezi nimi.
+ * Proč vyšlo dřív 0,085: efekt síly se s rozdílem sytí (viz log-poměry výš, +3 dává
+ * 0,54 a +12 jen 1,02) a v sezóně 3 je rozptyl sil dvakrát větší (AI kluby),
+ * do toho na zápas chybí v průměru 3,7 hráče na tým kvůli omluvenkám.
+ *
+ * Přeměřit po každých zhruba deseti kolech; 133 zápasů je málo.
  */
-export const STRENGTH_K = 0.085;
+export const STRENGTH_K = 0.035;
 
 /**
  * Sražení extrémů. U síly z celého kádru bylo potřeba (0,85), protože rozdíly
@@ -99,9 +121,30 @@ export const DISPERSION_C = 2.6;
  */
 export const MAX_GOALS = 20;
 
+/**
+ * Výhoda domácích průměrného klubu, ve stejných jednotkách jako
+ * matchHomeAdvantage (season/fanbase-helpers.ts): podíl držení míče navíc.
+ * Průměr přes domácí týmy 133 zápasů sezóny 3; báze modelu platí pro takový klub.
+ */
+export const CLUB_HA_REFERENCE = 0.086;
+
+/**
+ * Vliv klubové výhody domácích na log λ: o kolik se posune za jednotku výhody
+ * nad průměrem. Engine počítá výhodu každému klubu zvlášť z fanoušků a kotle
+ * (0,054 až 0,110 v sezóně 3), kancelář dřív znala jen průměr soutěže.
+ *
+ * Fit na 133 zápasech dal 7,3 ± 2,7. Bere se 5: mezi soutěžemi koeficient nedrží
+ * (III. třída má nejslabší fanoušky a nejvyšší výhodu domácích), uvnitř soutěže
+ * ano. S pěti je klub s nejsilnějším kotlem doma o 13 % gólů silnější než
+ * průměrný a klub bez fanoušků o 15 % slabší.
+ */
+export const CLUB_HA_K = 5;
+
 export interface TeamInput {
   /**
-   * Průměrný overall_rating NEJLEPŠÍCH JEDENÁCTI aktivních hráčů.
+   * Průměrný overall_rating jedenáctky, která nejspíš nastoupí: uložená sestava,
+   * jinak nejlepších jedenáct, vždy bez zraněných a suspendovaných
+   * (team-inputs.ts lineupStrength).
    *
    * Ne celý kádr: průměr přes soupisku netrestá slabý tým, ale široký. Klub
    * s 31 hráči včetně dorostenců od ratingu 16 měl proti klubu s 21 vybranými
@@ -133,14 +176,21 @@ export interface GoalLevels {
  * jsou nafitované báze, 1,8 = soutěž, kde padá o 80 % gólů víc. Jako GoalLevels
  * (z goalLevels) násobí góly domácích a hostů každá svou úrovní, tím nese i výhodu
  * domácích naměřenou v té soutěži.
+ *
+ * `homeAdvantage` je klubová výhoda domácích z matchHomeAdvantage. Bez ní se počítá
+ * s průměrným klubem (CLUB_HA_REFERENCE).
  */
-export function expectedGoals(home: TeamInput, away: TeamInput, level: number | GoalLevels = 1): Lambdas {
+export function expectedGoals(
+  home: TeamInput, away: TeamInput, level: number | GoalLevels = 1,
+  homeAdvantage: number = CLUB_HA_REFERENCE,
+): Lambdas {
   const levels = typeof level === "number" ? { home: level, away: level } : level;
   const raw = (home.strength + home.form) - (away.strength + away.form);
   const d = clamp(STRENGTH_SHRINK * raw, -STRENGTH_CAP, STRENGTH_CAP);
+  const shift = STRENGTH_K * d + CLUB_HA_K * (homeAdvantage - CLUB_HA_REFERENCE);
   return {
-    home: levels.home * BASE_HOME_GOALS * Math.exp(STRENGTH_K * d),
-    away: levels.away * BASE_AWAY_GOALS * Math.exp(-STRENGTH_K * d),
+    home: levels.home * BASE_HOME_GOALS * Math.exp(shift),
+    away: levels.away * BASE_AWAY_GOALS * Math.exp(-shift),
   };
 }
 
@@ -252,9 +302,9 @@ export interface SideLevelSample {
 /**
  * Úroveň gólů soutěže zvlášť pro domácí a pro hosty.
  *
- * Model má jedinou výhodu domácích pro všechny soutěže (poměr BASE_HOME_GOALS
- * a BASE_AWAY_GOALS), engine ji ale počítá z fanoušků a kotle každého klubu
- * (homeAdvantageFromFanbase), takže se mezi soutěžemi liší. V Praze v sezóně 3
+ * Báze nesou výhodu domácích průměrného klubu a klubovou odchylku přidává
+ * expectedGoals (CLUB_HA_K). Co zbývá, se mezi soutěžemi pořád liší: III. třída
+ * má nejslabší fanoušky a přitom nejvyšší výhodu domácích. V Praze v sezóně 3
  * vyšlo doma 1,71 a venku 0,74, ve druhém kole vyhráli domácí sedmkrát ze sedmi
  * i jako outsideři a výhra domácích se vyplácela 2,7 až 3,9 Kč na korunu.
  *

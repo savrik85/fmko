@@ -42,7 +42,11 @@ export const CALIBRATION_DAYS = 21;
 // kolo sezóny 3 (po 26. 10.) přepíše denní tick ten den ráno už novým modelem.
 // 2026-10-30: úroveň gólů jen z kol aktuální sezóny, zvlášť pro domácí a hosty,
 // a prior přeměřený na sezóně 3 (AI kluby v Budějovicích, výhoda domácích v Praze).
-export const MODEL_SINCE = "2026-10-30";
+// 2026-11-10: přefit na sezóně 3. Vliv síly 0,085 → 0,035, poměr bází domácí : hosté
+// 1,18 → 1,49, klubová výhoda domácích ze stejného vzorce jako engine a síla bez
+// zraněných a podle uložené sestavy. POZOR: je to den po napsání opravy. Když se
+// nasadí později, posunout na den nasazení, jinak hlídač bude soudit staré kurzy.
+export const MODEL_SINCE = "2026-11-10";
 
 /** Pod tolik vyhodnocených tipů se trh neposuzuje, je to jen šum. */
 export const CALIBRATION_MIN_N = 50;

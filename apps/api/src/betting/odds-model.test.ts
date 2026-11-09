@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   BASE_HOME_GOALS, BASE_AWAY_GOALS, DISPERSION_C, MARGIN, MIN_ODDS_X100, MAX_ODDS_X100,
+  CLUB_HA_K, CLUB_HA_REFERENCE, STRENGTH_K, STRENGTH_CAP,
   expectedGoals, formAdjustment, goalDistribution, outcomeProbabilities, totalsProbabilities,
   doubleChanceProbabilities,
   goalLevel, goalLevels, LEVEL_MIN, LEVEL_MAX, LEVEL_HALF_LIFE_ROUNDS, LEVEL_PRIOR_MATCHES, LEVEL_WINDOW_ROUNDS,
@@ -50,7 +51,26 @@ describe("očekávané góly", () => {
 
   it("domácí výhoda je zabudovaná v rozdílu bází, ne ve zvláštním členu", () => {
     expect(vyrovnany.home).toBeGreaterThan(vyrovnany.away);
-    expect(vyrovnany.home / vyrovnany.away).toBeCloseTo(1.177, 2);
+    // Produkce, sezóna 3: fit vyrovnaného zápasu 2,72 : 1,83, poměr 1,49 ± 0,14.
+    expect(vyrovnany.home / vyrovnany.away).toBeCloseTo(1.49, 2);
+  });
+
+  it("klub s plným kotlem je doma silnější než klub bez fanoušků", () => {
+    const sides = [{ strength: 30, form: 0 }, { strength: 30, form: 0 }] as const;
+    const averageClub = expectedGoals(sides[0], sides[1], 1, CLUB_HA_REFERENCE);
+    const fullStand = expectedGoals(sides[0], sides[1], 1, 0.11);
+    const withoutFans = expectedGoals(sides[0], sides[1], 1, 0.05);
+
+    // Průměrný klub je přesně báze, výchozí hodnota parametru je tentýž klub.
+    expect(averageClub).toEqual(vyrovnany);
+    expect(fullStand.home).toBeGreaterThan(averageClub.home);
+    expect(fullStand.away).toBeLessThan(averageClub.away);
+    expect(withoutFans.home).toBeLessThan(averageClub.home);
+    expect(withoutFans.away).toBeGreaterThan(averageClub.away);
+    // Posun je stejný člen jako síla: e^(K · rozdíl výhody).
+    expect(fullStand.home / averageClub.home).toBeCloseTo(Math.exp(CLUB_HA_K * (0.11 - CLUB_HA_REFERENCE)), 10);
+    // Celý rozsah naměřený na produkci (0,054 až 0,110) nesmí vážit víc než strop síly.
+    expect(Math.log(fullStand.home / withoutFans.home)).toBeLessThan(STRENGTH_K * STRENGTH_CAP);
   });
 
   it("silnější tým dá víc a dostane míň", () => {
@@ -76,18 +96,30 @@ describe("očekávané góly", () => {
   });
 
   it("model odpovídá naměřenému poměru gólů podle síly sestavy", () => {
-    // Naměřeno na odehraných zápasech (rozdíl top-11 síly → log poměru gólů):
-    //   +3 → +0,543 · +6 → +0,945
-    // Model má být na horní hraně: favorita spíš přecenit než podcenit, protože
-    // podcenění je jediná chyba, ze které dokáže sázející systematicky těžit.
+    // Naměřeno na 133 zápasech sezóny 3 na produkci (rozdíl síly → log poměru gólů
+    // nad výhodu domácích), průměr kladné a záporné strany:
+    //   ±3,5 → 0,38 · ±7,5 → 0,67 · ±13 → 0,83
+    // Model nesmí favorita přeceňovat: proti přeceněnému favoritovi stojí outsider
+    // s příliš vysokým kurzem a na něm kancelář v sezóně 3 prodělávala.
     const pomer = (rozdil: number) => {
       const l = expectedGoals({ strength: 30 + rozdil, form: 0 }, { strength: 30, form: 0 });
       return Math.log(l.home / l.away) - Math.log(BASE_HOME_GOALS / BASE_AWAY_GOALS);
     };
-    expect(pomer(3)).toBeGreaterThan(0.45);
-    expect(pomer(3)).toBeLessThan(0.70);
-    expect(pomer(6)).toBeGreaterThan(0.90);
-    expect(pomer(6)).toBeLessThan(1.30);
+    expect(pomer(3.5)).toBeGreaterThan(0.15);
+    expect(pomer(3.5)).toBeLessThan(0.40);
+    expect(pomer(7.5)).toBeGreaterThan(0.40);
+    expect(pomer(7.5)).toBeLessThan(0.70);
+    expect(pomer(13)).toBeGreaterThan(0.60);
+    expect(pomer(13)).toBeLessThan(0.85);
+  });
+
+  it("venkovní favorit o deset bodů není jistota", () => {
+    // Sezóna 3: hosté silnější o deset a víc bodů vyhráli 9 ze 17 zápasů. Starý model
+    // jim dával 79 % a kurz pod 1,5, domácímu outsiderovi kurz přes 5.
+    const o = outcomeProbabilities(expectedGoals({ strength: 30, form: 0 }, { strength: 42, form: 0 }));
+    expect(o.away).toBeGreaterThan(0.40);
+    expect(o.away).toBeLessThan(0.65);
+    expect(o.home).toBeGreaterThan(0.18);
   });
 
   it("široký kádr nesmí dělat z týmu outsidera", () => {
@@ -98,9 +130,11 @@ describe("očekávané góly", () => {
     const o = outcomeProbabilities(podleSestavy);
     expect(o.home).toBeGreaterThan(o.away);   // domácí favorit, jak má být
 
+    // Podle celého kádru by hosté vypadali o pět a půl bodu silnější a šance
+    // domácích by spadla o deset procentních bodů.
     const podleKadru = expectedGoals({ strength: 40.32, form: 0 }, { strength: 45.86, form: 0 });
     const spatne = outcomeProbabilities(podleKadru);
-    expect(spatne.away).toBeGreaterThan(spatne.home);  // tohle dělal starý model
+    expect(spatne.home).toBeLessThan(o.home - 0.08);
   });
 
   it("forma hýbe kurzem míň než rozdíl kádrů", () => {
@@ -316,10 +350,17 @@ describe("rozdělení gólů", () => {
  */
 describe("KALIBRACE na odehraných zápasech", () => {
   it("vyrovnaný zápas dá naměřený poměr výsledků", () => {
-    const o = outcomeProbabilities(vyrovnany);
-    expect(o.home).toBeCloseTo(NAMERENO.vyhraDoma, 1);
-    expect(o.draw).toBeCloseTo(NAMERENO.remiza, 1);
-    expect(o.away).toBeCloseTo(NAMERENO.vyhraVenku, 1);
+    // Produkce, sezóna 3, 22 zápasů s rozdílem síly sestav do ±2 bodů: domácí
+    // vyhráli 45 %, hosté 36 %. Přes všech 133 zápasů 53 % / 17 % / 30 %.
+    // Úroveň 1,42 je průměr soutěží dospělých (engine-transition.ts).
+    const o = outcomeProbabilities(expectedGoals({ strength: 30, form: 0 }, { strength: 30, form: 0 }, 1.42));
+    expect(o.home).toBeGreaterThan(0.45);
+    expect(o.home).toBeLessThan(0.58);
+    expect(o.draw).toBeGreaterThan(0.13);
+    expect(o.draw).toBeLessThan(0.21);
+    expect(o.away).toBeGreaterThan(0.25);
+    expect(o.away).toBeLessThan(0.36);
+    expect(NAMERENO.remiza).toBeGreaterThan(o.draw); // referenční data měla míň gólů, tedy víc remíz
   });
 
   it("linie na počet gólů sedí na naměřené četnosti do dvou procentních bodů", () => {
