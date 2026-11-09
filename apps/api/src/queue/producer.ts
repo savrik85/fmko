@@ -13,10 +13,15 @@ import { logger } from "../lib/logger";
 /** sendBatch bere najednou nejvýš 100 zpráv. */
 const MAX_BATCH = 100;
 
-async function sendChunked<T>(queue: Queue<T>, bodies: T[], label: string): Promise<number> {
+/** O kolik později jdou do fronty kola U21 než kola mužů. */
+export const U21_ROUND_DELAY_SECONDS = 8 * 60;
+/** Údržba lig (celebrity, AI inzeráty) se zařadí až po kolech. */
+export const MAINTENANCE_DELAY_SECONDS = 15 * 60;
+
+async function sendChunked<T>(queue: Queue<T>, bodies: T[], label: string, delaySeconds?: number): Promise<number> {
   let sent = 0;
   for (let i = 0; i < bodies.length; i += MAX_BATCH) {
-    const chunk = bodies.slice(i, i + MAX_BATCH).map((body) => ({ body }));
+    const chunk = bodies.slice(i, i + MAX_BATCH).map((body) => (delaySeconds ? { body, delaySeconds } : { body }));
     try {
       await queue.sendBatch(chunk);
       sent += chunk.length;
@@ -47,13 +52,14 @@ export async function enqueueMatchTick(env: Bindings): Promise<EnqueueResult> {
   const enqueuedAt = new Date().toISOString();
   const due = await findLeaguesWithDueRound(env.DB);
 
-  const roundMessages: MatchQueueMessage[] = due.map((d) => ({
-    kind: "league_round",
-    leagueId: d.leagueId,
-    gameDate: d.gameDate,
-    enqueuedAt,
-  }));
-  const rounds = await sendChunked(queue, roundMessages, "league_round");
+  // Mužské soutěže první, U21 až po nich: 2026-11-09 dostala U21 III. třídy slot dřív
+  // a spadla spolu s Prachaticemi a ČB, zatímco Praha čekala. U21 dorazí o pár minut
+  // později, kdy už mají áčka zápasy za sebou a instance volnější paměť.
+  const toMessage = (d: { leagueId: string; gameDate: string }): MatchQueueMessage => ({
+    kind: "league_round", leagueId: d.leagueId, gameDate: d.gameDate, enqueuedAt,
+  });
+  const rounds = await sendChunked(queue, due.filter((d) => !d.isU21).map(toMessage), "league_round")
+    + await sendChunked(queue, due.filter((d) => d.isU21).map(toMessage), "league_round_u21", U21_ROUND_DELAY_SECONDS);
 
   // Údržba (celebrity, AI inzeráty) běží pro ligy s lidským týmem nezávisle na tom,
   // jestli se dnes hraje — stejně jako to dělaly původní globální smyčky v index.ts.
@@ -72,7 +78,9 @@ export async function enqueueMatchTick(env: Bindings): Promise<EnqueueResult> {
     gameDate: r.game_date ?? "",
     enqueuedAt,
   }));
-  const maintenance = await sendChunked(queue, maintenanceMessages, "league_maintenance");
+  // Údržba až po kolech: dávka 16 zpráv v 18:05 přišla do instance s běžícími koly
+  // a ta spadla (2026-11-09). Celebrity a AI inzeráty počkají čtvrt hodiny.
+  const maintenance = await sendChunked(queue, maintenanceMessages, "league_maintenance", MAINTENANCE_DELAY_SECONDS);
 
   logger.info(
     { module: "queue-producer" },
