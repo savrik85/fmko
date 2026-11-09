@@ -10,6 +10,7 @@ import {
   deletePushSubscription,
   getNotificationPreferences,
   saveNotificationPreferences,
+  isValidPushSubscription,
   type PushSubscriptionData,
 } from "../community/web-push";
 import { logger } from "../lib/logger";
@@ -41,6 +42,11 @@ pushRouter.post("/push/subscribe", async (c) => {
 
   if (!body?.endpoint || !body?.keys?.p256dh || !body?.keys?.auth) {
     return c.json({ error: "Chybí endpoint nebo klíče" }, 400);
+  }
+  // Jen https adresy push služeb prohlížečů: na adresu odběru pak server sám posílá požadavky.
+  if (!isValidPushSubscription(body)) {
+    logger.warn({ module: "push" }, `odmítnutý odběr pro tým ${session.teamId}: neznámá push služba nebo neplatné klíče`);
+    return c.json({ error: "Tenhle prohlížeč pro oznámení nepodporujeme." }, 400);
   }
 
   await savePushSubscription(c.env.DB, session.teamId, body);
