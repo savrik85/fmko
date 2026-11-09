@@ -1966,13 +1966,16 @@ export async function copyOrCreateLineup(db: D1Database, teamId: string, calenda
     // Protože odlišení "user-saved explicit" vs "auto-copy z defaultu" v existujícím schématu
     // chybí, použiji heuristiku: nejnovější lineup z calendar_id co MÁ taky kopii v
     // lineup_presets (= byl ručně uložen jako preset). Pokud není, nejnovější vůbec.
+    // Jen sestavy uložené před výkopem tohoto kola: jinak by šlo po zamčení kola uložit
+    // sestavu na příští kolo a tenhle zápas (bez vlastní sestavy) by si ji zkopíroval.
     const lastLineup = await db.prepare(
         `SELECT l.formation, l.tactic, l.hardness, l.players_data, l.captain_id, l.preset_slot, l.match_plan, l.bench_data, l.submitted_at
          FROM lineups l
          WHERE l.team_id = ?
            AND l.is_auto = 0
+           AND l.submitted_at <= COALESCE((SELECT scheduled_at FROM season_calendar WHERE id = ?), '9999')
          ORDER BY l.submitted_at DESC, l.id ASC LIMIT 1`
-    ).bind(teamId).first<{
+    ).bind(teamId, calendarId).first<{
         formation: string;
         tactic: string;
         players_data: string;

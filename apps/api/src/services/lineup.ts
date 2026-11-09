@@ -57,9 +57,14 @@ export async function saveLineup(db: D1Database, teamId: string, body: SaveLineu
   // Ligové kolo, které se už hraje nebo je odehrané, sestavu nepřijme. Zápasy kola jdou
   // po sobě, takže dřív šla sestava měnit i po výkopu, se znalostí hotových výsledků.
   // Pohár, turnaj a přátelák v season_calendar nejsou a řídí se vlastními pravidly.
-  const round = await db.prepare("SELECT status FROM season_calendar WHERE id = ?")
-    .bind(body.calendarId).first<{ status: string }>()
-    .catch((e) => { logger.warn({ module: "game" }, "stav kola pro uložení sestavy", e); return null; });
+  // Když se stav kola nepodaří zjistit, sestava se neuloží (radši chyba než obejitá uzávěrka).
+  let round: { status: string } | null;
+  try {
+    round = await db.prepare("SELECT status FROM season_calendar WHERE id = ?").bind(body.calendarId).first<{ status: string }>();
+  } catch (e) {
+    logger.warn({ module: "game" }, "stav kola pro uložení sestavy", e);
+    return { ok: false, status: 500, error: "Sestavu se nepodařilo uložit, zkus to prosím znovu." };
+  }
   if (round && round.status !== "scheduled") {
     return { ok: false, status: 409, error: "Kolo se už hraje, sestavu teď změnit nejde." };
   }
