@@ -12,6 +12,8 @@ import { logger } from "../lib/logger";
 export const VALID_TACTICS = ["offensive", "balanced", "defensive", "long_ball", "possession", "pressing"] as const;
 /** Tvrdost hry: whitelist stejně jako u taktiky, DB na ni CHECK nemá. */
 export const VALID_HARDNESS = ["fair", "normal", "hard"] as const;
+/** Řady, na které jde hráče v sestavě postavit. */
+export const VALID_MATCH_POSITIONS = ["GK", "DEF", "MID", "FWD"] as const;
 export const VALID_FORMATIONS = ["4-4-2", "4-3-3", "3-5-2", "4-5-1", "5-3-2", "3-4-3"] as const;
 
 export interface SaveLineupInput {
@@ -35,6 +37,10 @@ export type SaveLineupResult = { ok: true; lineupId: string } | ServiceError;
  */
 export async function saveLineup(db: D1Database, teamId: string, body: SaveLineupInput): Promise<SaveLineupResult> {
   if (!body.players || body.players.length !== 11) return { ok: false, status: 400, error: "Sestava musí mít přesně 11 hráčů" };
+  // Engine zná jen čtyři řady. Jiná hodnota (ručně poslané "LW") by v něm shodila celý zápas.
+  if (body.players.some((p) => !VALID_MATCH_POSITIONS.includes(p?.matchPosition as typeof VALID_MATCH_POSITIONS[number]))) {
+    return { ok: false, status: 400, error: "Sestava obsahuje neplatnou pozici" };
+  }
   const gkCount = body.players.filter((p) => p.matchPosition === "GK").length;
   if (gkCount !== 1) return { ok: false, status: 400, error: "Sestava musí mít přesně 1 brankáře" };
   if (!VALID_TACTICS.includes(body.tactic as typeof VALID_TACTICS[number])) {
@@ -46,6 +52,16 @@ export async function saveLineup(db: D1Database, teamId: string, body: SaveLineu
   }
   if (!VALID_FORMATIONS.includes(body.formation as typeof VALID_FORMATIONS[number])) {
     return { ok: false, status: 400, error: `Neplatná formace "${body.formation}"` };
+  }
+
+  // Ligové kolo, které se už hraje nebo je odehrané, sestavu nepřijme. Zápasy kola jdou
+  // po sobě, takže dřív šla sestava měnit i po výkopu, se znalostí hotových výsledků.
+  // Pohár, turnaj a přátelák v season_calendar nejsou a řídí se vlastními pravidly.
+  const round = await db.prepare("SELECT status FROM season_calendar WHERE id = ?")
+    .bind(body.calendarId).first<{ status: string }>()
+    .catch((e) => { logger.warn({ module: "game" }, "stav kola pro uložení sestavy", e); return null; });
+  if (round && round.status !== "scheduled") {
+    return { ok: false, status: 409, error: "Kolo se už hraje, sestavu teď změnit nejde." };
   }
 
   // Hráči musí patřit týmu a být k dispozici
