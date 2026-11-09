@@ -3,7 +3,7 @@
  *
  * Příspěvek nebo komentář, který míří na jiný klub (označení, komentář pod jeho
  * příspěvkem nebo článkem, odpověď jeho trenérovi), vyhodnotí model: uznání přidá
- * respekt, rýpnutí napětí, urážka vezme respekt a přidá napětí. Lajk na příspěvek
+ * respekt a ubere napětí, rýpnutí přidá napětí, urážka vezme respekt a přidá napětí. Lajk na příspěvek
  * nebo komentář jiného trenéra přidá kapku respektu, jednou denně za dvojici.
  *
  * Vztah novináře ke klubu (`journalist_relations`) se hýbe jen tehdy, když komentář
@@ -28,7 +28,8 @@ const M = "social-relations";
 export type SocialTone = "praise" | "tease" | "insult" | "neutral";
 
 export const TONE_EFFECTS: Record<Exclude<SocialTone, "neutral">, { respect: number; heat: number; icon: string }> = {
-  praise: { respect: 4, heat: 0, icon: "👏" },
+  // Pochvala napětí zchladí: jeden z mála způsobů, jak z rivality ubrat.
+  praise: { respect: 4, heat: -2, icon: "👏" },
   tease: { respect: -1, heat: 5, icon: "😏" },
   insult: { respect: -8, heat: 8, icon: "💢" },
 };
@@ -179,7 +180,7 @@ async function recordEffect(db: D1Database, e: EffectRow): Promise<{ respect: nu
     `INSERT OR IGNORE INTO social_relation_effects (id, team_a_id, team_b_id, actor_team_id, source_key, kind, respect, heat)
      SELECT ?1, ?2, ?3, ?4, ?5, ?6,
             CASE WHEN ?7 = 0 THEN 0 ELSE (CASE WHEN ?7 > 0 THEN 1 ELSE -1 END) * MIN(ABS(?7), MAX(0, ?10 - ${used("respect")})) END,
-            MIN(ABS(?8), MAX(0, ?10 - ${used("heat")}))
+            CASE WHEN ?8 = 0 THEN 0 ELSE (CASE WHEN ?8 > 0 THEN 1 ELSE -1 END) * MIN(ABS(?8), MAX(0, ?10 - ${used("heat")})) END
      RETURNING respect, heat`,
   ).bind(crypto.randomUUID(), e.a, e.b, e.actorTeamId, e.sourceKey, e.kind, e.respect, e.heat, today(), SOCIAL_DAILY_CAP)
     .first<{ respect: number; heat: number }>();

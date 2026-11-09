@@ -261,6 +261,30 @@ export async function applyRelationEvent(
   return { ...rel, respect, heat, history };
 }
 
+/** O kolik napětí dvojice vychladne za odehrané ligové kolo. */
+export const HEAT_COOLDOWN_PER_ROUND = 1;
+
+/**
+ * Napětí mezi trenéry časem vychladne: za každé odehrané ligové kolo o bod, ne pod nulu.
+ * Dřív jen rostlo a derby (napětí 60+) se z dvojice už nikdy nestalo obyčejným zápasem.
+ *
+ * Volá denní tick ráno po kole: vychladnou dvojice, ve kterých aspoň jeden klub
+ * odehrál za posledních `hours` hodin ligový zápas (přáteláky a pohár se nepočítají,
+ * U21 má vlastní týmy a do vztahů klubů nepatří). Jeden příkaz, vrací počet dvojic.
+ */
+export async function coolHeatAfterLeagueRound(db: D1Database, hours = 24): Promise<number> {
+  const res = await db.prepare(
+    `UPDATE manager_relations SET heat = MAX(0, heat - ?)
+      WHERE heat > 0 AND EXISTS (
+        SELECT 1 FROM matches m
+         WHERE m.status = 'simulated' AND m.league_id IS NOT NULL
+           AND julianday(m.simulated_at) > julianday('now', ?)
+           AND (m.home_team_id IN (manager_relations.team_a_id, manager_relations.team_b_id)
+             OR m.away_team_id IN (manager_relations.team_a_id, manager_relations.team_b_id)))`,
+  ).bind(HEAT_COOLDOWN_PER_ROUND, `-${Math.max(1, Math.round(hours))} hours`).run();
+  return res.meta?.changes ?? 0;
+}
+
 /** Posun morálky celé kabiny (clamp 0–100). */
 export async function shiftSquadMorale(db: D1Database, teamId: string, delta: number): Promise<void> {
   if (delta === 0) return;

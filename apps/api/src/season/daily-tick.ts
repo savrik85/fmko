@@ -1209,6 +1209,15 @@ export async function executeDailyTick(
     logger.error({ module: "daily-tick" }, "resolve social pub events", e);
   }
 
+  // ── Napětí mezi trenéry vychladne o bod za odehrané ligové kolo (ráno po kole) ──
+  try {
+    const { coolHeatAfterLeagueRound } = await import("../community/manager-relations");
+    const cooled = await coolHeatAfterLeagueRound(env.DB);
+    if (cooled > 0) events.push({ type: "recovery", description: `Vztahy trenérů: napětí vychladlo u ${cooled} dvojic` });
+  } catch (e) {
+    logger.error({ module: "daily-tick" }, "cool manager heat after round", e);
+  }
+
   // Morale drift toward 50 — týmy s klubovým grilem mají pásmo posunuté nahoru (nálada drží výš).
   // Základní drift v try/catch s fallbackem: kdyby sloupec club_grill ještě neexistoval (deploy
   // před migrací), nesmí spadnout celý tick — spadne jen na drift bez gril-výjimky.

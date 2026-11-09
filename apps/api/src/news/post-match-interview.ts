@@ -711,8 +711,9 @@ export async function applyPostMatchInterviewEffects(
             text: `${myManager} po zápase kontroval na výrok soupeře`,
           });
         } else {
+          // Smířlivá odpověď napětí opravdu ubere, nejen přidá respekt.
           await applyRelationEvent(db, interview.team_id, opponentId, {
-            respect: 4, icon: "🤝",
+            respect: 4, heat: -2, icon: "🤝",
             text: `${myManager} po zápase napětí zchladil`,
           });
         }

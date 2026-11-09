@@ -108,6 +108,18 @@ describe("vyznění textu mění vztah", () => {
     expect(await relation()).toMatchObject({ respect: 4, heat: 0 });
   });
 
+  it("pochvala napětí zchladí o 2, pod nulu ne", async () => {
+    await applySocialToneEffects(db, always("tease"), tease(1));
+    expect(await relation()).toMatchObject({ respect: -1, heat: 5 });
+    await applySocialToneEffects(db, always("praise"), tease(2));
+    expect(await relation()).toMatchObject({ respect: 3, heat: 3 });
+    const stored = await db.prepare("SELECT heat FROM social_relation_effects WHERE source_key = ?").bind(tease(2).sourceKey).first<{ heat: number }>();
+    expect(stored?.heat).toBe(-2);
+    await applySocialToneEffects(db, always("praise"), tease(3));
+    await applySocialToneEffects(db, always("praise"), tease(4));
+    expect((await relation())!.heat).toBe(0);
+  });
+
   it("denní strop: urážky za den nepohnou o víc než 10", async () => {
     for (let i = 1; i <= 4; i++) await applySocialToneEffects(db, always("insult"), tease(i));
     expect(await relation()).toMatchObject({ respect: -10, heat: 10 });
