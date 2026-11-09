@@ -111,14 +111,14 @@ export default function OnboardingPage() {
   const { token, isLoading, teamId, setTeam } = useTeam();
   const router = useRouter();
 
-  const [access, setAccess] = useState<{ district: string | null; name: string; districts: string[] } | null>(null);
+  const [access, setAccess] = useState<{ district: string | null; name: string; districts: string[]; homeFull?: boolean } | null>(null);
   const [accessError, setAccessError] = useState("");
   const [accessAttempt, setAccessAttempt] = useState(0);
   useEffect(() => {
     if (!token) return;
     let cancelled = false;
     setAccessError("");
-    apiFetch<{ district: string | null; name: string; districts: string[] }>("/api/registration/access")
+    apiFetch<{ district: string | null; name: string; districts: string[]; homeFull?: boolean }>("/api/registration/access")
       .then(data => {
         if (cancelled) return;
         setAccess(data);
@@ -247,8 +247,8 @@ export default function OnboardingPage() {
     return <main className="min-h-dvh bg-paper flex flex-col items-center justify-center gap-4 p-6">
       {reclaim && <ReclaimCard offer={reclaim} busy={reclaiming} error={reclaimError} onReclaim={handleReclaim} newClubBelow={false} />}
       <div className="card p-8 max-w-lg text-center">
-        <h1 className="text-h1 mb-4">{access ? "Tvůj okres se chystá na výkop" : "Ověřujeme tvůj okres"}</h1>
-        <p className="mb-5">{accessError || (access ? "Týmy odemkneme po dokončení místních dat a založení prvního klubu zakladatelem ligy. Zatím dej dohromady partu kamarádů." : "Načítáme připravené okresy pro založení týmu.")}</p>
+        <h1 className="text-h1 mb-4">{access ? (access.homeFull ? `Liga v okrese ${access.district} je plná` : "Tvůj okres se chystá na výkop") : "Ověřujeme tvůj okres"}</h1>
+        <p className="mb-5">{accessError || (access?.homeFull ? "V tvém okrese teď není volný klub a jiný otevřený okres zatím není. Ozveme se, až se místo uvolní." : access ? "Týmy odemkneme po dokončení místních dat a založení prvního klubu zakladatelem ligy. Zatím dej dohromady partu kamarádů." : "Načítáme připravené okresy pro založení týmu.")}</p>
         {!access && !accessError ? <Spinner /> : <button className="btn btn-primary" onClick={() => setAccessAttempt(v => v + 1)}>Znovu ověřit stav</button>}
         <a href="/" className="block mt-6 underline">Zpátky do Pralesa</a>
       </div>
@@ -272,6 +272,15 @@ export default function OnboardingPage() {
         {step === 1 && reclaim && !state.createdTeamId && (
           <div className="px-4 pt-4">
             <ReclaimCard offer={reclaim} busy={reclaiming} error={reclaimError} onReclaim={handleReclaim} newClubBelow />
+          </div>
+        )}
+
+        {/* Účet zamčený na plný okres si vybírá jiný otevřený. */}
+        {step === 1 && access.homeFull && !state.createdTeamId && (
+          <div className="px-4 pt-4 w-full max-w-3xl mx-auto">
+            <div role="status" className="bg-gold-50 border border-gold-300 rounded-xl px-4 py-3 text-sm text-ink leading-relaxed">
+              <strong>Liga v okrese {access.district} je plná.</strong> Klub v ní teď založit nejde. Vyber si jiný okres s volným místem, nejživější ligy jsou nahoře.
+            </div>
           </div>
         )}
 

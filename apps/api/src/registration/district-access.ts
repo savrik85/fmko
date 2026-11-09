@@ -1,5 +1,13 @@
-/** Jediné pravidlo pro otevření okresu, používané onboardingem i zápisem týmu. */
-export async function districtAccess(db: D1Database, district: string, userId?: string): Promise<string | null> {
+import { createCapacityLookup, districtFullMessage, type CapacityLookup } from "./district-capacity";
+
+/**
+ * Jediné pravidlo pro otevření okresu, používané onboardingem i zápisem týmu.
+ * Plný nebo ručně zavřený okres nové kluby nepřijímá. Účet zamčený na takový okres
+ * si smí vybrat jiný otevřený, jinak by klub nezaložil nikdy.
+ */
+export async function districtAccess(
+  db: D1Database, district: string, userId?: string, capacityOf: CapacityLookup = createCapacityLookup(db),
+): Promise<string | null> {
   const registration = await db.prepare(
     `SELECT d.status, d.founder_request_id, d.founder_team_id, r.user_id AS founder_user_id,
        r.status AS founder_status, r.activated_at AS founder_activated_at
@@ -7,11 +15,13 @@ export async function districtAccess(db: D1Database, district: string, userId?: 
      WHERE d.district = ?`
   ).bind(district).first<{ status: string; founder_request_id: string | null; founder_team_id: string | null; founder_user_id: string | null; founder_status: string | null; founder_activated_at: string | null }>();
   if (registration?.status !== "ready") return "Pro tento okres právě připravujeme data. Registraci týmů otevřeme po dokončení přípravy.";
+  if ((await capacityOf(district)).full) return `${districtFullMessage(district)} Vyber si prosím okres s volným místem.`;
   if (userId) {
     const user = await db.prepare("SELECT registration_district FROM users WHERE id = ?")
       .bind(userId).first<{ registration_district: string | null }>();
     if (!user) return "Účet nebyl nalezen.";
-    if (user.registration_district && user.registration_district !== district) return "Svůj tým můžeš založit pouze ve vybraném okrese.";
+    if (user.registration_district && user.registration_district !== district
+      && !(await capacityOf(user.registration_district)).full) return "Svůj tým můžeš založit pouze ve vybraném okrese.";
   }
   if (registration.founder_request_id && !registration.founder_team_id && registration.founder_user_id !== userId
     && founderStillHasHeadStart(registration.founder_status, registration.founder_activated_at)) {

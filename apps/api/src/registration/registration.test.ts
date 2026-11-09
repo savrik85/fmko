@@ -78,9 +78,9 @@ describe("registrace okresu", () => {
     const res = await call("/api/registration/districts");
     const data = await res.json() as Array<{ name: string; status: string; founderFree: boolean }>;
     expect(data).toHaveLength(77);
-    expect(data).toContainEqual({ name: "Praha-východ", status: "available", founderFree: false });
-    expect(data).toContainEqual({ name: "Kladno", status: "ready", founderFree: false });
-    expect(data).toContainEqual({ name: "Prachatice", status: "ready", founderFree: true });
+    expect(data).toContainEqual(expect.objectContaining({ name: "Praha-východ", status: "available", founderFree: false }));
+    expect(data).toContainEqual(expect.objectContaining({ name: "Kladno", status: "ready", founderFree: false }));
+    expect(data).toContainEqual(expect.objectContaining({ name: "Prachatice", status: "ready", founderFree: true }));
   });
   it("uloží tři údaje bez založení účtu či přihlášení a zarezervuje zakladatele", async () => {
     const id = await request();

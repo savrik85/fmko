@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { Bindings } from "../index";
 import { logger } from "../lib/logger";
+import { createCapacityLookup } from "../registration/district-capacity";
 
 /**
  * Veřejná data pro vstupní stránku: čísla ze hry, poslední výsledky a titulky zpravodaje.
@@ -9,7 +10,8 @@ import { logger } from "../lib/logger";
  */
 export const publicLandingRouter = new Hono<{ Bindings: Bindings }>();
 
-const CACHE_KEY = "public-landing:v2";
+export const LANDING_CACHE_KEY = "public-landing:v3";
+const CACHE_KEY = LANDING_CACHE_KEY;
 const CACHE_TTL_S = 600;
 /** Rubriky psané o vymyšlených hráčích a klubech, ne o lidech za klávesnicí. */
 const SAFE_NEWS_TYPES = ["ai_report", "player_interview", "ultras_report", "season_wrap", "celebrity_arrival", "legend_farewell"];
@@ -18,7 +20,8 @@ export interface LandingData {
   stats: { matches: number; players: number; villages: number; districts: number };
   results: Array<{ home: string; away: string; homeScore: number; awayScore: number; league: string; at: string }>;
   headlines: Array<{ headline: string; league: string; type: string }>;
-  districts: Array<{ name: string; villages: number; managers: number; founderFree: boolean }>;
+  /** `full` = okres nové kluby nepřijímá (plno nebo ručně zavřeno); v seznamu ale zůstává. */
+  districts: Array<{ name: string; villages: number; managers: number; founderFree: boolean; full: boolean; freeSlots: number | null }>;
 }
 
 /** Slova ze jmen manažerů (4+ znaky), podle kterých se vyřadí titulek. */
@@ -82,10 +85,20 @@ async function loadLandingData(db: D1Database): Promise<LandingData> {
       FROM district_registrations d WHERE d.status = 'ready' ORDER BY d.district`)
     .all<{ name: string; villages: number; managers: number; founderFree: number }>();
 
+  const capacityOf = createCapacityLookup(db);
+  const districtList: LandingData["districts"] = [];
+  for (const d of districts.results) {
+    const capacity = await capacityOf(d.name);
+    // Volný = bez zakladatele i bez lidských klubů; první hráč v něm povede ligu.
+    districtList.push({
+      ...d, founderFree: Boolean(d.founderFree) && d.managers === 0 && !capacity.full,
+      full: capacity.full, freeSlots: capacity.freeSlots,
+    });
+  }
+
   return {
     stats: stats ?? { matches: 0, players: 0, villages: 0, districts: 0 },
-    // Volný = bez zakladatele i bez lidských klubů; první hráč v něm povede ligu.
-    districts: districts.results.map((d) => ({ ...d, founderFree: Boolean(d.founderFree) && d.managers === 0 })),
+    districts: districtList,
     results: results.results,
     headlines,
   };

@@ -76,6 +76,11 @@ villagesRouter.get("/stats", async (c) => {
   const { listFullDistricts } = await import("../league/district-leagues");
   const fullDistricts: string[] = await listFullDistricts(c.env.DB)
     .catch((e) => { logger.warn({ module: "villages" }, "fetch full districts", e); return [] as string[]; });
+  // Ručně zavřený okres se v onboardingu chová stejně jako plný.
+  const { listManuallyClosedDistricts } = await import("../registration/district-capacity");
+  for (const district of await listManuallyClosedDistricts(c.env.DB)) {
+    if (!fullDistricts.includes(district)) fullDistricts.push(district);
+  }
 
   return c.json({ villageCounts, districtCounts, regionCounts, fullDistricts });
 });

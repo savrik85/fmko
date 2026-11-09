@@ -84,4 +84,10 @@ export interface RegistrationDistrict {
   status: "available" | "preparing" | "ready";
   /** Připravený okres bez zakladatele a bez lidských klubů: první hráč v něm povede ligu. */
   founderFree: boolean;
+  /** Připravený okres, který nové kluby nepřijímá: liga je plná, nebo ho správce zavřel. */
+  full?: boolean;
+  /** Kolik nových klubů se do okresu ještě vejde (null = neznámé nebo okres není připravený). */
+  freeSlots?: number | null;
+  /** Lidští manažeři v okrese. */
+  managers?: number;
 }
