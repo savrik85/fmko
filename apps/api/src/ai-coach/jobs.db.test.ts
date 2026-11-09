@@ -8,7 +8,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { Miniflare } from "miniflare";
 import type { Bindings } from "../index";
 import type { AiCoachQueueMessage } from "../queue/messages";
-import { enqueueAiCoachJobs, handleAiCoachMessage, isGameMonday } from "./jobs";
+import { enqueueAiCoachJobs, handleAiCoachMessage, isGameMonday, lineupIsStale } from "./jobs";
 import { COACH_MODE_KEY } from "./mode";
 
 let miniflare: Miniflare;
@@ -191,6 +191,45 @@ describe("AI trenér: sestava na dnešní zápas", () => {
     await handleAiCoachMessage(env({ run: async () => { called = true; return {}; } }), matchMsg);
     expect(called).toBe(false);
     expect(await savedLineup()).not.toBeNull();
+  });
+
+  it("kádr se přes den změní (prodej, U21, zranění): sestava přestane platit a model ji postaví znovu", async () => {
+    let calls = 0;
+    const ai = { run: async () => {
+      calls++;
+      return { choices: [{ message: { content: JSON.stringify({ formation: "4-4-2", tactic: "balanced", hardness: "normal", captain: "P1", rest: [], mustStart: [], plan: [], reasoning: "x" }) } }], usage: { prompt_tokens: 100, completion_tokens: 20 } };
+    } };
+    const e = env(ai);
+    const now = new Date(`${DAY}T09:15:00.000Z`);
+    expect((await enqueueAiCoachJobs(e, "match", now)).inline).toBe(1);
+    expect(calls).toBe(1);
+    const first = JSON.parse((await savedLineup())!.players_data) as Array<{ playerId: string }>;
+    expect(await lineupIsStale(db, TEAM, "cal-1")).toBe(false);
+    // Platná sestava: další hodinu se klub nezařadí a model se neptá.
+    expect((await enqueueAiCoachJobs(e, "match", now)).teams).toBe(0);
+    expect(calls).toBe(1);
+
+    const cases: Array<[string, string, string]> = [
+      // Prodej přes den: hráč je v jiném klubu.
+      ["UPDATE players SET team_id = 'human-team' WHERE id = ?", "UPDATE players SET team_id = 'ai-team' WHERE id = ?", "prodej"],
+      // Zranění hráče ze sestavy.
+      ["INSERT INTO injuries VALUES ('i-day', ?, 'ai-team', 'muscle', 'natažený sval', 6, 0)", "DELETE FROM injuries WHERE id = 'i-day' AND player_id = ?", "zranění"],
+    ];
+    for (const [change, undo, what] of cases) {
+      const gone = (JSON.parse((await savedLineup())!.players_data) as Array<{ playerId: string }>)[5].playerId;
+      await db.prepare(change).bind(gone).run();
+      expect(await lineupIsStale(db, TEAM, "cal-1"), what).toBe(true);
+      const before = calls;
+      const res = await enqueueAiCoachJobs(e, "match", now);
+      expect(res.teams, what).toBe(1);
+      expect(calls, what).toBe(before + 1);
+      const rebuilt = JSON.parse((await savedLineup())!.players_data) as Array<{ playerId: string }>;
+      expect(rebuilt, what).toHaveLength(11);
+      expect(rebuilt.some((p) => p.playerId === gone), what).toBe(false);
+      expect(await lineupIsStale(db, TEAM, "cal-1"), what).toBe(false);
+      await db.prepare(undo).bind(gone).run();
+    }
+    expect(first).toHaveLength(11);
   });
 
   it("zastaralá zpráva (jiný herní den) se zahodí", async () => {
