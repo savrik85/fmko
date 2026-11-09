@@ -2200,7 +2200,8 @@ export default function TransfersPage() {
                   const fromAcademy = !!(o as { fromAcademy?: boolean }).fromAcademy;
                   // Žák ze sousední akademie bez dorostu: po odmítnutí neskončí u žáků, ale s fotbalem
                   const academyVillage = (o as { academyVillage?: string | null }).academyVillage ?? null;
-                  const hiddenTalent = (o.personality as any)?.hiddenTalent as number | undefined;
+                  // Jen pásmo: přesný talent ani stropy rozvoje API v nabídce neposílá
+                  const talentBand = (o as { talentBand?: "high" | "medium" | "low" | null }).talentBand ?? null;
                   // expiresAt je v HERNÍM čase (player-offers.ts ho počítá z game_date),
                   // takže odpočet musí běžet proti hernímu datu. Proti reálnému času
                   // ukazoval při posunutých hodinách nesmysly (např. „vyprší za 78 dní").
@@ -2240,9 +2241,9 @@ export default function TransfersPage() {
                                 </span>
                               ));
                             })()}
-                            {isYouth && !fromAcademy && hiddenTalent !== undefined && (
+                            {isYouth && !fromAcademy && talentBand && (
                               <span className="text-xs text-amber-600 font-heading font-bold" title="Skrytý talent, talentovaný hráč roste na tréninku rychleji a má vyšší strop rozvoje">
-                                ✨ Talent {hiddenTalent >= 30 ? "vysoký" : hiddenTalent >= 18 ? "střední" : "nízký"}
+                                ✨ Talent {talentBand === "high" ? "vysoký" : talentBand === "medium" ? "střední" : "nízký"}
                               </span>
                             )}
                           </div>

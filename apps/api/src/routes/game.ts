@@ -19,7 +19,7 @@ import { maintainPitch, setPitchCareMode, upgradeStadiumFacility } from "../serv
 import { computeBannerOffers, MAX_BANNERS, signSponsorContract } from "../services/banner-sponsors";
 import { setTicketPrice } from "../services/club-settings";
 import { restockConcession, setConcessionMode, setConcessionProduct } from "../services/concessions";
-import { acceptPlayerOffer, rejectPlayerOffer } from "../services/player-offer-actions";
+import { publicOfferDetails, acceptPlayerOffer, rejectPlayerOffer } from "../services/player-offer-actions";
 import { mustSeason } from "../lib/season";
 import { MAX_CLUB_NAME_LENGTH, NAME_TAKEN_ERROR, renameClub } from "../lib/club-rename";
 import { getSession, getTokenFromRequest } from "../auth/session";
@@ -6213,7 +6213,8 @@ gameRouter.get("/teams/:teamId/player-offers", async (c) => {
        LEFT JOIN teams pt ON pt.id = yp.team_id LEFT JOIN villages pv ON pv.id = pt.village_id
       WHERE o.team_id = ? AND o.status = 'pending' AND o.expires_at > ? ORDER BY o.created_at DESC`
   ).bind(teamId, offerCutoff).all().catch((e) => { logger.warn({ module: "game.ts", teamId }, "player offers", e); return { results: [] }; });
-  return c.json(offers.results.map((o) => ({
+  // Skrytý talent a stropy rozvoje z nabídky se neposílají (services/player-offer-actions.ts)
+  return c.json(offers.results.map((o) => ({ o, details: publicOfferDetails(o as { source: unknown; prospect_id: unknown; personality: unknown; life_context: unknown }) })).map(({ o, details }) => ({
     id: o.id, source: o.source, sourceName: o.source_name, message: o.message,
     // Žák z akademie (academy/service.ts), ne náhodný dorostenec
     fromAcademy: !!o.prospect_id,
@@ -6224,8 +6225,10 @@ gameRouter.get("/teams/:teamId/player-offers", async (c) => {
     overallRating: o.overall_rating, weeklyWage: o.weekly_wage, expiresAt: o.expires_at,
     skills: JSON.parse((o.skills as string) ?? "{}"),
     physical: JSON.parse((o.physical as string) ?? "{}"),
-    personality: JSON.parse((o.personality as string) ?? "{}"),
-    lifeContext: JSON.parse((o.life_context as string) ?? "{}"),
+    personality: details.personality,
+    lifeContext: details.lifeContext,
+    /** Pásmo talentu kluka z dorostu (ne žáka z akademie), jinak null. */
+    talentBand: details.talentBand,
     avatar: JSON.parse((o.avatar as string) ?? "{}"),
   })));
 });

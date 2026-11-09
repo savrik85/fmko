@@ -14,6 +14,29 @@ import { recordTransaction } from "../season/finance-processor";
 
 const M = "player-offer-actions";
 
+/**
+ * Co z nabídky smí vidět hráč. Nabídka nese v `personality.hiddenTalent` skrytý talent
+ * a v `life_context.skillsMax` stropy rozvoje (přijetí je odsud přenese do sloupců hráče):
+ * obojí se do odpovědi neposílá. U kluka z dorostu (ne žáka z akademie, tam talent ukazuje
+ * Akademie slovy trenéra) zůstává jen pásmo talentu, které stránka ukazovala už dřív.
+ */
+export function publicOfferDetails(offer: { source: unknown; prospect_id: unknown; personality: unknown; life_context: unknown }): {
+  personality: Record<string, unknown>;
+  lifeContext: Record<string, unknown>;
+  talentBand: "high" | "medium" | "low" | null;
+} {
+  const parse = (raw: unknown, what: string): Record<string, unknown> => {
+    try { return JSON.parse((raw as string | null) ?? "{}") as Record<string, unknown>; }
+    catch (e) { logger.warn({ module: M }, `parse offer ${what}`, e); return {}; }
+  };
+  const { hiddenTalent, ...personality } = parse(offer.personality, "personality");
+  const { skillsMax: _caps, ...lifeContext } = parse(offer.life_context, "life_context");
+  const showBand = offer.source === "youth" && !offer.prospect_id && typeof hiddenTalent === "number";
+  // Stejné prahy jako talentBand v ai-coach/player-offer-decision.ts (AI trenér vidí totéž co člověk)
+  const band = (t: number) => (t >= 30 ? "high" : t >= 18 ? "medium" : "low");
+  return { personality, lifeContext, talentBand: showBand ? band(hiddenTalent as number) : null };
+}
+
 /** Registrace hráče z nabídky. */
 export const PLAYER_OFFER_SIGNING_FEE = 500;
 

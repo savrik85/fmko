@@ -6,7 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
 import { Miniflare } from "miniflare";
 import { createRng } from "../generators/rng";
-import { acceptPlayerOffer } from "../services/player-offer-actions";
+import { acceptPlayerOffer, publicOfferDetails } from "../services/player-offer-actions";
 import { promotePlayerFromU21 } from "../services/u21-moves";
 import {
   foundYouthTeam, closeYouthTeam, setYouthCoach, loadCoachOptions, weeklyAcademy, recommendPlayUp, promoteProspect,
@@ -54,6 +54,23 @@ beforeAll(async () => {
 }, 180_000);
 
 afterAll(async () => { await mf?.dispose(); });
+
+describe("nabídka hráče pro web", () => {
+  it("kluk z dorostu: jen pásmo talentu, přesné číslo ani stropy ne", () => {
+    const offer = (talent: number, prospectId: string | null = null, source = "youth") => publicOfferDetails({
+      source, prospect_id: prospectId,
+      personality: JSON.stringify({ discipline: 50, hiddenTalent: talent }),
+      life_context: JSON.stringify({ morale: 50, skillsMax: { speed: { current: 20, maxPotential: 60 } } }),
+    });
+    expect(offer(35)).toEqual({ personality: { discipline: 50 }, lifeContext: { morale: 50 }, talentBand: "high" });
+    expect(offer(18).talentBand).toBe("medium");
+    expect(offer(17).talentBand).toBe("low");
+    // Žák z akademie a dospělý z hospody pásmo nemají
+    expect(offer(90, "prospect-1").talentBand).toBeNull();
+    expect(offer(90, null, "pub").talentBand).toBeNull();
+    expect(publicOfferDetails({ source: "pub", prospect_id: null, personality: "{", life_context: null })).toEqual({ personality: {}, lifeContext: {}, talentBand: null });
+  });
+});
 
 describe("družstvo žáků", () => {
   it("založení přivede kluky 11–14 let hned, podruhé založit nejde", async () => {
@@ -118,9 +135,22 @@ describe("družstvo žáků", () => {
     const offer = await recommendPlayUp(db, "club", older.id, GAME_DATE);
     expect(offer.ok).toBe(true);
     if (!offer.ok) return;
+    // Nabídka nese skrytý talent a stropy v DB, ale do odpovědi pro hráče nejdou
+    const row = await db.prepare("SELECT source, prospect_id, personality, life_context FROM player_offers WHERE id = ?").bind(offer.offerId)
+      .first<{ source: string; prospect_id: string; personality: string; life_context: string }>();
+    expect(JSON.parse(row!.personality).hiddenTalent).toBe(older.hidden_talent);
+    expect(Object.keys(JSON.parse(row!.life_context).skillsMax).length).toBeGreaterThan(5);
+    const shown = publicOfferDetails(row!);
+    expect(JSON.stringify(shown)).not.toMatch(/hiddenTalent|skillsMax|maxPotential/);
+    expect(shown.talentBand).toBeNull();
+    expect(shown.personality.patriotism).toBeTypeOf("number");
     const res = await acceptPlayerOffer(db, "club", offer.offerId);
     expect(res.ok).toBe(true);
     if (!res.ok) return;
+    // Přijetí je dál čte z DB: hráč má talent žáka i stropy rozvoje
+    const hidden = await db.prepare("SELECT hidden_talent, skills_max FROM players WHERE id = ?").bind(res.playerId).first<{ hidden_talent: number; skills_max: string }>();
+    expect(hidden!.hidden_talent).toBe(older.hidden_talent);
+    expect(JSON.parse(hidden!.skills_max).speed.maxPotential).toBeGreaterThan(0);
     const player = await db.prepare("SELECT team_id, raised_by_team_id, age FROM players WHERE id = ?").bind(res.playerId).first();
     expect(player).toEqual({ team_id: "club-u21", raised_by_team_id: "club", age: 13 });
     // Čerstvý odchovanec: značka, podle které v nejbližším létě nedospívá; skryté stropy v life_context nejsou
