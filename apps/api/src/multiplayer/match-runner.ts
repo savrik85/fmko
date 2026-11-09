@@ -684,8 +684,12 @@ export async function runScheduledMatches(
             // Obec má 4 zastupitele bez ohledu na počet týmů a každý přijme jen jeden tým
             // za den, takže tým z obce s více kluby o výhodu přicházel. Politik v hledišti
             // navíc nemá co dělat s tím, kdo má míč.
-            const fanbaseAdvantage = Math.max(-0.01, Math.min(0.03, (haInfo.total + (groupFx?.noiseBonus ?? 0)) * 0.01));
-            const homeAdvantage = Math.min(0.15, Math.max(0.02, 0.05 + ultrasAdvantage + fanbaseAdvantage));
+            // Jeden vzorec s kurzovým modelem (betting/team-inputs.ts): dřív ho kancelář neznala
+            // a domácí outsidery systematicky podceňovala.
+            const {matchHomeAdvantage} = await import("../season/fanbase-helpers");
+            const homeAdvantage = matchHomeAdvantage({
+                fanbaseTotal: haInfo.total, noiseBonus: groupFx?.noiseBonus ?? 0, ultrasAdvantage,
+            });
             // Kotel (bubny a vlajky) domácích zvedá návštěvu; strop kapacity stadionu platí dál.
             // Lidi, které přilákají zastupitelé, platí vstupné jako ostatní, takže je přemrštěná
             // cena odradí taky — jinak by od trojnásobku chodilo padesát lidí na každého zastupitele.
