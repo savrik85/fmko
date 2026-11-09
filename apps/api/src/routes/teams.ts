@@ -33,6 +33,7 @@ import { logger } from "../lib/logger";
 import { playerBodyView } from "../generators/physicals";
 import { getSession, getTokenFromRequest, updateSessionTeamId } from "../auth/session";
 import { findReclaimableClub, reclaimClub } from "../ai-clubs/reclaim";
+import { handOverToOwner } from "../ai-clubs/reclaim-handover";
 import { STAND_COLUMNS, standFacilities, type StandSide } from "../stadium/stands-model";
 import { ensureStadiumRow } from "../stadium/stadium-service";
 import { ensureEquipmentRow } from "../equipment/equipment-service";
@@ -1002,9 +1003,16 @@ teamsRouter.post("/reclaim", async (c) => {
   const offer = await findReclaimableClub(c.env.DB, userId);
   const teamId = typeof body.teamId === "string" && body.teamId ? body.teamId : offer?.teamId;
   if (!teamId) return c.json({ error: "Žádný klub, ke kterému by ses mohl vrátit." }, 404);
+  // Čas převzetí je potřeba pro souhrn; návrat ho z týmu maže.
+  const taken = await c.env.DB.prepare("SELECT ai_since FROM teams WHERE id = ? AND user_id = 'ai'").bind(teamId).first<{ ai_since: string | null }>()
+    .catch((e) => { logger.warn({ module: "teams" }, "čas převzetí klubu před návratem", e); return null; });
   if (!(await reclaimClub(c.env.DB, userId, teamId))) {
     return c.json({ error: "Ke klubu se už vrátit nejde." }, 409);
   }
+  // Rozdělaná práce AI trenéra (inzeráty, poptávky, čekající nabídky) se stáhne a majitel dostane
+  // zprávu, co se mezitím stalo. Návrat už platí; chyba úklidu ho nezruší.
+  await handOverToOwner(c.env, teamId, taken?.ai_since ?? null)
+    .catch((e) => logger.error({ module: "teams" }, `předání klubu ${teamId} vracejícímu se majiteli`, e));
 
   // Session drží teamId (push, část rout). Stejně jako po založení klubu.
   await updateSessionTeamId(c.env.SESSION_KV, token, teamId)

@@ -123,7 +123,16 @@ export interface WeeklyContext {
   budget: number;
   reputation: number;
   profile: AiCoachProfile;
-  finance: { weeklyRunningCost: number; weeklyIncome: number; reserveWeeks: number; reserve: number; spendable: number };
+  finance: {
+    weeklyRunningCost: number; weeklyIncome: number; reserveWeeks: number; reserve: number; spendable: number;
+    /**
+     * Týdenní strop investic do stadionu a nového vybavení u klubu převzatého po člověku
+     * (ai-clubs/takeover-guard.ts); jinak null nebo nic.
+     */
+    investCap?: number | null;
+  };
+  /** Klub převzatý po člověku v ochranné lhůtě: kolik dní zbývá. Jméno klubu ani stadionu se nemění. */
+  takeover?: { daysLeft: number } | null;
   league: { position: number | null; teams: number | null; points: number | null; played: number };
   training: {
     type: string; approach: string; sessions: number;
@@ -231,6 +240,13 @@ export function computeReserve(profile: AiCoachProfile, weeklyRunningCost: numbe
  */
 export function investBudgetFor(profile: AiCoachProfile, spendable: number): number {
   return Math.round(Math.max(0, spendable) * (0.15 + 0.85 * profile.building / 100));
+}
+
+/** Investiční rozpočet týdne: podle chuti stavět, u převzatého klubu nejvýš strop ochranné lhůty. */
+export function weeklyInvestBudget(ctx: Pick<WeeklyContext, "profile" | "finance">): number {
+  const byAppetite = investBudgetFor(ctx.profile, ctx.finance.spendable);
+  const cap = ctx.finance.investCap;
+  return cap === null || cap === undefined ? byAppetite : Math.min(byAppetite, Math.max(0, Math.round(cap)));
 }
 
 /** Nová cena vstupného po zdražení nebo zlevnění o desetinu (na pětikoruny, v mezích obce). */
@@ -570,7 +586,7 @@ export function planWeeklyActions(ctx: WeeklyContext, d: WeeklyDecision): Weekly
     if (pay(key, o.cost)) actions.push({ kind: "hire", key, staffId: o.ref, role: o.role, cost: o.cost, weeklyWage: o.weeklyWage });
   }
   // Stavby a nové vybavení jen do investičního rozpočtu podle chuti stavět.
-  let invest = investBudgetFor(ctx.profile, ctx.finance.spendable);
+  let invest = weeklyInvestBudget(ctx);
   const investPay = (item: string, cost: number): boolean => {
     if (cost > invest) { skipped.push({ item, reason: `investiční rozpočet (zbývá ${Math.round(invest)} Kč)` }); return false; }
     if (!pay(item, cost)) return false;
@@ -664,7 +680,10 @@ export function renderWeeklyPrompt(ctx: WeeklyContext): string {
   L.push(`ambition ${p.ambition}, thrift ${p.thrift}, building (stadium and equipment) ${p.building}, youth focus ${p.youthFocus}, risk ${p.risk}, patience ${p.patience}, trading ${p.trading}. Favourite tactic: ${p.favouriteTactic}.`);
   L.push("");
   L.push(`CLUB ${promptName(ctx.teamName)}: ${ctx.league.position ? `table position ${ctx.league.position}/${ctx.league.teams}, ${ctx.league.points} pts after ${ctx.league.played} matches` : "season just started"}. Reputation ${ctx.reputation}/100.`);
-  L.push(`MONEY: budget ${czk(ctx.budget)}. Weekly running costs about ${czk(f.weeklyRunningCost)}, weekly income about ${czk(f.weeklyIncome)}. You keep a reserve of ${f.reserveWeeks} weeks of running costs = ${czk(f.reserve)}. Money you may spend this week: ${czk(f.spendable)}, of which at most ${czk(investBudgetFor(p, f.spendable))} on stadium and new equipment (your building appetite).`);
+  L.push(`MONEY: budget ${czk(ctx.budget)}. Weekly running costs about ${czk(f.weeklyRunningCost)}, weekly income about ${czk(f.weeklyIncome)}. You keep a reserve of ${f.reserveWeeks} weeks of running costs = ${czk(f.reserve)}. Money you may spend this week: ${czk(f.spendable)}, of which at most ${czk(weeklyInvestBudget(ctx))} on stadium and new equipment (your building appetite).`);
+  if (ctx.takeover) {
+    L.push(`CARETAKER: you took this club over from a human owner who may come back within ${ctx.takeover.daysLeft} day${ctx.takeover.daysLeft === 1 ? "" : "s"}. Run it carefully: the club and the stadium keep their names (no main sponsor or stadium naming deal for now) and the limit on stadium and equipment above is lower than usual so that his savings are not spent in a few weeks.`);
+  }
   L.push(`YOUR STYLE: ${styleText(p)}`);
   L.push("");
   L.push(`TRAINING now: ${ctx.training.type}, ${ctx.training.sessions} sessions/week, approach ${ctx.training.approach}. Matches are played on weekdays ${ctx.training.matchWeekdays.join(",")} (0 = Sunday). Squad ${ctx.training.squadSize} players (${ctx.training.youngPlayers} aged 21 or less), average condition ${ctx.training.avgCondition}, injured ${ctx.training.injured}.`);
