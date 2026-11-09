@@ -30,8 +30,8 @@ import type { DemandInput } from "../transfers/demands";
 import { findVisibleFreeAgents, findVisibleListings } from "../transfers/market-visibility";
 import { findTransferSearchPlayerRows } from "../transfers/player-search";
 import {
-  BUY_DEMAND, minimumBid,
-  type BuyCandidateOption, type BuyLoanOption, type BuyPickContext, type BuyPickDecision,
+  BUY_DEMAND, MAX_INJURY_DAYS_TO_BUY, minimumBid,
+  type BuyCandidateOption, type BuyLoanOption, type BuyPickContext, type BuyPickDecision, type PlayerFitness,
 } from "./buy-decision";
 import {
   decideBuyPick, decideByModel, newMarketTrace, recordDecision, type DecidedBy, type MarketTrace, type ModelUse,
@@ -216,6 +216,34 @@ interface BuyCandidate {
   sellerIsAi: boolean;
   /** Hráč klubu mimo hru (inzerát nebo hlášení skauta): kupuje se jednáním, ne nabídkou. */
   outside?: OutsideCandidate;
+  /** Zdraví, kondice a stopka hráče klubu ve hře, jak je vidí i lidský kupec. */
+  fitness?: PlayerFitness | null;
+}
+
+/**
+ * Zdraví, kondice a stopka hráčů klubů ve hře (to, co vidí člověk na kartě cizího hráče).
+ * Zranění se bere, jak je vidět: i předstírané vypadá jako skutečné.
+ */
+export async function loadPlayerFitness(db: D1Database, playerIds: string[]): Promise<Map<string, PlayerFitness>> {
+  const out = new Map<string, PlayerFitness>();
+  for (let i = 0; i < playerIds.length; i += 90) {
+    const chunk = playerIds.slice(i, i + 90);
+    const rows = await db.prepare(
+      `SELECT p.id, p.suspended_matches,
+              CASE WHEN json_valid(p.life_context) THEN json_extract(p.life_context, '$.condition') END AS condition,
+              (SELECT MAX(inj.days_remaining) FROM injuries inj WHERE inj.player_id = p.id AND inj.days_remaining > 0) AS injury_days
+         FROM players p WHERE p.id IN (${chunk.map(() => "?").join(",")})`,
+    ).bind(...chunk).all<{ id: string; suspended_matches: number | null; condition: number | null; injury_days: number | null }>()
+      .catch((e) => { logger.warn({ module: M }, "zdraví kandidátů na nákup", e); return { results: [] as Array<{ id: string; suspended_matches: number | null; condition: number | null; injury_days: number | null }> }; });
+    for (const r of rows.results) {
+      out.set(r.id, {
+        injuryDays: r.injury_days && r.injury_days > 0 ? Number(r.injury_days) : null,
+        condition: typeof r.condition === "number" ? r.condition : null,
+        suspendedMatches: Number(r.suspended_matches) || 0,
+      });
+    }
+  }
+  return out;
 }
 
 /** Kandidáti na post: inzeráty klubů ve hře a hráči soupeřů v lize (bez vlastních a hostujících). */
@@ -279,6 +307,14 @@ async function buyCandidates(env: Bindings, club: AiClubState, need: PositionNee
       playerId: `outside:${o.sourceId}`, teamId: "", leagueId: null, rating: o.rating, age: o.age, position: o.position,
       marketValue: marketValue(o.rating, o.age, o.position), listingId: null, askingPrice: o.askingPrice, sellerIsAi: false, outside: o,
     });
+  }
+  // Co vidí lidský kupec: zranění, kondice, stopka. Hráč zraněný na víc než dva týdny se nenabízí.
+  const inGame = Array.from(out.values()).filter((c) => !c.outside);
+  const fitness = await loadPlayerFitness(db, inGame.map((c) => c.playerId));
+  for (const c of inGame) {
+    const f = fitness.get(c.playerId) ?? null;
+    if (f && f.injuryDays !== null && f.injuryDays > MAX_INJURY_DAYS_TO_BUY) out.delete(c.playerId);
+    else c.fitness = f;
   }
   // Obchody mezi AI kluby jsou vzácné: hráče jiného AI klubu AI zvažuje jen některé dny.
   const aiDay = stableUnit(`ai-to-ai|${club.teamId}|${pragueDay(now)}`) < AI_TO_AI_CHANCE;
@@ -452,6 +488,7 @@ async function buildBuyOptions(
         estimatedValue: c.marketValue, askingPrice: c.askingPrice, feePct: Math.round(c.feeShare * 100),
         minBid: minimumBid({ estimatedValue: c.marketValue, listedPrice: listed, ruleBid: c.amount }),
         maxBid: listed ? Math.min(c.maxPrice, listed) : c.maxPrice,
+        fitness: c.fitness ?? null,
       },
       cand: c, freeAgentId: null, ruleBid: c.amount, ruleRank: shortlist.length,
     });
@@ -488,7 +525,7 @@ async function buildBuyOptions(
       if (loans.length >= MAX_LOAN_OPTIONS) break;
       if (!(await inGameCandidateOpen(db, club.teamId, c))) continue;
       loans.push({
-        option: { key: `l${loans.length + 1}`, seller: c.sellerIsAi ? "ai" : "human", position: c.position, age: c.age, rating: c.rating },
+        option: { key: `l${loans.length + 1}`, seller: c.sellerIsAi ? "ai" : "human", position: c.position, age: c.age, rating: c.rating, fitness: c.fitness ?? null },
         playerId: c.playerId,
       });
     }

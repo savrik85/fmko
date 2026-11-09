@@ -16,7 +16,7 @@ import { generateAiProfile, type AiCoachProfile } from "./profile";
 import {
   loadScoutReportCandidates, maybeStartScoutTask, negotiateOutsidePurchase, outsideCandidateFromListing,
 } from "./outside-buy";
-import { runTransferMarket } from "./transfer-market";
+import { loadPlayerFitness, runTransferMarket } from "./transfer-market";
 
 let mf: Miniflare;
 let db: D1Database;
@@ -389,6 +389,30 @@ describe("AI klub vybírá posilu modelem: model navrhuje, kód hlídá", () => 
     expect(res.actions.find((a) => a.kind === "offer")).toMatchObject({ playerId: "h-mid", amount: bid, result: "sent", decidedBy: "model" });
     const offer = await db.prepare("SELECT from_team_id, to_team_id, offer_amount, status FROM transfer_offers WHERE player_id = 'h-mid'").first();
     expect(offer).toEqual({ from_team_id: AI_CLUB, to_team_id: "human-club", offer_amount: bid, status: "pending" });
+  });
+
+  it("kandidát nese to, co vidí lidský kupec (zranění, kondice, stopka); marod na víc než 14 dní se nenabízí", async () => {
+    await insertHumanClubPlayer("h-fit", "MID", 40, 26);
+    await insertHumanClubPlayer("h-knock", "MID", 42, 25);
+    await insertHumanClubPlayer("h-long", "MID", 48, 24);
+    await db.batch([
+      db.prepare("UPDATE players SET life_context = ?, suspended_matches = 2 WHERE id = 'h-fit'").bind(JSON.stringify({ condition: 62 })),
+      db.prepare(
+        `INSERT INTO injuries (id, player_id, team_id, type, description, severity, days_remaining, days_total)
+         VALUES ('inj-knock', 'h-knock', 'human-club', 'sval', 'Natažený sval', 'lehke', 9, 12),
+                ('inj-long', 'h-long', 'human-club', 'koleno', 'Koleno', 'tezke', 40, 60)`,
+      ),
+    ]);
+    const ai = fakeAi(() => ({ choice: "none", bid: 0, reason: "not now" }));
+    await runMarket(marketEnv(ai.binding));
+    const prompt = ai.calls.find((c) => c.name === "buy_pick")?.prompt ?? "";
+    expect(prompt).toContain("MID, age 26, rating 40, fit, condition 62 %, suspended for 2 more matches");
+    expect(prompt).toContain("MID, age 25, rating 42, INJURED for 9 more days");
+    // Nejlepší z trojice je zraněný na 40 dní: model ho vůbec neuvidí.
+    expect(prompt).not.toContain("rating 48");
+    const fitness = await loadPlayerFitness(db, ["h-fit", "h-knock", "h-long"]);
+    expect(fitness.get("h-fit")).toEqual({ injuryDays: null, condition: 62, suspendedMatches: 2 });
+    expect(fitness.get("h-long")?.injuryDays).toBe(40);
   });
 
   it("hostování: model vybere hráče i délku ze sady kódu, žádost jde stejnou službou jako u člověka", async () => {

@@ -47,6 +47,7 @@ import {
   fallbackPitchDecision, pitchGuardViolation, pitchOptions, pitchSchema, PITCH_SYSTEM_PROMPT, renderPitchPrompt, validatePitchReply,
   type PitchCandidate, type PitchContext, type PitchDecision, type PitchOptions,
 } from "./demand-pitch-decision";
+import { MAX_INJURY_DAYS_TO_BUY } from "./buy-decision";
 import { decideBuyerReplyByModel, logNegotiationDecision } from "./buy-model";
 import { activeSalePromise } from "./sale-promise";
 import {
@@ -838,7 +839,11 @@ async function pitchEntry(ctx: RunContext, pitch: PitchRow): Promise<PitchEntry>
   }
   const stillThere = !player.loan_from_team_id && (player.status == null || player.status === "active")
     && (await resolveClubTeamId(db, player.team_id)) === pitch.pitching_team_id;
-  const fits = stillThere && player.position === pitch.position
+  // Marod na víc než dva týdny poptávku nesplní (stejná mez jako u vlastního výběru na trhu).
+  const { loadPlayerFitness } = await import("./transfer-market");
+  const injuryDays = (await loadPlayerFitness(db, [player.id])).get(player.id)?.injuryDays ?? null;
+  const healthy = injuryDays === null || injuryDays <= MAX_INJURY_DAYS_TO_BUY;
+  const fits = stillThere && healthy && player.position === pitch.position
     && player.age >= pitch.age_min && player.age <= pitch.age_max
     && player.overall_rating >= (pitch.min_rating ?? 0);
   const mv = playerValue(player);

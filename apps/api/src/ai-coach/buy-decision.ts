@@ -23,6 +23,33 @@ export type BuySeller = "human" | "ai" | "outside" | "none";
  */
 export type BuyRoute = "listing" | "offer" | "outside_listing" | "scout_report" | "free_agent";
 
+/**
+ * Co o hráči klubu ve hře vidí i lidský kupec na jeho kartě: zranění a jeho délka, kondice
+ * a stopka. Dřív AI kupovala naslepo (jen post, věk, hodnocení) a šel jí prodat marod.
+ */
+export interface PlayerFitness {
+  /** Kolik dní ještě bude zraněný (null = zdravý). */
+  injuryDays: number | null;
+  /** Kondice 0 až 100 (null = neznámá). */
+  condition: number | null;
+  /** Kolik soutěžních zápasů ještě stojí za karty. */
+  suspendedMatches: number;
+}
+
+/** Hráč zraněný na delší dobu se AI klubu vůbec nenabízí: tohle je mez kódu, ne rozhodnutí. */
+export const MAX_INJURY_DAYS_TO_BUY = 14;
+
+/** Dodatek k popisu hráče pro model („, injured for 9 more days, condition 62 %“), nebo prázdný text. */
+export function fitnessText(f: PlayerFitness | null | undefined): string {
+  if (!f) return "";
+  const parts: string[] = [];
+  if (f.injuryDays !== null && f.injuryDays > 0) parts.push(`INJURED for ${f.injuryDays} more day${f.injuryDays === 1 ? "" : "s"}`);
+  else parts.push("fit");
+  if (f.condition !== null) parts.push(`condition ${Math.round(f.condition)} %`);
+  if (f.suspendedMatches > 0) parts.push(`suspended for ${f.suspendedMatches} more match${f.suspendedMatches === 1 ? "" : "es"}`);
+  return `, ${parts.join(", ")}`;
+}
+
 export interface BuyCandidateOption {
   /** Klíč pro model („c1“…). */
   key: string;
@@ -43,6 +70,8 @@ export interface BuyCandidateOption {
   /** Rozpětí nabídky (u volného hráče týdenní mzdy), které spočítal kód. */
   minBid: number;
   maxBid: number;
+  /** Zdraví a stopka hráče klubu ve hře (u klubu mimo hru a volného hráče se neví). */
+  fitness?: PlayerFitness | null;
 }
 
 export interface BuyLoanOption {
@@ -51,6 +80,7 @@ export interface BuyLoanOption {
   position: string;
   age: number;
   rating: number;
+  fitness?: PlayerFitness | null;
 }
 
 /** Délky hostování, ze kterých model vybírá (služba dovolí 7 až 180 dní). */
@@ -171,7 +201,7 @@ export function hasBuyChoice(ctx: Pick<BuyPickContext, "candidates" | "loans" | 
 }
 
 function candidateLine(c: BuyCandidateOption): string {
-  const head = `- "${c.key}": ${playerText(c)}`;
+  const head = `- "${c.key}": ${playerText(c)}${fitnessText(c.fitness)}`;
   const value = `estimated value ${czk(c.estimatedValue)}`;
   const fee = c.feePct > 0 ? ` He plays in another league, so you also pay a ${c.feePct} % inter-league fee on top of the price (your range already allows for it).` : "";
   const range = `Bid between ${czk(c.minBid)} and ${czk(c.maxBid)}.`;
@@ -214,7 +244,7 @@ export function renderBuyPickPrompt(ctx: BuyPickContext): string {
   lines.push("", "OTHER OPTIONS:");
   const durations = LOAN_DURATIONS.join(", ");
   for (const l of ctx.loans) {
-    lines.push(`- "${l.key}": ask ${SELLER_TEXT[l.seller]} to loan you ${playerText({ ...l, ratingRange: null })} without a fee for ${durations} days (you choose); the club decides.`);
+    lines.push(`- "${l.key}": ask ${SELLER_TEXT[l.seller]} to loan you ${playerText({ ...l, ratingRange: null })}${fitnessText(l.fitness)} without a fee for ${durations} days (you choose); the club decides.`);
   }
   if (ctx.demand) {
     lines.push(`- "${BUY_DEMAND}": post a public wanted ad for a ${pos} aged ${ctx.demand.ageMin}-${ctx.demand.ageMax}, up to ${czk(ctx.demand.maxPrice)}; clubs can offer you players over the next days.`);
