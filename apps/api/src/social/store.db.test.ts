@@ -228,7 +228,7 @@ describe("komentáře, lajky, oznámení", () => {
 
   it("lajk komentáře vede na příspěvek, pod kterým komentář je", async () => {
     const postId = await insertPost(db, me, "Ahoj");
-    const { id } = await insertManagerComment(db, (await loadViewer(db, "t-other"))!, `post:${postId}`, "Nazdar", null);
+    const { id } = (await insertManagerComment(db, (await loadViewer(db, "t-other"))!, `post:${postId}`, "Nazdar", null))!;
     const t = await resolveTarget(db, `comment:${id}`);
     expect(t).toMatchObject({ feedKey: `post:${postId}`, snippet: "Nazdar", ownerTeamId: "t-other", ownerIsHuman: true });
   });

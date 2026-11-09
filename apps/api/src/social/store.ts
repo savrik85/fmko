@@ -614,11 +614,19 @@ function mentionsJson(mentions: Mention[]): string | null {
   return mentions.length > 0 ? JSON.stringify(mentions) : null;
 }
 
-export async function insertPost(db: D1Database, viewer: Viewer, body: string, mentions: Mention[] = []): Promise<string> {
+/**
+ * Zapíše příspěvek. S `perDay` hlídá denní limit přímo v zápisu (počet dnešních
+ * příspěvků člověka se čte ve stejném příkazu), takže ho souběžné požadavky
+ * neobejdou. null = limit je vyčerpaný a nic se nezapsalo.
+ */
+export async function insertPost(db: D1Database, viewer: Viewer, body: string, mentions: Mention[] = [], perDay?: number): Promise<string | null> {
   const id = crypto.randomUUID();
-  await db.prepare("INSERT INTO social_posts (id, user_id, team_id, body, mentions) VALUES (?, ?, ?, ?, ?)")
-    .bind(id, viewer.userId, viewer.teamId, body, mentionsJson(mentions)).run();
-  return id;
+  const res = await db.prepare(
+    `INSERT INTO social_posts (id, user_id, team_id, body, mentions)
+     SELECT ?, ?, ?, ?, ?
+      WHERE (SELECT COUNT(*) FROM social_posts WHERE user_id = ? AND created_at >= ?) < ?`,
+  ).bind(id, viewer.userId, viewer.teamId, body, mentionsJson(mentions), viewer.userId, today(), perDay ?? Number.MAX_SAFE_INTEGER).run();
+  return (res.meta?.changes ?? 0) === 1 ? id : null;
 }
 
 /** Jméno trenéra klubu, jak ho ukazuje zeď. */
@@ -664,17 +672,22 @@ export async function resolveMentions(db: D1Database, body: string, ids: string[
   return pickMentions(body, candidates, authorTeamId);
 }
 
-export async function insertManagerComment(db: D1Database, viewer: Viewer, key: string, body: string, replyToId: string | null, mentions: Mention[] = []): Promise<{ id: string; authorName: string }> {
+/** Komentář trenéra. S `perDay` hlídá denní limit v zápisu stejně jako `insertPost`; null = vyčerpáno. */
+export async function insertManagerComment(db: D1Database, viewer: Viewer, key: string, body: string, replyToId: string | null, mentions: Mention[] = [], perDay?: number): Promise<{ id: string; authorName: string } | null> {
   const who = await db.prepare(`SELECT ${MANAGER_NAME("t.id")} AS name, ${MANAGER_AVATAR("t.id")} AS avatar FROM teams t WHERE t.id = ?`)
     .bind(viewer.teamId).first<{ name: string | null; avatar: string | null }>()
     .catch((e) => { logger.warn({ module: M }, "jméno komentujícího", e); return null; });
   const id = crypto.randomUUID();
   const authorName = who?.name ?? "Trenér";
-  await db.prepare(
+  const res = await db.prepare(
     `INSERT INTO social_comments (id, target_key, author_kind, user_id, team_id, author_name, author_avatar, reply_to_id, body, mentions)
-     VALUES (?, ?, 'manager', ?, ?, ?, ?, ?, ?, ?)`,
-  ).bind(id, key, viewer.userId, viewer.teamId, authorName, who?.avatar ?? null, replyToId, body, mentionsJson(mentions)).run();
-  return { id, authorName };
+     SELECT ?, ?, 'manager', ?, ?, ?, ?, ?, ?, ?
+      WHERE (SELECT COUNT(*) FROM social_comments WHERE user_id = ? AND created_at >= ?) < ?`,
+  ).bind(
+    id, key, viewer.userId, viewer.teamId, authorName, who?.avatar ?? null, replyToId, body, mentionsJson(mentions),
+    viewer.userId, today(), perDay ?? Number.MAX_SAFE_INTEGER,
+  ).run();
+  return (res.meta?.changes ?? 0) === 1 ? { id, authorName } : null;
 }
 
 export interface PersonaComment {
@@ -752,5 +765,62 @@ export async function insertReport(db: D1Database, userId: string, key: string, 
   const r = await db.prepare("INSERT OR IGNORE INTO social_reports (id, target_key, user_id, reason) VALUES (?, ?, ?, ?)")
     .bind(crypto.randomUUID(), key, userId, reason).run();
   return (r.meta?.changes ?? 0) > 0;
+}
+
+/** Po tolika nahlášeních od různých lidí se příspěvek nebo komentář sám skryje. */
+export const REPORTS_TO_HIDE = 3;
+
+function moderatedTable(key: string): { table: "social_posts" | "social_comments"; id: string } | null {
+  const ref = parseTargetKey(key);
+  if (!ref || (ref.kind !== "post" && ref.kind !== "comment")) return null;
+  return { table: ref.kind === "post" ? "social_posts" : "social_comments", id: ref.id };
+}
+
+/** Kolik různých lidí cíl nahlásilo a admin o tom ještě nerozhodl. */
+export async function openReportCount(db: D1Database, key: string): Promise<number> {
+  const r = await db.prepare("SELECT COUNT(DISTINCT user_id) AS n FROM social_reports WHERE target_key = ? AND resolved_at IS NULL")
+    .bind(key).first<{ n: number }>();
+  return r?.n ?? 0;
+}
+
+/**
+ * Skryje nahlášený cíl, jakmile ho nahlásili aspoň `REPORTS_TO_HIDE` různí lidé. Skrytí
+ * je `removed_at` s nevyřízenými nahlášeními: všechna čtení už stažené věci neukazují
+ * a admin o něm rozhodne (Stáhnout = zůstane, Nechat = `restoreAutoHidden`). Počet se
+ * čte v témže příkazu jako zápis. true = právě teď se skrylo.
+ */
+export async function hideIfReported(db: D1Database, key: string): Promise<boolean> {
+  const target = moderatedTable(key);
+  if (!target) return false;
+  const res = await db.prepare(
+    `UPDATE ${target.table} SET removed_at = strftime('%Y-%m-%dT%H:%M:%SZ','now')
+      WHERE id = ? AND removed_at IS NULL
+        AND (SELECT COUNT(DISTINCT user_id) FROM social_reports WHERE target_key = ? AND resolved_at IS NULL) >= ?`,
+  ).bind(target.id, key, REPORTS_TO_HIDE).run();
+  return (res.meta?.changes ?? 0) === 1;
+}
+
+/** Admin nahlášení zamítl: co se skrylo samo po nahlášeních, se vrátí. Volat před vyřízením nahlášení. */
+export async function restoreAutoHidden(db: D1Database, key: string): Promise<boolean> {
+  const target = moderatedTable(key);
+  if (!target) return false;
+  const res = await db.prepare(
+    `UPDATE ${target.table} SET removed_at = NULL
+      WHERE id = ? AND removed_at IS NOT NULL
+        AND EXISTS (SELECT 1 FROM social_reports WHERE target_key = ? AND resolved_at IS NULL)`,
+  ).bind(target.id, key).run();
+  return (res.meta?.changes ?? 0) === 1;
+}
+
+/** Stáhne cíl (admin). Vrací autora a text, ať jde uklidit citace z historie vztahů. */
+export async function removeReported(db: D1Database, key: string): Promise<{ teamId: string | null; body: string } | null> {
+  const target = moderatedTable(key);
+  if (!target) return null;
+  const row = await db.prepare(`SELECT team_id, body FROM ${target.table} WHERE id = ?`)
+    .bind(target.id).first<{ team_id: string | null; body: string }>();
+  if (!row) return null;
+  await db.prepare(`UPDATE ${target.table} SET removed_at = strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE id = ? AND removed_at IS NULL`)
+    .bind(target.id).run();
+  return { teamId: row.team_id, body: row.body };
 }
 

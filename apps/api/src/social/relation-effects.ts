@@ -109,6 +109,50 @@ export function momentText(authorName: string, body: string): string {
   return `${authorName} v Sockách: „${excerpt(body)}“`;
 }
 
+/** Co zůstane v historii vztahu místo citace staženého textu. */
+export const REMOVED_QUOTE = "(text stáhl moderátor)";
+
+/**
+ * Stažený příspěvek nebo komentář nesmí dál viset v historii vztahů: záznamy
+ * „X v Sockách: „…““ i lajky s jeho citací ukazují text všem, kdo se na vztah
+ * podívají. Projde vztahy klubu autora (trenéři i novináři) a citaci nahradí.
+ * Vrací počet upravených vztahů.
+ */
+export async function scrubRemovedQuotes(db: D1Database, authorTeamId: string, body: string): Promise<number> {
+  const quote = `„${excerpt(body)}“`;
+  let changed = 0;
+  const rels = await db.prepare(
+    "SELECT team_a_id, team_b_id, history FROM manager_relations WHERE (team_a_id = ? OR team_b_id = ?) AND history LIKE '%Sockách%'",
+  ).bind(authorTeamId, authorTeamId).all<{ team_a_id: string; team_b_id: string; history: string }>();
+  for (const rel of rels.results) {
+    let moments: Array<{ text?: string }>;
+    try {
+      moments = JSON.parse(rel.history) as Array<{ text?: string }>;
+    } catch (e) {
+      logger.warn({ module: M }, `nečitelná historie vztahu ${rel.team_a_id}/${rel.team_b_id}`, e);
+      continue;
+    }
+    if (!Array.isArray(moments)) continue;
+    let touched = false;
+    for (const m of moments) {
+      if (typeof m.text === "string" && m.text.includes(quote)) {
+        m.text = m.text.replace(quote, REMOVED_QUOTE);
+        touched = true;
+      }
+    }
+    if (!touched) continue;
+    await db.prepare("UPDATE manager_relations SET history = ? WHERE team_a_id = ? AND team_b_id = ?")
+      .bind(JSON.stringify(moments), rel.team_a_id, rel.team_b_id).run();
+    changed += 1;
+  }
+  // Novinář si důvod posledního posunu drží jako citaci komentáře (oříznutou na 160 znaků).
+  const reason = `Socky: „${excerpt(body, 100)}“`.slice(0, 160);
+  const journalists = await db.prepare(
+    "UPDATE journalist_relations SET duvod = ? WHERE team_id = ? AND duvod = ?",
+  ).bind(`Socky: ${REMOVED_QUOTE}`, authorTeamId, reason).run();
+  return changed + (journalists.meta?.changes ?? 0);
+}
+
 /** `target` je celé „vůči komu“: „klubu FK Engel Vimperk“, „novináři Janu Novákovi ze Zpravodaje“. */
 export type ToneClassifier = (text: string, target: string, context: string) => Promise<SocialTone>;
 

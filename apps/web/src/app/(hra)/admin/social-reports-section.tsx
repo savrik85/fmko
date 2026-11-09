@@ -79,7 +79,7 @@ export function SocialReportsSection() {
             <li key={r.target_key} className="py-3">
               <div className="text-sm text-muted">
                 {r.author ?? "?"}{r.team_name ? ` · ${r.team_name}` : ""} · nahlášeno {r.reports}×
-                {r.deleted_at ? " · autor smazal" : ""}{r.removed_at ? " · staženo" : ""}
+                {r.deleted_at ? " · autor smazal" : ""}{r.removed_at ? " · skryto po nahlášeních, Nechat ho vrátí" : ""}
               </div>
               <p className="text-base text-ink whitespace-pre-wrap break-words mt-1">{r.body ?? "(text chybí)"}</p>
               {r.reasons && r.reasons.replace(/[\s|]/g, "") && (
