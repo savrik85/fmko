@@ -448,18 +448,29 @@ export async function createStaffTask(db: D1Database, input: CreateStaffTaskInpu
 
 /**
  * Kolik se vrátí při zrušení.
- *  - nezačatý úkol: všechno,
+ *  - nezačatý úkol: všechno. Dlouhý úkol běží od herního dne po zadání (`today` > začátek),
+ *    i když ho ranní běh úkolů (5:00 UTC) ještě nezapsal: individuální plán násobí trénink už
+ *    v denním ticku ve 3:00 UTC a mezi tím šel zrušit s celou vratkou, tedy trénink zadarmo.
+ *    Stejně to hráči říká i stránka (StaffTaskBox: „už začal pracovat, peníze se nevrátí“).
  *  - `prorata` (propuštění, přeřazení, odchod hráče, nehraný zápas): dlouhý úkol za neodpracované dny,
  *    zápasový nic, pokud už ranní práce proběhla. Celá vratka u rozjetého úkolu by šla
  *    zneužít: nechat lékaře dva týdny pracovat, přeřadit ho a vzít si peníze zpátky.
  *  - zrušení manažerem po začátku: nic.
  */
-export function refundAmount(task: Pick<StaffTaskRow, "kind" | "cost_paid" | "starts_game_date" | "ends_game_date" | "last_work_game_date">, prorata: boolean): number {
+export function refundAmount(
+  task: Pick<StaffTaskRow, "kind" | "cost_paid" | "starts_game_date" | "ends_game_date" | "last_work_game_date">,
+  prorata: boolean,
+  /** Herní den zrušení (YYYY-MM-DD). Bez něj rozhoduje jen zapsaná práce. */
+  today?: string,
+): number {
   if (task.cost_paid <= 0) return 0;
-  if (task.last_work_game_date === null) return task.cost_paid;
+  const runningSince = task.kind !== "match" && today !== undefined && today > task.starts_game_date;
+  if (task.last_work_game_date === null && !runningSince) return task.cost_paid;
   if (!prorata || task.kind === "match") return 0;
   const total = Math.max(1, daysBetween(task.starts_game_date, task.ends_game_date));
-  const left = Math.max(0, daysBetween(task.last_work_game_date, task.ends_game_date));
+  // Poslední odpracovaný den: zapsaný, nebo dnešek, když dnešní běh úkolů ještě neproběhl
+  const worked = task.last_work_game_date ?? ((today as string) < task.ends_game_date ? (today as string) : task.ends_game_date);
+  const left = Math.max(0, daysBetween(worked, task.ends_game_date));
   return Math.floor(task.cost_paid * left / total);
 }
 
@@ -475,7 +486,7 @@ async function cancelTask(db: D1Database, task: StaffTaskRow, reason: string, ga
   ).bind(reason, task.id).run()
     .catch((e) => { logger.error({ module: MODULE }, `zrušení úkolu ${task.id}`, e); return null; });
   if (!res || (res.meta?.changes ?? 0) === 0) return null;
-  const refund = refundAmount(task, prorata);
+  const refund = refundAmount(task, prorata, gameDay(gameDate));
   if (refund > 0) {
     const def = isTaskType(task.task_type) ? STAFF_TASK_DEFS[task.task_type] : null;
     await recordTransaction(db, task.team_id, "staff_task", refund,

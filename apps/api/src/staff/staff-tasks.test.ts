@@ -73,6 +73,21 @@ describe("úkoly zaměstnanců: vratka", () => {
     expect(refundAmount({ ...match, last_work_game_date: null }, false)).toBe(300);
   });
 
+  it("individuální plán: po prvním tréninku s násobkem už celou cenu nevrací, i když ranní běh úkolů ještě neproběhl", () => {
+    const plan = { ...weekly, last_work_game_date: null };
+    // V den zadání (trénink s násobkem ještě nebyl): všechno
+    expect(refundAmount(plan, false, weekly.starts_game_date)).toBe(1000);
+    // Další herní den: denní tick už trénoval s násobkem, staff tick práci ještě nezapsal
+    expect(refundAmount(plan, false, addDays(weekly.starts_game_date, 1))).toBe(0);
+    // Propuštění trenéra ve stejném okně: jen neodpracované dny
+    const days = Math.round((Date.parse(weekly.ends_game_date) - Date.parse(weekly.starts_game_date)) / 86_400_000);
+    expect(refundAmount(plan, true, addDays(weekly.starts_game_date, 1))).toBe(Math.floor(1000 * (days - 1) / days));
+  });
+
+  it("zápasový úkol zadaný dny předem se dá do ranní práce zrušit s celou vratkou", () => {
+    expect(refundAmount({ ...match, last_work_game_date: null }, false, addDays(match.starts_game_date, 2))).toBe(300);
+  });
+
   it("zrušení manažerem po začátku nevrací nic", () => {
     expect(refundAmount({ ...weekly, last_work_game_date: "2026-10-06" }, false)).toBe(0);
   });
