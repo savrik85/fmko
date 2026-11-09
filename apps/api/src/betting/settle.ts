@@ -1,14 +1,12 @@
 /**
  * Vypořádání sázek po odehraném kole.
  *
- * Volá se z konce runScheduledMatches (multiplayer/match-runner.ts), tedy až
- * když jsou VŠECHNY zápasy kola odsimulované. Dřív to nejde: kombinovaný tiket
- * může mít tipy ze všech zápasů kola, takže vyhodnocení po jednotlivých zápasech
- * (jako resolveBets u sázky o bečku) by na akumulátor nestačilo.
+ * Volá se z konce runScheduledMatches (multiplayer/match-runner.ts) a jako záchranná
+ * síť z denního ticku (settleOpenRounds). Tiket se vypořádá, jakmile jsou rozhodnuté
+ * všechny jeho zápasy; kombinovaný tiket tedy čeká na svůj poslední zápas, ne na celé kolo.
  */
 
 import { logger } from "../lib/logger";
-import { recordTransaction } from "../season/finance-processor";
 import { gradeSelection, gradeTicket, type Appearances, type SelectionResult } from "./grade";
 import { capPayout } from "./odds-model";
 import { resolveRules } from "../competition/rules";
@@ -33,23 +31,68 @@ export interface SettleSummary {
   paidOut: number;
 }
 
-/**
- * Vypořádá všechny otevřené tikety daného kola.
- *
- * Je bezpečné volat opakovaně — zámkem je atomický UPDATE stavu tiketu.
- * Idempotence NEMŮŽE stát na reference_id v transakcích: ten sloupec nemá
- * unikátní index (migrations/0034_transactions.sql), takže recordTransaction
- * duplicitní zápis nezachytí.
- */
-export async function settleRound(db: D1Database, calendarId: string): Promise<SettleSummary> {
-  // Kolo musí být dohrané celé. Když ne, nedělá se nic a doběhne to po
-  // recoverStuckRounds — díky zámku níž bez rizika dvojí výplaty.
-  const zbyva = await db.prepare(
-    "SELECT COUNT(*) AS n FROM matches WHERE calendar_id = ? AND status <> 'simulated'"
-  ).bind(calendarId).first<{ n: number }>()
-    .catch((e) => { logger.warn({ module: M }, `kontrola dohranosti kola ${calendarId}`, e); return null; });
+/** Po kolika hodinách od termínu kola se neodehraný zápas na tiketu anuluje. */
+export const VOID_AFTER_HOURS = 48;
 
-  if (!zbyva || zbyva.n > 0) return { tickets: 0, paidOut: 0 };
+/** Stavy zápasu, které znamenají, že se hrát nebude. */
+const CANCELLED_MATCH_STATUSES = new Set(["cancelled", "void"]);
+
+export interface MatchForSettlement {
+  status: string;
+  home_score: number | null;
+  away_score: number | null;
+}
+
+/**
+ * Co se dá říct o tipu na tenhle zápas. Čistá funkce.
+ *
+ *  - 'played': zápas má výsledek, tip se vyhodnotí.
+ *  - 'void': zápas byl zrušen, zmizel, nebo se neodehrál do VOID_AFTER_HOURS
+ *    po termínu kola. Tip se počítá kurzem 1,00.
+ *  - 'waiting': zápas se ještě může odehrát, tiket počká.
+ */
+export function legState(
+  match: MatchForSettlement | undefined, deadlinePassed: boolean,
+): "played" | "void" | "waiting" {
+  if (!match) return "void";
+  if (CANCELLED_MATCH_STATUSES.has(match.status)) return "void";
+  if (match.status === "simulated") {
+    // Odsimulovaný zápas bez skóre už výsledek mít nebude.
+    return match.home_score !== null && match.away_score !== null ? "played" : "void";
+  }
+  return deadlinePassed ? "void" : "waiting";
+}
+
+/**
+ * Vypořádá otevřené tikety daného kola, které už vypořádat jdou.
+ *
+ * Tiket se vypořádá, jakmile jsou rozhodnuté všechny JEHO zápasy, ne celé kolo.
+ * Dřív se čekalo na všechny zápasy kola: když kolo spadlo a jeden zápas zůstal
+ * neodehraný, visely navždy i tikety, které na něj vůbec nesázely.
+ *
+ * Je bezpečné volat opakovaně. Výplata, zápis do transakcí, výsledky tipů a změna
+ * stavu tiketu jdou jednou transakcí (db.batch) a každý příkaz je podmíněný tím,
+ * že tiket je pořád 'open'. Dva souběžné běhy tak nevyplatí dvakrát a pád uprostřed
+ * nenechá tiket označený jako vyhraný bez peněz. Idempotence NEMŮŽE stát na
+ * reference_id v transakcích: ten sloupec nemá unikátní index
+ * (migrations/0034_transactions.sql).
+ */
+export async function settleRound(
+  db: D1Database, calendarId: string, now: number = Date.now(),
+): Promise<SettleSummary> {
+  const kolo = await db.prepare("SELECT scheduled_at FROM season_calendar WHERE id = ?")
+    .bind(calendarId).first<{ scheduled_at: string | null }>()
+    .catch((e) => { logger.warn({ module: M }, `termín kola ${calendarId}`, e); return null; });
+  const scheduledAt = kolo?.scheduled_at ? new Date(kolo.scheduled_at).getTime() : NaN;
+  // Bez termínu se neanuluje nic: radši nechat tiket čekat než vrátit vklad za zápas, který se odehraje.
+  const deadlinePassed = Number.isFinite(scheduledAt) && now - scheduledAt >= VOID_AFTER_HOURS * 3_600_000;
+
+  const zapasy = await db.prepare(
+    "SELECT id, status, home_score, away_score FROM matches WHERE calendar_id = ?"
+  ).bind(calendarId).all<MatchForSettlement & { id: string }>()
+    .catch((e) => { logger.warn({ module: M }, `zápasy kola ${calendarId}`, e); return null; });
+  if (!zapasy) return { tickets: 0, paidOut: 0 };
+  const matchById = new Map(zapasy.results.map((z) => [z.id, z]));
 
   const tikety = await db.prepare(
     `SELECT id, team_id, league_id, season_number, stake, total_odds_x100
@@ -86,12 +129,23 @@ export async function settleRound(db: D1Database, calendarId: string): Promise<S
 
   for (const t of tikety.results) {
     const moje = podleTiketu.get(t.id) ?? [];
-    const ohodnocene = moje.map((l) => {
+    const states = moje.map((l) => {
+      const state = legState(matchById.get(l.match_id), deadlinePassed);
+      // Střelec se hodnotí podle sestav. Zápas se skóre, ale ještě bez statistik hráčů
+      // (jiný běh ho právě dopisuje) by každého střelce anuloval jako „nenastoupil".
+      if (state === "played" && l.market === "scorer" && !nastupy.has(l.match_id) && !deadlinePassed) return "waiting";
+      return state;
+    });
+    // Aspoň jeden zápas tiketu se ještě může odehrát: tiket počká na další běh.
+    if (states.includes("waiting")) continue;
+
+    const ohodnocene = moje.map((l, i) => {
       const v = vysledky.get(l.match_id);
-      const result: SelectionResult = v
-        ? gradeSelection(l.market, l.selection, v, nastupy.get(l.match_id) ?? new Map())
-        : "void";
-      return { ...l, result };
+      const notPlayed = states[i] === "void" || !v;
+      const result: SelectionResult = notPlayed
+        ? "void"
+        : gradeSelection(l.market, l.selection, v, nastupy.get(l.match_id) ?? new Map());
+      return { ...l, result, notPlayed };
     });
 
     const limity = await resolveRules(db, t.league_id, t.season_number);
@@ -101,30 +155,40 @@ export async function settleRound(db: D1Database, calendarId: string): Promise<S
       ? capPayout(t.stake, vysledek.effectiveOddsX100, limity.bet_max_payout).payout
       : vysledek.status === "void" ? t.stake : 0;
 
-    // ZÁMEK. changes === 0 znamená, že tiket vypořádal jiný běh.
-    const gate = await db.prepare(
-      `UPDATE bet_tickets
-          SET status = ?, payout = ?, settled_game_date = ?,
-              settled_at = strftime('%Y-%m-%dT%H:%M:%SZ','now')
-        WHERE id = ? AND status = 'open'`
-    ).bind(vysledek.status, payout, gameDate, t.id).run()
-      .catch((e) => { logger.error({ module: M }, `zámek tiketu ${t.id}`, e); return null; });
-
-    if (!gate || (gate.meta?.changes ?? 0) === 0) continue;
-
-    await db.batch(ohodnocene.map((l) =>
-      db.prepare("UPDATE bet_selections SET result = ? WHERE id = ?").bind(l.result, l.id)
-    )).catch((e) => logger.error({ module: M }, `zápis výsledků tipů tiketu ${t.id}`, e));
-
-    // Prohraný tiket neúčtuje nic — vklad odešel při podání.
+    // Všechno podmíněné tím, že tiket je pořád 'open'; zámek (změna stavu) jde poslední.
+    const stillOpen = "EXISTS (SELECT 1 FROM bet_tickets WHERE id = ? AND status = 'open')";
+    const statements: D1PreparedStatement[] = [];
+    // Prohraný tiket neúčtuje nic, vklad odešel při podání.
     if (payout > 0) {
       const typ = vysledek.status === "won" ? "bet_win" : "bet_refund";
       const popis = vysledek.status === "won"
         ? `Výhra u sázkové kanceláře (${(vysledek.effectiveOddsX100 / 100).toFixed(2).replace(".", ",")}×)`
         : "Vrácený vklad, tiket anulován";
-      await recordTransaction(db, t.team_id, typ, payout, popis, gameDate, `bet-payout-${t.id}`);
-      vyplaceno += payout;
+      statements.push(
+        db.prepare(`UPDATE teams SET budget = budget + ? WHERE id = ? AND ${stillOpen}`)
+          .bind(payout, t.team_id, t.id),
+        db.prepare(
+          `INSERT INTO transactions (id, team_id, type, amount, balance_after, description, reference_id, game_date)
+           SELECT ?, ?, ?, ?, (SELECT budget FROM teams WHERE id = ?), ?, ?, ?
+            WHERE ${stillOpen}`
+        ).bind(crypto.randomUUID(), t.team_id, typ, payout, t.team_id, popis, `bet-payout-${t.id}`, gameDate, t.id),
+      );
     }
+    for (const l of ohodnocene) {
+      statements.push(db.prepare(`UPDATE bet_selections SET result = ? WHERE id = ? AND ${stillOpen}`).bind(l.result, l.id, t.id));
+    }
+    statements.push(db.prepare(
+      `UPDATE bet_tickets
+          SET status = ?, payout = ?, settled_game_date = ?,
+              settled_at = strftime('%Y-%m-%dT%H:%M:%SZ','now')
+        WHERE id = ? AND status = 'open'`
+    ).bind(vysledek.status, payout, gameDate, t.id));
+
+    const results = await db.batch(statements)
+      .catch((e) => { logger.error({ module: M }, `vypořádání tiketu ${t.id}`, e); return null; });
+    // changes === 0 u zámku znamená, že tiket vypořádal jiný běh a tenhle nic nezapsal.
+    if (!results || (results[results.length - 1]?.meta?.changes ?? 0) === 0) continue;
+    vyplaceno += payout;
 
     await oznam(db, t, ohodnocene, vysledek.status, payout, vysledek.effectiveOddsX100)
       .catch((e) => logger.warn({ module: M }, `oznámení k tiketu ${t.id}`, e));
@@ -133,6 +197,33 @@ export async function settleRound(db: D1Database, calendarId: string): Promise<S
   }
 
   return { tickets: vyporadano, paidOut: vyplaceno };
+}
+
+/**
+ * Záchranná síť: projde všechna kola, jejichž termín už byl a visí na nich otevřený tiket.
+ *
+ * Hlavní cesta je konec runScheduledMatches. Sem spadne tiket z kola, které dohrál
+ * ruční endpoint nebo recovery, a tiket se zápasem, který se neodehrál vůbec: ten se
+ * anuluje, až uplyne VOID_AFTER_HOURS. Dřív se zametala jen kola ve stavu 'simulated',
+ * takže kolo zaseklé po pádu drželo tikety napořád.
+ */
+export async function settleOpenRounds(
+  db: D1Database, now: number = Date.now(),
+): Promise<SettleSummary & { rounds: number }> {
+  const rounds = await db.prepare(
+    `SELECT DISTINCT t.calendar_id FROM bet_tickets t
+       JOIN season_calendar sc ON sc.id = t.calendar_id
+      WHERE t.status = 'open' AND (sc.status = 'simulated' OR sc.scheduled_at <= ?)`
+  ).bind(new Date(now).toISOString()).all<{ calendar_id: string }>()
+    .catch((e) => { logger.error({ module: M }, "kola k dovypořádání", e); return { results: [] }; });
+
+  let tickets = 0, paidOut = 0;
+  for (const r of rounds.results) {
+    const out = await settleRound(db, r.calendar_id, now);
+    tickets += out.tickets;
+    paidOut += out.paidOut;
+  }
+  return { rounds: rounds.results.length, tickets, paidOut };
 }
 
 async function loadResults(
@@ -211,9 +302,11 @@ function kolikSedlo(sedlo: number, celkem: number): string {
 
 async function oznam(
   db: D1Database, t: TicketRow,
-  legs: Array<{ label: string; result: SelectionResult }>,
+  legs: Array<{ label: string; result: SelectionResult; notPlayed?: boolean }>,
   status: "won" | "lost" | "void", payout: number, oddsX100: number,
 ): Promise<void> {
+  // Tip se anuluje ze dvou důvodů: sázený hráč nenastoupil, nebo se zápas vůbec neodehrál.
+  const unplayed = legs.some((l) => l.notPlayed);
   const { sendSystemSMS } = await import("../messaging/system-sms");
   const { createNotification } = await import("../community/notifications");
   const kc = (n: number) => `${n.toLocaleString("cs")} Kč`;
@@ -231,11 +324,11 @@ async function oznam(
       ? `Tiket č. ${cislo} je vyhraný. Vklad ${kc(t.stake)}, kurz ${ku(oddsX100)}, výplata ${kc(payout)}. Peníze máš na klubovém účtu.`
       : `Tiket č. ${cislo}, všech ${legs.length} tipů sedlo. Kurz ${ku(oddsX100)}, výplata ${kc(payout)}.`;
     if (anulovane > 0) {
-      sms += ` ${anulovane === 1 ? "Jeden tip se anuloval" : `${anulovane} tipy se anulovaly`}, hráč nenastoupil a kurz o něj klesl.`;
+      sms += ` ${anulovane === 1 ? "Jeden tip se anuloval" : `${anulovane} tipy se anulovaly`}, ${unplayed ? "zápas se neodehrál" : "hráč nenastoupil"} a kurz o něj klesl.`;
     }
   } else if (status === "void") {
     titulek = "🎫 Tiket anulován";
-    sms = `Tiket č. ${cislo} rušíme, nikdo ze sázených hráčů nenastoupil. Vklad ${kc(t.stake)} je zpátky na účtu.`;
+    sms = `Tiket č. ${cislo} rušíme, ${unplayed ? "zápas se neodehrál" : "nikdo ze sázených hráčů nenastoupil"}. Vklad ${kc(t.stake)} je zpátky na účtu.`;
   } else {
     const sedlo = legs.filter((l) => l.result === "won").length;
     const anulovane = legs.filter((l) => l.result === "void").length;
@@ -255,8 +348,8 @@ async function oznam(
     // a nesedí mu to s tím, co mu kancelář napsala.
     if (anulovane > 0) {
       sms += anulovane === 1
-        ? " Jeden tip se anuloval, hráč vůbec nenastoupil."
-        : ` ${anulovane} tipy se anulovaly, hráči vůbec nenastoupili.`;
+        ? ` Jeden tip se anuloval, ${unplayed ? "zápas se neodehrál" : "hráč vůbec nenastoupil"}.`
+        : ` ${anulovane} tipy se anulovaly, ${unplayed ? "zápasy se neodehrály" : "hráči vůbec nenastoupili"}.`;
     }
   }
 

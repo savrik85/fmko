@@ -1497,22 +1497,15 @@ export async function executeDailyTick(
     });
 
     // Záchranná síť: tiket z kola, které dohrál ruční endpoint nebo recovery,
-    // by jinak zůstal viset navždy. Zámek na status='open' dělá opakování zdarma.
+    // a tiket se zápasem, který se po pádu kola neodehrál vůbec (anuluje se po 48 hodinách).
+    // Vypořádání je podmíněné stavem 'open', takže opakování nic nestojí.
     await steps.run("betting-settle", async () => {
     try {
-      const { settleRound } = await import("../betting/settle");
-      const zbyle = await env.DB.prepare(
-        `SELECT DISTINCT t.calendar_id FROM bet_tickets t
-           JOIN season_calendar sc ON sc.id = t.calendar_id
-          WHERE t.status = 'open' AND sc.status = 'simulated'`
-      ).all<{ calendar_id: string }>();
-
-      for (const k of zbyle.results) {
-        const r = await settleRound(env.DB, k.calendar_id);
-        if (r.tickets > 0) {
-          logger.warn({ module: "betting" },
-            `dovypořádáno ${r.tickets} tiketů kola ${k.calendar_id}, uniklo hlavní cestě`);
-        }
+      const { settleOpenRounds } = await import("../betting/settle");
+      const r = await settleOpenRounds(env.DB);
+      if (r.tickets > 0) {
+        logger.warn({ module: "betting" },
+          `dovypořádáno ${r.tickets} tiketů z ${r.rounds} kol (${r.paidOut} Kč), uniklo hlavní cestě`);
       }
     } catch (e) { logger.error({ module: "betting" }, "dovypořádání tiketů", e); }
     });

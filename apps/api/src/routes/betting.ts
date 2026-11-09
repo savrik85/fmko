@@ -9,7 +9,7 @@ import { requireTeamOwnership, requireAdmin } from "../auth/middleware";
 import { getSession, getTokenFromRequest } from "../auth/session";
 import { generateBoard, nextOpenRound, teamStandings, EXTRA_MARKETS } from "../betting/board";
 import { placeTicket, limitsFor, canBet, type SelectionInput } from "../betting/tickets";
-import { settleRound } from "../betting/settle";
+import { settleRound, settleOpenRounds } from "../betting/settle";
 import { loadGradedOffers, marketReturns, bandCalibration, CALIBRATION_DAYS } from "../betting/calibration";
 import { knihaSazek, listinaPrestupu, muzeDoKnihy, muzeZablokovat } from "../competition/integrity";
 import { arena, prepniSdileni, pridejKomentar, smazKomentar, MAX_KOMENTAR, MAX_VZKAZ } from "../betting/arena";
@@ -651,21 +651,8 @@ bettingRouter.post("/admin/betting/settle", async (c) => {
     return c.json({ ok: true, ...res });
   }
 
-  // Bez parametru se zametou všechna kola, kde ještě visí otevřený tiket.
-  const kola = await c.env.DB.prepare(
-    `SELECT DISTINCT t.calendar_id FROM bet_tickets t
-       JOIN season_calendar sc ON sc.id = t.calendar_id
-      WHERE t.status = 'open' AND sc.status = 'simulated'`
-  ).all<{ calendar_id: string }>()
-    .catch((e) => { logger.error({ module: M }, "kola k dovypořádání", e); return { results: [] }; });
-
-  let tickets = 0, paidOut = 0;
-  for (const k of kola.results) {
-    const r = await settleRound(c.env.DB, k.calendar_id);
-    tickets += r.tickets;
-    paidOut += r.paidOut;
-  }
-  return c.json({ ok: true, rounds: kola.results.length, tickets, paidOut });
+  // Bez parametru se zametou všechna kola po termínu, kde ještě visí otevřený tiket.
+  return c.json({ ok: true, ...(await settleOpenRounds(c.env.DB)) });
 });
 
 export default bettingRouter;
