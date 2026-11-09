@@ -38,6 +38,7 @@ import { menuBadgesRouter } from "./routes/menu-badges";
 import { adminAiClubsRouter } from "./routes/admin-ai-clubs";
 import { adminAiCoachRouter } from "./routes/admin-ai-coach";
 import { guardTeamReads } from "./auth/team-read-guard";
+import { corsOrigin } from "./lib/cors-origins";
 // transfers endpoints are in gameRouter
 import { recoverStuckRounds } from "./multiplayer/match-runner";
 import { executeDailyTick } from "./season/daily-tick";
@@ -94,7 +95,8 @@ async function finishRoundAgendaAfterRecovery(
 
 const app = new Hono<{ Bindings: Bindings }>();
 
-app.use("*", cors({ origin: "*" }));
+// Jen web hry, náhledy Pages a localhost (lib/cors-origins.ts). Požadavky bez Origin CORS neřeší.
+app.use("*", cors({ origin: corsOrigin }));
 
 // AI Gateway se nastavuje jednou na vstupu; bez proměnné se volá Google přímo.
 app.use("*", async (c, next) => {
