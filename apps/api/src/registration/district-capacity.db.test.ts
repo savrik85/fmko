@@ -9,7 +9,7 @@ import { Miniflare } from "miniflare";
 import { Hono } from "hono";
 import { createSession } from "../auth/session";
 import type { Bindings } from "../index";
-import { publicLandingRouter } from "../routes/public-landing";
+import { LANDING_CACHE_KEY, publicLandingRouter } from "../routes/public-landing";
 import { registrationRouter } from "../routes/registration";
 import { villagesRouter } from "../routes/villages";
 import { districtAccess } from "./district-access";
@@ -90,7 +90,7 @@ beforeEach(async () => {
     db.prepare("UPDATE users SET registration_district = NULL WHERE id = 'member'"),
     db.prepare("UPDATE district_registrations SET registration_closed = 0, founder_request_id = NULL"),
   ]);
-  await env.CACHE_KV.delete("public-landing:v3");
+  await env.CACHE_KV.delete(LANDING_CACHE_KEY);
 });
 
 describe("kapacita okresu", () => {
@@ -141,7 +141,9 @@ describe("registrace do plného okresu", () => {
   });
 
   it("úvodní stránka plný okres ukazuje dál, s příznakem plno", async () => {
-    const data = await (await call("/api/public/landing")).json() as { stats: { districts: number }; districts: Array<{ name: string; full: boolean; managers: number; freeSlots: number | null }> };
+    const data = await (await call("/api/public/landing")).json() as { stats: { districts: number; season: number | null }; districts: Array<{ name: string; full: boolean; managers: number; freeSlots: number | null }> };
+    // Číslo hrané sezóny pro texty webu (registrace, pozvánka), ať ho nemají napevno.
+    expect(data.stats.season).toBe(99);
     expect(data.districts.find((d) => d.name === FULL)).toMatchObject({ full: true, managers: 3, freeSlots: 0 });
     expect(data.districts.find((d) => d.name === OPEN)).toMatchObject({ full: false, freeSlots: 1 });
     expect(data.stats.districts).toBe(data.districts.length);

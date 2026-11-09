@@ -140,7 +140,9 @@ export default function OnboardingPage() {
 
   // Redirect to register if not authenticated
   useEffect(() => {
-    if (!isLoading && !token) router.replace("/registrace");
+    // Kdo přišel na zakládání klubu bez účtu, chce hrát: registrace mu ukáže okresy,
+    // kde se hraje a je volno, ne výzvu k založení nové ligy.
+    if (!isLoading && !token) router.replace("/registrace?vstup=hra");
   }, [isLoading, token, router]);
 
   // Klub, který mezitím vedl AI trenér: bývalý vlastník se k němu může vrátit.

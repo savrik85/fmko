@@ -32,6 +32,7 @@ const NOT_LINKS = {
   "apps/web/src/context/team-context.tsx  /klub": "seznam veřejných prefixů",
   "apps/web/src/lib/page-title.ts  /redakce": "titulek v mapě, stránka existuje jen s ID",
   "apps/web/src/lib/analytics.ts  /relay": "adresa proxy pro PostHog, ne stránka",
+  "apps/web/src/lib/site-index.ts  /relay": "adresa proxy pro PostHog v robots.txt, ne stránka",
   "apps/web/src/app/relay/[...path]/route.ts  /static/": "cesta na straně PostHogu",
 };
 
