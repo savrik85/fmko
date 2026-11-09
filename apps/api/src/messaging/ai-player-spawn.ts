@@ -23,6 +23,7 @@ import { coachRelationStmts } from "../lib/coach-relation";
 import { weightTalkFromState } from "../season/weight-talk";
 import { coachStreak, leftOnReadChance, markCoachMessagesRead, readDelayMs } from "./left-on-read";
 import { describeNextMatch } from "./next-match";
+import { refundCoachSms } from "./phone-credit";
 import {
   generateInitialMessage,
   generateReply,
@@ -935,6 +936,10 @@ export async function handleAiPlayerReply(
       `UPDATE conversations SET ai_thread_state = json_set(ai_thread_state, '$.awaiting', 'coach') WHERE id = ?`,
     ).bind(convId).run()
       .catch((err) => logger.warn({ module: "ai-player-spawn" }, "rollback awaiting after crash", err));
+    // Odpověď na tuhle SMS už nepřijde (další pokus se neplánuje), kredit se vrací.
+    const owner = await db.prepare("SELECT team_id FROM conversations WHERE id = ?").bind(convId).first<{ team_id: string }>()
+      .catch((err) => { logger.warn({ module: "ai-player-spawn" }, "klub konverzace pro vrácení kreditu", err); return null; });
+    if (owner) await refundCoachSms(db, owner.team_id, convId, "odpověď hráče spadla");
   }
 }
 
@@ -1006,6 +1011,7 @@ async function handleAiPlayerReplyInner(
         `UPDATE conversations SET ai_thread_active = 0, ai_thread_state = ? WHERE id = ?`,
       ).bind(JSON.stringify({ ...state, awaiting: "done" }), convId),
     ]);
+    await refundCoachSms(db, conv.team_id, convId, "hráč už v klubu není");
     return;
   }
 

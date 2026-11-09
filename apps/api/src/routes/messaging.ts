@@ -7,6 +7,7 @@ import { Hono } from "hono";
 import type { Bindings } from "../index";
 import { logger } from "../lib/logger";
 import { photoKey } from "../messaging/player-photo";
+import { PLAYER_GONE_HINT, playerInClub } from "../messaging/player-reach";
 import { requireTeamOwnership, requireAdmin, requirePrivateTeamRead } from "../auth/middleware";
 import { listGroupChatsForTeam } from "./group-chats";
 import { sendWebPushToTeam, getNotificationPreferences } from "../community/web-push";
@@ -194,6 +195,16 @@ function odpovidatLze(
   };
 }
 
+/**
+ * Patří hráč z konverzace pořád ke klubu? Chyba dotazu = ano: kvůli výpadku DB se
+ * vlákno nezamyká, odeslání by stejně selhalo jinde.
+ */
+async function playerStillReachable(db: D1Database, playerId: string | null, teamId: string): Promise<boolean> {
+  if (!playerId) return false;
+  return playerInClub(db, playerId, teamId)
+    .catch((e) => { logger.warn({ module: "messaging" }, `ověření adresáta ${playerId}`, e); return true; });
+}
+
 messagingRouter.get("/teams/:teamId/conversations/:convId", async (c) => {
   const teamId = c.req.param("teamId");
   const convId = c.req.param("convId");
@@ -264,6 +275,10 @@ messagingRouter.get("/teams/:teamId/conversations/:convId", async (c) => {
     } catch (e) { logger.warn({ module: "messaging" }, "load unrest for conversation", e); }
   }
 
+  // Hráč, který v klubu už není (přestup, konec kariéry): vlákno zůstává ke čtení,
+  // psát do něj nejde. Odpověď by nepřišla a SMS by stála kredit naprázdno.
+  const playerGone = convOwner.type === "player" && !(await playerStillReachable(c.env.DB, convOwner.participant_id, teamId));
+
   let query = "SELECT * FROM messages WHERE conversation_id = ?";
   const binds: unknown[] = [convId];
 
@@ -317,10 +332,12 @@ messagingRouter.get("/teams/:teamId/conversations/:convId", async (c) => {
     // Kdo na druhé straně vůbec odpoví — rozhoduje server, ne frontend.
     // Většina systémových konverzací je jednosměrné oznámení (svaz, pořadatel,
     // sportovní ředitel); psát do nich by znamenalo mluvit do zdi.
-    ...odpovidatLze(convOwner.type, convOwner.ai_thread_active === 1, {
-      title: convOwner.title,
-      participantId: convOwner.participant_id,
-    }),
+    ...(playerGone
+      ? { canReply: false, channel: null, replyHint: PLAYER_GONE_HINT, readOnly: true }
+      : odpovidatLze(convOwner.type, convOwner.ai_thread_active === 1, {
+        title: convOwner.title,
+        participantId: convOwner.participant_id,
+      })),
     aiThreadActive: convOwner.ai_thread_active === 1,
     aiThreadState: parseAiThreadState(convOwner.ai_thread_state),
     participantId: convOwner.participant_id,
@@ -401,6 +418,9 @@ messagingRouter.post("/teams/:teamId/conversations/:convId/voice-note", async (c
   if (!conv || conv.team_id !== teamId) return c.json({ error: "Konverzace nenalezena" }, 404);
   const rule = odpovidatLze(conv.type, conv.ai_thread_active === 1, { participantId: conv.participant_id });
   if (!rule.canReply) return c.json({ error: "Do téhle konverzace se odpovídat nedá." }, 400);
+  if (conv.type === "player" && !(await playerStillReachable(c.env.DB, conv.participant_id, teamId))) {
+    return c.json({ error: PLAYER_GONE_HINT, readOnly: true }, 409);
+  }
 
   const {
     COACH_AUDIO_TYPES, COACH_AUDIO_MAX_BYTES, COACH_AUDIO_MAX_SEC, pendingCoachAudioKey, transcribeCoachVoice, takeVoiceNoteQuota,
@@ -515,7 +535,12 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
   }
   const platiSeKredit = pravidlo.channel === "sms";
 
-  const { loadCredit, spendCredit } = await import("../messaging/phone-credit");
+  // Adresát se ověřuje před stržením kreditu: hráč mimo klub neodpoví.
+  if (conv?.type === "player" && !(await playerStillReachable(c.env.DB, conv.participant_id, teamId))) {
+    return c.json({ error: PLAYER_GONE_HINT, readOnly: true }, 409);
+  }
+
+  const { loadCredit, spendCredit, refundCoachSms } = await import("../messaging/phone-credit");
   if (platiSeKredit) {
     // Vypnuté generování textu se musí poznat DŘÍV, než se strhne kredit —
     // jinak by hráč platil za odpověď, která nepřijde. Přepínač `ai_provider`
@@ -606,6 +631,10 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
         handleAiPlayerReply(c.env.DB, c.env, convId)
           .catch((e) => logger.error({ module: "messaging" }, "handleAiPlayerReply failed", e)),
       );
+    } else {
+      // Hráč zrovna píše odpověď na předchozí zprávu: tahle se uloží (uvidí ji v historii),
+      // ale vlastní odpověď nedostane, takže kredit za ni nepatří.
+      await refundCoachSms(c.env.DB, teamId, convId, "zpráva během psaní hráče");
     }
   }
 
@@ -705,6 +734,9 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
           });
         }
       }).catch((e) => logger.warn({ module: "messaging" }, "odpověď majitele firmy", e)));
+    } else {
+      // Majitel ještě píše odpověď na předchozí SMS, na tuhle nikdo neodpoví.
+      await refundCoachSms(c.env.DB, teamId, convId, "majitel firmy zrovna píše");
     }
   } else if (conv?.type === "system" && conv.participant_id?.startsWith("de-")) {
     // Pozvánka na okresní akci (pouť, bál…): přijdu s hráči / sám / nepřijdu.

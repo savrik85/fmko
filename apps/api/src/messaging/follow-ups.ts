@@ -24,6 +24,7 @@ import { generateFollowUpMessage, GeminiUnavailableError, type ThreadMessage } f
 import { INVITES, type InviteKind } from "./casual-topics";
 import { PHOTO_SCENES, generatePlayerPhoto, historyBody } from "./player-photo";
 import { loadChatMemory, offerStanceStmt } from "./player-memory";
+import { refundCoachSms } from "./phone-credit";
 import type { PlayerSnapshot } from "./ai-player-scenarios";
 
 const M = "follow-ups";
@@ -142,6 +143,8 @@ export async function deliverDueFollowUps(
     }
     if (result === "retry" && now.getTime() - Date.parse(row.created_at) > MAX_AGE_MS) {
       logger.warn({ module: M, teamId: row.team_id }, `odložená zpráva ${row.id} (${row.kind}) se po ${MAX_AGE_MS / 3600_000} hodinách vzdává`);
+      // Zaplacená SMS, na kterou hráč ani po výpadku neodepsal: kredit zpět.
+      if (row.kind === "retry_reply") await refundCoachSms(db, row.team_id, row.conversation_id, "odpověď po výpadku se vzdala");
       out.cancelled++;
       continue;
     }

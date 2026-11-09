@@ -27,8 +27,10 @@ import {
   pockejNezDopise, scheduleRetryReply,
 } from "./ai-player-spawn";
 import { loadChatMemory } from "./player-memory";
+import { refundCoachSms } from "./phone-credit";
 import type { PlayerSnapshot } from "./ai-player-scenarios";
 import { carryWeightTalk, weightTalkFromState } from "../season/weight-talk";
+import { playerInClub } from "./player-reach";
 
 const M = "coach-initiated";
 
@@ -71,13 +73,15 @@ export async function startCoachThread(
   },
 ): Promise<boolean> {
   try {
-    // Áčko i U21 téhož klubu: SMS U21 klukovi dřív končila tady a kredit byl pryč.
-    const row = await db
-      .prepare(`${PLAYER_SELECT} WHERE p.id = ? AND (p.team_id = ? OR p.team_id IN (SELECT id FROM teams WHERE parent_team_id = ? AND team_type = 'u21'))`)
-      .bind(opts.playerId, opts.teamId, opts.teamId)
-      .first<Record<string, unknown>>();
+    // Áčko, U21 i hráč půjčený jinam (klub ho dál vlastní): stejné pravidlo jako při
+    // odeslání zprávy a v `handleAiPlayerReply` (player-reach.ts). SMS U21 klukovi dřív
+    // končila tady a kredit byl pryč.
+    const row = await playerInClub(db, opts.playerId, opts.teamId)
+      ? await db.prepare(`${PLAYER_SELECT} WHERE p.id = ?`).bind(opts.playerId).first<Record<string, unknown>>()
+      : null;
     if (!row) {
       logger.warn({ module: M }, `hráč ${opts.playerId} není v kádru ${opts.teamId}`);
+      await refundCoachSms(db, opts.teamId, opts.convId, "hráč už v klubu není");
       return false;
     }
 
@@ -213,6 +217,8 @@ export async function startCoachThread(
       return false;
     }
     logger.error({ module: M }, `konverzace s hráčem ${opts.playerId}`, e);
+    // Tahle odpověď už nepřijde (žádný další pokus se neplánuje), SMS se vrací.
+    await refundCoachSms(db, opts.teamId, opts.convId, "odpověď hráče spadla");
     return false;
   }
 }
@@ -264,6 +270,17 @@ export async function dopadRozhovoru(
  * povahou: ukecaní a vzteklí mají navrch, zakřiknutí mlčí.
  */
 export async function replyInSquadGroup(
+  db: D1Database,
+  env: { GEMINI_API_KEY?: string },
+  opts: { convId: string; teamId: string; coachMessage: string },
+): Promise<boolean> {
+  const replied = await replyInSquadGroupInner(db, env, opts);
+  // Kabina se podruhé nezkouší: když se nikdo neozval, SMS se vrací.
+  if (!replied) await refundCoachSms(db, opts.teamId, opts.convId, "v kabině se nikdo neozval");
+  return replied;
+}
+
+async function replyInSquadGroupInner(
   db: D1Database,
   env: { GEMINI_API_KEY?: string },
   opts: { convId: string; teamId: string; coachMessage: string },
