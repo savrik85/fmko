@@ -118,12 +118,15 @@ async function messagesTo(teamId: string): Promise<string[]> {
     .bind(teamId).all<{ body: string }>()).results.map((r) => r.body);
 }
 
-function offerInsert(id: string, playerId: string, from: string, to: string, expiresAt: string, virtual: string | null = null): D1PreparedStatement {
+function offerInsert(id: string, playerId: string, from: string, to: string, expiresAt: string, virtual: string | null = null, amount = 30_000): D1PreparedStatement {
   return db.prepare(
     `INSERT INTO transfer_offers (id, player_id, from_team_id, to_team_id, offer_amount, offer_type, status, expires_at, virtual_team_data, created_at)
-     VALUES (?, ?, ?, ?, 30000, 'transfer', 'pending', ?, ?, ?)`,
-  ).bind(id, playerId, from, to, expiresAt, virtual, new Date(NOW.getTime() - DAY_MS).toISOString());
+     VALUES (?, ?, ?, ?, ?, 'transfer', 'pending', ?, ?, ?)`,
+  ).bind(id, playerId, from, to, amount, expiresAt, virtual, new Date(NOW.getTime() - DAY_MS).toISOString());
 }
+
+/** Nabídka nad cenou, za kterou AI klub hráče pouští (rezervace hráčů v testu je do 50 tisíc). */
+const GOOD_OFFER = 90_000;
 
 /** Workers AI s jednou připravenou odpovědí (případně podle promptu) a záznamem promptů. */
 function fakeAi(answer: unknown | ((prompt: string) => unknown)) {
@@ -202,14 +205,30 @@ afterEach(() => {
 });
 
 describe("odmítnutá nabídka na hráče AI klubu", () => {
-  it("AI klub nabídku odmítne: hráč se naštve jako u člověka, AI klubu se nic nepíše, kupec zprávu dostane", async () => {
-    await db.batch([offerInsert("o-reject", "ai-1-mid2", "human", "ai-1", FUTURE)]);
+  it("nabídka pod cenou AI klubu hráče nerozhodí: odmítnutí ani propadnutí, ani opakované", async () => {
+    // 30 tisíc je pod rezervací hráče (i pod tržní hodnotou): sérií takových nabídek slib prodeje vynutit nejde.
+    for (const id of ["o-low-1", "o-low-2", "o-low-3"]) {
+      await db.batch([offerInsert(id, "ai-1-mid2", "human", "ai-1", FUTURE)]);
+      expect((await rejectTransferOffer(baseEnv, "ai-1", id)).ok).toBe(true);
+    }
+    await db.batch([offerInsert("o-low-expire", "ai-1-mid2", "human", "ai-1", new Date(NOW.getTime() - 3_600_000).toISOString())]);
+    expect(await expireIdleOffers(baseEnv, NOW)).toBe(1);
+    const life = await lifeOf("ai-1-mid2");
+    expect(life.transferUnrest).toBeUndefined();
+    expect(life.morale).toBe(BASE_LIFE.morale);
+    expect(await count("SELECT COUNT(*) AS n FROM coach_relation_log WHERE player_id = 'ai-1-mid2' AND source = 'transfer_rejected'")).toBe(0);
+    // Kupec zprávu o odmítnutí dostane dál.
+    expect((await messagesTo("human")).some((m) => m.includes("odmítl přestup"))).toBe(true);
+  }, 60_000);
+
+  it("AI klub odmítne dobrou nabídku: hráč se naštve jako u člověka, AI klubu se nic nepíše, kupec zprávu dostane", async () => {
+    await db.batch([offerInsert("o-reject", "ai-1-mid2", "human", "ai-1", FUTURE, null, GOOD_OFFER)]);
     const res = await rejectTransferOffer(baseEnv, "ai-1", "o-reject");
     expect(res.ok).toBe(true);
 
     const life = await lifeOf("ai-1-mid2");
     expect(life.transferUnrest).toMatchObject({ level: 55, reason: "rejected_offer", reasons: ["money"], deals: [] });
-    expect(life.transferUnrest.offer).toMatchObject({ amount: 30_000, fromTeamId: "human" });
+    expect(life.transferUnrest.offer).toMatchObject({ amount: GOOD_OFFER, fromTeamId: "human" });
     // −10 × povaha (temper 40 → 0,95), zaokrouhleno.
     expect(life.morale).toBe(41);
     expect(await count("SELECT COUNT(*) AS n FROM coach_relation_log WHERE player_id = 'ai-1-mid2' AND source = 'transfer_rejected'")).toBe(1);
@@ -217,8 +236,8 @@ describe("odmítnutá nabídka na hráče AI klubu", () => {
     expect((await messagesTo("human")).some((m) => m.includes("odmítl přestup"))).toBe(true);
   }, 60_000);
 
-  it("AI klub nechá nabídku propadnout: mlčení je odmítnutí, taky bez zpráv", async () => {
-    await db.batch([offerInsert("o-expire", "ai-1-mid3", "human", "ai-1", new Date(NOW.getTime() - 3_600_000).toISOString())]);
+  it("AI klub nechá dobrou nabídku propadnout: mlčení je odmítnutí, taky bez zpráv", async () => {
+    await db.batch([offerInsert("o-expire", "ai-1-mid3", "human", "ai-1", new Date(NOW.getTime() - 3_600_000).toISOString(), null, GOOD_OFFER)]);
     expect(await expireIdleOffers(baseEnv, NOW)).toBe(1);
     expect((await lifeOf("ai-1-mid3")).transferUnrest).toMatchObject({ level: 55, reasons: ["money"] });
     expect(await textsTo("ai-1")).toBe(0);
