@@ -247,6 +247,23 @@ export function canPlayUp(age: number): boolean {
   return age >= PLAY_UP_AGE;
 }
 
+/**
+ * Do dorostu smí žák nejdřív po tolika herních dnech v akademii klubu. Bez lhůty šlo akademii
+ * založit, hned povýšit starší ročníky do dorostu a zase ji zrušit: hráči zadarmo.
+ */
+export const MIN_ACADEMY_DAYS = 28;
+export const MIN_ACADEMY_DAYS_ERROR = "U žáků musí být aspoň 4 týdny";
+
+/** Den (YYYY-MM-DD), od kterého smí žák do dorostu, nebo null, když už smí. */
+export function playUpAllowedFrom(joinedAt: string | null | undefined, today: string): string | null {
+  if (!joinedAt) return null;
+  const from = new Date(`${joinedAt.slice(0, 10)}T00:00:00Z`);
+  if (Number.isNaN(from.getTime())) return null;
+  from.setUTCDate(from.getUTCDate() + MIN_ACADEMY_DAYS);
+  const fromDay = from.toISOString().slice(0, 10);
+  return fromDay > today.slice(0, 10) ? fromDay : null;
+}
+
 export function recommendsPlayUp(age: number, estimate: number): boolean {
   return canPlayUp(age) && estimate >= PLAY_UP_ESTIMATE;
 }

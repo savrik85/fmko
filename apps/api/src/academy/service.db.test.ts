@@ -92,6 +92,24 @@ describe("družstvo žáků", () => {
     expect(view!.nextSummer).toBe((await prospects("club")).filter((p) => p.age === 14).length);
   });
 
+  it("čerstvě založená akademie: do dorostu smí žák až po 4 týdnech u žáků", async () => {
+    const kid = (await prospects("club")).find((k) => k.age === 13)!;
+    const blocked = await promoteProspect(db, "club", kid.id);
+    expect(blocked).toMatchObject({ ok: false, status: 409, error: "U žáků musí být aspoň 4 týdny" });
+    expect(await recommendPlayUp(db, "club", kid.id, GAME_DATE)).toMatchObject({ ok: false, status: 409, error: "U žáků musí být aspoň 4 týdny" });
+    // Ani denní tick ho nedoporučí dřív, i když jeho den přišel
+    await db.prepare("UPDATE youth_prospects SET next_offer_on = '2026-11-01' WHERE id = ?").bind(kid.id).run();
+    expect((await dailyAcademy(db, "club", GAME_DATE)).offered).toBe(0);
+    await db.prepare("UPDATE youth_prospects SET next_offer_on = NULL WHERE id = ?").bind(kid.id).run();
+    expect((await prospects("club")).some((k) => k.id === kid.id)).toBe(true);
+    expect((await loadAcademyView(db, "club"))!.prospects.find((k) => k.id === kid.id)!.playUpFrom).toBe("2026-11-30");
+    // 27 dní nestačí, 28 ano
+    await db.prepare("UPDATE youth_prospects SET joined_at = '2026-10-06' WHERE id = ?").bind(kid.id).run();
+    expect((await promoteProspect(db, "club", kid.id)).ok).toBe(false);
+    await db.prepare("UPDATE youth_prospects SET joined_at = '2026-10-05' WHERE team_id = 'club'").run();
+    expect((await loadAcademyView(db, "club"))!.prospects.find((k) => k.id === kid.id)!.playUpFrom).toBeNull();
+  });
+
   it("dvanáctiletého o kategorii výš nejde, třináctiletého ano a přijetí ho dá do U21", async () => {
     const kids = await prospects("club");
     const young = kids.find((k) => k.age <= 12)!;

@@ -188,7 +188,7 @@ describe("záporný rozpočet v létě", () => {
   it("ruční „Dát do dorostu“ při mínusu odmítne předem a hráč nevznikne", async () => {
     const { promoteProspect } = await import("./service");
     const kid = (await prospects("big")).find((k) => !k.coach_son)!;
-    await db.prepare("UPDATE youth_prospects SET age = 13 WHERE id = ?").bind(kid.id).run();
+    await db.prepare("UPDATE youth_prospects SET age = 13, joined_at = '2026-01-01' WHERE id = ?").bind(kid.id).run();
     const players = async () => (await db.prepare("SELECT COUNT(*) AS n FROM players WHERE team_id = 'big-u21'").first<{ n: number }>())!.n;
     const before = await players();
     const res = await promoteProspect(db, "big", kid.id);

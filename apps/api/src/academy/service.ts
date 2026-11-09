@@ -28,6 +28,7 @@ import {
   RECRUIT_DAY_COST, RECRUIT_REPEAT_DAYS, nextRecruitDay, recruitDayExpected, OPEN_DAY_COST, openDayExpected, OPEN_DAY_MAX_KIDS, OPEN_DAY_COMMITMENT_BONUS, OPEN_DAY_ESTIMATE_FACTOR, WEEKS_PER_SEASON, NEIGHBOR_RADIUS_KM, neighborKidsExpected, NEIGHBOR_MAX_PER_YEAR, MAX_SQUAD,
   POACH_RADIUS_KM, MAX_POACH_PER_SEASON, POACH_THRESHOLD, POACH_ACTIONS, type PoachAction, poachBaseInterest,
   interestText, leavingInterestText, rivalInterestText, leavingRivalText, MAX_POACH_CLUBS_PER_KID, youthFeeByAge,
+  MIN_ACADEMY_DAYS, MIN_ACADEMY_DAYS_ERROR, playUpAllowedFrom,
 } from "./rules";
 
 const M = "academy";
@@ -582,6 +583,7 @@ export async function recommendPlayUp(db: D1Database, teamId: string, prospectId
   const p = await loadProspect(db, teamId, prospectId);
   if (!p) return { ok: false, status: 404, error: "Žák u žáků není" };
   if (!canPlayUp(p.age)) return { ok: false, status: 409, error: "Do dorostu smí žák až od 13 let" };
+  if (playUpAllowedFrom(p.joined_at, gameDate)) return { ok: false, status: 409, error: MIN_ACADEMY_DAYS_ERROR };
   if (!(await hasU21Team(db, teamId))) return { ok: false, status: 409, error: NO_U21_ERROR };
   const coach = await coachState(db, club, MIN_SQUAD);
   const estimate = estimatedTalent(p.hidden_talent, p.age, p.estimate_offset, coach.judgement);
@@ -605,7 +607,10 @@ export async function promoteProspect(db: D1Database, teamId: string, prospectId
   if (!canPlayUp(p.age)) return { ok: false, status: 409, error: "Do dorostu smí žák až od 13 let" };
   if (!(await hasU21Team(db, teamId))) return { ok: false, status: 409, error: NO_U21_ERROR };
   const team = await db.prepare("SELECT game_date FROM teams WHERE id = ?").bind(teamId).first<{ game_date: string | null }>();
-  const offerId = await insertProspectOffer(db, club, p, teamId, `${p.first_name} ${p.last_name} jde do dorostu.`, team?.game_date ?? new Date().toISOString());
+  const gameDate = team?.game_date ?? new Date().toISOString();
+  // Založit, hned povýšit starší ročníky a zrušit by dávalo hráče zadarmo: nejdřív 4 týdny u žáků
+  if (playUpAllowedFrom(p.joined_at, gameDate)) return { ok: false, status: 409, error: MIN_ACADEMY_DAYS_ERROR };
+  const offerId = await insertProspectOffer(db, club, p, teamId, `${p.first_name} ${p.last_name} jde do dorostu.`, gameDate);
   const { acceptPlayerOffer } = await import("../services/player-offer-actions");
   const res = await acceptPlayerOffer(db, teamId, offerId);
   if (!res.ok) return res;
@@ -858,9 +863,10 @@ export async function dailyAcademy(db: D1Database, teamId: string, gameDate: str
       WHERE p.team_id = ? AND t.academy_upkeep = 1 AND t.academy_coach_type IS NOT NULL AND p.status = 'active'
         AND EXISTS (SELECT 1 FROM teams u WHERE u.parent_team_id = t.id AND u.team_type = 'u21')
         AND p.next_offer_on IS NOT NULL AND p.next_offer_on <= ?
+        AND date(p.joined_at, '+' || ? || ' days') <= date(?)
         AND NOT EXISTS (SELECT 1 FROM player_offers o WHERE o.prospect_id = p.id AND o.status = 'pending')
       ORDER BY p.next_offer_on LIMIT 1`,
-  ).bind(teamId, day(gameDate)).first<{ id: string }>()
+  ).bind(teamId, day(gameDate), MIN_ACADEMY_DAYS, day(gameDate)).first<{ id: string }>()
     .catch((e) => { logger.warn({ module: M, teamId }, "due prospects", e); return null; });
   if (!due) return { offered: 0 };
   const res = await recommendPlayUp(db, teamId, due.id, gameDate);
@@ -1083,6 +1089,8 @@ export async function loadAcademyView(db: D1Database, teamId: string) {
         mood: commitmentText(p.commitment),
         /** O kategorii výš jen do vlastního dorostu: za muže smí kluk až od 15 let. */
         canPlayUp: canPlayUp(p.age) && !!u21,
+        /** Den, od kterého ho jde dát do dorostu (4 týdny u žáků), null = už jde. */
+        playUpFrom: canPlayUp(p.age) && u21 ? playUpAllowedFrom(p.joined_at, cols?.game_date ?? new Date().toISOString()) : null,
         /** Týdenní plat, který by bral v dorostu. */
         graduateWage: canPlayUp(p.age) && u21 ? graduateWages.get(p.id) ?? null : null,
         offered: offered.has(p.id),

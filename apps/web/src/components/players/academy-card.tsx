@@ -35,6 +35,8 @@ interface Prospect {
   verdict: string | null;
   mood: string;
   canPlayUp: boolean;
+  /** Den, od kterého ho jde dát do dorostu (4 týdny u žáků), null = už jde. */
+  playUpFrom?: string | null;
   /** Týdenní plat v dorostu (jen u žáka, kterého jde dát do dorostu). */
   graduateWage: number | null;
   offered: boolean;
@@ -496,7 +498,10 @@ export function AcademyCard({ teamId }: { teamId: string }) {
                       {p.canPlayUp && p.graduateWage !== null && (
                         <p className="text-xs text-muted">V dorostu by bral zhruba {kc(p.graduateWage)} týdně.</p>
                       )}
-                      {p.canPlayUp && (
+                      {p.canPlayUp && p.playUpFrom && (
+                        <p className="text-xs text-muted">U žáků musí být aspoň 4 týdny, do dorostu ho můžeš dát od {new Date(`${p.playUpFrom}T12:00:00Z`).toLocaleDateString("cs", { day: "numeric", month: "numeric" })}.</p>
+                      )}
+                      {p.canPlayUp && !p.playUpFrom && (
                         <button
                           onClick={() => post(p.id, `/api/teams/${teamId}/academy/prospects/${p.id}/promote`, undefined, "Žáka se nepodařilo dát do dorostu", `${p.name} je teď v dorostu, najdeš ho v U21.`)}
                           disabled={busy !== null}
