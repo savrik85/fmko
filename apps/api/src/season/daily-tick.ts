@@ -18,6 +18,7 @@ import { injuryPronenessOf } from "../injuries/proneness";
 import { isBodyType } from "../generators/physicals";
 import { injuryReturnCondition } from "../injuries/injury-generator";
 import { maintainU21Pitches, U21_TEAMS_SQL } from "../stadium/u21-groundskeeper";
+import { decideTick, parseTickMark, tickMarkKey, TICK_MARK_TTL_S, TickSteps } from "./daily-tick-steps";
 
 export interface DailyTickEvent {
   type: "training" | "training_skipped" | "recovery" | "injury_healed" | "pitch" | "morale" | "match" | "day" | "loan_return" | "loan_breach";
@@ -30,6 +31,22 @@ export interface DailyTickResult {
   dayOfWeek: number;
   isTrainingDay: boolean;
   events: DailyTickEvent[];
+  /** Tick neběžel: den už je hotový, jiný běh právě běží, nebo nejde bezpečně pokračovat. */
+  skipped?: "done" | "running" | "resume_unavailable";
+  /** Běh navázal na rozdělaný tick téhož dne. */
+  resumed?: boolean;
+  /** Kroky, které při pokračování neběžely, protože už byly hotové. */
+  skippedSteps?: string[];
+  /** Kroky, které vyhodily chybu. Dokud nějaký je, tick není uzavřený jako hotový. */
+  failedSteps?: string[];
+}
+
+export interface DailyTickOptions {
+  /**
+   * Ruční spuštění adminem: obejde značku dne (i hotovou a i čerstvě rozběhnutou),
+   * provede ale jen kroky, které ještě nemají záznam o dokončení.
+   */
+  force?: boolean;
 }
 
 /** Povolené typy tréninku — drží sync s TrainingType v season/training.ts. */
@@ -83,6 +100,7 @@ export function parseTrainingPlan(raw: string | null, teamId?: string): Record<n
 export async function executeDailyTick(
   env: Bindings,
   gameDate?: Date,
+  options: DailyTickOptions = {},
 ): Promise<DailyTickResult> {
   const now = gameDate ?? new Date();
   // Kanonický herní den ticku = DETERMINISTICKY reálný den (16:00 UTC) + offset (game_clock).
@@ -106,13 +124,33 @@ export async function executeDailyTick(
 
   // Idempotency: zabránit dvojitému spuštění pro stejný herní den (klíč z deterministického data výše).
   const todayKey = effectiveDate.toISOString().slice(0, 10); // YYYY-MM-DD
-  const alreadyRan = await env.CACHE_KV.get(`daily-tick:${todayKey}`).catch((e) => { logger.warn({ module: "daily-tick" }, "read tick KV flag failed", e); return null; });
-  if (alreadyRan) {
+  // Značka má dva stavy (started s časem, done) a každý krok vlastní záznam o dokončení,
+  // viz daily-tick-steps.ts. Spadlý běh tak jde dokončit, aniž by se cokoli provedlo dvakrát.
+  const markRaw = await env.CACHE_KV.get(tickMarkKey(todayKey)).catch((e) => { logger.warn({ module: "daily-tick" }, "read tick KV flag failed", e); return null; });
+  const decision = decideTick(parseTickMark(markRaw), Date.now(), options.force === true);
+  const skippedResult = (skipped: NonNullable<DailyTickResult["skipped"]>): DailyTickResult =>
+    ({ date: effectiveDate.toISOString(), dayOfWeek: effectiveDate.getUTCDay(), isTrainingDay: false, events: [], skipped });
+  if (decision === "skip_done") {
     logger.warn({ module: "daily-tick" }, `SKIP, tick for ${todayKey} already ran`);
-    return { date: effectiveDate.toISOString(), dayOfWeek: effectiveDate.getUTCDay(), isTrainingDay: false, events: [] };
+    return skippedResult("done");
+  }
+  if (decision === "skip_running") {
+    logger.warn({ module: "daily-tick" }, `SKIP, tick for ${todayKey} právě běží (značka started je mladší než 20 minut)`);
+    return skippedResult("running");
+  }
+  const steps = await TickSteps.load(env.DB, todayKey);
+  const resumed = decision === "resume";
+  if (resumed && !steps.available) {
+    // Bez záznamů kroků by pokračování provedlo finance i trénink podruhé.
+    logger.error({ module: "daily-tick" }, `tick ${todayKey} nedoběhl a nejde v něm bezpečně pokračovat (chybí tabulka daily_tick_steps)`);
+    return skippedResult("resume_unavailable");
+  }
+  if (resumed) {
+    logger.warn({ module: "daily-tick" }, `RESUME, tick ${todayKey} pokračuje po nedokončeném běhu (hotových kroků ${steps.doneCount}${options.force ? ", vynuceno adminem" : ""})`);
   }
   // Uložit příznak s TTL 36h (pokryje případ posunu na další den)
-  await env.CACHE_KV.put(`daily-tick:${todayKey}`, "1", { expirationTtl: 60 * 60 * 36 }).catch((e) => logger.warn({ module: "daily-tick" }, "set tick KV flag failed", e));
+  await env.CACHE_KV.put(tickMarkKey(todayKey), JSON.stringify({ state: "started", at: new Date().toISOString() }), { expirationTtl: TICK_MARK_TTL_S })
+    .catch((e) => logger.warn({ module: "daily-tick" }, "set tick KV flag failed", e));
 
   const dayOfWeek = effectiveDate.getUTCDay();
   // Trénovat jde kterýkoli den v týdnu včetně víkendu — omezuje jen to, co si manažer nastaví.
@@ -123,6 +161,7 @@ export async function executeDailyTick(
   logger.info({ module: "daily-tick" }, `START dayOfWeek=${dayOfWeek} training=${isTrainingDay} date=${now.toISOString()}`);
 
   // Nový den: vyčistit včerejší absence (jednodenní flag v life_context.absence)
+  await steps.once("day-reset", async () => {
   await env.DB.prepare(
     "UPDATE players SET life_context = json_remove(life_context, '$.absence') WHERE json_extract(life_context, '$.absence') IS NOT NULL"
   ).run().catch((e) => logger.warn({ module: "daily-tick" }, "clear yesterday absences", e));
@@ -131,6 +170,7 @@ export async function executeDailyTick(
   await env.DB.prepare(
     "UPDATE players SET life_context = json_remove(life_context, '$.hangover') WHERE json_extract(life_context, '$.hangover') IS NOT NULL"
   ).run().catch((e) => logger.warn({ module: "daily-tick" }, "clear yesterday hangovers", e));
+  });
 
   // Retention condition_log — udržujeme posledních 60 dní per hráč, jinak by tabulka rostla bez limitu.
   await env.DB.prepare(
@@ -143,6 +183,7 @@ export async function executeDailyTick(
   ).run().catch((e) => logger.warn({ module: "daily-tick" }, "coach_relation_log retention", e));
 
   // ── Týdenní cyklus obce: vyprší staré brigády a v pondělí se generují nové ──
+  await steps.once("village-cycle", async () => {
   try {
     const {
       expireOldBrigades, generateWeeklyBrigades,
@@ -206,8 +247,10 @@ export async function executeDailyTick(
   } catch (e) {
     logger.error({ module: "daily-tick" }, "village brigade cycle failed", e);
   }
+  });
 
   // ── Setkání s majiteli firem v hospodě (vlastní try: chyba nesmí shodit cyklus obce) ──
+  await steps.once("sponsor-pub-meetings", async () => {
   try {
     const { expireSponsorPubEncounters, generateSponsorPubEncounters } = await import("../sponsors/hooks");
     const expiredSponsorPub = await expireSponsorPubEncounters(env.DB, effectiveDate.toISOString());
@@ -219,9 +262,11 @@ export async function executeDailyTick(
   } catch (e) {
     logger.error({ module: "daily-tick" }, "setkání s majiteli firem selhalo", e);
   }
+  });
 
   // ── Sliby sponzorům s termínem: licence, stavba, logo (vlastní try: chyba nesmí shodit tick) ──
   // Před SMS majitelů, aby zpráva o splněném nebo porušeném slibu mohla odejít ještě dnes.
+  await steps.run("sponsor-promises", async () => {
   try {
     const { evaluateDeadlinePromises } = await import("../sponsors/promise-runs");
     const r = await evaluateDeadlinePromises(env.DB, effectiveDate.toISOString());
@@ -231,8 +276,10 @@ export async function executeDailyTick(
   } catch (e) {
     logger.error({ module: "daily-tick" }, "sliby sponzorům s termínem selhaly", e);
   }
+  });
 
   // ── Prosby o příspěvek: po 30 dnech kontrola, jestli peníze šly na slíbený účel ──
+  await steps.once("sponsor-pleas", async () => {
   try {
     const { evaluateSponsorRequests } = await import("../sponsors/requests-db");
     const r = await evaluateSponsorRequests(env.DB, effectiveDate.toISOString());
@@ -242,9 +289,11 @@ export async function executeDailyTick(
   } catch (e) {
     logger.error({ module: "daily-tick" }, "prosby sponzorům selhaly", e);
   }
+  });
 
   // ── SMS od majitelů firem (vlastní try: chyba nesmí shodit zbytek ticku) ──
   // effectiveDate, ne teams.game_date: posun herního data v teams přijde až níž v ticku.
+  await steps.once("sponsor-sms", async () => {
   try {
     const { runOwnerSmsDaily } = await import("../sponsors/owner-sms-triggers");
     const r = await runOwnerSmsDaily(env.DB, effectiveDate.toISOString());
@@ -254,9 +303,11 @@ export async function executeDailyTick(
   } catch (e) {
     logger.error({ module: "daily-tick" }, "SMS od majitelů firem selhaly", e);
   }
+  });
 
   // ── Bydliště: hráč bez něj nebo s obcí, která v okrese není (nový hráč pražského klubu
   // z generators/residence.ts), dostane skutečnou obec podle dojíždění. Vlastní try. ──
+  await steps.run("residences", async () => {
   try {
     const { fillMissingResidences } = await import("../players/residence-fill");
     const r = await fillMissingResidences(env.DB, { limit: 200, includeUnknown: true });
@@ -264,6 +315,7 @@ export async function executeDailyTick(
   } catch (e) {
     logger.error({ module: "daily-tick" }, "doplnění bydliště selhalo", e);
   }
+  });
 
   // ── Training (Mon-Fri, if plan is set) ──
   // U21 týmy zdědí training_type/approach/sessions od parent A-týmu — manažer nastaví trénink
@@ -325,6 +377,8 @@ export async function executeDailyTick(
   for (const team of teams.results) {
     const teamId = team.id as string;
     bodyDriftTeams.push(teamId);
+    // Trénink klubu nejvýš jednou za herní den, i když tick po pádu pokračuje.
+    if (!(await steps.claim(`training:${teamId}`))) continue;
     // Trenér, vybavení a realizační tým visí na A-týmu — U21 nemá vlastní ani jedno.
     // Bez tohohle přesměrování trénoval dorost s výchozími hodnotami (trenér 40, vybavení 1,0),
     // tedy hůř než áčko, přestože právě u mládeže má rozvoj fungovat nejlíp.
@@ -834,18 +888,21 @@ export async function executeDailyTick(
   // Kluby se sekačkou (mower) jedou vlastním průchodem níž — tady se vynechají,
   // stejný idiom jako u grilu. Bez toho by jim trávník klesal dvakrát.
   // U21 hřiště drží správce (`stadium/u21-groundskeeper.ts`), denní úbytek se jim nepočítá.
+  await steps.once("pitch-wear", async () => {
   await env.DB.prepare(
     `UPDATE stadiums SET pitch_condition = MAX(5, pitch_condition - 1) WHERE pitch_type = 'natural' AND team_id NOT IN (SELECT team_id FROM equipment WHERE mower > 0) AND team_id NOT IN (${U21_TEAMS_SQL})`
   ).run();
   await env.DB.prepare(
     `UPDATE stadiums SET pitch_condition = MAX(10, pitch_condition - 1) WHERE pitch_type = 'hybrid' AND (ABS(RANDOM()) % 2 = 0) AND team_id NOT IN (SELECT team_id FROM equipment WHERE mower > 0) AND team_id NOT IN (${U21_TEAMS_SQL})`
   ).run();
+  });
 
   // Vlhkost půdy podle počasí DNEŠNÍHO dne, ne jen po zápase.
   //
   // Dřív se tu jen driftovalo k normálu, takže hřiště počasí vnímalo výhradně
   // v zápasový den — šest dní v týdnu ho déšť nenamočil a slunce nevysušilo.
   // Počasí je přitom vlastnost dne (`season/season-weather.ts`).
+  await steps.once("pitch-weather", async () => {
   try {
     const { resolveWeatherForDate } = await import("./season-weather");
     const { moistureDaily, pitchFrostDamage, IRRIGATION_MOISTURE_GAIN } = await import("../stadium/pitch-moisture");
@@ -925,9 +982,11 @@ export async function executeDailyTick(
   } catch (e) {
     logger.error({ module: "daily-tick" }, "denni vliv pocasi na travnik", e);
   }
+  });
 
   // Sekačka: trávník některé dny nechátrá vůbec. Šance = pitchCareMod (0–90 %),
   // takže Lv3 v dobrém stavu udrží hřiště skoro pořád.
+  await steps.once("pitch-mower", async () => {
   try {
     const mowers = await env.DB.prepare(
       "SELECT team_id, mower, mower_condition FROM equipment WHERE mower > 0"
@@ -942,18 +1001,22 @@ export async function executeDailyTick(
   } catch (e) {
     logger.warn({ module: "daily-tick" }, "mower pitch care", e);
   }
+  });
 
   // Správce U21 hřiště: až po mrazu a sekačce, ať den končí spraveným trávníkem.
+  await steps.once("pitch-u21-groundskeeper", async () => {
   try {
     const maintained = await maintainU21Pitches(env.DB);
     if (maintained > 0) events.push({ type: "pitch", description: `Správce U21 hřišť dnes pracoval na ${maintained}` });
   } catch (e) {
     logger.warn({ module: "daily-tick" }, "spravce u21 hriste", e);
   }
+  });
 
   // Equipment condition degradation (slow — 1-2 points per day for used items).
   // team_van ZÁMĚRNĚ vynechán: jeho kondice ovlivňuje commuteMod, který musí zůstat stejný
   // mezi day_before SMS a match_day simulací (jinak divergence absencí). Dodávku „opotřebí" jen zápas/nákup.
+  await steps.once("equipment-wear", async () => {
   const equipCategories = ["balls", "jerseys", "training_cones", "first_aid", "boots_stock", "bibs", "goalkeeper_gear", "water_bottles", "tactics_board",
     "gym_corner", "training_wall", "club_grill", "fan_drums", "winter_gear", "video_setup", "laundry", "mower", "coffee_maker",
     "sports_drinks", "raffle", "pa_system", "trophy_case", "area_security", "nutrition"];
@@ -988,8 +1051,10 @@ export async function executeDailyTick(
         .catch((e) => logger.warn({ module: "daily-tick" }, "equipment degradation with laundry", e));
     }
   }
+  });
 
   // Injury recovery
+  await steps.once("injuries-recovery", async () => {
   await env.DB.prepare(
     "UPDATE injuries SET days_remaining = days_remaining - 1 WHERE days_remaining > 0"
   ).run();
@@ -1078,8 +1143,10 @@ export async function executeDailyTick(
   if (returnStmts.length > 0) {
     await env.DB.batch(returnStmts).catch((e) => logger.warn({ module: "daily-tick" }, "injury return condition", e));
   }
+  });
 
   // Shower facility bonus: extra condition recovery per team
+  await steps.once("shower-recovery", async () => {
   try {
     const { calculateFacilityEffects } = await import("../stadium/stadium-generator");
     const stadiums = await env.DB.prepare(
@@ -1115,8 +1182,10 @@ export async function executeDailyTick(
   } catch (e) {
     logger.error({ module: "daily-tick" }, "shower bonus failed", e);
   }
+  });
 
   // Posilovna v kabině: extra regenerace kondice per tým (stejný vzor jako sprchy)
+  await steps.once("gym-recovery", async () => {
   try {
     const { calculateEffects } = await import("../equipment/equipment-generator");
     const gyms = await env.DB.prepare(
@@ -1150,8 +1219,10 @@ export async function executeDailyTick(
   } catch (e) {
     logger.error({ module: "daily-tick" }, "gym regen failed", e);
   }
+  });
 
   // ── Random life events ── (vesnické +/-, cooldown 5 dní per hráč, ~2% per hráč/den)
+  await steps.once("life-events", async () => {
   try {
     const { applyRandomLifeEvents } = await import("./random-events");
     const r = await applyRandomLifeEvents(env.DB);
@@ -1159,10 +1230,12 @@ export async function executeDailyTick(
   } catch (e) {
     logger.error({ module: "daily-tick" }, "random life events", e);
   }
+  });
 
   // (AI player chats mají vlastní cron 0 14 * * * v index.ts — nespouštět tady)
 
   // ── Hospoda U Pralesa ── generuj večerní session pro lidské týmy (idempotentní per game_date)
+  await steps.once("pub", async () => {
   try {
     const { generatePubSessionsForAllTeams } = await import("./pub");
     const r = await generatePubSessionsForAllTeams(env.DB, todayKey);
@@ -1170,8 +1243,10 @@ export async function executeDailyTick(
   } catch (e) {
     logger.error({ module: "daily-tick" }, "pub sessions", e);
   }
+  });
 
   // ── Okresní akce (pouť, bál…), jejichž den nastal: scény od modelu a následky ──
+  await steps.once("district-events", async () => {
   try {
     const { resolveDueDistrictEvents } = await import("../events/district-event-db");
     const n = await resolveDueDistrictEvents(env, todayKey);
@@ -1179,8 +1254,10 @@ export async function executeDailyTick(
   } catch (e) {
     logger.error({ module: "daily-tick" }, "district events", e);
   }
+  });
 
   // ── Postava: denní změna váhy (po hospodě, ať se počítá i dnešní večer) ──
+  await steps.once("body-drift", async () => {
   try {
     const { processDailyBodyDrift } = await import("./body-drift");
     const r = await processDailyBodyDrift(env.DB, { teamIds: bodyDriftTeams, trainedToday, gameDate: todayKey, isMonday: dayOfWeek === 1 });
@@ -1190,8 +1267,10 @@ export async function executeDailyTick(
   } catch (e) {
     logger.error({ module: "daily-tick" }, "body drift", e);
   }
+  });
 
   // ── Naplánované hospodské akce trenérů (posezení, runda) — vyhodnotit po „odehrání" hospody ──
+  await steps.once("pub-actions", async () => {
   try {
     const { resolvePlannedSocialEvents } = await import("../community/manager-relations");
     const n = await resolvePlannedSocialEvents(env.DB, todayKey);
@@ -1199,6 +1278,7 @@ export async function executeDailyTick(
   } catch (e) {
     logger.error({ module: "daily-tick" }, "resolve social pub events", e);
   }
+  });
 
   // ── Napětí mezi trenéry vychladne o bod za odehrané ligové kolo (ráno po kole) ──
   try {
@@ -1212,6 +1292,7 @@ export async function executeDailyTick(
   // Morale drift toward 50 — týmy s klubovým grilem mají pásmo posunuté nahoru (nálada drží výš).
   // Základní drift v try/catch s fallbackem: kdyby sloupec club_grill ještě neexistoval (deploy
   // před migrací), nesmí spadnout celý tick — spadne jen na drift bez gril-výjimky.
+  await steps.once("morale-drift", async () => {
   try {
     await env.DB.prepare(
       `UPDATE players SET life_context = json_set(life_context, '$.morale',
@@ -1253,6 +1334,7 @@ export async function executeDailyTick(
         END)`
     ).run().catch((e2) => logger.error({ module: "daily-tick" }, "plain morale drift fallback failed", e2));
   }
+  });
   events.push({ type: "morale", description: "Morálka se stabilizuje" });
 
   // Spokojenost se mezi zápasy vrací ke klidovému stavu kolem 55. Dřív mířila
@@ -1260,6 +1342,7 @@ export async function executeDailyTick(
   // se nic nedělo, tak sám skončil na „nadšení". Loajalita posouvá klid jen
   // o pár bodů: věrné publikum je v klidu o něco vlídnější (45 + loajalita × 0,15).
   // Krok je 8 % vzdálenosti, aspoň bod — výkyv po sérii výher vyprchá za pár týdnů.
+  await steps.once("fans-drift", async () => {
   const { SATISFACTION_REST_SQL } = await import("./fans-processor");
   await env.DB.prepare(
     `UPDATE fans SET satisfaction = CASE
@@ -1308,6 +1391,7 @@ export async function executeDailyTick(
     await env.DB.batch(loyaltyStmts)
       .catch((e) => logger.warn({ module: "daily-tick" }, "fans loyalty drift batch", e));
   }
+  });
 
   logger.info({ module: "daily-tick" }, "reached game date advancement section");
   // ── Advance game date for ALL teams (including AI) ──
@@ -1320,6 +1404,8 @@ export async function executeDailyTick(
   let globalGameDate: string | null = null;
   if (clock) {
     globalGameDate = effectiveDate.toISOString();
+    // Neměnná kopie pro kroky níž: uvnitř funkcí kroků by TypeScript u `let` zapomněl, že datum už je známé.
+    const tickGameDate: string = globalGameDate;
     await env.DB.prepare("UPDATE teams SET game_date = ? WHERE game_date IS NOT NULL").bind(globalGameDate).run()
       .catch((e) => logger.warn({ module: "daily-tick" }, "set global game date", e));
 
@@ -1328,38 +1414,44 @@ export async function executeDailyTick(
     // samostatný pohárový tick v index.ts, který se pouští až od poledne.
 
     // ── Přáteláky: domluvené na dnešek se otevřou na sestavu, propadlé výzvy vyprší ──
+    await steps.run("friendlies-morning", async () => {
     try {
       const { openDueFriendlies, expireStaleFriendlies, gameDay } = await import("../multiplayer/friendlies");
       const { pragueHour } = await import("../lib/match-tick-schedule");
-      const today = gameDay(globalGameDate);
+      const today = gameDay(tickGameDate);
       const expired = await expireStaleFriendlies(env.DB, today, pragueHour());
       const opened = await openDueFriendlies(env.DB, today);
       if (opened > 0 || expired.challenges > 0 || expired.offers > 0) {
         logger.info({ module: "friendlies" }, `přáteláky: otevřeno ${opened}, vypršelo ${expired.challenges} výzev a ${expired.offers} nabídek`);
       }
     } catch (e) { logger.error({ module: "friendlies" }, "ranní přáteláky selhaly", e); }
+    });
 
     // ── Delegace rozhodčích na zápasy za dva herní dny ──
     // Záměrně PŘED per-tým smyčkou: delegace je per liga a musí proběhnout i pro
     // zápasy dvou AI týmů, zatímco smyčka níž běží per tým a lidské trenéry filtruje.
+    await steps.run("referee-delegation", async () => {
     try {
       const { delegateReferees } = await import("../referees/delegation");
-      const delegated = await delegateReferees(env.DB, globalGameDate);
+      const delegated = await delegateReferees(env.DB, tickGameDate);
       if (delegated > 0) logger.info({ module: "referees" }, `delegováno ${delegated} zápasů`);
     } catch (e) { logger.error({ module: "referees" }, "delegace rozhodčích selhala", e); }
+    });
 
     // ── Předzápasové výroky AI trenérů ──
     // Stejné okno jako delegace: výrok musí vyjít před zápasem, jinak na něj
     // pozápasový rozhovor nemá jak navázat.
+    await steps.once("ai-prematch-statements", async () => {
     try {
       const { gameExpiry } = await import("../lib/game-time");
       const { publishAiPreMatchStatements } = await import("../news/ai-prematch-statement");
-      const target = new Date(gameExpiry(globalGameDate, 2));
+      const target = new Date(gameExpiry(tickGameDate, 2));
       const from = new Date(target); from.setUTCHours(0, 0, 0, 0);
       const to = new Date(target); to.setUTCHours(23, 59, 59, 999);
       const said = await publishAiPreMatchStatements(env.DB, from.toISOString(), to.toISOString());
       if (said > 0) logger.info({ module: "ai-statement" }, `${said} předzápasových výroků`);
     } catch (e) { logger.warn({ module: "ai-statement" }, "předzápasové výroky selhaly", e); }
+    });
 
     // ── Schůze vedení soutěže (středa) ──
     // Středa je jediný den bez kolize: liga hraje pondělí a čtvrtek, pohár v sobotu
@@ -1370,20 +1462,23 @@ export async function executeDailyTick(
     // a herní datum skočí o desítky dní zpět, takže absolutní „next_meeting_at <= dnes"
     // by po přechodu sezóny nemuselo nikdy nastat.
     if (dayOfWeek === MEETING_DAY_OF_WEEK) {
+      await steps.run("competition-meeting", async () => {
       try {
         const { runCompetitionMeetings } = await import("../competition/meeting");
-        const r = await runCompetitionMeetings(env.DB, globalGameDate);
+        const r = await runCompetitionMeetings(env.DB, tickGameDate);
         if (r.meetings > 0) {
           logger.info({ module: "competition" },
             `schůze: ${r.meetings} soutěží, ${r.closed} bodů projednáno, ${r.passed} přijato`);
         }
       } catch (e) { logger.error({ module: "competition" }, "schůze vedení soutěže selhala", e); }
+      });
     }
 
     // ── Sázková kancelář ──
     // Kurzový lístek se přepisuje jednou za herní den, dokud je kolo 'scheduled'.
     // Vstupy modelu (síla kádru, forma, střelci) se každý den mění, takže lístek
     // musí být čerstvý; podaný tiket to neovlivní, ten si kurz nese ve vlastní kopii.
+    await steps.run("betting-odds", async () => {
     try {
       const { generateBoard } = await import("../betting/board");
       const ligy = await env.DB.prepare(
@@ -1394,14 +1489,16 @@ export async function executeDailyTick(
 
       let radku = 0;
       for (const liga of ligy.results) {
-        const r = await generateBoard(env.DB, liga.id, globalGameDate);
+        const r = await generateBoard(env.DB, liga.id, tickGameDate);
         radku += r.rows;
       }
       if (radku > 0) logger.info({ module: "betting" }, `kurzový lístek: ${radku} kurzů`);
     } catch (e) { logger.error({ module: "betting" }, "generování kurzového lístku", e); }
+    });
 
     // Záchranná síť: tiket z kola, které dohrál ruční endpoint nebo recovery,
     // by jinak zůstal viset navždy. Zámek na status='open' dělá opakování zdarma.
+    await steps.run("betting-settle", async () => {
     try {
       const { settleRound } = await import("../betting/settle");
       const zbyle = await env.DB.prepare(
@@ -1418,6 +1515,7 @@ export async function executeDailyTick(
         }
       }
     } catch (e) { logger.error({ module: "betting" }, "dovypořádání tiketů", e); }
+    });
   }
   // (Chybějící game_clock už je zalogováno jako error na začátku ticku.)
 
@@ -1468,6 +1566,7 @@ export async function executeDailyTick(
   // objednat. Nejdřív se dotáhne, co běží od minule, pak se objedná nové:
   // opačné pořadí by v jednom běhu objednalo a hned pollovalo něco, co Suno
   // ještě nestihlo, a jen by to spálilo subrequesty.
+  await steps.run("chant-recordings", async () => {
   try {
     const { dotahniNahravky, objednejNahravky } = await import("../fans/fan-chant-audio");
     const dotazene = await dotahniNahravky(env);
@@ -1485,8 +1584,10 @@ export async function executeDailyTick(
   } catch (e) {
     logger.warn({ module: "daily-tick" }, "nahrávky chorálů", e);
   }
+  });
 
   // ── Player offer generation (organické nabídky — hospodský, kamarád, dorost, starosta) ──
+  await steps.once("player-offers", async () => {
   try {
     const { generatePlayerOffer, receivesPlayerOffers } = await import("../events/player-offers");
     const sizeMap: Record<string, string> = { hamlet: "vesnice", village: "obec", town: "mestys", small_city: "mesto", city: "mesto" };
@@ -1515,9 +1616,11 @@ export async function executeDailyTick(
   } catch (e) {
     logger.error({ module: "daily-tick" }, "player offer generation failed", e);
   }
+  });
 
   // ── Žáci: trenér žáků průběžně doporučuje kluky o kategorii výš do dorostu ──
   // Nahrazuje dřívější náhodné nabídky „Trenéra dorostu“ (player-offers.ts je už nelosuje).
+  await steps.once("youth-recommendations", async () => {
   try {
     const { dailyAcademy } = await import("../academy/service");
     const { receivesPlayerOffers } = await import("../events/player-offers");
@@ -1537,8 +1640,10 @@ export async function executeDailyTick(
   } catch (e) {
     logger.error({ module: "daily-tick" }, "academy daily failed", e);
   }
+  });
 
   // ── Free agent pool maintenance ──
+  await steps.run("free-agents", async () => {
   try {
     const { maintainFreeAgentPool } = await import("../transfers/free-agent-pool");
     const faRng = createRng(now.getTime() + 7777);
@@ -1549,9 +1654,11 @@ export async function executeDailyTick(
   } catch (e) {
     logger.error({ module: "daily-tick" }, "free agent pool failed", e);
   }
+  });
 
   // ── Player quitting check ──
   // Platí i pro AI kluby. Zprávu do zpravodaje dostane jen lidský klub, AI klubu nikdo nepíše.
+  await steps.once("player-quitting", async () => {
   try {
     const quitRng = createRng(now.getTime() + 9999);
     const activePlayers = await env.DB.prepare(
@@ -1583,10 +1690,12 @@ export async function executeDailyTick(
   } catch (e) {
     logger.error({ module: "daily-tick" }, "player quit check failed", e);
   }
+  });
 
   // ── Loan returns — hráči vracející se z hostování ──
   // loan_until se zapisuje v HERNÍM čase (game.ts loan accept) → porovnávat proti
   // hernímu datu, ne reálnému. Při offsetu se jinak hráči vraceli špatně (dřív/nikdy).
+  await steps.run("loan-returns", async () => {
   try {
     const expiredLoans = await env.DB.prepare(
       "SELECT id, first_name, last_name, team_id, loan_from_team_id FROM players WHERE loan_from_team_id IS NOT NULL AND loan_until <= ?"
@@ -1622,10 +1731,12 @@ export async function executeDailyTick(
   } catch (e) {
     logger.error({ module: "daily-tick" }, "loan return check failed", e);
   }
+  });
 
   // ── Hostování: podmínka hraní ──
   // Půjčujícímu klubu se jednou ozve, když hostující klub přestal plnit podmínku hraní
   // (transfers/loan-agreements.ts). Uzavře i záznamy hráčů, kteří už nehostují.
+  await steps.run("loan-play-condition", async () => {
   try {
     const { checkLoanAgreements } = await import("../transfers/loan-agreements");
     const res = await checkLoanAgreements(env.DB);
@@ -1633,12 +1744,14 @@ export async function executeDailyTick(
   } catch (e) {
     logger.error({ module: "daily-tick" }, "loan agreements check failed", e);
   }
+  });
 
   // Celebrity spawn moved to match tick (index.ts) to avoid D1 query limit in daily tick
 
   // ── Transfer expiry cleanup ──
   // transfer_offers expirují v transfer pressure ticku (transfers/transfer-pressure-tick.ts),
   // kde se řeší i dopad na morálku hráče, který o přestup stál.
+  await steps.run("transfer-expiry", async () => {
   try {
     // transfer_listings mají expiraci zapsanou v reálném čase (game.ts) → reálné now.
     await env.DB.prepare("UPDATE transfer_listings SET status = 'expired' WHERE status = 'active' AND expires_at < ?")
@@ -1661,11 +1774,13 @@ export async function executeDailyTick(
   } catch (e) {
     logger.error({ module: "daily-tick" }, "transfer expiry failed", e);
   }
+  });
 
   // ── Expirace inzerátů v bazaru vybavení ──
   // Reálný čas jako u transfer_listings — expires_at zapisuje equipment-market.ts
   // reálným Date. Vybavení se NEVRACÍ: prodávající ho celou dobu měl a používal,
   // inzerát byl jen nabídka. Stačí tedy zavřít status a dát vědět.
+  await steps.run("equipment-listings-expiry", async () => {
   try {
     const expiring = await env.DB.prepare(
       `SELECT el.id, el.team_id, el.category, el.level, el.price
@@ -1691,9 +1806,11 @@ export async function executeDailyTick(
   } catch (e) {
     logger.error({ module: "daily-tick" }, "equipment listing expiry failed", e);
   }
+  });
 
   // ── Nabídky vybavení od AI klubů ──
   // Až po expiraci, ať se doplňuje podle skutečného počtu živých nabídek.
+  await steps.once("ai-equipment-offers", async () => {
   try {
     const { generateAiEquipmentListings } = await import("../equipment/ai-listings");
     const created = await generateAiEquipmentListings(env.DB, now);
@@ -1701,6 +1818,7 @@ export async function executeDailyTick(
   } catch (e) {
     logger.error({ module: "daily-tick" }, "ai equipment listings failed", e);
   }
+  });
 
   // ── Normalize all leagues to max game_date ──
   // Prevents permanent date offset if leagues were initialized at different times.
@@ -1726,6 +1844,7 @@ export async function executeDailyTick(
   // ── Fanbase snapshots + bus streak break ─────────────────────────────────
   // Per team UPSERT do fanbase_snapshots + decay casual_count u obcí, kde nebyl bus
   // už 3+ home zápasy v řadě.
+  await steps.once("fanbase-snapshots", async () => {
   try {
     const fbTeams = await env.DB.prepare(
       `SELECT t.id as team_id, t.reputation, t.game_date,
@@ -1854,8 +1973,23 @@ export async function executeDailyTick(
   } catch (e) {
     logger.error({ module: "daily-tick" }, "fanbase snapshot + streak break failed", e);
   }
+  });
 
+  await steps.prune();
   const duration = ((Date.now() - tickStart) / 1000).toFixed(1);
-  logger.info({ module: "daily-tick" }, `DONE events=${events.length} duration=${duration}s`);
-  return { date: now.toISOString(), dayOfWeek, isTrainingDay, events };
+  if (steps.failed.length > 0) {
+    // Značka zůstává started: další spuštění (po 20 minutách nebo vynucené adminem) dokončí
+    // kroky, které opakování snesou. Kroky „nejvýš jednou" se samy neopakují.
+    logger.error({ module: "daily-tick" }, `NEDOKONČENO, selhaly kroky: ${steps.failed.join(", ")} (duration=${duration}s)`);
+  } else {
+    await env.CACHE_KV.put(tickMarkKey(todayKey), JSON.stringify({ state: "done", at: new Date().toISOString() }), { expirationTtl: TICK_MARK_TTL_S })
+      .catch((e) => logger.warn({ module: "daily-tick" }, "set tick KV done flag failed", e));
+    logger.info({ module: "daily-tick" }, `DONE events=${events.length} duration=${duration}s`);
+  }
+  return {
+    date: now.toISOString(), dayOfWeek, isTrainingDay, events,
+    resumed: resumed || undefined,
+    skippedSteps: steps.skipped.length > 0 ? steps.skipped : undefined,
+    failedSteps: steps.failed.length > 0 ? steps.failed : undefined,
+  };
 }

@@ -37,6 +37,32 @@ async function scalar(db: D1Database, sql: string, popis: string): Promise<numbe
   return row?.n ?? null;
 }
 
+/** Od kolika milisekund se běh z fronty hlásí jako příliš dlouhý. */
+export const QUEUE_RUN_ALARM_MS = 600_000;
+
+/**
+ * Stojí herní datum? Očekávaný herní den je dnešní den (UTC) plus posun z game_clock,
+ * stejně jako ho počítá denní tick. Bez game_clock nebo bez týmů s datem se nehlásí nic.
+ */
+export async function staleGameDateProblem(db: D1Database, now: Date): Promise<WatchdogProblem | null> {
+  const row = await db.prepare(
+    `SELECT (SELECT offset_days FROM game_clock WHERE id = 1) AS offset_days,
+            (SELECT MAX(game_date) FROM teams WHERE game_date IS NOT NULL) AS game_date`,
+  ).first<{ offset_days: number | null; game_date: string | null }>()
+    .catch((e) => { logger.warn({ module: "watchdog" }, "kontrola herního data selhala", e); return null; });
+  if (!row || row.offset_days == null || !row.game_date) return null;
+  const expected = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  expected.setUTCDate(expected.getUTCDate() + row.offset_days);
+  const expectedDay = expected.toISOString().slice(0, 10);
+  const actualDay = row.game_date.slice(0, 10);
+  if (actualDay >= expectedDay) return null;
+  return {
+    kod: "herni_datum",
+    popis: "Herní datum týmů není dnešní, denní tick nedoběhl k posunu data (večerní kolo nebude splatné)",
+    hodnota: `${actualDay} místo ${expectedDay}`,
+  };
+}
+
 /**
  * Projde kontroly a vrátí nalezené problémy. Nic nemění — jen čte a hlásí.
  */
@@ -142,6 +168,30 @@ export async function runWatchdog(env: Bindings): Promise<WatchdogResult> {
   );
   if (halfDone && halfDone > 0) {
     problemy.push({ kod: "zapas_napul", popis: "Zápas má výsledek, ale jeho zpracování spadlo uprostřed", hodnota: halfDone });
+  }
+
+  // ── 4c. Herní datum nestojí ──
+  // Denní tick posouvá teams.game_date na dnešek (reálný den plus posun z game_clock). Když
+  // tick spadne před posunem, datum zůstane včerejší, večerní kolo není splatné a nic to
+  // nenahlásí. Hlídač běží tři hodiny po ticku, takže rozdíl znamená nedoběhlý tick.
+  const staleGameDate = await staleGameDateProblem(env.DB, new Date());
+  if (staleGameDate) problemy.push(staleGameDate);
+
+  // ── 4d. Běh z fronty trvá moc dlouho ──
+  // Kolo se hraje kolem pěti minut. Běh nad deset minut je na hraně limitu Workeru
+  // a příště spadne v půlce.
+  const slowRun = await env.DB.prepare(
+    `SELECT kind, league_id, duration_ms FROM queue_runs
+      WHERE duration_ms > ? AND created_at > strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-1 day')
+      ORDER BY duration_ms DESC LIMIT 1`,
+  ).bind(QUEUE_RUN_ALARM_MS).first<{ kind: string; league_id: string | null; duration_ms: number }>()
+    .catch((e) => { logger.warn({ module: "watchdog" }, "kontrola délky běhů z fronty selhala", e); return null; });
+  if (slowRun) {
+    problemy.push({
+      kod: "pomaly_beh",
+      popis: `Běh z fronty (${slowRun.kind}${slowRun.league_id ? `, liga ${slowRun.league_id}` : ""}) trval přes ${QUEUE_RUN_ALARM_MS / 1000} s`,
+      hodnota: `${Math.round(slowRun.duration_ms / 1000)} s`,
+    });
   }
 
   // ── 5. Opakované pokusy ──

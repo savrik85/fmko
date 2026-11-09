@@ -7481,11 +7481,18 @@ gameRouter.get("/teams/:teamId/cup/team/:cupTeamId", async (c) => {
 });
 
 // POST /api/admin/run-daily-tick — ruční spuštění denního ticku (globální hodiny + auto-pohár + vše).
+// Bez parametru se chová jako cron: hotový den přeskočí, v nedoběhlém pokračuje až 20 minut
+// po jeho startu. ?force=1 značku dne obejde (i hotovou), provede ale jen kroky, které ještě
+// nemají záznam o dokončení (daily_tick_steps), takže finance ani trénink neproběhnou dvakrát.
 gameRouter.post("/admin/run-daily-tick", async (c) => {
   const { executeDailyTick } = await import("../season/daily-tick");
   try {
-    const r = await executeDailyTick(c.env);
-    return c.json({ ok: true, events: r.events?.length ?? 0 });
+    const r = await executeDailyTick(c.env, undefined, { force: c.req.query("force") === "1" });
+    return c.json({
+      ok: true, events: r.events?.length ?? 0,
+      skipped: r.skipped ?? null, resumed: r.resumed ?? false,
+      skippedSteps: r.skippedSteps ?? [], failedSteps: r.failedSteps ?? [],
+    });
   } catch (e) {
     logger.error({ module: "game.ts" }, "manual daily tick", e);
     return c.json({ error: "tick selhal" }, 500);
