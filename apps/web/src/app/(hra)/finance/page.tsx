@@ -375,7 +375,7 @@ function FlowsTab({ data }: { data: BudgetData }) {
             <div className="card p-4 sm:p-5">
               <SectionLabel>Sponzorské smlouvy</SectionLabel>
               <p className="mt-2 text-sm text-muted">
-                Žádná podepsaná smlouva — ze sponzorů teď nekape nic. Nabídky najdeš na stránce{" "}
+                Žádná podepsaná smlouva, ze sponzorů teď nekape nic. Nabídky najdeš na stránce{" "}
                 <a href="/sponzori" className="font-heading font-bold text-ink underline">Sponzoři</a>.
               </p>
             </div>
@@ -406,10 +406,10 @@ function FlowsTab({ data }: { data: BudgetData }) {
           <div className="card p-4 sm:p-5">
             <SectionLabel>Nepravidelné příjmy</SectionLabel>
             <div className="mt-2 text-sm text-muted space-y-1">
-              <div>• <span className="font-heading font-bold text-ink">Vstupné</span> — domácí zápasy podle návštěvy a ceny.</div>
-              <div>• <span className="font-heading font-bold text-ink">Bufet</span> — buď vlastní tržby, nebo pronájem externímu provozovateli.</div>
-              <div>• <span className="font-heading font-bold text-ink">Bonusy za výsledky</span> — výhra/remíza, sponzorské win-bonusy.</div>
-              <div>• <span className="font-heading font-bold text-ink">Přestupy</span> — prodej hráčů, jednorázové příjmy.</div>
+              <div>• <span className="font-heading font-bold text-ink">Vstupné</span>, domácí zápasy podle návštěvy a ceny.</div>
+              <div>• <span className="font-heading font-bold text-ink">Bufet</span>, buď vlastní tržby, nebo pronájem externímu provozovateli.</div>
+              <div>• <span className="font-heading font-bold text-ink">Bonusy za výsledky</span>, výhra/remíza, sponzorské win-bonusy.</div>
+              <div>• <span className="font-heading font-bold text-ink">Přestupy</span>, prodej hráčů, jednorázové příjmy.</div>
             </div>
           </div>
         </>
@@ -466,10 +466,10 @@ function FlowsTab({ data }: { data: BudgetData }) {
           <div className="card p-4 sm:p-5">
             <SectionLabel>Nepravidelné výdaje</SectionLabel>
             <div className="mt-2 text-sm text-muted space-y-1">
-              <div>• <span className="font-heading font-bold text-ink">Zápasové náklady</span> — rozhodčí, cestovné, občerstvení po zápase.</div>
-              <div>• <span className="font-heading font-bold text-ink">Přestupy</span> — přestupové ceny, registrace, hostování.</div>
-              <div>• <span className="font-heading font-bold text-ink">Upgrady</span> — stadion, hřiště, vybavení, propagace zápasu.</div>
-              <div>• <span className="font-heading font-bold text-ink">Inzeráty</span> — hledání volných hráčů.</div>
+              <div>• <span className="font-heading font-bold text-ink">Zápasové náklady</span>, rozhodčí, cestovné, občerstvení po zápase.</div>
+              <div>• <span className="font-heading font-bold text-ink">Přestupy</span>, přestupové ceny, registrace, hostování.</div>
+              <div>• <span className="font-heading font-bold text-ink">Upgrady</span>, stadion, hřiště, vybavení, propagace zápasu.</div>
+              <div>• <span className="font-heading font-bold text-ink">Inzeráty</span>, hledání volných hráčů.</div>
             </div>
           </div>
         </>
@@ -714,7 +714,7 @@ function LoanTab({ teamId, data, info, onChange, reload }: {
           <li>📅 Splátky: rovnoměrně po každém zápase až do konce sezóny</li>
           <li>🚫 Najednou pouze jedna aktivní půjčka</li>
           <li>🔁 Půjčku lze vzít jednou za sezónu</li>
-          <li>⛔ Při záporném rozpočtu nelze nic kupovat — dokud nevyrovnáš</li>
+          <li>⛔ Při záporném rozpočtu nelze nic kupovat, dokud nevyrovnáš</li>
         </ul>
       </div>
 

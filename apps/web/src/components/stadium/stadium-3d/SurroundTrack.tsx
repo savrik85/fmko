@@ -103,7 +103,7 @@ export function SurroundTrack({
           soupeřily v hloubkovém testu a povrch prosvítal trávníkem. Ladit to
           rozestupem nešlo: větší mezera dělala viditelný schod, menší vracela
           prosvítání. S dírou se plochy nepřekrývají vůbec a problém nemůže
-          vzniknout — zóna proto může ležet skoro v rovině s trávníkem. */}
+          vzniknout, zóna proto může ležet skoro v rovině s trávníkem. */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, APRON_Y, 0]} receiveShadow>
         <primitive object={apronGeometry} attach="geometry" />
         <meshStandardMaterial

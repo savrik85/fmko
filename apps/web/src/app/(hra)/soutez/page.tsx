@@ -468,7 +468,7 @@ export default function SoutezPage() {
           )}
           {/* Odbory hned pod hlavní záložky. Mezi těmi dvěma lištami dřív visela
               vývěska a hráč se k agendě odboru proscrolloval přes šest cizích
-              rozhodnutí — dvě navigace oddělené dlouhým seznamem. Co grémium
+              rozhodnutí, dvě navigace oddělené dlouhým seznamem. Co grémium
               rozhodlo, je pod agendou; kdo si to chce přečíst, ten doscrolluje. */}
           <Tabs
             items={gesceList.map((g) => ({
@@ -876,7 +876,7 @@ function ProposalForm({ teamId, state, gesce, onClose, onSaved }: {
                 <label className="text-sm text-muted">
                   Nová hodnota
                   {/* Rozsah se píše čísly. fmtValue umí nulu přeložit na „bez omezení",
-                      což z „0 – 60 bodů" udělá „bez omezení. 60 bodů" — a to se čte
+                      což z „0 – 60 bodů" udělá „bez omezení. 60 bodů", a to se čte
                       jako by pole žádný strop nemělo. Co znamená nula, říká poznámka. */}
                   {spec.min !== null && spec.max !== null && ` (${fmtRozsah(spec)})`}
                 </label>
@@ -899,7 +899,7 @@ function ProposalForm({ teamId, state, gesce, onClose, onSaved }: {
         )}
 
         {/* Návrh mimo rozpočet (stav hřiště, soupiska, sázky) nemá na klubovou
-            kasu vliv — čtyři řádky nul jsou jen šum. */}
+            kasu vliv, čtyři řádky nul jsou jen šum. */}
         {impact && zmeneno && (impact.delta.matchBonus !== 0 || impact.delta.placeReward !== 0 || impact.delta.entryFee !== 0) && (
           <div className="rounded-lg p-3 text-sm space-y-1" style={{ background: "var(--color-paper)" }}>
             <div className="font-semibold">Dopad na tvůj klub při současné formě</div>

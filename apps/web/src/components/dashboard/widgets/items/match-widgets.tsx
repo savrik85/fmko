@@ -410,7 +410,7 @@ export function RecentMatchesWidget({ data, height }: WidgetProps) {
               const resultText = m.result === "W" ? "text-pitch-600" : m.result === "L" ? "text-card-red" : "text-muted";
               return (
                 <tr key={m.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
-                  <td className="py-2 pl-4 sm:pl-5 pr-2 tabular-nums text-muted">{m.round ?? "—"}</td>
+                  <td className="py-2 pl-4 sm:pl-5 pr-2 tabular-nums text-muted">{m.round ?? "-"}</td>
                   <td className="py-2 pr-2">
                     <a href={`/zapas/${m.id}`} className="flex items-center gap-2 hover:underline">
                       <BadgePreview primary={m.opponentColor} secondary={m.opponentSecondary}

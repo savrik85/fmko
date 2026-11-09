@@ -101,7 +101,7 @@ export function SellDialog({ option, busy, onClose, onList, onPawn, onRepair }: 
           />
 
           <div className="text-sm text-muted">
-            Cenu si řekni jakou chceš — buď to někdo koupí, nebo ne. Nové vyjde na{" "}
+            Cenu si řekni jakou chceš, buď to někdo koupí, nebo ne. Nové vyjde na{" "}
             <span className="tabular-nums">{formatCZK(option.invested)}</span>, spodní hranice je{" "}
             <span className="tabular-nums">{formatCZK(option.bazarMin)}</span> (tolik dá zastavárna bez čekání).
           </div>
@@ -112,7 +112,7 @@ export function SellDialog({ option, busy, onClose, onList, onPawn, onRepair }: 
 
           {!priceValid && (
             <div className="text-sm text-card-red">
-              Nejmíň {formatCZK(option.bazarMin)} — pod tím se to vyplatí rovnou zastavit.
+              Nejmíň {formatCZK(option.bazarMin)}, pod tím se to vyplatí rovnou zastavit.
             </div>
           )}
 
@@ -127,7 +127,7 @@ export function SellDialog({ option, busy, onClose, onList, onPawn, onRepair }: 
 
         {/* Zastavárna */}
         <div className="border border-gray-200 rounded-xl p-4 space-y-2">
-          <div className="font-heading font-bold flex items-center gap-2">💸 Zastavárna — hned</div>
+          <div className="font-heading font-bold flex items-center gap-2">💸 Zastavárna, hned</div>
           <div className="text-sm text-muted">
             Dostaneš <span className="font-heading font-bold text-ink tabular-nums">{formatCZK(option.pawnQuote)}</span>.
             Investoval jsi <span className="tabular-nums">{formatCZK(option.invested)}</span>. Vybavení zmizí natrvalo,

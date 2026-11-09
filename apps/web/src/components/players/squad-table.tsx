@@ -99,8 +99,8 @@ export function SquadTable({ rows, compact, teamColor }: {
             </div>
             <div className={`flex-1 min-w-0 font-heading font-bold ${textSize} truncate`}>{p.name}</div>
             <div className={`w-12 text-center ${textSize} text-muted tabular-nums`}>{p.age}</div>
-            <div className={`w-14 text-center ${textSize} text-muted tabular-nums`}>{p.height ? `${p.height}` : "—"}</div>
-            <div className={`w-14 text-center ${textSize} text-muted tabular-nums`}>{p.weight ? `${p.weight}` : "—"}</div>
+            <div className={`w-14 text-center ${textSize} text-muted tabular-nums`}>{p.height ? `${p.height}` : "-"}</div>
+            <div className={`w-14 text-center ${textSize} text-muted tabular-nums`}>{p.weight ? `${p.weight}` : "-"}</div>
             <div className={`w-12 text-center ${textSize} text-muted`}>
               {p.foot === "left" ? "L" : p.foot === "both" ? "O" : "P"}
             </div>

@@ -86,7 +86,7 @@ export function parseDbTime(raw: string): Date {
 }
 
 export function formatTime(raw: string | null): string {
-  if (!raw) return "—";
+  if (!raw) return "-";
   const d = parseDbTime(raw);
   return Number.isNaN(d.getTime()) ? raw : d.toLocaleString("cs", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" });
 }

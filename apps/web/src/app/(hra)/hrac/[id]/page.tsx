@@ -89,7 +89,7 @@ function footLabel(foot?: string): string {
   if (foot === "left") return "Levá";
   if (foot === "right") return "Pravá";
   if (foot === "both") return "Oboumožka";
-  return "—";
+  return "-";
 }
 
 function sideLabel(side?: string): string {
@@ -97,7 +97,7 @@ function sideLabel(side?: string): string {
   if (side === "right") return "Pravá";
   if (side === "center") return "Střed";
   if (side === "any") return "Všechny";
-  return "—";
+  return "-";
 }
 
 
@@ -921,7 +921,7 @@ export default function PlayerDetailPage() {
                           onChange={(e) => setSwapSlots((prev) => prev.map((id, i) => (i === slot ? e.target.value || null : id)))}
                           className={`flex-1 min-w-0 rounded-soft px-3 py-2 text-sm font-heading focus:outline-none ${light ? "bg-black/5 text-gray-900 border border-black/20 focus:border-black/40" : "bg-white/10 text-white border border-white/20 focus:border-white/50"}`}
                         >
-                          <option value="" className="bg-gray-800 text-white">— bez výměny —</option>
+                          <option value="" className="bg-gray-800 text-white">- bez výměny -</option>
                           {mySquad
                             .filter((p) => !p.loan_from_team_id)
                             // Hráč vybraný v jiném slotu podruhé nabídnout nejde.
@@ -1091,9 +1091,9 @@ export default function PlayerDetailPage() {
             <DetailRow label="Pozice" value={<PositionBadge position={player.position} />} />
             <DetailRow label="Věk" value={`${player.age} let`} />
             <DetailRow label="Národnost" value={nationalityLabel((player as { nationality?: string }).nationality)} />
-            <DetailRow label="Povolání" value={player.lifeContext?.occupation ?? "—"} />
-            <DetailRow label="Bydliště" value={player.residence ?? "—"} />
-            <DetailRow label="Dojíždění" value={player.commute_km != null ? `${player.commute_km} km` : "—"} />
+            <DetailRow label="Povolání" value={player.lifeContext?.occupation ?? "-"} />
+            <DetailRow label="Bydliště" value={player.residence ?? "-"} />
+            <DetailRow label="Dojíždění" value={player.commute_km != null ? `${player.commute_km} km` : "-"} />
             {isOwnPlayer && player.weekly_wage != null && (
               <DetailRow label="Mzda" value={`${player.weekly_wage.toLocaleString("cs")} Kč/týd`} />
             )}
@@ -1106,7 +1106,7 @@ export default function PlayerDetailPage() {
                 : `cca ${marketValueEstimate(value).toLocaleString("cs")} Kč`;
               return <DetailRow label="Tržní cena" value={shown} />;
             })()}
-            <DetailRow label="Výška" value={player.physical?.height ? `${player.physical.height} cm` : "—"} />
+            <DetailRow label="Výška" value={player.physical?.height ? `${player.physical.height} cm` : "-"} />
             <DetailRow
               label="Váha"
               value={player.physical?.weight ? (
@@ -1116,7 +1116,7 @@ export default function PlayerDetailPage() {
                     <span className={WEIGHT_CATEGORY[player.body.weightCategory].color}> · {WEIGHT_CATEGORY[player.body.weightCategory].label}</span>
                   )}
                 </>
-              ) : "—"}
+              ) : "-"}
             />
             {player.body?.trend30d != null && (
               <DetailRow
@@ -1403,7 +1403,7 @@ export default function PlayerDetailPage() {
                       {m.rating.toFixed(1)}
                     </span>
                     <span className="flex items-center gap-0.5 text-xs">
-                      <span className="text-muted truncate max-w-[60px]">{m.opponent ?? "—"}</span>
+                      <span className="text-muted truncate max-w-[60px]">{m.opponent ?? "-"}</span>
                     </span>
                     <span className={`text-micro font-heading font-bold ${resultColor}`}>{resultLabel}</span>
                     {(m.goals > 0 || m.assists > 0) && (
@@ -1569,7 +1569,7 @@ export default function PlayerDetailPage() {
             { label: "Góly", value: totalGoals, sub: `${goalsPerGame.toFixed(2)} / zápas`, highlight: true },
             { label: "Asistence", value: totalAssists },
             { label: "G+A", value: goalContribution },
-            { label: "Min / gól", value: totalGoals > 0 ? Math.round(totalMinutes / totalGoals) : "—" },
+            { label: "Min / gól", value: totalGoals > 0 ? Math.round(totalMinutes / totalGoals) : "-" },
           );
         }
 
@@ -1659,13 +1659,13 @@ export default function PlayerDetailPage() {
                             <span className="font-heading font-bold text-ink truncate max-w-[140px]">{s.teamName}</span>
                           </a>
                         </td>
-                        <td className="py-2 pr-2 text-xs text-muted truncate max-w-[120px]">{s.leagueName ?? "—"}</td>
+                        <td className="py-2 pr-2 text-xs text-muted truncate max-w-[120px]">{s.leagueName ?? "-"}</td>
                         <td className="py-2 pr-2 text-center tabular-nums">{s.appearances}</td>
-                        <td className="py-2 pr-2 text-center tabular-nums font-heading font-bold">{(s.goals as number) > 0 ? s.goals : "—"}</td>
-                        <td className="py-2 pr-2 text-center tabular-nums">{(s.assists as number) > 0 ? s.assists : "—"}</td>
+                        <td className="py-2 pr-2 text-center tabular-nums font-heading font-bold">{(s.goals as number) > 0 ? s.goals : "-"}</td>
+                        <td className="py-2 pr-2 text-center tabular-nums">{(s.assists as number) > 0 ? s.assists : "-"}</td>
                         <td className="py-2 pr-2 text-center tabular-nums text-gold-500">{(s.yellowCards as number) > 0 ? s.yellowCards : ""}</td>
                         <td className="py-2 pr-2 text-center tabular-nums text-card-red">{(s.redCards as number) > 0 ? s.redCards : ""}</td>
-                        <td className="py-2 pr-4 sm:pr-5 text-center tabular-nums font-heading font-bold">{typeof s.avgRating === "number" ? s.avgRating.toFixed(1) : "—"}</td>
+                        <td className="py-2 pr-4 sm:pr-5 text-center tabular-nums font-heading font-bold">{typeof s.avgRating === "number" ? s.avgRating.toFixed(1) : "-"}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1751,7 +1751,7 @@ export default function PlayerDetailPage() {
 
                   return (
                     <tr key={m.matchId} className={`border-b border-gray-50 hover:bg-gray-50/50 transition-colors ${rowBg}`}>
-                      <td className="py-2 pl-4 sm:pl-5 pr-2 tabular-nums text-muted">{m.round ?? "—"}</td>
+                      <td className="py-2 pl-4 sm:pl-5 pr-2 tabular-nums text-muted">{m.round ?? "-"}</td>
                       <td className="py-2 pr-2">
                         <a href={`/zapas/${m.matchId}/zaznam`} className="flex items-center gap-2 hover:underline">
                           <BadgePreview primary={m.opponentColor} secondary={m.opponentSecondary}
@@ -1881,14 +1881,14 @@ export default function PlayerDetailPage() {
                     <div key={m.matchId} className="flex flex-col sm:flex-row sm:items-center gap-2 p-3 rounded-soft bg-gray-50/60 hover:bg-gray-50 transition-colors">
                       <div className="flex items-center gap-2 sm:w-[180px] shrink-0">
                         <span className="text-micro font-heading font-bold text-muted uppercase tabular-nums shrink-0">
-                          {m.round != null ? `${m.round}. kolo` : "—"}
+                          {m.round != null ? `${m.round}. kolo` : "-"}
                         </span>
                         <Link href={`/zapas/${m.matchId}`} className="font-heading font-bold text-sm text-ink hover:text-pitch-500 truncate">
                           {m.isHome ? "vs" : "@"} {m.opponent}
                         </Link>
                       </div>
                       <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-heading font-bold border ${reasonColor} shrink-0`}>
-                        {m.reason ?? "—"}
+                        {m.reason ?? "-"}
                       </span>
                       {m.smsText && (
                         <span className="text-xs text-muted italic flex-1 min-w-0">
@@ -2336,7 +2336,7 @@ function TrainingDevelopment({ teamId, playerId }: { teamId: string; playerId: s
               </thead>
               <tbody>
                 {visible.map((entry, i) => {
-                  const date = entry.game_date ? new Date(entry.game_date).toLocaleDateString("cs", { day: "numeric", month: "numeric" }) : "—";
+                  const date = entry.game_date ? new Date(entry.game_date).toLocaleDateString("cs", { day: "numeric", month: "numeric" }) : "-";
                   const trainingLabel = TRAIN_TYPE_LABELS[entry.training_type] ?? entry.training_type;
                   return (
                     <tr key={i} className="border-b border-gray-50 last:border-b-0 align-top">
@@ -2533,7 +2533,7 @@ function ConditionLog({ teamId, playerId }: { teamId: string; playerId: string }
                         </div>
                         <div className="md:hidden text-micro text-muted leading-tight">{entry.description ?? ""}</div>
                       </td>
-                      <td className="py-1.5 pr-3 text-muted hidden md:table-cell">{entry.description ?? "—"}</td>
+                      <td className="py-1.5 pr-3 text-muted hidden md:table-cell">{entry.description ?? "-"}</td>
                       <td className="py-1.5 text-right whitespace-nowrap">
                         <span className={`font-heading font-bold ${entry.delta > 0 ? "text-pitch-500" : entry.delta < 0 ? "text-card-red" : "text-muted"}`}>
                           {entry.delta > 0 ? `+${entry.delta}` : entry.delta}

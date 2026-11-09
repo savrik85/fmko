@@ -292,7 +292,7 @@ export function BusSelector({
           >
             {submitting
               ? "Objednávám…"
-              : `Objednat — ${selectedTier.cost.toLocaleString("cs")} Kč`}
+              : `Objednat za ${selectedTier.cost.toLocaleString("cs")} Kč`}
           </button>
         </>
       )}

@@ -122,7 +122,7 @@ export function RefereesPanel({ data, state, teamId, myOpen, jeKomisar, onChange
                     </div>
                   </div>
                   <div className="text-lg font-heading tabular-nums shrink-0" style={{ color: gradeColor(r.avgGrade) }}>
-                    {r.avgGrade !== null ? r.avgGrade.toFixed(2) : "—"}
+                    {r.avgGrade !== null ? r.avgGrade.toFixed(2) : "-"}
                   </div>
                 </div>
 
@@ -217,7 +217,7 @@ function PauseForm({ referee, teamId, weeks, fromWeek, maxPauses, onClose, onSav
         <div className="rounded-lg p-3 text-sm space-y-1" style={{ background: "var(--color-paper)" }}>
           <div>Odpískal {referee.matches} zápasů, průměrná známka{" "}
             <strong style={{ color: gradeColor(referee.avgGrade) }}>
-              {referee.avgGrade !== null ? referee.avgGrade.toFixed(2) : "—"}
+              {referee.avgGrade !== null ? referee.avgGrade.toFixed(2) : "-"}
             </strong>
           </div>
           <div className="text-muted">Za sezónu můžeš rozdat {maxPauses} stopky.</div>
@@ -299,7 +299,7 @@ function BanForm({ referee, teamId, deposit, jeKomisar, onClose, onSaved }: {
         <div className="rounded-lg p-3 text-sm space-y-1" style={{ background: "var(--color-paper)" }}>
           <div>Odpískal {referee.matches} zápasů, průměrná známka{" "}
             <strong style={{ color: gradeColor(referee.avgGrade) }}>
-              {referee.avgGrade !== null ? referee.avgGrade.toFixed(2) : "—"}
+              {referee.avgGrade !== null ? referee.avgGrade.toFixed(2) : "-"}
             </strong>
           </div>
           <div className="text-muted">
@@ -381,7 +381,7 @@ function MatchRow({ m, teamId, muzeMenit, onSwap }: {
           )}
         </div>
         <div className="text-lg font-heading tabular-nums shrink-0" style={{ color: gradeColor(m.avgGrade) }}>
-          {m.avgGrade !== null ? m.avgGrade.toFixed(2) : "—"}
+          {m.avgGrade !== null ? m.avgGrade.toFixed(2) : "-"}
         </div>
       </div>
 

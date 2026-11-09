@@ -249,20 +249,20 @@ export function PlayerBrowseTable({ rows, color, onColorText, ratingColor, colum
                   <span className="font-heading font-bold tabular-nums" style={{ color: ratingColor }}>{r.rating}</span>
                 </td>
                 {SKILL_COLUMNS.map((c) => (
-                  <td key={c.key} className={`py-2 pr-2 text-center tabular-nums ${attrColor(r.skills[c.key] ?? 0)}`}>{r.skills[c.key] ?? "—"}</td>
+                  <td key={c.key} className={`py-2 pr-2 text-center tabular-nums ${attrColor(r.skills[c.key] ?? 0)}`}>{r.skills[c.key] ?? "-"}</td>
                 ))}
-                {columns.condition && <td className="py-2 pr-2 text-center tabular-nums text-muted">{r.condition ?? "—"} %</td>}
-                {columns.form && <td className="py-2 pr-2 tabular-nums text-muted whitespace-nowrap">{r.form ? formatForm(r.form) : "—"}</td>}
+                {columns.condition && <td className="py-2 pr-2 text-center tabular-nums text-muted">{r.condition ?? "-"} %</td>}
+                {columns.form && <td className="py-2 pr-2 tabular-nums text-muted whitespace-nowrap">{r.form ? formatForm(r.form) : "-"}</td>}
                 {columns.price && (
-                  <td className="py-2 pr-2 text-right tabular-nums font-heading font-bold whitespace-nowrap">{r.price != null ? formatPrice(r.price) : "—"}</td>
+                  <td className="py-2 pr-2 text-right tabular-nums font-heading font-bold whitespace-nowrap">{r.price != null ? formatPrice(r.price) : "-"}</td>
                 )}
                 {showValue && <td className="py-2 pr-2 text-right tabular-nums whitespace-nowrap font-heading font-bold">{formatValue(rowValue(r))}</td>}
                 <td className="py-2 pr-2 text-center whitespace-nowrap">
                   {r.injury
                     ? <span className="text-sm font-heading font-bold text-card-red" title={r.injury.type ?? "Zranění"}>🩹 {r.injury.daysRemaining} d</span>
-                    : <span className="text-muted">—</span>}
+                    : <span className="text-muted">-</span>}
                 </td>
-                {columns.watchedSince && <td className="py-2 pr-2 text-muted whitespace-nowrap">{r.watchedSince ? formatDay(r.watchedSince) : "—"}</td>}
+                {columns.watchedSince && <td className="py-2 pr-2 text-muted whitespace-nowrap">{r.watchedSince ? formatDay(r.watchedSince) : "-"}</td>}
                 {onRemove && <td className="py-2 pr-4 sm:pr-5 text-right">{removeButton(r)}</td>}
                 {columns.action && (
                   <td className="py-2 pr-4 sm:pr-5 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>{r.action}</td>
@@ -301,7 +301,7 @@ export function PlayerBrowseTable({ rows, color, onColorText, ratingColor, colum
               {KEY_SKILLS[r.position].map((k) => (
                 <span key={k} className="tabular-nums">
                   <span className="text-muted">{skillShort(k)}</span>{" "}
-                  <span className={`font-heading font-bold ${attrColor(r.skills[k] ?? 0)}`}>{r.skills[k] ?? "—"}</span>
+                  <span className={`font-heading font-bold ${attrColor(r.skills[k] ?? 0)}`}>{r.skills[k] ?? "-"}</span>
                 </span>
               ))}
               {r.injury && (

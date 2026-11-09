@@ -184,7 +184,7 @@ export function ConcessionRevenueWidget({ data }: WidgetProps) {
   return (
     <div className="space-y-3">
       <BarChart
-        categories={sales.map((m) => m.opponentName ?? "—")}
+        categories={sales.map((m) => m.opponentName ?? "-")}
         series={[
           { label: "Tržba", color: PRIMARY, values: sales.map((m) => m.totalRevenue ?? 0) },
           { label: "Zisk", color: seriesColor(1), values: sales.map((m) => m.totalProfit ?? 0) },

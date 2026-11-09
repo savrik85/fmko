@@ -193,7 +193,7 @@ export function U21Rozvoj({ teamId }: { teamId: string }) {
             <span className="text-muted"> kluků v dorostu</span>
           </span>
           {!data.maSkauta && (
-            <span className="text-muted">Bez skauta neuvidíš stropy — najmi ho v Zaměstnancích.</span>
+            <span className="text-muted">Bez skauta neuvidíš stropy, najmi ho v Zaměstnancích.</span>
           )}
         </div>
       </section>

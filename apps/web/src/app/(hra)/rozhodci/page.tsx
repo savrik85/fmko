@@ -56,8 +56,8 @@ export default function RozhodciPage() {
       ) : (
       <>
       <p className="text-sm text-muted mb-4">
-        Komise rozhodčích okresu {district || "—"}. Známka 1–5 se počítá za každý odpískaný zápas
-        podle toho, jak ho sudí zvládl — čím níž v tabulce, tím hůř.
+        Komise rozhodčích okresu {district || "-"}. Známka 1–5 se počítá za každý odpískaný zápas
+        podle toho, jak ho sudí zvládl, čím níž v tabulce, tím hůř.
       </p>
 
       {odpiskali.length === 0 && (

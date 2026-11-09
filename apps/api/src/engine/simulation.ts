@@ -1107,7 +1107,7 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
           `Přímý kop přesně k tyči! ${playerName(kicker)}`, "freekick");
       } else {
         addEvent(minute, "chance", kicker, attacking.teamId,
-          `${playerName(kicker)} pálí přímák — ${rng.pick(["do zdi", "nad břevno", "těsně vedle", "brankář vyráží"])}`,
+          `${playerName(kicker)} pálí přímák, ${rng.pick(["do zdi", "nad břevno", "těsně vedle", "brankář vyráží"])}`,
           "freekick_missed");
       }
       return;
@@ -1135,7 +1135,7 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
         `Asistence: ${playerName(kicker)}`, "");
     } else if (rng.random() < 0.45) {
       addEvent(minute, "chance", header, attacking.teamId,
-        `${playerName(header)} hlavičkuje — ${rng.pick(["nad břevno", "vedle", "chytil brankář", "zblokováno"])}`,
+        `${playerName(header)} hlavičkuje, ${rng.pick(["nad břevno", "vedle", "chytil brankář", "zblokováno"])}`,
         "header_missed");
     }
   }

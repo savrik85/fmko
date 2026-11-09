@@ -67,7 +67,7 @@ export default function NapovedaPage() {
                         {info.relevantFor.includes(p) ? (
                           <span className="text-pitch-500 font-bold">✓</span>
                         ) : (
-                          <span className="text-muted-light">—</span>
+                          <span className="text-muted-light">-</span>
                         )}
                       </td>
                     ))}

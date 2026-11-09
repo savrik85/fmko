@@ -300,7 +300,7 @@ export function MatchReplayViewer({
             teamId: 1,
             description: `GÓÓÓL! ${homeName} rozvlnili síť!`,
           });
-          co.push(`${m}' — GÓÓÓL! Domácí ${homeName} se ujímají slova!`);
+          co.push(`${m}', GÓÓÓL! Domácí ${homeName} se ujímají slova!`);
         }
         for (let g = 0; g < awayScore; g++) {
           const m = Math.min(89, 21 + g * 27);
@@ -312,7 +312,7 @@ export function MatchReplayViewer({
             teamId: 2,
             description: `GÓÓÓL! ${awayName} skórují!`,
           });
-          co.push(`${m}' — GÓÓÓL! Hostující ${awayName} překonávají brankáře!`);
+          co.push(`${m}', GÓÓÓL! Hostující ${awayName} překonávají brankáře!`);
         }
         ev.push({
           minute: 45,
@@ -323,7 +323,7 @@ export function MatchReplayViewer({
           description: "Konec prvního poločasu.",
           detail: "Poločas",
         });
-        co.push("45' — Konec prvního poločasu.");
+        co.push("45', Konec prvního poločasu.");
 
         ev.sort((a: MatchEvent, b: MatchEvent) => a.minute - b.minute);
       }

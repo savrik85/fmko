@@ -124,7 +124,7 @@ export default function RozhodciDetailPage() {
             {ref.vsTeam.matches > 0 && (
               <>
                 <p className="text-sm">
-                  Pískal vám <span className="font-heading font-bold">{ref.vsTeam.matches}×</span> —{" "}
+                  Pískal vám <span className="font-heading font-bold">{ref.vsTeam.matches}×</span> -{" "}
                   {pocet(ref.vsTeam.wins, "výhra", "výhry", "výher")},{" "}
                   {pocet(ref.vsTeam.draws, "remíza", "remízy", "remíz")},{" "}
                   {pocet(ref.vsTeam.losses, "prohra", "prohry", "proher")}.

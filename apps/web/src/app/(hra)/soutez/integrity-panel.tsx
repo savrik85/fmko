@@ -126,7 +126,7 @@ export function IntegrityPanel({ state, teamId, jsemKomisar, onChanged }: {
     <div className="space-y-4">
       {/* ── Přestupy k prověření ─────────────────────────────────────────── */}
       {/* Zabalené jako všechno ostatní. Počet podezřelých je vidět v poznámce,
-          takže se sem dá zajít cíleně — automatické rozbalení nejdelšího seznamu
+          takže se sem dá zajít cíleně, automatické rozbalení nejdelšího seznamu
           by zrušilo důvod, proč jsou tyhle sekce sbalovací. */}
       <Rozbaleni
         title="Přestupy soutěže"

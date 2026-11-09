@@ -631,7 +631,7 @@ export default function NewsPage() {
           ))}
 
           {/* ═══ Rozhovorové rubriky ═══
-              Pořadí není pevné — nahoru jde ta, ve které vyšel nejčerstvější
+              Pořadí není pevné, nahoru jde ta, ve které vyšel nejčerstvější
               článek. Natvrdo dané pořadí znamenalo, že po kole bez pozápasových
               rozhovorů viselo nad čerstvými rozhovory kola staré vydání. */}
           {[

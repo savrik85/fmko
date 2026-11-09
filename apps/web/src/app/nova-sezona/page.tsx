@@ -41,7 +41,7 @@ export default function NovaSezonaPage() {
   if (loading) return <div className="min-h-dvh flex justify-center items-center bg-pitch-700"><Spinner /></div>;
   if (!data) return null;
 
-  const fmtDate = (s: string | null) => s ? new Date(s).toLocaleDateString("cs", { day: "numeric", month: "long" }) : "—";
+  const fmtDate = (s: string | null) => s ? new Date(s).toLocaleDateString("cs", { day: "numeric", month: "long" }) : "-";
 
   return (
     <div className="min-h-dvh bg-gradient-to-b from-pitch-600 to-pitch-800 text-white">
@@ -64,7 +64,7 @@ export default function NovaSezonaPage() {
           </div>
           <div className="bg-white/10 rounded-xl p-3 text-center">
             <div className="text-micro uppercase tracking-wider text-white/60">Pohár</div>
-            <div className="font-heading font-bold mt-0.5">{data.cup ? `${data.cup.rounds} kol` : "—"}</div>
+            <div className="font-heading font-bold mt-0.5">{data.cup ? `${data.cup.rounds} kol` : "-"}</div>
           </div>
         </div>
 

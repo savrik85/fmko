@@ -328,7 +328,7 @@ equipmentMarketRouter.post("/teams/:teamId/equipment-market/list", async (c) => 
   const band = getBazarPriceBand(category, level, condition);
   if (price < band.min) {
     return c.json({
-      error: `Míň než ${band.min.toLocaleString("cs")} Kč nedává smysl — tolik za to dá zastavárna.`,
+      error: `Míň než ${band.min.toLocaleString("cs")} Kč nedává smysl, tolik za to dá zastavárna.`,
       band,
     }, 400);
   }
@@ -392,7 +392,7 @@ equipmentMarketRouter.post("/teams/:teamId/equipment/pawn", async (c) => {
     .catch((e) => { logger.warn({ module: MODULE }, "check active listing before pawn", e); return null; });
   if (listed) {
     return c.json({
-      error: `${CATEGORY_LABELS[category]} máš v bazaru za ${listed.price.toLocaleString("cs")} Kč. Zastavárna dá jen ${getPawnQuote(category, level, condition).toLocaleString("cs")} Kč — nejdřív stáhni inzerát.`,
+      error: `${CATEGORY_LABELS[category]} máš v bazaru za ${listed.price.toLocaleString("cs")} Kč. Zastavárna dá jen ${getPawnQuote(category, level, condition).toLocaleString("cs")} Kč, nejdřív stáhni inzerát.`,
     }, 400);
   }
 

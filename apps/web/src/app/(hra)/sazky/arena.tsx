@@ -235,7 +235,7 @@ export function Arena({ data, teamId, onZmena }: {
     return (
       <Prazdno nadpis="V aréně je zatím prázdno">
         Vyvěs svůj tiket na záložce Tikety a ostatní ho uvidí. Můžou se pod ním
-        vyjádřit — a ty pod jejich.
+        vyjádřit, a ty pod jejich.
       </Prazdno>
     );
   }

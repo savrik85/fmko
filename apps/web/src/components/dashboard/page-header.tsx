@@ -98,7 +98,7 @@ export function PageHeader({ name, detail, color, badge, children, compact }: Pa
   const defaultChildren = (
     <Link href="/liga" className={`${boxBg} ${boxBgHover} rounded-xl px-4 py-2.5 text-center transition-colors`}>
       <div className={`font-heading font-[800] text-2xl tabular-nums leading-none ${txt}`}>
-        {ctx.leaguePosition != null ? `${ctx.leaguePosition}.` : "—"}
+        {ctx.leaguePosition != null ? `${ctx.leaguePosition}.` : "-"}
       </div>
       <div className={`${boxLabel} text-micro font-heading font-bold uppercase mt-1`}>Místo v lize</div>
     </Link>

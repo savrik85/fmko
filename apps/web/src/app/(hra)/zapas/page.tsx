@@ -13,7 +13,7 @@ import { BusSelector } from "./BusSelector";
 import { RefereeCard } from "@/components/match/referee-card";
 import { CollapsibleCard } from "@/components/ui";
 import type { RefereeProfileView, RefereeStatsView } from "@/lib/referee-info";
-import { getTacticTooltip, getFormationTooltip, getHardnessTooltip, type TacticKey, type HardnessKey } from "@/lib/tactic-info";
+import { getTacticTooltip, getFormationTooltip, getHardnessTooltip, TACTIC_INFO, FORMATION_INFO, HARDNESS_INFO, type TacticKey, type HardnessKey } from "@/lib/tactic-info";
 import { MatchPlanEditor } from "./MatchPlanEditor";
 import type { MatchPlanRule, SubMismatch } from "@okresni-masina/shared";
 import { computeLineupChemistry, splitPlanByLineup, benchForLineup, type RelationshipType } from "@okresni-masina/shared";
@@ -746,7 +746,7 @@ function MatchPage() {
               {!lineupSource && (
                 <div className="mt-1 flex items-center justify-center gap-2 text-xs">
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-card-red/10 text-card-red font-heading font-bold">
-                    ⚠ Bez uložené sestavy — použije se auto
+                    ⚠ Bez uložené sestavy, použije se auto
                   </span>
                 </div>
               )}
@@ -781,14 +781,14 @@ function MatchPage() {
                   </span>
                   <span>
                     <span className="font-heading font-bold">{h.label}</span>
-                    <span className="text-muted"> — {h.detail}</span>
+                    <span className="text-muted">, {h.detail}</span>
                   </span>
                 </li>
               ))}
             </ul>
           ) : (
             <p className="text-sm text-muted">
-              Podmínky jsou v pohodě — hřiště ani počasí ti do hry mluvit nebudou.
+              Podmínky jsou v pohodě, hřiště ani počasí ti do hry mluvit nebudou.
             </p>
           )}
         </CollapsibleCard>
@@ -925,7 +925,7 @@ function MatchPage() {
         </div>
 
         {/* Popisy zvolené trojice. Na desktopu je má i hover tooltip, na mobilu jinak
-            nejsou k dispozici — proto se nezahazují, jen se sbalí. */}
+            nejsou k dispozici, proto se nezahazují, jen se sbalí. */}
         <div className="mt-2 pt-2 border-t border-gray-100">
           <button
             type="button"
@@ -941,15 +941,15 @@ function MatchPage() {
         <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-1.5 text-micro leading-relaxed text-muted">
           <div>
             <span className="font-heading uppercase text-micro tracking-wide text-muted-light">Formace: </span>
-            {getFormationTooltip(formation).replace(/^[^—]+— /, "")}
+            {FORMATION_INFO[formation]?.description ?? ""}
           </div>
           <div>
             <span className="font-heading uppercase text-micro tracking-wide text-muted-light">Taktika: </span>
-            {getTacticTooltip(tactic as TacticKey).replace(/^[^—]+— /, "")}
+            {TACTIC_INFO[tactic as TacticKey]?.description ?? ""}
           </div>
           <div>
             <span className="font-heading uppercase text-micro tracking-wide text-muted-light">Tvrdost: </span>
-            {getHardnessTooltip(hardness).replace(/^[^—]+— /, "")}
+            {HARDNESS_INFO[hardness as HardnessKey]?.description ?? ""}
           </div>
         </div>
         )}
@@ -1045,7 +1045,7 @@ function MatchPage() {
                       součástí textu, centrovala se dvojice a jméno uteklo doleva. */}
                   <div className={`relative inline-block text-xs sm:text-sm font-heading font-bold text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)] ${isOut ? "line-through" : ""}`}
                     title={isOut ? (player?.absenceSms ?? player?.absenceReason ?? "Nehraje") : undefined}>
-                    {player?.lastName ?? "—"}
+                    {player?.lastName ?? "-"}
                     {isOOP && !isOut && (
                       <span className="absolute left-full top-0 ml-0.5" title="Hraje mimo svou pozici">⚠️</span>
                     )}
@@ -1073,7 +1073,7 @@ function MatchPage() {
           {editSlot !== null && (
             <div className="hidden lg:block card overflow-x-auto mb-3 table-scroll">
               <div className="px-3 py-2 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
-                <span className="font-heading font-bold text-sm uppercase text-muted">Vybrat hráče — {slots[editSlot].pos}</span>
+                <span className="font-heading font-bold text-sm uppercase text-muted">Vybrat hráče, {slots[editSlot].pos}</span>
                 <button onClick={() => setEditSlot(null)} className="text-muted hover:text-ink text-lg leading-none">✕</button>
               </div>
               <table className="w-full text-sm">
@@ -1202,7 +1202,7 @@ function MatchPage() {
                           <td className={`py-1.5 text-center tabular-nums ${attrC(s.defense)}`} title={`Obrana: ${s.defense}`}>{s.defense}</td>
                           <td className={`py-1.5 text-center tabular-nums ${condC(player.condition)}`} title={`Kondice: ${player.condition}%`}>{player.condition}%</td>
                           <td className="py-1.5 text-center" title={`Morálka: ${player.morale}%`}>{moraleIcon(player.morale)}</td>
-                          <td className="py-1.5 pr-3 text-center tabular-nums font-heading font-bold text-muted" title={`Průměrné hodnocení: ${s.avgRating ? Number(s.avgRating).toFixed(1) : "žádné"}`}>{s.avgRating ? Number(s.avgRating).toFixed(1) : "—"}</td>
+                          <td className="py-1.5 pr-3 text-center tabular-nums font-heading font-bold text-muted" title={`Průměrné hodnocení: ${s.avgRating ? Number(s.avgRating).toFixed(1) : "žádné"}`}>{s.avgRating ? Number(s.avgRating).toFixed(1) : "-"}</td>
                         </tr>
                       );
                     })}
@@ -1284,7 +1284,7 @@ function MatchPage() {
                           <td className={`py-1.5 text-center tabular-nums ${attrC(s.defense)}`} title={`Obrana: ${s.defense}`}>{s.defense}</td>
                           <td className={`py-1.5 text-center tabular-nums ${condC(p.condition)}`} title={`Kondice: ${p.condition}%`}>{p.condition}%</td>
                           <td className="py-1.5 text-center" title={`Morálka: ${p.morale}%`}>{moraleIcon(p.morale)}</td>
-                          <td className="py-1.5 pr-3 text-center tabular-nums font-heading font-bold text-muted" title={`Průměrné hodnocení: ${s.avgRating ? Number(s.avgRating).toFixed(1) : "žádné"}`}>{s.avgRating ? Number(s.avgRating).toFixed(1) : "—"}</td>
+                          <td className="py-1.5 pr-3 text-center tabular-nums font-heading font-bold text-muted" title={`Průměrné hodnocení: ${s.avgRating ? Number(s.avgRating).toFixed(1) : "žádné"}`}>{s.avgRating ? Number(s.avgRating).toFixed(1) : "-"}</td>
                         </tr>
                       );
                     };
@@ -1389,7 +1389,7 @@ function MatchPage() {
             )}
             {relSummary.length === 0 && availablePairs.length > 0 && (
               <div className="text-micro text-muted leading-snug">
-                V základní jedenáctce se zatím nikdo blíž nezná — v kádru ale ano.
+                V základní jedenáctce se zatím nikdo blíž nezná, v kádru ale ano.
                 Postav je vedle sebe a chemie naskočí:
                 <span className="block mt-1">
                   {availablePairs.slice(0, 3).map((p, i) => (
@@ -1408,7 +1408,7 @@ function MatchPage() {
             )}
             {relSummary.length === 0 && availablePairs.length === 0 && (
               <div className="text-micro text-muted leading-snug">
-                V kádru se zatím nikdo blíž nezná. Vazby vznikají samy, jak se soupiska mění —
+                V kádru se zatím nikdo blíž nezná. Vazby vznikají samy, jak se soupiska mění -
                 nováček z vesnice si najde souseda, vrstevníka ze školy, kolegu z práce nebo
                 parťáka na pivo. Bratři a mentorské dvojice se objeví taky, jen vzácněji.
               </div>
@@ -1451,7 +1451,7 @@ function MatchPage() {
           <div className="fixed inset-0 z-[var(--z-sheet)] bg-black/50" onClick={() => setEditSlot(null)} />
           <div className="fixed bottom-0 left-0 right-0 z-[var(--z-sheet)] bg-white rounded-t-2xl" style={{ maxHeight: "65vh" }}>
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-              <span className="font-heading font-bold text-sm uppercase text-muted">Vybrat — {slots[editSlot].pos}</span>
+              <span className="font-heading font-bold text-sm uppercase text-muted">Vybrat, {slots[editSlot].pos}</span>
               <button onClick={() => setEditSlot(null)} className="w-8 h-8 flex items-center justify-center text-muted hover:text-ink text-xl">✕</button>
             </div>
             <div className="overflow-y-auto" style={{ maxHeight: "calc(65vh - 48px)" }}>
@@ -1678,7 +1678,7 @@ function SetPieceTakers({ players, lineupIds, benchIds, rolesSaving, rolesSavedA
               : rolesSavedAt && <span className="text-sm text-pitch-600">Exekutoři uloženi ✓</span>}
         </div>
         <p className="text-sm text-muted mt-0.5 leading-snug">
-          Exekutoři platí pro celý tým — v lize, poháru i přáteláku — a ukládají se rovnou při volbě.
+          Exekutoři platí pro celý tým, v lize, poháru i přáteláku, a ukládají se rovnou při volbě.
           Kapitán patří k téhle sestavě, ten se uloží s ní. Když zvolený hráč zrovna nehraje,
           zaskočí za něj nejvhodnější zbylý.
         </p>

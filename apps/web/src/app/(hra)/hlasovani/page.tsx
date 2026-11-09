@@ -31,9 +31,9 @@ interface Vote {
 }
 
 function formatDate(val: string | null | undefined): string {
-  if (!val) return "—";
+  if (!val) return "-";
   const d = new Date(val.endsWith("Z") ? val : val + "Z");
-  if (isNaN(d.getTime())) return "—";
+  if (isNaN(d.getTime())) return "-";
   return d.toLocaleString("cs", { day: "numeric", month: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
@@ -138,7 +138,7 @@ function VoteCard({ vote, teamId, token, onVoted }: { vote: Vote; teamId: string
                         {(voter.manager_name ?? voter.team_name)[0]}
                       </div>
                     )}
-                    <span className="text-micro text-muted text-center leading-tight line-clamp-1 w-full">{voter.manager_name ? <CoachName name={voter.manager_name} isAi={voter.coach_is_ai === true} /> : "—"}</span>
+                    <span className="text-micro text-muted text-center leading-tight line-clamp-1 w-full">{voter.manager_name ? <CoachName name={voter.manager_name} isAi={voter.coach_is_ai === true} /> : "-"}</span>
                     <span className="text-micro font-heading font-bold text-ink text-center leading-tight line-clamp-2 w-full">{voter.team_name}</span>
                   </Link>
                 ))}

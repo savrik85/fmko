@@ -2452,7 +2452,7 @@ teamsRouter.patch("/:id/club/stadium", async (c) => {
         "SELECT sponsor_name FROM sponsor_contracts WHERE team_id = ? AND status = 'active' AND category = 'stadium' LIMIT 1"
       ).bind(teamId).first<{ sponsor_name: string }>();
       if (namingSponsor) {
-        return c.json({ error: `Název stadionu nemůžeš měnit — určuje ho sponzor "${namingSponsor.sponsor_name}".` }, 403);
+        return c.json({ error: `Název stadionu nemůžeš měnit, určuje ho sponzor "${namingSponsor.sponsor_name}".` }, 403);
       }
       updates.push({ col: "stadium_name", val: name });
     }

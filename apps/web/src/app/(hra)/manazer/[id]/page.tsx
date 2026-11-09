@@ -286,7 +286,7 @@ export default function ManagerDetailPage() {
               </div>
               <div className={`flex-1 ${boxBg} rounded-soft py-1 text-center`}>
                 <div className={`font-heading font-extrabold text-sm tabular-nums leading-none ${txt}`}>
-                  {achievements ? `${achievements.earnedCount}/${achievements.totalCount}` : "—"}
+                  {achievements ? `${achievements.earnedCount}/${achievements.totalCount}` : "-"}
                 </div>
                 <div className={`${boxLabel} text-micro font-heading font-bold uppercase mt-0.5`}>Úspěchy</div>
               </div>

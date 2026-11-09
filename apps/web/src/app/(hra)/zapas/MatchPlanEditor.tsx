@@ -92,7 +92,7 @@ function defaultAction(kind: PlanAction["kind"], starters: PlayerOption[], bench
  */
 function optionsWithCurrent(options: PlayerOption[], currentId: string): PlayerOption[] {
   if (options.some((p) => p.id === currentId)) return options;
-  return [{ id: currentId, name: "— hráč není k dispozici —" }, ...options];
+  return [{ id: currentId, name: "hráč není k dispozici" }, ...options];
 }
 
 const selectClass =
@@ -126,7 +126,7 @@ export function MatchPlanEditor({ plan, onChange, starters, bench }: Props) {
     <CollapsibleCard title="Pokyny na lavičce" summary={summary} startCollapsed>
       <p className="text-sm text-muted mb-3">
         Co má tým udělat, když zápas nejde podle plánu. Trenér pokyn provede sám v okamžiku,
-        kdy podmínka nastane — každý pokyn jen jednou za zápas.
+        kdy podmínka nastane, každý pokyn jen jednou za zápas.
       </p>
 
       <div className="flex flex-col gap-3">
@@ -358,7 +358,7 @@ function RuleRow({
 
       {chybiHrac && (
         <p className="text-sm text-card-red mt-2">
-          Hráč z tohohle pokynu už není v sestavě — vyber jiného, jinak se pokyn v zápase neprovede.
+          Hráč z tohohle pokynu už není v sestavě, vyber jiného, jinak se pokyn v zápase neprovede.
         </p>
       )}
     </div>

@@ -271,7 +271,7 @@ export default function TrainingPage() {
                       val ? "border-pitch-500/40 text-ink" : "border-gray-200 text-muted"
                     }`}
                   >
-                    <option value="">— volno —</option>
+                    <option value="">volno</option>
                     {TRAINING_TYPES.map((t) => (
                       <option key={t.key} value={t.key}>{t.icon} {t.label}</option>
                     ))}
@@ -307,7 +307,7 @@ export default function TrainingPage() {
               {" "}Intenzita: <strong className="text-gold-600">L</strong>ehký šetří síly (dobrý před zápasem),{" "}
               <strong className="text-pitch-600">N</strong>ormální, <strong className="text-card-red">T</strong>vrdý dá víc, ale hodně sebere.
               {Object.keys(trainingPlan).length === 0 && (
-                <span className="block mt-1 text-card-red font-heading font-bold">⚠ Celý týden volno — tým vůbec netrénuje.</span>
+                <span className="block mt-1 text-card-red font-heading font-bold">⚠ Celý týden volno, tým vůbec netrénuje.</span>
               )}
             </div>
           </div>
@@ -342,7 +342,7 @@ export default function TrainingPage() {
             <div><span className="font-heading font-bold text-ink">{TRAINING_TYPES.find((t) => t.key === type)?.label}:</span> {TRAINING_TYPES.find((t) => t.key === type)?.desc}. Zlepšuje {TRAINING_TYPES.find((t) => t.key === type)?.skills}.</div>
           )}
           <div><span className="font-heading font-bold text-ink">{APPROACHES.find((a) => a.key === approach)?.label}:</span> {APPROACHES.find((a) => a.key === approach)?.desc}.</div>
-          <div>Trénuje se automaticky ve vybraných dnech, klidně i o víkendu — jeden den, jeden trénink. Víc tréninkových dnů = rychlejší růst, ale vyšší náklady a únava.</div>
+          <div>Trénuje se automaticky ve vybraných dnech, klidně i o víkendu, jeden den, jeden trénink. Víc tréninkových dnů = rychlejší růst, ale vyšší náklady a únava.</div>
         </div>
 
         {/* Přístup + počet dnů. S týdenním plánem se dny berou z něj, tak ovladač schováme —
@@ -449,7 +449,7 @@ export default function TrainingPage() {
                 })}
               </div>
               <div className="mt-2 text-micro text-muted leading-relaxed">
-                💡 Trénuje se v každý vybraný den včetně soboty a neděle — nic se samo neruší.{" "}
+                💡 Trénuje se v každý vybraný den včetně soboty a neděle, nic se samo neruší.{" "}
                 <strong className="text-pitch-700">Před zápasem uber sám:</strong>{" "}
                 dej tomu dni lehkou intenzitu, nebo pošli unavené hráče na volno.
               </div>
@@ -517,10 +517,10 @@ export default function TrainingPage() {
           {(forecast.load.overloaded > forecast.load.content || forecast.load.underused > forecast.load.content) && (
             <div className="mt-3 text-sm bg-gold-300/10 border border-gold-300/40 rounded-soft px-3 py-2">
               {forecast.load.overloaded > forecast.load.content ? (
-                <>Tempo je na tenhle kádr moc ostré — hráčům bude klesat nálada. Zkus ubrat den, nebo dej{" "}
+                <>Tempo je na tenhle kádr moc ostré, hráčům bude klesat nálada. Zkus ubrat den, nebo dej{" "}
                 <span className="font-heading font-bold">volno</span> unaveným.</>
               ) : (
-                <>Kádr má rezervu — přidáním tréninkového dne porostou rychleji.</>
+                <>Kádr má rezervu, přidáním tréninkového dne porostou rychleji.</>
               )}
             </div>
           )}
@@ -621,7 +621,7 @@ export default function TrainingPage() {
       <div className="card p-4 sm:p-5">
         <SectionLabel>🌴 Volno z příštího tréninku{restIds.size > 0 ? ` (${restIds.size})` : ""}</SectionLabel>
         <p className="text-sm text-muted mt-1 leading-relaxed">
-          Vybraní hráči dostanou od trenéra volno — nejbližší trénink vynechají. Neztratí kondici,
+          Vybraní hráči dostanou od trenéra volno, nejbližší trénink vynechají. Neztratí kondici,
           ale ani se nezlepší. Po proběhnutí tréninku se volno automaticky zruší.
         </p>
         <div className="mt-3 max-h-80 overflow-y-auto rounded-soft border border-gray-100 divide-y divide-gray-50">
@@ -656,7 +656,7 @@ export default function TrainingPage() {
                 <span className="text-sm text-muted shrink-0 w-9">{p.position}</span>
                 {p.injury ? (
                   <span className="text-sm text-card-red shrink-0 text-right">
-                    🤕<span className="hidden sm:inline"> Zraněný — netrénuje</span>
+                    🤕<span className="hidden sm:inline"> Zraněný, netrénuje</span>
                   </span>
                 ) : (
                   <span className="text-sm text-muted shrink-0 text-right w-20 sm:w-28">

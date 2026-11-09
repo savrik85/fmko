@@ -340,7 +340,7 @@ function PitchOverview({ pitches }: { pitches: PitchData }) {
         {teams.map((t) => <PitchLine key={t.teamId} t={t} limit={limit} />)}
       </div>
       {/* Pomlčka místo čísla vypadá jako chyba dat, a přitom je to nepostavené
-          hřiště. Kontrola takový klub taky přeskakuje — není co měřit. */}
+          hřiště. Kontrola takový klub taky přeskakuje, není co měřit. */}
       {bezHriste > 0 && (
         <p className="text-sm text-muted mt-3 leading-snug">
           {bezHriste === 1 ? "Jeden klub zatím nemá" : `${bezHriste} ${plural(bezHriste, "klub", "kluby", "klubů")} zatím ${bezHriste < 5 ? "nemají" : "nemá"}`} postavené
@@ -376,7 +376,7 @@ function PitchLine({ t, limit }: { t: PitchRow; limit: number }) {
         </div>
       </div>
       <div className="text-lg font-heading tabular-nums shrink-0" style={{ color: barva }}>
-        {t.pitch ?? "—"}
+        {t.pitch ?? "-"}
       </div>
     </div>
   );

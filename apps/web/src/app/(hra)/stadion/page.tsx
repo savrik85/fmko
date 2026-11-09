@@ -866,10 +866,10 @@ export default function StadiumPage() {
                   Sektor hostů:{" "}
                   <strong className="font-heading">{stadium.sektory.hoste.nazev}</strong>
                   {stadium.sektory.hoste.pocet === 0
-                    ? " — nikoho neposílají, na výjezd nemají dost lidí."
+                    ? ", nikoho neposílají, na výjezd nemají dost lidí."
                     : stadium.sektory.hoste.kdy === "prijede"
-                      ? ` — čeká se jich ${stadium.sektory.hoste.pocet}.`
-                      : ` — tolik jich naposledy přijelo: ${stadium.sektory.hoste.pocet}.`}
+                      ? `, čeká se jich ${stadium.sektory.hoste.pocet}.`
+                      : `, tolik jich naposledy přijelo: ${stadium.sektory.hoste.pocet}.`}
                 </span>
               </div>
             )}
@@ -1205,7 +1205,7 @@ export default function StadiumPage() {
 
               {stadium.pitchCare.heatingLevel === 0 && stadium.pitchCare.irrigationLevel === 0 ? (
                 <p className="text-sm text-muted mb-3">
-                  Nemáš vyhřívání ani zavlažování. Ve Vybavení se dají pořídit — počasí pak trávníku
+                  Nemáš vyhřívání ani zavlažování. Ve Vybavení se dají pořídit, počasí pak trávníku
                   neubližuje tolik.
                 </p>
               ) : (
@@ -1265,7 +1265,7 @@ export default function StadiumPage() {
 
                   {stadium.pitchCare.mode === "off" && (
                     <p className="text-sm text-amber-700 mb-3">
-                      Péče je vypnutá. Ušetříš za provoz, ale trávník půjde dolů rychleji — a soutěž
+                      Péče je vypnutá. Ušetříš za provoz, ale trávník půjde dolů rychleji, a soutěž
                       si může neudržované hřiště vytknout.
                     </p>
                   )}

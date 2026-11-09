@@ -118,7 +118,7 @@ export function DisciplinaryPanel({ teamId }: { teamId: string | null }) {
   return (
     <>
       <p className="text-sm text-muted mb-4">
-        Pokuty udělené klubům okresu {district || "—"}. Komise trestá výroky o rozhodčích
+        Pokuty udělené klubům okresu {district || "-"}. Komise trestá výroky o rozhodčích
         v okresním zpravodaji, svaz pak administrativní prohřešky kolem zápasu.
       </p>
 
@@ -189,7 +189,7 @@ export function DisciplinaryPanel({ teamId }: { teamId: string | null }) {
 
       {odSvazu.length > 0 && (
         <>
-          <SectionLabel>Administrativa — pokuty od svazu</SectionLabel>
+          <SectionLabel>Administrativa, pokuty od svazu</SectionLabel>
           <p className="text-sm text-muted mb-2">
             Pozdní soupiska, neuklizené kabiny, nedodaný zápis. S rozhodčími nemají nic společného.
           </p>

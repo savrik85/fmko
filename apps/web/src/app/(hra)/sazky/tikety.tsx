@@ -82,7 +82,7 @@ function TiketKarta({ t, teamId, onZmena }: { t: Tiket; teamId: string; onZmena:
       )}
       {anulovane > 0 && (
         <div className="px-3 pb-2.5 text-sm text-muted">
-          {anulovane === 1 ? "Jeden tip se anuloval" : `${anulovane} tipy se anulovaly`} —
+          {anulovane === 1 ? "Jeden tip se anuloval" : `${anulovane} tipy se anulovaly`} -
           hráč nenastoupil, kurz o něj klesl.
         </div>
       )}

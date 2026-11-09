@@ -2910,7 +2910,7 @@ gameRouter.get("/teams/:teamId/season-info", async (c) => {
     upcoming.push({
       type: "match",
       date: entry.scheduled_at as string,
-      title: `${entry.game_week}. kolo — ${opponent ?? "Soupeř"}`,
+      title: `${entry.game_week}. kolo: ${opponent ?? "Soupeř"}`,
       subtitle: isHome ? "Doma" : "Venku",
       status: matchStatus === "simulated"
         ? `${entry.home_score}:${entry.away_score}`

@@ -208,11 +208,11 @@ export default function ReputacePage() {
         <div className="text-sm text-muted mt-5 pt-4 border-t border-gray-100 space-y-1.5">
           <p>
             Jak moc se o klubu v okrese ví. Ovlivňuje návštěvnost, podporu místních podnikatelů,
-            nabídky sponzorů, výnos bufetu i ochotu hráčů k tobě přestoupit — a odemyká vyšší
+            nabídky sponzorů, výnos bufetu i ochotu hráčů k tobě přestoupit, a odemyká vyšší
             úrovně stadionu a vybavení.
           </p>
           <p>
-            <strong className="text-ink">Samotná výhra zápasu s ní nehne</strong> — ta zvedá reputaci
+            <strong className="text-ink">Samotná výhra zápasu s ní nehne</strong>, ta zvedá reputaci
             trenéra, což je jiné číslo. Klubová se hýbe hlavně na konci sezóny, v poháru a přes akce.
           </p>
           {data.gainFactor < 1 && (
@@ -241,7 +241,7 @@ export default function ReputacePage() {
             </div>
             {next.missingReputation > 0 && nextFacility && (
               <div className="text-sm text-ink-light mt-3 pt-3 border-t border-pitch-500/15">
-                Nechce se ti čekat? Sprchy, hřiště, parkoviště a tribuny umí spolufinancovat obec —
+                Nechce se ti čekat? Sprchy, hřiště, parkoviště a tribuny umí spolufinancovat obec -
                 tam reputace nerozhoduje, jen přízeň.{" "}
                 <Link href="/obec" className="text-pitch-600 underline whitespace-nowrap">Obec →</Link>
               </div>
@@ -278,7 +278,7 @@ export default function ReputacePage() {
         {data.atNextUnlock && (
           <div className="text-sm text-muted mb-3">
             Vpravo je stav při reputaci{" "}
-            <strong className="text-pitch-600 tabular-nums">{data.atNextUnlock.reputation}</strong> —
+            <strong className="text-pitch-600 tabular-nums">{data.atNextUnlock.reputation}</strong> -
             to je práh dalšího zámku.
           </div>
         )}
@@ -309,7 +309,7 @@ export default function ReputacePage() {
         <div className="card p-4 sm:p-5">
           <SectionLabel>Jak ji zvednout</SectionLabel>
           <p className="text-sm text-muted mb-3">
-            Většina zdrojů se vyhodnotí sama — po zápase, na konci sezóny nebo jednou měsíčně.
+            Většina zdrojů se vyhodnotí sama, po zápase, na konci sezóny nebo jednou měsíčně.
             Ovlivnit můžeš hlavně výsledky, volby v akcích a vztah s obcí.
           </p>
           <div className="space-y-2.5">
@@ -322,7 +322,7 @@ export default function ReputacePage() {
         <div className="card p-4 sm:p-5">
           <SectionLabel>Co ji sráží</SectionLabel>
           <p className="text-sm text-muted mb-3">
-            Ztráty se na rozdíl od zisků nekrátí — spadnout jde vždycky plnou rychlostí.
+            Ztráty se na rozdíl od zisků nekrátí, spadnout jde vždycky plnou rychlostí.
           </p>
           <div className="space-y-2.5">
             {SOURCES_DOWN.map((s) => (
@@ -331,7 +331,7 @@ export default function ReputacePage() {
           </div>
           <div className="text-sm text-muted mt-3 pt-3 border-t border-gray-100">
             Útlum tě nikdy nestlačí pod{" "}
-            <span className="tabular-nums font-heading font-bold text-ink">{data.baseline}</span> —
+            <span className="tabular-nums font-heading font-bold text-ink">{data.baseline}</span> -
             to je práh pro velikost tvé obce.
           </div>
         </div>
@@ -361,7 +361,7 @@ export default function ReputacePage() {
                   <div className="text-sm text-ink">{h.description}</div>
                   {h.delta !== h.rawDelta && (
                     <div className="text-sm text-muted">
-                      Ze {h.rawDelta > 0 ? "+" : ""}{h.rawDelta} se započítalo {h.delta > 0 ? "+" : ""}{h.delta} — jsi vysoko.
+                      Ze {h.rawDelta > 0 ? "+" : ""}{h.rawDelta} se započítalo {h.delta > 0 ? "+" : ""}{h.delta}, jsi vysoko.
                     </div>
                   )}
                 </div>

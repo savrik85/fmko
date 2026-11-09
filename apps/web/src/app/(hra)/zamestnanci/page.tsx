@@ -326,7 +326,7 @@ export default function ZamestnanciPage() {
         : isSec
         ? `Důležitý atribut pro roli ${def.label} (1× váha)`
         : `Vedlejší atribut (nemá vliv na efektivitu role ${def.label})`
-      : "—";
+      : "-";
 
     const details = [
       {
@@ -602,7 +602,7 @@ export default function ZamestnanciPage() {
               <div className="card p-8 text-center text-muted">
                 <div className="text-4xl mb-3">👔</div>
                 <p className="text-lg font-heading font-bold mb-2">Nikdo volný</p>
-                <p className="text-sm">V okrese zrovna nikdo nehledá práci. Mrkni zítra — nabídka se průběžně obměňuje.</p>
+                <p className="text-sm">V okrese zrovna nikdo nehledá práci. Mrkni zítra, nabídka se průběžně obměňuje.</p>
               </div>
             ) : (
               <>

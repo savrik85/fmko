@@ -229,7 +229,7 @@ export default function PoharPage() {
             ))}
           </div>
         ) : (
-          <div className="card p-8 text-center text-muted text-sm">Zatím žádní střelci — góly se objeví po odehrání zápasů.</div>
+          <div className="card p-8 text-center text-muted text-sm">Zatím žádní střelci, góly se objeví po odehrání zápasů.</div>
         )
       )}
 

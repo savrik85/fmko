@@ -164,7 +164,7 @@ export default function HymnaPage() {
       </div>
 
       <div className="mb-5 p-3 rounded-soft bg-gray-50 border border-gray-200 text-sm text-ink">
-        Na generování hymny máš {maxAttempts} pokusy. Rozmysli si text i styl — pokusy se neobnovují a mazání hymny z historie je nevrací zpět.
+        Na generování hymny máš {maxAttempts} pokusy. Rozmysli si text i styl, pokusy se neobnovují a mazání hymny z historie je nevrací zpět.
         Zbývá <span className="font-bold tabular-nums">{maxAttempts - attemptsUsed}/{maxAttempts}</span>.
       </div>
 
@@ -211,7 +211,7 @@ export default function HymnaPage() {
                     Váš prohlížeč nepodporuje audio.
                   </audio>
                 ) : (
-                  <div className="text-sm text-card-red">Neznámý stav — zkus refresh nebo smazat.</div>
+                  <div className="text-sm text-card-red">Neznámý stav, zkus refresh nebo smazat.</div>
                 )}
                 <details className="mt-3">
                   <summary className="text-xs text-muted cursor-pointer hover:text-ink">Text hymny</summary>

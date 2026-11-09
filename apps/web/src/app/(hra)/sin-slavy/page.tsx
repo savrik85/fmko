@@ -96,7 +96,7 @@ export default function HallOfFamePage() {
                         <span className="font-heading font-bold truncate text-xs sm:text-sm"><CoachName name={e.managerName} isAi={e.coachIsAi === true} /></span>
                       </Link>
                     ) : (
-                      <span className="text-muted italic">—</span>
+                      <span className="text-muted italic">-</span>
                     )}
                   </td>
                   <td className="py-2 sm:py-2.5 px-1 sm:px-2">
