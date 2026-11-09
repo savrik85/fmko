@@ -628,12 +628,14 @@ export async function applyPostMatchInterviewEffects(
   // Pokuta od disciplinární komise.
   if (fine > 0) {
     try {
-      const { recordTransaction } = await import("../season/finance-processor");
+      const { recordTransaction, clubAccountOf, YOUTH_LABEL } = await import("../season/finance-processor");
       const gameDate = await db.prepare("SELECT game_date FROM teams WHERE id = ?")
         .bind(interview.team_id).first<{ game_date: string | null }>();
+      // Rozhovor po zápase dorostu: pokutu platí mateřský klub.
+      const account = await clubAccountOf(db, interview.team_id);
       await recordTransaction(
-        db, interview.team_id, "disciplinary_fine", -fine,
-        `Pokuta disciplinární komise za výroky o rozhodčím${ctx.refereeName ? ` (${ctx.refereeName})` : ""}`,
+        db, account.payerId, "disciplinary_fine", -fine,
+        `Pokuta disciplinární komise za výroky o rozhodčím${ctx.refereeName ? ` (${ctx.refereeName})` : ""}${account.isYouth ? `, ${YOUTH_LABEL}` : ""}`,
         gameDate?.game_date ?? new Date().toISOString(),
         `fine-${interview.id}`,
       );

@@ -309,6 +309,32 @@ export async function recordTransaction(
  */
 export const PLACENY_HRAC_SQL = "(status IS NULL OR status NOT IN ('released', 'quit'))";
 
+/** Přívlastek do popisu transakce, ze kterého je vidět, že výdaj patří dorostu. */
+export const YOUTH_LABEL = "dorost U21";
+
+export interface ClubAccount {
+  /** Tým, ze kterého se platí: u dorostu mateřský klub, jinak tým sám. */
+  payerId: string;
+  /** Platí se za dorost (U21) z účtu mateřského klubu. */
+  isYouth: boolean;
+}
+
+/**
+ * Z jakého účtu se platí za tým.
+ *
+ * Dorost (U21) je v tabulce teams vlastní řádek s vlastním rozpočtem, který
+ * manažer nikde nevidí: přehled Financí ukazuje jen áčko. Mzdy, tréninky
+ * a pokuty dorostu proto platí mateřský klub a v jeho knize jsou označené
+ * YOUTH_LABEL. Když se tým nepodaří načíst, platí sám za sebe jako dřív.
+ */
+export async function clubAccountOf(db: D1Database, teamId: string): Promise<ClubAccount> {
+  const row = await db.prepare("SELECT team_type, parent_team_id FROM teams WHERE id = ?")
+    .bind(teamId).first<{ team_type: string | null; parent_team_id: string | null }>()
+    .catch((e) => { logger.warn({ module: "finance" }, `účet klubu pro tým ${teamId}`, e); return null; });
+  if (row?.team_type === "u21" && row.parent_team_id) return { payerId: row.parent_team_id, isYouth: true };
+  return { payerId: teamId, isYouth: false };
+}
+
 /**
  * Týdenní finanční zpracování — volá se v pondělí z daily-tick.
  * Strhne mzdy, přičte sponzory, strhne údržbu.

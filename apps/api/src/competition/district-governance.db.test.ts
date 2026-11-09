@@ -182,6 +182,56 @@ describe("grémium okresu", () => {
     expect(await readBalance(db, PREBOR)).toBe(preborBefore);
   });
 
+  it("pokutu dorostu platí mateřský klub a po odvolání se vrací jemu", async () => {
+    const budgetOf = async (teamId: string) =>
+      (await db.prepare("SELECT budget FROM teams WHERE id = ?").bind(teamId).first<{ budget: number }>())!.budget;
+    const clubBefore = await budgetOf("p1");
+    const youthBefore = await budgetOf("p1-u21");
+
+    const id = await issueSanction(db, {
+      leagueId: PREBOR, seasonNumber: NEW_SEASON, teamId: "p1-u21", amount: 1500,
+      kind: "fan_disorder", reason: "vniknutí na hrací plochu", evidence: null,
+      issuedBy: "rule", issuedByTeamId: null, proposalId: null, gameDate: START,
+      referenceId: "faninc-youth",
+    });
+    expect(id).toBeTruthy();
+
+    // Sankce zůstává vedená na dorost, peníze odešly z účtu klubu a v knize je vidět, za koho.
+    const sanction = await db.prepare("SELECT team_id FROM competition_sanctions WHERE id = ?").bind(id).first<{ team_id: string }>();
+    expect(sanction?.team_id).toBe("p1-u21");
+    expect(await budgetOf("p1")).toBe(clubBefore - 1500);
+    expect(await budgetOf("p1-u21")).toBe(youthBefore);
+    const fine = await db.prepare("SELECT team_id, amount, description FROM transactions WHERE reference_id = ?")
+      .bind(`sanc-${id}`).first<{ team_id: string; amount: number; description: string }>();
+    expect(fine).toEqual({ team_id: "p1", amount: -1500, description: "Pokuta disciplinární rady (dorost U21): vniknutí na hrací plochu" });
+
+    expect(await refundSanction(db, id as string, START)).toBe(true);
+    expect(await budgetOf("p1")).toBe(clubBefore);
+    expect(await budgetOf("p1-u21")).toBe(youthBefore);
+  });
+
+  it("pokuta dorostu z doby před přesunem se vrací na účet, ze kterého odešla", async () => {
+    const budgetOf = async (teamId: string) =>
+      (await db.prepare("SELECT budget FROM teams WHERE id = ?").bind(teamId).first<{ budget: number }>())!.budget;
+    // Stará pokuta: zaplatil ji účet dorostu.
+    await db.batch([
+      db.prepare(
+        `INSERT INTO competition_sanctions (id, league_id, season_number, team_id, kind, amount, reason, issued_by, game_date, reference_id)
+         VALUES ('old-fine', ?, ?, 'p1-u21', 'fan_disorder', 900, 'házení předmětů', 'rule', ?, 'faninc-old')`,
+      ).bind(PREBOR, NEW_SEASON, START),
+      db.prepare("INSERT INTO transactions VALUES ('t-old', 'p1-u21', 'disciplinary_fine', -900, 0, 'Pokuta', 'sanc-old-fine', ?)").bind(START),
+      db.prepare(
+        `INSERT INTO competition_ledger (id, league_id, season_number, type, amount, description, team_id, game_date, reference_id)
+         VALUES ('l-old', ?, ?, 'sanction', 900, 'Pokuta', 'p1-u21', ?, 'sanc-old-fine')`,
+      ).bind(PREBOR, NEW_SEASON, START),
+    ]);
+    const clubBefore = await budgetOf("p1");
+    const youthBefore = await budgetOf("p1-u21");
+    expect(await refundSanction(db, "old-fine", START)).toBe(true);
+    expect(await budgetOf("p1-u21")).toBe(youthBefore + 900);
+    expect(await budgetOf("p1")).toBe(clubBefore);
+  });
+
   it("sudí vyškrtnutý za zápas přeboru nepíská ani III. třídu", async () => {
     await applyRefereeBan(db, {
       leagueId: PREBOR, seasonNumber: NEW_SEASON, refereeId: "ref-1",
