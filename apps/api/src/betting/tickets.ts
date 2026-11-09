@@ -7,7 +7,7 @@
 
 import { logger } from "../lib/logger";
 import { resolveRules } from "../competition/rules";
-import { recordTransaction, assertPurchaseAllowed } from "../season/finance-processor";
+import { assertPurchaseAllowed } from "../season/finance-processor";
 import { recordCompetitionEntry } from "../competition/ledger";
 import { linkedTeamIds, LINKED_CLUBS_ERRORS } from "../competition/club-links";
 import { combineOddsX100, capPayout } from "./odds-model";
@@ -112,8 +112,9 @@ export async function canBet(
 /**
  * Podá tiket.
  *
- * Pořadí kroků je závazné: nejdřív se ověří všechno, co může selhat bez následku,
- * pak teprve vznikne řádek a odejdou peníze.
+ * Nejdřív se ověří všechno, co může selhat bez následku, a hráč dostane
+ * srozumitelnou hlášku. Tiket, tipy a stržení vkladu pak proběhnou v jedné
+ * transakci, která limit kola i zůstatek hlídá znovu sama.
  */
 export async function placeTicket(db: D1Database, input: {
   teamId: string;
@@ -251,57 +252,106 @@ export async function placeTicket(db: D1Database, input: {
   const { payout, capped } = capPayout(stake, totalOdds, limity.maxPayout);
   const ticketId = crypto.randomUUID();
 
-  // Podmíněný INSERT — mezi kontrolou stavu kola a zápisem mohl match tick kolo
-  // zamknout. Stejný vzor jako atomický lock kola v season/league-round.ts.
-  const ins = await db.prepare(
-    `INSERT INTO bet_tickets
-       (id, team_id, league_id, season_number, calendar_id, stake, levy,
-        total_odds_x100, potential_payout, capped, status, placed_game_date)
-     SELECT ?,?,?,?,?,?,?,?,?,?,'pending',?
-      WHERE EXISTS (SELECT 1 FROM season_calendar WHERE id = ? AND status = 'scheduled')`
-  ).bind(
-    ticketId, teamId, leagueId, seasonNumber, calendarId, stake, levy,
-    totalOdds, payout, capped ? 1 : 0, gameDate, calendarId,
-  ).run().catch((e) => { logger.error({ module: M }, "zápis tiketu", e); return null; });
+  // ── Tiket, tipy a peníze v jedné transakci ───────────────────────────────
+  // db.batch je v D1 transakce: buď projde všechno, nebo nic.
+  //
+  // Dřív to byly samostatné kroky (spočítat tikety kola, zkontrolovat zůstatek,
+  // vložit tiket, strhnout vklad). Dva souběžné požadavky prošly oběma kontrolami
+  // naráz, takže šlo podat víc než tři tikety na kolo a vsadit víc, než klub měl.
+  // A když stržení vkladu spadlo na záporném rozpočtu, tiket zůstal navždy
+  // 'pending' a ubíral z limitu.
+  //
+  // Všechny tři podmínky jsou teď uvnitř INSERTu tiketu: kolo je pořád vypsané
+  // (match tick ho mezitím mohl zamknout), klub nemá plný limit a na účtu je
+  // dost na vklad i odvod. Ostatní příkazy se provedou jen tehdy, když tiket
+  // vznikl. Tiket vzniká rovnou 'open', mezistav 'pending' už není potřeba.
+  const ticketExists = "EXISTS (SELECT 1 FROM bet_tickets WHERE id = ?)";
+  const stakeDescription = `Sázka u kanceláře (${(totalOdds / 100).toFixed(2).replace(".", ",")}×)`;
 
-  if (!ins || (ins.meta?.changes ?? 0) === 0) {
-    return { ok: false, status: 409, error: "Sázky na tohle kolo jsou uzavřené, kolo se právě hraje." };
+  const statements: D1PreparedStatement[] = [
+    db.prepare(
+      `INSERT INTO bet_tickets
+         (id, team_id, league_id, season_number, calendar_id, stake, levy,
+          total_odds_x100, potential_payout, capped, status, placed_game_date)
+       SELECT ?,?,?,?,?,?,?,?,?,?,'open',?
+        WHERE EXISTS (SELECT 1 FROM season_calendar WHERE id = ? AND status = 'scheduled')
+          AND (SELECT COUNT(*) FROM bet_tickets
+                WHERE team_id = ? AND calendar_id = ? AND status <> 'void') < ?
+          AND (SELECT budget FROM teams WHERE id = ?) >= ?`
+    ).bind(
+      ticketId, teamId, leagueId, seasonNumber, calendarId, stake, levy,
+      totalOdds, payout, capped ? 1 : 0, gameDate,
+      calendarId, teamId, calendarId, limity.ticketsPerRound, teamId, celkem,
+    ),
+    db.prepare(`UPDATE teams SET budget = budget - ? WHERE id = ? AND ${ticketExists}`)
+      .bind(celkem, teamId, ticketId),
+    // Zůstatek po vkladu je o odvod vyšší než konečný, odvod se účtuje hned za ním.
+    db.prepare(
+      `INSERT INTO transactions (id, team_id, type, amount, balance_after, description, reference_id, game_date)
+       SELECT ?, ?, 'bet_stake', ?, (SELECT budget FROM teams WHERE id = ?) + ?, ?, ?, ?
+        WHERE ${ticketExists}`
+    ).bind(crypto.randomUUID(), teamId, -stake, teamId, levy, stakeDescription, `bet-stake-${ticketId}`, gameDate, ticketId),
+  ];
+  if (levy > 0) {
+    statements.push(db.prepare(
+      `INSERT INTO transactions (id, team_id, type, amount, balance_after, description, reference_id, game_date)
+       SELECT ?, ?, 'bet_levy', ?, (SELECT budget FROM teams WHERE id = ?), ?, ?, ?
+        WHERE ${ticketExists}`
+    ).bind(crypto.randomUUID(), teamId, -levy, teamId, "Odvod ze sázky do pokladny soutěže", `bet-levy-${ticketId}`, gameDate, ticketId));
+  }
+  for (const s of selections) {
+    const r = mapa.get(`${s.matchId}|${s.market}|${s.selection}`)!;
+    statements.push(db.prepare(
+      `INSERT INTO bet_selections (id, ticket_id, match_id, market, selection, odds_x100, label)
+       SELECT ?,?,?,?,?,?,? WHERE ${ticketExists}`
+    ).bind(crypto.randomUUID(), ticketId, r.match_id, r.market, r.selection, r.odds_x100, r.label, ticketId));
   }
 
-  const legs = selections.map((s) => {
-    const r = mapa.get(`${s.matchId}|${s.market}|${s.selection}`)!;
-    return db.prepare(
-      `INSERT INTO bet_selections (id, ticket_id, match_id, market, selection, odds_x100, label)
-       VALUES (?,?,?,?,?,?,?)`
-    ).bind(crypto.randomUUID(), ticketId, r.match_id, r.market, r.selection, r.odds_x100, r.label);
-  });
-
+  let created: boolean;
   try {
-    await db.batch(legs);
+    const results = await db.batch(statements);
+    created = (results[0]?.meta?.changes ?? 0) > 0;
   } catch (e) {
-    logger.error({ module: M }, `zápis tipů tiketu ${ticketId}`, e);
-    await db.prepare("DELETE FROM bet_tickets WHERE id = ? AND status = 'pending'").bind(ticketId).run()
-      .catch((err) => logger.error({ module: M }, `úklid tiketu ${ticketId}`, err));
+    // Chyba kteréhokoli příkazu vrátí celou transakci: tiket nevznikl a peníze neodešly.
+    logger.error({ module: M }, `zápis tiketu ${ticketId}`, e);
     return { ok: false, status: 500, error: "Tiket se nepodařilo uložit. Zkus to znovu." };
   }
 
-  await recordTransaction(db, teamId, "bet_stake", -stake,
-    `Sázka u kanceláře (${(totalOdds / 100).toFixed(2).replace(".", ",")}×)`, gameDate, `bet-stake-${ticketId}`);
+  if (!created) return await placementRefusal(db, teamId, calendarId, celkem, limity.ticketsPerRound);
 
   if (levy > 0) {
-    // Nejdřív ubrat klubu, pak připsat pokladně — pořadí je v projektu zvyk.
-    await recordTransaction(db, teamId, "bet_levy", -levy,
-      "Odvod ze sázky do pokladny soutěže", gameDate, `bet-levy-${ticketId}`);
+    // Klubu už odvod odešel v transakci výš, tohle ho připíše pokladně soutěže.
     await recordCompetitionEntry(db, {
       leagueId, seasonNumber, type: "levy_bet", amount: levy,
       description: "Odvod ze sázky", teamId, gameDate, referenceId: `bet-levy-${ticketId}`,
     });
   }
 
-  // Teprve teď je tiket zaplacený a smí se vyhodnocovat.
-  await db.prepare("UPDATE bet_tickets SET status = 'open' WHERE id = ? AND status = 'pending'")
-    .bind(ticketId).run()
-    .catch((e) => logger.error({ module: M }, `aktivace tiketu ${ticketId}`, e));
-
   return { ok: true, ticketId, totalOddsX100: totalOdds, payout, capped, levy };
+}
+
+/**
+ * Proč podmíněný zápis tiketu neprošel. Volá se jen po neúspěchu, takže stav
+ * se čte až po něm a slouží jen k výběru hlášky pro hráče.
+ */
+async function placementRefusal(
+  db: D1Database, teamId: string, calendarId: string, total: number, ticketsPerRound: number,
+): Promise<PlaceResult> {
+  const round = await db.prepare("SELECT status FROM season_calendar WHERE id = ?")
+    .bind(calendarId).first<{ status: string }>()
+    .catch((e) => { logger.warn({ module: M }, "stav kola po odmítnutém tiketu", e); return null; });
+  if (!round || round.status !== "scheduled") {
+    return { ok: false, status: 409, error: "Sázky na tohle kolo jsou uzavřené, kolo se právě hraje." };
+  }
+
+  const placed = await db.prepare(
+    "SELECT COUNT(*) AS n FROM bet_tickets WHERE team_id = ? AND calendar_id = ? AND status <> 'void'"
+  ).bind(teamId, calendarId).first<{ n: number }>()
+    .catch((e) => { logger.warn({ module: M }, "počet tiketů po odmítnutém tiketu", e); return null; });
+  if ((placed?.n ?? 0) >= ticketsPerRound) {
+    return { ok: false, status: 409, error: `Na jedno kolo smíš podat nejvýš ${ticketsPerRound} tikety.` };
+  }
+
+  const allowed = await assertPurchaseAllowed(db, teamId, total);
+  return { ok: false, status: 400, error: allowed.ok ? "Na vklad nemáš na účtu dost peněz." : allowed.reason };
 }
