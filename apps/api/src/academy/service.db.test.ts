@@ -208,10 +208,10 @@ describe("družstvo žáků", () => {
     expect(JSON.parse(hidden!.skills_max).speed.maxPotential).toBeGreaterThan(0);
     const player = await db.prepare("SELECT team_id, raised_by_team_id, age FROM players WHERE id = ?").bind(res.playerId).first();
     expect(player).toEqual({ team_id: "club-u21", raised_by_team_id: "club", age: 13 });
-    // Čerstvý odchovanec: značka, podle které v nejbližším létě nedospívá; skryté stropy v life_context nejsou
+    // Povýšený během sezóny značku čerstvého odchovance nemá (v létě dospívá); skryté stropy v life_context nejsou
     const ctx = await db.prepare("SELECT json_extract(life_context, '$.freshAcademyGraduate') AS fresh, json_extract(life_context, '$.skillsMax') AS caps FROM players WHERE id = ?")
       .bind(res.playerId).first<{ fresh: number | null; caps: string | null }>();
-    expect(ctx).toEqual({ fresh: 1, caps: null });
+    expect(ctx).toEqual({ fresh: null, caps: null });
   });
 
   it("dvě souběžná vytažení stejného kluka založí jen jednoho hráče", async () => {
@@ -236,8 +236,11 @@ describe("družstvo žáků", () => {
     const oldest = before.filter((p) => p.age === 14);
     await seasonEndAcademy(db, createRng(9), "club", GAME_DATE);
     for (const p of oldest) {
-      const row = await db.prepare("SELECT status FROM youth_prospects WHERE id = ?").bind(p.id).first<{ status: string }>();
+      const row = await db.prepare("SELECT status, player_id FROM youth_prospects WHERE id = ?").bind(p.id).first<{ status: string; player_id: string }>();
       expect(row!.status).toBe("promoted");
+      // Letní postup: značka, podle které v tomhle létě nedospívá
+      const fresh = await db.prepare("SELECT json_extract(life_context, '$.freshAcademyGraduate') AS fresh FROM players WHERE id = ?").bind(row!.player_id).first<{ fresh: number | null }>();
+      expect(fresh!.fresh).toBe(1);
     }
     const now = await prospects("club");
     for (const p of before.filter((x) => x.age < 14)) {

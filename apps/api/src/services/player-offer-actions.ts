@@ -72,7 +72,7 @@ export async function acceptPlayerOffer(db: D1Database, teamId: string, offerId:
   // Žák z cizích žáků (soused bez dorostu): odstupné jeho klubu. Peníze zkontrolovat PŘED
   // zabráním, stejně jako u nákupů jinde ve hře (finance-processor.assertPurchaseAllowed).
   const prospectOrigin = offer.prospect_id
-    ? await db.prepare("SELECT team_id, aged_season FROM youth_prospects WHERE id = ?").bind(offer.prospect_id).first<{ team_id: string; aged_season: number | null }>()
+    ? await db.prepare("SELECT team_id, aged_season, status FROM youth_prospects WHERE id = ?").bind(offer.prospect_id).first<{ team_id: string; aged_season: number | null; status: string }>()
         .catch((e) => { logger.warn({ module: M, teamId }, "load academy prospect", e); return null; })
     : null;
   if (prospectOrigin && prospectOrigin.team_id !== teamId) {
@@ -152,10 +152,12 @@ export async function acceptPlayerOffer(db: D1Database, teamId: string, offerId:
       missedSummer = true;
     }
   }
-  // Čerstvý odchovanec z akademie v nejbližším létě nedospívá (season/dospivani.ts): dovednosti
-  // právě dostal z generátoru podle věku a let u žáků, letní skok by přišel navíc. Značku po létě
-  // maže rollover (fáze u21_flags). Kdo vznikl až po létě ze staré nabídky, dospívání už minul.
-  const playerLifeContext: Record<string, unknown> = prospectId && !missedSummer
+  // Čerstvý odchovanec z letního postupu (vlastní dorost, nebo soused s dorostem) vzniká těsně
+  // před letním dospíváním: dovednosti právě dostal z generátoru, letní skok by přišel navíc,
+  // proto ho v tomhle létě přeskočí (season/dospivani.ts, značku pak maže rollover, fáze u21_flags).
+  // Žák povýšený během sezóny značku nedostává: v létě dospívá jako každý jiný dorostenec.
+  const summerGraduate = !!opts.mandatory || prospectOrigin?.status === "leaving";
+  const playerLifeContext: Record<string, unknown> = prospectId && summerGraduate && !missedSummer
     ? { ...lifeContextWithoutCaps, freshAcademyGraduate: true }
     : lifeContextWithoutCaps;
   await db.prepare(
