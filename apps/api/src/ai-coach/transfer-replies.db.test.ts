@@ -76,7 +76,7 @@ function laterInWindow(spanHours: number): Date {
 
 interface FakeModelInput {
   messages: Array<{ role: string; content: string }>;
-  response_format?: { json_schema: { schema: { properties: { action: { enum: string[] }; amount: { minimum?: number; maximum?: number } } } } };
+  response_format?: { json_schema: { name?: string; schema: { properties: { action: { enum: string[] }; amount: { minimum?: number; maximum?: number } } } } };
 }
 
 interface FakeAi {
@@ -160,7 +160,8 @@ beforeAll(async () => {
       life_context TEXT NOT NULL DEFAULT '{}', avatar TEXT NOT NULL DEFAULT '{}', weekly_wage INTEGER NOT NULL DEFAULT 0,
       squad_number INTEGER, loan_from_team_id TEXT, loan_until TEXT, parent_club_id TEXT, next_match_return INTEGER NOT NULL DEFAULT 0,
       residence TEXT, commute_km INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT 'active', nationality TEXT DEFAULT 'CZ',
-      is_celebrity INTEGER NOT NULL DEFAULT 0, hidden_talent REAL, skills_max TEXT, coach_relationship INTEGER
+      is_celebrity INTEGER NOT NULL DEFAULT 0, hidden_talent REAL, skills_max TEXT, coach_relationship INTEGER,
+      suspended_matches INTEGER NOT NULL DEFAULT 0
     );
     CREATE TABLE transfer_offers (
       id TEXT PRIMARY KEY, player_id TEXT NOT NULL, from_team_id TEXT NOT NULL, to_team_id TEXT NOT NULL, offer_amount INTEGER NOT NULL,
@@ -736,7 +737,8 @@ describe("o nabídce na hráče AI klubu rozhoduje model, kód hlídá", () => {
     const counter = await callRoute(`/teams/human/offers/${offer.offerId}/counter`, { method: "POST", token: "human-token", body: { amount: counterAt } });
     expect(counter.status).toBe(200);
     await replyToTransferOffers(withAi(ai), "ai-club", new Date(when.getTime() + HOUR), PROFILE);
-    expect(ai.calls).toBe(1);
+    // O přijetí se model neptal (po prodeji opory se ho kód zeptá jen na poptávku po náhradě).
+    expect(ai.prompts.filter((p) => !p.includes("SOLD: your key"))).toHaveLength(1);
     expect((await offerRow(offer.offerId))?.status).toBe("accepted");
     const log = await decisionFor(offer.offerId);
     expect(log).toMatchObject({ model: null, used_fallback: 0 });
@@ -834,6 +836,55 @@ describe("o nabídce na hráče AI klubu rozhoduje model, kód hlídá", () => {
     const log = await decisionFor(second.offerId);
     expect(log).toMatchObject({ used_fallback: 1, model: COACH_MODEL });
     expect(log!.error).toContain("8005");
+  });
+
+  /** Model, který nabídku přijme a o poptávce po náhradě odpoví podle `demand`. */
+  const sellAndDemand = (demand: unknown) => fakeAi((req: FakeModelInput) =>
+    req.response_format?.json_schema.name === "replacement_demand" ? demand : { action: "accept", amount: 0, reason: "Great money." });
+  const demandsOf = async () => (await db.prepare(
+    "SELECT position, age_min, age_max, max_price, min_rating, role FROM transfer_demands WHERE team_id = 'ai-club'",
+  ).all<{ position: string; age_min: number; age_max: number; max_price: number; min_rating: number; role: string }>()).results;
+
+  it("po prodeji opory rozhodne o poptávce po náhradě model: post, věk i strop ceny v mezích kódu", async () => {
+    const playerId = "ai-def1";
+    const when = later();
+    expect((await analysisNow()).importanceOf(playerId)).toBe("key");
+    const amount = (await askOf(playerId, when)) + 5000;
+    const ai = sellAndDemand({ post: true, position: "DEF", ages: "youth", maxPrice: 30_000, reason: "A young defender to grow into the role." });
+    const offer = await offerFromHuman({ playerId, amount });
+    expect(await replyToTransferOffers(withAi(ai), "ai-club", when, PROFILE)).toBe(1);
+    expect((await offerRow(offer.offerId))?.status).toBe("accepted");
+    expect(ai.calls).toBe(2);
+    expect(ai.prompts[1]).toContain("SOLD: your key DEF, age 26, rating 55");
+    expect(ai.prompts[1]).toContain(`for ${amount.toLocaleString("en-US")} CZK`);
+    expect(ai.prompts[1]).toContain("LEFT at DEF in your A-team: 52, 50, 48, 44, 40");
+    // Poptávka podle modelu (mladý obránce do 30 tisíc), ne podle pevných čísel z kódu (18 až 31 let, 110 % ceny).
+    expect(await demandsOf()).toEqual([{ position: "DEF", age_min: 17, age_max: 21, max_price: 30_000, min_rating: 49, role: "starter" }]);
+    const log = await db.prepare("SELECT actions, executed, used_fallback FROM ai_coach_decisions WHERE kind = 'replacement_demand' AND context_ref = ?")
+      .bind(playerId).first<{ actions: string; executed: string; used_fallback: number }>();
+    expect(JSON.parse(log!.actions)).toMatchObject({ post: true, position: "DEF", ages: "youth", maxPrice: 30_000, decidedBy: "model" });
+    expect(JSON.parse(log!.executed)).toMatchObject({ posted: true });
+    expect(log!.used_fallback).toBe(0);
+  });
+
+  it("poptávku po náhradě kód za model nezaloží: strop mimo meze, výpadek ani „nevypisovat“ nic nevypíšou", async () => {
+    const cases: Array<[string, unknown]> = [
+      ["ai-def1", { post: true, position: "DEF", ages: "prime", maxPrice: 9_000_000, reason: "Any price." }],
+      ["ai-mid1", { post: false, position: "MID", ages: "prime", maxPrice: 1000, reason: "The others are good enough." }],
+    ];
+    for (const [playerId, answer] of cases) {
+      const when = later();
+      const offer = await offerFromHuman({ playerId, amount: (await askOf(playerId, when)) + 5000 });
+      await replyToTransferOffers(withAi(sellAndDemand(answer)), "ai-club", when, PROFILE);
+      expect((await offerRow(offer.offerId))?.status, playerId).toBe("accepted");
+      expect(await demandsOf(), playerId).toEqual([]);
+    }
+    const logs = (await db.prepare("SELECT context_ref, executed, error FROM ai_coach_decisions WHERE kind = 'replacement_demand' ORDER BY context_ref")
+      .all<{ context_ref: string; executed: string; error: string | null }>()).results;
+    expect(logs.map((l) => l.context_ref)).toEqual(["ai-def1", "ai-mid1"]);
+    expect(JSON.parse(logs[0].executed)).toMatchObject({ posted: false, deferred: true });
+    expect(logs[0].error).toContain("neplatná odpověď modelu");
+    expect(JSON.parse(logs[1].executed)).toEqual({ posted: false });
   });
 
   it("dvě nabídky na téhož hráče: model rozhoduje o lepší a vidí i druhou, horší se nepřijme dřív", async () => {

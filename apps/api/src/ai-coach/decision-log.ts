@@ -20,6 +20,7 @@ export interface DecisionEntry {
    * `main_sponsor` a `stadium_sponsor` (výběr firmy k jednání), `sponsor_negotiation` (tah v jednání se sponzorem),
    * `player_offer` (podpis nebo odmítnutí místních hráčů z nabídek; jeden zápis za den),
    * `promise_listing` (inzerát hráče, kterému AI slíbila prodej),
+   * `replacement_demand` (poptávka po náhradě za prodanou oporu),
    * `sponsor_invite` (koho pozvat do VIP lóže na nejbližší domácí zápas).
    */
   kind: string;
