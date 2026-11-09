@@ -27,16 +27,36 @@ const CHEAP_IN = CHEAP_JOIN_TYPES.map((t) => `'${t}'`).join(", ");
 
 const czechDay = new Intl.DateTimeFormat("cs-CZ", { day: "numeric", month: "numeric", timeZone: "Europe/Prague" });
 
+const pragueDay = new Intl.DateTimeFormat("en-CA", { year: "numeric", month: "2-digit", day: "2-digit", timeZone: "Europe/Prague" });
+
+/** Čas z databáze (ISO, nebo `YYYY-MM-DD HH:MM:SS` v UTC) jako Date. */
+function parseDbTime(value: string): Date {
+  const iso = value.includes("T") ? value : value.replace(" ", "T");
+  return new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(iso) ? iso : `${iso}Z`);
+}
+
+/**
+ * Konec lhůty pro příchod v daný okamžik, nebo null, když už uplynula. Lhůta se počítá
+ * na celé dny pražského kalendáře: končí o půlnoci dne, který hráči ukazuje hláška.
+ * Dřív běžela na minutu od příchodu, takže hláška „půjde od 10. 11.“ odmítala prodej
+ * ještě 10. 11. dopoledne.
+ */
+export function registrationLockEnd(joinedAt: string, now: Date = new Date()): string | null {
+  const joined = parseDbTime(joinedAt);
+  if (Number.isNaN(joined.getTime())) return null;
+  const until = new Date(joined.getTime() + REGISTRATION_DAYS * 86_400_000);
+  return pragueDay.format(now) < pragueDay.format(until) ? until.toISOString() : null;
+}
+
 /** Do kdy hráč v lhůtě je (ISO), nebo null, když už se smí prodat. */
 export async function registrationLockedUntil(db: D1Database, playerId: string, now: Date = new Date()): Promise<string | null> {
   const row = await db.prepare(
-    `SELECT strftime('%Y-%m-%dT%H:%M:%SZ', joined_at, '+${REGISTRATION_DAYS} days') AS until FROM player_contracts
-      WHERE player_id = ? AND is_active = 1 AND join_type IN (${CHEAP_IN})
-        AND julianday(joined_at) + ${REGISTRATION_DAYS} > julianday(?)
+    `SELECT joined_at FROM player_contracts
+      WHERE player_id = ? AND is_active = 1 AND join_type IN (${CHEAP_IN}) AND joined_at IS NOT NULL
       ORDER BY joined_at DESC LIMIT 1`,
-  ).bind(playerId, now.toISOString()).first<{ until: string | null }>()
+  ).bind(playerId).first<{ joined_at: string | null }>()
     .catch((e) => { logger.warn({ module: M }, `lhůta hráče ${playerId}`, e); return null; });
-  return row?.until ?? null;
+  return row?.joined_at ? registrationLockEnd(row.joined_at, now) : null;
 }
 
 /** Text pro hráče: kdo a od kdy půjde prodat. */
