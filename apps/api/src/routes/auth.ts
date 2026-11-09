@@ -94,8 +94,8 @@ import { hashPassword, verifyPassword } from "../auth/password";
 import { createSession, getSession, deleteSession, deleteAllUserSessions, getTokenFromRequest } from "../auth/session";
 import { logger } from "../lib/logger";
 import {
-  attemptKey, blockedForSeconds, clearAttempts, recordAttempt,
-  LOGIN_EMAIL_LIMIT, LOGIN_IP_LIMIT, UNKNOWN_IP,
+  bumpCounters, judgeLogin, loginCounterKeys, settleSuccessfulLogin,
+  LOGIN_WINDOW_SECONDS, UNKNOWN_IP,
 } from "../auth/attempt-limiter";
 
 const authRouter = new Hono<{ Bindings: Bindings }>();
@@ -122,33 +122,43 @@ authRouter.post("/login", async (c) => {
   }
   const email = body.email.trim().toLowerCase();
 
-  // Brzda hádání hesel: neúspěchy se počítají na e-mail i na adresu. Bez hlavičky
-  // s adresou (mimo Cloudflare) jde pokus do společného koše, e-mail se počítá vždy.
-  const emailKey = await attemptKey("login-email", email);
-  const ipKey = await attemptKey("login-ip", c.req.header("CF-Connecting-IP") ?? UNKNOWN_IP);
-  const blockedFor = Math.max(
-    await blockedForSeconds(c.env.CACHE_KV, emailKey, LOGIN_EMAIL_LIMIT),
-    await blockedForSeconds(c.env.CACHE_KV, ipKey, LOGIN_IP_LIMIT),
-  );
-  if (blockedFor > 0) {
-    c.header("Retry-After", String(blockedFor));
-    return c.json({ error: `Příliš mnoho pokusů o přihlášení. Zkus to znovu za ${Math.ceil(blockedFor / 60)} min.` }, 429);
+  // Brzda hádání hesel. Pokus se připíše před ověřením hesla jedním atomickým zápisem
+  // do D1; když se zápis nepovede, pokus se odmítne. Bez hlavičky s adresou (mimo
+  // Cloudflare) jde pokus do společného koše.
+  const counterKeys = await loginCounterKeys(email, c.req.header("CF-Connecting-IP") ?? UNKNOWN_IP);
+  let gate;
+  try {
+    const counts = await bumpCounters(c.env.DB, [counterKeys.pair, counterKeys.ip, counterKeys.email], LOGIN_WINDOW_SECONDS);
+    gate = judgeLogin({
+      pair: counts.get(counterKeys.pair) ?? Infinity,
+      ip: counts.get(counterKeys.ip) ?? Infinity,
+      email: counts.get(counterKeys.email) ?? Infinity,
+    });
+  } catch (e) {
+    logger.error({ module: "auth" }, "počítadlo pokusů o přihlášení", e);
+    c.header("Retry-After", "30");
+    return c.json({ error: "Přihlášení teď nejde ověřit. Zkus to prosím za chvíli." }, 503);
   }
-  const rejectLogin = async () => {
-    await recordAttempt(c.env.CACHE_KV, emailKey, LOGIN_EMAIL_LIMIT);
-    await recordAttempt(c.env.CACHE_KV, ipKey, LOGIN_IP_LIMIT);
-    return c.json({ error: "Špatný email nebo heslo" }, 401);
-  };
+  if (gate.verdict === "blocked") {
+    c.header("Retry-After", String(LOGIN_WINDOW_SECONDS));
+    return c.json({ error: "Příliš mnoho pokusů o přihlášení. Zkus to znovu za 15 minut." }, 429);
+  }
 
   const user = await c.env.DB.prepare(
     "SELECT * FROM users WHERE email = ?"
   ).bind(email).first<Record<string, unknown>>();
 
-  if (!user || !user.password_hash) return rejectLogin();
+  if (!user || !user.password_hash) {
+    return c.json({ error: "Špatný email nebo heslo" }, 401);
+  }
 
   const valid = await verifyPassword(body.password, user.password_hash as string);
-  if (!valid) return rejectLogin();
-  await clearAttempts(c.env.CACHE_KV, emailKey);
+  if (!valid) {
+    return c.json({ error: "Špatný email nebo heslo" }, 401);
+  }
+  // Úklid počítadel přihlášení neblokuje: neúspěch znamená jen o pokus méně v běžícím okně.
+  await settleSuccessfulLogin(c.env.DB, counterKeys)
+    .catch((e) => logger.warn({ module: "auth" }, "úklid počítadel po přihlášení", e));
 
   // Find team + season info
   const team = await c.env.DB.prepare(
