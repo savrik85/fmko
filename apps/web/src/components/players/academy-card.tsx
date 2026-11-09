@@ -63,7 +63,7 @@ interface AcademyData {
     staff: { name: string } | null;
   } | null;
   staffMarket: { id: string; name: string; age: number; quality: string; weeklyWage: number; signingFee: number; description: string; blockedReason: string | null }[];
-  equipment: { key: string; label: string; effect: string; level: number }[];
+  equipment: { key: string; label: string; effect: string; level: number; condition?: number }[];
   potentialScale: { from: number; label: string }[];
   nextSummer: number;
   prospects: Prospect[];
@@ -761,7 +761,7 @@ export function AcademyCard({ teamId }: { teamId: string }) {
           <h2 className="font-heading font-bold text-base">Klubové vybavení, které žáci využívají</h2>
           <p className="text-sm text-muted">
             Tohle není součást akademie a týdně se za to neplatí. Je to vybavení celého klubu, které koupíš jednou ve Vybavení
-            a používá ho áčko i žáci. Míče, pomůcky a zimní výbava zrychlí růst žáků, dodávka sníží odchody.
+            a používá ho áčko i žáci. Míče, pomůcky a zimní výbava zrychlí růst žáků, dodávka sníží odchody. Počítá se úroveň i stav.
           </p>
           <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {data.equipment.map((e) => (
@@ -774,6 +774,9 @@ export function AcademyCard({ teamId }: { teamId: string }) {
                   {[1, 2, 3].map((l) => <span key={l} className={`h-1.5 flex-1 rounded-full ${e.level >= l ? "bg-pitch-500" : "bg-gray-200"}`} />)}
                 </div>
                 <p className="mt-1.5 text-xs text-muted">{e.effect}</p>
+                {e.level > 0 && e.condition !== undefined && e.condition < 100 && (
+                  <p className="mt-1 text-xs text-muted">Stav {Math.round(e.condition)} %. Opotřebené vybavení pomáhá žákům míň, opravíš ho ve Vybavení.</p>
+                )}
               </li>
             ))}
           </ul>

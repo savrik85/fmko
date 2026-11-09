@@ -109,6 +109,23 @@ describe("družstvo žáků", () => {
     expect(view!.nextSummer).toBe((await prospects("club")).filter((p) => p.age === 14).length);
   });
 
+  it("vybavení pro žáky: stránka ukáže úroveň i stav, růst se počítá z obojího", async () => {
+    const kid = (await prospects("club"))[0];
+    const stepWith = async (condition: number) => {
+      await db.prepare("INSERT INTO equipment (id, team_id, balls, balls_condition) VALUES ('eq-club', 'club', 3, ?) ON CONFLICT(team_id) DO UPDATE SET balls = 3, balls_condition = excluded.balls_condition")
+        .bind(condition).run();
+      const before = (await prospects("club")).find((p) => p.id === kid.id)!.progress_current;
+      await weeklyAcademy(db, "club", GAME_DATE, 1);
+      return (await prospects("club")).find((p) => p.id === kid.id)!.progress_current - before;
+    };
+    const broken = await stepWith(0);
+    const asNew = await stepWith(100);
+    expect(asNew).toBeGreaterThan(broken);
+    const view = await loadAcademyView(db, "club");
+    expect(view!.equipment.find((e) => e.key === "balls")).toMatchObject({ level: 3, condition: 100 });
+    await db.prepare("DELETE FROM equipment WHERE team_id = 'club'").run();
+  });
+
   it("odhad talentu se přepnutím trenéra tam a zpátky nemění a drží se v mezích chyby", async () => {
     const estimates = async () => new Map((await loadAcademyView(db, "club"))!.prospects.map((p) => [p.id, p.potential?.estimate ?? null]));
     const first = await estimates();

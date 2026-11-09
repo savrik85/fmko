@@ -144,27 +144,41 @@ export interface QualityInput {
   equipment?: YouthEquipment;
 }
 
+export type YouthEquipmentKey = "balls" | "training_cones" | "winter_gear" | "team_van";
+
 /** Klubové vybavení, které pomáhá žákům: míče, tréninkové pomůcky, zimní výbava, dodávka. */
 export interface YouthEquipment {
   balls: number;
   training_cones: number;
   winter_gear: number;
   team_van: number;
+  /** Stav vybavení 0–100 %. Chybí-li (čistý výpočet v testech), počítá se jako nové. */
+  condition?: Partial<Record<YouthEquipmentKey, number>>;
+}
+
+/**
+ * Účinná úroveň vybavení: úroveň 0–3 krát stav, stejně jako všude jinde ve hře
+ * (equipment-generator.ts `calculateEffects`). Dřív žákům pomáhalo i rozbité vybavení naplno.
+ */
+export function youthEquipmentEffect(e: YouthEquipment | undefined, key: YouthEquipmentKey): number {
+  if (!e) return 0;
+  const level = Math.max(0, Math.min(3, e[key] || 0));
+  const condition = Math.max(0, Math.min(100, e.condition?.[key] ?? 100));
+  return level * (condition / 100);
 }
 
 /** Co které vybavení žákům dá (do UI slovy, do výpočtu `equipmentQualityBonus`, `quitChance`). */
-export const YOUTH_EQUIPMENT: { key: keyof YouthEquipment; label: string; effect: string }[] = [
+export const YOUTH_EQUIPMENT: { key: YouthEquipmentKey; label: string; effect: string }[] = [
   { key: "balls", label: "Míče", effect: "víc míčů na tréninku: žáci rostou rychleji" },
   { key: "training_cones", label: "Tréninkové pomůcky", effect: "kužely, branky, žebříky: lepší trénink" },
   { key: "winter_gear", label: "Zimní výbava lavičky", effect: "o něco lepší trénink" },
   { key: "team_van", label: "Klubová dodávka", effect: "odvoz na zápasy: méně žáků skončí" },
 ];
 
-/** Bonus ke kvalitě přípravy z vybavení: míče a pomůcky po 0,03 za úroveň, zimní výbava 0,03. */
+/** Bonus ke kvalitě přípravy z vybavení: míče, pomůcky a zimní výbava po 0,03 za účinnou úroveň (úroveň × stav). */
 export function equipmentQualityBonus(e: YouthEquipment | undefined): number {
   if (!e) return 0;
-  const lvl = (n: number) => Math.max(0, Math.min(3, n || 0));
-  return 0.03 * (lvl(e.balls) + lvl(e.training_cones) + lvl(e.winter_gear));
+  return 0.03 * (youthEquipmentEffect(e, "balls") + youthEquipmentEffect(e, "training_cones") + youthEquipmentEffect(e, "winter_gear"));
 }
 
 /**

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { createRng } from "../generators/rng";
 import {
-  programQuality, weeklyProgress, expectedKidsPerYear, estimatedTalent, estimateOffset, canPlayUp, recommendsPlayUp, quitChance,
+  programQuality, weeklyProgress, expectedKidsPerYear, equipmentQualityBonus, youthEquipmentEffect, estimatedTalent, estimateOffset, canPlayUp, recommendsPlayUp, quitChance,
   rollKids, WEEKS_PER_SEASON, MAX_KIDS_PER_YEAR, MIN_SQUAD, verdictText, talentShiftAt13, youthTransferFee,
   upkeepWeekly, ACADEMY_LEVELS, academyLevelOf, coachSonAge, COACH_SON_CHANCE,
 } from "./rules";
@@ -53,6 +53,29 @@ describe("trenér a příprava", () => {
     expect(perWeek.current * WEEKS_PER_SEASON * 4).toBeLessThan(8);
     expect(perWeek.cap * WEEKS_PER_SEASON * 4).toBeGreaterThan(10);
     expect(perWeek.cap * WEEKS_PER_SEASON * 4).toBeLessThan(16);
+  });
+});
+
+describe("vybavení pro žáky", () => {
+  const input = { coach: "parent" as const, managerYouth: 40, squadSize: 12 };
+  const levels = { balls: 3, training_cones: 2, winter_gear: 1, team_van: 2 };
+
+  it("počítá se úroveň krát stav jako jinde ve hře, rozbité vybavení nepomáhá naplno", () => {
+    const none = programQuality(input);
+    const asNew = programQuality({ ...input, equipment: levels });
+    const half = programQuality({ ...input, equipment: { ...levels, condition: { balls: 50, training_cones: 50, winter_gear: 50 } } });
+    const broken = programQuality({ ...input, equipment: { ...levels, condition: { balls: 0, training_cones: 0, winter_gear: 0 } } });
+    expect(asNew - none).toBeCloseTo(0.03 * 6, 10);
+    expect(half - none).toBeCloseTo(0.03 * 3, 10);
+    expect(broken).toBeCloseTo(none, 10);
+    expect(equipmentQualityBonus({ ...levels, condition: { balls: 100, training_cones: 100, winter_gear: 100 } })).toBeCloseTo(equipmentQualityBonus(levels), 10);
+  });
+
+  it("dodávka snižuje odchody podle úrovně i stavu", () => {
+    expect(youthEquipmentEffect({ ...levels, condition: { team_van: 50 } }, "team_van")).toBe(1);
+    expect(youthEquipmentEffect(levels, "team_van")).toBe(2);
+    expect(youthEquipmentEffect(undefined, "team_van")).toBe(0);
+    expect(quitChance(50, true, true, 1)).toBeCloseTo(quitChance(50, true, true, 0) - 0.02, 10);
   });
 });
 
