@@ -148,7 +148,8 @@ function weeklyAnswer(concessions: { mode: string; products: Partial<Record<Prod
     training: { focus: "mixed", intensity: "normal", sessions: 3, approach: "balanced" },
     ticketPrice: "keep", pitchMaintenance: "none", pitchCareMode: "keep",
     stadium: [], equipmentUpgrades: [], equipmentRepairs: [], hire: [], academy: "keep", banners: [], promote: [], sendDown: [],
-    transfers: { stance: "hold", focus: [], sell: [] },
+    // Kádr testu je pod cílovou velikostí: model musí říct i to, jestli ho doplní.
+    transfers: { stance: "hold", focus: [], sell: [], fill: "none" },
     concessions,
     reasoning: "Own bar pays off, beer is what people want.",
   };
