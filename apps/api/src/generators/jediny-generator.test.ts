@@ -20,7 +20,8 @@ const SRC = fileURLToPath(new URL("..", import.meta.url));
 function zdrojaky(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
     const path = join(dir, name);
-    if (statSync(path).isDirectory()) return zdrojaky(path);
+    // test-support jsou pomocné soubory testů (plní testovací databázi), ne kód hry.
+    if (statSync(path).isDirectory()) return name === "test-support" ? [] : zdrojaky(path);
     return name.endsWith(".ts") && !name.endsWith(".test.ts") ? [path] : [];
   });
 }
