@@ -93,6 +93,10 @@ import type { Bindings } from "../index";
 import { hashPassword, verifyPassword } from "../auth/password";
 import { createSession, getSession, deleteSession, getTokenFromRequest } from "../auth/session";
 import { logger } from "../lib/logger";
+import {
+  attemptKey, blockedForSeconds, clearAttempts, recordAttempt,
+  LOGIN_EMAIL_LIMIT, LOGIN_IP_LIMIT, UNKNOWN_IP,
+} from "../auth/attempt-limiter";
 
 const authRouter = new Hono<{ Bindings: Bindings }>();
 
@@ -113,22 +117,38 @@ authRouter.post("/register", (c) => c.json({
 authRouter.post("/login", async (c) => {
   const body = await c.req.json<{ email: string; password: string }>();
 
-  if (!body.email || !body.password) {
+  if (!body.email || !body.password || typeof body.email !== "string" || typeof body.password !== "string") {
     return c.json({ error: "Vyplň email a heslo" }, 400);
   }
+  const email = body.email.trim().toLowerCase();
+
+  // Brzda hádání hesel: neúspěchy se počítají na e-mail i na adresu. Bez hlavičky
+  // s adresou (mimo Cloudflare) jde pokus do společného koše, e-mail se počítá vždy.
+  const emailKey = await attemptKey("login-email", email);
+  const ipKey = await attemptKey("login-ip", c.req.header("CF-Connecting-IP") ?? UNKNOWN_IP);
+  const blockedFor = Math.max(
+    await blockedForSeconds(c.env.CACHE_KV, emailKey, LOGIN_EMAIL_LIMIT),
+    await blockedForSeconds(c.env.CACHE_KV, ipKey, LOGIN_IP_LIMIT),
+  );
+  if (blockedFor > 0) {
+    c.header("Retry-After", String(blockedFor));
+    return c.json({ error: `Příliš mnoho pokusů o přihlášení. Zkus to znovu za ${Math.ceil(blockedFor / 60)} min.` }, 429);
+  }
+  const rejectLogin = async () => {
+    await recordAttempt(c.env.CACHE_KV, emailKey, LOGIN_EMAIL_LIMIT);
+    await recordAttempt(c.env.CACHE_KV, ipKey, LOGIN_IP_LIMIT);
+    return c.json({ error: "Špatný email nebo heslo" }, 401);
+  };
 
   const user = await c.env.DB.prepare(
     "SELECT * FROM users WHERE email = ?"
-  ).bind(body.email.toLowerCase()).first<Record<string, unknown>>();
+  ).bind(email).first<Record<string, unknown>>();
 
-  if (!user || !user.password_hash) {
-    return c.json({ error: "Špatný email nebo heslo" }, 401);
-  }
+  if (!user || !user.password_hash) return rejectLogin();
 
   const valid = await verifyPassword(body.password, user.password_hash as string);
-  if (!valid) {
-    return c.json({ error: "Špatný email nebo heslo" }, 401);
-  }
+  if (!valid) return rejectLogin();
+  await clearAttempts(c.env.CACHE_KV, emailKey);
 
   // Find team + season info
   const team = await c.env.DB.prepare(
@@ -153,7 +173,7 @@ authRouter.post("/login", async (c) => {
   await c.env.DB.prepare("UPDATE users SET last_login_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?")
     .bind(user.id).run().catch((e) => console.error("Failed to update last_login_at:", e));
 
-  const token = await createSession(c.env.SESSION_KV, user.id as string, body.email.toLowerCase(), teamId);
+  const token = await createSession(c.env.SESSION_KV, user.id as string, email, teamId);
 
   return c.json({
     token,
