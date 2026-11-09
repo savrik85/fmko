@@ -29,7 +29,9 @@ export type LeagueRoundStatus =
   /** Liga dnes žádné kolo nemá. */
   | "no-round"
   /** Zpráva je zastaralá — herní den se mezitím posunul. */
-  | "stale";
+  | "stale"
+  /** Kolo je rozehrané a má puls: pořád ho někdo hraje, zkusit znovu za chvíli. */
+  | "busy";
 
 export interface LeagueRoundResult {
   status: LeagueRoundStatus;
@@ -208,20 +210,30 @@ export async function processLeagueRound(
     .bind(leagueId, dayEnd.toISOString(), leagueId)
     .first<{ id: string }>();
 
-  if (!matchCal) return done("no-round", 0);
-  const calendarId = matchCal.id;
-
-  // ── Atomický lock ──
-  // Zabrání souběžnému cronu / endpointu / duplicitní zprávě zpracovat stejné kolo
-  // a tím zdvojit finance (concession, vstupné, prémie) — viz incident 2026-04.
-  // locked_at říká recovery, jestli kolo pořád někdo hraje (viz recoverStuckRounds).
-  const lockResult = await db
-    .prepare("UPDATE season_calendar SET status = 'lineup_locked', locked_at = ? WHERE id = ? AND status = 'scheduled'")
-    .bind(new Date().toISOString(), calendarId)
-    .run();
-  if (lockResult.meta.changes === 0) {
-    logger.info({ module: "league-round" }, `skip ${calendarId}: jiný trigger už drží lock`);
-    return done("skipped", 0, calendarId);
+  let calendarId: string;
+  if (matchCal) {
+    calendarId = matchCal.id;
+    // ── Atomický lock ──
+    // Zabrání souběžnému cronu / endpointu / duplicitní zprávě zpracovat stejné kolo
+    // a tím zdvojit finance (concession, vstupné, prémie) — viz incident 2026-04.
+    // locked_at říká recovery, jestli kolo pořád někdo hraje (viz recoverStuckRounds).
+    const lockResult = await db
+      .prepare("UPDATE season_calendar SET status = 'lineup_locked', locked_at = ? WHERE id = ? AND status = 'scheduled'")
+      .bind(new Date().toISOString(), calendarId)
+      .run();
+    if (lockResult.meta.changes === 0) {
+      logger.info({ module: "league-round" }, `skip ${calendarId}: jiný trigger už drží lock`);
+      return done("skipped", 0, calendarId);
+    }
+  } else {
+    // Kolo spadlo uprostřed (2026-11-09: běh zmizel po 5 ze 7 zápasů) a fronta
+    // zprávu doručila znovu. Dřív tu skončila s „no-round“ a kolo viselo do
+    // pojistky v 16:20/17:20. Teď ho převezme, když už nemá puls.
+    const resumed = await claimStaleRound(db, leagueId, dayEnd.toISOString());
+    if (resumed === "busy") return done("busy", 0);
+    if (!resumed) return done("no-round", 0);
+    calendarId = resumed;
+    logger.warn({ module: "league-round" }, `liga ${leagueId}: dohrávám rozehrané kolo ${calendarId} (běh spadl)`);
   }
 
   prof.mark("lock");
@@ -315,6 +327,32 @@ export async function processLeagueRound(
       result.phases.map((p) => `${p.name}=${p.queries}q/${p.ms}ms`).join(" "),
   );
   return result;
+}
+
+/**
+ * Rozehrané kolo ligy (lineup_locked) bez pulsu převezme: vrátí jeho id. Když kolo
+ * puls má, pořád ho někdo hraje: „busy“, ať to fronta zkusí za chvíli znovu.
+ * null = žádné rozehrané kolo.
+ */
+export async function claimStaleRound(db: D1Database, leagueId: string, dayEndIso: string, now: Date = new Date()): Promise<string | "busy" | null> {
+  const { ROUND_HEARTBEAT_STALE_MINUTES } = await import("../multiplayer/match-runner");
+  const locked = await db
+    .prepare(
+      `SELECT id, locked_at FROM season_calendar
+        WHERE league_id = ? AND status = 'lineup_locked' AND scheduled_at <= ?
+          AND season_number = (SELECT MAX(season_number) FROM season_calendar WHERE league_id = ?)
+        ORDER BY scheduled_at ASC LIMIT 1`,
+    )
+    .bind(leagueId, dayEndIso, leagueId)
+    .first<{ id: string; locked_at: string | null }>();
+  if (!locked) return null;
+  const cutoff = new Date(now.getTime() - ROUND_HEARTBEAT_STALE_MINUTES * 60_000).toISOString();
+  // Přezamknout jen kolo bez pulsu: souběžná zpráva nebo recovery ho pak nevezme podruhé.
+  const claim = await db
+    .prepare("UPDATE season_calendar SET locked_at = ? WHERE id = ? AND status = 'lineup_locked' AND (locked_at IS NULL OR locked_at <= ?)")
+    .bind(now.toISOString(), locked.id, cutoff)
+    .run();
+  return (claim.meta?.changes ?? 0) > 0 ? locked.id : "busy";
 }
 
 /** Zpravodajský souhrn kola. */
