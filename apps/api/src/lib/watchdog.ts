@@ -117,6 +117,32 @@ export async function runWatchdog(env: Bindings): Promise<WatchdogResult> {
     });
   }
 
+  // ── 4b. Zápasy, které se neodehrály nebo nedozpracovaly ──
+  // Kolo je označené za odehrané, ale zápas v něm zůstal viset (spadl na chybě).
+  const unplayed = await scalar(
+    env.DB,
+    `SELECT COUNT(*) AS n FROM matches m JOIN season_calendar sc ON sc.id = m.calendar_id
+      WHERE sc.status = 'simulated' AND m.status IN ('scheduled', 'lineups_open')
+        AND sc.season_number = (SELECT MAX(season_number) FROM season_calendar x WHERE x.league_id = sc.league_id)`,
+    "neodehrané zápasy v odehraných kolech",
+  );
+  if (unplayed && unplayed > 0) {
+    problemy.push({ kod: "neodehrany_zapas", popis: "V odehraném kole zůstal neodehraný zápas (sázky kola se nevypořádají)", hodnota: unplayed });
+  }
+  // Zápas má výsledek, ale jeho následky (statistiky, finance, kondice) nedoběhly.
+  const halfDone = await scalar(
+    env.DB,
+    `SELECT COUNT(*) AS n FROM matches m JOIN season_calendar sc ON sc.id = m.calendar_id
+      WHERE m.status = 'simulated' AND m.aftermath_done_at IS NULL
+        AND m.simulated_at > (SELECT MIN(aftermath_done_at) FROM matches)
+        AND m.simulated_at < strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-30 minutes')
+        AND m.simulated_at > strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-3 days')`,
+    "napůl zpracované zápasy",
+  );
+  if (halfDone && halfDone > 0) {
+    problemy.push({ kod: "zapas_napul", popis: "Zápas má výsledek, ale jeho zpracování spadlo uprostřed", hodnota: halfDone });
+  }
+
   // ── 5. Opakované pokusy ──
   const retry = await scalar(
     env.DB,

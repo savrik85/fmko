@@ -468,6 +468,13 @@ export default {
           log(r.unplayed > 0 ? "error" : "info", `kolo ${r.calendarId}: dodatečně dohráno ${r.played}, neodehraných zbývá ${r.unplayed}`);
         }
       } catch (e) { log("error", "dohrání neodehraných zápasů selhalo", e); }
+      // Zápasy s výsledkem, ale bez dokončených následků (běh spadl uprostřed zpracování).
+      try {
+        const { repairHalfProcessedMatches } = await import("./season/league-round");
+        for (const r of await repairHalfProcessedMatches(env.DB)) {
+          log(r.repaired ? "warn" : "error", `zápas ${r.matchId}: ${r.repaired ? "následky dopočítány" : `napůl zpracovaný, nejde dopočítat (${r.reason})`}`);
+        }
+      } catch (e) { log("error", "oprava napůl zpracovaných zápasů selhala", e); }
       // Turnaj: dohraje zápasy dne, které v 16:00/16:05 spadly (zábor propadá po 15 min).
       try {
         const { maybeAdvanceTournament } = await import("./tournament/advance");

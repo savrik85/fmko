@@ -1154,3 +1154,38 @@ export async function processLeagueMaintenance(
 
   return { celebritySpawned, listings, durationMs: Date.now() - startedAt, queries: counter.n };
 }
+
+
+/**
+ * Zápasy, jejichž zpracování spadlo po zápisu výsledku (běh zmizel uprostřed následků).
+ * Těm bez statistik dopočítá oprava statistiky, stopky, zranění a finance z uložených
+ * událostí; ostatní jen nahlásí. Dřív oprava existovala jen jako ruční admin endpoint.
+ */
+export async function repairHalfProcessedMatches(db: D1Database, limit = 5): Promise<Array<{ matchId: string; repaired: boolean; reason?: string }>> {
+  const rows = await db.prepare(
+    `SELECT m.id FROM matches m JOIN season_calendar sc ON sc.id = m.calendar_id
+      WHERE m.status = 'simulated' AND m.aftermath_done_at IS NULL
+        AND m.simulated_at > (SELECT MIN(aftermath_done_at) FROM matches)
+        AND m.simulated_at < strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-15 minutes')
+        AND m.simulated_at > strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-3 days')
+      ORDER BY m.simulated_at ASC LIMIT ?`,
+  ).bind(limit).all<{ id: string }>()
+    .catch((e) => { logger.warn({ module: "league-round" }, "hledání napůl zpracovaných zápasů", e); return { results: [] as Array<{ id: string }> }; });
+
+  const out: Array<{ matchId: string; repaired: boolean; reason?: string }> = [];
+  if (rows.results.length === 0) return out;
+  const { repairMatchAftermath } = await import("../multiplayer/match-aftermath-repair");
+  for (const row of rows.results) {
+    const res = await repairMatchAftermath(db, row.id)
+      .catch((e) => { logger.error({ module: "league-round" }, `oprava zápasu ${row.id}`, e); return { ok: false, reason: "oprava spadla" }; });
+    // Značka i u zápasu, který opravit nejde (statistiky má, spadl později): příště se
+    // už nezkouší, v logu a u hlídače zůstane jako chyba k ručnímu posouzení.
+    await db.prepare("UPDATE matches SET aftermath_done_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ? AND aftermath_done_at IS NULL")
+      .bind(row.id).run()
+      .catch((e) => logger.warn({ module: "league-round" }, `značka opravy zápasu ${row.id}`, e));
+    if (res.ok) logger.warn({ module: "league-round" }, `zápas ${row.id} spadl uprostřed zpracování, následky dopočítány`);
+    else logger.error({ module: "league-round" }, `zápas ${row.id} spadl uprostřed zpracování a nejde dopočítat: ${res.reason}`);
+    out.push({ matchId: row.id, repaired: res.ok, reason: res.reason });
+  }
+  return out;
+}

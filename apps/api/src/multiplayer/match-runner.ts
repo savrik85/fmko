@@ -1426,6 +1426,12 @@ export async function runScheduledMatches(
                 logger.warn({module: "match-runner"}, "check achievements", e);
             }
 
+            // Následky zápasu jsou zapsané celé. Zápas bez téhle značky zpracoval běh, který
+            // spadl uprostřed: najde ho hlídač a pojistka mu dopočítá, co umí.
+            await db.prepare("UPDATE matches SET aftermath_done_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?")
+                .bind(matchId).run()
+                .catch((e) => logger.warn({module: "match-runner"}, `značka dokončení zápasu ${matchId}`, e));
+
             results.push({
                 matchId,
                 homeScore: result.homeScore,
