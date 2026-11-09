@@ -1719,18 +1719,24 @@ export async function listPlayerOnMarket(
   return { ok: true, listingId: id };
 }
 
-/** DELETE /teams/:teamId/listings/:listingId — stáhnout inzerát (rozjednané příhozy se zamítnou). */
+/**
+ * DELETE /teams/:teamId/listings/:listingId — stáhnout inzerát (rozjednané příhozy se zamítnou).
+ * Jen vlastní a jen aktivní: dřív šel "stáhnout" i prodaný nebo propadlý inzerát (přepsal se
+ * mu stav) a cizí inzerát vrátil úspěch, i když se nic nestalo.
+ */
 export async function withdrawListing(env: Bindings, teamId: string, listingId: string): Promise<TransferActionResult> {
   const db = env.DB;
-  const res = await db.prepare("UPDATE transfer_listings SET status = 'withdrawn' WHERE id = ? AND team_id = ?").bind(listingId, teamId).run();
+  const clubTeamId = await resolveClubTeamId(db, teamId) ?? teamId;
+  const res = await db.prepare(
+    "UPDATE transfer_listings SET status = 'withdrawn' WHERE id = ? AND team_id IN (?, ?) AND status = 'active'",
+  ).bind(listingId, teamId, clubTeamId).run();
+  if ((res.meta.changes ?? 0) === 0) return fail(404, "Inzerát nenalezen nebo už není aktivní");
   await db.prepare("UPDATE transfer_bids SET status = 'rejected' WHERE listing_id = ? AND status = 'pending'").bind(listingId).run().catch((e) => logger.warn({ module: "game" }, "reject bids on listing withdrawal", e));
   // Žádosti o hostování z tohohle inzerátu padají spolu s ním.
-  if ((res.meta.changes ?? 0) > 0) {
-    await db.prepare(
-      `UPDATE transfer_offers SET status = 'rejected', reject_message = 'Klub inzerát na hostování stáhl.', resolved_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
-        WHERE listing_id = ? AND status IN ('pending','countered')`,
-    ).bind(listingId).run().catch((e) => logger.warn({ module: "game" }, "reject loan requests on listing withdrawal", e));
-  }
+  await db.prepare(
+    `UPDATE transfer_offers SET status = 'rejected', reject_message = 'Klub inzerát na hostování stáhl.', resolved_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+      WHERE listing_id = ? AND status IN ('pending','countered')`,
+  ).bind(listingId).run().catch((e) => logger.warn({ module: "game" }, "reject loan requests on listing withdrawal", e));
   return { ok: true };
 }
 

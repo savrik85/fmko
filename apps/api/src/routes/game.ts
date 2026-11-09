@@ -5362,8 +5362,8 @@ gameRouter.get("/teams/:teamId/watchlist", async (c) => {
 
 // Withdraw listing
 gameRouter.delete("/teams/:teamId/listings/:listingId", async (c) => {
-  await withdrawListing(c.env, c.req.param("teamId"), c.req.param("listingId"));
-  return c.json({ ok: true });
+  const res = await withdrawListing(c.env, c.req.param("teamId"), c.req.param("listingId"));
+  return res.ok ? c.json({ ok: true }) : transferError(c, res);
 });
 
 // ═══ HOSTOVÁNÍ: přehled půjčených hráčů, podrobnosti, stažení ═══
