@@ -19,6 +19,7 @@ import {
   type ConcessionAction, type ConcessionContext, type ConcessionDecision, type ConcessionTopUpPlan,
 } from "./concession-decision";
 import type { AiCoachProfile } from "./profile";
+import { promptName } from "./prompt-text";
 
 export const TRAINING_FOCUS = ["conditioning", "technique", "tactics", "match_practice", "mixed"] as const;
 export type TrainingFocus = typeof TRAINING_FOCUS[number];
@@ -662,7 +663,7 @@ export function renderWeeklyPrompt(ctx: WeeklyContext): string {
   L.push("YOUR PERSONALITY (0-100):");
   L.push(`ambition ${p.ambition}, thrift ${p.thrift}, building (stadium and equipment) ${p.building}, youth focus ${p.youthFocus}, risk ${p.risk}, patience ${p.patience}, trading ${p.trading}. Favourite tactic: ${p.favouriteTactic}.`);
   L.push("");
-  L.push(`CLUB ${ctx.teamName}: ${ctx.league.position ? `table position ${ctx.league.position}/${ctx.league.teams}, ${ctx.league.points} pts after ${ctx.league.played} matches` : "season just started"}. Reputation ${ctx.reputation}/100.`);
+  L.push(`CLUB ${promptName(ctx.teamName)}: ${ctx.league.position ? `table position ${ctx.league.position}/${ctx.league.teams}, ${ctx.league.points} pts after ${ctx.league.played} matches` : "season just started"}. Reputation ${ctx.reputation}/100.`);
   L.push(`MONEY: budget ${czk(ctx.budget)}. Weekly running costs about ${czk(f.weeklyRunningCost)}, weekly income about ${czk(f.weeklyIncome)}. You keep a reserve of ${f.reserveWeeks} weeks of running costs = ${czk(f.reserve)}. Money you may spend this week: ${czk(f.spendable)}, of which at most ${czk(investBudgetFor(p, f.spendable))} on stadium and new equipment (your building appetite).`);
   L.push(`YOUR STYLE: ${styleText(p)}`);
   L.push("");

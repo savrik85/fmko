@@ -21,7 +21,7 @@ import { setTicketPrice } from "../services/club-settings";
 import { restockConcession, setConcessionMode, setConcessionProduct } from "../services/concessions";
 import { publicOfferDetails, acceptPlayerOffer, rejectPlayerOffer } from "../services/player-offer-actions";
 import { mustSeason, currentSeasonSql } from "../lib/season";
-import { MAX_CLUB_NAME_LENGTH, NAME_TAKEN_ERROR, renameClub } from "../lib/club-rename";
+import { clubNameError, MAX_CLUB_NAME_LENGTH, NAME_TAKEN_ERROR, renameClub } from "../lib/club-rename";
 import { getSession, getTokenFromRequest } from "../auth/session";
 import { requireTeamOwnership, requireAdmin, requireOwnedTeamRead } from "../auth/middleware";
 import { buildPlayerView } from "../transfers/player-view";
@@ -2754,9 +2754,10 @@ gameRouter.post("/teams/:teamId/rename", async (c) => {
   const teamId = c.req.param("teamId");
   const { name } = await c.req.json<{ name: string }>();
 
-  if (typeof name !== "string" || name.trim().length < 2 || name.trim().length > MAX_CLUB_NAME_LENGTH) {
-    return c.json({ error: `Název musí mít 2-${MAX_CLUB_NAME_LENGTH} znaků` }, 400);
-  }
+  if (typeof name !== "string") return c.json({ error: `Název musí mít 2-${MAX_CLUB_NAME_LENGTH} znaků` }, 400);
+  // Jen písmena, číslice, mezery, tečka a pomlčka: název jde i do promptů AI trenérů (club-rename.ts).
+  const nameError = clubNameError(name);
+  if (nameError) return c.json({ error: nameError }, 400);
 
   // Check season limit
   const season = await c.env.DB.prepare("SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1")

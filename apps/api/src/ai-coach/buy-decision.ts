@@ -13,6 +13,7 @@
 import type { AiCoachProfile } from "./profile";
 import { MIN_PRICE } from "./valuation";
 import { styleText } from "./weekly-decision";
+import { promptName } from "./prompt-text";
 
 /** Kdo hráče prodává: klub ve hře (člověk, nebo AI trenér), klub mimo hru, nebo nikdo (volný hráč). */
 export type BuySeller = "human" | "ai" | "outside" | "none";
@@ -258,7 +259,7 @@ export function renderBuyPickPrompt(ctx: BuyPickContext): string {
   const lines: string[] = [
     ...personalityLines(ctx.profile),
     "",
-    `CLUB ${ctx.teamName}: budget ${czk(ctx.budget)}. You keep ${czk(ctx.reserve)} as a reserve for running costs, so you can spend at most ${czk(ctx.spendable)} on transfers.`,
+    `CLUB ${promptName(ctx.teamName)}: budget ${czk(ctx.budget)}. You keep ${czk(ctx.reserve)} as a reserve for running costs, so you can spend at most ${czk(ctx.spendable)} on transfers.`,
     `SQUAD: ${ctx.squadSize} senior players (you want about ${ctx.targetSquad}), your best eleven averages rating ${ctx.strength.toFixed(1)}. Ratings are on the game's own scale, not out of 100: compare them with your own players.`,
     course,
     `NEED: ${pos} (${n.position}), need ${n.need.toFixed(2)} on a 0-1 scale${n.missing > 0 ? `, ${n.missing} player(s) short of full depth` : ""}${n.upgrade ? ", the position is full: this is only an upgrade of the weakest starter, buy only if it is clearly worth the money" : ""}${n.fill ? ", your squad is below the size you want and in your Monday review you decided to fill it up: this is a squad player for the bench and rotation, do not overpay" : ""}, ${starters}. A signing improves the team from rating ${n.minRating} up.`,
@@ -406,7 +407,7 @@ function renderLoanNegotiationPrompt(ctx: BuyNegotiationContext, days: number): 
   const lines: string[] = [
     ...personalityLines(ctx.profile),
     "",
-    `CLUB ${ctx.teamName}: you can spend at most ${czk(ctx.spendable)} on transfers.`,
+    `CLUB ${promptName(ctx.teamName)}: you can spend at most ${czk(ctx.spendable)} on transfers.`,
     `LOAN TALKS: you asked ${SELLER_TEXT[ctx.seller]} to lend you ${playerText(ctx.player)}, estimated value ${czk(ctx.player.estimatedValue)}, for ${days} days.`,
     `- the loan fees you offered so far: ${ctx.ownBids.length ? ctx.ownBids.map(czk).join(", ") : "none"}`,
     `- the club now asks a loan fee of ${czk(ctx.ask)}`,
@@ -428,7 +429,7 @@ export function renderBuyNegotiationPrompt(ctx: BuyNegotiationContext): string {
   const lines: string[] = [
     ...personalityLines(ctx.profile),
     "",
-    `CLUB ${ctx.teamName}: you can spend at most ${czk(ctx.spendable)} on transfers.`,
+    `CLUB ${promptName(ctx.teamName)}: you can spend at most ${czk(ctx.spendable)} on transfers.`,
     `TALKS about ${playerText(ctx.player)}, estimated value ${czk(ctx.player.estimatedValue)}, with ${SELLER_TEXT[ctx.seller]}${ctx.listedPrice ? ` (transfer-listed for ${czk(ctx.listedPrice)})` : ""}.`,
     `- your offers so far: ${ctx.ownBids.length ? ctx.ownBids.map(czk).join(", ") : "none"}`,
     `- the seller now asks ${askText(ctx.ask, ctx.askTerms)}`,

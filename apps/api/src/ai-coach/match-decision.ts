@@ -17,6 +17,7 @@ import type { MatchPlayer } from "../engine/types";
 import { MAX_BENCH, validateBench } from "../lib/lineup-bench";
 import { validateMatchPlan } from "../lib/match-plan-validation";
 import { FORMATIONS, TACTICS, type AiCoachProfile, type Formation, type Tactic } from "./profile";
+import { promptName } from "./prompt-text";
 
 export type Slot = "GK" | "DEF" | "MID" | "FWD";
 export const SLOTS: readonly Slot[] = ["GK", "DEF", "MID", "FWD"];
@@ -725,8 +726,8 @@ export function renderMatchPrompt(ctx: MatchContext): string {
   lines.push(`Favourite tactic: ${p.favouriteTactic}. Favourite formations: ${p.favouriteFormations.join(", ")}.`);
   lines.push("");
   const kindText = f.kind === "league" ? `league match (${f.label})` : f.kind === "cup" ? `cup tie (${f.label}, knockout: a draw goes to penalties)` : `friendly match${f.stake > 0 ? ` with a ${f.stake} CZK bet on the result` : " (nothing at stake, good for rotation and testing youngsters)"}`;
-  lines.push(`MATCH: ${kindText}, ${f.isHome ? "HOME" : "AWAY"} vs ${f.opponentName}${f.isDerby ? " (local derby!)" : ""}.`);
-  lines.push(`Your team ${ctx.teamName}: ${ctx.own.position ? `table position ${ctx.own.position}/${ctx.own.teams}, ${ctx.own.points} pts` : "no table position yet"}, recent form ${ctx.own.form || "n/a"}, strength of best XI ${ctx.own.strength.toFixed(1)}.`);
+  lines.push(`MATCH: ${kindText}, ${f.isHome ? "HOME" : "AWAY"} vs ${promptName(f.opponentName)}${f.isDerby ? " (local derby!)" : ""}.`);
+  lines.push(`Your team ${promptName(ctx.teamName)}: ${ctx.own.position ? `table position ${ctx.own.position}/${ctx.own.teams}, ${ctx.own.points} pts` : "no table position yet"}, recent form ${ctx.own.form || "n/a"}, strength of best XI ${ctx.own.strength.toFixed(1)}.`);
   lines.push(`Opponent: ${ctx.opponent.position ? `table position ${ctx.opponent.position}` : "position n/a"}, recent form ${ctx.opponent.form || "n/a"}, strength ${ctx.opponent.strength === null ? "unknown" : ctx.opponent.strength.toFixed(1)}${ctx.opponent.bigClub ? " (a professional club far above your level)" : ""}.`);
   lines.push(`Weather: ${weatherText(ctx.weather)}. Pitch condition: ${ctx.pitchCondition ?? "n/a"}/100. Next competitive match: ${ctx.daysToNextMatch === null ? "not soon" : `in ${ctx.daysToNextMatch} day(s)`}.`);
   lines.push(`Referee strictness: ${ctx.refereeStrictness === null ? "unknown" : `${ctx.refereeStrictness}/100${ctx.refereeStrictness >= 65 ? " (strict, hard tackling gets punished)" : ctx.refereeStrictness <= 35 ? " (lenient, lets physical play go)" : ""}`}.`);

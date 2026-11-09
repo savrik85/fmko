@@ -16,6 +16,7 @@ import { cleanReason, czk, isRecord } from "./buy-decision";
 import { FAVOR_TEXT, OWNER_TEXT } from "./main-sponsor-decision";
 import type { AiCoachProfile } from "./profile";
 import { styleText } from "./weekly-decision";
+import { promptName } from "./prompt-text";
 
 /** Nejnižší úroveň VIP lóže, se kterou AI klub zve. */
 export const MIN_VIP_BOX_LEVEL = 1;
@@ -115,8 +116,8 @@ export function renderInvitePrompt(c: InviteContext): string {
     `ambition ${p.ambition}, thrift ${p.thrift}, risk ${p.risk}, patience ${p.patience}, youth focus ${p.youthFocus}.`,
     `YOUR STYLE: ${styleText(p)}`,
     "",
-    `CLUB ${c.teamName}: budget ${czk(c.budget)}; gifts may cost at most ${czk(c.spendable)} this week, the rest is your reserve.`,
-    `NEXT HOME MATCH: ${weekday(c.match.day)} ${c.match.day} against ${c.match.opponentName}, in ${c.match.daysAhead} day${c.match.daysAhead === 1 ? "" : "s"}.`
+    `CLUB ${promptName(c.teamName)}: budget ${czk(c.budget)}; gifts may cost at most ${czk(c.spendable)} this week, the rest is your reserve.`,
+    `NEXT HOME MATCH: ${weekday(c.match.day)} ${c.match.day} against ${promptName(c.match.opponentName)}, in ${c.match.daysAhead} day${c.match.daysAhead === 1 ? "" : "s"}.`
       + ` You lost ${c.recentLosses} of your last 5 matches.`,
     `YOUR VIP BOX (level ${c.vipBoxLevel}) has room for ${guests} at this match. An owner invited to the box accepts more often`
       + ` (+${c.vipAcceptancePoints} percentage points) and gains ${c.vipFavorBonus} more favour after the match.`,

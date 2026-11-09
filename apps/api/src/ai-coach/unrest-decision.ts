@@ -13,6 +13,7 @@ import type { UnrestReason } from "../transfers/unrest-reasons";
 import type { AiCoachProfile } from "./profile";
 import type { SquadImportance } from "./valuation";
 import { styleText } from "./weekly-decision";
+import { promptName } from "./prompt-text";
 
 export type UnrestChoice = UnrestActionId | "wait";
 
@@ -170,7 +171,7 @@ export function renderUnrestPrompt(ctx: UnrestDecisionContext): string {
     `ambition ${p.ambition}, thrift ${p.thrift}, youth focus ${p.youthFocus}, risk ${p.risk}, patience ${p.patience}, trading ${p.trading}.`,
     `YOUR STYLE: ${styleText(p)}`,
     "",
-    `CLUB ${ctx.teamName}: budget ${czk(ctx.budget)}; you keep ${czk(ctx.reserve)} as a reserve for running costs, so ${czk(ctx.spendable)} is free to spend. Your best eleven averages rating ${ctx.top11Average.toFixed(1)}.`,
+    `CLUB ${promptName(ctx.teamName)}: budget ${czk(ctx.budget)}; you keep ${czk(ctx.reserve)} as a reserve for running costs, so ${czk(ctx.spendable)} is free to spend. Your best eleven averages rating ${ctx.top11Average.toFixed(1)}.`,
     "",
     "UNHAPPY PLAYERS:",
     ...ctx.players.flatMap((pl) => [...playerLines(pl), ""]),

@@ -12,6 +12,7 @@
 import type { AiCoachProfile } from "./profile";
 import { MIN_PRICE, type SquadImportance } from "./valuation";
 import { styleText } from "./weekly-decision";
+import { promptName } from "./prompt-text";
 
 const ceil100 = (v: number) => Math.ceil(v / 100) * 100;
 
@@ -69,7 +70,7 @@ export function renderPromiseListingPrompt(ctx: PromiseListingContext): string {
     `ambition ${p.ambition}, thrift ${p.thrift}, youth focus ${p.youthFocus}, risk ${p.risk}, patience ${p.patience}, trading ${p.trading}.`,
     `YOUR STYLE: ${styleText(p)}`,
     "",
-    `CLUB ${ctx.teamName}: budget ${czk(ctx.budget)}, of which ${czk(ctx.spendable)} is free to spend.`,
+    `CLUB ${promptName(ctx.teamName)}: budget ${czk(ctx.budget)}, of which ${czk(ctx.spendable)} is free to spend.`,
     `PLAYER you promised to sell: ${pl.position}, age ${pl.age}, rating ${Math.round(pl.rating)}, ${IMPORTANCE_TEXT[pl.importance]}; market value ${czk(pl.marketValue)}. The promise runs for ${ctx.daysLeft} more day${ctx.daysLeft === 1 ? "" : "s"}.`,
     `The listing is public for 7 days. A club that offers the asking price gets him at once; lower offers you will answer one by one, never below his market value.`,
     `Asking price between ${czk(ctx.minPrice)} and ${czk(ctx.maxPrice)}, in whole hundreds.`,

@@ -17,6 +17,7 @@ import type { AkceTrestu } from "../incidents/typy";
 import type { AiCoachProfile } from "./profile";
 import type { SquadImportance } from "./valuation";
 import { styleText } from "./weekly-decision";
+import { promptName } from "./prompt-text";
 
 export type IncidentStage = "investigate" | "punish" | "advance" | "threat";
 
@@ -396,7 +397,7 @@ export function renderIncidentPrompt(ctx: IncidentDecisionContext): string {
     `ambition ${p.ambition}, thrift ${p.thrift}, risk ${p.risk}, patience ${p.patience}, youth focus ${p.youthFocus}.`,
     `YOUR STYLE: ${styleText(p)}`,
     "",
-    `CLUB ${club.teamName}: budget ${czk(club.budget)} (you like to keep at least ${czk(club.reserve)} in reserve), ${club.squadSize} players in the squad, ${plural(club.matchesNext7Days, "competitive match")} in the next 7 days.`,
+    `CLUB ${promptName(club.teamName)}: budget ${czk(club.budget)} (you like to keep at least ${czk(club.reserve)} in reserve), ${club.squadSize} players in the squad, ${plural(club.matchesNext7Days, "competitive match")} in the next 7 days.`,
     "",
   ];
   if (facts.stage === "advance") {

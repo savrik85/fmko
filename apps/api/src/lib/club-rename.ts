@@ -19,6 +19,19 @@ const M = "club-rename";
 /** Nejdelší název klubu, který si manažer může zvolit (ruční přejmenování i zkratka). */
 export const MAX_CLUB_NAME_LENGTH = 50;
 
+/**
+ * Název, který si manažer volí sám, smí mít jen písmena, číslice, mezery, tečku a pomlčku.
+ * Název jde do promptů AI trenérů (soupeř v zápase, výzva na přátelák): jiné znaky v něm
+ * nemají co dělat. Staré názvy a názvy po sponzorovi se nemění, do promptu se čistí samy.
+ */
+export function clubNameError(name: string): string | null {
+  const trimmed = name.trim();
+  if (trimmed.length < 2 || trimmed.length > MAX_CLUB_NAME_LENGTH) return `Název musí mít 2-${MAX_CLUB_NAME_LENGTH} znaků`;
+  if (/[^\p{L}\p{N} .\-]/u.test(trimmed.normalize("NFC"))) return "Název smí mít jen písmena, číslice, mezery, tečku a pomlčku";
+  if (!/\p{L}/u.test(trimmed)) return "Název musí obsahovat aspoň jedno písmeno";
+  return null;
+}
+
 /** Kolik starých adres webu si klub pamatuje. Víc by šlo zneužít k zabírání adres přejmenováváním. */
 export const MAX_SLUG_ALIASES = 3;
 

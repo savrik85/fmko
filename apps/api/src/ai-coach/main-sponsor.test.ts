@@ -112,7 +112,7 @@ describe("výběr hlavního sponzora modelem", () => {
 
   it("bez tabulky a financí z pondělní správy popis jen vynechá", () => {
     const prompt = renderMainSponsorPrompt(context({ league: null, weeklyRunningCost: null, weeklyIncome: null }));
-    expect(prompt).toContain("CLUB Sokol Testov: reputation 45/100.");
+    expect(prompt).toContain('CLUB "Sokol Testov": reputation 45/100.');
     expect(prompt).toContain("MONEY: budget 80,000 CZK.");
     expect(prompt).not.toContain("Weekly running costs");
   });

@@ -12,6 +12,7 @@
 import type { OfferSource } from "../events/player-offers";
 import type { AiCoachProfile } from "./profile";
 import { styleText } from "./weekly-decision";
+import { promptName } from "./prompt-text";
 
 export type PlayerOfferChoice = "sign" | "decline";
 export const PLAYER_OFFER_CHOICES: readonly PlayerOfferChoice[] = ["sign", "decline"];
@@ -143,7 +144,7 @@ export function renderPlayerOfferPrompt(ctx: PlayerOfferContext): string {
     `ambition ${p.ambition}, thrift ${p.thrift}, youth focus ${p.youthFocus}, risk ${p.risk}, patience ${p.patience}, trading ${p.trading}.`,
     `YOUR STYLE: ${styleText(p)}`,
     "",
-    `CLUB ${ctx.teamName}: budget ${czk(ctx.budget)}; you keep ${czk(ctx.reserve)} as a reserve for running costs, so ${czk(ctx.spendable)} is free to spend. Weekly running costs about ${czk(ctx.weeklyCosts)}.`,
+    `CLUB ${promptName(ctx.teamName)}: budget ${czk(ctx.budget)}; you keep ${czk(ctx.reserve)} as a reserve for running costs, so ${czk(ctx.spendable)} is free to spend. Weekly running costs about ${czk(ctx.weeklyCosts)}.`,
     `SQUAD: ${ctx.squadSize} first-team players (you want about ${ctx.targetSquad}, the limit is ${ctx.maxSquad}); formation ${ctx.formation}; your best eleven averages rating ${ctx.top11Average.toFixed(1)}.`,
     "",
     `OFFERS (a local player who would like to join you; signing costs a one-off ${czk(ctx.signingFee)} registration fee and then his weekly wage):`,
