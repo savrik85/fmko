@@ -1743,8 +1743,30 @@ export type SignFreeAgentResult = TransferActionResult<{
   player?: Record<string, unknown> | null;
 }>;
 
+/** Nejnižší mzda, kterou volný hráč vůbec zváží: podíl jeho požadavku. */
+export const FREE_AGENT_MIN_WAGE_SHARE = 0.8;
+
+/**
+ * Mzda, se kterou se o podpisu rozhoduje a která se hráči zapíše. Klient ji posílá v těle
+ * požadavku, takže se ověřuje proti požadavku hráče: dřív prošla i nula nebo záporné číslo
+ * a hráč pak hrál zadarmo. Bez udané mzdy platí požadavek hráče. Celebrita o mzdě nejedná.
+ */
+export function resolveFreeAgentWage(
+  offered: unknown, askedWage: number, isCelebrity: boolean,
+): { ok: true; wage: number } | { ok: false; error: string } {
+  const asked = Math.max(0, Math.round(Number(askedWage) || 0));
+  if (isCelebrity || offered == null) return { ok: true, wage: asked };
+  if (typeof offered !== "number" || !Number.isInteger(offered)) return { ok: false, error: "Mzda musí být celé číslo." };
+  const minWage = Math.ceil(asked * FREE_AGENT_MIN_WAGE_SHARE);
+  if (offered < minWage) {
+    return { ok: false, error: `Hráč chce ${asked.toLocaleString("cs")} Kč týdně. Pod ${minWage.toLocaleString("cs")} Kč s tebou jednat nebude.` };
+  }
+  if (offered > MAX_TRANSFER_AMOUNT) return { ok: false, error: "Mzda je příliš vysoká." };
+  return { ok: true, wage: offered };
+}
+
 /** POST /teams/:teamId/free-agents/:faId/sign — podpis volného hráče (rozhoduje hráč). */
-export async function signFreeAgent(env: Bindings, teamId: string, faId: string, offeredWage: number): Promise<SignFreeAgentResult> {
+export async function signFreeAgent(env: Bindings, teamId: string, faId: string, offeredWageInput: number | null | undefined): Promise<SignFreeAgentResult> {
   const db = env.DB;
   const team = await db.prepare(
     "SELECT t.*, v.lat, v.lng, v.district FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?"
@@ -1753,6 +1775,9 @@ export async function signFreeAgent(env: Bindings, teamId: string, faId: string,
 
   const fa = await db.prepare("SELECT * FROM free_agents WHERE id = ?").bind(faId).first<Record<string, unknown>>();
   if (!fa) return fail(404, "Volný hráč nenalezen");
+  const wageCheck = resolveFreeAgentWage(offeredWageInput, fa.weekly_wage as number, !!fa.is_celebrity);
+  if (!wageCheck.ok) return fail(400, wageCheck.error);
+  const offeredWage = wageCheck.wage;
 
   // Hráč z jiného okresu propuštěný dalším klubem téhož majitele: propuštění a podpis
   // by přesunuly hráče mezi vlastními kluby bez přestupu, mimo dohled soutěže.

@@ -5059,7 +5059,7 @@ gameRouter.get("/teams/:teamId/search-players", async (c) => {
 
 // Sign free agent (pravidla v services/transfer-actions.ts, platí i pro AI trenéra)
 gameRouter.post("/teams/:teamId/free-agents/:faId/sign", async (c) => {
-  const body = await c.req.json<{ offeredWage: number }>();
+  const body = await c.req.json<{ offeredWage?: number | null }>();
   const res = await signFreeAgent(c.env, c.req.param("teamId"), c.req.param("faId"), body.offeredWage);
   if (!res.ok) return transferError(c, res);
   const { ok: _ok, ...result } = res;
