@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { weatherForDay, winternessForDate } from "../season/season-weather";
 import { cupTieWeather, loadRoundMatches } from "./cup";
 
 /**
@@ -37,13 +38,12 @@ function fakeDb(pravidla: Array<{ vzor: RegExp; radky: Radek[] }>): D1Database {
   return { prepare: (sql: string) => stmt(sql) } as unknown as D1Database;
 }
 
-const HRANICE = { season_start: "2026-07-04T16:00:00.000Z", season_end: "2026-11-02T17:00:00.000Z" };
-/** Půlka sezóny = zima. Tenhle den měl na produkci sníh, pohár dostal "cloudy". */
-const DEN_ZAPASU = "2026-08-29T16:00:00.000Z";
+/** První lednový den se sněhem (počasí se řídí dnem v roce): pozná se od výchozího "cloudy". */
+const DEN_ZAPASU = Array.from({ length: 31 }, (_, i) => `2027-01-${String(i + 1).padStart(2, "0")}T17:00:00.000Z`)
+  .find((iso) => weatherForDay(iso, winternessForDate(iso)).weather === "snow")!;
 
 const cupDb = (radky: Radek[]) => fakeDb([
   { vzor: /FROM cup_matches/, radky },
-  { vzor: /FROM teams/, radky: [HRANICE] },
 ]);
 
 describe("počasí pohárového kola", () => {
@@ -72,8 +72,8 @@ describe("počasí pohárového kola", () => {
     expect(await cupTieWeather(db, undefined, "m1")).toBe("cloudy");
   });
 
-  it("bez hranic sezóny taky spadne na zataženo", async () => {
+  it("počasí dne nepotřebuje hranice sezóny v databázi", async () => {
     const db = fakeDb([]);
-    expect(await cupTieWeather(db, DEN_ZAPASU, "m1")).toBe("cloudy");
+    expect(await cupTieWeather(db, DEN_ZAPASU, "m1")).toBe("snow");
   });
 });

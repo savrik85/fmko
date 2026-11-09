@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveWeatherForMatchKey } from "./season-weather";
+import { resolveWeatherForMatchKey, weatherForDay, winternessForDate } from "./season-weather";
 
 /**
  * Počasí zápasu, ať leží kdekoli.
@@ -23,12 +23,11 @@ function fakeDb(pravidla: Array<{ vzor: RegExp; radek: Radek | null }>): D1Datab
   return { prepare: (sql: string) => stmt(sql) } as unknown as D1Database;
 }
 
-const HRANICE = { season_start: "2026-07-04T16:00:00.000Z", season_end: "2026-11-02T17:00:00.000Z" };
-/** Půlka sezóny — zima. Tenhle den má sníh, takže se pozná od prázdné hodnoty. */
-const DEN = "2026-08-29T16:00:00.000Z";
+/** První lednový den se sněhem: sníh se pozná od prázdné hodnoty i od výchozího „zataženo". */
+const DEN = Array.from({ length: 31 }, (_, i) => `2027-01-${String(i + 1).padStart(2, "0")}T17:00:00.000Z`)
+  .find((iso) => weatherForDay(iso, winternessForDate(iso)).weather === "snow")!;
 
 const db = (kde: "liga" | "pohar" | "pratelak" | "nikde") => fakeDb([
-  { vzor: /FROM teams/, radek: HRANICE },
   { vzor: /FROM season_calendar WHERE id/, radek: kde === "liga" ? { scheduled_at: DEN } : null },
   { vzor: /FROM cup_matches WHERE id/, radek: kde === "pohar" ? { scheduled_at: DEN } : null },
   { vzor: /FROM matches WHERE id/, radek: kde === "pratelak" ? { created_at: DEN } : null },

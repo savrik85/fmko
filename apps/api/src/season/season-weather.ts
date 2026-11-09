@@ -1,10 +1,11 @@
 /**
- * Počasí podle průběhu sezóny.
+ * Počasí podle dne v roce.
  *
- * Sezóna začíná i končí v létě a uprostřed je zima. Kalendářní měsíc se
- * záměrně neptáme: sezóny v datech startují pokaždé jindy (duben, červenec,
- * dvakrát srpen), takže vázat počasí na datum dávalo nesmysly — sníh v srpnu
- * a žně uprostřed mrazů.
+ * Herní datum je rovné skutečnému, takže zima je v zimě a léto v létě: nejchladněji
+ * je v půlce ledna, nejtepleji v půlce července. Dřív se zimavost počítala z pozice
+ * mezi začátkem a koncem sezóny (oba konce léto, uprostřed zima). To dávalo smysl,
+ * dokud herní čas běžel jinak než skutečný; se sezónou od října do ledna pak na
+ * konci ledna vycházelo 23 °C.
  *
  * Determinismus je podmínka, ne pohodlí. Předpověď u nadcházejícího zápasu,
  * SMS s omluvenkami i simulace musí dostat **stejné** počasí, jinak hra hráči
@@ -34,24 +35,29 @@ export function winternessAt(postup: number): number {
   return (1 - Math.cos(2 * Math.PI * p)) / 2;
 }
 
+/** Den v roce, kdy je nejchladněji (15. ledna). Nejtepleji je o půl roku později. */
+const COLDEST_DAY_OF_YEAR = 15;
+const DAYS_IN_YEAR = 365.25;
+
 /**
- * Zimavost pro konkrétní den podle jeho pozice v sezóně.
+ * Zimavost konkrétního dne podle dne v roce jeho (herního) data. 1 = půlka ledna,
+ * 0 = půlka července. Nečitelné datum vrací 0.
  *
  * Tohle je základ celého systému: počasí je vlastnost DNE, ne zápasu. Trénink
  * ve čtvrtek i zápas v neděli si sáhnou na stejnou funkci a dostanou počasí
  * svého dne.
  */
-export function winternessForDate(isoDate: string, seasonStart: string, seasonEnd: string): number {
-  const d = Date.parse(isoDate);
-  const a = Date.parse(seasonStart);
-  const b = Date.parse(seasonEnd);
-  if (!Number.isFinite(d) || !Number.isFinite(a) || !Number.isFinite(b) || b <= a) return 0;
-  return winternessAt((d - a) / (b - a));
+export function winternessForDate(isoDate: string): number {
+  const t = Date.parse(isoDate);
+  if (!Number.isFinite(t)) return 0;
+  const d = new Date(t);
+  const dayOfYear = (Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) - Date.UTC(d.getUTCFullYear(), 0, 1)) / 86400000 + 1;
+  return (1 + Math.cos(2 * Math.PI * (dayOfYear - COLDEST_DAY_OF_YEAR) / DAYS_IN_YEAR)) / 2;
 }
 
 /**
- * Jak hluboko v zimě dané kolo je. Zachováno pro testy oblouku; produkční cesta
- * jde přes `winternessForDate`, aby počasí měly i dny bez zápasu.
+ * Zimavost podle pořadí kola v sezóně (oba konce léto, uprostřed zima). Zachováno jen
+ * pro `roundWeather` a testy vah; produkční cesta jde přes `winternessForDate`.
  */
 export function seasonWinterness(gameWeek: number, totalWeeks: number): number {
   if (!Number.isFinite(gameWeek) || !Number.isFinite(totalWeeks) || totalWeeks <= 1) return 0;
@@ -60,7 +66,7 @@ export function seasonWinterness(gameWeek: number, totalWeeks: number): number {
   return (1 - Math.cos(2 * Math.PI * postup)) / 2;
 }
 
-/** Průměrná teplota fáze: 24 °C na koncích sezóny, −2 °C uprostřed. */
+/** Průměrná teplota podle zimavosti: 24 °C v půlce července, −2 °C v půlce ledna. */
 export function seasonTemperature(winterness: number): number {
   const z = Math.max(0, Math.min(1, winterness));
   return TEMP_STRED + TEMP_AMPLITUDA * (1 - 2 * z);
@@ -124,44 +130,13 @@ export function weatherForDay(isoDate: string, winterness: number): RoundWeather
     if (roll < cumulative) { weather = key; break; }
   }
 
-  return { weather, temperature: Math.round(seasonTemperature(winterness)) };
+  // „+ 0" převádí −0 (zaokrouhlené −0,3 °C) na obyčejnou nulu.
+  return { weather, temperature: Math.round(seasonTemperature(winterness)) + 0 };
 }
 
 /** Zpětně kompatibilní obal — počasí kola je prostě počasí jeho dne. */
 export function roundWeather(calendarId: string, gameWeek: number, totalWeeks: number): RoundWeather {
   return weatherForDay(`${calendarId}|${gameWeek}`, seasonWinterness(gameWeek, totalWeeks));
-}
-
-/** Kolik dní před prvním kolem začíná sezóna — rollover klade start do předsezóny. */
-const PREDSEZONA_DNI = 7;
-
-/** Hranice aktuální sezóny. Jsou pro celý svět stejné, stačí je vzít z libovolného týmu. */
-async function seasonBounds(db: D1Database): Promise<{ start: string; end: string } | null> {
-  const row = await db.prepare(
-    "SELECT season_start, season_end FROM teams WHERE season_start IS NOT NULL AND season_end IS NOT NULL LIMIT 1",
-  ).first<{ season_start: string; season_end: string }>().catch((e) => {
-    logger.warn({ module: "season-weather" }, "hranice sezóny z teams se nenačetly", e);
-    return null;
-  });
-  if (row) return { start: row.season_start, end: row.season_end };
-
-  // Záloha z kalendáře. `teams.season_start/season_end` plní JEDINÉ místo v kódu —
-  // rollover (`season-rollover.ts`) — takže čerstvě naseedovaný svět je má prázdné
-  // a bez tohohle by neměl počasí vůbec: ani v hlavičce, ani v předpovědi u zápasu,
-  // ani v poptávce bufetu. Kalendář existuje od seedu, oblouk sezóny jde odvodit z něj.
-  const cal = await db.prepare(
-    `SELECT MIN(scheduled_at) AS prvni, MAX(scheduled_at) AS posledni FROM season_calendar
-     WHERE season_number = (SELECT MAX(season_number) FROM season_calendar)`,
-  ).first<{ prvni: string | null; posledni: string | null }>().catch((e) => {
-    logger.warn({ module: "season-weather" }, "hranice sezóny z kalendáře se nenačetly", e);
-    return null;
-  });
-  if (!cal?.prvni || !cal?.posledni) return null;
-
-  const prvniKolo = Date.parse(cal.prvni);
-  if (!Number.isFinite(prvniKolo)) return null;
-  // Start týden před prvním kolem, ať oblouk vyjde stejně, ať hranice přišly odkudkoli.
-  return { start: new Date(prvniKolo - PREDSEZONA_DNI * 86400000).toISOString(), end: cal.posledni };
 }
 
 /**
@@ -175,10 +150,10 @@ export async function resolveWeatherForDate(
   db: D1Database,
   isoDate: string,
 ): Promise<RoundWeather | null> {
-  if (!isoDate) return null;
-  const bounds = await seasonBounds(db);
-  if (!bounds) return null;
-  return weatherForDay(isoDate, winternessForDate(isoDate, bounds.start, bounds.end));
+  // `db` zůstává v podpisu: volající ho předávají a počasí se tu dřív počítalo z hranic sezóny.
+  void db;
+  if (!isoDate || !Number.isFinite(Date.parse(isoDate))) return null;
+  return weatherForDay(isoDate, winternessForDate(isoDate));
 }
 
 /** Počasí kola = počasí dne, na který je kolo naplánované. */
