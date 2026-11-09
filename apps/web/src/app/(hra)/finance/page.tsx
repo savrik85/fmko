@@ -7,6 +7,7 @@ import { apiFetch } from "@/lib/api";
 import { sponsorTypeIcon, sponsorTypeLabel } from "@/lib/sponsor-types";
 import { Spinner, SectionLabel, PositionBadge, Tabs, useTabParam } from "@/components/ui";
 import { TXN_ICONS, TXN_LABELS } from "@/lib/transaction-labels";
+import { weeksText } from "@/lib/weeks-text";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Typy
@@ -275,9 +276,11 @@ function OverviewTab({ data, transactions, txnTotal, txnFilter, onFilter }: {
           <StatBox label="Zbývá zápasů" value={String(data.remainingMatches)} />
           <StatBox label="Za 4 týdny" value={formatCZK(data.forecast.in4Weeks)} colorRed={data.forecast.in4Weeks < 0} />
           <StatBox label="Na konci sezóny" value={formatCZK(data.forecast.inSeason)} colorRed={data.forecast.inSeason < 0} />
+          {/* Bankrot ve hře není: v mínusu se jen zablokují nákupy a investice. */}
           <StatBox
-            label="Bankrot za"
-            value={data.forecast.weeksUntilBankrupt != null ? `${data.forecast.weeksUntilBankrupt} týd` : "—"}
+            label="Peníze dojdou"
+            value={data.forecast.weeksUntilBankrupt != null ? `za ${weeksText(data.forecast.weeksUntilBankrupt)}` : "nehrozí"}
+            sub={data.forecast.weeksUntilBankrupt != null ? "pak se zablokují nákupy" : undefined}
             colorRed={data.forecast.weeksUntilBankrupt != null}
           />
         </div>
@@ -568,12 +571,19 @@ function ForecastTab({ data }: { data: BudgetData }) {
         <MetricCard label="Za 4 týdny" value={formatCZK(data.forecast.in4Weeks)} color={data.forecast.in4Weeks < 0 ? "text-card-red" : "text-ink"} />
         <MetricCard label="Na konci sezóny" value={formatCZK(data.forecast.inSeason)} color={data.forecast.inSeason < 0 ? "text-card-red" : "text-ink"} />
         <MetricCard
-          label="Bankrot za"
-          value={data.forecast.weeksUntilBankrupt != null ? `${data.forecast.weeksUntilBankrupt} týd` : "—"}
+          label="Peníze dojdou"
+          value={data.forecast.weeksUntilBankrupt != null ? `za ${weeksText(data.forecast.weeksUntilBankrupt)}` : "nehrozí"}
           color={data.forecast.weeksUntilBankrupt != null ? "text-card-red" : "text-muted"}
-          sub={data.forecast.weeksUntilBankrupt != null ? "hrozí záporný rozpočet" : "stabilní hospodaření"}
+          sub={data.forecast.weeksUntilBankrupt != null ? "rozpočet spadne do mínusu" : "stabilní hospodaření"}
         />
       </div>
+
+      {data.forecast.weeksUntilBankrupt != null && (
+        <p className="text-sm text-muted leading-snug">
+          Klub v mínusu nekončí. Mzdy a provoz se platí dál, ale dokud rozpočet nevyrovnáš,
+          zablokují se nákupy a investice: přestupy, stavby, vybavení i inzeráty.
+        </p>
+      )}
 
       <div className="card p-4 sm:p-5">
         <SectionLabel>Předpoklady výpočtu</SectionLabel>

@@ -783,7 +783,8 @@ gameRouter.get("/teams/:teamId/budget", async (c) => {
   const in4Weeks = forecastSeries[4]?.budget ?? (team.budget as number);
   const inSeason = forecastSeries[Math.min(seasonWeeksLeft, horizon)]?.budget ?? (team.budget as number);
 
-  // Bankrot: první týden kde budget < 0
+  // První týden, kdy prognóza spadne pod nulu. Bankrot ve hře není, v mínusu se jen
+  // zablokují nákupy (PURCHASE_TYPES). Název pole zůstává kvůli klientům.
   const bankruptIdx = forecastSeries.findIndex((p, i) => i > 0 && p.budget < 0);
   const weeksUntilBankrupt = bankruptIdx > 0 ? bankruptIdx : null;
 
