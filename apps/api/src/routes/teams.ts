@@ -243,11 +243,23 @@ teamsRouter.post("/", async (c) => {
     : (village.population as number) > 1000 ? 40000 : 20000;
 
   step = "insert-team";
-  await c.env.DB.prepare(
-    "INSERT INTO teams (id, user_id, village_id, name, primary_color, secondary_color, budget, jersey_pattern, badge_pattern, stadium_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-  ).bind(teamId, userId, body.villageId, body.name,
-    body.primaryColor ?? "#2D5F2D", body.secondaryColor ?? "#FFFFFF", budget,
-    body.jerseyPattern ?? "solid", body.badgePattern ?? "shield", body.stadiumName ?? null).run();
+  // Podmínka „ještě žádné áčko nemá“ je součástí INSERTu: dva souběžné požadavky
+  // (dvojklik, dvě záložky) dřív oba prošly kontrolou výše a založily dva kluby.
+  const { insertHumanTeamOnce } = await import("../lib/insert-human-team");
+  const inserted = await insertHumanTeamOnce(c.env.DB, {
+    id: teamId, userId, villageId: body.villageId, name: body.name,
+    primaryColor: body.primaryColor ?? "#2D5F2D", secondaryColor: body.secondaryColor ?? "#FFFFFF", budget,
+    jerseyPattern: body.jerseyPattern ?? "solid", badgePattern: body.badgePattern ?? "shield",
+    stadiumName: body.stadiumName ?? null,
+  });
+  if (!inserted) {
+    const raced = await c.env.DB.prepare(
+      "SELECT id, name FROM teams WHERE user_id = ? AND COALESCE(team_type, 'senior') <> 'u21' LIMIT 1"
+    ).bind(userId).first<{ id: string; name: string }>();
+    logger.info({ module: "teams" }, `souběžné založení klubu: userId=${userId}, vrací se ${raced?.id ?? "nic"}`);
+    if (!raced) return c.json({ error: "Klub se nepodařilo založit, zkus to prosím znovu." }, 409);
+    return c.json({ id: raced.id, name: raced.name, existing: true }, 200);
+  }
 
   // Sponzora při zakládání klubu už nevybíráme: hlavního sponzora i stadion si klub vyjedná ve hře
   // (stránka Sponzoři). Starší klient může pole `sponsor` ještě poslat, ignoruje se.
