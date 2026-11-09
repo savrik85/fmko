@@ -260,38 +260,67 @@ staffRouter.post("/teams/:teamId/staff/:staffId/reassign", async (c) => {
   return c.json({ ok: true });
 });
 
-/** POST /teams/:teamId/staff/:staffId/course { attribute } — pošle zaměstnance na kurz. */
-staffRouter.post("/teams/:teamId/staff/:staffId/course", async (c) => {
-  const teamId = c.req.param("teamId");
-  const staffId = c.req.param("staffId");
-  const body = await c.req.json<{ attribute?: string }>().catch(() => ({} as { attribute?: string }));
-  const attribute = body.attribute as StaffAttributeKey | undefined;
-  if (!attribute || !ATTR_COLUMNS.includes(attribute)) return c.json({ error: "Neplatný atribut" }, 400);
+export type StartCourseResult =
+  | { ok: true; course: { attribute: StaffAttributeKey; points: number; weeks: number; cost: number } }
+  | { ok: false; status: 400 | 404 | 409; error: string };
 
-  const row = await c.env.DB.prepare(`SELECT ${STAFF_COLS} FROM staff_members WHERE id = ? AND team_id = ?`)
+/**
+ * Pošle zaměstnance na kurz. Kontrola „už je na kurzu“ je součástí zápisu (podmíněný UPDATE)
+ * a platí se až po něm: dřív se četlo, pak zapsalo a zaplatilo zvlášť, takže dvojklik
+ * (dva souběžné požadavky) zaplatil kurz dvakrát.
+ */
+export async function startStaffCourse(db: D1Database, teamId: string, staffId: string, rawAttribute: unknown): Promise<StartCourseResult> {
+  const attribute = rawAttribute as StaffAttributeKey | undefined;
+  if (!attribute || !ATTR_COLUMNS.includes(attribute)) return { ok: false, status: 400, error: "Neplatný atribut" };
+
+  const row = await db.prepare(`SELECT ${STAFF_COLS} FROM staff_members WHERE id = ? AND team_id = ?`)
     .bind(staffId, teamId).first<StaffRow>()
     .catch((e) => { logger.warn({ module: "staff" }, "course load staff", e); return null; });
-  if (!row) return c.json({ error: "Zaměstnanec nenalezen" }, 404);
-  if (row.course_attribute) return c.json({ error: "Zaměstnanec už je na kurzu." }, 409);
+  if (!row) return { ok: false, status: 404, error: "Zaměstnanec nenalezen" };
+  if (row.course_attribute) return { ok: false, status: 409, error: "Zaměstnanec už je na kurzu." };
 
   const current = (row as unknown as Record<string, number>)[attribute];
   const quote = computeCourse(current);
-  if (!quote) return c.json({ error: "Tenhle atribut je už na maximu (20)." }, 400);
+  if (!quote) return { ok: false, status: 400, error: "Tenhle atribut je už na maximu (20)." };
 
-  const allowed = await assertPurchaseAllowed(c.env.DB, teamId, quote.cost);
-  if (!allowed.ok) return c.json({ error: allowed.reason }, 400);
+  const allowed = await assertPurchaseAllowed(db, teamId, quote.cost);
+  if (!allowed.ok) return { ok: false, status: 400, error: allowed.reason };
 
-  const gameDate = await loadGameDate(c.env.DB, teamId);
+  const gameDate = await loadGameDate(db, teamId);
 
-  await c.env.DB.prepare(
-    "UPDATE staff_members SET course_attribute = ?, course_points = ?, course_weeks_remaining = ? WHERE id = ? AND team_id = ?"
-  ).bind(attribute, quote.points, quote.weeks, staffId, teamId).run()
+  // Nárok atomicky: kurz zapíše jen ten požadavek, který zaměstnance zastihl bez kurzu
+  // a s hodnotou atributu, ze které se počítala cena
+  const claim = await db.prepare(
+    `UPDATE staff_members SET course_attribute = ?, course_points = ?, course_weeks_remaining = ?
+      WHERE id = ? AND team_id = ? AND course_attribute IS NULL AND ${attribute} = ?`,
+  ).bind(attribute, quote.points, quote.weeks, staffId, teamId, current).run()
     .catch((e) => { logger.error({ module: "staff" }, "course start failed", e); throw e; });
+  if (claim.meta.changes !== 1) return { ok: false, status: 409, error: "Zaměstnanec už je na kurzu." };
 
-  await recordTransaction(c.env.DB, teamId, "course_fee", -quote.cost,
-    `Kurz (${STAFF_ATTRIBUTE_LABELS[attribute as StaffAttributeKey] ?? attribute}) pro ${row.first_name} ${row.last_name}`, gameDate, staffId);
+  try {
+    await recordTransaction(db, teamId, "course_fee", -quote.cost,
+      `Kurz (${STAFF_ATTRIBUTE_LABELS[attribute as StaffAttributeKey] ?? attribute}) pro ${row.first_name} ${row.last_name}`, gameDate, staffId);
+  } catch (e) {
+    // Platba neprošla (rozpočet mezitím spadl do mínusu): kurz bez zaplacení nesmí zůstat
+    logger.error({ module: "staff", teamId, staffId }, "platba kurzu selhala, kurz se ruší", e);
+    await db.prepare(
+      "UPDATE staff_members SET course_attribute = NULL, course_points = NULL, course_weeks_remaining = NULL WHERE id = ? AND team_id = ? AND course_attribute = ?",
+    ).bind(staffId, teamId, attribute).run()
+      .catch((e2) => logger.error({ module: "staff", teamId, staffId }, "zrušení nezaplaceného kurzu", e2));
+    return { ok: false, status: 409, error: "Kurz se nepodařilo zaplatit." };
+  }
+  return { ok: true, course: { attribute, ...quote } };
+}
 
-  return c.json({ ok: true, course: { attribute, ...quote } });
+/** POST /teams/:teamId/staff/:staffId/course { attribute } — pošle zaměstnance na kurz. */
+staffRouter.post("/teams/:teamId/staff/:staffId/course", async (c) => {
+  const body = await c.req.json<{ attribute?: string }>().catch((e) => {
+    logger.warn({ module: "staff" }, "course body", e);
+    return {} as { attribute?: string };
+  });
+  const res = await startStaffCourse(c.env.DB, c.req.param("teamId"), c.req.param("staffId"), body.attribute);
+  if (!res.ok) return c.json({ error: res.error }, res.status);
+  return c.json({ ok: true, course: res.course });
 });
 
 /**
