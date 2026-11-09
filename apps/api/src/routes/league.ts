@@ -841,9 +841,11 @@ leagueRouter.get("/leagues/:leagueId/transfers-overview", async (c) => {
 
   // Cross-league admin fee total (from transactions)
   const adminFeeRes = await c.env.DB.prepare(
-    `SELECT SUM(ABS(amount)) as total FROM transactions tx
-     JOIN teams t ON tx.team_id = t.id
-     WHERE tx.type = 'transfer_admin_fee' AND t.league_id = ?`
+    // Přes kluby ligy a index (team_id, type). Spojení s teams plánovač četl od transakcí
+    // a prošel celou tabulku.
+    `SELECT SUM(ABS(tx.amount)) as total FROM transactions tx
+     WHERE tx.type = 'transfer_admin_fee'
+       AND tx.team_id IN (SELECT t.id FROM teams t WHERE t.league_id = ?)`
   ).bind(leagueId).first<{ total: number }>().catch(() => ({ total: 0 }));
 
   // Top 10 biggest transfers (jen placené)

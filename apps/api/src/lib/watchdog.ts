@@ -58,14 +58,15 @@ export async function runWatchdog(env: Bindings): Promise<WatchdogResult> {
   // poruchu navždycky.
   const hodinPoTerminu = await scalar(
     env.DB,
+    // Od kalendáře (index na termín), ne od zápasů: dotaz od neodehraných zápasů četl
+    // při každém běhu 200 tisíc řádků.
     `SELECT CAST((julianday('now') - julianday(MIN(sc.scheduled_at))) * 24 AS INTEGER) AS n
-       FROM matches m
-       JOIN season_calendar sc ON sc.id = m.calendar_id
-      WHERE m.status != 'simulated'
-        AND sc.scheduled_at < datetime('now', '-2 hours')
+       FROM season_calendar sc
+      WHERE sc.scheduled_at < datetime('now', '-2 hours')
         AND sc.season_number = (
-          SELECT MAX(sc2.season_number) FROM season_calendar sc2 WHERE sc2.league_id = m.league_id
-        )`,
+          SELECT MAX(sc2.season_number) FROM season_calendar sc2 WHERE sc2.league_id = sc.league_id
+        )
+        AND EXISTS (SELECT 1 FROM matches m WHERE m.calendar_id = sc.id AND m.status != 'simulated')`,
     "hodin od zmeškaného kola",
   );
   if (hodinPoTerminu !== null && hodinPoTerminu > 0) {

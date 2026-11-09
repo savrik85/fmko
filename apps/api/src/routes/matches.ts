@@ -416,6 +416,23 @@ matchesRouter.get("/teams/:teamId/tournament-preview/:matchId", async (c) => {
   });
 });
 
+/**
+ * Hranice rozpisu klubu: číslo aktuální (nejvyšší) sezóny jeho ligy a termín posledního
+ * kola sezóny předchozí (přáteláky po něm patří k aktuální sezóně). Liga bez rozpisu
+ * nebo klub bez ligy: žádné ligové zápasy a všechny přáteláky.
+ */
+export async function loadScheduleSeasonBounds(
+  db: D1Database, leagueId: string | null | undefined,
+): Promise<{ seasonNumber: number | null; previousSeasonEnd: string }> {
+  if (!leagueId) return { seasonNumber: null, previousSeasonEnd: "" };
+  const season = await db.prepare("SELECT MAX(season_number) AS n FROM season_calendar WHERE league_id = ?")
+    .bind(leagueId).first<{ n: number | null }>();
+  if (season?.n == null) return { seasonNumber: null, previousSeasonEnd: "" };
+  const previous = await db.prepare("SELECT MAX(scheduled_at) AS last_at FROM season_calendar WHERE league_id = ? AND season_number < ?")
+    .bind(leagueId, season.n).first<{ last_at: string | null }>();
+  return { seasonNumber: season.n, previousSeasonEnd: previous?.last_at ?? "" };
+}
+
 // GET /api/teams/:teamId/schedule — rozpis zápasů (odehrané + nadcházející)
 
 matchesRouter.get("/teams/:teamId/schedule", async (c) => {
@@ -444,6 +461,11 @@ matchesRouter.get("/teams/:teamId/schedule", async (c) => {
   // Přátelák nemá kolo v kalendáři (calendar_id NULL), takže ho filtr na sezónu kalendáře
   // dřív vyřadil celý a v Rozpisu chyběl. Patří do sezóny, když je až po posledním kole
   // té předchozí: přípravné přáteláky v létě se tak počítají k nové sezóně.
+  //
+  // Aktuální sezóna ligy a konec té předchozí se zjistí předem dvěma dotazy přes index.
+  // Dřív to byly poddotazy vyhodnocované pro každý zápas klubu ve všech sezónách a jeden
+  // rozpis četl přes 100 tisíc řádků.
+  const bounds = await loadScheduleSeasonBounds(c.env.DB, team.league_id);
   const result = await c.env.DB.prepare(
     `SELECT m.*,
        ht.name as home_name, ht.primary_color as home_color, ht.secondary_color as home_secondary, ht.badge_pattern as home_badge, ht.user_id as home_user_id, ht.village_id as home_village_id,
@@ -457,14 +479,11 @@ matchesRouter.get("/teams/:teamId/schedule", async (c) => {
      LEFT JOIN lineups l ON l.team_id = ? AND l.calendar_id = COALESCE(m.calendar_id, m.id)
      WHERE (m.home_team_id = ? OR m.away_team_id = ?)
        AND (
-         sc.season_number = (SELECT MAX(sc2.season_number) FROM season_calendar sc2 WHERE sc2.league_id = m.league_id)
-         OR (m.calendar_id IS NULL AND m.created_at > COALESCE(
-           (SELECT MAX(sc3.scheduled_at) FROM season_calendar sc3
-             WHERE sc3.league_id = ? AND sc3.season_number < (SELECT MAX(sc4.season_number) FROM season_calendar sc4 WHERE sc4.league_id = ?)),
-           ''))
+         (m.calendar_id IS NOT NULL AND sc.season_number = ?)
+         OR (m.calendar_id IS NULL AND m.created_at > ?)
        )
      ORDER BY COALESCE(sc.scheduled_at, m.created_at) ASC`
-  ).bind(teamId, teamId, teamId, team.league_id, team.league_id).all().catch((e) => { logger.warn({ module: "matches" }, "fetch team schedule", e); return { results: [] }; });
+  ).bind(teamId, teamId, teamId, bounds.seasonNumber, bounds.previousSeasonEnd).all().catch((e) => { logger.warn({ module: "matches" }, "fetch team schedule", e); return { results: [] }; });
 
   // Default fallback — poslední user-saved lineup (použije se pro zápasy bez explicit per-calendar)
   const defaultLineup = await c.env.DB.prepare(

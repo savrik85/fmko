@@ -49,8 +49,10 @@ async function getNextMatch(db: D1Database, teamId: string, leagueId: string, ga
      JOIN teams t1 ON m.home_team_id = t1.id
      JOIN teams t2 ON m.away_team_id = t2.id
      -- nejstarší NEODEHRANÉ kolo; bez filtru scheduled_at >= game_date, který přeskakuje
-     -- kola předběhnutá herním kalendářem (cron je nestihl odsimulovat)
-     WHERE sc.league_id = ? AND m.status IN ('scheduled','lineups_open')
+     -- kola předběhnutá herním kalendářem (cron je nestihl odsimulovat).
+     -- Jen aktuální sezóna ligy: neodehraná kola starších sezón v kalendáři zůstávají.
+     WHERE sc.league_id = ? AND ${currentSeasonSql("sc")}
+     AND m.status IN ('scheduled','lineups_open')
      AND (m.home_team_id = ? OR m.away_team_id = ?)
      ORDER BY sc.scheduled_at LIMIT 1`
   ).bind(leagueId, teamId, teamId).first<Record<string, unknown>>();
@@ -97,8 +99,50 @@ import {
   bumpCounters, judgeLogin, loginCounterKeys, settleSuccessfulLogin,
   LOGIN_WINDOW_SECONDS, UNKNOWN_IP,
 } from "../auth/attempt-limiter";
+import { currentSeasonSql } from "../lib/season";
 
 const authRouter = new Hono<{ Bindings: Bindings }>();
+
+/** Jak dlouho /auth/me drží ligové údaje hlavičky v KV. Po odehrání kola stačí, že vyprší. */
+export const ME_LEAGUE_CACHE_TTL_S = 300;
+
+interface MeLeagueInfo {
+  leaguePosition: number | null;
+  nextMatch: Awaited<ReturnType<typeof getNextMatch>>;
+  preseason: Awaited<ReturnType<typeof loadPreseason>>;
+}
+
+/** Klíč obsahuje herní den: „za kolik dní je zápas" se po půlnoci nesmí vrátit ze včerejška. */
+export function meLeagueCacheKey(teamId: string, gameDate: string | null): string {
+  return `auth-me-league:v1:${teamId}:${(gameDate ?? "").slice(0, 10)}`;
+}
+
+/**
+ * Pozice v tabulce, příští zápas a přípravné období pro hlavičku. Web volá /auth/me každou
+ * minutu z každého otevřeného tabu; tyhle tři dotazy četly přes 100 milionů řádků denně,
+ * přitom se mění jen po odehraném kole. Drží se proto pět minut v CACHE_KV.
+ * Chyba KV nesmí /me shodit: spočítá se to z databáze jako dřív.
+ */
+async function loadMeLeagueInfo(
+  env: Bindings, team: { id: string; leagueId: string | null; gameDate: string | null },
+): Promise<MeLeagueInfo> {
+  if (!team.leagueId) return { leaguePosition: null, nextMatch: null, preseason: null };
+  const key = meLeagueCacheKey(team.id, team.gameDate);
+  const cached = await env.CACHE_KV?.get(key, "json")
+    .catch((e) => { logger.warn({ module: "auth" }, "čtení cache ligových údajů /me", e); return null; }) as MeLeagueInfo | null | undefined;
+  if (cached) return cached;
+
+  const { getTeamPosition } = await import("../stats/standings");
+  const position = await getTeamPosition(env.DB, team.leagueId, team.id);
+  const info: MeLeagueInfo = {
+    leaguePosition: position === 0 ? null : position,
+    nextMatch: await getNextMatch(env.DB, team.id, team.leagueId, team.gameDate),
+    preseason: await loadPreseason(env.DB, team.leagueId),
+  };
+  await env.CACHE_KV?.put(key, JSON.stringify(info), { expirationTtl: ME_LEAGUE_CACHE_TTL_S })
+    .catch((e) => logger.warn({ module: "auth" }, "zápis cache ligových údajů /me", e));
+  return info;
+}
 
 function validatePassword(pw: string): string | null {
   if (pw.length < 8) return "Heslo musí mít alespoň 8 znaků";
@@ -251,12 +295,10 @@ authRouter.get("/me", async (c) => {
      FROM teams t LEFT JOIN villages v ON t.village_id = v.id WHERE t.user_id = ? LIMIT 1`
   ).bind(session.userId).first<Record<string, unknown>>();
 
-  let leaguePosition: number | null = null;
-  if (team?.id && team?.league_id) {
-    const { getTeamPosition } = await import("../stats/standings");
-    leaguePosition = await getTeamPosition(c.env.DB, team.league_id as string, team.id as string);
-    if (leaguePosition === 0) leaguePosition = null;
-  }
+  const leagueInfo: MeLeagueInfo = team?.id
+    ? await loadMeLeagueInfo(c.env, { id: team.id as string, leagueId: (team.league_id as string | null) ?? null, gameDate: (team.game_date as string | null) ?? null })
+    : { leaguePosition: null, nextMatch: null, preseason: null };
+  const leaguePosition = leagueInfo.leaguePosition;
 
   const user = await c.env.DB.prepare("SELECT is_admin FROM users WHERE id = ?")
     .bind(session.userId).first<{ is_admin: number }>().catch((e) => { logger.warn({ module: "auth" }, "fetch is_admin for /me", e); return null; });
@@ -287,10 +329,8 @@ authRouter.get("/me", async (c) => {
       : null,
     gameDate: (team?.game_date as string) ?? null,
     currentWeather: await getCurrentWeather(c.env.DB, (team?.game_date as string) ?? null),
-    nextMatch: team?.id && team?.league_id
-      ? await getNextMatch(c.env.DB, team.id as string, team.league_id as string, team.game_date as string | null)
-      : null,
-    preseason: team?.league_id ? await loadPreseason(c.env.DB, team.league_id as string) : null,
+    nextMatch: leagueInfo.nextMatch,
+    preseason: leagueInfo.preseason,
   });
 });
 
