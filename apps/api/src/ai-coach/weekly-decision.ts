@@ -35,6 +35,13 @@ export const PITCH_CARE_CHOICES = ["keep", "auto", "manual", "off"] as const;
 export type PitchCareChoice = typeof PITCH_CARE_CHOICES[number];
 export const ACADEMY_CHOICES = ["keep", "none", "volunteer", "parent", "staff"] as const;
 export type AcademyChoice = typeof ACADEMY_CHOICES[number];
+/** Úroveň běžící akademie: nechat, nebo skromná / běžná / ambiciózní (academy/rules.ts). */
+export const ACADEMY_LEVEL_CHOICES = ["keep", "modest", "standard", "ambitious"] as const;
+export type AcademyLevelChoice = typeof ACADEMY_LEVEL_CHOICES[number];
+/** S kolika lákanými žáky najednou model nejvýš pracuje. */
+const MAX_ACADEMY_DEFEND = 8;
+/** Vyšší úroveň akademie musí být z čeho platit: příplatek na tolik týdnů musí zůstat nad rezervou. */
+const ACADEMY_LEVEL_WEEKS = 6;
 export const TRANSFER_STANCES = ["buy", "hold", "sell"] as const;
 export type TransferStance = typeof TRANSFER_STANCES[number];
 export const TRANSFER_POSITIONS = ["GK", "DEF", "MID", "FWD"] as const;
@@ -164,6 +171,8 @@ export interface WeeklyContext {
     canFound: boolean;
     /** Akademie běží (i bez trenéra, kdy je `current` „none“, ale provoz se platí). */
     founded?: boolean;
+    /** Provoz běžící akademie, o kterém rozhoduje model (jen když akademie běží). */
+    care?: AcademyCareContext | null;
   };
   banners: { active: number; max: number; offers: BannerOption[] };
   u21: { exists: boolean; aTeamSize: number; promote: U21MoveOption[]; sendDown: U21MoveOption[] };
@@ -171,6 +180,40 @@ export interface WeeklyContext {
   /** Bufet: provoz, produkty, kvality a meze cen i nákupu (concession-decision.ts). */
   concessions: ConcessionContext;
 }
+
+/** Lákaný žák v nabídce pro model. */
+export interface PoachedKidOption {
+  key: string;
+  poachId: string;
+  age: number;
+  position: string;
+  interest: number;
+}
+
+export interface AcademyCareContext {
+  level: Exclude<AcademyLevelChoice, "keep">;
+  /** Týdenní provoz podle úrovně při dnešním počtu žáků. */
+  weeklyCost: Record<Exclude<AcademyLevelChoice, "keep">, number>;
+  canRecruitDay: boolean;
+  recruitDayCost: number;
+  canOpenDay: boolean;
+  openDayCost: number;
+  /** Od jakého zájmu žák v létě odejde. */
+  poachThreshold: number;
+  /** Žáci, o které stojí jiný klub a s jejichž rodiči trenér ještě nemluvil. */
+  poached: PoachedKidOption[];
+}
+
+/** Rozhodnutí modelu o provozu akademie. Bez modelu se nemění nic. */
+export interface AcademyCareDecision {
+  level: AcademyLevelChoice;
+  recruitDay: boolean;
+  openDay: boolean;
+  /** Klíče lákaných žáků, s jejichž rodiči trenér promluví. */
+  defend: string[];
+}
+
+export const NO_ACADEMY_CARE: AcademyCareDecision = { level: "keep", recruitDay: false, openDay: false, defend: [] };
 
 export interface WeeklyDecision {
   training: { focus: TrainingFocus; intensity: TrainingIntensityChoice; sessions: number; approach: TrainingApproachChoice };
@@ -182,6 +225,8 @@ export interface WeeklyDecision {
   equipmentRepairs: string[];
   hire: string[];
   academy: AcademyChoice;
+  /** Provoz běžící akademie (starší uložená rozhodnutí ho nemají: nic se nemění). */
+  academyCare?: AcademyCareDecision;
   banners: string[];
   promote: string[];
   sendDown: string[];
@@ -196,6 +241,10 @@ export type WeeklyAction =
   | { kind: "ticket_price"; price: number; from: number }
   | { kind: "pitch_care_mode"; mode: Exclude<PitchCareChoice, "keep"> }
   | { kind: "academy"; level: Exclude<AcademyChoice, "keep"> }
+  | { kind: "academy_level"; level: Exclude<AcademyLevelChoice, "keep">; weeklyCost: number }
+  | { kind: "academy_recruit_day"; cost: number }
+  | { kind: "academy_open_day"; cost: number }
+  | { kind: "academy_defend"; key: string; poachId: string }
   | { kind: "banner"; key: string; sponsorName: string; sponsorType: string; monthly: number; seasons: number }
   | { kind: "promote"; key: string; playerId: string }
   | { kind: "send_down"; key: string; playerId: string }
@@ -346,6 +395,8 @@ export function fallbackWeeklyDecision(ctx: WeeklyContext): WeeklyDecision {
   return {
     training: { focus, intensity, sessions, approach },
     ticketPrice, pitchMaintenance, pitchCareMode, stadium, equipmentUpgrades, equipmentRepairs, hire, academy, banners,
+    // Provoz akademie (úroveň, nábor, obrana žáků) je rozhodnutí modelu: pravidlo ho nemění.
+    academyCare: NO_ACADEMY_CARE,
     promote, sendDown, transfers: fallbackTransfers(ctx), concessions: fallbackConcessions(ctx.concessions, p),
     reasoning: "fallback rule",
   };
@@ -395,6 +446,31 @@ function validateTransfers(raw: unknown, ctx: WeeklyContext, rejected: string[])
     focus: Array.isArray(focus) ? focus as TransferPosition[] : [],
     sell: Array.isArray(sell) ? sell : [],
     fill,
+  };
+}
+
+/** Je o provozu akademie co rozhodovat? (Akademie běží.) */
+export function hasAcademyCare(ctx: Pick<WeeklyContext, "academy">): boolean {
+  return !!ctx.academy.care;
+}
+
+/** Blok provozu akademie je samostatný: chybný nebo chybějící nic nemění, zbytek týdne platí. */
+function validateAcademyCare(raw: unknown, ctx: WeeklyContext, rejected: string[]): AcademyCareDecision {
+  const care = ctx.academy.care;
+  if (!care) return NO_ACADEMY_CARE;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    rejected.push("academyCare: chybí, provoz akademie se nemění");
+    return NO_ACADEMY_CARE;
+  }
+  const r = raw as Record<string, unknown>;
+  const level = pick(r.level, ACADEMY_LEVEL_CHOICES, "academyCare.level");
+  if (typeof level === "object") rejected.push(`${level.error}, úroveň akademie se nemění`);
+  const defend = keys(r.defend, "academyCare.defend", new Set(care.poached.map((k) => k.key)), MAX_ACADEMY_DEFEND, rejected);
+  return {
+    level: typeof level === "object" ? "keep" : level,
+    recruitDay: r.recruitDay === true,
+    openDay: r.openDay === true,
+    defend: Array.isArray(defend) ? defend : [],
   };
 }
 
@@ -484,6 +560,7 @@ export function validateWeeklyDecision(raw: unknown, ctx: WeeklyContext): Weekly
       promote: sets.promote as string[],
       sendDown: sets.sendDown as string[],
       transfers: validateTransfers(r.transfers, ctx, rejected),
+      academyCare: validateAcademyCare(r.academyCare, ctx, rejected),
       concessions: validateConcessions(r.concessions, ctx.concessions, ctx.profile, rejected),
       reasoning: typeof r.reasoning === "string" ? r.reasoning.slice(0, 600) : "",
     },
@@ -515,6 +592,14 @@ export function planWeeklyActions(ctx: WeeklyContext, d: WeeklyDecision): Weekly
       && (d.academy !== "staff" || ctx.academy.canStaff) && (d.academy !== "volunteer" || ctx.academy.canVolunteer);
     if (allowed) actions.push({ kind: "academy", level: d.academy });
     else skipped.push({ item: `academy ${d.academy}`, reason: !ctx.academy.canFound ? "akademii jde založit až příští sezónu" : d.academy === "staff" ? "nemá trenéra mládeže" : "nemá hráče od 28 let" });
+  }
+
+  // Provoz akademie: obrana lákaných žáků nic nestojí (rozhovor s rodiči, jednou za lákání).
+  const care = ctx.academy.care ?? null;
+  const careChoice = care && d.academy !== "none" ? d.academyCare ?? NO_ACADEMY_CARE : NO_ACADEMY_CARE;
+  for (const key of careChoice.defend) {
+    const kid = care?.poached.find((k) => k.key === key);
+    if (kid) actions.push({ kind: "academy_defend", key, poachId: kid.poachId });
   }
 
   const freeSlots = Math.max(0, ctx.banners.max - ctx.banners.active);
@@ -584,6 +669,23 @@ export function planWeeklyActions(ctx: WeeklyContext, d: WeeklyDecision): Weekly
     // Podpisné + mzda na šest týdnů musí zůstat nad rezervou.
     if (o.cost + o.weeklyWage * 6 > left) { skipped.push({ item: key, reason: "rezerva (podpisné a mzda)" }); continue; }
     if (pay(key, o.cost)) actions.push({ kind: "hire", key, staffId: o.ref, role: o.role, cost: o.cost, weeklyWage: o.weeklyWage });
+  }
+  // Akademie v mezích rozpočtu: nábor a den otevřených dveří se platí hned, vyšší úroveň musí být
+  // z čeho platit dalších šest týdnů (nižší úroveň šetří a projde vždy).
+  if (care) {
+    if (careChoice.recruitDay) {
+      if (!care.canRecruitDay) skipped.push({ item: "academy recruit day", reason: "nábor teď nejde (letos už byl, chybí trenér žáků nebo je plno)" });
+      else if (pay("academy recruit day", care.recruitDayCost)) actions.push({ kind: "academy_recruit_day", cost: care.recruitDayCost });
+    }
+    if (careChoice.openDay) {
+      if (!care.canOpenDay) skipped.push({ item: "academy open day", reason: "den otevřených dveří teď nejde (letos už byl, chybí trenér žáků nebo je plno)" });
+      else if (pay("academy open day", care.openDayCost)) actions.push({ kind: "academy_open_day", cost: care.openDayCost });
+    }
+    if (careChoice.level !== "keep" && careChoice.level !== care.level) {
+      const extra = care.weeklyCost[careChoice.level] - care.weeklyCost[care.level];
+      if (extra > 0 && extra * ACADEMY_LEVEL_WEEKS > left) skipped.push({ item: `academy level ${careChoice.level}`, reason: `rezerva (příplatek ${extra} Kč týdně)` });
+      else actions.push({ kind: "academy_level", level: careChoice.level, weeklyCost: care.weeklyCost[careChoice.level] });
+    }
   }
   // Stavby a nové vybavení jen do investičního rozpočtu podle chuti stavět.
   let invest = weeklyInvestBudget(ctx);
@@ -706,6 +808,14 @@ export function renderWeeklyPrompt(ctx: WeeklyContext): string {
   L.push("Roles: asistent (faster player development), maser (better daily recovery), lekar (shorter injuries), kondicni_trener (less fatigue), spravce_hriste (pitch keeps condition), trener_mladeze (youth development), trener_brankaru (goalkeepers), psycholog (morale), obsluha (refreshment sales), sef_fanklubu (fans), ekonom (finances), skaut (scouting).");
   L.push("");
   L.push(`YOUTH TEAM (the club's own boys aged 11-14 from the village, ${ctx.academy.prospects} now; the village gives about ${ctx.academy.expectedPerYear.toFixed(1)} boys a year, 9 are needed to play the district youth league): ${ctx.academy.founded && ctx.academy.current === "none" ? "founded but WITHOUT a coach (the boys do not train and more of them quit, running costs are still paid)" : ctx.academy.current}. Options keep / none (no youth team, boys quit) / volunteer (an A-team player aged 28+ coaches them for free: fewer boys quit and more kids join, but he misses some A-team training${ctx.academy.canVolunteer ? "" : ", NOT AVAILABLE"}) / parent (a boy's father coaches for free, average, brings one extra kid from recruitment) / staff (the hired trener_mladeze: best development, but the U21 and young A-team players then get only half of his training bonus${ctx.academy.canStaff ? "" : ", NOT AVAILABLE: hire one first"})${ctx.academy.canFound ? "" : " (the academy was closed this season and can be founded again only next season)"}. Running costs about ${czk(ACADEMY_WEEKLY_COST.volunteer)}/week (300 + 50 per boy). Every summer the 14-year-olds move up to the U21; the coach also recommends talented boys aged 13+ during the season.`);
+  const care = ctx.academy.care;
+  if (care) {
+    const c = care.weeklyCost;
+    L.push(`ACADEMY CARE (your youth team runs at level "${care.level}"): levels modest (${czk(c.modest)}/week: boys grow slower and more of them quit, rival clubs lure them away more easily), standard (${czk(c.standard)}/week), ambitious (${czk(c.ambitious)}/week: summer camp and tournaments, boys grow clearly faster, fewer quit, boys are harder to lure away). Recruitment day at the village school (${czk(care.recruitDayCost)}, once a season, brings boys aged 11-12): ${care.canRecruitDay ? "available" : "not available now"}. Open day at your ground (${czk(care.openDayCost)}, once a season, brings boys from the whole area and you learn more about them): ${care.canOpenDay ? "available" : "not available now"}.`);
+    L.push(care.poached.length
+      ? `RIVAL CLUBS are luring your boys away (key: position, age, how much he wants to leave 0-100; at ${care.poachThreshold} or more he leaves in the summer for a small fee): ${care.poached.map((k) => `${k.key}: ${k.position} age ${k.age}, interest ${k.interest}`).join("; ")}. Talking to a boy's parents (defend) costs nothing, works once per boy and lowers his interest.`
+      : "No rival club is luring your boys away right now.");
+  }
   L.push(`BANNER SPONSORS: ${ctx.banners.active}/${ctx.banners.max} used. Offers (key: company, monthly payment, seasons); banners only bring money, free slots are filled with the best offers you do not pick:`);
   L.push(ctx.banners.offers.length ? ctx.banners.offers.map((o) => `${o.key}: ${o.label}, ${czk(o.monthly)}/month, ${o.seasons} season(s)`).join("\n") : "(none)");
   L.push("");
@@ -727,7 +837,7 @@ export function renderWeeklyPrompt(ctx: WeeklyContext): string {
   const concessionKeys = hasConcessionChoice(ctx.concessions)
     ? `, concessions {mode ${ctx.concessions.modeOptions.join("/")}, products {${ctx.concessions.products.map((p) => p.key).join(", ")}: each {tier, price, buy}}}`
     : "";
-  L.push(`DECIDE (JSON keys): training {focus, intensity, sessions 1-5, approach}, ticketPrice, pitchMaintenance, pitchCareMode, stadium (keys, max 2), equipmentUpgrades (keys, max 3), equipmentRepairs (keys), hire (candidate keys, max 1), academy, banners (offer keys), promote (keys, max 2), sendDown (keys, max 2), transfers {stance buy/hold/sell, focus (positions GK/DEF/MID/FWD, max 2), sell (surplus keys, max 3)${below ? ", fill none/free_agents/market/both" : ""}}${concessionKeys}, reasoning (max 40 words).`);
+  L.push(`DECIDE (JSON keys): training {focus, intensity, sessions 1-5, approach}, ticketPrice, pitchMaintenance, pitchCareMode, stadium (keys, max 2), equipmentUpgrades (keys, max 3), equipmentRepairs (keys), hire (candidate keys, max 1), academy${hasAcademyCare(ctx) ? ", academyCare {level keep/modest/standard/ambitious, recruitDay true/false, openDay true/false, defend (keys of lured boys)}" : ""}, banners (offer keys), promote (keys, max 2), sendDown (keys, max 2), transfers {stance buy/hold/sell, focus (positions GK/DEF/MID/FWD, max 2), sell (surplus keys, max 3)${below ? ", fill none/free_agents/market/both" : ""}}${concessionKeys}, reasoning (max 40 words).`);
   L.push("Paid items are executed in the order repairs, pitch, refreshment stock, hiring, equipment, stadium and stop when the money above the reserve runs out.");
   return L.join("\n");
 }
@@ -762,6 +872,19 @@ export function weeklyDecisionSchema(ctx: WeeklyContext): Record<string, unknown
       equipmentRepairs: arr(ctx.equipmentRepairs.map((o) => o.key)),
       hire: arr(ctx.staff.candidates.map((o) => o.key)),
       academy: { type: "string", enum: [...ACADEMY_CHOICES] },
+      ...(hasAcademyCare(ctx) ? {
+        academyCare: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            level: { type: "string", enum: [...ACADEMY_LEVEL_CHOICES] },
+            recruitDay: { type: "boolean" },
+            openDay: { type: "boolean" },
+            defend: arr((ctx.academy.care?.poached ?? []).map((k) => k.key)),
+          },
+          required: ["level", "recruitDay", "openDay", "defend"],
+        },
+      } : {}),
       banners: arr(ctx.banners.offers.map((o) => o.key)),
       promote: arr(ctx.u21.promote.map((o) => o.key)),
       sendDown: arr(ctx.u21.sendDown.map((o) => o.key)),
@@ -781,7 +904,7 @@ export function weeklyDecisionSchema(ctx: WeeklyContext): Record<string, unknown
     },
     required: [
       "training", "ticketPrice", "pitchMaintenance", "pitchCareMode", "stadium", "equipmentUpgrades", "equipmentRepairs", "hire",
-      "academy", "banners", "promote", "sendDown", "transfers", ...(concessions ? ["concessions"] : []), "reasoning",
+      "academy", ...(hasAcademyCare(ctx) ? ["academyCare"] : []), "banners", "promote", "sendDown", "transfers", ...(concessions ? ["concessions"] : []), "reasoning",
     ],
   };
 }

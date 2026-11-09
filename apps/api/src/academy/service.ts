@@ -1760,6 +1760,53 @@ export async function youthContextForTeam(db: D1Database, teamId: string) {
   };
 }
 
+/** Žák AI klubu, o kterého stojí jiný klub a s jehož rodiči trenér ještě nemluvil. */
+export interface PoachedProspect {
+  poachId: string;
+  age: number;
+  position: string;
+  /** Zájem žáka o odchod 0 až 100; od `POACH_THRESHOLD` v létě přestoupí. */
+  interest: number;
+}
+
+/**
+ * Pro týdenní správu AI klubu: provoz běžící akademie, o kterém rozhoduje model (úroveň, nábor,
+ * den otevřených dveří, obrana lákaných žáků). Null = klub akademii nemá. Dřív AI akademii jen
+ * zakládala a rušila: žáky jí šlo přetahovat bez odporu a nikdy nenabírala.
+ */
+export async function academyCareForTeam(db: D1Database, teamId: string) {
+  const club = await loadClub(db, teamId);
+  if (!club || !club.academy_upkeep) return null;
+  const kids = (await activeProspects(db, teamId)).length;
+  const coach = await coachState(db, club, kids);
+  const seasonNumber = await currentSeasonNumber(db);
+  const used = await db.prepare("SELECT academy_recruit_day_season AS recruit, academy_open_day_season AS open FROM teams WHERE id = ?")
+    .bind(teamId).first<{ recruit: number | null; open: number | null }>();
+  const ready = !!coach.type && kids < MAX_SQUAD;
+  const poached = await db.prepare(
+    `SELECT y.id AS poachId, p.age, p.position, y.interest
+       FROM youth_poach y JOIN youth_prospects p ON p.id = y.prospect_id
+      WHERE y.from_team_id = ?1 AND y.status = 'active' AND p.status = 'active' AND p.team_id = ?1
+        AND NOT EXISTS (SELECT 1 FROM json_each(y.actions) WHERE value = 'defend')
+      ORDER BY y.interest DESC, y.id LIMIT 8`,
+  ).bind(teamId).all<PoachedProspect>();
+  const level = academyLevelOf(club.academy_level);
+  return {
+    level,
+    prospects: kids,
+    hasCoach: !!coach.type,
+    /** Týdenní provoz při dnešním počtu žáků podle úrovně. */
+    weeklyCost: { modest: upkeepWeekly(kids, "modest"), standard: upkeepWeekly(kids, "standard"), ambitious: upkeepWeekly(kids, "ambitious") },
+    /** Nábor ve škole: jednou za sezónu, pod `MIN_SQUAD` žáků jde opakovat. */
+    canRecruitDay: ready && ((used?.recruit ?? -1) < seasonNumber || kids < MIN_SQUAD),
+    recruitDayCost: RECRUIT_DAY_COST,
+    canOpenDay: ready && (used?.open ?? -1) < seasonNumber,
+    openDayCost: OPEN_DAY_COST,
+    poachThreshold: POACH_THRESHOLD,
+    poached: poached.results,
+  };
+}
+
 /**
  * AI trenér nastaví žáky volbou: none = zrušit, jinak založit (když nejsou) a dát trenéra.
  * Dobrovolníka vybere kód (hráč áčka s nejvyšším vůdcovstvím), táta je ten nejmladšího kluka.
