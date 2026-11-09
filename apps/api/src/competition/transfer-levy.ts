@@ -7,6 +7,10 @@
  *    v sazebníku a přitéká soutěži kupujícího, která si tím chrání vlastní trh.
  *  - **odvod z přestupu uvnitř soutěže** platí PRODÁVAJÍCÍ z utržené částky.
  *    Výchozí sazba je nula, takže dokud si ho kluby neodhlasují, nic se neděje.
+ *
+ * Hostování samo se nezpoplatňuje. Aby se tím poplatky nedaly obejít (hostování za
+ * skutečnou cenu a odkup za korunu), počítá se u odkupu z hostování základ jako cena
+ * odkupu plus poplatek zaplacený za hostování (`buyoutLoanFee`).
  */
 
 import { logger } from "../lib/logger";
@@ -129,4 +133,23 @@ export async function recordTransferLevies(db: D1Database, opts: {
       });
     }
   }
+}
+
+/**
+ * Poplatek, který klub kupujícího zaplatil za běžící hostování hráče. U odkupu z hostování
+ * se přičítá k ceně odkupu jako základ pro poplatky. Když hráč u kupujícího nehostuje, nula.
+ * `buyerTeamId` smí být áčko i U21 kupujícího.
+ */
+export async function buyoutLoanFee(db: D1Database, playerId: string, buyerTeamId: string): Promise<number> {
+  const row = await db.prepare(
+    `SELECT pc.fee FROM player_contracts pc
+       JOIN players p ON p.id = pc.player_id
+       JOIN teams holder ON holder.id = p.team_id
+       JOIN teams buyer ON buyer.id = ?
+      WHERE pc.player_id = ? AND pc.join_type = 'loan' AND pc.is_active = 1 AND p.loan_from_team_id IS NOT NULL
+        AND COALESCE(holder.parent_team_id, holder.id) = COALESCE(buyer.parent_team_id, buyer.id)
+      LIMIT 1`,
+  ).bind(buyerTeamId, playerId).first<{ fee: number | null }>()
+    .catch((e) => { logger.warn({ module: M }, `poplatek za hostování hráče ${playerId}`, e); return null; });
+  return Math.max(0, row?.fee ?? 0);
 }

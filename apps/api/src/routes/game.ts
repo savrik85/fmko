@@ -5775,11 +5775,14 @@ gameRouter.get("/teams/:teamId/offers", async (c) => {
   // soutěž odhlasovala. A hlavně nevěděl o výjimce pro mládež — u přesunu mezi
   // A-týmem a rezervou se poplatek neplatí, protože to není přestup mezi
   // soutěžemi dospělých.
-  const { computeTransferLevies } = await import("../competition/transfer-levy");
+  const { computeTransferLevies, buyoutLoanFee } = await import("../competition/transfer-levy");
   const dopocitejPoplatek = async (rows: Record<string, unknown>[]) => {
     const out: Record<string, unknown>[] = [];
     for (const r of rows) {
-      const castka = Number(r.counter_amount ?? r.offer_amount ?? 0);
+      // Odkup z hostování: do základu poplatku patří i poplatek zaplacený za hostování.
+      const loanFeePaid = r.offer_type !== "loan" && r.from_team_id !== "virtual_ai"
+        ? await buyoutLoanFee(c.env.DB, String(r.player_id), String(r.from_team_id)) : 0;
+      const castka = Number(r.counter_amount ?? r.offer_amount ?? 0) + loanFeePaid;
       const poplatky = await computeTransferLevies(c.env.DB, {
         buyerLeagueId: r.from_league_id as string | null,
         sellerLeagueId: r.to_league_id as string | null,
@@ -5945,11 +5948,14 @@ gameRouter.get("/teams/:teamId/offers/:offerId", async (c) => {
   const currentAmount = (offer.counter_amount != null ? offer.counter_amount : offer.offer_amount) as number;
   const crossLeague = !!(fromTeamRow?.league_id && sellerSquad?.league_id && fromTeamRow.league_id !== sellerSquad.league_id);
   // Stejný výpočet jako při přijetí, jinak by náhled ukazoval jinou částku, než se strhne.
-  const { computeTransferLevies: previewLevies } = await import("../competition/transfer-levy");
+  const { computeTransferLevies: previewLevies, buyoutLoanFee: previewLoanFee } = await import("../competition/transfer-levy");
+  // Odkup z hostování: do základu poplatku patří i poplatek zaplacený za hostování.
+  const loanFeePaid = offer.offer_type !== "loan" && offer.from_team_id !== "virtual_ai"
+    ? await previewLoanFee(c.env.DB, String(offer.player_id), String(offer.from_team_id)) : 0;
   const adminFee = (await previewLevies(c.env.DB, {
     buyerLeagueId: fromTeamRow?.league_id as string | null | undefined,
     sellerLeagueId: sellerSquad?.league_id,
-    amount: currentAmount, isLoan: offer.offer_type === "loan",
+    amount: currentAmount + loanFeePaid, isLoan: offer.offer_type === "loan",
   })).adminFee;
 
   // Zájem hráče o přestup — u aktivní nabídky čerstvý přepočet, u uzavřené snapshot.
