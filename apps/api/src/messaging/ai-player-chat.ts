@@ -75,6 +75,21 @@ export interface TeamContext {
   subjectPlayerName?: string;
   /** Praha nebo město. Venku je pod hlasovkou slyšet ulice, ne vesnice. */
   urban?: boolean;
+  /**
+   * Hráč nehraje za áčko klubu, se kterým si píše: je v dorostu (U21), nebo na
+   * hostování jinde. Výsledek, příští zápas, tabulka a spoluhráči v kontextu pak
+   * patří týmu, za který právě hraje, a prompt to musí říct.
+   */
+  playingFor?: { kind: "u21" | "loan"; teamName: string };
+}
+
+/** Řádek do faktů: za koho hráč hraje, když to není áčko klubu, se kterým si píše. */
+export function playingForFact(team: TeamContext): string {
+  if (!team.playingFor) return "";
+  if (team.playingFor.kind === "u21") {
+    return `- Hraješ za dorost (${team.playingFor.teamName}), ne za áčko. Poslední zápas, příští zápas, tabulka i spoluhráči níže jsou dorostu. O zápasech áčka nic nevíš a nehrál jsi v nich.`;
+  }
+  return `- Jsi na hostování v klubu ${team.playingFor.teamName}. Patříš dál klubu ${team.teamName} a píšeš si s jeho trenérem, ale hraješ a trénuješ jinde. Poslední zápas, příští zápas, tabulka i spoluhráči níže jsou týmu ${team.playingFor.teamName}. O zápasech klubu ${team.teamName} nic nevíš a nehrál jsi v nich.`;
 }
 
 /**
@@ -257,7 +272,11 @@ export function buildSystemPrompt(
   const language = foreignSpeechRule(player.nationality);
 
   return [
-    `Jsi ${player.firstName} ${player.lastName}, ${player.age}letý ${positionStr} amatérského týmu ${team.teamName}${village} v české vesnické soutěži.`,
+    team.playingFor?.kind === "u21"
+      ? `Jsi ${player.firstName} ${player.lastName}, ${player.age}letý ${positionStr} dorostu (U21) amatérského klubu ${team.teamName}${village} v české vesnické soutěži.`
+      : team.playingFor?.kind === "loan"
+        ? `Jsi ${player.firstName} ${player.lastName}, ${player.age}letý ${positionStr} amatérského klubu ${team.teamName}${village}, teď na hostování v klubu ${team.playingFor.teamName}, v české vesnické soutěži.`
+        : `Jsi ${player.firstName} ${player.lastName}, ${player.age}letý ${positionStr} amatérského týmu ${team.teamName}${village} v české vesnické soutěži.`,
     `Tvoje povaha: ${buildPersonalityHints(player)}.`,
     `Aktuální nálada: ${player.morale}/100, kondice: ${player.condition}/100, vztah s trenérem: ${player.coachRelationship}/100.`,
     popisZdravi(player),
@@ -296,13 +315,16 @@ export function buildSystemPrompt(
     "- NIKDY nepiš jako AI nebo formálně.",
     "",
     "FAKTA O KLUBU, smíš se opírat VÝHRADNĚ o ně:",
+    playingForFact(team),
     team.lastMatchResult
       ? `- Poslední zápas: ${team.lastMatchResult}. NIKDY nepiš jiný výsledek, nevymýšlej si skóre, soupeře ani to, jestli se vyhrálo či prohrálo.`
       : "- O posledním zápase nic nevíš. NEZMIŇUJ žádný výsledek, skóre ani soupeře.",
     team.nextMatch
       ? `- Příští mistrovský zápas: ${team.nextMatch}.`
       : "- Termín dalšího zápasu neznáš.",
-    team.leaguePosition ? `- Tým je v tabulce na ${team.leaguePosition}. místě.` : "",
+    team.leaguePosition
+      ? `- ${team.playingFor ? `Tým, za který hraješ (${team.playingFor.teamName}),` : "Tým"} je v tabulce na ${team.leaguePosition}. místě.`
+      : "",
     team.squadNames && team.squadNames.length > 0
       ? `- Spoluhráči (JEDINÁ povolená jména, o kterých smíš mluvit): ${team.squadNames.join(", ")}. NIKOHO jiného nejmenuj — žádná vymyšlená jména.`
       : "- Jména spoluhráčů neznáš. NIKOHO nejmenuj.",

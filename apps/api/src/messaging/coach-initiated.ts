@@ -86,12 +86,14 @@ export async function startCoachThread(
     }
 
     // Bez účasti v posledním zápase si hráč z výsledku týmu domyslel, že hrál.
-    // U21 kluk hrál jinou soutěž, výsledek áčka mu nepatří (stejně jako v `handleAiPlayerReply`).
-    const matchCtx = row.team_id === opts.teamId ? await loadLastMatchContext(db, opts.teamId) : undefined;
+    // U21 kluk nebo hráč na hostování hrál jinou soutěž: zápasy i tabulka se berou z týmu,
+    // za který právě hraje, ne z áčka (stejně jako v `handleAiPlayerReply`).
+    const playerTeamId = (row.team_id as string | null) ?? opts.teamId;
+    const matchCtx = await loadLastMatchContext(db, playerTeamId);
     const player = loadPlayerSnapshot(row, matchCtx);
     const situaceKind = (await nactiSituaceTymu(db, opts.teamId)).get(opts.playerId);
     player.zivotniSituace = situaceKind ? { kind: situaceKind, label: nazevSituace(situaceKind) } : undefined;
-    const team = await loadTeamContext(db, opts.teamId);
+    const team = await loadTeamContext(db, opts.teamId, playerTeamId);
 
     // Téma incidentu z tlačítka „Zeptat se" nebo z dřívější otázky (spec 7a).
     const vlakno = await db.prepare("SELECT ai_thread_state FROM conversations WHERE id = ?")

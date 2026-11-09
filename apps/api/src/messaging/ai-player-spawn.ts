@@ -425,8 +425,15 @@ async function pickSubjectTeammate(
   return any ? { id: any.id, name: `${any.first_name} ${any.last_name}` } : null;
 }
 
-export async function loadTeamContext(db: D1Database, teamId: string): Promise<TeamContext> {
-  const row = await db.prepare(
+/**
+ * Kontext klubu pro prompt hráče. `teamId` je klub, kterému patří konverzace (jeho
+ * trenérovi hráč píše). `playerTeamId` je tým, za který hráč právě hraje
+ * (`players.team_id`): u kluka z U21 nebo hráče na hostování se liší a poslední zápas,
+ * příští zápas, tabulka i spoluhráči se pak berou z něj. Dřív dostal výsledky áčka.
+ */
+export async function loadTeamContext(db: D1Database, teamId: string, playerTeamId?: string | null): Promise<TeamContext> {
+  const clubTeamId = teamId;
+  const club = await db.prepare(
     `SELECT t.name, v.name as village_name, v.size as village_size, v.district, m.name as manager_name, t.league_id
      FROM teams t
      LEFT JOIN villages v ON t.village_id = v.id
@@ -437,6 +444,24 @@ export async function loadTeamContext(db: D1Database, teamId: string): Promise<T
     manager_name: string | null; league_id: string | null;
   }>()
     .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "loadTeamContext", e); return null; });
+
+  // Tým, za který hráč hraje. Když je to jiný než klub konverzace, zápasy a tabulka jdou z něj.
+  let row = club;
+  let playingFor: TeamContext["playingFor"];
+  if (playerTeamId && playerTeamId !== clubTeamId) {
+    const playing = await db.prepare(
+      "SELECT name, league_id, team_type, parent_team_id FROM teams WHERE id = ?",
+    ).bind(playerTeamId).first<{ name: string; league_id: string | null; team_type: string | null; parent_team_id: string | null }>()
+      .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "loadTeamContext tým hráče", e); return null; });
+    if (playing) {
+      teamId = playerTeamId;
+      row = club ? { ...club, league_id: playing.league_id } : null;
+      playingFor = {
+        kind: playing.team_type === "u21" && playing.parent_team_id === clubTeamId ? "u21" : "loan",
+        teamName: playing.name,
+      };
+    }
+  }
 
   // Poslední odehraný zápas — bez něj si model výsledek vymyslí a gratuluje k prohře,
   // kterou tým vyhrál. Formát stejný jako v rozhovorech pro Zpravodaj.
@@ -496,7 +521,8 @@ export async function loadTeamContext(db: D1Database, teamId: string): Promise<T
     .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "loadTeamContext squad", e); return { results: [] as Array<{ first_name: string; last_name: string }> }; });
 
   return {
-    teamName: row?.name ?? "tým",
+    teamName: club?.name ?? "tým",
+    playingFor,
     villageName: row?.village_name ?? undefined,
     // Pražské čtvrti mají ve hře velikost vesnice, ulice je tam slyšet stejně.
     urban: row?.district === "Praha" || ["town", "small_city", "city"].includes(row?.village_size ?? ""),
@@ -1015,9 +1041,10 @@ async function handleAiPlayerReplyInner(
     return;
   }
 
-  // Účast v posledním zápase jen u hráče z kádru, se kterým se píše. Hostující nebo hráč
-  // z U21 hrál jinou soutěž a výsledek týmu by se mu připsal stejně špatně jako dřív.
-  const replyMatchCtx = playerRow.team_id === conv.team_id ? await loadLastMatchContext(db, conv.team_id) : undefined;
+  // Účast v posledním zápase podle týmu, za který hráč hraje (`players.team_id`). Hostující
+  // nebo hráč z U21 hrál jinou soutěž; výsledek áčka se mu připsat nesmí.
+  // Kluk z U21 nebo hráč na hostování dostane účast v zápase svého týmu, ne áčka.
+  const replyMatchCtx = await loadLastMatchContext(db, (playerRow.team_id as string | null) ?? conv.team_id);
   const player = loadPlayerSnapshot(playerRow, replyMatchCtx);
   // Pozvánka z hospody: v celé konverzaci sedí v hospodě a píše opile, i když už je pozdě.
   if (scenario.atPub) player.atPub = true;
@@ -1035,7 +1062,7 @@ async function handleAiPlayerReplyInner(
   player.lastOwnMessageAt = await loadLastOwnMessageAt(db, convId, player.id);
   player.lateReply = opts.lateReply;
   const memory = await loadChatMemory(db, player, { teamId: conv.team_id, convId });
-  const teamCtx = await loadTeamContext(db, conv.team_id);
+  const teamCtx = await loadTeamContext(db, conv.team_id, playerRow.team_id as string | null);
   // Rozhovor „jen tak" bez tabulky, jinak ji model cpe do každé odpovědi (casual-messages.ts).
   if (scenario.category === "casual" && scenario.id !== "casual_how_are_you") teamCtx.leaguePosition = undefined;
 

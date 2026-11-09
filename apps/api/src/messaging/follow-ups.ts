@@ -214,10 +214,11 @@ async function deliverOne(db: D1Database, env: FollowUpEnv, row: FollowUpRow, no
     return "cancelled";
   }
 
-  // Účast v posledním zápase jen u hráče z tohohle kádru, jinak hrál jinou soutěž.
-  const player = loadPlayerSnapshot(playerRow, playerRow.team_id === row.team_id ? await loadLastMatchContext(db, row.team_id) : undefined);
+  // Zápasy a tabulka podle týmu, za který hráč hraje (U21, hostování), ne podle áčka.
+  const playerTeamId = (playerRow.team_id as string | null) ?? row.team_id;
+  const player = loadPlayerSnapshot(playerRow, await loadLastMatchContext(db, playerTeamId));
   const memory = await loadChatMemory(db, player, { teamId: row.team_id, convId: row.conversation_id });
-  const team = await loadTeamContext(db, row.team_id);
+  const team = await loadTeamContext(db, row.team_id, playerTeamId);
   const history = await loadHistory(db, row.conversation_id);
 
   let instruction: string;
