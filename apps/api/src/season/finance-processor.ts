@@ -863,7 +863,8 @@ export async function processMatchDayFinances(
       result,
       fans: fansCtx.fans,
       opponentReputation,
-      effectiveTicketPrice: isHome ? ticketPrice : baseTicketPrice,
+      // Cena nastavená manažerem, ne vybraná u vstupu (ta nese i plot a spokojenost). Venku se neposuzuje.
+      setTicketPrice: isHome ? (fansCtx?.fans.base_ticket_price ?? 0) : 0,
       villageBaseTicketPrice: baseTicketPrice,
       concessionMode: fansCtx.concessionMode,
       soldProducts: isHome ? soldProducts : [],

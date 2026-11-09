@@ -13,7 +13,7 @@ function base(pitchCondition: number | null) {
     result: "draw" as const,
     fans: { hardcore: 100, regular: 200, casual: 300 } as never,
     opponentReputation: 50,
-    effectiveTicketPrice: 50,
+    setTicketPrice: 0,
     villageBaseTicketPrice: 50,
     concessionMode: "external" as const,
     soldProducts: [],

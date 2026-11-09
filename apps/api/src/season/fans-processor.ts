@@ -43,8 +43,11 @@ export interface MatchSatisfactionInput {
   result: "win" | "draw" | "loss";
   fans: FansState;
   opponentReputation: number;
-  /** Efektivní cena vstupného (po facility + satisfaction mul) */
-  effectiveTicketPrice: number;
+  /**
+   * Cena vstupného, kterou pro domácí zápas nastavil manažer (`fans.base_ticket_price`),
+   * bez bonusu za oplocení a bez násobitele spokojenosti. 0 = sazba obce; venku 0.
+   */
+  setTicketPrice: number;
   /** Village base ticket price (reference pro "normální" vstupné) */
   villageBaseTicketPrice: number;
   concessionMode: "external" | "self";
@@ -210,9 +213,14 @@ export function computeMatchSatisfactionDelta(input: MatchSatisfactionInput): Ma
     reasons.push(`Prohra s outsiderem ${penalty}`);
   }
 
-  // 3. Cena vstupného
+  // 3. Cena vstupného: to, co nastavil manažer, proti sazbě obce.
+  //
+  // Dřív se porovnávala cena vybraná u vstupu, tedy i s bonusem za oplocení (až +20 %)
+  // a násobitelem spokojenosti (až ×1,3). Klub s plotem a spokojenými fanoušky tak
+  // dostával „Drahé vstupné −2" po každém domácím zápase, i když na cenu nikdy nesáhl.
   if (input.villageBaseTicketPrice > 0) {
-    const ratio = input.effectiveTicketPrice / input.villageBaseTicketPrice;
+    const setPrice = input.setTicketPrice > 0 ? input.setTicketPrice : input.villageBaseTicketPrice;
+    const ratio = setPrice / input.villageBaseTicketPrice;
     if (ratio > 1.2) {
       delta -= 2;
       reasons.push("Drahé vstupné -2");
