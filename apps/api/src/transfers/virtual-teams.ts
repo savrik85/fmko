@@ -89,16 +89,52 @@ function calcAskingPrice(rating: number, age: number, position: string, rng: Rng
   return Math.round((value * rng.int(90, 110) / 100) / 100) * 100;
 }
 
+/** Kolik prodejů klubům mimo hru za sezónu projde za plnou cenu. */
+export const OUTSIDE_SALE_FULL_PRICE_COUNT = 2;
+/** O kolik klesne nabídnutá cena za každý další prodej v sezóně. */
+export const OUTSIDE_SALE_PRICE_STEP = 0.15;
+/** Pod jaký podíl tržní hodnoty nabídka klubu mimo hru neklesne. */
+export const OUTSIDE_SALE_PRICE_FLOOR = 0.6;
+
+/**
+ * Cena po slevě za opakované prodeje klubům mimo hru. Ty platí penězi, které ve hře nikdo
+ * nevydělal, takže klub, který jim prodává jednoho hráče za druhým, tiskne peníze. První
+ * dva prodeje v sezóně jsou za plnou cenu, každý další o 15 % níž, nejníž 60 % tržní hodnoty.
+ */
+export function outsideSalePrice(price: number, value: number, priorSales: number): number {
+  if (priorSales < OUTSIDE_SALE_FULL_PRICE_COUNT) return price;
+  const factor = 1 - OUTSIDE_SALE_PRICE_STEP * (priorSales - OUTSIDE_SALE_FULL_PRICE_COUNT + 1);
+  return Math.min(price, Math.max(value * OUTSIDE_SALE_PRICE_FLOOR, price * factor));
+}
+
+/**
+ * Kolik hráčů už klub (áčko i U21) v běžící sezóně prodal klubům mimo hru. Počítají se
+ * přijaté nabídky od `virtual_ai`, tedy nabídky cizích klubů i prodeje přes jejich poptávky.
+ */
+export async function outsideSalesThisSeason(db: D1Database, teamId: string): Promise<number> {
+  const row = await db.prepare(
+    `SELECT COUNT(*) AS n FROM transfer_offers o
+      WHERE o.from_team_id = 'virtual_ai' AND o.status = 'accepted'
+        AND o.to_team_id IN (
+          SELECT r.id FROM teams me JOIN teams r ON COALESCE(r.parent_team_id, r.id) = COALESCE(me.parent_team_id, me.id)
+           WHERE me.id = ?)
+        AND datetime(o.resolved_at) >= (SELECT datetime(created_at) FROM seasons ORDER BY number DESC LIMIT 1)`,
+  ).bind(teamId).first<{ n: number }>()
+    .catch((e) => { logger.warn({ module: "virtual-teams" }, "prodeje klubům mimo hru v sezóně", e); return null; });
+  return row?.n ?? 0;
+}
+
 /**
  * Cena CPU nabídky: tržní hodnota až o čtvrtinu výš. Cizí klub kupuje za tržní cenu
  * a hráče, kterého chce, si trochu připlatí. Německý klub dá o 30–50 % víc než český
- * (rozhodnutí 2026-10-18).
+ * (rozhodnutí 2026-10-18). `priorSales` = kolik hráčů už prodávající klub v sezóně
+ * klubům mimo hru prodal (viz `outsideSalePrice`).
  */
-export function calcOfferPrice(rating: number, age: number, position: string, rng: Rng, abroad = false): number {
+export function calcOfferPrice(rating: number, age: number, position: string, rng: Rng, abroad = false, priorSales = 0): number {
   const value = estimateMarketValue(rating, age, position);
   const czech = value * rng.int(100, 125) / 100;
   const price = abroad ? czech * rng.int(130, 150) / 100 : czech;
-  return Math.round(price / 100) * 100;
+  return Math.round(outsideSalePrice(price, value, priorSales) / 100) * 100;
 }
 
 // ═══════════════════════════════════════════════
@@ -390,15 +426,17 @@ async function maybeOfferForTeam(
     rating: Math.max(baseTeam.rating, Math.round(teamAvg) + 8 + rng.int(0, 12)),
   };
 
+  // Kolikátý prodej klubu mimo hru by to pro tenhle klub v sezóně byl: od třetího cena klesá.
+  const priorSales = await outsideSalesThisSeason(db, targetTeamId);
   let target = rng.pick(candidates);
-  let offerPrice = calcOfferPrice(target.overall_rating as number, (target.age as number) ?? 25, target.position as string, rng, abroad);
+  let offerPrice = calcOfferPrice(target.overall_rating as number, (target.age as number) ?? 25, target.position as string, rng, abroad, priorSales);
   let interest = await computeInterestForOffer(db, target.id as string, {
     fromTeamId: "virtual_ai", offerAmount: offerPrice, virtualRating: virtualTeam.rating, virtualCountry: virtualTeam.country,
   }).catch((e) => { logger.warn({ module: "virtual-teams" }, "compute interest", e); return null; });
 
   if (interest && interest.level === 0 && candidates.length > 1) {
     const other = rng.pick(candidates.filter((p) => p.id !== target.id));
-    const otherPrice = calcOfferPrice(other.overall_rating as number, (other.age as number) ?? 25, other.position as string, rng, abroad);
+    const otherPrice = calcOfferPrice(other.overall_rating as number, (other.age as number) ?? 25, other.position as string, rng, abroad, priorSales);
     const otherInterest = await computeInterestForOffer(db, other.id as string, {
       fromTeamId: "virtual_ai", offerAmount: otherPrice, virtualRating: virtualTeam.rating, virtualCountry: virtualTeam.country,
     }).catch((e) => { logger.warn({ module: "virtual-teams" }, "compute interest #2", e); return null; });

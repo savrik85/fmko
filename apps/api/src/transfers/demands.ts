@@ -475,8 +475,10 @@ export async function pitchPlayer(db: D1Database, teamId: string, demandId: stri
     return { ok: true, status: "declined", message: reply };
   }
 
-  const { calcOfferPrice, germanClubLetter } = await import("./virtual-teams");
-  const marketPrice = calcOfferPrice(player.overall_rating, player.age, player.position, rng, abroad);
+  const { calcOfferPrice, germanClubLetter, outsideSalesThisSeason } = await import("./virtual-teams");
+  // Prodej přes poptávku je taky prodej klubu mimo hru: od třetího v sezóně cena klesá.
+  const marketPrice = calcOfferPrice(player.overall_rating, player.age, player.position, rng, abroad,
+    await outsideSalesThisSeason(db, me.clubTeamId));
   const price = demand.max_price ? Math.min(demand.max_price, marketPrice) : marketPrice;
   const clubName = club?.name ?? "Klub mimo hru";
   const { computeInterestForOffer } = await import("./player-interest");
