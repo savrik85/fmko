@@ -8,6 +8,7 @@ import { Hono } from "hono";
 import type { Bindings } from "../index";
 import { logger } from "../lib/logger";
 import { requireTeamOwnership, requirePrivateTeamRead } from "../auth/middleware";
+import { FREE_CHAT_PER_HOUR, TOO_LONG_ERROR, cleanPhoneMessage, pageLimit } from "../messaging/limits";
 
 const groupChatsRouter = new Hono<{ Bindings: Bindings }>();
 
@@ -151,7 +152,7 @@ groupChatsRouter.get("/teams/:teamId/group-chats", async (c) => {
 groupChatsRouter.get("/teams/:teamId/group-chats/:groupId/messages", async (c) => {
   const teamId = c.req.param("teamId");
   const groupId = c.req.param("groupId");
-  const limit = Number(c.req.query("limit") || "50");
+  const limit = pageLimit(c.req.query("limit"));
   const before = c.req.query("before");
 
   if (!(await canAccessChat(c.env.DB, teamId, groupId))) {
@@ -205,11 +206,32 @@ groupChatsRouter.get("/teams/:teamId/group-chats/:groupId/messages", async (c) =
   return c.json(messages);
 });
 
+/**
+ * Zapíše zprávu do skupinového chatu, pokud klub za poslední hodinu nenapsal do
+ * bezplatných chatů (ligový a globální dohromady) už `FREE_CHAT_PER_HOUR` zpráv.
+ * Strop je součást zápisu, takže ho souběžné požadavky neobejdou. false = přes strop.
+ */
+export async function insertGroupMessage(
+  db: D1Database,
+  m: { id: string; groupId: string; teamId: string; senderName: string; text: string; now: string },
+): Promise<boolean> {
+  const hourAgo = new Date(Date.parse(m.now) - 3600_000).toISOString();
+  const res = await db.prepare(
+    `INSERT INTO group_messages (id, group_chat_id, sender_team_id, sender_name, body, sent_at)
+     SELECT ?, ?, ?, ?, ?, ?
+      WHERE (SELECT COUNT(*) FROM group_messages WHERE sender_team_id = ? AND sent_at > ?) < ?`
+  ).bind(m.id, m.groupId, m.teamId, m.senderName, m.text, m.now, m.teamId, hourAgo, FREE_CHAT_PER_HOUR).run();
+  return (res.meta?.changes ?? 0) === 1;
+}
+
 groupChatsRouter.post("/teams/:teamId/group-chats/:groupId/messages", async (c) => {
   const teamId = c.req.param("teamId");
   const groupId = c.req.param("groupId");
   const body = await c.req.json<{ body: string }>();
-  if (!body.body?.trim()) return c.json({ error: "Empty message" }, 400);
+  const cleaned = cleanPhoneMessage(body.body);
+  if ("error" in cleaned) {
+    return c.json({ error: cleaned.error === "too_long" ? TOO_LONG_ERROR : "Zpráva je prázdná." }, 400);
+  }
 
   if (!(await canAccessChat(c.env.DB, teamId, groupId))) {
     return c.json({ error: "Chat nenalezen" }, 404);
@@ -221,11 +243,11 @@ groupChatsRouter.post("/teams/:teamId/group-chats/:groupId/messages", async (c) 
 
   const msgId = crypto.randomUUID();
   const now = new Date().toISOString();
-  const text = body.body.trim();
+  const text = cleaned.text;
 
-  await c.env.DB.prepare(
-    "INSERT INTO group_messages (id, group_chat_id, sender_team_id, sender_name, body, sent_at) VALUES (?, ?, ?, ?, ?, ?)"
-  ).bind(msgId, groupId, teamId, senderName, text, now).run();
+  if (!(await insertGroupMessage(c.env.DB, { id: msgId, groupId, teamId, senderName, text, now }))) {
+    return c.json({ error: `Do chatů jsi za poslední hodinu napsal ${FREE_CHAT_PER_HOUR} zpráv. Dej si chvíli pauzu.` }, 429);
+  }
 
   await c.env.DB.prepare(
     "UPDATE group_chats SET last_message_text = ?, last_message_at = ? WHERE id = ?"

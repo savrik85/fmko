@@ -19,7 +19,7 @@ import { nazevSituace } from "../incidents/situace";
 import { temaZeStavu } from "../incidents/tema";
 import { nactiZnalostiHrace } from "../incidents/znalosti-db";
 import {
-  generateCoachInitiatedReply, generateSquadGroupReaction, GeminiUnavailableError, playerTimeContext,
+  coachQuote, generateCoachInitiatedReply, generateSquadGroupReaction, GeminiUnavailableError, playerTimeContext,
 } from "./ai-player-chat";
 import { coachStreak, leftOnReadChance, markCoachMessagesRead, readDelayMs } from "./left-on-read";
 import {
@@ -332,7 +332,7 @@ async function replyInSquadGroupInner(
     const text = await generateSquadGroupReaction(
       env, mluvci, team, opts.coachMessage,
       (predchozi?.results ?? []).map((m) =>
-        m.sender_type === "user" ? `TRENÉR: ${m.body}` : `${m.sender_name}: ${m.body}`),
+        m.sender_type === "user" ? `TRENÉR: ${coachQuote(m.body)}` : `${m.sender_name}: ${m.body}`),
     );
     if (!text) return false;
 

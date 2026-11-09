@@ -8,6 +8,7 @@ import type { Bindings } from "../index";
 import { logger } from "../lib/logger";
 import { photoKey } from "../messaging/player-photo";
 import { PLAYER_GONE_HINT, playerInClub } from "../messaging/player-reach";
+import { PHONE_MESSAGE_MAX, TOO_LONG_ERROR, cleanPhoneMessage, pageLimit } from "../messaging/limits";
 import { requireTeamOwnership, requireAdmin, requirePrivateTeamRead } from "../auth/middleware";
 import { listGroupChatsForTeam } from "./group-chats";
 import { sendWebPushToTeam, getNotificationPreferences } from "../community/web-push";
@@ -208,7 +209,7 @@ async function playerStillReachable(db: D1Database, playerId: string | null, tea
 messagingRouter.get("/teams/:teamId/conversations/:convId", async (c) => {
   const teamId = c.req.param("teamId");
   const convId = c.req.param("convId");
-  const limit = Number(c.req.query("limit") || "50");
+  const limit = pageLimit(c.req.query("limit"));
   const before = c.req.query("before"); // cursor pagination
 
   // Ověřit že konverzace patří tomuto týmu + načíst AI thread state
@@ -496,7 +497,13 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
     body: string; optionId?: string; voice?: { audioKey?: unknown; durationSec?: unknown; peaks?: unknown };
   }>();
 
-  if (!body.body?.trim()) return c.json({ error: "Empty message" }, 400);
+  // Hlasovka: `body` je přepis od modelu, ne text od hráče, takže se zkrátí místo odmítnutí.
+  const cleaned = cleanPhoneMessage(body.voice && typeof body.body === "string" ? body.body.slice(0, PHONE_MESSAGE_MAX) : body.body);
+  if ("error" in cleaned) {
+    return c.json({ error: cleaned.error === "too_long" ? TOO_LONG_ERROR : "Zpráva je prázdná." }, 400);
+  }
+  // Dál se pracuje jen s očištěným textem.
+  body.body = cleaned.text;
 
   let voiceMeta: { type: "voice"; audioKey: string; durationSec: number; peaks?: number[] } | null = null;
   if (body.voice) {
