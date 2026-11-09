@@ -39,6 +39,7 @@ import { adminAiClubsRouter } from "./routes/admin-ai-clubs";
 import { adminAiCoachRouter } from "./routes/admin-ai-coach";
 import { guardTeamReads } from "./auth/team-read-guard";
 import { corsOrigin } from "./lib/cors-origins";
+import { requireAdmin } from "./auth/middleware";
 // transfers endpoints are in gameRouter
 import { recoverStuckRounds } from "./multiplayer/match-runner";
 import { executeDailyTick } from "./season/daily-tick";
@@ -138,6 +139,9 @@ app.get("/health", (c) => c.json({ status: "ok" }));
 // Čtení dat klubu je soukromé, dokud cesta není na seznamu veřejných (auth/team-read-guard.ts).
 // Musí být před připojením routerů: handler, který odpoví dřív, pozdější middleware nespustí.
 app.use("/api/teams/*", guardTeamReads);
+// Admin routy dřív chránilo jen to, že se matchesRouter s `use("/admin/*")` připojuje jako první.
+// Výslovně tady, ať ochrana nezávisí na pořadí routerů.
+app.use("/api/admin/*", requireAdmin);
 
 app.route("/auth", authRouter);
 app.route("/api/registration", registrationRouter);
