@@ -31,7 +31,7 @@ import { findVisibleFreeAgents, findVisibleListings } from "../transfers/market-
 import { findTransferSearchPlayerRows } from "../transfers/player-search";
 import {
   BUY_DEMAND, MAX_INJURY_DAYS_TO_BUY, minimumBid,
-  type BuyCandidateOption, type BuyLoanOption, type BuyPickContext, type BuyPickDecision, type PlayerFitness,
+  type BuyCandidateOption, type BuyLoanOption, type BuyPickContext, type BuyPickDecision, type PastOffer, type PlayerFitness,
 } from "./buy-decision";
 import {
   decideBuyPick, decideByModel, newMarketTrace, recordDecision, type DecidedBy, type MarketTrace, type ModelUse,
@@ -52,7 +52,7 @@ import {
 } from "./outside-buy";
 import { ensureAiProfile, type AiCoachProfile } from "./profile";
 import { MAX_SQUAD, SIGNING_SQUAD_THRESHOLD, squadFillNeeds, TARGET_SENIOR_SQUAD, type PositionNeed } from "./squad";
-import { loadAiClubState, pragueDay, pragueHour, type AiClubState } from "./transfer-club";
+import { loadAiClubState, parseDbTime, pragueDay, pragueHour, type AiClubState } from "./transfer-club";
 import { canOpenDeal, claimTask, openOutgoingOffers } from "./transfer-replies";
 import { buyCeiling, maxBuyPrice, openingBid, stableUnit } from "./valuation";
 
@@ -421,6 +421,40 @@ async function priceCandidates(db: D1Database, club: AiClubState, need: Position
   return priced;
 }
 
+/** Jak daleko do minulosti model vidí vlastní nabídky na téhož hráče a kolik nejvýš. */
+const PAST_OFFER_DAYS = 30;
+const MAX_PAST_OFFERS = 3;
+
+/**
+ * Vlastní uzavřené nabídky klubu na hráče za poslední měsíc (přestupy) a jak dopadly. Na produ
+ * AI nabízela týmž hráčům dokola skoro stejně a nabídky propadaly bez reakce (39 nabídek,
+ * 1 přijatá): bez paměti model nemá proč nabídnout jinak.
+ */
+export async function loadPastOffers(db: D1Database, clubTeamId: string, playerId: string, now: Date): Promise<PastOffer[]> {
+  const since = new Date(now.getTime() - PAST_OFFER_DAYS * DAY_MS).toISOString();
+  const rows = await db.prepare(
+    `SELECT offer_amount, counter_amount, status, last_action_by, created_at FROM transfer_offers
+      WHERE player_id = ? AND COALESCE(offer_type, 'transfer') != 'loan'
+        AND status IN ('expired', 'rejected', 'withdrawn')
+        AND from_team_id IN (SELECT id FROM teams WHERE id = ? OR parent_team_id = ?)
+        AND julianday(created_at) >= julianday(?)
+      ORDER BY julianday(created_at) DESC LIMIT ?`,
+  ).bind(playerId, clubTeamId, clubTeamId, since, MAX_PAST_OFFERS).all<{
+    offer_amount: number; counter_amount: number | null; status: string; last_action_by: string | null; created_at: string;
+  }>().catch((e) => { logger.warn({ module: M }, `dřívější nabídky na hráče ${playerId}`, e); return { results: [] }; });
+  return rows.results.map((r) => {
+    const created = parseDbTime(r.created_at) ?? now;
+    // Stažená nabídka s protinávrhem prodávajícího: AI odešla, protože chtěl víc.
+    const countered = r.status === "withdrawn" && r.counter_amount != null && r.counter_amount > r.offer_amount;
+    const outcome: PastOffer["outcome"] = countered ? "countered"
+      : r.status === "expired" ? "ignored" : r.status === "rejected" ? "rejected" : "withdrawn";
+    return {
+      amount: Number(r.offer_amount) || 0, outcome, counter: countered ? Number(r.counter_amount) : null,
+      daysAgo: Math.max(0, Math.floor((now.getTime() - created.getTime()) / DAY_MS)),
+    };
+  });
+}
+
 /** Na hráče klubu ve hře jde nabídnout: žádná rozjetá nabídka, pauza po odmítnutí ani propojené kluby. */
 async function inGameCandidateOpen(db: D1Database, clubTeamId: string, c: BuyCandidate): Promise<boolean> {
   if (await hasOpenOfferFor(db, c.playerId, clubTeamId)) return false;
@@ -489,6 +523,7 @@ async function buildBuyOptions(
         minBid: minimumBid({ estimatedValue: c.marketValue, listedPrice: listed, ruleBid: c.amount }),
         maxBid: listed ? Math.min(c.maxPrice, listed) : c.maxPrice,
         fitness: c.fitness ?? null,
+        pastOffers: c.outside ? [] : await loadPastOffers(db, club.teamId, c.playerId, now),
       },
       cand: c, freeAgentId: null, ruleBid: c.amount, ruleRank: shortlist.length,
     });

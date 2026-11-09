@@ -16,7 +16,7 @@ import { generateAiProfile, type AiCoachProfile } from "./profile";
 import {
   loadScoutReportCandidates, maybeStartScoutTask, negotiateOutsidePurchase, outsideCandidateFromListing,
 } from "./outside-buy";
-import { loadPlayerFitness, runTransferMarket } from "./transfer-market";
+import { loadPastOffers, loadPlayerFitness, runTransferMarket } from "./transfer-market";
 
 let mf: Miniflare;
 let db: D1Database;
@@ -377,6 +377,29 @@ describe("AI klub vybírá posilu modelem: model navrhuje, kód hlídá", () => 
     const res = await runMarket(marketEnv(undefined));
     expect(res.actions.find((a) => a.kind === "outside_buy")).toMatchObject({ amount: 6000, decidedBy: "fallback" });
     expect(await marketLog()).toMatchObject({ mode: "on", model: "rules", used_fallback: 1, error: null });
+  });
+
+  it("dřívější vlastní nabídky na téhož hráče model dostane i s výsledkem", async () => {
+    await insertHumanClubPlayer("h-mid", "MID", 40, 26);
+    const ago = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString();
+    const past = (id: string, amount: number, status: string, days: number, counter: number | null = null) => db.prepare(
+      `INSERT INTO transfer_offers (id, player_id, from_team_id, to_team_id, offer_amount, counter_amount, offer_type, status, expires_at, created_at)
+       VALUES (?, 'h-mid', ?, 'human-club', ?, ?, 'transfer', ?, ?, ?)`,
+    ).bind(id, AI_CLUB, amount, counter, status, ago(days - 3), ago(days));
+    await db.batch([
+      past("old-expired", 3000, "expired", 12),
+      past("old-walked", 3200, "withdrawn", 6, 9000),
+      // Starší než měsíc se nepočítá, rozjednaná taky ne.
+      past("old-ancient", 2500, "rejected", 45),
+    ]);
+    expect(await loadPastOffers(db, AI_CLUB, "h-mid", new Date())).toEqual([
+      { amount: 3200, outcome: "countered", counter: 9000, daysAgo: 6 },
+      { amount: 3000, outcome: "ignored", counter: null, daysAgo: 12 },
+    ]);
+    const ai = fakeAi(() => ({ choice: "none", bid: 0, reason: "they will not sell" }));
+    await runMarket(marketEnv(ai.binding));
+    const prompt = ai.calls.find((c) => c.name === "buy_pick")?.prompt ?? "";
+    expect(prompt).toContain("YOUR EARLIER OFFERS for him: 3,200 CZK 6 days ago: the club asked for more and you walked away (they wanted 9,000 CZK); 3,000 CZK 12 days ago: the club never answered and it expired.");
   });
 
   it("přímá nabídka hráči lidského klubu v lize: částku z rozpětí pošle stejnou službou jako člověk", async () => {

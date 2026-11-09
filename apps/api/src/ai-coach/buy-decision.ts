@@ -50,6 +50,33 @@ export function fitnessText(f: PlayerFitness | null | undefined): string {
   return `, ${parts.join(", ")}`;
 }
 
+/** Dřívější vlastní nabídka AI klubu na téhož hráče a jak dopadla. */
+export interface PastOffer {
+  amount: number;
+  outcome: "ignored" | "rejected" | "withdrawn" | "countered";
+  /** Protinávrh prodávajícího, na který AI nepřistoupila (jen `countered`). */
+  counter: number | null;
+  daysAgo: number;
+}
+
+const PAST_OUTCOME_TEXT: Record<PastOffer["outcome"], string> = {
+  ignored: "the club never answered and it expired",
+  rejected: "the club refused it",
+  withdrawn: "you withdrew it",
+  countered: "the club asked for more and you walked away",
+};
+
+/** Věta pro model o dřívějších nabídkách na hráče (prázdná, když žádné nebyly). */
+export function pastOffersText(past: PastOffer[] | undefined): string {
+  if (!past || past.length === 0) return "";
+  const items = past.map((o) => {
+    const when = o.daysAgo <= 0 ? "today" : `${o.daysAgo} day${o.daysAgo === 1 ? "" : "s"} ago`;
+    const counter = o.outcome === "countered" && o.counter ? ` (they wanted ${czk(o.counter)})` : "";
+    return `${czk(o.amount)} ${when}: ${PAST_OUTCOME_TEXT[o.outcome]}${counter}`;
+  });
+  return ` YOUR EARLIER OFFERS for him: ${items.join("; ")}. The same offer again will end the same way: offer clearly more, or leave him.`;
+}
+
 export interface BuyCandidateOption {
   /** Klíč pro model („c1“…). */
   key: string;
@@ -72,6 +99,8 @@ export interface BuyCandidateOption {
   maxBid: number;
   /** Zdraví a stopka hráče klubu ve hře (u klubu mimo hru a volného hráče se neví). */
   fitness?: PlayerFitness | null;
+  /** Vlastní nabídky na téhož hráče za poslední měsíc a jejich výsledek, od nejnovější. */
+  pastOffers?: PastOffer[];
 }
 
 export interface BuyLoanOption {
@@ -207,9 +236,9 @@ function candidateLine(c: BuyCandidateOption): string {
   const range = `Bid between ${czk(c.minBid)} and ${czk(c.maxBid)}.`;
   switch (c.route) {
     case "listing":
-      return `${head}, ${value}. Transfer-listed by ${SELLER_TEXT[c.seller]} for ${czk(c.askingPrice ?? c.maxBid)}: a bid at the asking price is accepted, a lower one may be countered or refused.${fee} ${range}`;
+      return `${head}, ${value}. Transfer-listed by ${SELLER_TEXT[c.seller]} for ${czk(c.askingPrice ?? c.maxBid)}: a bid at the asking price is accepted, a lower one may be countered or refused.${fee} ${range}${pastOffersText(c.pastOffers)}`;
     case "offer":
-      return `${head}, ${value}. Plays for ${SELLER_TEXT[c.seller]} and is not transfer-listed: a direct offer, the club may accept, counter or refuse (after a refusal you cannot bid for him for 10 days).${fee} ${range}`;
+      return `${head}, ${value}. Plays for ${SELLER_TEXT[c.seller]} and is not transfer-listed: a direct offer, the club may accept, counter or refuse (after a refusal you cannot bid for him for 10 days).${fee} ${range}${pastOffersText(c.pastOffers)}`;
     case "outside_listing":
       return `${head}, ${value}. Transfer-listed by ${SELLER_TEXT.outside} for ${czk(c.askingPrice ?? c.maxBid)}: the club agrees at the asking price, haggles below it and breaks off after insulting offers; then the player decides whether to join. ${range}`;
     case "scout_report":
