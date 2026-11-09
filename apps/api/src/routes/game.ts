@@ -3357,14 +3357,16 @@ gameRouter.post("/game/generate-round-report", async (c) => {
   if (!c.env.GEMINI_API_KEY) return c.json({ error: "GEMINI_API_KEY není nastaven" }, 500);
 
   const cal = await c.env.DB.prepare(
-    "SELECT league_id, game_week, status FROM season_calendar WHERE id = ?"
-  ).bind(calendarId).first<{ league_id: string; game_week: number; status: string }>();
+    "SELECT league_id, game_week, status, scheduled_at FROM season_calendar WHERE id = ?"
+  ).bind(calendarId).first<{ league_id: string; game_week: number; status: string; scheduled_at: string }>();
   if (!cal) return c.json({ error: "kolo nenalezeno" }, 404);
   if (cal.status !== "simulated") return c.json({ error: `kolo není simulated (${cal.status})` }, 400);
 
+  // Jen článek k TOMUHLE kolu: liga i číslo kola se opakují každou sezónu, takže
+  // dřív stačil článek k 5. kolu z července a nový se nevytvořil (Prachatice 2026-11-09).
   const existing = await c.env.DB.prepare(
-    "SELECT id FROM news WHERE league_id = ? AND game_week = ? AND type = 'ai_report'"
-  ).bind(cal.league_id, cal.game_week).first();
+    "SELECT id FROM news WHERE league_id = ? AND game_week = ? AND type = 'ai_report' AND created_at >= ?"
+  ).bind(cal.league_id, cal.game_week, cal.scheduled_at.slice(0, 10)).first();
   if (existing) return c.json({ ok: false, skipped: true, reason: "ai_report pro toto kolo už existuje" });
 
   // standingsBefore: nejlepší dostupné přiblížení = aktuální tabulka (kolo je už odehrané).
