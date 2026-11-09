@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applySeasonDevelopment } from "./season-development";
+import { applySeasonDevelopment, developmentTarget } from "./season-development";
 
 describe("applySeasonDevelopment", () => {
   it("zkušenost se věkem nemění", () => {
@@ -53,5 +53,21 @@ describe("vývoj za celou sezónu", () => {
     expect(now - start!).toBeGreaterThanOrEqual(4);
     // Bez záznamů o růstu nic nedopočítává.
     expect(seasonStartRating("MID", skills, physical, 0, undefined, undefined)).toBeNull();
+  });
+});
+
+describe("developmentTarget", () => {
+  it("slabého hráče podlaha nezvedne na 20", () => {
+    expect(developmentTarget(14, 0)).toBe(14);
+    expect(developmentTarget(14, -3)).toBe(14);
+    expect(developmentTarget(14, 2)).toBe(16);
+    expect(developmentTarget(19, 4)).toBe(23);
+  });
+
+  it("nad dvacítkou platí podlaha 20 a strop 99 jako dřív", () => {
+    expect(developmentTarget(22, -4)).toBe(20);
+    expect(developmentTarget(20, -1)).toBe(20);
+    expect(developmentTarget(50, -3)).toBe(47);
+    expect(developmentTarget(98, 4)).toBe(99);
   });
 });

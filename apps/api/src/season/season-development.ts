@@ -116,6 +116,14 @@ const MGR_LABELS: Record<string, string> = {
   youth_development: "Mládež", discipline: "Disciplína",
 };
 
+/**
+ * Cílové hodnocení po letním vývoji. Podlaha 20 chrání před propadem, ale nesmí hráče zvednout:
+ * dřív `clamp(before + delta, 20, 99)` vytáhl každého slabšího (třeba žáka s 14) rovnou na 20.
+ */
+export function developmentTarget(before: number, delta: number): number {
+  return clamp(before + delta, Math.min(before, 20), 99);
+}
+
 export async function developSquadAndManager(
   db: D1Database,
   leagueId: string,
@@ -139,7 +147,7 @@ export async function developSquadAndManager(
   for (const p of playersRes.results) {
     const before = p.overall_rating;
     if (before <= 0) continue;
-    const target = clamp(before + ratingDelta(rng, p.age), 20, 99);
+    const target = developmentTarget(before, ratingDelta(rng, p.age));
 
     let skills: Record<string, unknown>;
     let physical: Record<string, unknown>;
