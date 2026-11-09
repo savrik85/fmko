@@ -78,6 +78,31 @@ export const WEATHER_CZ: Record<string, string> = {
   snow: "sněžení",
 };
 
+/** Model nevrátil použitelný článek. Vyhazuje se, aby fronta pokus zopakovala. */
+export class EmptyReportError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "EmptyReportError";
+  }
+}
+
+/** Článek o kole: liga, číslo kola a vznik ode dne, kdy se kolo hrálo (parametry v tomhle pořadí). */
+const ROUND_REPORT_EXISTS_SQL =
+  "SELECT 1 FROM news WHERE league_id = ? AND game_week = ? AND type = 'ai_report' AND substr(created_at, 1, 10) >= ?";
+
+/** Den, kdy se kolo hrálo (YYYY-MM-DD). Bez kalendáře prázdný řetězec = jakýkoli článek k číslu kola. */
+async function roundDayOf(db: D1Database, calendarId: string): Promise<string> {
+  const cal = await db.prepare("SELECT scheduled_at FROM season_calendar WHERE id = ?")
+    .bind(calendarId).first<{ scheduled_at: string | null }>()
+    .catch((e) => { logger.warn({ module: "ai-reporter" }, "den kola pro kontrolu článku", e); return null; });
+  return (cal?.scheduled_at ?? "").slice(0, 10);
+}
+
+export async function roundReportExists(db: D1Database, leagueId: string, gameWeek: number, roundDay: string): Promise<boolean> {
+  const row = await db.prepare(`${ROUND_REPORT_EXISTS_SQL} LIMIT 1`).bind(leagueId, gameWeek, roundDay).first<{ 1: number }>();
+  return !!row;
+}
+
 export async function generateAiRoundReport(
   db: D1Database,
   geminiApiKey: string,
@@ -102,6 +127,14 @@ export async function generateAiRoundReport(
   ).bind(calendarId).all();
 
   if (matchRows.results.length === 0) return;
+
+  // Článek k tomuhle kolu už vyšel (opakované doručení z fronty, ruční dogenerování):
+  // nevolat model znovu. Liga i číslo kola se každou sezónu opakují, proto i datum kola.
+  const roundDay = await roundDayOf(db, calendarId);
+  if (await roundReportExists(db, leagueId, gameWeek, roundDay)) {
+    logger.info({ module: "ai-reporter" }, `článek k ${gameWeek}. kolu ligy ${leagueId} už existuje, přeskakuji`);
+    return;
+  }
 
   // 2. Individuální statistiky
   const matchIds = matchRows.results.map((m) => m.id as string);
@@ -386,25 +419,28 @@ Styl:
     prompt,
     { maxTokens: 2048, temperature: 0.6, module: "ai-reporter" },
   );
-  if (!text) {
-    logger.warn({ module: "ai-reporter" }, "generátor vrátil prázdnou odpověď");
-    return;
-  }
+  // Prázdná odpověď je chyba, ne hotovo: fronta článků pak zprávu zopakuje (max_retries),
+  // dřív konzument vrátil done a kolo zůstalo bez článku.
+  if (!text) throw new EmptyReportError("generátor vrátil prázdnou odpověď");
 
   // Parsování: první neprázdný řádek = headline, zbytek = body
   const lines = text.trim().split("\n").filter((l) => l.trim().length > 0);
   const headline = lines[0].replace(/^#+\s*/, "").replace(/^\*+/, "").replace(/\*+$/, "").trim();
   const body = lines.slice(1).map((l) => l.replace(/^\*+/, "").replace(/\*+$/, "").trim()).filter(Boolean).join("\n");
 
-  if (!headline || !body) {
-    logger.warn({ module: "ai-reporter" }, "Could not parse headline/body from Gemini response");
+  if (!headline || !body) throw new EmptyReportError("z odpovědi modelu nejde vyčíst titulek a text");
+
+  // Uložení do news. Tabulka nemá unikátní klíč na kolo, takže kontrola existence je
+  // součást zápisu: dva souběžné běhy (retry fronty a ruční dogenerování) uloží jeden článek.
+  const inserted = await db.prepare(
+    `INSERT INTO news (id, league_id, type, headline, body, game_week, created_at)
+     SELECT ?, ?, 'ai_report', ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+      WHERE NOT EXISTS (${ROUND_REPORT_EXISTS_SQL})`
+  ).bind(crypto.randomUUID(), leagueId, headline, body, gameWeek, leagueId, gameWeek, roundDay).run();
+  if ((inserted.meta?.changes ?? 0) === 0) {
+    logger.info({ module: "ai-reporter" }, `článek k ${gameWeek}. kolu ligy ${leagueId} mezitím uložil jiný běh`);
     return;
   }
-
-  // Uložení do news
-  await db.prepare(
-    "INSERT INTO news (id, league_id, type, headline, body, game_week, created_at) VALUES (?, ?, 'ai_report', ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))"
-  ).bind(crypto.randomUUID(), leagueId, headline, body, gameWeek).run();
 
   logger.info({ module: "ai-reporter" }, `AI report generated for game week ${gameWeek}: "${headline}"`);
 

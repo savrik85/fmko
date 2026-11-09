@@ -3374,7 +3374,13 @@ gameRouter.post("/game/generate-round-report", async (c) => {
   const { calculateStandings } = await import("../stats/standings");
   const { generateAiRoundReport } = await import("../news/ai-reporter");
   const standings = await calculateStandings(c.env.DB, cal.league_id);
-  await generateAiRoundReport(c.env.DB, c.env.GEMINI_API_KEY, cal.league_id, calendarId, cal.game_week, standings);
+  // Prázdná odpověď modelu teď vyhazuje chybu (kvůli retry fronty); tady ji vrátit čitelně.
+  try {
+    await generateAiRoundReport(c.env.DB, c.env.GEMINI_API_KEY, cal.league_id, calendarId, cal.game_week, standings);
+  } catch (e) {
+    logger.warn({ module: "game.ts" }, `dogenerování článku kola ${calendarId}`, e);
+    return c.json({ ok: false, generated: false, error: e instanceof Error ? e.message : "článek se nepodařilo vygenerovat" }, 502);
+  }
 
   const report = await c.env.DB.prepare(
     "SELECT headline, substr(body, 1, 240) as preview, length(body) as len FROM news WHERE league_id = ? AND game_week = ? AND type = 'ai_report'"
