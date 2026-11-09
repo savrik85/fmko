@@ -23,6 +23,11 @@ export async function sendPlayerToU21(db: D1Database, teamId: string, playerId: 
   // který si ho půjčil) a návrat i stažení ho vrátí odkudkoli. Zápasy U21 se ale do
   // podmínky hraní nepočítají, ta hlídá áčko.
   if (player.next_match_return) return { ok: false, status: 400, error: "Hráč už čeká na návrat z U21" };
+  // Jen trvale: přesun na jeden zápas si pamatuje áčko hostitele jako místo návratu
+  // (`parent_club_id`), a kdyby hostování mezitím skončilo, vrátil by se po zápase U21 tam.
+  if (player.loan_from_team_id && mode === "next_match") {
+    return { ok: false, status: 400, error: "Hostujícího hráče jde do U21 přesunout jen trvale, na jeden zápas ne." };
+  }
 
   const u21Team = await db.prepare(
     "SELECT id FROM teams WHERE parent_team_id = ? AND team_type = 'u21'"

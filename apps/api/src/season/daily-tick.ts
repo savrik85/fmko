@@ -1697,13 +1697,14 @@ export async function executeDailyTick(
       const originalTeamId = p.loan_from_team_id as string;
       const playerId = p.id as string;
       const loanTeamId = p.team_id as string;
-      await env.DB.prepare("UPDATE players SET team_id = ?, loan_from_team_id = NULL, loan_until = NULL WHERE id = ?")
-        .bind(originalTeamId, playerId).run();
+      // Hráč může být u hostitele i v U21: přesun a smlouva jdou podle hráče (transfers/loan-return.ts).
+      const { returnLoanedPlayerStmt, closeLoanContractStmt } = await import("../transfers/loan-return");
+      await returnLoanedPlayerStmt(env.DB, playerId, originalTeamId).run();
       const { closeLoanAgreements } = await import("../transfers/loan-agreements");
       await closeLoanAgreements(env.DB, playerId, "ended");
       // Close loan contract
-      await env.DB.prepare("UPDATE player_contracts SET is_active = 0, left_at = ?, leave_type = 'loan_end' WHERE player_id = ? AND team_id = ? AND join_type = 'loan' AND is_active = 1")
-        .bind(now.toISOString(), playerId, loanTeamId).run().catch((e) => logger.warn({ module: "daily-tick" }, "close loan contract", e));
+      await closeLoanContractStmt(env.DB, playerId, now.toISOString(), "loan_end").run()
+        .catch((e) => logger.warn({ module: "daily-tick" }, "close loan contract", e));
       logger.info({ module: "daily-tick" }, `loan return: ${p.first_name} ${p.last_name} → team ${originalTeamId}`);
       // News about loan return
       try {

@@ -6154,18 +6154,17 @@ async function vratZHostovani(
   },
   iniciator: "hostujici" | "kmenovy",
 ): Promise<void> {
-  const borrowerTeamId = player.team_id;
+  // Hráč může sedět v U21 hostitele: peníze, smlouva i telefon patří jeho áčku.
+  const borrowerTeamId = await resolveClubTeamId(db, player.team_id) ?? player.team_id;
   const ownerRosterTeamId = player.loan_from_team_id;
   const ownerClubTeamId = await resolveClubTeamId(db, ownerRosterTeamId) ?? ownerRosterTeamId;
   const gameDate = (await db.prepare("SELECT game_date FROM teams WHERE id = ?")
     .bind(borrowerTeamId).first<{ game_date: string }>())?.game_date ?? new Date().toISOString();
 
-  await db.prepare("UPDATE players SET team_id = ?, loan_from_team_id = NULL, loan_until = NULL WHERE id = ?")
-    .bind(ownerRosterTeamId, player.id).run();
+  const { returnLoanedPlayerStmt, closeLoanContractStmt } = await import("../transfers/loan-return");
+  await returnLoanedPlayerStmt(db, player.id, ownerRosterTeamId).run();
 
-  await db.prepare(
-    "UPDATE player_contracts SET is_active = 0, left_at = ?, leave_type = ? WHERE player_id = ? AND team_id = ? AND is_active = 1"
-  ).bind(gameDate, iniciator === "kmenovy" ? "loan_recalled" : "loan_terminated", player.id, borrowerTeamId)
+  await closeLoanContractStmt(db, player.id, gameDate, iniciator === "kmenovy" ? "loan_recalled" : "loan_terminated")
     .run().catch((e) => logger.warn({ module: "game" }, "close loan contract failed", e));
 
   await onPlayerTransferred(db, player.id, ownerRosterTeamId, { permanent: false });
@@ -6211,7 +6210,10 @@ gameRouter.post("/teams/:teamId/loans/:playerId/terminate", async (c) => {
   const teamId = c.req.param("teamId");
   const player = await nactiHostujicihoHrace(c.env.DB, c.req.param("playerId"));
   if (!player) return c.json({ error: "Hráč nenalezen" }, 404);
-  if (player.team_id !== teamId) return c.json({ error: "Hráč není ve tvém klubu" }, 403);
+  // Hostující hráč smí u hostitele i do U21, ukončit hostování jde odkudkoli z klubu.
+  const playerClubTeamId = await resolveClubTeamId(c.env.DB, player.team_id);
+  const actorClubTeamId = await resolveClubTeamId(c.env.DB, teamId);
+  if (!playerClubTeamId || playerClubTeamId !== actorClubTeamId) return c.json({ error: "Hráč není ve tvém klubu" }, 403);
   if (!player.loan_from_team_id) return c.json({ error: "Hráč není na hostování" }, 400);
 
   await vratZHostovani(c.env.DB, { ...player, loan_from_team_id: player.loan_from_team_id }, "hostujici");

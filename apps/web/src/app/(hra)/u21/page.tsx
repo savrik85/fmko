@@ -342,12 +342,15 @@ export default function U21Page() {
                       className="min-h-11 px-3 py-2 text-xs bg-pitch-500 hover:bg-pitch-600 text-white rounded disabled:opacity-50 whitespace-nowrap w-full md:w-auto"
                       title="Trvale do U21 dokud ho nepovoláš zpět"
                     >→ Přesunout do U21</button>
-                    <button
-                      disabled={busy === p.id}
-                      onClick={() => sendToU21(p.id, "next_match")}
-                      className="min-h-11 px-3 py-2 text-xs bg-gold-500 hover:bg-gold-600 text-white rounded disabled:opacity-50 whitespace-nowrap w-full md:w-auto"
-                      title="Jen na nejbližší U21 zápas, pak zpět"
-                    >→ Na jeden zápas</button>
+                    {/* Hostující hráč smí do U21 jen trvale (návrat po zápase by kolidoval s koncem hostování). */}
+                    {!young.find((y) => y.id === p.id)?.loan_from_team_id && (
+                      <button
+                        disabled={busy === p.id}
+                        onClick={() => sendToU21(p.id, "next_match")}
+                        className="min-h-11 px-3 py-2 text-xs bg-gold-500 hover:bg-gold-600 text-white rounded disabled:opacity-50 whitespace-nowrap w-full md:w-auto"
+                        title="Jen na nejbližší U21 zápas, pak zpět"
+                      >→ Na jeden zápas</button>
+                    )}
                   </div>
                 )}
               />
