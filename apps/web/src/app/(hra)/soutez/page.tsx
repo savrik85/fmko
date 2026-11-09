@@ -73,6 +73,11 @@ const ROLE_OF_GESCE: Record<string, string> = {
 };
 
 const ANSWER_LABEL: Record<string, string> = { pro: "Pro", proti: "Proti", zdrzel: "Zdržel se" };
+// U odvolání proti pokutě šlo „Proti" číst jako „proti pokutě", tlačítka proto říkají, co hlas udělá.
+const APPEAL_ANSWER_LABEL: Record<string, string> = { pro: "Zrušit pokutu", proti: "Pokutu ponechat", zdrzel: "Zdržel se" };
+function answerLabel(kind: string, answer: string): string {
+  return (kind === "appeal" ? APPEAL_ANSWER_LABEL : ANSWER_LABEL)[answer] ?? answer;
+}
 
 /**
  * Hodnota návrhu v řeči, kterou hráč čte. Zrcadlí formatRuleValue na serveru —
@@ -713,7 +718,7 @@ function ProposalCard({ p, myTeamId, avatars, onVote, onWithdraw, onDefend, canV
                 {(["pro", "proti", "zdrzel"] as const).map((a) => (
                   <button key={a} onClick={() => onVote(p.id, a)}
                     className={`btn btn-md ${p.myAnswer === a ? "btn-primary" : "btn-secondary"}`}>
-                    {ANSWER_LABEL[a]}
+                    {answerLabel(p.kind, a)}
                   </button>
                 ))}
               </div>
@@ -721,7 +726,7 @@ function ProposalCard({ p, myTeamId, avatars, onVote, onWithdraw, onDefend, canV
 
             {p.myAnswer && (
               <div className="text-sm text-muted">
-                Tvůj hlas: {ANSWER_LABEL[p.myAnswer]}. Do zahájení zasedání ho můžeš změnit.
+                Tvůj hlas: {answerLabel(p.kind, p.myAnswer)}. Do zahájení zasedání ho můžeš změnit.
               </div>
             )}
             {mine && (
@@ -740,7 +745,7 @@ function ProposalCard({ p, myTeamId, avatars, onVote, onWithdraw, onDefend, canV
                   if (list.length === 0) return null;
                   return (
                     <div key={a} className="break-words">
-                      <span className="text-muted">{ANSWER_LABEL[a]}: </span>
+                      <span className="text-muted">{answerLabel(p.kind, a)}: </span>
                       {list.map((v, i) => (
                         <span key={v.teamId}>
                           {i > 0 && ", "}

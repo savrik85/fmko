@@ -481,6 +481,18 @@ async function afterSanction(
     .catch((e) => logger.warn({ module: M }, "sentiment rozhodčích po druhé pokutě", e));
 }
 
+/**
+ * Text bodu programu pro odvolání. Nadpis říká, o čem se hlasuje: hlas PRO pokutu ruší.
+ * Dřívější „Odvolání proti pokutě 1 500 Kč" s tlačítky Pro a Proti šlo číst obráceně
+ * („jsem proti pokutě") a dva kluby tak hlasovaly proti vlastnímu odvolání.
+ */
+export function appealProposalText(amount: number, reason: string): { title: string; body: string } {
+  return {
+    title: `Odvolání: zrušit pokutu ${amount.toLocaleString("cs")} Kč?`,
+    body: `Klub se odvolává a žádá zrušení pokuty. Hlas pro pokutu zruší a peníze vrátí, hlas proti ji ponechá. Důvod pokuty: ${reason}`,
+  };
+}
+
 /** Vrátí pokutu při úspěšném odvolání. Peníze putují z pokladny zpátky klubu. */
 export async function refundSanction(
   db: D1Database, sanctionId: string, gameDate: string,
