@@ -72,6 +72,16 @@ describe("hostující hráč v U21 hostitele", () => {
     expect(await sendPlayerToU21(t.db, "buyer-a", "own", "next_match")).toEqual({ ok: true, mode: "next_match" });
   });
 
+  it("hráč se stopkou do U21 nesmí, stopku by si odseděl v dorostu", async () => {
+    await insertTestPlayer(t.db, { id: "banned", teamId: "buyer-a", age: 19 });
+    await t.db.prepare("UPDATE players SET suspended_matches = 2 WHERE id = 'banned'").run();
+    for (const mode of ["next_match", "permanent"] as const) {
+      expect(await sendPlayerToU21(t.db, "buyer-a", "banned", mode)).toMatchObject({ ok: false, status: 400 });
+    }
+    await t.db.prepare("UPDATE players SET suspended_matches = 0 WHERE id = 'banned'").run();
+    expect(await sendPlayerToU21(t.db, "buyer-a", "banned", "permanent")).toEqual({ ok: true, mode: "permanent" });
+  });
+
   it("konec hostování (příkazy denního ticku) vrátí hráče z U21 hostitele čistého a zavře smlouvu", async () => {
     await putInHostU21({ nextMatch: true });
     await returnLoanedPlayerStmt(t.db, "loanee", "seller-a").run();

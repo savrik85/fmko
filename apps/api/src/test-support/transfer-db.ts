@@ -34,7 +34,7 @@ const SCHEMA = `
     skills TEXT NOT NULL DEFAULT '{}', physical TEXT NOT NULL DEFAULT '{}', personality TEXT NOT NULL DEFAULT '{}',
     life_context TEXT NOT NULL DEFAULT '{}', avatar TEXT NOT NULL DEFAULT '{}', weekly_wage INTEGER NOT NULL DEFAULT 0,
     squad_number INTEGER, loan_from_team_id TEXT, loan_until TEXT, parent_club_id TEXT,
-    next_match_return INTEGER NOT NULL DEFAULT 0, residence TEXT, commute_km INTEGER NOT NULL DEFAULT 0,
+    next_match_return INTEGER NOT NULL DEFAULT 0, suspended_matches INTEGER DEFAULT 0, residence TEXT, commute_km INTEGER NOT NULL DEFAULT 0,
     status TEXT NOT NULL DEFAULT 'active', hidden_talent REAL DEFAULT 0, nationality TEXT NOT NULL DEFAULT 'CZ',
     is_celebrity INTEGER DEFAULT 0, skills_max TEXT NOT NULL DEFAULT '{}', coach_relationship INTEGER, raised_by_team_id TEXT
   );
