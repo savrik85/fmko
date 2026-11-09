@@ -388,6 +388,18 @@ export default {
       }
     }
 
+    // ── DOKONČENÍ DENNÍHO TICKU: 5:00 UTC ──
+    // Když tick ve 3:00 spadl uprostřed, herní datum zůstalo včerejší a večerní kolo by se
+    // nehrálo. Hotový den tohle volání přeskočí, rozpracovaný doběhne od nedokončených kroků.
+    if (cron === "0 5 * * *") {
+      try {
+        const resumed = await executeDailyTick(env);
+        if (resumed.events.length > 0) log("warn", `denní tick dokončen až v 5:00: ${resumed.events.length} událostí`);
+      } catch (e: any) {
+        log("error", "dokončení denního ticku selhalo", e);
+      }
+    }
+
     // ── STAFF TICK: 5:00 UTC — efekty zaměstnanců (masér, lékař, správce, psycholog, kurzy, skaut, pool) ──
     // Samostatný cron mimo daily-tick. Manuální trigger (!cron) ho spustí taky.
     if (cron === "0 5 * * *" || !cron) {
