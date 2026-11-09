@@ -2,6 +2,8 @@
  * Výpočet ligové tabulky.
  */
 
+import { sortStandings } from "../stats/standings-order";
+
 export interface StandingEntry {
   teamIndex: number;
   played: number;
@@ -65,17 +67,12 @@ export function calculateStandings(
     }
   }
 
-  // Sort: points DESC, goal diff DESC, goals for DESC
-  standings.sort((a, b) => {
-    const pointDiff = b.points - a.points;
-    if (pointDiff !== 0) return pointDiff;
-
-    const gdA = a.goalsFor - a.goalsAgainst;
-    const gdB = b.goalsFor - b.goalsAgainst;
-    if (gdB !== gdA) return gdB - gdA;
-
-    return b.goalsFor - a.goalsFor;
-  });
-
-  return standings;
+  // Stejné pořadí jako všude jinde (stats/standings-order.ts). Stabilní klíč je index týmu,
+  // doplněný nulami, ať se řadí číselně.
+  const key = (index: number) => String(index).padStart(6, "0");
+  const ranked = sortStandings(
+    standings.map((entry) => ({ teamId: key(entry.teamIndex), points: entry.points, gf: entry.goalsFor, ga: entry.goalsAgainst, entry })),
+    results.map((r) => ({ homeTeamId: key(r.homeTeamIndex), awayTeamId: key(r.awayTeamIndex), homeScore: r.homeScore, awayScore: r.awayScore })),
+  );
+  return ranked.map((r) => r.entry);
 }
