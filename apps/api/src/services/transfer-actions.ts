@@ -950,6 +950,35 @@ export async function acceptTransferOffer(
       .catch((e) => logger.warn({ module: "game" }, "close stale offer accept claim", e));
   };
 
+  /**
+   * Zabrání vzácných zdrojů obchodu (peníze kupujícího, hráč, hráči na výměnu) jedním D1
+   * batchem. Každý krok je podmíněný UPDATE; když některý nechytne řádek, kroky, které
+   * prošly, se jedním batchem vrátí. Dřív šly kroky po jednom: výjimka mezi nimi (výpadek
+   * D1) nechala nabídku přijatou a peníze stržené bez hráče. Batch je transakce, takže
+   * výjimka teď znamená, že se nestalo nic.
+   * Vrací index kroku, který neprošel, `-1` při výjimce, nebo `null`, když prošlo všechno.
+   */
+  const claimDealResources = async (
+    steps: Array<{ stmt: D1PreparedStatement; undo: D1PreparedStatement }>,
+  ): Promise<number | null> => {
+    let results: D1Result[];
+    try {
+      results = await db.batch(steps.map((step) => step.stmt));
+    } catch (e) {
+      logger.error({ module: "game" }, `zabrání peněz a hráčů pro nabídku ${offerId} selhalo`, e);
+      return -1;
+    }
+    const failedIndex = results.findIndex((r) => (r.meta?.changes ?? 0) === 0);
+    if (failedIndex === -1) return null;
+    const undo = steps.filter((_, i) => (results[i].meta?.changes ?? 0) > 0).map((step) => step.undo);
+    if (undo.length > 0) {
+      await db.batch(undo)
+        .catch((e) => logger.error({ module: "game" }, `vrácení zabraných peněz a hráčů u nabídky ${offerId} selhalo`, e));
+    }
+    return failedIndex;
+  };
+  const refundBuyerStmt = (sum: number) => db.prepare("UPDATE teams SET budget = budget + ? WHERE id = ?").bind(sum, buyerTeamId);
+
   // ── Prodej virtuálnímu klubu — hráč odchází ze hry, prodávající dostane peníze ──
   if (buyerTeamId === "virtual_ai") {
     const previousPlayerStatus = currentPlayer.status ?? "active";
@@ -1118,32 +1147,43 @@ export async function acceptTransferOffer(
   const swapDestTeamIds = new Map<string, string>();
 
   if (offerType === "loan" && loanDuration) {
-    // Hostování — atomický budget check (pouze pokud je nenulový poplatek)
-    if (amount > 0) {
-      const loanDeductResult = await db.prepare(
-        "UPDATE teams SET budget = budget - ? WHERE id = ? AND budget >= ?"
-      ).bind(amount, buyerTeamId, amount).run();
-      if (loanDeductResult.meta.changes === 0) {
-        await releaseOfferClaim();
-        return fail(400, "Kupující nemá dostatek prostředků");
-      }
-    }
-
     const loanUntil = new Date(gameDate);
     loanUntil.setDate(loanUntil.getDate() + loanDuration);
 
-    const moved = await db.prepare(
-      `UPDATE players
-       SET team_id = ?, loan_from_team_id = ?, loan_until = ?, parent_club_id = NULL, next_match_return = 0
-       WHERE id = ? AND team_id = ? AND loan_from_team_id IS NULL
-         AND COALESCE(status, 'active') != 'transferring'`,
-    ).bind(buyerDestTeamId, sellerRosterTeamId, loanUntil.toISOString(), playerId, sellerRosterTeamId).run();
-    if (moved.meta.changes === 0) {
-      if (amount > 0) {
-        await db.prepare("UPDATE teams SET budget = budget + ? WHERE id = ?")
-          .bind(amount, buyerTeamId).run()
-          .catch((e) => logger.warn({ module: "game" }, "refund budget after player loan race", e));
-      }
+    // Poplatek (když nějaký je) a přesun hráče se zaberou naráz.
+    const loanSteps = [{
+      stmt: db.prepare(
+        `UPDATE players
+         SET team_id = ?, loan_from_team_id = ?, loan_until = ?, parent_club_id = NULL, next_match_return = 0
+         WHERE id = ? AND team_id = ? AND loan_from_team_id IS NULL
+           AND COALESCE(status, 'active') != 'transferring'`,
+      ).bind(buyerDestTeamId, sellerRosterTeamId, loanUntil.toISOString(), playerId, sellerRosterTeamId),
+      undo: db.prepare(
+        `UPDATE players SET team_id = ?, loan_from_team_id = ?, loan_until = ?, parent_club_id = ?, next_match_return = ?
+         WHERE id = ? AND team_id = ? AND loan_from_team_id = ?`,
+      ).bind(
+        currentPlayer.team_id, currentPlayer.loan_from_team_id, currentPlayer.loan_until,
+        currentPlayer.parent_club_id, currentPlayer.next_match_return,
+        playerId, buyerDestTeamId, sellerRosterTeamId,
+      ),
+    }];
+    const loanFeeStepIndex = amount > 0 ? 0 : -1;
+    if (amount > 0) {
+      loanSteps.unshift({
+        stmt: db.prepare("UPDATE teams SET budget = budget - ? WHERE id = ? AND budget >= ?").bind(amount, buyerTeamId, amount),
+        undo: refundBuyerStmt(amount),
+      });
+    }
+    const loanFailedStep = await claimDealResources(loanSteps);
+    if (loanFailedStep === -1) {
+      await releaseOfferClaim();
+      return fail(500, "Hostování se nepodařilo dokončit, zkus to znovu");
+    }
+    if (loanFailedStep !== null && loanFailedStep === loanFeeStepIndex) {
+      await releaseOfferClaim();
+      return fail(400, "Kupující nemá dostatek prostředků");
+    }
+    if (loanFailedStep !== null) {
       await closeStaleOfferClaim();
       return fail(409, "Hráč mezitím změnil klub");
     }
@@ -1180,20 +1220,10 @@ export async function acceptTransferOffer(
     } catch (e) {
       logger.error({ module: "game" }, "commit loan offer failed; rolling back guarded move", e);
       const rollback = [
-        db.prepare(
-          `UPDATE players SET team_id = ?, loan_from_team_id = ?, loan_until = ?, parent_club_id = ?, next_match_return = ?
-           WHERE id = ? AND team_id = ? AND loan_from_team_id = ?`,
-        ).bind(
-          currentPlayer.team_id, currentPlayer.loan_from_team_id, currentPlayer.loan_until,
-          currentPlayer.parent_club_id, currentPlayer.next_match_return,
-          playerId, buyerDestTeamId, sellerRosterTeamId,
-        ),
+        ...loanSteps.map((step) => step.undo),
         db.prepare("UPDATE transfer_offers SET status = ?, resolved_at = NULL WHERE id = ? AND status = 'accepted'")
           .bind(offer.status, offerId),
       ];
-      if (amount > 0) {
-        rollback.push(db.prepare("UPDATE teams SET budget = budget + ? WHERE id = ?").bind(amount, buyerTeamId));
-      }
       await db.batch(rollback).catch((rollbackError) => logger.error({ module: "game" }, "rollback failed loan offer", rollbackError));
       return fail(500, "Hostování se nepodařilo dokončit, zkus to znovu");
     }
@@ -1225,38 +1255,31 @@ export async function acceptTransferOffer(
     // Trvalý přestup — atomický budget check + odečtení (včetně cross-league admin fee).
     // Při splátkách se hned strhne jen záloha, zbytek chodí každé pondělí (transfers/installments.ts).
     const totalCost = payNow + adminFee;
-    const transferDeductResult = await db.prepare(
-      "UPDATE teams SET budget = budget - ? WHERE id = ? AND budget >= ?"
-    ).bind(totalCost, buyerTeamId, totalCost).run();
-    if (transferDeductResult.meta.changes === 0) {
-      await releaseOfferClaim();
-      return fail(400, adminFee > 0
-        ? `Kupující nemá dostatek prostředků (cena ${amount.toLocaleString("cs")} Kč + administrační poplatek ${adminFee.toLocaleString("cs")} Kč)`
-        : "Kupující nemá dostatek prostředků", { reason: "buyer_funds" });
-    }
 
     // Hráči na výměnu — ověř, že všichni stále patří kupujícímu (race-safe).
-    // Stačí, aby jeden mezitím odešel, a celý obchod padá.
+    // Stačí, aby jeden mezitím odešel, a celý obchod padá. Zatím se nic nezabralo,
+    // při chybě se jen uvolní nabídka.
     const swapMoves: Array<{ id: string; rosterTeamId: string; destTeamId: string; loanUntil: string | null; parentClubId: string | null; nextMatchReturn: number }> = [];
-    for (const swapId of swapPlayerIds) {
-      const swap = await db.prepare("SELECT team_id, loan_from_team_id, loan_until, parent_club_id, next_match_return, age, first_name, last_name FROM players WHERE id = ?").bind(swapId).first<{ team_id: string; loan_from_team_id: string | null; loan_until: string | null; parent_club_id: string | null; next_match_return: number; age: number; first_name: string; last_name: string }>();
-      const swapClubTeamId = swap ? await resolveClubTeamId(db, swap.team_id) : null;
-      if (!swap || swapClubTeamId !== buyerTeamId || swap.loan_from_team_id || swap.next_match_return === 1) {
-        // Vrátit peníze (rollback budget)
-        await db.prepare("UPDATE teams SET budget = budget + ? WHERE id = ?").bind(totalCost, buyerTeamId).run()
-          .catch((e) => logger.warn({ module: "game" }, "rollback budget after swap race", e));
-        await releaseOfferClaim();
-        return fail(409, "Hráč na výměnu již není k dispozici");
+    try {
+      for (const swapId of swapPlayerIds) {
+        const swap = await db.prepare("SELECT team_id, loan_from_team_id, loan_until, parent_club_id, next_match_return, age, first_name, last_name FROM players WHERE id = ?").bind(swapId).first<{ team_id: string; loan_from_team_id: string | null; loan_until: string | null; parent_club_id: string | null; next_match_return: number; age: number; first_name: string; last_name: string }>();
+        const swapClubTeamId = swap ? await resolveClubTeamId(db, swap.team_id) : null;
+        if (!swap || swapClubTeamId !== buyerTeamId || swap.loan_from_team_id || swap.next_match_return === 1) {
+          await releaseOfferClaim();
+          return fail(409, "Hráč na výměnu již není k dispozici");
+        }
+        // Hráč na výměnu mladší 15 let jde do U21 prodávajícího; bez ní výměna neprojde.
+        const swapPlacement = await placeInSeniorSquad(db, sellerTeamId, swap.age, `${swap.first_name} ${swap.last_name}`);
+        if (!swapPlacement.ok) {
+          await releaseOfferClaim();
+          return fail(400, swapPlacement.error);
+        }
+        swapMoves.push({ id: swapId, rosterTeamId: swap.team_id, destTeamId: swapPlacement.teamId, loanUntil: swap.loan_until, parentClubId: swap.parent_club_id, nextMatchReturn: swap.next_match_return });
       }
-      // Hráč na výměnu mladší 15 let jde do U21 prodávajícího; bez ní výměna neprojde.
-      const swapPlacement = await placeInSeniorSquad(db, sellerTeamId, swap.age, `${swap.first_name} ${swap.last_name}`);
-      if (!swapPlacement.ok) {
-        await db.prepare("UPDATE teams SET budget = budget + ? WHERE id = ?").bind(totalCost, buyerTeamId).run()
-          .catch((e) => logger.warn({ module: "game" }, "rollback budget after swap age check", e));
-        await releaseOfferClaim();
-        return fail(400, swapPlacement.error);
-      }
-      swapMoves.push({ id: swapId, rosterTeamId: swap.team_id, destTeamId: swapPlacement.teamId, loanUntil: swap.loan_until, parentClubId: swap.parent_club_id, nextMatchReturn: swap.next_match_return });
+    } catch (e) {
+      logger.error({ module: "game" }, `kontrola hráčů na výměnu u nabídky ${offerId} selhala`, e);
+      await releaseOfferClaim();
+      return fail(500, "Přestup se nepodařilo dokončit, zkus to znovu");
     }
     for (const m of swapMoves) swapDestTeamIds.set(m.id, m.destTeamId);
     // Vrácení už přesunutých hráčů na výměnu na jejich původní soupisku.
@@ -1265,43 +1288,52 @@ export async function acceptTransferOffer(
        WHERE id = ? AND team_id = ? AND loan_from_team_id IS NULL`,
     ).bind(m.rosterTeamId, m.loanUntil, m.parentClubId, m.nextMatchReturn, m.id, m.destTeamId));
 
-    // Přičíst prodávajícímu + přesunout hráče + swap + uzavřít nabídku atomicky.
+    // Stržení peněz, přesun hráče a přesun hráčů na výměnu jsou jeden batch (claimDealResources).
     // Guard `AND team_id = ?` chrání proti race condition (hráč mezitím prodán).
     const playerUpdateStmt = isBuyoutAccept
       ? db.prepare("UPDATE players SET team_id = ?, loan_from_team_id = NULL, loan_until = NULL, parent_club_id = NULL, next_match_return = 0 WHERE id = ? AND team_id = ? AND loan_from_team_id = ? AND COALESCE(status, 'active') != 'transferring'").bind(buyerDestTeamId, playerId, currentPlayer.team_id, sellerRosterTeamId)
       : db.prepare("UPDATE players SET team_id = ?, loan_from_team_id = NULL, loan_until = NULL, parent_club_id = NULL, next_match_return = 0 WHERE id = ? AND team_id = ? AND loan_from_team_id IS NULL AND COALESCE(status, 'active') != 'transferring'").bind(buyerDestTeamId, playerId, sellerRosterTeamId);
-
-    const moved = await playerUpdateStmt.run();
-    if (moved.meta.changes === 0) {
-      await db.prepare("UPDATE teams SET budget = budget + ? WHERE id = ?").bind(totalCost, buyerTeamId).run()
-        .catch((e) => logger.warn({ module: "game" }, "refund budget after player transfer race", e));
+    const playerRestoreStmt = () => db.prepare(
+      `UPDATE players SET team_id = ?, loan_from_team_id = ?, loan_until = ?, parent_club_id = ?, next_match_return = ?
+       WHERE id = ? AND team_id = ? AND loan_from_team_id IS NULL`,
+    ).bind(
+      currentPlayer.team_id, currentPlayer.loan_from_team_id, currentPlayer.loan_until,
+      currentPlayer.parent_club_id, currentPlayer.next_match_return, playerId, buyerDestTeamId,
+    );
+    const DEDUCT_STEP = 0;
+    const PLAYER_STEP = 1;
+    const failedStep = await claimDealResources([
+      {
+        stmt: db.prepare("UPDATE teams SET budget = budget - ? WHERE id = ? AND budget >= ?").bind(totalCost, buyerTeamId, totalCost),
+        undo: refundBuyerStmt(totalCost),
+      },
+      { stmt: playerUpdateStmt, undo: playerRestoreStmt() },
+      ...swapMoves.map((m) => ({
+        stmt: db.prepare(
+          `UPDATE players SET team_id = ?, loan_from_team_id = NULL, loan_until = NULL, parent_club_id = NULL, next_match_return = 0
+           WHERE id = ? AND team_id = ? AND loan_from_team_id IS NULL AND next_match_return = 0
+             AND COALESCE(status, 'active') != 'transferring'`,
+        ).bind(m.destTeamId, m.id, m.rosterTeamId),
+        undo: swapRollbackStmts([m])[0],
+      })),
+    ]);
+    if (failedStep === -1) {
+      await releaseOfferClaim();
+      return fail(500, "Přestup se nepodařilo dokončit, zkus to znovu");
+    }
+    if (failedStep === DEDUCT_STEP) {
+      await releaseOfferClaim();
+      return fail(400, adminFee > 0
+        ? `Kupující nemá dostatek prostředků (cena ${amount.toLocaleString("cs")} Kč + administrační poplatek ${adminFee.toLocaleString("cs")} Kč)`
+        : "Kupující nemá dostatek prostředků", { reason: "buyer_funds" });
+    }
+    if (failedStep === PLAYER_STEP) {
       await closeStaleOfferClaim();
       return fail(409, "Hráč mezitím změnil klub");
     }
-
-    for (let i = 0; i < swapMoves.length; i++) {
-      const m = swapMoves[i];
-      const swapMoved = await db.prepare(
-        `UPDATE players SET team_id = ?, loan_from_team_id = NULL, loan_until = NULL, parent_club_id = NULL, next_match_return = 0
-         WHERE id = ? AND team_id = ? AND loan_from_team_id IS NULL AND next_match_return = 0
-           AND COALESCE(status, 'active') != 'transferring'`,
-      ).bind(m.destTeamId, m.id, m.rosterTeamId).run();
-      if (swapMoved.meta.changes === 0) {
-        await db.batch([
-          db.prepare(
-            `UPDATE players SET team_id = ?, loan_from_team_id = ?, loan_until = ?, parent_club_id = ?, next_match_return = ?
-             WHERE id = ? AND team_id = ? AND loan_from_team_id IS NULL`,
-          ).bind(
-            currentPlayer.team_id, currentPlayer.loan_from_team_id, currentPlayer.loan_until,
-            currentPlayer.parent_club_id, currentPlayer.next_match_return, playerId, buyerDestTeamId,
-          ),
-          ...swapRollbackStmts(swapMoves.slice(0, i)),
-        ]).catch((e) => logger.warn({ module: "game" }, "rollback players after swap race", e));
-        await db.prepare("UPDATE teams SET budget = budget + ? WHERE id = ?").bind(totalCost, buyerTeamId).run()
-          .catch((e) => logger.warn({ module: "game" }, "refund budget after swap race", e));
-        await releaseOfferClaim();
-        return fail(409, "Hráč na výměnu již není k dispozici");
-      }
+    if (failedStep !== null) {
+      await releaseOfferClaim();
+      return fail(409, "Hráč na výměnu již není k dispozici");
     }
 
     const buyerBalanceAfter = buyer.budget - totalCost;
@@ -1393,14 +1425,8 @@ export async function acceptTransferOffer(
     } catch (e) {
       logger.error({ module: "game" }, "commit transfer offer failed; rolling back guarded moves", e);
       const rollback = [
-        db.prepare(
-          `UPDATE players SET team_id = ?, loan_from_team_id = ?, loan_until = ?, parent_club_id = ?, next_match_return = ?
-           WHERE id = ? AND team_id = ? AND loan_from_team_id IS NULL`,
-        ).bind(
-          currentPlayer.team_id, currentPlayer.loan_from_team_id, currentPlayer.loan_until,
-          currentPlayer.parent_club_id, currentPlayer.next_match_return, playerId, buyerDestTeamId,
-        ),
-        db.prepare("UPDATE teams SET budget = budget + ? WHERE id = ?").bind(totalCost, buyerTeamId),
+        playerRestoreStmt(),
+        refundBuyerStmt(totalCost),
         db.prepare("UPDATE transfer_offers SET status = ?, resolved_at = NULL WHERE id = ? AND status = 'accepted'")
           .bind(offer.status, offerId),
       ];
