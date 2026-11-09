@@ -136,23 +136,25 @@ export async function readLeagueGameDate(db: D1Database, leagueId: string): Prom
  */
 export async function findLeaguesWithDueRound(
   db: D1Database,
-): Promise<Array<{ leagueId: string; gameDate: string }>> {
+): Promise<Array<{ leagueId: string; gameDate: string; isU21: boolean }>> {
   const rows = await db.prepare(
-    `SELECT t.league_id AS league_id, MAX(t.game_date) AS max_game_date
+    `SELECT t.league_id AS league_id, MAX(t.game_date) AS max_game_date, MAX(l.league_type = 'u21') AS is_u21
        FROM teams t JOIN leagues l ON t.league_id = l.id
       WHERE t.league_id IS NOT NULL AND t.game_date IS NOT NULL
       GROUP BY t.league_id`,
   ).all<{
     league_id: string | null;
     max_game_date: string | null;
+    is_u21: number | null;
   }>();
 
-  const out: Array<{ leagueId: string; gameDate: string }> = [];
+  const out: Array<{ leagueId: string; gameDate: string; isU21: boolean }> = [];
   for (const row of rows.results) {
     if (!row.league_id || !row.max_game_date) continue;
-    out.push({ leagueId: row.league_id, gameDate: row.max_game_date });
+    out.push({ leagueId: row.league_id, gameDate: row.max_game_date, isU21: row.is_u21 === 1 });
   }
-  return out;
+  // Mužské soutěže první (viz enqueueMatchTick).
+  return out.sort((a, b) => Number(a.isU21) - Number(b.isU21));
 }
 
 /**
