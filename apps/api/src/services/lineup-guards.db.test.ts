@@ -38,8 +38,7 @@ describe("uložení sestavy, kontroly před zápisem", () => {
   });
 
   it("zamčené i odehrané ligové kolo sestavu nepřijme", async () => {
-    const expected = { ok: false, status: 409, error: "Kolo se už hraje, sestavu teď změnit nejde." };
-    expect(await saveLineup(db, "t1", lineup("locked", VALID))).toEqual(expected);
-    expect(await saveLineup(db, "t1", lineup("played", VALID))).toEqual(expected);
+    expect(await saveLineup(db, "t1", lineup("locked", VALID))).toEqual({ ok: false, status: 409, error: "Kolo se už hraje, sestavu teď změnit nejde." });
+    expect(await saveLineup(db, "t1", lineup("played", VALID))).toEqual({ ok: false, status: 409, error: "Kolo je už odehrané, sestavu změnit nejde." });
   });
 });

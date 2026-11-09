@@ -66,7 +66,7 @@ export async function saveLineup(db: D1Database, teamId: string, body: SaveLineu
     return { ok: false, status: 500, error: "Sestavu se nepodařilo uložit, zkus to prosím znovu." };
   }
   if (round && round.status !== "scheduled") {
-    return { ok: false, status: 409, error: "Kolo se už hraje, sestavu teď změnit nejde." };
+    return { ok: false, status: 409, error: round.status === "simulated" ? "Kolo je už odehrané, sestavu změnit nejde." : "Kolo se už hraje, sestavu teď změnit nejde." };
   }
 
   // Hráči musí patřit týmu a být k dispozici
