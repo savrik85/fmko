@@ -208,7 +208,14 @@ registrationRouter.get("/access", requireAuth, async c => {
     const order = new Map(open.map((d, i) => [d.name, i]));
     districts.sort((a, b) => (order.get(a) ?? 999) - (order.get(b) ?? 999));
   }
-  return c.json({ district: home, name: user?.display_name ?? "", districts, homeFull });
+  // Co klub v okrese čeká (hrající liga, nová liga, přípravné období), ať to onboarding řekne předem.
+  const { districtStartInfo } = await import("../league/mid-season-schedule");
+  const starts: Record<string, Awaited<ReturnType<typeof districtStartInfo>>> = {};
+  for (const name of districts) {
+    starts[name] = await districtStartInfo(c.env.DB, name)
+      .catch((e) => { logger.warn({ module: "registration" }, `začátek ligy v okrese ${name}`, e); return null; });
+  }
+  return c.json({ district: home, name: user?.display_name ?? "", districts, homeFull, starts });
 });
 
 registrationRouter.use("/admin/*", requireAdmin);
