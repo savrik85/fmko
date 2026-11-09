@@ -12,6 +12,8 @@
  */
 import { logger } from "../lib/logger";
 import { scheduleRetryReply } from "./ai-player-spawn";
+import { refundCoachSms } from "./phone-credit";
+import { playerInClub } from "./player-reach";
 import { releaseStuckOwnerTyping } from "../sponsors/owner-typing";
 
 const M = "stuck-replies";
@@ -54,6 +56,14 @@ export async function releaseStuckReplies(db: D1Database): Promise<{ players: nu
       if ((res.meta?.changes ?? 0) === 0) continue;
       players++;
       if (row.fresh === 1 && row.player_id) {
+        // Hráč, který z klubu odešel, už neodpoví: žádný další pokus, SMS se vrací.
+        // Chyba dotazu = pokus se naplánuje, o hráči mimo klub rozhodne až on.
+        const reachable = await playerInClub(db, row.player_id, row.team_id)
+          .catch((e) => { logger.warn({ module: M }, `ověření hráče ${row.player_id} pro opožděnou odpověď`, e); return true; });
+        if (!reachable) {
+          await refundCoachSms(db, row.team_id, row.id, "hráč už v klubu není");
+          continue;
+        }
         await scheduleRetryReply(db, { teamId: row.team_id, playerId: row.player_id, convId: row.id });
         retries++;
       }

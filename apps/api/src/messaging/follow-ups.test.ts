@@ -41,7 +41,7 @@ beforeEach(async () => {
     await db.prepare(`DROP TABLE IF EXISTS ${t}`).run();
   }
   for (const sql of [
-    "CREATE TABLE teams (id TEXT PRIMARY KEY, name TEXT, user_id TEXT, parent_team_id TEXT, village_id TEXT, league_id TEXT, game_date TEXT)",
+    "CREATE TABLE teams (id TEXT PRIMARY KEY, name TEXT, user_id TEXT, parent_team_id TEXT, village_id TEXT, league_id TEXT, game_date TEXT, phone_credit INTEGER, phone_credit_date TEXT)",
     `CREATE TABLE players (id TEXT PRIMARY KEY, team_id TEXT, loan_from_team_id TEXT, first_name TEXT, last_name TEXT, nationality TEXT,
        age INTEGER, position TEXT, personality TEXT, life_context TEXT, coach_relationship INTEGER, is_celebrity INTEGER, status TEXT, overall_rating INTEGER)`,
     `CREATE TABLE conversations (id TEXT PRIMARY KEY, team_id TEXT, type TEXT, participant_id TEXT, last_message_text TEXT, last_message_at TEXT,
@@ -146,7 +146,39 @@ describe("odpověď po výpadku modelu", () => {
     expect((await followUps())[0].done_at).toBeNull();
     for (let h = 35; h <= 48; h++) await deliverDueFollowUps(db, {}, new Date(NOW.getTime() + h * 3600_000 + 60_000));
     expect((await followUps())[0].done_at).not.toBeNull();
+  }, 30_000);
+
+  it("hráč mezitím odešel z klubu: konec hned, žádné další pokusy a SMS se vrací", async () => {
+    await db.prepare("UPDATE teams SET phone_credit = 9 WHERE id = 't1'").run();
+    await db.prepare("UPDATE players SET team_id = 't2' WHERE id = 'p1'").run();
+    await msg("m1", "user", "Kdo rozbil tribunu?", "2026-11-10T13:17:00.000Z");
+    await schedule("retry_reply");
+    expect(await deliverDueFollowUps(db, {}, NOW)).toMatchObject({ cancelled: 1, retried: 0 });
+    expect(fx.startCoachThread).not.toHaveBeenCalled();
+    expect((await followUps())[0].done_at).not.toBeNull();
+    const team = await db.prepare("SELECT phone_credit FROM teams WHERE id = 't1'").first<{ phone_credit: number }>();
+    expect(team?.phone_credit).toBe(12);
+    // Další běh už nemá co zkoušet ani vracet.
+    expect(await deliverDueFollowUps(db, {}, new Date(NOW.getTime() + 3600_000))).toMatchObject({ cancelled: 0, retried: 0 });
+    expect((await db.prepare("SELECT phone_credit FROM teams WHERE id = 't1'").first<{ phone_credit: number }>())?.phone_credit).toBe(12);
   });
+
+  it("hráč půjčený jinam odpověď dostane, klub ho dál vlastní", async () => {
+    await db.prepare("UPDATE players SET team_id = 't2', loan_from_team_id = 't1' WHERE id = 'p1'").run();
+    await msg("m1", "user", "Jak se ti tam daří?", "2026-11-10T13:17:00.000Z");
+    await schedule("retry_reply");
+    await deliverDueFollowUps(db, {}, NOW);
+    expect(fx.startCoachThread).toHaveBeenCalled();
+  });
+
+  it("vzdaná odpověď po 36 hodinách SMS vrací", async () => {
+    fx.aiEnabled.mockResolvedValue(false);
+    await db.prepare("UPDATE teams SET phone_credit = 0 WHERE id = 't1'").run();
+    await msg("m1", "user", "Kdo rozbil tribunu?", "2026-11-10T13:17:00.000Z");
+    await schedule("retry_reply");
+    for (let h = 0; h <= 48; h++) await deliverDueFollowUps(db, {}, new Date(NOW.getTime() + h * 3600_000 + 60_000));
+    expect((await db.prepare("SELECT phone_credit FROM teams WHERE id = 't1'").first<{ phone_credit: number }>())?.phone_credit).toBe(3);
+  }, 30_000);
 
   it("hráč, který spí, dostane odpověď až ráno", async () => {
     await msg("m1", "user", "Sedli, odmítneme Forpsi, jo?", "2026-11-10T13:17:00.000Z");

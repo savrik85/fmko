@@ -25,6 +25,7 @@ import { INVITES, type InviteKind } from "./casual-topics";
 import { PHOTO_SCENES, generatePlayerPhoto, historyBody } from "./player-photo";
 import { loadChatMemory, offerStanceStmt } from "./player-memory";
 import { refundCoachSms } from "./phone-credit";
+import { playerInClub } from "./player-reach";
 import type { PlayerSnapshot } from "./ai-player-scenarios";
 
 const M = "follow-ups";
@@ -313,6 +314,13 @@ async function retryReply(db: D1Database, env: FollowUpEnv, row: FollowUpRow): P
   ).bind(row.conversation_id).first<{ id: string; body: string; sent_at: string }>();
   if (!lastCoach) return "cancelled";
   if (await answeredOrRead(db, row, lastCoach)) return "cancelled";
+  // Hráč mezitím odešel z klubu: odpověď už nepřijde nikdy. Dřív se zkoušela každou hodinu
+  // celých 36 hodin. Končí hned a zaplacená SMS se vrací.
+  if (!(await playerInClub(db, row.player_id, row.team_id))) {
+    logger.info({ module: M, teamId: row.team_id }, `odpověď po výpadku zrušena, hráč ${row.player_id} už v klubu není`);
+    await refundCoachSms(db, row.team_id, row.conversation_id, "hráč už v klubu není");
+    return "cancelled";
+  }
 
   const { isAiEnabled } = await import("../lib/ai-provider");
   if (!(await isAiEnabled(env))) return "retry";

@@ -23,7 +23,9 @@ beforeAll(async () => {
   await db.exec("CREATE TABLE conversations (id TEXT PRIMARY KEY, team_id TEXT, type TEXT, participant_id TEXT, ai_thread_active INTEGER, ai_thread_state TEXT, last_message_at TEXT, last_message_text TEXT, unread_count INTEGER DEFAULT 0)");
   await db.exec("CREATE TABLE messages (id TEXT PRIMARY KEY, conversation_id TEXT, sender_type TEXT, sender_name TEXT, body TEXT, metadata TEXT, sent_at TEXT, read INTEGER)");
   await db.exec("CREATE TABLE player_follow_ups (id TEXT PRIMARY KEY, team_id TEXT, player_id TEXT, conversation_id TEXT, kind TEXT, due_at TEXT, payload TEXT, created_at TEXT, done_at TEXT)");
-  await db.exec("CREATE TABLE players (id TEXT PRIMARY KEY, first_name TEXT, last_name TEXT, personality TEXT)");
+  await db.exec("CREATE TABLE players (id TEXT PRIMARY KEY, team_id TEXT, loan_from_team_id TEXT, first_name TEXT, last_name TEXT, personality TEXT)");
+  await db.exec("CREATE TABLE teams (id TEXT PRIMARY KEY, parent_team_id TEXT, phone_credit INTEGER, phone_credit_date TEXT)");
+  await db.exec("INSERT INTO teams (id, phone_credit) VALUES ('t1', 0), ('t2', 0)");
 });
 
 afterAll(async () => {
@@ -35,6 +37,9 @@ beforeEach(async () => {
     db.prepare("DELETE FROM conversations"),
     db.prepare("DELETE FROM messages"),
     db.prepare("DELETE FROM player_follow_ups"),
+    db.prepare("DELETE FROM players"),
+    db.prepare("INSERT INTO players (id, team_id) VALUES ('p1', 't1')"),
+    db.prepare("UPDATE teams SET phone_credit = 0"),
   ]);
 });
 
@@ -76,6 +81,16 @@ describe("zaseklá odpověď hráče", () => {
     expect(res).toMatchObject({ players: 1, retries: 1 });
     const followUp = await db.prepare("SELECT kind, conversation_id FROM player_follow_ups").first<{ kind: string; conversation_id: string }>();
     expect(followUp).toEqual({ kind: "retry_reply", conversation_id: "fresh" });
+  });
+
+  it("hráč mimo klub: vlákno se vrátí, opožděná odpověď se neplánuje a SMS se vrací", async () => {
+    await db.prepare("UPDATE players SET team_id = 't2' WHERE id = 'p1'").run();
+    await addConv("gone", playerThread({ awaiting_since: ago(40) }), ago(40));
+    await addMessage("gone", "user", ago(40));
+    const res = await releaseStuckReplies(db);
+    expect(res).toMatchObject({ players: 1, retries: 0 });
+    expect(await db.prepare("SELECT COUNT(*) AS n FROM player_follow_ups").first<{ n: number }>()).toEqual({ n: 0 });
+    expect((await db.prepare("SELECT phone_credit FROM teams WHERE id = 't1'").first<{ phone_credit: number }>())?.phone_credit).toBe(3);
   });
 
   it("odpověď, která právě běží, nechá být", async () => {

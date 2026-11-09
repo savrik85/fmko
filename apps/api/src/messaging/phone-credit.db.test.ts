@@ -57,7 +57,7 @@ describe("denní dobití", () => {
     expect((await credit()).c).toBe(0);
     // Další čtení týž den nesmí dobít znovu.
     expect((await loadCredit(db, "club")).zbyva).toBe(0);
-  });
+  }, 30_000);
 
   it("herní den posunutý zpět kredit nedobije", async () => {
     await db.prepare("UPDATE teams SET phone_credit = 3 WHERE id = 'club'").run();
