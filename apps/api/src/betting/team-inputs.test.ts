@@ -94,11 +94,11 @@ describe("klubová výhoda domácích pro kurzy", () => {
   it("sektor kotle třetí úrovně přidá pět setin, kotel přestěhovaný za bránu nic", () => {
     const stadium = { capacity: 300, ultras_stand: 3 };
     const ultras = { kind: "kotel", size: 40, mood: 50, passion: 50, spending: 50, noise: 42, sector: "kotel", closed_matches: 0, ticket_discount: 0 };
-    const withKotel = clubHomeAdvantage({ fanbase: noFans, stadium, groups: [ultras], recentAttendance: 150 });
+    const withUltras = clubHomeAdvantage({ fanbase: noFans, stadium, groups: [ultras], recentAttendance: 150 });
     const moved = clubHomeAdvantage({ fanbase: noFans, stadium, groups: [{ ...ultras, sector: "za_branou" }], recentAttendance: 150 });
     const closed = clubHomeAdvantage({ fanbase: noFans, stadium, groups: [{ ...ultras, closed_matches: 2 }], recentAttendance: 150 });
-    expect(withKotel - moved).toBeGreaterThan(0.04);
-    expect(withKotel).toBeGreaterThan(closed);
+    expect(withUltras - moved).toBeGreaterThan(0.04);
+    expect(withUltras).toBeGreaterThan(closed);
   });
 
   it("vyprodáno přidá bod, prázdno půl bodu ubere, bez odehraného zápasu nic", () => {

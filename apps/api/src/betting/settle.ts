@@ -82,10 +82,10 @@ export async function settleRound(
   /** Herní čas v ms. Výchozí je herní datum klubů kola; zadává se jen v testech. */
   gameNow?: number,
 ): Promise<SettleSummary> {
-  const kolo = await db.prepare("SELECT scheduled_at FROM season_calendar WHERE id = ?")
+  const roundRow = await db.prepare("SELECT scheduled_at FROM season_calendar WHERE id = ?")
     .bind(calendarId).first<{ scheduled_at: string | null }>()
     .catch((e) => { logger.warn({ module: M }, `termín kola ${calendarId}`, e); return null; });
-  const scheduledAt = kolo?.scheduled_at ? new Date(kolo.scheduled_at).getTime() : NaN;
+  const scheduledAt = roundRow?.scheduled_at ? new Date(roundRow.scheduled_at).getTime() : NaN;
   // Lhůta běží v herním čase, stejně jako termín kola: herní datum není reálné
   // (game_clock.offset_days) a na testovacím prostředí se liší o týdny.
   const gameDate = await gameDateOf(db, calendarId);
@@ -94,12 +94,12 @@ export async function settleRound(
   const deadlinePassed = Number.isFinite(scheduledAt) && Number.isFinite(now)
     && now - scheduledAt >= VOID_AFTER_HOURS * 3_600_000;
 
-  const zapasy = await db.prepare(
+  const matchRows = await db.prepare(
     "SELECT id, status, home_score, away_score FROM matches WHERE calendar_id = ?"
   ).bind(calendarId).all<MatchForSettlement & { id: string }>()
     .catch((e) => { logger.warn({ module: M }, `zápasy kola ${calendarId}`, e); return null; });
-  if (!zapasy) return { tickets: 0, paidOut: 0 };
-  const matchById = new Map(zapasy.results.map((z) => [z.id, z]));
+  if (!matchRows) return { tickets: 0, paidOut: 0 };
+  const matchById = new Map(matchRows.results.map((z) => [z.id, z]));
 
   const tikety = await db.prepare(
     `SELECT id, team_id, league_id, season_number, stake, total_odds_x100
@@ -145,7 +145,7 @@ export async function settleRound(
     // Aspoň jeden zápas tiketu se ještě může odehrát: tiket počká na další běh.
     if (states.includes("waiting")) continue;
 
-    const ohodnocene = moje.map((l, i) => {
+    const graded = moje.map((l, i) => {
       const v = vysledky.get(l.match_id);
       const notPlayed = states[i] === "void" || !v;
       const result: SelectionResult = notPlayed
@@ -155,7 +155,7 @@ export async function settleRound(
     });
 
     const limity = await resolveRules(db, t.league_id, t.season_number);
-    const vysledek = gradeTicket(ohodnocene.map((l) => ({ result: l.result, oddsX100: l.odds_x100 })));
+    const vysledek = gradeTicket(graded.map((l) => ({ result: l.result, oddsX100: l.odds_x100 })));
 
     const payout = vysledek.status === "won"
       ? capPayout(t.stake, vysledek.effectiveOddsX100, limity.bet_max_payout).payout
@@ -180,7 +180,7 @@ export async function settleRound(
         ).bind(crypto.randomUUID(), t.team_id, typ, payout, t.team_id, popis, `bet-payout-${t.id}`, gameDate, t.id),
       );
     }
-    for (const l of ohodnocene) {
+    for (const l of graded) {
       statements.push(db.prepare(`UPDATE bet_selections SET result = ? WHERE id = ? AND ${stillOpen}`).bind(l.result, l.id, t.id));
     }
     statements.push(db.prepare(
@@ -196,7 +196,7 @@ export async function settleRound(
     if (!results || (results[results.length - 1]?.meta?.changes ?? 0) === 0) continue;
     vyplaceno += payout;
 
-    await oznam(db, t, ohodnocene, vysledek.status, payout, vysledek.effectiveOddsX100)
+    await oznam(db, t, graded, vysledek.status, payout, vysledek.effectiveOddsX100)
       .catch((e) => logger.warn({ module: M }, `oznámení k tiketu ${t.id}`, e));
 
     vyporadano++;
