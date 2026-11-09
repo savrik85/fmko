@@ -499,7 +499,7 @@ export function AcademyCard({ teamId }: { teamId: string }) {
                         <p className="text-xs text-muted">V dorostu by bral zhruba {kc(p.graduateWage)} týdně.</p>
                       )}
                       {p.canPlayUp && p.playUpFrom && (
-                        <p className="text-xs text-muted">U žáků musí být aspoň 4 týdny, do dorostu ho můžeš dát od {new Date(`${p.playUpFrom}T12:00:00Z`).toLocaleDateString("cs", { day: "numeric", month: "numeric" })}.</p>
+                        <p className="text-xs text-muted">U žáků musí být aspoň 4 týdny, do dorostu ho můžeš dát od {new Date(`${p.playUpFrom}T12:00:00Z`).toLocaleDateString("cs", { day: "numeric", month: "numeric" })}</p>
                       )}
                       {p.canPlayUp && !p.playUpFrom && (
                         <button
