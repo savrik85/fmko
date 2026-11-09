@@ -47,14 +47,14 @@ export interface HandoverSummary {
   message: string;
 }
 
-const kc = (n: number) => `${Math.round(n).toLocaleString("cs-CZ").replace(/ | /g, " ")} Kč`;
+const formatCzk = (n: number) => `${Math.round(n).toLocaleString("cs-CZ").replace(/[\u00a0\u202f]/g, " ")} Kč`;
 
 function plural(n: number, one: string, few: string, many: string): string {
   return `${n} ${n === 1 ? one : n >= 2 && n <= 4 ? few : many}`;
 }
 
 function listNames(items: Array<{ name: string; amount: number }>): string {
-  const shown = items.slice(0, MAX_NAMES).map((i) => (i.amount > 0 ? `${i.name} (${kc(i.amount)})` : i.name));
+  const shown = items.slice(0, MAX_NAMES).map((i) => (i.amount > 0 ? `${i.name} (${formatCzk(i.amount)})` : i.name));
   const rest = items.length - shown.length;
   return shown.join(", ") + (rest > 0 ? ` a ${rest} další` : "");
 }
@@ -65,7 +65,7 @@ export function handoverMessage(s: Omit<HandoverSummary, "message">): string {
   if (s.sold.length > 0) lines.push(`Odešli: ${listNames(s.sold)}.`);
   if (s.bought.length > 0) lines.push(`Přišli: ${listNames(s.bought)}.`);
   if (s.sponsors.length > 0) lines.push(`Nové smlouvy se sponzory: ${s.sponsors.slice(0, MAX_NAMES).join(", ")}${s.sponsors.length > MAX_NAMES ? ` a ${s.sponsors.length - MAX_NAMES} další` : ""}.`);
-  if (s.spending.length > 0) lines.push(`Větší útraty: ${s.spending.map((g) => `${g.label} ${kc(g.total)}`).join(", ")}.`);
+  if (s.spending.length > 0) lines.push(`Větší útraty: ${s.spending.map((g) => `${g.label} ${formatCzk(g.total)}`).join(", ")}.`);
   if (s.sold.length + s.bought.length + s.sponsors.length + s.spending.length === 0) lines.push("V kádru, u sponzorů ani na stadionu se nic velkého nezměnilo.");
   const withdrawn: string[] = [];
   if (s.listingsWithdrawn > 0) withdrawn.push(plural(s.listingsWithdrawn, "inzerát", "inzeráty", "inzerátů"));
