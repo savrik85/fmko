@@ -215,7 +215,14 @@ teamsRouter.post("/", async (c) => {
     return c.json({ id: existingTeam.id, name: existingName?.name ?? "", existing: true }, 200);
   }
 
-  const accessError = await districtAccess(c.env.DB, village.district as string, userId);
+  // Plný nebo ručně zavřený okres hlásí stejným kódem jako dřív (409 league_full),
+  // web na něj má vlastní hlášku. Ostatní důvody z districtAccess zůstávají 403.
+  const { createCapacityLookup, districtFullMessage } = await import("../registration/district-capacity");
+  const capacityOf = createCapacityLookup(c.env.DB);
+  if ((await capacityOf(village.district as string)).full) {
+    return c.json({ error: "league_full", message: districtFullMessage(village.district as string) }, 409);
+  }
+  const accessError = await districtAccess(c.env.DB, village.district as string, userId, capacityOf);
   if (accessError) return c.json({ error: accessError }, 403);
 
   // Je v okrese pro nový klub místo? Pravidlo (přebor → III. třída → plno) drží
