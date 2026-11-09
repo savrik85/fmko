@@ -10,7 +10,7 @@ import {
 } from "../registration/district-capacity";
 import { logger } from "../lib/logger";
 import {
-  bumpCounters, counterKey, REGISTRATION_IP_MAX, REGISTRATION_WINDOW_SECONDS, UNKNOWN_IP,
+  bumpCounters, counterKey, REGISTRATION_IP_MAX, REGISTRATION_WINDOW_SECONDS, UNKNOWN_IP, normalizeClientAddress,
 } from "../auth/attempt-limiter";
 
 /**
@@ -40,7 +40,7 @@ function newToken(): string {
  */
 async function rejectRateLimited(c: Context<{ Bindings: Bindings }>): Promise<Response | null> {
   try {
-    const key = await counterKey("registration-ip", c.req.header("CF-Connecting-IP") ?? UNKNOWN_IP);
+    const key = await counterKey("registration-ip", normalizeClientAddress(c.req.header("CF-Connecting-IP") ?? UNKNOWN_IP));
     const count = (await bumpCounters(c.env.DB, [key], REGISTRATION_WINDOW_SECONDS)).get(key) ?? Infinity;
     if (count > REGISTRATION_IP_MAX) return c.json({ error: "Příliš mnoho žádostí. Zkus to prosím za hodinu." }, 429);
     return null;

@@ -22,6 +22,8 @@ export const LOGIN_IP_MAX = 20;
  * se správným heslem se tak přihlásí, i když na jeho účet někdo útočí.
  */
 export const LOGIN_EMAIL_MAX = 50;
+/** Nad tímhle počtem pokusů na e-mail v okně se odmítá každý pokus, i z nové adresy. */
+export const LOGIN_EMAIL_HARD_MAX = 300;
 /** Požadavek bez hlavičky s adresou (mimo Cloudflare) se počítá do společného koše. */
 export const UNKNOWN_IP = "unknown";
 
@@ -71,7 +73,23 @@ export interface LoginCounterKeys {
   email: string;
 }
 
-export async function loginCounterKeys(email: string, ip: string): Promise<LoginCounterKeys> {
+/**
+ * Adresa pro počítadla. U IPv6 jen prvních 64 bitů: jeden zákazník dostává celý rozsah /64
+ * a střídáním adres v něm by každému pokusu vyšlo čerstvé počítadlo.
+ */
+export function normalizeClientAddress(ip: string): string {
+  const value = ip.trim().toLowerCase();
+  if (!value.includes(":")) return value;
+  const [head, tail = ""] = value.split("::");
+  const headGroups = head ? head.split(":") : [];
+  const tailGroups = tail ? tail.split(":") : [];
+  const missing = value.includes("::") ? Math.max(0, 8 - headGroups.length - tailGroups.length) : 0;
+  const groups = [...headGroups, ...Array<string>(missing).fill("0"), ...tailGroups].slice(0, 4);
+  return `${groups.map((g) => g.replace(/^0+(?=.)/, "")).join(":")}::/64`;
+}
+
+export async function loginCounterKeys(email: string, rawIp: string): Promise<LoginCounterKeys> {
+  const ip = normalizeClientAddress(rawIp);
   return {
     pair: await counterKey("login-pair", `${email}|${ip}`),
     ip: await counterKey("login-ip", ip),
@@ -92,6 +110,9 @@ export function judgeLogin(counts: { pair: number; ip: number; email: number }):
   if (counts.pair > LOGIN_PAIR_MAX || counts.ip > LOGIN_IP_MAX) return { verdict: "blocked" };
   // Na e-mail se útočí z mnoha adres: dál smí jen adresa bez dřívějšího pokusu v okně.
   if (counts.email > LOGIN_EMAIL_MAX && counts.pair > 1) return { verdict: "blocked" };
+  // Tvrdý strop na e-mail bez ohledu na adresu: rozložené hádání z mnoha adres, kde je
+  // každá „nová“, by jinak mělo jeden pokus na adresu donekonečna.
+  if (counts.email > LOGIN_EMAIL_HARD_MAX) return { verdict: "blocked" };
   return { verdict: "verify" };
 }
 
