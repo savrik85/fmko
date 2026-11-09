@@ -72,3 +72,12 @@ export function isRoundRecoveryTickNow(cron: string | undefined, hourInPrague: n
   if (hourInPrague == null) return cron === RECOVERY_CRON_SUMMER;
   return (cron === RECOVERY_CRON_SUMMER || cron === RECOVERY_CRON_WINTER) && hourInPrague === MATCH_HOUR_PRAGUE;
 }
+
+/**
+ * Druhý zápasový cron (:05) je jen pojistka pro případ, že první (:00) kola nezařadil.
+ * Smí proto řadit jen ligy, jejichž dnešní kolo ještě nikdo nezamkl, a žádnou údržbu.
+ * Dřív poslal celou dávku podruhé do instance s běžícími koly (pád 2026-11-09).
+ */
+export function isMatchTickRetry(cron: string | undefined): boolean {
+  return !!cron && cron.startsWith("5 ");
+}

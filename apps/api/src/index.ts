@@ -75,6 +75,22 @@ export type Bindings = {
   API_BASE_URL?: string;
 };
 
+/**
+ * Pojistka (recoverStuckRounds) hraje jen zápasy. Agendu po kole (oznámení, články,
+ * události mezi koly, úklid) doběhne tohle; dřív ji musel někdo pustit ručně.
+ */
+async function finishRoundAgendaAfterRecovery(
+  env: Bindings, calendarId: string, log: (level: string, msg: string, err?: unknown) => void,
+): Promise<void> {
+  try {
+    const { finishRecoveredRound } = await import("./season/league-round");
+    const finished = await finishRecoveredRound(env, calendarId, { owner: true });
+    log(finished.ok ? "info" : "warn", `agenda dohraného kola ${calendarId}: ${finished.ok ? `${finished.matches} zápasů` : finished.reason}`);
+  } catch (e) {
+    log("error", `agenda dohraného kola ${calendarId} selhala`, e);
+  }
+}
+
 const app = new Hono<{ Bindings: Bindings }>();
 
 app.use("*", cors({ origin: "*" }));
@@ -429,11 +445,29 @@ export default {
     // by tak čekalo do zítřejšího ticku; tenhle ho dohraje ještě týž den.
     if (isRoundRecoveryTickNow(cron, hourInPrague)) {
       try {
-        const recovered = await recoverStuckRounds(env.DB, env.GEMINI_API_KEY);
-        for (const r of recovered) {
-          log("info", `recovered stuck round ${r.calendarId} (liga ${r.leagueId}): ${r.matches} zápasů dohráno`);
+        const { readMatchTickMode } = await import("./queue/messages");
+        const { ROUND_HEARTBEAT_STALE_MINUTES } = await import("./multiplayer/match-runner");
+        // Fronta: každé zaseklé kolo dostane vlastní invokaci a dohraje se celé, i s agendou.
+        const requeued = (await readMatchTickMode(env.CACHE_KV)) === "queue"
+          ? await (await import("./queue/producer")).enqueueStuckRounds(env, ROUND_HEARTBEAT_STALE_MINUTES)
+          : 0;
+        if (requeued > 0) {
+          log("warn", `zaseklá kola zpět do fronty: ${requeued}`);
+        } else {
+          const recovered = await recoverStuckRounds(env.DB, env.GEMINI_API_KEY);
+          for (const r of recovered) {
+            log("info", `recovered stuck round ${r.calendarId} (liga ${r.leagueId}): ${r.matches} zápasů dohráno`);
+            await finishRoundAgendaAfterRecovery(env, r.calendarId, log);
+          }
         }
       } catch (e) { log("error", "stuck round recovery (16:20) failed", e); }
+      // Zápasy, které v odehraném kole zůstaly neodehrané (spadly na chybě i napodruhé).
+      try {
+        const { replayUnplayedMatches } = await import("./season/league-round");
+        for (const r of await replayUnplayedMatches(env)) {
+          log(r.unplayed > 0 ? "error" : "info", `kolo ${r.calendarId}: dodatečně dohráno ${r.played}, neodehraných zbývá ${r.unplayed}`);
+        }
+      } catch (e) { log("error", "dohrání neodehraných zápasů selhalo", e); }
       // Turnaj: dohraje zápasy dne, které v 16:00/16:05 spadly (zábor propadá po 15 min).
       try {
         const { maybeAdvanceTournament } = await import("./tournament/advance");
@@ -456,6 +490,7 @@ export default {
           const recovered = await recoverStuckRounds(env.DB, env.GEMINI_API_KEY);
           for (const r of recovered) {
             log("info", `recovered stuck round ${r.calendarId} (liga ${r.leagueId}): ${r.matches} zápasů dohráno`);
+            await finishRoundAgendaAfterRecovery(env, r.calendarId, log);
           }
         } catch (e) { log("error", "stuck round recovery failed", e); }
 
@@ -468,7 +503,8 @@ export default {
           // Doběhne za sekundu bez ohledu na počet lig; vlastní práci udělá
           // konzumer, kde každá liga dostane vlastní invokaci a vlastní rozpočet.
           const { enqueueMatchTick } = await import("./queue/producer");
-          const enq = await enqueueMatchTick(env);
+          const { isMatchTickRetry } = await import("./lib/match-tick-schedule");
+          const enq = await enqueueMatchTick(env, { retryOnly: isMatchTickRetry(cron) });
           log("info", `match tick zařazen do fronty: ${enq.rounds} kol, ${enq.maintenance} údržeb`);
         } else {
           // ── STARÁ CESTA (režim "loop") ──

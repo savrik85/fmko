@@ -106,6 +106,10 @@ export async function recoverStuckRounds(
         const results = await runScheduledMatches(db, round.id, geminiApiKey);
         await db.prepare("UPDATE season_calendar SET status = 'simulated' WHERE id = ?")
             .bind(round.id).run();
+        const unplayed = await countRoundMatches(db, round.id, "unplayed");
+        if (unplayed > 0) {
+            logger.error({module: "match-runner"}, `kolo ${round.id}: ${unplayed} zápasů zůstalo neodehraných, dohraje je replayUnplayedMatches`);
+        }
         recovered.push({ calendarId: round.id, leagueId: round.league_id, matches: results.length });
 
         // Základní přehled výsledků (round_results) — bez AI reporteru, ten je sekundární
@@ -133,6 +137,26 @@ export async function recoverStuckRounds(
         }
     }
     return recovered;
+}
+
+/** Kolik zápasů kola je v daném stavu ('simulated' = odehrané, 'unplayed' = čeká na simulaci). */
+export async function countRoundMatches(db: D1Database, calendarId: string, state: "simulated" | "unplayed"): Promise<number> {
+    const where = state === "simulated" ? "status = 'simulated'" : "status IN ('scheduled', 'lineups_open')";
+    const row = await db.prepare(`SELECT COUNT(*) AS n FROM matches WHERE calendar_id = ? AND ${where}`)
+        .bind(calendarId).first<{ n: number }>()
+        .catch((e) => { logger.warn({module: "match-runner"}, `počet zápasů kola ${calendarId}`, e); return null; });
+    return row?.n ?? 0;
+}
+
+const MATCH_SLOTS = ["GK", "DEF", "MID", "FWD"] as const;
+type MatchSlot = typeof MATCH_SLOTS[number];
+
+/**
+ * Pozice ze sestavy uložené manažerem. Engine zná jen čtyři řady; cokoli jiného
+ * (ručně poslané "LW") by v něm sáhlo do prázdna a shodilo celý zápas.
+ */
+export function normalizeMatchPosition(value: unknown): MatchSlot | undefined {
+    return typeof value === "string" && (MATCH_SLOTS as readonly string[]).includes(value) ? value as MatchSlot : undefined;
 }
 
 export async function runScheduledMatches(
@@ -177,7 +201,13 @@ export async function runScheduledMatches(
     }
     const weather: Weather = roundW?.weather ?? "cloudy";
 
-    for (const match of matches.results) {
+    // Zápas, který spadne na chybě, dostane v tomtéž běhu ještě jeden pokus na konci kola.
+    // Opakování je bezpečné: výsledek se zapisuje podmíněně z 'lineups_open', takže zápas,
+    // který spadl až po zápisu výsledku, druhý pokus jen přeskočí.
+    const pendingMatches = [...matches.results];
+    const retriedMatchIds = new Set<string>();
+    for (let matchIndex = 0; matchIndex < pendingMatches.length; matchIndex++) {
+        const match = pendingMatches[matchIndex];
         const matchId = match.id as string;
         const homeTeamId = match.home_team_id as string;
         const awayTeamId = match.away_team_id as string;
@@ -1404,9 +1434,20 @@ export async function runScheduledMatches(
                 matchType,
             });
         } catch (e) {
-            logger.error({module: "match-runner"}, `Failed to simulate match ${matchId}`, e);
+            if (!retriedMatchIds.has(matchId)) {
+                retriedMatchIds.add(matchId);
+                pendingMatches.push(match);
+                logger.error({module: "match-runner"}, `zápas ${matchId} spadl, zkusím ho znovu na konci kola`, e);
+            } else {
+                logger.error({module: "match-runner"}, `zápas ${matchId} spadl i napodruhé a zůstává neodehraný (kolo ${calendarId})`, e);
+            }
         }
     }
+
+    // Kolo, které tenhle běh jen dohrával (nebo ho převzal až po posledním zápase), má
+    // odehrané zápasy z dřívějšího běhu. Rozhovory, souhrn kola a sázky patří celému kolu,
+    // ne jen zápasům z tohoto běhu; všechny tři kroky si duplicitu hlídají samy.
+    const roundHasResults = results.length > 0 || (await countRoundMatches(db, calendarId, "simulated")) > 0;
 
     // Paměť rozhodčích vyprchává o bod za kolo — jinak by jedna urážka platila navždy.
     if (results.length > 0 && calRow?.league_id) {
@@ -1424,7 +1465,7 @@ export async function runScheduledMatches(
     // Pozápasový rozhovor — první v řadě, protože je časově citlivý: hráč musí stihnout
     // odpovědět, než se odehraje další kolo. Nevyžaduje Gemini (má šablonový fallback),
     // proto stojí mimo blok podmíněný klíčem.
-    if (results.length > 0 && !youthRound) {
+    if (roundHasResults && !youthRound) {
         try {
             const {tryCreatePostMatchInterviews} = await import("../news/post-match-interview");
             await tryCreatePostMatchInterviews(db, geminiApiKey, calendarId);
@@ -1434,7 +1475,7 @@ export async function runScheduledMatches(
     }
 
     // Round summary — AI vybere Hráče a Trenéra kola + napíše článek
-    if (results.length > 0 && geminiApiKey && !youthRound) {
+    if (roundHasResults && geminiApiKey && !youthRound) {
         try {
             const {generateRoundSummary} = await import("../news/round-summary");
             await generateRoundSummary(db, geminiApiKey, calendarId);
@@ -1671,7 +1712,7 @@ export async function buildMatchPlayers(
             const missingByPos: Record<string, number> = {GK: 0, DEF: 0, MID: 0, FWD: 0};
             for (const pick of userPicks.slice(0, 11)) {
                 if (!allAvailable.find(r => (r.id as string) === pick.playerId)) {
-                    const pos = pick.matchPosition ?? "MID";
+                    const pos = normalizeMatchPosition(pick.matchPosition) ?? "MID";
                     missingByPos[pos] = (missingByPos[pos] ?? 0) + 1;
                 }
             }
@@ -1739,7 +1780,8 @@ export async function buildMatchPlayers(
         try {
             const picks = JSON.parse(userLineupJson) as Array<{ playerId: string; matchPosition?: string }>;
             for (const p of picks) {
-                if (p.matchPosition) matchPositionMap.set(p.playerId, p.matchPosition);
+                const slot = normalizeMatchPosition(p.matchPosition);
+                if (slot) matchPositionMap.set(p.playerId, slot);
             }
         } catch (e) {
             logger.warn({module: "match-runner"}, "parse userLineupJson", e);

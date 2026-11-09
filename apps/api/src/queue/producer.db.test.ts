@@ -5,7 +5,8 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Miniflare } from "miniflare";
-import { MAINTENANCE_DELAY_SECONDS, U21_ROUND_DELAY_SECONDS, enqueueMatchTick } from "./producer";
+import { MAINTENANCE_DELAY_SECONDS, U21_ROUND_DELAY_SECONDS, enqueueMatchTick, enqueueStuckRounds } from "./producer";
+import { isMatchTickRetry } from "../lib/match-tick-schedule";
 import { findLeaguesWithDueRound } from "../season/league-round";
 import type { Bindings } from "../index";
 
@@ -76,5 +77,57 @@ describe("zápasový tick do fronty", () => {
     // Údržba se do fronty dostane až po všech kolech.
     const lastRound = sent.map((m) => m.kind).lastIndexOf("league_round");
     expect(sent.findIndex((m) => m.kind === "league_maintenance")).toBeGreaterThan(lastRound);
+  });
+});
+
+/**
+ * Druhý zápasový cron (:05) posílal celou dávku podruhé do instance s běžícími koly.
+ * Teď řadí jen ligy, jejichž kolo zůstalo nezamčené, a pojistka v 18:20 vrací do fronty
+ * každé zaseklé kolo zvlášť (dřív dohrála v cronu jen jedno).
+ */
+describe("pojistný tick a zaseklá kola", () => {
+  const collect = () => {
+    const sent: Array<{ kind: string; leagueId: string; delay: number | undefined }> = [];
+    const queue = {
+      sendBatch: async (msgs: Array<{ body: { kind: string; leagueId: string }; delaySeconds?: number }>) => {
+        for (const m of msgs) sent.push({ kind: m.body.kind, leagueId: m.body.leagueId, delay: m.delaySeconds });
+      },
+    };
+    return { sent, env: { DB: db, MATCH_QUEUE: queue } as unknown as Bindings };
+  };
+
+  beforeAll(async () => {
+    await db.prepare("CREATE TABLE season_calendar (id TEXT PRIMARY KEY, league_id TEXT, scheduled_at TEXT, status TEXT, locked_at TEXT, season_number INTEGER)").run();
+    const stale = new Date(Date.now() - 20 * 60_000).toISOString();
+    const fresh = new Date().toISOString();
+    await db.batch([
+      // Praha: první tick kolo nezařadil, pořád čeká. Loňské nezamčené kolo se nepočítá.
+      db.prepare("INSERT INTO season_calendar VALUES ('c-praha', 'e-praha', '2026-11-09T17:00:00.000Z', 'scheduled', NULL, 3)"),
+      db.prepare("INSERT INTO season_calendar VALUES ('c-cb-old', 'c-cb', '2026-06-11T16:00:00.000Z', 'scheduled', NULL, 1)"),
+      db.prepare("INSERT INTO season_calendar VALUES ('c-cb', 'c-cb', '2026-11-09T17:00:00.000Z', 'lineup_locked', ?, 3)").bind(stale),
+      // Prachatice právě hrají (čerstvý puls), U21 má kolo až zítra.
+      db.prepare("INSERT INTO season_calendar VALUES ('c-prachatice', 'b-prachatice', '2026-11-09T17:00:00.000Z', 'lineup_locked', ?, 3)").bind(fresh),
+      db.prepare("INSERT INTO season_calendar VALUES ('c-u21', 'a-u21', '2026-11-10T17:00:00.000Z', 'scheduled', NULL, 3)"),
+    ]);
+  });
+
+  it("cron v :05 je pojistný, v :00 ne", () => {
+    expect(isMatchTickRetry("5 17 * * *")).toBe(true);
+    expect(isMatchTickRetry("5 16 * * *")).toBe(true);
+    expect(isMatchTickRetry("0 17 * * *")).toBe(false);
+    expect(isMatchTickRetry(undefined)).toBe(false);
+  });
+
+  it("pojistný tick zařadí jen ligu s nezamčeným dnešním kolem a žádnou údržbu", async () => {
+    const { sent, env } = collect();
+    const res = await enqueueMatchTick(env, { retryOnly: true });
+    expect(sent).toEqual([{ kind: "league_round", leagueId: "e-praha", delay: undefined }]);
+    expect(res).toMatchObject({ rounds: 1, maintenance: 0 });
+  });
+
+  it("pojistka vrátí do fronty každé kolo bez pulsu, běžící kolo nechá být", async () => {
+    const { sent, env } = collect();
+    expect(await enqueueStuckRounds(env, 6)).toBe(1);
+    expect(sent).toEqual([{ kind: "league_round", leagueId: "c-cb", delay: undefined }]);
   });
 });

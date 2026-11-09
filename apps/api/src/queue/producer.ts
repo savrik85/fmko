@@ -42,7 +42,7 @@ export interface EnqueueResult {
  * Zařadí zápasový tick: jedna zpráva na ligu se splatným kolem + jedna údržbová
  * zpráva na každou ligu s lidským týmem.
  */
-export async function enqueueMatchTick(env: Bindings): Promise<EnqueueResult> {
+export async function enqueueMatchTick(env: Bindings, options: { retryOnly?: boolean } = {}): Promise<EnqueueResult> {
   const queue = env.MATCH_QUEUE;
   if (!queue) {
     logger.error({ module: "queue-producer" }, "MATCH_QUEUE binding chybí, nic nezařazeno");
@@ -50,7 +50,18 @@ export async function enqueueMatchTick(env: Bindings): Promise<EnqueueResult> {
   }
 
   const enqueuedAt = new Date().toISOString();
-  const due = await findLeaguesWithDueRound(env.DB);
+  let due = await findLeaguesWithDueRound(env.DB);
+  if (options.retryOnly) {
+    // Pojistný tick: jen ligy, jejichž splatné kolo je pořád 'scheduled' (první tick ho
+    // nezařadil nebo se zpráva ztratila). Zamčená a odehraná kola nechává být.
+    const pending = await leaguesWithUnlockedDueRound(env.DB, due.map((d) => d.gameDate));
+    due = due.filter((d) => pending.has(d.leagueId));
+    const rounds = await sendChunked(queue, due.map((d): MatchQueueMessage => ({
+      kind: "league_round", leagueId: d.leagueId, gameDate: d.gameDate, enqueuedAt,
+    })), "league_round_retry");
+    logger.info({ module: "queue-producer" }, `pojistný zápasový tick: ${rounds} kol znovu zařazeno`);
+    return { rounds, maintenance: 0, leagues: due.map((d) => d.leagueId) };
+  }
 
   // Mužské soutěže první, U21 až po nich: 2026-11-09 dostala U21 III. třídy slot dřív
   // a spadla spolu s Prachaticemi a ČB, zatímco Praha čekala. U21 dorazí o pár minut
@@ -87,6 +98,51 @@ export async function enqueueMatchTick(env: Bindings): Promise<EnqueueResult> {
     `zápasový tick zařazen: ${rounds} kol, ${maintenance} údržeb (${due.length} lig se splatným kolem)`,
   );
   return { rounds, maintenance, leagues: due.map((d) => d.leagueId) };
+}
+
+/** Ligy, které mají v aktuální sezóně splatné kolo, které ještě nikdo nezamkl. */
+async function leaguesWithUnlockedDueRound(db: D1Database, gameDates: string[]): Promise<Set<string>> {
+  if (gameDates.length === 0) return new Set();
+  const dayEnd = new Date(gameDates.reduce((a, b) => (a > b ? a : b)));
+  dayEnd.setUTCHours(23, 59, 59, 999);
+  const rows = await db.prepare(
+    `SELECT DISTINCT sc.league_id AS league_id FROM season_calendar sc
+      WHERE sc.status = 'scheduled' AND sc.scheduled_at <= ?
+        AND sc.season_number = (SELECT MAX(season_number) FROM season_calendar x WHERE x.league_id = sc.league_id)`,
+  ).bind(dayEnd.toISOString()).all<{ league_id: string }>()
+    .catch((e) => {
+      logger.error({ module: "queue-producer" }, "ligy s nezamčeným kolem", e);
+      return { results: [] as Array<{ league_id: string }> };
+    });
+  return new Set(rows.results.map((r) => r.league_id));
+}
+
+/**
+ * Zaseklá kola (zamčená, bez pulsu) pošle znovu do fronty: každé dostane vlastní
+ * invokaci, která ho převezme (claimStaleRound) a dohraje i s agendou. Dřív pojistka
+ * dohrála v cronu jediné kolo a jen zápasy; 2026-11-09 spadla tři kola naráz.
+ */
+export async function enqueueStuckRounds(env: Bindings, staleMinutes: number): Promise<number> {
+  const queue = env.MATCH_QUEUE;
+  if (!queue) return 0;
+  const cutoff = new Date(Date.now() - staleMinutes * 60_000).toISOString();
+  const rows = await env.DB.prepare(
+    `SELECT sc.league_id AS league_id, MAX(t.game_date) AS game_date
+       FROM season_calendar sc JOIN teams t ON t.league_id = sc.league_id AND t.game_date IS NOT NULL
+      WHERE sc.status = 'lineup_locked' AND (sc.locked_at IS NULL OR sc.locked_at <= ?)
+      GROUP BY sc.league_id`,
+  ).bind(cutoff).all<{ league_id: string; game_date: string | null }>()
+    .catch((e) => {
+      logger.error({ module: "queue-producer" }, "hledání zaseklých kol", e);
+      return { results: [] as Array<{ league_id: string; game_date: string | null }> };
+    });
+  const enqueuedAt = new Date().toISOString();
+  const messages = rows.results.filter((r) => !!r.game_date).map((r): MatchQueueMessage => ({
+    kind: "league_round", leagueId: r.league_id, gameDate: r.game_date as string, enqueuedAt,
+  }));
+  const sent = await sendChunked(queue, messages, "league_round_stuck");
+  if (sent > 0) logger.warn({ module: "queue-producer" }, `zaseklá kola zpět do fronty: ${sent}`);
+  return sent;
 }
 
 /**

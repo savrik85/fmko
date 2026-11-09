@@ -233,7 +233,15 @@ export async function processLeagueRound(
     // pojistky v 16:20/17:20. Teď ho převezme, když už nemá puls.
     const resumed = await claimStaleRound(db, leagueId, dayEnd.toISOString());
     if (resumed === "busy") return done("busy", 0);
-    if (!resumed) return done("no-round", 0);
+    if (!resumed) {
+      // Zápasy dnešního kola jsou odehrané, ale běh mohl spadnout až v agendě po kole
+      // (oznámení, články, události mezi koly). Opakovaná zpráva ji doběhne.
+      const unfinished = await findRoundWithOpenAgenda(env, db, leagueId, gameDate);
+      if (!unfinished) return done("no-round", 0);
+      const finished = await finishRecoveredRound(env, unfinished);
+      if (finished.reason === AGENDA_BUSY) return done("busy", 0, unfinished);
+      return done(finished.ok ? "done" : "no-round", finished.matches ?? 0, unfinished);
+    }
     calendarId = resumed;
     logger.warn({ module: "league-round" }, `liga ${leagueId}: dohrávám rozehrané kolo ${calendarId} (běh spadl)`);
   }
@@ -251,15 +259,20 @@ export async function processLeagueRound(
 
   prof.mark("tabulka");
 
-  const { runScheduledMatches } = await import("../multiplayer/match-runner");
+  const { runScheduledMatches, countRoundMatches } = await import("../multiplayer/match-runner");
   const results = await runScheduledMatches(db, calendarId, env.GEMINI_API_KEY);
-  await db.prepare("UPDATE season_calendar SET status = 'simulated' WHERE id = ?").bind(calendarId).run();
+  // locked_at od teď slouží jako puls agendy po kole (viz claimRoundAgenda).
+  await db.prepare("UPDATE season_calendar SET status = 'simulated', locked_at = ? WHERE id = ?")
+    .bind(new Date().toISOString(), calendarId).run();
+  const unplayed = await countRoundMatches(db, calendarId, "unplayed");
+  if (unplayed > 0) {
+    logger.error({ module: "league-round" }, `kolo ${calendarId}: ${unplayed} zápasů zůstalo neodehraných, dohraje je replayUnplayedMatches`);
+  }
 
   prof.mark("simulace");
 
+  const isU21Round = await isU21League(db, leagueId);
   // Po U21 kole: vrátit hráče s next_match_return zpět do A-týmu
-  const isU21Round = !!(await db.prepare("SELECT 1 FROM leagues WHERE id = ? AND league_type = 'u21'").bind(leagueId).first()
-    .catch((e) => { logger.warn({ module: "league-round" }, "typ ligy", e); return null; }));
   try {
     if (isU21Round) {
       const { returnNextMatchPlayers } = await import("./u21-return");
@@ -270,38 +283,16 @@ export async function processLeagueRound(
     logger.warn({ module: "league-round" }, "u21 return hook", e);
   }
 
-  // Po zápase: smaž zbývající pending PŘEDZÁPASOVÉ interview žádosti (po zápase už nemají
-  // smysl). Filtr na kind je nutný: pozápasový rozhovor vzniká uvnitř runScheduledMatches
-  // pro TENTÝŽ calendar_id, takže bez něj by ho tenhle úklid zabil pár řádků po vzniku.
-  await expirePreMatchInterviews(db, calendarId);
+  prof.mark("u21");
 
-  prof.mark("u21+rozhovory");
+  const calRow = await db.prepare("SELECT game_week FROM season_calendar WHERE id = ?").bind(calendarId).first<{ game_week: number }>();
+  const agendaMatches = await runRoundAgenda(env, db, {
+    leagueId, calendarId, gameWeek: calRow?.game_week ?? 0, isU21: isU21Round, standingsBefore, opts,
+    mark: (name) => prof.mark(name),
+  });
 
-  if (results.length > 0) {
-    const calRow = await db.prepare("SELECT game_week FROM season_calendar WHERE id = ?").bind(calendarId).first<{ game_week: number }>();
-    const gameWeek = calRow?.game_week ?? 0;
-
-    await writeRoundSummaryNews(db, leagueId, calendarId, gameWeek);
-    prof.mark("zpravodaj");
-    await sendMatchResultNotifications(env, db, results);
-    prof.mark("notifikace");
-    // U21: AI články, události mezi koly (rozpočet, morálka) a nahodilé události patří
-    // klubu, tedy áčku. Výsledky, tabulka a souhrn kola U21 má.
-    if (!isU21Round) {
-      await dispatchRoundReports(env, leagueId, calendarId, gameWeek, standingsBefore, opts);
-      prof.mark("reporty");
-      await runBetweenRoundEvents(db, results, gameWeek, leagueId, calendarId);
-      prof.mark("udalosti-mezi-koly");
-      await runAdhocEvents(env, db, leagueId, gameWeek);
-      prof.mark("adhoc-udalosti");
-      await notifySeasonalDecisions(env, db, leagueId, gameWeek);
-      prof.mark("sezonni-rozhodnuti");
-    }
-    await cleanupMatchDayConversations(db, calendarId);
-    prof.mark("uklid-konverzaci");
-  }
-
-  const result = done("done", results.length, calendarId);
+  // Počet zápasů kola, ne jen těch z tohoto běhu: převzaté kolo má část odehranou dřív.
+  const result = done("done", Math.max(results.length, agendaMatches), calendarId);
   logger.info(
     { module: "league-round" },
     `liga ${leagueId}: ${result.matches} zápasů, ${result.queries} dotazů, ${result.durationMs} ms | ` +
@@ -336,45 +327,208 @@ export async function claimStaleRound(db: D1Database, leagueId: string, dayEndIs
   return (claim.meta?.changes ?? 0) > 0 ? locked.id : "busy";
 }
 
-/**
- * Dokončí kolo, které dohrála pojistka (recoverStuckRounds): ta jen odsimuluje zápasy,
- * oznámení o výsledcích, události mezi koly, nahodilé události, sezónní rozhodnutí
- * a úklid zápasových chatů vynechá. Jednou na kolo (značka v CACHE_KV).
- */
-export async function finishRecoveredRound(env: Bindings, calendarId: string): Promise<{ ok: boolean; reason?: string; matches?: number }> {
-  const db = env.DB;
-  const cal = await db.prepare("SELECT league_id, game_week, status FROM season_calendar WHERE id = ?")
-    .bind(calendarId).first<{ league_id: string; game_week: number; status: string }>();
-  if (!cal) return { ok: false, reason: "kolo nenalezeno" };
-  if (cal.status !== "simulated") return { ok: false, reason: `kolo není odehrané (${cal.status})` };
-  const marker = `round-finished:${calendarId}`;
-  if (await env.CACHE_KV?.get(marker)) return { ok: false, reason: "kolo už je dokončené" };
-  await env.CACHE_KV?.put(marker, new Date().toISOString(), { expirationTtl: 60 * 60 * 24 * 30 });
+async function isU21League(db: D1Database, leagueId: string): Promise<boolean> {
+  return !!(await db.prepare("SELECT 1 FROM leagues WHERE id = ? AND league_type = 'u21'").bind(leagueId).first()
+    .catch((e) => { logger.warn({ module: "league-round" }, "typ ligy", e); return null; }));
+}
 
+type RoundMatchResult = { matchId: string; homeScore: number; awayScore: number; eventsCount: number; matchType: "pvp" | "pve_home" | "pve_away" | "ai_vs_ai" };
+
+/** Všechny odehrané zápasy kola z databáze, bez ohledu na to, který běh je odehrál. */
+async function loadRoundResults(db: D1Database, calendarId: string): Promise<RoundMatchResult[]> {
   const rows = await db.prepare(
     `SELECT m.id, m.home_score, m.away_score, th.user_id AS home_user, ta.user_id AS away_user
        FROM matches m JOIN teams th ON th.id = m.home_team_id JOIN teams ta ON ta.id = m.away_team_id
       WHERE m.calendar_id = ? AND m.status = 'simulated'`,
   ).bind(calendarId).all<{ id: string; home_score: number; away_score: number; home_user: string | null; away_user: string | null }>();
   const human = (u: string | null) => !!u && u !== "ai";
-  const results = rows.results.map((r) => ({
+  return rows.results.map((r) => ({
     matchId: r.id, homeScore: r.home_score ?? 0, awayScore: r.away_score ?? 0, eventsCount: 0,
-    matchType: (human(r.home_user) && human(r.away_user) ? "pvp" : human(r.home_user) ? "pve_home" : human(r.away_user) ? "pve_away" : "ai_vs_ai") as "pvp" | "pve_home" | "pve_away" | "ai_vs_ai",
+    matchType: human(r.home_user) && human(r.away_user) ? "pvp" : human(r.home_user) ? "pve_home" : human(r.away_user) ? "pve_away" : "ai_vs_ai",
   }));
-  if (results.length === 0) return { ok: false, reason: "žádné odehrané zápasy" };
+}
 
-  const isU21 = !!(await db.prepare("SELECT 1 FROM leagues WHERE id = ? AND league_type = 'u21'").bind(cal.league_id).first()
-    .catch((e) => { logger.warn({ module: "league-round" }, "typ ligy", e); return null; }));
-  await sendMatchResultNotifications(env, db, results);
+/** Po jak dlouhé době bez pulsu se agenda po kole považuje za opuštěnou (běh spadl). */
+export const AGENDA_STALE_MINUTES = 6;
+/** Důvod, se kterým finishRecoveredRound odmítne kolo, jehož agendu právě dělá jiný běh. */
+export const AGENDA_BUSY = "agendu kola právě dělá jiný běh";
+
+const agendaStateKey = (calendarId: string) => `round-agenda:${calendarId}`;
+const agendaFinishedKey = (calendarId: string) => `round-finished:${calendarId}`;
+const AGENDA_TTL_SECONDS = 60 * 60 * 24 * 30;
+
+/**
+ * Zabere agendu odehraného kola pro tenhle běh: projde jen u kola bez čerstvého pulsu.
+ * Atomické v databázi, takže dva běhy agendu neudělají naráz.
+ */
+export async function claimRoundAgenda(db: D1Database, calendarId: string, now: Date = new Date()): Promise<boolean> {
+  const cutoff = new Date(now.getTime() - AGENDA_STALE_MINUTES * 60_000).toISOString();
+  const claim = await db
+    .prepare("UPDATE season_calendar SET locked_at = ? WHERE id = ? AND status = 'simulated' AND (locked_at IS NULL OR locked_at <= ?)")
+    .bind(now.toISOString(), calendarId, cutoff).run();
+  return (claim.meta?.changes ?? 0) > 0;
+}
+
+async function touchAgendaPulse(db: D1Database, calendarId: string): Promise<void> {
+  await db.prepare("UPDATE season_calendar SET locked_at = ? WHERE id = ? AND status = 'simulated'")
+    .bind(new Date().toISOString(), calendarId).run()
+    .catch((e) => logger.warn({ module: "league-round" }, `puls agendy kola ${calendarId}`, e));
+}
+
+interface RoundAgendaInput {
+  leagueId: string;
+  calendarId: string;
+  gameWeek: number;
+  isU21: boolean;
+  /** Tabulka před kolem pro reportéra. Při dohrávání po pádu už není známá. */
+  standingsBefore: StandingEntry[] | null;
+  opts: LeagueRoundOpts;
+  mark?: (name: string) => void;
+}
+
+/**
+ * Agenda po kole: přehled výsledků, oznámení, články, události mezi koly, nahodilé
+ * události, sezónní rozhodnutí a úklid. Pracuje se VŠEMI odehranými zápasy kola a každý
+ * hotový krok si zapíše (CACHE_KV), takže po pádu běhu ji další běh doběhne od místa,
+ * kde skončila, a hotové kroky nezopakuje. Vrací počet odehraných zápasů kola.
+ */
+async function runRoundAgenda(env: Bindings, db: D1Database, input: RoundAgendaInput): Promise<number> {
+  const { leagueId, calendarId, gameWeek, isU21, opts } = input;
+  const results = await loadRoundResults(db, calendarId);
+  if (results.length === 0) return 0;
+
+  const kv = env.CACHE_KV;
+  const stored = await kv?.get(agendaStateKey(calendarId), "json")
+    .catch((e) => { logger.warn({ module: "league-round" }, `stav agendy kola ${calendarId}`, e); return null; }) as { done?: string[] } | null | undefined;
+  const doneSteps = new Set<string>(stored?.done ?? []);
+
+  const step = async (name: string, run: () => Promise<void>): Promise<void> => {
+    if (!doneSteps.has(name)) {
+      await touchAgendaPulse(db, calendarId);
+      await run();
+      doneSteps.add(name);
+      await kv?.put(agendaStateKey(calendarId), JSON.stringify({ done: [...doneSteps] }), { expirationTtl: AGENDA_TTL_SECONDS })
+        .catch((e) => logger.warn({ module: "league-round" }, `zápis stavu agendy kola ${calendarId}`, e));
+    }
+    input.mark?.(name);
+  };
+
+  // Pojistka (recoverStuckRounds) si přehled výsledků píše sama: nezdvojovat.
+  await step("zpravodaj", async () => {
+    if (!(await hasRoundResultsNews(db, leagueId, calendarId, gameWeek))) await writeRoundSummaryNews(db, leagueId, calendarId, gameWeek);
+  });
+  await step("notifikace", () => sendMatchResultNotifications(env, db, results));
+  // U21: AI články, události mezi koly (rozpočet, morálka) a nahodilé události patří
+  // klubu, tedy áčku. Výsledky, tabulka a souhrn kola U21 má.
   if (!isU21) {
-    await runBetweenRoundEvents(db, results, cal.game_week, cal.league_id, calendarId);
-    await runAdhocEvents(env, db, cal.league_id, cal.game_week);
-    await notifySeasonalDecisions(env, db, cal.league_id, cal.game_week);
+    await step("reporty", () => dispatchRoundReports(env, leagueId, calendarId, gameWeek, input.standingsBefore ?? [], opts));
+    await step("udalosti-mezi-koly", () => runBetweenRoundEvents(db, results, gameWeek, leagueId, calendarId));
+    await step("adhoc-udalosti", () => runAdhocEvents(env, db, leagueId, gameWeek));
+    await step("sezonni-rozhodnuti", () => notifySeasonalDecisions(env, db, leagueId, gameWeek));
   }
-  await expirePreMatchInterviews(db, calendarId);
-  await cleanupMatchDayConversations(db, calendarId);
-  logger.info({ module: "league-round" }, `dokončeno dohrané kolo ${calendarId}: ${results.length} zápasů`);
-  return { ok: true, matches: results.length };
+  // Úklid je bezpečné opakovat. Předzápasové rozhovory: filtr na kind je nutný, pozápasový
+  // rozhovor vzniká pro tentýž calendar_id a bez filtru by ho úklid zabil hned po vzniku.
+  await step("uklid-konverzaci", async () => {
+    await expirePreMatchInterviews(db, calendarId);
+    await cleanupMatchDayConversations(db, calendarId);
+  });
+
+  await kv?.put(agendaFinishedKey(calendarId), new Date().toISOString(), { expirationTtl: AGENDA_TTL_SECONDS })
+    .catch((e) => logger.warn({ module: "league-round" }, `značka dokončeného kola ${calendarId}`, e));
+  return results.length;
+}
+
+/** Má už kolo v tomto ročníku přehled výsledků (psaný pojistkou nebo dřívějším během)? */
+async function hasRoundResultsNews(db: D1Database, leagueId: string, calendarId: string, gameWeek: number): Promise<boolean> {
+  const row = await db.prepare(
+    `SELECT 1 AS yes FROM news n JOIN season_calendar sc ON sc.id = ?
+      WHERE n.league_id = ? AND n.type = 'round_results' AND n.game_week = ?
+        AND n.created_at >= datetime(sc.scheduled_at, '-1 day') LIMIT 1`,
+  ).bind(calendarId, leagueId, gameWeek).first<{ yes: number }>()
+    .catch((e) => { logger.warn({ module: "league-round" }, `přehled výsledků kola ${calendarId}`, e); return null; });
+  return !!row;
+}
+
+/**
+ * Dnešní odehrané kolo ligy, jehož agenda po kole není dokončená. Bez CACHE_KV se stav
+ * agendy nedá poznat, pak se nic nedohledává.
+ */
+async function findRoundWithOpenAgenda(env: Bindings, db: D1Database, leagueId: string, gameDate: string): Promise<string | null> {
+  if (!env.CACHE_KV) return null;
+  const dayStart = new Date(gameDate);
+  dayStart.setUTCHours(0, 0, 0, 0);
+  const dayEnd = new Date(gameDate);
+  dayEnd.setUTCHours(23, 59, 59, 999);
+  const cal = await db.prepare(
+    `SELECT id FROM season_calendar
+      WHERE league_id = ? AND status = 'simulated' AND scheduled_at BETWEEN ? AND ?
+        AND season_number = (SELECT MAX(season_number) FROM season_calendar WHERE league_id = ?)
+      ORDER BY scheduled_at DESC LIMIT 1`,
+  ).bind(leagueId, dayStart.toISOString(), dayEnd.toISOString(), leagueId).first<{ id: string }>()
+    .catch((e) => { logger.warn({ module: "league-round" }, `dnešní kolo ligy ${leagueId}`, e); return null; });
+  if (!cal) return null;
+  const finished = await env.CACHE_KV.get(agendaFinishedKey(cal.id))
+    .catch((e) => { logger.warn({ module: "league-round" }, `značka dokončeného kola ${cal.id}`, e); return "unknown"; });
+  return finished ? null : cal.id;
+}
+
+/**
+ * Doběhne agendu odehraného kola: po pojistce (recoverStuckRounds hraje jen zápasy),
+ * po běhu, který spadl uprostřed agendy, nebo ručně z administrace. Hotové kroky se
+ * neopakují a kolo s dokončenou agendou se odmítne, takže volání je bezpečné opakovat
+ * i na zdravém kole. `owner` = volá běh, který kolo právě sám dohrál (puls je jeho).
+ */
+export async function finishRecoveredRound(
+  env: Bindings, calendarId: string, options: { owner?: boolean } = {},
+): Promise<{ ok: boolean; reason?: string; matches?: number }> {
+  const db = env.DB;
+  const cal = await db.prepare("SELECT league_id, game_week, status FROM season_calendar WHERE id = ?")
+    .bind(calendarId).first<{ league_id: string; game_week: number; status: string }>();
+  if (!cal) return { ok: false, reason: "kolo nenalezeno" };
+  if (cal.status !== "simulated") return { ok: false, reason: `kolo není odehrané (${cal.status})` };
+  if (await env.CACHE_KV?.get(agendaFinishedKey(calendarId))) return { ok: false, reason: "kolo už je dokončené" };
+  if (!options.owner && !(await claimRoundAgenda(db, calendarId))) return { ok: false, reason: AGENDA_BUSY };
+
+  const matches = await runRoundAgenda(env, db, {
+    leagueId: cal.league_id, calendarId, gameWeek: cal.game_week,
+    isU21: await isU21League(db, cal.league_id), standingsBefore: null,
+    opts: { reportsQueue: env.REPORTS_QUEUE },
+  });
+  if (matches === 0) return { ok: false, reason: "žádné odehrané zápasy" };
+  logger.info({ module: "league-round" }, `dokončena agenda kola ${calendarId}: ${matches} zápasů`);
+  return { ok: true, matches };
+}
+
+/**
+ * Dohraje zápasy, které zůstaly neodehrané v kole označeném za odehrané (zápas spadl
+ * na chybě i napodruhé). Bez toho by zůstal viset navždy: tick bere jen kola 'scheduled',
+ * pojistka jen 'lineup_locked', a sázky kola by se nikdy nevypořádaly.
+ */
+export async function replayUnplayedMatches(env: Bindings, limit = 2): Promise<Array<{ calendarId: string; played: number; unplayed: number }>> {
+  const db = env.DB;
+  const rounds = await db.prepare(
+    `SELECT DISTINCT sc.id, sc.league_id FROM season_calendar sc
+       JOIN matches m ON m.calendar_id = sc.id AND m.status IN ('scheduled', 'lineups_open')
+      WHERE sc.status = 'simulated'
+        AND sc.season_number = (SELECT MAX(season_number) FROM season_calendar x WHERE x.league_id = sc.league_id)
+      ORDER BY sc.scheduled_at ASC LIMIT ?`,
+  ).bind(limit).all<{ id: string; league_id: string }>()
+    .catch((e) => { logger.warn({ module: "league-round" }, "hledání neodehraných zápasů", e); return { results: [] as Array<{ id: string; league_id: string }> }; });
+
+  const out: Array<{ calendarId: string; played: number; unplayed: number }> = [];
+  const { runScheduledMatches, countRoundMatches } = await import("../multiplayer/match-runner");
+  for (const round of rounds.results) {
+    // Stejný zámek jako agenda: dva běhy tentýž zápas nedohrávají naráz.
+    if (!(await claimRoundAgenda(db, round.id))) continue;
+    await db.prepare("UPDATE matches SET status = 'lineups_open' WHERE calendar_id = ? AND status = 'scheduled'").bind(round.id).run();
+    const results = await runScheduledMatches(db, round.id, env.GEMINI_API_KEY);
+    const unplayed = await countRoundMatches(db, round.id, "unplayed");
+    if (results.length > 0) await sendMatchResultNotifications(env, db, results);
+    if (unplayed > 0) logger.error({ module: "league-round" }, `kolo ${round.id}: ${unplayed} zápasů se nepodařilo dohrát ani dodatečně`);
+    else logger.info({ module: "league-round" }, `kolo ${round.id}: dodatečně dohráno ${results.length} zápasů`);
+    out.push({ calendarId: round.id, played: results.length, unplayed });
+  }
+  return out;
 }
 
 /** Zruší nevyřízené žádosti o předzápasový rozhovor kola, které už je odehrané. */
