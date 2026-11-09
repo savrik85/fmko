@@ -6891,6 +6891,16 @@ gameRouter.post("/admin/generate-round-summary", async (c) => {
   return c.json({ ok: true, ...result });
 });
 
+// POST /api/admin/rounds/finish?calendarId=X — dokončí kolo, které dohrála pojistka:
+// oznámení o výsledcích, události mezi koly, nahodilé události, úklid zápasových chatů.
+// Jednou na kolo.
+gameRouter.post("/admin/rounds/finish", async (c) => {
+  const calendarId = c.req.query("calendarId");
+  if (!calendarId) return c.json({ error: "calendarId je povinný" }, 400);
+  const { finishRecoveredRound } = await import("../season/league-round");
+  return c.json(await finishRecoveredRound(c.env, calendarId));
+});
+
 // POST /api/admin/generate-ultras-report?calendarId=X — dev trigger rubriky Prales Ultras
 gameRouter.post("/admin/generate-ultras-report", async (c) => {
   const calendarId = c.req.query("calendarId");

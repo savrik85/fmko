@@ -355,6 +355,46 @@ export async function claimStaleRound(db: D1Database, leagueId: string, dayEndIs
   return (claim.meta?.changes ?? 0) > 0 ? locked.id : "busy";
 }
 
+/**
+ * Dokončí kolo, které dohrála pojistka (recoverStuckRounds): ta jen odsimuluje zápasy,
+ * oznámení o výsledcích, události mezi koly, nahodilé události, sezónní rozhodnutí
+ * a úklid zápasových chatů vynechá. Jednou na kolo (značka v CACHE_KV).
+ */
+export async function finishRecoveredRound(env: Bindings, calendarId: string): Promise<{ ok: boolean; reason?: string; matches?: number }> {
+  const db = env.DB;
+  const cal = await db.prepare("SELECT league_id, game_week, status FROM season_calendar WHERE id = ?")
+    .bind(calendarId).first<{ league_id: string; game_week: number; status: string }>();
+  if (!cal) return { ok: false, reason: "kolo nenalezeno" };
+  if (cal.status !== "simulated") return { ok: false, reason: `kolo není odehrané (${cal.status})` };
+  const marker = `round-finished:${calendarId}`;
+  if (await env.CACHE_KV?.get(marker)) return { ok: false, reason: "kolo už je dokončené" };
+  await env.CACHE_KV?.put(marker, new Date().toISOString(), { expirationTtl: 60 * 60 * 24 * 30 });
+
+  const rows = await db.prepare(
+    `SELECT m.id, m.home_score, m.away_score, th.user_id AS home_user, ta.user_id AS away_user
+       FROM matches m JOIN teams th ON th.id = m.home_team_id JOIN teams ta ON ta.id = m.away_team_id
+      WHERE m.calendar_id = ? AND m.status = 'simulated'`,
+  ).bind(calendarId).all<{ id: string; home_score: number; away_score: number; home_user: string | null; away_user: string | null }>();
+  const human = (u: string | null) => !!u && u !== "ai";
+  const results = rows.results.map((r) => ({
+    matchId: r.id, homeScore: r.home_score ?? 0, awayScore: r.away_score ?? 0, eventsCount: 0,
+    matchType: (human(r.home_user) && human(r.away_user) ? "pvp" : human(r.home_user) ? "pve_home" : human(r.away_user) ? "pve_away" : "ai_vs_ai") as "pvp" | "pve_home" | "pve_away" | "ai_vs_ai",
+  }));
+  if (results.length === 0) return { ok: false, reason: "žádné odehrané zápasy" };
+
+  const isU21 = !!(await db.prepare("SELECT 1 FROM leagues WHERE id = ? AND league_type = 'u21'").bind(cal.league_id).first()
+    .catch((e) => { logger.warn({ module: "league-round" }, "typ ligy", e); return null; }));
+  await sendMatchResultNotifications(env, db, results);
+  if (!isU21) {
+    await runBetweenRoundEvents(db, results, cal.game_week, cal.league_id, calendarId);
+    await runAdhocEvents(env, db, cal.league_id, cal.game_week);
+    await notifySeasonalDecisions(env, db, cal.league_id, cal.game_week);
+  }
+  await cleanupMatchDayConversations(db, calendarId);
+  logger.info({ module: "league-round" }, `dokončeno dohrané kolo ${calendarId}: ${results.length} zápasů`);
+  return { ok: true, matches: results.length };
+}
+
 /** Zpravodajský souhrn kola. */
 async function writeRoundSummaryNews(db: D1Database, leagueId: string, calendarId: string, gameWeek: number): Promise<void> {
   try {
