@@ -12,6 +12,7 @@ import { applyOfferRejectionImpact } from "./offer-rejection-impact";
 import { resolveOfferClubScope } from "./offer-club-scope";
 import { computeInterestForOffer, interestOfferOf } from "./player-interest";
 import { isAiTeam } from "../services/transfer-actions";
+import { settleBuyerSideEnd, type EndedOffer } from "./priced-out";
 
 /** Kolik nabídek se zpracuje za jeden tick (D1 limity), zbytek přijde na řadu příště. */
 const EXPIRY_BATCH_LIMIT = 20;
@@ -55,6 +56,10 @@ export async function expireIdleOffers(env: Bindings, now: Date = new Date()): P
     if (sellerSilent) {
       await applyOfferRejectionImpact(db, offer, "expire", env)
         .catch((e) => logger.warn({ module: "offer-expiry" }, `impact ${offer.id}`, e));
+    } else if (scope) {
+      // Na tahu byl kupec. Když mu prodávající poslal absurdní protinávrh a kupec ho nechal
+      // propadnout, je to odmítnutí prodávajícím (priced-out.ts).
+      await settleBuyerSideEnd(db, offer as unknown as EndedOffer, scope, env);
     }
     await notifyExpiry(db, offer, scope?.buyerClubTeamId ?? offer.from_team_id, scope?.sellerClubTeamId ?? offer.to_team_id, sellerSilent)
       .catch((e) => logger.warn({ module: "offer-expiry" }, `notify ${offer.id}`, e));

@@ -1503,6 +1503,15 @@ export async function rejectTransferOffer(
       VAPID_PUBLIC_KEY: env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: env.VAPID_SUBJECT, DB: db,
     }).catch((e) => logger.warn({ module: "game" }, "rejection impact", e)));
   }
+  // Kupec odmítl protinávrh. Když byl absurdní, je to odmítnutí prodávajícím: kupec blokaci
+  // nedostane a hráč, který chtěl odejít, reaguje jako na běžné odmítnutí (transfers/priced-out.ts).
+  if (scope.role === "buyer") {
+    const { settleBuyerSideEnd } = await import("../transfers/priced-out");
+    await inBackground(opts, settleBuyerSideEnd(db, offer, scope, {
+      GEMINI_API_KEY: env.GEMINI_API_KEY,
+      VAPID_PUBLIC_KEY: env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: env.VAPID_SUBJECT, DB: db,
+    }));
+  }
 
   await db.prepare("INSERT INTO transfer_offer_events (id, offer_id, team_id, event_type, amount, message) VALUES (?, ?, ?, 'reject', NULL, ?)")
     .bind(crypto.randomUUID(), offerId, scope.actorClubTeamId, message).run()
@@ -1660,6 +1669,14 @@ export async function withdrawTransferOffer(
       GEMINI_API_KEY: env.GEMINI_API_KEY,
       VAPID_PUBLIC_KEY: env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: env.VAPID_SUBJECT, DB: db,
     }).catch((e) => logger.warn({ module: "game" }, "end negotiation impact", e)));
+  }
+  // Kupec stáhl nabídku po absurdním protinávrhu: počítá se jako odmítnutí prodávajícím.
+  if (scope.role === "buyer") {
+    const { settleBuyerSideEnd } = await import("../transfers/priced-out");
+    await inBackground(opts, settleBuyerSideEnd(db, offer, scope, {
+      GEMINI_API_KEY: env.GEMINI_API_KEY,
+      VAPID_PUBLIC_KEY: env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: env.VAPID_SUBJECT, DB: db,
+    }));
   }
 
   // Notifikace druhé straně
