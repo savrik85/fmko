@@ -24,8 +24,9 @@ import {
 import { coachStreak, leftOnReadChance, markCoachMessagesRead, readDelayMs } from "./left-on-read";
 import {
   INJURY_COLUMN, afterPlayerReply, loadLastMatchContext, loadLastOwnMessageAt, loadPlayerSnapshot, loadTeamContext, nactiSituaceTymu,
-  pockejNezDopise, scheduleRetryReply,
+  pockejNezDopise, pushPlayerReply, scheduleRetryReply,
 } from "./ai-player-spawn";
+import type { OptionalPushKeys } from "../community/phone-push";
 import { loadChatMemory } from "./player-memory";
 import { refundCoachSms } from "./phone-credit";
 import type { PlayerSnapshot } from "./ai-player-scenarios";
@@ -65,7 +66,7 @@ const PLAYER_SELECT = `
  */
 export async function startCoachThread(
   db: D1Database,
-  env: { GEMINI_API_KEY?: string; CACHE_KV?: KVNamespace },
+  env: { GEMINI_API_KEY?: string; CACHE_KV?: KVNamespace } & OptionalPushKeys,
   opts: {
     convId: string; teamId: string; playerId: string; coachMessage: string;
     /** Odpověď přichází se zpožděním po výpadku modelu (follow-ups.ts). */
@@ -209,6 +210,7 @@ export async function startCoachThread(
       ),
       ...dopad,
     ]);
+    await pushPlayerReply(db, env, { teamId: opts.teamId, convId: opts.convId, sender: jmeno, text: reply.body });
 
     return true;
   } catch (e) {

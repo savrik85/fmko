@@ -948,7 +948,7 @@ function pickPlayerWeighted(
  */
 export async function handleAiPlayerReply(
   db: D1Database,
-  env: { GEMINI_API_KEY?: string; CACHE_KV?: KVNamespace },
+  env: { GEMINI_API_KEY?: string; CACHE_KV?: KVNamespace } & OptionalPushKeys,
   convId: string,
   /** Odpověď přichází se zpožděním (follow-ups.ts): hráč řekne, že neměl telefon u sebe. */
   opts: { lateReply?: "offline" } = {},
@@ -971,7 +971,7 @@ export async function handleAiPlayerReply(
 
 async function handleAiPlayerReplyInner(
   db: D1Database,
-  env: { GEMINI_API_KEY?: string; CACHE_KV?: KVNamespace },
+  env: { GEMINI_API_KEY?: string; CACHE_KV?: KVNamespace } & OptionalPushKeys,
   convId: string,
   opts: { lateReply?: "offline" },
 ): Promise<void> {
@@ -1150,6 +1150,7 @@ async function handleAiPlayerReplyInner(
         "UPDATE conversations SET ai_thread_state = ?, last_message_text = ?, last_message_at = ?, unread_count = unread_count + 1 WHERE id = ?",
       ).bind(JSON.stringify(newState), reply.body.slice(0, 100), now, convId),
     ]);
+    await pushPlayerReply(db, env, { teamId: conv.team_id, convId, sender: senderName, text: reply.body });
     return;
   }
 
@@ -1180,6 +1181,7 @@ async function handleAiPlayerReplyInner(
     resolution.absence_days = 0;
   }
   await applyResolutionAndClose(db, convId, conv.team_id, player.id, reply.body, senderName, scenario.id, state, resolution);
+  await pushPlayerReply(db, env, { teamId: conv.team_id, convId, sender: senderName, text: reply.body });
 }
 
 /**
@@ -1672,6 +1674,20 @@ export async function afterPlayerReply(
       payload: { anchorAt: r.at }, replace: true,
     });
   }
+}
+
+/**
+ * Push, že hráč odepsal na SMS trenéra (hned, nebo opožděně po výpadku modelu). Volá se
+ * až po zápisu zprávy, ať ji trenér po klepnutí na push v konverzaci najde. Dřív chodil
+ * push jen na zprávy, které hráč začal sám; odpověď po pár minutách trenér neviděl.
+ * Přepínač „Události a ostatní“ hlídá `pushPhoneMessage`, selhání se jen zaloguje.
+ */
+export async function pushPlayerReply(
+  db: D1Database,
+  env: OptionalPushKeys,
+  m: { teamId: string; convId: string; sender: string; text: string },
+): Promise<void> {
+  await pushPhoneMessage(db, env, m);
 }
 
 /** Model nešel, když trenér psal: odpověď se zkusí za necelou hodinu znovu (follow-ups.ts). */

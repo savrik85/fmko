@@ -7,6 +7,7 @@ import { Hono } from "hono";
 import type { Bindings } from "../index";
 import { logger } from "../lib/logger";
 import { photoKey } from "../messaging/player-photo";
+import { pushPhoneMessage } from "../community/phone-push";
 import { PLAYER_GONE_HINT, playerInClub } from "../messaging/player-reach";
 import { PHONE_MESSAGE_MAX, TOO_LONG_ERROR, cleanPhoneMessage, pageLimit } from "../messaging/limits";
 import { requireTeamOwnership, requireAdmin, requirePrivateTeamRead } from "../auth/middleware";
@@ -791,6 +792,20 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
     await c.env.DB.prepare(
       "INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, sent_at, read) VALUES (?, ?, 'manager', ?, ?, ?, ?, 0)"
     ).bind(uuid(), otherConv.id, teamId, senderName, body.body.trim(), now).run();
+
+    // Push druhému trenérovi: zpráva od kolegy dřív ležela v telefonu, dokud ho sám neotevřel.
+    // Přepínač „Události a ostatní“ hlídá pushPhoneMessage; AI klub odběr nemá, nic se neodešle.
+    const recipientConvId = otherConv.id;
+    c.executionCtx.waitUntil((async () => {
+      const sender = await c.env.DB.prepare("SELECT name FROM managers WHERE team_id = ?")
+        .bind(teamId).first<{ name: string }>()
+        .catch((e) => { logger.warn({ module: "messaging" }, "jméno trenéra pro push", e); return null; });
+      await pushPhoneMessage(c.env.DB, c.env, {
+        teamId: otherTeamId, convId: recipientConvId,
+        sender: sender?.name ? `${sender.name} (${senderName})` : senderName,
+        text: trimmedText,
+      });
+    })().catch((e) => logger.warn({ module: "messaging" }, "push zprávy od trenéra", e)));
   }
 
   return c.json({ id: msgId, sentAt: now, credit: await loadCredit(c.env.DB, teamId) });
