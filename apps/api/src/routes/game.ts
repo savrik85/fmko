@@ -6568,6 +6568,19 @@ gameRouter.get("/teams/:teamId/coach-interviews", async (c) => {
   return c.json({ interviews, journalist: tazatel });
 });
 
+/**
+ * Uloží odpovědi a přepne rozhovor z pending na answered jedním příkazem.
+ * Vrací true jen tomu požadavku, který rozhovor opravdu zabral.
+ */
+export async function claimInterviewAnswer(
+  db: D1Database, interviewId: string, answers: string[], tones: string[],
+): Promise<boolean> {
+  const res = await db.prepare(
+    "UPDATE coach_interviews SET status = 'answered', answers = ?, answer_tones = ? WHERE id = ? AND status = 'pending'"
+  ).bind(JSON.stringify(answers), JSON.stringify(tones), interviewId).run();
+  return (res.meta?.changes ?? 0) === 1;
+}
+
 // POST /api/teams/:teamId/coach-interviews/:interviewId/answer — submit answers + generate article
 gameRouter.post("/teams/:teamId/coach-interviews/:interviewId/answer", async (c) => {
   const teamId = c.req.param("teamId");
@@ -6599,11 +6612,12 @@ gameRouter.post("/teams/:teamId/coach-interviews/:interviewId/answer", async (c)
   const tones = normalizeTones(body.tones, answers.length);
 
   // KROK 1: Okamžitě ulož odpovědi před Gemini — odpovědi se neztratí při selhání generování
-  await c.env.DB.prepare(
-    "UPDATE coach_interviews SET status = 'answered', answers = ?, answer_tones = ? WHERE id = ?"
-  ).bind(JSON.stringify(answers), JSON.stringify(tones), interviewId)
-    .run()
-    .catch((e) => { logger.warn({ module: "game.ts" }, "save interview answers", e); });
+  // Podmínka na stav dělá z uložení zároveň zabrání rozhovoru: ze dvou souběžných
+  // odeslání projde jedno, druhé nesmí znovu zaúčtovat efekty ani vydat článek.
+  const claimed = await claimInterviewAnswer(c.env.DB, interviewId, answers, tones)
+    .catch((e) => { logger.warn({ module: "game.ts" }, "save interview answers", e); return null; });
+  if (claimed === null) return c.json({ error: "Odpovědi se nepodařilo uložit. Zkus to znovu." }, 500);
+  if (!claimed) return c.json({ error: "Rozhovor nenalezen nebo již zpracován" }, 409);
 
   // ── Pozápasový rozhovor má vlastní cestu ──
   // Efekty se zaúčtují VŽDY, i když Gemini selže — jinak by si rozhodčí nic
