@@ -687,12 +687,19 @@ async function replyAsSeller(ctx: RunContext, offer: OfferRow, buyerClubTeamId: 
     }
     : await decideSale(ctx, input, { player, analysis, buyerClubTeamId, offerId: offer.id });
   if (sale.deferred) {
-    await log(ctx, {
-      kind: "transfer_reply", contextRef: offer.id,
-      inputSummary: summarizeSeller(player, importance, sale.decision, offer),
-      actions: { deferred: true, decidedBy: sale.by, allowed: sale.options.actions }, executed: "deferred", error: sale.deferred,
-      outcome: { by: "guard", trace: sale.trace },
-    });
+    // Odklad se opakuje každou hodinu, dokud důvod trvá: do deníku jen poprvé.
+    const noted = await db.prepare(
+      "SELECT 1 AS x FROM ai_coach_decisions WHERE team_id = ? AND kind = 'transfer_reply' AND context_ref = ? AND mode = ? AND executed LIKE '%deferred%' LIMIT 1",
+    ).bind(club.teamId, offer.id, ctx.mode).first<{ x: number }>()
+      .catch((e) => { logger.warn({ module: M, teamId: club.teamId }, `deník odkladu odpovědi na ${offer.id}`, e); return null; });
+    if (!noted) {
+      await log(ctx, {
+        kind: "transfer_reply", contextRef: offer.id,
+        inputSummary: summarizeSeller(player, importance, sale.decision, offer),
+        actions: { deferred: true, decidedBy: sale.by, allowed: sale.options.actions }, executed: "deferred", error: sale.deferred,
+        outcome: { by: "guard", trace: sale.trace },
+      });
+    }
     throw new RetryLaterError(sale.deferred);
   }
   const result = await executeSellerDecision(ctx, offer, sale.decision, swap.value, costs);
