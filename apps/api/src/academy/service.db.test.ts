@@ -10,7 +10,7 @@ import { acceptPlayerOffer, publicOfferDetails } from "../services/player-offer-
 import { promotePlayerFromU21 } from "../services/u21-moves";
 import {
   foundYouthTeam, closeYouthTeam, setYouthCoach, loadCoachOptions, weeklyAcademy, recommendPlayUp, promoteProspect,
-  seasonEndAcademy, dailyAcademy, loadAcademyView, seedFromLegacy, volunteerCoachId, recruitDay, type ProspectRow,
+  seasonEndAcademy, dailyAcademy, loadAcademyView, seedFromLegacy, volunteerCoachId, recruitDay, setAcademyLevel, type ProspectRow,
 } from "./service";
 
 let mf: Miniflare;
@@ -124,6 +124,25 @@ describe("družstvo žáků", () => {
     const view = await loadAcademyView(db, "club");
     expect(view!.equipment.find((e) => e.key === "balls")).toMatchObject({ level: 3, condition: 100 });
     await db.prepare("DELETE FROM equipment WHERE team_id = 'club'").run();
+  });
+
+  it("úroveň přepnutá jen na okamžik akce nábor ani den otevřených dveří nezlepší", async () => {
+    const saved = await db.prepare("SELECT academy_level AS level, academy_level_weeks AS weeks FROM teams WHERE id = 'club'").first<{ level: string | null; weeks: string | null }>();
+    const expectedWith = async (level: string) => {
+      expect((await setAcademyLevel(db, "club", level)).ok).toBe(true);
+      const view = await loadAcademyView(db, "club");
+      return { recruit: view!.recruitDay.expected, open: view!.openDay.expected, byCoach: view!.recruitDay.byCoach };
+    };
+    // Pět zaplacených týdnů skromné úrovně
+    await db.prepare("UPDATE teams SET academy_level_weeks = '{\"modest\":5}' WHERE id = 'club'").run();
+    const modest = await expectedWith("modest");
+    const flipped = await expectedWith("ambitious");
+    expect(flipped).toEqual(modest);
+    // Zaplacené ambiciózní týdny se projeví
+    await db.prepare("UPDATE teams SET academy_level_weeks = '{\"ambitious\":5}' WHERE id = 'club'").run();
+    const paid = await expectedWith("ambitious");
+    expect(paid.recruit).toBeGreaterThan(modest.recruit);
+    await db.prepare("UPDATE teams SET academy_level = ?, academy_level_weeks = ? WHERE id = 'club'").bind(saved!.level, saved!.weeks).run();
   });
 
   it("odhad talentu se přepnutím trenéra tam a zpátky nemění a drží se v mezích chyby", async () => {

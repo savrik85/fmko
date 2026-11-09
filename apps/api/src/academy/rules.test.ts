@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { createRng } from "../generators/rng";
 import {
-  programQuality, weeklyProgress, expectedKidsPerYear, equipmentQualityBonus, youthEquipmentEffect, estimatedTalent, estimateOffset, canPlayUp, recommendsPlayUp, quitChance,
+  programQuality, weeklyProgress, expectedKidsPerYear, paidLevelGrowth, equipmentQualityBonus, youthEquipmentEffect, estimatedTalent, estimateOffset, canPlayUp, recommendsPlayUp, quitChance,
   rollKids, WEEKS_PER_SEASON, MAX_KIDS_PER_YEAR, MIN_SQUAD, verdictText, talentShiftAt13, youthTransferFee,
   upkeepWeekly, ACADEMY_LEVELS, academyLevelOf, coachSonAge, COACH_SON_CHANCE,
 } from "./rules";
@@ -53,6 +53,25 @@ describe("trenér a příprava", () => {
     expect(perWeek.current * WEEKS_PER_SEASON * 4).toBeLessThan(8);
     expect(perWeek.cap * WEEKS_PER_SEASON * 4).toBeGreaterThan(10);
     expect(perWeek.cap * WEEKS_PER_SEASON * 4).toBeLessThan(16);
+  });
+});
+
+describe("úroveň akademie pro jednorázové akce", () => {
+  it("počítají se jen zaplacené týdny, okamžité přepnutí nic nedá", () => {
+    // Pět týdnů běžná, teď přepnuto na ambiciózní: pořád běžná
+    expect(paidLevelGrowth('{"standard":5}', "ambitious")).toBe(1);
+    // A obráceně: skromná nastavená na okamžik neubere
+    expect(paidLevelGrowth('{"ambitious":5}', "modest")).toBe(ACADEMY_LEVELS.ambitious.growth);
+    // Průměr podle týdnů
+    expect(paidLevelGrowth('{"standard":5,"ambitious":5}', "standard")).toBeCloseTo((1 + 1.45) / 2, 10);
+    expect(paidLevelGrowth('{"modest":3,"standard":1}', "ambitious")).toBeCloseTo((0.7 * 3 + 1) / 4, 10);
+  });
+
+  it("bez zaplaceného týdne platí nejvýš běžná", () => {
+    expect(paidLevelGrowth(null, "ambitious")).toBe(1);
+    expect(paidLevelGrowth("{}", "standard")).toBe(1);
+    expect(paidLevelGrowth(null, "modest")).toBe(ACADEMY_LEVELS.modest.growth);
+    expect(paidLevelGrowth("{rozbité", "ambitious")).toBe(1);
   });
 });
 

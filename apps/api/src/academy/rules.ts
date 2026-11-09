@@ -79,6 +79,29 @@ export function seasonLevelEffects(weeksJson: string | null | undefined, current
   return { quit: avg("quit"), attract: avg("attract"), poachBonus: Math.round(avg("poachBonus")) };
 }
 
+/**
+ * Násobek kvality přípravy pro jednorázové akce (nábor ve škole, den otevřených dveří, lákání
+ * žáků) podle ZAPLACENÝCH týdnů sezóny. Úroveň se platí až týdenní uzávěrkou, takže s okamžitým
+ * nastavením šlo přepnout na ambiciózní, udělat akci a hned přepnout zpátky zadarmo.
+ * Na rozdíl od `seasonLevelEffects` se současná úroveň nepočítá, dokud za ni klub nezaplatil:
+ * bez jediného zaplaceného týdne (začátek sezóny, nová akademie) platí nejvýš běžná.
+ */
+export function paidLevelGrowth(weeksJson: string | null | undefined, current: AcademyLevel): number {
+  let weeks: Partial<Record<AcademyLevel, number>> = {};
+  try { weeks = weeksJson ? JSON.parse(weeksJson) as Partial<Record<AcademyLevel, number>> : {}; }
+  catch (e) { logger.warn({ module: "academy-rules" }, "academy_level_weeks nejde přečíst", e); weeks = {}; }
+  let total = 0;
+  let sum = 0;
+  for (const k of Object.keys(ACADEMY_LEVELS) as AcademyLevel[]) {
+    const n = Number(weeks?.[k] ?? 0);
+    if (!Number.isFinite(n) || n <= 0) continue;
+    total += n;
+    sum += ACADEMY_LEVELS[k].growth * n;
+  }
+  if (total === 0) return Math.min(ACADEMY_LEVELS[current].growth, ACADEMY_LEVELS.standard.growth);
+  return sum / total;
+}
+
 export function upkeepWeekly(squadSize: number, level: AcademyLevel = "standard"): number {
   const l = ACADEMY_LEVELS[level];
   return l.base + l.perKid * Math.max(0, squadSize);
