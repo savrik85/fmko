@@ -370,7 +370,7 @@ export async function executeDailyTick(
     }
     const todayIntensity = dayPlan?.[dayOfWeek]?.intensity ?? "normal";
     // Týdenní zátěž pro spokojenost hráčů — tvrdý trénink váží víc než lehký.
-    const { INTENSITY } = await import("./training");
+    const { INTENSITY, trainingConditionDrain } = await import("./training");
     const weeklyLoad = dayPlan
       ? Object.values(dayPlan).reduce((sum, d) => sum + INTENSITY[d.intensity].load, 0)
       : teamTrainingDays.length;
@@ -759,18 +759,9 @@ export async function executeDailyTick(
           await env.DB.batch(zapisy).catch((e) => logger.warn({ module: "daily-tick" }, "ulozit vysledek treninku", e));
         }
 
-        // Training drains condition for attending players
-        // Conditioning = light (builds stamina, low drain), tactical = medium, intense drills = heavy
-        const drainMap: Record<string, number> = {
-          conditioning: 3,
-          passing: 4,
-          defense: 5,
-          shooting: 5,
-          technique: 4,
-          tactical: 3,
-        };
+        // Trénink ubírá kondici těm, kdo přišli (podle typu, training.ts).
         // Kondiční trenér snižuje úbytek kondice z tréninku (min 1 bod)
-        const baseDrain = (drainMap[todayTrainingType ?? ""] ?? 4) * INTENSITY[todayIntensity].drain;
+        const baseDrain = trainingConditionDrain(todayTrainingType) * INTENSITY[todayIntensity].drain;
         const condDrain = Math.max(1, Math.round(baseDrain * (1 - staffFx.conditionDrainReduction)));
         const { logConditionStmt } = await import("../lib/condition-log");
         for (const a of result.attendance) {

@@ -54,6 +54,24 @@ export function storedTrainingApproach(raw: unknown): TrainingApproach {
 export const DEFAULT_TRAINING_TYPE: TrainingType = "conditioning";
 
 /**
+ * Kolik kondice ubere jeden trénink podle typu (před násobkem intenzity). Kondice a taktika jsou
+ * lehké, technika střední. Tabulka dřív měla klíče passing, defense, shooting a tactical, které
+ * mezi typy tréninku nejsou, takže taktika padala na výchozí 4 místo zamýšlených 3.
+ * Zápasový trénink svou hodnotu neměl nikdy a zůstává na výchozích 4.
+ */
+export const TRAINING_CONDITION_DRAIN: Record<TrainingType, number> = {
+  conditioning: 3,
+  technique: 4,
+  tactics: 3,
+  match_practice: 4,
+};
+const DEFAULT_CONDITION_DRAIN = 4;
+
+export function trainingConditionDrain(type: string | null | undefined): number {
+  return isTrainingType(type) ? TRAINING_CONDITION_DRAIN[type] : DEFAULT_CONDITION_DRAIN;
+}
+
+/**
  * Typ tréninku, podle kterého tick trénuje a účtuje. AI klub bez nastaveného typu trénuje
  * výchozí kondici (dny a počet tréninků doplní tick z výchozí mapy). Lidský klub bez typu
  * netrénuje, jako dosud: nic si nenastavil.
