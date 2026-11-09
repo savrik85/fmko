@@ -221,6 +221,14 @@ gameRouter.get("/teams/:teamId/players/:playerId/profile-extras", async (c) => {
   const teamId = c.req.param("teamId");
   const playerId = c.req.param("playerId");
 
+  // Přesná povaha a vazby jsou jen pro klub, kterému hráč patří: áčko, jeho U21, nebo
+  // kmenový klub hráče na hostování. Dřív stačilo znát id hráče (audit 2026-11-09).
+  const clubTeams = "SELECT id FROM teams WHERE id = ?1 OR parent_team_id = ?1 OR id = (SELECT parent_team_id FROM teams WHERE id = ?1)";
+  const ownPlayer = await c.env.DB.prepare(
+    `SELECT id FROM players WHERE id = ?2 AND (team_id IN (${clubTeams}) OR loan_from_team_id IN (${clubTeams}))`,
+  ).bind(teamId, playerId).first<{ id: string }>();
+  if (!ownPlayer) return c.json({ error: "Hráč nepatří do tvého klubu" }, 403);
+
   const [playerRow, relRows] = await c.env.DB.batch([
     c.env.DB.prepare("SELECT personality FROM players WHERE id = ?").bind(playerId),
     c.env.DB.prepare(
@@ -2333,6 +2341,17 @@ gameRouter.get("/teams/:teamId/sponsors", async (c) => {
   const activeRows = await c.env.DB.prepare(
     "SELECT * FROM sponsor_contracts WHERE team_id = ? AND status = 'active'"
   ).bind(teamId).all().catch((e) => { logger.warn({ module: "game" }, "fetch active sponsor contracts", e); return { results: [] }; });
+
+  // Cizí klub (stadion soupeře) vidí jen názvy reklam u hřiště. Částky, bonusy, výpovědní
+  // pokuty a nabídky jsou věc majitele.
+  const { tymyDivaka } = await import("../auth/divak");
+  if (!(await tymyDivaka(c)).has(teamId)) {
+    return c.json({
+      bannerContracts: activeRows.results
+        .filter((r) => r.category === "banner")
+        .map((r) => ({ sponsorName: r.sponsor_name as string })),
+    });
+  }
 
   // Poměrná výpovědní pokuta, stejný vzorec jako POST /sponsors/terminate — karta smlouvy musí
   // ukazovat přesně tu částku, kterou by výpověď teď strhla, ne nominální earlyTerminationFee
