@@ -1,6 +1,7 @@
 import { Hono, type Context } from "hono";
 import type { Bindings } from "../index";
 import { logger } from "../lib/logger";
+import { currentSeasonSql } from "../lib/season";
 import { loadSeniorTeamSlugs, rememberOldWebsiteSlug, slugTakenByOtherTeam } from "../lib/club-rename";
 import { getSession } from "../auth/session";
 import {
@@ -595,6 +596,7 @@ const UPCOMING_SQL = `SELECT m.id, m.round, sc.scheduled_at,
  JOIN teams ht ON m.home_team_id = ht.id
  JOIN teams at ON m.away_team_id = at.id
  WHERE (m.home_team_id = ? OR m.away_team_id = ?) AND m.status = 'scheduled'
+   AND (sc.id IS NULL OR ${currentSeasonSql("sc")})
  ORDER BY (sc.scheduled_at IS NULL), sc.scheduled_at ASC, m.round ASC LIMIT 5`;
 
 type PollChoice = "win" | "draw" | "loss";

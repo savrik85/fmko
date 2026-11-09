@@ -20,7 +20,7 @@ import { computeBannerOffers, MAX_BANNERS, signSponsorContract } from "../servic
 import { setTicketPrice } from "../services/club-settings";
 import { restockConcession, setConcessionMode, setConcessionProduct } from "../services/concessions";
 import { publicOfferDetails, acceptPlayerOffer, rejectPlayerOffer } from "../services/player-offer-actions";
-import { mustSeason } from "../lib/season";
+import { mustSeason, currentSeasonSql } from "../lib/season";
 import { MAX_CLUB_NAME_LENGTH, NAME_TAKEN_ERROR, renameClub } from "../lib/club-rename";
 import { getSession, getTokenFromRequest } from "../auth/session";
 import { requireTeamOwnership, requireAdmin, requireOwnedTeamRead } from "../auth/middleware";
@@ -3264,7 +3264,7 @@ gameRouter.post("/game/bootstrap-league", async (c) => {
 
     for (let r = 0; r < body.simulateRounds; r++) {
       const cal = await db.prepare(
-        "SELECT id FROM season_calendar WHERE league_id = ? AND status = 'scheduled' ORDER BY scheduled_at ASC LIMIT 1"
+        `SELECT id FROM season_calendar WHERE league_id = ? AND status = 'scheduled' AND ${currentSeasonSql("season_calendar")} ORDER BY scheduled_at ASC LIMIT 1`
       ).bind(league.id).first<{ id: string }>();
       if (!cal) break;
 
@@ -3950,6 +3950,7 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
         JOIN teams t1 ON m.home_team_id = t1.id
         JOIN teams t2 ON m.away_team_id = t2.id
         WHERE sc.league_id = ? AND sc.status = 'scheduled'
+          AND ${currentSeasonSql("sc")}
           AND (m.home_team_id = ? OR m.away_team_id = ?)
         ORDER BY sc.scheduled_at ASC LIMIT 30`
       ).bind(teamId, team.league_id, teamId, teamId).all();
@@ -6880,6 +6881,7 @@ gameRouter.post("/admin/teams/:teamId/generate-interview", async (c) => {
      WHERE (m.home_team_id = ? OR m.away_team_id = ?)
        AND sc.scheduled_at > datetime('now')
        AND sc.status = 'scheduled'
+       AND ${currentSeasonSql("sc")}
      ORDER BY sc.scheduled_at ASC LIMIT 1`
   ).bind(teamId, teamId, teamId)
     .first<{ calendar_id: string; game_week: number; scheduled_at: string; league_id: string }>()
@@ -6907,7 +6909,7 @@ gameRouter.post("/admin/leagues/:leagueId/generate-matchday-preview", async (c) 
   // Najdi nejbližší nadcházející kolo (status='scheduled') této ligy
   const nextCal = await c.env.DB.prepare(
     `SELECT id, game_week, scheduled_at FROM season_calendar
-     WHERE league_id = ? AND status = 'scheduled'
+     WHERE league_id = ? AND status = 'scheduled' AND ${currentSeasonSql("season_calendar")}
      ORDER BY scheduled_at ASC LIMIT 1`
   ).bind(leagueId)
     .first<{ id: string; game_week: number; scheduled_at: string }>()
@@ -7502,6 +7504,21 @@ gameRouter.post("/admin/holiday-break/shift", async (c) => {
   } catch (e) {
     logger.error({ module: "game.ts" }, "posun kol z vánoční přestávky", e);
     return c.json({ error: "Posun kol selhal, rozpis zůstal beze změny." }, 500);
+  }
+});
+
+// POST /api/admin/stale-rounds/cleanup — úklid neodehraných kol starších sezón (stav scheduled).
+// ?dryRun=1 (výchozí) jen vrátí přehled po ligách a odkazy, které by úklid blokovaly;
+// ?dryRun=0 kola, jejich zápasy a sestavy smaže v jedné transakci. Stav „cancelled“ zapsat
+// nejde, CHECK na season_calendar.status a matches.status ho nezná.
+gameRouter.post("/admin/stale-rounds/cleanup", async (c) => {
+  const dryRun = c.req.query("dryRun") !== "0";
+  const { cleanupStaleRounds } = await import("../season/stale-rounds");
+  try {
+    return c.json(await cleanupStaleRounds(c.env.DB, { dryRun }));
+  } catch (e) {
+    logger.error({ module: "game.ts" }, "úklid starých neodehraných kol", e);
+    return c.json({ error: "Úklid selhal, nic se nesmazalo." }, 500);
   }
 });
 

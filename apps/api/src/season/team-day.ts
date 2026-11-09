@@ -19,6 +19,7 @@ import { brokenCzech } from "../messaging/foreign-speech";
 import type { Bindings } from "../index";
 import { createRng } from "../generators/rng";
 import { logger } from "../lib/logger";
+import { currentSeasonSql } from "../lib/season";
 import { parseTrainingPlan, type DailyTickEvent } from "./daily-tick";
 
 export type TeamDayStatus = "done" | "skipped";
@@ -652,7 +653,9 @@ export async function processTeamDay(
       try {
         const todayEnd = new Date(gd); todayEnd.setUTCHours(23, 59, 59, 999);
         const todayMatch = await env.DB.prepare(
-          "SELECT id, scheduled_at FROM season_calendar WHERE league_id = ? AND scheduled_at <= ? AND status = 'scheduled' ORDER BY scheduled_at ASC LIMIT 1"
+          // Jen aktuální sezóna: neodehrané kolo z loňska má termín dávno v minulosti
+          // a ranní omluvenky by se psaly k němu místo k dnešnímu zápasu.
+          `SELECT id, scheduled_at FROM season_calendar WHERE league_id = ? AND scheduled_at <= ? AND status = 'scheduled' AND ${currentSeasonSql("season_calendar")} ORDER BY scheduled_at ASC LIMIT 1`
         ).bind(team.league_id, todayEnd.toISOString()).first<{ id: string; scheduled_at: string }>().catch((e) => { logger.warn({ module: "daily-tick" }, "today match lookup", e); return null; });
 
         if (todayMatch) {

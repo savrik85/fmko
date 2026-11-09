@@ -16,6 +16,7 @@
 import { cleanDashes } from "../lib/dashes";
 import type { Bindings } from "../index";
 import { logger } from "../lib/logger";
+import { currentSeasonSql } from "../lib/season";
 import { WORKERS_AI_MODEL } from "../lib/ai-provider";
 import { callCoachModel } from "../ai-coach/llm";
 import { createRng } from "../generators/rng";
@@ -276,6 +277,7 @@ async function teamMatch(db: D1Database, teamId: string, which: "last" | "next")
        FROM matches m JOIN season_calendar sc ON sc.id = m.calendar_id
        LEFT JOIN teams th ON th.id = m.home_team_id LEFT JOIN teams ta ON ta.id = m.away_team_id
       WHERE (m.home_team_id = ? OR m.away_team_id = ?) AND ${cond}
+        AND ${currentSeasonSql("sc")}
       ORDER BY sc.scheduled_at ${which === "last" ? "DESC" : "ASC"} LIMIT 1`,
   ).bind(teamId, teamId).first<MatchRow>()
     .catch((e) => { logger.warn({ module: M }, `zápas klubu (${which})`, e); return null; });

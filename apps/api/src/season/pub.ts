@@ -11,6 +11,7 @@ import { udalostiHospody, zapisHospody } from "../incidents/hospoda-db";
 import { ROZVOD_HOSPODA_NASOBEK } from "../incidents/nastaveni";
 import { disciplinePubExcessMul } from "@okresni-masina/shared";
 import { logger } from "../lib/logger";
+import { currentSeasonSql } from "../lib/season";
 import { coachRelationStmts } from "../lib/coach-relation";
 import { districtPoolFor, type DistrictPool } from "../data/flavor/district-pool";
 
@@ -1516,6 +1517,7 @@ export async function generatePubSessionsForAllTeams(db: D1Database, gameDate: s
     const nextMatch = await db.prepare(
       `SELECT scheduled_at FROM season_calendar sc JOIN matches m ON m.calendar_id = sc.id
        WHERE (m.home_team_id = ? OR m.away_team_id = ?) AND sc.status = 'scheduled'
+         AND ${currentSeasonSql("sc")}
        ORDER BY sc.scheduled_at ASC LIMIT 1`,
     ).bind(team.id, team.id).first<{ scheduled_at: string }>().catch((e) => { logger.warn({ module: "pub" }, "load next match", e); return null; });
     const daysToNextMatch = nextMatch ? Math.max(0, Math.ceil((new Date(nextMatch.scheduled_at).getTime() - new Date(gameDate).getTime()) / 86400000)) : null;

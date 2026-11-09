@@ -10,6 +10,7 @@
 import { Hono } from "hono";
 import type { Bindings } from "../index";
 import { logger } from "../lib/logger";
+import { currentSeasonSql } from "../lib/season";
 import {
   getRelation, applyRelationEvent, relationStatus, relationLabel, relationGroup, isLoyalAlly, aiArchetype, AI_ARCHETYPE_LABELS,
   isAiTeam, aiGestureResponse, aiAcceptsBet, aiStatementResponse, shiftSquadMorale, insertRelationNews,
@@ -91,6 +92,8 @@ async function nextMutualMatch(db: D1Database, a: string, b: string): Promise<Ma
      FROM matches
      WHERE status IN ('scheduled', 'lineups_open')
        AND ((home_team_id = ? AND away_team_id = ?) OR (home_team_id = ? AND away_team_id = ?))
+       -- Ligový zápas jen z aktuální sezóny, neodehrané zápasy starších sezón v tabulce zůstávají.
+       AND (calendar_id IS NULL OR EXISTS (SELECT 1 FROM season_calendar sc WHERE sc.id = matches.calendar_id AND ${currentSeasonSql("sc")}))
      ORDER BY round ASC LIMIT 1`
   ).bind(a, b, b, a).first<MatchRow>();
 }
