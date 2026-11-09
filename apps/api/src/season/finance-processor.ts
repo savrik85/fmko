@@ -346,6 +346,7 @@ export async function processWeeklyFinances(
   villageSize: string,
 ): Promise<void> {
   const category = mapVillageSize(villageSize);
+  const account = await clubAccountOf(db, teamId);
 
   // Get team reputation
   const teamInfo = await db.prepare("SELECT reputation FROM teams WHERE id = ?")
@@ -369,9 +370,13 @@ export async function processWeeklyFinances(
     `SELECT COUNT(*) as cnt, COALESCE(SUM(weekly_wage), 0) as total FROM players WHERE team_id = ? AND ${PLACENY_HRAC_SQL}`
   ).bind(teamId).first<{ cnt: number; total: number }>();
 
+  // Mzdy dorostu platí mateřský klub (clubAccountOf) a v jeho knize jsou vidět zvlášť.
   if (wageResult && wageResult.total > 0) {
-    await recordTransaction(db, teamId, "wage", -wageResult.total,
-      `Týdenní mzdy: ${wageResult.cnt} hráčů`, gameDate);
+    await recordTransaction(db, account.payerId, "wage", -wageResult.total,
+      account.isYouth
+        ? `Týdenní mzdy, ${YOUTH_LABEL}: ${wageResult.cnt} hráčů`
+        : `Týdenní mzdy: ${wageResult.cnt} hráčů`,
+      gameDate);
   }
 
   // 1b. Staff wages — mzdy zaměstnanců realizačního týmu
@@ -436,9 +441,11 @@ export async function processWeeklyFinances(
   }
 
   // 5. Base sponsorship income (dle reputace — místní podpora)
+  //    Dorost ji nedostává: podnikatelé podporují klub, ne každé jeho mužstvo zvlášť.
+  //    Dřív ji U21 brala podruhé na vlastní účet, který nikdo neviděl.
   const baseSponsorMonthly = reputation * 100;
   const weeklyBaseSponsor = Math.round((baseSponsorMonthly / 4.3) * staffFx.sponsorBonusMul);
-  if (weeklyBaseSponsor > 0) {
+  if (weeklyBaseSponsor > 0 && !account.isYouth) {
     await recordTransaction(db, teamId, "sponsor_income", weeklyBaseSponsor,
       `Podpora místních podnikatelů`, gameDate);
   }
@@ -463,7 +470,10 @@ export async function processWeeklyFinances(
   const subsidyDesc = favor === 50
     ? `Dotace od obce`
     : `Dotace od obce (přízeň ${favor}/100, ×${favorMultiplier.toFixed(2)})`;
-  await recordTransaction(db, teamId, "other", weeklySubsidy, subsidyDesc, gameDate);
+  // Obec dotuje klub jednou. Dorost vlastní dotaci nemá, stejně jako podporu podnikatelů.
+  if (!account.isYouth) {
+    await recordTransaction(db, teamId, "other", weeklySubsidy, subsidyDesc, gameDate);
+  }
 
   // 7. Player contributions (členské příspěvky — 100 Kč/hráč/měsíc)
   const playerCount = wageResult?.cnt ?? 0;
@@ -904,8 +914,10 @@ export async function processTrainingCost(
     vesnice: 200, obec: 400, mestys: 600, mesto: 1000,
   };
   const cost = costPerSession[category] ?? 400;
-  await recordTransaction(db, teamId, "training_cost", -cost,
-    `Trénink`, gameDate);
+  // Trénink dorostu platí mateřský klub, stejně jako jeho mzdy.
+  const account = await clubAccountOf(db, teamId);
+  await recordTransaction(db, account.payerId, "training_cost", -cost,
+    account.isYouth ? `Trénink, ${YOUTH_LABEL}` : `Trénink`, gameDate);
 }
 
 /**

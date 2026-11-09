@@ -34,7 +34,7 @@ interface BudgetData {
   wageBill: { weekly: number; topPlayers: WagePlayer[] };
   weekly: {
     income: { sponsors: number; baseSponsor: number; subsidy: number; playerContributions: number; transferInstallments?: number; total: number };
-    expenses: { wages: number; staffWages?: number; maintenance: number; equipment: number; training: number; loanRepayment: number; transferInstallments?: number; total: number };
+    expenses: { wages: number; staffWages?: number; maintenance: number; equipment: number; training: number; youthWages?: number; youthTraining?: number; loanRepayment: number; transferInstallments?: number; total: number };
     net: number;
     netWithLoan: number;
   };
@@ -311,6 +311,8 @@ function topExpenseItems(d: BudgetData) {
     ...((d.weekly.expenses.staffWages ?? 0) > 0 ? [{ label: "Mzdy zaměstnanců", amount: d.weekly.expenses.staffWages ?? 0 }] : []),
     { label: "Údržba hřiště", amount: d.weekly.expenses.maintenance },
     { label: "Tréninky", amount: d.weekly.expenses.training },
+    ...((d.weekly.expenses.youthWages ?? 0) > 0 ? [{ label: "Mzdy dorostu (U21)", amount: d.weekly.expenses.youthWages ?? 0 }] : []),
+    ...((d.weekly.expenses.youthTraining ?? 0) > 0 ? [{ label: "Tréninky dorostu (U21)", amount: d.weekly.expenses.youthTraining ?? 0 }] : []),
     { label: "Vybavení", amount: d.weekly.expenses.equipment },
     ...(d.weekly.expenses.loanRepayment > 0 ? [{ label: "Splátka půjčky (odhad/týd)", amount: d.weekly.expenses.loanRepayment }] : []),
     { label: "Splátky za koupené hráče", amount: d.weekly.expenses.transferInstallments ?? 0 },
@@ -418,6 +420,12 @@ function FlowsTab({ data }: { data: BudgetData }) {
             <div className="space-y-2.5">
               <BarRow label="Mzdy hráčů" amount={data.weekly.expenses.wages} max={totalExpWithLoan} icon="💸" />
               <BarRow label="Tréninky" amount={data.weekly.expenses.training} max={totalExpWithLoan} icon="🏋" />
+              {(data.weekly.expenses.youthWages ?? 0) > 0 && (
+                <BarRow label="Mzdy dorostu (U21)" amount={data.weekly.expenses.youthWages ?? 0} max={totalExpWithLoan} icon="🧒" />
+              )}
+              {(data.weekly.expenses.youthTraining ?? 0) > 0 && (
+                <BarRow label="Tréninky dorostu (U21)" amount={data.weekly.expenses.youthTraining ?? 0} max={totalExpWithLoan} icon="🏃" />
+              )}
               <BarRow label="Údržba hřiště" amount={data.weekly.expenses.maintenance} max={totalExpWithLoan} icon="🌿" />
               <BarRow label="Vybavení" amount={data.weekly.expenses.equipment} max={totalExpWithLoan} icon="👟" />
               {data.weekly.expenses.loanRepayment > 0 && (

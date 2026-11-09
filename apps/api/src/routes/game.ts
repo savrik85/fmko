@@ -669,7 +669,21 @@ gameRouter.get("/teams/:teamId/budget", async (c) => {
   ).bind(teamId).first<{ total: number }>().catch((e) => { logger.warn({ module: "game" }, "load staff wages for budget", e); return null; });
   const weeklyStaffWages = staffWageRow?.total ?? 0;
 
-  const weeklyExpenses = weeklyWages + weeklyStaffWages + weeklyMaintenance + weeklyEquipment + weeklyTraining;
+  // Dorost (U21): mzdy a tréninky platí klub (finance-processor clubAccountOf), takže
+  // patří do jeho týdenních výdajů. Tréninků je tolik, kolik má dorost nastaveno.
+  const youthRow = await c.env.DB.prepare(
+    `SELECT COALESCE(SUM(COALESCE(u.training_sessions, 2)), 0) AS sessions,
+            (SELECT COALESCE(SUM(p.weekly_wage), 0) FROM players p
+              WHERE p.team_id IN (SELECT id FROM teams WHERE parent_team_id = ?1 AND team_type = 'u21')
+                AND ${PLACENY_HRAC_SQL}) AS wages
+       FROM teams u WHERE u.parent_team_id = ?1 AND u.team_type = 'u21'`
+  ).bind(teamId).first<{ sessions: number; wages: number }>()
+    .catch((e) => { logger.warn({ module: "game" }, "load youth costs for budget", e); return null; });
+  const weeklyYouthWages = youthRow?.wages ?? 0;
+  const weeklyYouthTraining = (trainingPerSession[category] ?? 400) * (youthRow?.sessions ?? 0);
+
+  const weeklyExpenses = weeklyWages + weeklyStaffWages + weeklyMaintenance + weeklyEquipment + weeklyTraining
+    + weeklyYouthWages + weeklyYouthTraining;
   const weeklyNet = weeklyIncome - weeklyExpenses;
 
   // Active cash loan + remaining match days
@@ -805,6 +819,8 @@ gameRouter.get("/teams/:teamId/budget", async (c) => {
       expenses: {
         wages: weeklyWages, staffWages: weeklyStaffWages, maintenance: weeklyMaintenance,
         equipment: weeklyEquipment, training: weeklyTraining,
+        // Dorost U21: platí klub, v knize jsou řádky označené „dorost U21“.
+        youthWages: weeklyYouthWages, youthTraining: weeklyYouthTraining,
         loanRepayment: weeklyLoanRepayment,
         // Splátky za koupené hráče příští pondělí (v `total` nejsou, jako půjčka).
         transferInstallments: nextTransferInstallmentsOut,
