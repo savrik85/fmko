@@ -322,8 +322,7 @@ export default {
     // ten druhý pak už nemá co dělat. Ranní crony (posun dne, zaměstnanci, preview) se
     // do poledne nedostanou samy od sebe.
     // Manuální trigger (!cron) pohár posune vždy — tam si o běh říká člověk.
-    // Zbylé ticky (14, 16, 16:05) dají dohromady 12 dávek po 48 zápasech denně, takže i
-    // největší kolo (1. kolo, u 56 týmů 24 zápasů) je hotové ještě ten den.
+    // Zbylé ticky (14, 16, 16:05) kolo dohrají, kdyby řetěz dávek ve frontě spadl.
     // Předčasně se nic neodehraje — maybeAdvanceCup simuluje jen kola, jejichž termín už nastal,
     // a herní datum se posouvá výhradně v nočním ticku.
     // Když by převod časové zóny z jakéhokoli důvodu selhal, radši kolo pustíme podle
@@ -343,9 +342,20 @@ export default {
     const isCupTick = !cron || (prahaHodina >= 12 && !["0 3 * * *", "0 5 * * *", "0 6 * * *"].includes(cron));
     if (isCupTick) {
       try {
-        const { maybeAdvanceCup } = await import("./cup/cup");
-        const batches = await maybeAdvanceCup(env.DB, env);
-        if (batches > 0) log("info", `cup tick: ${batches} dávek`);
+        // Zápasy se skutečným klubem hraje fronta po malých dávkách (cup/cup-queue.ts).
+        // V cronu zůstává jen levná část: založení poháru, kádry hostů a kola, kde
+        // skutečný klub nehraje. Dřív tu běželo až 36 zápasů plným enginem v jedné invokaci.
+        const { readMatchTickMode } = await import("./queue/messages");
+        const cupViaQueue = (await readMatchTickMode(env.CACHE_KV)) === "queue";
+        const { enqueueCupTick } = await import("./cup/cup-queue");
+        const queued = cupViaQueue ? await enqueueCupTick(env) : 0;
+        if (queued > 0) {
+          log("info", `cup tick: ${queued} řetězů dávek ve frontě`);
+        } else {
+          const { maybeAdvanceCup } = await import("./cup/cup");
+          const batches = await maybeAdvanceCup(env.DB, env, { maxChunks: 1, deadlineMs: Date.now() + 8 * 60_000 });
+          if (batches > 0) log("info", `cup tick: ${batches} dávek`);
+        }
       } catch (e: any) {
         log("error", "cup tick failed", e);
       }
