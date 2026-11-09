@@ -424,8 +424,11 @@ export const COURSE_RULES = {
   licence: { exam: { questions: 15, passScore: 12, timeLimitMin: 20 } },
   /** Opravný termín stojí tuhle část ceny kurzu. */
   retakeShare: 0.2,
-  /** Kolik herních dní po konci kurzu je na test (a na opravný termín). */
-  examWindowDays: 7,
+  /**
+   * Kolik herních dní po konci kurzu je na test (a na opravný termín). Do 9. 11. 2026 to bylo 7:
+   * dva licenční kurzy po 25 000 Kč tak propadly bez jediného pokusu.
+   */
+  examWindowDays: 14,
   /** O kolik sekund se zkrátí čas testu za každý odchod z okna (jiný tab, jiná aplikace). */
   examLeavePenaltySec: 60,
   maxAttrCoursesPerSeason: 3,

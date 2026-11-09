@@ -819,6 +819,25 @@ export async function payRetake(db: D1Database, teamId: string, courseId: string
 
 // ── Denní odpočet (team-day) ──
 
+/** Kolik herních dní před koncem okna na test (a na opravný termín) přijde SMS s připomínkou. */
+export const EXAM_REMINDER_DAYS = 3;
+
+function daysLeftText(left: number): string {
+  if (left === 1) return "zbývá poslední den";
+  return left < 5 ? `zbývají ${left} dny` : `zbývá ${left} dní`;
+}
+
+/** SMS s připomínkou testu nebo opravného termínu a s tím, co se stane, když lhůta uplyne. */
+export function examReminderText(course: Pick<CourseRow, "status" | "attempts_used" | "retake_price">, title: string, left: number): string {
+  if (course.status === "retake_available") {
+    return `Na přihlášku na opravný termín „${title}“ ${daysLeftText(left)}. Stojí ${course.retake_price.toLocaleString("cs")} Kč. Když se nepřihlásíš, kurz propadne i s penězi.`;
+  }
+  const consequence = course.attempts_used === 0
+    ? `Když ho nestihneš, počítá se jako nesplněný a zbude jen opravný termín za ${course.retake_price.toLocaleString("cs")} Kč.`
+    : "Když ho nestihneš, kurz propadne i s penězi.";
+  return `Na závěrečný test „${title}“ ${daysLeftText(left)}. ${consequence} Test najdeš na profilu trenéra v záložce Vzdělání.`;
+}
+
 /**
  * Jeden herní den trenérské školy klubu: odpočet kurzu, konec kurzu → test,
  * odpočet okna na test, připomínka, propadnutí. Vyhodnotí i test, který někdo
@@ -865,12 +884,17 @@ export async function tickCoachCourses(db: D1Database, teamId: string, env?: Pus
   if (left > 0) {
     await db.prepare("UPDATE coach_courses SET exam_days_remaining = ? WHERE id = ? AND status = ?")
       .bind(left, course.id, course.status).run();
-    if (left <= 2 && !course.reminder_sent) {
-      await db.prepare("UPDATE coach_courses SET reminder_sent = 1 WHERE id = ?").bind(course.id).run();
-      const what = course.status === "exam_ready" ? "test" : "přihlášku na opravný termín";
-      await createNotification(db, teamId, "event", `🎓 Poslední ${left === 1 ? "den" : "dny"} na ${what}`,
-        `${title}: zbývá ${left} ${left === 1 ? "den" : "dny"}.`, `/manazer/${teamId}?tab=vzdelani`, env)
-        .catch((e) => logger.warn({ module: M }, `připomínka testu ${course.id}`, e));
+    if (left <= EXAM_REMINDER_DAYS && !course.reminder_sent) {
+      // Jednou za okno (příznak se zabírá atomicky): SMS do telefonu a upozornění
+      const claim = await db.prepare("UPDATE coach_courses SET reminder_sent = 1 WHERE id = ? AND reminder_sent = 0").bind(course.id).run();
+      if ((claim.meta?.changes ?? 0) > 0) {
+        const what = course.status === "exam_ready" ? "test" : "přihlášku na opravný termín";
+        await sendSystemSMS(db, teamId, SCHOOL, examReminderText(course, title, left), { type: "coach_course", courseId: course.id })
+          .catch((e) => logger.warn({ module: M }, `SMS připomínky testu ${course.id}`, e));
+        await createNotification(db, teamId, "event", `🎓 Poslední ${left === 1 ? "den" : "dny"} na ${what}`,
+          `${title}: ${daysLeftText(left)}.`, `/manazer/${teamId}?tab=vzdelani`, env)
+          .catch((e) => logger.warn({ module: M }, `připomínka testu ${course.id}`, e));
+      }
     }
     return;
   }
