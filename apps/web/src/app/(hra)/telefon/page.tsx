@@ -342,13 +342,13 @@ export default function PhonePage() {
         {credit && (
           <p className="text-sm text-muted leading-snug">
             {credit.zbyva >= credit.cenaSms ? (
-              <>Na kartě máš <strong className="text-ink">{credit.zbyva} Kč</strong> — to je{" "}
+              <>Na kartě máš <strong className="text-ink">{credit.zbyva} Kč</strong>, to je{" "}
                 {credit.zprav === 1 ? "jedna SMS" : `${credit.zprav} SMS`}.{" "}
                 Hráčům a do kabiny jde <span className="text-pitch-600 font-medium">SMS</span> za{" "}
                 {credit.cenaSms} Kč, zbytek přes{" "}
                 <span className="text-blue-600 font-medium">iMessage</span> zdarma.</>
             ) : (
-              <>Na kartě máš {credit.zbyva} Kč, na SMS to nestačí. Dobije se zítra ráno — přes{" "}
+              <>Na kartě máš {credit.zbyva} Kč, na SMS to nestačí. Dobije se zítra ráno, přes{" "}
                 <span className="text-blue-600 font-medium">iMessage</span> píšeš dál zdarma.</>
             )}
           </p>

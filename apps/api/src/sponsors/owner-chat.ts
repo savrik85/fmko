@@ -6,6 +6,7 @@
  * hotový výsledek a má ho jen říct. Když částku nebo termín v odpovědi popletl, nebo
  * model nejede, volající použije připravenou větu.
  */
+import { cleanDashes } from "../lib/dashes";
 import { logger } from "../lib/logger";
 import type { OwnerPersonality } from "./owners";
 import { isRequestPurpose, PURPOSE_LABELS, type RequestPurpose, type RequestRelation } from "./requests";
@@ -162,7 +163,7 @@ Odpověz jen JSON: {"body": "text SMS"}`;
  * v ní jsou a jiná částka (od 1 000 Kč) ne. Jinak null a volající použije připravenou větu.
  */
 export function checkOwnerReply(raw: string, mustContain: { amounts?: number[]; days?: string[]; allowed?: number[] } = {}): string | null {
-  const body = raw.trim().replace(/^["„“]+|["“”]+$/g, "").replace(/\s*—\s*/g, ", ").trim();
+  const body = cleanDashes(raw.trim().replace(/^["„“]+|["“”]+$/g, "")).trim();
   if (!body || body.length > 600) return null;
   const digits = digitsOnly(body);
   for (const a of mustContain.amounts ?? []) {

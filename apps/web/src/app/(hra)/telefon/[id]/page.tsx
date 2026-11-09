@@ -867,7 +867,7 @@ export default function ConversationPage() {
                 <span>· {credit.cenaSms} Kč za zprávu · kredit {credit.zbyva} Kč</span>
               </>
             ) : (
-              <span>Kredit {credit.zbyva} Kč — na SMS to nestačí. Dobije se zítra ráno.</span>
+              <span>Kredit {credit.zbyva} Kč, na SMS to nestačí. Dobije se zítra ráno.</span>
             )}
           </p>
         )}

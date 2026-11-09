@@ -902,7 +902,7 @@ teamsRouter.post("/", async (c) => {
     ];
     const bodies = [
       `${managerLabel}, ${backstoryText}, se ujímá vedení ${body.name} z ${village.name as string}. Kádr čítá ${squad.length} hráčů. Mezi oporami vyčnívají ${topList}. Fanoušci jsou zvědaví, co nová sezóna přinese.`,
-      `V ${village.name as string} to žije — ${managerLabel} převzal tým ${body.name}. „Chceme hrát dobrý fotbal," řekl po svém jmenování. Na soupisku se dostal ${squad.length} hráčů, tahouny by měli být ${topList}.`,
+      `V ${village.name as string} to žije, ${managerLabel} převzal tým ${body.name}. „Chceme hrát dobrý fotbal," řekl po svém jmenování. Na soupisku se dostal ${squad.length} hráčů, tahouny by měli být ${topList}.`,
       `Okresní fotbal má novou kapitolu. ${managerLabel} (${backstoryText}) dorazil do ${village.name as string} a ujal se vedení ${body.name}. V kádru o ${squad.length} hráčích budou klíčoví ${topList}.`,
     ];
     const idx = Math.floor(Math.random() * headlines.length);

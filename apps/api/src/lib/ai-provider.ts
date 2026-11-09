@@ -15,6 +15,7 @@
  * Produkce tak zůstává nedotčená, dokud ji někdo výslovně nepřepne.
  */
 
+import { cleanDashes } from "./dashes";
 import { logger } from "./logger";
 
 export type AiProvider = "gemini" | "workers-ai" | "off";
@@ -144,7 +145,8 @@ export async function generateText(
         ? JSON.stringify(raw)
         : "";
     if (!text) logger.warn({ module: mod }, "workers-ai vrátil prázdnou odpověď");
-    return text || null;
+    // Dlouhé pomlčky pryč hned tady, ať se nedostanou do článků ani do SMS (lib/dashes.ts).
+    return text ? cleanDashes(text) : null;
   }
 
   // ── Gemini (default) ──

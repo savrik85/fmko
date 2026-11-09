@@ -8681,7 +8681,7 @@ gameRouter.post("/admin/news/:newsId/regenerate-interview", async (c) => {
   const result = await generateInterviewArticle(geminiKey, body.qa, body.managerName, body.teamName, opponentName);
   if (!result) return c.json({ error: "gemini failed" }, 500);
 
-  const correctionNote = "\n\n— Oprava: Předchozí verze článku chybně upravila záměrné slovní hříčky trenéra jako překlepy. Za nedorozumění se omlouváme, chyba byla na straně redaktora.";
+  const correctionNote = "\n\nOprava: Předchozí verze článku chybně upravila záměrné slovní hříčky trenéra jako překlepy. Za nedorozumění se omlouváme, chyba byla na straně redaktora.";
   const newBody = JSON.stringify({ ...body, article: result.body + correctionNote }, );
   const newHeadline = result.headline.replace(/\[oprava\]$/, "").trim() + " [oprava]";
 

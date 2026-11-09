@@ -130,7 +130,7 @@ function fallbackArticle(gameWeek: number, homeMatches: HomeMatch[]): string {
   }
   const bordel = homeMatches.filter((m) => m.incidenty.length > 0);
   if (bordel.length > 0) {
-    parts.push(`Ne všude ale zůstalo u fandění: ${bordel.map((m) => `**${m.homeName}** — ${m.incidenty[0]}`).join(" ")}`);
+    parts.push(`Ne všude ale zůstalo u fandění: ${bordel.map((m) => `**${m.homeName}**: ${m.incidenty[0]}`).join(" ")}`);
   }
   return parts.join("\n");
 }

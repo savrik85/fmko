@@ -275,7 +275,7 @@ export async function recordTransaction(
     const pre = await db.prepare("SELECT budget FROM teams WHERE id = ?")
       .bind(teamId).first<{ budget: number }>();
     if (pre && pre.budget < 0) {
-      const msg = `BUDGET_BLOCKED: Záporný rozpočet (${pre.budget.toLocaleString("cs")} Kč) — nákupy zakázány do vyrovnání.`;
+      const msg = `BUDGET_BLOCKED: Záporný rozpočet (${pre.budget.toLocaleString("cs")} Kč). Nákupy jsou zakázány do vyrovnání.`;
       logger.warn({ module: "finance" }, `${msg} type=${type} amount=${amount} team=${teamId}`);
       throw new Error(msg);
     }
@@ -899,14 +899,14 @@ export async function assertPurchaseAllowed(
     return {
       ok: false,
       budget: team.budget,
-      reason: `Záporný rozpočet (${team.budget.toLocaleString("cs")} Kč) — nákupy jsou zakázány do vyrovnání na nulu.`,
+      reason: `Záporný rozpočet (${team.budget.toLocaleString("cs")} Kč). Nákupy jsou zakázány do vyrovnání na nulu.`,
     };
   }
   if (team.budget < amount) {
     return {
       ok: false,
       budget: team.budget,
-      reason: `Nedostatek prostředků — potřeba ${amount.toLocaleString("cs")} Kč, k dispozici ${team.budget.toLocaleString("cs")} Kč.`,
+      reason: `Nedostatek prostředků: potřeba ${amount.toLocaleString("cs")} Kč, k dispozici ${team.budget.toLocaleString("cs")} Kč.`,
     };
   }
   return { ok: true, budget: team.budget };

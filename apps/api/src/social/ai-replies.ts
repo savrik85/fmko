@@ -13,6 +13,7 @@
  * si lidi příspěvku všimnou až po chvíli. Druhý fanoušek pak reaguje i na prvního.
  */
 
+import { cleanDashes } from "../lib/dashes";
 import type { Bindings } from "../index";
 import { logger } from "../lib/logger";
 import { WORKERS_AI_MODEL } from "../lib/ai-provider";
@@ -100,9 +101,7 @@ const FORBIDDEN_IN_REPLY = /(https?:\/\/|www\.|\b[\w.-]+\.(cz|com|net|org|eu|sk|
 /** Úklid odpovědi modelu: bez uvozovek kolem, bez dlouhých pomlček, rozumná délka. */
 export function cleanReply(raw: string): string | null {
   if (FORBIDDEN_IN_REPLY.test(raw)) return null;
-  let t = raw.trim()
-    .replace(/^["„“'»«]+|["„“'»«]+$/g, "")
-    .replace(/\s*[—–]\s*/g, ", ")
+  let t = cleanDashes(raw.trim().replace(/^["„“'»«]+|["„“'»«]+$/g, ""))
     .replace(/#\w+/g, "")
     .replace(/\s{2,}/g, " ")
     .trim();

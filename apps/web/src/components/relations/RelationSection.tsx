@@ -255,7 +255,7 @@ export function RelationCard({ myTeamId, otherTeamId, otherManagerName }: {
           </button>
         )}
         {ix.pendingBet && ix.pendingBet.status === "pending" && (
-          <span className="text-sm text-muted self-center">🍺 Sázka o bečku běží — rozhodne hřiště</span>
+          <span className="text-sm text-muted self-center">🍺 Sázka o bečku běží, rozhodne hřiště</span>
         )}
         {ix.pendingBet && ix.pendingBet.status === "offered" && ix.pendingBet.offeredByMe && (
           <span className="text-sm text-muted self-center">🍺 Nabídka sázky čeká na odpověď</span>
@@ -416,7 +416,7 @@ export function PreMatchCard({ myTeamId, otherTeamId, otherTeamName }: {
           </button>
         )}
         {ix.pendingBet && ix.pendingBet.status === "pending" && (
-          <span className="text-sm text-muted self-center">🍺 Sázka o bečku běží — rozhodne hřiště</span>
+          <span className="text-sm text-muted self-center">🍺 Sázka o bečku běží, rozhodne hřiště</span>
         )}
         {ix.pendingBet && ix.pendingBet.status === "offered" && !ix.pendingBet.offeredByMe && (
           <>

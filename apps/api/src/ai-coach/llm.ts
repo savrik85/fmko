@@ -9,6 +9,7 @@
  * z kopie produkce). Kredity pokrývají jen modely hostované Cloudflarem.
  */
 
+import { cleanDashesDeep } from "../lib/dashes";
 import type { Bindings } from "../index";
 import { logger } from "../lib/logger";
 
@@ -325,5 +326,6 @@ export async function callCoachModel(env: Pick<Bindings, "AI">, req: CoachModelR
       error: out.text ? "odpověď není JSON objekt" : "prázdná odpověď",
     };
   }
-  return { json, raw: out.text.slice(0, 8000), model, tokensIn: out.tokensIn, tokensOut: out.tokensOut, latencyMs };
+  // Texty z rozhodnutí (SMS, výroky do novin, komentáře) jdou hráčům: bez dlouhých pomlček.
+  return { json: cleanDashesDeep(json), raw: out.text.slice(0, 8000), model, tokensIn: out.tokensIn, tokensOut: out.tokensOut, latencyMs };
 }

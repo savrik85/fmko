@@ -193,7 +193,7 @@ function odpovidatLze(
   return {
     canReply: false,
     channel: null,
-    replyHint: `${opts.title ?? "Odesílatel"} posílá jen oznámení — odpovídat nejde.`,
+    replyHint: `${opts.title ?? "Odesílatel"} posílá jen oznámení, odpovídat nejde.`,
   };
 }
 

@@ -168,7 +168,7 @@ export function StammtischCard({ teamId }: { teamId: string }) {
       <div className="flex flex-wrap gap-2">
         {info.stammtisch.planned ? (
           <div className="w-full">
-            <div className="text-sm font-heading font-bold mb-2">🍻 Posezení je domluvené — odpovědi pozvaných</div>
+            <div className="text-sm font-heading font-bold mb-2">🍻 Posezení je domluvené, odpovědi pozvaných</div>
             {info.stammtisch.topic && <div className="text-sm mb-2">Téma: „{info.stammtisch.topic}“</div>}
             <div className="space-y-1">
               {info.stammtisch.plannedInvites.length === 0 ? (
@@ -186,7 +186,7 @@ export function StammtischCard({ teamId }: { teamId: string }) {
                 );
               })}
             </div>
-            <div className="text-xs text-muted mt-2">Vyhodnotí se večer — kdo neodpoví do té doby, nedorazí.</div>
+            <div className="text-xs text-muted mt-2">Vyhodnotí se večer. Kdo neodpoví do té doby, nedorazí.</div>
           </div>
         ) : (
           <button disabled={busy || !info.stammtisch.available}
@@ -200,7 +200,7 @@ export function StammtischCard({ teamId }: { teamId: string }) {
         )}
 
         {info.pubRound.planned ? (
-          <span className="text-sm text-muted self-center">🍺 Runda je slíbená — večer se roztočí</span>
+          <span className="text-sm text-muted self-center">🍺 Runda je slíbená, večer se roztočí</span>
         ) : (
           <button disabled={busy || !info.pubRound.available}
             title={info.pubRound.reason ?? "Pivo všem štamgastům, morálka, fanoušci i starosta v rohu. Roztočí se večer."}
@@ -214,7 +214,7 @@ export function StammtischCard({ teamId }: { teamId: string }) {
       {picking && info.stammtisch.available && (
         <div className="mt-3 border border-gray-100 rounded-soft p-3">
           <div className="text-xs text-muted uppercase tracking-wide font-heading font-bold mb-2">
-            Koho pozvat? ({selected.size}/4) — zvou se jen lidští trenéři
+            Koho pozvat? ({selected.size}/4), zvou se jen lidští trenéři
           </div>
           {managers.filter((m) => !m.isAi).length === 0 && (
             <div className="text-sm text-muted">V lize zatím není žádný další lidský trenér.</div>
@@ -253,7 +253,7 @@ export function StammtischCard({ teamId }: { teamId: string }) {
               className={`${BTN} bg-amber-50 border-amber-200 hover:bg-amber-100`}>
               Pozvat ke stolu ({selected.size ? `rezervace 100 Kč + rundy max ${info.stammtisch.costPerHead * (selected.size + 1)} Kč` : "vyber trenéry"})
             </button>
-            <span className="text-xs text-muted">Pozvaní dostanou pozvánku k přijetí. Vyhodnotí se večer v hospodě — platí se jen za ty, kdo dorazí, a pozor na rivaly u jednoho stolu.</span>
+            <span className="text-xs text-muted">Pozvaní dostanou pozvánku k přijetí. Vyhodnotí se večer v hospodě. Platí se jen za ty, kdo dorazí, a pozor na rivaly u jednoho stolu.</span>
           </div>
         </div>
       )}
