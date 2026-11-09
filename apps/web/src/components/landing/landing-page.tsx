@@ -11,7 +11,7 @@ type LandingData = {
   stats: { matches: number; players: number; villages: number; districts: number };
   results: Array<{ home: string; away: string; homeScore: number; awayScore: number; league: string; at: string }>;
   headlines: Array<{ headline: string; league: string; type: string }>;
-  districts: Array<{ name: string; villages: number; managers: number; founderFree: boolean }>;
+  districts: Array<{ name: string; villages: number; managers: number; founderFree: boolean; full?: boolean; freeSlots?: number | null }>;
 };
 
 const HEADLINE_LABEL: Record<string, string> = {
@@ -39,6 +39,10 @@ const MOMENTS = [
 
 function czNumber(n: number): string {
   return n.toLocaleString("cs-CZ");
+}
+
+function managersLabel(n: number): string {
+  return `${n} ${n === 1 ? "manažer" : n >= 2 && n <= 4 ? "manažeři" : "manažerů"}`;
 }
 
 function shortDate(iso: string): string {
@@ -127,8 +131,8 @@ export function LandingPage({ redirectPlayers = true }: { redirectPlayers?: bool
         <ul className={styles.playedList}>{playedDistricts.map((d) => <li key={d.name}>
           <Link href={`/registrace?okres=${encodeURIComponent(d.name)}`}>
             <strong>{d.name}</strong>
-            <span className={styles.playedMeta}>{d.managers >= 5 ? `${d.managers} manažerů` : "Volná místa v lize"} · {d.villages} obcí</span>
-            <span className={styles.playedCta}>Přidat se <span aria-hidden="true">→</span></span>
+            <span className={styles.playedMeta}>{d.full ? `${managersLabel(d.managers)} · plno` : `${d.managers >= 5 ? `${d.managers} manažerů` : "Volná místa v lize"} · ${d.villages} obcí`}</span>
+            <span className={styles.playedCta}>{d.full ? "Čekací listina" : "Přidat se"} <span aria-hidden="true">→</span></span>
           </Link>
         </li>)}</ul>
       </div>}

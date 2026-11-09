@@ -17,6 +17,7 @@ export default function RegisterPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [waitlisted, setWaitlisted] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -26,7 +27,11 @@ export default function RegisterPage() {
   const router = useRouter();
   const selected = districts.find(d => d.name === district);
   const status = selected?.status;
-  const instant = status === "ready";
+  // Plná (nebo ručně zavřená) liga: účet nevzniká, nabízí se čekací listina a jiné okresy.
+  const closed = status === "ready" && Boolean(selected?.full);
+  const instant = status === "ready" && !closed;
+  const openDistricts = districts.filter(d => d.status === "ready" && !d.full)
+    .sort((a, b) => (b.managers ?? 0) - (a.managers ?? 0) || a.name.localeCompare(b.name, "cs"));
 
   function loadDistricts() {
     setLoadError(false);
@@ -50,11 +55,13 @@ export default function RegisterPage() {
         login(result.token, result.user); router.replace("/onboarding");
         return;
       }
-      await apiFetch("/api/registration/requests", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, email, district }) });
+      const accepted = await apiFetch<{ accepted: boolean; waitlist?: boolean }>("/api/registration/requests", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, email, district }) });
+      setWaitlisted(Boolean(accepted.waitlist) || closed);
       setSubmitted(true);
     } catch (err) {
       const message = (err as Error).message;
       if (message === "district_not_ready") { loadDistricts(); setError("Tenhle okres se ještě připravuje. Odešli žádost a ozveme se."); }
+      else if (message === "district_full") { loadDistricts(); setError(`Liga v okrese ${district} se mezitím zaplnila. Zapiš se na čekací listinu, nebo si vyber jiný okres.`); }
       else setError(message === "Network error" ? "Registraci se nepodařilo odeslat. Zkontroluj připojení a zkus to znovu." : message);
     }
     setLoading(false);
@@ -63,17 +70,22 @@ export default function RegisterPage() {
   return <main className={styles.page}>
     <header className={styles.header}><Link className={styles.logo} href="/">PRALES.</Link><Link href="/prihlaseni">Už mám účet →</Link></header>
     <div className={styles.layout}>
-      {!direct && <section className={styles.intro}><p className={styles.eyebrow}>PRVNÍ KROK DO VAŠÍ LIGY</p><h1>Každý okres<br />potřebuje<br /><em>svého předsedu.</em></h1><p>Začni u vás doma. Pozvi kamarády z hospody, práce nebo kabiny a veď první období ligy, která bude patřit vašemu okresu.</p><ol><li><strong>Ty vybereš okres.</strong><span>{instant ? "Jméno, e-mail a heslo. Nic dalšího nepotřebujeme." : "Jméno a e-mail. Nic dalšího teď nepotřebujeme."}</span></li>{instant ? <><li><strong>Okres je připravený.</strong><span>Místní obce, jména a sponzoři už čekají. Klub zakládáš hned po registraci.</span></li><li><strong>Pozveš kamarády.</strong><span>{selected?.founderFree ? "Kdo založí klub první, povede ligu jako předseda na první období." : "Každý vede svůj klub, derby se pak řeší u piva."}</span></li></> : <><li><strong>My do 24 hodin připravíme data.</strong><span>Místní jména, obce, sponzory a atmosféru, aby to bylo opravdu vaše.</span></li><li><strong>Ty začneš jako předseda.</strong><span>Po aktivaci založíš klub, pozveš kamarády a na první období povedeš celou soutěž.</span></li></>}</ol><Link href="/" className={styles.back}>Zpátky na hřiště</Link></section>}
+      {!direct && <section className={styles.intro}><p className={styles.eyebrow}>PRVNÍ KROK DO VAŠÍ LIGY</p><h1>Každý okres<br />potřebuje<br /><em>svého předsedu.</em></h1><p>Začni u vás doma. Pozvi kamarády z hospody, práce nebo kabiny a veď první období ligy, která bude patřit vašemu okresu.</p><ol><li><strong>Ty vybereš okres.</strong><span>{instant ? "Jméno, e-mail a heslo. Nic dalšího nepotřebujeme." : "Jméno a e-mail. Nic dalšího teď nepotřebujeme."}</span></li>{closed ? <><li><strong>Liga v okrese je plná.</strong><span>Zapiš se na čekací listinu. Ozveme se, až se uvolní místo.</span></li><li><strong>Nebo hraj hned jinde.</strong><span>Vyber si okres s volným místem a klub založíš hned po registraci.</span></li></> : instant ? <><li><strong>Okres je připravený.</strong><span>Místní obce, jména a sponzoři už čekají. Klub zakládáš hned po registraci.</span></li><li><strong>Pozveš kamarády.</strong><span>{selected?.founderFree ? "Kdo založí klub první, povede ligu jako předseda na první období." : "Každý vede svůj klub, derby se pak řeší u piva."}</span></li></> : <><li><strong>My do 24 hodin připravíme data.</strong><span>Místní jména, obce, sponzory a atmosféru, aby to bylo opravdu vaše.</span></li><li><strong>Ty začneš jako předseda.</strong><span>Po aktivaci založíš klub, pozveš kamarády a na první období povedeš celou soutěž.</span></li></>}</ol><Link href="/" className={styles.back}>Zpátky na hřiště</Link></section>}
       <section className={styles.card} aria-labelledby="registration-title">
         {submitted ? <div role="status" className={styles.success}>
-          <span className={styles.check} aria-hidden="true">✓</span><p className={styles.eyebrow}>ŽÁDOST JE U NÁS</p><h2 id="registration-title">{district} jde do hry.</h2><p>Žádost jsme přijali. Na <strong>{email.trim()}</strong> dostaneš do 24 hodin další postup a aktivační odkaz.</p><div className={styles.note}>Týmy se odemknou po přípravě okresu. Zatím dej vědět kamarádům, že se chystá vaše liga.</div><p className={styles.small}>Pokud se neozveme, zkontroluj spam nebo napiš na <a href="mailto:admin@prales.fun">admin@prales.fun</a>.</p><Link href="/" className={styles.submit}>Zpět do Pralesa →</Link>
+          <span className={styles.check} aria-hidden="true">✓</span>{waitlisted ? <><p className={styles.eyebrow}>JSI NA ČEKACÍ LISTINĚ</p><h2 id="registration-title">{district}: dáme ti vědět.</h2><p>Liga v okrese {district} je teď plná. Jakmile se v ní uvolní místo, napíšeme ti na <strong>{email.trim()}</strong>.</p>{openDistricts.length > 0 && <div className={styles.note}>Nechceš čekat? V jiném okrese můžeš hrát hned: {openDistricts.slice(0, 3).map(d => d.name).join(", ")}. <button type="button" className="underline" onClick={() => { setSubmitted(false); setWaitlisted(false); setDistrict(openDistricts[0].name); }}>Vybrat okres s volným místem</button></div>}<p className={styles.small}>S dotazem napiš na <a href="mailto:admin@prales.fun">admin@prales.fun</a>.</p></> : <><p className={styles.eyebrow}>ŽÁDOST JE U NÁS</p><h2 id="registration-title">{district} jde do hry.</h2><p>Žádost jsme přijali. Na <strong>{email.trim()}</strong> dostaneš do 24 hodin další postup a aktivační odkaz.</p><div className={styles.note}>Týmy se odemknou po přípravě okresu. Zatím dej vědět kamarádům, že se chystá vaše liga.</div><p className={styles.small}>Pokud se neozveme, zkontroluj spam nebo napiš na <a href="mailto:admin@prales.fun">admin@prales.fun</a>.</p></>}<Link href="/" className={styles.submit}>Zpět do Pralesa →</Link>
         </div> : <>
-          <p className={styles.eyebrow}>{instant ? "PÁR ÚDAJŮ A JSI NA HŘIŠTI" : "JEN TŘI ÚDAJE A JSME VE HŘE"}</p><h2 id="registration-title">{direct ? `Registrace: ${district}` : selected?.founderFree ? "Založ ligu jako první" : instant ? "Přidej se do okresu" : "Rozjeď svůj okres"}</h2><p className={styles.description}>{instant ? "Okres je připravený. Po registraci rovnou zakládáš klub." : "Heslo a vlastní tým vyřešíš až po přípravě dat."}</p>
+          <p className={styles.eyebrow}>{closed ? "LIGA JE PLNÁ" : instant ? "PÁR ÚDAJŮ A JSI NA HŘIŠTI" : "JEN TŘI ÚDAJE A JSME VE HŘE"}</p><h2 id="registration-title">{closed ? `${district}: plno` : direct ? `Registrace: ${district}` : selected?.founderFree ? "Založ ligu jako první" : instant ? "Přidej se do okresu" : "Rozjeď svůj okres"}</h2><p className={styles.description}>{closed ? "V téhle lize teď není volný klub. Zapiš se na čekací listinu, nebo si vyber okres s volným místem." : instant ? "Okres je připravený. Po registraci rovnou zakládáš klub." : "Heslo a vlastní tým vyřešíš až po přípravě dat."}</p>
           <form onSubmit={submit} className={styles.form}>
             <Input label="Tvoje jméno" name="name" autoComplete="name" placeholder="Jak ti máme říkat?" value={name} minLength={2} maxLength={80} onChange={e => setName(e.target.value)} required />
             <Input label="E-mail" name="email" type="email" autoComplete="email" autoCapitalize="none" spellCheck={false} placeholder="tvuj@email.cz" maxLength={254} value={email} onChange={e => setEmail(e.target.value)} required />
-            <div><label htmlFor="district" className="input-label">Váš okres</label><select id="district" name="district" className="input" value={district} onChange={e => setDistrict(e.target.value)} required aria-describedby="district-help"><option value="" disabled>Vyber okres</option>{REGISTRATION_DISTRICTS.map(name => <option key={name} value={name}>{name}{districts.find(d => d.name === name)?.status === "ready" ? " · hraj hned" : districts.find(d => d.name === name)?.status === "preparing" ? " · v přípravě" : ""}</option>)}</select></div>
-            <div id="district-help" className={styles.note}>{selected?.founderFree ? "Okres je připravený a zatím v něm nikdo nehraje. Kdo založí klub první, povede ligu jako její předseda na první období." : status === "ready" ? "Okres je připravený. Připojíš se jako manažer a klub založíš hned po registraci." : status === "preparing" ? "Tenhle okres už má svého zakladatele a připravuje se. Přidej se k němu jako manažer. Ozveme se po dokončení dat." : "Založením nové ligy se staneš jejím prvním předsedou na první období. Do 24 hodin připravíme data pro váš okres a pošleme ti aktivační odkaz."}</div>
+            <div><label htmlFor="district" className="input-label">Váš okres</label><select id="district" name="district" className="input" value={district} onChange={e => setDistrict(e.target.value)} required aria-describedby="district-help"><option value="" disabled>Vyber okres</option>{REGISTRATION_DISTRICTS.map(name => <option key={name} value={name}>{name}{districts.find(d => d.name === name)?.status === "ready" ? (districts.find(d => d.name === name)?.full ? " · plno" : " · hraj hned") : districts.find(d => d.name === name)?.status === "preparing" ? " · v přípravě" : ""}</option>)}</select></div>
+            <div id="district-help" className={styles.note}>{closed ? <>
+              <strong>Liga v okrese {district} je plná.</strong> Zapiš se na čekací listinu a ozveme se, až se uvolní místo.
+              {openDistricts.length > 0 && <> Nebo hraj hned v okrese s volným místem:
+                <span className="flex flex-wrap gap-2 mt-3">{openDistricts.map(d => <button key={d.name} type="button" className="btn btn-secondary btn-sm" onClick={() => { setDistrict(d.name); setError(""); }}>{d.name}{(d.managers ?? 0) > 0 ? ` · ${d.managers} ${(d.managers ?? 0) === 1 ? "manažer" : (d.managers ?? 0) < 5 ? "manažeři" : "manažerů"}` : " · volný okres"}</button>)}</span>
+              </>}
+            </> : selected?.founderFree ? "Okres je připravený a zatím v něm nikdo nehraje. Kdo založí klub první, povede ligu jako její předseda na první období." : status === "ready" ? "Okres je připravený. Připojíš se jako manažer a klub založíš hned po registraci." : status === "preparing" ? "Tenhle okres už má svého zakladatele a připravuje se. Přidej se k němu jako manažer. Ozveme se po dokončení dat." : "Založením nové ligy se staneš jejím prvním předsedou na první období. Do 24 hodin připravíme data pro váš okres a pošleme ti aktivační odkaz."}</div>
             {instant && <>
               <Input label="Heslo" type="password" name="new-password" autoComplete="new-password" minLength={8} maxLength={128} pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9]).{8,128}" title="8 až 128 znaků, malé i velké písmeno a číslo" aria-describedby="password-help" value={password} onChange={e => setPassword(e.target.value)} required />
               <p id="password-help" className={styles.small}>Alespoň 8 znaků, malé i velké písmeno a číslo.</p>
@@ -81,8 +93,8 @@ export default function RegisterPage() {
             </>}
             {loadError && <p role="alert" className={styles.small}>Stav okresů teď nejde načíst. <button type="button" onClick={loadDistricts} className="underline">Zkusit znovu</button></p>}
             <ErrorBox message={error} />
-            <Button type="submit" size="lg" disabled={loading || !district || !name.trim() || districts.length === 0} className={styles.submit}>{loading ? (instant ? "Zakládám účet…" : "Odesílám žádost…") : instant ? "Registrovat a založit klub ↗" : status === "available" ? "Založit vlastní ligu ↗" : "Odeslat registraci ↗"}</Button>
-            <p className={styles.small}>{instant ? "E-mail slouží k přihlášení do hry." : "E-mail použijeme pro vyřízení registrace a přístup do hry. Odesláním žádosti se ještě nezakládá tým."}</p>
+            <Button type="submit" size="lg" disabled={loading || !district || !name.trim() || districts.length === 0} className={styles.submit}>{loading ? (instant ? "Zakládám účet…" : closed ? "Zapisuji…" : "Odesílám žádost…") : closed ? "Zapsat se na čekací listinu ↗" : instant ? "Registrovat a založit klub ↗" : status === "available" ? "Založit vlastní ligu ↗" : "Odeslat registraci ↗"}</Button>
+            <p className={styles.small}>{closed ? "E-mail použijeme jen k tomu, abychom ti dali vědět o volném místě. Účet ani tým se tím nezakládá." : instant ? "E-mail slouží k přihlášení do hry." : "E-mail použijeme pro vyřízení registrace a přístup do hry. Odesláním žádosti se ještě nezakládá tým."}</p>
           </form>
         </>}
       </section>
