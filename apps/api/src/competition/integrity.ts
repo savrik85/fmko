@@ -110,6 +110,77 @@ export async function knihaSazek(
   }));
 }
 
+export interface FriendlyStakeRecord {
+  challengeId: string;
+  /** Den zápasu, YYYY-MM-DD. */
+  date: string | null;
+  challengerId: string;
+  challengerName: string;
+  opponentId: string;
+  opponentName: string;
+  /** Kolik složil každý z klubů. */
+  stake: number;
+  /** 'held' = složeno, zápas se teprve hraje; 'paid' = vyplaceno; 'refunded' = vráceno, nehrálo se. */
+  status: "held" | "paid" | "refunded";
+  /** Skóre z pohledu vyzyvatele, null = ještě se nehrálo. */
+  challengerGoals: number | null;
+  opponentGoals: number | null;
+  /** Kluby mají společného majitele podle listiny propojených klubů. */
+  linked: boolean;
+}
+
+/**
+ * Přáteláky o peníze klubů soutěže, nejnovější první.
+ *
+ * Patří do knihy vedle tiketů: přátelák o peníze je sázka na vlastní zápas
+ * a dvěma klubům stačí domluvit výsledek, aby si přelily peníze. Kód nic
+ * neposuzuje, jen to komisaři ukáže.
+ */
+export async function friendlyStakeBook(
+  db: D1Database, leagueId: string, limit = 40,
+): Promise<FriendlyStakeRecord[]> {
+  const leagueIds = await districtLeagueIds(db, leagueId);
+  const ph = sqlPlaceholders(leagueIds);
+  const rows = await db.prepare(
+    `SELECT c.id, c.match_date, c.stake, c.stake_status,
+            c.challenger_team_id, ta.name AS challenger_name,
+            c.challenged_team_id, tb.name AS opponent_name,
+            m.home_team_id, m.home_score, m.away_score, m.status AS match_status,
+            EXISTS (SELECT 1 FROM club_links la JOIN club_links lb ON lb.group_id = la.group_id
+                     WHERE la.team_id = c.challenger_team_id AND lb.team_id = c.challenged_team_id) AS linked
+       FROM challenges c
+       JOIN teams ta ON ta.id = c.challenger_team_id
+       JOIN teams tb ON tb.id = c.challenged_team_id
+       LEFT JOIN matches m ON m.id = c.match_id
+      WHERE c.stake > 0 AND c.stake_status IN ('held', 'paid', 'refunded')
+        AND (ta.league_id IN (${ph}) OR tb.league_id IN (${ph}))
+      ORDER BY COALESCE(c.match_date, c.created_at) DESC LIMIT ?`
+  ).bind(...leagueIds, ...leagueIds, limit).all<{
+    id: string; match_date: string | null; stake: number; stake_status: FriendlyStakeRecord["status"];
+    challenger_team_id: string; challenger_name: string; challenged_team_id: string; opponent_name: string;
+    home_team_id: string | null; home_score: number | null; away_score: number | null; match_status: string | null;
+    linked: number;
+  }>().catch((e) => { logger.error({ module: M }, `přáteláky o peníze ligy ${leagueId}`, e); return { results: [] }; });
+
+  return rows.results.map((r) => {
+    const played = r.match_status === "simulated" && r.home_score !== null && r.away_score !== null;
+    const challengerHome = r.home_team_id === r.challenger_team_id;
+    return {
+      challengeId: r.id,
+      date: r.match_date,
+      challengerId: r.challenger_team_id,
+      challengerName: r.challenger_name,
+      opponentId: r.challenged_team_id,
+      opponentName: r.opponent_name,
+      stake: r.stake,
+      status: r.stake_status,
+      challengerGoals: played ? (challengerHome ? r.home_score : r.away_score) : null,
+      opponentGoals: played ? (challengerHome ? r.away_score : r.home_score) : null,
+      linked: r.linked === 1,
+    };
+  });
+}
+
 export interface ZaznamPrestupu {
   hrac: string;
   playerId: string;

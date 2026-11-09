@@ -18,6 +18,7 @@ import { logger } from "../lib/logger";
 import { haversineKm } from "../season/fanbase-helpers";
 import { areClubsLinked } from "../competition/club-links";
 import { recordTransaction } from "../season/finance-processor";
+import { resolveRules } from "../competition/rules";
 
 const M = "friendlies";
 
@@ -114,6 +115,44 @@ export function challengeToOfferTerms(terms: { venue: ChallengeVenue; costPayer:
     venue: terms.venue === "challenger" ? "poster" : terms.venue === "opponent" ? "taker" : "neutral",
     costPayer: terms.costPayer === "challenger" ? "poster" : "each",
   };
+}
+
+/**
+ * Strop sázky v přáteláku ze stropů běžné sázky v soutěžích zúčastněných klubů. Čistá funkce.
+ *
+ * Přátelák o peníze je sázka na vlastní zápas, takže se nesmí hrát o víc, než kolik
+ * grémium dovolí vsadit u kanceláře (sazebník, bet_max_stake). Dřív platil jen pevný
+ * strop 10 000 Kč, tedy dvojnásobek výchozího stropu sázky 5 000 Kč. Platí nejnižší
+ * strop ze všech soutěží, zaokrouhlený dolů na krok sázky.
+ */
+export function friendlyStakeCap(betMaxStakes: readonly number[]): number {
+  const lowest = Math.min(FRIENDLY_MAX_STAKE, ...betMaxStakes.filter((n) => Number.isFinite(n) && n >= 0));
+  return Math.floor(lowest / FRIENDLY_STAKE_STEP) * FRIENDLY_STAKE_STEP;
+}
+
+/** Strop sázky v přáteláku pro dané kluby podle pravidel jejich soutěží. */
+export async function loadFriendlyStakeCap(db: D1Database, teamIds: string[]): Promise<number> {
+  const ids = [...new Set(teamIds)];
+  if (ids.length === 0) return friendlyStakeCap([]);
+  const rows = await db.prepare(
+    `SELECT t.league_id,
+            (SELECT MAX(season_number) FROM season_calendar sc WHERE sc.league_id = t.league_id) AS season_number
+       FROM teams t WHERE t.id IN (${ids.map(() => "?").join(",")})`,
+  ).bind(...ids).all<{ league_id: string | null; season_number: number | null }>()
+    .catch((e) => { logger.warn({ module: M }, "soutěže klubů pro strop sázky", e); return { results: [] }; });
+  const stakes = await Promise.all(rows.results.map(async (r) =>
+    (await resolveRules(db, r.league_id, r.season_number)).bet_max_stake));
+  return friendlyStakeCap(stakes);
+}
+
+/** Hláška, když je sázka nad stropem soutěže; null = v pořádku. */
+export async function stakeCapError(db: D1Database, teamIds: string[], stake: number): Promise<string | null> {
+  if (stake <= 0) return null;
+  const cap = await loadFriendlyStakeCap(db, teamIds);
+  if (stake <= cap) return null;
+  return cap > 0
+    ? `Podle pravidel soutěže se dá hrát nejvýš o ${cap.toLocaleString("cs")} Kč.`
+    : "Podle pravidel soutěže se o peníze hrát nedá.";
 }
 
 /** Kluby se stejným majitelem smí hrát jen bez peněz. */

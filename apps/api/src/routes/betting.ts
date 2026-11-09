@@ -11,7 +11,7 @@ import { generateBoard, nextOpenRound, teamStandings, EXTRA_MARKETS } from "../b
 import { placeTicket, limitsFor, canBet, type SelectionInput } from "../betting/tickets";
 import { settleRound, settleOpenRounds } from "../betting/settle";
 import { loadGradedOffers, marketReturns, bandCalibration, CALIBRATION_DAYS } from "../betting/calibration";
-import { knihaSazek, listinaPrestupu, muzeDoKnihy, muzeZablokovat } from "../competition/integrity";
+import { friendlyStakeBook, knihaSazek, listinaPrestupu, muzeDoKnihy, muzeZablokovat } from "../competition/integrity";
 import { arena, prepniSdileni, pridejKomentar, smazKomentar, MAX_KOMENTAR, MAX_VZKAZ } from "../betting/arena";
 
 const M = "betting";
@@ -414,11 +414,12 @@ bettingRouter.get("/teams/:teamId/betting/book", async (c) => {
     return c.json({ error: "Do knihy sázek vidí jen komisař pro integritu a prezident soutěže." }, 403);
   }
 
-  const [kniha, prestupy] = await Promise.all([
+  const [kniha, prestupy, friendlyStakes] = await Promise.all([
     knihaSazek(c.env.DB, kde.leagueId, kde.seasonNumber),
     listinaPrestupu(c.env.DB, kde.leagueId, kde.seasonNumber),
+    friendlyStakeBook(c.env.DB, kde.leagueId),
   ]);
-  return c.json({ tickets: kniha, transfers: prestupy });
+  return c.json({ tickets: kniha, transfers: prestupy, friendlyStakes });
 });
 
 /** Zákaz sázení uložený komisařem, bez hlasování. */

@@ -21,7 +21,7 @@ import { logger } from "../lib/logger";
 import { pragueHour } from "../lib/match-tick-schedule";
 import { seedFromString } from "../lib/seed";
 import {
-  FRIENDLY_MAX_STAKE, FRIENDLY_STAKE_STEP,
+  FRIENDLY_MAX_STAKE, FRIENDLY_STAKE_STEP, loadFriendlyStakeCap,
   addDays, findBusy, quoteFriendly, sumCosts,
   type ChallengeVenue, type CostPayer, type OfferVenue,
 } from "../multiplayer/friendlies";
@@ -386,7 +386,12 @@ export async function maybeOfferFriendly(
   }
   if (candidates.length === 0) return false;
 
-  const maxStake = Math.min(maxFriendlyStake(profile), Math.floor(friendlySpendLimit(team.budget, profile) / FRIENDLY_STAKE_STEP) * FRIENDLY_STAKE_STEP);
+  // Strop sázky podle pravidel soutěže platí i pro AI klub, jinak by nabídku nešlo vypsat.
+  const maxStake = Math.min(
+    maxFriendlyStake(profile),
+    await loadFriendlyStakeCap(db, [teamId]),
+    Math.floor(friendlySpendLimit(team.budget, profile) / FRIENDLY_STAKE_STEP) * FRIENDLY_STAKE_STEP,
+  );
   const stakes = [0];
   for (let s = FRIENDLY_STAKE_STEP; s <= maxStake; s += FRIENDLY_STAKE_STEP) stakes.push(s);
   const ctx: FriendlyOfferContext = {
