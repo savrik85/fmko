@@ -72,9 +72,9 @@ async function relationEffects(env: Bindings, input: ToneInput): Promise<number>
   return applySocialToneEffects(env.DB, modelToneClassifier(env), input);
 }
 
-/** Komentář pod článkem novináře nebo odpověď novináři hýbe jeho vztahem ke klubu. */
+/** Odpověď novináři nebo komentář, který na něj míří, hýbe jeho vztahem ke klubu. */
 async function journalistEffects(env: Bindings, input: JournalistToneInput): Promise<number> {
-  if (input.journalistIds.length === 0) return 0;
+  if (input.journalistIds.length === 0 && !input.repliedJournalistId) return 0;
   if (await aiMode(env) === "off") return 0;
   return applySocialJournalistEffects(env.DB, modelToneClassifier(env), input);
 }
@@ -192,10 +192,8 @@ socialRouter.post("/teams/:teamId/social/comments", async (c) => {
 
   await runLater(c, journalistEffects(c.env, {
     authorTeamId: viewer.teamId, text, sourceKey: `comment:${id}`, context: target.title,
-    journalistIds: [
-      target.journalistId ?? null,
-      replyTo?.authorKind === "journalist" ? replyTo.personaId : null,
-    ].filter((x): x is string => !!x),
+    journalistIds: target.journalistId ? [target.journalistId] : [],
+    repliedJournalistId: replyTo?.authorKind === "journalist" ? replyTo.personaId : null,
   }));
 
   await runLater(c, scheduleAiReplies(c.env, {

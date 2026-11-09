@@ -618,6 +618,7 @@ export async function socialScandals(db: D1Database, teamId: string, now: Date =
        LEFT JOIN teams ta ON ta.id = e.team_a_id
        LEFT JOIN teams tb ON tb.id = e.team_b_id
       WHERE e.kind IN ('tease', 'insult', 'journalist_tease', 'journalist_insult')
+        AND (e.respect != 0 OR e.heat != 0)
         AND (e.team_a_id = ? OR e.team_b_id = ?) AND e.created_at >= ?
       ORDER BY e.created_at DESC LIMIT 12`,
   ).bind(teamId, teamId, since).all<SockyRow>()
