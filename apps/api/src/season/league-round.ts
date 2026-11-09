@@ -627,8 +627,12 @@ async function sendMatchResultNotifications(
       VAPID_SUBJECT: env.VAPID_SUBJECT,
       DB: db,
     };
+    const { notifyMatchInjuries } = await import("../injuries/match-injury-alerts");
     for (const mr of results) {
       if (mr.matchType === "ai_vs_ai") continue;
+      // Zranění ze zápasu: trenér se o něm dřív dozvěděl, až když otevřel kádr.
+      await notifyMatchInjuries(db, mr.matchId, pushEnv)
+        .catch((e) => logger.warn({ module: "league-round" }, `oznámení o zranění ze zápasu ${mr.matchId}`, e));
       const md = await db
         .prepare(
           "SELECT m.home_score, m.away_score, m.home_team_id, m.away_team_id, t1.name as hn, t2.name as an, t1.user_id as hu, t2.user_id as au FROM matches m JOIN teams t1 ON m.home_team_id=t1.id JOIN teams t2 ON m.away_team_id=t2.id WHERE m.id=?",
