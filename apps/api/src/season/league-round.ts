@@ -273,28 +273,7 @@ export async function processLeagueRound(
   // Po zápase: smaž zbývající pending PŘEDZÁPASOVÉ interview žádosti (po zápase už nemají
   // smysl). Filtr na kind je nutný: pozápasový rozhovor vzniká uvnitř runScheduledMatches
   // pro TENTÝŽ calendar_id, takže bez něj by ho tenhle úklid zabil pár řádků po vzniku.
-  try {
-    const expired = await db
-      .prepare("SELECT id FROM coach_interviews WHERE match_calendar_id = ? AND status = 'pending' AND kind = 'pre_match'")
-      .bind(calendarId)
-      .all<{ id: string }>();
-    for (const ci of expired.results) {
-      await db
-        .prepare("DELETE FROM messages WHERE metadata LIKE ?")
-        .bind(`%"interviewId":"${ci.id}"%`)
-        .run()
-        .catch((e) => logger.warn({ module: "league-round" }, `cleanup interview msg ${ci.id}`, e));
-    }
-    await db
-      .prepare("UPDATE coach_interviews SET status = 'expired' WHERE match_calendar_id = ? AND status = 'pending' AND kind = 'pre_match'")
-      .bind(calendarId)
-      .run();
-    if (expired.results.length > 0) {
-      logger.info({ module: "league-round" }, `expired ${expired.results.length} unanswered interviews after match`);
-    }
-  } catch (e) {
-    logger.warn({ module: "league-round" }, "post-match interview cleanup", e);
-  }
+  await expirePreMatchInterviews(db, calendarId);
 
   prof.mark("u21+rozhovory");
 
@@ -392,9 +371,51 @@ export async function finishRecoveredRound(env: Bindings, calendarId: string): P
     await runAdhocEvents(env, db, cal.league_id, cal.game_week);
     await notifySeasonalDecisions(env, db, cal.league_id, cal.game_week);
   }
+  await expirePreMatchInterviews(db, calendarId);
   await cleanupMatchDayConversations(db, calendarId);
   logger.info({ module: "league-round" }, `dokončeno dohrané kolo ${calendarId}: ${results.length} zápasů`);
   return { ok: true, matches: results.length };
+}
+
+/** Zruší nevyřízené žádosti o předzápasový rozhovor kola, které už je odehrané. */
+export async function expirePreMatchInterviews(db: D1Database, calendarId: string): Promise<number> {
+  try {
+    const expired = await db
+      .prepare("SELECT id FROM coach_interviews WHERE match_calendar_id = ? AND status = 'pending' AND kind = 'pre_match'")
+      .bind(calendarId)
+      .all<{ id: string }>();
+    for (const ci of expired.results) {
+      await db
+        .prepare("DELETE FROM messages WHERE metadata LIKE ?")
+        .bind(`%"interviewId":"${ci.id}"%`)
+        .run()
+        .catch((e) => logger.warn({ module: "league-round" }, `cleanup interview msg ${ci.id}`, e));
+    }
+    await db
+      .prepare("UPDATE coach_interviews SET status = 'expired' WHERE match_calendar_id = ? AND status = 'pending' AND kind = 'pre_match'")
+      .bind(calendarId)
+      .run();
+    if (expired.results.length > 0) {
+      logger.info({ module: "league-round" }, `expired ${expired.results.length} unanswered interviews after match`);
+    }
+    return expired.results.length;
+  } catch (e) {
+    logger.warn({ module: "league-round" }, "post-match interview cleanup", e);
+    return 0;
+  }
+}
+
+/**
+ * Úklid odehraného kola: nevyřízené předzápasové rozhovory a zápasové chaty.
+ * Bezpečné opakovat. Pro kola dohraná pojistkou, která úklid vynechá.
+ */
+export async function cleanupPlayedRound(db: D1Database, calendarId: string): Promise<{ ok: boolean; reason?: string; interviews?: number }> {
+  const cal = await db.prepare("SELECT status FROM season_calendar WHERE id = ?").bind(calendarId).first<{ status: string }>();
+  if (!cal) return { ok: false, reason: "kolo nenalezeno" };
+  if (cal.status !== "simulated") return { ok: false, reason: `kolo není odehrané (${cal.status})` };
+  const interviews = await expirePreMatchInterviews(db, calendarId);
+  await cleanupMatchDayConversations(db, calendarId);
+  return { ok: true, interviews };
 }
 
 /** Zpravodajský souhrn kola. */

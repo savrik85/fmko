@@ -6899,6 +6899,15 @@ gameRouter.post("/admin/matches/:matchId/repair-aftermath", async (c) => {
   return c.json(await repairMatchAftermath(c.env.DB, c.req.param("matchId")));
 });
 
+// POST /api/admin/rounds/cleanup?calendarId=X — úklid odehraného kola: zruší nevyřízené
+// předzápasové rozhovory a smaže zápasové chaty. Bezpečné opakovat.
+gameRouter.post("/admin/rounds/cleanup", async (c) => {
+  const calendarId = c.req.query("calendarId");
+  if (!calendarId) return c.json({ error: "calendarId je povinný" }, 400);
+  const { cleanupPlayedRound } = await import("../season/league-round");
+  return c.json(await cleanupPlayedRound(c.env.DB, calendarId));
+});
+
 // POST /api/admin/rounds/finish?calendarId=X — dokončí kolo, které dohrála pojistka:
 // oznámení o výsledcích, události mezi koly, nahodilé události, úklid zápasových chatů.
 // Jednou na kolo.
