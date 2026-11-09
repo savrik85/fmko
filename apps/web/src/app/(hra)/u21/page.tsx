@@ -268,7 +268,7 @@ export default function U21Page() {
     );
   }
 
-  const young = seniorPlayers.filter((p) => p.age <= 21 && !p.loan_from_team_id);
+  const young = seniorPlayers.filter((p) => p.age <= 21);
 
   // Nejbližší U21 zápas: první nesimulovaný match v rounds kde figuruje náš U21 tým
   const nextMatch: { round: LeagueRound; m: LeagueRound["matches"][number]; isHome: boolean } | null = (() => {

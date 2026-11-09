@@ -6891,6 +6891,14 @@ gameRouter.post("/admin/generate-round-summary", async (c) => {
   return c.json({ ok: true, ...result });
 });
 
+// POST /api/admin/matches/:matchId/repair-aftermath — zápas, u kterého běh spadl hned po
+// uložení výsledku: dopočítá statistiky a hodnocení hráčů, stopky, zranění a peníze
+// z uložených událostí, bez nové simulace. Jen jednou (zápas bez statistik).
+gameRouter.post("/admin/matches/:matchId/repair-aftermath", async (c) => {
+  const { repairMatchAftermath } = await import("../multiplayer/match-aftermath-repair");
+  return c.json(await repairMatchAftermath(c.env.DB, c.req.param("matchId")));
+});
+
 // POST /api/admin/rounds/finish?calendarId=X — dokončí kolo, které dohrála pojistka:
 // oznámení o výsledcích, události mezi koly, nahodilé události, úklid zápasových chatů.
 // Jednou na kolo.
