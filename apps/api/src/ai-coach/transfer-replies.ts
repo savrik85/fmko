@@ -877,6 +877,11 @@ const PITCH_DECLINE_REPLIES = [
   "Díky za tip, ale {player} není hráč, kterého teď hledáme.",
   "Za nabídku díky, na tohle místo chceme jiného hráče.",
 ];
+/** Klub je na limitu nákupů nebo rozjetých nabídek: o hráči se nerozhoduje, jen se slušně odpoví. */
+const PITCH_NOT_BUYING_REPLIES = [
+  "Díky za nabídku, ale teď nekupujeme. Zkuste to později.",
+  "Za tip díky. Teď máme rozjednáno dost, další nákup neřešíme.",
+];
 
 function pickReply(pool: string[], key: string, playerName: string): string {
   return pool[Math.floor(stableUnit(key) * pool.length) % pool.length].replace("{player}", playerName);
@@ -1049,7 +1054,9 @@ function pitchActions(outcome: PitchOutcome, entries: PitchEntry[]): Record<stri
 /**
  * Hráči, které kluby nabídly k poptávkám AI klubu. Po poptávkách: model vybere mezi všemi
  * nabídnutými hráči (po lidské prodlevě), koho a za kolik vezme, nebo nikoho; nevybraní
- * dostanou slušné odmítnutí. Nad limitem rozjetých obchodů AI počká.
+ * dostanou slušné odmítnutí. Nad limitem nákupů nebo rozjetých nabídek AI kupovat nesmí (mez
+ * kódu): nabídnutí hráči dostanou odpověď „teď nekupujeme“. Dřív čekali bez odpovědi, dokud
+ * poptávka nevypršela.
  */
 async function replyToDemandPitches(ctx: RunContext, budget: { left: number }): Promise<number> {
   const db = ctx.env.DB;
@@ -1073,15 +1080,36 @@ async function replyToDemandPitches(ctx: RunContext, budget: { left: number }): 
   for (const pitches of groups.values()) {
     if (budget.left <= 0) break;
     const { club } = ctx;
-    // Nabídka na nabídnutého hráče je vlastní obchod: nad limitem obchodů AI počká.
     const open = await openOutgoingOffers(db, club.teamId);
-    if (!canOpenDeal(club, open)) break;
     const entries: PitchEntry[] = [];
     for (const pitch of pitches) {
       if (await claimCoachTask(db, club.teamId, claimTask(ctx.mode, `transfer_pitch:${pitch.id}`), "reply")) entries.push(await pitchEntry(ctx, pitch));
     }
     if (entries.length === 0) continue;
     const demand = entries[0].row;
+    // Nabídka na nabídnutého hráče je vlastní obchod: nad limitem ji AI poslat nesmí. Není o čem
+    // rozhodovat, ale kluby, které hráče nabídly, dostanou odpověď.
+    if (!canOpenDeal(club, open)) {
+      const results: Array<Record<string, unknown>> = [];
+      for (const e of entries) {
+        if (ctx.mode !== "shadow") {
+          await db.prepare("UPDATE transfer_demand_pitches SET status = 'declined', reply = ? WHERE id = ? AND status = 'pitched'")
+            .bind(pickReply(PITCH_NOT_BUYING_REPLIES, `pitch-limit|${e.row.id}`, e.playerName), e.row.id).run()
+            .catch((err) => logger.warn({ module: M }, `odpověď na nabídnutého hráče ${e.row.id}`, err));
+        }
+        results.push({ pitchId: e.row.id, playerId: e.candidate.playerId, result: "declined" });
+      }
+      await log(ctx, {
+        kind: "demand_pitch", contextRef: demand.demand_id,
+        inputSummary: `demand ${demand.demand_id} ${demand.position}: ${entries.length} pitched, deal limit (buys30 ${club.buysLast30}/${club.dealLimit}, open offers ${open}/${openDealLimit(club.profile)})`,
+        actions: { offers: [], declined: entries.map((e) => e.row.id), deferred: [], decidedBy: "guard", reason: "deal_limit" },
+        executed: ctx.mode === "shadow" ? "shadow" : results,
+        outcome: { by: "guard", trace: NO_TRACE },
+      });
+      handled += entries.length;
+      budget.left--;
+      continue;
+    }
     const options = pitchOptions(entries.map((e) => e.candidate), openDealLimit(club.profile) - open, club.spendable);
     const outcome = await decidePitches(ctx, demand, entries, options);
     const executed = await executePitchDecision(ctx, entries, outcome.decision);

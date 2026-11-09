@@ -1176,6 +1176,32 @@ describe("AI klub jako kupující: model navrhuje, kód hlídá", () => {
     expect(JSON.parse(log!.actions).deferred).toHaveLength(1);
   });
 
+  it("poptávka nad limitem rozjetých nabídek: nabídnutí hráči nečekají, dostanou odpověď „teď nekupujeme“", async () => {
+    const demandId = await pitchSetup();
+    // Trenér s obchodní aktivitou 60 smí mít dvě rozjeté nabídky: obě už běží.
+    const expires = new Date(Date.now() + 3 * 86_400_000).toISOString();
+    await db.batch(["h-weak-mid", "h-young-mid"].map((playerId, i) => db.prepare(
+      `INSERT INTO transfer_offers (id, player_id, from_team_id, to_team_id, offer_amount, status, expires_at, last_action_by)
+       VALUES (?, ?, 'ai-club', 'human', 5000, 'pending', ?, 'ai-club')`,
+    ).bind(`open-${i}`, playerId, expires)));
+    const ai = fakeAi({ offers: [], reason: "unused" });
+    expect(await replyToTransferOffers(withAi(ai), "ai-club", later(), BUYER_PROFILE)).toBe(2);
+    // O ničem se nerozhoduje (mez kódu), model se neptá a nabídka nevznikne.
+    expect(ai.calls).toBe(0);
+    expect((await aiOffers()).filter((o) => o.player_id.startsWith("h-fwd"))).toEqual([]);
+    const pitches = await pitchesOf(demandId);
+    expect(pitches).toHaveLength(2);
+    for (const p of pitches) {
+      expect(p).toMatchObject({ status: "declined", offer_id: null });
+      expect(p.reply).toMatch(/nekupujeme|další nákup neřešíme/);
+      expect(p.reply).not.toMatch(/[—–]/);
+    }
+    const log = await decisionFor(demandId);
+    expect(JSON.parse(log!.actions)).toMatchObject({ decidedBy: "guard", reason: "deal_limit", offers: [] });
+    // Druhý běh už nic nedělá.
+    expect(await replyToTransferOffers(withAi(ai), "ai-club", later(), BUYER_PROFILE)).toBe(0);
+  });
+
   it("poptávka bez vhodného hráče (na nikoho AI nemá): odmítne kód, model se neptá", async () => {
     const demandId = await pitchSetup(1000);
     const ai = fakeAi({ offers: [], reason: "x" });
