@@ -7233,7 +7233,7 @@ gameRouter.post("/teams/:teamId/season-welcome/dismiss", async (c) => {
 });
 
 // POST /api/teams/:teamId/season-recap/decide — manažer rozhodl souboje „kdo zůstane".
-// Body: { leaving: string[] } — ID hráčů, kteří odejdou (poražení v duelech). Validuje proti staged duelům.
+// Body: { leaving: string[] } — ID hráčů, kteří odejdou, právě jeden z každé dvojice (jinak 400).
 gameRouter.post("/teams/:teamId/season-recap/decide", async (c) => {
   const teamId = c.req.param("teamId");
   const body = await c.req.json<{ leaving: string[] }>().catch((e) => { logger.warn({ module: "game.ts" }, "parse decide body", e); return null; });

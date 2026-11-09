@@ -58,12 +58,32 @@ export async function loadPendingSeasonDuels(db: D1Database, teamId: string): Pr
   return duels.length > 0 ? { seasonNumber: row.season_number, duels } : null;
 }
 
-export type SeasonDuelsResult = { ok: true; removed: number } | { ok: false; status: 404; error: string };
+export type SeasonDuelsResult = { ok: true; removed: number } | { ok: false; status: 400 | 404; error: string };
+
+export const DUELS_ONE_PER_PAIR_ERROR = "U každé dvojice vyber právě jednoho hráče, který odejde.";
 
 /**
- * Rozhodne souboje: `leaving` jsou id hráčů, kteří odejdou. Platí jen id ze soubojů a nejvýš
- * tolik, kolik je soubojů. Odcházející odejdou nadobro (ne na trh volných hráčů), nikdo za ně
- * nepřijde. Přehled konce sezóny se označí za přečtený, i když souboje nebyly.
+ * Z každé dvojice musí odejít právě jeden: prázdný výběr by souboje zahodil bez odchodu
+ * a dva ze stejné dvojice by poslaly pryč oba. Id mimo souboje se ignorují.
+ * Vrací odcházející v pořadí soubojů, nebo null, když výběr pravidlo nesplňuje.
+ */
+export function pickLeavers(duels: readonly SeasonDuel[], leaving: readonly unknown[]): string[] | null {
+  const chosen = new Set(leaving.filter((id): id is string => typeof id === "string"));
+  const leavers: string[] = [];
+  for (const d of duels) {
+    const a = chosen.has(d.a.playerId);
+    const b = chosen.has(d.b.playerId);
+    if (a === b) return null;
+    leavers.push(a ? d.a.playerId : d.b.playerId);
+  }
+  return leavers;
+}
+
+/**
+ * Rozhodne souboje: `leaving` jsou id hráčů, kteří odejdou, právě jeden z každé dvojice
+ * (jinak 400 a nic se nezmění). Odcházející odejdou nadobro (ne na trh volných hráčů), nikdo
+ * za ně nepřijde. Hráč na hostování v klubu neodchází nikdy, patří jinému klubu.
+ * Přehled konce sezóny se označí za přečtený, i když souboje nebyly.
  */
 export async function decideSeasonDuels(db: D1Database, teamId: string, leaving: readonly unknown[]): Promise<SeasonDuelsResult> {
   const row = await loadUnseenRecap(db, teamId);
@@ -75,11 +95,19 @@ export async function decideSeasonDuels(db: D1Database, teamId: string, leaving:
   if (duels.length > 0) {
     const byId = new Map<string, SeasonDuelPlayer>();
     for (const d of duels) { byId.set(d.a.playerId, d.a); byId.set(d.b.playerId, d.b); }
-    const toRemove = leaving.filter((id): id is string => typeof id === "string" && byId.has(id)).slice(0, duels.length);
+    const toRemove = pickLeavers(duels, leaving);
+    if (!toRemove) return { ok: false, status: 400, error: DUELS_ONE_PER_PAIR_ERROR };
 
     const removed: Array<Record<string, unknown>> = [];
     for (const id of toRemove) {
       const info = byId.get(id)!;
+      // Souboje sestavené před opravou výběru mohly obsahovat hostujícího hráče.
+      const loan = await db.prepare("SELECT loan_from_team_id FROM players WHERE id = ? AND team_id = ?")
+        .bind(id, teamId).first<{ loan_from_team_id: string | null }>();
+      if (loan?.loan_from_team_id) {
+        logger.warn({ module: M, teamId, playerId: id }, "souboj s hostujícím hráčem, neodchází");
+        continue;
+      }
       const r = await removePlayer(db, id, "quit", { toFreeAgent: false, teamId });
       if (r.ok) removed.push({ name: info.name, age: info.age, position: info.position, overallRating: info.overallRating, kind: "decision", reason: "Trenér se rozhodl dát mu sbohem." });
     }
