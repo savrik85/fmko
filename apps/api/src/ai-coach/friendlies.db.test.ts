@@ -126,12 +126,14 @@ describe("výzva AI klubu", () => {
     expect(body.teams.map((t) => t.id)).toContain("ai-1");
 
     // Týž den výzvu nechá ležet.
-    expect(await respondToFriendlyChallenges(db, "ai-1", profile({ thrift: 40, risk: 50 }), EVENING)).toBe(0);
+    const accepting = fakeAi(() => ({ accept: true, reason: "A free date and no stake." }));
+    expect(await respondToFriendlyChallenges(db, "ai-1", profile({ thrift: 40, risk: 50 }), EVENING, { ai: accepting.binding })).toBe(0);
     expect(await count("SELECT COUNT(*) AS n FROM challenges WHERE id = ? AND status = 'pending'", challengeId)).toBe(1);
+    expect(accepting.calls()).toBe(0);
 
-    // Druhý den večer přijme: termín volný, bez sázky, náklady malé.
+    // Druhý den večer model přijme: termín volný, bez sázky, náklady malé.
     await setGameDay(addDays(TODAY, 1));
-    expect(await respondToFriendlyChallenges(db, "ai-1", profile({ thrift: 40, risk: 50 }), EVENING)).toBe(1);
+    expect(await respondToFriendlyChallenges(db, "ai-1", profile({ thrift: 40, risk: 50 }), EVENING, { ai: accepting.binding })).toBe(1);
     const ch = await db.prepare("SELECT status, match_id FROM challenges WHERE id = ?").bind(challengeId).first<{ status: string; match_id: string | null }>();
     expect(ch?.status).toBe("accepted");
     const match = await db.prepare("SELECT home_team_id, away_team_id, status FROM matches WHERE id = ?").bind(ch!.match_id).first<{ home_team_id: string; away_team_id: string; status: string }>();
@@ -178,9 +180,10 @@ describe("nabídka termínu od AI klubu", () => {
     for (let i = 0; i < 90 && posted === 0; i++) {
       const day = addDays("2026-12-01", i);
       await setGameDay(day);
-      if (await maybeOfferFriendly(db, "ai-3", bold, NOON)) { posted++; postedOn = day; }
+      // Pravidla nabídek (četnost, nárok na den) nezávisle na modelu: režim off rozhoduje pravidlem.
+      if (await maybeOfferFriendly(db, "ai-3", bold, NOON, { mode: "off" })) { posted++; postedOn = day; }
       // Druhý pokus týž den nic neudělá (nárok na den).
-      expect(await maybeOfferFriendly(db, "ai-3", bold, NOON)).toBe(false);
+      expect(await maybeOfferFriendly(db, "ai-3", bold, NOON, { mode: "off" })).toBe(false);
     }
     expect(posted).toBe(1);
     const offers = await db.prepare("SELECT match_date, venue, cost_payer, stake FROM friendly_offers WHERE team_id = 'ai-3'")
@@ -194,7 +197,7 @@ describe("nabídka termínu od AI klubu", () => {
     // S otevřenou nabídkou další nevypíše.
     for (let i = 1; i <= 20; i++) {
       await setGameDay(addDays(postedOn!, i));
-      expect(await maybeOfferFriendly(db, "ai-3", bold, NOON)).toBe(false);
+      expect(await maybeOfferFriendly(db, "ai-3", bold, NOON, { mode: "off" })).toBe(false);
     }
     // V noci nevypisuje vůbec.
     await setGameDay("2027-03-01");
@@ -241,18 +244,29 @@ describe("o přátelácích rozhoduje model, kód hlídá meze", () => {
     expect(JSON.parse(logged!.actions)).toMatchObject({ accept: false, decidedBy: "model" });
   }, 60_000);
 
-  it("nesmyslná odpověď modelu: přijme náhradní pravidlo a deník to přizná", async () => {
+  it("výpadek nebo nesmysl modelu: kód za něj nepřijme (ani se sázkou), výzva čeká na další běh", async () => {
     await setGameDay(TODAY);
-    const r = await sendChallenge(db, "other", "ai-4", { date: addDays(TODAY, 1) }, { now: NOON });
+    const r = await sendChallenge(db, "other", "ai-4", { date: addDays(TODAY, 1), stake: 500 }, { now: NOON });
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    const ai = fakeAi(() => ({ verdict: "maybe" }));
-    expect(await respondToFriendlyChallenges(db, "ai-4", profile({ thrift: 40, risk: 50 }), NOON, { ai: ai.binding })).toBe(1);
-    const ch = await db.prepare("SELECT status FROM challenges WHERE id = ?").bind(r.challengeId).first<{ status: string }>();
-    expect(ch?.status).toBe("accepted");
-    const logged = await lastDecision("ai-4", "friendly_reply");
-    expect(logged?.used_fallback).toBe(1);
-    expect(logged?.error).toBeTruthy();
+    const pending = () => count("SELECT COUNT(*) AS n FROM challenges WHERE id = ? AND status = 'pending'", r.challengeId);
+    const coach = profile({ thrift: 20, risk: 80 });
+    const nonsense = fakeAi(() => ({ verdict: "maybe" }));
+    expect(await respondToFriendlyChallenges(db, "ai-4", coach, NOON, { ai: nonsense.binding })).toBe(0);
+    expect(await pending()).toBe(1);
+    const broken = { run: async () => { throw new Error("8005: Internal server error"); } };
+    expect(await respondToFriendlyChallenges(db, "ai-4", coach, NOON, { ai: { AI: broken } as unknown as Pick<Bindings, "AI"> })).toBe(0);
+    // Bez bindingu modelu taky nic.
+    expect(await respondToFriendlyChallenges(db, "ai-4", coach, NOON)).toBe(0);
+    expect(await pending()).toBe(1);
+    expect(await count("SELECT COUNT(*) AS n FROM matches WHERE (home_team_id = 'ai-4' OR away_team_id = 'ai-4') AND created_at >= ?", NOON.toISOString().slice(0, 10))).toBe(0);
+    // Odklad je v deníku jednou, bez příznaku náhradního pravidla.
+    expect(await count("SELECT COUNT(*) AS n FROM ai_coach_decisions WHERE team_id = 'ai-4' AND kind = 'friendly_reply' AND context_ref = ? AND executed LIKE '%deferred%' AND used_fallback = 0", r.challengeId)).toBe(1);
+
+    // Model se vrátí: rozhodne on.
+    const back = fakeAi(() => ({ accept: false, reason: "Too much money at stake." }));
+    expect(await respondToFriendlyChallenges(db, "ai-4", coach, NOON, { ai: back.binding })).toBe(1);
+    expect((await db.prepare("SELECT status FROM challenges WHERE id = ?").bind(r.challengeId).first<{ status: string }>())?.status).toBe("declined");
   }, 60_000);
 
   it("vysokou sázku odmítne kód a model se vůbec neptá", async () => {
