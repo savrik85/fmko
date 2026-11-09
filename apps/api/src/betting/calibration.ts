@@ -67,6 +67,8 @@ export interface GradedOffer {
   selection: string;
   oddsX100: number;
   result: SelectionResult;
+  /** Pravděpodobnost, kterou tipu dával model (bet_odds.probability). Pro kalibraci po pásmech. */
+  probability?: number;
 }
 
 export interface MarketReturn {
@@ -97,6 +99,101 @@ function marketGroup(market: string, selection: string): string {
   return market;
 }
 
+const SELECTION_LABELS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+  "1x2": { "1": "výsledek: domácí", "X": "výsledek: remíza", "2": "výsledek: hosté" },
+  dchance: { "1X": "dvojtip: domácí neprohrají", "12": "dvojtip: nebude remíza", "X2": "dvojtip: hosté neprohrají" },
+};
+
+/**
+ * Skupina po výběru u trhů, kde má zápas od každého výběru jeden kurz. Jinde null:
+ * gólové linie a handicapy mají na zápas víc kurzů, které spolu padají a stojí,
+ * a počítat je jako nezávislé tipy by dělalo plané poplachy.
+ */
+function selectionGroup(market: string, selection: string): string | null {
+  if (market === "btts") return marketGroup(market, selection);
+  return SELECTION_LABELS[market]?.[selection] ?? null;
+}
+
+/** Kurzová pásma pro kalibraci: horní mez kurzu v setinách a popis. */
+export const ODDS_BANDS: ReadonlyArray<{ below: number; label: string }> = [
+  { below: 150, label: "kurz do 1,5" },
+  { below: 200, label: "kurz 1,5 až 2" },
+  { below: 300, label: "kurz 2 až 3" },
+  { below: 500, label: "kurz 3 až 5" },
+  { below: Infinity, label: "kurz 5 a víc" },
+];
+
+export function oddsBand(oddsX100: number): string {
+  return (ODDS_BANDS.find((b) => oddsX100 < b.below) ?? ODDS_BANDS[ODDS_BANDS.length - 1]).label;
+}
+
+/** Pod tolik tipů se pásmo neposuzuje. */
+export const BAND_MIN_N = 30;
+
+/**
+ * O kolik směrodatných chyb se musí počet výher lišit od toho, co čekal model.
+ *
+ * Přísnější než CALIBRATION_Z: pásem je kolem čtyřiceti a dívá se na ně každý den.
+ * Díru ze sezóny 3 to chytí s rezervou: domácí s kurzem 5 a víc vyhráli 11 z 39
+ * proti očekávaným 3,5 (4,2 chyby), hosté s kurzem do 1,5 vyhráli 23 ze 45 proti
+ * očekávaným 35,5 (−4,7 chyby).
+ */
+export const BAND_Z = 3.5;
+
+export interface BandCalibration {
+  /** „výsledek: domácí · kurz 5 a víc" */
+  label: string;
+  n: number;
+  /** Kolik tipů vyšlo. */
+  wins: number;
+  /** Kolik jich mělo vyjít podle modelu (součet pravděpodobností). */
+  expectedWins: number;
+  /** Kolik v průměru vrátí vsazená koruna. */
+  meanReturn: number;
+  /** (wins − expectedWins) / směrodatná chyba. Kladné = tip vychází častěji, než model čekal. */
+  z: number;
+  /** Model se v pásmu prokazatelně plete, jedním nebo druhým směrem. */
+  miscalibrated: boolean;
+}
+
+/**
+ * Kalibrace po výběrech a kurzových pásmech. Čistá funkce.
+ *
+ * Neměří návratnost, ale porovnává počet výher s tím, co čekal model. Je to
+ * mnohem citlivější: u kurzu 12 má návratnost obrovský rozptyl a 39 tipů
+ * s návratností 3,5 Kč za korunu ještě nebyl poplach, kdežto 11 výher místo
+ * 3,5 je jasná věc.
+ *
+ * Hlásí se oba směry. Přeceněný favorit sám kancelář nic nestojí, ale proti
+ * němu stojí podceněný outsider a jeho pásmo může mít zatím málo tipů.
+ */
+export function bandCalibration(offers: GradedOffer[]): BandCalibration[] {
+  const groups = new Map<string, { n: number; wins: number; expected: number; variance: number; returned: number }>();
+  for (const o of offers) {
+    if (o.result === "void" || o.probability === undefined) continue;
+    const side = selectionGroup(o.market, o.selection);
+    if (!side) continue;
+    const label = `${side} · ${oddsBand(o.oddsX100)}`;
+    const g = groups.get(label) ?? { n: 0, wins: 0, expected: 0, variance: 0, returned: 0 };
+    const p = Math.max(0, Math.min(1, o.probability));
+    g.n++;
+    g.expected += p;
+    g.variance += p * (1 - p);
+    if (o.result === "won") { g.wins++; g.returned += o.oddsX100 / 100; }
+    groups.set(label, g);
+  }
+
+  const out: BandCalibration[] = [];
+  for (const [label, g] of groups) {
+    const z = g.variance > 0 ? (g.wins - g.expected) / Math.sqrt(g.variance) : 0;
+    out.push({
+      label, n: g.n, wins: g.wins, expectedWins: g.expected, meanReturn: g.returned / g.n, z,
+      miscalibrated: g.n >= BAND_MIN_N && Math.abs(z) >= BAND_Z,
+    });
+  }
+  return out.sort((a, b) => a.label.localeCompare(b.label, "cs"));
+}
+
 /**
  * Návratnost každého trhu, celkem i po soutěžích. Čistá funkce.
  *
@@ -118,6 +215,10 @@ export function marketReturns(offers: GradedOffer[]): MarketReturn[] {
     const g = marketGroup(o.market, o.selection);
     pridat(g, r);
     pridat(`${g} · ${o.leagueName}`, r);
+    // Výsledek a dvojtip i po výběrech. Jako celek se chyby vyruší: v sezóně 3 vracela
+    // „1" 176 % a „2" 68 % a trh „výsledek" dohromady vypadal jen lehce ztrátově.
+    const side = selectionGroup(o.market, o.selection);
+    if (side && side !== g) pridat(side, r);
   }
 
   const out: MarketReturn[] = [];
@@ -138,7 +239,7 @@ export function marketReturns(offers: GradedOffer[]): MarketReturn[] {
 /** Kurzy vypsané na zápasy odehrané za posledních CALIBRATION_DAYS dní, vyhodnocené. */
 export async function loadGradedOffers(db: D1Database, days = CALIBRATION_DAYS): Promise<GradedOffer[]> {
   const rows = await db.prepare(
-    `SELECT o.league_id, l.name AS league_name, o.market, o.selection, o.odds_x100,
+    `SELECT o.league_id, l.name AS league_name, o.market, o.selection, o.odds_x100, o.probability,
             m.home_score, m.away_score,
             s.player_id AS appeared, COALESCE(s.goals, 0) AS goals
        FROM bet_odds o
@@ -152,6 +253,7 @@ export async function loadGradedOffers(db: D1Database, days = CALIBRATION_DAYS):
         AND o.game_date >= ?`
   ).bind(new Date(Date.now() - days * 86_400_000).toISOString(), MODEL_SINCE).all<{
     league_id: string; league_name: string; market: string; selection: string; odds_x100: number;
+    probability: number | null;
     home_score: number; away_score: number; appeared: string | null; goals: number;
   }>();
 
@@ -164,9 +266,31 @@ export async function loadGradedOffers(db: D1Database, days = CALIBRATION_DAYS):
       market: r.market,
       selection: r.selection,
       oddsX100: r.odds_x100,
+      probability: r.probability ?? undefined,
       result: gradeSelection(r.market, r.selection, { homeScore: r.home_score, awayScore: r.away_score }, apps),
     };
   });
+}
+
+export interface CalibrationAlerts {
+  /** Trhy, na kterých kancelář prokazatelně prodělává. */
+  overpriced: MarketReturn[];
+  /** Výběry a kurzová pásma, kde se model rozchází se skutečností. */
+  bands: BandCalibration[];
+}
+
+/** Všechno, co má hlídač o kurzech nahlásit, z jednoho načtení. */
+export async function calibrationAlerts(db: D1Database): Promise<CalibrationAlerts> {
+  const offers = await loadGradedOffers(db);
+  const overpriced = marketReturns(offers).filter((m) => m.overpriced);
+  const bands = bandCalibration(offers).filter((b) => b.miscalibrated);
+  if (overpriced.length > 0) {
+    logger.warn({ module: M }, `podhodnocené trhy: ${overpriced.map((m) => `${m.label} ${m.meanReturn.toFixed(2)}`).join(", ")}`);
+  }
+  if (bands.length > 0) {
+    logger.warn({ module: M }, `rozkalibrovaná pásma: ${bands.map((b) => `${b.label} ${b.wins}/${b.n} proti ${b.expectedWins.toFixed(1)}`).join(", ")}`);
+  }
+  return { overpriced, bands };
 }
 
 /** Celá tabulka návratností za poslední období. */

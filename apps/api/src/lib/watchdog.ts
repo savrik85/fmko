@@ -209,12 +209,23 @@ export async function runWatchdog(env: Bindings): Promise<WatchdogResult> {
   // Taky ticho: nic nespadne, jen se hráčům vyplácí víc, než vsadí. V září 2026
   // to trvalo měsíc a stálo přes 600 tisíc, než si toho někdo všiml.
   try {
-    const { overpricedMarkets } = await import("../betting/calibration");
-    for (const m of await overpricedMarkets(env.DB)) {
+    const { calibrationAlerts } = await import("../betting/calibration");
+    const alerts = await calibrationAlerts(env.DB);
+    for (const m of alerts.overpriced) {
       problemy.push({
         kod: "kurzy",
         popis: `Kurzy na trh „${m.label}" jsou podhodnocené, sázení se hráčům vyplácí`,
         hodnota: `${m.meanReturn.toFixed(2).replace(".", ",")} Kč za korunu z ${m.n} tipů`,
+      });
+    }
+    // Trh jako celek může vypadat v pořádku, i když „1" vrací dvojnásobek a „2" polovinu.
+    // Proto ještě výběry po kurzových pásmech: počet výher proti tomu, co čekal model.
+    for (const b of alerts.bands) {
+      problemy.push({
+        kod: "kurzy_pasmo",
+        popis: `Kurzový model se plete v pásmu „${b.label}": tip vychází ${b.z > 0 ? "častěji" : "méně často"}, než model čekal`,
+        hodnota: `${b.wins} výher z ${b.n} tipů, model čekal ${b.expectedWins.toFixed(1).replace(".", ",")}; `
+          + `návratnost ${b.meanReturn.toFixed(2).replace(".", ",")} Kč za korunu`,
       });
     }
   } catch (e) {
