@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { generateRemainingSeasonCalendar, generateSeasonCalendar, MAX_ROUNDS_PER_WEEK, parseMatchWeekdays } from "./calendar";
+import { generateRemainingSeasonCalendar, generateSeasonCalendar, isSeniorHolidayBlocked, MAX_ROUNDS_PER_WEEK, parseMatchWeekdays } from "./calendar";
 import { totalRounds } from "../league/schedule";
 
 describe("rozpis sezóny", () => {
@@ -10,7 +10,8 @@ describe("rozpis sezóny", () => {
   });
 
   it("půlka kol na podzim, pak zimní přestávka aspoň týden", () => {
-    const c = generateSeasonCalendar("L", 3, new Date("2026-10-21T18:00:00Z"), 26);
+    // Sezóna mimo Vánoce; sezóna přes svátky má místo toho vánoční přestávku (holiday-shift.test.ts).
+    const c = generateSeasonCalendar("L", 3, new Date("2027-02-15T18:00:00Z"), 26);
     const gap = (new Date(c.entries[13].scheduledAt).getTime() - new Date(c.entries[12].scheduledAt).getTime()) / 86_400_000;
     expect(gap).toBeGreaterThanOrEqual(7);
     // Konec sezóny týden po posledním kole.
@@ -66,8 +67,10 @@ describe("rozpis na zbytek sezóny (III. třída)", () => {
     lastDate: new Date("2027-01-28T17:00:00.000Z"),
   };
 
-  it("od středy 28. 10. 2026 do čtvrtka 28. 1. 2027 se 26 kol vejde do středy a neděle", () => {
-    const entries = generateRemainingSeasonCalendar({ ...base, from: new Date("2026-10-28T00:00:00.000Z") });
+  it("od středy 28. 10. 2026 do pondělí 8. 2. 2027 se 26 kol vejde do středy a neděle", () => {
+    // Tři termíny (23., 27. a 30. 12.) padají do vánoční přestávky, proto konec až v únoru.
+    const lastDate = new Date("2027-02-08T17:00:00.000Z");
+    const entries = generateRemainingSeasonCalendar({ ...base, lastDate, from: new Date("2026-10-28T00:00:00.000Z") });
     expect(entries).toHaveLength(26);
     expect(entries.map((e) => e.gameWeek)).toEqual(Array.from({ length: 26 }, (_, i) => i + 1));
     expect(entries[0].scheduledAt).toBe("2026-10-28T17:00:00.000Z");
@@ -75,21 +78,22 @@ describe("rozpis na zbytek sezóny (III. třída)", () => {
       const at = new Date(e.scheduledAt);
       expect([0, 3]).toContain(at.getUTCDay());
       expect(at.getUTCHours()).toBe(17); // 18:00 v Praze v zimě
-      expect(at.getTime()).toBeLessThanOrEqual(base.lastDate.getTime());
+      expect(at.getTime()).toBeLessThanOrEqual(lastDate.getTime());
+      expect(isSeniorHolidayBlocked(at), e.scheduledAt).toBe(false);
     }
-    // Bez vánoční přestávky: mezi koly nejvýš čtyři dny.
-    for (let i = 1; i < entries.length; i++) {
-      expect(new Date(entries[i].scheduledAt).getTime() - new Date(entries[i - 1].scheduledAt).getTime()).toBeLessThanOrEqual(4 * 86_400_000);
-    }
+    // Mezi koly nejvýš čtyři dny, jen přes svátky dva týdny (20. 12. až 3. 1.).
+    const gaps = entries.slice(1).map((e, i) => (new Date(e.scheduledAt).getTime() - new Date(entries[i].scheduledAt).getTime()) / 86_400_000);
+    expect(gaps.filter((g) => g > 4)).toEqual([14]);
   });
 
   it("chybějící kola doplní pátky od konce, nejvýš tři kola týdně", () => {
     const entries = generateRemainingSeasonCalendar({ ...base, from: new Date("2026-11-08T16:00:00.000Z") });
     expect(entries).toHaveLength(26);
     const fridays = entries.filter((e) => e.matchDay === "friday").map((e) => e.scheduledAt.slice(0, 10));
-    // Středy a neděle od 8. 11. dají 24 termínů, dva pátky přibudou v posledních týdnech
-    // (29. 1. už je po posledním kole přeboru).
-    expect(fridays).toEqual(["2027-01-15", "2027-01-22"]);
+    // Středy a neděle od 8. 11. dají bez vánoční přestávky 21 termínů, pět pátků přibude
+    // od konce sezóny (29. 1. už je po posledním kole přeboru, o svátcích se nehraje).
+    expect(fridays).toEqual(["2026-12-11", "2026-12-18", "2027-01-08", "2027-01-15", "2027-01-22"]);
+    for (const e of entries) expect(isSeniorHolidayBlocked(new Date(e.scheduledAt)), e.scheduledAt).toBe(false);
     const perWeek = new Map<string, number>();
     for (const e of entries) {
       const d = new Date(e.scheduledAt);

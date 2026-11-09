@@ -7490,6 +7490,21 @@ gameRouter.post("/admin/run-daily-tick", async (c) => {
   }
 });
 
+// POST /api/admin/holiday-break/shift — posun kol z vánoční přestávky (22. 12. až 2. 1.) za svátky.
+// ?dryRun=1 jen vrátí plán (kola, nové termíny, o kolik dní později skončí každá liga).
+// ?useFreeDaysBefore=1 nejdřív zaplní volné hrací dny před svátky, konec sezóny se posune méně.
+// Mění season_calendar (scheduled_at, match_day) neodehraných kol a teams.season_end.
+gameRouter.post("/admin/holiday-break/shift", async (c) => {
+  const dryRun = c.req.query("dryRun") !== "0";
+  const { shiftHolidayRounds } = await import("../season/holiday-shift");
+  try {
+    return c.json(await shiftHolidayRounds(c.env.DB, { dryRun, useFreeDaysBefore: c.req.query("useFreeDaysBefore") === "1" }));
+  } catch (e) {
+    logger.error({ module: "game.ts" }, "posun kol z vánoční přestávky", e);
+    return c.json({ error: "Posun kol selhal, rozpis zůstal beze změny." }, 500);
+  }
+});
+
 // POST /api/admin/sponsor-promises/evaluate — ruční vyhodnocení slibů sponzorům (testování).
 // ?scope=deadline → termínové sliby k hernímu dni (jako denní tick, bez KV zámku ticku),
 // ?scope=season&season=N → sezónní sliby sezóny N nad dosavadními daty, MIMO rollover

@@ -14,7 +14,7 @@
  * Cloudflare Workers běží v UTC, takže setHours() by nastavil UTC čas.
  * European DST: last Sunday of March → last Sunday of October.
  */
-function setPrague18(d: Date): void {
+export function setPrague18(d: Date): void {
   const y = d.getUTCFullYear();
   // Poslední neděle v březnu
   const marchEnd = new Date(Date.UTC(y, 2, 31));
@@ -26,6 +26,26 @@ function setPrague18(d: Date): void {
   // CEST (DST): UTC+2 → 18:00 CEST = 16:00 UTC
   // CET: UTC+1 → 18:00 CET = 17:00 UTC
   d.setUTCHours(isDST ? 16 : 17, 0, 0, 0);
+}
+
+const DAY_MS = 86_400_000;
+
+/**
+ * Vánoční přestávka: mezi 22. 12. a 2. 1. včetně se nehraje žádné kolo. Den se bere v UTC,
+ * večerní výkop (18:00 v Praze) má v UTC stejné datum.
+ */
+export function isHolidayBreak(d: Date): boolean {
+  const month = d.getUTCMonth() + 1;
+  const day = d.getUTCDate();
+  return (month === 12 && day >= 22) || (month === 1 && day <= 2);
+}
+
+/**
+ * Den, na který nesmí padnout kolo áčka: přestávka sama a den před ní, protože U21 hraje
+ * den po áčku a její kolo by do přestávky spadlo.
+ */
+export function isSeniorHolidayBlocked(d: Date): boolean {
+  return isHolidayBreak(d) || isHolidayBreak(new Date(d.getTime() + DAY_MS));
 }
 
 export interface CalendarEntry {
@@ -75,6 +95,10 @@ export function parseMatchWeekdays(raw: string | null | undefined): number[] {
  * - Podzim: první polovina kol (u 26 kol 1-13)
  * - Zimní přestávka: 1 týden
  * - Jaro: druhá polovina
+ *
+ * Mezi 22. 12. a 2. 1. se nehraje (`isSeniorHolidayBlocked`), kola se posunou za svátky.
+ * Když sezóna svátky přechází, je zimní přestávkou právě tahle vánoční a týdenní přestávka
+ * po polovině kol se nevkládá, jinak by sezóna měla přestávky dvě.
  */
 export function generateSeasonCalendar(
   leagueId: string,
@@ -83,6 +107,19 @@ export function generateSeasonCalendar(
   rounds = 30,
   weekdays: readonly number[] = DEFAULT_MATCH_WEEKDAYS,
 ): SeasonCalendar {
+  const overHolidays = buildSeasonCalendar(leagueId, seasonNumber, startDate, rounds, weekdays, false);
+  if (overHolidays.holidayBreakAfterRound !== null) return overHolidays.calendar;
+  return buildSeasonCalendar(leagueId, seasonNumber, startDate, rounds, weekdays, true).calendar;
+}
+
+function buildSeasonCalendar(
+  leagueId: string,
+  seasonNumber: number,
+  startDate: Date,
+  rounds: number,
+  weekdays: readonly number[],
+  midSeasonBreak: boolean,
+): { calendar: SeasonCalendar; holidayBreakAfterRound: number | null } {
   // Jen platné dny 0–6, jinak by hledání hracího dne nikdy neskončilo.
   const valid = weekdays.filter((d) => Number.isInteger(d) && d >= 0 && d <= 6);
   const days = new Set(valid.length > 0 ? valid : DEFAULT_MATCH_WEEKDAYS);
@@ -92,8 +129,13 @@ export function generateSeasonCalendar(
   // Dny se počítají v UTC jako na Workeru, ať test na počítači v jiném pásmu vyjde stejně.
   const cursor = new Date(startDate);
   cursor.setUTCDate(cursor.getUTCDate() + 5);
+  // Po kterém kole přišla vánoční přestávka (null = sezóna svátky nepřechází).
+  let holidayBreakAfterRound: number | null = null;
   const snapToMatchDay = () => {
-    while (!days.has(cursor.getUTCDay())) cursor.setUTCDate(cursor.getUTCDate() + 1);
+    while (!days.has(cursor.getUTCDay()) || isSeniorHolidayBlocked(cursor)) {
+      if (days.has(cursor.getUTCDay()) && entries.length > 0 && holidayBreakAfterRound === null) holidayBreakAfterRound = entries.length;
+      cursor.setUTCDate(cursor.getUTCDate() + 1);
+    }
   };
   snapToMatchDay();
 
@@ -126,12 +168,14 @@ export function generateSeasonCalendar(
   }
 
   // Zimní přestávka + jaro začíná dalším ligovým dnem ~týden po přestávce
-  const winterBreakStart = new Date(entries[entries.length - 1].scheduledAt);
+  let winterBreakStart = new Date(entries[entries.length - 1].scheduledAt);
   winterBreakStart.setUTCDate(winterBreakStart.getUTCDate() + 3);
-  cursor.setTime(winterBreakStart.getTime());
-  cursor.setUTCDate(cursor.getUTCDate() + 7);
-  snapToMatchDay();
-  const springStart = new Date(cursor);
+  if (midSeasonBreak) {
+    cursor.setTime(winterBreakStart.getTime());
+    cursor.setUTCDate(cursor.getUTCDate() + 7);
+    snapToMatchDay();
+  }
+  let springStart = new Date(cursor);
 
   // JARO: zbytek kol
   for (; round <= rounds; round++) {
@@ -139,15 +183,28 @@ export function generateSeasonCalendar(
     advance();
   }
 
+  // Bez přestávky po polovině je zimní přestávkou ta vánoční: začíná po posledním kole
+  // před svátky a jaro prvním kolem po nich.
+  if (!midSeasonBreak && holidayBreakAfterRound !== null && holidayBreakAfterRound < entries.length) {
+    winterBreakStart = new Date(entries[holidayBreakAfterRound - 1].scheduledAt);
+    winterBreakStart.setUTCDate(winterBreakStart.getUTCDate() + 3);
+    springStart = new Date(entries[holidayBreakAfterRound].scheduledAt);
+  } else if (!midSeasonBreak) {
+    holidayBreakAfterRound = null;
+  }
+
   const seasonEnd = new Date(entries[entries.length - 1].scheduledAt);
   seasonEnd.setUTCDate(seasonEnd.getUTCDate() + 7);
 
   return {
-    entries,
-    autumnStart,
-    winterBreakStart: winterBreakStart.toISOString(),
-    springStart: springStart.toISOString(),
-    seasonEnd: seasonEnd.toISOString(),
+    calendar: {
+      entries,
+      autumnStart,
+      winterBreakStart: winterBreakStart.toISOString(),
+      springStart: springStart.toISOString(),
+      seasonEnd: seasonEnd.toISOString(),
+    },
+    holidayBreakAfterRound,
   };
 }
 
@@ -175,8 +232,9 @@ function weekKey(d: Date): string {
 /**
  * Rozpis pro ligu, která vzniká uprostřed sezóny (III. třída Prachatice, spec část 2).
  *
- * Kola padají na hrací dny ligy v 18:00 v Praze, od prvního termínu po `from` bez zimní
- * přestávky. Když se do hracích dnů do `lastDate` nevejdou, doplní se `extraWeekday`
+ * Kola padají na hrací dny ligy v 18:00 v Praze, od prvního termínu po `from`. Mezi 22. 12.
+ * a 2. 1. se nehraje (`isSeniorHolidayBlocked`), jiná přestávka tu není.
+ * Když se do hracích dnů do `lastDate` nevejdou, doplní se `extraWeekday`
  * od konce sezóny, nejvýš `MAX_ROUNDS_PER_WEEK` kola týdně. Když se nevejdou ani tak,
  * vyhodí chybu: liga nesmí zdržet konec sezóny.
  */
@@ -190,6 +248,7 @@ export function generateRemainingSeasonCalendar(opts: RemainingSeasonOptions): C
     const slot = new Date(day);
     setPrague18(slot);
     if (slot.getTime() < opts.from.getTime() || slot.getTime() > opts.lastDate.getTime()) continue;
+    if (isSeniorHolidayBlocked(slot)) continue;
     if (days.has(slot.getUTCDay())) base.push(slot);
     else if (slot.getUTCDay() === opts.extraWeekday) extra.push(slot);
   }
