@@ -13,6 +13,7 @@
  * Co už běží (hostování, splátky), doběhne. Srpnové oznámení slíbilo amnestii.
  */
 
+import { marketValue } from "@okresni-masina/shared";
 import { logger } from "../lib/logger";
 
 const M = "club-links";
@@ -257,4 +258,98 @@ export async function suspiciousPairs(db: D1Database, limit = 20): Promise<Suspi
       linked: a.groupId != null && a.groupId === b.groupId,
     };
   });
+}
+
+// ── Přestupy za podezřelou cenu ────────────────────────────────────────────
+
+/** Kolikanásobek (nebo zlomek) tržní hodnoty už stojí za pohled. */
+export const OFF_PRICE_RATIO = 3;
+/** Jak daleko do minulosti přehled sahá. */
+export const OFF_PRICE_DAYS = 30;
+
+export interface OffPriceTransfer {
+  offerId: string;
+  resolvedAt: string;
+  playerId: string;
+  playerName: string;
+  age: number | null;
+  position: string | null;
+  rating: number | null;
+  buyer: { teamId: string; name: string };
+  seller: { teamId: string; name: string };
+  /** Zaplacená částka a tržní hodnota hráčů, kteří šli výměnou opačným směrem. */
+  paid: number;
+  swapValue: number;
+  marketValue: number;
+  /** (paid + swapValue) / marketValue */
+  ratio: number;
+  linked: boolean;
+}
+
+/** Je cena mimo pásmo třetina až trojnásobek tržní hodnoty? */
+export function isOffPrice(price: number, value: number): boolean {
+  if (value <= 0) return false;
+  return price > value * OFF_PRICE_RATIO || price < value / OFF_PRICE_RATIO;
+}
+
+/**
+ * Trvalé přestupy mezi lidskými kluby za poslední měsíc s cenou nad trojnásobkem nebo pod
+ * třetinou tržní hodnoty. Přehled dvojic výš skóruje jen počet obchodů, jeden přestup za
+ * nesmyslnou cenu v něm zapadne. Jen čtení: nic neblokuje, rozhoduje admin.
+ *
+ * Tržní hodnota se počítá z dnešního hodnocení a věku hráče, ne z doby přestupu, takže
+ * u hráče, který se od té doby hodně změnil, je poměr jen orientační.
+ */
+export async function offPriceTransfers(db: D1Database, now: Date = new Date(), limit = 50): Promise<OffPriceTransfer[]> {
+  const since = new Date(now.getTime() - OFF_PRICE_DAYS * 86_400_000).toISOString();
+  const rows = await db.prepare(
+    `SELECT o.id, o.resolved_at, o.player_id, COALESCE(o.counter_amount, o.offer_amount, 0) AS paid,
+            COALESCE(p.first_name, dp.first_name) AS first_name, COALESCE(p.last_name, dp.last_name) AS last_name,
+            COALESCE(p.age, dp.age) AS age, COALESCE(p.position, dp.position) AS position,
+            COALESCE(p.overall_rating, dp.overall_rating) AS rating,
+            bc.id AS buyer_id, bc.name AS buyer_name, sc.id AS seller_id, sc.name AS seller_name
+       FROM transfer_offers o
+       JOIN teams f ON f.id = o.from_team_id
+       JOIN teams t ON t.id = o.to_team_id
+       JOIN teams bc ON bc.id = COALESCE(f.parent_team_id, f.id)
+       JOIN teams sc ON sc.id = COALESCE(t.parent_team_id, t.id)
+       LEFT JOIN players p ON p.id = o.player_id
+       LEFT JOIN departed_players dp ON dp.id = o.player_id
+      WHERE o.status = 'accepted' AND COALESCE(o.offer_type, 'transfer') <> 'loan'
+        AND bc.user_id <> 'ai' AND sc.user_id <> 'ai' AND bc.id <> sc.id
+        AND o.resolved_at >= ?
+      ORDER BY o.resolved_at DESC LIMIT 500`,
+  ).bind(since).all<{
+    id: string; resolved_at: string; player_id: string; paid: number; first_name: string | null; last_name: string | null;
+    age: number | null; position: string | null; rating: number | null;
+    buyer_id: string; buyer_name: string; seller_id: string; seller_name: string;
+  }>().catch((e) => { logger.error({ module: M }, "přestupy pro přehled cen", e); return { results: [] as never[] }; });
+  if (rows.results.length === 0) return [];
+
+  const { loadSwapPlayers } = await import("../transfers/swap-players");
+  const swaps = await loadSwapPlayers(db, rows.results.map((r) => r.id))
+    .catch((e) => { logger.error({ module: M }, "hráči na výměnu pro přehled cen", e); return new Map<string, never[]>(); });
+
+  const out: OffPriceTransfer[] = [];
+  for (const r of rows.results) {
+    // Hráč, o kterém už databáze nic neví, se ocenit nedá.
+    if (r.rating == null) continue;
+    const value = marketValue(r.rating, r.age ?? 26, r.position);
+    const swapValue = (swaps.get(r.id) ?? []).reduce(
+      (sum, sp) => sum + (sp.overall_rating != null ? marketValue(sp.overall_rating, sp.age ?? 26, sp.position) : 0), 0);
+    const price = r.paid + swapValue;
+    if (!isOffPrice(price, value)) continue;
+    out.push({
+      offerId: r.id, resolvedAt: r.resolved_at, playerId: r.player_id,
+      playerName: r.first_name ? `${r.first_name} ${r.last_name ?? ""}`.trim() : "(hráč nenalezen)",
+      age: r.age, position: r.position, rating: r.rating,
+      buyer: { teamId: r.buyer_id, name: r.buyer_name }, seller: { teamId: r.seller_id, name: r.seller_name },
+      paid: r.paid, swapValue, marketValue: value, ratio: Math.round((price / value) * 100) / 100,
+      linked: await areClubsLinked(db, r.buyer_id, r.seller_id)
+        .catch((e) => { logger.warn({ module: M }, "propojení klubů v přehledu cen", e); return false; }),
+    });
+  }
+  // Nejdál od tržní hodnoty nahoře, ať už směrem nahoru, nebo dolů.
+  const distance = (x: OffPriceTransfer) => Math.abs(Math.log(Math.max(x.ratio, 0.001)));
+  return out.sort((a, b) => distance(b) - distance(a)).slice(0, limit);
 }

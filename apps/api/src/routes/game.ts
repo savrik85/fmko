@@ -8970,12 +8970,15 @@ gameRouter.get("/admin/market-stats", async (c) => {
 
 /**
  * Propojené kluby a podezřelé dvojice. Propojení se zapisuje ručně do `club_links`,
- * tady je jen přehled: kdo už propojený je a kdo spolu hraje a obchoduje nejvíc.
+ * tady je jen přehled: kdo už propojený je, kdo spolu hraje a obchoduje nejvíc a které
+ * přestupy posledního měsíce proběhly daleko od tržní hodnoty.
  */
 gameRouter.get("/admin/club-links", async (c) => {
-  const { listLinkGroups, suspiciousPairs } = await import("../competition/club-links");
-  const [groups, pairs] = await Promise.all([listLinkGroups(c.env.DB), suspiciousPairs(c.env.DB)]);
-  return c.json({ ok: true, groups, pairs });
+  const { listLinkGroups, suspiciousPairs, offPriceTransfers } = await import("../competition/club-links");
+  const [groups, pairs, offPrice] = await Promise.all([
+    listLinkGroups(c.env.DB), suspiciousPairs(c.env.DB), offPriceTransfers(c.env.DB),
+  ]);
+  return c.json({ ok: true, groups, pairs, offPriceTransfers: offPrice });
 });
 
 gameRouter.get("/admin/health", async (c) => {
