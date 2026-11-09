@@ -780,7 +780,8 @@ export async function acceptTransferOffer(
   if (await areClubsLinked(db, scope.buyerClubTeamId, scope.sellerClubTeamId)) return fail(403, LINKED_CLUBS_ERRORS.transfer);
 
   // ?? přeskakuje jen null/undefined, ne 0 — proto explicitní kontrola.
-  const amount = (offer.counter_amount != null ? (offer.counter_amount as number) : (offer.offer_amount as number));
+  // `let`: u prodeje klubu mimo hru se částka při přijetí ještě srovná se stropem po slevě.
+  let amount = (offer.counter_amount != null ? (offer.counter_amount as number) : (offer.offer_amount as number));
   if (amount < 0) return fail(400, "Neplatná částka přestupu");
   // Podmínky posledního návrhu: záloha + týdenní splátky, procenta z příštího přestupu.
   const terms = termsFromRow(offer as { upfront_pct?: number | null; installments?: number | null; sell_on_pct?: number | null }, amount);
@@ -964,9 +965,24 @@ export async function acceptTransferOffer(
     }
     const soldName = `${removed.player.firstName} ${removed.player.lastName}`;
 
+    // Sleva za opakované prodeje klubům mimo hru se počítá znovu teď, podle prodejů, které
+    // už v sezóně opravdu proběhly. Nabídka nese cenu z doby, kdy vznikla: klub, který jich
+    // měl víc rozjednaných naráz, by je jinak všechny přijal za plnou cenu. Nabídka je už
+    // zabraná (accepted), proto se počítá bez ní; dvě souběžná přijetí se tak uvidí navzájem.
+    const { outsideSaleCeiling, outsideSalesThisSeason, OUTSIDE_SALE_FULL_PRICE_COUNT } = await import("../transfers/virtual-teams");
+    const priorOutsideSales = await outsideSalesThisSeason(db, sellerTeamId, { pending: false, exceptOfferId: offerId });
+    const offeredAmount = amount;
+    if (priorOutsideSales >= OUTSIDE_SALE_FULL_PRICE_COUNT) {
+      amount = Math.min(amount, outsideSaleCeiling(
+        removed.player.overallRating, removed.player.age, removed.player.position, !!vd.country && vd.country !== "CZ", priorOutsideSales,
+      ));
+    }
+    const priceCut = amount < offeredAmount;
+
     await db.batch([
       db.prepare("UPDATE teams SET budget = budget + ? WHERE id = ?").bind(amount, sellerTeamId),
-      db.prepare("UPDATE transfer_offers SET status = 'accepted', resolved_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?").bind(offerId),
+      // Nabídka nese částku, která se opravdu zaplatila (přehledy a počty z ní čtou).
+      db.prepare("UPDATE transfer_offers SET status = 'accepted', offer_amount = ?, counter_amount = NULL, resolved_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?").bind(amount, offerId),
     ]);
     await db.prepare(
       `UPDATE player_contracts SET is_active = 0, left_at = ?, leave_type = 'transfer'
@@ -996,7 +1012,7 @@ export async function acceptTransferOffer(
     }).catch((e) => logger.warn({ module: "game" }, "create virtual sale news", e));
 
     await smsToClub(db, sellerTeamId,
-      `📤 Přestup potvrzen. ${soldName} odchází do ${virtualName}${vd.city ? ` (${vd.city}${vd.country === "DE" ? ", Německo" : ""})` : ""} za ${amount.toLocaleString("cs")} Kč.`,
+      `📤 Přestup potvrzen. ${soldName} odchází do ${virtualName}${vd.city ? ` (${vd.city}${vd.country === "DE" ? ", Německo" : ""})` : ""} za ${amount.toLocaleString("cs")} Kč.${priceCut ? ` Původně nabízeli ${offeredAmount.toLocaleString("cs")} Kč, jenže kluby mimo hru od třetího hráče v sezóně platí míň.` : ""}`,
       "virtual sale SMS");
     await notifyClub(env, sellerTeamId, `✅ Přestup ${soldName} dokončen`,
       `${virtualName} zaplatil ${amount.toLocaleString("cs-CZ")} Kč.`, `/prestupy`, "virtual sale notification");

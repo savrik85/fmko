@@ -107,34 +107,61 @@ export function outsideSalePrice(price: number, value: number, priorSales: numbe
   return Math.min(price, Math.max(value * OUTSIDE_SALE_PRICE_FLOOR, price * factor));
 }
 
+/** Kolik prodejů se počítá, když se počet nepodaří zjistit: nabídka pak vyjde na podlahu. */
+export const OUTSIDE_SALES_UNKNOWN = 99;
+
 /**
  * Kolik hráčů už klub (áčko i U21) v běžící sezóně prodal klubům mimo hru. Počítají se
- * přijaté nabídky od `virtual_ai`, tedy nabídky cizích klubů i prodeje přes jejich poptávky.
+ * nabídky od `virtual_ai`, tedy nabídky cizích klubů i prodeje přes jejich poptávky.
+ *
+ * `pending: true` (cena nové nabídky) přičte i nabídky, které ještě čekají: jinak by klub
+ * nasbíral několik nabídek za plnou cenu naráz a přijal je všechny. `pending: false`
+ * (kontrola při přijetí) bere jen už přijaté, bez nabídky `exceptOfferId`.
+ * Když dotaz selže, vrací `OUTSIDE_SALES_UNKNOWN`: chyba nesmí znamenat plnou cenu.
  */
-export async function outsideSalesThisSeason(db: D1Database, teamId: string): Promise<number> {
+export async function outsideSalesThisSeason(
+  db: D1Database, teamId: string, opts: { pending?: boolean; exceptOfferId?: string } = {},
+): Promise<number> {
+  const statuses = opts.pending === false ? "('accepted')" : "('accepted', 'pending', 'countered')";
   const row = await db.prepare(
     `SELECT COUNT(*) AS n FROM transfer_offers o
-      WHERE o.from_team_id = 'virtual_ai' AND o.status = 'accepted'
+      WHERE o.from_team_id = 'virtual_ai' AND o.status IN ${statuses} AND o.id <> ?
         AND o.to_team_id IN (
           SELECT r.id FROM teams me JOIN teams r ON COALESCE(r.parent_team_id, r.id) = COALESCE(me.parent_team_id, me.id)
            WHERE me.id = ?)
-        AND datetime(o.resolved_at) >= (SELECT datetime(created_at) FROM seasons ORDER BY number DESC LIMIT 1)`,
-  ).bind(teamId).first<{ n: number }>()
-    .catch((e) => { logger.warn({ module: "virtual-teams" }, "prodeje klubům mimo hru v sezóně", e); return null; });
-  return row?.n ?? 0;
+        AND (o.status <> 'accepted'
+          OR datetime(o.resolved_at) >= (SELECT datetime(created_at) FROM seasons ORDER BY number DESC LIMIT 1))`,
+  ).bind(opts.exceptOfferId ?? "", teamId).first<{ n: number }>()
+    .catch((e) => { logger.error({ module: "virtual-teams" }, "prodeje klubům mimo hru v sezóně", e); return null; });
+  return row ? row.n : OUTSIDE_SALES_UNKNOWN;
 }
+
+/** Nejvyšší přirážka českého klubu k tržní hodnotě a německého k české ceně, v procentech. */
+const OFFER_PREMIUM_PCT = { min: 100, max: 125 } as const;
+const ABROAD_PREMIUM_PCT = { min: 130, max: 150 } as const;
 
 /**
  * Cena CPU nabídky: tržní hodnota až o čtvrtinu výš. Cizí klub kupuje za tržní cenu
  * a hráče, kterého chce, si trochu připlatí. Německý klub dá o 30–50 % víc než český
  * (rozhodnutí 2026-10-18). `priorSales` = kolik hráčů už prodávající klub v sezóně
- * klubům mimo hru prodal (viz `outsideSalePrice`).
+ * klubům mimo hru prodal nebo má rozjednaných (viz `outsideSalePrice`).
  */
 export function calcOfferPrice(rating: number, age: number, position: string, rng: Rng, abroad = false, priorSales = 0): number {
   const value = estimateMarketValue(rating, age, position);
-  const czech = value * rng.int(100, 125) / 100;
-  const price = abroad ? czech * rng.int(130, 150) / 100 : czech;
+  const czech = value * rng.int(OFFER_PREMIUM_PCT.min, OFFER_PREMIUM_PCT.max) / 100;
+  const price = abroad ? czech * rng.int(ABROAD_PREMIUM_PCT.min, ABROAD_PREMIUM_PCT.max) / 100 : czech;
   return Math.round(outsideSalePrice(price, value, priorSales) / 100) * 100;
+}
+
+/**
+ * Nejvíc, co klub mimo hru zaplatí za hráče, když už mu prodávající v sezóně prodal
+ * `priorSales` hráčů: horní okraj pásma nabídky po slevě. Hlídá se při přijetí, ať sleva
+ * platí i pro nabídky, které vznikly dřív, než se předchozí prodeje uzavřely.
+ */
+export function outsideSaleCeiling(rating: number, age: number, position: string | null | undefined, abroad: boolean, priorSales: number): number {
+  const value = estimateMarketValue(rating, age, position);
+  const top = value * OFFER_PREMIUM_PCT.max / 100 * (abroad ? ABROAD_PREMIUM_PCT.max / 100 : 1);
+  return Math.round(outsideSalePrice(top, value, priorSales) / 100) * 100;
 }
 
 // ═══════════════════════════════════════════════
