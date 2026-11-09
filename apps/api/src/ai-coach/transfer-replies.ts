@@ -1154,7 +1154,7 @@ export async function openOutgoingOffers(db: D1Database, clubTeamId: string): Pr
   return row?.n ?? 0;
 }
 
-/** Smí AI klub rozjet další vlastní obchod? */
+/** Smí AI klub rozjet další vlastní nákup? Měsíční limit počítá jen příchody (prodeje nákup neblokují). */
 export function canOpenDeal(club: AiClubState, openOffers: number): boolean {
-  return !club.overDealLimit && openOffers < openDealLimit(club.profile);
+  return !club.overBuyLimit && openOffers < openDealLimit(club.profile);
 }

@@ -38,6 +38,9 @@ export const TRANSFER_STANCES = ["buy", "hold", "sell"] as const;
 export type TransferStance = typeof TRANSFER_STANCES[number];
 export const TRANSFER_POSITIONS = ["GK", "DEF", "MID", "FWD"] as const;
 export type TransferPosition = typeof TRANSFER_POSITIONS[number];
+/** Jak doplnit kádr pod cílovou velikostí: nijak, volnými hráči, nákupem, nebo obojím. */
+export const SQUAD_FILL_CHOICES = ["none", "free_agents", "market", "both"] as const;
+export type SquadFillChoice = typeof SQUAD_FILL_CHOICES[number];
 const MAX_TRANSFER_FOCUS = 2;
 const MAX_TRANSFER_SELL = 3;
 /** Od jaké potřeby postu kupuje náhradní pravidlo (stejně jako trh bez kurzu). */
@@ -108,6 +111,8 @@ export interface TransferPlan {
   focus: TransferPosition[];
   /** Id hráčů z `sell` (klíče přeložené přes kontext), trh je vystaví přednostně. */
   sellIds: string[];
+  /** Doplnění kádru pod cílovou velikostí, jak ho zvolil model (bez modelu „none“). */
+  fill: SquadFillChoice;
 }
 
 export interface WeeklyContext {
@@ -170,7 +175,7 @@ export interface WeeklyDecision {
   banners: string[];
   promote: string[];
   sendDown: string[];
-  transfers: { stance: TransferStance; focus: TransferPosition[]; sell: string[] };
+  transfers: { stance: TransferStance; focus: TransferPosition[]; sell: string[]; fill?: SquadFillChoice };
   concessions: ConcessionDecision;
   reasoning: string;
 }
@@ -339,7 +344,13 @@ export function fallbackTransfers(ctx: WeeklyContext): WeeklyDecision["transfers
   const stance: TransferStance = urgent.length > 0 && ctx.finance.spendable > 0 ? "buy"
     : t.squadSize > t.targetSize && ctx.profile.trading >= 40 ? "sell"
       : "hold";
-  return { stance, focus: urgent.slice(0, MAX_TRANSFER_FOCUS).map((n) => n.position), sell: [] };
+  // Doplnění kádru pod cílovou velikostí je rozhodnutí modelu: pravidlo ho samo nezvolí.
+  return { stance, focus: urgent.slice(0, MAX_TRANSFER_FOCUS).map((n) => n.position), sell: [], fill: "none" };
+}
+
+/** Má klub áčko pod cílovou velikostí? Pak model v pondělí musí říct, jestli a jak ho doplní. */
+export function squadBelowTarget(ctx: Pick<WeeklyContext, "transfers">): boolean {
+  return ctx.transfers.squadSize < ctx.transfers.targetSize;
 }
 
 /** Přestupní blok je samostatný: chybný nebo chybějící nahradí náhradní kurz, zbytek týdne platí. */
@@ -356,10 +367,17 @@ function validateTransfers(raw: unknown, ctx: WeeklyContext, rejected: string[])
   }
   const focus = keys(r.focus, "transfers.focus", new Set(TRANSFER_POSITIONS), MAX_TRANSFER_FOCUS, rejected);
   const sell = keys(r.sell, "transfers.sell", new Set(ctx.transfers.surplus.map((o) => o.key)), MAX_TRANSFER_SELL, rejected);
+  let fill: SquadFillChoice = "none";
+  if (squadBelowTarget(ctx)) {
+    const picked = pick(r.fill, SQUAD_FILL_CHOICES, "transfers.fill");
+    if (typeof picked === "object") rejected.push(`${picked.error}, kádr se tento týden nedoplňuje`);
+    else fill = picked;
+  }
   return {
     stance,
     focus: Array.isArray(focus) ? focus as TransferPosition[] : [],
     sell: Array.isArray(sell) ? sell : [],
+    fill,
   };
 }
 
@@ -573,6 +591,7 @@ export function planWeeklyActions(ctx: WeeklyContext, d: WeeklyDecision): Weekly
     stance: course.stance,
     focus: course.focus,
     sellIds: course.sell.map((k) => surplusById.get(k)).filter((id): id is string => !!id),
+    fill: squadBelowTarget(ctx) ? course.fill ?? "none" : "none",
   };
   return {
     actions, skipped, totalCost: total, transfers,
@@ -680,11 +699,15 @@ export function renderWeeklyPrompt(ctx: WeeklyContext): string {
   L.push("Surplus players you could put on the transfer list (key: position, age, rating):");
   L.push(t.surplus.length ? t.surplus.map((o) => `${o.key}: ${o.label}`).join("\n") : "(none)");
   L.push("Transfer course for this week (your scouts then work on it every day; the game sets all prices and never overpays): buy = look for a player for your weak positions within the money above your reserve; hold = no purchases unless a starting position is empty; sell = put surplus players on the transfer list, no purchases unless a starting position is empty. focus = up to 2 positions to strengthen first. sell = up to 3 surplus keys to list first.");
+  const below = squadBelowTarget(ctx);
+  if (below) {
+    L.push(`SQUAD SIZE: you have ${t.squadSize} A-team players and want about ${t.targetSize}. You MUST decide how to fill the squad this week (transfers.fill): free_agents = sign free agents for the bench (no transfer fee, only wages), market = buy squad players from other clubs, both = either way, none = stay with a small squad on purpose. Whom exactly and for how much you decide day by day.`);
+  }
   L.push("");
   const concessionKeys = hasConcessionChoice(ctx.concessions)
     ? `, concessions {mode ${ctx.concessions.modeOptions.join("/")}, products {${ctx.concessions.products.map((p) => p.key).join(", ")}: each {tier, price, buy}}}`
     : "";
-  L.push(`DECIDE (JSON keys): training {focus, intensity, sessions 1-5, approach}, ticketPrice, pitchMaintenance, pitchCareMode, stadium (keys, max 2), equipmentUpgrades (keys, max 3), equipmentRepairs (keys), hire (candidate keys, max 1), academy, banners (offer keys), promote (keys, max 2), sendDown (keys, max 2), transfers {stance buy/hold/sell, focus (positions GK/DEF/MID/FWD, max 2), sell (surplus keys, max 3)}${concessionKeys}, reasoning (max 40 words).`);
+  L.push(`DECIDE (JSON keys): training {focus, intensity, sessions 1-5, approach}, ticketPrice, pitchMaintenance, pitchCareMode, stadium (keys, max 2), equipmentUpgrades (keys, max 3), equipmentRepairs (keys), hire (candidate keys, max 1), academy, banners (offer keys), promote (keys, max 2), sendDown (keys, max 2), transfers {stance buy/hold/sell, focus (positions GK/DEF/MID/FWD, max 2), sell (surplus keys, max 3)${below ? ", fill none/free_agents/market/both" : ""}}${concessionKeys}, reasoning (max 40 words).`);
   L.push("Paid items are executed in the order repairs, pitch, refreshment stock, hiring, equipment, stadium and stop when the money above the reserve runs out.");
   return L.join("\n");
 }
@@ -729,8 +752,9 @@ export function weeklyDecisionSchema(ctx: WeeklyContext): Record<string, unknown
           stance: { type: "string", enum: [...TRANSFER_STANCES] },
           focus: { type: "array", items: { type: "string", enum: [...TRANSFER_POSITIONS] }, maxItems: MAX_TRANSFER_FOCUS },
           sell: arr(ctx.transfers.surplus.map((o) => o.key)),
+          ...(squadBelowTarget(ctx) ? { fill: { type: "string", enum: [...SQUAD_FILL_CHOICES] } } : {}),
         },
-        required: ["stance", "focus", "sell"],
+        required: ["stance", "focus", "sell", ...(squadBelowTarget(ctx) ? ["fill"] : [])],
       },
       ...(concessions ? { concessions } : {}),
       reasoning: { type: "string" },

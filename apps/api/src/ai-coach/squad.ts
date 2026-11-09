@@ -59,7 +59,15 @@ export interface PositionNeed {
    * hráče do základu“). Kupuje se jen hráč aspoň o UPGRADE_MIN_GAIN lepší.
    */
   upgrade?: boolean;
+  /**
+   * Posty jsou obsazené, ale kádr je pod cílovou velikostí a trenér ho v pondělí rozhodl
+   * doplnit: hledá se hráč do šířky kádru, ne posila základu.
+   */
+  fill?: boolean;
 }
+
+/** Potřeba při doplňování kádru: nad běžným nákupem (`UPGRADE_NEED`), pod prázdným místem v základu. */
+export const FILL_NEED = 0.4;
 
 /** O kolik musí být posila lepší než nejslabší hráč základu na postu, aby se vyplatila. */
 export const UPGRADE_MIN_GAIN = 5;
@@ -79,6 +87,30 @@ export interface SquadAnalysis {
   needs: PositionNeed[];
   /** Přijde hráč na výměnu klubu k užitku (hrál by aspoň v rotaci)? */
   isUseful(p: { position: string; rating: number; age: number }): boolean;
+}
+
+/**
+ * Posty, kam jde doplnit kádr pod cílovou velikostí (`TARGET_SENIOR_SQUAD`): jen ty, kde už
+ * nechybí hloubka (to je běžná potřeba). Hráč do šířky má být aspoň tak dobrý jako poslední
+ * hráč potřebné hloubky, ať nesedí jen na tribuně. Od nejtenčího postu.
+ */
+export function squadFillNeeds(analysis: SquadAnalysis): PositionNeed[] {
+  if (analysis.seniorOwnCount >= TARGET_SENIOR_SQUAD) return [];
+  const slots = formationSlots(analysis.formation);
+  const out: Array<PositionNeed & { spare: number }> = [];
+  for (const p of SQUAD_POSITIONS) {
+    if (analysis.needs.some((n) => n.position === p && !n.upgrade)) continue;
+    const list = analysis.members.filter((m) => !m.isU21Roster && m.position === p).sort((a, b) => b.rating - a.rating);
+    const depth = slots[p] + BACKUPS[p];
+    if (list.length < depth) continue;
+    out.push({
+      position: p, need: FILL_NEED, missing: 0, minRating: Math.round(list[depth - 1].rating),
+      startersAverage: Math.round(average(list.slice(0, slots[p]).map((m) => m.rating)) * 10) / 10,
+      fill: true, spare: list.length - depth,
+    });
+  }
+  out.sort((a, b) => a.spare - b.spare);
+  return out.map(({ spare: _spare, ...n }) => n);
 }
 
 /** Počet hráčů v základu podle formace („4-4-2“ → 1 / 4 / 4 / 2). */

@@ -64,6 +64,8 @@ export interface BuyNeedInfo {
   startersAverage: number;
   /** Plný post, jen zlepšení nejslabšího hráče základu. */
   upgrade?: boolean;
+  /** Kádr pod cílovou velikostí: hráč do šířky kádru, jak trenér rozhodl v pondělí. */
+  fill?: boolean;
 }
 
 export interface BuyPickContext {
@@ -200,7 +202,7 @@ export function renderBuyPickPrompt(ctx: BuyPickContext): string {
     `CLUB ${ctx.teamName}: budget ${czk(ctx.budget)}. You keep ${czk(ctx.reserve)} as a reserve for running costs, so you can spend at most ${czk(ctx.spendable)} on transfers.`,
     `SQUAD: ${ctx.squadSize} senior players (you want about ${ctx.targetSquad}), your best eleven averages rating ${ctx.strength.toFixed(1)}. Ratings are on the game's own scale, not out of 100: compare them with your own players.`,
     course,
-    `NEED: ${pos} (${n.position}), need ${n.need.toFixed(2)} on a 0-1 scale${n.missing > 0 ? `, ${n.missing} player(s) short of full depth` : ""}${n.upgrade ? ", the position is full: this is only an upgrade of the weakest starter, buy only if it is clearly worth the money" : ""}, ${starters}. A signing improves the team from rating ${n.minRating} up.`,
+    `NEED: ${pos} (${n.position}), need ${n.need.toFixed(2)} on a 0-1 scale${n.missing > 0 ? `, ${n.missing} player(s) short of full depth` : ""}${n.upgrade ? ", the position is full: this is only an upgrade of the weakest starter, buy only if it is clearly worth the money" : ""}${n.fill ? ", your squad is below the size you want and in your Monday review you decided to fill it up: this is a squad player for the bench and rotation, do not overpay" : ""}, ${starters}. A signing improves the team from rating ${n.minRating} up.`,
     "",
   ];
   if (ctx.candidates.length > 0) {

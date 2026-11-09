@@ -121,7 +121,7 @@ const everything: WeeklyDecision = {
   banners: ["B1", "B2", "B3"],
   promote: ["U1"],
   sendDown: ["Y1"],
-  transfers: { stance: "sell", focus: ["FWD"], sell: ["L2"] },
+  transfers: { stance: "sell", focus: ["FWD"], sell: ["L2"], fill: "free_agents" },
   concessions: { mode: "external", products: [], decidedBy: "model" },
   reasoning: "all in",
 };
@@ -237,8 +237,37 @@ describe("kontrola odpovědi modelu", () => {
     const r = validateWeeklyDecision(everything, context(100_000));
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(r.decision.transfers).toEqual({ stance: "sell", focus: ["FWD"], sell: ["L2"] });
-    expect(planWeeklyActions(context(100_000), r.decision).transfers).toEqual({ stance: "sell", focus: ["FWD"], sellIds: ["old-2"] });
+    expect(r.decision.transfers).toEqual({ stance: "sell", focus: ["FWD"], sell: ["L2"], fill: "free_agents" });
+    expect(planWeeklyActions(context(100_000), r.decision).transfers).toEqual({ stance: "sell", focus: ["FWD"], sellIds: ["old-2"], fill: "free_agents" });
+  });
+
+  it("kádr pod cílovou velikostí: model dostane povinnou otázku na doplnění a rozhodne ji; pravidlo nedoplňuje", () => {
+    const below = context(100_000);
+    expect(below.transfers.squadSize).toBeLessThan(below.transfers.targetSize);
+    const prompt = renderWeeklyPrompt(below);
+    expect(prompt).toContain("SQUAD SIZE: you have 21 A-team players and want about 24. You MUST decide how to fill the squad this week (transfers.fill)");
+    expect(prompt).toContain("fill none/free_agents/market/both");
+    const schema = weeklyDecisionSchema(below) as { properties: { transfers: { required: string[]; properties: { fill?: { enum: string[] } } } } };
+    expect(schema.properties.transfers.required).toContain("fill");
+    expect(schema.properties.transfers.properties.fill?.enum).toEqual(["none", "free_agents", "market", "both"]);
+    for (const fill of ["none", "free_agents", "market", "both"] as const) {
+      const r = validateWeeklyDecision({ ...everything, transfers: { ...everything.transfers, fill } }, below);
+      expect(r.ok && r.decision.transfers.fill).toBe(fill);
+      if (r.ok) expect(planWeeklyActions(below, r.decision).transfers.fill).toBe(fill);
+    }
+    // Odpověď bez volby (nebo s nesmyslem): kód za model nerozhodne, kádr se ten týden nedoplňuje.
+    const silent = validateWeeklyDecision({ ...everything, transfers: { stance: "buy", focus: [], sell: [], fill: "everyone" } }, below);
+    expect(silent.ok && silent.decision.transfers.fill).toBe("none");
+    if (silent.ok) expect(silent.rejected.some((x) => x.includes("transfers.fill"))).toBe(true);
+    expect(fallbackWeeklyDecision(below).transfers.fill).toBe("none");
+
+    // Plný kádr: otázka v popisu ani ve schématu není a volba se ignoruje.
+    const full = { ...below, transfers: { ...below.transfers, squadSize: 24 } };
+    expect(renderWeeklyPrompt(full)).not.toContain("SQUAD SIZE:");
+    const fullSchema = weeklyDecisionSchema(full) as { properties: { transfers: { required: string[] } } };
+    expect(fullSchema.properties.transfers.required).not.toContain("fill");
+    const ignored = validateWeeklyDecision({ ...everything, transfers: { ...everything.transfers, fill: "both" } }, full);
+    expect(ignored.ok && ignored.decision.transfers.fill).toBe("none");
   });
 
   it("chybný přestupní kurz nahradí náhradní, zbytek týdne platí; cizí klíče a posty se zahodí", () => {
@@ -246,15 +275,15 @@ describe("kontrola odpovědi modelu", () => {
     expect(bad.ok).toBe(true);
     if (bad.ok) {
       // Náhradní kurz: FWD má potřebu 0,42 a jsou peníze → kupovat, posílit útok.
-      expect(bad.decision.transfers).toEqual({ stance: "buy", focus: ["FWD"], sell: [] });
+      expect(bad.decision.transfers).toEqual({ stance: "buy", focus: ["FWD"], sell: [], fill: "none" });
       expect(bad.decision.stadium).toEqual(["S1", "S2"]);
       expect(bad.rejected.some((x) => x.includes("transfers.stance"))).toBe(true);
     }
     const missing = validateWeeklyDecision({ ...everything, transfers: undefined }, context(100_000));
     if (missing.ok) expect(missing.decision.transfers.stance).toBe("buy");
-    const foreign = validateWeeklyDecision({ ...everything, transfers: { stance: "hold", focus: ["KEEPER", "MID"], sell: ["S1", "L1"] } }, context(100_000));
+    const foreign = validateWeeklyDecision({ ...everything, transfers: { stance: "hold", focus: ["KEEPER", "MID"], sell: ["S1", "L1"], fill: "market" } }, context(100_000));
     expect(foreign.ok).toBe(true);
-    if (foreign.ok) expect(foreign.decision.transfers).toEqual({ stance: "hold", focus: ["MID"], sell: ["L1"] });
+    if (foreign.ok) expect(foreign.decision.transfers).toEqual({ stance: "hold", focus: ["MID"], sell: ["L1"], fill: "market" });
   });
 
   it("náhradní kurz: bez peněz nad rezervou drží, přeplněný kádr obchodník prodává", () => {
