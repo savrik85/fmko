@@ -60,6 +60,19 @@ async function fetchPosition(teamId: string): Promise<number | null> {
   }
 }
 
+/** Číslo právě hrané sezóny pro text pozvánky. Když se nenačte, text se obejde bez něj. */
+async function fetchSeason(): Promise<number | null> {
+  try {
+    const r = await fetch(`${API}/api/public/landing`, { cache: "no-store" });
+    if (!r.ok) return null;
+    const data = await r.json() as { stats?: { season?: number | null } };
+    return data.stats?.season ?? null;
+  } catch (e) {
+    console.warn("pozvánka: načtení sezóny", e);
+    return null;
+  }
+}
+
 export async function generateMetadata({ params }: { params: Promise<{ teamId: string }> }): Promise<Metadata> {
   const { teamId } = await params;
   const [team, manager] = await Promise.all([fetchTeam(teamId), fetchManager(teamId)]);
@@ -93,10 +106,11 @@ export async function generateMetadata({ params }: { params: Promise<{ teamId: s
 
 export default async function InvitePage({ params }: { params: Promise<{ teamId: string }> }) {
   const { teamId } = await params;
-  const [team, manager, position] = await Promise.all([
+  const [team, manager, position, season] = await Promise.all([
     fetchTeam(teamId),
     fetchManager(teamId),
     fetchPosition(teamId),
+    fetchSeason(),
   ]);
 
   if (!team) {
@@ -111,5 +125,5 @@ export default async function InvitePage({ params }: { params: Promise<{ teamId:
     );
   }
 
-  return <InvitePageClient team={team} manager={manager} position={position} />;
+  return <InvitePageClient team={team} manager={manager} position={position} season={season} />;
 }

@@ -147,8 +147,8 @@ export async function spawnCelebrity(
     legend: tier === "S"
       ? `Okresním přeborem otřásla zpráva, do oblasti se přistěhoval ${fullName}, ${tierDesc} a legenda české kopané. Podle našich informací se zajímá o účast v místním přeboru. Fanoušci v celém okresu nevěří vlastním očím. Kdo si ho podepíše?`
       : `Překvapivá zpráva: ${fullName}, ${tierDesc}, se usadil v okrese a hledá tým kde by si zakopal. Je k dispozici jako volný hráč.`,
-    fallen_star: `${fullName}, kdysi velká naděje na pozici ${celeb.position === "FWD" ? "útočníka" : celeb.position === "MID" ? "záložníka" : "obránce"}, se vrátil do rodného kraje. Kariéru v první lize mu zničil alkohol a životní styl. Talent ale zůstal — otázka zní, jestli ho někdo dokáže vychovat zpět.`,
-    glass_man: `${fullName}, talentovaný ${celeb.position === "FWD" ? "útočník" : celeb.position === "MID" ? "záložník" : "obránce"} v nejlepších letech, musel kvůli chronickým zraněním opustit profesionální fotbal. Teď hledá tým v okresním přeboru. Když hraje, je výborný — ale vydrží jeho kolena?`,
+    fallen_star: `${fullName}, kdysi velká naděje na pozici ${celeb.position === "FWD" ? "útočníka" : celeb.position === "MID" ? "záložníka" : "obránce"}, se vrátil do rodného kraje. Kariéru v první lize mu zničil alkohol a životní styl. Talent ale zůstal, otázka zní, jestli ho někdo dokáže vychovat zpět.`,
+    glass_man: `${fullName}, talentovaný ${celeb.position === "FWD" ? "útočník" : celeb.position === "MID" ? "záložník" : "obránce"} v nejlepších letech, musel kvůli chronickým zraněním opustit profesionální fotbal. Teď hledá tým v okresním přeboru. Když hraje, je výborný, ale vydrží jeho kolena?`,
   };
 
   await db.prepare(

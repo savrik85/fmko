@@ -17,7 +17,7 @@ export const GOLD = "#C4A035";
 export const GOLD_SOFT = "#FBF6E6";
 
 export function czk(n: number | null | undefined): string {
-  if (n === null || n === undefined) return "—";
+  if (n === null || n === undefined) return "-";
   return `${Math.round(n).toLocaleString("cs")} Kč`;
 }
 

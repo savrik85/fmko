@@ -183,7 +183,7 @@ export function TiketSheet({ open, onClose, vybrane, celkovyKurz, board, teamId,
           {strop && <Radek label="Vyplatíme" value={czk(L.maxPayout)} strong />}
           {strop && (
             <p className="text-sm text-gold-700 leading-snug pt-1">
-              Strop kanceláře je {czk(L.maxPayout)} na tiket. Víc ti nevyplatíme — na vyšší vklad
+              Strop kanceláře je {czk(L.maxPayout)} na tiket. Víc ti nevyplatíme, na vyšší vklad
               už se nevyplatí sázet.
             </p>
           )}

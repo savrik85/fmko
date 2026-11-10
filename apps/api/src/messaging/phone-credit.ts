@@ -63,13 +63,25 @@ export async function loadCredit(db: D1Database, teamId: string): Promise<Credit
     return stav(row.phone_credit);
   }
 
-  await db
-    .prepare("UPDATE teams SET phone_credit = ?, phone_credit_date = ? WHERE id = ?")
-    .bind(DENNI_KREDIT, dnes, teamId)
+  // Dobíjí se jen dopředu a jen jednou: podmínka na datum je přímo v zápisu, takže
+  // souběžná čtení ani herní den posunutý zpět (oprava kalendáře) nedobijí podruhé.
+  const refill = await db
+    .prepare(
+      `UPDATE teams SET phone_credit = ?, phone_credit_date = ?
+        WHERE id = ? AND (phone_credit_date IS NULL OR phone_credit_date < ? OR phone_credit IS NULL)`,
+    )
+    .bind(DENNI_KREDIT, dnes, teamId, dnes)
     .run()
-    .catch((e) => { logger.warn({ module: M }, `obnova kreditu ${teamId}`, e); });
+    .catch((e) => { logger.warn({ module: M }, `obnova kreditu ${teamId}`, e); return null; });
+  if ((refill?.meta?.changes ?? 0) > 0) return stav(DENNI_KREDIT);
 
-  return stav(DENNI_KREDIT);
+  // Nedobilo se: dobil to souběžný požadavek, nebo se den vrátil. Platí, co je v DB.
+  const current = await db
+    .prepare("SELECT phone_credit FROM teams WHERE id = ?")
+    .bind(teamId)
+    .first<{ phone_credit: number | null }>()
+    .catch((e) => { logger.warn({ module: M }, `kredit po obnově ${teamId}`, e); return null; });
+  return stav(current?.phone_credit ?? row.phone_credit ?? 0);
 }
 
 function stav(zbyva: number): CreditState {
@@ -97,6 +109,33 @@ export async function spendCredit(db: D1Database, teamId: string, kolik = CENA_S
     .catch((e) => { logger.warn({ module: M }, `stržení kreditu ${teamId}`, e); return null; });
 
   return (res?.meta?.changes ?? 0) > 0;
+}
+
+/**
+ * Vrátí kredit za poslední SMS trenéra v konverzaci, na kterou odpověď definitivně
+ * nepřijde (hráč odešel, odpověď spadla, hráč zrovna psal a zprávu už nezapočítal).
+ * Dočasný výpadek modelu sem nepatří, tam se odpověď zkouší znovu.
+ *
+ * Každá zpráva se vrací nejvýš jednou: vratku si zabere značka v metadatech zprávy,
+ * takže opakované pokusy o odpověď nevrátí kredit dvakrát. Nikdy nad denní dobití.
+ */
+export async function refundCoachSms(db: D1Database, teamId: string, convId: string, reason: string): Promise<boolean> {
+  try {
+    const claimed = await db.prepare(
+      `UPDATE messages SET metadata = json_set(COALESCE(metadata, '{}'), '$.creditRefunded', 1)
+        WHERE id = (SELECT id FROM messages WHERE conversation_id = ? AND sender_type = 'user'
+                     ORDER BY julianday(sent_at) DESC LIMIT 1)
+          AND json_extract(COALESCE(metadata, '{}'), '$.creditRefunded') IS NULL`,
+    ).bind(convId).run();
+    if ((claimed.meta?.changes ?? 0) !== 1) return false;
+    await db.prepare("UPDATE teams SET phone_credit = MIN(?, COALESCE(phone_credit, 0) + ?) WHERE id = ?")
+      .bind(DENNI_KREDIT, CENA_SMS, teamId).run();
+    logger.info({ module: M, teamId }, `kredit za SMS vrácen (${reason}), konverzace ${convId}`);
+    return true;
+  } catch (e) {
+    logger.warn({ module: M, teamId }, `vrácení kreditu (${reason}), konverzace ${convId}`, e);
+    return false;
+  }
 }
 
 /** Kredit slovem — do UI, ať se to nepočítá na dvou místech. */

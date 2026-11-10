@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canFine, collectEvidence, DEFAULT_EVIDENCE_LIMITS } from "./discipline";
+import { appealProposalText, canFine, collectEvidence, DEFAULT_EVIDENCE_LIMITS } from "./discipline";
 
 /**
  * Atrapa D1, která odpovídá podle toho, na co se dotaz ptá. Sbírání důkazů dělá
@@ -107,5 +107,17 @@ describe("smí se podat návrh na pokutu", () => {
     } as unknown as D1Database;
     await canFine(db, "l", "t", 2, "bet_manipulation");
     expect(sql).toContain("status IN ('issued','appealed','paid')");
+  });
+});
+
+describe("odvolání proti pokutě jako bod programu", () => {
+  it("nadpis říká, o čem se hlasuje, a text vysvětlí hlas pro i proti", () => {
+    const text = appealProposalText(1500, "Neudržované hřiště");
+    expect(text.title).toBe("Odvolání: zrušit pokutu 1 500 Kč?");
+    expect(text.body).toContain("Hlas pro pokutu zruší");
+    expect(text.body).toContain("hlas proti ji ponechá");
+    expect(text.body).toContain("Důvod pokuty: Neudržované hřiště");
+    // V textech pro hráče nejsou dlouhé pomlčky.
+    expect(`${text.title} ${text.body}`).not.toMatch(/[—–]/);
   });
 });

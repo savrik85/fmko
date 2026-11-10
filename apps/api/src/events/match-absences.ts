@@ -8,6 +8,7 @@ import { absenceSeedForMatch } from "../lib/seed";
 import { generateAbsences, hracProAbsenci } from "./absence";
 import { createRng } from "../generators/rng";
 import { logger } from "../lib/logger";
+import { currentSeasonSql } from "../lib/season";
 import { nactiIncidentniKontext, pridejIncidentniAbsence } from "../incidents/absence-hracu";
 
 export interface MatchContext {
@@ -341,9 +342,10 @@ export async function findUpcomingMatchContext(
   // Nejstarší NEODEHRANÉ kolo (status='scheduled'). Bez filtru scheduled_at >= game_date —
   // ten by přeskočil kola, která herní kalendář předběhl (cron je nestihl odsimulovat),
   // a ukazoval by budoucí kolo místo nejbližšího nedohraného. status='scheduled' už sám
-  // zaručuje, že kolo není odehrané.
+  // zaručuje, že kolo není odehrané. Jen aktuální sezóna ligy: neodehraná kola starších sezón
+  // v kalendáři zůstávají a bez filtru by vyhrála ona.
   const cal = await db.prepare(
-    "SELECT id, scheduled_at FROM season_calendar WHERE league_id = ? AND status = 'scheduled' ORDER BY scheduled_at ASC LIMIT 1",
+    `SELECT id, scheduled_at FROM season_calendar WHERE league_id = ? AND status = 'scheduled' AND ${currentSeasonSql("season_calendar")} ORDER BY scheduled_at ASC LIMIT 1`,
   ).bind(team.league_id).first<{ id: string; scheduled_at: string }>()
     .catch((e) => { logger.warn({ module: "match-absences" }, "calendar lookup", e); return null; });
   if (!cal) return null;

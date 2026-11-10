@@ -21,8 +21,9 @@ import {
   doubleChanceProbabilities,
   scorerShares, scorerProbability,
   marketOdds, singleSideOdds, MAX_ODDS_X100,
-  goalLevels, LEVEL_WINDOW_ROUNDS, type SideLevelSample, type GoalLevels, type Lambdas,
+  goalLevels, LEVEL_WINDOW_ROUNDS, CLUB_HA_REFERENCE, type SideLevelSample, type GoalLevels, type Lambdas,
 } from "./odds-model";
+import { loadClubHomeAdvantages, loadMatchStrengths, DEFAULT_STRENGTH } from "./team-inputs";
 import {
   HANDICAP_LINES, TEAM_TOTAL_LINES, GOAL_BANDS, BTTS_YES, BTTS_NO,
   handicapProbabilities, goalBandProbabilities, bothTeamsScoreProbability,
@@ -152,14 +153,16 @@ export async function nextOpenRound(db: D1Database, leagueId: string): Promise<R
 }
 
 /**
- * Síla týmu = průměr nejlepších JEDENÁCTI aktivních hráčů.
+ * Síla kádru = průměr nejlepších JEDENÁCTI aktivních hráčů.
  *
  * Ne celý kádr. Průměr přes soupisku netrestá slabý tým, ale široký: klub
  * s 31 hráči včetně dorostenců měl proti klubu s 21 vybranými průměr nižší
  * o jedenáct bodů, i když jeho sestava byla lepší — a kurzy z něj dělaly
  * outsidera. Nastupuje jedenáct lidí, ne celá soupiska.
  *
- * Definice je součástí kalibrace modelu (viz STRENGTH_K).
+ * Slouží jen úrovni gólů z ODEHRANÝCH kol (loadGoalLevel): dnešní marodka
+ * o zápase před třemi týdny nic neříká. Kurzy na nejbližší kolo berou sílu
+ * z loadMatchStrengths, tedy bez zraněných a podle uložené sestavy.
  */
 async function loadStrengths(db: D1Database, teamIds: string[]): Promise<Map<string, number>> {
   if (teamIds.length === 0) return new Map();
@@ -346,12 +349,20 @@ export async function loadGoalLevel(db: D1Database, leagueId: string): Promise<G
   if (zapasy.results.length === 0) return prior;
 
   const tymy = [...new Set(zapasy.results.flatMap((z) => [z.home_team_id, z.away_team_id]))];
-  const sily = await loadStrengths(db, tymy);
+  const [sily, homeAdvantages] = await Promise.all([
+    loadStrengths(db, tymy),
+    loadClubHomeAdvantages(db, [...new Set(zapasy.results.map((z) => z.home_team_id))]),
+  ]);
 
+  // Očekávání se počítá stejným tvarem modelu jako kurzy, tedy i s klubovou výhodou
+  // domácích. Jinak by úroveň soutěže s plnými kotli vyšla vyšší a výhoda by se
+  // do kurzu započítala dvakrát.
   const vzorky: SideLevelSample[] = zapasy.results.map((z) => {
     const l = expectedGoals(
-      { strength: sily.get(z.home_team_id) ?? 30, form: 0 },
-      { strength: sily.get(z.away_team_id) ?? 30, form: 0 },
+      { strength: sily.get(z.home_team_id) ?? DEFAULT_STRENGTH, form: 0 },
+      { strength: sily.get(z.away_team_id) ?? DEFAULT_STRENGTH, form: 0 },
+      1,
+      homeAdvantages.get(z.home_team_id) ?? CLUB_HA_REFERENCE,
     );
     return {
       homeGoals: z.home_score,
@@ -458,11 +469,14 @@ export function matchOdds(input: {
   awayGoalsPerMatch: number;
   /** Úroveň gólů soutěže z goalLevel, nebo zvlášť domácí a hosté z goalLevels. */
   goalLevel: number | GoalLevels;
+  /** Klubová výhoda domácích z matchHomeAdvantage. Bez ní průměrný klub. */
+  homeAdvantage?: number;
 }): Array<Omit<OddsRow, "leagueId" | "seasonNumber" | "calendarId">> {
   const lambdas = expectedGoals(
     { strength: input.homeStrength, form: input.homeForm },
     { strength: input.awayStrength, form: input.awayForm },
     input.goalLevel,
+    input.homeAdvantage ?? CLUB_HA_REFERENCE,
   );
   const out: Array<Omit<OddsRow, "leagueId" | "seasonNumber" | "calendarId">> = [];
 
@@ -576,8 +590,14 @@ export async function generateBoard(
   const teamIds = [...new Set(matches.results.flatMap((m) => [m.home_team_id, m.away_team_id]))];
   const seasonId = `season-${round.season_number}`;
 
-  const [strengths, tabulka, scorers, level] = await Promise.all([
-    loadStrengths(db, teamIds),
+  // Kolik herních dní zbývá do kola: zranění, které se do té doby vyléčí, nevadí.
+  const daysUntilMatch = Math.max(0, Math.floor(
+    (new Date(round.scheduled_at).getTime() - new Date(gameDate).getTime()) / 86_400_000,
+  ) || 0);
+
+  const [strengths, homeAdvantages, tabulka, scorers, level] = await Promise.all([
+    loadMatchStrengths(db, teamIds, round.calendar_id, daysUntilMatch),
+    loadClubHomeAdvantages(db, [...new Set(matches.results.map((m) => m.home_team_id))]),
     teamStandings(db, leagueId, round.season_number),
     loadScorers(db, teamIds, seasonId),
     loadGoalLevel(db, leagueId),
@@ -599,8 +619,9 @@ export async function generateBoard(
       matchId: m.id,
       homeName: m.home_name,
       awayName: m.away_name,
-      homeStrength: strengths.get(m.home_team_id) ?? 30,
-      awayStrength: strengths.get(m.away_team_id) ?? 30,
+      homeStrength: strengths.get(m.home_team_id) ?? DEFAULT_STRENGTH,
+      awayStrength: strengths.get(m.away_team_id) ?? DEFAULT_STRENGTH,
+      homeAdvantage: homeAdvantages.get(m.home_team_id),
       homeForm: tabulka.get(m.home_team_id)?.formAdj ?? 0,
       awayForm: tabulka.get(m.away_team_id)?.formAdj ?? 0,
       homeGoalsPerMatch: golyNaZapas(m.home_team_id),

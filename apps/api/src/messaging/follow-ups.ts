@@ -24,6 +24,8 @@ import { generateFollowUpMessage, GeminiUnavailableError, type ThreadMessage } f
 import { INVITES, type InviteKind } from "./casual-topics";
 import { PHOTO_SCENES, generatePlayerPhoto, historyBody } from "./player-photo";
 import { loadChatMemory, offerStanceStmt } from "./player-memory";
+import { refundCoachSms } from "./phone-credit";
+import { playerInClub } from "./player-reach";
 import type { PlayerSnapshot } from "./ai-player-scenarios";
 
 const M = "follow-ups";
@@ -142,6 +144,8 @@ export async function deliverDueFollowUps(
     }
     if (result === "retry" && now.getTime() - Date.parse(row.created_at) > MAX_AGE_MS) {
       logger.warn({ module: M, teamId: row.team_id }, `odložená zpráva ${row.id} (${row.kind}) se po ${MAX_AGE_MS / 3600_000} hodinách vzdává`);
+      // Zaplacená SMS, na kterou hráč ani po výpadku neodepsal: kredit zpět.
+      if (row.kind === "retry_reply") await refundCoachSms(db, row.team_id, row.conversation_id, "odpověď po výpadku se vzdala");
       out.cancelled++;
       continue;
     }
@@ -210,10 +214,11 @@ async function deliverOne(db: D1Database, env: FollowUpEnv, row: FollowUpRow, no
     return "cancelled";
   }
 
-  // Účast v posledním zápase jen u hráče z tohohle kádru, jinak hrál jinou soutěž.
-  const player = loadPlayerSnapshot(playerRow, playerRow.team_id === row.team_id ? await loadLastMatchContext(db, row.team_id) : undefined);
+  // Zápasy a tabulka podle týmu, za který hráč hraje (U21, hostování), ne podle áčka.
+  const playerTeamId = (playerRow.team_id as string | null) ?? row.team_id;
+  const player = loadPlayerSnapshot(playerRow, await loadLastMatchContext(db, playerTeamId));
   const memory = await loadChatMemory(db, player, { teamId: row.team_id, convId: row.conversation_id });
-  const team = await loadTeamContext(db, row.team_id);
+  const team = await loadTeamContext(db, row.team_id, playerTeamId);
   const history = await loadHistory(db, row.conversation_id);
 
   let instruction: string;
@@ -310,6 +315,13 @@ async function retryReply(db: D1Database, env: FollowUpEnv, row: FollowUpRow): P
   ).bind(row.conversation_id).first<{ id: string; body: string; sent_at: string }>();
   if (!lastCoach) return "cancelled";
   if (await answeredOrRead(db, row, lastCoach)) return "cancelled";
+  // Hráč mezitím odešel z klubu: odpověď už nepřijde nikdy. Dřív se zkoušela každou hodinu
+  // celých 36 hodin. Končí hned a zaplacená SMS se vrací.
+  if (!(await playerInClub(db, row.player_id, row.team_id))) {
+    logger.info({ module: M, teamId: row.team_id }, `odpověď po výpadku zrušena, hráč ${row.player_id} už v klubu není`);
+    await refundCoachSms(db, row.team_id, row.conversation_id, "hráč už v klubu není");
+    return "cancelled";
+  }
 
   const { isAiEnabled } = await import("../lib/ai-provider");
   if (!(await isAiEnabled(env))) return "retry";

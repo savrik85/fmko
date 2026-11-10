@@ -287,7 +287,7 @@ export function SquadAttributeTable({ players, potential = new Map(), promises =
                     className={`py-2 px-1 text-center tabular-nums font-heading font-bold ${potColor}`}
                     title={pot?.slovne ?? "Bez skauta v realizačním týmu potenciál neodhadneš"}
                   >
-                    {pot?.strop ?? "—"}
+                    {pot?.strop ?? "-"}
                   </td>
                   {COLUMNS.filter((col) => col.skill).map((col) => {
                     const v = skillValue(p, col.skill!);
@@ -298,7 +298,7 @@ export function SquadAttributeTable({ players, potential = new Map(), promises =
                       <td key={col.key} className={`py-1.5 px-1 text-center ${isKey ? "bg-pitch-50/70" : "opacity-40"}`}>
                         {typeof v === "number"
                           ? <span className={`${VALUE_BADGE} ${attrBg(v)}`}>{v}</span>
-                          : <span className="text-muted">—</span>}
+                          : <span className="text-muted">-</span>}
                       </td>
                     );
                   })}

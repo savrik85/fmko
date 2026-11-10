@@ -9,6 +9,7 @@
 
 import { ROLE_DEFS, type StaffRole } from "@okresni-masina/shared";
 import type { Bindings } from "../index";
+import { loadTakeoverGuard, TAKEOVER_PROTECTION_DAYS } from "../ai-clubs/takeover-guard";
 import { logger } from "../lib/logger";
 import { getEquipmentOptions, repairEquipment, upgradeEquipment } from "../services/equipment";
 import { nactiPoskozeni, opravVybaveni } from "../stadium/stadium-damage";
@@ -114,10 +115,20 @@ async function loadAcademyContext(db: D1Database, teamId: string): Promise<Weekl
   const data = await youthContextForTeam(db, teamId)
     .catch((e) => { logger.warn({ module: M, teamId }, "žáci pro týdenní správu", e); return null; });
   if (!data) return { current: "none", weeklyCostNow: 0, prospects: 0, expectedPerYear: 0, canVolunteer: false, canStaff: false, canFound: false };
+  // Provoz běžící akademie (úroveň, nábor, den otevřených dveří, obrana lákaných žáků): rozhoduje model.
+  const { academyCareForTeam } = await import("../academy/service");
+  const care = data.founded
+    ? await academyCareForTeam(db, teamId).catch((e) => { logger.warn({ module: M, teamId }, "provoz akademie pro týdenní správu", e); return null; })
+    : null;
   return {
     current: data.current, weeklyCostNow: ACADEMY_WEEKLY_COST[data.current], prospects: data.prospects,
     expectedPerYear: data.expectedPerYear, canVolunteer: data.canVolunteer, canStaff: data.canStaff, canFound: data.canFound,
     founded: data.founded,
+    care: care ? {
+      level: care.level, weeklyCost: care.weeklyCost, canRecruitDay: care.canRecruitDay, recruitDayCost: care.recruitDayCost,
+      canOpenDay: care.canOpenDay, openDayCost: care.openDayCost, poachThreshold: care.poachThreshold,
+      poached: care.poached.map((k, i) => ({ key: `K${i + 1}`, poachId: k.poachId, age: k.age, position: k.position, interest: k.interest })),
+    } : null,
   };
 }
 
@@ -414,6 +425,25 @@ async function executeAction(db: D1Database, teamId: string, ctx: WeeklyContext,
         const res = await setAcademyInvestment(db, teamId, a.level);
         return { ok: res.ok, detail: res.ok ? res.investment : res.error };
       }
+      case "academy_level": {
+        const { setAcademyLevel } = await import("../academy/service");
+        const res = await setAcademyLevel(db, teamId, a.level);
+        return { ok: res.ok, detail: res.ok ? `${res.level} (${a.weeklyCost} Kč týdně)` : res.error };
+      }
+      case "academy_recruit_day":
+      case "academy_open_day": {
+        const { openDay, recruitDay } = await import("../academy/service");
+        const { createRng, cryptoSeed } = await import("../generators/rng");
+        const res = a.kind === "academy_recruit_day"
+          ? await recruitDay(db, createRng(cryptoSeed()), teamId, `${ctx.gameDay}T12:00:00.000Z`)
+          : await openDay(db, createRng(cryptoSeed()), teamId, `${ctx.gameDay}T12:00:00.000Z`);
+        return { ok: res.ok, detail: res.ok ? `přišlo ${res.names.length} žáků` : res.error };
+      }
+      case "academy_defend": {
+        const { defendPoach } = await import("../academy/service");
+        const res = await defendPoach(db, teamId, a.poachId);
+        return { ok: res.ok, detail: res.ok ? `${a.key}: ${res.interest}` : res.error };
+      }
       case "banner": {
         const res = await signSponsorContract(db, teamId, {
           category: "banner", sponsorName: a.sponsorName, sponsorType: a.sponsorType,
@@ -491,6 +521,12 @@ export async function runWeeklyReview(env: Bindings, teamId: string, now: Date, 
     logger.warn({ module: M, teamId }, "týdenní správa: tým nenalezen");
     return { used: "fallback", executed: [], skipped: [], spent: 0, mode: logMode };
   }
+  // Klub převzatý po člověku: prvních 90 dní strop investic a žádné přejmenování (takeover-guard.ts).
+  const guard = await loadTakeoverGuard(db, teamId, now);
+  if (guard.active) {
+    ctx.finance.investCap = ctx.finance.reserve;
+    ctx.takeover = { daysLeft: guard.daysLeft };
+  }
   const decided = await decideWeekly(env, ctx, { useModel: mode !== "off", model: opts.model });
   const plan = planWeeklyActions(ctx, decided.decision);
 
@@ -521,16 +557,23 @@ export async function runWeeklyReview(env: Bindings, teamId: string, now: Date, 
     mode, dryRun: opts.dryRun, ai: env, model: opts.model, contextRef: `week:${ctx.gameDay}`,
     club: { league: ctx.league, weeklyRunningCost: ctx.finance.weeklyRunningCost, weeklyIncome: ctx.finance.weeklyIncome },
   };
-  const main = await maybeSignMainSponsor(db, teamId, ctx.profile, sponsorOpts).catch((e) => {
-    logger.warn({ module: M, teamId }, "hlavní sponzor", e);
-    return null;
-  });
-  if (main?.signed) executed.push({ action: "main_sponsor", ok: true, detail: main.detail });
-  const stadiumSponsor = await maybeSignStadiumSponsor(db, teamId, ctx.profile, sponsorOpts).catch((e) => {
-    logger.warn({ module: M, teamId }, "sponzor stadionu", e);
-    return null;
-  });
-  if (stadiumSponsor?.signed) executed.push({ action: "stadium_sponsor", ok: true, detail: stadiumSponsor.detail });
+  // Hlavní sponzor přejmenuje klub a sponzor stadionu stadion: u klubu převzatého po člověku
+  // se v ochranné lhůtě nepodepisují (mez kódu, majitel má klub dostat zpátky pod svým jménem).
+  if (guard.active) {
+    const detail = `převzatý klub: prvních ${TAKEOVER_PROTECTION_DAYS} dní se klub ani stadion nepřejmenuje (zbývá ${guard.daysLeft} dní)`;
+    executed.push({ action: "main_sponsor", ok: false, detail }, { action: "stadium_sponsor", ok: false, detail });
+  } else {
+    const main = await maybeSignMainSponsor(db, teamId, ctx.profile, sponsorOpts).catch((e) => {
+      logger.warn({ module: M, teamId }, "hlavní sponzor", e);
+      return null;
+    });
+    if (main?.signed) executed.push({ action: "main_sponsor", ok: true, detail: main.detail });
+    const stadiumSponsor = await maybeSignStadiumSponsor(db, teamId, ctx.profile, sponsorOpts).catch((e) => {
+      logger.warn({ module: M, teamId }, "sponzor stadionu", e);
+      return null;
+    });
+    if (stadiumSponsor?.signed) executed.push({ action: "stadium_sponsor", ok: true, detail: stadiumSponsor.detail });
+  }
   // Majitelé firem do VIP lóže na nejbližší domácí zápas: koho pozvat volí model (jen s lóží, dárky
   // nad rezervou), pozvání provede stejná služba jako u člověka. Vlastní záznam v deníku (sponsor_invite).
   const invites = await maybeInviteSponsorOwners(db, teamId, ctx.profile, {

@@ -92,7 +92,7 @@ function vyrokQuestions(c: PostMatchContext): string[] {
       : c.opponentStatement.quote;
     return [
       `Před zápasem ${kdo} prohlásil: „${uryvek}" Co na to teď?`,
-      `${kdo} si před zápasem neodpustil poznámku — „${uryvek}". Vrátil jsi mu to na hřišti?`,
+      `${kdo} si před zápasem neodpustil poznámku: „${uryvek}". Vrátil jsi mu to na hřišti?`,
     ];
   }
   return [

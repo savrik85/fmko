@@ -21,7 +21,7 @@ import { logger } from "../lib/logger";
 import { pragueHour } from "../lib/match-tick-schedule";
 import { seedFromString } from "../lib/seed";
 import {
-  FRIENDLY_MAX_STAKE, FRIENDLY_STAKE_STEP,
+  FRIENDLY_MAX_STAKE, FRIENDLY_STAKE_STEP, loadFriendlyStakeCap,
   addDays, findBusy, quoteFriendly, sumCosts,
   type ChallengeVenue, type CostPayer, type OfferVenue,
 } from "../multiplayer/friendlies";
@@ -220,12 +220,18 @@ function daysBetween(from: string, to: string): number {
   return Math.round((new Date(`${to}T12:00:00Z`).getTime() - new Date(`${from}T12:00:00Z`).getTime()) / 86_400_000);
 }
 
-/** Výzva prošla mezemi: přijetí rozhodne model, bez něj náhradní pravidlo (přijmout). */
+/**
+ * Výzva prošla mezemi: přijetí rozhodne model. Když model neodpoví (výpadek, nesmysl, chybí
+ * binding), nerozhodne se nic (`deferred`) a výzva počká na další běh; po termínu ji hra nechá
+ * propadnout jako každou jinou. Dřív výpadek znamenal vždy přijmout, i se sázkou. Pravidlo
+ * (přijmout, co prošlo mezemi) platí jen v režimu off, kde se model neptá vůbec.
+ */
 async function decideReply(
   db: D1Database, team: FriendlyClub, ch: ChallengeRow, check: ChallengeCheck, profile: AiCoachProfile, today: string,
   mode: CoachMode, opts: FriendlyCoachOpts,
-): Promise<{ accept: boolean; reason: string; by: DecidedBy; trace: ModelTrace }> {
-  if (mode === "off" || !opts.ai) return { accept: true, reason: "fits", by: "fallback", trace: NO_TRACE };
+): Promise<{ accept: boolean; reason: string; by: DecidedBy; trace: ModelTrace; deferred?: boolean }> {
+  if (mode === "off") return { accept: true, reason: "fits", by: "fallback", trace: NO_TRACE };
+  if (!opts.ai) return { accept: false, reason: "model_unavailable", by: "guard", trace: { ...NO_TRACE, error: "chybí binding AI" }, deferred: true };
   const opponent = await loadFriendlyClub(db, ch.challenger_team_id);
   const venue = check.terms.venue === "neutral" ? "neutral" : check.terms.venue === "opponent" ? "home" : "away";
   const ctx: FriendlyReplyContext = {
@@ -253,7 +259,9 @@ async function decideReply(
     latencyMs: res.latencyMs, prompt,
   };
   const parsed = res.json ? validateFriendlyReply(res.json) : null;
-  if (!parsed) return { accept: true, reason: "fits", by: "fallback", trace: { ...trace, error: trace.error ?? "neplatná odpověď modelu" } };
+  if (!parsed) {
+    return { accept: false, reason: "model_unavailable", by: "guard", trace: { ...trace, error: trace.error ?? "neplatná odpověď modelu" }, deferred: true };
+  }
   return { accept: parsed.accept, reason: parsed.reason, by: "model", trace };
 }
 
@@ -307,6 +315,17 @@ export async function respondToFriendlyChallenges(
         tokensIn: outcome.trace.tokensIn, tokensOut: outcome.trace.tokensOut, latencyMs: outcome.trace.latencyMs,
       });
 
+      if (outcome.deferred) {
+        // Model nerozhodl: výzva čeká dál. Do deníku jen poprvé, ať ho odklad nezaplní každou hodinu.
+        const noted = await db.prepare(
+          "SELECT 1 AS x FROM ai_coach_decisions WHERE team_id = ? AND kind = 'friendly_reply' AND context_ref = ? AND executed LIKE '%deferred%' LIMIT 1",
+        ).bind(teamId, ch.id).first()
+          .catch((e) => { logger.warn({ module: M, teamId }, "deník odkladu odpovědi na výzvu", e); return null; });
+        if (!noted) await log({ deferred: true });
+        logger.warn({ module: M, teamId }, `odpověď na výzvu ${ch.id} odložena: ${outcome.trace.error ?? "model neodpověděl"}`);
+        continue;
+      }
+
       if (mode === "shadow") {
         await log(null);
         continue;
@@ -338,7 +357,7 @@ export async function respondToFriendlyChallenges(
   return handled;
 }
 
-/** Náhradní pravidlo nabídky: náhodný volný termín, většinou doma, sázka podle povahy. */
+/** Pravidlo nabídky jen pro režim off (model se neptá): náhodný volný termín, většinou doma, sázka podle povahy. */
 function fallbackOffer(ctx: FriendlyOfferContext, rng: ReturnType<typeof createRng>, profile: AiCoachProfile): FriendlyOfferDecision {
   const date = rng.pick(ctx.dates.map((d) => d.date));
   const venue = rng.weighted({ poster: 7, neutral: 2, taker: 1 }) as OfferVenue;
@@ -386,7 +405,12 @@ export async function maybeOfferFriendly(
   }
   if (candidates.length === 0) return false;
 
-  const maxStake = Math.min(maxFriendlyStake(profile), Math.floor(friendlySpendLimit(team.budget, profile) / FRIENDLY_STAKE_STEP) * FRIENDLY_STAKE_STEP);
+  // Strop sázky podle pravidel soutěže platí i pro AI klub, jinak by nabídku nešlo vypsat.
+  const maxStake = Math.min(
+    maxFriendlyStake(profile),
+    await loadFriendlyStakeCap(db, [teamId]),
+    Math.floor(friendlySpendLimit(team.budget, profile) / FRIENDLY_STAKE_STEP) * FRIENDLY_STAKE_STEP,
+  );
   const stakes = [0];
   for (let s = FRIENDLY_STAKE_STEP; s <= maxStake; s += FRIENDLY_STAKE_STEP) stakes.push(s);
   const ctx: FriendlyOfferContext = {
@@ -418,6 +442,18 @@ export async function maybeOfferFriendly(
     } else {
       trace = { ...trace, error: trace.error ?? "neplatná odpověď modelu" };
     }
+  } else if (mode !== "off") {
+    trace = { ...NO_TRACE, error: "chybí binding AI" };
+  }
+  // Model měl rozhodnout a nerozhodl: nabídku (a sázku) za něj kód nevypíše, dnes se nenabízí nic.
+  if (by === "fallback" && mode !== "off") {
+    await logDecision(db, {
+      teamId, kind: "friendly_offer", mode, model: trace.model, contextRef: today,
+      inputSummary: trace.prompt ?? `budget=${team.budget} candidates=${candidates.length}`, rawOutput: trace.raw,
+      actions: { post: false, deferred: true, decidedBy: "guard" }, executed: { posted: false, deferred: true }, usedFallback: false,
+      error: trace.error ?? "model neodpověděl", tokensIn: trace.tokensIn, tokensOut: trace.tokensOut, latencyMs: trace.latencyMs,
+    });
+    return false;
   }
 
   const body = { date: decision.date, venue: decision.venue, costPayer: "each" as const, stake: decision.stake };

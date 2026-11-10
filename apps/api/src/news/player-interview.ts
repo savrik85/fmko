@@ -10,7 +10,7 @@
  * coach_relationship). Žádná nová mechanika, žádné parsování volného textu.
  */
 
-import { GEMINI_TEXT_MODEL } from "./gemini-helper";
+import { DEFAULT_GEMINI_TIMEOUT_MS, GEMINI_TEXT_MODEL } from "./gemini-helper";
 import { calculateStandings } from "../stats/standings";
 import { logger } from "../lib/logger";
 import { applyCoachRelationDelta } from "../lib/coach-relation";
@@ -66,6 +66,7 @@ async function callGemini(apiKey: string, prompt: string, maxTokens = 1536): Pro
           responseMimeType: "application/json",
         },
       }),
+      signal: AbortSignal.timeout(DEFAULT_GEMINI_TIMEOUT_MS),
     },
   ).catch((e) => {
     logger.warn({ module: "player-interview" }, "gemini fetch failed", e);

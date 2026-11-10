@@ -19,6 +19,7 @@ import { brokenCzech } from "../messaging/foreign-speech";
 import type { Bindings } from "../index";
 import { createRng } from "../generators/rng";
 import { logger } from "../lib/logger";
+import { currentSeasonSql } from "../lib/season";
 import { parseTrainingPlan, type DailyTickEvent } from "./daily-tick";
 
 export type TeamDayStatus = "done" | "skipped";
@@ -56,6 +57,70 @@ export async function claimTeamDay(db: D1Database, teamId: string, gameDate: str
   // Při chybě zápisu radši NEZPRACOVAT než riskovat dvojité finance.
   if (!res) return false;
   return res.meta.changes > 0;
+}
+
+/**
+ * Hraje tým v daný herní den (YYYY-MM-DD) zápas? Stejná pravidla jako `matchDayTeams`
+ * v daily-tick.ts: liga a přátelák žijí v matches, pohár v cup_matches přes cup_teams.
+ */
+export async function teamPlaysOnDay(db: D1Database, teamId: string, day: string): Promise<boolean> {
+  const row = await db.prepare(
+    `SELECT 1 AS ok FROM matches m
+       LEFT JOIN season_calendar sc ON sc.id = m.calendar_id
+      WHERE (m.home_team_id = ? OR m.away_team_id = ?)
+        AND substr(COALESCE(sc.scheduled_at, m.created_at), 1, 10) = ?
+     UNION ALL
+     SELECT 1 FROM cup_matches cm
+       JOIN cup_teams ct ON ct.id IN (cm.home_cup_team_id, cm.away_cup_team_id)
+      WHERE ct.team_id = ? AND substr(cm.scheduled_at, 1, 10) = ?
+     LIMIT 1`,
+  ).bind(teamId, teamId, day, teamId, day).first<{ ok: number }>()
+    // Při chybě se platí jako dřív: neplatit za proběhlý trénink by bylo horší než zaplatit za odpadlý
+    .catch((e) => { logger.warn({ module: "team-day", teamId }, "zápas v den tréninku", e); return null; });
+  return !!row;
+}
+
+export type TrainingCostOutcome = "charged" | "no_training" | "match_day";
+
+/**
+ * Náklad na trénink za herní den `gameDate`. Platí se jen za trénink, který proběhl: stejné dny
+ * jako v daily-tick.ts (týdenní plán má přednost před vlastními dny a ty před výchozím rozpisem)
+ * a ne v den zápasu, kdy trénink odpadá. Dřív se v zápasový den platilo, i když se netrénovalo.
+ * O víkendu se trénuje zdarma (náklad se počítá jen v pondělí až pátek), to se nemění.
+ */
+export async function chargeTrainingCost(db: D1Database, team: Record<string, unknown>, gameDate: string): Promise<TrainingCostOutcome> {
+  const teamId = team.id as string;
+  const dayOfWeek = new Date(gameDate).getUTCDay();
+  const costPlan = parseTrainingPlan(team.training_plan as string | null, teamId);
+  // AI klub bez nastaveného typu trénuje výchozí kondici (daily-tick), takže za ni i platí.
+  const { teamTrainingType } = await import("./training");
+  const costTrainingType = teamTrainingType(team.training_type as string | null, team.user_id as string | null);
+  if (!(costTrainingType || costPlan) || dayOfWeek < 1 || dayOfWeek > 5) return "no_training";
+  const sessions = (team.training_sessions as number) ?? 2;
+  const trainingDayMap: Record<number, number[]> = {
+    1: [2], 2: [2, 4], 3: [1, 3, 5], 4: [1, 2, 4, 5], 5: [1, 2, 3, 4, 5],
+  };
+  let customDays: number[] | null = null;
+  if (team.training_days) {
+    try {
+      const parsed = JSON.parse(team.training_days as string);
+      if (Array.isArray(parsed) && parsed.every((d) => typeof d === "number" && d >= 0 && d <= 6)) {
+        customDays = parsed;
+      }
+    } catch (e) { logger.warn({ module: "daily-tick", teamId }, "parse training_days for cost", e); }
+  }
+  // Dny z týdenního plánu mají přednost — stejné pořadí jako u samotného tréninku,
+  // jinak by se náklad strhl v den, kdy se netrénovalo (nebo naopak chyběl).
+  const planDaysForCost = costPlan ? Object.keys(costPlan).map(Number).filter((d) => d >= 0 && d <= 6) : [];
+  const trainingDays = planDaysForCost.length > 0
+    ? planDaysForCost
+    : (customDays && customDays.length > 0) ? customDays : (trainingDayMap[sessions] ?? trainingDayMap[2]);
+  if (!trainingDays.includes(dayOfWeek)) return "no_training";
+  // V den zápasu trénink odpadá (daily-tick.ts „Zápasový den, trénink odpadá“), tak se ani neplatí
+  if (await teamPlaysOnDay(db, teamId, gameDate.slice(0, 10))) return "match_day";
+  const { processTrainingCost } = await import("./finance-processor");
+  await processTrainingCost(db, teamId, gameDate, (team.village_size as string) ?? "village");
+  return "charged";
 }
 
 /** Zpracuje jeden herní den jednoho týmu. */
@@ -575,46 +640,11 @@ export async function processTeamDay(
       }
     } catch (e) { logger.warn({ module: "daily-tick" }, `fan groups failed for team ${teamId}`, e); }
 
-    // ── Training cost (only on actual training days that ran — custom training_days
-    // override default mapping, smart-skip se kontroluje u top loop a tady musíme
-    // replikovat stejné podmínky, aby se náklad netáhl při skipnutém tréninku) ──
-    const costPlan = parseTrainingPlan(team.training_plan as string | null, teamId);
-    // AI klub bez nastaveného typu trénuje výchozí kondici (daily-tick), takže za ni i platí.
-    const { teamTrainingType } = await import("./training");
-    const costTrainingType = teamTrainingType(team.training_type as string | null, team.user_id);
-    if ((costTrainingType || costPlan) && newDayOfWeek >= 1 && newDayOfWeek <= 5) {
-      const sessions = (team.training_sessions as number) ?? 2;
-      const trainingDayMap: Record<number, number[]> = {
-        1: [2], 2: [2, 4], 3: [1, 3, 5], 4: [1, 2, 4, 5], 5: [1, 2, 3, 4, 5],
-      };
-      let customDays: number[] | null = null;
-      if (team.training_days) {
-        try {
-          const parsed = JSON.parse(team.training_days as string);
-          if (Array.isArray(parsed) && parsed.every((d) => typeof d === "number" && d >= 0 && d <= 6)) {
-            customDays = parsed;
-          }
-        } catch (e) { logger.warn({ module: "daily-tick", teamId }, "parse training_days for cost", e); }
-      }
-      // Dny z týdenního plánu mají přednost — stejné pořadí jako u samotného tréninku výše,
-      // jinak by se náklad strhl v den, kdy se netrénovalo (nebo naopak chyběl).
-      const planDaysForCost = costPlan ? Object.keys(costPlan).map(Number).filter((d) => d >= 0 && d <= 6) : [];
-      const trainingDays = planDaysForCost.length > 0
-        ? planDaysForCost
-        : (customDays && customDays.length > 0) ? customDays : (trainingDayMap[sessions] ?? trainingDayMap[2]);
-
-      if (trainingDays.includes(newDayOfWeek)) {
-        // Trénuje se každý nastavený den, takže se za každý i platí (dřív odpadalo
-        // spolu s automatickým volnem před zápasem).
-        {
-          try {
-            const { processTrainingCost } = await import("./finance-processor");
-            await processTrainingCost(env.DB, teamId, newGameDate, (team.village_size as string) ?? "village");
-          } catch (e) {
-            logger.error({ module: "daily-tick" }, `training cost failed for team ${teamId}`, e);
-          }
-        }
-      }
+    // ── Náklad na trénink: jen v den, kdy tým opravdu trénoval (chargeTrainingCost níž) ──
+    try {
+      await chargeTrainingCost(env.DB, team, newGameDate);
+    } catch (e) {
+      logger.error({ module: "daily-tick" }, `training cost failed for team ${teamId}`, e);
     }
 
     // Match simulation is handled by MATCH TICK (separate cron at 18:00)
@@ -623,7 +653,9 @@ export async function processTeamDay(
       try {
         const todayEnd = new Date(gd); todayEnd.setUTCHours(23, 59, 59, 999);
         const todayMatch = await env.DB.prepare(
-          "SELECT id, scheduled_at FROM season_calendar WHERE league_id = ? AND scheduled_at <= ? AND status = 'scheduled' ORDER BY scheduled_at ASC LIMIT 1"
+          // Jen aktuální sezóna: neodehrané kolo z loňska má termín dávno v minulosti
+          // a ranní omluvenky by se psaly k němu místo k dnešnímu zápasu.
+          `SELECT id, scheduled_at FROM season_calendar WHERE league_id = ? AND scheduled_at <= ? AND status = 'scheduled' AND ${currentSeasonSql("season_calendar")} ORDER BY scheduled_at ASC LIMIT 1`
         ).bind(team.league_id, todayEnd.toISOString()).first<{ id: string; scheduled_at: string }>().catch((e) => { logger.warn({ module: "daily-tick" }, "today match lookup", e); return null; });
 
         if (todayMatch) {

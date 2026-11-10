@@ -558,8 +558,10 @@ export async function applyPostMatchInterviewEffects(
      ORDER BY created_at DESC LIMIT 1`
   ).bind(interview.team_id, interview.id).first<{ analysis: string }>()
     .catch((e) => { logger.warn({ module: M }, "předchozí analýza", e); return null; });
-  const opakovana = safeParse<{ rozhodci?: { postoj?: string } }>(predchozi?.analysis ?? null, {})
-    .rozhodci?.postoj === "kritika";
+  const previousStance = safeParse<{ rozhodci?: { postoj?: string } }>(predchozi?.analysis ?? null, {})
+    .rozhodci?.postoj;
+  const opakovana = previousStance === "kritika";
+  const repeatedDefense = previousStance === "obhajoba";
 
   // Sazbu pokuty za kritiku rozhodčího si odhlasovala soutěž. Bez samosprávy platí výchozí.
   const { resolveRules } = await import("../competition/rules");
@@ -569,7 +571,7 @@ export async function applyPostMatchInterviewEffects(
     .catch((e) => { logger.warn({ module: M }, "sezóna ligy pro sazebník pokut", e); return null; });
   const compRules = await resolveRules(db, interview.league_id, seasonRow?.n ?? null);
 
-  const eff = effectsFor(stance.postoj, stance.sila, opakovana, compRules.fine_referee_abuse);
+  const eff = effectsFor(stance.postoj, stance.sila, opakovana, compRules.fine_referee_abuse, repeatedDefense);
 
   // Pokuta: deterministická podle rozhovoru, aby opakované volání nedalo jinou částku.
   const rng = createRng(seedFromString(`fine-${interview.id}`));
@@ -626,12 +628,14 @@ export async function applyPostMatchInterviewEffects(
   // Pokuta od disciplinární komise.
   if (fine > 0) {
     try {
-      const { recordTransaction } = await import("../season/finance-processor");
+      const { recordTransaction, clubAccountOf, YOUTH_LABEL } = await import("../season/finance-processor");
       const gameDate = await db.prepare("SELECT game_date FROM teams WHERE id = ?")
         .bind(interview.team_id).first<{ game_date: string | null }>();
+      // Rozhovor po zápase dorostu: pokutu platí mateřský klub.
+      const account = await clubAccountOf(db, interview.team_id);
       await recordTransaction(
-        db, interview.team_id, "disciplinary_fine", -fine,
-        `Pokuta disciplinární komise za výroky o rozhodčím${ctx.refereeName ? ` (${ctx.refereeName})` : ""}`,
+        db, account.payerId, "disciplinary_fine", -fine,
+        `Pokuta disciplinární komise za výroky o rozhodčím${ctx.refereeName ? ` (${ctx.refereeName})` : ""}${account.isYouth ? `, ${YOUTH_LABEL}` : ""}`,
         gameDate?.game_date ?? new Date().toISOString(),
         `fine-${interview.id}`,
       );
@@ -711,8 +715,9 @@ export async function applyPostMatchInterviewEffects(
             text: `${myManager} po zápase kontroval na výrok soupeře`,
           });
         } else {
+          // Smířlivá odpověď napětí opravdu ubere, nejen přidá respekt.
           await applyRelationEvent(db, interview.team_id, opponentId, {
-            respect: 4, icon: "🤝",
+            respect: 4, heat: -2, icon: "🤝",
             text: `${myManager} po zápase napětí zchladil`,
           });
         }

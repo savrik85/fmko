@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Bindings } from "../index";
 import {
-  buyChoiceKeys, buyNegotiationBounds, buyNegotiationSchema, buyPickSchema, CASH_TERMS, hasBuyChoice, minimumBid,
+  buyChoiceKeys, buyNegotiationBounds, buyNegotiationSchema, buyPickSchema, CASH_TERMS, hasBuyChoice, minimumBid, pastOffersText,
   renderBuyNegotiationPrompt, renderBuyPickPrompt, validateBuyNegotiation, validateBuyPick,
   type BuyNegotiationContext, type BuyPickContext,
 } from "./buy-decision";
@@ -147,6 +147,25 @@ describe("výběr hráče modelem: model navrhuje, kód hlídá", () => {
     expect(prompt).toContain('"demand": post a public wanted ad');
     expect(prompt).toContain("ALREADY TRIED TODAY WITHOUT A DEAL:");
     expect(prompt).toContain("the club broke off the talks");
+  });
+
+  it("model vidí své dřívější nabídky na téhož hráče a jak dopadly", () => {
+    expect(pastOffersText([])).toBe("");
+    expect(pastOffersText(undefined)).toBe("");
+    const base = pickCtx();
+    const prompt = renderBuyPickPrompt(pickCtx({
+      candidates: [{
+        ...base.candidates[0], route: "offer", askingPrice: null,
+        pastOffers: [
+          { amount: 7000, outcome: "ignored", counter: null, daysAgo: 4 },
+          { amount: 6500, outcome: "countered", counter: 14_000, daysAgo: 9 },
+          { amount: 6000, outcome: "rejected", counter: null, daysAgo: 1 },
+        ],
+      }],
+    }));
+    expect(prompt).toContain("YOUR EARLIER OFFERS for him: 7,000 CZK 4 days ago: the club never answered and it expired; 6,500 CZK 9 days ago: the club asked for more and you walked away (they wanted 14,000 CZK); 6,000 CZK 1 day ago: the club refused it.");
+    expect(prompt).toContain("The same offer again will end the same way");
+    expect(renderBuyPickPrompt(base)).not.toContain("YOUR EARLIER OFFERS");
   });
 
   it("spodní mez nabídky je 70 % ceny, nejméně 500 Kč a nikdy nad nabídkou pravidla", () => {

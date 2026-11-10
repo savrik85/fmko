@@ -339,9 +339,9 @@ export default function SquadPage() {
                     <td className="py-2 px-1.5 text-center tabular-nums font-heading font-bold">{(s.goals ?? 0) + (s.assists ?? 0)}</td>
                     <td className="py-2 px-1.5 text-center tabular-nums text-amber-600">{s.yellowCards ?? 0}</td>
                     <td className="py-2 px-1.5 text-center tabular-nums text-card-red">{s.redCards ?? 0}</td>
-                    <td className="py-2 px-1.5 text-center tabular-nums">{s.position === "GK" ? (s.cleanSheets ?? 0) : "—"}</td>
+                    <td className="py-2 px-1.5 text-center tabular-nums">{s.position === "GK" ? (s.cleanSheets ?? 0) : "-"}</td>
                     <td className="py-2 px-1.5 text-center tabular-nums text-gold-600">{s.manOfMatch ?? 0}</td>
-                    <td className="py-2 px-1.5 text-center tabular-nums font-heading font-bold">{s.avgRating != null && s.avgRating > 0 ? s.avgRating.toFixed(1) : "—"}</td>
+                    <td className="py-2 px-1.5 text-center tabular-nums font-heading font-bold">{s.avgRating != null && s.avgRating > 0 ? s.avgRating.toFixed(1) : "-"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -494,19 +494,19 @@ function DochazkaTab({ rows, sortKey, sortDir, onSort }: {
                   </td>
                   <td className="py-2 px-1.5 text-center"><PositionBadge position={r.position} /></td>
                   <td className={`py-2 px-1.5 text-center tabular-nums font-heading font-bold ${pctColor}`}>
-                    {r.trainingTotal > 0 ? `${r.trainingPct}%` : "—"}
+                    {r.trainingTotal > 0 ? `${r.trainingPct}%` : "-"}
                   </td>
                   <td className="py-2 px-1.5 text-center tabular-nums text-muted">
-                    {r.trainingTotal > 0 ? `${r.trainingAttended}/${r.trainingTotal}` : "—"}
+                    {r.trainingTotal > 0 ? `${r.trainingAttended}/${r.trainingTotal}` : "-"}
                   </td>
                   <td className="py-2 px-1.5 text-center tabular-nums">
                     {r.matchesPlayed}/{r.matchesAvailable}
                   </td>
-                  <td className="py-2 px-1.5 text-center tabular-nums text-card-red">{r.breakdown.injury || "—"}</td>
-                  <td className="py-2 px-1.5 text-center tabular-nums text-amber-600">{r.breakdown.suspension || "—"}</td>
-                  <td className="py-2 px-1.5 text-center tabular-nums text-blue-600">{r.breakdown.excuse || "—"}</td>
-                  <td className="py-2 px-1.5 text-center tabular-nums text-muted">{r.breakdown.bench || "—"}</td>
-                  <td className="py-2 px-1.5 text-center tabular-nums text-muted">{r.breakdown.notNominated || "—"}</td>
+                  <td className="py-2 px-1.5 text-center tabular-nums text-card-red">{r.breakdown.injury || "-"}</td>
+                  <td className="py-2 px-1.5 text-center tabular-nums text-amber-600">{r.breakdown.suspension || "-"}</td>
+                  <td className="py-2 px-1.5 text-center tabular-nums text-blue-600">{r.breakdown.excuse || "-"}</td>
+                  <td className="py-2 px-1.5 text-center tabular-nums text-muted">{r.breakdown.bench || "-"}</td>
+                  <td className="py-2 px-1.5 text-center tabular-nums text-muted">{r.breakdown.notNominated || "-"}</td>
                 </tr>
               );
             })}

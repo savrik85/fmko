@@ -16,6 +16,7 @@ import type { OwnerPersonality } from "../sponsors/owners";
 import { favorBand, type FavorBand } from "../sponsors/overview";
 import type { AiCoachProfile } from "./profile";
 import { styleText } from "./weekly-decision";
+import { promptName } from "./prompt-text";
 
 /** Volba „tento týden nikoho neoslovit“. */
 export const NO_SPONSOR_CHOICE = "none";
@@ -140,7 +141,7 @@ export function renderMainSponsorPrompt(ctx: MainSponsorContext): string {
     `ambition ${p.ambition}, thrift ${p.thrift}, risk ${p.risk}, patience ${p.patience}, youth focus ${p.youthFocus}.`,
     `YOUR STYLE: ${styleText(p)}`,
     "",
-    `CLUB ${ctx.teamName}: reputation ${ctx.reputation}/100${league}.`,
+    `CLUB ${promptName(ctx.teamName)}: reputation ${ctx.reputation}/100${league}.`,
     `MONEY: budget ${czk(ctx.budget)}${money}.`,
     "",
     `COMPANIES from your district that would talk to you now (key: company, business, owner, favour toward your club, ${CHOICE_TEXT[ctx.category].companies}):`,

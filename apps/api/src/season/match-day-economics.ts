@@ -141,20 +141,73 @@ export async function matchDayAverages(db: D1Database, teamId: string): Promise<
 
 /**
  * Pravidelné výdaje, které týdenní model v `/budget` nezná: události, cesty skauta, úkoly
- * zaměstnanců, poplatky soutěži, akademie, posezení s trenéry a pokuty. Průměr za
- * poslední čtyři týdny. Mzdy, údržba, vybavení a trénink jsou v modelu, tady nejsou.
+ * zaměstnanců, odvody soutěži, akademie a posezení s trenéry. Průměr za poslední čtyři
+ * týdny. Mzdy, údržba, vybavení a trénink jsou v modelu, tady nejsou. Pokuty viz FINE_TYPES.
  */
 export const OTHER_RUNNING_TYPES = [
   "event", "scout_travel", "staff_task", "competition_fee", "youth_academy", "manager_social",
-  "disciplinary_fine", "incident_fine", "incident_deduction", "incident_advance",
+  "incident_deduction", "incident_advance",
 ] as const;
 
+/**
+ * Pokuty. Nechodí pravidelně, takže se neprůměrují za čtyři týdny, ale za celou sezónu:
+ * jedna pokuta 12 000 Kč dřív prognóze ubírala 3 000 Kč každý týden až do konce sezóny.
+ */
+export const FINE_TYPES = ["disciplinary_fine", "incident_fine"] as const;
+
+/**
+ * Platby soutěži jednou za sezónu podle reference_id: startovné (`fee-…`) a splátka
+ * bezúročné půjčky (`loanrep-…`). Typ `competition_fee` mají společný s průběžnými
+ * odvody, ty do pravidelných výdajů patří dál. Startovné 15 000 Kč se dřív čtyři týdny
+ * po začátku sezóny promítalo do každého týdne prognózy jako 3 750 Kč.
+ */
+export const SEASON_ONCE_REFERENCE_PREFIXES = ["fee-", "loanrep-"] as const;
+
+const WINDOW_WEEKS = WHOLESALE_WINDOW_DAYS / 7;
+
+/**
+ * Týdenní odhad z pravidelných výdajů za poslední čtyři týdny a z pokut za sezónu.
+ * Čistá funkce. Na začátku sezóny se pokuty dělí aspoň čtyřmi týdny, stejně jako dřív.
+ */
+export function otherRunningPerWeek(input: {
+  /** Součet pravidelných výdajů za WHOLESALE_WINDOW_DAYS dní (záporný). */
+  recentTotal: number;
+  /** Součet pokut od začátku sezóny (záporný). */
+  seasonFinesTotal: number;
+  /** Kolik týdnů sezóny uběhlo. */
+  seasonWeeks: number;
+}): number {
+  const fineWeeks = Math.max(WINDOW_WEEKS, input.seasonWeeks);
+  return Math.round(input.recentTotal / WINDOW_WEEKS + input.seasonFinesTotal / fineWeeks);
+}
+
 export async function otherRunningCostsPerWeek(db: D1Database, teamId: string): Promise<number> {
-  const row = await db.prepare(
-    `SELECT COALESCE(SUM(amount), 0) AS total FROM transactions
-      WHERE team_id = ? AND type IN (${OTHER_RUNNING_TYPES.map((t) => `'${t}'`).join(",")})
-        AND julianday(created_at) > julianday('now') - ${WHOLESALE_WINDOW_DAYS}`,
-  ).bind(teamId).first<{ total: number }>()
-    .catch((e) => { logger.warn({ module: M, teamId }, "ostatní pravidelné výdaje", e); return null; });
-  return Math.round((row?.total ?? 0) / (WHOLESALE_WINDOW_DAYS / 7));
+  const inList = (types: readonly string[]) => types.map((t) => `'${t}'`).join(",");
+  const onceFilter = SEASON_ONCE_REFERENCE_PREFIXES.map((p) => `reference_id LIKE '${p}%'`).join(" OR ");
+
+  const [recent, fines] = await Promise.all([
+    db.prepare(
+      `SELECT COALESCE(SUM(amount), 0) AS total FROM transactions
+        WHERE team_id = ? AND type IN (${inList(OTHER_RUNNING_TYPES)})
+          AND NOT (type = 'competition_fee' AND reference_id IS NOT NULL AND (${onceFilter}))
+          AND julianday(created_at) > julianday('now') - ${WHOLESALE_WINDOW_DAYS}`,
+    ).bind(teamId).first<{ total: number }>()
+      .catch((e) => { logger.warn({ module: M, teamId }, "ostatní pravidelné výdaje", e); return null; }),
+    // Sezóna i pokuty v herním čase. Tým bez začátku sezóny: pokuty za poslední čtyři týdny jako dřív.
+    db.prepare(
+      `SELECT COALESCE(SUM(x.amount), 0) AS total,
+              MAX(0, julianday(t.game_date) - julianday(t.season_start)) / 7.0 AS weeks
+         FROM teams t
+         LEFT JOIN transactions x ON x.team_id = t.id AND x.type IN (${inList(FINE_TYPES)})
+              AND x.game_date >= COALESCE(t.season_start, strftime('%Y-%m-%dT%H:%M:%SZ', t.game_date, '-${WHOLESALE_WINDOW_DAYS} days'))
+        WHERE t.id = ?`,
+    ).bind(teamId).first<{ total: number; weeks: number | null }>()
+      .catch((e) => { logger.warn({ module: M, teamId }, "pokuty za sezónu", e); return null; }),
+  ]);
+
+  return otherRunningPerWeek({
+    recentTotal: recent?.total ?? 0,
+    seasonFinesTotal: fines?.total ?? 0,
+    seasonWeeks: fines?.weeks ?? 0,
+  });
 }

@@ -121,7 +121,9 @@ const DUEL_STORIES = [
  */
 async function buildDuels(db: D1Database, teamId: string, rng: ReturnType<typeof createRng>): Promise<Duel[]> {
   const res = await db.prepare(
-    "SELECT id, first_name, last_name, position, age, overall_rating, life_context FROM players WHERE team_id = ? AND status = 'active'",
+    // Hostující hráč patří jinému klubu, do soubojů nesmí (hostitel by ho smazal nadobro).
+    // Vlastní hráč půjčený jinam má team_id hostitele, takže se sem nedostane taky.
+    "SELECT id, first_name, last_name, position, age, overall_rating, life_context FROM players WHERE team_id = ? AND status = 'active' AND loan_from_team_id IS NULL",
   ).bind(teamId).all<{ id: string; first_name: string; last_name: string; position: string; age: number; overall_rating: number; life_context: string }>()
     .catch((e) => { logger.warn({ module: "season-departures" }, "load squad for duels", e); return { results: [] as any[] }; });
   const players = res.results;

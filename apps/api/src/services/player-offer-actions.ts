@@ -14,6 +14,29 @@ import { recordTransaction } from "../season/finance-processor";
 
 const M = "player-offer-actions";
 
+/**
+ * Co z nabídky smí vidět hráč. Nabídka nese v `personality.hiddenTalent` skrytý talent
+ * a v `life_context.skillsMax` stropy rozvoje (přijetí je odsud přenese do sloupců hráče):
+ * obojí se do odpovědi neposílá. U kluka z dorostu (ne žáka z akademie, tam talent ukazuje
+ * Akademie slovy trenéra) zůstává jen pásmo talentu, které stránka ukazovala už dřív.
+ */
+export function publicOfferDetails(offer: { source: unknown; prospect_id: unknown; personality: unknown; life_context: unknown }): {
+  personality: Record<string, unknown>;
+  lifeContext: Record<string, unknown>;
+  talentBand: "high" | "medium" | "low" | null;
+} {
+  const parse = (raw: unknown, what: string): Record<string, unknown> => {
+    try { return JSON.parse((raw as string | null) ?? "{}") as Record<string, unknown>; }
+    catch (e) { logger.warn({ module: M }, `parse offer ${what}`, e); return {}; }
+  };
+  const { hiddenTalent, ...personality } = parse(offer.personality, "personality");
+  const { skillsMax: _caps, ...lifeContext } = parse(offer.life_context, "life_context");
+  const showBand = offer.source === "youth" && !offer.prospect_id && typeof hiddenTalent === "number";
+  // Stejné prahy jako talentBand v ai-coach/player-offer-decision.ts (AI trenér vidí totéž co člověk)
+  const band = (t: number) => (t >= 30 ? "high" : t >= 18 ? "medium" : "low");
+  return { personality, lifeContext, talentBand: showBand ? band(hiddenTalent as number) : null };
+}
+
 /** Registrace hráče z nabídky. */
 export const PLAYER_OFFER_SIGNING_FEE = 500;
 
@@ -49,7 +72,7 @@ export async function acceptPlayerOffer(db: D1Database, teamId: string, offerId:
   // Žák z cizích žáků (soused bez dorostu): odstupné jeho klubu. Peníze zkontrolovat PŘED
   // zabráním, stejně jako u nákupů jinde ve hře (finance-processor.assertPurchaseAllowed).
   const prospectOrigin = offer.prospect_id
-    ? await db.prepare("SELECT team_id, aged_season FROM youth_prospects WHERE id = ?").bind(offer.prospect_id).first<{ team_id: string; aged_season: number | null }>()
+    ? await db.prepare("SELECT team_id, aged_season, status FROM youth_prospects WHERE id = ?").bind(offer.prospect_id).first<{ team_id: string; aged_season: number | null; status: string }>()
         .catch((e) => { logger.warn({ module: M, teamId }, "load academy prospect", e); return null; })
     : null;
   if (prospectOrigin && prospectOrigin.team_id !== teamId) {
@@ -120,16 +143,28 @@ export async function acceptPlayerOffer(db: D1Database, teamId: string, offerId:
   // přijme až po přechodu do nové sezóny, stárnutí ho minulo: rok mu přidat (jinak by celou
   // sezónu zůstal čtrnáctiletý a nesměl do áčka).
   let age = Number(offer.age);
+  let missedSummer = false;
   if (prospectOrigin?.aged_season != null) {
     const current = await db.prepare("SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1").first<{ number: number }>()
       .catch((e) => { logger.warn({ module: M, teamId }, "active season for academy offer", e); return null; });
-    if (current && current.number > prospectOrigin.aged_season) age += current.number - prospectOrigin.aged_season;
+    if (current && current.number > prospectOrigin.aged_season) {
+      age += current.number - prospectOrigin.aged_season;
+      missedSummer = true;
+    }
   }
+  // Čerstvý odchovanec z letního postupu (vlastní dorost, nebo soused s dorostem) vzniká těsně
+  // před letním dospíváním: dovednosti právě dostal z generátoru, letní skok by přišel navíc,
+  // proto ho v tomhle létě přeskočí (season/dospivani.ts, značku pak maže rollover, fáze u21_flags).
+  // Žák povýšený během sezóny značku nedostává: v létě dospívá jako každý jiný dorostenec.
+  const summerGraduate = !!opts.mandatory || prospectOrigin?.status === "leaving";
+  const playerLifeContext: Record<string, unknown> = prospectId && summerGraduate && !missedSummer
+    ? { ...lifeContextWithoutCaps, freshAcademyGraduate: true }
+    : lifeContextWithoutCaps;
   await db.prepare(
     `INSERT INTO players (id, team_id, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, weekly_wage, status, nationality, hidden_talent, skills_max, raised_by_team_id)
      VALUES (?, ?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)`
   ).bind(playerId, targetTeamId, offer.first_name, offer.last_name, age, offer.position, offer.overall_rating,
-    offer.skills, offer.physical, offer.personality, JSON.stringify(lifeContextWithoutCaps), offer.avatar, offer.weekly_wage,
+    offer.skills, offer.physical, offer.personality, JSON.stringify(playerLifeContext), offer.avatar, offer.weekly_wage,
     (offer.nationality as string) ?? "CZ", hiddenTalent, JSON.stringify(skillsMax), raisedBy).run();
 
   // Set residence

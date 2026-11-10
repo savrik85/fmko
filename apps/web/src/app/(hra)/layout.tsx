@@ -63,7 +63,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         )}
 {/* no-scrollbar: `main` je scrollovací plocha a klasický posuvník si
             ukrajoval 15 px šířky. Hlavička stránky uvnitř pak končila 15 px
-            před pravým okrajem, kdežto horní lišta nad ní šla až ke kraji —
+            před pravým okrajem, kdežto horní lišta nad ní šla až ke kraji -
             vypadalo to jako zúžená hlavička se světlým proužkem vpravo.
             Na dotyku je posuvník překryvný, takže se tam nic neztrácí. */}
         <main className="flex-1 overflow-y-auto no-scrollbar pb-20 sm:pb-0 bg-paper">

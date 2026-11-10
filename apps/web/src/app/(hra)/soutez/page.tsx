@@ -73,6 +73,11 @@ const ROLE_OF_GESCE: Record<string, string> = {
 };
 
 const ANSWER_LABEL: Record<string, string> = { pro: "Pro", proti: "Proti", zdrzel: "Zdržel se" };
+// U odvolání proti pokutě šlo „Proti" číst jako „proti pokutě", tlačítka proto říkají, co hlas udělá.
+const APPEAL_ANSWER_LABEL: Record<string, string> = { pro: "Zrušit pokutu", proti: "Pokutu ponechat", zdrzel: "Zdržel se" };
+function answerLabel(kind: string, answer: string): string {
+  return (kind === "appeal" ? APPEAL_ANSWER_LABEL : ANSWER_LABEL)[answer] ?? answer;
+}
 
 /**
  * Hodnota návrhu v řeči, kterou hráč čte. Zrcadlí formatRuleValue na serveru —
@@ -463,7 +468,7 @@ export default function SoutezPage() {
           )}
           {/* Odbory hned pod hlavní záložky. Mezi těmi dvěma lištami dřív visela
               vývěska a hráč se k agendě odboru proscrolloval přes šest cizích
-              rozhodnutí — dvě navigace oddělené dlouhým seznamem. Co grémium
+              rozhodnutí, dvě navigace oddělené dlouhým seznamem. Co grémium
               rozhodlo, je pod agendou; kdo si to chce přečíst, ten doscrolluje. */}
           <Tabs
             items={gesceList.map((g) => ({
@@ -713,7 +718,7 @@ function ProposalCard({ p, myTeamId, avatars, onVote, onWithdraw, onDefend, canV
                 {(["pro", "proti", "zdrzel"] as const).map((a) => (
                   <button key={a} onClick={() => onVote(p.id, a)}
                     className={`btn btn-md ${p.myAnswer === a ? "btn-primary" : "btn-secondary"}`}>
-                    {ANSWER_LABEL[a]}
+                    {answerLabel(p.kind, a)}
                   </button>
                 ))}
               </div>
@@ -721,7 +726,7 @@ function ProposalCard({ p, myTeamId, avatars, onVote, onWithdraw, onDefend, canV
 
             {p.myAnswer && (
               <div className="text-sm text-muted">
-                Tvůj hlas: {ANSWER_LABEL[p.myAnswer]}. Do zahájení zasedání ho můžeš změnit.
+                Tvůj hlas: {answerLabel(p.kind, p.myAnswer)}. Do zahájení zasedání ho můžeš změnit.
               </div>
             )}
             {mine && (
@@ -740,7 +745,7 @@ function ProposalCard({ p, myTeamId, avatars, onVote, onWithdraw, onDefend, canV
                   if (list.length === 0) return null;
                   return (
                     <div key={a} className="break-words">
-                      <span className="text-muted">{ANSWER_LABEL[a]}: </span>
+                      <span className="text-muted">{answerLabel(p.kind, a)}: </span>
                       {list.map((v, i) => (
                         <span key={v.teamId}>
                           {i > 0 && ", "}
@@ -871,7 +876,7 @@ function ProposalForm({ teamId, state, gesce, onClose, onSaved }: {
                 <label className="text-sm text-muted">
                   Nová hodnota
                   {/* Rozsah se píše čísly. fmtValue umí nulu přeložit na „bez omezení",
-                      což z „0 – 60 bodů" udělá „bez omezení. 60 bodů" — a to se čte
+                      což z „0 – 60 bodů" udělá „bez omezení. 60 bodů", a to se čte
                       jako by pole žádný strop nemělo. Co znamená nula, říká poznámka. */}
                   {spec.min !== null && spec.max !== null && ` (${fmtRozsah(spec)})`}
                 </label>
@@ -894,7 +899,7 @@ function ProposalForm({ teamId, state, gesce, onClose, onSaved }: {
         )}
 
         {/* Návrh mimo rozpočet (stav hřiště, soupiska, sázky) nemá na klubovou
-            kasu vliv — čtyři řádky nul jsou jen šum. */}
+            kasu vliv, čtyři řádky nul jsou jen šum. */}
         {impact && zmeneno && (impact.delta.matchBonus !== 0 || impact.delta.placeReward !== 0 || impact.delta.entryFee !== 0) && (
           <div className="rounded-lg p-3 text-sm space-y-1" style={{ background: "var(--color-paper)" }}>
             <div className="font-semibold">Dopad na tvůj klub při současné formě</div>

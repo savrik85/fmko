@@ -631,7 +631,7 @@ export default function NewsPage() {
           ))}
 
           {/* ═══ Rozhovorové rubriky ═══
-              Pořadí není pevné — nahoru jde ta, ve které vyšel nejčerstvější
+              Pořadí není pevné, nahoru jde ta, ve které vyšel nejčerstvější
               článek. Natvrdo dané pořadí znamenalo, že po kole bez pozápasových
               rozhovorů viselo nad čerstvými rozhovory kola staré vydání. */}
           {[
@@ -684,7 +684,7 @@ export default function NewsPage() {
                       avatar={meta.managerAvatar}
                       jmenoHref={iv.teamId ? `/manazer/${iv.teamId}` : undefined}
                       text={meta.article ?? iv.body}
-                      poznamka={meta.vztah ? `${meta.vztah.popis}${meta.vztah.dopad ? ` — ${meta.vztah.dopad}` : ""}` : undefined}
+                      poznamka={meta.vztah ? `${meta.vztah.popis}${meta.vztah.dopad ? `, ${meta.vztah.dopad}` : ""}` : undefined}
                     />
                   );
                 })}
@@ -920,7 +920,7 @@ function Podpis({ clanek, stred = false }: { clanek: Article; stred?: boolean })
         <Link
           href={`/redakce/${autor.id}`}
           className="uppercase tracking-[0.12em] font-heading font-bold text-ink hover:underline underline-offset-2"
-          title={`Profil redaktora — ${STYL_POPIS[autor.style] ?? "redakce"}`}
+          title={`Profil redaktora: ${STYL_POPIS[autor.style] ?? "redakce"}`}
         >
           {autor.name}
         </Link>

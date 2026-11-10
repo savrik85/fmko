@@ -105,7 +105,7 @@ export function ScoutReportSheet({ teamId, reportId, onClose, onChanged }: {
     const out: { res: { success: boolean; decision?: { explanation?: string } } | null } = { res: null };
     const done = await apiAction(
       apiFetch<{ success: boolean; decision?: { explanation?: string } }>(`/api/teams/${teamId}/free-agents/${r.freeAgentId}/sign`, {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ offeredWage: r.weeklyWage ?? 0 }),
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ offeredWage: r.weeklyWage ?? undefined }),
       }).then((x) => { out.res = x; }),
       "Podpis se nezdařil",
     );

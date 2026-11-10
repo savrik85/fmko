@@ -18,6 +18,7 @@ import { reasonSms, unrestReasonsFromFactors, type ClubStep, type UnrestReason }
 import { LEVEL_RANK } from "../league/district-leagues";
 import { resolvePromises } from "./promises";
 import { stanceForOffer } from "../messaging/player-memory";
+import { marketValue } from "@okresni-masina/shared";
 
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 const DAY_MS = 86400000;
@@ -129,6 +130,37 @@ const FAKE_INJURIES: { type: string; description: string; smsText: string }[] = 
   { type: "koleno", description: "Bolest v koleni", smsText: "Trenére, to koleno prostě nejde. Píchá v něm při každém kroku, musím pauzírovat." },
 ];
 
+/**
+ * Nejnižší cena, za kterou AI klub hráče pouští: u přestupu rezervace podle významu v kádru
+ * a aspoň tržní hodnota (se slibem prodeje jen tržní hodnota, jako v rozhodnutí o nabídce),
+ * u hostování požadovaný poplatek. Null = klub ho nepouští vůbec (oporu na hostování).
+ * Když kádr nejde načíst, platí tržní hodnota.
+ */
+export async function aiClubPriceFloor(
+  db: D1Database,
+  clubTeamId: string,
+  player: { id: string; rating: number; age: number; position: string | null; promisedSale: boolean; isLoan: boolean; loanDays: number },
+): Promise<number | null> {
+  const value = marketValue(player.rating, player.age, player.position);
+  try {
+    const { ensureAiProfile } = await import("../ai-coach/profile");
+    const { loadAiClubState } = await import("../ai-coach/transfer-club");
+    const { reservationPrice } = await import("../ai-coach/valuation");
+    const { requiredLoanFee } = await import("../ai-coach/transfer-decision");
+    const now = new Date();
+    const profile = await ensureAiProfile(db, clubTeamId);
+    const club = await loadAiClubState(db, clubTeamId, profile, now);
+    if (!club) return player.isLoan ? 0 : value;
+    const importance = club.analysis.importanceOf(player.id);
+    if (player.isLoan) return requiredLoanFee({ marketValue: value, age: player.age, importance, loanDays: player.loanDays });
+    if (player.promisedSale) return value;
+    return Math.max(value, reservationPrice({ marketValue: value, age: player.age, importance, profile, playerId: player.id, now }));
+  } catch (e) {
+    logger.warn({ module: "rejection-impact" }, `cena AI klubu ${clubTeamId} za hráče ${player.id}`, e);
+    return player.isLoan ? 0 : value;
+  }
+}
+
 interface OfferLike {
   id?: unknown;
   player_id?: unknown;
@@ -216,6 +248,23 @@ export async function applyOfferRejectionImpact(
   // Trenér si nabídku sám vyžádal a slíbil hráče pustit („Pustit ho“), a teď ji odmítl
   // nebo nechal propadnout: porušený slib bez ohledu na to, jak moc hráč chce pryč.
   const brokenReleasePledge = unrest.pledge?.type === "release" && unrest.pledge.offerId === (offer.id as string);
+
+  // AI klub: nabídka pod cenou, za kterou klub hráče pouští, hráče nerozhodí. Jinak šlo sérií
+  // směšných nabídek hráče AI klubu naštvat, vynutit slib prodeje a koupit ho pod cenou.
+  if (silent && !brokenReleasePledge) {
+    const rated = await db.prepare("SELECT overall_rating, age, position FROM players WHERE id = ?").bind(playerId)
+      .first<{ overall_rating: number | null; age: number | null; position: string | null }>()
+      .catch((e) => { logger.warn({ module: "rejection-impact" }, "hodnocení hráče AI klubu", e); return null; });
+    const floor = await aiClubPriceFloor(db, sellerClubTeamId, {
+      id: playerId, rating: Number(rated?.overall_rating) || 0, age: Number(rated?.age) || 25, position: rated?.position ?? null,
+      promisedSale: unrest.pledge?.type === "transfer" && new Date(unrest.pledge.deadline) > new Date(),
+      isLoan, loanDays: Number((offer as { loan_duration?: unknown }).loan_duration) || 30,
+    });
+    if (floor === null || amount < floor) {
+      logger.info({ module: "rejection-impact" }, `${trigger}: nabídka ${amount} na hráče AI klubu ${playerId} pod cenou klubu (${floor ?? "nepouští"}), bez dopadu`);
+      return;
+    }
+  }
 
   // Co hráč trenérovi o nabídce sám napsal (messaging/player-memory.ts). Dřív dostal David Novák
   // hned po svém „nabídku odmítněte“ šablonu „smetl jste to ze stolu“ (prod 2026-10-24).

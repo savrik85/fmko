@@ -10,6 +10,7 @@
 import type { AiCoachProfile } from "./profile";
 import type { SquadImportance } from "./valuation";
 import { styleText } from "./weekly-decision";
+import { promptName } from "./prompt-text";
 
 export type DuelSide = "A" | "B";
 
@@ -81,7 +82,7 @@ export function renderSeasonDuelsPrompt(ctx: SeasonDuelsContext): string {
     `ambition ${p.ambition}, thrift ${p.thrift}, youth focus ${p.youthFocus}, risk ${p.risk}, patience ${p.patience}.`,
     `YOUR STYLE: ${styleText(p)}`,
     "",
-    `CLUB ${ctx.teamName}: ${ctx.squadSize} players in the A-team, ${ctx.goalkeepers} goalkeeper${ctx.goalkeepers === 1 ? "" : "s"}.`,
+    `CLUB ${promptName(ctx.teamName)}: ${ctx.squadSize} players in the A-team, ${ctx.goalkeepers} goalkeeper${ctx.goalkeepers === 1 ? "" : "s"}.`,
     "",
     "PAIRS (one player of each pair leaves):",
   ];

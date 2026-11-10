@@ -14,6 +14,7 @@
 
 import { logger } from "../lib/logger";
 import { sendSystemSMS } from "../messaging/system-sms";
+import { closeLoanContractStmt, returnLoanedPlayerStmt } from "./loan-return";
 
 const M = "loan-agreements";
 
@@ -757,19 +758,15 @@ export async function recallLoan(db: D1Database, actorTeamId: string, agreementO
   }
 
   // Přesun hráče je zámek: projde jen jednou, i kdyby se klikalo dvakrát.
-  const moved = await db.prepare(
-    "UPDATE players SET team_id = ?, loan_from_team_id = NULL, loan_until = NULL WHERE id = ? AND loan_from_team_id = ? AND team_id = ?",
-  ).bind(a.lender_team_id, a.player_id, a.lender_team_id, player.team_id).run();
+  // Hráč může být u hostitele i v U21: přesun i smlouva jdou podle hráče (loan-return.ts).
+  const moved = await returnLoanedPlayerStmt(db, a.player_id, a.lender_team_id).run();
   if ((moved.meta.changes ?? 0) === 0) return { ok: false, status: 409, error: "Hráč už na hostování není" };
 
   const now = nowIso();
   const gameDate = borrower.game_date ?? now;
   const stmts = [
     db.prepare("UPDATE loan_agreements SET status = 'recalled', ended_at = ? WHERE id = ?").bind(now, a.id),
-    db.prepare(
-      `UPDATE player_contracts SET is_active = 0, left_at = ?, leave_type = 'loan_end'
-        WHERE player_id = ? AND team_id = ? AND join_type = 'loan' AND is_active = 1`,
-    ).bind(gameDate, a.player_id, player.team_id),
+    closeLoanContractStmt(db, a.player_id, gameDate, "loan_end"),
     // Rozjednaný odkup hostujícího klubu ztratil smysl.
     db.prepare(
       `UPDATE transfer_offers SET status = 'withdrawn', resolved_at = ?

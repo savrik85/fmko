@@ -93,7 +93,7 @@ interface LeagueRound {
 const TAB_KEYS = ["kadr", "atributy", "rozvoj", "tabulka", "rozpis", "statistiky"] as const;
 
 function formatDate(iso: string | null): string {
-  if (!iso) return "—";
+  if (!iso) return "-";
   return new Date(iso).toLocaleDateString("cs", { day: "numeric", month: "numeric" });
 }
 
@@ -342,12 +342,15 @@ export default function U21Page() {
                       className="min-h-11 px-3 py-2 text-xs bg-pitch-500 hover:bg-pitch-600 text-white rounded disabled:opacity-50 whitespace-nowrap w-full md:w-auto"
                       title="Trvale do U21 dokud ho nepovoláš zpět"
                     >→ Přesunout do U21</button>
-                    <button
-                      disabled={busy === p.id}
-                      onClick={() => sendToU21(p.id, "next_match")}
-                      className="min-h-11 px-3 py-2 text-xs bg-gold-500 hover:bg-gold-600 text-white rounded disabled:opacity-50 whitespace-nowrap w-full md:w-auto"
-                      title="Jen na nejbližší U21 zápas, pak zpět"
-                    >→ Na jeden zápas</button>
+                    {/* Hostující hráč smí do U21 jen trvale (návrat po zápase by kolidoval s koncem hostování). */}
+                    {!young.find((y) => y.id === p.id)?.loan_from_team_id && (
+                      <button
+                        disabled={busy === p.id}
+                        onClick={() => sendToU21(p.id, "next_match")}
+                        className="min-h-11 px-3 py-2 text-xs bg-gold-500 hover:bg-gold-600 text-white rounded disabled:opacity-50 whitespace-nowrap w-full md:w-auto"
+                        title="Jen na nejbližší U21 zápas, pak zpět"
+                      >→ Na jeden zápas</button>
+                    )}
                   </div>
                 )}
               />
@@ -433,7 +436,7 @@ export default function U21Page() {
                             return <div key={side} className="flex items-center gap-2 text-sm">
                               <span className="shrink-0"><BadgePreview primary={(side === "home" ? m.homeColor : m.awayColor) || "#2D5F2D"} secondary={(side === "home" ? m.homeSecondary : m.awaySecondary) || "#FFFFFF"} pattern={((side === "home" ? m.homeBadge : m.awayBadge) as BadgePattern) || "shield"} initials={ini(name)} size={20} /></span>
                               <span className={`min-w-0 flex-1 break-words ${id === u21TeamId ? "font-bold text-pitch-600" : "text-ink"}`}>{id ? <Link href={`/tym/${id}`} className="hover:underline">{name}</Link> : name}</span>
-                              <span className="w-6 shrink-0 text-center font-bold tabular-nums">{m.status === "simulated" ? score ?? "—" : "—"}</span>
+                              <span className="w-6 shrink-0 text-center font-bold tabular-nums">{m.status === "simulated" ? score ?? "-" : "-"}</span>
                             </div>;
                           })}
                         </div>
@@ -463,7 +466,7 @@ function NextMatchBanner({ data, gameDate }: { data: { round: LeagueRound; m: Le
   const us = isHome ? { name: m.homeName, color: m.homeColor, secondary: m.homeSecondary, badge: m.homeBadge, id: m.homeTeamId } : { name: m.awayName, color: m.awayColor, secondary: m.awaySecondary, badge: m.awayBadge, id: m.awayTeamId };
   const opp = isHome ? { name: m.awayName, color: m.awayColor, secondary: m.awaySecondary, badge: m.awayBadge, id: m.awayTeamId } : { name: m.homeName, color: m.homeColor, secondary: m.homeSecondary, badge: m.homeBadge, id: m.homeTeamId };
   const date = round.scheduledAt ? new Date(round.scheduledAt) : null;
-  const dateLabel = date ? date.toLocaleDateString("cs", { weekday: "long", day: "numeric", month: "numeric" }) : "—";
+  const dateLabel = date ? date.toLocaleDateString("cs", { weekday: "long", day: "numeric", month: "numeric" }) : "-";
   const timeLabel = date ? date.toLocaleTimeString("cs", { hour: "2-digit", minute: "2-digit" }) : "";
 
   // Game-time „za N dní" — porovnáme datum zápasu s game_date hráče (ne real datum).
@@ -737,7 +740,7 @@ function PlayerList({
                   <span className="block text-[10px] text-muted">Hodnocení</span>
                 </span>
                 <span className="w-10 shrink-0 text-center tabular-nums" title="Body dovedností za 30 dní">
-                  <span className={`block text-sm font-semibold ${growth > 0 ? "text-pitch-600" : "text-muted"}`}>{growth > 0 ? `+${growth}` : "—"}</span>
+                  <span className={`block text-sm font-semibold ${growth > 0 ? "text-pitch-600" : "text-muted"}`}>{growth > 0 ? `+${growth}` : "-"}</span>
                   <span className="block text-[10px] text-muted">Růst</span>
                 </span>
                 <span aria-hidden="true" className="text-muted transition-transform group-open:rotate-180">⌄</span>
@@ -745,7 +748,7 @@ function PlayerList({
               <div className="space-y-3 rounded-lg bg-surface-2 p-3 mb-2">
                 <Link href={`/hrac/${p.id}`} className="inline-flex min-h-11 items-center text-sm font-semibold text-pitch-600 hover:underline">Profil: {p.firstName} {p.lastName} →</Link>
                 <dl className="grid grid-cols-4 gap-1 text-center">
-                  {[["Zápasy", stat?.appearances ?? 0], ["Góly", stat?.goals ?? 0], ["Asistence", stat?.assists ?? 0], ["Známka", stat?.avgRating?.toFixed(1) ?? "—"]].map(([label, value]) => (
+                  {[["Zápasy", stat?.appearances ?? 0], ["Góly", stat?.goals ?? 0], ["Asistence", stat?.assists ?? 0], ["Známka", stat?.avgRating?.toFixed(1) ?? "-"]].map(([label, value]) => (
                     <div key={label}>
                       <dt className="text-xs text-muted">{label}</dt>
                       <dd className="mt-1 text-sm font-bold tabular-nums">{value}</dd>

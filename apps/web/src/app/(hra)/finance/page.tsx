@@ -7,6 +7,7 @@ import { apiFetch } from "@/lib/api";
 import { sponsorTypeIcon, sponsorTypeLabel } from "@/lib/sponsor-types";
 import { Spinner, SectionLabel, PositionBadge, Tabs, useTabParam } from "@/components/ui";
 import { TXN_ICONS, TXN_LABELS } from "@/lib/transaction-labels";
+import { weeksText } from "@/lib/weeks-text";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Typy
@@ -34,7 +35,7 @@ interface BudgetData {
   wageBill: { weekly: number; topPlayers: WagePlayer[] };
   weekly: {
     income: { sponsors: number; baseSponsor: number; subsidy: number; playerContributions: number; transferInstallments?: number; total: number };
-    expenses: { wages: number; staffWages?: number; maintenance: number; equipment: number; training: number; loanRepayment: number; transferInstallments?: number; total: number };
+    expenses: { wages: number; staffWages?: number; maintenance: number; equipment: number; training: number; youthWages?: number; youthTraining?: number; loanRepayment: number; transferInstallments?: number; total: number };
     net: number;
     netWithLoan: number;
   };
@@ -275,9 +276,11 @@ function OverviewTab({ data, transactions, txnTotal, txnFilter, onFilter }: {
           <StatBox label="Zbývá zápasů" value={String(data.remainingMatches)} />
           <StatBox label="Za 4 týdny" value={formatCZK(data.forecast.in4Weeks)} colorRed={data.forecast.in4Weeks < 0} />
           <StatBox label="Na konci sezóny" value={formatCZK(data.forecast.inSeason)} colorRed={data.forecast.inSeason < 0} />
+          {/* Bankrot ve hře není: v mínusu se jen zablokují nákupy a investice. */}
           <StatBox
-            label="Bankrot za"
-            value={data.forecast.weeksUntilBankrupt != null ? `${data.forecast.weeksUntilBankrupt} týd` : "—"}
+            label="Peníze dojdou"
+            value={data.forecast.weeksUntilBankrupt != null ? `za ${weeksText(data.forecast.weeksUntilBankrupt)}` : "nehrozí"}
+            sub={data.forecast.weeksUntilBankrupt != null ? "pak se zablokují nákupy" : undefined}
             colorRed={data.forecast.weeksUntilBankrupt != null}
           />
         </div>
@@ -311,6 +314,8 @@ function topExpenseItems(d: BudgetData) {
     ...((d.weekly.expenses.staffWages ?? 0) > 0 ? [{ label: "Mzdy zaměstnanců", amount: d.weekly.expenses.staffWages ?? 0 }] : []),
     { label: "Údržba hřiště", amount: d.weekly.expenses.maintenance },
     { label: "Tréninky", amount: d.weekly.expenses.training },
+    ...((d.weekly.expenses.youthWages ?? 0) > 0 ? [{ label: "Mzdy dorostu (U21)", amount: d.weekly.expenses.youthWages ?? 0 }] : []),
+    ...((d.weekly.expenses.youthTraining ?? 0) > 0 ? [{ label: "Tréninky dorostu (U21)", amount: d.weekly.expenses.youthTraining ?? 0 }] : []),
     { label: "Vybavení", amount: d.weekly.expenses.equipment },
     ...(d.weekly.expenses.loanRepayment > 0 ? [{ label: "Splátka půjčky (odhad/týd)", amount: d.weekly.expenses.loanRepayment }] : []),
     { label: "Splátky za koupené hráče", amount: d.weekly.expenses.transferInstallments ?? 0 },
@@ -370,7 +375,7 @@ function FlowsTab({ data }: { data: BudgetData }) {
             <div className="card p-4 sm:p-5">
               <SectionLabel>Sponzorské smlouvy</SectionLabel>
               <p className="mt-2 text-sm text-muted">
-                Žádná podepsaná smlouva — ze sponzorů teď nekape nic. Nabídky najdeš na stránce{" "}
+                Žádná podepsaná smlouva, ze sponzorů teď nekape nic. Nabídky najdeš na stránce{" "}
                 <a href="/sponzori" className="font-heading font-bold text-ink underline">Sponzoři</a>.
               </p>
             </div>
@@ -401,10 +406,10 @@ function FlowsTab({ data }: { data: BudgetData }) {
           <div className="card p-4 sm:p-5">
             <SectionLabel>Nepravidelné příjmy</SectionLabel>
             <div className="mt-2 text-sm text-muted space-y-1">
-              <div>• <span className="font-heading font-bold text-ink">Vstupné</span> — domácí zápasy podle návštěvy a ceny.</div>
-              <div>• <span className="font-heading font-bold text-ink">Bufet</span> — buď vlastní tržby, nebo pronájem externímu provozovateli.</div>
-              <div>• <span className="font-heading font-bold text-ink">Bonusy za výsledky</span> — výhra/remíza, sponzorské win-bonusy.</div>
-              <div>• <span className="font-heading font-bold text-ink">Přestupy</span> — prodej hráčů, jednorázové příjmy.</div>
+              <div>• <span className="font-heading font-bold text-ink">Vstupné</span>, domácí zápasy podle návštěvy a ceny.</div>
+              <div>• <span className="font-heading font-bold text-ink">Bufet</span>, buď vlastní tržby, nebo pronájem externímu provozovateli.</div>
+              <div>• <span className="font-heading font-bold text-ink">Bonusy za výsledky</span>, výhra/remíza, sponzorské win-bonusy.</div>
+              <div>• <span className="font-heading font-bold text-ink">Přestupy</span>, prodej hráčů, jednorázové příjmy.</div>
             </div>
           </div>
         </>
@@ -418,6 +423,12 @@ function FlowsTab({ data }: { data: BudgetData }) {
             <div className="space-y-2.5">
               <BarRow label="Mzdy hráčů" amount={data.weekly.expenses.wages} max={totalExpWithLoan} icon="💸" />
               <BarRow label="Tréninky" amount={data.weekly.expenses.training} max={totalExpWithLoan} icon="🏋" />
+              {(data.weekly.expenses.youthWages ?? 0) > 0 && (
+                <BarRow label="Mzdy dorostu (U21)" amount={data.weekly.expenses.youthWages ?? 0} max={totalExpWithLoan} icon="🧒" />
+              )}
+              {(data.weekly.expenses.youthTraining ?? 0) > 0 && (
+                <BarRow label="Tréninky dorostu (U21)" amount={data.weekly.expenses.youthTraining ?? 0} max={totalExpWithLoan} icon="🏃" />
+              )}
               <BarRow label="Údržba hřiště" amount={data.weekly.expenses.maintenance} max={totalExpWithLoan} icon="🌿" />
               <BarRow label="Vybavení" amount={data.weekly.expenses.equipment} max={totalExpWithLoan} icon="👟" />
               {data.weekly.expenses.loanRepayment > 0 && (
@@ -455,10 +466,10 @@ function FlowsTab({ data }: { data: BudgetData }) {
           <div className="card p-4 sm:p-5">
             <SectionLabel>Nepravidelné výdaje</SectionLabel>
             <div className="mt-2 text-sm text-muted space-y-1">
-              <div>• <span className="font-heading font-bold text-ink">Zápasové náklady</span> — rozhodčí, cestovné, občerstvení po zápase.</div>
-              <div>• <span className="font-heading font-bold text-ink">Přestupy</span> — přestupové ceny, registrace, hostování.</div>
-              <div>• <span className="font-heading font-bold text-ink">Upgrady</span> — stadion, hřiště, vybavení, propagace zápasu.</div>
-              <div>• <span className="font-heading font-bold text-ink">Inzeráty</span> — hledání volných hráčů.</div>
+              <div>• <span className="font-heading font-bold text-ink">Zápasové náklady</span>, rozhodčí, cestovné, občerstvení po zápase.</div>
+              <div>• <span className="font-heading font-bold text-ink">Přestupy</span>, přestupové ceny, registrace, hostování.</div>
+              <div>• <span className="font-heading font-bold text-ink">Upgrady</span>, stadion, hřiště, vybavení, propagace zápasu.</div>
+              <div>• <span className="font-heading font-bold text-ink">Inzeráty</span>, hledání volných hráčů.</div>
             </div>
           </div>
         </>
@@ -560,12 +571,19 @@ function ForecastTab({ data }: { data: BudgetData }) {
         <MetricCard label="Za 4 týdny" value={formatCZK(data.forecast.in4Weeks)} color={data.forecast.in4Weeks < 0 ? "text-card-red" : "text-ink"} />
         <MetricCard label="Na konci sezóny" value={formatCZK(data.forecast.inSeason)} color={data.forecast.inSeason < 0 ? "text-card-red" : "text-ink"} />
         <MetricCard
-          label="Bankrot za"
-          value={data.forecast.weeksUntilBankrupt != null ? `${data.forecast.weeksUntilBankrupt} týd` : "—"}
+          label="Peníze dojdou"
+          value={data.forecast.weeksUntilBankrupt != null ? `za ${weeksText(data.forecast.weeksUntilBankrupt)}` : "nehrozí"}
           color={data.forecast.weeksUntilBankrupt != null ? "text-card-red" : "text-muted"}
-          sub={data.forecast.weeksUntilBankrupt != null ? "hrozí záporný rozpočet" : "stabilní hospodaření"}
+          sub={data.forecast.weeksUntilBankrupt != null ? "rozpočet spadne do mínusu" : "stabilní hospodaření"}
         />
       </div>
+
+      {data.forecast.weeksUntilBankrupt != null && (
+        <p className="text-sm text-muted leading-snug">
+          Klub v mínusu nekončí. Mzdy a provoz se platí dál, ale dokud rozpočet nevyrovnáš,
+          zablokují se nákupy a investice: přestupy, stavby, vybavení i inzeráty.
+        </p>
+      )}
 
       <div className="card p-4 sm:p-5">
         <SectionLabel>Předpoklady výpočtu</SectionLabel>
@@ -696,7 +714,7 @@ function LoanTab({ teamId, data, info, onChange, reload }: {
           <li>📅 Splátky: rovnoměrně po každém zápase až do konce sezóny</li>
           <li>🚫 Najednou pouze jedna aktivní půjčka</li>
           <li>🔁 Půjčku lze vzít jednou za sezónu</li>
-          <li>⛔ Při záporném rozpočtu nelze nic kupovat — dokud nevyrovnáš</li>
+          <li>⛔ Při záporném rozpočtu nelze nic kupovat, dokud nevyrovnáš</li>
         </ul>
       </div>
 

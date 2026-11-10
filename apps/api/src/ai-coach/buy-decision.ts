@@ -13,6 +13,7 @@
 import type { AiCoachProfile } from "./profile";
 import { MIN_PRICE } from "./valuation";
 import { styleText } from "./weekly-decision";
+import { promptName } from "./prompt-text";
 
 /** Kdo hráče prodává: klub ve hře (člověk, nebo AI trenér), klub mimo hru, nebo nikdo (volný hráč). */
 export type BuySeller = "human" | "ai" | "outside" | "none";
@@ -22,6 +23,60 @@ export type BuySeller = "human" | "ai" | "outside" | "none";
  * jednání s klubem mimo hru (inzerát, nebo hlášení skauta), podpis volného hráče.
  */
 export type BuyRoute = "listing" | "offer" | "outside_listing" | "scout_report" | "free_agent";
+
+/**
+ * Co o hráči klubu ve hře vidí i lidský kupec na jeho kartě: zranění a jeho délka, kondice
+ * a stopka. Dřív AI kupovala naslepo (jen post, věk, hodnocení) a šel jí prodat marod.
+ */
+export interface PlayerFitness {
+  /** Kolik dní ještě bude zraněný (null = zdravý). */
+  injuryDays: number | null;
+  /** Kondice 0 až 100 (null = neznámá). */
+  condition: number | null;
+  /** Kolik soutěžních zápasů ještě stojí za karty. */
+  suspendedMatches: number;
+}
+
+/** Hráč zraněný na delší dobu se AI klubu vůbec nenabízí: tohle je mez kódu, ne rozhodnutí. */
+export const MAX_INJURY_DAYS_TO_BUY = 14;
+
+/** Dodatek k popisu hráče pro model („, injured for 9 more days, condition 62 %“), nebo prázdný text. */
+export function fitnessText(f: PlayerFitness | null | undefined): string {
+  if (!f) return "";
+  const parts: string[] = [];
+  if (f.injuryDays !== null && f.injuryDays > 0) parts.push(`INJURED for ${f.injuryDays} more day${f.injuryDays === 1 ? "" : "s"}`);
+  else parts.push("fit");
+  if (f.condition !== null) parts.push(`condition ${Math.round(f.condition)} %`);
+  if (f.suspendedMatches > 0) parts.push(`suspended for ${f.suspendedMatches} more match${f.suspendedMatches === 1 ? "" : "es"}`);
+  return `, ${parts.join(", ")}`;
+}
+
+/** Dřívější vlastní nabídka AI klubu na téhož hráče a jak dopadla. */
+export interface PastOffer {
+  amount: number;
+  outcome: "ignored" | "rejected" | "withdrawn" | "countered";
+  /** Protinávrh prodávajícího, na který AI nepřistoupila (jen `countered`). */
+  counter: number | null;
+  daysAgo: number;
+}
+
+const PAST_OUTCOME_TEXT: Record<PastOffer["outcome"], string> = {
+  ignored: "the club never answered and it expired",
+  rejected: "the club refused it",
+  withdrawn: "you withdrew it",
+  countered: "the club asked for more and you walked away",
+};
+
+/** Věta pro model o dřívějších nabídkách na hráče (prázdná, když žádné nebyly). */
+export function pastOffersText(past: PastOffer[] | undefined): string {
+  if (!past || past.length === 0) return "";
+  const items = past.map((o) => {
+    const when = o.daysAgo <= 0 ? "today" : `${o.daysAgo} day${o.daysAgo === 1 ? "" : "s"} ago`;
+    const counter = o.outcome === "countered" && o.counter ? ` (they wanted ${czk(o.counter)})` : "";
+    return `${czk(o.amount)} ${when}: ${PAST_OUTCOME_TEXT[o.outcome]}${counter}`;
+  });
+  return ` YOUR EARLIER OFFERS for him: ${items.join("; ")}. The same offer again will end the same way: offer clearly more, or leave him.`;
+}
 
 export interface BuyCandidateOption {
   /** Klíč pro model („c1“…). */
@@ -43,6 +98,10 @@ export interface BuyCandidateOption {
   /** Rozpětí nabídky (u volného hráče týdenní mzdy), které spočítal kód. */
   minBid: number;
   maxBid: number;
+  /** Zdraví a stopka hráče klubu ve hře (u klubu mimo hru a volného hráče se neví). */
+  fitness?: PlayerFitness | null;
+  /** Vlastní nabídky na téhož hráče za poslední měsíc a jejich výsledek, od nejnovější. */
+  pastOffers?: PastOffer[];
 }
 
 export interface BuyLoanOption {
@@ -51,6 +110,7 @@ export interface BuyLoanOption {
   position: string;
   age: number;
   rating: number;
+  fitness?: PlayerFitness | null;
 }
 
 /** Délky hostování, ze kterých model vybírá (služba dovolí 7 až 180 dní). */
@@ -64,6 +124,8 @@ export interface BuyNeedInfo {
   startersAverage: number;
   /** Plný post, jen zlepšení nejslabšího hráče základu. */
   upgrade?: boolean;
+  /** Kádr pod cílovou velikostí: hráč do šířky kádru, jak trenér rozhodl v pondělí. */
+  fill?: boolean;
 }
 
 export interface BuyPickContext {
@@ -169,15 +231,15 @@ export function hasBuyChoice(ctx: Pick<BuyPickContext, "candidates" | "loans" | 
 }
 
 function candidateLine(c: BuyCandidateOption): string {
-  const head = `- "${c.key}": ${playerText(c)}`;
+  const head = `- "${c.key}": ${playerText(c)}${fitnessText(c.fitness)}`;
   const value = `estimated value ${czk(c.estimatedValue)}`;
   const fee = c.feePct > 0 ? ` He plays in another league, so you also pay a ${c.feePct} % inter-league fee on top of the price (your range already allows for it).` : "";
   const range = `Bid between ${czk(c.minBid)} and ${czk(c.maxBid)}.`;
   switch (c.route) {
     case "listing":
-      return `${head}, ${value}. Transfer-listed by ${SELLER_TEXT[c.seller]} for ${czk(c.askingPrice ?? c.maxBid)}: a bid at the asking price is accepted, a lower one may be countered or refused.${fee} ${range}`;
+      return `${head}, ${value}. Transfer-listed by ${SELLER_TEXT[c.seller]} for ${czk(c.askingPrice ?? c.maxBid)}: a bid at the asking price is accepted, a lower one may be countered or refused.${fee} ${range}${pastOffersText(c.pastOffers)}`;
     case "offer":
-      return `${head}, ${value}. Plays for ${SELLER_TEXT[c.seller]} and is not transfer-listed: a direct offer, the club may accept, counter or refuse (after a refusal you cannot bid for him for 10 days).${fee} ${range}`;
+      return `${head}, ${value}. Plays for ${SELLER_TEXT[c.seller]} and is not transfer-listed: a direct offer, the club may accept, counter or refuse (after a refusal you cannot bid for him for 10 days).${fee} ${range}${pastOffersText(c.pastOffers)}`;
     case "outside_listing":
       return `${head}, ${value}. Transfer-listed by ${SELLER_TEXT.outside} for ${czk(c.askingPrice ?? c.maxBid)}: the club agrees at the asking price, haggles below it and breaks off after insulting offers; then the player decides whether to join. ${range}`;
     case "scout_report":
@@ -197,10 +259,10 @@ export function renderBuyPickPrompt(ctx: BuyPickContext): string {
   const lines: string[] = [
     ...personalityLines(ctx.profile),
     "",
-    `CLUB ${ctx.teamName}: budget ${czk(ctx.budget)}. You keep ${czk(ctx.reserve)} as a reserve for running costs, so you can spend at most ${czk(ctx.spendable)} on transfers.`,
+    `CLUB ${promptName(ctx.teamName)}: budget ${czk(ctx.budget)}. You keep ${czk(ctx.reserve)} as a reserve for running costs, so you can spend at most ${czk(ctx.spendable)} on transfers.`,
     `SQUAD: ${ctx.squadSize} senior players (you want about ${ctx.targetSquad}), your best eleven averages rating ${ctx.strength.toFixed(1)}. Ratings are on the game's own scale, not out of 100: compare them with your own players.`,
     course,
-    `NEED: ${pos} (${n.position}), need ${n.need.toFixed(2)} on a 0-1 scale${n.missing > 0 ? `, ${n.missing} player(s) short of full depth` : ""}${n.upgrade ? ", the position is full: this is only an upgrade of the weakest starter, buy only if it is clearly worth the money" : ""}, ${starters}. A signing improves the team from rating ${n.minRating} up.`,
+    `NEED: ${pos} (${n.position}), need ${n.need.toFixed(2)} on a 0-1 scale${n.missing > 0 ? `, ${n.missing} player(s) short of full depth` : ""}${n.upgrade ? ", the position is full: this is only an upgrade of the weakest starter, buy only if it is clearly worth the money" : ""}${n.fill ? ", your squad is below the size you want and in your Monday review you decided to fill it up: this is a squad player for the bench and rotation, do not overpay" : ""}, ${starters}. A signing improves the team from rating ${n.minRating} up.`,
     "",
   ];
   if (ctx.candidates.length > 0) {
@@ -212,7 +274,7 @@ export function renderBuyPickPrompt(ctx: BuyPickContext): string {
   lines.push("", "OTHER OPTIONS:");
   const durations = LOAN_DURATIONS.join(", ");
   for (const l of ctx.loans) {
-    lines.push(`- "${l.key}": ask ${SELLER_TEXT[l.seller]} to loan you ${playerText({ ...l, ratingRange: null })} without a fee for ${durations} days (you choose); the club decides.`);
+    lines.push(`- "${l.key}": ask ${SELLER_TEXT[l.seller]} to loan you ${playerText({ ...l, ratingRange: null })}${fitnessText(l.fitness)} without a fee for ${durations} days (you choose); the club decides.`);
   }
   if (ctx.demand) {
     lines.push(`- "${BUY_DEMAND}": post a public wanted ad for a ${pos} aged ${ctx.demand.ageMin}-${ctx.demand.ageMax}, up to ${czk(ctx.demand.maxPrice)}; clubs can offer you players over the next days.`);
@@ -345,7 +407,7 @@ function renderLoanNegotiationPrompt(ctx: BuyNegotiationContext, days: number): 
   const lines: string[] = [
     ...personalityLines(ctx.profile),
     "",
-    `CLUB ${ctx.teamName}: you can spend at most ${czk(ctx.spendable)} on transfers.`,
+    `CLUB ${promptName(ctx.teamName)}: you can spend at most ${czk(ctx.spendable)} on transfers.`,
     `LOAN TALKS: you asked ${SELLER_TEXT[ctx.seller]} to lend you ${playerText(ctx.player)}, estimated value ${czk(ctx.player.estimatedValue)}, for ${days} days.`,
     `- the loan fees you offered so far: ${ctx.ownBids.length ? ctx.ownBids.map(czk).join(", ") : "none"}`,
     `- the club now asks a loan fee of ${czk(ctx.ask)}`,
@@ -367,7 +429,7 @@ export function renderBuyNegotiationPrompt(ctx: BuyNegotiationContext): string {
   const lines: string[] = [
     ...personalityLines(ctx.profile),
     "",
-    `CLUB ${ctx.teamName}: you can spend at most ${czk(ctx.spendable)} on transfers.`,
+    `CLUB ${promptName(ctx.teamName)}: you can spend at most ${czk(ctx.spendable)} on transfers.`,
     `TALKS about ${playerText(ctx.player)}, estimated value ${czk(ctx.player.estimatedValue)}, with ${SELLER_TEXT[ctx.seller]}${ctx.listedPrice ? ` (transfer-listed for ${czk(ctx.listedPrice)})` : ""}.`,
     `- your offers so far: ${ctx.ownBids.length ? ctx.ownBids.map(czk).join(", ") : "none"}`,
     `- the seller now asks ${askText(ctx.ask, ctx.askTerms)}`,

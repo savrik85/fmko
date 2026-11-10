@@ -87,7 +87,7 @@ describe("náhradní pravidlo podle povahy", () => {
 describe("popis pro model", () => {
   it("zápas, lóže a místa, peníze nad rezervou, majitelé s klíči, náklonností, dárkem a vztahem ke klubu", () => {
     const prompt = renderInvitePrompt(context());
-    expect(prompt).toContain("NEXT HOME MATCH: Thursday 2026-11-05 against Jiskra Dvůr, in 3 days. You lost 1 of your last 5 matches.");
+    expect(prompt).toContain('NEXT HOME MATCH: Thursday 2026-11-05 against "Jiskra Dvůr", in 3 days. You lost 1 of your last 5 matches.');
     expect(prompt).toContain("YOUR VIP BOX (level 2) has room for 2 more guests at this match.");
     expect(prompt).toContain("(+10 percentage points) and gains 2 more favour after the match");
     expect(prompt).toContain("gifts may cost at most 20,000 CZK this week");

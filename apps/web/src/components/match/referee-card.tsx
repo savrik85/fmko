@@ -71,7 +71,7 @@ export function RefereeCard({ referee, isHome }: Props) {
         <div className="grid grid-cols-3 gap-2 mt-3">
           <Stat label="Známka" value={formatGrade(s.avgGrade)} className={gradeColor(s.avgGrade)}
             hint={s.avgGrade != null ? gradeWord(s.avgGrade) : undefined} />
-          <Stat label="Karet/zápas" value={s.cardsPerMatch != null ? s.cardsPerMatch.toFixed(1).replace(".", ",") : "—"} />
+          <Stat label="Karet/zápas" value={s.cardsPerMatch != null ? s.cardsPerMatch.toFixed(1).replace(".", ",") : "-"} />
           <Stat label="Odpískal" value={`${s.matches}×`} />
         </div>
       )}

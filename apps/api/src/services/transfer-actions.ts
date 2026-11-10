@@ -19,6 +19,7 @@ import { recordTransaction } from "../season/finance-processor";
 import { resolveClubTeamId, resolveOfferClubScope } from "../transfers/offer-club-scope";
 import { areClubsLinked, LINKED_CLUBS_ERRORS } from "../competition/club-links";
 import { offerReplyDeadline } from "../transfers/offer-deadline";
+import { placeInSeniorSquad } from "../transfers/senior-age";
 import { installmentLimitError, installmentBudgetError, weeklyInstallment } from "../transfers/installments";
 import { sendPhoneSMS } from "../messaging/phone-sms";
 import {
@@ -83,6 +84,19 @@ async function missingOfferFail(
 }
 
 /**
+ * Nabídka po lhůtě na odpověď: propadne hned (se vším, co k propadnutí patří) a akce se
+ * neprovede. Volá ji každá akce nad nabídkou, ať se s nabídkou po lhůtě nedá nic dělat
+ * dřív, než ji uklidí tick.
+ */
+async function overdueOfferFail(env: Bindings, offerId: string, expiresAt: unknown): Promise<TransferActionFailure | null> {
+  const { isOfferOverdue, expireOverdueOffer } = await import("../transfers/offer-expiry");
+  if (!isOfferOverdue(expiresAt)) return null;
+  await expireOverdueOffer(env, offerId)
+    .catch((e) => logger.warn({ module: M }, `propadnutí nabídky ${offerId} při akci`, e));
+  return fail(410, "Nabídka propadla, lhůta na odpověď už uplynula.");
+}
+
+/**
  * Kolik bude kupující potřebovat hned při přijetí: zálohu (u jednorázové platby celou cenu)
  * a k ní meziligový poplatek. Stejný výpočet jako přijetí (`acceptTransferOffer`), aby nabídka,
  * kterou kupující nezaplatí, vůbec nevznikla. Dřív se při založení hlídala jen záloha:
@@ -91,6 +105,8 @@ async function missingOfferFail(
  */
 async function upfrontShortfall(db: D1Database, opts: {
   buyerClubTeamId: string; sellerRosterTeamId: string; terms: TransferTerms; isLoan: boolean;
+  /** Odkup z hostování: poplatek zaplacený za hostování, počítá se do základu poplatků. */
+  loanFeePaid?: number;
 }): Promise<string | null> {
   const payNow = transferSchedule(opts.terms).upfront;
   const buyer = await db.prepare("SELECT budget, league_id FROM teams WHERE id = ?")
@@ -103,7 +119,7 @@ async function upfrontShortfall(db: D1Database, opts: {
       .catch((e) => { logger.warn({ module: "game" }, "soutěž prodávajícího pro poplatek", e); return null; });
     const { computeTransferLevies } = await import("../competition/transfer-levy");
     adminFee = (await computeTransferLevies(db, {
-      buyerLeagueId: buyer.league_id, sellerLeagueId: seller?.league_id, amount: opts.terms.amount, isLoan: false,
+      buyerLeagueId: buyer.league_id, sellerLeagueId: seller?.league_id, amount: opts.terms.amount + (opts.loanFeePaid ?? 0), isLoan: false,
     })).adminFee;
   }
   const needed = payNow + adminFee;
@@ -244,9 +260,16 @@ export async function createTransferOffer(
   const db = env.DB;
   const buyerClubTeamId = await resolveClubTeamId(db, actorTeamId);
   if (!buyerClubTeamId) return fail(404, "Kupující tým nenalezen");
-  const targetSquad: "senior" | "u21" = body.targetSquad === "u21" ? "u21" : "senior";
+  let targetSquad: "senior" | "u21" = body.targetSquad === "u21" ? "u21" : "senior";
   const player = await db.prepare("SELECT p.*, t.user_id FROM players p JOIN teams t ON p.team_id = t.id WHERE p.id = ?").bind(body.playerId).first<Record<string, unknown>>();
   if (!player) return fail(404, "Hráč nenalezen");
+  // Za muže až od 15 let: mladší jde do U21 kupujícího, a když ji klub nemá, nabídnout nejde.
+  // Platí pro přestup, odkup i hostování (transfers/senior-age.ts).
+  if (targetSquad === "senior") {
+    const placement = await placeInSeniorSquad(db, buyerClubTeamId, player.age as number, `${player.first_name} ${player.last_name}`);
+    if (!placement.ok) return fail(400, placement.error);
+    targetSquad = placement.squad;
+  }
 
   // Buyout případ: hráč je u nás na hostování a chceme ho odkoupit od původního klubu
   const playerClubTeamId = await resolveClubTeamId(db, player.team_id as string);
@@ -303,7 +326,11 @@ export async function createTransferOffer(
   }
   // Kupující potřebuje peníze na zálohu (u jednorázové platby je záloha celá cena)
   // a na meziligový poplatek, který se platí hned při přijetí.
-  const shortfall = await upfrontShortfall(db, { buyerClubTeamId, sellerRosterTeamId: targetOwnerId, terms, isLoan: offerType === "loan" });
+  const { buyoutLoanFee } = await import("../competition/transfer-levy");
+  const shortfall = await upfrontShortfall(db, {
+    buyerClubTeamId, sellerRosterTeamId: targetOwnerId, terms, isLoan: offerType === "loan",
+    loanFeePaid: isBuyout ? await buyoutLoanFee(db, body.playerId, buyerClubTeamId) : 0,
+  });
   if (shortfall) return fail(400, shortfall);
 
   if (offerType === "loan" && (!loanDuration || loanDuration < 7 || loanDuration > 180)) {
@@ -316,18 +343,22 @@ export async function createTransferOffer(
   // Hráči na výměnu: jen v úvodní nabídce a jen u trvalého přestupu, vlastní, nezranění, ne chtěný hráč.
   if (swapPlayerIds.length > 0) {
     if (offerType === "loan") return fail(400, "Hráče na výměnu lze přidat jen u trvalého přestupu");
-    const swapError = await swapPlayersError(db, swapPlayerIds, { buyerClubTeamId, targetPlayerId: body.playerId });
+    const sellerClubTeamId = await resolveClubTeamId(db, targetOwnerId) ?? targetOwnerId;
+    const swapError = await swapPlayersError(db, swapPlayerIds, { buyerClubTeamId, targetPlayerId: body.playerId, sellerClubTeamId });
     if (swapError) return fail(swapError.status, swapError.error);
   }
 
   // Idempotence: pokud existuje aktivní nabídka od tohoto týmu na tohoto hráče, vrátit ji
   const existing = await db.prepare(
-    `SELECT id FROM transfer_offers
+    `SELECT id, expires_at FROM transfer_offers
      WHERE player_id = ?
        AND from_team_id IN (SELECT id FROM teams WHERE id = ? OR parent_team_id = ?)
        AND status IN ('pending','countered') LIMIT 1`
-  ).bind(body.playerId, buyerClubTeamId, buyerClubTeamId).first<{ id: string }>().catch((e) => { logger.warn({ module: "game" }, "check duplicate offer", e); return null; });
-  if (existing) return fail(409, "Již máte aktivní nabídku na tohoto hráče", { offerId: existing.id });
+  ).bind(body.playerId, buyerClubTeamId, buyerClubTeamId).first<{ id: string; expires_at: string | null }>().catch((e) => { logger.warn({ module: "game" }, "check duplicate offer", e); return null; });
+  // Stará nabídka po lhůtě aktivní není: propadne teď a o nové rozhodne blokace níž.
+  if (existing && !(await overdueOfferFail(env, existing.id, existing.expires_at))) {
+    return fail(409, "Již máte aktivní nabídku na tohoto hráče", { offerId: existing.id });
+  }
 
   // Anti-spam: odmítnutá nabídka kazí hráči morálku — opakovat na stejného hráče jde
   // až po 10 dnech. Vlastní stažení kupce neblokuje (pravidla v transfers/offer-cooldown.ts).
@@ -774,13 +805,16 @@ export async function acceptTransferOffer(
   ).bind(offerId).first<Record<string, unknown>>();
   if (!offer) return missingOfferFail(db, actorTeamId, offerId, 409, "Nabídka nenalezena nebo nejsi na tahu");
   const scope = await resolveOfferClubScope(db, actorTeamId, offer);
-  if (!scope?.role || !scope.onTurn) return fail(409, "Nabídka nenalezena nebo nejsi na tahu");
-  if (offer.expires_at && new Date(offer.expires_at as string) < new Date()) return fail(410, "Nabídka vypršela");
+  if (!scope?.role) return fail(409, "Nabídka nenalezena nebo nejsi na tahu");
+  const overdue = await overdueOfferFail(env, offerId, offer.expires_at);
+  if (overdue) return overdue;
+  if (!scope.onTurn) return fail(409, "Nabídka nenalezena nebo nejsi na tahu");
   // Nabídka mohla vzniknout, než admin kluby propojil. Přijetím by obchod prošel.
   if (await areClubsLinked(db, scope.buyerClubTeamId, scope.sellerClubTeamId)) return fail(403, LINKED_CLUBS_ERRORS.transfer);
 
   // ?? přeskakuje jen null/undefined, ne 0 — proto explicitní kontrola.
-  const amount = (offer.counter_amount != null ? (offer.counter_amount as number) : (offer.offer_amount as number));
+  // `let`: u prodeje klubu mimo hru se částka při přijetí ještě srovná se stropem po slevě.
+  let amount = (offer.counter_amount != null ? (offer.counter_amount as number) : (offer.offer_amount as number));
   if (amount < 0) return fail(400, "Neplatná částka přestupu");
   // Podmínky posledního návrhu: záloha + týdenní splátky, procenta z příštího přestupu.
   const terms = termsFromRow(offer as { upfront_pct?: number | null; installments?: number | null; sell_on_pct?: number | null }, amount);
@@ -871,11 +905,14 @@ export async function acceptTransferOffer(
     && currentPlayer.current_club_team_id === buyerTeamId;
   // Odkup z hostování: poplatek za běžící hostování je součást ceny. Jinak by šlo hráče s doložkou
   // půjčit za skutečnou cenu, odkoupit za 1 Kč a procenta by se počítala z 1 Kč.
-  const activeLoanFee = isBuyoutAccept
-    ? (await db.prepare("SELECT fee FROM player_contracts WHERE player_id = ? AND join_type = 'loan' AND is_active = 1 LIMIT 1")
-        .bind(playerId).first<{ fee: number | null }>()
-        .catch((e) => { logger.warn({ module: "game" }, "poplatek za hostování pro procenta", e); return null; }))?.fee ?? 0
-    : 0;
+  // Stejně tak poplatky soutěži (meziligový i odvod) se u odkupu počítají z ceny odkupu
+  // a poplatku za hostování dohromady, jinak by je hostování s odkupem za korunu obešlo.
+  const activeLoan = isBuyoutAccept
+    ? await db.prepare("SELECT id, fee FROM player_contracts WHERE player_id = ? AND join_type = 'loan' AND is_active = 1 LIMIT 1")
+        .bind(playerId).first<{ id: string; fee: number | null }>()
+        .catch((e) => { logger.warn({ module: "game" }, "poplatek za hostování pro procenta", e); return null; })
+    : null;
+  const activeLoanFee = Math.max(0, activeLoan?.fee ?? 0);
   const sellerRosterTeamId = isBuyoutAccept
     ? currentPlayer.loan_from_team_id!
     : currentPlayer.current_club_team_id === sellerTeamId && !currentPlayer.loan_from_team_id
@@ -912,6 +949,35 @@ export async function acceptTransferOffer(
     ).bind(offerId).run()
       .catch((e) => logger.warn({ module: "game" }, "close stale offer accept claim", e));
   };
+
+  /**
+   * Zabrání vzácných zdrojů obchodu (peníze kupujícího, hráč, hráči na výměnu) jedním D1
+   * batchem. Každý krok je podmíněný UPDATE; když některý nechytne řádek, kroky, které
+   * prošly, se jedním batchem vrátí. Dřív šly kroky po jednom: výjimka mezi nimi (výpadek
+   * D1) nechala nabídku přijatou a peníze stržené bez hráče. Batch je transakce, takže
+   * výjimka teď znamená, že se nestalo nic.
+   * Vrací index kroku, který neprošel, `-1` při výjimce, nebo `null`, když prošlo všechno.
+   */
+  const claimDealResources = async (
+    steps: Array<{ stmt: D1PreparedStatement; undo: D1PreparedStatement }>,
+  ): Promise<number | null> => {
+    let results: D1Result[];
+    try {
+      results = await db.batch(steps.map((step) => step.stmt));
+    } catch (e) {
+      logger.error({ module: "game" }, `zabrání peněz a hráčů pro nabídku ${offerId} selhalo`, e);
+      return -1;
+    }
+    const failedIndex = results.findIndex((r) => (r.meta?.changes ?? 0) === 0);
+    if (failedIndex === -1) return null;
+    const undo = steps.filter((_, i) => (results[i].meta?.changes ?? 0) > 0).map((step) => step.undo);
+    if (undo.length > 0) {
+      await db.batch(undo)
+        .catch((e) => logger.error({ module: "game" }, `vrácení zabraných peněz a hráčů u nabídky ${offerId} selhalo`, e));
+    }
+    return failedIndex;
+  };
+  const refundBuyerStmt = (sum: number) => db.prepare("UPDATE teams SET budget = budget + ? WHERE id = ?").bind(sum, buyerTeamId);
 
   // ── Prodej virtuálnímu klubu — hráč odchází ze hry, prodávající dostane peníze ──
   if (buyerTeamId === "virtual_ai") {
@@ -964,9 +1030,24 @@ export async function acceptTransferOffer(
     }
     const soldName = `${removed.player.firstName} ${removed.player.lastName}`;
 
+    // Sleva za opakované prodeje klubům mimo hru se počítá znovu teď, podle prodejů, které
+    // už v sezóně opravdu proběhly. Nabídka nese cenu z doby, kdy vznikla: klub, který jich
+    // měl víc rozjednaných naráz, by je jinak všechny přijal za plnou cenu. Nabídka je už
+    // zabraná (accepted), proto se počítá bez ní; dvě souběžná přijetí se tak uvidí navzájem.
+    const { outsideSaleCeiling, outsideSalesThisSeason, OUTSIDE_SALE_FULL_PRICE_COUNT } = await import("../transfers/virtual-teams");
+    const priorOutsideSales = await outsideSalesThisSeason(db, sellerTeamId, { pending: false, exceptOfferId: offerId });
+    const offeredAmount = amount;
+    if (priorOutsideSales >= OUTSIDE_SALE_FULL_PRICE_COUNT) {
+      amount = Math.min(amount, outsideSaleCeiling(
+        removed.player.overallRating, removed.player.age, removed.player.position, !!vd.country && vd.country !== "CZ", priorOutsideSales,
+      ));
+    }
+    const priceCut = amount < offeredAmount;
+
     await db.batch([
       db.prepare("UPDATE teams SET budget = budget + ? WHERE id = ?").bind(amount, sellerTeamId),
-      db.prepare("UPDATE transfer_offers SET status = 'accepted', resolved_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?").bind(offerId),
+      // Nabídka nese částku, která se opravdu zaplatila (přehledy a počty z ní čtou).
+      db.prepare("UPDATE transfer_offers SET status = 'accepted', offer_amount = ?, counter_amount = NULL, resolved_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?").bind(amount, offerId),
     ]);
     await db.prepare(
       `UPDATE player_contracts SET is_active = 0, left_at = ?, leave_type = 'transfer'
@@ -996,7 +1077,7 @@ export async function acceptTransferOffer(
     }).catch((e) => logger.warn({ module: "game" }, "create virtual sale news", e));
 
     await smsToClub(db, sellerTeamId,
-      `📤 Přestup potvrzen. ${soldName} odchází do ${virtualName}${vd.city ? ` (${vd.city}${vd.country === "DE" ? ", Německo" : ""})` : ""} za ${amount.toLocaleString("cs")} Kč.`,
+      `📤 Přestup potvrzen. ${soldName} odchází do ${virtualName}${vd.city ? ` (${vd.city}${vd.country === "DE" ? ", Německo" : ""})` : ""} za ${amount.toLocaleString("cs")} Kč.${priceCut ? ` Původně nabízeli ${offeredAmount.toLocaleString("cs")} Kč, jenže kluby mimo hru od třetího hráče v sezóně platí míň.` : ""}`,
       "virtual sale SMS");
     await notifyClub(env, sellerTeamId, `✅ Přestup ${soldName} dokončen`,
       `${virtualName} zaplatil ${amount.toLocaleString("cs-CZ")} Kč.`, `/prestupy`, "virtual sale notification");
@@ -1012,6 +1093,15 @@ export async function acceptTransferOffer(
     ).bind(buyerTeamId).first<{ id: string }>();
     if (!buyerU21) return fail(400, "Kupující nemá U21 tým, nelze přijmout");
     buyerDestTeamId = buyerU21.id;
+  } else {
+    // Do áčka (přestup, odkup i hostování) až od 15 let: mladší jde do U21 kupujícího.
+    // Hlídá se i tady, nabídka mohla vzniknout dřív, než to hlídalo její založení.
+    const incoming = await db.prepare("SELECT first_name, last_name, age FROM players WHERE id = ?").bind(playerId)
+      .first<{ first_name: string; last_name: string; age: number }>();
+    if (!incoming) return fail(409, "Hráč již není v kádru");
+    const placement = await placeInSeniorSquad(db, buyerTeamId, incoming.age, `${incoming.first_name} ${incoming.last_name}`);
+    if (!placement.ok) return fail(400, placement.error);
+    buyerDestTeamId = placement.teamId;
   }
 
   const buyer = await db.prepare("SELECT budget, name, game_date, league_id FROM teams WHERE id = ?").bind(buyerTeamId).first<{ budget: number; name: string; game_date: string; league_id: string }>();
@@ -1034,7 +1124,7 @@ export async function acceptTransferOffer(
   const { computeTransferLevies } = await import("../competition/transfer-levy");
   const levies = await computeTransferLevies(db, {
     buyerLeagueId: buyer.league_id, sellerLeagueId: sellerRoster?.league_id,
-    amount, isLoan: offerType === "loan",
+    amount: amount + activeLoanFee, isLoan: offerType === "loan",
   });
   const adminFee = levies.adminFee;
   // Při splátkách kupující hned platí jen zálohu (+ celý mezikrajský poplatek).
@@ -1053,38 +1143,52 @@ export async function acceptTransferOffer(
     if (limitError) return fail(400, limitError);
   }
   if (!(await claimOffer())) return fail(409, "Nabídku mezitím vyřešil někdo jiný");
+  /** Na jakou soupisku prodávajícího šel který hráč z výměny (mladší 15 let do U21). */
+  const swapDestTeamIds = new Map<string, string>();
 
   if (offerType === "loan" && loanDuration) {
-    // Hostování — atomický budget check (pouze pokud je nenulový poplatek)
-    if (amount > 0) {
-      const loanDeductResult = await db.prepare(
-        "UPDATE teams SET budget = budget - ? WHERE id = ? AND budget >= ?"
-      ).bind(amount, buyerTeamId, amount).run();
-      if (loanDeductResult.meta.changes === 0) {
-        await releaseOfferClaim();
-        return fail(400, "Kupující nemá dostatek prostředků");
-      }
-    }
-
     const loanUntil = new Date(gameDate);
     loanUntil.setDate(loanUntil.getDate() + loanDuration);
 
-    const moved = await db.prepare(
-      `UPDATE players
-       SET team_id = ?, loan_from_team_id = ?, loan_until = ?, parent_club_id = NULL, next_match_return = 0
-       WHERE id = ? AND team_id = ? AND loan_from_team_id IS NULL
-         AND COALESCE(status, 'active') != 'transferring'`,
-    ).bind(buyerTeamId, sellerRosterTeamId, loanUntil.toISOString(), playerId, sellerRosterTeamId).run();
-    if (moved.meta.changes === 0) {
-      if (amount > 0) {
-        await db.prepare("UPDATE teams SET budget = budget + ? WHERE id = ?")
-          .bind(amount, buyerTeamId).run()
-          .catch((e) => logger.warn({ module: "game" }, "refund budget after player loan race", e));
-      }
+    // Poplatek (když nějaký je) a přesun hráče se zaberou naráz.
+    const loanSteps = [{
+      stmt: db.prepare(
+        `UPDATE players
+         SET team_id = ?, loan_from_team_id = ?, loan_until = ?, parent_club_id = NULL, next_match_return = 0
+         WHERE id = ? AND team_id = ? AND loan_from_team_id IS NULL
+           AND COALESCE(status, 'active') != 'transferring'`,
+      ).bind(buyerDestTeamId, sellerRosterTeamId, loanUntil.toISOString(), playerId, sellerRosterTeamId),
+      undo: db.prepare(
+        `UPDATE players SET team_id = ?, loan_from_team_id = ?, loan_until = ?, parent_club_id = ?, next_match_return = ?
+         WHERE id = ? AND team_id = ? AND loan_from_team_id = ?`,
+      ).bind(
+        currentPlayer.team_id, currentPlayer.loan_from_team_id, currentPlayer.loan_until,
+        currentPlayer.parent_club_id, currentPlayer.next_match_return,
+        playerId, buyerDestTeamId, sellerRosterTeamId,
+      ),
+    }];
+    const loanFeeStepIndex = amount > 0 ? 0 : -1;
+    if (amount > 0) {
+      loanSteps.unshift({
+        stmt: db.prepare("UPDATE teams SET budget = budget - ? WHERE id = ? AND budget >= ?").bind(amount, buyerTeamId, amount),
+        undo: refundBuyerStmt(amount),
+      });
+    }
+    const loanFailedStep = await claimDealResources(loanSteps);
+    if (loanFailedStep === -1) {
+      await releaseOfferClaim();
+      return fail(500, "Hostování se nepodařilo dokončit, zkus to znovu");
+    }
+    if (loanFailedStep !== null && loanFailedStep === loanFeeStepIndex) {
+      await releaseOfferClaim();
+      return fail(400, "Kupující nemá dostatek prostředků");
+    }
+    if (loanFailedStep !== null) {
       await closeStaleOfferClaim();
       return fail(409, "Hráč mezitím změnil klub");
     }
 
+    const loanContractId = crypto.randomUUID();
     const loanCore = [
       db.prepare("UPDATE transfer_offers SET status = 'accepted', resolved_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?").bind(offerId),
       // Ostatní žádosti z inzerátu na hostování půjčující nepřijal: dostanou odmítnutí.
@@ -1099,7 +1203,7 @@ export async function acceptTransferOffer(
          WHERE player_id = ? AND id != ? AND status IN ('pending','countered')`,
       ).bind(playerId, offerId),
       db.prepare("INSERT INTO player_contracts (id, player_id, team_id, season_id, joined_at, join_type, fee, is_active) VALUES (?, ?, ?, ?, ?, 'loan', ?, 1)")
-        .bind(crypto.randomUUID(), playerId, buyerTeamId, seasonId, gameDate, amount),
+        .bind(loanContractId, playerId, buyerTeamId, seasonId, gameDate, amount),
     ];
     if (amount > 0) {
       loanCore.push(
@@ -1116,22 +1220,20 @@ export async function acceptTransferOffer(
     } catch (e) {
       logger.error({ module: "game" }, "commit loan offer failed; rolling back guarded move", e);
       const rollback = [
-        db.prepare(
-          `UPDATE players SET team_id = ?, loan_from_team_id = ?, loan_until = ?, parent_club_id = ?, next_match_return = ?
-           WHERE id = ? AND team_id = ? AND loan_from_team_id = ?`,
-        ).bind(
-          currentPlayer.team_id, currentPlayer.loan_from_team_id, currentPlayer.loan_until,
-          currentPlayer.parent_club_id, currentPlayer.next_match_return,
-          playerId, buyerTeamId, sellerRosterTeamId,
-        ),
+        ...loanSteps.map((step) => step.undo),
         db.prepare("UPDATE transfer_offers SET status = ?, resolved_at = NULL WHERE id = ? AND status = 'accepted'")
           .bind(offer.status, offerId),
       ];
-      if (amount > 0) {
-        rollback.push(db.prepare("UPDATE teams SET budget = budget + ? WHERE id = ?").bind(amount, buyerTeamId));
-      }
       await db.batch(rollback).catch((rollbackError) => logger.error({ module: "game" }, "rollback failed loan offer", rollbackError));
       return fail(500, "Hostování se nepodařilo dokončit, zkus to znovu");
+    }
+
+    // Hráč s doložkou o procentech z příštího přestupu: z poplatku za hostování jdou procenta
+    // hned klubu, kterému doložka patří. Doložka běží dál.
+    if (amount > 0) {
+      const { paySellOnFromLoanFee } = await import("../transfers/installments");
+      await paySellOnFromLoanFee(db, { playerId, ownerClubTeamId: sellerTeamId, loanFee: amount, loanContractId, gameDate })
+        .catch((e) => logger.error({ module: "game" }, "procenta z poplatku za hostování", e));
     }
 
     // Záznam hostování pro přehled půjčujícího a hlídání podmínky hraní. Mimo atomický
@@ -1153,74 +1255,85 @@ export async function acceptTransferOffer(
     // Trvalý přestup — atomický budget check + odečtení (včetně cross-league admin fee).
     // Při splátkách se hned strhne jen záloha, zbytek chodí každé pondělí (transfers/installments.ts).
     const totalCost = payNow + adminFee;
-    const transferDeductResult = await db.prepare(
-      "UPDATE teams SET budget = budget - ? WHERE id = ? AND budget >= ?"
-    ).bind(totalCost, buyerTeamId, totalCost).run();
-    if (transferDeductResult.meta.changes === 0) {
+
+    // Hráči na výměnu — ověř, že všichni stále patří kupujícímu (race-safe).
+    // Stačí, aby jeden mezitím odešel, a celý obchod padá. Zatím se nic nezabralo,
+    // při chybě se jen uvolní nabídka.
+    const swapMoves: Array<{ id: string; rosterTeamId: string; destTeamId: string; loanUntil: string | null; parentClubId: string | null; nextMatchReturn: number }> = [];
+    try {
+      for (const swapId of swapPlayerIds) {
+        const swap = await db.prepare("SELECT team_id, loan_from_team_id, loan_until, parent_club_id, next_match_return, age, first_name, last_name FROM players WHERE id = ?").bind(swapId).first<{ team_id: string; loan_from_team_id: string | null; loan_until: string | null; parent_club_id: string | null; next_match_return: number; age: number; first_name: string; last_name: string }>();
+        const swapClubTeamId = swap ? await resolveClubTeamId(db, swap.team_id) : null;
+        if (!swap || swapClubTeamId !== buyerTeamId || swap.loan_from_team_id || swap.next_match_return === 1) {
+          await releaseOfferClaim();
+          return fail(409, "Hráč na výměnu již není k dispozici");
+        }
+        // Hráč na výměnu mladší 15 let jde do U21 prodávajícího; bez ní výměna neprojde.
+        const swapPlacement = await placeInSeniorSquad(db, sellerTeamId, swap.age, `${swap.first_name} ${swap.last_name}`);
+        if (!swapPlacement.ok) {
+          await releaseOfferClaim();
+          return fail(400, swapPlacement.error);
+        }
+        swapMoves.push({ id: swapId, rosterTeamId: swap.team_id, destTeamId: swapPlacement.teamId, loanUntil: swap.loan_until, parentClubId: swap.parent_club_id, nextMatchReturn: swap.next_match_return });
+      }
+    } catch (e) {
+      logger.error({ module: "game" }, `kontrola hráčů na výměnu u nabídky ${offerId} selhala`, e);
+      await releaseOfferClaim();
+      return fail(500, "Přestup se nepodařilo dokončit, zkus to znovu");
+    }
+    for (const m of swapMoves) swapDestTeamIds.set(m.id, m.destTeamId);
+    // Vrácení už přesunutých hráčů na výměnu na jejich původní soupisku.
+    const swapRollbackStmts = (moves: typeof swapMoves) => moves.map((m) => db.prepare(
+      `UPDATE players SET team_id = ?, loan_from_team_id = NULL, loan_until = ?, parent_club_id = ?, next_match_return = ?
+       WHERE id = ? AND team_id = ? AND loan_from_team_id IS NULL`,
+    ).bind(m.rosterTeamId, m.loanUntil, m.parentClubId, m.nextMatchReturn, m.id, m.destTeamId));
+
+    // Stržení peněz, přesun hráče a přesun hráčů na výměnu jsou jeden batch (claimDealResources).
+    // Guard `AND team_id = ?` chrání proti race condition (hráč mezitím prodán).
+    const playerUpdateStmt = isBuyoutAccept
+      ? db.prepare("UPDATE players SET team_id = ?, loan_from_team_id = NULL, loan_until = NULL, parent_club_id = NULL, next_match_return = 0 WHERE id = ? AND team_id = ? AND loan_from_team_id = ? AND COALESCE(status, 'active') != 'transferring'").bind(buyerDestTeamId, playerId, currentPlayer.team_id, sellerRosterTeamId)
+      : db.prepare("UPDATE players SET team_id = ?, loan_from_team_id = NULL, loan_until = NULL, parent_club_id = NULL, next_match_return = 0 WHERE id = ? AND team_id = ? AND loan_from_team_id IS NULL AND COALESCE(status, 'active') != 'transferring'").bind(buyerDestTeamId, playerId, sellerRosterTeamId);
+    const playerRestoreStmt = () => db.prepare(
+      `UPDATE players SET team_id = ?, loan_from_team_id = ?, loan_until = ?, parent_club_id = ?, next_match_return = ?
+       WHERE id = ? AND team_id = ? AND loan_from_team_id IS NULL`,
+    ).bind(
+      currentPlayer.team_id, currentPlayer.loan_from_team_id, currentPlayer.loan_until,
+      currentPlayer.parent_club_id, currentPlayer.next_match_return, playerId, buyerDestTeamId,
+    );
+    const DEDUCT_STEP = 0;
+    const PLAYER_STEP = 1;
+    const failedStep = await claimDealResources([
+      {
+        stmt: db.prepare("UPDATE teams SET budget = budget - ? WHERE id = ? AND budget >= ?").bind(totalCost, buyerTeamId, totalCost),
+        undo: refundBuyerStmt(totalCost),
+      },
+      { stmt: playerUpdateStmt, undo: playerRestoreStmt() },
+      ...swapMoves.map((m) => ({
+        stmt: db.prepare(
+          `UPDATE players SET team_id = ?, loan_from_team_id = NULL, loan_until = NULL, parent_club_id = NULL, next_match_return = 0
+           WHERE id = ? AND team_id = ? AND loan_from_team_id IS NULL AND next_match_return = 0
+             AND COALESCE(status, 'active') != 'transferring'`,
+        ).bind(m.destTeamId, m.id, m.rosterTeamId),
+        undo: swapRollbackStmts([m])[0],
+      })),
+    ]);
+    if (failedStep === -1) {
+      await releaseOfferClaim();
+      return fail(500, "Přestup se nepodařilo dokončit, zkus to znovu");
+    }
+    if (failedStep === DEDUCT_STEP) {
       await releaseOfferClaim();
       return fail(400, adminFee > 0
         ? `Kupující nemá dostatek prostředků (cena ${amount.toLocaleString("cs")} Kč + administrační poplatek ${adminFee.toLocaleString("cs")} Kč)`
         : "Kupující nemá dostatek prostředků", { reason: "buyer_funds" });
     }
-
-    // Hráči na výměnu — ověř, že všichni stále patří kupujícímu (race-safe).
-    // Stačí, aby jeden mezitím odešel, a celý obchod padá.
-    const swapMoves: Array<{ id: string; rosterTeamId: string; loanUntil: string | null; parentClubId: string | null; nextMatchReturn: number }> = [];
-    for (const swapId of swapPlayerIds) {
-      const swap = await db.prepare("SELECT team_id, loan_from_team_id, loan_until, parent_club_id, next_match_return FROM players WHERE id = ?").bind(swapId).first<{ team_id: string; loan_from_team_id: string | null; loan_until: string | null; parent_club_id: string | null; next_match_return: number }>();
-      const swapClubTeamId = swap ? await resolveClubTeamId(db, swap.team_id) : null;
-      if (!swap || swapClubTeamId !== buyerTeamId || swap.loan_from_team_id || swap.next_match_return === 1) {
-        // Vrátit peníze (rollback budget)
-        await db.prepare("UPDATE teams SET budget = budget + ? WHERE id = ?").bind(totalCost, buyerTeamId).run()
-          .catch((e) => logger.warn({ module: "game" }, "rollback budget after swap race", e));
-        await releaseOfferClaim();
-        return fail(409, "Hráč na výměnu již není k dispozici");
-      }
-      swapMoves.push({ id: swapId, rosterTeamId: swap.team_id, loanUntil: swap.loan_until, parentClubId: swap.parent_club_id, nextMatchReturn: swap.next_match_return });
-    }
-    // Vrácení už přesunutých hráčů na výměnu na jejich původní soupisku.
-    const swapRollbackStmts = (moves: typeof swapMoves) => moves.map((m) => db.prepare(
-      `UPDATE players SET team_id = ?, loan_from_team_id = NULL, loan_until = ?, parent_club_id = ?, next_match_return = ?
-       WHERE id = ? AND team_id = ? AND loan_from_team_id IS NULL`,
-    ).bind(m.rosterTeamId, m.loanUntil, m.parentClubId, m.nextMatchReturn, m.id, sellerTeamId));
-
-    // Přičíst prodávajícímu + přesunout hráče + swap + uzavřít nabídku atomicky.
-    // Guard `AND team_id = ?` chrání proti race condition (hráč mezitím prodán).
-    const playerUpdateStmt = isBuyoutAccept
-      ? db.prepare("UPDATE players SET team_id = ?, loan_from_team_id = NULL, loan_until = NULL, parent_club_id = NULL, next_match_return = 0 WHERE id = ? AND team_id = ? AND loan_from_team_id = ? AND COALESCE(status, 'active') != 'transferring'").bind(buyerDestTeamId, playerId, currentPlayer.team_id, sellerRosterTeamId)
-      : db.prepare("UPDATE players SET team_id = ?, loan_from_team_id = NULL, loan_until = NULL, parent_club_id = NULL, next_match_return = 0 WHERE id = ? AND team_id = ? AND loan_from_team_id IS NULL AND COALESCE(status, 'active') != 'transferring'").bind(buyerDestTeamId, playerId, sellerRosterTeamId);
-
-    const moved = await playerUpdateStmt.run();
-    if (moved.meta.changes === 0) {
-      await db.prepare("UPDATE teams SET budget = budget + ? WHERE id = ?").bind(totalCost, buyerTeamId).run()
-        .catch((e) => logger.warn({ module: "game" }, "refund budget after player transfer race", e));
+    if (failedStep === PLAYER_STEP) {
       await closeStaleOfferClaim();
       return fail(409, "Hráč mezitím změnil klub");
     }
-
-    for (let i = 0; i < swapMoves.length; i++) {
-      const m = swapMoves[i];
-      const swapMoved = await db.prepare(
-        `UPDATE players SET team_id = ?, loan_from_team_id = NULL, loan_until = NULL, parent_club_id = NULL, next_match_return = 0
-         WHERE id = ? AND team_id = ? AND loan_from_team_id IS NULL AND next_match_return = 0
-           AND COALESCE(status, 'active') != 'transferring'`,
-      ).bind(sellerTeamId, m.id, m.rosterTeamId).run();
-      if (swapMoved.meta.changes === 0) {
-        await db.batch([
-          db.prepare(
-            `UPDATE players SET team_id = ?, loan_from_team_id = ?, loan_until = ?, parent_club_id = ?, next_match_return = ?
-             WHERE id = ? AND team_id = ? AND loan_from_team_id IS NULL`,
-          ).bind(
-            currentPlayer.team_id, currentPlayer.loan_from_team_id, currentPlayer.loan_until,
-            currentPlayer.parent_club_id, currentPlayer.next_match_return, playerId, buyerDestTeamId,
-          ),
-          ...swapRollbackStmts(swapMoves.slice(0, i)),
-        ]).catch((e) => logger.warn({ module: "game" }, "rollback players after swap race", e));
-        await db.prepare("UPDATE teams SET budget = budget + ? WHERE id = ?").bind(totalCost, buyerTeamId).run()
-          .catch((e) => logger.warn({ module: "game" }, "refund budget after swap race", e));
-        await releaseOfferClaim();
-        return fail(409, "Hráč na výměnu již není k dispozici");
-      }
+    if (failedStep !== null) {
+      await releaseOfferClaim();
+      return fail(409, "Hráč na výměnu již není k dispozici");
     }
 
     const buyerBalanceAfter = buyer.budget - totalCost;
@@ -1260,14 +1373,14 @@ export async function acceptTransferOffer(
     }
     if (adminFee > 0) {
       transferCore.push(db.prepare("INSERT INTO transactions (id, team_id, type, amount, balance_after, description, game_date) VALUES (?, ?, 'transfer_admin_fee', ?, ?, ?, ?)")
-        .bind(crypto.randomUUID(), buyerTeamId, -adminFee, buyerBalanceAfter, `Administrační poplatek za meziligový přestup (${levies.adminFeePct} %)`, gameDate));
+        .bind(crypto.randomUUID(), buyerTeamId, -adminFee, buyerBalanceAfter, `Administrační poplatek za meziligový přestup (${levies.adminFeePct} %${activeLoanFee > 0 ? " z ceny odkupu a poplatku za hostování" : ""})`, gameDate));
     }
     if (levies.levy > 0) {
       // Odvod platí prodávající z utržené částky — kupujícího se netýká.
       transferCore.push(db.prepare("UPDATE teams SET budget = budget - ? WHERE id = ?").bind(levies.levy, sellerTeamId));
       transferCore.push(db.prepare("INSERT INTO transactions (id, team_id, type, amount, balance_after, description, game_date) VALUES (?, ?, 'competition_fee', ?, ?, ?, ?)")
         .bind(crypto.randomUUID(), sellerTeamId, -levies.levy, (seller?.budget ?? 0) + payNow - levies.levy,
-          `Odvod z přestupu uvnitř soutěže (${levies.levyPct} %)`, gameDate));
+          `Odvod z přestupu uvnitř soutěže (${levies.levyPct} %${activeLoanFee > 0 ? " z ceny odkupu a poplatku za hostování" : ""})`, gameDate));
     }
 
     if (isBuyoutAccept) {
@@ -1302,7 +1415,7 @@ export async function acceptTransferOffer(
              AND team_id IN (SELECT id FROM teams WHERE id = ? OR parent_team_id = ?)`,
         ).bind(gameDate, m.id, buyerTeamId, buyerTeamId),
         db.prepare("INSERT INTO player_contracts (id, player_id, team_id, season_id, joined_at, join_type, fee, is_active) VALUES (?, ?, ?, ?, ?, 'swap', 0, 1)")
-          .bind(crypto.randomUUID(), m.id, sellerTeamId, seasonId, gameDate),
+          .bind(crypto.randomUUID(), m.id, m.destTeamId, seasonId, gameDate),
       );
     }
 
@@ -1312,14 +1425,8 @@ export async function acceptTransferOffer(
     } catch (e) {
       logger.error({ module: "game" }, "commit transfer offer failed; rolling back guarded moves", e);
       const rollback = [
-        db.prepare(
-          `UPDATE players SET team_id = ?, loan_from_team_id = ?, loan_until = ?, parent_club_id = ?, next_match_return = ?
-           WHERE id = ? AND team_id = ? AND loan_from_team_id IS NULL`,
-        ).bind(
-          currentPlayer.team_id, currentPlayer.loan_from_team_id, currentPlayer.loan_until,
-          currentPlayer.parent_club_id, currentPlayer.next_match_return, playerId, buyerDestTeamId,
-        ),
-        db.prepare("UPDATE teams SET budget = budget + ? WHERE id = ?").bind(totalCost, buyerTeamId),
+        playerRestoreStmt(),
+        refundBuyerStmt(totalCost),
         db.prepare("UPDATE transfer_offers SET status = ?, resolved_at = NULL WHERE id = ? AND status = 'accepted'")
           .bind(offer.status, offerId),
       ];
@@ -1342,7 +1449,14 @@ export async function acceptTransferOffer(
 
     // Prodávající hráče sám splácel nebo slíbil procenta: zbytek dluhu a procenta z ceny jdou hned.
     const { settleOnResale } = await import("../transfers/installments");
-    await settleOnResale(db, { playerId, ownerClubTeamId: sellerTeamId, saleAmount: saleValueForSellOn + activeLoanFee, saleOfferId: offerId, gameDate })
+    // Z poplatku za hostování už procenta mohla odejít při jeho přijetí (paySellOnFromLoanFee);
+    // do základu se pak znovu nepočítá. Starší hostování je tam mají poprvé až teď.
+    const { loanFeeSellOnPaid } = await import("../transfers/installments");
+    const loanFeeAlreadyShared = activeLoan && activeLoanFee > 0
+      ? await loanFeeSellOnPaid(db, activeLoan.id)
+        .catch((e) => { logger.warn({ module: "game" }, "procenta z poplatku za hostování už vyplacena", e); return false; })
+      : false;
+    await settleOnResale(db, { playerId, ownerClubTeamId: sellerTeamId, saleAmount: saleValueForSellOn + (loanFeeAlreadyShared ? 0 : activeLoanFee), saleOfferId: offerId, gameDate })
       .catch((e) => logger.error({ module: "game" }, "doplacení splátek a procent při dalším prodeji", e));
 
     const { createTransferNews } = await import("../transfers/transfer-news");
@@ -1364,7 +1478,7 @@ export async function acceptTransferOffer(
   // Update commute + reset squad number (odkup z hostování je trvalý přestup, samo hostování ne)
   await onPlayerTransferred(db, playerId, buyerDestTeamId, { permanent: offerType !== "loan" });
   for (const swapId of swapPlayerIds) {
-    await onPlayerTransferred(db, swapId, sellerTeamId, { permanent: true });
+    await onPlayerTransferred(db, swapId, swapDestTeamIds.get(swapId) ?? sellerTeamId, { permanent: true });
   }
 
   // Kořaly kupce (klub, ne jeho dorost): první koupě, celebrita v týmu. Hostování
@@ -1410,6 +1524,7 @@ export async function acceptTransferOffer(
 interface OfferForReply {
   id: string; player_id: string; from_team_id: string; to_team_id: string; offer_amount: number; counter_amount: number | null;
   offer_type: string; status: string; last_action_by: string | null; virtual_team_data: string | null;
+  expires_at: string | null;
 }
 
 /** POST /teams/:teamId/offers/:offerId/reject — odmítnout smí ten, kdo je na tahu. */
@@ -1432,13 +1547,16 @@ export async function rejectTransferOffer(
   const message = input.message ?? null;
   // Reject smí ten, kdo JE na tahu — buyer i seller.
   const offer = await db.prepare(
-    `SELECT id, player_id, from_team_id, to_team_id, offer_amount, counter_amount, offer_type, status, last_action_by, virtual_team_data
+    `SELECT id, player_id, from_team_id, to_team_id, offer_amount, counter_amount, offer_type, status, last_action_by, virtual_team_data, expires_at
      FROM transfer_offers WHERE id = ? AND status IN ('pending','countered')`
   ).bind(offerId).first<OfferForReply>()
     .catch((e) => { logger.warn({ module: "game" }, "fetch offer for reject", e); return null; });
   if (!offer) return missingOfferFail(db, actorTeamId, offerId, 404, "Nabídka nenalezena");
   const scope = await resolveOfferClubScope(db, actorTeamId, offer);
   if (!scope?.role) return fail(404, "Nabídka nenalezena");
+  // Po lhůtě už nejde ani odmítnout: nabídka propadla a mlčení má své následky.
+  const overdue = await overdueOfferFail(env, offerId, offer.expires_at);
+  if (overdue) return overdue;
   if (!scope.onTurn) return fail(409, "Nejsi na tahu");
 
   const rejected = await db.prepare(
@@ -1457,6 +1575,15 @@ export async function rejectTransferOffer(
       GEMINI_API_KEY: env.GEMINI_API_KEY,
       VAPID_PUBLIC_KEY: env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: env.VAPID_SUBJECT, DB: db,
     }).catch((e) => logger.warn({ module: "game" }, "rejection impact", e)));
+  }
+  // Kupec odmítl protinávrh. Když byl absurdní, je to odmítnutí prodávajícím: kupec blokaci
+  // nedostane a hráč, který chtěl odejít, reaguje jako na běžné odmítnutí (transfers/priced-out.ts).
+  if (scope.role === "buyer") {
+    const { settleBuyerSideEnd } = await import("../transfers/priced-out");
+    await inBackground(opts, settleBuyerSideEnd(db, offer, scope, {
+      GEMINI_API_KEY: env.GEMINI_API_KEY,
+      VAPID_PUBLIC_KEY: env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: env.VAPID_SUBJECT, DB: db,
+    }));
   }
 
   await db.prepare("INSERT INTO transfer_offer_events (id, offer_id, team_id, event_type, amount, message) VALUES (?, ?, ?, 'reject', NULL, ?)")
@@ -1511,8 +1638,9 @@ export async function counterTransferOffer(env: Bindings, actorTeamId: string, o
   const scope = await resolveOfferClubScope(db, actorTeamId, offer);
   if (!scope?.role) return fail(404, "Nabídka nenalezena");
   if (scope.buyerClubTeamId === "virtual_ai") return fail(400, "Virtuální klub o ceně nejedná, ber, nebo nech být");
+  const overdue = await overdueOfferFail(env, offerId, offer.expires_at);
+  if (overdue) return overdue;
   if (!scope.onTurn) return fail(409, "Nejsi na tahu");
-  if (offer.expires_at && new Date(offer.expires_at) < new Date()) return fail(410, "Nabídka vypršela");
   if (await areClubsLinked(db, scope.buyerClubTeamId, scope.sellerClubTeamId)) return fail(403, LINKED_CLUBS_ERRORS.transfer);
 
   // Podmínky protinávrhu: co strana neposlala, zůstává z aktuálního návrhu (starší klienti posílají jen částku).
@@ -1592,12 +1720,15 @@ export async function withdrawTransferOffer(
   const withdrawMessage = input.message ?? null;
   // Stáhnout/ukončit smí kupec i prodávající, pokud je jednání aktivní.
   const offer = await db.prepare(
-    `SELECT id, player_id, from_team_id, to_team_id, offer_amount, counter_amount, offer_type, status, last_action_by, virtual_team_data
+    `SELECT id, player_id, from_team_id, to_team_id, offer_amount, counter_amount, offer_type, status, last_action_by, virtual_team_data, expires_at
      FROM transfer_offers WHERE id = ? AND status IN ('pending','countered')`
   ).bind(offerId).first<OfferForReply>();
   if (!offer) return fail(409, "Jednání nelze ukončit (nejsi součástí nebo už je vyřešené)");
   const scope = await resolveOfferClubScope(db, actorTeamId, offer);
   if (!scope?.role) return fail(409, "Jednání nelze ukončit (nejsi součástí nebo už je vyřešené)");
+  // Po lhůtě nejde ani stáhnout: kdo mlčel, nevyhne se následkům tím, že jednání dodatečně ukončí.
+  const overdue = await overdueOfferFail(env, offerId, offer.expires_at);
+  if (overdue) return overdue;
 
   const result = await db.prepare(
     "UPDATE transfer_offers SET status = 'withdrawn', resolved_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ? AND status IN ('pending','countered')"
@@ -1615,6 +1746,14 @@ export async function withdrawTransferOffer(
       GEMINI_API_KEY: env.GEMINI_API_KEY,
       VAPID_PUBLIC_KEY: env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: env.VAPID_SUBJECT, DB: db,
     }).catch((e) => logger.warn({ module: "game" }, "end negotiation impact", e)));
+  }
+  // Kupec stáhl nabídku po absurdním protinávrhu: počítá se jako odmítnutí prodávajícím.
+  if (scope.role === "buyer") {
+    const { settleBuyerSideEnd } = await import("../transfers/priced-out");
+    await inBackground(opts, settleBuyerSideEnd(db, offer, scope, {
+      GEMINI_API_KEY: env.GEMINI_API_KEY,
+      VAPID_PUBLIC_KEY: env.VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY: env.VAPID_PRIVATE_KEY, VAPID_SUBJECT: env.VAPID_SUBJECT, DB: db,
+    }));
   }
 
   // Notifikace druhé straně
@@ -1719,18 +1858,24 @@ export async function listPlayerOnMarket(
   return { ok: true, listingId: id };
 }
 
-/** DELETE /teams/:teamId/listings/:listingId — stáhnout inzerát (rozjednané příhozy se zamítnou). */
+/**
+ * DELETE /teams/:teamId/listings/:listingId — stáhnout inzerát (rozjednané příhozy se zamítnou).
+ * Jen vlastní a jen aktivní: dřív šel "stáhnout" i prodaný nebo propadlý inzerát (přepsal se
+ * mu stav) a cizí inzerát vrátil úspěch, i když se nic nestalo.
+ */
 export async function withdrawListing(env: Bindings, teamId: string, listingId: string): Promise<TransferActionResult> {
   const db = env.DB;
-  const res = await db.prepare("UPDATE transfer_listings SET status = 'withdrawn' WHERE id = ? AND team_id = ?").bind(listingId, teamId).run();
+  const clubTeamId = await resolveClubTeamId(db, teamId) ?? teamId;
+  const res = await db.prepare(
+    "UPDATE transfer_listings SET status = 'withdrawn' WHERE id = ? AND team_id IN (?, ?) AND status = 'active'",
+  ).bind(listingId, teamId, clubTeamId).run();
+  if ((res.meta.changes ?? 0) === 0) return fail(404, "Inzerát nenalezen nebo už není aktivní");
   await db.prepare("UPDATE transfer_bids SET status = 'rejected' WHERE listing_id = ? AND status = 'pending'").bind(listingId).run().catch((e) => logger.warn({ module: "game" }, "reject bids on listing withdrawal", e));
   // Žádosti o hostování z tohohle inzerátu padají spolu s ním.
-  if ((res.meta.changes ?? 0) > 0) {
-    await db.prepare(
-      `UPDATE transfer_offers SET status = 'rejected', reject_message = 'Klub inzerát na hostování stáhl.', resolved_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
-        WHERE listing_id = ? AND status IN ('pending','countered')`,
-    ).bind(listingId).run().catch((e) => logger.warn({ module: "game" }, "reject loan requests on listing withdrawal", e));
-  }
+  await db.prepare(
+    `UPDATE transfer_offers SET status = 'rejected', reject_message = 'Klub inzerát na hostování stáhl.', resolved_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+      WHERE listing_id = ? AND status IN ('pending','countered')`,
+  ).bind(listingId).run().catch((e) => logger.warn({ module: "game" }, "reject loan requests on listing withdrawal", e));
   return { ok: true };
 }
 
@@ -1743,8 +1888,30 @@ export type SignFreeAgentResult = TransferActionResult<{
   player?: Record<string, unknown> | null;
 }>;
 
+/** Nejnižší mzda, kterou volný hráč vůbec zváží: podíl jeho požadavku. */
+export const FREE_AGENT_MIN_WAGE_SHARE = 0.8;
+
+/**
+ * Mzda, se kterou se o podpisu rozhoduje a která se hráči zapíše. Klient ji posílá v těle
+ * požadavku, takže se ověřuje proti požadavku hráče: dřív prošla i nula nebo záporné číslo
+ * a hráč pak hrál zadarmo. Bez udané mzdy platí požadavek hráče. Celebrita o mzdě nejedná.
+ */
+export function resolveFreeAgentWage(
+  offered: unknown, askedWage: number, isCelebrity: boolean,
+): { ok: true; wage: number } | { ok: false; error: string } {
+  const asked = Math.max(0, Math.round(Number(askedWage) || 0));
+  if (isCelebrity || offered == null) return { ok: true, wage: asked };
+  if (typeof offered !== "number" || !Number.isInteger(offered)) return { ok: false, error: "Mzda musí být celé číslo." };
+  const minWage = Math.ceil(asked * FREE_AGENT_MIN_WAGE_SHARE);
+  if (offered < minWage) {
+    return { ok: false, error: `Hráč chce ${asked.toLocaleString("cs")} Kč týdně. Pod ${minWage.toLocaleString("cs")} Kč s tebou jednat nebude.` };
+  }
+  if (offered > MAX_TRANSFER_AMOUNT) return { ok: false, error: "Mzda je příliš vysoká." };
+  return { ok: true, wage: offered };
+}
+
 /** POST /teams/:teamId/free-agents/:faId/sign — podpis volného hráče (rozhoduje hráč). */
-export async function signFreeAgent(env: Bindings, teamId: string, faId: string, offeredWage: number): Promise<SignFreeAgentResult> {
+export async function signFreeAgent(env: Bindings, teamId: string, faId: string, offeredWageInput: number | null | undefined): Promise<SignFreeAgentResult> {
   const db = env.DB;
   const team = await db.prepare(
     "SELECT t.*, v.lat, v.lng, v.district FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?"
@@ -1753,6 +1920,9 @@ export async function signFreeAgent(env: Bindings, teamId: string, faId: string,
 
   const fa = await db.prepare("SELECT * FROM free_agents WHERE id = ?").bind(faId).first<Record<string, unknown>>();
   if (!fa) return fail(404, "Volný hráč nenalezen");
+  const wageCheck = resolveFreeAgentWage(offeredWageInput, fa.weekly_wage as number, !!fa.is_celebrity);
+  if (!wageCheck.ok) return fail(400, wageCheck.error);
+  const offeredWage = wageCheck.wage;
 
   // Hráč z jiného okresu propuštěný dalším klubem téhož majitele: propuštění a podpis
   // by přesunuly hráče mezi vlastními kluby bez přestupu, mimo dohled soutěže.
@@ -1777,6 +1947,10 @@ export async function signFreeAgent(env: Bindings, teamId: string, faId: string,
   const squadCount = await db.prepare("SELECT COUNT(*) as cnt FROM players WHERE team_id = ?")
     .bind(teamId).first<{ cnt: number }>();
   if ((squadCount?.cnt ?? 0) >= 30) return fail(400, "Kádr je plný (max. 30 hráčů)");
+  // Za muže až od 15 let: mladší volný hráč jde do U21 klubu, bez ní ho podepsat nejde.
+  const placement = await placeInSeniorSquad(db, await resolveClubTeamId(db, teamId) ?? teamId, Number(fa.age), `${fa.first_name} ${fa.last_name}`);
+  if (!placement.ok) return fail(400, placement.error);
+  const rosterTeamId = placement.squad === "u21" ? placement.teamId : teamId;
 
   // Peníze na registraci se kontrolují PŘED rozhodnutím hráče. Dřív se nekontrolovaly vůbec:
   // hráč rozhodl, a když odmítl, zapsal se klub do `rejected_by` a hráč mu zmizel z trhu,
@@ -1840,7 +2014,7 @@ export async function signFreeAgent(env: Bindings, teamId: string, faId: string,
   await db.prepare(
     `INSERT INTO players (id, team_id, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, hidden_talent, weekly_wage, nationality, status, is_celebrity, skills_max)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)`
-  ).bind(playerId, teamId, fa.first_name, fa.last_name, (fa.nickname as string) ?? "", fa.age, fa.position, fa.overall_rating,
+  ).bind(playerId, rosterTeamId, fa.first_name, fa.last_name, (fa.nickname as string) ?? "", fa.age, fa.position, fa.overall_rating,
     fa.skills, fa.physical, fa.personality, fa.life_context, fa.avatar, faTalent, offeredWage, (fa.nationality as string) ?? "CZ", isCelebrity, faSkillsMax).run();
 
   // Set residence & commute for new signing
@@ -1856,13 +2030,13 @@ export async function signFreeAgent(env: Bindings, teamId: string, faId: string,
 
   const season = await db.prepare("SELECT id FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1").first<{ id: string }>().catch((e) => { logger.warn({ module: "game" }, "fetch season for signing contract", e); return null; });
   await db.prepare("INSERT INTO player_contracts (id, player_id, team_id, season_id, join_type, fee, is_active) VALUES (?, ?, ?, ?, 'free_agent', 0, 1)")
-    .bind(crypto.randomUUID(), playerId, teamId, season?.id ?? "unknown").run().catch((e) => logger.warn({ module: "game" }, "insert signing contract", e));
+    .bind(crypto.randomUUID(), playerId, rosterTeamId, season?.id ?? "unknown").run().catch((e) => logger.warn({ module: "game" }, "insert signing contract", e));
 
   // Nováček si do kabiny přinese pár vazeb (soused, kolega z práce, vrstevník…)
   const { attachNewcomerRelations } = await import("../transfers/attach-relations");
-  await attachNewcomerRelations(db, teamId, playerId);
+  await attachNewcomerRelations(db, rosterTeamId, playerId);
   const { initNewcomerCoachRelation } = await import("../lib/coach-relation");
-  await initNewcomerCoachRelation(db, teamId, playerId);
+  await initNewcomerCoachRelation(db, rosterTeamId, playerId);
 
   // Atomický DELETE — pokud FA mezitím podepsal jiný tým, RETURNING vrátí 0 řádků.
   const deleted = await db.prepare("DELETE FROM free_agents WHERE id = ? RETURNING id").bind(faId).first<{ id: string }>();

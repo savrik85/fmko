@@ -1149,6 +1149,8 @@ competitionRouter.post("/teams/:teamId/competition/sanctions/:id/appeal", async 
   // vlastní grémium, visí pod jejím id, schůze ale zasedá jen u přeboru.
   const appealLeagueId = await governingLeagueId(c.env.DB, s.league_id);
 
+  const { appealProposalText } = await import("../competition/discipline");
+  const text = appealProposalText(s.amount, s.reason);
   await c.env.DB.prepare(
     `INSERT INTO competition_proposals
       (id, league_id, season_number, kind, gesce, title, body, payload, proposed_by_team_id,
@@ -1156,8 +1158,7 @@ competitionRouter.post("/teams/:teamId/competition/sanctions/:id/appeal", async 
      VALUES (?,?,?,'appeal','disciplinarni',?,?,?,?,?,?,?,0)`
   ).bind(
     id, appealLeagueId, s.season_number,
-    `Odvolání proti pokutě ${s.amount.toLocaleString("cs")} Kč`,
-    s.reason, JSON.stringify({ sanctionId: s.id }), teamId, 0.5, 0.5, gameDate,
+    text.title, text.body, JSON.stringify({ sanctionId: s.id }), teamId, 0.5, 0.5, gameDate,
   ).run();
 
   await c.env.DB.prepare("UPDATE competition_sanctions SET status = 'appealed', appeal_proposal_id = ? WHERE id = ?")

@@ -33,6 +33,7 @@ import { logger } from "../lib/logger";
 import { playerBodyView } from "../generators/physicals";
 import { getSession, getTokenFromRequest, updateSessionTeamId } from "../auth/session";
 import { findReclaimableClub, reclaimClub } from "../ai-clubs/reclaim";
+import { handOverToOwner } from "../ai-clubs/reclaim-handover";
 import { STAND_COLUMNS, standFacilities, type StandSide } from "../stadium/stands-model";
 import { ensureStadiumRow } from "../stadium/stadium-service";
 import { ensureEquipmentRow } from "../equipment/equipment-service";
@@ -243,11 +244,23 @@ teamsRouter.post("/", async (c) => {
     : (village.population as number) > 1000 ? 40000 : 20000;
 
   step = "insert-team";
-  await c.env.DB.prepare(
-    "INSERT INTO teams (id, user_id, village_id, name, primary_color, secondary_color, budget, jersey_pattern, badge_pattern, stadium_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-  ).bind(teamId, userId, body.villageId, body.name,
-    body.primaryColor ?? "#2D5F2D", body.secondaryColor ?? "#FFFFFF", budget,
-    body.jerseyPattern ?? "solid", body.badgePattern ?? "shield", body.stadiumName ?? null).run();
+  // Podmínka „ještě žádné áčko nemá“ je součástí INSERTu: dva souběžné požadavky
+  // (dvojklik, dvě záložky) dřív oba prošly kontrolou výše a založily dva kluby.
+  const { insertHumanTeamOnce } = await import("../lib/insert-human-team");
+  const inserted = await insertHumanTeamOnce(c.env.DB, {
+    id: teamId, userId, villageId: body.villageId, name: body.name,
+    primaryColor: body.primaryColor ?? "#2D5F2D", secondaryColor: body.secondaryColor ?? "#FFFFFF", budget,
+    jerseyPattern: body.jerseyPattern ?? "solid", badgePattern: body.badgePattern ?? "shield",
+    stadiumName: body.stadiumName ?? null,
+  });
+  if (!inserted) {
+    const raced = await c.env.DB.prepare(
+      "SELECT id, name FROM teams WHERE user_id = ? AND COALESCE(team_type, 'senior') <> 'u21' LIMIT 1"
+    ).bind(userId).first<{ id: string; name: string }>();
+    logger.info({ module: "teams" }, `souběžné založení klubu: userId=${userId}, vrací se ${raced?.id ?? "nic"}`);
+    if (!raced) return c.json({ error: "Klub se nepodařilo založit, zkus to prosím znovu." }, 409);
+    return c.json({ id: raced.id, name: raced.name, existing: true }, 200);
+  }
 
   // Sponzora při zakládání klubu už nevybíráme: hlavního sponzora i stadion si klub vyjedná ve hře
   // (stránka Sponzoři). Starší klient může pole `sponsor` ještě poslat, ignoruje se.
@@ -809,11 +822,24 @@ teamsRouter.post("/", async (c) => {
 
   step = "create-schedule";
   if (runningSeason) {
-    // Přípravné období: sezóna ostatních lig už běží, nová liga rozpis nedostane.
-    // Týmy dostanou sdílený herní čas běžící sezóny a rozpis jim vytvoří rollover.
+    // Sezóna ostatních lig už běží: týmy dostanou její sdílený herní čas a liga rozpis na
+    // zbytek sezóny (dvoukolově, nebo jednokolově, když se dvě kola nevejdou). Když do konce
+    // sezóny zbývá méně než osm hracích dnů, zůstává přípravné období a rozpis vytvoří rollover.
     await c.env.DB.prepare("UPDATE teams SET game_date = ?, season_start = ?, season_end = ? WHERE league_id = ?")
       .bind(runningSeason.gameDate, runningSeason.seasonStart, runningSeason.seasonEnd, leagueId).run();
-    logger.info({ module: "teams" }, `liga ${leagueName} založena v přípravném období, rozpis vytvoří rollover`);
+    const { insertLeagueSchedule, planMidSeasonSchedule } = await import("../league/mid-season-schedule");
+    // Jen nový přebor (první klub v okrese). III. třída založená registrací dál čeká na rollover.
+    const plan = leagueLevel === "okresni_prebor" && runningSeason.lastMatchAt && teamIds.length >= 2
+      ? planMidSeasonSchedule({
+          leagueId, seasonNumber: season.number, gameDate: new Date(runningSeason.gameDate),
+          lastDate: new Date(runningSeason.lastMatchAt), teamCount: teamIds.length,
+        }, rng)
+      : null;
+    if (plan && plan.format !== "preseason") {
+      await insertLeagueSchedule(c.env.DB, leagueId, season.number, plan, teamIds);
+    } else {
+      logger.info({ module: "teams" }, `liga ${leagueName} založena v přípravném období (hracích dnů do konce sezóny: ${plan?.matchDays ?? 0}), rozpis vytvoří rollover`);
+    }
   } else if (teamIds.length >= 2) {
     const schedule = generateSchedule(rng, teamIds.length);
     const calendar = generateSeasonCalendar(leagueId, season.number, new Date(), totalRounds(teamIds.length));
@@ -902,7 +928,7 @@ teamsRouter.post("/", async (c) => {
     ];
     const bodies = [
       `${managerLabel}, ${backstoryText}, se ujímá vedení ${body.name} z ${village.name as string}. Kádr čítá ${squad.length} hráčů. Mezi oporami vyčnívají ${topList}. Fanoušci jsou zvědaví, co nová sezóna přinese.`,
-      `V ${village.name as string} to žije — ${managerLabel} převzal tým ${body.name}. „Chceme hrát dobrý fotbal," řekl po svém jmenování. Na soupisku se dostal ${squad.length} hráčů, tahouny by měli být ${topList}.`,
+      `V ${village.name as string} to žije, ${managerLabel} převzal tým ${body.name}. „Chceme hrát dobrý fotbal," řekl po svém jmenování. Na soupisku se dostal ${squad.length} hráčů, tahouny by měli být ${topList}.`,
       `Okresní fotbal má novou kapitolu. ${managerLabel} (${backstoryText}) dorazil do ${village.name as string} a ujal se vedení ${body.name}. V kádru o ${squad.length} hráčích budou klíčoví ${topList}.`,
     ];
     const idx = Math.floor(Math.random() * headlines.length);
@@ -977,9 +1003,16 @@ teamsRouter.post("/reclaim", async (c) => {
   const offer = await findReclaimableClub(c.env.DB, userId);
   const teamId = typeof body.teamId === "string" && body.teamId ? body.teamId : offer?.teamId;
   if (!teamId) return c.json({ error: "Žádný klub, ke kterému by ses mohl vrátit." }, 404);
+  // Čas převzetí je potřeba pro souhrn; návrat ho z týmu maže.
+  const taken = await c.env.DB.prepare("SELECT ai_since FROM teams WHERE id = ? AND user_id = 'ai'").bind(teamId).first<{ ai_since: string | null }>()
+    .catch((e) => { logger.warn({ module: "teams" }, "čas převzetí klubu před návratem", e); return null; });
   if (!(await reclaimClub(c.env.DB, userId, teamId))) {
     return c.json({ error: "Ke klubu se už vrátit nejde." }, 409);
   }
+  // Rozdělaná práce AI trenéra (inzeráty, poptávky, čekající nabídky) se stáhne a majitel dostane
+  // zprávu, co se mezitím stalo. Návrat už platí; chyba úklidu ho nezruší.
+  await handOverToOwner(c.env, teamId, taken?.ai_since ?? null)
+    .catch((e) => logger.error({ module: "teams" }, `předání klubu ${teamId} vracejícímu se majiteli`, e));
 
   // Session drží teamId (push, část rout). Stejně jako po založení klubu.
   await updateSessionTeamId(c.env.SESSION_KV, token, teamId)
@@ -2419,7 +2452,7 @@ teamsRouter.patch("/:id/club/stadium", async (c) => {
         "SELECT sponsor_name FROM sponsor_contracts WHERE team_id = ? AND status = 'active' AND category = 'stadium' LIMIT 1"
       ).bind(teamId).first<{ sponsor_name: string }>();
       if (namingSponsor) {
-        return c.json({ error: `Název stadionu nemůžeš měnit — určuje ho sponzor "${namingSponsor.sponsor_name}".` }, 403);
+        return c.json({ error: `Název stadionu nemůžeš měnit, určuje ho sponzor "${namingSponsor.sponsor_name}".` }, 403);
       }
       updates.push({ col: "stadium_name", val: name });
     }

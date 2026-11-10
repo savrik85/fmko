@@ -49,8 +49,10 @@ async function getNextMatch(db: D1Database, teamId: string, leagueId: string, ga
      JOIN teams t1 ON m.home_team_id = t1.id
      JOIN teams t2 ON m.away_team_id = t2.id
      -- nejstarší NEODEHRANÉ kolo; bez filtru scheduled_at >= game_date, který přeskakuje
-     -- kola předběhnutá herním kalendářem (cron je nestihl odsimulovat)
-     WHERE sc.league_id = ? AND m.status IN ('scheduled','lineups_open')
+     -- kola předběhnutá herním kalendářem (cron je nestihl odsimulovat).
+     -- Jen aktuální sezóna ligy: neodehraná kola starších sezón v kalendáři zůstávají.
+     WHERE sc.league_id = ? AND ${currentSeasonSql("sc")}
+     AND m.status IN ('scheduled','lineups_open')
      AND (m.home_team_id = ? OR m.away_team_id = ?)
      ORDER BY sc.scheduled_at LIMIT 1`
   ).bind(leagueId, teamId, teamId).first<Record<string, unknown>>();
@@ -91,10 +93,56 @@ async function getNextMatch(db: D1Database, teamId: string, leagueId: string, ga
 import { Hono } from "hono";
 import type { Bindings } from "../index";
 import { hashPassword, verifyPassword } from "../auth/password";
-import { createSession, getSession, deleteSession, getTokenFromRequest } from "../auth/session";
+import { createSession, getSession, deleteSession, deleteAllUserSessions, getTokenFromRequest } from "../auth/session";
 import { logger } from "../lib/logger";
+import {
+  bumpCounters, judgeLogin, loginCounterKeys, settleSuccessfulLogin,
+  LOGIN_WINDOW_SECONDS, UNKNOWN_IP,
+} from "../auth/attempt-limiter";
+import { currentSeasonSql } from "../lib/season";
 
 const authRouter = new Hono<{ Bindings: Bindings }>();
+
+/** Jak dlouho /auth/me drží ligové údaje hlavičky v KV. Po odehrání kola stačí, že vyprší. */
+export const ME_LEAGUE_CACHE_TTL_S = 300;
+
+interface MeLeagueInfo {
+  leaguePosition: number | null;
+  nextMatch: Awaited<ReturnType<typeof getNextMatch>>;
+  preseason: Awaited<ReturnType<typeof loadPreseason>>;
+}
+
+/** Klíč obsahuje herní den: „za kolik dní je zápas" se po půlnoci nesmí vrátit ze včerejška. */
+export function meLeagueCacheKey(teamId: string, gameDate: string | null): string {
+  return `auth-me-league:v1:${teamId}:${(gameDate ?? "").slice(0, 10)}`;
+}
+
+/**
+ * Pozice v tabulce, příští zápas a přípravné období pro hlavičku. Web volá /auth/me každou
+ * minutu z každého otevřeného tabu; tyhle tři dotazy četly přes 100 milionů řádků denně,
+ * přitom se mění jen po odehraném kole. Drží se proto pět minut v CACHE_KV.
+ * Chyba KV nesmí /me shodit: spočítá se to z databáze jako dřív.
+ */
+async function loadMeLeagueInfo(
+  env: Bindings, team: { id: string; leagueId: string | null; gameDate: string | null },
+): Promise<MeLeagueInfo> {
+  if (!team.leagueId) return { leaguePosition: null, nextMatch: null, preseason: null };
+  const key = meLeagueCacheKey(team.id, team.gameDate);
+  const cached = await env.CACHE_KV?.get(key, "json")
+    .catch((e) => { logger.warn({ module: "auth" }, "čtení cache ligových údajů /me", e); return null; }) as MeLeagueInfo | null | undefined;
+  if (cached) return cached;
+
+  const { getTeamPosition } = await import("../stats/standings");
+  const position = await getTeamPosition(env.DB, team.leagueId, team.id);
+  const info: MeLeagueInfo = {
+    leaguePosition: position === 0 ? null : position,
+    nextMatch: await getNextMatch(env.DB, team.id, team.leagueId, team.gameDate),
+    preseason: await loadPreseason(env.DB, team.leagueId),
+  };
+  await env.CACHE_KV?.put(key, JSON.stringify(info), { expirationTtl: ME_LEAGUE_CACHE_TTL_S })
+    .catch((e) => logger.warn({ module: "auth" }, "zápis cache ligových údajů /me", e));
+  return info;
+}
 
 function validatePassword(pw: string): string | null {
   if (pw.length < 8) return "Heslo musí mít alespoň 8 znaků";
@@ -113,13 +161,36 @@ authRouter.post("/register", (c) => c.json({
 authRouter.post("/login", async (c) => {
   const body = await c.req.json<{ email: string; password: string }>();
 
-  if (!body.email || !body.password) {
+  if (!body.email || !body.password || typeof body.email !== "string" || typeof body.password !== "string") {
     return c.json({ error: "Vyplň email a heslo" }, 400);
+  }
+  const email = body.email.trim().toLowerCase();
+
+  // Brzda hádání hesel. Pokus se připíše před ověřením hesla jedním atomickým zápisem
+  // do D1; když se zápis nepovede, pokus se odmítne. Bez hlavičky s adresou (mimo
+  // Cloudflare) jde pokus do společného koše.
+  const counterKeys = await loginCounterKeys(email, c.req.header("CF-Connecting-IP") ?? UNKNOWN_IP);
+  let gate;
+  try {
+    const counts = await bumpCounters(c.env.DB, [counterKeys.pair, counterKeys.ip, counterKeys.email], LOGIN_WINDOW_SECONDS);
+    gate = judgeLogin({
+      pair: counts.get(counterKeys.pair) ?? Infinity,
+      ip: counts.get(counterKeys.ip) ?? Infinity,
+      email: counts.get(counterKeys.email) ?? Infinity,
+    });
+  } catch (e) {
+    logger.error({ module: "auth" }, "počítadlo pokusů o přihlášení", e);
+    c.header("Retry-After", "30");
+    return c.json({ error: "Přihlášení teď nejde ověřit. Zkus to prosím za chvíli." }, 503);
+  }
+  if (gate.verdict === "blocked") {
+    c.header("Retry-After", String(LOGIN_WINDOW_SECONDS));
+    return c.json({ error: "Příliš mnoho pokusů o přihlášení. Zkus to znovu za 15 minut." }, 429);
   }
 
   const user = await c.env.DB.prepare(
     "SELECT * FROM users WHERE email = ?"
-  ).bind(body.email.toLowerCase()).first<Record<string, unknown>>();
+  ).bind(email).first<Record<string, unknown>>();
 
   if (!user || !user.password_hash) {
     return c.json({ error: "Špatný email nebo heslo" }, 401);
@@ -129,6 +200,9 @@ authRouter.post("/login", async (c) => {
   if (!valid) {
     return c.json({ error: "Špatný email nebo heslo" }, 401);
   }
+  // Úklid počítadel přihlášení neblokuje: neúspěch znamená jen o pokus méně v běžícím okně.
+  await settleSuccessfulLogin(c.env.DB, counterKeys)
+    .catch((e) => logger.warn({ module: "auth" }, "úklid počítadel po přihlášení", e));
 
   // Find team + season info
   const team = await c.env.DB.prepare(
@@ -153,7 +227,7 @@ authRouter.post("/login", async (c) => {
   await c.env.DB.prepare("UPDATE users SET last_login_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?")
     .bind(user.id).run().catch((e) => console.error("Failed to update last_login_at:", e));
 
-  const token = await createSession(c.env.SESSION_KV, user.id as string, body.email.toLowerCase(), teamId);
+  const token = await createSession(c.env.SESSION_KV, user.id as string, email, teamId);
 
   return c.json({
     token,
@@ -221,12 +295,10 @@ authRouter.get("/me", async (c) => {
      FROM teams t LEFT JOIN villages v ON t.village_id = v.id WHERE t.user_id = ? LIMIT 1`
   ).bind(session.userId).first<Record<string, unknown>>();
 
-  let leaguePosition: number | null = null;
-  if (team?.id && team?.league_id) {
-    const { getTeamPosition } = await import("../stats/standings");
-    leaguePosition = await getTeamPosition(c.env.DB, team.league_id as string, team.id as string);
-    if (leaguePosition === 0) leaguePosition = null;
-  }
+  const leagueInfo: MeLeagueInfo = team?.id
+    ? await loadMeLeagueInfo(c.env, { id: team.id as string, leagueId: (team.league_id as string | null) ?? null, gameDate: (team.game_date as string | null) ?? null })
+    : { leaguePosition: null, nextMatch: null, preseason: null };
+  const leaguePosition = leagueInfo.leaguePosition;
 
   const user = await c.env.DB.prepare("SELECT is_admin FROM users WHERE id = ?")
     .bind(session.userId).first<{ is_admin: number }>().catch((e) => { logger.warn({ module: "auth" }, "fetch is_admin for /me", e); return null; });
@@ -257,10 +329,8 @@ authRouter.get("/me", async (c) => {
       : null,
     gameDate: (team?.game_date as string) ?? null,
     currentWeather: await getCurrentWeather(c.env.DB, (team?.game_date as string) ?? null),
-    nextMatch: team?.id && team?.league_id
-      ? await getNextMatch(c.env.DB, team.id as string, team.league_id as string, team.game_date as string | null)
-      : null,
-    preseason: team?.league_id ? await loadPreseason(c.env.DB, team.league_id as string) : null,
+    nextMatch: leagueInfo.nextMatch,
+    preseason: leagueInfo.preseason,
   });
 });
 
@@ -295,8 +365,11 @@ authRouter.post("/change-password", async (c) => {
   await c.env.DB.prepare("UPDATE users SET password_hash = ? WHERE id = ?")
     .bind(newHash, session.userId).run();
 
-  // Invalidovat aktuální session — uživatel se musí znovu přihlásit
-  const { deleteSession } = await import("../auth/session");
+  // Zneplatnit všechny relace uživatele, nejen tu aktuální: token, který někdo získal
+  // se starým heslem, by jinak platil dál až 90 dní. Uživatel se přihlásí znovu.
+  await deleteAllUserSessions(c.env.SESSION_KV, session.userId)
+    .catch((e) => logger.warn({ module: "auth" }, "delete all sessions after pw change", e));
+  // Aktuální zvlášť: session z doby před seznamem relací v něm být nemusí.
   await deleteSession(c.env.SESSION_KV, token).catch((e) => logger.warn({ module: "auth" }, "delete session after pw change", e));
 
   return c.json({ ok: true });
@@ -323,6 +396,10 @@ authRouter.post("/admin/change-password", async (c) => {
   const newHash = await hashPassword(body.newPassword);
   await c.env.DB.prepare("UPDATE users SET password_hash = ? WHERE id = ?")
     .bind(newHash, body.userId).run();
+
+  // Admin mění heslo typicky u ztraceného nebo napadeného účtu: staré relace musí skončit.
+  await deleteAllUserSessions(c.env.SESSION_KV, body.userId)
+    .catch((e) => logger.warn({ module: "auth" }, "delete all sessions after admin pw change", e));
 
   return c.json({ ok: true });
 });

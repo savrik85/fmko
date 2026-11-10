@@ -172,6 +172,10 @@ describe("lákání a plat v dorostu", () => {
 describe("záporný rozpočet v létě", () => {
   it("vlastní čtrnáctiletý postoupí do dorostu i při mínusu a registrace se strhne", async () => {
     const kid = (await prospects("big")).find((k) => !k.coach_son)!;
+    // Jména se losují: jmenovec mezi kluky, kteří skončili, by shodil kontrolu SMS níž.
+    kid.first_name = "Xaver";
+    kid.last_name = "Unikátní";
+    await db.prepare("UPDATE youth_prospects SET first_name = ?, last_name = ? WHERE id = ?").bind(kid.first_name, kid.last_name, kid.id).run();
     await db.prepare("UPDATE youth_prospects SET age = 14, aged_season = NULL WHERE id = ?").bind(kid.id).run();
     await db.prepare("UPDATE youth_prospects SET aged_season = 3 WHERE team_id = 'big' AND id != ?").bind(kid.id).run();
     await db.prepare("UPDATE teams SET budget = -1000 WHERE id = 'big'").run();
@@ -188,7 +192,7 @@ describe("záporný rozpočet v létě", () => {
   it("ruční „Dát do dorostu“ při mínusu odmítne předem a hráč nevznikne", async () => {
     const { promoteProspect } = await import("./service");
     const kid = (await prospects("big")).find((k) => !k.coach_son)!;
-    await db.prepare("UPDATE youth_prospects SET age = 13 WHERE id = ?").bind(kid.id).run();
+    await db.prepare("UPDATE youth_prospects SET age = 13, joined_at = '2026-01-01' WHERE id = ?").bind(kid.id).run();
     const players = async () => (await db.prepare("SELECT COUNT(*) AS n FROM players WHERE team_id = 'big-u21'").first<{ n: number }>())!.n;
     const before = await players();
     const res = await promoteProspect(db, "big", kid.id);

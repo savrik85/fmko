@@ -118,6 +118,40 @@ export async function settleOnResale(
   return out;
 }
 
+const loanFeeSellOnRef = (loanContractId: string) => `sellon-loan-${loanContractId}`;
+
+/**
+ * Hráč s doložkou o procentech šel na placené hostování: procenta z poplatku dostane klub,
+ * kterému doložka patří, hned. Doložka běží dál (hráč se vrátí a příští přestup ji teprve
+ * uzavře). Bez toho šla doložka obejít: hostování za skutečnou cenu a odkup za korunu.
+ * Vrací vyplacenou částku. Jedno hostování platí jednou (`reference_id` podle smlouvy).
+ */
+export async function paySellOnFromLoanFee(
+  db: D1Database,
+  args: { playerId: string; ownerClubTeamId: string; loanFee: number; loanContractId: string; gameDate: string },
+): Promise<number> {
+  if (args.loanFee <= 0) return 0;
+  const clause = await db.prepare(
+    `SELECT id, beneficiary_team_id, player_name, pct FROM sell_on_clauses
+      WHERE player_id = ? AND owner_team_id = ? AND status = 'active' LIMIT 1`,
+  ).bind(args.playerId, args.ownerClubTeamId).first<{ id: string; beneficiary_team_id: string; player_name: string; pct: number }>();
+  if (!clause) return 0;
+  const share = sellOnShare(args.loanFee, clause.pct);
+  if (share <= 0 || await loanFeeSellOnPaid(db, args.loanContractId)) return 0;
+  const desc = `${clause.pct} % z poplatku za hostování: ${clause.player_name}`;
+  const ref = loanFeeSellOnRef(args.loanContractId);
+  await recordTransaction(db, args.ownerClubTeamId, "sell_on_fee", -share, desc, args.gameDate, ref);
+  await recordTransaction(db, clause.beneficiary_team_id, "sell_on_income", share, desc, args.gameDate, ref);
+  return share;
+}
+
+/** Vyplatila se už z poplatku za tohle hostování procenta z doložky? */
+export async function loanFeeSellOnPaid(db: D1Database, loanContractId: string): Promise<boolean> {
+  const row = await db.prepare("SELECT 1 AS paid FROM transactions WHERE reference_id = ? LIMIT 1")
+    .bind(loanFeeSellOnRef(loanContractId)).first<{ paid: number }>();
+  return !!row;
+}
+
 /**
  * Běžící doložka o procentech z příštího přestupu hráče, nebo null. Hráče s doložkou jde jen
  * prodat: propuštěním ani výměnou by klub, kterému procenta patří, nedostal nic.

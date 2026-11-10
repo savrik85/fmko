@@ -36,7 +36,7 @@ describe("počasí kola pro zpravodaj", () => {
     // Den se hledá přes týž zdroj, který používá hra — natvrdo psané datum by se
     // rozešlo s obloukem sezóny, jakmile by se pohnuly váhy počasí.
     const { weatherForDay, winternessForDate } = await import("../season/season-weather");
-    const den = (iso: string) => weatherForDay(iso, winternessForDate(iso, HRANICE.season_start, HRANICE.season_end)).weather;
+    const den = (iso: string) => weatherForDay(iso, winternessForDate(iso)).weather;
 
     let zajimavy: string | null = null;
     let nudny: string | null = null;

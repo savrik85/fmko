@@ -30,8 +30,8 @@ import type { DemandInput } from "../transfers/demands";
 import { findVisibleFreeAgents, findVisibleListings } from "../transfers/market-visibility";
 import { findTransferSearchPlayerRows } from "../transfers/player-search";
 import {
-  BUY_DEMAND, minimumBid,
-  type BuyCandidateOption, type BuyLoanOption, type BuyPickContext, type BuyPickDecision,
+  BUY_DEMAND, MAX_INJURY_DAYS_TO_BUY, minimumBid,
+  type BuyCandidateOption, type BuyLoanOption, type BuyPickContext, type BuyPickDecision, type PastOffer, type PlayerFitness,
 } from "./buy-decision";
 import {
   decideBuyPick, decideByModel, newMarketTrace, recordDecision, type DecidedBy, type MarketTrace, type ModelUse,
@@ -51,10 +51,10 @@ import {
   SCOUT_TASK_WEEKS, scoutAgesFor, scoutRadiusFor, startScoutTask, type OutsideCandidate,
 } from "./outside-buy";
 import { ensureAiProfile, type AiCoachProfile } from "./profile";
-import { MAX_SQUAD, SIGNING_SQUAD_THRESHOLD, TARGET_SENIOR_SQUAD, type PositionNeed } from "./squad";
-import { loadAiClubState, pragueDay, pragueHour, type AiClubState } from "./transfer-club";
+import { MAX_SQUAD, SIGNING_SQUAD_THRESHOLD, squadFillNeeds, TARGET_SENIOR_SQUAD, type PositionNeed } from "./squad";
+import { loadAiClubState, parseDbTime, pragueDay, pragueHour, type AiClubState } from "./transfer-club";
 import { canOpenDeal, claimTask, openOutgoingOffers } from "./transfer-replies";
-import { maxBuyPrice, openingBid, stableUnit } from "./valuation";
+import { buyCeiling, maxBuyPrice, openingBid, stableUnit } from "./valuation";
 
 const M = "ai-transfer-market";
 
@@ -70,8 +70,10 @@ export function marketHour(teamId: string): number {
 
 /** Jak často AI klub uvažuje o hráči jiného AI klubu (obchody mezi AI kluby jsou vzácné). */
 export const AI_TO_AI_CHANCE = 0.2;
-/** Nabídku AI pošle, jen když jí strop dovolí dát aspoň tolik z tržní hodnoty. */
+/** Hráč přichází v úvahu, jen když peníze nad rezervou stačí aspoň na tolik z jeho tržní hodnoty. */
 const MIN_MAX_TO_VALUE = 0.9;
+/** Kolik volných hráčů model uvidí, když doplňuje kádr do cílové velikosti. */
+const MAX_FILL_FREE_AGENTS = 4;
 /** Nejvýš tolik pokusů o nabídku za den (služba může odmítnout: pauza po odmítnutí, propojení). */
 const MAX_OFFER_ATTEMPTS = 3;
 /** Potřeba postu, od které AI kupuje (bez přestupního kurzu i s kurzem „kupovat“). */
@@ -88,6 +90,11 @@ export interface WeeklyTransferPlan {
   stance: "buy" | "hold" | "sell";
   focus: string[];
   sellIds: string[];
+  /**
+   * Jak trenér v pondělí rozhodl doplnit kádr pod cílovou velikostí: volnými hráči, nákupem,
+   * obojím, nebo vůbec (i starší zápisy bez téhle volby).
+   */
+  fill?: "none" | "free_agents" | "market" | "both";
 }
 
 /**
@@ -113,6 +120,7 @@ export async function loadWeeklyTransferPlan(db: D1Database, teamId: string, now
       stance: p.stance,
       focus: Array.isArray(p.focus) ? p.focus.filter((x): x is string => typeof x === "string") : [],
       sellIds: Array.isArray(p.sellIds) ? p.sellIds.filter((x): x is string => typeof x === "string") : [],
+      fill: p.fill === "free_agents" || p.fill === "market" || p.fill === "both" ? p.fill : "none",
     };
   } catch (e) {
     logger.warn({ module: M }, `nečitelný přestupní kurz klubu ${teamId}`, e);
@@ -208,6 +216,34 @@ interface BuyCandidate {
   sellerIsAi: boolean;
   /** Hráč klubu mimo hru (inzerát nebo hlášení skauta): kupuje se jednáním, ne nabídkou. */
   outside?: OutsideCandidate;
+  /** Zdraví, kondice a stopka hráče klubu ve hře, jak je vidí i lidský kupec. */
+  fitness?: PlayerFitness | null;
+}
+
+/**
+ * Zdraví, kondice a stopka hráčů klubů ve hře (to, co vidí člověk na kartě cizího hráče).
+ * Zranění se bere, jak je vidět: i předstírané vypadá jako skutečné.
+ */
+export async function loadPlayerFitness(db: D1Database, playerIds: string[]): Promise<Map<string, PlayerFitness>> {
+  const out = new Map<string, PlayerFitness>();
+  for (let i = 0; i < playerIds.length; i += 90) {
+    const chunk = playerIds.slice(i, i + 90);
+    const rows = await db.prepare(
+      `SELECT p.id, p.suspended_matches,
+              CASE WHEN json_valid(p.life_context) THEN json_extract(p.life_context, '$.condition') END AS condition,
+              (SELECT MAX(inj.days_remaining) FROM injuries inj WHERE inj.player_id = p.id AND inj.days_remaining > 0) AS injury_days
+         FROM players p WHERE p.id IN (${chunk.map(() => "?").join(",")})`,
+    ).bind(...chunk).all<{ id: string; suspended_matches: number | null; condition: number | null; injury_days: number | null }>()
+      .catch((e) => { logger.warn({ module: M }, "zdraví kandidátů na nákup", e); return { results: [] as Array<{ id: string; suspended_matches: number | null; condition: number | null; injury_days: number | null }> }; });
+    for (const r of rows.results) {
+      out.set(r.id, {
+        injuryDays: r.injury_days && r.injury_days > 0 ? Number(r.injury_days) : null,
+        condition: typeof r.condition === "number" ? r.condition : null,
+        suspendedMatches: Number(r.suspended_matches) || 0,
+      });
+    }
+  }
+  return out;
 }
 
 /** Kandidáti na post: inzeráty klubů ve hře a hráči soupeřů v lize (bez vlastních a hostujících). */
@@ -264,12 +300,21 @@ async function buyCandidates(env: Bindings, club: AiClubState, need: PositionNee
     }
   }
   // Hlášení vlastního skauta o hráčích klubů mimo hru (střed odhadu, jak ho vidí i člověk).
+  // Jestli stojí za to, posoudí model (vidí celý rozptyl odhadu): stačí, když horní odhad potřebu splní.
   for (const o of await loadScoutReportCandidates(db, club.teamId, now)) {
-    if (o.position !== need.position || o.rating < need.minRating) continue;
+    if (o.position !== need.position || (o.ratingRange?.hi ?? o.rating) < need.minRating) continue;
     out.set(`outside:${o.sourceId}`, {
       playerId: `outside:${o.sourceId}`, teamId: "", leagueId: null, rating: o.rating, age: o.age, position: o.position,
       marketValue: marketValue(o.rating, o.age, o.position), listingId: null, askingPrice: o.askingPrice, sellerIsAi: false, outside: o,
     });
+  }
+  // Co vidí lidský kupec: zranění, kondice, stopka. Hráč zraněný na víc než dva týdny se nenabízí.
+  const inGame = Array.from(out.values()).filter((c) => !c.outside);
+  const fitness = await loadPlayerFitness(db, inGame.map((c) => c.playerId));
+  for (const c of inGame) {
+    const f = fitness.get(c.playerId) ?? null;
+    if (f && f.injuryDays !== null && f.injuryDays > MAX_INJURY_DAYS_TO_BUY) out.delete(c.playerId);
+    else c.fitness = f;
   }
   // Obchody mezi AI kluby jsou vzácné: hráče jiného AI klubu AI zvažuje jen některé dny.
   const aiDay = stableUnit(`ai-to-ai|${club.teamId}|${pragueDay(now)}`) < AI_TO_AI_CHANCE;
@@ -342,16 +387,29 @@ async function priceCandidates(db: D1Database, club: AiClubState, need: Position
   const feeShares = new Map<string, number>();
   for (const c of candidates) {
     const feeShare = await adminFeeShare(db, club.leagueId, c.leagueId, feeShares);
-    const maxPrice = Math.floor(maxBuyPrice({
-      marketValue: c.marketValue, need: need.need, profile: club.profile, playerId: c.playerId, now, spendable: club.spendable,
-    }) / (1 + feeShare) / 100) * 100;
+    const net = (price: number) => Math.floor(price / (1 + feeShare) / 100) * 100;
+    // Strop pro model: podle skutečných cen na trhu a peněz nad rezervou (`buyCeiling`). Dřív byl
+    // stropem odhad pravidla podle povahy (`maxBuyPrice`), který ležel pod cenami, za které se
+    // opravdu prodává, a kandidáty vyřadil dřív, než je model uviděl (audit 2026-11).
+    const scouted = c.outside?.source === "scout_report" ? c.outside : null;
+    const maxPrice = net(buyCeiling({
+      marketValue: c.marketValue, spendable: club.spendable,
+      scoutAskHint: scouted?.askingPrice ?? null,
+      optimisticValue: scouted?.ratingRange ? marketValue(scouted.ratingRange.hi, c.age, c.position) : null,
+    }));
+    // Na hráče prostě nejsou peníze: nabídka hluboko pod cenou nemá smysl.
     if (maxPrice < c.marketValue * MIN_MAX_TO_VALUE) continue;
-    const bid = openingBid(maxPrice, c.marketValue, club.profile, c.playerId, now);
-    // Inzerát: cena z inzerátu, když se vejde do stropu, jinak rozumně pod ní.
+    // Částka pravidla (bez modelu) zůstává opatrná podle povahy, jen se vejde pod strop.
+    const ruleMax = Math.min(maxPrice, net(maxBuyPrice({
+      marketValue: c.marketValue, need: need.need, profile: club.profile, playerId: c.playerId, now, spendable: club.spendable,
+    })));
+    const bid = Math.min(maxPrice, openingBid(ruleMax, c.marketValue, club.profile, c.playerId, now));
+    // Inzerát: cena z inzerátu, když se vejde do opatrného stropu, jinak rozumně pod ní.
     const amount = c.askingPrice
-      ? (c.askingPrice <= maxPrice ? c.askingPrice : Math.max(bid, Math.floor(c.askingPrice * 0.85 / 100) * 100))
+      ? (c.askingPrice <= ruleMax ? c.askingPrice : Math.min(maxPrice, Math.max(bid, Math.floor(c.askingPrice * 0.85 / 100) * 100)))
       : bid;
-    if (amount > maxPrice) continue;
+    // Prodávající chce o tolik víc, že by ani strop na slušnou nabídku nestačil.
+    if (c.askingPrice && Math.floor(c.askingPrice * 0.85 / 100) * 100 > maxPrice) continue;
     priced.push({ ...c, maxPrice, amount, feeShare });
   }
   // Hlášení vlastního skauta první (je to jeho práce na hledaný post a za deset dní propadne),
@@ -361,6 +419,40 @@ async function priceCandidates(db: D1Database, club: AiClubState, need: Position
     || ((b.rating - need.minRating + 1) / b.amount) - ((a.rating - need.minRating + 1) / a.amount)
     || b.rating - a.rating);
   return priced;
+}
+
+/** Jak daleko do minulosti model vidí vlastní nabídky na téhož hráče a kolik nejvýš. */
+const PAST_OFFER_DAYS = 30;
+const MAX_PAST_OFFERS = 3;
+
+/**
+ * Vlastní uzavřené nabídky klubu na hráče za poslední měsíc (přestupy) a jak dopadly. Na produ
+ * AI nabízela týmž hráčům dokola skoro stejně a nabídky propadaly bez reakce (39 nabídek,
+ * 1 přijatá): bez paměti model nemá proč nabídnout jinak.
+ */
+export async function loadPastOffers(db: D1Database, clubTeamId: string, playerId: string, now: Date): Promise<PastOffer[]> {
+  const since = new Date(now.getTime() - PAST_OFFER_DAYS * DAY_MS).toISOString();
+  const rows = await db.prepare(
+    `SELECT offer_amount, counter_amount, status, last_action_by, created_at FROM transfer_offers
+      WHERE player_id = ? AND COALESCE(offer_type, 'transfer') != 'loan'
+        AND status IN ('expired', 'rejected', 'withdrawn')
+        AND from_team_id IN (SELECT id FROM teams WHERE id = ? OR parent_team_id = ?)
+        AND julianday(created_at) >= julianday(?)
+      ORDER BY julianday(created_at) DESC LIMIT ?`,
+  ).bind(playerId, clubTeamId, clubTeamId, since, MAX_PAST_OFFERS).all<{
+    offer_amount: number; counter_amount: number | null; status: string; last_action_by: string | null; created_at: string;
+  }>().catch((e) => { logger.warn({ module: M }, `dřívější nabídky na hráče ${playerId}`, e); return { results: [] }; });
+  return rows.results.map((r) => {
+    const created = parseDbTime(r.created_at) ?? now;
+    // Stažená nabídka s protinávrhem prodávajícího: AI odešla, protože chtěl víc.
+    const countered = r.status === "withdrawn" && r.counter_amount != null && r.counter_amount > r.offer_amount;
+    const outcome: PastOffer["outcome"] = countered ? "countered"
+      : r.status === "expired" ? "ignored" : r.status === "rejected" ? "rejected" : "withdrawn";
+    return {
+      amount: Number(r.offer_amount) || 0, outcome, counter: countered ? Number(r.counter_amount) : null,
+      daysAgo: Math.max(0, Math.floor((now.getTime() - created.getTime()) / DAY_MS)),
+    };
+  });
 }
 
 /** Na hráče klubu ve hře jde nabídnout: žádná rozjetá nabídka, pauza po odmítnutí ani propojené kluby. */
@@ -412,10 +504,11 @@ async function demandOption(db: D1Database, club: AiClubState, need: PositionNee
  */
 async function buildBuyOptions(
   env: Bindings, club: AiClubState, need: PositionNeed, candidates: BuyCandidate[], priced: PricedCandidate[], now: Date,
+  routes: { transfers: boolean; freeAgents: boolean } = { transfers: true, freeAgents: true },
 ): Promise<BuyOptions> {
   const db = env.DB;
   const shortlist: ShortlistEntry[] = [];
-  for (const c of priced) {
+  for (const c of routes.transfers ? priced : []) {
     if (shortlist.length >= MAX_SHORTLIST) break;
     const open = c.outside ? await outsideCandidateOpen(db, club.teamId, c.outside, now) : await inGameCandidateOpen(db, club.teamId, c);
     if (!open) continue;
@@ -429,18 +522,20 @@ async function buildBuyOptions(
         estimatedValue: c.marketValue, askingPrice: c.askingPrice, feePct: Math.round(c.feeShare * 100),
         minBid: minimumBid({ estimatedValue: c.marketValue, listedPrice: listed, ruleBid: c.amount }),
         maxBid: listed ? Math.min(c.maxPrice, listed) : c.maxPrice,
+        fitness: c.fitness ?? null,
+        pastOffers: c.outside ? [] : await loadPastOffers(db, club.teamId, c.playerId, now),
       },
       cand: c, freeAgentId: null, ruleBid: c.amount, ruleRank: shortlist.length,
     });
   }
 
   // Volní hráči na post: bez odstupného, jen registrace a mzda.
-  if (club.district && !club.overDealLimit && club.spendable >= FREE_AGENT_SIGNING_FEE) {
+  if (routes.freeAgents && club.district && !club.overBuyLimit && club.spendable >= FREE_AGENT_SIGNING_FEE) {
     const agents = await findVisibleFreeAgents(db, { id: club.teamId, district: club.district, userId: club.userId })
       .catch((e) => { logger.warn({ module: M }, "volní hráči pro nákup", e); return [] as Record<string, unknown>[]; });
     let added = 0;
     for (const a of agents) {
-      if (added >= MAX_FREE_AGENT_OPTIONS) break;
+      if (added >= (need.fill ? MAX_FILL_FREE_AGENTS : MAX_FREE_AGENT_OPTIONS)) break;
       const rating = Number(a.overall_rating) || 0;
       if (a.position !== need.position || rating < need.minRating || typeof a.id !== "string") continue;
       const age = Number(a.age) || 25;
@@ -459,13 +554,13 @@ async function buildBuyOptions(
 
   // Hostování: mladý hráč klubu ve hře na tenký post (bez poplatku, délku volí model z `LOAN_DURATIONS`).
   const loans: LoanEntry[] = [];
-  if (need.missing > 0) {
+  if (need.missing > 0 && routes.transfers) {
     const young = candidates.filter((c) => c.age <= 21 && !c.listingId && !c.outside).sort((a, b) => b.rating - a.rating);
     for (const c of young) {
       if (loans.length >= MAX_LOAN_OPTIONS) break;
       if (!(await inGameCandidateOpen(db, club.teamId, c))) continue;
       loans.push({
-        option: { key: `l${loans.length + 1}`, seller: c.sellerIsAi ? "ai" : "human", position: c.position, age: c.age, rating: c.rating },
+        option: { key: `l${loans.length + 1}`, seller: c.sellerIsAi ? "ai" : "human", position: c.position, age: c.age, rating: c.rating, fitness: c.fitness ?? null },
         playerId: c.playerId,
       });
     }
@@ -474,7 +569,7 @@ async function buildBuyOptions(
   const bestYoung = candidates.filter((c) => c.age <= 21 && !c.listingId).sort((a, b) => b.rating - a.rating)[0];
   const ruleLoan = bestYoung ? loans.find((l) => l.playerId === bestYoung.playerId) ?? null : null;
 
-  return { shortlist, loans, ruleLoan, demand: await demandOption(db, club, need, now) };
+  return { shortlist, loans, ruleLoan, demand: routes.transfers ? await demandOption(db, club, need, now) : null };
 }
 
 /** Co model vidí v daném kroku: bez vyzkoušených možností, po třech pokusech o koupi už bez hráčů. */
@@ -485,7 +580,7 @@ function pickContext(
   return {
     teamName: club.name, profile: club.profile, budget: club.budget, reserve: club.reserve, spendable: club.spendable,
     squadSize: club.analysis.seniorOwnCount, targetSquad: TARGET_SENIOR_SQUAD, strength: club.analysis.top11Average,
-    need: { position: need.position, need: need.need, missing: need.missing, minRating: need.minRating, startersAverage: need.startersAverage, upgrade: need.upgrade },
+    need: { position: need.position, need: need.need, missing: need.missing, minRating: need.minRating, startersAverage: need.startersAverage, upgrade: need.upgrade, fill: need.fill },
     course: plan ? { stance: plan.stance, focus: plan.focus } : null,
     candidates: buyAttempts < MAX_OFFER_ATTEMPTS ? options.shortlist.filter((e) => !tried.has(e.option.key)).map((e) => e.option) : [],
     loans: options.loans.filter((l) => !tried.has(l.option.key)).map((l) => l.option),
@@ -651,11 +746,33 @@ async function scoutForNeeds(
 }
 
 /**
- * Na nejpotřebnější post shání posilu. Jestli a na jaký post, rozhoduje kód: pondělní kurz určuje,
- * od jaké potřeby a na které posty nejdřív (`buyThreshold`), k tomu rezerva a limity obchodů.
- * Koho a za kolik vybere model z užšího výběru (bez modelu pravidlo). Když pokus nevyjde (klub
- * jednání ukončil, hráč odmítl, služba nabídku nepustila), trenér zkusí jinou možnost, nejvýš
- * `MAX_MODEL_PICKS` rozhodnutí modelu za den. Po výpadku modelu dokončí den pravidlo.
+ * Posty, na které dnes klub posilu hledá, v pořadí, v jakém se zkoušejí:
+ * - posty z pondělního kurzu (`focus` při kurzu „kupovat“) napřed, pak podle potřeby,
+ * - práh potřeby podle kurzu (`buyThreshold`); zlepšení základu projde i s kurzem „držet“,
+ * - doplnění kádru pod cílovou velikostí, když ho trenér v pondělí zvolil (`plan.fill`),
+ * - při shodné potřebě pořadí postů rotuje podle dne. Dřív vždy vyhrál brankář (pořadí
+ *   v kódu): na produ šlo 25 z 38 nabídek na brankáře, zatímco skauti hledali jiné posty.
+ */
+export function buyNeedsFor(club: AiClubState, plan: WeeklyTransferPlan | null, now: Date): PositionNeed[] {
+  const focus = plan?.stance === "buy" ? plan.focus : [];
+  const fill = plan?.fill && plan.fill !== "none" ? squadFillNeeds(club.analysis) : [];
+  const day = pragueDay(now);
+  const turn = (n: PositionNeed) => stableUnit(`need-order|${club.teamId}|${day}|${n.position}`);
+  return [
+    // Zlepšení základu jde i s kurzem „držet“ nebo „prodávat“: koupit, nebo nic, rozhodne model.
+    ...club.analysis.needs.filter((n) => n.need >= (n.upgrade ? BUY_NEED : buyThreshold(n.position, plan))),
+    ...fill,
+  ].sort((a, b) => (Number(focus.includes(b.position)) - Number(focus.includes(a.position))) || (b.need - a.need) || (turn(a) - turn(b)));
+}
+
+/**
+ * Shání posilu. Na které posty, určuje `buyNeedsFor` (pondělní kurz modelu, potřeba, doplnění
+ * kádru), k tomu rezerva a limity nákupů. Posty se zkoušejí v pořadí a model dostane první, na
+ * kterém je opravdu z koho vybírat (hráč nebo hostování); posty s platným hlášením vlastního
+ * skauta jdou napřed, protože hlášení za deset dní propadne. Když není z koho vybírat nikde,
+ * zbyde nejpotřebnější post (poptávka). Koho a za kolik vybere model z užšího výběru. Když pokus
+ * nevyjde (klub jednání ukončil, hráč odmítl, služba nabídku nepustila), trenér zkusí jinou
+ * možnost, nejvýš `MAX_MODEL_PICKS` rozhodnutí modelu za den. Po výpadku modelu dokončí den pravidlo.
  */
 async function buyForNeed(
   env: Bindings, club: AiClubState, now: Date, mode: DecisionMode, actions: MarketAction[], plan: WeeklyTransferPlan | null,
@@ -663,20 +780,31 @@ async function buyForNeed(
 ): Promise<void> {
   const db = env.DB;
   if (club.analysis.seniorOwnCount >= MAX_SQUAD - 1 || club.spendable <= 0) return;
-  const focus = plan?.stance === "buy" ? plan.focus : [];
-  const needs = [...club.analysis.needs]
-    .sort((a, b) => (Number(focus.includes(b.position)) - Number(focus.includes(a.position))) || (b.need - a.need))
-    // Zlepšení základu jde i s kurzem „držet“ nebo „prodávat“: koupit, nebo nic, rozhodne model.
-    .filter((n) => n.need >= (n.upgrade ? BUY_NEED : buyThreshold(n.position, plan)));
-  const need = needs[0];
-  if (!need) return;
+  const needs = buyNeedsFor(club, plan, now);
+  if (needs.length === 0) return;
 
-  await scoutForNeeds(env, club, needs, now, mode, actions, plan, trace, use);
+  await scoutForNeeds(env, club, needs.filter((n) => !n.fill), now, mode, actions, plan, trace, use);
 
   if (!canOpenDeal(club, await openOutgoingOffers(db, club.teamId))) return;
-  const candidates = await buyCandidates(env, club, need, now);
-  const priced = await priceCandidates(db, club, need, candidates, now);
-  const options = await buildBuyOptions(env, club, need, candidates, priced, now);
+  // Posty s hlášením vlastního skauta napřed (jeho práce, za deset dní propadne).
+  const scouted = new Set((await loadScoutReportCandidates(db, club.teamId, now)).map((o) => o.position));
+  const ordered = [...needs.filter((n) => scouted.has(n.position)), ...needs.filter((n) => !scouted.has(n.position))];
+  let picked: { need: PositionNeed; options: BuyOptions } | null = null;
+  let first: { need: PositionNeed; options: BuyOptions } | null = null;
+  for (const n of ordered) {
+    // Doplnění kádru jde cestou, kterou trenér v pondělí zvolil (volní hráči, trh, obojí).
+    const routes = n.fill
+      ? { transfers: plan?.fill === "market" || plan?.fill === "both", freeAgents: plan?.fill === "free_agents" || plan?.fill === "both" }
+      : { transfers: true, freeAgents: true };
+    const candidates = routes.transfers ? await buyCandidates(env, club, n, now) : [];
+    const priced = await priceCandidates(db, club, n, candidates, now);
+    const built = await buildBuyOptions(env, club, n, candidates, priced, now, routes);
+    first ??= { need: n, options: built };
+    if (built.shortlist.length > 0 || built.loans.length > 0) { picked = { need: n, options: built }; break; }
+  }
+  const chosen = picked ?? first;
+  if (!chosen) return;
+  const { need, options } = chosen;
 
   const tried = new Set<string>();
   const triedLines: string[] = [];
@@ -723,7 +851,7 @@ async function signFreeAgents(
   const emptyPosition = club.analysis.needs.find((n) => n.startersAverage === 0);
   const belowMinimum = club.analysis.seniorOwnCount < SIGNING_SQUAD_THRESHOLD;
   if (!belowMinimum && !emptyPosition) return;
-  if (club.overDealLimit || club.budget < FREE_AGENT_SIGNING_FEE + club.reserve / 4) return;
+  if (club.overBuyLimit || club.budget < FREE_AGENT_SIGNING_FEE + club.reserve / 4) return;
   if (!club.district) return;
   const agents = await findVisibleFreeAgents(env.DB, { id: club.teamId, district: club.district, userId: club.userId })
     .catch((e) => { logger.warn({ module: M }, "volní hráči", e); return [] as Record<string, unknown>[]; });
@@ -819,8 +947,8 @@ export async function runTransferMarket(env: Bindings, teamId: string, now: Date
   await logDecision(db, {
     teamId, kind: "transfer_market", mode, model: trace.model ?? "rules", contextRef: pragueDay(now),
     inputSummary: `budget=${club.budget} reserve=${club.reserve} spendable=${club.spendable} squad=${club.analysis.seniorOwnCount}`
-      + ` deals30=${club.dealsLast30}/${club.dealLimit} needs=${club.analysis.needs.map((n) => `${n.position}:${n.need.toFixed(2)}`).join(",") || "-"}`
-      + ` course=${plan ? `${plan.stance}${plan.focus.length ? `:${plan.focus.join("+")}` : ""}` : "-"}`
+      + ` deals30=${club.dealsLast30}/${club.dealLimit} buys30=${club.buysLast30} needs=${club.analysis.needs.map((n) => `${n.position}:${n.need.toFixed(2)}`).join(",") || "-"}`
+      + ` course=${plan ? `${plan.stance}${plan.focus.length ? `:${plan.focus.join("+")}` : ""}${plan.fill && plan.fill !== "none" ? ` fill=${plan.fill}` : ""}` : "-"}`
       + (trace.prompts.length > 0 ? `\n\n${trace.prompts.join("\n---\n")}` : ""),
     rawOutput: trace.raws.length > 0 ? trace.raws.join("\n---\n") : null,
     actions: actions.map(({ result: _r, error: _e, ...a }) => a),

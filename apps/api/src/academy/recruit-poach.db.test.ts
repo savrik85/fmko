@@ -6,7 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
 import { Miniflare } from "miniflare";
 import { createRng } from "../generators/rng";
-import { foundYouthTeam, setYouthCoach, recruitDay, openDay, seasonEndAcademy, poachAction, defendPoach, loadAcademyView, setAcademyLevel, weeklyAcademy, type ProspectRow } from "./service";
+import { academyCareForTeam, foundYouthTeam, setYouthCoach, recruitDay, openDay, seasonEndAcademy, poachAction, defendPoach, loadAcademyView, setAcademyLevel, weeklyAcademy, type ProspectRow } from "./service";
 import { coachSonAge } from "./rules";
 
 let mf: Miniflare;
@@ -82,6 +82,8 @@ describe("náborový den", () => {
       expect(p.age).toBeLessThanOrEqual(14);
       expect(p.commitment).toBeGreaterThanOrEqual(55 + 15);
       expect(Math.abs(p.estimate_offset)).toBeLessThanOrEqual(0.5);
+      // Trenér ho viděl hrát: poloviční chyba odhadu
+      expect(p.estimate_precision).toBe(0.5);
       expect(p.aged_season).toBeNull();
     }
     expect((await openDay(db, createRng(99), "big", GAME_DATE)).ok).toBe(false);
@@ -131,6 +133,27 @@ describe("přetahování", () => {
     const kid = (await prospects("small"))[2];
     const res = await poachAction(db, createRng(11), "sister", kid.id, "invite", GAME_DATE);
     expect(res.ok).toBe(false);
+  });
+
+  it("týdenní správa AI klubu vidí provoz akademie a lákané žáky; po rozhovoru s rodiči žák z nabídky zmizí", async () => {
+    const care = await academyCareForTeam(db, "small");
+    expect(care).toMatchObject({ level: "standard", hasCoach: true, poachThreshold: 60, recruitDayCost: 1500, openDayCost: 2500, canRecruitDay: true, canOpenDay: true });
+    expect(care!.weeklyCost.modest).toBeLessThan(care!.weeklyCost.standard);
+    expect(care!.weeklyCost.standard).toBeLessThan(care!.weeklyCost.ambitious);
+    // Jiskra láká dva žáky Sokola; s rodiči žádného z nich ještě nikdo nemluvil.
+    expect(care!.poached).toHaveLength(2);
+    for (const k of care!.poached) expect(k).toMatchObject({ poachId: expect.any(String), age: expect.any(Number), interest: expect.any(Number) });
+    const kid = (await prospects("small"))[0];
+    const poach = await db.prepare("SELECT id, interest FROM youth_poach WHERE prospect_id = ? AND to_team_id = 'big'").bind(kid.id).first<{ id: string; interest: number }>();
+    expect(care!.poached.map((k) => k.poachId)).toContain(poach!.id);
+    expect((await defendPoach(db, "small", poach!.id)).ok).toBe(true);
+    const after = await academyCareForTeam(db, "small");
+    expect(after!.poached.map((k) => k.poachId)).not.toContain(poach!.id);
+    expect(after!.poached).toHaveLength(1);
+    const lowered = await db.prepare("SELECT interest FROM youth_poach WHERE id = ?").bind(poach!.id).first<{ interest: number }>();
+    expect(lowered!.interest).toBeLessThan(poach!.interest);
+    // Klub bez akademie nemá o čem rozhodovat.
+    expect(await academyCareForTeam(db, "sister-none")).toBeNull();
   });
 
   it("v létě kluk se zájmem přestoupí za odstupné, bez zájmu zůstane", async () => {

@@ -42,7 +42,7 @@ const FORM_LABELS: Record<string, string> = { W: "V", D: "R", L: "P" };
 function ini(n: string) { return n.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase(); }
 
 function formatDate(iso: string | null): string {
-  if (!iso) return "—";
+  if (!iso) return "-";
   return new Date(iso).toLocaleDateString("cs", { day: "numeric", month: "numeric" });
 }
 
@@ -432,7 +432,7 @@ function PastSeasonView({ entry, myTeamId }: { entry: HistoryEntry; myTeamId: st
 }
 
 function PastTeamLink({ teamId, name, highlight }: { teamId?: string | null; name?: string | null; highlight?: boolean }) {
-  if (!name) return <span>—</span>;
+  if (!name) return <span>-</span>;
   if (!teamId) return <span className="font-heading font-bold">{name}</span>;
   return <Link href={`/tym/${teamId}`} className={`font-heading font-bold hover:text-pitch-500 transition-colors ${highlight ? "text-pitch-600" : ""}`}>{name}</Link>;
 }

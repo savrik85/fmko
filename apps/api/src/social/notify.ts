@@ -99,3 +99,42 @@ export async function notifySocial(env: Pick<Bindings, "DB" | "VAPID_PUBLIC_KEY"
     logger.warn({ module: M }, `oznámení (${n.kind}) pro ${n.recipientTeamId}`, e);
   }
 }
+
+/** Kam vede oznámení o nahlášení: administrace, kde se o něm rozhoduje. */
+const ADMIN_LINK = "/admin";
+
+/**
+ * Dá vědět adminům (`users.is_admin`), že někdo nahlásil příspěvek nebo komentář.
+ * Dřív nahlášení jen vložilo řádek a čekalo, až se admin podívá sám. Oznámení jde na
+ * hlavní klub každého admina, s pushem (druh `system`). Dokud jedno leží nepřečtené,
+ * další se nepřidá; skrytí po nahlášeních má vlastní titulek a projde vždycky.
+ */
+export async function notifyAdminsOfReport(
+  env: Pick<Bindings, "DB" | "VAPID_PUBLIC_KEY" | "VAPID_PRIVATE_KEY" | "VAPID_SUBJECT">,
+  r: { key: string; body: string; reports: number; hidden: boolean },
+): Promise<number> {
+  const db = env.DB;
+  const admins = await db.prepare(
+    `SELECT t.id FROM teams t JOIN users u ON u.id = t.user_id
+      WHERE u.is_admin = 1 AND t.parent_team_id IS NULL`,
+  ).all<{ id: string }>()
+    .catch((e) => { logger.warn({ module: M }, "admini pro nahlášení", e); return { results: [] as Array<{ id: string }> }; });
+  const title = r.hidden ? "Socky: skryto po nahlášeních" : "Socky: nové nahlášení";
+  const what = r.key.startsWith("comment:") ? "Komentář" : "Příspěvek";
+  const text = r.hidden
+    ? `${what} „${excerpt(r.body, 80)}“ nahlásili ${r.reports} lidé a je skrytý, dokud nerozhodneš.`
+    : `${what} „${excerpt(r.body, 80)}“ někdo nahlásil (celkem ${r.reports}×).`;
+  let sent = 0;
+  for (const admin of admins.results) {
+    try {
+      const pending = await db.prepare("SELECT 1 AS x FROM notifications WHERE team_id = ? AND read = 0 AND action_url = ? AND title = ? LIMIT 1")
+        .bind(admin.id, ADMIN_LINK, title).first<{ x: number }>();
+      if (pending) continue;
+      await createNotification(db, admin.id, "system", title, text, ADMIN_LINK, env);
+      sent += 1;
+    } catch (e) {
+      logger.warn({ module: M }, `oznámení adminovi ${admin.id} o nahlášení`, e);
+    }
+  }
+  return sent;
+}

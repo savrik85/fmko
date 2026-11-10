@@ -148,6 +148,13 @@ async function handleMessage(body: AnyQueueMessage, env: Bindings): Promise<RunO
       return { status: result.teams > 0 ? "done" : "skipped", matches: result.teams };
     }
 
+    case "cup_round": {
+      const { processCupChunk } = await import("../cup/cup-queue");
+      const result = await processCupChunk(env, body.hop);
+      logger.info({ module: "queue-consumer" }, `cup_round (článek ${body.hop}): ${result.status}, odehráno ${result.played}, zbývá ${result.remaining}`);
+      return { status: result.status, matches: result.played };
+    }
+
     case "social_reply": {
       const { generateAiReplies } = await import("../social/ai-replies");
       const written = await generateAiReplies(env, body.trigger, { slot: body.slot, replyId: body.replyId });

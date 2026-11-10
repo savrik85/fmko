@@ -27,6 +27,37 @@ export interface PushSubscriptionData {
 
 // ─── DB helpers ──────────────────────────────────────────────────────────────
 
+/** Nejvýš tolik zařízení na klub. Další odběr vytlačí nejstarší. */
+export const MAX_SUBSCRIPTIONS_PER_TEAM = 10;
+const MAX_ENDPOINT_LENGTH = 2048;
+const MAX_KEY_LENGTH = 512;
+
+/**
+ * Push služby prohlížečů. Na adresu odběru posílá server požadavky sám, takže libovolná
+ * adresa by z něj dělala nástroj na volání cizích serverů. Chrome, Edge, Opera, Brave
+ * a Samsung jdou přes FCM, Firefox přes Mozillu, Safari přes Apple, starší Edge přes WNS.
+ */
+const PUSH_SERVICE_HOSTS = ["fcm.googleapis.com", "android.googleapis.com", "web.push.apple.com"];
+const PUSH_SERVICE_SUFFIXES = [".push.services.mozilla.com", ".notify.windows.com", ".push.apple.com"];
+
+export function isAllowedPushEndpoint(endpoint: unknown): endpoint is string {
+  if (typeof endpoint !== "string" || endpoint.length > MAX_ENDPOINT_LENGTH) return false;
+  let url: URL;
+  try {
+    url = new URL(endpoint);
+  } catch {
+    return false;
+  }
+  if (url.protocol !== "https:" || url.port !== "" || url.username !== "" || url.password !== "") return false;
+  return PUSH_SERVICE_HOSTS.includes(url.hostname) || PUSH_SERVICE_SUFFIXES.some((suffix) => url.hostname.endsWith(suffix));
+}
+
+export function isValidPushSubscription(sub: unknown): sub is PushSubscriptionData {
+  const candidate = sub as Partial<PushSubscriptionData> | null;
+  const validKey = (key: unknown) => typeof key === "string" && key.length > 0 && key.length <= MAX_KEY_LENGTH;
+  return !!candidate && isAllowedPushEndpoint(candidate.endpoint) && validKey(candidate.keys?.p256dh) && validKey(candidate.keys?.auth);
+}
+
 export async function savePushSubscription(
   db: D1Database,
   teamId: string,
@@ -34,9 +65,17 @@ export async function savePushSubscription(
 ): Promise<void> {
   await db
     .prepare(
-      "INSERT INTO push_subscriptions (id, team_id, endpoint, p256dh, auth) VALUES (?, ?, ?, ?, ?) ON CONFLICT(endpoint) DO UPDATE SET team_id = excluded.team_id, p256dh = excluded.p256dh, auth = excluded.auth",
+      "INSERT INTO push_subscriptions (id, team_id, endpoint, p256dh, auth) VALUES (?, ?, ?, ?, ?) ON CONFLICT(endpoint) DO UPDATE SET team_id = excluded.team_id, p256dh = excluded.p256dh, auth = excluded.auth, created_at = datetime('now')",
     )
     .bind(crypto.randomUUID(), teamId, sub.endpoint, sub.keys.p256dh, sub.keys.auth)
+    .run();
+  // Strop na klub: zůstane deset naposledy přihlášených zařízení.
+  await db
+    .prepare(
+      `DELETE FROM push_subscriptions WHERE team_id = ?1 AND id NOT IN (
+         SELECT id FROM push_subscriptions WHERE team_id = ?1 ORDER BY created_at DESC, rowid DESC LIMIT ?2)`,
+    )
+    .bind(teamId, MAX_SUBSCRIPTIONS_PER_TEAM)
     .run();
 }
 

@@ -106,6 +106,10 @@ export async function recoverStuckRounds(
         const results = await runScheduledMatches(db, round.id, geminiApiKey);
         await db.prepare("UPDATE season_calendar SET status = 'simulated' WHERE id = ?")
             .bind(round.id).run();
+        const unplayed = await countRoundMatches(db, round.id, "unplayed");
+        if (unplayed > 0) {
+            logger.error({module: "match-runner"}, `kolo ${round.id}: ${unplayed} zápasů zůstalo neodehraných, dohraje je replayUnplayedMatches`);
+        }
         recovered.push({ calendarId: round.id, leagueId: round.league_id, matches: results.length });
 
         // Základní přehled výsledků (round_results) — bez AI reporteru, ten je sekundární
@@ -133,6 +137,26 @@ export async function recoverStuckRounds(
         }
     }
     return recovered;
+}
+
+/** Kolik zápasů kola je v daném stavu ('simulated' = odehrané, 'unplayed' = čeká na simulaci). */
+export async function countRoundMatches(db: D1Database, calendarId: string, state: "simulated" | "unplayed"): Promise<number> {
+    const where = state === "simulated" ? "status = 'simulated'" : "status IN ('scheduled', 'lineups_open')";
+    const row = await db.prepare(`SELECT COUNT(*) AS n FROM matches WHERE calendar_id = ? AND ${where}`)
+        .bind(calendarId).first<{ n: number }>()
+        .catch((e) => { logger.warn({module: "match-runner"}, `počet zápasů kola ${calendarId}`, e); return null; });
+    return row?.n ?? 0;
+}
+
+const MATCH_SLOTS = ["GK", "DEF", "MID", "FWD"] as const;
+type MatchSlot = typeof MATCH_SLOTS[number];
+
+/**
+ * Pozice ze sestavy uložené manažerem. Engine zná jen čtyři řady; cokoli jiného
+ * (ručně poslané "LW") by v něm sáhlo do prázdna a shodilo celý zápas.
+ */
+export function normalizeMatchPosition(value: unknown): MatchSlot | undefined {
+    return typeof value === "string" && (MATCH_SLOTS as readonly string[]).includes(value) ? value as MatchSlot : undefined;
 }
 
 export async function runScheduledMatches(
@@ -177,7 +201,13 @@ export async function runScheduledMatches(
     }
     const weather: Weather = roundW?.weather ?? "cloudy";
 
-    for (const match of matches.results) {
+    // Zápas, který spadne na chybě, dostane v tomtéž běhu ještě jeden pokus na konci kola.
+    // Opakování je bezpečné: výsledek se zapisuje podmíněně z 'lineups_open', takže zápas,
+    // který spadl až po zápisu výsledku, druhý pokus jen přeskočí.
+    const pendingMatches = [...matches.results];
+    const retriedMatchIds = new Set<string>();
+    for (let matchIndex = 0; matchIndex < pendingMatches.length; matchIndex++) {
+        const match = pendingMatches[matchIndex];
         const matchId = match.id as string;
         const homeTeamId = match.home_team_id as string;
         const awayTeamId = match.away_team_id as string;
@@ -654,8 +684,12 @@ export async function runScheduledMatches(
             // Obec má 4 zastupitele bez ohledu na počet týmů a každý přijme jen jeden tým
             // za den, takže tým z obce s více kluby o výhodu přicházel. Politik v hledišti
             // navíc nemá co dělat s tím, kdo má míč.
-            const fanbaseAdvantage = Math.max(-0.01, Math.min(0.03, (haInfo.total + (groupFx?.noiseBonus ?? 0)) * 0.01));
-            const homeAdvantage = Math.min(0.15, Math.max(0.02, 0.05 + ultrasAdvantage + fanbaseAdvantage));
+            // Jeden vzorec s kurzovým modelem (betting/team-inputs.ts): dřív ho kancelář neznala
+            // a domácí outsidery systematicky podceňovala.
+            const {matchHomeAdvantage} = await import("../season/fanbase-helpers");
+            const homeAdvantage = matchHomeAdvantage({
+                fanbaseTotal: haInfo.total, noiseBonus: groupFx?.noiseBonus ?? 0, ultrasAdvantage,
+            });
             // Kotel (bubny a vlajky) domácích zvedá návštěvu; strop kapacity stadionu platí dál.
             // Lidi, které přilákají zastupitelé, platí vstupné jako ostatní, takže je přemrštěná
             // cena odradí taky — jinak by od trojnásobku chodilo padesát lidí na každého zastupitele.
@@ -1396,6 +1430,12 @@ export async function runScheduledMatches(
                 logger.warn({module: "match-runner"}, "check achievements", e);
             }
 
+            // Následky zápasu jsou zapsané celé. Zápas bez téhle značky zpracoval běh, který
+            // spadl uprostřed: najde ho hlídač a pojistka mu dopočítá, co umí.
+            await db.prepare("UPDATE matches SET aftermath_done_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?")
+                .bind(matchId).run()
+                .catch((e) => logger.warn({module: "match-runner"}, `značka dokončení zápasu ${matchId}`, e));
+
             results.push({
                 matchId,
                 homeScore: result.homeScore,
@@ -1404,9 +1444,20 @@ export async function runScheduledMatches(
                 matchType,
             });
         } catch (e) {
-            logger.error({module: "match-runner"}, `Failed to simulate match ${matchId}`, e);
+            if (!retriedMatchIds.has(matchId)) {
+                retriedMatchIds.add(matchId);
+                pendingMatches.push(match);
+                logger.error({module: "match-runner"}, `zápas ${matchId} spadl, zkusím ho znovu na konci kola`, e);
+            } else {
+                logger.error({module: "match-runner"}, `zápas ${matchId} spadl i napodruhé a zůstává neodehraný (kolo ${calendarId})`, e);
+            }
         }
     }
+
+    // Kolo, které tenhle běh jen dohrával (nebo ho převzal až po posledním zápase), má
+    // odehrané zápasy z dřívějšího běhu. Rozhovory, souhrn kola a sázky patří celému kolu,
+    // ne jen zápasům z tohoto běhu; všechny tři kroky si duplicitu hlídají samy.
+    const roundHasResults = results.length > 0 || (await countRoundMatches(db, calendarId, "simulated")) > 0;
 
     // Paměť rozhodčích vyprchává o bod za kolo — jinak by jedna urážka platila navždy.
     if (results.length > 0 && calRow?.league_id) {
@@ -1424,7 +1475,7 @@ export async function runScheduledMatches(
     // Pozápasový rozhovor — první v řadě, protože je časově citlivý: hráč musí stihnout
     // odpovědět, než se odehraje další kolo. Nevyžaduje Gemini (má šablonový fallback),
     // proto stojí mimo blok podmíněný klíčem.
-    if (results.length > 0 && !youthRound) {
+    if (roundHasResults && !youthRound) {
         try {
             const {tryCreatePostMatchInterviews} = await import("../news/post-match-interview");
             await tryCreatePostMatchInterviews(db, geminiApiKey, calendarId);
@@ -1434,7 +1485,7 @@ export async function runScheduledMatches(
     }
 
     // Round summary — AI vybere Hráče a Trenéra kola + napíše článek
-    if (results.length > 0 && geminiApiKey && !youthRound) {
+    if (roundHasResults && geminiApiKey && !youthRound) {
         try {
             const {generateRoundSummary} = await import("../news/round-summary");
             await generateRoundSummary(db, geminiApiKey, calendarId);
@@ -1671,7 +1722,7 @@ export async function buildMatchPlayers(
             const missingByPos: Record<string, number> = {GK: 0, DEF: 0, MID: 0, FWD: 0};
             for (const pick of userPicks.slice(0, 11)) {
                 if (!allAvailable.find(r => (r.id as string) === pick.playerId)) {
-                    const pos = pick.matchPosition ?? "MID";
+                    const pos = normalizeMatchPosition(pick.matchPosition) ?? "MID";
                     missingByPos[pos] = (missingByPos[pos] ?? 0) + 1;
                 }
             }
@@ -1739,7 +1790,8 @@ export async function buildMatchPlayers(
         try {
             const picks = JSON.parse(userLineupJson) as Array<{ playerId: string; matchPosition?: string }>;
             for (const p of picks) {
-                if (p.matchPosition) matchPositionMap.set(p.playerId, p.matchPosition);
+                const slot = normalizeMatchPosition(p.matchPosition);
+                if (slot) matchPositionMap.set(p.playerId, slot);
             }
         } catch (e) {
             logger.warn({module: "match-runner"}, "parse userLineupJson", e);
@@ -1924,13 +1976,16 @@ export async function copyOrCreateLineup(db: D1Database, teamId: string, calenda
     // Protože odlišení "user-saved explicit" vs "auto-copy z defaultu" v existujícím schématu
     // chybí, použiji heuristiku: nejnovější lineup z calendar_id co MÁ taky kopii v
     // lineup_presets (= byl ručně uložen jako preset). Pokud není, nejnovější vůbec.
+    // Jen sestavy uložené před výkopem tohoto kola: jinak by šlo po zamčení kola uložit
+    // sestavu na příští kolo a tenhle zápas (bez vlastní sestavy) by si ji zkopíroval.
     const lastLineup = await db.prepare(
         `SELECT l.formation, l.tactic, l.hardness, l.players_data, l.captain_id, l.preset_slot, l.match_plan, l.bench_data, l.submitted_at
          FROM lineups l
          WHERE l.team_id = ?
            AND l.is_auto = 0
+           AND l.submitted_at <= COALESCE((SELECT scheduled_at FROM season_calendar WHERE id = ?), '9999')
          ORDER BY l.submitted_at DESC, l.id ASC LIMIT 1`
-    ).bind(teamId).first<{
+    ).bind(teamId, calendarId).first<{
         formation: string;
         tactic: string;
         players_data: string;

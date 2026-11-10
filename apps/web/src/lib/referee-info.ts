@@ -142,7 +142,7 @@ export function gradeColor(grade: number | null): string {
 
 /** Známka na dvě desetinná místa s českou desetinnou čárkou. */
 export function formatGrade(grade: number | null, digits = 2): string {
-  if (grade == null) return "—";
+  if (grade == null) return "-";
   return grade.toFixed(digits).replace(".", ",");
 }
 

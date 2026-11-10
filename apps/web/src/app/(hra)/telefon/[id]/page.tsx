@@ -382,7 +382,8 @@ export default function ConversationPage() {
       console.error("send message:", e);
       // Došlý kredit je běžný stav, ne chyba k reportování — patří k vstupnímu poli.
       const zprava = (e as { message?: string }).message ?? "";
-      setCreditError(zprava.includes("kredit") ? zprava : "Zprávu se nepodařilo odeslat.");
+      // Server říká česky, proč zpráva neodešla (kredit, délka, strop chatu, hráč odešel).
+      setCreditError(isSendRefusal(e) && zprava ? zprava : "Zprávu se nepodařilo odeslat.");
     }
     setSending(false);
   };
@@ -866,8 +867,14 @@ export default function ConversationPage() {
                 <span>· {credit.cenaSms} Kč za zprávu · kredit {credit.zbyva} Kč</span>
               </>
             ) : (
-              <span>Kredit {credit.zbyva} Kč — na SMS to nestačí. Dobije se zítra ráno.</span>
+              <span>Kredit {credit.zbyva} Kč, na SMS to nestačí. Dobije se zítra ráno.</span>
             )}
+          </p>
+        )}
+        {/* Počítadlo jen když se blíží limit, jinak by u každé SMS jen překáželo. */}
+        {newMsg.length >= MESSAGE_COUNTER_FROM && (
+          <p className={`text-sm mb-1.5 px-1 ${newMsg.length >= MESSAGE_MAX ? "text-card-red font-medium" : "text-muted"}`}>
+            {newMsg.length} / {MESSAGE_MAX} znaků
           </p>
         )}
         <div className="flex items-end gap-2">
@@ -884,6 +891,7 @@ export default function ConversationPage() {
             }}
             onHeightChange={scrollToLatest}
             enterKeyHint="send"
+            maxLength={MESSAGE_MAX}
             maxRows={6}
             placeholder={
               cekaSeNaHrace ? (ownerSponsorId ? "Píše…" : "Hráč píše…")
@@ -922,6 +930,17 @@ export default function ConversationPage() {
       )}
     </PhoneFrame>
   );
+}
+
+/** Nejdelší zpráva. Stejné číslo hlídá server (apps/api/src/messaging/limits.ts). */
+const MESSAGE_MAX = 500;
+/** Od kolika znaků se ukáže počítadlo. */
+const MESSAGE_COUNTER_FROM = 450;
+
+/** Server zprávu odmítl s vysvětlením (400 délka a kredit, 409 hráč odešel, 429 strop chatu). */
+function isSendRefusal(e: unknown): boolean {
+  const status = (e as { status?: number }).status;
+  return status === 400 || status === 409 || status === 429;
 }
 
 /**

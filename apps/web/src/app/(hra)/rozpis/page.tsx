@@ -74,7 +74,7 @@ interface LeagueRound {
 }
 
 function formatDate(iso: string | null): string {
-  if (!iso) return "—";
+  if (!iso) return "-";
   return new Date(iso).toLocaleDateString("cs", { day: "numeric", month: "numeric" });
 }
 
@@ -203,7 +203,7 @@ export default function SchedulePage() {
                   <div className="text-xs sm:text-sm text-muted mt-0.5 leading-tight">
                     vs <TeamName name={nextHome.awayName} isAi={nextHome.awayIsAi === true} /> · {nextHome.isCup ? `🏆 ${nextHome.roundName ?? "Pohár"} · ` : ""}{formatDate(nextHome.scheduledAt)}
                     {nextHome.promoted && nextHome.promotionCost
-                      ? <span className="hidden sm:inline"> — zaplaceno {nextHome.promotionCost.toLocaleString("cs")} Kč</span>
+                      ? <span className="hidden sm:inline">, zaplaceno {nextHome.promotionCost.toLocaleString("cs")} Kč</span>
                       : null}
                   </div>
                 </div>

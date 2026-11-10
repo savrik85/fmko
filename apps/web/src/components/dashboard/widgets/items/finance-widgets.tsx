@@ -10,6 +10,7 @@ import {
   DIVERGING, PRIMARY, seriesColor, compact, compactCZK, fullCZK,
 } from "../charts";
 import type { WidgetProps } from "../types";
+import { weeksText } from "@/lib/weeks-text";
 import { safeTeamColor, MoreLink } from "./shared";
 
 // ── Rozpočet ────────────────────────────────────────────────────────────────
@@ -66,7 +67,7 @@ export function BudgetForecastWidget({ data }: WidgetProps) {
       </div>
       {bankrupt != null && (
         <div className="text-sm text-card-red text-center font-heading font-bold">
-          Při téhle bilanci dojdou peníze za {bankrupt} týdnů.
+          Při téhle bilanci dojdou peníze za {weeksText(bankrupt)}. V mínusu se zablokují nákupy a investice.
         </div>
       )}
     </div>
@@ -183,7 +184,7 @@ export function ConcessionRevenueWidget({ data }: WidgetProps) {
   return (
     <div className="space-y-3">
       <BarChart
-        categories={sales.map((m) => m.opponentName ?? "—")}
+        categories={sales.map((m) => m.opponentName ?? "-")}
         series={[
           { label: "Tržba", color: PRIMARY, values: sales.map((m) => m.totalRevenue ?? 0) },
           { label: "Zisk", color: seriesColor(1), values: sales.map((m) => m.totalProfit ?? 0) },

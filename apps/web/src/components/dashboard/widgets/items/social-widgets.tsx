@@ -148,7 +148,7 @@ export function FanVillagesWidget({ data, height }: WidgetProps) {
         data={razeno.map((o) => ({
           label: `${o.villageName} · ${o.distanceKm.toFixed(1)} km`,
           value: o.celkem,
-          display: o.celkem > 0 ? String(o.celkem) : "—",
+          display: o.celkem > 0 ? String(o.celkem) : "-",
         }))}
       />
       <div className="text-sm text-muted text-center">

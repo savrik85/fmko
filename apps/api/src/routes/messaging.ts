@@ -7,6 +7,9 @@ import { Hono } from "hono";
 import type { Bindings } from "../index";
 import { logger } from "../lib/logger";
 import { photoKey } from "../messaging/player-photo";
+import { pushPhoneMessage } from "../community/phone-push";
+import { PLAYER_GONE_HINT, playerInClub } from "../messaging/player-reach";
+import { PHONE_MESSAGE_MAX, TOO_LONG_ERROR, cleanPhoneMessage, pageLimit } from "../messaging/limits";
 import { requireTeamOwnership, requireAdmin, requirePrivateTeamRead } from "../auth/middleware";
 import { listGroupChatsForTeam } from "./group-chats";
 import { sendWebPushToTeam, getNotificationPreferences } from "../community/web-push";
@@ -190,14 +193,24 @@ function odpovidatLze(
   return {
     canReply: false,
     channel: null,
-    replyHint: `${opts.title ?? "Odesílatel"} posílá jen oznámení — odpovídat nejde.`,
+    replyHint: `${opts.title ?? "Odesílatel"} posílá jen oznámení, odpovídat nejde.`,
   };
+}
+
+/**
+ * Patří hráč z konverzace pořád ke klubu? Chyba dotazu = ano: kvůli výpadku DB se
+ * vlákno nezamyká, odeslání by stejně selhalo jinde.
+ */
+async function playerStillReachable(db: D1Database, playerId: string | null, teamId: string): Promise<boolean> {
+  if (!playerId) return false;
+  return playerInClub(db, playerId, teamId)
+    .catch((e) => { logger.warn({ module: "messaging" }, `ověření adresáta ${playerId}`, e); return true; });
 }
 
 messagingRouter.get("/teams/:teamId/conversations/:convId", async (c) => {
   const teamId = c.req.param("teamId");
   const convId = c.req.param("convId");
-  const limit = Number(c.req.query("limit") || "50");
+  const limit = pageLimit(c.req.query("limit"));
   const before = c.req.query("before"); // cursor pagination
 
   // Ověřit že konverzace patří tomuto týmu + načíst AI thread state
@@ -264,6 +277,10 @@ messagingRouter.get("/teams/:teamId/conversations/:convId", async (c) => {
     } catch (e) { logger.warn({ module: "messaging" }, "load unrest for conversation", e); }
   }
 
+  // Hráč, který v klubu už není (přestup, konec kariéry): vlákno zůstává ke čtení,
+  // psát do něj nejde. Odpověď by nepřišla a SMS by stála kredit naprázdno.
+  const playerGone = convOwner.type === "player" && !(await playerStillReachable(c.env.DB, convOwner.participant_id, teamId));
+
   let query = "SELECT * FROM messages WHERE conversation_id = ?";
   const binds: unknown[] = [convId];
 
@@ -317,10 +334,12 @@ messagingRouter.get("/teams/:teamId/conversations/:convId", async (c) => {
     // Kdo na druhé straně vůbec odpoví — rozhoduje server, ne frontend.
     // Většina systémových konverzací je jednosměrné oznámení (svaz, pořadatel,
     // sportovní ředitel); psát do nich by znamenalo mluvit do zdi.
-    ...odpovidatLze(convOwner.type, convOwner.ai_thread_active === 1, {
-      title: convOwner.title,
-      participantId: convOwner.participant_id,
-    }),
+    ...(playerGone
+      ? { canReply: false, channel: null, replyHint: PLAYER_GONE_HINT, readOnly: true }
+      : odpovidatLze(convOwner.type, convOwner.ai_thread_active === 1, {
+        title: convOwner.title,
+        participantId: convOwner.participant_id,
+      })),
     aiThreadActive: convOwner.ai_thread_active === 1,
     aiThreadState: parseAiThreadState(convOwner.ai_thread_state),
     participantId: convOwner.participant_id,
@@ -401,6 +420,9 @@ messagingRouter.post("/teams/:teamId/conversations/:convId/voice-note", async (c
   if (!conv || conv.team_id !== teamId) return c.json({ error: "Konverzace nenalezena" }, 404);
   const rule = odpovidatLze(conv.type, conv.ai_thread_active === 1, { participantId: conv.participant_id });
   if (!rule.canReply) return c.json({ error: "Do téhle konverzace se odpovídat nedá." }, 400);
+  if (conv.type === "player" && !(await playerStillReachable(c.env.DB, conv.participant_id, teamId))) {
+    return c.json({ error: PLAYER_GONE_HINT, readOnly: true }, 409);
+  }
 
   const {
     COACH_AUDIO_TYPES, COACH_AUDIO_MAX_BYTES, COACH_AUDIO_MAX_SEC, pendingCoachAudioKey, transcribeCoachVoice, takeVoiceNoteQuota,
@@ -476,7 +498,13 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
     body: string; optionId?: string; voice?: { audioKey?: unknown; durationSec?: unknown; peaks?: unknown };
   }>();
 
-  if (!body.body?.trim()) return c.json({ error: "Empty message" }, 400);
+  // Hlasovka: `body` je přepis od modelu, ne text od hráče, takže se zkrátí místo odmítnutí.
+  const cleaned = cleanPhoneMessage(body.voice && typeof body.body === "string" ? body.body.slice(0, PHONE_MESSAGE_MAX) : body.body);
+  if ("error" in cleaned) {
+    return c.json({ error: cleaned.error === "too_long" ? TOO_LONG_ERROR : "Zpráva je prázdná." }, 400);
+  }
+  // Dál se pracuje jen s očištěným textem.
+  body.body = cleaned.text;
 
   let voiceMeta: { type: "voice"; audioKey: string; durationSec: number; peaks?: number[] } | null = null;
   if (body.voice) {
@@ -515,7 +543,12 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
   }
   const platiSeKredit = pravidlo.channel === "sms";
 
-  const { loadCredit, spendCredit } = await import("../messaging/phone-credit");
+  // Adresát se ověřuje před stržením kreditu: hráč mimo klub neodpoví.
+  if (conv?.type === "player" && !(await playerStillReachable(c.env.DB, conv.participant_id, teamId))) {
+    return c.json({ error: PLAYER_GONE_HINT, readOnly: true }, 409);
+  }
+
+  const { loadCredit, spendCredit, refundCoachSms } = await import("../messaging/phone-credit");
   if (platiSeKredit) {
     // Vypnuté generování textu se musí poznat DŘÍV, než se strhne kredit —
     // jinak by hráč platil za odpověď, která nepřijde. Přepínač `ai_provider`
@@ -606,6 +639,10 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
         handleAiPlayerReply(c.env.DB, c.env, convId)
           .catch((e) => logger.error({ module: "messaging" }, "handleAiPlayerReply failed", e)),
       );
+    } else {
+      // Hráč zrovna píše odpověď na předchozí zprávu: tahle se uloží (uvidí ji v historii),
+      // ale vlastní odpověď nedostane, takže kredit za ni nepatří.
+      await refundCoachSms(c.env.DB, teamId, convId, "zpráva během psaní hráče");
     }
   }
 
@@ -705,6 +742,9 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
           });
         }
       }).catch((e) => logger.warn({ module: "messaging" }, "odpověď majitele firmy", e)));
+    } else {
+      // Majitel ještě píše odpověď na předchozí SMS, na tuhle nikdo neodpoví.
+      await refundCoachSms(c.env.DB, teamId, convId, "majitel firmy zrovna píše");
     }
   } else if (conv?.type === "system" && conv.participant_id?.startsWith("de-")) {
     // Pozvánka na okresní akci (pouť, bál…): přijdu s hráči / sám / nepřijdu.
@@ -752,6 +792,20 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
     await c.env.DB.prepare(
       "INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, sent_at, read) VALUES (?, ?, 'manager', ?, ?, ?, ?, 0)"
     ).bind(uuid(), otherConv.id, teamId, senderName, body.body.trim(), now).run();
+
+    // Push druhému trenérovi: zpráva od kolegy dřív ležela v telefonu, dokud ho sám neotevřel.
+    // Přepínač „Události a ostatní“ hlídá pushPhoneMessage; AI klub odběr nemá, nic se neodešle.
+    const recipientConvId = otherConv.id;
+    c.executionCtx.waitUntil((async () => {
+      const sender = await c.env.DB.prepare("SELECT name FROM managers WHERE team_id = ?")
+        .bind(teamId).first<{ name: string }>()
+        .catch((e) => { logger.warn({ module: "messaging" }, "jméno trenéra pro push", e); return null; });
+      await pushPhoneMessage(c.env.DB, c.env, {
+        teamId: otherTeamId, convId: recipientConvId,
+        sender: sender?.name ? `${sender.name} (${senderName})` : senderName,
+        text: trimmedText,
+      });
+    })().catch((e) => logger.warn({ module: "messaging" }, "push zprávy od trenéra", e)));
   }
 
   return c.json({ id: msgId, sentAt: now, credit: await loadCredit(c.env.DB, teamId) });

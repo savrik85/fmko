@@ -10,7 +10,7 @@ import { logger } from "../lib/logger";
 import { pragueHour } from "../lib/match-tick-schedule";
 import { linkedTeamIds } from "../competition/club-links";
 import {
-  FRIENDLY_DAYS_AHEAD, FRIENDLY_MAX_STAKE, FRIENDLY_STAKE_STEP, MAX_MESSAGE_LENGTH, MAX_OPEN_OFFERS,
+  FRIENDLY_DAYS_AHEAD, FRIENDLY_STAKE_STEP, MAX_MESSAGE_LENGTH, MAX_OPEN_OFFERS, loadFriendlyStakeCap,
   FRIENDLY_REST_DAYS, FRIENDLY_REFEREE_FEE, NEUTRAL_RENTAL_FEE, TRAVEL_BASE, TRAVEL_PER_KM,
   addDays, busyText, earliestDay, expireStaleFriendlies, findBusy, gameDay,
   loadCrests, loadFriendlyTable, loadHeadToHead, offerToChallengeTerms, openDueFriendlies, parseTerms,
@@ -217,7 +217,8 @@ friendliesRouter.get("/teams/:teamId/challenges", async (c) => {
     record,
     table,
     limits: {
-      maxStake: FRIENDLY_MAX_STAKE, stakeStep: FRIENDLY_STAKE_STEP, daysAhead: FRIENDLY_DAYS_AHEAD,
+      // Strop podle pravidel vlastní soutěže; s klubem z jiné soutěže platí nižší z obou.
+      maxStake: await loadFriendlyStakeCap(db, [teamId]), stakeStep: FRIENDLY_STAKE_STEP, daysAhead: FRIENDLY_DAYS_AHEAD,
       maxOpenOffers: MAX_OPEN_OFFERS, maxMessage: MAX_MESSAGE_LENGTH, restDays: FRIENDLY_REST_DAYS,
       refereeFee: FRIENDLY_REFEREE_FEE, rentalFee: NEUTRAL_RENTAL_FEE, travelBase: TRAVEL_BASE, travelPerKm: TRAVEL_PER_KM,
     },

@@ -9,8 +9,10 @@
  * z kopie produkce). Kredity pokrývají jen modely hostované Cloudflarem.
  */
 
+import { cleanDashesDeep } from "../lib/dashes";
 import type { Bindings } from "../index";
 import { logger } from "../lib/logger";
+import { NAME_RULE } from "./prompt-text";
 
 /**
  * Model vybraný měřením (docs/ai-coach-model-eval-2026-10-25.md): gpt-oss-120b se střední silou
@@ -246,7 +248,8 @@ export function buildModelInput(model: string, req: CoachModelRequest): Record<s
   const profile = MODEL_PROFILES[model] ?? DEFAULT_PROFILE;
   const input: Record<string, unknown> = {
     messages: [
-      { role: "system", content: req.system },
+      // Jména klubů jsou text od hráčů: v promptu jsou v uvozovkách a model je nesmí brát jako pokyn.
+      { role: "system", content: `${req.system} ${NAME_RULE}` },
       { role: "user", content: req.user },
     ],
     max_tokens: (req.maxTokens ?? 1200) + profile.reasoningBudget,
@@ -325,5 +328,6 @@ export async function callCoachModel(env: Pick<Bindings, "AI">, req: CoachModelR
       error: out.text ? "odpověď není JSON objekt" : "prázdná odpověď",
     };
   }
-  return { json, raw: out.text.slice(0, 8000), model, tokensIn: out.tokensIn, tokensOut: out.tokensOut, latencyMs };
+  // Texty z rozhodnutí (SMS, výroky do novin, komentáře) jdou hráčům: bez dlouhých pomlček.
+  return { json: cleanDashesDeep(json), raw: out.text.slice(0, 8000), model, tokensIn: out.tokensIn, tokensOut: out.tokensOut, latencyMs };
 }

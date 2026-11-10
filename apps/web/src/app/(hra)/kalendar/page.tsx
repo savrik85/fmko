@@ -126,7 +126,7 @@ export default function CalendarPage() {
             const isFriendly = match?.title.startsWith("Přátelák");
             const isCup = !!match?.isCup;
             const matchLabel = match
-              ? match.title.replace("Přátelák ", "").replace("Pohár ", "").replace(/^\d+\. kolo — /, "")
+              ? match.title.replace("Přátelák ", "").replace("Pohár ", "").replace(/^\d+\. kolo(?: —|:) /, "")
               : null;
             const isLineupNeeded = match?.status === "Nastav sestavu!";
             const matchBg = !match ? "" :

@@ -10,7 +10,7 @@ export default function NovinkyPage() {
 
   return (
     <div className="page-container space-y-4">
-      <p className="text-sm text-muted">Co se v Pralesu změnilo — nejnovější nahoře.</p>
+      <p className="text-sm text-muted">Co se v Pralesu změnilo, nejnovější nahoře.</p>
       {RELEASE_NOTES.map((n) => (
         <div key={`${n.date}-${n.title}`} className="card p-4 sm:p-5">
           <div className="text-xs text-muted font-heading font-bold uppercase tracking-wide">

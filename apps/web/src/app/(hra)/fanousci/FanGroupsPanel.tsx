@@ -284,12 +284,12 @@ export function FanGroupsPanel({ data, teamId, onChanged }: {
         <div className="mt-3 space-y-3 text-sm leading-relaxed">
           <p>
             Tvoji fanoušci nejsou jedna masa. Dělí se na několik part, každá má svou povahu,
-            svého vůdce a vlastní náladu. Nejsou navíc k tvé základně — jsou to lidi z ní.
+            svého vůdce a vlastní náladu. Nejsou navíc k tvé základně, jsou to lidi z ní.
           </p>
           <ul className="space-y-1.5 ml-4 list-disc">
             <li><strong>Nálada</strong> jde nahoru, když se klubu daří a když jim vyjdeš vstříc.</li>
             <li><strong>Naštvanost</strong> roste, když jim něco zatrhneš. Sama vyprchává pomalu.</li>
-            <li><strong>Kotel</strong> ti dělá domácí výhodu — a taky nejvíc problémů.</li>
+            <li><strong>Kotel</strong> ti dělá domácí výhodu, a taky nejvíc problémů.</li>
             <li><strong>Rodiny a pamětníci</strong> bordel nesnášejí a při nepokojích odcházejí první.</li>
           </ul>
           <p className="text-muted">
@@ -377,13 +377,13 @@ export function FanGroupsPanel({ data, teamId, onChanged }: {
                 <span className="text-muted shrink-0">{formatDatum(u.gameDate)}</span>
                 <span>
                   <strong>{u.label}</strong>
-                  {u.detail && <span className="text-muted"> — {u.detail}</span>}
+                  {u.detail && <span className="text-muted">, {u.detail}</span>}
                 </span>
               </li>
             ))}
           </ul>
           <p className="mt-3 text-sm text-muted">
-            Každá parta to bere jinak. Pamětníky urazí přejmenování klubu, kotel ne —
+            Každá parta to bere jinak. Pamětníky urazí přejmenování klubu, kotel ne -
             a naopak.
           </p>
         </div>

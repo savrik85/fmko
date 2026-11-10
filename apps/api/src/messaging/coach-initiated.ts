@@ -19,16 +19,19 @@ import { nazevSituace } from "../incidents/situace";
 import { temaZeStavu } from "../incidents/tema";
 import { nactiZnalostiHrace } from "../incidents/znalosti-db";
 import {
-  generateCoachInitiatedReply, generateSquadGroupReaction, GeminiUnavailableError, playerTimeContext,
+  coachQuote, generateCoachInitiatedReply, generateSquadGroupReaction, GeminiUnavailableError, playerTimeContext,
 } from "./ai-player-chat";
 import { coachStreak, leftOnReadChance, markCoachMessagesRead, readDelayMs } from "./left-on-read";
 import {
   INJURY_COLUMN, afterPlayerReply, loadLastMatchContext, loadLastOwnMessageAt, loadPlayerSnapshot, loadTeamContext, nactiSituaceTymu,
-  pockejNezDopise, scheduleRetryReply,
+  pockejNezDopise, pushPlayerReply, scheduleRetryReply,
 } from "./ai-player-spawn";
+import type { OptionalPushKeys } from "../community/phone-push";
 import { loadChatMemory } from "./player-memory";
+import { refundCoachSms } from "./phone-credit";
 import type { PlayerSnapshot } from "./ai-player-scenarios";
 import { carryWeightTalk, weightTalkFromState } from "../season/weight-talk";
+import { playerInClub } from "./player-reach";
 
 const M = "coach-initiated";
 
@@ -63,7 +66,7 @@ const PLAYER_SELECT = `
  */
 export async function startCoachThread(
   db: D1Database,
-  env: { GEMINI_API_KEY?: string; CACHE_KV?: KVNamespace },
+  env: { GEMINI_API_KEY?: string; CACHE_KV?: KVNamespace } & OptionalPushKeys,
   opts: {
     convId: string; teamId: string; playerId: string; coachMessage: string;
     /** Odpověď přichází se zpožděním po výpadku modelu (follow-ups.ts). */
@@ -71,23 +74,27 @@ export async function startCoachThread(
   },
 ): Promise<boolean> {
   try {
-    // Áčko i U21 téhož klubu: SMS U21 klukovi dřív končila tady a kredit byl pryč.
-    const row = await db
-      .prepare(`${PLAYER_SELECT} WHERE p.id = ? AND (p.team_id = ? OR p.team_id IN (SELECT id FROM teams WHERE parent_team_id = ? AND team_type = 'u21'))`)
-      .bind(opts.playerId, opts.teamId, opts.teamId)
-      .first<Record<string, unknown>>();
+    // Áčko, U21 i hráč půjčený jinam (klub ho dál vlastní): stejné pravidlo jako při
+    // odeslání zprávy a v `handleAiPlayerReply` (player-reach.ts). SMS U21 klukovi dřív
+    // končila tady a kredit byl pryč.
+    const row = await playerInClub(db, opts.playerId, opts.teamId)
+      ? await db.prepare(`${PLAYER_SELECT} WHERE p.id = ?`).bind(opts.playerId).first<Record<string, unknown>>()
+      : null;
     if (!row) {
       logger.warn({ module: M }, `hráč ${opts.playerId} není v kádru ${opts.teamId}`);
+      await refundCoachSms(db, opts.teamId, opts.convId, "hráč už v klubu není");
       return false;
     }
 
     // Bez účasti v posledním zápase si hráč z výsledku týmu domyslel, že hrál.
-    // U21 kluk hrál jinou soutěž, výsledek áčka mu nepatří (stejně jako v `handleAiPlayerReply`).
-    const matchCtx = row.team_id === opts.teamId ? await loadLastMatchContext(db, opts.teamId) : undefined;
+    // U21 kluk nebo hráč na hostování hrál jinou soutěž: zápasy i tabulka se berou z týmu,
+    // za který právě hraje, ne z áčka (stejně jako v `handleAiPlayerReply`).
+    const playerTeamId = (row.team_id as string | null) ?? opts.teamId;
+    const matchCtx = await loadLastMatchContext(db, playerTeamId);
     const player = loadPlayerSnapshot(row, matchCtx);
     const situaceKind = (await nactiSituaceTymu(db, opts.teamId)).get(opts.playerId);
     player.zivotniSituace = situaceKind ? { kind: situaceKind, label: nazevSituace(situaceKind) } : undefined;
-    const team = await loadTeamContext(db, opts.teamId);
+    const team = await loadTeamContext(db, opts.teamId, playerTeamId);
 
     // Téma incidentu z tlačítka „Zeptat se" nebo z dřívější otázky (spec 7a).
     const vlakno = await db.prepare("SELECT ai_thread_state FROM conversations WHERE id = ?")
@@ -203,6 +210,7 @@ export async function startCoachThread(
       ),
       ...dopad,
     ]);
+    await pushPlayerReply(db, env, { teamId: opts.teamId, convId: opts.convId, sender: jmeno, text: reply.body });
 
     return true;
   } catch (e) {
@@ -213,6 +221,8 @@ export async function startCoachThread(
       return false;
     }
     logger.error({ module: M }, `konverzace s hráčem ${opts.playerId}`, e);
+    // Tahle odpověď už nepřijde (žádný další pokus se neplánuje), SMS se vrací.
+    await refundCoachSms(db, opts.teamId, opts.convId, "odpověď hráče spadla");
     return false;
   }
 }
@@ -268,6 +278,17 @@ export async function replyInSquadGroup(
   env: { GEMINI_API_KEY?: string },
   opts: { convId: string; teamId: string; coachMessage: string },
 ): Promise<boolean> {
+  const replied = await replyInSquadGroupInner(db, env, opts);
+  // Kabina se podruhé nezkouší: když se nikdo neozval, SMS se vrací.
+  if (!replied) await refundCoachSms(db, opts.teamId, opts.convId, "v kabině se nikdo neozval");
+  return replied;
+}
+
+async function replyInSquadGroupInner(
+  db: D1Database,
+  env: { GEMINI_API_KEY?: string },
+  opts: { convId: string; teamId: string; coachMessage: string },
+): Promise<boolean> {
   try {
     const rows = await db
       .prepare(`${PLAYER_SELECT} WHERE p.team_id = ? AND (p.status IS NULL OR p.status = 'active')`)
@@ -315,7 +336,7 @@ export async function replyInSquadGroup(
     const text = await generateSquadGroupReaction(
       env, mluvci, team, opts.coachMessage,
       (predchozi?.results ?? []).map((m) =>
-        m.sender_type === "user" ? `TRENÉR: ${m.body}` : `${m.sender_name}: ${m.body}`),
+        m.sender_type === "user" ? `TRENÉR: ${coachQuote(m.body)}` : `${m.sender_name}: ${m.body}`),
     );
     if (!text) return false;
 

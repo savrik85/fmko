@@ -162,7 +162,7 @@ export function PotentialProgress({ teamId, playerId }: { teamId: string; player
 
                   {naStropu && (
                     <div className="text-micro text-gold-600 font-heading font-bold mt-0.5">
-                      Na svém stropu — tréninkem už z něj víc nedostaneš
+                      Na svém stropu, tréninkem už z něj víc nedostaneš
                     </div>
                   )}
                 </div>

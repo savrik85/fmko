@@ -10,10 +10,12 @@
 import { Hono } from "hono";
 import type { Bindings } from "../index";
 import { logger } from "../lib/logger";
+import { currentSeasonSql } from "../lib/season";
 import {
   getRelation, applyRelationEvent, relationStatus, relationLabel, relationGroup, isLoyalAlly, aiArchetype, AI_ARCHETYPE_LABELS,
   isAiTeam, aiGestureResponse, aiAcceptsBet, aiStatementResponse, shiftSquadMorale, insertRelationNews,
   getManagerName, getTeamName, getTeamGameDate, insertInteraction,
+  claimInteraction, finishInteraction, releaseInteraction,
   type GestureChoice, type StatementTone,
 } from "../community/manager-relations";
 import { recordTransaction, assertPurchaseAllowed } from "../season/finance-processor";
@@ -90,6 +92,8 @@ async function nextMutualMatch(db: D1Database, a: string, b: string): Promise<Ma
      FROM matches
      WHERE status IN ('scheduled', 'lineups_open')
        AND ((home_team_id = ? AND away_team_id = ?) OR (home_team_id = ? AND away_team_id = ?))
+       -- Ligový zápas jen z aktuální sezóny, neodehrané zápasy starších sezón v tabulce zůstávají.
+       AND (calendar_id IS NULL OR EXISTS (SELECT 1 FROM season_calendar sc WHERE sc.id = matches.calendar_id AND ${currentSeasonSql("sc")}))
      ORDER BY round ASC LIMIT 1`
   ).bind(a, b, b, a).first<MatchRow>();
 }
@@ -112,6 +116,17 @@ async function lastInteractionAt(
      ORDER BY created_at DESC LIMIT 1`
   ).bind(type, teamA, teamB, teamB, teamA).first<{ created_at: string }>();
   return row?.created_at ?? null;
+}
+
+/** Platba po zabrání nároku: když spadne, nárok se uvolní, ať hráč nepřijde o pokus. */
+async function payOrRelease(db: D1Database, claimId: string, pay: () => Promise<unknown>): Promise<void> {
+  try {
+    await pay();
+  } catch (e) {
+    await releaseInteraction(db, claimId)
+      .catch((err) => logger.warn({ module: "relations" }, "release interaction claim", err));
+    throw e;
+  }
 }
 
 function daysSince(iso: string | null): number {
@@ -443,6 +458,10 @@ relationsRouter.post("/teams/:teamId/relations/:otherId/interact", async (c) => 
         if (await hasInteraction(db, "gesture", teamId, match.id)) {
           return c.json({ error: "Gesto po tomto zápase už proběhlo." }, 400);
         }
+        // Nárok se zabírá před efekty: ze souběžných požadavků projde jen jeden.
+        if (!await claimInteraction(db, "gesture", teamId, otherId, match.id, { choice }, "resolved", { kind: "match" })) {
+          return c.json({ error: "Gesto po tomto zápase už proběhlo." }, 409);
+        }
 
         let resultText: string;
         if (choice === "handshake") {
@@ -494,7 +513,6 @@ relationsRouter.post("/teams/:teamId/relations/:otherId/interact", async (c) => 
           aiResponseText = `${theirManager} ${resp.flavor}.`;
         }
 
-        await insertInteraction(db, "gesture", teamId, otherId, match.id, { choice });
         return c.json({ ok: true, message: resultText, aiResponse: aiResponseText });
       }
 
@@ -503,6 +521,9 @@ relationsRouter.post("/teams/:teamId/relations/:otherId/interact", async (c) => 
         const praiseAt = await lastInteractionAt(db, "praise", teamId, otherId);
         if (daysSince(praiseAt) < PRAISE_COOLDOWN_DAYS) {
           return c.json({ error: "Chválil jsi nedávno. Moc cukru kazí zuby." }, 400);
+        }
+        if (!await claimInteraction(db, "praise", teamId, otherId, null, {}, "resolved", { kind: "cooldown", days: PRAISE_COOLDOWN_DAYS })) {
+          return c.json({ error: "Chválil jsi nedávno. Moc cukru kazí zuby." }, 409);
         }
 
         await applyRelationEvent(db, teamId, otherId, {
@@ -536,7 +557,6 @@ relationsRouter.post("/teams/:teamId/relations/:otherId/interact", async (c) => 
             .catch((e) => logger.warn({ module: "relations" }, "praise notification", e));
         }
 
-        await insertInteraction(db, "praise", teamId, otherId, null, {});
         return c.json({ ok: true, message: `Vzkázal jsi trenérovi ${theirName} uznání.`, aiResponse: aiResponseText });
       }
 
@@ -554,13 +574,16 @@ relationsRouter.post("/teams/:teamId/relations/:otherId/interact", async (c) => 
         if (!purchase.ok) return c.json({ error: purchase.reason }, 400);
 
         // Uražený AI manažer s vysokým heat odmítne
-        if (otherIsAi && aiArchetype(otherId) === "urazeny" && rel.heat > 50) {
-          await insertInteraction(db, "beer", teamId, otherId, null, { declined: true });
+        const beerDeclined = otherIsAi && aiArchetype(otherId) === "urazeny" && rel.heat > 50;
+        const beerClaim = await claimInteraction(db, "beer", teamId, otherId, null,
+          beerDeclined ? { declined: true } : {}, "resolved", { kind: "cooldown", days: BEER_COOLDOWN_DAYS });
+        if (!beerClaim) return c.json({ error: "Na pivo jste spolu byli nedávno. Nepřeháněj to." }, 409);
+        if (beerDeclined) {
           return c.json({ ok: true, message: `${theirManager} pozvání odmítl. Pořád se zlobí.` });
         }
 
-        await recordTransaction(db, teamId, "manager_social", -BEER_COST,
-          `Pivo s trenérem ${theirName}`, gameDate);
+        await payOrRelease(db, beerClaim, () => recordTransaction(db, teamId, "manager_social", -BEER_COST,
+          `Pivo s trenérem ${theirName}`, gameDate));
         await applyRelationEvent(db, teamId, otherId, {
           respect: 8, icon: "🍻", text: `${myManager} a ${theirManager} zašli na pivo`,
         });
@@ -582,7 +605,7 @@ relationsRouter.post("/teams/:teamId/relations/:otherId/interact", async (c) => 
           }
         }
 
-        await insertInteraction(db, "beer", teamId, otherId, null, { darts: dartsText != null });
+        await finishInteraction(db, beerClaim, { darts: dartsText != null });
         if (!otherIsAi) {
           await createNotification(db, otherId, "event", "🍻 Pivo s kolegou",
             `Trenér ${myName} tě vzal na pivo. Respekt mezi vámi roste.`,
@@ -603,13 +626,17 @@ relationsRouter.post("/teams/:teamId/relations/:otherId/interact", async (c) => 
         const purchase = await assertPurchaseAllowed(db, teamId, BET_AMOUNT);
         if (!purchase.ok) return c.json({ error: purchase.reason }, 400);
 
+        // Sázka se zabere jedním příkazem: dvě souběžné nabídky na stejný zápas neprojdou.
+        const betClaim = await claimInteraction(db, "bet", teamId, otherId, match.id,
+          { amount: BET_AMOUNT }, otherIsAi ? "pending" : "offered", { kind: "open_bet" });
+        if (!betClaim) return c.json({ error: "Sázka na tento zápas už existuje." }, 409);
+
         if (otherIsAi) {
           const rel = await getRelation(db, teamId, otherId);
           if (!aiAcceptsBet(aiArchetype(otherId), rel.heat)) {
-            await insertInteraction(db, "bet", teamId, otherId, match.id, { declined: true }, "resolved");
+            await finishInteraction(db, betClaim, { declined: true }, "resolved");
             return c.json({ ok: true, accepted: false, message: `${theirManager} mávl rukou: „Já se nesázím." Možná příště.` });
           }
-          await insertInteraction(db, "bet", teamId, otherId, match.id, { amount: BET_AMOUNT }, "pending");
           await applyRelationEvent(db, teamId, otherId, {
             heat: 3, icon: "🍺", text: `Sázka o bečku na ${match.round != null ? `${match.round}. kolo` : "příští zápas"}`,
           });
@@ -617,7 +644,6 @@ relationsRouter.post("/teams/:teamId/relations/:otherId/interact", async (c) => 
         }
 
         // Lidský protějšek — nabídka čeká na přijetí
-        await insertInteraction(db, "bet", teamId, otherId, match.id, { amount: BET_AMOUNT }, "offered");
         await createNotification(db, otherId, "event", "🍺 Sázka o bečku!",
           `Trenér ${myName} se s tebou chce vsadit o bečku (${BET_AMOUNT} Kč) na váš vzájemný zápas. Přijmeš?`,
           `/manazer/${teamId}`, c.env as never)
@@ -634,13 +660,16 @@ relationsRouter.post("/teams/:teamId/relations/:otherId/interact", async (c) => 
         if (!offer) return c.json({ error: "Žádná čekající sázka." }, 400);
 
         if (body.type === "bet_decline") {
-          await db.prepare("UPDATE manager_interactions SET status = 'resolved', payload = json_set(payload, '$.declined', 1) WHERE id = ?")
+          await db.prepare("UPDATE manager_interactions SET status = 'resolved', payload = json_set(payload, '$.declined', 1) WHERE id = ? AND status = 'offered'")
             .bind(offer.id).run();
           return c.json({ ok: true, message: "Sázku jsi odmítl. Bečka zůstává v bezpečí." });
         }
         const purchase = await assertPurchaseAllowed(db, teamId, BET_AMOUNT);
         if (!purchase.ok) return c.json({ error: purchase.reason }, 400);
-        await db.prepare("UPDATE manager_interactions SET status = 'pending' WHERE id = ?").bind(offer.id).run();
+        // Přijetí platí jen jednou: druhý souběžný požadavek už nabídku ve stavu offered nenajde.
+        const accepted = await db.prepare("UPDATE manager_interactions SET status = 'pending' WHERE id = ? AND status = 'offered'")
+          .bind(offer.id).run();
+        if ((accepted.meta?.changes ?? 0) !== 1) return c.json({ error: "Žádná čekající sázka." }, 409);
         await applyRelationEvent(db, teamId, otherId, {
           heat: 3, icon: "🍺", text: "Sázka o bečku uzavřena",
         });
@@ -667,10 +696,15 @@ relationsRouter.post("/teams/:teamId/relations/:otherId/interact", async (c) => 
         let message: string;
         // Text výroku se ukládá i do interakce — pozápasový rozhovor se soupeře ptá
         // na to, co řekl, a z novinového článku by ho už nevydoloval.
-        let quote: string;
+        const quote = tone === "respect" ? statementRespectQuote(names, await districtOfTeam(db, teamId))
+          : tone === "provoke" ? statementProvokeQuote(names, await districtOfTeam(db, teamId))
+          : statementHumbleQuote(names);
+        if (!await claimInteraction(db, "statement", teamId, otherId, match.id, { tone, quote },
+          tone === "humble" ? "pending" : "resolved", { kind: "match" })) {
+          return c.json({ error: "Před tímhle zápasem už jsi do novin mluvil. Jednou stačí." }, 409);
+        }
 
         if (tone === "respect") {
-          quote = statementRespectQuote(names, await districtOfTeam(db, teamId));
           await insertRelationNews(db, match.league_id, `Před zápasem: ${myName} smeká`, quote, teamId);
           await applyRelationEvent(db, teamId, otherId, {
             respect: 5, icon: "🫡", text: `${myManager} před ${roundLabel} veřejně uznal kvality soupeře`,
@@ -678,7 +712,6 @@ relationsRouter.post("/teams/:teamId/relations/:otherId/interact", async (c) => 
           await shiftSquadMorale(db, teamId, 1);
           message = "Uznání vyšlo v novinách. Kabina hraje bez tlaku.";
         } else if (tone === "provoke") {
-          quote = statementProvokeQuote(names, await districtOfTeam(db, teamId));
           await insertRelationNews(db, match.league_id, `PŘESTŘELKA: ${myManager} provokuje před ${roundLabel}`, quote, teamId);
           await applyRelationEvent(db, teamId, otherId, {
             heat: 10, icon: "😏", text: `${myManager} před ${roundLabel} provokoval v novinách`,
@@ -687,7 +720,6 @@ relationsRouter.post("/teams/:teamId/relations/:otherId/interact", async (c) => 
           await shiftSquadMorale(db, otherId, 2); // provokace soupeře nabudí — má to cenu
           message = "Provokace vyšla v novinách. Kabina hoří, jenže soupeř taky.";
         } else {
-          quote = statementHumbleQuote(names);
           await insertRelationNews(db, match.league_id, `${myName} hraje chudáčka`, quote, teamId);
           message = "Skromnost vyšla v novinách. Teď nesmíš vyhrát moc vysoko… nebo vlastně smíš?";
         }
@@ -712,7 +744,6 @@ relationsRouter.post("/teams/:teamId/relations/:otherId/interact", async (c) => 
             .catch((e) => logger.warn({ module: "relations" }, "statement notification", e));
         }
 
-        await insertInteraction(db, "statement", teamId, otherId, match.id, { tone, quote }, tone === "humble" ? "pending" : "resolved");
         return c.json({ ok: true, message, aiResponse: aiResponseText });
       }
 
@@ -728,16 +759,21 @@ relationsRouter.post("/teams/:teamId/relations/:otherId/interact", async (c) => 
         const team = await db.prepare("SELECT league_id FROM teams WHERE id = ?")
           .bind(teamId).first<{ league_id: string | null }>();
 
-        await recordTransaction(db, teamId, "manager_social", -AD_COST, "Inzerát v novinách", gameDate);
-
+        // Text i prozrazení (30 %) se losují předem, ať je nárok zapsaný celý
+        // a platba s efekty proběhnou jen u požadavku, který ho zabral.
         const adText = adTextFor(names);
+        const revealed = Math.random() < 0.3;
+        const adClaim = await claimInteraction(db, "ad", teamId, otherId, null, { text: adText, revealed },
+          "resolved", { kind: "cooldown", days: AD_COOLDOWN_DAYS });
+        if (!adClaim) {
+          return c.json({ error: "Redakce další anonymní inzerát zatím nepřijme. Nech to vychladnout." }, 409);
+        }
+        await payOrRelease(db, adClaim, () => recordTransaction(db, teamId, "manager_social", -AD_COST, "Inzerát v novinách", gameDate));
+
         await insertRelationNews(db, team?.league_id ?? null, "Inzerce", adText);
         await shiftSquadMorale(db, otherId, -2);
 
-        // 30% šance na prozrazení
-        let revealed = false;
-        if (Math.random() < 0.3) {
-          revealed = true;
+        if (revealed) {
           await applyRelationEvent(db, teamId, otherId, {
             heat: 15, respect: -5, icon: "🕵️", text: `Provalilo se, že jedovatý inzerát podal ${myManager}`,
           });
@@ -754,7 +790,6 @@ relationsRouter.post("/teams/:teamId/relations/:otherId/interact", async (c) => 
           }
         }
 
-        await insertInteraction(db, "ad", teamId, otherId, null, { text: adText, revealed });
         return c.json({
           ok: true,
           message: revealed
@@ -777,8 +812,10 @@ relationsRouter.post("/teams/:teamId/relations/:otherId/interact", async (c) => 
         const purchase = await assertPurchaseAllowed(db, teamId, GIFT_COST);
         if (!purchase.ok) return c.json({ error: purchase.reason }, 400);
 
-        await recordTransaction(db, teamId, "manager_social", -GIFT_COST,
-          `Dárkový koš pro ${theirName}`, gameDate);
+        const giftClaim = await claimInteraction(db, "gift", teamId, otherId, match.id, { tone }, "resolved", { kind: "match" });
+        if (!giftClaim) return c.json({ error: "Dárek už jsi poslal." }, 409);
+        await payOrRelease(db, giftClaim, () => recordTransaction(db, teamId, "manager_social", -GIFT_COST,
+          `Dárkový koš pro ${theirName}`, gameDate));
 
         let message: string;
         if (tone === "sincere") {
@@ -806,7 +843,6 @@ relationsRouter.post("/teams/:teamId/relations/:otherId/interact", async (c) => 
           }
         }
 
-        await insertInteraction(db, "gift", teamId, otherId, match.id, { tone });
         return c.json({ ok: true, message });
       }
 

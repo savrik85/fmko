@@ -428,11 +428,14 @@ export async function issueSanction(db: D1Database, opts: IssueSanctionOpts): Pr
   // Klíč už v tabulce byl — tuhle pokutu někdo udělil dřív a peníze se hnuly s ní.
   if ((res.meta?.changes ?? 0) === 0) return null;
 
-  const { recordTransaction } = await import("../season/finance-processor");
+  // Pokutu dorostu platí mateřský klub: U21 má vlastní řádek v teams, ale jeho
+  // rozpočet manažer nikde nevidí. Sankce sama zůstává vedená na tým, který ji dostal.
+  const { recordTransaction, clubAccountOf, YOUTH_LABEL } = await import("../season/finance-processor");
+  const account = await clubAccountOf(db, opts.teamId);
   await recordTransaction(
-    db, opts.teamId, "disciplinary_fine", -amount,
-    `Pokuta disciplinární rady: ${opts.reason}`, opts.gameDate, `sanc-${id}`,
-  ).catch((e) => logger.error({ module: M }, `stržení pokuty klubu ${opts.teamId}`, e));
+    db, account.payerId, "disciplinary_fine", -amount,
+    `Pokuta disciplinární rady${account.isYouth ? ` (${YOUTH_LABEL})` : ""}: ${opts.reason}`, opts.gameDate, `sanc-${id}`,
+  ).catch((e) => logger.error({ module: M }, `stržení pokuty klubu ${account.payerId}`, e));
 
   await recordCompetitionEntry(db, {
     leagueId: treasuryLeagueId, seasonNumber: opts.seasonNumber, type: "sanction",
@@ -481,6 +484,18 @@ async function afterSanction(
     .catch((e) => logger.warn({ module: M }, "sentiment rozhodčích po druhé pokutě", e));
 }
 
+/**
+ * Text bodu programu pro odvolání. Nadpis říká, o čem se hlasuje: hlas PRO pokutu ruší.
+ * Dřívější „Odvolání proti pokutě 1 500 Kč" s tlačítky Pro a Proti šlo číst obráceně
+ * („jsem proti pokutě") a dva kluby tak hlasovaly proti vlastnímu odvolání.
+ */
+export function appealProposalText(amount: number, reason: string): { title: string; body: string } {
+  return {
+    title: `Odvolání: zrušit pokutu ${amount.toLocaleString("cs")} Kč?`,
+    body: `Klub se odvolává a žádá zrušení pokuty. Hlas pro pokutu zruší a peníze vrátí, hlas proti ji ponechá. Důvod pokuty: ${reason}`,
+  };
+}
+
 /** Vrátí pokutu při úspěšném odvolání. Peníze putují z pokladny zpátky klubu. */
 export async function refundSanction(
   db: D1Database, sanctionId: string, gameDate: string,
@@ -507,11 +522,19 @@ export async function refundSanction(
   });
   if (!entry.written) return true;   // už vráceno dřív
 
+  // Peníze se vrací tomu, kdo pokutu zaplatil. U dorostu je to mateřský klub,
+  // u pokut z doby před přesunem ještě účet dorostu.
+  const paidBy = await db.prepare(
+    "SELECT team_id FROM transactions WHERE reference_id = ? AND type = 'disciplinary_fine' AND amount < 0 LIMIT 1"
+  ).bind(`sanc-${s.id}`).first<{ team_id: string }>()
+    .catch((e) => { logger.warn({ module: M }, `plátce pokuty ${s.id}`, e); return null; });
+  const refundTo = paidBy?.team_id ?? s.team_id;
+
   const { recordTransaction } = await import("../season/finance-processor");
   await recordTransaction(
-    db, s.team_id, "disciplinary_fine", s.amount,
+    db, refundTo, "disciplinary_fine", s.amount,
     `Vrácení pokuty po úspěšném odvolání`, gameDate, `sanc-refund-${s.id}`,
-  ).catch((e) => logger.error({ module: M }, `vrácení pokuty klubu ${s.team_id}`, e));
+  ).catch((e) => logger.error({ module: M }, `vrácení pokuty klubu ${refundTo}`, e));
 
   try {
     const { sendSystemSMS } = await import("../messaging/system-sms");

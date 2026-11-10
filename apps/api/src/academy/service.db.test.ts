@@ -6,11 +6,11 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
 import { Miniflare } from "miniflare";
 import { createRng } from "../generators/rng";
-import { acceptPlayerOffer } from "../services/player-offer-actions";
+import { acceptPlayerOffer, publicOfferDetails } from "../services/player-offer-actions";
 import { promotePlayerFromU21 } from "../services/u21-moves";
 import {
   foundYouthTeam, closeYouthTeam, setYouthCoach, loadCoachOptions, weeklyAcademy, recommendPlayUp, promoteProspect,
-  seasonEndAcademy, dailyAcademy, loadAcademyView, seedFromLegacy, volunteerCoachId, recruitDay, type ProspectRow,
+  seasonEndAcademy, dailyAcademy, loadAcademyView, seedFromLegacy, volunteerCoachId, recruitDay, setAcademyLevel, type ProspectRow,
 } from "./service";
 
 let mf: Miniflare;
@@ -55,6 +55,23 @@ beforeAll(async () => {
 
 afterAll(async () => { await mf?.dispose(); });
 
+describe("nabídka hráče pro web", () => {
+  it("kluk z dorostu: jen pásmo talentu, přesné číslo ani stropy ne", () => {
+    const offer = (talent: number, prospectId: string | null = null, source = "youth") => publicOfferDetails({
+      source, prospect_id: prospectId,
+      personality: JSON.stringify({ discipline: 50, hiddenTalent: talent }),
+      life_context: JSON.stringify({ morale: 50, skillsMax: { speed: { current: 20, maxPotential: 60 } } }),
+    });
+    expect(offer(35)).toEqual({ personality: { discipline: 50 }, lifeContext: { morale: 50 }, talentBand: "high" });
+    expect(offer(18).talentBand).toBe("medium");
+    expect(offer(17).talentBand).toBe("low");
+    // Žák z akademie a dospělý z hospody pásmo nemají
+    expect(offer(90, "prospect-1").talentBand).toBeNull();
+    expect(offer(90, null, "pub").talentBand).toBeNull();
+    expect(publicOfferDetails({ source: "pub", prospect_id: null, personality: "{", life_context: null })).toEqual({ personality: {}, lifeContext: {}, talentBand: null });
+  });
+});
+
 describe("družstvo žáků", () => {
   it("založení přivede kluky 11–14 let hned, podruhé založit nejde", async () => {
     const res = await foundYouthTeam(db, createRng(1), "club", GAME_DATE);
@@ -92,6 +109,79 @@ describe("družstvo žáků", () => {
     expect(view!.nextSummer).toBe((await prospects("club")).filter((p) => p.age === 14).length);
   });
 
+  it("vybavení pro žáky: stránka ukáže úroveň i stav, růst se počítá z obojího", async () => {
+    const kid = (await prospects("club"))[0];
+    const stepWith = async (condition: number) => {
+      await db.prepare("INSERT INTO equipment (id, team_id, balls, balls_condition) VALUES ('eq-club', 'club', 3, ?) ON CONFLICT(team_id) DO UPDATE SET balls = 3, balls_condition = excluded.balls_condition")
+        .bind(condition).run();
+      const before = (await prospects("club")).find((p) => p.id === kid.id)!.progress_current;
+      await weeklyAcademy(db, "club", GAME_DATE, 1);
+      return (await prospects("club")).find((p) => p.id === kid.id)!.progress_current - before;
+    };
+    const broken = await stepWith(0);
+    const asNew = await stepWith(100);
+    expect(asNew).toBeGreaterThan(broken);
+    const view = await loadAcademyView(db, "club");
+    expect(view!.equipment.find((e) => e.key === "balls")).toMatchObject({ level: 3, condition: 100 });
+    await db.prepare("DELETE FROM equipment WHERE team_id = 'club'").run();
+  });
+
+  it("úroveň přepnutá jen na okamžik akce nábor ani den otevřených dveří nezlepší", async () => {
+    const saved = await db.prepare("SELECT academy_level AS level, academy_level_weeks AS weeks FROM teams WHERE id = 'club'").first<{ level: string | null; weeks: string | null }>();
+    const expectedWith = async (level: string) => {
+      expect((await setAcademyLevel(db, "club", level)).ok).toBe(true);
+      const view = await loadAcademyView(db, "club");
+      return { recruit: view!.recruitDay.expected, open: view!.openDay.expected, byCoach: view!.recruitDay.byCoach };
+    };
+    // Pět zaplacených týdnů skromné úrovně
+    await db.prepare("UPDATE teams SET academy_level_weeks = '{\"modest\":5}' WHERE id = 'club'").run();
+    const modest = await expectedWith("modest");
+    const flipped = await expectedWith("ambitious");
+    expect(flipped).toEqual(modest);
+    // Zaplacené ambiciózní týdny se projeví
+    await db.prepare("UPDATE teams SET academy_level_weeks = '{\"ambitious\":5}' WHERE id = 'club'").run();
+    const paid = await expectedWith("ambitious");
+    expect(paid.recruit).toBeGreaterThan(modest.recruit);
+    await db.prepare("UPDATE teams SET academy_level = ?, academy_level_weeks = ? WHERE id = 'club'").bind(saved!.level, saved!.weeks).run();
+  });
+
+  it("odhad talentu se přepnutím trenéra tam a zpátky nemění a drží se v mezích chyby", async () => {
+    const estimates = async () => new Map((await loadAcademyView(db, "club"))!.prospects.map((p) => [p.id, p.potential?.estimate ?? null]));
+    const first = await estimates();
+    expect(await estimates()).toEqual(first);
+    // Táta místo hráče áčka: oba odhadují bez úsudku trenéra mládeže, takže vidí totéž
+    expect((await setYouthCoach(db, "club", { type: "parent" })).ok).toBe(true);
+    expect(await estimates()).toEqual(first);
+    expect((await setYouthCoach(db, "club", { type: "volunteer", playerId: "vet" })).ok).toBe(true);
+    expect(await estimates()).toEqual(first);
+    for (const p of await prospects("club")) {
+      expect(Math.abs((first.get(p.id) ?? 0) - p.hidden_talent)).toBeLessThanOrEqual((16 - p.age) * 5);
+    }
+    // Příští sezónu trenér odhaduje znovu
+    await db.prepare("UPDATE seasons SET number = 4 WHERE id = 'season-3'").run();
+    const next = await estimates();
+    await db.prepare("UPDATE seasons SET number = 3 WHERE id = 'season-3'").run();
+    expect([...next.values()]).not.toEqual([...first.values()]);
+  });
+
+  it("čerstvě založená akademie: do dorostu smí žák až po 4 týdnech u žáků", async () => {
+    const kid = (await prospects("club")).find((k) => k.age === 13)!;
+    const blocked = await promoteProspect(db, "club", kid.id);
+    expect(blocked).toMatchObject({ ok: false, status: 409, error: "U žáků musí být aspoň 4 týdny" });
+    expect(await recommendPlayUp(db, "club", kid.id, GAME_DATE)).toMatchObject({ ok: false, status: 409, error: "U žáků musí být aspoň 4 týdny" });
+    // Ani denní tick ho nedoporučí dřív, i když jeho den přišel
+    await db.prepare("UPDATE youth_prospects SET next_offer_on = '2026-11-01' WHERE id = ?").bind(kid.id).run();
+    expect((await dailyAcademy(db, "club", GAME_DATE)).offered).toBe(0);
+    await db.prepare("UPDATE youth_prospects SET next_offer_on = NULL WHERE id = ?").bind(kid.id).run();
+    expect((await prospects("club")).some((k) => k.id === kid.id)).toBe(true);
+    expect((await loadAcademyView(db, "club"))!.prospects.find((k) => k.id === kid.id)!.playUpFrom).toBe("2026-11-30");
+    // 27 dní nestačí, 28 ano
+    await db.prepare("UPDATE youth_prospects SET joined_at = '2026-10-06' WHERE id = ?").bind(kid.id).run();
+    expect((await promoteProspect(db, "club", kid.id)).ok).toBe(false);
+    await db.prepare("UPDATE youth_prospects SET joined_at = '2026-10-05' WHERE team_id = 'club'").run();
+    expect((await loadAcademyView(db, "club"))!.prospects.find((k) => k.id === kid.id)!.playUpFrom).toBeNull();
+  });
+
   it("dvanáctiletého o kategorii výš nejde, třináctiletého ano a přijetí ho dá do U21", async () => {
     const kids = await prospects("club");
     const young = kids.find((k) => k.age <= 12)!;
@@ -100,11 +190,28 @@ describe("družstvo žáků", () => {
     const offer = await recommendPlayUp(db, "club", older.id, GAME_DATE);
     expect(offer.ok).toBe(true);
     if (!offer.ok) return;
+    // Nabídka nese skrytý talent a stropy v DB, ale do odpovědi pro hráče nejdou
+    const row = await db.prepare("SELECT source, prospect_id, personality, life_context FROM player_offers WHERE id = ?").bind(offer.offerId)
+      .first<{ source: string; prospect_id: string; personality: string; life_context: string }>();
+    expect(JSON.parse(row!.personality).hiddenTalent).toBe(older.hidden_talent);
+    expect(Object.keys(JSON.parse(row!.life_context).skillsMax).length).toBeGreaterThan(5);
+    const shown = publicOfferDetails(row!);
+    expect(JSON.stringify(shown)).not.toMatch(/hiddenTalent|skillsMax|maxPotential/);
+    expect(shown.talentBand).toBeNull();
+    expect(shown.personality.patriotism).toBeTypeOf("number");
     const res = await acceptPlayerOffer(db, "club", offer.offerId);
     expect(res.ok).toBe(true);
     if (!res.ok) return;
+    // Přijetí je dál čte z DB: hráč má talent žáka i stropy rozvoje
+    const hidden = await db.prepare("SELECT hidden_talent, skills_max FROM players WHERE id = ?").bind(res.playerId).first<{ hidden_talent: number; skills_max: string }>();
+    expect(hidden!.hidden_talent).toBe(older.hidden_talent);
+    expect(JSON.parse(hidden!.skills_max).speed.maxPotential).toBeGreaterThan(0);
     const player = await db.prepare("SELECT team_id, raised_by_team_id, age FROM players WHERE id = ?").bind(res.playerId).first();
     expect(player).toEqual({ team_id: "club-u21", raised_by_team_id: "club", age: 13 });
+    // Povýšený během sezóny značku čerstvého odchovance nemá (v létě dospívá); skryté stropy v life_context nejsou
+    const ctx = await db.prepare("SELECT json_extract(life_context, '$.freshAcademyGraduate') AS fresh, json_extract(life_context, '$.skillsMax') AS caps FROM players WHERE id = ?")
+      .bind(res.playerId).first<{ fresh: number | null; caps: string | null }>();
+    expect(ctx).toEqual({ fresh: null, caps: null });
   });
 
   it("dvě souběžná vytažení stejného kluka založí jen jednoho hráče", async () => {
@@ -129,8 +236,11 @@ describe("družstvo žáků", () => {
     const oldest = before.filter((p) => p.age === 14);
     await seasonEndAcademy(db, createRng(9), "club", GAME_DATE);
     for (const p of oldest) {
-      const row = await db.prepare("SELECT status FROM youth_prospects WHERE id = ?").bind(p.id).first<{ status: string }>();
+      const row = await db.prepare("SELECT status, player_id FROM youth_prospects WHERE id = ?").bind(p.id).first<{ status: string; player_id: string }>();
       expect(row!.status).toBe("promoted");
+      // Letní postup: značka, podle které v tomhle létě nedospívá
+      const fresh = await db.prepare("SELECT json_extract(life_context, '$.freshAcademyGraduate') AS fresh FROM players WHERE id = ?").bind(row!.player_id).first<{ fresh: number | null }>();
+      expect(fresh!.fresh).toBe(1);
     }
     const now = await prospects("club");
     for (const p of before.filter((x) => x.age < 14)) {

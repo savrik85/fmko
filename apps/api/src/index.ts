@@ -37,6 +37,9 @@ import { squadAnalysisRouter } from "./routes/squad-analysis";
 import { menuBadgesRouter } from "./routes/menu-badges";
 import { adminAiClubsRouter } from "./routes/admin-ai-clubs";
 import { adminAiCoachRouter } from "./routes/admin-ai-coach";
+import { guardTeamReads } from "./auth/team-read-guard";
+import { corsOrigin } from "./lib/cors-origins";
+import { requireAdmin } from "./auth/middleware";
 // transfers endpoints are in gameRouter
 import { recoverStuckRounds } from "./multiplayer/match-runner";
 import { executeDailyTick } from "./season/daily-tick";
@@ -75,9 +78,26 @@ export type Bindings = {
   API_BASE_URL?: string;
 };
 
+/**
+ * Pojistka (recoverStuckRounds) hraje jen zápasy. Agendu po kole (oznámení, články,
+ * události mezi koly, úklid) doběhne tohle; dřív ji musel někdo pustit ručně.
+ */
+async function finishRoundAgendaAfterRecovery(
+  env: Bindings, calendarId: string, log: (level: string, msg: string, err?: unknown) => void,
+): Promise<void> {
+  try {
+    const { finishRecoveredRound } = await import("./season/league-round");
+    const finished = await finishRecoveredRound(env, calendarId, { owner: true });
+    log(finished.ok ? "info" : "warn", `agenda dohraného kola ${calendarId}: ${finished.ok ? `${finished.matches} zápasů` : finished.reason}`);
+  } catch (e) {
+    log("error", `agenda dohraného kola ${calendarId} selhala`, e);
+  }
+}
+
 const app = new Hono<{ Bindings: Bindings }>();
 
-app.use("*", cors({ origin: "*" }));
+// Jen web hry, náhledy Pages a localhost (lib/cors-origins.ts). Požadavky bez Origin CORS neřeší.
+app.use("*", cors({ origin: corsOrigin }));
 
 // AI Gateway se nastavuje jednou na vstupu; bez proměnné se volá Google přímo.
 app.use("*", async (c, next) => {
@@ -115,6 +135,13 @@ app.onError((err, c) => {
 
 app.get("/", (c) => c.json({ name: "Prales API", version: "0.2.0" }));
 app.get("/health", (c) => c.json({ status: "ok" }));
+
+// Čtení dat klubu je soukromé, dokud cesta není na seznamu veřejných (auth/team-read-guard.ts).
+// Musí být před připojením routerů: handler, který odpoví dřív, pozdější middleware nespustí.
+app.use("/api/teams/*", guardTeamReads);
+// Admin routy dřív chránilo jen to, že se matchesRouter s `use("/admin/*")` připojuje jako první.
+// Výslovně tady, ať ochrana nezávisí na pořadí routerů.
+app.use("/api/admin/*", requireAdmin);
 
 app.route("/auth", authRouter);
 app.route("/api/registration", registrationRouter);
@@ -194,6 +221,15 @@ export default {
         await releaseStuckReplies(env.DB);
       } catch (e: any) {
         log("error", "uvolnění zaseklých odpovědí selhalo", e);
+      }
+      // Přestupové nabídky po lhůtě: polední tick je uklízí jednou denně, do té doby visely
+      // jako aktivní až 24 hodin. Jeden levný dotaz, nejvýš 20 nabídek za běh.
+      try {
+        const { expireIdleOffers } = await import("./transfers/offer-expiry");
+        const n = await expireIdleOffers(env);
+        if (n > 0) log("info", `propadlé přestupové nabídky: ${n}`);
+      } catch (e: any) {
+        log("error", "propadnutí přestupových nabídek selhalo", e);
       }
       // Průvodce prvním týdnem: kapitán pošle další úkol, nebo starosta odměnu.
       try {
@@ -322,8 +358,7 @@ export default {
     // ten druhý pak už nemá co dělat. Ranní crony (posun dne, zaměstnanci, preview) se
     // do poledne nedostanou samy od sebe.
     // Manuální trigger (!cron) pohár posune vždy — tam si o běh říká člověk.
-    // Zbylé ticky (14, 16, 16:05) dají dohromady 12 dávek po 48 zápasech denně, takže i
-    // největší kolo (1. kolo, u 56 týmů 24 zápasů) je hotové ještě ten den.
+    // Zbylé ticky (14, 16, 16:05) kolo dohrají, kdyby řetěz dávek ve frontě spadl.
     // Předčasně se nic neodehraje — maybeAdvanceCup simuluje jen kola, jejichž termín už nastal,
     // a herní datum se posouvá výhradně v nočním ticku.
     // Když by převod časové zóny z jakéhokoli důvodu selhal, radši kolo pustíme podle
@@ -343,11 +378,34 @@ export default {
     const isCupTick = !cron || (prahaHodina >= 12 && !["0 3 * * *", "0 5 * * *", "0 6 * * *"].includes(cron));
     if (isCupTick) {
       try {
-        const { maybeAdvanceCup } = await import("./cup/cup");
-        const batches = await maybeAdvanceCup(env.DB, env);
-        if (batches > 0) log("info", `cup tick: ${batches} dávek`);
+        // Zápasy se skutečným klubem hraje fronta po malých dávkách (cup/cup-queue.ts).
+        // V cronu zůstává jen levná část: založení poháru, kádry hostů a kola, kde
+        // skutečný klub nehraje. Dřív tu běželo až 36 zápasů plným enginem v jedné invokaci.
+        const { readMatchTickMode } = await import("./queue/messages");
+        const cupViaQueue = (await readMatchTickMode(env.CACHE_KV)) === "queue";
+        const { enqueueCupTick } = await import("./cup/cup-queue");
+        const queued = cupViaQueue ? await enqueueCupTick(env) : 0;
+        if (queued > 0) {
+          log("info", `cup tick: ${queued} řetězů dávek ve frontě`);
+        } else {
+          const { maybeAdvanceCup } = await import("./cup/cup");
+          const batches = await maybeAdvanceCup(env.DB, env, { maxChunks: 1, deadlineMs: Date.now() + 8 * 60_000 });
+          if (batches > 0) log("info", `cup tick: ${batches} dávek`);
+        }
       } catch (e: any) {
         log("error", "cup tick failed", e);
+      }
+    }
+
+    // ── DOKONČENÍ DENNÍHO TICKU: 5:00 UTC ──
+    // Když tick ve 3:00 spadl uprostřed, herní datum zůstalo včerejší a večerní kolo by se
+    // nehrálo. Hotový den tohle volání přeskočí, rozpracovaný doběhne od nedokončených kroků.
+    if (cron === "0 5 * * *") {
+      try {
+        const resumed = await executeDailyTick(env);
+        if (resumed.events.length > 0) log("warn", `denní tick dokončen až v 5:00: ${resumed.events.length} událostí`);
+      } catch (e: any) {
+        log("error", "dokončení denního ticku selhalo", e);
       }
     }
 
@@ -419,11 +477,36 @@ export default {
     // by tak čekalo do zítřejšího ticku; tenhle ho dohraje ještě týž den.
     if (isRoundRecoveryTickNow(cron, hourInPrague)) {
       try {
-        const recovered = await recoverStuckRounds(env.DB, env.GEMINI_API_KEY);
-        for (const r of recovered) {
-          log("info", `recovered stuck round ${r.calendarId} (liga ${r.leagueId}): ${r.matches} zápasů dohráno`);
+        const { readMatchTickMode } = await import("./queue/messages");
+        const { ROUND_HEARTBEAT_STALE_MINUTES } = await import("./multiplayer/match-runner");
+        // Fronta: každé zaseklé kolo dostane vlastní invokaci a dohraje se celé, i s agendou.
+        const requeued = (await readMatchTickMode(env.CACHE_KV)) === "queue"
+          ? await (await import("./queue/producer")).enqueueStuckRounds(env, ROUND_HEARTBEAT_STALE_MINUTES)
+          : 0;
+        if (requeued > 0) {
+          log("warn", `zaseklá kola zpět do fronty: ${requeued}`);
+        } else {
+          const recovered = await recoverStuckRounds(env.DB, env.GEMINI_API_KEY);
+          for (const r of recovered) {
+            log("info", `recovered stuck round ${r.calendarId} (liga ${r.leagueId}): ${r.matches} zápasů dohráno`);
+            await finishRoundAgendaAfterRecovery(env, r.calendarId, log);
+          }
         }
       } catch (e) { log("error", "stuck round recovery (16:20) failed", e); }
+      // Zápasy, které v odehraném kole zůstaly neodehrané (spadly na chybě i napodruhé).
+      try {
+        const { replayUnplayedMatches } = await import("./season/league-round");
+        for (const r of await replayUnplayedMatches(env)) {
+          log(r.unplayed > 0 ? "error" : "info", `kolo ${r.calendarId}: dodatečně dohráno ${r.played}, neodehraných zbývá ${r.unplayed}`);
+        }
+      } catch (e) { log("error", "dohrání neodehraných zápasů selhalo", e); }
+      // Zápasy s výsledkem, ale bez dokončených následků (běh spadl uprostřed zpracování).
+      try {
+        const { repairHalfProcessedMatches } = await import("./season/league-round");
+        for (const r of await repairHalfProcessedMatches(env.DB)) {
+          log(r.repaired ? "warn" : "error", `zápas ${r.matchId}: ${r.repaired ? "následky dopočítány" : `napůl zpracovaný, nejde dopočítat (${r.reason})`}`);
+        }
+      } catch (e) { log("error", "oprava napůl zpracovaných zápasů selhala", e); }
       // Turnaj: dohraje zápasy dne, které v 16:00/16:05 spadly (zábor propadá po 15 min).
       try {
         const { maybeAdvanceTournament } = await import("./tournament/advance");
@@ -446,6 +529,7 @@ export default {
           const recovered = await recoverStuckRounds(env.DB, env.GEMINI_API_KEY);
           for (const r of recovered) {
             log("info", `recovered stuck round ${r.calendarId} (liga ${r.leagueId}): ${r.matches} zápasů dohráno`);
+            await finishRoundAgendaAfterRecovery(env, r.calendarId, log);
           }
         } catch (e) { log("error", "stuck round recovery failed", e); }
 
@@ -458,7 +542,8 @@ export default {
           // Doběhne za sekundu bez ohledu na počet lig; vlastní práci udělá
           // konzumer, kde každá liga dostane vlastní invokaci a vlastní rozpočet.
           const { enqueueMatchTick } = await import("./queue/producer");
-          const enq = await enqueueMatchTick(env);
+          const { isMatchTickRetry } = await import("./lib/match-tick-schedule");
+          const enq = await enqueueMatchTick(env, { retryOnly: isMatchTickRetry(cron) });
           log("info", `match tick zařazen do fronty: ${enq.rounds} kol, ${enq.maintenance} údržeb`);
         } else {
           // ── STARÁ CESTA (režim "loop") ──
@@ -548,10 +633,8 @@ export default {
             const queued = await enqueueMatchdayPreviews(env);
             log("info", `matchday preview zařazeno do fronty: ${queued} článků`);
           } else {
-            const { generateMatchdayPreview } = await import("./news/matchday-preview");
-            const leagues = await env.DB.prepare(
-              "SELECT DISTINCT t.league_id, t.game_date FROM teams t WHERE t.league_id IS NOT NULL AND t.game_date IS NOT NULL AND t.user_id != 'ai'"
-            ).all();
+            const { generateMatchdayPreview, PREVIEW_LEAGUES_SQL } = await import("./news/matchday-preview");
+            const leagues = await env.DB.prepare(PREVIEW_LEAGUES_SQL).all();
             let generated = 0;
             for (const lg of leagues.results) {
               const leagueId = lg.league_id as string;

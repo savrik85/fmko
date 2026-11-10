@@ -343,14 +343,14 @@ export function CupProgressWidget({ data }: WidgetProps) {
         {cup.myMatches.map((m) => (
           <li key={m.matchId} className="flex items-center gap-2 py-1.5 border-b border-gray-50 last:border-b-0">
             <span className="text-sm text-muted w-24 shrink-0 truncate">{m.roundName}</span>
-            <span className="text-sm font-heading font-bold flex-1 truncate">{m.opponent?.name ?? "—"}</span>
+            <span className="text-sm font-heading font-bold flex-1 truncate">{m.opponent?.name ?? "-"}</span>
             <span className="text-micro text-muted uppercase">{m.isHome ? "D" : "V"}</span>
             {m.myScore != null && m.oppScore != null ? (
               <span className={`text-sm font-heading font-bold tabular-nums px-1.5 py-0.5 rounded ${
                 m.won ? "bg-pitch-50 text-pitch-600" : "bg-red-50 text-card-red"
               }`}>{m.myScore}:{m.oppScore}</span>
             ) : (
-              <span className="text-sm text-muted">{m.daysUntil != null ? `za ${m.daysUntil} d` : "—"}</span>
+              <span className="text-sm text-muted">{m.daysUntil != null ? `za ${m.daysUntil} d` : "-"}</span>
             )}
           </li>
         ))}

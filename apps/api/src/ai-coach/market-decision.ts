@@ -16,6 +16,7 @@
 
 import type { AiCoachProfile } from "./profile";
 import { cleanReason, czk, isRecord, personalityLines, POSITION_TEXT, SELLER_TEXT, toAmount } from "./buy-decision";
+import { promptName } from "./prompt-text";
 
 export const MARKET_SYSTEM_PROMPT = [
   "You are the head coach and manager of an amateur Czech district football club in a football management game.",
@@ -59,7 +60,7 @@ function clubLines(ctx: ClubLine): string[] {
   return [
     ...personalityLines(ctx.profile),
     "",
-    `CLUB ${ctx.teamName}: budget ${czk(ctx.budget)}, of which ${czk(ctx.spendable)} is above the reserve you keep for running costs.`,
+    `CLUB ${promptName(ctx.teamName)}: budget ${czk(ctx.budget)}, of which ${czk(ctx.spendable)} is above the reserve you keep for running costs.`,
     `SQUAD: ${ctx.squadSize} senior players, you want about ${ctx.targetSquad} (on match days a few are always missing). Ratings are on the game's own scale, not out of 100.`,
     `TRANSFER COURSE this week (your Monday review): ${course}.`,
   ];

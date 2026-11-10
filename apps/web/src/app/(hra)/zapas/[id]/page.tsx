@@ -307,7 +307,7 @@ export default function MatchDetailPage() {
             &#8592; Zpět
           </button>
           {/* Bez uloženého průběhu (pohár proti týmu bez kádru = silová simulace) by přehrávka
-              skončila na "Zápas nemá záznam průběhu" — tlačítko v tom případě nenabízíme. */}
+              skončila na "Zápas nemá záznam průběhu", tlačítko v tom případě nenabízíme. */}
           {match.status === "simulated" && match.events.length > 0 && (
             <button onClick={() => router.push(`/zapas/${matchId}/zaznam`)}
               className="ml-auto px-3 py-1.5 rounded-soft text-sm font-heading font-bold text-white bg-pitch-500 hover:bg-pitch-400 transition-colors shadow-md flex items-center gap-1.5">
@@ -432,7 +432,7 @@ export default function MatchDetailPage() {
                     <div className="font-heading font-bold text-sm">
                       {inc.minute}&apos; · {incidentLabel(inc.kind)}
                       {teamNameById[inc.againstTeamId] && (
-                        <span className="font-normal text-muted"> — proti {teamNameById[inc.againstTeamId]}</span>
+                        <span className="font-normal text-muted">, proti {teamNameById[inc.againstTeamId]}</span>
                       )}
                     </div>
                     <p className="text-sm mt-0.5">{inc.text}</p>
@@ -462,7 +462,7 @@ export default function MatchDetailPage() {
               >
                 <div className="font-heading font-bold text-sm">
                   {inc.minute}&apos; · {inc.label}
-                  <span className="font-normal text-muted"> — {inc.groupName}</span>
+                  <span className="font-normal text-muted">, {inc.groupName}</span>
                 </div>
                 <p className="text-sm mt-0.5">{inc.text}</p>
                 {(inc.fine > 0 || inc.closedMatches > 0 || inc.fansLost > 0) && (
@@ -557,7 +557,7 @@ export default function MatchDetailPage() {
               </div>
               <div className="divide-y divide-gray-100">
                 {top.length === 0 ? (
-                  <div className="px-3 py-3 text-sm text-muted italic">—</div>
+                  <div className="px-3 py-3 text-sm text-muted italic">-</div>
                 ) : top.map((entry) => {
                   const s = statsForPlayer(entry.id, teamId);
                   const ratingColor = entry.rating >= 7.5 ? "bg-pitch-100 text-pitch-700"
@@ -733,7 +733,7 @@ export default function MatchDetailPage() {
                           <div className="shrink-0 w-12 h-1.5 rounded-full bg-gray-100 overflow-hidden hidden sm:block" title={matchRating != null ? `Rating ${matchRating.toFixed(1)}/10` : "Bez ratingu"}>
                             <div className="h-full rounded-full transition-all" style={{ width: `${barPct}%`, backgroundColor: barColor }} />
                           </div>
-                          <span className={`shrink-0 px-2 py-0.5 rounded-control text-xs font-heading font-bold tabular-nums ${ratingColor}`} title="Hodnocení hráče v zápase">{matchRating != null ? matchRating.toFixed(1) : "—"}</span>
+                          <span className={`shrink-0 px-2 py-0.5 rounded-control text-xs font-heading font-bold tabular-nums ${ratingColor}`} title="Hodnocení hráče v zápase">{matchRating != null ? matchRating.toFixed(1) : "-"}</span>
                         </div>
                         );
                       })}

@@ -145,7 +145,7 @@ export default function MaskotPage() {
       </div>
 
       <div className="mb-5 p-3 rounded-soft bg-gray-50 border border-gray-200 text-sm text-ink">
-        Na generování maskota máš {maxAttempts} pokusy. Rozmysli si jméno, typ bytosti i styl — pokusy se neobnovují a mazání z historie je nevrací zpět.
+        Na generování maskota máš {maxAttempts} pokusy. Rozmysli si jméno, typ bytosti i styl, pokusy se neobnovují a mazání z historie je nevrací zpět.
         Zbývá <span className="font-bold tabular-nums">{maxAttempts - attemptsUsed}/{maxAttempts}</span>.
       </div>
 

@@ -572,16 +572,28 @@ export async function signAiNegotiation(db: D1Database, env: PushEnv | undefined
   const problem = await termsProblem(db, buyer, terms);
   if (problem) return fail(400, problem);
 
-  const destTeamId = row.target_squad === "u21" ? await u21TeamOf(db, buyer) : buyer;
+  let destTeamId = row.target_squad === "u21" ? await u21TeamOf(db, buyer) : buyer;
   if (!destTeamId) return fail(400, "Tvůj klub nemá U21 tým.");
-  const squad = await db.prepare("SELECT COUNT(*) AS n, AVG(overall_rating) AS avg FROM players WHERE team_id = ?")
-    .bind(destTeamId).first<{ n: number; avg: number | null }>();
+  const squadOf = (teamId: string) => db.prepare("SELECT COUNT(*) AS n, AVG(overall_rating) AS avg FROM players WHERE team_id = ?")
+    .bind(teamId).first<{ n: number; avg: number | null }>();
+  let squad = await squadOf(destTeamId);
   if ((squad?.n ?? 0) >= SQUAD_CAP) return fail(400, `Kádr je plný (${SQUAD_CAP} hráčů). Nejdřív někoho pusť.`);
 
   const src = await loadSourceForSigning(db, row);
   if (!src) {
     await expireNegotiation(db, env, row, "Hráč už není k mání, sebral ho jiný klub.", now);
     return fail(409, "Hráč už není k mání.");
+  }
+  if (row.target_squad !== "u21") {
+    // Za muže až od 15 let: mladší hráč z cizího klubu jde do U21 (transfers/senior-age.ts).
+    const { placeInSeniorSquad } = await import("./senior-age");
+    const placement = await placeInSeniorSquad(db, buyer, src.player.age ?? 99, row.player_name);
+    if (!placement.ok) return fail(400, placement.error);
+    if (placement.teamId !== destTeamId) {
+      destTeamId = placement.teamId;
+      squad = await squadOf(destTeamId);
+      if ((squad?.n ?? 0) >= SQUAD_CAP) return fail(400, `Kádr je plný (${SQUAD_CAP} hráčů). Nejdřív někoho pusť.`);
+    }
   }
 
   // ── Rozhodnutí hráče ──

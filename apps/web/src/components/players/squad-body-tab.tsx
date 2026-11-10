@@ -91,13 +91,13 @@ export function SquadBodyTab({ teamId, filter }: { teamId: string; filter: PosFi
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         <div className="card p-3 text-center">
           <div className="font-heading font-[800] text-2xl tabular-nums">
-            {summary.avgExcess === null ? "—" : `${signed(summary.avgExcess).replace(".", ",")} kg`}
+            {summary.avgExcess === null ? "-" : `${signed(summary.avgExcess).replace(".", ",")} kg`}
           </div>
           <div className="text-micro text-muted uppercase tracking-wide">Ø nad ideálem</div>
         </div>
         <div className="card p-3 text-center">
           <div className={`font-heading font-[800] text-2xl tabular-nums ${summary.avgTrend30d && summary.avgTrend30d > 0 ? "text-card-red" : ""}`}>
-            {summary.avgTrend30d === null ? "—" : formatKgChange(summary.avgTrend30d)}
+            {summary.avgTrend30d === null ? "-" : formatKgChange(summary.avgTrend30d)}
           </div>
           <div className="text-micro text-muted uppercase tracking-wide">Ø za měsíc</div>
         </div>
@@ -157,16 +157,16 @@ export function SquadBodyTab({ teamId, filter }: { teamId: string; filter: PosFi
                     </td>
                     <td className="py-2 px-1.5 text-center"><PositionBadge position={p.position} /></td>
                     <td className="py-2 px-1.5 text-center tabular-nums font-heading font-bold whitespace-nowrap">
-                      {p.weight !== null ? formatKg(p.weight) : "—"}
+                      {p.weight !== null ? formatKg(p.weight) : "-"}
                     </td>
                     <td className={`py-2 px-1.5 text-center whitespace-nowrap font-heading font-bold ${cat?.color ?? "text-muted"}`}>
-                      {cat?.label ?? "—"}
+                      {cat?.label ?? "-"}
                     </td>
                     <td className={`py-2 px-1.5 text-center tabular-nums whitespace-nowrap ${p.trend30d !== null ? trendTone(p.trend30d, p.weightCategory) : "text-muted"}`}>
-                      {p.trend30d !== null ? formatKgChange(p.trend30d) : "—"}
+                      {p.trend30d !== null ? formatKgChange(p.trend30d) : "-"}
                     </td>
                     <td className={`py-2 px-1.5 text-center tabular-nums whitespace-nowrap ${speed || stamina ? "text-card-red font-heading font-bold" : "text-muted"}`}>
-                      {!speed && !stamina ? "—" : speed === stamina ? signed(speed) : `${signed(speed)}/${signed(stamina)}`}
+                      {!speed && !stamina ? "-" : speed === stamina ? signed(speed) : `${signed(speed)}/${signed(stamina)}`}
                     </td>
                     <td className="py-2 px-1.5 text-center whitespace-nowrap text-sm">
                       {p.cause && <span title={CAUSE[p.cause].label}>{CAUSE[p.cause].icon}</span>}
@@ -174,7 +174,7 @@ export function SquadBodyTab({ teamId, filter }: { teamId: string; filter: PosFi
                         ? <span title={`Plán nabírání do ${czDate(p.planUntil)}`}>💪</span>
                         : <span title={`Plán hubnutí do ${czDate(p.planUntil)}`}>🏃</span>)}
                       {p.pledgeUntil && <span title={`Slíbil omezit hospodu do ${czDate(p.pledgeUntil)}`}>🤝</span>}
-                      {!p.cause && !p.planUntil && !p.pledgeUntil && <span className="text-muted text-xs">—</span>}
+                      {!p.cause && !p.planUntil && !p.pledgeUntil && <span className="text-muted text-xs">-</span>}
                     </td>
                     <td className="py-1 px-1.5 text-center">
                       {p.problem && (

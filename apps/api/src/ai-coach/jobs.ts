@@ -6,13 +6,17 @@
  * každá úloha nejdřív zabere nárok v `ai_coach_claims` (tým, úloha, den): druhé
  * doručení už nic neudělá (žádná dvojí týdenní správa, dvojí nákup ani dvě sestavy).
  *
+ * Sestava se staví ráno, ale kádr se přes den mění (prodej, přesun do U21 v pondělní správě,
+ * zranění). Když uložená sestava přestane platit, zařazení úlohy `match` její nárok uvolní
+ * a model ji postaví znovu (`lineupIsStale`); dřív díru doplnil až automat v zápase.
+ *
  * Bez bindingu fronty (lokální vývoj) se úlohy zpracují rovnou v cronu.
  */
 
 import type { Bindings } from "../index";
 import { logger } from "../lib/logger";
 import type { AiCoachQueueMessage, CoachTask } from "../queue/messages";
-import { claimCoachTask, releaseCoachTask } from "./claims";
+import { claimCoachTask, completeCoachTask, releaseCoachTask, STALE_CLAIM_MS } from "./claims";
 import { topUpConcessions } from "./concessions";
 import { HOURLY_HOOKS } from "./hourly-hooks";
 import { findTodaysFixtures, prepareAiLineup } from "./match";
@@ -44,6 +48,35 @@ export async function listAiClubs(db: D1Database): Promise<string[]> {
   return rows.results.map((r) => r.id);
 }
 
+/**
+ * Je uložená sestava na zápas neplatná? Některý hráč jedenáctky už v týmu není (prodej,
+ * hostování, přesun do U21), není aktivní, nebo se zranil. Bez uložené sestavy false: tu řeší
+ * nárok (nepovedený pokus se neopakuje každou hodinu).
+ */
+export async function lineupIsStale(db: D1Database, teamId: string, calendarId: string): Promise<boolean> {
+  const row = await db.prepare("SELECT players_data FROM lineups WHERE team_id = ? AND calendar_id = ?")
+    .bind(teamId, calendarId).first<{ players_data: string | null }>()
+    .catch((e) => { logger.warn({ module: M, teamId }, `uložená sestava na ${calendarId}`, e); return null; });
+  if (!row?.players_data) return false;
+  let ids: string[] = [];
+  try {
+    const parsed = JSON.parse(row.players_data) as Array<{ playerId?: unknown }>;
+    ids = Array.isArray(parsed) ? parsed.map((p) => p?.playerId).filter((id): id is string => typeof id === "string") : [];
+  } catch (e) {
+    logger.warn({ module: M, teamId }, `nečitelná sestava na ${calendarId}`, e);
+    return false;
+  }
+  if (ids.length === 0) return false;
+  const ok = await db.prepare(
+    `SELECT COUNT(*) AS n FROM players p
+      WHERE p.id IN (${ids.map(() => "?").join(",")}) AND p.team_id = ? AND (p.status IS NULL OR p.status = 'active')
+        AND NOT EXISTS (SELECT 1 FROM injuries i WHERE i.player_id = p.id AND i.days_remaining > 0)`,
+  ).bind(...ids, teamId).first<{ n: number }>()
+    .catch((e) => { logger.warn({ module: M, teamId }, `kontrola hráčů sestavy na ${calendarId}`, e); return null; });
+  // Když kontrola selže, sestava se nechá být: zbytečné volání modelu je horší než hodina zpoždění.
+  return ok !== null && (ok.n ?? 0) < ids.length;
+}
+
 /** Klíč dne úlohy: herní den, u hodinové úlohy i reálná hodina (UTC). */
 export function taskDay(task: CoachTask, gameDay: string, now: Date): string {
   return task === "hourly" ? `${gameDay}T${String(now.getUTCHours()).padStart(2, "0")}` : gameDay;
@@ -73,7 +106,8 @@ export async function enqueueAiCoachJobs(env: Bindings, task: CoachTask, now: Da
 
   let teams = await listAiClubs(env.DB);
   if (task === "match") {
-    // Jen kluby, které dnes hrají a mají aspoň jeden zápas ještě bez připravené sestavy (bez nároku).
+    // Jen kluby, které dnes hrají a mají aspoň jeden zápas ještě bez připravené sestavy (bez nároku),
+    // nebo se sestavou, která mezitím přestala platit (hráč prodán, poslán do U21, zraněn).
     const withFixture: string[] = [];
     for (const id of teams) {
       const fixtures = await findTodaysFixtures(env.DB, id, gameDay);
@@ -82,7 +116,18 @@ export async function enqueueAiCoachJobs(env: Bindings, task: CoachTask, now: Da
         .bind(id, gameDay).all<{ task: string }>()
         .catch((e) => { logger.warn({ module: M, teamId: id }, "nároky na dnešní sestavy", e); return { results: [] as Array<{ task: string }> }; });
       const done = new Set(claimed.results.map((r) => r.task));
-      if (fixtures.some((f) => !done.has(`match:${f.calendarId}`))) withFixture.push(id);
+      let pending = false;
+      for (const f of fixtures) {
+        const claimKey = `match:${f.calendarId}`;
+        if (!done.has(claimKey)) { pending = true; continue; }
+        if (await lineupIsStale(env.DB, id, f.calendarId)) {
+          // Nárok se uvolní a úloha sestavu postaví znovu: o nové sestavě rozhodne zase model.
+          await releaseCoachTask(env.DB, id, claimKey, gameDay);
+          logger.info({ module: M, teamId: id }, `sestava na ${f.calendarId} přestala platit, postaví se znovu`);
+          pending = true;
+        }
+      }
+      if (pending) withFixture.push(id);
     }
     teams = withFixture;
   }
@@ -188,7 +233,9 @@ export async function runAiCoachTask(
   }
 
   // hourly: projdou se všechny části (přáteláky, přestupy…); chyba jedné nezastaví ostatní.
-  if (useClaims && !(await claimCoachTask(db, teamId, "hourly", day))) return { status: "duplicate", detail: null };
+  // Nárok s časem: běh ukončený natvrdo nechá nárok nedokončený a opakované doručení zprávy
+  // ho po 30 minutách smí převzít (části si dvojí provedení hlídají vlastními nároky).
+  if (useClaims && !(await claimCoachTask(db, teamId, "hourly", day, { staleAfterMs: STALE_CLAIM_MS }))) return { status: "duplicate", detail: null };
   if (opts.dryRun) return { status: "done", detail: { hooks: HOURLY_HOOKS.map((h) => h.name), dryRun: true } };
   const profile = await ensureAiProfile(db, teamId);
   const results: Array<{ hook: string; ok: boolean }> = [];
@@ -201,6 +248,7 @@ export async function runAiCoachTask(
       results.push({ hook: hook.name, ok: false });
     }
   }
+  if (useClaims) await completeCoachTask(db, teamId, "hourly", day);
   return { status: "done", detail: results };
 }
 

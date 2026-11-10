@@ -1057,8 +1057,19 @@ export async function cupTieWeather(
   return rw.weather;
 }
 
+/** Meze jedné dávky pohárového kola (viz simulateCupRound). */
+export interface CupChunkLimits {
+  /** Kolik zápasů z dávky smí projít plným enginem. */
+  fullEngineBudget?: number;
+  /** Čas (ms od epochy), po kterém se už další zápas plným enginem nezačne. */
+  deadlineMs?: number;
+}
+
+/** Výchozí rozpočet plného enginu na dávku. Zápas trvá kolem minuty, invokace smí 15. */
+export const CUP_FULL_ENGINE_BUDGET = 6;
+
 /** Odsimuluje aktuální kolo poháru a vygeneruje další kolo z vítězů (nebo ukončí pohár ve finále). */
-export async function simulateCupRound(db: D1Database, cupId: string, env: OptionalPushKeys = {}): Promise<{ ok: boolean; round?: number; finished?: boolean; winner?: string }> {
+export async function simulateCupRound(db: D1Database, cupId: string, env: OptionalPushKeys = {}, limits: CupChunkLimits = {}): Promise<{ ok: boolean; round?: number; finished?: boolean; winner?: string }> {
   const cup = await db.prepare("SELECT total_rounds, current_round, status, season_number FROM cup_competitions WHERE id = ?").bind(cupId)
     .first<{ total_rounds: number; current_round: number; status: string; season_number: number }>()
     .catch((e) => { logger.warn({ module: M }, "load cup", e); return null; });
@@ -1071,7 +1082,10 @@ export async function simulateCupRound(db: D1Database, cupId: string, env: Optio
   // v jedné dávce mnohem víc a kolo se dohraje řádově rychleji.
   const CUP_CHUNK = 48;
   // Kolik zápasů z dávky smí projít plným enginem (sestavy, události, komentář, statistiky).
-  const FULL_ENGINE_BUDGET = 12;
+  // Dřív 12: zápas plným enginem trvá přes minutu, takže dávka vycházela na 13 až 15 minut
+  // při limitu invokace 15. Kolo, kde hraje skutečný klub v každém zápase (1. kolo se 32
+  // zápasy), by tak spadlo uprostřed a zápas se po propadnutí záboru odehrál znovu.
+  const FULL_ENGINE_BUDGET = Math.max(1, limits.fullEngineBudget ?? CUP_FULL_ENGINE_BUDGET);
   // Po kolika minutách se claim nedokončeného zápasu považuje za mrtvý (spadlá invokace).
   const CLAIM_STALE_MIN = 15;
   const roundMatches = await loadRoundMatches(db, cupId, round, CUP_CHUNK);
@@ -1140,8 +1154,13 @@ export async function simulateCupRound(db: D1Database, cupId: string, env: Optio
     if (!m.home_cup_team_id || !m.away_cup_team_id) continue;
     // Rozpočet plného enginu je vyčerpán → zápas, který ho potřebuje, počká na další dávku.
     // Radši ať se odehraje později se vším všudy, než hned jako holé skóre.
-    if (fullUsed >= FULL_ENGINE_BUDGET
-        && (!!realTeamOf.get(m.home_cup_team_id) || !!realTeamOf.get(m.away_cup_team_id))) {
+    const needsFullEngine = !!realTeamOf.get(m.home_cup_team_id) || !!realTeamOf.get(m.away_cup_team_id);
+    if (fullUsed >= FULL_ENGINE_BUDGET && needsFullEngine) {
+      continue;
+    }
+    // Došel čas invokace: drahý zápas už nezačínat, dohraje ho další dávka.
+    if (needsFullEngine && limits.deadlineMs !== undefined && Date.now() >= limits.deadlineMs) {
+      logger.info({ module: M }, `cup tie ${m.id}: dávce došel čas, zápas počká na další`);
       continue;
     }
 
@@ -1353,7 +1372,10 @@ async function announceCupRound(db: D1Database, env: OptionalPushKeys, cupId: st
  * Auto-postup poháru: pokud aktuální kolo aktivního poháru má naplánované datum
  * <= herní den, odsimuluj ho (i víc kol dozadu, kdyby se hra opozdila). Volá se z daily-ticku.
  */
-export async function maybeAdvanceCup(db: D1Database, env: OptionalPushKeys = {}): Promise<number> {
+export async function maybeAdvanceCup(
+  db: D1Database, env: OptionalPushKeys = {},
+  opts: CupChunkLimits & { maxChunks?: number } = {},
+): Promise<number> {
   const season = await db.prepare("SELECT MAX(number) AS n FROM seasons WHERE status = 'active'").first<{ n: number }>()
     .catch((e) => { logger.warn({ module: M }, "advance: season", e); return null; });
   if (!season?.n) return 0;
@@ -1373,8 +1395,12 @@ export async function maybeAdvanceCup(db: D1Database, env: OptionalPushKeys = {}
   // Lazy dogenerování kádrů velkoklubů (chunk 8/tick) — musí být hotové před 1. kolem.
   await ensureBigClubSquads(db, anyCup.id, 8).catch((e) => logger.warn({ module: M }, "ensure big club squads", e));
 
+  // Dávky navíc jen pro kola bez skutečných klubů (silová simulace za pár dotazů). Čas hlídá
+  // deadlineMs: po jeho vypršení se další dávka nezačne.
+  const maxChunks = Math.max(1, opts.maxChunks ?? 3);
   let advanced = 0, guard = 0;
-  while (guard++ < 3) { // max 3 chunky/tick (plný engine je drahý na subrequesty)
+  while (guard++ < maxChunks) {
+    if (advanced > 0 && opts.deadlineMs !== undefined && Date.now() >= opts.deadlineMs) break;
     const cup = await db.prepare("SELECT id, current_round FROM cup_competitions WHERE season_number = ? AND status = 'active' LIMIT 1")
       .bind(season.n).first<{ id: string; current_round: number }>()
       .catch((e) => { logger.warn({ module: M }, "advance: load cup", e); return null; });
@@ -1383,7 +1409,7 @@ export async function maybeAdvanceCup(db: D1Database, env: OptionalPushKeys = {}
       .bind(cup.id, cup.current_round).first<{ d: string | null }>()
       .catch((e) => { logger.warn({ module: M }, "advance: round date", e); return null; });
     if (!cur?.d || cur.d > gd.d) break; // kolo ještě nemá nadejít / už je dohrané
-    await simulateCupRound(db, cup.id, env);
+    await simulateCupRound(db, cup.id, env, { fullEngineBudget: opts.fullEngineBudget, deadlineMs: opts.deadlineMs });
     advanced++;
   }
   if (advanced > 0) logger.info({ module: M }, `cup auto-advanced ${advanced} kol (s=${season.n})`);

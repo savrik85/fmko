@@ -103,6 +103,9 @@ function restoreOnboarding(): { step: number; state: OnboardingState } {
   return { step: Math.min(requestedStep, validStep), state: parsed };
 }
 
+/** Co nový klub v okrese čeká (z /api/registration/access). */
+export type DistrictStart = { mode: "join" | "new_league" | "new_league_single" | "new_league_preseason"; startsAfter: string | null };
+
 export default function OnboardingPage() {
   const restored = restoreOnboarding();
   const [step, setStep] = useState(restored.step);
@@ -111,14 +114,14 @@ export default function OnboardingPage() {
   const { token, isLoading, teamId, setTeam } = useTeam();
   const router = useRouter();
 
-  const [access, setAccess] = useState<{ district: string | null; name: string; districts: string[]; homeFull?: boolean } | null>(null);
+  const [access, setAccess] = useState<{ district: string | null; name: string; districts: string[]; homeFull?: boolean; starts?: Record<string, DistrictStart | null> } | null>(null);
   const [accessError, setAccessError] = useState("");
   const [accessAttempt, setAccessAttempt] = useState(0);
   useEffect(() => {
     if (!token) return;
     let cancelled = false;
     setAccessError("");
-    apiFetch<{ district: string | null; name: string; districts: string[]; homeFull?: boolean }>("/api/registration/access")
+    apiFetch<{ district: string | null; name: string; districts: string[]; homeFull?: boolean; starts?: Record<string, DistrictStart | null> }>("/api/registration/access")
       .then(data => {
         if (cancelled) return;
         setAccess(data);
@@ -137,7 +140,9 @@ export default function OnboardingPage() {
 
   // Redirect to register if not authenticated
   useEffect(() => {
-    if (!isLoading && !token) router.replace("/registrace");
+    // Kdo přišel na zakládání klubu bez účtu, chce hrát: registrace mu ukáže okresy,
+    // kde se hraje a je volno, ne výzvu k založení nové ligy.
+    if (!isLoading && !token) router.replace("/registrace?vstup=hra");
   }, [isLoading, token, router]);
 
   // Klub, který mezitím vedl AI trenér: bývalý vlastník se k němu může vrátit.
@@ -288,6 +293,7 @@ export default function OnboardingPage() {
         {step === 1 && (
           <StepLocation
             allowedDistricts={access.districts}
+            districtStarts={access.starts}
             onSelect={(village) => {
               setState((s) => ({
                 ...s,

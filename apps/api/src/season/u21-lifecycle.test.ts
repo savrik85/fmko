@@ -9,7 +9,8 @@ import { describe, it, expect } from "vitest";
 import {
   vyberChybejiciPosty, CILOVY_POCET_DOROSTU, VEK_ODCHODU_Z_DOROSTU, MAX_KADR_ACKA,
 } from "./u21-lifecycle";
-import { vekovyNasobitel } from "../skills/generator";
+import { generatePlayerSkills, vekovyNasobitel } from "../skills/generator";
+import { createRng } from "../generators/rng";
 
 describe("doplňování postů", () => {
   it("dodá přesně tolik hráčů, kolik se žádá", () => {
@@ -86,7 +87,26 @@ describe("věková křivka", () => {
   });
 
   it("mimo rozsah nespadne pod ani nad křivku", () => {
-    expect(vekovyNasobitel(14)).toBe(vekovyNasobitel(16));
     expect(vekovyNasobitel(99)).toBe(0.5);
+  });
+
+  it("pod 16 let křivka klesá dál, žák nevzniká s dovednostmi šestnáctiletého", () => {
+    expect(vekovyNasobitel(13)).toBe(0.62);
+    expect(vekovyNasobitel(14)).toBe(0.68);
+    expect(vekovyNasobitel(15)).toBe(0.73);
+    expect(vekovyNasobitel(16)).toBeCloseTo(0.78, 10);
+    // Mladší než 13 jako třináctiletý
+    expect(vekovyNasobitel(11)).toBe(0.62);
+    expect(vekovyNasobitel(12)).toBe(0.62);
+    // Od 16 let beze změny
+    for (let age = 16; age <= 21; age++) expect(vekovyNasobitel(age)).toBeCloseTo(0.78 + (age - 16) * 0.038, 10);
+  });
+
+  it("třináctiletý ze stejného semínka vyjde slabší než šestnáctiletý, šestnáctiletý se nemění", () => {
+    const rate = (age: number) => generatePlayerSkills(createRng(77), { position: "MID", age, level: "village", hiddenTalent: 20 }).rating;
+    expect(rate(13)).toBeLessThan(rate(14));
+    expect(rate(14)).toBeLessThan(rate(16));
+    // Šestnáctiletý: pevná hodnota z generátoru před změnou křivky pod 16 let
+    expect(rate(16)).toBe(21);
   });
 });

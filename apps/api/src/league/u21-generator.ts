@@ -16,6 +16,7 @@ import { createPlayer, levelFromCategory, levelFromVillageSize } from "../genera
 import { generateDescription } from "../generators/description-generator";
 import { getDistrictDataFromDB } from "../data/districts";
 import { logger } from "../lib/logger";
+import { isHolidayBreak } from "../season/calendar";
 import { mustSeason } from "../lib/season";
 
 const POSITIONS = ["GK", "DEF", "MID", "FWD"] as const;
@@ -425,15 +426,23 @@ export function u21RoundDates(
   const out: { at: Date; parentCalendarId: string | null }[] = [];
   for (let r = 0; r < rounds; r++) {
     const s = seniorRounds[r];
-    if (s) { out.push({ at: new Date(new Date(s.scheduled_at).getTime() + DAY_MS), parentCalendarId: s.id }); continue; }
+    if (s) {
+      // Den po áčku. Rozpis áčka se svátkům vyhýbá i s tímhle dnem; kdyby přesto vyšel
+      // do vánoční přestávky (starý rozpis), kolo se odehraje hned po ní.
+      let next = new Date(new Date(s.scheduled_at).getTime() + DAY_MS);
+      while (isHolidayBreak(next)) next = new Date(next.getTime() + DAY_MS);
+      out.push({ at: next, parentCalendarId: s.id });
+      continue;
+    }
     let at: Date;
+    const isMatchDay = (d: Date) => (d.getUTCDay() === 2 || d.getUTCDay() === 5) && !isHolidayBreak(d);
     if (out.length > 0) {
       at = new Date(out[out.length - 1].at);
-      do { at = new Date(at.getTime() + DAY_MS); } while (at.getUTCDay() !== 2 && at.getUTCDay() !== 5);
+      do { at = new Date(at.getTime() + DAY_MS); } while (!isMatchDay(at));
     } else {
       at = new Date(startDate ?? new Date());
       at.setUTCHours(17, 0, 0, 0); // 18:00 v Praze v zimě, jako áčko
-      do { at = new Date(at.getTime() + DAY_MS); } while (at.getUTCDay() !== 2 && at.getUTCDay() !== 5);
+      do { at = new Date(at.getTime() + DAY_MS); } while (!isMatchDay(at));
     }
     out.push({ at, parentCalendarId: null });
   }

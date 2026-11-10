@@ -16,7 +16,7 @@ import type { PushEnv } from "../community/web-push";
 import {
   MAX_OPEN_OFFERS,
   busyText, dateError, earliestDay, findBusy, gameDay,
-  holdStakes, linkedTermsError, loadClubGeo, offerToChallengeTerms, parseTerms, pickNeutralVillage, refundStake,
+  holdStakes, linkedTermsError, loadClubGeo, offerToChallengeTerms, parseTerms, pickNeutralVillage, refundStake, stakeCapError,
   type ChallengeVenue, type CostPayer, type FriendlyTerms, type OfferCostPayer, type OfferVenue,
 } from "./friendlies";
 
@@ -167,6 +167,8 @@ export async function sendChallenge(
   if (dateErr) return fail(400, dateErr);
   const linkedErr = await linkedTermsError(db, teamId, opponentId, terms);
   if (linkedErr) return fail(403, linkedErr);
+  const capErr = await stakeCapError(db, [teamId, opponentId], terms.stake);
+  if (capErr) return fail(400, capErr);
   if (team.budget < terms.stake) return fail(400, "Na takovou sázku nemáš dost peněz.");
   const clash = await scheduleClash(db, teamId, opponentId, terms.date);
   if (clash) return fail(409, clash);
@@ -328,6 +330,8 @@ export async function postFriendlyOffer(
 
   const dateErr = dateError(date, today, hour);
   if (dateErr) return fail(400, dateErr);
+  const capErr = await stakeCapError(db, [teamId], stake);
+  if (capErr) return fail(400, capErr);
   if (team.budget < stake) return fail(400, "Na takovou sázku nemáš dost peněz.");
   const busy = await findBusy(db, teamId, date);
   if (busy) return fail(409, busyText(busy, true));
@@ -366,6 +370,9 @@ export async function takeFriendlyOffer(
   const terms: FriendlyTerms = { date: offer.match_date, venue, costPayer, stake: offer.stake, message: offer.message };
   const linkedErr = await linkedTermsError(db, offer.team_id, teamId, terms);
   if (linkedErr) return fail(403, linkedErr);
+  // Nabídka mohla vzniknout v soutěži s vyšším stropem, než má ten, kdo ji bere.
+  const capErr = await stakeCapError(db, [offer.team_id, teamId], terms.stake);
+  if (capErr) return fail(400, capErr);
   if (team.budget < terms.stake) return fail(400, "Na sázku nemáš dost peněz.");
   if (poster.budget < terms.stake) return fail(400, "Klub, který nabídku vypsal, teď na sázku nemá peníze.");
   const clash = await scheduleClash(db, teamId, offer.team_id, terms.date);

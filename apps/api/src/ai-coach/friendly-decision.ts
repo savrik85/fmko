@@ -11,6 +11,7 @@
 import type { OfferVenue } from "../multiplayer/friendlies";
 import type { AiCoachProfile } from "./profile";
 import { styleText } from "./weekly-decision";
+import { promptName } from "./prompt-text";
 
 /** Soutěžní zápas poblíž termínu: posun ve dnech (záporný = před přátelákem) a druh. */
 export interface NearbyMatch {
@@ -108,7 +109,7 @@ function clubLines(ctx: FriendlyClubSnapshot): string[] {
     `ambition ${p.ambition}, thrift ${p.thrift}, risk ${p.risk}, patience ${p.patience}, youth focus ${p.youthFocus}.`,
     `YOUR STYLE: ${styleText(p)}`,
     "",
-    `CLUB ${ctx.teamName}: budget ${czk(ctx.budget)}, strength ${ctx.strength !== null ? ctx.strength.toFixed(1) : "unknown"} (average rating of the best eleven).`,
+    `CLUB ${promptName(ctx.teamName)}: budget ${czk(ctx.budget)}, strength ${ctx.strength !== null ? ctx.strength.toFixed(1) : "unknown"} (average rating of the best eleven).`,
     `SQUAD: ${ctx.players} players, average condition ${ctx.avgCondition !== null ? `${Math.round(ctx.avgCondition)} %` : "unknown"}, injured ${ctx.injured}. Friendlies already agreed: ${ctx.upcomingFriendlies}.`,
   ];
 }
@@ -119,7 +120,7 @@ export function renderFriendlyReplyPrompt(ctx: FriendlyReplyContext): string {
   return [
     ...clubLines(ctx),
     "",
-    `CHALLENGE from ${ctx.opponent.name} (${ctx.opponent.human ? "managed by a human player" : "managed by another computer coach"}), ${strengthText(ctx.strength, ctx.opponent.strength)}.`,
+    `CHALLENGE from ${promptName(ctx.opponent.name)} (${ctx.opponent.human ? "managed by a human player" : "managed by another computer coach"}), ${strengthText(ctx.strength, ctx.opponent.strength)}.`,
     `- date ${ctx.date} (${weekday(ctx.date)}), in ${ctx.daysAhead} day${ctx.daysAhead === 1 ? "" : "s"}; ${nearbyText(ctx.nearby)}`,
     `- venue: ${venue}`,
     `- costs: ${costs}; your share ${czk(ctx.ourCosts)}`,

@@ -29,9 +29,10 @@ beforeAll(async () => {
     .replace(/--.*$/gm, "").split(";").map((s) => s.trim()).filter(Boolean);
   for (const sql of migration) await db.prepare(sql).run();
 
-  const effect = (id: string, a: string, b: string, actor: string, source: string, kind: string, created: string) =>
-    db.prepare("INSERT INTO social_relation_effects (id, team_a_id, team_b_id, actor_team_id, source_key, kind, respect, heat, created_at) VALUES (?, ?, ?, ?, ?, ?, 0, 0, ?)")
-      .bind(id, a, b, actor, source, kind, created);
+  // `shift` = posun respektu; nula je text, který se jen vyhodnotil (nebo ho uřízl denní strop).
+  const effect = (id: string, a: string, b: string, actor: string, source: string, kind: string, created: string, shift = -3) =>
+    db.prepare("INSERT INTO social_relation_effects (id, team_a_id, team_b_id, actor_team_id, source_key, kind, respect, heat, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)")
+      .bind(id, a, b, actor, source, kind, shift, created);
   await db.batch([
     db.prepare("INSERT INTO teams VALUES ('t-spule', 'AC Jitona Spůle'), ('t-kavo', 'FC Kávoviny Vlachovo Březí'), ('t-vim', 'FK Engel Vimperk')"),
     db.prepare("INSERT INTO social_posts (id, team_id, body, created_at) VALUES ('p1', 't-spule', '@FK Engel Vimperk zítra vás rozstřílíme. Jsme ready!', '2026-11-07T10:00:00Z')"),
@@ -46,6 +47,9 @@ beforeAll(async () => {
     effect("e4", "j-dra", "t-spule", "t-spule", "comment:c2", "journalist_tease", "2026-11-08T09:30:05Z"),
     effect("e5", "t-spule", "t-vim", "t-spule", "comment:c3", "insult", "2026-11-08T09:40:05Z"),
     effect("e6", "t-spule", "t-vim", "t-spule", "post:p3", "tease", "2026-10-20T10:00:05Z"),
+    // Rýpnutí bez posunu vztahu kauzu nedělá.
+    db.prepare("INSERT INTO social_comments (id, team_id, author_kind, body, created_at) VALUES ('c4', 't-spule', 'manager', 'Vimperk zase mele z posledního', '2026-11-08T10:00:00Z')"),
+    effect("e7", "t-spule", "t-vim", "t-spule", "comment:c4", "tease", "2026-11-08T10:00:05Z", 0),
   ]);
 });
 

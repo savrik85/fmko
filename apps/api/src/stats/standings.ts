@@ -3,6 +3,8 @@
  * Jediný zdroj pravdy — používat VŠUDE kde se počítá pozice v lize.
  */
 
+import { sortStandings, toRankedMatch } from "./standings-order";
+
 export interface StandingEntry {
   teamId: string;
   points: number;
@@ -18,7 +20,7 @@ export interface StandingEntry {
 
 /**
  * Vypočítá ligovou tabulku z odehraných zápasů.
- * Řazení: body DESC → skóre rozdíl DESC → vstřelené góly DESC
+ * Řazení drží stats/standings-order.ts: body, vzájemné zápasy, rozdíl skóre, vstřelené góly, id týmu.
  */
 export async function calculateStandings(
   db: D1Database,
@@ -92,19 +94,12 @@ export async function calculateStandings(
     };
   });
 
-  // Sort: points DESC → goal difference DESC → goals for DESC
-  standings.sort((a, b) => {
-    const pd = b.points - a.points;
-    if (pd !== 0) return pd;
-    const gd = b.gd - a.gd;
-    if (gd !== 0) return gd;
-    return b.gf - a.gf;
-  });
+  const sorted = sortStandings(standings, matches.results.map(toRankedMatch));
 
   // Assign positions
-  standings.forEach((s, i) => { s.pos = i + 1; });
+  sorted.forEach((s, i) => { s.pos = i + 1; });
 
-  return standings;
+  return sorted;
 }
 
 /**

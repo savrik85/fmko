@@ -493,7 +493,7 @@ export default function DresPage() {
                       <circle cx="11" cy="11" r="6" fill="white" />
                       <circle cx="13.5" cy="11" r="5.5" fill="#1f2937" />
                     </svg>
-                  ) : opt.value || <span className="text-xs text-muted">—</span>}
+                  ) : opt.value || <span className="text-xs text-muted">-</span>}
                 </button>
               );
             })}
@@ -566,7 +566,7 @@ export default function DresPage() {
       <div className="mb-5">
         <Link href="/muj-klub" className="text-sm text-muted hover:text-ink">← Zpět na Klubový web</Link>
         <h1 className="font-heading font-extrabold text-2xl text-ink mt-1">Dres a znak</h1>
-        <p className="text-sm text-muted mt-0.5">Vlastní vzhled klubu — barvy, vzor dresu, znak a šála.</p>
+        <p className="text-sm text-muted mt-0.5">Vlastní vzhled klubu, barvy, vzor dresu, znak a šála.</p>
       </div>
 
       {/* ═══ Desktop: náhledy nahoře, editory dole, šála na celou šířku ═══ */}

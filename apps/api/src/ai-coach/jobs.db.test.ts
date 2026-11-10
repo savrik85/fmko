@@ -8,7 +8,8 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { Miniflare } from "miniflare";
 import type { Bindings } from "../index";
 import type { AiCoachQueueMessage } from "../queue/messages";
-import { enqueueAiCoachJobs, handleAiCoachMessage, isGameMonday } from "./jobs";
+import { enqueueAiCoachJobs, handleAiCoachMessage, isGameMonday, lineupIsStale } from "./jobs";
+import { claimCoachTask, completeCoachTask, STALE_CLAIM_MS } from "./claims";
 import { COACH_MODE_KEY } from "./mode";
 
 let miniflare: Miniflare;
@@ -75,6 +76,8 @@ beforeAll(async () => {
   for (const stmt of migration.split(";").map((x) => x.trim()).filter((x) => /^CREATE/i.test(x.replace(/^--.*$/gm, "").trim()))) {
     await db.prepare(stmt.replace(/^--.*$/gm, "").trim()).run();
   }
+  // Dokončení nároku (migrace 0299).
+  await db.prepare(readFileSync(resolve(__dirname, "../../migrations/0299_ai_coach_claims_done.sql"), "utf8").replace(/^--.*$/gm, "").trim().replace(/;$/, "")).run();
   await db.batch([
     db.prepare("INSERT INTO seasons VALUES ('s3', 3, 'active')"),
     db.prepare("INSERT INTO villages VALUES ('v1', 'Lhota', 'village', 'Praha', 600), ('v2', 'Ves', 'village', 'Praha', 500)"),
@@ -122,6 +125,40 @@ async function savedLineup() {
   return db.prepare("SELECT formation, tactic, hardness, players_data, bench_data, is_auto, captain_id FROM lineups WHERE team_id = ? AND calendar_id = 'cal-1'")
     .bind(TEAM).first<{ formation: string; tactic: string; hardness: string; players_data: string; bench_data: string | null; is_auto: number; captain_id: string | null }>();
 }
+
+describe("nároky s časem: běh ukončený natvrdo nenechá úlohu viset navždy", () => {
+  const stamp = (minutesAgo: number) => new Date(Date.now() - minutesAgo * 60_000).toISOString().slice(0, 19) + "Z";
+  const age = (task: string, minutesAgo: number) => db.prepare("UPDATE ai_coach_claims SET claimed_at = ? WHERE team_id = ? AND task = ?").bind(stamp(minutesAgo), TEAM, task).run();
+  const stale = { staleAfterMs: STALE_CLAIM_MS };
+
+  it("nedokončený nárok převezme další běh až po 30 minutách, dokončený nikdy; bez časové volby se nepřebírá nic", async () => {
+    expect(await claimCoachTask(db, TEAM, "hourly", "2026-11-02T09", stale)).toBe(true);
+    // Čerstvý nárok: druhé doručení zprávy nic nedělá.
+    expect(await claimCoachTask(db, TEAM, "hourly", "2026-11-02T09", stale)).toBe(false);
+    await age("hourly", 29);
+    expect(await claimCoachTask(db, TEAM, "hourly", "2026-11-02T09", stale)).toBe(false);
+    await age("hourly", 31);
+    // Úlohy bez časové volby (týdenní správa, sestava) se nepřebírají nikdy.
+    expect(await claimCoachTask(db, TEAM, "hourly", "2026-11-02T09")).toBe(false);
+    expect(await claimCoachTask(db, TEAM, "hourly", "2026-11-02T09", stale)).toBe(true);
+    // Převzetí nárok znovu „omladí“: třetí běh ho hned nepřevezme.
+    expect(await claimCoachTask(db, TEAM, "hourly", "2026-11-02T09", stale)).toBe(false);
+    await completeCoachTask(db, TEAM, "hourly", "2026-11-02T09");
+    await age("hourly", 500);
+    expect(await claimCoachTask(db, TEAM, "hourly", "2026-11-02T09", stale)).toBe(false);
+  });
+
+  it("hodinová úloha nárok po dokončení označí a zaseknutý nárok po 30 minutách převezme", async () => {
+    const msg: AiCoachQueueMessage = { kind: "ai_coach", teamId: TEAM, task: "hourly", day: `${DAY}T09`, enqueuedAt: `${DAY}T09:15:00.000Z` };
+    // Běh ukončený natvrdo: nárok bez dokončení, starý 40 minut.
+    await db.prepare("INSERT INTO ai_coach_claims (team_id, task, day, claimed_at) VALUES (?, 'hourly', ?, ?)").bind(TEAM, msg.day, stamp(40)).run();
+    const res = await handleAiCoachMessage(env(), msg);
+    expect(res.status).toBe("done");
+    const claim = await db.prepare("SELECT done_at FROM ai_coach_claims WHERE team_id = ? AND task = 'hourly' AND day = ?").bind(TEAM, msg.day).first<{ done_at: string | null }>();
+    expect(claim?.done_at).toBeTruthy();
+    expect((await handleAiCoachMessage(env(), msg)).status).toBe("duplicate");
+  });
+});
 
 describe("AI trenér: sestava na dnešní zápas", () => {
   it("platné rozhodnutí modelu uloží sestavu stejnou službou jako člověk", async () => {
@@ -191,6 +228,45 @@ describe("AI trenér: sestava na dnešní zápas", () => {
     await handleAiCoachMessage(env({ run: async () => { called = true; return {}; } }), matchMsg);
     expect(called).toBe(false);
     expect(await savedLineup()).not.toBeNull();
+  });
+
+  it("kádr se přes den změní (prodej, U21, zranění): sestava přestane platit a model ji postaví znovu", async () => {
+    let calls = 0;
+    const ai = { run: async () => {
+      calls++;
+      return { choices: [{ message: { content: JSON.stringify({ formation: "4-4-2", tactic: "balanced", hardness: "normal", captain: "P1", rest: [], mustStart: [], plan: [], reasoning: "x" }) } }], usage: { prompt_tokens: 100, completion_tokens: 20 } };
+    } };
+    const e = env(ai);
+    const now = new Date(`${DAY}T09:15:00.000Z`);
+    expect((await enqueueAiCoachJobs(e, "match", now)).inline).toBe(1);
+    expect(calls).toBe(1);
+    const first = JSON.parse((await savedLineup())!.players_data) as Array<{ playerId: string }>;
+    expect(await lineupIsStale(db, TEAM, "cal-1")).toBe(false);
+    // Platná sestava: další hodinu se klub nezařadí a model se neptá.
+    expect((await enqueueAiCoachJobs(e, "match", now)).teams).toBe(0);
+    expect(calls).toBe(1);
+
+    const cases: Array<[string, string, string]> = [
+      // Prodej přes den: hráč je v jiném klubu.
+      ["UPDATE players SET team_id = 'human-team' WHERE id = ?", "UPDATE players SET team_id = 'ai-team' WHERE id = ?", "prodej"],
+      // Zranění hráče ze sestavy.
+      ["INSERT INTO injuries VALUES ('i-day', ?, 'ai-team', 'muscle', 'natažený sval', 6, 0)", "DELETE FROM injuries WHERE id = 'i-day' AND player_id = ?", "zranění"],
+    ];
+    for (const [change, undo, what] of cases) {
+      const gone = (JSON.parse((await savedLineup())!.players_data) as Array<{ playerId: string }>)[5].playerId;
+      await db.prepare(change).bind(gone).run();
+      expect(await lineupIsStale(db, TEAM, "cal-1"), what).toBe(true);
+      const before = calls;
+      const res = await enqueueAiCoachJobs(e, "match", now);
+      expect(res.teams, what).toBe(1);
+      expect(calls, what).toBe(before + 1);
+      const rebuilt = JSON.parse((await savedLineup())!.players_data) as Array<{ playerId: string }>;
+      expect(rebuilt, what).toHaveLength(11);
+      expect(rebuilt.some((p) => p.playerId === gone), what).toBe(false);
+      expect(await lineupIsStale(db, TEAM, "cal-1"), what).toBe(false);
+      await db.prepare(undo).bind(gone).run();
+    }
+    expect(first).toHaveLength(11);
   });
 
   it("zastaralá zpráva (jiný herní den) se zahodí", async () => {

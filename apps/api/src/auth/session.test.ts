@@ -4,7 +4,7 @@
  * prodlouží na plných 30 dní, nejvýš jednou za den (jeden zápis do KV na hráče a den).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createSession, deleteSession, getSession, SESSION_MAX_AGE_MS, SESSION_RENEW_AFTER_MS, type Session } from "./session";
+import { createSession, deleteAllUserSessions, deleteSession, getSession, SESSION_MAX_AGE_MS, SESSION_RENEW_AFTER_MS, type Session } from "./session";
 
 const DAY = 24 * 60 * 60 * 1000;
 const HOUR = 60 * 60 * 1000;
@@ -14,6 +14,8 @@ const THIRTY_DAYS_S = 30 * 24 * 60 * 60;
 class MemoryKv {
   private store = new Map<string, { value: string; expiresAt: number | null }>();
   puts: Array<{ key: string; value: string; ttl: number | undefined }> = [];
+  /** Zápisy do seznamu relací uživatele (`user-session:`), zvlášť od zápisů session. */
+  indexPuts: Array<{ key: string; ttl: number | undefined }> = [];
   failPuts = false;
 
   async get(key: string): Promise<string | null> {
@@ -27,13 +29,22 @@ class MemoryKv {
   }
 
   async put(key: string, value: string, opts?: { expirationTtl?: number }): Promise<void> {
-    this.puts.push({ key, value, ttl: opts?.expirationTtl });
+    if (key.startsWith("user-session:")) this.indexPuts.push({ key, ttl: opts?.expirationTtl });
+    else this.puts.push({ key, value, ttl: opts?.expirationTtl });
     if (this.failPuts) throw new Error("KV PUT failed: 429 Too Many Requests");
     this.store.set(key, { value, expiresAt: opts?.expirationTtl ? Date.now() + opts.expirationTtl * 1000 : null });
   }
 
   async delete(key: string): Promise<void> {
     this.store.delete(key);
+  }
+
+  async list(opts: { prefix: string }): Promise<{ keys: Array<{ name: string }>; list_complete: boolean }> {
+    const keys: Array<{ name: string }> = [];
+    for (const name of this.store.keys()) {
+      if (name.startsWith(opts.prefix) && (await this.get(name)) !== null) keys.push({ name });
+    }
+    return { keys, list_complete: true };
   }
 }
 
@@ -199,5 +210,64 @@ describe("horní hranice a odhlášení", () => {
     kv.puts = [];
     await getSession(asKv(kv), `${token}-other`);
     expect(kv.puts.filter((x) => x.key === `session:${token}-other`)).toEqual([]);
+  });
+});
+
+describe("zneplatnění všech relací uživatele (změna hesla)", () => {
+  it("přihlášení zapíše session do seznamu relací na 90 dní", async () => {
+    const kv = new MemoryKv();
+    const token = await createSession(asKv(kv), "u1", "u1@example.test", "t1");
+    expect(kv.indexPuts).toEqual([{ key: `user-session:u1:${token}`, ttl: SESSION_MAX_AGE_MS / 1000 }]);
+  });
+
+  it("zneplatní všechna zařízení uživatele a cizí relace nechá být", async () => {
+    const kv = new MemoryKv();
+    const phone = await createSession(asKv(kv), "u1", "u1@example.test", "t1");
+    const laptop = await createSession(asKv(kv), "u1", "u1@example.test", "t1");
+    const stranger = await createSession(asKv(kv), "u2", "u2@example.test", "t2");
+    // Uživatel, jehož id je předponou jiného, nesmí o relaci přijít.
+    const similar = await createSession(asKv(kv), "u11", "u11@example.test", "t3");
+
+    expect(await deleteAllUserSessions(asKv(kv), "u1")).toBe(2);
+
+    expect(await getSession(asKv(kv), phone)).toBeNull();
+    expect(await getSession(asKv(kv), laptop)).toBeNull();
+    expect((await getSession(asKv(kv), stranger))?.userId).toBe("u2");
+    expect((await getSession(asKv(kv), similar))?.userId).toBe("u11");
+    // Záznam o odhlášení brání souběžnému prodloužení session vrátit.
+    expect(await kv.get(`revoked:${phone}`)).toBe("1");
+    expect(await kv.get(`revoked:${laptop}`)).toBe("1");
+    expect((await kv.list({ prefix: "user-session:u1:" })).keys).toEqual([]);
+  });
+
+  it("uživatel bez relací: nic se nestane", async () => {
+    const kv = new MemoryKv();
+    expect(await deleteAllUserSessions(asKv(kv), "nobody")).toBe(0);
+  });
+
+  it("session z doby před seznamem se do něj zapíše při prodloužení a pak jde zneplatnit", async () => {
+    const kv = new MemoryKv();
+    const createdAt = new Date(START.getTime() - 10 * DAY).toISOString();
+    await kv.put("session:legacy", JSON.stringify({ userId: "u5", email: "u5@example.test", teamId: "t5", createdAt }), {
+      expirationTtl: 20 * 24 * 60 * 60,
+    });
+    expect(await deleteAllUserSessions(asKv(kv), "u5")).toBe(0);
+    expect(await getSession(asKv(kv), "legacy")).not.toBeNull();
+    expect(kv.indexPuts.map((x) => x.key)).toEqual(["user-session:u5:legacy"]);
+
+    // Další prodloužení už seznam znovu nezapisuje.
+    vi.setSystemTime(START.getTime() + 2 * DAY);
+    await getSession(asKv(kv), "legacy");
+    expect(kv.indexPuts).toHaveLength(1);
+
+    expect(await deleteAllUserSessions(asKv(kv), "u5")).toBe(1);
+    expect(await getSession(asKv(kv), "legacy")).toBeNull();
+  });
+
+  it("odhlášení uklidí záznam ze seznamu relací", async () => {
+    const kv = new MemoryKv();
+    const token = await createSession(asKv(kv), "u1", "u1@example.test", "t1");
+    await deleteSession(asKv(kv), token);
+    expect((await kv.list({ prefix: "user-session:u1:" })).keys).toEqual([]);
   });
 });

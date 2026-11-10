@@ -15,7 +15,7 @@ function zapas(over: Partial<MatchSatisfactionInput> = {}): MatchSatisfactionInp
     result: "draw",
     fans: { satisfaction: 60, loyalty: 60, expected_performance: 50, base_ticket_price: 0 },
     opponentReputation: 50,
-    effectiveTicketPrice: 50,
+    setTicketPrice: 0,
     villageBaseTicketPrice: 50,
     concessionMode: "external",
     soldProducts: [],

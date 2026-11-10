@@ -222,7 +222,7 @@ export function SeasonNumbersWidget({ data }: WidgetProps) {
               <span className="font-heading font-bold text-ink">
                 {s.biggestWin.homeScore}:{s.biggestWin.awayScore}
               </span>{" "}
-              — {s.biggestWin.homeTeam} vs. {s.biggestWin.awayTeam}
+             , {s.biggestWin.homeTeam} vs. {s.biggestWin.awayTeam}
             </span>
           </li>
         )}
@@ -231,7 +231,7 @@ export function SeasonNumbersWidget({ data }: WidgetProps) {
             <span className="shrink-0">🎟</span>
             <span className="text-muted">
               Rekordní návštěva <span className="font-heading font-bold text-ink">{s.recordAttendance.value}</span>{" "}
-              — {s.recordAttendance.homeTeam}
+             , {s.recordAttendance.homeTeam}
             </span>
           </li>
         )}
@@ -240,7 +240,7 @@ export function SeasonNumbersWidget({ data }: WidgetProps) {
             <span className="shrink-0">🟥</span>
             <span className="text-muted">
               Nejdivočejší zápas <span className="font-heading font-bold text-ink">{s.wildestMatch.cards} karet</span>{" "}
-              — {s.wildestMatch.homeTeam} vs. {s.wildestMatch.awayTeam}
+             , {s.wildestMatch.homeTeam} vs. {s.wildestMatch.awayTeam}
             </span>
           </li>
         )}
@@ -364,7 +364,7 @@ export function DisciplineWidget({ data, height }: WidgetProps) {
           </li>
         ))}
       </ul>
-      <div className="text-micro text-muted text-center">Řazeno podle závažnosti — červená váží jako tři žluté.</div>
+      <div className="text-micro text-muted text-center">Řazeno podle závažnosti, červená váží jako tři žluté.</div>
     </div>
   );
 }

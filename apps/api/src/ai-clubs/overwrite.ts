@@ -22,6 +22,7 @@ import { logger } from "../lib/logger";
 import { sendSystemSMS } from "../messaging/system-sms";
 import { recordTransaction } from "../season/finance-processor";
 import { STAFF_LISTED_WEEKS } from "../staff/staff-generator";
+import { closeLoanContractStmt, returnLoanedPlayerStmt } from "../transfers/loan-return";
 import { removePlayer } from "../transfers/remove-player";
 import { overwritableAiTeamSql } from "./owner-activity";
 
@@ -103,10 +104,8 @@ async function settleLoans(db: D1Database, teamId: string, opts: OverwriteOpts, 
     .catch((e) => { logger.warn({ module: M }, "hostující hráči AI klubu", e); return { results: [] as Array<{ id: string; first_name: string; last_name: string; loan_from_team_id: string }> }; });
   for (const p of loanedIn.results) {
     const ok = await db.batch([
-      db.prepare("UPDATE player_contracts SET is_active = 0, left_at = ?, leave_type = 'loan_end' WHERE player_id = ? AND team_id = ? AND join_type = 'loan' AND is_active = 1")
-        .bind(nowIso, p.id, teamId),
-      db.prepare("UPDATE players SET team_id = loan_from_team_id, loan_from_team_id = NULL, loan_until = NULL WHERE id = ? AND team_id = ?")
-        .bind(p.id, teamId),
+      closeLoanContractStmt(db, p.id, nowIso, "loan_end"),
+      returnLoanedPlayerStmt(db, p.id, p.loan_from_team_id),
     ]).then(() => true).catch((e) => { logger.warn({ module: M }, `návrat hostujícího hráče ${p.id}`, e); return false; });
     if (!ok) continue;
     summary.loansReturned++;

@@ -37,6 +37,32 @@ async function scalar(db: D1Database, sql: string, popis: string): Promise<numbe
   return row?.n ?? null;
 }
 
+/** Od kolika milisekund se běh z fronty hlásí jako příliš dlouhý. */
+export const QUEUE_RUN_ALARM_MS = 600_000;
+
+/**
+ * Stojí herní datum? Očekávaný herní den je dnešní den (UTC) plus posun z game_clock,
+ * stejně jako ho počítá denní tick. Bez game_clock nebo bez týmů s datem se nehlásí nic.
+ */
+export async function staleGameDateProblem(db: D1Database, now: Date): Promise<WatchdogProblem | null> {
+  const row = await db.prepare(
+    `SELECT (SELECT offset_days FROM game_clock WHERE id = 1) AS offset_days,
+            (SELECT MAX(game_date) FROM teams WHERE game_date IS NOT NULL) AS game_date`,
+  ).first<{ offset_days: number | null; game_date: string | null }>()
+    .catch((e) => { logger.warn({ module: "watchdog" }, "kontrola herního data selhala", e); return null; });
+  if (!row || row.offset_days == null || !row.game_date) return null;
+  const expected = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  expected.setUTCDate(expected.getUTCDate() + row.offset_days);
+  const expectedDay = expected.toISOString().slice(0, 10);
+  const actualDay = row.game_date.slice(0, 10);
+  if (actualDay >= expectedDay) return null;
+  return {
+    kod: "herni_datum",
+    popis: "Herní datum týmů není dnešní, denní tick nedoběhl k posunu data (večerní kolo nebude splatné)",
+    hodnota: `${actualDay} místo ${expectedDay}`,
+  };
+}
+
 /**
  * Projde kontroly a vrátí nalezené problémy. Nic nemění — jen čte a hlásí.
  */
@@ -58,14 +84,15 @@ export async function runWatchdog(env: Bindings): Promise<WatchdogResult> {
   // poruchu navždycky.
   const hodinPoTerminu = await scalar(
     env.DB,
+    // Od kalendáře (index na termín), ne od zápasů: dotaz od neodehraných zápasů četl
+    // při každém běhu 200 tisíc řádků.
     `SELECT CAST((julianday('now') - julianday(MIN(sc.scheduled_at))) * 24 AS INTEGER) AS n
-       FROM matches m
-       JOIN season_calendar sc ON sc.id = m.calendar_id
-      WHERE m.status != 'simulated'
-        AND sc.scheduled_at < datetime('now', '-2 hours')
+       FROM season_calendar sc
+      WHERE sc.scheduled_at < datetime('now', '-2 hours')
         AND sc.season_number = (
-          SELECT MAX(sc2.season_number) FROM season_calendar sc2 WHERE sc2.league_id = m.league_id
-        )`,
+          SELECT MAX(sc2.season_number) FROM season_calendar sc2 WHERE sc2.league_id = sc.league_id
+        )
+        AND EXISTS (SELECT 1 FROM matches m WHERE m.calendar_id = sc.id AND m.status != 'simulated')`,
     "hodin od zmeškaného kola",
   );
   if (hodinPoTerminu !== null && hodinPoTerminu > 0) {
@@ -117,10 +144,61 @@ export async function runWatchdog(env: Bindings): Promise<WatchdogResult> {
     });
   }
 
+  // ── 4b. Zápasy, které se neodehrály nebo nedozpracovaly ──
+  // Kolo je označené za odehrané, ale zápas v něm zůstal viset (spadl na chybě).
+  const unplayed = await scalar(
+    env.DB,
+    `SELECT COUNT(*) AS n FROM matches m JOIN season_calendar sc ON sc.id = m.calendar_id
+      WHERE sc.status = 'simulated' AND m.status IN ('scheduled', 'lineups_open')
+        AND sc.season_number = (SELECT MAX(season_number) FROM season_calendar x WHERE x.league_id = sc.league_id)`,
+    "neodehrané zápasy v odehraných kolech",
+  );
+  if (unplayed && unplayed > 0) {
+    problemy.push({ kod: "neodehrany_zapas", popis: "V odehraném kole zůstal neodehraný zápas (sázky kola se nevypořádají)", hodnota: unplayed });
+  }
+  // Zápas má výsledek, ale jeho následky (statistiky, finance, kondice) nedoběhly.
+  const halfDone = await scalar(
+    env.DB,
+    `SELECT COUNT(*) AS n FROM matches m JOIN season_calendar sc ON sc.id = m.calendar_id
+      WHERE m.status = 'simulated' AND m.aftermath_done_at IS NULL
+        AND m.simulated_at > (SELECT MIN(aftermath_done_at) FROM matches)
+        AND m.simulated_at < strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-30 minutes')
+        AND m.simulated_at > strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-3 days')`,
+    "napůl zpracované zápasy",
+  );
+  if (halfDone && halfDone > 0) {
+    problemy.push({ kod: "zapas_napul", popis: "Zápas má výsledek, ale jeho zpracování spadlo uprostřed", hodnota: halfDone });
+  }
+
+  // ── 4c. Herní datum nestojí ──
+  // Denní tick posouvá teams.game_date na dnešek (reálný den plus posun z game_clock). Když
+  // tick spadne před posunem, datum zůstane včerejší, večerní kolo není splatné a nic to
+  // nenahlásí. Hlídač běží tři hodiny po ticku, takže rozdíl znamená nedoběhlý tick.
+  const staleGameDate = await staleGameDateProblem(env.DB, new Date());
+  if (staleGameDate) problemy.push(staleGameDate);
+
+  // ── 4d. Běh z fronty trvá moc dlouho ──
+  // Kolo se hraje kolem pěti minut. Běh nad deset minut je na hraně limitu Workeru
+  // a příště spadne v půlce.
+  const slowRun = await env.DB.prepare(
+    `SELECT kind, league_id, duration_ms FROM queue_runs
+      WHERE duration_ms > ? AND created_at > strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-1 day')
+      ORDER BY duration_ms DESC LIMIT 1`,
+  ).bind(QUEUE_RUN_ALARM_MS).first<{ kind: string; league_id: string | null; duration_ms: number }>()
+    .catch((e) => { logger.warn({ module: "watchdog" }, "kontrola délky běhů z fronty selhala", e); return null; });
+  if (slowRun) {
+    problemy.push({
+      kod: "pomaly_beh",
+      popis: `Běh z fronty (${slowRun.kind}${slowRun.league_id ? `, liga ${slowRun.league_id}` : ""}) trval přes ${QUEUE_RUN_ALARM_MS / 1000} s`,
+      hodnota: `${Math.round(slowRun.duration_ms / 1000)} s`,
+    });
+  }
+
   // ── 5. Opakované pokusy ──
   const retry = await scalar(
     env.DB,
-    "SELECT COUNT(*) AS n FROM queue_runs WHERE attempts > 1 AND created_at > datetime('now', '-1 day')",
+    // „busy“ není porucha: zpráva jen čeká, až běžící kolo doběhne (fronta ji vrací schválně).
+    "SELECT COUNT(*) AS n FROM queue_runs WHERE attempts > 1 AND status <> 'busy' AND created_at > datetime('now', '-1 day')",
     "retry za 24 h",
   );
   if (retry && retry > 0) {
@@ -131,12 +209,23 @@ export async function runWatchdog(env: Bindings): Promise<WatchdogResult> {
   // Taky ticho: nic nespadne, jen se hráčům vyplácí víc, než vsadí. V září 2026
   // to trvalo měsíc a stálo přes 600 tisíc, než si toho někdo všiml.
   try {
-    const { overpricedMarkets } = await import("../betting/calibration");
-    for (const m of await overpricedMarkets(env.DB)) {
+    const { calibrationAlerts } = await import("../betting/calibration");
+    const alerts = await calibrationAlerts(env.DB);
+    for (const m of alerts.overpriced) {
       problemy.push({
         kod: "kurzy",
         popis: `Kurzy na trh „${m.label}" jsou podhodnocené, sázení se hráčům vyplácí`,
         hodnota: `${m.meanReturn.toFixed(2).replace(".", ",")} Kč za korunu z ${m.n} tipů`,
+      });
+    }
+    // Trh jako celek může vypadat v pořádku, i když „1" vrací dvojnásobek a „2" polovinu.
+    // Proto ještě výběry po kurzových pásmech: počet výher proti tomu, co čekal model.
+    for (const b of alerts.bands) {
+      problemy.push({
+        kod: "kurzy_pasmo",
+        popis: `Kurzový model se plete v pásmu „${b.label}": tip vychází ${b.z > 0 ? "častěji" : "méně často"}, než model čekal`,
+        hodnota: `${b.wins} výher z ${b.n} tipů, model čekal ${b.expectedWins.toFixed(1).replace(".", ",")}; `
+          + `návratnost ${b.meanReturn.toFixed(2).replace(".", ",")} Kč za korunu`,
       });
     }
   } catch (e) {

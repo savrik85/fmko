@@ -16,7 +16,7 @@ import { generateAiProfile, type AiCoachProfile } from "./profile";
 import {
   loadScoutReportCandidates, maybeStartScoutTask, negotiateOutsidePurchase, outsideCandidateFromListing,
 } from "./outside-buy";
-import { runTransferMarket } from "./transfer-market";
+import { loadPastOffers, loadPlayerFitness, runTransferMarket } from "./transfer-market";
 
 let mf: Miniflare;
 let db: D1Database;
@@ -379,6 +379,29 @@ describe("AI klub vybírá posilu modelem: model navrhuje, kód hlídá", () => 
     expect(await marketLog()).toMatchObject({ mode: "on", model: "rules", used_fallback: 1, error: null });
   });
 
+  it("dřívější vlastní nabídky na téhož hráče model dostane i s výsledkem", async () => {
+    await insertHumanClubPlayer("h-mid", "MID", 40, 26);
+    const ago = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString();
+    const past = (id: string, amount: number, status: string, days: number, counter: number | null = null) => db.prepare(
+      `INSERT INTO transfer_offers (id, player_id, from_team_id, to_team_id, offer_amount, counter_amount, offer_type, status, expires_at, created_at)
+       VALUES (?, 'h-mid', ?, 'human-club', ?, ?, 'transfer', ?, ?, ?)`,
+    ).bind(id, AI_CLUB, amount, counter, status, ago(days - 3), ago(days));
+    await db.batch([
+      past("old-expired", 3000, "expired", 12),
+      past("old-walked", 3200, "withdrawn", 6, 9000),
+      // Starší než měsíc se nepočítá, rozjednaná taky ne.
+      past("old-ancient", 2500, "rejected", 45),
+    ]);
+    expect(await loadPastOffers(db, AI_CLUB, "h-mid", new Date())).toEqual([
+      { amount: 3200, outcome: "countered", counter: 9000, daysAgo: 6 },
+      { amount: 3000, outcome: "ignored", counter: null, daysAgo: 12 },
+    ]);
+    const ai = fakeAi(() => ({ choice: "none", bid: 0, reason: "they will not sell" }));
+    await runMarket(marketEnv(ai.binding));
+    const prompt = ai.calls.find((c) => c.name === "buy_pick")?.prompt ?? "";
+    expect(prompt).toContain("YOUR EARLIER OFFERS for him: 3,200 CZK 6 days ago: the club asked for more and you walked away (they wanted 9,000 CZK); 3,000 CZK 12 days ago: the club never answered and it expired.");
+  });
+
   it("přímá nabídka hráči lidského klubu v lize: částku z rozpětí pošle stejnou službou jako člověk", async () => {
     await insertHumanClubPlayer("h-mid", "MID", 40, 26);
     // 80 % tržní hodnoty: nad urážlivou mezí (70 %) a pod stropem (aspoň 90 %).
@@ -389,6 +412,30 @@ describe("AI klub vybírá posilu modelem: model navrhuje, kód hlídá", () => 
     expect(res.actions.find((a) => a.kind === "offer")).toMatchObject({ playerId: "h-mid", amount: bid, result: "sent", decidedBy: "model" });
     const offer = await db.prepare("SELECT from_team_id, to_team_id, offer_amount, status FROM transfer_offers WHERE player_id = 'h-mid'").first();
     expect(offer).toEqual({ from_team_id: AI_CLUB, to_team_id: "human-club", offer_amount: bid, status: "pending" });
+  });
+
+  it("kandidát nese to, co vidí lidský kupec (zranění, kondice, stopka); marod na víc než 14 dní se nenabízí", async () => {
+    await insertHumanClubPlayer("h-fit", "MID", 40, 26);
+    await insertHumanClubPlayer("h-knock", "MID", 42, 25);
+    await insertHumanClubPlayer("h-long", "MID", 48, 24);
+    await db.batch([
+      db.prepare("UPDATE players SET life_context = ?, suspended_matches = 2 WHERE id = 'h-fit'").bind(JSON.stringify({ condition: 62 })),
+      db.prepare(
+        `INSERT INTO injuries (id, player_id, team_id, type, description, severity, days_remaining, days_total)
+         VALUES ('inj-knock', 'h-knock', 'human-club', 'sval', 'Natažený sval', 'lehke', 9, 12),
+                ('inj-long', 'h-long', 'human-club', 'koleno', 'Koleno', 'tezke', 40, 60)`,
+      ),
+    ]);
+    const ai = fakeAi(() => ({ choice: "none", bid: 0, reason: "not now" }));
+    await runMarket(marketEnv(ai.binding));
+    const prompt = ai.calls.find((c) => c.name === "buy_pick")?.prompt ?? "";
+    expect(prompt).toContain("MID, age 26, rating 40, fit, condition 62 %, suspended for 2 more matches");
+    expect(prompt).toContain("MID, age 25, rating 42, INJURED for 9 more days");
+    // Nejlepší z trojice je zraněný na 40 dní: model ho vůbec neuvidí.
+    expect(prompt).not.toContain("rating 48");
+    const fitness = await loadPlayerFitness(db, ["h-fit", "h-knock", "h-long"]);
+    expect(fitness.get("h-fit")).toEqual({ injuryDays: null, condition: 62, suspendedMatches: 2 });
+    expect(fitness.get("h-long")?.injuryDays).toBe(40);
   });
 
   it("hostování: model vybere hráče i délku ze sady kódu, žádost jde stejnou službou jako u člověka", async () => {
@@ -418,6 +465,66 @@ describe("AI klub vybírá posilu modelem: model navrhuje, kód hlídá", () => 
     expect(offer!.loan_duration).toBeGreaterThanOrEqual(30);
     expect(offer!.loan_duration).toBeLessThanOrEqual(60);
     expect((await marketLog()).used_fallback).toBe(1);
+  });
+
+  it("hlášení skauta na jiný než nejpotřebnější post a s cenou nad odhadem se k modelu dostane a jedná se o něm", async () => {
+    // Nejvíc chybí záložník, skaut ale přivezl útočníka (odhad 28 až 46) a klub si řekne 8 000 Kč,
+    // skoro dvojnásobek hodnoty při středu odhadu. Dřív hlášení propadlo (jiný post, cena nad stropem
+    // 1,35× středu) a model ho nikdy neviděl: na produ 26 hlášení, žádné jednání.
+    await db.prepare(
+      `INSERT INTO scout_reports (id, team_id, source, club_name, district, distance_km, player_data, first_name, last_name, age, position,
+         rating_lo, rating_hi, ask_hint, status, expires_at, created_game_date)
+       VALUES ('sr-fwd', ?, 'village_club', 'TJ Mimo hru', 'Prachatice', 12, ?, 'Marek', 'Skrytý', 24, 'FWD', 28, 46, 8000, 'active', ?, '2026-10-26')`,
+    ).bind(AI_CLUB, JSON.stringify(virtualPlayer("FWD", 44)), FUTURE).run();
+    const ai = fakeAi(pickC1(7000));
+    const res = await runMarket(marketEnv(ai.binding));
+    const pick = ai.calls.find((c) => c.name === "buy_pick");
+    expect(pick?.prompt).toContain("NEED: forward (FWD)");
+    expect(pick?.prompt).toContain("rating about 37 (your scout's estimate 28-46)");
+    expect(pick?.prompt).toContain("the scout guesses the club wants about 8,000 CZK");
+    // Strop sahá ke skautovu odhadu ceny (8 000 + 5 %), ne jen k 1,5× hodnoty středu odhadu.
+    expect(pick?.prompt).toContain("and 8,400 CZK.");
+    const buy = res.actions.find((a) => a.kind === "outside_buy");
+    expect(buy).toMatchObject({ decidedBy: "model", position: "FWD" });
+    expect(await count("SELECT COUNT(*) AS n FROM ai_negotiations WHERE team_id = ? AND scout_report_id = 'sr-fwd'", AI_CLUB)).toBe(1);
+  });
+
+  it("kádr pod cílovou velikostí: volného hráče do šířky model dostane, jen když doplnění v pondělí zvolil", async () => {
+    // 19 hráčů s plnou hloubkou všech postů (4-4-2): zbývá jen zlepšení základu od hodnocení 35.
+    const extra = ["DEF", "DEF", "MID", "MID", "MID"];
+    await db.batch(extra.map((pos, i) => db.prepare(
+      `INSERT INTO players (id, team_id, first_name, last_name, age, position, overall_rating, skills, physical, personality, life_context, avatar, status)
+       VALUES (?, ?, 'Jan', 'Navíc', 26, ?, 30, ?, '{}', '{}', '{}', '{}', 'active')`,
+    ).bind(`px${i}`, AI_CLUB, pos, JSON.stringify(SKILLS))));
+    // Volný obránce 32: základ nezlepší (35 by musel mít), do šířky kádru se hodí.
+    await db.prepare(
+      `INSERT INTO free_agents (id, district, first_name, last_name, age, position, overall_rating, weekly_wage, village_id, expires_at)
+       VALUES ('fa-def', 'Prachatice', 'Volný', 'Obránce', 27, 'DEF', 32, 200, 'p06', ?)`,
+    ).bind(FUTURE).run();
+    const setPlan = async (fill: string) => {
+      await db.prepare("DELETE FROM ai_coach_decisions WHERE team_id = ?").bind(AI_CLUB).run();
+      await db.prepare(
+        `INSERT INTO ai_coach_decisions (id, team_id, kind, mode, actions, used_fallback) VALUES (?, ?, 'weekly', 'on', ?, 0)`,
+      ).bind(`weekly-${fill}`, AI_CLUB, JSON.stringify({ transferPlan: { stance: "hold", focus: [], sellIds: [], fill }, at: new Date().toISOString() })).run();
+    };
+
+    // Trenér v pondělí řekl „nedoplňovat“: volný hráč do šířky se modelu nenabídne.
+    await setPlan("none");
+    const quiet = fakeAi(() => ({ choice: "none", bid: 0, reason: "nothing" }));
+    await runMarket(marketEnv(quiet.binding));
+    expect(quiet.calls.some((c) => c.prompt.includes("Free agent without a club"))).toBe(false);
+
+    // Trenér zvolil doplnění volnými hráči: model ho dostane na výběr a rozhodne.
+    await setPlan("free_agents");
+    const ai = fakeAi(({ name, choices }) => name === "buy_pick" && choices.includes("c1")
+      ? { choice: "c1", bid: 220, reason: "cheap depth" } : { choice: "none", bid: 0, reason: "nothing" });
+    const res = await runMarket(marketEnv(ai.binding));
+    const pick = ai.calls.find((c) => c.name === "buy_pick" && c.prompt.includes("Free agent without a club"));
+    expect(pick?.prompt).toContain("NEED: defender (DEF)");
+    expect(pick?.prompt).toContain("your squad is below the size you want and in your Monday review you decided to fill it up");
+    // Cesta „volní hráči“: žádné přestupy ani poptávka mezi možnostmi.
+    expect(pick?.choices).toEqual(["c1", "none"]);
+    expect(res.actions.find((a) => a.kind === "sign_free_agent")).toMatchObject({ playerId: "fa-def", amount: 220, decidedBy: "model" });
   });
 
   it("volný hráč na post: model nabídne mzdu z rozpětí, podpis jde přes stejnou službu", async () => {

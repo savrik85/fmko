@@ -79,6 +79,29 @@ export function seasonLevelEffects(weeksJson: string | null | undefined, current
   return { quit: avg("quit"), attract: avg("attract"), poachBonus: Math.round(avg("poachBonus")) };
 }
 
+/**
+ * Násobek kvality přípravy pro jednorázové akce (nábor ve škole, den otevřených dveří, lákání
+ * žáků) podle ZAPLACENÝCH týdnů sezóny. Úroveň se platí až týdenní uzávěrkou, takže s okamžitým
+ * nastavením šlo přepnout na ambiciózní, udělat akci a hned přepnout zpátky zadarmo.
+ * Na rozdíl od `seasonLevelEffects` se současná úroveň nepočítá, dokud za ni klub nezaplatil:
+ * bez jediného zaplaceného týdne (začátek sezóny, nová akademie) platí nejvýš běžná.
+ */
+export function paidLevelGrowth(weeksJson: string | null | undefined, current: AcademyLevel): number {
+  let weeks: Partial<Record<AcademyLevel, number>> = {};
+  try { weeks = weeksJson ? JSON.parse(weeksJson) as Partial<Record<AcademyLevel, number>> : {}; }
+  catch (e) { logger.warn({ module: "academy-rules" }, "academy_level_weeks nejde přečíst", e); weeks = {}; }
+  let total = 0;
+  let sum = 0;
+  for (const k of Object.keys(ACADEMY_LEVELS) as AcademyLevel[]) {
+    const n = Number(weeks?.[k] ?? 0);
+    if (!Number.isFinite(n) || n <= 0) continue;
+    total += n;
+    sum += ACADEMY_LEVELS[k].growth * n;
+  }
+  if (total === 0) return Math.min(ACADEMY_LEVELS[current].growth, ACADEMY_LEVELS.standard.growth);
+  return sum / total;
+}
+
 export function upkeepWeekly(squadSize: number, level: AcademyLevel = "standard"): number {
   const l = ACADEMY_LEVELS[level];
   return l.base + l.perKid * Math.max(0, squadSize);
@@ -144,27 +167,41 @@ export interface QualityInput {
   equipment?: YouthEquipment;
 }
 
+export type YouthEquipmentKey = "balls" | "training_cones" | "winter_gear" | "team_van";
+
 /** Klubové vybavení, které pomáhá žákům: míče, tréninkové pomůcky, zimní výbava, dodávka. */
 export interface YouthEquipment {
   balls: number;
   training_cones: number;
   winter_gear: number;
   team_van: number;
+  /** Stav vybavení 0–100 %. Chybí-li (čistý výpočet v testech), počítá se jako nové. */
+  condition?: Partial<Record<YouthEquipmentKey, number>>;
+}
+
+/**
+ * Účinná úroveň vybavení: úroveň 0–3 krát stav, stejně jako všude jinde ve hře
+ * (equipment-generator.ts `calculateEffects`). Dřív žákům pomáhalo i rozbité vybavení naplno.
+ */
+export function youthEquipmentEffect(e: YouthEquipment | undefined, key: YouthEquipmentKey): number {
+  if (!e) return 0;
+  const level = Math.max(0, Math.min(3, e[key] || 0));
+  const condition = Math.max(0, Math.min(100, e.condition?.[key] ?? 100));
+  return level * (condition / 100);
 }
 
 /** Co které vybavení žákům dá (do UI slovy, do výpočtu `equipmentQualityBonus`, `quitChance`). */
-export const YOUTH_EQUIPMENT: { key: keyof YouthEquipment; label: string; effect: string }[] = [
+export const YOUTH_EQUIPMENT: { key: YouthEquipmentKey; label: string; effect: string }[] = [
   { key: "balls", label: "Míče", effect: "víc míčů na tréninku: žáci rostou rychleji" },
   { key: "training_cones", label: "Tréninkové pomůcky", effect: "kužely, branky, žebříky: lepší trénink" },
   { key: "winter_gear", label: "Zimní výbava lavičky", effect: "o něco lepší trénink" },
   { key: "team_van", label: "Klubová dodávka", effect: "odvoz na zápasy: méně žáků skončí" },
 ];
 
-/** Bonus ke kvalitě přípravy z vybavení: míče a pomůcky po 0,03 za úroveň, zimní výbava 0,03. */
+/** Bonus ke kvalitě přípravy z vybavení: míče, pomůcky a zimní výbava po 0,03 za účinnou úroveň (úroveň × stav). */
 export function equipmentQualityBonus(e: YouthEquipment | undefined): number {
   if (!e) return 0;
-  const lvl = (n: number) => Math.max(0, Math.min(3, n || 0));
-  return 0.03 * (lvl(e.balls) + lvl(e.training_cones) + lvl(e.winter_gear));
+  return 0.03 * (youthEquipmentEffect(e, "balls") + youthEquipmentEffect(e, "training_cones") + youthEquipmentEffect(e, "winter_gear"));
 }
 
 /**
@@ -205,13 +242,32 @@ export function talentShiftAt13(rng: Rng): number {
 
 /**
  * Šum v trenérově odhadu talentu: v 11 letech ±25, ve 14 ±10. Placený trenér se plete
- * až o polovinu méně podle úsudku (`judgement` 0–20). `offset` je pevné číslo kluka −1..1,
+ * až o polovinu méně podle úsudku (`judgement` 0–20). `offset` je číslo −1..1 z `estimateOffset`,
  * aby odhad v UI neposkakoval.
  */
 export function estimatedTalent(talent: number, age: number, offset: number, staffJudgement: number | null): number {
   const base = Math.max(0, 16 - age) * 5;
   const sharp = staffJudgement === null ? 1 : 1 - (Math.max(0, Math.min(20, staffJudgement)) / 20) * 0.5;
   return Math.max(0, Math.min(100, Math.round(talent + offset * base * sharp)));
+}
+
+/**
+ * Směr a díl chyby odhadu −1..1, pevný pro žáka, klub, sezónu a úsudek toho, kdo odhaduje.
+ *
+ * Dřív měl žák jedno pevné číslo a trenér určoval jen velikost chyby. Přepnout trenéra je
+ * zdarma, takže dvě čtení (s trenérem mládeže a bez něj) dala dvě rovnice o dvou neznámých
+ * a skrytý talent šel dopočítat přesně. Teď má každý odhadce vlastní los: druhé čtení je jen
+ * druhý nezávislý odhad. Přepnutí tam a zpátky ukáže zase totéž, nová sezóna nový odhad.
+ */
+export function estimateOffset(prospectId: string, clubId: string, seasonNumber: number, staffJudgement: number | null): number {
+  const key = `${prospectId}|${clubId}|${seasonNumber}|${staffJudgement === null ? "none" : Math.round(staffJudgement)}`;
+  let h = 2166136261;
+  for (let i = 0; i < key.length; i++) h = Math.imul(h ^ key.charCodeAt(i), 16777619) >>> 0;
+  // Domíchání (fmix32), ať se sousední klíče (sezóna 3 a 4) neliší jen o kousek
+  h ^= h >>> 16; h = Math.imul(h, 0x85ebca6b) >>> 0;
+  h ^= h >>> 13; h = Math.imul(h, 0xc2b2ae35) >>> 0;
+  h ^= h >>> 16;
+  return ((h >>> 0) / 0xffffffff) * 2 - 1;
 }
 
 /**
@@ -245,6 +301,23 @@ export const PLAY_UP_ESTIMATE = 45;
 
 export function canPlayUp(age: number): boolean {
   return age >= PLAY_UP_AGE;
+}
+
+/**
+ * Do dorostu smí žák nejdřív po tolika herních dnech v akademii klubu. Bez lhůty šlo akademii
+ * založit, hned povýšit starší ročníky do dorostu a zase ji zrušit: hráči zadarmo.
+ */
+export const MIN_ACADEMY_DAYS = 28;
+export const MIN_ACADEMY_DAYS_ERROR = "U žáků musí být aspoň 4 týdny";
+
+/** Den (YYYY-MM-DD), od kterého smí žák do dorostu, nebo null, když už smí. */
+export function playUpAllowedFrom(joinedAt: string | null | undefined, today: string): string | null {
+  if (!joinedAt) return null;
+  const from = new Date(`${joinedAt.slice(0, 10)}T00:00:00Z`);
+  if (Number.isNaN(from.getTime())) return null;
+  from.setUTCDate(from.getUTCDate() + MIN_ACADEMY_DAYS);
+  const fromDay = from.toISOString().slice(0, 10);
+  return fromDay > today.slice(0, 10) ? fromDay : null;
 }
 
 export function recommendsPlayUp(age: number, estimate: number): boolean {

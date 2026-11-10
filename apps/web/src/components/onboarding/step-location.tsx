@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import type { VillageSelection } from "@/app/onboarding/page";
+import type { DistrictStart, VillageSelection } from "@/app/onboarding/page";
 import { apiFetch } from "@/lib/api";
 import { Spinner } from "@/components/ui";
 
@@ -35,9 +35,21 @@ function getSizeBadge(size: string): { label: string; bg: string; text: string }
 interface Props {
   onSelect: (village: VillageSelection) => void;
   allowedDistricts: string[];
+  /** Co klub v okrese čeká: hrající liga, nová liga, nebo přípravné období. */
+  districtStarts?: Record<string, DistrictStart | null>;
 }
 
-export function StepLocation({ onSelect, allowedDistricts }: Props) {
+/** Věta o tom, kdy se v okrese začne hrát. Hráč ji má vidět dřív, než klub založí. */
+function startNote(district: string, start: DistrictStart | null | undefined): string | null {
+  if (!start || start.mode === "join") return null;
+  if (start.mode === "new_league") return `V okrese ${district} zakládáš novou ligu. Ostatní kluby zatím povedou AI trenéři a hrát se začne během pár dní.`;
+  if (start.mode === "new_league_single") return `V okrese ${district} zakládáš novou ligu. Sezóna už běží, do jejího konce se stihne každý s každým jednou. Hrát se začne během pár dní.`;
+  const after = start.startsAfter ? new Date(start.startsAfter) : null;
+  const date = after && !Number.isNaN(after.getTime()) ? ` po ${after.getDate()}. ${after.getMonth() + 1}.` : "";
+  return `V okrese ${district} zakládáš novou ligu, ale do konce sezóny už zbývá málo hracích dnů. Liga začne až s novou sezónou${date}. Do té doby tě čeká přípravné období: trénink, přestupy a přáteláky.`;
+}
+
+export function StepLocation({ onSelect, allowedDistricts, districtStarts }: Props) {
   const [villages, setVillages] = useState<Village[]>([]);
   const [stats, setStats] = useState<Stats>({ villageCounts: {}, districtCounts: {}, regionCounts: {} });
   const [loading, setLoading] = useState(true);
@@ -210,6 +222,11 @@ export function StepLocation({ onSelect, allowedDistricts }: Props) {
       ) : (
         /* ═══ Village selection ═══ */
         <>
+          {startNote(selectedDistrict, districtStarts?.[selectedDistrict]) && (
+            <div role="status" className="bg-gold-50 border border-gold-300 rounded-xl px-4 py-3 mb-4 text-sm text-ink leading-relaxed">
+              {startNote(selectedDistrict, districtStarts?.[selectedDistrict])}
+            </div>
+          )}
           <p className="text-sm text-muted mb-3">{districtVillages.length} obcí v okrese {selectedDistrict}</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {districtVillages.map((v) => {

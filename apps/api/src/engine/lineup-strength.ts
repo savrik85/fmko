@@ -115,7 +115,7 @@ export function calcLineupStrength(setup: TeamSetup): LineupStrength {
   // Out-of-position penalty (matchPosition ≠ position)
   const oop = setup.lineup.filter((p) => p.matchPosition && p.matchPosition !== p.position);
   if (oop.length > 0) {
-    notes.push(`${oop.length} ${oop.length === 1 ? "hráč hraje" : "hráči hrají"} mimo svou pozici — ztrácí 10–40 % klíčových atributů.`);
+    notes.push(`${oop.length} ${oop.length === 1 ? "hráč hraje" : "hráči hrají"} mimo svou pozici a ztrácí 10 až 40 % klíčových atributů.`);
   }
 
   return {
@@ -170,7 +170,7 @@ export function calcLineupPreview(ownSetup: TeamSetup, opponentSetup?: TeamSetup
   } else if (weakLines.length >= 2 && comparison.overall === "MUCH_WEAKER") {
     recommendation = `Velký rozdíl v síle (${weakLines.join(", ")}). Zvaž defenzivní taktiku a rychlé protiútoky.`;
   } else if (weakLines.length >= 1) {
-    recommendation = `Máš slabší ${weakLines.join(", ")} než soupeř — buď zpevni sestavu, nebo zvol Defenzivní taktiku.`;
+    recommendation = `Máš slabší ${weakLines.join(", ")} než soupeř. Buď zpevni sestavu, nebo zvol Defenzivní taktiku.`;
   } else if (comparison.overall === "EVEN") {
     recommendation = "Vyrovnaný souboj. Klíč: kondice, morálka a sehranost.";
   }

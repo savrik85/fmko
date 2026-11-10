@@ -76,7 +76,7 @@ function laterInWindow(spanHours: number): Date {
 
 interface FakeModelInput {
   messages: Array<{ role: string; content: string }>;
-  response_format?: { json_schema: { schema: { properties: { action: { enum: string[] }; amount: { minimum?: number; maximum?: number } } } } };
+  response_format?: { json_schema: { name?: string; schema: { properties: { action: { enum: string[] }; amount: { minimum?: number; maximum?: number } } } } };
 }
 
 interface FakeAi {
@@ -160,7 +160,8 @@ beforeAll(async () => {
       life_context TEXT NOT NULL DEFAULT '{}', avatar TEXT NOT NULL DEFAULT '{}', weekly_wage INTEGER NOT NULL DEFAULT 0,
       squad_number INTEGER, loan_from_team_id TEXT, loan_until TEXT, parent_club_id TEXT, next_match_return INTEGER NOT NULL DEFAULT 0,
       residence TEXT, commute_km INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT 'active', nationality TEXT DEFAULT 'CZ',
-      is_celebrity INTEGER NOT NULL DEFAULT 0, hidden_talent REAL, skills_max TEXT, coach_relationship INTEGER
+      is_celebrity INTEGER NOT NULL DEFAULT 0, hidden_talent REAL, skills_max TEXT, coach_relationship INTEGER,
+      suspended_matches INTEGER NOT NULL DEFAULT 0
     );
     CREATE TABLE transfer_offers (
       id TEXT PRIMARY KEY, player_id TEXT NOT NULL, from_team_id TEXT NOT NULL, to_team_id TEXT NOT NULL, offer_amount INTEGER NOT NULL,
@@ -230,7 +231,7 @@ beforeAll(async () => {
       raw_output TEXT, actions TEXT, executed TEXT, used_fallback INTEGER NOT NULL DEFAULT 0, error TEXT, tokens_in INTEGER, tokens_out INTEGER,
       latency_ms INTEGER, created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
     );
-    CREATE TABLE ai_coach_claims (team_id TEXT NOT NULL, task TEXT NOT NULL, day TEXT NOT NULL, claimed_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')), PRIMARY KEY (team_id, task, day))
+    CREATE TABLE ai_coach_claims (team_id TEXT NOT NULL, task TEXT NOT NULL, day TEXT NOT NULL, claimed_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')), done_at TEXT, PRIMARY KEY (team_id, task, day))
   `);
   await executeStatements(readFileSync(new URL("../../migrations/0268_player_promises.sql", import.meta.url), "utf8")
     .split("-- Sliby, které už běží")[0].replace(/--.*$/gm, ""));
@@ -736,7 +737,8 @@ describe("o nabídce na hráče AI klubu rozhoduje model, kód hlídá", () => {
     const counter = await callRoute(`/teams/human/offers/${offer.offerId}/counter`, { method: "POST", token: "human-token", body: { amount: counterAt } });
     expect(counter.status).toBe(200);
     await replyToTransferOffers(withAi(ai), "ai-club", new Date(when.getTime() + HOUR), PROFILE);
-    expect(ai.calls).toBe(1);
+    // O přijetí se model neptal (po prodeji opory se ho kód zeptá jen na poptávku po náhradě).
+    expect(ai.prompts.filter((p) => !p.includes("SOLD: your key"))).toHaveLength(1);
     expect((await offerRow(offer.offerId))?.status).toBe("accepted");
     const log = await decisionFor(offer.offerId);
     expect(log).toMatchObject({ model: null, used_fallback: 0 });
@@ -834,6 +836,135 @@ describe("o nabídce na hráče AI klubu rozhoduje model, kód hlídá", () => {
     const log = await decisionFor(second.offerId);
     expect(log).toMatchObject({ used_fallback: 1, model: COACH_MODEL });
     expect(log!.error).toContain("8005");
+  });
+
+  /** Model, který nabídku přijme a o poptávce po náhradě odpoví podle `demand`. */
+  const sellAndDemand = (demand: unknown) => fakeAi((req: FakeModelInput) =>
+    req.response_format?.json_schema.name === "replacement_demand" ? demand : { action: "accept", amount: 0, reason: "Great money." });
+  const demandsOf = async () => (await db.prepare(
+    "SELECT position, age_min, age_max, max_price, min_rating, role FROM transfer_demands WHERE team_id = 'ai-club'",
+  ).all<{ position: string; age_min: number; age_max: number; max_price: number; min_rating: number; role: string }>()).results;
+
+  it("po prodeji opory rozhodne o poptávce po náhradě model: post, věk i strop ceny v mezích kódu", async () => {
+    const playerId = "ai-def1";
+    const when = later();
+    expect((await analysisNow()).importanceOf(playerId)).toBe("key");
+    const amount = (await askOf(playerId, when)) + 5000;
+    const ai = sellAndDemand({ post: true, position: "DEF", ages: "youth", maxPrice: 30_000, reason: "A young defender to grow into the role." });
+    const offer = await offerFromHuman({ playerId, amount });
+    expect(await replyToTransferOffers(withAi(ai), "ai-club", when, PROFILE)).toBe(1);
+    expect((await offerRow(offer.offerId))?.status).toBe("accepted");
+    expect(ai.calls).toBe(2);
+    expect(ai.prompts[1]).toContain("SOLD: your key DEF, age 26, rating 55");
+    expect(ai.prompts[1]).toContain(`for ${amount.toLocaleString("en-US")} CZK`);
+    expect(ai.prompts[1]).toContain("LEFT at DEF in your A-team: 52, 50, 48, 44, 40");
+    // Poptávka podle modelu (mladý obránce do 30 tisíc), ne podle pevných čísel z kódu (18 až 31 let, 110 % ceny).
+    expect(await demandsOf()).toEqual([{ position: "DEF", age_min: 17, age_max: 21, max_price: 30_000, min_rating: 49, role: "starter" }]);
+    const log = await db.prepare("SELECT actions, executed, used_fallback FROM ai_coach_decisions WHERE kind = 'replacement_demand' AND context_ref = ?")
+      .bind(playerId).first<{ actions: string; executed: string; used_fallback: number }>();
+    expect(JSON.parse(log!.actions)).toMatchObject({ post: true, position: "DEF", ages: "youth", maxPrice: 30_000, decidedBy: "model" });
+    expect(JSON.parse(log!.executed)).toMatchObject({ posted: true });
+    expect(log!.used_fallback).toBe(0);
+  });
+
+  it("poptávku po náhradě kód za model nezaloží: strop mimo meze, výpadek ani „nevypisovat“ nic nevypíšou", async () => {
+    const cases: Array<[string, unknown]> = [
+      ["ai-def1", { post: true, position: "DEF", ages: "prime", maxPrice: 9_000_000, reason: "Any price." }],
+      ["ai-mid1", { post: false, position: "MID", ages: "prime", maxPrice: 1000, reason: "The others are good enough." }],
+    ];
+    for (const [playerId, answer] of cases) {
+      const when = later();
+      const offer = await offerFromHuman({ playerId, amount: (await askOf(playerId, when)) + 5000 });
+      await replyToTransferOffers(withAi(sellAndDemand(answer)), "ai-club", when, PROFILE);
+      expect((await offerRow(offer.offerId))?.status, playerId).toBe("accepted");
+      expect(await demandsOf(), playerId).toEqual([]);
+    }
+    const logs = (await db.prepare("SELECT context_ref, executed, error FROM ai_coach_decisions WHERE kind = 'replacement_demand' ORDER BY context_ref")
+      .all<{ context_ref: string; executed: string; error: string | null }>()).results;
+    expect(logs.map((l) => l.context_ref)).toEqual(["ai-def1", "ai-mid1"]);
+    expect(JSON.parse(logs[0].executed)).toMatchObject({ posted: false, deferred: true });
+    expect(logs[0].error).toContain("neplatná odpověď modelu");
+    expect(JSON.parse(logs[1].executed)).toEqual({ posted: false });
+  });
+
+  it("nárok na odpověď po běhu ukončeném natvrdo: čerstvý se respektuje, po 30 minutách ho převezme další běh", async () => {
+    const playerId = "ai-mid4";
+    const when = later();
+    const offer = await offerFromHuman({ playerId, amount: await reservationOf(playerId, when) });
+    // Stav, který by zůstal po běhu ukončeném mezi zabráním nároku a odpovědí: nárok bez dokončení.
+    const ev = await db.prepare("SELECT COUNT(*) AS n, MAX(julianday(created_at)) AS last_jd FROM transfer_offer_events WHERE offer_id = ?")
+      .bind(offer.offerId).first<{ n: number; last_jd: number }>();
+    const row = await db.prepare("SELECT status, last_action_by FROM transfer_offers WHERE id = ?").bind(offer.offerId).first<{ status: string; last_action_by: string | null }>();
+    const at = new Date(Math.round((ev!.last_jd - 2440587.5) * 86_400_000));
+    const key = `${ev!.n}|${row!.status}|${row!.last_action_by ?? "-"}|${at.toISOString()}`;
+    const task = `transfer_reply:${offer.offerId}`;
+    const stamp = (minutesAgo: number) => new Date(Date.now() - minutesAgo * 60_000).toISOString().slice(0, 19) + "Z";
+    await db.prepare("INSERT INTO ai_coach_claims (team_id, task, day, claimed_at) VALUES ('ai-club', ?, ?, ?)").bind(task, key, stamp(10)).run();
+    const ai = fakeAi({ action: "accept", amount: 0, reason: "Fair." });
+
+    // Deset minut starý nárok: jiný běh možná ještě pracuje, nesahat.
+    expect(await replyToTransferOffers(withAi(ai), "ai-club", when, PROFILE)).toBe(0);
+    expect(ai.calls).toBe(0);
+    expect((await offerRow(offer.offerId))?.status).toBe("pending");
+
+    // Po 30 minutách ho převezme další běh a nabídka dostane odpověď.
+    await db.prepare("UPDATE ai_coach_claims SET claimed_at = ? WHERE task = ?").bind(stamp(31), task).run();
+    expect(await replyToTransferOffers(withAi(ai), "ai-club", when, PROFILE)).toBe(1);
+    expect(ai.calls).toBe(1);
+    expect((await offerRow(offer.offerId))?.status).toBe("accepted");
+    const claim = await db.prepare("SELECT done_at FROM ai_coach_claims WHERE task = ? AND day = ?").bind(task, key).first<{ done_at: string | null }>();
+    expect(claim?.done_at).toBeTruthy();
+  });
+
+  it("dokončenou odpověď nikdo nepřevezme, ani když je nárok starý (shadow se neptá znovu)", async () => {
+    await cacheKv.put("ai_coach_mode", JSON.stringify({ market: "shadow" }));
+    const playerId = "ai-mid4";
+    const when = later();
+    const offer = await offerFromHuman({ playerId, amount: await reservationOf(playerId, when) });
+    const ai = fakeAi({ action: "accept", amount: 0, reason: "Fair." });
+    expect(await replyToTransferOffers(withAi(ai), "ai-club", when, PROFILE)).toBe(1);
+    await db.prepare("UPDATE ai_coach_claims SET claimed_at = '2026-01-01T00:00:00Z' WHERE task = ?").bind(`shadow:transfer_reply:${offer.offerId}`).run();
+    expect(await replyToTransferOffers(withAi(ai), "ai-club", when, PROFILE)).toBe(0);
+    expect(ai.calls).toBe(1);
+  });
+
+  it("dvě nabídky na téhož hráče: model rozhoduje o lepší a vidí i druhou, horší se nepřijme dřív", async () => {
+    const playerId = "ai-mid4";
+    const when = later();
+    const reservation = await reservationOf(playerId, when);
+    // Horší nabídka přišla první, lepší (od třetího klubu) po ní.
+    const lower = await offerFromHuman({ playerId, amount: reservation });
+    const higher = await offerFromHuman({ playerId, amount: reservation + 1500 }, "third-token", "third");
+    expect(higher.status).toBe(200);
+    const ai = fakeAi({ action: "accept", amount: 0, reason: "Best offer on the table." });
+    const handled = await replyToTransferOffers(withAi(ai), "ai-club", when, PROFILE);
+    expect(handled).toBe(1);
+    // Model se ptal jednou, na lepší nabídku, a o druhé věděl.
+    expect(ai.calls).toBe(1);
+    expect(ai.prompts[0]).toContain(`permanent transfer for ${(reservation + 1500).toLocaleString("en-US")} CZK`);
+    expect(ai.prompts[0]).toContain(`OTHER OFFERS for him waiting for your answer, worth to your club: ${reservation.toLocaleString("en-US")} CZK`);
+    expect((await offerRow(higher.offerId))?.status).toBe("accepted");
+    expect(await teamOf(playerId)).toBe("third");
+    expect((await offerRow(lower.offerId))?.status).not.toBe("accepted");
+  });
+
+  it("lepší nabídka čeká a model u ní mlčí (shadow): horší nabídka se odloží, nepřijme se ani pravidlem", async () => {
+    const playerId = "ai-mid4";
+    const when = later();
+    const reservation = await reservationOf(playerId, when);
+    const lower = await offerFromHuman({ playerId, amount: reservation });
+    const higher = await offerFromHuman({ playerId, amount: reservation + 1500 }, "third-token", "third");
+    await cacheKv.put("ai_coach_mode", JSON.stringify({ market: "shadow" }));
+    const ai = fakeAi({ action: "accept", amount: 0, reason: "Take it." });
+    await replyToTransferOffers(withAi(ai), "ai-club", when, PROFILE);
+    // Nanečisto se rozhodlo jen o lepší; horší čeká s uvolněným nárokem.
+    expect(ai.calls).toBe(1);
+    expect((await offerRow(higher.offerId))?.status).toBe("pending");
+    expect((await offerRow(lower.offerId))?.status).toBe("pending");
+    const deferred = await decisionFor(lower.offerId);
+    expect(JSON.parse(deferred!.executed)).toBe("deferred");
+    expect(deferred!.error).toContain("čeká lepší nabídka");
+    expect((await db.prepare("SELECT COUNT(*) AS n FROM ai_coach_claims WHERE task = ?").bind(`shadow:transfer_reply:${lower.offerId}`).first<{ n: number }>())!.n).toBe(0);
   });
 });
 
@@ -1084,6 +1215,32 @@ describe("AI klub jako kupující: model navrhuje, kód hlídá", () => {
     const statuses = (await pitchesOf(demandId)).map((p) => p.status).sort();
     expect(statuses).toEqual(["accepted", "pitched"]);
     expect(JSON.parse(log!.actions).deferred).toHaveLength(1);
+  });
+
+  it("poptávka nad limitem rozjetých nabídek: nabídnutí hráči nečekají, dostanou odpověď „teď nekupujeme“", async () => {
+    const demandId = await pitchSetup();
+    // Trenér s obchodní aktivitou 60 smí mít dvě rozjeté nabídky: obě už běží.
+    const expires = new Date(Date.now() + 3 * 86_400_000).toISOString();
+    await db.batch(["h-weak-mid", "h-young-mid"].map((playerId, i) => db.prepare(
+      `INSERT INTO transfer_offers (id, player_id, from_team_id, to_team_id, offer_amount, status, expires_at, last_action_by)
+       VALUES (?, ?, 'ai-club', 'human', 5000, 'pending', ?, 'ai-club')`,
+    ).bind(`open-${i}`, playerId, expires)));
+    const ai = fakeAi({ offers: [], reason: "unused" });
+    expect(await replyToTransferOffers(withAi(ai), "ai-club", later(), BUYER_PROFILE)).toBe(2);
+    // O ničem se nerozhoduje (mez kódu), model se neptá a nabídka nevznikne.
+    expect(ai.calls).toBe(0);
+    expect((await aiOffers()).filter((o) => o.player_id.startsWith("h-fwd"))).toEqual([]);
+    const pitches = await pitchesOf(demandId);
+    expect(pitches).toHaveLength(2);
+    for (const p of pitches) {
+      expect(p).toMatchObject({ status: "declined", offer_id: null });
+      expect(p.reply).toMatch(/nekupujeme|další nákup neřešíme/);
+      expect(p.reply).not.toMatch(/[—–]/);
+    }
+    const log = await decisionFor(demandId);
+    expect(JSON.parse(log!.actions)).toMatchObject({ decidedBy: "guard", reason: "deal_limit", offers: [] });
+    // Druhý běh už nic nedělá.
+    expect(await replyToTransferOffers(withAi(ai), "ai-club", later(), BUYER_PROFILE)).toBe(0);
   });
 
   it("poptávka bez vhodného hráče (na nikoho AI nemá): odmítne kód, model se neptá", async () => {

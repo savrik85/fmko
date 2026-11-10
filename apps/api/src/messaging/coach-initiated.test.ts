@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("./ai-player-chat", () => ({
   generateCoachInitiatedReply: vi.fn(),
+  coachQuote: (text: string) => `<<<${text}>>>`,
   generateSquadGroupReaction: vi.fn(async () => "Jasně, trenére."),
   GeminiUnavailableError: class GeminiUnavailableError extends Error {},
   playerTimeContext: vi.fn(() => ({ situace: "volno" })),
@@ -26,13 +27,14 @@ vi.mock("./ai-player-spawn", () => ({
   loadLastOwnMessageAt: vi.fn(async () => undefined),
   afterPlayerReply: vi.fn(async () => undefined),
   scheduleRetryReply: vi.fn(async () => undefined),
+  pushPlayerReply: vi.fn(async () => undefined),
 }));
 vi.mock("../incidents/znalosti-db", () => ({ nactiZnalostiHrace: vi.fn(async () => []) }));
 
 import { FalesnaD1, jakoD1 } from "../incidents/testovaci-d1";
 import { nactiZnalostiHrace } from "../incidents/znalosti-db";
 import { generateCoachInitiatedReply, generateSquadGroupReaction, playerTimeContext } from "./ai-player-chat";
-import { nactiSituaceTymu } from "./ai-player-spawn";
+import { nactiSituaceTymu, pushPlayerReply } from "./ai-player-spawn";
 import { replyInSquadGroup, startCoachThread } from "./coach-initiated";
 import { leftOnReadChance, markCoachMessagesRead } from "./left-on-read";
 
@@ -132,11 +134,26 @@ describe("hráč zná svou životní situaci", () => {
   });
 });
 
+describe("konverzace začatá trenérem a push", () => {
+  it("odpověď hráče pošle push do konverzace, až je zpráva zapsaná", async () => {
+    vi.mocked(generateCoachInitiatedReply).mockResolvedValue({ body: "Nic nevím, trenére.", conversationComplete: true });
+    const d = db(null);
+    const env = { VAPID_PUBLIC_KEY: "pub" };
+    expect(await startCoachThread(jakoD1(d), env, { convId: "konv-1", teamId: "tym-a", playerId: "s", coachMessage: "Kdo ukradl dresy?" })).toBe(true);
+    expect(pushPlayerReply).toHaveBeenCalledTimes(1);
+    expect(pushPlayerReply).toHaveBeenCalledWith(expect.anything(), env, {
+      teamId: "tym-a", convId: "konv-1", sender: "Jan Svědek", text: "Nic nevím, trenére.",
+    });
+    expect(d.davky.flat().some((q) => /INSERT INTO messages/.test(q.sql))).toBe(true);
+  });
+});
+
 describe("konverzace začatá trenérem a přečteno", () => {
   it("hráč si zprávu jen přečte: fajfky zmodrají, odpověď ani vlákno nevznikne", async () => {
     vi.mocked(leftOnReadChance).mockReturnValueOnce(1);
     const d = db(null);
     expect(await zacni(d)).toBe(false);
+    expect(pushPlayerReply).not.toHaveBeenCalled();
     expect(markCoachMessagesRead).toHaveBeenCalledWith(expect.anything(), "konv-1", expect.any(String));
     expect(generateCoachInitiatedReply).not.toHaveBeenCalled();
     expect(stavVlakna(d)).toBeUndefined();

@@ -63,7 +63,8 @@ describe("žádná cesta nezakládá hráče bez potenciálu", () => {
     const nalezy: Array<{ soubor: string; radek: number; sql: string }> = [];
     for (const p of readdirSync(join(slozka, podcesta), { withFileTypes: true })) {
       const cesta = podcesta ? `${podcesta}/${p.name}` : p.name;
-      if (p.isDirectory()) { nalezy.push(...najdiZapisy(slozka, cesta)); continue; }
+      // test-support jsou pomocné soubory testů (plní testovací databázi), ne kód hry.
+      if (p.isDirectory()) { if (p.name !== "test-support") nalezy.push(...najdiZapisy(slozka, cesta)); continue; }
       if (!p.name.endsWith(".ts") || p.name.endsWith(".test.ts")) continue;
       const radky = readFileSync(join(slozka, cesta), "utf8").split("\n");
       radky.forEach((r, i) => {

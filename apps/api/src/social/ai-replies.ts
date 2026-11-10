@@ -13,8 +13,10 @@
  * si lidi příspěvku všimnou až po chvíli. Druhý fanoušek pak reaguje i na prvního.
  */
 
+import { cleanDashes } from "../lib/dashes";
 import type { Bindings } from "../index";
 import { logger } from "../lib/logger";
+import { currentSeasonSql } from "../lib/season";
 import { WORKERS_AI_MODEL } from "../lib/ai-provider";
 import { callCoachModel } from "../ai-coach/llm";
 import { createRng } from "../generators/rng";
@@ -100,9 +102,7 @@ const FORBIDDEN_IN_REPLY = /(https?:\/\/|www\.|\b[\w.-]+\.(cz|com|net|org|eu|sk|
 /** Úklid odpovědi modelu: bez uvozovek kolem, bez dlouhých pomlček, rozumná délka. */
 export function cleanReply(raw: string): string | null {
   if (FORBIDDEN_IN_REPLY.test(raw)) return null;
-  let t = raw.trim()
-    .replace(/^["„“'»«]+|["„“'»«]+$/g, "")
-    .replace(/\s*[—–]\s*/g, ", ")
+  let t = cleanDashes(raw.trim().replace(/^["„“'»«]+|["„“'»«]+$/g, ""))
     .replace(/#\w+/g, "")
     .replace(/\s{2,}/g, " ")
     .trim();
@@ -277,6 +277,7 @@ async function teamMatch(db: D1Database, teamId: string, which: "last" | "next")
        FROM matches m JOIN season_calendar sc ON sc.id = m.calendar_id
        LEFT JOIN teams th ON th.id = m.home_team_id LEFT JOIN teams ta ON ta.id = m.away_team_id
       WHERE (m.home_team_id = ? OR m.away_team_id = ?) AND ${cond}
+        AND ${currentSeasonSql("sc")}
       ORDER BY sc.scheduled_at ${which === "last" ? "DESC" : "ASC"} LIMIT 1`,
   ).bind(teamId, teamId).first<MatchRow>()
     .catch((e) => { logger.warn({ module: M }, `zápas klubu (${which})`, e); return null; });

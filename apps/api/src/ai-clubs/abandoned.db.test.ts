@@ -20,6 +20,7 @@ import { findAbandonedClubs, isTakeoverEnabled, MAX_TAKEOVERS_PER_RUN, runAbando
 import { runWatchdog } from "../lib/watchdog";
 import { pickOverwritableAiTeam } from "./overwrite";
 import { findReclaimableClub } from "./reclaim";
+import { loadTakeoverGuard } from "./takeover-guard";
 import type { Bindings } from "../index";
 
 const DISTRICT = "Prachatice";
@@ -395,6 +396,36 @@ describe("návrat vlastníka", () => {
     // Kdo klub nikdy neměl, nabídku nedostane.
     expect(await findReclaimableClub(db, "founder")).toBeNull();
 
+    // Ochranná lhůta převzatého klubu běží (90 dní), u klubu, který byl AI od začátku, ne.
+    expect(await loadTakeoverGuard(db, club, new Date())).toMatchObject({ active: true, daysLeft: 90 });
+    expect((await loadTakeoverGuard(db, aiTeams[1], new Date())).active).toBe(false);
+
+    // Co po sobě AI trenér nechal: inzerát, poptávku, čekající nabídku, prodej, sponzora a stavbu.
+    const own = (await db.prepare("SELECT id, first_name, last_name FROM players WHERE team_id = ? ORDER BY id LIMIT 3").bind(club)
+      .all<{ id: string; first_name: string; last_name: string }>()).results;
+    const foreign = (await db.prepare("SELECT id FROM players WHERE team_id = ? ORDER BY id LIMIT 1").bind(aiTeams[1]).first<{ id: string }>())!.id;
+    const league = (await db.prepare("SELECT league_id FROM teams WHERE id = ?").bind(club).first<{ league_id: string }>())!.league_id;
+    const nowIso = new Date().toISOString();
+    const future = new Date(Date.now() + 3 * DAY_MS).toISOString();
+    await db.batch([
+      db.prepare("INSERT INTO transfer_listings (id, player_id, team_id, asking_price, league_id, status, expires_at) VALUES ('ai-listing', ?, ?, 9000, ?, 'active', ?)")
+        .bind(own[0].id, club, league, future),
+      db.prepare(
+        `INSERT INTO transfer_demands (id, team_id, league_id, position, age_min, age_max, role, max_price, status, expires_at, created_at)
+         VALUES ('ai-demand', ?, ?, 'MID', 19, 31, 'starter', 20000, 'active', ?, ?)`,
+      ).bind(club, league, future, nowIso),
+      db.prepare(
+        `INSERT INTO transfer_offers (id, player_id, from_team_id, to_team_id, offer_amount, offer_type, status, expires_at, last_action_by, created_at)
+         VALUES ('ai-offer', ?, ?, ?, 12000, 'transfer', 'pending', ?, ?, ?)`,
+      ).bind(foreign, club, aiTeams[1], future, club, nowIso),
+      db.prepare(
+        `INSERT INTO transfer_offers (id, player_id, from_team_id, to_team_id, offer_amount, offer_type, status, expires_at, created_at, resolved_at)
+         VALUES ('ai-sale', ?, ?, ?, 45000, 'transfer', 'accepted', ?, ?, ?)`,
+      ).bind(own[1].id, aiTeams[1], club, future, nowIso, nowIso),
+      db.prepare("INSERT INTO sponsor_contracts (id, team_id, sponsor_name, sponsor_type, monthly_amount) VALUES ('ai-sponsor', ?, 'Pekárna Kubát', 'bakery', 3000)").bind(club),
+      db.prepare("INSERT INTO transactions (id, team_id, type, amount, balance_after, description, game_date) VALUES ('ai-build', ?, 'stadium_upgrade', -120000, 50000, 'Tribuna', '2026-11-09')").bind(club),
+    ]);
+
     const { result: res, problems } = await withLogs(() => Promise.resolve(app.request("/api/teams/reclaim", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -410,6 +441,22 @@ describe("návrat vlastníka", () => {
     const coaches = await db.prepare("SELECT id, user_id, name FROM managers WHERE team_id = ?").bind(club).all<{ id: string; user_id: string; name: string }>();
     expect(coaches.results).toEqual([{ id: "coach-u-back", user_id: "u-back", name: "Václav Navrátilec" }]);
     expect((await getSession(env.SESSION_KV, token))?.teamId).toBe(club);
+
+    // Rozdělaná práce AI trenéra je stažená a majitel má v telefonu souhrn, co se mezitím stalo.
+    expect(await count("SELECT COUNT(*) AS n FROM transfer_listings WHERE id = 'ai-listing' AND status = 'withdrawn'")).toBe(1);
+    expect(await count("SELECT COUNT(*) AS n FROM transfer_demands WHERE id = 'ai-demand' AND status = 'withdrawn'")).toBe(1);
+    expect(await count("SELECT COUNT(*) AS n FROM transfer_offers WHERE id = 'ai-offer' AND status = 'withdrawn'")).toBe(1);
+    const sms = await db.prepare(
+      "SELECT m.body, c.title FROM messages m JOIN conversations c ON c.id = m.conversation_id WHERE c.team_id = ? AND c.title = 'Sekretář klubu'",
+    ).bind(club).first<{ body: string; title: string }>();
+    expect(sms?.body).toContain("Trenére, vítejte zpátky.");
+    expect(sms?.body).toContain(`Odešli: ${own[1].first_name} ${own[1].last_name} (45 000 Kč).`);
+    expect(sms?.body).toContain("Nové smlouvy se sponzory: Pekárna Kubát.");
+    expect(sms?.body).toContain("Větší útraty: stadion a hřiště 120 000 Kč.");
+    expect(sms?.body).toContain("Stáhli jsme 1 inzerát, 1 poptávku, 1 rozjednanou nabídku");
+    expect(sms?.body).not.toMatch(/[—–]/);
+    // Po návratu už žádná ochranná lhůta neplatí: klub vede člověk.
+    expect((await loadTakeoverGuard(db, club, new Date())).active).toBe(false);
 
     // Návrat je aktivita: noční převzetí klub hned znovu nevezme.
     expect((await findAbandonedClubs(db, new Date())).map((c) => c.teamId)).not.toContain(club);

@@ -495,7 +495,7 @@ export default function TeamPage() {
                     const resultText = m.result === "W" ? "text-pitch-600" : m.result === "L" ? "text-card-red" : "text-muted";
                     return (
                       <tr key={m.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
-                        <td className="py-2 pl-4 sm:pl-5 pr-2 tabular-nums text-muted">{m.round ?? "—"}</td>
+                        <td className="py-2 pl-4 sm:pl-5 pr-2 tabular-nums text-muted">{m.round ?? "-"}</td>
                         <td className="py-2 pr-2">
                           <a href={`/zapas/${m.id}/zaznam`} className="flex items-center gap-2 hover:underline">
                             <BadgePreview primary={m.opponentColor} secondary={m.opponentSecondary}
@@ -510,7 +510,7 @@ export default function TeamPage() {
                             {m.homeScore}:{m.awayScore}
                           </span>
                         </td>
-                        <td className="py-2 pr-4 sm:pr-5 text-center tabular-nums text-muted text-xs">{m.attendance ?? "—"}</td>
+                        <td className="py-2 pr-4 sm:pr-5 text-center tabular-nums text-muted text-xs">{m.attendance ?? "-"}</td>
                       </tr>
                     );
                   })}
@@ -541,7 +541,7 @@ export default function TeamPage() {
                         {(p.redCards as number) > 0 && <span className="inline-block w-2.5 h-3.5 rounded-[1px] bg-card-red" title={`${p.redCards} červených`} />}
                         <span className={`font-heading font-bold text-xs px-1.5 py-0.5 rounded ${
                           (p.avgRating as number) >= 7 ? "bg-pitch-50 text-pitch-600" : "bg-gray-50 text-ink"
-                        }`}>{(p.avgRating as number)?.toFixed(1) ?? "—"}</span>
+                        }`}>{(p.avgRating as number)?.toFixed(1) ?? "-"}</span>
                       </div>
                     </>
                   );

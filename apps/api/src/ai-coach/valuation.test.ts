@@ -248,6 +248,23 @@ describe("pokusy AI klub obrat", () => {
     expect(withStar.sellBlock("star", [{ position: "FWD", rating: 57 }])).toBeNull();
   });
 
+  it("klub nad stropem soupisky smí prodávat; strop hlídá jen výměnu, která by kádr nafoukla", () => {
+    // 32 hráčů v áčku (strop je 30): čistý prodej kádr zmenšuje a musí projít.
+    const extra = Array.from({ length: 14 }, (_, i) => member(`extra${i + 1}`, "MID", 36));
+    const squad = analyzeSquad([...fullSquad(), ...extra], profile());
+    expect(squad.seniorOwnCount).toBe(32);
+    expect(squad.sellBlock("extra1")).toBeNull();
+    expect(squad.sellBlock("mid6")).toBeNull();
+    // Výměna jeden za jednoho kádr nezmenší (32 je pořád nad stropem): blok platí dál.
+    expect(squad.sellBlock("extra1", [{ position: "MID", rating: 45 }])).toBe("squad_full");
+    // Dva za jednoho na hraně stropu: 30 − 1 + 2 = 31, taky ne.
+    const atCap = analyzeSquad([...fullSquad(), ...extra.slice(0, 12)], profile());
+    expect(atCap.seniorOwnCount).toBe(30);
+    expect(atCap.sellBlock("extra1")).toBeNull();
+    expect(atCap.sellBlock("extra1", [{ position: "MID", rating: 45 }])).toBeNull();
+    expect(atCap.sellBlock("extra1", [{ position: "MID", rating: 45 }, { position: "DEF", rating: 44 }])).toBe("squad_full");
+  });
+
   it("nad limitem obchodů za měsíc chce AI víc, ale pojistky platí dál", () => {
     const mv = 20_000;
     const p = profile();

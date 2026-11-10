@@ -255,3 +255,48 @@ describe("konec sezóny: lidský klub beze změny", () => {
     expect(again.status).toBe(404);
   }, 60_000);
 });
+
+describe("souboje kdo zůstane: právě jeden z dvojice a žádný hostující hráč", () => {
+  async function decide(leaving: string[]) {
+    const token = await createSession(sessions, "u-human", "human@example.test", HUMAN);
+    return app.request(`/api/teams/${HUMAN}/season-recap/decide`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ leaving }),
+    }, env());
+  }
+
+  it("prázdný výběr, oba z jedné dvojice i vynechaná dvojice vrátí 400 a nic nezmění", async () => {
+    await insertRecap(HUMAN, 1, [["hu-p8", "hu-p9"], ["hu-p13", "hu-p14"]]);
+    for (const leaving of [[], ["hu-p8", "hu-p9", "hu-p13"], ["hu-p8"], ["foreign-id"]]) {
+      const res = await decide(leaving);
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({ error: "U každé dvojice vyber právě jednoho hráče, který odejde." });
+    }
+    expect(await inTeam(HUMAN, ["hu-p8", "hu-p9", "hu-p13", "hu-p14"])).toBe(4);
+    const r = await recap(HUMAN);
+    expect(r?.seen).toBe(0);
+    expect(r?.data.decision?.duels).toHaveLength(2);
+
+    expect((await decide(["hu-p8", "hu-p14"])).status).toBe(200);
+    expect(await inTeam(HUMAN, ["hu-p8", "hu-p14"])).toBe(0);
+  }, 60_000);
+
+  it("hostující hráč se do soubojů nedostane", async () => {
+    // Nejohroženější (nejstarší) hráči klubu jsou hu-p15 a hu-p14; oba jsou tu jen na hostování.
+    await db.prepare("UPDATE players SET loan_from_team_id = ? WHERE id IN ('hu-p15', 'hu-p14')").bind(AI).run();
+    const res = await processTeamDepartures(db, LEAGUE, HUMAN, 1);
+    const ids = res.duels.flatMap((d) => [d.a.playerId, d.b.playerId]);
+    expect(ids.length).toBeGreaterThan(0);
+    expect(ids).not.toContain("hu-p15");
+    expect(ids).not.toContain("hu-p14");
+  }, 60_000);
+
+  it("starý souboj s hostujícím hráčem ho nesmaže", async () => {
+    await insertRecap(HUMAN, 1, [["hu-p8", "hu-p9"]]);
+    await db.prepare("UPDATE players SET loan_from_team_id = ? WHERE id = 'hu-p9'").bind(AI).run();
+    expect((await decide(["hu-p9"])).status).toBe(200);
+    expect(await inTeam(HUMAN, ["hu-p8", "hu-p9"])).toBe(2);
+    expect((await recap(HUMAN))?.seen).toBe(1);
+  }, 60_000);
+});

@@ -8,6 +8,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { Miniflare } from "miniflare";
 import {
   applySocialJournalistEffects, applySocialLike, applySocialToneEffects, capDelta, journalistShift, momentText,
+  textAddressesJournalist,
   relationTargets, textMentionsClub, type SocialTone, type ToneClassifier,
 } from "./relation-effects";
 
@@ -23,11 +24,11 @@ beforeAll(async () => {
   db = await miniflare.getD1Database("DB");
   for (const sql of [
     "CREATE TABLE villages (id TEXT PRIMARY KEY, lat REAL, lng REAL)",
-    "CREATE TABLE teams (id TEXT PRIMARY KEY, name TEXT, village_id TEXT)",
+    "CREATE TABLE teams (id TEXT PRIMARY KEY, name TEXT, village_id TEXT, league_id TEXT)",
     `CREATE TABLE manager_relations (team_a_id TEXT NOT NULL, team_b_id TEXT NOT NULL, respect INTEGER NOT NULL DEFAULT 0,
       heat INTEGER NOT NULL DEFAULT 0, history TEXT NOT NULL DEFAULT '[]', updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
       PRIMARY KEY (team_a_id, team_b_id))`,
-    "CREATE TABLE journalists (id TEXT PRIMARY KEY, first_name TEXT, last_name TEXT, nickname TEXT, style TEXT)",
+    "CREATE TABLE journalists (id TEXT PRIMARY KEY, first_name TEXT, last_name TEXT, nickname TEXT, style TEXT, league_id TEXT)",
     `CREATE TABLE journalist_relations (id TEXT PRIMARY KEY, journalist_id TEXT NOT NULL, team_id TEXT NOT NULL,
       sentiment INTEGER NOT NULL DEFAULT 0, duvod TEXT NOT NULL DEFAULT '', updated_at TEXT, UNIQUE(journalist_id, team_id))`,
   ]) await db.prepare(sql).run();
@@ -37,10 +38,11 @@ beforeAll(async () => {
   await db.batch([
     // Vesnice daleko od sebe: vztah začíná na nule, bez sousedského napětí.
     db.prepare("INSERT INTO villages VALUES ('v1', 49.0, 14.0), ('v2', 50.5, 15.5)"),
-    db.prepare("INSERT INTO teams VALUES ('t-spule', 'AC Jitona Spůle', 'v1'), ('t-kavo', 'FC Kávoviny Vlachovo Březí', 'v2')"),
+    db.prepare("INSERT INTO teams VALUES ('t-spule', 'AC Jitona Spůle', 'v1', 'l1'), ('t-kavo', 'FC Kávoviny Vlachovo Březí', 'v2', 'l1')"),
     db.prepare(`INSERT INTO journalists VALUES
-      ('j-ser', 'Jaromír', 'Reindl', NULL, 'seriozni'),
-      ('j-bul', 'Řehoř', 'Tesař', 'Fanda', 'bulvar')`),
+      ('j-ser', 'Jaromír', 'Reindl', NULL, 'seriozni', 'l1'),
+      ('j-bul', 'Řehoř', 'Tesař', 'Fanda', 'bulvar', 'l1'),
+      ('j-far', 'Drahomíra', 'Pražská', NULL, 'seriozni', 'l2')`),
   ]);
 });
 
@@ -106,6 +108,18 @@ describe("vyznění textu mění vztah", () => {
     expect(await relation()).toMatchObject({ respect: 4, heat: 0 });
   });
 
+  it("pochvala napětí zchladí o 2, pod nulu ne", async () => {
+    await applySocialToneEffects(db, always("tease"), tease(1));
+    expect(await relation()).toMatchObject({ respect: -1, heat: 5 });
+    await applySocialToneEffects(db, always("praise"), tease(2));
+    expect(await relation()).toMatchObject({ respect: 3, heat: 3 });
+    const stored = await db.prepare("SELECT heat FROM social_relation_effects WHERE source_key = ?").bind(tease(2).sourceKey).first<{ heat: number }>();
+    expect(stored?.heat).toBe(-2);
+    await applySocialToneEffects(db, always("praise"), tease(3));
+    await applySocialToneEffects(db, always("praise"), tease(4));
+    expect((await relation())!.heat).toBe(0);
+  });
+
   it("denní strop: urážky za den nepohnou o víc než 10", async () => {
     for (let i = 1; i <= 4; i++) await applySocialToneEffects(db, always("insult"), tease(i));
     expect(await relation()).toMatchObject({ respect: -10, heat: 10 });
@@ -156,7 +170,7 @@ describe("novináři", () => {
   const sentiment = async (id: string) =>
     (await db.prepare("SELECT sentiment, duvod FROM journalist_relations WHERE journalist_id = ? AND team_id = 't-spule'").bind(id).first<{ sentiment: number; duvod: string }>());
   const comment = (n: number, journalistIds: string[]) => ({
-    authorTeamId: "t-spule", text: "Hlavně ať o tom nepíše pak zasse Drahomíra :D", sourceKey: `comment:j${n}`,
+    authorTeamId: "t-spule", text: "Hlavně ať o tom ta redakce zase nepíše nesmysly :D", sourceKey: `comment:j${n}`,
     context: "Spůle hostí Vimperk v zápase o první místo", journalistIds,
   });
 
@@ -167,7 +181,7 @@ describe("novináři", () => {
     expect(journalistShift("neutral", null)).toBe(0);
     expect(await applySocialJournalistEffects(db, always("tease"), comment(1, ["j-ser", "j-bul"]))).toBe(2);
     expect((await sentiment("j-ser"))?.sentiment).toBe(-3);
-    expect(await sentiment("j-bul")).toMatchObject({ sentiment: 2, duvod: "Socky: „Hlavně ať o tom nepíše pak zasse Drahomíra :D“" });
+    expect(await sentiment("j-bul")).toMatchObject({ sentiment: 2, duvod: "Socky: „Hlavně ať o tom ta redakce zase nepíše nesmysly :D“" });
   });
 
   it("stejný komentář jen jednou a za den nejvýš strop", async () => {
@@ -178,5 +192,51 @@ describe("novináři", () => {
     await applySocialJournalistEffects(db, cls, comment(2, ["j-ser"]));
     const stored = await db.prepare("SELECT SUM(respect) AS s FROM social_relation_effects WHERE team_a_id = 'j-ser'").first<{ s: number }>();
     expect(stored?.s).toBe(-10);
+  });
+
+  it("komentář pod článkem, který na novináře nemíří, se vůbec nehodnotí", async () => {
+    const cls = always("insult");
+    for (const [i, text] of [
+      "To je hnus, co se v té Praze děje",
+      "Buďte rádi, že u vás nemáte Řepku :D",
+      "@FK Seznam Dvorce je zlo no",
+    ].entries()) {
+      expect(await applySocialJournalistEffects(db, cls, { ...comment(10 + i, ["j-ser"]), text })).toBe(0);
+    }
+    expect(cls.calls).toBe(0);
+    expect(await sentiment("j-ser")).toBeNull();
+    const rows = await db.prepare("SELECT COUNT(*) AS n FROM social_relation_effects").first<{ n: number }>();
+    expect(rows?.n).toBe(0);
+  });
+
+  it("pochvala článku, jméno novináře a odpověď na jeho komentář se počítají", async () => {
+    expect(await applySocialJournalistEffects(db, always("praise"), { ...comment(20, ["j-ser"]), text: "Dobrej rozhovor" })).toBe(1);
+    expect((await sentiment("j-ser"))?.sentiment).toBe(4);
+    // Skloňované příjmení
+    expect(await applySocialJournalistEffects(db, always("praise"), { ...comment(21, ["j-bul"]), text: "Tesařovi se to povedlo" })).toBe(1);
+    // Odpověď na komentář novináře míří na něj, i když ho nejmenuje.
+    expect(await applySocialJournalistEffects(db, always("tease"), {
+      ...comment(22, []), text: "To si děláš srandu, ne?", repliedJournalistId: "j-bul",
+    })).toBe(1);
+    expect((await sentiment("j-bul"))?.sentiment).toBe(5);
+  });
+
+  it("redaktor z jiné ligy si klub nevede", async () => {
+    const cls = always("insult");
+    expect(await applySocialJournalistEffects(db, cls, {
+      ...comment(30, ["j-far"]), text: "Ten článek je hnus, Drahomíro", repliedJournalistId: "j-far",
+    })).toBe(0);
+    expect(cls.calls).toBe(0);
+  });
+
+  it("textAddressesJournalist: jméno, přezdívka a slova o tisku", () => {
+    const j = { first_name: "Řehoř", last_name: "Tesař", nickname: "Fanda" };
+    expect(textAddressesJournalist("Dobrej rozhovor", j)).toBe(true);
+    expect(textAddressesJournalist("Pane redaktore, tohle ne", j)).toBe(true);
+    expect(textAddressesJournalist("Fando, ty jsi číslo", j)).toBe(true);
+    expect(textAddressesJournalist("s Řehořem bych na pivo nešel", j)).toBe(true);
+    expect(textAddressesJournalist("To je hnus, co se v té Praze děje", j)).toBe(false);
+    expect(textAddressesJournalist("Buďte rádi, že u vás nemáte Řepku :D", j)).toBe(false);
+    expect(textAddressesJournalist("@FK Seznam Dvorce je zlo no", j)).toBe(false);
   });
 });

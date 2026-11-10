@@ -10,14 +10,15 @@ import { createCapacityLookup } from "../registration/district-capacity";
  */
 export const publicLandingRouter = new Hono<{ Bindings: Bindings }>();
 
-export const LANDING_CACHE_KEY = "public-landing:v3";
+export const LANDING_CACHE_KEY = "public-landing:v4";
 const CACHE_KEY = LANDING_CACHE_KEY;
 const CACHE_TTL_S = 600;
 /** Rubriky psané o vymyšlených hráčích a klubech, ne o lidech za klávesnicí. */
 const SAFE_NEWS_TYPES = ["ai_report", "player_interview", "ultras_report", "season_wrap", "celebrity_arrival", "legend_farewell"];
 
 export interface LandingData {
-  stats: { matches: number; players: number; villages: number; districts: number };
+  /** `season` = číslo právě hrané sezóny (texty webu ho nesmí mít napevno). */
+  stats: { matches: number; players: number; villages: number; districts: number; season: number | null };
   results: Array<{ home: string; away: string; homeScore: number; awayScore: number; league: string; at: string }>;
   headlines: Array<{ headline: string; league: string; type: string }>;
   /** `full` = okres nové kluby nepřijímá (plno nebo ručně zavřeno); v seznamu ale zůstává. */
@@ -45,7 +46,8 @@ async function loadLandingData(db: D1Database): Promise<LandingData> {
       (SELECT COUNT(*) FROM matches WHERE status = 'simulated') AS matches,
       (SELECT COUNT(*) FROM players) AS players,
       (SELECT COUNT(*) FROM villages v JOIN district_registrations d ON d.district = v.district AND d.status = 'ready') AS villages,
-      (SELECT COUNT(*) FROM district_registrations WHERE status = 'ready') AS districts`)
+      (SELECT COUNT(*) FROM district_registrations WHERE status = 'ready') AS districts,
+      (SELECT MAX(number) FROM seasons WHERE status = 'active') AS season`)
     .first<LandingData["stats"]>();
 
   // Jen ligy, kde hrají lidé (aspoň tři kluby), a nejvýš dva zápasy z každé, ať je vidět víc soutěží.
@@ -97,7 +99,7 @@ async function loadLandingData(db: D1Database): Promise<LandingData> {
   }
 
   return {
-    stats: stats ?? { matches: 0, players: 0, villages: 0, districts: 0 },
+    stats: stats ?? { matches: 0, players: 0, villages: 0, districts: 0, season: null },
     districts: districtList,
     results: results.results,
     headlines,

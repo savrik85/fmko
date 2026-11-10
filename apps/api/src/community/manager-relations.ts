@@ -261,6 +261,30 @@ export async function applyRelationEvent(
   return { ...rel, respect, heat, history };
 }
 
+/** O kolik napětí dvojice vychladne za odehrané ligové kolo. */
+export const HEAT_COOLDOWN_PER_ROUND = 1;
+
+/**
+ * Napětí mezi trenéry časem vychladne: za každé odehrané ligové kolo o bod, ne pod nulu.
+ * Dřív jen rostlo a derby (napětí 60+) se z dvojice už nikdy nestalo obyčejným zápasem.
+ *
+ * Volá denní tick ráno po kole: vychladnou dvojice, ve kterých aspoň jeden klub
+ * odehrál za posledních `hours` hodin ligový zápas (přáteláky a pohár se nepočítají,
+ * U21 má vlastní týmy a do vztahů klubů nepatří). Jeden příkaz, vrací počet dvojic.
+ */
+export async function coolHeatAfterLeagueRound(db: D1Database, hours = 24): Promise<number> {
+  const res = await db.prepare(
+    `UPDATE manager_relations SET heat = MAX(0, heat - ?)
+      WHERE heat > 0 AND EXISTS (
+        SELECT 1 FROM matches m
+         WHERE m.status = 'simulated' AND m.league_id IS NOT NULL
+           AND julianday(m.simulated_at) > julianday('now', ?)
+           AND (m.home_team_id IN (manager_relations.team_a_id, manager_relations.team_b_id)
+             OR m.away_team_id IN (manager_relations.team_a_id, manager_relations.team_b_id)))`,
+  ).bind(HEAT_COOLDOWN_PER_ROUND, `-${Math.max(1, Math.round(hours))} hours`).run();
+  return res.meta?.changes ?? 0;
+}
+
 /** Posun morálky celé kabiny (clamp 0–100). */
 export async function shiftSquadMorale(db: D1Database, teamId: string, delta: number): Promise<void> {
   if (delta === 0) return;
@@ -285,6 +309,62 @@ export async function insertInteraction(
     "INSERT INTO manager_interactions (id, type, actor_team_id, target_team_id, match_id, payload, status) VALUES (?, ?, ?, ?, ?, ?, ?)"
   ).bind(id, type, actorId, targetId, matchId, JSON.stringify(payload), status).run();
   return id;
+}
+
+/** Podmínka, za které se nárok na interakci smí zabrat. */
+export type InteractionGuard =
+  /** Jednou za zápas a aktéra (gesto, výrok, dárek). */
+  | { kind: "match" }
+  /** Jednou za `days` dní pro dvojici, ať začal kdokoli (pochvala, pivo, inzerát). */
+  | { kind: "cooldown"; days: number }
+  /** Jedna otevřená sázka na zápas. */
+  | { kind: "open_bet" };
+
+/**
+ * Atomicky zabere nárok na interakci: řádek se vloží jen tehdy, když podmínka
+ * (zápas, cooldown, otevřená sázka) v okamžiku zápisu pořád platí. Kontrola
+ * a zápis jsou jeden příkaz, takže ze souběžných požadavků projde právě jeden.
+ * Vrací id interakce, nebo null, když nárok už zabral někdo jiný. Efekty
+ * a platbu smí volající spustit až po úspěšném zabrání.
+ */
+export async function claimInteraction(
+  db: D1Database, type: string, actorId: string, targetId: string,
+  matchId: string | null, payload: Record<string, unknown>, status: string,
+  guard: InteractionGuard,
+): Promise<string | null> {
+  const id = crypto.randomUUID();
+  const insert = `INSERT INTO manager_interactions (id, type, actor_team_id, target_team_id, match_id, payload, status)
+     SELECT ?, ?, ?, ?, ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM manager_interactions WHERE `;
+  const row = [id, type, actorId, targetId, matchId, JSON.stringify(payload), status];
+  let res: D1Result;
+  if (guard.kind === "match") {
+    res = await db.prepare(`${insert} type = ? AND actor_team_id = ? AND match_id = ?)`)
+      .bind(...row, type, actorId, matchId).run();
+  } else if (guard.kind === "open_bet") {
+    res = await db.prepare(`${insert} type = 'bet' AND match_id = ? AND status IN ('pending', 'offered'))`)
+      .bind(...row, matchId).run();
+  } else {
+    const days = Math.max(1, Math.round(guard.days));
+    res = await db.prepare(
+      `${insert} type = ?
+         AND ((actor_team_id = ? AND target_team_id = ?) OR (actor_team_id = ? AND target_team_id = ?))
+         AND created_at > strftime('%Y-%m-%dT%H:%M:%SZ', 'now', ?))`
+    ).bind(...row, type, actorId, targetId, targetId, actorId, `-${days} days`).run();
+  }
+  return (res.meta?.changes ?? 0) === 1 ? id : null;
+}
+
+/** Doplní zabrané interakci výsledek (payload, případně stav). */
+export async function finishInteraction(
+  db: D1Database, id: string, payload: Record<string, unknown>, status?: string,
+): Promise<void> {
+  await db.prepare("UPDATE manager_interactions SET payload = ?, status = COALESCE(?, status) WHERE id = ?")
+    .bind(JSON.stringify(payload), status ?? null, id).run();
+}
+
+/** Uvolní zabraný nárok, když se platba nepovedla a nic dalšího se nestalo. */
+export async function releaseInteraction(db: D1Database, id: string): Promise<void> {
+  await db.prepare("DELETE FROM manager_interactions WHERE id = ?").bind(id).run();
 }
 
 export async function insertRelationNews(

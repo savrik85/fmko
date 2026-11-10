@@ -20,6 +20,9 @@ function generateSkillValue(rng: Rng, range: LeagueLevelRange, positionBonus: nu
   return { current: Math.max(1, current), maxPotential: clampedCap };
 }
 
+/** Věková křivka pod 16 let (žáci z akademie); mladší než 13 jako třináctiletý. */
+const UNDER_16_MULTIPLIER: Record<number, number> = { 13: 0.62, 14: 0.68, 15: 0.73 };
+
 /**
  * Jak moc je hráč v daném věku pod svým „dospělým" já.
  *
@@ -30,11 +33,15 @@ function generateSkillValue(rng: Rng, range: LeagueLevelRange, positionBonus: nu
  *
  * Náběh zároveň začíná výš (0,78 místo 0,7), protože nejmladší ročníky vycházely
  * z generátoru tak slabé, že se nedaly použít ani v dorostu.
+ *
+ * Pod 16 let (žák z akademie, který jde do dorostu dřív) křivka klesá dál. Dřív se věk
+ * zarovnal na 16, takže třináctiletý vznikal s dovednostmi šestnáctiletého.
  */
 export function vekovyNasobitel(age: number): number {
   if (age >= 28) return age < 34 ? 0.9 : age < 40 ? 0.75 : 0.5;
   if (age >= 22) return 1.0;
-  const vek = Math.min(21, Math.max(16, age));
+  if (age < 16) return UNDER_16_MULTIPLIER[Math.max(13, Math.floor(age))] ?? UNDER_16_MULTIPLIER[13];
+  const vek = Math.min(21, age);
   return 0.78 + (vek - 16) * 0.038; // 16 → 0,78 … 21 → 0,97
 }
 

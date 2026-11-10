@@ -386,7 +386,7 @@ function RecentTransferRow({ t }: { t: TransfersOverview["recent"][number] }) {
   const hasAvatar = t.playerAvatar && Object.keys(t.playerAvatar).length > 0;
   return (
     /* items-start, ne items-center: prostřední sloupec je dvouřádkový, takže
-       se cena centrovala proti jeho středu a končila 17 px pod jménem —
+       se cena centrovala proti jeho středu a končila 17 px pod jménem -
        vypadalo to, že patří k řádku pod ním. Cena je proto na lince se
        jménem; druhý řádek (odkud → kam) tím dostal celou šířku a názvy
        klubů se ořezávají mnohem míň. */
@@ -424,7 +424,7 @@ function RecentTransferRow({ t }: { t: TransfersOverview["recent"][number] }) {
               </span>
             ) : t.fee > 0 ? (
               <>{t.fee.toLocaleString("cs")}&nbsp;<span className="text-micro text-muted">Kč</span></>
-            ) : "—"}
+            ) : "-"}
           </span>
         </div>
         {/* Cena je celková; jen připomenout, že se splácí a že prodávající má procenta. */}
@@ -1731,7 +1731,7 @@ export default function TransfersPage() {
           )}
 
           {searchLoaded && (
-            <p className="text-xs text-amber-600 italic px-1">⚠ Dovednosti cizích hráčů jsou pouze orientační — přesné hodnoty znáš jen u svého týmu.</p>
+            <p className="text-xs text-amber-600 italic px-1">⚠ Dovednosti cizích hráčů jsou pouze orientační, přesné hodnoty znáš jen u svého týmu.</p>
           )}
 
           {/* Výsledky se dřív ukázaly až po nastavení filtru, takže po otevření
@@ -1787,7 +1787,7 @@ export default function TransfersPage() {
         <div className="space-y-3">
           {/* Počet nalezených a přepínač filtrů na jednom řádku. Filtrovat
               bylo přes celou šířku a bralo 60 px hned pod záložkami, přestože
-              je to jen přepínač — stejný jako „Víc" v Hledání. */}
+              je to jen přepínač, stejný jako „Víc" v Hledání. */}
           <div className="flex items-center justify-between gap-2">
             <SectionLabel>
               Volní hráči{" "}
@@ -1843,7 +1843,7 @@ export default function TransfersPage() {
                     onChange={(e) => setFilters((f) => ({ ...f, ratingMin: parseInt(e.target.value) || 0 }))}
                     className="w-20 px-2 py-1.5 rounded-soft border border-gray-200 text-sm font-heading tabular-nums text-center focus:outline-none focus:ring-2 focus:ring-pitch-500/30"
                   />
-                  <span className="text-muted text-sm">—</span>
+                  <span className="text-muted text-sm">-</span>
                   <input
                     type="number" min={0} max={99} placeholder="Max"
                     value={filters.ratingMax < 99 ? filters.ratingMax : ""}
@@ -1876,7 +1876,7 @@ export default function TransfersPage() {
                     onChange={(e) => setFilters((f) => ({ ...f, ageMin: parseInt(e.target.value) || 15 }))}
                     className="w-20 px-2 py-1.5 rounded-soft border border-gray-200 text-sm font-heading tabular-nums text-center focus:outline-none focus:ring-2 focus:ring-pitch-500/30"
                   />
-                  <span className="text-muted text-sm">—</span>
+                  <span className="text-muted text-sm">-</span>
                   <input
                     type="number" min={15} max={50} placeholder="Max"
                     value={filters.ageMax < 50 ? filters.ageMax : ""}
@@ -2200,7 +2200,8 @@ export default function TransfersPage() {
                   const fromAcademy = !!(o as { fromAcademy?: boolean }).fromAcademy;
                   // Žák ze sousední akademie bez dorostu: po odmítnutí neskončí u žáků, ale s fotbalem
                   const academyVillage = (o as { academyVillage?: string | null }).academyVillage ?? null;
-                  const hiddenTalent = (o.personality as any)?.hiddenTalent as number | undefined;
+                  // Jen pásmo: přesný talent ani stropy rozvoje API v nabídce neposílá
+                  const talentBand = (o as { talentBand?: "high" | "medium" | "low" | null }).talentBand ?? null;
                   // expiresAt je v HERNÍM čase (player-offers.ts ho počítá z game_date),
                   // takže odpočet musí běžet proti hernímu datu. Proti reálnému času
                   // ukazoval při posunutých hodinách nesmysly (např. „vyprší za 78 dní").
@@ -2240,9 +2241,9 @@ export default function TransfersPage() {
                                 </span>
                               ));
                             })()}
-                            {isYouth && !fromAcademy && hiddenTalent !== undefined && (
+                            {isYouth && !fromAcademy && talentBand && (
                               <span className="text-xs text-amber-600 font-heading font-bold" title="Skrytý talent, talentovaný hráč roste na tréninku rychleji a má vyšší strop rozvoje">
-                                ✨ Talent {hiddenTalent >= 30 ? "vysoký" : hiddenTalent >= 18 ? "střední" : "nízký"}
+                                ✨ Talent {talentBand === "high" ? "vysoký" : talentBand === "medium" ? "střední" : "nízký"}
                               </span>
                             )}
                           </div>
@@ -2913,12 +2914,12 @@ function SquadTransferTable({ players, myListings, teamId, confirm, setPriceDial
                   <td className="py-2 px-2 text-center"><PositionBadge position={p.position as "GK" | "DEF" | "MID" | "FWD"} /></td>
                   <td className="py-2 px-2 text-center tabular-nums text-muted">{p.age}</td>
                   <td className="py-2 px-2 text-center tabular-nums font-heading font-bold">{p.overall_rating}</td>
-                  <td className={`py-2 px-2 text-center tabular-nums hidden sm:table-cell ${attrCellColor(s?.speed ?? 0)}`}>{s?.speed ?? "—"}</td>
-                  <td className={`py-2 px-2 text-center tabular-nums hidden sm:table-cell ${attrCellColor(s?.technique ?? 0)}`}>{s?.technique ?? "—"}</td>
-                  <td className={`py-2 px-2 text-center tabular-nums hidden sm:table-cell ${attrCellColor(s?.shooting ?? 0)}`}>{s?.shooting ?? "—"}</td>
-                  <td className={`py-2 px-2 text-center tabular-nums hidden sm:table-cell ${attrCellColor(s?.passing ?? 0)}`}>{s?.passing ?? "—"}</td>
-                  <td className={`py-2 px-2 text-center tabular-nums hidden sm:table-cell ${attrCellColor(s?.defense ?? 0)}`}>{s?.defense ?? "—"}</td>
-                  <td className={`py-2 px-2 text-center tabular-nums hidden sm:table-cell ${attrCellColor(s?.stamina ?? 0)}`}>{s?.stamina ?? "—"}</td>
+                  <td className={`py-2 px-2 text-center tabular-nums hidden sm:table-cell ${attrCellColor(s?.speed ?? 0)}`}>{s?.speed ?? "-"}</td>
+                  <td className={`py-2 px-2 text-center tabular-nums hidden sm:table-cell ${attrCellColor(s?.technique ?? 0)}`}>{s?.technique ?? "-"}</td>
+                  <td className={`py-2 px-2 text-center tabular-nums hidden sm:table-cell ${attrCellColor(s?.shooting ?? 0)}`}>{s?.shooting ?? "-"}</td>
+                  <td className={`py-2 px-2 text-center tabular-nums hidden sm:table-cell ${attrCellColor(s?.passing ?? 0)}`}>{s?.passing ?? "-"}</td>
+                  <td className={`py-2 px-2 text-center tabular-nums hidden sm:table-cell ${attrCellColor(s?.defense ?? 0)}`}>{s?.defense ?? "-"}</td>
+                  <td className={`py-2 px-2 text-center tabular-nums hidden sm:table-cell ${attrCellColor(s?.stamina ?? 0)}`}>{s?.stamina ?? "-"}</td>
                   <td className="py-2 px-2 text-center tabular-nums text-muted text-xs hidden sm:table-cell">{formatCZK(p.weekly_wage ?? 0)}</td>
                   <td className="py-2 px-2 text-center tabular-nums font-heading font-bold hidden sm:table-cell whitespace-nowrap">{formatCZK(playerValue(p))}</td>
                   <td className="py-2 px-2 text-center hidden sm:table-cell">

@@ -99,7 +99,7 @@ export function AttendanceHistoryWidget({ data }: WidgetProps) {
   return (
     <div className="space-y-3">
       <BarChart
-        categories={home.map((m) => m.opponent ?? "—")}
+        categories={home.map((m) => m.opponent ?? "-")}
         series={[{ label: "Diváků", color: PRIMARY, values: home.map((m) => m.attendance ?? 0) }]}
         formatValue={(v) => `${Math.round(v).toLocaleString("cs")} diváků`}
       />

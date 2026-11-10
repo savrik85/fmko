@@ -19,9 +19,9 @@ import { maintainPitch, setPitchCareMode, upgradeStadiumFacility } from "../serv
 import { computeBannerOffers, MAX_BANNERS, signSponsorContract } from "../services/banner-sponsors";
 import { setTicketPrice } from "../services/club-settings";
 import { restockConcession, setConcessionMode, setConcessionProduct } from "../services/concessions";
-import { acceptPlayerOffer, rejectPlayerOffer } from "../services/player-offer-actions";
-import { mustSeason } from "../lib/season";
-import { MAX_CLUB_NAME_LENGTH, NAME_TAKEN_ERROR, renameClub } from "../lib/club-rename";
+import { publicOfferDetails, acceptPlayerOffer, rejectPlayerOffer } from "../services/player-offer-actions";
+import { mustSeason, currentSeasonSql } from "../lib/season";
+import { clubNameError, MAX_CLUB_NAME_LENGTH, NAME_TAKEN_ERROR, renameClub } from "../lib/club-rename";
 import { getSession, getTokenFromRequest } from "../auth/session";
 import { requireTeamOwnership, requireAdmin, requireOwnedTeamRead } from "../auth/middleware";
 import { buildPlayerView } from "../transfers/player-view";
@@ -220,6 +220,14 @@ gameRouter.get("/teams/:teamId/players/:playerId/training-log", async (c) => {
 gameRouter.get("/teams/:teamId/players/:playerId/profile-extras", async (c) => {
   const teamId = c.req.param("teamId");
   const playerId = c.req.param("playerId");
+
+  // Přesná povaha a vazby jsou jen pro klub, kterému hráč patří: áčko, jeho U21, nebo
+  // kmenový klub hráče na hostování. Dřív stačilo znát id hráče (audit 2026-11-09).
+  const clubTeams = "SELECT id FROM teams WHERE id = ?1 OR parent_team_id = ?1 OR id = (SELECT parent_team_id FROM teams WHERE id = ?1)";
+  const ownPlayer = await c.env.DB.prepare(
+    `SELECT id FROM players WHERE id = ?2 AND (team_id IN (${clubTeams}) OR loan_from_team_id IN (${clubTeams}))`,
+  ).bind(teamId, playerId).first<{ id: string }>();
+  if (!ownPlayer) return c.json({ error: "Hráč nepatří do tvého klubu" }, 403);
 
   const [playerRow, relRows] = await c.env.DB.batch([
     c.env.DB.prepare("SELECT personality FROM players WHERE id = ?").bind(playerId),
@@ -661,7 +669,21 @@ gameRouter.get("/teams/:teamId/budget", async (c) => {
   ).bind(teamId).first<{ total: number }>().catch((e) => { logger.warn({ module: "game" }, "load staff wages for budget", e); return null; });
   const weeklyStaffWages = staffWageRow?.total ?? 0;
 
-  const weeklyExpenses = weeklyWages + weeklyStaffWages + weeklyMaintenance + weeklyEquipment + weeklyTraining;
+  // Dorost (U21): mzdy a tréninky platí klub (finance-processor clubAccountOf), takže
+  // patří do jeho týdenních výdajů. Tréninků je tolik, kolik má dorost nastaveno.
+  const youthRow = await c.env.DB.prepare(
+    `SELECT COALESCE(SUM(COALESCE(u.training_sessions, 2)), 0) AS sessions,
+            (SELECT COALESCE(SUM(p.weekly_wage), 0) FROM players p
+              WHERE p.team_id IN (SELECT id FROM teams WHERE parent_team_id = ?1 AND team_type = 'u21')
+                AND ${PLACENY_HRAC_SQL}) AS wages
+       FROM teams u WHERE u.parent_team_id = ?1 AND u.team_type = 'u21'`
+  ).bind(teamId).first<{ sessions: number; wages: number }>()
+    .catch((e) => { logger.warn({ module: "game" }, "load youth costs for budget", e); return null; });
+  const weeklyYouthWages = youthRow?.wages ?? 0;
+  const weeklyYouthTraining = (trainingPerSession[category] ?? 400) * (youthRow?.sessions ?? 0);
+
+  const weeklyExpenses = weeklyWages + weeklyStaffWages + weeklyMaintenance + weeklyEquipment + weeklyTraining
+    + weeklyYouthWages + weeklyYouthTraining;
   const weeklyNet = weeklyIncome - weeklyExpenses;
 
   // Active cash loan + remaining match days
@@ -761,7 +783,8 @@ gameRouter.get("/teams/:teamId/budget", async (c) => {
   const in4Weeks = forecastSeries[4]?.budget ?? (team.budget as number);
   const inSeason = forecastSeries[Math.min(seasonWeeksLeft, horizon)]?.budget ?? (team.budget as number);
 
-  // Bankrot: první týden kde budget < 0
+  // První týden, kdy prognóza spadne pod nulu. Bankrot ve hře není, v mínusu se jen
+  // zablokují nákupy (PURCHASE_TYPES). Název pole zůstává kvůli klientům.
   const bankruptIdx = forecastSeries.findIndex((p, i) => i > 0 && p.budget < 0);
   const weeksUntilBankrupt = bankruptIdx > 0 ? bankruptIdx : null;
 
@@ -797,6 +820,8 @@ gameRouter.get("/teams/:teamId/budget", async (c) => {
       expenses: {
         wages: weeklyWages, staffWages: weeklyStaffWages, maintenance: weeklyMaintenance,
         equipment: weeklyEquipment, training: weeklyTraining,
+        // Dorost U21: platí klub, v knize jsou řádky označené „dorost U21“.
+        youthWages: weeklyYouthWages, youthTraining: weeklyYouthTraining,
         loanRepayment: weeklyLoanRepayment,
         // Splátky za koupené hráče příští pondělí (v `total` nejsou, jako půjčka).
         transferInstallments: nextTransferInstallmentsOut,
@@ -2334,6 +2359,17 @@ gameRouter.get("/teams/:teamId/sponsors", async (c) => {
     "SELECT * FROM sponsor_contracts WHERE team_id = ? AND status = 'active'"
   ).bind(teamId).all().catch((e) => { logger.warn({ module: "game" }, "fetch active sponsor contracts", e); return { results: [] }; });
 
+  // Cizí klub (stadion soupeře) vidí jen názvy reklam u hřiště. Částky, bonusy, výpovědní
+  // pokuty a nabídky jsou věc majitele.
+  const { tymyDivaka } = await import("../auth/divak");
+  if (!(await tymyDivaka(c)).has(teamId)) {
+    return c.json({
+      bannerContracts: activeRows.results
+        .filter((r) => r.category === "banner")
+        .map((r) => ({ sponsorName: r.sponsor_name as string })),
+    });
+  }
+
   // Poměrná výpovědní pokuta, stejný vzorec jako POST /sponsors/terminate — karta smlouvy musí
   // ukazovat přesně tu částku, kterou by výpověď teď strhla, ne nominální earlyTerminationFee
   // celé smlouvy (ta se zmenšuje s ubývajícími sezónami).
@@ -2718,9 +2754,10 @@ gameRouter.post("/teams/:teamId/rename", async (c) => {
   const teamId = c.req.param("teamId");
   const { name } = await c.req.json<{ name: string }>();
 
-  if (typeof name !== "string" || name.trim().length < 2 || name.trim().length > MAX_CLUB_NAME_LENGTH) {
-    return c.json({ error: `Název musí mít 2-${MAX_CLUB_NAME_LENGTH} znaků` }, 400);
-  }
+  if (typeof name !== "string") return c.json({ error: `Název musí mít 2-${MAX_CLUB_NAME_LENGTH} znaků` }, 400);
+  // Jen písmena, číslice, mezery, tečka a pomlčka: název jde i do promptů AI trenérů (club-rename.ts).
+  const nameError = clubNameError(name);
+  if (nameError) return c.json({ error: nameError }, 400);
 
   // Check season limit
   const season = await c.env.DB.prepare("SELECT number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1")
@@ -2873,7 +2910,7 @@ gameRouter.get("/teams/:teamId/season-info", async (c) => {
     upcoming.push({
       type: "match",
       date: entry.scheduled_at as string,
-      title: `${entry.game_week}. kolo — ${opponent ?? "Soupeř"}`,
+      title: `${entry.game_week}. kolo: ${opponent ?? "Soupeř"}`,
       subtitle: isHome ? "Doma" : "Venku",
       status: matchStatus === "simulated"
         ? `${entry.home_score}:${entry.away_score}`
@@ -3245,7 +3282,7 @@ gameRouter.post("/game/bootstrap-league", async (c) => {
 
     for (let r = 0; r < body.simulateRounds; r++) {
       const cal = await db.prepare(
-        "SELECT id FROM season_calendar WHERE league_id = ? AND status = 'scheduled' ORDER BY scheduled_at ASC LIMIT 1"
+        `SELECT id FROM season_calendar WHERE league_id = ? AND status = 'scheduled' AND ${currentSeasonSql("season_calendar")} ORDER BY scheduled_at ASC LIMIT 1`
       ).bind(league.id).first<{ id: string }>();
       if (!cal) break;
 
@@ -3374,7 +3411,13 @@ gameRouter.post("/game/generate-round-report", async (c) => {
   const { calculateStandings } = await import("../stats/standings");
   const { generateAiRoundReport } = await import("../news/ai-reporter");
   const standings = await calculateStandings(c.env.DB, cal.league_id);
-  await generateAiRoundReport(c.env.DB, c.env.GEMINI_API_KEY, cal.league_id, calendarId, cal.game_week, standings);
+  // Prázdná odpověď modelu teď vyhazuje chybu (kvůli retry fronty); tady ji vrátit čitelně.
+  try {
+    await generateAiRoundReport(c.env.DB, c.env.GEMINI_API_KEY, cal.league_id, calendarId, cal.game_week, standings);
+  } catch (e) {
+    logger.warn({ module: "game.ts" }, `dogenerování článku kola ${calendarId}`, e);
+    return c.json({ ok: false, generated: false, error: e instanceof Error ? e.message : "článek se nepodařilo vygenerovat" }, 502);
+  }
 
   const report = await c.env.DB.prepare(
     "SELECT headline, substr(body, 1, 240) as preview, length(body) as len FROM news WHERE league_id = ? AND game_week = ? AND type = 'ai_report'"
@@ -3925,6 +3968,7 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
         JOIN teams t1 ON m.home_team_id = t1.id
         JOIN teams t2 ON m.away_team_id = t2.id
         WHERE sc.league_id = ? AND sc.status = 'scheduled'
+          AND ${currentSeasonSql("sc")}
           AND (m.home_team_id = ? OR m.away_team_id = ?)
         ORDER BY sc.scheduled_at ASC LIMIT 30`
       ).bind(teamId, team.league_id, teamId, teamId).all();
@@ -5015,7 +5059,7 @@ gameRouter.get("/teams/:teamId/search-players", async (c) => {
 
 // Sign free agent (pravidla v services/transfer-actions.ts, platí i pro AI trenéra)
 gameRouter.post("/teams/:teamId/free-agents/:faId/sign", async (c) => {
-  const body = await c.req.json<{ offeredWage: number }>();
+  const body = await c.req.json<{ offeredWage?: number | null }>();
   const res = await signFreeAgent(c.env, c.req.param("teamId"), c.req.param("faId"), body.offeredWage);
   if (!res.ok) return transferError(c, res);
   const { ok: _ok, ...result } = res;
@@ -5318,8 +5362,8 @@ gameRouter.get("/teams/:teamId/watchlist", async (c) => {
 
 // Withdraw listing
 gameRouter.delete("/teams/:teamId/listings/:listingId", async (c) => {
-  await withdrawListing(c.env, c.req.param("teamId"), c.req.param("listingId"));
-  return c.json({ ok: true });
+  const res = await withdrawListing(c.env, c.req.param("teamId"), c.req.param("listingId"));
+  return res.ok ? c.json({ ok: true }) : transferError(c, res);
 });
 
 // ═══ HOSTOVÁNÍ: přehled půjčených hráčů, podrobnosti, stažení ═══
@@ -5572,6 +5616,9 @@ gameRouter.get("/teams/:teamId/offers", async (c) => {
        json_extract(to2.virtual_team_data, '$.name'),
        CASE WHEN json_valid(to2.message) THEN json_extract(to2.message, '$.teamName') END,
        'Neznámý klub') ELSE t.name END`;
+  // Nabídka po lhůtě na odpověď mezi aktivní nepatří, i když ji tick ještě neuklidil
+  // (lhůta je v reálném čase, viz transfers/offer-deadline.ts).
+  const activeSince = new Date().toISOString();
   const incoming = await c.env.DB.prepare(
     `SELECT to2.*, p.first_name, p.last_name, p.age, p.position, p.overall_rating, p.avatar as player_avatar, p.skills as player_skills,
      ${virtualNameSql} as from_team_name, t.league_id as from_league_id,
@@ -5584,8 +5631,8 @@ gameRouter.get("/teams/:teamId/offers", async (c) => {
      CASE WHEN to2.from_team_id = 'virtual_ai' THEN 1 ELSE 0 END as is_virtual
      FROM transfer_offers to2 JOIN players p ON to2.player_id = p.id LEFT JOIN teams t ON to2.from_team_id = t.id
      WHERE to2.to_team_id IN (SELECT id FROM teams WHERE id = ? OR parent_team_id = ?)
-       AND to2.status IN ('pending','countered') ORDER BY to2.created_at DESC`
-  ).bind(clubTeamId, clubTeamId).all();
+       AND to2.status IN ('pending','countered') AND to2.expires_at > ? ORDER BY to2.created_at DESC`
+  ).bind(clubTeamId, clubTeamId, activeSince).all();
   const myTeam = await c.env.DB.prepare("SELECT league_id FROM teams WHERE id = ?").bind(clubTeamId).first<{ league_id: string }>();
   const outgoing = await c.env.DB.prepare(
     `SELECT to2.*, p.first_name, p.last_name, p.age, p.position, p.avatar as player_avatar, p.skills as player_skills,
@@ -5599,8 +5646,8 @@ gameRouter.get("/teams/:teamId/offers", async (c) => {
      COALESCE((SELECT COALESCE(la.parent_team_id, la.id) FROM teams la WHERE la.id = to2.last_action_by), to2.last_action_by) as last_action_club_id
      FROM transfer_offers to2 JOIN players p ON to2.player_id = p.id JOIN teams t ON to2.to_team_id = t.id
      WHERE to2.from_team_id IN (SELECT id FROM teams WHERE id = ? OR parent_team_id = ?)
-       AND to2.status IN ('pending','countered') ORDER BY to2.created_at DESC`
-  ).bind(clubTeamId, clubTeamId).all();
+       AND to2.status IN ('pending','countered') AND to2.expires_at > ? ORDER BY to2.created_at DESC`
+  ).bind(clubTeamId, clubTeamId, activeSince).all();
 
   // Historie — uzavrene offery (accepted, rejected, withdrawn, expired). Kam tym patril, ta role zustava.
   // LEFT JOIN kvůli virtuálním klubům; hráč může být po prodeji virtuálnímu klubu smazán → LEFT JOIN players + fallback.
@@ -5728,11 +5775,14 @@ gameRouter.get("/teams/:teamId/offers", async (c) => {
   // soutěž odhlasovala. A hlavně nevěděl o výjimce pro mládež — u přesunu mezi
   // A-týmem a rezervou se poplatek neplatí, protože to není přestup mezi
   // soutěžemi dospělých.
-  const { computeTransferLevies } = await import("../competition/transfer-levy");
+  const { computeTransferLevies, buyoutLoanFee } = await import("../competition/transfer-levy");
   const dopocitejPoplatek = async (rows: Record<string, unknown>[]) => {
     const out: Record<string, unknown>[] = [];
     for (const r of rows) {
-      const castka = Number(r.counter_amount ?? r.offer_amount ?? 0);
+      // Odkup z hostování: do základu poplatku patří i poplatek zaplacený za hostování.
+      const loanFeePaid = r.offer_type !== "loan" && r.from_team_id !== "virtual_ai"
+        ? await buyoutLoanFee(c.env.DB, String(r.player_id), String(r.from_team_id)) : 0;
+      const castka = Number(r.counter_amount ?? r.offer_amount ?? 0) + loanFeePaid;
       const poplatky = await computeTransferLevies(c.env.DB, {
         buyerLeagueId: r.from_league_id as string | null,
         sellerLeagueId: r.to_league_id as string | null,
@@ -5898,11 +5948,14 @@ gameRouter.get("/teams/:teamId/offers/:offerId", async (c) => {
   const currentAmount = (offer.counter_amount != null ? offer.counter_amount : offer.offer_amount) as number;
   const crossLeague = !!(fromTeamRow?.league_id && sellerSquad?.league_id && fromTeamRow.league_id !== sellerSquad.league_id);
   // Stejný výpočet jako při přijetí, jinak by náhled ukazoval jinou částku, než se strhne.
-  const { computeTransferLevies: previewLevies } = await import("../competition/transfer-levy");
+  const { computeTransferLevies: previewLevies, buyoutLoanFee: previewLoanFee } = await import("../competition/transfer-levy");
+  // Odkup z hostování: do základu poplatku patří i poplatek zaplacený za hostování.
+  const loanFeePaid = offer.offer_type !== "loan" && offer.from_team_id !== "virtual_ai"
+    ? await previewLoanFee(c.env.DB, String(offer.player_id), String(offer.from_team_id)) : 0;
   const adminFee = (await previewLevies(c.env.DB, {
     buyerLeagueId: fromTeamRow?.league_id as string | null | undefined,
     sellerLeagueId: sellerSquad?.league_id,
-    amount: currentAmount, isLoan: offer.offer_type === "loan",
+    amount: currentAmount + loanFeePaid, isLoan: offer.offer_type === "loan",
   })).adminFee;
 
   // Zájem hráče o přestup — u aktivní nabídky čerstvý přepočet, u uzavřené snapshot.
@@ -6110,18 +6163,17 @@ async function vratZHostovani(
   },
   iniciator: "hostujici" | "kmenovy",
 ): Promise<void> {
-  const borrowerTeamId = player.team_id;
+  // Hráč může sedět v U21 hostitele: peníze, smlouva i telefon patří jeho áčku.
+  const borrowerTeamId = await resolveClubTeamId(db, player.team_id) ?? player.team_id;
   const ownerRosterTeamId = player.loan_from_team_id;
   const ownerClubTeamId = await resolveClubTeamId(db, ownerRosterTeamId) ?? ownerRosterTeamId;
   const gameDate = (await db.prepare("SELECT game_date FROM teams WHERE id = ?")
     .bind(borrowerTeamId).first<{ game_date: string }>())?.game_date ?? new Date().toISOString();
 
-  await db.prepare("UPDATE players SET team_id = ?, loan_from_team_id = NULL, loan_until = NULL WHERE id = ?")
-    .bind(ownerRosterTeamId, player.id).run();
+  const { returnLoanedPlayerStmt, closeLoanContractStmt } = await import("../transfers/loan-return");
+  await returnLoanedPlayerStmt(db, player.id, ownerRosterTeamId).run();
 
-  await db.prepare(
-    "UPDATE player_contracts SET is_active = 0, left_at = ?, leave_type = ? WHERE player_id = ? AND team_id = ? AND is_active = 1"
-  ).bind(gameDate, iniciator === "kmenovy" ? "loan_recalled" : "loan_terminated", player.id, borrowerTeamId)
+  await closeLoanContractStmt(db, player.id, gameDate, iniciator === "kmenovy" ? "loan_recalled" : "loan_terminated")
     .run().catch((e) => logger.warn({ module: "game" }, "close loan contract failed", e));
 
   await onPlayerTransferred(db, player.id, ownerRosterTeamId, { permanent: false });
@@ -6167,7 +6219,10 @@ gameRouter.post("/teams/:teamId/loans/:playerId/terminate", async (c) => {
   const teamId = c.req.param("teamId");
   const player = await nactiHostujicihoHrace(c.env.DB, c.req.param("playerId"));
   if (!player) return c.json({ error: "Hráč nenalezen" }, 404);
-  if (player.team_id !== teamId) return c.json({ error: "Hráč není ve tvém klubu" }, 403);
+  // Hostující hráč smí u hostitele i do U21, ukončit hostování jde odkudkoli z klubu.
+  const playerClubTeamId = await resolveClubTeamId(c.env.DB, player.team_id);
+  const actorClubTeamId = await resolveClubTeamId(c.env.DB, teamId);
+  if (!playerClubTeamId || playerClubTeamId !== actorClubTeamId) return c.json({ error: "Hráč není ve tvém klubu" }, 403);
   if (!player.loan_from_team_id) return c.json({ error: "Hráč není na hostování" }, 400);
 
   await vratZHostovani(c.env.DB, { ...player, loan_from_team_id: player.loan_from_team_id }, "hostujici");
@@ -6207,7 +6262,8 @@ gameRouter.get("/teams/:teamId/player-offers", async (c) => {
        LEFT JOIN teams pt ON pt.id = yp.team_id LEFT JOIN villages pv ON pv.id = pt.village_id
       WHERE o.team_id = ? AND o.status = 'pending' AND o.expires_at > ? ORDER BY o.created_at DESC`
   ).bind(teamId, offerCutoff).all().catch((e) => { logger.warn({ module: "game.ts", teamId }, "player offers", e); return { results: [] }; });
-  return c.json(offers.results.map((o) => ({
+  // Skrytý talent a stropy rozvoje z nabídky se neposílají (services/player-offer-actions.ts)
+  return c.json(offers.results.map((o) => ({ o, details: publicOfferDetails(o as { source: unknown; prospect_id: unknown; personality: unknown; life_context: unknown }) })).map(({ o, details }) => ({
     id: o.id, source: o.source, sourceName: o.source_name, message: o.message,
     // Žák z akademie (academy/service.ts), ne náhodný dorostenec
     fromAcademy: !!o.prospect_id,
@@ -6218,8 +6274,10 @@ gameRouter.get("/teams/:teamId/player-offers", async (c) => {
     overallRating: o.overall_rating, weeklyWage: o.weekly_wage, expiresAt: o.expires_at,
     skills: JSON.parse((o.skills as string) ?? "{}"),
     physical: JSON.parse((o.physical as string) ?? "{}"),
-    personality: JSON.parse((o.personality as string) ?? "{}"),
-    lifeContext: JSON.parse((o.life_context as string) ?? "{}"),
+    personality: details.personality,
+    lifeContext: details.lifeContext,
+    /** Pásmo talentu kluka z dorostu (ne žáka z akademie), jinak null. */
+    talentBand: details.talentBand,
     avatar: JSON.parse((o.avatar as string) ?? "{}"),
   })));
 });
@@ -6568,6 +6626,19 @@ gameRouter.get("/teams/:teamId/coach-interviews", async (c) => {
   return c.json({ interviews, journalist: tazatel });
 });
 
+/**
+ * Uloží odpovědi a přepne rozhovor z pending na answered jedním příkazem.
+ * Vrací true jen tomu požadavku, který rozhovor opravdu zabral.
+ */
+export async function claimInterviewAnswer(
+  db: D1Database, interviewId: string, answers: string[], tones: string[],
+): Promise<boolean> {
+  const res = await db.prepare(
+    "UPDATE coach_interviews SET status = 'answered', answers = ?, answer_tones = ? WHERE id = ? AND status = 'pending'"
+  ).bind(JSON.stringify(answers), JSON.stringify(tones), interviewId).run();
+  return (res.meta?.changes ?? 0) === 1;
+}
+
 // POST /api/teams/:teamId/coach-interviews/:interviewId/answer — submit answers + generate article
 gameRouter.post("/teams/:teamId/coach-interviews/:interviewId/answer", async (c) => {
   const teamId = c.req.param("teamId");
@@ -6599,11 +6670,12 @@ gameRouter.post("/teams/:teamId/coach-interviews/:interviewId/answer", async (c)
   const tones = normalizeTones(body.tones, answers.length);
 
   // KROK 1: Okamžitě ulož odpovědi před Gemini — odpovědi se neztratí při selhání generování
-  await c.env.DB.prepare(
-    "UPDATE coach_interviews SET status = 'answered', answers = ?, answer_tones = ? WHERE id = ?"
-  ).bind(JSON.stringify(answers), JSON.stringify(tones), interviewId)
-    .run()
-    .catch((e) => { logger.warn({ module: "game.ts" }, "save interview answers", e); });
+  // Podmínka na stav dělá z uložení zároveň zabrání rozhovoru: ze dvou souběžných
+  // odeslání projde jedno, druhé nesmí znovu zaúčtovat efekty ani vydat článek.
+  const claimed = await claimInterviewAnswer(c.env.DB, interviewId, answers, tones)
+    .catch((e) => { logger.warn({ module: "game.ts" }, "save interview answers", e); return null; });
+  if (claimed === null) return c.json({ error: "Odpovědi se nepodařilo uložit. Zkus to znovu." }, 500);
+  if (!claimed) return c.json({ error: "Rozhovor nenalezen nebo již zpracován" }, 409);
 
   // ── Pozápasový rozhovor má vlastní cestu ──
   // Efekty se zaúčtují VŽDY, i když Gemini selže — jinak by si rozhodčí nic
@@ -6838,6 +6910,7 @@ gameRouter.post("/admin/teams/:teamId/generate-interview", async (c) => {
      WHERE (m.home_team_id = ? OR m.away_team_id = ?)
        AND sc.scheduled_at > datetime('now')
        AND sc.status = 'scheduled'
+       AND ${currentSeasonSql("sc")}
      ORDER BY sc.scheduled_at ASC LIMIT 1`
   ).bind(teamId, teamId, teamId)
     .first<{ calendar_id: string; game_week: number; scheduled_at: string; league_id: string }>()
@@ -6865,7 +6938,7 @@ gameRouter.post("/admin/leagues/:leagueId/generate-matchday-preview", async (c) 
   // Najdi nejbližší nadcházející kolo (status='scheduled') této ligy
   const nextCal = await c.env.DB.prepare(
     `SELECT id, game_week, scheduled_at FROM season_calendar
-     WHERE league_id = ? AND status = 'scheduled'
+     WHERE league_id = ? AND status = 'scheduled' AND ${currentSeasonSql("season_calendar")}
      ORDER BY scheduled_at ASC LIMIT 1`
   ).bind(leagueId)
     .first<{ id: string; game_week: number; scheduled_at: string }>()
@@ -6908,9 +6981,9 @@ gameRouter.post("/admin/rounds/cleanup", async (c) => {
   return c.json(await cleanupPlayedRound(c.env.DB, calendarId));
 });
 
-// POST /api/admin/rounds/finish?calendarId=X — dokončí kolo, které dohrála pojistka:
-// oznámení o výsledcích, události mezi koly, nahodilé události, úklid zápasových chatů.
-// Jednou na kolo.
+// POST /api/admin/rounds/finish?calendarId=X — doběhne agendu odehraného kola (přehled
+// výsledků, oznámení, články, události mezi koly, úklid). Hotové kroky neopakuje a kolo
+// s dokončenou agendou odmítne, takže je bezpečné ho volat opakovaně i na zdravé kolo.
 gameRouter.post("/admin/rounds/finish", async (c) => {
   const calendarId = c.req.query("calendarId");
   if (!calendarId) return c.json({ error: "calendarId je povinný" }, 400);
@@ -7064,6 +7137,27 @@ gameRouter.post("/game/delegate-referees", async (c) => {
   return c.json({ ok: true, delegated, calendars: cals?.results.length ?? 0, gameDate: gd.d });
 });
 
+// POST /api/admin/rollover-phase?season=N&phase=sponsors|municipal_elections&action=retry|skip
+// Ruční rozhodnutí o fázi rolloveru „nejvýš jednou“, která spadla nebo se přerušila a rollover
+// na ní stojí. retry = další krok ji pustí znovu, skip = uzavře ji bez dokončení.
+// ?dryRun=1 (výchozí) jen vrátí stav fáze a poslední chybu; ?dryRun=0 rozhodnutí zapíše.
+gameRouter.post("/admin/rollover-phase", async (c) => {
+  const season = Number(c.req.query("season"));
+  const phase = c.req.query("phase") ?? "";
+  const action = c.req.query("action") ?? null;
+  const { ROLLOVER_PHASES, resolveRolloverPhase } = await import("../season/season-rollover");
+  if (!Number.isInteger(season) || season < 1) return c.json({ error: "Chybí číslo končící sezóny (season)." }, 400);
+  if (!(ROLLOVER_PHASES as readonly string[]).includes(phase)) return c.json({ error: `Neznámá fáze. Fáze: ${ROLLOVER_PHASES.join(", ")}` }, 400);
+  if (action !== null && action !== "retry" && action !== "skip") return c.json({ error: "action je retry nebo skip." }, 400);
+  try {
+    const dryRun = c.req.query("dryRun") !== "0";
+    return c.json({ dryRun, ...(await resolveRolloverPhase(c.env.DB, season, phase as (typeof ROLLOVER_PHASES)[number], action, dryRun)) });
+  } catch (e) {
+    logger.error({ module: "game.ts" }, "rozhodnutí o fázi rolloveru", e);
+    return c.json({ error: "Stav fáze se nepodařilo načíst nebo zapsat." }, 500);
+  }
+});
+
 // POST /api/admin/end-season?force=1 — GLOBÁLNÍ chunkovaná orchestrace konce sezóny.
 // Zakončí celý ročník napříč všemi senior ligami + založí nový globální ročník.
 // Volat OPAKOVANĚ dokud allDone=true (admin tlačítko / curl loop). Jedna jednotka práce/invokaci.
@@ -7191,7 +7285,7 @@ gameRouter.post("/teams/:teamId/season-welcome/dismiss", async (c) => {
 });
 
 // POST /api/teams/:teamId/season-recap/decide — manažer rozhodl souboje „kdo zůstane".
-// Body: { leaving: string[] } — ID hráčů, kteří odejdou (poražení v duelech). Validuje proti staged duelům.
+// Body: { leaving: string[] } — ID hráčů, kteří odejdou, právě jeden z každé dvojice (jinak 400).
 gameRouter.post("/teams/:teamId/season-recap/decide", async (c) => {
   const teamId = c.req.param("teamId");
   const body = await c.req.json<{ leaving: string[] }>().catch((e) => { logger.warn({ module: "game.ts" }, "parse decide body", e); return null; });
@@ -7437,14 +7531,51 @@ gameRouter.get("/teams/:teamId/cup/team/:cupTeamId", async (c) => {
 });
 
 // POST /api/admin/run-daily-tick — ruční spuštění denního ticku (globální hodiny + auto-pohár + vše).
+// Bez parametru se chová jako cron: hotový den přeskočí, v nedoběhlém pokračuje až 20 minut
+// po jeho startu. ?force=1 značku dne obejde (i hotovou), provede ale jen kroky, které ještě
+// nemají záznam o dokončení (daily_tick_steps), takže finance ani trénink neproběhnou dvakrát.
 gameRouter.post("/admin/run-daily-tick", async (c) => {
   const { executeDailyTick } = await import("../season/daily-tick");
   try {
-    const r = await executeDailyTick(c.env);
-    return c.json({ ok: true, events: r.events?.length ?? 0 });
+    const r = await executeDailyTick(c.env, undefined, { force: c.req.query("force") === "1" });
+    return c.json({
+      ok: true, events: r.events?.length ?? 0,
+      skipped: r.skipped ?? null, resumed: r.resumed ?? false,
+      skippedSteps: r.skippedSteps ?? [], failedSteps: r.failedSteps ?? [],
+    });
   } catch (e) {
     logger.error({ module: "game.ts" }, "manual daily tick", e);
     return c.json({ error: "tick selhal" }, 500);
+  }
+});
+
+// POST /api/admin/holiday-break/shift — posun kol z vánoční přestávky (22. 12. až 2. 1.) za svátky.
+// ?dryRun=1 jen vrátí plán (kola, nové termíny, o kolik dní později skončí každá liga).
+// ?useFreeDaysBefore=1 nejdřív zaplní volné hrací dny před svátky, konec sezóny se posune méně.
+// Mění season_calendar (scheduled_at, match_day) neodehraných kol a teams.season_end.
+gameRouter.post("/admin/holiday-break/shift", async (c) => {
+  const dryRun = c.req.query("dryRun") !== "0";
+  const { shiftHolidayRounds } = await import("../season/holiday-shift");
+  try {
+    return c.json(await shiftHolidayRounds(c.env.DB, { dryRun, useFreeDaysBefore: c.req.query("useFreeDaysBefore") === "1" }));
+  } catch (e) {
+    logger.error({ module: "game.ts" }, "posun kol z vánoční přestávky", e);
+    return c.json({ error: "Posun kol selhal, rozpis zůstal beze změny." }, 500);
+  }
+});
+
+// POST /api/admin/stale-rounds/cleanup — úklid neodehraných kol starších sezón (stav scheduled).
+// ?dryRun=1 (výchozí) jen vrátí přehled po ligách a odkazy, které by úklid blokovaly;
+// ?dryRun=0 kola, jejich zápasy a sestavy smaže v jedné transakci. Stav „cancelled“ zapsat
+// nejde, CHECK na season_calendar.status a matches.status ho nezná.
+gameRouter.post("/admin/stale-rounds/cleanup", async (c) => {
+  const dryRun = c.req.query("dryRun") !== "0";
+  const { cleanupStaleRounds } = await import("../season/stale-rounds");
+  try {
+    return c.json(await cleanupStaleRounds(c.env.DB, { dryRun }));
+  } catch (e) {
+    logger.error({ module: "game.ts" }, "úklid starých neodehraných kol", e);
+    return c.json({ error: "Úklid selhal, nic se nesmazalo." }, 500);
   }
 });
 
@@ -8661,7 +8792,7 @@ gameRouter.post("/admin/news/:newsId/regenerate-interview", async (c) => {
   const result = await generateInterviewArticle(geminiKey, body.qa, body.managerName, body.teamName, opponentName);
   if (!result) return c.json({ error: "gemini failed" }, 500);
 
-  const correctionNote = "\n\n— Oprava: Předchozí verze článku chybně upravila záměrné slovní hříčky trenéra jako překlepy. Za nedorozumění se omlouváme, chyba byla na straně redaktora.";
+  const correctionNote = "\n\nOprava: Předchozí verze článku chybně upravila záměrné slovní hříčky trenéra jako překlepy. Za nedorozumění se omlouváme, chyba byla na straně redaktora.";
   const newBody = JSON.stringify({ ...body, article: result.body + correctionNote }, );
   const newHeadline = result.headline.replace(/\[oprava\]$/, "").trim() + " [oprava]";
 
@@ -8850,12 +8981,15 @@ gameRouter.get("/admin/market-stats", async (c) => {
 
 /**
  * Propojené kluby a podezřelé dvojice. Propojení se zapisuje ručně do `club_links`,
- * tady je jen přehled: kdo už propojený je a kdo spolu hraje a obchoduje nejvíc.
+ * tady je jen přehled: kdo už propojený je, kdo spolu hraje a obchoduje nejvíc a které
+ * přestupy posledního měsíce proběhly daleko od tržní hodnoty.
  */
 gameRouter.get("/admin/club-links", async (c) => {
-  const { listLinkGroups, suspiciousPairs } = await import("../competition/club-links");
-  const [groups, pairs] = await Promise.all([listLinkGroups(c.env.DB), suspiciousPairs(c.env.DB)]);
-  return c.json({ ok: true, groups, pairs });
+  const { listLinkGroups, suspiciousPairs, offPriceTransfers } = await import("../competition/club-links");
+  const [groups, pairs, offPrice] = await Promise.all([
+    listLinkGroups(c.env.DB), suspiciousPairs(c.env.DB), offPriceTransfers(c.env.DB),
+  ]);
+  return c.json({ ok: true, groups, pairs, offPriceTransfers: offPrice });
 });
 
 gameRouter.get("/admin/health", async (c) => {

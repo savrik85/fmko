@@ -18,9 +18,11 @@ interface Props {
   };
   manager: { name: string; backstory: string; age: number; avatar: Record<string, unknown> | null } | null;
   position: number | null;
+  /** Číslo právě hrané sezóny (z API), null když se nenačetlo. */
+  season?: number | null;
 }
 
-export function InvitePageClient({ team, manager, position }: Props) {
+export function InvitePageClient({ team, manager, position, season }: Props) {
   const managerName = manager?.name ?? "Tren\u00E9r";
   const color = team.primary_color || "#2D5F2D";
   const initials = team.name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase();
@@ -108,7 +110,7 @@ export function InvitePageClient({ team, manager, position }: Props) {
         {/* Early access note */}
         <div className="rounded-xl px-4 py-3 mb-8 text-center" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
           <p className="text-white/40 text-xs leading-relaxed">
-            {"\u{1F331} Probíhá první testovací sezóna. Hra se aktivně vyvíjí a tvoje připomínky pomohou utvářet další verze."}
+            {`\u{1F331} ${season ? `Hraje se ${season}. sezóna. ` : ""}Hra se dál vyvíjí a tvoje připomínky pomáhají utvářet další verze.`}
           </p>
         </div>
 

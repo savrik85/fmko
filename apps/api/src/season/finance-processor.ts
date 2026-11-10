@@ -275,7 +275,7 @@ export async function recordTransaction(
     const pre = await db.prepare("SELECT budget FROM teams WHERE id = ?")
       .bind(teamId).first<{ budget: number }>();
     if (pre && pre.budget < 0) {
-      const msg = `BUDGET_BLOCKED: Záporný rozpočet (${pre.budget.toLocaleString("cs")} Kč) — nákupy zakázány do vyrovnání.`;
+      const msg = `BUDGET_BLOCKED: Záporný rozpočet (${pre.budget.toLocaleString("cs")} Kč). Nákupy jsou zakázány do vyrovnání.`;
       logger.warn({ module: "finance" }, `${msg} type=${type} amount=${amount} team=${teamId}`);
       throw new Error(msg);
     }
@@ -309,6 +309,32 @@ export async function recordTransaction(
  */
 export const PLACENY_HRAC_SQL = "(status IS NULL OR status NOT IN ('released', 'quit'))";
 
+/** Přívlastek do popisu transakce, ze kterého je vidět, že výdaj patří dorostu. */
+export const YOUTH_LABEL = "dorost U21";
+
+export interface ClubAccount {
+  /** Tým, ze kterého se platí: u dorostu mateřský klub, jinak tým sám. */
+  payerId: string;
+  /** Platí se za dorost (U21) z účtu mateřského klubu. */
+  isYouth: boolean;
+}
+
+/**
+ * Z jakého účtu se platí za tým.
+ *
+ * Dorost (U21) je v tabulce teams vlastní řádek s vlastním rozpočtem, který
+ * manažer nikde nevidí: přehled Financí ukazuje jen áčko. Mzdy, tréninky
+ * a pokuty dorostu proto platí mateřský klub a v jeho knize jsou označené
+ * YOUTH_LABEL. Když se tým nepodaří načíst, platí sám za sebe jako dřív.
+ */
+export async function clubAccountOf(db: D1Database, teamId: string): Promise<ClubAccount> {
+  const row = await db.prepare("SELECT team_type, parent_team_id FROM teams WHERE id = ?")
+    .bind(teamId).first<{ team_type: string | null; parent_team_id: string | null }>()
+    .catch((e) => { logger.warn({ module: "finance" }, `účet klubu pro tým ${teamId}`, e); return null; });
+  if (row?.team_type === "u21" && row.parent_team_id) return { payerId: row.parent_team_id, isYouth: true };
+  return { payerId: teamId, isYouth: false };
+}
+
 /**
  * Týdenní finanční zpracování — volá se v pondělí z daily-tick.
  * Strhne mzdy, přičte sponzory, strhne údržbu.
@@ -320,6 +346,7 @@ export async function processWeeklyFinances(
   villageSize: string,
 ): Promise<void> {
   const category = mapVillageSize(villageSize);
+  const account = await clubAccountOf(db, teamId);
 
   // Get team reputation
   const teamInfo = await db.prepare("SELECT reputation FROM teams WHERE id = ?")
@@ -343,9 +370,13 @@ export async function processWeeklyFinances(
     `SELECT COUNT(*) as cnt, COALESCE(SUM(weekly_wage), 0) as total FROM players WHERE team_id = ? AND ${PLACENY_HRAC_SQL}`
   ).bind(teamId).first<{ cnt: number; total: number }>();
 
+  // Mzdy dorostu platí mateřský klub (clubAccountOf) a v jeho knize jsou vidět zvlášť.
   if (wageResult && wageResult.total > 0) {
-    await recordTransaction(db, teamId, "wage", -wageResult.total,
-      `Týdenní mzdy: ${wageResult.cnt} hráčů`, gameDate);
+    await recordTransaction(db, account.payerId, "wage", -wageResult.total,
+      account.isYouth
+        ? `Týdenní mzdy, ${YOUTH_LABEL}: ${wageResult.cnt} hráčů`
+        : `Týdenní mzdy: ${wageResult.cnt} hráčů`,
+      gameDate);
   }
 
   // 1b. Staff wages — mzdy zaměstnanců realizačního týmu
@@ -410,9 +441,11 @@ export async function processWeeklyFinances(
   }
 
   // 5. Base sponsorship income (dle reputace — místní podpora)
+  //    Dorost ji nedostává: podnikatelé podporují klub, ne každé jeho mužstvo zvlášť.
+  //    Dřív ji U21 brala podruhé na vlastní účet, který nikdo neviděl.
   const baseSponsorMonthly = reputation * 100;
   const weeklyBaseSponsor = Math.round((baseSponsorMonthly / 4.3) * staffFx.sponsorBonusMul);
-  if (weeklyBaseSponsor > 0) {
+  if (weeklyBaseSponsor > 0 && !account.isYouth) {
     await recordTransaction(db, teamId, "sponsor_income", weeklyBaseSponsor,
       `Podpora místních podnikatelů`, gameDate);
   }
@@ -437,7 +470,10 @@ export async function processWeeklyFinances(
   const subsidyDesc = favor === 50
     ? `Dotace od obce`
     : `Dotace od obce (přízeň ${favor}/100, ×${favorMultiplier.toFixed(2)})`;
-  await recordTransaction(db, teamId, "other", weeklySubsidy, subsidyDesc, gameDate);
+  // Obec dotuje klub jednou. Dorost vlastní dotaci nemá, stejně jako podporu podnikatelů.
+  if (!account.isYouth) {
+    await recordTransaction(db, teamId, "other", weeklySubsidy, subsidyDesc, gameDate);
+  }
 
   // 7. Player contributions (členské příspěvky — 100 Kč/hráč/měsíc)
   const playerCount = wageResult?.cnt ?? 0;
@@ -827,7 +863,8 @@ export async function processMatchDayFinances(
       result,
       fans: fansCtx.fans,
       opponentReputation,
-      effectiveTicketPrice: isHome ? ticketPrice : baseTicketPrice,
+      // Cena nastavená manažerem, ne vybraná u vstupu (ta nese i plot a spokojenost). Venku se neposuzuje.
+      setTicketPrice: isHome ? (fansCtx?.fans.base_ticket_price ?? 0) : 0,
       villageBaseTicketPrice: baseTicketPrice,
       concessionMode: fansCtx.concessionMode,
       soldProducts: isHome ? soldProducts : [],
@@ -878,8 +915,10 @@ export async function processTrainingCost(
     vesnice: 200, obec: 400, mestys: 600, mesto: 1000,
   };
   const cost = costPerSession[category] ?? 400;
-  await recordTransaction(db, teamId, "training_cost", -cost,
-    `Trénink`, gameDate);
+  // Trénink dorostu platí mateřský klub, stejně jako jeho mzdy.
+  const account = await clubAccountOf(db, teamId);
+  await recordTransaction(db, account.payerId, "training_cost", -cost,
+    account.isYouth ? `Trénink, ${YOUTH_LABEL}` : `Trénink`, gameDate);
 }
 
 /**
@@ -899,14 +938,14 @@ export async function assertPurchaseAllowed(
     return {
       ok: false,
       budget: team.budget,
-      reason: `Záporný rozpočet (${team.budget.toLocaleString("cs")} Kč) — nákupy jsou zakázány do vyrovnání na nulu.`,
+      reason: `Záporný rozpočet (${team.budget.toLocaleString("cs")} Kč). Nákupy jsou zakázány do vyrovnání na nulu.`,
     };
   }
   if (team.budget < amount) {
     return {
       ok: false,
       budget: team.budget,
-      reason: `Nedostatek prostředků — potřeba ${amount.toLocaleString("cs")} Kč, k dispozici ${team.budget.toLocaleString("cs")} Kč.`,
+      reason: `Nedostatek prostředků: potřeba ${amount.toLocaleString("cs")} Kč, k dispozici ${team.budget.toLocaleString("cs")} Kč.`,
     };
   }
   return { ok: true, budget: team.budget };

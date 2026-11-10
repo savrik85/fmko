@@ -12,30 +12,34 @@ const ctx = (marketValue: number): PromiseListingContext => ({
 });
 
 describe("inzerát po slibu prodeje", () => {
-  it("meze: od 60 % tržní hodnoty do tržní hodnoty, po stovkách, dolní nikdy nad horní", () => {
-    expect(promiseListingBounds(20_000)).toEqual({ minPrice: 12_000, maxPrice: 20_000 });
-    expect(promiseListingBounds(20_050)).toEqual({ minPrice: 12_100, maxPrice: 20_100 });
+  it("meze: od tržní hodnoty do 115 %, po stovkách, dolní nikdy nad horní", () => {
+    expect(promiseListingBounds(20_000)).toEqual({ minPrice: 20_000, maxPrice: 23_000 });
+    expect(promiseListingBounds(20_050)).toEqual({ minPrice: 20_100, maxPrice: 23_200 });
     // Nejlevnější hráč: počítá se s cenou aspoň 500 Kč.
-    expect(promiseListingBounds(100)).toEqual({ minPrice: 300, maxPrice: 300 });
+    expect(promiseListingBounds(100)).toEqual({ minPrice: 500, maxPrice: 600 });
   });
 
-  it("model smí jen celou stovku v mezích, jinak platí tržní hodnota", () => {
+  it("model smí jen celou stovku v mezích; pod tržní hodnotu inzerát nejde", () => {
     const c = ctx(20_000);
-    expect(validatePromiseListing({ price: 15_000, reason: "sell him soon" }, c)).toEqual({ price: 15_000, reason: "sell him soon" });
-    expect(validatePromiseListing({ price: "16000", reason: "" }, c)?.price).toBe(16_000);
-    expect(validatePromiseListing({ price: 11_900, reason: "" }, c)).toBeNull();
-    expect(validatePromiseListing({ price: 20_100, reason: "" }, c)).toBeNull();
-    expect(validatePromiseListing({ price: 15_050, reason: "" }, c)).toBeNull();
+    expect(validatePromiseListing({ price: 21_000, reason: "sell him soon" }, c)).toEqual({ price: 21_000, reason: "sell him soon" });
+    expect(validatePromiseListing({ price: "22000", reason: "" }, c)?.price).toBe(22_000);
+    // Dřív šlo vystavit od 60 % tržní hodnoty: opory pak odcházely pod cenou.
+    expect(validatePromiseListing({ price: 15_000, reason: "" }, c)).toBeNull();
+    expect(validatePromiseListing({ price: 19_900, reason: "" }, c)).toBeNull();
+    expect(validatePromiseListing({ price: 23_100, reason: "" }, c)).toBeNull();
+    expect(validatePromiseListing({ price: 21_050, reason: "" }, c)).toBeNull();
     expect(validatePromiseListing("nonsense", c)).toBeNull();
+    // Pravidlo (jen režim off): tržní hodnota.
     expect(fallbackPromiseListing(c)).toEqual({ price: 20_000, reason: "fallback" });
   });
 
-  it("schéma drží meze a prompt říká, od kolika AI přestup přijme", () => {
+  it("schéma drží meze a prompt neslibuje prodej pod cenou", () => {
     const c = ctx(20_000);
-    expect(promiseListingSchema(c)).toMatchObject({ properties: { price: { type: "integer", minimum: 12_000, maximum: 20_000 } } });
+    expect(promiseListingSchema(c)).toMatchObject({ properties: { price: { type: "integer", minimum: 20_000, maximum: 23_000 } } });
     const prompt = renderPromiseListingPrompt(c);
     expect(prompt).toContain("market value 20,000 CZK");
-    expect(prompt).toContain("you also accept any transfer offer of at least 12,000 CZK");
-    expect(prompt).toContain("between 12,000 CZK and 20,000 CZK");
+    expect(prompt).toContain("never below his market value");
+    expect(prompt).not.toContain("you also accept any transfer offer");
+    expect(prompt).toContain("between 20,000 CZK and 23,000 CZK");
   });
 });

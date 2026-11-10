@@ -111,7 +111,7 @@ leagueRouter.get("/teams/:teamId/standings", async (c) => {
   }
 
   // Build standings array
-  const standings = teamIds.map((tid) => {
+  const unsorted = teamIds.map((tid) => {
     const s = stats[tid];
     const m = teamMeta[tid];
     const played = s.wins + s.draws + s.losses;
@@ -134,14 +134,9 @@ leagueRouter.get("/teams/:teamId/standings", async (c) => {
     };
   });
 
-  // Sort: points DESC, goal diff DESC, goals for DESC
-  standings.sort((a, b) => {
-    const pd = b.points - a.points;
-    if (pd !== 0) return pd;
-    const gd = (b.gf - b.ga) - (a.gf - a.ga);
-    if (gd !== 0) return gd;
-    return b.gf - a.gf;
-  });
+  // Pořadí drží stats/standings-order.ts (body, vzájemné zápasy, skóre, góly, id týmu).
+  const { sortStandings, toRankedMatch } = await import("../stats/standings-order");
+  const standings = sortStandings(unsorted, matches.results.map(toRankedMatch));
 
   // Assign positions
   standings.forEach((s, i) => { (s as Record<string, unknown>).pos = i + 1; });
@@ -491,7 +486,7 @@ leagueRouter.get("/leagues/:leagueId/standings", async (c) => {
     else { stats[homeId].draws++; stats[homeId].form.push("D"); stats[awayId].draws++; stats[awayId].form.push("D"); }
   }
 
-  const standings = teamIds.map((tid) => {
+  const unsorted = teamIds.map((tid) => {
     const s = stats[tid];
     const t = leagueTeams.results.find(r => r.id === tid)!;
     return {
@@ -506,7 +501,8 @@ leagueRouter.get("/leagues/:leagueId/standings", async (c) => {
     };
   });
 
-  standings.sort((a, b) => (b.points - a.points) || ((b.gf - b.ga) - (a.gf - a.ga)) || (b.gf - a.gf));
+  const { sortStandings, toRankedMatch } = await import("../stats/standings-order");
+  const standings = sortStandings(unsorted, matches.results.map(toRankedMatch));
   standings.forEach((s, i) => { (s as Record<string, unknown>).pos = i + 1; });
 
   return c.json({
@@ -845,9 +841,11 @@ leagueRouter.get("/leagues/:leagueId/transfers-overview", async (c) => {
 
   // Cross-league admin fee total (from transactions)
   const adminFeeRes = await c.env.DB.prepare(
-    `SELECT SUM(ABS(amount)) as total FROM transactions tx
-     JOIN teams t ON tx.team_id = t.id
-     WHERE tx.type = 'transfer_admin_fee' AND t.league_id = ?`
+    // Přes kluby ligy a index (team_id, type). Spojení s teams plánovač četl od transakcí
+    // a prošel celou tabulku.
+    `SELECT SUM(ABS(tx.amount)) as total FROM transactions tx
+     WHERE tx.type = 'transfer_admin_fee'
+       AND tx.team_id IN (SELECT t.id FROM teams t WHERE t.league_id = ?)`
   ).bind(leagueId).first<{ total: number }>().catch(() => ({ total: 0 }));
 
   // Top 10 biggest transfers (jen placené)

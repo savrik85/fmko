@@ -564,22 +564,22 @@ export default function FansPage() {
         <div className="mt-3 space-y-3 text-sm leading-relaxed">
           <p>Fanoušci se dělí na tři druhy podle toho, jak ti jsou věrní:</p>
           <ul className="space-y-1.5 ml-4 list-disc">
-            <li><strong className="text-card-red">🟥 Tvrdé jádro</strong> — ti, co přijdou vždycky. I když prší, i když prohráváš. Když je jich hodně, mužstvo se cítí silně doma.</li>
-            <li><strong className="text-gold-600">🟧 Pravidelní</strong> — chodí skoro pořád. Po dlouhé sérii proher pár z nich začne chybět, ale většinou se vrátí.</li>
-            <li><strong className="text-gold-500">🟨 Občasní</strong> — přijdou když mají náladu. Tihle se snadno nadchnou, ale taky snadno přestanou chodit.</li>
+            <li><strong className="text-card-red">🟥 Tvrdé jádro</strong>, ti, co přijdou vždycky. I když prší, i když prohráváš. Když je jich hodně, mužstvo se cítí silně doma.</li>
+            <li><strong className="text-gold-600">🟧 Pravidelní</strong>, chodí skoro pořád. Po dlouhé sérii proher pár z nich začne chybět, ale většinou se vrátí.</li>
+            <li><strong className="text-gold-500">🟨 Občasní</strong>, přijdou když mají náladu. Tihle se snadno nadchnou, ale taky snadno přestanou chodit.</li>
           </ul>
 
           <p className="pt-2">Fanoušci ti přibývají třemi způsoby:</p>
           <ol className="space-y-1.5 ml-4 list-decimal">
-            <li><strong>Z vlastní vesnice</strong> — automaticky podle počtu obyvatel. Když chodíš stabilně domů, občasní se časem stávají pravidelnými, pravidelní pak tvrdým jádrem.</li>
-            <li><strong>Z propagace</strong> (📢) — zaplatíš si článek ve zpravodaji a přitáhneš víc lidí. Když propaguješ <strong>3 zápasy po sobě</strong>, část z nich u tebe zůstane natrvalo.</li>
-            <li><strong>Z autobusů</strong> (🚌) — pošleš bus do sousední vesnice a doveze 8 až 45 lidí (podle velikosti). Když posíláš bus do stejné obce <strong>3 zápasy po sobě</strong>, ze čtvrtiny cestujících se stanou tví stálí fanoušci.</li>
+            <li><strong>Z vlastní vesnice</strong>, automaticky podle počtu obyvatel. Když chodíš stabilně domů, občasní se časem stávají pravidelnými, pravidelní pak tvrdým jádrem.</li>
+            <li><strong>Z propagace</strong> (📢), zaplatíš si článek ve zpravodaji a přitáhneš víc lidí. Když propaguješ <strong>3 zápasy po sobě</strong>, část z nich u tebe zůstane natrvalo.</li>
+            <li><strong>Z autobusů</strong> (🚌), pošleš bus do sousední vesnice a doveze 8 až 45 lidí (podle velikosti). Když posíláš bus do stejné obce <strong>3 zápasy po sobě</strong>, ze čtvrtiny cestujících se stanou tví stálí fanoušci.</li>
           </ol>
 
           <p className="pt-2">Pár věcí, na které si dej pozor:</p>
           <ul className="space-y-1.5 ml-4 list-disc">
             <li><strong>Vzdálenost rozhoduje.</strong> Bližší obec = víc lidí u tebe zůstane natrvalo. Z 2 km zůstane víc než dvojnásobek toho, co z 10 km. Velký bus do daleké obce přiveze sice hodně diváků, ale do stálých se jich přepíše málo.</li>
-            <li><strong>Vyplatí se vydržet.</strong> Posílej bus pravidelně. Když ho přestaneš platit, lidi z té obce postupně přestanou chodit — po 3 nepokrytých zápasech ti polovina utíká.</li>
+            <li><strong>Vyplatí se vydržet.</strong> Posílej bus pravidelně. Když ho přestaneš platit, lidi z té obce postupně přestanou chodit, po 3 nepokrytých zápasech ti polovina utíká.</li>
             <li><strong>Líp 3 různé obce než 3× ta samá.</strong> Když pošleš každý zápas bus jinam, dostáváš trvalé fanoušky ze tří míst zároveň. Když lítáš jen do jedné obce, máš sice plnější tribunu hned, ale dlouhodobě tě to omezí.</li>
           </ul>
 
@@ -680,7 +680,7 @@ export default function FansPage() {
                 <span className="text-right tabular-nums">{Math.max(0, eb.walkUp - Math.round(fanbase.homeVillage.population * 0.075))}</span>
               </div>
               <div className="italic">
-                Stálí jsou tví registrovaní — znáš je jménem, reagují na výsledky, rostou s tvými akcemi. Zbytek jsou anonymní vesničané a lidi z okolí, co prostě přijdou na zápas.
+                Stálí jsou tví registrovaní, znáš je jménem, reagují na výsledky, rostou s tvými akcemi. Zbytek jsou anonymní vesničané a lidi z okolí, co prostě přijdou na zápas.
               </div>
             </div>
           );
@@ -972,7 +972,7 @@ export default function FansPage() {
           </div>
           <div>
             <div className="flex justify-between text-xs text-muted mb-1">
-              <span>Loajalita — dlouhodobá důvěra ke klubu</span>
+              <span>Loajalita, dlouhodobá důvěra ke klubu</span>
               <span>{fans.loyalty} / 100</span>
             </div>
             <div className="w-full bg-gray-200 rounded-full h-2.5">
@@ -1149,7 +1149,7 @@ export default function FansPage() {
 
           <div className="text-sm text-muted mb-4">
             Fanoušci sledují, koho máš na lavičce. Z reputace a motivace trenéra počítáme jedno
-            číslo — <strong className="text-ink">vliv</strong>. Ten po každém zápase přidá nebo ubere
+            číslo, <strong className="text-ink">vliv</strong>. Ten po každém zápase přidá nebo ubere
             body spokojenosti a dlouhodobě posouvá hladinu loajality.
           </div>
 
@@ -1246,13 +1246,13 @@ export default function FansPage() {
             </div>
             <div className="text-sm text-muted mt-3 space-y-1">
               <p>
-                <strong className="text-ink">Po zápase</strong> se hodnota přičte ke spokojenosti —
+                <strong className="text-ink">Po zápase</strong> se hodnota přičte ke spokojenosti -
                 pro srovnání: výhra je +6, prohra −5, drahé vstupné −2.
               </p>
               <p>
                 <strong className="text-ink">Loajalita</strong> je hladina, ke které se spokojenost
                 každý den o bod vrací. Trenér tu hladinu posouvá proti reputaci klubu. Přes 100 se
-                ale nedostane — když má klub reputaci 100, kladný posun se ztratí ve stropu.
+                ale nedostane, když má klub reputaci 100, kladný posun se ztratí ve stropu.
               </p>
             </div>
           </div>
@@ -1274,7 +1274,7 @@ export default function FansPage() {
               </div>
             ) : (
               <div className="text-sm font-heading font-bold text-pitch-600 mb-3">
-                Jsi na nejvyšším stupni. Fanoušky víc nepotěšíš — soustřeď se na výsledky a vstupné.
+                Jsi na nejvyšším stupni. Fanoušky víc nepotěšíš, soustřeď se na výsledky a vstupné.
               </div>
             )}
 
@@ -1549,7 +1549,7 @@ export default function FansPage() {
       {currentTab === "sales" && concession.mode === "self" && (<>
         {/* ═══ Prodeje občerstvení ═══ */}
         <div className="card p-4 sm:p-5">
-          <SectionLabel>Prodeje občerstvení — posledních {salesHistory.length}</SectionLabel>
+          <SectionLabel>Prodeje občerstvení, posledních {salesHistory.length}</SectionLabel>
 
           {salesHistory.length === 0 ? (
             <div className="py-4 text-sm text-muted text-center">

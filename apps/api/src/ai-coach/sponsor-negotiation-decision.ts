@@ -34,6 +34,7 @@ import { cleanReason, czk, isRecord, toAmount } from "./buy-decision";
 import { FAVOR_TEXT, OWNER_TEXT } from "./main-sponsor-decision";
 import type { AiCoachProfile } from "./profile";
 import { styleText } from "./weekly-decision";
+import { promptName } from "./prompt-text";
 
 /** Kolik vlastních návrhů AI v jednom jednání nejvýš pošle. */
 export const MAX_AI_COUNTERS = 2;
@@ -378,7 +379,7 @@ export function renderSponsorTalksPrompt(c: SponsorTalksContext): string {
     `ambition ${p.ambition}, thrift ${p.thrift}, risk ${p.risk}, patience ${p.patience}, youth focus ${p.youthFocus}.`,
     `YOUR STYLE: ${styleText(p)}`,
     "",
-    `CLUB ${c.teamName}: budget ${czk(c.budget)}, reputation ${d.reputation}/100.`,
+    `CLUB ${promptName(c.teamName)}: budget ${czk(c.budget)}, reputation ${d.reputation}/100.`,
     `TALKS with ${c.sponsorName} (${c.sponsorType.replace(/_/g, " ")}) about ${what}.`,
     `OWNER: ${OWNER_TEXT[c.owner]}; favour ${c.favor}/100 (${FAVOR_TEXT[favorBand(c.favor)]}). `
       + `His patience: ${plural(c.patience, "more rejected proposal")} and he walks away and will not talk to you for 14 days.`,

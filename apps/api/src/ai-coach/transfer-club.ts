@@ -30,6 +30,13 @@ export interface AiClubState {
   dealsLast30: number;
   dealLimit: number;
   overDealLimit: boolean;
+  /** Příchody za 30 dní (koupě, hostování k nám, volní hráči, kluby mimo hru). */
+  buysLast30: number;
+  /**
+   * Limit pro vlastní nákupy počítá jen příchody: klub, který hodně prodal, musí smět kádr
+   * doplnit (dřív ho prodeje zablokovaly a zůstal s 19 hráči).
+   */
+  overBuyLimit: boolean;
 }
 
 /** Čas z databáze („YYYY-MM-DD HH:MM:SS“ i ISO) jako UTC datum. */
@@ -89,6 +96,28 @@ export async function countRecentDeals(db: D1Database, clubTeamId: string, now: 
 }
 
 /** Stav AI klubu (A-týmu). Pro lidský klub nebo U21 vrací null: rozhoduje jen AI trenér áčka. */
+/** Příchody klubu za posledních 30 dní: přijaté vlastní nabídky, volní hráči, hráči z klubů mimo hru. */
+export async function countRecentBuys(db: D1Database, clubTeamId: string, now: Date): Promise<number> {
+  const since = new Date(now.getTime() - 30 * DAY_MS).toISOString();
+  const offers = await db.prepare(
+    `SELECT COUNT(*) AS n FROM transfer_offers
+      WHERE status = 'accepted' AND julianday(resolved_at) > julianday(?)
+        AND from_team_id IN (SELECT id FROM teams WHERE id = ? OR parent_team_id = ?)`,
+  ).bind(since, clubTeamId, clubTeamId).first<{ n: number }>()
+    .catch((e) => { logger.warn({ module: M }, `nákupy klubu ${clubTeamId}`, e); return null; });
+  const signings = await db.prepare(
+    `SELECT COUNT(*) AS n FROM player_contracts
+      WHERE join_type = 'free_agent' AND julianday(joined_at) > julianday(?)
+        AND team_id IN (SELECT id FROM teams WHERE id = ? OR parent_team_id = ?)`,
+  ).bind(since, clubTeamId, clubTeamId).first<{ n: number }>()
+    .catch((e) => { logger.warn({ module: M }, `podpisy volných hráčů ${clubTeamId}`, e); return null; });
+  const outside = await db.prepare(
+    "SELECT COUNT(*) AS n FROM ai_negotiations WHERE team_id = ? AND status = 'signed' AND julianday(resolved_at) > julianday(?)",
+  ).bind(clubTeamId, since).first<{ n: number }>()
+    .catch((e) => { logger.warn({ module: M }, `nákupy od klubů mimo hru ${clubTeamId}`, e); return null; });
+  return (offers?.n ?? 0) + (signings?.n ?? 0) + (outside?.n ?? 0);
+}
+
 export async function loadAiClubState(db: D1Database, teamId: string, profile: AiCoachProfile, now: Date): Promise<AiClubState | null> {
   const team = await db.prepare(
     `SELECT t.id, t.name, t.budget, t.league_id, t.user_id, t.parent_team_id, v.district
@@ -103,10 +132,12 @@ export async function loadAiClubState(db: D1Database, teamId: string, profile: A
   const budget = Number(team.budget) || 0;
   const dealsLast30 = await countRecentDeals(db, teamId, now);
   const dealLimit = monthlyDealLimit(profile);
+  const buysLast30 = await countRecentBuys(db, teamId, now);
   return {
     teamId, name: team.name, budget, leagueId: team.league_id, district: team.district, userId: team.user_id,
     profile, members, analysis, weeklyCosts, reserve,
     spendable: Math.max(0, budget - reserve),
     dealsLast30, dealLimit, overDealLimit: dealsLast30 >= dealLimit,
+    buysLast30, overBuyLimit: buysLast30 >= dealLimit,
   };
 }

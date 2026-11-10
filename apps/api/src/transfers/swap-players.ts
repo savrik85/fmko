@@ -8,6 +8,7 @@
 import { resolveClubTeamId } from "./offer-club-scope";
 import { activeSellOnClause } from "./installments";
 import { logger } from "../lib/logger";
+import { placeInSeniorSquad } from "./senior-age";
 
 const M = "swap-players";
 
@@ -63,17 +64,22 @@ export async function swapSellOnError(
 export async function swapPlayersError(
   db: D1Database,
   ids: string[],
-  opts: { buyerClubTeamId: string; targetPlayerId: string },
+  opts: { buyerClubTeamId: string; targetPlayerId: string; sellerClubTeamId?: string },
 ): Promise<{ status: 400 | 404; error: string } | null> {
   for (const id of ids) {
     if (id === opts.targetPlayerId) return { status: 400, error: "Nelze nabídnout stejného hráče" };
-    const swap = await db.prepare("SELECT team_id, loan_from_team_id, next_match_return, first_name, last_name FROM players WHERE id = ?")
-      .bind(id).first<{ team_id: string; loan_from_team_id: string | null; next_match_return: number; first_name: string | null; last_name: string | null }>();
+    const swap = await db.prepare("SELECT team_id, loan_from_team_id, next_match_return, first_name, last_name, age FROM players WHERE id = ?")
+      .bind(id).first<{ team_id: string; loan_from_team_id: string | null; next_match_return: number; first_name: string | null; last_name: string | null; age: number }>();
     if (!swap) return { status: 404, error: "Hráč na výměnu nenalezen" };
     const swapClubTeamId = await resolveClubTeamId(db, swap.team_id);
     if (swapClubTeamId !== opts.buyerClubTeamId) return { status: 400, error: "Hráč na výměnu není ve tvém klubu" };
     if (swap.loan_from_team_id) return { status: 400, error: "Hráč na výměnu je na hostování, nelze vyměnit" };
     if (swap.next_match_return === 1) return { status: 400, error: "Hráč na výměnu čeká na návrat z U21, nelze ho nabídnout" };
+    // Za muže až od 15 let: mladší hráč na výměnu potřebuje u prodávajícího U21.
+    if (opts.sellerClubTeamId) {
+      const placement = await placeInSeniorSquad(db, opts.sellerClubTeamId, swap.age, swapPlayerName(swap));
+      if (!placement.ok) return { status: 400, error: placement.error };
+    }
     const injury = await db.prepare("SELECT 1 FROM injuries WHERE player_id = ? AND days_remaining > 0 LIMIT 1")
       .bind(id).first()
       .catch((e) => { logger.warn({ module: M }, "zranění hráče na výměnu", e); return null; });

@@ -100,7 +100,7 @@ export default function AdminPage() {
             <div className="card p-4">
               <SectionLabel>ℹ️ Systém</SectionLabel>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                <div className="break-all"><span className="text-muted">Team ID:</span> <span className="font-mono">{teamId ?? "—"}</span></div>
+                <div className="break-all"><span className="text-muted">Team ID:</span> <span className="font-mono">{teamId ?? "-"}</span></div>
                 <div className="break-all"><span className="text-muted">API:</span> <span className="font-mono">{process.env.NEXT_PUBLIC_API_URL ?? "localhost:8787"}</span></div>
                 <div><span className="text-muted">Prostředí:</span> <span className="font-mono">{env.label}</span></div>
                 <div><span className="text-muted">Admin:</span> <span className="font-mono text-pitch-500">ano</span></div>
@@ -275,9 +275,9 @@ function SeasonEndSection() {
     <div className="card p-4">
       <SectionLabel>🏁 Zakončení sezóny</SectionLabel>
       <div className="text-sm text-muted mb-3">
-        Zakončí celý ročník <strong>napříč všemi senior ligami</strong> — odměny, reputaci, ocenění, archiv,
+        Zakončí celý ročník <strong>napříč všemi senior ligami</strong>, odměny, reputaci, ocenění, archiv,
         odchody hráčů (+1 rok všem), rozhovory s trenéry a založí jeden nový globální ročník se synchronizovaným
-        kalendářem. Volá se opakovaně, dokud není hotovo — vydrž, chvíli to trvá.
+        kalendářem. Volá se opakovaně, dokud není hotovo, vydrž, chvíli to trvá.
       </div>
       <div className="flex flex-wrap gap-3 items-center mb-3">
         <label className="flex items-center gap-1.5 text-sm">
@@ -548,15 +548,15 @@ function BroadcastSection() {
   };
 
   const formatDate = (val: string | null | undefined) => {
-    if (!val) return "—";
+    if (!val) return "-";
     const d = new Date(val);
-    if (isNaN(d.getTime())) return "—";
+    if (isNaN(d.getTime())) return "-";
     return d.toLocaleString("cs", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" });
   };
 
   return (
     <div className="card p-4">
-      <SectionLabel>📢 Předseda Přeboru — zpráva všem</SectionLabel>
+      <SectionLabel>📢 Předseda Přeboru, zpráva všem</SectionLabel>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end mb-4">
         <textarea
@@ -936,7 +936,7 @@ function UserManagement() {
 
   const activityOf = (u: (typeof users)[number]) => {
     const raw = u.last_activity_at ?? u.last_login_at;
-    if (!raw) return "—";
+    if (!raw) return "-";
     return new Date(raw.endsWith("Z") ? raw : raw.replace(" ", "T") + "Z")
       .toLocaleString("cs", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
   };
@@ -979,7 +979,7 @@ function UserManagement() {
           <li key={u.id} className="py-2.5">
             <div className="font-mono text-sm break-all">{u.email}{u.is_admin ? <span className="font-sans text-pitch-600"> · admin</span> : null}</div>
             <div className="text-sm text-muted">
-              {u.team_name ?? "bez týmu"} · {u.district ?? "—"} · {activityOf(u)}
+              {u.team_name ?? "bez týmu"} · {u.district ?? "-"} · {activityOf(u)}
             </div>
             <div className="mt-1">{actionsOf(u)}</div>
           </li>
@@ -1002,8 +1002,8 @@ function UserManagement() {
             {shown.map((u) => (
               <tr key={u.id} className="border-b border-gray-50 hover:bg-gray-50/50">
                 <td className="py-1.5 px-3 font-mono text-sm break-all">{u.email}</td>
-                <td className="py-1.5 px-3">{u.team_name ?? "—"}</td>
-                <td className="py-1.5 px-3 text-muted">{u.district ?? "—"}</td>
+                <td className="py-1.5 px-3">{u.team_name ?? "-"}</td>
+                <td className="py-1.5 px-3 text-muted">{u.district ?? "-"}</td>
                 <td className="py-1.5 px-3">{u.is_admin ? "✓" : ""}</td>
                 <td className="py-1.5 px-3 text-muted whitespace-nowrap">{activityOf(u)}</td>
                 <td className="py-1.5 px-3">{actionsOf(u)}</td>
@@ -1340,7 +1340,7 @@ function TrhSection() {
                   {data.podleDnu.map((r, i) => (
                     <tr key={i} className="border-t border-gray-100">
                       <td className="py-1.5 whitespace-nowrap">{r.den}</td>
-                      <td className="py-1.5">{r.district ?? "—"}</td>
+                      <td className="py-1.5">{r.district ?? "-"}</td>
                       <td className="py-1.5 text-right font-bold">{r.vytvorila_hra}</td>
                       <td className="py-1.5 text-right">{r.od_manazeru}</td>
                       <td className="py-1.5 text-right">{r.od_ai}</td>
@@ -1387,6 +1387,11 @@ interface PairClub extends LinkedClub { groupId: string | null }
 interface ClubLinksData {
   groups: Array<{ groupId: string; clubs: Array<LinkedClub & { note: string | null; linkedAt: string }> }>;
   pairs: Array<{ a: PairClub; b: PairClub; friendlies: number; transfers: number; loans: number; money: number; linked: boolean }>;
+  offPriceTransfers?: Array<{
+    offerId: string; resolvedAt: string; playerId: string; playerName: string; age: number | null; position: string | null;
+    rating: number | null; buyer: { teamId: string; name: string }; seller: { teamId: string; name: string };
+    paid: number; swapValue: number; marketValue: number; ratio: number; linked: boolean;
+  }>;
 }
 
 /** Podezřelých dvojic bývá desítky, nejdřív stačí ty nejčastější. */
@@ -1497,6 +1502,38 @@ function ClubLinksSection() {
             {showAllPairs ? "Jen prvních deset" : `Zobrazit všechny dvojice (${data.pairs.length})`}
           </button>
         )}
+      </div>
+
+      <div className="card p-4">
+        <SectionLabel>💸 Přestupy mimo tržní cenu</SectionLabel>
+        <div className="text-sm text-muted mb-3">
+          Přestupy mezi lidskými kluby za posledních 30 dní s cenou nad trojnásobkem nebo pod třetinou tržní hodnoty.
+          Tržní hodnota je z dnešního hodnocení hráče. Nic se tu neblokuje.
+        </div>
+        {(data.offPriceTransfers ?? []).length === 0 && <div className="text-sm text-muted">Žádný takový přestup.</div>}
+        <div className="grid gap-2 lg:grid-cols-2">
+          {(data.offPriceTransfers ?? []).map((t) => (
+            <div key={t.offerId} className="rounded-soft border border-gray-200 p-3">
+              <div className="flex flex-wrap items-baseline gap-x-2">
+                <a href={`/hrac/${t.playerId}`} className="font-heading font-bold text-base hover:underline">{t.playerName}</a>
+                <span className="text-sm text-muted">{t.position ?? "?"} · {t.age ?? "?"} let · hodnocení {t.rating ?? "?"}</span>
+                {t.linked && <span className="text-sm font-heading font-bold text-pitch-600">propojené kluby</span>}
+              </div>
+              <div className="text-sm mt-1">
+                <a href={`/tym/${t.seller.teamId}`} className="hover:underline">{t.seller.name}</a>
+                {" → "}
+                <a href={`/tym/${t.buyer.teamId}`} className="hover:underline">{t.buyer.name}</a>
+                {" · "}{new Date(t.resolvedAt).toLocaleDateString("cs")}
+              </div>
+              <div className="text-sm mt-1">
+                Zaplaceno {t.paid.toLocaleString("cs")} Kč
+                {t.swapValue > 0 && ` a hráči za ${t.swapValue.toLocaleString("cs")} Kč`}
+                {" · "}tržní hodnota {t.marketValue.toLocaleString("cs")} Kč
+                {" · "}<span className="font-heading font-bold">{t.ratio.toLocaleString("cs")}×</span>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );

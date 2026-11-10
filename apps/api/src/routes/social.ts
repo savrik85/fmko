@@ -14,15 +14,15 @@ import {
   cleanUserText, mentionIds, parseTargetKey, type FeedCategory, type Mention, type Mute,
 } from "../social/feed-model";
 import {
-  addMute, commentsToday, insertManagerComment, insertPost, insertReport, loadComments, loadFeed,
-  loadFeedItem, loadMutes, loadReplyTarget, loadViewer, managerName, mentionableTeams, postsToday,
-  removeMute, resolveMentions, resolveTarget, softDeleteComment, softDeletePost, toggleLike,
+  addMute, commentsToday, hideIfReported, insertManagerComment, insertPost, insertReport, loadComments, loadFeed,
+  loadFeedItem, loadMutes, loadReplyTarget, loadViewer, managerName, mentionableTeams, openReportCount, postsToday,
+  removeMute, removeReported, resolveMentions, resolveTarget, restoreAutoHidden, softDeleteComment, softDeletePost, toggleLike,
 } from "../social/store";
-import { likedWhat, notifySocial } from "../social/notify";
+import { likedWhat, notifyAdminsOfReport, notifySocial } from "../social/notify";
 import { SOCIAL_AI_MODE_KEY, aiMode, scheduleAiReplies, type ReplyTrigger } from "../social/ai-replies";
 import {
   applySocialJournalistEffects, applySocialLike, applySocialToneEffects, modelToneClassifier, relationTargets,
-  textMentionsClub, type JournalistToneInput, type ToneInput,
+  scrubRemovedQuotes, textMentionsClub, type JournalistToneInput, type ToneInput,
 } from "../social/relation-effects";
 
 const M = "social-route";
@@ -72,9 +72,9 @@ async function relationEffects(env: Bindings, input: ToneInput): Promise<number>
   return applySocialToneEffects(env.DB, modelToneClassifier(env), input);
 }
 
-/** Komentář pod článkem novináře nebo odpověď novináři hýbe jeho vztahem ke klubu. */
+/** Odpověď novináři nebo komentář, který na něj míří, hýbe jeho vztahem ke klubu. */
 async function journalistEffects(env: Bindings, input: JournalistToneInput): Promise<number> {
-  if (input.journalistIds.length === 0) return 0;
+  if (input.journalistIds.length === 0 && !input.repliedJournalistId) return 0;
   if (await aiMode(env) === "off") return 0;
   return applySocialJournalistEffects(env.DB, modelToneClassifier(env), input);
 }
@@ -104,6 +104,9 @@ socialRouter.get("/teams/:teamId/social/comments", async (c) => {
   const key = c.req.query("key") ?? "";
   const ref = parseTargetKey(key);
   if (!ref || ref.kind === "comment" || ref.kind === "fanpost") return c.json({ error: "Neznámý příspěvek" }, 400);
+  // Pod smazaným nebo staženým příspěvkem se diskuse nevydává: odkaz z oznámení
+  // nebo starý klíč by jinak ukázal komentáře k něčemu, co už nikdo vidět nemá.
+  if (!(await resolveTarget(c.env.DB, key))) return c.json({ error: "Příspěvek už není k dispozici." }, 404);
   return c.json({ comments: await loadComments(c.env.DB, key, viewer) });
 });
 
@@ -117,7 +120,9 @@ socialRouter.post("/teams/:teamId/social/posts", async (c) => {
     return c.json({ error: `Dnes už jsi napsal ${POSTS_PER_DAY} příspěvků. Zítra zase.` }, 429);
   }
   const mentions = await resolveMentions(c.env.DB, text, mentionIds(body?.mentions), viewer.teamId);
-  const id = await insertPost(c.env.DB, viewer, text, mentions);
+  // Limit se hlídá i v zápisu: kontrola výš je jen rychlá odpověď, souběžné požadavky by ji obešly.
+  const id = await insertPost(c.env.DB, viewer, text, mentions, POSTS_PER_DAY);
+  if (!id) return c.json({ error: `Dnes už jsi napsal ${POSTS_PER_DAY} příspěvků. Zítra zase.` }, 429);
   const key = `post:${id}`;
   const authorName = await managerName(c.env.DB, viewer.teamId);
   await notifyMentions(c, mentions, key, viewer.teamId, authorName, text, `příspěvek trenéra ${authorName}`);
@@ -163,7 +168,9 @@ socialRouter.post("/teams/:teamId/social/comments", async (c) => {
   if (replyToId && !replyTo) return c.json({ error: "Komentář, na který odpovídáš, už není." }, 404);
 
   const mentions = await resolveMentions(c.env.DB, text, mentionIds(body?.mentions), viewer.teamId);
-  const { id, authorName } = await insertManagerComment(c.env.DB, viewer, key, text, replyTo?.id ?? null, mentions);
+  const inserted = await insertManagerComment(c.env.DB, viewer, key, text, replyTo?.id ?? null, mentions, COMMENTS_PER_DAY);
+  if (!inserted) return c.json({ error: "Na dnešek už toho bylo dost. Zítra zase." }, 429);
+  const { id, authorName } = inserted;
 
   // Komu dát vědět: označeným, majiteli příspěvku a tomu, komu se odpovídá (když je to jiný trenér).
   // Kdo je označený, dostane jen zmínku, ne k tomu ještě oznámení o komentáři.
@@ -192,10 +199,8 @@ socialRouter.post("/teams/:teamId/social/comments", async (c) => {
 
   await runLater(c, journalistEffects(c.env, {
     authorTeamId: viewer.teamId, text, sourceKey: `comment:${id}`, context: target.title,
-    journalistIds: [
-      target.journalistId ?? null,
-      replyTo?.authorKind === "journalist" ? replyTo.personaId : null,
-    ].filter((x): x is string => !!x),
+    journalistIds: target.journalistId ? [target.journalistId] : [],
+    repliedJournalistId: replyTo?.authorKind === "journalist" ? replyTo.personaId : null,
   }));
 
   await runLater(c, scheduleAiReplies(c.env, {
@@ -317,6 +322,14 @@ socialRouter.post("/teams/:teamId/social/reports", async (c) => {
   if (!target) return c.json({ error: "Tohle už neexistuje." }, 404);
   const reason = cleanUserText(body?.reason, 300);
   const fresh = await insertReport(c.env.DB, viewer.userId, key, reason);
+  if (fresh) {
+    // Tři nahlášení od různých lidí cíl skryjí do rozhodnutí admina; adminům jde oznámení s pushem.
+    const hidden = await hideIfReported(c.env.DB, key)
+      .catch((e) => { logger.warn({ module: M }, `skrytí po nahlášeních ${key}`, e); return false; });
+    const reports = await openReportCount(c.env.DB, key)
+      .catch((e) => { logger.warn({ module: M }, `počet nahlášení ${key}`, e); return 1; });
+    await runLater(c, notifyAdminsOfReport(c.env, { key, body: target.snippet, reports, hidden }));
+  }
   return c.json({ ok: true, already: !fresh });
 });
 
@@ -353,9 +366,15 @@ socialRouter.post("/admin/social/reports/resolve", async (c) => {
   if (!ref || (ref.kind !== "post" && ref.kind !== "comment") || !action) return c.json({ error: "Neplatný požadavek" }, 400);
   const db = c.env.DB;
   if (action === "remove") {
-    const table = ref.kind === "post" ? "social_posts" : "social_comments";
-    await db.prepare(`UPDATE ${table} SET removed_at = strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE id = ? AND removed_at IS NULL`)
-      .bind(ref.id).run();
+    const removed = await removeReported(db, key);
+    // Citace staženého textu nesmí zůstat v historii vztahů trenérů a novinářů.
+    if (removed?.teamId) {
+      await scrubRemovedQuotes(db, removed.teamId, removed.body)
+        .catch((e) => logger.warn({ module: M }, `úklid citací po stažení ${key}`, e));
+    }
+  } else {
+    // Zamítnuté nahlášení vrátí, co se mezitím samo skrylo. Musí být před vyřízením nahlášení.
+    await restoreAutoHidden(db, key);
   }
   await db.prepare(
     `UPDATE social_reports SET resolved_at = strftime('%Y-%m-%dT%H:%M:%SZ','now'), resolution = ?

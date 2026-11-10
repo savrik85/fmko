@@ -43,6 +43,16 @@ export type MatchQueueMessage =
       enqueuedAt: string;
     }
   | {
+      /**
+       * Dávka pohárového kola (cup/cup-queue.ts). Nenese id kola ani zápasu: konzumer si
+       * aktuální kolo najde sám a každý zápas zabírá atomicky, takže duplicita nevadí.
+       */
+      kind: "cup_round";
+      /** Kolikátý článek řetězu dávek to je (pojistka proti nekonečné smyčce). */
+      hop: number;
+      enqueuedAt: string;
+    }
+  | {
       /** Denní tick pro všechny týmy jedné ligy (finance, trénink, kabina, zprávy). */
       kind: "league_day";
       leagueId: string;

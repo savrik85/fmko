@@ -12,6 +12,7 @@
  * nezmění, dokud se proměnná výslovně nenastaví.
  */
 
+import { cleanDashes } from "../lib/dashes";
 import { logger } from "../lib/logger";
 
 const GEMINI_HOST = "https://generativelanguage.googleapis.com";
@@ -22,6 +23,12 @@ const GEMINI_HOST = "https://generativelanguage.googleapis.com";
  */
 export const GEMINI_TEXT_MODEL = "gemini-3.8-flash";
 const GEMINI_PATH = `/v1beta/models/${GEMINI_TEXT_MODEL}:generateContent`;
+
+/**
+ * Výchozí časový limit volání Gemini. Bez limitu čekal fetch, dokud model neodpověděl,
+ * a volání na konci kola (rozhovory, souhrn) tak mohlo vyčerpat čas celé invokace.
+ */
+export const DEFAULT_GEMINI_TIMEOUT_MS = 60_000;
 
 export interface GeminiOpts {
   maxOutputTokens?: number;
@@ -37,7 +44,7 @@ export interface GeminiOpts {
    * Když chybí, volá se Google přímo.
    */
   gatewayUrl?: string;
-  /** Časový limit volání; bez něj čeká fetch, dokud Gemini neodpoví. */
+  /** Časový limit volání; výchozí je DEFAULT_GEMINI_TIMEOUT_MS. */
   timeoutMs?: number;
 }
 
@@ -85,7 +92,7 @@ export async function callGemini(apiKey: string, prompt: string, opts: GeminiOpt
       },
       ...(opts.safetySettings ? { safetySettings: opts.safetySettings } : {}),
     }),
-    ...(opts.timeoutMs ? { signal: AbortSignal.timeout(opts.timeoutMs) } : {}),
+    signal: AbortSignal.timeout(opts.timeoutMs ?? DEFAULT_GEMINI_TIMEOUT_MS),
   }).catch((e) => { logger.warn({ module: mod }, "gemini fetch failed", e); return null; });
 
   if (!res || !res.ok) {
@@ -101,5 +108,6 @@ export async function callGemini(apiKey: string, prompt: string, opts: GeminiOpt
 
   const parts = json.candidates?.[0]?.content?.parts ?? [];
   const text = parts.filter((p) => !p.thought).map((p) => p.text ?? "").join("").trim();
-  return text || null;
+  // Dlouhé pomlčky pryč hned tady, ať se nedostanou do článků ani do SMS (lib/dashes.ts).
+  return text ? cleanDashes(text) : null;
 }

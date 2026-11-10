@@ -64,7 +64,7 @@ function shorten(text: string, max = 140): string {
 }
 
 function seconds(ms: number | null): string {
-  return ms == null ? "—" : `${Math.round(ms / 1000)} s`;
+  return ms == null ? "-" : `${Math.round(ms / 1000)} s`;
 }
 
 function buildIssues(health: Health | null, watchdog: WatchdogData | null, coach: CoachStatus | null, failed: string[]): Issue[] {
@@ -195,7 +195,7 @@ function CoachCard({ coach, onOpenTab }: { coach: CoachStatus; onOpenTab: (tab: 
         <Tile label="Rozhodnutí za 24 h" value={String(l.decisions)} note={modelShare !== null ? `${modelShare} % modelem` : "model zatím nerozhodoval"} />
         <Tile label="Chyby za 24 h" value={String(l.errors)} note={`za 7 dní ${coach.last7d.errors}`} />
         <Tile label="Poslední rozhodnutí" value={relativeTime(coach.lastDecisionAt)} note={formatTime(coach.lastDecisionAt)} />
-        <Tile label="Průměrná doba" value={l.avgLatencyMs !== null ? `${(l.avgLatencyMs / 1000).toFixed(1)} s` : "—"}
+        <Tile label="Průměrná doba" value={l.avgLatencyMs !== null ? `${(l.avgLatencyMs / 1000).toFixed(1)} s` : "-"}
           note={l.tokensOut > 0 ? `${Math.round((l.tokensIn + l.tokensOut) / 1000)} tis. tokenů` : undefined} />
       </div>
 
@@ -337,7 +337,7 @@ export function DashboardSection({ onOpenTab }: { onOpenTab: (tab: AdminTab) => 
               <div className="min-w-0">
                 <div className="font-heading font-bold text-xl">{banner.title}</div>
                 <div className="text-sm">
-                  Herní den {health?.hodiny.herniDatum?.slice(0, 10) ?? "—"}
+                  Herní den {health?.hodiny.herniDatum?.slice(0, 10) ?? "-"}
                   {health && <> · {PROCESSING_LABEL[health.rezim.zpracovani] ?? `kola: ${health.rezim.zpracovani}`} · {TEXTS_LABEL[health.rezim.aiPoskytovatel] ?? `texty: ${health.rezim.aiPoskytovatel}`}, AI trenéři Workers AI</>}
                 </div>
               </div>
@@ -355,8 +355,8 @@ export function DashboardSection({ onOpenTab }: { onOpenTab: (tab: AdminTab) => 
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mt-3">
             <Tile label="Kola za 24 h" value={String(health.kola24h.pocet)} note={`průměr ${seconds(health.kola24h.prumerMs)}`} />
             <Tile label="Poslední kolo" value={seconds(health.posledniKolo.trvaniMs)} note={health.posledniKolo.kdy ? relativeTime(health.posledniKolo.kdy) : undefined} />
-            <Tile label="AI rozhodnutí" value={coach ? String(coach.last24h.decisions) : "—"} note={coach ? `za 24 h, chyby ${coach.last24h.errors}` : undefined} />
-            <Tile label="AI kluby" value={coach ? String(coach.clubs.total) : "—"} note={coach ? `v mínusu ${coach.clubs.inDebt.length}` : undefined} />
+            <Tile label="AI rozhodnutí" value={coach ? String(coach.last24h.decisions) : "-"} note={coach ? `za 24 h, chyby ${coach.last24h.errors}` : undefined} />
+            <Tile label="AI kluby" value={coach ? String(coach.clubs.total) : "-"} note={coach ? `v mínusu ${coach.clubs.inDebt.length}` : undefined} />
           </div>
         )}
       </div>

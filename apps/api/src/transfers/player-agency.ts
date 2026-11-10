@@ -86,7 +86,7 @@ export function evaluateSigningChance(
         accepted: false,
         probability: Math.round(100 - rejectChance),
         explanation: rng.pick(celebRejectReasons),
-        factors: [{ name: "Celebrita", value: -Math.round(rejectChance), detail: `${celebType === "legend" ? `Tier ${celebTier}` : celebType} — má nároky` }],
+        factors: [{ name: "Celebrita", value: -Math.round(rejectChance), detail: `${celebType === "legend" ? `Tier ${celebTier}` : celebType}, má nároky` }],
       };
     }
     return {

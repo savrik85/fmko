@@ -29,6 +29,26 @@ interface ZaznamPrestupu {
   vymena?: boolean; protihrac?: string | null;
 }
 
+interface FriendlyStakeRecord {
+  challengeId: string; date: string | null;
+  challengerId: string; challengerName: string; opponentId: string; opponentName: string;
+  stake: number; status: string; challengerGoals: number | null; opponentGoals: number | null; linked: boolean;
+}
+
+interface BookData { tickets: ZaznamKnihy[]; transfers: ZaznamPrestupu[]; friendlyStakes?: FriendlyStakeRecord[] }
+
+const FRIENDLY_STAKE_STATUS: Record<string, { label: string; bg: string; fg: string }> = {
+  held: { label: "Složeno", bg: "#F0EEE9", fg: "#5B5348" },
+  paid: { label: "Vyplaceno", bg: "#E8F5E8", fg: "#1E4A1E" },
+  refunded: { label: "Vráceno", bg: "#FBF6E6", fg: "#866D1E" },
+};
+
+/** „2026-11-09" → „9. 11." */
+const shortDay = (day: string) => {
+  const [, m, d] = day.slice(0, 10).split("-");
+  return `${Number(d)}. ${Number(m)}.`;
+};
+
 const kurz = (x: number) => (x / 100).toFixed(2).replace(".", ",");
 
 const STAV: Record<string, { label: string; bg: string; fg: string }> = {
@@ -42,7 +62,7 @@ const STAV: Record<string, { label: string; bg: string; fg: string }> = {
 export function IntegrityPanel({ state, teamId, jsemKomisar, onChanged }: {
   state: State; teamId: string | null; jsemKomisar: boolean; onChanged: () => void;
 }) {
-  const [data, setData] = useState<{ tickets: ZaznamKnihy[]; transfers: ZaznamPrestupu[] } | null>(null);
+  const [data, setData] = useState<BookData | null>(null);
   const [chyba, setChyba] = useState<string | null>(null);
   const [zabavit, setZabavit] = useState<ZaznamKnihy | null>(null);
   const [zablokovat, setZablokovat] = useState(false);
@@ -53,7 +73,7 @@ export function IntegrityPanel({ state, teamId, jsemKomisar, onChanged }: {
 
   useEffect(() => {
     if (!teamId) return;
-    apiFetch<{ tickets: ZaznamKnihy[]; transfers: ZaznamPrestupu[] }>(`/api/teams/${teamId}/betting/book`)
+    apiFetch<BookData>(`/api/teams/${teamId}/betting/book`)
       .then(setData)
       .catch((e) => {
         console.error("načtení knihy sázek:", e);
@@ -72,6 +92,7 @@ export function IntegrityPanel({ state, teamId, jsemKomisar, onChanged }: {
   if (!data) return <Empty>Načítám knihu sázek…</Empty>;
 
   const podezrele = data.transfers.filter((t) => t.priznaky.length > 0);
+  const friendlyStakes = data.friendlyStakes ?? [];
 
   const provedZabaveni = async () => {
     if (!zabavit || !teamId) return;
@@ -105,7 +126,7 @@ export function IntegrityPanel({ state, teamId, jsemKomisar, onChanged }: {
     <div className="space-y-4">
       {/* ── Přestupy k prověření ─────────────────────────────────────────── */}
       {/* Zabalené jako všechno ostatní. Počet podezřelých je vidět v poznámce,
-          takže se sem dá zajít cíleně — automatické rozbalení nejdelšího seznamu
+          takže se sem dá zajít cíleně, automatické rozbalení nejdelšího seznamu
           by zrušilo důvod, proč jsou tyhle sekce sbalovací. */}
       <Rozbaleni
         title="Přestupy soutěže"
@@ -211,6 +232,50 @@ export function IntegrityPanel({ state, teamId, jsemKomisar, onChanged }: {
                       </button>
                     )}
                   </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </Rozbaleni>
+
+      {/* ── Přáteláky o peníze ───────────────────────────────────────────── */}
+      <Rozbaleni
+        title="Přáteláky o peníze"
+        right={`${friendlyStakes.length} ${plural(friendlyStakes.length, "zápas", "zápasy", "zápasů")}`}
+        note={friendlyStakes.length === 0
+          ? "O peníze se zatím nehrálo."
+          : "Přáteláky klubů soutěže, ve kterých si obě strany složily sázku. Vítěz bere obě."}
+      >
+        {friendlyStakes.length > 0 && (
+          <ul className="divide-y divide-gray-50">
+            {friendlyStakes.map((f) => {
+              const s = FRIENDLY_STAKE_STATUS[f.status] ?? FRIENDLY_STAKE_STATUS.held;
+              const played = f.challengerGoals != null && f.opponentGoals != null;
+              return (
+                <li key={f.challengeId} className="py-2.5">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-micro font-heading font-bold uppercase tracking-wide px-2 py-0.5 rounded-full"
+                          style={{ background: s.bg, color: s.fg }}>
+                      {s.label}
+                    </span>
+                    <span className="text-base font-semibold min-w-0">
+                      <EntityLink type="team" id={f.challengerId}>{f.challengerName}</EntityLink>
+                      {played ? ` ${f.challengerGoals}:${f.opponentGoals} ` : " a "}
+                      <EntityLink type="team" id={f.opponentId}>{f.opponentName}</EntityLink>
+                    </span>
+                    {f.date && (
+                      <span className="ml-auto text-micro text-muted tabular-nums">{shortDay(f.date)}</span>
+                    )}
+                  </div>
+                  <div className="text-sm mt-1 tabular-nums">
+                    každý složil <b className="font-heading">{czk(f.stake)}</b>
+                  </div>
+                  {f.linked && (
+                    <div className="text-sm mt-1 leading-snug" style={{ color: "#A32B1F" }}>
+                      ⚠ Kluby mají podle listiny stejného majitele.
+                    </div>
+                  )}
                 </li>
               );
             })}

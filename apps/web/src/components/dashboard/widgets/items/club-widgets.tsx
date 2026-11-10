@@ -435,7 +435,7 @@ export function WatchlistWidget({ data, height }: WidgetProps) {
               {p.firstName} {p.lastName}
             </a>
             {p.teamName && <span className="text-sm text-muted truncate max-w-[40%]">{p.teamName}</span>}
-            <span className="text-sm font-heading font-bold tabular-nums shrink-0">{p.overallRating ?? "—"}</span>
+            <span className="text-sm font-heading font-bold tabular-nums shrink-0">{p.overallRating ?? "-"}</span>
           </li>
         ))}
       </ul>

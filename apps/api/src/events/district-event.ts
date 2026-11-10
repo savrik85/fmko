@@ -7,6 +7,7 @@
  * Kód jen hlídá meze následků, aby jedna akce nerozbila sezónu.
  */
 
+import { cleanDashes } from "../lib/dashes";
 import type { Rng } from "../generators/rng";
 
 export type EventChoice = "alone" | "with_players" | "skip";
@@ -220,9 +221,8 @@ export function buildEventPrompt(i: EventPromptInput): string {
 
 const clamp = (v: number, [lo, hi]: readonly [number, number]) => Math.max(lo, Math.min(hi, Math.round(v)));
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
-const LONG_DASH = /\s*[—–]\s*/g;
 const cleanText = (s: unknown, max: number) =>
-  typeof s === "string" ? s.replace(LONG_DASH, ", ").replace(/\s+/g, " ").trim().slice(0, max) : "";
+  typeof s === "string" ? cleanDashes(s).replace(/\s+/g, " ").trim().slice(0, max) : "";
 
 /**
  * Odpověď modelu → reportáž se scénami. Neznámé klíče a efekty se zahodí, čísla se
@@ -365,7 +365,7 @@ export function buildInvitationPrompt(title: string, place: string, description:
 
 /** Pozvánka, když model nepíše: složená jen ze zadání akce. */
 export function plainInvitation(title: string, place: string, description: string): string {
-  return `Zítra: ${title}. Místo: ${place}. ${description} Budou tam trenéři i hráči z celého okresu. Přijdete?`.replace(LONG_DASH, ", ");
+  return cleanDashes(`Zítra: ${title}. Místo: ${place}. ${description} Budou tam trenéři i hráči z celého okresu. Přijdete?`);
 }
 
 export function cleanInvitation(text: string | null): string | null {
@@ -399,7 +399,7 @@ export function articleSms(title: string, place: string, headline: string, newsI
   metadata: { type: "guide"; href: string; label: string; newsId: string };
 } {
   return {
-    text: `📰 Ve Zpravodaji vyšla reportáž z okresní akce ${title}, ${place}: „${headline}“`.replace(LONG_DASH, ", "),
+    text: cleanDashes(`📰 Ve Zpravodaji vyšla reportáž z okresní akce ${title}, ${place}: „${headline}“`),
     metadata: { type: "guide", href: `/zpravodaj?article=${newsId}`, label: "Otevřít Zpravodaj", newsId },
   };
 }

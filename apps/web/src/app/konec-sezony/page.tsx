@@ -165,7 +165,7 @@ function Recap({ data, onEnter }: { data: RecapData; onEnter: (leaving?: string[
               <div className="se-crown">🏆</div>
               <div className="se-mistr">MISTR LIGY</div>
               <div className="se-team se-team-gold">{data.teamName}</div>
-              <div className="se-champ-sub">1. místo z {data.totalTeams} týmů — <strong>kraluješ Přeboru!</strong></div>
+              <div className="se-champ-sub">1. místo z {data.totalTeams} týmů, <strong>kraluješ Přeboru!</strong></div>
             </div>
           ) : (
             <>
@@ -176,7 +176,7 @@ function Recap({ data, onEnter }: { data: RecapData; onEnter: (leaving?: string[
                   <span className="se-pos-sub">MÍSTO<br /><em>z {data.totalTeams} týmů</em></span>
                 </div>
               ) : (
-                <div className="se-placement"><span className="se-pos" style={{ color: mood.accent }}>—</span></div>
+                <div className="se-placement"><span className="se-pos" style={{ color: mood.accent }}>-</span></div>
               )}
               <div className="se-team">{data.teamName}</div>
               <div className="se-champ">Mistrem ligy se stal <strong style={{ color: "#F0D060" }}>{data.champion.name}</strong></div>
@@ -231,7 +231,7 @@ function Recap({ data, onEnter }: { data: RecapData; onEnter: (leaving?: string[
         {duels.length > 0 ? (
           <Section className="se-block">
             <h2 className="se-h2">Kdo zůstane?</h2>
-            <p className="se-decision-intro">Místo je jen pro jednoho z každé dvojice — druhý pověsí kopačky na hřebík a <strong>nikdo za něj nepřijde</strong>. Klikni, kdo zůstává. Tvoje rozhodnutí.</p>
+            <p className="se-decision-intro">Místo je jen pro jednoho z každé dvojice, druhý pověsí kopačky na hřebík a <strong>nikdo za něj nepřijde</strong>. Klikni, kdo zůstává. Tvoje rozhodnutí.</p>
             <div className="se-duels">
               {duels.map((d, i) => (
                 <div key={i} className="se-duel-wrap">
@@ -250,7 +250,7 @@ function Recap({ data, onEnter }: { data: RecapData; onEnter: (leaving?: string[
           <Section className="se-block">
             <h2 className="se-h2">Rozloučili jsme se</h2>
             {data.departures.length === 0 ? (
-              <p className="se-empty">Kádr zůstal pohromadě — nikdo nepověsil kopačky na hřebík.</p>
+              <p className="se-empty">Kádr zůstal pohromadě, nikdo nepověsil kopačky na hřebík.</p>
             ) : (
               <div className="se-deps">
                 {data.departures.map((d, i) => (
@@ -326,7 +326,7 @@ function Recap({ data, onEnter }: { data: RecapData; onEnter: (leaving?: string[
                     <div className="se-rel-label">🤝 Spojenec na lavičce</div>
                     <div className="se-rel-name">{rel.ally.managerName ? <CoachName name={rel.ally.managerName} isAi={rel.ally.coachIsAi === true} /> : rel.ally.teamName}</div>
                     {rel.ally.managerName && <div className="se-rel-team">{rel.ally.teamName}</div>}
-                    <div className="se-rel-verdict">Vzájemný respekt — člověk, co ti drží place.</div>
+                    <div className="se-rel-verdict">Vzájemný respekt, člověk, co ti drží place.</div>
                   </div>
                 )}
                 {rel?.favorite && (
@@ -406,7 +406,7 @@ function Recap({ data, onEnter }: { data: RecapData; onEnter: (leaving?: string[
                     <div key={i} className="se-pub-award">
                       <span className="se-pub-award-emoji">{a.emoji}</span>
                       <div>
-                        <div className="se-pub-award-title">{a.title} — <strong>{a.playerName}</strong></div>
+                        <div className="se-pub-award-title">{a.title}, <strong>{a.playerName}</strong></div>
                         <div className="se-pub-award-detail">{a.detail}</div>
                       </div>
                     </div>

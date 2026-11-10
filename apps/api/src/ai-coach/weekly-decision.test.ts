@@ -121,7 +121,7 @@ const everything: WeeklyDecision = {
   banners: ["B1", "B2", "B3"],
   promote: ["U1"],
   sendDown: ["Y1"],
-  transfers: { stance: "sell", focus: ["FWD"], sell: ["L2"] },
+  transfers: { stance: "sell", focus: ["FWD"], sell: ["L2"], fill: "free_agents" },
   concessions: { mode: "external", products: [], decidedBy: "model" },
   reasoning: "all in",
 };
@@ -237,8 +237,37 @@ describe("kontrola odpovědi modelu", () => {
     const r = validateWeeklyDecision(everything, context(100_000));
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(r.decision.transfers).toEqual({ stance: "sell", focus: ["FWD"], sell: ["L2"] });
-    expect(planWeeklyActions(context(100_000), r.decision).transfers).toEqual({ stance: "sell", focus: ["FWD"], sellIds: ["old-2"] });
+    expect(r.decision.transfers).toEqual({ stance: "sell", focus: ["FWD"], sell: ["L2"], fill: "free_agents" });
+    expect(planWeeklyActions(context(100_000), r.decision).transfers).toEqual({ stance: "sell", focus: ["FWD"], sellIds: ["old-2"], fill: "free_agents" });
+  });
+
+  it("kádr pod cílovou velikostí: model dostane povinnou otázku na doplnění a rozhodne ji; pravidlo nedoplňuje", () => {
+    const below = context(100_000);
+    expect(below.transfers.squadSize).toBeLessThan(below.transfers.targetSize);
+    const prompt = renderWeeklyPrompt(below);
+    expect(prompt).toContain("SQUAD SIZE: you have 21 A-team players and want about 24. You MUST decide how to fill the squad this week (transfers.fill)");
+    expect(prompt).toContain("fill none/free_agents/market/both");
+    const schema = weeklyDecisionSchema(below) as { properties: { transfers: { required: string[]; properties: { fill?: { enum: string[] } } } } };
+    expect(schema.properties.transfers.required).toContain("fill");
+    expect(schema.properties.transfers.properties.fill?.enum).toEqual(["none", "free_agents", "market", "both"]);
+    for (const fill of ["none", "free_agents", "market", "both"] as const) {
+      const r = validateWeeklyDecision({ ...everything, transfers: { ...everything.transfers, fill } }, below);
+      expect(r.ok && r.decision.transfers.fill).toBe(fill);
+      if (r.ok) expect(planWeeklyActions(below, r.decision).transfers.fill).toBe(fill);
+    }
+    // Odpověď bez volby (nebo s nesmyslem): kód za model nerozhodne, kádr se ten týden nedoplňuje.
+    const silent = validateWeeklyDecision({ ...everything, transfers: { stance: "buy", focus: [], sell: [], fill: "everyone" } }, below);
+    expect(silent.ok && silent.decision.transfers.fill).toBe("none");
+    if (silent.ok) expect(silent.rejected.some((x) => x.includes("transfers.fill"))).toBe(true);
+    expect(fallbackWeeklyDecision(below).transfers.fill).toBe("none");
+
+    // Plný kádr: otázka v popisu ani ve schématu není a volba se ignoruje.
+    const full = { ...below, transfers: { ...below.transfers, squadSize: 24 } };
+    expect(renderWeeklyPrompt(full)).not.toContain("SQUAD SIZE:");
+    const fullSchema = weeklyDecisionSchema(full) as { properties: { transfers: { required: string[] } } };
+    expect(fullSchema.properties.transfers.required).not.toContain("fill");
+    const ignored = validateWeeklyDecision({ ...everything, transfers: { ...everything.transfers, fill: "both" } }, full);
+    expect(ignored.ok && ignored.decision.transfers.fill).toBe("none");
   });
 
   it("chybný přestupní kurz nahradí náhradní, zbytek týdne platí; cizí klíče a posty se zahodí", () => {
@@ -246,15 +275,82 @@ describe("kontrola odpovědi modelu", () => {
     expect(bad.ok).toBe(true);
     if (bad.ok) {
       // Náhradní kurz: FWD má potřebu 0,42 a jsou peníze → kupovat, posílit útok.
-      expect(bad.decision.transfers).toEqual({ stance: "buy", focus: ["FWD"], sell: [] });
+      expect(bad.decision.transfers).toEqual({ stance: "buy", focus: ["FWD"], sell: [], fill: "none" });
       expect(bad.decision.stadium).toEqual(["S1", "S2"]);
       expect(bad.rejected.some((x) => x.includes("transfers.stance"))).toBe(true);
     }
     const missing = validateWeeklyDecision({ ...everything, transfers: undefined }, context(100_000));
     if (missing.ok) expect(missing.decision.transfers.stance).toBe("buy");
-    const foreign = validateWeeklyDecision({ ...everything, transfers: { stance: "hold", focus: ["KEEPER", "MID"], sell: ["S1", "L1"] } }, context(100_000));
+    const foreign = validateWeeklyDecision({ ...everything, transfers: { stance: "hold", focus: ["KEEPER", "MID"], sell: ["S1", "L1"], fill: "market" } }, context(100_000));
     expect(foreign.ok).toBe(true);
-    if (foreign.ok) expect(foreign.decision.transfers).toEqual({ stance: "hold", focus: ["MID"], sell: ["L1"] });
+    if (foreign.ok) expect(foreign.decision.transfers).toEqual({ stance: "hold", focus: ["MID"], sell: ["L1"], fill: "market" });
+  });
+
+  it("provoz akademie rozhoduje model v mezích rozpočtu: úroveň, nábor, den otevřených dveří a obrana lákaných žáků", () => {
+    const withCare = (budget: number, over: Partial<NonNullable<WeeklyContext["academy"]["care"]>> = {}): WeeklyContext => {
+      const c = context(budget);
+      return {
+        ...c,
+        academy: {
+          ...c.academy, current: "parent", founded: true,
+          care: {
+            level: "standard", weeklyCost: { modest: 560, standard: 900, ambitious: 1580 },
+            canRecruitDay: true, recruitDayCost: 1500, canOpenDay: true, openDayCost: 2500, poachThreshold: 60,
+            poached: [
+              { key: "K1", poachId: "poach-1", age: 13, position: "MID", interest: 70 },
+              { key: "K2", poachId: "poach-2", age: 12, position: "GK", interest: 35 },
+            ],
+            ...over,
+          },
+        },
+      };
+    };
+    const ctx = withCare(100_000);
+    const prompt = renderWeeklyPrompt(ctx);
+    expect(prompt).toContain('ACADEMY CARE (your youth team runs at level "standard")');
+    expect(prompt).toContain("Recruitment day at the village school (1,500 CZK, once a season, brings boys aged 11-12): available.");
+    expect(prompt).toContain("RIVAL CLUBS are luring your boys away");
+    expect(prompt).toContain("K1: MID age 13, interest 70; K2: GK age 12, interest 35");
+    expect(prompt).toContain("academyCare {level keep/modest/standard/ambitious, recruitDay true/false, openDay true/false, defend (keys of lured boys)}");
+    const schema = weeklyDecisionSchema(ctx) as { required: string[]; properties: { academyCare?: { properties: { defend: { items: { enum: string[] } } } } } };
+    expect(schema.required).toContain("academyCare");
+    expect(schema.properties.academyCare?.properties.defend.items.enum).toEqual(["K1", "K2"]);
+
+    const answer = { ...everything, academy: "keep", academyCare: { level: "ambitious", recruitDay: true, openDay: true, defend: ["K1", "K9"] } };
+    const r = validateWeeklyDecision(answer, ctx);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.decision.academyCare).toEqual({ level: "ambitious", recruitDay: true, openDay: true, defend: ["K1"] });
+    expect(r.rejected.some((x) => x.includes("academyCare.defend: neznámá volba K9"))).toBe(true);
+    const plan = planWeeklyActions(ctx, r.decision);
+    expect(plan.actions).toContainEqual({ kind: "academy_defend", key: "K1", poachId: "poach-1" });
+    expect(plan.actions).toContainEqual({ kind: "academy_recruit_day", cost: 1500 });
+    expect(plan.actions).toContainEqual({ kind: "academy_open_day", cost: 2500 });
+    expect(plan.actions).toContainEqual({ kind: "academy_level", level: "ambitious", weeklyCost: 1580 });
+
+    // Bez peněz nad rezervou: obrana (zdarma) projde, placené akce a dražší úroveň ne; levnější úroveň ano.
+    const poor = withCare(0);
+    const poorPlan = planWeeklyActions(poor, r.decision);
+    expect(poorPlan.actions.some((a) => a.kind === "academy_defend")).toBe(true);
+    expect(poorPlan.actions.some((a) => a.kind === "academy_recruit_day" || a.kind === "academy_open_day" || a.kind === "academy_level")).toBe(false);
+    expect(poorPlan.skipped.some((x) => x.item === "academy level ambitious")).toBe(true);
+    const saving = planWeeklyActions(poor, { ...r.decision, academyCare: { level: "modest", recruitDay: false, openDay: false, defend: [] } });
+    expect(saving.actions).toContainEqual({ kind: "academy_level", level: "modest", weeklyCost: 560 });
+
+    // Nábor, který letos už byl, kód nepustí.
+    const used = planWeeklyActions(withCare(100_000, { canRecruitDay: false, canOpenDay: false }), r.decision);
+    expect(used.actions.some((a) => a.kind === "academy_recruit_day" || a.kind === "academy_open_day")).toBe(false);
+
+    // Bez odpovědi modelu (pravidlo) ani při chybějícím bloku se na provozu akademie nic nemění.
+    expect(fallbackWeeklyDecision(ctx).academyCare).toEqual({ level: "keep", recruitDay: false, openDay: false, defend: [] });
+    const missing = validateWeeklyDecision({ ...everything, academy: "keep" }, ctx);
+    expect(missing.ok && missing.decision.academyCare).toEqual({ level: "keep", recruitDay: false, openDay: false, defend: [] });
+    expect(planWeeklyActions(ctx, fallbackWeeklyDecision(ctx)).actions.some((a) => a.kind.startsWith("academy_"))).toBe(false);
+
+    // Klub bez běžící akademie se na provoz neptá.
+    const none = context(100_000);
+    expect(renderWeeklyPrompt(none)).not.toContain("ACADEMY CARE");
+    expect((weeklyDecisionSchema(none) as { required: string[] }).required).not.toContain("academyCare");
   });
 
   it("náhradní kurz: bez peněz nad rezervou drží, přeplněný kádr obchodník prodává", () => {

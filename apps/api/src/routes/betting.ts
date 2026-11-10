@@ -9,9 +9,9 @@ import { requireTeamOwnership, requireAdmin } from "../auth/middleware";
 import { getSession, getTokenFromRequest } from "../auth/session";
 import { generateBoard, nextOpenRound, teamStandings, EXTRA_MARKETS } from "../betting/board";
 import { placeTicket, limitsFor, canBet, type SelectionInput } from "../betting/tickets";
-import { settleRound } from "../betting/settle";
-import { oddsCalibration, CALIBRATION_DAYS } from "../betting/calibration";
-import { knihaSazek, listinaPrestupu, muzeDoKnihy, muzeZablokovat } from "../competition/integrity";
+import { settleRound, settleOpenRounds } from "../betting/settle";
+import { loadGradedOffers, marketReturns, bandCalibration, CALIBRATION_DAYS } from "../betting/calibration";
+import { friendlyStakeBook, knihaSazek, listinaPrestupu, muzeDoKnihy, muzeZablokovat } from "../competition/integrity";
 import { arena, prepniSdileni, pridejKomentar, smazKomentar, MAX_KOMENTAR, MAX_VZKAZ } from "../betting/arena";
 
 const M = "betting";
@@ -414,11 +414,12 @@ bettingRouter.get("/teams/:teamId/betting/book", async (c) => {
     return c.json({ error: "Do knihy sázek vidí jen komisař pro integritu a prezident soutěže." }, 403);
   }
 
-  const [kniha, prestupy] = await Promise.all([
+  const [kniha, prestupy, friendlyStakes] = await Promise.all([
     knihaSazek(c.env.DB, kde.leagueId, kde.seasonNumber),
     listinaPrestupu(c.env.DB, kde.leagueId, kde.seasonNumber),
+    friendlyStakeBook(c.env.DB, kde.leagueId),
   ]);
-  return c.json({ tickets: kniha, transfers: prestupy });
+  return c.json({ tickets: kniha, transfers: prestupy, friendlyStakes });
 });
 
 /** Zákaz sázení uložený komisařem, bez hlasování. */
@@ -639,8 +640,9 @@ bettingRouter.post("/admin/betting/:leagueId/board", async (c) => {
 // Návratnost trhů na odehraných zápasech. Nad 1 znamená, že kancelář prodělává.
 bettingRouter.get("/admin/betting/calibration", async (c) => {
   const dni = Math.min(120, Math.max(1, Number(c.req.query("days")) || CALIBRATION_DAYS));
-  const trhy = await oddsCalibration(c.env.DB, dni);
-  return c.json({ days: dni, markets: trhy });
+  const offers = await loadGradedOffers(c.env.DB, dni);
+  // `bands`: výběry po kurzových pásmech, počet výher proti očekávání modelu.
+  return c.json({ days: dni, markets: marketReturns(offers), bands: bandCalibration(offers) });
 });
 
 bettingRouter.post("/admin/betting/settle", async (c) => {
@@ -650,21 +652,8 @@ bettingRouter.post("/admin/betting/settle", async (c) => {
     return c.json({ ok: true, ...res });
   }
 
-  // Bez parametru se zametou všechna kola, kde ještě visí otevřený tiket.
-  const kola = await c.env.DB.prepare(
-    `SELECT DISTINCT t.calendar_id FROM bet_tickets t
-       JOIN season_calendar sc ON sc.id = t.calendar_id
-      WHERE t.status = 'open' AND sc.status = 'simulated'`
-  ).all<{ calendar_id: string }>()
-    .catch((e) => { logger.error({ module: M }, "kola k dovypořádání", e); return { results: [] }; });
-
-  let tickets = 0, paidOut = 0;
-  for (const k of kola.results) {
-    const r = await settleRound(c.env.DB, k.calendar_id);
-    tickets += r.tickets;
-    paidOut += r.paidOut;
-  }
-  return c.json({ ok: true, rounds: kola.results.length, tickets, paidOut });
+  // Bez parametru se zametou všechna kola po termínu, kde ještě visí otevřený tiket.
+  return c.json({ ok: true, ...(await settleOpenRounds(c.env.DB)) });
 });
 
 export default bettingRouter;

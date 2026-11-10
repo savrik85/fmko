@@ -185,6 +185,40 @@ export function maxBuyPrice(input: MaxBuyInput): number {
 }
 
 /** První nabídka kupujícího AI: pod jeho stropem, ať má kam přidávat. */
+/**
+ * Strop ceny, do kterého smí o nákupu rozhodovat model (trh AI klubu), jako násobek tržní
+ * hodnoty. Podle skutečných přestupů na produ (10. 10. až 9. 11. 2026, 93 obchodů hotově):
+ * medián zaplaceno / tržní hodnota 1,23, p75 1,68; od AI klubů lidé kupují za medián 1,48
+ * (inzeráty) až 1,74 (přímé nabídky). Dřívější strop pravidla (`maxBuyPrice`, u běžné potřeby
+ * 0,73 až 1,12 tržní hodnoty) ležel pod cenami, za které se na trhu opravdu prodává, takže
+ * AI skoro žádného kandidáta nedostala k modelu. 1,5 = za kolik AI kluby samy prodávají.
+ */
+export const MARKET_BUY_CAP = 1.5;
+
+export interface BuyCeilingInput {
+  marketValue: number;
+  /** Peníze nad rezervou: nad ně strop nikdy nejde. */
+  spendable: number;
+  /** Hlášení skauta: kolik si klub podle skauta řekne. */
+  scoutAskHint?: number | null;
+  /** Hlášení skauta: tržní hodnota při horním odhadu hodnocení. */
+  optimisticValue?: number | null;
+}
+
+/**
+ * Nejvyšší cena, kterou smí model za hráče nabídnout. U hlášení skauta zná AI jen rozptyl
+ * odhadu a klub mimo hru cení hráče podle skutečnosti: strop proto sahá až ke skautovu odhadu
+ * ceny, nejvýš ale k hodnotě hráče při horním odhadu (víc by nezaplatil ani optimista).
+ */
+export function buyCeiling(input: BuyCeilingInput): number {
+  const mv = Math.max(MIN_PRICE, input.marketValue);
+  let cap = mv * MARKET_BUY_CAP;
+  if (input.scoutAskHint && input.scoutAskHint > 0 && input.optimisticValue && input.optimisticValue > 0) {
+    cap = Math.max(cap, Math.min(input.scoutAskHint * 1.05, input.optimisticValue));
+  }
+  return Math.max(0, floor100(Math.min(cap, Math.max(0, input.spendable))));
+}
+
 export function openingBid(maxPrice: number, marketValueOfPlayer: number, profile: AiCoachProfile, playerId: string, now: Date): number {
   const start = 0.78 + (profile.risk / 100) * 0.1 + stableUnit(`bid|${playerId}|${valuationWindow(now)}`) * 0.06;
   // Pod 60 % tržní hodnoty by to byla urážka, kterou žádný rozumný prodávající nebere.
