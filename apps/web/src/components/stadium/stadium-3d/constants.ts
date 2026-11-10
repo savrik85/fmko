@@ -161,9 +161,12 @@ export const VIEWPOINTS: Record<CameraViewpoint, ViewpointDef> = {
     id: "overview",
     label: "Areál",
     icon: "🦅",
-    position: [55, 45, 55],
-    target: [0, 0, 0],
-    fov: 35,
+    // Pohled zpoza branky, mírně z boku: hřiště běží do hloubky, obě podélné tribuny jsou
+    // vidět zevnitř a za vzdálenou brankou leží ves se silnicí. Dřív se koukalo shora
+    // z rohu na plechové střechy dvou tribun a na záda tabule.
+    position: [-36, 34, 74],
+    target: [2, 1, -4],
+    fov: 34,
   },
   main_stand: {
     id: "main_stand",
