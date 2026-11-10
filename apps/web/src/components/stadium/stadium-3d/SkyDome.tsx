@@ -69,7 +69,7 @@ export function getSkyParams(timeOfDay: TimeOfDay, weather: WeatherType): SkyPar
     // sunny / wind
     return {
       zenith: "#2B74BD", mid: "#63ACE3", horizon: "#CFE6F5", ground: "#A6CCE8", envGround: "#3E6B2A",
-      sunDir: [40, 60, 25], sunColor: "#FFF3D6", glow: 0.38, haze: 0.28, discDeg: 1.6, discIntensity: 3.0,
+      sunDir: [45, 42, 30], sunColor: "#FFF3D6", glow: 0.38, haze: 0.28, discDeg: 1.6, discIntensity: 3.0,
       envIntensity: 0.55,
     };
   }

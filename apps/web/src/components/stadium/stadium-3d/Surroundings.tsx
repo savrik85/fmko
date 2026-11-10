@@ -4,16 +4,27 @@ import { useMemo, useRef, useEffect } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
 import { useWind } from "./wind";
-import { GROUND_SIZE, GROUND_COLOR, TREE_POSITIONS, ROAD, type TimeOfDay, type WeatherType } from "./constants";
-import { generateAsphaltSurface, generateTerrainSurface, generateSnowTerrainSurface } from "./grassTexture";
+import { GROUND_SIZE, GROUND_COLOR, TREE_POSITIONS, ROAD, FENCE_BOUNDS, PITCH, APRON_MARGIN, type TimeOfDay, type WeatherType } from "./constants";
+import { generateAsphaltSurface, generateGravelSurface, generateTerrainSurface, generateSnowTerrainSurface } from "./grassTexture";
+import { Landscape, HILLS, HILL_BASE_Y, MAIN_ROAD_Z, MAIN_ROAD_WIDTH } from "./Landscape";
 
 interface SurroundingsProps {
   reduceTrees?: boolean;
   timeOfDay?: TimeOfDay;
   weather?: WeatherType;
+  /** Rozměry oplocení: podle nich se kreslí posekaný trávník areálu a chodník u plotu. */
+  fence?: { width: number; depth: number };
+  /** Bez plotu (úroveň 0) se chodník podél něj nekreslí. */
+  fenceLevel?: number;
 }
 
-export function Surroundings({ reduceTrees = false, timeOfDay = "day", weather = "sunny" }: SurroundingsProps) {
+export function Surroundings({
+  reduceTrees = false,
+  timeOfDay = "day",
+  weather = "sunny",
+  fence = FENCE_BOUNDS,
+  fenceLevel = 0,
+}: SurroundingsProps) {
   const isSnow = weather === "snow";
   const groundSurface = useMemo(
     // Opakování textury roste s velikostí terénu (360 m), aby texel zůstal stejně velký jako dřív.
@@ -34,23 +45,28 @@ export function Surroundings({ reduceTrees = false, timeOfDay = "day", weather =
         />
       </mesh>
 
+      {/* Posekaný trávník areálu a štěrkový chodník podél plotu: oddělí areál od louky */}
+      <CompoundGround fence={fence} showWalkway={fenceLevel > 0} isSnow={isSnow} />
+
       {/* Zvlněné kopečky v krajině na horizontu */}
       <LandscapeHills isSnow={isSnow} />
+
+      {/* Pole, les, okresní silnice, ves a hřebeny na obzoru */}
+      <Landscape timeOfDay={timeOfDay} weather={weather} reduced={reduceTrees} />
 
       {/* Příjezdová cesta */}
       <Road />
 
       {/* Stromy a lesíky kolem areálu */}
       <Trees reduce={reduceTrees} isSnow={isSnow} />
-
-      {/* Silueta vesničky na horizontu (domky a kostelík) */}
-      <DistantVillage timeOfDay={timeOfDay} isSnow={isSnow} />
     </group>
   );
 }
 
 function Road() {
-  const [sx, sz] = ROAD.start;
+  // Příjezdovka vede od parkoviště až na okresní silnici.
+  const [sx] = ROAD.start;
+  const sz = MAIN_ROAD_Z + MAIN_ROAD_WIDTH / 2;
   const [ex, ez] = ROAD.end;
   const dx = ex - sx;
   const dz = ez - sz;
@@ -63,7 +79,7 @@ function Road() {
 
   return (
     <mesh
-      position={[(sx + ex) / 2, 0.01, (sz + ez) / 2]}
+      position={[(sx + ex) / 2, 0.07, (sz + ez) / 2]}
       rotation={[-Math.PI / 2, 0, -angle]}
       receiveShadow
     >
@@ -73,31 +89,115 @@ function Road() {
         bumpMap={roadSurface.bumpMap}
         bumpScale={0.045}
         roughness={0.96}
+        polygonOffset
+        polygonOffsetFactor={-4}
+        polygonOffsetUnits={-4}
       />
     </mesh>
+  );
+}
+
+/** Posekaný trávník uvnitř plotu a štěrkový chodník podél něj. */
+function CompoundGround({
+  fence,
+  showWalkway,
+  isSnow,
+}: {
+  fence: { width: number; depth: number };
+  showWalkway: boolean;
+  isSnow: boolean;
+}) {
+  const walkwayWidth = 3;
+  const halfW = fence.width / 2;
+  const halfD = fence.depth / 2;
+  const lawn = useMemo(
+    () => (isSnow ? null : generateTerrainSurface("#7C9F48", fence.width / 14, fence.depth / 14)),
+    [isSnow, fence.width, fence.depth],
+  );
+  // Rám s dírou pod hřištěm a výběhovou zónou. Plná deska by se díky polygonOffsetu
+  // z dálky vykreslila přes trávník hřiště a smazala čáry i pruhy sekání.
+  const lawnGeometry = useMemo(() => {
+    const shape = new THREE.Shape();
+    shape.moveTo(-halfW, -halfD);
+    shape.lineTo(halfW, -halfD);
+    shape.lineTo(halfW, halfD);
+    shape.lineTo(-halfW, halfD);
+    shape.closePath();
+    const holeW = PITCH.width / 2 + APRON_MARGIN - 0.2;
+    const holeD = PITCH.depth / 2 + APRON_MARGIN - 0.2;
+    const hole = new THREE.Path();
+    hole.moveTo(-holeW, -holeD);
+    hole.lineTo(-holeW, holeD);
+    hole.lineTo(holeW, holeD);
+    hole.lineTo(holeW, -holeD);
+    hole.closePath();
+    shape.holes.push(hole);
+    const g = new THREE.ShapeGeometry(shape);
+    // ShapeGeometry dává UV v metrech; textura počítá s rozsahem 0–1 přes celou plochu.
+    const uv = g.getAttribute("uv");
+    for (let i = 0; i < uv.count; i++) {
+      uv.setXY(i, uv.getX(i) / fence.width + 0.5, uv.getY(i) / fence.depth + 0.5);
+    }
+    uv.needsUpdate = true;
+    return g;
+  }, [halfW, halfD, fence.width, fence.depth]);
+  useEffect(() => () => lawnGeometry.dispose(), [lawnGeometry]);
+  const gravelX = useMemo(() => generateGravelSurface(fence.width / 4, 1), [fence.width]);
+  const gravelZ = useMemo(() => generateGravelSurface(1, fence.depth / 4), [fence.depth]);
+  const strips: Array<{ pos: [number, number, number]; size: [number, number]; alongX: boolean }> = [
+    { pos: [0, 0.03, -(halfD - walkwayWidth / 2)], size: [fence.width, walkwayWidth], alongX: true },
+    { pos: [0, 0.03, halfD - walkwayWidth / 2], size: [fence.width, walkwayWidth], alongX: true },
+    { pos: [-(halfW - walkwayWidth / 2), 0.03, 0], size: [walkwayWidth, fence.depth - walkwayWidth * 2], alongX: false },
+    { pos: [halfW - walkwayWidth / 2, 0.03, 0], size: [walkwayWidth, fence.depth - walkwayWidth * 2], alongX: false },
+  ];
+  return (
+    <group>
+      {lawn && (
+        <mesh geometry={lawnGeometry} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.015, 0]} receiveShadow>
+          <meshStandardMaterial
+            map={lawn.map}
+            bumpMap={lawn.bumpMap}
+            bumpScale={0.08}
+            roughness={1}
+            polygonOffset
+            polygonOffsetFactor={-1}
+            polygonOffsetUnits={-1}
+          />
+        </mesh>
+      )}
+      {showWalkway &&
+        strips.map((strip, i) => {
+          const surface = strip.alongX ? gravelX : gravelZ;
+          return (
+            <mesh key={i} rotation={[-Math.PI / 2, 0, 0]} position={strip.pos} receiveShadow>
+              <planeGeometry args={strip.size} />
+              <meshStandardMaterial
+                // Pod sněhem je chodník jen prošlapaná světlá stopa, bez textury štěrku.
+                map={isSnow ? null : surface.map}
+                bumpMap={surface.bumpMap}
+                bumpScale={0.05}
+                color={isSnow ? "#D5DDE5" : "#FFFFFF"}
+                roughness={1}
+                polygonOffset
+                polygonOffsetFactor={-2}
+                polygonOffsetUnits={-2}
+              />
+            </mesh>
+          );
+        })}
+    </group>
   );
 }
 
 /** Zvlněný terén / nízké kopečky kolem areálu */
 function LandscapeHills({ isSnow = false }: { isSnow?: boolean }) {
   // Dřív čtyři obří koule hned za plotem, které z nadhledu vypadaly jako zelené kupole.
-  // Teď nižší a širší vlny dál v krajině (vnitřní okraj ≥ ~95 m, aby nepohltily
-  // stromy ani vesničku), hladce stínované — vzdálené kopce nemají hrany.
-  const hills: Array<{ pos: [number, number, number]; scale: [number, number, number]; tint: string }> = [
-    { pos: [-130, -2.5, -110], scale: [65, 9, 45], tint: "#3F6E26" },
-    { pos: [110, -2.5, -130], scale: [80, 11, 55], tint: "#457A2B" },
-    { pos: [-140, -2.5, 60], scale: [65, 8, 50], tint: "#4A7A2C" },
-    { pos: [125, -2.5, 110], scale: [75, 10, 50], tint: "#3F6E26" },
-    { pos: [-20, -2.5, -155], scale: [85, 9, 45], tint: "#457A2B" },
-    { pos: [30, -2.5, 155], scale: [80, 8, 45], tint: "#4A7A2C" },
-    { pos: [-155, -2.5, -20], scale: [55, 7, 60], tint: "#568A34" },
-    { pos: [160, -2.5, -10], scale: [55, 7.5, 60], tint: "#457A2B" },
-  ];
-
+  // Teď nižší a širší vlny dál v krajině, hladce stínované — vzdálené kopce nemají hrany.
+  // Rozmístění sdílí s krajinou (les a domy na nich stojí podle `terrainHeight`).
   return (
     <group>
-      {hills.map((h, i) => (
-        <mesh key={i} position={h.pos} scale={h.scale} receiveShadow>
+      {HILLS.map((h, i) => (
+        <mesh key={i} position={[h.pos[0], HILL_BASE_Y, h.pos[1]]} scale={h.scale} receiveShadow>
           <sphereGeometry args={[1, 28, 14]} />
           <meshStandardMaterial color={isSnow ? "#E2E8F0" : h.tint} roughness={1} />
         </mesh>
@@ -106,50 +206,22 @@ function LandscapeHills({ isSnow = false }: { isSnow?: boolean }) {
   );
 }
 
-/** Vesnička na horizontu (domky se sedlovými střechami a věž kostela) */
-function DistantVillage({ timeOfDay, isSnow = false }: { timeOfDay: TimeOfDay; isSnow?: boolean }) {
-  const isNight = timeOfDay === "night";
-
-  return (
-    <group position={[-70, 0, -65]} rotation={[0, 0.4, 0]}>
-      {/* Kostelní věž */}
-      <mesh position={[0, 6, 0]} castShadow>
-        <boxGeometry args={[4, 12, 4]} />
-        <meshStandardMaterial color="#E2DCD5" roughness={0.9} />
-      </mesh>
-      {/* Jehlanová střecha kostela */}
-      <mesh position={[0, 15, 0]} castShadow>
-        <coneGeometry args={[3.2, 7, 4]} />
-        <meshStandardMaterial color={isSnow ? "#F8FAFC" : "#883A2D"} roughness={0.7} />
-      </mesh>
-
-      {/* Vesnické domky */}
-      {[
-        { x: -10, z: -4, w: 6, h: 4, d: 5, roof: "#A0432C" },
-        { x: 8, z: 2, w: 7, h: 4.5, d: 5.5, roof: "#8B4513" },
-        { x: 18, z: -2, w: 5.5, h: 3.8, d: 5, roof: "#9A3412" },
-      ].map((d, i) => (
-        <group key={i} position={[d.x, 0, d.z]}>
-          <mesh position={[0, d.h / 2, 0]} castShadow>
-            <boxGeometry args={[d.w, d.h, d.d]} />
-            <meshStandardMaterial color="#F3EFEA" roughness={0.9} />
-          </mesh>
-          <mesh position={[0, d.h + 1.2, 0]} rotation={[0, 0, 0]} castShadow>
-            <coneGeometry args={[d.w * 0.7, 2.5, 4]} />
-            <meshStandardMaterial color={isSnow ? "#F8FAFC" : d.roof} roughness={0.7} />
-          </mesh>
-          {/* Rozsvícená okna v noci */}
-          {isNight && (
-            <mesh position={[0, d.h * 0.5, d.d / 2 + 0.05]}>
-              <planeGeometry args={[1.2, 1]} />
-              <meshBasicMaterial color="#FDE047" toneMapped={false} />
-            </mesh>
-          )}
-        </group>
-      ))}
-    </group>
-  );
-}
+/**
+ * Stromy navíc k pevným pozicím kolem plotu: alej podél okresní silnice a příjezdovky
+ * a pár solitérů v polích.
+ */
+const EXTRA_TREE_POSITIONS: Array<[number, number]> = (() => {
+  const out: Array<[number, number]> = [];
+  const edge = MAIN_ROAD_WIDTH / 2 + 3.2;
+  for (let x = -172; x <= 44; x += 13) {
+    // Ves má místo aleje domy; u odbočky k hřišti je mezera.
+    if (Math.abs(x - 42) < 7) continue;
+    out.push([x, MAIN_ROAD_Z - edge], [x + 6.5, MAIN_ROAD_Z + edge]);
+  }
+  for (let z = -60; z > MAIN_ROAD_Z + 8; z -= 9) out.push([42 + 5.5, z]);
+  out.push([-92, -36], [-118, 4], [-84, 62], [-104, 96], [84, 86], [98, 14], [112, -52], [-40, 112], [56, 118], [-78, -118]);
+  return out;
+})();
 
 function Trees({ reduce = false, isSnow = false }: { reduce?: boolean; isSnow?: boolean }) {
   const trunkRef = useRef<THREE.InstancedMesh>(null);
@@ -205,7 +277,8 @@ function Trees({ reduce = false, isSnow = false }: { reduce?: boolean; isSnow?: 
       seed = (seed * 9301 + 49297) % 233280;
       return seed / 233280;
     };
-    const positions = reduce ? TREE_POSITIONS.filter((_, i) => i % 2 === 0) : TREE_POSITIONS;
+    const all = [...TREE_POSITIONS, ...EXTRA_TREE_POSITIONS];
+    const positions = reduce ? all.filter((_, i) => i % 2 === 0) : all;
     return positions.map(([x, z]) => {
       const kindRoll = rand();
       return {

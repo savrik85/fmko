@@ -159,11 +159,13 @@ export function LightingAndAtmosphere({
           ) : (
             <>
               {/* Jasno / Slunečno */}
-              <ambientLight intensity={(0.65) * amb} color="#F0F6FF" />
+              {/* Slunce níž (cca 38°) a silnější proti rozptýlenému světlu: tribuny a stromy
+                  vrhají čitelné stíny. Dřív svítilo skoro shora a scéna byla plochá. */}
+              <ambientLight intensity={(0.42) * amb} color="#EAF2FF" />
               <directionalLight
-                position={[40, 60, 25]}
-                intensity={1.3}
-                color="#FFF8EC"
+                position={[45, 42, 30]}
+                intensity={2.0}
+                color="#FFF1DC"
                 castShadow={!isMobile}
                 shadow-mapSize-width={shadowMapSize}
                 shadow-mapSize-height={shadowMapSize}
@@ -175,8 +177,8 @@ export function LightingAndAtmosphere({
                 shadow-camera-bottom={-55}
                 shadow-bias={-0.0003}
               />
-              <directionalLight position={[-35, 25, -30]} intensity={0.4} color="#D2E4F8" />
-              <hemisphereLight args={["#C8E5F7", "#447526", 0.4]} />
+              <directionalLight position={[-35, 25, -30]} intensity={0.28} color="#D2E4F8" />
+              <hemisphereLight args={["#C8E5F7", "#447526", 0.36]} />
             </>
           )}
         </group>
@@ -206,7 +208,7 @@ export function LightingAndAtmosphere({
             shadow-bias={-0.0003}
           />
           <directionalLight position={[-40, 18, 40]} intensity={0.4} color="#9D76A8" />
-          <hemisphereLight args={["#F89E68", "#2E4720", 0.4]} />
+          <hemisphereLight args={["#F2A98A", "#4A5E2C", 0.55]} />
         </group>
       )}
 

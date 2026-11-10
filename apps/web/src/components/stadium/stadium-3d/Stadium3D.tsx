@@ -496,7 +496,7 @@ export function Stadium3D({
         // na mobilním 16bitovém depth bufferu se pak plochy pár tisícin od sebe
         // (trávník vs. okolní dlažba) perou o pořadí a prosvítají skrz sebe.
         // Kamera je díky minDistance=15 vždy dost daleko, takže near=1 nic neořízne.
-        camera={{ position: [55, 45, 55], fov: 35, near: 1, far: 400 }}
+        camera={{ position: VIEWPOINTS.overview.position, fov: VIEWPOINTS.overview.fov, near: 1, far: 400 }}
         frameloop={inView ? "always" : "never"}
         dpr={[1, dpr]}
         onCreated={() => {
@@ -529,11 +529,11 @@ export function Stadium3D({
         <CameraController viewpoint={viewpoint} isMobile={isMobile} viewpoints={viewpoints} instant={!!onSnapshotReady} />
 
         {/* Post-processing: ambient occlusion, záře světel, vinětace, tone mapping (jen desktop) */}
-        {fxActive && isSceneReady && <PostFX timeOfDay={timeOfDay} />}
+        {fxActive && isSceneReady && <PostFX timeOfDay={timeOfDay} miniature={viewpoint === "overview" || viewpoint === "orbit"} />}
 
         <Suspense fallback={null}>
           {/* Okolí, terénní kopečky a vzdálená vesnička */}
-          <Surroundings reduceTrees={isMobile} timeOfDay={timeOfDay} weather={weather} />
+          <Surroundings reduceTrees={isMobile} timeOfDay={timeOfDay} weather={weather} fence={layout.fence} fenceLevel={f.fence ?? 0} />
 
           {/* Vesnický život v areálu: zahrádka, pivo, kouřící gril, kola, údržba trávníku, zábradlí */}
           <VillageVibe
