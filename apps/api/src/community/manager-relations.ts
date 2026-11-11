@@ -273,15 +273,22 @@ export const HEAT_COOLDOWN_PER_ROUND = 1;
  * U21 má vlastní týmy a do vztahů klubů nepatří). Jeden příkaz, vrací počet dvojic.
  */
 export async function coolHeatAfterLeagueRound(db: D1Database, hours = 24): Promise<number> {
+  // Kluby, které hrály, se vyberou JEDNÍM průchodem zápasů. Korelovaný poddotaz (EXISTS
+  // přes matches pro každou dvojici) četl na produkci statisíce řádků a shazoval denní tick.
   const res = await db.prepare(
-    `UPDATE manager_relations SET heat = MAX(0, heat - ?)
-      WHERE heat > 0 AND EXISTS (
-        SELECT 1 FROM matches m
-         WHERE m.status = 'simulated' AND m.league_id IS NOT NULL
-           AND julianday(m.simulated_at) > julianday('now', ?)
-           AND (m.home_team_id IN (manager_relations.team_a_id, manager_relations.team_b_id)
-             OR m.away_team_id IN (manager_relations.team_a_id, manager_relations.team_b_id)))`,
-  ).bind(HEAT_COOLDOWN_PER_ROUND, `-${Math.max(1, Math.round(hours))} hours`).run();
+    `WITH played(team_id) AS (
+       SELECT home_team_id FROM matches
+        WHERE status = 'simulated' AND league_id IS NOT NULL
+          AND julianday(simulated_at) > julianday('now', ?1)
+       UNION
+       SELECT away_team_id FROM matches
+        WHERE status = 'simulated' AND league_id IS NOT NULL
+          AND julianday(simulated_at) > julianday('now', ?1)
+     )
+     UPDATE manager_relations SET heat = MAX(0, heat - ?2)
+      WHERE heat > 0
+        AND (team_a_id IN (SELECT team_id FROM played) OR team_b_id IN (SELECT team_id FROM played))`,
+  ).bind(`-${Math.max(1, Math.round(hours))} hours`, HEAT_COOLDOWN_PER_ROUND).run();
   return res.meta?.changes ?? 0;
 }
 
