@@ -1281,6 +1281,8 @@ export async function executeDailyTick(
   });
 
   // ── Napětí mezi trenéry vychladne o bod za odehrané ligové kolo (ráno po kole) ──
+  // Vlastní krok: při pokračování po pádu se bod nesmí ubrat podruhé.
+  await steps.once("manager-heat-cooldown", async () => {
   try {
     const { coolHeatAfterLeagueRound } = await import("../community/manager-relations");
     const cooled = await coolHeatAfterLeagueRound(env.DB);
@@ -1288,6 +1290,7 @@ export async function executeDailyTick(
   } catch (e) {
     logger.error({ module: "daily-tick" }, "cool manager heat after round", e);
   }
+  });
 
   // Morale drift toward 50 — týmy s klubovým grilem mají pásmo posunuté nahoru (nálada drží výš).
   // Základní drift v try/catch s fallbackem: kdyby sloupec club_grill ještě neexistoval (deploy
