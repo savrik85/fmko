@@ -165,6 +165,16 @@ describe("vrácení omylem postavené tribuny", () => {
     await db.prepare("DELETE FROM matches WHERE id IN ('m-away', 'm-home')").run();
   });
 
+  it("i pohárový domácí zápas vrácení zavře: pozná se podle vybraného vstupného", async () => {
+    await build("stand_main");
+    const [entry] = await loadStadiumBuilds(db, TEAM);
+    await db.prepare(
+      "INSERT INTO transactions (id, team_id, type, amount, balance_after, description, game_date, created_at) VALUES ('t-gate', ?, 'match_income', 9000, 0, 'Vstupné: 300 × 30 Kč', '2026-11-14', datetime('now', '+1 hour'))",
+    ).bind(TEAM).run();
+    expect(await revertStandBuild(db, TEAM, entry.id)).toMatchObject({ ok: false, status: 409, error: expect.stringContaining("domácí zápas") });
+    expect(await levelOf("stand_main")).toBe(1);
+  });
+
   it("vrací se jen to, co se za stavbu opravdu strhlo", async () => {
     const cost = await build("stand_opposite");
     const [entry] = await loadStadiumBuilds(db, TEAM);

@@ -97,7 +97,12 @@ async function undoBlocker(db: D1Database, build: BuildRow, stadium: Record<stri
   const played = await db.prepare(
     "SELECT 1 AS n FROM matches WHERE home_team_id = ? AND status = 'simulated' AND julianday(simulated_at) > julianday(?) LIMIT 1",
   ).bind(build.team_id, build.built_at).first<{ n: number }>();
-  if (played) return "Na tribuně se už hrál domácí zápas. Vrátit jde jen stavba, na které se ještě nehrálo.";
+  // Pohár má vlastní tabulku zápasů. Vstupné z každého domácího zápasu (liga i pohár) ale
+  // zapisuje stejná funkce (processMatchDayFinances), takže ho spolehlivě pozná platba.
+  const gate = played ? null : await db.prepare(
+    "SELECT 1 AS n FROM transactions WHERE team_id = ? AND type = 'match_income' AND julianday(created_at) > julianday(?) LIMIT 1",
+  ).bind(build.team_id, build.built_at).first<{ n: number }>();
+  if (played || gate) return "Na tribuně se už hrál domácí zápas. Vrátit jde jen stavba, na které se ještě nehrálo.";
 
   const damage = await db.prepare(
     "SELECT 1 AS n FROM stadium_damage WHERE team_id = ? AND facility = ? AND repaired_at IS NULL LIMIT 1",
