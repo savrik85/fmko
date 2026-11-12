@@ -21,6 +21,7 @@ import { TransferTermsFields, PLAIN_TERMS, type TermsValue } from "@/components/
 import { PlayerObligationsCard } from "@/components/transfers/player-obligations";
 import { LoanStatusCard } from "@/components/transfers/loan-status-card";
 import { LoanListingDialog, type LoanListingValue } from "@/components/transfers/loan-listing-dialog";
+import { RevealPotentialToggle, RevealedPotentialBadge, type RevealedPotential } from "@/components/transfers/revealed-potential";
 import { loanTermsLine } from "@/lib/loans";
 import { formatLogDate, RelationTrend } from "@/components/manager/CoachKabinaTab";
 import { attrBg, attrValue, withBody, bodyNote, formatKg, formatKgChange, WEIGHT_CATEGORY, type WeightCategoryKey } from "@/lib/player-attrs";
@@ -162,6 +163,8 @@ export default function PlayerDetailPage() {
   const [loanDialogOpen, setLoanDialogOpen] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [isWatched, setIsWatched] = useState(false);
+  // Potenciál, který prodávající odkryl u aktivního inzerátu (jen cizí hráč).
+  const [revealedPotential, setRevealedPotential] = useState<RevealedPotential | null>(null);
   const [watchLoading, setWatchLoading] = useState(false);
   const [scoutDialogOpen, setScoutDialogOpen] = useState(false);
   const [scoutsData, setScoutsData] = useState<ScoutOption[]>([]);
@@ -233,10 +236,11 @@ export default function PlayerDetailPage() {
   useEffect(() => {
     if (!teamId) return;
     // First fetch the player to find which team they belong to
-    apiFetch<Player & { isWatched?: boolean; watchers?: Array<{ id: string; name: string; primary_color: string; secondary_color: string; badge_pattern: string }>; offerState?: OfferState | null }>(`/api/teams/${teamId}/players/${playerId}`)
+    apiFetch<Player & { isWatched?: boolean; watchers?: Array<{ id: string; name: string; primary_color: string; secondary_color: string; badge_pattern: string }>; offerState?: OfferState | null; revealedPotential?: RevealedPotential | null }>(`/api/teams/${teamId}/players/${playerId}`)
       .then(async (p) => {
         setPlayer(p);
         setIsWatched(!!p.isWatched);
+        setRevealedPotential(p.revealedPotential ?? null);
         setOfferState(p.offerState ?? null);
         const playerOwnerTeamId = p.team_id || teamId;
         const isForeign = playerOwnerTeamId !== teamId;
@@ -299,7 +303,7 @@ export default function PlayerDetailPage() {
     setActionLoading(true);
     const ok = await apiAction(apiFetch(`/api/teams/${teamId}/players/${playerId}/list`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ askingPrice: v.fee, dealType: "loan", loanDays: v.days, playingTime: v.playingTime }),
+      body: JSON.stringify({ askingPrice: v.fee, dealType: "loan", loanDays: v.days, playingTime: v.playingTime, revealPotential: v.revealPotential }),
     }), "Nabídnutí na hostování se nezdařilo");
     if (ok) {
       setLoanDialogOpen(false);
@@ -308,12 +312,12 @@ export default function PlayerDetailPage() {
     setActionLoading(false);
   };
 
-  const listOnMarket = async (price: number) => {
+  const listOnMarket = async (price: number, revealPotential: boolean) => {
     if (!teamId || !player || actionLoading) return;
     setActionLoading(true);
     const ok = await apiAction(apiFetch(`/api/teams/${teamId}/players/${playerId}/list`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ askingPrice: price }),
+      body: JSON.stringify({ askingPrice: price, revealPotential }),
     }), "Vystavení na trh se nezdařilo");
     if (ok) {
       setPriceDialogOpen(false);
@@ -1051,6 +1055,13 @@ export default function PlayerDetailPage() {
         );
       })()}
 
+
+      {revealedPotential && !isOwnPlayer && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-gold-200 bg-gold-50 px-3 py-2">
+          <RevealedPotentialBadge age={player.age ?? null} potential={revealedPotential} />
+          <span className="text-sm text-ink">Potenciál odkryl prodávající klub u inzerátu na trhu.</span>
+        </div>
+      )}
 
       {/* ═══ Row 1: Info + Attributes grid + Physical/Character ═══ */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
@@ -1994,11 +2005,12 @@ function toMyListing(l: MyListingRow): MyListingState {
 }
 
 function PlayerPriceDialog({ player, onClose, onConfirm, loading }: {
-  player: Player; onClose: () => void; onConfirm: (price: number) => void; loading: boolean;
+  player: Player; onClose: () => void; onConfirm: (price: number, revealPotential: boolean) => void; loading: boolean;
 }) {
   // Výchozí cena = tržní hodnota (stejný vzorec jako nabídky a inzeráty cizích klubů).
   const defaultPrice = marketValue(player.overall_rating ?? 50, player.age ?? 27, player.position);
   const [price, setPrice] = useState<number | null>(defaultPrice);
+  const [revealPotential, setRevealPotential] = useState(false);
 
   return (
     // Kliknutí vedle dialog nezavírá — rozepsaná cena by se ztratila. Zavírá jen Zrušit.
@@ -2031,6 +2043,10 @@ function PlayerPriceDialog({ player, onClose, onConfirm, loading }: {
             </div>
           </div>
 
+          <div className="mt-4">
+            <RevealPotentialToggle checked={revealPotential} onChange={setRevealPotential} />
+          </div>
+
           <div className="flex gap-2 mt-5">
             <button
               onClick={onClose}
@@ -2039,7 +2055,7 @@ function PlayerPriceDialog({ player, onClose, onConfirm, loading }: {
               Zrušit
             </button>
             <button
-              onClick={() => { if (price) onConfirm(price); }}
+              onClick={() => { if (price) onConfirm(price, revealPotential); }}
               disabled={loading || !price}
               className="flex-1 py-2 rounded-soft text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 disabled:opacity-50"
             >

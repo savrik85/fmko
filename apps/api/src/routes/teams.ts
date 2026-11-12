@@ -1325,12 +1325,22 @@ teamsRouter.get("/:id/players/:playerId", async (c) => {
     offerState = { activeOfferId: active?.id ?? null, retry };
   }
 
+  // Cizí hráč s inzerátem, u kterého prodávající odkryl potenciál: stejné rozpětí jako na trhu.
+  const { revealedPotentialForPlayer } = await import("../transfers/revealed-potential");
+  const revealedPotential = cizi
+    ? await revealedPotentialForPlayer(c.env.DB, {
+        id: row.id as string, age: row.age as number, rating: row.overall_rating as number, position: row.position as string,
+        hiddenTalent: (row.hidden_talent as number | null) ?? null, skillsMax: (row.skills_max as string | null) ?? null,
+      })
+    : null;
+
   return c.json({
     ...ocisteny.row,
     isOwn,
     isParentClub,
     loan,
     offerState,
+    revealedPotential,
     skills,
     physical,
     // Počítá se až ze zamlžených hodnot: u cizího hráče nesmí prozradit přesnou váhu.

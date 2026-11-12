@@ -5068,10 +5068,10 @@ gameRouter.post("/teams/:teamId/free-agents/:faId/sign", async (c) => {
 
 // List player on transfer market
 gameRouter.post("/teams/:teamId/players/:playerId/list", async (c) => {
-  const body = await c.req.json<{ askingPrice: number; dealType?: string; loanDays?: number; playingTime?: string }>();
+  const body = await c.req.json<{ askingPrice: number; dealType?: string; loanDays?: number; playingTime?: string; revealPotential?: boolean }>();
   // dealType 'loan' = inzerát na hostování (délka, poplatek, podmínka hraní).
   const loan = body.dealType === "loan" ? { days: Number(body.loanDays), playingTime: String(body.playingTime ?? "") } : null;
-  const res = await listPlayerOnMarket(c.env, c.req.param("teamId"), c.req.param("playerId"), body.askingPrice, loan);
+  const res = await listPlayerOnMarket(c.env, c.req.param("teamId"), c.req.param("playerId"), body.askingPrice, loan, { revealPotential: body.revealPotential === true });
   return res.ok ? c.json({ ok: true, listingId: res.listingId }) : transferError(c, res);
 });
 
@@ -5408,10 +5408,11 @@ gameRouter.get("/teams/:teamId/market", async (c) => {
   // Z ostatních soutěží inzeráty klubů ve hře (lidských i AI). Hráči klubů mimo hru
   // (is_ai_listing) se nabízejí jen ve své lize. Pravidla sdílí s AI trenérem market-visibility.ts.
   const { findVisibleListings } = await import("../transfers/market-visibility");
+  const { revealedPotential } = await import("../transfers/revealed-potential");
   const listings = { results: await findVisibleListings(c.env.DB, { id: teamId, leagueId: team.league_id }) };
 
   const myListings = await c.env.DB.prepare(
-    `SELECT tl.id, tl.player_id, tl.asking_price, tl.expires_at, tl.deal_type, tl.loan_days, tl.loan_playing_time,
+    `SELECT tl.id, tl.player_id, tl.asking_price, tl.expires_at, tl.deal_type, tl.loan_days, tl.loan_playing_time, tl.reveal_potential,
      p.first_name, p.last_name, p.age, p.position, p.overall_rating, p.avatar as player_avatar
      FROM transfer_listings tl JOIN players p ON tl.player_id = p.id WHERE tl.team_id = ? AND tl.status = 'active'`
   ).bind(teamId).all();
@@ -5511,8 +5512,15 @@ gameRouter.get("/teams/:teamId/market", async (c) => {
         // Filtr „Jen můj okres“: III. třída téhož okresu se počítá za vlastní.
         otherDistrict: l.league_id !== team.league_id && l.league_district !== team.district,
         injuryDays: (l.injury_days as number) ?? null,
+        // Potenciál jen u inzerátů, kde ho prodávající odkryl (jinak null).
+        revealedPotential: l.reveal_potential === 1
+          ? revealedPotential({
+              listingId: l.id as string, age: l.age as number, rating: l.overall_rating as number, position: l.position as string,
+              hiddenTalent: (l.revealed_talent as number | null) ?? null, skillsMax: (l.revealed_skills_max as string | null) ?? null,
+            })
+          : null,
         avatar: (() => { try { return JSON.parse(l.player_avatar as string); } catch (e) { logger.warn({ module: "game" }, `parse market avatar: ${e}`); return {}; } })(),
-        skills: (() => { try { const s = JSON.parse(l.skills as string); const blur = (v: number) => Math.round(v / 5) * 5; return Object.fromEntries(Object.entries(s).map(([k, v]) => [k, typeof v === "number" ? blur(v) : v])); } catch { return {}; } })(),
+        skills: (() => { try { const s = JSON.parse(l.skills as string); const blur = (v: number) => Math.round(v / 5) * 5; return Object.fromEntries(Object.entries(s).map(([k, v]) => [k, typeof v === "number" ? blur(v) : v])); } catch (e) { logger.warn({ module: "game" }, `parse market skills: ${e}`); return {}; } })(),
         myBidAmount: myBids[l.id as string] ?? null,
         myActiveOfferId: activeOffer?.offerId ?? null,
         myActiveOfferAmount: activeOffer ? (activeOffer.counterAmount ?? activeOffer.amount) : null,
@@ -5523,6 +5531,7 @@ gameRouter.get("/teams/:teamId/market", async (c) => {
       id: l.id, playerId: l.player_id, askingPrice: l.asking_price,
       dealType: l.deal_type === "loan" ? "loan" : "transfer",
       loanDays: (l.loan_days as number | null) ?? null, loanPlayingTime: (l.loan_playing_time as string | null) ?? null,
+      revealPotential: l.reveal_potential === 1,
       loanRequests: loanRequests.filter((r) => r.listing_id === l.id).map((r) => ({
         offerId: r.id, teamId: r.from_team_id, teamName: r.team_name, leagueName: r.league_name,
       })),

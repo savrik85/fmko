@@ -1784,8 +1784,14 @@ export interface LoanListingInput {
   playingTime: string;
 }
 
+export interface ListingOptions {
+  /** Prodávající odkryl potenciál hráče: kupující ho uvidí na trhu i v profilu. */
+  revealPotential?: boolean;
+}
+
 export async function listPlayerOnMarket(
   env: Bindings, teamId: string, playerId: string, askingPrice: number, loan?: LoanListingInput | null,
+  options: ListingOptions = {},
 ): Promise<TransferActionResult<{ listingId: string }>> {
   const db = env.DB;
   const {
@@ -1836,9 +1842,9 @@ export async function listPlayerOnMarket(
   const id = crypto.randomUUID();
 
   await db.prepare(
-    "INSERT INTO transfer_listings (id, player_id, team_id, asking_price, league_id, expires_at, deal_type, loan_days, loan_playing_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    "INSERT INTO transfer_listings (id, player_id, team_id, asking_price, league_id, expires_at, deal_type, loan_days, loan_playing_time, reveal_potential) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
   ).bind(id, playerId, teamId, askingPrice, listingTeam.league_id, expiresAt.toISOString(),
-    loan ? "loan" : "transfer", loan ? loan.days : null, playingTime).run();
+    loan ? "loan" : "transfer", loan ? loan.days : null, playingTime, options.revealPotential ? 1 : 0).run();
 
   if (loan && playingTime) {
     // Kluby nižší soutěže v okrese se o hráči k zapůjčení dozví SMS (nejvýš jedna za den).

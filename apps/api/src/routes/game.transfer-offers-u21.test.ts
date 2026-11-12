@@ -231,7 +231,7 @@ beforeAll(async () => {
       league_id TEXT NOT NULL,
       status TEXT NOT NULL,
       expires_at TEXT NOT NULL,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')), deal_type TEXT NOT NULL DEFAULT 'transfer', loan_days INTEGER, loan_playing_time TEXT
+      created_at TEXT NOT NULL DEFAULT (datetime('now')), deal_type TEXT NOT NULL DEFAULT 'transfer', loan_days INTEGER, loan_playing_time TEXT, reveal_potential INTEGER NOT NULL DEFAULT 0
     );
 
     CREATE TABLE transfer_bids (
