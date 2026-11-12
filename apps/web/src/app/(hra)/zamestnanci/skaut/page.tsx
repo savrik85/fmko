@@ -319,7 +319,7 @@ export default function ScoutPage() {
                   const isSel = s.id === currentScout?.id;
                   const hasAsgn = !!s.assignment;
                   const watching = s.playerMissions?.length ?? 0;
-                  let statusLabel = watching > 0 ? `Volný · sleduje ${watching} ${plural(watching, "hráče", "hráče", "hráčů")}` : "Volný";
+                  let statusLabel = watching > 0 ? `Volný · sleduje ${plural(watching, "hráče", "hráče", "hráčů")}` : "Volný";
                   if (s.assignment) {
                     if (s.assignment.assignment_type === "player") {
                       statusLabel = `Hráč: ${s.assignment.targetPlayerName ?? "v terénu"}`;
