@@ -77,8 +77,15 @@ describe("historie staveb", () => {
     await db.prepare(
       "INSERT INTO transactions (id, team_id, type, amount, balance_after, description, game_date, created_at) VALUES ('t-old', ?, 'stadium_upgrade', -43700, 0, 'Vylepšení stadionu: Hlavní tribuna', '2026-10-10', '2026-10-10 12:00:00')",
     ).bind(TEAM).run();
+    // Nejstarší platby nesly místo názvu klíč sloupce.
+    await db.prepare(
+      "INSERT INTO transactions (id, team_id, type, amount, balance_after, description, game_date, created_at) VALUES ('t-older', ?, 'stadium_upgrade', -95000, 0, 'Vylepšení stadionu: lighting', '2026-08-23', '2026-08-23 20:49:00')",
+    ).bind(TEAM).run();
     const builds = await loadStadiumBuilds(db, TEAM);
-    expect(builds).toEqual([expect.objectContaining({ label: "Hlavní tribuna", cost: 43700, toLevel: null, undo: null, builtAt: "2026-10-10T12:00:00Z" })]);
+    expect(builds).toEqual([
+      expect.objectContaining({ label: "Hlavní tribuna", cost: 43700, toLevel: null, undo: null, builtAt: "2026-10-10T12:00:00Z" }),
+      expect.objectContaining({ label: "Osvětlení", cost: 95000 }),
+    ]);
   });
 });
 

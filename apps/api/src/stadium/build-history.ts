@@ -12,6 +12,7 @@
 import { logger } from "../lib/logger";
 import { recordTransaction } from "../season/finance-processor";
 import type { ServiceError } from "../services/lineup";
+import { FACILITY_LABELS } from "./stadium-generator";
 import { EXT_KIND_LABELS, EXT_SLOT_DEFS, requirementOf, type ExtKind, type ExtSlot } from "./extension-catalog";
 import { loadExtensions } from "./extensions-db";
 import { STAND_SIDES, readStandLevels, standsMaxLevel, type StandSide } from "./stands-model";
@@ -131,6 +132,12 @@ async function undoBlocker(db: D1Database, build: BuildRow, stadium: Record<stri
   return null;
 }
 
+/** Název stavby ze staré platby. Nejstarší platby nesly klíč sloupce (`lighting`) místo názvu. */
+function legacyLabel(description: string): string {
+  const name = description.replace(/^Vylepšení stadionu:\s*/, "");
+  return FACILITY_LABELS[name] ?? name;
+}
+
 /** Historie staveb klubu, nejnovější první: záznamy z historie a starší platby z financí. */
 export async function loadStadiumBuilds(db: D1Database, teamId: string, now = new Date()): Promise<StadiumBuildView[]> {
   const rows = await db.prepare(
@@ -164,7 +171,7 @@ export async function loadStadiumBuilds(db: D1Database, teamId: string, now = ne
     .catch((e) => { logger.warn({ module: M }, "starší stavby z financí", e); return { results: [] }; });
   for (const t of legacy.results) {
     views.push({
-      id: `txn-${t.id}`, facility: "legacy", label: t.description.replace(/^Vylepšení stadionu:\s*/, ""),
+      id: `txn-${t.id}`, facility: "legacy", label: legacyLabel(t.description),
       fromLevel: null, toLevel: null, cost: -t.amount,
       builtAt: t.created_at.includes("T") ? t.created_at : `${t.created_at.replace(" ", "T")}Z`,
       revertedAt: null, undo: null,
