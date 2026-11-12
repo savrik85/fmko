@@ -130,11 +130,11 @@ describe("trh napříč ligami", () => {
   });
 
   it("odkrytý potenciál vidí kupující jen u inzerátu, kde ho prodávající odkryl", async () => {
-    const stropy = JSON.stringify(Object.fromEntries(
+    const skillCaps = JSON.stringify(Object.fromEntries(
       ["speed", "technique", "shooting", "passing", "heading", "defense", "stamina", "strength", "vision", "creativity", "setPieces"]
         .map((k) => [k, { current: 55, maxPotential: 72 }]),
     ));
-    await db.prepare("UPDATE players SET skills_max = ?, hidden_talent = 60 WHERE id IN ('p-human', 'p-ai-club')").bind(stropy).run();
+    await db.prepare("UPDATE players SET skills_max = ?, hidden_talent = 60 WHERE id IN ('p-human', 'p-ai-club')").bind(skillCaps).run();
     await db.prepare("UPDATE transfer_listings SET reveal_potential = 1 WHERE id = 'listing-human'").run();
     try {
       const res = await callRoute("/teams/praha-human/market");

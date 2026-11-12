@@ -301,6 +301,25 @@ function pitchBarColor(condition: number): string {
 
 function formatCZK(v: number): string { return v.toLocaleString("cs") + " Kč"; }
 
+function formatDateTime(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString("cs", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+/** Záznam z historie staveb (api: stadium/build-history.ts). */
+interface StadiumBuild {
+  id: string;
+  facility: string;
+  label: string;
+  fromLevel: number | null;
+  toLevel: number | null;
+  cost: number;
+  builtAt: string;
+  revertedAt: string | null;
+  undo: { available: boolean; until: string; blockedReason: string | null } | null;
+}
+
 /**
  * ─── Stavební bloky stránky ─────────────────────────────────────────────────
  *
@@ -509,8 +528,15 @@ export default function StadiumPage() {
    */
   const [matchWeather, setMatchWeather] = useState<string | null>(null);
 
+  // Historie staveb (co, kdy, za kolik) a co z ní jde ještě vrátit.
+  const [builds, setBuilds] = useState<StadiumBuild[]>([]);
+  const [historyOpen, setHistoryOpen] = useState(false);
+
   const refresh = async () => {
     if (!teamId) return;
+    apiFetch<{ builds: StadiumBuild[] }>(`/api/teams/${teamId}/stadium/builds`)
+      .then((res) => setBuilds(res.builds ?? []))
+      .catch((e) => console.error("historie staveb se nenačetla:", e));
     const [s, t, sp] = await Promise.all([
       apiFetch<StadiumData>(`/api/teams/${teamId}/stadium`),
       apiFetch<Team>(`/api/teams/${teamId}`),
@@ -607,6 +633,31 @@ export default function StadiumPage() {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ facility }),
     }).catch((e) => console.error("stadium upgrade failed:", e));
+    await refresh();
+    setActing(null);
+  };
+
+  const handleRevertBuild = async (build: StadiumBuild) => {
+    if (!teamId || acting) return;
+    const ok = await confirm({
+      title: `Vrátit stavbu: ${build.label}?`,
+      description: `Tribuna se vrátí na úroveň ${build.fromLevel ?? 0} a celá zaplacená částka se připíše zpátky do pokladny. Jde to jen do ${formatDateTime(build.undo?.until ?? build.builtAt)}.`,
+      details: [{ label: "Vrátí se", value: `+${formatCZK(build.cost)}`, color: "text-pitch-600" }],
+      confirmLabel: "Vrátit stavbu",
+      variant: "danger",
+    });
+    if (!ok) return;
+    setActing(build.facility);
+    try {
+      await apiFetch(`/api/teams/${teamId}/stadium/builds/${build.id}/revert`, { method: "POST" });
+    } catch (e) {
+      console.error("vrácení stavby selhalo:", e);
+      await confirm({
+        title: "Stavbu se nepodařilo vrátit",
+        description: e instanceof Error ? e.message : "Zkus to prosím znovu.",
+        confirmLabel: "Rozumím",
+      });
+    }
     await refresh();
     setActing(null);
   };
@@ -1449,6 +1500,33 @@ export default function StadiumPage() {
                         {!upgrade && level >= 3 && (
                           <div className="text-sm text-pitch-600 font-heading font-bold">Tribuna je na maximální úrovni</div>
                         )}
+                        {(() => {
+                          // Poslední stavba na téhle straně, dokud ji jde vrátit (48 hodin).
+                          const lastBuild = builds.find((b) => b.facility === facility && !b.revertedAt && b.undo);
+                          if (!lastBuild?.undo) return null;
+                          return (
+                            <div className="rounded-lg border border-gray-200 p-3 space-y-2">
+                              <div className="text-sm leading-snug">
+                                <span className="font-heading font-bold">Postaveno omylem?</span>{" "}
+                                Úroveň {lastBuild.toLevel} jde do {formatDateTime(lastBuild.undo.until)} vrátit i s penězi.
+                              </div>
+                              {lastBuild.undo.available ? (
+                                <button
+                                  onClick={() => handleRevertBuild(lastBuild)}
+                                  disabled={!!acting}
+                                  className="min-h-11 w-full sm:w-auto px-4 py-2 rounded-soft text-sm font-heading font-bold border-2 border-red-200 text-red-700 bg-white hover:bg-red-50 disabled:opacity-50"
+                                >
+                                  Vrátit stavbu
+                                </button>
+                              ) : (
+                                <div className="text-sm text-muted leading-snug">Teď vrátit nejde: {lastBuild.undo.blockedReason}</div>
+                              )}
+                              {lastBuild.undo.available && (
+                                <div className="text-sm text-muted">Do pokladny se vrátí {formatCZK(lastBuild.cost)}.</div>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </div>
                       <div className="space-y-2">
                         <div className="font-heading font-bold text-base">
@@ -1556,6 +1634,43 @@ export default function StadiumPage() {
             </div>
           );
         })}
+      </div>
+
+      {/* ═══ Historie staveb ═══ */}
+      <div className="card p-4 space-y-3">
+        <button type="button" onClick={() => setHistoryOpen((v) => !v)}
+          className="w-full flex items-center justify-between gap-3 text-left min-h-11">
+          <span>
+            <span className="block font-heading font-bold">Historie staveb</span>
+            <span className="block text-sm text-muted">
+              {builds.length === 0 ? "Zatím žádná stavba" : `${builds.length} ${builds.length === 1 ? "záznam" : builds.length < 5 ? "záznamy" : "záznamů"} · co se postavilo, kdy a za kolik`}
+            </span>
+          </span>
+          <span className="text-xl shrink-0" aria-hidden>{historyOpen ? "▾" : "▸"}</span>
+        </button>
+        {historyOpen && builds.length > 0 && (
+          <ul className="divide-y divide-gray-100">
+            {builds.map((b) => (
+              <li key={b.id} className="py-2 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className={`font-heading font-bold text-sm ${b.revertedAt ? "line-through text-muted" : "text-ink"}`}>
+                    {b.label}{b.toLevel != null ? `, úroveň ${b.toLevel}` : ""}
+                  </div>
+                  <div className="text-sm text-muted">
+                    {formatDateTime(b.builtAt)}
+                    {b.revertedAt ? ` · vráceno ${formatDateTime(b.revertedAt)}` : ""}
+                  </div>
+                </div>
+                <div className="shrink-0 font-heading font-bold text-sm tabular-nums text-ink">{formatCZK(b.cost)}</div>
+              </li>
+            ))}
+          </ul>
+        )}
+        {historyOpen && (
+          <p className="text-sm text-muted leading-snug">
+            Omylem postavenou tribunu jde do 48 hodin vrátit i s penězi, tlačítko je v kartě dané tribuny. Starší stavby jsou tu z plateb ve financích, proto u nich chybí úroveň.
+          </p>
+        )}
       </div>
     </div>
   );

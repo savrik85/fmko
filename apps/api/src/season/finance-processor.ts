@@ -23,6 +23,7 @@ export type TransactionType =
   | "equipment_sale"       // příjem z prodeje vybavení v bazaru
   | "equipment_pawn"       // výkup v zastavárně
   | "stadium_upgrade"
+  | "stadium_refund"       // vrácení omylem postavené tribuny (stadium/build-history.ts)
   | "stadium_visual"
   | "club_website"         // šablony a doplňky klubového webu
   | "pitch_repair"

@@ -103,9 +103,16 @@ export async function upgradeStadiumFacility(
   // Teprve po úspěšném zámku strhnout peníze. Do popisu jde český název zařízení,
   // ne klíč sloupce — v historii transakcí to čte hráč, ne databáze.
   const { FACILITY_LABELS } = await import("../stadium/stadium-generator");
+  // Historie staveb: z ní jde omylem postavená tribuna do 48 hodin vrátit. Platba nese její referenci.
+  const { recordStadiumBuild, buildReference } = await import("../stadium/build-history");
+  const buildId = await recordStadiumBuild(db, {
+    teamId, facility, label: FACILITY_LABELS[facility] ?? facility,
+    fromLevel: upgrade.currentLevel, toLevel: upgrade.nextLevel, cost: upgrade.cost,
+  });
   try {
     await recordTransaction(db, teamId, "stadium_upgrade", -upgrade.cost,
-      `Vylepšení stadionu: ${FACILITY_LABELS[facility] ?? facility}`, new Date().toISOString());
+      `Vylepšení stadionu: ${FACILITY_LABELS[facility] ?? facility}`, new Date().toISOString(),
+      buildId ? buildReference(buildId) : "build-unrecorded");
   } catch (e) {
     // Level je už zapsaný (zámek prošel) — klub by jinak dostal upgrade zadarmo
     // a nikdo by se to nedozvěděl. Nesmí to zmizet v prázdném catchi.
