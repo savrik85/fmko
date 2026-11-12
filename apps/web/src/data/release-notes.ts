@@ -12,6 +12,17 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    date: "2026-11-12",
+    emoji: "🕵️",
+    title: "Skauting bez stropu, potenciál na trhu a vrácení tribuny",
+    items: [
+      "Skaut teď může sledovat kolik hráčů chceš najednou, i když je zrovna na jiném úkolu. Na profilu hráče klikni na Poslat skauta. Za každého zaplatíš jedno cestovné 500 Kč, až hlášení dorazí. Koho skaut sleduje, vidíš na jeho stránce v Zaměstnancích a každé sledování tam můžeš zrušit.",
+      "Když dáváš hráče na prodej nebo na hostování, můžeš zaškrtnout Odkrýt potenciál hráče. Kupující pak na trhu i v profilu hráče uvidí, kam to může dotáhnout. Je to zdarma a platí, dokud je inzerát aktivní.",
+      "Postavil sis tribunu omylem? Do 48 hodin ji v kartě tribuny na Stadionu vrátíš tlačítkem Vrátit stavbu a dostaneš zpátky celou částku. Jde to, dokud se na ní nehrál domácí zápas.",
+      "Dole na Stadionu je nová Historie staveb: co se postavilo, kdy a za kolik.",
+    ],
+  },
+  {
     date: "2026-11-08",
     emoji: "🗣️",
     title: "Socky pro všechny okresy",
