@@ -36,7 +36,7 @@ beforeAll(async () => {
     CREATE TABLE players (
       id TEXT PRIMARY KEY, team_id TEXT NOT NULL, first_name TEXT NOT NULL, last_name TEXT NOT NULL, age INTEGER NOT NULL,
       position TEXT NOT NULL, overall_rating INTEGER NOT NULL, skills TEXT NOT NULL DEFAULT '{}', avatar TEXT NOT NULL DEFAULT '{}',
-      nationality TEXT NOT NULL DEFAULT 'CZ'
+      nationality TEXT NOT NULL DEFAULT 'CZ', skills_max TEXT, hidden_talent REAL
     );
     CREATE TABLE injuries (id TEXT PRIMARY KEY, player_id TEXT NOT NULL, days_remaining INTEGER NOT NULL);
     CREATE TABLE free_agents (
@@ -51,7 +51,7 @@ beforeAll(async () => {
     CREATE TABLE transfer_listings (
       id TEXT PRIMARY KEY, player_id TEXT NOT NULL, team_id TEXT NOT NULL, asking_price INTEGER NOT NULL,
       league_id TEXT NOT NULL, status TEXT NOT NULL, expires_at TEXT NOT NULL, is_ai_listing INTEGER NOT NULL DEFAULT 0,
-      ai_player_data TEXT, rejected_by TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL DEFAULT (datetime('now')), deal_type TEXT NOT NULL DEFAULT 'transfer', loan_days INTEGER, loan_playing_time TEXT
+      ai_player_data TEXT, rejected_by TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL DEFAULT (datetime('now')), deal_type TEXT NOT NULL DEFAULT 'transfer', loan_days INTEGER, loan_playing_time TEXT, reveal_potential INTEGER NOT NULL DEFAULT 0
     );
     CREATE TABLE transfer_bids (id TEXT PRIMARY KEY, listing_id TEXT NOT NULL, team_id TEXT NOT NULL, amount INTEGER NOT NULL, status TEXT NOT NULL);
     CREATE TABLE transfer_offers (
@@ -127,6 +127,34 @@ describe("trh napříč ligami", () => {
     const { listings } = await res.json() as { listings: Array<{ id: string; origin: string | null }> };
     expect(listings.map((l) => l.id)).toEqual(["listing-human", "listing-ai-club"]);
     expect(listings.every((l) => l.origin === "Prachatice")).toBe(true);
+  });
+
+  it("odkrytý potenciál vidí kupující jen u inzerátu, kde ho prodávající odkryl", async () => {
+    const stropy = JSON.stringify(Object.fromEntries(
+      ["speed", "technique", "shooting", "passing", "heading", "defense", "stamina", "strength", "vision", "creativity", "setPieces"]
+        .map((k) => [k, { current: 55, maxPotential: 72 }]),
+    ));
+    await db.prepare("UPDATE players SET skills_max = ?, hidden_talent = 60 WHERE id IN ('p-human', 'p-ai-club')").bind(stropy).run();
+    await db.prepare("UPDATE transfer_listings SET reveal_potential = 1 WHERE id = 'listing-human'").run();
+    try {
+      const res = await callRoute("/teams/praha-human/market");
+      const text = await res.text();
+      const { listings } = JSON.parse(text) as { listings: Array<{ id: string; overallRating: number; revealedPotential: { lo: number; hi: number; ratingHi: number } | null }> };
+      const revealed = listings.find((l) => l.id === "listing-human")?.revealedPotential;
+      expect(revealed).not.toBeNull();
+      expect(revealed!.lo).toBeGreaterThanOrEqual(55);
+      expect(revealed!.hi).toBeGreaterThanOrEqual(revealed!.lo);
+      expect(revealed!.hi).toBeLessThanOrEqual(85);
+      // Neodkrytý inzerát potenciál nedostane a surové stropy z API neodejdou u žádného.
+      expect(listings.find((l) => l.id === "listing-ai-club")?.revealedPotential).toBeNull();
+      expect(text).not.toContain("maxPotential");
+      expect(text).not.toContain("revealed_skills_max");
+      // Rozpětí je po dobu inzerátu stálé a pro všechny kupující stejné.
+      const again = await (await callRoute("/teams/pt-lower/market")).json() as { listings: Array<{ id: string; revealedPotential: unknown }> };
+      expect(again.listings.find((l) => l.id === "listing-human")?.revealedPotential).toEqual(revealed);
+    } finally {
+      await db.prepare("UPDATE transfer_listings SET reveal_potential = 0 WHERE id = 'listing-human'").run();
+    }
   });
 
   it("jiná soutěž v tomtéž okrese má štítek se soutěží", async () => {

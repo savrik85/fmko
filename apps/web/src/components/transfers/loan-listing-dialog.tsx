@@ -8,8 +8,9 @@
 import { useState } from "react";
 import { MoneyInput } from "@/components/ui/money-input";
 import { LOAN_DURATIONS, LOAN_PLAYING_TIME_OPTIONS, type LoanPlayingTime } from "@/lib/loans";
+import { RevealPotentialToggle } from "./revealed-potential";
 
-export interface LoanListingValue { days: number; fee: number; playingTime: LoanPlayingTime }
+export interface LoanListingValue { days: number; fee: number; playingTime: LoanPlayingTime; revealPotential: boolean }
 
 export function LoanListingDialog({ playerName, playerLine, onClose, onConfirm, loading }: {
   playerName: string;
@@ -21,6 +22,7 @@ export function LoanListingDialog({ playerName, playerLine, onClose, onConfirm, 
   const [days, setDays] = useState(60);
   const [fee, setFee] = useState<number | null>(0);
   const [playingTime, setPlayingTime] = useState<LoanPlayingTime>("regular");
+  const [revealPotential, setRevealPotential] = useState(false);
 
   return (
     // Kliknutí vedle dialog nezavírá, rozepsané podmínky by se ztratily. Zavírá jen Zrušit.
@@ -74,6 +76,8 @@ export function LoanListingDialog({ playerName, playerLine, onClose, onConfirm, 
             </p>
           </fieldset>
 
+          <RevealPotentialToggle checked={revealPotential} onChange={setRevealPotential} />
+
           <p className="text-sm text-ink">
             Kluby o hráče požádají a ty každou žádost potvrdíš, nebo odmítneš. Bez tvého potvrzení nikam neodejde.
           </p>
@@ -83,7 +87,7 @@ export function LoanListingDialog({ playerName, playerLine, onClose, onConfirm, 
               className="flex-1 py-2.5 rounded-soft text-sm font-heading font-bold bg-gray-100 hover:bg-gray-200 text-ink">
               Zrušit
             </button>
-            <button onClick={() => onConfirm({ days, fee: fee ?? 0, playingTime })} disabled={loading}
+            <button onClick={() => onConfirm({ days, fee: fee ?? 0, playingTime, revealPotential })} disabled={loading}
               className="flex-1 py-2.5 rounded-soft text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 disabled:opacity-50">
               {loading ? "Ukládám..." : "Nabídnout"}
             </button>

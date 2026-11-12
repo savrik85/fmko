@@ -47,10 +47,16 @@ export async function findVisibleFreeAgents(
  * soutěží inzeráty klubů ve hře (lidských i AI). Vlastní inzeráty a ty, u kterých klub
  * hráč už odmítl, se vynechají.
  */
+/**
+ * Stropy dovedností a talent se čtou jen u inzerátů, kde je prodávající odkryl
+ * (`reveal_potential`); u ostatních zůstávají NULL, aby se k cizímu klubu nedostaly ani surově.
+ */
 export async function findVisibleListings(db: D1Database, team: { id: string; leagueId: string }): Promise<Record<string, unknown>[]> {
   const listings = await db.prepare(
     `SELECT tl.id, tl.player_id, tl.team_id, tl.asking_price, tl.expires_at, tl.is_ai_listing, tl.ai_player_data, tl.rejected_by,
-     tl.deal_type, tl.loan_days, tl.loan_playing_time,
+     tl.deal_type, tl.loan_days, tl.loan_playing_time, tl.reveal_potential,
+     CASE WHEN tl.reveal_potential = 1 THEN p.skills_max END as revealed_skills_max,
+     CASE WHEN tl.reveal_potential = 1 THEN p.hidden_talent END as revealed_talent,
      tl.league_id, l.name as league_name, l.district as league_district,
      p.first_name, p.last_name, p.age, p.position, p.overall_rating, p.avatar as player_avatar, p.skills, p.nationality,
      t.name as team_name, t.user_id as team_user_id, i.days_remaining as injury_days

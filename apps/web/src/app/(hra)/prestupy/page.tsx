@@ -19,6 +19,7 @@ import { ObligationsTab } from "./ObligationsTab";
 import { DemandsTab } from "./DemandsTab";
 import { LoansTab } from "./LoansTab";
 import { loanTermsLine } from "@/lib/loans";
+import { RevealPotentialToggle, RevealedPotentialBadge, type RevealedPotential } from "@/components/transfers/revealed-potential";
 import { OriginBadge } from "@/components/transfers/origin-badge";
 import { AiNegotiationsList } from "@/components/transfers/AiNegotiationsList";
 import { termsNote, TransferTermsFields, PLAIN_TERMS, type TermsValue } from "@/components/transfers/transfer-terms";
@@ -580,6 +581,8 @@ interface MarketListing {
   dealType?: "transfer" | "loan";
   loanDays?: number | null;
   loanPlayingTime?: string | null;
+  /** Potenciál, který prodávající u inzerátu odkryl (jinak null). */
+  revealedPotential?: RevealedPotential | null;
 }
 
 /** Štítek „odkud“ u hráče z jiného okresu nebo soutěže — stejný na Volných i na Prodeji. */
@@ -810,8 +813,10 @@ export default function TransfersPage() {
   // Price dialog
   const [priceDialog, setPriceDialog] = useState<{
     title: string; description: string; defaultPrice: number;
-    onConfirm: (price: number, terms: TermsValue) => void;
+    onConfirm: (price: number, terms: TermsValue, revealPotential: boolean) => void;
     negotiate?: (price: number) => void;
+    /** Vystavení vlastního hráče: nabídne odkrytí potenciálu kupujícím. */
+    listing?: boolean;
     /** Nákup z trhu: jak se platí (null = jen cena, třeba vystavení vlastního hráče). */
     payment?: { allowSellOn: boolean } | null;
   } | null>(null);
@@ -1184,12 +1189,15 @@ export default function TransfersPage() {
       rating: l.overallRating, skills: l.skills ?? {}, avatar,
       injury: l.injuryDays ? { type: null, daysRemaining: l.injuryDays } : null,
       clubLabel: l.teamName, clubIsAi: l.teamIsAi === true, price: l.askingPrice,
-      tag: l.dealType === "loan" ? (
+      tag: l.dealType === "loan" || l.origin || l.revealedPotential ? (
         <span className="inline-flex flex-wrap items-center gap-1">
           {l.origin && <OriginBadge origin={l.origin} />}
-          <span className="text-xs font-heading font-bold px-2 py-0.5 rounded-full bg-pitch-50 text-pitch-700">{loanTermsLine(l)}</span>
+          {l.dealType === "loan" && (
+            <span className="text-xs font-heading font-bold px-2 py-0.5 rounded-full bg-pitch-50 text-pitch-700">{loanTermsLine(l)}</span>
+          )}
+          {l.revealedPotential && <RevealedPotentialBadge age={l.playerAge} potential={l.revealedPotential} />}
         </span>
-      ) : l.origin ? <OriginBadge origin={l.origin} /> : undefined,
+      ) : undefined,
       action: listingAction(l),
       onOpen: l.isAiListing ? () => openListingBid(l) : () => router.push(`/hrac/${l.playerId}`),
     };
@@ -2837,10 +2845,11 @@ function SquadTransferTable({ players, myListings, teamId, confirm, setPriceDial
       title: `Vystavit ${p.first_name} ${p.last_name} na trh`,
       description: `${p.position}, ${p.age} let, rating ${p.overall_rating}`,
       defaultPrice: marketValue(p.overall_rating ?? 50, p.age ?? 27, p.position),
-      onConfirm: async (price: number) => {
+      listing: true,
+      onConfirm: async (price: number, _terms: TermsValue, revealPotential: boolean) => {
         const ok = await apiAction(apiFetch(`/api/teams/${teamId}/players/${p.id}/list`, {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ askingPrice: price }),
+          body: JSON.stringify({ askingPrice: price, revealPotential }),
         }), "Vystavení na trh se nezdařilo");
         setPriceDialog(null);
         if (ok) await refresh();
@@ -2983,22 +2992,25 @@ function SquadTransferTable({ players, myListings, teamId, confirm, setPriceDial
   );
 }
 
-function PriceDialog({ title, description, defaultPrice, onConfirm, onClose, negotiate, payment }: {
+function PriceDialog({ title, description, defaultPrice, onConfirm, onClose, negotiate, payment, listing }: {
   title: string; description: string; defaultPrice: number;
-  onConfirm: (price: number, terms: TermsValue) => Promise<void> | void; onClose: () => void;
+  onConfirm: (price: number, terms: TermsValue, revealPotential: boolean) => Promise<void> | void; onClose: () => void;
+  /** Vystavení vlastního hráče: nabídne odkrytí potenciálu kupujícím. */
+  listing?: boolean;
   /** Inzerát lidského klubu: plná nabídka v profilu hráče (výměna hráče, zpráva klubu). */
   negotiate?: (price: number) => void;
   payment?: { allowSellOn: boolean } | null;
 }) {
   const [price, setPrice] = useState<number | null>(defaultPrice);
   const [terms, setTerms] = useState<TermsValue>(PLAIN_TERMS);
+  const [revealPotential, setRevealPotential] = useState(false);
 
   return (
     <SheetDialog open title={title} description={description} confirmDisabled={!price}
       onCancel={onClose}
       onConfirm={async () => {
         if (!price) return;
-        try { await onConfirm(price, terms); } catch (e) { console.error("PriceDialog confirm error:", e); }
+        try { await onConfirm(price, terms, revealPotential); } catch (e) { console.error("PriceDialog confirm error:", e); }
       }}>
       <label className="text-sm text-muted font-heading uppercase">Požadovaná cena (Kč)</label>
       <MoneyInput
@@ -3020,6 +3032,11 @@ function PriceDialog({ title, description, defaultPrice, onConfirm, onClose, neg
           );
         })}
       </div>
+      {listing && (
+        <div className="mt-4 text-left">
+          <RevealPotentialToggle checked={revealPotential} onChange={setRevealPotential} />
+        </div>
+      )}
       {payment && (
         <div className="mt-4">
           <TransferTermsFields amount={price} value={terms} onChange={setTerms} allowSellOn={payment.allowSellOn} />
