@@ -30,6 +30,8 @@ beforeAll(async () => {
     db.prepare("INSERT INTO seasons (id, number, status) VALUES ('season-3', 3, 'active')"),
     db.prepare("INSERT INTO teams (id, user_id, village_id, name, budget, reputation, game_date) VALUES (?, 'u-club', ?, 'Jiskra', ?, 50, '2026-11-12T16:00:00.000Z')")
       .bind(TEAM, village!.id, START_BUDGET),
+    db.prepare("INSERT INTO teams (id, user_id, village_id, name, budget, reputation, game_date) VALUES ('other', 'ai', ?, 'Soupeř', 50000, 50, '2026-11-12T16:00:00.000Z')")
+      .bind(village!.id),
     db.prepare("INSERT INTO stadiums (id, team_id) VALUES ('st-club', ?)").bind(TEAM),
   ]);
 }, 180_000);
@@ -147,6 +149,31 @@ describe("vrácení omylem postavené tribuny", () => {
     ).bind(TEAM).run();
     expect(await revertStandBuild(db, TEAM, entry.id)).toMatchObject({ ok: false, status: 409, error: expect.stringContaining("poškozená") });
     expect(await levelOf("stand_main")).toBe(1);
+  });
+
+  it("po odehraném domácím zápase už vrátit nejde (kapacita by se půjčila zadarmo)", async () => {
+    await build("stand_main");
+    const [entry] = await loadStadiumBuilds(db, TEAM);
+    const soon = new Date(Date.now() + 3600_000).toISOString().replace(/\.\d{3}Z$/, "Z");
+    // Venkovní zápas nevadí, domácí ano.
+    await db.prepare("INSERT INTO matches (id, home_team_id, away_team_id, status, simulated_at) VALUES ('m-away', 'other', ?, 'simulated', ?)").bind(TEAM, soon).run();
+    expect((await loadStadiumBuilds(db, TEAM))[0].undo).toMatchObject({ available: true });
+    await db.prepare("INSERT INTO matches (id, home_team_id, away_team_id, status, simulated_at) VALUES ('m-home', ?, 'other', 'simulated', ?)").bind(TEAM, soon).run();
+    expect((await loadStadiumBuilds(db, TEAM))[0].undo).toMatchObject({ available: false, blockedReason: expect.stringContaining("domácí zápas") });
+    expect(await revertStandBuild(db, TEAM, entry.id)).toMatchObject({ ok: false, status: 409 });
+    expect(await levelOf("stand_main")).toBe(1);
+    await db.prepare("DELETE FROM matches WHERE id IN ('m-away', 'm-home')").run();
+  });
+
+  it("vrací se jen to, co se za stavbu opravdu strhlo", async () => {
+    const cost = await build("stand_opposite");
+    const [entry] = await loadStadiumBuilds(db, TEAM);
+    // Stržení při stavbě selhalo: platba chybí, není co vracet.
+    await db.prepare("DELETE FROM transactions WHERE type = 'stadium_upgrade'").run();
+    await db.prepare("UPDATE teams SET budget = ? WHERE id = ?").bind(START_BUDGET, TEAM).run();
+    expect(cost).toBeGreaterThan(0);
+    expect(await revertStandBuild(db, TEAM, entry.id)).toEqual({ ok: true, refund: 0, level: 0 });
+    expect(await budget()).toBe(START_BUDGET);
   });
 
   it("cizí klub stavbu nevrátí", async () => {

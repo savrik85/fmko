@@ -1508,7 +1508,7 @@ export default function StadiumPage() {
                             <div className="rounded-lg border border-gray-200 p-3 space-y-2">
                               <div className="text-sm leading-snug">
                                 <span className="font-heading font-bold">Postaveno omylem?</span>{" "}
-                                Úroveň {lastBuild.toLevel} jde do {formatDateTime(lastBuild.undo.until)} vrátit i s penězi.
+                                Úroveň {lastBuild.toLevel} jde do {formatDateTime(lastBuild.undo.until)} vrátit i s penězi, dokud se na ní nehrál domácí zápas.
                               </div>
                               {lastBuild.undo.available ? (
                                 <button
@@ -1668,7 +1668,7 @@ export default function StadiumPage() {
         )}
         {historyOpen && (
           <p className="text-sm text-muted leading-snug">
-            Omylem postavenou tribunu jde do 48 hodin vrátit i s penězi, tlačítko je v kartě dané tribuny. Starší stavby jsou tu z plateb ve financích, proto u nich chybí úroveň.
+            Omylem postavenou tribunu jde do 48 hodin vrátit i s penězi, dokud se na ní nehrál domácí zápas. Tlačítko je v kartě dané tribuny. Starší stavby jsou tu z plateb ve financích, proto u nich chybí úroveň.
           </p>
         )}
       </div>
