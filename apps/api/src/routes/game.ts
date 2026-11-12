@@ -1940,6 +1940,23 @@ async function stavSektoru(
   };
 }
 
+// GET /api/teams/:id/stadium/builds — historie staveb (co, kdy, za kolik) a co z ní jde vrátit
+gameRouter.get("/teams/:teamId/stadium/builds", async (c) => {
+  const teamId = c.req.param("teamId");
+  const denied = await requireOwnedTeamRead(c, teamId);
+  if (denied) return denied;
+  const { loadStadiumBuilds, STAND_BUILD_UNDO_HOURS } = await import("../stadium/build-history");
+  return c.json({ builds: await loadStadiumBuilds(c.env.DB, teamId), undoHours: STAND_BUILD_UNDO_HOURS });
+});
+
+// POST /api/teams/:id/stadium/builds/:buildId/revert — vrátit omylem postavenou tribunu (do 48 h, plná částka)
+gameRouter.post("/teams/:teamId/stadium/builds/:buildId/revert", async (c) => {
+  const { revertStandBuild } = await import("../stadium/build-history");
+  const res = await revertStandBuild(c.env.DB, c.req.param("teamId"), c.req.param("buildId"));
+  if (!res.ok) return c.json({ error: res.error }, res.status);
+  return c.json({ ok: true, refund: res.refund, level: res.level });
+});
+
 // POST /api/teams/:id/stadium/upgrade — upgrade a facility
 gameRouter.post("/teams/:teamId/stadium/upgrade", async (c) => {
   const teamId = c.req.param("teamId");
@@ -1955,7 +1972,8 @@ gameRouter.post("/teams/:teamId/stadium/upgrade", async (c) => {
 gameRouter.post("/teams/:teamId/stadium/extension", async (c) => {
   const teamId = c.req.param("teamId");
   const body = await c.req.json<{ slot?: string; kind?: string }>();
-  const { EXT_SLOTS, allowedKinds, getExtensionSlots } = await import("../stadium/extension-catalog");
+  const { EXT_SLOTS, EXT_SLOT_DEFS, allowedKinds, getExtensionSlots } = await import("../stadium/extension-catalog");
+  type ExtSlot = import("../stadium/extension-catalog").ExtSlot;
   const { loadExtensions, buildExtension, replaceMobileExtension } = await import("../stadium/extensions-db");
   const { readStandLevels } = await import("../stadium/stands-model");
 
@@ -1995,9 +2013,15 @@ gameRouter.post("/teams/:teamId/stadium/extension", async (c) => {
   if (!claimed) {
     return c.json({ error: "Stavba už probíhá, načti stránku znovu" }, 409);
   }
+  const { recordStadiumBuild, buildReference } = await import("../stadium/build-history");
+  const buildId = await recordStadiumBuild(c.env.DB, {
+    teamId, facility: `extension:${body.slot}`, label: `Přístavba: ${option.label} (${EXT_SLOT_DEFS[body.slot as ExtSlot].label.split(":")[0]})`,
+    fromLevel: slotState.built?.level ?? 0, toLevel: option.level, cost: option.cost,
+  });
   try {
     await recordTransaction(c.env.DB, teamId, "stadium_upgrade", -option.cost,
-      `Přístavba tribuny: ${option.label}, úroveň ${option.level}${option.replaces ? " (nahradila mobilní tribunku)" : ""}`, new Date().toISOString());
+      `Přístavba tribuny: ${option.label}, úroveň ${option.level}${option.replaces ? " (nahradila mobilní tribunku)" : ""}`, new Date().toISOString(),
+      buildId ? buildReference(buildId) : "build-unrecorded");
   } catch (e) {
     // Přístavba už stojí. Bez záznamu by klub dostal stavbu zadarmo a nikdo by se to nedozvěděl.
     logger.error({ module: "game", teamId }, `přístavba ${body.slot}/${body.kind}: zapsána, ale strhnutí ${option.cost} Kč selhalo`, e);

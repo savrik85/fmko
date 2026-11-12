@@ -6,7 +6,7 @@
 export const TXN_ICONS: Record<string, string> = {
   wage: "💸", sponsor_income: "💰", match_income: "🏟", match_expense: "⚽",
   match_reward: "🏆", training_cost: "🏋", pitch_maintenance: "🌿",
-  equipment_expense: "👟", equipment_upgrade: "⬆", stadium_upgrade: "🏗",
+  equipment_expense: "👟", equipment_upgrade: "⬆", stadium_upgrade: "🏗", stadium_refund: "↩",
   pitch_repair: "🛠", pitch_upgrade: "🌿", classified_ad: "📰",
   sponsor_termination: "❌", sponsor_signing: "✍", sponsor_request: "🤲", season_reward: "🏆", event: "⚡",
   transfer_fee: "🤝", transfer_income: "💵", signing_fee: "✍",
@@ -36,7 +36,7 @@ export const TXN_ICONS: Record<string, string> = {
 export const TXN_LABELS: Record<string, string> = {
   wage: "Mzdy", sponsor_income: "Sponzoři", match_income: "Vstupné", match_expense: "Zápasové náklady",
   match_reward: "Bonus za výsledek", training_cost: "Trénink", pitch_maintenance: "Údržba hřiště",
-  equipment_expense: "Vybavení", equipment_upgrade: "Upgrade vybavení", stadium_upgrade: "Upgrade stadionu",
+  equipment_expense: "Vybavení", equipment_upgrade: "Upgrade vybavení", stadium_upgrade: "Upgrade stadionu", stadium_refund: "Vrácení stavby",
   pitch_repair: "Oprava hřiště", pitch_upgrade: "Změna povrchu", classified_ad: "Inzerát",
   sponsor_termination: "Ukončení smlouvy", sponsor_signing: "Sponzor při podpisu", sponsor_request: "Příspěvek od sponzora", season_reward: "Sezónní odměna", event: "Událost",
   transfer_fee: "Přestupová cena", transfer_income: "Prodej hráče", signing_fee: "Podpisový bonus",
