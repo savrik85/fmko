@@ -102,7 +102,9 @@ scoutingRouter.get("/teams/:teamId/scout", async (c) => {
   const assignments = await loadActiveAssignments(db, teamId);
   const selectedStaffId = c.req.query("staffId") || (allScouts[0]?.id ?? null);
   const scout = selectedStaffId ? allScouts.find((s) => s.id === selectedStaffId) ?? allScouts[0] ?? null : null;
-  const assignment = scout ? assignments.find((a) => a.staff_id === scout.id) ?? null : null;
+  // Hlavní úkol má skaut jen jeden; sledovaní hráči běží vedle něj a je jich libovolně mnoho.
+  const isPlayerMission = (a: typeof assignments[0]) => a.assignment_type === "player";
+  const assignment = scout ? assignments.find((a) => a.staff_id === scout.id && !isPlayerMission(a)) ?? null : null;
 
   const coachRow = await db.prepare(
     `SELECT m.licence_level FROM teams t
@@ -160,7 +162,7 @@ scoutingRouter.get("/teams/:teamId/scout", async (c) => {
   });
 
   const scoutList = allScouts.map((s) => {
-    const asgn = assignments.find((a) => a.staff_id === s.id);
+    const asgn = assignments.find((a) => a.staff_id === s.id && !isPlayerMission(a));
     return {
       id: s.id,
       name: `${s.first_name} ${s.last_name}`,
@@ -169,6 +171,7 @@ scoutingRouter.get("/teams/:teamId/scout", async (c) => {
       judgement: s.judgement,
       communication: s.communication,
       assignment: asgn ? enrichAssignment(asgn) : null,
+      playerMissions: assignments.filter((a) => a.staff_id === s.id && isPlayerMission(a)).map(enrichAssignment),
     };
   });
 
@@ -288,9 +291,11 @@ scoutingRouter.delete("/teams/:teamId/scout/assignment", async (c) => {
   const teamId = c.req.param("teamId");
   const clubId = await club(c, teamId);
   if (typeof clubId !== "string") return clubId;
-  const staffId = c.req.query("staffId") || (await c.req.json().catch(() => ({} as { staffId?: string }))).staffId;
-  const done = await cancelScoutAssignment(c.env.DB, clubId, "manager", staffId);
-  if (!done) return c.json({ error: "Skaut teď žádný úkol nemá." }, 409);
+  const staffId = c.req.query("staffId") || (await c.req.json().catch((e) => { logger.warn({ module: "scouting" }, "tělo zrušení úkolu skauta chybí", e); return {} as { staffId?: string }; })).staffId;
+  // ?assignmentId= ukončí jedno sledování hráče; bez něj jen hlavní úkol, sledovaní hráči běží dál.
+  const assignmentId = c.req.query("assignmentId");
+  const done = await cancelScoutAssignment(c.env.DB, clubId, "manager", staffId, assignmentId ? { assignmentId } : { mainTask: true });
+  if (!done) return c.json({ error: assignmentId ? "Tohle sledování už neběží." : "Skaut teď žádný úkol nemá." }, 409);
   return c.json({ ok: true });
 });
 

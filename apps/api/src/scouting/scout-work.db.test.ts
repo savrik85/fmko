@@ -18,6 +18,7 @@ import { scoutingRouter } from "../routes/scouting";
 import { recordTransaction } from "../season/finance-processor";
 import { executeStaffTick } from "../staff/staff-tick";
 import {
+  cancelScoutAssignment,
   createLeagueScoutAssignment, createMatchScoutAssignment, createPlayerScoutAssignment, createScoutAssignment, maintainScoutReports,
   refundUnworkedScoutTravel, runScoutWork,
 } from "./scout-work";
@@ -296,6 +297,66 @@ describe("cestovné až po odvedené práci", () => {
     expect(await budget()).toBe(200);
     expect(await assignment(player.id)).toMatchObject({ status: "cancelled", reports_sent: 0 });
     expect((await scoutSms()).some((s) => s.includes("nejsou peníze"))).toBe(true);
+  });
+});
+
+describe("sledování více hráčů najednou", () => {
+  beforeEach(seed);
+
+  it("jeden skaut sleduje libovolně hráčů vedle hlavního úkolu, každého za jedno cestovné", async () => {
+    const area = ok(await createScoutAssignment(db, {
+      teamId: BUYER, staffId: "sc-player", positions: null, ageMin: 18, ageMax: 32, radiusKm: 15, weeks: 2, gameDate: THURSDAY,
+    }));
+    const first = ok(await createPlayerScoutAssignment(db, { teamId: BUYER, staffId: "sc-player", targetPlayerId: "a-star", gameDate: THURSDAY }));
+    const second = ok(await createPlayerScoutAssignment(db, { teamId: BUYER, staffId: "sc-player", targetPlayerId: "a-weak", gameDate: THURSDAY }));
+    const third = ok(await createPlayerScoutAssignment(db, { teamId: BUYER, staffId: "sc-player", targetPlayerId: "b-fwd", gameDate: THURSDAY }));
+
+    // Druhý hlavní úkol témuž skautovi nejde, sledování hráče ho neblokuje.
+    const another = await createMatchScoutAssignment(db, { teamId: BUYER, staffId: "sc-player", targetTeamId: OPP_A, gameDate: THURSDAY });
+    expect(another).toMatchObject({ ok: false, status: 409 });
+
+    await runScoutWork(env, { gameDate: MONDAY });
+
+    for (const mission of [first, second, third]) {
+      const travel = await travelOf(mission.id);
+      expect(travel).toHaveLength(1);
+      expect(travel[0].amount).toBe(-500);
+    }
+    expect(await travelOf(area.id)).toHaveLength(1);
+    const reports = await db.prepare("SELECT COUNT(*) AS n FROM scout_reports WHERE team_id = ? AND assignment_id IN (?, ?, ?)")
+      .bind(BUYER, first.id, second.id, third.id).first<{ n: number }>();
+    expect(reports?.n).toBe(3);
+  });
+
+  it("téhož hráče klub nesleduje dvakrát současně, po hlášení ho smí poslat znovu", async () => {
+    ok(await createPlayerScoutAssignment(db, { teamId: BUYER, staffId: "sc-player", targetPlayerId: "a-star", gameDate: THURSDAY }));
+    const again = await createPlayerScoutAssignment(db, { teamId: BUYER, staffId: "sc-match", targetPlayerId: "a-star", gameDate: THURSDAY });
+    expect(again).toMatchObject({ ok: false, status: 409, error: "Tohoto hráče už skaut sleduje. Počkej na hlášení." });
+
+    await runScoutWork(env, { gameDate: MONDAY });
+    ok(await createPlayerScoutAssignment(db, { teamId: BUYER, staffId: "sc-player", targetPlayerId: "a-star", gameDate: MONDAY }));
+  });
+
+  it("ukončení hlavního úkolu nechá sledované hráče běžet, jedno sledování jde zrušit samostatně", async () => {
+    ok(await createScoutAssignment(db, {
+      teamId: BUYER, staffId: "sc-player", positions: null, ageMin: 18, ageMax: 32, radiusKm: 15, weeks: 2, gameDate: THURSDAY,
+    }));
+    const first = ok(await createPlayerScoutAssignment(db, { teamId: BUYER, staffId: "sc-player", targetPlayerId: "a-star", gameDate: THURSDAY }));
+    const second = ok(await createPlayerScoutAssignment(db, { teamId: BUYER, staffId: "sc-player", targetPlayerId: "a-weak", gameDate: THURSDAY }));
+    const statusOf = async (id: string) =>
+      (await db.prepare("SELECT status FROM scout_assignments WHERE id = ?").bind(id).first<{ status: string }>())?.status;
+
+    expect(await cancelScoutAssignment(db, BUYER, "manager", "sc-player", { mainTask: true })).toBe(true);
+    expect(await statusOf(first.id)).toBe("active");
+    expect(await statusOf(second.id)).toBe("active");
+
+    expect(await cancelScoutAssignment(db, BUYER, "manager", undefined, { assignmentId: first.id })).toBe(true);
+    expect(await statusOf(first.id)).toBe("cancelled");
+    expect(await statusOf(second.id)).toBe("active");
+
+    // Odchod skauta ukončí všechno, co měl rozjeté.
+    expect(await cancelScoutAssignment(db, BUYER, "scout_left", "sc-player")).toBe(true);
+    expect(await statusOf(second.id)).toBe("cancelled");
   });
 });
 
