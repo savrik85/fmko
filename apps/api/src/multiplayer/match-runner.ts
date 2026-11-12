@@ -3,6 +3,7 @@
  * Volán z daily-tick nebo cron triggeru.
  */
 
+import { pickAutoEleven } from "../engine/auto-lineup";
 import {simulateMatch} from "../engine/simulation";
 import {weatherAttendanceFactor, pitchAttendanceFactor} from "../season/weather";
 import {generateMatchCommentary, loadCommentaryFromDB} from "../engine/commentary";
@@ -274,10 +275,13 @@ export async function runScheduledMatches(
 
             // Build match players — buildMatchPlayers si sama generuje day_before + match_day absence
             // s jednotným seedem (matchKey + teamId + phase) shodným s preview/SMS.
+            // Automatickou sestavu (is_auto) smí runner přestavět podle toho, kdo dorazí.
+            // Sestava od trenéra (i její kopie z minulého kola) zůstává, jak ji postavil.
+            const autoFormationOf = (row: LineupRow | null) => (row?.is_auto === 1 ? { autoFormation: row.formation } : {});
             const homeBuild = await buildMatchPlayers(db, homeTeamId,
-                homeLineupRow?.players_data ?? null, 0, {matchKey: calendarId, benchJson: homeLineupRow?.bench_data});
+                homeLineupRow?.players_data ?? null, 0, {matchKey: calendarId, benchJson: homeLineupRow?.bench_data, ...autoFormationOf(homeLineupRow)});
             const awayBuild = await buildMatchPlayers(db, awayTeamId,
-                awayLineupRow?.players_data ?? null, 100, {matchKey: calendarId, benchJson: awayLineupRow?.bench_data});
+                awayLineupRow?.players_data ?? null, 100, {matchKey: calendarId, benchJson: awayLineupRow?.bench_data, ...autoFormationOf(awayLineupRow)});
 
             const homeLineup = homeBuild.players;
             const awayLineup = awayBuild.players;
@@ -315,8 +319,8 @@ export async function runScheduledMatches(
 
             const homeTactic = (homeLineupRow?.tactic as any) ?? "balanced";
             const awayTactic = (awayLineupRow?.tactic as any) ?? "balanced";
-            const homeFormation = homeLineupRow?.formation ?? "4-4-2";
-            const awayFormation = awayLineupRow?.formation ?? "4-4-2";
+            const homeFormation = homeBuild.formation ?? homeLineupRow?.formation ?? "4-4-2";
+            const awayFormation = awayBuild.formation ?? awayLineupRow?.formation ?? "4-4-2";
             const homeHardness = (homeLineupRow?.hardness as Hardness | null) ?? "normal";
             const awayHardness = (awayLineupRow?.hardness as Hardness | null) ?? "normal";
 
@@ -1528,6 +1532,8 @@ interface BuildResult {
     idMap: Map<number, string>;
     positionMap: Map<string, string>;
     absentNames: Array<{ playerId: string; name: string; reason: string; smsText: string }>;
+    /** Formace, kterou pro zápas zvolil automat (jen u automatické sestavy, jinak null). */
+    formation: string | null;
     /** Všech (nejvýš 18) hráčů, kteří na zápas jeli. */
     matchSquadIds: string[];
     /** Náhradníci, kteří jeli (osmnáctka bez základu). */
@@ -1541,7 +1547,9 @@ export async function buildMatchPlayers(
     userLineupJson?: string | null,
     idOffset: number = 0,
     // benchJson = uložená lavička (lineups.bench_data), null = náhradníky vybere automat
-    options?: { friendlyMultiplier?: number; matchKey?: string; benchJson?: string | null },
+    // autoFormation = sestavu skládá automat (lineups.is_auto): jedenáctka i formace se
+    // postaví znovu z hráčů, kteří na zápas opravdu jedou; hodnota je oblíbená formace týmu.
+    options?: { friendlyMultiplier?: number; matchKey?: string; benchJson?: string | null; autoFormation?: string | null },
     // Volitelně předané řádky kádru (stejný tvar jako players) — pro pohárové velkokluby
     // z cup_club_players. Když je zadáno, přeskočí se dotaz na tabulku players.
     sourceRows?: { results: Record<string, unknown>[] },
@@ -1686,6 +1694,21 @@ export async function buildMatchPlayers(
     // Na zápas jede základ a nejvýš sedm náhradníků, jako v zápise o utkání v okresních
     // soutěžích. Stejný výběr kopíruje sestavovač na webu (apps/web/src/lib/bench.ts).
     const MAX_MATCHDAY_SQUAD = 18;
+
+    // Automatická sestava vznikla ze všech hráčů kádru, i těch, kdo nakonec nedorazili
+    // (zranění, trest, omluvenka). Místo záplatování děr se postaví znovu z dostupných:
+    // jinak automat držel původní formaci a díry plnil hráči z jiných řad.
+    let rebuiltFormation: string | null = null;
+    if (options?.autoFormation !== undefined) {
+        const rebuilt = pickAutoEleven(
+            allAvailable.map((r) => ({ id: r.id as string, position: r.position as string, rating: (r.overall_rating as number) ?? 0 })),
+            options.autoFormation,
+        );
+        if (rebuilt.picks.length > 0) {
+            userLineupJson = JSON.stringify(rebuilt.picks);
+            rebuiltFormation = rebuilt.formation;
+        }
+    }
 
     // If user set a lineup, order players: selected 11 first, then rest as subs
     let ordered = allAvailable;
@@ -1949,7 +1972,7 @@ export async function buildMatchPlayers(
     }
 
     return {
-        players, idMap, positionMap, absentNames: absentInfo,
+        players, idMap, positionMap, absentNames: absentInfo, formation: rebuiltFormation,
         matchSquadIds,
         benchIds: matchSquadIds.slice(11),
         leftOutIds: allAvailable.map((r) => r.id as string).filter((id) => !inSquad.has(id)),
@@ -2046,6 +2069,19 @@ export async function copyOrCreateLineup(db: D1Database, teamId: string, calenda
     await createAutoLineup(db, teamId, calendarId);
 }
 
+/** Formace s nejvyšší sehraností z teams.formation_familiarity (JSON), nebo null. */
+function mostFamiliarFormation(raw: string | null | undefined): string | null {
+    if (!raw) return null;
+    try {
+        const entries = Object.entries(JSON.parse(raw) as Record<string, number>);
+        entries.sort((a, b) => b[1] - a[1]);
+        return entries[0]?.[0] ?? null;
+    } catch (e) {
+        logger.warn({module: "match-runner"}, "nečitelná sehranost formací", e);
+        return null;
+    }
+}
+
 export async function createAutoLineup(
     db: D1Database,
     teamId: string,
@@ -2055,44 +2091,24 @@ export async function createAutoLineup(
         "SELECT id, position, overall_rating FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active') ORDER BY overall_rating DESC"
     ).bind(teamId).all();
 
-    // Respect team's saved formation if exists
-    const savedLineup = await db.prepare("SELECT formation FROM lineups WHERE team_id = ? ORDER BY submitted_at DESC LIMIT 1")
+    // Oblíbená formace: naposledy uložená trenérem, jinak ta, na kterou je tým nejvíc sehraný
+    // (U21 sestavu od trenéra nemá). Při shodě vyhraje, aby tým formace zbytečně nestřídal.
+    const savedLineup = await db.prepare("SELECT formation FROM lineups WHERE team_id = ? AND is_auto = 0 ORDER BY submitted_at DESC LIMIT 1")
         .bind(teamId).first<{ formation: string }>().catch((e) => {
-            logger.warn({module: "match-runner"}, "query failed", e);
+            logger.warn({module: "match-runner"}, "poslední formace trenéra", e);
             return null;
         });
-    const formation = savedLineup?.formation ?? "4-4-2";
-    const parts = formation.split("-").map(Number);
-    const slots: Record<string, number> = {
-        GK: 1,
-        DEF: parts[0] || 4,
-        MID: (parts[1] || 4) + (parts[2] && parts.length > 3 ? parts[2] : 0),
-        FWD: parts[parts.length - 1] || 2
-    };
-    const picked: Array<{ playerId: string; matchPosition: string }> = [];
-    const usedIds = new Set<string>();
-
-    // First pass: fill each position with natural players
-    for (const pos of ["GK", "DEF", "MID", "FWD"]) {
-        const candidates = players.results.filter((p) => p.position === pos && !usedIds.has(p.id as string));
-        const count = slots[pos];
-        for (let i = 0; i < count && i < candidates.length; i++) {
-            picked.push({playerId: candidates[i].id as string, matchPosition: pos});
-            usedIds.add(candidates[i].id as string);
-        }
-    }
-
-    // Second pass: fill remaining slots with best available (out of position)
-    while (picked.length < 11) {
-        const remaining = players.results.find((p) => !usedIds.has(p.id as string));
-        if (!remaining) break;
-        // Find which position still needs players
-        const filled: Record<string, number> = {GK: 0, DEF: 0, MID: 0, FWD: 0};
-        for (const p of picked) filled[p.matchPosition]++;
-        const needPos = Object.entries(slots).find(([pos, need]) => filled[pos] < need)?.[0] ?? "MID";
-        picked.push({playerId: remaining.id as string, matchPosition: needPos});
-        usedIds.add(remaining.id as string);
-    }
+    const familiarityRow = savedLineup ? null : await db.prepare("SELECT formation_familiarity FROM teams WHERE id = ?")
+        .bind(teamId).first<{ formation_familiarity: string | null }>().catch((e) => {
+            logger.warn({module: "match-runner"}, "sehranost formací pro automatickou sestavu", e);
+            return null;
+        });
+    // Formace podle toho, koho tým má: ta, ve které stojí nejvíc hráčů na vlastní pozici.
+    // Viz engine/auto-lineup.ts.
+    const { formation, picks: picked } = pickAutoEleven(
+        players.results.map((p) => ({ id: p.id as string, position: p.position as string, rating: (p.overall_rating as number) ?? 0 })),
+        savedLineup?.formation ?? mostFamiliarFormation(familiarityRow?.formation_familiarity),
+    );
 
     // Zachovat poslední user-uložený tactic a tvrdost — nejen formation. Bez toho fallback
     // vždy resetuje na "balanced"/"normal", i když user dlouhodobě hrál třeba "possession"
