@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   EXT_KINDS, EXT_SLOTS, EXT_SLOT_DEFS, allowedKinds, extCapacity, extCost, extensionsCapacity,
-  getExtensionSlots, requirementOf,
+  getExtensionSlots, requirementOf, extTotalCost, extConversionCost,
 } from "./extension-catalog";
 import { legacyStandsToSides } from "./stands-model";
 
@@ -110,12 +110,48 @@ describe("pravidla odemykání", () => {
     expect(bypass.locked).toBe(false);
   });
 
-  it("postavené místo nabízí jen vylepšení stejného druhu, na maximu nic", () => {
+  it("postavené místo nabízí vylepšení stejného druhu (na maximu už ne) a přestavbu na jiný druh", () => {
     const sides = legacyStandsToSides(3);
     const s = slotsOf(sides, [{ slot: "ext_main", kind: "length", level: 1 }, { slot: "ext_opposite", kind: "length", level: 3 }]);
-    expect(s.find((x) => x.slot === "ext_main")!.options.map((o) => o.kind)).toEqual(["length"]);
-    expect(s.find((x) => x.slot === "ext_opposite")!.options).toEqual([]);
+    const main = s.find((x) => x.slot === "ext_main")!.options;
+    expect(main.filter((o) => !o.converts).map((o) => o.kind)).toEqual(["length"]);
+    expect(main.filter((o) => o.converts).map((o) => o.kind)).toEqual(["second_tier", "double_stand", "stilts", "tower", "footbridge"]);
+    const maxed = s.find((x) => x.slot === "ext_opposite")!.options;
+    expect(maxed.every((o) => o.converts)).toBe(true);
+    expect(maxed.map((o) => o.kind)).toEqual(["second_tier", "double_stand", "footbridge"]);
     expect(option(s, "ext_main", "length").capacityGain).toBe(extCapacity("length", 2) - extCapacity("length", 1));
+  });
+
+  it("přestavba drží úroveň, mění kapacitu o rozdíl druhů a stojí doplatek plus pětinu nového druhu", () => {
+    const sides = legacyStandsToSides(3);
+    const s = slotsOf(sides, [{ slot: "ext_goal_west", kind: "terrace", level: 2 }]);
+    const toTier = option(s, "ext_goal_west", "second_tier");
+    expect(toTier).toMatchObject({ converts: true, level: 2, locked: false });
+    expect(toTier.capacityGain).toBe(extCapacity("second_tier", 2) - extCapacity("terrace", 2));
+    expect(toTier.capacity).toBe(extCapacity("second_tier", 2));
+    // Dražší druh: doplatek do jeho ceny a pětina navrch.
+    const tierTotal = extTotalCost("second_tier", 2);
+    expect(toTier.cost).toBe(Math.round((tierTotal - extTotalCost("terrace", 2) + tierTotal * 0.2) / 100) * 100);
+    expect(extConversionCost("terrace", "second_tier", 2)).toBe(toTier.cost);
+    // Levnější druh: nic se nevrací, platí se jen pětina jeho ceny.
+    expect(extConversionCost("second_tier", "terrace", 2)).toBe(Math.round((extTotalCost("terrace", 2) * 0.2) / 100) * 100);
+    expect(extConversionCost("second_tier", "terrace", 2)).toBeGreaterThan(0);
+    expect(extTotalCost("terrace", 2)).toBe(extCost("terrace", 1) + extCost("terrace", 2));
+  });
+
+  it("přestavba ctí podmínky nového druhu: úroveň tribuny i vylučování s rohem", () => {
+    // Druhé patro chce tribunu na úrovni 3, lávka nic: na dvojce jde přestavět jen na lávku.
+    const low = slotsOf({ ...legacyStandsToSides(0), stand_main: 2 }, [{ slot: "ext_main", kind: "stilts", level: 1 }]);
+    expect(option(low, "ext_main", "second_tier")).toMatchObject({ converts: true, locked: true });
+    expect(option(low, "ext_main", "footbridge")).toMatchObject({ converts: true, locked: false });
+    // V rohu stojí přístavba: na prodloužení přestavět nejde. Vlastní přístavba přestavbě nevadí.
+    const corner = slotsOf(legacyStandsToSides(3), [
+      { slot: "ext_main", kind: "stilts", level: 1 }, { slot: "corner_main_goal_east", kind: "corner", level: 1 },
+    ]);
+    expect(option(corner, "ext_main", "length").locked).toBe(true);
+    expect(option(corner, "ext_main", "tower").locked).toBe(false);
+    // Na mobilní tribunku se nepřestavuje.
+    expect(corner.find((x) => x.slot === "corner_main_goal_east")!.options.some((o) => o.kind === "mobile")).toBe(false);
   });
 
   it("slot definice obsahuje strany pro rohy a pro postranní místa", () => {
@@ -186,12 +222,13 @@ describe("pravidla odemykání", () => {
     }
   });
 
-  it("jiné než mobilní přístavby se nenahrazují, jen vylepšují", () => {
+  it("jiné než mobilní přístavby se nenahrazují od úrovně 1: vylepšují se, nebo přestavují na stejné úrovni", () => {
     const sides = legacyStandsToSides(3);
-    const slots = slotsOf(sides, [{ slot: "corner_main_goal_east", kind: "corner", level: 1 }]);
+    const slots = slotsOf(sides, [{ slot: "corner_main_goal_east", kind: "corner", level: 2 }]);
     const options = slots.find((x) => x.slot === "corner_main_goal_east")!.options;
-    expect(options.map((o) => o.kind)).toEqual(["corner"]);
-    expect(options[0].replaces).toBeFalsy();
+    expect(options.map((o) => o.kind)).toEqual(["corner", "curved_corner", "wing", "bridge"]);
+    expect(options.every((o) => !o.replaces)).toBe(true);
+    expect(options.filter((o) => o.converts).every((o) => o.level === 2)).toBe(true);
   });
 
   it("nahrazení respektuje pravidla nové přístavby (rohová tribuna chce obě tribuny)", () => {

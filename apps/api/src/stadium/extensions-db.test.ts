@@ -2,7 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { Miniflare } from "miniflare";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { buildExtension, loadExtensions, replaceMobileExtension } from "./extensions-db";
+import { buildExtension, convertExtension, loadExtensions, replaceMobileExtension } from "./extensions-db";
 import { extCapacity } from "./extension-catalog";
 
 let miniflare: Miniflare;
@@ -67,6 +67,31 @@ describe("buildExtension", () => {
     await buildExtension(db, "t1", "ext_opposite", "length", 0);
     await buildExtension(db, "t1", "corner_main_goal_east", "curved_corner", 0);
     expect(await capacityOf()).toBe(extCapacity("length", 1) + extCapacity("curved_corner", 1));
+  });
+});
+
+describe("convertExtension", () => {
+  it("přestaví přístavbu na jiný druh, úroveň zůstane a kapacita se přepočítá", async () => {
+    expect(await buildExtension(db, "t1", "ext_goal_west", "terrace", 0)).toBe(true);
+    expect(await buildExtension(db, "t1", "ext_goal_west", "terrace", 1)).toBe(true);
+    expect(await convertExtension(db, "t1", "ext_goal_west", "terrace", "round_stand", 2)).toBe(true);
+    expect(await loadExtensions(db, "t1")).toEqual([{ slot: "ext_goal_west", kind: "round_stand", level: 2 }]);
+    const row = await db.prepare("SELECT stand_ext_capacity FROM stadiums WHERE team_id = 't1'").first<{ stand_ext_capacity: number }>();
+    expect(row?.stand_ext_capacity).toBe(extCapacity("round_stand", 2));
+  });
+
+  it("dvojí odeslání ani špatná úroveň neprojde", async () => {
+    expect(await buildExtension(db, "t1", "ext_goal_west", "terrace", 0)).toBe(true);
+    expect(await convertExtension(db, "t1", "ext_goal_west", "terrace", "round_stand", 2)).toBe(false);
+    expect(await convertExtension(db, "t1", "ext_goal_west", "terrace", "round_stand", 1)).toBe(true);
+    expect(await convertExtension(db, "t1", "ext_goal_west", "terrace", "round_stand", 1)).toBe(false);
+  });
+
+  it("přestavba, která koliduje s rohem, se vrátí na původní druh", async () => {
+    expect(await buildExtension(db, "t1", "ext_main", "stilts", 0)).toBe(true);
+    expect(await buildExtension(db, "t1", "corner_main_goal_east", "corner", 0)).toBe(true);
+    expect(await convertExtension(db, "t1", "ext_main", "stilts", "length", 1)).toBe(false);
+    expect((await loadExtensions(db, "t1")).find((r) => r.slot === "ext_main")).toEqual({ slot: "ext_main", kind: "stilts", level: 1 });
   });
 });
 

@@ -1974,7 +1974,7 @@ gameRouter.post("/teams/:teamId/stadium/extension", async (c) => {
   const body = await c.req.json<{ slot?: string; kind?: string }>();
   const { EXT_SLOTS, EXT_SLOT_DEFS, allowedKinds, getExtensionSlots } = await import("../stadium/extension-catalog");
   type ExtSlot = import("../stadium/extension-catalog").ExtSlot;
-  const { loadExtensions, buildExtension, replaceMobileExtension } = await import("../stadium/extensions-db");
+  const { loadExtensions, buildExtension, replaceMobileExtension, convertExtension } = await import("../stadium/extensions-db");
   const { readStandLevels } = await import("../stadium/stands-model");
 
   if (!body.slot || !(EXT_SLOTS as readonly string[]).includes(body.slot)) return c.json({ error: "Neznámé místo pro přístavbu" }, 400);
@@ -2001,26 +2001,34 @@ gameRouter.post("/teams/:teamId/stadium/extension", async (c) => {
     season: mustSeason(seasonRow?.number),
     ignoreProgressLocks,
   }).find((s) => s.slot === body.slot);
+  // Druh v místě je jednoznačný: vylepšení nese stojící druh, přestavba a náhrada vždy jiný.
   const option = slotState?.options.find((o) => o.kind === body.kind);
   if (!slotState || !option) return c.json({ error: "Tuhle přístavbu sem nejde postavit ani vylepšit" }, 400);
   if (option.locked) return c.json({ error: option.lockReason ?? "Zamčeno" }, 400);
   if (team.budget < option.cost) return c.json({ error: "Nedostatek peněz" }, 400);
 
   // Zámek proti dvojímu odeslání: kdo prohraje, nezapíše nic a peníze se nestrhnou.
-  const claimed = option.replaces
-    ? await replaceMobileExtension(c.env.DB, teamId, body.slot, body.kind, slotState.built?.level ?? 0)
-    : await buildExtension(c.env.DB, teamId, body.slot, body.kind, slotState.built?.level ?? 0);
+  const claimed = option.converts && slotState.built
+    ? await convertExtension(c.env.DB, teamId, body.slot, slotState.built.kind, body.kind, slotState.built.level)
+    : option.replaces
+      ? await replaceMobileExtension(c.env.DB, teamId, body.slot, body.kind, slotState.built?.level ?? 0)
+      : await buildExtension(c.env.DB, teamId, body.slot, body.kind, slotState.built?.level ?? 0);
   if (!claimed) {
     return c.json({ error: "Stavba už probíhá, načti stránku znovu" }, 409);
   }
   const { recordStadiumBuild, buildReference } = await import("../stadium/build-history");
   const buildId = await recordStadiumBuild(c.env.DB, {
-    teamId, facility: `extension:${body.slot}`, label: `Přístavba: ${option.label} (${EXT_SLOT_DEFS[body.slot as ExtSlot].label.split(":")[0]})`,
+    teamId, facility: `extension:${body.slot}`,
+    label: option.converts && slotState.built
+      ? `Přestavba: ${slotState.built.label} na ${option.label} (${EXT_SLOT_DEFS[body.slot as ExtSlot].label.split(":")[0]})`
+      : `Přístavba: ${option.label} (${EXT_SLOT_DEFS[body.slot as ExtSlot].label.split(":")[0]})`,
     fromLevel: slotState.built?.level ?? 0, toLevel: option.level, cost: option.cost,
   });
   try {
     await recordTransaction(c.env.DB, teamId, "stadium_upgrade", -option.cost,
-      `Přístavba tribuny: ${option.label}, úroveň ${option.level}${option.replaces ? " (nahradila mobilní tribunku)" : ""}`, new Date().toISOString(),
+      option.converts && slotState.built
+        ? `Přestavba tribuny: ${slotState.built.label} na ${option.label}, úroveň ${option.level}`
+        : `Přístavba tribuny: ${option.label}, úroveň ${option.level}${option.replaces ? " (nahradila mobilní tribunku)" : ""}`, new Date().toISOString(),
       buildId ? buildReference(buildId) : "build-unrecorded");
   } catch (e) {
     // Přístavba už stojí. Bez záznamu by klub dostal stavbu zadarmo a nikdo by se to nedozvěděl.

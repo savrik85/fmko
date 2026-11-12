@@ -96,6 +96,26 @@ export function extCost(kind: string, level: number): number {
   return Math.round((seats * BASE_PRICE_PER_SEAT[level] * PRICE_MULT[kind as ExtKind] * factor) / 100) * 100;
 }
 
+/** Co stála přístavba celkem od základu až po danou úroveň. */
+export function extTotalCost(kind: string, level: number): number {
+  let total = 0;
+  for (let l = 1; l <= level; l++) total += extCost(kind, l);
+  return total;
+}
+
+/** Podíl z ceny nového druhu, který se platí za bourání a přestavbu. */
+export const CONVERSION_FEE_SHARE = 0.2;
+
+/**
+ * Cena přestavby přístavby na jiný druh na STEJNÉ úrovni: doplatek, když je nový druh dražší
+ * (za levnější se nic nevrací), a k tomu pětina ceny nového druhu za bourání a přestavbu.
+ */
+export function extConversionCost(fromKind: string, toKind: string, level: number): number {
+  const target = extTotalCost(toKind, level);
+  const surcharge = Math.max(0, target - extTotalCost(fromKind, level));
+  return Math.round((surcharge + target * CONVERSION_FEE_SHARE) / 100) * 100;
+}
+
 /** Celková kapacita postavených přístaveb. Neznámé druhy se přeskočí. */
 export function extensionsCapacity(rows: ReadonlyArray<{ slot: string; kind: string; level: number }>): number {
   return rows.reduce((sum, r) => sum + extCapacity(r.kind, r.level), 0);
@@ -179,6 +199,8 @@ export interface ExtOption {
   lockDetail?: LockDetail;
   /** Mobilní tribunka je dočasná: nová přístavba ji v místě nahradí (rozebere se, platí se cena nové). */
   replaces?: boolean;
+  /** Přestavba stojící přístavby na jiný druh na stejné úrovni (za poplatek, viz extConversionCost). */
+  converts?: boolean;
 }
 
 export interface ExtSlotState {
@@ -286,8 +308,8 @@ function buildOption(
 
 /**
  * Stav všech míst a to, co se tam dá postavit nebo vylepšit.
- * Prázdné místo nabízí všechny povolené druhy na úrovni 1, postavené jen vylepšení
- * stejného druhu o úroveň výš (na maximu nic).
+ * Prázdné místo nabízí všechny povolené druhy na úrovni 1, postavené vylepšení stejného
+ * druhu o úroveň výš (na maximu už ne) a přestavbu na jiný druh na stejné úrovni.
  */
 export function getExtensionSlots(
   sides: StandLevels,
@@ -311,10 +333,20 @@ export function getExtensionSlots(
         .filter((k) => k !== "mobile")
         .map((k) => ({ ...buildOption(k, slot, 1, 0, sides, ctx, built), replaces: true, capacityGain: extCapacity(k, 1) - extCapacity("mobile", current.level) }));
       options = [...upgrade, ...replacements];
-    } else if (current.level >= 3) {
-      options = [];
     } else {
-      options = [buildOption(current.kind, slot, current.level + 1, current.level, sides, ctx, built)];
+      const upgrade = current.level >= 3 ? [] : [buildOption(current.kind, slot, current.level + 1, current.level, sides, ctx, built)];
+      // Přestavba na jiný druh: stejná úroveň, podmínky nového druhu platí jako při stavbě.
+      // Vylučování se posuzuje bez přístavby, která se právě přestavuje.
+      const others = built.filter((b) => b.slot !== slot);
+      const conversions = ALLOWED[slot]
+        .filter((k) => k !== current.kind && k !== "mobile")
+        .map((k) => ({
+          ...buildOption(k, slot, current.level, current.level, sides, ctx, others),
+          converts: true,
+          cost: extConversionCost(current.kind, k, current.level),
+          capacityGain: extCapacity(k, current.level) - extCapacity(current.kind, current.level),
+        }));
+      options = [...upgrade, ...conversions];
     }
     return { slot, type: def.type, label: def.label, sides: def.sides, built: current, options };
   });
