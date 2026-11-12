@@ -57,6 +57,8 @@ interface ExtOptionData {
   lockDetail?: LockDetailData;
   /** Nová přístavba nahradí mobilní tribunku v místě (ta se rozebere). */
   replaces?: boolean;
+  /** Přestavba stojící přístavby na jiný druh na stejné úrovni (za poplatek). */
+  converts?: boolean;
 }
 
 interface ExtSlotData {
@@ -300,6 +302,13 @@ function pitchBarColor(condition: number): string {
 }
 
 function formatCZK(v: number): string { return v.toLocaleString("cs") + " Kč"; }
+
+/** Text tlačítka u nabídky přístavby: stavba, vylepšení, náhrada mobilní tribunky, nebo přestavba. */
+function extActionLabel(slot: { built: unknown | null }, option: { replaces?: boolean; converts?: boolean }): string {
+  if (option.converts) return "Přestavět";
+  if (option.replaces) return "Nahradit";
+  return slot.built ? "Vylepšit" : "Postavit";
+}
 
 function formatDateTime(iso: string): string {
   const d = new Date(iso);
@@ -683,12 +692,16 @@ export default function StadiumPage() {
     // jen když se stadion plní.
     const attendance = knownAttendance(stadium.homeAttendance);
     const ok = await confirm({
-      title: option.replaces
-        ? `Nahradit mobilní tribunku: ${option.label}?`
-        : `${slot.built ? "Vylepšit" : "Postavit"} ${option.label}?`,
-      description: option.replaces
-        ? `${slot.label}: mobilní tribunka se rozebere a místo obsadí ${option.label.toLowerCase()} (${option.capacityGain >= 0 ? "+" : ""}${option.capacityGain} míst)`
-        : `${slot.label}: +${option.capacityGain} míst`,
+      title: option.converts
+        ? `Přestavět na: ${option.label}?`
+        : option.replaces
+          ? `Nahradit mobilní tribunku: ${option.label}?`
+          : `${slot.built ? "Vylepšit" : "Postavit"} ${option.label}?`,
+      description: option.converts
+        ? `${slot.label.split(":")[0]}: ${slot.built?.label.toLowerCase() ?? "přístavba"} se zbourá a na stejné úrovni ${option.level} vznikne ${option.label.toLowerCase()} (${option.capacityGain >= 0 ? "+" : ""}${option.capacityGain} míst). Za původní stavbu se nic nevrací.`
+        : option.replaces
+          ? `${slot.label}: mobilní tribunka se rozebere a místo obsadí ${option.label.toLowerCase()} (${option.capacityGain >= 0 ? "+" : ""}${option.capacityGain} míst)`
+          : `${slot.label}: +${option.capacityGain} míst`,
       details: [
         { label: "Kapacita", value: `${stadium.capacity} → ${stadium.capacity + option.capacityGain} míst` },
         ...(attendance ? [{
@@ -698,7 +711,7 @@ export default function StadiumPage() {
         }] : []),
         { label: "Cena", value: `-${formatCZK(option.cost)}`, color: "text-card-red" },
       ],
-      confirmLabel: option.replaces ? "Nahradit" : slot.built ? "Vylepšit" : "Postavit",
+      confirmLabel: extActionLabel(slot, option),
     });
     if (!ok) return;
     setActing(`ext-${slot.slot}`);
@@ -720,19 +733,32 @@ export default function StadiumPage() {
   /** Nabídka přístavby v jednom místě: druhy s cenou, zámky a tlačítky Náhled a Postavit. */
   const renderExtOptions = (slot: ExtSlotData) => (
     <div className="space-y-3">
-      {slot.built && slot.options.length === 0 && (
+      {slot.built && !slot.options.some((o) => !o.converts) && (
         <div className="text-sm text-pitch-600 font-heading font-bold">Přístavba je na maximální úrovni</div>
       )}
-      {slot.options.map((o) => {
+      {slot.options.map((o, index) => {
         const previewing = extPreview?.item.slot === slot.slot && extPreview.item.kind === o.kind;
+        const firstConversion = !!o.converts && !slot.options[index - 1]?.converts;
         return (
-          <div key={o.kind} className={`rounded-lg p-3 space-y-2 ${previewing ? "bg-pitch-50 border border-pitch-400" : "bg-gray-50"}`}>
+          <div key={o.kind} className="space-y-3">
+          {firstConversion && (
+            <div className="pt-1">
+              <div className="font-heading font-bold text-base">Přestavět na jiný tvar</div>
+              <div className="text-sm text-muted leading-snug">
+                Úroveň {slot.built?.level} zůstane. Platíš doplatek, když je nový tvar dražší, a pětinu jeho ceny za bourání a přestavbu. Za původní stavbu se nic nevrací.
+              </div>
+            </div>
+          )}
+          <div className={`rounded-lg p-3 space-y-2 ${previewing ? "bg-pitch-50 border border-pitch-400" : "bg-gray-50"}`}>
             <div className="font-heading font-bold text-base">
               {o.label} <span className="text-muted font-normal">· úroveň {o.level}</span>
             </div>
             <div className="text-sm text-muted leading-snug">{o.description}</div>
             {o.replaces && (
               <div className="text-sm text-pitch-600 leading-snug">Nahradí mobilní tribunku, ta se rozebere.</div>
+            )}
+            {o.converts && (
+              <div className="text-sm text-pitch-600 leading-snug">Nahradí: {slot.built?.label.toLowerCase()}.</div>
             )}
             <div className="text-sm">
               <span className="font-heading font-bold tabular-nums">{o.capacityGain >= 0 ? "+" : ""}{o.capacityGain} míst</span>{" "}
@@ -766,9 +792,10 @@ export default function StadiumPage() {
                 disabled={o.locked || (team?.budget ?? 0) < o.cost || !!acting}
                 className="btn btn-primary btn-sm min-h-11 flex-1 sm:flex-none"
               >
-                {acting === `ext-${slot.slot}` ? "…" : o.replaces ? "Nahradit" : slot.built ? "Vylepšit" : "Postavit"}
+                {acting === `ext-${slot.slot}` ? "…" : extActionLabel(slot, o)}
               </button>
             </div>
+          </div>
           </div>
         );
       })}
@@ -894,7 +921,7 @@ export default function StadiumPage() {
                         disabled={!canBuild}
                         className="btn btn-primary btn-sm min-h-11"
                       >
-                        {extPreview.option.replaces ? "Nahradit" : slot.built ? "Vylepšit" : "Postavit"}
+                        {extActionLabel(slot, extPreview.option)}
                       </button>
                     ) : null;
                   })()}
@@ -1450,7 +1477,9 @@ export default function StadiumPage() {
               const extSummary = slot.built ? `${slot.built.label} ${slot.built.level}/3` : "bez přístavby";
               const hint = upgrade
                 ? (upgrade.locked ? `Vylepšení na ${upgrade.nextLevel} je zatím zamčené` : `Tribuna jde vylepšit na ${upgrade.nextLevel}`)
-                : slot.options.length > 0 ? "Tribuna je na maximu, přístavbu lze postavit" : "Vše na maximu";
+                : slot.built
+                  ? "Tribuna je na maximu, přístavbu lze vylepšit nebo přestavět"
+                  : slot.options.length > 0 ? "Tribuna je na maximu, přístavbu lze postavit" : "Vše na maximu";
               return (
                 <div key={slotId} className="rounded-xl border border-gray-300 overflow-hidden">
                   <button
@@ -1547,9 +1576,9 @@ export default function StadiumPage() {
               const open = openSlot === slot.slot;
               const available = slot.options.filter((o) => !o.locked).length;
               const summary = slot.built ? `${slot.built.label}, úroveň ${slot.built.level} z 3` : "Zatím tu nic nestojí";
-              const hint = slot.options.length === 0
-                ? "Maximální úroveň"
-                : slot.built ? "Lze vylepšit" : `${available} z ${slot.options.length} možností k postavení`;
+              const hint = slot.built
+                ? (slot.options.some((o) => !o.converts) ? "Lze vylepšit nebo přestavět" : "Maximální úroveň, lze přestavět na jiný tvar")
+                : `${available} z ${slot.options.length} možností k postavení`;
               return (
                 <div key={slot.slot} className="rounded-xl border border-gray-300 overflow-hidden">
                   <button

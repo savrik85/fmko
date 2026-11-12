@@ -76,6 +76,37 @@ async function refreshCapacitySafely(db: D1Database, teamId: string): Promise<vo
 }
 
 /**
+ * Přestaví přístavbu na jiný druh na stejné úrovni. Atomicky: UPDATE sedne, jen když v místě
+ * pořád stojí původní druh na dané úrovni. Kdo zámek prohraje, nezapíše nic a volající nesmí
+ * strhnout peníze.
+ */
+export async function convertExtension(
+  db: D1Database,
+  teamId: string,
+  slot: string,
+  fromKind: string,
+  toKind: string,
+  level: number,
+): Promise<boolean> {
+  const res = await db
+    .prepare("UPDATE stadium_extensions SET kind = ? WHERE team_id = ? AND slot = ? AND kind = ? AND level = ?")
+    .bind(toKind, teamId, slot, fromKind, level)
+    .run();
+  if ((res.meta?.changes ?? 0) < 1) return false;
+  // Stejná kontrola vylučování jako při stavbě; kolidující přestavba se vrátí na původní druh.
+  const others = (await loadExtensions(db, teamId)).filter((r) => r.slot !== slot);
+  if (cornerConflict(toKind as ExtKind, slot as ExtSlot, others)) {
+    await db
+      .prepare("UPDATE stadium_extensions SET kind = ? WHERE team_id = ? AND slot = ? AND kind = ? AND level = ?")
+      .bind(fromKind, teamId, slot, toKind, level)
+      .run();
+    return false;
+  }
+  await refreshCapacitySafely(db, teamId);
+  return true;
+}
+
+/**
  * Nahradí mobilní tribunku v místě jinou přístavbou na úrovni 1. Atomicky: UPDATE sedne jen když
  * v místě pořád stojí mobilní tribunka dané úrovně, takže dvojí odeslání nebo souběžná stavba
  * neprojde. Kdo zámek prohraje, nezapíše nic a volající nesmí strhnout peníze.
