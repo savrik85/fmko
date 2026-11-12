@@ -5,8 +5,9 @@
  * historií se dohledávají z plateb ve financích (typ stadium_upgrade bez reference): tam je
  * jen název a částka, úroveň ne.
  *
- * Vrátit jde jen úroveň tribuny (jedna ze čtyř stran), a to do 48 hodin od stavby a jen
- * dokud je to poslední stavba na té straně. Vrátí se úroveň i celá zaplacená částka.
+ * Vrátit jde jen úroveň tribuny (jedna ze čtyř stran), a to do 48 hodin od stavby, jen dokud
+ * je to poslední stavba na té straně a dokud se na ní nehrál domácí zápas (jinak by šla
+ * kapacita na zápas půjčit zadarmo). Vrátí se úroveň i celá zaplacená částka.
  */
 import { logger } from "../lib/logger";
 import { recordTransaction } from "../season/finance-processor";
@@ -91,6 +92,12 @@ async function undoBlocker(db: D1Database, build: BuildRow, stadium: Record<stri
   if (((stadium[side] as number | null) ?? 0) !== build.to_level) {
     return "Tribuna má teď jinou úroveň, než jakou tahle stavba postavila.";
   }
+
+  // Tribuna, na které se už hrálo, vydělala na vstupném: vrátit ji pak zadarmo by byla půjčka kapacity.
+  const played = await db.prepare(
+    "SELECT 1 AS n FROM matches WHERE home_team_id = ? AND status = 'simulated' AND julianday(simulated_at) > julianday(?) LIMIT 1",
+  ).bind(build.team_id, build.built_at).first<{ n: number }>();
+  if (played) return "Na tribuně se už hrál domácí zápas. Vrátit jde jen stavba, na které se ještě nehrálo.";
 
   const damage = await db.prepare(
     "SELECT 1 AS n FROM stadium_damage WHERE team_id = ? AND facility = ? AND repaired_at IS NULL LIMIT 1",
@@ -192,14 +199,20 @@ export async function revertStandBuild(
     return { ok: false, status: 409, error: "Tribuna se mezitím změnila, načti stránku znovu." };
   }
 
-  if (build.cost > 0) {
+  // Vrací se jen to, co se za stavbu opravdu strhlo (platba nese referenci na záznam).
+  // Když stržení při stavbě selhalo, není co vracet.
+  const paid = await db.prepare(
+    "SELECT COALESCE(-SUM(amount), 0) AS total FROM transactions WHERE team_id = ? AND type = 'stadium_upgrade' AND reference_id = ? AND amount < 0",
+  ).bind(teamId, buildReference(build.id)).first<{ total: number }>();
+  const refund = Math.max(0, Math.min(build.cost, paid?.total ?? 0));
+  if (refund > 0) {
     try {
-      await recordTransaction(db, teamId, "stadium_refund", build.cost, `Vrácení stavby: ${build.label}`, now.toISOString(), buildReference(build.id));
+      await recordTransaction(db, teamId, "stadium_refund", refund, `Vrácení stavby: ${build.label}`, now.toISOString(), buildReference(build.id));
     } catch (e) {
       // Úroveň je už dole. Bez peněz by klub přišel o tribunu i o částku a nikdo by to nevěděl.
-      logger.error({ module: M, teamId }, `vrácení stavby ${build.id}: úroveň snížena, ale ${build.cost} Kč se nevrátilo`, e);
+      logger.error({ module: M, teamId }, `vrácení stavby ${build.id}: úroveň snížena, ale ${refund} Kč se nevrátilo`, e);
       return { ok: false, status: 500, error: "Tribuna je vrácená, ale peníze se nepřipsaly. Napiš správci hry." };
     }
   }
-  return { ok: true, refund: build.cost, level: build.from_level! };
+  return { ok: true, refund, level: build.from_level! };
 }
