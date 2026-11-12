@@ -115,12 +115,16 @@ export async function loadActiveAssignments(db: D1Database, teamId: string): Pro
   return res.results;
 }
 
+/**
+ * Hlavní úkol skauta (oblast, liga, soupeř): ten smí mít jen jeden. Sledování konkrétních
+ * hráčů se sem nepočítá, těch může běžet libovolně mnoho vedle sebe.
+ */
 export async function loadActiveAssignment(db: D1Database, teamId: string, staffId?: string): Promise<AssignmentRow | null> {
   if (staffId) {
-    return db.prepare("SELECT * FROM scout_assignments WHERE team_id = ? AND staff_id = ? AND status = 'active' LIMIT 1")
+    return db.prepare("SELECT * FROM scout_assignments WHERE team_id = ? AND staff_id = ? AND status = 'active' AND assignment_type != 'player' LIMIT 1")
       .bind(teamId, staffId).first<AssignmentRow>().catch((e) => { logger.warn({ module: "scouting" }, "load active assignment for staff", e); return null; });
   }
-  return db.prepare("SELECT * FROM scout_assignments WHERE team_id = ? AND status = 'active' LIMIT 1")
+  return db.prepare("SELECT * FROM scout_assignments WHERE team_id = ? AND status = 'active' AND assignment_type != 'player' LIMIT 1")
     .bind(teamId).first<AssignmentRow>().catch((e) => { logger.warn({ module: "scouting" }, "load active assignment", e); return null; });
 }
 
@@ -186,13 +190,16 @@ export async function createPlayerScoutAssignment(db: D1Database, input: {
 }): Promise<{ ok: true; id: string } | Fail> {
   const scout = await loadTeamScout(db, input.teamId, input.staffId);
   if (!scout) return fail(400, "Nemáš skauta. Najmi ho v Zaměstnancích.");
-  const active = await loadActiveAssignment(db, input.teamId, scout.id);
-  if (active) return fail(409, "Tento skaut už na jednom úkolu je. Nejdřív ho ukonči.");
+  // Sledování hráče skauta neblokuje: smí jich mít rozjetých kolik chce, i vedle hlavního úkolu.
 
   const player = await db.prepare("SELECT id, first_name, last_name, team_id FROM players WHERE id = ?")
     .bind(input.targetPlayerId).first<{ id: string; first_name: string; last_name: string; team_id: string | null }>();
   if (!player) return fail(404, "Hráč nenalezen.");
   if (player.team_id === input.teamId) return fail(400, "Nemůžeš skautovat vlastního hráče.");
+  const watched = await db.prepare(
+    "SELECT 1 AS n FROM scout_assignments WHERE team_id = ? AND target_player_id = ? AND status = 'active' AND assignment_type = 'player' LIMIT 1",
+  ).bind(input.teamId, player.id).first<{ n: number }>();
+  if (watched) return fail(409, "Tohoto hráče už skaut sleduje. Počkej na hlášení.");
 
   const cost = SCOUT_MISSION_COST;
   const budget = await db.prepare("SELECT budget FROM teams WHERE id = ?").bind(input.teamId).first<{ budget: number }>();
@@ -207,7 +214,7 @@ export async function createPlayerScoutAssignment(db: D1Database, input: {
     ).bind(id, input.teamId, scout.id, player.id, cost, input.gameDate).run();
   } catch (e) {
     logger.warn({ module: "scouting" }, "zadání hráčského úkolu", e);
-    return fail(409, "Skaut už na jednom úkolu je.");
+    return fail(409, "Tohoto hráče už skaut sleduje. Počkej na hlášení.");
   }
   return { ok: true, id };
 }
@@ -303,11 +310,21 @@ export async function createLeagueScoutAssignment(db: D1Database, input: {
   return { ok: true, id };
 }
 
-export async function cancelScoutAssignment(db: D1Database, teamId: string, reason: string, staffId?: string): Promise<boolean> {
-  const query = staffId
-    ? "UPDATE scout_assignments SET status = 'cancelled', end_reason = ?, revisit_report_id = NULL, closed_at = strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE team_id = ? AND staff_id = ? AND status = 'active'"
-    : "UPDATE scout_assignments SET status = 'cancelled', end_reason = ?, revisit_report_id = NULL, closed_at = strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE team_id = ? AND status = 'active'";
-  const binds = staffId ? [reason, teamId, staffId] : [reason, teamId];
+/**
+ * Ukončí aktivní úkoly. Bez `only` všechny úkoly skauta (odchod skauta, konec peněz),
+ * `only.assignmentId` jedno konkrétní sledování hráče, `only.mainTask` jen hlavní úkol
+ * (sledovaní hráči běží dál).
+ */
+export async function cancelScoutAssignment(
+  db: D1Database, teamId: string, reason: string, staffId?: string,
+  only?: { assignmentId?: string; mainTask?: boolean },
+): Promise<boolean> {
+  const where = ["team_id = ?", "status = 'active'"];
+  const binds: string[] = [reason, teamId];
+  if (staffId) { where.push("staff_id = ?"); binds.push(staffId); }
+  if (only?.assignmentId) { where.push("id = ?"); binds.push(only.assignmentId); }
+  else if (only?.mainTask) where.push("assignment_type != 'player'");
+  const query = `UPDATE scout_assignments SET status = 'cancelled', end_reason = ?, revisit_report_id = NULL, closed_at = strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE ${where.join(" AND ")}`;
   const res = await db.prepare(query).bind(...binds).run();
   return (res.meta?.changes ?? 0) > 0;
 }
@@ -319,7 +336,7 @@ export async function requestRevisit(db: D1Database, teamId: string, reportId: s
   if (!report) return fail(404, "Hlášení nenalezeno.");
   if (report.status !== "active" && report.status !== "negotiating") return fail(409, "Hlášení už neplatí.");
   const res = await db.prepare(
-    "UPDATE scout_assignments SET revisit_report_id = ? WHERE team_id = ? AND status = 'active' AND revisit_report_id IS NULL",
+    "UPDATE scout_assignments SET revisit_report_id = ? WHERE team_id = ? AND status = 'active' AND assignment_type != 'player' AND revisit_report_id IS NULL",
   ).bind(reportId, teamId).run();
   if ((res.meta?.changes ?? 0) === 0) {
     const a = await loadActiveAssignment(db, teamId);

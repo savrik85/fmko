@@ -164,7 +164,7 @@ export default function PlayerDetailPage() {
   const [isWatched, setIsWatched] = useState(false);
   const [watchLoading, setWatchLoading] = useState(false);
   const [scoutDialogOpen, setScoutDialogOpen] = useState(false);
-  const [scoutsData, setScoutsData] = useState<Array<{ id: string; name: string; eff: number; assignment: any | null }>>([]);
+  const [scoutsData, setScoutsData] = useState<ScoutOption[]>([]);
   const [scoutLoading, setScoutLoading] = useState(false);
   const [scoutSent, setScoutSent] = useState(false);
   const { open: openConversation, openingPlayerId: openingConversationFor } = useOpenPlayerConversation(teamId);
@@ -373,7 +373,7 @@ export default function PlayerDetailPage() {
     setScoutLoading(true);
     try {
       const res = await apiFetch<{
-        scouts?: Array<{ id: string; name: string; eff: number; assignment: any | null }>;
+        scouts?: ScoutOption[];
         scout?: { id: string; name: string; eff: number };
         assignment?: any;
       }>(`/api/teams/${teamId}/scout`);
@@ -2052,6 +2052,14 @@ function PlayerPriceDialog({ player, onClose, onConfirm, loading }: {
   );
 }
 
+interface ScoutOption {
+  id: string;
+  name: string;
+  eff: number;
+  assignment: unknown | null;
+  playerMissions?: Array<{ id: string; target_player_id: string | null }>;
+}
+
 function ScoutPlayerDialog({
   player,
   scouts,
@@ -2060,15 +2068,16 @@ function ScoutPlayerDialog({
   loading,
 }: {
   player: Player;
-  scouts: Array<{ id: string; name: string; eff: number; assignment: any | null }>;
+  scouts: ScoutOption[];
   onClose: () => void;
   onConfirm: (staffId: string) => void;
   loading: boolean;
 }) {
-  const availableScouts = scouts.filter((s) => !s.assignment);
-  const [selectedStaffId, setSelectedStaffId] = useState<string>(
-    availableScouts[0]?.id ?? scouts[0]?.id ?? ""
-  );
+  // Sledování hráče skauta neblokuje, vybrat jde kteréhokoli. Předvybraný je ten nejméně vytížený.
+  const watchedCount = (s: ScoutOption) => s.playerMissions?.length ?? 0;
+  const leastBusy = [...scouts].sort((a, b) => watchedCount(a) - watchedCount(b))[0];
+  const [selectedStaffId, setSelectedStaffId] = useState<string>(leastBusy?.id ?? "");
+  const alreadyWatching = scouts.find((s) => s.playerMissions?.some((m) => m.target_player_id === player.id)) ?? null;
 
   return (
     <div className="fixed inset-0 z-[var(--z-sheet)] flex items-center justify-center bg-black/40 p-4">
@@ -2089,8 +2098,9 @@ function ScoutPlayerDialog({
               <li>Povahové rysy (alkohol, nervy, přístup)</li>
             </ul>
             <div className="text-pitch-700 font-heading font-bold pt-1">
-              Doba sledování: 2 dny · Cena: 500 Kč
+              Doba sledování: 2 dny · Cena: 500 Kč za hráče
             </div>
+            <div>Sledovat můžeš kolik hráčů chceš najednou, za každého zaplatíš jedno cestovné.</div>
           </div>
 
           {scouts.length === 0 ? (
@@ -2104,17 +2114,17 @@ function ScoutPlayerDialog({
                 Najmout skauta →
               </Link>
             </div>
-          ) : availableScouts.length === 0 ? (
+          ) : alreadyWatching ? (
             <div className="text-center py-3 space-y-2">
               <p className="text-sm text-muted">
-                Všichni tvoji skauti ({scouts.length}) jsou právě na jiné misi.
+                Tohoto hráče už sleduje {alreadyWatching.name}. Hlášení přijde do dvou dnů.
               </p>
               <Link
                 href="/zamestnanci/skaut"
                 className="btn btn-secondary btn-sm inline-block"
                 onClick={onClose}
               >
-                Spravovat skauty →
+                Sledovaní hráči →
               </Link>
             </div>
           ) : (
@@ -2123,7 +2133,7 @@ function ScoutPlayerDialog({
                 Vyber skauta
               </label>
               <div className="space-y-1.5">
-                {availableScouts.map((s) => (
+                {scouts.map((s) => (
                   <label
                     key={s.id}
                     className={`flex items-center justify-between p-2.5 rounded-xl border cursor-pointer transition-all ${
@@ -2142,8 +2152,9 @@ function ScoutPlayerDialog({
                       />
                       <span className="font-heading font-bold text-sm text-ink">{s.name}</span>
                     </div>
-                    <span className="text-xs text-muted font-heading">
+                    <span className="text-xs text-muted font-heading text-right">
                       efektivita <strong className="text-pitch-700">{s.eff}/20</strong>
+                      {watchedCount(s) > 0 && <span className="block">sleduje {watchedCount(s)}</span>}
                     </span>
                   </label>
                 ))}
@@ -2159,7 +2170,7 @@ function ScoutPlayerDialog({
             >
               Zrušit
             </button>
-            {availableScouts.length > 0 && (
+            {scouts.length > 0 && !alreadyWatching && (
               <button
                 type="button"
                 onClick={() => { if (selectedStaffId) onConfirm(selectedStaffId); }}

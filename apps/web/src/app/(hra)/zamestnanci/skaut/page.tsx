@@ -48,7 +48,9 @@ interface ScoutItem {
   name: string;
   avatar?: Record<string, unknown>;
   eff: number;
+  /** Hlavní úkol (oblast, liga, soupeř). Sledovaní hráči jsou zvlášť v playerMissions. */
   assignment: Assignment | null;
+  playerMissions?: Assignment[];
 }
 
 interface OpponentItem {
@@ -178,6 +180,7 @@ export default function ScoutPage() {
 
   const currentScout = scoutsList.find((s) => s.id === selectedScoutId) ?? scoutsList[0] ?? null;
   const a = currentScout?.assignment ?? null;
+  const watchedPlayers = currentScout?.playerMissions ?? [];
 
   const tier = data.options.radiusTiers.find((t) => t.km === radius) ?? data.options.radiusTiers[0];
   const youth = ageMax <= SCOUT_YOUTH_AGE_MAX;
@@ -270,6 +273,17 @@ export default function ScoutPage() {
     if (await apiAction(apiFetch(`/api/teams/${teamId}/scout/assignment?staffId=${currentScout.id}`, { method: "DELETE" }), "Úkol se nepodařilo ukončit")) await load();
   };
 
+  const stopWatching = async (mission: Assignment) => {
+    const ok = await confirm({
+      title: "Zrušit sledování?",
+      description: `Skaut přestane sledovat hráče ${mission.targetPlayerName ?? ""}. Cestovné se platí až za hotové hlášení, takže teď nic nezaplatíš.`,
+      confirmLabel: "Zrušit sledování",
+      variant: "danger",
+    });
+    if (!ok) return;
+    if (await apiAction(apiFetch(`/api/teams/${teamId}/scout/assignment?assignmentId=${mission.id}`, { method: "DELETE" }), "Sledování se nepodařilo zrušit")) await load();
+  };
+
   const chip = (active: boolean) =>
     `px-3 py-2 rounded-soft text-sm font-heading font-bold transition-colors ${active ? "bg-pitch-500 text-white" : "bg-gray-100 text-muted hover:bg-gray-200"}`;
 
@@ -304,7 +318,8 @@ export default function ScoutPage() {
                 {scoutsList.map((s) => {
                   const isSel = s.id === currentScout?.id;
                   const hasAsgn = !!s.assignment;
-                  let statusLabel = "Volný";
+                  const watching = s.playerMissions?.length ?? 0;
+                  let statusLabel = watching > 0 ? `Volný · sleduje ${watching} ${plural(watching, "hráče", "hráče", "hráčů")}` : "Volný";
                   if (s.assignment) {
                     if (s.assignment.assignment_type === "player") {
                       statusLabel = `Hráč: ${s.assignment.targetPlayerName ?? "v terénu"}`;
@@ -478,6 +493,47 @@ export default function ScoutPage() {
               </button>
             </>
           )}
+        </div>
+      )}
+
+      {currentScout && (
+        <div className="card p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <SectionLabel>Sledovaní hráči</SectionLabel>
+            <span className="text-xs bg-gray-100 text-muted font-heading font-bold px-2 py-0.5 rounded">{watchedPlayers.length}</span>
+          </div>
+          {watchedPlayers.length === 0 ? (
+            <div className="text-sm text-muted">
+              {currentScout.name} teď nikoho nesleduje. Otevři profil hráče kdekoli ve hře a klikni na <strong>Poslat skauta</strong>.
+            </div>
+          ) : (
+            <ul className="divide-y divide-gray-100">
+              {watchedPlayers.map((m) => (
+                <li key={m.id} className="flex items-center justify-between gap-3 py-2">
+                  <div className="min-w-0">
+                    {m.target_player_id ? (
+                      <Link href={`/hrac/${m.target_player_id}`} className="font-heading font-bold text-sm text-ink hover:text-pitch-600 truncate block">
+                        {m.targetPlayerName ?? "Hráč"}
+                      </Link>
+                    ) : (
+                      <span className="font-heading font-bold text-sm text-ink">{m.targetPlayerName ?? "Hráč"}</span>
+                    )}
+                    <div className="text-xs text-muted">Hlášení do 2 dnů · cestovné {kc(m.weekly_cost || 500)}</div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => stopWatching(m)}
+                    className="shrink-0 px-3 py-2 rounded-soft text-xs font-heading font-bold border border-red-200 text-red-700 bg-white hover:bg-red-50"
+                  >
+                    Zrušit
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="text-xs text-muted">
+            Sledovat můžeš kolik hráčů chceš najednou, i když je skaut na jiném úkolu. Za každého zaplatíš jedno cestovné 500 Kč, až hlášení dorazí.
+          </div>
         </div>
       )}
 
