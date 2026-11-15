@@ -256,6 +256,10 @@ export async function delegationOf(
 ): Promise<DelegatedMatch[]> {
   const { refereeFullName } = await import("../referees/referee-generator");
 
+  // Známka ze všech soutěží grémia, stejně jako v listině (refereeStandings).
+  // Jen ze soutěže kola by u téhož sudího stálo jiné číslo než o kus níž.
+  const ids = await districtLeagueIds(db, leagueId);
+
   const rows = await db.prepare(
     `SELECT m.id, m.home_team_id, m.away_team_id, m.referee_id,
             h.name AS home_name, a.name AS away_name,
@@ -266,12 +270,15 @@ export async function delegationOf(
        JOIN teams h ON h.id = m.home_team_id
        JOIN teams a ON a.id = m.away_team_id
        LEFT JOIN referees r ON r.id = m.referee_id
-       LEFT JOIN referee_stats s
-              ON s.referee_id = m.referee_id AND s.season_number = ? AND s.league_id = ?
+       LEFT JOIN (SELECT referee_id, SUM(matches) AS matches, SUM(grade_sum) AS grade_sum
+                    FROM referee_stats
+                   WHERE season_number = ? AND league_id IN (${sqlPlaceholders(ids)})
+                   GROUP BY referee_id) s
+              ON s.referee_id = m.referee_id
        LEFT JOIN competition_referee_swaps w ON w.match_id = m.id
       WHERE m.calendar_id = ?
       ORDER BY h.name`
-  ).bind(seasonNumber, leagueId, calendarId).all<{
+  ).bind(seasonNumber, ...ids, calendarId).all<{
     id: string; home_team_id: string; away_team_id: string; referee_id: string | null;
     home_name: string; away_name: string;
     first_name: string | null; last_name: string | null; nickname: string | null;
