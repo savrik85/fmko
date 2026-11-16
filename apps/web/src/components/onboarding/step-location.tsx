@@ -43,7 +43,6 @@ interface Props {
 function startNote(district: string, start: DistrictStart | null | undefined): string | null {
   if (!start || start.mode === "join") return null;
   if (start.mode === "new_league") return `V okrese ${district} zakládáš novou ligu. Ostatní kluby zatím povedou AI trenéři a hrát se začne během pár dní.`;
-  if (start.mode === "new_league_single") return `V okrese ${district} zakládáš novou ligu. Sezóna už běží, do jejího konce se stihne každý s každým jednou. Hrát se začne během pár dní.`;
   const after = start.startsAfter ? new Date(start.startsAfter) : null;
   const date = after && !Number.isNaN(after.getTime()) ? ` po ${after.getDate()}. ${after.getMonth() + 1}.` : "";
   return `V okrese ${district} zakládáš novou ligu, ale do konce sezóny už zbývá málo hracích dnů. Liga začne až s novou sezónou${date}. Do té doby tě čeká přípravné období: trénink, přestupy a přáteláky.`;

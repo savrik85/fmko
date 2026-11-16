@@ -104,7 +104,7 @@ function restoreOnboarding(): { step: number; state: OnboardingState } {
 }
 
 /** Co nový klub v okrese čeká (z /api/registration/access). */
-export type DistrictStart = { mode: "join" | "new_league" | "new_league_single" | "new_league_preseason"; startsAfter: string | null };
+export type DistrictStart = { mode: "join" | "new_league" | "new_league_preseason"; startsAfter: string | null };
 
 export default function OnboardingPage() {
   const restored = restoreOnboarding();
