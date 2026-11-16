@@ -8,6 +8,7 @@ import { useTeam } from "@/context/team-context";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { SectionLabel, Spinner, BadgePreview, Tabs, useTabParam, type TabItem } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
+import { HeroBackdrop } from "@/components/ui/hero-backdrop";
 import { EditManagerModal } from "@/components/manager/EditManagerModal";
 import { CoachKabinaTab } from "@/components/manager/CoachKabinaTab";
 import { CoachEducationTab } from "@/components/manager/CoachEducationTab";
@@ -109,7 +110,8 @@ export default function ManagerDetailPage() {
   return (
     <>
       {/* ═══ Manager header — konzistentní se zbytkem aplikace (Hráč/Tým) ═══ */}
-      <div className="hero-gradient px-3 sm:px-8 py-4 sm:py-5" style={{ backgroundColor: color }}>
+      <div className="hero-gradient hero-detail px-3 sm:px-8 py-4 sm:py-5" style={{ backgroundColor: color }}>
+        <HeroBackdrop primary={color} secondary={team.secondary_color} pattern={team.badge_pattern ?? null} />
         <div className="max-w-[1280px] mx-auto">
           
           {/* ─── Desktop ─── */}

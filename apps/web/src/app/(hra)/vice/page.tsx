@@ -3,13 +3,7 @@
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { useMenuBadges, MenuBadgesState } from "@/hooks/use-menu-badges";
-
-interface MenuItem {
-  href: string;
-  icon: string;
-  label: string;
-  color: string;
-}
+import { MENU_BADGE_BG, MENU_FOOTER_ITEMS, menuBadgeFor, menuGroupsFor, type MenuItem } from "@/lib/menu-structure";
 
 interface Section {
   title: string;
@@ -31,79 +25,30 @@ type TileBadge =
   | { type: "count"; count: number; bg?: string }
   | { type: "tag"; label: string; bg?: string };
 
-const BASE_SECTIONS: Section[] = [
-  {
-    title: "Klub",
-    items: [
-      { href: "/trener", icon: "🧑‍💼", label: "Profil trenéra", color: "#2D5F2D" },
-      { href: "/muj-klub", icon: "🌐", label: "Klubový web", color: "#153615" },
-      { href: "/obec", icon: "🏘️", label: "Obec", color: "#3D6B5C" },
-      { href: "/reputace", icon: "⭐", label: "Reputace", color: "#B8860B" },
-      { href: "/kadr", icon: "👥", label: "Kádr", color: "#2D5F2D" },
-      { href: "/u21", icon: "🧒", label: "Mládež", color: "#3D7A3D" },
-      { href: "/trenink", icon: "🏋️", label: "Tréninky", color: "#3D7A3D" },
-      { href: "/zamestnanci", icon: "👔", label: "Zaměstnanci", color: "#4E6B7B" },
-      { href: "/prestupy", icon: "🤝", label: "Přestupy", color: "#4A8A4A" },
-      { href: "/sazky", icon: "🎫", label: "Sázková kancelář", color: "#7A2E2E" },
-      { href: "/finance", icon: "💰", label: "Finance", color: "#6B8E23" },
-      { href: "/sponzori", icon: "💼", label: "Sponzoři", color: "#8B7355" },
-      { href: "/vybaveni", icon: "👟", label: "Vybavení", color: "#7B6B4E" },
-      { href: "/stadion", icon: "🏟️", label: "Stadion", color: "#5C7A3D" },
-      { href: "/fanousci", icon: "📢", label: "Fanoušci", color: "#8B4513" },
-      { href: "/udalosti", icon: "🎉", label: "Události", color: "#8B6914" },
-      { href: "/hospoda", icon: "🍺", label: "Hospoda", color: "#8B5A2B" },
-      { href: "/incidenty", icon: "🚨", label: "Incidenty", color: "#7A2E2E" },
-    ],
-  },
-  {
-    title: "Soutěž",
-    items: [
-      { href: "/liga", icon: "🏆", label: "Liga", color: "#B8860B" },
-      { href: "/pohar", icon: "🥇", label: "Pohár", color: "#A0722D" },
-      { href: "/turnaj", icon: "⚽", label: "Turnaj P-Mobile", color: "#A3155F" },
-      { href: "/rozpis", icon: "📅", label: "Rozpis", color: "#3D6B5C" },
-      { href: "/pratelaky", icon: "🤛", label: "Přáteláky", color: "#4A7A5C" },
-      { href: "/kalendar", icon: "🗓️", label: "Kalendář", color: "#6B7B3D" },
-      { href: "/zpravodaj", icon: "📰", label: "Zpravodaj", color: "#556B2F" },
-      { href: "/rozhodci", icon: "🧑‍⚖️", label: "Rozhodčí", color: "#4E4E4E" },
-      { href: "/soutez", icon: "🏛️", label: "Grémium soutěže", color: "#6B5B3D" },
-      // Sněm ligy je dynamicky doplněn, pokud existuje neodevzdaný hlas
-    ],
-  },
-  {
-    title: "Ostatní",
-    items: [
-      { href: "/novinky", icon: "✨", label: "Co je nového", color: "#3D7A3D" },
-      { href: "/napoveda", icon: "📖", label: "Nápověda", color: "#2D5F2D" },
-      { href: "/aplikace", icon: "📲", label: "Nainstaluj", color: "#153615" },
-      { href: "/nastaveni", icon: "⚙️", label: "Nastavení", color: "#6B6B6B" },
-    ],
-  },
-];
+const INSTALL_ITEM: MenuItem = { href: "/aplikace", icon: "📲", label: "Nainstaluj", color: "#153615" };
+
+/**
+ * Dlaždice podle stejných skupin jako postranní menu. Položky ze spodní lišty
+ * se neopakují; ze skupiny Dnes tak zbyde jen Zpravodaj, který jde do Ostatních.
+ */
+function buildSections(badges: MenuBadgesState): Section[] {
+  const sections: Section[] = [];
+  const rest: MenuItem[] = [];
+  for (const group of menuGroupsFor(badges)) {
+    const items = group.items.filter((item) => !item.inBottomNav);
+    if (group.id === "today") rest.push(...items);
+    else sections.push({ title: group.label, items });
+  }
+  const [coachProfile, ...service] = MENU_FOOTER_ITEMS;
+  sections.push({ title: "Ostatní", items: [...rest, coachProfile, ...service.slice(0, 2), INSTALL_ITEM, ...service.slice(2)] });
+  return sections;
+}
 
 function getTileBadge(href: string, badges: MenuBadgesState): TileBadge | null {
-  if (href === "/prestupy" && badges.incomingOffers > 0) {
-    return { type: "count", count: badges.incomingOffers, bg: "bg-card-red" };
-  }
-  if (href === "/sazky" && badges.betsCount > 0) {
-    return { type: "count", count: badges.betsCount, bg: "bg-card-red" };
-  }
-  if (href === "/soutez" && badges.gremiumCount > 0) {
-    return { type: "count", count: badges.gremiumCount, bg: "bg-card-red" };
-  }
-  if (href === "/udalosti" && badges.pendingEvents > 0) {
-    return { type: "count", count: badges.pendingEvents, bg: "bg-amber-500" };
-  }
-  if (href === "/obec" && badges.pendingVillage > 0) {
-    return { type: "count", count: badges.pendingVillage, bg: "bg-amber-500" };
-  }
-  if (href === "/hlasovani" && badges.unvotedCount > 0) {
-    return { type: "count", count: badges.unvotedCount, bg: "bg-amber-500" };
-  }
-  if (href === "/novinky" && badges.notesUnseen) {
-    return { type: "tag", label: "Nové", bg: "bg-pitch-500" };
-  }
-  return null;
+  const badge = menuBadgeFor(href, badges);
+  if (!badge) return null;
+  const bg = MENU_BADGE_BG[badge.tone];
+  return badge.count != null ? { type: "count", count: badge.count, bg } : { type: "tag", label: badge.label ?? "", bg };
 }
 
 export default function MorePage() {
@@ -198,21 +143,7 @@ export default function MorePage() {
 
   const totalAlertCount = pendingAlerts.reduce((sum, a) => sum + (a.count ?? 1), 0);
 
-  const sections = BASE_SECTIONS.map((section) => {
-    if (section.title === "Soutěž" && badges.unvotedCount > 0) {
-      const alreadyHas = section.items.some((i) => i.href === "/hlasovani");
-      if (!alreadyHas) {
-        return {
-          ...section,
-          items: [
-            ...section.items,
-            { href: "/hlasovani", icon: "🗳️", label: "Sněm", color: "#B8860B" },
-          ],
-        };
-      }
-    }
-    return section;
-  });
+  const sections = buildSections(badges);
 
   return (
     <div className="page-container pb-24">

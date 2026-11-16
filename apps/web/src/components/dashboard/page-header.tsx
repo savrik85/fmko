@@ -1,12 +1,11 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { BadgePreview } from "@/components/ui/badge-preview";
 import type { BadgePattern } from "@/components/ui/badge-preview";
-import { pageTitleFor } from "@/lib/page-title";
+import { usePageHeaderOverride } from "@/context/page-header-context";
 
 interface PageHeaderProps {
   name?: string;
@@ -27,9 +26,31 @@ function isLightColor(hex: string): boolean {
   return (r * 299 + g * 587 + b * 114) / 1000 > 160;
 }
 
+interface CompactHeaderBridgeProps {
+  name?: string;
+  color?: string;
+  badge?: ReactNode | null;
+  hideLeaguePosition: boolean;
+}
+
+function CompactHeaderBridge({ name, color, badge, hideLeaguePosition }: CompactHeaderBridgeProps) {
+  const { setOverride } = usePageHeaderOverride();
+  // Znak je nový prvek při každém vykreslení; v závislostech by efekt točil dokola.
+  const badgeRef = useRef(badge);
+  badgeRef.current = badge;
+  const badgeHidden = badge === null;
+  const hasCustomBadge = badge != null;
+
+  useEffect(() => {
+    setOverride({ name, color, badge: badgeRef.current, hideLeaguePosition });
+    return () => setOverride(null);
+  }, [name, color, badgeHidden, hasCustomBadge, hideLeaguePosition, setOverride]);
+
+  return null;
+}
+
 export function PageHeader({ name, detail, color, badge, children, compact }: PageHeaderProps) {
   const ctx = useTeam();
-  const pathname = usePathname();
   const bg = color || ctx.primaryColor || "#2D5F2D";
   const displayName = name || ctx.teamName || "";
   const displayDetail = detail ?? (ctx.villageName && ctx.district ? `${ctx.villageName} · ${ctx.district}` : null);
@@ -56,40 +77,12 @@ export function PageHeader({ name, detail, color, badge, children, compact }: Pa
     ) : null;
 
   // ── Kompaktní varianta ──
-  // Používá se na všech stránkách. Plná hlavička opakovala název týmu
-  // a pozici v lize na každé obrazovce — informaci, kterou hráč zná —
-  // a brala 87 px z 844px displeje. Tahle bere 42.
-  //
-  // Když stránka předá `name` (Liga, Rozpis, Pohár), má přednost před
-  // názvem odvozeným z adresy: „Přebor Prahy — Sezóna 3" řekne víc než
-  // „Liga". Stejně tak `badge={null}` a `children={null}` se respektují,
-  // aby si tyhle stránky mohly znak i pravý štítek odepřít.
+  // Nekreslí nic: znak, název stránky i pozici v lize nese horní lišta
+  // (FMTopBar), aby nahoře neležely dva barevné pruhy pod sebou. Stránka tudy
+  // liště jen předá vlastní název („Přebor Prahy“ místo „Liga“), barvu a znak.
+  // `badge={null}` znak skryje, `children={null}` skryje pozici v lize.
   if (compact) {
-    const title = name || pageTitleFor(pathname) || displayName;
-    // Vlastní znak stránky (např. logo pořadatele turnaje) má přednost před znakem týmu.
-    const znak = badge === null ? null : (badge ?? makeBadge(26));
-    return (
-      <div className="hero-gradient py-2 px-4 sm:px-8" style={{ backgroundColor: bg }}>
-        <div className="flex items-center gap-3 min-w-0">
-          {znak && <div className="shrink-0">{znak}</div>}
-          <h1 className={`font-heading font-[800] ${txt} text-lg sm:text-xl leading-none truncate flex-1 min-w-0`}>
-            {title}
-          </h1>
-          {children !== null && ctx.leaguePosition != null && (
-            /* items-center + leading-none na obou: při items-baseline měl
-               popisek výchozí řádkování 17 px proti 16 px čísla, takže seděl
-               o 3 px níž a chip vypadal rozhozeně. */
-            <Link
-              href="/liga"
-              className={`${boxBg} ${boxBgHover} shrink-0 rounded-control px-2.5 py-1.5 transition-colors flex items-center gap-1`}
-            >
-              <span className={`font-heading font-[800] text-base tabular-nums leading-none ${txt}`}>{ctx.leaguePosition}.</span>
-              <span className={`${boxLabel} text-micro font-heading font-bold uppercase leading-none`}>v lize</span>
-            </Link>
-          )}
-        </div>
-      </div>
-    );
+    return <CompactHeaderBridge name={name} color={color} badge={badge} hideLeaguePosition={children === null} />;
   }
 
   // ── Plná varianta ──

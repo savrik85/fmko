@@ -118,3 +118,20 @@ export function isNeutralExtreme(hex: string): boolean {
   return l > 0.85 || l < 0.012;
 }
 
+
+/**
+ * Barva horní lišty z barev klubu: vždy dost tmavá na bílý text.
+ *
+ * Světlé dresy se ztmaví se zachováním odstínu (žlutá → okrová), takže lišta
+ * vypadá u všech klubů stejně stavěná a nemusí se přepínat na tmavé písmo.
+ * Skoro bílý klub by vyšel šedě, proto se u něj bere vedlejší barva.
+ */
+export function chromeColorFor(primary: string | null | undefined, secondary?: string | null): string {
+  const FALLBACK_CHROME = "#153615";
+  if (!primary) return FALLBACK_CHROME;
+  if (relativeLuminance(parseHex(primary)) > 0.85) {
+    if (secondary && relativeLuminance(parseHex(secondary)) <= 0.85) return readableOnLight(secondary);
+    return FALLBACK_CHROME;
+  }
+  return readableOnLight(primary);
+}

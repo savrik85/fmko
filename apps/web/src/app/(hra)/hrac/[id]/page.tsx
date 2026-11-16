@@ -27,6 +27,7 @@ import { formatLogDate, RelationTrend } from "@/components/manager/CoachKabinaTa
 import { attrBg, attrValue, withBody, bodyNote, formatKg, formatKgChange, WEIGHT_CATEGORY, type WeightCategoryKey } from "@/lib/player-attrs";
 
 import type { BadgePattern } from "@/components/ui";
+import { HeroBackdrop } from "@/components/ui/hero-backdrop";
 import { isLightColor } from "@/lib/team-color";
 
 // Stejný strop hlídá API (apps/api/src/transfers/swap-players.ts).
@@ -523,7 +524,8 @@ export default function PlayerDetailPage() {
   return (
     <>
       {/* ═══ Player header ═══ */}
-      <div className="hero-gradient px-3 sm:px-8 py-4 sm:py-5" style={{ backgroundColor: color }}>
+      <div className="hero-gradient hero-detail px-3 sm:px-8 py-4 sm:py-5" style={{ backgroundColor: color }}>
+        <HeroBackdrop primary={color} secondary={displayTeam.secondary_color} pattern={displayTeam.badge_pattern ?? null} />
         <div className="max-w-[1280px] mx-auto">
           {/* ─── Desktop: jednořádkový layout ─── */}
           <div className="hidden sm:flex items-center gap-4">

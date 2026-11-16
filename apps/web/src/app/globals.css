@@ -683,6 +683,44 @@ body { touch-action: manipulation; }
   -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
 }
 
+/* Horní lišta v barvě klubu: jemné prosvětlení shora, ať nepůsobí jako plochý obdélník. */
+.topbar-club {
+  background-image: linear-gradient(180deg, rgba(255,255,255,0.07) 0%, rgba(0,0,0,0.14) 100%);
+  box-shadow: inset 0 -1px 0 rgba(0,0,0,0.18);
+}
+
+/* Velká hlavička detailu (hráč, tým, trenér): pozadí kreslí <HeroBackdrop />,
+   obsah musí ležet nad ním. */
+.hero-detail > :not(.hero-backdrop) { position: relative; z-index: 1; }
+.hero-backdrop { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.hero-backdrop-shade {
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(120% 140% at 0% 0%, rgba(255,255,255,0.14) 0%, transparent 55%),
+    linear-gradient(115deg, transparent 35%, rgba(0,0,0,0.28) 100%);
+}
+/* Šerpa ve vedlejší barvě klubu: dva šikmé pruhy vpravo, jako na dresu. */
+.hero-backdrop-sash {
+  position: absolute; top: -20%; bottom: -20%; right: 9%; width: 190px;
+  transform: skewX(-18deg);
+  background: linear-gradient(90deg,
+    var(--hero-accent) 0, var(--hero-accent) 34%,
+    transparent 34%, transparent 50%,
+    var(--hero-accent) 50%, var(--hero-accent) 62%,
+    transparent 62%);
+  opacity: 0.2;
+}
+.hero-backdrop-mark {
+  position: absolute; right: -24px; top: 50%;
+  transform: translateY(-50%) rotate(-8deg);
+  opacity: 0.16;
+}
+.hero-backdrop-edge { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: var(--hero-accent); opacity: 0.85; }
+@media (max-width: 639px) {
+  .hero-backdrop-sash { width: 110px; right: 4%; }
+  .hero-backdrop-mark { right: -40px; opacity: 0.12; }
+}
+
 .hero-gradient { position: relative; overflow: hidden; }
 .hero-gradient::after {
   content: ""; position: absolute; inset: 0;

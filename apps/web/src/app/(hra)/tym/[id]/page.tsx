@@ -7,6 +7,7 @@ import { apiFetch, showError, type Team, type Player, type TeamMatchResults, typ
 import { useTeam } from "@/context/team-context";
 import { Spinner, SectionLabel, BadgePreview, PositionBadge, JerseyPreview } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
+import { HeroBackdrop } from "@/components/ui/hero-backdrop";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { PreMatchCard } from "@/components/relations/RelationSection";
 import { ForeignSquad } from "./ForeignSquad";
@@ -187,7 +188,8 @@ export default function TeamPage() {
   return (
     <>
       {/* ═══ Team header ═══ */}
-      <div className="hero-gradient px-3 sm:px-8 py-4 sm:py-5" style={{ backgroundColor: color }}>
+      <div className="hero-gradient hero-detail px-3 sm:px-8 py-4 sm:py-5" style={{ backgroundColor: color }}>
+        <HeroBackdrop primary={color} secondary={team.secondary_color} pattern={team.badge_pattern ?? null} />
         <div className="max-w-[1280px] mx-auto">
           {/* ─── Desktop ─── */}
           <div className="hidden sm:flex items-center gap-4">

@@ -1,4 +1,5 @@
 "use client";
+import { HeroBackdrop } from "@/components/ui/hero-backdrop";
 
 import { useState } from "react";
 import Link from "next/link";
@@ -131,7 +132,8 @@ export function FriendlyRecord({ data, onChallenge }: { data: FriendliesData; on
     <div className="space-y-5">
       {/* Karta v barvě klubu: kde stojím a co se teď děje */}
       <div className="card p-0 overflow-hidden">
-        <div className="hero-gradient px-4 sm:px-5 py-4 sm:py-5" style={{ backgroundColor: color }}>
+        <div className="hero-gradient hero-detail px-4 sm:px-5 py-4 sm:py-5" style={{ backgroundColor: color }}>
+        <HeroBackdrop primary={color} secondary={data.me?.crest.secondary} pattern={data.me?.crest.pattern ?? null} />
           <div className="flex items-center gap-3">
             <ClubCrest crest={data.me?.crest} size={52} />
             <div className="min-w-0">
