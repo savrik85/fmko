@@ -69,53 +69,54 @@ export function FMTopBar() {
 
       {badge && <Link href="/prehled" aria-label="Domů" className="shrink-0 hidden min-[400px]:block">{badge}</Link>}
 
-      <h1 className="font-heading font-[800] text-white text-lg sm:text-xl leading-none truncate min-w-0">
+      <h1 className="font-heading font-[800] text-white text-lg sm:text-xl leading-none truncate min-w-0 sm:shrink-0">
         {title}
       </h1>
 
       <Napoveda />
 
       {/* ml-auto místo prázdného roztahovacího prvku: ten bral na mobilu další mezeru. */}
-      <div className="ml-auto flex items-center gap-1 sm:gap-2 shrink-0 text-micro sm:text-sm font-heading text-white">
+      <div className="ml-auto flex items-center gap-1 sm:gap-2 shrink-0 sm:shrink sm:min-w-0 text-micro sm:text-sm font-heading text-white">
         {/* Počasí herního dne: na mobilu místo nezbývá, je na Domů. */}
         {currentWeather && (
           <span
-            className="hidden md:inline text-white/80 tabular-nums whitespace-nowrap px-1"
+            className="hidden lg:inline text-white/80 tabular-nums whitespace-nowrap px-1"
             title={`${currentWeather.description} · ${currentWeather.temperature} °C`}
           >
             {currentWeather.icon}{" "}
-            <span className="hidden xl:inline">{currentWeather.description}{" · "}</span>
+            <span className="hidden 2xl:inline">{currentWeather.description}{" · "}</span>
             {currentWeather.temperature}{"°"}
           </span>
         )}
         {season != null && (
-          <span className="text-white/80 whitespace-nowrap hidden lg:inline px-1">
+          <span className="text-white/80 whitespace-nowrap hidden xl:inline px-1">
             {"Sezóna"} {season}{seasonDay != null && seasonTotal != null && seasonTotal > 0 ? ` · den ${seasonDay}/${seasonTotal}` : ""}
           </span>
         )}
         {showPosition && (
           <Link href="/liga" className={CHIP} title="Tabulka ligy">
             <span className="font-[800] tabular-nums">{ctx.leaguePosition}.</span>
-            <span className="hidden sm:inline text-white/80 text-micro font-bold uppercase">v lize</span>
+            <span className="hidden md:inline text-white/80 text-micro font-bold uppercase">v lize</span>
           </Link>
         )}
         {budget != null && (
           <Link href="/finance" className={`${CHIP} tabular-nums`} title="Finance klubu">
-            <span className="hidden sm:inline" aria-hidden="true">{"💰"}</span>
+            <span className="hidden md:inline" aria-hidden="true">{"💰"}</span>
             <span className="font-bold">{budget.toLocaleString("cs")} {"Kč"}</span>
           </Link>
         )}
         {nextMatch && (
-          <Link href="/zapas" className={CHIP} title="Sestava na příští zápas">
+          <Link href="/zapas" className={`${CHIP} sm:min-w-0`} title={`Příští zápas: ${nextMatch.opponent}. Otevře sestavu.`}>
             <span aria-hidden="true">{nextMatch.isCup ? "🏆" : "⚽"}</span>
-            {nextMatch.isFriendly && <span className="text-amber-300 text-micro hidden sm:inline">přátelák</span>}
-            {nextMatch.isCup && <span className="text-amber-300 text-micro hidden sm:inline">pohár</span>}
-            {/* Jméno soupeře je na mobilu ta nejdražší položka (187 px ze 390);
-                bez něj zbyde „⚽ za 6 dní“. Soupeře najde hráč na Domů. */}
-            <span className="font-bold hidden sm:inline max-w-[14ch] truncate">{nextMatch.opponent}</span>
-            <span className="hidden sm:inline text-white/60">{"·"}</span>
+            {nextMatch.isFriendly && <span className="text-amber-300 text-micro hidden lg:inline">přátelák</span>}
+            {nextMatch.isCup && <span className="text-amber-300 text-micro hidden lg:inline">pohár</span>}
+            {/* Jméno soupeře se ukazuje celé od šířky, kam se vejde (lg). Pod ní
+                zbyde „⚽ za 6 dní“; uříznuté „FK Ma…“ je horší než nic. */}
+            {/* Celý název soupeře; zkrátí se až ve chvíli, kdy se do lišty opravdu nevejde. */}
+            <span className="font-bold hidden lg:inline truncate min-w-0">{nextMatch.opponent}</span>
+            <span className="hidden lg:inline text-white/60">{"·"}</span>
             {nextMatch.isFriendly ? (
-              <span className="text-amber-300 font-bold hidden sm:inline">sestava!</span>
+              <span className="text-amber-300 font-bold">sestava!</span>
             ) : nextMatch.daysUntil === 0 ? (
               <span className="font-[800]">{"dnes!"}</span>
             ) : nextMatch.daysUntil === 1 ? (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTeam } from "@/context/team-context";
@@ -35,8 +35,27 @@ export function FMSidebar() {
   const pathname = usePathname();
   const { teamId, isAdmin, logout } = useTeam();
 
+  const navRef = useRef<HTMLElement | null>(null);
+  const [moreBelow, setMoreBelow] = useState(false);
+
   // Až po připojení: na serveru localStorage není a první vykreslení musí sedět.
   useEffect(() => { setCollapsedGroups(readCollapsedGroups()); }, []);
+
+  const updateScrollHint = useCallback(() => {
+    const nav = navRef.current;
+    if (!nav) return;
+    setMoreBelow(nav.scrollHeight - nav.scrollTop - nav.clientHeight > 8);
+  }, []);
+
+  // Výška obsahu se mění sbalením skupiny, zúžením menu i změnou okna.
+  useEffect(() => {
+    updateScrollHint();
+    const nav = navRef.current;
+    if (!nav || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(updateScrollHint);
+    observer.observe(nav);
+    return () => observer.disconnect();
+  }, [updateScrollHint, collapsedGroups, expanded, badges.unvotedCount, isAdmin]);
 
   const toggleGroup = (id: string) => {
     setCollapsedGroups((current) => {
@@ -116,54 +135,75 @@ export function FMSidebar() {
           )}
         </div>
 
-        <nav className="flex-1 overflow-y-auto no-scrollbar py-1">
-          {groups.map((group, index) => {
-            // Zúžené menu ukazuje jen ikony; sbalování skupin by v něm položky schovalo beze stopy.
-            const collapsed = expanded && collapsedGroups.includes(group.id);
-            const hiddenCount = collapsed ? groupBadgeCount(group, badges) : 0;
-            const holdsActive = group.items.some(isItemActive);
-            return (
-              <div key={group.id}>
-                {expanded ? (
-                  <button
-                    onClick={() => toggleGroup(group.id)}
-                    aria-expanded={!collapsed}
-                    className={`w-full flex items-center gap-1.5 px-3 pt-3 pb-1 text-micro font-heading font-bold uppercase tracking-widest transition-colors ${
-                      collapsed && holdsActive ? "text-green-400" : "text-white/45 hover:text-white/80"
-                    }`}
-                  >
-                    <span className="flex-1 text-left">{group.label}</span>
-                    {hiddenCount > 0 && (
-                      <span className="bg-card-red text-white text-micro font-bold px-1.5 py-0.5 rounded-full leading-none tracking-normal">
-                        {hiddenCount}
-                      </span>
-                    )}
-                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true"
-                      className={`shrink-0 transition-transform duration-150 ${collapsed ? "-rotate-90" : ""}`}>
-                      <path d="M2 3.5l3 3 3-3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                  </button>
-                ) : (
-                  index > 0 && <div className="mx-2.5 my-1 border-t border-white/10" />
-                )}
-                {!collapsed && group.items.map(renderItem)}
-              </div>
-            );
-          })}
-        </nav>
+        {/* Jedna rolovací plocha pro celé menu včetně servisních položek. Dřív
+            byly dole přišpendlené a na nižším displeji ukrojily skupinám místo. */}
+        <div className="relative flex-1 min-h-0">
+          <nav ref={navRef} onScroll={updateScrollHint} className="sidebar-scroll h-full overflow-y-auto py-1">
+            {groups.map((group, index) => {
+              // Zúžené menu ukazuje jen ikony; sbalování skupin by v něm položky schovalo beze stopy.
+              const collapsed = expanded && collapsedGroups.includes(group.id);
+              const hiddenCount = collapsed ? groupBadgeCount(group, badges) : 0;
+              const holdsActive = group.items.some(isItemActive);
+              return (
+                <div key={group.id}>
+                  {expanded ? (
+                    <button
+                      onClick={() => toggleGroup(group.id)}
+                      aria-expanded={!collapsed}
+                      className={`w-full flex items-center gap-1.5 px-3 pt-3 pb-1 text-micro font-heading font-bold uppercase tracking-widest transition-colors ${
+                        collapsed && holdsActive ? "text-green-400" : "text-white/45 hover:text-white/80"
+                      }`}
+                    >
+                      <span className="flex-1 text-left">{group.label}</span>
+                      {hiddenCount > 0 && (
+                        <span className="bg-card-red text-white text-micro font-bold px-1.5 py-0.5 rounded-full leading-none tracking-normal">
+                          {hiddenCount}
+                        </span>
+                      )}
+                      <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true"
+                        className={`shrink-0 transition-transform duration-150 ${collapsed ? "-rotate-90" : ""}`}>
+                        <path d="M2 3.5l3 3 3-3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </button>
+                  ) : (
+                    index > 0 && <div className="mx-2.5 my-1 border-t border-white/10" />
+                  )}
+                  {!collapsed && group.items.map(renderItem)}
+                </div>
+              );
+            })}
 
-        <div className="border-t border-white/10 py-1.5">
-          {footerItems.map(renderItem)}
-          <button
-            onClick={logout}
-            title={!expanded ? "Odhlásit" : undefined}
-            className={`flex items-center gap-2.5 mx-1 my-px rounded text-white/55 hover:text-white hover:bg-white/5 transition-colors ${
-              expanded ? "px-2.5 py-1.5 w-[calc(100%-0.5rem)]" : "px-0 py-1.5 justify-center w-[calc(100%-0.5rem)]"
-            }`}
-          >
-            <span className="text-sm shrink-0 w-5 text-center leading-none">🚪</span>
-            {expanded && <span className="text-[13px] font-medium leading-none">Odhlásit</span>}
-          </button>
+            <div className="border-t border-white/10 mt-2 pt-1.5 pb-1">
+              {footerItems.map(renderItem)}
+              <button
+                onClick={logout}
+                title={!expanded ? "Odhlásit" : undefined}
+                className={`flex items-center gap-2.5 mx-1 my-px rounded text-white/55 hover:text-white hover:bg-white/5 transition-colors w-[calc(100%-0.5rem)] ${
+                  expanded ? "px-2.5 py-1.5" : "px-0 py-1.5 justify-center"
+                }`}
+              >
+                <span className="text-sm shrink-0 w-5 text-center leading-none">🚪</span>
+                {expanded && <span className="text-[13px] font-medium leading-none">Odhlásit</span>}
+              </button>
+            </div>
+          </nav>
+
+          {/* Menu pokračuje pod okrajem: ztmavení a šipka, na kterou se dá kliknout. */}
+          {moreBelow && (
+            <button
+              onClick={() => navRef.current?.scrollBy({ top: 240, behavior: "smooth" })}
+              aria-label="Další položky menu"
+              className="absolute inset-x-0 bottom-0 h-12 flex items-end justify-center pb-1 text-white"
+              style={{ background: "linear-gradient(180deg, rgba(20,30,20,0) 0%, #141e14 70%)" }}
+            >
+              <span className="flex items-center gap-1 text-micro font-heading font-bold uppercase tracking-wider bg-white/15 rounded-full px-2.5 py-1">
+                {expanded && "Další"}
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
+                  <path d="M2 3.5l3 3 3-3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </span>
+            </button>
+          )}
         </div>
       </aside>
 
