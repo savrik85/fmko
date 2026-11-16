@@ -6,22 +6,14 @@ import { FMSidebar } from "@/components/dashboard/fm-sidebar";
 import { FMTopBar } from "@/components/dashboard/fm-topbar";
 import { BottomNav } from "@/components/dashboard/bottom-nav";
 import { NotificationTitle } from "@/components/dashboard/notification-title";
-import { PageHeader } from "@/components/dashboard/page-header";
+import { PageHeaderProvider } from "@/context/page-header-context";
 import { AnnouncementDialog } from "@/components/dashboard/announcement-dialog";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
 
-const DETAIL_PREFIXES = ["/hrac/", "/tym/", "/zapas/", "/pohar/tym/", "/telefon/", "/manazer/"];
-// Telefon má vlastní hlavičku („Telefon", kredit, tužka) a nad ní ještě
-// stavový řádek. Hlavička stránky nad tím dělala druhý nadpis Telefon a
-// na mobilu ukrajovala kus obrazovky, na které má být vidět seznam zpráv.
-const CUSTOM_HEADER_PAGES = ["/liga", "/rozpis", "/pohar", "/turnaj", "/telefon"];
-
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { teamId, isAdmin } = useTeam();
-  const isDetailPage = DETAIL_PREFIXES.some((p) => pathname.startsWith(p) && pathname !== p.slice(0, -1));
-  const hasCustomHeader = CUSTOM_HEADER_PAGES.includes(pathname);
   // Přehrávání záznamu zápasu — skrýt horní lištu, stav konta by prozrazoval výsledek.
   const isReplay = pathname.includes("/zaznam");
   // Check for unseen match — redirect to match-day screen (skip on replay pages)
@@ -51,6 +43,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   // pro status bar a v tom odsazení prosvítalo béžové pozadí jako světlý pruh
   // nad zelenou lištou. Obsah uvnitř má papír vlastní (bg-paper na <main>).
   return (
+    <PageHeaderProvider>
     <div className="h-dvh flex bg-[var(--color-chrome)] overflow-hidden">
       <FMSidebar />
 
@@ -67,10 +60,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             vypadalo to jako zúžená hlavička se světlým proužkem vpravo.
             Na dotyku je posuvník překryvný, takže se tam nic neztrácí. */}
         <main className="flex-1 overflow-y-auto no-scrollbar pb-20 sm:pb-0 bg-paper">
-          {/* Kompaktní hlavička všude. Plná opakovala název týmu a pozici
-              v lize na každé obrazovce a brala 87 px z 844px displeje; navíc
-              se výška hlavičky měnila podle stránky a působilo to neuceleně. */}
-          {!isDetailPage && !hasCustomHeader && <PageHeader compact />}
+          {/* Hlavičku stránky (znak, název, pozice v lize) nese horní lišta;
+              samostatný pruh pod ní bral na mobilu dalších 42 px. */}
           {children}
         </main>
       </div>
@@ -88,5 +79,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* Jednorázové oznámení všem manažerům — při přehrávání zápasu neruší. */}
       {!isReplay && <AnnouncementDialog />}
     </div>
+    </PageHeaderProvider>
   );
 }

@@ -1,86 +1,129 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
+import { usePageHeaderOverride } from "@/context/page-header-context";
 import { Napoveda } from "@/components/ui/napoveda";
+import { BadgePreview } from "@/components/ui/badge-preview";
+import type { BadgePattern } from "@/components/ui/badge-preview";
+import { pageTitleFor } from "@/lib/page-title";
+import { chromeColorFor } from "@/lib/team-color";
 
+/** Stránky s vlastním nadpisem hned pod lištou: lišta místo něj ukáže název klubu. */
+const PAGES_WITH_OWN_TITLE = ["/telefon"];
+
+const CHIP = "rounded-control bg-white/10 hover:bg-white/20 transition-colors whitespace-nowrap flex items-center gap-1 px-2 py-1.5 leading-none";
+
+/**
+ * Horní lišta v barvě klubu: znak, název stránky, pozice v lize, peníze a příští zápas.
+ *
+ * Dřív tu byla zelená lišta (56 px) a pod ní ještě pruh hlavičky stránky v barvě
+ * klubu (42 px). Teď je to jeden pruh a všechno v něm vede tam, kde se s tím dá
+ * něco dělat: peníze do Financí, zápas na Sestavu, pozice do Ligy.
+ */
 export function FMTopBar() {
   const router = useRouter();
-  const { budget, season, seasonDay, seasonTotal, nextMatch, currentWeather } = useTeam();
+  const pathname = usePathname();
+  const ctx = useTeam();
+  const { budget, season, seasonDay, seasonTotal, nextMatch, currentWeather } = ctx;
+  const { override } = usePageHeaderOverride();
+
+  // Vlastní barva stránky (turnaj pořadatele) se bere tak, jak je; klubová se ztmaví pro bílý text.
+  const background = override?.color ?? chromeColorFor(ctx.primaryColor, ctx.secondaryColor);
+  const ownTitle = PAGES_WITH_OWN_TITLE.includes(pathname);
+  const title = override?.name || (ownTitle ? ctx.teamName : pageTitleFor(pathname)) || ctx.teamName || "";
+
+  const autoInitials = (ctx.teamName || "").split(" ").map((w) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase();
+  const clubBadge = ctx.primaryColor ? (
+    <BadgePreview
+      primary={ctx.badgePrimary || ctx.primaryColor}
+      secondary={ctx.badgeSecondary || ctx.secondaryColor || "#FFFFFF"}
+      pattern={(ctx.badgePattern as BadgePattern) || "shield"}
+      initials={ctx.badgeInitials || autoInitials}
+      symbol={ctx.badgeSymbol}
+      size={28}
+    />
+  ) : null;
+  const badge = override?.badge === null ? null : (override?.badge ?? clubBadge);
+  const showPosition = !override?.hideLeaguePosition && ctx.leaguePosition != null;
 
   return (
     <header
-      /* h-14 je výška obsahu; horní inset se přičítá jako padding, aby zelená
+      /* h-14 je výška obsahu; horní inset se přičítá jako padding, aby barva
          sahala pod status bar a nevznikal nad lištou světlý pruh. */
-      className="on-dark flex items-center pl-1 pr-3 sm:px-5 gap-2 sm:gap-4 shrink-0"
+      className="on-dark topbar-club flex items-center pl-1 pr-2 sm:pl-3 sm:pr-5 gap-1 sm:gap-3 shrink-0"
       style={{
-        background: "var(--color-chrome)",
+        backgroundColor: background,
         height: "calc(3.5rem + env(safe-area-inset-top, 0px))",
         paddingTop: "env(safe-area-inset-top, 0px)",
       }}
     >
-      <div className="flex items-center gap-1 shrink-0">
-        <button
-          onClick={() => router.back()}
-          className="w-11 h-11 sm:w-8 sm:h-8 rounded-control flex items-center justify-center text-white/60 hover:text-white hover:bg-white/10 transition-colors"
-          aria-label="Zpět"
-        >
-          <svg width="20" height="20" viewBox="0 0 18 18" fill="none" aria-hidden="true"><path d="M11 4L6 9l5 5" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-        </button>
-        <button
-          onClick={() => { try { window.history.forward(); } catch (e) { console.error("history forward:", e); } }}
-          className="hidden sm:flex w-8 h-8 rounded-control items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition-colors"
-          aria-label="Vpřed"
-        >
-          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true"><path d="M7 4l5 5-5 5" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-        </button>
-      </div>
+      <button
+        onClick={() => router.back()}
+        className="w-10 h-11 sm:w-8 sm:h-8 rounded-control flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 transition-colors shrink-0"
+        aria-label="Zpět"
+      >
+        <svg width="20" height="20" viewBox="0 0 18 18" fill="none" aria-hidden="true"><path d="M11 4L6 9l5 5" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+      </button>
+
+      {badge && <Link href="/prehled" aria-label="Domů" className="shrink-0 hidden min-[400px]:block">{badge}</Link>}
+
+      <h1 className="font-heading font-[800] text-white text-lg sm:text-xl leading-none truncate min-w-0">
+        {title}
+      </h1>
 
       <Napoveda />
 
-      <div className="flex-1 min-w-0" />
-
-      <div className="flex items-center gap-3 sm:gap-6 shrink-0 text-micro sm:text-sm font-heading overflow-hidden">
-        {/* Počasí herního dne. Na mobilu jen ikona a teplota — vejde se vedle
-            rozpočtu; popis („Vytrvalý déšť, bahno") až od sm nahoru. */}
+      {/* ml-auto místo prázdného roztahovacího prvku: ten bral na mobilu další mezeru. */}
+      <div className="ml-auto flex items-center gap-1 sm:gap-2 shrink-0 text-micro sm:text-sm font-heading text-white">
+        {/* Počasí herního dne: na mobilu místo nezbývá, je na Domů. */}
         {currentWeather && (
           <span
-            className="text-white/60 tabular-nums whitespace-nowrap"
+            className="hidden md:inline text-white/80 tabular-nums whitespace-nowrap px-1"
             title={`${currentWeather.description} · ${currentWeather.temperature} °C`}
           >
             {currentWeather.icon}{" "}
-            <span className="hidden md:inline text-white/40">{currentWeather.description}{" · "}</span>
+            <span className="hidden xl:inline">{currentWeather.description}{" · "}</span>
             {currentWeather.temperature}{"°"}
           </span>
         )}
+        {season != null && (
+          <span className="text-white/80 whitespace-nowrap hidden lg:inline px-1">
+            {"Sezóna"} {season}{seasonDay != null && seasonTotal != null && seasonTotal > 0 ? ` · den ${seasonDay}/${seasonTotal}` : ""}
+          </span>
+        )}
+        {showPosition && (
+          <Link href="/liga" className={CHIP} title="Tabulka ligy">
+            <span className="font-[800] tabular-nums">{ctx.leaguePosition}.</span>
+            <span className="hidden sm:inline text-white/80 text-micro font-bold uppercase">v lize</span>
+          </Link>
+        )}
         {budget != null && (
-          <span className="text-white/60 tabular-nums whitespace-nowrap">{"💰"} {budget.toLocaleString("cs")} {"Kč"}</span>
+          <Link href="/finance" className={`${CHIP} tabular-nums`} title="Finance klubu">
+            <span className="hidden sm:inline" aria-hidden="true">{"💰"}</span>
+            <span className="font-bold">{budget.toLocaleString("cs")} {"Kč"}</span>
+          </Link>
         )}
         {nextMatch && (
-          <span className="text-white/60 whitespace-nowrap truncate">
-            {nextMatch.isCup ? "🏆" : "⚽"} {nextMatch.isFriendly && <span className="text-amber-400 text-micro mr-1 hidden sm:inline">přátelák</span>}
-            {nextMatch.isCup && <span className="text-gold-400 text-micro mr-1 hidden sm:inline">pohár</span>}
-            {/* Jméno soupeře je na mobilu ta nejdražší položka v hlavičce (187 px
-                ze 390). Bez něj zbyde „⚽ za 6 dní", což je informace, kvůli
-                které se sem člověk dívá; soupeře najde na Domů. Od sm nahoru
-                se vrací. */}
-            <span className="text-white font-bold hidden sm:inline">{nextMatch.opponent}</span>
-            <span className="hidden sm:inline">{" · "}</span>
+          <Link href="/zapas" className={CHIP} title="Sestava na příští zápas">
+            <span aria-hidden="true">{nextMatch.isCup ? "🏆" : "⚽"}</span>
+            {nextMatch.isFriendly && <span className="text-amber-300 text-micro hidden sm:inline">přátelák</span>}
+            {nextMatch.isCup && <span className="text-amber-300 text-micro hidden sm:inline">pohár</span>}
+            {/* Jméno soupeře je na mobilu ta nejdražší položka (187 px ze 390);
+                bez něj zbyde „⚽ za 6 dní“. Soupeře najde hráč na Domů. */}
+            <span className="font-bold hidden sm:inline max-w-[14ch] truncate">{nextMatch.opponent}</span>
+            <span className="hidden sm:inline text-white/60">{"·"}</span>
             {nextMatch.isFriendly ? (
-              <span className="text-amber-400 font-bold hidden sm:inline">sestava!</span>
+              <span className="text-amber-300 font-bold hidden sm:inline">sestava!</span>
             ) : nextMatch.daysUntil === 0 ? (
-              <span className="text-pitch-400 font-bold">{"dnes!"}</span>
+              <span className="font-[800]">{"dnes!"}</span>
             ) : nextMatch.daysUntil === 1 ? (
-              <span className="text-pitch-400">{"zítra"}</span>
+              <span className="font-bold">{"zítra"}</span>
             ) : (
               <span>{"za"} {nextMatch.daysUntil} {"dní"}</span>
             )}
-          </span>
-        )}
-        {season != null && (
-          <span className="text-white/40 whitespace-nowrap hidden sm:inline">
-            {"📅"} {"Sezóna"} {season}{seasonDay != null && seasonTotal != null && seasonTotal > 0 ? ` · den ${seasonDay}/${seasonTotal}` : ""}
-          </span>
+          </Link>
         )}
       </div>
     </header>

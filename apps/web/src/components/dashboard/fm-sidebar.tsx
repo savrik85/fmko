@@ -1,116 +1,113 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { useMenuBadges } from "@/hooks/use-menu-badges";
+import {
+  MENU_BADGE_BG,
+  MENU_FOOTER_ITEMS,
+  groupBadgeCount,
+  menuBadgeFor,
+  menuGroupsFor,
+  type MenuItem,
+} from "@/lib/menu-structure";
 
-interface NavItem {
-  href: string;
-  label: string;
-  icon: string;
-  group: "main" | "club" | "league";
-  /** Další adresy, na kterých je položka aktivní (Mládež: U21 i Akademie). */
-  alsoActive?: string[];
+const COLLAPSED_GROUPS_KEY = "menu-collapsed-groups";
+const ADMIN_ITEM: MenuItem = { href: "/admin", label: "Admin", icon: "🛠️", color: "#8B4513" };
+
+function readCollapsedGroups(): string[] {
+  try {
+    const raw = window.localStorage.getItem(COLLAPSED_GROUPS_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === "string") : [];
+  } catch (e) {
+    console.warn("read collapsed menu groups:", e);
+    return [];
+  }
 }
-
-const NAV_ITEMS: NavItem[] = [
-  { href: "/prehled", label: "Domů", icon: "\u{1F3E0}", group: "main" },
-  { href: "/telefon", label: "Telefon", icon: "\u{1F4F1}", group: "main" },
-  { href: "/zpravodaj", label: "Zpravodaj", icon: "\u{1F4F0}", group: "main" },
-  { href: "/novinky", label: "Co je nového", icon: "✨", group: "main" },
-  { href: "/trener", label: "Profil trenéra", icon: "\u{1F9D1}\u200D\u{1F4BC}", group: "club" },
-  { href: "/muj-klub", label: "Klubový web", icon: "🌐", group: "club" },
-  { href: "/obec", label: "Obec", icon: "\u{1F3D8}\uFE0F", group: "club" },
-  { href: "/reputace", label: "Reputace", icon: "\u2B50", group: "club" },
-  { href: "/kadr", label: "Kádr", icon: "\u{1F465}", group: "club" },
-  // Mládež: U21 a Akademie se přepínají nahoře na stránce (components/players/youth-section-nav.tsx)
-  { href: "/u21", label: "Mládež", icon: "\u{1F9D2}", group: "club", alsoActive: ["/akademie"] },
-  { href: "/trenink", label: "Tréninky", icon: "\u{1F3CB}", group: "club" },
-  { href: "/zamestnanci", label: "Zaměstnanci", icon: "\u{1F454}", group: "club" },
-  { href: "/prestupy", label: "Přestupy", icon: "\u{1F91D}", group: "club" },
-  { href: "/sazky", label: "Sázky", icon: "\u{1F3AB}", group: "club" },
-  { href: "/finance", label: "Finance", icon: "\u{1F4B0}", group: "club" },
-  { href: "/sponzori", label: "Sponzoři", icon: "\u{1F4BC}", group: "club" },
-  { href: "/vybaveni", label: "Vybavení", icon: "\u{1F45F}", group: "club" },
-  { href: "/stadion", label: "Stadion", icon: "\u{1F3DF}", group: "club" },
-  { href: "/fanousci", label: "Fanoušci", icon: "\u{1F4E3}", group: "club" },
-  { href: "/udalosti", label: "Události", icon: "\u{1F389}", group: "club" },
-  { href: "/hospoda", label: "Hospoda", icon: "\u{1F37A}", group: "club" },
-  { href: "/incidenty", label: "Incidenty", icon: "\u{1F6A8}", group: "club" },
-  { href: "/zapas", label: "Sestava", icon: "\u{1F4CB}", group: "league" },
-  { href: "/rozpis", label: "Rozpis", icon: "\u{1F4C5}", group: "league" },
-  { href: "/pratelaky", label: "Přáteláky", icon: "\u{1F91C}", group: "league" },
-  { href: "/liga", label: "Liga", icon: "\u{1F3C6}", group: "league" },
-  { href: "/rozhodci", label: "Rozhodčí", icon: "\u{1F9D1}\u200D\u2696\uFE0F", group: "league" },
-  { href: "/soutez", label: "Grémium", icon: "\u{1F3DB}\uFE0F", group: "league" },
-  { href: "/pohar", label: "Pohár", icon: "\u{1F3C5}", group: "league" },
-  { href: "/turnaj", label: "Turnaj", icon: "\u26BD", group: "league" },
-  { href: "/kalendar", label: "Kalendář", icon: "\u{1F5D3}", group: "league" },
-  { href: "/napoveda", label: "Nápověda", icon: "\u{1F4D6}", group: "league" },
-  // Sněm dočasně skryt z menu — dostupný přes přímou URL /hlasovani.
-];
-
-const GROUP_LABELS: Record<string, string> = {
-  main: "",
-  club: "Klub",
-  league: "Soutěž",
-};
 
 export function FMSidebar() {
   const [expanded, setExpanded] = useState(true);
+  const [collapsedGroups, setCollapsedGroups] = useState<string[]>([]);
   const badges = useMenuBadges();
   const pathname = usePathname();
   const { teamId, isAdmin, logout } = useTeam();
 
-  const {
-    unreadMessages,
-    incomingOffers,
-    unvotedCount,
-    notesUnseen,
-    gremiumCount,
-    betsCount,
-    pendingEvents,
-    pendingVillage,
-  } = badges;
+  // Až po připojení: na serveru localStorage není a první vykreslení musí sedět.
+  useEffect(() => { setCollapsedGroups(readCollapsedGroups()); }, []);
+
+  const toggleGroup = (id: string) => {
+    setCollapsedGroups((current) => {
+      const next = current.includes(id) ? current.filter((g) => g !== id) : [...current, id];
+      try {
+        window.localStorage.setItem(COLLAPSED_GROUPS_KEY, JSON.stringify(next));
+      } catch (e) {
+        console.warn("save collapsed menu groups:", e);
+      }
+      return next;
+    });
+  };
 
   const isActive = (href: string) => {
     if (href === "/prehled") return pathname === "/prehled";
     // Vlastní profil trenéra žije pod /manazer/{teamId}, skripta a test pod /trener/…
     if (href === "/trener") return pathname.startsWith("/trener") || (!!teamId && pathname === `/manazer/${teamId}`);
-    if (href === "/kadr" || (href.startsWith("/tym/") && teamId)) {
+    if (href === "/kadr") {
       return pathname.startsWith("/kadr") || pathname.startsWith("/tym/") || pathname.startsWith("/hrac/");
     }
-    return pathname.startsWith(href);
+    // „/zapas“ je Sestava; „/zapasovy-den“ k ní nepatří.
+    return pathname === href || pathname.startsWith(`${href}/`);
   };
-  const isItemActive = (item: NavItem) => isActive(item.href) || (item.alsoActive ?? []).some((h) => pathname.startsWith(h));
+  const isItemActive = (item: MenuItem) => isActive(item.href) || (item.alsoActive ?? []).some((h) => pathname.startsWith(h));
 
-  const baseItems = isAdmin
-    ? [...NAV_ITEMS, { href: "/admin", label: "Admin", icon: "⚙️", group: "main" as const }]
-    : NAV_ITEMS;
+  const groups = menuGroupsFor(badges);
+  const footerItems = isAdmin ? [...MENU_FOOTER_ITEMS, ADMIN_ITEM] : MENU_FOOTER_ITEMS;
 
-  const items = unvotedCount > 0
-    ? [...baseItems, { href: "/hlasovani", label: "Sněm", icon: "🗳️", group: "league" as const }]
-    : baseItems;
-
-  const groups = ["main", "club", "league"] as const;
+  const renderItem = (item: MenuItem) => {
+    const active = isItemActive(item);
+    const badge = menuBadgeFor(item.href, badges);
+    return (
+      <Link
+        key={item.href}
+        href={item.href}
+        title={!expanded ? item.label : undefined}
+        aria-current={active ? "page" : undefined}
+        className={`relative flex items-center gap-2.5 mx-1 my-px rounded transition-colors duration-100 ${
+          expanded ? "px-2.5 py-1.5" : "px-0 py-1.5 justify-center"
+        } ${active ? "bg-white/10 text-white" : "text-white/55 hover:text-white hover:bg-white/5"}`}
+      >
+        {active && <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-4 rounded-r bg-green-400" />}
+        <span className="text-sm shrink-0 w-5 text-center leading-none">{item.icon}</span>
+        {expanded && <span className="text-[13px] font-medium whitespace-nowrap leading-none flex-1 min-w-0 truncate">{item.label}</span>}
+        {badge && expanded && (
+          <span className={`${MENU_BADGE_BG[badge.tone]} text-white text-micro font-bold px-1.5 py-0.5 rounded-full leading-none shrink-0`}>
+            {badge.label ?? badge.count}
+          </span>
+        )}
+        {badge && !expanded && (
+          <span className={`absolute top-0.5 right-1 w-1.5 h-1.5 rounded-full ${MENU_BADGE_BG[badge.tone]}`} />
+        )}
+      </Link>
+    );
+  };
 
   return (
     <>
       <aside
-        className={`hidden sm:flex flex-col fixed left-0 top-0 bottom-0 z-40 transition-all duration-200 ${
+        className={`on-dark hidden sm:flex flex-col fixed left-0 top-0 bottom-0 z-40 transition-all duration-200 ${
           expanded ? "w-48" : "w-12"
         }`}
         style={{ background: "#141e14" }}
       >
-        {/* Header */}
         <div className="h-14 flex items-center shrink-0 px-3" style={{ background: "#0f170f" }}>
           <button
             onClick={() => setExpanded(!expanded)}
-            className="w-7 h-7 rounded flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition-colors text-sm shrink-0"
+            aria-label={expanded ? "Zúžit menu" : "Rozšířit menu"}
+            className="w-7 h-7 rounded flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 transition-colors text-sm shrink-0"
           >
-            {expanded ? "\u25C0" : "\u25B6"}
+            {expanded ? "◀" : "▶"}
           </button>
           {expanded && (
             <span className="ml-3 text-white/80 font-heading font-bold text-sm tracking-wider uppercase whitespace-nowrap">
@@ -119,116 +116,53 @@ export function FMSidebar() {
           )}
         </div>
 
-        {/* Nav */}
-        <nav className="flex-1 overflow-y-auto py-1">
-          {groups.map((group) => {
-            const groupItems = items.filter((i) => i.group === group);
+        <nav className="flex-1 overflow-y-auto no-scrollbar py-1">
+          {groups.map((group, index) => {
+            // Zúžené menu ukazuje jen ikony; sbalování skupin by v něm položky schovalo beze stopy.
+            const collapsed = expanded && collapsedGroups.includes(group.id);
+            const hiddenCount = collapsed ? groupBadgeCount(group, badges) : 0;
+            const holdsActive = group.items.some(isItemActive);
             return (
-              <div key={group}>
-                {expanded && GROUP_LABELS[group] && (
-                  <div className="px-3 pt-3 pb-1 text-micro font-heading font-bold text-white/20 uppercase tracking-widest">
-                    {GROUP_LABELS[group]}
-                  </div>
+              <div key={group.id}>
+                {expanded ? (
+                  <button
+                    onClick={() => toggleGroup(group.id)}
+                    aria-expanded={!collapsed}
+                    className={`w-full flex items-center gap-1.5 px-3 pt-3 pb-1 text-micro font-heading font-bold uppercase tracking-widest transition-colors ${
+                      collapsed && holdsActive ? "text-green-400" : "text-white/45 hover:text-white/80"
+                    }`}
+                  >
+                    <span className="flex-1 text-left">{group.label}</span>
+                    {hiddenCount > 0 && (
+                      <span className="bg-card-red text-white text-micro font-bold px-1.5 py-0.5 rounded-full leading-none tracking-normal">
+                        {hiddenCount}
+                      </span>
+                    )}
+                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true"
+                      className={`shrink-0 transition-transform duration-150 ${collapsed ? "-rotate-90" : ""}`}>
+                      <path d="M2 3.5l3 3 3-3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </button>
+                ) : (
+                  index > 0 && <div className="mx-2.5 my-1 border-t border-white/10" />
                 )}
-                {!expanded && group !== "main" && (
-                  <div className="mx-2.5 my-1 border-t border-white/5" />
-                )}
-                {groupItems.map((item) => {
-                  const active = isItemActive(item);
-                  return (
-                    <div key={item.href + item.label}>
-                    <Link
-                      href={item.href}
-                      title={!expanded ? item.label : undefined}
-                      className={`relative flex items-center gap-2.5 mx-1 my-px rounded transition-all duration-100 ${
-                        expanded ? "px-2.5 py-1.5" : "px-0 py-1.5 justify-center"
-                      } ${
-                        active
-                          ? "bg-white/10 text-white"
-                          : "text-white/35 hover:text-white/80 hover:bg-white/5"
-                      }`}
-                    >
-                      {/* Active indicator bar */}
-                      {active && (
-                        <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-4 rounded-r bg-green-400" />
-                      )}
-                      <span className="text-sm shrink-0 w-5 text-center leading-none">{item.icon}</span>
-                      {!expanded && item.href === "/novinky" && notesUnseen && (
-                        <span className="absolute top-0.5 right-1 w-1.5 h-1.5 rounded-full bg-green-400" />
-                      )}
-                      {!expanded && item.href === "/telefon" && unreadMessages > 0 && (
-                        <span className="absolute top-0.5 right-1 w-1.5 h-1.5 rounded-full bg-card-red" />
-                      )}
-                      {!expanded && item.href === "/prestupy" && incomingOffers > 0 && (
-                        <span className="absolute top-0.5 right-1 w-1.5 h-1.5 rounded-full bg-card-red" />
-                      )}
-                      {!expanded && item.href === "/soutez" && gremiumCount > 0 && (
-                        <span className="absolute top-0.5 right-1 w-1.5 h-1.5 rounded-full bg-card-red" />
-                      )}
-                      {!expanded && item.href === "/sazky" && betsCount > 0 && (
-                        <span className="absolute top-0.5 right-1 w-1.5 h-1.5 rounded-full bg-card-red" />
-                      )}
-                      {!expanded && item.href === "/hlasovani" && unvotedCount > 0 && (
-                        <span className="absolute top-0.5 right-1 w-1.5 h-1.5 rounded-full bg-amber-500" />
-                      )}
-                      {!expanded && ((item.href === "/udalosti" && pendingEvents > 0) || (item.href === "/obec" && pendingVillage > 0)) && (
-                        <span className="absolute top-0.5 right-1 w-1.5 h-1.5 rounded-full bg-amber-500" />
-                      )}
-                      {expanded && (
-                        <span className="text-[13px] font-medium whitespace-nowrap leading-none">
-                          {item.label}
-                          {item.href === "/novinky" && notesUnseen && (
-                            <span className="ml-1.5 bg-pitch-500 text-white text-micro font-bold px-1.5 py-0.5 rounded-full">Nové</span>
-                          )}
-                          {item.href === "/telefon" && unreadMessages > 0 && (
-                            <span className="ml-1.5 bg-card-red text-white text-micro font-bold px-1.5 py-0.5 rounded-full">{unreadMessages}</span>
-                          )}
-                          {item.href === "/prestupy" && incomingOffers > 0 && (
-                            <span className="ml-1.5 bg-card-red text-white text-micro font-bold px-1.5 py-0.5 rounded-full">{incomingOffers}</span>
-                          )}
-                          {item.href === "/hlasovani" && unvotedCount > 0 && (
-                            <span className="ml-1.5 bg-amber-500 text-white text-micro font-bold px-1.5 py-0.5 rounded-full">{unvotedCount}</span>
-                          )}
-                          {item.href === "/soutez" && gremiumCount > 0 && (
-                            <span className="ml-1.5 bg-card-red text-white text-micro font-bold px-1.5 py-0.5 rounded-full">{gremiumCount}</span>
-                          )}
-                          {item.href === "/sazky" && betsCount > 0 && (
-                            <span className="ml-1.5 bg-card-red text-white text-micro font-bold px-1.5 py-0.5 rounded-full">{betsCount}</span>
-                          )}
-                          {item.href === "/udalosti" && pendingEvents > 0 && (
-                            <span className="ml-1.5 bg-amber-500 text-white text-micro font-bold px-1.5 py-0.5 rounded-full">{pendingEvents}</span>
-                          )}
-                          {item.href === "/obec" && pendingVillage > 0 && (
-                            <span className="ml-1.5 bg-amber-500 text-white text-micro font-bold px-1.5 py-0.5 rounded-full">{pendingVillage}</span>
-                          )}
-                        </span>
-                      )}
-                    </Link>
-                    </div>
-                  );
-                })}
+                {!collapsed && group.items.map(renderItem)}
               </div>
             );
           })}
         </nav>
 
-        {/* Settings + Logout */}
-        <div className="border-t border-white/5 p-1.5">
-          <Link href="/nastaveni" title={!expanded ? "Nastavení" : undefined}
-            className={`flex items-center gap-2.5 w-full rounded text-white/30 hover:text-white/60 hover:bg-white/5 transition-colors ${
-              expanded ? "px-2.5 py-1.5" : "px-0 py-1.5 justify-center"
-            }`}>
-            <span className="text-sm shrink-0 w-5 text-center">{"\u2699\uFE0F"}</span>
-            {expanded && <span className="text-sm font-medium">Nastavení</span>}
-          </Link>
+        <div className="border-t border-white/10 py-1.5">
+          {footerItems.map(renderItem)}
           <button
             onClick={logout}
-            className={`flex items-center gap-2.5 w-full rounded text-white/30 hover:text-white/60 hover:bg-white/5 transition-colors ${
-              expanded ? "px-2.5 py-2" : "px-0 py-2 justify-center"
+            title={!expanded ? "Odhlásit" : undefined}
+            className={`flex items-center gap-2.5 mx-1 my-px rounded text-white/55 hover:text-white hover:bg-white/5 transition-colors ${
+              expanded ? "px-2.5 py-1.5 w-[calc(100%-0.5rem)]" : "px-0 py-1.5 justify-center w-[calc(100%-0.5rem)]"
             }`}
           >
-            <span className="text-sm shrink-0 w-5 text-center">{"\u{1F6AA}"}</span>
-            {expanded && <span className="text-sm font-medium">Odhlásit</span>}
+            <span className="text-sm shrink-0 w-5 text-center leading-none">🚪</span>
+            {expanded && <span className="text-[13px] font-medium leading-none">Odhlásit</span>}
           </button>
         </div>
       </aside>
