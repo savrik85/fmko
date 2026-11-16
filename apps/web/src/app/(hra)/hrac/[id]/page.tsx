@@ -489,7 +489,7 @@ export default function PlayerDetailPage() {
   const txtMuted = light ? "text-gray-500" : "text-white/60";
   const boxBg = light ? "bg-black/5" : "bg-white/10";
   const tone = heroTone(color);
-  // Rating a číslo dresu stojí na plné destičce; na ní se píše barvou klubu.
+  // Hodnocení stojí na plné destičce; na ní se píše barvou klubu.
   const plateText = tone.light ? "#FFFFFF" : readableOnLight(color);
   // Plná kondice barvu nepotřebuje, upozorňuje až únava.
   const conditionFill = condition >= 80 ? tone.fill : condition >= 50 ? "bg-gold-400" : condition >= 20 ? "bg-orange-400" : "bg-red-500";
@@ -563,7 +563,7 @@ export default function PlayerDetailPage() {
               <HeroNavButton tone={tone} direction="prev" label="Předchozí hráč" className="hidden sm:flex"
                 onClick={() => prevPlayer && router.push(`/hrac/${prevPlayer.id}`)} />
             )}
-            <div className="relative shrink-0">
+            <div className="shrink-0">
               {hasFace ? (
                 <>
                   <FaceAvatar faceConfig={player.avatar} size={46} className={`sm:hidden ${tone.panel} rounded-xl`} />
@@ -573,12 +573,6 @@ export default function PlayerDetailPage() {
                 <div className={`w-[46px] h-14 sm:w-20 sm:h-24 rounded-xl ${tone.panel} flex items-center justify-center ${tone.text} font-heading font-bold text-xl sm:text-3xl`}>
                   {player.first_name[0]}
                 </div>
-              )}
-              {player.squad_number != null && (
-                <span className={`absolute -bottom-1.5 -right-1.5 min-w-[26px] h-6 px-1 rounded-control flex items-center justify-center text-xs font-heading font-extrabold tabular-nums shadow ${tone.plate}`}
-                  style={{ color: plateText }} title="Číslo dresu">
-                  {player.squad_number}
-                </span>
               )}
             </div>
             <div className="flex-1 min-w-0">
