@@ -32,6 +32,13 @@
  *   ligu, které smazání nedovolí. Naostro je potřeba `humanTeams` = počet klubů vedených
  *   člověkem z běhu nanečisto. `closeDistrict=1` zavře okres novým registracím.
  *
+ * POST /api/admin/ai-clubs/align-schedule?leagueId=&refLeagueId=&dryRun=1
+ *   Kola ligy (a její U21, o den později) dostanou termíny stejných kol vzorové ligy. Kola,
+ *   jejichž termín už minul, pak dopočítá `POST /api/game/run-matches?leagueId=`, jedno na volání.
+ *
+ * POST /api/admin/ai-clubs/clear-schedule?leagueId=&dryRun=1
+ *   Zruší rozpis ligy, která ještě nehrála (i U21). Kluby zůstanou, liga čeká v přípravném období.
+ *
  * POST /api/admin/ai-clubs/facilities?dryRun=1
  *   Řádek stadionu a vybavení všem klubům v ligách, které ho ještě nemají.
  *
@@ -50,7 +57,8 @@ import { applyLeveling, LEVELING_MODES, planLeveling, type LevelingMode } from "
 import { cryptoSeed } from "../generators/rng";
 import { findAbandonedClubs, MAX_TAKEOVERS_PER_RUN, runAbandonedClubTakeover } from "../ai-clubs/abandoned";
 import { openDistrictRegistration } from "../ai-clubs/district-opening";
-import { deleteLeague } from "../league/delete-league";
+import { alignLeagueSchedule } from "../league/align-schedule";
+import { clearLeagueSchedule, deleteLeague } from "../league/delete-league";
 import { extendLeagueToDouble } from "../league/extend-schedule";
 import { backfillClubFacilities } from "../ai-clubs/facilities-backfill";
 import { cleanupU21AiManagers } from "../ai-clubs/u21-manager-cleanup";
@@ -142,6 +150,31 @@ adminAiClubsRouter.post("/delete-league", async (c) => {
   } catch (e) {
     logger.error({ module: M }, `smazání ligy ${leagueId}`, e);
     return c.json({ error: "Smazání ligy selhalo, podrobnosti jsou v logu. Opakované volání domaže zbytek." }, 500);
+  }
+});
+
+adminAiClubsRouter.post("/align-schedule", async (c) => {
+  const leagueId = c.req.query("leagueId")?.trim();
+  const referenceLeagueId = c.req.query("refLeagueId")?.trim();
+  if (!leagueId || !referenceLeagueId) return c.json({ error: "Chybí leagueId nebo refLeagueId" }, 400);
+  try {
+    const result = await alignLeagueSchedule(c.env.DB, leagueId, referenceLeagueId, { dryRun: isDryRun(c.req.query("dryRun")) });
+    return c.json(result, result.ok ? 200 : 400);
+  } catch (e) {
+    logger.error({ module: M }, `srovnání rozpisu ligy ${leagueId}`, e);
+    return c.json({ error: "Srovnání rozpisu selhalo, podrobnosti jsou v logu" }, 500);
+  }
+});
+
+adminAiClubsRouter.post("/clear-schedule", async (c) => {
+  const leagueId = c.req.query("leagueId")?.trim();
+  if (!leagueId) return c.json({ error: "Chybí leagueId" }, 400);
+  try {
+    const result = await clearLeagueSchedule(c.env.DB, leagueId, { dryRun: isDryRun(c.req.query("dryRun")) });
+    return c.json(result, result.ok ? 200 : 400);
+  } catch (e) {
+    logger.error({ module: M }, `zrušení rozpisu ligy ${leagueId}`, e);
+    return c.json({ error: "Zrušení rozpisu selhalo, podrobnosti jsou v logu" }, 500);
   }
 });
 
