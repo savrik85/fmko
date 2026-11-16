@@ -179,6 +179,10 @@ teamsRouter.post("/", async (c) => {
   const village = await c.env.DB.prepare("SELECT * FROM villages WHERE id = ?")
     .bind(body.villageId).first<Record<string, unknown>>();
   if (!village) return c.json({ error: "Village not found" }, 404);
+  // Obec s příliš mnoha kluby je pro nové zavřená (`villages.registration_locked`, migrace 0313).
+  if (village.registration_locked) {
+    return c.json({ error: `V obci ${village.name} už je klubů dost. Vyber si prosím jinou obec z okresu.` }, 400);
+  }
 
   let teamId = uuid();
 

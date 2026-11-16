@@ -14,6 +14,9 @@ import { createSession } from "../auth/session";
 import { rolloverAllLeagues } from "../season/season-rollover";
 import { modestBudgetTarget } from "../ai-clubs/leveling";
 import type { Bindings } from "../index";
+import { districtLeagueIds } from "../competition/rules";
+import { deleteLeague } from "./delete-league";
+import { resolveDistrictSlot } from "./district-leagues";
 import { applyDistrictPromotions, leagueMovement } from "./district-promotion";
 import { createLowerLeague, LowerLeagueError, pickLowerLeagueVillages, type LowerLeagueResult } from "./lower-league-setup";
 
@@ -27,6 +30,7 @@ let db: D1Database;
 let env: Bindings;
 let preborId: string;
 let created: LowerLeagueResult;
+let fourth: LowerLeagueResult;
 let dryRun: LowerLeagueResult;
 
 async function count(sql: string, ...binds: unknown[]): Promise<number> {
@@ -252,10 +256,123 @@ describe("III. třída uprostřed sezóny", () => {
     expect(await snapshot()).toEqual(before);
   }, 300_000);
 
+  it("IV. třída: bez III. třídy nevznikne, špatná úroveň skončí chybou", async () => {
+    const res = await app.request(`/api/admin/ai-clubs/lower-league?district=${encodeURIComponent(DISTRICT)}&level=krajsky_prebor&dryRun=1`,
+      { method: "POST", headers: { Authorization: `Bearer ${await createSession(env.SESSION_KV, "admin", "admin@example.test", null)}` } }, env);
+    expect(res.status).toBe(400);
+    await db.prepare("UPDATE leagues SET status = 'finished' WHERE id = ?").bind(created.leagueId).run();
+    await expect(createLowerLeague(db, { district: DISTRICT, seed: 5, dryRun: true, level: "iv_trida" })).rejects.toThrow(/III\. třída/);
+    await db.prepare("UPDATE leagues SET status = 'active' WHERE id = ?").bind(created.leagueId).run();
+  }, 60_000);
+
+  it("IV. třída: 14 AI klubů z dalších obcí, celé dvoukolo, síla pod III. třídou, nový hráč jde do ní", async () => {
+    const thirdId = created.leagueId!;
+    await fillWithHumans(thirdId, "third");
+    // Migrace mají v okrese míň obcí než produkce (tam je volných 55), osm zbylých nestačí.
+    const extraVillages = ["Zdíkov Horní", "Lenora Nová", "Stachy Dolní", "Vacov Malý", "Ktiš Horní", "Záblatí Dolní", "Nová Pec Zadní", "Strážný Dolní"];
+    for (const [i, villageName] of extraVillages.entries()) {
+      await db.prepare(
+        "INSERT INTO villages (id, name, district, region, population, size, lat, lng) VALUES (?, ?, ?, 'Jihočeský kraj', ?, 'hamlet', 49.0, 13.9)",
+      ).bind(`extra-village-${i}`, villageName, DISTRICT, 300 + i).run();
+    }
+    const thirdVillages = (await db.prepare("SELECT village_id FROM teams WHERE league_id = ?").bind(thirdId).all<{ village_id: string }>())
+      .results.map((r) => r.village_id);
+    const thirdCalendar = await db.prepare("SELECT id, scheduled_at FROM season_calendar WHERE league_id = ? ORDER BY game_week")
+      .bind(thirdId).all<{ id: string; scheduled_at: string }>();
+    const before = await snapshot();
+
+    const dry = await createLowerLeague(db, { district: DISTRICT, seed: 91, dryRun: true, level: "iv_trida" });
+    expect(await snapshot()).toEqual(before);
+    expect(dry.name).toBe("IV. třída Prachatice");
+    expect(dry.calendar.rounds).toBe(26);
+
+    fourth = await createLowerLeague(db, { district: DISTRICT, seed: 91, dryRun: false, level: "iv_trida" });
+    const leagueId = fourth.leagueId!;
+    expect(leagueId).not.toBe(thirdId);
+    const league = await db.prepare("SELECT name, level, league_type, match_weekdays, promotion_enabled FROM leagues WHERE id = ?")
+      .bind(leagueId).first();
+    expect(league).toEqual({ name: "IV. třída Prachatice", level: "iv_trida", league_type: "senior", match_weekdays: "2,6", promotion_enabled: 0 });
+    expect(fourth.promotionDisabled).toEqual([leagueId]);
+
+    // Kluby z obcí, které nemá přebor ani III. třída, všechny AI.
+    const teams = await db.prepare("SELECT id, user_id, village_id FROM teams WHERE league_id = ?").bind(leagueId)
+      .all<{ id: string; user_id: string; village_id: string }>();
+    expect(teams.results).toHaveLength(14);
+    for (const t of teams.results) {
+      expect(t.user_id).toBe("ai");
+      expect(thirdVillages).not.toContain(t.village_id);
+      expect(await count("SELECT COUNT(*) AS n FROM stadiums WHERE team_id = ?", t.id)).toBe(1);
+    }
+    expect(fourth.teams.map((t) => t.name).sort()).toEqual(dry.teams.map((t) => t.name).sort());
+    expect(fourth.calendar.entries.map((e) => e.scheduledAt)).toEqual(dry.calendar.entries.map((e) => e.scheduledAt));
+
+    // Rozpis: 26 kol po sedmi zápasech, úterý a sobota, doplňkový čtvrtek, dohrávková neděle; nejvýš čtyři kola týdně.
+    const calendar = await db.prepare("SELECT id, match_day, scheduled_at FROM season_calendar WHERE league_id = ? ORDER BY scheduled_at")
+      .bind(leagueId).all<{ id: string; match_day: string; scheduled_at: string }>();
+    expect(calendar.results).toHaveLength(26);
+    expect(await count("SELECT COUNT(*) AS n FROM matches WHERE league_id = ?", leagueId)).toBe(14 * 13);
+    const preborLast = (await db.prepare("SELECT MAX(scheduled_at) AS d FROM season_calendar WHERE league_id = ?").bind(preborId).first<{ d: string }>())!.d;
+    const perWeek = new Map<string, number>();
+    for (const c of calendar.results) {
+      expect(["tuesday", "saturday", "thursday", "sunday"]).toContain(c.match_day);
+      expect(c.scheduled_at <= preborLast).toBe(true);
+      expect(await count("SELECT COUNT(*) AS n FROM matches WHERE calendar_id = ?", c.id)).toBe(7);
+      const d = new Date(c.scheduled_at);
+      const monday = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - ((d.getUTCDay() + 6) % 7)));
+      perWeek.set(monday.toISOString(), (perWeek.get(monday.toISOString()) ?? 0) + 1);
+    }
+    expect(Math.max(...perWeek.values())).toBeLessThanOrEqual(4);
+    // Každá dvojice se potká dvakrát, jednou doma a jednou venku.
+    expect(await count(
+      `SELECT COUNT(*) AS n FROM (SELECT home_team_id, away_team_id FROM matches WHERE league_id = ?
+        GROUP BY home_team_id, away_team_id HAVING COUNT(*) <> 1)`, leagueId)).toBe(0);
+
+    // U21 den po áčku.
+    const mirrored = await db.prepare(
+      `SELECT u.scheduled_at AS u21, s.scheduled_at AS senior FROM season_calendar u JOIN season_calendar s ON s.id = u.parent_calendar_id
+        WHERE u.league_id = ?`,
+    ).bind(fourth.u21LeagueId).all<{ u21: string; senior: string }>();
+    expect(mirrored.results).toHaveLength(26);
+    for (const r of mirrored.results) expect(new Date(r.u21).getTime() - new Date(r.senior).getTime()).toBe(86_400_000);
+
+    // Vzor síly je III. třída, ne přebor.
+    const senior = fourth.leveling.senior!;
+    expect(senior.plan.reference.leagueIds).toEqual([thirdId]);
+    expect(senior.plan.reference.teams).toBe(14);
+    expect(senior.result!.failedStatements).toBe(0);
+    const min = senior.plan.reference.top11!.min;
+    for (const club of senior.plan.clubs) {
+      expect(club.target.top11).toBeGreaterThanOrEqual(min - 12 - 0.1);
+      expect(club.target.top11).toBeLessThanOrEqual(min + 0.1);
+    }
+    expect(fourth.leveling.u21!.plan.reference.leagueIds).toEqual([created.u21LeagueId]);
+
+    // III. třída zůstala, jak byla, a postup ani sestup nikde nepřibyl.
+    const thirdAfter = await db.prepare("SELECT id, scheduled_at FROM season_calendar WHERE league_id = ? ORDER BY game_week")
+      .bind(thirdId).all<{ id: string; scheduled_at: string }>();
+    expect(thirdAfter.results).toEqual(thirdCalendar.results);
+    for (const id of [preborId, thirdId, leagueId]) expect(await leagueMovement(db, id)).toEqual({ promotion: false, relegation: false });
+
+    // Grémium okresu vede přebor i pro IV. třídu.
+    expect(await districtLeagueIds(db, leagueId)).toEqual([preborId, thirdId, leagueId]);
+
+    // Okres už není plný: nový hráč převezme AI klub ve IV. třídě.
+    const slot = await resolveDistrictSlot(db, DISTRICT, (await db.prepare("SELECT season_id FROM leagues WHERE id = ?").bind(leagueId).first<{ season_id: string }>())!.season_id, null);
+    expect(slot.kind).toBe("join");
+    if (slot.kind === "join") expect(slot.league.id).toBe(leagueId);
+
+    const again = await createLowerLeague(db, { district: DISTRICT, seed: 91, dryRun: false, level: "iv_trida" });
+    expect(again.resumed).toBe(true);
+    expect(again.leagueId).toBe(leagueId);
+    expect(await count("SELECT COUNT(*) AS n FROM teams WHERE league_id = ?", leagueId)).toBe(14);
+    expect(await count("SELECT COUNT(*) AS n FROM season_calendar WHERE league_id = ?", leagueId)).toBe(26);
+  }, 600_000);
+
   it("po odehrané sezóně se nic nepřesune a rollover nechá III. třídě středu a neděli", async () => {
     const leagueId = created.leagueId!;
     await playLeague(preborId);
     await playLeague(leagueId);
+    await playLeague(fourth.leagueId!);
     const leaguesOf = async () => (await db.prepare("SELECT id, league_id FROM teams WHERE league_id IN (?, ?) ORDER BY id")
       .bind(preborId, leagueId).all()).results;
     const before = await leaguesOf();
@@ -270,9 +387,81 @@ describe("III. třída uprostřed sezóny", () => {
     ).bind(id).all<{ match_day: string }>()).results.map((r) => r.match_day);
     expect(await days(leagueId)).toEqual(["sunday", "wednesday"]);
     expect(await days(preborId)).toEqual(["monday", "thursday"]);
+    expect(await days(fourth.leagueId!)).toEqual(["saturday", "tuesday"]);
+    expect((await db.prepare("SELECT level FROM leagues WHERE id = ?").bind(fourth.leagueId).first<{ level: string }>())!.level).toBe("iv_trida");
     expect(await days(created.u21LeagueId!)).toEqual(["monday", "thursday"]);
     expect(await count(
       "SELECT COUNT(*) AS n FROM matches m JOIN season_calendar sc ON sc.id = m.calendar_id WHERE sc.league_id = ? AND sc.season_number = 2",
       leagueId)).toBe(14 * 13);
+  }, 600_000);
+
+  it("smazání ligy: nanečisto nic, naostro zmizí liga, U21, kluby i hráči a zbytek zůstane", async () => {
+    const target = (await db.prepare(
+      "SELECT id FROM leagues WHERE level = 'iv_trida' AND league_type = 'senior' AND status = 'active' ORDER BY created_at DESC LIMIT 1",
+    ).first<{ id: string }>())!.id;
+    const teamIds = (await db.prepare(
+      "SELECT id FROM teams WHERE league_id = ?1 OR league_id IN (SELECT id FROM leagues WHERE parent_league_id = ?1)",
+    ).bind(target).all<{ id: string }>()).results.map((r) => r.id);
+    expect(teamIds).toHaveLength(28);
+    const marks = teamIds.map(() => "?").join(",");
+    const others = async () => ({
+      teams: await count(`SELECT COUNT(*) AS n FROM teams WHERE id NOT IN (${marks})`, ...teamIds),
+      players: await count(`SELECT COUNT(*) AS n FROM players WHERE team_id NOT IN (${marks})`, ...teamIds),
+      matches: await count("SELECT COUNT(*) AS n FROM matches WHERE league_id <> ?1 AND league_id NOT IN (SELECT id FROM leagues WHERE parent_league_id = ?1)", target),
+      stadiums: await count(`SELECT COUNT(*) AS n FROM stadiums WHERE team_id NOT IN (${marks})`, ...teamIds),
+      leagues: await count("SELECT COUNT(*) AS n FROM leagues WHERE id <> ?1 AND COALESCE(parent_league_id, '') <> ?1", target),
+    });
+    const u21 = (await db.prepare("SELECT id FROM leagues WHERE parent_league_id = ?").bind(target).first<{ id: string }>())!.id;
+    expect((await deleteLeague(db, u21, { dryRun: true })).ok).toBe(false);
+
+    // Po rolloveru jsou kluby přihlášené do poháru: los by smazání rozbilo, proto ho zastaví.
+    const inCup = await deleteLeague(db, target, { dryRun: true });
+    expect(inCup.blockers).toEqual(["14 přihlášek do poháru"]);
+    expect((await deleteLeague(db, target, { dryRun: false, expectedHumanTeams: 0 })).reason).toMatch(/poháru/);
+    for (const table of ["cup_matches", "cup_club_players", "cup_teams", "cup_entries"]) await db.prepare(`DELETE FROM ${table}`).run();
+    const untouched = await others();
+    const before = await snapshot();
+
+    const dry = await deleteLeague(db, target, { dryRun: true });
+    expect(dry.ok).toBe(true);
+    expect(dry.teams).toBe(28);
+    expect(dry.humanTeams).toEqual([]);
+    expect(dry.blockers).toEqual([]);
+    expect(await snapshot()).toEqual(before);
+
+    // Klub vedený člověkem musí být potvrzen počtem, jinak se nic nesmaže.
+    await db.prepare("UPDATE teams SET user_id = 'founder' WHERE id = ?").bind(teamIds[0]).run();
+    const refused = await deleteLeague(db, target, { dryRun: false, expectedHumanTeams: 0 });
+    expect(refused.ok).toBe(false);
+    expect(await snapshot()).toEqual({ ...before });
+    await db.prepare("UPDATE teams SET user_id = 'ai' WHERE id = ?").bind(teamIds[0]).run();
+
+    // Rozehraná sázka cizího klubu na zápas ligy smazání zastaví.
+    const match = (await db.prepare("SELECT id, calendar_id FROM matches WHERE league_id = ? LIMIT 1").bind(target).first<{ id: string; calendar_id: string }>())!;
+    const outsider = (await db.prepare("SELECT id FROM teams WHERE league_id = ? LIMIT 1").bind(preborId).first<{ id: string }>())!.id;
+    const ticketColumns = (await db.prepare("SELECT name FROM pragma_table_info('bet_tickets') WHERE \"notnull\" = 1 AND dflt_value IS NULL AND pk = 0").all<{ name: string }>())
+      .results.map((r) => r.name);
+    const ticketValues: Record<string, unknown> = { team_id: outsider, league_id: target, calendar_id: match.calendar_id, status: "open" };
+    const insertColumns = ["id", ...new Set([...ticketColumns, "team_id", "league_id", "calendar_id", "status"])];
+    await db.prepare(`INSERT INTO bet_tickets (${insertColumns.join(", ")}) VALUES (${insertColumns.map(() => "?").join(", ")})`)
+      .bind(...insertColumns.map((c) => (c === "id" ? "ticket-outside" : ticketValues[c] ?? 1))).run();
+    const blocked = await deleteLeague(db, target, { dryRun: false, expectedHumanTeams: 0 });
+    expect(blocked.ok).toBe(false);
+    expect(blocked.reason).toMatch(/sázek/);
+    await db.prepare("DELETE FROM bet_tickets WHERE id = 'ticket-outside'").run();
+
+    const done = await deleteLeague(db, target, { dryRun: false, expectedHumanTeams: 0, closeDistrict: true });
+    expect(done.ok).toBe(true);
+    expect(await count("SELECT COUNT(*) AS n FROM leagues WHERE id = ?1 OR parent_league_id = ?1", target)).toBe(0);
+    expect(await count(`SELECT COUNT(*) AS n FROM teams WHERE id IN (${marks})`, ...teamIds)).toBe(0);
+    for (const table of ["players", "stadiums", "equipment", "managers", "transactions", "player_contracts", "team_fanbase"]) {
+      expect(await count(`SELECT COUNT(*) AS n FROM ${table} WHERE team_id IN (${marks})`, ...teamIds), table).toBe(0);
+    }
+    expect(await count(`SELECT COUNT(*) AS n FROM matches WHERE home_team_id IN (${marks}) OR away_team_id IN (${marks})`, ...teamIds, ...teamIds)).toBe(0);
+    expect(await others()).toEqual(untouched);
+    expect((await db.prepare("SELECT registration_closed FROM district_registrations WHERE district = ?").bind(DISTRICT).first<{ registration_closed: number }>())!.registration_closed).toBe(1);
+    expect((await db.prepare("PRAGMA foreign_key_check").all()).results).toEqual([]);
+
+    expect((await deleteLeague(db, target, { dryRun: false, expectedHumanTeams: 0 })).reason).toBe("Soutěž nenalezena.");
   }, 600_000);
 });

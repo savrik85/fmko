@@ -12,6 +12,8 @@ type Village = {
   region: string;
   population: number;
   size: string;
+  /** 1 = v obci už nejde založit další klub (je jich tam moc). */
+  registration_locked?: number;
 };
 
 type Stats = {
@@ -231,14 +233,16 @@ export function StepLocation({ onSelect, allowedDistricts, districtStarts }: Pro
             {districtVillages.map((v) => {
               const badge = getSizeBadge(v.size);
               const playerCount = stats.villageCounts[v.id] ?? 0;
+              const locked = !!v.registration_locked;
               return (
                 <button
                   key={v.id}
+                  disabled={locked}
                   onClick={() => onSelect({
                     id: v.id, name: v.name, district: v.district,
                     region: v.region, population: v.population, size: v.size,
                   })}
-                  className="card card-hover p-4 text-left flex items-center gap-3"
+                  className={`card p-4 text-left flex items-center gap-3 ${locked ? "opacity-60 cursor-not-allowed" : "card-hover"}`}
                 >
                   <div className="flex-1 min-w-0">
                     <div className="font-heading font-bold text-base truncate">{v.name}</div>
@@ -251,9 +255,15 @@ export function StepLocation({ onSelect, allowedDistricts, districtStarts }: Pro
                         <div className="text-micro text-muted">hráčů</div>
                       </div>
                     )}
-                    <span className={`text-micro font-heading font-bold px-2 py-1 rounded-control ${badge.bg} ${badge.text}`}>
-                      {badge.label}
-                    </span>
+                    {locked ? (
+                      <span className="text-micro font-heading font-bold px-2 py-1 rounded-control bg-surface text-ink">
+                        Obsazeno
+                      </span>
+                    ) : (
+                      <span className={`text-micro font-heading font-bold px-2 py-1 rounded-control ${badge.bg} ${badge.text}`}>
+                        {badge.label}
+                      </span>
+                    )}
                   </div>
                 </button>
               );

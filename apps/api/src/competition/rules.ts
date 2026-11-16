@@ -56,9 +56,9 @@ function rowToRules(row: Record<string, unknown>): CompetitionRules {
 // ── Grémium okresu ──────────────────────────────────────────────────────────
 
 /** Úrovně, které se v okrese sdružují pod jedno grémium. */
-const DISTRICT_LEVELS = ["okresni_prebor", "okresni_soutez"] as const;
+const DISTRICT_LEVELS = ["okresni_prebor", "okresni_soutez", "iv_trida"] as const;
 /** Pořadí řídící soutěže: vyšší úroveň vede. */
-const LEVEL_RANK: Record<string, number> = { okresni_prebor: 2, okresni_soutez: 1 };
+const LEVEL_RANK: Record<string, number> = { okresni_prebor: 2, okresni_soutez: 1, iv_trida: 0 };
 
 export interface DistrictLeague {
   id: string;

@@ -55,6 +55,7 @@ export type CompetitionRules = { -readonly [K in keyof typeof DEFAULT_RULES]: nu
 
 /** Násobič odměn podle úrovně soutěže. Zrcadlí LEVEL_MULT v season/season-rewards.ts. */
 export const LEVEL_MULT: Record<string, number> = {
+  iv_trida: 0.7,
   okresni_soutez: 0.85,
   okresni_prebor: 1.0,
   ib_trida: 1.2,

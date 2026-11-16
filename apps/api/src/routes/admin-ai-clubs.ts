@@ -6,13 +6,17 @@
  *   pro každý klub), bez něj se plán rovnou provede. Stejné `seed` dá stejný plán, takže se
  *   nanečisto zkontrolovaný plán provede beze změny. Bez `seed` se vylosuje a vrátí v plánu.
  *   Volitelně `teamIds=a,b` jen pro vybrané kluby. U21 liga se narovná stejným voláním.
- *   Volitelně `refLeagueId` (jen league-humans): vzorem jsou lidé z jiné ligy (ČB podle Prahy).
+ *   Volitelně `refLeagueId`: vzorem jsou lidé z jiné ligy (league-humans: ČB podle Prahy,
+ *   below-league: IV. třída pod III. třídu místo pod přebor).
  *
  * POST /api/admin/ai-clubs/lower-league?district=Prachatice&seed=&dryRun=1
  *   III. třída okresu uprostřed sezóny (část 2): 14 AI klubů z největších obcí bez klubu,
  *   U21, rozpis středa a neděle do posledního kola přeboru, bez postupu a sestupu,
  *   narovnání. `dryRun=1` vrátí obce, jména klubů a rozpis. Opakované volání dokončí
  *   rozdělanou ligu (např. po překročení limitu dotazů).
+ *   `level=iv_trida` založí pod III. třídou IV. třídu: úterý a sobota, doplňkové čtvrtky,
+ *   když je potřeba, dohrávková neděle (čtyři kola týdně), síla klubů pod III. třídou.
+ *   `villages=id1,id2` vynutí obce, které by se podle velikosti do výběru nedostaly.
  *
  * POST /api/admin/ai-clubs/open-district?district=České Budějovice&dryRun=1
  *   Spuštění ligy okresu: otevře okres registracím (část 1).
@@ -21,6 +25,12 @@
  *   Liga s jednokolovým rozpisem (založená registrací uprostřed sezóny do 2026-11-16) dostane
  *   plné dvoukolo: zbylá kola se posunou na dřívější termíny, přibudou odvety, U21 den po áčku.
  *   `dryRun=1` vrátí jen přehled posunů a nových kol. Opakované volání dokončí rozdělanou U21.
+ *
+ * POST /api/admin/ai-clubs/delete-league?leagueId=&dryRun=1&humanTeams=&closeDistrict=1
+ *   Smaže seniorskou ligu i s U21: kluby, hráče, zápasy a všechno, co na ně odkazuje. Účty lidí
+ *   zůstávají. `dryRun=1` vrátí, kolik řádků ve kterých tabulkách zmizí, a vazby na kluby mimo
+ *   ligu, které smazání nedovolí. Naostro je potřeba `humanTeams` = počet klubů vedených
+ *   člověkem z běhu nanečisto. `closeDistrict=1` zavře okres novým registracím.
  *
  * POST /api/admin/ai-clubs/facilities?dryRun=1
  *   Řádek stadionu a vybavení všem klubům v ligách, které ho ještě nemají.
@@ -40,10 +50,11 @@ import { applyLeveling, LEVELING_MODES, planLeveling, type LevelingMode } from "
 import { cryptoSeed } from "../generators/rng";
 import { findAbandonedClubs, MAX_TAKEOVERS_PER_RUN, runAbandonedClubTakeover } from "../ai-clubs/abandoned";
 import { openDistrictRegistration } from "../ai-clubs/district-opening";
+import { deleteLeague } from "../league/delete-league";
 import { extendLeagueToDouble } from "../league/extend-schedule";
 import { backfillClubFacilities } from "../ai-clubs/facilities-backfill";
 import { cleanupU21AiManagers } from "../ai-clubs/u21-manager-cleanup";
-import { createLowerLeague, LowerLeagueError } from "../league/lower-league-setup";
+import { createLowerLeague, isLowerLeagueLevel, LowerLeagueError } from "../league/lower-league-setup";
 import { logger } from "../lib/logger";
 
 const M = "admin-ai-clubs";
@@ -75,7 +86,7 @@ adminAiClubsRouter.post("/level", async (c) => {
   const seed = parsedSeed ?? cryptoSeed();
   const teamIds = c.req.query("teamIds")?.split(",").map((s) => s.trim()).filter(Boolean);
   const referenceLeagueId = c.req.query("refLeagueId") || undefined;
-  if (referenceLeagueId && mode !== "league-humans") return c.json({ error: "refLeagueId jde jen s režimem league-humans" }, 400);
+  if (referenceLeagueId && mode === "newcomer") return c.json({ error: "refLeagueId jde jen s režimy league-humans a below-league" }, 400);
 
   const league = await c.env.DB.prepare("SELECT id FROM leagues WHERE id = ?").bind(leagueId).first<{ id: string }>();
   if (!league) return c.json({ error: "Liga neexistuje" }, 404);
@@ -103,14 +114,34 @@ adminAiClubsRouter.post("/lower-league", async (c) => {
   if (rawSeed !== undefined && rawSeed !== "" && parsedSeed === null) return c.json({ error: "seed musí být celé číslo 0 až 4294967295" }, 400);
   const seed = parsedSeed ?? cryptoSeed();
   const dryRun = isDryRun(c.req.query("dryRun"));
+  const level = c.req.query("level") || "okresni_soutez";
+  if (!isLowerLeagueLevel(level)) return c.json({ error: "level musí být okresni_soutez nebo iv_trida" }, 400);
 
   try {
-    const result = await createLowerLeague(c.env.DB, { district, seed, dryRun });
+    const includeVillageIds = (c.req.query("villages") ?? "").split(",").map((v) => v.trim()).filter(Boolean);
+    const result = await createLowerLeague(c.env.DB, { district, seed, dryRun, level, includeVillageIds });
     return c.json({ seed, ...result });
   } catch (e) {
     if (e instanceof LowerLeagueError) return c.json({ error: e.message }, 400);
-    logger.error({ module: M }, `založení III. třídy v okrese ${district}`, e);
-    return c.json({ error: "Založení III. třídy selhalo, podrobnosti jsou v logu. Opakované volání rozdělanou ligu dokončí." }, 500);
+    logger.error({ module: M }, `založení nižší soutěže (${level}) v okrese ${district}`, e);
+    return c.json({ error: "Založení soutěže selhalo, podrobnosti jsou v logu. Opakované volání rozdělanou ligu dokončí." }, 500);
+  }
+});
+
+adminAiClubsRouter.post("/delete-league", async (c) => {
+  const leagueId = c.req.query("leagueId")?.trim();
+  if (!leagueId) return c.json({ error: "Chybí leagueId" }, 400);
+  const dryRun = isDryRun(c.req.query("dryRun"));
+  const rawHumans = c.req.query("humanTeams");
+  const expectedHumanTeams = rawHumans !== undefined && /^\d+$/.test(rawHumans) ? Number(rawHumans) : undefined;
+  try {
+    const result = await deleteLeague(c.env.DB, leagueId, {
+      dryRun, expectedHumanTeams, closeDistrict: c.req.query("closeDistrict") === "1",
+    });
+    return c.json(result, result.ok ? 200 : 400);
+  } catch (e) {
+    logger.error({ module: M }, `smazání ligy ${leagueId}`, e);
+    return c.json({ error: "Smazání ligy selhalo, podrobnosti jsou v logu. Opakované volání domaže zbytek." }, 500);
   }
 });
 

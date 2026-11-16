@@ -71,6 +71,8 @@ export const DEFAULT_MATCH_WEEKDAYS: readonly number[] = [1, 4];
 
 /** Nejvýš tolik kol jedné ligy v jednom týdnu (pondělí až neděle). */
 export const MAX_ROUNDS_PER_WEEK = 3;
+/** Strop pro týden s dohrávkou (liga založená pozdě, která musí stihnout celé dvoukolo). */
+export const CATCH_UP_ROUNDS_PER_WEEK = 4;
 
 const DAY_NAMES: readonly CalendarEntry["matchDay"][] = [
   "sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday",
@@ -220,6 +222,11 @@ export interface RemainingSeasonOptions {
   weekdays: number[];
   /** Den, kterým se doplní kola, která se do hracích dnů nevejdou (od konce sezóny). */
   extraWeekday: number;
+  /**
+   * Dohrávkový den: když nestačí ani `extraWeekday`, přidá se čtvrté kolo týdně v tenhle den
+   * (od konce sezóny, nejvýš `CATCH_UP_ROUNDS_PER_WEEK` kol týdně). Bez něj rozpis skončí chybou.
+   */
+  catchUpWeekday?: number;
 }
 
 /** Pondělí týdne, do kterého termín patří (klíč pro limit kol na týden). */
@@ -235,13 +242,15 @@ function weekKey(d: Date): string {
  * Kola padají na hrací dny ligy v 18:00 v Praze, od prvního termínu po `from`. Mezi 22. 12.
  * a 2. 1. se nehraje (`isSeniorHolidayBlocked`), jiná přestávka tu není.
  * Když se do hracích dnů do `lastDate` nevejdou, doplní se `extraWeekday`
- * od konce sezóny, nejvýš `MAX_ROUNDS_PER_WEEK` kola týdně. Když se nevejdou ani tak,
+ * od konce sezóny, nejvýš `MAX_ROUNDS_PER_WEEK` kola týdně, a pak případně dohrávkový den
+ * (`catchUpWeekday`, čtvrté kolo týdně). Když se nevejdou ani tak,
  * vyhodí chybu: liga nesmí zdržet konec sezóny.
  */
 export function generateRemainingSeasonCalendar(opts: RemainingSeasonOptions): CalendarEntry[] {
   const days = new Set(opts.weekdays);
   const base: Date[] = [];
   const extra: Date[] = [];
+  const catchUp: Date[] = [];
   const day = new Date(Date.UTC(opts.from.getUTCFullYear(), opts.from.getUTCMonth(), opts.from.getUTCDate()));
   const lastDay = Date.UTC(opts.lastDate.getUTCFullYear(), opts.lastDate.getUTCMonth(), opts.lastDate.getUTCDate());
   for (; day.getTime() <= lastDay; day.setUTCDate(day.getUTCDate() + 1)) {
@@ -251,6 +260,7 @@ export function generateRemainingSeasonCalendar(opts: RemainingSeasonOptions): C
     if (isSeniorHolidayBlocked(slot)) continue;
     if (days.has(slot.getUTCDay())) base.push(slot);
     else if (slot.getUTCDay() === opts.extraWeekday) extra.push(slot);
+    else if (slot.getUTCDay() === opts.catchUpWeekday) catchUp.push(slot);
   }
 
   let chosen: Date[];
@@ -260,13 +270,17 @@ export function generateRemainingSeasonCalendar(opts: RemainingSeasonOptions): C
     chosen = [...base];
     const perWeek = new Map<string, number>();
     for (const d of chosen) perWeek.set(weekKey(d), (perWeek.get(weekKey(d)) ?? 0) + 1);
-    for (const d of [...extra].reverse()) {
-      if (chosen.length >= opts.rounds) break;
-      const key = weekKey(d);
-      if ((perWeek.get(key) ?? 0) >= MAX_ROUNDS_PER_WEEK) continue;
-      chosen.push(d);
-      perWeek.set(key, (perWeek.get(key) ?? 0) + 1);
-    }
+    const fill = (slots: Date[], weekLimit: number) => {
+      for (const d of [...slots].reverse()) {
+        if (chosen.length >= opts.rounds) break;
+        const key = weekKey(d);
+        if ((perWeek.get(key) ?? 0) >= weekLimit) continue;
+        chosen.push(d);
+        perWeek.set(key, (perWeek.get(key) ?? 0) + 1);
+      }
+    };
+    fill(extra, MAX_ROUNDS_PER_WEEK);
+    fill(catchUp, CATCH_UP_ROUNDS_PER_WEEK);
     if (chosen.length < opts.rounds) {
       throw new Error(
         `Rozpis se nevejde: ${opts.rounds} kol, termínů od ${opts.from.toISOString().slice(0, 10)} do ${opts.lastDate.toISOString().slice(0, 10)} je jen ${chosen.length}`,
