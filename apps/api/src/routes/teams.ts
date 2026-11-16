@@ -823,8 +823,8 @@ teamsRouter.post("/", async (c) => {
   step = "create-schedule";
   if (runningSeason) {
     // Sezóna ostatních lig už běží: týmy dostanou její sdílený herní čas a liga rozpis na
-    // zbytek sezóny (dvoukolově, nebo jednokolově, když se dvě kola nevejdou). Když do konce
-    // sezóny zbývá méně než osm hracích dnů, zůstává přípravné období a rozpis vytvoří rollover.
+    // zbytek sezóny, vždy dvoukolový (když je potřeba, i se sobotami). Když se dvoukolo do
+    // konce sezóny nevejde, zůstává přípravné období a rozpis vytvoří rollover.
     await c.env.DB.prepare("UPDATE teams SET game_date = ?, season_start = ?, season_end = ? WHERE league_id = ?")
       .bind(runningSeason.gameDate, runningSeason.seasonStart, runningSeason.seasonEnd, leagueId).run();
     const { insertLeagueSchedule, planMidSeasonSchedule } = await import("../league/mid-season-schedule");
@@ -838,7 +838,7 @@ teamsRouter.post("/", async (c) => {
     if (plan && plan.format !== "preseason") {
       await insertLeagueSchedule(c.env.DB, leagueId, season.number, plan, teamIds);
     } else {
-      logger.info({ module: "teams" }, `liga ${leagueName} založena v přípravném období (hracích dnů do konce sezóny: ${plan?.matchDays ?? 0}), rozpis vytvoří rollover`);
+      logger.info({ module: "teams" }, `liga ${leagueName} založena v přípravném období (termínů do konce sezóny: ${plan?.matchDays ?? 0}), rozpis vytvoří rollover`);
     }
   } else if (teamIds.length >= 2) {
     const schedule = generateSchedule(rng, teamIds.length);

@@ -17,6 +17,11 @@
  * POST /api/admin/ai-clubs/open-district?district=České Budějovice&dryRun=1
  *   Spuštění ligy okresu: otevře okres registracím (část 1).
  *
+ * POST /api/admin/ai-clubs/extend-schedule?leagueId=&dryRun=1
+ *   Liga s jednokolovým rozpisem (založená registrací uprostřed sezóny do 2026-11-16) dostane
+ *   plné dvoukolo: zbylá kola se posunou na dřívější termíny, přibudou odvety, U21 den po áčku.
+ *   `dryRun=1` vrátí jen přehled posunů a nových kol. Opakované volání dokončí rozdělanou U21.
+ *
  * POST /api/admin/ai-clubs/facilities?dryRun=1
  *   Řádek stadionu a vybavení všem klubům v ligách, které ho ještě nemají.
  *
@@ -35,6 +40,7 @@ import { applyLeveling, LEVELING_MODES, planLeveling, type LevelingMode } from "
 import { cryptoSeed } from "../generators/rng";
 import { findAbandonedClubs, MAX_TAKEOVERS_PER_RUN, runAbandonedClubTakeover } from "../ai-clubs/abandoned";
 import { openDistrictRegistration } from "../ai-clubs/district-opening";
+import { extendLeagueToDouble } from "../league/extend-schedule";
 import { backfillClubFacilities } from "../ai-clubs/facilities-backfill";
 import { cleanupU21AiManagers } from "../ai-clubs/u21-manager-cleanup";
 import { createLowerLeague, LowerLeagueError } from "../league/lower-league-setup";
@@ -117,6 +123,18 @@ adminAiClubsRouter.post("/open-district", async (c) => {
   } catch (e) {
     logger.error({ module: M }, `otevření okresu ${district}`, e);
     return c.json({ error: "Otevření okresu selhalo, podrobnosti jsou v logu" }, 500);
+  }
+});
+
+adminAiClubsRouter.post("/extend-schedule", async (c) => {
+  const leagueId = c.req.query("leagueId")?.trim();
+  if (!leagueId) return c.json({ error: "Chybí leagueId" }, 400);
+  try {
+    const result = await extendLeagueToDouble(c.env.DB, leagueId, { dryRun: isDryRun(c.req.query("dryRun")) });
+    return c.json(result, result.ok ? 200 : 400);
+  } catch (e) {
+    logger.error({ module: M }, `rozšíření rozpisu ligy ${leagueId}`, e);
+    return c.json({ error: "Rozšíření rozpisu selhalo, podrobnosti jsou v logu. Opakované volání dokončí rozdělanou U21." }, 500);
   }
 });
 
