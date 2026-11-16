@@ -463,6 +463,8 @@ export async function mirrorScheduleToU21(
   seniorLeagueId: string,
   u21LeagueId: string,
   fromGameWeek: number,
+  /** Jen kola této sezóny. Bez něj všechna kola ligy (liga s jedinou sezónou). */
+  seasonNumber?: number,
 ): Promise<{ calendarEntries: number; matches: number }> {
   // Lookup: senior team id → U21 team id
   const teamRows = await db.prepare(
@@ -474,8 +476,10 @@ export async function mirrorScheduleToU21(
   // Vyber všechny A-ligy záznamy od fromGameWeek dál
   const calendarRows = await db.prepare(
     // Jen kola se zápasy: prázdné řádky kalendáře by U21 zbytečně natáhly sezónu.
-    "SELECT id, season_number, game_week, match_day, scheduled_at, status FROM season_calendar sc WHERE league_id = ? AND game_week >= ? AND EXISTS (SELECT 1 FROM matches m WHERE m.calendar_id = sc.id) ORDER BY game_week"
-  ).bind(seniorLeagueId, fromGameWeek).all<{ id: string; season_number: number; game_week: number; match_day: string; scheduled_at: string; status: string }>();
+    `SELECT id, season_number, game_week, match_day, scheduled_at, status FROM season_calendar sc
+      WHERE league_id = ? AND game_week >= ? AND (? IS NULL OR season_number = ?)
+        AND EXISTS (SELECT 1 FROM matches m WHERE m.calendar_id = sc.id) ORDER BY game_week`
+  ).bind(seniorLeagueId, fromGameWeek, seasonNumber ?? null, seasonNumber ?? null).all<{ id: string; season_number: number; game_week: number; match_day: string; scheduled_at: string; status: string }>();
 
   let calCount = 0;
   let matchCount = 0;
