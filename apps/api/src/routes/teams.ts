@@ -487,6 +487,18 @@ teamsRouter.post("/", async (c) => {
       }
       teamId = oldId;
 
+      // Liga založená do zásoby (IV. třída) čeká bez rozpisu na prvního člověka: teď se rozběhne
+      // podle vyšší soutěže okresu a zameškaná kola se dopočítají přes frontu zápasů.
+      // III. třída založená registrací uprostřed sezóny sem nepatří, ta čeká na novou sezónu.
+      const hasCalendar = slot.league.level !== "iv_trida" ? { x: 1 } : await c.env.DB.prepare("SELECT 1 AS x FROM season_calendar WHERE league_id = ? AND season_number = ? LIMIT 1")
+        .bind(existingLeague.id, season.number).first<{ x: number }>()
+        .catch((e) => { logger.warn({ module: "teams" }, `rozpis ligy ${existingLeague.id}`, e); return { x: 1 }; });
+      if (!hasCalendar) {
+        const { startLeagueOnJoin } = await import("../league/start-league");
+        const started = await startLeagueOnJoin(c.env, existingLeague.id);
+        logger.info({ module: "teams" }, `liga ${existingLeague.name} po registraci: ${started?.ok ? `spuštěna, k dopočítání ${started.overdue}` : started?.reason ?? "spuštění selhalo"}`);
+      }
+
       // Rezerva jde s áčkem. Bez tohohle zůstane U21 na původním vlastníkovi,
       // ten pak nemůže založit nový klub (systém mu tvrdí, že vede U21)
       // a nový majitel áčka svoji rezervu naopak neřídí.

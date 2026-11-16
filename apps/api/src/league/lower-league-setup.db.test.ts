@@ -18,6 +18,7 @@ import { districtLeagueIds } from "../competition/rules";
 import { alignLeagueSchedule } from "./align-schedule";
 import { clearLeagueSchedule, deleteLeague } from "./delete-league";
 import { resolveDistrictSlot } from "./district-leagues";
+import { enqueueLeagueCatchUp, startWaitingLeague } from "./start-league";
 import { applyDistrictPromotions, leagueMovement } from "./district-promotion";
 import { createLowerLeague, LowerLeagueError, pickLowerLeagueVillages, type LowerLeagueResult } from "./lower-league-setup";
 
@@ -535,4 +536,91 @@ describe("III. třída uprostřed sezóny", () => {
     expect(await count("SELECT COUNT(*) AS n FROM teams WHERE league_id IN (?, ?)", third, thirdU21)).toBe(teams);
     expect((await db.prepare("PRAGMA foreign_key_check").all()).results).toEqual([]);
   }, 120_000);
+
+  it("spuštění čekající ligy: rozpis podle vyšší soutěže okresu, U21 o den později, zameškaná kola do fronty", async () => {
+    const third = (await db.prepare(
+      "SELECT id FROM leagues WHERE level = 'okresni_soutez' AND league_type = 'senior' AND district = ?",
+    ).bind(DISTRICT).first<{ id: string }>())!.id;
+    const thirdU21 = (await db.prepare("SELECT id FROM leagues WHERE parent_league_id = ?").bind(third).first<{ id: string }>())!.id;
+    const season = (await db.prepare("SELECT MAX(season_number) AS n FROM season_calendar WHERE league_id = ?").bind(preborId).first<{ n: number }>())!.n;
+    const datesOf = async (id: string) => (await db.prepare(
+      "SELECT scheduled_at FROM season_calendar WHERE league_id = ? AND season_number = ? ORDER BY game_week",
+    ).bind(id, season).all<{ scheduled_at: string }>()).results.map((r) => r.scheduled_at);
+    const preborDates = await datesOf(preborId);
+    expect(await datesOf(third)).toEqual([]);
+    const now = new Date(Date.parse(preborDates[3]) + 3_600_000);
+
+    expect((await startWaitingLeague(db, preborId, { dryRun: true })).reason).toBe("Soutěž už rozpis má.");
+    expect((await startWaitingLeague(db, thirdU21, { dryRun: true })).ok).toBe(false);
+    const dry = await startWaitingLeague(db, third, { dryRun: true, now });
+    expect(dry).toMatchObject({ ok: true, referenceLeagueId: preborId, rounds: 26, matches: 14 * 13, overdue: 4 });
+    expect(dry.u21).toMatchObject({ leagueId: thirdU21, overdue: 3 });
+    expect(await datesOf(third)).toEqual([]);
+
+    const started = await startWaitingLeague(db, third, { dryRun: false, now, seed: 11 });
+    expect(started.ok).toBe(true);
+    expect(await datesOf(third)).toEqual(preborDates);
+    expect(await datesOf(thirdU21)).toEqual(preborDates.map((d) => new Date(Date.parse(d) + 86_400_000).toISOString()));
+    for (const id of [third, thirdU21]) {
+      expect(await count("SELECT COUNT(*) AS n FROM matches m JOIN season_calendar sc ON sc.id = m.calendar_id WHERE sc.league_id = ? AND sc.season_number = ?", id, season)).toBe(14 * 13);
+      expect(await count(
+        `SELECT COUNT(*) AS n FROM (SELECT sc.id FROM season_calendar sc LEFT JOIN matches m ON m.calendar_id = sc.id
+          WHERE sc.league_id = ? AND sc.season_number = ? GROUP BY sc.id HAVING COUNT(m.id) <> 7)`, id, season)).toBe(0);
+    }
+    // Každá dvojice jednou doma a jednou venku.
+    expect(await count(
+      `SELECT COUNT(*) AS n FROM (SELECT m.home_team_id, m.away_team_id FROM matches m JOIN season_calendar sc ON sc.id = m.calendar_id
+        WHERE sc.league_id = ? AND sc.season_number = ? GROUP BY m.home_team_id, m.away_team_id HAVING COUNT(*) <> 1)`, third, season)).toBe(0);
+    expect((await startWaitingLeague(db, third, { dryRun: false, now })).reason).toBe("Soutěž už rozpis má.");
+
+    // Dopočítání: jedno kolo na zprávu, áčko před U21, s rozestupem; večer až po kole.
+    const sent: Array<{ leagueId: string; delay: number }> = [];
+    const queueEnv = { ...env, MATCH_QUEUE: { send: async (body: { leagueId: string }, o?: { delaySeconds?: number }) => { sent.push({ leagueId: body.leagueId, delay: o?.delaySeconds ?? 0 }); } } } as unknown as Bindings;
+    expect(await enqueueLeagueCatchUp(queueEnv, started, third, new Date("2026-11-20T10:00:00Z"))).toBe(7);
+    expect(sent.map((m) => m.leagueId)).toEqual([third, third, third, third, thirdU21, thirdU21, thirdU21]);
+    expect(sent.map((m) => m.delay)).toEqual([0, 240, 480, 720, 960, 1200, 1440]);
+    sent.length = 0;
+    await enqueueLeagueCatchUp(queueEnv, started, third, new Date("2026-11-20T16:30:00Z"));
+    expect(sent[0].delay).toBe(7200);
+  }, 120_000);
+
+  it("registrace do čekající IV. třídy ji spustí: nový klub má hned rozpis podle vyšší soutěže", async () => {
+    // IV. třída je po předchozích testech smazaná, čekající ligu zastoupí bývalá III. třída.
+    const waiting = (await db.prepare(
+      "SELECT id FROM leagues WHERE level = 'okresni_soutez' AND league_type = 'senior' AND district = ?",
+    ).bind(DISTRICT).first<{ id: string }>())!.id;
+    const waitingU21 = (await db.prepare("SELECT id FROM leagues WHERE parent_league_id = ?").bind(waiting).first<{ id: string }>())!.id;
+    const season = (await db.prepare("SELECT MAX(season_number) AS n FROM season_calendar WHERE league_id = ?").bind(preborId).first<{ n: number }>())!.n;
+    await db.prepare("UPDATE leagues SET level = 'iv_trida' WHERE id IN (?, ?)").bind(waiting, waitingU21).run();
+    await db.prepare("UPDATE district_registrations SET registration_closed = 0 WHERE district = ?").bind(DISTRICT).run();
+    expect((await clearLeagueSchedule(db, waiting, { dryRun: false })).ok).toBe(true);
+    const freed = (await db.prepare("SELECT id FROM teams WHERE league_id = ? ORDER BY id LIMIT 1").bind(waiting).first<{ id: string }>())!.id;
+    await db.prepare("UPDATE teams SET user_id = 'ai', ai_former_user_id = NULL WHERE id = ? OR parent_team_id = ?").bind(freed, freed).run();
+    const roundsOf = (id: string) => count("SELECT COUNT(*) AS n FROM season_calendar WHERE league_id = ? AND season_number = ?", id, season);
+    expect([await roundsOf(waiting), await roundsOf(waitingU21)]).toEqual([0, 0]);
+
+    const village = (await db.prepare(
+      "SELECT v.id FROM villages v WHERE v.district = ? AND COALESCE(v.registration_locked, 0) = 0 AND NOT EXISTS (SELECT 1 FROM teams t WHERE t.village_id = v.id) LIMIT 1",
+    ).bind(DISTRICT).first<{ id: string }>())!.id;
+    const joined = await createTeam("newcomer-iv", village, "FK Nováček");
+    expect(joined.status).toBe(201);
+    expect(joined.body.leagueId).toBe(waiting);
+
+    expect([await roundsOf(waiting), await roundsOf(waitingU21)]).toEqual([26, 26]);
+    const dates = async (id: string) => (await db.prepare(
+      "SELECT scheduled_at FROM season_calendar WHERE league_id = ? AND season_number = ? ORDER BY game_week",
+    ).bind(id, season).all<{ scheduled_at: string }>()).results.map((r) => r.scheduled_at);
+    expect(await dates(waiting)).toEqual(await dates(preborId));
+    // Nový klub je v rozpisu: 26 zápasů, 13 doma.
+    const ownId = String(joined.body.id);
+    expect(await count(
+      "SELECT COUNT(*) AS n FROM matches m JOIN season_calendar sc ON sc.id = m.calendar_id WHERE sc.league_id = ? AND sc.season_number = ? AND (m.home_team_id = ?3 OR m.away_team_id = ?3)",
+      waiting, season, ownId)).toBe(26);
+
+    // Zamčená obec: klub v ní založit nejde.
+    await db.prepare("UPDATE villages SET registration_locked = 1 WHERE id = ?").bind(village).run();
+    const lockedOut = await createTeam("newcomer-locked", village, "FK Zamčeno");
+    expect(lockedOut.status).toBe(400);
+    expect(String(lockedOut.body.error)).toMatch(/klubů dost/);
+  }, 300_000);
 });

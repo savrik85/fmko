@@ -39,6 +39,10 @@
  * POST /api/admin/ai-clubs/clear-schedule?leagueId=&dryRun=1
  *   Zruší rozpis ligy, která ještě nehrála (i U21). Kluby zůstanou, liga čeká v přípravném období.
  *
+ * POST /api/admin/ai-clubs/start-league?leagueId=&dryRun=1
+ *   Ruční spuštění ligy, která čeká bez rozpisu (jinak ji spustí první registrace): rozpis podle
+ *   nejbližší vyšší soutěže okresu, U21 o den později, zameškaná kola dopočítá fronta zápasů.
+ *
  * POST /api/admin/ai-clubs/facilities?dryRun=1
  *   Řádek stadionu a vybavení všem klubům v ligách, které ho ještě nemají.
  *
@@ -58,6 +62,7 @@ import { cryptoSeed } from "../generators/rng";
 import { findAbandonedClubs, MAX_TAKEOVERS_PER_RUN, runAbandonedClubTakeover } from "../ai-clubs/abandoned";
 import { openDistrictRegistration } from "../ai-clubs/district-opening";
 import { alignLeagueSchedule } from "../league/align-schedule";
+import { enqueueLeagueCatchUp, startWaitingLeague } from "../league/start-league";
 import { clearLeagueSchedule, deleteLeague } from "../league/delete-league";
 import { extendLeagueToDouble } from "../league/extend-schedule";
 import { backfillClubFacilities } from "../ai-clubs/facilities-backfill";
@@ -163,6 +168,19 @@ adminAiClubsRouter.post("/align-schedule", async (c) => {
   } catch (e) {
     logger.error({ module: M }, `srovnání rozpisu ligy ${leagueId}`, e);
     return c.json({ error: "Srovnání rozpisu selhalo, podrobnosti jsou v logu" }, 500);
+  }
+});
+
+adminAiClubsRouter.post("/start-league", async (c) => {
+  const leagueId = c.req.query("leagueId")?.trim();
+  if (!leagueId) return c.json({ error: "Chybí leagueId" }, 400);
+  try {
+    const result = await startWaitingLeague(c.env.DB, leagueId, { dryRun: isDryRun(c.req.query("dryRun")) });
+    const enqueued = result.ok && !result.dryRun ? await enqueueLeagueCatchUp(c.env, result, leagueId) : 0;
+    return c.json({ ...result, enqueued }, result.ok ? 200 : 400);
+  } catch (e) {
+    logger.error({ module: M }, `spuštění ligy ${leagueId}`, e);
+    return c.json({ error: "Spuštění ligy selhalo, podrobnosti jsou v logu" }, 500);
   }
 });
 
