@@ -291,3 +291,92 @@ export async function deleteLeague(
   logger.info({ module: M }, `liga ${league.name} smazána: ${result.teams} klubů, ${result.players} hráčů, ${result.rowsTotal} řádků`);
   return result;
 }
+
+export interface ClearScheduleResult {
+  ok: boolean;
+  reason?: string;
+  dryRun: boolean;
+  leagues?: Array<{ id: string; name: string }>;
+  rounds?: number;
+  matches?: number;
+  steps?: DeleteLeagueStep[];
+}
+
+/**
+ * Zruší rozpis ligy, která ještě nehrála (i její U21): kola, zápasy a co na ně odkazuje
+ * (kurzy, sestavy na kolo, pozvánky). Kluby a hráči zůstávají, liga je pak v přípravném
+ * období a rozpis dostane, až se spustí. Odehrané nebo rozehrané kolo zrušení zastaví,
+ * stejně tak vsazený tiket na některý ze zápasů.
+ */
+export async function clearLeagueSchedule(
+  db: D1Database, leagueId: string, opts: { dryRun: boolean },
+): Promise<ClearScheduleResult> {
+  const { dryRun } = opts;
+  const stop = (reason: string): ClearScheduleResult => ({ ok: false, reason, dryRun });
+  const league = await db.prepare(
+    "SELECT id, name, COALESCE(league_type, 'senior') AS league_type FROM leagues WHERE id = ?",
+  ).bind(leagueId).first<{ id: string; name: string; league_type: string }>();
+  if (!league) return stop("Soutěž nenalezena.");
+  if (league.league_type !== "senior") return stop("Rozpis se ruší u seniorské soutěže, její U21 jde s ní.");
+
+  const children = await db.prepare("SELECT id, name FROM leagues WHERE parent_league_id = ?").bind(leagueId)
+    .all<{ id: string; name: string }>();
+  const leagues = [{ id: league.id, name: league.name }, ...children.results];
+  const leagueSql = idList(leagues.map((l) => l.id));
+  // Jen aktuální sezóna: liga drží v jedné tabulce i odehraná kola starších sezón. Číslo sezóny
+  // se zjistí předem; poddotaz na nejvyšší sezónu by po smazání kol ukázal na tu předchozí.
+  const seasons = await db.prepare(
+    `SELECT league_id, MAX(season_number) AS season_number FROM season_calendar WHERE league_id IN (${leagueSql}) GROUP BY league_id`,
+  ).all<{ league_id: string; season_number: number }>();
+  if (seasons.results.length === 0) return stop("Soutěž žádný rozpis nemá.");
+  const seasonFilter = seasons.results
+    .map((r) => `(league_id IN (${idList([r.league_id])}) AND season_number = ${Number(r.season_number)})`).join(" OR ");
+  const calendarScope = `SELECT id FROM season_calendar WHERE ${seasonFilter}`;
+  const matchScope = `SELECT id FROM matches WHERE calendar_id IN (${calendarScope})`;
+
+  const rounds = await countOf(db, `SELECT COUNT(*) AS n FROM (${calendarScope})`);
+  const matches = await countOf(db, `SELECT COUNT(*) AS n FROM (${matchScope})`);
+  if (rounds === 0 && matches === 0) return stop("Soutěž žádný rozpis nemá.");
+
+  const started = await countOf(db, `SELECT COUNT(*) AS n FROM season_calendar WHERE id IN (${calendarScope}) AND status <> 'scheduled'`)
+    + await countOf(db, `SELECT COUNT(*) AS n FROM matches WHERE id IN (${matchScope}) AND (status <> 'scheduled' OR home_score IS NOT NULL)`);
+  if (started > 0) return stop("Soutěž už hrála nebo právě hraje, rozpis zrušit nejde.");
+  const bets = await countOf(db,
+    `SELECT COUNT(*) AS n FROM bet_tickets t WHERE t.calendar_id IN (${calendarScope})
+        OR EXISTS (SELECT 1 FROM bet_selections b WHERE b.ticket_id = t.id AND b.match_id IN (${matchScope}))`);
+  if (bets > 0) return stop(`Na zápasy soutěže je vsazeno (${bets} tiketů), rozpis zrušit nejde.`);
+
+  const columns = await db.prepare(
+    `SELECT m.name AS tbl, p.name AS col FROM sqlite_master m JOIN pragma_table_info(m.name) p
+      WHERE m.type = 'table' AND m.name NOT LIKE 'sqlite_%' AND m.name NOT LIKE '_cf_%' AND m.name NOT LIKE 'd1_%'
+      ORDER BY m.name, p.cid`,
+  ).all<{ tbl: string; col: string }>();
+  const steps: DeleteLeagueStep[] = [];
+  const statements: string[] = [];
+  for (const { tbl, col } of columns.results) {
+    const kind = refKindOf(col);
+    if (kind !== "match" && kind !== "calendar") continue;
+    if (tbl === "matches" || tbl === "season_calendar") continue;
+    const clear = CLEAR_COLUMNS.has(`${tbl}.${col}`);
+    const where = `"${col}" IN (${kind === "match" ? matchScope : calendarScope})`;
+    const rows = await countOf(db, `SELECT COUNT(*) AS n FROM "${tbl}" WHERE ${where}`);
+    if (rows === 0) continue;
+    steps.push({ table: tbl, column: col, action: clear ? "clear" : "delete", rows });
+    statements.push(clear ? `UPDATE "${tbl}" SET "${col}" = NULL WHERE ${where}` : `DELETE FROM "${tbl}" WHERE ${where}`);
+  }
+  steps.push({ table: "matches", column: "id", action: "delete", rows: matches });
+  steps.push({ table: "season_calendar", column: "id", action: "delete", rows: rounds });
+  // U21 zápas a kolo odkazují na áčko, proto jdou první. Podmínka na stav drží pojistku i při souběhu s tickem.
+  statements.push(
+    `DELETE FROM matches WHERE id IN (${matchScope}) AND parent_match_id IS NOT NULL AND status = 'scheduled'`,
+    `DELETE FROM matches WHERE id IN (${matchScope}) AND status = 'scheduled'`,
+    `DELETE FROM season_calendar WHERE id IN (${calendarScope}) AND parent_calendar_id IS NOT NULL AND status = 'scheduled'`,
+    `DELETE FROM season_calendar WHERE id IN (${calendarScope}) AND status = 'scheduled'`,
+  );
+
+  const result: ClearScheduleResult = { ok: true, dryRun, leagues, rounds, matches, steps };
+  if (dryRun) return result;
+  await db.batch([db.prepare("PRAGMA defer_foreign_keys = on"), ...statements.map((sql) => db.prepare(sql))]);
+  logger.info({ module: M }, `liga ${league.name}: rozpis zrušen (${rounds} kol, ${matches} zápasů)`);
+  return result;
+}
