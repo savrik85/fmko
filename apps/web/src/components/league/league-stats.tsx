@@ -5,7 +5,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Spinner, BadgePreview, PositionBadge } from "@/components/ui";
+import { Spinner, BadgePreview, PositionBadge, ListCard, ListRow, RowValue } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 
 interface PlayerStat {
@@ -336,32 +336,29 @@ function CuriosityCard({ icon, title, item, unit }: {
   );
 }
 
-/** Žebříček týmů — stejný rytmus jako StatTable, jen bez hráče a pozice. */
+/** Pořadí v žebříčku jako levý prvek řádku. */
+function Rank({ value }: { value: number }) {
+  return <span className={`text-body font-bold tabular-nums ${value === 1 ? "text-gold-700" : "text-muted"}`}>{value}</span>;
+}
+
+/** Žebříček týmů: stejný řádek jako u hráčů, jen bez postu. */
 function TeamTable({ title, rows, renderValue }: {
   title: string; rows: TeamStat[]; renderValue: (t: TeamStat) => React.ReactNode;
 }) {
   return (
-    <div className="card overflow-hidden">
-      <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-100">
-        <span className="text-xs font-heading font-bold uppercase text-muted">{title}</span>
-      </div>
-      <table className="stat-table w-full text-sm table-fixed">
-        <tbody>
-          {rows.map((t, i) => (
-            <tr key={t.teamId} className={`border-b border-gray-50 last:border-b-0 ${t.isMyTeam ? "bg-pitch-50/40" : ""}`}>
-              <td className="py-2 pl-3 w-8 text-center font-heading font-bold tabular-nums text-muted">{i + 1}</td>
-              <td className="py-2 px-2 min-w-0">
-                <Link href={`/tym/${t.teamId}`} className="flex items-center gap-2 min-w-0 hover:text-pitch-500 transition-colors">
-                  <BadgePreview primary={t.teamColor} secondary={t.teamSecondary} pattern={t.teamBadge as BadgePattern} initials={ini(t.teamName)} size={18} />
-                  <span className={`font-heading font-bold truncate ${t.isMyTeam ? "text-pitch-600" : ""}`}>{t.teamName}</span>
-                </Link>
-              </td>
-              <td className="py-2 pr-4 w-24 sm:w-32 text-right font-heading font-[800] text-lg tabular-nums whitespace-nowrap">{renderValue(t)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <ListCard title={title}>
+      {rows.map((t, i) => (
+        <ListRow key={t.teamId} href={`/tym/${t.teamId}`} chevron={false}
+          leading={<Rank value={i + 1} />}
+          title={
+            <span className={`flex items-center gap-2 ${t.isMyTeam ? "text-pitch-600" : ""}`}>
+              <BadgePreview primary={t.teamColor} secondary={t.teamSecondary} pattern={t.teamBadge as BadgePattern} initials={ini(t.teamName)} size={20} />
+              <span className="min-w-0">{t.teamName}</span>
+            </span>
+          }
+          trailing={<RowValue>{renderValue(t)}</RowValue>} />
+      ))}
+    </ListCard>
   );
 }
 
@@ -370,40 +367,20 @@ function StatTable({ title, rows, valueKey, label, decimal, renderValue }: {
   renderValue?: (p: PlayerStat) => React.ReactNode;
 }) {
   return (
-    <div className="card overflow-hidden">
-      <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-100">
-        <span className="text-xs font-heading font-bold uppercase text-muted">{title}</span>
-      </div>
-      <table className="stat-table w-full text-sm table-fixed">
-        <tbody>
-          {rows.map((p, i) => (
-            <tr key={i} className={`border-b border-gray-50 last:border-b-0 ${p.isMyTeam ? "bg-pitch-50/40" : ""}`}>
-              <td className="py-1.5 pl-3 w-8 text-center align-top font-heading font-bold tabular-nums text-muted leading-snug">{i + 1}</td>
-              {/* Mobil: tým pod jménem, aby se vešel celý název. Od sm výš vedle sebe jako dřív. */}
-              <td className="py-1.5 px-2 min-w-0 align-top">
-                {/* Mobil: první řádek odznak + jméno, druhý řádek tým odsazený pod jménem. */}
-                <div className="flex items-start gap-2 min-w-0">
-                  <span className="shrink-0 w-10 flex justify-center pt-px"><PositionBadge position={p.position as "GK" | "DEF" | "MID" | "FWD"} /></span>
-                  <div className="min-w-0 flex-1">
-                    <Link href={`/hrac/${p.playerId}`} className={`block font-heading font-bold truncate leading-snug hover:text-pitch-500 transition-colors ${p.isMyTeam ? "text-pitch-600" : ""}`}>{p.name}</Link>
-                    <Link href={`/tym/${p.teamId}`} className="sm:hidden flex items-center gap-1 min-w-0 leading-snug hover:text-pitch-500 transition-colors">
-                      <BadgePreview primary={p.teamColor} secondary={p.teamSecondary} pattern={p.teamBadge as BadgePattern} initials={ini(p.teamName)} size={12} />
-                      <span className="text-xs text-muted truncate">{p.teamName}</span>
-                    </Link>
-                  </div>
-                  <Link href={`/tym/${p.teamId}`} className="hidden sm:flex items-center gap-1.5 shrink-0 max-w-[45%] hover:text-pitch-500 transition-colors">
-                    <BadgePreview primary={p.teamColor} secondary={p.teamSecondary} pattern={p.teamBadge as BadgePattern} initials={ini(p.teamName)} size={16} />
-                    <span className="text-xs text-muted truncate">{p.teamName}</span>
-                  </Link>
-                </div>
-              </td>
-              <td className="py-1.5 pr-4 w-24 sm:w-36 text-right align-top font-heading font-[800] text-lg leading-snug tabular-nums whitespace-nowrap">
-                {renderValue ? renderValue(p) : decimal ? ((p as any)[valueKey] as number).toFixed(1) : (p as any)[valueKey]}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <ListCard title={title}>
+      {rows.map((p, i) => (
+        <ListRow key={i} href={`/hrac/${p.playerId}`} chevron={false}
+          leading={<Rank value={i + 1} />}
+          title={<span className={p.isMyTeam ? "text-pitch-600" : ""}>{p.name}</span>}
+          meta={
+            <span className="inline-flex items-center gap-1.5 align-middle">
+              <PositionBadge position={p.position as "GK" | "DEF" | "MID" | "FWD"} />
+              <BadgePreview primary={p.teamColor} secondary={p.teamSecondary} pattern={p.teamBadge as BadgePattern} initials={ini(p.teamName)} size={14} />
+              {p.teamName}
+            </span>
+          }
+          trailing={<RowValue>{renderValue ? renderValue(p) : decimal ? ((p as any)[valueKey] as number).toFixed(1) : (p as any)[valueKey]}</RowValue>} />
+      ))}
+    </ListCard>
   );
 }

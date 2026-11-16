@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
-import { Spinner, SectionLabel, BadgePreview, PositionBadge, PageHeader, Tabs } from "@/components/ui";
+import { Spinner, SectionLabel, BadgePreview, PositionBadge, PageHeader, Tabs, DataTable, EntityCell, ListCard, ResultChip, type DataColumn, type MatchOutcome } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 import { PreseasonNotice } from "@/components/team/preseason-notice";
 import { LeagueStatsTab, type StatsData } from "@/components/league/league-stats";
@@ -33,11 +33,9 @@ interface LeagueRound {
 
 // ═══ Helpers ═══
 
-const FORM_COLORS: Record<string, string> = { W: "bg-pitch-400", D: "bg-gold-500", L: "bg-card-red" };
 
 interface LeagueMovement { promotion: boolean; relegation: boolean }
 const NO_MOVEMENT: LeagueMovement = { promotion: false, relegation: false };
-const FORM_LABELS: Record<string, string> = { W: "V", D: "R", L: "P" };
 
 function ini(n: string) { return n.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase(); }
 
@@ -368,32 +366,24 @@ function PastSeasonView({ entry, myTeamId }: { entry: HistoryEntry; myTeamId: st
 
       {/* Konečná tabulka */}
       {entry.finalStandings && entry.finalStandings.length > 0 && (
-        <div className="card overflow-x-auto table-scroll">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b-2 border-gray-200 text-muted">
-                <th className="py-2.5 px-1.5 text-xs font-heading uppercase text-center w-8">#</th>
-                <th className="py-2.5 px-3 text-xs font-heading uppercase text-left">Tým</th>
-                <th className="py-2.5 px-1.5 text-xs font-heading uppercase text-center w-8 hidden sm:table-cell">Z</th>
-                <th className="py-2.5 px-1.5 text-xs font-heading uppercase text-center">V-R-P</th>
-                <th className="py-2.5 px-1.5 text-xs font-heading uppercase text-center w-14">Skóre</th>
-                <th className="py-2.5 px-1.5 text-xs font-heading uppercase text-center w-10">B</th>
-              </tr>
-            </thead>
-            <tbody>
-              {entry.finalStandings.map((r, idx) => (
-                <tr key={r.teamId} className={`border-b border-gray-50 ${r.teamId === myTeamId ? "bg-pitch-50/60" : idx % 2 === 1 ? "bg-gray-50/30" : ""}`}>
-                  <td className="py-3 px-1.5 text-center"><span className={`font-heading font-[800] text-base tabular-nums ${r.pos === 1 ? "text-gold-500" : r.pos <= 3 ? "text-pitch-500" : "text-muted"}`}>{r.pos}</span></td>
-                  <td className="py-3 px-3"><PastTeamLink teamId={r.teamId} name={r.teamName} highlight={r.teamId === myTeamId} /></td>
-                  <td className="py-3 px-1.5 text-center tabular-nums text-muted hidden sm:table-cell">{r.played}</td>
-                  <td className="py-3 px-1.5 text-center tabular-nums text-muted">{r.wins}-{r.draws}-{r.losses}</td>
-                  <td className="py-3 px-1.5 text-center tabular-nums">{r.gf}:{r.ga}</td>
-                  <td className="py-3 px-1.5 text-center"><span className="font-heading font-[800] text-lg tabular-nums">{r.points}</span></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <ListCard title="Konečná tabulka">
+          <DataTable
+            rows={entry.finalStandings} rowKey={(r) => r.teamId}
+            rowHref={(r) => `/tym/${r.teamId}`}
+            rowTone={(r) => ({ own: r.teamId === myTeamId })}
+            empty="Konečná tabulka téhle sezóny se nedochovala."
+            columns={[
+              { key: "pos", header: "#", width: "w-10", align: "center",
+                cell: (r) => <span className={`font-bold ${r.pos === 1 ? "text-gold-700" : "text-muted"}`}>{r.pos}</span> },
+              { key: "team", header: "Klub", align: "left",
+                cell: (r) => <EntityCell name={r.teamName} bold={r.teamId === myTeamId}
+                  meta={`${r.wins}-${r.draws}-${r.losses} · ${r.gf}:${r.ga}`} metaMobileOnly /> },
+              { key: "played", header: "Z", title: "Zápasy", width: "w-10", cell: (r) => r.played },
+              { key: "record", header: "V-R-P", width: "w-20", priority: 2, cell: (r) => `${r.wins}-${r.draws}-${r.losses}` },
+              { key: "score", header: "Skóre", width: "w-16", priority: 2, cell: (r) => `${r.gf}:${r.ga}` },
+              { key: "points", header: "Body", width: "w-14", emphasis: true, cell: (r) => r.points },
+            ]} />
+        </ListCard>
       )}
 
       {/* Nejlepší jedenáctka */}
@@ -500,133 +490,50 @@ function ArticleBody({ article }: { article: NewsArticle }) {
 
 // ═══ Tabulka ═══
 
-type SortKey = "pos" | "team" | "played" | "wins" | "draws" | "losses" | "gd" | "points";
-type SortDir = "asc" | "desc";
-
 function StandingsTab({ standings, teamId, movement }: { standings: Standing[]; teamId: string; movement: LeagueMovement }) {
-  const [sortKey, setSortKey] = useState<SortKey>("pos");
-  const [sortDir, setSortDir] = useState<SortDir>("asc");
-
-  if (standings.length === 0) return <div className="card p-8 text-center text-muted">Zatím žádné výsledky.</div>;
-
-  const handleSort = (key: SortKey) => {
-    if (sortKey === key) setSortDir((d) => d === "asc" ? "desc" : "asc");
-    else { setSortKey(key); setSortDir(key === "team" ? "asc" : "desc"); }
-  };
-
-  const sorted = [...standings].sort((a, b) => {
-    let cmp = 0;
-    switch (sortKey) {
-      case "pos": cmp = a.pos - b.pos; break;
-      case "team": cmp = a.team.localeCompare(b.team, "cs"); break;
-      case "played": cmp = a.played - b.played; break;
-      case "wins": cmp = a.wins - b.wins; break;
-      case "draws": cmp = a.draws - b.draws; break;
-      case "losses": cmp = a.losses - b.losses; break;
-      case "gd": cmp = (a.gf - a.ga) - (b.gf - b.ga); break;
-      case "points": cmp = a.points - b.points; break;
-    }
-    return sortDir === "asc" ? cmp : -cmp;
-  });
-
   const totalTeams = standings.length;
-  const cols: Array<{ key: SortKey; label: string; w: string }> = [
-    { key: "pos", label: "#", w: "w-8" },
-    { key: "team", label: "Tým", w: "flex-1" },
-    { key: "played", label: "Z", w: "w-8" },
-    { key: "wins", label: "V", w: "w-8" },
-    { key: "draws", label: "R", w: "w-8" },
-    { key: "losses", label: "P", w: "w-8" },
-    { key: "gd", label: "Skóre", w: "w-14" },
-    { key: "points", label: "B", w: "w-10" },
+  const columns: DataColumn<Standing>[] = [
+    { key: "pos", header: "#", width: "w-10", align: "center", sortValue: (r) => r.pos, firstDir: "asc",
+      cell: (r) => <span className={`font-bold ${r.pos === 1 ? "text-gold-700" : "text-muted"}`}>{r.pos}</span> },
+    { key: "team", header: "Klub", align: "left", sortValue: (r) => r.team,
+      cell: (r) => (
+        <EntityCell
+          leading={<BadgePreview primary={r.primaryColor || "#2D5F2D"} secondary={r.secondaryColor || "#FFF"}
+            pattern={(r.badgePattern as BadgePattern) || "shield"} initials={ini(r.team)} size={24} />}
+          name={<TeamName name={r.team} isAi={r.isAi === true} wrap />} bold={r.isPlayer}
+          meta={`${r.wins}-${r.draws}-${r.losses} · ${r.gf}:${r.ga}`} metaMobileOnly />
+      ) },
+    { key: "played", header: "Z", title: "Zápasy", width: "w-10", sortValue: (r) => r.played, cell: (r) => r.played },
+    { key: "wins", header: "V", title: "Výhry", width: "w-10", priority: 2, sortValue: (r) => r.wins, cell: (r) => r.wins },
+    { key: "draws", header: "R", title: "Remízy", width: "w-10", priority: 2, sortValue: (r) => r.draws, cell: (r) => r.draws },
+    { key: "losses", header: "P", title: "Prohry", width: "w-10", priority: 2, sortValue: (r) => r.losses, cell: (r) => r.losses },
+    { key: "gd", header: "Skóre", width: "w-16", priority: 2, sortValue: (r) => r.gf - r.ga, cell: (r) => `${r.gf}:${r.ga}` },
+    { key: "form", header: "Forma", width: "w-32", priority: 3,
+      cell: (r) => (
+        <span className="inline-flex gap-1">
+          {(r.form ?? []).slice(0, 5).map((f, i) => <ResultChip key={i} result={f as MatchOutcome} />)}
+        </span>
+      ) },
+    { key: "points", header: "Body", width: "w-14", emphasis: true, sortValue: (r) => r.points, cell: (r) => r.points },
   ];
 
   return (
-    <div className="card overflow-x-auto table-scroll">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b-2 border-gray-200">
-            {cols.map((col) => {
-              const hideMobile = ["played", "wins", "draws", "losses"].includes(col.key);
-              return (
-                <th key={col.key} onClick={() => handleSort(col.key)}
-                  colSpan={col.key === "team" ? 2 : undefined}
-                  className={`py-2.5 px-1.5 text-xs font-heading uppercase cursor-pointer select-none hover:text-pitch-500 transition-colors whitespace-nowrap ${
-                    col.key === "team" ? "text-left pl-3" : "text-center"
-                  } ${sortKey === col.key ? "text-pitch-600" : "text-muted"} ${hideMobile ? "hidden sm:table-cell" : ""}`}>
-                  {col.label}{sortKey === col.key ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
-                </th>
-              );
-            })}
-            <th className="py-2.5 px-1.5 text-xs font-heading uppercase text-muted text-center w-28 hidden sm:table-cell">Forma</th>
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.map((row, idx) => {
-            const isPromo = movement.promotion && row.pos <= 2;
-            const isRel = movement.relegation && row.pos >= totalTeams - 1;
-            return (
-              <tr key={row.teamId ?? row.pos}
-                className={`border-b border-gray-50 transition-colors ${
-                  row.isPlayer ? "bg-pitch-50/60" : idx % 2 === 1 ? "bg-gray-50/30" : "hover:bg-gray-50/50"
-                }`}>
-                {/* Position */}
-                <td className="py-3 px-1.5 text-center">
-                  <span className={`font-heading font-[800] text-base tabular-nums ${
-                    row.pos === 1 ? "text-gold-500" : isPromo ? "text-pitch-500" : isRel ? "text-card-red" : "text-muted"
-                  }`}>
-                    {row.pos}
-                  </span>
-                </td>
-                {/* Badge */}
-                <td className="py-3 pl-2 pr-0 w-8" style={{ verticalAlign: "middle" }}>
-                  <BadgePreview primary={row.primaryColor || "#2D5F2D"} secondary={row.secondaryColor || "#FFF"}
-                    pattern={(row.badgePattern as BadgePattern) || "shield"} initials={ini(row.team)} size={24} />
-                </td>
-                {/* Team */}
-                <td className="py-3 px-1.5" style={{ verticalAlign: "middle" }}>
-                  {/* AI klub je odkaz jako každý jiný klub, rozdíl je jen štítek u trenéra. */}
-                  {row.teamId ? (
-                    <Link href={`/tym/${row.teamId}`} className={`font-heading font-bold hover:text-pitch-500 transition-colors ${row.isPlayer ? "text-pitch-600" : ""}`}>
-                      <TeamName name={row.team} isAi={row.isAi === true} />
-                    </Link>
-                  ) : (
-                    <span className="font-heading font-bold"><TeamName name={row.team} isAi={row.isAi === true} /></span>
-                  )}
-                </td>
-                {/* Stats — hidden on mobile */}
-                <td className="py-3 px-1.5 text-center tabular-nums text-muted hidden sm:table-cell">{row.played}</td>
-                <td className="py-3 px-1.5 text-center tabular-nums font-medium hidden sm:table-cell">{row.wins}</td>
-                <td className="py-3 px-1.5 text-center tabular-nums font-medium hidden sm:table-cell">{row.draws}</td>
-                <td className="py-3 px-1.5 text-center tabular-nums font-medium hidden sm:table-cell">{row.losses}</td>
-                <td className="py-3 px-1.5 text-center tabular-nums">{row.gf}:{row.ga}</td>
-                {/* Points */}
-                <td className="py-3 px-1.5 text-center">
-                  <span className="font-heading font-[800] text-xl tabular-nums">{row.points}</span>
-                </td>
-                {/* Form — hidden on mobile */}
-                <td className="py-3 px-1.5 hidden sm:table-cell">
-                  <div className="flex gap-1 justify-center">
-                    {(row.form ?? []).slice(0, 5).map((f, i) => (
-                      <div key={i} className={`w-5 h-5 rounded ${FORM_COLORS[f] ?? "bg-gray-200"} flex items-center justify-center text-white text-micro font-bold`}>
-                        {FORM_LABELS[f] ?? f}
-                      </div>
-                    ))}
-                  </div>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+    <ListCard>
+      <DataTable columns={columns} rows={standings} rowKey={(r) => r.teamId ?? String(r.pos)}
+        rowHref={(r) => (r.teamId ? `/tym/${r.teamId}` : undefined)}
+        rowTone={(r) => ({
+          own: r.isPlayer,
+          bar: movement.promotion && r.pos <= 2 ? "up" : movement.relegation && r.pos >= totalTeams - 1 ? "down" : undefined,
+        })}
+        empty="Tabulka se naplní po prvním odehraném kole." emptyIcon="🏆" />
       {/* Legenda jen pro postup a sestup, které liga opravdu má */}
-      {(movement.promotion || movement.relegation) && (
-        <div className="flex items-center gap-4 px-4 py-2 border-t border-gray-100 text-xs text-muted">
-          {movement.promotion && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-pitch-500" /> Postup</span>}
-          {movement.relegation && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-card-red" /> Sestup</span>}
+      {standings.length > 0 && (movement.promotion || movement.relegation) && (
+        <div className="flex items-center gap-4 px-4 py-2 border-t border-line text-meta text-muted">
+          {movement.promotion && <span className="flex items-center gap-1.5"><span className="w-[3px] h-3 bg-pitch-500" /> Postup</span>}
+          {movement.relegation && <span className="flex items-center gap-1.5"><span className="w-[3px] h-3 bg-card-red" /> Sestup</span>}
         </div>
       )}
-    </div>
+    </ListCard>
   );
 }
 

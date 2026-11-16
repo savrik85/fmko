@@ -53,6 +53,10 @@ Tato pravidla jsou z `CLAUDE.md` a z dřívějších chyb. Porušení znamená v
    `DataTable` s `scroll` (má vlastní vodítko).
 7. **Hlavní text se neořezává.** Jméno hráče, název klubu a titulek nesmí dostat
    `truncate` ani pevné `max-w-[…]`. Díly to řeší samy; nepřidávej to do buněk.
+7a. **Název klubu vždy `<TeamName … wrap />`.** Bez `wrap` má AI klub název na jednom
+    řádku s `truncate` a roztáhne tabulku za okraj karty (karta to ořízne a poslední
+    sloupec zmizí, aniž by stránka přetekla). Po každé tabulce změř
+    `table.getBoundingClientRect().width <= card.getBoundingClientRect().width`.
 8. **Na telefonu nesmí seznam zabrat víc místa než dřív.** Před úpravou a po ní
    změř výšku prvních pěti řádků na šířce 375 px. Když je nová vyšší o víc než
    15 %, zúž obsah druhého řádku, nezvětšuj řádek.
