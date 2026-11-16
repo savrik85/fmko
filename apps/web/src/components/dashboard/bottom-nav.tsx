@@ -42,14 +42,26 @@ function useViewportShortfall(): ViewportShortfall {
         reachesScreenBottom = Math.abs(probe.getBoundingClientRect().height - window.screen.height) <= 2;
         probe.remove();
       }
-      setShortfall({ gap, reachesScreenBottom });
+      setShortfall((prev) =>
+        prev.gap === gap && prev.reachesScreenBottom === reachesScreenBottom ? prev : { gap, reachesScreenBottom });
     };
     measure();
+    // Hned po startu aplikace vrací iOS `lvh` ještě ve výšce okna (812) a na
+    // plných 874 ho opraví až po chvíli, bez události `resize`. Jediné měření
+    // při načtení proto vyšlo záporně a lišta zůstala nahoře. Měří se znovu
+    // několik vteřin po startu a při každém návratu do aplikace.
+    const retries = [250, 500, 1000, 2000, 4000, 8000].map((delay) => window.setTimeout(measure, delay));
+    const onVisible = () => { if (document.visibilityState === "visible") measure(); };
     window.addEventListener("resize", measure);
     window.addEventListener("orientationchange", measure);
+    window.addEventListener("pageshow", measure);
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
+      retries.forEach((id) => window.clearTimeout(id));
       window.removeEventListener("resize", measure);
       window.removeEventListener("orientationchange", measure);
+      window.removeEventListener("pageshow", measure);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, []);
   return shortfall;
