@@ -17,6 +17,15 @@ function measureInset(side: "top" | "bottom"): number {
   return Math.round(height);
 }
 
+function measureUnit(unit: string): number {
+  const probe = document.createElement("div");
+  probe.style.cssText = `position:fixed;visibility:hidden;pointer-events:none;top:0;height:100${unit}`;
+  document.body.appendChild(probe);
+  const height = probe.getBoundingClientRect().height;
+  probe.remove();
+  return Math.round(height);
+}
+
 function rectSummary(selector: string): string {
   const el = document.querySelector(selector);
   if (!el) return "není";
@@ -35,6 +44,7 @@ function collectLines(): string[] {
   return [
     `okno ${window.innerWidth}×${window.innerHeight}  displej ${window.screen.width}×${window.screen.height}`,
     `vv ${vv ? `${Math.round(vv.height)} top ${Math.round(vv.offsetTop)}` : "není"}  html ${document.documentElement.clientHeight}  dpr ${window.devicePixelRatio}`,
+    `vh ${measureUnit("vh")}  lvh ${measureUnit("lvh")}  svh ${measureUnit("svh")}  dvh ${measureUnit("dvh")}`,
     `inset nahoře ${measureInset("top")}  dole ${measureInset("bottom")}`,
     `horní lišta ${rectSummary("header")}`,
     `obsah ${rectSummary("main")}  posun ${main ? Math.round(main.scrollTop) : "?"}`,
@@ -62,7 +72,24 @@ export function ViewportDiagnostics() {
 
   if (!lines || hidden) return null;
 
+  // Zkouška, čím se dá kreslit do pruhu pod spodní lištou (pod hranou okna).
+  const gap = Math.max(0, window.screen.height - window.innerHeight);
+  const probeBase = "fixed pointer-events-none z-[var(--z-error)]";
+
   return (
+    <>
+    {gap > 0 && (
+      <>
+        {/* Růžová: fixed se záporným bottom. */}
+        <div className={probeBase} style={{ left: 0, width: "30%", bottom: -gap, height: gap, background: "#ff2bd6" }} />
+        {/* Žlutá: fixed u spodní hrany, posunutá přes transform. */}
+        <div className={probeBase} style={{ left: "35%", width: "30%", bottom: 0, height: gap, transform: `translateY(${gap}px)`, background: "#ffe100" }} />
+        {/* Tyrkysová: fixed od horní hrany, vysoká 100vh. */}
+        <div className={probeBase} style={{ right: 0, width: 10, top: 0, height: "100vh", background: "#00e5ff" }} />
+        {/* Oranžová: fixed od horní hrany, vysoká jako displej. */}
+        <div className={probeBase} style={{ right: 14, width: 10, top: 0, height: window.screen.height, background: "#ff7a00" }} />
+      </>
+    )}
     <button
       type="button"
       onClick={() => setHidden(true)}
@@ -73,5 +100,6 @@ export function ViewportDiagnostics() {
       ))}
       <span className="block text-white/60 mt-1">{"Diagnostika okrajů. Klepnutím schováš."}</span>
     </button>
+    </>
   );
 }
