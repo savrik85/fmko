@@ -5,41 +5,54 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useMenuBadges } from "@/hooks/use-menu-badges";
 
+interface ViewportShortfall {
+  /** O kolik je okno kratší než displej (0 = sedí). */
+  gap: number;
+  /** Jednotka `lvh` dosáhne až na spodní hranu displeje, takže se pod okno dá kreslit. */
+  reachesScreenBottom: boolean;
+}
+
 /**
- * O kolik je layoutový viewport kratší než displej.
+ * O kolik je okno nainstalované aplikace kratší než displej.
  *
- * Naměřeno na zařízení: `innerHeight` 797, `screen.height` 844. Rozdíl 47 px.
- * `position: fixed; bottom: 0` se ukotví na 797, ale plocha, kterou dokument
- * vybarvuje, sahá až do 844 — pod lištou proto zůstával béžový pruh v barvě
- * `--color-paper`. Že je béžový, a ne bílý, je důkaz, že ho kreslí náš
- * dokument; iOS by tuhle barvu nevymyslel.
+ * iOS 26 s průhledným stavovým řádkem spočítá okno o výšku horního výřezu kratší
+ * (naměřeno 812 proti 874, dřív 797 proti 844), ale nechá ho začínat úplně nahoře.
+ * `position: fixed; bottom: 0` se proto ukotví nad spodní hranou displeje a pod
+ * lištou zbyde prázdný pruh.
  *
- * Lišta se proto posune o ten rozdíl níž (`bottom: -47px`) a stejnou hodnotu
- * dostane jako spodní odsazení, takže popisky zůstanou, kde byly, a zelená
- * se protáhne až ke spodní hraně displeje.
- *
- * Když viewport sedí (innerHeight == screen.height), vrací 0 a nic se nemění.
+ * Zkouška na zařízení (2026-11-17): prvek posunutý pod okno záporným `bottom`,
+ * přes `transform` ani s výškou v pixelech se v tom pruhu nevykreslí. Vykreslí se
+ * jen `fixed` prvek od horní hrany s výškou v `vh`/`lvh`, které mají plných 874.
  */
-function useSchodekViewportu(): number {
-  const [schodek, setSchodek] = useState(0);
+function useViewportShortfall(): ViewportShortfall {
+  const [shortfall, setShortfall] = useState<ViewportShortfall>({ gap: 0, reachesScreenBottom: false });
   useEffect(() => {
-    const zmer = () => {
+    const measure = () => {
       // Jen na výšku — na šířku se rozměry takhle porovnávat nedají.
-      const naVysku = window.innerHeight > window.innerWidth;
-      if (!naVysku || !window.screen?.height) { setSchodek(0); return; }
-      const rozdil = Math.round(window.screen.height - window.innerHeight);
-      // Nad 200 px už to nebude safe-area, ale něco jiného (klávesnice apod.).
-      setSchodek(rozdil > 4 && rozdil < 200 ? rozdil : 0);
+      const portrait = window.innerHeight > window.innerWidth;
+      if (!portrait || !window.screen?.height) { setShortfall({ gap: 0, reachesScreenBottom: false }); return; }
+      const diff = Math.round(window.screen.height - window.innerHeight);
+      // Nad 200 px už to nebude výřez, ale něco jiného (klávesnice apod.).
+      const gap = diff > 4 && diff < 200 ? diff : 0;
+      let reachesScreenBottom = false;
+      if (gap > 0) {
+        const probe = document.createElement("div");
+        probe.style.cssText = "position:fixed;visibility:hidden;pointer-events:none;top:0;height:100lvh";
+        document.body.appendChild(probe);
+        reachesScreenBottom = Math.abs(probe.getBoundingClientRect().height - window.screen.height) <= 2;
+        probe.remove();
+      }
+      setShortfall({ gap, reachesScreenBottom });
     };
-    zmer();
-    window.addEventListener("resize", zmer);
-    window.addEventListener("orientationchange", zmer);
+    measure();
+    window.addEventListener("resize", measure);
+    window.addEventListener("orientationchange", measure);
     return () => {
-      window.removeEventListener("resize", zmer);
-      window.removeEventListener("orientationchange", zmer);
+      window.removeEventListener("resize", measure);
+      window.removeEventListener("orientationchange", measure);
     };
   }, []);
-  return schodek;
+  return shortfall;
 }
 
 /**
@@ -53,22 +66,33 @@ function scrollMainToTop() {
 
 export function BottomNav() {
   const pathname = usePathname();
-  const schodek = useSchodekViewportu();
+  const { gap, reachesScreenBottom } = useViewportShortfall();
+  // Lišta protažená až ke spodní hraně displeje (viz useViewportShortfall).
+  const extended = gap > 0 && reachesScreenBottom;
   const badges = useMenuBadges();
-  const navRef = useRef<HTMLElement | null>(null);
+  const barRef = useRef<HTMLDivElement | null>(null);
 
-  // Skutečná výška lišty pro stránky, které mají sahat až k ní (Telefon). Mění se se
-  // safe-area a schodkem, pevné odsazení `pb-20` v layoutu nechávalo nad lištou mezeru.
+  // Kolik lišta zabírá ze spodku okna, pro stránky, které mají sahat až k ní (Telefon).
+  // U protažené lišty je to míň než její výška: zbytek leží pod hranou okna.
   useEffect(() => {
-    const nav = navRef.current;
-    if (!nav || typeof ResizeObserver === "undefined") return;
+    const bar = barRef.current;
+    if (!bar || typeof ResizeObserver === "undefined") return;
     const root = document.documentElement;
-    const publish = () => root.style.setProperty("--bottom-nav-h", `${nav.offsetHeight}px`);
+    const publish = () => {
+      const rect = bar.getBoundingClientRect();
+      const covered = rect.height > 0 ? Math.max(0, Math.round(window.innerHeight - rect.top)) : 0;
+      root.style.setProperty("--bottom-nav-h", `${covered}px`);
+    };
     publish();
     const observer = new ResizeObserver(publish);
-    observer.observe(nav);
-    return () => { observer.disconnect(); root.style.removeProperty("--bottom-nav-h"); };
-  }, []);
+    observer.observe(bar);
+    window.addEventListener("resize", publish);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", publish);
+      root.style.removeProperty("--bottom-nav-h");
+    };
+  }, [extended]);
 
   const items = [
     { href: "/prehled", label: "Domů", icon: "🏟" },
@@ -81,23 +105,25 @@ export function BottomNav() {
 
   return (
     <nav
-      ref={navRef}
-      className="on-dark fixed bottom-0 left-0 right-0 z-[var(--z-nav)] sm:hidden"
-      style={{
-        background: "var(--color-chrome)",
-        // Lišta zůstává ukotvená na spodku viewportu. Posouvat ji níž
-        // (`bottom: -47px`) nejde — `fixed` prvky se na iOS ořežou na
-        // layoutový viewport, takže se tím jen odřízly popisky. Zelenou pod
-        // hranicí kreslí `body`, které má barvu rámu.
-        bottom: 0,
-        // Když je pod viewportem schodek, leží home indikátor v něm a odsazení
-        // uvnitř lišty by ho rezervovalo podruhé — obsah by plaval vysoko.
-        paddingBottom: schodek ? "0px" : "env(safe-area-inset-bottom, 0px)",
-      }}
+      className={`on-dark fixed left-0 right-0 z-[var(--z-nav)] sm:hidden ${extended ? "pointer-events-none" : ""}`}
+      style={
+        extended
+          // Obal přes celou výšku displeje: jen takhle se dá kreslit pod hranu okna.
+          // Sám je průhledný a nechytá dotyky, lišta sedí u jeho spodku.
+          ? { top: 0, height: "100lvh" }
+          : { bottom: 0 }
+      }
     >
-      {/* Vizuální lišta je obsah + schodek pod viewportem (u tebe 47 px).
-          Při 56 px obsahu vycházela na 103 px a ikony seděly v horní třetině.
-          48 px dá 95 px celkem, což je blízko nativní liště. */}
+      <div
+        ref={barRef}
+        className={extended ? "absolute inset-x-0 bottom-0 pointer-events-auto" : ""}
+        style={{
+          background: "var(--color-chrome)",
+          // Místo pro systémovou čárku. Když je okno kratší a lišta protáhnout
+          // nejde, leží čárka až pod oknem a odsazení by ji rezervovalo podruhé.
+          paddingBottom: gap > 0 && !extended ? "0px" : "env(safe-area-inset-bottom, 0px)",
+        }}
+      >
       <div className="flex justify-around items-center h-12 px-2">
         {items.map((item) => {
           // Větev pro položku „Kádr" tu byla i poté, co ji z lišty vyhodili —
@@ -132,6 +158,7 @@ export function BottomNav() {
             </Link>
           );
         })}
+      </div>
       </div>
     </nav>
   );
