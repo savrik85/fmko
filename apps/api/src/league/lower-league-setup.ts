@@ -13,6 +13,10 @@
  *  - bez postupu a sestupu (`promotion_enabled = 0` u III. třídy i přeboru),
  *  - narovnání `below-league` áčka i U21.
  *
+ * IV. třída (`level: "iv_trida"`) vzniká stejně pod III. třídou: úterý a sobota, doplňkové
+ * čtvrtky a podle potřeby dohrávková neděle (čtyři kola týdně), aby i pozdě založená liga
+ * odehrála celé dvoukolo. Síla klubů se rovná pod III. třídu, ne pod přebor.
+ *
  * Opakované volání po přerušení (limit dotazů Workeru) dokončí rozdělanou ligu: co už je
  * hotové, přeskočí. Nanečisto (`dryRun`) nic nezapíše a vrátí obce, jména klubů a rozpis.
  */
@@ -26,7 +30,7 @@ import { createRng } from "../generators/rng";
 import { logger } from "../lib/logger";
 import { generateRemainingSeasonCalendar, type CalendarEntry } from "../season/calendar";
 import { generateAITeams } from "./ai-teams";
-import { districtLeagueName, LOWER_LEAGUE_MIN_SIZE, LOWER_LEAGUE_SIZE } from "./district-leagues";
+import { districtLeagueName, LOWER_LEAGUE_MIN_SIZE, LOWER_LEAGUE_SIZE, type LowerLeagueLevel } from "./district-leagues";
 import { insertAITeamsIntoDB } from "./insert-ai-teams";
 import type { LeagueSetup } from "./league-generator";
 import { generateSchedule, totalRounds } from "./schedule";
@@ -38,6 +42,23 @@ const M = "lower-league-setup";
 export const LOWER_LEAGUE_WEEKDAYS = [3, 0];
 /** Den, kterým se doplní kola, která se do středy a neděle nevejdou. */
 export const LOWER_LEAGUE_EXTRA_WEEKDAY = 5;
+
+interface LowerLeagueSchedule {
+  weekdays: number[];
+  extraWeekday: number;
+  catchUpWeekday?: number;
+}
+
+/** Hrací dny podle úrovně. IV. třída: úterý a sobota, doplňkový čtvrtek, dohrávková neděle. */
+const LEVEL_SCHEDULE: Record<LowerLeagueLevel, LowerLeagueSchedule> = {
+  okresni_soutez: { weekdays: LOWER_LEAGUE_WEEKDAYS, extraWeekday: LOWER_LEAGUE_EXTRA_WEEKDAY },
+  iv_trida: { weekdays: [2, 6], extraWeekday: 4, catchUpWeekday: 0 },
+};
+
+export function isLowerLeagueLevel(value: string): value is LowerLeagueLevel {
+  return Object.hasOwn(LEVEL_SCHEDULE, value);
+}
+
 /** První kolo nejdřív tolik dní po založení. */
 export const FIRST_ROUND_DELAY_DAYS = 2;
 const BATCH_SIZE = 80;
@@ -77,6 +98,8 @@ export interface LowerLeagueResult {
     /** Nejpozdější možné poslední kolo (poslední kolo přeboru téže sezóny). */
     latestAllowed: string;
     fridayRounds: number;
+    /** Kola mimo hrací dny ligy (doplňkový a dohrávkový den). */
+    extraRounds: number;
     entries: Array<{ round: number; scheduledAt: string; matchDay: string }>;
   };
   u21Matches: number;
@@ -85,16 +108,28 @@ export interface LowerLeagueResult {
   warnings: string[];
 }
 
-/** Obce okresu bez klubu (žádný tým, ani U21), bez okresního a velkého města, od největší. */
-export async function pickLowerLeagueVillages(db: D1Database, district: string, count = LOWER_LEAGUE_SIZE): Promise<string[]> {
+/**
+ * Obce okresu bez klubu (žádný tým, ani U21), bez okresního a velkého města, od největší.
+ * `include` jsou obce, které v lize být mají, i když by se podle velikosti nedostaly
+ * (zaberou místo nejmenším z výběru). Obec mimo okres nebo s klubem skončí chybou.
+ */
+export async function pickLowerLeagueVillages(
+  db: D1Database, district: string, count = LOWER_LEAGUE_SIZE, include: readonly string[] = [],
+): Promise<string[]> {
   const rows = await db.prepare(
     `SELECT v.id FROM villages v
       WHERE v.district = ? AND v.size NOT IN ('small_city', 'city')
         AND NOT EXISTS (SELECT 1 FROM teams t WHERE t.village_id = v.id)
-      ORDER BY v.population DESC, v.name
-      LIMIT ?`,
-  ).bind(district, count).all<{ id: string }>();
-  return rows.results.map((r) => r.id);
+      ORDER BY v.population DESC, v.name`,
+  ).bind(district).all<{ id: string }>();
+  const free = rows.results.map((r) => r.id);
+  const forced = [...new Set(include)];
+  const unavailable = forced.filter((id) => !free.includes(id));
+  if (unavailable.length > 0) {
+    throw new LowerLeagueError(`Obec ${unavailable.join(", ")} není volná obec okresu ${district} (jiný okres, město, nebo už má klub).`);
+  }
+  if (forced.length > count) throw new LowerLeagueError(`Vynucených obcí je ${forced.length}, liga má jen ${count} míst.`);
+  return [...forced, ...free.filter((id) => !forced.includes(id)).slice(0, count - forced.length)];
 }
 
 async function loadVillages(db: D1Database, ids: readonly string[]): Promise<VillageRow[]> {
@@ -123,9 +158,12 @@ async function runInBatches(db: D1Database, stmts: D1PreparedStatement[], label:
  */
 export async function createLowerLeague(
   db: D1Database,
-  opts: { district: string; seed: number; dryRun: boolean },
+  opts: { district: string; seed: number; dryRun: boolean; level?: LowerLeagueLevel; includeVillageIds?: readonly string[] },
 ): Promise<LowerLeagueResult> {
   const { district, seed, dryRun } = opts;
+  const level: LowerLeagueLevel = opts.level ?? "okresni_soutez";
+  const schedule = LEVEL_SCHEDULE[level];
+  const label = level === "iv_trida" ? "IV. třída" : "III. třída";
   const warnings: string[] = [];
 
   const season = await db.prepare("SELECT id, number FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1")
@@ -148,28 +186,40 @@ export async function createLowerLeague(
       WHERE sc.league_id = ? AND sc.season_number = ?
         AND EXISTS (SELECT 1 FROM matches m WHERE m.calendar_id = sc.id)`,
   ).bind(prebor.id, season.number).first<{ last: string | null }>();
-  if (!preborLast?.last) throw new LowerLeagueError(`${prebor.name} nemá v sezóně ${season.number} rozpis, III. třída by neměla do kdy hrát.`);
+  if (!preborLast?.last) throw new LowerLeagueError(`${prebor.name} nemá v sezóně ${season.number} rozpis, ${label} by neměla do kdy hrát.`);
   const gameDate = preborDates?.game_date ?? new Date().toISOString();
+
+  // IV. třída stojí pod III. třídou: bez ní nemá smysl a její lidské kluby jsou vzor síly.
+  const upper = level === "iv_trida"
+    ? await db.prepare(
+      `SELECT id, name FROM leagues
+        WHERE district = ? AND season_id = ? AND level = 'okresni_soutez'
+          AND COALESCE(league_type, 'senior') = 'senior' AND status = 'active'
+        LIMIT 1`,
+    ).bind(district, season.id).first<{ id: string; name: string }>()
+    : null;
+  if (level === "iv_trida" && !upper) throw new LowerLeagueError(`V okrese ${district} se nehraje III. třída, IV. třída vzniká až pod ní.`);
 
   const existing = await db.prepare(
     `SELECT id, name, match_weekdays FROM leagues
-      WHERE district = ? AND season_id = ? AND level = 'okresni_soutez' AND COALESCE(league_type, 'senior') = 'senior'
+      WHERE district = ? AND season_id = ? AND level = ? AND COALESCE(league_type, 'senior') = 'senior'
       LIMIT 1`,
-  ).bind(district, season.id).first<{ id: string; name: string; match_weekdays: string | null }>();
-  // Dokončit jde jen ligu, kterou založila tahle funkce (středa a neděle). Automatickou
+  ).bind(district, season.id, level).first<{ id: string; name: string; match_weekdays: string | null }>();
+  // Dokončit jde jen ligu, kterou založila tahle funkce (pozná se podle hracích dnů). Automatickou
   // III. třídu z registrace nepřepisujeme.
-  if (existing && existing.match_weekdays !== LOWER_LEAGUE_WEEKDAYS.join(",")) {
+  if (existing && existing.match_weekdays !== schedule.weekdays.join(",")) {
     throw new LowerLeagueError(`${existing.name} už v okrese existuje (vznikla registrací), znovu ji nezakládám.`);
   }
-  const name = existing?.name ?? districtLeagueName(district, "okresni_soutez");
+  const name = existing?.name ?? districtLeagueName(district, level);
 
   const existingTeams = existing
     ? (await db.prepare("SELECT id, name, village_id FROM teams WHERE league_id = ? ORDER BY name").bind(existing.id)
       .all<{ id: string; name: string; village_id: string }>()).results
     : [];
-  const villageIds = existingTeams.length > 0 ? existingTeams.map((t) => t.village_id) : await pickLowerLeagueVillages(db, district);
+  const villageIds = existingTeams.length > 0 ? existingTeams.map((t) => t.village_id)
+    : await pickLowerLeagueVillages(db, district, LOWER_LEAGUE_SIZE, opts.includeVillageIds ?? []);
   if (villageIds.length < LOWER_LEAGUE_MIN_SIZE) {
-    throw new LowerLeagueError(`Na III. třídu je v okrese ${district} jen ${villageIds.length} obcí bez klubu (potřeba aspoň ${LOWER_LEAGUE_MIN_SIZE}).`);
+    throw new LowerLeagueError(`Na soutěž ${name} je v okrese ${district} jen ${villageIds.length} obcí bez klubu (potřeba aspoň ${LOWER_LEAGUE_MIN_SIZE}).`);
   }
   if (villageIds.length < LOWER_LEAGUE_SIZE) warnings.push(`Obcí bez klubu je jen ${villageIds.length}, liga bude mít ${villageIds.length} klubů.`);
   const villages = await loadVillages(db, villageIds);
@@ -200,8 +250,9 @@ export async function createLowerLeague(
         from: new Date(new Date(gameDate).getTime() + FIRST_ROUND_DELAY_DAYS * 86_400_000),
         lastDate: new Date(preborLast.last!),
         rounds: totalRounds(villages.length),
-        weekdays: LOWER_LEAGUE_WEEKDAYS,
-        extraWeekday: LOWER_LEAGUE_EXTRA_WEEKDAY,
+        weekdays: schedule.weekdays,
+        extraWeekday: schedule.extraWeekday,
+        catchUpWeekday: schedule.catchUpWeekday,
       });
     } catch (e) {
       throw new LowerLeagueError(e instanceof Error ? e.message : String(e));
@@ -215,7 +266,7 @@ export async function createLowerLeague(
     teams: existingTeams.length > 0
       ? existingTeams.map((t) => ({ teamId: t.id, name: t.name, villageId: t.village_id }))
       : aiTeams.map((t) => ({ teamId: null, name: t.teamName, villageId: t.villageCode })),
-    calendar: { rounds: 0, firstRoundAt: null, lastRoundAt: null, latestAllowed: preborLast.last, fridayRounds: 0, entries: [] },
+    calendar: { rounds: 0, firstRoundAt: null, lastRoundAt: null, latestAllowed: preborLast.last, fridayRounds: 0, extraRounds: 0, entries: [] },
     u21Matches: 0,
     promotionDisabled: [],
     leveling: { senior: null, u21: null },
@@ -229,6 +280,7 @@ export async function createLowerLeague(
       lastRoundAt: sorted[sorted.length - 1]?.scheduledAt ?? null,
       latestAllowed: preborLast.last!,
       fridayRounds: sorted.filter((e) => e.matchDay === "friday").length,
+      extraRounds: sorted.filter((e) => !schedule.weekdays.includes(new Date(e.scheduledAt).getUTCDay())).length,
       entries: sorted.map((e) => ({ round: e.gameWeek, scheduledAt: e.scheduledAt, matchDay: e.matchDay })),
     };
   };
@@ -245,8 +297,8 @@ export async function createLowerLeague(
     leagueId = crypto.randomUUID();
     await db.prepare(
       `INSERT INTO leagues (id, season_id, district, name, level, status, league_type, promotion_enabled, match_weekdays)
-       VALUES (?, ?, ?, ?, 'okresni_soutez', 'active', 'senior', 0, ?)`,
-    ).bind(leagueId, season.id, district, name, LOWER_LEAGUE_WEEKDAYS.join(",")).run();
+       VALUES (?, ?, ?, ?, ?, 'active', 'senior', 0, ?)`,
+    ).bind(leagueId, season.id, district, name, level, schedule.weekdays.join(",")).run();
     result.leagueId = leagueId;
     logger.info({ module: M }, `${name}: liga založena (${leagueId})`);
   }
@@ -316,13 +368,17 @@ export async function createLowerLeague(
   result.u21Matches = (await db.prepare("SELECT COUNT(*) AS n FROM matches WHERE league_id = ?").bind(u21.u21LeagueId).first<{ n: number }>())?.n ?? 0;
 
   // Bez postupu a sestupu mezi přeborem a III. třídou (district-promotion, sliby sponzorům).
-  await db.prepare("UPDATE leagues SET promotion_enabled = 0 WHERE id IN (?, ?)").bind(leagueId, prebor.id).run();
-  result.promotionDisabled = [leagueId, prebor.id];
+  // IV. třída do postupů nepatří vůbec, nastavení přeboru a III. třídy nechává být.
+  result.promotionDisabled = level === "iv_trida" ? [leagueId] : [leagueId, prebor.id];
+  await db.prepare(`UPDATE leagues SET promotion_enabled = 0 WHERE id IN (${result.promotionDisabled.map(() => "?").join(", ")})`)
+    .bind(...result.promotionDisabled).run();
 
-  // Narovnání: síla mezi nejslabším klubem přeboru minus 12 a nejslabším klubem přeboru.
-  const seniorPlan = await planLeveling(db, { leagueId, mode: "below-league", seed });
+  // Narovnání: síla mezi nejslabším klubem vzoru minus 12 a nejslabším klubem vzoru.
+  // Vzor je přebor okresu, u IV. třídy III. třída.
+  const referenceLeagueId = upper?.id;
+  const seniorPlan = await planLeveling(db, { leagueId, mode: "below-league", seed, referenceLeagueId });
   result.leveling.senior = { plan: seniorPlan, result: await applyLeveling(db, seniorPlan) };
-  const u21Plan = await planLeveling(db, { leagueId: u21.u21LeagueId, mode: "below-league", seed: (seed + 1) >>> 0 });
+  const u21Plan = await planLeveling(db, { leagueId: u21.u21LeagueId, mode: "below-league", seed: (seed + 1) >>> 0, referenceLeagueId });
   result.leveling.u21 = { plan: u21Plan, result: await applyLeveling(db, u21Plan) };
   for (const w of [...seniorPlan.warnings, ...u21Plan.warnings]) warnings.push(w);
 

@@ -29,6 +29,7 @@ export interface SeasonRewardResult {
 
 /** Násobič odměny dle úrovně soutěže (vyšší soutěž = vyšší příjmy). */
 const LEVEL_MULT: Record<string, number> = {
+  iv_trida: 0.7,
   okresni_soutez: 0.85,
   okresni_prebor: 1.0,
   ib_trida: 1.2,

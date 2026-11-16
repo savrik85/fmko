@@ -989,7 +989,8 @@ async function loadLeague(db: D1Database, leagueId: string): Promise<LeagueRow |
 /**
  * Ligy, jejichž aktivní lidské kluby tvoří vzor. `referenceLeagueId` u režimu league-humans bere
  * lidi z jiné ligy: v lize s jediným lidským klubem by všechny AI kluby vyšly stejně silné
- * (ČB s Řeznictvím), se vzorem z Prahy dostanou stejný rozptyl jako lidé tam.
+ * (ČB s Řeznictvím), se vzorem z Prahy dostanou stejný rozptyl jako lidé tam. U below-league
+ * nahradí přebor okresu (IV. třída se rovná pod III. třídu).
  */
 async function referenceLeagueIds(db: D1Database, league: LeagueRow, mode: LevelingMode, referenceLeagueId?: string): Promise<string[]> {
   if (mode === "league-humans") return [referenceLeagueId ?? league.id];
@@ -1000,12 +1001,13 @@ async function referenceLeagueIds(db: D1Database, league: LeagueRow, mode: Level
     ).bind(league.league_type, league.season_id).all<{ id: string }>();
     return rows.results.map((r) => r.id);
   }
-  // below-league: přebor téhož okresu (U21 liga bere U21 ligu přeboru).
+  // below-league: přebor téhož okresu (U21 liga bere U21 ligu přeboru). IV. třída si jako vzor
+  // předá III. třídu (`referenceLeagueId` = seniorská liga, U21 si vezme její U21).
   const senior = league.league_type === "u21" && league.parent_league_id
     ? await loadLeague(db, league.parent_league_id)
     : league;
   if (!senior) return [];
-  const prebor = await db.prepare(
+  const prebor = referenceLeagueId ? { id: referenceLeagueId } : await db.prepare(
     `SELECT id FROM leagues WHERE district = ? AND COALESCE(league_type, 'senior') = 'senior' AND level = 'okresni_prebor'
         AND season_id = ? AND status = 'active' AND id <> ? LIMIT 1`,
   ).bind(senior.district, senior.season_id, senior.id).first<{ id: string }>();
@@ -1436,7 +1438,10 @@ export interface PlanLevelingOptions {
   teamIds?: string[];
   /** Od kdy se počítá 30 dní aktivity vzoru (testy). */
   now?: Date;
-  /** Režim league-humans: vzorem jsou lidé z této ligy místo narovnávané (viz referenceLeagueIds). */
+  /**
+   * Vzorem jsou lidé z této ligy: u league-humans místo narovnávané ligy, u below-league místo
+   * přeboru okresu (vždy seniorská liga, U21 si vezme její U21). Viz referenceLeagueIds.
+   */
   referenceLeagueId?: string;
 }
 

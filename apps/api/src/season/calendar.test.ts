@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { generateRemainingSeasonCalendar, generateSeasonCalendar, isSeniorHolidayBlocked, MAX_ROUNDS_PER_WEEK, parseMatchWeekdays } from "./calendar";
+import { generateRemainingSeasonCalendar, generateSeasonCalendar, CATCH_UP_ROUNDS_PER_WEEK, isSeniorHolidayBlocked, MAX_ROUNDS_PER_WEEK, parseMatchWeekdays } from "./calendar";
 import { totalRounds } from "../league/schedule";
 
 describe("rozpis sezóny", () => {
@@ -106,6 +106,37 @@ describe("rozpis na zbytek sezóny (III. třída)", () => {
     // Kola jdou po sobě v čase.
     const times = entries.map((e) => e.scheduledAt);
     expect([...times].sort()).toEqual(times);
+  });
+
+  it("dohrávkový den přidá čtvrté kolo týdně, jen kolik je potřeba", () => {
+    // IV. třída od 20. 11.: úterý, sobota a čtvrtky dají 24 termínů, dvě kola dohraje neděle.
+    const late = { ...base, weekdays: [2, 6], extraWeekday: 4, from: new Date("2026-11-20T00:00:00.000Z") };
+    expect(() => generateRemainingSeasonCalendar(late)).toThrow(/jen 24/);
+
+    const entries = generateRemainingSeasonCalendar({ ...late, catchUpWeekday: 0 });
+    expect(entries).toHaveLength(26);
+    const sundays = entries.filter((e) => e.matchDay === "sunday").map((e) => e.scheduledAt.slice(0, 10));
+    expect(sundays).toEqual(["2027-01-17", "2027-01-24"]);
+    const perWeek = new Map<string, number>();
+    for (const e of entries) {
+      const d = new Date(e.scheduledAt);
+      expect(isSeniorHolidayBlocked(d), e.scheduledAt).toBe(false);
+      const monday = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - ((d.getUTCDay() + 6) % 7)));
+      const key = monday.toISOString().slice(0, 10);
+      perWeek.set(key, (perWeek.get(key) ?? 0) + 1);
+    }
+    expect(Math.max(...perWeek.values())).toBe(CATCH_UP_ROUNDS_PER_WEEK);
+    expect([...perWeek.values()].filter((n) => n === CATCH_UP_ROUNDS_PER_WEEK)).toHaveLength(2);
+    const times = entries.map((e) => e.scheduledAt);
+    expect([...times].sort()).toEqual(times);
+    expect(times[times.length - 1] <= base.lastDate.toISOString()).toBe(true);
+  });
+
+  it("dohrávkový den se nepoužije, když stačí hrací a doplňkové dny", () => {
+    const entries = generateRemainingSeasonCalendar({
+      ...base, weekdays: [2, 6], extraWeekday: 4, catchUpWeekday: 0, rounds: 22, from: new Date("2026-11-20T00:00:00.000Z"),
+    });
+    expect(entries.filter((e) => e.matchDay === "sunday")).toHaveLength(0);
   });
 
   it("málo dní: výjimka, liga nesmí zdržet konec sezóny", () => {

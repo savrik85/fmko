@@ -1,8 +1,9 @@
 /**
  * Seniorské soutěže jednoho okresu: kam se nový klub zařadí a jestli je okres plný.
  *
- * Okres může mít dvě soutěže nad sebou: okresní přebor (nahoře) a pod ním
- * okresní soutěž, která se hráčům ukazuje jako „III. třída <okres>“. Tahle funkce
+ * Okres může mít soutěže nad sebou: okresní přebor (nahoře), pod ním okresní soutěž,
+ * která se hráčům ukazuje jako „III. třída <okres>“, a pod ní ručně založenou
+ * „IV. třídu <okres>“ (`iv_trida`, vzniká jen přes admin, registrace ji sama nezaloží). Tahle funkce
  * je jediné místo s pravidlem pro zakládání týmu, používá ho `POST /api/teams`
  * i výpis plných okresů pro onboarding (`/api/villages/stats`).
  *
@@ -21,6 +22,8 @@ import { overwritableAiTeamSql } from "../ai-clubs/owner-activity";
 import { logger } from "../lib/logger";
 
 export type DistrictLeagueLevel = "okresni_prebor" | "okresni_soutez";
+/** Soutěže pod přeborem, které se zakládají ručně s AI kluby (`lower-league-setup.ts`). */
+export type LowerLeagueLevel = "okresni_soutez" | "iv_trida";
 
 /** Pořadí úrovní shora dolů. Vyšší číslo = vyšší soutěž. */
 export const LEVEL_RANK: Record<string, number> = {
@@ -29,6 +32,7 @@ export const LEVEL_RANK: Record<string, number> = {
   ib_trida: 3,
   okresni_prebor: 2,
   okresni_soutez: 1,
+  iv_trida: 0,
 };
 
 export const LOWER_LEAGUE_SIZE = 14;
@@ -54,7 +58,8 @@ export type DistrictSlot =
   | { kind: "full"; message: string };
 
 /** Jméno ligy podle úrovně. Praha má vlastní názvosloví přeboru. */
-export function districtLeagueName(district: string, level: DistrictLeagueLevel): string {
+export function districtLeagueName(district: string, level: DistrictLeagueLevel | LowerLeagueLevel): string {
+  if (level === "iv_trida") return `IV. třída ${district}`;
   if (level === "okresni_soutez") return `III. třída ${district}`;
   return district === "Praha" ? "Přebor Prahy" : `Okresní přebor ${district}`;
 }
