@@ -536,7 +536,7 @@ export default function MatchDetailPage() {
                 <span className="font-heading font-[800] text-3xl sm:text-4xl tabular-nums text-pitch-700">
                   {mvp.rating.toFixed(1)}
                 </span>
-                <span className="text-micro uppercase tracking-wide font-heading font-bold text-muted">rating</span>
+                <span className="text-micro uppercase tracking-wide font-heading font-bold text-muted">hodnocení</span>
               </div>
             </div>
           </div>
@@ -730,7 +730,7 @@ export default function MatchDetailPage() {
                               </span>
                             )}
                           </span>
-                          <div className="shrink-0 w-12 h-1.5 rounded-full bg-gray-100 overflow-hidden hidden sm:block" title={matchRating != null ? `Rating ${matchRating.toFixed(1)}/10` : "Bez ratingu"}>
+                          <div className="shrink-0 w-12 h-1.5 rounded-full bg-gray-100 overflow-hidden hidden sm:block" title={matchRating != null ? `Hodnocení ${matchRating.toFixed(1)}/10` : "Bez hodnocení"}>
                             <div className="h-full rounded-full transition-all" style={{ width: `${barPct}%`, backgroundColor: barColor }} />
                           </div>
                           <span className={`shrink-0 px-2 py-0.5 rounded-control text-xs font-heading font-bold tabular-nums ${ratingColor}`} title="Hodnocení hráče v zápase">{matchRating != null ? matchRating.toFixed(1) : "-"}</span>

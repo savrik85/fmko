@@ -4,7 +4,8 @@ import { HeroBackdrop } from "@/components/ui/hero-backdrop";
 import { useState } from "react";
 import Link from "next/link";
 import { pocet } from "@/lib/referee-info";
-import { bestTextOn, isLightColor, isNeutralExtreme } from "@/lib/team-color";
+import { isLightColor, isNeutralExtreme } from "@/lib/team-color";
+import { HeroStat, HeroStats, heroTone } from "@/components/ui/hero-kit";
 import { SectionLabel } from "@/components/ui";
 import {
   ClubCrest, FormChip, PRIMARY_BUTTON, SECONDARY_BUTTON, TeamLink, dayShort, formatCZK, venueText,
@@ -120,10 +121,7 @@ export function FriendlyRecord({ data, onChallenge }: { data: FriendliesData; on
   const r = data.record;
   const o = r.overall;
   const color = data.me?.crest.primary ?? "#2D5F2D";
-  const light = bestTextOn(color) === "dark";
-  const txt = light ? "text-gray-900" : "text-white";
-  const txtMuted = light ? "text-gray-600" : "text-white/70";
-  const boxBg = light ? "bg-black/5" : "bg-white/10";
+  const tone = heroTone(color);
   const meId = data.me?.id;
   const shownTable = data.table.slice(0, 10);
   const mineOutside = data.table.find((t) => t.teamId === meId && t.pos > 10);
@@ -132,26 +130,25 @@ export function FriendlyRecord({ data, onChallenge }: { data: FriendliesData; on
     <div className="space-y-5">
       {/* Karta v barvě klubu: kde stojím a co se teď děje */}
       <div className="card p-0 overflow-hidden">
-        <div className="hero-gradient hero-detail px-4 sm:px-5 py-4 sm:py-5" style={{ backgroundColor: color }}>
+        <div className="hero-gradient hero-detail px-4 sm:px-5 py-3 sm:py-5" style={{ backgroundColor: color }}>
         <HeroBackdrop primary={color} secondary={data.me?.crest.secondary} pattern={data.me?.crest.pattern ?? null} />
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-x-3 sm:gap-x-4 gap-y-2 sm:gap-y-3">
             <ClubCrest crest={data.me?.crest} size={52} />
-            <div className="min-w-0">
-              <div className={`font-heading font-extrabold text-xl leading-tight ${txt}`}>Přáteláky {data.me?.name ?? ""}</div>
-              <div className={`text-sm mt-0.5 ${txtMuted}`}>{streakSentence(r)}</div>
+            <div className="flex-1 min-w-0">
+              <div className={`font-heading font-extrabold text-lg sm:text-2xl leading-tight ${tone.text}`}>Přáteláky {data.me?.name ?? ""}</div>
+              <div className={`text-sm mt-0.5 ${tone.muted}`}>{streakSentence(r)}</div>
             </div>
-          </div>
-          <div className="grid grid-cols-3 gap-2 mt-4">
-            {[
-              { value: o.won, label: o.won === 1 ? "výhra" : o.won >= 2 && o.won <= 4 ? "výhry" : "výher" },
-              { value: o.drawn, label: o.drawn === 1 ? "remíza" : o.drawn >= 2 && o.drawn <= 4 ? "remízy" : "remíz" },
-              { value: o.lost, label: o.lost === 1 ? "prohra" : o.lost >= 2 && o.lost <= 4 ? "prohry" : "proher" },
-            ].map((x) => (
-              <div key={x.label} className={`${boxBg} rounded-soft py-2.5 text-center`}>
-                <div className={`font-heading font-[800] text-3xl leading-none tabular-nums ${txt}`}>{x.value}</div>
-                <div className={`text-sm mt-1 ${txtMuted}`}>{x.label}</div>
-              </div>
-            ))}
+            <HeroStats tone={tone}>
+              {[
+                { value: o.won, label: o.won === 1 ? "výhra" : o.won >= 2 && o.won <= 4 ? "výhry" : "výher" },
+                { value: o.drawn, label: o.drawn === 1 ? "remíza" : o.drawn >= 2 && o.drawn <= 4 ? "remízy" : "remíz" },
+                { value: o.lost, label: o.lost === 1 ? "prohra" : o.lost >= 2 && o.lost <= 4 ? "prohry" : "proher" },
+              ].map((x) => (
+                <HeroStat key={x.label} tone={tone} label={x.label}>
+                  <span className="font-heading font-extrabold text-xl sm:text-3xl tabular-nums leading-none">{x.value}</span>
+                </HeroStat>
+              ))}
+            </HeroStats>
           </div>
         </div>
         {o.played > 0 && (

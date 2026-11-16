@@ -115,7 +115,7 @@ export default function LoanReportPage() {
               <PositionBadge position={data.position as "GK" | "DEF" | "MID" | "FWD"} />
               <span>{data.age} let</span>
               <span>·</span>
-              <span>rating <span className="font-heading font-bold text-ink">{ratingNow}</span></span>
+              <span>hodnocení <span className="font-heading font-bold text-ink">{ratingNow}</span></span>
               {data.ratingChange != null && data.ratingChange !== 0 && <Change value={data.ratingChange} />}
             </div>
           </div>
@@ -224,7 +224,7 @@ export default function LoanReportPage() {
       <div className="card p-4 sm:p-5">
         <SectionLabel>Jak se zlepšuje</SectionLabel>
         <p className="text-sm">
-          Rating na začátku <span className="font-heading font-bold tabular-nums">{data.development.startRating ?? "–"}</span>,
+          Hodnocení na začátku <span className="font-heading font-bold tabular-nums">{data.development.startRating ?? "–"}</span>,
           teď <span className="font-heading font-bold tabular-nums">{ratingNow}</span>
           {data.ratingChange != null && <> (<Change value={data.ratingChange} />)</>}.
         </p>

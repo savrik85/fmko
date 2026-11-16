@@ -33,7 +33,7 @@ const COLUMNS: Array<{ key: SortKey; label: string; tip?: string; attrKey?: Attr
   { key: "name", label: "Jméno", tip: "Jméno hráče" },
   { key: "pos", label: "Poz", tip: "Pozice" },
   { key: "age", label: "Věk", attrKey: "age" },
-  { key: "rat", label: "Rat", attrKey: "rat" },
+  { key: "rat", label: "Hod", attrKey: "rat" },
   { key: "pot", label: "Pot", tip: "Potenciál, kam hráč reálně dojde, než ho dožene věk. Odhad skauta, bez skauta se nezobrazí." },
   { key: "spd", label: "Rch", attrKey: "spd", skill: "speed" },
   { key: "tec", label: "Tch", attrKey: "tec", skill: "technique" },

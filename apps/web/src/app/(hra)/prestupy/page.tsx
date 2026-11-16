@@ -746,7 +746,7 @@ const POS_PILLS: Array<{ value: string; label: string }> = [
 ];
 
 const SORT_OPTIONS: Array<{ value: FASortKey; label: string }> = [
-  { value: "rating", label: "Rating" },
+  { value: "rating", label: "Hodnocení" },
   { value: "wage", label: "Plat" },
   { value: "age", label: "Věk" },
   { value: "distance", label: "Vzdálenost" },
@@ -1309,7 +1309,7 @@ export default function TransfersPage() {
   const signFreeAgent = async (fa: FreeAgent) => {
     const ok = await confirm({
       title: `Podepsat ${fa.firstName} ${fa.lastName}?`,
-      description: `${fa.position}, ${fa.age} let, rating ${fa.overallRating} ${fa.occupation}`,
+      description: `${fa.position}, ${fa.age} let, hodnocení ${fa.overallRating} ${fa.occupation}`,
       details: [
         { label: "Mzda", value: `${formatCZK(fa.weeklyWage)}/týd`, color: "text-ink" },
         { label: "Registrace", value: `-${formatCZK(500)}`, color: "text-card-red" },
@@ -1649,7 +1649,7 @@ export default function TransfersPage() {
 
               <div className="card px-3 py-2 space-y-1.5">
                 <FiltrRadek
-                  popisek="Rating"
+                  popisek="Hodnocení"
                   volby={[
                     { k: "0", l: "Vše" }, { k: "30", l: "30+" }, { k: "50", l: "50+" },
                     { k: "60", l: "60+" }, { k: "70", l: "70+" },
@@ -1723,7 +1723,7 @@ export default function TransfersPage() {
                   <div>
                     <span className="block text-micro text-muted font-heading font-bold uppercase tracking-wide mb-1.5">Řazení</span>
                     <select value={searchSort} onChange={(e) => setSearchSort(e.target.value)} className="select w-full">
-                      <option value="rating">Rating (nejlepší)</option>
+                      <option value="rating">Hodnocení (nejlepší)</option>
                       <option value="age">Věk (nejmladší)</option>
                       <option value="wage">Plat (nejnižší)</option>
                       <option value="name">Jméno (A–Z)</option>
@@ -1843,7 +1843,7 @@ export default function TransfersPage() {
 
               {/* Rating */}
               <div>
-                <label className="text-xs font-heading uppercase text-muted mb-1.5 block">Rating</label>
+                <label className="text-xs font-heading uppercase text-muted mb-1.5 block">Hodnocení</label>
                 <div className="flex items-center gap-2">
                   <input
                     type="number" min={0} max={99} placeholder="Min"
@@ -2790,7 +2790,7 @@ const SORT_COLS: Array<{ key: SortKey; label: string; short: string }> = [
   { key: "name", label: "Jméno", short: "Jméno" },
   { key: "position", label: "Pozice", short: "Poz" },
   { key: "age", label: "Věk", short: "Věk" },
-  { key: "rating", label: "Rating", short: "Rat" },
+  { key: "rating", label: "Hodnocení", short: "Hod" },
   { key: "speed", label: "Rychlost", short: "Rch" },
   { key: "technique", label: "Technika", short: "Tch" },
   { key: "shooting", label: "Střelba", short: "Stř" },
@@ -2843,7 +2843,7 @@ function SquadTransferTable({ players, myListings, teamId, confirm, setPriceDial
     setChoice(null);
     setPriceDialog({
       title: `Vystavit ${p.first_name} ${p.last_name} na trh`,
-      description: `${p.position}, ${p.age} let, rating ${p.overall_rating}`,
+      description: `${p.position}, ${p.age} let, hodnocení ${p.overall_rating}`,
       defaultPrice: marketValue(p.overall_rating ?? 50, p.age ?? 27, p.position),
       listing: true,
       onConfirm: async (price: number, _terms: TermsValue, revealPotential: boolean) => {

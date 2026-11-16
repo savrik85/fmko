@@ -42,7 +42,7 @@ export function SquadScatterWidget({ data }: WidgetProps) {
             : PRIMARY,
         }))}
         xLabel="věk"
-        yLabel="rating"
+        yLabel="hodnocení"
         xDivider={HRANICE_VEKU}
         yDivider={hraniceRatingu}
         quadrants={{
@@ -51,10 +51,10 @@ export function SquadScatterWidget({ data }: WidgetProps) {
           bottomLeft: "vychovat",
           bottomRight: "na odchod",
         }}
-        formatPoint={(p) => `${p.label} · ${p.x} let · rating ${p.y}${p.size ? ` · ${Math.round(p.size)} Kč/t` : ""}`}
+        formatPoint={(p) => `${p.label} · ${p.x} let · hodnocení ${p.y}${p.size ? ` · ${Math.round(p.size)} Kč/t` : ""}`}
       />
       <div className="text-sm text-muted text-center">
-        Velikost bodu je týdenní mzda. Dělicí čáry: {HRANICE_VEKU} let a průměrný rating {hraniceRatingu}.
+        Velikost bodu je týdenní mzda. Dělicí čáry: {HRANICE_VEKU} let a průměrné hodnocení {hraniceRatingu}.
       </div>
     </div>
   );

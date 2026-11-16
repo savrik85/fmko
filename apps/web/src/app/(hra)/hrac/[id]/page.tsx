@@ -9,7 +9,7 @@ import { useTeam } from "@/context/team-context";
 import { useOpenPlayerConversation } from "@/hooks/use-open-player-conversation";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { PotentialProgress } from "@/components/players/potential-progress";
-import { usePotencial, PotentialBox, PotentialBadge } from "@/components/players/potential-summary";
+import { usePotencial, PotentialStars, PotentialBadge } from "@/components/players/potential-summary";
 import { PositionBadge, SectionLabel, Spinner, BadgePreview, JerseyPreview, useConfirm } from "@/components/ui";
 import { SquadNumberEditor } from "./SquadNumberEditor";
 import { PlayerCompare } from "./PlayerCompare";
@@ -28,7 +28,8 @@ import { attrBg, attrValue, withBody, bodyNote, formatKg, formatKgChange, WEIGHT
 
 import type { BadgePattern } from "@/components/ui";
 import { HeroBackdrop } from "@/components/ui/hero-backdrop";
-import { isLightColor } from "@/lib/team-color";
+import { isLightColor, readableOnLight } from "@/lib/team-color";
+import { HERO_ACTIONS_ROW, HERO_BUTTON, HeroNavButton, HeroStat, HeroStats, heroTone } from "@/components/ui/hero-kit";
 
 // Stejný strop hlídá API (apps/api/src/transfers/swap-players.ts).
 const MAX_SWAP_PLAYERS = 2;
@@ -480,16 +481,19 @@ export default function PlayerDetailPage() {
   if (loading) return <div className="min-h-dvh flex items-center justify-center"><Spinner size="lg" /></div>;
   if (!player || !team) return <div className="page-container">Hráč nenalezen.</div>;
 
-  const cond = conditionLabel(player.lifeContext?.condition ?? 50);
+  const condition = player.lifeContext?.condition ?? 50;
   const displayTeam = isOwnPlayer ? team : (playerTeam ?? team);
   const color = displayTeam.primary_color || "#2D5F2D";
   const light = isLightColor(color);
   const txt = light ? "text-gray-900" : "text-white";
   const txtMuted = light ? "text-gray-500" : "text-white/60";
-  const txtSoft = light ? "text-gray-400" : "text-white/40";
   const boxBg = light ? "bg-black/5" : "bg-white/10";
-  const boxBgHover = light ? "hover:bg-black/10" : "hover:bg-white/20";
-  const boxLabel = light ? "text-gray-400" : "text-white/50";
+  const tone = heroTone(color);
+  // Rating a číslo dresu stojí na plné destičce; na ní se píše barvou klubu.
+  const plateText = tone.light ? "#FFFFFF" : readableOnLight(color);
+  // Plná kondice barvu nepotřebuje, upozorňuje až únava.
+  const conditionFill = condition >= 80 ? tone.fill : condition >= 50 ? "bg-gold-400" : condition >= 20 ? "bg-orange-400" : "bg-red-500";
+  const hasFace = !!player.avatar && typeof player.avatar === "object" && Object.keys(player.avatar).length > 2;
 
   // Injury info (rendered as inline pill on both layouts)
   const injuryInfo = (player as unknown as { injury?: { daysRemaining: number; type?: string } | null }).injury ?? null;
@@ -521,142 +525,110 @@ export default function PlayerDetailPage() {
     </span>
   ) : null;
 
+  const metaLine = (
+    <>
+      <PositionBadge position={player.position} />
+      <span className={`${tone.muted} text-sm`}>{player.age} let</span>
+      {player.lifeContext?.occupation && (
+        <>
+          <span className={tone.soft}>&middot;</span>
+          <span className={`${tone.muted} text-sm`}>{player.lifeContext.occupation}</span>
+        </>
+      )}
+      <span className={tone.soft}>&middot;</span>
+      <a href={`/tym/${displayTeam.id}`} className={`${tone.muted} text-sm hover:opacity-80 underline decoration-current/30 transition-colors flex items-center gap-1.5`}>
+        <BadgePreview primary={color} secondary={displayTeam.secondary_color || "#FFF"} pattern={(displayTeam.badge_pattern as BadgePattern) || "shield"}
+          initials={displayTeam.name.split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={18} />
+        {displayTeam.name}
+      </a>
+      {player.loan_from_team_id && (
+        <span className="bg-yellow-300 text-gray-900 text-xs font-heading font-bold px-2 py-0.5 rounded-full whitespace-nowrap">Na hostování</span>
+      )}
+      {injuryPill}
+      {absencePill}
+      {unrestPill}
+    </>
+  );
+
   return (
     <>
       {/* ═══ Player header ═══ */}
-      <div className="hero-gradient hero-detail px-3 sm:px-8 py-4 sm:py-5" style={{ backgroundColor: color }}>
+      <div className="hero-gradient hero-detail px-3 sm:px-8 py-3 sm:py-5" style={{ backgroundColor: color }}>
         <HeroBackdrop primary={color} secondary={displayTeam.secondary_color} pattern={displayTeam.badge_pattern ?? null} />
         <div className="max-w-[1280px] mx-auto">
-          {/* ─── Desktop: jednořádkový layout ─── */}
-          <div className="hidden sm:flex items-center gap-4">
+          {/* Jedno rozložení pro mobil i desktop: na mobilu se ukazatele zalomí
+              pod jméno přes celou šířku, na desktopu stojí vpravo. */}
+          <div className="flex flex-wrap items-center gap-x-3 sm:gap-x-4 gap-y-2 sm:gap-y-3">
             {allPlayers.length > 1 && (
-              <button onClick={() => prevPlayer && router.push(`/hrac/${prevPlayer.id}`)}
-                className={`w-10 h-10 rounded-xl ${boxBg} ${boxBgHover} flex items-center justify-center ${txt} shrink-0 transition-colors`}>&#9664;</button>
+              <HeroNavButton tone={tone} direction="prev" label="Předchozí hráč" className="hidden sm:flex"
+                onClick={() => prevPlayer && router.push(`/hrac/${prevPlayer.id}`)} />
             )}
-            {player.avatar && typeof player.avatar === "object" && Object.keys(player.avatar).length > 2 ? (
-              <FaceAvatar faceConfig={player.avatar} size={72} className={`shrink-0 ${boxBg} rounded-xl`} />
-            ) : (
-              <div className={`shrink-0 w-[72px] h-[72px] rounded-xl ${boxBg} flex items-center justify-center ${txt} font-heading font-bold text-2xl`}>
-                {player.first_name[0]}
-              </div>
-            )}
-            <div className="flex-1 min-w-0">
-              <h1 className={`font-heading font-extrabold ${txt} text-2xl leading-tight`}>
-                {player.first_name} {player.last_name}
-              </h1>
-              {player.nickname && (
-                <div className={`${txtMuted} text-sm`}>&bdquo;{player.nickname}&ldquo;</div>
-              )}
-              <div className="flex items-center gap-3 mt-1 flex-wrap">
-                <PositionBadge position={player.position} />
-                <span className={`${txtMuted} text-sm`}>{player.age} let</span>
-                <span className={txtSoft}>&middot;</span>
-                <span className={`${txtMuted} text-sm`}>{player.lifeContext?.occupation ?? ""}</span>
-                {player.loan_from_team_id && (
-                  <>
-                    <span className={txtSoft}>&middot;</span>
-                    <span className="bg-yellow-400/20 text-yellow-700 text-xs font-heading font-bold px-2 py-0.5 rounded-full">Na hostování</span>
-                  </>
-                )}
-                <span className={txtSoft}>&middot;</span>
-                <a href={`/tym/${displayTeam.id}`} className={`${txtMuted} text-sm hover:opacity-80 underline transition-colors flex items-center gap-1.5`}>
-                  <BadgePreview primary={color} secondary={displayTeam.secondary_color || "#FFF"} pattern={(displayTeam.badge_pattern as BadgePattern) || "shield"}
-                    initials={displayTeam.name.split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={18} />
-                  {displayTeam.name}
-                </a>
-                {injuryPill}
-                {absencePill}
-                {unrestPill}
-              </div>
-            </div>
-            <div className="flex items-center gap-2.5 shrink-0">
-              <div className={`${boxBg} rounded-xl py-2.5 text-center min-w-[64px]`}>
-                <div className={`font-heading font-extrabold text-lg tabular-nums leading-none ${cond.color}`}>
-                  {player.lifeContext?.condition ?? 50}%
-                </div>
-                <div className={`${boxLabel} text-micro font-heading font-bold uppercase mt-0.5`}>Kondice</div>
-              </div>
-              <div className={`${boxBg} rounded-xl py-2.5 text-center min-w-[64px]`}>
-                <div className="text-xl leading-none">{getMoraleEmoji(player.lifeContext?.morale ?? 50)}</div>
-                <div className={`${boxLabel} text-micro font-heading font-bold uppercase mt-0.5`}>Morálka</div>
-              </div>
-              <div className={`${boxBg} rounded-xl py-2.5 text-center min-w-[64px]`}>
-                <div className={`font-heading font-extrabold text-xl tabular-nums leading-none ${txt}`}>
-                  {player.overall_rating}
-                </div>
-                <div className={`${boxLabel} text-micro font-heading font-bold uppercase mt-0.5`}>Rating</div>
-              </div>
-              <PotentialBox data={potencial} boxBg={boxBg} boxLabel={boxLabel} klic="hl-desktop" />
-            </div>
-            {allPlayers.length > 1 && (
-              <button onClick={() => nextPlayer && router.push(`/hrac/${nextPlayer.id}`)}
-                className={`w-10 h-10 rounded-xl ${boxBg} ${boxBgHover} flex items-center justify-center ${txt} shrink-0 transition-colors`}>&#9654;</button>
-            )}
-          </div>
-
-          {/* ─── Mobil: kompaktní layout ─── */}
-          <div className="sm:hidden">
-            {/* Řádek 1: avatar + jméno/info + šipky */}
-            <div className="flex items-center gap-3">
-              {player.avatar && typeof player.avatar === "object" && Object.keys(player.avatar).length > 2 ? (
-                <FaceAvatar faceConfig={player.avatar} size={56} className={`shrink-0 ${boxBg} rounded-xl`} />
+            <div className="relative shrink-0">
+              {hasFace ? (
+                <>
+                  <FaceAvatar faceConfig={player.avatar} size={46} className={`sm:hidden ${tone.panel} rounded-xl`} />
+                  <FaceAvatar faceConfig={player.avatar} size={80} className={`hidden sm:block ${tone.panel} rounded-xl`} />
+                </>
               ) : (
-                <div className={`shrink-0 w-14 h-14 rounded-xl ${boxBg} flex items-center justify-center ${txt} font-heading font-bold text-xl`}>
+                <div className={`w-[46px] h-14 sm:w-20 sm:h-24 rounded-xl ${tone.panel} flex items-center justify-center ${tone.text} font-heading font-bold text-xl sm:text-3xl`}>
                   {player.first_name[0]}
                 </div>
               )}
-              <div className="flex-1 min-w-0">
-                <h1 className={`font-heading font-extrabold ${txt} text-xl leading-tight`}>
-                  {player.first_name} {player.last_name}
-                </h1>
-                {player.nickname && (
-                  <div className={`${txtMuted} text-sm`}>&bdquo;{player.nickname}&ldquo;</div>
-                )}
-              </div>
-              {allPlayers.length > 1 && (
-                <div className="flex gap-1.5 shrink-0">
-                  <button onClick={() => prevPlayer && router.push(`/hrac/${prevPlayer.id}`)}
-                    className={`w-8 h-8 rounded-soft ${boxBg} ${boxBgHover} flex items-center justify-center ${txt} transition-colors text-sm`}>&#9664;</button>
-                  <button onClick={() => nextPlayer && router.push(`/hrac/${nextPlayer.id}`)}
-                    className={`w-8 h-8 rounded-soft ${boxBg} ${boxBgHover} flex items-center justify-center ${txt} transition-colors text-sm`}>&#9654;</button>
-                </div>
+              {player.squad_number != null && (
+                <span className={`absolute -bottom-1.5 -right-1.5 min-w-[26px] h-6 px-1 rounded-control flex items-center justify-center text-xs font-heading font-extrabold tabular-nums shadow ${tone.plate}`}
+                  style={{ color: plateText }} title="Číslo dresu">
+                  {player.squad_number}
+                </span>
               )}
             </div>
-            {/* Řádek 2: pozice, věk, povolání, tým, injury pill */}
-            <div className="flex items-center gap-2 mt-2 flex-wrap">
-              <PositionBadge position={player.position} />
-              <span className={`${txtMuted} text-sm`}>{player.age} let</span>
-              <span className={txtSoft}>&middot;</span>
-              <span className={`${txtMuted} text-sm`}>{player.lifeContext?.occupation ?? ""}</span>
-              <span className={txtSoft}>&middot;</span>
-              <a href={`/tym/${displayTeam.id}`} className={`${txtMuted} text-sm hover:opacity-80 flex items-center gap-1.5`}>
-                <BadgePreview primary={color} secondary={displayTeam.secondary_color || "#FFF"} pattern={(displayTeam.badge_pattern as BadgePattern) || "shield"}
-                  initials={displayTeam.name.split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={16} />
-                {displayTeam.name}
-              </a>
-              {injuryPill}
-              {absencePill}
-              {unrestPill}
+            <div className="flex-1 min-w-0">
+              <h1 className={`font-heading font-extrabold ${tone.text} text-lg sm:text-3xl leading-tight`}>
+                {player.first_name} {player.last_name}
+              </h1>
+              {player.nickname && (
+                <div className={`${tone.muted} text-sm`}>&bdquo;{player.nickname}&ldquo;</div>
+              )}
+              <div className="hidden sm:flex items-center gap-x-3 gap-y-1 mt-1.5 flex-wrap">{metaLine}</div>
             </div>
-            {/* Řádek 3: staty přes celou šířku. Nízké boxy — na mobilu se za ně vejde
-                víc obsahu, aniž by manažer musel scrollovat. */}
-            <div className="flex gap-1.5 mt-2">
-              <div className={`flex-1 ${boxBg} rounded-soft py-1 text-center`}>
-                <div className={`font-heading font-extrabold text-sm tabular-nums leading-none ${cond.color}`}>
-                  {player.lifeContext?.condition ?? 50}%
-                </div>
-                <div className={`${boxLabel} text-micro font-heading font-bold uppercase mt-0.5`}>Kondice</div>
+            {allPlayers.length > 1 && (
+              <div className="flex sm:hidden gap-1.5 shrink-0">
+                <HeroNavButton tone={tone} direction="prev" label="Předchozí hráč" className="flex"
+                  onClick={() => prevPlayer && router.push(`/hrac/${prevPlayer.id}`)} />
+                <HeroNavButton tone={tone} direction="next" label="Další hráč" className="flex"
+                  onClick={() => nextPlayer && router.push(`/hrac/${nextPlayer.id}`)} />
               </div>
-              <div className={`flex-1 ${boxBg} rounded-soft py-1 text-center`}>
-                <div className="text-sm leading-none">{getMoraleEmoji(player.lifeContext?.morale ?? 50)}</div>
-                <div className={`${boxLabel} text-micro font-heading font-bold uppercase mt-0.5`}>Morálka</div>
-              </div>
-              <div className={`flex-1 ${boxBg} rounded-soft py-1 text-center`}>
-                <div className={`font-heading font-extrabold text-sm tabular-nums leading-none ${txt}`}>{player.overall_rating}</div>
-                <div className={`${boxLabel} text-micro font-heading font-bold uppercase mt-0.5`}>Rating</div>
-              </div>
-              <PotentialBox data={potencial} boxBg={`flex-1 ${boxBg}`} boxLabel={boxLabel} klic="hl-mobil" kompaktni />
-            </div>
+            )}
+            <div className="sm:hidden w-full flex items-center gap-x-2 gap-y-1 flex-wrap">{metaLine}</div>
+
+            <HeroStats tone={tone}>
+              <HeroStat tone={tone} label="Hodnocení">
+                <span className={`min-w-[38px] sm:min-w-[54px] h-7 sm:h-11 px-1.5 sm:px-2 rounded-control flex items-center justify-center font-heading font-extrabold text-lg sm:text-3xl tabular-nums leading-none ${tone.plate}`}
+                  style={{ color: plateText }}>
+                  {player.overall_rating}
+                </span>
+              </HeroStat>
+              {potencial?.nadejnost && (
+                <HeroStat tone={tone} label="Potenciál">
+                  <PotentialStars data={potencial} klic="hero" />
+                </HeroStat>
+              )}
+              <HeroStat tone={tone} label="Kondice" title={conditionLabel(condition).text}>
+                <span className="font-heading font-extrabold text-base sm:text-2xl tabular-nums leading-none">
+                  {condition}<span className="text-xs sm:text-sm">%</span>
+                </span>
+                <span className={`block w-12 h-1 rounded-full overflow-hidden ${tone.track}`}>
+                  <span className={`block h-full rounded-full ${conditionFill}`} style={{ width: `${Math.max(4, Math.min(100, condition))}%` }} />
+                </span>
+              </HeroStat>
+              <HeroStat tone={tone} label="Morálka">
+                <span className="text-xl sm:text-2xl leading-none">{getMoraleEmoji(player.lifeContext?.morale ?? 50)}</span>
+              </HeroStat>
+            </HeroStats>
+
+            {allPlayers.length > 1 && (
+              <HeroNavButton tone={tone} direction="next" label="Další hráč" className="hidden sm:flex"
+                onClick={() => nextPlayer && router.push(`/hrac/${nextPlayer.id}`)} />
+            )}
           </div>
 
           {/* ─── Hostování — kdo hráče vlastní a kdy se vrací ───
@@ -684,22 +656,16 @@ export default function PlayerDetailPage() {
 
           {/* ─── Action row — same styling mobile + desktop ─── */}
           {(() => {
-            const btnBase = `flex-1 sm:flex-initial min-w-[120px] rounded-xl px-4 py-2 text-sm font-heading font-bold transition-colors flex items-center justify-center gap-1.5`;
-            const btnNeutral = light
-              ? "bg-black/10 hover:bg-black/20 text-gray-900"
-              : "bg-white/10 hover:bg-white/20 text-white";
-            const btnNeutralActive = light ? "bg-black/25 text-gray-900" : "bg-white/25 text-white";
-            const btnWatched = light
-              ? "bg-gold-500/40 text-gray-900 ring-1 ring-gold-600/50"
-              : "bg-gold-400/30 text-white ring-1 ring-gold-300/50";
-            const btnDanger = light
-              ? "bg-red-500/20 hover:bg-red-500/30 text-red-700"
-              : "bg-red-500/20 hover:bg-red-500/30 text-white";
+            const btnBase = `${HERO_BUTTON} flex-1 sm:flex-initial`;
+            const btnNeutral = tone.button;
+            const btnNeutralActive = tone.buttonActive;
+            const btnWatched = tone.buttonAccent;
+            const btnDanger = tone.buttonDanger;
             const btnListing = light
               ? "bg-gold-500/30 text-gray-900"
               : "bg-gold-500/20 text-white";
             return (
-              <div className="mt-3 flex flex-wrap gap-2">
+              <div className={`${HERO_ACTIONS_ROW} ${tone.rule}`}>
                 {/* Nabídka / Odkoupit */}
                 {canSendOffer && !offerSent && (offerState?.activeOfferId ? (
                   <Link href={`/prestupy/nabidka/${offerState.activeOfferId}`} className={`${btnBase} ${btnNeutral}`}>
@@ -769,7 +735,7 @@ export default function PlayerDetailPage() {
                     // Krátký popisek a bez roztahování přes celou šířku: s plnou
                     // šířkou by se řada tlačítek na mobilu zalomila o řádek navíc
                     // a hlavička hráče by zabrala půl displeje.
-                    className={`shrink-0 sm:flex-initial min-w-0 sm:min-w-[120px] rounded-xl px-3 sm:px-4 py-2 text-sm font-heading font-bold transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50 ${btnNeutral}`}>
+                    className={`${HERO_BUTTON} shrink-0 ${btnNeutral}`}>
                     💬 SMS
                   </button>
                 )}
@@ -801,8 +767,12 @@ export default function PlayerDetailPage() {
                 ))}
                 {isOwnPlayer && !isLoanedToUs && (
                   <button onClick={releasePlayer} disabled={actionLoading}
-                    className={`${btnBase} disabled:opacity-50 ${btnDanger}`}>
-                    🗑️ Propustit
+                    // Vpravo a stranou: nevratná akce nemá stát v řadě s ostatními.
+                    aria-label="Propustit hráče" title="Propustit hráče"
+                    // Na mobilu jen ikona: se čtvrtým popiskem by se řada zalomila
+                    // a hlavička by zabrala přes třetinu displeje.
+                    className={`${HERO_BUTTON} flex-none sm:ml-auto ${btnDanger}`}>
+                    🗑️ <span className="hidden sm:inline">Propustit</span>
                   </button>
                 )}
               </div>
@@ -981,7 +951,9 @@ export default function PlayerDetailPage() {
     <div className="page-container space-y-5">
 
       {/* ═══ Tab navigation ═══ */}
-      <div className="flex gap-1 border-b border-gray-200 -mt-1 overflow-x-auto">
+      {/* Na mobilu se záložky dělí o šířku rovným dílem: dřív se pátá schovala
+          za okraj a nic nenaznačovalo, že se řada dá posunout. */}
+      <div className="flex sm:gap-1 border-b border-gray-200 -mt-1">
         {([
           { id: "prehled", label: "Přehled" },
           { id: "statistiky", label: "Statistiky" },
@@ -992,11 +964,12 @@ export default function PlayerDetailPage() {
           <button
             key={t.id}
             onClick={() => switchTab(t.id)}
-            className={`px-4 py-2.5 text-sm font-heading font-bold transition-colors border-b-2 -mb-px shrink-0 ${
-              activeTab === t.id
-                ? "text-pitch-600 border-pitch-500"
-                : "text-muted border-transparent hover:text-ink hover:border-gray-300"
+            aria-current={activeTab === t.id ? "page" : undefined}
+            className={`flex-1 sm:flex-initial min-w-0 px-1 sm:px-4 py-2.5 text-[13px] sm:text-sm font-heading font-bold transition-colors border-b-[3px] -mb-px ${
+              activeTab === t.id ? "" : "text-muted border-transparent hover:text-ink hover:border-gray-300"
             }`}
+            // Aktivní záložka v barvě klubu, stejně jako lišta a hlavička nad ní.
+            style={activeTab === t.id ? { color: readableOnLight(color), borderColor: readableOnLight(color) } : undefined}
           >
             {t.label}
           </button>
@@ -1430,7 +1403,7 @@ export default function PlayerDetailPage() {
               })}
             </div>
             <div className="text-xs text-muted mt-3">
-              Průměrný rating posledních {recent.length} zápasů: <span className="font-heading font-bold text-ink">{recentAvg.toFixed(1)}</span>
+              Průměrné hodnocení posledních {recent.length} zápasů: <span className="font-heading font-bold text-ink">{recentAvg.toFixed(1)}</span>
             </div>
           </div>
         );
@@ -1454,7 +1427,7 @@ export default function PlayerDetailPage() {
         return (
           <div className="card p-4 sm:p-5">
             <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-              <SectionLabel>Trend ratingu · {series.length} zápasů</SectionLabel>
+              <SectionLabel>Trend hodnocení · {series.length} zápasů</SectionLabel>
               <div className="text-xs font-heading text-muted">
                 Průměr: <span className="font-bold text-ink">{avg.toFixed(2)}</span>
               </div>
@@ -1493,7 +1466,7 @@ export default function PlayerDetailPage() {
         const items = [
           { label: "Góly", icon: "⚽", rank: leagueRanks.goals },
           { label: "Asistence", icon: "👟", rank: leagueRanks.assists },
-          { label: "Průměr ratingu", icon: "⭐", rank: leagueRanks.rating, isRating: true },
+          { label: "Průměr hodnocení", icon: "⭐", rank: leagueRanks.rating, isRating: true },
         ].filter((i) => i.rank != null && i.rank.value > 0);
         if (items.length === 0) return null;
         return (
@@ -1772,8 +1745,8 @@ export default function PlayerDetailPage() {
                             initials={(m.opponent ?? "").split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={20} />
                           <span className="font-heading font-bold text-ink truncate max-w-[180px]">{m.opponent ?? "Soupeř"}</span>
                           <span className="text-micro text-muted uppercase">{m.isHome ? "D" : "V"}</span>
-                          {isBest && <span title="Nejlepší rating sezóny" className="text-xs">🌟</span>}
-                          {isWorst && <span title="Nejhorší rating sezóny" className="text-xs">😞</span>}
+                          {isBest && <span title="Nejlepší hodnocení sezóny" className="text-xs">🌟</span>}
+                          {isWorst && <span title="Nejhorší hodnocení sezóny" className="text-xs">😞</span>}
                         </a>
                       </td>
                       <td className="py-2 pr-2 text-center">
@@ -1783,7 +1756,7 @@ export default function PlayerDetailPage() {
                       </td>
                       <td className="py-2 pr-2">
                         <div className="flex items-center justify-center gap-2">
-                          <div className="w-8 h-1.5 rounded-full bg-gray-100 overflow-hidden hidden sm:block" title={`Rating ${m.rating.toFixed(1)}/10`}>
+                          <div className="w-8 h-1.5 rounded-full bg-gray-100 overflow-hidden hidden sm:block" title={`Hodnocení ${m.rating.toFixed(1)}/10`}>
                             <div className="h-full rounded-full" style={{ width: `${barPct}%`, backgroundColor: barColor }} />
                           </div>
                           <span className={`tabular-nums font-heading font-bold ${ratingColor}`}>
@@ -1972,7 +1945,7 @@ export default function PlayerDetailPage() {
     {loanDialogOpen && player && (
       <LoanListingDialog
         playerName={`${player.first_name} ${player.last_name}`}
-        playerLine={`${player.position}, ${player.age} let, rating ${player.overall_rating}`}
+        playerLine={`${player.position}, ${player.age} let, hodnocení ${player.overall_rating}`}
         onClose={() => setLoanDialogOpen(false)}
         onConfirm={listOnLoan}
         loading={actionLoading}
@@ -2021,7 +1994,7 @@ function PlayerPriceDialog({ player, onClose, onConfirm, loading }: {
         <div className="p-5">
           <h3 className="font-heading font-bold text-lg">Nabídnout na trh</h3>
           <p className="text-sm text-muted mt-1">
-            {player.first_name} {player.last_name} · {player.position}, {player.age} let, rating {player.overall_rating}
+            {player.first_name} {player.last_name} · {player.position}, {player.age} let, hodnocení {player.overall_rating}
           </p>
 
           <div className="mt-4">

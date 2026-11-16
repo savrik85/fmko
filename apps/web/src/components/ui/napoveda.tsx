@@ -60,8 +60,8 @@ const HELP: Record<string, HelpEntry> = {
     title: "Kádr týmu",
     icon: "\u{1F465}",
     sections: [
-      { text: "Všichni hráči v týmu seřazení podle ratingu. Klikni na jméno pro detail." },
-      { heading: "Rating", text: "Celkové hodnocení hráče (0–100). Vesnická úroveň je kolem 35–40, městská 40–45. Wonderkidi (+15–25 bonus) mají šanci 2 % při generování." },
+      { text: "Všichni hráči v týmu seřazení podle hodnocení. Klikni na jméno pro detail." },
+      { heading: "Hodnocení", text: "Celkové hodnocení hráče (0–100). Vesnická úroveň je kolem 35–40, městská 40–45. Wonderkidi (+15–25 bonus) mají šanci 2 % při generování." },
       { heading: "Kondice", text: "Regeneruje se denně podle staminy: vysoká stamina (≥75) = +18/den, nízká (<25) = +7/den. Klesne po zápase a tréninku (−3 až −8). Pod 60 % výrazně snižuje výkon v zápase (až na 0,6×)." },
       { heading: "Morálka", text: "Ovlivňuje výkon. Výhra dá +3 až +7, prohra −2 až −5. Denně se táhne k 50 (nad 55 klesá, pod 45 roste). Příliš nízká morálka + nízký patriotismus = hrozba odchodu hráče." },
       { heading: "Pozice", text: "BRA/OBR/ZÁL/ÚTO. Hráč mimo svou pozici má až −40 % na relevantní dovednosti. Např. útočník v obraně ztrácí 30 % obrany." },
@@ -90,7 +90,7 @@ const HELP: Record<string, HelpEntry> = {
       { heading: "Nabídky od Místního kontaktu", text: "20% šance za kolo, že ti někdo doporučí hráče (hospoda, mládež, kamarád). Přijde SMS, hráč se objeví v přestupech." },
       { heading: "Hostování", text: "Půjčka hráče z jiného týmu na 30–90 dní. Hráč se po vypršení automaticky vrátí." },
       { heading: "Kvalita podle velikosti obce", text: "Vesnice: základ 37. Obec: 39. Městys: 41. Město: 44." },
-      { text: "Platy hráčů: 10 + (rating/100) × 400 Kč/měsíc. Hráč s ratingem 50 stojí ~210 Kč/měsíc.", tip: true },
+      { text: "Platy hráčů: 10 + (hodnocení/100) × 400 Kč/měsíc. Hráč s hodnocením 50 stojí ~210 Kč/měsíc.", tip: true },
     ],
   },
   "/finance": {
@@ -399,7 +399,7 @@ export function NapovedaOnboarding({ step }: { step: string }) {
       icon: "\u{1F31F}",
       sections: [
         { text: "Vygenerovaný kádr. Každý hráč má unikátní osobnost, zaměstnání a schopnosti." },
-        { heading: "Rating", text: "Vesnice: kolem 35–40. Město: 40–45. Wonderkid (2% šance, věk ≤21): +15–25 navíc!" },
+        { heading: "Hodnocení", text: "Vesnice: kolem 35–40. Město: 40–45. Wonderkid (2% šance, věk ≤21): +15–25 navíc!" },
         { heading: "Osobnost", text: "Disciplína určuje docházku. Patriotismus loajalitu. Alkohol únavu a absenci. Temperament riziko karet." },
         { text: "Po dokončení začni posouvat dny. Tréninky jsou út+čt (2×/týden). První zápas bude o víkendu.", tip: true },
       ],

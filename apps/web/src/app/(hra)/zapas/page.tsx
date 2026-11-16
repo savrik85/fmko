@@ -1081,7 +1081,7 @@ function MatchPage() {
                   <tr className="border-b border-gray-200 text-muted">
                     <th className="py-1.5 pl-3 w-8 text-center text-xs font-heading">#</th>
                     <th className="py-1.5 text-left text-xs font-heading">Hráč</th>
-                    <th className="py-1.5 text-center text-xs font-heading w-8">Rat</th>
+                    <th className="py-1.5 text-center text-xs font-heading w-8">Hod</th>
                     <th className="py-1.5 text-center text-xs font-heading w-8">Rch</th>
                     <th className="py-1.5 text-center text-xs font-heading w-8">Tch</th>
                     <th className="py-1.5 text-center text-xs font-heading w-8">Stř</th>
@@ -1158,7 +1158,7 @@ function MatchPage() {
                     <tr className="border-b border-gray-200 text-muted">
                       <th className="py-1.5 pl-3 w-8 text-center text-xs font-heading" title="Číslo dresu">#</th>
                       <th className="py-1.5 text-left text-xs font-heading">Hráč</th>
-                      <th className="py-1.5 text-center text-xs font-heading w-8" title="Celkový rating">Rat</th>
+                      <th className="py-1.5 text-center text-xs font-heading w-8" title="Celkové hodnocení">Hod</th>
                       <th className="py-1.5 text-center text-xs font-heading w-8" title="Rychlost">Rch</th>
                       <th className="py-1.5 text-center text-xs font-heading w-8" title="Technika">Tch</th>
                       <th className="py-1.5 text-center text-xs font-heading w-8" title="Střelba">Stř</th>
@@ -1195,7 +1195,7 @@ function MatchPage() {
                               )}
                             </div>
                           </td>
-                          <td className="py-1.5 text-center tabular-nums font-heading font-bold" title={`Rating: ${player.overallRating}`}>{player.overallRating}</td>
+                          <td className="py-1.5 text-center tabular-nums font-heading font-bold" title={`Hodnocení: ${player.overallRating}`}>{player.overallRating}</td>
                           <td className={`py-1.5 text-center tabular-nums ${attrC(s.speed)}`} title={`Rychlost: ${s.speed}`}>{s.speed}</td>
                           <td className={`py-1.5 text-center tabular-nums ${attrC(s.technique)}`} title={`Technika: ${s.technique}`}>{s.technique}</td>
                           <td className={`py-1.5 text-center tabular-nums ${attrC(s.shooting)}`} title={`Střelba: ${s.shooting}`}>{s.shooting}</td>
@@ -1226,7 +1226,7 @@ function MatchPage() {
                           : "Klepni na náhradníka, místo kterého pojede.")
                       : benchIds
                         ? "Klepni na hráče a pak na toho, kdo má jet místo něj."
-                        : "Zatím je vybral automat podle ratingu. Klepni na hráče a pak na toho, kdo má jet místo něj."}
+                        : "Zatím je vybral automat podle hodnocení. Klepni na hráče a pak na toho, kdo má jet místo něj."}
                   </p>
                 </div>
                 <table className="w-full text-sm">
@@ -1234,7 +1234,7 @@ function MatchPage() {
                     <tr className="border-b border-gray-200 text-muted">
                       <th className="py-1.5 pl-3 w-8 text-center text-xs font-heading" title="Číslo dresu">#</th>
                       <th className="py-1.5 text-left text-xs font-heading">Hráč</th>
-                      <th className="py-1.5 text-center text-xs font-heading w-8" title="Celkový rating">Rat</th>
+                      <th className="py-1.5 text-center text-xs font-heading w-8" title="Celkové hodnocení">Hod</th>
                       <th className="py-1.5 text-center text-xs font-heading w-8" title="Rychlost">Rch</th>
                       <th className="py-1.5 text-center text-xs font-heading w-8" title="Technika">Tch</th>
                       <th className="py-1.5 text-center text-xs font-heading w-8" title="Střelba">Stř</th>
@@ -1277,7 +1277,7 @@ function MatchPage() {
                               </div>
                             )}
                           </td>
-                          <td className="py-1.5 text-center tabular-nums font-heading font-bold" title={`Rating: ${p.overallRating}`}>{p.overallRating}</td>
+                          <td className="py-1.5 text-center tabular-nums font-heading font-bold" title={`Hodnocení: ${p.overallRating}`}>{p.overallRating}</td>
                           <td className={`py-1.5 text-center tabular-nums ${attrC(s.speed)}`} title={`Rychlost: ${s.speed}`}>{s.speed}</td>
                           <td className={`py-1.5 text-center tabular-nums ${attrC(s.technique)}`} title={`Technika: ${s.technique}`}>{s.technique}</td>
                           <td className={`py-1.5 text-center tabular-nums ${attrC(s.shooting)}`} title={`Střelba: ${s.shooting}`}>{s.shooting}</td>

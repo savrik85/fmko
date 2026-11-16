@@ -77,6 +77,8 @@ const PREFIX_TITLES: Array<[string, string]> = [
 export function pageTitleFor(pathname: string): string {
   const exact = PAGE_TITLES[pathname];
   if (exact) return exact;
+  // Stadion cizího klubu leží pod /tym/{id}/stadion; bez výjimky by se jmenoval „Profil týmu“.
+  if (pathname.startsWith("/tym/") && pathname.endsWith("/stadion")) return "Stadion";
   for (const [prefix, title] of PREFIX_TITLES) {
     if (pathname.startsWith(prefix)) return title;
   }

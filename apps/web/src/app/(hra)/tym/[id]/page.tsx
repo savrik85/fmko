@@ -12,7 +12,8 @@ import { FaceAvatar } from "@/components/players/face-avatar";
 import { PreMatchCard } from "@/components/relations/RelationSection";
 import { ForeignSquad } from "./ForeignSquad";
 import { TransferOverview } from "./TransferOverview";
-import { isLightColor, readableOnLight, bestTextOn } from "@/lib/team-color";
+import { readableOnLight, bestTextOn } from "@/lib/team-color";
+import { HERO_BUTTON, HeroActions, HeroNavButton, HeroStat, HeroStats, heroTone } from "@/components/ui/hero-kit";
 import { CoachName } from "@/components/manager/coach-name";
 import { TeamName } from "@/components/manager/team-name";
 
@@ -171,13 +172,29 @@ export default function TeamPage() {
   if (!team) return <div className="page-container">Tým nenalezen.</div>;
 
   const color = team.primary_color || "#2D5F2D";
-  const light = isLightColor(color);
-  const txt = light ? "text-gray-900" : "text-white";
-  const txtMuted = light ? "text-gray-500" : "text-white/60";
-  const txtSoft = light ? "text-gray-400" : "text-white/40";
-  const boxBg = light ? "bg-black/5" : "bg-white/10";
-  const boxBgHover = light ? "hover:bg-black/10" : "hover:bg-white/20";
-  const boxLabel = light ? "text-gray-400" : "text-white/50";
+  const tone = heroTone(color);
+  // Pozice v lize stojí na plné destičce; na ní se píše barvou klubu.
+  const plateText = tone.light ? "#FFFFFF" : readableOnLight(color);
+  const statNumber = "font-heading font-extrabold text-xl sm:text-3xl tabular-nums leading-none";
+  const badgePrimary = team.badge_primary_color || color;
+  const badgeSecondary = team.badge_secondary_color || team.secondary_color || "#FFFFFF";
+  const badgePattern = (team.badge_pattern as BadgePattern) || "shield";
+  const badgeInitials = team.badge_initials || team.name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase();
+  const form = matchResults?.form ?? [];
+
+  const openCoachConversation = async () => {
+    if (!myTeamId) return;
+    try {
+      const res = await apiFetch<{ conversationId: string }>(`/api/teams/${myTeamId}/conversation-with/${teamId}`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
+      });
+      if (res?.conversationId) router.push(`/telefon/${res.conversationId}`);
+    } catch (e) {
+      console.error("create conversation:", e);
+      showError("Nepodařilo se otevřít konverzaci", (e as Error)?.message || "Zkus to prosím znovu.");
+    }
+  };
+
   const ratingColor = readableOnLight(color);
   // Bílé a velmi světlé dresy splynou s bílou kartou — okraj drží tvar prvku viditelný.
   const onColorText = bestTextOn(color) === "light"
@@ -188,162 +205,95 @@ export default function TeamPage() {
   return (
     <>
       {/* ═══ Team header ═══ */}
-      <div className="hero-gradient hero-detail px-3 sm:px-8 py-4 sm:py-5" style={{ backgroundColor: color }}>
+      <div className="hero-gradient hero-detail px-3 sm:px-8 py-3 sm:py-5" style={{ backgroundColor: color }}>
         <HeroBackdrop primary={color} secondary={team.secondary_color} pattern={team.badge_pattern ?? null} />
         <div className="max-w-[1280px] mx-auto">
-          {/* ─── Desktop ─── */}
-          <div className="hidden sm:flex items-center gap-4">
+          {/* Jedno rozložení pro mobil i desktop: ukazatele se na mobilu zalomí pod název. */}
+          <div className="flex flex-wrap items-center gap-x-3 sm:gap-x-4 gap-y-2 sm:gap-y-3">
             {leagueTeams.length > 1 && (
-              <button onClick={() => prevTeam && router.push(`/tym/${prevTeam.id}`)}
-                className={`w-10 h-10 rounded-xl ${boxBg} ${boxBgHover} flex items-center justify-center ${txt} shrink-0 transition-colors`}>&#9664;</button>
+              <HeroNavButton tone={tone} direction="prev" label="Předchozí tým" className="hidden sm:flex"
+                onClick={() => prevTeam && router.push(`/tym/${prevTeam.id}`)} />
             )}
-            <BadgePreview primary={team.badge_primary_color || color} secondary={team.badge_secondary_color || team.secondary_color || "#FFFFFF"}
-              pattern={(team.badge_pattern as BadgePattern) || "shield"}
-              initials={team.badge_initials || team.name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()}
-              symbol={team.badge_symbol} size={56} />
-            <div className="flex-1 min-w-0">
-              <h1 className={`font-heading font-extrabold ${txt} text-2xl leading-tight truncate`}><TeamName name={team.name} isAi={manager?.coachIsAi === true} /></h1>
-              <div className={`${txtMuted} text-sm mt-0.5`}>
-                <Link href={`/obec/${team.village_id}`} className={`${light ? "text-gray-700" : "text-white/80"} underline decoration-current/30 hover:decoration-current`}>{team.village_name}</Link>
-                {" "}&middot; {team.district}
-              </div>
-              {leaguePos && leagueName && (
-                <a href="/liga" className={`inline-block mt-1 ${txtMuted} text-sm font-heading font-bold hover:opacity-80 transition-colors underline`}>
-                  {leaguePos}. v {leagueName}
-                </a>
-              )}
+            <div className="shrink-0 sm:hidden">
+              <BadgePreview primary={badgePrimary} secondary={badgeSecondary} pattern={badgePattern} initials={badgeInitials} symbol={team.badge_symbol} size={40} />
             </div>
-            <div className="flex items-center gap-3 shrink-0">
-              <a
-                href={`/klub/${teamId}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                title="Klubový web"
-                className={`${boxBg} ${boxBgHover} rounded-xl px-4 py-2 text-center transition-colors cursor-pointer`}
-              >
-                <div className="text-xl leading-none">{"\u{1F310}"}</div>
-                <div className={`${boxLabel} text-micro font-heading font-bold uppercase mt-1`}>Web</div>
-              </a>
-              {!isOwnTeam && (team as any).user_id !== "ai" && (
-                <button onClick={async () => {
-                  if (!myTeamId) return;
-                  try {
-                    const res = await apiFetch<{ conversationId: string }>(`/api/teams/${myTeamId}/conversation-with/${teamId}`, {
-                      method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
-                    });
-                    if (res?.conversationId) router.push(`/telefon/${res.conversationId}`);
-                  } catch (e) {
-                    console.error("create conversation:", e);
-                    showError("Nepodařilo se otevřít konverzaci", (e as Error)?.message || "Zkus to prosím znovu.");
-                  }
-                }}
-                  className={`${boxBg} ${boxBgHover} rounded-xl px-4 py-2 text-center transition-colors cursor-pointer`}>
-                  <div className="text-xl leading-none">💬</div>
-                  <div className={`${boxLabel} text-micro font-heading font-bold uppercase mt-1`}>Napsat</div>
-                </button>
-              )}
-              <div className={`${boxBg} rounded-xl px-4 py-2 text-center`}>
-                <div className={`font-heading font-extrabold text-xl tabular-nums leading-none ${txt}`}>{players.length}</div>
-                <div className={`${boxLabel} text-micro font-heading font-bold uppercase mt-1`}>Hráčů</div>
+            <div className="shrink-0 hidden sm:block">
+              <BadgePreview primary={badgePrimary} secondary={badgeSecondary} pattern={badgePattern} initials={badgeInitials} symbol={team.badge_symbol} size={76} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h1 className={`font-heading font-extrabold ${tone.text} text-lg sm:text-3xl leading-tight`}>
+                <TeamName name={team.name} isAi={manager?.coachIsAi === true} />
+              </h1>
+              <div className={`${tone.muted} text-[13px] sm:text-sm sm:mt-0.5`}>
+                <Link href={`/obec/${team.village_id}`} className="underline decoration-current/30 hover:decoration-current">{team.village_name}</Link>
+                {" "}&middot; {team.district}
+                {leagueName && (
+                  <>
+                    {" "}&middot;{" "}
+                    <Link href="/liga" className="underline decoration-current/30 hover:decoration-current">{leagueName}</Link>
+                  </>
+                )}
               </div>
-              {isOwnTeam && (
-                <div className={`${boxBg} rounded-xl px-4 py-2 text-center`}>
-                  <div className={`font-heading font-extrabold text-xl tabular-nums leading-none ${txt}`}>{avgRating}</div>
-                  <div className={`${boxLabel} text-micro font-heading font-bold uppercase mt-1`}>Rating</div>
-                </div>
-              )}
-              <button onClick={() => router.push(`/tym/${teamId}/stadion`)}
-                className={`${boxBg} ${boxBgHover} rounded-xl px-4 py-2 text-center transition-colors cursor-pointer`}>
-                <div className="text-xl leading-none">🏟</div>
-                <div className={`${boxLabel} text-micro font-heading font-bold uppercase mt-1`}>Stadion</div>
-              </button>
             </div>
             {leagueTeams.length > 1 && (
-              <button onClick={() => nextTeam && router.push(`/tym/${nextTeam.id}`)}
-                className={`w-10 h-10 rounded-xl ${boxBg} ${boxBgHover} flex items-center justify-center ${txt} shrink-0 transition-colors`}>&#9654;</button>
+              <div className="flex sm:hidden gap-1.5 shrink-0">
+                <HeroNavButton tone={tone} direction="prev" label="Předchozí tým" className="flex"
+                  onClick={() => prevTeam && router.push(`/tym/${prevTeam.id}`)} />
+                <HeroNavButton tone={tone} direction="next" label="Další tým" className="flex"
+                  onClick={() => nextTeam && router.push(`/tym/${nextTeam.id}`)} />
+              </div>
+            )}
+
+            <HeroStats tone={tone}>
+              {leaguePos && (
+                <HeroStat tone={tone} label="V lize" href="/liga" title="Tabulka ligy">
+                  <span className={`min-w-[38px] sm:min-w-[54px] h-7 sm:h-11 px-1.5 sm:px-2 rounded-control flex items-center justify-center font-heading font-extrabold text-lg sm:text-3xl tabular-nums leading-none ${tone.plate}`}
+                    style={{ color: plateText }}>
+                    {leaguePos}.
+                  </span>
+                </HeroStat>
+              )}
+              <HeroStat tone={tone} label="Hráčů">
+                <span className={statNumber}>{players.length}</span>
+              </HeroStat>
+              {isOwnTeam && (
+                <HeroStat tone={tone} label="Hodnocení">
+                  <span className={statNumber}>{avgRating}</span>
+                </HeroStat>
+              )}
+              {form.length > 0 && (
+                <HeroStat tone={tone} label="Forma" wide title="Posledních pět zápasů, nejnovější vlevo">
+                  <span className="flex gap-0.5 sm:gap-1">
+                    {form.map((f, i) => (
+                      <span key={i} className={`w-[18px] h-[18px] sm:w-6 sm:h-6 rounded flex items-center justify-center text-[10px] sm:text-xs font-heading font-bold text-white ring-1 ${tone.light ? "ring-black/10" : "ring-white/40"} ${
+                        f === "W" ? "bg-pitch-500" : f === "L" ? "bg-card-red" : "bg-gray-500"
+                      }`}>{f === "W" ? "V" : f === "L" ? "P" : "R"}</span>
+                    ))}
+                  </span>
+                </HeroStat>
+              )}
+            </HeroStats>
+
+            {leagueTeams.length > 1 && (
+              <HeroNavButton tone={tone} direction="next" label="Další tým" className="hidden sm:flex"
+                onClick={() => nextTeam && router.push(`/tym/${nextTeam.id}`)} />
             )}
           </div>
 
-          {/* ─── Mobil ─── */}
-          <div className="sm:hidden">
-            {/* Řádek 1: badge + název + šipky */}
-            <div className="flex items-center gap-3">
-              <BadgePreview primary={team.badge_primary_color || color} secondary={team.badge_secondary_color || team.secondary_color || "#FFFFFF"}
-                pattern={(team.badge_pattern as BadgePattern) || "shield"}
-                initials={team.badge_initials || team.name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()}
-                symbol={team.badge_symbol} size={44} />
-              <div className="flex-1 min-w-0">
-                <h1 className={`font-heading font-extrabold ${txt} text-xl leading-tight truncate`}><TeamName name={team.name} isAi={manager?.coachIsAi === true} /></h1>
-                <div className={`${txtMuted} text-sm`}>
-                  <span className={light ? "text-gray-700" : "text-white/80"}>{team.village_name}</span>
-                  {" "}&middot; {team.district}
-                </div>
-              </div>
-              {leagueTeams.length > 1 && (
-                <div className="flex gap-1.5 shrink-0">
-                  <button onClick={() => prevTeam && router.push(`/tym/${prevTeam.id}`)}
-                    className={`w-8 h-8 rounded-soft ${boxBg} ${boxBgHover} flex items-center justify-center ${txt} transition-colors text-sm`}>&#9664;</button>
-                  <button onClick={() => nextTeam && router.push(`/tym/${nextTeam.id}`)}
-                    className={`w-8 h-8 rounded-soft ${boxBg} ${boxBgHover} flex items-center justify-center ${txt} transition-colors text-sm`}>&#9654;</button>
-                </div>
-              )}
-            </div>
-            {/* Řádek 2: liga + staty + napsat.
-                flex-wrap: na úzkém displeji se dlaždice zalomí pod odkaz na ligu.
-                Bez toho se „3. v Přebor Prahy" mačkalo do tří řádků. */}
-            <div className="flex flex-wrap items-center justify-between gap-y-2 mt-3">
-              {leaguePos && leagueName ? (
-                <a href="/liga" className={`${txtMuted} text-sm font-heading font-bold whitespace-nowrap hover:opacity-80 transition-colors`}>
-                  {leaguePos}. v {leagueName}
-                </a>
-              ) : <span />}
-              <div className="flex items-center gap-2">
-                <a
-                  href={`/klub/${teamId}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  title="Klubový web"
-                  className={`${boxBg} ${boxBgHover} rounded-soft px-3 py-1.5 text-center transition-colors cursor-pointer`}
-                >
-                  <div className="text-base leading-none">{"\u{1F310}"}</div>
-                  <div className={`${boxLabel} text-micro font-heading font-bold uppercase mt-0.5`}>Web</div>
-                </a>
-                {!isOwnTeam && (team as any).user_id !== "ai" && (
-                  <button onClick={async () => {
-                    if (!myTeamId) return;
-                    try {
-                      const res = await apiFetch<{ conversationId: string }>(`/api/teams/${myTeamId}/conversation-with/${teamId}`, {
-                        method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
-                      });
-                      if (res?.conversationId) router.push(`/telefon/${res.conversationId}`);
-                    } catch (e) {
-                      console.error("create conversation (mobile):", e);
-                      showError("Nepodařilo se otevřít konverzaci", (e as Error)?.message || "Zkus to prosím znovu.");
-                    }
-                  }}
-                    className={`${boxBg} ${boxBgHover} rounded-soft px-3 py-1.5 text-center transition-colors cursor-pointer`}>
-                    <div className="text-base leading-none">💬</div>
-                    <div className={`${boxLabel} text-micro font-heading font-bold uppercase mt-0.5`}>Napsat</div>
-                  </button>
-                )}
-                <div className={`${boxBg} rounded-soft px-3 py-1.5 text-center`}>
-                  <div className={`font-heading font-extrabold text-base tabular-nums leading-none ${txt}`}>{players.length}</div>
-                  <div className={`${boxLabel} text-micro font-heading font-bold uppercase mt-0.5`}>Hráčů</div>
-                </div>
-                {isOwnTeam && (
-                  <div className={`${boxBg} rounded-soft px-3 py-1.5 text-center`}>
-                    <div className={`font-heading font-extrabold text-base tabular-nums leading-none ${txt}`}>{avgRating}</div>
-                    <div className={`${boxLabel} text-micro font-heading font-bold uppercase mt-0.5`}>Rating</div>
-                  </div>
-                )}
-                <button onClick={() => router.push(`/tym/${teamId}/stadion`)}
-                  className={`${boxBg} ${boxBgHover} rounded-soft px-3 py-1.5 text-center transition-colors cursor-pointer`}>
-                  <div className="text-base leading-none">🏟</div>
-                  <div className={`${boxLabel} text-micro font-heading font-bold uppercase mt-0.5`}>Stadion</div>
-                </button>
-              </div>
-            </div>
-          </div>
+          <HeroActions tone={tone}>
+            <a href={`/klub/${teamId}`} target="_blank" rel="noopener noreferrer"
+              className={`${HERO_BUTTON} flex-1 sm:flex-initial ${tone.button}`}>
+              {"\u{1F310}"} <span className="sm:hidden">Web</span><span className="hidden sm:inline">Klubový web</span>
+            </a>
+            <Link href={`/tym/${teamId}/stadion`} className={`${HERO_BUTTON} flex-1 sm:flex-initial ${tone.button}`}>
+              🏟️ Stadion
+            </Link>
+            {!isOwnTeam && (team as any).user_id !== "ai" && (
+              <button onClick={openCoachConversation} className={`${HERO_BUTTON} flex-1 sm:flex-initial ${tone.button}`}>
+                💬 <span className="sm:hidden">Napsat</span><span className="hidden sm:inline">Napsat trenérovi</span>
+              </button>
+            )}
+          </HeroActions>
         </div>
       </div>
 
@@ -428,13 +378,6 @@ export default function TeamPage() {
           <SectionLabel>Sezónní bilance</SectionLabel>
           {matchResults && matchResults.matches.length > 0 ? (
             <div className="space-y-3">
-              <div className="flex items-center gap-1.5">
-                {matchResults.form.map((f, i) => (
-                  <span key={i} className={`w-7 h-7 rounded-control flex items-center justify-center text-xs font-heading font-bold text-white ${
-                    f === "W" ? "bg-pitch-500" : f === "L" ? "bg-card-red" : "bg-gray-400"
-                  }`}>{f === "W" ? "V" : f === "L" ? "P" : "R"}</span>
-                ))}
-              </div>
               <div className="grid grid-cols-3 gap-2 text-center">
                 <div className="bg-gray-50 rounded-soft py-2">
                   <div className="font-heading font-bold text-lg tabular-nums text-pitch-500">{matchResults.summary.wins}</div>

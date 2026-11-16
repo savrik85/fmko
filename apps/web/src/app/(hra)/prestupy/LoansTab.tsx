@@ -26,7 +26,7 @@ function LoanCard({ s, lent }: { s: LoanSummary; lent: boolean }) {
         <span className="font-heading font-bold text-base">{s.playerName}</span>
         <PositionBadge position={s.position as "GK" | "DEF" | "MID" | "FWD"} />
         <span className="text-sm text-muted">{s.age} let</span>
-        <span className="text-sm text-muted">· rating <span className="font-heading font-bold text-ink">{s.rating ?? "–"}</span></span>
+        <span className="text-sm text-muted">· hodnocení <span className="font-heading font-bold text-ink">{s.rating ?? "–"}</span></span>
         {s.ratingChange != null && s.ratingChange !== 0 && (
           <span className={`text-sm font-heading font-bold ${s.ratingChange > 0 ? "text-pitch-700" : "text-red-800"}`}>
             {s.ratingChange > 0 ? `+${s.ratingChange}` : s.ratingChange}

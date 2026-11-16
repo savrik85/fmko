@@ -225,7 +225,7 @@ export function NextMatchWidget({ data, teamId }: WidgetProps) {
           const homeAge = home.squad?.length ? Math.round(home.squad.reduce((s, p) => s + p.age, 0) / home.squad.length) : 0;
           const awayAge = away.squad?.length ? Math.round(away.squad.reduce((s, p) => s + p.age, 0) / away.squad.length) : 0;
           const stats = [
-            { label: "Rating", h: home.avgRating, a: away.avgRating, higherBetter: true },
+            { label: "Hodnocení", h: home.avgRating, a: away.avgRating, higherBetter: true },
             { label: "BRA", h: avgByPos(home.squad, "GK"), a: avgByPos(away.squad, "GK"), higherBetter: true },
             { label: "OBR", h: avgByPos(home.squad, "DEF"), a: avgByPos(away.squad, "DEF"), higherBetter: true },
             { label: "ZÁL", h: avgByPos(home.squad, "MID"), a: avgByPos(away.squad, "MID"), higherBetter: true },

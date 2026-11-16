@@ -246,7 +246,7 @@ export default function SquadPage() {
         <div className="card grid grid-cols-4 divide-x divide-gray-100">
           {[
             { value: String(players.length), label: "Hráčů", className: "" },
-            { value: String(avgRating), label: "Ø Rating", className: "" },
+            { value: String(avgRating), label: "Ø Hodnocení", className: "" },
             { value: avgAge, label: "Ø Věk", className: "" },
             { value: totalWage.toLocaleString("cs"), label: "Mzdy/týd", className: "text-card-red" },
           ].map((s) => (
@@ -308,7 +308,7 @@ export default function SquadPage() {
                     ["r", "ČK", "Červené karty"],
                     ["cs", "CS", "Čistá konta (brankáři)"],
                     ["mom", "MoM", "Hráč zápasu"],
-                    ["avg", "Ø", "Průměrný rating"],
+                    ["avg", "Ø", "Průměrné hodnocení"],
                   ] as Array<[StatsKey, string, string]>).map(([k, label, tip]) => (
                     <th key={k}
                       onClick={() => toggleStatsSort(k)}
@@ -355,7 +355,7 @@ export default function SquadPage() {
         <>
           <div className="text-micro font-heading font-bold text-muted uppercase tracking-wider mt-1">{"\u{1F3C5}"} Žebříčky kádru</div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            <PlayerTopList title={"\u{2B50} Nejvyšší rating"} items={topPlayerData.ratings} valueOf={(p) => p.overall_rating ?? 0} />
+            <PlayerTopList title={"\u{2B50} Nejvyšší hodnocení"} items={topPlayerData.ratings} valueOf={(p) => p.overall_rating ?? 0} />
             <PlayerTopList title={"\u{1F525} Top kondice"} items={topPlayerData.condition.map((x) => x.p)} valueOf={(p) => `${(p.lifeContext as unknown as Record<string, number>)?.condition ?? 0}%`} />
             <PlayerTopList title={"\u{1F60A} Top morálka"} items={topPlayerData.morale.map((x) => x.p)} valueOf={(p) => `${(p.lifeContext as unknown as Record<string, number>)?.morale ?? 0}%`} />
             <PlayerTopList title={"\u{1F4A8} Nejrychlejší"} items={topPlayerData.speed.map((x) => x.p)} valueOf={(p) => p.skills?.speed ?? 0} />
@@ -377,7 +377,7 @@ export default function SquadPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <TopList title={"\u{26BD} Nejlepší střelci"} items={topMatchData.scorers} valueOf={(s) => s.goals ?? 0} suffix="g" />
                 <TopList title={"\u{1F3AF} Nejlepší asistenti"} items={topMatchData.assists} valueOf={(s) => s.assists ?? 0} suffix="a" />
-                <TopList title={"\u{2B50} Avg rating zápasů"} items={topMatchData.ratings} valueOf={(s) => (s.avgRating ?? 0).toFixed(1)} />
+                <TopList title={"\u{2B50} Průměrné hodnocení v zápasech"} items={topMatchData.ratings} valueOf={(s) => (s.avgRating ?? 0).toFixed(1)} />
                 <TopList title={"\u{1F451} Hráč zápasu"} items={topMatchData.mom} valueOf={(s) => s.manOfMatch ?? 0} suffix="×" />
                 <TopList title={"\u{23F1}\u{FE0F} Nejvíce minut"} items={topMatchData.minutes} valueOf={(s) => `${s.minutesPlayed ?? 0} '`} />
                 <TopList title={"\u{1F9E4} Čistá konta"} items={topMatchData.cleanSheets} valueOf={(s) => s.cleanSheets ?? 0} />

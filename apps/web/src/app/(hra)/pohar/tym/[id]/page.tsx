@@ -128,7 +128,7 @@ export default function CupTeamDetailPage() {
                   <th className="text-left px-4 py-2 w-10">Poz</th>
                   <th className="text-left px-2 py-2">Hráč</th>
                   <th className="text-right px-2 py-2">Věk</th>
-                  <th className="text-right px-2 py-2">Rating</th>
+                  <th className="text-right px-2 py-2">Hodnocení</th>
                   <th className="text-right px-2 py-2">Kondice</th>
                   <th className="text-right px-4 py-2">Morálka</th>
                 </tr>

@@ -13,7 +13,8 @@ import { EditManagerModal } from "@/components/manager/EditManagerModal";
 import { CoachKabinaTab } from "@/components/manager/CoachKabinaTab";
 import { CoachEducationTab } from "@/components/manager/CoachEducationTab";
 import { FamilyCard, RelationCard, RelationsOverview } from "@/components/relations/RelationSection";
-import { isLightColor, bestTextOn } from "@/lib/team-color";
+import { readableOnLight } from "@/lib/team-color";
+import { HERO_BUTTON, HeroActions, HeroStat, HeroStats, heroTone } from "@/components/ui/hero-kit";
 import { coachAttributeEffects, coachTags, licenceCap, LICENCE_LEVELS } from "@okresni-masina/shared";
 import { LicenceBadge } from "@/components/manager/LicenceBadge";
 import { CoachName } from "@/components/manager/coach-name";
@@ -99,209 +100,137 @@ export default function ManagerDetailPage() {
   const displayName = <CoachName name={manager.name} isAi={isAiCoach} />;
 
   const color = team.primary_color || "#2D5F2D";
-  const isDarkText = bestTextOn(color) === "dark";
-  const txt = isDarkText ? "text-gray-900" : "text-white";
-  const txtMuted = isDarkText ? "text-gray-800" : "text-white/80";
-  const txtSoft = isDarkText ? "text-gray-600" : "text-white/50";
-  const boxBg = isDarkText ? "bg-black/10 text-gray-900" : "bg-white/15 text-white";
-  const boxBgHover = isDarkText ? "hover:bg-black/15" : "hover:bg-white/25";
-  const boxLabel = isDarkText ? "text-gray-700 font-semibold" : "text-white/70";
+  const tone = heroTone(color);
+  // Reputace stojí na plné destičce; na ní se píše barvou klubu.
+  const plateText = tone.light ? "#FFFFFF" : readableOnLight(color);
+  const statNumber = "font-heading font-extrabold text-lg sm:text-3xl tabular-nums leading-none";
+  const hasFace = !!manager.avatar && Object.keys(manager.avatar).length > 2;
+  const canWrite = managerId !== teamId && !!teamId && (team as any).user_id !== "ai";
+
+  const openConversation = async () => {
+    if (!teamId) return;
+    try {
+      const res = await apiFetch<{ conversationId: string }>(`/api/teams/${teamId}/conversation-with/${managerId}`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
+      });
+      if (res?.conversationId) router.push(`/telefon/${res.conversationId}`);
+    } catch (e) {
+      console.error("conversation-with:", e);
+      showError("Nepodařilo se otevřít konverzaci", (e as Error)?.message || "Zkus to prosím znovu.");
+    }
+  };
+
+  // Věk, bydliště a klub: jednou, vykreslí se na mobilu i na desktopu.
+  const metaLine = (
+    <>
+      {manager.age && <span className={`${tone.muted} text-sm`}>{manager.age} let</span>}
+      {manager.birthplace && (
+        <>
+          <span className={tone.soft}>&middot;</span>
+          {manager.birthplaceVillageId
+            ? <Link href={`/obec/${manager.birthplaceVillageId}`} className={`${tone.muted} text-sm underline decoration-current/30 hover:decoration-current`}>{manager.birthplace}</Link>
+            : <span className={`${tone.muted} text-sm`}>{manager.birthplace}</span>}
+        </>
+      )}
+      <span className={tone.soft}>&middot;</span>
+      <a href={`/tym/${team.id}`} className={`${tone.muted} text-sm hover:opacity-80 underline decoration-current/30 transition-colors flex items-center gap-1.5`}>
+        <BadgePreview primary={color} secondary={team.secondary_color || "#FFF"} pattern={(team.badge_pattern as BadgePattern) || "shield"}
+          initials={team.name.split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={18} />
+        {team.name}
+      </a>
+    </>
+  );
 
   return (
     <>
       {/* ═══ Manager header — konzistentní se zbytkem aplikace (Hráč/Tým) ═══ */}
-      <div className="hero-gradient hero-detail px-3 sm:px-8 py-4 sm:py-5" style={{ backgroundColor: color }}>
+      <div className="hero-gradient hero-detail px-3 sm:px-8 py-3 sm:py-5" style={{ backgroundColor: color }}>
         <HeroBackdrop primary={color} secondary={team.secondary_color} pattern={team.badge_pattern ?? null} />
         <div className="max-w-[1280px] mx-auto">
-          
-          {/* ─── Desktop ─── */}
-          <div className="hidden sm:flex items-center gap-4">
-            {manager.avatar && Object.keys(manager.avatar).length > 2 ? (
-              <FaceAvatar faceConfig={manager.avatar} size={72} className={`shrink-0 ${boxBg} rounded-xl`} />
-            ) : (
-              <div className={`shrink-0 w-[72px] h-[72px] rounded-xl ${boxBg} flex items-center justify-center ${txt} font-heading font-bold text-2xl`}>
-                {manager.name[0]}
-              </div>
-            )}
+          {/* Jedno rozložení pro mobil i desktop, stejné jako u hráče a týmu. */}
+          <div className="flex flex-wrap items-center gap-x-3 sm:gap-x-4 gap-y-2 sm:gap-y-3">
+            <div className="shrink-0">
+              {hasFace ? (
+                <>
+                  <FaceAvatar faceConfig={manager.avatar} size={46} className={`sm:hidden ${tone.panel} rounded-xl`} />
+                  <FaceAvatar faceConfig={manager.avatar} size={80} className={`hidden sm:block ${tone.panel} rounded-xl`} />
+                </>
+              ) : (
+                <div className={`w-[46px] h-14 sm:w-20 sm:h-24 rounded-xl ${tone.panel} flex items-center justify-center ${tone.text} font-heading font-bold text-xl sm:text-3xl`}>
+                  {manager.name[0]}
+                </div>
+              )}
+            </div>
             <div className="flex-1 min-w-0">
-              <h1 className={`font-heading font-extrabold ${txt} text-2xl leading-tight truncate`}>
+              <h1 className={`font-heading font-extrabold ${tone.text} text-lg sm:text-3xl leading-tight`}>
                 {displayName}
               </h1>
               <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                 {manager.backstory && (
-                  <span className={`${txtMuted} text-sm font-heading font-semibold`}>
+                  <span className={`${tone.muted} text-sm font-heading font-semibold hidden sm:inline`}>
                     {BACKSTORY_LABELS[manager.backstory] ?? manager.backstory}
                   </span>
                 )}
                 <LicenceBadge level={manager.licenceLevel ?? 0} showNone />
               </div>
-              <div className="flex items-center gap-3 mt-1 flex-wrap">
-                {manager.age && <span className={`${txtMuted} text-sm`}>{manager.age} let</span>}
-                {manager.birthplace && (
-                  <>
-                    <span className={txtSoft}>&middot;</span>
-                    {manager.birthplaceVillageId
-                      ? <Link href={`/obec/${manager.birthplaceVillageId}`} className={`${txtMuted} text-sm underline decoration-current/30 hover:decoration-current`}>{manager.birthplace}</Link>
-                      : <span className={`${txtMuted} text-sm`}>{manager.birthplace}</span>}
-                  </>
-                )}
-                <span className={txtSoft}>&middot;</span>
-                <a href={`/tym/${team.id}`} className={`${txtMuted} text-sm hover:opacity-80 underline transition-colors flex items-center gap-1.5`}>
-                  <BadgePreview primary={color} secondary={team.secondary_color || "#FFF"} pattern={(team.badge_pattern as BadgePattern) || "shield"}
-                    initials={team.name.split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={18} />
-                  {team.name}
-                </a>
-              </div>
+              <div className="hidden sm:flex items-center gap-x-3 gap-y-1 mt-1 flex-wrap">{metaLine}</div>
             </div>
-
-            <div className="flex items-center gap-2.5 shrink-0">
-              <div className={`${boxBg} rounded-xl py-2.5 text-center min-w-[64px]`}>
-                <div className={`font-heading font-extrabold text-xl tabular-nums leading-none ${txt}`}>
-                  {manager.reputation ?? 30}
-                </div>
-                <div className={`${boxLabel} text-micro font-heading font-bold uppercase mt-0.5`}>Reputace</div>
-              </div>
-
-              <div className={`${boxBg} rounded-xl py-2.5 text-center min-w-[64px]`}>
-                <div className={`font-heading font-extrabold text-xl leading-none ${txt}`}>
-                  {shortLicence(manager.licenceLevel ?? 0)}
-                </div>
-                <div className={`${boxLabel} text-micro font-heading font-bold uppercase mt-0.5`}>Licence</div>
-              </div>
-
-              {canEdit && (
-                <button onClick={() => setEditing(true)}
-                  className={`${boxBg} ${boxBgHover} rounded-xl px-4 py-2 text-center transition-colors cursor-pointer shrink-0`}>
-                  <div className="text-xl leading-none">✏️</div>
-                  <div className={`${boxLabel} text-micro font-heading font-bold uppercase mt-1`}>Upravit</div>
-                </button>
-              )}
-
-              {managerId !== teamId && teamId && (team as any).user_id !== "ai" && (
-                <button onClick={async () => {
-                  if (!teamId) return;
-                  try {
-                    const res = await apiFetch<{ conversationId: string }>(`/api/teams/${teamId}/conversation-with/${managerId}`, {
-                      method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
-                    });
-                    if (res?.conversationId) router.push(`/telefon/${res.conversationId}`);
-                  } catch (e) {
-                    console.error("conversation-with:", e);
-                    showError("Nepodařilo se otevřít konverzaci", (e as Error)?.message || "Zkus to prosím znovu.");
-                  }
-                }}
-                  className={`${boxBg} ${boxBgHover} rounded-xl px-4 py-2 text-center transition-colors cursor-pointer shrink-0`}>
-                  <div className="text-xl leading-none">💬</div>
-                  <div className={`${boxLabel} text-micro font-heading font-bold uppercase mt-1`}>Napsat</div>
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* ─── Mobil ─── */}
-          <div className="sm:hidden">
-            {/* Řádek 1: avatar + jméno/licence + akční tlačítka */}
-            <div className="flex items-center gap-3">
-              {manager.avatar && Object.keys(manager.avatar).length > 2 ? (
-                <FaceAvatar faceConfig={manager.avatar} size={56} className={`shrink-0 ${boxBg} rounded-xl`} />
-              ) : (
-                <div className={`shrink-0 w-14 h-14 rounded-xl ${boxBg} flex items-center justify-center ${txt} font-heading font-bold text-xl`}>
-                  {manager.name[0]}
-                </div>
-              )}
-              <div className="flex-1 min-w-0">
-                <h1 className={`font-heading font-extrabold ${txt} text-xl leading-tight truncate`}>
-                  {displayName}
-                </h1>
-                <div className="flex items-center gap-2 mt-0.5">
-                  <LicenceBadge level={manager.licenceLevel ?? 0} showNone />
-                </div>
-              </div>
-              {canEdit && (
-                <button onClick={() => setEditing(true)}
-                  className={`w-9 h-9 rounded-soft ${boxBg} ${boxBgHover} flex items-center justify-center ${txt} transition-colors text-base shrink-0`}
-                  title="Upravit profil">
-                  ✏️
-                </button>
-              )}
-              {managerId !== teamId && teamId && (team as any).user_id !== "ai" && (
-                <button onClick={async () => {
-                  if (!teamId) return;
-                  try {
-                    const res = await apiFetch<{ conversationId: string }>(`/api/teams/${teamId}/conversation-with/${managerId}`, {
-                      method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
-                    });
-                    if (res?.conversationId) router.push(`/telefon/${res.conversationId}`);
-                  } catch (e) {
-                    showError("Nepodařilo se otevřít konverzaci", (e as Error)?.message || "Zkus to prosím znovu.");
-                  }
-                }}
-                  className={`w-9 h-9 rounded-soft ${boxBg} ${boxBgHover} flex items-center justify-center ${txt} transition-colors text-base shrink-0`}
-                  title="Napsat trenérovi">
-                  💬
-                </button>
-              )}
-            </div>
-
-            {/* Řádek 2: pozadí, věk, bydliště, tým */}
-            <div className="flex items-center gap-2 mt-2 flex-wrap text-sm">
+            {/* Na mobilu jsou akce ikonou vedle jména: samostatná řada by hlavičku zvedla o čtvrtinu. */}
+            {canEdit && (
+              <button onClick={() => setEditing(true)} aria-label="Upravit profil" title="Upravit profil"
+                className={`sm:hidden w-8 h-8 rounded-control flex items-center justify-center shrink-0 transition-colors ${tone.nav}`}>
+                ✏️
+              </button>
+            )}
+            {canWrite && (
+              <button onClick={openConversation} aria-label="Napsat trenérovi" title="Napsat trenérovi"
+                className={`sm:hidden w-8 h-8 rounded-control flex items-center justify-center shrink-0 transition-colors ${tone.nav}`}>
+                💬
+              </button>
+            )}
+            <div className="sm:hidden w-full flex items-center gap-x-2 gap-y-1 flex-wrap">
               {manager.backstory && (
-                <span className={`${txtMuted} font-heading font-semibold`}>
-                  {BACKSTORY_LABELS[manager.backstory] ?? manager.backstory}
-                </span>
-              )}
-              {manager.age && (
                 <>
-                  <span className={txtSoft}>&middot;</span>
-                  <span className={`${txtMuted}`}>{manager.age} let</span>
+                  <span className={`${tone.muted} text-sm font-heading font-semibold`}>{BACKSTORY_LABELS[manager.backstory] ?? manager.backstory}</span>
+                  <span className={tone.soft}>&middot;</span>
                 </>
               )}
-              {manager.birthplace && (
-                <>
-                  <span className={txtSoft}>&middot;</span>
-                  {manager.birthplaceVillageId
-                    ? <Link href={`/obec/${manager.birthplaceVillageId}`} className={`${txtMuted} underline decoration-current/30 hover:decoration-current`}>{manager.birthplace}</Link>
-                    : <span className={`${txtMuted}`}>{manager.birthplace}</span>}
-                </>
-              )}
-              <span className={txtSoft}>&middot;</span>
-              <a href={`/tym/${team.id}`} className={`${txtMuted} hover:opacity-80 underline flex items-center gap-1.5`}>
-                <BadgePreview primary={color} secondary={team.secondary_color || "#FFF"} pattern={(team.badge_pattern as BadgePattern) || "shield"}
-                  initials={team.name.split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={16} />
-                <span className="truncate max-w-[170px]">{team.name}</span>
-              </a>
+              {metaLine}
             </div>
 
-            {/* Řádek 3: Staty na celou šířku (stejné jako v detailu hráče) */}
-            <div className="flex gap-1.5 mt-2">
-              <div className={`flex-1 ${boxBg} rounded-soft py-1 text-center`}>
-                <div className={`font-heading font-extrabold text-sm tabular-nums leading-none ${txt}`}>
+            <HeroStats tone={tone}>
+              <HeroStat tone={tone} label="Reputace">
+                <span className={`min-w-[38px] sm:min-w-[54px] h-7 sm:h-11 px-1.5 sm:px-2 rounded-control flex items-center justify-center font-heading font-extrabold text-lg sm:text-3xl tabular-nums leading-none ${tone.plate}`}
+                  style={{ color: plateText }}>
                   {manager.reputation ?? 30}
-                </div>
-                <div className={`${boxLabel} text-micro font-heading font-bold uppercase mt-0.5`}>Reputace</div>
-              </div>
-              <div className={`flex-1 ${boxBg} rounded-soft py-1 text-center`}>
-                <div className={`font-heading font-extrabold text-sm leading-none ${txt}`}>
-                  {shortLicence(manager.licenceLevel ?? 0)}
-                </div>
-                <div className={`${boxLabel} text-micro font-heading font-bold uppercase mt-0.5`}>Licence</div>
-              </div>
-              <div className={`flex-1 ${boxBg} rounded-soft py-1 text-center`}>
-                <div className={`font-heading font-extrabold text-sm tabular-nums leading-none ${txt}`}>
-                  {achievements ? `${achievements.earnedCount}/${achievements.totalCount}` : "-"}
-                </div>
-                <div className={`${boxLabel} text-micro font-heading font-bold uppercase mt-0.5`}>Úspěchy</div>
-              </div>
+                </span>
+              </HeroStat>
+              <HeroStat tone={tone} label="Licence">
+                <span className={statNumber}>{shortLicence(manager.licenceLevel ?? 0)}</span>
+              </HeroStat>
+              <HeroStat tone={tone} label="Úspěchy">
+                <span className={statNumber}>{achievements ? `${achievements.earnedCount}/${achievements.totalCount}` : "-"}</span>
+              </HeroStat>
               {hofRank && (
-                <div className={`flex-1 ${boxBg} rounded-soft py-1 text-center`}>
-                  <div className={`font-heading font-extrabold text-sm tabular-nums leading-none ${txt}`}>
-                    #{hofRank.rank}
-                  </div>
-                  <div className={`${boxLabel} text-micro font-heading font-bold uppercase mt-0.5`}>Síň slávy</div>
-                </div>
+                <HeroStat tone={tone} label="Síň slávy" title={`${hofRank.rank}. z ${hofRank.total} trenérů`}>
+                  <span className={statNumber}>{hofRank.rank}.</span>
+                </HeroStat>
               )}
-            </div>
+            </HeroStats>
           </div>
+
+          {(canEdit || canWrite) && (
+            <div className="hidden sm:block">
+              <HeroActions tone={tone}>
+                {canEdit && (
+                  <button onClick={() => setEditing(true)} className={`${HERO_BUTTON} ${tone.button}`}>✏️ Upravit profil</button>
+                )}
+                {canWrite && (
+                  <button onClick={openConversation} className={`${HERO_BUTTON} ${tone.button}`}>💬 Napsat trenérovi</button>
+                )}
+              </HeroActions>
+            </div>
+          )}
 
         </div>
       </div>

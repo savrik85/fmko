@@ -342,7 +342,7 @@ export async function applyLocalSale(
   }
 
   const desc = isStar
-    ? `Klub prodal místního ${player.first_name} ${player.last_name} (rating ${player.overall_rating}). Občané jsou v šoku.`
+    ? `Klub prodal místního ${player.first_name} ${player.last_name} (hodnocení ${player.overall_rating}). Občané jsou v šoku.`
     : `Klub prodal místního ${player.first_name} ${player.last_name}.`;
   await db.prepare(
     `INSERT INTO village_history (id, village_id, team_id, official_id, event_type, description, impact, game_date, created_at)

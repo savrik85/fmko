@@ -79,7 +79,7 @@ export function generateCharacteristics(
 
   // ── B) Věk + talent ──
   if (age < 20 && rating > age * 2.8) {
-    tags.push({ key: "talent", label: "Velký talent", emoji: "💎", color: "blue", description: `V ${age} letech nadprůměrný rating ${rating}`, priority: 3 });
+    tags.push({ key: "talent", label: "Velký talent", emoji: "💎", color: "blue", description: `V ${age} letech nadprůměrné hodnocení ${rating}`, priority: 3 });
   } else if (age >= 20 && age <= 23) {
     const avgRating = teamPlayers.length > 0 ? teamPlayers.reduce((sum, tp) => sum + (tp.overall_rating ?? 0), 0) / teamPlayers.length : 50;
     if (rating > avgRating * 1.1) {

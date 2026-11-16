@@ -8,6 +8,9 @@ import { Card, CardBody, SectionLabel, Spinner } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { DistrictMap, clubBadgeSvg, villageSizeLabel, type MapVillage } from "@/components/map/DistrictMap";
 import { StadiumPreview } from "./StadiumPreview";
+import { HeroBackdrop } from "@/components/ui/hero-backdrop";
+import { HeroNavButton, HeroStat, HeroStats, heroTone } from "@/components/ui/hero-kit";
+import { readableOnLight } from "@/lib/team-color";
 
 type Face = Record<string, unknown> | null;
 
@@ -277,44 +280,73 @@ export default function VillageProfilePage() {
     clubs: data.clubs.map((c) => ({ id: c.id, name: c.name, isAi: c.isAi, leagueName: c.leagueName, primaryColor: c.colors.primary, secondaryColor: c.colors.secondary, badge: c.badge })),
   };
 
+  // Obec vlastní barvu nemá. S jediným klubem si půjčí jeho, jinak zůstane zelená.
+  const onlyClub = data.clubs.length === 1 ? data.clubs[0] : null;
+  const color = onlyClub?.colors.primary || "#2D5F2D";
+  const tone = heroTone(color);
+  const plateText = tone.light ? "#FFFFFF" : readableOnLight(color);
+  const statNumber = "font-heading font-extrabold text-lg sm:text-3xl tabular-nums leading-none";
+
   return (
-    <div className="page-container space-y-6">
-      <div className="flex items-center justify-between gap-2">
-        <Link href="/obec?tab=okres" className="text-sm text-pitch-700 hover:text-pitch-500 font-heading font-bold">← Obce okresu</Link>
-        {prev && next && (
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => router.push(`/obec/${prev.id}`)}
-              aria-label={`Předchozí obec: ${prev.name}`}
-              className="w-8 h-8 rounded-soft bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-sm shrink-0"
-            >
-              &#9664;
-            </button>
-            <span className="text-sm text-muted tabular-nums">{idx + 1} / {pool.length}</span>
-            <button
-              onClick={() => router.push(`/obec/${next.id}`)}
-              aria-label={`Další obec: ${next.name}`}
-              className="w-8 h-8 rounded-soft bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-sm shrink-0"
-            >
-              &#9654;
-            </button>
+    <>
+      {/* Hlavička jako u hráče a týmu: název, ukazatele vpravo, listování obcemi okresu. */}
+      <div className="hero-gradient hero-detail px-3 sm:px-8 py-3 sm:py-5" style={{ backgroundColor: color }}>
+        <HeroBackdrop primary={color} secondary={onlyClub?.colors.secondary} />
+        <div className="max-w-[1280px] mx-auto">
+          <div className="flex flex-wrap items-center gap-x-3 sm:gap-x-4 gap-y-2 sm:gap-y-3">
+            {prev && (
+              <HeroNavButton tone={tone} direction="prev" label={`Předchozí obec: ${prev.name}`} className="hidden sm:flex"
+                onClick={() => router.push(`/obec/${prev.id}`)} />
+            )}
+            <div className="flex-1 min-w-0">
+              <h1 className={`font-heading font-extrabold ${tone.text} text-lg sm:text-3xl leading-tight`}>{v.name}</h1>
+              <div className={`${tone.muted} text-[13px] sm:text-sm sm:mt-0.5`}>
+                {villageSizeLabel(v.size)} &middot;{" "}
+                <Link href="/obec?tab=okres" className="underline decoration-current/30 hover:decoration-current">okres {v.district}</Link>
+                {prev && next && <> &middot; <span className="tabular-nums">{idx + 1} / {pool.length}</span></>}
+              </div>
+            </div>
+            {prev && next && (
+              <div className="flex sm:hidden gap-1.5 shrink-0">
+                <HeroNavButton tone={tone} direction="prev" label={`Předchozí obec: ${prev.name}`} className="flex"
+                  onClick={() => router.push(`/obec/${prev.id}`)} />
+                <HeroNavButton tone={tone} direction="next" label={`Další obec: ${next.name}`} className="flex"
+                  onClick={() => router.push(`/obec/${next.id}`)} />
+              </div>
+            )}
+            <HeroStats tone={tone}>
+              <HeroStat tone={tone} label="Obyvatel">
+                <span className={`min-w-[38px] sm:min-w-[54px] h-7 sm:h-11 px-1.5 sm:px-2 rounded-control flex items-center justify-center font-heading font-extrabold text-lg sm:text-3xl tabular-nums leading-none ${tone.plate}`}
+                  style={{ color: plateText }}>
+                  {v.population.toLocaleString("cs-CZ")}
+                </span>
+              </HeroStat>
+              <HeroStat tone={tone} label={data.clubs.length === 1 ? "Klub" : data.clubs.length >= 2 && data.clubs.length <= 4 ? "Kluby" : "Klubů"}>
+                <span className={statNumber}>{data.clubs.length}</span>
+              </HeroStat>
+              <HeroStat tone={tone} label="Hráčů odtud">
+                <span className={statNumber}>{data.residents.length}</span>
+              </HeroStat>
+            </HeroStats>
+            {next && (
+              <HeroNavButton tone={tone} direction="next" label={`Další obec: ${next.name}`} className="hidden sm:flex"
+                onClick={() => router.push(`/obec/${next.id}`)} />
+            )}
           </div>
-        )}
+        </div>
       </div>
 
+    <div className="page-container space-y-6">
       <div className="grid gap-4 md:grid-cols-[1fr_300px] md:items-start">
         <Card>
           <CardBody className="space-y-3">
-            <div>
-              <h1 className="font-heading font-bold text-2xl leading-tight">{v.name}</h1>
-              <div className="text-sm text-muted">
-                {villageSizeLabel(v.size)} · {v.population.toLocaleString("cs-CZ")} obyvatel · okres {v.district}
-              </div>
-            </div>
-            {facts.length > 0 && (
+            <SectionLabel>O obci</SectionLabel>
+            {facts.length > 0 ? (
               <ul className="space-y-1.5 text-sm text-ink-light">
                 {facts.map((f, i) => <li key={i} className="flex gap-2"><span aria-hidden>·</span><span>{f}</span></li>)}
               </ul>
+            ) : (
+              <p className="text-sm text-muted">O téhle obci zatím kronika mlčí.</p>
             )}
           </CardBody>
         </Card>
@@ -456,5 +488,6 @@ export default function VillageProfilePage() {
         </div>
       )}
     </div>
+    </>
   );
 }

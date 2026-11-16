@@ -776,7 +776,7 @@ function OwnVillage() {
                     {[
                       { v: localPride.totalLocalCount, l: "místních v kádru" },
                       { v: localPride.recentStartersTotal, l: "startů za 90 dní" },
-                      { v: localPride.avgRating ?? "?", l: "průměrný rating" },
+                      { v: localPride.avgRating ?? "?", l: "průměrné hodnocení" },
                     ].map((x) => (
                       <div key={x.l} className="rounded-xl bg-surface p-2">
                         <div className="text-2xl font-heading font-bold tabular-nums">{x.v}</div>
