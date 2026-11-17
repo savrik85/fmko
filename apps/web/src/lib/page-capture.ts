@@ -177,12 +177,34 @@ async function toJpeg(canvas: HTMLCanvasElement, background: string): Promise<Bl
  * Pokusy: nejdřív s písmem hry (bez něj se texty v systémovém písmu lámou a přetékají),
  * dvakrát, protože Safari občas vykreslí až napodruhé. Bez písma jen jako poslední možnost.
  */
-const ATTEMPTS = (scale: number): Array<{ scale: number; fonts: boolean }> => [
-  { scale, fonts: true },
-  { scale, fonts: true },
-  { scale, fonts: false },
-  { scale: 1, fonts: false },
-];
+const ATTEMPTS = (scale: number): Array<{ scale: number; fonts: boolean }> => IS_WEBKIT
+  ? [{ scale, fonts: false }, { scale, fonts: false }, { scale: 1, fonts: false }]
+  : [{ scale, fonts: true }, { scale, fonts: true }, { scale, fonts: false }];
+
+/**
+ * Safari na iPhonu (a každý prohlížeč na iOS, i Chrome) kopii stránky s vloženými
+ * písmy hry nevykreslí: 16 souborů písma v obrázku = černá fotka nebo vypršení času.
+ * Tam se písma nevkládají a v kopii se nahradí vestavěnými písmy iOS, která vypadají
+ * a měří podobně (viz `useSystemLookalikeFonts`), aby se texty nelámaly.
+ */
+const IS_WEBKIT = typeof navigator !== "undefined"
+  && /AppleWebKit/.test(navigator.userAgent)
+  && !/Chrome\/|Chromium|Edg\/|Android/.test(navigator.userAgent);
+
+const BODY_LOOKALIKE = '"Avenir Next", Avenir, system-ui, sans-serif';
+const HEADING_LOOKALIKE = '"Avenir Next Condensed", "Arial Narrow", "Avenir Next", system-ui, sans-serif';
+
+/** V kopii stránky nahradí písma hry (Outfit, Barlow Condensed) vestavěnými podobnými. */
+function useSystemLookalikeFonts(root: HTMLElement): void {
+  const replace = (el: HTMLElement) => {
+    const family = el.style.fontFamily.toLowerCase();
+    if (!family) return;
+    if (family.includes("barlow")) el.style.setProperty("font-family", HEADING_LOOKALIKE, "important");
+    else if (family.includes("outfit")) el.style.setProperty("font-family", BODY_LOOKALIKE, "important");
+  };
+  replace(root);
+  root.querySelectorAll<HTMLElement>("*").forEach(replace);
+}
 
 /** Písmo hry do kopie stránky jen ve woff2, ať je kopie co nejmenší. */
 function fontOption(fonts: boolean): CanvasOptions["font"] {
@@ -247,6 +269,7 @@ export async function captureVisibleContent(): Promise<CaptureResult> {
         // Kopie `main` ukáže výřez od místa, kam hráč odscrolloval.
         onCloneNode: (cloned: Node) => {
           if (!(cloned instanceof HTMLElement)) return;
+          if (!fonts) useSystemLookalikeFonts(cloned);
           cloned.style.setProperty("height", `${height}px`, "important");
           cloned.style.setProperty("overflow", "hidden", "important");
           if (scrollTop > 0) {
@@ -282,6 +305,7 @@ function canvasOptions(target: HTMLElement, plan: PagePlan, options: CaptureOpti
     // Kopie má výšky živé stránky natvrdo ve stylu; `main` a sloupec nad ním se
     // natáhnou na vyfocený obsah, aby se nescrollovalo. Živá stránka se nemění.
     onCloneNode: (cloned: Node) => {
+      if (cloned instanceof HTMLElement && !fonts) useSystemLookalikeFonts(cloned);
       if (!(cloned instanceof HTMLElement) || !main) return;
       const clonedMain = cloned.querySelector("main");
       if (!clonedMain) return;
