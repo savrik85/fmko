@@ -1,5 +1,6 @@
 "use client";
 
+import { FixtureGroup, FixtureRow, type FixtureSide } from "@/components/match/fixture-row";
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
@@ -421,30 +422,26 @@ export default function U21Page() {
               const matches = r.matches.filter((m) => !onlyOurMatches || m.homeTeamId === u21TeamId || m.awayTeamId === u21TeamId);
               if (!matches.length) return null;
               return (
-                <section key={r.round} className="card overflow-hidden">
-                  <div className="flex items-center justify-between bg-surface-2 px-3 py-2 text-xs">
-                    <h2 className="font-bold">{r.round}. kolo</h2><span className="text-muted">{formatDate(r.scheduledAt)}</span>
-                  </div>
-                  <ul className="divide-y divide-gray-200">
-                    {matches.map((m) => (
-                      <li key={m.id} className={`p-3 ${m.homeTeamId === u21TeamId || m.awayTeamId === u21TeamId ? "border-l-2 border-pitch-500" : ""}`}>
-                        <div className="space-y-2">
-                          {(["home", "away"] as const).map((side) => {
-                            const id = side === "home" ? m.homeTeamId : m.awayTeamId;
-                            const name = side === "home" ? m.homeName : m.awayName;
-                            const score = side === "home" ? m.homeScore : m.awayScore;
-                            return <div key={side} className="flex items-center gap-2 text-sm">
-                              <span className="shrink-0"><BadgePreview primary={(side === "home" ? m.homeColor : m.awayColor) || "#2D5F2D"} secondary={(side === "home" ? m.homeSecondary : m.awaySecondary) || "#FFFFFF"} pattern={((side === "home" ? m.homeBadge : m.awayBadge) as BadgePattern) || "shield"} initials={ini(name)} size={20} /></span>
-                              <span className={`min-w-0 flex-1 break-words ${id === u21TeamId ? "font-bold text-pitch-600" : "text-ink"}`}>{id ? <Link href={`/tym/${id}`} className="hover:underline">{name}</Link> : name}</span>
-                              <span className="w-6 shrink-0 text-center font-bold tabular-nums">{m.status === "simulated" ? score ?? "-" : "-"}</span>
-                            </div>;
-                          })}
-                        </div>
-                        <div className="mt-2 text-[11px] text-muted">{m.status === "simulated" ? <Link href={`/zapas/${m.id}`} className="font-semibold text-pitch-600 hover:underline">Odehráno, detail zápasu</Link> : r.scheduledAt ? new Date(r.scheduledAt).toLocaleTimeString("cs", { hour: "2-digit", minute: "2-digit" }) : "Termín bude upřesněn"} · domácí nahoře</div>
-                      </li>
-                    ))}
-                  </ul>
-                </section>
+                <FixtureGroup key={r.round} title={`${r.round}. kolo`} note={formatDate(r.scheduledAt)}>
+                  {matches.map((m) => {
+                    const isPlayed = m.status === "simulated" && m.homeScore != null && m.awayScore != null;
+                    const side = (id: string | null | undefined, name: string, color: string | null | undefined, secondary: string | null | undefined, badge: string | null | undefined, isAi?: boolean): FixtureSide => ({
+                      name: name.replace(/ U21$/, ""), href: id ? `/tym/${id}` : null, color: color || "#2D5F2D", isAi: isAi === true,
+                      crest: { pattern: badge ?? null, primary: color || "#2D5F2D", secondary: secondary || "#FFFFFF", initials: null, symbol: null },
+                    });
+                    return (
+                      <FixtureRow key={m.id}
+                        home={side(m.homeTeamId, m.homeName, m.homeColor, m.homeSecondary, m.homeBadge, m.homeIsAi)}
+                        away={side(m.awayTeamId, m.awayName, m.awayColor, m.awaySecondary, m.awayBadge, m.awayIsAi)}
+                        score={isPlayed ? { home: m.homeScore!, away: m.awayScore! } : null}
+                        // Neodehraný zápas ukáže v tabuli čas výkopu, jako dřív pod zápasem.
+                        kickoff={r.scheduledAt ? new Date(r.scheduledAt).toLocaleTimeString("cs", { hour: "2-digit", minute: "2-digit" }) : "?"}
+                        winner={isPlayed ? (m.homeScore! > m.awayScore! ? "home" : m.awayScore! > m.homeScore! ? "away" : null) : null}
+                        href={isPlayed ? `/zapas/${m.id}` : null}
+                        accent={m.homeTeamId === u21TeamId || m.awayTeamId === u21TeamId ? "var(--color-pitch-500)" : null} />
+                    );
+                  })}
+                </FixtureGroup>
               );
             })}
           </div>

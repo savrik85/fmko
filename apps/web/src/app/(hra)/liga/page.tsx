@@ -10,6 +10,7 @@ import type { BadgePattern } from "@/components/ui";
 import { PreseasonNotice } from "@/components/team/preseason-notice";
 import { LeagueStatsTab, type StatsData } from "@/components/league/league-stats";
 import { CoachName } from "@/components/manager/coach-name";
+import { FixtureGroup, FixtureRow, type FixtureSide } from "@/components/match/fixture-row";
 import { TeamName } from "@/components/manager/team-name";
 
 // ═══ Types ═══
@@ -550,68 +551,29 @@ function ScheduleTab({ rounds, loaded, teamId, showAll }: { rounds: LeagueRound[
     return <div className="card p-8 text-center text-muted">{showAll ? "Rozpis není dostupný" : "Žádné odehrané zápasy"}</div>;
   }
 
+  const side = (id: string, name: string, color: string, secondary: string, badge: string): FixtureSide => ({
+    name, href: id ? `/tym/${id}` : null, color,
+    crest: { pattern: badge, primary: color, secondary, initials: null, symbol: null },
+  });
   return (
     <div className="space-y-4">
       {displayRounds.map((round) => (
-        <div key={round.round} className="card overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50 border-b border-gray-100">
-            <span className="font-heading font-bold text-sm">{round.round}. kolo</span>
-            {round.scheduledAt && <span className="text-xs text-muted">{formatDate(round.scheduledAt)}</span>}
-          </div>
-          <div>
-            {round.matches.map((m, i) => {
-              const isPlayed = m.status === "simulated";
-              const isMyMatch = m.homeTeamId === teamId || m.awayTeamId === teamId;
-              const rowCls = `px-4 py-3 ${i < round.matches.length - 1 ? "border-b border-gray-50" : ""} ${isMyMatch ? "bg-pitch-50/40" : ""} ${isPlayed ? "hover:bg-gray-50 transition-colors cursor-pointer" : ""}`;
-              const content = (
-                <div className={rowCls}>
-                  {/* Mobil — každý tým na svém řádku, aby se vešel celý název */}
-                  <div className="sm:hidden flex items-center gap-3">
-                    <div className="flex-1 min-w-0 space-y-1">
-                      <div className="flex items-center gap-2 h-7 min-w-0">
-                        <BadgePreview primary={m.homeColor} secondary={m.homeSecondary} pattern={m.homeBadge as BadgePattern} initials={ini(m.homeName)} size={22} />
-                        <span className={`text-base font-heading truncate ${m.homeTeamId === teamId ? "font-bold text-pitch-600" : ""}`}>{m.homeName}</span>
-                      </div>
-                      <div className="flex items-center gap-2 h-7 min-w-0">
-                        <BadgePreview primary={m.awayColor} secondary={m.awaySecondary} pattern={m.awayBadge as BadgePattern} initials={ini(m.awayName)} size={22} />
-                        <span className={`text-base font-heading truncate ${m.awayTeamId === teamId ? "font-bold text-pitch-600" : ""}`}>{m.awayName}</span>
-                      </div>
-                    </div>
-                    {isPlayed ? (
-                      <div className="shrink-0 space-y-1 text-right font-heading font-[800] text-lg tabular-nums">
-                        <div className="h-7 flex items-center justify-end">{m.homeScore}</div>
-                        <div className="h-7 flex items-center justify-end">{m.awayScore}</div>
-                      </div>
-                    ) : (
-                      <span className="shrink-0 text-sm text-muted font-heading">vs</span>
-                    )}
-                  </div>
-
-                  {/* Desktop — klasicky proti sobě */}
-                  <div className="hidden sm:flex items-center">
-                    <div className="flex items-center gap-2 flex-1 min-w-0 justify-end">
-                      <span className={`text-sm font-heading truncate ${m.homeTeamId === teamId ? "font-bold text-pitch-600" : ""}`}>{m.homeName}</span>
-                      <BadgePreview primary={m.homeColor} secondary={m.homeSecondary} pattern={m.homeBadge as BadgePattern} initials={ini(m.homeName)} size={22} />
-                    </div>
-                    <div className="shrink-0 w-20 text-center">
-                      {isPlayed ? (
-                        <span className="font-heading font-[800] text-lg tabular-nums">{m.homeScore} : {m.awayScore}</span>
-                      ) : (
-                        <span className="text-xs text-muted font-heading">vs</span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <BadgePreview primary={m.awayColor} secondary={m.awaySecondary} pattern={m.awayBadge as BadgePattern} initials={ini(m.awayName)} size={22} />
-                      <span className={`text-sm font-heading truncate ${m.awayTeamId === teamId ? "font-bold text-pitch-600" : ""}`}>{m.awayName}</span>
-                    </div>
-                  </div>
-                </div>
-              );
-              if (isPlayed) return <Link key={m.id} href={`/zapas/${m.id}`}>{content}</Link>;
-              return <div key={m.id}>{content}</div>;
-            })}
-          </div>
-        </div>
+        <FixtureGroup key={round.round} title={`${round.round}. kolo`} note={round.scheduledAt ? formatDate(round.scheduledAt) : undefined}>
+          {round.matches.map((m) => {
+            const isPlayed = m.status === "simulated" && m.homeScore != null && m.awayScore != null;
+            const isMine = m.homeTeamId === teamId || m.awayTeamId === teamId;
+            return (
+              <FixtureRow key={m.id}
+                home={side(m.homeTeamId, m.homeName, m.homeColor, m.homeSecondary, m.homeBadge)}
+                away={side(m.awayTeamId, m.awayName, m.awayColor, m.awaySecondary, m.awayBadge)}
+                score={isPlayed ? { home: m.homeScore!, away: m.awayScore! } : null}
+                kickoff="vs"
+                winner={isPlayed ? (m.homeScore! > m.awayScore! ? "home" : m.awayScore! > m.homeScore! ? "away" : null) : null}
+                href={isPlayed ? `/zapas/${m.id}` : null}
+                accent={isMine ? "var(--color-pitch-500)" : null} />
+            );
+          })}
+        </FixtureGroup>
       ))}
     </div>
   );

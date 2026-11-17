@@ -11,7 +11,7 @@
 
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { BadgePreview, type BadgePattern } from "@/components/ui";
+import { BadgePreview, ListCard, type BadgePattern } from "@/components/ui";
 import { TeamName } from "@/components/manager/team-name";
 
 export interface FixtureCrest {
@@ -147,13 +147,10 @@ export function FixtureRow({ home, away, score, kickoff, winner, href, hrefLabel
 
 /** Skupina zápasů (den, kolo) s nadpisem a počtem. */
 export function FixtureGroup({ title, note, children }: { title: ReactNode; note?: ReactNode; children: ReactNode }) {
+  // Záhlaví jako u ostatních seznamů (ListCard): nadpis verzálkami, údaj vedle něj.
   return (
-    <section>
-      <div className="flex items-baseline justify-between gap-3 px-1 mb-2">
-        <h3 className="font-heading font-bold text-base text-ink">{title}</h3>
-        {note && <span className="text-sm text-muted shrink-0">{note}</span>}
-      </div>
-      <div className="card overflow-hidden divide-y divide-gray-100">{children}</div>
-    </section>
+    <ListCard title={title} controls={note ? <span className="text-meta text-muted">{note}</span> : undefined}>
+      <div className="divide-y divide-line-soft">{children}</div>
+    </ListCard>
   );
 }

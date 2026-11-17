@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, showError } from "@/lib/api";
-import { Spinner, SectionLabel, BadgePreview, PageHeader, useConfirm, Tabs } from "@/components/ui";
+import { Spinner, SectionLabel, BadgePreview, PageHeader, useConfirm, Tabs, ListCard, ListRow, ListEmpty, ScoreChip, type MatchOutcome } from "@/components/ui";
+import { FixtureGroup, FixtureRow, type FixtureSide } from "@/components/match/fixture-row";
 import type { BadgePattern } from "@/components/ui";
 import { PreseasonNotice } from "@/components/team/preseason-notice";
 import { TeamName } from "@/components/manager/team-name";
@@ -81,17 +81,6 @@ function formatDate(iso: string | null): string {
 function formatTime(iso: string | null): string {
   if (!iso) return "";
   return new Date(iso).toLocaleTimeString("cs", { hour: "2-digit", minute: "2-digit" });
-}
-
-function matchResult(m: ScheduleMatch): { label: string; color: string } {
-  if (m.status !== "simulated" || m.homeScore == null || m.awayScore == null) {
-    return { label: "Naplánováno", color: "text-muted" };
-  }
-  const myScore = m.isHome ? m.homeScore : m.awayScore;
-  const theirScore = m.isHome ? m.awayScore : m.homeScore;
-  if (myScore > theirScore) return { label: "V", color: "bg-pitch-400 text-white" };
-  if (myScore < theirScore) return { label: "P", color: "bg-card-red text-white" };
-  return { label: "R", color: "bg-gold-500 text-white" };
 }
 
 type Tab = "my" | "league";
@@ -225,32 +214,23 @@ export default function SchedulePage() {
           )}
 
           {upcoming.length > 0 && (
-            <div className="mb-6">
-              <SectionLabel>Nadcházející</SectionLabel>
-              <div className="flex flex-col gap-3">
-                {upcoming.map((m) => (
-                  <MatchRow key={m.id} match={m} myTeamId={teamId!} canEditLineup={upcomingIds.has(m.id)} />
-                ))}
-              </div>
-            </div>
+            <ListCard title="Nadcházející" count={upcoming.length} className="mb-6">
+              {upcoming.map((m) => (
+                <MatchRow key={m.id} match={m} canEditLineup={upcomingIds.has(m.id)} />
+              ))}
+            </ListCard>
           )}
 
           {played.length > 0 && (
-            <div>
-              <SectionLabel>Odehrané</SectionLabel>
-              <div className="flex flex-col gap-3">
-                {played.map((m) => (
-                  <MatchRow key={m.id} match={m} myTeamId={teamId!} canEditLineup={false} />
-                ))}
-              </div>
-            </div>
+            <ListCard title="Odehrané" count={played.length}>
+              {played.map((m) => (
+                <MatchRow key={m.id} match={m} canEditLineup={false} />
+              ))}
+            </ListCard>
           )}
 
           {matches.length === 0 && (
-            <div className="card p-8 text-center text-muted">
-              <p className="text-lg mb-2">Zatím žádné zápasy</p>
-              <p className="text-base">Odehraj první zápas!</p>
-            </div>
+            <ListCard><ListEmpty icon="📅">Zatím žádné zápasy. Rozpis se objeví, až se losuje soutěž.</ListEmpty></ListCard>
           )}
         </>
       )}
@@ -262,25 +242,18 @@ export default function SchedulePage() {
             <div className="flex items-center justify-center py-12"><Spinner /></div>
           )}
           {!leagueLoading && rounds.length === 0 && (
-            <div className="card p-8 text-center text-muted">
-              <p className="text-lg">Rozpis ligy není dostupný</p>
+            <ListCard><ListEmpty icon="📅">Rozpis ligy zatím není dostupný.</ListEmpty></ListCard>
+          )}
+          {!leagueLoading && (
+            <div className="space-y-4">
+              {rounds.map((round) => (
+                <FixtureGroup key={round.round} title={`${round.round}. kolo`}
+                  note={round.scheduledAt ? `${formatDate(round.scheduledAt)} ${formatTime(round.scheduledAt)}` : undefined}>
+                  {round.matches.map((m) => <LeagueMatchRow key={m.id} match={m} myTeamId={teamId!} />)}
+                </FixtureGroup>
+              ))}
             </div>
           )}
-          {!leagueLoading && rounds.map((round) => (
-            <div key={round.round} className="mb-5">
-              <div className="flex items-center gap-3 mb-2">
-                <span className="font-heading font-bold text-base text-pitch-600">{round.round}. kolo</span>
-                {round.scheduledAt && (
-                  <span className="text-sm text-muted">{formatDate(round.scheduledAt)} {formatTime(round.scheduledAt)}</span>
-                )}
-              </div>
-              <div className="space-y-1.5">
-                {round.matches.map((m) => (
-                  <LeagueMatchRow key={m.id} match={m} myTeamId={teamId!} />
-                ))}
-              </div>
-            </div>
-          ))}
         </>
       )}
     </div>
@@ -288,11 +261,8 @@ export default function SchedulePage() {
   );
 }
 
-function MatchRow({ match: m, myTeamId, canEditLineup }: { match: ScheduleMatch; myTeamId: string; canEditLineup: boolean }) {
-  const result = matchResult(m);
-  const isPlayed = m.status === "simulated";
-
-  // Opponent info for mobile layout
+function MatchRow({ match: m, canEditLineup }: { match: ScheduleMatch; canEditLineup: boolean }) {
+  const isPlayed = m.status === "simulated" && m.homeScore != null && m.awayScore != null;
   const opp = m.isHome
     ? { name: m.awayName, isAi: m.awayIsAi === true, color: m.awayColor, secondary: m.awaySecondary, badge: m.awayBadge }
     : { name: m.homeName, isAi: m.homeIsAi === true, color: m.homeColor, secondary: m.homeSecondary, badge: m.homeBadge };
@@ -301,153 +271,61 @@ function MatchRow({ match: m, myTeamId, canEditLineup }: { match: ScheduleMatch;
   // Přátelák na pozdější den čeká jako „scheduled": sestava se mu otevře až v den zápasu.
   const lineupLater = !isPlayed && m.isFriendly === true && m.status === "scheduled";
   const canEdit = canEditLineup && !lineupLater;
-  const isClickable = isPlayed || canEdit;
-  // Decentní info o zvolené sestavě pro nadcházející zápas
-  const lineupInfo = lineupLater
-    ? { label: "Sestava v den zápasu", color: "text-muted" }
+  const lineup: { label: string; tone: "ok" | "neutral" | "danger" } | null = lineupLater
+    ? { label: "Sestava v den zápasu", tone: "neutral" }
     : !isPlayed && canEdit
-    ? (m.presetSlot
-        ? { label: `Sestava ${m.presetSlot}`, color: "text-pitch-600" }
-        : m.hasLineup
-          ? { label: "Sestava nastavena ✓", color: "text-pitch-600" }
-          : m.isDefaultLineup
-            ? { label: m.defaultPresetSlot ? `Sestava ${m.defaultPresetSlot} (výchozí)` : "Sestava (výchozí) ✓", color: "text-muted" }
-            : { label: "⚠ Bez sestavy", color: "text-card-red" })
+      ? (m.presetSlot
+          ? { label: `Sestava ${m.presetSlot}`, tone: "ok" }
+          : m.hasLineup
+            ? { label: "Sestava ✓", tone: "ok" }
+            : m.isDefaultLineup
+              ? { label: m.defaultPresetSlot ? `Sestava ${m.defaultPresetSlot} (výchozí)` : "Výchozí sestava", tone: "neutral" }
+              : { label: "Bez sestavy", tone: "danger" })
+      : null;
+
+  const kind = m.isFriendly ? (m.isHome ? "přátelák doma" : "přátelák venku")
+    : m.isTournament ? (m.roundName ?? "turnaj")
+    : m.isCup ? `🏆 ${m.roundName ?? "pohár"}`
+    : `${m.round ? `${m.round}. kolo · ` : ""}${m.isHome ? "doma" : "venku"}`;
+  const outcome: MatchOutcome | null = isPlayed
+    ? ((m.isHome ? m.homeScore! - m.awayScore! : m.awayScore! - m.homeScore!) > 0 ? "W"
+      : (m.isHome ? m.homeScore! - m.awayScore! : m.awayScore! - m.homeScore!) < 0 ? "L" : "D")
     : null;
-  const linkLabel = isPlayed ? "Přehled" : canEdit ? (lineupInfo?.label ?? "Sestava") : lineupInfo?.label ?? null;
-  const linkColor = isPlayed ? "text-pitch-600" : (lineupInfo?.color ?? "text-pitch-600");
-  const inner = (
-    <div className={`card px-3 py-3 md:px-4 shadow-lg ${m.isLocalDerby ? "border-l-4 border-l-red-600" : ""} ${isClickable ? "hover:bg-gray-50 transition-colors" : ""}`}>
-      {/* Mobile layout */}
-      <div className="flex md:hidden items-center gap-2">
-        <div className="shrink-0 w-6 text-center text-xs text-muted font-heading">
-          {m.isFriendly ? <span title="Přátelák">🤝</span> : m.isLocalDerby ? <span title="Místní derby" className="text-red-600">🏘️</span> : m.isCup || m.isTournament ? <span title={m.roundName ?? "Pohár"} className="text-gold-600">🏆</span> : (m.round ? `${m.round}.` : "")}
-        </div>
-        <BadgePreview primary={opp.color} secondary={opp.secondary} pattern={opp.badge as BadgePattern}
-          initials={oppInitials} size={22} />
-        <div className="flex-1 min-w-0">
-          <div className="text-sm font-heading font-bold truncate"><TeamName name={opp.name} isAi={opp.isAi} /></div>
-          <div className="text-micro text-muted font-heading">{m.isTournament ? m.roundName : m.isFriendly ? (m.isHome ? "přátelák doma" : "přátelák venku") : m.isHome ? "doma" : "venku"}</div>
-        </div>
-        {isPlayed ? (
-          <>
-            <div className="shrink-0 font-heading font-[800] text-base tabular-nums">{m.homeScore}:{m.awayScore}</div>
-            <span className={`shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-micro font-bold ${result.color}`}>
-              {result.label}
-            </span>
-          </>
-        ) : (
-          <div className="shrink-0 text-right">
-            <div className="text-xs font-heading font-bold tabular-nums">{formatDate(m.scheduledAt)}</div>
-            <div className="text-micro text-muted font-heading tabular-nums">{formatTime(m.scheduledAt)}</div>
-          </div>
-        )}
-      </div>
+  // Odehraný zápas (i pohárový, má vlastní detail) vede na detail; nadcházející na sestavu.
+  // Pro přátelák (calendarId=null) i pohár je klíčem m.id, BE next-match ho mapuje jako calendarId.
+  const href = isPlayed ? `/zapas/${m.id}` : canEdit ? `/zapas?calendarId=${m.calendarId ?? m.id}` : undefined;
 
-      {/* Desktop layout */}
-      <div className="hidden md:flex items-center gap-3">
-        <div className="shrink-0 w-8 text-center">
-          {m.isFriendly ? (
-            <div className="text-sm" title="Přátelák">🤝</div>
-          ) : m.isLocalDerby ? (
-            <div className="text-sm text-red-600" title="Místní derby">🏘️</div>
-          ) : m.isCup || m.isTournament ? (
-            <div className="text-sm text-gold-600" title={m.roundName ?? "Pohár"}>🏆</div>
-          ) : (
-            <div className="text-xs text-muted font-heading">{m.round ? `${m.round}.` : ""}</div>
-          )}
-        </div>
-
-        <div className="flex-1 min-w-0 flex items-center gap-2 justify-end">
-          <span className={`text-sm font-heading truncate ${m.homeTeamId === myTeamId ? "font-bold" : ""}`}>
-            <TeamName name={m.homeName} isAi={m.homeIsAi === true} />
-          </span>
-          <BadgePreview primary={m.homeColor} secondary={m.homeSecondary} pattern={m.homeBadge as BadgePattern}
-            initials={m.homeName.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase()} size={22} />
-        </div>
-
-        <div className="shrink-0 w-20 text-center">
-          {isPlayed ? (
-            <div className="font-heading font-[800] text-lg tabular-nums">{m.homeScore} : {m.awayScore}</div>
-          ) : (
-            <div>
-              <div className="text-xs font-heading font-bold">{formatDate(m.scheduledAt)}</div>
-              <div className="text-xs text-muted">{formatTime(m.scheduledAt)}</div>
-            </div>
-          )}
-        </div>
-
-        <div className="flex-1 min-w-0 flex items-center gap-2">
-          <BadgePreview primary={m.awayColor} secondary={m.awaySecondary} pattern={m.awayBadge as BadgePattern}
-            initials={m.awayName.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase()} size={22} />
-          <span className={`text-sm font-heading truncate ${m.awayTeamId === myTeamId ? "font-bold" : ""}`}>
-            <TeamName name={m.awayName} isAi={m.awayIsAi === true} />
-          </span>
-        </div>
-
-        <div className="shrink-0 w-7">
-          {isPlayed && (
-            <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${result.color}`}>
-              {result.label}
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* Link centered at bottom — compact, no divider */}
-      {linkLabel && (
-        <div className="mt-1 text-center">
-          <span className={`text-xs font-heading font-bold ${linkColor}`}>{linkLabel}{isClickable ? " →" : ""}</span>
-        </div>
-      )}
-    </div>
+  return (
+    // Místní derby nese červený proužek vlevo jako dřív.
+    <ListRow href={href} tone={m.isLocalDerby ? "danger" : undefined}
+      leading={<BadgePreview primary={opp.color} secondary={opp.secondary} pattern={opp.badge as BadgePattern} initials={oppInitials} size={32} />}
+      title={<>{m.isLocalDerby && <span title="Místní derby" className="mr-1">🏘️</span>}<TeamName name={opp.name} isAi={opp.isAi} wrap /></>}
+      meta={isPlayed ? kind : `${kind} · ${formatDate(m.scheduledAt)} ${formatTime(m.scheduledAt)}`}
+      // Stav sestavy pod podrobnostmi jako dřív: štítek vpravo by dlouhý název soupeře zalomil na tři řádky.
+      detail={!outcome && lineup
+        ? <span className={`font-bold ${lineup.tone === "ok" ? "text-pitch-600" : lineup.tone === "danger" ? "text-card-red" : "text-muted"}`}>{lineup.tone === "danger" ? "⚠ " : ""}{lineup.label}</span>
+        : undefined}
+      trailing={outcome ? <ScoreChip result={outcome}>{m.homeScore}:{m.awayScore}</ScoreChip> : undefined} />
   );
-
-  // Odehraný zápas (i pohárový — má vlastní detail endpoint) → detail zápasu
-  if (isPlayed) return <Link href={`/zapas/${m.id}`}>{inner}</Link>;
-  if (canEdit) {
-    // Pro friendly (calendarId=null) i pohár použij m.id/calendarId — BE next-match to mapuje jako calendarId
-    const switchId = m.calendarId ?? m.id;
-    return <Link href={`/zapas?calendarId=${switchId}`}>{inner}</Link>;
-  }
-  return inner;
 }
 
 function LeagueMatchRow({ match: m, myTeamId }: {
   match: LeagueRound["matches"][number];
   myTeamId: string;
 }) {
-  const isPlayed = m.status === "simulated";
-  const isMyMatch = m.homeTeamId === myTeamId || m.awayTeamId === myTeamId;
-
-  const inner = (
-    <div className={`card flex items-center gap-3 px-4 py-3 ${isMyMatch ? "ring-1 ring-pitch-400/30 bg-pitch-500/[0.03]" : ""} ${isPlayed ? "hover:bg-gray-50 transition-colors" : ""}`}>
-      <div className="flex-1 min-w-0 flex items-center gap-2 justify-end">
-        <span className={`text-sm font-heading truncate ${m.homeTeamId === myTeamId ? "font-bold text-pitch-600" : ""}`}>
-          <TeamName name={m.homeName} isAi={m.homeIsAi === true} />
-        </span>
-        <BadgePreview primary={m.homeColor} secondary={m.homeSecondary} pattern={m.homeBadge as BadgePattern}
-          initials={m.homeName.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase()} size={22} />
-      </div>
-
-      <div className="shrink-0 w-16 text-center">
-        {isPlayed ? (
-          <span className="font-heading font-[800] text-lg tabular-nums">{m.homeScore} : {m.awayScore}</span>
-        ) : (
-          <span className="text-xs text-muted font-heading">vs</span>
-        )}
-      </div>
-
-      <div className="flex-1 min-w-0 flex items-center gap-2">
-        <BadgePreview primary={m.awayColor} secondary={m.awaySecondary} pattern={m.awayBadge as BadgePattern}
-          initials={m.awayName.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase()} size={22} />
-        <span className={`text-sm font-heading truncate ${m.awayTeamId === myTeamId ? "font-bold text-pitch-600" : ""}`}>
-          <TeamName name={m.awayName} isAi={m.awayIsAi === true} />
-        </span>
-      </div>
-    </div>
+  const isPlayed = m.status === "simulated" && m.homeScore != null && m.awayScore != null;
+  const side = (id: string, name: string, isAi: boolean | undefined, color: string, secondary: string, badge: string): FixtureSide => ({
+    name, href: id ? `/tym/${id}` : null, color, isAi: isAi === true,
+    crest: { pattern: badge, primary: color, secondary, initials: null, symbol: null },
+  });
+  return (
+    <FixtureRow
+      home={side(m.homeTeamId, m.homeName, m.homeIsAi, m.homeColor, m.homeSecondary, m.homeBadge)}
+      away={side(m.awayTeamId, m.awayName, m.awayIsAi, m.awayColor, m.awaySecondary, m.awayBadge)}
+      score={isPlayed ? { home: m.homeScore!, away: m.awayScore! } : null}
+      kickoff="vs"
+      winner={isPlayed ? (m.homeScore! > m.awayScore! ? "home" : m.awayScore! > m.homeScore! ? "away" : null) : null}
+      href={isPlayed ? `/zapas/${m.id}` : null}
+      accent={m.homeTeamId === myTeamId || m.awayTeamId === myTeamId ? "var(--color-pitch-500)" : null} />
   );
-
-  if (isPlayed) return <Link href={`/zapas/${m.id}`}>{inner}</Link>;
-  return inner;
 }
