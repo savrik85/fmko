@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
 import { useTeam } from "@/context/team-context";
-import { Spinner, SectionLabel } from "@/components/ui";
+import { Spinner, SectionLabel, ListCard, ListRow, ListEmpty, RowValue } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import {
   REFEREE_AXES, axisWord, axisColor, formatGrade, gradeColor, gradeWord, incidentLabel,
@@ -153,31 +153,15 @@ export default function RozhodciDetailPage() {
         </>
       )}
 
-      <SectionLabel>Známky z jednotlivých zápasů</SectionLabel>
-      {ref.recentMatches.length === 0 ? (
-        <div className="card p-4"><p className="text-sm text-muted">Zatím žádný odpískaný zápas.</p></div>
-      ) : (
-        <div className="space-y-2">
-          {ref.recentMatches.map((m) => (
-            <Link key={m.matchId} href={`/zapas/${m.matchId}`} className="card card-hover p-3 flex items-center gap-3">
-              <div className="min-w-0 flex-1">
-                <div className="font-heading font-bold text-base truncate">
-                  {m.homeName} {m.homeScore}:{m.awayScore} {m.awayName}
-                </div>
-                <div className="text-sm text-muted truncate">
-                  {m.gameWeek != null ? `${m.gameWeek}. kolo` : "Pohár"}
-                  {m.incidents.length > 0 && ` · ${incidentLabel(m.incidents[0].kind)}`}
-                </div>
-              </div>
-              <div className="text-right shrink-0">
-                <div className={`font-heading font-bold text-lg tabular-nums ${gradeColor(m.grade)}`}>
-                  {formatGrade(m.grade, 1)}
-                </div>
-              </div>
-            </Link>
-          ))}
-        </div>
-      )}
+      <ListCard title="Známky z jednotlivých zápasů" count={ref.recentMatches.length || undefined}>
+        {ref.recentMatches.length === 0 && <ListEmpty icon="🟨">Zatím žádný odpískaný zápas.</ListEmpty>}
+        {ref.recentMatches.map((m) => (
+          <ListRow key={m.matchId} href={`/zapas/${m.matchId}`}
+            title={<>{m.homeName} <span className="tabular-nums">{m.homeScore}:{m.awayScore}</span> {m.awayName}</>}
+            meta={`${m.gameWeek != null ? `${m.gameWeek}. kolo` : "Pohár"}${m.incidents.length > 0 ? ` · ${incidentLabel(m.incidents[0].kind)}` : ""}`}
+            trailing={<RowValue><span className={gradeColor(m.grade)}>{formatGrade(m.grade, 1)}</span></RowValue>} />
+        ))}
+      </ListCard>
     </div>
   );
 }

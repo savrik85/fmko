@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
 import { useTeam } from "@/context/team-context";
-import { Spinner, SectionLabel, Tabs, useTabParam } from "@/components/ui";
+import { Spinner, SectionLabel, Tabs, useTabParam, ListCard, ListRow, RowValue } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { DisciplinaryPanel } from "@/components/referees/disciplinary-panel";
 import {
@@ -68,44 +68,22 @@ export default function RozhodciPage() {
         </div>
       )}
 
-      <SectionLabel>Pořadí podle průměrné známky</SectionLabel>
-      <div className="space-y-2">
+      <ListCard title="Pořadí podle průměrné známky" count={rows.length}>
         {rows.map((r, i) => (
-          <Link
-            key={r.id}
-            href={`/rozhodci/${r.id}`}
-            className="card card-hover p-3 flex items-center gap-3"
-          >
-            <span className="font-heading font-bold text-base text-muted w-6 text-right tabular-nums shrink-0">
-              {r.stats.matches > 0 ? i + 1 : "–"}
-            </span>
-            {r.avatar && (
-              <FaceAvatar faceConfig={r.avatar} size={40} className="border border-ink/20 bg-white shrink-0 rounded-soft" />
-            )}
-            <div className="min-w-0 flex-1">
-              <div className="font-heading font-bold text-base truncate">{r.name}</div>
-              {/* Doplňková čísla pod jméno — v tabulce na mobilu by přetekla */}
-              <div className="text-sm text-muted truncate">
-                {r.archetypeLabel}
-                {r.stats.matches > 0 && (
-                  <>
-                    {" · "}{r.stats.matches}× · {formatGrade(r.stats.cardsPerMatch, 1)} karty
-                    {r.stats.incidents ? ` · ${r.stats.incidents}× sporná situace` : ""}
-                  </>
-                )}
-              </div>
-            </div>
-            <div className="text-right shrink-0">
-              <div className={`font-heading font-bold text-lg tabular-nums ${gradeColor(r.stats.avgGrade)}`}>
-                {formatGrade(r.stats.avgGrade)}
-              </div>
-              <div className="text-micro text-muted leading-tight">
-                {r.stats.avgGrade != null ? gradeWord(r.stats.avgGrade) : "nepískal"}
-              </div>
-            </div>
-          </Link>
+          <ListRow key={r.id} href={`/rozhodci/${r.id}`}
+            leading={r.avatar
+              ? <FaceAvatar faceConfig={r.avatar} size={30} className="border border-ink/20 bg-white rounded-full" />
+              : <span className="text-body font-bold text-muted tabular-nums">{r.stats.matches > 0 ? i + 1 : "–"}</span>}
+            title={<>{r.stats.matches > 0 && <span className="text-muted font-normal tabular-nums mr-1.5">{i + 1}.</span>}{r.name}</>}
+            meta={[r.archetypeLabel, r.stats.matches > 0 ? `${r.stats.matches}× · ${formatGrade(r.stats.cardsPerMatch, 1)} karty` : null,
+              r.stats.incidents ? `${r.stats.incidents}× sporná situace` : null].filter(Boolean).join(" · ")}
+            trailing={
+              <RowValue sub={r.stats.avgGrade != null ? gradeWord(r.stats.avgGrade) : "nepískal"}>
+                <span className={gradeColor(r.stats.avgGrade)}>{formatGrade(r.stats.avgGrade)}</span>
+              </RowValue>
+            } />
         ))}
-      </div>
+      </ListCard>
       </>
       )}
     </div>

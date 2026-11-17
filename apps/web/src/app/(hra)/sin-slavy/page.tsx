@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
-import { Spinner, BadgePreview } from "@/components/ui";
+import { Spinner, BadgePreview, DataTable, EntityCell, ListCard } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import type { BadgePattern } from "@/components/ui";
 import { CoachName } from "@/components/manager/coach-name";
@@ -52,81 +52,45 @@ export default function HallOfFamePage() {
         <p className="text-sm text-muted mt-0.5">Žebříček trenérů podle počtu úspěchů</p>
       </div>
 
-      <div className="card">
-        <table className="w-full text-xs sm:text-sm">
-          <thead>
-            <tr className="text-left text-label border-b border-gray-200 text-micro uppercase tracking-wide">
-              <th className="py-2 sm:py-3 pl-2 sm:pl-4 pr-1 w-8 sm:w-12">#</th>
-              <th className="py-2 sm:py-3 px-1 sm:px-2">Trenér</th>
-              <th className="py-2 sm:py-3 px-1 sm:px-2">Tým</th>
-              <th className="hidden sm:table-cell py-2 sm:py-3 px-1 sm:px-2 text-right w-12">🥇</th>
-              <th className="hidden sm:table-cell py-2 sm:py-3 px-1 sm:px-2 text-right w-12">🥈</th>
-              <th className="hidden sm:table-cell py-2 sm:py-3 px-1 sm:px-2 text-right w-12">🥉</th>
-              <th className="py-2 sm:py-3 px-1 sm:px-2 pr-2 sm:pr-4 text-right w-10 sm:w-12">Σ</th>
-            </tr>
-          </thead>
-          <tbody>
-            {reranked.map((e) => {
-              const isMe = e.teamId === teamId;
-              const hasAvatar = e.managerAvatar && Object.keys(e.managerAvatar).length > 2;
-              return (
-                <tr
-                  key={e.teamId}
-                  className={`border-b border-gray-50 last:border-b-0 hover:bg-gray-50/40 transition-colors ${isMe ? "bg-pitch-50/40" : ""}`}
-                >
-                  <td className="py-2 sm:py-2.5 pl-2 sm:pl-4 pr-1 font-heading font-[800] tabular-nums text-xs sm:text-sm">
-                    {e.displayRank <= 3 ? (
-                      <span className={e.displayRank === 1 ? "text-amber-600" : e.displayRank === 2 ? "text-gray-500" : "text-orange-700"}>
-                        {e.displayRank}.
-                      </span>
-                    ) : (
-                      <span className="text-muted">{e.displayRank}.</span>
-                    )}
-                  </td>
-                  <td className="py-2 sm:py-2.5 px-1 sm:px-2">
-                    {e.managerId && e.managerName ? (
-                      <Link href={`/manazer/${e.teamId}`} className="flex items-center gap-1.5 sm:gap-2 hover:text-pitch-500 transition-colors">
-                        {hasAvatar ? (
-                          <FaceAvatar faceConfig={e.managerAvatar as Record<string, unknown>} size={24} className="shrink-0 bg-gray-100 rounded-full sm:!w-8 sm:!h-8" />
-                        ) : (
-                          <div className="shrink-0 w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-gray-200 flex items-center justify-center font-heading font-bold text-micro sm:text-xs text-muted">
-                            {e.managerName[0]}
-                          </div>
-                        )}
-                        <span className="font-heading font-bold truncate text-xs sm:text-sm"><CoachName name={e.managerName} isAi={e.coachIsAi === true} /></span>
-                      </Link>
-                    ) : (
-                      <span className="text-muted italic">-</span>
-                    )}
-                  </td>
-                  <td className="py-2 sm:py-2.5 px-1 sm:px-2">
-                    <Link href={`/tym/${e.teamId}`} className="flex items-center gap-1.5 sm:gap-2 hover:opacity-80 transition-opacity">
-                      <BadgePreview
-                        primary={e.primaryColor}
-                        secondary={e.secondaryColor}
-                        pattern={e.badgePattern as BadgePattern}
-                        initials={e.teamName.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase()}
-                        size={18}
-                      />
-                      <div className="min-w-0">
-                        <div className="truncate font-heading font-bold text-xs sm:text-sm">{e.teamName}</div>
-                        {e.villageName && <div className="text-micro text-muted truncate">{e.villageName}</div>}
-                      </div>
-                    </Link>
-                  </td>
-                  <td className="hidden sm:table-cell py-2 sm:py-2.5 px-1 sm:px-2 text-right tabular-nums font-heading font-bold text-amber-600 text-xs sm:text-sm">{e.gold || ""}</td>
-                  <td className="hidden sm:table-cell py-2 sm:py-2.5 px-1 sm:px-2 text-right tabular-nums font-heading font-bold text-gray-500 text-xs sm:text-sm">{e.silver || ""}</td>
-                  <td className="hidden sm:table-cell py-2 sm:py-2.5 px-1 sm:px-2 text-right tabular-nums font-heading font-bold text-orange-700 text-xs sm:text-sm">{e.bronze || ""}</td>
-                  <td className="py-2 sm:py-2.5 px-1 sm:px-2 pr-2 sm:pr-4 text-right tabular-nums font-heading font-[800] text-xs sm:text-sm">{e.total}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-        {reranked.length === 0 && (
-          <div className="text-center text-muted py-8 text-sm">Žebříček je prázdný.</div>
-        )}
-      </div>
+      <ListCard>
+        <DataTable rows={reranked} rowKey={(e) => e.teamId}
+          rowHref={(e) => (e.managerId ? `/manazer/${e.teamId}` : `/tym/${e.teamId}`)}
+          rowTone={(e) => ({ own: e.teamId === teamId })}
+          empty="Žebříček je prázdný. Úspěchy se sbírají za vítězství, poháry a sérii bez porážky."
+          emptyIcon="🏆"
+          columns={[
+            { key: "rank", header: "#", width: "w-10", align: "center",
+              cell: (e) => <span className={`font-bold ${e.displayRank === 1 ? "text-gold-700" : e.displayRank <= 3 ? "text-ink-light" : "text-muted"}`}>{e.displayRank}</span> },
+            { key: "coach", header: "Trenér", align: "left",
+              cell: (e) => {
+                const hasAvatar = e.managerAvatar && Object.keys(e.managerAvatar).length > 2;
+                return (
+                  <EntityCell
+                    leading={hasAvatar
+                      ? <FaceAvatar faceConfig={e.managerAvatar as Record<string, unknown>} size={28} className="bg-gray-100 rounded-full" />
+                      : <span className="w-7 h-7 rounded-full bg-gray-200 flex items-center justify-center text-micro font-bold text-muted">{e.managerName?.[0] ?? "-"}</span>}
+                    name={e.managerId && e.managerName ? <CoachName name={e.managerName} isAi={e.coachIsAi === true} /> : <span className="text-muted italic">-</span>}
+                    bold={e.teamId === teamId}
+                    meta={e.teamName} metaMobileOnly />
+                );
+              } },
+            { key: "team", header: "Tým", align: "left", priority: 2,
+              cell: (e) => (
+                <Link href={`/tym/${e.teamId}`} onClick={(ev) => ev.stopPropagation()} className="flex items-center gap-2 hover:opacity-80">
+                  <BadgePreview primary={e.primaryColor} secondary={e.secondaryColor} pattern={e.badgePattern as BadgePattern}
+                    initials={e.teamName.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase()} size={20} />
+                  <span className="min-w-0">
+                    <span className="block font-bold text-ink">{e.teamName}</span>
+                    {e.villageName && <span className="block text-meta text-muted">{e.villageName}</span>}
+                  </span>
+                </Link>
+              ) },
+            { key: "gold", header: "🥇", title: "Zlato", width: "w-12", priority: 2, cell: (e) => <span className="font-bold text-gold-700">{e.gold || ""}</span> },
+            { key: "silver", header: "🥈", title: "Stříbro", width: "w-12", priority: 2, cell: (e) => <span className="font-bold text-gray-500">{e.silver || ""}</span> },
+            { key: "bronze", header: "🥉", title: "Bronz", width: "w-12", priority: 2, cell: (e) => <span className="font-bold text-orange-700">{e.bronze || ""}</span> },
+            { key: "total", header: "Σ", title: "Úspěchů celkem", width: "w-12", emphasis: true, cell: (e) => e.total },
+          ]} />
+      </ListCard>
     </div>
   );
 }

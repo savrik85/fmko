@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
-import { Spinner, SectionLabel, EntityLink } from "@/components/ui";
+import { Spinner, SectionLabel, EntityLink, ListCard, ListRow, RowValue } from "@/components/ui";
 
 interface Fine {
   id: string;
@@ -135,48 +135,17 @@ export function DisciplinaryPanel({ teamId }: { teamId: string | null }) {
         </div>
       </div>
 
-      <SectionLabel>Černá listina okresu</SectionLabel>
-      <div className="space-y-2 mb-4">
-        {podleTymu.slice(0, 3).map((t, i) => (
-          <div
-            key={t.teamId}
-            className="card p-3 flex items-center gap-3 border-l-4"
-            style={{ borderLeftColor: MEDAILE[i].barva }}
-          >
-            <span className="text-xl shrink-0">{MEDAILE[i].emoji}</span>
-            <div className="min-w-0 flex-1">
-              <EntityLink type="team" id={t.teamId} className="font-heading font-bold text-base">
-                {t.teamName}
-              </EntityLink>
-              <div className="text-sm text-muted">{t.count}× {pocetPokut(t.count)}</div>
-            </div>
-            <div className="font-heading font-bold text-lg tabular-nums text-card-red shrink-0">
-              −{t.sum.toLocaleString("cs")} Kč
-            </div>
-          </div>
+      <ListCard title="Černá listina okresu" className="mb-6">
+        {podleTymu.map((t, i) => (
+          <ListRow key={t.teamId} href={`/tym/${t.teamId}`} chevron={false}
+            leading={i < 3
+              ? <span className="text-xl" aria-hidden="true">{MEDAILE[i].emoji}</span>
+              : <span className="text-body font-bold text-muted tabular-nums">{i + 1}</span>}
+            title={t.teamName}
+            meta={`${t.count}× ${pocetPokut(t.count)}`}
+            trailing={<RowValue tone="minus">−{t.sum.toLocaleString("cs")} Kč</RowValue>} />
         ))}
-      </div>
-
-      {podleTymu.length > 3 && (
-        <div className="space-y-2 mb-6">
-          {podleTymu.slice(3).map((t, i) => (
-            <div key={t.teamId} className="card p-3 flex items-center gap-3">
-              <span className="font-heading font-bold text-base text-muted w-6 text-right tabular-nums shrink-0">
-                {i + 4}
-              </span>
-              <div className="min-w-0 flex-1">
-                <EntityLink type="team" id={t.teamId} className="font-heading font-bold text-base">
-                  {t.teamName}
-                </EntityLink>
-                <div className="text-sm text-muted">{t.count}× {pocetPokut(t.count)}</div>
-              </div>
-              <div className="font-heading font-bold text-base tabular-nums text-card-red shrink-0">
-                −{t.sum.toLocaleString("cs")} Kč
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+      </ListCard>
 
       {zaVyroky.length > 0 && (
         <>
