@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
-import { Spinner, SectionLabel } from "@/components/ui";
+import { Spinner, SectionLabel, ListCard, ListRow, RowIcon } from "@/components/ui";
 import { DetailIncidentu } from "./DetailIncidentu";
 import { datum, stavPilulka, VYSLEDEK_LABEL, type Incident } from "./typy";
 
@@ -98,34 +98,26 @@ function Incidenty() {
         </p>
       </div>
       {poskozeni.length > 0 && (
-        <div className="card p-4 sm:p-5">
-          <SectionLabel>Rozbité zařízení</SectionLabel>
-          <p className="text-sm text-muted">Dokud rozbité zařízení neopravíš, nefunguje.</p>
+        <ListCard title="Rozbité zařízení" count={poskozeni.length}>
+          <p className="px-4 pt-3 text-meta text-muted">Dokud rozbité zařízení neopravíš, nefunguje.</p>
           {opravaZprava && (
-            <p className={`text-sm mt-2 ${opravaZprava.typ === "ok" ? "text-pitch-600" : "text-card-red"}`}>
+            <p className={`px-4 pt-1 text-meta ${opravaZprava.typ === "ok" ? "text-pitch-600" : "text-card-red"}`}>
               {opravaZprava.text}
             </p>
           )}
-          <div className="mt-3 space-y-3">
-            {poskozeni.map((p) => (
-              <div key={p.id} className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="font-heading font-bold text-base">{p.label}</div>
-                  <div className="text-sm text-muted">
-                    Oprava {p.cost.toLocaleString("cs-CZ")} Kč · o {p.levels} {p.levels === 1 ? "úroveň" : "úrovně"}
-                  </div>
-                </div>
-                <button
-                  onClick={() => opravit(p)}
-                  disabled={opravujeId === p.id}
-                  className="shrink-0 px-3 py-2 rounded-soft text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 disabled:opacity-50"
-                >
+          {poskozeni.map((p) => (
+            <ListRow key={p.id} tone="danger"
+              leading={<RowIcon>🔧</RowIcon>}
+              title={p.label}
+              meta={`Oprava ${p.cost.toLocaleString("cs-CZ")} Kč · o ${p.levels} ${p.levels === 1 ? "úroveň" : "úrovně"}`}
+              trailing={
+                <button onClick={() => opravit(p)} disabled={opravujeId === p.id}
+                  className="px-3 py-2 rounded-control text-sm font-bold bg-pitch-500 text-white hover:bg-pitch-600 disabled:opacity-50">
                   Opravit
                 </button>
-              </div>
-            ))}
-          </div>
-        </div>
+              } />
+          ))}
+        </ListCard>
       )}
       <Seznam titulek="Řeší se" incidenty={zive} prazdne="Teď je v klubu klid." />
       {uzavrene.length > 0 && <Seznam titulek="Uzavřené za poslední měsíc" incidenty={uzavrene} />}

@@ -8,7 +8,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, apiAction } from "@/lib/api";
-import { Spinner, SectionLabel, PositionBadge, useConfirm } from "@/components/ui";
+import { Spinner, SectionLabel, PositionBadge, useConfirm, ListCard, ListRow, ListEmpty, StatusChip } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { ScoutReportSheet, daysLeft, type ScoutReport } from "@/components/scouting/ScoutReportSheet";
 import { ratingText } from "@/components/scouting/WillingnessBadge";
@@ -99,26 +99,16 @@ function ScoutFace({ avatar, size }: { avatar?: Record<string, unknown>; size: n
 function ReportRow({ r, onOpen }: { r: ScoutReport; onOpen: () => void }) {
   const live = r.status === "active" || r.status === "negotiating";
   return (
-    <button onClick={onOpen} className="card p-3 w-full text-left flex items-center gap-3 hover:bg-pitch-50/40 transition-colors">
-      {Object.keys(r.avatar ?? {}).length > 0
-        ? <FaceAvatar faceConfig={r.avatar} size={40} className="rounded-full shrink-0" />
-        : <div className="w-10 h-10 rounded-full bg-gray-100 shrink-0" />}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="font-heading font-bold text-base">{r.firstName} {r.lastName}</span>
-          <PositionBadge position={r.position as "GK" | "DEF" | "MID" | "FWD"} />
-          <span className="text-sm text-muted">{r.age} let</span>
-          <span className="text-sm font-heading font-bold tabular-nums">{ratingText(r.ratingLo, r.ratingHi)}</span>
-        </div>
-        <div className="text-sm text-muted truncate">
-          {r.source === "free_agent" ? `Volný hráč · okres ${r.district}` : r.clubName} · {r.distanceKm} km
-        </div>
-        <div className="text-sm font-heading font-bold text-muted">
-          {r.status === "active" ? `Platí ještě ${daysLeft(r.expiresAt)} d` : SCOUT_REPORT_STATUS_LABELS[r.status]}
-        </div>
-      </div>
-      <span className={`shrink-0 ${live ? "text-pitch-500" : "text-muted"}`}>→</span>
-    </button>
+    <ListRow onClick={onOpen} tone={live ? "new" : undefined}
+      leading={Object.keys(r.avatar ?? {}).length > 0
+        ? <FaceAvatar faceConfig={r.avatar} size={30} className="rounded-full" />
+        : <span className="w-9 h-9 rounded-full bg-surface-3" />}
+      title={<>{r.firstName} {r.lastName}<span className="ml-2 align-middle"><PositionBadge position={r.position as "GK" | "DEF" | "MID" | "FWD"} /></span></>}
+      meta={[`hod. ${ratingText(r.ratingLo, r.ratingHi)}`, `${r.age} let`,
+        r.source === "free_agent" ? `volný hráč, okres ${r.district}` : r.clubName, `${r.distanceKm} km`].join(" · ")}
+      trailing={live
+        ? <StatusChip tone="ok">{r.status === "active" ? `Platí ${daysLeft(r.expiresAt)} d` : SCOUT_REPORT_STATUS_LABELS[r.status]}</StatusChip>
+        : <span className="text-meta text-muted whitespace-nowrap">{SCOUT_REPORT_STATUS_LABELS[r.status]}</span>} />
   );
 }
 
@@ -497,44 +487,27 @@ export default function ScoutPage() {
       )}
 
       {currentScout && (
-        <div className="card p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <SectionLabel>Sledovaní hráči</SectionLabel>
-            <span className="text-xs bg-gray-100 text-muted font-heading font-bold px-2 py-0.5 rounded">{watchedPlayers.length}</span>
-          </div>
-          {watchedPlayers.length === 0 ? (
-            <div className="text-sm text-muted">
-              {currentScout.name} teď nikoho nesleduje. Otevři profil hráče kdekoli ve hře a klikni na <strong>Poslat skauta</strong>.
-            </div>
-          ) : (
-            <ul className="divide-y divide-gray-100">
-              {watchedPlayers.map((m) => (
-                <li key={m.id} className="flex items-center justify-between gap-3 py-2">
-                  <div className="min-w-0">
-                    {m.target_player_id ? (
-                      <Link href={`/hrac/${m.target_player_id}`} className="font-heading font-bold text-sm text-ink hover:text-pitch-600 truncate block">
-                        {m.targetPlayerName ?? "Hráč"}
-                      </Link>
-                    ) : (
-                      <span className="font-heading font-bold text-sm text-ink">{m.targetPlayerName ?? "Hráč"}</span>
-                    )}
-                    <div className="text-xs text-muted">Hlášení do 2 dnů · cestovné {kc(m.weekly_cost || 500)}</div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => stopWatching(m)}
-                    className="shrink-0 px-3 py-2 rounded-soft text-xs font-heading font-bold border border-red-200 text-red-700 bg-white hover:bg-red-50"
-                  >
-                    Zrušit
-                  </button>
-                </li>
-              ))}
-            </ul>
+        <ListCard title="Sledovaní hráči" count={watchedPlayers.length}>
+          {watchedPlayers.length === 0 && (
+            <ListEmpty icon="👀">{currentScout.name} teď nikoho nesleduje. Otevři profil hráče kdekoli ve hře a klikni na <strong>Poslat skauta</strong>.</ListEmpty>
           )}
-          <div className="text-xs text-muted">
+          {watchedPlayers.map((m) => (
+            <ListRow key={m.id}
+              title={m.target_player_id
+                ? <Link href={`/hrac/${m.target_player_id}`} className="hover:text-pitch-600">{m.targetPlayerName ?? "Hráč"}</Link>
+                : (m.targetPlayerName ?? "Hráč")}
+              meta={`Hlášení do 2 dnů · cestovné ${kc(m.weekly_cost || 500)}`}
+              trailing={
+                <button type="button" onClick={() => stopWatching(m)}
+                  className="px-3 py-2 rounded-control text-meta font-bold border border-red-200 text-red-700 bg-white hover:bg-red-50">
+                  Zrušit
+                </button>
+              } />
+          ))}
+          <p className="px-4 py-3 border-t border-line text-meta text-muted">
             Sledovat můžeš kolik hráčů chceš najednou, i když je skaut na jiném úkolu. Za každého zaplatíš jedno cestovné 500 Kč, až hlášení dorazí.
-          </div>
-        </div>
+          </p>
+        </ListCard>
       )}
 
       {currentScout && !a && (
@@ -893,30 +866,22 @@ export default function ScoutPage() {
         </div>
       )}
 
-      <div>
-        <SectionLabel>Hlášení ({data.reports.length})</SectionLabel>
-        {data.reports.length === 0 ? (
-          <div className="card p-5 text-center text-muted text-sm">
-            {scoutsList.length > 0 ? "Zatím nic. Skaut píše v pondělí." : "Bez skauta žádná hlášení."}
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {data.reports.map((r) => <ReportRow key={r.id} r={r} onOpen={() => setOpenReport(r.id)} />)}
-          </div>
+      <ListCard title="Hlášení" count={data.reports.length}>
+        {data.reports.length === 0 && (
+          <ListEmpty icon="🕵️">{scoutsList.length > 0 ? "Zatím nic. Skaut píše v pondělí." : "Bez skauta žádná hlášení. Najmi ho v Zaměstnancích."}</ListEmpty>
         )}
-      </div>
+        {data.reports.map((r) => <ReportRow key={r.id} r={r} onOpen={() => setOpenReport(r.id)} />)}
+      </ListCard>
 
       {data.pastReports.length > 0 && (
-        <div>
-          <button onClick={() => setShowPast((v) => !v)} className="text-sm font-heading font-bold text-muted hover:text-ink">
-            Starší hlášení ({data.pastReports.length}) {showPast ? "▲" : "▼"}
-          </button>
-          {showPast && (
-            <div className="space-y-2 mt-2">
-              {data.pastReports.map((r) => <ReportRow key={r.id} r={r} onOpen={() => setOpenReport(r.id)} />)}
-            </div>
-          )}
-        </div>
+        <ListCard title="Starší hlášení" count={data.pastReports.length}
+          controls={
+            <button onClick={() => setShowPast((v) => !v)} className="text-meta font-bold text-pitch-600 hover:underline min-h-11 px-2">
+              {showPast ? "Skrýt" : "Ukázat"}
+            </button>
+          }>
+          {showPast && data.pastReports.map((r) => <ReportRow key={r.id} r={r} onOpen={() => setOpenReport(r.id)} />)}
+        </ListCard>
       )}
 
       {openReport && (

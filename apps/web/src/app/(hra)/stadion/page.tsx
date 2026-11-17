@@ -5,7 +5,7 @@ import { clientOnly } from "@/components/client-only";
 import { useTeam } from "@/context/team-context";
 import { useGuideVisit } from "@/components/team/first-week-guide";
 import { apiFetch, type Team } from "@/lib/api";
-import { Spinner, SectionLabel, useConfirm, LockDetail, type LockDetailData } from "@/components/ui";
+import { Spinner, SectionLabel, useConfirm, LockDetail, type LockDetailData, ListRow, RowValue } from "@/components/ui";
 import { StadiumView } from "@/components/stadium/stadium-view";
 import { KotelPrehravac } from "@/components/stadium/KotelPrehravac";
 import { moistureLabel, moistureHint } from "@/lib/pitch-moisture";
@@ -1678,22 +1678,14 @@ export default function StadiumPage() {
           <span className="text-xl shrink-0" aria-hidden>{historyOpen ? "▾" : "▸"}</span>
         </button>
         {historyOpen && builds.length > 0 && (
-          <ul className="divide-y divide-gray-100">
+          <div className="-mx-4 border-y border-line">
             {builds.map((b) => (
-              <li key={b.id} className="py-2 flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className={`font-heading font-bold text-sm ${b.revertedAt ? "line-through text-muted" : "text-ink"}`}>
-                    {b.label}{b.toLevel != null ? `, úroveň ${b.toLevel}` : ""}
-                  </div>
-                  <div className="text-sm text-muted">
-                    {formatDateTime(b.builtAt)}
-                    {b.revertedAt ? ` · vráceno ${formatDateTime(b.revertedAt)}` : ""}
-                  </div>
-                </div>
-                <div className="shrink-0 font-heading font-bold text-sm tabular-nums text-ink">{formatCZK(b.cost)}</div>
-              </li>
+              <ListRow key={b.id}
+                title={<span className={b.revertedAt ? "line-through text-muted" : ""}>{b.label}{b.toLevel != null ? `, úroveň ${b.toLevel}` : ""}</span>}
+                meta={`${formatDateTime(b.builtAt)}${b.revertedAt ? ` · vráceno ${formatDateTime(b.revertedAt)}` : ""}`}
+                trailing={<RowValue>{formatCZK(b.cost)}</RowValue>} />
             ))}
-          </ul>
+          </div>
         )}
         {historyOpen && (
           <p className="text-sm text-muted leading-snug">

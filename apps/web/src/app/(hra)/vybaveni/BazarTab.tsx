@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { LockDetail, SectionLabel, Spinner } from "@/components/ui";
+import { LockDetail, SectionLabel, Spinner, ListCard, ListRow, RowIcon } from "@/components/ui";
 import { AmenityGainChip } from "@/components/equipment/amenity-gain-chip";
 import {
   EQUIPMENT_ICONS, condBarColor, condColor, daysLeft, formatCZK,
@@ -48,29 +48,20 @@ export function BazarTab({ data, loading, budget, busy, onBuy, onWithdraw, onRep
     <div className="space-y-5">
       {/* Moje nabídky */}
       {data.myListings.length > 0 && (
-        <div className="card p-4">
-          <SectionLabel>Moje nabídky</SectionLabel>
-          <div className="space-y-2">
-            {data.myListings.map((l) => (
-              <div key={l.id} className="flex items-center gap-3 py-2 border-b border-gray-100 last:border-0">
-                <span className="text-2xl shrink-0">{EQUIPMENT_ICONS[l.category] ?? "📦"}</span>
-                <div className="flex-1 min-w-0">
-                  <div className="font-heading font-bold">{l.categoryLabel} <span className="text-muted font-normal">· úroveň {l.level}</span></div>
-                  <div className="text-sm text-muted">
-                    {formatCZK(l.price)} · stav <span className={condColor(l.condition)}>{l.condition} %</span> · {daysLeft(l.expiresAt)}
-                  </div>
-                </div>
-                <button
-                  onClick={() => onWithdraw(l)}
-                  disabled={!!busy}
-                  className="shrink-0 py-1.5 px-4 rounded-soft text-sm font-heading font-bold border border-gray-300 text-muted hover:text-ink hover:border-gray-400 disabled:opacity-50 transition-colors"
-                >
+        <ListCard title="Moje nabídky" count={data.myListings.length}>
+          {data.myListings.map((l) => (
+            <ListRow key={l.id}
+              leading={<RowIcon>{EQUIPMENT_ICONS[l.category] ?? "📦"}</RowIcon>}
+              title={<>{l.categoryLabel} <span className="text-muted font-normal">· úroveň {l.level}</span></>}
+              meta={<>{formatCZK(l.price)} · stav <span className={condColor(l.condition)}>{l.condition} %</span> · {daysLeft(l.expiresAt)}</>}
+              trailing={
+                <button onClick={() => onWithdraw(l)} disabled={!!busy}
+                  className="py-1.5 px-4 rounded-control text-sm font-bold border border-gray-300 text-muted hover:text-ink hover:border-gray-400 disabled:opacity-50 transition-colors">
                   {busy === `w-${l.id}` ? "..." : "Stáhnout"}
                 </button>
-              </div>
-            ))}
-          </div>
-        </div>
+              } />
+          ))}
+        </ListCard>
       )}
 
       {/* Filtry */}
@@ -227,24 +218,21 @@ export function BazarTab({ data, loading, budget, busy, onBuy, onWithdraw, onRep
 
       {/* Historie */}
       {data.history.length > 0 && (
-        <div className="card p-4">
-          <SectionLabel>Co jsem prodal</SectionLabel>
-          <div className="space-y-1.5">
-            {data.history.map((h, i) => (
-              <div key={i} className="flex items-center gap-2 text-sm py-1 border-b border-gray-100 last:border-0">
-                <span className="text-lg shrink-0">{EQUIPMENT_ICONS[h.category] ?? "📦"}</span>
-                <span className="font-heading font-bold">{h.categoryLabel}</span>
-                <span className="text-muted">úroveň {h.level}</span>
-                <span className="ml-auto text-muted">
-                  {h.status === "sold" && <>prodáno {h.buyerName ? `do ${h.buyerName}` : ""} za <span className="font-heading font-bold text-pitch-600">{formatCZK(h.soldPrice ?? 0)}</span></>}
-                  {h.status === "pawned" && <>zastaveno za <span className="font-heading font-bold text-gold-600">{formatCZK(h.soldPrice ?? 0)}</span></>}
+        <ListCard title="Co jsem prodal">
+          {data.history.map((h, i) => (
+            <ListRow key={i} dense
+              leading={<span className="text-lg" aria-hidden="true">{EQUIPMENT_ICONS[h.category] ?? "📦"}</span>}
+              title={<>{h.categoryLabel} <span className="text-muted font-normal">· úroveň {h.level}</span></>}
+              trailing={
+                <span className="text-meta text-muted text-right">
+                  {h.status === "sold" && <>prodáno {h.buyerName ? `do ${h.buyerName}` : ""} za <span className="font-bold text-pitch-600">{formatCZK(h.soldPrice ?? 0)}</span></>}
+                  {h.status === "pawned" && <>zastaveno za <span className="font-bold text-gold-600">{formatCZK(h.soldPrice ?? 0)}</span></>}
                   {h.status === "expired" && "inzerát vypršel"}
                   {h.status === "withdrawn" && "staženo"}
                 </span>
-              </div>
-            ))}
-          </div>
-        </div>
+              } />
+          ))}
+        </ListCard>
       )}
     </div>
   );
