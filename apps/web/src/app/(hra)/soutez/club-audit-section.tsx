@@ -10,7 +10,7 @@
 
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
-import { DataTable, EntityLink, Modal, ListRow, RowValue, RowIcon, type DataColumn } from "@/components/ui";
+import { DataTable, EntityLink, Modal, ListRow, RowValue, RowIcon, type DataColumn, Disclosure } from "@/components/ui";
 import { TXN_ICONS, TXN_LABELS } from "@/lib/transaction-labels";
 import { Rozbaleni, czk, formatDate, plural } from "./ui";
 
@@ -202,14 +202,11 @@ export function ClubAuditSection({ teamId }: { teamId: string }) {
             )}
 
             {audit.items.length > 0 && (
-              <details>
-                <summary className="cursor-pointer text-sm font-semibold">
-                  Všechny položky ({audit.items.length})
-                </summary>
+              <Disclosure summary={`Všechny položky (${audit.items.length})`}>
                 <ul className="divide-y divide-line-soft mt-1 -mx-4">
                   {audit.items.map((item, i) => <ItemRow key={i} item={item} />)}
                 </ul>
-              </details>
+              </Disclosure>
             )}
           </div>
         )}

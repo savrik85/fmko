@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
-import { Card, CardBody, SectionLabel, Modal, Button, Tabs, useTabParam, ListCard, ListRow, ListEmpty, RowIcon, RowValue, SectionLoading, ProgressBar, type ProgressTone } from "@/components/ui";
+import { Card, CardBody, SectionLabel, Modal, Button, Tabs, useTabParam, ListCard, ListRow, ListEmpty, RowIcon, RowValue, SectionLoading, ProgressBar, type ProgressTone, CollapsibleCard } from "@/components/ui";
 import { DistrictMap, clubBadgeSvg, villageSizeLabel, type MapVillage } from "@/components/map/DistrictMap";
 import { DistrictVillages } from "./DistrictVillages";
 import { FaceAvatar } from "@/components/players/face-avatar";
@@ -773,13 +773,8 @@ function OwnVillage() {
       </ListCard>
 
       {/* Jak to s obcí funguje */}
-      <details className="card p-4 sm:p-5 group">
-        <summary className="cursor-pointer font-heading font-bold text-sm flex items-center justify-between">
-          <span>💡 Jak to s obcí funguje</span>
-          <span className="text-xs text-muted group-open:hidden">rozbalit</span>
-          <span className="text-xs text-muted hidden group-open:inline">sbalit</span>
-        </summary>
-        <div className="mt-3 space-y-3 text-sm leading-relaxed text-ink-light">
+      <CollapsibleCard title="💡 Jak to s obcí funguje" startCollapsed>
+        <div className="space-y-3 text-sm leading-relaxed text-ink-light">
           <p>Klub žije v obci a s její radnicí. <strong className="text-ink">Přízeň obce</strong> rozhoduje o dotaci: při nejhorším dostaneš polovinu, při nejlepším jeden a půl násobek. Za sezónu jsou to tisíce korun.</p>
           <p>V <strong className="text-ink">zastupitelstvu</strong> sedí starosta a tři zastupitelé. Každý má svou povahu a svůj vztah k tobě. Když je v obci víc klubů, rozhodují se podle toho, koho mají radši.</p>
           <ul className="space-y-1.5 ml-4 list-disc">
@@ -793,7 +788,7 @@ function OwnVillage() {
           <p><strong className="text-ink">Volby</strong> 🗳️: na konci každé sezóny se vymění celé vedení obce a přízeň u všech klubů začíná znovu napůl.</p>
           <p><strong className="text-ink">Krize</strong> ⚠️: když přízeň spadne hodně nízko, obec se otočí proti klubu. Cesta zpátky vede přes brigády a petice.</p>
         </div>
-      </details>
+      </CollapsibleCard>
 
       {toast && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[var(--z-sheet)] bg-gray-900 text-white px-4 py-2 rounded-soft shadow-lg text-sm">

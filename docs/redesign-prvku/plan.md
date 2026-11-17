@@ -460,4 +460,12 @@ na telefonu zvětšilo o víc než 15 %). Ponecháno: záložky (mise skauta, Ak
 sekce mládeže), tlačítka otevírající panel (Filtrovat, Víc) a přepínače vedle nich, kvíz trenéra,
 konfigurátor stadionu, ovládání dlaždic na Domů, sázková tabule, onboarding (vlastní vzhled),
 volby s radiem v popisku (hostování podmínka, úkoly zaměstnanců).
+Vlna 4 hotová lokálně: všechna potvrzení jako plachta (`useConfirm({ sheet: true })`),
+`window.confirm` nahrazený, vlastní překrytí (nabídka na trh, skaut, hostování, odpověď majitele)
+jsou `Sheet`, `zavritKlikemVedle` → `closeOnBackdrop`. Ponecháno: `Modal` (už obal nad `Sheet`),
+výběr hráče v Sestavě (portál), odhalení hráče, oznámení novinek, onboarding, konec sezóny.
+Vlna 5 hotová lokálně: 64 polí na třídách `input`/`select` (rozměry jako `!` přepsání),
+karty „Jak to funguje“ jako `CollapsibleCard startCollapsed`, tři malá rozbalení `Disclosure`.
+Ponecháno: pole na tmavém podkladu a s dynamickou třídou, karty v Tréninku a rozboru kádru
+s vlastním záhlavím.
 Vše lokálně, nepushnuté; push jen na pokyn uživatele.

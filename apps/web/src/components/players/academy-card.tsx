@@ -14,7 +14,7 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { apiFetch, apiAction } from "@/lib/api";
 import { FaceAvatar } from "@/components/players/face-avatar";
-import { Tabs, useTabParam, ListRow, RowValue, RatingPill, ratingToneIn, StatusChip, choiceClass, SelectedMark } from "@/components/ui";
+import { Tabs, useTabParam, ListRow, RowValue, RatingPill, ratingToneIn, StatusChip, choiceClass, SelectedMark, Disclosure } from "@/components/ui";
 import { formatKc } from "@/lib/format";
 
 const TAB_KEYS = ["prehled", "zaci", "novi", "trener", "vybaveni"] as const;
@@ -389,8 +389,7 @@ export function AcademyCard({ teamId }: { teamId: string }) {
           {promising.length > 0 && (
             <p className="text-sm"><strong className="font-heading text-ink">Nadějní podle trenéra:</strong> {promising.map((p) => `${p.name} (${p.age})`).join(", ")}</p>
           )}
-          <details className="text-sm">
-            <summary className="cursor-pointer font-heading font-bold text-pitch-600 min-h-11 flex items-center gap-1.5">Jak akademie funguje <span aria-hidden="true">▾</span></summary>
+          <Disclosure summary="Jak akademie funguje">
             <ul className="mt-1 space-y-1.5 text-muted list-disc pl-5">
               <li>Žáci jsou z tvé obce, od 11 do 14 let. Každé léto přijde nový ročník jedenáctiletých, kolik jich je, záleží na velikosti obce.</li>
               <li>Od {data.minSquad} žáků hraje družstvo okresní soutěž žáků (zápasy se ve hře neukazují). Žáci díky zápasům rostou naplno a méně jich skončí. S menším počtem jen trénují: rostou poloviční rychlostí a víc jich odejde.</li>
@@ -400,7 +399,7 @@ export function AcademyCard({ teamId }: { teamId: string }) {
               <li>Podle pravidel FAČR smí žák do dorostu od 13 let, za muže (áčko) až od 15 let.</li>
               <li>Kolik do akademie dáváš, si vybereš: skromná šetří, ale žáci rostou pomaleji a víc jich skončí; ambiciózní platí soustředění a turnaje, žáci rostou rychleji a láká to i žáky odjinud.</li>
             </ul>
-          </details>
+          </Disclosure>
         </section>
   
         <section className="card p-4 sm:p-5 space-y-3">

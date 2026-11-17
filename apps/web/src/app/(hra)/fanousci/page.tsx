@@ -6,7 +6,7 @@ import { MANAGER_FANS } from "@okresni-masina/shared";
 import { ManagerFansBandsTable } from "@/components/fans/manager-fans-bands";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, showError, type Team } from "@/lib/api";
-import { SectionLabel, useConfirm, Tabs, ListCard, ListRow, ListEmpty, RowIcon, RowValue, ResultChip, PageLoading } from "@/components/ui";
+import { SectionLabel, useConfirm, Tabs, ListCard, ListRow, ListEmpty, RowIcon, RowValue, ResultChip, PageLoading, CollapsibleCard } from "@/components/ui";
 import { BusSelector } from "../zapas/BusSelector";
 import { FanGroupsPanel, type FanGroupsData } from "./FanGroupsPanel";
 import { formatKc } from "@/lib/format";
@@ -543,13 +543,8 @@ export default function FansPage() {
 
       {currentTab === "fanbase" && fanbase && (<>
       {/* ═══ Jak to funguje — jednoduchý úvod ═══ */}
-      <details className="card p-4 sm:p-5 group">
-        <summary className="cursor-pointer font-heading font-bold text-sm flex items-center justify-between">
-          <span>💡 Jak to s fanoušky funguje</span>
-          <span className="text-xs text-muted group-open:hidden">rozbalit</span>
-          <span className="text-xs text-muted hidden group-open:inline">sbalit</span>
-        </summary>
-        <div className="mt-3 space-y-3 text-sm leading-relaxed">
+      <CollapsibleCard title="💡 Jak to s fanoušky funguje" startCollapsed>
+        <div className="space-y-3 text-sm leading-relaxed">
           <p>Fanoušci se dělí na tři druhy podle toho, jak ti jsou věrní:</p>
           <ul className="space-y-1.5 ml-4 list-disc">
             <li><strong className="text-card-red">🟥 Tvrdé jádro</strong>, ti, co přijdou vždycky. I když prší, i když prohráváš. Když je jich hodně, mužstvo se cítí silně doma.</li>
@@ -575,7 +570,7 @@ export default function FansPage() {
             Pro malou vesnici (do 200 obyvatel) je rozumný cíl po první sezóně: 20-30 stálých fanoušků a kolem 80-90 lidí na zápase. Záleží na tom, kolik peněz máš na busy a propagaci.
           </p>
         </div>
-      </details>
+      </CollapsibleCard>
 
       {/* ═══ Fanbase tier pyramid ═══ */}
       <div className="card p-4 sm:p-5">

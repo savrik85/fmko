@@ -9,7 +9,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { SectionLabel, useConfirm, ListCard, ListRow, ListEmpty, RowIcon, RowValue } from "@/components/ui";
+import { SectionLabel, useConfirm, ListCard, ListRow, ListEmpty, RowIcon, RowValue, CollapsibleCard, Disclosure } from "@/components/ui";
 import { apiFetch, showError } from "@/lib/api";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { odesloLidi, zavrenoNaZapasy, pripadu } from "@okresni-masina/shared";
@@ -273,13 +273,8 @@ export function FanGroupsPanel({ data, teamId, onChanged }: {
     <div className="space-y-5">
       {dialog}
       {/* ═══ Jak to funguje ═══ */}
-      <details className="card p-4 sm:p-5 group">
-        <summary className="cursor-pointer font-heading font-bold text-sm flex items-center justify-between">
-          <span>💡 Jak to s partami funguje</span>
-          <span className="text-xs text-muted group-open:hidden">rozbalit</span>
-          <span className="text-xs text-muted hidden group-open:inline">sbalit</span>
-        </summary>
-        <div className="mt-3 space-y-3 text-sm leading-relaxed">
+      <CollapsibleCard title="💡 Jak to s partami funguje" startCollapsed>
+        <div className="space-y-3 text-sm leading-relaxed">
           <p>
             Tvoji fanoušci nejsou jedna masa. Dělí se na několik part, každá má svou povahu,
             svého vůdce a vlastní náladu. Nejsou navíc k tvé základně, jsou to lidi z ní.
@@ -294,7 +289,7 @@ export function FanGroupsPanel({ data, teamId, onChanged }: {
             Pořadatelská služba na stadionu riziko sráží, ale kotel nemá rád, když ho někdo šacuje.
           </p>
         </div>
-      </details>
+      </CollapsibleCard>
 
       {/* ═══ Chorály ═══ */}
       <ChoralyPanel chants={data.chants ?? []} teamId={teamId} onChanged={onChanged} />
@@ -355,13 +350,9 @@ export function FanGroupsPanel({ data, teamId, onChanged }: {
             </div>
           )}
 
-          <details className="mt-3 group">
-            <summary className="cursor-pointer text-sm font-semibold">
-              <span className="group-open:hidden">Co s tím můžeš udělat</span>
-              <span className="hidden group-open:inline">Skrýt možnosti</span>
-            </summary>
+          <Disclosure className="mt-3" summary="Co s tím můžeš udělat">
             <Akce group={g} teamId={teamId} onChanged={onChanged} confirm={confirm} />
-          </details>
+          </Disclosure>
         </div>
       ))}
 
