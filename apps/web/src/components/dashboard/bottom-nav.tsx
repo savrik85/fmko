@@ -108,7 +108,7 @@ export function BottomNav() {
       {/* Vizuální lišta je obsah + schodek pod viewportem (u tebe 47 px).
           Při 56 px obsahu vycházela na 103 px a ikony seděly v horní třetině.
           48 px dá 95 px celkem, což je blízko nativní liště. */}
-      <div className="flex justify-around items-center h-12 px-2">
+      <div className="flex justify-around items-center h-[58px] px-2">
         {items.map((item) => {
           // Větev pro položku „Kádr" tu byla i poté, co ji z lišty vyhodili —
           // nikdy se nevyhodnotila. Kádr je dnes pod Více.

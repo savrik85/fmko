@@ -51,6 +51,56 @@ function getTileBadge(href: string, badges: MenuBadgesState): TileBadge | null {
   return badge.count != null ? { type: "count", count: badge.count, bg } : { type: "tag", label: badge.label ?? "", bg };
 }
 
+const ADMIN_ITEM: MenuItem = { href: "/admin", icon: "🛠️", label: "Administrace", color: "#8B4513" };
+
+/**
+ * Skupina menu jako bílá karta s řádky ve dvou sloupcích.
+ *
+ * Dřív to byly barevné dlaždice po čtyřech: dlouhé názvy se lámaly na dva
+ * řádky a barevné plochy se praly mezi sebou. Řádek má ikonu, celý název
+ * a odznak v jedné lince a na výšku 48 px pro prst.
+ */
+function MenuSection({ title, items, badges }: { title: string; items: MenuItem[]; badges: MenuBadgesState }) {
+  return (
+    <section className="mb-4 rounded-2xl bg-surface border border-line shadow-xs overflow-hidden">
+      <h2 className="px-3.5 pt-3 pb-2 text-xs font-heading font-bold text-muted uppercase tracking-wide">{title}</h2>
+      {/* Mezery v barvě linky dělají dělicí čáry mezi řádky i sloupci. */}
+      <div className="grid grid-cols-2 gap-px bg-line border-t border-line">
+        {items.map((item) => {
+          const badge = getTileBadge(item.href, badges);
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className="flex items-center gap-2.5 h-12 pl-3 pr-2.5 bg-surface active:bg-gray-100 transition-colors min-w-0"
+            >
+              <span
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-base shrink-0"
+                style={{ background: `${item.color}1F` }}
+                aria-hidden="true"
+              >
+                {item.icon}
+              </span>
+              <span className="text-sm font-medium text-ink truncate min-w-0 flex-1">{item.label}</span>
+              {badge && badge.type === "count" && badge.count > 0 && (
+                <span className={`${badge.bg ?? "bg-card-red"} text-white text-[10px] font-bold min-w-[18px] h-[18px] px-1 rounded-full flex items-center justify-center shrink-0`}>
+                  {badge.count > 99 ? "99+" : badge.count}
+                </span>
+              )}
+              {badge && badge.type === "tag" && (
+                // Štítek „Nové“ by v půlce šířky uřízl název, stačí zelená tečka.
+                <span className="w-2.5 h-2.5 rounded-full bg-pitch-500 shrink-0" role="img" aria-label={badge.label} />
+              )}
+            </Link>
+          );
+        })}
+        {/* Lichý počet: prázdná buňka, ať pod ní neprosvítá barva linky. */}
+        {items.length % 2 === 1 && <span aria-hidden="true" className="bg-surface" />}
+      </div>
+    </section>
+  );
+}
+
 export default function MorePage() {
   const { logout, isAdmin } = useTeam();
   const badges = useMenuBadges();
@@ -208,77 +258,11 @@ export default function MorePage() {
       )}
 
       {sections.map((section) => (
-        <div key={section.title} className="mb-6">
-          <p className="text-xs font-heading font-bold text-muted uppercase tracking-wide mb-3 px-1 flex items-center gap-2 after:flex-1 after:h-px after:bg-line">
-            {section.title}
-          </p>
-          <div className="grid grid-cols-4 gap-2">
-            {section.items.map((item) => {
-              const badge = getTileBadge(item.href, badges);
-
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className="relative flex flex-col items-center gap-1.5 p-3 rounded-xl transition-transform active:scale-95"
-                  /* Sytost 14 % a 24 % — skupiny od sebe jdou rozeznat */
-                  style={{ background: `${item.color}24` }}
-                >
-                  <div
-                    className="w-11 h-11 rounded-xl flex items-center justify-center text-xl"
-                    style={{ background: `${item.color}3D` }}
-                    aria-hidden="true"
-                  >
-                    {item.icon}
-                  </div>
-                  <span className="text-micro font-medium text-ink text-center leading-tight">
-                    {item.label}
-                  </span>
-                  {badge && badge.type === "count" && badge.count > 0 && (
-                    <span
-                      className={`absolute -top-1 -right-1 ${badge.bg ?? "bg-card-red"} text-white text-[10px] font-bold min-w-[18px] h-[18px] px-1 rounded-full flex items-center justify-center shadow-md border-2 border-surface`}
-                    >
-                      {badge.count > 99 ? "99+" : badge.count}
-                    </span>
-                  )}
-                  {badge && badge.type === "tag" && (
-                    <span className="absolute -top-1 -right-1 bg-pitch-500 text-white text-micro font-bold px-1.5 py-0.5 rounded-full shadow-md border-2 border-surface">
-                      {badge.label}
-                    </span>
-                  )}
-                </Link>
-              );
-            })}
-          </div>
-        </div>
+        <MenuSection key={section.title} title={section.title} items={section.items} badges={badges} />
       ))}
 
       {/* Administrace — jen pro adminy */}
-      {isAdmin && (
-        <div className="mb-6">
-          <p className="text-xs font-heading font-bold text-muted uppercase tracking-wide mb-3 px-1 flex items-center gap-2 after:flex-1 after:h-px after:bg-line">
-            Správa
-          </p>
-          <div className="grid grid-cols-4 gap-2">
-            <Link
-              href="/admin"
-              className="relative flex flex-col items-center gap-1.5 p-3 rounded-xl transition-transform active:scale-95"
-              style={{ background: "#8B451324" }}
-            >
-              <div
-                className="w-11 h-11 rounded-xl flex items-center justify-center text-xl"
-                style={{ background: "#8B45133D" }}
-                aria-hidden="true"
-              >
-                🛠️
-              </div>
-              <span className="text-micro font-medium text-ink text-center leading-tight">
-                Administrace
-              </span>
-            </Link>
-          </div>
-        </div>
-      )}
+      {isAdmin && <MenuSection title="Správa" items={[ADMIN_ITEM]} badges={badges} />}
 
       <button
         onClick={logout}
