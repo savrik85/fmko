@@ -6,9 +6,8 @@
  */
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { apiFetch } from "@/lib/api";
-import { SectionLabel, PositionBadge } from "@/components/ui";
+import { PositionBadge, ListCard, ListRow, StatusChip } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { ratingText } from "@/components/scouting/WillingnessBadge";
 import { AI_NEGOTIATION_STATUS_LABELS, formatTermsSummary, type AiNegotiationStatus, type TransferTerms } from "@okresni-masina/shared";
@@ -32,11 +31,13 @@ export interface AiNegotiationSummary {
   resolvedAt: string | null;
 }
 
-function stateLine(n: AiNegotiationSummary): { text: string; tone: string } {
-  if (n.status === "agreed") return { text: "Klub souhlasí, podepiš", tone: "text-pitch-600" };
-  if (n.status === "open" && n.waiting) return { text: "Klub si to rozmýšlí", tone: "text-muted" };
-  if (n.status === "open" && n.onTurn) return { text: "Klub odpověděl, jsi na tahu", tone: "text-gold-600" };
-  return { text: AI_NEGOTIATION_STATUS_LABELS[n.status], tone: "text-muted" };
+/** Stav jednání jako krátký štítek vpravo v řádku; celá věta je v bublině. */
+function stateChip(n: AiNegotiationSummary): { label: string; text: string; tone: "ok" | "warn" | "neutral" } {
+  if (n.status === "agreed") return { label: "Podepiš", text: "Klub souhlasí, podepiš", tone: "ok" };
+  if (n.status === "open" && n.waiting) return { label: "Rozmýšlí si to", text: "Klub si to rozmýšlí", tone: "neutral" };
+  if (n.status === "open" && n.onTurn) return { label: "Jsi na tahu", text: "Klub odpověděl, jsi na tahu", tone: "warn" };
+  const label = AI_NEGOTIATION_STATUS_LABELS[n.status];
+  return { label, text: label, tone: "neutral" };
 }
 
 export function AiNegotiationsList({ teamId, view }: { teamId: string | null; view: "active" | "closed" }) {
@@ -53,31 +54,23 @@ export function AiNegotiationsList({ teamId, view }: { teamId: string | null; vi
   if (items.length === 0) return null;
 
   return (
-    <div>
-      <SectionLabel>{view === "active" ? `Jednání s cizími kluby (${items.length})` : "Jednání s cizími kluby"}</SectionLabel>
-      <div className="space-y-2">
-        {items.map((n) => {
-          const s = stateLine(n);
-          return (
-            <Link key={n.id} href={`/prestupy/jednani/${n.id}`} className={`card p-3 flex items-center gap-3 hover:bg-pitch-50/40 transition-colors ${n.onTurn ? "ring-2 ring-gold-300/60" : ""}`}>
-              {Object.keys(n.avatar ?? {}).length > 0
-                ? <FaceAvatar faceConfig={n.avatar} size={40} className="rounded-full shrink-0" />
-                : <div className="w-10 h-10 rounded-full bg-gray-100 shrink-0" />}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-heading font-bold text-base">{n.playerName}</span>
-                  {n.position && <PositionBadge position={n.position as "GK" | "DEF" | "MID" | "FWD"} />}
-                  {n.age != null && <span className="text-sm text-muted">{n.age} let</span>}
-                  <span className="text-sm font-heading font-bold tabular-nums">{ratingText(n.ratingLo, n.ratingHi)}</span>
-                </div>
-                <div className="text-sm text-muted truncate">{n.clubName}{n.clubCity ? `, ${n.clubCity}` : ""} · {formatTermsSummary(n.terms)}</div>
-                <div className={`text-sm font-heading font-bold ${s.tone}`}>{s.text}</div>
-              </div>
-              <span className="text-muted shrink-0">→</span>
-            </Link>
-          );
-        })}
-      </div>
-    </div>
+    <ListCard title="Jednání s cizími kluby" count={view === "active" ? items.length : undefined}>
+      {items.map((n) => {
+        const st = stateChip(n);
+        return (
+          <ListRow key={n.id} href={`/prestupy/jednani/${n.id}`}
+            tone={n.onTurn || n.status === "agreed" ? "new" : undefined}
+            leading={Object.keys(n.avatar ?? {}).length > 0
+              ? <FaceAvatar faceConfig={n.avatar} size={30} className="rounded-full" />
+              : <span className="w-9 h-9 rounded-full bg-surface-3" />}
+            title={<>{n.playerName}{n.position && <span className="ml-2 align-middle"><PositionBadge position={n.position as "GK" | "DEF" | "MID" | "FWD"} /></span>}</>}
+            // Ukončená jednání mají stav na začátku podrobností: dlouhý štítek vpravo
+            // by na telefonu zalomil jméno na dva řádky.
+            meta={[st.tone === "neutral" ? st.label : null, `hod. ${ratingText(n.ratingLo, n.ratingHi)}`, n.age != null ? `${n.age} let` : null,
+              `${n.clubName}${n.clubCity ? `, ${n.clubCity}` : ""}`, formatTermsSummary(n.terms)].filter(Boolean).join(" · ")}
+            trailing={st.tone !== "neutral" ? <span title={st.text}><StatusChip tone={st.tone}>{st.label}</StatusChip></span> : undefined} />
+        );
+      })}
+    </ListCard>
   );
 }

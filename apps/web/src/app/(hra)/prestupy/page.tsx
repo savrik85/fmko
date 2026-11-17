@@ -9,7 +9,8 @@ import { useTeam } from "@/context/team-context";
 import { apiFetch, apiAction, showError, type Player } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
 import { nationalityFlag } from "@/lib/nationality";
-import { Spinner, SectionLabel, PositionBadge, useConfirm, BadgePreview, type BadgePattern, Tabs, useTabParam, Sheet, SheetDialog, Button } from "@/components/ui";
+import { Spinner, SectionLabel, PositionBadge, useConfirm, BadgePreview, type BadgePattern, Tabs, useTabParam, Sheet, SheetDialog, Button, DataTable, EntityCell, ListCard, ListRow, ListEmpty, RatingPill, StatusChip, ratingToneIn } from "@/components/ui";
+import { attrBg } from "@/lib/player-attrs";
 import { PlayerRevealCard } from "@/components/players/reveal-card";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { isLightColor, bestTextOn, readableOnLight } from "@/lib/team-color";
@@ -391,7 +392,7 @@ function RecentTransferRow({ t }: { t: TransfersOverview["recent"][number] }) {
        vypadalo to, že patří k řádku pod ním. Cena je proto na lince se
        jménem; druhý řádek (odkud → kam) tím dostal celou šířku a názvy
        klubů se ořezávají mnohem míň. */
-    <div className="flex items-start gap-2.5 py-2 border-b border-gray-100 last:border-b-0">
+    <div className="flex items-start gap-3 px-4 py-2.5 min-h-[56px] border-b border-line-soft last:border-b-0">
       {hasAvatar ? (
         <div className="shrink-0 rounded-soft overflow-hidden bg-gray-50">
           <FaceAvatar faceConfig={t.playerAvatar as Record<string, unknown>} size={32} />
@@ -1491,17 +1492,11 @@ export default function TransfersPage() {
 
               {/* Poslední přestupy */}
               {overview.recent.length > 0 && (
-                <div className="card p-4 sm:p-5">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-base" aria-hidden>📋</span>
-                    <SectionLabel>Poslední přestupy</SectionLabel>
-                  </div>
-                  <div>
-                    {overview.recent.map((t) => (
-                      <RecentTransferRow key={`${t.playerId}-${t.date}`} t={t} />
-                    ))}
-                  </div>
-                </div>
+                <ListCard title="📋 Poslední přestupy" count={overview.recent.length}>
+                  {overview.recent.map((t) => (
+                    <RecentTransferRow key={`${t.playerId}-${t.date}`} t={t} />
+                  ))}
+                </ListCard>
               )}
 
               {/* Spekulace */}
@@ -1522,12 +1517,8 @@ export default function TransfersPage() {
               {/* Top sellers + buyers */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {overview.topSellers.length > 0 && (
-                  <div className="card p-4 sm:p-5">
-                    <div className="flex items-center gap-2 mb-3">
-                      <span className="text-base" aria-hidden>💰</span>
-                      <SectionLabel>Nejvíc vydělali</SectionLabel>
-                    </div>
-                    <div className="space-y-2.5">
+                  <ListCard title="💰 Nejvíc vydělali">
+                    <div className="px-4 py-3 space-y-2.5">
                       {overview.topSellers.map((s, i) => {
                         const max = overview.topSellers[0]?.earned ?? 1;
                         const pct = (s.earned / max) * 100;
@@ -1550,15 +1541,11 @@ export default function TransfersPage() {
                         );
                       })}
                     </div>
-                  </div>
+                  </ListCard>
                 )}
                 {overview.topBuyers.length > 0 && (
-                  <div className="card p-4 sm:p-5">
-                    <div className="flex items-center gap-2 mb-3">
-                      <span className="text-base" aria-hidden>🛒</span>
-                      <SectionLabel>Nejvíc utratili</SectionLabel>
-                    </div>
-                    <div className="space-y-2.5">
+                  <ListCard title="🛒 Nejvíc utratili">
+                    <div className="px-4 py-3 space-y-2.5">
                       {overview.topBuyers.map((b, i) => {
                         const max = overview.topBuyers[0]?.spent ?? 1;
                         const pct = (b.spent / max) * 100;
@@ -1581,38 +1568,26 @@ export default function TransfersPage() {
                         );
                       })}
                     </div>
-                  </div>
+                  </ListCard>
                 )}
               </div>
 
               {/* Nejaktivnější */}
               {overview.mostActive.length > 0 && (
-                <div className="card p-4 sm:p-5">
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="text-base" aria-hidden>⚡</span>
-                    <SectionLabel>Nejaktivnější</SectionLabel>
-                  </div>
-                  <div className="space-y-2">
-                    {overview.mostActive.map((a, i) => (
-                      <div key={a.teamId} className="flex items-center gap-2.5 py-1">
-                        <span className="font-heading font-bold text-xs text-muted w-4 tabular-nums shrink-0">{i + 1}.</span>
-                        <ClubBadge badge={a.badge} size={28} />
-                        <Link href={`/tym/${a.teamId}`} className="text-sm font-heading font-bold text-ink hover:text-pitch-500 truncate flex-1 min-w-0">
-                          {a.teamName}
-                        </Link>
-                        <div className="flex items-center gap-2 sm:gap-3 shrink-0 text-xs">
-                          <span className="inline-flex items-center gap-0.5 text-pitch-500 font-heading font-bold tabular-nums" title="Příchozí">
-                            <span aria-hidden>↓</span>{a.in}
-                          </span>
-                          <span className="inline-flex items-center gap-0.5 text-card-red font-heading font-bold tabular-nums" title="Odchozí">
-                            <span aria-hidden>↑</span>{a.out}
-                          </span>
-                          <span className="font-heading font-[800] text-base tabular-nums w-7 text-right text-ink">{a.total}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                <ListCard title="⚡ Nejaktivnější">
+                  {overview.mostActive.map((a, i) => (
+                    <ListRow key={a.teamId} dense href={`/tym/${a.teamId}`}
+                      leading={<span className="text-meta text-muted tabular-nums">{i + 1}.</span>}
+                      title={<span className="flex items-center gap-2"><ClubBadge badge={a.badge} size={24} /><span className="min-w-0">{a.teamName}</span></span>}
+                      trailing={
+                        <span className="flex items-center gap-2 sm:gap-3 text-meta tabular-nums">
+                          <span className="text-pitch-600 font-bold" title="Příchozí"><span aria-hidden>↓</span>{a.in}</span>
+                          <span className="text-card-red font-bold" title="Odchozí"><span aria-hidden>↑</span>{a.out}</span>
+                          <span className="text-body font-bold text-ink w-7 text-right">{a.total}</span>
+                        </span>
+                      } />
+                  ))}
+                </ListCard>
               )}
 
             </>
@@ -2109,17 +2084,17 @@ export default function TransfersPage() {
             <div>
               <SectionLabel>Historie přestupů</SectionLabel>
               {history.length === 0 ? (
-                <div className="card p-6 text-center text-muted">Zatím žádná uzavřená jednání.</div>
+                <ListCard><ListEmpty icon="🗂️">Zatím žádná uzavřená jednání. Tady se objeví každá nabídka, která skončila.</ListEmpty></ListCard>
               ) : (
-                <div className="space-y-2">
+                <ListCard title="Uzavřená jednání" count={history.length}>
                   {history.flatMap((o) => {
-                    const statusMap: Record<string, { label: string; color: string }> = {
-                      accepted: { label: "Přijato", color: "text-pitch-500" },
-                      rejected: { label: "Zamítnuto", color: "text-red-600" },
-                      withdrawn: { label: "Staženo", color: "text-muted" },
-                      expired: { label: "Vypršelo", color: "text-muted" },
+                    const statusMap: Record<string, { label: string; tone: "ok" | "danger" | "neutral" }> = {
+                      accepted: { label: "Přijato", tone: "ok" },
+                      rejected: { label: "Zamítnuto", tone: "danger" },
+                      withdrawn: { label: "Staženo", tone: "neutral" },
+                      expired: { label: "Vypršelo", tone: "neutral" },
                     };
-                    const s = statusMap[o.status] ?? { label: o.status, color: "text-muted" };
+                    const s = statusMap[o.status] ?? { label: o.status, tone: "neutral" as const };
                     const amount = o.counter_amount ?? o.offer_amount;
                     const isLoan = o.offer_type === "loan";
                     const otherName = o.my_role === "buyer" ? o.to_team_name : o.from_team_name;
@@ -2144,27 +2119,14 @@ export default function TransfersPage() {
                       avatar: Record<string, unknown> | null, prichod: boolean, castka: number | null,
                       poznamka: string | null,
                     ) => (
-                      <Link key={key} href={`/prestupy/nabidka/${o.id}`} className="card p-3 flex items-center gap-3 hover:bg-pitch-50 transition-colors">
-                        {avatar && Object.keys(avatar).length > 0
-                          ? <FaceAvatar faceConfig={avatar} size={36} className="rounded-full shrink-0" />
-                          : <div className="w-9 h-9 rounded-full bg-gray-100 shrink-0" />}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-heading font-bold text-sm truncate">{jmeno}</span>
-                            {pozice && <PositionBadge position={pozice as "GK" | "DEF" | "MID" | "FWD"} />}
-                            <span className={`text-xs font-heading font-bold uppercase tracking-wider ${s.color}`}>{s.label}</span>
-                          </div>
-                          <div className="text-xs text-muted truncate">
-                            {prichod ? "←" : "→"} {otherName}
-                            {" · "}
-                            {druh}
-                            {poznamka && ` · ${poznamka}`}
-                            {castka != null && castka > 0 && ` · ${castka.toLocaleString("cs")} Kč`}
-                            {when && ` · ${when}`}
-                          </div>
-                        </div>
-                        <span className="text-xs text-muted shrink-0">›</span>
-                      </Link>
+                      <ListRow key={key} href={`/prestupy/nabidka/${o.id}`}
+                        leading={avatar && Object.keys(avatar).length > 0
+                          ? <FaceAvatar faceConfig={avatar} size={30} className="rounded-full" />
+                          : <span className="w-9 h-9 rounded-full bg-surface-3" />}
+                        title={<>{jmeno}{pozice && <span className="ml-2 align-middle"><PositionBadge position={pozice as "GK" | "DEF" | "MID" | "FWD"} /></span>}</>}
+                        meta={[`${prichod ? "←" : "→"} ${otherName}`, druh, poznamka,
+                          castka != null && castka > 0 ? `${castka.toLocaleString("cs")} Kč` : null, when || null].filter(Boolean).join(" · ")}
+                        trailing={<StatusChip tone={s.tone}>{s.label}</StatusChip>} />
                     );
 
                     const podminky = offerTermsNote(o);
@@ -2187,7 +2149,7 @@ export default function TransfersPage() {
                       )),
                     ];
                   })}
-                </div>
+                </ListCard>
               )}
             </div>
           )}
@@ -2784,32 +2746,9 @@ export default function TransfersPage() {
 }
 
 type SortKey = "name" | "position" | "age" | "rating" | "speed" | "technique" | "shooting" | "passing" | "defense" | "stamina" | "wage" | "value";
-type SortDir = "asc" | "desc";
-
-const SORT_COLS: Array<{ key: SortKey; label: string; short: string }> = [
-  { key: "name", label: "Jméno", short: "Jméno" },
-  { key: "position", label: "Pozice", short: "Poz" },
-  { key: "age", label: "Věk", short: "Věk" },
-  { key: "rating", label: "Hodnocení", short: "Hod" },
-  { key: "speed", label: "Rychlost", short: "Rch" },
-  { key: "technique", label: "Technika", short: "Tch" },
-  { key: "shooting", label: "Střelba", short: "Stř" },
-  { key: "passing", label: "Přihrávky", short: "Přh" },
-  { key: "defense", label: "Obrana", short: "Obr" },
-  { key: "stamina", label: "Výdrž", short: "Výd" },
-  { key: "wage", label: "Mzda", short: "Mzda" },
-  { key: "value", label: "Tržní hodnota", short: "Hodnota" },
-];
 
 /** Tržní hodnota hráče — stejný vzorec jako nabídky a inzeráty cizích klubů. */
 const playerValue = (p: Player) => marketValue(p.overall_rating ?? 0, p.age ?? 27, p.position);
-
-function attrCellColor(v: number): string {
-  if (v >= 70) return "text-pitch-500 font-bold";
-  if (v >= 50) return "text-pitch-700";
-  if (v >= 30) return "text-ink";
-  return "text-muted";
-}
 
 function getPlayerSortValue(p: Player, key: SortKey): string | number {
   const s = p.skills as Record<string, number> | undefined;
@@ -2834,8 +2773,6 @@ function SquadTransferTable({ players, myListings, teamId, confirm, setPriceDial
   confirm: (opts: any) => Promise<boolean>;
   setPriceDialog: (d: any) => void; refresh: () => Promise<void>;
 }) {
-  const [sortKey, setSortKey] = useState<SortKey>("rating");
-  const [sortDir, setSortDir] = useState<SortDir>("desc");
   // Jedno tlačítko „Na trh" (dvě se na mobilu nevešla); prodat nebo propustit se volí až v plachtě.
   const [choice, setChoice] = useState<Player | null>(null);
 
@@ -2869,84 +2806,59 @@ function SquadTransferTable({ players, myListings, teamId, confirm, setPriceDial
     if (await apiAction(apiFetch(`/api/teams/${teamId}/players/${p.id}/release`, { method: "POST" }), "Propuštění hráče se nezdařilo")) await refresh();
   };
 
-  const toggleSort = (key: SortKey) => {
-    if (sortKey === key) setSortDir(sortDir === "asc" ? "desc" : "asc");
-    else { setSortKey(key); setSortDir(key === "name" || key === "position" ? "asc" : "desc"); }
-  };
-
-  const sorted = [...players].sort((a, b) => {
-    const va = getPlayerSortValue(a, sortKey);
-    const vb = getPlayerSortValue(b, sortKey);
-    const cmp = typeof va === "string" ? va.localeCompare(vb as string, "cs") : (va as number) - (vb as number);
-    return sortDir === "asc" ? cmp : -cmp;
-  });
-
   return (
     <div>
-      <SectionLabel>Hráči ({players.length})</SectionLabel>
-      <div className="card overflow-x-auto table-scroll">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-gray-100">
-              {SORT_COLS.map((col) => {
-                // Na mobilu hodnota nemá vlastní sloupec, ukazuje se pod jménem hráče.
-                const hideMobile = ["speed", "technique", "shooting", "passing", "defense", "stamina", "wage", "value"].includes(col.key);
+      <ListCard title="Hráči" count={players.length}>
+        <DataTable rows={players} rowKey={(p) => p.id}
+          rowHref={(p) => `/hrac/${p.id}`}
+          defaultSort={{ key: "rating", dir: "desc" }}
+          rowTone={(p) => ((p as any).status === "quit" ? { bar: "down" } : myListings.some((l) => l.playerId === p.id) ? { bar: "warn" } : undefined)}
+          empty="V kádru teď nikoho nemáš."
+          columns={[
+            { key: "name", header: "Jméno", align: "left", sortValue: (p) => getPlayerSortValue(p, "name"), firstDir: "asc",
+              cell: (p) => {
+                const isQuit = (p as any).status === "quit";
+                const isListed = myListings.some((l) => l.playerId === p.id);
                 return (
-                  <th key={col.key}
-                    onClick={() => toggleSort(col.key)}
-                    className={`py-2 px-2 text-xs font-heading uppercase cursor-pointer select-none hover:text-pitch-500 transition-colors whitespace-nowrap ${
-                      sortKey === col.key ? "text-pitch-600" : "text-muted"
-                    } ${col.key === "name" ? "text-left pl-4" : "text-center"} ${hideMobile ? "hidden sm:table-cell" : ""}`}
-                    title={col.label}
-                  >
-                    {col.short}{sortKey === col.key ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
-                  </th>
+                  <EntityCell name={`${p.first_name} ${p.last_name}`}
+                    meta={<>
+                      <span className="sm:hidden mr-1.5 align-middle"><PositionBadge position={p.position as "GK" | "DEF" | "MID" | "FWD"} /></span>
+                      <span className="lg:hidden">{formatCZK(playerValue(p))}</span>
+                      {isQuit && <span className="ml-1.5"><StatusChip tone="danger">Odmítá</StatusChip></span>}
+                      {isListed && <span className="ml-1.5"><StatusChip tone="warn">Na trhu</StatusChip></span>}
+                    </>} />
                 );
-              })}
-              <th className="py-2 px-2 text-xs font-heading uppercase text-muted text-center hidden sm:table-cell">Status</th>
-              <th className="py-2 px-2 text-xs font-heading uppercase text-muted text-right pr-4">Akce</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sorted.map((p) => {
-              const s = p.skills as Record<string, number> | undefined;
-              const isQuit = (p as any).status === "quit";
-              const isListed = myListings.some((l) => l.playerId === p.id);
-              return (
-                <tr key={p.id} className={`border-b border-gray-50 last:border-b-0 hover:bg-gray-50/50 ${isQuit ? "bg-red-50/30" : ""}`}>
-                  <td className="py-2 px-2 pl-4">
-                    <Link href={`/hrac/${p.id}`} className="font-heading font-bold hover:text-pitch-500 underline decoration-pitch-500/20 transition-colors whitespace-nowrap">
-                      {p.first_name} {p.last_name}
-                    </Link>
-                    <div className="sm:hidden text-sm text-muted tabular-nums whitespace-nowrap">{formatCZK(playerValue(p))}</div>
-                  </td>
-                  <td className="py-2 px-2 text-center"><PositionBadge position={p.position as "GK" | "DEF" | "MID" | "FWD"} /></td>
-                  <td className="py-2 px-2 text-center tabular-nums text-muted">{p.age}</td>
-                  <td className="py-2 px-2 text-center tabular-nums font-heading font-bold">{p.overall_rating}</td>
-                  <td className={`py-2 px-2 text-center tabular-nums hidden sm:table-cell ${attrCellColor(s?.speed ?? 0)}`}>{s?.speed ?? "-"}</td>
-                  <td className={`py-2 px-2 text-center tabular-nums hidden sm:table-cell ${attrCellColor(s?.technique ?? 0)}`}>{s?.technique ?? "-"}</td>
-                  <td className={`py-2 px-2 text-center tabular-nums hidden sm:table-cell ${attrCellColor(s?.shooting ?? 0)}`}>{s?.shooting ?? "-"}</td>
-                  <td className={`py-2 px-2 text-center tabular-nums hidden sm:table-cell ${attrCellColor(s?.passing ?? 0)}`}>{s?.passing ?? "-"}</td>
-                  <td className={`py-2 px-2 text-center tabular-nums hidden sm:table-cell ${attrCellColor(s?.defense ?? 0)}`}>{s?.defense ?? "-"}</td>
-                  <td className={`py-2 px-2 text-center tabular-nums hidden sm:table-cell ${attrCellColor(s?.stamina ?? 0)}`}>{s?.stamina ?? "-"}</td>
-                  <td className="py-2 px-2 text-center tabular-nums text-muted text-xs hidden sm:table-cell">{formatCZK(p.weekly_wage ?? 0)}</td>
-                  <td className="py-2 px-2 text-center tabular-nums font-heading font-bold hidden sm:table-cell whitespace-nowrap">{formatCZK(playerValue(p))}</td>
-                  <td className="py-2 px-2 text-center hidden sm:table-cell">
-                    {isQuit && <span className="text-xs font-heading font-bold text-card-red bg-red-50 px-1.5 py-0.5 rounded">Odmítá</span>}
-                    {isListed && <span className="text-xs font-heading font-bold text-gold-600 bg-gold-50 px-1.5 py-0.5 rounded">Na trhu</span>}
-                  </td>
-                  <td className="py-2 px-2 pr-4 text-right">
-                    <button onClick={() => setChoice(p)}
-                      className="py-1.5 px-3 rounded text-sm font-heading font-bold bg-gold-500 text-white hover:bg-gold-600 transition-colors whitespace-nowrap">
-                      Na trh
-                    </button>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+              } },
+            { key: "position", header: "Poz", title: "Pozice", width: "w-14", priority: 2, sortValue: (p) => getPlayerSortValue(p, "position"), firstDir: "asc",
+              cell: (p) => <PositionBadge position={p.position as "GK" | "DEF" | "MID" | "FWD"} /> },
+            { key: "age", header: "Věk", width: "w-11", sortValue: (p) => p.age, cell: (p) => p.age },
+            { key: "rating", header: "Hod.", title: "Hodnocení", width: "w-14", sortValue: (p) => p.overall_rating ?? 0,
+              cell: (p) => <RatingPill value={p.overall_rating ?? 0} tone={ratingToneIn(p.overall_rating ?? 0, players.map((x) => x.overall_rating ?? 0))} /> },
+              { key: "speed", header: "Rch", title: "Rychlost", width: "w-11", priority: 2, sortValue: (p) => getPlayerSortValue(p, "speed"),
+                cell: (p) => { const v = (p.skills as Record<string, number> | undefined)?.speed; return v == null ? "-" : <span className={`inline-flex w-[30px] h-6 rounded-tight items-center justify-center text-meta font-bold ${attrBg(v)}`}>{v}</span>; } },
+              { key: "technique", header: "Tch", title: "Technika", width: "w-11", priority: 2, sortValue: (p) => getPlayerSortValue(p, "technique"),
+                cell: (p) => { const v = (p.skills as Record<string, number> | undefined)?.technique; return v == null ? "-" : <span className={`inline-flex w-[30px] h-6 rounded-tight items-center justify-center text-meta font-bold ${attrBg(v)}`}>{v}</span>; } },
+              { key: "shooting", header: "Stř", title: "Střelba", width: "w-11", priority: 2, sortValue: (p) => getPlayerSortValue(p, "shooting"),
+                cell: (p) => { const v = (p.skills as Record<string, number> | undefined)?.shooting; return v == null ? "-" : <span className={`inline-flex w-[30px] h-6 rounded-tight items-center justify-center text-meta font-bold ${attrBg(v)}`}>{v}</span>; } },
+              { key: "passing", header: "Přh", title: "Přihrávky", width: "w-11", priority: 2, sortValue: (p) => getPlayerSortValue(p, "passing"),
+                cell: (p) => { const v = (p.skills as Record<string, number> | undefined)?.passing; return v == null ? "-" : <span className={`inline-flex w-[30px] h-6 rounded-tight items-center justify-center text-meta font-bold ${attrBg(v)}`}>{v}</span>; } },
+              { key: "defense", header: "Obr", title: "Obrana", width: "w-11", priority: 2, sortValue: (p) => getPlayerSortValue(p, "defense"),
+                cell: (p) => { const v = (p.skills as Record<string, number> | undefined)?.defense; return v == null ? "-" : <span className={`inline-flex w-[30px] h-6 rounded-tight items-center justify-center text-meta font-bold ${attrBg(v)}`}>{v}</span>; } },
+              { key: "stamina", header: "Výd", title: "Výdrž", width: "w-11", priority: 2, sortValue: (p) => getPlayerSortValue(p, "stamina"),
+                cell: (p) => { const v = (p.skills as Record<string, number> | undefined)?.stamina; return v == null ? "-" : <span className={`inline-flex w-[30px] h-6 rounded-tight items-center justify-center text-meta font-bold ${attrBg(v)}`}>{v}</span>; } },
+            { key: "wage", header: "Mzda", width: "w-24", align: "right", priority: 3, sortValue: (p) => p.weekly_wage ?? 0,
+              cell: (p) => <span className="whitespace-nowrap">{formatCZK(p.weekly_wage ?? 0)}</span> },
+            { key: "value", header: "Hodnota", title: "Tržní hodnota", width: "w-28", align: "right", priority: 3, emphasis: true, sortValue: (p) => playerValue(p),
+              cell: (p) => <span className="whitespace-nowrap">{formatCZK(playerValue(p))}</span> },
+            { key: "action", header: "", align: "right", width: "w-24",
+              cell: (p) => (
+                <button onClick={(e) => { e.stopPropagation(); setChoice(p); }}
+                  className="py-1.5 px-3 rounded-control text-sm font-bold bg-gold-500 text-white hover:bg-gold-600 transition-colors whitespace-nowrap">
+                  Na trh
+                </button>
+              ) },
+          ]} />
+      </ListCard>
       <p className="text-sm text-muted mt-2 px-1">
         Hodnota kádru <span className="font-heading font-bold text-ink tabular-nums">{formatCZK(players.reduce((sum, p) => sum + playerValue(p), 0))}</span>
         {" "}· tržní cena podle hodnocení, věku a pozice ze skutečných přestupů
