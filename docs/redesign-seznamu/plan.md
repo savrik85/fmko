@@ -445,22 +445,27 @@ Po každé vlně jedna krátká zpráva česky:
 Když narazíš na chybu ve hře, která s redesignem nesouvisí, platí protokol z
 `CLAUDE.md`: reprodukuj, najdi příčinu, popiš, počkej na souhlas.
 
-## 10. Co zůstalo mimo sdílené díly a proč (stav 17. 11. 2026)
+## 10. Stav převodu (17. 11. 2026)
 
-Tyto seznamy jsem při převodu vědomě nechal ve vlastní podobě. Kdo plán převezme,
-ať je nepřevádí bez dohody s uživatelem.
+Všechny seznamy z inventáře stojí na sdílených dílech, včetně míst, která byla
+původně vedená jako výjimky: Sestava (DataTable s tónem `selected` a `scroll.until`),
+detail zápasu, rozpisy (FixtureRow), grémium, sázky, widgety na Domů (`dense`),
+U21 a akademie, hospoda, nápověda, karty s rozhodnutím (nabídky, výzvy na přáteláky,
+události, petice, investice, brigády, kurzy trenéra) a pruhové žebříčky.
+
+Mimo zůstává jen to, co podle sekce 5 seznam není, nebo co plán vynechává sám:
 
 | Místo | Proč |
 |---|---|
-| Sestava (`/zapas`): výběr hráče, základní sestava, lavička | Je to editor: výběr pozice, výměna, stav každého řádku (mimo post, nepřítomný, vybraný). Sjednocené je jen záhlaví. |
-| Detail zápasu: sestavy obou týmů, klíčové momenty, góly, komentář | Zápasový protokol s barvou postu a časovou osou. |
-| Rozpisy zápasů (liga, `/rozpis`, pohár, turnaj, U21) | Řádek má dva týmy proti sobě; potřeboval by vlastní díl. |
-| Karty s rozhodnutím a více tlačítky (nabídky, výzvy na přáteláky, události k rozhodnutí, petice, kurzy trenéra) | Víc akcí a víc řádků textu než jeden řádek seznamu. |
-| Grémium (`/soutez`) a sázky (`/sazky`) | Vlastní vzhled (úřední zápis, tiket). |
-| Telefon, Zpravodaj | Vlastní vzhled (telefon, noviny). |
-| Widgety na Domů | Dlaždice si počítají, kolik řádků se vejde (`ROW_PX`); řádek 48 px by je rozbil. |
-| Hráči U21 a akademie | Rozbalovací řádky s akcemi (`<details>`). |
-| Nápověda a vliv trenéra na fanoušky | Referenční tabulky v textu nápovědy. |
-| Hospoda: výtržnosti a pozvaní trenéři | Vnořené v kartě večera s tlačítky. |
-| Pruhové žebříčky (nejvíc vydělali / utratili, zlepšení z tréninku) | Řádek nese ukazatel průběhu, ne hodnotu. |
+| Telefon, Zpravodaj, Redakce | Vynechané plánem (sekce 4, vlny): vlastní vzhled telefonu a novin. |
+| Volba úrovně akademie, karty trenéra žáků (zaměstnanec, táta) | Přepínač mezi třemi volbami, ne seznam. |
+| Účastníci večera v hospodě, zlepšení hráče na hostování | Štítky v řádku, ne seznam. |
+| „Co to dělá s tréninkem“ u kurzu, podmínky zámku v reputaci | Dvojice štítek a hodnota. |
+| Mrtvé bloky starých bidů v Přestupech (`{false && …}`) | Nevykreslují se. |
 
+Čeká na rozhodnutí uživatele:
+
+| Místo | Proč |
+|---|---|
+| Góly v detailu zápasu | Dva sloupce domácí a hosté. Jako `ListRow` (i hustý) by byly na telefonu o 50 až 60 % vyšší, což porušuje pravidlo 8. |
+| „Podle atributů“ v Trénincích | Sloupcový graf přírůstků po atributech. Hustý řádek by ho na telefonu zvětšil o víc než 50 %. |
