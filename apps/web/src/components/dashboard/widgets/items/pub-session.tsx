@@ -7,7 +7,7 @@
 
 import Link from "next/link";
 import { ClubScarf, type ScarfPattern } from "@/components/team/club-scarf";
-import type { BadgePattern } from "@/components/ui";
+import { ListRow, type BadgePattern } from "@/components/ui";
 import type { WidgetProps } from "../types";
 import { initials } from "./shared";
 
@@ -102,34 +102,36 @@ export function PubSessionWidget({ data }: WidgetProps) {
             </div>
           )}
 
+          {/* Výtržnost je celá jednou větou bez názvu: věta jde do `detail`, ikona bez dlaždice (plán 3.3b). */}
           {session.incidents.length > 0 && (
-            <ul className="divide-y divide-gray-100">
+            <div className="-mx-4 sm:-mx-5">
               {session.incidents.map((inc, i) => (
-                <li key={i} className="text-sm py-2 first:pt-0 last:pb-0">
-                  <div className="flex gap-2 items-start">
-                    <span className="shrink-0">{INCIDENT_ICONS[inc.type] ?? "•"}</span>
-                    <span className="text-ink leading-snug">{inc.text}</span>
-                  </div>
-                  {inc.effects && inc.effects.length > 0 && (
-                    <div className="ml-7 mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-micro">
-                      {inc.effects.map((ef, ei) => {
-                        const efColor = ef.type === "injury" || ef.type === "hangover" || (ef.delta != null && ef.delta < 0)
-                          ? "text-card-red"
-                          : ef.delta != null && ef.delta > 0
-                            ? "text-pitch-500"
-                            : "text-muted";
-                        return (
-                          <span key={ei} className={efColor}>
-                            <span className="text-muted">{playerNameById(ef.playerId)}:</span>{" "}
-                            <span className="font-heading font-bold">{ef.label}</span>
-                          </span>
-                        );
-                      })}
-                    </div>
-                  )}
-                </li>
+                <ListRow key={i} dense
+                  leading={<span className="text-base leading-none" aria-hidden="true">{INCIDENT_ICONS[inc.type] ?? "•"}</span>}
+                  detail={
+                    <>
+                      {inc.text}
+                      {inc.effects && inc.effects.length > 0 && (
+                        <span className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-micro">
+                          {inc.effects.map((ef, ei) => {
+                            const efColor = ef.type === "injury" || ef.type === "hangover" || (ef.delta != null && ef.delta < 0)
+                              ? "text-card-red"
+                              : ef.delta != null && ef.delta > 0
+                                ? "text-pitch-500"
+                                : "text-muted";
+                            return (
+                              <span key={ei} className={efColor}>
+                                <span className="text-muted">{playerNameById(ef.playerId)}:</span>{" "}
+                                <span className="font-heading font-bold">{ef.label}</span>
+                              </span>
+                            );
+                          })}
+                        </span>
+                      )}
+                    </>
+                  } />
               ))}
-            </ul>
+            </div>
           )}
         </div>
       </div>

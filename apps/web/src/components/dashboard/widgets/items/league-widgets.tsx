@@ -2,8 +2,8 @@
 
 /** Widgety kolem ligy — tabulka, bilance, žebříčky střelců a grafy sezóny. */
 
-import { DataTable } from "@/components/ui";
-import Link from "next/link";
+import { DataTable, ListRow, ScoreChip } from "@/components/ui";
+import type { ReactNode } from "react";
 import { WidgetSkeleton, WidgetError } from "../widget-frame";
 import {
   DonutChart, LineChart, BarChart, StackedBar, HBarChart,
@@ -12,6 +12,19 @@ import {
 import type { WidgetProps } from "../types";
 import { rowsForHeight, ROW_PX } from "../widget-heights";
 import { ScorerRow, MoreLink, FormChip, safeTeamColor } from "./shared";
+
+/**
+ * Jméno a šedý doplněk (klub, kolo poháru) na jednom řádku hustého řádku. Jméno se
+ * nikdy neořízne (nanejvýš se zalomí), doplněk skončí třemi tečkami.
+ */
+function NameWithAside({ name, aside }: { name: ReactNode; aside?: ReactNode }) {
+  return (
+    <span className="flex items-baseline gap-1.5 min-w-0">
+      <span className="shrink-0 max-w-full">{name}</span>
+      {aside && <span className="min-w-0 truncate text-meta font-normal text-muted">{aside}</span>}
+    </span>
+  );
+}
 
 // ── Tabulka ─────────────────────────────────────────────────────────────────
 
@@ -277,25 +290,25 @@ export function LeagueCardsWidget({ data, height }: WidgetProps) {
 
   const max = Math.max(...rows.map((r) => r.yellowCards + r.redCards), 1);
 
+  // Jméno a klub na jednom řádku, pruh v `detail`: 44 px, sedí na ROW_PX.bar.
   return (
-    <ul className="space-y-2">
+    <div className="-mx-4 sm:-mx-5">
       {rows.map((r) => (
-        <li key={r.playerId}>
-          <div className="flex items-baseline gap-2 mb-1">
-            <a href={`/hrac/${r.playerId}`} className="text-sm truncate min-w-0 flex-1 hover:text-pitch-500 hover:underline transition-colors">
-              {r.name} <span className="text-muted">· {r.teamName}</span>
-            </a>
-            <span className="text-sm font-heading font-bold tabular-nums shrink-0">
+        <ListRow key={r.playerId} dense href={`/hrac/${r.playerId}`}
+          title={<NameWithAside name={r.name} aside={`· ${r.teamName}`} />}
+          trailing={
+            <span className="text-meta font-bold text-ink tabular-nums">
               {r.yellowCards}<span className="text-muted">Ž</span> {r.redCards}<span className="text-muted">Č</span>
             </span>
-          </div>
-          <div className="flex h-2 gap-[2px]">
-            <div className="rounded-l-[4px]" style={{ width: `${(r.yellowCards / max) * 100}%`, background: "#F5C542" }} title={`Žluté: ${r.yellowCards}`} />
-            <div className="rounded-r-[4px]" style={{ width: `${(r.redCards / max) * 100}%`, background: DIVERGING.negative }} title={`Červené: ${r.redCards}`} />
-          </div>
-        </li>
+          }
+          detail={
+            <span className="flex h-2 gap-[2px]">
+              <span className="rounded-l-[4px]" style={{ width: `${(r.yellowCards / max) * 100}%`, background: "#F5C542" }} title={`Žluté: ${r.yellowCards}`} />
+              <span className="rounded-r-[4px]" style={{ width: `${(r.redCards / max) * 100}%`, background: DIVERGING.negative }} title={`Červené: ${r.redCards}`} />
+            </span>
+          } />
       ))}
-    </ul>
+    </div>
   );
 }
 
@@ -318,22 +331,23 @@ export function CupProgressWidget({ data }: WidgetProps) {
         note={status}
         color={my?.isChampion ? "#C4A035" : my?.alive ? DIVERGING.positive : undefined}
       />
-      <ol className="space-y-1">
+      <div className="-mx-4 sm:-mx-5">
         {cup.myMatches.map((m) => (
-          <li key={m.matchId} className="flex items-center gap-2 py-1.5 border-b border-gray-50 last:border-b-0">
-            <span className="text-sm text-muted w-24 shrink-0 truncate">{m.roundName}</span>
-            <span className="text-sm font-heading font-bold flex-1 truncate">{m.opponent?.name ?? "-"}</span>
-            <span className="text-micro text-muted uppercase">{m.isHome ? "D" : "V"}</span>
-            {m.myScore != null && m.oppScore != null ? (
-              <span className={`text-sm font-heading font-bold tabular-nums px-1.5 py-0.5 rounded ${
-                m.won ? "bg-pitch-50 text-pitch-600" : "bg-red-50 text-card-red"
-              }`}>{m.myScore}:{m.oppScore}</span>
-            ) : (
-              <span className="text-sm text-muted">{m.daysUntil != null ? `za ${m.daysUntil} d` : "-"}</span>
-            )}
-          </li>
+          <ListRow key={m.matchId} dense
+            title={<NameWithAside name={m.opponent?.name ?? "-"} aside={m.roundName} />}
+            trailing={
+              <>
+                <span className="text-micro text-muted uppercase">{m.isHome ? "D" : "V"}</span>
+                {m.myScore != null && m.oppScore != null ? (
+                  // Pohár remízu nezná (rozhodnou penalty), takže stačí výhra, nebo prohra.
+                  <ScoreChip result={m.won ? "W" : "L"}>{m.myScore}:{m.oppScore}</ScoreChip>
+                ) : (
+                  <span className="text-meta text-muted">{m.daysUntil != null ? `za ${m.daysUntil} d` : "-"}</span>
+                )}
+              </>
+            } />
         ))}
-      </ol>
+      </div>
       <MoreLink href="/pohar">Celý pavouk →</MoreLink>
     </div>
   );

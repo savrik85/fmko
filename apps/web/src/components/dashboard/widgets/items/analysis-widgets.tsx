@@ -5,6 +5,7 @@
  * heatmapa sezóny, vodopád rozpočtu a vývoj pozice v tabulce.
  */
 
+import { ListRow } from "@/components/ui";
 import { WidgetSkeleton, WidgetError } from "../widget-frame";
 import {
   ScatterChart, HeatmapGrid, Waterfall, LineChart, HBarChart,
@@ -344,26 +345,26 @@ export function DisciplineWidget({ data, height }: WidgetProps) {
     .slice(0, rowsForHeight(height, ROW_PX.bar, 32));
   const max = Math.max(...top.map((p) => p.yellowCards + p.redCards), 1);
 
+  // Jméno na jednom řádku, pruh v `detail`: 44 px, sedí na ROW_PX.bar.
   return (
     <div className="space-y-3">
-      <ul className="space-y-2">
+      <div className="-mx-4 sm:-mx-5">
         {top.map((p) => (
-          <li key={p.playerId}>
-            <div className="flex items-baseline gap-2 mb-1">
-              <a href={`/hrac/${p.playerId}`} className="text-sm truncate min-w-0 flex-1 hover:text-pitch-500 hover:underline transition-colors">
-                {p.firstName} {p.lastName}
-              </a>
-              <span className="text-sm font-heading font-bold tabular-nums shrink-0">
+          <ListRow key={p.playerId} dense href={`/hrac/${p.playerId}`}
+            title={`${p.firstName} ${p.lastName}`}
+            trailing={
+              <span className="text-meta font-bold text-ink tabular-nums">
                 {p.yellowCards}<span className="text-muted">Ž</span> {p.redCards}<span className="text-muted">Č</span>
               </span>
-            </div>
-            <div className="flex h-2 gap-[2px]">
-              <div className="rounded-l-[4px]" style={{ width: `${(p.yellowCards / max) * 100}%`, background: "#F5C542" }} title={`Žluté: ${p.yellowCards}`} />
-              <div className="rounded-r-[4px]" style={{ width: `${(p.redCards / max) * 100}%`, background: DIVERGING.negative }} title={`Červené: ${p.redCards}`} />
-            </div>
-          </li>
+            }
+            detail={
+              <span className="flex h-2 gap-[2px]">
+                <span className="rounded-l-[4px]" style={{ width: `${(p.yellowCards / max) * 100}%`, background: "#F5C542" }} title={`Žluté: ${p.yellowCards}`} />
+                <span className="rounded-r-[4px]" style={{ width: `${(p.redCards / max) * 100}%`, background: DIVERGING.negative }} title={`Červené: ${p.redCards}`} />
+              </span>
+            } />
         ))}
-      </ul>
+      </div>
       <div className="text-micro text-muted text-center">Řazeno podle závažnosti, červená váží jako tři žluté.</div>
     </div>
   );

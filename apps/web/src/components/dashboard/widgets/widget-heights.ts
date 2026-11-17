@@ -61,17 +61,32 @@ const AUTO_ROWS = 6;
  * ne odhadnutá — s odhadem seznamy přetékaly přes spodní hranu karty.
  */
 export const ROW_PX = {
-  /** Jméno nad vodorovným pruhem (HBarChart). */
+  /**
+   * Jméno nad vodorovným pruhem (HBarChart). Sedí i na hustý ListRow s pruhem
+   * v `detail` (Karty v lize, Disciplína): 12 + 20,6 + 2 + 8 + 1 = 44 px.
+   */
   bar: 45,
   /** Prostý řádek: jméno a hodnota vedle sebe. */
   list: 41,
-  /** Řádek tabulky bez grafiky (hustá DataTable, 40 px, s rezervou na zalomený dlouhý název). */
+  /**
+   * Řádek tabulky bez grafiky (hustá DataTable, 40 px, s rezervou na zalomený dlouhý název).
+   * Stejně vysoký je hustý ListRow s jedním řádkem textu.
+   */
   table: 43,
   /** Řádek tabulky s erbem soupeře. */
   tableBadge: 41,
-  /** Řádek s ikonou a dvěma řádky textu. */
+  /**
+   * Řádek s ikonou a dvěma řádky textu: hustý ListRow s jedním řádkem v `detail`
+   * (12 + 20,6 + 2 + 17,9 + 1 = 54 px), nebo s titulkem zalomeným na dva řádky.
+   */
   rich: 55,
-  /** Řádek s vlastními ukazateli pod textem (Rivalové). */
+  /**
+   * Hustý ListRow se dvěma jmény v titulku a krátkým popisem v `detail` (Kabina).
+   * Nezalomený má 54 px, zalomený na úzké dlaždici 74 px; 64 px ve výšce 2 unese
+   * zalomené všechny řádky, ve výšce 3 většinu.
+   */
+  pair: 64,
+  /** Řádek s vlastními ukazateli pod textem (Rivalové): hustý ListRow, 81 px. */
   tall: 81,
 } as const;
 

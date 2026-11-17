@@ -3,6 +3,7 @@
 /** Widgety kolem trhu — volní hráči, hráči na prodej, dokončené přestupy v lize. */
 
 import Link from "next/link";
+import { ListRow, RatingPill, ratingToneIn } from "@/components/ui";
 import { WidgetSkeleton, WidgetError } from "../widget-frame";
 import { ChartEmpty, compactCZK, fullCZK } from "../charts";
 import type { WidgetProps } from "../types";
@@ -13,19 +14,14 @@ const POSITION_LABELS: Record<string, string> = { GK: "BRA", DEF: "OBR", MID: "Z
 
 function PosTag({ position }: { position: string }) {
   return (
-    <span className="text-micro font-heading font-bold uppercase text-muted w-8 shrink-0">
+    <span className="text-micro font-heading font-bold uppercase text-muted">
       {POSITION_LABELS[position] ?? position}
     </span>
   );
 }
 
-function Rating({ value }: { value: number }) {
-  return (
-    <span className={`font-heading font-bold text-sm tabular-nums px-1.5 py-0.5 rounded shrink-0 ${
-      value >= 60 ? "bg-pitch-50 text-pitch-700" : value >= 40 ? "bg-gray-50 text-ink" : "bg-gray-50 text-muted"
-    }`}>{value}</span>
-  );
-}
+// Řádky mají pod jménem jeden řádek údajů v `detail` (hustý řádek 54 px), proto ROW_PX.rich.
+// Údaje se jako dřív smí useknout třemi tečkami, jméno ne.
 
 // ── Volní hráči ─────────────────────────────────────────────────────────────
 
@@ -34,29 +30,33 @@ export function FreeAgentsWidget({ data, height }: WidgetProps) {
   if (data.freeAgents.error) return <WidgetError />;
   const agents = [...(data.freeAgents.data ?? [])].sort((a, b) => b.overallRating - a.overallRating);
   if (agents.length === 0) return <ChartEmpty>Na trhu není nikdo volný.</ChartEmpty>;
+  const ratings = agents.map((a) => a.overallRating);
 
   return (
     <div className="space-y-3">
       <div className="text-sm text-muted">
         Volných hráčů <span className="font-heading font-bold text-ink tabular-nums">{agents.length}</span> · zdarma, platíš jen mzdu
       </div>
-      <ul className="space-y-1">
+      <div className="-mx-4 sm:-mx-5">
         {agents.slice(0, rowsForHeight(height, ROW_PX.rich, 56)).map((a) => (
-          <li key={a.id} className="flex items-center gap-2 py-1.5 border-b border-gray-50 last:border-b-0">
-            <PosTag position={a.position} />
-            <div className="min-w-0 flex-1">
-              <div className="font-heading font-bold text-sm truncate">{a.firstName} {a.lastName}</div>
-              <div className="text-micro text-muted truncate">
+          <ListRow key={a.id} dense
+            leading={<PosTag position={a.position} />}
+            title={`${a.firstName} ${a.lastName}`}
+            detail={
+              <span className="block truncate text-muted">
                 {a.age} let{a.villageName ? ` · ${a.villageName}` : ""}
                 {a.origin ? ` · ${a.origin}` : ""}
                 {a.distanceKm != null ? ` · ${Math.round(a.distanceKm)} km` : ""}
-              </div>
-            </div>
-            <span className="text-sm text-muted tabular-nums shrink-0">{compactCZK(a.weeklyWage)}/t</span>
-            <Rating value={a.overallRating} />
-          </li>
+              </span>
+            }
+            trailing={
+              <>
+                <span className="text-meta text-muted tabular-nums">{compactCZK(a.weeklyWage)}/t</span>
+                <RatingPill value={a.overallRating} tone={ratingToneIn(a.overallRating, ratings)} />
+              </>
+            } />
         ))}
-      </ul>
+      </div>
       <MoreLink href="/prestupy">Celý trh →</MoreLink>
     </div>
   );
@@ -69,29 +69,31 @@ export function MarketListingsWidget({ data, height }: WidgetProps) {
   if (data.market.error) return <WidgetError />;
   const listings = [...(data.market.data ?? [])].sort((a, b) => b.overallRating - a.overallRating);
   if (listings.length === 0) return <ChartEmpty>Nikdo teď nikoho neprodává.</ChartEmpty>;
+  const ratings = listings.map((l) => l.overallRating);
 
   return (
     <div className="space-y-3">
       <div className="text-sm text-muted">
         Na prodej <span className="font-heading font-bold text-ink tabular-nums">{listings.length}</span> hráčů
       </div>
-      <ul className="space-y-1">
+      <div className="-mx-4 sm:-mx-5">
         {listings.slice(0, rowsForHeight(height, ROW_PX.rich, 56)).map((l) => (
-          <li key={l.id} className="flex items-center gap-2 py-1.5 border-b border-gray-50 last:border-b-0">
-            <PosTag position={l.position} />
-            <div className="min-w-0 flex-1">
-              <a href={`/hrac/${l.playerId}`} className="font-heading font-bold text-sm truncate block hover:text-pitch-500 hover:underline transition-colors">
-                {l.playerName}
-              </a>
-              <div className="text-micro text-muted truncate">
+          <ListRow key={l.id} dense href={`/hrac/${l.playerId}`}
+            leading={<PosTag position={l.position} />}
+            title={l.playerName}
+            detail={
+              <span className="block truncate text-muted">
                 {l.playerAge} let · {l.teamName}{l.origin ? ` · ${l.origin}` : ""}
-              </div>
-            </div>
-            <span className="text-sm font-heading font-bold tabular-nums shrink-0">{compactCZK(l.askingPrice)}</span>
-            <Rating value={l.overallRating} />
-          </li>
+              </span>
+            }
+            trailing={
+              <>
+                <span className="text-meta font-bold text-ink tabular-nums">{compactCZK(l.askingPrice)}</span>
+                <RatingPill value={l.overallRating} tone={ratingToneIn(l.overallRating, ratings)} />
+              </>
+            } />
         ))}
-      </ul>
+      </div>
       <MoreLink href="/prestupy">Celý trh →</MoreLink>
     </div>
   );
@@ -107,26 +109,33 @@ export function LeagueTransfersWidget({ data, teamId, height }: WidgetProps) {
 
   return (
     <div className="space-y-3">
-      <ul className="space-y-1">
+      {/* Řádek má dva odkazy (hráč a nový klub), proto celý odkazem není.
+          Vlastní přestup podbarvuje <li>; čáry mezi řádky proto kreslí divide-y. */}
+      <ul className="-mx-4 sm:-mx-5 divide-y divide-line-soft">
         {transfers.slice(0, rowsForHeight(height, ROW_PX.rich, 56)).map((t, i) => {
           const mine = t.toTeamId === teamId || t.fromTeamId === teamId;
           return (
-            <li key={`${t.playerId}-${i}`} className={`py-1.5 border-b border-gray-50 last:border-b-0 ${mine ? "bg-pitch-50/40 -mx-1 px-1 rounded" : ""}`}>
-              <div className="flex items-center gap-2">
-                <a href={`/hrac/${t.playerId}`} className="font-heading font-bold text-sm truncate min-w-0 flex-1 hover:text-pitch-500 hover:underline transition-colors">
-                  {t.playerName}
-                </a>
-                <span className="text-sm font-heading font-bold tabular-nums shrink-0">
-                  {/* U výměny je částka jen doplatek — psát ji jako cenu by z obchodu
-                      za hráče udělalo výprodej za pár korun. */}
-                  {t.isSwap ? <span className="text-sky-700">⇄&nbsp;výměna</span>
-                    : t.fee > 0 ? compactCZK(t.fee) : "zdarma"}
-                </span>
-              </div>
-              <div className="text-micro text-muted truncate">
-                {t.fromTeam ?? "volný hráč"} <span className="text-muted-light">→</span>{" "}
-                {t.toTeamId ? <Link href={`/tym/${t.toTeamId}`} className="hover:text-pitch-500 transition-colors">{t.toTeam}</Link> : t.toTeam}
-              </div>
+            <li key={`${t.playerId}-${i}`} className={mine ? "bg-pitch-50" : undefined}>
+              <ListRow dense
+                title={
+                  <a href={`/hrac/${t.playerId}`} className="hover:text-pitch-500 hover:underline transition-colors">
+                    {t.playerName}
+                  </a>
+                }
+                detail={
+                  <span className="block truncate text-muted">
+                    {t.fromTeam ?? "volný hráč"} <span className="text-muted-light">→</span>{" "}
+                    {t.toTeamId ? <Link href={`/tym/${t.toTeamId}`} className="hover:text-pitch-500 transition-colors">{t.toTeam}</Link> : t.toTeam}
+                  </span>
+                }
+                trailing={
+                  <span className="text-meta font-bold text-ink tabular-nums">
+                    {/* U výměny je částka jen doplatek — psát ji jako cenu by z obchodu
+                        za hráče udělalo výprodej za pár korun. */}
+                    {t.isSwap ? <span className="text-sky-700">⇄&nbsp;výměna</span>
+                      : t.fee > 0 ? compactCZK(t.fee) : "zdarma"}
+                  </span>
+                } />
             </li>
           );
         })}

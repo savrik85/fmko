@@ -5,7 +5,7 @@
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { apiFetch, showError } from "@/lib/api";
-import { BadgePreview, useConfirm, type BadgePattern, DataTable, ScoreChip, type MatchOutcome } from "@/components/ui";
+import { BadgePreview, useConfirm, type BadgePattern, DataTable, ListRow, ScoreChip, type MatchOutcome } from "@/components/ui";
 import { WidgetSkeleton, WidgetError } from "../widget-frame";
 import type { WidgetProps, ScheduleMatch } from "../types";
 import { rowsForHeight, ROW_PX } from "../widget-heights";
@@ -334,12 +334,12 @@ function MiniForm({ f }: { f: string }) {
 export function FixturesWidget({ data, height }: WidgetProps) {
   if (data.schedule.loading) return <WidgetSkeleton />;
   if (data.schedule.error) return <WidgetError />;
-  const upcoming = (data.schedule.data?.matches ?? []).filter((m) => m.status !== "simulated").slice(0, rowsForHeight(height, ROW_PX.list, 32));
+  const upcoming = (data.schedule.data?.matches ?? []).filter((m) => m.status !== "simulated").slice(0, rowsForHeight(height, ROW_PX.table, 32));
 
   return (
     <>
       {upcoming.length > 0 ? (
-        <div className="space-y-2">
+        <div className="-mx-4 sm:-mx-5">
           {upcoming.map((m) => {
             const opp = m.isHome ? m.awayName : m.homeName;
             const oppIsAi = (m.isHome ? m.awayIsAi : m.homeIsAi) === true;
@@ -347,18 +347,23 @@ export function FixturesWidget({ data, height }: WidgetProps) {
             // Rozpis vrací calendarId pro ligový zápas, u přáteláku je id = match.id
             const switchId = m.calendarId ?? m.id;
             return (
-              <Link key={m.id} href={`/zapas?calendarId=${switchId}`} className="flex items-center gap-2 py-1.5 border-b border-gray-50 last:border-b-0 hover:bg-gray-50 -mx-2 px-2 rounded transition-colors">
-                <span className="text-sm text-muted tabular-nums w-5" title={m.roundName ?? undefined}>
-                  {m.round != null ? `${m.round}.` : m.isCup || m.isTournament ? "🏆" : ""}
-                </span>
-                <span className="text-sm font-heading font-bold flex-1 min-w-0"><TeamName name={opp} isAi={oppIsAi} /></span>
-                {/* Turnaj je na neutrální půdě: ani doma, ani venku. */}
-                {!m.isTournament && (
-                  <span className={`text-micro font-heading font-bold uppercase ${m.isHome ? "text-pitch-600" : "text-muted"}`}>{m.isHome ? "D" : "V"}</span>
-                )}
-                <LineupFlag m={m} />
-                <span className="text-micro text-muted tabular-nums">{date}</span>
-              </Link>
+              <ListRow key={m.id} dense href={`/zapas?calendarId=${switchId}`}
+                leading={
+                  <span className="text-meta text-muted tabular-nums" title={m.roundName ?? undefined}>
+                    {m.round != null ? `${m.round}.` : m.isCup || m.isTournament ? "🏆" : ""}
+                  </span>
+                }
+                title={<TeamName name={opp} isAi={oppIsAi} wrap />}
+                trailing={
+                  <>
+                    {/* Turnaj je na neutrální půdě: ani doma, ani venku. */}
+                    {!m.isTournament && (
+                      <span className={`text-micro font-heading font-bold uppercase ${m.isHome ? "text-pitch-600" : "text-muted"}`}>{m.isHome ? "D" : "V"}</span>
+                    )}
+                    <LineupFlag m={m} />
+                    <span className="text-micro text-muted tabular-nums">{date}</span>
+                  </>
+                } />
             );
           })}
         </div>
