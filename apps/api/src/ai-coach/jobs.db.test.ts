@@ -46,7 +46,7 @@ beforeAll(async () => {
   const schema = [
     "CREATE TABLE seasons (id TEXT PRIMARY KEY, number INTEGER, status TEXT)",
     "CREATE TABLE villages (id TEXT PRIMARY KEY, name TEXT, size TEXT, district TEXT, population INTEGER)",
-    "CREATE TABLE leagues (id TEXT PRIMARY KEY, name TEXT, district TEXT, league_type TEXT, level TEXT, match_weekdays TEXT)",
+    "CREATE TABLE leagues (id TEXT PRIMARY KEY, name TEXT, district TEXT, league_type TEXT, level TEXT, match_weekdays TEXT, waiting INTEGER NOT NULL DEFAULT 0)",
     `CREATE TABLE teams (id TEXT PRIMARY KEY, name TEXT, user_id TEXT, parent_team_id TEXT, league_id TEXT, team_type TEXT,
       village_id TEXT, game_date TEXT, budget INTEGER, reputation INTEGER, penalty_taker_id TEXT, freekick_taker_id TEXT,
       captain_id TEXT, formation_familiarity TEXT, training_type TEXT, training_approach TEXT, training_sessions INTEGER,
@@ -81,7 +81,7 @@ beforeAll(async () => {
   await db.batch([
     db.prepare("INSERT INTO seasons VALUES ('s3', 3, 'active')"),
     db.prepare("INSERT INTO villages VALUES ('v1', 'Lhota', 'village', 'Praha', 600), ('v2', 'Ves', 'village', 'Praha', 500)"),
-    db.prepare("INSERT INTO leagues VALUES ('lg1', 'Přebor', 'Praha', 'senior', 'okresni_prebor', NULL)"),
+    db.prepare("INSERT INTO leagues (id, name, district, league_type, level, match_weekdays) VALUES ('lg1', 'Přebor', 'Praha', 'senior', 'okresni_prebor', NULL)"),
     db.prepare(`INSERT INTO teams (id, name, user_id, league_id, team_type, village_id, game_date, budget, reputation) VALUES
       ('ai-team', 'Sokol Lhota', 'ai', 'lg1', 'senior', 'v1', '${DAY}T16:00:00.000Z', 120000, 50),
       ('human-team', 'Slavoj Ves', 'user-1', 'lg1', 'senior', 'v2', '${DAY}T16:00:00.000Z', 90000, 50)`),

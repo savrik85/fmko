@@ -59,7 +59,7 @@ export async function findTransferSearchPlayerRows(
      FROM players p JOIN teams t ON p.team_id = t.id
      WHERE t.league_id IN (
        SELECT id FROM leagues
-       WHERE id = ? OR (parent_league_id = ? AND league_type = 'u21')
+       WHERE (id = ? OR (parent_league_id = ? AND league_type = 'u21')) AND waiting = 0
      )
        AND COALESCE(t.parent_team_id, t.id) != ?
        AND (p.status IS NULL OR p.status = 'active')

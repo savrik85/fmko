@@ -19,6 +19,8 @@ import { alignLeagueSchedule } from "./align-schedule";
 import { clearLeagueSchedule, deleteLeague } from "./delete-league";
 import { resolveDistrictSlot } from "./district-leagues";
 import { enqueueLeagueCatchUp, startWaitingLeague } from "./start-league";
+import { closeWaitingLeague, isTeamInWaitingLeague } from "./waiting-league";
+import { listAiClubs } from "../ai-coach/jobs";
 import { applyDistrictPromotions, leagueMovement } from "./district-promotion";
 import { createLowerLeague, LowerLeagueError, pickLowerLeagueVillages, type LowerLeagueResult } from "./lower-league-setup";
 
@@ -599,6 +601,19 @@ describe("III. třída uprostřed sezóny", () => {
     const roundsOf = (id: string) => count("SELECT COUNT(*) AS n FROM season_calendar WHERE league_id = ? AND season_number = ?", id, season);
     expect([await roundsOf(waiting), await roundsOf(waitingU21)]).toEqual([0, 0]);
 
+    // Zavřená do první přihlášky: AI trenér jejích klubů nic nedělá, obchod ani přáteláky s ní nejdou.
+    await db.prepare("UPDATE teams SET user_id = 'ai', ai_former_user_id = NULL WHERE league_id IN (?, ?)").bind(waiting, waitingU21).run();
+    const preview = await closeWaitingLeague(db, waiting, { dryRun: true });
+    expect(preview.ok).toBe(true);
+    expect(await count("SELECT COUNT(*) AS n FROM leagues WHERE id IN (?, ?) AND waiting = 1", waiting, waitingU21)).toBe(0);
+    expect((await closeWaitingLeague(db, waiting, { dryRun: false })).ok).toBe(true);
+    expect(await count("SELECT COUNT(*) AS n FROM leagues WHERE id IN (?, ?) AND waiting = 1", waiting, waitingU21)).toBe(2);
+    expect((await closeWaitingLeague(db, waitingU21, { dryRun: true })).ok).toBe(false);
+    const waitingClubs = (await db.prepare("SELECT id FROM teams WHERE league_id = ?").bind(waiting).all<{ id: string }>()).results.map((r) => r.id);
+    const aiClubs = await listAiClubs(db);
+    expect(waitingClubs.some((id) => aiClubs.includes(id))).toBe(false);
+    expect(await isTeamInWaitingLeague(db, freed)).toBe(true);
+
     const village = (await db.prepare(
       "SELECT v.id FROM villages v WHERE v.district = ? AND COALESCE(v.registration_locked, 0) = 0 AND NOT EXISTS (SELECT 1 FROM teams t WHERE t.village_id = v.id) LIMIT 1",
     ).bind(DISTRICT).first<{ id: string }>())!.id;
@@ -607,6 +622,9 @@ describe("III. třída uprostřed sezóny", () => {
     expect(joined.body.leagueId).toBe(waiting);
 
     expect([await roundsOf(waiting), await roundsOf(waitingU21)]).toEqual([26, 26]);
+    // Registrace ligu otevřela i s U21.
+    expect(await count("SELECT COUNT(*) AS n FROM leagues WHERE id IN (?, ?) AND waiting = 0", waiting, waitingU21)).toBe(2);
+    expect((await listAiClubs(db)).some((id) => waitingClubs.includes(id))).toBe(true);
     const dates = async (id: string) => (await db.prepare(
       "SELECT scheduled_at FROM season_calendar WHERE league_id = ? AND season_number = ? ORDER BY game_week",
     ).bind(id, season).all<{ scheduled_at: string }>()).results.map((r) => r.scheduled_at);

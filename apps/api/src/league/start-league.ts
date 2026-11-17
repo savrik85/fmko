@@ -121,6 +121,8 @@ export async function startWaitingLeague(
     ).bind(crypto.randomUUID(), leagueId, calendarId, m.round, home.id, away.id));
   }
   statements.push(db.prepare("UPDATE leagues SET match_weekdays = ? WHERE id = ?").bind(reference.match_weekdays, leagueId));
+  // Zavřená čekající liga se otevře i s U21 (league/waiting-league.ts).
+  statements.push(db.prepare("UPDATE leagues SET waiting = 0 WHERE id = ? OR parent_league_id = ?").bind(leagueId, leagueId));
   // Jedna dávka = jedna transakce: liga má rozpis celý, nebo žádný.
   await db.batch(statements);
 

@@ -34,7 +34,7 @@ beforeAll(async () => {
   db = await mf.getD1Database("DB");
   kv = await mf.getKVNamespace("CACHE_KV") as unknown as KVNamespace;
   for (const sql of [
-    "CREATE TABLE leagues (id TEXT PRIMARY KEY, league_type TEXT DEFAULT 'senior', parent_league_id TEXT)",
+    "CREATE TABLE leagues (id TEXT PRIMARY KEY, league_type TEXT DEFAULT 'senior', parent_league_id TEXT, waiting INTEGER NOT NULL DEFAULT 0)",
     `CREATE TABLE season_calendar (id TEXT PRIMARY KEY, league_id TEXT NOT NULL, season_number INTEGER NOT NULL,
        game_week INTEGER NOT NULL, scheduled_at TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'scheduled')`,
     `CREATE TABLE matches (id TEXT PRIMARY KEY, calendar_id TEXT, home_team_id TEXT NOT NULL, away_team_id TEXT NOT NULL,
