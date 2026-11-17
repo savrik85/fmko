@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
-import { Spinner, SectionLabel, EntityLink, ListCard, ListRow, RowValue } from "@/components/ui";
+import { Spinner, EntityLink, ListCard, ListRow, RowValue, StatusChip } from "@/components/ui";
 
 interface Fine {
   id: string;
@@ -38,37 +38,26 @@ function denPokuty(gameDate: string): string {
   return d.toLocaleDateString("cs", { day: "numeric", month: "numeric", year: "numeric" });
 }
 
-function ListinaPokut({ fines }: { fines: Fine[] }) {
+/** Řádky pokut do karty se seznamem. Odůvodnění je celá věta, proto pod název a nikdy useknuté. */
+function FineRows({ fines }: { fines: Fine[] }) {
   return (
-    <div className="space-y-2">
+    <>
       {fines.map((f) => (
-        <div
-          key={f.id}
-          className="card p-3 border-l-4"
-          /* Barevný pruh podle původu — komise červeně, svazová administrativa
-             šedě. Na první pohled je vidět, co je trest za výroky a co papíry. */
-          style={{ borderLeftColor: f.kind === "rozhovor" ? "#D94032" : "#B5AFA5" }}
-        >
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <EntityLink type="team" id={f.teamId} className="font-heading font-bold text-base">
-                {f.teamName}
-              </EntityLink>
-              <div className="text-sm text-muted flex items-center gap-2 flex-wrap">
-                <span className={`badge ${f.kind === "rozhovor" ? "badge-danger" : ""}`}>
-                  {f.kind === "rozhovor" ? "komise" : "svaz"}
-                </span>
-                {denPokuty(f.gameDate)}
-              </div>
-            </div>
-            <div className="font-heading font-bold text-base tabular-nums text-card-red shrink-0">
-              −{f.amount.toLocaleString("cs")} Kč
-            </div>
-          </div>
-          <p className="text-sm mt-2">{f.reason}</p>
-        </div>
+        <ListRow key={f.id}
+          /* Pruh podle původu: komise červeně, svazová administrativa bez pruhu
+             (dřív šedý). Na první pohled je vidět, co je trest za výroky a co papíry. */
+          tone={f.kind === "rozhovor" ? "danger" : undefined}
+          title={<EntityLink type="team" id={f.teamId}>{f.teamName}</EntityLink>}
+          meta={<>
+            <StatusChip tone={f.kind === "rozhovor" ? "danger" : "neutral"}>
+              {f.kind === "rozhovor" ? "komise" : "svaz"}
+            </StatusChip>{" "}
+            {denPokuty(f.gameDate)}
+          </>}
+          detail={f.reason}
+          trailing={<RowValue tone="minus">−{f.amount.toLocaleString("cs")} Kč</RowValue>} />
       ))}
-    </div>
+    </>
   );
 }
 
@@ -148,22 +137,18 @@ export function DisciplinaryPanel({ teamId }: { teamId: string | null }) {
       </ListCard>
 
       {zaVyroky.length > 0 && (
-        <>
-          <SectionLabel>Za výroky o rozhodčím</SectionLabel>
-          <div className="mb-6">
-            <ListinaPokut fines={zaVyroky} />
-          </div>
-        </>
+        <ListCard title="Za výroky o rozhodčím" className="mb-6">
+          <FineRows fines={zaVyroky} />
+        </ListCard>
       )}
 
       {odSvazu.length > 0 && (
-        <>
-          <SectionLabel>Administrativa, pokuty od svazu</SectionLabel>
-          <p className="text-sm text-muted mb-2">
+        <ListCard title="Administrativa, pokuty od svazu">
+          <p className="px-4 pt-3 text-meta text-muted">
             Pozdní soupiska, neuklizené kabiny, nedodaný zápis. S rozhodčími nemají nic společného.
           </p>
-          <ListinaPokut fines={odSvazu} />
-        </>
+          <FineRows fines={odSvazu} />
+        </ListCard>
       )}
     </>
   );

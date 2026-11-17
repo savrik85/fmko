@@ -10,7 +10,7 @@
 
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
-import { EntityLink, Modal, ListRow, RowValue, RowIcon } from "@/components/ui";
+import { DataTable, EntityLink, Modal, ListRow, RowValue, RowIcon, type DataColumn } from "@/components/ui";
 import { TXN_ICONS, TXN_LABELS } from "@/lib/transaction-labels";
 import { Rozbaleni, czk, formatDate, plural } from "./ui";
 
@@ -42,6 +42,13 @@ function amountStyle(n: number): React.CSSProperties {
 function signedCzk(n: number): string {
   return `${n > 0 ? "+" : n < 0 ? "−" : ""}${czk(Math.abs(n))}`;
 }
+
+/** Součty podle druhu pohybu. Prázdná buňka = v tom směru nic. */
+const CATEGORY_COLUMNS: DataColumn<LedgerCategory>[] = [
+  { key: "type", header: "Druh", align: "left", cell: (c) => TXN_LABELS[c.type] ?? c.type },
+  { key: "income", header: "Příjmy", align: "right", cell: (c) => (c.income > 0 ? czk(c.income) : "") },
+  { key: "expense", header: "Výdaje", align: "right", cell: (c) => (c.expense > 0 ? czk(c.expense) : "") },
+];
 
 function ItemRow({ item }: { item: LedgerItem }) {
   return (
@@ -177,24 +184,11 @@ export function ClubAuditSection({ teamId }: { teamId: string }) {
             {audit.categories.length > 0 && (
               <div>
                 <div className="section-label mb-1">Podle druhu</div>
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-micro text-muted uppercase tracking-wide">
-                      <th className="text-left font-normal py-1">Druh</th>
-                      <th className="text-right font-normal py-1">Příjmy</th>
-                      <th className="text-right font-normal py-1">Výdaje</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {audit.categories.map((c) => (
-                      <tr key={c.type}>
-                        <td className="py-1.5 pr-2">{TXN_LABELS[c.type] ?? c.type}</td>
-                        <td className="py-1.5 text-right tabular-nums">{c.income > 0 ? czk(c.income) : ""}</td>
-                        <td className="py-1.5 text-right tabular-nums">{c.expense > 0 ? czk(c.expense) : ""}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                {/* Tabulka až k okrajům okna, jako řádky položek níž. */}
+                <div className="-mx-4 border-y border-line">
+                  <DataTable columns={CATEGORY_COLUMNS} rows={audit.categories} rowKey={(c) => c.type}
+                    empty="Za tohle období klub nemá žádné příjmy ani výdaje." />
+                </div>
               </div>
             )}
 

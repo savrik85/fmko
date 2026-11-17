@@ -7,7 +7,7 @@
  * akce jsou přes celou šířku a dlouhá jména se lámou.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { apiAction, apiFetch } from "@/lib/api";
 import { CoachName } from "@/components/manager/coach-name";
 import { Modal, ListRow, RowValue } from "@/components/ui";
@@ -15,7 +15,7 @@ import { EntityLink } from "@/components/ui";
 import { licenceLabel } from "@okresni-masina/shared";
 import { DecisionPill } from "@/components/dashboard/gremium-vyveska";
 import {
-  Empty, GOLD, GOLD_SOFT, OpenProposalNote, Ornament, PersonLine, Portrait, Row,
+  Empty, GOLD, GOLD_SOFT, OpenProposalNote, Ornament, Portrait, Row,
   czk, formatDate, plural, signed,
 } from "./ui";
 import type {
@@ -187,6 +187,29 @@ export function PokladnaPanel({ state, ledger }: {
 }
 
 // ── Vedení a volby ──────────────────────────────────────────────────────────
+/**
+ * Kdo funkci drží, do zalamovacího řádku pod názvem funkce. Obsah jako PersonLine:
+ * trenér a jeho klub, klub bez trenéra se podepíše sám sebou. Jméno klubu se
+ * nesmí useknout, proto `detail`, ne jednořádkové `meta`.
+ */
+function HolderLine({ managerName, coachIsAi = false, teamId, teamName, note }: {
+  managerName: string | null; coachIsAi?: boolean;
+  teamId: string; teamName: string; note?: ReactNode;
+}) {
+  const club = <EntityLink type="team" id={teamId}>{teamName}</EntityLink>;
+  return (
+    <span className="block break-words">
+      <span className="font-semibold text-ink">
+        {managerName ? <CoachName name={managerName} isAi={coachIsAi} /> : club}
+      </span>
+      <span className="text-muted">
+        {" · "}{managerName ? club : "klub bez trenéra"}
+        {note && <> · {note}</>}
+      </span>
+    </span>
+  );
+}
+
 export function VedeniPanel({ state, elections, avatars, board, teamId, onChanged, onPost }: {
   state: State; elections: Election[];
   avatars: Record<string, Record<string, unknown> | null>;
@@ -232,60 +255,65 @@ export function VedeniPanel({ state, elections, avatars, board, teamId, onChange
     <div className="space-y-4">
       <div className="card p-5">
         <Ornament>Složení grémia</Ornament>
-        <div className="space-y-3">
+        <div className="-mx-5 border-y border-line">
           {(state.roles ?? []).map((r) => {
             const suspended = state.officials.find((o) => o.role === r.role)?.status === "suspended";
+            const canSuspend = jsemPrezident && !!r.holder && r.role !== "predseda" && !suspended;
+            const canResign = r.holder?.teamId === teamId;
             return (
-              <div key={r.role} className="space-y-2">
-                <div className="flex items-center gap-3">
-                <Portrait avatar={r.holder ? avatars[r.holder.teamId] : null}
-                  name={r.holder?.managerName ?? r.holder?.teamName} size={48}
-                  ring={r.holder ? GOLD : "var(--color-muted-light)"} />
-                <div className="min-w-0 flex-1">
-                  <div className="section-label mb-0" style={{ fontSize: "0.6875rem" }}>{r.label}</div>
+              <ListRow key={r.role}
+                leading={<Portrait avatar={r.holder ? avatars[r.holder.teamId] : null}
+                  name={r.holder?.managerName ?? r.holder?.teamName} size={36}
+                  ring={r.holder ? GOLD : "var(--color-muted-light)"} />}
+                title={r.label}
+                // Kdo funkci drží, jde pod název celý: jméno klubu se nesmí useknout.
+                detail={<>
                   {r.holder ? (
-                    <PersonLine
+                    <HolderLine
                       managerName={r.holder.managerName} coachIsAi={r.holder.coachIsAi}
                       teamId={r.holder.teamId} teamName={r.holder.teamName}
                       note={suspended ? <span className="text-danger">pravomoc pozastavena</span> : undefined}
                     />
                   ) : (
-                    <div className="text-base text-muted">
+                    <span className="block text-muted">
                       neobsazeno{jsemPrezident ? ", zastupuješ ji" : ""}
-                    </div>
+                    </span>
                   )}
-                </div>
-                {jsemPrezident && r.holder && r.role !== "predseda" && !suspended && (
-                  <button className="btn btn-md btn-secondary shrink-0"
-                    onClick={() => setSuspendRole({ role: r.role, label: r.label })}>
-                    Pozastavit
-                  </button>
-                )}
-                {r.holder?.teamId === teamId && (
-                  <button className="btn btn-md btn-secondary shrink-0"
-                    onClick={() => setResignRole({ role: r.role, label: r.label })}>
-                    Rezignovat
-                  </button>
-                )}
-                </div>
 
-                {/* Co ta funkce spravuje a co doopravdy smí — ať se nikdo neptá,
-                    proč tam někdo sedí. Text jde ze serveru, aby v UI nemohla
-                    viset pravomoc, kterou kód neumí. */}
-                <div className="rounded-lg p-3 text-sm" style={{ background: "var(--color-paper)" }}>
-                  <div className="font-semibold">Co má na starost</div>
-                  <p className="text-muted mt-0.5">{r.agenda}</p>
-                  <div className="font-semibold mt-2">Co smí</div>
-                  <ul className="mt-0.5 space-y-1">
-                    {r.powers.map((v, i) => (
-                      <li key={i} className="text-muted flex gap-2">
-                        <span aria-hidden="true" style={{ color: GOLD }}>◆</span>
-                        <span className="min-w-0">{v}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
+                  {(canSuspend || canResign) && (
+                    <span className="flex flex-wrap gap-2 mt-2">
+                      {canSuspend && (
+                        <button className="btn btn-md btn-secondary"
+                          onClick={() => setSuspendRole({ role: r.role, label: r.label })}>
+                          Pozastavit
+                        </button>
+                      )}
+                      {canResign && (
+                        <button className="btn btn-md btn-secondary"
+                          onClick={() => setResignRole({ role: r.role, label: r.label })}>
+                          Rezignovat
+                        </button>
+                      )}
+                    </span>
+                  )}
+
+                  {/* Co ta funkce spravuje a co doopravdy smí — ať se nikdo neptá,
+                      proč tam někdo sedí. Text jde ze serveru, aby v UI nemohla
+                      viset pravomoc, kterou kód neumí. */}
+                  <span className="block rounded-lg p-3 mt-2" style={{ background: "var(--color-paper)" }}>
+                    <span className="block font-semibold text-ink">Co má na starost</span>
+                    <span className="block text-muted mt-0.5">{r.agenda}</span>
+                    <span className="block font-semibold text-ink mt-2">Co smí</span>
+                    <span className="block mt-0.5 space-y-1">
+                      {r.powers.map((v, i) => (
+                        <span key={i} className="text-muted flex gap-2">
+                          <span aria-hidden="true" style={{ color: GOLD }}>◆</span>
+                          <span className="min-w-0">{v}</span>
+                        </span>
+                      ))}
+                    </span>
+                  </span>
+                </>} />
             );
           })}
         </div>
@@ -347,33 +375,40 @@ export function VedeniPanel({ state, elections, avatars, board, teamId, onChange
                     && ` · hlasovalo ${e.votesCast} ${plural(e.votesCast, "klub", "kluby", "klubů")}`}
                 </div>
 
-                <div className="space-y-2">
-                  {e.candidates.map((k) => {
-                    const mine = e.myVote === k.teamId;
-                    return (
-                      <div key={k.teamId}
-                        className="flex items-center gap-3 rounded-lg p-3"
-                        style={{
-                          background: mine ? "rgba(196,160,53,0.14)" : "var(--color-surface)",
-                          boxShadow: mine ? `inset 0 0 0 1px ${GOLD}` : "inset 0 0 0 1px var(--color-line)",
-                        }}>
-                        <Portrait avatar={avatars[k.teamId]} name={k.managerName ?? k.teamName} size={40}
-                          ring={mine ? GOLD : "var(--color-muted-light)"} />
-                        <div className="min-w-0 flex-1">
-                          <PersonLine managerName={k.managerName} teamId={k.teamId} teamName={k.teamName} />
-                        </div>
-                        <button
-                          className={`btn btn-md shrink-0 ${mine ? "btn-primary" : "btn-secondary"}`}
-                          style={{ minWidth: 108 }}
-                          disabled={busy === e.id}
-                          onClick={() => vote(e.id, k.teamId)}
-                        >
-                          {mine ? "✓ Tvůj hlas" : "Dát hlas"}
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
+                {e.candidates.length > 0 && (
+                  <div className="-mx-4 border-y border-line">
+                    {e.candidates.map((k) => {
+                      const mine = e.myVote === k.teamId;
+                      return (
+                        <ListRow key={k.teamId}
+                          leading={<Portrait avatar={avatars[k.teamId]} name={k.managerName ?? k.teamName} size={36}
+                            ring={mine ? GOLD : "var(--color-muted-light)"} />}
+                          title={k.managerName
+                            ? <CoachName name={k.managerName} isAi={false} />
+                            : <EntityLink type="team" id={k.teamId}>{k.teamName}</EntityLink>}
+                          // Klub i tlačítko pod jméno: vedle portrétu by tlačítko na telefonu
+                          // jméno usekl a v jednořádkových podrobnostech by se usekl klub.
+                          detail={<>
+                            <span className="block break-words text-muted">
+                              {k.managerName
+                                ? <EntityLink type="team" id={k.teamId}>{k.teamName}</EntityLink>
+                                : "klub bez trenéra"}
+                            </span>
+                            <span className="flex flex-wrap gap-2 mt-2">
+                              <button
+                                className={`btn btn-md ${mine ? "btn-primary" : "btn-secondary"}`}
+                                style={{ minWidth: 108 }}
+                                disabled={busy === e.id}
+                                onClick={() => vote(e.id, k.teamId)}
+                              >
+                                {mine ? "✓ Tvůj hlas" : "Dát hlas"}
+                              </button>
+                            </span>
+                          </>} />
+                      );
+                    })}
+                  </div>
+                )}
 
                 <button
                   className={`btn btn-lg w-full mt-3 ${jsemKandidat ? "btn-ghost" : "btn-secondary"}`}
@@ -433,22 +468,19 @@ export function VedeniPanel({ state, elections, avatars, board, teamId, onChange
       {done.length > 0 && (
         <div className="card p-5">
           <Ornament>Výsledky voleb</Ornament>
-          <div className="space-y-3">
+          <div className="-mx-5 -mb-5 border-t border-line">
             {done.map((e) => (
-              <div key={e.id} className="flex items-center gap-3">
-                <Portrait avatar={e.winnerTeamId ? avatars[e.winnerTeamId] : null}
-                  name={e.winnerManager ?? e.winnerName} size={40}
-                  ring={e.winnerTeamId ? GOLD : "var(--color-muted-light)"} />
-                <div className="min-w-0 flex-1">
-                  <div className="section-label mb-0" style={{ fontSize: "0.6875rem" }}>{e.roleLabel}</div>
-                  {e.winnerTeamId ? (
-                    <PersonLine managerName={e.winnerManager} teamId={e.winnerTeamId}
-                      teamName={e.winnerName ?? "?"} note={e.resultNote ?? undefined} />
-                  ) : (
-                    <div className="text-base text-muted">neobsazeno: {e.resultNote}</div>
-                  )}
-                </div>
-              </div>
+              <ListRow key={e.id}
+                leading={<Portrait avatar={e.winnerTeamId ? avatars[e.winnerTeamId] : null}
+                  name={e.winnerManager ?? e.winnerName} size={36}
+                  ring={e.winnerTeamId ? GOLD : "var(--color-muted-light)"} />}
+                title={e.roleLabel}
+                detail={e.winnerTeamId ? (
+                  <HolderLine managerName={e.winnerManager} teamId={e.winnerTeamId}
+                    teamName={e.winnerName ?? "?"} note={e.resultNote ?? undefined} />
+                ) : (
+                  <span className="block text-muted">neobsazeno: {e.resultNote}</span>
+                )} />
             ))}
           </div>
         </div>
@@ -905,37 +937,36 @@ export function SponsorPanel({ data, teamId, onChanged }: {
             Přijmout jde jen jednu a soutěž se tím přejmenuje. Rozhoduje se
             dvoutřetinovou většinou.
           </p>
-          <div className="space-y-3">
+          {/* Bez věty pod seznamem sahají řádky až ke spodnímu okraji karty. */}
+          <div className={`-mx-5 border-t border-line ${smim ? "-mb-5" : "border-b"}`}>
             {data.offers.filter((o) => o.status === "open").map((o) => (
-              <div key={o.id} className="rounded-lg p-3" style={{ background: "var(--color-paper)" }}>
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="text-base font-semibold break-words">
-                      {o.name} liga
-                    </div>
-                    <div className="text-sm text-muted">
-                      {TIER[o.tier]} · {czk(o.amount)} za sezónu · na {o.seasons}{" "}
-                      {o.seasons === 1 ? "sezónu" : o.seasons <= 4 ? "sezóny" : "sezón"}
-                    </div>
-                  </div>
-                  {smim && (
-                    <button className="btn btn-md btn-secondary shrink-0"
-                      disabled={saving === o.id} onClick={() => predloz(o.id)}>
-                      {saving === o.id ? "Odesílám…" : "Dát hlasovat"}
-                    </button>
-                  )}
-                </div>
-                {o.conditions.length > 0 && (
-                  <ul className="mt-2 space-y-1">
+              <ListRow key={o.id}
+                title={`${o.name} liga`}
+                meta={<>
+                  {TIER[o.tier]} · na {o.seasons}{" "}
+                  {o.seasons === 1 ? "sezónu" : o.seasons <= 4 ? "sezóny" : "sezón"}
+                </>}
+                trailing={<RowValue sub="za sezónu">{czk(o.amount)}</RowValue>}
+                // Podmínky i tlačítko pod název: věty se nesmí useknout a tlačítko
+                // vedle částky by na telefonu název smáčklo.
+                detail={(o.conditions.length > 0 || smim) ? (
+                  <>
                     {o.conditions.map((c, i) => (
-                      <li key={i} className="text-sm text-muted flex gap-2">
+                      <span key={i} className="text-muted flex gap-2 mt-1">
                         <span aria-hidden="true" style={{ color: GOLD }}>◆</span>
                         <span className="min-w-0">{c}</span>
-                      </li>
+                      </span>
                     ))}
-                  </ul>
-                )}
-              </div>
+                    {smim && (
+                      <span className="flex flex-wrap gap-2 mt-2">
+                        <button className="btn btn-md btn-secondary"
+                          disabled={saving === o.id} onClick={() => predloz(o.id)}>
+                          {saving === o.id ? "Odesílám…" : "Dát hlasovat"}
+                        </button>
+                      </span>
+                    )}
+                  </>
+                ) : undefined} />
             ))}
           </div>
           {!smim && (

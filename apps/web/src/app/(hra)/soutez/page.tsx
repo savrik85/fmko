@@ -14,10 +14,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTeam } from "@/context/team-context";
 import { apiAction, apiFetch } from "@/lib/api";
-import { EntityLink, Modal, Spinner, Tabs, useTabParam } from "@/components/ui";
+import { EntityLink, ListCard, ListRow, Modal, Spinner, Tabs, useTabParam } from "@/components/ui";
 import { LICENCE_LEVELS, licenceLabel } from "@okresni-masina/shared";
 import {
-  Empty, GOLD, OpenProposalNote, Ornament, PersonLine, Portrait, Row, StatusPill, czk, plural, signed,
+  Empty, GOLD, OpenProposalNote, PersonLine, Portrait, Row, StatusPill, czk, plural, signed,
 } from "./ui";
 import { GrantsPanel, OdborInbox, PokladnaPanel, SponsorPanel, VedeniPanel, ZapisyPanel } from "./panels";
 import { GremiumVyveska } from "@/components/dashboard/gremium-vyveska";
@@ -505,10 +505,12 @@ export default function SoutezPage() {
           {open.length === 0 ? (
             <Empty>V tomhle odboru není na programu žádný bod.</Empty>
           ) : (
-            open.map((p) => (
-              <ProposalCard key={p.id} p={p} myTeamId={teamId} avatars={avatars}
-                onVote={vote} onWithdraw={withdraw} onDefend={defend} canVote={state.enabled} />
-            ))
+            <ListCard>
+              {open.map((p) => (
+                <ProposalRow key={p.id} p={p} myTeamId={teamId} avatars={avatars}
+                  onVote={vote} onWithdraw={withdraw} onDefend={defend} canVote={state.enabled} />
+              ))}
+            </ListCard>
           )}
 
           {state.enabled && gesce !== "zadna" && gesce !== "disciplinarni" && gesce !== "rozhodcich" && (
@@ -553,15 +555,12 @@ export default function SoutezPage() {
           )}
 
           {closed.length > 0 && (
-            <div className="pt-2">
-              <Ornament>Projednané body</Ornament>
-              <div className="space-y-4">
-                {closed.map((p) => (
-                  <ProposalCard key={p.id} p={p} myTeamId={teamId} avatars={avatars}
-                    onVote={vote} onWithdraw={withdraw} onDefend={defend} canVote={false} />
-                ))}
-              </div>
-            </div>
+            <ListCard title="Projednané body">
+              {closed.map((p) => (
+                <ProposalRow key={p.id} p={p} myTeamId={teamId} avatars={avatars}
+                  onVote={vote} onWithdraw={withdraw} onDefend={defend} canVote={false} />
+              ))}
+            </ListCard>
           )}
 
           {/* Rozhodnutí celého grémia, ne jen tohohle odboru — proto až za agendou.
@@ -640,8 +639,13 @@ function GesceHeader({ gesce, state, avatars }: {
   );
 }
 
-// ── Karta návrhu ────────────────────────────────────────────────────────────
-function ProposalCard({ p, myTeamId, avatars, onVote, onWithdraw, onDefend, canVote }: {
+// ── Řádek návrhu ────────────────────────────────────────────────────────────
+/**
+ * Jeden bod programu. Řádek nemá vlevo portrét: tlačítka hlasování jsou tři vedle
+ * sebe a na telefonu by jim sloupec s portrétem ubral šířku. Navrhovatel má malý
+ * portrét přímo u svého jména, jako dřív na kartě.
+ */
+function ProposalRow({ p, myTeamId, avatars, onVote, onWithdraw, onDefend, canVote }: {
   p: Proposal; myTeamId: string | null;
   avatars: Record<string, Record<string, unknown> | null>;
   onVote: (id: string, answer: string) => void;
@@ -654,97 +658,99 @@ function ProposalCard({ p, myTeamId, avatars, onVote, onWithdraw, onDefend, canV
   const [defence, setDefence] = useState("");
 
   return (
-    <div className="card overflow-hidden">
-      {p.status !== "open" && (
-        <div className="h-0.5" style={{ background: p.status === "passed" ? "#3B7A3B" : "#D94032" }} />
-      )}
-      <div className="p-5 space-y-3">
-        <div className="flex items-start justify-between gap-3">
-          <div className="text-base font-semibold leading-snug break-words min-w-0">{p.title}</div>
-          {p.status !== "open" && <StatusPill status={p.status} />}
-        </div>
+    <ListRow
+      title={p.title}
+      detail={<>
+        {/* Štítek pod názvem, ne vpravo: široký „Neusnášeníschopné" by usekl název bodu. */}
+        {p.status !== "open" && (
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1">
+            <StatusPill status={p.status} />
+          </span>
+        )}
 
-        <div className="flex items-center gap-2 text-sm text-muted">
+        <span className="flex items-center gap-2 mt-1.5 text-muted">
           <Portrait avatar={avatars[p.proposedByTeamId]} name={p.proposerName} size={28} ring="var(--color-muted-light)" />
-          <div className="min-w-0 break-words">
+          <span className="min-w-0 break-words">
             Navrhuje {p.proposerName
               ? <EntityLink type="team" id={p.proposedByTeamId}>{p.proposerName}</EntityLink>
               : "neznámý klub"}
             {p.majority > 0.5 && " · dvoutřetinová většina"}
             {p.effectiveFromSeason && ` · platí od ${p.effectiveFromSeason}. sezóny`}
-          </div>
-        </div>
+          </span>
+        </span>
 
-        {p.body && <p className="text-sm break-words">{p.body}</p>}
+        {p.body && <span className="block mt-2 break-words">{p.body}</span>}
         {p.evidence && (
-          <div className="text-sm rounded-lg p-3" style={{ background: "var(--color-paper)" }}>
+          <span className="block rounded-lg p-2.5 mt-2 break-words" style={{ background: "var(--color-paper)" }}>
             <span className="font-semibold">Doloženo: </span>{p.evidence}
-          </div>
+          </span>
         )}
-        {p.payload?.budgetNote && <p className="text-sm text-muted">{p.payload.budgetNote}</p>}
+        {p.payload?.budgetNote && <span className="block mt-2 text-muted">{p.payload.budgetNote}</span>}
 
         {p.defence && (
-          <div className="text-sm rounded-lg p-3" style={{ background: "#FBF6E6" }}>
+          <span className="block rounded-lg p-2.5 mt-2 break-words" style={{ background: "#FBF6E6" }}>
             <span className="font-semibold">Obhajoba dotčeného klubu: </span>„{p.defence}"
-          </div>
+          </span>
         )}
 
         {p.status === "open" ? (
           <>
-            <div className="text-sm text-muted">
+            <span className="block mt-2 text-muted">
               Hlasovalo {p.castCount} {plural(p.castCount, "klub", "kluby", "klubů")}.
-            </div>
+            </span>
 
             {jsemDotceny ? (
-              <div className="space-y-2">
-                <div className="text-sm">
+              <span className="block mt-2">
+                <span className="block">
                   O návrhu, který se týká tvého klubu, nehlasuješ. Můžeš ale napsat obhajobu,
                   uvidí ji všichni před hlasováním.
-                </div>
+                </span>
                 {!p.defence && (
                   <>
-                    <textarea className="input w-full" rows={2} maxLength={150}
+                    <textarea className="input w-full mt-2" rows={2} maxLength={150}
                       value={defence} onChange={(e) => setDefence(e.target.value)}
                       placeholder="Co na svou obranu…" />
-                    <button className="btn btn-lg btn-secondary w-full"
+                    <button className="btn btn-lg btn-secondary w-full mt-2"
                       disabled={!defence.trim()} onClick={() => onDefend(p.id, defence)}>
                       Odeslat obhajobu
                     </button>
                   </>
                 )}
-              </div>
+              </span>
             ) : canVote ? (
-              <div className="grid grid-cols-3 gap-2">
+              <span className="grid grid-cols-3 gap-2 mt-2">
                 {(["pro", "proti", "zdrzel"] as const).map((a) => (
                   <button key={a} onClick={() => onVote(p.id, a)}
                     className={`btn btn-md ${p.myAnswer === a ? "btn-primary" : "btn-secondary"}`}>
                     {answerLabel(p.kind, a)}
                   </button>
                 ))}
-              </div>
+              </span>
             ) : null}
 
             {p.myAnswer && (
-              <div className="text-sm text-muted">
+              <span className="block mt-2 text-muted">
                 Tvůj hlas: {answerLabel(p.kind, p.myAnswer)}. Do zahájení zasedání ho můžeš změnit.
-              </div>
+              </span>
             )}
             {mine && (
-              <button className="btn btn-md btn-ghost w-full" onClick={() => onWithdraw(p.id)}>
-                Stáhnout návrh
-              </button>
+              <span className="flex flex-wrap gap-2 mt-2">
+                <button className="btn btn-md btn-ghost w-full" onClick={() => onWithdraw(p.id)}>
+                  Stáhnout návrh
+                </button>
+              </span>
             )}
           </>
         ) : (
           <>
-            {p.resultNote && <div className="text-sm">{p.resultNote}</div>}
+            {p.resultNote && <span className="block mt-2 text-ink">{p.resultNote}</span>}
             {p.voters && p.voters.length > 0 && (
-              <div className="text-sm space-y-1">
+              <span className="block mt-1.5 space-y-1">
                 {(["pro", "proti", "zdrzel"] as const).map((a) => {
                   const list = p.voters!.filter((v) => v.answer === a);
                   if (list.length === 0) return null;
                   return (
-                    <div key={a} className="break-words">
+                    <span key={a} className="block break-words">
                       <span className="text-muted">{answerLabel(p.kind, a)}: </span>
                       {list.map((v, i) => (
                         <span key={v.teamId}>
@@ -752,15 +758,14 @@ function ProposalCard({ p, myTeamId, avatars, onVote, onWithdraw, onDefend, canV
                           <EntityLink type="team" id={v.teamId}>{v.teamName}</EntityLink>
                         </span>
                       ))}
-                    </div>
+                    </span>
                   );
                 })}
-              </div>
+              </span>
             )}
           </>
         )}
-      </div>
-    </div>
+      </>} />
   );
 }
 
