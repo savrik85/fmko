@@ -649,6 +649,17 @@ input[type="number"] { -moz-appearance: textfield; }
   }
 }
 
+/* ── PWA na iOS 26: text horní lišty mimo rozmazání ───────────────────────
+   iOS 26 kreslí přes horní okraj nainstalované aplikace rozmazaný pás, který
+   sahá kousek pod stavový řádek a zasahoval do textu lišty. Vypnout nejde
+   (CSS ani pevný jednobarevný pruh nepomohly), takže se obsah lišty o kousek
+   odsadí. `-webkit-touch-callout` zná jen iOS, Androidu se to netýká. */
+@media (display-mode: standalone) and (max-width: 639px) {
+  @supports (-webkit-touch-callout: none) {
+    :root { --edge-blur-clearance: 14px; }
+  }
+}
+
 /* ── PWA: žádné nechtěné přiblížení ────────────────────────────────────────
    `manipulation` ruší dvojklepnutí na přiblížení, ale gesto dvěma prsty
    nechává být — kdo potřebuje zvětšit, pořád může. */
