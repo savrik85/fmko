@@ -153,6 +153,13 @@ Stavba řádku je vždy stejná a nemění se mezi telefonem a desktopem:
 Význam proužku: `new` = nepřečtené nebo čeká na reakci hráče, `warn` = upozornění
 (únava, blíží se termín), `danger` = problém (zranění, stopka, propadlá lhůta).
 
+### 3.3a Hustý řádek (`dense`)
+
+`<ListRow dense …>` má 40 px, užší levý prvek a žádnou šipku. Je jen pro žebříčky
+a krátké výčty v dlaždicích (pořadí, jméno, jedno číslo): TOP v Kádru, docházka
+v Trénincích, „Chybí dnes“. Běžné seznamy zůstávají na 56 px. Hustý řádek nemá
+druhý řádek podrobností; když ho položka potřebuje, není to hustý řádek.
+
 ### 3.4 Prázdný stav
 
 Vždy `ListEmpty` (v tabulce prop `empty`). Text je celá věta: co prázdný seznam

@@ -60,7 +60,7 @@ export function RowGroup({ label, aside }: { label: ReactNode; aside?: ReactNode
   );
 }
 
-export function ListRow({ href, onClick, leading, title, meta, trailing, tone, chevron }: {
+export function ListRow({ href, onClick, leading, title, meta, trailing, tone, chevron, dense }: {
   /** Celý řádek je odkaz. Nepoužívat spolu s tlačítkem v `trailing`. */
   href?: string;
   onClick?: () => void;
@@ -75,15 +75,20 @@ export function ListRow({ href, onClick, leading, title, meta, trailing, tone, c
   tone?: RowTone;
   /** Šipka vpravo. Výchozí: ano, když je řádek klikací. */
   chevron?: boolean;
+  /**
+   * Hustý řádek (40 px) pro žebříčky a krátké výčty v dlaždicích: pořadí, jméno, číslo.
+   * Bez šipky. Běžné seznamy ho nepoužívají.
+   */
+  dense?: boolean;
 }) {
   const clickable = !!href || !!onClick;
-  const showChevron = chevron ?? clickable;
-  const shape = `relative flex items-center gap-3 min-h-[56px] px-4 py-2.5 border-b border-line-soft last:border-b-0 text-left w-full ${
+  const showChevron = chevron ?? (clickable && !dense);
+  const shape = `relative flex items-center ${dense ? "gap-2.5 min-h-[40px] py-1.5" : "gap-3 min-h-[56px] py-2.5"} px-4 border-b border-line-soft last:border-b-0 text-left w-full ${
     clickable ? "hover:bg-surface-2 transition-colors cursor-pointer" : ""
   } ${tone ? `before:absolute before:left-0 before:inset-y-0 before:w-[3px] ${ROW_TONE_BAR[tone]}` : ""}`;
   const body = (
     <>
-      {leading && <span className="shrink-0 w-9 h-9 flex items-center justify-center">{leading}</span>}
+      {leading && <span className={`shrink-0 flex items-center justify-center ${dense ? "w-6" : "w-9 h-9"}`}>{leading}</span>}
       <span className="flex-1 min-w-0">
         {/* Bez `block`: přebil by display z line-clamp a titulek by se neomezil na dva řádky. */}
         <span className="text-body font-bold text-ink leading-snug line-clamp-2">{title}</span>

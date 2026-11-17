@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { TalentStars } from "@/components/players/talent-stars";
 import { apiFetch, type Team, type Player } from "@/lib/api";
-import { Spinner, PositionBadge, Tabs, useTabParam } from "@/components/ui";
+import { Spinner, PositionBadge, Tabs, useTabParam, ListCard, ListRow, ListEmpty } from "@/components/ui";
 import { PositionFilter, SquadAttributeTable, type PosFilter } from "@/components/players/squad-attribute-table";
 import { SquadBodyTab } from "@/components/players/squad-body-tab";
 import { SquadAnalysisTab } from "@/components/players/squad-analysis-tab";
@@ -517,42 +517,35 @@ function DochazkaTab({ rows, sortKey, sortDir, onSort }: {
   );
 }
 
+/** Pořadí v žebříčku: první tři medaile, dál číslo. */
+function rankMark(index: number) {
+  return index === 0 ? "\u{1F947}" : index === 1 ? "\u{1F948}" : index === 2 ? "\u{1F949}" : <span className="text-meta text-muted tabular-nums">{index + 1}.</span>;
+}
+
+function TopValue({ value, suffix }: { value: string | number; suffix: string }) {
+  return (
+    <span className="text-body font-bold tabular-nums text-pitch-600">
+      {value}{suffix && <span className="text-muted font-normal text-meta ml-0.5">{suffix}</span>}
+    </span>
+  );
+}
+
 function PlayerTopList({ title, items, valueOf, suffix = "" }: {
   title: string;
   items: Player[];
   valueOf: (p: Player) => string | number;
   suffix?: string;
 }) {
-  if (items.length === 0) {
-    return (
-      <div className="card p-4">
-        <div className="font-heading font-bold text-sm text-ink mb-2">{title}</div>
-        <div className="text-xs text-muted">Žádná data.</div>
-      </div>
-    );
-  }
   return (
-    <div className="card p-4">
-      <div className="font-heading font-bold text-sm text-ink mb-3">{title}</div>
-      <div className="space-y-1.5">
-        {items.map((p, i) => {
-          const medal = i === 0 ? "\u{1F947}" : i === 1 ? "\u{1F948}" : i === 2 ? "\u{1F949}" : `${i + 1}.`;
-          return (
-            <Link key={p.id} href={`/hrac/${p.id}`}
-              className="flex items-center gap-2 py-1.5 px-2 -mx-2 rounded hover:bg-pitch-50/50 transition-colors group">
-              <span className="w-6 text-center text-sm shrink-0">{medal}</span>
-              <PositionBadge position={p.position as "GK" | "DEF" | "MID" | "FWD"} />
-              <span className="flex-1 min-w-0 truncate font-heading font-bold text-sm group-hover:text-pitch-500 transition-colors">
-                {p.first_name} {p.last_name}
-              </span>
-              <span className="font-heading font-[800] tabular-nums text-pitch-600 text-sm shrink-0">
-                {valueOf(p)}{suffix && <span className="text-muted font-normal text-xs ml-0.5">{suffix}</span>}
-              </span>
-            </Link>
-          );
-        })}
-      </div>
-    </div>
+    <ListCard title={title}>
+      {items.length === 0 && <ListEmpty icon="📊">Tenhle žebříček se naplní, až budou mít hráči co ukázat.</ListEmpty>}
+      {items.map((p, i) => (
+        <ListRow key={p.id} dense href={`/hrac/${p.id}`}
+          leading={rankMark(i)}
+          title={<span className="flex items-center gap-2"><PositionBadge position={p.position as "GK" | "DEF" | "MID" | "FWD"} /><span className="min-w-0">{p.first_name} {p.last_name}</span></span>}
+          trailing={<TopValue value={valueOf(p)} suffix={suffix} />} />
+      ))}
+    </ListCard>
   );
 }
 
@@ -562,35 +555,15 @@ function TopList({ title, items, valueOf, suffix = "" }: {
   valueOf: (s: PlayerSeasonStats) => string | number;
   suffix?: string;
 }) {
-  if (items.length === 0) {
-    return (
-      <div className="card p-4">
-        <div className="font-heading font-bold text-sm text-ink mb-2">{title}</div>
-        <div className="text-xs text-muted">Žádná data.</div>
-      </div>
-    );
-  }
   return (
-    <div className="card p-4">
-      <div className="font-heading font-bold text-sm text-ink mb-3">{title}</div>
-      <div className="space-y-1.5">
-        {items.map((s, i) => {
-          const medal = i === 0 ? "\u{1F947}" : i === 1 ? "\u{1F948}" : i === 2 ? "\u{1F949}" : `${i + 1}.`;
-          return (
-            <Link key={s.playerId} href={`/hrac/${s.playerId}`}
-              className="flex items-center gap-2 py-1.5 px-2 -mx-2 rounded hover:bg-pitch-50/50 transition-colors group">
-              <span className="w-6 text-center text-sm shrink-0">{medal}</span>
-              <PositionBadge position={s.position} />
-              <span className="flex-1 min-w-0 truncate font-heading font-bold text-sm group-hover:text-pitch-500 transition-colors">
-                {s.firstName} {s.lastName}
-              </span>
-              <span className="font-heading font-[800] tabular-nums text-pitch-600 text-sm shrink-0">
-                {valueOf(s)}{suffix && <span className="text-muted font-normal text-xs ml-0.5">{suffix}</span>}
-              </span>
-            </Link>
-          );
-        })}
-      </div>
-    </div>
+    <ListCard title={title}>
+      {items.length === 0 && <ListEmpty icon="📊">Tenhle žebříček se naplní po prvních odehraných zápasech.</ListEmpty>}
+      {items.map((s, i) => (
+        <ListRow key={s.playerId} dense href={`/hrac/${s.playerId}`}
+          leading={rankMark(i)}
+          title={<span className="flex items-center gap-2"><PositionBadge position={s.position} /><span className="min-w-0">{s.firstName} {s.lastName}</span></span>}
+          trailing={<TopValue value={valueOf(s)} suffix={suffix} />} />
+      ))}
+    </ListCard>
   );
 }

@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, apiAction, type Player } from "@/lib/api";
 import Link from "next/link";
-import { Spinner, SectionLabel } from "@/components/ui";
+import { Spinner, SectionLabel, ListCard, ListRow } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 
 type TrainingType = "conditioning" | "technique" | "tactics" | "match_practice";
@@ -190,19 +190,13 @@ export default function TrainingPage() {
     <div className="page-container space-y-5">
 
       {absences.length > 0 && (
-        <div className="card p-4 sm:p-5">
-          <SectionLabel>🚫 Chybí dnes ({absences.length})</SectionLabel>
-          <div className="mt-2 space-y-1.5">
-            {absences.map((a) => (
-              <div key={a.playerId} className="flex items-center justify-between gap-3 text-sm">
-                <Link href={`/hrac/${a.playerId}`} className="font-heading font-bold hover:text-pitch-500 underline decoration-pitch-500/20">
-                  {a.firstName} {a.lastName}
-                </Link>
-                <span className="text-muted text-xs flex-1 text-right">{a.absence?.reason ?? "Důvod neuveden"}</span>
-              </div>
-            ))}
-          </div>
-        </div>
+        <ListCard title="🚫 Chybí dnes" count={absences.length}>
+          {absences.map((a) => (
+            <ListRow key={a.playerId} dense href={`/hrac/${a.playerId}`}
+              title={`${a.firstName} ${a.lastName}`}
+              trailing={<span className="text-meta text-muted text-right">{a.absence?.reason ?? "Důvod neuveden"}</span>} />
+          ))}
+        </ListCard>
       )}
 
       {/* Training settings */}
@@ -964,42 +958,34 @@ export default function TrainingPage() {
           {(stats.attendanceTop.length > 0 || stats.attendanceBottom.length > 0) && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {stats.attendanceTop.length > 0 && (
-                <div className="card p-4 sm:p-5">
-                  <SectionLabel>Nejlepší docházka</SectionLabel>
-                  <div className="space-y-1">
-                    {stats.attendanceTop.map((p, i) => (
-                      <div key={p.playerId} className="flex items-center gap-2 py-1">
-                        <span className="text-xs text-muted w-4 tabular-nums shrink-0">{i + 1}.</span>
-                        <Link href={`/hrac/${p.playerId}`} className="text-sm font-heading font-bold hover:text-pitch-500 transition-colors truncate flex-1 min-w-0">
-                          {p.name}
-                        </Link>
-                        <span className="text-xs text-muted tabular-nums shrink-0">{p.attended}/{p.total}</span>
-                        <span className={`font-heading font-bold text-xs tabular-nums w-9 text-right shrink-0 ${
-                          p.pct >= 80 ? "text-pitch-500" : p.pct >= 50 ? "text-gold-600" : "text-card-red"
-                        }`}>{p.pct}%</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                <ListCard title="Nejlepší docházka">
+                  {stats.attendanceTop.map((p, i) => (
+                    <ListRow key={p.playerId} dense href={`/hrac/${p.playerId}`}
+                      leading={<span className="text-meta text-muted tabular-nums">{i + 1}.</span>}
+                      title={p.name}
+                      trailing={
+                        <span className="flex items-center gap-2 tabular-nums">
+                          <span className="text-meta text-muted">{p.attended}/{p.total}</span>
+                          <span className={`text-body font-bold w-10 text-right ${p.pct >= 80 ? "text-pitch-600" : p.pct >= 50 ? "text-gold-600" : "text-card-red"}`}>{p.pct} %</span>
+                        </span>
+                      } />
+                  ))}
+                </ListCard>
               )}
               {stats.attendanceBottom.length > 0 && (
-                <div className="card p-4 sm:p-5">
-                  <SectionLabel>Nejhorší docházka</SectionLabel>
-                  <div className="space-y-1">
-                    {stats.attendanceBottom.map((p, i) => (
-                      <div key={p.playerId} className="flex items-center gap-2 py-1">
-                        <span className="text-xs text-muted w-4 tabular-nums shrink-0">{i + 1}.</span>
-                        <Link href={`/hrac/${p.playerId}`} className="text-sm font-heading font-bold hover:text-pitch-500 transition-colors truncate flex-1 min-w-0">
-                          {p.name}
-                        </Link>
-                        <span className="text-xs text-muted tabular-nums shrink-0">{p.attended}/{p.total}</span>
-                        <span className={`font-heading font-bold text-xs tabular-nums w-9 text-right shrink-0 ${
-                          p.pct >= 80 ? "text-pitch-500" : p.pct >= 50 ? "text-gold-600" : "text-card-red"
-                        }`}>{p.pct}%</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                <ListCard title="Nejhorší docházka">
+                  {stats.attendanceBottom.map((p, i) => (
+                    <ListRow key={p.playerId} dense href={`/hrac/${p.playerId}`}
+                      leading={<span className="text-meta text-muted tabular-nums">{i + 1}.</span>}
+                      title={p.name}
+                      trailing={
+                        <span className="flex items-center gap-2 tabular-nums">
+                          <span className="text-meta text-muted">{p.attended}/{p.total}</span>
+                          <span className={`text-body font-bold w-10 text-right ${p.pct >= 80 ? "text-pitch-600" : p.pct >= 50 ? "text-gold-600" : "text-card-red"}`}>{p.pct} %</span>
+                        </span>
+                      } />
+                  ))}
+                </ListCard>
               )}
             </div>
           )}
