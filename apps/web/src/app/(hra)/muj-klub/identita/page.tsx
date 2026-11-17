@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, showError } from "@/lib/api";
-import { Card, CardHeader, CardBody, SectionLabel, StickyActions, PageLoading } from "@/components/ui";
+import { Card, CardHeader, CardBody, SectionLabel, StickyActions, PageLoading, ChoiceGroup } from "@/components/ui";
 import { withClubPrefix, type ClubPrefix } from "@okresni-masina/shared";
 
 interface ClubIdentity {
@@ -147,23 +147,8 @@ export default function IdentitaPage() {
           </CardHeader>
           <CardBody className="flex flex-col gap-3">
             <div className="flex flex-wrap gap-2">
-              {prefixInfo.options.map((p) => {
-                const active = prefix === p;
-                return (
-                  <button
-                    key={p}
-                    type="button"
-                    onClick={() => setPrefix(p)}
-                    disabled={!prefixInfo.canChange}
-                    aria-pressed={active}
-                    className={`min-w-[3.5rem] px-3 py-2 rounded-soft border text-sm font-heading font-bold transition-colors disabled:opacity-60 ${
-                      active ? "border-pitch-500 bg-pitch-500 text-white" : "border-gray-200 text-ink hover:border-pitch-300"
-                    }`}
-                  >
-                    {p}
-                  </button>
-                );
-              })}
+              <ChoiceGroup ariaLabel="Zkratka před názvem" value={prefix} onChange={setPrefix}
+                options={prefixInfo.options.map((p) => ({ value: p, label: p, disabled: !prefixInfo.canChange }))} />
             </div>
             <div className="text-sm">
               <span className="text-muted">Název klubu: </span>

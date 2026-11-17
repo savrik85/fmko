@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Card, CardBody, ListCard, ListEmpty, ListRow } from "@/components/ui";
+import { Card, CardBody, ListCard, ListEmpty, ListRow, ChoiceGroup } from "@/components/ui";
 import { FIRM_FILTERS, FIRM_SORTS, filterFirms, sortFirms, type FirmFilter, type FirmSort } from "@/lib/sponsor-firms";
 import { personalityLabel } from "@/lib/sponsor-owners";
 import type { DistrictFirm } from "@/lib/sponsor-page-types";
@@ -41,20 +41,6 @@ export function FirmRow({ firm: f, isOurStadiumSponsor = false }: { firm: Distri
   );
 }
 
-function Chip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className={`shrink-0 px-3 min-h-11 rounded-control text-sm font-heading font-bold transition-colors ${
-        active ? "bg-pitch-500 text-white" : "bg-surface-2 text-muted hover:text-ink"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
 
 export function FirmsTab({ firms, mySponsorIds, stadiumSponsorId = null }: {
   firms: DistrictFirm[] | null;
@@ -80,19 +66,13 @@ export function FirmsTab({ firms, mySponsorIds, stadiumSponsorId = null }: {
         Vztah k majitelům si budujte dopředu: pozvěte je na zápas, potkejte je v hospodě. Kdo vás má rád, dá víc.
       </p>
 
-      <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filtr firem">
-        {FIRM_FILTERS.map(({ key, label }) => (
-          <Chip key={key} active={filter === key} onClick={() => setFilter(key)}>
-            {label} ({filterFirms(firms, key, mySponsorIds).length})
-          </Chip>
-        ))}
-      </div>
+      <ChoiceGroup ariaLabel="Filtr firem" value={filter} onChange={setFilter}
+        options={FIRM_FILTERS.map(({ key, label }) => ({ value: key, label: `${label} (${filterFirms(firms, key, mySponsorIds).length})` }))} />
 
-      <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Řazení firem">
-        <span className="shrink-0 text-sm text-muted mr-1">Řadit:</span>
-        {FIRM_SORTS.map(({ key, label }) => (
-          <Chip key={key} active={sort === key} onClick={() => setSort(key)}>{label}</Chip>
-        ))}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="shrink-0 text-sm text-muted">Řadit:</span>
+        <ChoiceGroup ariaLabel="Řazení firem" size="sm" value={sort} onChange={setSort}
+          options={FIRM_SORTS.map(({ key, label }) => ({ value: key, label }))} />
       </div>
 
       <ListCard>

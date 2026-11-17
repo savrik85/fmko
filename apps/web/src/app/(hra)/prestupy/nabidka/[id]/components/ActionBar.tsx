@@ -4,7 +4,7 @@ import { MoneyInput, formatAmount } from "@/components/ui/money-input";
 import { useState } from "react";
 import { formatTermsSummary, type TransferTerms } from "@okresni-masina/shared";
 import { TransferTermsFields, type TermsValue } from "@/components/transfers/transfer-terms";
-import { SheetDialog } from "@/components/ui";
+import { SheetDialog, ChoiceGroup } from "@/components/ui";
 import { MessageDialog } from "./MessageDialog";
 import { formatKc } from "@/lib/format";
 
@@ -165,20 +165,12 @@ function CounterDialog({ initial, allowZero, initialTerms, onCancel, onConfirm }
         className="w-full mt-1 px-3 py-2.5 rounded-xl border border-gray-200 bg-white font-heading font-bold text-lg tabular-nums text-center focus:outline-none focus:ring-2 focus:ring-pitch-500/30 focus:border-pitch-500"
       />
       {/* U výměny bez doplatku by všechny předvolby vyšly na nulu. */}
-      {initial >= 100 && <div className="flex justify-center gap-2 mt-2">
-        {[0.8, 1, 1.2, 1.5].map((mul) => Math.round((initial * mul) / 100) * 100).map((preset, i) => (
-          <button
-            key={i}
-            type="button"
-            onClick={() => setV(preset)}
-            className={`px-2.5 py-1 rounded text-sm font-heading font-bold tabular-nums transition-colors ${
-              v === preset ? "bg-pitch-500 text-white" : "bg-black/5 text-muted hover:bg-black/10"
-            }`}
-          >
-            {formatAmount(preset)}
-          </button>
-        ))}
-      </div>}
+      {initial >= 100 && (
+        <ChoiceGroup ariaLabel="Rychlá částka" size="sm" className="justify-center mt-2" value={v != null ? String(v) : null}
+          onChange={(x) => setV(Number(x))}
+          options={[...new Set([0.8, 1, 1.2, 1.5].map((mul) => Math.round((initial * mul) / 100) * 100))]
+            .map((preset) => ({ value: String(preset), label: formatAmount(preset) }))} />
+      )}
       {terms && (
         <div className="mt-4">
           <TransferTermsFields amount={v} value={terms} onChange={setTerms} />

@@ -9,6 +9,7 @@ import { useState } from "react";
 import { MoneyInput } from "@/components/ui/money-input";
 import { LOAN_DURATIONS, LOAN_PLAYING_TIME_OPTIONS, type LoanPlayingTime } from "@/lib/loans";
 import { RevealPotentialToggle } from "./revealed-potential";
+import { ChoiceGroup } from "@/components/ui";
 
 export interface LoanListingValue { days: number; fee: number; playingTime: LoanPlayingTime; revealPotential: boolean }
 
@@ -36,14 +37,8 @@ export function LoanListingDialog({ playerName, playerLine, onClose, onConfirm, 
 
           <div>
             <div className="text-xs text-muted font-heading uppercase tracking-wide mb-1.5">Na jak dlouho</div>
-            <div className="grid grid-cols-3 gap-2">
-              {LOAN_DURATIONS.map((d) => (
-                <button key={d.days} type="button" onClick={() => setDays(d.days)}
-                  className={`py-2 px-2 rounded-soft text-sm font-heading font-bold transition-colors ${days === d.days ? "bg-pitch-500 text-white" : "bg-gray-100 text-ink hover:bg-gray-200"}`}>
-                  {d.label}
-                </button>
-              ))}
-            </div>
+            <ChoiceGroup ariaLabel="Na jak dlouho" columns={3} value={String(days)} onChange={(v) => setDays(Number(v))}
+              options={LOAN_DURATIONS.map((d) => ({ value: String(d.days), label: d.label }))} />
           </div>
 
           <label className="block">

@@ -10,7 +10,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { apiFetch, apiAction } from "@/lib/api";
-import { Sheet, SheetDialog, PositionBadge, useConfirm, SectionLoading } from "@/components/ui";
+import { Sheet, SheetDialog, PositionBadge, useConfirm, SectionLoading, ChoiceGroup } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { MoneyInput, formatAmount } from "@/components/ui/money-input";
 import { TransferTermsFields, PLAIN_TERMS, type TermsValue } from "@/components/transfers/transfer-terms";
@@ -298,14 +298,10 @@ function OfferSheet({ askHint, canU21, onCancel, onConfirm }: {
       <label className="text-sm text-muted font-heading uppercase">Kolik nabízíš (Kč)</label>
       <MoneyInput value={amount} onChange={setAmount} autoFocus
         className="w-full mt-1 px-3 py-2.5 rounded-xl border border-gray-200 bg-white font-heading font-bold text-lg tabular-nums text-center focus:outline-none focus:ring-2 focus:ring-pitch-500/30 focus:border-pitch-500" />
-      <div className="flex justify-center gap-2 mt-2">
-        {[0.7, 0.8, 0.9, 1].map((m) => Math.round((askHint * m) / 100) * 100).map((preset, i) => (
-          <button key={i} type="button" onClick={() => setAmount(preset)}
-            className={`px-2.5 py-1 rounded text-sm font-heading font-bold tabular-nums transition-colors ${amount === preset ? "bg-pitch-500 text-white" : "bg-black/5 text-muted hover:bg-black/10"}`}>
-            {formatAmount(preset)}
-          </button>
-        ))}
-      </div>
+      <ChoiceGroup ariaLabel="Rychlá částka" size="sm" className="justify-center mt-2" value={amount != null ? String(amount) : null}
+        onChange={(x) => setAmount(Number(x))}
+        options={[...new Set([0.7, 0.8, 0.9, 1].map((m) => Math.round((askHint * m) / 100) * 100))]
+          .map((preset) => ({ value: String(preset), label: formatAmount(preset) }))} />
       <div className="mt-4">
         <TransferTermsFields amount={amount} value={terms} onChange={setTerms} allowSellOn={false} />
       </div>

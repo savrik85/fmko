@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
-import { SectionLabel, BadgePreview, PositionBadge, PageHeader, Tabs, DataTable, EntityCell, ListCard, ListRow, ListEmpty, RowGroup, RowIcon, ResultChip, type DataColumn, type MatchOutcome, PageLoading, SectionLoading } from "@/components/ui";
+import { SectionLabel, BadgePreview, PositionBadge, PageHeader, Tabs, DataTable, EntityCell, ListCard, ListRow, ListEmpty, RowGroup, RowIcon, ResultChip, type DataColumn, type MatchOutcome, PageLoading, SectionLoading, ChoiceGroup } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 import { PreseasonNotice } from "@/components/team/preseason-notice";
 import { LeagueStatsTab, type StatsData } from "@/components/league/league-stats";
@@ -243,18 +243,9 @@ function LigaPage() {
         if (district.length < 2) return null;
         const ownId = district.find((l) => l.name === ownLeagueName)?.id ?? null;
         return (
-          <div className="flex flex-wrap gap-2" role="group" aria-label={`Soutěže okresu ${ctx.district}`}>
-            {district.map((l) => {
-              const active = selectedLeagueId ? selectedLeagueId === l.id : l.id === ownId;
-              return (
-                <button key={l.id} type="button" aria-pressed={active}
-                  onClick={() => handleLeagueChange(l.id === ownId ? "own" : l.id)}
-                  className={`px-3 py-1.5 rounded-full text-sm font-heading font-bold transition-colors ${active ? "bg-pitch-600 text-white" : "bg-white text-ink border border-gray-200 hover:bg-gray-50"}`}>
-                  {l.name}{l.id === ownId ? " (moje)" : ""}
-                </button>
-              );
-            })}
-          </div>
+          <ChoiceGroup ariaLabel={`Soutěže okresu ${ctx.district}`} size="sm" value={selectedLeagueId ?? ownId}
+            onChange={(id) => handleLeagueChange(id === ownId ? "own" : id)}
+            options={district.map((l) => ({ value: l.id, label: `${l.name}${l.id === ownId ? " (moje)" : ""}` }))} />
         );
       })()}
 

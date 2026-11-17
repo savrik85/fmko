@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { odesloLidi, zavrenoNaZapasy } from "@okresni-masina/shared";
 import { apiFetch } from "@/lib/api";
-import { SectionLabel, BadgePreview, PositionBadge, ListRow, RatingPill, ListCard, RowGroup, StatusChip, type RowTone, PageLoading } from "@/components/ui";
+import { SectionLabel, BadgePreview, PositionBadge, ListRow, RatingPill, ListCard, RowGroup, StatusChip, type RowTone, PageLoading, ChoiceGroup } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 import { useTeam } from "@/context/team-context";
 import { MatchBreakdown } from "@/components/MatchBreakdown";
@@ -571,18 +571,8 @@ export default function MatchDetailPage() {
           {/* Sort toggle */}
           <div className="flex items-center justify-end gap-1 mb-2">
             <span className="text-xs font-heading uppercase text-muted mr-2">Řadit:</span>
-            <button
-              onClick={() => setLineupSort("position")}
-              className={`px-2.5 py-1 rounded-control text-xs font-heading font-bold transition-colors ${
-                lineupSort === "position" ? "bg-pitch-500 text-white" : "bg-gray-100 text-ink hover:bg-gray-200"
-              }`}
-            >Po pozicích</button>
-            <button
-              onClick={() => setLineupSort("rating")}
-              className={`px-2.5 py-1 rounded-control text-xs font-heading font-bold transition-colors ${
-                lineupSort === "rating" ? "bg-pitch-500 text-white" : "bg-gray-100 text-ink hover:bg-gray-200"
-              }`}
-            >Dle hodnocení</button>
+            <ChoiceGroup ariaLabel="Řadit sestavu" size="sm" value={lineupSort} onChange={setLineupSort}
+              options={[{ value: "position", label: "Po pozicích" }, { value: "rating", label: "Dle hodnocení" }]} />
           </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {[

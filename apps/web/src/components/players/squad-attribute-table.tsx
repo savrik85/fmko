@@ -10,7 +10,7 @@
 
 import { PromiseBadge } from "@/components/players/promise-card";
 import { attributeImportance, coachRelationBand } from "@okresni-masina/shared";
-import { PositionBadge, DataTable, ListCard, type DataColumn, StatusChip } from "@/components/ui";
+import { PositionBadge, DataTable, ListCard, type DataColumn, StatusChip, ChoiceGroup } from "@/components/ui";
 import type { Player } from "@/lib/api";
 import { ATTRIBUTE_INFO, getTooltip, type AttrKey } from "@/lib/attribute-info";
 import { attrBg, attrValue } from "@/lib/player-attrs";
@@ -148,29 +148,16 @@ export function PositionFilter({ players, value, onChange }: {
   return (
     <div className="card p-3">
       <div className="text-micro text-muted font-heading uppercase tracking-wide mb-2">Filtr pozice</div>
-      <div className="flex rounded-xl bg-gray-50 p-0.5 gap-0.5">
-        {([
+      <ChoiceGroup ariaLabel="Filtr pozice" size="sm" columns={5} value={value} onChange={onChange}
+        options={([
           ["all", "Vše", players.length],
           ["GK", "Brankáři", counts.GK],
           ["DEF", "Obrana", counts.DEF],
           ["MID", "Záloha", counts.MID],
           ["FWD", "Útok", counts.FWD],
-        ] as Array<[PosFilter, string, number]>).map(([pos, label, count]) => (
-          <button
-            key={pos}
-            onClick={() => onChange(pos)}
-            aria-pressed={value === pos}
-            className={`flex-1 py-1.5 px-1 rounded-soft text-center transition-all font-heading font-bold ${
-              value === pos
-                ? "bg-white shadow-sm text-pitch-600"
-                : "text-muted hover:text-ink"
-            }`}
-          >
-            <div className="text-xs sm:text-sm truncate">{label}</div>
-            <div className={`text-micro tabular-nums ${value === pos ? "text-pitch-500" : "text-muted-light"}`}>{count}</div>
-          </button>
-        ))}
-      </div>
+        ] as Array<[PosFilter, string, number]>).map(([pos, label, count]) => ({
+          value: pos, label: <span className="text-xs sm:text-sm">{label}</span>, hint: <span className="tabular-nums">{count}</span>,
+        }))} />
     </div>
   );
 }

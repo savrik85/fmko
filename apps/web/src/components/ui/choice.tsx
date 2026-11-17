@@ -40,10 +40,11 @@ export interface ChoiceOption<T extends string> {
   title?: string;
 }
 
-const COLUMNS: Record<2 | 3 | 4 | 6 | 7, string> = {
+const COLUMNS: Record<2 | 3 | 4 | 5 | 6 | 7, string> = {
   2: "grid grid-cols-2",
   3: "grid grid-cols-3",
   4: "grid grid-cols-4",
+  5: "grid grid-cols-5",
   6: "grid grid-cols-3 sm:grid-cols-6",
   7: "grid grid-cols-7",
 };
@@ -52,7 +53,7 @@ type ChoiceGroupProps<T extends string> = {
   options: ReadonlyArray<ChoiceOption<T>>;
   ariaLabel: string;
   /** Bez `columns` je to řada, která se zalamuje. */
-  columns?: 2 | 3 | 4 | 6 | 7;
+  columns?: 2 | 3 | 4 | 5 | 6 | 7;
   /** `sm` pro filtry (32 px), `md` pro formuláře (44 px). */
   size?: "sm" | "md";
   className?: string;
@@ -70,9 +71,10 @@ export function ChoiceGroup<T extends string>(props: ChoiceGroupProps<T>) {
   const isSelected = (v: T) => (props.multiple ? props.value.includes(v) : props.value === v);
   const layout = columns ? COLUMNS[columns] : "flex flex-wrap";
   const gap = columns === 7 ? "gap-1.5" : "gap-2";
-  const sizing = size === "sm"
-    ? "min-h-8 px-3 py-1 text-[13px]"
-    : columns === 7 ? "min-h-12 px-0.5 py-1 text-[13px]" : "min-h-11 px-2.5 py-1.5 text-sm";
+  // V mřížce určuje šířku sloupec, proto menší vnitřní odsazení; v řadě dává šířku text.
+  const sizing = columns === 7 ? "min-h-12 px-0.5 py-1 text-[13px]"
+    : size === "sm" ? `min-h-8 ${columns ? "px-1" : "px-3"} py-1 text-[13px]`
+    : `min-h-11 ${columns ? "px-1.5" : "px-2.5"} py-1.5 text-sm`;
   return (
     <div role={props.multiple ? "group" : "radiogroup"} aria-label={ariaLabel} className={`${layout} ${gap} ${className}`}>
       {options.map((o) => {

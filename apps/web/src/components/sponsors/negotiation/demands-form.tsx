@@ -6,6 +6,7 @@ import {
   allowedSeasonsOf, findOption, PROMISE_LABELS, proposalOneTimeTotal, type Demands, type NegotiationView, type Proposal,
 } from "@/lib/sponsor-negotiation";
 import { formatKc } from "@/lib/format";
+import { ChoiceGroup } from "@/components/ui";
 
 function MoneyInput({ label, hint, value, onChange }: { label: string; hint?: string; value: number; onChange: (v: number) => void }) {
   return (
@@ -107,17 +108,9 @@ export function DemandsForm({ view, proposal, onChange }: {
 
       <div>
         <div className="text-sm font-heading font-bold mb-1">Délka smlouvy</div>
-        <div className="flex gap-1.5" role="group" aria-label="Délka smlouvy">
-          {allowedSeasons.map((n) => (
-            <button
-              key={n} type="button" aria-pressed={proposal.seasons === n}
-              onClick={() => onChange({ ...proposal, seasons: n })}
-              className={`flex-1 min-h-11 rounded-control text-sm font-heading font-bold ${proposal.seasons === n ? "bg-pitch-500 text-white" : "bg-surface-2 text-muted"}`}
-            >
-              {seasonsAccusative(n)}
-            </button>
-          ))}
-        </div>
+        <ChoiceGroup ariaLabel="Délka smlouvy" columns={allowedSeasons.length <= 2 ? 2 : allowedSeasons.length === 3 ? 3 : 4}
+          value={String(proposal.seasons)} onChange={(v) => onChange({ ...proposal, seasons: Number(v) })}
+          options={allowedSeasons.map((n) => ({ value: String(n), label: seasonsAccusative(n) }))} />
         {!allowedSeasons.includes(1) && (
           <p className="text-sm text-muted mt-1">Do konce sezóny zbývá méně než měsíc, smlouvu jde podepsat nejméně na 2 sezóny.</p>
         )}

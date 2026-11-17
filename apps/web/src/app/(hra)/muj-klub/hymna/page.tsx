@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, showError } from "@/lib/api";
-import { Spinner, Card, CardHeader, CardBody, SectionLabel, PageLoading, ErrorBox, StatusChip } from "@/components/ui";
+import { Spinner, Card, CardHeader, CardBody, SectionLabel, PageLoading, ErrorBox, StatusChip, ChoiceGroup } from "@/components/ui";
 
 interface Anthem {
   id: string;
@@ -238,20 +238,8 @@ export default function HymnaPage() {
               <h2 className="font-heading font-bold text-base text-ink">{anthems.length === 0 ? "1." : "Nová hymna:"} Text</h2>
             </CardHeader>
             <CardBody className="flex flex-col gap-4">
-              <div className="flex gap-2">
-                <button type="button" onClick={() => setLyricsMode("auto")}
-                  className={`flex-1 px-4 py-2 rounded-soft text-sm font-heading font-bold transition-colors ${
-                    lyricsMode === "auto" ? "bg-pitch-500 text-white" : "bg-gray-100 text-ink hover:bg-gray-200"
-                  }`}>
-                  {"\u{1F916}"} Automaticky
-                </button>
-                <button type="button" onClick={() => setLyricsMode("custom")}
-                  className={`flex-1 px-4 py-2 rounded-soft text-sm font-heading font-bold transition-colors ${
-                    lyricsMode === "custom" ? "bg-pitch-500 text-white" : "bg-gray-100 text-ink hover:bg-gray-200"
-                  }`}>
-                  {"\u{270F}️"} S vlastními slovy
-                </button>
-              </div>
+              <ChoiceGroup ariaLabel="Text hymny" columns={2} value={lyricsMode} onChange={setLyricsMode}
+                options={[{ value: "auto", label: <>{"\u{1F916}"} Automaticky</> }, { value: "custom", label: <>{"\u{270F}️"} S vlastními slovy</> }]} />
 
               {lyricsMode === "custom" && (
                 <div>

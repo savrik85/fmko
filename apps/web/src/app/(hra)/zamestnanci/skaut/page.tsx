@@ -8,7 +8,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, apiAction } from "@/lib/api";
-import { SectionLabel, PositionBadge, useConfirm, ListCard, ListRow, ListEmpty, StatusChip, PageLoading } from "@/components/ui";
+import { SectionLabel, PositionBadge, useConfirm, ListCard, ListRow, ListEmpty, StatusChip, PageLoading, ChoiceGroup } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { ScoutReportSheet, daysLeft, type ScoutReport } from "@/components/scouting/ScoutReportSheet";
 import { ratingText } from "@/components/scouting/WillingnessBadge";
@@ -273,9 +273,6 @@ export default function ScoutPage() {
     if (!ok) return;
     if (await apiAction(apiFetch(`/api/teams/${teamId}/scout/assignment?assignmentId=${mission.id}`, { method: "DELETE" }), "Sledování se nepodařilo zrušit")) await load();
   };
-
-  const chip = (active: boolean) =>
-    `px-3 py-2 rounded-soft text-sm font-heading font-bold transition-colors ${active ? "bg-pitch-500 text-white" : "bg-gray-100 text-muted hover:bg-gray-200"}`;
 
   return (
     <div className="max-w-3xl mx-auto p-4 sm:p-6 space-y-5">
@@ -585,25 +582,15 @@ export default function ScoutPage() {
                   <div>
                     <div className="text-sm text-muted font-heading uppercase mb-1.5">Koho hledat</div>
                     <div className="text-sm text-muted mb-1.5">Můžeš zaškrtnout víc postů nebo nechat všechny.</div>
-                    <div className="flex flex-wrap gap-2">
-                      <button type="button" className={chip(positions.length === 0)} onClick={() => setPositions([])}>Všechny posty</button>
-                      {SCOUT_POSITIONS.map((p) => (
-                        <button key={p} type="button" aria-pressed={positions.includes(p)} className={chip(positions.includes(p))} onClick={() => togglePosition(p)}>
-                          {positions.includes(p) ? "✓ " : ""}{SCOUT_POSITION_LABELS[p]}
-                        </button>
-                      ))}
-                    </div>
+                    <ChoiceGroup ariaLabel="Posty" multiple size="sm" value={positions.length === 0 ? ["all"] : positions}
+                      onChange={(v) => (v === "all" ? setPositions([]) : togglePosition(v as typeof SCOUT_POSITIONS[number]))}
+                      options={[{ value: "all", label: "Všechny posty" }, ...SCOUT_POSITIONS.map((p) => ({ value: p as string, label: SCOUT_POSITION_LABELS[p] }))]} />
                   </div>
 
                   <div>
                     <div className="text-sm text-muted font-heading uppercase mb-1.5">Jak dlouho sledovat soutěž</div>
-                    <div className="flex flex-wrap gap-2">
-                      {data.options.weeks.map((w) => (
-                        <button key={w} type="button" className={chip(weeks === w)} onClick={() => setWeeks(w)}>
-                          {plural(w, "týden", "týdny", "týdnů")}
-                        </button>
-                      ))}
-                    </div>
+                    <ChoiceGroup ariaLabel="Jak dlouho" size="sm" value={String(weeks)} onChange={(v) => setWeeks(Number(v))}
+                      options={data.options.weeks.map((w) => ({ value: String(w), label: plural(w, "týden", "týdny", "týdnů") }))} />
                   </div>
 
                   <div className="rounded-xl bg-white/70 border border-gray-100 p-3 space-y-1.5 text-sm">
@@ -658,25 +645,15 @@ export default function ScoutPage() {
                   <div>
                     <div className="text-sm text-muted font-heading uppercase mb-1.5">Koho hledat</div>
                     <div className="text-sm text-muted mb-1.5">Můžeš zaškrtnout víc postů nebo nechat všechny.</div>
-                    <div className="flex flex-wrap gap-2">
-                      <button type="button" className={chip(positions.length === 0)} onClick={() => setPositions([])}>Všechny posty</button>
-                      {SCOUT_POSITIONS.map((p) => (
-                        <button key={p} type="button" aria-pressed={positions.includes(p)} className={chip(positions.includes(p))} onClick={() => togglePosition(p)}>
-                          {positions.includes(p) ? "✓ " : ""}{SCOUT_POSITION_LABELS[p]}
-                        </button>
-                      ))}
-                    </div>
+                    <ChoiceGroup ariaLabel="Posty" multiple size="sm" value={positions.length === 0 ? ["all"] : positions}
+                      onChange={(v) => (v === "all" ? setPositions([]) : togglePosition(v as typeof SCOUT_POSITIONS[number]))}
+                      options={[{ value: "all", label: "Všechny posty" }, ...SCOUT_POSITIONS.map((p) => ({ value: p as string, label: SCOUT_POSITION_LABELS[p] }))]} />
                   </div>
 
                   <div>
                     <div className="text-sm text-muted font-heading uppercase mb-1.5">Jak dlouho sledovat soutěž</div>
-                    <div className="flex flex-wrap gap-2">
-                      {data.options.weeks.map((w) => (
-                        <button key={w} type="button" className={chip(weeks === w)} onClick={() => setWeeks(w)}>
-                          {plural(w, "týden", "týdny", "týdnů")}
-                        </button>
-                      ))}
-                    </div>
+                    <ChoiceGroup ariaLabel="Jak dlouho" size="sm" value={String(weeks)} onChange={(v) => setWeeks(Number(v))}
+                      options={data.options.weeks.map((w) => ({ value: String(w), label: plural(w, "týden", "týdny", "týdnů") }))} />
                   </div>
 
                   <div className="rounded-xl bg-white/70 border border-gray-100 p-3 space-y-1.5 text-sm">
@@ -716,14 +693,9 @@ export default function ScoutPage() {
               <div>
                 <div className="text-sm text-muted font-heading uppercase mb-1.5">Koho hledat</div>
                 <div className="text-sm text-muted mb-1.5">Můžeš zaškrtnout víc postů.</div>
-                <div className="flex flex-wrap gap-2">
-                  <button type="button" className={chip(positions.length === 0)} onClick={() => setPositions([])}>Kdokoli</button>
-                  {SCOUT_POSITIONS.map((p) => (
-                    <button key={p} type="button" aria-pressed={positions.includes(p)} className={chip(positions.includes(p))} onClick={() => togglePosition(p)}>
-                      {positions.includes(p) ? "✓ " : ""}{SCOUT_POSITION_LABELS[p]}
-                    </button>
-                  ))}
-                </div>
+                <ChoiceGroup ariaLabel="Posty" multiple size="sm" value={positions.length === 0 ? ["all"] : positions}
+                  onChange={(v) => (v === "all" ? setPositions([]) : togglePosition(v as typeof SCOUT_POSITIONS[number]))}
+                  options={[{ value: "all", label: "Kdokoli" }, ...SCOUT_POSITIONS.map((p) => ({ value: p as string, label: SCOUT_POSITION_LABELS[p] }))]} />
               </div>
 
               <div>
@@ -778,25 +750,15 @@ export default function ScoutPage() {
 
               <div>
                 <div className="text-sm text-muted font-heading uppercase mb-1.5">Kam jezdit</div>
-                <div className="grid grid-cols-3 gap-2">
-                  {data.options.radiusTiers.map((t) => (
-                    <button key={t.km} type="button" onClick={() => setRadius(t.km)}
-                      className={`rounded-xl border-2 p-3 text-center transition-colors ${radius === t.km ? "border-pitch-500 bg-pitch-50" : "border-gray-100 bg-white hover:border-gray-200"}`}>
-                      <div className="font-heading font-bold text-lg tabular-nums">{t.km} km</div>
-                      <div className="text-sm text-muted">{t.km <= 15 ? "okolí" : t.km <= 30 ? "sousední okresy" : "daleko"}</div>
-                    </button>
-                  ))}
-                </div>
+                <ChoiceGroup ariaLabel="Kam jezdit" columns={3} value={String(radius)} onChange={(v) => setRadius(Number(v))}
+                  options={data.options.radiusTiers.map((t) => ({ value: String(t.km), label: `${t.km} km`, hint: t.km <= 15 ? "okolí" : t.km <= 30 ? "sousední okresy" : "daleko" }))} />
                 <div className="text-sm text-muted mt-1.5">Cestovné {formatKc(tier.weeklyCost)} týdně. Čím dál, tím víc klubů, ale hráčům se nechce tak daleko dojíždět.</div>
               </div>
 
               <div>
                 <div className="text-sm text-muted font-heading uppercase mb-1.5">Jak dlouho</div>
-                <div className="flex flex-wrap gap-2">
-                  {data.options.weeks.map((w) => (
-                    <button key={w} type="button" className={chip(weeks === w)} onClick={() => setWeeks(w)}>{plural(w, "týden", "týdny", "týdnů")}</button>
-                  ))}
-                </div>
+                <ChoiceGroup ariaLabel="Jak dlouho" size="sm" value={String(weeks)} onChange={(v) => setWeeks(Number(v))}
+                  options={data.options.weeks.map((w) => ({ value: String(w), label: plural(w, "týden", "týdny", "týdnů") }))} />
               </div>
 
               <div className="rounded-xl bg-white/70 border border-gray-100 px-3 py-2 text-sm">

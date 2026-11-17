@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { LeagueStatsTab, type StatsData } from "@/components/league/league-stats";
 import { apiFetch } from "@/lib/api";
-import { PositionBadge, BadgePreview, useConfirm, Tabs, useTabParam, DataTable, EntityCell, ListCard, ListRow, ListEmpty, RowValue, RatingPill, ratingToneIn, type DataColumn, SectionLoading, ErrorBox } from "@/components/ui";
+import { PositionBadge, BadgePreview, useConfirm, Tabs, useTabParam, DataTable, EntityCell, ListCard, ListRow, ListEmpty, RowValue, RatingPill, ratingToneIn, type DataColumn, SectionLoading, ErrorBox, ChoiceGroup } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { U21Rozvoj } from "@/components/players/u21-rozvoj";
 import { YouthSectionNav } from "@/components/players/youth-section-nav";
@@ -395,9 +395,9 @@ export default function U21Page() {
 
       {tab === "rozpis" && !scheduleError && (
         <div className="space-y-3">
-          <div className="flex gap-1 rounded-lg bg-surface p-1" role="group" aria-label="Zobrazené zápasy">
-            {[true, false].map((own) => <button key={String(own)} aria-pressed={onlyOurMatches === own} onClick={() => setOnlyOurMatches(own)} className={`min-h-11 flex-1 rounded-lg text-sm font-semibold ${onlyOurMatches === own ? "bg-pitch-500 text-white" : "text-muted"}`}>{own ? "Naše U21" : "Celá liga"}</button>)}
-          </div>
+          <ChoiceGroup ariaLabel="Zobrazené zápasy" columns={2} value={onlyOurMatches ? "own" : "all"}
+            onChange={(v) => setOnlyOurMatches(v === "own")}
+            options={[{ value: "own", label: "Naše U21" }, { value: "all", label: "Celá liga" }]} />
           {!onlyOurMatches && sortedRounds.length > 0 && (
             <div className="flex items-center gap-2">
               <button aria-label="Předchozí kolo" disabled={roundIndex <= 0} onClick={() => setSelectedRound(sortedRounds[roundIndex - 1].round)} className="min-h-11 min-w-11 rounded-lg bg-surface disabled:opacity-30">←</button>
