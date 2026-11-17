@@ -305,7 +305,7 @@ villagesRouter.get("/district/:district/map", async (c) => {
               t.badge_pattern, t.badge_primary_color, t.badge_secondary_color, t.badge_initials, t.badge_symbol
          FROM teams t JOIN villages v ON v.id = t.village_id LEFT JOIN leagues l ON l.id = t.league_id
         WHERE v.district = ? AND t.parent_team_id IS NULL AND COALESCE(t.team_type, 'senior') != 'u21'
-          AND t.name NOT LIKE 'DELETED%'`,
+          AND t.name NOT LIKE 'DELETED%' AND COALESCE(l.waiting, 0) = 0`,
     ).bind(district).all<{
       id: string; name: string; village_id: string; user_id: string; primary_color: string; secondary_color: string; league_name: string | null;
       badge_pattern: string | null; badge_primary_color: string | null; badge_secondary_color: string | null; badge_initials: string | null; badge_symbol: string | null;

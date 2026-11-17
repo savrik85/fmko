@@ -68,7 +68,7 @@ async function loadLandingData(db: D1Database): Promise<LandingData> {
     .all<{ display_name: string | null }>();
   const tokens = managerNameTokens(managers.results.map((m) => m.display_name));
   const news = await db.prepare(`SELECT n.headline, n.type, l.name AS league FROM news n
-      JOIN leagues l ON l.id = n.league_id
+      JOIN leagues l ON l.id = n.league_id AND l.waiting = 0
       WHERE n.type IN (${SAFE_NEWS_TYPES.map(() => "?").join(",")})
       ORDER BY n.created_at DESC LIMIT 40`)
     .bind(...SAFE_NEWS_TYPES).all<LandingData["headlines"][number]>();
