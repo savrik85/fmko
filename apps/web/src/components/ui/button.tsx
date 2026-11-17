@@ -12,7 +12,7 @@ const variants: Record<ButtonVariant, string> = {
   primary: "btn-primary",
   "primary-dark": "btn-primary-dark",
   secondary: "btn-secondary",
-  danger: "btn-primary", // btn base + override
+  danger: "btn-danger",
   ghost: "btn-ghost",
 };
 

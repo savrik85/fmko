@@ -320,6 +320,11 @@ body::before {
 .btn-ghost { background: transparent; color: var(--color-muted); }
 .btn-ghost:hover { background: rgba(26,23,20,0.04); color: var(--color-ink); }
 
+/* Akce, která něco zruší nebo vezme (propustit, ukončit smlouvu). Plné červené,
+   stejně jako potvrzení v SheetDialog (varianta R2 z docs/redesign-prvku/maketa.html). */
+.btn-danger { background: var(--color-card-red); color: white; box-shadow: var(--shadow-card); }
+.btn-danger:hover { background: var(--color-red-600, #dc2626); box-shadow: var(--shadow-hover); }
+
 /* ═══════════════════════════════════════════════
    CARDS
    ═══════════════════════════════════════════════ */

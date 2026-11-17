@@ -107,9 +107,9 @@ export function SectionLoading() {
   součást kroku 1: `message?: string; children?: ReactNode`).
 - Druh **„tlačítko“**: dnes `Button variant="danger"` kreslí **zelené** tlačítko
   (`danger: "btn-primary"` v `button.tsx`), proto si každé červené tlačítko staví
-  vlastní třídy. Krok 1 přidá do `globals.css` třídu `.btn-danger` podle
-  nejčastější ruční varianty (bílý podklad, `border-2 border-red-200`,
-  `text-red-700`, hover `bg-red-50`) a `button.tsx` ji použije. Pak ruční červená
+  vlastní třídy. Krok 1 přidá do `globals.css` třídu `.btn-danger` a `button.tsx`
+  ji použije. **Rozhodnuto 17. 11. 2026: varianta R2**, plné červené
+  (`card-red`) s bílým textem a stínem karty. Pak ruční červená
   tlačítka → `<Button variant="danger">` nebo třída `btn btn-danger`.
 - Druh **„tón (mapa nebo podmínka)“**: červený podklad ve stavové mapě nebo podmínce
   (`broken_off: "bg-red-50 text-red-700"`). To není chybová hláška, ale štítek:
@@ -199,13 +199,14 @@ Největší a nejviditelnější oblast: 115 míst v 53 souborech. Vybraná volb
 nejméně pět vzhledů (plná `bg-pitch-500` s bílým textem, `bg-pitch-50` se zeleným
 rámečkem, jen zelený rámeček, `ring`, tmavá `bg-pitch-700`).
 
-**Vzhled vybírá uživatel** v kroku 0 ze tří variant v `maketa.html`:
+**Rozhodnuto 17. 11. 2026: varianta C.** Uživatel vybíral ze tří variant v `maketa.html`:
 
 - **A, plná:** vybraná volba `bg-pitch-500 text-white`, ostatní `bg-surface-2`.
 - **B, světlá:** vybraná `bg-pitch-50 border-2 border-pitch-500 text-pitch-700`,
   ostatní bílé s `border-line`.
-- **C, bílá s fajfkou:** vybraná bílá s `border-2 border-pitch-500` a ✓ v rohu,
-  ostatní `bg-surface-2` bez rámečku.
+- **C, bílá s fajfkou (vybraná):** vybraná bílá s dvoupixelovým zeleným rámečkem
+  (`pitch-500`) a ✓ v pravém horním rohu, ostatní `bg-surface-3` bez rámečku.
+  Nedostupná volba přeškrtnutá, `text-muted-light`, bez podkladu.
 
 Nové díly `components/ui/choice.tsx`:
 
@@ -443,4 +444,7 @@ Po každé vlně jedna krátká zpráva česky:
 
 ## 10. Stav (17. 11. 2026)
 
-Nezačato. Inventář vygenerovaný, čeká se na krok 0 (maketa a volba varianty).
+Krok 0 hotový: maketa v `maketa.html`, uživatel vybral volbu C a červené tlačítko R2.
+Krok 1 hotový: `PageLoading`, `SectionLoading`, `ErrorBox` s `children`, `.btn-danger`
+(`Button variant="danger"`), `lib/format.ts`, `ProgressBar`, `ChoiceGroup`, `ChoiceCard`,
+`Disclosure`. Ověřené na dočasné stránce na 375 px i desktopu. Následuje vlna 1.
