@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { TalentStars } from "@/components/players/talent-stars";
 import { apiFetch, type Team, type Player } from "@/lib/api";
-import { Spinner, PositionBadge, Tabs, useTabParam, ListCard, ListRow, ListEmpty, DataTable } from "@/components/ui";
+import { PositionBadge, Tabs, useTabParam, ListCard, ListRow, ListEmpty, DataTable, PageLoading, SectionLoading } from "@/components/ui";
 import { PositionFilter, SquadAttributeTable, StickyPlayerName, type PosFilter } from "@/components/players/squad-attribute-table";
 import { SquadBodyTab } from "@/components/players/squad-body-tab";
 import { SquadAnalysisTab } from "@/components/players/squad-analysis-tab";
@@ -165,7 +165,7 @@ export default function SquadPage() {
     };
   }, [players]);
 
-  if (loading) return <div className="page-container flex justify-center min-h-[50vh] items-center"><Spinner /></div>;
+  if (loading) return <PageLoading />;
   if (!team) return <div className="p-6">Tým nenalezen.</div>;
 
   const filtered = filter === "all" ? players : players.filter((p) => p.position === filter);
@@ -327,7 +327,7 @@ export default function SquadPage() {
       {/* Docházka — týmový přehled */}
       {tab === "dochazka" && (
         !attendanceLoaded ? (
-          <div className="card p-6 flex items-center justify-center min-h-[120px]"><Spinner /></div>
+          <div className="card"><SectionLoading /></div>
         ) : (
           <DochazkaTab
             rows={attendance.filter((r) => filter === "all" || r.position === filter)}

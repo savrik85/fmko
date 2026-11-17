@@ -6,7 +6,7 @@ import { MANAGER_FANS } from "@okresni-masina/shared";
 import { ManagerFansBandsTable } from "@/components/fans/manager-fans-bands";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, showError, type Team } from "@/lib/api";
-import { Spinner, SectionLabel, useConfirm, Tabs, ListCard, ListRow, ListEmpty, RowIcon, RowValue, ResultChip } from "@/components/ui";
+import { SectionLabel, useConfirm, Tabs, ListCard, ListRow, ListEmpty, RowIcon, RowValue, ResultChip, PageLoading } from "@/components/ui";
 import { BusSelector } from "../zapas/BusSelector";
 import { FanGroupsPanel, type FanGroupsData } from "./FanGroupsPanel";
 import { formatKc } from "@/lib/format";
@@ -509,11 +509,7 @@ export default function FansPage() {
   };
 
   if (loading) {
-    return (
-      <div className="page-container flex items-center justify-center min-h-[50vh]">
-        <Spinner />
-      </div>
-    );
+    return <PageLoading />;
   }
   if (!fans || !concession || !team) {
     return <div className="page-container">Nepodařilo se načíst data fanoušků.</div>;

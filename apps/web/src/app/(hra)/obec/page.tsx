@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
-import { Card, CardBody, Spinner, SectionLabel, Modal, Button, Tabs, useTabParam, ListCard, ListRow, ListEmpty, RowIcon, RowValue } from "@/components/ui";
+import { Card, CardBody, SectionLabel, Modal, Button, Tabs, useTabParam, ListCard, ListRow, ListEmpty, RowIcon, RowValue, SectionLoading } from "@/components/ui";
 import { DistrictMap, clubBadgeSvg, villageSizeLabel, type MapVillage } from "@/components/map/DistrictMap";
 import { DistrictVillages } from "./DistrictVillages";
 import { FaceAvatar } from "@/components/players/face-avatar";
@@ -486,7 +486,7 @@ function OwnVillage() {
   }, [teamId]);
 
   if (loading) {
-    return <div className="p-8 flex justify-center"><Spinner /></div>;
+    return <SectionLoading />;
   }
 
   if (error || !village || !favor) {
@@ -966,7 +966,7 @@ function BrigadeTakeDialog({ brigade, teamId, onClose, onSuccess }: BrigadeTakeD
             </div>
           </div>
           {loading ? (
-            <Spinner />
+            <SectionLoading />
           ) : eligible.length < brigade.required_player_count ? (
             <div className="text-sm text-card-red">
               Nemáš dost způsobilých hráčů (potřeba ≥ 60 kondice, bez zranění).

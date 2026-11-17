@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
-import { Card, CardBody, SectionLabel, Spinner, ListCard, ListRow, ListEmpty } from "@/components/ui";
+import { Card, CardBody, SectionLabel, ListCard, ListRow, ListEmpty, SectionLoading } from "@/components/ui";
 import { DistrictMap, clubBadgeSvg, villageSizeLabel, type MapVillage } from "@/components/map/DistrictMap";
 
 interface MapResponse {
@@ -76,7 +76,7 @@ export function DistrictVillages() {
       </div>
 
       {error && <Card><CardBody><p className="text-card-red text-center">Obce se nepodařilo načíst.</p></CardBody></Card>}
-      {!data && !error && <div className="flex justify-center py-16"><Spinner /></div>}
+      {!data && !error && <SectionLoading />}
 
       {data && (
         <div className="grid gap-4 lg:grid-cols-[1fr_320px]">

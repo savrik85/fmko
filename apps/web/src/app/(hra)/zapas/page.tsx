@@ -7,7 +7,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, apiAction, type Player } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
-import { Spinner, Button, PositionBadge, BadgePreview, JerseyPreview, DataTable, EntityCell, ListCard, ListRow, type DataColumn } from "@/components/ui";
+import { Button, PositionBadge, BadgePreview, JerseyPreview, DataTable, EntityCell, ListCard, ListRow, type DataColumn, PageLoading } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 import { BusSelector } from "./BusSelector";
 import { RefereeCard } from "@/components/match/referee-card";
@@ -602,7 +602,7 @@ function MatchPage() {
     setSaving(false);
   };
 
-  if (loading) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
+  if (loading) return <PageLoading />;
   if (!nextMatch) return (
     <div className="page-container space-y-4"><PreseasonNotice /><div className="card p-8 text-center">
       <p className="font-heading font-bold text-xl mb-2">Žádný naplánovaný zápas</p>

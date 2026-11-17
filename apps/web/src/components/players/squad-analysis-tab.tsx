@@ -21,7 +21,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
-import { Spinner, ListCard, ListRow, StatusChip } from "@/components/ui";
+import { ListCard, ListRow, StatusChip, SectionLoading } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { RATING_WEIGHTS } from "@okresni-masina/shared";
 
@@ -967,7 +967,7 @@ export function SquadAnalysisTab({ teamId, potential }: { teamId: string; potent
       .finally(() => setLoading(false));
   }, [teamId]);
 
-  if (loading) return <div className="card p-6 flex items-center justify-center min-h-[120px]"><Spinner /></div>;
+  if (loading) return <div className="card"><SectionLoading /></div>;
   if (error || !data) return <div className="card p-4 text-sm text-card-red text-center">{error ?? "Rozbor se nepodařilo načíst."}</div>;
   return <SquadAnalysisView data={data} potential={potential} />;
 }

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { LockDetail, Spinner, ListCard, ListRow, ListEmpty, RowIcon, RowValue } from "@/components/ui";
+import { LockDetail, ListCard, ListRow, ListEmpty, RowIcon, RowValue, SectionLoading } from "@/components/ui";
 import { AmenityGainChip } from "@/components/equipment/amenity-gain-chip";
 import { EQUIPMENT_ICONS, condBarColor, condColor, daysLeft, type BazarData, type BazarListing, type MyListing } from "./types";
 import { formatKc } from "@/lib/format";
@@ -39,7 +39,7 @@ export function BazarTab({ data, loading, budget, busy, onBuy, onWithdraw, onRep
     });
   }, [data, onlyAvailable, sort]);
 
-  if (loading) return <div className="flex justify-center py-10"><Spinner /></div>;
+  if (loading) return <SectionLoading />;
   if (!data) return <div className="card p-8 text-center text-muted">Bazar se nepodařilo načíst.</div>;
 
   return (

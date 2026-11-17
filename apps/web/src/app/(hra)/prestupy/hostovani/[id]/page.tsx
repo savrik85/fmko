@@ -11,7 +11,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiAction, apiFetch } from "@/lib/api";
-import { DataTable, EntityCell, PositionBadge, SectionLabel, Spinner, useConfirm } from "@/components/ui";
+import { DataTable, EntityCell, PositionBadge, SectionLabel, useConfirm, SectionLoading } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import {
   LOAN_STATE_STYLE, SKILL_LABELS, daysWord, shortDate, type LoanMatchLine, type LoanReport,
@@ -100,7 +100,7 @@ export default function LoanReportPage() {
       </div>
     );
   }
-  if (!data) return <div className="flex justify-center py-16"><Spinner /></div>;
+  if (!data) return <SectionLoading />;
 
   const lent = data.role === "lender";
   const state = LOAN_STATE_STYLE[data.playingTimeState];

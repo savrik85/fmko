@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
 import { useTeam } from "@/context/team-context";
-import { Spinner, SectionLabel, ListCard, ListRow, ListEmpty, RowValue } from "@/components/ui";
+import { SectionLabel, ListCard, ListRow, ListEmpty, RowValue, PageLoading } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import {
   REFEREE_AXES, axisWord, axisColor, formatGrade, gradeColor, gradeWord, incidentLabel,
@@ -53,7 +53,7 @@ export default function RozhodciDetailPage() {
       .finally(() => setLoading(false));
   }, [id, teamId]);
 
-  if (loading) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner size="lg" /></div>;
+  if (loading) return <PageLoading />;
   if (!ref) return <div className="page-container">Rozhodčí nenalezen.</div>;
 
   const s = ref.stats;

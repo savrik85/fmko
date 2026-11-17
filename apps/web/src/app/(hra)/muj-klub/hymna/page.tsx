@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, showError } from "@/lib/api";
-import { Spinner, Card, CardHeader, CardBody, SectionLabel } from "@/components/ui";
+import { Spinner, Card, CardHeader, CardBody, SectionLabel, PageLoading } from "@/components/ui";
 
 interface Anthem {
   id: string;
@@ -152,7 +152,7 @@ export default function HymnaPage() {
     }
   }
 
-  if (loading) return <div className="page-container flex justify-center min-h-[50vh] items-center"><Spinner /></div>;
+  if (loading) return <PageLoading />;
 
   const canGenerate = attemptsUsed < maxAttempts;
 

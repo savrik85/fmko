@@ -7,7 +7,7 @@
 
 import { useEffect, useState } from "react";
 import { apiFetch, apiAction } from "@/lib/api";
-import { Spinner } from "@/components/ui";
+import { SectionLoading } from "@/components/ui";
 import { PlayerBrowseTable, type BrowseRow } from "@/components/players/PlayerBrowseTable";
 
 export interface WatchedPlayer {
@@ -58,7 +58,7 @@ export function WatchlistTab({ teamId, onCount, onOpenFreeAgents, color, onColor
     }
   };
 
-  if (players === null) return <div className="flex justify-center py-8"><Spinner /></div>;
+  if (players === null) return <SectionLoading />;
 
   const rows: BrowseRow[] = players.map((p) => ({
     id: p.id,

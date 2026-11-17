@@ -4,7 +4,7 @@ import { useState, useEffect, type ReactNode } from "react";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, apiAction, type Player } from "@/lib/api";
 import Link from "next/link";
-import { Spinner, SectionLabel, ListCard, ListRow } from "@/components/ui";
+import { SectionLabel, ListCard, ListRow, PageLoading } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 
 type TrainingType = "conditioning" | "technique" | "tactics" | "match_practice";
@@ -184,7 +184,7 @@ export default function TrainingPage() {
     setDirty(true);
   };
 
-  if (loading) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
+  if (loading) return <PageLoading />;
 
   return (
     <div className="page-container space-y-5">

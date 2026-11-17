@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 import { sponsorTypeLabel } from "@/lib/sponsor-types";
-import { Card, CardBody, Spinner, SectionLabel, ErrorBox, ListCard, ListRow, ListEmpty } from "@/components/ui";
+import { Card, CardBody, SectionLabel, ErrorBox, ListCard, ListRow, ListEmpty, SectionLoading } from "@/components/ui";
 import { useTeam } from "@/context/team-context";
 import { OwnerCard, type OwnerInfo, type MyTeamInfo } from "@/components/sponsors/owner-card";
 import { NegotiationEntry } from "@/components/sponsors/negotiation-entry";
@@ -69,7 +69,7 @@ export default function SponsorDetailPage() {
   useEffect(load, [id, teamId, isLoading]);
 
   if (error) return <div className="page-container"><ErrorBox message={error} /></div>;
-  if (!data) return <div className="flex justify-center py-12"><Spinner /></div>;
+  if (!data) return <SectionLoading />;
 
   const others = data.activeContracts.filter((c) => c.category !== "main");
 

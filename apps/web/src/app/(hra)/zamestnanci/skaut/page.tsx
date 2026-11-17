@@ -8,7 +8,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, apiAction } from "@/lib/api";
-import { Spinner, SectionLabel, PositionBadge, useConfirm, ListCard, ListRow, ListEmpty, StatusChip } from "@/components/ui";
+import { SectionLabel, PositionBadge, useConfirm, ListCard, ListRow, ListEmpty, StatusChip, PageLoading } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { ScoutReportSheet, daysLeft, type ScoutReport } from "@/components/scouting/ScoutReportSheet";
 import { ratingText } from "@/components/scouting/WillingnessBadge";
@@ -161,7 +161,7 @@ export default function ScoutPage() {
     if (rep) setOpenReport(rep);
   }, []);
 
-  if (loading && !data) return <div className="min-h-[40vh] flex items-center justify-center"><Spinner /></div>;
+  if (loading && !data) return <PageLoading />;
   if (!data || !teamId) return <div className="p-6 text-center text-muted">Skauta se nepodařilo načíst.</div>;
 
   const scoutsList: ScoutItem[] = data.scouts && data.scouts.length > 0

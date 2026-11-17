@@ -10,7 +10,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
 import { useOpenPlayerConversation } from "@/hooks/use-open-player-conversation";
-import { Spinner, PositionBadge, DataTable, ListCard } from "@/components/ui";
+import { PositionBadge, DataTable, ListCard, SectionLoading } from "@/components/ui";
 import { formatKg, formatKgChange, WEIGHT_CATEGORY, type WeightCategoryKey } from "@/lib/player-attrs";
 import type { PosFilter } from "@/components/players/squad-attribute-table";
 
@@ -78,7 +78,7 @@ export function SquadBodyTab({ teamId, filter }: { teamId: string; filter: PosFi
       .finally(() => setLoading(false));
   }, [teamId]);
 
-  if (loading) return <div className="card p-6 flex items-center justify-center min-h-[120px]"><Spinner /></div>;
+  if (loading) return <div className="card"><SectionLoading /></div>;
   if (error || !data) return <div className="card p-4 text-sm text-card-red text-center">{error ?? "Přehled se nepodařilo načíst."}</div>;
 
   const { summary } = data;

@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
-import { Spinner, SectionLabel, PageHeader, Tabs, useTabParam, ListCard, ListRow, ListEmpty, RowValue } from "@/components/ui";
+import { SectionLabel, PageHeader, Tabs, useTabParam, ListCard, ListRow, ListEmpty, RowValue, PageLoading } from "@/components/ui";
 import { FixtureGroup, FixtureRow, type FixtureCrest, type FixtureSide } from "@/components/match/fixture-row";
 import { RoundPager } from "@/components/match/round-pager";
 import { TeamName } from "@/components/manager/team-name";
@@ -100,7 +100,7 @@ export default function PoharPage() {
       .finally(() => setLoading(false));
   }, [teamId]);
 
-  if (loading) return <div className="flex justify-center py-20"><Spinner /></div>;
+  if (loading) return <PageLoading />;
 
   if (!data?.cup) {
     return (

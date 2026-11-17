@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { apiFetch, showError, type Team, type Player, type TeamMatchResults, type ManagerProfile } from "@/lib/api";
 import { useTeam } from "@/context/team-context";
-import { Spinner, SectionLabel, BadgePreview, PositionBadge, JerseyPreview, ListCard, ListRow, ListEmpty, ShowMore, ScoreChip, RatingPill, DataTable, EntityCell, ratingToneIn, type DataColumn, type MatchOutcome } from "@/components/ui";
+import { SectionLabel, BadgePreview, PositionBadge, JerseyPreview, ListCard, ListRow, ListEmpty, ShowMore, ScoreChip, RatingPill, DataTable, EntityCell, ratingToneIn, type DataColumn, type MatchOutcome, PageLoading } from "@/components/ui";
 import { attrBg } from "@/lib/player-attrs";
 import type { BadgePattern } from "@/components/ui";
 import { HeroBackdrop } from "@/components/ui/hero-backdrop";
@@ -121,7 +121,7 @@ export default function TeamPage() {
     return { biggestWin: biggestWin.diff > 0 ? biggestWin.match : null, biggestLoss: biggestLoss.diff < 0 ? biggestLoss.match : null };
   }, [matchResults]);
 
-  if (loading) return <div className="page-container flex justify-center min-h-[50vh] items-center"><Spinner /></div>;
+  if (loading) return <PageLoading />;
   if (!team) return <div className="page-container">Tým nenalezen.</div>;
 
   const color = team.primary_color || "#2D5F2D";

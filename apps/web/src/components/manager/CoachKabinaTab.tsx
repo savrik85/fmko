@@ -8,7 +8,7 @@
 import { useEffect, useState } from "react";
 import { coachRelationBand, coachRelationBandByKey, COACH_RELATION_BAND_ORDER, type CoachRelationBandKey } from "@okresni-masina/shared";
 import { apiFetch } from "@/lib/api";
-import { SectionLabel, Spinner, PositionBadge, ListCard, ListRow, ListEmpty, RowValue } from "@/components/ui";
+import { SectionLabel, PositionBadge, ListCard, ListRow, ListEmpty, RowValue, SectionLoading } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 
 interface KabinaPlayer {
@@ -151,7 +151,7 @@ export function CoachKabinaTab({ teamId }: { teamId: string }) {
   }, [teamId]);
 
   if (error) return <div className="card p-4 text-sm text-card-red">{error}</div>;
-  if (!data) return <div className="flex justify-center py-10"><Spinner /></div>;
+  if (!data) return <SectionLoading />;
 
   const { summary } = data;
   const avgBand = coachRelationBand(summary.avgRelationship);

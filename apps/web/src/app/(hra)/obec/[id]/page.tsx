@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { API_BASE, apiFetch } from "@/lib/api";
-import { Card, CardBody, SectionLabel, Spinner, ListCard, ListRow, RowIcon, RowGroup, RowValue, ListEmpty } from "@/components/ui";
+import { Card, CardBody, SectionLabel, ListCard, ListRow, RowIcon, RowGroup, RowValue, ListEmpty, PageLoading } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { DistrictMap, clubBadgeSvg, villageSizeLabel, type MapVillage } from "@/components/map/DistrictMap";
 import { StadiumPreview } from "./StadiumPreview";
@@ -252,7 +252,7 @@ export default function VillageProfilePage() {
   }, [district]);
 
   if (error) return <div className="page-container"><Card><CardBody><p className="text-center text-card-red">Obec se nepodařilo načíst.</p></CardBody></Card></div>;
-  if (!data) return <div className="page-container flex justify-center py-16"><Spinner /></div>;
+  if (!data) return <PageLoading />;
 
   const v = data.village;
   // S klubem se listuje obcemi s klubem, jinak všemi; abecedně.

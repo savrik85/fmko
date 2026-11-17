@@ -11,7 +11,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
-import { Spinner, SectionLabel } from "@/components/ui";
+import { SectionLabel, PageLoading } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { axisWord } from "@/lib/referee-info";
 import { sentimentWord } from "@/lib/fan-info";
@@ -67,7 +67,7 @@ export default function VudceDetailPage() {
   }, [id]);
 
   if (loading) {
-    return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner size="lg" /></div>;
+    return <PageLoading />;
   }
   if (!data) return <div className="page-container">Vůdce nenalezen.</div>;
 

@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
-import { Spinner, Card, CardHeader, CardBody, BadgePreview, JerseyPreview } from "@/components/ui";
+import { Card, CardHeader, CardBody, BadgePreview, JerseyPreview, PageLoading } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 import { StadiumPhotoCard } from "@/app/klub/[teamId]/StadiumPhotoCard";
 import {
@@ -275,11 +275,7 @@ export default function MujKlubPage() {
   };
 
   if (loading) {
-    return (
-      <div className="page-container flex justify-center min-h-[50vh] items-center">
-        <Spinner />
-      </div>
-    );
+    return <PageLoading />;
   }
 
   const website = websiteData?.website;

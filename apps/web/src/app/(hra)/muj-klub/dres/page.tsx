@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, showError } from "@/lib/api";
-import { Spinner, Card, CardHeader, CardBody, JerseyPreview, BadgePreview, ShortsPreview, SocksPreview, SectionLabel, Modal, StickyActions } from "@/components/ui";
+import { Card, CardHeader, CardBody, JerseyPreview, BadgePreview, ShortsPreview, SocksPreview, SectionLabel, Modal, StickyActions, PageLoading } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 import { ClubScarf, SCARF_PATTERNS, type ScarfPattern } from "@/components/team/club-scarf";
 
@@ -372,7 +372,7 @@ export default function DresPage() {
   }
 
   if (loading) {
-    return <div className="page-container flex justify-center min-h-[50vh] items-center"><Spinner /></div>;
+    return <PageLoading />;
   }
   if (!club) {
     return <div className="page-container">Klub nenalezen.</div>;

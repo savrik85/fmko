@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
 import { useTeam } from "@/context/team-context";
-import { Spinner, SectionLabel, Tabs, useTabParam, ListCard, ListRow, RowValue } from "@/components/ui";
+import { SectionLabel, Tabs, useTabParam, ListCard, ListRow, RowValue, PageLoading } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { DisciplinaryPanel } from "@/components/referees/disciplinary-panel";
 import {
@@ -32,7 +32,7 @@ export default function RozhodciPage() {
       .finally(() => setLoading(false));
   }, [teamId]);
 
-  if (loading) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner size="lg" /></div>;
+  if (loading) return <PageLoading />;
 
   const odpiskali = rows.filter((r) => r.stats.matches > 0);
 

@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, showError } from "@/lib/api";
-import { Spinner, useConfirm } from "@/components/ui";
+import { useConfirm, PageLoading } from "@/components/ui";
 import { getWidget } from "@/components/dashboard/widgets/registry";
 import { DEFAULT_LAYOUT } from "@/components/dashboard/widgets/default-layout";
 import { useDashboardData } from "@/components/dashboard/widgets/use-dashboard-data";
@@ -158,7 +158,7 @@ export default function DashboardPage() {
   };
 
   if (!layout) {
-    return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
+    return <PageLoading />;
   }
 
   return (

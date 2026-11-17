@@ -11,7 +11,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, apiAction } from "@/lib/api";
-import { Spinner, PositionBadge, SheetDialog, useConfirm } from "@/components/ui";
+import { PositionBadge, SheetDialog, useConfirm, PageLoading } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { MoneyInput, formatAmount } from "@/components/ui/money-input";
 import { TransferTermsFields, TermsBreakdown, type TermsValue } from "@/components/transfers/transfer-terms";
@@ -109,7 +109,7 @@ export default function AiNegotiationPage() {
   }, [data?.negotiation.waiting, refresh]);
 
   if (loading && !data) {
-    return <div className="min-h-[40vh] flex items-center justify-center"><Spinner /></div>;
+    return <PageLoading />;
   }
   if (error || !data) {
     return (

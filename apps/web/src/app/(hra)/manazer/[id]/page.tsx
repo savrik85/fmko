@@ -6,7 +6,7 @@ import Link from "next/link";
 import { apiFetch, showError, type ManagerProfile, type Team } from "@/lib/api";
 import { useTeam } from "@/context/team-context";
 import { FaceAvatar } from "@/components/players/face-avatar";
-import { SectionLabel, Spinner, BadgePreview, Tabs, useTabParam, ListCard, ListRow, ListEmpty, RowGroup, RowValue, DeltaMark, type TabItem } from "@/components/ui";
+import { SectionLabel, BadgePreview, Tabs, useTabParam, ListCard, ListRow, ListEmpty, RowGroup, RowValue, DeltaMark, type TabItem, PageLoading } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 import { HeroBackdrop } from "@/components/ui/hero-backdrop";
 import { EditManagerModal } from "@/components/manager/EditManagerModal";
@@ -92,7 +92,7 @@ export default function ManagerDetailPage() {
     }).catch((e) => { console.error("manager page load:", e); setLoading(false); });
   }, [teamId, managerId]);
 
-  if (loading) return <div className="min-h-dvh flex items-center justify-center"><Spinner size="lg" /></div>;
+  if (loading) return <PageLoading />;
   if (!manager || !team) return <div className="page-container">Trenér nenalezen.</div>;
 
   // Jediný viditelný rozdíl AI klubu: odznak s robotem u jména trenéra.

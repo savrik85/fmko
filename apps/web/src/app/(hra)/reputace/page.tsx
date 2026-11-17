@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
-import { Spinner, SectionLabel, ListCard, ListRow, ListEmpty, RowValue, DeltaMark } from "@/components/ui";
+import { SectionLabel, ListCard, ListRow, ListEmpty, RowValue, DeltaMark, PageLoading } from "@/components/ui";
 import { formatKc } from "@/lib/format";
 
 interface Unlock {
@@ -169,7 +169,7 @@ export default function ReputacePage() {
   }, [teamId]);
 
   if (loading) {
-    return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
+    return <PageLoading />;
   }
   if (!data) {
     return <div className="page-container"><div className="card p-4 text-sm text-muted">Reputaci se nepodařilo načíst.</div></div>;

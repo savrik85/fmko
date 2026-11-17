@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
-import { Spinner, EntityLink, ListCard, ListRow, RowValue, StatusChip } from "@/components/ui";
+import { EntityLink, ListCard, ListRow, RowValue, StatusChip, SectionLoading } from "@/components/ui";
 import { formatKc } from "@/lib/format";
 
 interface Fine {
@@ -77,7 +77,7 @@ export function DisciplinaryPanel({ teamId }: { teamId: string | null }) {
       .finally(() => setLoading(false));
   }, [teamId]);
 
-  if (loading) return <div className="flex items-center justify-center py-12"><Spinner size="lg" /></div>;
+  if (loading) return <SectionLoading />;
 
   // Kolik zaplatil který klub — trestní rejstřík okresu je zajímavější než samotný seznam.
   const podleTymu = Object.values(

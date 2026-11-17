@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 import { useTeam } from "@/context/team-context";
-import { ErrorBox, SectionLabel, Spinner, useConfirm } from "@/components/ui";
+import { ErrorBox, SectionLabel, useConfirm, SectionLoading } from "@/components/ui";
 
 import { formatGameDay, seasonsAccusative, weeklyAmount } from "@/lib/sponsor-format";
 import {
@@ -188,7 +188,7 @@ export default function NegotiationPage() {
     );
   }
   if (error && !view) return <div className="page-container"><ErrorBox message={error} /></div>;
-  if (!view || !draft) return <div className="flex justify-center py-12"><Spinner /></div>;
+  if (!view || !draft) return <SectionLoading />;
 
   const estimate = estimateRange(view, draft.promises, draft.seasons);
   const cost = previewCost(view, draft);

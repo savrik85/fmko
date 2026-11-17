@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { useGuideVisit } from "@/components/team/first-week-guide";
 import { apiAction, apiFetch, type Team } from "@/lib/api";
-import { Spinner, SectionLabel, useConfirm, LockDetail, Tabs, ListCard, ListRow, RowIcon } from "@/components/ui";
+import { SectionLabel, useConfirm, LockDetail, Tabs, ListCard, ListRow, RowIcon, PageLoading } from "@/components/ui";
 import { amenityDetail, withAmenityNote } from "@/lib/amenity-outlook";
 import { AmenityGainChip } from "@/components/equipment/amenity-gain-chip";
 import { SellDialog } from "./SellDialog";
@@ -26,7 +26,7 @@ const CARD_BTN = "shrink-0 w-24 py-1.5 rounded-soft text-xs font-heading font-bo
 // na prerenderu — stejný vzor jako liga/page.tsx:90.
 export default function EquipmentPageWrapper() {
   return (
-    <Suspense fallback={<div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>}>
+    <Suspense fallback={<PageLoading />}>
       <EquipmentPage />
     </Suspense>
   );
@@ -218,7 +218,7 @@ function EquipmentPage() {
     setActing(null);
   };
 
-  if (loading) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
+  if (loading) return <PageLoading />;
   if (!data || !team) return <div className="page-container">Data nenalezena.</div>;
 
   const fx = data.effects;

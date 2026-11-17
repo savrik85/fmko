@@ -9,7 +9,7 @@ import { useTeam } from "@/context/team-context";
 import { apiFetch, apiAction, showError, type Player } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
 import { nationalityFlag } from "@/lib/nationality";
-import { Spinner, SectionLabel, PositionBadge, useConfirm, BadgePreview, type BadgePattern, Tabs, useTabParam, Sheet, SheetDialog, Button, DataTable, EntityCell, ListCard, ListRow, ListEmpty, RowIcon, RowValue, RatingPill, StatusChip, ratingToneIn } from "@/components/ui";
+import { SectionLabel, PositionBadge, useConfirm, BadgePreview, type BadgePattern, Tabs, useTabParam, Sheet, SheetDialog, Button, DataTable, EntityCell, ListCard, ListRow, ListEmpty, RowIcon, RowValue, RatingPill, StatusChip, ratingToneIn, PageLoading, SectionLoading } from "@/components/ui";
 import { attrBg } from "@/lib/player-attrs";
 import { PlayerRevealCard } from "@/components/players/reveal-card";
 import { FaceAvatar } from "@/components/players/face-avatar";
@@ -1063,7 +1063,7 @@ export default function TransfersPage() {
     return getUnseenOffersCount(teamId ?? "", { incoming, outgoing, incomingBids, outgoingBids });
   }, [teamId, incoming, outgoing, incomingBids, outgoingBids, tab]);
 
-  if (loading) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
+  if (loading) return <PageLoading />;
 
   const quitCount = players.filter((p) => (p as any).status === "quit").length;
   const tabs: [Tab, string, number][] = [
@@ -1426,7 +1426,7 @@ export default function TransfersPage() {
       {/* ═══ TAB: Přehled ═══ */}
       {tab === "overview" && (
         <div className="space-y-4">
-          {overviewLoading && <div className="flex justify-center py-8"><Spinner /></div>}
+          {overviewLoading && <SectionLoading />}
           {!overviewLoading && !overview && (
             <div className="card p-8 text-center text-muted">Nepodařilo se načíst přehled</div>
           )}
@@ -1563,7 +1563,7 @@ export default function TransfersPage() {
       {/* ═══ TAB: Hledání ═══ */}
       {isSearch && (
         <div className="space-y-3">
-          {!searchLoaded && <div className="flex justify-center py-8"><Spinner /></div>}
+          {!searchLoaded && <SectionLoading />}
           {searchLoaded && (
             <>
               {/* Rating a věk jsou při shánění hráče důležitější než jméno,

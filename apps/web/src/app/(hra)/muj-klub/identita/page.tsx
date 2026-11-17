@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, showError } from "@/lib/api";
-import { Spinner, Card, CardHeader, CardBody, SectionLabel, StickyActions } from "@/components/ui";
+import { Card, CardHeader, CardBody, SectionLabel, StickyActions, PageLoading } from "@/components/ui";
 import { withClubPrefix, type ClubPrefix } from "@okresni-masina/shared";
 
 interface ClubIdentity {
@@ -128,7 +128,7 @@ export default function IdentitaPage() {
     }
   }
 
-  if (loading) return <div className="page-container flex justify-center min-h-[50vh] items-center"><Spinner /></div>;
+  if (loading) return <PageLoading />;
 
   return (
     <div className="page-container">

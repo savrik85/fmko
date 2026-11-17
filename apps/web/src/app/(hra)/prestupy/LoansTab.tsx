@@ -7,7 +7,7 @@
 
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
-import { ListCard, ListEmpty, ListRow, PositionBadge, RatingPill, Spinner, StatusChip, type RowTone } from "@/components/ui";
+import { ListCard, ListEmpty, ListRow, PositionBadge, RatingPill, StatusChip, type RowTone, SectionLoading } from "@/components/ui";
 import { LOAN_STATE_STYLE, daysWord, type LoanOverview, type LoanSummary } from "@/lib/loans";
 
 const STATE_CHIP_TONE: Record<LoanSummary["playingTimeState"], "ok" | "warn" | "danger" | "neutral"> = {
@@ -78,7 +78,7 @@ export function LoansTab({ teamId }: { teamId: string }) {
       .catch((e) => { console.error("načtení hostování:", e); setData({ lent: [], borrowed: [] }); });
   }, [teamId]);
 
-  if (!data) return <div className="flex justify-center py-10"><Spinner /></div>;
+  if (!data) return <SectionLoading />;
 
   return (
     <div className="space-y-5">

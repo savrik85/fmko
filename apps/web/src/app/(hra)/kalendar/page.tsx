@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
-import { Spinner } from "@/components/ui";
+import { PageLoading } from "@/components/ui";
 import { PreseasonNotice } from "@/components/team/preseason-notice";
 
 interface UpcomingEvent {
@@ -45,7 +45,7 @@ export default function CalendarPage() {
       .catch(() => setLoading(false));
   }, [teamId]);
 
-  if (loading) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
+  if (loading) return <PageLoading />;
   if (!data || !viewMonth) return <div className="page-container">Data nenalezena.</div>;
 
   const progress = Math.round((data.currentDay / data.totalDays) * 100);

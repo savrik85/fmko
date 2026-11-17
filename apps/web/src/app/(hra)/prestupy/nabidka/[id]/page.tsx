@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, apiAction } from "@/lib/api";
-import { Spinner } from "@/components/ui";
+import { PageLoading } from "@/components/ui";
 import { TeamSide, type TeamSummary, type ManagerSummary } from "./components/TeamSide";
 import { PlayerHero, type PlayerSummary } from "./components/PlayerHero";
 import { OfferTimeline, type OfferEvent } from "./components/OfferTimeline";
@@ -125,11 +125,7 @@ export default function OfferDetailPage() {
   }, [teamId, sellerPlayerId]);
 
   if (loading && !data) {
-    return (
-      <div className="min-h-[40vh] flex items-center justify-center">
-        <Spinner />
-      </div>
-    );
+    return <PageLoading />;
   }
   if (error || !data) {
     return (

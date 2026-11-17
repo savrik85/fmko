@@ -9,7 +9,7 @@ import { seasonsAccusative, remainingSeasonsText, weeklyAmount } from "@/lib/spo
 import type {
   DistrictFirm, PubEncounter, SponsorCategory, SponsorHistoryItem, SponsorOffer, SponsorOverview, SponsorPromiseView, SponsorsData,
 } from "@/lib/sponsor-page-types";
-import { Card, CardBody, ErrorBox, Spinner, Tabs, useConfirm, useTabParam } from "@/components/ui";
+import { Card, CardBody, ErrorBox, Tabs, useConfirm, useTabParam, PageLoading } from "@/components/ui";
 import { ContractsTab } from "@/components/sponsors/contracts-tab";
 import { FirmsTab } from "@/components/sponsors/firms-tab";
 import { PopularityTab } from "@/components/sponsors/popularity-tab";
@@ -300,10 +300,10 @@ export default function SponsorsPage() {
     setActing(false);
   };
 
-  if (authLoading || loading) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
+  if (authLoading || loading) return <PageLoading />;
   if (loadError) return <div className="page-container"><ErrorBox message={`Sponzory se nepodařilo načíst: ${loadError}`} /></div>;
   if (!teamId) return <div className="page-container text-base text-muted">Sponzory uvidíš, až budeš mít klub.</div>;
-  if (!data || !team) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
+  if (!data || !team) return <PageLoading />;
 
   const hasMainSponsor = !!data.mainContract;
   const favors = new Map<number, number>((firms?.firms ?? []).map((f) => [f.sponsorId, f.favor]));

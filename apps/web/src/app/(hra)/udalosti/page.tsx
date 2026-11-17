@@ -5,7 +5,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, apiAction } from "@/lib/api";
-import { Card, CardBody, Spinner, SectionLabel, useConfirm, ListCard, ListRow, RowIcon, RowGroup } from "@/components/ui";
+import { Card, CardBody, SectionLabel, useConfirm, ListCard, ListRow, RowIcon, RowGroup, PageLoading } from "@/components/ui";
 import { DistrictEvents } from "./DistrictEvents";
 
 interface EventEffect {
@@ -162,7 +162,7 @@ export default function EventsPage() {
     setChoosing(null);
   };
 
-  if (loading) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
+  if (loading) return <PageLoading />;
 
   // K rozhodnutí jsou jen události s volbami. Události bez voleb jsou taky "pending",
   // ale vyřeší je denní tick sám — do sekce "čeká na tebe" nepatří.

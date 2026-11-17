@@ -9,7 +9,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
-import { Spinner, ListCard, ListEmpty, ListRow, RowValue } from "@/components/ui";
+import { ListCard, ListEmpty, ListRow, RowValue, SectionLoading } from "@/components/ui";
 import { CPU_CLUB_ID } from "@okresni-masina/shared";
 import { formatKc } from "@/lib/format";
 
@@ -95,7 +95,7 @@ export function ObligationsTab({ teamId, loans }: { teamId: string; loans: React
   }, [teamId]);
 
   if (failed) return <div className="card p-6 text-center text-muted">Závazky se nepodařilo načíst.</div>;
-  if (!data) return <div className="flex justify-center py-8"><Spinner /></div>;
+  if (!data) return <SectionLoading />;
 
   const { paying, receiving, sellOnOwed, sellOnClaims, totals } = data;
   const nothing = paying.length + receiving.length + sellOnOwed.length + sellOnClaims.length === 0;

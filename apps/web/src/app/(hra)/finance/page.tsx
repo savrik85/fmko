@@ -5,7 +5,7 @@ import { sponsorMonthlyPayout } from "@okresni-masina/shared";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
 import { sponsorTypeIcon, sponsorTypeLabel } from "@/lib/sponsor-types";
-import { Spinner, SectionLabel, PositionBadge, Tabs, useTabParam, ListCard, ListRow, ListEmpty, RowIcon, RowValue } from "@/components/ui";
+import { SectionLabel, PositionBadge, Tabs, useTabParam, ListCard, ListRow, ListEmpty, RowIcon, RowValue, PageLoading, SectionLoading } from "@/components/ui";
 import { TXN_ICONS, TXN_LABELS } from "@/lib/transaction-labels";
 import { weeksText } from "@/lib/weeks-text";
 import { formatKc } from "@/lib/format";
@@ -153,7 +153,7 @@ export default function FinancesPage() {
     loadTransactions(txnFilter);
   };
 
-  if (loading) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
+  if (loading) return <PageLoading />;
   if (!data) return <div className="page-container">Data nenalezena.</div>;
 
   const tabs: [Tab, string, string][] = [
@@ -663,7 +663,7 @@ function LoanTab({ teamId, data, info, onChange, reload }: {
   }, [info?.rules.minPrincipal, info?.rules.maxPrincipal]);
 
   if (!info) {
-    return <div className="card p-8 text-center"><Spinner /></div>;
+    return <div className="card"><SectionLoading /></div>;
   }
 
   const take = async () => {

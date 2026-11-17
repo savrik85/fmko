@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, showError } from "@/lib/api";
-import { Spinner, Card, CardHeader, CardBody, SectionLabel } from "@/components/ui";
+import { Card, CardHeader, CardBody, SectionLabel, PageLoading } from "@/components/ui";
 
 interface Mascot {
   id: string;
@@ -133,7 +133,7 @@ export default function MaskotPage() {
     }
   }
 
-  if (loading) return <div className="page-container flex justify-center min-h-[50vh] items-center"><Spinner /></div>;
+  if (loading) return <PageLoading />;
 
   const canGenerate = attemptsUsed < maxAttempts;
 

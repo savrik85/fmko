@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
-import { Spinner, Tabs, useTabParam } from "@/components/ui";
+import { Tabs, useTabParam, PageLoading } from "@/components/ui";
 import { KurzovyListek } from "./kurzy";
 import { TiketLista, TiketSheet } from "./tiket";
 import { MojeTikety } from "./tikety";
@@ -94,7 +94,7 @@ export default function SazkyPage() {
 
   if (nacitam) {
     return (
-      <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>
+      <PageLoading />
     );
   }
 

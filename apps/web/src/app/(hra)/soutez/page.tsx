@@ -14,7 +14,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTeam } from "@/context/team-context";
 import { apiAction, apiFetch } from "@/lib/api";
-import { EntityLink, ListCard, ListRow, Modal, Spinner, Tabs, useTabParam } from "@/components/ui";
+import { EntityLink, ListCard, ListRow, Modal, Tabs, useTabParam, PageLoading } from "@/components/ui";
 import { LICENCE_LEVELS, licenceLabel } from "@okresni-masina/shared";
 import {
   Empty, GOLD, OpenProposalNote, PersonLine, Portrait, Row, StatusPill, czk, plural, signed,
@@ -367,7 +367,7 @@ export default function SoutezPage() {
   };
 
   if (loading) {
-    return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
+    return <PageLoading />;
   }
   if (!state) {
     return <div className="page-container"><Empty>Soutěž se nepodařilo načíst.</Empty></div>;

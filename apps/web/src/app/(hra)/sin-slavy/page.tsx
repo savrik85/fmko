@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
-import { Spinner, BadgePreview, DataTable, EntityCell, ListCard } from "@/components/ui";
+import { BadgePreview, DataTable, EntityCell, ListCard, PageLoading } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import type { BadgePattern } from "@/components/ui";
 import { CoachName } from "@/components/manager/coach-name";
@@ -40,7 +40,7 @@ export default function HallOfFamePage() {
       .catch((e) => { console.error("hall of fame load:", e); setLoading(false); });
   }, []);
 
-  if (loading) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner size="lg" /></div>;
+  if (loading) return <PageLoading />;
 
   // AI kluby patří do žebříčku jako každý jiný klub, liší se jen štítkem u trenéra.
   const reranked = entries.map((e, i) => ({ ...e, displayRank: i + 1 }));

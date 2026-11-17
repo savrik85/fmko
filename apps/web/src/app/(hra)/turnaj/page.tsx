@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
-import { Spinner, SectionLabel, PageHeader, Button, ListCard, ListRow, ListEmpty, RowIcon } from "@/components/ui";
+import { SectionLabel, PageHeader, Button, ListCard, ListRow, ListEmpty, RowIcon, PageLoading } from "@/components/ui";
 import { bestTextOn } from "@/lib/team-color";
 import { BRAND, CompetitionView, type Competition } from "./competition";
 import { PMobileLogo, PMobileMark, SignalWaves, pMobileTheme } from "@/components/brand/p-mobile";
@@ -169,7 +169,7 @@ export default function TurnajPage() {
     }
   };
 
-  if (loading) return <div className="flex justify-center py-20"><Spinner /></div>;
+  if (loading) return <PageLoading />;
 
   const t = data?.tournament;
   if (!t) {

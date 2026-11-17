@@ -1,6 +1,6 @@
 "use client";
 
-import { ListCard, ListEmpty, ListRow, Spinner, StatusChip } from "@/components/ui";
+import { ListCard, ListEmpty, ListRow, StatusChip, SectionLoading } from "@/components/ui";
 import { seasonsAccusative, weeklyAmount } from "@/lib/sponsor-format";
 
 import type { ActiveContract, SponsorCategory, SponsorHistoryItem } from "@/lib/sponsor-page-types";
@@ -22,7 +22,7 @@ export function HistoryTab({ items, error, mainContract }: { items: SponsorHisto
   if (error) {
     return <div className="text-sm text-card-red bg-red-50 border border-red-200 rounded-soft px-3 py-2">Historii se nepodařilo načíst: {error}</div>;
   }
-  if (!items) return <div className="flex justify-center py-8"><Spinner /></div>;
+  if (!items) return <SectionLoading />;
 
   // Kdo byl hlavním sponzorem od které sezóny (jen smlouvy se známou sezónou podpisu), od nejstarší.
   // Aktuální hlavní smlouva (pokud existuje) jde na konec časové osy, i když ještě neskončila.

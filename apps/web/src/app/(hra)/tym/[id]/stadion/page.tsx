@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { clientOnly } from "@/components/client-only";
 import { apiFetch, type Team } from "@/lib/api";
 import Link from "next/link";
-import { Spinner, BadgePreview } from "@/components/ui";
+import { Spinner, BadgePreview, PageLoading } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 import { HeroBackdrop } from "@/components/ui/hero-backdrop";
 import { HeroNavButton, HeroStat, HeroStats, heroTone } from "@/components/ui/hero-kit";
@@ -106,7 +106,7 @@ export default function VisitStadiumPage() {
   const dalsi = leagueTeams.length > 1
     ? leagueTeams[(indexVLize + 1) % leagueTeams.length] : null;
 
-  if (loading) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
+  if (loading) return <PageLoading />;
   if (!stadium || !team) return <div className="page-container">Stadion nenalezen.</div>;
 
   const color = team.primary_color || "#2D5F2D";

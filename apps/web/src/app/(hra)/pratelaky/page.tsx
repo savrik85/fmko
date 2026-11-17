@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, showError } from "@/lib/api";
-import { SectionLabel, Spinner, Tabs, useTabParam, useConfirm, ListCard, ListEmpty } from "@/components/ui";
+import { SectionLabel, Tabs, useTabParam, useConfirm, ListCard, ListEmpty, PageLoading } from "@/components/ui";
 import { FriendlyForm } from "./FriendlyForm";
 import { FriendlyRecord } from "./FriendlyRecord";
 import { FixtureCard, FriendlyCard, PRIMARY_BUTTON, SECONDARY_BUTTON, StakeTag, StatusPill, TAG, TeamLink, dayLabel, sumCosts, venueText, type FriendliesData, type FriendlyView, type OfferView } from "./friendly-ui";
@@ -90,7 +90,7 @@ export default function FriendlyPage() {
     setTimeout(() => topRef.current?.scrollIntoView({ block: "start" }), 0);
   };
 
-  if (loading) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
+  if (loading) return <PageLoading />;
   if (!data || !teamId) return <div className="page-container"><div className="card p-6 text-center text-muted">Přáteláky se nepodařilo načíst.</div></div>;
 
   const openOffers = data.offers.filter((o) => !o.blocked).length;

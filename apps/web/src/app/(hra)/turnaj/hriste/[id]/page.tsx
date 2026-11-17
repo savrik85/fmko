@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { clientOnly } from "@/components/client-only";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
-import { Spinner } from "@/components/ui";
+import { Spinner, PageLoading } from "@/components/ui";
 import { pMobileTheme } from "@/components/brand/p-mobile";
 import { BRAND, DayBlock, dayLabel, stageTitle, type Competition } from "../../competition";
 import { venueColors, venueExtensions, venueFacilities } from "../../venue-scene";
@@ -43,7 +43,7 @@ export default function TournamentVenuePage() {
       .finally(() => setLoading(false));
   }, [teamId]);
 
-  if (loading) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
+  if (loading) return <PageLoading />;
   const venues = data?.competition?.venues ?? [];
   const index = venues.findIndex((v) => v.id === id);
   const venue = venues[index];

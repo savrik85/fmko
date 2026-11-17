@@ -15,7 +15,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, showError } from "@/lib/api";
-import { SectionLabel, Spinner } from "@/components/ui";
+import { SectionLabel, Spinner, PageLoading } from "@/components/ui";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { COURSE_RULES } from "@okresni-masina/shared";
 import { announceExamRunning } from "@/lib/coach-exam-channel";
@@ -140,7 +140,7 @@ export default function TestPage() {
       </div>
     );
   }
-  if (!exam || !teamId || !courseId) return <div className="min-h-[50dvh] flex items-center justify-center"><Spinner size="lg" /></div>;
+  if (!exam || !teamId || !courseId) return <PageLoading />;
 
   if (exam.state === "ready") return <Intro exam={exam} teamId={teamId} courseId={courseId} onStarted={setExam} />;
   if (exam.state === "running") return <RunningExam exam={exam} teamId={teamId} courseId={courseId} onFinished={setExam} onReload={load} />;

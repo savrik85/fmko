@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, showError } from "@/lib/api";
-import { Spinner, SectionLabel, DataTable, EntityCell, ListCard, ListRow, StatusChip } from "@/components/ui";
+import { SectionLabel, DataTable, EntityCell, ListCard, ListRow, StatusChip, PageLoading } from "@/components/ui";
 import { bestTextOn } from "@/lib/team-color";
 
 interface CupSquadPlayer { name: string; position: string; rating: number; age: number; condition: number; morale: number; suspended: boolean }
@@ -54,7 +54,7 @@ export default function CupTeamDetailPage() {
       .finally(() => setLoading(false));
   }, [teamId, params.id]);
 
-  if (loading) return <div className="flex items-center justify-center min-h-[50vh]"><Spinner size="lg" /></div>;
+  if (loading) return <PageLoading />;
   if (!data?.team) return <div className="page-container py-10 text-center text-muted">Pohárový tým nenalezen.</div>;
 
   const t = data.team;

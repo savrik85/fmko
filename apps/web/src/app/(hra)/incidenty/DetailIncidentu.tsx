@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
-import { Spinner, SectionLabel } from "@/components/ui";
+import { SectionLabel, SectionLoading } from "@/components/ui";
 import { datum, OBVINENI_LABEL, stavPilulka, TREST_HOTOVO, TREST_LABEL, VYSLEDEK_LABEL, ZDROJ_EMOJI, type AkceTrestu, type DetailIncidentuData, type VysledekObvineni } from "./typy";
 import { formatKc } from "@/lib/format";
 
@@ -89,7 +89,7 @@ export function DetailIncidentu({ teamId, incidentId, onZmena }: { teamId: strin
   }
 
   if (chyba) return <div className="card p-4 text-sm text-muted">{chyba}</div>;
-  if (!detail) return <div className="flex justify-center py-10"><Spinner /></div>;
+  if (!detail) return <SectionLoading />;
 
   const { incident: i, vysetrovani: v, akce } = detail;
   const vysledek = i.status === "uzavreny" && i.resolution ? VYSLEDEK_LABEL[i.resolution] : undefined;

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, apiAction } from "@/lib/api";
-import { Spinner, Tabs, useTabParam, ListCard, ListRow, ListEmpty, RowIcon, StatusChip } from "@/components/ui";
+import { Tabs, useTabParam, ListCard, ListRow, ListEmpty, RowIcon, StatusChip, PageLoading } from "@/components/ui";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { StaffTaskBox, type StaffTasksData } from "@/components/staff/StaffTaskBox";
@@ -371,7 +371,7 @@ export default function ZamestnanciPage() {
     }
   };
 
-  if (loading) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
+  if (loading) return <PageLoading />;
 
   const tabs: [Tab, string, number][] = [["team", "Tým", hired.length], ["market", "Volní", market.length]];
   const filteredMarket = marketRoleFilter === "all" ? market : market.filter((c) => c.profession === marketRoleFilter);

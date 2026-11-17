@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
-import { Spinner, SectionLabel, ListCard, ListRow, ListEmpty, RowIcon } from "@/components/ui";
+import { SectionLabel, ListCard, ListRow, ListEmpty, RowIcon, PageLoading } from "@/components/ui";
 import { DetailIncidentu } from "./DetailIncidentu";
 import { datum, stavPilulka, VYSLEDEK_LABEL, type Incident } from "./typy";
 import { formatKc } from "@/lib/format";
@@ -20,7 +20,7 @@ interface Poskozeni {
   gameDate: string | null;
 }
 
-const NACITANI = <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
+const NACITANI = <PageLoading />;
 
 export default function IncidentyStranka() {
   return <Suspense fallback={NACITANI}><Incidenty /></Suspense>;

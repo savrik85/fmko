@@ -10,7 +10,7 @@ import { Fragment, useCallback, useEffect, useState, type ReactNode } from "reac
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { apiFetch, apiAction, showError } from "@/lib/api";
-import { Spinner, PositionBadge, SheetDialog, useConfirm, ListCard, ListRow, ListEmpty, RowIcon, StatusChip } from "@/components/ui";
+import { PositionBadge, SheetDialog, useConfirm, ListCard, ListRow, ListEmpty, RowIcon, StatusChip, SectionLoading } from "@/components/ui";
 import { MoneyInput } from "@/components/ui/money-input";
 import { OriginBadge } from "@/components/transfers/origin-badge";
 import { formatKc } from "@/lib/format";
@@ -142,7 +142,7 @@ export function DemandsTab({ teamId }: { teamId: string }) {
   useEffect(() => { load(); }, [load]);
 
   if (failed) return <div className="card p-6 text-center text-muted">Poptávky se nepodařilo načíst.</div>;
-  if (!data) return <div className="flex justify-center py-8"><Spinner /></div>;
+  if (!data) return <SectionLoading />;
 
   const withdraw = async (d: DemandBase) => {
     const ok = await confirm({ title: "Stáhnout poptávku?", description: `Hledáš ${d.summary}. Po stažení ti k ní už nikdo nikoho nenabídne.`, confirmLabel: "Stáhnout", variant: "danger" });

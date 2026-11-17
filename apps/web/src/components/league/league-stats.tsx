@@ -5,7 +5,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Spinner, BadgePreview, PositionBadge, ListCard, ListRow, RowValue } from "@/components/ui";
+import { BadgePreview, PositionBadge, ListCard, ListRow, RowValue, SectionLoading } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 
 interface PlayerStat {
@@ -77,7 +77,7 @@ type StatSection = "hraci" | "brankari" | "tymy" | "zajimavosti";
 
 export function LeagueStatsTab({ data, loaded }: { data: StatsData | null; loaded: boolean }) {
   const [section, setSection] = useState<StatSection>("hraci");
-  if (!loaded) return <div className="flex items-center justify-center py-12"><Spinner /></div>;
+  if (!loaded) return <SectionLoading />;
   if (!data) return <div className="card p-8 text-center text-muted">Zatím žádné statistiky.</div>;
 
   const {

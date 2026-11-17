@@ -10,7 +10,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { apiFetch, showError } from "@/lib/api";
-import { SectionLabel, Spinner, ListCard, ListRow, ListEmpty } from "@/components/ui";
+import { SectionLabel, ListCard, ListRow, ListEmpty, SectionLoading } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { LicenceBadge } from "@/components/manager/LicenceBadge";
 import { CoachName } from "@/components/manager/coach-name";
@@ -156,7 +156,7 @@ export function RelationCard({ myTeamId, otherTeamId, otherManagerName }: {
     }
   };
 
-  if (loading) return <div className="card p-4 sm:p-5 flex justify-center"><Spinner /></div>;
+  if (loading) return <div className="card"><SectionLoading /></div>;
   if (!detail) return null;
 
   const { interactions: ix } = detail;
@@ -590,7 +590,7 @@ export function RelationsOverview({ teamId }: { teamId: string }) {
   }, [teamId]);
 
   if (error) return <div className="card p-4 text-sm text-card-red">Vztahy s trenéry se nepodařilo načíst.</div>;
-  if (!relations) return <div className="flex justify-center py-10"><Spinner /></div>;
+  if (!relations) return <SectionLoading />;
   if (relations.length === 0) return <div className="card p-4 text-sm text-muted">V lize zatím nejsou další trenéři.</div>;
 
   return (

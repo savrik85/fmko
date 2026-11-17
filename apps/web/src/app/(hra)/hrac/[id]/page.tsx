@@ -10,7 +10,7 @@ import { useOpenPlayerConversation } from "@/hooks/use-open-player-conversation"
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { PotentialProgress } from "@/components/players/potential-progress";
 import { usePotencial, PotentialStars, PotentialBadge } from "@/components/players/potential-summary";
-import { PositionBadge, SectionLabel, Spinner, BadgePreview, JerseyPreview, useConfirm, DataTable, EntityCell, ScoreChip, RatingPill, ListCard, ListRow, RowIcon, ShowMore, type MatchOutcome } from "@/components/ui";
+import { PositionBadge, SectionLabel, BadgePreview, JerseyPreview, useConfirm, DataTable, EntityCell, ScoreChip, RatingPill, ListCard, ListRow, RowIcon, ShowMore, type MatchOutcome, SectionLoading, PageLoading } from "@/components/ui";
 import { SquadNumberEditor } from "./SquadNumberEditor";
 import { PlayerCompare } from "./PlayerCompare";
 import { generateCharacteristics, type PlayerTag } from "@/lib/characteristics";
@@ -479,7 +479,7 @@ export default function PlayerDetailPage() {
     setOfferSending(false);
   }
 
-  if (loading) return <div className="min-h-dvh flex items-center justify-center"><Spinner size="lg" /></div>;
+  if (loading) return <PageLoading />;
   if (!player || !team) return <div className="page-container">Hráč nenalezen.</div>;
 
   const condition = player.lifeContext?.condition ?? 50;
@@ -1723,7 +1723,7 @@ export default function PlayerDetailPage() {
       {activeTab === "ucast" && isOwnPlayer && (
         <>
           {!attendanceLoaded ? (
-            <div className="card p-6 flex items-center justify-center min-h-[120px]"><Spinner /></div>
+            <div className="card"><SectionLoading /></div>
           ) : !attendance ? (
             <div className="card p-4 text-sm text-muted">Data o docházce se nepodařilo načíst.</div>
           ) : (

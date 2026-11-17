@@ -10,7 +10,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { apiFetch, apiAction } from "@/lib/api";
-import { Sheet, SheetDialog, PositionBadge, Spinner, useConfirm } from "@/components/ui";
+import { Sheet, SheetDialog, PositionBadge, useConfirm, SectionLoading } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { MoneyInput, formatAmount } from "@/components/ui/money-input";
 import { TransferTermsFields, PLAIN_TERMS, type TermsValue } from "@/components/transfers/transfer-terms";
@@ -140,7 +140,7 @@ export function ScoutReportSheet({ teamId, reportId, onClose, onChanged }: {
   return (
     <Sheet open onClose={onClose} title={name || "Hlášení skauta"}>
       <div className="px-5 pt-3 sm:pt-5 pb-5 space-y-4">
-        {!data && !error && <div className="py-8 flex justify-center"><Spinner /></div>}
+        {!data && !error && <SectionLoading />}
         {error && (
           <div className="text-center py-6 space-y-3">
             <div className="text-red-600 font-heading font-bold">{error}</div>

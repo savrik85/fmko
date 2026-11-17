@@ -5,7 +5,7 @@ import Link from "next/link";
 import { apiFetch, type Team, type Player } from "@/lib/api";
 import { useTeam } from "@/context/team-context";
 import { StammtischCard } from "@/components/relations/StammtischCard";
-import { Spinner, ListCard, ListRow, type BadgePattern } from "@/components/ui";
+import { ListCard, ListRow, type BadgePattern, PageLoading } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { ClubScarf, type ScarfPattern } from "@/components/team/club-scarf";
 
@@ -184,7 +184,7 @@ export default function HospodaPage() {
     }
   };
 
-  if (loading) return <div className="page-container flex items-center justify-center min-h-[40vh]"><Spinner /></div>;
+  if (loading) return <PageLoading />;
 
   // Top pijani — kolikrát byl v hospodě. Hráče, kteří už v týmu nejsou
   // (prodáni/uvolněni), do Síně slávy nepouštíme — odkaz na profil by byl 404.

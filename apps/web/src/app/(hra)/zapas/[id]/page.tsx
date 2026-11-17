@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { odesloLidi, zavrenoNaZapasy } from "@okresni-masina/shared";
 import { apiFetch } from "@/lib/api";
-import { Spinner, SectionLabel, BadgePreview, PositionBadge, ListRow, RatingPill, ListCard, RowGroup, StatusChip, type RowTone } from "@/components/ui";
+import { SectionLabel, BadgePreview, PositionBadge, ListRow, RatingPill, ListCard, RowGroup, StatusChip, type RowTone, PageLoading } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 import { useTeam } from "@/context/team-context";
 import { MatchBreakdown } from "@/components/MatchBreakdown";
@@ -141,7 +141,7 @@ export default function MatchDetailPage() {
       .catch(() => loadCup());
   }, [matchId, router]);
 
-  if (loading) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner size="lg" /></div>;
+  if (loading) return <PageLoading />;
   if (!match) return <div className="page-container">Zápas nenalezen.</div>;
 
   const hc = match.home_color || "#2D5F2D";

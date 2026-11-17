@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
-import { Spinner, SectionLabel, BadgePreview, PositionBadge, PageHeader, Tabs, DataTable, EntityCell, ListCard, ListRow, ListEmpty, RowGroup, RowIcon, ResultChip, type DataColumn, type MatchOutcome } from "@/components/ui";
+import { SectionLabel, BadgePreview, PositionBadge, PageHeader, Tabs, DataTable, EntityCell, ListCard, ListRow, ListEmpty, RowGroup, RowIcon, ResultChip, type DataColumn, type MatchOutcome, PageLoading, SectionLoading } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 import { PreseasonNotice } from "@/components/team/preseason-notice";
 import { LeagueStatsTab, type StatsData } from "@/components/league/league-stats";
@@ -223,7 +223,7 @@ function LigaPage() {
     setTab("tabulka");
   };
 
-  if (loadingStandings) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
+  if (loadingStandings) return <PageLoading />;
 
   const displayName = seasonNum ? `${leagueName}. Sezóna ${seasonNum}` : (leagueName || "Liga");
 
@@ -322,7 +322,7 @@ function LigaPage() {
       {tab === "vysledky" && <ScheduleTab rounds={rounds} loaded={loadedTabs.has("vysledky")} teamId={teamId!} showAll={false} />}
       {tab === "statistiky" && <LeagueStatsTab data={statsData} loaded={loadedTabs.has("statistiky")} />}
       {isOtherLeague && tab === "zpravodaj" && (
-        !loadedTabs.has("zpravodaj") ? <div className="flex justify-center py-8"><Spinner /></div> : (
+        !loadedTabs.has("zpravodaj") ? <SectionLoading /> : (
           <ListCard title="Zpravodaj" count={newsArticles.length || undefined}>
             {newsArticles.length === 0 && <ListEmpty icon="📰">Zatím žádné zprávy.</ListEmpty>}
             {newsArticles.map((a) => {
@@ -540,7 +540,7 @@ function StandingsTab({ standings, teamId, movement }: { standings: Standing[]; 
 // ═══ Rozpis / Výsledky ═══
 
 function ScheduleTab({ rounds, loaded, teamId, showAll }: { rounds: LeagueRound[]; loaded: boolean; teamId: string; showAll: boolean }) {
-  if (!loaded) return <div className="flex items-center justify-center py-12"><Spinner /></div>;
+  if (!loaded) return <SectionLoading />;
 
   const displayRounds = showAll
     ? rounds

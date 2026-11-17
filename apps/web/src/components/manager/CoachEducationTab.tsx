@@ -9,7 +9,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { apiAction, apiFetch } from "@/lib/api";
-import { SectionLabel, Spinner, ListCard, ListRow, ListEmpty, RowIcon, RowGroup } from "@/components/ui";
+import { SectionLabel, ListCard, ListRow, ListEmpty, RowIcon, RowGroup, SectionLoading } from "@/components/ui";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { COURSE_ATTR_LABELS, type CourseAttr } from "@okresni-masina/shared";
 import { LicenceBadge } from "./LicenceBadge";
@@ -180,7 +180,7 @@ export function CoachEducationTab({ teamId, isOwn }: { teamId: string; isOwn: bo
   };
 
   if (error) return <div className="card p-4 text-sm text-card-red">{error}</div>;
-  if (!data) return <div className="flex justify-center py-10"><Spinner /></div>;
+  if (!data) return <SectionLoading />;
 
   const a = data.active;
   const offers = data.offers ?? [];

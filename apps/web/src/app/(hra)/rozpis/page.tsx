@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, showError } from "@/lib/api";
-import { Spinner, SectionLabel, BadgePreview, PageHeader, useConfirm, Tabs, ListCard, ListRow, ListEmpty, ScoreChip, type MatchOutcome } from "@/components/ui";
+import { SectionLabel, BadgePreview, PageHeader, useConfirm, Tabs, ListCard, ListRow, ListEmpty, ScoreChip, type MatchOutcome, PageLoading, SectionLoading } from "@/components/ui";
 import { FixtureGroup, FixtureRow, type FixtureSide } from "@/components/match/fixture-row";
 import type { BadgePattern } from "@/components/ui";
 import { PreseasonNotice } from "@/components/team/preseason-notice";
@@ -152,7 +152,7 @@ export default function SchedulePage() {
       .catch(() => setLeagueLoading(false));
   }, [tab, teamId, leagueLoaded]);
 
-  if (loading) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
+  if (loading) return <PageLoading />;
 
   const played = matches.filter((m) => m.status === "simulated");
   const upcoming = matches.filter((m) => m.status !== "simulated");
@@ -240,7 +240,7 @@ export default function SchedulePage() {
       {tab === "league" && (
         <>
           {leagueLoading && (
-            <div className="flex items-center justify-center py-12"><Spinner /></div>
+            <SectionLoading />
           )}
           {!leagueLoading && rounds.length === 0 && (
             <ListCard><ListEmpty icon="📅">Rozpis ligy zatím není dostupný.</ListEmpty></ListCard>

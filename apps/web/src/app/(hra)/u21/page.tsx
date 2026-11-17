@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { LeagueStatsTab, type StatsData } from "@/components/league/league-stats";
 import { apiFetch } from "@/lib/api";
-import { Spinner, PositionBadge, BadgePreview, useConfirm, Tabs, useTabParam, DataTable, EntityCell, ListCard, ListRow, ListEmpty, RowValue, RatingPill, ratingToneIn, type DataColumn } from "@/components/ui";
+import { PositionBadge, BadgePreview, useConfirm, Tabs, useTabParam, DataTable, EntityCell, ListCard, ListRow, ListEmpty, RowValue, RatingPill, ratingToneIn, type DataColumn, SectionLoading } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { U21Rozvoj } from "@/components/players/u21-rozvoj";
 import { YouthSectionNav } from "@/components/players/youth-section-nav";
@@ -252,7 +252,7 @@ export default function U21Page() {
   if (loading) {
     return (
       <div className="p-3 sm:p-4 md:p-6 space-y-3">
-        <div className="flex items-center justify-center py-12"><Spinner /></div>
+        <SectionLoading />
       </div>
     );
   }
@@ -316,7 +316,7 @@ export default function U21Page() {
         </div>
       )}
 
-      {tab === "kadr" && !squadLoaded && !error && <div className="flex justify-center p-8"><Spinner /></div>}
+      {tab === "kadr" && !squadLoaded && !error && <SectionLoading />}
       {tab === "kadr" && squadLoaded && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
           {/* A-tým — mladí hráči k odeslání */}

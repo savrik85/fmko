@@ -1,6 +1,6 @@
 "use client";
 
-import { Card, CardBody, SectionLabel, Spinner, ListCard, ListRow, ListEmpty, RowValue } from "@/components/ui";
+import { Card, CardBody, SectionLabel, ListCard, ListRow, ListEmpty, RowValue, SectionLoading } from "@/components/ui";
 import { formatFavorDelta, formatGameDay } from "@/lib/sponsor-format";
 import { FAVOR_BAND_LABELS, FAVOR_BAND_ORDER, favorLabel } from "@/lib/sponsor-owners";
 import type { FavorBand, FirmFavorItem, SponsorOverview } from "@/lib/sponsor-page-types";
@@ -31,7 +31,7 @@ export function PopularityTab({ overview, error }: { overview: SponsorOverview |
   if (error) {
     return <div className="text-sm text-card-red bg-red-50 border border-red-200 rounded-soft px-3 py-2">Přehled se nepodařilo načíst: {error}</div>;
   }
-  if (!overview) return <div className="flex justify-center py-8"><Spinner /></div>;
+  if (!overview) return <SectionLoading />;
   if (overview.firmsCount === 0 || overview.avgFavor == null) {
     return <Card><CardBody><p className="text-center text-sm text-muted py-3">V okrese zatím nejsou žádné firmy.</p></CardBody></Card>;
   }
