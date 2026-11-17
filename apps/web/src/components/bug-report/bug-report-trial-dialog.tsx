@@ -4,27 +4,21 @@ import { useEffect, useMemo, useState } from "react";
 import { Sheet } from "@/components/ui/sheet";
 import type { CaptureResult } from "@/lib/page-capture";
 
-const ENGINE_LABELS = ["A", "B"] as const;
-
 /**
- * Zkouška focení stránky (fáze 1 nahlášení chyby): dva snímky stejné stránky
- * ze dvou knihoven pod sebou, s časem a velikostí. Autor na iPhonu vybere,
- * který víc odpovídá stránce. Nic se neodesílá.
+ * Zkouška focení celé stránky (fáze 1 nahlášení chyby): snímek s časem
+ * a velikostí, aby šel na iPhonu porovnat se stránkou. Nic se neodesílá.
  */
 export function BugReportTrialDialog({
-  results,
+  result,
   onClose,
 }: {
-  results: CaptureResult[];
+  result: CaptureResult;
   onClose: () => void;
 }) {
-  const urls = useMemo(
-    () => results.map((r) => (r.blob ? URL.createObjectURL(r.blob) : null)),
-    [results],
-  );
-  useEffect(() => () => urls.forEach((url) => { if (url) URL.revokeObjectURL(url); }), [urls]);
+  const url = useMemo(() => (result.blob ? URL.createObjectURL(result.blob) : null), [result]);
+  useEffect(() => () => { if (url) URL.revokeObjectURL(url); }, [url]);
 
-  const [zoomed, setZoomed] = useState<number | null>(null);
+  const [zoomed, setZoomed] = useState(false);
 
   return (
     <Sheet open onClose={onClose} title="Zkouška focení stránky" closeOnBackdrop={false} maxWidth="520px">
@@ -41,45 +35,42 @@ export function BugReportTrialDialog({
           </button>
         </div>
         <p className="mt-1 text-sm text-gray-700">
-          Hlášení se zatím neodesílá. Porovnej, který snímek víc odpovídá stránce. Ťuknutím snímek zvětšíš.
+          Hlášení se zatím neodesílá. Zkontroluj, jestli snímek odpovídá stránce. Ťuknutím ho zvětšíš.
         </p>
 
-        <div className="mt-4 space-y-5">
-          {results.map((result, i) => {
-            const url = urls[i];
-            const isZoomed = zoomed === i;
-            return (
-              <figure key={result.engine}>
-                <figcaption className="flex items-baseline justify-between text-sm mb-1.5">
-                  <span className="font-heading font-bold text-ink">Snímek {ENGINE_LABELS[i] ?? i + 1}</span>
-                  <span className="text-gray-600 tabular-nums">
-                    {result.ms} ms
-                    {result.blob && <> · {Math.round(result.blob.size / 1024)} kB</>}
-                  </span>
-                </figcaption>
-                {url ? (
-                  <button
-                    type="button"
-                    onClick={() => setZoomed(isZoomed ? null : i)}
-                    className="block w-full rounded-card overflow-hidden border border-gray-300 bg-white"
-                    aria-label={isZoomed ? "Zmenšit snímek" : "Zvětšit snímek"}
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element -- blob URL, next/image ho neumí */}
-                    <img
-                      src={url}
-                      alt={`Snímek ${ENGINE_LABELS[i] ?? i + 1}`}
-                      className={isZoomed ? "w-full h-auto" : "w-full h-56 object-cover object-top"}
-                    />
-                  </button>
-                ) : (
-                  <p className="rounded-card border border-card-red/40 bg-red-50 px-3 py-2 text-sm text-card-red">
-                    Snímek se nepodařilo udělat: {result.error ?? "neznámá chyba"}
-                  </p>
-                )}
-              </figure>
-            );
-          })}
-        </div>
+        <figure className="mt-4">
+          <figcaption className="flex items-baseline justify-between text-sm mb-1.5">
+            <span className="font-heading font-bold text-ink">Celá stránka</span>
+            <span className="text-gray-600 tabular-nums">
+              {result.ms} ms
+              {result.blob && <> · {Math.round(result.blob.size / 1024)} kB</>}
+            </span>
+          </figcaption>
+          {url ? (
+            <button
+              type="button"
+              onClick={() => setZoomed(!zoomed)}
+              className="block w-full rounded-card overflow-hidden border border-gray-300 bg-white"
+              aria-label={zoomed ? "Zmenšit snímek" : "Zvětšit snímek"}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element -- blob URL, next/image ho neumí */}
+              <img
+                src={url}
+                alt="Snímek celé stránky"
+                className={zoomed ? "w-full h-auto" : "w-full h-72 object-cover object-top"}
+              />
+            </button>
+          ) : (
+            <p className="rounded-card border border-card-red/40 bg-red-50 px-3 py-2 text-sm text-card-red">
+              Snímek se nepodařilo udělat: {result.error ?? "neznámá chyba"}
+            </p>
+          )}
+          {result.truncated && (
+            <p className="mt-1.5 text-xs text-gray-600">
+              Stránka je hodně dlouhá, snímek ukazuje jen okolí místa, kde jsi byl.
+            </p>
+          )}
+        </figure>
       </div>
     </Sheet>
   );

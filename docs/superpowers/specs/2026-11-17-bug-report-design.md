@@ -96,8 +96,10 @@ Kde:
 Průběh:
 1. Hráč ťukne na Nahlásit chybu.
 2. Menu se zavře.
-3. Vyfotí se viditelná část obrazovky tak, jak ji hráč vidí, i s horní a spodní lištou,
-   tedy jako screen tlačítky telefonu, ne celá dlouhá stránka.
+3. Vyfotí se celá stránka jako dlouhý screenshot: nahoře horní lišta, pod ní celý obsah
+   od začátku do konce, dole spodní lišta (přání autora po zkoušce 2026-11-17). Strop
+   6 000 CSS px (~7 obrazovek): delší stránka (Zpravodaj ~15 800) se vyfotí jen kolem
+   místa, kde hráč je, a okno to napíše. Knihovna: modern-screenshot (vyhrála zkoušku A/B).
 4. Otevře se okno:
 
 ```
@@ -175,9 +177,7 @@ Co se přibalí samo (hráč to nevidí):
 
 ## Co zůstává na stavitelovi
 
-- Výběr knihovny na vyfocení stránky (např. `modern-screenshot`, `@zumer/snapdom`).
-  Rozhoduje, jak věrně vyfotí stránku v Safari na iPhonu i v nainstalované aplikaci
-  (písma, obrázky, `position: fixed` lišty) a jak rychle to zvládne.
+- ~~Výběr knihovny~~ rozhodnuto: `modern-screenshot` (autor po zkoušce A/B 2026-11-17).
 - Jak zachytit chyby z konzole (vlastní malý zásobník od startu aplikace).
 - Jak dostat verzi buildu do webu (dnes žádná proměnná `NEXT_PUBLIC_*` s commitem není).
 - Přesná podoba rozbalovacího menu a okna hlášení.
