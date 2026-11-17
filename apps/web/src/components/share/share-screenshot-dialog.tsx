@@ -92,8 +92,8 @@ export function ShareScreenshotDialog({
   const button = "flex-1 min-w-[96px] h-11 rounded-control font-heading font-bold text-sm transition-colors disabled:opacity-50";
 
   return (
-    <Sheet open onClose={onClose} title="Fotka stránky" maxWidth="520px">
-      <div data-capture-ignore className="px-5 pb-6 pt-2 sm:pt-5">
+    <Sheet open onClose={onClose} title="Fotka stránky" maxWidth="520px" centered>
+      <div data-capture-ignore className="px-5 pb-6 pt-5">
         <div className="flex items-start justify-between gap-3">
           <h2 className="font-heading font-bold text-lg text-ink">Fotka stránky</h2>
           <button

@@ -62,8 +62,8 @@ export function BugReportDialog({
   };
 
   return (
-    <Sheet open onClose={onClose} title="Nahlásit chybu" closeOnBackdrop={false} maxWidth="520px">
-      <div data-capture-ignore className="px-5 pb-6 pt-2 sm:pt-5">
+    <Sheet open onClose={onClose} title="Nahlásit chybu" closeOnBackdrop={false} maxWidth="520px" centered>
+      <div data-capture-ignore className="px-5 pb-6 pt-5">
         <div className="flex items-start justify-between gap-3">
           <h2 className="font-heading font-bold text-lg text-ink">Nahlásit chybu</h2>
           <button
