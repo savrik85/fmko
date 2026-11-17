@@ -37,11 +37,13 @@ export async function currentGameDay(db: D1Database): Promise<string | null> {
 /**
  * AI áčka, která hrají soutěž (U21 si sestavu staví automat, ty se nepočítají). Jen kluby
  * z existující ligy: kluby smazané ligy (na testingu po starých pokusech) nehrají a nemají hráče.
+ * Kluby zavřené čekající ligy (league/waiting-league.ts) nic nedělají, dokud ji neotevře registrace.
  */
 export async function listAiClubs(db: D1Database): Promise<string[]> {
   const rows = await db.prepare(
     `SELECT t.id FROM teams t JOIN leagues l ON l.id = t.league_id
       WHERE t.user_id = 'ai' AND t.parent_team_id IS NULL AND COALESCE(t.team_type, 'senior') != 'u21'
+        AND l.waiting = 0
       ORDER BY t.id`,
   ).all<{ id: string }>()
     .catch((e) => { logger.error({ module: M }, "seznam AI klubů", e); return { results: [] as Array<{ id: string }> }; });

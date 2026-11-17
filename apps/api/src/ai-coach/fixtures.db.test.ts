@@ -24,7 +24,7 @@ beforeAll(async () => {
   db = await miniflare.getD1Database("DB");
   for (const sql of [
     "CREATE TABLE seasons (id TEXT PRIMARY KEY, number INTEGER, status TEXT)",
-    "CREATE TABLE leagues (id TEXT PRIMARY KEY, name TEXT)",
+    "CREATE TABLE leagues (id TEXT PRIMARY KEY, name TEXT, waiting INTEGER NOT NULL DEFAULT 0)",
     "CREATE TABLE teams (id TEXT PRIMARY KEY, name TEXT, user_id TEXT, parent_team_id TEXT, league_id TEXT, team_type TEXT, game_date TEXT)",
     "CREATE TABLE season_calendar (id TEXT PRIMARY KEY, league_id TEXT, season_number INTEGER, scheduled_at TEXT, status TEXT)",
     "CREATE TABLE matches (id TEXT PRIMARY KEY, calendar_id TEXT, league_id TEXT, home_team_id TEXT, away_team_id TEXT, status TEXT, created_at TEXT)",
@@ -33,7 +33,7 @@ beforeAll(async () => {
     "CREATE TABLE cup_teams (id TEXT PRIMARY KEY, cup_id TEXT, team_id TEXT, name TEXT)",
     "CREATE TABLE cup_matches (id TEXT PRIMARY KEY, cup_id TEXT, round INTEGER, home_cup_team_id TEXT, away_cup_team_id TEXT, status TEXT, scheduled_at TEXT)",
     "INSERT INTO seasons VALUES ('s2', 2, 'finished'), ('s3', 3, 'active')",
-    "INSERT INTO leagues VALUES ('lg1', 'Přebor')",
+    "INSERT INTO leagues (id, name) VALUES ('lg1', 'Přebor')",
     `INSERT INTO teams VALUES
       ('ai-1', 'Sokol Lhota', 'ai', NULL, 'lg1', 'senior', '${DAY}T16:00:00.000Z'),
       ('ai-1-u21', 'Sokol Lhota U21', 'ai', 'ai-1', 'lg1', 'u21', '${DAY}T16:00:00.000Z'),

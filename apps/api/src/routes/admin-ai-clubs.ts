@@ -63,6 +63,7 @@ import { findAbandonedClubs, MAX_TAKEOVERS_PER_RUN, runAbandonedClubTakeover } f
 import { openDistrictRegistration } from "../ai-clubs/district-opening";
 import { alignLeagueSchedule } from "../league/align-schedule";
 import { settleCaughtUpLeague } from "../league/catch-up-round";
+import { closeWaitingLeague } from "../league/waiting-league";
 import { enqueueLeagueCatchUp, startWaitingLeague } from "../league/start-league";
 import { clearLeagueSchedule, deleteLeague } from "../league/delete-league";
 import { extendLeagueToDouble } from "../league/extend-schedule";
@@ -183,6 +184,20 @@ adminAiClubsRouter.post("/settle-catch-up", async (c) => {
   } catch (e) {
     logger.error({ module: M }, `vyrovnání dohnaných kol ligy ${leagueId}`, e);
     return c.json({ error: "Vyrovnání dohnaných kol selhalo, podrobnosti jsou v logu" }, 500);
+  }
+});
+
+// Zavření čekající ligy (IV. třída do zásoby) do první přihlášky: AI kluby nic nedělají,
+// trh a přáteláky ji nevidí, rozjeté inzeráty, nabídky a výzvy se stáhnou. S dryRun=1 náhled.
+adminAiClubsRouter.post("/close-waiting-league", async (c) => {
+  const leagueId = c.req.query("leagueId")?.trim();
+  if (!leagueId) return c.json({ error: "Chybí leagueId" }, 400);
+  try {
+    const result = await closeWaitingLeague(c.env.DB, leagueId, { dryRun: isDryRun(c.req.query("dryRun")) });
+    return c.json(result, result.ok ? 200 : 400);
+  } catch (e) {
+    logger.error({ module: M }, `zavření čekající ligy ${leagueId}`, e);
+    return c.json({ error: "Zavření ligy selhalo, podrobnosti jsou v logu" }, 500);
   }
 });
 

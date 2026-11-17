@@ -28,7 +28,7 @@ beforeAll(async () => {
 
   await executeStatements(`
     CREATE TABLE villages (id TEXT PRIMARY KEY, name TEXT NOT NULL, district TEXT NOT NULL, lat REAL NOT NULL, lng REAL NOT NULL);
-    CREATE TABLE leagues (id TEXT PRIMARY KEY, name TEXT NOT NULL, district TEXT NOT NULL);
+    CREATE TABLE leagues (id TEXT PRIMARY KEY, name TEXT NOT NULL, district TEXT NOT NULL, waiting INTEGER NOT NULL DEFAULT 0);
     CREATE TABLE teams (
       id TEXT PRIMARY KEY, user_id TEXT NOT NULL, name TEXT NOT NULL, league_id TEXT, village_id TEXT,
       parent_team_id TEXT, team_type TEXT NOT NULL DEFAULT 'senior', budget INTEGER NOT NULL DEFAULT 0, reputation INTEGER NOT NULL DEFAULT 50
@@ -61,7 +61,7 @@ beforeAll(async () => {
     CREATE TABLE ai_negotiations (id TEXT PRIMARY KEY, team_id TEXT NOT NULL, listing_id TEXT, status TEXT NOT NULL);
 
     INSERT INTO villages VALUES ('v-praha', 'Břevnov', 'Praha', 50.08, 14.36), ('v-pt', 'Vimperk', 'Prachatice', 49.05, 13.78);
-    INSERT INTO leagues VALUES ('l-praha', 'Přebor Prahy', 'Praha'), ('l-pt', 'Okresní přebor Prachatice', 'Prachatice'),
+    INSERT INTO leagues (id, name, district) VALUES ('l-praha', 'Přebor Prahy', 'Praha'), ('l-pt', 'Okresní přebor Prachatice', 'Prachatice'),
       ('l-pt-lower', 'III. třída Prachatice', 'Prachatice');
     INSERT INTO teams (id, user_id, name, league_id, village_id) VALUES
       ('praha-human', 'user-praha', 'FK Břevnov', 'l-praha', 'v-praha'),

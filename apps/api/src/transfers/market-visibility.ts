@@ -67,6 +67,7 @@ export async function findVisibleListings(db: D1Database, team: { id: string; le
      LEFT JOIN injuries i ON p.id = i.player_id AND i.days_remaining > 0 AND tl.is_ai_listing = 0
      WHERE tl.status = 'active' AND tl.team_id != ?
        AND (tl.league_id = ? OR (tl.is_ai_listing = 0 AND t.id IS NOT NULL))
+       AND COALESCE(l.waiting, 0) = 0
      ORDER BY CASE WHEN tl.league_id = ? THEN 0 ELSE 1 END, tl.created_at DESC`,
   ).bind(team.id, team.leagueId, team.leagueId).all<Record<string, unknown>>();
   return listings.results.filter((l) => !rejectedBy(l.rejected_by, "listing").includes(team.id));

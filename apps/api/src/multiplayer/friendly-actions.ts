@@ -9,6 +9,7 @@
  * jen lidský klub.
  */
 
+import { WAITING_TEAM_ERROR, isTeamInWaitingLeague } from "../league/waiting-league";
 import { logger } from "../lib/logger";
 import { pragueHour } from "../lib/match-tick-schedule";
 import { sendSystemSMS } from "../messaging/system-sms";
@@ -156,6 +157,7 @@ export async function sendChallenge(
   const [team, opponent] = await Promise.all([loadFriendlyClub(db, teamId), loadFriendlyClub(db, opponentId)]);
   if (!isPlayableClub(team)) return fail(400, "Přáteláky hraje áčko klubu.");
   if (!isPlayableClub(opponent)) return fail(400, "Přáteláky lze hrát pouze proti hráčským týmům");
+  if (await isTeamInWaitingLeague(db, opponentId)) return fail(409, WAITING_TEAM_ERROR);
 
   const today = friendlyToday(team);
   const hour = pragueHour(opts.now ?? new Date());
@@ -360,6 +362,7 @@ export async function takeFriendlyOffer(
   const [team, poster] = await Promise.all([loadFriendlyClub(db, teamId), loadFriendlyClub(db, offer.team_id)]);
   if (!isPlayableClub(team)) return fail(400, "Přáteláky hraje áčko klubu.");
   if (!isPlayableClub(poster)) return fail(409, "Nabídka už neplatí.");
+  if (await isTeamInWaitingLeague(db, offer.team_id)) return fail(409, "Nabídka už neplatí.");
 
   const today = friendlyToday(team);
   const hour = pragueHour(opts.now ?? new Date());

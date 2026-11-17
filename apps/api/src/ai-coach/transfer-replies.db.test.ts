@@ -140,7 +140,7 @@ beforeAll(async () => {
     CREATE TABLE club_links (team_id TEXT PRIMARY KEY, group_id TEXT NOT NULL, note TEXT, created_at TEXT);
     CREATE TABLE sponsor_contracts (id TEXT PRIMARY KEY, team_id TEXT NOT NULL, monthly_amount INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'active');
     CREATE TABLE village_team_favor (team_id TEXT NOT NULL, official_id TEXT, favor INTEGER NOT NULL DEFAULT 50);
-    CREATE TABLE leagues (id TEXT PRIMARY KEY, name TEXT, district TEXT NOT NULL, league_type TEXT NOT NULL DEFAULT 'senior', parent_league_id TEXT);
+    CREATE TABLE leagues (id TEXT PRIMARY KEY, name TEXT, district TEXT NOT NULL, league_type TEXT NOT NULL DEFAULT 'senior', parent_league_id TEXT, waiting INTEGER NOT NULL DEFAULT 0);
     CREATE TABLE teams (
       id TEXT PRIMARY KEY, user_id TEXT NOT NULL, parent_team_id TEXT, team_type TEXT NOT NULL DEFAULT 'senior', name TEXT NOT NULL,
       budget INTEGER NOT NULL DEFAULT 0, game_date TEXT, league_id TEXT, village_id TEXT,

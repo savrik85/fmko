@@ -13,12 +13,12 @@ beforeAll(async () => {
   });
   db = await miniflare.getD1Database("DB");
 
-  await db.exec("CREATE TABLE leagues (id TEXT PRIMARY KEY, parent_league_id TEXT, league_type TEXT NOT NULL)");
+  await db.exec("CREATE TABLE leagues (id TEXT PRIMARY KEY, parent_league_id TEXT, league_type TEXT NOT NULL, waiting INTEGER NOT NULL DEFAULT 0)");
   await db.exec("CREATE TABLE teams (id TEXT PRIMARY KEY, league_id TEXT NOT NULL, parent_team_id TEXT, user_id TEXT NOT NULL, name TEXT NOT NULL)");
   await db.exec("CREATE TABLE players (id TEXT PRIMARY KEY, team_id TEXT NOT NULL, first_name TEXT NOT NULL, last_name TEXT NOT NULL, nickname TEXT, age INTEGER NOT NULL, position TEXT NOT NULL, overall_rating INTEGER NOT NULL, weekly_wage INTEGER NOT NULL DEFAULT 0, skills TEXT NOT NULL DEFAULT '{}', physical TEXT NOT NULL DEFAULT '{}', avatar TEXT NOT NULL DEFAULT '{}', squad_number INTEGER, nationality TEXT, status TEXT)");
 
   const insertLeague = (id: string, parentId: string | null, type: string) =>
-    db.prepare("INSERT INTO leagues VALUES (?, ?, ?)").bind(id, parentId, type);
+    db.prepare("INSERT INTO leagues (id, parent_league_id, league_type) VALUES (?, ?, ?)").bind(id, parentId, type);
   const insertTeam = (id: string, leagueId: string, parentId: string | null, userId: string, name: string) =>
     db.prepare("INSERT INTO teams VALUES (?, ?, ?, ?, ?)").bind(id, leagueId, parentId, userId, name);
   const insertPlayer = (id: string, teamId: string, firstName: string, lastName: string, age: number, position: string, rating: number, status: string) =>

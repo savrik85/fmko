@@ -10,6 +10,7 @@
  * telefon nemá a nikdo by je nečetl.
  */
 
+import { WAITING_TEAM_ERROR, isTeamInWaitingLeague } from "../league/waiting-league";
 import type { Bindings } from "../index";
 import { createRng, cryptoSeed } from "../generators/rng";
 import { logger } from "../lib/logger";
@@ -286,6 +287,8 @@ export async function createTransferOffer(
   // Nabídky jdou lidským i AI klubům (spec 3.7). Klub mimo hru vlastní soupisku nemá.
   const ownerTeam = await db.prepare("SELECT user_id FROM teams WHERE id = ?").bind(targetOwnerId).first<{ user_id: string }>();
   if (!ownerTeam) return fail(400, "Klub hráče nenalezen");
+  // Zavřená čekající liga (IV. třída do zásoby) s nikým neobchoduje (league/waiting-league.ts).
+  if (await isTeamInWaitingLeague(db, targetOwnerId) || await isTeamInWaitingLeague(db, buyerClubTeamId)) return fail(409, WAITING_TEAM_ERROR);
   // Propojené kluby: platí pro přestup, hostování, výměnu i odkup z hostování.
   if (await areClubsLinked(db, buyerClubTeamId, targetOwnerId)) return fail(403, LINKED_CLUBS_ERRORS.transfer);
 
