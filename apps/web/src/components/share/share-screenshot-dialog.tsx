@@ -106,7 +106,7 @@ export function ShareScreenshotDialog({
           </button>
         </div>
         <p className="mt-1 text-sm text-gray-700">
-          Dole je pruh s klubem a adresou hry. Pošli ji kamarádům nebo ji ulož.
+          V rámečku je klub a adresa hry. Pošli ji kamarádům nebo ji ulož.
         </p>
 
         <div className="mt-3 flex flex-wrap gap-2">

@@ -6,7 +6,7 @@ import { HelpMenu, type CaptureAction } from "./help-menu";
 import { BugReportDialog } from "@/components/bug-report/bug-report-dialog";
 import { ShareScreenshotDialog } from "@/components/share/share-screenshot-dialog";
 import { useTeam } from "@/context/team-context";
-import { capturePage, type CaptureResult } from "@/lib/page-capture";
+import { capturePage, captureVisibleContent, type CaptureResult } from "@/lib/page-capture";
 import { installDiagnostics, recordPageVisit } from "@/lib/client-diagnostics";
 import { brandScreenshot } from "@/lib/share-screenshot";
 
@@ -403,7 +403,7 @@ export function Napoveda() {
         setCapture(await capturePage());
         return;
       }
-      const result = await capturePage({ hideBottomNav: true, visibleOnly: true });
+      const result = await captureVisibleContent();
       if (!result.blob) { setShare({ canvas: null, error: result.error }); return; }
       try {
         setShare({ canvas: await brandScreenshot(result.blob, result.width, teamName) });
