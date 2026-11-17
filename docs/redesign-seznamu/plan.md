@@ -447,25 +447,35 @@ Když narazíš na chybu ve hře, která s redesignem nesouvisí, platí protoko
 
 ## 10. Stav převodu (17. 11. 2026)
 
-Všechny seznamy z inventáře stojí na sdílených dílech, včetně míst, která byla
-původně vedená jako výjimky: Sestava (DataTable s tónem `selected` a `scroll.until`),
-detail zápasu, rozpisy (FixtureRow), grémium, sázky, widgety na Domů (`dense`),
-U21 a akademie, hospoda, nápověda, karty s rozhodnutím (nabídky, výzvy na přáteláky,
-události, petice, investice, brigády, kurzy trenéra) a pruhové žebříčky.
+Převedené: Sestava (DataTable s tónem `selected` a `scroll.until`), detail zápasu
+včetně gólů, rozpisy (FixtureRow), grémium (pokladna, zápisy, vývěska, integrita,
+listina trestů, rozhodčí), sázky, widgety tabulky a výsledků na Domů (`dense`),
+U21 a akademie, hospoda, nápověda, nabídky v Přestupech, přáteláky, události,
+obec (Moje obec), kurzy trenéra, reputace, pruhové žebříčky.
+
+Kontrola celého inventáře proti kódu 17. 11. našla ještě asi 70 ručně dělaných
+seznamů. Převádí se po skupinách:
+
+- Domů: zbylé widgety (zprávy, trh, kabina, soupeři, karty, rozpis, fanoušci, tribuna, hospoda)
+- Přestupy: poslední přestupy, spekulace, moje inzeráty, poptávky, hostování, splátky a procenta, zápasy hostujícího hráče
+- Kádr: rozbor kádru, karty hráčů na telefonu (PlayerBrowseTable), profil hráče (vztah k trenérovi, zmeškané zápasy, sliby)
+- Liga: zprávy z jiné ligy, výsledky kola z článku
+- Sestava: výběr hráče na telefonu, autobusy fanoušků
+- Kancelář: půjčky ve financích, prodej na stadionu, zaměstnanci a jejich výběr hráčů, sponzoři, bazar, vybavení, stadion, incidenty
+- Tréninky: kdo pomáhá, volno, morálka, přírůstky po hráčích
+- Trenér: úspěchy, rodina, společná historie
+- Obec a okres: lidé u okresní akce, profil obce, obce okresu
+- Grémium a hlasování: návrhy, vedení, volby, nabídky sponzorů soutěže, účetnictví v revizi, pokuty rozhodčích, hlasování
+- Přáteláky: rivalové
 
 Mimo zůstává jen to, co podle sekce 5 seznam není, nebo co plán vynechává sám:
 
 | Místo | Proč |
 |---|---|
 | Telefon, Zpravodaj, Redakce | Vynechané plánem (sekce 4, vlny): vlastní vzhled telefonu a novin. |
-| Volba úrovně akademie, karty trenéra žáků (zaměstnanec, táta) | Přepínač mezi třemi volbami, ne seznam. |
-| Účastníci večera v hospodě, zlepšení hráče na hostování | Štítky v řádku, ne seznam. |
-| „Co to dělá s tréninkem“ u kurzu, podmínky zámku v reputaci | Dvojice štítek a hodnota. |
+| Volba úrovně akademie, karty trenéra žáků, výběr skauta, typy úkolů | Přepínač mezi několika volbami, ne seznam. |
+| Účastníci večera v hospodě, zlepšení hráče na hostování, kluby sledující hráče | Štítky, ne seznam. |
+| „Co to dělá s tréninkem“ u kurzu, podmínky zámku v reputaci, atributy trenéra | Dvojice štítek a hodnota. |
+| Sázkový přehled s kurzy, komentáře v aréně, vlákna zpráv a vyjednávání | Tabule s tlačítky kurzů a chat, ne řádkový seznam. |
+| Konfigurátor tribun a zařízení stadionu | Stavebnice, ne seznam. |
 | Mrtvé bloky starých bidů v Přestupech (`{false && …}`) | Nevykreslují se. |
-
-Čeká na rozhodnutí uživatele:
-
-| Místo | Proč |
-|---|---|
-| Góly v detailu zápasu | Dva sloupce domácí a hosté. Jako `ListRow` (i hustý) by byly na telefonu o 50 až 60 % vyšší, což porušuje pravidlo 8. |
-| „Podle atributů“ v Trénincích | Sloupcový graf přírůstků po atributech. Hustý řádek by ho na telefonu zvětšil o víc než 50 %. |
