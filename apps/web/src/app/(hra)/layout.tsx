@@ -44,7 +44,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   // nad zelenou lištou. Obsah uvnitř má papír vlastní (bg-paper na <main>).
   return (
     <PageHeaderProvider>
-    <div className="h-dvh flex bg-[var(--color-chrome)] overflow-hidden">
+    <div className="app-shell h-dvh flex bg-[var(--color-chrome)] overflow-hidden">
       <FMSidebar />
 
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">

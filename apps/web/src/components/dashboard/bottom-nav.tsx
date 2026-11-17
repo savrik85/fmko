@@ -27,6 +27,13 @@ function useSchodekViewportu(): number {
       // Jen na výšku — na šířku se rozměry takhle porovnávat nedají.
       const naVysku = window.innerHeight > window.innerWidth;
       if (!naVysku || !window.screen?.height) { setSchodek(0); return; }
+      // V nainstalované aplikaci sahá obal hry přes `100lvh` až ke spodní hraně
+      // displeje (globals.css, .app-shell) a lišta leží u jeho spodku. Schodek
+      // se tam neřeší a lišta si nechává místo na systémovou čárku.
+      const fullHeightShell =
+        window.matchMedia("(display-mode: standalone) and (max-width: 639px)").matches &&
+        typeof CSS !== "undefined" && CSS.supports("height", "100lvh");
+      if (fullHeightShell) { setSchodek(0); return; }
       const rozdil = Math.round(window.screen.height - window.innerHeight);
       // Nad 200 px už to nebude safe-area, ale něco jiného (klávesnice apod.).
       setSchodek(rozdil > 4 && rozdil < 200 ? rozdil : 0);
@@ -82,7 +89,7 @@ export function BottomNav() {
   return (
     <nav
       ref={navRef}
-      className="on-dark fixed bottom-0 left-0 right-0 z-[var(--z-nav)] sm:hidden"
+      className="app-bottom-nav on-dark fixed bottom-0 left-0 right-0 z-[var(--z-nav)] sm:hidden"
       style={{
         background: "var(--color-chrome)",
         // Lišta zůstává ukotvená na spodku viewportu. Posouvat ji níž

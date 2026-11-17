@@ -618,6 +618,37 @@ input[type="number"] { -moz-appearance: textfield; }
   }
 }
 
+/* ── PWA na iOS 26: obal hry přes celý displej ────────────────────────────
+   S průhledným stavovým řádkem počítá iOS 26 okno nainstalované aplikace
+   o výšku výřezu kratší než displej (naměřeno 812 proti 874). `100dvh`
+   i `position: fixed; bottom: 0` proto končí nad spodní hranou a pod spodní
+   lištou zbývalo 62 px prázdna. Plnou výšku displeje dává jen `100lvh`.
+
+   `fixed` prvky iOS pod hranou okna ořízne (zkoušeno 2026-11-17, z lišty byl
+   vidět jen horní kousek ikon). Proto je na plnou výšku obal v běžném toku
+   dokumentu a spodní lišta je v něm `absolute`, ne `fixed`.
+
+   Kde okno sedí (Android, opravený iOS), je `100lvh` v nainstalované aplikaci
+   stejné jako `100dvh` a nic se nemění. `overflow: hidden` drží dokument na
+   místě, jinak by se dal o ten rozdíl odscrollovat a horní lišta by odjela.
+   Platí jen se hrou (.app-shell); přihlášení a další stránky rolují dokumentem. */
+@media (display-mode: standalone) and (max-width: 639px) {
+  @supports (height: 100lvh) {
+    html:has(.app-shell),
+    html:has(.app-shell) body {
+      height: 100lvh;
+      overflow: hidden;
+    }
+    .app-shell {
+      height: 100lvh;
+      position: relative;
+    }
+    .app-shell .app-bottom-nav {
+      position: absolute;
+    }
+  }
+}
+
 /* ── PWA: žádné nechtěné přiblížení ────────────────────────────────────────
    `manipulation` ruší dvojklepnutí na přiblížení, ale gesto dvěma prsty
    nechává být — kdo potřebuje zvětšit, pořád může. */
