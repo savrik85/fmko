@@ -268,8 +268,12 @@ function HelpPanel({ help, onClose }: { help: HelpEntry; onClose: () => void }) 
       <div className="fixed inset-0 z-40 bg-black/20" onClick={onClose} />
       {/* Na mobilu spodní plachta, na desktopu panel pod horní lištou —
           tam, kde tlačítko nově je. Dřív visel v pravém dolním rohu
-          u plovoucího kolečka. */}
-      <div className="fixed bottom-[5.5rem] sm:bottom-auto sm:top-16 left-3 right-3 sm:left-auto sm:right-4 z-[var(--z-nav)] sm:w-[360px] max-h-[55vh] sm:max-h-[70vh] overflow-y-auto overscroll-contain rounded-xl bg-white shadow-2xl border border-gray-100 animate-slide-up">
+          u plovoucího kolečka.
+          Odstup odspodu bere skutečnou výšku spodní lišty (`--bottom-nav-h`
+          publikuje BottomNav i se safe area). Pevných 5,5 rem sedělo na starou
+          48px lištu; vyšší lišta s čárkou iPhonu (93 px) spodek panelu překryla.
+          Bez lišty (onboarding) zůstává původních 5,5 rem. */}
+      <div className="fixed bottom-[calc(var(--bottom-nav-h,4.75rem)+0.75rem)] sm:bottom-auto sm:top-16 left-3 right-3 sm:left-auto sm:right-4 z-[var(--z-nav)] sm:w-[360px] max-h-[55vh] sm:max-h-[70vh] overflow-y-auto overscroll-contain rounded-xl bg-white shadow-2xl border border-gray-100 animate-slide-up">
         <div className="sticky top-0 bg-pitch-700 text-white px-5 py-3 rounded-t-xl flex items-center gap-3">
           <span className="text-xl">{help.icon}</span>
           <span className="font-heading font-bold text-base">{help.title}</span>
