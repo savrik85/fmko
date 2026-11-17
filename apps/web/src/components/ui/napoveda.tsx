@@ -319,7 +319,9 @@ function HelpButton({
   const spolecne = "flex items-center justify-center font-heading font-bold rounded-full transition-colors";
   const styl =
     variant === "bar"
-      ? "w-8 h-8 text-base bg-white/10 text-white/70 hover:bg-white/20 hover:text-white shrink-0"
+      // V liště jen tenký kroužek u názvu stránky: plné světlé kolo se s názvem
+      // tlouklo. Plocha pro prst zůstává 36 × 44 px, kroužek kreslí vnitřní span.
+      ? "group w-9 h-11 -ml-1 text-xs text-white/80 hover:text-white shrink-0"
       : `fixed z-[var(--z-nav)] w-11 h-11 text-lg bg-pitch-700 text-white shadow-lg hover:bg-pitch-600 ${className ?? "bottom-24 sm:bottom-6 right-4"}`;
   return (
     <button
@@ -328,7 +330,11 @@ function HelpButton({
       title={open ? "Zavřít nápovědu" : "Nápověda"}
       aria-label={open ? "Zavřít nápovědu" : "Nápověda"}
     >
-      {open ? "✕" : "?"}
+      {variant === "bar" ? (
+        <span className="flex items-center justify-center w-[22px] h-[22px] rounded-full border-[1.5px] border-white/55 group-hover:border-white transition-colors">
+          {open ? "✕" : "?"}
+        </span>
+      ) : open ? "✕" : "?"}
     </button>
   );
 }

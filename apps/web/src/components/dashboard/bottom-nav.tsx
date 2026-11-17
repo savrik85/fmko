@@ -77,21 +77,24 @@ export function BottomNav() {
     return () => { observer.disconnect(); root.style.removeProperty("--bottom-nav-h"); };
   }, []);
 
-  const items = [
-    { href: "/prehled", label: "Domů", icon: "🏟" },
-    { href: "/telefon", label: "Telefon", icon: "📱", badge: badges.unreadMessages },
-    { href: "/zapas", label: "Sestava", icon: "📋" },
-    { href: "/liga", label: "Liga", icon: "🏆" },
+  const items: { href: string; label: string; icon: React.ReactNode; badge?: number }[] = [
+    { href: "/prehled", label: "Domů", icon: <><path d="M3 11l9-7 9 7v9H3z" /><path d="M9 20v-6h6v6" /></> },
+    { href: "/telefon", label: "Telefon", icon: <><rect x="7" y="2.5" width="10" height="19" rx="2.5" /><path d="M11 18.5h2" /></>, badge: badges.unreadMessages },
+    { href: "/zapas", label: "Sestava", icon: <><rect x="5" y="4" width="14" height="17" rx="2" /><path d="M9 4V2.5h6V4M9 10h6M9 14h6" /></> },
+    { href: "/liga", label: "Liga", icon: <path d="M7 4h10v5a5 5 0 01-10 0zM7 6H4c0 3 1.5 4.5 3.5 5M17 6h3c0 3-1.5 4.5-3.5 5M12 14v4M8.5 20.5h7" /> },
     // Všechny podnotifikace (grémium, sázky, přestupy, novinky, sněm) se sčítají do Více
-    { href: "/vice", label: "Více", icon: "⚙", badge: badges.moreBadgeCount },
+    { href: "/vice", label: "Více", icon: <path d="M4 7h16M4 12h16M4 17h16" />, badge: badges.moreBadgeCount },
   ];
+
 
   return (
     <nav
       ref={navRef}
-      className="app-bottom-nav on-dark fixed bottom-0 left-0 right-0 z-[var(--z-nav)] sm:hidden"
+      className="app-bottom-nav fixed bottom-0 left-0 right-0 z-[var(--z-nav)] sm:hidden rounded-t-[18px] border-t border-gray-300 shadow-[0_-10px_26px_-6px_rgba(26,23,20,0.42)]"
       style={{
-        background: "var(--color-chrome)",
+        // Světlá lišta: spodek splyne s obsahem a místo pod ikonami nepůsobí
+        // jako zelený blok. Kde hráč je, ukazuje zelená barva a proužek nahoře.
+        background: "var(--color-surface)",
         // Lišta zůstává ukotvená na spodku viewportu. Posouvat ji níž
         // (`bottom: -47px`) nejde — `fixed` prvky se na iOS ořežou na
         // layoutový viewport, takže se tím jen odřízly popisky. Zelenou pod
@@ -125,12 +128,16 @@ export function BottomNav() {
               }}
               className={`relative flex flex-col items-center justify-center gap-0.5 px-3 rounded-soft transition-colors min-w-[56px] ${
                 isActive
-                  ? "text-white"
-                  : "text-white/50 hover:text-white"
+                  ? "text-pitch-500 font-semibold"
+                  : "text-gray-600 hover:text-ink"
               }`}
+              aria-current={isActive ? "page" : undefined}
             >
-              <span className="text-lg leading-none">{item.icon}</span>
-              <span className="text-micro font-medium leading-none">{item.label}</span>
+              {isActive && <span aria-hidden className="absolute -top-[7px] w-8 h-[3px] rounded-b-full bg-pitch-500" />}
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                {item.icon}
+              </svg>
+              <span className="text-micro leading-none">{item.label}</span>
               {item.badge != null && item.badge > 0 && (
                 <span className="absolute top-0 right-2 bg-card-red text-white text-[9px] font-bold min-w-[16px] h-4 px-1 rounded-full flex items-center justify-center">
                   {item.badge > 99 ? "99+" : item.badge}
