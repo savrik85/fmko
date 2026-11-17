@@ -15,7 +15,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { marketValue, marketValueEstimate } from "@okresni-masina/shared";
-import { PositionBadge, DataTable, EntityCell, RatingPill, ratingToneIn, type DataColumn } from "@/components/ui";
+import { PositionBadge, DataTable, EntityCell, RatingPill, ratingToneIn, ListCard, ListRow, ListEmpty, type DataColumn } from "@/components/ui";
 import { attrBg } from "@/lib/player-attrs";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { TeamName } from "@/components/manager/team-name";
@@ -151,15 +151,16 @@ export function PlayerBrowseTable({ rows, color, onColorText, ratingColor, colum
     });
   }, [rows, filter, sortKey, sortDir]);
 
-  if (rows.length === 0) return <p className="text-sm text-muted">{emptyText ?? "Nikdo tu není."}</p>;
+  if (rows.length === 0) return <ListEmpty icon="👤">{emptyText ?? "Nikdo tu není."}</ListEmpty>;
 
   const avatar = (r: BrowseRow, size: number) => r.avatar && typeof r.avatar === "object" && Object.keys(r.avatar).length > 2
     ? <FaceAvatar faceConfig={r.avatar} size={size} className="shrink-0" />
     : (
-      <div className={`rounded-full flex items-center justify-center text-sm font-bold shrink-0 ${onColorText}`}
+      // span, ne div: na telefonu je portrét uvnitř řádku, který je odkaz nebo tlačítko.
+      <span className={`rounded-full flex items-center justify-center text-sm font-bold shrink-0 ${onColorText}`}
         style={{ backgroundColor: color, width: size, height: size }}>
         {r.firstName[0]}
-      </div>
+      </span>
     );
 
   const open = (r: BrowseRow) => (r.onOpen ? r.onOpen() : router.push(`/hrac/${r.id}`));
@@ -172,6 +173,8 @@ export function PlayerBrowseTable({ rows, color, onColorText, ratingColor, colum
   );
 
   const ratings = rows.map((r) => r.rating);
+  // Na telefonu se barva hodnocení měří proti hráčům, které seznam právě ukazuje.
+  const mobileRatings = sorted.map((r) => r.rating);
   const tableColumns: DataColumn<BrowseRow>[] = [
     { key: "name", header: "Hráč", align: "left", sortValue: (r) => r.lastName,
       cell: (r) => (
@@ -259,54 +262,67 @@ export function PlayerBrowseTable({ rows, color, onColorText, ratingColor, colum
       </div>
 
       {/* ── Mobil: seznam s popsanými dovednostmi ── */}
-      <div className="md:hidden flex flex-col gap-2">
-        {sorted.map((r) => (
-          <div key={r.id} onClick={() => open(r)}
-            className="card px-3 py-2.5 hover:bg-gray-50 transition-colors cursor-pointer">
-            <div className="flex items-center gap-3">
-              <span className="shrink-0 w-9 h-9 flex items-center justify-center">{avatar(r, 30)}</span>
-              <div className="flex-1 min-w-0">
-                <div className="text-body font-bold text-ink leading-snug">{r.firstName} {r.lastName}</div>
-                <div className="text-meta text-muted tabular-nums flex items-center gap-1.5 flex-wrap">
+      <ListCard className="md:hidden">
+        {sorted.length === 0 && <ListEmpty icon="👤">Na tomhle postu tu nikdo není.</ListEmpty>}
+        {sorted.map((r) => {
+          const name = `${r.firstName} ${r.lastName}`;
+          // Řádek s tlačítkem (Odebrat, Podepsat, Nabídnout…) nesmí být sám klikací:
+          // tlačítko v tlačítku nejde. Detail pak otevírá jméno.
+          const hasButtons = !!onRemove || (!!columns.action && r.action != null);
+          const nameLink = !hasButtons ? name : r.onOpen
+            ? <button type="button" onClick={r.onOpen} className="text-left hover:underline">{name}</button>
+            : <Link href={`/hrac/${r.id}`} className="hover:underline">{name}</Link>;
+          return (
+            <ListRow key={r.id}
+              href={!hasButtons && !r.onOpen ? `/hrac/${r.id}` : undefined}
+              onClick={!hasButtons && r.onOpen ? r.onOpen : undefined}
+              tone={r.injury ? "danger" : undefined}
+              leading={avatar(r, 30)}
+              title={nameLink}
+              meta={
+                <span className="inline-flex items-center gap-1.5 tabular-nums">
                   <PositionBadge position={r.position} />
                   <span>{r.age} let{columns.price || !showValue ? "" : ` · ${formatValue(rowValue(r))}`}</span>
-                </div>
-                {/* Klub na vlastním řádku celý: vedle věku se dlouhé jméno usekávalo. */}
-                {columns.club && (r.club || r.clubLabel) && (
-                  <div className="text-meta text-muted leading-snug break-words"><TeamName name={r.club?.name ?? r.clubLabel ?? ""} isAi={r.clubIsAi === true} wrap /></div>
-                )}
-                {r.tag && <div className="mt-0.5">{r.tag}</div>}
-              </div>
-              <RatingPill value={r.rating} tone={ratingToneIn(r.rating, ratings)} />
-            </div>
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-sm">
-              {KEY_SKILLS[r.position].map((k) => (
-                <span key={k} className="tabular-nums">
-                  <span className="text-muted">{skillShort(k)}</span>{" "}
-                  <span className={`font-heading font-bold ${attrColor(r.skills[k] ?? 0)}`}>{r.skills[k] ?? "-"}</span>
                 </span>
-              ))}
-              {r.injury && (
-                <span className="font-heading font-bold text-card-red" title={r.injury.type ?? "Zranění"}>🩹 zraněn {r.injury.daysRemaining} d</span>
-              )}
-            </div>
-            {(columns.form && r.form) || onRemove ? (
-              <div className="flex items-center justify-between gap-2 mt-1.5 text-sm text-muted">
-                <span className="tabular-nums">{columns.form && r.form ? `Forma: ${formatForm(r.form)}` : ""}</span>
-                {removeButton(r)}
-              </div>
-            ) : null}
-            {columns.price || columns.action ? (
-              <div className="flex items-center justify-between gap-2 mt-2">
-                <div className="text-sm tabular-nums min-w-0">
-                  {columns.price && r.price != null && <span className="font-heading font-bold text-ink">{formatPrice(r.price)}</span>}
-                </div>
-                {columns.action && <div className="shrink-0" onClick={(e) => e.stopPropagation()}>{r.action}</div>}
-              </div>
-            ) : null}
-          </div>
-        ))}
-      </div>
+              }
+              trailing={<RatingPill value={r.rating} tone={ratingToneIn(r.rating, mobileRatings)} />}
+              detail={
+                <>
+                  {/* Klub na vlastním řádku celý: vedle věku se dlouhé jméno usekávalo. */}
+                  {columns.club && (r.club || r.clubLabel) && (
+                    <span className="block text-muted break-words"><TeamName name={r.club?.name ?? r.clubLabel ?? ""} isAi={r.clubIsAi === true} wrap /></span>
+                  )}
+                  {r.tag && <span className="block mt-0.5">{r.tag}</span>}
+                  <span className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
+                    {KEY_SKILLS[r.position].map((k) => (
+                      <span key={k} className="tabular-nums">
+                        <span className="text-muted">{skillShort(k)}</span>{" "}
+                        <span className={`font-heading font-bold ${attrColor(r.skills[k] ?? 0)}`}>{r.skills[k] ?? "-"}</span>
+                      </span>
+                    ))}
+                    {r.injury && (
+                      <span className="font-heading font-bold text-card-red" title={r.injury.type ?? "Zranění"}>🩹 zraněn {r.injury.daysRemaining} d</span>
+                    )}
+                  </span>
+                  {(columns.form && r.form) || onRemove ? (
+                    <span className="flex items-center justify-between gap-2 mt-1 text-muted">
+                      <span className="tabular-nums">{columns.form && r.form ? `Forma: ${formatForm(r.form)}` : ""}</span>
+                      {removeButton(r)}
+                    </span>
+                  ) : null}
+                  {columns.price || columns.action ? (
+                    <span className="flex items-center justify-between gap-2 mt-1.5">
+                      <span className="tabular-nums min-w-0">
+                        {columns.price && r.price != null && <span className="font-heading font-bold text-ink">{formatPrice(r.price)}</span>}
+                      </span>
+                      {columns.action && <span className="shrink-0">{r.action}</span>}
+                    </span>
+                  ) : null}
+                </>
+              } />
+          );
+        })}
+      </ListCard>
     </div>
   );
 }

@@ -21,7 +21,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
-import { Spinner } from "@/components/ui";
+import { Spinner, ListCard, ListRow, StatusChip } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { RATING_WEIGHTS } from "@okresni-masina/shared";
 
@@ -231,14 +231,6 @@ function RichText({ parts }: { parts: TextPart[] }) {
   );
 }
 
-function PlayerLink({ id, name, className = "" }: { id: string; name: string; className?: string }) {
-  return (
-    <Link href={`/hrac/${id}`} className={`font-heading font-bold text-base text-ink hover:text-pitch-500 transition-colors ${className}`}>
-      {name}
-    </Link>
-  );
-}
-
 function AssistantFace({ assistant, size }: { assistant: AssistantInfo; size: number }) {
   return (
     <div className="shrink-0 rounded-control overflow-hidden bg-paper flex items-center justify-center" style={{ width: size, height: size }}>
@@ -417,19 +409,17 @@ function PlayerRow({ p, table }: { p: LinePlayer; table: LineTable }) {
   const plus = byGap.filter((v) => v.verdict === "strong").slice(0, 2);
   const minus = byGap.filter((v) => v.verdict === "weak").reverse().slice(0, 2);
   return (
-    <li className="py-2.5 border-t border-gray-200/70 first:border-t-0">
-      <div className="flex items-baseline gap-2 min-w-0">
-        <PlayerLink id={p.id} name={p.name} className="truncate" />
-        <span className="shrink-0 text-sm text-muted">{p.age !== null ? `${p.age} let` : ""}</span>
-        {p.injured && <span className={`${PILL} shrink-0 bg-card-red/10 text-card-red`}>Zraněný</span>}
-      </div>
-      {(plus.length > 0 || minus.length > 0) && (
-        <div className="mt-1.5 flex flex-wrap gap-1.5">
+    <ListRow href={`/hrac/${p.id}`}
+      tone={p.injured ? "danger" : undefined}
+      // Věk za jménem jako dřív: s věkem na vlastním řádku by řádek s dovednostmi narostl.
+      title={<>{p.name}{p.age !== null && <span className="ml-2 text-meta font-normal text-muted">{p.age} let</span>}</>}
+      detail={plus.length > 0 || minus.length > 0 ? (
+        <span className="flex flex-wrap gap-1.5 mt-1">
           {plus.map((v) => <SkillChip key={v.skill} label={`${skillName(v.skill, table.line)} ${v.value}`} positive />)}
           {minus.map((v) => <SkillChip key={v.skill} label={`${skillName(v.skill, table.line)} ${v.value}`} positive={false} />)}
-        </div>
-      )}
-    </li>
+        </span>
+      ) : undefined}
+      trailing={p.injured ? <StatusChip tone="danger">Zraněný</StatusChip> : undefined} />
   );
 }
 
@@ -439,7 +429,8 @@ function LinePlayers({ table }: { table: LineTable }) {
   return (
     <div>
       <h4 className="font-heading font-bold text-base">{PLAYERS_TITLE[table.line]}</h4>
-      <ul>{table.players.map((p) => <PlayerRow key={p.id} p={p} table={table} />)}</ul>
+      {/* Karta má px-4 sm:px-6, ListRow px-4: s -mx-4 sedí text řádků pod nadpisem na telefonu i od sm. */}
+      <div className="-mx-4">{table.players.map((p) => <PlayerRow key={p.id} p={p} table={table} />)}</div>
       <p className="text-sm text-muted mt-2">Od nejlepšího. Zeleně co má hráč nad průměrem ligy na svém postu, červeně co pod ním.</p>
     </div>
   );
@@ -447,20 +438,19 @@ function LinePlayers({ table }: { table: LineTable }) {
 
 function InsightRow({ item, positive }: { item: Insight; positive: boolean }) {
   return (
-    <li className="flex gap-2.5">
-      <span
-        className={`shrink-0 mt-0.5 w-5 h-5 rounded-full flex items-center justify-center font-heading font-[800] text-sm leading-none ${
-          positive ? "bg-pitch-100 text-pitch-700" : "bg-card-red/10 text-card-red"
-        }`}
-        aria-label={positive ? "Síla" : "Slabina"}
-      >
-        {positive ? "+" : "−"}
-      </span>
-      <div className="min-w-0">
-        <div className="font-heading font-bold text-base leading-tight">{item.title}</div>
-        <p className="text-base text-ink-light leading-snug mt-0.5"><RichText parts={item.text} /></p>
-      </div>
-    </li>
+    <ListRow
+      leading={
+        <span
+          className={`w-6 h-6 rounded-full flex items-center justify-center font-heading font-[800] text-sm leading-none ${
+            positive ? "bg-pitch-100 text-pitch-700" : "bg-card-red/10 text-card-red"
+          }`}
+          aria-label={positive ? "Síla" : "Slabina"}
+        >
+          {positive ? "+" : "−"}
+        </span>
+      }
+      title={item.title}
+      detail={<RichText parts={item.text} />} />
   );
 }
 
@@ -468,11 +458,11 @@ function Insights({ title, strengths, weaknesses }: { title: string; strengths: 
   if (strengths.length === 0 && weaknesses.length === 0) return null;
   return (
     <div>
-      <h4 className="font-heading font-bold text-base mb-2.5">{title}</h4>
-      <ul className="space-y-3">
+      <h4 className="font-heading font-bold text-base">{title}</h4>
+      <div className="-mx-4">
         {weaknesses.map((w) => <InsightRow key={`w-${w.scope}-${w.aspect}`} item={w} positive={false} />)}
         {strengths.map((s) => <InsightRow key={`s-${s.scope}-${s.aspect}`} item={s} positive />)}
-      </ul>
+      </div>
     </div>
   );
 }
@@ -525,27 +515,23 @@ function LineRow({ line, table, selected, onSelect }: {
   const v = VERDICT[line.verdict];
   const label = (line.vague && VAGUE_VERDICT[line.verdict]) || v.label;
   const { minus } = lineHighlights(table);
+  // Vybraná řada má zelený podklad jako dřív; ListRow vlastní podklad nemá, proto obal.
   return (
-    <button
-      type="button"
-      onClick={onSelect}
-      aria-expanded={selected}
-      className={`w-full text-left px-4 sm:px-6 py-3 block transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-pitch-500 ${
-        selected ? "bg-pitch-50" : "hover:bg-paper/60"
-      }`}
-    >
-      <span className="flex items-center gap-3">
-        <span className="font-heading font-bold text-base w-[4.5rem] shrink-0">{LINE_LABEL[line.line]}</span>
-        <PowerMeter verdict={line.verdict} />
-        <span className={`ml-auto text-sm font-heading font-bold whitespace-nowrap ${TONE_TEXT[v.tone]}`}>{label}</span>
-        <Chevron open={selected} />
-      </span>
-      <span className="block mt-0.5 text-sm text-ink-light">
-        {minus.length > 0
+    <div className={selected ? "bg-pitch-50" : undefined}>
+      <ListRow onClick={onSelect} chevron={false}
+        // Měřák a verdikt v prvním řádku: ve sloupci vpravo by „Chybí…“ pod názvem zúžily na pár slov.
+        title={
+          <span className="flex items-center gap-3">
+            <span className="w-[4.5rem] shrink-0">{LINE_LABEL[line.line]}</span>
+            <PowerMeter verdict={line.verdict} />
+            <span className={`ml-auto text-sm font-heading font-bold whitespace-nowrap ${TONE_TEXT[v.tone]}`}>{label}</span>
+          </span>
+        }
+        detail={minus.length > 0
           ? <>Chybí: {minus.map((s) => skillName(s, line.line).toLowerCase()).join(", ")}</>
           : <span className="text-pitch-600">Bez slabin proti lize</span>}
-      </span>
-    </button>
+        trailing={<Chevron open={selected} />} />
+    </div>
   );
 }
 
@@ -620,24 +606,29 @@ function AgeChart({ ages, xiAverage, leagueAverage }: { ages: Array<{ age: numbe
   );
 }
 
+/**
+ * Krátký výčet jmen v dlaždici Perspektivy: husté řádky, aby trojice sloupců nenarostla.
+ * Nadpis a prázdná věta mají px-4 jako řádky; sloupce stojí těsně vedle sebe (gap-x-0)
+ * a mezeru mezi nimi dělá odsazení řádků.
+ */
 function PersonList({ title, items, empty }: { title: string; items: Array<{ id: string; name: string; note: string; accent?: string }>; empty: string }) {
   return (
     <div className="min-w-0">
-      <h4 className="font-heading font-bold text-base mb-1">{title}</h4>
+      <h4 className="font-heading font-bold text-base mb-1 px-4">{title}</h4>
       {items.length === 0 ? (
-        <p className="text-sm text-muted">{empty}</p>
+        <p className="text-sm text-muted px-4">{empty}</p>
       ) : (
-        <ul>
-          {items.map((p) => (
-            <li key={p.id} className="flex items-baseline gap-2 py-1.5 border-t border-gray-100 first:border-t-0 min-w-0">
-              <PlayerLink id={p.id} name={p.name} className="truncate" />
-              <span className="ml-auto shrink-0 text-sm text-right">
+        items.map((p) => (
+          <ListRow key={p.id} dense href={`/hrac/${p.id}`}
+            title={p.name}
+            trailing={
+              // Odhad skauta bývá i tříslovný: smí se zalomit, jinak by jméno v úzkém sloupci zmizelo.
+              <span className="block max-w-40 text-sm leading-snug">
                 <span className="text-muted">{p.note}</span>
                 {p.accent && <span className="text-pitch-600 font-bold"> {p.accent}</span>}
               </span>
-            </li>
-          ))}
-        </ul>
+            } />
+        ))
       )}
     </div>
   );
@@ -730,27 +721,30 @@ function OutlookDetail({ outlook, potential, teamStrengths, teamWeaknesses, onCl
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 pt-5 border-t border-gray-100">
-        <PersonList
-          title="Na tréninku rostou"
-          items={outlook.growing.map((g) => ({
-            id: g.id, name: g.name, note: `${g.age ?? "?"} let,`, accent: g.pace === "fast" ? "rychle" : "pozvolna",
-          }))}
-          empty="Za poslední čtyři týdny nikdo výrazně nepovyrostl."
-        />
-        <PersonList
-          title="Mladí do 21 let"
-          items={outlook.youngsters.map((y) => {
-            const scout = potentialNote(potential?.get(y.id)?.slovne);
-            return { id: y.id, name: y.name, note: `${y.age ?? "?"} let${scout ? "," : ""}`, accent: scout };
-          })}
-          empty="Nikoho do 21 let v kádru nemáme."
-        />
-        <PersonList
-          title="Opory přes 30"
-          items={outlook.veterans.map((v) => ({ id: v.id, name: v.name, note: `${v.age ?? "?"} let` }))}
-          empty="V nejlepší jedenáctce nikoho přes 30 nemáme."
-        />
+      <div className="pt-5 border-t border-gray-100">
+        {/* -mx-4: text řádků (px-4) sedí pod okrajem karty (px-4 sm:px-6) na telefonu i od sm. */}
+        <div className="-mx-4 grid grid-cols-1 sm:grid-cols-3 gap-5 sm:gap-x-0">
+          <PersonList
+            title="Na tréninku rostou"
+            items={outlook.growing.map((g) => ({
+              id: g.id, name: g.name, note: `${g.age ?? "?"} let,`, accent: g.pace === "fast" ? "rychle" : "pozvolna",
+            }))}
+            empty="Za poslední čtyři týdny nikdo výrazně nepovyrostl."
+          />
+          <PersonList
+            title="Mladí do 21 let"
+            items={outlook.youngsters.map((y) => {
+              const scout = potentialNote(potential?.get(y.id)?.slovne);
+              return { id: y.id, name: y.name, note: `${y.age ?? "?"} let${scout ? "," : ""}`, accent: scout };
+            })}
+            empty="Nikoho do 21 let v kádru nemáme."
+          />
+          <PersonList
+            title="Opory přes 30"
+            items={outlook.veterans.map((v) => ({ id: v.id, name: v.name, note: `${v.age ?? "?"} let` }))}
+            empty="V nejlepší jedenáctce nikoho přes 30 nemáme."
+          />
+        </div>
       </div>
       {!hasScout && outlook.youngsters.length > 0 && (
         <p className="text-sm text-muted">
@@ -796,17 +790,15 @@ function StyleSection({ style }: { style: ReadyAnalysis["style"] }) {
           <StyleRow label="Rozestavění" value={style.formation.formation} pill={FAMILIARITY[style.formation.familiarity]} />
         </ul>
         <h4 className="font-heading font-bold text-base mt-3">Všechny taktiky</h4>
-        <ul className="mt-1">
+        {/* Obsah má px-4 sm:px-6, ListRow px-4: s -mx-4 sedí text řádků pod nadpisem. */}
+        <div className="-mx-4">
           {style.tactics.map((t) => (
-            <li key={t.tactic} className="flex items-start justify-between gap-3 py-2 border-t border-gray-100 first:border-t-0">
-              <div className="min-w-0">
-                <div className={`text-base ${t.recommended ? "font-bold text-pitch-700" : "text-ink"}`}>{t.label}</div>
-                {t.reason && <div className="text-sm text-muted">{t.reason}</div>}
-              </div>
-              <span className={`${PILL} ${FIT[t.verdict].className}`}>{FIT[t.verdict].label}</span>
-            </li>
+            <ListRow key={t.tactic}
+              title={<span className={t.recommended ? "text-pitch-700" : undefined}>{t.label}</span>}
+              detail={t.reason ? <span className="text-muted">{t.reason}</span> : undefined}
+              trailing={<span className={`${PILL} ${FIT[t.verdict].className}`}>{FIT[t.verdict].label}</span>} />
           ))}
-        </ul>
+        </div>
         <p className="text-sm text-muted mt-2">{style.hardness.text} {style.formation.text}</p>
       </div>
     </details>
@@ -824,16 +816,18 @@ function Warnings({ items }: { items: ReadyAnalysis["warnings"] }) {
         </span>
         <span className="transition-transform group-open:rotate-180"><Chevron open={false} /></span>
       </summary>
-      <ul className="px-4 sm:px-6 pb-4 space-y-2.5">
+      {/* sm:px-2: ikona řádku (ListRow má px-4) sedí pod nadpisem shrnutí (px-4 sm:px-6). */}
+      <div className="sm:px-2 pb-2 border-t border-gray-100">
         {items.map((w, i) => (
-          <li key={i} className="flex items-start gap-2.5 pt-2.5 border-t border-gray-100">
-            <span className="text-base shrink-0 w-6 text-center" title={WARNING_ICON[w.kind].label} aria-label={WARNING_ICON[w.kind].label}>
-              {WARNING_ICON[w.kind].icon}
-            </span>
-            <p className="text-base text-ink-light leading-snug"><RichText parts={w.text} /></p>
-          </li>
+          <ListRow key={i} dense
+            leading={
+              <span className="text-base" title={WARNING_ICON[w.kind].label} aria-label={WARNING_ICON[w.kind].label}>
+                {WARNING_ICON[w.kind].icon}
+              </span>
+            }
+            detail={<RichText parts={w.text} />} />
         ))}
-      </ul>
+      </div>
     </details>
   );
 }
@@ -905,12 +899,8 @@ export function SquadAnalysisView({ data, potential }: { data: SquadAnalysisResp
     <div className="space-y-3">
       <Verdict r={r} />
 
-      <section className="card">
-        <div className="px-4 sm:px-6 pt-4 pb-2.5 flex items-baseline justify-between gap-3">
-          <h3 className="font-heading font-bold text-lg leading-tight">Řady proti lize</h3>
-          <span className="text-sm text-muted">nejlepší jedenáctka, {r.basis.formation}</span>
-        </div>
-        <div className="divide-y divide-gray-100 border-t border-gray-100">
+      <ListCard title="Řady proti lize" count={`nejlepší jedenáctka, ${r.basis.formation}`}>
+        <div className="divide-y divide-line-soft">
           {lines.map((l) => (
             <LineRow
               key={l.line}
@@ -921,7 +911,7 @@ export function SquadAnalysisView({ data, potential }: { data: SquadAnalysisResp
             />
           ))}
         </div>
-      </section>
+      </ListCard>
 
       {selectedLine && (
         <div ref={lineDetailRef} className="scroll-mt-4">

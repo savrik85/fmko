@@ -1256,13 +1256,15 @@ export default function PlayerDetailPage() {
             {coachLog.length > 0 ? (
               <div className="mt-3">
                 <div className="text-sm font-heading font-bold text-muted mb-1">Proč</div>
-                {coachLog.slice(0, 5).map((l, i) => (
-                  <div key={i} className="flex items-start gap-2 py-1.5 border-b border-gray-50 last:border-b-0 text-sm">
-                    <RelationTrend delta={l.delta} />
-                    <span className="flex-1 text-ink-light">{l.description}</span>
-                    <span className="shrink-0 text-muted tabular-nums">{formatLogDate(l.date)}</span>
-                  </div>
-                ))}
+                {/* Řádky až k okrajům karty (ta má p-4 sm:p-5). */}
+                <div className="-mx-4 sm:-mx-5">
+                  {coachLog.slice(0, 5).map((l, i) => (
+                    <ListRow key={i} dense
+                      leading={<RelationTrend delta={l.delta} />}
+                      detail={l.description}
+                      trailing={<span className="text-meta text-muted tabular-nums">{formatLogDate(l.date)}</span>} />
+                  ))}
+                </div>
               </div>
             ) : (
               <p className="text-sm text-muted mt-2 leading-snug">
@@ -1769,48 +1771,37 @@ export default function PlayerDetailPage() {
                     ? (m.isHome ? `${m.homeScore}:${m.awayScore}` : `${m.awayScore}:${m.homeScore}`)
                     : null;
                   const reasonColor =
-                    m.reason === "Zranění" ? "bg-red-50 text-red-700 border-red-200"
-                    : m.reason === "Stopka za karty" ? "bg-amber-50 text-amber-700 border-amber-200"
-                    : m.reason === "Na lavičce" ? "bg-gray-50 text-gray-600 border-gray-200"
-                    : m.reason === "Nenominován" ? "bg-gray-50 text-gray-500 border-gray-200"
-                    : "bg-blue-50 text-blue-700 border-blue-200";
+                    m.reason === "Zranění" ? "bg-red-50 text-red-700"
+                    : m.reason === "Stopka za karty" ? "bg-amber-50 text-amber-700"
+                    : m.reason === "Na lavičce" ? "bg-gray-50 text-gray-600"
+                    : m.reason === "Nenominován" ? "bg-gray-50 text-gray-500"
+                    : "bg-blue-50 text-blue-700";
                   return (
-                    <div key={m.matchId} className="flex flex-col sm:flex-row sm:items-center gap-2 p-3 rounded-soft bg-gray-50/60 hover:bg-gray-50 transition-colors">
-                      <div className="flex items-center gap-2 sm:w-[180px] shrink-0">
-                        <span className="text-micro font-heading font-bold text-muted uppercase tabular-nums shrink-0">
-                          {m.round != null ? `${m.round}. kolo` : "-"}
+                    <ListRow key={m.matchId} href={`/zapas/${m.matchId}`}
+                      title={`${m.isHome ? "vs" : "@"} ${m.opponent}`}
+                      meta={[m.round != null ? `${m.round}. kolo` : null, score].filter(Boolean).join(" · ") || undefined}
+                      detail={m.smsText ? <span className="italic text-muted">{"\u{1F4AC}"} &ldquo;{m.smsText}&rdquo;</span> : undefined}
+                      trailing={
+                        <span className={`inline-block text-micro px-2 py-0.5 rounded-full font-bold whitespace-nowrap ${reasonColor}`}>
+                          {m.reason ?? "-"}
                         </span>
-                        <Link href={`/zapas/${m.matchId}`} className="font-heading font-bold text-sm text-ink hover:text-pitch-500 truncate">
-                          {m.isHome ? "vs" : "@"} {m.opponent}
-                        </Link>
-                      </div>
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-heading font-bold border ${reasonColor} shrink-0`}>
-                        {m.reason ?? "-"}
-                      </span>
-                      {m.smsText && (
-                        <span className="text-xs text-muted italic flex-1 min-w-0">
-                          {"\u{1F4AC}"} &ldquo;{m.smsText}&rdquo;
-                        </span>
-                      )}
-                      {score && <span className="text-xs text-muted tabular-nums shrink-0 ml-auto">{score}</span>}
-                    </div>
+                      } />
                   );
                 };
                 return (
                   <>
                     {realAbsences.length > 0 && (
-                      <div className="card p-4 sm:p-5">
-                        <SectionLabel>Zameškal (zranění / stopka / výmluva)</SectionLabel>
-                        <div className="space-y-2 mt-2">{realAbsences.map(RowItem)}</div>
-                      </div>
+                      <ListCard title="Zameškal (zranění / stopka / výmluva)">
+                        {realAbsences.map(RowItem)}
+                      </ListCard>
                     )}
                     {benchOrNot.length > 0 && (
-                      <details className="card p-4 sm:p-5">
-                        <summary className="cursor-pointer flex items-center justify-between">
+                      <details className="card">
+                        <summary className="cursor-pointer flex items-center justify-between p-4 sm:p-5">
                           <SectionLabel>Nehrál ({benchOrNot.length}× lavička / nenominován)</SectionLabel>
                           <span className="text-xs text-muted">rozbalit</span>
                         </summary>
-                        <div className="space-y-2 mt-3">{benchOrNot.map(RowItem)}</div>
+                        <div className="border-t border-line">{benchOrNot.map(RowItem)}</div>
                       </details>
                     )}
                   </>

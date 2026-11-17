@@ -78,7 +78,8 @@ export function WatchlistTab({ teamId, onCount, onOpenFreeAgents, color, onColor
   }));
 
   return (
-    <div className="card p-4 sm:p-5">
+    // Karta jen od md: na telefonu je seznam hráčů sám kartou (ListCard v PlayerBrowseTable).
+    <div className="md:p-5 md:bg-[var(--color-surface)] md:rounded-[var(--radius-card)] md:shadow-[var(--shadow-card)]">
       <PlayerBrowseTable rows={rows} color={color} onColorText={onColorText} ratingColor={ratingColor}
         columns={{ club: true, form: true, watchedSince: true }} onRemove={remove}
         emptyText="Zatím nikoho nesleduješ. Hráče přidáš hvězdičkou v jeho profilu." />

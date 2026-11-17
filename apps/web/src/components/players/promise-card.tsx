@@ -1,4 +1,4 @@
-import { SectionLabel } from "@/components/ui";
+import { ListCard, ListRow, StatusChip } from "@/components/ui";
 
 export interface PlayerPromiseView {
   id: string;
@@ -9,11 +9,11 @@ export interface PlayerPromiseView {
   resolvedAt: string | null;
 }
 
-const STATUS_CLASS: Record<PlayerPromiseView["status"], string> = {
-  active: "bg-amber-50 text-amber-800 border-amber-200",
-  kept: "bg-pitch-50 text-pitch-700 border-pitch-200",
-  broken: "bg-red-50 text-card-red border-red-200",
-  expired: "bg-gray-50 text-muted border-gray-200",
+const STATUS_TONE: Record<PlayerPromiseView["status"], "ok" | "warn" | "danger" | "neutral"> = {
+  active: "warn",
+  kept: "ok",
+  broken: "danger",
+  expired: "neutral",
 };
 
 const dateCz = (iso: string) => new Date(iso).toLocaleDateString("cs-CZ", { day: "numeric", month: "numeric" });
@@ -25,25 +25,22 @@ const dateCz = (iso: string) => new Date(iso).toLocaleDateString("cs-CZ", { day:
 export function PromiseCard({ promises }: { promises: PlayerPromiseView[] }) {
   if (promises.length === 0) return null;
   return (
-    <div className="card p-4 sm:p-5 mb-5">
-      <SectionLabel>Sliby</SectionLabel>
-      <div className="mt-2">
-        {promises.map((p) => (
-          <div key={p.id} className="flex items-start gap-2 py-2 border-b border-gray-50 last:border-b-0">
-            <span aria-hidden className="text-base leading-6">🤞</span>
-            <div className="flex-1 min-w-0">
-              <div className="text-sm font-heading font-bold text-ink">{p.text}</div>
-              <div className="text-sm text-muted">
+    <ListCard title="Sliby" className="mb-5">
+      {/* Slib bývá celá věta (i s klubem a lhůtou), proto bez názvu a celý v odstavci. */}
+      {promises.map((p) => (
+        <ListRow key={p.id} dense
+          leading={<span aria-hidden className="text-base">🤞</span>}
+          detail={
+            <>
+              <span className="block font-bold">{p.text}</span>
+              <span className="block text-muted">
                 Slíbeno {dateCz(p.madeAt)}{p.resolvedAt ? `, vyřešeno ${dateCz(p.resolvedAt)}` : ""}
-              </div>
-            </div>
-            <span className={`shrink-0 text-sm font-heading font-bold border rounded-full px-2 py-0.5 ${STATUS_CLASS[p.status]}`}>
-              {p.statusLabel}
-            </span>
-          </div>
-        ))}
-      </div>
-    </div>
+              </span>
+            </>
+          }
+          trailing={<StatusChip tone={STATUS_TONE[p.status]}>{p.statusLabel}</StatusChip>} />
+      ))}
+    </ListCard>
   );
 }
 
