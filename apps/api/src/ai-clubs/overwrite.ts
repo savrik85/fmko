@@ -169,10 +169,24 @@ async function deleteOwnPlayers(db: D1Database, teamId: string, nowIso: string):
   return deleted?.meta?.changes ?? 0;
 }
 
-/** Domluvené a čekající přáteláky AI klubu: zrušit, sázky vrátit, lidskému soupeři napsat. */
-async function cancelFriendlies(db: D1Database, teamId: string, opts: OverwriteOpts): Promise<number> {
-  const reason = `Klub ${opts.previousName} převzal nový trenér.`;
-  const nowIso = opts.now.toISOString();
+/** Proč se přáteláky AI klubu ruší: do výzvy (`cancel_reason`) a do SMS lidskému soupeři. */
+export interface FriendlyCancelTexts {
+  /** Jméno AI klubu, jak ho zná soupeř. */
+  clubName: string;
+  /** Celá věta do `challenges.cancel_reason`. */
+  reason: string;
+  /** Důvod do SMS za dvojtečkou („klub převzal nový trenér“). */
+  smsReason: string;
+}
+
+/**
+ * Domluvené a čekající přáteláky AI klubu: zrušit, sázky vrátit, lidskému soupeři napsat.
+ * Volá převzetí klubu i zavření čekající ligy (league/waiting-league.ts).
+ */
+export async function cancelAiClubFriendlies(db: D1Database, teamId: string, texts: FriendlyCancelTexts, now: Date): Promise<number> {
+  const { reason } = texts;
+  const opts = { previousName: texts.clubName };
+  const nowIso = now.toISOString();
   const accepted = await db.prepare(
     `SELECT c.id, c.challenger_team_id, c.challenged_team_id, c.stake, c.stake_status, c.match_id
        FROM challenges c JOIN matches m ON m.id = c.match_id
@@ -204,7 +218,7 @@ async function cancelFriendlies(db: D1Database, teamId: string, opts: OverwriteO
     if (!ok) continue;
     cancelled++;
     await smsHuman(db, opponentId,
-      `↩️ Přátelák s ${opts.previousName} se nehraje: klub převzal nový trenér.${ch.stake && ch.stake_status === "held" ? " Sázka se vrátila." : ""}`);
+      `↩️ Přátelák s ${opts.previousName} se nehraje: ${texts.smsReason}.${ch.stake && ch.stake_status === "held" ? " Sázka se vrátila." : ""}`);
   }
 
   cancelled += await runStatement(db, "čekající výzvy",
@@ -256,7 +270,9 @@ export async function wipeAiClubForNewcomer(db: D1Database, teamId: string, opts
   await runStatement(db, "sledovaní hráči", "DELETE FROM player_watchlist WHERE team_id = ?", teamId);
 
   // ── Přáteláky ──
-  summary.friendliesCancelled = await cancelFriendlies(db, teamId, opts);
+  summary.friendliesCancelled = await cancelAiClubFriendlies(db, teamId, {
+    clubName: opts.previousName, reason: `Klub ${opts.previousName} převzal nový trenér.`, smsReason: "klub převzal nový trenér",
+  }, opts.now);
 
   // ── Zaměstnanci zpět do poolu, jejich úkoly končí bez vracení peněz ──
   await runStatement(db, "úkoly zaměstnanců", "DELETE FROM staff_tasks WHERE team_id = ?", teamId);
