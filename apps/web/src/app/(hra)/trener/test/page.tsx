@@ -15,10 +15,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, showError } from "@/lib/api";
-import { SectionLabel, Spinner } from "@/components/ui";
+import { SectionLabel, Spinner, PageLoading } from "@/components/ui";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { COURSE_RULES } from "@okresni-masina/shared";
 import { announceExamRunning } from "@/lib/coach-exam-channel";
+import { formatKc } from "@/lib/format";
 
 interface Rules {
   questions: number;
@@ -139,7 +140,7 @@ export default function TestPage() {
       </div>
     );
   }
-  if (!exam || !teamId || !courseId) return <div className="min-h-[50dvh] flex items-center justify-center"><Spinner size="lg" /></div>;
+  if (!exam || !teamId || !courseId) return <PageLoading />;
 
   if (exam.state === "ready") return <Intro exam={exam} teamId={teamId} courseId={courseId} onStarted={setExam} />;
   if (exam.state === "running") return <RunningExam exam={exam} teamId={teamId} courseId={courseId} onFinished={setExam} onReload={load} />;
@@ -224,7 +225,7 @@ function Intro({ exam, teamId, courseId, onStarted }: { exam: Ready; teamId: str
 function RunningExam({ exam, teamId, courseId, onFinished, onReload }: {
   exam: Running; teamId: string; courseId: string; onFinished: (e: Exam) => void; onReload: () => void;
 }) {
-  const { confirm, dialog } = useConfirm();
+  const { confirm, dialog } = useConfirm({ sheet: true });
   const [answers, setAnswers] = useState<number[]>(exam.answers);
   const [index, setIndex] = useState(() => Math.max(0, exam.answers.findIndex((a) => a < 0)));
   const [now, setNow] = useState(() => Date.now());
@@ -460,7 +461,7 @@ function ResultView({ result, teamId, courseId }: { result: Result; teamId: stri
         )}
         {result.retakePrice !== null && (
           <p className="text-sm text-red-800 mt-2">
-            Máš jeden opravný termín. Přihlásit se na něj můžeš v záložce Vzdělání (cena {result.retakePrice.toLocaleString("cs")} Kč).
+            Máš jeden opravný termín. Přihlásit se na něj můžeš v záložce Vzdělání (cena {formatKc(result.retakePrice)}).
           </p>
         )}
         <div className="flex flex-col sm:flex-row gap-2 mt-4">

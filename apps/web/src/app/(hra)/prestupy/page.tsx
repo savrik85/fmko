@@ -9,7 +9,8 @@ import { useTeam } from "@/context/team-context";
 import { apiFetch, apiAction, showError, type Player } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
 import { nationalityFlag } from "@/lib/nationality";
-import { Spinner, SectionLabel, PositionBadge, useConfirm, BadgePreview, type BadgePattern, Tabs, useTabParam, Sheet, SheetDialog, Button } from "@/components/ui";
+import { SectionLabel, PositionBadge, useConfirm, BadgePreview, type BadgePattern, Tabs, useTabParam, Sheet, SheetDialog, Button, DataTable, EntityCell, ListCard, ListRow, ListEmpty, RowIcon, RowValue, RatingPill, StatusChip, ratingToneIn, PageLoading, SectionLoading, ChoiceGroup, choiceClass } from "@/components/ui";
+import { attrBg } from "@/lib/player-attrs";
 import { PlayerRevealCard } from "@/components/players/reveal-card";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { isLightColor, bestTextOn, readableOnLight } from "@/lib/team-color";
@@ -25,6 +26,7 @@ import { AiNegotiationsList } from "@/components/transfers/AiNegotiationsList";
 import { termsNote, TransferTermsFields, PLAIN_TERMS, type TermsValue } from "@/components/transfers/transfer-terms";
 import { markOffersSeen, getUnseenOffersCount } from "@/lib/seen-offers";
 import { setIncomingOffersCount, triggerMenuBadgesRefresh } from "@/hooks/use-menu-badges";
+import { formatKc } from "@/lib/format";
 
 // Na telefonu se 7 záložek nevešlo, proto 4 hlavní a pod nimi podzáložky:
 // Hledat = všechno, kde vybírám cizí hráče; Můj tým = vlastní kádr a peníze za přestupy.
@@ -73,7 +75,6 @@ interface TeamBadge {
   symbol: string | null;
 }
 
-function formatCZK(v: number): string { return v.toLocaleString("cs") + " Kč"; }
 
 interface SwapPlayerBrief {
   id: string;
@@ -95,7 +96,7 @@ function czechList(items: string[]): string {
 
 /** Částka nabídky; u výměny bez doplatku by „0 Kč" vypadalo jako dar. */
 function offerAmountLabel(amount: number, swapCount: number): string {
-  return swapCount > 0 && amount === 0 ? "bez doplatku" : formatCZK(amount);
+  return swapCount > 0 && amount === 0 ? "bez doplatku" : formatKc(amount);
 }
 
 function SwapPlayerChips({ players }: { players: SwapPlayerBrief[] }) {
@@ -285,171 +286,165 @@ function HeroTransfer({ t }: { t: TransfersOverview["biggest"][number] }) {
   );
 }
 
-// Kompaktní karta #2-#5
-function MidTransferCard({ rank, t }: { rank: number; t: TransfersOverview["biggest"][number] }) {
-  const hasAvatar = t.playerAvatar && Object.keys(t.playerAvatar).length > 0;
+/** Portrét vlevo v řádku seznamu; bez portrétu šedé kolečko stejné velikosti. */
+function RowFace({ avatar }: { avatar?: Record<string, unknown> | null }) {
+  return avatar && Object.keys(avatar).length > 0
+    ? <FaceAvatar faceConfig={avatar} size={30} className="rounded-full bg-surface-3" />
+    : <span className="w-9 h-9 rounded-full bg-surface-3" />;
+}
+
+/**
+ * Odkud → kam v podrobnostech řádku, na jednom řádku jako dřív: dlouhé názvy klubů
+ * se zkrátí (celý název je v odkazu), zalomení by seznam na telefonu protáhlo o polovinu.
+ */
+function TransferRoute({ from, to }: { from: ReactNode; to: ReactNode }) {
+  return (
+    <span className="flex items-center gap-1.5 min-w-0">
+      <span className="min-w-0 shrink truncate">{from}</span>
+      <span className="shrink-0"><FancyArrow size="xs" /></span>
+      <span className="min-w-0 shrink truncate">{to}</span>
+    </span>
+  );
+}
+
+// Řádek #2 až #5 nejdražších přestupů
+function MidTransferRow({ rank, t }: { rank: number; t: TransfersOverview["biggest"][number] }) {
   const medal = rank === 2 ? "from-gray-300 to-gray-400 text-gray-900" : rank === 3 ? "from-amber-300 to-amber-500 text-amber-950" : "from-gray-100 to-gray-200 text-gray-600";
   return (
-    <div className="relative bg-white rounded-xl border border-gray-200 hover:border-pitch-300 hover:shadow-md transition-all p-3 sm:p-4">
-      <div className="flex items-start gap-3">
-        {hasAvatar ? (
-          <div className="shrink-0 rounded-xl overflow-hidden bg-gray-50 ring-2 ring-white shadow-sm">
-            <FaceAvatar faceConfig={t.playerAvatar as Record<string, unknown>} size={56} />
-          </div>
-        ) : (
-          <div className="shrink-0 w-14 h-[67px] rounded-xl bg-gray-100" />
-        )}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-start justify-between gap-2 mb-1">
-            <Link href={`/hrac/${t.playerId}`} className="font-heading font-bold text-sm sm:text-base text-ink hover:text-pitch-500 truncate flex-1 min-w-0">
-              {t.playerName}
-              {t.isCrossLeague && <span className="ml-1 text-micro">🔄</span>}
-            </Link>
-            <span className={`shrink-0 px-1.5 py-0.5 rounded text-micro font-heading font-bold bg-gradient-to-br ${medal}`}>#{rank}</span>
-          </div>
-          {(t.position || t.age) && (
-            <div className="flex items-center gap-1.5 mb-1.5">
-              {t.position && <PositionBadge position={t.position} />}
-              {t.age ? <span className="text-micro text-muted tabular-nums">{t.age}&nbsp;let</span> : null}
-            </div>
-          )}
-          <div className="flex items-center gap-1.5 text-xs sm:text-sm text-muted mb-2 min-w-0">
-            {t.fromTeam ? (
-              <ClubLink teamId={t.fromTeamId} name={t.fromTeam} badge={t.fromTeamBadge} href={t.fromTeamId ? `/tym/${t.fromTeamId}` : null} bold={false} />
-            ) : (
-              <FreeAgentLabel />
-            )}
-            <FancyArrow size="sm" />
-            <ClubLink teamId={t.toVirtual ? null : t.toTeamId} name={t.toTeam} badge={t.toTeamBadge} href={t.toVirtual ? null : `/tym/${t.toTeamId}`} bold={false} />
-          </div>
-          <div className="font-heading font-[800] text-base sm:text-lg text-pitch-500 tabular-nums">
-            {t.fee.toLocaleString("cs")} <span className="text-xs text-pitch-700">Kč</span>
-          </div>
-        </div>
-      </div>
-    </div>
+    <ListRow
+      leading={<RowFace avatar={t.playerAvatar} />}
+      title={<>
+        <Link href={`/hrac/${t.playerId}`} className="hover:text-pitch-500 underline decoration-pitch-500/20 transition-colors">
+          {t.playerName}
+        </Link>
+        {t.isCrossLeague && <span className="ml-1.5 text-micro">🔄</span>}
+      </>}
+      meta={<>
+        <span className={`inline-block px-1.5 rounded text-micro font-heading font-bold bg-gradient-to-br ${medal}`}>#{rank}</span>
+        {t.position && <> <PositionBadge position={t.position} /></>}
+        {t.age ? ` ${t.age} let` : null}
+      </>}
+      trailing={<RowValue>{formatKc(t.fee)}</RowValue>}
+      detail={
+        <TransferRoute
+          from={t.fromTeam
+            ? <ClubLink teamId={t.fromTeamId} name={t.fromTeam} badge={t.fromTeamBadge} href={t.fromTeamId ? `/tym/${t.fromTeamId}` : null} bold={false} />
+            : <FreeAgentLabel />}
+          to={<ClubLink teamId={t.toVirtual ? null : t.toTeamId} name={t.toTeam} badge={t.toTeamBadge} href={t.toVirtual ? null : `/tym/${t.toTeamId}`} bold={false} />} />
+      } />
   );
 }
 
-// Karta spekulace
-function SpeculationCard({ s }: { s: NonNullable<TransfersOverview["speculations"]>[number] }) {
-  const hasAvatar = s.playerAvatar && Object.keys(s.playerAvatar).length > 0;
+// Řádek spekulace: hráč, o kterého se zajímají jiné týmy
+function SpeculationRow({ s, ratings }: { s: NonNullable<TransfersOverview["speculations"]>[number]; ratings: number[] }) {
   const hot = s.watcherCount >= 3;
   return (
-    <div className="bg-white rounded-xl border border-gray-200 hover:border-amber-400 hover:shadow-md transition-all p-3 sm:p-4">
-      <div className="flex items-start gap-3">
-        <div className="relative shrink-0">
-          {hasAvatar ? (
-            <div className="rounded-xl overflow-hidden bg-gray-50 ring-2 ring-white shadow-sm">
-              <FaceAvatar faceConfig={s.playerAvatar as Record<string, unknown>} size={48} />
-            </div>
-          ) : (
-            <div className="w-12 h-[58px] rounded-xl bg-gray-100" />
-          )}
-          {hot && <span className="absolute -top-1 -right-1 text-base" title="Hot">🔥</span>}
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5 mb-1">
-            <Link href={`/hrac/${s.playerId}`} className="font-heading font-bold text-sm sm:text-base text-ink hover:text-pitch-500 truncate">
-              {s.playerName}
-            </Link>
-            <span className="shrink-0 text-micro text-muted tabular-nums">{s.position}·{s.overallRating}</span>
-          </div>
-          <div className="text-xs sm:text-sm text-muted mb-1.5 min-w-0">
-            <ClubLink teamId={s.currentTeamId} name={s.currentTeamName} badge={s.currentTeamBadge} href={`/tym/${s.currentTeamId}`} bold={false} badgeSize={20} />
-          </div>
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1 min-w-0">
-              <span aria-hidden className="text-micro">👁️</span>
-              {(s.watcherBadges && s.watcherBadges.length > 0 ? s.watcherBadges : []).slice(0, 5).map((b, i) => (
-                <span key={i} className="relative inline-block" title="Zájem skrytého klubu">
-                  <ClubBadge badge={b} size={20} />
-                  <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-amber-500 text-white text-[9px] font-heading font-bold flex items-center justify-center ring-1 ring-white">?</span>
-                </span>
-              ))}
-              {s.watcherBadges && s.watcherBadges.length > 5 && (
-                <span className="text-micro text-muted font-heading font-bold ml-1">+{s.watcherBadges.length - 5}</span>
-              )}
-              {(!s.watcherBadges || s.watcherBadges.length === 0) && (
-                <span className="text-micro text-amber-800 font-heading font-bold">{s.watcherCount} {s.watcherCount === 1 ? "tým" : s.watcherCount < 5 ? "týmy" : "týmů"}</span>
-              )}
-            </div>
-            <span className="text-micro text-muted shrink-0">{relativeTimeCs(s.latestWatchedAt)}</span>
-          </div>
-        </div>
-      </div>
-    </div>
+    <ListRow
+      leading={
+        <span className="relative inline-flex">
+          <RowFace avatar={s.playerAvatar} />
+          {hot && <span className="absolute -top-1 -right-1 text-sm leading-none" title="Hot">🔥</span>}
+        </span>
+      }
+      title={
+        <Link href={`/hrac/${s.playerId}`} className="hover:text-pitch-500 underline decoration-pitch-500/20 transition-colors">
+          {s.playerName}
+        </Link>
+      }
+      meta={<PositionBadge position={s.position} />}
+      trailing={<RatingPill value={s.overallRating} tone={ratingToneIn(s.overallRating, ratings)} />}
+      detail={<>
+        <span className="flex min-w-0">
+          <ClubLink teamId={s.currentTeamId} name={s.currentTeamName} badge={s.currentTeamBadge} href={`/tym/${s.currentTeamId}`} bold={false} badgeSize={20} />
+        </span>
+        <span className="flex items-center justify-between gap-2 mt-1">
+          <span className="flex items-center gap-1 min-w-0">
+            <span aria-hidden className="text-micro">👁️</span>
+            {(s.watcherBadges && s.watcherBadges.length > 0 ? s.watcherBadges : []).slice(0, 5).map((b, i) => (
+              <span key={i} className="relative inline-block" title="Zájem skrytého klubu">
+                <ClubBadge badge={b} size={20} />
+                <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-amber-500 text-white text-[9px] font-heading font-bold flex items-center justify-center ring-1 ring-white">?</span>
+              </span>
+            ))}
+            {s.watcherBadges && s.watcherBadges.length > 5 && (
+              <span className="text-micro text-muted font-heading font-bold ml-1">+{s.watcherBadges.length - 5}</span>
+            )}
+            {(!s.watcherBadges || s.watcherBadges.length === 0) && (
+              <span className="text-micro text-amber-800 font-heading font-bold">{s.watcherCount} {s.watcherCount === 1 ? "tým" : s.watcherCount < 5 ? "týmy" : "týmů"}</span>
+            )}
+          </span>
+          <span className="text-micro text-muted shrink-0">{relativeTimeCs(s.latestWatchedAt)}</span>
+        </span>
+      </>} />
   );
 }
 
-// Kompaktní řádek pro Poslední přestupy
+/** Cena vpravo v řádku posledního přestupu. U hostování a výměny štítek, částka pod ním. */
+function RecentTransferPrice({ t }: { t: TransfersOverview["recent"][number] }) {
+  if (t.joinType === "loan") {
+    // Hostování není prodej, cena by se pletla s přestupní částkou.
+    return (
+      <RowValue sub={t.fee > 0 ? formatKc(t.fee) : undefined}>
+        <span className="text-meta text-yellow-700">🤝 {t.loanEnded ? "Hostování skončilo" : "Hostování"}</span>
+      </RowValue>
+    );
+  }
+  if (t.joinType === "free_agent") return <RowValue><span className="text-meta text-amber-700">★ Zdarma</span></RowValue>;
+  if (t.isSwap) {
+    // U výměny je částka jen doplatek. Napsat ji jako cenu by z obchodu
+    // za hráče udělalo výprodej za pár korun.
+    return (
+      <RowValue sub={t.fee > 0 ? `doplatek ${formatKc(t.fee)}` : undefined}>
+        <span className="text-meta text-sky-700">⇄ Výměna</span>
+      </RowValue>
+    );
+  }
+  return t.fee > 0 ? <RowValue>{formatKc(t.fee)}</RowValue> : <span className="text-muted">-</span>;
+}
+
+// Řádek pro Poslední přestupy: odkud → kam a splátky jsou v podrobnostech, ty se neořezávají.
 function RecentTransferRow({ t }: { t: TransfersOverview["recent"][number] }) {
-  const hasAvatar = t.playerAvatar && Object.keys(t.playerAvatar).length > 0;
+  // Cena je celková; jen připomenout, že se splácí a že prodávající má procenta.
+  const terms = [
+    t.installments ? `na splátky (${t.installments}× týdně)` : null,
+    t.sellOnPct ? `+ ${t.sellOnPct} % z dalšího prodeje` : null,
+  ].filter(Boolean).join(" · ");
   return (
-    /* items-start, ne items-center: prostřední sloupec je dvouřádkový, takže
-       se cena centrovala proti jeho středu a končila 17 px pod jménem -
-       vypadalo to, že patří k řádku pod ním. Cena je proto na lince se
-       jménem; druhý řádek (odkud → kam) tím dostal celou šířku a názvy
-       klubů se ořezávají mnohem míň. */
-    <div className="flex items-start gap-2.5 py-2 border-b border-gray-100 last:border-b-0">
-      {hasAvatar ? (
-        <div className="shrink-0 rounded-soft overflow-hidden bg-gray-50">
-          <FaceAvatar faceConfig={t.playerAvatar as Record<string, unknown>} size={32} />
-        </div>
-      ) : (
-        <div className="shrink-0 w-8 h-[38px] rounded-soft bg-gray-100" />
-      )}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5 min-w-0">
-          <Link href={`/hrac/${t.playerId}`} className="font-heading font-bold text-sm text-ink hover:text-pitch-500 truncate">
-            {t.playerName}
-          </Link>
-          {t.position && <PositionBadge position={t.position} />}
-          {t.age ? <span className="text-micro text-muted tabular-nums shrink-0">{t.age}&nbsp;l.</span> : null}
-          {t.isCrossLeague && <span className="text-micro shrink-0">🔄</span>}
-          <span className="ml-auto shrink-0 font-heading font-bold text-sm text-pitch-500 tabular-nums whitespace-nowrap">
-            {t.joinType === "loan" ? (
-              /* Hostování není prodej — cena by se pletla s přestupní částkou. */
-              <span className="text-yellow-700">
-                🤝&nbsp;{t.loanEnded ? "HOSTOVÁNÍ SKONČILO" : "HOSTOVÁNÍ"}
-                {t.fee > 0 ? <span className="text-muted">&nbsp;· {t.fee.toLocaleString("cs")}&nbsp;Kč</span> : null}
-              </span>
-            ) : t.joinType === "free_agent" ? (
-              <span className="text-amber-700">★&nbsp;ZDARMA</span>
-            ) : t.isSwap ? (
-              /* U výměny je částka jen doplatek. Napsat ji jako cenu by z obchodu
-                 za hráče udělalo výprodej za pár korun. */
-              <span className="text-sky-700">
-                ⇄&nbsp;VÝMĚNA
-                {t.fee > 0 ? <span className="text-muted">&nbsp;· doplatek {t.fee.toLocaleString("cs")}&nbsp;Kč</span> : null}
-              </span>
-            ) : t.fee > 0 ? (
-              <>{t.fee.toLocaleString("cs")}&nbsp;<span className="text-micro text-muted">Kč</span></>
-            ) : "-"}
+    <ListRow
+      leading={<RowFace avatar={t.playerAvatar} />}
+      /* Post a věk u jména jako dřív: třetí řádek by seznam na telefonu protáhl o polovinu. */
+      /* Cena na řádku se jménem, ne vpravo přes celý řádek: odkud → kam pak má celou
+         šířku a názvy klubů se ořezávají mnohem míň. */
+      title={
+        <span className="flex items-start justify-between gap-2">
+          <span className="min-w-0">
+            <Link href={`/hrac/${t.playerId}`} className="hover:text-pitch-500 underline decoration-pitch-500/20 transition-colors">
+              {t.playerName}
+            </Link>
+            {t.position && <span className="ml-1.5 align-middle"><PositionBadge position={t.position} /></span>}
+            {t.age ? <span className="ml-1 text-meta font-normal text-muted whitespace-nowrap">{t.age} let</span> : null}
+            {t.isCrossLeague && <span className="ml-1.5 text-micro">🔄</span>}
           </span>
-        </div>
-        {/* Cena je celková; jen připomenout, že se splácí a že prodávající má procenta. */}
-        {(t.installments || t.sellOnPct) ? (
-          <div className="text-sm text-muted text-right">
-            {[t.installments ? `na splátky (${t.installments}× týdně)` : null, t.sellOnPct ? `+ ${t.sellOnPct} % z dalšího prodeje` : null].filter(Boolean).join(" · ")}
-          </div>
-        ) : null}
-        <div className="flex items-center gap-1 text-xs text-muted mt-0.5 min-w-0">
-          {/* U hostování „odkud" znamená kmenový klub, ne pool volných hráčů. */}
-          {!t.fromTeam ? (
-            t.joinType === "loan"
-              ? <span className="text-muted shrink-0">kmenový klub neznámý</span>
-              : <FreeAgentLabel />
-          ) : t.joinType === "free_agent" ? (
-            <FreeAgentLabel />
-          ) : (
-            <ClubLink teamId={t.fromTeamId} name={t.fromTeam} badge={t.fromTeamBadge} href={t.fromTeamId ? `/tym/${t.fromTeamId}` : null} bold={false} />
-          )}
-          <FancyArrow size="xs" />
-          <ClubLink teamId={t.toVirtual ? null : t.toTeamId} name={t.toTeam} badge={t.toTeamBadge} href={t.toVirtual ? null : `/tym/${t.toTeamId}`} bold={false} />
-        </div>
-      </div>
-    </div>
+          <span className="shrink-0 text-right"><RecentTransferPrice t={t} /></span>
+        </span>
+      }
+      detail={<>
+        <TransferRoute
+          from={
+            /* U hostování „odkud" znamená kmenový klub, ne pool volných hráčů. */
+            !t.fromTeam ? (
+              t.joinType === "loan"
+                ? <span className="text-muted">kmenový klub neznámý</span>
+                : <FreeAgentLabel />
+            ) : t.joinType === "free_agent" ? (
+              <FreeAgentLabel />
+            ) : (
+              <ClubLink teamId={t.fromTeamId} name={t.fromTeam} badge={t.fromTeamBadge} href={t.fromTeamId ? `/tym/${t.fromTeamId}` : null} bold={false} />
+            )
+          }
+          to={<ClubLink teamId={t.toVirtual ? null : t.toTeamId} name={t.toTeam} badge={t.toTeamBadge} href={t.toVirtual ? null : `/tym/${t.toTeamId}`} bold={false} />} />
+        {terms && <span className="block text-muted mt-0.5">{terms}</span>}
+      </>} />
   );
 }
 
@@ -517,18 +512,16 @@ function FiltrRadek({ popisek, volby, aktivni, vyber }: {
 }) {
   return (
     <div className="flex items-center gap-2">
-      <span className="w-14 shrink-0 text-micro text-muted font-heading font-bold uppercase tracking-wide">
+      <span className="w-[4.5rem] shrink-0 text-micro text-muted font-heading font-bold uppercase tracking-wide">
         {popisek}
       </span>
-      <div className="flex gap-1.5 overflow-x-auto no-scrollbar -my-0.5 py-0.5" role="group" aria-label={popisek}>
+      <div className="flex gap-1.5 overflow-x-auto no-scrollbar -my-0.5 py-0.5 px-px" role="group" aria-label={popisek}>
         {volby.map(({ k, l }) => (
           <button
             key={k}
             onClick={() => vyber(k)}
             aria-pressed={aktivni === k}
-            className={`shrink-0 px-3 min-h-9 rounded-control text-sm font-heading font-bold transition-colors ${
-              aktivni === k ? "bg-pitch-500 text-white" : "bg-surface-2 text-muted hover:text-ink"
-            }`}
+            className={`shrink-0 px-3 min-h-9 text-sm font-heading font-bold ${choiceClass(aktivni === k)}`}
           >
             {l}
           </button>
@@ -746,7 +739,7 @@ const POS_PILLS: Array<{ value: string; label: string }> = [
 ];
 
 const SORT_OPTIONS: Array<{ value: FASortKey; label: string }> = [
-  { value: "rating", label: "Rating" },
+  { value: "rating", label: "Hodnocení" },
   { value: "wage", label: "Plat" },
   { value: "age", label: "Věk" },
   { value: "distance", label: "Vzdálenost" },
@@ -1068,7 +1061,7 @@ export default function TransfersPage() {
     return getUnseenOffersCount(teamId ?? "", { incoming, outgoing, incomingBids, outgoingBids });
   }, [teamId, incoming, outgoing, incomingBids, outgoingBids, tab]);
 
-  if (loading) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
+  if (loading) return <PageLoading />;
 
   const quitCount = players.filter((p) => (p as any).status === "quit").length;
   const tabs: [Tab, string, number][] = [
@@ -1087,8 +1080,8 @@ export default function TransfersPage() {
   const openListingBid = (l: MarketListing) => setPriceDialog({
     title: `Nabídnout za ${l.playerName}`,
     description: l.isAiListing
-      ? `Požadovaná cena: ${formatCZK(l.askingPrice)}. O ceně se s klubem dá jednat, předseda odpoví hned.`
-      : `Požadovaná cena: ${formatCZK(l.askingPrice)}`,
+      ? `Požadovaná cena: ${formatKc(l.askingPrice)}. O ceně se s klubem dá jednat, předseda odpoví hned.`
+      : `Požadovaná cena: ${formatKc(l.askingPrice)}`,
     defaultPrice: l.askingPrice,
     // Splátky jdou u obou; procenta a výměna jen s lidským klubem.
     payment: { allowSellOn: !l.isAiListing },
@@ -1167,7 +1160,7 @@ export default function TransfersPage() {
     </Link>
   ) : l.myBidAmount ? (
     <span className="inline-block py-1.5 px-4 rounded-soft text-sm font-heading font-bold bg-pitch-50 text-pitch-600">
-      Nabídnuto {formatCZK(l.myBidAmount)}
+      Nabídnuto {formatKc(l.myBidAmount)}
     </span>
   ) : (
     <button onClick={() => openListingBid(l)}
@@ -1193,7 +1186,7 @@ export default function TransfersPage() {
         <span className="inline-flex flex-wrap items-center gap-1">
           {l.origin && <OriginBadge origin={l.origin} />}
           {l.dealType === "loan" && (
-            <span className="text-xs font-heading font-bold px-2 py-0.5 rounded-full bg-pitch-50 text-pitch-700">{loanTermsLine(l)}</span>
+            <StatusChip tone="ok">{loanTermsLine(l)}</StatusChip>
           )}
           {l.revealedPotential && <RevealedPotentialBadge age={l.playerAge} potential={l.revealedPotential} />}
         </span>
@@ -1206,97 +1199,94 @@ export default function TransfersPage() {
   const loanRows: BrowseRow[] = loanListings.map(toListingRow);
 
   // Moje inzeráty: prodej v podzáložce Prodej, hostování (se žádostmi) v podzáložce Hostování.
+  // Pod každým inzerátem jeho žádosti o hostování (🤝) a nabídky z trhu (💰) jako vlastní řádky.
   const renderMyListings = (items: MyListing[], title: string): ReactNode => items.length === 0 ? null : (
-              <div>
-                <SectionLabel>{title} ({items.length})</SectionLabel>
-                <div className="space-y-3">
-                  {items.map((l) => {
-                    const mlAvatar = (() => { try { const a = (l as any).avatar; return typeof a === "string" ? JSON.parse(a) : a; } catch { return null; } })();
-                    return (
-                    <div key={l.id} className="card p-4">
-                      <div className="flex items-center gap-3 mb-2">
-                        {mlAvatar && Object.keys(mlAvatar).length > 0
-                          ? <FaceAvatar faceConfig={mlAvatar} size={40} className="rounded-full shrink-0" />
-                          : <div className="w-10 h-10 rounded-full bg-gray-100 shrink-0" />}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <Link href={`/hrac/${l.playerId}`} className="font-heading font-bold hover:text-pitch-500 underline decoration-pitch-500/20 transition-colors">
-                              {l.playerName}
-                            </Link>
-                            <PositionBadge position={l.position as "GK" | "DEF" | "MID" | "FWD"} />
-                            <span className="text-sm text-muted">{l.playerAge} let</span>
-                          </div>
-                          {l.dealType === "loan" ? (
-                            <div className="text-xs text-muted">Na hostování: <span className="font-heading font-bold text-ink">{loanTermsLine(l)}</span></div>
-                          ) : (
-                            <div className="text-xs text-muted">Cena: <span className="font-heading font-bold text-ink">{formatCZK(l.askingPrice)}</span></div>
-                          )}
-                        </div>
-                        <button
-                          onClick={async () => {
-                            if (!teamId) return;
-                            if (await apiAction(apiFetch(`/api/teams/${teamId}/listings/${l.id}`, { method: "DELETE" }), "Stažení inzerátu se nezdařilo")) await refresh();
-                          }}
-                          className="shrink-0 py-1 px-3 rounded-soft text-xs font-heading font-bold bg-gray-100 text-muted hover:bg-gray-200 transition-colors"
-                        >
-                          Stáhnout
-                        </button>
-                      </div>
-                      {l.dealType === "loan" && (
-                        <div className="border-t border-gray-100 pt-2">
-                          {(l.loanRequests ?? []).length === 0 ? (
-                            <p className="text-sm text-muted">Zatím nikdo nepožádal.</p>
-                          ) : (
-                            <div className="space-y-2">
-                              <p className="text-sm text-muted">Žádosti ({l.loanRequests!.length}). Přijmeš jednu, ostatní dostanou odmítnutí.</p>
-                              {l.loanRequests!.map((r) => (
-                                <div key={r.offerId} className="flex items-center justify-between gap-3">
-                                  <div className="text-sm min-w-0">
-                                    <span className="font-heading font-bold">{r.teamName}</span>
-                                    {r.leagueName && <span className="text-muted"> · {r.leagueName}</span>}
-                                  </div>
-                                  <Link href={`/prestupy/nabidka/${r.offerId}`}
-                                    className="shrink-0 py-1 px-3 rounded-soft text-xs font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">
-                                    Rozhodnout
-                                  </Link>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                      {l.bids.length > 0 && (
-                        <div className="border-t border-gray-100 pt-2 space-y-2">
-                          {l.bids.map((b) => (
-                            <div key={b.id} className="flex items-center justify-between gap-3">
-                              <div className="text-sm">
-                                <span className="font-heading font-bold">{b.bidderName}</span>
-                                <span className="text-muted"> nabízí </span>
-                                <span className="font-heading font-bold text-pitch-500">{formatCZK(b.amount)}</span>
-                              </div>
-                              <div className="flex gap-2">
-                                <button onClick={async () => {
-                                  const ok = await confirm({ title: `Přijmout nabídku ${formatCZK(b.amount)}?`, description: `Od: ${b.bidderName}`, confirmLabel: "Přijmout" });
-                                  if (!ok || !teamId) return;
-                                  if (await apiAction(apiFetch(`/api/teams/${teamId}/bids/${b.id}/accept`, { method: "POST" }), "Přijetí nabídky se nezdařilo")) await refresh();
-                                }} className="py-1 px-3 rounded-soft text-xs font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">
-                                  Přijmout
-                                </button>
-                                <button onClick={async () => {
-                                  if (!teamId) return;
-                                  if (await apiAction(apiFetch(`/api/teams/${teamId}/bids/${b.id}/reject`, { method: "POST" }), "Odmítnutí nabídky se nezdařilo")) await refresh();
-                                }} className="py-1 px-3 rounded-soft text-xs font-heading font-bold bg-gray-100 text-muted hover:bg-gray-200 transition-colors">
-                                  Odmítnout
-                                </button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  ); })}
-                </div>
-              </div>
+    <ListCard title={title} count={items.length}>
+      {items.flatMap((l) => {
+        const listingAvatar = (() => {
+          try {
+            const a = (l as any).avatar;
+            return typeof a === "string" ? JSON.parse(a) : a;
+          } catch (e) {
+            console.warn("Avatar hráče v inzerátu nejde přečíst:", e);
+            return null;
+          }
+        })();
+        const requests = l.loanRequests ?? [];
+        const listingRow = (
+          <ListRow key={l.id}
+            leading={<RowFace avatar={listingAvatar} />}
+            title={
+              <Link href={`/hrac/${l.playerId}`} className="hover:text-pitch-500 underline decoration-pitch-500/20 transition-colors">
+                {l.playerName}
+              </Link>
+            }
+            meta={<><PositionBadge position={l.position} /> {l.playerAge} let</>}
+            trailing={
+              <button
+                onClick={async () => {
+                  if (!teamId) return;
+                  if (await apiAction(apiFetch(`/api/teams/${teamId}/listings/${l.id}`, { method: "DELETE" }), "Stažení inzerátu se nezdařilo")) await refresh();
+                }}
+                className="py-1 px-3 rounded-soft text-xs font-heading font-bold bg-gray-100 text-muted hover:bg-gray-200 transition-colors"
+              >
+                Stáhnout
+              </button>
+            }
+            detail={<>
+              {l.dealType === "loan" ? (
+                <span className="block"><span className="text-muted">Na hostování:</span> <span className="font-bold text-ink">{loanTermsLine(l)}</span></span>
+              ) : (
+                <span className="block"><span className="text-muted">Cena:</span> <span className="font-bold text-ink">{formatKc(l.askingPrice)}</span></span>
+              )}
+              {l.dealType === "loan" && (
+                <span className="block text-muted mt-0.5">
+                  {requests.length === 0
+                    ? "Zatím nikdo nepožádal."
+                    : `Žádosti (${requests.length}). Přijmeš jednu, ostatní dostanou odmítnutí.`}
+                </span>
+              )}
+            </>} />
+        );
+        const requestRows = l.dealType === "loan" ? requests.map((r) => (
+          <ListRow key={`${l.id}-request-${r.offerId}`} tone="new"
+            leading={<RowIcon>🤝</RowIcon>}
+            title={r.teamName}
+            meta={r.leagueName ?? undefined}
+            trailing={
+              <Link href={`/prestupy/nabidka/${r.offerId}`}
+                className="py-1 px-3 rounded-soft text-xs font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">
+                Rozhodnout
+              </Link>
+            } />
+        )) : [];
+        const bidRows = l.bids.map((b) => (
+          <ListRow key={`${l.id}-bid-${b.id}`} tone="new"
+            leading={<RowIcon>💰</RowIcon>}
+            title={b.bidderName}
+            meta="nabízí"
+            trailing={<RowValue tone="plus">{formatKc(b.amount)}</RowValue>}
+            detail={
+              <span className="flex flex-wrap gap-2 mt-1">
+                <button onClick={async () => {
+                  const ok = await confirm({ title: `Přijmout nabídku ${formatKc(b.amount)}?`, description: `Od: ${b.bidderName}`, confirmLabel: "Přijmout" });
+                  if (!ok || !teamId) return;
+                  if (await apiAction(apiFetch(`/api/teams/${teamId}/bids/${b.id}/accept`, { method: "POST" }), "Přijetí nabídky se nezdařilo")) await refresh();
+                }} className="py-1 px-3 rounded-soft text-xs font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">
+                  Přijmout
+                </button>
+                <button onClick={async () => {
+                  if (!teamId) return;
+                  if (await apiAction(apiFetch(`/api/teams/${teamId}/bids/${b.id}/reject`, { method: "POST" }), "Odmítnutí nabídky se nezdařilo")) await refresh();
+                }} className="py-1 px-3 rounded-soft text-xs font-heading font-bold bg-gray-100 text-muted hover:bg-gray-200 transition-colors">
+                  Odmítnout
+                </button>
+              </span>
+            } />
+        ));
+        return [listingRow, ...requestRows, ...bidRows];
+      })}
+    </ListCard>
   );
 
   const searchRows: BrowseRow[] = filteredSearch.slice(0, VYPIS_MAX).map((p) => ({
@@ -1309,10 +1299,10 @@ export default function TransfersPage() {
   const signFreeAgent = async (fa: FreeAgent) => {
     const ok = await confirm({
       title: `Podepsat ${fa.firstName} ${fa.lastName}?`,
-      description: `${fa.position}, ${fa.age} let, rating ${fa.overallRating} ${fa.occupation}`,
+      description: `${fa.position}, ${fa.age} let, hodnocení ${fa.overallRating} ${fa.occupation}`,
       details: [
-        { label: "Mzda", value: `${formatCZK(fa.weeklyWage)}/týd`, color: "text-ink" },
-        { label: "Registrace", value: `-${formatCZK(500)}`, color: "text-card-red" },
+        { label: "Mzda", value: `${formatKc(fa.weeklyWage)}/týd`, color: "text-ink" },
+        { label: "Registrace", value: `−${formatKc(500)}`, color: "text-card-red" },
       ],
       confirmLabel: "Podepsat",
     });
@@ -1341,7 +1331,7 @@ export default function TransfersPage() {
     id: fa.id, firstName: fa.firstName, lastName: fa.lastName, nickname: fa.nickname ?? null, age: fa.age,
     position: fa.position as BrowseRow["position"], rating: fa.overallRating,
     skills: fa.skills as BrowseRow["skills"], avatar: fa.avatar,
-    clubLabel: [fa.occupation, `${formatCZK(fa.weeklyWage)}/týd`, fa.distanceKm !== null ? `${fa.distanceKm} km` : null, fa.villageName]
+    clubLabel: [fa.occupation, `${formatKc(fa.weeklyWage)}/týd`, fa.distanceKm !== null ? `${fa.distanceKm} km` : null, fa.villageName]
       .filter(Boolean).join(" · "),
     tag: (fa.origin || fa.isCelebrity || fa.source === "released") ? (
       <span className="text-sm">
@@ -1434,7 +1424,7 @@ export default function TransfersPage() {
       {/* ═══ TAB: Přehled ═══ */}
       {tab === "overview" && (
         <div className="space-y-4">
-          {overviewLoading && <div className="flex justify-center py-8"><Spinner /></div>}
+          {overviewLoading && <SectionLoading />}
           {!overviewLoading && !overview && (
             <div className="card p-8 text-center text-muted">Nepodařilo se načíst přehled</div>
           )}
@@ -1474,145 +1464,93 @@ export default function TransfersPage() {
                 </div>
               </div>
 
-              {/* Top 2-5 nejdražších — grid karet */}
+              {/* Top 2-5 nejdražších */}
               {overview.biggest.length > 1 && (
-                <div>
-                  <div className="flex items-center justify-between mb-2 px-1">
-                    <SectionLabel>Další přestupy roku</SectionLabel>
-                    <span className="text-micro text-muted uppercase tracking-wide">#2 – #{Math.min(overview.biggest.length, 5)}</span>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {overview.biggest.slice(1, 5).map((t, i) => (
-                      <MidTransferCard key={`${t.playerId}-${t.date}`} rank={i + 2} t={t} />
-                    ))}
-                  </div>
-                </div>
+                <ListCard title="Další přestupy roku" count={`#2 až #${Math.min(overview.biggest.length, 5)}`}>
+                  {overview.biggest.slice(1, 5).map((t, i) => (
+                    <MidTransferRow key={`${t.playerId}-${t.date}`} rank={i + 2} t={t} />
+                  ))}
+                </ListCard>
               )}
 
               {/* Poslední přestupy */}
               {overview.recent.length > 0 && (
-                <div className="card p-4 sm:p-5">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-base" aria-hidden>📋</span>
-                    <SectionLabel>Poslední přestupy</SectionLabel>
-                  </div>
-                  <div>
-                    {overview.recent.map((t) => (
-                      <RecentTransferRow key={`${t.playerId}-${t.date}`} t={t} />
-                    ))}
-                  </div>
-                </div>
+                <ListCard title="📋 Poslední přestupy" count={overview.recent.length}>
+                  {overview.recent.map((t) => (
+                    <RecentTransferRow key={`${t.playerId}-${t.date}`} t={t} />
+                  ))}
+                </ListCard>
               )}
 
               {/* Spekulace */}
-              {overview.speculations && overview.speculations.length > 0 && (
-                <div>
-                  <div className="flex items-center justify-between mb-2 px-1">
-                    <SectionLabel>Spekulace</SectionLabel>
-                    <span className="text-micro sm:text-xs text-muted">Ve hledáčku jiných týmů</span>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {overview.speculations.slice(0, 4).map((s) => (
-                      <SpeculationCard key={s.playerId} s={s} />
+              {overview.speculations && overview.speculations.length > 0 && (() => {
+                const shownSpeculations = overview.speculations.slice(0, 4);
+                const speculationRatings = shownSpeculations.map((s) => s.overallRating);
+                return (
+                  <ListCard title="Spekulace" count="Ve hledáčku jiných týmů">
+                    {shownSpeculations.map((s) => (
+                      <SpeculationRow key={s.playerId} s={s} ratings={speculationRatings} />
                     ))}
-                  </div>
-                </div>
-              )}
+                  </ListCard>
+                );
+              })()}
 
               {/* Top sellers + buyers */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {overview.topSellers.length > 0 && (
-                  <div className="card p-4 sm:p-5">
-                    <div className="flex items-center gap-2 mb-3">
-                      <span className="text-base" aria-hidden>💰</span>
-                      <SectionLabel>Nejvíc vydělali</SectionLabel>
-                    </div>
-                    <div className="space-y-2.5">
-                      {overview.topSellers.map((s, i) => {
-                        const max = overview.topSellers[0]?.earned ?? 1;
-                        const pct = (s.earned / max) * 100;
-                        return (
-                          <div key={s.teamId} className="flex items-center gap-2.5">
-                            <span className="font-heading font-bold text-xs text-muted w-4 tabular-nums shrink-0">{i + 1}.</span>
-                            <ClubBadge badge={s.badge} size={28} />
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center justify-between gap-2 mb-1">
-                                <Link href={`/tym/${s.teamId}`} className="text-sm font-heading font-bold text-ink hover:text-pitch-500 truncate">
-                                  {s.teamName}
-                                </Link>
-                                <span className="font-heading font-bold text-sm text-pitch-500 tabular-nums shrink-0">{s.earned.toLocaleString("cs")} Kč</span>
-                              </div>
-                              <div className="bg-gray-100 rounded-full h-2 overflow-hidden">
-                                <div className="h-full bg-gradient-to-r from-pitch-400 to-pitch-600 rounded-full transition-all" style={{ width: `${pct}%` }} />
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
+                  <ListCard title="💰 Nejvíc vydělali">
+                    {overview.topSellers.map((s, i) => {
+                      const max = overview.topSellers[0]?.earned ?? 1;
+                      return (
+                        <ListRow key={s.teamId} dense href={`/tym/${s.teamId}`}
+                          leading={<span className="text-meta text-muted tabular-nums">{i + 1}.</span>}
+                          title={<span className="flex items-center gap-2"><ClubBadge badge={s.badge} size={24} /><span className="min-w-0">{s.teamName}</span></span>}
+                          trailing={<span className="text-body font-bold tabular-nums text-pitch-600">{formatKc(s.earned)}</span>}
+                          detail={
+                            <span className="block bg-gray-100 rounded-full h-1.5 overflow-hidden mt-1">
+                              <span className="block h-full bg-gradient-to-r from-pitch-400 to-pitch-600 rounded-full" style={{ width: `${(s.earned / max) * 100}%` }} />
+                            </span>
+                          } />
+                      );
+                    })}
+                  </ListCard>
                 )}
                 {overview.topBuyers.length > 0 && (
-                  <div className="card p-4 sm:p-5">
-                    <div className="flex items-center gap-2 mb-3">
-                      <span className="text-base" aria-hidden>🛒</span>
-                      <SectionLabel>Nejvíc utratili</SectionLabel>
-                    </div>
-                    <div className="space-y-2.5">
-                      {overview.topBuyers.map((b, i) => {
-                        const max = overview.topBuyers[0]?.spent ?? 1;
-                        const pct = (b.spent / max) * 100;
-                        return (
-                          <div key={b.teamId} className="flex items-center gap-2.5">
-                            <span className="font-heading font-bold text-xs text-muted w-4 tabular-nums shrink-0">{i + 1}.</span>
-                            <ClubBadge badge={b.badge} size={28} />
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center justify-between gap-2 mb-1">
-                                <Link href={`/tym/${b.teamId}`} className="text-sm font-heading font-bold text-ink hover:text-pitch-500 truncate">
-                                  {b.teamName}
-                                </Link>
-                                <span className="font-heading font-bold text-sm text-card-red tabular-nums shrink-0">{b.spent.toLocaleString("cs")} Kč</span>
-                              </div>
-                              <div className="bg-gray-100 rounded-full h-2 overflow-hidden">
-                                <div className="h-full bg-gradient-to-r from-amber-400 to-card-red rounded-full transition-all" style={{ width: `${pct}%` }} />
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
+                  <ListCard title="🛒 Nejvíc utratili">
+                    {overview.topBuyers.map((b, i) => {
+                      const max = overview.topBuyers[0]?.spent ?? 1;
+                      return (
+                        <ListRow key={b.teamId} dense href={`/tym/${b.teamId}`}
+                          leading={<span className="text-meta text-muted tabular-nums">{i + 1}.</span>}
+                          title={<span className="flex items-center gap-2"><ClubBadge badge={b.badge} size={24} /><span className="min-w-0">{b.teamName}</span></span>}
+                          trailing={<span className="text-body font-bold tabular-nums text-card-red">{formatKc(b.spent)}</span>}
+                          detail={
+                            <span className="block bg-gray-100 rounded-full h-1.5 overflow-hidden mt-1">
+                              <span className="block h-full bg-gradient-to-r from-amber-400 to-card-red rounded-full" style={{ width: `${(b.spent / max) * 100}%` }} />
+                            </span>
+                          } />
+                      );
+                    })}
+                  </ListCard>
                 )}
               </div>
 
               {/* Nejaktivnější */}
               {overview.mostActive.length > 0 && (
-                <div className="card p-4 sm:p-5">
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="text-base" aria-hidden>⚡</span>
-                    <SectionLabel>Nejaktivnější</SectionLabel>
-                  </div>
-                  <div className="space-y-2">
-                    {overview.mostActive.map((a, i) => (
-                      <div key={a.teamId} className="flex items-center gap-2.5 py-1">
-                        <span className="font-heading font-bold text-xs text-muted w-4 tabular-nums shrink-0">{i + 1}.</span>
-                        <ClubBadge badge={a.badge} size={28} />
-                        <Link href={`/tym/${a.teamId}`} className="text-sm font-heading font-bold text-ink hover:text-pitch-500 truncate flex-1 min-w-0">
-                          {a.teamName}
-                        </Link>
-                        <div className="flex items-center gap-2 sm:gap-3 shrink-0 text-xs">
-                          <span className="inline-flex items-center gap-0.5 text-pitch-500 font-heading font-bold tabular-nums" title="Příchozí">
-                            <span aria-hidden>↓</span>{a.in}
-                          </span>
-                          <span className="inline-flex items-center gap-0.5 text-card-red font-heading font-bold tabular-nums" title="Odchozí">
-                            <span aria-hidden>↑</span>{a.out}
-                          </span>
-                          <span className="font-heading font-[800] text-base tabular-nums w-7 text-right text-ink">{a.total}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                <ListCard title="⚡ Nejaktivnější">
+                  {overview.mostActive.map((a, i) => (
+                    <ListRow key={a.teamId} dense href={`/tym/${a.teamId}`}
+                      leading={<span className="text-meta text-muted tabular-nums">{i + 1}.</span>}
+                      title={<span className="flex items-center gap-2"><ClubBadge badge={a.badge} size={24} /><span className="min-w-0">{a.teamName}</span></span>}
+                      trailing={
+                        <span className="flex items-center gap-2 sm:gap-3 text-meta tabular-nums">
+                          <span className="text-pitch-600 font-bold" title="Příchozí"><span aria-hidden>↓</span>{a.in}</span>
+                          <span className="text-card-red font-bold" title="Odchozí"><span aria-hidden>↑</span>{a.out}</span>
+                          <span className="text-body font-bold text-ink w-7 text-right">{a.total}</span>
+                        </span>
+                      } />
+                  ))}
+                </ListCard>
               )}
 
             </>
@@ -1623,7 +1561,7 @@ export default function TransfersPage() {
       {/* ═══ TAB: Hledání ═══ */}
       {isSearch && (
         <div className="space-y-3">
-          {!searchLoaded && <div className="flex justify-center py-8"><Spinner /></div>}
+          {!searchLoaded && <SectionLoading />}
           {searchLoaded && (
             <>
               {/* Rating a věk jsou při shánění hráče důležitější než jméno,
@@ -1649,7 +1587,7 @@ export default function TransfersPage() {
 
               <div className="card px-3 py-2 space-y-1.5">
                 <FiltrRadek
-                  popisek="Rating"
+                  popisek="Hodnocení"
                   volby={[
                     { k: "0", l: "Vše" }, { k: "30", l: "30+" }, { k: "50", l: "50+" },
                     { k: "60", l: "60+" }, { k: "70", l: "70+" },
@@ -1712,18 +1650,18 @@ export default function TransfersPage() {
                     <div className="flex gap-1.5 items-center">
                       <input type="number" value={searchAgeMin || ""} onChange={(e) => setSearchAgeMin(parseInt(e.target.value) || 0)}
                         placeholder="od" min={0} max={60} aria-label="Věk od"
-                        className="w-20 px-2 min-h-11 rounded-control border border-line text-sm font-heading tabular-nums text-center" />
+                        className="input !w-20 !px-2 min-h-11 !text-sm !font-heading tabular-nums text-center" />
                       <span className="text-muted">–</span>
                       <input type="number" value={searchAgeMax < 99 ? searchAgeMax : ""} onChange={(e) => setSearchAgeMax(parseInt(e.target.value) || 99)}
                         placeholder="do" min={0} max={60} aria-label="Věk do"
-                        className="w-20 px-2 min-h-11 rounded-control border border-line text-sm font-heading tabular-nums text-center" />
+                        className="input !w-20 !px-2 min-h-11 !text-sm !font-heading tabular-nums text-center" />
                     </div>
                   </div>
 
                   <div>
                     <span className="block text-micro text-muted font-heading font-bold uppercase tracking-wide mb-1.5">Řazení</span>
                     <select value={searchSort} onChange={(e) => setSearchSort(e.target.value)} className="select w-full">
-                      <option value="rating">Rating (nejlepší)</option>
+                      <option value="rating">Hodnocení (nejlepší)</option>
                       <option value="age">Věk (nejmladší)</option>
                       <option value="wage">Plat (nejnižší)</option>
                       <option value="name">Jméno (A–Z)</option>
@@ -1824,54 +1762,32 @@ export default function TransfersPage() {
               {/* Position pills */}
               <div>
                 <label className="text-xs font-heading uppercase text-muted mb-1.5 block">Pozice</label>
-                <div className="flex gap-1.5">
-                  {POS_PILLS.map((p) => (
-                    <button
-                      key={p.value}
-                      onClick={() => setFilters((f) => ({ ...f, position: p.value }))}
-                      className={`px-3 py-1.5 rounded-soft text-sm font-heading font-bold transition-colors ${
-                        filters.position === p.value
-                          ? "bg-pitch-500 text-white"
-                          : "bg-surface text-muted hover:text-ink"
-                      }`}
-                    >
-                      {p.label}
-                    </button>
-                  ))}
-                </div>
+                <ChoiceGroup ariaLabel="Pozice" size="sm" value={filters.position}
+                  onChange={(v) => setFilters((f) => ({ ...f, position: v }))}
+                  options={POS_PILLS.map((p) => ({ value: p.value, label: p.label }))} />
               </div>
 
               {/* Rating */}
               <div>
-                <label className="text-xs font-heading uppercase text-muted mb-1.5 block">Rating</label>
+                <label className="text-xs font-heading uppercase text-muted mb-1.5 block">Hodnocení</label>
                 <div className="flex items-center gap-2">
                   <input
                     type="number" min={0} max={99} placeholder="Min"
                     value={filters.ratingMin || ""}
                     onChange={(e) => setFilters((f) => ({ ...f, ratingMin: parseInt(e.target.value) || 0 }))}
-                    className="w-20 px-2 py-1.5 rounded-soft border border-gray-200 text-sm font-heading tabular-nums text-center focus:outline-none focus:ring-2 focus:ring-pitch-500/30"
+                    className="input !w-20 !px-2 !py-1.5 !text-sm !font-heading tabular-nums text-center"
                   />
                   <span className="text-muted text-sm">-</span>
                   <input
                     type="number" min={0} max={99} placeholder="Max"
                     value={filters.ratingMax < 99 ? filters.ratingMax : ""}
                     onChange={(e) => setFilters((f) => ({ ...f, ratingMax: parseInt(e.target.value) || 99 }))}
-                    className="w-20 px-2 py-1.5 rounded-soft border border-gray-200 text-sm font-heading tabular-nums text-center focus:outline-none focus:ring-2 focus:ring-pitch-500/30"
+                    className="input !w-20 !px-2 !py-1.5 !text-sm !font-heading tabular-nums text-center"
                   />
                 </div>
-                <div className="flex gap-1.5 mt-1.5">
-                  {[30, 50, 60].map((v) => (
-                    <button
-                      key={v}
-                      onClick={() => setFilters((f) => ({ ...f, ratingMin: v }))}
-                      className={`px-2.5 py-1 rounded text-xs font-heading font-bold transition-colors ${
-                        filters.ratingMin === v ? "bg-pitch-500 text-white" : "bg-surface text-muted hover:text-ink"
-                      }`}
-                    >
-                      {v}+
-                    </button>
-                  ))}
-                </div>
+                <ChoiceGroup ariaLabel="Hodnocení od" size="sm" className="mt-1.5" value={String(filters.ratingMin)}
+                  onChange={(v) => setFilters((f) => ({ ...f, ratingMin: Number(v) }))}
+                  options={[30, 50, 60].map((v) => ({ value: String(v), label: `${v}+` }))} />
               </div>
 
               {/* Age */}
@@ -1882,14 +1798,14 @@ export default function TransfersPage() {
                     type="number" min={15} max={50} placeholder="Min"
                     value={filters.ageMin > 15 ? filters.ageMin : ""}
                     onChange={(e) => setFilters((f) => ({ ...f, ageMin: parseInt(e.target.value) || 15 }))}
-                    className="w-20 px-2 py-1.5 rounded-soft border border-gray-200 text-sm font-heading tabular-nums text-center focus:outline-none focus:ring-2 focus:ring-pitch-500/30"
+                    className="input !w-20 !px-2 !py-1.5 !text-sm !font-heading tabular-nums text-center"
                   />
                   <span className="text-muted text-sm">-</span>
                   <input
                     type="number" min={15} max={50} placeholder="Max"
                     value={filters.ageMax < 50 ? filters.ageMax : ""}
                     onChange={(e) => setFilters((f) => ({ ...f, ageMax: parseInt(e.target.value) || 50 }))}
-                    className="w-20 px-2 py-1.5 rounded-soft border border-gray-200 text-sm font-heading tabular-nums text-center focus:outline-none focus:ring-2 focus:ring-pitch-500/30"
+                    className="input !w-20 !px-2 !py-1.5 !text-sm !font-heading tabular-nums text-center"
                   />
                 </div>
               </div>
@@ -1901,7 +1817,7 @@ export default function TransfersPage() {
                   type="number" min={0} step={100} placeholder="Bez limitu"
                   value={filters.maxWage || ""}
                   onChange={(e) => setFilters((f) => ({ ...f, maxWage: parseInt(e.target.value) || 0 }))}
-                  className="w-32 px-2 py-1.5 rounded-soft border border-gray-200 text-sm font-heading tabular-nums text-center focus:outline-none focus:ring-2 focus:ring-pitch-500/30"
+                  className="input !w-32 !px-2 !py-1.5 !text-sm !font-heading tabular-nums text-center"
                 />
               </div>
 
@@ -1929,7 +1845,7 @@ export default function TransfersPage() {
                           type="number" min={0} max={99} placeholder="0"
                           value={(filters[key] as number) || ""}
                           onChange={(e) => setFilters((f) => ({ ...f, [key]: parseInt(e.target.value) || 0 }))}
-                          className="w-full px-2 py-1.5 rounded-soft border border-gray-200 text-sm font-heading tabular-nums text-center focus:outline-none focus:ring-2 focus:ring-pitch-500/30"
+                          className="input !w-full !px-2 !py-1.5 !text-sm !font-heading tabular-nums text-center"
                         />
                       </div>
                     ))}
@@ -1943,7 +1859,7 @@ export default function TransfersPage() {
                 <select
                   value={filters.sort}
                   onChange={(e) => setFilters((f) => ({ ...f, sort: e.target.value as FASortKey }))}
-                  className="px-3 py-1.5 rounded-soft border border-gray-200 text-sm font-heading focus:outline-none focus:ring-2 focus:ring-pitch-500/30"
+                  className="select !py-1.5 !text-sm !font-heading"
                 >
                   {SORT_OPTIONS.map((o) => (
                     <option key={o.value} value={o.value}>{o.label}</option>
@@ -1968,7 +1884,7 @@ export default function TransfersPage() {
                       onChange={(e) => setPresetName(e.target.value)}
                       onKeyDown={(e) => { if (e.key === "Enter") handleSavePreset(); if (e.key === "Escape") setShowPresetInput(false); }}
                       placeholder="Název filtru"
-                      className="px-2 py-1 rounded-soft border border-gray-200 text-sm font-heading focus:outline-none focus:ring-2 focus:ring-pitch-500/30 w-32"
+                      className="input !px-2 !py-1 !text-sm !font-heading !w-32"
                       autoFocus
                     />
                     <button onClick={handleSavePreset} className="py-1 px-2.5 rounded-soft text-xs font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">
@@ -2109,17 +2025,17 @@ export default function TransfersPage() {
             <div>
               <SectionLabel>Historie přestupů</SectionLabel>
               {history.length === 0 ? (
-                <div className="card p-6 text-center text-muted">Zatím žádná uzavřená jednání.</div>
+                <ListCard><ListEmpty icon="🗂️">Zatím žádná uzavřená jednání. Tady se objeví každá nabídka, která skončila.</ListEmpty></ListCard>
               ) : (
-                <div className="space-y-2">
+                <ListCard title="Uzavřená jednání" count={history.length}>
                   {history.flatMap((o) => {
-                    const statusMap: Record<string, { label: string; color: string }> = {
-                      accepted: { label: "Přijato", color: "text-pitch-500" },
-                      rejected: { label: "Zamítnuto", color: "text-red-600" },
-                      withdrawn: { label: "Staženo", color: "text-muted" },
-                      expired: { label: "Vypršelo", color: "text-muted" },
+                    const statusMap: Record<string, { label: string; tone: "ok" | "danger" | "neutral" }> = {
+                      accepted: { label: "Přijato", tone: "ok" },
+                      rejected: { label: "Zamítnuto", tone: "danger" },
+                      withdrawn: { label: "Staženo", tone: "neutral" },
+                      expired: { label: "Vypršelo", tone: "neutral" },
                     };
-                    const s = statusMap[o.status] ?? { label: o.status, color: "text-muted" };
+                    const s = statusMap[o.status] ?? { label: o.status, tone: "neutral" as const };
                     const amount = o.counter_amount ?? o.offer_amount;
                     const isLoan = o.offer_type === "loan";
                     const otherName = o.my_role === "buyer" ? o.to_team_name : o.from_team_name;
@@ -2144,27 +2060,14 @@ export default function TransfersPage() {
                       avatar: Record<string, unknown> | null, prichod: boolean, castka: number | null,
                       poznamka: string | null,
                     ) => (
-                      <Link key={key} href={`/prestupy/nabidka/${o.id}`} className="card p-3 flex items-center gap-3 hover:bg-pitch-50 transition-colors">
-                        {avatar && Object.keys(avatar).length > 0
-                          ? <FaceAvatar faceConfig={avatar} size={36} className="rounded-full shrink-0" />
-                          : <div className="w-9 h-9 rounded-full bg-gray-100 shrink-0" />}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-heading font-bold text-sm truncate">{jmeno}</span>
-                            {pozice && <PositionBadge position={pozice as "GK" | "DEF" | "MID" | "FWD"} />}
-                            <span className={`text-xs font-heading font-bold uppercase tracking-wider ${s.color}`}>{s.label}</span>
-                          </div>
-                          <div className="text-xs text-muted truncate">
-                            {prichod ? "←" : "→"} {otherName}
-                            {" · "}
-                            {druh}
-                            {poznamka && ` · ${poznamka}`}
-                            {castka != null && castka > 0 && ` · ${castka.toLocaleString("cs")} Kč`}
-                            {when && ` · ${when}`}
-                          </div>
-                        </div>
-                        <span className="text-xs text-muted shrink-0">›</span>
-                      </Link>
+                      <ListRow key={key} href={`/prestupy/nabidka/${o.id}`}
+                        leading={avatar && Object.keys(avatar).length > 0
+                          ? <FaceAvatar faceConfig={avatar} size={30} className="rounded-full" />
+                          : <span className="w-9 h-9 rounded-full bg-surface-3" />}
+                        title={<>{jmeno}{pozice && <span className="ml-2 align-middle"><PositionBadge position={pozice as "GK" | "DEF" | "MID" | "FWD"} /></span>}</>}
+                        meta={[`${prichod ? "←" : "→"} ${otherName}`, druh, poznamka,
+                          castka != null && castka > 0 ? `${formatKc(castka)}` : null, when || null].filter(Boolean).join(" · ")}
+                        trailing={<StatusChip tone={s.tone}>{s.label}</StatusChip>} />
                     );
 
                     const podminky = offerTermsNote(o);
@@ -2187,7 +2090,7 @@ export default function TransfersPage() {
                       )),
                     ];
                   })}
-                </div>
+                </ListCard>
               )}
             </div>
           )}
@@ -2196,9 +2099,7 @@ export default function TransfersPage() {
 
           {/* ── Organické nabídky hráčů (skauting) ── */}
           {playerOffers.length > 0 && (
-            <div>
-              <SectionLabel>Noví zájemci ({playerOffers.length})</SectionLabel>
-              <div className="space-y-3">
+            <ListCard title="Noví zájemci" count={playerOffers.length}>
                 {playerOffers.map((o) => {
                   const sourceIcon: Record<string, string> = {
                     pub: "🍺", youth: "🌱", friend: "🤝", recommendation: "🏛️",
@@ -2216,19 +2117,20 @@ export default function TransfersPage() {
                   const nowMs = gameDate ? new Date(gameDate).getTime() : Date.now();
                   const daysLeft = Math.max(0, Math.ceil((new Date(o.expiresAt).getTime() - nowMs) / 86400000));
                   return (
-                    <div key={o.id} className="card p-4">
-                      <div className="flex items-start gap-3">
-                        {o.avatar && Object.keys(o.avatar).length > 0
-                          ? <FaceAvatar faceConfig={o.avatar} size={44} className="rounded-full shrink-0 mt-0.5" />
-                          : <div className="w-11 h-11 rounded-full bg-surface shrink-0 mt-0.5 flex items-center justify-center text-xl">{sourceIcon[o.source] ?? "👤"}</div>}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                            <span className="font-heading font-bold text-base">{o.firstName} {o.lastName}</span>
-                            {nationalityFlag((o as { nationality?: string }).nationality) && <span title={(o as { nationality?: string }).nationality}>{nationalityFlag((o as { nationality?: string }).nationality)}</span>}
-                            <PositionBadge position={o.position as "GK" | "DEF" | "MID" | "FWD"} />
-                            <span className="text-sm text-muted">{o.age} let</span>
-                            {isYouth && <span className="text-xs bg-pitch-100 text-pitch-700 px-2 py-0.5 rounded-full font-heading font-bold">{fromAcademy ? (academyVillage ? `Žák z obce ${academyVillage}` : "Žák z akademie") : "Dorostenec"}</span>}
-                          </div>
+                    <ListRow key={o.id} tone="new"
+                      leading={o.avatar && Object.keys(o.avatar).length > 0
+                        ? <FaceAvatar faceConfig={o.avatar} size={36} className="rounded-full" />
+                        : <span className="w-9 h-9 rounded-full bg-surface flex items-center justify-center text-lg">{sourceIcon[o.source] ?? "👤"}</span>}
+                      title={
+                        <span className="inline-flex items-center gap-2 flex-wrap">
+                          {o.firstName} {o.lastName}
+                          {nationalityFlag((o as { nationality?: string }).nationality) && <span title={(o as { nationality?: string }).nationality}>{nationalityFlag((o as { nationality?: string }).nationality)}</span>}
+                          <PositionBadge position={o.position as "GK" | "DEF" | "MID" | "FWD"} />
+                          <span className="text-meta font-normal text-muted">{o.age} let</span>
+                          {isYouth && <StatusChip tone="ok">{fromAcademy ? (academyVillage ? `Žák z obce ${academyVillage}` : "Žák z akademie") : "Dorostenec"}</StatusChip>}
+                        </span>
+                      }
+                      detail={<>
                           <div className="text-xs text-muted mb-1">
                             {sourceIcon[o.source]} <span className="font-heading font-bold text-ink">{o.sourceName}</span>
                           </div>
@@ -2259,8 +2161,7 @@ export default function TransfersPage() {
                             Plat: <span className="font-heading font-bold text-ink">{o.weeklyWage} Kč/týden</span>
                             <span className="ml-3">Vyprší za: <span className={daysLeft <= 1 ? "text-card-red font-bold" : ""}>{daysLeft} {daysLeft === 1 ? "den" : daysLeft < 5 ? "dny" : "dní"}</span></span>
                           </div>
-                        </div>
-                        <div className="flex flex-col gap-2 shrink-0">
+                        <span className="flex flex-wrap items-center gap-2 mt-2">
                           <button
                             disabled={playerOfferLoading === o.id}
                             onClick={async () => {
@@ -2291,36 +2192,33 @@ export default function TransfersPage() {
                             {fromAcademy && !academyVillage ? "Nechat u žáků" : "Odmítnout"}
                           </button>
                           {academyVillage && (
-                            <p className="w-full text-xs text-muted">Jeho klub nemá dorost: když ho nevezmeš, nemá kde hrát a s fotbalem skončí. Za přijetí zaplatíš jeho klubu tabulkové odstupné.</p>
+                            <span className="block w-full text-xs text-muted">Jeho klub nemá dorost: když ho nevezmeš, nemá kde hrát a s fotbalem skončí. Za přijetí zaplatíš jeho klubu tabulkové odstupné.</span>
                           )}
-                        </div>
-                      </div>
-                    </div>
+                        </span>
+                      </>} />
                   );
                 })}
-              </div>
-            </div>
+            </ListCard>
           )}
 
           {incoming.length > 0 && (
-            <div>
-              <SectionLabel>Příchozí nabídky ({incoming.length})</SectionLabel>
-              <div className="space-y-3">
+            <ListCard title="Příchozí nabídky" count={incoming.length}>
                 {incoming.map((o) => {
                   const oAvatar = (() => { try { const raw = (o as any).player_avatar ?? o.avatar; return typeof raw === "string" ? JSON.parse(raw) : raw; } catch { return null; } })();
                   return (
-                  <div key={o.id} className="card p-4">
-                    <div className="flex items-start gap-3 flex-wrap sm:flex-nowrap">
-                      {oAvatar && Object.keys(oAvatar).length > 0
-                        ? <FaceAvatar faceConfig={oAvatar} size={40} className="rounded-full shrink-0 mt-0.5" />
-                        : <div className="w-10 h-10 rounded-full bg-gray-100 shrink-0 mt-0.5" />}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-0.5">
-                          <Link href={`/hrac/${o.player_id}`} className="font-heading font-bold hover:text-pitch-500 underline decoration-pitch-500/20 transition-colors">
-                            {o.first_name} {o.last_name}
-                          </Link>
-                          <PositionBadge position={o.position as "GK" | "DEF" | "MID" | "FWD"} />
-                        </div>
+                  <ListRow key={o.id} tone={o.on_turn === false ? undefined : "warn"}
+                    leading={oAvatar && Object.keys(oAvatar).length > 0
+                      ? <FaceAvatar faceConfig={oAvatar} size={36} className="rounded-full" />
+                      : <span className="w-9 h-9 rounded-full bg-gray-100" />}
+                    title={
+                      <span className="inline-flex items-center gap-2 flex-wrap">
+                        <Link href={`/hrac/${o.player_id}`} className="hover:text-pitch-500 underline decoration-pitch-500/20 transition-colors">
+                          {o.first_name} {o.last_name}
+                        </Link>
+                        <PositionBadge position={o.position as "GK" | "DEF" | "MID" | "FWD"} />
+                      </span>
+                    }
+                    detail={<>
                         {(() => {
                           const ps = (() => { try { const raw = (o as any).player_skills; return typeof raw === "string" ? JSON.parse(raw) : raw; } catch { return null; } })();
                           if (!ps || Object.keys(ps).length === 0) return null;
@@ -2336,7 +2234,7 @@ export default function TransfersPage() {
                           )}
                           <span className="text-muted"> nabízí </span>
                           {o.offer_type === "loan" ? (
-                            <span className="text-yellow-600 font-heading font-bold">Hostování{o.loan_duration ? ` (${o.loan_duration} dní)` : ""}{(o.counter_amount ?? o.offer_amount) > 0 ? ` za ${formatCZK(o.counter_amount ?? o.offer_amount)}` : " zdarma"}</span>
+                            <span className="text-yellow-600 font-heading font-bold">Hostování{o.loan_duration ? ` (${o.loan_duration} dní)` : ""}{(o.counter_amount ?? o.offer_amount) > 0 ? ` za ${formatKc(o.counter_amount ?? o.offer_amount)}` : " zdarma"}</span>
                           ) : (
                             <span className="font-heading font-bold text-pitch-500">{offerAmountLabel(o.counter_amount ?? o.offer_amount, o.swap_players?.length ?? 0)}</span>
                           )}
@@ -2345,7 +2243,7 @@ export default function TransfersPage() {
                         {o.offer_type !== "loan" && owedByPlayer[o.player_id] && (() => {
                           const ow = owedByPlayer[o.player_id];
                           const cut = ow.remaining + sellOnShare(o.counter_amount ?? o.offer_amount, ow.pct);
-                          return <div className="text-sm text-gold-600 tabular-nums">Z ceny se ti hned strhne {formatCZK(cut)} ({[ow.remaining > 0 ? "doplacení splátek" : null, ow.pct > 0 ? `${ow.pct} %` : null].filter(Boolean).join(" a ")} pro {ow.to})</div>;
+                          return <div className="text-sm text-gold-600 tabular-nums">Z ceny se ti hned strhne {formatKc(cut)} ({[ow.remaining > 0 ? "doplacení splátek" : null, ow.pct > 0 ? `${ow.pct} %` : null].filter(Boolean).join(" a ")} pro {ow.to})</div>;
                         })()}
                         <SwapPlayerChips players={o.swap_players ?? []} />
                         {o.player_interest != null && (
@@ -2362,10 +2260,9 @@ export default function TransfersPage() {
                           </div>
                         )}
                         {o.message && <div className="text-xs text-muted mt-1 italic">&ldquo;{o.message}&rdquo;</div>}
-                        {o.status === "countered" && <div className="text-xs text-gold-600 mt-1">Protinabídka: {formatCZK(o.counter_amount!)}</div>}
+                        {o.status === "countered" && <div className="text-xs text-gold-600 mt-1">Protinabídka: {formatKc(o.counter_amount!)}</div>}
                         {o.on_turn === false && <div className="text-xs text-muted mt-1 italic">Čeká se na odpověď soupeře</div>}
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2 shrink-0 justify-start sm:justify-end w-full sm:w-auto mt-2 sm:mt-0">
+                      <span className="flex flex-wrap items-center gap-2 mt-2">
                         <Link href={`/prestupy/nabidka/${o.id}`} className="py-1.5 px-3 rounded-soft text-sm font-heading font-bold bg-ink text-white hover:bg-ink/80 transition-colors">
                           Jednání →
                         </Link>
@@ -2374,11 +2271,11 @@ export default function TransfersPage() {
                           const amount = o.counter_amount ?? o.offer_amount;
                           const isCrossLeague = myLeagueId && (o as any).from_league_id && (o as any).from_league_id !== myLeagueId;
                           const adminFee = Number((o as any).admin_fee ?? 0);
-                          const podminky = o.offer_type === "loan" ? formatCZK(amount) : formatTermsSummary(termsFromRow(o, amount));
+                          const podminky = o.offer_type === "loan" ? formatKc(amount) : formatTermsSummary(termsFromRow(o, amount));
                           const ow = o.offer_type !== "loan" ? owedByPlayer[o.player_id] : undefined;
-                          const srazka = ow ? `\n\nZ ceny se ti hned strhne ${formatCZK(ow.remaining + sellOnShare(amount, ow.pct))} (doplacení splátek a procenta pro ${ow.to}).` : "";
+                          const srazka = ow ? `\n\nZ ceny se ti hned strhne ${formatKc(ow.remaining + sellOnShare(amount, ow.pct))} (doplacení splátek a procenta pro ${ow.to}).` : "";
                           const desc = (adminFee > 0
-                            ? `Za ${o.first_name} ${o.last_name}: ${podminky}\n\nMeziligový přestup, kupující zaplatí navíc administrační poplatek ${formatCZK(adminFee)}`
+                            ? `Za ${o.first_name} ${o.last_name}: ${podminky}\n\nMeziligový přestup, kupující zaplatí navíc administrační poplatek ${formatKc(adminFee)}`
                             : `Za ${o.first_name} ${o.last_name}: ${podminky}`) + srazka;
                           const ok = await confirm({ title: "Přijmout nabídku?", description: desc, confirmLabel: "Přijmout" });
                           if (!ok || !teamId) return;
@@ -2394,7 +2291,7 @@ export default function TransfersPage() {
                           const currentAmount = o.counter_amount ?? o.offer_amount;
                           setPriceDialog({
                             title: `Protinabídka za ${o.first_name} ${o.last_name}`,
-                            description: `${o.from_team_name} nabízí ${formatCZK(currentAmount)}. Zadej částku, za kterou jsi ochotný hráče pustit.`,
+                            description: `${o.from_team_name} nabízí ${formatKc(currentAmount)}. Zadej částku, za kterou jsi ochotný hráče pustit.`,
                             defaultPrice: Math.round(currentAmount * 1.25),
                             onConfirm: async (price) => {
                               if (!teamId) return;
@@ -2425,34 +2322,31 @@ export default function TransfersPage() {
                         }} className="py-1.5 px-3 rounded-soft text-sm font-heading font-bold bg-gray-100 text-muted hover:bg-gray-200 transition-colors">
                           Ukončit
                         </button>
-                      </div>
-                    </div>
-                  </div>
+                      </span>
+                    </>} />
                 ); })}
-              </div>
-            </div>
+            </ListCard>
           )}
 
           <AiNegotiationsList teamId={teamId} view="active" />
 
           {outgoing.length > 0 && (
-            <div>
-              <SectionLabel>Moje nabídky ({outgoing.length})</SectionLabel>
-              <div className="space-y-3">
+            <ListCard title="Moje nabídky" count={outgoing.length}>
                 {outgoing.map((o) => {
                   const oAvatar = (() => { try { const raw = (o as any).player_avatar ?? o.avatar; return typeof raw === "string" ? JSON.parse(raw) : raw; } catch { return null; } })();
                   return (
-                  <div key={o.id} className="card p-4">
-                    <div className="flex items-start sm:items-center gap-3 flex-wrap sm:flex-nowrap">
-                      {oAvatar && Object.keys(oAvatar).length > 0
-                        ? <FaceAvatar faceConfig={oAvatar} size={40} className="rounded-full shrink-0" />
-                        : <div className="w-10 h-10 rounded-full bg-gray-100 shrink-0" />}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-0.5">
-                          <span className="font-heading font-bold">{o.first_name} {o.last_name}</span>
-                          <PositionBadge position={o.position as "GK" | "DEF" | "MID" | "FWD"} />
-                          <span className="text-sm text-muted">→ {o.to_team_name}</span>
-                        </div>
+                  <ListRow key={o.id} tone={o.on_turn ? "warn" : undefined}
+                    leading={oAvatar && Object.keys(oAvatar).length > 0
+                      ? <FaceAvatar faceConfig={oAvatar} size={36} className="rounded-full" />
+                      : <span className="w-9 h-9 rounded-full bg-gray-100" />}
+                    title={
+                      <span className="inline-flex items-center gap-2 flex-wrap">
+                        {o.first_name} {o.last_name}
+                        <PositionBadge position={o.position as "GK" | "DEF" | "MID" | "FWD"} />
+                      </span>
+                    }
+                    meta={`→ ${o.to_team_name}`}
+                    detail={<>
                         {(() => {
                           const ps = (() => { try { const raw = (o as any).player_skills; return typeof raw === "string" ? JSON.parse(raw) : raw; } catch { return null; } })();
                           if (!ps || Object.keys(ps).length === 0) return null;
@@ -2474,12 +2368,11 @@ export default function TransfersPage() {
                             // i výjimku pro mládež (přesun mezi áčkem a rezervou se neplatí).
                             const fee = Number((o as any).admin_fee ?? 0);
                             if (fee <= 0) return null;
-                            return <span className="text-xs text-card-red ml-2">+ poplatek {formatCZK(fee)}</span>;
+                            return <span className="text-xs text-card-red ml-2">+ poplatek {formatKc(fee)}</span>;
                           })()}
                         </div>
                         <SwapPlayerChips players={o.swap_players ?? []} />
-                      </div>
-                      <div className="flex flex-wrap items-stretch gap-2 shrink-0 justify-start sm:justify-end w-full sm:w-auto mt-2 sm:mt-0">
+                      <span className="flex flex-wrap items-stretch gap-2 mt-2">
                         <Link href={`/prestupy/nabidka/${o.id}`} className="inline-flex items-center justify-center py-1.5 px-3 rounded-soft text-xs font-heading font-bold bg-ink text-white hover:bg-ink/80 transition-colors">
                           Jednání →
                         </Link>
@@ -2488,9 +2381,9 @@ export default function TransfersPage() {
                             const amount = o.counter_amount ?? o.offer_amount;
                             const isCrossLeague = myLeagueId && (o as any).to_league_id && (o as any).to_league_id !== myLeagueId;
                             const adminFee = Number((o as any).admin_fee ?? 0);
-                            const podminky = o.offer_type === "loan" ? formatCZK(amount) : formatTermsSummary(termsFromRow(o, amount));
+                            const podminky = o.offer_type === "loan" ? formatKc(amount) : formatTermsSummary(termsFromRow(o, amount));
                             const desc = adminFee > 0
-                              ? `Za ${o.first_name} ${o.last_name}: ${podminky}\n\nMeziligový přestup, zaplatíš navíc administrační poplatek ${formatCZK(adminFee)}`
+                              ? `Za ${o.first_name} ${o.last_name}: ${podminky}\n\nMeziligový přestup, zaplatíš navíc administrační poplatek ${formatKc(adminFee)}`
                               : `Za ${o.first_name} ${o.last_name}: ${podminky}`;
                             const ok = await confirm({ title: "Přijmout protinabídku?", description: desc, confirmLabel: "Přijmout" });
                             if (!ok || !teamId) return;
@@ -2503,7 +2396,7 @@ export default function TransfersPage() {
                             const currentAmount = o.counter_amount ?? o.offer_amount;
                             setPriceDialog({
                               title: `Protinabídka za ${o.first_name} ${o.last_name}`,
-                              description: `${o.to_team_name} chce ${formatCZK(currentAmount)}. Zadej novou částku.`,
+                              description: `${o.to_team_name} chce ${formatKc(currentAmount)}. Zadej novou částku.`,
                               defaultPrice: Math.round(currentAmount * 0.9),
                               onConfirm: async (price) => {
                                 if (!teamId) return;
@@ -2529,12 +2422,10 @@ export default function TransfersPage() {
                         }} className="inline-flex items-center justify-center py-1.5 px-3 rounded-soft text-xs font-heading font-bold bg-gray-100 text-muted hover:bg-gray-200 transition-colors">
                           Stáhnout
                         </button>
-                      </div>
-                    </div>
-                  </div>
+                      </span>
+                    </>} />
                 ); })}
-              </div>
-            </div>
+            </ListCard>
           )}
 
           {/* Legacy bidy (před sjednocením s offers) — postupně zmizí */}
@@ -2557,22 +2448,22 @@ export default function TransfersPage() {
                               {b.first_name} {b.last_name}
                             </Link>
                             <PositionBadge position={b.position as "GK" | "DEF" | "MID" | "FWD"} />
-                            <span className="text-xs px-2 py-0.5 rounded-full bg-gold-50 text-gold-700 font-heading font-bold">Z trhu</span>
+                            <StatusChip tone="warn">Z trhu</StatusChip>
                           </div>
                           <div className="text-sm">
                             <span className="font-heading font-bold">{b.buyer_team_name}</span>
                             <span className="text-muted"> nabízí </span>
-                            <span className="font-heading font-bold text-pitch-500">{formatCZK(currentAmount)}</span>
-                            <span className="text-xs text-muted ml-2">(požadovaná cena {formatCZK(b.asking_price)})</span>
+                            <span className="font-heading font-bold text-pitch-500">{formatKc(currentAmount)}</span>
+                            <span className="text-xs text-muted ml-2">(požadovaná cena {formatKc(b.asking_price)})</span>
                           </div>
-                          {b.status === "countered" && <div className="text-xs text-gold-600 mt-1">Tvá protinabídka: {formatCZK(b.counter_amount!)}</div>}
+                          {b.status === "countered" && <div className="text-xs text-gold-600 mt-1">Tvá protinabídka: {formatKc(b.counter_amount!)}</div>}
                           {!b.on_turn && <div className="text-xs text-muted mt-1 italic">Čeká se na odpověď druhé strany</div>}
                         </div>
                         <div className="flex flex-wrap gap-2 shrink-0 justify-end">
                           {b.on_turn && (<>
                             <button onClick={async () => {
                               if (!teamId) return;
-                              const ok = await confirm({ title: `Přijmout ${formatCZK(currentAmount)}?`, description: `Za ${b.first_name} ${b.last_name}`, confirmLabel: "Přijmout" });
+                              const ok = await confirm({ title: `Přijmout ${formatKc(currentAmount)}?`, description: `Za ${b.first_name} ${b.last_name}`, confirmLabel: "Přijmout" });
                               if (!ok) return;
                               if (await apiAction(apiFetch(`/api/teams/${teamId}/bids/${b.id}/accept`, { method: "POST" }), "Přijetí nabídky se nezdařilo")) await refresh();
                             }} className="py-1.5 px-4 rounded-soft text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">
@@ -2581,7 +2472,7 @@ export default function TransfersPage() {
                             <button onClick={() => {
                               setPriceDialog({
                                 title: `Protinabídka za ${b.first_name} ${b.last_name}`,
-                                description: `${b.buyer_team_name} nabízí ${formatCZK(currentAmount)}. Zadej částku.`,
+                                description: `${b.buyer_team_name} nabízí ${formatKc(currentAmount)}. Zadej částku.`,
                                 defaultPrice: Math.round(currentAmount * 1.25),
                                 onConfirm: async (price) => {
                                   if (!teamId) return;
@@ -2631,20 +2522,20 @@ export default function TransfersPage() {
                             <span className="font-heading font-bold">{b.first_name} {b.last_name}</span>
                             <PositionBadge position={b.position as "GK" | "DEF" | "MID" | "FWD"} />
                             <span className="text-sm text-muted">→ {b.seller_team_name}</span>
-                            <span className="text-xs px-2 py-0.5 rounded-full bg-gold-50 text-gold-700 font-heading font-bold">Z trhu</span>
+                            <StatusChip tone="warn">Z trhu</StatusChip>
                           </div>
                           <div className="text-sm text-muted">
-                            Nabídnuto: <span className="font-heading font-bold text-ink">{formatCZK(b.amount)}</span>
-                            <span className="ml-2 text-xs">(cena {formatCZK(b.asking_price)})</span>
+                            Nabídnuto: <span className="font-heading font-bold text-ink">{formatKc(b.amount)}</span>
+                            <span className="ml-2 text-xs">(cena {formatKc(b.asking_price)})</span>
                           </div>
-                          {b.status === "countered" && <div className="text-sm text-gold-600 mt-1">Protinabídka prodávajícího: <span className="font-heading font-bold">{formatCZK(b.counter_amount!)}</span></div>}
+                          {b.status === "countered" && <div className="text-sm text-gold-600 mt-1">Protinabídka prodávajícího: <span className="font-heading font-bold">{formatKc(b.counter_amount!)}</span></div>}
                           {!b.on_turn && b.status !== "countered" && <div className="text-xs text-muted mt-1 italic">Čeká se na prodávajícího</div>}
                         </div>
                         <div className="flex flex-wrap gap-2 shrink-0 justify-end">
                           {b.on_turn && b.status === "countered" && (<>
                             <button onClick={async () => {
                               if (!teamId) return;
-                              const ok = await confirm({ title: `Přijmout protinabídku ${formatCZK(currentAmount)}?`, description: `Za ${b.first_name} ${b.last_name}`, confirmLabel: "Přijmout" });
+                              const ok = await confirm({ title: `Přijmout protinabídku ${formatKc(currentAmount)}?`, description: `Za ${b.first_name} ${b.last_name}`, confirmLabel: "Přijmout" });
                               if (!ok) return;
                               if (await apiAction(apiFetch(`/api/teams/${teamId}/bids/${b.id}/accept`, { method: "POST" }), "Přijetí nabídky se nezdařilo")) await refresh();
                             }} className="py-1.5 px-4 rounded-soft text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">
@@ -2653,7 +2544,7 @@ export default function TransfersPage() {
                             <button onClick={() => {
                               setPriceDialog({
                                 title: `Protinabídka za ${b.first_name} ${b.last_name}`,
-                                description: `${b.seller_team_name} chce ${formatCZK(currentAmount)}. Zadej novou částku.`,
+                                description: `${b.seller_team_name} chce ${formatKc(currentAmount)}. Zadej novou částku.`,
                                 defaultPrice: Math.round(currentAmount * 0.9),
                                 onConfirm: async (price) => {
                                   if (!teamId) return;
@@ -2687,7 +2578,7 @@ export default function TransfersPage() {
           )}
 
           {playerOffers.length === 0 && incoming.length === 0 && outgoing.length === 0 && (
-            <div className="card p-6 text-center text-muted">Žádné aktivní nabídky. Hostování a splátky najdeš v záložce Závazky.</div>
+            <ListCard><ListEmpty icon="🤝">Žádné aktivní nabídky. Hostování a splátky najdeš v záložce Závazky.</ListEmpty></ListCard>
           )}
 
           </>}
@@ -2702,47 +2593,55 @@ export default function TransfersPage() {
             <>
       {/* Loaned out players */}
       {loanedOut.length > 0 && (
-        <div>
-          <SectionLabel>Na hostování (odchozí)</SectionLabel>
-          <div className="space-y-2">
+        <ListCard title="Na hostování (odchozí)" count={loanedOut.length}>
             {loanedOut.map((p) => (
-              <div key={p.id} className="card p-3 flex items-center gap-3 flex-wrap">
-                <Link href={`/hrac/${p.id}`} className="font-heading font-bold text-base hover:text-pitch-500 underline decoration-pitch-500/20 transition-colors">
-                  {p.first_name} {p.last_name}
-                </Link>
-                <PositionBadge position={p.position as "GK" | "DEF" | "MID" | "FWD"} />
-                <span className="text-sm text-muted">→ {p.loan_team_name}</span>
-                <span className="ml-auto text-sm text-yellow-600 font-heading font-bold">
-                  {p.days_left > 0 ? `zpět za ${p.days_left} ${dnySlovem(p.days_left)}` : "vrací se"}
-                  {" · "}{new Date(p.loan_until).toLocaleDateString("cs")}
-                </span>
-                {/* Jak hraje a stažení zpátky (s pravidly o poplatku) jsou v přehledu hostování. */}
-                <Link href="/prestupy?tab=squad&tym=hostovani"
-                  className="shrink-0 py-1 px-3 rounded-soft text-sm font-heading font-bold bg-pitch-500/10 text-pitch-600 hover:bg-pitch-500/20 transition-colors">
-                  Přehled hostování
-                </Link>
-              </div>
+              <ListRow key={p.id}
+                title={
+                  <span className="inline-flex items-center gap-2 flex-wrap">
+                    <Link href={`/hrac/${p.id}`} className="hover:text-pitch-500 underline decoration-pitch-500/20 transition-colors">
+                      {p.first_name} {p.last_name}
+                    </Link>
+                    <PositionBadge position={p.position as "GK" | "DEF" | "MID" | "FWD"} />
+                  </span>
+                }
+                meta={`→ ${p.loan_team_name}`}
+                detail={
+                  <span className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                    <span className="text-yellow-600 font-heading font-bold">
+                      {p.days_left > 0 ? `zpět za ${p.days_left} ${dnySlovem(p.days_left)}` : "vrací se"}
+                      {" · "}{new Date(p.loan_until).toLocaleDateString("cs")}
+                    </span>
+                    {/* Jak hraje a stažení zpátky (s pravidly o poplatku) jsou v přehledu hostování. */}
+                    <Link href="/prestupy?tab=squad&tym=hostovani"
+                      className="py-1 px-3 rounded-soft text-sm font-heading font-bold bg-pitch-500/10 text-pitch-600 hover:bg-pitch-500/20 transition-colors">
+                      Přehled hostování
+                    </Link>
+                  </span>
+                } />
             ))}
-          </div>
-        </div>
+        </ListCard>
       )}
 
       {/* Loaned in players */}
       {loanedIn.length > 0 && (
-        <div>
-          <SectionLabel>Na hostování (příchozí)</SectionLabel>
-          <div className="space-y-2">
+        <ListCard title="Na hostování (příchozí)" count={loanedIn.length}>
             {loanedIn.map((p) => (
-              <div key={p.id} className="card p-3 flex items-center gap-3 flex-wrap">
-                <Link href={`/hrac/${p.id}`} className="font-heading font-bold text-base hover:text-pitch-500 underline decoration-pitch-500/20 transition-colors">
-                  {p.first_name} {p.last_name}
-                </Link>
-                <PositionBadge position={p.position as "GK" | "DEF" | "MID" | "FWD"} />
-                <span className="text-sm text-muted">z {p.owner_team_name}</span>
-                <span className="ml-auto text-sm text-yellow-600 font-heading font-bold">
-                  {p.days_left > 0 ? `končí za ${p.days_left} ${dnySlovem(p.days_left)}` : "končí dnes"}
-                  {" · "}{new Date(p.loan_until).toLocaleDateString("cs")}
-                </span>
+              <ListRow key={p.id}
+                title={
+                  <span className="inline-flex items-center gap-2 flex-wrap">
+                    <Link href={`/hrac/${p.id}`} className="hover:text-pitch-500 underline decoration-pitch-500/20 transition-colors">
+                      {p.first_name} {p.last_name}
+                    </Link>
+                    <PositionBadge position={p.position as "GK" | "DEF" | "MID" | "FWD"} />
+                  </span>
+                }
+                meta={`z ${p.owner_team_name}`}
+                detail={
+                  <span className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                    <span className="text-yellow-600 font-heading font-bold">
+                      {p.days_left > 0 ? `končí za ${p.days_left} ${dnySlovem(p.days_left)}` : "končí dnes"}
+                      {" · "}{new Date(p.loan_until).toLocaleDateString("cs")}
+                    </span>
                 <button
                   onClick={async () => {
                     const ok = await confirm({
@@ -2754,14 +2653,14 @@ export default function TransfersPage() {
                     if (!ok || !teamId) return;
                     if (await apiAction(apiFetch(`/api/teams/${teamId}/loans/${p.id}/terminate`, { method: "POST" }), "Ukončení hostování se nezdařilo")) await refresh();
                   }}
-                  className="shrink-0 py-1 px-3 rounded-soft text-xs font-heading font-bold bg-card-red/10 text-card-red hover:bg-card-red/20 transition-colors"
+                  className="py-1 px-3 rounded-soft text-xs font-heading font-bold bg-card-red/10 text-card-red hover:bg-card-red/20 transition-colors"
                 >
                   Ukončit
                 </button>
-              </div>
+                  </span>
+                } />
             ))}
-          </div>
-        </div>
+        </ListCard>
       )}
             </>
           ) : null}
@@ -2784,32 +2683,9 @@ export default function TransfersPage() {
 }
 
 type SortKey = "name" | "position" | "age" | "rating" | "speed" | "technique" | "shooting" | "passing" | "defense" | "stamina" | "wage" | "value";
-type SortDir = "asc" | "desc";
-
-const SORT_COLS: Array<{ key: SortKey; label: string; short: string }> = [
-  { key: "name", label: "Jméno", short: "Jméno" },
-  { key: "position", label: "Pozice", short: "Poz" },
-  { key: "age", label: "Věk", short: "Věk" },
-  { key: "rating", label: "Rating", short: "Rat" },
-  { key: "speed", label: "Rychlost", short: "Rch" },
-  { key: "technique", label: "Technika", short: "Tch" },
-  { key: "shooting", label: "Střelba", short: "Stř" },
-  { key: "passing", label: "Přihrávky", short: "Přh" },
-  { key: "defense", label: "Obrana", short: "Obr" },
-  { key: "stamina", label: "Výdrž", short: "Výd" },
-  { key: "wage", label: "Mzda", short: "Mzda" },
-  { key: "value", label: "Tržní hodnota", short: "Hodnota" },
-];
 
 /** Tržní hodnota hráče — stejný vzorec jako nabídky a inzeráty cizích klubů. */
 const playerValue = (p: Player) => marketValue(p.overall_rating ?? 0, p.age ?? 27, p.position);
-
-function attrCellColor(v: number): string {
-  if (v >= 70) return "text-pitch-500 font-bold";
-  if (v >= 50) return "text-pitch-700";
-  if (v >= 30) return "text-ink";
-  return "text-muted";
-}
 
 function getPlayerSortValue(p: Player, key: SortKey): string | number {
   const s = p.skills as Record<string, number> | undefined;
@@ -2834,8 +2710,6 @@ function SquadTransferTable({ players, myListings, teamId, confirm, setPriceDial
   confirm: (opts: any) => Promise<boolean>;
   setPriceDialog: (d: any) => void; refresh: () => Promise<void>;
 }) {
-  const [sortKey, setSortKey] = useState<SortKey>("rating");
-  const [sortDir, setSortDir] = useState<SortDir>("desc");
   // Jedno tlačítko „Na trh" (dvě se na mobilu nevešla); prodat nebo propustit se volí až v plachtě.
   const [choice, setChoice] = useState<Player | null>(null);
 
@@ -2843,7 +2717,7 @@ function SquadTransferTable({ players, myListings, teamId, confirm, setPriceDial
     setChoice(null);
     setPriceDialog({
       title: `Vystavit ${p.first_name} ${p.last_name} na trh`,
-      description: `${p.position}, ${p.age} let, rating ${p.overall_rating}`,
+      description: `${p.position}, ${p.age} let, hodnocení ${p.overall_rating}`,
       defaultPrice: marketValue(p.overall_rating ?? 50, p.age ?? 27, p.position),
       listing: true,
       onConfirm: async (price: number, _terms: TermsValue, revealPotential: boolean) => {
@@ -2869,86 +2743,61 @@ function SquadTransferTable({ players, myListings, teamId, confirm, setPriceDial
     if (await apiAction(apiFetch(`/api/teams/${teamId}/players/${p.id}/release`, { method: "POST" }), "Propuštění hráče se nezdařilo")) await refresh();
   };
 
-  const toggleSort = (key: SortKey) => {
-    if (sortKey === key) setSortDir(sortDir === "asc" ? "desc" : "asc");
-    else { setSortKey(key); setSortDir(key === "name" || key === "position" ? "asc" : "desc"); }
-  };
-
-  const sorted = [...players].sort((a, b) => {
-    const va = getPlayerSortValue(a, sortKey);
-    const vb = getPlayerSortValue(b, sortKey);
-    const cmp = typeof va === "string" ? va.localeCompare(vb as string, "cs") : (va as number) - (vb as number);
-    return sortDir === "asc" ? cmp : -cmp;
-  });
-
   return (
     <div>
-      <SectionLabel>Hráči ({players.length})</SectionLabel>
-      <div className="card overflow-x-auto table-scroll">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-gray-100">
-              {SORT_COLS.map((col) => {
-                // Na mobilu hodnota nemá vlastní sloupec, ukazuje se pod jménem hráče.
-                const hideMobile = ["speed", "technique", "shooting", "passing", "defense", "stamina", "wage", "value"].includes(col.key);
+      <ListCard title="Hráči" count={players.length}>
+        <DataTable rows={players} rowKey={(p) => p.id}
+          rowHref={(p) => `/hrac/${p.id}`}
+          defaultSort={{ key: "rating", dir: "desc" }}
+          rowTone={(p) => ((p as any).status === "quit" ? { bar: "down" } : myListings.some((l) => l.playerId === p.id) ? { bar: "warn" } : undefined)}
+          empty="V kádru teď nikoho nemáš."
+          columns={[
+            { key: "name", header: "Jméno", align: "left", sortValue: (p) => getPlayerSortValue(p, "name"), firstDir: "asc",
+              cell: (p) => {
+                const isQuit = (p as any).status === "quit";
+                const isListed = myListings.some((l) => l.playerId === p.id);
                 return (
-                  <th key={col.key}
-                    onClick={() => toggleSort(col.key)}
-                    className={`py-2 px-2 text-xs font-heading uppercase cursor-pointer select-none hover:text-pitch-500 transition-colors whitespace-nowrap ${
-                      sortKey === col.key ? "text-pitch-600" : "text-muted"
-                    } ${col.key === "name" ? "text-left pl-4" : "text-center"} ${hideMobile ? "hidden sm:table-cell" : ""}`}
-                    title={col.label}
-                  >
-                    {col.short}{sortKey === col.key ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
-                  </th>
+                  <EntityCell name={`${p.first_name} ${p.last_name}`}
+                    meta={<>
+                      <span className="sm:hidden mr-1.5 align-middle"><PositionBadge position={p.position as "GK" | "DEF" | "MID" | "FWD"} /></span>
+                      <span className="lg:hidden">{formatKc(playerValue(p))}</span>
+                      {isQuit && <span className="ml-1.5"><StatusChip tone="danger">Odmítá</StatusChip></span>}
+                      {isListed && <span className="ml-1.5"><StatusChip tone="warn">Na trhu</StatusChip></span>}
+                    </>} />
                 );
-              })}
-              <th className="py-2 px-2 text-xs font-heading uppercase text-muted text-center hidden sm:table-cell">Status</th>
-              <th className="py-2 px-2 text-xs font-heading uppercase text-muted text-right pr-4">Akce</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sorted.map((p) => {
-              const s = p.skills as Record<string, number> | undefined;
-              const isQuit = (p as any).status === "quit";
-              const isListed = myListings.some((l) => l.playerId === p.id);
-              return (
-                <tr key={p.id} className={`border-b border-gray-50 last:border-b-0 hover:bg-gray-50/50 ${isQuit ? "bg-red-50/30" : ""}`}>
-                  <td className="py-2 px-2 pl-4">
-                    <Link href={`/hrac/${p.id}`} className="font-heading font-bold hover:text-pitch-500 underline decoration-pitch-500/20 transition-colors whitespace-nowrap">
-                      {p.first_name} {p.last_name}
-                    </Link>
-                    <div className="sm:hidden text-sm text-muted tabular-nums whitespace-nowrap">{formatCZK(playerValue(p))}</div>
-                  </td>
-                  <td className="py-2 px-2 text-center"><PositionBadge position={p.position as "GK" | "DEF" | "MID" | "FWD"} /></td>
-                  <td className="py-2 px-2 text-center tabular-nums text-muted">{p.age}</td>
-                  <td className="py-2 px-2 text-center tabular-nums font-heading font-bold">{p.overall_rating}</td>
-                  <td className={`py-2 px-2 text-center tabular-nums hidden sm:table-cell ${attrCellColor(s?.speed ?? 0)}`}>{s?.speed ?? "-"}</td>
-                  <td className={`py-2 px-2 text-center tabular-nums hidden sm:table-cell ${attrCellColor(s?.technique ?? 0)}`}>{s?.technique ?? "-"}</td>
-                  <td className={`py-2 px-2 text-center tabular-nums hidden sm:table-cell ${attrCellColor(s?.shooting ?? 0)}`}>{s?.shooting ?? "-"}</td>
-                  <td className={`py-2 px-2 text-center tabular-nums hidden sm:table-cell ${attrCellColor(s?.passing ?? 0)}`}>{s?.passing ?? "-"}</td>
-                  <td className={`py-2 px-2 text-center tabular-nums hidden sm:table-cell ${attrCellColor(s?.defense ?? 0)}`}>{s?.defense ?? "-"}</td>
-                  <td className={`py-2 px-2 text-center tabular-nums hidden sm:table-cell ${attrCellColor(s?.stamina ?? 0)}`}>{s?.stamina ?? "-"}</td>
-                  <td className="py-2 px-2 text-center tabular-nums text-muted text-xs hidden sm:table-cell">{formatCZK(p.weekly_wage ?? 0)}</td>
-                  <td className="py-2 px-2 text-center tabular-nums font-heading font-bold hidden sm:table-cell whitespace-nowrap">{formatCZK(playerValue(p))}</td>
-                  <td className="py-2 px-2 text-center hidden sm:table-cell">
-                    {isQuit && <span className="text-xs font-heading font-bold text-card-red bg-red-50 px-1.5 py-0.5 rounded">Odmítá</span>}
-                    {isListed && <span className="text-xs font-heading font-bold text-gold-600 bg-gold-50 px-1.5 py-0.5 rounded">Na trhu</span>}
-                  </td>
-                  <td className="py-2 px-2 pr-4 text-right">
-                    <button onClick={() => setChoice(p)}
-                      className="py-1.5 px-3 rounded text-sm font-heading font-bold bg-gold-500 text-white hover:bg-gold-600 transition-colors whitespace-nowrap">
-                      Na trh
-                    </button>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+              } },
+            { key: "position", header: "Poz", title: "Pozice", width: "w-14", priority: 2, sortValue: (p) => getPlayerSortValue(p, "position"), firstDir: "asc",
+              cell: (p) => <PositionBadge position={p.position as "GK" | "DEF" | "MID" | "FWD"} /> },
+            { key: "age", header: "Věk", width: "w-11", sortValue: (p) => p.age, cell: (p) => p.age },
+            { key: "rating", header: "Hod.", title: "Hodnocení", width: "w-14", sortValue: (p) => p.overall_rating ?? 0,
+              cell: (p) => <RatingPill value={p.overall_rating ?? 0} tone={ratingToneIn(p.overall_rating ?? 0, players.map((x) => x.overall_rating ?? 0))} /> },
+              { key: "speed", header: "Rch", title: "Rychlost", width: "w-11", priority: 2, sortValue: (p) => getPlayerSortValue(p, "speed"),
+                cell: (p) => { const v = (p.skills as Record<string, number> | undefined)?.speed; return v == null ? "-" : <span className={`inline-flex w-[30px] h-6 rounded-tight items-center justify-center text-meta font-bold ${attrBg(v)}`}>{v}</span>; } },
+              { key: "technique", header: "Tch", title: "Technika", width: "w-11", priority: 2, sortValue: (p) => getPlayerSortValue(p, "technique"),
+                cell: (p) => { const v = (p.skills as Record<string, number> | undefined)?.technique; return v == null ? "-" : <span className={`inline-flex w-[30px] h-6 rounded-tight items-center justify-center text-meta font-bold ${attrBg(v)}`}>{v}</span>; } },
+              { key: "shooting", header: "Stř", title: "Střelba", width: "w-11", priority: 2, sortValue: (p) => getPlayerSortValue(p, "shooting"),
+                cell: (p) => { const v = (p.skills as Record<string, number> | undefined)?.shooting; return v == null ? "-" : <span className={`inline-flex w-[30px] h-6 rounded-tight items-center justify-center text-meta font-bold ${attrBg(v)}`}>{v}</span>; } },
+              { key: "passing", header: "Přh", title: "Přihrávky", width: "w-11", priority: 2, sortValue: (p) => getPlayerSortValue(p, "passing"),
+                cell: (p) => { const v = (p.skills as Record<string, number> | undefined)?.passing; return v == null ? "-" : <span className={`inline-flex w-[30px] h-6 rounded-tight items-center justify-center text-meta font-bold ${attrBg(v)}`}>{v}</span>; } },
+              { key: "defense", header: "Obr", title: "Obrana", width: "w-11", priority: 2, sortValue: (p) => getPlayerSortValue(p, "defense"),
+                cell: (p) => { const v = (p.skills as Record<string, number> | undefined)?.defense; return v == null ? "-" : <span className={`inline-flex w-[30px] h-6 rounded-tight items-center justify-center text-meta font-bold ${attrBg(v)}`}>{v}</span>; } },
+              { key: "stamina", header: "Výd", title: "Výdrž", width: "w-11", priority: 2, sortValue: (p) => getPlayerSortValue(p, "stamina"),
+                cell: (p) => { const v = (p.skills as Record<string, number> | undefined)?.stamina; return v == null ? "-" : <span className={`inline-flex w-[30px] h-6 rounded-tight items-center justify-center text-meta font-bold ${attrBg(v)}`}>{v}</span>; } },
+            { key: "wage", header: "Mzda", width: "w-24", align: "right", priority: 3, sortValue: (p) => p.weekly_wage ?? 0,
+              cell: (p) => <span className="whitespace-nowrap">{formatKc(p.weekly_wage ?? 0)}</span> },
+            { key: "value", header: "Hodnota", title: "Tržní hodnota", width: "w-28", align: "right", priority: 3, emphasis: true, sortValue: (p) => playerValue(p),
+              cell: (p) => <span className="whitespace-nowrap">{formatKc(playerValue(p))}</span> },
+            { key: "action", header: "", align: "right", width: "w-24",
+              cell: (p) => (
+                <button onClick={(e) => { e.stopPropagation(); setChoice(p); }}
+                  className="py-1.5 px-3 rounded-control text-sm font-bold bg-gold-500 text-white hover:bg-gold-600 transition-colors whitespace-nowrap">
+                  Na trh
+                </button>
+              ) },
+          ]} />
+      </ListCard>
       <p className="text-sm text-muted mt-2 px-1">
-        Hodnota kádru <span className="font-heading font-bold text-ink tabular-nums">{formatCZK(players.reduce((sum, p) => sum + playerValue(p), 0))}</span>
+        Hodnota kádru <span className="font-heading font-bold text-ink tabular-nums">{formatKc(players.reduce((sum, p) => sum + playerValue(p), 0))}</span>
         {" "}· tržní cena podle hodnocení, věku a pozice ze skutečných přestupů
       </p>
 
@@ -2958,10 +2807,10 @@ function SquadTransferTable({ players, myListings, teamId, confirm, setPriceDial
           return (
             <div className="px-5 pt-3 sm:pt-5 space-y-3" style={{ paddingBottom: "max(1.25rem, env(safe-area-inset-bottom, 0px))" }}>
               <h3 className="font-heading font-bold text-lg">{choice.first_name} {choice.last_name}</h3>
-              <p className="text-sm text-ink-light">Tržní cena {formatCZK(playerValue(choice))}</p>
+              <p className="text-sm text-ink-light">Tržní cena {formatKc(playerValue(choice))}</p>
               {listed ? (
                 <div className="rounded-xl bg-gold-50 border border-gold-300/60 p-3 text-sm flex items-center gap-3">
-                  <span className="flex-1">Už je na trhu za <span className="font-heading font-bold">{formatCZK(listed.askingPrice)}</span>.</span>
+                  <span className="flex-1">Už je na trhu za <span className="font-heading font-bold">{formatKc(listed.askingPrice)}</span>.</span>
                   <button onClick={async () => {
                     setChoice(null);
                     if (await apiAction(apiFetch(`/api/teams/${teamId}/listings/${listed.id}`, { method: "DELETE" }), "Stažení inzerátu se nezdařilo")) await refresh();
@@ -3019,19 +2868,14 @@ function PriceDialog({ title, description, defaultPrice, onConfirm, onClose, neg
         autoFocus
         className="w-full mt-1 px-3 py-2.5 rounded-xl border border-gray-200 bg-white font-heading font-bold text-lg tabular-nums text-center focus:outline-none focus:ring-2 focus:ring-pitch-500/30 focus:border-pitch-500"
       />
-      <div className="flex justify-center gap-2 mt-2">
-        {/* Násobky výchozí ceny (tržní hodnota / požadovaná cena), stejně jako na detailu hráče.
-            Pevné částky 1k–10k neseděly k tržním cenám v desítkách tisíc. */}
-        {[0.5, 1, 1.5, 2].map((mul) => {
+      {/* Násobky výchozí ceny (tržní hodnota / požadovaná cena), stejně jako na detailu hráče.
+          Pevné částky 1k–10k neseděly k tržním cenám v desítkách tisíc. */}
+      <ChoiceGroup ariaLabel="Násobek ceny" size="sm" className="justify-center mt-2" value={price != null ? String(price) : null}
+        onChange={(v) => setPrice(Number(v))}
+        options={[0.5, 1, 1.5, 2].map((mul) => {
           const v = Math.round((defaultPrice * mul) / 100) * 100;
-          return (
-            <button key={mul} type="button" onClick={() => setPrice(v)}
-              className={`px-2.5 py-1 rounded text-sm font-heading font-bold transition-colors ${price === v ? "bg-pitch-500 text-white" : "bg-black/5 text-muted hover:bg-black/10"}`}>
-              {mul.toLocaleString("cs-CZ")}×
-            </button>
-          );
-        })}
-      </div>
+          return { value: String(v), label: `${mul.toLocaleString("cs-CZ")}×` };
+        }).filter((o, i, all) => all.findIndex((x) => x.value === o.value) === i)} />
       {listing && (
         <div className="mt-4 text-left">
           <RevealPotentialToggle checked={revealPotential} onChange={setRevealPotential} />

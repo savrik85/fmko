@@ -2,7 +2,7 @@
 
 /** Widgety o lidech kolem klubu — rivalové, kabina, odkud jezdí fanoušci, kalendář. */
 
-import Link from "next/link";
+import { ListRow, RowValue } from "@/components/ui";
 import { WidgetSkeleton, WidgetError } from "../widget-frame";
 import { HBarChart, Meter, ChartEmpty, ChartHero, DIVERGING, STATUS } from "../charts";
 import type { WidgetProps } from "../types";
@@ -21,47 +21,51 @@ export function RivalsWidget({ data, height }: WidgetProps) {
   const razeno = [...vsichni].sort((a, b) => (b.heat + Math.abs(b.respect)) - (a.heat + Math.abs(a.respect)))
     .slice(0, rowsForHeight(height, ROW_PX.tall, 32));
 
+  // Řádek: název (20,6) + popis (17,9) + dva ukazatele (4 + 15 + 2 + 6) + odsazení a čára (13) = 81 px, ROW_PX.tall.
   return (
     <div className="space-y-3">
-      <ul className="space-y-2.5">
+      <div className="-mx-4 sm:-mx-5">
         {razeno.map((r) => (
-          <li key={r.teamId}>
-            <div className="flex items-baseline gap-2">
-              <span className="w-2.5 h-2.5 rounded-tight shrink-0" style={{ background: r.primaryColor }} aria-hidden="true" />
-              <Link href={`/tym/${r.teamId}`} className="text-sm font-heading font-bold truncate min-w-0 flex-1 hover:text-pitch-500 hover:underline transition-colors">
-                {r.teamName}
-              </Link>
-              <span className="text-micro text-muted shrink-0">{r.archetypeLabel}</span>
-            </div>
-            <div className="text-sm text-muted mt-0.5">{r.label}</div>
-            <div className="flex gap-2 mt-1">
-              <div className="flex-1">
-                <div className="flex justify-between text-micro text-muted mb-0.5">
-                  <span>Respekt</span><span className="tabular-nums">{r.respect}</span>
-                </div>
-                {/* Respekt jde od −100 do 100, proto se posouvá do kladné poloviny */}
-                <div className="h-1.5 rounded-full" style={{ background: "#EFEBE3" }}>
-                  <div className="h-full rounded-full" style={{
-                    width: `${(r.respect + 100) / 2}%`,
-                    background: r.respect >= 0 ? DIVERGING.positive : DIVERGING.negative,
-                  }} />
-                </div>
-              </div>
-              <div className="flex-1">
-                <div className="flex justify-between text-micro text-muted mb-0.5">
-                  <span>Napětí</span><span className="tabular-nums">{r.heat}</span>
-                </div>
-                <div className="h-1.5 rounded-full" style={{ background: "#EFEBE3" }}>
-                  <div className="h-full rounded-full" style={{
-                    width: `${r.heat}%`,
-                    background: r.heat >= 60 ? STATUS.critical : r.heat >= 30 ? STATUS.warning : "#B5AFA5",
-                  }} />
-                </div>
-              </div>
-            </div>
-          </li>
+          <ListRow key={r.teamId} dense href={`/tym/${r.teamId}`}
+            leading={
+              <span className="flex h-5 items-center" aria-hidden="true">
+                <span className="w-2.5 h-2.5 rounded-tight" style={{ background: r.primaryColor }} />
+              </span>
+            }
+            title={r.teamName}
+            trailing={<span className="text-micro text-muted">{r.archetypeLabel}</span>}
+            detail={
+              <>
+                <span className="block text-muted">{r.label}</span>
+                <span className="flex gap-2 mt-1">
+                  <span className="flex-1">
+                    <span className="flex justify-between text-micro text-muted mb-0.5">
+                      <span>Respekt</span><span className="tabular-nums">{r.respect}</span>
+                    </span>
+                    {/* Respekt jde od −100 do 100, proto se posouvá do kladné poloviny */}
+                    <span className="block h-1.5 rounded-full" style={{ background: "#EFEBE3" }}>
+                      <span className="block h-full rounded-full" style={{
+                        width: `${(r.respect + 100) / 2}%`,
+                        background: r.respect >= 0 ? DIVERGING.positive : DIVERGING.negative,
+                      }} />
+                    </span>
+                  </span>
+                  <span className="flex-1">
+                    <span className="flex justify-between text-micro text-muted mb-0.5">
+                      <span>Napětí</span><span className="tabular-nums">{r.heat}</span>
+                    </span>
+                    <span className="block h-1.5 rounded-full" style={{ background: "#EFEBE3" }}>
+                      <span className="block h-full rounded-full" style={{
+                        width: `${r.heat}%`,
+                        background: r.heat >= 60 ? STATUS.critical : r.heat >= 30 ? STATUS.warning : "#B5AFA5",
+                      }} />
+                    </span>
+                  </span>
+                </span>
+              </>
+            } />
         ))}
-      </ul>
+      </div>
       <div className="text-micro text-muted text-center">Napětí od 60 výš dělá z utkání derby.</div>
     </div>
   );
@@ -88,36 +92,32 @@ export function SquadChemistryWidget({ data, height }: WidgetProps) {
   const vazby = data.relationships.data ?? [];
   if (vazby.length === 0) return <ChartEmpty>V kabině se zatím nikdo s nikým nespřátelil.</ChartEmpty>;
 
+  // Dvě jména se na úzké dlaždici zalomí na dva řádky, proto ROW_PX.pair místo ROW_PX.rich.
   const razeno = [...vazby].sort((a, b) => b.strength - a.strength)
-    .slice(0, rowsForHeight(height, ROW_PX.rich, 32));
+    .slice(0, rowsForHeight(height, ROW_PX.pair, 32));
   const spatnych = vazby.filter((v) => VZTAH_LABEL[v.type]?.dobry === false).length;
 
   return (
     <div className="space-y-3">
-      <ul className="space-y-1">
+      {/* Řádek má dva odkazy (oba hráče), proto celý odkazem není. */}
+      <div className="-mx-4 sm:-mx-5">
         {razeno.map((v) => {
           const popis = VZTAH_LABEL[v.type] ?? { text: v.type, icon: "•", dobry: true };
           return (
-            <li key={v.id} className="flex items-center gap-2 py-1.5 border-b border-gray-50 last:border-b-0">
-              <span className="shrink-0 text-base" aria-hidden="true">{popis.icon}</span>
-              <div className="min-w-0 flex-1">
-                <div className="text-sm font-heading font-bold truncate">
+            <ListRow key={v.id} dense
+              leading={<span className="text-base leading-none" aria-hidden="true">{popis.icon}</span>}
+              title={
+                <>
                   <a href={`/hrac/${v.player_a_id}`} className="hover:text-pitch-500 hover:underline transition-colors">{v.player_a_name}</a>
                   <span className="text-muted font-normal"> a </span>
                   <a href={`/hrac/${v.player_b_id}`} className="hover:text-pitch-500 hover:underline transition-colors">{v.player_b_name}</a>
-                </div>
-                <div className="text-micro text-muted">{popis.text}</div>
-              </div>
-              <span
-                className="text-sm font-heading font-bold tabular-nums shrink-0"
-                style={{ color: popis.dobry ? DIVERGING.positive : DIVERGING.negative }}
-              >
-                {v.strength}
-              </span>
-            </li>
+                </>
+              }
+              detail={<span className="text-muted">{popis.text}</span>}
+              trailing={<RowValue tone={popis.dobry ? "plus" : "minus"}>{v.strength}</RowValue>} />
           );
         })}
-      </ul>
+      </div>
       <div className="text-sm text-muted text-center">
         {vazby.length} vazeb v kabině
         {spatnych > 0 && <>, z toho <span className="font-heading font-bold" style={{ color: DIVERGING.negative }}>{spatnych}</span> problémových</>}
@@ -168,7 +168,7 @@ export function SeasonProgressWidget({ data, height }: WidgetProps) {
   if (!info) return <ChartEmpty>Kalendář sezóny zatím není k dispozici.</ChartEmpty>;
 
   const zbyva = Math.max(0, info.totalDays - info.currentDay);
-  const dalsi = (info.upcoming ?? []).slice(0, rowsForHeight(height, ROW_PX.list, 130));
+  const dalsi = (info.upcoming ?? []).slice(0, rowsForHeight(height, ROW_PX.table, 130));
 
   return (
     <div className="space-y-3">
@@ -180,17 +180,18 @@ export function SeasonProgressWidget({ data, height }: WidgetProps) {
         display={`${Math.round((info.currentDay / info.totalDays) * 100)} %`}
       />
       {dalsi.length > 0 && (
-        <ul className="space-y-1">
+        <div className="-mx-4 sm:-mx-5">
           {dalsi.map((u, i) => (
-            <li key={`${u.date}-${i}`} className="flex items-center gap-2 py-1 border-b border-gray-50 last:border-b-0">
-              <span className="shrink-0">{u.type === "match" ? "⚽" : u.type === "training" ? "🏋️" : "📅"}</span>
-              <span className="text-sm font-heading font-bold flex-1 truncate">{u.title}</span>
-              <span className="text-micro text-muted shrink-0 tabular-nums">
-                {new Date(u.date).toLocaleDateString("cs", { day: "numeric", month: "numeric" })}
-              </span>
-            </li>
+            <ListRow key={`${u.date}-${i}`} dense
+              leading={<span className="leading-none" aria-hidden="true">{u.type === "match" ? "⚽" : u.type === "training" ? "🏋️" : "📅"}</span>}
+              title={u.title}
+              trailing={
+                <span className="text-micro text-muted tabular-nums">
+                  {new Date(u.date).toLocaleDateString("cs", { day: "numeric", month: "numeric" })}
+                </span>
+              } />
           ))}
-        </ul>
+        </div>
       )}
       <MoreLink href="/kalendar">Celý kalendář →</MoreLink>
     </div>

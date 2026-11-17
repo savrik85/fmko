@@ -9,10 +9,11 @@
 
 import { useState } from "react";
 import { apiAction, apiFetch } from "@/lib/api";
-import { EntityLink } from "@/components/ui";
+import { EntityLink, ListRow, RowValue } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
-import { czk, kurz, IkonaTipu, Prazdno, StavPill, TYP_TIKETU } from "./ui";
+import { kurz, IkonaTipu, Prazdno, StavPill, TYP_TIKETU } from "./ui";
 import type { ArenaOdpoved, ArenaTiket } from "./types";
+import { formatKc } from "@/lib/format";
 
 /**
  * Název trhu před popiskem tipu. Prázdný řetězec = popisek mluví sám za sebe
@@ -186,33 +187,26 @@ function ArenaKarta({ t, maxComment, teamId, onZmena }: {
         )}
       </div>
 
-      <ol className="divide-y divide-gray-50">
+      <ol className="divide-y divide-line-soft">
         {t.tipy.map((s, i) => (
-          <li key={i} className="flex items-start gap-2 px-3 py-2">
-            <span className="mt-0.5"><IkonaTipu stav={s.result} /></span>
-            <div className="flex-1 min-w-0">
-              <div className="text-base font-semibold leading-tight break-words">{s.zapas}</div>
-              <div className="text-sm text-muted leading-tight break-words">
-                {(TRH[s.market] ?? s.market) && `${TRH[s.market] ?? s.market}: `}{s.label}
-                {s.vysledek && <> · <span className="tabular-nums text-ink">{s.vysledek}</span></>}
-              </div>
-            </div>
-            <span className={`text-base font-heading font-bold tabular-nums shrink-0
-                             ${s.result === "lost" ? "text-muted line-through" : ""}`}>
-              {kurz(s.oddsX100)}
-            </span>
+          <li key={i}>
+            <ListRow
+              leading={<IkonaTipu stav={s.result} />}
+              title={s.zapas}
+              detail={<>{(TRH[s.market] ?? s.market) && `${TRH[s.market] ?? s.market}: `}{s.label}{s.vysledek && <> · <span className="tabular-nums text-ink">{s.vysledek}</span></>}</>}
+              trailing={<RowValue><span className={s.result === "lost" ? "text-muted line-through" : ""}>{kurz(s.oddsX100)}</span></RowValue>} />
           </li>
         ))}
       </ol>
 
       <div className="px-3 py-2 bg-gray-50/60 flex items-center gap-3 flex-wrap text-sm tabular-nums">
-        <span className="text-muted">vklad <b className="font-heading text-ink">{czk(t.stake)}</b></span>
+        <span className="text-muted">vklad <b className="font-heading text-ink">{formatKc(t.stake)}</b></span>
         <span className="text-gray-300">·</span>
         <span className="text-muted">kurz <b className="font-heading text-ink">{kurz(t.totalOddsX100)}</b></span>
         <span className="text-gray-300">·</span>
         <span className={t.status === "won" ? "text-pitch-600"
           : t.status === "lost" || t.status === "confiscated" ? "text-card-red" : "text-muted"}>
-          {slovo} <b className="font-heading">{czk(castka)}</b>
+          {slovo} <b className="font-heading">{formatKc(castka)}</b>
         </span>
         {t.jeMuj && (
           <button type="button" onClick={stahni}

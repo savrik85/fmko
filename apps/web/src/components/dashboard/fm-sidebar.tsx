@@ -15,6 +15,11 @@ import {
 } from "@/lib/menu-structure";
 
 const COLLAPSED_GROUPS_KEY = "menu-collapsed-groups";
+/** Odznak s počtem: pevná výška, kulatý i u jedné číslice, číslo vždy na středu. */
+const MENU_BADGE = "inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full text-white text-micro font-bold leading-none tabular-nums tracking-normal normal-case shrink-0";
+/** Stejný strop jako ve spodní liště na mobilu: „530“ vedle „99+“ vypadalo jako dvě různá čísla. */
+const capCount = (count: number | undefined) => (count != null && count > 99 ? "99+" : count);
+
 const ADMIN_ITEM: MenuItem = { href: "/admin", label: "Admin", icon: "🛠️", color: "#8B4513" };
 
 function readCollapsedGroups(): string[] {
@@ -101,8 +106,8 @@ export function FMSidebar() {
         <span className="text-sm shrink-0 w-5 text-center leading-none">{item.icon}</span>
         {expanded && <span className="text-[13px] font-medium whitespace-nowrap leading-none flex-1 min-w-0 truncate">{item.label}</span>}
         {badge && expanded && (
-          <span className={`${MENU_BADGE_BG[badge.tone]} text-white text-micro font-bold px-1.5 py-0.5 rounded-full leading-none shrink-0`}>
-            {badge.label ?? badge.count}
+          <span className={`${MENU_BADGE} ${MENU_BADGE_BG[badge.tone]}`}>
+            {badge.label ?? capCount(badge.count)}
           </span>
         )}
         {badge && !expanded && (
@@ -156,9 +161,7 @@ export function FMSidebar() {
                     >
                       <span className="flex-1 text-left">{group.label}</span>
                       {hiddenCount > 0 && (
-                        <span className="bg-card-red text-white text-micro font-bold px-1.5 py-0.5 rounded-full leading-none tracking-normal">
-                          {hiddenCount}
-                        </span>
+                        <span className={`${MENU_BADGE} bg-card-red`}>{capCount(hiddenCount)}</span>
                       )}
                       <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true"
                         className={`shrink-0 transition-transform duration-150 ${collapsed ? "-rotate-90" : ""}`}>

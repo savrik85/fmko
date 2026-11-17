@@ -5,10 +5,10 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
 import { useTeam } from "@/context/team-context";
-import { Spinner, SectionLabel } from "@/components/ui";
+import { SectionLabel, ListCard, ListRow, ListEmpty, RowValue, PageLoading, ProgressBar } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import {
-  REFEREE_AXES, axisWord, axisColor, formatGrade, gradeColor, gradeWord, incidentLabel,
+  REFEREE_AXES, axisWord, axisTone, formatGrade, gradeColor, gradeWord, incidentLabel,
   memoryWord, memoryColor, pocet,
   type RefereeProfileView, type RefereeStatsView, type RefereeIncidentView,
 } from "@/lib/referee-info";
@@ -53,7 +53,7 @@ export default function RozhodciDetailPage() {
       .finally(() => setLoading(false));
   }, [id, teamId]);
 
-  if (loading) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner size="lg" /></div>;
+  if (loading) return <PageLoading />;
   if (!ref) return <div className="page-container">Rozhodčí nenalezen.</div>;
 
   const s = ref.stats;
@@ -106,9 +106,7 @@ export default function RozhodciDetailPage() {
             <div key={axis.key}>
               <div className="flex items-center gap-2">
                 <span className="text-sm w-36 shrink-0">{axis.label}</span>
-                <div className="flex-1 h-2 rounded-full bg-ink/10 overflow-hidden">
-                  <div className={`h-full rounded-full ${axisColor(value)}`} style={{ width: `${value}%` }} />
-                </div>
+                <ProgressBar value={value} tone={axisTone(value)} label={axisWord(value)} className="flex-1" />
                 <span className="text-sm text-muted w-28 shrink-0 text-right">{axisWord(value)}</span>
               </div>
               <p className="text-sm text-ink-light mt-0.5 mb-2">{axis.popis}</p>
@@ -153,31 +151,15 @@ export default function RozhodciDetailPage() {
         </>
       )}
 
-      <SectionLabel>Známky z jednotlivých zápasů</SectionLabel>
-      {ref.recentMatches.length === 0 ? (
-        <div className="card p-4"><p className="text-sm text-muted">Zatím žádný odpískaný zápas.</p></div>
-      ) : (
-        <div className="space-y-2">
-          {ref.recentMatches.map((m) => (
-            <Link key={m.matchId} href={`/zapas/${m.matchId}`} className="card card-hover p-3 flex items-center gap-3">
-              <div className="min-w-0 flex-1">
-                <div className="font-heading font-bold text-base truncate">
-                  {m.homeName} {m.homeScore}:{m.awayScore} {m.awayName}
-                </div>
-                <div className="text-sm text-muted truncate">
-                  {m.gameWeek != null ? `${m.gameWeek}. kolo` : "Pohár"}
-                  {m.incidents.length > 0 && ` · ${incidentLabel(m.incidents[0].kind)}`}
-                </div>
-              </div>
-              <div className="text-right shrink-0">
-                <div className={`font-heading font-bold text-lg tabular-nums ${gradeColor(m.grade)}`}>
-                  {formatGrade(m.grade, 1)}
-                </div>
-              </div>
-            </Link>
-          ))}
-        </div>
-      )}
+      <ListCard title="Známky z jednotlivých zápasů" count={ref.recentMatches.length || undefined}>
+        {ref.recentMatches.length === 0 && <ListEmpty icon="🟨">Zatím žádný odpískaný zápas.</ListEmpty>}
+        {ref.recentMatches.map((m) => (
+          <ListRow key={m.matchId} href={`/zapas/${m.matchId}`}
+            title={<>{m.homeName} <span className="tabular-nums">{m.homeScore}:{m.awayScore}</span> {m.awayName}</>}
+            meta={`${m.gameWeek != null ? `${m.gameWeek}. kolo` : "Pohár"}${m.incidents.length > 0 ? ` · ${incidentLabel(m.incidents[0].kind)}` : ""}`}
+            trailing={<RowValue><span className={gradeColor(m.grade)}>{formatGrade(m.grade, 1)}</span></RowValue>} />
+        ))}
+      </ListCard>
     </div>
   );
 }

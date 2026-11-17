@@ -5,17 +5,14 @@ import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { TalentStars } from "@/components/players/talent-stars";
 import { apiFetch, type Team, type Player } from "@/lib/api";
-import { Spinner, PositionBadge, Tabs, useTabParam } from "@/components/ui";
-import { PositionFilter, SquadAttributeTable, type PosFilter } from "@/components/players/squad-attribute-table";
+import { PositionBadge, Tabs, useTabParam, ListCard, ListRow, ListEmpty, DataTable, PageLoading, SectionLoading } from "@/components/ui";
+import { PositionFilter, SquadAttributeTable, StickyPlayerName, type PosFilter } from "@/components/players/squad-attribute-table";
 import { SquadBodyTab } from "@/components/players/squad-body-tab";
 import { SquadAnalysisTab } from "@/components/players/squad-analysis-tab";
 
 type Tab = "atributy" | "sezona" | "top" | "dochazka" | "postava" | "rozbor";
 // Pořadí určuje i výchozí záložku — první je ta bez ?tab= v adrese.
 const TAB_KEYS = ["atributy", "rozbor", "sezona", "postava", "dochazka", "top"] as const;
-type StatsKey = "name" | "pos" | "apps" | "min" | "g" | "a" | "ga" | "y" | "r" | "cs" | "mom" | "avg";
-type AttKey = "name" | "pos" | "trainPct" | "trainAtt" | "matches" | "injury" | "suspension" | "excuse" | "bench" | "notNominated";
-type SortDir = "asc" | "desc";
 
 interface AttendanceRow {
   playerId: string;
@@ -68,12 +65,8 @@ export default function SquadPage() {
   const [seasonStats, setSeasonStats] = useState<PlayerSeasonStats[]>([]);
   const [tab, setTab] = useTabParam(TAB_KEYS);
   const [filter, setFilter] = useState<PosFilter>("all");
-  const [statsSortKey, setStatsSortKey] = useState<StatsKey>("g");
-  const [statsSortDir, setStatsSortDir] = useState<SortDir>("desc");
   const [attendance, setAttendance] = useState<AttendanceRow[]>([]);
   const [attendanceLoaded, setAttendanceLoaded] = useState(false);
-  const [attSortKey, setAttSortKey] = useState<AttKey>("trainPct");
-  const [attSortDir, setAttSortDir] = useState<SortDir>("desc");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -172,40 +165,13 @@ export default function SquadPage() {
     };
   }, [players]);
 
-  if (loading) return <div className="page-container flex justify-center min-h-[50vh] items-center"><Spinner /></div>;
+  if (loading) return <PageLoading />;
   if (!team) return <div className="p-6">Tým nenalezen.</div>;
 
   const filtered = filter === "all" ? players : players.filter((p) => p.position === filter);
 
   // Stats tab — filter + sort
   const statsFiltered = filter === "all" ? seasonStats : seasonStats.filter((s) => s.position === filter);
-  const getStatsVal = (s: PlayerSeasonStats, k: StatsKey): string | number => {
-    switch (k) {
-      case "name": return `${s.lastName} ${s.firstName}`;
-      case "pos": return POS_ORDER[s.position] ?? 9;
-      case "apps": return s.appearances ?? 0;
-      case "min": return s.minutesPlayed ?? 0;
-      case "g": return s.goals ?? 0;
-      case "a": return s.assists ?? 0;
-      case "ga": return (s.goals ?? 0) + (s.assists ?? 0);
-      case "y": return s.yellowCards ?? 0;
-      case "r": return s.redCards ?? 0;
-      case "cs": return s.cleanSheets ?? 0;
-      case "mom": return s.manOfMatch ?? 0;
-      case "avg": return s.avgRating ?? 0;
-    }
-  };
-  const statsSorted = [...statsFiltered].sort((a, b) => {
-    const va = getStatsVal(a, statsSortKey);
-    const vb = getStatsVal(b, statsSortKey);
-    const cmp = typeof va === "string" ? va.localeCompare(vb as string, "cs") : (va as number) - (vb as number);
-    return statsSortDir === "asc" ? cmp : -cmp;
-  });
-  const toggleStatsSort = (k: StatsKey) => {
-    if (statsSortKey === k) setStatsSortDir(statsSortDir === "asc" ? "desc" : "asc");
-    else { setStatsSortKey(k); setStatsSortDir(k === "name" ? "asc" : "desc"); }
-  };
-
   const totalGoals = seasonStats.reduce((s, p) => s + (p.goals ?? 0), 0);
   const totalAssists = seasonStats.reduce((s, p) => s + (p.assists ?? 0), 0);
   const totalApps = seasonStats.reduce((s, p) => s + (p.appearances ?? 0), 0);
@@ -246,7 +212,7 @@ export default function SquadPage() {
         <div className="card grid grid-cols-4 divide-x divide-gray-100">
           {[
             { value: String(players.length), label: "Hráčů", className: "" },
-            { value: String(avgRating), label: "Ø Rating", className: "" },
+            { value: String(avgRating), label: "Ø Hod.", className: "" },
             { value: avgAge, label: "Ø Věk", className: "" },
             { value: totalWage.toLocaleString("cs"), label: "Mzdy/týd", className: "text-card-red" },
           ].map((s) => (
@@ -292,61 +258,28 @@ export default function SquadPage() {
               {"\u{2139}\u{FE0F}"} Tým zatím neodehrál žádný zápas. Statistiky se naplní postupně po každém kole. <Link href="/rozpis" className="text-pitch-600 underline ml-1">Rozpis zápasů</Link>
             </div>
           )}
-          <div className="card overflow-x-auto table-scroll">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b-2 border-gray-200">
-                  {([
-                    ["name", "Jméno", "Jméno hráče"],
-                    ["pos", "Poz", "Pozice"],
-                    ["apps", "Záp", "Zápasy"],
-                    ["min", "Min", "Odehrané minuty"],
-                    ["g", "G", "Góly"],
-                    ["a", "A", "Asistence"],
-                    ["ga", "G+A", "Góly + asistence"],
-                    ["y", "ŽK", "Žluté karty"],
-                    ["r", "ČK", "Červené karty"],
-                    ["cs", "CS", "Čistá konta (brankáři)"],
-                    ["mom", "MoM", "Hráč zápasu"],
-                    ["avg", "Ø", "Průměrný rating"],
-                  ] as Array<[StatsKey, string, string]>).map(([k, label, tip]) => (
-                    <th key={k}
-                      onClick={() => toggleStatsSort(k)}
-                      title={tip}
-                      className={`py-2.5 px-1.5 font-heading uppercase cursor-pointer select-none hover:text-pitch-500 transition-colors whitespace-nowrap ${
-                        statsSortKey === k ? "text-pitch-600 bg-pitch-50" : "text-muted"
-                      } ${k === "name" ? "text-left pl-3 sticky left-0 bg-white z-10" : "text-center"}`}
-                    >
-                      {label}{statsSortKey === k ? (statsSortDir === "asc" ? " ↑" : " ↓") : ""}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {statsSorted.map((s) => (
-                  <tr key={s.playerId} className="border-b border-gray-50 hover:bg-pitch-50/30 transition-colors">
-                    <td className="py-2 px-1.5 pl-3 sticky left-0 bg-white z-10">
-                      <Link href={`/hrac/${s.playerId}`}
-                        className="font-heading font-bold text-sm hover:text-pitch-500 underline decoration-pitch-500/20 transition-colors whitespace-nowrap">
-                        {s.firstName} {s.lastName}
-                      </Link>
-                    </td>
-                    <td className="py-2 px-1.5 text-center"><PositionBadge position={s.position} /></td>
-                    <td className="py-2 px-1.5 text-center tabular-nums">{s.appearances ?? 0}</td>
-                    <td className="py-2 px-1.5 text-center tabular-nums text-muted">{s.minutesPlayed ?? 0}</td>
-                    <td className="py-2 px-1.5 text-center tabular-nums font-heading font-bold text-pitch-600">{s.goals ?? 0}</td>
-                    <td className="py-2 px-1.5 text-center tabular-nums font-heading font-bold text-blue-600">{s.assists ?? 0}</td>
-                    <td className="py-2 px-1.5 text-center tabular-nums font-heading font-bold">{(s.goals ?? 0) + (s.assists ?? 0)}</td>
-                    <td className="py-2 px-1.5 text-center tabular-nums text-amber-600">{s.yellowCards ?? 0}</td>
-                    <td className="py-2 px-1.5 text-center tabular-nums text-card-red">{s.redCards ?? 0}</td>
-                    <td className="py-2 px-1.5 text-center tabular-nums">{s.position === "GK" ? (s.cleanSheets ?? 0) : "-"}</td>
-                    <td className="py-2 px-1.5 text-center tabular-nums text-gold-600">{s.manOfMatch ?? 0}</td>
-                    <td className="py-2 px-1.5 text-center tabular-nums font-heading font-bold">{s.avgRating != null && s.avgRating > 0 ? s.avgRating.toFixed(1) : "-"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <ListCard>
+            <DataTable rows={statsFiltered} rowKey={(r) => r.playerId}
+              rowHref={(r) => `/hrac/${r.playerId}`} scroll={{ minWidth: 620 }}
+              defaultSort={{ key: "g", dir: "desc" }}
+              empty="Žádní hráči neodpovídají filtru."
+              columns={[
+                { key: "name", header: "Jméno", title: "Jméno hráče", align: "left", sortValue: (r) => `${r.lastName} ${r.firstName}`, firstDir: "asc",
+                  cell: (r) => <span className="text-body font-bold text-ink whitespace-nowrap"><StickyPlayerName firstName={r.firstName} lastName={r.lastName} /></span> },
+                { key: "pos", header: "Poz", title: "Pozice", width: "w-14", sortValue: (r) => POS_ORDER[r.position] ?? 9, firstDir: "asc", cell: (r) => <PositionBadge position={r.position} /> },
+                { key: "apps", header: "Záp", title: "Zápasy", width: "w-11", sortValue: (r) => r.appearances ?? 0, cell: (r) => r.appearances ?? 0 },
+                { key: "min", header: "Min", title: "Odehrané minuty", width: "w-12", sortValue: (r) => r.minutesPlayed ?? 0, cell: (r) => r.minutesPlayed ?? 0 },
+                { key: "g", header: "G", title: "Góly", width: "w-10", sortValue: (r) => r.goals ?? 0, cell: (r) => <span className="font-bold text-pitch-600">{r.goals ?? 0}</span> },
+                { key: "a", header: "A", title: "Asistence", width: "w-10", sortValue: (r) => r.assists ?? 0, cell: (r) => <span className="font-bold text-blue-600">{r.assists ?? 0}</span> },
+                { key: "ga", header: "G+A", title: "Góly + asistence", width: "w-12", sortValue: (r) => (r.goals ?? 0) + (r.assists ?? 0), cell: (r) => <span className="font-bold text-ink">{(r.goals ?? 0) + (r.assists ?? 0)}</span> },
+                { key: "y", header: "ŽK", title: "Žluté karty", width: "w-10", sortValue: (r) => r.yellowCards ?? 0, cell: (r) => <span className="text-amber-600">{r.yellowCards ?? 0}</span> },
+                { key: "r", header: "ČK", title: "Červené karty", width: "w-10", sortValue: (r) => r.redCards ?? 0, cell: (r) => <span className="text-card-red">{r.redCards ?? 0}</span> },
+                { key: "cs", header: "CS", title: "Čistá konta (brankáři)", width: "w-10", sortValue: (r) => r.cleanSheets ?? 0, cell: (r) => (r.position === "GK" ? (r.cleanSheets ?? 0) : "-") },
+                { key: "mom", header: "MoM", title: "Hráč zápasu", width: "w-12", sortValue: (r) => r.manOfMatch ?? 0, cell: (r) => <span className="text-gold-600">{r.manOfMatch ?? 0}</span> },
+                { key: "avg", header: "Ø", title: "Průměrné hodnocení", width: "w-12", emphasis: true, sortValue: (r) => r.avgRating ?? 0,
+                  cell: (r) => (r.avgRating != null && r.avgRating > 0 ? r.avgRating.toFixed(1) : "-") },
+              ]} />
+          </ListCard>
         </>
       )}
 
@@ -355,7 +288,7 @@ export default function SquadPage() {
         <>
           <div className="text-micro font-heading font-bold text-muted uppercase tracking-wider mt-1">{"\u{1F3C5}"} Žebříčky kádru</div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            <PlayerTopList title={"\u{2B50} Nejvyšší rating"} items={topPlayerData.ratings} valueOf={(p) => p.overall_rating ?? 0} />
+            <PlayerTopList title={"\u{2B50} Nejvyšší hodnocení"} items={topPlayerData.ratings} valueOf={(p) => p.overall_rating ?? 0} />
             <PlayerTopList title={"\u{1F525} Top kondice"} items={topPlayerData.condition.map((x) => x.p)} valueOf={(p) => `${(p.lifeContext as unknown as Record<string, number>)?.condition ?? 0}%`} />
             <PlayerTopList title={"\u{1F60A} Top morálka"} items={topPlayerData.morale.map((x) => x.p)} valueOf={(p) => `${(p.lifeContext as unknown as Record<string, number>)?.morale ?? 0}%`} />
             <PlayerTopList title={"\u{1F4A8} Nejrychlejší"} items={topPlayerData.speed.map((x) => x.p)} valueOf={(p) => p.skills?.speed ?? 0} />
@@ -377,7 +310,7 @@ export default function SquadPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <TopList title={"\u{26BD} Nejlepší střelci"} items={topMatchData.scorers} valueOf={(s) => s.goals ?? 0} suffix="g" />
                 <TopList title={"\u{1F3AF} Nejlepší asistenti"} items={topMatchData.assists} valueOf={(s) => s.assists ?? 0} suffix="a" />
-                <TopList title={"\u{2B50} Avg rating zápasů"} items={topMatchData.ratings} valueOf={(s) => (s.avgRating ?? 0).toFixed(1)} />
+                <TopList title={"\u{2B50} Průměrné hodnocení v zápasech"} items={topMatchData.ratings} valueOf={(s) => (s.avgRating ?? 0).toFixed(1)} />
                 <TopList title={"\u{1F451} Hráč zápasu"} items={topMatchData.mom} valueOf={(s) => s.manOfMatch ?? 0} suffix="×" />
                 <TopList title={"\u{23F1}\u{FE0F} Nejvíce minut"} items={topMatchData.minutes} valueOf={(s) => `${s.minutesPlayed ?? 0} '`} />
                 <TopList title={"\u{1F9E4} Čistá konta"} items={topMatchData.cleanSheets} valueOf={(s) => s.cleanSheets ?? 0} />
@@ -394,16 +327,10 @@ export default function SquadPage() {
       {/* Docházka — týmový přehled */}
       {tab === "dochazka" && (
         !attendanceLoaded ? (
-          <div className="card p-6 flex items-center justify-center min-h-[120px]"><Spinner /></div>
+          <div className="card"><SectionLoading /></div>
         ) : (
           <DochazkaTab
             rows={attendance.filter((r) => filter === "all" || r.position === filter)}
-            sortKey={attSortKey}
-            sortDir={attSortDir}
-            onSort={(k) => {
-              if (attSortKey === k) setAttSortDir(attSortDir === "asc" ? "desc" : "asc");
-              else { setAttSortKey(k); setAttSortDir(k === "name" ? "asc" : "desc"); }
-            }}
           />
         )
       )}
@@ -416,104 +343,51 @@ export default function SquadPage() {
   );
 }
 
-function DochazkaTab({ rows, sortKey, sortDir, onSort }: {
-  rows: AttendanceRow[];
-  sortKey: AttKey;
-  sortDir: SortDir;
-  onSort: (k: AttKey) => void;
-}) {
-  const getVal = (r: AttendanceRow, k: AttKey): string | number => {
-    switch (k) {
-      case "name": return `${r.lastName} ${r.firstName}`;
-      case "pos": return POS_ORDER[r.position] ?? 9;
-      case "trainPct": return r.trainingPct;
-      case "trainAtt": return r.trainingAttended;
-      case "matches": return r.matchesPlayed;
-      case "injury": return r.breakdown.injury;
-      case "suspension": return r.breakdown.suspension;
-      case "excuse": return r.breakdown.excuse;
-      case "bench": return r.breakdown.bench;
-      case "notNominated": return r.breakdown.notNominated;
-    }
-  };
-  const sorted = [...rows].sort((a, b) => {
-    const va = getVal(a, sortKey);
-    const vb = getVal(b, sortKey);
-    const cmp = typeof va === "string" ? va.localeCompare(vb as string, "cs") : (va as number) - (vb as number);
-    return sortDir === "asc" ? cmp : -cmp;
-  });
+function DochazkaTab({ rows }: { rows: AttendanceRow[] }) {
   const totalMatches = rows[0]?.matchesAvailable ?? 0;
-  if (rows.length === 0) {
-    return <div className="card p-4 text-sm text-muted text-center">Žádní hráči neodpovídají filtru.</div>;
-  }
+  const dash = (n: number) => n || "-";
   return (
     <>
-      {totalMatches === 0 && (
+      {totalMatches === 0 && rows.length > 0 && (
         <div className="card p-3 text-center text-xs text-muted">
           {"\u{2139}\u{FE0F}"} Tým zatím neodehrál žádný zápas. Tabulka zobrazí jen tréninkovou docházku.
         </div>
       )}
-      <div className="card overflow-x-auto table-scroll">
-        <table className="w-full text-xs">
-          <thead>
-            <tr className="border-b-2 border-gray-200">
-              {([
-                ["name", "Jméno", "Jméno hráče", "left"],
-                ["pos", "Poz", "Pozice", "center"],
-                ["trainPct", "Tréninky %", "Procento docházky na trénink", "center"],
-                ["trainAtt", "Tréninky", "Účast / celkem", "center"],
-                ["matches", "Zápasy", "Odehrané zápasy / dostupné", "center"],
-                ["injury", "Zranění", "Zameškáno kvůli zranění", "center"],
-                ["suspension", "Stopka", "Zameškáno kvůli stopce za karty", "center"],
-                ["excuse", "Výmluvy", "Zameškáno kvůli omluvě (osobní, zdraví, kocovina…)", "center"],
-                ["bench", "Lavička", "Byl v nominaci jako náhradník, ale nedostal šanci", "center"],
-                ["notNominated", "Nenominován", "Trenér ho do zápasu vůbec nenominoval", "center"],
-              ] as Array<[AttKey, string, string, "left" | "center"]>).map(([k, label, tip, align]) => (
-                <th key={k}
-                  onClick={() => onSort(k)}
-                  title={tip}
-                  className={`py-2.5 px-1.5 font-heading uppercase cursor-pointer select-none hover:text-pitch-500 transition-colors whitespace-nowrap ${
-                    sortKey === k ? "text-pitch-600 bg-pitch-50" : "text-muted"
-                  } ${align === "left" ? "text-left pl-3 sticky left-0 bg-white z-10" : "text-center"}`}
-                >
-                  {label}{sortKey === k ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {sorted.map((r) => {
-              const pctColor = r.trainingPct >= 80 ? "text-pitch-600" : r.trainingPct >= 60 ? "text-amber-600" : "text-card-red";
-              return (
-                <tr key={r.playerId} className="border-b border-gray-50 hover:bg-pitch-50/30 transition-colors">
-                  <td className="py-2 px-1.5 pl-3 sticky left-0 bg-white z-10">
-                    <Link href={`/hrac/${r.playerId}#ucast`}
-                      className="font-heading font-bold text-sm hover:text-pitch-500 underline decoration-pitch-500/20 transition-colors whitespace-nowrap">
-                      {r.firstName} {r.lastName}
-                    </Link>
-                  </td>
-                  <td className="py-2 px-1.5 text-center"><PositionBadge position={r.position} /></td>
-                  <td className={`py-2 px-1.5 text-center tabular-nums font-heading font-bold ${pctColor}`}>
-                    {r.trainingTotal > 0 ? `${r.trainingPct}%` : "-"}
-                  </td>
-                  <td className="py-2 px-1.5 text-center tabular-nums text-muted">
-                    {r.trainingTotal > 0 ? `${r.trainingAttended}/${r.trainingTotal}` : "-"}
-                  </td>
-                  <td className="py-2 px-1.5 text-center tabular-nums">
-                    {r.matchesPlayed}/{r.matchesAvailable}
-                  </td>
-                  <td className="py-2 px-1.5 text-center tabular-nums text-card-red">{r.breakdown.injury || "-"}</td>
-                  <td className="py-2 px-1.5 text-center tabular-nums text-amber-600">{r.breakdown.suspension || "-"}</td>
-                  <td className="py-2 px-1.5 text-center tabular-nums text-blue-600">{r.breakdown.excuse || "-"}</td>
-                  <td className="py-2 px-1.5 text-center tabular-nums text-muted">{r.breakdown.bench || "-"}</td>
-                  <td className="py-2 px-1.5 text-center tabular-nums text-muted">{r.breakdown.notNominated || "-"}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+      <ListCard>
+        <DataTable rows={rows} rowKey={(r) => r.playerId}
+          rowHref={(r) => `/hrac/${r.playerId}#ucast`} scroll={{ minWidth: 820 }}
+          defaultSort={{ key: "trainPct", dir: "desc" }}
+          empty="Žádní hráči neodpovídají filtru."
+          columns={[
+            { key: "name", header: "Jméno", title: "Jméno hráče", align: "left", sortValue: (r) => `${r.lastName} ${r.firstName}`, firstDir: "asc",
+              cell: (r) => <span className="text-body font-bold text-ink whitespace-nowrap"><StickyPlayerName firstName={r.firstName} lastName={r.lastName} /></span> },
+            { key: "pos", header: "Poz", title: "Pozice", width: "w-14", sortValue: (r) => POS_ORDER[r.position] ?? 9, firstDir: "asc", cell: (r) => <PositionBadge position={r.position} /> },
+            { key: "trainPct", header: "Tréninky %", title: "Procento docházky na trénink", sortValue: (r) => r.trainingPct,
+              cell: (r) => <span className={`font-bold ${r.trainingPct >= 80 ? "text-pitch-600" : r.trainingPct >= 60 ? "text-amber-600" : "text-card-red"}`}>{r.trainingTotal > 0 ? `${r.trainingPct} %` : "-"}</span> },
+            { key: "trainAtt", header: "Tréninky", title: "Účast / celkem", sortValue: (r) => r.trainingAttended,
+              cell: (r) => (r.trainingTotal > 0 ? `${r.trainingAttended}/${r.trainingTotal}` : "-") },
+            { key: "matches", header: "Zápasy", title: "Odehrané zápasy / dostupné", sortValue: (r) => r.matchesPlayed, cell: (r) => `${r.matchesPlayed}/${r.matchesAvailable}` },
+            { key: "injury", header: "Zranění", title: "Zameškáno kvůli zranění", sortValue: (r) => r.breakdown.injury, cell: (r) => <span className="text-card-red">{dash(r.breakdown.injury)}</span> },
+            { key: "suspension", header: "Stopka", title: "Zameškáno kvůli stopce za karty", sortValue: (r) => r.breakdown.suspension, cell: (r) => <span className="text-amber-600">{dash(r.breakdown.suspension)}</span> },
+            { key: "excuse", header: "Výmluvy", title: "Zameškáno kvůli omluvě (osobní, zdraví, kocovina…)", sortValue: (r) => r.breakdown.excuse, cell: (r) => <span className="text-blue-600">{dash(r.breakdown.excuse)}</span> },
+            { key: "bench", header: "Lavička", title: "Byl v nominaci jako náhradník, ale nedostal šanci", sortValue: (r) => r.breakdown.bench, cell: (r) => dash(r.breakdown.bench) },
+            { key: "notNominated", header: "Nenominován", title: "Trenér ho do zápasu vůbec nenominoval", sortValue: (r) => r.breakdown.notNominated, cell: (r) => dash(r.breakdown.notNominated) },
+          ]} />
+      </ListCard>
     </>
+  );
+}
+
+/** Pořadí v žebříčku: první tři medaile, dál číslo. */
+function rankMark(index: number) {
+  return index === 0 ? "\u{1F947}" : index === 1 ? "\u{1F948}" : index === 2 ? "\u{1F949}" : <span className="text-meta text-muted tabular-nums">{index + 1}.</span>;
+}
+
+function TopValue({ value, suffix }: { value: string | number; suffix: string }) {
+  return (
+    <span className="text-body font-bold tabular-nums text-pitch-600">
+      {value}{suffix && <span className="text-muted font-normal text-meta ml-0.5">{suffix}</span>}
+    </span>
   );
 }
 
@@ -523,36 +397,16 @@ function PlayerTopList({ title, items, valueOf, suffix = "" }: {
   valueOf: (p: Player) => string | number;
   suffix?: string;
 }) {
-  if (items.length === 0) {
-    return (
-      <div className="card p-4">
-        <div className="font-heading font-bold text-sm text-ink mb-2">{title}</div>
-        <div className="text-xs text-muted">Žádná data.</div>
-      </div>
-    );
-  }
   return (
-    <div className="card p-4">
-      <div className="font-heading font-bold text-sm text-ink mb-3">{title}</div>
-      <div className="space-y-1.5">
-        {items.map((p, i) => {
-          const medal = i === 0 ? "\u{1F947}" : i === 1 ? "\u{1F948}" : i === 2 ? "\u{1F949}" : `${i + 1}.`;
-          return (
-            <Link key={p.id} href={`/hrac/${p.id}`}
-              className="flex items-center gap-2 py-1.5 px-2 -mx-2 rounded hover:bg-pitch-50/50 transition-colors group">
-              <span className="w-6 text-center text-sm shrink-0">{medal}</span>
-              <PositionBadge position={p.position as "GK" | "DEF" | "MID" | "FWD"} />
-              <span className="flex-1 min-w-0 truncate font-heading font-bold text-sm group-hover:text-pitch-500 transition-colors">
-                {p.first_name} {p.last_name}
-              </span>
-              <span className="font-heading font-[800] tabular-nums text-pitch-600 text-sm shrink-0">
-                {valueOf(p)}{suffix && <span className="text-muted font-normal text-xs ml-0.5">{suffix}</span>}
-              </span>
-            </Link>
-          );
-        })}
-      </div>
-    </div>
+    <ListCard title={title}>
+      {items.length === 0 && <ListEmpty icon="📊">Tenhle žebříček se naplní, až budou mít hráči co ukázat.</ListEmpty>}
+      {items.map((p, i) => (
+        <ListRow key={p.id} dense href={`/hrac/${p.id}`}
+          leading={rankMark(i)}
+          title={<span className="flex items-center gap-2"><PositionBadge position={p.position as "GK" | "DEF" | "MID" | "FWD"} /><span className="min-w-0">{p.first_name} {p.last_name}</span></span>}
+          trailing={<TopValue value={valueOf(p)} suffix={suffix} />} />
+      ))}
+    </ListCard>
   );
 }
 
@@ -562,35 +416,15 @@ function TopList({ title, items, valueOf, suffix = "" }: {
   valueOf: (s: PlayerSeasonStats) => string | number;
   suffix?: string;
 }) {
-  if (items.length === 0) {
-    return (
-      <div className="card p-4">
-        <div className="font-heading font-bold text-sm text-ink mb-2">{title}</div>
-        <div className="text-xs text-muted">Žádná data.</div>
-      </div>
-    );
-  }
   return (
-    <div className="card p-4">
-      <div className="font-heading font-bold text-sm text-ink mb-3">{title}</div>
-      <div className="space-y-1.5">
-        {items.map((s, i) => {
-          const medal = i === 0 ? "\u{1F947}" : i === 1 ? "\u{1F948}" : i === 2 ? "\u{1F949}" : `${i + 1}.`;
-          return (
-            <Link key={s.playerId} href={`/hrac/${s.playerId}`}
-              className="flex items-center gap-2 py-1.5 px-2 -mx-2 rounded hover:bg-pitch-50/50 transition-colors group">
-              <span className="w-6 text-center text-sm shrink-0">{medal}</span>
-              <PositionBadge position={s.position} />
-              <span className="flex-1 min-w-0 truncate font-heading font-bold text-sm group-hover:text-pitch-500 transition-colors">
-                {s.firstName} {s.lastName}
-              </span>
-              <span className="font-heading font-[800] tabular-nums text-pitch-600 text-sm shrink-0">
-                {valueOf(s)}{suffix && <span className="text-muted font-normal text-xs ml-0.5">{suffix}</span>}
-              </span>
-            </Link>
-          );
-        })}
-      </div>
-    </div>
+    <ListCard title={title}>
+      {items.length === 0 && <ListEmpty icon="📊">Tenhle žebříček se naplní po prvních odehraných zápasech.</ListEmpty>}
+      {items.map((s, i) => (
+        <ListRow key={s.playerId} dense href={`/hrac/${s.playerId}`}
+          leading={rankMark(i)}
+          title={<span className="flex items-center gap-2"><PositionBadge position={s.position} /><span className="min-w-0">{s.firstName} {s.lastName}</span></span>}
+          trailing={<TopValue value={valueOf(s)} suffix={suffix} />} />
+      ))}
+    </ListCard>
   );
 }

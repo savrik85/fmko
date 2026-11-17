@@ -12,7 +12,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
-import { SectionLabel, Spinner } from "@/components/ui";
+import { SectionLabel, Spinner, PageLoading } from "@/components/ui";
 import { LessonBody } from "@/components/manager/LessonBody";
 import { COACH_EXAM_CHANNEL, type CoachExamMessage } from "@/lib/coach-exam-channel";
 
@@ -114,7 +114,7 @@ export default function SkriptaPage() {
       </div>
     );
   }
-  if (!data) return <div className="min-h-[50dvh] flex items-center justify-center"><Spinner size="lg" /></div>;
+  if (!data) return <PageLoading />;
 
   const lesson = data.lessons[index];
   const last = index === data.lessons.length - 1;

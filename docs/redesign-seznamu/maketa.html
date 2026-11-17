@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prales: maketa seznamů</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Barlow+Condensed:wght@600;700&display=swap" rel="stylesheet">
+<style>
+/* Hodnoty jsou opsané z apps/web/src/app/globals.css (@theme). Maketa je jen obrázek,
+   do aplikace se z ní nic nekopíruje: třídy Tailwindu jsou v plan.md. */
+:root {
+  --pitch-50:#E8F5E8; --pitch-100:#C8E6C8; --pitch-400:#3A7A3A; --pitch-500:#2D5F2D; --pitch-600:#1E4A1E;
+  --gold-50:#FBF6E6; --gold-500:#C4A035; --gold-700:#866D1E;
+  --red:#D94032; --red-soft:#FBEAE8;
+  --paper:#F5F0E8; --surface:#FFFFFF; --muted:#8B8578; --muted-light:#B5AFA5; --ink:#1A1714; --ink-light:#3D3830;
+  --line:oklch(92.8% 0.009 85); --line-soft:oklch(96.7% 0.005 85); --surface-2:oklch(98.5% 0.003 85); --surface-3:oklch(96.7% 0.005 85);
+  --gray-400:oklch(70.7% 0.017 85);
+  --r-tight:6px; --r-control:10px; --r-card:14px;
+  --shadow-card:0 2px 12px rgba(26,23,20,.07),0 1px 3px rgba(26,23,20,.04);
+}
+* { box-sizing:border-box; }
+body { margin:0; background:var(--paper); color:var(--ink); font-family:Outfit,ui-sans-serif,sans-serif; font-weight:450; font-size:15px; line-height:1.35; }
+.page { max-width:1180px; margin:0 auto; padding:24px 16px 80px; }
+h1 { font-size:28px; font-weight:800; margin:0 0 4px; }
+h2 { font-size:20px; font-weight:800; margin:44px 0 6px; }
+.lead { color:var(--ink-light); margin:0 0 18px; max-width:760px; }
+.note { color:var(--muted); font-size:13px; margin:8px 0 0; }
+.cols { display:grid; grid-template-columns:minmax(0,1fr) 375px; gap:24px; align-items:start; }
+@media (max-width:900px){ .cols { grid-template-columns:1fr; } }
+.frame-label { font-family:"Barlow Condensed",sans-serif; font-weight:600; font-size:13px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); margin:0 0 8px; }
+.phone { width:375px; max-width:100%; border:1px dashed var(--muted-light); border-radius:18px; padding:12px; background:var(--paper); }
+
+/* ── společné ── */
+.card { background:var(--surface); border-radius:var(--r-card); box-shadow:var(--shadow-card); overflow:hidden; }
+.section-label { font-family:"Barlow Condensed",sans-serif; font-weight:600; font-size:13px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }
+.list-head { display:flex; align-items:center; gap:8px; padding:12px 16px; border-bottom:1px solid var(--line); }
+.list-head .count { color:var(--muted-light); font-weight:600; font-size:13px; }
+.list-head .spacer { flex:1; }
+.seg { display:inline-flex; background:var(--surface-3); border-radius:var(--r-control); padding:2px; }
+.seg button { border:0; background:none; font:inherit; font-size:13px; font-weight:700; color:var(--muted); padding:5px 10px; border-radius:8px; cursor:pointer; }
+.seg button.on { background:var(--surface); color:var(--ink); box-shadow:0 1px 2px rgba(26,23,20,.08); }
+.num { font-variant-numeric:tabular-nums; }
+.crest { width:24px; height:24px; flex:none; clip-path:polygon(50% 0,100% 18%,100% 62%,50% 100%,0 62%,0 18%); }
+.avatar { width:36px; height:36px; flex:none; border-radius:50%; background:var(--surface-3); display:grid; place-items:center; font-weight:700; color:var(--ink-light); }
+.icon-tile { width:36px; height:36px; flex:none; border-radius:var(--r-control); background:var(--surface-3); display:grid; place-items:center; font-size:18px; }
+.pos { display:inline-flex; align-items:center; padding:3px 8px; border-radius:6px; font-weight:700; font-size:12px; letter-spacing:.04em; background:#fff; box-shadow:inset 0 0 0 1px currentColor; }
+.pos.gk{color:#E88D0C}.pos.def{color:#2563EB}.pos.mid{color:#16A34A}.pos.fwd{color:#DC2626}
+.res { width:22px; height:22px; border-radius:var(--r-tight); display:inline-grid; place-items:center; color:#fff; font-size:11px; font-weight:700; }
+.res.w{background:var(--pitch-500)} .res.d{background:var(--gray-400)} .res.l{background:var(--red)}
+.score { display:inline-block; min-width:44px; text-align:center; padding:3px 8px; border-radius:var(--r-tight); font-weight:700; font-size:13px; font-variant-numeric:tabular-nums; }
+.score.w{background:var(--pitch-50);color:var(--pitch-600)} .score.d{background:var(--surface-3);color:var(--muted)} .score.l{background:var(--red-soft);color:var(--red)}
+.rating { display:inline-grid; place-items:center; min-width:36px; height:28px; padding:0 6px; border-radius:var(--r-control); font-weight:700; font-size:15px; font-variant-numeric:tabular-nums; background:var(--surface-3); color:var(--ink); }
+.rating.top{background:var(--gold-50);color:var(--gold-700)} .rating.good{background:var(--pitch-50);color:var(--pitch-600)} .rating.poor{background:var(--red-soft);color:var(--red)}
+.chip { display:inline-block; padding:3px 8px; border-radius:999px; font-size:12px; font-weight:700; white-space:nowrap; }
+.chip.warn{background:#F7EFD9;color:#A87A12} .chip.danger{background:var(--red-soft);color:var(--red)} .chip.ok{background:var(--pitch-50);color:var(--pitch-600)} .chip.neutral{background:var(--surface-3);color:var(--muted)}
+.more { display:block; width:100%; border:0; border-top:1px solid var(--line); background:none; font:inherit; font-size:13px; font-weight:700; color:var(--pitch-600); padding:12px; cursor:pointer; }
+.more:hover { background:var(--surface-2); }
+.empty { padding:28px 20px; text-align:center; }
+.empty .ico { font-size:28px; line-height:1; }
+.empty p { margin:8px auto 12px; max-width:320px; color:var(--ink-light); }
+.btn { display:inline-block; border:0; border-radius:var(--r-control); background:var(--pitch-500); color:#fff; font:inherit; font-weight:700; font-size:14px; padding:9px 16px; }
+
+/* ── tabulka ── */
+table { width:100%; border-collapse:collapse; }
+thead th { height:36px; padding:0 8px; background:var(--surface-2); border-bottom:1px solid var(--line); font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); white-space:nowrap; text-align:center; }
+thead th.l { text-align:left; } thead th.r { text-align:right; }
+thead th.sort { cursor:pointer; } thead th.sort.on { color:var(--pitch-600); }
+thead th.sort.on::after { content:" ▾"; }
+tbody td { height:48px; padding:0 8px; border-bottom:1px solid var(--line-soft); text-align:center; color:var(--ink-light); }
+tbody tr:last-child td { border-bottom:0; }
+tbody tr:hover td { background:var(--surface-2); }
+td.l { text-align:left; } td.r { text-align:right; }
+td.rank { width:40px; font-weight:700; color:var(--muted); position:relative; }
+td.main { font-weight:700; font-size:15px; color:var(--ink); }
+td.first, th.first { padding-left:16px; } td.last, th.last { padding-right:16px; }
+.entity { display:flex; align-items:center; gap:8px; min-width:0; }
+.entity .name { font-weight:700; color:var(--ink); }
+.entity .meta { display:block; font-size:13px; color:var(--muted); font-weight:450; }
+tr.own td { background:var(--pitch-50); } tr.own:hover td { background:var(--pitch-50); }
+tr.own .name { font-weight:800; }
+/* zóny tabulky: proužek vlevo v první buňce */
+td.zone-up::before, td.zone-down::before, td.zone-own::before { content:""; position:absolute; left:0; top:0; bottom:0; width:3px; }
+td.zone-up::before{background:var(--pitch-500)} td.zone-down::before{background:var(--red)}
+td.rank.gold { color:var(--gold-700); }
+.p2, .p3 { }                       /* priorita sloupce: p2 od 640 px, p3 od 1024 px */
+.phone .p2, .phone .p3 { display:none; }
+.phone tbody td { height:52px; }
+/* posuvná tabulka s přilepeným prvním sloupcem */
+.scroll { overflow-x:auto; }
+.scroll table { min-width:640px; }
+.scroll .stick { position:sticky; left:0; background:var(--surface); box-shadow:6px 0 8px -6px rgba(26,23,20,.18); z-index:1; }
+.scroll thead .stick { background:var(--surface-2); }
+.scroll-hint { font-size:12px; color:var(--muted); padding:8px 16px; border-top:1px solid var(--line-soft); }
+.attr { display:inline-grid; place-items:center; width:30px; height:24px; border-radius:var(--r-tight); font-weight:700; font-size:13px; font-variant-numeric:tabular-nums; }
+.attr.a{background:var(--pitch-500);color:#fff}.attr.b{background:var(--pitch-100);color:var(--pitch-600)}.attr.c{background:var(--surface-3);color:var(--ink-light)}.attr.d{background:var(--red-soft);color:var(--red)}
+
+/* ── řádkový seznam ── */
+.group { padding:6px 16px; background:var(--surface-2); border-bottom:1px solid var(--line-soft); font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); display:flex; justify-content:space-between; }
+.row { display:flex; align-items:center; gap:12px; min-height:56px; padding:10px 16px; border-bottom:1px solid var(--line-soft); position:relative; text-decoration:none; color:inherit; }
+.row:last-child { border-bottom:0; }
+a.row:hover { background:var(--surface-2); }
+.row .body { flex:1; min-width:0; }
+.row .title { font-weight:700; color:var(--ink); display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.row .meta { font-size:13px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.row .trail { flex:none; text-align:right; display:flex; align-items:center; gap:8px; }
+.row .value { font-weight:700; font-size:15px; font-variant-numeric:tabular-nums; color:var(--ink); }
+.row .value.plus { color:var(--pitch-600); } .row .value.minus { color:var(--red); }
+.row .sub { display:block; font-size:11px; color:var(--muted); font-weight:450; }
+.row .chev { color:var(--muted-light); font-size:18px; line-height:1; }
+.row.tone-new::before, .row.tone-warn::before, .row.tone-danger::before { content:""; position:absolute; left:0; top:0; bottom:0; width:3px; }
+.row.tone-new::before{background:var(--pitch-500)} .row.tone-warn::before{background:var(--gold-500)} .row.tone-danger::before{background:var(--red)}
+.row .small-btn { border:1px solid var(--line); background:var(--surface); border-radius:var(--r-control); font:inherit; font-size:13px; font-weight:700; padding:7px 12px; color:var(--ink); }
+
+/* ── anatomie ── */
+.anat { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:12px; margin-top:12px; }
+.anat .card { padding:14px 16px; }
+.anat b { display:block; margin-bottom:4px; }
+.anat span { color:var(--ink-light); font-size:14px; }
+.dont { border-left:3px solid var(--red); } .do { border-left:3px solid var(--pitch-500); }
+</style>
+</head>
+<body>
+<div class="page">
+
+<h1>Seznamy ve hře: cílový vzhled</h1>
+<p class="lead">Dva sdílené díly: <b>tabulka</b> (porovnávání čísel ve sloupcích) a <b>řádkový seznam</b> (položky, na které se kliká). Vlevo je desktop, vpravo totéž na telefonu šířky 375 px. Přesné třídy a kód jsou v souboru plan.md vedle této makety.</p>
+
+<!-- ═════════ 1. TABULKA ═════════ -->
+<h2>1. Tabulka: ligová tabulka</h2>
+<p class="lead">Záhlaví 36 px na světle šedém podkladu, řádek 48 px (na telefonu 52 px). Vlastní klub má zelený podklad, postupová a sestupová zóna tenký proužek vlevo. Na telefonu se sloupce neposouvají do strany: méně důležité se schovají.</p>
+<div class="cols">
+  <div>
+    <p class="frame-label">Desktop</p>
+    <div class="card">
+      <div class="list-head"><span class="section-label">Kofola liga</span><span class="count">14 týmů</span><span class="spacer"></span>
+        <span class="seg"><button class="on">Celkem</button><button>Doma</button><button>Venku</button></span></div>
+      <table>
+        <thead><tr>
+          <th class="first">#</th><th class="l">Klub</th><th>Z</th><th class="p2">V</th><th class="p2">R</th><th class="p2">P</th><th class="p2">Skóre</th><th class="p3">Forma</th><th class="last">Body</th>
+        </tr></thead>
+        <tbody>
+          <tr><td class="rank first zone-up gold">1</td><td class="l"><span class="entity"><span class="crest" style="background:#1d4ed8"></span><span class="name">FK Staropramen Dejvice</span></span></td><td class="num">22</td><td class="num p2">17</td><td class="num p2">3</td><td class="num p2">2</td><td class="num p2">61:19</td><td class="p3"><span class="res w">V</span> <span class="res w">V</span> <span class="res d">R</span> <span class="res w">V</span> <span class="res w">V</span></td><td class="main num last">54</td></tr>
+          <tr class="own"><td class="rank first zone-up">2</td><td class="l"><span class="entity"><span class="crest" style="background:#2D5F2D"></span><span class="name">AC Rohlík Břevnov</span></span></td><td class="num">22</td><td class="num p2">16</td><td class="num p2">2</td><td class="num p2">4</td><td class="num p2">58:27</td><td class="p3"><span class="res l">P</span> <span class="res w">V</span> <span class="res w">V</span> <span class="res w">V</span> <span class="res w">V</span></td><td class="main num last">50</td></tr>
+          <tr><td class="rank first">3</td><td class="l"><span class="entity"><span class="crest" style="background:#b91c1c"></span><span class="name">FK Seznam Suchdol</span></span></td><td class="num">22</td><td class="num p2">12</td><td class="num p2">5</td><td class="num p2">5</td><td class="num p2">40:28</td><td class="p3"><span class="res w">V</span> <span class="res d">R</span> <span class="res l">P</span> <span class="res w">V</span> <span class="res d">R</span></td><td class="main num last">41</td></tr>
+          <tr><td class="rank first">4</td><td class="l"><span class="entity"><span class="crest" style="background:#0e7490"></span><span class="name">FK ČEZ Prosek</span></span></td><td class="num">22</td><td class="num p2">10</td><td class="num p2">4</td><td class="num p2">8</td><td class="num p2">33:30</td><td class="p3"><span class="res l">P</span> <span class="res l">P</span> <span class="res w">V</span> <span class="res d">R</span> <span class="res w">V</span></td><td class="main num last">34</td></tr>
+          <tr><td class="rank first zone-down">13</td><td class="l"><span class="entity"><span class="crest" style="background:#f59e0b"></span><span class="name">FK Kiosek Na Ďolíčku Břevnov</span></span></td><td class="num">22</td><td class="num p2">3</td><td class="num p2">2</td><td class="num p2">17</td><td class="num p2">18:63</td><td class="p3"><span class="res l">P</span> <span class="res l">P</span> <span class="res w">V</span> <span class="res l">P</span> <span class="res w">V</span></td><td class="main num last">11</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div>
+    <p class="frame-label">Telefon 375 px</p>
+    <div class="phone"><div class="card">
+      <div class="list-head"><span class="section-label">Kofola liga</span><span class="spacer"></span><span class="seg"><button class="on">Celkem</button><button>Doma</button><button>Venku</button></span></div>
+      <table>
+        <thead><tr><th class="first">#</th><th class="l">Klub</th><th>Z</th><th class="last">Body</th></tr></thead>
+        <tbody>
+          <tr><td class="rank first zone-up gold">1</td><td class="l"><span class="entity"><span class="crest" style="background:#1d4ed8"></span><span><span class="name">FK Staropramen Dejvice</span><span class="meta num">17-3-2 · 61:19</span></span></span></td><td class="num">22</td><td class="main num last">54</td></tr>
+          <tr class="own"><td class="rank first zone-up">2</td><td class="l"><span class="entity"><span class="crest" style="background:#2D5F2D"></span><span><span class="name">AC Rohlík Břevnov</span><span class="meta num">16-2-4 · 58:27</span></span></span></td><td class="num">22</td><td class="main num last">50</td></tr>
+          <tr><td class="rank first">3</td><td class="l"><span class="entity"><span class="crest" style="background:#b91c1c"></span><span><span class="name">FK Seznam Suchdol</span><span class="meta num">12-5-5 · 40:28</span></span></span></td><td class="num">22</td><td class="main num last">41</td></tr>
+          <tr><td class="rank first zone-down">13</td><td class="l"><span class="entity"><span class="crest" style="background:#f59e0b"></span><span><span class="name">FK Kiosek Na Ďolíčku Břevnov</span><span class="meta num">3-2-17 · 18:63</span></span></span></td><td class="num">22</td><td class="main num last">11</td></tr>
+        </tbody>
+      </table>
+    </div></div>
+    <p class="note">Schované sloupce (V, R, P, Skóre) se na telefonu sloučí do druhého řádku pod název. Dlouhý název se zalomí, neořezává se.</p>
+  </div>
+</div>
+
+<!-- ═════════ 2. TABULKA S POSUVEM ═════════ -->
+<h2>2. Tabulka s mnoha sloupci: atributy kádru</h2>
+<p class="lead">Jen tam, kde se sloupce schovat nedají (atributy hráčů). První sloupec zůstává přilepený vlevo se stínem, pod tabulkou je na telefonu věta, že se dá posunout. Řazení klikem na záhlaví, aktivní sloupec je zelený se šipkou.</p>
+<div class="cols">
+  <div>
+    <p class="frame-label">Desktop</p>
+    <div class="card">
+      <div class="list-head"><span class="section-label">Kádr</span><span class="count">22 hráčů</span></div>
+      <table>
+        <thead><tr><th class="l first sort">Hráč</th><th class="sort">Věk</th><th class="sort on">Hod.</th><th class="sort">Rch</th><th class="sort">Tch</th><th class="sort">Stř</th><th class="sort">Při</th><th class="sort">Obr</th><th class="sort last">Kondice</th></tr></thead>
+        <tbody>
+          <tr><td class="l first"><span class="entity"><span class="pos fwd">ÚTO</span><span class="name">Adam Petrášek</span></span></td><td class="num">24</td><td><span class="rating top">61</span></td><td><span class="attr a">71</span></td><td><span class="attr b">58</span></td><td><span class="attr a">68</span></td><td><span class="attr c">44</span></td><td><span class="attr d">22</span></td><td class="num last">92 %</td></tr>
+          <tr><td class="l first"><span class="entity"><span class="pos fwd">ÚTO</span><span class="name">Vojtěch Huso</span></span></td><td class="num">29</td><td><span class="rating good">52</span></td><td><span class="attr c">42</span></td><td><span class="attr c">41</span></td><td><span class="attr b">62</span></td><td><span class="attr b">52</span></td><td><span class="attr c">37</span></td><td class="num last">47 %</td></tr>
+          <tr><td class="l first"><span class="entity"><span class="pos mid">ZÁL</span><span class="name">Jan Růžička</span></span></td><td class="num">31</td><td><span class="rating">48</span></td><td><span class="attr c">39</span></td><td><span class="attr b">55</span></td><td><span class="attr c">40</span></td><td><span class="attr a">66</span></td><td><span class="attr c">41</span></td><td class="num last">80 %</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div>
+    <p class="frame-label">Telefon 375 px</p>
+    <div class="phone"><div class="card">
+      <div class="list-head"><span class="section-label">Kádr</span><span class="count">22 hráčů</span></div>
+      <div class="scroll">
+      <table>
+        <thead><tr><th class="l first sort stick">Hráč</th><th class="sort">Věk</th><th class="sort on">Hod.</th><th class="sort">Rch</th><th class="sort">Tch</th><th class="sort">Stř</th><th class="sort">Při</th><th class="sort">Obr</th><th class="sort last">Kondice</th></tr></thead>
+        <tbody>
+          <tr><td class="l first stick"><span class="entity"><span class="pos fwd">ÚTO</span><span class="name">A. Petrášek</span></span></td><td class="num">24</td><td><span class="rating top">61</span></td><td><span class="attr a">71</span></td><td><span class="attr b">58</span></td><td><span class="attr a">68</span></td><td><span class="attr c">44</span></td><td><span class="attr d">22</span></td><td class="num last">92 %</td></tr>
+          <tr><td class="l first stick"><span class="entity"><span class="pos fwd">ÚTO</span><span class="name">V. Huso</span></span></td><td class="num">29</td><td><span class="rating good">52</span></td><td><span class="attr c">42</span></td><td><span class="attr c">41</span></td><td><span class="attr b">62</span></td><td><span class="attr b">52</span></td><td><span class="attr c">37</span></td><td class="num last">47 %</td></tr>
+          <tr><td class="l first stick"><span class="entity"><span class="pos mid">ZÁL</span><span class="name">J. Růžička</span></span></td><td class="num">31</td><td><span class="rating">48</span></td><td><span class="attr c">39</span></td><td><span class="attr b">55</span></td><td><span class="attr c">40</span></td><td><span class="attr a">66</span></td><td><span class="attr c">41</span></td><td class="num last">80 %</td></tr>
+        </tbody>
+      </table>
+      </div>
+      <div class="scroll-hint">← Tabulku lze posunout do strany →</div>
+    </div></div>
+    <p class="note">V přilepeném sloupci se křestní jméno zkrátí na iniciálu (jediné povolené zkrácení hlavního textu).</p>
+  </div>
+</div>
+
+<!-- ═════════ 3. ŘÁDKOVÝ SEZNAM ═════════ -->
+<h2>3. Řádkový seznam: výsledky a hráči</h2>
+<p class="lead">Stavba řádku je vždy stejná: vlevo znak, portrét nebo ikona (36 px), uprostřed název a pod ním jeden řádek podrobností, vpravo hlavní číslo nebo stav. Celý řádek je odkaz a má vpravo šipku. Řádek je vysoký nejmíň 56 px. Na telefonu vypadá stejně, jen je užší.</p>
+<div class="cols">
+  <div>
+    <p class="frame-label">Desktop</p>
+    <div class="card">
+      <div class="list-head"><span class="section-label">Výsledky</span><span class="count">52 zápasů</span></div>
+      <div class="group"><span>Kolo 22</span><span>12. 11.</span></div>
+      <a class="row" href="#"><span class="crest" style="background:#1d4ed8;width:36px;height:36px"></span><span class="body"><span class="title">FK Staropramen Dejvice</span><span class="meta">doma · 545 diváků</span></span><span class="trail"><span class="score l">3:4</span><span class="chev">›</span></span></a>
+      <div class="group"><span>Kolo 21</span><span>9. 11.</span></div>
+      <a class="row" href="#"><span class="crest" style="background:#2D5F2D;width:36px;height:36px"></span><span class="body"><span class="title">Test Klamovka</span><span class="meta">venku · 150 diváků</span></span><span class="trail"><span class="score w">1:7</span><span class="chev">›</span></span></a>
+      <div class="group"><span>Kolo 20</span><span>6. 11.</span></div>
+      <a class="row" href="#"><span class="crest" style="background:#b91c1c;width:36px;height:36px"></span><span class="body"><span class="title">Test Praha OK</span><span class="meta">doma · 550 diváků</span></span><span class="trail"><span class="score w">7:0</span><span class="chev">›</span></span></a>
+      <button class="more">Zobrazit dalších 10 z 49</button>
+    </div>
+  </div>
+  <div>
+    <p class="frame-label">Telefon 375 px</p>
+    <div class="phone"><div class="card">
+      <div class="list-head"><span class="section-label">Kádr</span><span class="count">22 hráčů</span></div>
+      <a class="row" href="#"><span class="avatar">AP</span><span class="body"><span class="title">Adam Petrášek</span><span class="meta"><span class="pos fwd">ÚTO</span> &nbsp;24 let · 38 gólů</span></span><span class="trail"><span class="rating top">61</span><span class="chev">›</span></span></a>
+      <a class="row tone-danger" href="#"><span class="avatar">VH</span><span class="body"><span class="title">Vojtěch Huso</span><span class="meta"><span class="pos fwd">ÚTO</span> &nbsp;29 let · zraněn 3 dny</span></span><span class="trail"><span class="rating good">52</span><span class="chev">›</span></span></a>
+      <a class="row tone-warn" href="#"><span class="avatar">JR</span><span class="body"><span class="title">Jan Růžička</span><span class="meta"><span class="pos mid">ZÁL</span> &nbsp;31 let · kondice 41 %</span></span><span class="trail"><span class="rating">48</span><span class="chev">›</span></span></a>
+      <a class="row" href="#"><span class="avatar">JK</span><span class="body"><span class="title">Jan Kolman</span><span class="meta"><span class="pos mid">ZÁL</span> &nbsp;27 let · 10 gólů</span></span><span class="trail"><span class="rating">46</span><span class="chev">›</span></span></a>
+    </div></div>
+    <p class="note">Barevný proužek vlevo říká stav řádku: červená zranění nebo problém, zlatá upozornění, zelená novinka.</p>
+  </div>
+</div>
+
+<!-- ═════════ 4. SEZNAM S ČÁSTKOU A AKCÍ ═════════ -->
+<h2>4. Řádkový seznam: peníze a akce</h2>
+<p class="lead">Částka je vpravo, kladná zeleně, záporná červeně. Když má řádek vlastní tlačítko, nemá šipku a klikací je jen tlačítko a název. Řádky se seskupují pod úzkým šedým nadpisem (den, kolo, stav).</p>
+<div class="cols">
+  <div>
+    <p class="frame-label">Desktop</p>
+    <div class="card">
+      <div class="list-head"><span class="section-label">Pohyby na účtu</span><span class="spacer"></span><span class="seg"><button class="on">Vše</button><button>Příjmy</button><button>Výdaje</button></span></div>
+      <div class="group"><span>Dnes</span><span class="num">+4 180 Kč</span></div>
+      <div class="row"><span class="icon-tile">🎟️</span><span class="body"><span class="title">Vstupné</span><span class="meta">AC Rohlík Břevnov – FK Staropramen Dejvice · 545 diváků</span></span><span class="trail"><span class="value plus num">+8 175 Kč</span></span></div>
+      <div class="row"><span class="icon-tile">👥</span><span class="body"><span class="title">Mzdy hráčů</span><span class="meta">22 hráčů</span></span><span class="trail"><span class="value minus num">−3 995 Kč</span></span></div>
+      <div class="group"><span>Včera</span><span class="num">+25 000 Kč</span></div>
+      <div class="row"><span class="icon-tile">💼</span><span class="body"><span class="title">Splátka od sponzora</span><span class="meta">Řeznictví U Krkovičky</span></span><span class="trail"><span class="value plus num">+25 000 Kč</span></span></div>
+    </div>
+  </div>
+  <div>
+    <p class="frame-label">Telefon 375 px</p>
+    <div class="phone"><div class="card">
+      <div class="list-head"><span class="section-label">Nabídky</span><span class="count">3</span></div>
+      <div class="row tone-new"><span class="crest" style="background:#b91c1c;width:36px;height:36px"></span><span class="body"><span class="title">FK Seznam Suchdol chce Vojtěcha Husa</span><span class="meta">22 000 Kč · platí ještě 2 dny</span></span><span class="trail"><button class="small-btn">Otevřít</button></span></div>
+      <div class="row"><span class="crest" style="background:#0e7490;width:36px;height:36px"></span><span class="body"><span class="title">FK ČEZ Prosek: hostování</span><span class="meta">Jan Kolman · do konce sezóny</span></span><span class="trail"><span class="chip warn">Čeká na tebe</span></span></div>
+      <div class="row"><span class="crest" style="background:#1d4ed8;width:36px;height:36px"></span><span class="body"><span class="title">FK Staropramen Dejvice</span><span class="meta">Adam Petrášek · 61 000 Kč</span></span><span class="trail"><span class="chip neutral">Odmítnuto</span></span></div>
+    </div></div>
+  </div>
+</div>
+
+<!-- ═════════ 5. PRÁZDNÝ STAV ═════════ -->
+<h2>5. Prázdný seznam a dlouhý seznam</h2>
+<p class="lead">Prázdný seznam nikdy neukazuje jen „Žádná data“. Vždy má větu, co to znamená, a když to jde, tlačítko s dalším krokem. Dlouhý seznam ukáže prvních 10 (tabulka 20) a tlačítko, které řekne, kolik jich zbývá.</p>
+<div class="cols">
+  <div>
+    <p class="frame-label">Prázdný stav</p>
+    <div class="card">
+      <div class="list-head"><span class="section-label">Nabídky</span></div>
+      <div class="empty"><div class="ico">📭</div><p>Zatím ti nikdo nenabídl přestup. Dej hráče na trh a kluby se ozvou samy.</p><span class="btn">Otevřít kádr</span></div>
+    </div>
+  </div>
+  <div>
+    <p class="frame-label">Zobrazit další</p>
+    <div class="phone"><div class="card">
+      <a class="row" href="#"><span class="icon-tile">⚽</span><span class="body"><span class="title">Poslední řádek první desítky</span><span class="meta">podrobnosti</span></span><span class="trail"><span class="chev">›</span></span></a>
+      <button class="more">Zobrazit dalších 10 z 42</button>
+    </div></div>
+  </div>
+</div>
+
+<!-- ═════════ 6. ANATOMIE ═════════ -->
+<h2>6. Pravidla v kostce</h2>
+<div class="anat">
+  <div class="card do"><b>Jedna výška, jedno záhlaví</b><span>Záhlaví 36 px, řádek tabulky 48 px (telefon 52 px), řádek seznamu nejmíň 56 px. Žádné jiné hodnoty.</span></div>
+  <div class="card do"><b>Čísla ve sloupci pod sebou</b><span>Všechna čísla mají tabulkové číslice. Hlavní číslo řádku (body, hodnocení, částka) je tučné a úplně vpravo.</span></div>
+  <div class="card do"><b>Hlavní text se neořezává</b><span>Název klubu, jméno hráče a titulek se zalomí nejvýš na dva řádky. Třemi tečkami se smí zkrátit jen druhý řádek s podrobnostmi.</span></div>
+  <div class="card do"><b>Stav barvou vlevo, ne podkladem</b><span>Zelený podklad má jen vlastní klub. Ostatní stavy (novinka, upozornění, problém) značí 3 px proužek vlevo.</span></div>
+  <div class="card dont"><b>Žádné schované rolování</b><span>Tabulka se do strany posouvá jen ve variantě s přilepeným sloupcem a větou pod ní. Nikde jinde.</span></div>
+  <div class="card dont"><b>Žádná druhá verze pro telefon</b><span>Seznam se nepřepíná mezi tabulkou a kartami. Je to pořád stejný díl, jen s méně sloupci.</span></div>
+</div>
+
+</div>
+</body>
+</html>

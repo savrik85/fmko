@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, apiAction, type Player } from "@/lib/api";
 import Link from "next/link";
-import { Spinner, SectionLabel } from "@/components/ui";
+import { SectionLabel, ListCard, ListRow, PageLoading, ProgressBar } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 
 type TrainingType = "conditioning" | "technique" | "tactics" | "match_practice";
@@ -184,25 +184,19 @@ export default function TrainingPage() {
     setDirty(true);
   };
 
-  if (loading) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
+  if (loading) return <PageLoading />;
 
   return (
     <div className="page-container space-y-5">
 
       {absences.length > 0 && (
-        <div className="card p-4 sm:p-5">
-          <SectionLabel>🚫 Chybí dnes ({absences.length})</SectionLabel>
-          <div className="mt-2 space-y-1.5">
-            {absences.map((a) => (
-              <div key={a.playerId} className="flex items-center justify-between gap-3 text-sm">
-                <Link href={`/hrac/${a.playerId}`} className="font-heading font-bold hover:text-pitch-500 underline decoration-pitch-500/20">
-                  {a.firstName} {a.lastName}
-                </Link>
-                <span className="text-muted text-xs flex-1 text-right">{a.absence?.reason ?? "Důvod neuveden"}</span>
-              </div>
-            ))}
-          </div>
-        </div>
+        <ListCard title="🚫 Chybí dnes" count={absences.length}>
+          {absences.map((a) => (
+            <ListRow key={a.playerId} dense href={`/hrac/${a.playerId}`}
+              title={`${a.firstName} ${a.lastName}`}
+              trailing={<span className="text-meta text-muted text-right">{a.absence?.reason ?? "Důvod neuveden"}</span>} />
+          ))}
+        </ListCard>
       )}
 
       {/* Training settings */}
@@ -530,69 +524,47 @@ export default function TrainingPage() {
             <div className="mt-3 pt-3 border-t border-gray-100">
               <div className="text-micro text-muted font-heading uppercase tracking-wide mb-2">Kdo tomu pomáhá</div>
 
-              {forecast.managerImpact && (() => {
-                const mi = forecast.managerImpact;
-                let face: Record<string, unknown> | null = null;
-                try { face = mi.avatar ? JSON.parse(mi.avatar) : null; }
-                catch (e) { console.error("manager avatar parse:", e); }
-                const positive = !mi.detail.startsWith("-");
-                return (
-                  <Link
-                    href={`/manazer/${teamId}`}
-                    className="flex items-center gap-2.5 py-1.5 hover:bg-gray-50 rounded-soft px-1 -mx-1 transition-colors"
-                  >
-                    <div className="shrink-0 w-9 h-9 rounded-full overflow-hidden bg-gray-100 flex items-center justify-center">
-                      {face ? <FaceAvatar faceConfig={face} size={30} /> : <span className="text-base">🧑‍🏫</span>}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="font-heading font-bold text-sm leading-tight truncate">{mi.name}</div>
-                      <div className="text-micro text-muted leading-tight">
-                        {mi.role}{mi.youthDetail ? ` · ${mi.youthDetail}` : ""}
-                      </div>
-                    </div>
-                    <span className={`shrink-0 text-xs font-heading font-bold ${positive ? "text-pitch-600" : "text-card-red"}`}>
-                      {mi.detail}
-                    </span>
-                  </Link>
-                );
-              })()}
+              {/* Husté řádky s malým portrétem: běžný řádek by byl na telefonu o čtvrtinu vyšší.
+                  Přínos vpravo se na telefonu zalomí do dvou řádků, ať zbyde místo na jméno. */}
+              <div className="-mx-4 sm:-mx-5 border-t border-line-soft">
+                {forecast.managerImpact && (() => {
+                  const mi = forecast.managerImpact;
+                  let face: Record<string, unknown> | null = null;
+                  try { face = mi.avatar ? JSON.parse(mi.avatar) : null; }
+                  catch (e) { console.error("manager avatar parse:", e); }
+                  const positive = !mi.detail.startsWith("-");
+                  return (
+                    <ListRow dense href={`/manazer/${teamId}`}
+                      leading={<ImpactAvatar face={face} fallback="🧑‍🏫" />}
+                      title={mi.name}
+                      meta={mi.role}
+                      // Práce s mládeží je u trenéra navíc a nesmí se useknout, proto pod roli celá.
+                      detail={mi.youthDetail ?? undefined}
+                      trailing={<ImpactValue tone={positive ? "plus" : "minus"}>{mi.detail}</ImpactValue>} />
+                  );
+                })()}
 
-              {(forecast.staffImpact ?? []).map((st) => {
-                let face: Record<string, unknown> | null = null;
-                try { face = st.avatar ? JSON.parse(st.avatar) : null; }
-                catch (e) { console.error("staff avatar parse:", e); }
-                return (
-                  <Link
-                    key={st.staffId}
-                    href="/zamestnanci"
-                    className="flex items-center gap-2.5 py-1.5 hover:bg-gray-50 rounded-soft px-1 -mx-1 transition-colors"
-                  >
-                    <div className="shrink-0 w-9 h-9 rounded-full overflow-hidden bg-gray-100 flex items-center justify-center">
-                      {face ? <FaceAvatar faceConfig={face} size={30} /> : <span className="text-base">👔</span>}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="font-heading font-bold text-sm leading-tight truncate">{st.name}</div>
-                      <div className="text-micro text-muted leading-tight">{st.role}</div>
-                    </div>
-                    <span className="shrink-0 text-xs font-heading font-bold text-pitch-600">{st.detail}</span>
-                  </Link>
-                );
-              })}
+                {(forecast.staffImpact ?? []).map((st) => {
+                  let face: Record<string, unknown> | null = null;
+                  try { face = st.avatar ? JSON.parse(st.avatar) : null; }
+                  catch (e) { console.error("staff avatar parse:", e); }
+                  return (
+                    <ListRow key={st.staffId} dense href="/zamestnanci"
+                      leading={<ImpactAvatar face={face} fallback="👔" />}
+                      title={st.name}
+                      meta={st.role}
+                      trailing={<ImpactValue tone="plus">{st.detail}</ImpactValue>} />
+                  );
+                })}
 
-              {(forecast.equipmentImpact ?? []).map((eq) => (
-                <Link
-                  key={eq.label}
-                  href="/vybaveni"
-                  className="flex items-center gap-2.5 py-1.5 hover:bg-gray-50 rounded-soft px-1 -mx-1 transition-colors"
-                >
-                  <div className="shrink-0 w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-base">🎒</div>
-                  <div className="min-w-0 flex-1">
-                    <div className="font-heading font-bold text-sm leading-tight truncate">{eq.label}</div>
-                    <div className="text-micro text-muted leading-tight">Vybavení</div>
-                  </div>
-                  <span className="shrink-0 text-xs font-heading font-bold text-pitch-600">{eq.detail}</span>
-                </Link>
-              ))}
+                {(forecast.equipmentImpact ?? []).map((eq) => (
+                  <ListRow key={eq.label} dense href="/vybaveni"
+                    leading={<ImpactAvatar face={null} fallback="🎒" />}
+                    title={eq.label}
+                    meta="Vybavení"
+                    trailing={<ImpactValue tone="plus">{eq.detail}</ImpactValue>} />
+                ))}
+              </div>
             </div>
           )}
 
@@ -624,48 +596,56 @@ export default function TrainingPage() {
           Vybraní hráči dostanou od trenéra volno, nejbližší trénink vynechají. Neztratí kondici,
           ale ani se nezlepší. Po proběhnutí tréninku se volno automaticky zruší.
         </p>
-        <div className="mt-3 max-h-80 overflow-y-auto rounded-soft border border-gray-100 divide-y divide-gray-50">
+        <div className="-mx-4 sm:-mx-5 mt-3 max-h-80 overflow-y-auto border-y border-line-soft divide-y divide-line-soft">
           {squad.map((p) => {
             const checked = restIds.has(p.id);
             // Zraněnému nejde volno dát (netrénuje tak jako tak), ale dřív nastavené jde odvolat
             const locked = !!p.injury && !checked;
             const cond = p.lifeContext?.condition ?? 100;
+            const checkboxId = `rest-${p.id}`;
             return (
-              <div
-                key={p.id}
-                onClick={() => { if (!locked) toggleRest(p.id); }}
-                className={`flex items-center gap-3 px-3 py-2 ${locked ? "opacity-40" : "cursor-pointer hover:bg-gray-50"} ${checked ? "bg-pitch-50/40" : ""}`}
-              >
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  disabled={locked}
-                  onChange={() => toggleRest(p.id)}
-                  onClick={(e) => e.stopPropagation()}
-                  className="accent-pitch-500 w-4 h-4 shrink-0"
-                />
-                {/* Jméno bere zbylé místo, pozice i kondice mají pevnou šířku — jinak by
-                    pozice plavala podle délky jména a sloupce by se na mobilu rozjely. */}
-                <Link
-                  href={`/hrac/${p.id}`}
-                  onClick={(e) => e.stopPropagation()}
-                  className="font-heading font-bold text-base hover:text-pitch-500 transition-colors truncate flex-1 min-w-0"
-                >
-                  {p.first_name} {p.last_name}
-                </Link>
-                <span className="text-sm text-muted shrink-0 w-9">{p.position}</span>
-                {p.injury ? (
-                  <span className="text-sm text-card-red shrink-0 text-right">
-                    🤕<span className="hidden sm:inline"> Zraněný, netrénuje</span>
-                  </span>
-                ) : (
-                  <span className="text-sm text-muted shrink-0 text-right w-20 sm:w-28">
-                    <span className="hidden sm:inline">Kondice </span>
-                    <span className={`font-heading font-bold tabular-nums ${cond >= 70 ? "text-pitch-500" : cond >= 40 ? "text-gold-600" : "text-card-red"}`}>
-                      {cond}
-                    </span>
-                  </span>
-                )}
+              <div key={p.id}
+                className={`${locked ? "opacity-40" : "hover:bg-surface-2 transition-colors"} ${checked ? "bg-pitch-50/40" : ""}`}>
+                <ListRow dense
+                  leading={
+                    <>
+                      {/* Popisek zaškrtávátka přes celý řádek: klik kamkoli do řádku přepne volno.
+                          Zaškrtávátko i jméno (odkaz na hráče) leží nad ním, takže se nic nevnořuje
+                          a klik na jméno volno nepřepne. Zraněnému zamčené zaškrtávátko nic nepřepne. */}
+                      <label htmlFor={checkboxId} className={`absolute inset-0 ${locked ? "" : "cursor-pointer"}`} />
+                      <input
+                        id={checkboxId}
+                        type="checkbox"
+                        checked={checked}
+                        disabled={locked}
+                        onChange={() => toggleRest(p.id)}
+                        className="relative accent-pitch-500 w-4 h-4"
+                      />
+                    </>
+                  }
+                  title={
+                    <Link href={`/hrac/${p.id}`} className="relative hover:text-pitch-500 transition-colors">
+                      {p.first_name} {p.last_name}
+                    </Link>
+                  }
+                  trailing={
+                    // Pozice i kondice mají pevnou šířku, jinak by sloupce plavaly podle délky jména.
+                    <>
+                      <span className="text-meta text-muted w-9 text-left">{p.position}</span>
+                      {p.injury ? (
+                        <span className="text-meta text-card-red">
+                          🤕<span className="hidden sm:inline"> Zraněný, netrénuje</span>
+                        </span>
+                      ) : (
+                        <span className="text-meta text-muted w-20 sm:w-28">
+                          <span className="hidden sm:inline">Kondice </span>
+                          <span className={`font-bold tabular-nums ${cond >= 70 ? "text-pitch-500" : cond >= 40 ? "text-gold-600" : "text-card-red"}`}>
+                            {cond}
+                          </span>
+                        </span>
+                      )}
+                    </>
+                  } />
               </div>
             );
           })}
@@ -745,33 +725,36 @@ export default function TrainingPage() {
                   </div>
                 </div>
               </div>
-              <div className="mt-2.5 bg-gray-100 rounded-full h-1.5 overflow-hidden">
-                <div className="h-full bg-pitch-400 rounded-full transition-all duration-700" style={{ width: `${pct}%` }} />
-              </div>
+              <ProgressBar value={pct} size="sm" label="Účast na tréninku" className="mt-2.5" />
 
               {/* Jak hráčům sedí nastavená zátěž a přístup */}
               {result.moraleChanges && result.moraleChanges.length > 0 && (
-                <div className="mt-3 pt-3 border-t border-gray-100">
-                  <div className="text-micro text-muted font-heading uppercase tracking-wide mb-1.5">Nálada po tréninku</div>
-                  <div className="space-y-1">
-                    {result.moraleChanges.map((m, i) => (
-                      <div key={`${m.playerId}-${i}`} className="flex items-center justify-between gap-3 text-sm">
-                        {m.playerId ? (
-                          <Link href={`/hrac/${m.playerId}`} className="font-heading font-bold hover:text-pitch-600 truncate">
-                            {m.playerName}
-                          </Link>
-                        ) : (
-                          <span className="font-heading font-bold truncate">{m.playerName}</span>
-                        )}
-                        <span className="flex items-center gap-2 shrink-0">
-                          <span className="text-muted text-xs">{m.reason}</span>
-                          <span className={`font-heading font-bold text-xs ${m.change > 0 ? "text-pitch-600" : "text-card-red"}`}>
-                            {m.change > 0 ? "+" : ""}{m.change} nálada
+                <div className="-mx-3 sm:-mx-4 -mb-3 sm:-mb-4 mt-3 border-t border-line-soft">
+                  {/* Jeden řádek se všemi změnami v detailu: řádek na hráče by měl minimum 40 px
+                      a krátké poznámky by na telefonu narostly o 70 %. */}
+                  <ListRow
+                    title="Nálada po tréninku"
+                    detail={
+                      <span className="block space-y-0.5 mt-0.5">
+                        {result.moraleChanges.map((m, i) => (
+                          <span key={`${m.playerId}-${i}`} className="flex items-baseline justify-between gap-3">
+                            {m.playerId ? (
+                              <Link href={`/hrac/${m.playerId}`} className="font-heading font-bold text-ink hover:text-pitch-600 truncate">
+                                {m.playerName}
+                              </Link>
+                            ) : (
+                              <span className="font-heading font-bold text-ink truncate">{m.playerName}</span>
+                            )}
+                            <span className="flex items-baseline gap-2 shrink-0">
+                              <span className="text-muted text-xs">{m.reason}</span>
+                              <span className={`font-heading font-bold text-xs ${m.change > 0 ? "text-pitch-600" : "text-card-red"}`}>
+                                {m.change > 0 ? "+" : ""}{m.change} nálada
+                              </span>
+                            </span>
                           </span>
-                        </span>
-                      </div>
-                    ))}
-                  </div>
+                        ))}
+                      </span>
+                    } />
                 </div>
               )}
             </div>
@@ -784,7 +767,8 @@ export default function TrainingPage() {
                   Zlepšení ({totalUpgrades})
                   {groupedNegative.length > 0 && <span className="text-card-red font-normal text-xs ml-1">· {groupedNegative.length} pokles</span>}
                 </summary>
-                <div className="px-3 sm:px-4 pb-3 sm:pb-4 space-y-1">
+                {/* Řádek na hráče: vlevo součet, pod jménem pruhy atributů. Bez href, jméno je odkaz. */}
+                <div className="border-t border-line-soft">
                   {(() => {
                     const maxDelta = Math.max(
                       1,
@@ -797,48 +781,46 @@ export default function TrainingPage() {
                           const posAttrs = data.attrs.filter((a) => a.change > 0).slice(0, 5);
                           const totalGain = data.attrs.reduce((s, a) => s + Math.max(0, a.change), 0);
                           return (
-                            <div key={name} className="py-1.5 border-b border-gray-50 last:border-b-0">
-                              <div className="flex items-baseline gap-2">
-                                <span className="font-heading font-[800] text-pitch-500 text-sm tabular-nums w-7 text-center shrink-0">+{totalGain}</span>
-                                <span className="text-sm"><PlayerLink id={data.playerId} name={name} playerMap={playerMap} /></span>
-                              </div>
-                              <div className="mt-1 ml-9 space-y-1">
-                                {posAttrs.map((a, i) => (
-                                  <div key={i} className="flex items-center gap-2">
-                                    <span className="text-xs w-4 text-center shrink-0">{ATTR_EMOJI[a.attribute] ?? ""}</span>
-                                    <span className="text-xs text-pitch-600 w-20 sm:w-24 shrink-0 truncate">{ATTR_LABELS[a.attribute] ?? a.attribute}</span>
-                                    <div className="flex-1 bg-gray-100 rounded-full h-1.5 overflow-hidden min-w-0">
-                                      <div className="h-full bg-pitch-400 rounded-full transition-all duration-700" style={{ width: `${(a.change / maxDelta) * 100}%` }} />
-                                    </div>
-                                    <span className="font-heading font-bold text-xs tabular-nums text-pitch-500 w-7 text-right shrink-0">+{a.change}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
+                            <ListRow key={name} dense
+                              leading={<span className="text-meta font-extrabold text-pitch-500 tabular-nums">+{totalGain}</span>}
+                              title={<PlayerLink id={data.playerId} name={name} playerMap={playerMap} />}
+                              detail={
+                                <span className="block mt-1 space-y-1">
+                                  {posAttrs.map((a, i) => (
+                                    <span key={i} className="flex items-center gap-2">
+                                      <span className="text-xs w-4 text-center shrink-0">{ATTR_EMOJI[a.attribute] ?? ""}</span>
+                                      <span className="text-xs text-pitch-600 w-20 sm:w-24 shrink-0 truncate">{ATTR_LABELS[a.attribute] ?? a.attribute}</span>
+                                      <span className="flex-1 bg-gray-100 rounded-full h-1.5 overflow-hidden min-w-0">
+                                        <span className="block h-full bg-pitch-400 rounded-full transition-all duration-700" style={{ width: `${(a.change / maxDelta) * 100}%` }} />
+                                      </span>
+                                      <span className="font-bold text-xs tabular-nums text-pitch-500 w-7 text-right shrink-0">+{a.change}</span>
+                                    </span>
+                                  ))}
+                                </span>
+                              } />
                           );
                         })}
                         {groupedNegative.map(([name, data]) => {
                           const negAttrs = data.attrs.slice(0, 5);
                           const totalLoss = data.attrs.reduce((s, a) => s + a.change, 0);
                           return (
-                            <div key={name} className="py-1.5 border-b border-gray-50 last:border-b-0">
-                              <div className="flex items-baseline gap-2">
-                                <span className="font-heading font-[800] text-card-red text-sm tabular-nums w-7 text-center shrink-0">{totalLoss}</span>
-                                <span className="text-sm"><PlayerLink id={data.playerId} name={name} playerMap={playerMap} /></span>
-                              </div>
-                              <div className="mt-1 ml-9 space-y-1">
-                                {negAttrs.map((a, i) => (
-                                  <div key={i} className="flex items-center gap-2">
-                                    <span className="text-xs w-4 text-center shrink-0">{ATTR_EMOJI[a.attribute] ?? ""}</span>
-                                    <span className="text-xs text-card-red w-20 sm:w-24 shrink-0 truncate">{ATTR_LABELS[a.attribute] ?? a.attribute}</span>
-                                    <div className="flex-1 bg-gray-100 rounded-full h-1.5 overflow-hidden min-w-0">
-                                      <div className="h-full bg-card-red rounded-full transition-all duration-700" style={{ width: `${(Math.abs(a.change) / maxDelta) * 100}%` }} />
-                                    </div>
-                                    <span className="font-heading font-bold text-xs tabular-nums text-card-red w-7 text-right shrink-0">{a.change}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
+                            <ListRow key={name} dense
+                              leading={<span className="text-meta font-extrabold text-card-red tabular-nums">{totalLoss}</span>}
+                              title={<PlayerLink id={data.playerId} name={name} playerMap={playerMap} />}
+                              detail={
+                                <span className="block mt-1 space-y-1">
+                                  {negAttrs.map((a, i) => (
+                                    <span key={i} className="flex items-center gap-2">
+                                      <span className="text-xs w-4 text-center shrink-0">{ATTR_EMOJI[a.attribute] ?? ""}</span>
+                                      <span className="text-xs text-card-red w-20 sm:w-24 shrink-0 truncate">{ATTR_LABELS[a.attribute] ?? a.attribute}</span>
+                                      <span className="flex-1 bg-gray-100 rounded-full h-1.5 overflow-hidden min-w-0">
+                                        <span className="block h-full bg-card-red rounded-full transition-all duration-700" style={{ width: `${(Math.abs(a.change) / maxDelta) * 100}%` }} />
+                                      </span>
+                                      <span className="font-bold text-xs tabular-nums text-card-red w-7 text-right shrink-0">{a.change}</span>
+                                    </span>
+                                  ))}
+                                </span>
+                              } />
                           );
                         })}
                       </>
@@ -873,13 +855,12 @@ export default function TrainingPage() {
                   <span className="text-micro text-muted group-open:rotate-90 transition-transform">&#9654;</span>
                   Omluvenky ({absentList.length})
                 </summary>
-                <div className="px-3 sm:px-4 pb-3 sm:pb-4 space-y-0.5">
+                <div className="border-t border-line-soft">
                   {absentList.map((a, i) => (
-                    <div key={i} className="flex items-baseline gap-2 py-1.5 border-b border-gray-50 last:border-b-0">
-                      <span className="text-card-red text-xs shrink-0">&#10005;</span>
-                      <span className="text-sm"><PlayerLink id={a.playerId} name={a.playerName} playerMap={playerMap} /></span>
-                      {a.reason && <span className="text-xs text-muted italic">&mdash; {a.reason}</span>}
-                    </div>
+                    <ListRow key={i} dense
+                      leading={<span className="text-card-red text-meta">&#10005;</span>}
+                      title={<PlayerLink id={a.playerId} name={a.playerName} playerMap={playerMap} />}
+                      trailing={a.reason ? <span className="text-meta text-muted italic text-right">{a.reason}</span> : undefined} />
                   ))}
                 </div>
               </details>
@@ -911,52 +892,49 @@ export default function TrainingPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {/* Top improvers */}
             {stats.topImprovers.length > 0 && (
-              <div className="card p-4 sm:p-5">
-                <SectionLabel>Nejvíc se zlepšili</SectionLabel>
-                <div className="space-y-1.5">
-                  {stats.topImprovers.map((p, i) => {
-                    const maxGains = stats.topImprovers[0]?.totalGains ?? 1;
-                    return (
-                      <div key={p.playerId} className="flex items-center gap-2">
-                        <span className="text-xs text-muted w-4 tabular-nums shrink-0">{i + 1}.</span>
-                        <div className="flex-1 min-w-0">
-                          <Link href={`/hrac/${p.playerId}`} className="text-sm font-heading font-bold hover:text-pitch-500 transition-colors truncate block">
-                            {p.name}
-                          </Link>
-                          <div className="flex items-center gap-2 mt-0.5">
-                            <div className="flex-1 bg-gray-100 rounded-full h-1.5 overflow-hidden">
-                              <div className="h-full bg-pitch-400 rounded-full" style={{ width: `${(p.totalGains / maxGains) * 100}%` }} />
-                            </div>
-                            <span className="font-heading font-bold text-xs text-pitch-500 tabular-nums shrink-0">+{p.totalGains}</span>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
+              <ListCard title="Nejvíc se zlepšili">
+                {stats.topImprovers.map((p, i) => {
+                  const maxGains = stats.topImprovers[0]?.totalGains ?? 1;
+                  return (
+                    <ListRow key={p.playerId} dense href={`/hrac/${p.playerId}`}
+                      leading={<span className="text-meta text-muted tabular-nums">{i + 1}.</span>}
+                      title={p.name}
+                      trailing={
+                        <span className="flex items-center gap-2">
+                          <span className="w-16 sm:w-24 bg-gray-100 rounded-full h-1.5 overflow-hidden" aria-hidden="true">
+                            <span className="block h-full bg-pitch-400 rounded-full" style={{ width: `${(p.totalGains / maxGains) * 100}%` }} />
+                          </span>
+                          <span className="text-body font-bold text-pitch-600 tabular-nums w-8 text-right">+{p.totalGains}</span>
+                        </span>
+                      } />
+                  );
+                })}
+              </ListCard>
             )}
 
             {/* Skill breakdown */}
             {stats.skillBreakdown.length > 0 && (
-              <div className="card p-4 sm:p-5">
-                <SectionLabel>Podle atributů</SectionLabel>
-                <div className="space-y-1.5">
+              <ListCard title="Podle atributů" className="overflow-hidden">
+                {/* Po dvou vedle sebe: osm hustých řádků pod sebou by byl na telefonu o třetinu vyšší než původní graf. */}
+                <div className="grid grid-cols-2 -mb-px [&>*:nth-child(odd)]:border-r [&>*:nth-child(odd)]:border-line-soft">
                   {stats.skillBreakdown.filter((s) => s.gains > 0).slice(0, 8).map((s) => {
                     const maxGains = stats.skillBreakdown[0]?.gains ?? 1;
                     return (
-                      <div key={s.attribute} className="flex items-center gap-2">
-                        <span className="text-sm w-5 shrink-0">{ATTR_EMOJI[s.attribute] ?? ""}</span>
-                        <span className="text-xs font-heading font-bold w-16 shrink-0 truncate">{ATTR_LABELS[s.attribute] ?? s.attribute}</span>
-                        <div className="flex-1 bg-gray-100 rounded-full h-1.5 overflow-hidden">
-                          <div className="h-full bg-pitch-300 rounded-full" style={{ width: `${(s.gains / maxGains) * 100}%` }} />
-                        </div>
-                        <span className="font-heading font-bold text-xs tabular-nums text-pitch-500 w-6 text-right shrink-0">+{s.gains}</span>
-                      </div>
+                      <ListRow key={s.attribute} dense
+                        leading={<span className="text-base leading-none" aria-hidden="true">{ATTR_EMOJI[s.attribute] ?? ""}</span>}
+                        title={ATTR_LABELS[s.attribute] ?? s.attribute}
+                        detail={
+                          <span className="flex items-center gap-2 mt-0.5">
+                            <span className="flex-1 bg-gray-100 rounded-full h-1.5 overflow-hidden">
+                              <span className="block h-full bg-pitch-300 rounded-full" style={{ width: `${(s.gains / maxGains) * 100}%` }} />
+                            </span>
+                            <span className="font-bold tabular-nums text-pitch-600">+{s.gains}</span>
+                          </span>
+                        } />
                     );
                   })}
                 </div>
-              </div>
+              </ListCard>
             )}
           </div>
 
@@ -964,42 +942,34 @@ export default function TrainingPage() {
           {(stats.attendanceTop.length > 0 || stats.attendanceBottom.length > 0) && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {stats.attendanceTop.length > 0 && (
-                <div className="card p-4 sm:p-5">
-                  <SectionLabel>Nejlepší docházka</SectionLabel>
-                  <div className="space-y-1">
-                    {stats.attendanceTop.map((p, i) => (
-                      <div key={p.playerId} className="flex items-center gap-2 py-1">
-                        <span className="text-xs text-muted w-4 tabular-nums shrink-0">{i + 1}.</span>
-                        <Link href={`/hrac/${p.playerId}`} className="text-sm font-heading font-bold hover:text-pitch-500 transition-colors truncate flex-1 min-w-0">
-                          {p.name}
-                        </Link>
-                        <span className="text-xs text-muted tabular-nums shrink-0">{p.attended}/{p.total}</span>
-                        <span className={`font-heading font-bold text-xs tabular-nums w-9 text-right shrink-0 ${
-                          p.pct >= 80 ? "text-pitch-500" : p.pct >= 50 ? "text-gold-600" : "text-card-red"
-                        }`}>{p.pct}%</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                <ListCard title="Nejlepší docházka">
+                  {stats.attendanceTop.map((p, i) => (
+                    <ListRow key={p.playerId} dense href={`/hrac/${p.playerId}`}
+                      leading={<span className="text-meta text-muted tabular-nums">{i + 1}.</span>}
+                      title={p.name}
+                      trailing={
+                        <span className="flex items-center gap-2 tabular-nums">
+                          <span className="text-meta text-muted">{p.attended}/{p.total}</span>
+                          <span className={`text-body font-bold w-10 text-right ${p.pct >= 80 ? "text-pitch-600" : p.pct >= 50 ? "text-gold-600" : "text-card-red"}`}>{p.pct} %</span>
+                        </span>
+                      } />
+                  ))}
+                </ListCard>
               )}
               {stats.attendanceBottom.length > 0 && (
-                <div className="card p-4 sm:p-5">
-                  <SectionLabel>Nejhorší docházka</SectionLabel>
-                  <div className="space-y-1">
-                    {stats.attendanceBottom.map((p, i) => (
-                      <div key={p.playerId} className="flex items-center gap-2 py-1">
-                        <span className="text-xs text-muted w-4 tabular-nums shrink-0">{i + 1}.</span>
-                        <Link href={`/hrac/${p.playerId}`} className="text-sm font-heading font-bold hover:text-pitch-500 transition-colors truncate flex-1 min-w-0">
-                          {p.name}
-                        </Link>
-                        <span className="text-xs text-muted tabular-nums shrink-0">{p.attended}/{p.total}</span>
-                        <span className={`font-heading font-bold text-xs tabular-nums w-9 text-right shrink-0 ${
-                          p.pct >= 80 ? "text-pitch-500" : p.pct >= 50 ? "text-gold-600" : "text-card-red"
-                        }`}>{p.pct}%</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                <ListCard title="Nejhorší docházka">
+                  {stats.attendanceBottom.map((p, i) => (
+                    <ListRow key={p.playerId} dense href={`/hrac/${p.playerId}`}
+                      leading={<span className="text-meta text-muted tabular-nums">{i + 1}.</span>}
+                      title={p.name}
+                      trailing={
+                        <span className="flex items-center gap-2 tabular-nums">
+                          <span className="text-meta text-muted">{p.attended}/{p.total}</span>
+                          <span className={`text-body font-bold w-10 text-right ${p.pct >= 80 ? "text-pitch-600" : p.pct >= 50 ? "text-gold-600" : "text-card-red"}`}>{p.pct} %</span>
+                        </span>
+                      } />
+                  ))}
+                </ListCard>
               )}
             </div>
           )}
@@ -1010,6 +980,24 @@ export default function TrainingPage() {
         Tréninky probíhají automaticky ve dnech z tvého plánu, v den zápasu se netrénuje
       </p>
     </div>
+  );
+}
+
+/** Malý portrét do hustého řádku „Kdo tomu pomáhá“; bez obličeje emoji role. */
+function ImpactAvatar({ face, fallback }: { face: Record<string, unknown> | null; fallback: string }) {
+  return (
+    <span className="w-6 h-6 rounded-full overflow-hidden bg-surface-3 flex items-center justify-center">
+      {face ? <FaceAvatar faceConfig={face} size={20} /> : <span className="text-meta leading-none" aria-hidden="true">{fallback}</span>}
+    </span>
+  );
+}
+
+/** Přínos vpravo v řádku. Na telefonu se zalomí, aby jméno nezůstalo na pár písmenech. */
+function ImpactValue({ tone, children }: { tone: "plus" | "minus"; children: ReactNode }) {
+  return (
+    <span className={`block max-w-[120px] sm:max-w-none text-meta font-bold leading-tight ${tone === "plus" ? "text-pitch-600" : "text-card-red"}`}>
+      {children}
+    </span>
   );
 }
 

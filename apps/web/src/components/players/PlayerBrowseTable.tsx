@@ -15,9 +15,11 @@ import { useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { marketValue, marketValueEstimate } from "@okresni-masina/shared";
-import { PositionBadge } from "@/components/ui";
+import { PositionBadge, DataTable, EntityCell, RatingPill, ratingToneIn, ListCard, ListRow, ListEmpty, type DataColumn, ChoiceGroup } from "@/components/ui";
+import { attrBg } from "@/lib/player-attrs";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { TeamName } from "@/components/manager/team-name";
+import { formatKc } from "@/lib/format";
 
 type Position = "GK" | "DEF" | "MID" | "FWD";
 type SkillKey = "speed" | "technique" | "shooting" | "passing" | "heading" | "defense" | "goalkeeping";
@@ -84,8 +86,7 @@ const MOBILE_SORTS: Array<{ key: SortKey; label: string }> = [
 const PRICE_SORT: { key: SortKey; label: string } = { key: "price", label: "Cena" };
 
 const rowValue = (r: BrowseRow) => marketValueEstimate(marketValue(r.rating, r.age, r.position));
-const formatValue = (v: number) => `cca ${v.toLocaleString("cs")} Kč`;
-const formatPrice = (v: number) => `${v.toLocaleString("cs")} Kč`;
+const formatValue = (v: number) => `cca ${formatKc(v)}`;
 const skillShort = (k: SkillKey) => SKILL_COLUMNS.find((c) => c.key === k)?.short ?? k;
 const formatForm = (f: NonNullable<BrowseRow["form"]>) =>
   `${f.matches} z · ${f.goals} g · ${f.assists} a${f.matches > 0 ? ` · ${f.avgRating.toFixed(1)}` : ""}`;
@@ -134,11 +135,10 @@ export function PlayerBrowseTable({ rows, color, onColorText, ratingColor, colum
   const showValue = columns.value !== false;
   const mobileSorts = [...MOBILE_SORTS.filter((m) => showValue || m.key !== "value"), ...(columns.price ? [PRICE_SORT] : [])];
 
-  const sortBy = (key: SortKey) => {
-    if (sortKey === key) { setSortDir(sortDir === "asc" ? "desc" : "asc"); return; }
-    setSortKey(key);
-    setSortDir(key === "name" || key === "club" || key === "position" ? "asc" : "desc");
-  };
+  const baseRows = useMemo(() => {
+    const list = filter === "all" ? rows : rows.filter((r) => r.position === filter);
+    return [...list].sort((a, b) => POS_ORDER[a.position] - POS_ORDER[b.position] || b.rating - a.rating);
+  }, [rows, filter]);
 
   const sorted = useMemo(() => {
     const list = filter === "all" ? rows : rows.filter((r) => r.position === filter);
@@ -151,23 +151,17 @@ export function PlayerBrowseTable({ rows, color, onColorText, ratingColor, colum
     });
   }, [rows, filter, sortKey, sortDir]);
 
-  if (rows.length === 0) return <p className="text-sm text-muted">{emptyText ?? "Nikdo tu není."}</p>;
+  if (rows.length === 0) return <ListEmpty icon="👤">{emptyText ?? "Nikdo tu není."}</ListEmpty>;
 
   const avatar = (r: BrowseRow, size: number) => r.avatar && typeof r.avatar === "object" && Object.keys(r.avatar).length > 2
     ? <FaceAvatar faceConfig={r.avatar} size={size} className="shrink-0" />
     : (
-      <div className={`rounded-full flex items-center justify-center text-sm font-bold shrink-0 ${onColorText}`}
+      // span, ne div: na telefonu je portrét uvnitř řádku, který je odkaz nebo tlačítko.
+      <span className={`rounded-full flex items-center justify-center text-sm font-bold shrink-0 ${onColorText}`}
         style={{ backgroundColor: color, width: size, height: size }}>
         {r.firstName[0]}
-      </div>
+      </span>
     );
-
-  const header = (key: SortKey, label: string, className: string, title?: string) => (
-    <th key={key} className={`pb-2 pr-2 text-sm font-heading font-bold uppercase cursor-pointer select-none whitespace-nowrap hover:text-pitch-500 transition-colors ${sortKey === key ? "text-pitch-600" : "text-muted"} ${className}`}
-      onClick={() => sortBy(key)} title={title ?? label}>
-      {label}{sortKey === key ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
-    </th>
-  );
 
   const open = (r: BrowseRow) => (r.onOpen ? r.onOpen() : router.push(`/hrac/${r.id}`));
 
@@ -178,153 +172,153 @@ export function PlayerBrowseTable({ rows, color, onColorText, ratingColor, colum
     </button>
   );
 
+  const ratings = rows.map((r) => r.rating);
+  // Na telefonu se barva hodnocení měří proti hráčům, které seznam právě ukazuje.
+  const mobileRatings = sorted.map((r) => r.rating);
+  const tableColumns: DataColumn<BrowseRow>[] = [
+    { key: "name", header: "Hráč", align: "left", sortValue: (r) => r.lastName,
+      cell: (r) => (
+        <EntityCell leading={avatar(r, 28)}
+          name={`${r.firstName} ${r.lastName}`}
+          meta={r.nickname || r.tag ? <>{r.nickname && <span className="text-gold-600">„{r.nickname}“</span>}{r.tag && <span className="block">{r.tag}</span>}</> : undefined} />
+      ) },
+    ...(columns.club ? [{
+      key: "club", header: "Klub", align: "left" as const, sortValue: (r: BrowseRow) => r.club?.name ?? r.clubLabel ?? "",
+      cell: (r: BrowseRow) => r.club
+        ? <Link href={`/tym/${r.club.id}`} onClick={(e) => e.stopPropagation()} className="block min-w-[170px] hover:underline"><TeamName name={r.club.name} isAi={r.clubIsAi === true} wrap /></Link>
+        : <span className="block min-w-[170px] text-muted"><TeamName name={r.clubLabel ?? "bez klubu"} isAi={r.clubIsAi === true} wrap /></span>,
+    }] : []),
+    { key: "position", header: "Poz", title: "Pozice", width: "w-16", sortValue: (r) => POS_ORDER[r.position] ?? 9, firstDir: "asc",
+      cell: (r) => <PositionBadge position={r.position} /> },
+    { key: "age", header: "Věk", width: "w-12", sortValue: (r) => r.age, cell: (r) => r.age },
+    { key: "rating", header: "Hod.", title: "Hodnocení", width: "w-14", sortValue: (r) => r.rating,
+      cell: (r) => <RatingPill value={r.rating} tone={ratingToneIn(r.rating, ratings)} /> },
+    ...SKILL_COLUMNS.map((c): DataColumn<BrowseRow> => ({
+      key: c.key, header: c.short, title: c.label, width: "w-11", sortValue: (r) => r.skills[c.key] ?? 0,
+      cell: (r) => r.skills[c.key] == null ? "-" : (
+        <span className={`inline-flex w-[30px] h-6 rounded-tight items-center justify-center text-meta font-bold ${attrBg(r.skills[c.key] ?? 0)}`}>{r.skills[c.key]}</span>
+      ),
+    })),
+    ...(columns.condition ? [{
+      key: "condition", header: "Kon", title: "Kondice", width: "w-16", sortValue: (r: BrowseRow) => r.condition ?? 0,
+      cell: (r: BrowseRow) => <span className="whitespace-nowrap">{r.condition ?? "-"} %</span>,
+    }] : []),
+    ...(columns.form ? [{
+      key: "form", header: "Forma", title: "Zápasy · góly · asistence · průměrná známka", align: "left" as const,
+      cell: (r: BrowseRow) => <span className="whitespace-nowrap">{r.form ? formatForm(r.form) : "-"}</span>,
+    }] : []),
+    ...(columns.price ? [{
+      key: "price", header: "Cena", title: "Cena z inzerátu", align: "right" as const, emphasis: true, sortValue: (r: BrowseRow) => r.price ?? 0,
+      cell: (r: BrowseRow) => <span className="whitespace-nowrap">{r.price != null ? formatKc(r.price) : "-"}</span>,
+    }] : []),
+    ...(showValue ? [{
+      key: "value", header: "Cena", title: "Tržní cena (odhad)", align: "right" as const, emphasis: true, sortValue: (r: BrowseRow) => rowValue(r),
+      cell: (r: BrowseRow) => <span className="whitespace-nowrap">{formatValue(rowValue(r))}</span>,
+    }] : []),
+    { key: "state", header: "Stav", width: "w-20",
+      cell: (r) => r.injury
+        ? <span className="whitespace-nowrap font-bold text-card-red" title={r.injury.type ?? "Zranění"}>🩹 {r.injury.daysRemaining} d</span>
+        : <span className="text-muted">-</span> },
+    ...(columns.watchedSince ? [{
+      key: "watchedSince", header: "Sleduji od", align: "left" as const,
+      cell: (r: BrowseRow) => <span className="whitespace-nowrap">{r.watchedSince ? formatDay(r.watchedSince) : "-"}</span>,
+    }] : []),
+    ...(onRemove ? [{ key: "remove", header: "", align: "right" as const, cell: (r: BrowseRow) => removeButton(r) }] : []),
+    ...(columns.action ? [{
+      key: "action", header: "", align: "right" as const,
+      cell: (r: BrowseRow) => <span className="whitespace-nowrap" onClick={(e) => e.stopPropagation()}>{r.action}</span>,
+    }] : []),
+  ];
+
   return (
     <div>
       <div className="flex flex-wrap items-center gap-2 mb-4">
-        {/* Mobil: pět stejně širokých tlačítek v jednom řádku, zalomené zabíraly půl displeje. */}
-        <div className="grid grid-cols-5 gap-1 w-full md:flex md:w-auto md:gap-2">
-          {(["all", "GK", "DEF", "MID", "FWD"] as PosFilter[]).map((pos) => (
-            <button key={pos} onClick={() => setFilter(pos)}
-              className={`px-1 py-1.5 md:px-3 rounded-full text-sm font-heading font-bold whitespace-nowrap transition-colors ${filter === pos ? "text-white" : "bg-gray-100 text-muted hover:bg-gray-200"}`}
-              style={filter === pos ? { backgroundColor: color } : undefined}>
-              {pos === "all" ? "Vše" : `${POS_LABELS[pos]} ${rows.filter((r) => r.position === pos).length}`}
-            </button>
-          ))}
-        </div>
+        {/* Mobil: pět stejně širokých voleb v jednom řádku, zalomené zabíraly půl displeje. */}
+        <ChoiceGroup ariaLabel="Filtr pozice" columns={5} className="w-full md:w-auto" value={filter} onChange={setFilter}
+          options={(["all", "GK", "DEF", "MID", "FWD"] as PosFilter[]).map((pos) => ({
+            value: pos,
+            label: <span className="whitespace-nowrap">{pos === "all" ? "Vše" : `${POS_LABELS[pos]} ${rows.filter((r) => r.position === pos).length}`}</span>,
+          }))} />
         {/* Mobil nemá záhlaví tabulky, řadí se výběrem */}
         <label className="md:hidden flex items-center gap-2 text-sm text-muted ml-auto">
           Řadit
           <select value={sortKey} onChange={(e) => { const k = e.target.value as SortKey; setSortKey(k); setSortDir(k === "position" ? "asc" : "desc"); }}
-            className="text-sm font-heading font-bold text-ink bg-gray-100 rounded-soft px-2 py-1.5">
+            className="select !text-sm !font-heading font-bold !py-1.5">
             {mobileSorts.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
           </select>
         </label>
       </div>
 
-      {/* ── Počítač: řaditelná tabulka ── */}
-      <div className="hidden md:block overflow-x-auto -mx-4 sm:-mx-5 table-scroll">
-        <table className="w-full text-sm min-w-[960px]">
-          <thead>
-            <tr className="text-left border-b border-gray-200">
-              {header("position", "Poz", "w-12 pl-4 sm:pl-5", "Pozice")}
-              {header("name", "Hráč", "min-w-[170px]")}
-              {columns.club && header("club", "Klub", "min-w-[130px]")}
-              {header("age", "Věk", "w-12 text-center")}
-              {header("rating", "Hod", "w-12 text-center", "Hodnocení")}
-              {SKILL_COLUMNS.map((c) => header(c.key, c.short, "w-11 text-center", c.label))}
-              {columns.condition && header("condition", "Kon", "w-14 text-center", "Kondice")}
-              {columns.form && <th className="pb-2 pr-2 text-sm font-heading font-bold uppercase text-muted whitespace-nowrap" title="Zápasy · góly · asistence · průměrná známka">Forma</th>}
-              {columns.price && header("price", "Cena", "w-28 text-right", "Cena z inzerátu")}
-              {showValue && header("value", "Cena", "w-32 text-right", "Tržní cena (odhad)")}
-              <th className="pb-2 pr-2 text-sm font-heading font-bold uppercase text-muted text-center w-20">Stav</th>
-              {columns.watchedSince && <th className="pb-2 pr-2 text-sm font-heading font-bold uppercase text-muted whitespace-nowrap">Sleduji od</th>}
-              {onRemove && <th className="pb-2 pr-4 sm:pr-5" />}
-              {columns.action && <th className="pb-2 pr-4 sm:pr-5" />}
-            </tr>
-          </thead>
-          <tbody>
-            {sorted.map((r) => (
-              <tr key={r.id} onClick={() => open(r)}
-                className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors cursor-pointer">
-                <td className="py-2 pl-4 sm:pl-5 pr-1"><PositionBadge position={r.position} /></td>
-                <td className="py-2 pr-2">
-                  <div className="flex items-center gap-2">
-                    {avatar(r, 28)}
-                    <div className="min-w-0">
-                      <span className="font-heading font-bold text-base truncate block">{r.firstName} {r.lastName}</span>
-                      {r.nickname && <span className="text-sm text-gold-500 block">&bdquo;{r.nickname}&ldquo;</span>}
-                      {r.tag && <span className="block">{r.tag}</span>}
-                    </div>
-                  </div>
-                </td>
-                {columns.club && (
-                  <td className="py-2 pr-2 whitespace-nowrap">
-                    {r.club
-                      ? <Link href={`/tym/${r.club.id}`} onClick={(e) => e.stopPropagation()} className="hover:underline"><TeamName name={r.club.name} isAi={r.clubIsAi === true} /></Link>
-                      : <span className="text-muted"><TeamName name={r.clubLabel ?? "bez klubu"} isAi={r.clubIsAi === true} /></span>}
-                  </td>
-                )}
-                <td className="py-2 pr-2 text-center tabular-nums text-muted">{r.age}</td>
-                <td className="py-2 pr-2 text-center">
-                  <span className="font-heading font-bold tabular-nums" style={{ color: ratingColor }}>{r.rating}</span>
-                </td>
-                {SKILL_COLUMNS.map((c) => (
-                  <td key={c.key} className={`py-2 pr-2 text-center tabular-nums ${attrColor(r.skills[c.key] ?? 0)}`}>{r.skills[c.key] ?? "-"}</td>
-                ))}
-                {columns.condition && <td className="py-2 pr-2 text-center tabular-nums text-muted">{r.condition ?? "-"} %</td>}
-                {columns.form && <td className="py-2 pr-2 tabular-nums text-muted whitespace-nowrap">{r.form ? formatForm(r.form) : "-"}</td>}
-                {columns.price && (
-                  <td className="py-2 pr-2 text-right tabular-nums font-heading font-bold whitespace-nowrap">{r.price != null ? formatPrice(r.price) : "-"}</td>
-                )}
-                {showValue && <td className="py-2 pr-2 text-right tabular-nums whitespace-nowrap font-heading font-bold">{formatValue(rowValue(r))}</td>}
-                <td className="py-2 pr-2 text-center whitespace-nowrap">
-                  {r.injury
-                    ? <span className="text-sm font-heading font-bold text-card-red" title={r.injury.type ?? "Zranění"}>🩹 {r.injury.daysRemaining} d</span>
-                    : <span className="text-muted">-</span>}
-                </td>
-                {columns.watchedSince && <td className="py-2 pr-2 text-muted whitespace-nowrap">{r.watchedSince ? formatDay(r.watchedSince) : "-"}</td>}
-                {onRemove && <td className="py-2 pr-4 sm:pr-5 text-right">{removeButton(r)}</td>}
-                {columns.action && (
-                  <td className="py-2 pr-4 sm:pr-5 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>{r.action}</td>
-                )}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      {/* ── Počítač: řaditelná tabulka s přilepeným sloupcem hráče ── */}
+      <div className="hidden md:block -mx-4 sm:-mx-5">
+        <DataTable columns={tableColumns} rows={baseRows} rowKey={(r) => r.id}
+          onRowClick={open} scroll={{ minWidth: 960 }}
+          defaultSort={{ key: defaultSort, dir: defaultSort === "position" ? "asc" : "desc" }}
+          empty="Na tomhle postu tu nikdo není." />
       </div>
 
       {/* ── Mobil: seznam s popsanými dovednostmi ── */}
-      <div className="md:hidden flex flex-col gap-2">
-        {sorted.map((r) => (
-          <div key={r.id} onClick={() => open(r)}
-            className="card px-3 py-2.5 hover:bg-gray-50 transition-colors cursor-pointer">
-            <div className="flex items-center gap-3">
-              <PositionBadge position={r.position} />
-              {avatar(r, 36)}
-              <div className="flex-1 min-w-0">
-                <div className="font-heading font-bold text-base truncate">{r.firstName} {r.lastName}</div>
-                <div className="text-sm text-muted tabular-nums">
-                  <span className="font-heading font-bold text-ink">{r.age} let</span>
-                  {columns.price || !showValue ? "" : ` · ${formatValue(rowValue(r))}`}
-                </div>
-                {/* Klub na vlastním řádku celý: vedle věku se dlouhé jméno usekávalo. */}
-                {columns.club && (r.club || r.clubLabel) && (
-                  <div className="text-sm text-muted leading-snug break-words"><TeamName name={r.club?.name ?? r.clubLabel ?? ""} isAi={r.clubIsAi === true} wrap /></div>
-                )}
-                {r.tag && <div className="mt-0.5">{r.tag}</div>}
-              </div>
-              <span className={`px-2 py-1 rounded-soft font-heading font-bold text-base tabular-nums shrink-0 ${onColorText}`} style={{ backgroundColor: color }}>
-                {r.rating}
-              </span>
-            </div>
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-sm">
-              {KEY_SKILLS[r.position].map((k) => (
-                <span key={k} className="tabular-nums">
-                  <span className="text-muted">{skillShort(k)}</span>{" "}
-                  <span className={`font-heading font-bold ${attrColor(r.skills[k] ?? 0)}`}>{r.skills[k] ?? "-"}</span>
+      <ListCard className="md:hidden">
+        {sorted.length === 0 && <ListEmpty icon="👤">Na tomhle postu tu nikdo není.</ListEmpty>}
+        {sorted.map((r) => {
+          const name = `${r.firstName} ${r.lastName}`;
+          // Řádek s tlačítkem (Odebrat, Podepsat, Nabídnout…) nesmí být sám klikací:
+          // tlačítko v tlačítku nejde. Detail pak otevírá jméno.
+          const hasButtons = !!onRemove || (!!columns.action && r.action != null);
+          const nameLink = !hasButtons ? name : r.onOpen
+            ? <button type="button" onClick={r.onOpen} className="text-left hover:underline">{name}</button>
+            : <Link href={`/hrac/${r.id}`} className="hover:underline">{name}</Link>;
+          return (
+            <ListRow key={r.id}
+              href={!hasButtons && !r.onOpen ? `/hrac/${r.id}` : undefined}
+              onClick={!hasButtons && r.onOpen ? r.onOpen : undefined}
+              tone={r.injury ? "danger" : undefined}
+              leading={avatar(r, 30)}
+              title={nameLink}
+              meta={
+                <span className="inline-flex items-center gap-1.5 tabular-nums">
+                  <PositionBadge position={r.position} />
+                  <span>{r.age} let{columns.price || !showValue ? "" : ` · ${formatValue(rowValue(r))}`}</span>
                 </span>
-              ))}
-              {r.injury && (
-                <span className="font-heading font-bold text-card-red" title={r.injury.type ?? "Zranění"}>🩹 zraněn {r.injury.daysRemaining} d</span>
-              )}
-            </div>
-            {(columns.form && r.form) || onRemove ? (
-              <div className="flex items-center justify-between gap-2 mt-1.5 text-sm text-muted">
-                <span className="tabular-nums">{columns.form && r.form ? `Forma: ${formatForm(r.form)}` : ""}</span>
-                {removeButton(r)}
-              </div>
-            ) : null}
-            {columns.price || columns.action ? (
-              <div className="flex items-center justify-between gap-2 mt-2">
-                <div className="text-sm tabular-nums min-w-0">
-                  {columns.price && r.price != null && <span className="font-heading font-bold text-ink">{formatPrice(r.price)}</span>}
-                </div>
-                {columns.action && <div className="shrink-0" onClick={(e) => e.stopPropagation()}>{r.action}</div>}
-              </div>
-            ) : null}
-          </div>
-        ))}
-      </div>
+              }
+              trailing={<RatingPill value={r.rating} tone={ratingToneIn(r.rating, mobileRatings)} />}
+              detail={
+                <>
+                  {/* Klub na vlastním řádku celý: vedle věku se dlouhé jméno usekávalo. */}
+                  {columns.club && (r.club || r.clubLabel) && (
+                    <span className="block text-muted break-words"><TeamName name={r.club?.name ?? r.clubLabel ?? ""} isAi={r.clubIsAi === true} wrap /></span>
+                  )}
+                  {r.tag && <span className="block mt-0.5">{r.tag}</span>}
+                  <span className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
+                    {KEY_SKILLS[r.position].map((k) => (
+                      <span key={k} className="tabular-nums">
+                        <span className="text-muted">{skillShort(k)}</span>{" "}
+                        <span className={`font-heading font-bold ${attrColor(r.skills[k] ?? 0)}`}>{r.skills[k] ?? "-"}</span>
+                      </span>
+                    ))}
+                    {r.injury && (
+                      <span className="font-heading font-bold text-card-red" title={r.injury.type ?? "Zranění"}>🩹 zraněn {r.injury.daysRemaining} d</span>
+                    )}
+                  </span>
+                  {(columns.form && r.form) || onRemove ? (
+                    <span className="flex items-center justify-between gap-2 mt-1 text-muted">
+                      <span className="tabular-nums">{columns.form && r.form ? `Forma: ${formatForm(r.form)}` : ""}</span>
+                      {removeButton(r)}
+                    </span>
+                  ) : null}
+                  {columns.price || columns.action ? (
+                    <span className="flex items-center justify-between gap-2 mt-1.5">
+                      <span className="tabular-nums min-w-0">
+                        {columns.price && r.price != null && <span className="font-heading font-bold text-ink">{formatKc(r.price)}</span>}
+                      </span>
+                      {columns.action && <span className="shrink-0">{r.action}</span>}
+                    </span>
+                  ) : null}
+                </>
+              } />
+          );
+        })}
+      </ListCard>
     </div>
   );
 }

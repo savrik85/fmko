@@ -7,7 +7,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, apiAction, type Player } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
-import { Spinner, Button, PositionBadge, BadgePreview, JerseyPreview } from "@/components/ui";
+import { Button, PositionBadge, BadgePreview, JerseyPreview, DataTable, EntityCell, ListCard, ListRow, type DataColumn, PageLoading, ProgressBar, ChoiceGroup } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 import { BusSelector } from "./BusSelector";
 import { RefereeCard } from "@/components/match/referee-card";
@@ -206,6 +206,47 @@ function captainInLineup(captainId: string | null, lineupIds: Array<string | nul
   const starters = pool.filter((p) => lineupIds.includes(p.id) && !p.absent);
   if (captainId && starters.some((p) => p.id === captainId)) return captainId;
   return starters.sort((a, b) => (b.leadership ?? 30) - (a.leadership ?? 30))[0]?.id ?? null;
+}
+
+/** Číslo dresu v kolečku barvy postu. */
+function PlayerNumber({ n, pos }: { n: number | string; pos: string }) {
+  return (
+    <span className={`w-6 h-6 rounded-full flex items-center justify-center text-white font-heading font-bold text-xs ${POS_BG[pos] ?? "bg-gray-400"}`}>
+      {n}
+    </span>
+  );
+}
+
+type BenchRow = { p: AvailablePlayer; note?: string };
+
+/**
+ * Sloupce s čísly hráče, stejné v základní sestavě, na lavičce i ve výběru hráče.
+ * Pořadí řádků určuje sestava, proto se tu neřadí klikem na záhlaví.
+ */
+function playerStatColumns<T>(get: (row: T) => AvailablePlayer, withAvg: boolean): DataColumn<T>[] {
+  const attr = (key: "speed" | "technique" | "shooting" | "defense", header: string, title: string): DataColumn<T> => ({
+    key, header, title, width: "w-10",
+    cell: (r) => { const v = get(r)[key] ?? 0; return <span className={attrC(v)} title={`${title}: ${v}`}>{v}</span>; },
+  });
+  const columns: DataColumn<T>[] = [
+    { key: "ovr", header: "Hod", title: "Celkové hodnocení", width: "w-10", emphasis: true, cell: (r) => get(r).overallRating },
+    attr("speed", "Rch", "Rychlost"),
+    attr("technique", "Tch", "Technika"),
+    attr("shooting", "Stř", "Střelba"),
+    attr("defense", "Obr", "Obrana"),
+    { key: "con", header: "Kon", title: "Kondice", width: "w-12", cell: (r) => <span className={condC(get(r).condition)}>{get(r).condition}%</span> },
+    { key: "mor", header: "Mor", title: "Morálka", width: "w-10", cell: (r) => <span title={`Morálka: ${get(r).morale}%`}>{moraleIcon(get(r).morale)}</span> },
+  ];
+  if (withAvg) {
+    columns.push({
+      key: "avg", header: "Hod", title: "Průměrné hodnocení", width: "w-10",
+      cell: (r) => {
+        const avg = (get(r) as { avgRating?: number | string | null }).avgRating;
+        return <span className="font-heading font-bold text-muted">{avg ? Number(avg).toFixed(1) : "-"}</span>;
+      },
+    });
+  }
+  return columns;
 }
 
 export default function MatchPageWrapper() {
@@ -561,7 +602,7 @@ function MatchPage() {
     setSaving(false);
   };
 
-  if (loading) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
+  if (loading) return <PageLoading />;
   if (!nextMatch) return (
     <div className="page-container space-y-4"><PreseasonNotice /><div className="card p-8 text-center">
       <p className="font-heading font-bold text-xl mb-2">Žádný naplánovaný zápas</p>
@@ -575,6 +616,27 @@ function MatchPage() {
 
   // Kdo z hráčů mimo základ pojede na zápas (7 náhradníků) a kdo zůstane doma
   const { subs, autoFilled, standIns, leftOut } = splitBench(players, selected, slots.map((s) => s.pos), benchIds);
+  /** Buňka hráče na lavičce a ve výběru: nedostupný přeškrtnutý s důvodem, jinak post, forma a poznámka. */
+  const benchNameCell = (p: AvailablePlayer, note?: string, outOfPosition?: boolean) => {
+    const extra = p as AvailablePlayer & { injured?: boolean; injuryDays?: number; absenceSms?: string; absenceReason?: string; hangover?: boolean };
+    return p.absent ? (
+      <EntityCell
+        leading={<PlayerNumber n={p.squadNumber ?? "?"} pos={p.position} />}
+        name={<span className="line-through text-muted">{p.lastName}</span>}
+        meta={<span className="italic">{extra.injured ? `Zranění (${extra.injuryDays}d)` : (extra.absenceSms ?? extra.absenceReason ?? "Nedostupný")}</span>} />
+    ) : (
+      <EntityCell
+        leading={<PlayerNumber n={p.squadNumber ?? "?"} pos={p.position} />}
+        name={<span className="inline-flex items-center gap-1 flex-wrap">
+          {outOfPosition && <span className="text-gold-500" aria-label="Mimo post">⚠️</span>}
+          {p.lastName}
+          <PositionBadge position={p.position as Pos} />
+          <FormBadge form={playerForms[p.id]} />
+          {extra.hangover && <span title="Ranní kocovina po výhře (−15 kondice)">🍺</span>}
+        </span>}
+        meta={note ? <span className="text-gold-600 font-heading font-bold">{note}</span> : `${p.firstName} · ${p.age} let`} />
+    );
+  };
   const subIds = new Set(subs.map((p) => p.id));
 
   // Klepnutí na hráče v lavičce nebo mezi těmi, co nejedou. Dva klepy na hráče z různých
@@ -680,15 +742,20 @@ function MatchPage() {
           router.replace(`/zapas?calendarId=${um.calendarId}`, { scroll: false });
           // myName z contextu — jinak by se mixovalo při přepínání doma↔venku
           const myName = ourTeamName ?? (nextMatch?.isHome ? nextMatch.homeName : nextMatch?.awayName ?? "");
+          // matchId v seznamu nadcházejících zápasů není; do odpovědi next-match zůstane prázdné,
+          // jinak by autobusy a porovnání sestav běžely nad předchozím zápasem.
           setNextMatch((prev) => prev ? {
-            ...prev, calendarId: um.calendarId, gameWeek: um.gameWeek, scheduledAt: um.scheduledAt, isHome: um.isHome, isFriendly: um.isFriendly, isCup: um.isCup, isTournament: um.isTournament, venueName: um.isTournament ? prev.venueName : null, roundName: um.roundName,
+            ...prev, matchId: "", calendarId: um.calendarId, gameWeek: um.gameWeek, scheduledAt: um.scheduledAt, isHome: um.isHome, isFriendly: um.isFriendly, isCup: um.isCup, isTournament: um.isTournament, venueName: um.isTournament ? prev.venueName : null, roundName: um.roundName,
             homeName: um.isHome ? myName : um.opponentName,
             awayName: um.isHome ? um.opponentName : myName,
           } : prev);
           if (teamId) {
             // Použij next-match endpoint s calendarId — vrací lineup+source (explicit/default) + availablePlayers
-            apiFetch<{ referee?: DelegatedReferee | null; forecast?: { icon: string; expected: string; temperature: number; description: string } | null; tacticHints?: Array<{ tone: "warning" | "opportunity" | "info"; label: string; detail: string }>; lineup: { formation: string; tactic: string; hardness?: string; captainId: string | null; presetSlot: "A" | "B" | "C" | null; matchPlan?: MatchPlanRule[]; bench?: string[] | null; source?: "explicit" | "default" | null; players: Array<{ playerId: string }> } | null; availablePlayers: AvailablePlayer[] }>(`/api/teams/${teamId}/next-match?calendarId=${um.calendarId}`)
+            apiFetch<{ nextMatch?: { matchId: string } | null; referee?: DelegatedReferee | null; forecast?: { icon: string; expected: string; temperature: number; description: string } | null; tacticHints?: Array<{ tone: "warning" | "opportunity" | "info"; label: string; detail: string }>; lineup: { formation: string; tactic: string; hardness?: string; captainId: string | null; presetSlot: "A" | "B" | "C" | null; matchPlan?: MatchPlanRule[]; bench?: string[] | null; source?: "explicit" | "default" | null; players: Array<{ playerId: string }> } | null; availablePlayers: AvailablePlayer[] }>(`/api/teams/${teamId}/next-match?calendarId=${um.calendarId}`)
               .then((data) => {
+                // Hráč mohl mezitím přepnout jinam: ID patří jen zápasu, pro který se ptalo.
+                const loadedMatchId = data.nextMatch?.matchId;
+                if (loadedMatchId) setNextMatch((prev) => prev && prev.calendarId === um.calendarId ? { ...prev, matchId: loadedMatchId } : prev);
                 setReferee(data.referee ?? null);
                 setForecast(data.forecast ?? null);
                 setTacticHints(data.tacticHints ?? []);
@@ -800,7 +867,7 @@ function MatchPage() {
       )}
 
       {/* Bus z okolí — domácí ligové i pohárové zápasy (ne přátelák, ne turnaj na neutrální půdě) */}
-      {nextMatch?.isHome && !nextMatch.isFriendly && !nextMatch.isTournament && teamId && (
+      {nextMatch?.isHome && !nextMatch.isFriendly && !nextMatch.isTournament && nextMatch.matchId && teamId && (
         <BusSelector teamId={teamId} matchId={nextMatch.matchId} />
       )}
 
@@ -816,33 +883,13 @@ function MatchPage() {
               : "Klepnutím vybereš sestavu"}
           </div>
         </div>
-        <div className="grid grid-cols-3 gap-2">
-          {(["A", "B", "C"] as const).map((slot) => {
-            const preset = presets[slot];
-            const filled = !!preset;
-            const active = activePreset === slot;
-            return (
-              <div key={slot} className="relative">
-                <button
-                  onClick={() => { onPresetClick(slot); setSaved(false); }}
-                  className={`w-full py-2 px-2 rounded-soft text-xs font-heading font-bold border-2 transition-all ${
-                    active ? "bg-pitch-500 border-pitch-600 text-white shadow-md"
-                    : filled ? "bg-gold-50 border-pitch-300 text-ink hover:border-pitch-500"
-                    : "bg-gray-50 border-gray-200 text-muted hover:bg-gray-100"
-                  }`}
-                >
-                  {/* flex-col: na 375 px se „Sestava A" a stav vedle sebe nevesly
-                      a nazev se lamal na dva radky. Pod sebou to sedi. */}
-                  <div className="flex flex-col items-center leading-tight">
-                    <span className="whitespace-nowrap">Sestava {slot}</span>
-                    {filled && <span className={`text-micro ${active ? "opacity-90" : "opacity-70"}`}>{preset.formation}</span>}
-                    {!filled && <span className="text-micro opacity-70">prázdná</span>}
-                  </div>
-                </button>
-              </div>
-            );
-          })}
-        </div>
+        <ChoiceGroup ariaLabel="Uložené sestavy" columns={3} value={activePreset}
+          onChange={(slot) => { onPresetClick(slot); setSaved(false); }}
+          options={(["A", "B", "C"] as const).map((slot) => ({
+            value: slot,
+            label: <span className="whitespace-nowrap">Sestava {slot}</span>,
+            hint: presets[slot]?.formation ?? "prázdná",
+          }))} />
       </div>
 
       {/* ═══ Formation + Tactic — one row, with chemistry badge ═══ */}
@@ -855,31 +902,24 @@ function MatchPage() {
                 Sehranost: <span className={`font-bold ${famColor(formationFam[formation] ?? 15)}`}>{Math.round(formationFam[formation] ?? 15)}</span>/100
               </div>
             </div>
-            <div className="grid grid-cols-3 sm:grid-cols-6 rounded-xl bg-gray-50 p-0.5 gap-0.5">
-              {FORMATIONS.map((f) => {
+            <ChoiceGroup ariaLabel="Formace" columns={6} size="sm" value={formation}
+              onChange={(f) => { setFormation(f); autoFill(players, f); }}
+              options={FORMATIONS.map((f) => {
                 const fam = formationFam[f] ?? 15;
-                return (
-                  <button key={f} onClick={() => { setFormation(f); autoFill(players, f); }}
-                    title={getFormationTooltip(f)}
-                    className={`py-1.5 rounded-soft text-center text-xs font-heading font-bold transition-all cursor-help ${formation === f ? "bg-white shadow-sm text-pitch-600" : "text-muted hover:text-ink"}`}>
-                    {f}
-                    <div className={`mt-0.5 h-1 rounded-full ${famBgColor(fam)}`} style={{ width: `${Math.max(8, fam)}%`, marginInline: "auto" }} />
-                  </button>
-                );
-              })}
-            </div>
+                return {
+                  value: f, label: f, title: getFormationTooltip(f),
+                  hint: <span className={`block mt-0.5 h-1 rounded-full ${famBgColor(fam)}`} style={{ width: `${Math.max(8, fam)}%`, marginInline: "auto" }} />,
+                };
+              })} />
           </div>
           <div className="flex-1 min-w-0">
             <div className="text-micro text-muted font-heading uppercase tracking-wide mb-1">Taktika</div>
-            <div className="grid grid-cols-3 sm:grid-cols-6 rounded-xl bg-gray-50 p-0.5 gap-0.5">
-              {TACTICS.map((t) => (
-                <button key={t.key} onClick={() => { setTactic(t.key); setSaved(false); }}
-                  title={getTacticTooltip(t.key as TacticKey)}
-                  className={`py-1.5 rounded-soft text-center text-xs font-heading font-bold transition-all cursor-help ${tactic === t.key ? "bg-white shadow-sm text-pitch-600" : "text-muted hover:text-ink"}`}>
-                  <span className="hidden sm:inline">{t.icon} </span>{t.label}
-                </button>
-              ))}
-            </div>
+            <ChoiceGroup ariaLabel="Taktika" columns={6} size="sm" value={tactic}
+              onChange={(k) => { setTactic(k); setSaved(false); }}
+              options={TACTICS.map((t) => ({
+                value: t.key, title: getTacticTooltip(t.key as TacticKey),
+                label: <><span className="hidden sm:inline">{t.icon} </span>{t.label}</>,
+              }))} />
           </div>
         </div>
         {/* Tvrdost hry — vlastní řádek, aby se třetí osa na desktopu nervala s formací a taktikou */}
@@ -895,15 +935,12 @@ function MatchPage() {
               </span>
             )}
           </div>
-          <div className="grid grid-cols-3 rounded-xl bg-gray-50 p-0.5 gap-0.5">
-            {HARDNESS.map((h) => (
-              <button key={h.key} onClick={() => { setHardness(h.key); setSaved(false); }}
-                title={getHardnessTooltip(h.key)}
-                className={`py-1.5 rounded-soft text-center text-xs font-heading font-bold transition-all cursor-help ${hardness === h.key ? "bg-white shadow-sm text-pitch-600" : "text-muted hover:text-ink"}`}>
-                <span className="hidden sm:inline">{h.icon} </span>{h.label}
-              </button>
-            ))}
-          </div>
+          <ChoiceGroup ariaLabel="Tvrdost hry" columns={3} size="sm" value={hardness}
+            onChange={(k) => { setHardness(k); setSaved(false); }}
+            options={HARDNESS.map((h) => ({
+              value: h.key, title: getHardnessTooltip(h.key),
+              label: <><span className="hidden sm:inline">{h.icon} </span>{h.label}</>,
+            }))} />
           {/* Varování jen když má smysl — u benevolentního sudího by jen šumělo */}
           {hardness === "hard" && referee && referee.strictness >= 65 && (
             <p className="text-micro text-card-red mt-1.5">
@@ -1071,264 +1108,128 @@ function MatchPage() {
         <div>
           {/* Desktop selector — inline, replaces XI table */}
           {editSlot !== null && (
-            <div className="hidden lg:block card overflow-x-auto mb-3 table-scroll">
-              <div className="px-3 py-2 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
-                <span className="font-heading font-bold text-sm uppercase text-muted">Vybrat hráče, {slots[editSlot].pos}</span>
+            <div className="hidden lg:block card overflow-hidden mb-3">
+              <div className="px-4 py-3 border-b border-line flex items-center justify-between">
+                <span className="section-label !mb-0">Vybrat hráče, {slots[editSlot].pos}</span>
                 <button onClick={() => setEditSlot(null)} className="text-muted hover:text-ink text-lg leading-none">✕</button>
               </div>
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-200 text-muted">
-                    <th className="py-1.5 pl-3 w-8 text-center text-xs font-heading">#</th>
-                    <th className="py-1.5 text-left text-xs font-heading">Hráč</th>
-                    <th className="py-1.5 text-center text-xs font-heading w-8">Rat</th>
-                    <th className="py-1.5 text-center text-xs font-heading w-8">Rch</th>
-                    <th className="py-1.5 text-center text-xs font-heading w-8">Tch</th>
-                    <th className="py-1.5 text-center text-xs font-heading w-8">Stř</th>
-                    <th className="py-1.5 text-center text-xs font-heading w-8">Obr</th>
-                    <th className="py-1.5 text-center text-xs font-heading w-8">Kon</th>
-                    <th className="py-1.5 pr-3 text-center text-xs font-heading w-8">Mor</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {players
-                    .filter((p) => !selected.includes(p.id) || p.id === selected[editSlot])
-                    .sort((a, b) => {
-                      if (a.absent && !b.absent) return 1;
-                      if (!a.absent && b.absent) return -1;
-                      return (a.position === slots[editSlot].pos ? -1 : 1) - (b.position === slots[editSlot].pos ? -1 : 1) || b.overallRating - a.overallRating;
-                    })
-                    .map((p) => {
-                      const isCurrent = p.id === selected[editSlot];
-                      const isOOP = p.position !== slots[editSlot].pos;
-                      const isAbsent = p.absent;
-                      const s = p as any;
-                      return (
-                        <tr key={p.id}
-                          onClick={() => { if (!isAbsent) { placeInLineup(editSlot, p.id); setEditSlot(null); } }}
-                          className={`border-b border-gray-50 last:border-b-0 transition-colors ${
-                            isAbsent ? "opacity-35 cursor-not-allowed" : isCurrent ? "bg-pitch-100" : "hover:bg-gray-50 cursor-pointer"
-                          } ${isOOP && !isAbsent ? "bg-gold-50/50" : ""}`}>
-                          <td className="py-1.5 pl-3 text-center">
-                            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-white font-heading font-bold text-xs mx-auto ${POS_BG[p.position]}`}>
-                              {p.squadNumber ?? "?"}
-                            </div>
-                          </td>
-                          <td className="py-1.5 px-1.5">
-                            {isAbsent ? (
-                              <div>
-                                <span className="font-heading font-bold text-sm line-through text-muted">{p.lastName}</span>
-                                <div className="text-micro text-muted italic">{(p as any).injured ? `Zranění (${(p as any).injuryDays}d)` : ((p as any).absenceSms ?? (p as any).absenceReason ?? "Nedostupný")}</div>
-                              </div>
-                            ) : (
-                              <div>
-                                <div className="flex items-center gap-1">
-                                  <span className="font-heading font-bold text-sm">{isOOP && <span className="text-gold-500 mr-1">⚠️</span>}{p.lastName}</span>
-                                  <PositionBadge position={p.position as Pos} />
-                                  <FormBadge form={playerForms[p.id]} />
-                                  {(p as any).hangover && <span title="Ranní kocovina po výhře (−15 kondice)">🍺</span>}
-                                </div>
-                                <div className="text-xs text-muted">{p.firstName} · {p.age} let</div>
-                              </div>
-                            )}
-                          </td>
-                          <td className="py-1.5 text-center tabular-nums font-heading font-bold">{p.overallRating}</td>
-                          <td className={`py-1.5 text-center tabular-nums ${attrC(s.speed)}`}>{s.speed}</td>
-                          <td className={`py-1.5 text-center tabular-nums ${attrC(s.technique)}`}>{s.technique}</td>
-                          <td className={`py-1.5 text-center tabular-nums ${attrC(s.shooting)}`}>{s.shooting}</td>
-                          <td className={`py-1.5 text-center tabular-nums ${attrC(s.defense)}`}>{s.defense}</td>
-                          <td className={`py-1.5 text-center tabular-nums ${condC(p.condition)}`}>{p.condition}%</td>
-                          <td className="py-1.5 pr-3 text-center">{moraleIcon(p.morale)}</td>
-                        </tr>
-                      );
-                    })}
-                </tbody>
-              </table>
+              <DataTable dense
+                columns={[
+                  {
+                    key: "name", header: "Hráč",
+                    cell: (p: AvailablePlayer) => benchNameCell(p, undefined, p.position !== slots[editSlot].pos && !p.absent),
+                  },
+                  ...playerStatColumns((p: AvailablePlayer) => p, false),
+                ]}
+                rows={players
+                  .filter((p) => !selected.includes(p.id) || p.id === selected[editSlot])
+                  .sort((a, b) => {
+                    if (a.absent && !b.absent) return 1;
+                    if (!a.absent && b.absent) return -1;
+                    return (a.position === slots[editSlot].pos ? -1 : 1) - (b.position === slots[editSlot].pos ? -1 : 1) || b.overallRating - a.overallRating;
+                  })}
+                rowKey={(p) => p.id}
+                onRowClick={(p) => { if (!p.absent) { placeInLineup(editSlot, p.id); setEditSlot(null); } }}
+                rowTone={(p) => ({
+                  dim: !!p.absent,
+                  own: p.id === selected[editSlot],
+                  bar: p.position !== slots[editSlot].pos && !p.absent ? "warn" : undefined,
+                })}
+                empty="Na tuhle pozici nezbyl nikdo volný." />
             </div>
           )}
           {/* XI table + bench — always visible */}
           <>
             {/* Starting XI table */}
-              <div className="card overflow-x-auto mb-3 table-scroll">
-                <div className="px-3 py-2 bg-gray-50 border-b border-gray-100">
-                  <span className="font-heading font-bold text-sm uppercase text-muted">Základní sestava</span>
-                </div>
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-gray-200 text-muted">
-                      <th className="py-1.5 pl-3 w-8 text-center text-xs font-heading" title="Číslo dresu">#</th>
-                      <th className="py-1.5 text-left text-xs font-heading">Hráč</th>
-                      <th className="py-1.5 text-center text-xs font-heading w-8" title="Celkový rating">Rat</th>
-                      <th className="py-1.5 text-center text-xs font-heading w-8" title="Rychlost">Rch</th>
-                      <th className="py-1.5 text-center text-xs font-heading w-8" title="Technika">Tch</th>
-                      <th className="py-1.5 text-center text-xs font-heading w-8" title="Střelba">Stř</th>
-                      <th className="py-1.5 text-center text-xs font-heading w-8" title="Obrana">Obr</th>
-                      <th className="py-1.5 text-center text-xs font-heading w-8" title="Kondice">Kon</th>
-                      <th className="py-1.5 text-center text-xs font-heading w-8" title="Morálka">Mor</th>
-                      <th className="py-1.5 pr-3 text-center text-xs font-heading w-8" title="Průměrné hodnocení">Hod</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {selected.map((pid, i) => {
-                      const player = pid ? players.find((p) => p.id === pid) : null;
-                      if (!player) return null;
-                      const isOOP = player.position !== slots[i].pos;
-                      const s = player as any;
-                      return (
-                        <tr key={i} className={`border-b border-gray-50 last:border-b-0 hover:bg-gray-50 cursor-pointer ${isOOP ? "bg-gold-50/50" : ""} ${swapSource === i ? "bg-gold-100 ring-1 ring-gold-400" : ""}`}
-                          onClick={() => { setEditSlot(i); setSwapSource(null); }}>
-                          <td className="py-1.5 pl-3 text-center">
-                            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-white font-heading font-bold text-xs mx-auto ${POS_BG[slots[i].pos]}`}>
-                              {player.squadNumber ?? i + 1}
-                            </div>
-                          </td>
-                          <td className="py-1.5 px-1.5">
-                            <div className="flex items-center gap-1.5">
-                              <div className="min-w-0">
-                                <span className="font-heading font-bold text-sm leading-tight">{player.lastName}</span>
-                                <FormBadge form={playerForms[player.id]} />
-                                <div className="text-xs text-muted">{player.firstName} · {player.age} let</div>
-                              </div>
-                              {captainId === player.id && (
-                                <span className="shrink-0 w-6 h-6 rounded-full text-micro font-heading font-[800] flex items-center justify-center bg-gold-500 text-white shadow-sm"
-                                  title="Kapitán, mění se níž v Rolích v týmu">C</span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="py-1.5 text-center tabular-nums font-heading font-bold" title={`Rating: ${player.overallRating}`}>{player.overallRating}</td>
-                          <td className={`py-1.5 text-center tabular-nums ${attrC(s.speed)}`} title={`Rychlost: ${s.speed}`}>{s.speed}</td>
-                          <td className={`py-1.5 text-center tabular-nums ${attrC(s.technique)}`} title={`Technika: ${s.technique}`}>{s.technique}</td>
-                          <td className={`py-1.5 text-center tabular-nums ${attrC(s.shooting)}`} title={`Střelba: ${s.shooting}`}>{s.shooting}</td>
-                          <td className={`py-1.5 text-center tabular-nums ${attrC(s.defense)}`} title={`Obrana: ${s.defense}`}>{s.defense}</td>
-                          <td className={`py-1.5 text-center tabular-nums ${condC(player.condition)}`} title={`Kondice: ${player.condition}%`}>{player.condition}%</td>
-                          <td className="py-1.5 text-center" title={`Morálka: ${player.morale}%`}>{moraleIcon(player.morale)}</td>
-                          <td className="py-1.5 pr-3 text-center tabular-nums font-heading font-bold text-muted" title={`Průměrné hodnocení: ${s.avgRating ? Number(s.avgRating).toFixed(1) : "žádné"}`}>{s.avgRating ? Number(s.avgRating).toFixed(1) : "-"}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Lavička — jen ti, kdo na zápas pojedou. Zbytek kádru je oddělený pod ní. */}
-              <div className="card overflow-x-auto table-scroll">
-                <div className="px-3 py-2 bg-gray-50 border-b border-gray-100">
-                  <span className="font-heading font-bold text-sm uppercase text-muted">
-                    Lavička ({subs.length + standIns.length})
-                  </span>
-                  <p className="text-sm text-muted leading-snug mt-0.5">
-                    Na zápas jede základ a sedm náhradníků, vystřídat můžeš pět hráčů.
-                  </p>
-                  <p className={`text-sm leading-snug mt-0.5 ${benchPick ? "font-heading font-bold text-gold-600" : "text-muted"}`}>
-                    {benchPick
-                      ? (subIds.has(benchPick)
-                          ? "Klepni na hráče dole, který pojede místo něj."
-                          : "Klepni na náhradníka, místo kterého pojede.")
-                      : benchIds
-                        ? "Klepni na hráče a pak na toho, kdo má jet místo něj."
-                        : "Zatím je vybral automat podle ratingu. Klepni na hráče a pak na toho, kdo má jet místo něj."}
-                  </p>
-                </div>
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-gray-200 text-muted">
-                      <th className="py-1.5 pl-3 w-8 text-center text-xs font-heading" title="Číslo dresu">#</th>
-                      <th className="py-1.5 text-left text-xs font-heading">Hráč</th>
-                      <th className="py-1.5 text-center text-xs font-heading w-8" title="Celkový rating">Rat</th>
-                      <th className="py-1.5 text-center text-xs font-heading w-8" title="Rychlost">Rch</th>
-                      <th className="py-1.5 text-center text-xs font-heading w-8" title="Technika">Tch</th>
-                      <th className="py-1.5 text-center text-xs font-heading w-8" title="Střelba">Stř</th>
-                      <th className="py-1.5 text-center text-xs font-heading w-8" title="Obrana">Obr</th>
-                      <th className="py-1.5 text-center text-xs font-heading w-8" title="Kondice">Kon</th>
-                      <th className="py-1.5 text-center text-xs font-heading w-8" title="Morálka">Mor</th>
-                      <th className="py-1.5 pr-3 text-center text-xs font-heading w-8" title="Průměrné hodnocení">Hod</th>
-                    </tr>
-                  </thead>
-                  {(() => {
-                    const renderBenchRow = (p: AvailablePlayer, isLeftOut: boolean, note?: string) => {
-                      const s = p as any;
-                      const isAbsent = p.absent;
-                      return (
-                        <tr key={p.id}
-                          onClick={() => onBenchRowClick(p)}
-                          className={`border-b border-gray-50 last:border-b-0 ${isAbsent ? "opacity-35" : "cursor-pointer hover:bg-pitch-50"} ${isLeftOut && !isAbsent && benchPick !== p.id ? "opacity-60" : ""} ${benchPick === p.id ? "bg-gold-100 ring-1 ring-gold-400" : ""}`}>
-                          <td className="py-1.5 pl-3 w-8 text-center">
-                            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-white font-heading font-bold text-xs mx-auto ${POS_BG[p.position]}`}>
-                              {p.squadNumber ?? "?"}
-                            </div>
-                          </td>
-                          <td className="py-1.5 px-1.5">
-                            {isAbsent ? (
-                              <div>
-                                <span className="font-heading font-bold text-sm leading-tight line-through text-muted">{p.lastName}</span>
-                                <div className="text-micro text-muted italic">{(p as any).injured ? `Zranění (${(p as any).injuryDays}d)` : ((p as any).absenceSms ?? (p as any).absenceReason ?? "Nedostupný")}</div>
-                              </div>
-                            ) : (
-                              <div>
-                                <div className="flex items-center gap-1">
-                                  <span className="font-heading font-bold text-sm leading-tight">{p.lastName}</span>
-                                  <PositionBadge position={p.position as Pos} />
-                                  <FormBadge form={playerForms[p.id]} />
-                                  {(p as any).hangover && <span title="Ranní kocovina po výhře (−15 kondice)">🍺</span>}
-                                </div>
-                                {note
-                                  ? <div className="text-sm text-gold-600 font-heading font-bold">{note}</div>
-                                  : <div className="text-xs text-muted">{p.firstName} · {p.age} let</div>}
-                              </div>
-                            )}
-                          </td>
-                          <td className="py-1.5 text-center tabular-nums font-heading font-bold" title={`Rating: ${p.overallRating}`}>{p.overallRating}</td>
-                          <td className={`py-1.5 text-center tabular-nums ${attrC(s.speed)}`} title={`Rychlost: ${s.speed}`}>{s.speed}</td>
-                          <td className={`py-1.5 text-center tabular-nums ${attrC(s.technique)}`} title={`Technika: ${s.technique}`}>{s.technique}</td>
-                          <td className={`py-1.5 text-center tabular-nums ${attrC(s.shooting)}`} title={`Střelba: ${s.shooting}`}>{s.shooting}</td>
-                          <td className={`py-1.5 text-center tabular-nums ${attrC(s.defense)}`} title={`Obrana: ${s.defense}`}>{s.defense}</td>
-                          <td className={`py-1.5 text-center tabular-nums ${condC(p.condition)}`} title={`Kondice: ${p.condition}%`}>{p.condition}%</td>
-                          <td className="py-1.5 text-center" title={`Morálka: ${p.morale}%`}>{moraleIcon(p.morale)}</td>
-                          <td className="py-1.5 pr-3 text-center tabular-nums font-heading font-bold text-muted" title={`Průměrné hodnocení: ${s.avgRating ? Number(s.avgRating).toFixed(1) : "žádné"}`}>{s.avgRating ? Number(s.avgRating).toFixed(1) : "-"}</td>
-                        </tr>
-                      );
-                    };
-                    return (
-                      <>
-                        <tbody>
-                          {standIns.map((s) => renderBenchRow(s.player, false, `Nastoupí za ${s.replacing.lastName}`))}
-                          {subs.map((p) => renderBenchRow(p, false, autoFilled.includes(p) ? "Doplnil automat za omluveného" : undefined))}
-                          {subs.length + standIns.length === 0 && (
-                            <tr>
-                              <td colSpan={10} className="px-3 py-2 text-sm text-muted">
-                                Na lavičku nezbyl nikdo, kdo by mohl jet.
-                              </td>
-                            </tr>
+            <ListCard title="Základní sestava" className="mb-3 overflow-hidden">
+              <DataTable dense scroll={{ minWidth: 600, until: "lg" }}
+                columns={[
+                  {
+                    key: "name", header: "Hráč",
+                    cell: ({ p, i }: { p: AvailablePlayer; i: number }) => (
+                      <EntityCell
+                        leading={<PlayerNumber n={p.squadNumber ?? i + 1} pos={slots[i].pos} />}
+                        name={<span className="inline-flex items-center gap-1 flex-wrap">
+                          {p.lastName}
+                          <FormBadge form={playerForms[p.id]} />
+                          {captainId === p.id && (
+                            <span className="shrink-0 w-5 h-5 rounded-full text-micro font-heading font-[800] flex items-center justify-center bg-gold-500 text-white"
+                              title="Kapitán, mění se níž v Rolích v týmu">C</span>
                           )}
-                        </tbody>
-                        {leftOut.length > 0 && (
-                          <tbody>
-                            <tr className="bg-gray-50 border-y border-gray-100">
-                              <td colSpan={10} className="px-3 py-2">
-                                <span className="font-heading font-bold text-sm uppercase text-muted">
-                                  Nejedou na zápas ({leftOut.length})
-                                </span>
-                                <p className="text-sm text-muted leading-snug">
-                                  Zůstávají doma a střídat nemůžou. Na hřiště je dostaneš jen do základu.
-                                </p>
-                              </td>
-                            </tr>
-                            {leftOut.map((p) => renderBenchRow(p, true))}
-                          </tbody>
-                        )}
-                      </>
-                    );
-                  })()}
-                </table>
-                {benchIds && (
-                  <div className="px-3 py-2 border-t border-gray-100">
-                    <button type="button" onClick={() => { setBenchIds(null); setBenchPick(null); setSaved(false); }}
-                      className="text-sm font-heading font-bold text-pitch-700">
-                      Nechat vybrat automat
-                    </button>
-                  </div>
-                )}
+                        </span>}
+                        meta={`${p.firstName} · ${p.age} let`} />
+                    ),
+                  },
+                  ...playerStatColumns((r: { p: AvailablePlayer; i: number }) => r.p, true),
+                ]}
+                rows={selected.flatMap((pid, i) => {
+                  const p = pid ? players.find((x) => x.id === pid) : null;
+                  return p ? [{ p, i }] : [];
+                })}
+                rowKey={(r) => String(r.i)}
+                onRowClick={(r) => { setEditSlot(r.i); setSwapSource(null); }}
+                rowTone={(r) => ({ bar: r.p.position !== slots[r.i].pos ? "warn" : undefined, selected: swapSource === r.i })}
+                empty="Sestava je zatím prázdná. Klepni na kolečko na hřišti a vyber hráče." />
+            </ListCard>
+
+            {/* Lavička — jen ti, kdo na zápas pojedou. Zbytek kádru je oddělený pod ní. */}
+            <ListCard title="Lavička" count={subs.length + standIns.length} className="overflow-hidden">
+              <div className="px-4 py-2 border-b border-line-soft">
+                <p className="text-sm text-muted leading-snug">
+                  Na zápas jede základ a sedm náhradníků, vystřídat můžeš pět hráčů.
+                </p>
+                <p className={`text-sm leading-snug mt-0.5 ${benchPick ? "font-heading font-bold text-gold-600" : "text-muted"}`}>
+                  {benchPick
+                    ? (subIds.has(benchPick)
+                        ? "Klepni na hráče dole, který pojede místo něj."
+                        : "Klepni na náhradníka, místo kterého pojede.")
+                    : benchIds
+                      ? "Klepni na hráče a pak na toho, kdo má jet místo něj."
+                      : "Zatím je vybral automat podle hodnocení. Klepni na hráče a pak na toho, kdo má jet místo něj."}
+                </p>
               </div>
+              <DataTable dense scroll={{ minWidth: 600, until: "lg" }}
+                columns={[
+                  { key: "name", header: "Hráč", cell: (r: BenchRow) => benchNameCell(r.p, r.note) },
+                  ...playerStatColumns((r: BenchRow) => r.p, true),
+                ]}
+                rows={[
+                  ...standIns.map((x) => ({ p: x.player, note: `Nastoupí za ${x.replacing.lastName}` })),
+                  ...subs.map((p) => ({ p, note: autoFilled.includes(p) ? "Doplnil automat za omluveného" : undefined })),
+                ]}
+                rowKey={(r) => r.p.id}
+                onRowClick={(r) => onBenchRowClick(r.p)}
+                rowTone={(r) => ({ dim: !!r.p.absent, selected: benchPick === r.p.id })}
+                empty="Na lavičku nezbyl nikdo, kdo by mohl jet." />
+              {leftOut.length > 0 && (
+                <>
+                  <div className="px-4 py-2 bg-surface-2 border-y border-line">
+                    <span className="section-label !mb-0">Nejedou na zápas ({leftOut.length})</span>
+                    <p className="text-sm text-muted leading-snug">
+                      Zůstávají doma a střídat nemůžou. Na hřiště je dostaneš jen do základu.
+                    </p>
+                  </div>
+                  <DataTable dense scroll={{ minWidth: 600, until: "lg" }}
+                    columns={[
+                      { key: "name", header: "Hráč", cell: (p: AvailablePlayer) => benchNameCell(p) },
+                      ...playerStatColumns((p: AvailablePlayer) => p, true),
+                    ]}
+                    rows={leftOut}
+                    rowKey={(p) => p.id}
+                    onRowClick={(p) => onBenchRowClick(p)}
+                    rowTone={(p) => ({ dim: !!p.absent || benchPick !== p.id, selected: benchPick === p.id })}
+                    empty="Na zápas jedou všichni." />
+                </>
+              )}
+              {benchIds && (
+                <div className="px-4 py-2 border-t border-line-soft">
+                  <button type="button" onClick={() => { setBenchIds(null); setBenchPick(null); setSaved(false); }}
+                    className="text-sm font-heading font-bold text-pitch-700">
+                    Nechat vybrat automat
+                  </button>
+                </div>
+              )}
+            </ListCard>
           </>
         </div>
       </div>
@@ -1358,9 +1259,7 @@ function MatchPage() {
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
-              <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
-                <div className={`h-full rounded-full transition-all duration-500 ${chemistry >= 65 ? "bg-pitch-400" : chemistry >= 45 ? "bg-gold-400" : "bg-card-red"}`} style={{ width: `${chemistry}%` }} />
-              </div>
+              <ProgressBar value={chemistry} tone={chemistry >= 65 ? "ok" : chemistry >= 45 ? "warn" : "danger"} label="Chemie" className="flex-1" />
               <span className={`text-xs font-heading font-bold ${chemColor} shrink-0`}>{chemLabel}</span>
             </div>
             {relSummary.length > 0 && (
@@ -1422,7 +1321,7 @@ function MatchPage() {
       {teamId && nextMatch && selected.filter(Boolean).length === 11 && (
         <LineupPreview
           teamId={teamId}
-          matchId={nextMatch.isCup || nextMatch.isTournament ? undefined : nextMatch.matchId}
+          matchId={nextMatch.isCup || nextMatch.isTournament ? undefined : nextMatch.matchId || undefined}
           formation={formation}
           tactic={tactic}
           hardness={hardness}
@@ -1454,7 +1353,7 @@ function MatchPage() {
               <span className="font-heading font-bold text-sm uppercase text-muted">Vybrat, {slots[editSlot].pos}</span>
               <button onClick={() => setEditSlot(null)} className="w-8 h-8 flex items-center justify-center text-muted hover:text-ink text-xl">✕</button>
             </div>
-            <div className="overflow-y-auto" style={{ maxHeight: "calc(65vh - 48px)" }}>
+            <div className="overflow-y-auto divide-y divide-line-soft" style={{ maxHeight: "calc(65vh - 48px)" }}>
               {players
                 .filter((p) => !selected.includes(p.id) || p.id === selected[editSlot])
                 .sort((a, b) => {
@@ -1466,23 +1365,19 @@ function MatchPage() {
                   const isCurrent = p.id === selected[editSlot];
                   const isAbsent = p.absent;
                   return (
-                    <button key={p.id} disabled={isAbsent}
-                      onClick={() => { placeInLineup(editSlot, p.id); setEditSlot(null); }}
-                      className={`w-full flex items-center gap-3 px-4 py-3 border-b border-gray-50 text-left ${
-                        isAbsent ? "opacity-30" : isCurrent ? "bg-pitch-50" : "active:bg-gray-100"
-                      }`}>
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-heading font-bold text-xs shrink-0 ${POS_BG[p.position]}`}>
-                        {p.squadNumber ?? "?"}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-heading font-bold text-sm">{p.lastName}</span>
-                          <PositionBadge position={p.position as Pos} />
-                        </div>
-                        <div className="text-xs text-muted">{p.firstName} · {p.overallRating} rat · {p.condition}%</div>
-                      </div>
-                      <span className="text-sm shrink-0">{moraleIcon(p.morale)}</span>
-                    </button>
+                    // Chybějícího hráče nejde vybrat: jeho řádek nedostane onClick, je to jen vybledlý text.
+                    <div key={p.id} className={isAbsent ? "opacity-30" : isCurrent ? "bg-pitch-50" : "active:bg-gray-100"}>
+                      <ListRow chevron={false}
+                        onClick={isAbsent ? undefined : () => { placeInLineup(editSlot, p.id); setEditSlot(null); }}
+                        leading={
+                          <span className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-heading font-bold text-xs ${POS_BG[p.position]}`}>
+                            {p.squadNumber ?? "?"}
+                          </span>
+                        }
+                        title={<>{p.lastName} <span className="inline-block align-middle"><PositionBadge position={p.position as Pos} /></span></>}
+                        meta={<>{p.firstName} · hod. {p.overallRating} · {p.condition}%</>}
+                        trailing={<span className="text-sm">{moraleIcon(p.morale)}</span>} />
+                    </div>
                   );
                 })}
             </div>
@@ -1578,36 +1473,18 @@ function TakerPicker({ role, players, lineupIds, benchIds, selectedId, onChange 
       </div>
       <p className="text-sm text-muted mb-2 leading-snug lg:min-h-[3.75rem]">{cfg.hint}</p>
 
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="text-muted border-b border-gray-100">
-            <th className="text-left font-heading text-xs font-bold py-1">Kdo rozhoduje</th>
-            {cfg.attrs.map((a) => (
-              <th key={String(a.key)} className="text-center font-heading text-xs font-bold py-1 w-11"
-                title={`${a.nazev}, váha ${Math.round(a.vaha * 100)} %`}>
-                {a.zkratka}
-                {cfg.attrs.length > 1 && (
-                  <div className="text-micro font-normal leading-none">{Math.round(a.vaha * 100)}%</div>
-                )}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {videt.map(({ p, hraje }, i) => {
-            const vybrany = p.id === selectedId;
-            return (
-              <tr key={p.id}
-                onClick={() => onChange(vybrany ? null : p.id)}
-                className={`cursor-pointer border-b border-gray-50 last:border-b-0 ${
-                  vybrany ? "bg-pitch-50" : "hover:bg-gray-50"
-                } ${hraje ? "" : "opacity-55"}`}>
-                <td className="py-2 pr-2">
-                  <div className="flex items-center gap-1.5">
-                    <span className={`w-3.5 h-3.5 rounded-full border-2 shrink-0 ${
-                      vybrany ? "border-pitch-600 bg-pitch-600" : "border-gray-300"
-                    }`} />
-                    <span className="font-heading font-bold">{p.lastName}</span>
+      <div className="-mx-4 lg:mx-0 border-y border-line lg:border lg:rounded-soft overflow-hidden">
+        <DataTable dense
+          columns={[
+            {
+              key: "name", header: "Kdo rozhoduje",
+              cell: ({ p, hraje }: { p: AvailablePlayer; hraje: boolean }) => {
+                const isSelected = p.id === selectedId;
+                const i = videt.findIndex((r) => r.p.id === p.id);
+                return (
+                  <span className="flex items-center gap-1.5 min-w-0">
+                    <span className={`w-3.5 h-3.5 rounded-full border-2 shrink-0 ${isSelected ? "border-pitch-600 bg-pitch-600" : "border-gray-300"}`} />
+                    <span className="font-heading font-bold text-ink">{p.lastName}</span>
                     <span className="text-muted text-xs truncate">{p.firstName}</span>
                     {i === 0 && hraje && !rozbaleno && (
                       <span className="text-xs text-pitch-600 font-heading font-bold shrink-0">nej</span>
@@ -1615,18 +1492,29 @@ function TakerPicker({ role, players, lineupIds, benchIds, selectedId, onChange 
                     {!hraje && (
                       <span className="text-xs text-muted shrink-0">{benchIds.has(p.id) ? "lavička" : "nejede"}</span>
                     )}
-                  </div>
-                </td>
-                {cfg.attrs.map((a) => (
-                  <td key={String(a.key)} className={`py-2 text-center tabular-nums ${attrC(hodnota(p, a))}`}>
-                    {hodnota(p, a)}
-                  </td>
-                ))}
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+                  </span>
+                );
+              },
+            },
+            ...cfg.attrs.map((a): DataColumn<{ p: AvailablePlayer; hraje: boolean }> => ({
+              key: String(a.key),
+              header: (
+                <span className="inline-flex flex-col items-center leading-tight">
+                  {a.zkratka}
+                  {cfg.attrs.length > 1 && <span className="font-normal normal-case tracking-normal">{Math.round(a.vaha * 100)}%</span>}
+                </span>
+              ),
+              title: `${a.nazev}, váha ${Math.round(a.vaha * 100)} %`,
+              width: "w-11",
+              cell: ({ p }) => <span className={attrC(hodnota(p, a))}>{hodnota(p, a)}</span>,
+            })),
+          ]}
+          rows={videt}
+          rowKey={(r) => r.p.id}
+          onRowClick={(r) => onChange(r.p.id === selectedId ? null : r.p.id)}
+          rowTone={(r) => ({ own: r.p.id === selectedId, dim: !r.hraje })}
+          empty="Nikdo k výběru." />
+      </div>
 
       <div className="flex items-center justify-between mt-2 gap-2 lg:mt-auto lg:pt-2">
         <span className="text-sm text-muted">

@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from "react";
 import type { DistrictStart, VillageSelection } from "@/app/onboarding/page";
 import { apiFetch } from "@/lib/api";
-import { Spinner } from "@/components/ui";
+import { PageLoading } from "@/components/ui";
 
 type Village = {
   id: string;
@@ -157,7 +157,7 @@ export function StepLocation({ onSelect, allowedDistricts, districtStarts }: Pro
       )}
 
       {loadError ? <div role="alert"><p>Obce se nepodařilo načíst.</p><button className="btn btn-primary mt-3" onClick={() => setAttempt(v => v + 1)}>Zkusit znovu</button></div> : loading ? (
-        <div className="flex-1 flex items-center justify-center py-20"><Spinner /></div>
+        <PageLoading />
       ) : step === "region" ? (
         /* ═══ Region selection ═══ */
         <>

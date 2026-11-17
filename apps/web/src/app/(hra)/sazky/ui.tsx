@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import type { StavTiketu, StavTipu } from "./types";
+import { StatusChip, ChipTone } from "@/components/ui";
 
 /** Kurz s desetinnou ČÁRKOU. Tečka by prozradila, že je to přeložená appka. */
 export function kurz(x100: number): string {
@@ -27,13 +28,7 @@ export function OddsButton({ tip, label, oddsX100, vybrano, onClick }: {
   );
 }
 
-export function czk(n: number): string {
-  return `${n.toLocaleString("cs")} Kč`;
-}
 
-export function signed(n: number): string {
-  return `${n > 0 ? "+" : n < 0 ? "−" : ""}${Math.abs(n).toLocaleString("cs")} Kč`;
-}
 
 /** Názvy tiketů podle počtu tipů — lidové, jak se jim říká u přepážky. */
 export const TYP_TIKETU: Record<number, string> = {
@@ -70,23 +65,20 @@ export function IkonaTipu({ stav }: { stav: StavTipu }) {
   );
 }
 
-const STAV: Record<StavTiketu, { label: string; bg: string; fg: string }> = {
-  open: { label: "Čeká na kolo", bg: "#F0EEE9", fg: "#5B5348" },
-  won: { label: "Vyhraný", bg: "#E8F5E8", fg: "#1E4A1E" },
-  lost: { label: "Prohraný", bg: "#FBEAE8", fg: "#A32B1F" },
-  void: { label: "Vrácený vklad", bg: "#FBF6E6", fg: "#866D1E" },
-  confiscated: { label: "Zabavená výhra", bg: "#FBEAE8", fg: "#A32B1F" },
+const STAV: Record<StavTiketu, { label: string; tone: ChipTone }> = {
+  open: { label: "Čeká na kolo", tone: "neutral" },
+  won: { label: "Vyhraný", tone: "ok" },
+  lost: { label: "Prohraný", tone: "danger" },
+  void: { label: "Vrácený vklad", tone: "warn" },
+  confiscated: { label: "Zabavená výhra", tone: "danger" },
 };
 
 export function StavPill({ stav }: { stav: StavTiketu }) {
   const s = STAV[stav] ?? STAV.open;
   return (
-    <span
-      className="text-micro font-heading font-bold uppercase tracking-wide px-2 py-0.5 rounded-full"
-      style={{ background: s.bg, color: s.fg }}
-    >
+    <StatusChip tone={s.tone}>
       {s.label}
-    </span>
+    </StatusChip>
   );
 }
 

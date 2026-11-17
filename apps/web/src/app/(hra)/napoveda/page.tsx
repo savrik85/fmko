@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { MANAGER_FANS, MANAGER_FANS_BANDS } from "@okresni-masina/shared";
+import { DataTable, EntityCell } from "@/components/ui";
+import { ManagerFansBandsTable } from "@/components/fans/manager-fans-bands";
+import { MANAGER_FANS } from "@okresni-masina/shared";
 import { ATTRIBUTE_INFO, type AttrKey, type Pos } from "@/lib/attribute-info";
 import { TACTIC_INFO, FORMATION_INFO, HARDNESS_INFO, type TacticKey, type HardnessKey } from "@/lib/tactic-info";
 
@@ -40,43 +42,22 @@ export default function NapovedaPage() {
         <p className="text-sm text-muted">
           Každá pozice se hodnotí podle jiných atributů. Zelená tečka = klíčový atribut pro pozici.
         </p>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b-2 border-gray-200">
-                <th className="text-left py-2 px-2 font-heading uppercase text-xs text-muted">Atribut</th>
-                {(["GK", "DEF", "MID", "FWD"] as Pos[]).map((p) => (
-                  <th key={p} className="text-center py-2 px-2 font-heading uppercase text-xs text-muted">
-                    <div className="flex items-center justify-center gap-1.5">
-                      <span className={`w-1.5 h-1.5 rounded-full ${POS_COLOR[p]}`} />
-                      {POS_LABEL[p]}
-                    </div>
-                  </th>
-                ))}
-                <th className="text-left py-2 px-2 font-heading uppercase text-xs text-muted">Význam</th>
-              </tr>
-            </thead>
-            <tbody>
-              {SKILL_KEYS.map((key) => {
-                const info = ATTRIBUTE_INFO[key];
-                return (
-                  <tr key={key} className="border-b border-gray-50">
-                    <td className="py-2 px-2 font-heading font-bold">{info.label}</td>
-                    {(["GK", "DEF", "MID", "FWD"] as Pos[]).map((p) => (
-                      <td key={p} className="text-center py-2 px-2">
-                        {info.relevantFor.includes(p) ? (
-                          <span className="text-pitch-500 font-bold">✓</span>
-                        ) : (
-                          <span className="text-muted-light">-</span>
-                        )}
-                      </td>
-                    ))}
-                    <td className="py-2 px-2 text-xs text-muted">{info.description}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+        <div className="-mx-4 border-y border-line">
+          <DataTable rows={SKILL_KEYS} rowKey={(key) => key}
+            empty="Atributy nejsou k dispozici."
+            columns={[
+              { key: "attr", header: "Atribut", align: "left",
+                cell: (key) => <EntityCell name={ATTRIBUTE_INFO[key].label} meta={ATTRIBUTE_INFO[key].description} metaMobileOnly /> },
+              ...(["GK", "DEF", "MID", "FWD"] as Pos[]).map((pos) => ({
+                key: pos, width: "w-14",
+                header: <span className="inline-flex items-center gap-1"><span className={`w-1.5 h-1.5 rounded-full ${POS_COLOR[pos]}`} />{POS_LABEL[pos].slice(0, 3)}</span>,
+                title: POS_LABEL[pos],
+                cell: (key: AttrKey) => ATTRIBUTE_INFO[key].relevantFor.includes(pos)
+                  ? <span className="text-pitch-600 font-bold">✓</span>
+                  : <span className="text-muted-light">-</span>,
+              })),
+              { key: "meaning", header: "Význam", align: "left", priority: 2, cell: (key) => <span className="text-meta">{ATTRIBUTE_INFO[key].description}</span> },
+            ]} />
         </div>
       </section>
 
@@ -236,38 +217,8 @@ export default function NapovedaPage() {
               {String(MANAGER_FANS.REP_WEIGHT).replace(".", ",")} × reputace + {String(MANAGER_FANS.MOT_WEIGHT).replace(".", ",")} × motivace + {String(MANAGER_FANS.FORM_WEIGHT).replace(".", ",")} × forma
             </span>. Neutrál je {MANAGER_FANS.NEUTRAL}.
           </p>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b-2 border-gray-200">
-                  <th className="text-left py-2 px-2 font-heading uppercase text-xs text-muted">Vliv</th>
-                  <th className="text-right py-2 px-2 font-heading uppercase text-xs text-muted">Po zápase</th>
-                  <th className="text-right py-2 px-2 font-heading uppercase text-xs text-muted">Loajalita</th>
-                  <th className="text-left py-2 px-2 font-heading uppercase text-xs text-muted">Jak to fanoušci berou</th>
-                </tr>
-              </thead>
-              <tbody>
-                {MANAGER_FANS_BANDS.map((band, i) => {
-                  const upper = i === 0 ? null : MANAGER_FANS_BANDS[i - 1].min - 1;
-                  const range = upper === null
-                    ? `${band.min} a víc`
-                    : band.min === 0 ? `${upper} a míň` : `${band.min}–${upper}`;
-                  const tone = band.matchBoost > 0 ? "text-pitch-500" : band.matchBoost < 0 ? "text-card-red" : "text-ink";
-                  return (
-                    <tr key={band.key} className="border-b border-gray-50">
-                      <td className="py-2 px-2 tabular-nums whitespace-nowrap">{range}</td>
-                      <td className={`py-2 px-2 text-right tabular-nums font-heading font-bold ${tone}`}>
-                        {band.matchBoost > 0 ? "+" : ""}{band.matchBoost}
-                      </td>
-                      <td className="py-2 px-2 text-right tabular-nums text-muted">
-                        {band.loyaltyOffset > 0 ? "+" : ""}{band.loyaltyOffset}
-                      </td>
-                      <td className="py-2 px-2 text-xs text-muted">{band.fanView}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+          <div className="-mx-4 border-y border-line">
+            <ManagerFansBandsTable />
           </div>
           <div className="text-sm text-muted mt-3 space-y-1">
             <p>

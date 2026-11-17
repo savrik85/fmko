@@ -12,7 +12,7 @@
 
 import { useMemo, useState } from "react";
 import { apiAction, apiFetch } from "@/lib/api";
-import { EntityLink, Modal } from "@/components/ui";
+import { EntityLink, Modal, ListRow, RowValue } from "@/components/ui";
 import { Empty, OpenProposalNote, Ornament, czk, plural } from "./ui";
 import type { DelegatedMatch, FreeReferee, RefereeData, RefereeRow, State } from "./types";
 
@@ -62,7 +62,7 @@ export function RefereesPanel({ data, state, teamId, myOpen, jeKomisar, onChange
               : "Kdo píská nejbližší kolo. Delegace proběhla losem; do obsazení může zasáhnout komisař rozhodčích."}
           </p>
 
-          <div className="divide-y mt-3" style={{ borderColor: "var(--color-line)" }}>
+          <div className="-mx-5 mt-3 border-y border-line">
             {data.delegation.map((m) => (
               <MatchRow
                 key={m.matchId} m={m} teamId={teamId}
@@ -100,35 +100,18 @@ export function RefereesPanel({ data, state, teamId, myOpen, jeKomisar, onChange
 
       <div className="card p-5">
           <Ornament>Rozhodčí a jejich známky</Ornament>
-          <div className="divide-y" style={{ borderColor: "var(--color-line)" }}>
+          <div className="-mx-5 border-y border-line">
             {data.referees.map((r) => (
-              <div key={r.refereeId} className="py-2.5">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="text-base font-semibold break-words">
-                      {r.name}
-                      {r.banned && <span className="text-sm text-danger"> · vyškrtnut</span>}
-                      {r.paused && !r.banned && (
-                        <span className="text-sm" style={{ color: "#A32B1F" }}>
-                          {" "}· stopka do {r.pausedUntil}. kola
-                        </span>
-                      )}
-                      {r.flagged && !r.banned && !r.paused && (
-                        <span className="text-sm" style={{ color: "#A32B1F" }}> · pod drobnohledem</span>
-                      )}
-                    </div>
-                    <div className="text-sm text-muted">
-                      {r.matches} {r.matches === 1 ? "zápas" : r.matches < 5 ? "zápasy" : "zápasů"} v sezóně
-                    </div>
-                  </div>
-                  <div className="text-lg font-heading tabular-nums shrink-0" style={{ color: gradeColor(r.avgGrade) }}>
-                    {r.avgGrade !== null ? r.avgGrade.toFixed(2) : "-"}
-                  </div>
-                </div>
-
-                {/* Ovládání pod jméno, ne do řádku — na mobilu by se dvě tlačítka vedle známky nevešla. */}
-                {state.enabled && teamId && !r.banned && (
-                  <div className="flex flex-wrap gap-2 mt-2">
+              <ListRow key={r.refereeId} tone={r.banned || r.paused ? "danger" : r.flagged ? "warn" : undefined}
+                title={<>{r.name}
+                  {r.banned && <span className="text-meta font-normal text-danger"> · vyškrtnut</span>}
+                  {r.paused && !r.banned && <span className="text-meta font-normal" style={{ color: "#A32B1F" }}> · stopka do {r.pausedUntil}. kola</span>}
+                  {r.flagged && !r.banned && !r.paused && <span className="text-meta font-normal" style={{ color: "#A32B1F" }}> · pod drobnohledem</span>}
+                </>}
+                meta={`${r.matches} ${r.matches === 1 ? "zápas" : r.matches < 5 ? "zápasy" : "zápasů"} v sezóně`}
+                // Ovládání pod jméno, ne do řádku: na mobilu by se dvě tlačítka vedle známky nevešla.
+                detail={state.enabled && teamId && !r.banned && ((jeKomisar && !r.paused && data.canPause) || (data.canBan && (!myOpen || jeKomisar))) ? (
+                  <span className="flex flex-wrap gap-2 mt-2">
                     {jeKomisar && !r.paused && data.canPause && (
                       <button className="btn btn-md btn-secondary" onClick={() => setPauseTarget(r)}>
                         Stopka na {data.pauseWeeks} kola
@@ -140,9 +123,9 @@ export function RefereesPanel({ data, state, teamId, myOpen, jeKomisar, onChange
                         {jeKomisar ? "Vyškrtnout" : "Navrhnout vyškrtnutí"}
                       </button>
                     )}
-                  </div>
-                )}
-              </div>
+                  </span>
+                ) : undefined}
+                trailing={<RowValue><span style={{ color: gradeColor(r.avgGrade) }}>{r.avgGrade !== null ? r.avgGrade.toFixed(2) : "-"}</span></RowValue>} />
             ))}
           </div>
         {jeKomisar && !data.canPause && data.pauseReason && (
@@ -205,7 +188,7 @@ function PauseForm({ referee, teamId, weeks, fromWeek, maxPauses, onClose, onSav
   };
 
   return (
-    <Modal isOpen onClose={onClose} title="Stopka rozhodčímu" zavritKlikemVedle={false}>
+    <Modal isOpen onClose={onClose} title="Stopka rozhodčímu" closeOnBackdrop={false}>
       <div className="p-5 space-y-4">
         <div className="text-lg font-heading">Stopka na {weeks} kola: {referee.name}</div>
         <p className="text-sm text-muted">
@@ -285,7 +268,7 @@ function BanForm({ referee, teamId, deposit, jeKomisar, onClose, onSaved }: {
   };
 
   return (
-    <Modal isOpen onClose={onClose} title="Vyškrtnutí rozhodčího" zavritKlikemVedle={false}>
+    <Modal isOpen onClose={onClose} title="Vyškrtnutí rozhodčího" closeOnBackdrop={false}>
       <div className="p-5 space-y-4">
         <div className="text-lg font-heading">
           {primo ? "Vyškrtnout" : "Navrhnout vyškrtnutí"}: {referee.name}
@@ -361,36 +344,25 @@ function MatchRow({ m, teamId, muzeMenit, onSwap }: {
   const mujZapas = m.homeTeamId === teamId || m.awayTeamId === teamId;
 
   return (
-    <div className="py-2.5">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="text-base font-semibold break-words">
-            <EntityLink type="team" id={m.homeTeamId}>{m.homeTeamName}</EntityLink>
-            <span className="text-muted"> – </span>
-            <EntityLink type="team" id={m.awayTeamId}>{m.awayTeamName}</EntityLink>
-            {mujZapas && <span className="text-sm text-muted"> · tvůj zápas</span>}
-          </div>
-          <div className="text-sm text-muted break-words">
-            {m.refereeName ?? "zatím bez rozhodčího"}
-            {m.swapped && (
-              <span style={{ color: "#866D1E" }}> · vyměněno komisařem</span>
-            )}
-          </div>
-          {m.swapReason && (
-            <div className="text-sm text-muted break-words italic">„{m.swapReason}"</div>
+    <ListRow tone={mujZapas ? "new" : undefined}
+      title={<>
+        <EntityLink type="team" id={m.homeTeamId}>{m.homeTeamName}</EntityLink>
+        <span className="text-muted font-normal"> – </span>
+        <EntityLink type="team" id={m.awayTeamId}>{m.awayTeamName}</EntityLink>
+        {mujZapas && <span className="text-meta font-normal text-muted"> · tvůj zápas</span>}
+      </>}
+      meta={<>{m.refereeName ?? "zatím bez rozhodčího"}{m.swapped && <span style={{ color: "#866D1E" }}> · vyměněno komisařem</span>}</>}
+      detail={(m.swapReason || muzeMenit) ? (
+        <>
+          {m.swapReason && <span className="block italic">„{m.swapReason}"</span>}
+          {muzeMenit && (
+            <button className="btn btn-md btn-secondary mt-2" onClick={onSwap}>
+              {m.swapped ? "Změnit znovu" : "Vyměnit rozhodčího"}
+            </button>
           )}
-        </div>
-        <div className="text-lg font-heading tabular-nums shrink-0" style={{ color: gradeColor(m.avgGrade) }}>
-          {m.avgGrade !== null ? m.avgGrade.toFixed(2) : "-"}
-        </div>
-      </div>
-
-      {muzeMenit && (
-        <button className="btn btn-md btn-secondary mt-2" onClick={onSwap}>
-          {m.swapped ? "Změnit znovu" : "Vyměnit rozhodčího"}
-        </button>
-      )}
-    </div>
+        </>
+      ) : undefined}
+      trailing={<RowValue><span style={{ color: gradeColor(m.avgGrade) }}>{m.avgGrade !== null ? m.avgGrade.toFixed(2) : "-"}</span></RowValue>} />
   );
 }
 
@@ -434,7 +406,7 @@ function SwapForm({ match, teamId, volni, gameWeek, onClose, onSaved }: {
   };
 
   return (
-    <Modal isOpen onClose={onClose} title="Výměna rozhodčího" zavritKlikemVedle={false}>
+    <Modal isOpen onClose={onClose} title="Výměna rozhodčího" closeOnBackdrop={false}>
       <div className="p-5 space-y-4">
         <div className="text-lg font-heading">
           {match.homeTeamName} – {match.awayTeamName}

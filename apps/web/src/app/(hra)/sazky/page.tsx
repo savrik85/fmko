@@ -3,13 +3,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
-import { Spinner, Tabs, useTabParam } from "@/components/ui";
+import { Tabs, useTabParam, PageLoading } from "@/components/ui";
 import { KurzovyListek } from "./kurzy";
 import { TiketLista, TiketSheet } from "./tiket";
 import { MojeTikety } from "./tikety";
 import { Arena } from "./arena";
-import { czk, Prazdno, signed } from "./ui";
+import { Prazdno } from "./ui";
 import type { ArenaOdpoved, Board, TiketyOdpoved, VybranyTip } from "./types";
+import { formatKc, formatSigned } from "@/lib/format";
 
 const TAB_KEYS = ["kurzy", "tikety", "arena"] as const;
 
@@ -93,7 +94,7 @@ export default function SazkyPage() {
 
   if (nacitam) {
     return (
-      <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>
+      <PageLoading />
     );
   }
 
@@ -135,13 +136,13 @@ export default function SazkyPage() {
                 </span>
                 <span className="text-sm tabular-nums">
                   <span className="text-muted">vsazeno</span>{" "}
-                  <b className="font-heading">{czk(bilance.staked + bilance.levy)}</b>
+                  <b className="font-heading">{formatKc(bilance.staked + bilance.levy)}</b>
                   <span className="text-gray-300"> · </span>
                   <span className="text-muted">vyhráno</span>{" "}
-                  <b className="font-heading">{czk(bilance.won)}</b>
+                  <b className="font-heading">{formatKc(bilance.won)}</b>
                   <span className="text-gray-300"> · </span>
                   <b className={`font-heading ${bilance.net >= 0 ? "text-pitch-600" : "text-card-red"}`}>
-                    {signed(bilance.net)}
+                    {formatSigned(bilance.net)}
                   </b>
                 </span>
               </div>

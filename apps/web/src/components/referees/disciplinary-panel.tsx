@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
-import { Spinner, SectionLabel, EntityLink } from "@/components/ui";
+import { EntityLink, ListCard, ListRow, RowValue, StatusChip, SectionLoading } from "@/components/ui";
+import { formatKc } from "@/lib/format";
 
 interface Fine {
   id: string;
@@ -38,37 +39,26 @@ function denPokuty(gameDate: string): string {
   return d.toLocaleDateString("cs", { day: "numeric", month: "numeric", year: "numeric" });
 }
 
-function ListinaPokut({ fines }: { fines: Fine[] }) {
+/** Řádky pokut do karty se seznamem. Odůvodnění je celá věta, proto pod název a nikdy useknuté. */
+function FineRows({ fines }: { fines: Fine[] }) {
   return (
-    <div className="space-y-2">
+    <>
       {fines.map((f) => (
-        <div
-          key={f.id}
-          className="card p-3 border-l-4"
-          /* Barevný pruh podle původu — komise červeně, svazová administrativa
-             šedě. Na první pohled je vidět, co je trest za výroky a co papíry. */
-          style={{ borderLeftColor: f.kind === "rozhovor" ? "#D94032" : "#B5AFA5" }}
-        >
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <EntityLink type="team" id={f.teamId} className="font-heading font-bold text-base">
-                {f.teamName}
-              </EntityLink>
-              <div className="text-sm text-muted flex items-center gap-2 flex-wrap">
-                <span className={`badge ${f.kind === "rozhovor" ? "badge-danger" : ""}`}>
-                  {f.kind === "rozhovor" ? "komise" : "svaz"}
-                </span>
-                {denPokuty(f.gameDate)}
-              </div>
-            </div>
-            <div className="font-heading font-bold text-base tabular-nums text-card-red shrink-0">
-              −{f.amount.toLocaleString("cs")} Kč
-            </div>
-          </div>
-          <p className="text-sm mt-2">{f.reason}</p>
-        </div>
+        <ListRow key={f.id}
+          /* Pruh podle původu: komise červeně, svazová administrativa bez pruhu
+             (dřív šedý). Na první pohled je vidět, co je trest za výroky a co papíry. */
+          tone={f.kind === "rozhovor" ? "danger" : undefined}
+          title={<EntityLink type="team" id={f.teamId}>{f.teamName}</EntityLink>}
+          meta={<>
+            <StatusChip tone={f.kind === "rozhovor" ? "danger" : "neutral"}>
+              {f.kind === "rozhovor" ? "komise" : "svaz"}
+            </StatusChip>{" "}
+            {denPokuty(f.gameDate)}
+          </>}
+          detail={f.reason}
+          trailing={<RowValue tone="minus">−{formatKc(f.amount)}</RowValue>} />
       ))}
-    </div>
+    </>
   );
 }
 
@@ -87,7 +77,7 @@ export function DisciplinaryPanel({ teamId }: { teamId: string | null }) {
       .finally(() => setLoading(false));
   }, [teamId]);
 
-  if (loading) return <div className="flex items-center justify-center py-12"><Spinner size="lg" /></div>;
+  if (loading) return <SectionLoading />;
 
   // Kolik zaplatil který klub — trestní rejstřík okresu je zajímavější než samotný seznam.
   const podleTymu = Object.values(
@@ -126,7 +116,7 @@ export function DisciplinaryPanel({ teamId }: { teamId: string | null }) {
         <div>
           <div className="text-sm text-muted">Uloženo celkem</div>
           <div className="font-heading font-bold text-lg tabular-nums">
-            {total.toLocaleString("cs")} Kč
+            {formatKc(total)}
           </div>
         </div>
         <div className="text-right">
@@ -135,66 +125,31 @@ export function DisciplinaryPanel({ teamId }: { teamId: string | null }) {
         </div>
       </div>
 
-      <SectionLabel>Černá listina okresu</SectionLabel>
-      <div className="space-y-2 mb-4">
-        {podleTymu.slice(0, 3).map((t, i) => (
-          <div
-            key={t.teamId}
-            className="card p-3 flex items-center gap-3 border-l-4"
-            style={{ borderLeftColor: MEDAILE[i].barva }}
-          >
-            <span className="text-xl shrink-0">{MEDAILE[i].emoji}</span>
-            <div className="min-w-0 flex-1">
-              <EntityLink type="team" id={t.teamId} className="font-heading font-bold text-base">
-                {t.teamName}
-              </EntityLink>
-              <div className="text-sm text-muted">{t.count}× {pocetPokut(t.count)}</div>
-            </div>
-            <div className="font-heading font-bold text-lg tabular-nums text-card-red shrink-0">
-              −{t.sum.toLocaleString("cs")} Kč
-            </div>
-          </div>
+      <ListCard title="Černá listina okresu" className="mb-6">
+        {podleTymu.map((t, i) => (
+          <ListRow key={t.teamId} href={`/tym/${t.teamId}`} chevron={false}
+            leading={i < 3
+              ? <span className="text-xl" aria-hidden="true">{MEDAILE[i].emoji}</span>
+              : <span className="text-body font-bold text-muted tabular-nums">{i + 1}</span>}
+            title={t.teamName}
+            meta={`${t.count}× ${pocetPokut(t.count)}`}
+            trailing={<RowValue tone="minus">−{formatKc(t.sum)}</RowValue>} />
         ))}
-      </div>
-
-      {podleTymu.length > 3 && (
-        <div className="space-y-2 mb-6">
-          {podleTymu.slice(3).map((t, i) => (
-            <div key={t.teamId} className="card p-3 flex items-center gap-3">
-              <span className="font-heading font-bold text-base text-muted w-6 text-right tabular-nums shrink-0">
-                {i + 4}
-              </span>
-              <div className="min-w-0 flex-1">
-                <EntityLink type="team" id={t.teamId} className="font-heading font-bold text-base">
-                  {t.teamName}
-                </EntityLink>
-                <div className="text-sm text-muted">{t.count}× {pocetPokut(t.count)}</div>
-              </div>
-              <div className="font-heading font-bold text-base tabular-nums text-card-red shrink-0">
-                −{t.sum.toLocaleString("cs")} Kč
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+      </ListCard>
 
       {zaVyroky.length > 0 && (
-        <>
-          <SectionLabel>Za výroky o rozhodčím</SectionLabel>
-          <div className="mb-6">
-            <ListinaPokut fines={zaVyroky} />
-          </div>
-        </>
+        <ListCard title="Za výroky o rozhodčím" className="mb-6">
+          <FineRows fines={zaVyroky} />
+        </ListCard>
       )}
 
       {odSvazu.length > 0 && (
-        <>
-          <SectionLabel>Administrativa, pokuty od svazu</SectionLabel>
-          <p className="text-sm text-muted mb-2">
+        <ListCard title="Administrativa, pokuty od svazu">
+          <p className="px-4 pt-3 text-meta text-muted">
             Pozdní soupiska, neuklizené kabiny, nedodaný zápis. S rozhodčími nemají nic společného.
           </p>
-          <ListinaPokut fines={odSvazu} />
-        </>
+          <FineRows fines={odSvazu} />
+        </ListCard>
       )}
     </>
   );

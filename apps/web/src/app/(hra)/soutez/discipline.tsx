@@ -10,7 +10,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { apiAction, apiFetch } from "@/lib/api";
 import { CoachName } from "@/components/manager/coach-name";
-import { EntityLink, Modal } from "@/components/ui";
+import { EntityLink, Modal, ListRow, RowValue } from "@/components/ui";
 import { Empty, OpenProposalNote, Ornament, PersonLine, Portrait, Rozbaleni, StatusPill, czk, plural } from "./ui";
 import type { DisciplineData, PitchData, PitchRow, Sanction, State } from "./types";
 
@@ -76,7 +76,7 @@ export function DisciplinePanel({ data, state, teamId, isChair, myOpen, onChange
       {mine.length > 0 && (
         <div className="card p-5">
           <Ornament>Tresty tvého klubu</Ornament>
-          <div className="space-y-3">
+          <div className="-mx-5 -mb-5 border-t border-line">
             {mine.map((s) => (
               <SanctionRow key={s.id} s={s} teamId={teamId} onChanged={onChanged} canAppeal />
             ))}
@@ -94,7 +94,7 @@ export function DisciplinePanel({ data, state, teamId, isChair, myOpen, onChange
           : "Všechny pokuty sezóny i s odůvodněním."}
       >
         {data.sanctions.length > 0 && (
-          <div className="space-y-3">
+          <div className="-mx-4 sm:-mx-5 -mb-4 sm:-mb-5 mt-3 border-t border-line">
             {data.sanctions.map((s) => (
               <SanctionRow key={s.id} s={s} teamId={teamId} onChanged={onChanged} />
             ))}
@@ -130,30 +130,25 @@ function SanctionRow({ s, teamId, onChanged, canAppeal }: {
   };
 
   return (
-    <div className="rounded-lg p-3" style={{ background: "var(--color-paper)" }}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="text-base font-semibold break-words">
-            {s.managerName ? <CoachName name={s.managerName} isAi={s.coachIsAi === true} /> : s.teamName} · {czk(s.amount)}
-          </div>
-          <div className="text-sm text-muted break-words">{s.reason}</div>
-        </div>
-        <StatusPill status={s.status} />
-      </div>
-      {s.evidence && <div className="text-sm mt-1 break-words">Doloženo: {s.evidence}</div>}
-      <div className="text-sm text-muted mt-1">
-        {s.issuedBy === "chair"
-          ? "Uložil předseda disciplinární rady"
-          : s.issuedBy === "rule"
-            ? "Uloženo automaticky ze zápisu o utkání"
-            : "Rozhodlo zasedání grémia"}
-      </div>
-      {canAppeal && s.status === "issued" && (
-        <button className="btn btn-md btn-secondary w-full mt-2" disabled={busy} onClick={appeal}>
-          Odvolat se
-        </button>
-      )}
-    </div>
+    <ListRow
+      title={<>{s.managerName ? <CoachName name={s.managerName} isAi={s.coachIsAi === true} /> : s.teamName} · {czk(s.amount)}</>}
+      trailing={<StatusPill status={s.status} />}
+      detail={<>
+        <span className="block">{s.reason}</span>
+        {s.evidence && <span className="block mt-1">Doloženo: {s.evidence}</span>}
+        <span className="block text-muted mt-1">
+          {s.issuedBy === "chair"
+            ? "Uložil předseda disciplinární rady"
+            : s.issuedBy === "rule"
+              ? "Uloženo automaticky ze zápisu o utkání"
+              : "Rozhodlo zasedání grémia"}
+        </span>
+        {canAppeal && s.status === "issued" && (
+          <button className="btn btn-md btn-secondary w-full mt-2" disabled={busy} onClick={appeal}>
+            Odvolat se
+          </button>
+        )}
+      </>} />
   );
 }
 
@@ -229,7 +224,7 @@ function FineForm({ data, teamId, isChair, onClose, onSaved }: {
   };
 
   return (
-    <Modal isOpen onClose={onClose} title="Návrh na pokutu" zavritKlikemVedle={false}>
+    <Modal isOpen onClose={onClose} title="Návrh na pokutu" closeOnBackdrop={false}>
       <div className="p-5 space-y-4">
         <div className="text-lg font-heading">Návrh na pokutu</div>
 
@@ -336,7 +331,7 @@ function PitchOverview({ pitches }: { pitches: PitchData }) {
 
   return (
     <Rozbaleni title="Stav hřišť" right={`${teams.length} ${plural(teams.length, "klub", "kluby", "klubů")}`} note={note}>
-      <div className="divide-y" style={{ borderColor: "var(--color-line)" }}>
+      <div className="-mx-4 sm:-mx-5 mt-3 border-t border-line">
         {teams.map((t) => <PitchLine key={t.teamId} t={t} limit={limit} />)}
       </div>
       {/* Pomlčka místo čísla vypadá jako chyba dat, a přitom je to nepostavené
@@ -363,21 +358,14 @@ function pitchColor(pitch: number | null, limit: number): string {
 function PitchLine({ t, limit }: { t: PitchRow; limit: number }) {
   const barva = pitchColor(t.pitch, limit);
   return (
-    <div className="flex items-center gap-3 py-2.5">
-      <div className="min-w-0 flex-1">
-        <div className="text-base font-semibold break-words">
-          <EntityLink type="team" id={t.teamId}>{t.teamName}</EntityLink>
-          {t.breaches && <span className="text-sm" style={{ color: "#A32B1F" }}> · pod hranicí</span>}
-        </div>
-        {/* Pruh nese stav rychleji než číslo — na mobilu se čte jedním pohledem. */}
-        <div className="h-1.5 rounded-full mt-1.5 overflow-hidden" style={{ background: "var(--color-line)" }}>
-          <div className="h-full rounded-full"
-            style={{ width: `${Math.max(0, Math.min(100, t.pitch ?? 0))}%`, background: barva }} />
-        </div>
-      </div>
-      <div className="text-lg font-heading tabular-nums shrink-0" style={{ color: barva }}>
-        {t.pitch ?? "-"}
-      </div>
-    </div>
+    <ListRow tone={t.breaches ? "danger" : undefined}
+      title={<><EntityLink type="team" id={t.teamId}>{t.teamName}</EntityLink>{t.breaches && <span className="text-meta font-normal" style={{ color: "#A32B1F" }}> · pod hranicí</span>}</>}
+      // Pruh nese stav rychleji než číslo, na mobilu se čte jedním pohledem.
+      detail={
+        <span className="block h-1.5 rounded-full mt-1 overflow-hidden" style={{ background: "var(--color-line)" }}>
+          <span className="block h-full rounded-full" style={{ width: `${Math.max(0, Math.min(100, t.pitch ?? 0))}%`, background: barva }} />
+        </span>
+      }
+      trailing={<RowValue><span style={{ color: barva }}>{t.pitch ?? "-"}</span></RowValue>} />
   );
 }

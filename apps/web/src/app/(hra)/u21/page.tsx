@@ -1,11 +1,12 @@
 "use client";
 
+import { FixtureGroup, FixtureRow, type FixtureSide } from "@/components/match/fixture-row";
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { LeagueStatsTab, type StatsData } from "@/components/league/league-stats";
 import { apiFetch } from "@/lib/api";
-import { Spinner, PositionBadge, BadgePreview, useConfirm, Tabs, useTabParam } from "@/components/ui";
+import { PositionBadge, BadgePreview, useConfirm, Tabs, useTabParam, DataTable, EntityCell, ListCard, ListRow, ListEmpty, RowValue, RatingPill, ratingToneIn, type DataColumn, SectionLoading, ErrorBox, ChoiceGroup } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { U21Rozvoj } from "@/components/players/u21-rozvoj";
 import { YouthSectionNav } from "@/components/players/youth-section-nav";
@@ -103,7 +104,7 @@ function ini(name: string): string {
 
 export default function U21Page() {
   const { teamId, gameDate: ctxGameDate } = useTeam();
-  const { confirm, dialog: confirmDialog } = useConfirm();
+  const { confirm, dialog: confirmDialog } = useConfirm({ sheet: true });
   const [tab, setTab] = useTabParam(TAB_KEYS);
 
   // Akademie byla záložkou U21 (?tab=akademie), teď má vlastní stránku v menu Mládež
@@ -251,7 +252,7 @@ export default function U21Page() {
   if (loading) {
     return (
       <div className="p-3 sm:p-4 md:p-6 space-y-3">
-        <div className="flex items-center justify-center py-12"><Spinner /></div>
+        <SectionLoading />
       </div>
     );
   }
@@ -310,21 +311,16 @@ export default function U21Page() {
       )}
 
       {error && (
-        <div className="card border-l-4 border-card-red bg-red-50 p-3 text-sm text-red-800">
-          {error}
-        </div>
+        <ErrorBox message={error} />
       )}
 
-      {tab === "kadr" && !squadLoaded && !error && <div className="flex justify-center p-8"><Spinner /></div>}
+      {tab === "kadr" && !squadLoaded && !error && <SectionLoading />}
       {tab === "kadr" && squadLoaded && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
           {/* A-tým — mladí hráči k odeslání */}
-          <section className="card min-w-0 p-3 md:p-4">
-            <h2 className="font-heading font-bold text-base mb-3">
-              A-tým: mladí hráči ({young.length})
-            </h2>
+          <ListCard title="A-tým: mladí hráči" count={young.length} className="min-w-0">
             {young.length === 0 ? (
-              <p className="text-sm text-gray-500">Žádný hráč do 21 let v A-týmu.</p>
+              <ListEmpty icon="🧒">Žádný hráč do 21 let v A-týmu.</ListEmpty>
             ) : (
               <PlayerList
                 players={young.map((p) => ({
@@ -355,15 +351,12 @@ export default function U21Page() {
                 )}
               />
             )}
-          </section>
+          </ListCard>
 
           {/* U21 kádr — povýšení */}
-          <section className="card min-w-0 p-3 md:p-4">
-            <h2 className="font-heading font-bold text-base mb-3">
-              U21 kádr ({u21Players.length})
-            </h2>
+          <ListCard title="U21 kádr" count={u21Players.length} className="min-w-0">
             {u21Players.length === 0 ? (
-              <p className="text-sm text-gray-500">Kádr je prázdný.</p>
+              <ListEmpty icon="🧒">Kádr U21 je prázdný. Mladé hráče sem pošleš ze seznamu áčka.</ListEmpty>
             ) : (
               <PlayerList
                 players={u21Players.map((p) => ({
@@ -390,7 +383,7 @@ export default function U21Page() {
                 )}
               />
             )}
-          </section>
+          </ListCard>
         </div>
       )}
 
@@ -402,13 +395,13 @@ export default function U21Page() {
 
       {tab === "rozpis" && !scheduleError && (
         <div className="space-y-3">
-          <div className="flex gap-1 rounded-lg bg-surface p-1" role="group" aria-label="Zobrazené zápasy">
-            {[true, false].map((own) => <button key={String(own)} aria-pressed={onlyOurMatches === own} onClick={() => setOnlyOurMatches(own)} className={`min-h-11 flex-1 rounded-lg text-sm font-semibold ${onlyOurMatches === own ? "bg-pitch-500 text-white" : "text-muted"}`}>{own ? "Naše U21" : "Celá liga"}</button>)}
-          </div>
+          <ChoiceGroup ariaLabel="Zobrazené zápasy" columns={2} value={onlyOurMatches ? "own" : "all"}
+            onChange={(v) => setOnlyOurMatches(v === "own")}
+            options={[{ value: "own", label: "Naše U21" }, { value: "all", label: "Celá liga" }]} />
           {!onlyOurMatches && sortedRounds.length > 0 && (
             <div className="flex items-center gap-2">
               <button aria-label="Předchozí kolo" disabled={roundIndex <= 0} onClick={() => setSelectedRound(sortedRounds[roundIndex - 1].round)} className="min-h-11 min-w-11 rounded-lg bg-surface disabled:opacity-30">←</button>
-              <select aria-label="Kolo soutěže" value={activeRound} onChange={(e) => setSelectedRound(Number(e.target.value))} className="min-h-11 min-w-0 flex-1 rounded-lg border border-gray-200 bg-surface px-3 text-sm">
+              <select aria-label="Kolo soutěže" value={activeRound} onChange={(e) => setSelectedRound(Number(e.target.value))} className="select min-h-11 min-w-0 flex-1 !text-sm">
                 {sortedRounds.map((r) => <option key={r.round} value={r.round}>{r.round}. kolo · {formatDate(r.scheduledAt)}</option>)}
               </select>
               <button aria-label="Další kolo" disabled={roundIndex >= sortedRounds.length - 1} onClick={() => setSelectedRound(sortedRounds[roundIndex + 1].round)} className="min-h-11 min-w-11 rounded-lg bg-surface disabled:opacity-30">→</button>
@@ -421,30 +414,26 @@ export default function U21Page() {
               const matches = r.matches.filter((m) => !onlyOurMatches || m.homeTeamId === u21TeamId || m.awayTeamId === u21TeamId);
               if (!matches.length) return null;
               return (
-                <section key={r.round} className="card overflow-hidden">
-                  <div className="flex items-center justify-between bg-surface-2 px-3 py-2 text-xs">
-                    <h2 className="font-bold">{r.round}. kolo</h2><span className="text-muted">{formatDate(r.scheduledAt)}</span>
-                  </div>
-                  <ul className="divide-y divide-gray-200">
-                    {matches.map((m) => (
-                      <li key={m.id} className={`p-3 ${m.homeTeamId === u21TeamId || m.awayTeamId === u21TeamId ? "border-l-2 border-pitch-500" : ""}`}>
-                        <div className="space-y-2">
-                          {(["home", "away"] as const).map((side) => {
-                            const id = side === "home" ? m.homeTeamId : m.awayTeamId;
-                            const name = side === "home" ? m.homeName : m.awayName;
-                            const score = side === "home" ? m.homeScore : m.awayScore;
-                            return <div key={side} className="flex items-center gap-2 text-sm">
-                              <span className="shrink-0"><BadgePreview primary={(side === "home" ? m.homeColor : m.awayColor) || "#2D5F2D"} secondary={(side === "home" ? m.homeSecondary : m.awaySecondary) || "#FFFFFF"} pattern={((side === "home" ? m.homeBadge : m.awayBadge) as BadgePattern) || "shield"} initials={ini(name)} size={20} /></span>
-                              <span className={`min-w-0 flex-1 break-words ${id === u21TeamId ? "font-bold text-pitch-600" : "text-ink"}`}>{id ? <Link href={`/tym/${id}`} className="hover:underline">{name}</Link> : name}</span>
-                              <span className="w-6 shrink-0 text-center font-bold tabular-nums">{m.status === "simulated" ? score ?? "-" : "-"}</span>
-                            </div>;
-                          })}
-                        </div>
-                        <div className="mt-2 text-[11px] text-muted">{m.status === "simulated" ? <Link href={`/zapas/${m.id}`} className="font-semibold text-pitch-600 hover:underline">Odehráno, detail zápasu</Link> : r.scheduledAt ? new Date(r.scheduledAt).toLocaleTimeString("cs", { hour: "2-digit", minute: "2-digit" }) : "Termín bude upřesněn"} · domácí nahoře</div>
-                      </li>
-                    ))}
-                  </ul>
-                </section>
+                <FixtureGroup key={r.round} title={`${r.round}. kolo`} note={formatDate(r.scheduledAt)}>
+                  {matches.map((m) => {
+                    const isPlayed = m.status === "simulated" && m.homeScore != null && m.awayScore != null;
+                    const side = (id: string | null | undefined, name: string, color: string | null | undefined, secondary: string | null | undefined, badge: string | null | undefined, isAi?: boolean): FixtureSide => ({
+                      name: name.replace(/ U21$/, ""), href: id ? `/tym/${id}` : null, color: color || "#2D5F2D", isAi: isAi === true,
+                      crest: { pattern: badge ?? null, primary: color || "#2D5F2D", secondary: secondary || "#FFFFFF", initials: null, symbol: null },
+                    });
+                    return (
+                      <FixtureRow key={m.id}
+                        home={side(m.homeTeamId, m.homeName, m.homeColor, m.homeSecondary, m.homeBadge, m.homeIsAi)}
+                        away={side(m.awayTeamId, m.awayName, m.awayColor, m.awaySecondary, m.awayBadge, m.awayIsAi)}
+                        score={isPlayed ? { home: m.homeScore!, away: m.awayScore! } : null}
+                        // Neodehraný zápas ukáže v tabuli čas výkopu, jako dřív pod zápasem.
+                        kickoff={r.scheduledAt ? new Date(r.scheduledAt).toLocaleTimeString("cs", { hour: "2-digit", minute: "2-digit" }) : "?"}
+                        winner={isPlayed ? (m.homeScore! > m.awayScore! ? "home" : m.awayScore! > m.homeScore! ? "away" : null) : null}
+                        href={isPlayed ? `/zapas/${m.id}` : null}
+                        accent={m.homeTeamId === u21TeamId || m.awayTeamId === u21TeamId ? "var(--color-pitch-500)" : null} />
+                    );
+                  })}
+                </FixtureGroup>
               );
             })}
           </div>
@@ -545,107 +534,33 @@ function NextMatchBanner({ data, gameDate }: { data: { round: LeagueRound; m: Le
   );
 }
 
-type StandingSortKey = "pos" | "team" | "played" | "wins" | "draws" | "losses" | "gd" | "points";
 
 function StandingsTable({ standings, ownTeamId }: { standings: Standing[]; ownTeamId: string }) {
-  const [sortKey, setSortKey] = useState<StandingSortKey>("pos");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
-
-  const toggle = (key: StandingSortKey) => {
-    if (key === sortKey) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    else {
-      setSortKey(key);
-      setSortDir(key === "pos" || key === "team" ? "asc" : "desc");
-    }
-  };
-
-  const sorted = [...standings].sort((a, b) => {
-    let cmp = 0;
-    switch (sortKey) {
-      case "pos": cmp = a.pos - b.pos; break;
-      case "team": cmp = a.team.localeCompare(b.team, "cs"); break;
-      case "played": cmp = a.played - b.played; break;
-      case "wins": cmp = a.wins - b.wins; break;
-      case "draws": cmp = a.draws - b.draws; break;
-      case "losses": cmp = a.losses - b.losses; break;
-      case "gd": cmp = (a.gf - a.ga) - (b.gf - b.ga); break;
-      case "points": cmp = a.points - b.points; break;
-    }
-    return sortDir === "asc" ? cmp : -cmp;
-  });
-
-  const arrow = (key: StandingSortKey) => sortKey === key ? (sortDir === "asc" ? " ↑" : " ↓") : "";
-
-  const Th = ({ k, label, align = "center", bold = false, desktop = false }: { k: StandingSortKey; label: string; align?: "left" | "center"; bold?: boolean; desktop?: boolean }) => (
-    <th
-      aria-sort={sortKey === k ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
-      className={`${desktop ? "hidden sm:table-cell" : ""} px-1 sm:px-3 py-1 hover:text-gray-700 select-none ${align === "left" ? "text-left" : "text-center"} ${bold ? "font-bold" : ""}`}
-    >
-      <button onClick={() => toggle(k)} className="min-h-11 whitespace-nowrap" aria-label={`Řadit: ${label}`}>{label}{arrow(k)}</button>
-    </th>
-  );
-
+  const columns: DataColumn<Standing>[] = [
+    { key: "pos", header: "#", width: "w-10", align: "center", sortValue: (r) => r.pos, firstDir: "asc",
+      cell: (r) => <span className={`font-bold ${r.pos === 1 ? "text-gold-700" : "text-muted"}`}>{r.pos}</span> },
+    { key: "team", header: "Klub", align: "left", sortValue: (r) => r.team,
+      cell: (r) => (
+        <EntityCell
+          leading={<BadgePreview primary={r.primaryColor || "#2D5F2D"} secondary={r.secondaryColor || "#FFFFFF"}
+            pattern={(r.badgePattern as BadgePattern) || "shield"} initials={ini(r.team)} size={24} />}
+          name={r.team.replace(/ U21$/, "")} bold={r.teamId === ownTeamId}
+          meta={`${r.wins}-${r.draws}-${r.losses} · ${r.gf}:${r.ga}`} metaMobileOnly />
+      ) },
+    { key: "played", header: "Z", title: "Zápasy", width: "w-10", sortValue: (r) => r.played, cell: (r) => r.played },
+    { key: "wins", header: "V", title: "Výhry", width: "w-10", priority: 2, sortValue: (r) => r.wins, cell: (r) => r.wins },
+    { key: "draws", header: "R", title: "Remízy", width: "w-10", priority: 2, sortValue: (r) => r.draws, cell: (r) => r.draws },
+    { key: "losses", header: "P", title: "Prohry", width: "w-10", priority: 2, sortValue: (r) => r.losses, cell: (r) => r.losses },
+    { key: "gd", header: "Skóre", width: "w-16", priority: 2, sortValue: (r) => r.gf - r.ga, cell: (r) => `${r.gf}:${r.ga}` },
+    { key: "points", header: "Body", width: "w-14", emphasis: true, sortValue: (r) => r.points, cell: (r) => r.points },
+  ];
   return (
-    <div className="card overflow-hidden">
-      <table className="w-full text-sm">
-        <caption className="sr-only">Tabulka ligy U21. Z: zápasy, V: výhry, R: remízy, P: prohry, B: body.</caption>
-        <thead>
-          <tr className="border-b border-gray-200 text-left text-xs text-gray-500 uppercase">
-            <Th k="pos" label="#" />
-            <Th k="team" label="Tým" align="left" />
-            <Th k="played" label="Z" />
-            <Th k="wins" label="V" desktop />
-            <Th k="draws" label="R" desktop />
-            <Th k="losses" label="P" desktop />
-            <Th k="gd" label="Skóre" />
-            <Th k="points" label="B" bold />
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.map((s) => (
-            <tr
-              key={s.pos}
-              className={`border-b border-gray-100 ${s.teamId === ownTeamId ? "bg-pitch-50 font-semibold" : ""}`}
-            >
-              <td className="px-1 sm:px-3 py-2 text-center">{s.pos}</td>
-              <td className="px-1 sm:px-3 py-2 w-full">
-                <div className="flex items-center gap-1.5">
-                  <BadgePreview
-                    primary={s.primaryColor || "#2D5F2D"}
-                    secondary={s.secondaryColor || "#FFFFFF"}
-                    pattern={(s.badgePattern as BadgePattern) || "shield"}
-                    initials={ini(s.team)}
-                    size={22}
-                  />
-                  {/* AI klub je odkaz jako každý jiný klub, rozdíl je jen štítek u trenéra. */}
-                  {s.teamId ? (
-                    <Link href={`/tym/${s.teamId}`} className="break-words hover:text-pitch-600 transition-colors">
-                      {s.team.replace(/ U21$/, "")}
-                    </Link>
-                  ) : (
-                    <span>{s.team.replace(/ U21$/, "")}</span>
-                  )}
-                </div>
-                <div className="mt-1 pl-7 text-[10px] font-normal text-muted sm:hidden">{s.wins} V · {s.draws} R · {s.losses} P</div>
-              </td>
-              <td className="px-1 sm:px-3 py-2 text-center tabular-nums">{s.played}</td>
-              <td className="hidden sm:table-cell px-3 py-2 text-center tabular-nums">{s.wins}</td>
-              <td className="hidden sm:table-cell px-3 py-2 text-center tabular-nums">{s.draws}</td>
-              <td className="hidden sm:table-cell px-3 py-2 text-center tabular-nums">{s.losses}</td>
-              <td className="px-1 sm:px-3 py-2 text-center whitespace-nowrap tabular-nums">{s.gf}:{s.ga}</td>
-              <td className="px-1 sm:px-3 py-2 text-center tabular-nums font-bold">{s.points}</td>
-            </tr>
-          ))}
-          {sorted.length === 0 && (
-            <tr>
-              <td colSpan={8} className="text-center text-gray-500 py-6">
-                Žádné odehrané zápasy
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-    </div>
+    <ListCard>
+      <DataTable columns={columns} rows={standings} rowKey={(r) => String(r.pos)}
+        rowHref={(r) => (r.teamId ? `/tym/${r.teamId}` : undefined)}
+        rowTone={(r) => ({ own: r.teamId === ownTeamId })}
+        empty="Tabulka U21 se naplní po prvním odehraném kole." emptyIcon="🏆" />
+    </ListCard>
   );
 }
 
@@ -677,6 +592,7 @@ function PlayerList({
 }) {
   const [sortKey, setSortKey] = useState<SortKey>("ovr");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [openId, setOpenId] = useState<string | null>(null);
 
   const toggle = (key: SortKey) => {
     if (key === sortKey) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -706,46 +622,48 @@ function PlayerList({
     return sortDir === "asc" ? cmp : -cmp;
   });
 
+  const ratings = players.map((p) => p.overallRating);
+
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
+    <>
+      <div className="flex items-center gap-2 px-4 py-2 border-b border-line-soft">
         <label className="min-w-0 flex-1 text-xs text-muted"><span className="sr-only">Řadit podle</span>
-          <select className="w-full min-h-11 rounded-lg border border-gray-200 bg-surface px-2 text-sm text-ink" value={sortKey} onChange={(e) => { const key = e.target.value as SortKey; setSortKey(key); setSortDir(key === "name" || key === "age" || key === "pos" ? "asc" : "desc"); }}>
+          <select className="select w-full min-h-11 !text-sm" value={sortKey} onChange={(e) => { const key = e.target.value as SortKey; setSortKey(key); setSortDir(key === "name" || key === "age" || key === "pos" ? "asc" : "desc"); }}>
             {([["ovr", "Celkové hodnocení"], ["growth", "Tréninkový růst"], ["age", "Věk"], ["name", "Jméno"], ["pos", "Pozice"], ["apps", "Zápasy"], ["g", "Góly"], ["a", "Asistence"], ["rat", "Zápasová známka"]] as const).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select>
         </label>
         <button className="min-h-11 rounded-lg border border-gray-200 px-3 text-sm" onClick={() => toggle(sortKey)} aria-label="Obrátit směr řazení">{sortDir === "asc" ? "↑" : "↓"}</button>
       </div>
-      <div className="divide-y divide-gray-200">
-        {sorted.map((p) => {
-          const stat = statsMap.get(p.id);
-          const growth = growthMap.get(p.id) ?? 0;
-          return (
-            <details key={p.id} className="group">
-              <summary className="flex min-h-16 cursor-pointer list-none items-center gap-2 py-2 [&::-webkit-details-marker]:hidden">
-                <div className="flex h-10 w-9 shrink-0 items-center justify-center overflow-hidden rounded bg-pitch-50">
-                  {p.avatar ? <FaceAvatar faceConfig={p.avatar} size={30} /> : <span className="text-xs font-bold text-pitch-600">{p.firstName[0]}{p.lastName[0]}</span>}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-semibold text-ink">{p.firstName} {p.lastName}</span>
-                  <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted">
-                    <PositionBadge position={p.position} />
-                    <span>{p.age} let</span>
-                    {p.nextMatchReturn && <span className="text-amber-700">↩ do áčka</span>}
-                    {p.age >= 22 && <span className="text-amber-700">nad 21 let</span>}
+      {sorted.map((p) => {
+        const stat = statsMap.get(p.id);
+        const growth = growthMap.get(p.id) ?? 0;
+        const open = openId === p.id;
+        return (
+          <div key={p.id} className="border-b border-line-soft last:border-b-0">
+            {/* Řádek rozbalí panel se statistikami a akcemi; tlačítka a odkaz jsou
+                mimo řádek, protože tlačítko v tlačítku nejde. */}
+            <ListRow onClick={() => setOpenId(open ? null : p.id)} chevron={false}
+              leading={p.avatar ? <FaceAvatar faceConfig={p.avatar} size={36} /> : <span className="w-9 h-9 rounded-full bg-pitch-50 flex items-center justify-center text-meta font-bold text-pitch-600">{p.firstName[0]}{p.lastName[0]}</span>}
+              title={`${p.firstName} ${p.lastName}`}
+              meta={
+                <span className="inline-flex items-center gap-1.5">
+                  <PositionBadge position={p.position} />
+                  <span>{p.age} let</span>
+                  {p.nextMatchReturn && <span className="text-amber-700">↩ do áčka</span>}
+                  {p.age >= 22 && <span className="text-amber-700">nad 21 let</span>}
+                </span>
+              }
+              trailing={
+                <>
+                  <span title="Celkové hodnocení hráče"><RatingPill value={p.overallRating} tone={ratingToneIn(p.overallRating, ratings)} /></span>
+                  <span className="w-9 text-center" title="Body dovedností za 30 dní">
+                    <RowValue tone={growth > 0 ? "plus" : undefined} sub="Růst">{growth > 0 ? `+${growth}` : "-"}</RowValue>
                   </span>
-                </div>
-                <span className="w-14 shrink-0 text-center tabular-nums" title="Celkové hodnocení hráče">
-                  <span className="block text-base font-bold text-ink">{p.overallRating}</span>
-                  <span className="block text-[10px] text-muted">Hodnocení</span>
-                </span>
-                <span className="w-10 shrink-0 text-center tabular-nums" title="Body dovedností za 30 dní">
-                  <span className={`block text-sm font-semibold ${growth > 0 ? "text-pitch-600" : "text-muted"}`}>{growth > 0 ? `+${growth}` : "-"}</span>
-                  <span className="block text-[10px] text-muted">Růst</span>
-                </span>
-                <span aria-hidden="true" className="text-muted transition-transform group-open:rotate-180">⌄</span>
-              </summary>
-              <div className="space-y-3 rounded-lg bg-surface-2 p-3 mb-2">
+                  <span aria-hidden="true" className={`text-muted transition-transform ${open ? "rotate-180" : ""}`}>⌄</span>
+                </>
+              } />
+            {open && (
+              <div className="space-y-3 mx-4 mb-3 rounded-lg bg-surface-2 p-3">
                 <Link href={`/hrac/${p.id}`} className="inline-flex min-h-11 items-center text-sm font-semibold text-pitch-600 hover:underline">Profil: {p.firstName} {p.lastName} →</Link>
                 <dl className="grid grid-cols-4 gap-1 text-center">
                   {[["Zápasy", stat?.appearances ?? 0], ["Góly", stat?.goals ?? 0], ["Asistence", stat?.assists ?? 0], ["Známka", stat?.avgRating?.toFixed(1) ?? "-"]].map(([label, value]) => (
@@ -759,10 +677,10 @@ function PlayerList({
                 {p.nextMatchReturn && <p className="text-xs text-amber-700">Po nejbližším zápase se vrátí do áčka.</p>}
                 {renderActions(p)}
               </div>
-            </details>
-          );
-        })}
-      </div>
-    </div>
+            )}
+          </div>
+        );
+      })}
+    </>
   );
 }

@@ -41,7 +41,7 @@ export function SheetDialog({
   };
 
   return (
-    <Sheet open={open} onClose={() => { if (!busy) onCancel(); }} title={title} maxWidth="440px" zavritKlikemVedle={false}>
+    <Sheet open={open} onClose={() => { if (!busy) onCancel(); }} title={title} maxWidth="440px" closeOnBackdrop={false}>
       <div className="px-5 pt-3 sm:pt-5 pb-2">
         <h3 className="font-heading font-bold text-lg text-ink">{title}</h3>
         {description && <div className="text-sm text-ink-light mt-1.5 whitespace-pre-line">{description}</div>}

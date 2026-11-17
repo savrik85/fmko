@@ -8,7 +8,7 @@
 
 import { useEffect, useState } from "react";
 import { apiFetch, type Player } from "@/lib/api";
-import { Spinner } from "@/components/ui";
+import { SectionLoading } from "@/components/ui";
 import { PositionFilter, SquadAttributeTable, type PosFilter, type PotentialMap } from "./squad-attribute-table";
 
 interface DevelopmentPlayer {
@@ -34,7 +34,7 @@ export function U21Attributes({ teamId }: { teamId: string }) {
   }, [teamId]);
 
   if (error) return <p role="alert" className="card p-4 text-sm">{error}</p>;
-  if (!players) return <div className="flex justify-center p-8"><Spinner /></div>;
+  if (!players) return <SectionLoading />;
   if (players.length === 0) return <p className="card p-4 text-sm text-muted">Kádr U21 je prázdný.</p>;
 
   const filtered = filter === "all" ? players : players.filter((p) => p.position === filter);

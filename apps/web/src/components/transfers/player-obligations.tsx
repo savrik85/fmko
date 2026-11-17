@@ -11,6 +11,7 @@ import Link from "next/link";
 import { apiFetch } from "@/lib/api";
 import { SectionLabel } from "@/components/ui";
 import { CPU_CLUB_ID } from "@okresni-masina/shared";
+import { formatKc } from "@/lib/format";
 
 interface Deal {
   otherTeamId: string; otherTeamName: string; totalAmount: number; remaining: number;
@@ -19,7 +20,6 @@ interface Deal {
 interface Clause { otherTeamId: string; otherTeamName: string; pct: number }
 interface PlayerObligations { paying: Deal | null; receiving: Deal | null; sellOnOwed: Clause | null; sellOnClaim: Clause | null }
 
-const kc = (v: number) => `${v.toLocaleString("cs-CZ")} Kč`;
 
 function Team({ id, name }: { id: string; name: string }) {
   if (id === CPU_CLUB_ID) return <span className="font-heading font-bold">{name}</span>;
@@ -47,17 +47,17 @@ export function PlayerObligationsCard({ teamId, playerId }: { teamId: string; pl
       <ul className="space-y-2 text-sm">
         {paying && (
           <li>
-            Splácíš ho klubu <Team id={paying.otherTeamId} name={paying.otherTeamName} />: cena {kc(paying.totalAmount)},
-            zbývá <span className="font-heading font-bold tabular-nums">{kc(paying.remaining)}</span>,
-            příští pondělí {kc(paying.nextPayment)} (splátka {paying.installmentsPaid + 1} z {paying.installmentsTotal}).
+            Splácíš ho klubu <Team id={paying.otherTeamId} name={paying.otherTeamName} />: cena {formatKc(paying.totalAmount)},
+            zbývá <span className="font-heading font-bold tabular-nums">{formatKc(paying.remaining)}</span>,
+            příští pondělí {formatKc(paying.nextPayment)} (splátka {paying.installmentsPaid + 1} z {paying.installmentsTotal}).
             <span className="block text-muted">Když ho prodáš, zbytek se doplatí hned z ceny prodeje.</span>
           </li>
         )}
         {receiving && (
           <li>
-            <Team id={receiving.otherTeamId} name={receiving.otherTeamName} /> ti za něj splácí: cena {kc(receiving.totalAmount)},
-            zbývá <span className="font-heading font-bold tabular-nums">{kc(receiving.remaining)}</span>,
-            příští pondělí {kc(receiving.nextPayment)} (splátka {receiving.installmentsPaid + 1} z {receiving.installmentsTotal}).
+            <Team id={receiving.otherTeamId} name={receiving.otherTeamName} /> ti za něj splácí: cena {formatKc(receiving.totalAmount)},
+            zbývá <span className="font-heading font-bold tabular-nums">{formatKc(receiving.remaining)}</span>,
+            příští pondělí {formatKc(receiving.nextPayment)} (splátka {receiving.installmentsPaid + 1} z {receiving.installmentsTotal}).
           </li>
         )}
         {sellOnOwed && (

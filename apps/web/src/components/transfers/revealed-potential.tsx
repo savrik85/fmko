@@ -6,6 +6,7 @@
  */
 
 import { scoutReach } from "@/lib/scout-reach";
+import { StatusChip } from "@/components/ui";
 
 export interface RevealedPotential {
   lo: number;
@@ -32,9 +33,8 @@ export function RevealPotentialToggle({ checked, onChange }: { checked: boolean;
 export function RevealedPotentialBadge({ age, potential }: { age: number | null; potential: RevealedPotential }) {
   const reach = scoutReach(age, potential.ratingHi, potential.lo, potential.hi);
   return (
-    <span title="Potenciál odkryl prodávající klub"
-      className="inline-block text-xs font-heading font-bold px-2 py-0.5 rounded-full bg-gold-50 text-gold-700 whitespace-nowrap">
+    <StatusChip tone="warn" title="Potenciál odkryl prodávající klub">
       Potenciál: {reach.sentence}
-    </span>
+    </StatusChip>
   );
 }

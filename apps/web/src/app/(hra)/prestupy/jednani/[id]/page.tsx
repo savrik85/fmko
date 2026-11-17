@@ -11,7 +11,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, apiAction } from "@/lib/api";
-import { Spinner, PositionBadge, SheetDialog, useConfirm } from "@/components/ui";
+import { PositionBadge, SheetDialog, useConfirm, PageLoading, ChoiceGroup } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { MoneyInput, formatAmount } from "@/components/ui/money-input";
 import { TransferTermsFields, TermsBreakdown, type TermsValue } from "@/components/transfers/transfer-terms";
@@ -19,6 +19,7 @@ import { WillingnessBadge, ratingText } from "@/components/scouting/WillingnessB
 import { TeamSide, type TeamSummary, type ManagerSummary } from "../../nabidka/[id]/components/TeamSide";
 import { OfferTimeline, type OfferEvent } from "../../nabidka/[id]/components/OfferTimeline";
 import { AI_NEGOTIATION_STATUS_LABELS, formatTermsSummary, type AiNegotiationStatus, type TransferTerms } from "@okresni-masina/shared";
+import { formatKc } from "@/lib/format";
 
 interface Detail {
   negotiation: {
@@ -108,7 +109,7 @@ export default function AiNegotiationPage() {
   }, [data?.negotiation.waiting, refresh]);
 
   if (loading && !data) {
-    return <div className="min-h-[40vh] flex items-center justify-center"><Spinner /></div>;
+    return <PageLoading />;
   }
   if (error || !data) {
     return (
@@ -271,7 +272,7 @@ export default function AiNegotiationPage() {
               <div className="text-sm text-muted font-heading uppercase tracking-wider">
                 {n.status === "agreed" ? "Klub souhlasí s tvou nabídkou" : `${n.clubName} chce`}
               </div>
-              <div className="font-heading font-[900] text-2xl tabular-nums mt-1">{n.terms.amount.toLocaleString("cs")} Kč</div>
+              <div className="font-heading font-[900] text-2xl tabular-nums mt-1">{formatKc(n.terms.amount)}</div>
             </div>
             <div className="max-w-sm mx-auto w-full"><TermsBreakdown terms={n.terms} /></div>
             {n.status === "agreed" && (
@@ -303,7 +304,7 @@ export default function AiNegotiationPage() {
               )}
             </div>
             <div className="text-center text-sm text-muted tabular-nums">
-              Podpisem zaplatíš hned {payNow.toLocaleString("cs")} Kč{n.terms.installments > 0 ? `, zbytek ve ${n.terms.installments} týdenních splátkách` : ""}.
+              Podpisem zaplatíš hned {formatKc(payNow)}{n.terms.installments > 0 ? `, zbytek ve ${n.terms.installments} týdenních splátkách` : ""}.
             </div>
           </>
         )}
@@ -355,14 +356,10 @@ function CounterSheet({ initial, onCancel, onConfirm }: {
         autoFocus
         className="w-full mt-1 px-3 py-2.5 rounded-xl border border-gray-200 bg-white font-heading font-bold text-lg tabular-nums text-center focus:outline-none focus:ring-2 focus:ring-pitch-500/30 focus:border-pitch-500"
       />
-      <div className="flex justify-center gap-2 mt-2">
-        {[0.8, 0.9, 0.95, 1].map((mul) => Math.round((initial.amount * mul) / 100) * 100).map((preset, i) => (
-          <button key={i} type="button" onClick={() => setAmount(preset)}
-            className={`px-2.5 py-1 rounded text-sm font-heading font-bold tabular-nums transition-colors ${amount === preset ? "bg-pitch-500 text-white" : "bg-black/5 text-muted hover:bg-black/10"}`}>
-            {formatAmount(preset)}
-          </button>
-        ))}
-      </div>
+      <ChoiceGroup ariaLabel="Rychlá částka" size="sm" className="justify-center mt-2" value={amount != null ? String(amount) : null}
+        onChange={(v) => setAmount(Number(v))}
+        options={[...new Set([0.8, 0.9, 0.95, 1].map((mul) => Math.round((initial.amount * mul) / 100) * 100))]
+          .map((preset) => ({ value: String(preset), label: formatAmount(preset) }))} />
       <div className="mt-4">
         <TransferTermsFields amount={amount} value={terms} onChange={setTerms} allowSellOn={false} />
       </div>

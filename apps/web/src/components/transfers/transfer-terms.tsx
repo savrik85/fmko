@@ -11,6 +11,7 @@ import {
   UPFRONT_PCT_MIN, INSTALLMENTS_MIN, INSTALLMENTS_MAX, SELL_ON_PCT_MAX, SELL_ON_PCT_STEP, INSTALLMENT_MIN_AMOUNT,
   maxInstallmentsFor, minAmountForInstallments, transferSchedule, type TransferTerms,
 } from "@okresni-masina/shared";
+import { formatKc } from "@/lib/format";
 
 export type TermsValue = Omit<TransferTerms, "amount">;
 /** card = bílá karta; light/dark = na barvě týmu (tmavé / bílé písmo). */
@@ -19,7 +20,6 @@ export type TermsVariant = "card" | "light" | "dark";
 export const PLAIN_TERMS: TermsValue = { upfrontPct: 100, installments: 0, sellOnPct: 0 };
 const DEFAULT_INSTALLMENT_TERMS = { upfrontPct: 30, installments: 4 };
 
-const kc = (v: number) => `${v.toLocaleString("cs-CZ")} Kč`;
 
 const styles = {
   card: {
@@ -104,7 +104,7 @@ export function TransferTermsFields({ amount, value, onChange, variant = "card",
         </div>
         {!installmentsPossible && (
           <div className={`text-sm mt-1 ${s.sub}`}>
-            Na splátky jde až od ceny {kc(minAmountForInstallments(UPFRONT_PCT_MIN))}, splátka musí být aspoň {kc(INSTALLMENT_MIN_AMOUNT)}.
+            Na splátky jde až od ceny {formatKc(minAmountForInstallments(UPFRONT_PCT_MIN))}, splátka musí být aspoň {formatKc(INSTALLMENT_MIN_AMOUNT)}.
           </div>
         )}
       </div>
@@ -114,7 +114,7 @@ export function TransferTermsFields({ amount, value, onChange, variant = "card",
           <label className="block">
             <span className={`flex justify-between text-sm ${s.label}`}>
               <span className="font-heading uppercase">Záloha</span>
-              <span className={`font-heading font-bold tabular-nums ${s.text}`}>{value.upfrontPct} % · {kc(upfront)}</span>
+              <span className={`font-heading font-bold tabular-nums ${s.text}`}>{value.upfrontPct} % · {formatKc(upfront)}</span>
             </span>
             <input type="range" min={UPFRONT_PCT_MIN} max={90} step={5} value={value.upfrontPct}
               onChange={(e) => onChange({ ...value, upfrontPct: Number(e.target.value) })}
@@ -124,7 +124,7 @@ export function TransferTermsFields({ amount, value, onChange, variant = "card",
             <span className={`flex justify-between text-sm ${s.label}`}>
               <span className="font-heading uppercase">Počet týdenních splátek</span>
               <span className={`font-heading font-bold tabular-nums ${s.text}`}>
-                {value.installments}× po {kc(plan.installmentAmount)}
+                {value.installments}× po {formatKc(plan.installmentAmount)}
               </span>
             </span>
             <input type="range" min={INSTALLMENTS_MIN} max={Math.max(INSTALLMENTS_MIN, maxN)} step={1} value={value.installments}
@@ -133,14 +133,14 @@ export function TransferTermsFields({ amount, value, onChange, variant = "card",
               className={`w-full mt-1 ${s.accent}`} />
             {maxN < INSTALLMENTS_MAX && (
               <span className={`block text-sm mt-0.5 ${s.sub}`}>
-                Při téhle ceně nejvýš {maxN} splátek, splátka musí být aspoň {kc(INSTALLMENT_MIN_AMOUNT)}.
+                Při téhle ceně nejvýš {maxN} splátek, splátka musí být aspoň {formatKc(INSTALLMENT_MIN_AMOUNT)}.
               </span>
             )}
           </label>
           <div className={`rounded-xl px-3 py-2 text-sm tabular-nums ${s.box}`}>
             <span className={s.sub}>Celkem </span>
-            <span className={`font-heading font-bold ${s.text}`}>{kc(total)}</span>
-            <span className={s.sub}> = {kc(plan.upfront)} hned + {plan.installments}× {kc(plan.installmentAmount)}</span>
+            <span className={`font-heading font-bold ${s.text}`}>{formatKc(total)}</span>
+            <span className={s.sub}> = {formatKc(plan.upfront)} hned + {plan.installments}× {formatKc(plan.installmentAmount)}</span>
             <span className={`block ${s.sub}`}>Poslední splátka za {plan.installments} {plan.installments < 5 ? "týdny" : "týdnů"}.</span>
           </div>
         </>
@@ -172,18 +172,18 @@ export function TermsBreakdown({ terms, adminFee = 0, variant = "card", sellOnFo
 }) {
   const s = styles[variant];
   const plan = transferSchedule(terms);
-  const rows: Array<[string, string]> = [["Cena celkem", kc(terms.amount)]];
+  const rows: Array<[string, string]> = [["Cena celkem", formatKc(terms.amount)]];
   if (plan.installments > 0) {
-    rows.push(["Hned (záloha " + terms.upfrontPct + " %)", kc(plan.upfront)]);
+    rows.push(["Hned (záloha " + terms.upfrontPct + " %)", formatKc(plan.upfront)]);
     rows.push([
       `Pak ${plan.installments}× každé pondělí`,
       plan.lastInstallment !== plan.installmentAmount
-        ? `${kc(plan.installmentAmount)} (poslední ${kc(plan.lastInstallment)})`
-        : kc(plan.installmentAmount),
+        ? `${formatKc(plan.installmentAmount)} (poslední ${formatKc(plan.lastInstallment)})`
+        : formatKc(plan.installmentAmount),
     ]);
   }
-  if (adminFee > 0) rows.push(["Administrační poplatek hned", kc(adminFee)]);
-  if (plan.installments > 0 || adminFee > 0) rows.push(["Kupující zaplatí hned", kc(plan.upfront + adminFee)]);
+  if (adminFee > 0) rows.push(["Administrační poplatek hned", formatKc(adminFee)]);
+  if (plan.installments > 0 || adminFee > 0) rows.push(["Kupující zaplatí hned", formatKc(plan.upfront + adminFee)]);
   if (terms.sellOnPct > 0) {
     rows.push(["Z příštího přestupu", `${terms.sellOnPct} %${sellOnFor ? ` pro ${sellOnFor}` : ""}`]);
   }
@@ -206,7 +206,7 @@ export function termsNote(t: Pick<TransferTerms, "upfrontPct" | "installments" |
   if (t.installments > 0) {
     if (t.amount != null && t.amount > 0) {
       const plan = transferSchedule({ amount: t.amount, upfrontPct: t.upfrontPct, installments: t.installments, sellOnPct: t.sellOnPct });
-      parts.push(`záloha ${kc(plan.upfront)} + ${plan.installments}× ${kc(plan.installmentAmount)} týdně`);
+      parts.push(`záloha ${formatKc(plan.upfront)} + ${plan.installments}× ${formatKc(plan.installmentAmount)} týdně`);
     } else {
       parts.push(`záloha ${t.upfrontPct} % + ${t.installments}× týdně`);
     }

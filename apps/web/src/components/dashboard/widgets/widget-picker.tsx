@@ -71,7 +71,7 @@ export function WidgetPicker({
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Hledat widget…"
             aria-label="Hledat widget"
-            className="mt-3 w-full h-10 px-3 rounded-soft bg-white border border-gray-200 text-sm outline-none focus:border-pitch-400 transition-colors"
+            className="input mt-3 !w-full h-10 !px-3 !text-sm"
           />
 
           {/* Kategorie — na mobilu se posouvají do strany, nezalamují se do bloku */}

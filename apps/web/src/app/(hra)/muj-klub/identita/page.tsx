@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, showError } from "@/lib/api";
-import { Spinner, Card, CardHeader, CardBody, SectionLabel, StickyActions } from "@/components/ui";
+import { Card, CardHeader, CardBody, SectionLabel, StickyActions, PageLoading, ChoiceGroup } from "@/components/ui";
 import { withClubPrefix, type ClubPrefix } from "@okresni-masina/shared";
 
 interface ClubIdentity {
@@ -128,7 +128,7 @@ export default function IdentitaPage() {
     }
   }
 
-  if (loading) return <div className="page-container flex justify-center min-h-[50vh] items-center"><Spinner /></div>;
+  if (loading) return <PageLoading />;
 
   return (
     <div className="page-container">
@@ -147,23 +147,8 @@ export default function IdentitaPage() {
           </CardHeader>
           <CardBody className="flex flex-col gap-3">
             <div className="flex flex-wrap gap-2">
-              {prefixInfo.options.map((p) => {
-                const active = prefix === p;
-                return (
-                  <button
-                    key={p}
-                    type="button"
-                    onClick={() => setPrefix(p)}
-                    disabled={!prefixInfo.canChange}
-                    aria-pressed={active}
-                    className={`min-w-[3.5rem] px-3 py-2 rounded-soft border text-sm font-heading font-bold transition-colors disabled:opacity-60 ${
-                      active ? "border-pitch-500 bg-pitch-500 text-white" : "border-gray-200 text-ink hover:border-pitch-300"
-                    }`}
-                  >
-                    {p}
-                  </button>
-                );
-              })}
+              <ChoiceGroup ariaLabel="Zkratka před názvem" value={prefix} onChange={setPrefix}
+                options={prefixInfo.options.map((p) => ({ value: p, label: p, disabled: !prefixInfo.canChange }))} />
             </div>
             <div className="text-sm">
               <span className="text-muted">Název klubu: </span>
@@ -191,14 +176,14 @@ export default function IdentitaPage() {
             <SectionLabel>Přezdívka klubu</SectionLabel>
             <input type="text" value={nickname} onChange={(e) => setNickname(e.target.value.slice(0, 40))}
               placeholder="např. Medvědi, Zelené pruhy, Šumavské psy"
-              className="w-full px-3 py-2 border border-gray-200 rounded-soft text-sm focus:border-pitch-500 focus:outline-none" />
+              className="input !w-full !px-3 !py-2 !text-sm" />
             <div className="text-xs text-muted mt-1">Jak týmu říkají fanoušci.</div>
           </div>
           <div>
             <SectionLabel>Rok založení klubu</SectionLabel>
             <input type="number" value={foundingYear} onChange={(e) => setFoundingYear(e.target.value.slice(0, 4))}
               placeholder="1923" min={1800} max={2100}
-              className="w-full sm:max-w-[160px] px-3 py-2 border border-gray-200 rounded-soft text-sm focus:border-pitch-500 focus:outline-none" />
+              className="input !w-full sm:max-w-[160px] !px-3 !py-2 !text-sm" />
           </div>
         </CardBody>
       </Card>
@@ -215,7 +200,7 @@ export default function IdentitaPage() {
         <CardBody>
           <input type="text" value={motto} onChange={(e) => setMotto(e.target.value.slice(0, 120))}
             placeholder='např. "Síla z lesa", "Nikdy se nevzdáme"'
-            className="w-full px-3 py-2 border border-gray-200 rounded-soft text-sm focus:border-pitch-500 focus:outline-none" />
+            className="input !w-full !px-3 !py-2 !text-sm" />
           <div className="text-xs text-muted mt-1">{motto.length}/120 znaků</div>
         </CardBody>
       </Card>
@@ -233,7 +218,7 @@ export default function IdentitaPage() {
           <textarea value={foundingStory} onChange={(e) => setFoundingStory(e.target.value.slice(0, 2000))}
             placeholder="Jak klub vznikl. Kdo ho založil, kde, za jakých okolností..."
             rows={6}
-            className="w-full px-3 py-2 border border-gray-200 rounded-soft text-sm focus:border-pitch-500 focus:outline-none resize-vertical" />
+            className="input !w-full !px-3 !py-2 !text-sm resize-vertical" />
           <div className="text-xs text-muted mt-1">{foundingStory.length}/2000 znaků</div>
         </CardBody>
       </Card>
@@ -251,7 +236,7 @@ export default function IdentitaPage() {
           <textarea value={colorsMeaning} onChange={(e) => setColorsMeaning(e.target.value.slice(0, 500))}
             placeholder="Co klubové barvy symbolizují..."
             rows={3}
-            className="w-full px-3 py-2 border border-gray-200 rounded-soft text-sm focus:border-pitch-500 focus:outline-none resize-vertical" />
+            className="input !w-full !px-3 !py-2 !text-sm resize-vertical" />
           <div className="text-xs text-muted mt-1">{colorsMeaning.length}/500 znaků</div>
         </CardBody>
       </Card>

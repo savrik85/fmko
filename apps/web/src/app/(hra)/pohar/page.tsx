@@ -4,10 +4,11 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
-import { Spinner, SectionLabel, PageHeader, Tabs, useTabParam } from "@/components/ui";
+import { SectionLabel, PageHeader, Tabs, useTabParam, ListCard, ListRow, ListEmpty, RowValue, PageLoading } from "@/components/ui";
 import { FixtureGroup, FixtureRow, type FixtureCrest, type FixtureSide } from "@/components/match/fixture-row";
 import { RoundPager } from "@/components/match/round-pager";
 import { TeamName } from "@/components/manager/team-name";
+import { formatKc } from "@/lib/format";
 
 // Pořadí určuje i výchozí záložku — první je ta bez ?tab= v adrese.
 const TAB_KEYS = ["pavouk", "strelci"] as const;
@@ -99,7 +100,7 @@ export default function PoharPage() {
       .finally(() => setLoading(false));
   }, [teamId]);
 
-  if (loading) return <div className="flex justify-center py-20"><Spinner /></div>;
+  if (loading) return <PageLoading />;
 
   if (!data?.cup) {
     return (
@@ -143,7 +144,7 @@ export default function PoharPage() {
             {data.prizes.map((p) => (
               <div key={p.round}>
                 <div className="text-xs text-muted">{p.roundName}</div>
-                <div className="font-heading font-bold tabular-nums text-base leading-tight">{p.prize.toLocaleString("cs")} Kč</div>
+                <div className="font-heading font-bold tabular-nums text-base leading-tight">{formatKc(p.prize)}</div>
               </div>
             ))}
           </div>
@@ -157,7 +158,7 @@ export default function PoharPage() {
         return (
           <FixtureGroup
             title="Tvoje cesta"
-            note={myEarnings > 0 ? `${status}, vyděláno ${myEarnings.toLocaleString("cs")} Kč` : status}
+            note={myEarnings > 0 ? `${status}, vyděláno ${formatKc(myEarnings)}` : status}
           >
             {myMatches.length === 0 ? (
               <div className="px-4 py-4 text-sm text-muted text-center">
@@ -209,27 +210,18 @@ export default function PoharPage() {
       {/* Střelci poháru */}
       {tab === "strelci" && (
         (data.scorers && data.scorers.length > 0) ? (
-          <div className="card">
+          <ListCard title="Střelci poháru">
             {data.scorers.map((s, i) => (
-              <div key={s.playerId} className="flex items-center gap-3 px-3 py-2 border-b border-gray-50 last:border-b-0">
-                <span className="w-5 text-right text-xs text-muted tabular-nums shrink-0">{i + 1}.</span>
-                <span className="flex-1 min-w-0 text-sm truncate">
-                  <span className="font-bold">{s.teamId ? <Link href={`/tym/${s.teamId}`} className="hover:underline">{s.name}</Link> : s.name}</span>
-                  <span className="text-muted"> · {s.teamName}</span>
-                </span>
-                {s.assists > 0 && <span className="text-xs text-muted shrink-0">{s.assists} A</span>}
-                {(s.yellow > 0 || s.red > 0) && (
-                  <span className="text-xs shrink-0 tabular-nums">
-                    {s.yellow > 0 && <span className="text-amber-600">🟨{s.yellow}</span>}
-                    {s.red > 0 && <span className="text-card-red ml-1">🟥{s.red}</span>}
-                  </span>
-                )}
-                <span className="font-heading font-[800] text-sm tabular-nums shrink-0 w-6 text-right">{s.goals}</span>
-              </div>
+              <ListRow key={s.playerId} href={s.teamId ? `/tym/${s.teamId}` : undefined} chevron={false}
+                leading={<span className={`text-body font-bold tabular-nums ${i === 0 ? "text-gold-700" : "text-muted"}`}>{i + 1}</span>}
+                title={s.name}
+                meta={[s.teamName, s.assists > 0 ? `${s.assists} asistencí` : null,
+                  s.yellow > 0 ? `🟨 ${s.yellow}` : null, s.red > 0 ? `🟥 ${s.red}` : null].filter(Boolean).join(" · ")}
+                trailing={<RowValue>{s.goals}</RowValue>} />
             ))}
-          </div>
+          </ListCard>
         ) : (
-          <div className="card p-8 text-center text-muted text-sm">Zatím žádní střelci, góly se objeví po odehrání zápasů.</div>
+          <ListCard><ListEmpty icon="⚽">Zatím žádní střelci, góly se objeví po odehrání zápasů.</ListEmpty></ListCard>
         )
       )}
 

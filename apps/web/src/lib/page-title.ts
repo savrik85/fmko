@@ -16,7 +16,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/zamestnanci": "Zaměstnanci",
   "/zamestnanci/skaut": "Skaut",
   "/prestupy": "Přestupy",
-  "/sazky": "Sázková kancelář",
+  "/sazky": "Sázky",
   "/finance": "Finance",
   "/sponzori": "Sponzoři",
   "/vybaveni": "Vybavení",
@@ -29,14 +29,14 @@ const PAGE_TITLES: Record<string, string> = {
   "/liga": "Liga",
   "/nastaveni": "Nastavení",
   "/admin": "Administrace",
-  "/rozpis": "Rozpis zápasů",
+  "/rozpis": "Rozpis",
   "/kalendar": "Kalendář",
   "/hlasovani": "Sněm Pralesu",
   "/novinky": "Co je nového",
   "/muj-klub": "Klubový web",
   "/muj-klub/dres": "Dres",
-  "/muj-klub/stadion": "Stadion klubu",
-  "/muj-klub/identita": "Identita klubu",
+  "/muj-klub/stadion": "Stadion",
+  "/muj-klub/identita": "Identita",
   "/muj-klub/hymna": "Hymna",
   "/muj-klub/maskot": "Maskot",
   "/obec": "Obec",
@@ -47,27 +47,27 @@ const PAGE_TITLES: Record<string, string> = {
   "/pohar": "Pohár",
   "/turnaj": "Turnaj",
   "/rozhodci": "Rozhodčí",
-  "/soutez": "Grémium soutěže",
+  "/soutez": "Grémium",
   "/vice": "Více",
   "/napoveda": "Nápověda",
   "/aplikace": "Nainstaluj",
-  "/pozvat": "Pozvi kamaráda",
+  "/pozvat": "Pozvánka",
   "/redakce": "Redakce",
-  "/trener": "Profil trenéra",
+  "/trener": "Trenér",
   "/trener/skripta": "Skripta",
-  "/trener/test": "Závěrečný test",
+  "/trener/test": "Test",
 };
 
 const PREFIX_TITLES: Array<[string, string]> = [
-  ["/hrac/", "Profil hráče"],
-  ["/tym/", "Profil týmu"],
+  ["/hrac/", "Hráč"],
+  ["/tym/", "Tým"],
   ["/sponzor/", "Sponzor"],
-  ["/zapas/", "Výsledek zápasu"],
+  ["/zapas/", "Zápas"],
   ["/telefon/", "Konverzace"],
-  ["/manazer/", "Profil trenéra"],
+  ["/manazer/", "Trenér"],
   ["/rozhodci/", "Rozhodčí"],
   ["/redakce/", "Redakce"],
-  ["/zpravodaj/rozhovor/", "Rozhovor pro Zpravodaj"],
+  ["/zpravodaj/rozhovor/", "Rozhovor"],
   ["/obec/", "Obec"],
   ["/pohar/tym/", "Tým v poháru"],
   ["/prestupy/nabidka/", "Nabídka"],
@@ -77,6 +77,8 @@ const PREFIX_TITLES: Array<[string, string]> = [
 export function pageTitleFor(pathname: string): string {
   const exact = PAGE_TITLES[pathname];
   if (exact) return exact;
+  // Stadion cizího klubu leží pod /tym/{id}/stadion; bez výjimky by se jmenoval „Tým“.
+  if (pathname.startsWith("/tym/") && pathname.endsWith("/stadion")) return "Stadion";
   for (const [prefix, title] of PREFIX_TITLES) {
     if (pathname.startsWith(prefix)) return title;
   }

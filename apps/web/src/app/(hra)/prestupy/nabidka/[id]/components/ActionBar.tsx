@@ -4,8 +4,9 @@ import { MoneyInput, formatAmount } from "@/components/ui/money-input";
 import { useState } from "react";
 import { formatTermsSummary, type TransferTerms } from "@okresni-masina/shared";
 import { TransferTermsFields, type TermsValue } from "@/components/transfers/transfer-terms";
-import { SheetDialog } from "@/components/ui";
+import { SheetDialog, ChoiceGroup } from "@/components/ui";
 import { MessageDialog } from "./MessageDialog";
+import { formatKc } from "@/lib/format";
 
 type DialogKind = "accept" | "counter" | "reject" | null;
 
@@ -79,21 +80,21 @@ export function ActionBar({
         </div>
         <div className="text-center text-sm text-muted tabular-nums">
           {role === "buyer"
-            ? `Přijetím zaplatíš hned ${payNow.toLocaleString("cs")} Kč${terms.installments > 0 ? `, zbytek ve ${terms.installments} týdenních splátkách` : ""}.`
-            : `Kupující při přijetí pošle hned ${(payNow - adminFee).toLocaleString("cs")} Kč${terms.installments > 0 ? `, zbytek ve ${terms.installments} týdenních splátkách` : ""}.`}
+            ? `Přijetím zaplatíš hned ${formatKc(payNow)}${terms.installments > 0 ? `, zbytek ve ${terms.installments} týdenních splátkách` : ""}.`
+            : `Kupující při přijetí pošle hned ${formatKc(payNow - adminFee)}${terms.installments > 0 ? `, zbytek ve ${terms.installments} týdenních splátkách` : ""}.`}
         </div>
         {saleDeductions && (
           <div className="mx-auto w-full max-w-sm rounded-xl bg-gold-50 border border-gold-300/60 px-3 py-2 text-sm tabular-nums">
             <div className="font-heading font-bold mb-1">Z ceny se ti hned strhne</div>
             {saleDeductions.settle > 0 && (
-              <div className="flex justify-between gap-3"><span>Doplacení splátek pro {saleDeductions.settleTo}</span><span className="font-heading font-bold">{saleDeductions.settle.toLocaleString("cs")} Kč</span></div>
+              <div className="flex justify-between gap-3"><span>Doplacení splátek pro {saleDeductions.settleTo}</span><span className="font-heading font-bold">{formatKc(saleDeductions.settle)}</span></div>
             )}
             {saleDeductions.sellOnPct > 0 && (
-              <div className="flex justify-between gap-3"><span>{saleDeductions.sellOnPct} % pro {saleDeductions.sellOnTo}</span><span className="font-heading font-bold">{saleDeductions.sellOn.toLocaleString("cs")} Kč{saleDeductions.withSwap ? " a víc" : ""}</span></div>
+              <div className="flex justify-between gap-3"><span>{saleDeductions.sellOnPct} % pro {saleDeductions.sellOnTo}</span><span className="font-heading font-bold">{formatKc(saleDeductions.sellOn)}{saleDeductions.withSwap ? " a víc" : ""}</span></div>
             )}
             <div className="flex justify-between gap-3 border-t border-gold-300/60 mt-1 pt-1">
               <span>Zůstane ti z ceny</span>
-              <span className="font-heading font-bold">{(currentAmount - saleDeductions.settle - saleDeductions.sellOn).toLocaleString("cs")} Kč</span>
+              <span className="font-heading font-bold">{formatKc(currentAmount - saleDeductions.settle - saleDeductions.sellOn)}</span>
             </div>
             {saleDeductions.withSwap && (
               <div className="text-muted mt-1">U výměny se procenta počítají i z tržní ceny hráče, kterého dostaneš.</div>
@@ -164,20 +165,12 @@ function CounterDialog({ initial, allowZero, initialTerms, onCancel, onConfirm }
         className="w-full mt-1 px-3 py-2.5 rounded-xl border border-gray-200 bg-white font-heading font-bold text-lg tabular-nums text-center focus:outline-none focus:ring-2 focus:ring-pitch-500/30 focus:border-pitch-500"
       />
       {/* U výměny bez doplatku by všechny předvolby vyšly na nulu. */}
-      {initial >= 100 && <div className="flex justify-center gap-2 mt-2">
-        {[0.8, 1, 1.2, 1.5].map((mul) => Math.round((initial * mul) / 100) * 100).map((preset, i) => (
-          <button
-            key={i}
-            type="button"
-            onClick={() => setV(preset)}
-            className={`px-2.5 py-1 rounded text-sm font-heading font-bold tabular-nums transition-colors ${
-              v === preset ? "bg-pitch-500 text-white" : "bg-black/5 text-muted hover:bg-black/10"
-            }`}
-          >
-            {formatAmount(preset)}
-          </button>
-        ))}
-      </div>}
+      {initial >= 100 && (
+        <ChoiceGroup ariaLabel="Rychlá částka" size="sm" className="justify-center mt-2" value={v != null ? String(v) : null}
+          onChange={(x) => setV(Number(x))}
+          options={[...new Set([0.8, 1, 1.2, 1.5].map((mul) => Math.round((initial * mul) / 100) * 100))]
+            .map((preset) => ({ value: String(preset), label: formatAmount(preset) }))} />
+      )}
       {terms && (
         <div className="mt-4">
           <TransferTermsFields amount={v} value={terms} onChange={setTerms} />
@@ -190,7 +183,7 @@ function CounterDialog({ initial, allowZero, initialTerms, onCancel, onConfirm }
           onChange={(e) => setMsg(e.target.value.slice(0, 200))}
           rows={2}
           placeholder="např. Klub přistupuje vstřícně..."
-          className="w-full mt-1 px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-gold-500/30 focus:border-gold-500 resize-none"
+          className="input !w-full mt-1 !px-3 !py-2 !text-sm resize-none"
         />
         <div className="text-sm text-muted text-right mt-0.5 tabular-nums">{msg.length}/200</div>
       </div>

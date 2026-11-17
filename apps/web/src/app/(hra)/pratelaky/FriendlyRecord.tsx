@@ -2,14 +2,12 @@
 import { HeroBackdrop } from "@/components/ui/hero-backdrop";
 
 import { useState } from "react";
-import Link from "next/link";
 import { pocet } from "@/lib/referee-info";
-import { bestTextOn, isLightColor, isNeutralExtreme } from "@/lib/team-color";
-import { SectionLabel } from "@/components/ui";
-import {
-  ClubCrest, FormChip, PRIMARY_BUTTON, SECONDARY_BUTTON, TeamLink, dayShort, formatCZK, venueText,
-  type Crest, type FriendliesData, type HeadToHead,
-} from "./friendly-ui";
+import { isLightColor, isNeutralExtreme } from "@/lib/team-color";
+import { HeroStat, HeroStats, heroTone } from "@/components/ui/hero-kit";
+import { DataTable, EntityCell, ListCard, ListRow, ScoreChip, ShowMore } from "@/components/ui";
+import { ClubCrest, FormChip, PRIMARY_BUTTON, SECONDARY_BUTTON, TeamLink, dayShort, venueText, type Crest, type FriendliesData, type HeadToHead } from "./friendly-ui";
+import { formatKc } from "@/lib/format";
 
 /** Věta pod erbem: co se teď děje a co dál. Bez čísel tam, kde nejsou potřeba. */
 function streakSentence(r: FriendliesData["record"]): string {
@@ -25,7 +23,7 @@ function streakSentence(r: FriendliesData["record"]): string {
 
 function stakeText(v: number): string | null {
   if (v === 0) return null;
-  return v > 0 ? `na sázkách +${formatCZK(v)}` : `na sázkách −${formatCZK(-v)}`;
+  return v > 0 ? `na sázkách +${formatKc(v)}` : `na sázkách −${formatKc(-v)}`;
 }
 
 /** Barva klubu do pruhu. Bílá nebo skoro bílá by na světlém pozadí zmizela, vezme se druhá barva. */
@@ -53,7 +51,11 @@ function rivalryStory(h: HeadToHead): string {
   return "";
 }
 
-function RivalryCard({ h, me, onChallenge }: { h: HeadToHead; me: FriendliesData["me"]; onChallenge: (teamId: string) => void }) {
+/**
+ * Rival jako řádek: vpravo kdo vede, pod jménem přetahovaná, bilance, příběh a výzva.
+ * Řádek nemá href, protože v něm je odkaz na klub i tlačítko.
+ */
+function RivalryRow({ h, me, onChallenge }: { h: HeadToHead; me: FriendliesData["me"]; onChallenge: (teamId: string) => void }) {
   const head = rivalryHeadline(h);
   const myColor = barColor(me?.crest, "#2D5F2D");
   let theirColor = barColor(h.crest, "#9CA3AF");
@@ -61,36 +63,37 @@ function RivalryCard({ h, me, onChallenge }: { h: HeadToHead; me: FriendliesData
   const pct = (n: number) => `${(n / Math.max(1, h.played)) * 100}%`;
   const stake = stakeText(h.stakeNet);
   return (
-    <div className="card p-4 flex flex-col gap-3">
-      <div className="flex items-start justify-between gap-2">
-        <TeamLink id={h.teamId} name={h.name} />
-        <span className={`font-heading font-[800] text-base whitespace-nowrap tabular-nums ${head.tone}`}>{head.text}</span>
-      </div>
-
-      {/* Přetahovaná: vlevo moje výhry v mé barvě, vpravo jejich v jejich, uprostřed remízy. */}
-      <div className="flex items-center gap-2" aria-label={`${h.won} výher, ${h.drawn} remíz, ${h.lost} proher`}>
-        <ClubCrest crest={me?.crest} size={30} />
-        <div className="flex-1 h-3 rounded-full overflow-hidden flex bg-black/5">
-          <div style={{ width: pct(h.won), backgroundColor: myColor }} />
-          <div style={{ width: pct(h.drawn) }} className="bg-gray-300" />
-          <div style={{ width: pct(h.lost), backgroundColor: theirColor }} />
-        </div>
-        <ClubCrest crest={h.crest} size={30} />
-      </div>
-      <div className="flex justify-between text-sm tabular-nums -mt-1">
-        <span><span className="font-heading font-bold">{h.won}</span> {h.won === 1 ? "výhra" : h.won >= 2 && h.won <= 4 ? "výhry" : "výher"}</span>
-        <span className="text-muted">{pocet(h.drawn, "remíza", "remízy", "remíz")} · skóre {h.goalsFor}:{h.goalsAgainst}</span>
-        <span><span className="font-heading font-bold">{h.lost}</span> {h.lost === 1 ? "prohra" : h.lost >= 2 && h.lost <= 4 ? "prohry" : "proher"}</span>
-      </div>
-
-      <p className="text-sm text-ink">
-        {rivalryStory(h)}
-        {stake && <span className="text-muted"> Celkem {stake}.</span>}
-      </p>
-      <button onClick={() => onChallenge(h.teamId)} className={`self-start ${h.lastResult === "L" ? PRIMARY_BUTTON : SECONDARY_BUTTON}`}>
-        {h.lastResult === "L" ? "Vyzvat na odvetu" : "Vyzvat znovu"}
-      </button>
-    </div>
+    <ListRow
+      title={<TeamLink id={h.teamId} name={h.name} />}
+      trailing={<span className={`text-body font-extrabold whitespace-nowrap tabular-nums ${head.tone}`}>{head.text}</span>}
+      detail={
+        <>
+          {/* Přetahovaná: vlevo moje výhry v mé barvě, vpravo jejich v jejich, uprostřed remízy. */}
+          <span className="flex items-center gap-2 mt-1.5" aria-label={`${h.won} výher, ${h.drawn} remíz, ${h.lost} proher`}>
+            <ClubCrest crest={me?.crest} size={24} />
+            <span className="flex-1 h-3 rounded-full overflow-hidden flex bg-black/5">
+              <span style={{ width: pct(h.won), backgroundColor: myColor }} />
+              <span style={{ width: pct(h.drawn) }} className="bg-gray-300" />
+              <span style={{ width: pct(h.lost), backgroundColor: theirColor }} />
+            </span>
+            <ClubCrest crest={h.crest} size={24} />
+          </span>
+          <span className="flex justify-between gap-2 mt-1 tabular-nums">
+            <span><span className="font-bold text-ink">{h.won}</span> {h.won === 1 ? "výhra" : h.won >= 2 && h.won <= 4 ? "výhry" : "výher"}</span>
+            <span className="text-muted text-center">{pocet(h.drawn, "remíza", "remízy", "remíz")} · skóre {h.goalsFor}:{h.goalsAgainst}</span>
+            <span><span className="font-bold text-ink">{h.lost}</span> {h.lost === 1 ? "prohra" : h.lost >= 2 && h.lost <= 4 ? "prohry" : "proher"}</span>
+          </span>
+          <span className="block mt-1.5 text-ink">
+            {rivalryStory(h)}
+            {stake && <span className="text-muted"> Celkem {stake}.</span>}
+          </span>
+          <span className="block mt-2.5">
+            <button onClick={() => onChallenge(h.teamId)} className={h.lastResult === "L" ? PRIMARY_BUTTON : SECONDARY_BUTTON}>
+              {h.lastResult === "L" ? "Vyzvat na odvetu" : "Vyzvat znovu"}
+            </button>
+          </span>
+        </>
+      } />
   );
 }
 
@@ -120,10 +123,7 @@ export function FriendlyRecord({ data, onChallenge }: { data: FriendliesData; on
   const r = data.record;
   const o = r.overall;
   const color = data.me?.crest.primary ?? "#2D5F2D";
-  const light = bestTextOn(color) === "dark";
-  const txt = light ? "text-gray-900" : "text-white";
-  const txtMuted = light ? "text-gray-600" : "text-white/70";
-  const boxBg = light ? "bg-black/5" : "bg-white/10";
+  const tone = heroTone(color);
   const meId = data.me?.id;
   const shownTable = data.table.slice(0, 10);
   const mineOutside = data.table.find((t) => t.teamId === meId && t.pos > 10);
@@ -132,26 +132,25 @@ export function FriendlyRecord({ data, onChallenge }: { data: FriendliesData; on
     <div className="space-y-5">
       {/* Karta v barvě klubu: kde stojím a co se teď děje */}
       <div className="card p-0 overflow-hidden">
-        <div className="hero-gradient hero-detail px-4 sm:px-5 py-4 sm:py-5" style={{ backgroundColor: color }}>
+        <div className="hero-gradient hero-detail px-4 sm:px-5 py-3 sm:py-5" style={{ backgroundColor: color }}>
         <HeroBackdrop primary={color} secondary={data.me?.crest.secondary} pattern={data.me?.crest.pattern ?? null} />
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-x-3 sm:gap-x-4 gap-y-2 sm:gap-y-3">
             <ClubCrest crest={data.me?.crest} size={52} />
-            <div className="min-w-0">
-              <div className={`font-heading font-extrabold text-xl leading-tight ${txt}`}>Přáteláky {data.me?.name ?? ""}</div>
-              <div className={`text-sm mt-0.5 ${txtMuted}`}>{streakSentence(r)}</div>
+            <div className="flex-1 min-w-0">
+              <div className={`font-heading font-extrabold text-lg sm:text-2xl leading-tight ${tone.text}`}>Přáteláky {data.me?.name ?? ""}</div>
+              <div className={`text-sm mt-0.5 ${tone.muted}`}>{streakSentence(r)}</div>
             </div>
-          </div>
-          <div className="grid grid-cols-3 gap-2 mt-4">
-            {[
-              { value: o.won, label: o.won === 1 ? "výhra" : o.won >= 2 && o.won <= 4 ? "výhry" : "výher" },
-              { value: o.drawn, label: o.drawn === 1 ? "remíza" : o.drawn >= 2 && o.drawn <= 4 ? "remízy" : "remíz" },
-              { value: o.lost, label: o.lost === 1 ? "prohra" : o.lost >= 2 && o.lost <= 4 ? "prohry" : "proher" },
-            ].map((x) => (
-              <div key={x.label} className={`${boxBg} rounded-soft py-2.5 text-center`}>
-                <div className={`font-heading font-[800] text-3xl leading-none tabular-nums ${txt}`}>{x.value}</div>
-                <div className={`text-sm mt-1 ${txtMuted}`}>{x.label}</div>
-              </div>
-            ))}
+            <HeroStats tone={tone}>
+              {[
+                { value: o.won, label: o.won === 1 ? "výhra" : o.won >= 2 && o.won <= 4 ? "výhry" : "výher" },
+                { value: o.drawn, label: o.drawn === 1 ? "remíza" : o.drawn >= 2 && o.drawn <= 4 ? "remízy" : "remíz" },
+                { value: o.lost, label: o.lost === 1 ? "prohra" : o.lost >= 2 && o.lost <= 4 ? "prohry" : "proher" },
+              ].map((x) => (
+                <HeroStat key={x.label} tone={tone} label={x.label}>
+                  <span className="font-heading font-extrabold text-xl sm:text-3xl tabular-nums leading-none">{x.value}</span>
+                </HeroStat>
+              ))}
+            </HeroStats>
           </div>
         </div>
         {o.played > 0 && (
@@ -174,94 +173,58 @@ export function FriendlyRecord({ data, onChallenge }: { data: FriendliesData; on
       </div>
 
       <div>
-        <SectionLabel>Žebříček přáteláků v sezóně</SectionLabel>
-        <div className="card p-0 overflow-hidden">
-          <div className="px-4 py-3 text-sm font-heading font-bold text-ink border-b border-gray-100">{tableMotivation(data)}</div>
-          {data.table.length === 0 ? (
-            <div className="px-4 py-4 text-sm text-muted">V téhle sezóně se zatím žádný přátelák nehrál.</div>
-          ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b-2 border-gray-200 text-muted">
-                  <th className="py-2.5 px-1.5 text-sm font-heading text-center w-9">#</th>
-                  <th className="py-2.5 px-2 text-sm font-heading text-left">Klub</th>
-                  <th className="py-2.5 px-1.5 text-sm font-heading text-center hidden sm:table-cell">Z</th>
-                  <th className="py-2.5 px-1.5 text-sm font-heading text-center">V-R-P</th>
-                  <th className="py-2.5 px-1.5 text-sm font-heading text-center hidden sm:table-cell">Skóre</th>
-                  <th className="py-2.5 px-2 text-sm font-heading text-center w-10">B</th>
-                </tr>
-              </thead>
-              <tbody>
-                {[...shownTable, ...(mineOutside ? [mineOutside] : [])].map((t) => {
-                  const mine = t.teamId === meId;
-                  return (
-                    <tr key={t.teamId} className={`border-b border-gray-50 ${mine ? "bg-pitch-50/60" : ""}`}>
-                      <td className="py-2.5 px-1.5 text-center">
-                        <span className={`font-heading font-[800] text-base tabular-nums ${t.pos === 1 ? "text-gold-500" : t.pos <= 3 ? "text-pitch-500" : "text-muted"}`}>{t.pos}</span>
-                      </td>
-                      <td className="py-2.5 px-2">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <ClubCrest crest={t.crest} size={24} />
-                          <Link href={`/tym/${t.teamId}`} className={`font-heading text-base truncate hover:text-pitch-500 ${mine ? "font-[800] text-ink" : "font-bold text-ink"}`}>{t.name}</Link>
-                        </div>
-                      </td>
-                      <td className="py-2.5 px-1.5 text-center tabular-nums text-muted hidden sm:table-cell">{t.played}</td>
-                      <td className="py-2.5 px-1.5 text-center tabular-nums text-muted whitespace-nowrap">{t.won}-{t.drawn}-{t.lost}</td>
-                      <td className="py-2.5 px-1.5 text-center tabular-nums hidden sm:table-cell">{t.goalsFor}:{t.goalsAgainst}</td>
-                      <td className="py-2.5 px-2 text-center"><span className="font-heading font-[800] text-lg tabular-nums">{t.points}</span></td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
-        </div>
+        <ListCard title="Žebříček přáteláků v sezóně">
+          <div className="px-4 py-3 text-body font-bold text-ink border-b border-line-soft">{tableMotivation(data)}</div>
+          <DataTable
+            rows={[...shownTable, ...(mineOutside ? [mineOutside] : [])]} rowKey={(t) => t.teamId}
+            rowHref={(t) => `/tym/${t.teamId}`}
+            rowTone={(t) => ({ own: t.teamId === meId })}
+            empty="V téhle sezóně se zatím žádný přátelák nehrál. Vyzvi někoho a žebříček otevřeš ty."
+            columns={[
+              { key: "pos", header: "#", width: "w-10", align: "center",
+                cell: (t) => <span className={`font-bold ${t.pos === 1 ? "text-gold-700" : "text-muted"}`}>{t.pos}</span> },
+              { key: "team", header: "Klub", align: "left",
+                cell: (t) => <EntityCell leading={<ClubCrest crest={t.crest} size={24} />} name={t.name} bold={t.teamId === meId}
+                  meta={`${t.won}-${t.drawn}-${t.lost} · ${t.goalsFor}:${t.goalsAgainst}`} metaMobileOnly /> },
+              { key: "played", header: "Z", title: "Zápasy", width: "w-10", cell: (t) => t.played },
+              { key: "record", header: "V-R-P", width: "w-20", priority: 2, cell: (t) => `${t.won}-${t.drawn}-${t.lost}` },
+              { key: "score", header: "Skóre", width: "w-16", priority: 2, cell: (t) => `${t.goalsFor}:${t.goalsAgainst}` },
+              { key: "points", header: "Body", width: "w-14", emphasis: true, cell: (t) => t.points },
+            ]} />
+        </ListCard>
       </div>
 
       {r.opponents.length > 0 && (
-        <div>
-          <SectionLabel>Rivalové</SectionLabel>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <ListCard title="Rivalové" count={r.opponents.length} className="overflow-hidden">
+          {/* Od 640 px po dvou vedle sebe jako dřív karty, jinak by se pruh přetahované roztáhl přes celou šířku. */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 -mb-px sm:[&>*:nth-child(odd)]:border-r sm:[&>*:nth-child(odd)]:border-line-soft">
             {(showAllRivals ? r.opponents : r.opponents.slice(0, RIVALS_SHOWN)).map((h) => (
-              <RivalryCard key={h.teamId} h={h} me={data.me} onChallenge={onChallenge} />
+              <RivalryRow key={h.teamId} h={h} me={data.me} onChallenge={onChallenge} />
             ))}
           </div>
-          {r.opponents.length > RIVALS_SHOWN && (
-            <button onClick={() => setShowAllRivals((v) => !v)} className={`w-full mt-3 ${SECONDARY_BUTTON}`}>
-              {showAllRivals ? "Jen hlavní rivalové" : `Všichni rivalové (${r.opponents.length})`}
-            </button>
-          )}
-        </div>
+          {/* Zbytek najednou, jako dřív tlačítko „Všichni rivalové“. */}
+          <ShowMore shown={showAllRivals ? r.opponents.length : Math.min(RIVALS_SHOWN, r.opponents.length)}
+            total={r.opponents.length} step={r.opponents.length - RIVALS_SHOWN}
+            onMore={() => setShowAllRivals(true)} />
+        </ListCard>
       )}
 
       {data.played.length > 0 && (
-        <div>
-          <SectionLabel>Poslední odehrané</SectionLabel>
-          <div className="card p-0 overflow-hidden divide-y divide-gray-100">
-            {data.played.map((f) => {
-              const result = f.myScore == null || f.opponentScore == null ? null
-                : f.myScore > f.opponentScore ? "W" : f.myScore < f.opponentScore ? "L" : "D";
-              const tone = result === "W" ? "bg-pitch-500" : result === "L" ? "bg-card-red" : "bg-gray-400";
-              return (
-                <div key={f.id} className="flex items-center gap-3 px-3 py-2.5">
-                  <div className={`w-14 shrink-0 rounded-control py-1.5 text-center font-heading font-[800] text-lg tabular-nums text-white ${tone}`}>
-                    {f.myScore}:{f.opponentScore}
-                  </div>
-                  <ClubCrest crest={f.opponent.crest} size={28} />
-                  <div className="flex-1 min-w-0">
-                    <TeamLink id={f.opponent.id} name={f.opponent.name} />
-                    <div className="text-sm text-muted truncate">
-                      {f.date ? `${dayShort(f.date).day} · ` : ""}{venueText(f.venue, f.neutralVillage)}{f.stake > 0 ? ` · o ${formatCZK(f.stake)}` : ""}
-                    </div>
-                  </div>
-                  {f.matchId && (
-                    <Link href={`/zapas/${f.matchId}/zaznam`} className="text-sm font-heading font-bold text-pitch-600 hover:underline shrink-0">Záznam</Link>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
+        <ListCard title="Poslední odehrané" count={data.played.length}>
+          {data.played.map((f) => {
+            const result = f.myScore == null || f.opponentScore == null ? null
+              : f.myScore > f.opponentScore ? "W" : f.myScore < f.opponentScore ? "L" : "D";
+            return (
+              <ListRow key={f.id} href={f.matchId ? `/zapas/${f.matchId}/zaznam` : undefined}
+                leading={<ClubCrest crest={f.opponent.crest} size={30} />}
+                title={f.opponent.name}
+                meta={`${f.date ? `${dayShort(f.date).day} · ` : ""}${venueText(f.venue, f.neutralVillage)}${f.stake > 0 ? ` · o ${formatKc(f.stake)}` : ""}`}
+                trailing={result
+                  ? <ScoreChip result={result}>{f.myScore}:{f.opponentScore}</ScoreChip>
+                  : <span className="text-meta text-muted">-</span>} />
+            );
+          })}
+        </ListCard>
       )}
     </div>
   );

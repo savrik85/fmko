@@ -23,7 +23,7 @@ export function Sheet({
   title,
   maxWidth = "560px",
   className = "",
-  zavritKlikemVedle = true,
+  closeOnBackdrop = true,
 }: {
   open: boolean;
   onClose: () => void;
@@ -36,9 +36,9 @@ export function Sheet({
    * Zavřít kliknutím vedle plachty. U formulářů se vypíná — jeden vedlejší klik
    * by zahodil rozepsaný návrh a hráč by nepochopil, kam se mu poděl.
    */
-  zavritKlikemVedle?: boolean;
+  closeOnBackdrop?: boolean;
 }) {
-  const vratitFokusNa = useRef<HTMLElement | null>(null);
+  const restoreFocusTo = useRef<HTMLElement | null>(null);
   const panel = useRef<HTMLDivElement>(null);
 
   // onClose drží ref, NE závislost efektu.
@@ -52,7 +52,7 @@ export function Sheet({
 
   useEffect(() => {
     if (!open) return;
-    vratitFokusNa.current = document.activeElement as HTMLElement | null;
+    restoreFocusTo.current = document.activeElement as HTMLElement | null;
 
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") { e.stopPropagation(); onCloseRef.current(); }
@@ -60,15 +60,15 @@ export function Sheet({
     document.addEventListener("keydown", onKey);
 
     // Zámek scrollu pozadí — bez něj se pod otevřenou plachtou posouvala stránka.
-    const puvodni = document.body.style.overflow;
+    const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
 
     panel.current?.focus();
 
     return () => {
       document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = puvodni;
-      vratitFokusNa.current?.focus?.();
+      document.body.style.overflow = previousOverflow;
+      restoreFocusTo.current?.focus?.();
     };
   }, [open]);
 
@@ -77,7 +77,7 @@ export function Sheet({
   return (
     <div
       className="fixed inset-0 z-[var(--z-sheet)] flex items-end sm:items-center justify-center"
-      onClick={zavritKlikemVedle ? onClose : undefined}
+      onClick={closeOnBackdrop ? onClose : undefined}
     >
       <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px]" aria-hidden="true" />
       <div

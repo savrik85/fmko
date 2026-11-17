@@ -1,10 +1,11 @@
 "use client";
 
-import { formatCZK } from "@/lib/sponsor-owners";
+
 import {
   findOption, optionKey, PROMISE_LABELS, PROMISE_ORDER, PROMISE_TIMING,
   type NegotiationView, type PromiseKind, type PromiseSpec,
 } from "@/lib/sponsor-negotiation";
+import { formatKc } from "@/lib/format";
 
 /** Sliby jako karty: klepnutím přidat nebo odebrat, u vybraného zvolit parametr. */
 export function PromisePicker({ view, seasons, promises, onChange }: {
@@ -57,7 +58,7 @@ export function PromisePicker({ view, seasons, promises, onChange }: {
                 {options.length > 1 ? (
                   <select
                     value={optionKey(chosen.params)} onChange={(e) => pick(kind, e.target.value)}
-                    className="input w-full min-h-11 text-base" aria-label={`Parametr slibu ${PROMISE_LABELS[kind]}`}
+                    className="select w-full min-h-11 !text-base" aria-label={`Parametr slibu ${PROMISE_LABELS[kind]}`}
                   >
                     {options.map((o) => <option key={optionKey(o.params)} value={optionKey(o.params)}>{o.label}</option>)}
                   </select>
@@ -66,8 +67,8 @@ export function PromisePicker({ view, seasons, promises, onChange }: {
                 )}
                 {opt && (
                   <div className="text-sm text-muted">
-                    Ochota stoupne zhruba o {formatCZK(opt.value.low)} až {formatCZK(opt.value.high)} měsíčně.
-                    Za nesplnění pokuta {formatCZK(opt.penalty.low)} až {formatCZK(opt.penalty.high)}{opt.seasonal ? " za každou sezónu" : ""}.
+                    Ochota stoupne zhruba o {formatKc(opt.value.low)} až {formatKc(opt.value.high)} měsíčně.
+                    Za nesplnění pokuta {formatKc(opt.penalty.low)} až {formatKc(opt.penalty.high)}{opt.seasonal ? " za každou sezónu" : ""}.
                   </div>
                 )}
               </div>

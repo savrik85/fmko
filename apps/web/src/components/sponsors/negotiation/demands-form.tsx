@@ -1,10 +1,12 @@
 "use client";
 
-import { formatCZK } from "@/lib/sponsor-owners";
+
 import { seasonsAccusative, weeklyAmount } from "@/lib/sponsor-format";
 import {
   allowedSeasonsOf, findOption, PROMISE_LABELS, proposalOneTimeTotal, type Demands, type NegotiationView, type Proposal,
 } from "@/lib/sponsor-negotiation";
+import { formatKc } from "@/lib/format";
+import { ChoiceGroup } from "@/components/ui";
 
 function MoneyInput({ label, hint, value, onChange }: { label: string; hint?: string; value: number; onChange: (v: number) => void }) {
   return (
@@ -14,7 +16,7 @@ function MoneyInput({ label, hint, value, onChange }: { label: string; hint?: st
       <input
         type="number" inputMode="numeric" min={0} step={100} value={value}
         onChange={(e) => onChange(Math.max(0, Math.round(Number(e.target.value) || 0)))}
-        className="input w-full min-h-11 text-base mt-1 tabular-nums"
+        className="input !w-full min-h-11 text-base mt-1 tabular-nums"
       />
     </label>
   );
@@ -33,7 +35,7 @@ export function DemandsForm({ view, proposal, onChange }: {
     <div className="space-y-4">
       <MoneyInput
         label="Měsíčně"
-        hint={`Na účet přijde ${formatCZK(weeklyAmount(d.monthly))} každé pondělí.`}
+        hint={`Na účet přijde ${formatKc(weeklyAmount(d.monthly))} každé pondělí.`}
         value={d.monthly}
         onChange={(v) => set({ monthly: v })}
       />
@@ -61,11 +63,11 @@ export function DemandsForm({ view, proposal, onChange }: {
           <span className="block text-sm font-heading font-bold">Stavba, kterou sponzor zaplatí</span>
           <select
             value={d.construction ?? ""} onChange={(e) => set({ construction: e.target.value || null })}
-            className="input w-full min-h-11 text-base mt-1"
+            className="select w-full min-h-11 !text-base mt-1"
           >
             <option value="">Nic</option>
             {view.construction.map((o) => (
-              <option key={o.key} value={o.key}>{o.label} na úroveň {o.level} ({formatCZK(o.cost)})</option>
+              <option key={o.key} value={o.key}>{o.label} na úroveň {o.level} ({formatKc(o.cost)})</option>
             ))}
           </select>
         </label>
@@ -76,11 +78,11 @@ export function DemandsForm({ view, proposal, onChange }: {
           <span className="block text-sm font-heading font-bold">Vybavení od sponzora</span>
           <select
             value={d.equipment ?? ""} onChange={(e) => set({ equipment: e.target.value || null })}
-            className="input w-full min-h-11 text-base mt-1"
+            className="select w-full min-h-11 !text-base mt-1"
           >
             <option value="">Nic</option>
             {view.equipment.map((o) => (
-              <option key={o.key} value={o.key}>{o.label} na úroveň {o.level} ({formatCZK(o.cost)})</option>
+              <option key={o.key} value={o.key}>{o.label} na úroveň {o.level} ({formatKc(o.cost)})</option>
             ))}
           </select>
         </label>
@@ -93,7 +95,7 @@ export function DemandsForm({ view, proposal, onChange }: {
             className="mt-1 h-5 w-5 shrink-0"
           />
           <span className="text-sm">
-            Ať sponzor zaplatí výpovědní pokutu u {view.current.sponsorName} ({formatCZK(view.current.terminationFee)}).
+            Ať sponzor zaplatí výpovědní pokutu u {view.current.sponsorName} ({formatKc(view.current.terminationFee)}).
           </span>
         </label>
       )}
@@ -106,17 +108,9 @@ export function DemandsForm({ view, proposal, onChange }: {
 
       <div>
         <div className="text-sm font-heading font-bold mb-1">Délka smlouvy</div>
-        <div className="flex gap-1.5" role="group" aria-label="Délka smlouvy">
-          {allowedSeasons.map((n) => (
-            <button
-              key={n} type="button" aria-pressed={proposal.seasons === n}
-              onClick={() => onChange({ ...proposal, seasons: n })}
-              className={`flex-1 min-h-11 rounded-control text-sm font-heading font-bold ${proposal.seasons === n ? "bg-pitch-500 text-white" : "bg-surface-2 text-muted"}`}
-            >
-              {seasonsAccusative(n)}
-            </button>
-          ))}
-        </div>
+        <ChoiceGroup ariaLabel="Délka smlouvy" columns={allowedSeasons.length <= 2 ? 2 : allowedSeasons.length === 3 ? 3 : 4}
+          value={String(proposal.seasons)} onChange={(v) => onChange({ ...proposal, seasons: Number(v) })}
+          options={allowedSeasons.map((n) => ({ value: String(n), label: seasonsAccusative(n) }))} />
         {!allowedSeasons.includes(1) && (
           <p className="text-sm text-muted mt-1">Do konce sezóny zbývá méně než měsíc, smlouvu jde podepsat nejméně na 2 sezóny.</p>
         )}

@@ -2,7 +2,7 @@
 
 /** Přehledové widgety — zpravodaj, úspěchy, síň slávy, události. */
 
-import Link from "next/link";
+import { ListRow } from "@/components/ui";
 import { WidgetSkeleton, WidgetError } from "../widget-frame";
 import { ChartEmpty, ChartHero } from "../charts";
 import type { WidgetProps } from "../types";
@@ -17,21 +17,15 @@ export function NewsWidget({ data, height }: WidgetProps) {
   const news = (data.news.data ?? []).slice(0, rowsForHeight(height, ROW_PX.rich, 32));
   if (news.length === 0) return <ChartEmpty>Zpravodaj zatím mlčí.</ChartEmpty>;
 
+  // Titulek se smí zalomit na dva řádky (54 px), proto ROW_PX.rich.
   return (
     <>
-      <div className="space-y-2">
+      <div className="-mx-4 sm:-mx-5">
         {news.map((article) => (
-          <Link
-            key={article.id}
-            href="/zpravodaj"
-            className="flex items-center gap-3 py-2 border-b border-gray-50 last:border-b-0 hover:bg-gray-50/50 -mx-1 px-1 rounded transition-colors"
-          >
-            <span className="text-lg shrink-0">{article.icon}</span>
-            <div className="min-w-0 flex-1">
-              <div className="text-sm font-heading font-bold truncate">{article.headline}</div>
-            </div>
-            <span className="text-micro text-muted shrink-0">{timeAgo(article.date)}</span>
-          </Link>
+          <ListRow key={article.id} dense href="/zpravodaj"
+            leading={<span className="text-lg leading-none" aria-hidden="true">{article.icon}</span>}
+            title={article.headline}
+            trailing={<span className="text-micro text-muted">{timeAgo(article.date)}</span>} />
         ))}
       </div>
       <MoreLink href="/zpravodaj">Celý zpravodaj →</MoreLink>
@@ -47,23 +41,17 @@ export function AchievementsWidget({ data, teamId, height }: WidgetProps) {
   const achievements = (data.achievements.data ?? []).slice(0, rowsForHeight(height, ROW_PX.rich, 32));
   if (achievements.length === 0) return <ChartEmpty>Zatím žádný odemčený úspěch.</ChartEmpty>;
 
+  // Kdy se úspěch odemkl, stojí vpravo; titulek se smí zalomit na dva řádky (54 px), proto ROW_PX.rich.
   return (
     <>
-      <div className="mt-2 space-y-1">
+      <div className="-mx-4 sm:-mx-5">
         {achievements.map((a) => {
           const tierColor = a.tier === "gold" ? "text-amber-600" : a.tier === "silver" ? "text-gray-500" : "text-orange-700";
           return (
-            <Link
-              key={a.key}
-              href={`/manazer/${teamId}`}
-              className="flex items-center gap-2.5 py-1.5 px-1 hover:bg-gray-50/60 rounded-control transition-colors"
-            >
-              <div className="text-xl shrink-0 leading-none">{a.icon}</div>
-              <div className="min-w-0 flex-1">
-                <div className={`font-heading font-bold text-sm truncate ${tierColor}`}>{a.title}</div>
-                <div className="text-micro text-muted mt-0.5">{timeAgo(a.earnedAt)}</div>
-              </div>
-            </Link>
+            <ListRow key={a.key} dense href={`/manazer/${teamId}`}
+              leading={<span className="text-xl leading-none" aria-hidden="true">{a.icon}</span>}
+              title={<span className={tierColor}>{a.title}</span>}
+              trailing={<span className="text-micro text-muted">{timeAgo(a.earnedAt)}</span>} />
           );
         })}
       </div>
@@ -107,20 +95,19 @@ export function EventsWidget({ data, height }: WidgetProps) {
   if (data.events.loading) return <WidgetSkeleton />;
   if (data.events.error) return <WidgetError />;
   // API vrací `status`, ne `resolved`: dřív filtr nepouštěl pryč nic a widget ukazoval i proběhlé.
-  const events = (data.events.data ?? []).filter((e) => e.status !== "resolved").slice(0, rowsForHeight(height, ROW_PX.list, 32));
+  const events = (data.events.data ?? []).filter((e) => e.status !== "resolved").slice(0, rowsForHeight(height, ROW_PX.table, 32));
   if (events.length === 0) return <ChartEmpty>Nic se nechystá.</ChartEmpty>;
 
   return (
     <>
-      <ul className="space-y-1">
+      <div className="-mx-4 sm:-mx-5">
         {events.map((e) => (
-          <li key={e.id} className="flex items-center gap-2.5 py-1.5 border-b border-gray-50 last:border-b-0">
-            <span className="text-lg shrink-0">{e.icon ?? "📅"}</span>
-            <span className="text-sm font-heading font-bold flex-1 truncate">{e.title ?? e.headline ?? "Událost"}</span>
-            {e.gameWeek != null && <span className="text-micro text-muted shrink-0">{e.gameWeek}. kolo</span>}
-          </li>
+          <ListRow key={e.id} dense
+            leading={<span className="text-lg leading-none" aria-hidden="true">{e.icon ?? "📅"}</span>}
+            title={e.title ?? e.headline ?? "Událost"}
+            trailing={e.gameWeek != null ? <span className="text-micro text-muted">{e.gameWeek}. kolo</span> : undefined} />
         ))}
-      </ul>
+      </div>
       <MoreLink href="/udalosti">Všechny události →</MoreLink>
     </>
   );

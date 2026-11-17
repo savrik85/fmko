@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
-import { SectionLabel } from "@/components/ui";
+import { SectionLabel, StatusChip } from "@/components/ui";
 import { currentPushSubscription, disablePush, enablePush, pushAvailability, type EnablePushResult, type PushAvailability } from "@/lib/push";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
@@ -176,21 +176,21 @@ export default function SettingsPage() {
             <label htmlFor="pw-current" className="text-xs text-muted uppercase font-heading font-bold block mb-1">Současné heslo</label>
             <input id="pw-current" name="current-password" type="password" autoComplete="current-password"
               value={currentPw} onChange={(e) => setCurrentPw(e.target.value)}
-              className="w-full border border-gray-200 rounded-soft px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-pitch-400" required />
+              className="input !w-full !px-3 !py-2 !text-sm" required />
           </div>
           <div>
             <label htmlFor="pw-new" className="text-xs text-muted uppercase font-heading font-bold block mb-1">Nové heslo</label>
             <input id="pw-new" name="new-password" type="password" autoComplete="new-password"
               value={newPw} onChange={(e) => setNewPw(e.target.value)}
-              className="w-full border border-gray-200 rounded-soft px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-pitch-400" required />
+              className="input !w-full !px-3 !py-2 !text-sm" required />
             {newPw && pwErrors.length > 0 && (
               <div className="flex gap-2 mt-1.5 flex-wrap">
                 {["min. 8 znaků", "malé písmeno", "velké písmeno", "číslo"].map((req) => {
                   const ok = !pwErrors.includes(req);
                   return (
-                    <span key={req} className={`text-micro px-1.5 py-0.5 rounded-full font-heading font-bold ${ok ? "bg-pitch-50 text-pitch-600" : "bg-gray-100 text-muted"}`}>
+                    <StatusChip tone={ok ? "ok" : "neutral"} key={req}>
                       {ok ? "✓" : "○"} {req}
-                    </span>
+                    </StatusChip>
                   );
                 })}
               </div>
@@ -200,7 +200,7 @@ export default function SettingsPage() {
             <label htmlFor="pw-new-2" className="text-xs text-muted uppercase font-heading font-bold block mb-1">Nové heslo znovu</label>
             <input id="pw-new-2" name="new-password-confirm" type="password" autoComplete="new-password"
               value={newPw2} onChange={(e) => setNewPw2(e.target.value)}
-              className="w-full border border-gray-200 rounded-soft px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-pitch-400" required />
+              className="input !w-full !px-3 !py-2 !text-sm" required />
             {pwMatch && <p className="text-card-red text-xs mt-1">Hesla se neshodují</p>}
           </div>
 

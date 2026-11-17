@@ -4,7 +4,12 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { clientOnly } from "@/components/client-only";
 import { apiFetch, type Team } from "@/lib/api";
-import { Spinner } from "@/components/ui";
+import Link from "next/link";
+import { Spinner, BadgePreview, PageLoading } from "@/components/ui";
+import type { BadgePattern } from "@/components/ui";
+import { HeroBackdrop } from "@/components/ui/hero-backdrop";
+import { HeroNavButton, HeroStat, HeroStats, heroTone } from "@/components/ui/hero-kit";
+import { readableOnLight } from "@/lib/team-color";
 import { KotelPrehravac } from "@/components/stadium/KotelPrehravac";
 
 import { builtExtensionsOf } from "@/components/stadium/stadium-3d/stand-levels";
@@ -101,49 +106,82 @@ export default function VisitStadiumPage() {
   const dalsi = leagueTeams.length > 1
     ? leagueTeams[(indexVLize + 1) % leagueTeams.length] : null;
 
-  if (loading) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
+  if (loading) return <PageLoading />;
   if (!stadium || !team) return <div className="page-container">Stadion nenalezen.</div>;
 
+  const color = team.primary_color || "#2D5F2D";
+  const tone = heroTone(color);
+  // Kapacita stojí na plné destičce; na ní se píše barvou klubu.
+  const plateText = tone.light ? "#FFFFFF" : readableOnLight(color);
+  const statNumber = "font-heading font-extrabold text-lg sm:text-3xl tabular-nums leading-none";
+  const badgeProps = {
+    primary: team.badge_primary_color || color,
+    secondary: team.badge_secondary_color || team.secondary_color || "#FFFFFF",
+    pattern: (team.badge_pattern as BadgePattern) || "shield",
+    initials: team.badge_initials || teamInitials(team.name),
+    symbol: team.badge_symbol,
+  };
+
   return (
-    <div className="page-container space-y-5">
-      {/* Header: zpět, šipky po lize a název. Na mobilu se to musí zalomit,
-          jinak se dlouhý název stadionu pere se šipkami o místo. */}
-      <div className="flex items-center justify-between gap-2">
-        <button onClick={() => router.back()} className="text-sm text-pitch-500 font-heading font-bold hover:text-pitch-600">
-          ← Zpět
-        </button>
-        <div className="flex items-center gap-3">
-          {leagueTeams.length > 1 && (
-            <button
-              onClick={() => predchozi && router.push(`/tym/${predchozi.id}/stadion`)}
-              aria-label={`Předchozí stadion: ${predchozi?.name ?? ""}`}
-              className="w-8 h-8 rounded-soft bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-sm shrink-0"
-            >
-              &#9664;
-            </button>
-          )}
-          <div className="text-right min-w-0">
-            <div className="font-heading font-bold text-base truncate">{team.name}</div>
-            {stadium.stadiumName && <div className="text-sm text-muted truncate">{stadium.stadiumName}</div>}
-            {stadium.currentWeather && (
-              <div className="text-sm text-muted">
-                {WEATHER_ICON[stadium.currentWeather] ?? ""} {WEATHER_LABEL[stadium.currentWeather] ?? stadium.currentWeather}
-                {stadium.currentTemperature != null ? ` · ${stadium.currentTemperature} °C` : ""}
+    <>
+      {/* Hlavička jako u hráče a týmu: znak, název, ukazatele vpravo, listování po lize. */}
+      <div className="hero-gradient hero-detail px-3 sm:px-8 py-3 sm:py-5" style={{ backgroundColor: color }}>
+        <HeroBackdrop primary={color} secondary={team.secondary_color} pattern={team.badge_pattern ?? null} />
+        <div className="max-w-[1280px] mx-auto">
+          <div className="flex flex-wrap items-center gap-x-3 sm:gap-x-4 gap-y-2 sm:gap-y-3">
+            {leagueTeams.length > 1 && (
+              <HeroNavButton tone={tone} direction="prev" label={`Předchozí stadion: ${predchozi?.name ?? ""}`} className="hidden sm:flex"
+                onClick={() => predchozi && router.push(`/tym/${predchozi.id}/stadion`)} />
+            )}
+            <div className="shrink-0 sm:hidden"><BadgePreview {...badgeProps} size={40} /></div>
+            <div className="shrink-0 hidden sm:block"><BadgePreview {...badgeProps} size={76} /></div>
+            <div className="flex-1 min-w-0">
+              <h1 className={`font-heading font-extrabold ${tone.text} text-lg sm:text-3xl leading-tight`}>
+                {stadium.stadiumName || "Obecní hřiště"}
+              </h1>
+              <div className={`${tone.muted} text-[13px] sm:text-sm sm:mt-0.5`}>
+                <Link href={`/tym/${teamId}`} className="underline decoration-current/30 hover:decoration-current">{team.name}</Link>
+                {stadium.currentWeather && (
+                  <>
+                    {" "}&middot; {WEATHER_ICON[stadium.currentWeather] ?? ""} {WEATHER_LABEL[stadium.currentWeather] ?? stadium.currentWeather}
+                    {stadium.currentTemperature != null ? ` · ${stadium.currentTemperature} °C` : ""}
+                  </>
+                )}
+              </div>
+            </div>
+            {leagueTeams.length > 1 && (
+              <div className="flex sm:hidden gap-1.5 shrink-0">
+                <HeroNavButton tone={tone} direction="prev" label={`Předchozí stadion: ${predchozi?.name ?? ""}`} className="flex"
+                  onClick={() => predchozi && router.push(`/tym/${predchozi.id}/stadion`)} />
+                <HeroNavButton tone={tone} direction="next" label={`Další stadion: ${dalsi?.name ?? ""}`} className="flex"
+                  onClick={() => dalsi && router.push(`/tym/${dalsi.id}/stadion`)} />
               </div>
             )}
+            <HeroStats tone={tone}>
+              <HeroStat tone={tone} label="Kapacita">
+                <span className={`min-w-[38px] sm:min-w-[54px] h-7 sm:h-11 px-1.5 sm:px-2 rounded-control flex items-center justify-center font-heading font-extrabold text-lg sm:text-3xl tabular-nums leading-none ${tone.plate}`}
+                  style={{ color: plateText }}>
+                  {stadium.capacity.toLocaleString("cs")}
+                </span>
+              </HeroStat>
+              <HeroStat tone={tone} label="Trávník">
+                <span className={statNumber}>{stadium.pitchCondition}<span className="text-xs sm:text-sm">%</span></span>
+              </HeroStat>
+              <HeroStat tone={tone} label="Povrch">
+                <span className="font-heading font-extrabold text-base sm:text-xl leading-none">
+                  {stadium.pitchType === "natural" ? "Přírodní" : stadium.pitchType === "hybrid" ? "Hybridní" : "Umělý"}
+                </span>
+              </HeroStat>
+            </HeroStats>
+            {leagueTeams.length > 1 && (
+              <HeroNavButton tone={tone} direction="next" label={`Další stadion: ${dalsi?.name ?? ""}`} className="hidden sm:flex"
+                onClick={() => dalsi && router.push(`/tym/${dalsi.id}/stadion`)} />
+            )}
           </div>
-          {leagueTeams.length > 1 && (
-            <button
-              onClick={() => dalsi && router.push(`/tym/${dalsi.id}/stadion`)}
-              aria-label={`Další stadion: ${dalsi?.name ?? ""}`}
-              className="w-8 h-8 rounded-soft bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-sm shrink-0"
-            >
-              &#9654;
-            </button>
-          )}
         </div>
       </div>
 
+    <div className="page-container space-y-5">
       <Stadium3DViewer
         open={viewerOpen}
         onClose={() => setViewerOpen(false)}
@@ -204,23 +242,6 @@ export default function VisitStadiumPage() {
           🔍 Prohlédnout v plné velikosti
         </button>
 
-        {/* Stats */}
-        <div className="grid grid-cols-3 gap-4 text-center mt-4 pt-4 border-t border-gray-100">
-          <div>
-            <div className="font-heading font-bold text-xl tabular-nums text-ink">{stadium.capacity}</div>
-            <div className="text-sm text-muted">Kapacita</div>
-          </div>
-          <div>
-            <div className="font-heading font-bold text-xl tabular-nums text-ink">{stadium.pitchCondition}%</div>
-            <div className="text-sm text-muted">Trávník</div>
-          </div>
-          <div>
-            <div className="font-heading font-bold text-xl tabular-nums text-ink">
-              {stadium.pitchType === "natural" ? "Přírodní" : stadium.pitchType === "hybrid" ? "Hybridní" : "Umělý"}
-            </div>
-            <div className="text-sm text-muted">Povrch</div>
-          </div>
-        </div>
       </div>
 
       {/* Chorály cizího kotle. Endpoint `/fans/chants` pouští GET komukoli,
@@ -228,5 +249,6 @@ export default function VisitStadiumPage() {
           z toho, co na tebe zpívají, než z tabulky. */}
       <KotelPrehravac teamId={teamId} zapasovyDen={!!stadium.matchDay} cizi />
     </div>
+    </>
   );
 }

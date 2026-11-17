@@ -258,7 +258,7 @@ function PlayerHead({ player, side, link, isU21, win }: {
       </div>
       <div className="mt-2 font-heading tabular-nums leading-none">
         <span className={`font-extrabold text-2xl ${win ? colors.text : "text-ink"}`}>{player.overall_rating}</span>
-        <span className="ml-1 text-sm font-bold text-muted">rating</span>
+        <span className="ml-1 text-sm font-bold text-muted">hodnocení</span>
       </div>
     </div>
   );

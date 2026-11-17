@@ -4,7 +4,8 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
-import { Spinner, SectionLabel } from "@/components/ui";
+import { SectionLabel, ListCard, ListRow, ListEmpty, RowValue, DeltaMark, PageLoading } from "@/components/ui";
+import { formatKc } from "@/lib/format";
 
 interface Unlock {
   kind: string;
@@ -54,7 +55,6 @@ interface ReputationData {
   };
 }
 
-const CZK = (n: number) => `${n.toLocaleString("cs")} Kč`;
 
 function barColor(v: number): string {
   if (v >= 70) return "bg-pitch-500";
@@ -169,7 +169,7 @@ export default function ReputacePage() {
   }, [teamId]);
 
   if (loading) {
-    return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
+    return <PageLoading />;
   }
   if (!data) {
     return <div className="page-container"><div className="card p-4 text-sm text-muted">Reputaci se nepodařilo načíst.</div></div>;
@@ -253,20 +253,13 @@ export default function ReputacePage() {
           </div>
         )}
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <div className="-mx-4 sm:-mx-5 -mb-4 sm:-mb-5 border-t border-line">
           {data.unlocks.all.map((u) => (
-            <div
-              key={`${u.kind}-${u.level}`}
-              className={`rounded-soft border p-3 ${u.unlocked ? "border-gray-100 bg-gray-50" : "border-gray-200"}`}
-            >
-              <div className="flex items-baseline justify-between gap-2">
-                <span className={`text-sm font-heading font-bold ${u.unlocked ? "text-muted" : "text-ink"}`}>
-                  {u.unlocked ? "✓ " : "🔒 "}{u.label}
-                </span>
-              </div>
-              <div className="text-sm text-muted tabular-nums mt-0.5">
-                reputace {u.reputation} · {u.matches} zápasů · sezóna {u.season}
-              </div>
+            <div key={`${u.kind}-${u.level}`} className={u.unlocked ? "opacity-60" : ""}>
+              <ListRow dense
+                leading={<span className="text-base leading-none" aria-hidden="true">{u.unlocked ? "✓" : "🔒"}</span>}
+                title={u.label}
+                trailing={<span className="text-meta text-muted tabular-nums text-right">rep. {u.reputation} · {u.matches} záp. · {u.season}. sez.</span>} />
             </div>
           ))}
         </div>
@@ -282,10 +275,10 @@ export default function ReputacePage() {
             to je práh dalšího zámku.
           </div>
         )}
-        <div className="space-y-1">
+        <div className="-mx-4 sm:-mx-5 -mb-4 sm:-mb-5 border-t border-line">
           <EarnRow icon="🏪" label="Podpora místních podnikatelů" note="vyplácí se týdně, zaměstnanci ji můžou zvýšit"
-            now={CZK(data.earns.baseSponsorMonthly) + "/měs"}
-            next={data.atNextUnlock ? CZK(data.atNextUnlock.baseSponsorMonthly) + "/měs" : null} />
+            now={formatKc(data.earns.baseSponsorMonthly) + "/měs"}
+            next={data.atNextUnlock ? formatKc(data.atNextUnlock.baseSponsorMonthly) + "/měs" : null} />
           <EarnRow icon="💼" label="Nabídek sponzorů"
             now={String(data.earns.sponsorOfferCount)}
             next={data.atNextUnlock ? String(data.atNextUnlock.sponsorOfferCount) : null} />
@@ -296,8 +289,8 @@ export default function ReputacePage() {
             now={`+${data.earns.attendanceBonusPct} %`}
             next={data.atNextUnlock ? `+${data.atNextUnlock.attendanceBonusPct} %` : null} />
           <EarnRow icon="🍺" label="Pronájem bufetu" note="jen v režimu externího provozovatele"
-            now={CZK(data.earns.concessionWeeklyExternal) + "/týden"}
-            next={data.atNextUnlock ? CZK(data.atNextUnlock.concessionWeeklyExternal) + "/týden" : null} />
+            now={formatKc(data.earns.concessionWeeklyExternal) + "/týden"}
+            next={data.atNextUnlock ? formatKc(data.atNextUnlock.concessionWeeklyExternal) + "/týden" : null} />
           <EarnRow icon="🤝" label="Zájem hráčů o přestup k tobě"
             now={`${data.earns.transferInterestScore > 0 ? "+" : ""}${data.earns.transferInterestScore} bodů`}
             next={data.atNextUnlock ? `${data.atNextUnlock.transferInterestScore > 0 ? "+" : ""}${data.atNextUnlock.transferInterestScore} bodů` : null} />
@@ -312,7 +305,7 @@ export default function ReputacePage() {
             Většina zdrojů se vyhodnotí sama, po zápase, na konci sezóny nebo jednou měsíčně.
             Ovlivnit můžeš hlavně výsledky, volby v akcích a vztah s obcí.
           </p>
-          <div className="space-y-2.5">
+          <div className="-mx-4 sm:-mx-5 -mb-4 sm:-mb-5 border-t border-line">
             {SOURCES_UP.map((s) => (
               <SourceRow key={s.label} label={s.label} detail={s.detail} href={s.href} positive />
             ))}
@@ -324,12 +317,12 @@ export default function ReputacePage() {
           <p className="text-sm text-muted mb-3">
             Ztráty se na rozdíl od zisků nekrátí, spadnout jde vždycky plnou rychlostí.
           </p>
-          <div className="space-y-2.5">
+          <div className="-mx-4 sm:-mx-5 border-y border-line">
             {SOURCES_DOWN.map((s) => (
               <SourceRow key={s.label} label={s.label} detail={s.detail} href={null} positive={false} />
             ))}
           </div>
-          <div className="text-sm text-muted mt-3 pt-3 border-t border-gray-100">
+          <div className="text-sm text-muted mt-3">
             Útlum tě nikdy nestlačí pod{" "}
             <span className="tabular-nums font-heading font-bold text-ink">{data.baseline}</span> -
             to je práh pro velikost tvé obce.
@@ -338,42 +331,19 @@ export default function ReputacePage() {
       </div>
 
       {/* ═══ Historie ═══ */}
-      <div className="card p-4 sm:p-5">
-        <SectionLabel>
-          {data.history.length > 0 ? `Odkud se vzala (posledních ${data.history.length})` : "Odkud se vzala"}
-        </SectionLabel>
-        {data.history.length === 0 ? (
-          <div className="py-6 text-sm text-muted text-center">
-            Zatím žádná změna. Historie se začne plnit, jakmile se reputace pohne.
-          </div>
-        ) : (
-          <div className="space-y-1">
-            {data.history.map((h, i) => (
-              <div key={i} className="flex items-start gap-3 py-2 border-b border-gray-50 last:border-b-0">
-                <div className={`shrink-0 w-9 h-9 rounded-full flex items-center justify-center font-heading font-bold text-sm tabular-nums ${
-                  h.delta > 0 ? "bg-pitch-50 text-pitch-600"
-                    : h.delta < 0 ? "bg-red-50 text-card-red"
-                    : "bg-gray-50 text-muted"
-                }`}>
-                  {h.delta > 0 ? "+" : ""}{h.delta}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm text-ink">{h.description}</div>
-                  {h.delta !== h.rawDelta && (
-                    <div className="text-sm text-muted">
-                      Ze {h.rawDelta > 0 ? "+" : ""}{h.rawDelta} se započítalo {h.delta > 0 ? "+" : ""}{h.delta}, jsi vysoko.
-                    </div>
-                  )}
-                </div>
-                <div className="shrink-0 text-right">
-                  <div className="text-sm text-muted tabular-nums">{formatDate(h.gameDate)}</div>
-                  <div className="text-sm font-heading font-bold text-ink tabular-nums">{h.newValue}</div>
-                </div>
-              </div>
-            ))}
-          </div>
+      <ListCard title="Odkud se vzala" count={data.history.length > 0 ? `posledních ${data.history.length}` : undefined}>
+        {data.history.length === 0 && (
+          <ListEmpty icon="⭐">Zatím žádná změna. Historie se začne plnit, jakmile se reputace pohne.</ListEmpty>
         )}
-      </div>
+        {data.history.map((h, i) => (
+          <ListRow key={i}
+            leading={<DeltaMark value={h.delta} />}
+            // Popis bývá celá věta: patří do odstavce, v titulku by se ořízl.
+            title={formatDate(h.gameDate)}
+            detail={<>{h.description}{h.delta !== h.rawDelta && <span className="text-muted"> Ze {h.rawDelta > 0 ? "+" : ""}{h.rawDelta} se započítalo {h.delta > 0 ? "+" : ""}{h.delta}, jsi vysoko.</span>}</>}
+            trailing={<RowValue sub="reputace">{h.newValue}</RowValue>} />
+        ))}
+      </ListCard>
     </div>
   );
 }
@@ -469,21 +439,16 @@ function ConditionTile({ label, need, have, missing }: { label: string; need: nu
 
 function EarnRow({ icon, label, now, next, note }: { icon: string; label: string; now: string; next: string | null; note?: string }) {
   return (
-    <div className="flex items-baseline gap-3 py-2 border-b border-gray-50 last:border-b-0">
-      <span className="shrink-0 text-base leading-none">{icon}</span>
-      <span className="flex-1 min-w-0 text-sm text-ink">
-        {label}
-        {note && <span className="block text-sm text-muted leading-snug">{note}</span>}
-      </span>
-      <span className="shrink-0 text-sm font-heading font-bold tabular-nums text-ink text-right whitespace-nowrap">
-        {now}
-      </span>
-      {next !== null && (
-        <span className="shrink-0 text-sm tabular-nums text-pitch-600 text-right whitespace-nowrap w-28">
-          → {next}
+    <ListRow dense
+      leading={<span className="text-base leading-none" aria-hidden="true">{icon}</span>}
+      title={<span className="font-normal">{label}</span>}
+      detail={note || undefined}
+      trailing={
+        <span className="flex items-baseline gap-3 tabular-nums whitespace-nowrap">
+          <span className="text-body font-bold text-ink">{now}</span>
+          {next !== null && <span className="text-meta text-pitch-600 w-24 text-right">→ {next}</span>}
         </span>
-      )}
-    </div>
+      } />
   );
 }
 
@@ -498,14 +463,10 @@ function SourceRow({
   href: string | null;
   positive: boolean;
 }) {
+  // Proužek nese směr: zelený zdroj reputaci zvedá, červený ji sráží.
   return (
-    <div className={`pl-3 border-l-2 ${positive ? "border-pitch-400" : "border-card-red/60"}`}>
-      <div className="text-sm font-heading font-bold text-ink">
-        {href ? (
-          <Link href={href} className="hover:text-pitch-600 underline decoration-pitch-500/20">{label}</Link>
-        ) : label}
-      </div>
-      <div className="text-sm text-muted leading-snug">{detail}</div>
-    </div>
+    <ListRow dense href={href ?? undefined} tone={positive ? "new" : "danger"}
+      title={label}
+      detail={detail} />
   );
 }

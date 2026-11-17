@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { FaceAvatar } from "@/components/players/face-avatar";
-import { CollapsibleCard } from "@/components/ui";
+import { CollapsibleCard, ProgressBar } from "@/components/ui";
 import {
-  REFEREE_AXES, axisWord, axisColor, refereeAdviceCz, formatGrade, gradeColor, gradeWord,
+  REFEREE_AXES, axisWord, axisTone, refereeAdviceCz, formatGrade, gradeColor, gradeWord,
   memoryWord, memoryColor, pocet,
   type RefereeProfileView, type RefereeStatsView, type RefereeMemoryView,
 } from "@/lib/referee-info";
@@ -84,9 +84,7 @@ export function RefereeCard({ referee, isHome }: Props) {
             <div key={axis.key}>
               <div className="flex items-center gap-2">
                 <span className="text-sm w-36 shrink-0">{axis.label}</span>
-                <div className="flex-1 h-2 rounded-full bg-ink/10 overflow-hidden">
-                  <div className={`h-full rounded-full ${axisColor(value)}`} style={{ width: `${value}%` }} />
-                </div>
+                <ProgressBar value={value} tone={axisTone(value)} label={axisWord(value)} className="flex-1" />
                 <span className="text-sm text-muted w-28 shrink-0 text-right">{axisWord(value)}</span>
               </div>
               <p className="text-sm text-ink-light mt-0.5 mb-2">{axis.popis}</p>

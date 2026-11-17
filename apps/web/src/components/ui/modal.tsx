@@ -10,7 +10,7 @@ interface ModalProps {
   maxWidth?: string;
   title?: string;
   /** Formulářový modal se kliknutím vedle nezavírá — viz Sheet. */
-  zavritKlikemVedle?: boolean;
+  closeOnBackdrop?: boolean;
 }
 
 /**
@@ -21,10 +21,10 @@ interface ModalProps {
  * i stránku pod ním. Volající kód se nemusel měnit — chování zdědí
  * všechny čtyři použití zdarma.
  */
-export function Modal({ isOpen, onClose, children, maxWidth, title, zavritKlikemVedle }: ModalProps) {
+export function Modal({ isOpen, onClose, children, maxWidth, title, closeOnBackdrop }: ModalProps) {
   return (
     <Sheet open={isOpen} onClose={onClose} maxWidth={maxWidth ?? "560px"} title={title}
-      zavritKlikemVedle={zavritKlikemVedle}>
+      closeOnBackdrop={closeOnBackdrop}>
       {children}
     </Sheet>
   );

@@ -8,7 +8,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { apiFetch, apiAction } from "@/lib/api";
-import { Sheet } from "@/components/ui";
+import { Sheet, ListRow } from "@/components/ui";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { formatKg } from "@/lib/player-attrs";
 import {
@@ -21,6 +21,7 @@ import {
   type StaffTaskType,
   type StaffTaskView,
 } from "@okresni-masina/shared";
+import { formatKc } from "@/lib/format";
 
 export interface StaffTasksData {
   gameDate: string;
@@ -40,7 +41,6 @@ interface Member {
 
 const POSITION_LABEL: Record<string, string> = { GK: "BRA", DEF: "OBR", MID: "ZÁL", FWD: "ÚTO" };
 
-function czk(n: number): string { return `${n.toLocaleString("cs")} Kč`; }
 
 function czDate(day: string): string {
   const [, m, d] = day.split("-").map(Number);
@@ -212,7 +212,7 @@ export function StaffTaskBox({ teamId, member, data, onChanged }: {
       title: `Zrušit úkol ${def.label}?`,
       description: started
         ? `${name} už začal${member.gender === "f" ? "a" : ""} pracovat, peníze se nevrátí.`
-        : `Zatím se nezačalo, ${czk(t.costPaid)} se vrátí do pokladny.`,
+        : `Zatím se nezačalo, ${formatKc(t.costPaid)} se vrátí do pokladny.`,
       confirmLabel: "Zrušit úkol",
       cancelLabel: "Nechat běžet",
       variant: "danger",
@@ -290,7 +290,7 @@ export function StaffTaskBox({ teamId, member, data, onChanged }: {
                   <div className="text-sm text-muted">{d.description}</div>
                   <div className="text-sm text-ink">
                     {d.kind === "match" ? "Na příští ligový zápas" : `Na ${d.durations?.map((x) => `${x}`).join(" nebo ")} dní`}
-                    {" · "}{czk(staffTaskCost(t, d.durations?.[0]))}
+                    {" · "}{formatKc(staffTaskCost(t, d.durations?.[0]))}
                     {unavailable && <span className="text-card-red"> · {data.nextMatch ? "příští zápas je venku" : "žádný zápas v plánu"}</span>}
                   </div>
                 </button>
@@ -335,33 +335,38 @@ export function StaffTaskBox({ teamId, member, data, onChanged }: {
                       : "V klubu není nikdo vhodný."}
                   </div>
                 ) : (
-                  <div className="max-h-72 overflow-y-auto divide-y divide-gray-100 border border-gray-100 rounded-soft">
+                  <div className="max-h-72 overflow-y-auto divide-y divide-line-soft border border-line rounded-soft">
+                    {/* Celý řádek je popisek přepínače, klik kamkoli do řádku hráče vybere. */}
                     {candidates.map(({ p, blockedBy }) => {
                       const selected = def.target === "players" ? playerIds.includes(p.id) : playerId === p.id;
                       const full = def.target === "players" && !selected && playerIds.length >= (def.maxPlayers ?? 5);
                       const disabled = full || !!blockedBy;
+                      const info = blockedBy ? [] : playerInfo(picked!, p);
+                      // S druhým řádkem je řádek zarovnaný nahoru: přepínač posunout k prvnímu řádku jména.
                       return (
-                        <label key={p.id} className={`flex items-center gap-3 px-3 py-2 ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"} ${selected ? "bg-pitch-500/10" : ""}`}>
-                          <input
-                            type={def.target === "players" ? "checkbox" : "radio"}
-                            name={`task-player-${member.id}`}
-                            checked={selected}
-                            disabled={disabled}
-                            onChange={() => {
-                              if (def.target === "players") {
-                                setPlayerIds((cur) => cur.includes(p.id) ? cur.filter((x) => x !== p.id) : [...cur, p.id]);
-                              } else setPlayerId(p.id);
-                            }}
-                          />
-                          <span className="text-sm font-heading text-muted w-9 shrink-0">{POSITION_LABEL[p.position] ?? p.position}</span>
-                          <span className="flex-1 min-w-0">
-                            <span className="text-base font-bold truncate block">{p.name}{p.isU21 ? " (U21)" : ""}</span>
-                            <span className="text-sm flex flex-wrap gap-x-2">
-                              {blockedBy
-                                ? <span className="text-muted">{blockedBy}</span>
-                                : playerInfo(picked!, p).map((i) => <span key={i.text} className={i.tone}>{i.text}</span>)}
-                            </span>
-                          </span>
+                        <label key={p.id} className={`block ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"} ${selected ? "bg-pitch-500/10" : disabled ? "" : "hover:bg-surface-2"}`}>
+                          <ListRow dense
+                            leading={
+                              <input
+                                type={def.target === "players" ? "checkbox" : "radio"}
+                                name={`task-player-${member.id}`}
+                                checked={selected}
+                                disabled={disabled}
+                                onChange={() => {
+                                  if (def.target === "players") {
+                                    setPlayerIds((cur) => cur.includes(p.id) ? cur.filter((x) => x !== p.id) : [...cur, p.id]);
+                                  } else setPlayerId(p.id);
+                                }}
+                                className={blockedBy || info.length > 0 ? "mt-1" : undefined}
+                              />
+                            }
+                            title={`${p.name}${p.isU21 ? " (U21)" : ""}`}
+                            detail={blockedBy
+                              ? <span className="text-muted">{blockedBy}</span>
+                              : info.length > 0
+                                ? <span className="flex flex-wrap gap-x-2">{info.map((i) => <span key={i.text} className={i.tone}>{i.text}</span>)}</span>
+                                : undefined}
+                            trailing={<span className="text-meta font-heading text-muted">{POSITION_LABEL[p.position] ?? p.position}</span>} />
                         </label>
                       );
                     })}
@@ -372,7 +377,7 @@ export function StaffTaskBox({ teamId, member, data, onChanged }: {
 
             <div className="text-sm border-t border-gray-100 pt-3 flex justify-between">
               <span className="text-muted">Cena</span>
-              <span className="font-heading font-bold tabular-nums">{czk(staffTaskCost(picked!, duration ?? undefined))}</span>
+              <span className="font-heading font-bold tabular-nums">{formatKc(staffTaskCost(picked!, duration ?? undefined))}</span>
             </div>
 
             <div className="flex gap-2 justify-between">

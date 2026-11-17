@@ -1,3 +1,4 @@
+import { formatKc } from "@/lib/format";
 /**
  * Barvy a formátování pro dashboardové grafy.
  *
@@ -101,7 +102,7 @@ export function compactCZK(value: number): string {
 
 /** Plná částka v korunách — do tooltipů a hodnot, kde je místo. */
 export function fullCZK(value: number): string {
-  return `${Math.round(value).toLocaleString("cs")} Kč`;
+  return `${formatKc(Math.round(value))}`;
 }
 
 /**

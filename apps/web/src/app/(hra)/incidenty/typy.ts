@@ -121,6 +121,3 @@ export function datum(iso: string): string {
   return new Date(iso).toLocaleDateString("cs-CZ", { day: "numeric", month: "numeric", timeZone: "UTC" });
 }
 
-export function kc(castka: number): string {
-  return `${castka.toLocaleString("cs-CZ")} Kč`;
-}

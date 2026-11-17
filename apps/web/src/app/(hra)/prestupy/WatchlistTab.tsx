@@ -7,7 +7,7 @@
 
 import { useEffect, useState } from "react";
 import { apiFetch, apiAction } from "@/lib/api";
-import { Spinner } from "@/components/ui";
+import { SectionLoading } from "@/components/ui";
 import { PlayerBrowseTable, type BrowseRow } from "@/components/players/PlayerBrowseTable";
 
 export interface WatchedPlayer {
@@ -58,7 +58,7 @@ export function WatchlistTab({ teamId, onCount, onOpenFreeAgents, color, onColor
     }
   };
 
-  if (players === null) return <div className="flex justify-center py-8"><Spinner /></div>;
+  if (players === null) return <SectionLoading />;
 
   const rows: BrowseRow[] = players.map((p) => ({
     id: p.id,
@@ -78,7 +78,8 @@ export function WatchlistTab({ teamId, onCount, onOpenFreeAgents, color, onColor
   }));
 
   return (
-    <div className="card p-4 sm:p-5">
+    // Karta jen od md: na telefonu je seznam hráčů sám kartou (ListCard v PlayerBrowseTable).
+    <div className="md:p-5 md:bg-[var(--color-surface)] md:rounded-[var(--radius-card)] md:shadow-[var(--shadow-card)]">
       <PlayerBrowseTable rows={rows} color={color} onColorText={onColorText} ratingColor={ratingColor}
         columns={{ club: true, form: true, watchedSince: true }} onRemove={remove}
         emptyText="Zatím nikoho nesleduješ. Hráče přidáš hvězdičkou v jeho profilu." />

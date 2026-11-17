@@ -5,8 +5,8 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 import { useTeam } from "@/context/team-context";
-import { ErrorBox, SectionLabel, Spinner, useConfirm } from "@/components/ui";
-import { formatCZK } from "@/lib/sponsor-owners";
+import { ErrorBox, SectionLabel, useConfirm, SectionLoading } from "@/components/ui";
+
 import { formatGameDay, seasonsAccusative, weeklyAmount } from "@/lib/sponsor-format";
 import {
   estimateRange, initialDraft, previewCost, proposalsEqual, RESPONSE_LABELS, withSeasons,
@@ -18,6 +18,7 @@ import { DemandsForm } from "@/components/sponsors/negotiation/demands-form";
 import { RoundsHistory } from "@/components/sponsors/negotiation/rounds-history";
 import { SigningSummary } from "@/components/sponsors/negotiation/signing-summary";
 import { OwnerReplyDialog } from "@/components/sponsors/negotiation/owner-reply-dialog";
+import { formatKc } from "@/lib/format";
 
 const CLOSED_TEXT: Record<string, string> = {
   walked_away: "Majitel od jednání odešel. Chvíli s vámi jednat nebude.",
@@ -68,7 +69,7 @@ export default function NegotiationPage() {
   const replyRef = useRef<HTMLDivElement | null>(null);
   // Dialog s odpovědí hned po návrhu (jako u přestupů), ať hráč nemusí hledat, co majitel řekl.
   const [replyOpen, setReplyOpen] = useState(false);
-  const { confirm, dialog } = useConfirm();
+  const { confirm, dialog } = useConfirm({ sheet: true });
 
   useEffect(() => {
     setNegId(new URLSearchParams(window.location.search).get("id"));
@@ -126,14 +127,14 @@ export default function NegotiationPage() {
         + (legacySwitch ? " Přechod ze staré smlouvy je zdarma: žádná výpovědní pokuta ani ztráta reputace." : ""),
       details: [
         // Co klub opravdu dostane, stejně jako u podpisu banneru (s násobitelem výplaty).
-        { label: "Týdenní příjem", value: `+${formatCZK(weeklyAmount(d.monthly))}`, color: "text-pitch-500" },
-        ...(d.signingBonus > 0 ? [{ label: "Za podpis", value: `+${formatCZK(d.signingBonus)}`, color: "text-pitch-500" }] : []),
+        { label: "Týdenní příjem", value: `+${formatKc(weeklyAmount(d.monthly))}`, color: "text-pitch-500" },
+        ...(d.signingBonus > 0 ? [{ label: "Za podpis", value: `+${formatKc(d.signingBonus)}`, color: "text-pitch-500" }] : []),
         ...(view.current && !view.current.sameSponsor && p.currentFee === 0 && view.current.terminationFee > 0
-          ? [{ label: "Výpovědní pokuta", value: `-${formatCZK(view.current.terminationFee)}`, color: "text-card-red" }] : []),
+          ? [{ label: "Výpovědní pokuta", value: `−${formatKc(view.current.terminationFee)}`, color: "text-card-red" }] : []),
         ...(view.current && view.current.clawback > 0
-          ? [{ label: "Vrácení zálohy", value: `-${formatCZK(view.current.clawback)}`, color: "text-card-red" }] : []),
+          ? [{ label: "Vrácení zálohy", value: `−${formatKc(view.current.clawback)}`, color: "text-card-red" }] : []),
         ...(view.current && !view.current.sameSponsor && (view.current.forfeitPenalty ?? 0) > 0
-          ? [{ label: "Propadlé sliby", value: `pokuta ${formatCZK(view.current.forfeitPenalty ?? 0)}`, color: "text-card-red" }] : []),
+          ? [{ label: "Propadlé sliby", value: `pokuta ${formatKc(view.current.forfeitPenalty ?? 0)}`, color: "text-card-red" }] : []),
         ...(p.renamesClub && p.reputationPenalty > 0 ? [{ label: "Dopad na reputaci", value: "-3 reputace", color: "text-card-red" }] : []),
       ],
       confirmLabel: "Podepsat",
@@ -187,7 +188,7 @@ export default function NegotiationPage() {
     );
   }
   if (error && !view) return <div className="page-container"><ErrorBox message={error} /></div>;
-  if (!view || !draft) return <div className="flex justify-center py-12"><Spinner /></div>;
+  if (!view || !draft) return <SectionLoading />;
 
   const estimate = estimateRange(view, draft.promises, draft.seasons);
   const cost = previewCost(view, draft);
@@ -264,14 +265,14 @@ export default function NegotiationPage() {
         </div>
       )}
 
-      {error && <div className="text-sm text-card-red bg-red-50 border border-red-200 rounded-soft px-3 py-2">{error}</div>}
+      {error && <ErrorBox message={error} />}
 
       {/* Odesílací tlačítka vždy na konci stránky, bez částek. */}
       <div className="flex flex-col gap-2">
         {negotiable && !agreesWithPending && (
           <p className="text-sm">
-            Tvůj návrh ho stojí <span className={`font-heading font-bold ${cost > estimate.high ? "text-card-red" : cost <= estimate.low ? "text-pitch-600" : "text-gold-600"}`}>{formatCZK(cost)}</span> měsíčně,
-            ochota je zhruba {formatCZK(estimate.low)} až {formatCZK(estimate.high)}.
+            Tvůj návrh ho stojí <span className={`font-heading font-bold ${cost > estimate.high ? "text-card-red" : cost <= estimate.low ? "text-pitch-600" : "text-gold-600"}`}>{formatKc(cost)}</span> měsíčně,
+            ochota je zhruba {formatKc(estimate.low)} až {formatKc(estimate.high)}.
             {cost > estimate.high * 1.5 ? " Takový návrh ho nejspíš urazí." : cost > estimate.high ? " Nejspíš ho odmítne." : ""}
           </p>
         )}

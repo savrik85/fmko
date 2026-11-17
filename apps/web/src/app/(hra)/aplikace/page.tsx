@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { StatusChip } from "@/components/ui";
 
 type DeviceType =
   | "ios-safari"
@@ -165,9 +166,9 @@ export default function AppInstallPage() {
         <div className="flex gap-2 flex-wrap mt-3">
           {/* Offline režim appka nemá: service worker obsluhuje jen upozornění, nic necachuje. */}
           {["Rychlý přístup z plochy", "Push notifikace"].map((f) => (
-            <span key={f} className="text-xs bg-pitch-50 text-pitch-700 font-heading font-bold px-2 py-1 rounded-full">
+            <StatusChip tone="ok" key={f}>
               ✓ {f}
-            </span>
+            </StatusChip>
           ))}
         </div>
       </div>
@@ -194,9 +195,9 @@ export default function AppInstallPage() {
         <div className="card p-5">
           <div className="flex items-center gap-2 mb-4">
             <span className="text-xs font-heading font-bold text-muted uppercase tracking-wide">Návod pro</span>
-            <span className="text-xs font-heading font-bold bg-pitch-50 text-pitch-700 px-2 py-0.5 rounded-full">
+            <StatusChip tone="ok">
               {info.title}
-            </span>
+            </StatusChip>
           </div>
 
           <ol className="space-y-4">

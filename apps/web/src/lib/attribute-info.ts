@@ -16,7 +16,7 @@ export interface AttrInfo {
 
 export const ATTRIBUTE_INFO: Record<AttrKey, AttrInfo> = {
   rat: {
-    label: "Celkový rating",
+    label: "Celkové hodnocení",
     description: "Souhrnné hodnocení hráče (0–100). Vážený průměr všech dovedností podle pozice.",
     relevantFor: ["GK", "DEF", "MID", "FWD"],
   },
@@ -102,7 +102,7 @@ export const ATTRIBUTE_INFO: Record<AttrKey, AttrInfo> = {
   },
   wage: {
     label: "Týdenní mzda",
-    description: "Kolik hráč týdně bere. Větší mzda = vyšší rating, ale větší zátěž na rozpočet.",
+    description: "Kolik hráč týdně bere. Větší mzda = vyšší hodnocení, ale větší zátěž na rozpočet.",
     relevantFor: ["GK", "DEF", "MID", "FWD"],
   },
 };

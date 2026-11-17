@@ -2,12 +2,14 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { MANAGER_FANS, MANAGER_FANS_BANDS } from "@okresni-masina/shared";
+import { MANAGER_FANS } from "@okresni-masina/shared";
+import { ManagerFansBandsTable } from "@/components/fans/manager-fans-bands";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, showError, type Team } from "@/lib/api";
-import { Spinner, SectionLabel, useConfirm, Tabs } from "@/components/ui";
+import { SectionLabel, useConfirm, Tabs, ListCard, ListRow, ListEmpty, RowIcon, RowValue, ResultChip, PageLoading, CollapsibleCard } from "@/components/ui";
 import { BusSelector } from "../zapas/BusSelector";
 import { FanGroupsPanel, type FanGroupsData } from "./FanGroupsPanel";
+import { formatKc } from "@/lib/format";
 
 interface ScheduleMatch {
   id: string;
@@ -214,9 +216,6 @@ const PRODUCT_ICONS: Record<string, string> = {
 };
 
 
-function formatCZK(v: number): string {
-  return v.toLocaleString("cs") + " Kč";
-}
 
 function satBarColor(value: number): string {
   if (value >= 75) return "bg-pitch-500";
@@ -235,13 +234,6 @@ function formatGamedate(s: string): string {
   const d = new Date(s.length > 10 ? s : s + "T00:00:00");
   if (isNaN(d.getTime())) return s;
   return `${d.getDate()}.${d.getMonth() + 1}.`;
-}
-
-function resultBadge(r: string | null): { label: string; cls: string } {
-  if (r === "win") return { label: "V", cls: "bg-pitch-500 text-white" };
-  if (r === "draw") return { label: "R", cls: "bg-gold-500 text-white" };
-  if (r === "loss") return { label: "P", cls: "bg-card-red text-white" };
-  return { label: "?", cls: "bg-gray-200 text-gray-500" };
 }
 
 /** Výsledek slovem — písmeno V se plete s „venku". */
@@ -310,7 +302,7 @@ export default function FansPage() {
   const [productDrafts, setProductDrafts] = useState<Record<string, { sellPrice: string }>>({});
   const [restockQty, setRestockQty] = useState<Record<string, string>>({});
   const [acting, setActing] = useState<string | null>(null);
-  const { confirm, dialog: confirmDialog } = useConfirm();
+  const { confirm, dialog: confirmDialog } = useConfirm({ sheet: true });
 
   const refresh = async () => {
     if (!teamId) return;
@@ -391,7 +383,7 @@ export default function FansPage() {
 
   const promoteNext = async () => {
     if (!teamId || !nextHomeMatch || promoting) return;
-    const priceStr = promotionPrice != null ? `${promotionPrice.toLocaleString("cs")} Kč` : "500–2 500 Kč";
+    const priceStr = promotionPrice != null ? `${formatKc(promotionPrice)}` : "500–2 500 Kč";
     const ok = await confirm({
       title: `Propagovat zápas proti ${nextHomeMatch.awayName}?`,
       description: `Doma · ${nextHomeMatch.scheduledAt ? new Date(nextHomeMatch.scheduledAt).toLocaleDateString("cs") : ""}. Vyjde článek ve Zpravodaji a přijde +25 % diváků.`,
@@ -501,8 +493,8 @@ export default function FansPage() {
     const ok = await confirm({
       title: `Doplnit sklad ${product.label}?`,
       description: `${qty} ks × ${tier.wholesalePrice} Kč (${tier.label})`,
-      details: [{ label: "Celkem", value: `-${formatCZK(total)}`, color: "text-card-red" }],
-      confirmLabel: `Nakoupit za ${formatCZK(total)}`,
+      details: [{ label: "Celkem", value: `−${formatKc(total)}`, color: "text-card-red" }],
+      confirmLabel: `Nakoupit za ${formatKc(total)}`,
     });
     if (!ok) return;
     setActing("restock-" + key);
@@ -517,11 +509,7 @@ export default function FansPage() {
   };
 
   if (loading) {
-    return (
-      <div className="page-container flex items-center justify-center min-h-[50vh]">
-        <Spinner />
-      </div>
-    );
+    return <PageLoading />;
   }
   if (!fans || !concession || !team) {
     return <div className="page-container">Nepodařilo se načíst data fanoušků.</div>;
@@ -555,13 +543,8 @@ export default function FansPage() {
 
       {currentTab === "fanbase" && fanbase && (<>
       {/* ═══ Jak to funguje — jednoduchý úvod ═══ */}
-      <details className="card p-4 sm:p-5 group">
-        <summary className="cursor-pointer font-heading font-bold text-sm flex items-center justify-between">
-          <span>💡 Jak to s fanoušky funguje</span>
-          <span className="text-xs text-muted group-open:hidden">rozbalit</span>
-          <span className="text-xs text-muted hidden group-open:inline">sbalit</span>
-        </summary>
-        <div className="mt-3 space-y-3 text-sm leading-relaxed">
+      <CollapsibleCard title="💡 Jak to s fanoušky funguje" startCollapsed>
+        <div className="space-y-3 text-sm leading-relaxed">
           <p>Fanoušci se dělí na tři druhy podle toho, jak ti jsou věrní:</p>
           <ul className="space-y-1.5 ml-4 list-disc">
             <li><strong className="text-card-red">🟥 Tvrdé jádro</strong>, ti, co přijdou vždycky. I když prší, i když prohráváš. Když je jich hodně, mužstvo se cítí silně doma.</li>
@@ -587,7 +570,7 @@ export default function FansPage() {
             Pro malou vesnici (do 200 obyvatel) je rozumný cíl po první sezóně: 20-30 stálých fanoušků a kolem 80-90 lidí na zápase. Záleží na tom, kolik peněz máš na busy a propagaci.
           </p>
         </div>
-      </details>
+      </CollapsibleCard>
 
       {/* ═══ Fanbase tier pyramid ═══ */}
       <div className="card p-4 sm:p-5">
@@ -721,7 +704,7 @@ export default function FansPage() {
                 📢 {promoting ? "Propaguji…" : "Propagovat zápas"}
                 {promotionPrice != null && (
                   <span className="text-xs text-muted font-normal">
-                    {promotionPrice.toLocaleString("cs")} Kč
+                    {formatKc(promotionPrice)}
                   </span>
                 )}
               </button>
@@ -826,40 +809,21 @@ export default function FansPage() {
       </div>
 
       {/* ═══ Spádové obce (autobusy) ═══ */}
-      <div className="card p-4 sm:p-5">
-        <SectionLabel>Spádové obce (autobusy)</SectionLabel>
-        {fanbase.satellites.length === 0 ? (
-          <div className="text-sm text-muted">
-            Zatím žádné spádové obce. Před domácím zápasem objednej autobus z okolí (sekce u zápasu).
-          </div>
-        ) : (
-          <div className="space-y-1.5">
-            {fanbase.satellites.map((s) => {
-              const total = s.casualCount + s.regularCount + s.hardcoreCount;
-              return (
-                <div
-                  key={s.villageId}
-                  className="flex items-center gap-2 text-sm py-1.5 border-b border-gray-100 last:border-b-0"
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="font-heading font-bold truncate">{s.villageName}</div>
-                    <div className="text-micro text-muted">
-                      {s.distanceKm} km · {s.population.toLocaleString("cs")} obyv. · konverze ×{s.conversionMod}
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="font-heading font-bold text-pitch-600">★ {total}</div>
-                    <div className="text-micro text-muted">streak {s.consecutiveBuses}</div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+      <ListCard title="Spádové obce (autobusy)" count={fanbase.satellites.length || undefined}>
+        {fanbase.satellites.length === 0 && (
+          <ListEmpty icon="🚌">Zatím žádné spádové obce. Před domácím zápasem objednej autobus z okolí (sekce u zápasu).</ListEmpty>
         )}
-        <div className="mt-2 text-micro text-muted">
+        {fanbase.satellites.map((s) => (
+          <ListRow key={s.villageId}
+            leading={<RowIcon>🚌</RowIcon>}
+            title={s.villageName}
+            meta={`${s.distanceKm} km · ${s.population.toLocaleString("cs")} obyv. · konverze ×${s.conversionMod}`}
+            trailing={<RowValue sub={`streak ${s.consecutiveBuses}`}><span className="text-pitch-600">★ {s.casualCount + s.regularCount + s.hardcoreCount}</span></RowValue>} />
+        ))}
+        <div className="px-4 py-3 border-t border-line text-meta text-muted">
           Bližší obce mají vyšší konverzi (3 km = ×1.2, 10 km = ×0.5). Lidi z blízka snadněji udělají z busu pravidelný návyk.
         </div>
-      </div>
+      </ListCard>
 
       {/* ═══ Propagační kampaň ═══ */}
       <div className="card p-4 sm:p-5">
@@ -1033,7 +997,7 @@ export default function FansPage() {
             max={500}
             value={ticketPriceDraft}
             onChange={(e) => setTicketPriceDraft(e.target.value)}
-            className="w-20 px-2.5 py-1.5 border border-gray-200 rounded-soft text-sm tabular-nums text-right bg-white focus:outline-none focus:border-pitch-500 shrink-0"
+            className="input !w-20 !px-2.5 !py-1.5 !text-sm tabular-nums text-right shrink-0"
           />
           <span className="text-xs text-muted shrink-0">Kč</span>
           <button
@@ -1077,45 +1041,20 @@ export default function FansPage() {
             </div>
 
             {/* Seznam zápasů */}
-            <div className="space-y-2">
+            <div className="-mx-4 sm:-mx-5 -mb-4 sm:-mb-5 border-t border-line">
               {history.map((h) => {
-                const badge = resultBadge(h.result);
+                const outcome = h.result === "win" ? "W" : h.result === "loss" ? "L" : h.result === "draw" ? "D" : null;
                 return (
-                  <div key={h.id} className="flex items-start gap-3 py-2 border-b border-gray-50 last:border-b-0">
-                    <div className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-heading font-bold ${badge.cls}`}>
-                      {badge.label}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-heading font-bold text-ink">
-                          {h.opponentName ?? "Neznámý soupeř"}
-                        </span>
-                        <span className="text-xs text-muted">{formatGamedate(h.gamedate)}</span>
-                        {h.attendance > 0 && (
-                          <span className="text-xs text-muted">· {h.attendance} diváků</span>
-                        )}
-                      </div>
-                      {h.reasons.length > 0 && (
-                        <div className="flex items-center gap-1.5 flex-wrap mt-1">
-                          {h.reasons.map((r, i) => (
-                            <span key={i} className="text-xs text-muted">
-                              {r}{i < h.reasons.length - 1 ? " ·" : ""}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                    <div className="shrink-0 text-right">
-                      <div className={`font-heading font-bold text-sm tabular-nums ${
-                        h.delta > 0 ? "text-pitch-500" : h.delta < 0 ? "text-card-red" : "text-muted"
-                      }`}>
-                        {h.delta > 0 ? "+" : ""}{h.delta}
-                      </div>
-                      <div className="text-xs text-muted tabular-nums">
-                        {h.satisfactionBefore}→{h.satisfactionAfter}
-                      </div>
-                    </div>
-                  </div>
+                  <ListRow key={h.id}
+                    leading={outcome ? <ResultChip result={outcome} /> : <span className="w-[22px] h-[22px] rounded-tight bg-gray-200 text-gray-500 text-micro font-bold flex items-center justify-center">?</span>}
+                    title={h.opponentName ?? "Neznámý soupeř"}
+                    meta={[formatGamedate(h.gamedate), h.attendance > 0 ? `${h.attendance} diváků` : null].filter(Boolean).join(" · ")}
+                    detail={h.reasons.length > 0 ? h.reasons.join(" · ") : undefined}
+                    trailing={
+                      <RowValue tone={h.delta > 0 ? "plus" : h.delta < 0 ? "minus" : undefined} sub={`${h.satisfactionBefore}→${h.satisfactionAfter}`}>
+                        {h.delta > 0 ? "+" : h.delta < 0 ? "−" : ""}{Math.abs(h.delta)}
+                      </RowValue>
+                    } />
                 );
               })}
             </div>
@@ -1204,45 +1143,8 @@ export default function FansPage() {
           {/* — Žebříček stupňů — */}
           <div className="mb-4">
             <div className="text-sm font-heading font-bold text-ink mb-2">Stupně vlivu</div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-200">
-                    <th className="text-left py-1.5 pr-3 font-heading uppercase text-xs text-muted tracking-widest">Vliv</th>
-                    <th className="text-right py-1.5 px-2 font-heading uppercase text-xs text-muted tracking-widest whitespace-nowrap">Po zápase</th>
-                    <th className="text-right py-1.5 px-2 font-heading uppercase text-xs text-muted tracking-widest">Loajalita</th>
-                    <th className="text-left py-1.5 pl-3 font-heading uppercase text-xs text-muted tracking-widest">Jak to fanoušci berou</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {MANAGER_FANS_BANDS.map((band, i) => {
-                    const isCurrent = band.key === m.bandKey;
-                    const upper = i === 0 ? null : MANAGER_FANS_BANDS[i - 1].min - 1;
-                    const range = upper === null
-                      ? `${band.min} a víc`
-                      : band.min === 0 ? `${upper} a míň` : `${band.min}–${upper}`;
-                    return (
-                      <tr
-                        key={band.key}
-                        className={isCurrent
-                          ? "bg-pitch-50 border-l-2 border-pitch-500"
-                          : "border-b border-gray-50"}
-                      >
-                        <td className={`py-2 pr-3 tabular-nums whitespace-nowrap ${isCurrent ? "pl-2 font-heading font-bold text-ink" : "text-muted"}`}>
-                          {range}
-                        </td>
-                        <td className={`py-2 px-2 text-right tabular-nums font-heading font-bold ${tone(band.matchBoost)}`}>
-                          {sign(band.matchBoost)}
-                        </td>
-                        <td className={`py-2 px-2 text-right tabular-nums ${isCurrent ? "text-ink" : "text-muted"}`}>
-                          {sign(band.loyaltyOffset)}
-                        </td>
-                        <td className={`py-2 pl-3 ${isCurrent ? "text-ink" : "text-muted"}`}>{band.fanView}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+            <div className="-mx-4 sm:-mx-5 border-y border-line">
+              <ManagerFansBandsTable currentKey={m.bandKey} />
             </div>
             <div className="text-sm text-muted mt-3 space-y-1">
               <p>
@@ -1363,7 +1265,7 @@ export default function FansPage() {
                 : "Týdenní pasivní příjem z pronájmu občerstvení"}
             </div>
             <div className="font-heading font-bold text-xl tabular-nums text-pitch-500">
-              {formatCZK(concession.externalWeeklyIncome)}
+              {formatKc(concession.externalWeeklyIncome)}
             </div>
             <div className="text-xs text-muted mt-1">
               {concession.refreshmentsLevel === 0
@@ -1489,7 +1391,7 @@ export default function FansPage() {
                       min={0}
                       value={priceDraft}
                       onChange={(e) => setProductDrafts((d) => ({ ...d, [p.key]: { sellPrice: e.target.value } }))}
-                      className="w-20 px-2.5 py-1.5 border border-gray-200 rounded-soft text-sm tabular-nums text-right bg-white focus:outline-none focus:border-pitch-500 shrink-0"
+                      className="input !w-20 !px-2.5 !py-1.5 !text-sm tabular-nums text-right shrink-0"
                     />
                     <span className="text-xs text-muted shrink-0 w-3 text-center">Kč</span>
                     <button
@@ -1520,7 +1422,7 @@ export default function FansPage() {
                       placeholder="0"
                       value={qty}
                       onChange={(e) => setRestockQty((r) => ({ ...r, [p.key]: e.target.value }))}
-                      className="w-20 px-2.5 py-1.5 border border-gray-200 rounded-soft text-sm tabular-nums text-right bg-white focus:outline-none focus:border-pitch-500 shrink-0"
+                      className="input !w-20 !px-2.5 !py-1.5 !text-sm tabular-nums text-right shrink-0"
                     />
                     <span className="text-xs text-muted shrink-0 w-3 text-center">ks</span>
                     <button
@@ -1562,69 +1464,67 @@ export default function FansPage() {
               <div className="bg-gray-50 rounded-soft p-3 text-center">
                 <div className="text-xs text-muted uppercase mb-1">Celkový výnos</div>
                 <div className="font-heading font-bold text-lg tabular-nums text-pitch-500">
-                  {formatCZK(salesHistory.reduce((s, m) => s + m.totalRevenue, 0))}
+                  {formatKc(salesHistory.reduce((s, m) => s + m.totalRevenue, 0))}
                 </div>
               </div>
               <div className="bg-gray-50 rounded-soft p-3 text-center">
                 <div className="text-xs text-muted uppercase mb-1">Čistý zisk</div>
                 <div className="font-heading font-bold text-lg tabular-nums text-pitch-500">
-                  {formatCZK(salesHistory.reduce((s, m) => s + m.totalProfit, 0))}
+                  {formatKc(salesHistory.reduce((s, m) => s + m.totalProfit, 0))}
                 </div>
               </div>
               <div className="bg-gray-50 rounded-soft p-3 text-center">
                 <div className="text-xs text-muted uppercase mb-1">Ø na zápas</div>
                 <div className="font-heading font-bold text-lg tabular-nums text-ink">
-                  {formatCZK(Math.round(salesHistory.reduce((s, m) => s + m.totalProfit, 0) / salesHistory.length))}
+                  {formatKc(Math.round(salesHistory.reduce((s, m) => s + m.totalProfit, 0) / salesHistory.length))}
                 </div>
               </div>
             </div>
 
-            {/* Per match list */}
-            <div className="space-y-3">
+            {/* Per match list. Výnos a zisk nejsou vpravo, ale v odstavci: sloupec vpravo
+                by na telefonu zúžil mřížku produktů pod ním. */}
+            <div className="-mx-4 sm:-mx-5">
               {salesHistory.map((m, idx) => {
-                const vysledek = resultLabel(m.result);
+                const outcome = resultLabel(m.result);
                 return (
-                  <div key={(m.matchId ?? "") + idx} className="border border-gray-100 rounded-soft p-3">
-                    <div className="flex items-center gap-2.5 mb-2">
-                      <span className="shrink-0 text-lg" title={m.isCup ? "Pohárový zápas" : "Ligový zápas"}>
-                        {m.isCup ? "🏆" : "⚽"}
+                  <ListRow key={(m.matchId ?? "") + idx}
+                    leading={
+                      <span className="block" title={m.isCup ? "Pohárový zápas" : "Ligový zápas"}>
+                        <RowIcon>{m.isCup ? "🏆" : "⚽"}</RowIcon>
                       </span>
-                      <div className="flex-1 min-w-0">
-                        <div className="font-heading font-bold text-sm text-ink">
-                          {m.opponentName ?? "Neznámý soupeř"}
-                        </div>
-                        <div className="text-xs text-muted">
-                          Doma · {formatGamedate(m.gamedate)} · {m.attendance} diváků
-                          {vysledek.text && <span className={`ml-1 font-bold ${vysledek.cls}`}>{vysledek.text}</span>}
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="font-heading font-bold text-sm tabular-nums text-pitch-500">
-                          {formatCZK(m.totalRevenue)}
-                        </div>
-                        <div className="text-xs text-muted">zisk {formatCZK(m.totalProfit)}</div>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-3 gap-2 mt-2 pt-2 border-t border-gray-50">
-                      {m.products.map((p) => (
-                        <div key={p.productKey} className="text-xs">
-                          <div className="flex items-center gap-1 mb-0.5">
-                            <span>{PRODUCT_ICONS[p.productKey] ?? "🍽"}</span>
-                            <span className="font-heading font-bold tabular-nums text-ink">
-                              {p.soldCount} ks
+                    }
+                    title={m.opponentName ?? "Neznámý soupeř"}
+                    meta={<>
+                      Doma · {formatGamedate(m.gamedate)} · {m.attendance} diváků
+                      {outcome.text && <span className={`ml-1 font-bold ${outcome.cls}`}>{outcome.text}</span>}
+                    </>}
+                    detail={
+                      <span className="block mt-0.5">
+                        <span className="block">
+                          <span className="font-heading font-bold tabular-nums text-pitch-500">{formatKc(m.totalRevenue)}</span>
+                          <span className="text-xs text-muted"> · zisk {formatKc(m.totalProfit)}</span>
+                        </span>
+                        <span className="grid grid-cols-3 gap-2 mt-1.5">
+                          {m.products.map((p) => (
+                            <span key={p.productKey} className="block text-xs">
+                              <span className="flex items-center gap-1 mb-0.5">
+                                <span>{PRODUCT_ICONS[p.productKey] ?? "🍽"}</span>
+                                <span className="font-heading font-bold tabular-nums text-ink">
+                                  {p.soldCount} ks
+                                </span>
+                                {p.stockout && <span className="text-card-red">⚠</span>}
+                              </span>
+                              <span className="block text-muted tabular-nums">
+                                {p.sellPrice} Kč → {formatKc(p.revenue)}
+                              </span>
+                              <span className={`block tabular-nums ${p.profit >= 0 ? "text-pitch-500" : "text-card-red"}`}>
+                                {p.profit > 0 ? "+" : ""}{formatKc(p.profit)}
+                              </span>
                             </span>
-                            {p.stockout && <span className="text-card-red">⚠</span>}
-                          </div>
-                          <div className="text-muted tabular-nums">
-                            {p.sellPrice} Kč → {formatCZK(p.revenue)}
-                          </div>
-                          <div className={`tabular-nums ${p.profit >= 0 ? "text-pitch-500" : "text-card-red"}`}>
-                            {p.profit > 0 ? "+" : ""}{formatCZK(p.profit)}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+                          ))}
+                        </span>
+                      </span>
+                    } />
                 );
               })}
             </div>

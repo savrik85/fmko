@@ -1,7 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type Ref } from "react";
 import { usePathname } from "next/navigation";
+import { HelpMenu } from "./help-menu";
+import { BugReportTrialDialog } from "@/components/bug-report/bug-report-trial-dialog";
+import { captureVisibleApp, type CaptureResult } from "@/lib/page-capture";
+
+/** Počká, až prohlížeč vykreslí „Fotím stránku…“, než ho focení na chvíli zablokuje. */
+function nextPaint(): Promise<void> {
+  return new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+}
 
 interface HelpSection {
   heading?: string;
@@ -60,8 +68,8 @@ const HELP: Record<string, HelpEntry> = {
     title: "Kádr týmu",
     icon: "\u{1F465}",
     sections: [
-      { text: "Všichni hráči v týmu seřazení podle ratingu. Klikni na jméno pro detail." },
-      { heading: "Rating", text: "Celkové hodnocení hráče (0–100). Vesnická úroveň je kolem 35–40, městská 40–45. Wonderkidi (+15–25 bonus) mají šanci 2 % při generování." },
+      { text: "Všichni hráči v týmu seřazení podle hodnocení. Klikni na jméno pro detail." },
+      { heading: "Hodnocení", text: "Celkové hodnocení hráče (0–100). Vesnická úroveň je kolem 35–40, městská 40–45. Wonderkidi (+15–25 bonus) mají šanci 2 % při generování." },
       { heading: "Kondice", text: "Regeneruje se denně podle staminy: vysoká stamina (≥75) = +18/den, nízká (<25) = +7/den. Klesne po zápase a tréninku (−3 až −8). Pod 60 % výrazně snižuje výkon v zápase (až na 0,6×)." },
       { heading: "Morálka", text: "Ovlivňuje výkon. Výhra dá +3 až +7, prohra −2 až −5. Denně se táhne k 50 (nad 55 klesá, pod 45 roste). Příliš nízká morálka + nízký patriotismus = hrozba odchodu hráče." },
       { heading: "Pozice", text: "BRA/OBR/ZÁL/ÚTO. Hráč mimo svou pozici má až −40 % na relevantní dovednosti. Např. útočník v obraně ztrácí 30 % obrany." },
@@ -90,7 +98,7 @@ const HELP: Record<string, HelpEntry> = {
       { heading: "Nabídky od Místního kontaktu", text: "20% šance za kolo, že ti někdo doporučí hráče (hospoda, mládež, kamarád). Přijde SMS, hráč se objeví v přestupech." },
       { heading: "Hostování", text: "Půjčka hráče z jiného týmu na 30–90 dní. Hráč se po vypršení automaticky vrátí." },
       { heading: "Kvalita podle velikosti obce", text: "Vesnice: základ 37. Obec: 39. Městys: 41. Město: 44." },
-      { text: "Platy hráčů: 10 + (rating/100) × 400 Kč/měsíc. Hráč s ratingem 50 stojí ~210 Kč/měsíc.", tip: true },
+      { text: "Platy hráčů: 10 + (hodnocení/100) × 400 Kč/měsíc. Hráč s hodnocením 50 stojí ~210 Kč/měsíc.", tip: true },
     ],
   },
   "/finance": {
@@ -268,8 +276,12 @@ function HelpPanel({ help, onClose }: { help: HelpEntry; onClose: () => void }) 
       <div className="fixed inset-0 z-40 bg-black/20" onClick={onClose} />
       {/* Na mobilu spodní plachta, na desktopu panel pod horní lištou —
           tam, kde tlačítko nově je. Dřív visel v pravém dolním rohu
-          u plovoucího kolečka. */}
-      <div className="fixed bottom-[5.5rem] sm:bottom-auto sm:top-16 left-3 right-3 sm:left-auto sm:right-4 z-[var(--z-nav)] sm:w-[360px] max-h-[55vh] sm:max-h-[70vh] overflow-y-auto overscroll-contain rounded-xl bg-white shadow-2xl border border-gray-100 animate-slide-up">
+          u plovoucího kolečka.
+          Odstup odspodu bere skutečnou výšku spodní lišty (`--bottom-nav-h`
+          publikuje BottomNav i se safe area). Pevných 5,5 rem sedělo na starou
+          48px lištu; vyšší lišta s čárkou iPhonu (93 px) spodek panelu překryla.
+          Bez lišty (onboarding) zůstává původních 5,5 rem. */}
+      <div className="fixed bottom-[calc(var(--bottom-nav-h,4.75rem)+0.75rem)] sm:bottom-auto sm:top-16 left-3 right-3 sm:left-auto sm:right-4 z-[var(--z-nav)] sm:w-[360px] max-h-[55vh] sm:max-h-[70vh] overflow-y-auto overscroll-contain rounded-xl bg-white shadow-2xl border border-gray-100 animate-slide-up">
         <div className="sticky top-0 bg-pitch-700 text-white px-5 py-3 rounded-t-xl flex items-center gap-3">
           <span className="text-xl">{help.icon}</span>
           <span className="font-heading font-bold text-base">{help.title}</span>
@@ -310,41 +322,109 @@ function HelpButton({
   onClick,
   variant = "floating",
   className,
+  label,
+  buttonRef,
 }: {
   open: boolean;
   onClick: () => void;
   variant?: "bar" | "floating";
   className?: string;
+  /** Popisek zavřeného tlačítka; v liště otevírá menu, ne rovnou nápovědu. */
+  label?: string;
+  buttonRef?: Ref<HTMLButtonElement>;
 }) {
   const spolecne = "flex items-center justify-center font-heading font-bold rounded-full transition-colors";
   const styl =
     variant === "bar"
-      ? "w-8 h-8 text-base bg-white/10 text-white/70 hover:bg-white/20 hover:text-white shrink-0"
+      // V liště jen tenký kroužek u názvu stránky: plné světlé kolo se s názvem
+      // tlouklo. Plocha pro prst zůstává 36 × 44 px, kroužek kreslí vnitřní span.
+      ? "group w-9 h-11 -ml-1 text-xs text-white/80 hover:text-white shrink-0"
       : `fixed z-[var(--z-nav)] w-11 h-11 text-lg bg-pitch-700 text-white shadow-lg hover:bg-pitch-600 ${className ?? "bottom-24 sm:bottom-6 right-4"}`;
   return (
     <button
+      ref={buttonRef}
       onClick={onClick}
       className={`${spolecne} ${styl}`}
-      title={open ? "Zavřít nápovědu" : "Nápověda"}
-      aria-label={open ? "Zavřít nápovědu" : "Nápověda"}
+      title={open ? "Zavřít" : (label ?? "Nápověda")}
+      aria-label={open ? "Zavřít" : (label ?? "Nápověda")}
+      aria-expanded={open}
     >
-      {open ? "✕" : "?"}
+      {variant === "bar" ? (
+        <span className="flex items-center justify-center w-[22px] h-[22px] rounded-full border-[1.5px] border-white/55 group-hover:border-white transition-colors">
+          {open ? "✕" : "?"}
+        </span>
+      ) : open ? "✕" : "?"}
     </button>
   );
 }
 
 // ── Exports ────────────────────────────────────────────────
 
+/**
+ * Kroužek v horní liště. Otevírá menu s nápovědou ke stránce a nahlášením chyby,
+ * proto je na každé stránce, i kde nápověda není (menu pak nabídne jen nahlášení).
+ */
 export function Napoveda() {
-  const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState<"closed" | "menu" | "help">("closed");
+  const [anchor, setAnchor] = useState<HTMLButtonElement | null>(null);
   const pathname = usePathname();
   const help = findHelp(pathname);
-  if (!help) return null;
+
+  // Přechod na jinou stránku menu i nápovědu zavře; nápověda patří stránce.
+  useEffect(() => { setMode("closed"); }, [pathname]);
+
+  // Focení: ref hlídá dvojí ťuknutí ještě před překreslením, stav ukazuje „Fotím stránku…“.
+  const capturingRef = useRef(false);
+  const [capturing, setCapturing] = useState(false);
+  const [captures, setCaptures] = useState<CaptureResult[] | null>(null);
+
+  // Menu zůstává během focení otevřené s „Fotím stránku…“: je mimo `.app-shell`
+  // (portál), na snímek se nedostane, a jeho průhledná vrstva nepustí ťuknutí
+  // na stránku pod ním. Zavřít ho do konce focení nejde.
+  const reportBug = async () => {
+    if (capturingRef.current) return;
+    capturingRef.current = true;
+    setCapturing(true);
+    try {
+      await nextPaint();
+      // Postupně, ne naráz: dvě kopie stránky najednou by se přetahovaly o výkon a časy by nešly porovnat.
+      const first = await captureVisibleApp("modern-screenshot");
+      const second = await captureVisibleApp("snapdom");
+      setCaptures([first, second]);
+    } finally {
+      capturingRef.current = false;
+      setCapturing(false);
+      setMode("closed");
+    }
+  };
+
+  const closeMenu = () => {
+    if (capturingRef.current) return;
+    setMode("closed");
+  };
 
   return (
     <>
-      <HelpButton open={open} onClick={() => setOpen(!open)} variant="bar" />
-      {open && <HelpPanel help={help} onClose={() => setOpen(false)} />}
+      <HelpButton
+        // Během focení je menu otevřené, ale na snímku má být v kroužku „?“, ne křížek.
+        open={mode !== "closed" && !capturing}
+        onClick={() => (mode === "closed" ? setMode("menu") : closeMenu())}
+        variant="bar"
+        label="Nápověda a nahlášení chyby"
+        buttonRef={setAnchor}
+      />
+      {mode === "menu" && (
+        <HelpMenu
+          anchor={anchor}
+          hasHelp={help != null}
+          busy={capturing}
+          onShowHelp={() => setMode("help")}
+          onReportBug={reportBug}
+          onClose={closeMenu}
+        />
+      )}
+      {mode === "help" && help && <HelpPanel help={help} onClose={() => setMode("closed")} />}
+      {captures && <BugReportTrialDialog results={captures} onClose={() => setCaptures(null)} />}
     </>
   );
 }
@@ -399,7 +479,7 @@ export function NapovedaOnboarding({ step }: { step: string }) {
       icon: "\u{1F31F}",
       sections: [
         { text: "Vygenerovaný kádr. Každý hráč má unikátní osobnost, zaměstnání a schopnosti." },
-        { heading: "Rating", text: "Vesnice: kolem 35–40. Město: 40–45. Wonderkid (2% šance, věk ≤21): +15–25 navíc!" },
+        { heading: "Hodnocení", text: "Vesnice: kolem 35–40. Město: 40–45. Wonderkid (2% šance, věk ≤21): +15–25 navíc!" },
         { heading: "Osobnost", text: "Disciplína určuje docházku. Patriotismus loajalitu. Alkohol únavu a absenci. Temperament riziko karet." },
         { text: "Po dokončení začni posouvat dny. Tréninky jsou út+čt (2×/týden). První zápas bude o víkendu.", tip: true },
       ],

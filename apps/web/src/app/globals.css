@@ -320,6 +320,11 @@ body::before {
 .btn-ghost { background: transparent; color: var(--color-muted); }
 .btn-ghost:hover { background: rgba(26,23,20,0.04); color: var(--color-ink); }
 
+/* Akce, která něco zruší nebo vezme (propustit, ukončit smlouvu). Plné červené,
+   stejně jako potvrzení v SheetDialog (varianta R2 z docs/redesign-prvku/maketa.html). */
+.btn-danger { background: var(--color-card-red); color: white; box-shadow: var(--shadow-card); }
+.btn-danger:hover { background: var(--color-red-600, #dc2626); box-shadow: var(--shadow-hover); }
+
 /* ═══════════════════════════════════════════════
    CARDS
    ═══════════════════════════════════════════════ */
@@ -618,6 +623,61 @@ input[type="number"] { -moz-appearance: textfield; }
   }
 }
 
+/* ── PWA na iOS 26: obal hry přes celý displej ────────────────────────────
+   S průhledným stavovým řádkem počítá iOS 26 okno nainstalované aplikace
+   o výšku výřezu kratší než displej (naměřeno 812 proti 874). `100dvh`
+   i `position: fixed; bottom: 0` proto končí nad spodní hranou a pod spodní
+   lištou zbývalo 62 px prázdna. Plnou výšku displeje dává jen `100lvh`.
+
+   `fixed` prvky iOS pod hranou okna ořízne (zkoušeno 2026-11-17, z lišty byl
+   vidět jen horní kousek ikon). Proto je na plnou výšku obal v běžném toku
+   dokumentu a spodní lišta je v něm `absolute`, ne `fixed`.
+
+   Kde okno sedí (Android, opravený iOS), je `100lvh` v nainstalované aplikaci
+   stejné jako `100dvh` a nic se nemění. `overflow: hidden` drží dokument na
+   místě, jinak by se dal o ten rozdíl odscrollovat a horní lišta by odjela.
+   Platí jen se hrou (.app-shell); přihlášení a další stránky rolují dokumentem. */
+@media (display-mode: standalone) and (max-width: 639px) {
+  @supports (height: 100lvh) {
+    html:has(.app-shell),
+    html:has(.app-shell) body {
+      height: 100lvh;
+      overflow: hidden;
+    }
+    .app-shell {
+      height: 100lvh;
+      position: relative;
+    }
+    .app-shell .app-bottom-nav {
+      position: absolute;
+    }
+  }
+}
+
+/* ── PWA na iOS 26: rozmazání pod hodinami jako záměr ─────────────────────
+   iOS 26 kreslí přes horní okraj nainstalované aplikace rozmazaný pás, který
+   končí kousek pod stavovým řádkem a zasahuje do horní lišty. Vypnout nejde
+   (CSS ani pevný jednobarevný pruh nepomohly). Lišta má proto pod hodinami
+   tmavší odstín své barvy, který se do ní měkce rozpouští právě v místě, kde
+   pás končí: hrana rozmazání pak splyne s přechodem a působí jako stín.
+   `-webkit-touch-callout` zná jen iOS, Androidu se to netýká. */
+@media (display-mode: standalone) and (max-width: 639px) {
+  @supports (-webkit-touch-callout: none) {
+    /* Text lišty o kousek níž, aby jeho vršek neležel v rozmazaném pásu. */
+    :root { --edge-blur-clearance: 14px; }
+    /* `header.` kvůli váze: základní .topbar-club je v souboru níž a jinak by vyhrál. */
+    header.topbar-club {
+      background-image:
+        linear-gradient(180deg,
+          rgba(0,0,0,0.30) 0,
+          rgba(0,0,0,0.30) calc(env(safe-area-inset-top, 0px) - 16px),
+          rgba(0,0,0,0.12) calc(env(safe-area-inset-top, 0px) + 6px),
+          rgba(0,0,0,0) calc(env(safe-area-inset-top, 0px) + 30px)),
+        linear-gradient(180deg, rgba(255,255,255,0.07) 0%, rgba(0,0,0,0.14) 100%);
+    }
+  }
+}
+
 /* ── PWA: žádné nechtěné přiblížení ────────────────────────────────────────
    `manipulation` ruší dvojklepnutí na přiblížení, ale gesto dvěma prsty
    nechává být — kdo potřebuje zvětšit, pořád může. */
@@ -714,17 +774,18 @@ body { touch-action: manipulation; }
     transparent 34%, transparent 50%,
     var(--hero-accent) 50%, var(--hero-accent) 62%,
     transparent 62%);
-  opacity: 0.2;
+  /* Jen náznak: přes pruhy se čtou ukazatele a tlačítka, nesmí je přebíjet. */
+  opacity: 0.08;
 }
 .hero-backdrop-mark {
   position: absolute; right: -24px; top: 50%;
   transform: translateY(-50%) rotate(-8deg);
-  opacity: 0.16;
+  opacity: 0.07;
 }
 .hero-backdrop-edge { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: var(--hero-accent); opacity: 0.85; }
 @media (max-width: 639px) {
-  .hero-backdrop-sash { width: 110px; right: 4%; }
-  .hero-backdrop-mark { right: -40px; opacity: 0.12; }
+  .hero-backdrop-sash { width: 90px; right: -2%; opacity: 0.06; }
+  .hero-backdrop-mark { right: -70px; opacity: 0.05; }
 }
 
 .hero-gradient { position: relative; overflow: hidden; }

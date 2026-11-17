@@ -9,6 +9,7 @@ import { useState } from "react";
 import { MoneyInput } from "@/components/ui/money-input";
 import { LOAN_DURATIONS, LOAN_PLAYING_TIME_OPTIONS, type LoanPlayingTime } from "@/lib/loans";
 import { RevealPotentialToggle } from "./revealed-potential";
+import { ChoiceGroup, Sheet } from "@/components/ui";
 
 export interface LoanListingValue { days: number; fee: number; playingTime: LoanPlayingTime; revealPotential: boolean }
 
@@ -26,8 +27,7 @@ export function LoanListingDialog({ playerName, playerLine, onClose, onConfirm, 
 
   return (
     // Kliknutí vedle dialog nezavírá, rozepsané podmínky by se ztratily. Zavírá jen Zrušit.
-    <div className="fixed inset-0 z-[var(--z-sheet)] flex items-center justify-center bg-black/40 p-4">
-      <div className="bg-white rounded-2xl w-full max-w-md shadow-xl max-h-[90vh] overflow-y-auto">
+    <Sheet open onClose={onClose} maxWidth="448px" closeOnBackdrop={false} title="Nabídnout na hostování">
         <div className="p-5 space-y-5">
           <div>
             <h3 className="font-heading font-bold text-lg text-ink">Nabídnout na hostování</h3>
@@ -36,14 +36,8 @@ export function LoanListingDialog({ playerName, playerLine, onClose, onConfirm, 
 
           <div>
             <div className="text-xs text-muted font-heading uppercase tracking-wide mb-1.5">Na jak dlouho</div>
-            <div className="grid grid-cols-3 gap-2">
-              {LOAN_DURATIONS.map((d) => (
-                <button key={d.days} type="button" onClick={() => setDays(d.days)}
-                  className={`py-2 px-2 rounded-soft text-sm font-heading font-bold transition-colors ${days === d.days ? "bg-pitch-500 text-white" : "bg-gray-100 text-ink hover:bg-gray-200"}`}>
-                  {d.label}
-                </button>
-              ))}
-            </div>
+            <ChoiceGroup ariaLabel="Na jak dlouho" columns={3} value={String(days)} onChange={(v) => setDays(Number(v))}
+              options={LOAN_DURATIONS.map((d) => ({ value: String(d.days), label: d.label }))} />
           </div>
 
           <label className="block">
@@ -93,7 +87,6 @@ export function LoanListingDialog({ playerName, playerLine, onClose, onConfirm, 
             </button>
           </div>
         </div>
-      </div>
-    </div>
+    </Sheet>
   );
 }

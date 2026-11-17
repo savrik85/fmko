@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
-import { Card, CardBody, SectionLabel } from "@/components/ui";
+import { Card, CardBody, SectionLabel, ListRow, StatusChip } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 
 /** Okresní akce (pouť, bál…): co se na ní stalo lidem klubu. Data z GET /teams/:id/district-events. */
@@ -67,30 +67,22 @@ function Avatar({ person, size }: { person: EventPerson; size: number }) {
   );
 }
 
+/** Hráč vede na svůj profil celým řádkem, trenér profil nemá. Dopady akce jsou pod jménem. */
 function PersonRow({ person }: { person: EventPerson }) {
   return (
-    <li className="flex items-start gap-2.5">
-      <Avatar person={person} size={34} />
-      <div className="min-w-0 flex-1">
-        <div className="text-sm leading-tight">
-          {person.kind === "player" ? (
-            <Link href={`/hrac/${person.id}`} className="font-heading font-bold text-ink hover:text-pitch-500 underline decoration-pitch-500/20">
-              {person.name}
-            </Link>
-          ) : (
-            <span className="font-heading font-bold text-ink">{person.name}</span>
-          )}
-          <span className="text-muted"> · {person.own ? "tvůj klub" : person.teamName}</span>
-        </div>
-        {person.effects.length > 0 && (
-          <div className="flex flex-wrap gap-1 mt-1">
-            {person.effects.map((e, i) => (
-              <span key={i} className={`text-xs font-medium px-1.5 py-0.5 rounded ${TONE_CLASS[e.tone]}`}>{e.label}</span>
-            ))}
-          </div>
-        )}
-      </div>
-    </li>
+    // Hustý řádek s klubem u jména: u akce jich bývá víc za sebou a běžný řádek
+    // by kartu na telefonu protáhl o pětinu.
+    <ListRow dense chevron={false}
+      href={person.kind === "player" ? `/hrac/${person.id}` : undefined}
+      leading={<Avatar person={person} size={24} />}
+      title={<>{person.name}<span className="text-meta font-normal text-muted"> · {person.own ? "tvůj klub" : person.teamName}</span></>}
+      detail={person.effects.length > 0 ? (
+        <span className="flex flex-wrap gap-1">
+          {person.effects.map((e, i) => (
+            <span key={i} className={`text-xs font-medium px-1.5 py-0.5 rounded ${TONE_CLASS[e.tone]}`}>{e.label}</span>
+          ))}
+        </span>
+      ) : undefined} />
   );
 }
 
@@ -104,9 +96,9 @@ function EventCard({ ev }: { ev: DistrictEvent }) {
           <div className="min-w-0 flex-1">
             <div className="font-heading font-bold text-lg leading-tight">{ev.title}</div>
             <div className="text-sm text-muted">{ev.place} · {formatDate(ev.eventDate)}</div>
-            <span className="inline-block mt-1.5 text-xs font-heading font-bold px-2 py-0.5 rounded-full bg-surface text-ink">
+            <StatusChip tone="neutral">
               {(done ? CHOICE_TEXT : PENDING_TEXT)[ev.myChoice ?? "none"]}
-            </span>
+            </StatusChip>
           </div>
         </div>
 
@@ -128,9 +120,9 @@ function EventCard({ ev }: { ev: DistrictEvent }) {
             <div key={i} className="border-t border-gray-100 pt-3 space-y-2.5">
               <p className="text-[15px] leading-relaxed text-ink">{sc.text}</p>
               {people.length > 0 && (
-                <ul className="space-y-2">
+                <div className="-mx-5 border-t border-line-soft">
                   {people.map((p) => <PersonRow key={`${p.kind}-${p.id}`} person={p} />)}
-                </ul>
+                </div>
               )}
             </div>
           );

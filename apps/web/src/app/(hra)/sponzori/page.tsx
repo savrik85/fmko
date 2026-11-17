@@ -4,12 +4,12 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, type Team } from "@/lib/api";
-import { formatCZK } from "@/lib/sponsor-owners";
+
 import { seasonsAccusative, remainingSeasonsText, weeklyAmount } from "@/lib/sponsor-format";
 import type {
   DistrictFirm, PubEncounter, SponsorCategory, SponsorHistoryItem, SponsorOffer, SponsorOverview, SponsorPromiseView, SponsorsData,
 } from "@/lib/sponsor-page-types";
-import { Card, CardBody, ErrorBox, Spinner, Tabs, useConfirm, useTabParam } from "@/components/ui";
+import { Card, CardBody, ErrorBox, Tabs, useConfirm, useTabParam, PageLoading } from "@/components/ui";
 import { ContractsTab } from "@/components/sponsors/contracts-tab";
 import { FirmsTab } from "@/components/sponsors/firms-tab";
 import { PopularityTab } from "@/components/sponsors/popularity-tab";
@@ -17,6 +17,7 @@ import { HistoryTab } from "@/components/sponsors/history-tab";
 import { SponsorLink } from "@/components/sponsors/sponsor-link";
 import { mySponsorIdsOf } from "@/lib/sponsor-firms";
 import { groupPromisesByContract } from "@/lib/sponsor-promises";
+import { formatKc } from "@/lib/format";
 
 const SPONSOR_TABS = ["contracts", "firms", "popularity", "history"] as const;
 type SponsorTab = (typeof SPONSOR_TABS)[number];
@@ -42,7 +43,7 @@ export default function SponsorsPage() {
   const [renameInput, setRenameInput] = useState("");
   const [showRename, setShowRename] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
-  const { confirm, dialog: confirmDialog } = useConfirm();
+  const { confirm, dialog: confirmDialog } = useConfirm({ sheet: true });
   const [overview, setOverview] = useState<SponsorOverview | null>(null);
   const [overviewError, setOverviewError] = useState<string | null>(null);
   const [history, setHistory] = useState<SponsorHistoryItem[] | null>(null);
@@ -140,9 +141,9 @@ export default function SponsorsPage() {
     const isMain = category === "main";
     const isBanner = category === "banner";
     const details = [
-      { label: "Týdenní příjem", value: `+${formatCZK(weeklyAmount(offer.monthlyAmount))}`, color: "text-pitch-500" },
-      ...(offer.winBonus > 0 ? [{ label: "Bonus za výhru", value: `+${formatCZK(offer.winBonus)}`, color: "text-pitch-400" }] : []),
-      { label: "Výpovědní pokuta", value: `-${formatCZK(offer.earlyTerminationFee)}`, color: "text-card-red" },
+      { label: "Týdenní příjem", value: `+${formatKc(weeklyAmount(offer.monthlyAmount))}`, color: "text-pitch-500" },
+      ...(offer.winBonus > 0 ? [{ label: "Bonus za výhru", value: `+${formatKc(offer.winBonus)}`, color: "text-pitch-400" }] : []),
+      { label: "Výpovědní pokuta", value: `−${formatKc(offer.earlyTerminationFee)}`, color: "text-card-red" },
     ];
     if (isMain) {
       details.push({ label: "Změna názvu", value: "Ano (název se změní)", color: "text-gold-600" });
@@ -186,12 +187,12 @@ export default function SponsorsPage() {
     const isMain = category === "main";
 
     const details = [
-      { label: "Výpovědní pokuta", value: `-${formatCZK(fee)}`, color: "text-card-red" },
+      { label: "Výpovědní pokuta", value: `−${formatKc(fee)}`, color: "text-card-red" },
     ];
     const clawback = contract.clawback ?? 0;
-    if (clawback > 0) details.push({ label: "Vrácení zálohy", value: `-${formatCZK(clawback)}`, color: "text-card-red" });
+    if (clawback > 0) details.push({ label: "Vrácení zálohy", value: `−${formatKc(clawback)}`, color: "text-card-red" });
     const forfeitPenalty = contract.forfeitPenalty ?? 0;
-    if (forfeitPenalty > 0) details.push({ label: "Propadlé sliby", value: `pokuta ${formatCZK(forfeitPenalty)}`, color: "text-card-red" });
+    if (forfeitPenalty > 0) details.push({ label: "Propadlé sliby", value: `pokuta ${formatKc(forfeitPenalty)}`, color: "text-card-red" });
     let description = `${remainingSeasonsText(contract.seasonsRemaining)} ze smlouvy s ${contract.sponsorName}.`;
     if (isMain) {
       details.push({ label: "Dopad na reputaci", value: "-2 reputace", color: "text-card-red" });
@@ -239,8 +240,8 @@ export default function SponsorsPage() {
       title: `Prodloužit smlouvu s firmou ${contract.sponsorName}?`,
       description: `Nová smlouva na ${seasonsAccusative(r.seasons)} za podmínek podle aktuální reputace. Beze změny názvu klubu a bez sankce.`,
       details: [
-        { label: "Nově týdně", value: `+${formatCZK(weeklyAmount(r.monthlyAmount))}`, color: "text-pitch-500" },
-        ...(r.winBonus > 0 ? [{ label: "Za výhru", value: `+${formatCZK(r.winBonus)}`, color: "text-pitch-400" }] : []),
+        { label: "Nově týdně", value: `+${formatKc(weeklyAmount(r.monthlyAmount))}`, color: "text-pitch-500" },
+        ...(r.winBonus > 0 ? [{ label: "Za výhru", value: `+${formatKc(r.winBonus)}`, color: "text-pitch-400" }] : []),
         { label: "Délka", value: seasonsAccusative(r.seasons) },
       ],
       confirmLabel: "Prodloužit smlouvu",
@@ -299,10 +300,10 @@ export default function SponsorsPage() {
     setActing(false);
   };
 
-  if (authLoading || loading) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
+  if (authLoading || loading) return <PageLoading />;
   if (loadError) return <div className="page-container"><ErrorBox message={`Sponzory se nepodařilo načíst: ${loadError}`} /></div>;
   if (!teamId) return <div className="page-container text-base text-muted">Sponzory uvidíš, až budeš mít klub.</div>;
-  if (!data || !team) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
+  if (!data || !team) return <PageLoading />;
 
   const hasMainSponsor = !!data.mainContract;
   const favors = new Map<number, number>((firms?.firms ?? []).map((f) => [f.sponsorId, f.favor]));
@@ -350,7 +351,7 @@ export default function SponsorsPage() {
       </Card>
 
       {actionError && (
-        <div className="text-sm text-card-red bg-red-50 border border-red-200 rounded-soft px-3 py-2">{actionError}</div>
+        <ErrorBox message={actionError} />
       )}
 
       {firms?.pub && (
@@ -359,7 +360,7 @@ export default function SponsorsPage() {
             <div className="text-sm">
               🍺 V hospodě sedí <span className="font-heading font-bold text-base">{firms.pub.ownerName}</span>, majitel{" "}
               <SponsorLink id={firms.pub.sponsorId} name={firms.pub.sponsorName} className="font-heading font-bold text-base" />.
-              Pozvat ho na pivo stojí {formatCZK(firms.pub.beerCost)}.
+              Pozvat ho na pivo stojí {formatKc(firms.pub.beerCost)}.
             </div>
             <div className="flex flex-wrap gap-2 mt-3">
               <button onClick={() => handlePub("beer")} disabled={acting} className="btn btn-primary btn-sm min-h-11">Pozvat na pivo</button>

@@ -14,6 +14,22 @@ import {
 import type { WidgetProps } from "../types";
 import { rowsForHeight, ROW_PX } from "../widget-heights";
 import { AttrPill, MoreLink, safeTeamColor } from "./shared";
+import { ListRow, RatingPill } from "@/components/ui";
+import type { ReactNode } from "react";
+
+/**
+ * Jméno a šedý doplněk (role, klub) na jednom řádku hustého řádku. Jméno se nikdy
+ * neořízne (nanejvýš se zalomí), doplněk skončí třemi tečkami, takže řádek drží
+ * 40 px a sedí na ROW_PX.table.
+ */
+function NameWithAside({ name, aside }: { name: ReactNode; aside?: ReactNode }) {
+  return (
+    <span className="flex items-baseline gap-1.5 min-w-0">
+      <span className="shrink-0 max-w-full">{name}</span>
+      {aside && <span className="min-w-0 truncate text-meta font-normal text-muted">{aside}</span>}
+    </span>
+  );
+}
 
 // ── Trenér ──────────────────────────────────────────────────────────────────
 
@@ -324,15 +340,13 @@ export function StaffWidget({ data, height }: WidgetProps) {
 
   return (
     <div className="space-y-3">
-      <ul className="space-y-1">
-        {staff.slice(0, rowsForHeight(height, ROW_PX.list, 60)).map((s) => (
-          <li key={s.id} className="flex items-center gap-2 py-1.5 border-b border-gray-50 last:border-b-0">
-            <span className="text-sm text-muted w-28 shrink-0 truncate">{STAFF_ROLE_LABELS[s.role ?? ""] ?? s.role}</span>
-            <span className="text-sm font-heading font-bold flex-1 truncate">{s.firstName} {s.lastName}</span>
-            <span className="text-sm text-muted tabular-nums shrink-0">{compactCZK(s.weeklyWage ?? 0)}</span>
-          </li>
+      <div className="-mx-4 sm:-mx-5">
+        {staff.slice(0, rowsForHeight(height, ROW_PX.table, 60)).map((s) => (
+          <ListRow key={s.id} dense
+            title={<NameWithAside name={`${s.firstName} ${s.lastName}`} aside={STAFF_ROLE_LABELS[s.role ?? ""] ?? s.role} />}
+            trailing={<span className="text-meta text-muted tabular-nums">{compactCZK(s.weeklyWage ?? 0)}</span>} />
         ))}
-      </ul>
+      </div>
       <div className="text-sm text-muted text-center">
         Mzdy zaměstnanců <span className="font-heading font-bold text-ink tabular-nums">{fullCZK(totalWage)}</span> týdně
       </div>
@@ -401,17 +415,17 @@ export function TransferOffersWidget({ data, height }: WidgetProps) {
 
   return (
     <div className="space-y-3">
-      <ul className="space-y-1">
-        {offers.slice(0, rowsForHeight(height, ROW_PX.list, 32)).map((o) => (
-          <li key={o.id} className="flex items-center gap-2 py-1.5 border-b border-gray-50 last:border-b-0">
-            <span className="text-sm font-heading font-bold flex-1 truncate">{o.playerName ?? o.player_name ?? "Hráč"}</span>
-            {o.from_team_name && <span className="text-sm text-muted truncate max-w-[40%]">{o.from_team_name}</span>}
-            <span className="text-sm font-heading font-bold tabular-nums shrink-0">
-              {compactCZK(o.offerAmount ?? o.offer_amount ?? 0)}
-            </span>
-          </li>
+      <div className="-mx-4 sm:-mx-5">
+        {offers.slice(0, rowsForHeight(height, ROW_PX.table, 32)).map((o) => (
+          <ListRow key={o.id} dense
+            title={<NameWithAside name={o.playerName ?? o.player_name ?? "Hráč"} aside={o.from_team_name} />}
+            trailing={
+              <span className="text-meta font-bold text-ink tabular-nums">
+                {compactCZK(o.offerAmount ?? o.offer_amount ?? 0)}
+              </span>
+            } />
         ))}
-      </ul>
+      </div>
       <MoreLink href="/prestupy">Zobrazit přestupy →</MoreLink>
     </div>
   );
@@ -425,20 +439,14 @@ export function WatchlistWidget({ data, height }: WidgetProps) {
 
   return (
     <div className="space-y-3">
-      <ul className="space-y-1">
-        {players.slice(0, rowsForHeight(height, ROW_PX.list, 32)).map((p, i) => (
-          <li key={p.playerId ?? p.id ?? i} className="flex items-center gap-2 py-1.5 border-b border-gray-50 last:border-b-0">
-            <a
-              href={p.playerId ? `/hrac/${p.playerId}` : "#"}
-              className="text-sm font-heading font-bold flex-1 truncate hover:text-pitch-500 hover:underline transition-colors"
-            >
-              {p.firstName} {p.lastName}
-            </a>
-            {p.teamName && <span className="text-sm text-muted truncate max-w-[40%]">{p.teamName}</span>}
-            <span className="text-sm font-heading font-bold tabular-nums shrink-0">{p.overallRating ?? "-"}</span>
-          </li>
+      <div className="-mx-4 sm:-mx-5">
+        {players.slice(0, rowsForHeight(height, ROW_PX.table, 32)).map((p, i) => (
+          // Hodnocení zůstává neutrální jako dřív: sledovaní hráči se mezi sebou neporovnávají.
+          <ListRow key={p.playerId ?? p.id ?? i} dense href={p.playerId ? `/hrac/${p.playerId}` : undefined}
+            title={<NameWithAside name={`${p.firstName} ${p.lastName}`} aside={p.teamName} />}
+            trailing={<RatingPill value={p.overallRating ?? "-"} />} />
         ))}
-      </ul>
+      </div>
       <MoreLink href="/prestupy?tab=hledat&hledat=sledovani">Celý watchlist →</MoreLink>
     </div>
   );

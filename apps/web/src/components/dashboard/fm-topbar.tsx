@@ -9,6 +9,7 @@ import { BadgePreview } from "@/components/ui/badge-preview";
 import type { BadgePattern } from "@/components/ui/badge-preview";
 import { pageTitleFor } from "@/lib/page-title";
 import { chromeColorFor } from "@/lib/team-color";
+import { formatKc } from "@/lib/format";
 
 /** Stránky s vlastním nadpisem hned pod lištou: lišta místo něj ukáže název klubu. */
 const PAGES_WITH_OWN_TITLE = ["/telefon"];
@@ -55,8 +56,10 @@ export function FMTopBar() {
       className="on-dark topbar-club flex items-center pl-1 pr-2 sm:pl-3 sm:pr-5 gap-1 sm:gap-3 shrink-0"
       style={{
         backgroundColor: background,
-        height: "calc(3.5rem + env(safe-area-inset-top, 0px))",
-        paddingTop: "env(safe-area-inset-top, 0px)",
+        // --edge-blur-clearance: kousek navíc v nainstalované aplikaci na iOS,
+        // aby text lišty neležel v rozmazání pod hodinami (globals.css).
+        height: "calc(3.5rem + env(safe-area-inset-top, 0px) + var(--edge-blur-clearance, 0px))",
+        paddingTop: "calc(env(safe-area-inset-top, 0px) + var(--edge-blur-clearance, 0px))",
       }}
     >
       <button
@@ -69,7 +72,7 @@ export function FMTopBar() {
 
       {badge && <Link href="/prehled" aria-label="Domů" className="shrink-0 hidden min-[400px]:block">{badge}</Link>}
 
-      <h1 className="font-heading font-[800] text-white text-lg sm:text-xl leading-none truncate min-w-0 sm:shrink-0">
+      <h1 className="font-heading font-[800] text-white text-lg sm:text-xl leading-tight truncate min-w-0 sm:shrink-0">
         {title}
       </h1>
 
@@ -102,7 +105,7 @@ export function FMTopBar() {
         {budget != null && (
           <Link href="/finance" className={`${CHIP} tabular-nums`} title="Finance klubu">
             <span className="hidden md:inline" aria-hidden="true">{"💰"}</span>
-            <span className="font-bold">{budget.toLocaleString("cs")} {"Kč"}</span>
+            <span className="font-bold">{formatKc(budget)}</span>
           </Link>
         )}
         {nextMatch && (

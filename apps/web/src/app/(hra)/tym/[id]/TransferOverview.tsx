@@ -3,9 +3,10 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
-import { SectionLabel, BadgePreview } from "@/components/ui";
+import { BadgePreview, ListCard, ListRow, ListEmpty } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
+import { formatKc } from "@/lib/format";
 
 interface TransferRow {
   direction: "in" | "out";
@@ -28,7 +29,6 @@ const KIND_LABEL: Record<TransferRow["kind"], string> = {
   released: "Propuštěn",
 };
 
-const fmtCZK = (v: number) => `${v.toLocaleString("cs")} Kč`;
 
 /** Přehled přestupů klubu (vlastního i cizího): kdo přišel, kdo odešel, odkud/kam a za kolik. */
 export function TransferOverview({ teamId }: { teamId: string }) {
@@ -49,55 +49,42 @@ export function TransferOverview({ teamId }: { teamId: string }) {
   if (rows === null) return null;
 
   return (
-    <div className="card p-4 sm:p-5">
-      <SectionLabel>Přehled přestupů</SectionLabel>
-      {rows.length === 0 ? (
-        <p className="text-sm text-muted">Zatím žádné přestupy.</p>
-      ) : (
-        <ul className="divide-y divide-gray-200">
-          {rows.map((r, i) => (
-            <li key={`${r.direction}-${r.playerId}-${r.date}-${i}`} className="py-2.5 flex items-center gap-3">
-              {r.playerAvatar && Object.keys(r.playerAvatar).length > 2 ? (
-                <div className="h-10 w-10 shrink-0 overflow-hidden rounded-full bg-gray-100">
-                  <FaceAvatar faceConfig={r.playerAvatar} size={33} />
-                </div>
-              ) : (
-                <div className="h-10 w-10 shrink-0 rounded-full bg-gray-200" aria-hidden="true" />
-              )}
-              <div className="min-w-0 flex-1">
-                <Link href={`/hrac/${r.playerId}`} className="text-base font-heading font-bold hover:underline">
-                  {r.playerName}
-                </Link>
-                <div className="text-sm text-muted flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
-                  <span className={`font-bold ${r.direction === "in" ? "text-pitch-600" : "text-card-red"}`}>
-                    {r.direction === "in" ? "→" : "←"} {KIND_LABEL[r.kind]}
-                  </span>
-                  {r.otherTeamName && (
-                    <>
-                      <span>{r.direction === "in" ? "z" : "do"}</span>
-                      {/* Klub mimo hru (skaut, inzerát, cizí kupec) nemá stránku: jméno bez odkazu. */}
-                      {r.otherTeamId ? (
-                        <Link href={`/tym/${r.otherTeamId}`} className="inline-flex items-center gap-1 font-semibold text-gray-700 hover:underline">
-                          <OtherTeamBadge badge={r.otherTeamBadge} />
-                          {r.otherTeamName}
-                        </Link>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 font-semibold text-gray-700">
-                          <OtherTeamBadge badge={r.otherTeamBadge} />
-                          {r.otherTeamName}
-                        </span>
-                      )}
-                    </>
+    <ListCard title="Přehled přestupů" count={rows.length || undefined}>
+      {rows.length === 0 && <ListEmpty icon="🔁">Zatím žádné přestupy. Tady se objeví každý hráč, který přišel nebo odešel.</ListEmpty>}
+      {rows.map((r, i) => (
+        <ListRow key={`${r.direction}-${r.playerId}-${r.date}-${i}`}
+          leading={r.playerAvatar && Object.keys(r.playerAvatar).length > 2
+            ? <FaceAvatar faceConfig={r.playerAvatar} size={30} className="rounded-full bg-surface-3" />
+            : <span className="w-9 h-9 rounded-full bg-surface-3" aria-hidden="true" />}
+          title={<Link href={`/hrac/${r.playerId}`} className="hover:text-pitch-600">{r.playerName}</Link>}
+          detail={
+            <span className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+              <span className={`font-bold ${r.direction === "in" ? "text-pitch-600" : "text-card-red"}`}>
+                {r.direction === "in" ? "→" : "←"} {KIND_LABEL[r.kind]}
+              </span>
+              {r.otherTeamName && (
+                <>
+                  <span>{r.direction === "in" ? "z" : "do"}</span>
+                  {/* Klub mimo hru (skaut, inzerát, cizí kupec) nemá stránku: jméno bez odkazu. */}
+                  {r.otherTeamId ? (
+                    <Link href={`/tym/${r.otherTeamId}`} className="inline-flex items-center gap-1 font-semibold text-gray-700 hover:underline">
+                      <OtherTeamBadge badge={r.otherTeamBadge} />
+                      {r.otherTeamName}
+                    </Link>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 font-semibold text-gray-700">
+                      <OtherTeamBadge badge={r.otherTeamBadge} />
+                      {r.otherTeamName}
+                    </span>
                   )}
-                  {r.fee > 0 && <span>· {fmtCZK(r.fee)}</span>}
-                  {r.seasonNumber != null && <span>· sezóna {r.seasonNumber}</span>}
-                </div>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
+                </>
+              )}
+              {r.fee > 0 && <span>· {formatKc(r.fee)}</span>}
+              {r.seasonNumber != null && <span>· sezóna {r.seasonNumber}</span>}
+            </span>
+          } />
+      ))}
+    </ListCard>
   );
 }
 

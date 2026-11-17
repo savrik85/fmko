@@ -5,12 +5,13 @@
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { apiFetch, showError } from "@/lib/api";
-import { BadgePreview, useConfirm, type BadgePattern } from "@/components/ui";
+import { BadgePreview, useConfirm, type BadgePattern, DataTable, ListRow, ScoreChip, type MatchOutcome } from "@/components/ui";
 import { WidgetSkeleton, WidgetError } from "../widget-frame";
 import type { WidgetProps, ScheduleMatch } from "../types";
 import { rowsForHeight, ROW_PX } from "../widget-heights";
 import { initials } from "./shared";
 import { TeamName } from "@/components/manager/team-name";
+import { formatKc } from "@/lib/format";
 
 // ── Dnešní program ──────────────────────────────────────────────────────────
 
@@ -80,7 +81,7 @@ export function NextMatchWidget({ data, teamId }: WidgetProps) {
   const promotionPrice = data.schedule.data?.promotionPrice ?? null;
   const [promoting, setPromoting] = useState(false);
   const [localMatches, setLocalMatches] = useState<ScheduleMatch[] | null>(null);
-  const { confirm, dialog: confirmDialog } = useConfirm();
+  const { confirm, dialog: confirmDialog } = useConfirm({ sheet: true });
 
   const list = localMatches ?? matches;
   const nextMatch = list.find((m) => m.status !== "simulated");
@@ -94,7 +95,7 @@ export function NextMatchWidget({ data, teamId }: WidgetProps) {
 
   const promoteMatch = async (m: ScheduleMatch) => {
     if (!teamId || promoting) return;
-    const priceStr = promotionPrice != null ? `${promotionPrice.toLocaleString("cs")} Kč` : "500–2 500 Kč";
+    const priceStr = promotionPrice != null ? `${formatKc(promotionPrice)}` : "500–2 500 Kč";
     const ok = await confirm({
       title: `Propagovat zápas proti ${m.awayName}?`,
       description: `Doma · ${m.scheduledAt ? new Date(m.scheduledAt).toLocaleDateString("cs") : ""}. Vyjde článek ve Zpravodaji a přijde +25 % diváků.`,
@@ -225,7 +226,7 @@ export function NextMatchWidget({ data, teamId }: WidgetProps) {
           const homeAge = home.squad?.length ? Math.round(home.squad.reduce((s, p) => s + p.age, 0) / home.squad.length) : 0;
           const awayAge = away.squad?.length ? Math.round(away.squad.reduce((s, p) => s + p.age, 0) / away.squad.length) : 0;
           const stats = [
-            { label: "Rating", h: home.avgRating, a: away.avgRating, higherBetter: true },
+            { label: "Hodnocení", h: home.avgRating, a: away.avgRating, higherBetter: true },
             { label: "BRA", h: avgByPos(home.squad, "GK"), a: avgByPos(away.squad, "GK"), higherBetter: true },
             { label: "OBR", h: avgByPos(home.squad, "DEF"), a: avgByPos(away.squad, "DEF"), higherBetter: true },
             { label: "ZÁL", h: avgByPos(home.squad, "MID"), a: avgByPos(away.squad, "MID"), higherBetter: true },
@@ -334,12 +335,12 @@ function MiniForm({ f }: { f: string }) {
 export function FixturesWidget({ data, height }: WidgetProps) {
   if (data.schedule.loading) return <WidgetSkeleton />;
   if (data.schedule.error) return <WidgetError />;
-  const upcoming = (data.schedule.data?.matches ?? []).filter((m) => m.status !== "simulated").slice(0, rowsForHeight(height, ROW_PX.list, 32));
+  const upcoming = (data.schedule.data?.matches ?? []).filter((m) => m.status !== "simulated").slice(0, rowsForHeight(height, ROW_PX.table, 32));
 
   return (
     <>
       {upcoming.length > 0 ? (
-        <div className="space-y-2">
+        <div className="-mx-4 sm:-mx-5">
           {upcoming.map((m) => {
             const opp = m.isHome ? m.awayName : m.homeName;
             const oppIsAi = (m.isHome ? m.awayIsAi : m.homeIsAi) === true;
@@ -347,18 +348,23 @@ export function FixturesWidget({ data, height }: WidgetProps) {
             // Rozpis vrací calendarId pro ligový zápas, u přáteláku je id = match.id
             const switchId = m.calendarId ?? m.id;
             return (
-              <Link key={m.id} href={`/zapas?calendarId=${switchId}`} className="flex items-center gap-2 py-1.5 border-b border-gray-50 last:border-b-0 hover:bg-gray-50 -mx-2 px-2 rounded transition-colors">
-                <span className="text-sm text-muted tabular-nums w-5" title={m.roundName ?? undefined}>
-                  {m.round != null ? `${m.round}.` : m.isCup || m.isTournament ? "🏆" : ""}
-                </span>
-                <span className="text-sm font-heading font-bold flex-1 min-w-0"><TeamName name={opp} isAi={oppIsAi} /></span>
-                {/* Turnaj je na neutrální půdě: ani doma, ani venku. */}
-                {!m.isTournament && (
-                  <span className={`text-micro font-heading font-bold uppercase ${m.isHome ? "text-pitch-600" : "text-muted"}`}>{m.isHome ? "D" : "V"}</span>
-                )}
-                <LineupFlag m={m} />
-                <span className="text-micro text-muted tabular-nums">{date}</span>
-              </Link>
+              <ListRow key={m.id} dense href={`/zapas?calendarId=${switchId}`}
+                leading={
+                  <span className="text-meta text-muted tabular-nums" title={m.roundName ?? undefined}>
+                    {m.round != null ? `${m.round}.` : m.isCup || m.isTournament ? "🏆" : ""}
+                  </span>
+                }
+                title={<TeamName name={opp} isAi={oppIsAi} wrap />}
+                trailing={
+                  <>
+                    {/* Turnaj je na neutrální půdě: ani doma, ani venku. */}
+                    {!m.isTournament && (
+                      <span className={`text-micro font-heading font-bold uppercase ${m.isHome ? "text-pitch-600" : "text-muted"}`}>{m.isHome ? "D" : "V"}</span>
+                    )}
+                    <LineupFlag m={m} />
+                    <span className="text-micro text-muted tabular-nums">{date}</span>
+                  </>
+                } />
             );
           })}
         </div>
@@ -395,41 +401,24 @@ export function RecentMatchesWidget({ data, height }: WidgetProps) {
 
   return (
     <>
-      <div className="overflow-x-auto -mx-4 sm:-mx-5 table-scroll">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-label border-b border-gray-200 text-micro uppercase tracking-wide">
-              <th className="pb-2 pl-4 sm:pl-5 pr-2 w-10">Kolo</th>
-              <th className="pb-2 pr-2">Soupeř</th>
-              <th className="pb-2 pr-4 sm:pr-5 text-center w-20">Výsledek</th>
-            </tr>
-          </thead>
-          <tbody>
-            {matches.slice(0, rowsForHeight(height, ROW_PX.tableBadge, 60)).map((m) => {
-              const resultBg = m.result === "W" ? "bg-pitch-50" : m.result === "L" ? "bg-red-50" : "bg-gray-50";
-              const resultText = m.result === "W" ? "text-pitch-600" : m.result === "L" ? "text-card-red" : "text-muted";
-              return (
-                <tr key={m.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
-                  <td className="py-2 pl-4 sm:pl-5 pr-2 tabular-nums text-muted">{m.round ?? "-"}</td>
-                  <td className="py-2 pr-2">
-                    <a href={`/zapas/${m.id}`} className="flex items-center gap-2 hover:underline">
-                      <BadgePreview primary={m.opponentColor} secondary={m.opponentSecondary}
-                        pattern={(m.opponentBadge as BadgePattern) || "shield"}
-                        initials={initials(m.opponent ?? "")} size={20} />
-                      <span className="font-heading font-bold text-ink truncate max-w-[200px]">{m.opponent}</span>
-                      <span className="text-micro text-muted uppercase">{m.isHome ? "D" : "V"}</span>
-                    </a>
-                  </td>
-                  <td className="py-2 pr-4 sm:pr-5 text-center">
-                    <a href={`/zapas/${m.id}`} className={`inline-flex items-center px-2 py-0.5 rounded-control text-sm font-heading font-bold hover:opacity-80 transition-opacity ${resultBg} ${resultText}`}>
-                      {m.homeScore}:{m.awayScore}
-                    </a>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+      <div className="-mx-4 sm:-mx-5 border-t border-line">
+        <DataTable dense rows={matches.slice(0, rowsForHeight(height, ROW_PX.tableBadge, 60))}
+          rowKey={(m) => m.id} rowHref={(m) => `/zapas/${m.id}`}
+          empty="Zatím žádný odehraný zápas."
+          columns={[
+            { key: "round", header: "Kolo", width: "w-12", align: "center", cell: (m) => <span className="text-muted">{m.round ?? "-"}</span> },
+            { key: "opponent", header: "Soupeř", align: "left",
+              cell: (m) => (
+                <span className="flex items-center gap-2 min-w-0">
+                  <BadgePreview primary={m.opponentColor} secondary={m.opponentSecondary}
+                    pattern={(m.opponentBadge as BadgePattern) || "shield"} initials={initials(m.opponent ?? "")} size={20} />
+                  <span className="font-bold text-ink leading-tight">{m.opponent}</span>
+                  <span className="text-micro text-muted uppercase">{m.isHome ? "D" : "V"}</span>
+                </span>
+              ) },
+            { key: "score", header: "Výsledek", width: "w-20",
+              cell: (m) => <ScoreChip result={(m.result === "W" || m.result === "L" ? m.result : "D") as MatchOutcome}>{m.homeScore}:{m.awayScore}</ScoreChip> },
+          ]} />
       </div>
       <div className="text-center pt-2">
         <Link href="/rozpis" className="text-sm text-pitch-500 font-heading font-bold hover:underline">Všechny zápasy →</Link>

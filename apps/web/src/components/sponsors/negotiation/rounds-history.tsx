@@ -1,14 +1,15 @@
 "use client";
 
 import { Card, CardBody } from "@/components/ui";
-import { formatCZK } from "@/lib/sponsor-owners";
+
 import { seasonsAccusative } from "@/lib/sponsor-format";
 import { PROMISE_LABELS, RESPONSE_LABELS, type NegotiationRound, type Proposal } from "@/lib/sponsor-negotiation";
+import { formatKc } from "@/lib/format";
 
 function summary(p: Proposal): string {
-  const parts = [`${formatCZK(p.demands.monthly)} měsíčně`, `na ${seasonsAccusative(p.seasons)}`];
-  if (p.demands.winBonus > 0) parts.push(`${formatCZK(p.demands.winBonus)} za výhru`);
-  if (p.demands.signingBonus > 0) parts.push(`${formatCZK(p.demands.signingBonus)} za podpis`);
+  const parts = [`${formatKc(p.demands.monthly)} měsíčně`, `na ${seasonsAccusative(p.seasons)}`];
+  if (p.demands.winBonus > 0) parts.push(`${formatKc(p.demands.winBonus)} za výhru`);
+  if (p.demands.signingBonus > 0) parts.push(`${formatKc(p.demands.signingBonus)} za podpis`);
   if (p.promises.length > 0) parts.push(`sliby: ${p.promises.map((s) => PROMISE_LABELS[s.kind].toLowerCase()).join(", ")}`);
   return parts.join(", ");
 }

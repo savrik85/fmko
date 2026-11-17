@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, showError } from "@/lib/api";
-import { Spinner, Card, CardHeader, CardBody, SectionLabel } from "@/components/ui";
+import { Spinner, Card, CardHeader, CardBody, SectionLabel, PageLoading, ErrorBox, StatusChip, ChoiceGroup, choiceClass } from "@/components/ui";
 
 interface Anthem {
   id: string;
@@ -152,7 +152,7 @@ export default function HymnaPage() {
     }
   }
 
-  if (loading) return <div className="page-container flex justify-center min-h-[50vh] items-center"><Spinner /></div>;
+  if (loading) return <PageLoading />;
 
   const canGenerate = attemptsUsed < maxAttempts;
 
@@ -183,7 +183,7 @@ export default function HymnaPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <h3 className="font-heading font-bold text-base text-ink truncate">{a.title}</h3>
-                      {a.isSelected && <span className="text-micro font-bold bg-pitch-500 text-white px-2 py-0.5 rounded-full">AKTUÁLNÍ</span>}
+                      {a.isSelected && <StatusChip tone="ok">AKTUÁLNÍ</StatusChip>}
                     </div>
                     <div className="text-xs text-muted mt-0.5">
                       {STYLE_PRESETS.find((p) => p.value === a.style)?.label || a.style}
@@ -238,20 +238,8 @@ export default function HymnaPage() {
               <h2 className="font-heading font-bold text-base text-ink">{anthems.length === 0 ? "1." : "Nová hymna:"} Text</h2>
             </CardHeader>
             <CardBody className="flex flex-col gap-4">
-              <div className="flex gap-2">
-                <button type="button" onClick={() => setLyricsMode("auto")}
-                  className={`flex-1 px-4 py-2 rounded-soft text-sm font-heading font-bold transition-colors ${
-                    lyricsMode === "auto" ? "bg-pitch-500 text-white" : "bg-gray-100 text-ink hover:bg-gray-200"
-                  }`}>
-                  {"\u{1F916}"} Automaticky
-                </button>
-                <button type="button" onClick={() => setLyricsMode("custom")}
-                  className={`flex-1 px-4 py-2 rounded-soft text-sm font-heading font-bold transition-colors ${
-                    lyricsMode === "custom" ? "bg-pitch-500 text-white" : "bg-gray-100 text-ink hover:bg-gray-200"
-                  }`}>
-                  {"\u{270F}️"} S vlastními slovy
-                </button>
-              </div>
+              <ChoiceGroup ariaLabel="Text hymny" columns={2} value={lyricsMode} onChange={setLyricsMode}
+                options={[{ value: "auto", label: <>{"\u{1F916}"} Automaticky</> }, { value: "custom", label: <>{"\u{270F}️"} S vlastními slovy</> }]} />
 
               {lyricsMode === "custom" && (
                 <div>
@@ -259,7 +247,7 @@ export default function HymnaPage() {
                   <textarea value={hints} onChange={(e) => setHints(e.target.value.slice(0, 500))}
                     placeholder="Např.: Medvědi, hospoda U Lípy, nikdy nezapomeneme, bratři Novákové"
                     rows={3}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-soft text-sm focus:border-pitch-500 focus:outline-none resize-none" />
+                    className="input !w-full !px-3 !py-2 !text-sm resize-none" />
                   <div className="text-xs text-muted mt-1">{hints.length}/500 znaků</div>
                 </div>
               )}
@@ -275,13 +263,13 @@ export default function HymnaPage() {
                   <div>
                     <SectionLabel>Název hymny</SectionLabel>
                     <input type="text" value={title} onChange={(e) => setTitle(e.target.value.slice(0, 100))}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-soft text-sm focus:border-pitch-500 focus:outline-none" />
+                      className="input !w-full !px-3 !py-2 !text-sm" />
                   </div>
                   <div>
                     <SectionLabel>Text (můžeš upravit)</SectionLabel>
                     <textarea value={lyrics} onChange={(e) => setLyrics(e.target.value.slice(0, 3000))}
                       rows={12}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-soft text-sm font-mono focus:border-pitch-500 focus:outline-none resize-vertical" />
+                      className="input !w-full !px-3 !py-2 !text-sm !font-mono resize-vertical" />
                     <div className="text-xs text-muted mt-1">{lyrics.length}/3000 znaků</div>
                   </div>
                 </>
@@ -300,9 +288,7 @@ export default function HymnaPage() {
                   const active = style === preset.value;
                   return (
                     <button type="button" key={preset.value} onClick={() => setStyle(preset.value)}
-                      className={`px-3 py-2.5 rounded-soft text-sm text-left border-2 transition-all ${
-                        active ? "border-pitch-500 bg-pitch-50 text-pitch-700 font-bold" : "border-gray-200 hover:border-gray-300 bg-white text-ink"
-                      }`}>
+                      className={`px-3 py-2.5 text-sm text-left ${active ? "font-bold" : ""} ${choiceClass(active)}`}>
                       {preset.label}
                     </button>
                   );
@@ -323,9 +309,7 @@ export default function HymnaPage() {
           </div>
 
           {musicError && (
-            <div className="mt-3 p-3 rounded-soft bg-red-50 border border-red-200 text-sm text-red-800">
-              {musicError}
-            </div>
+            <div className="mt-3"><ErrorBox message={musicError} /></div>
           )}
         </>
       )}

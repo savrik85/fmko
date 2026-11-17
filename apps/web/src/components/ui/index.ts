@@ -2,7 +2,10 @@ export { Button } from "./button";
 export { Card, CardHeader, CardBody } from "./card";
 export { Badge } from "./badge";
 export { StatBar } from "./stat-bar";
-export { Spinner } from "./spinner";
+export { Spinner, PageLoading, SectionLoading } from "./spinner";
+export { ProgressBar, type ProgressTone } from "./progress-bar";
+export { ChoiceGroup, ChoiceCard, choiceClass, type ChoiceOption } from "./choice";
+export { Disclosure } from "./disclosure";
 export { CollapsibleCard, useOpenOnDesktop } from "./CollapsibleCard";
 export { Input } from "./input";
 export { AutoGrowTextarea } from "./auto-grow-textarea";
@@ -25,3 +28,9 @@ export { Sheet } from "./sheet";
 export { SheetDialog } from "./sheet-dialog";
 export { StickyActions } from "./sticky-actions";
 export { IconButton } from "./icon-button";
+export { DataTable, EntityCell, type DataColumn, type DataRowTone } from "./data-table";
+export {
+  ListCard, ListRow, RowGroup, RowIcon, RowValue, ListEmpty, ShowMore, DeltaMark,
+  ResultChip, ScoreChip, RatingPill, StatusChip, ratingToneIn, type ChipTone,
+  type RowTone, type RatingTone, type MatchOutcome,
+} from "./list-kit";

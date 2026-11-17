@@ -1,11 +1,12 @@
 "use client";
 
-import { SectionLabel } from "@/components/ui";
+import { SectionLabel, ListRow, RowValue } from "@/components/ui";
 import { useState } from "react";
 import { apiAction, apiFetch } from "@/lib/api";
 import { Sheet } from "@/components/ui";
-import { czk, kurz, signed, IkonaTipu, Prazdno, Statek, StavPill, TYP_TIKETU } from "./ui";
+import { kurz, IkonaTipu, Prazdno, Statek, StavPill, TYP_TIKETU } from "./ui";
 import type { Tiket, TiketyOdpoved } from "./types";
+import { formatKc, formatSigned } from "@/lib/format";
 
 function TiketKarta({ t, teamId, onZmena }: { t: Tiket; teamId: string; onZmena: () => void }) {
   const [vyvesuji, setVyvesuji] = useState(false);
@@ -47,30 +48,23 @@ function TiketKarta({ t, teamId, onZmena }: { t: Tiket; teamId: string; onZmena:
         )}
       </div>
 
-      <ol className="divide-y divide-gray-50">
+      <ol className="divide-y divide-line-soft">
         {t.selections.map((s) => (
-          <li key={`${s.matchId}-${s.label}`} className="flex items-start gap-2 px-3 py-2.5">
-            <span className="mt-0.5"><IkonaTipu stav={s.result} /></span>
-            <div className="flex-1 min-w-0">
-              <div className="text-base font-semibold leading-tight break-words">{s.zapas}</div>
-              <div className="text-sm text-muted leading-tight break-words">
-                {s.label}
-                {s.vysledek && <> · <span className="tabular-nums text-ink">{s.vysledek}</span></>}
-              </div>
-            </div>
-            <span className={`text-base font-heading font-bold tabular-nums shrink-0
-                             ${s.result === "lost" ? "text-muted line-through" : ""}`}>
-              {kurz(s.oddsX100)}
-            </span>
+          <li key={`${s.matchId}-${s.label}`}>
+            <ListRow
+              leading={<IkonaTipu stav={s.result} />}
+              title={s.zapas}
+              detail={<>{s.label}{s.vysledek && <> · <span className="tabular-nums text-ink">{s.vysledek}</span></>}</>}
+              trailing={<RowValue><span className={s.result === "lost" ? "text-muted line-through" : ""}>{kurz(s.oddsX100)}</span></RowValue>} />
           </li>
         ))}
       </ol>
 
       <div className="px-3 py-2.5 bg-gray-50/60 grid grid-cols-3 gap-2 text-center">
-        <Statek label="Vklad" value={czk(t.stake)} />
+        <Statek label="Vklad" value={formatKc(t.stake)} />
         <Statek label="Kurz" value={kurz(t.totalOddsX100)} />
         <Statek label={popisVyplaty}
-                value={czk(castka)}
+                value={formatKc(castka)}
                 className={t.status === "won" ? "text-pitch-600"
                   : t.status === "lost" || t.status === "confiscated" ? "text-card-red" : ""} />
       </div>
@@ -101,7 +95,7 @@ function TiketKarta({ t, teamId, onZmena }: { t: Tiket; teamId: string; onZmena:
         </button>
       )}
 
-      <Sheet open={vyvesuji} onClose={() => setVyvesuji(false)} title="Vyvěsit tiket" maxWidth="480px" zavritKlikemVedle={false}>
+      <Sheet open={vyvesuji} onClose={() => setVyvesuji(false)} title="Vyvěsit tiket" maxWidth="480px" closeOnBackdrop={false}>
         <div className="p-4 space-y-3">
           <p className="text-sm text-muted leading-snug">
             Tiket uvidí všechny kluby v soutěži a můžou se pod ním vyjádřit.
@@ -136,14 +130,14 @@ export function MojeTikety({ data, teamId, onZmena }: { data: TiketyOdpoved | nu
       {/* Souhrn je v hlavičce stránky, tady stačí rozpad a vysvětlení. */}
       <div className="card p-4">
         <div className="grid grid-cols-3 gap-2 text-center">
-          <Statek label="Vsazeno" value={czk(s.staked + s.levy)} />
-          <Statek label="Vyhráno" value={czk(s.won)} />
-          <Statek label="Rozdíl" value={signed(s.net)}
+          <Statek label="Vsazeno" value={formatKc(s.staked + s.levy)} />
+          <Statek label="Vyhráno" value={formatKc(s.won)} />
+          <Statek label="Rozdíl" value={formatSigned(s.net)}
                   className={s.net >= 0 ? "text-pitch-600" : "text-card-red"} />
         </div>
         <p className="text-sm text-muted mt-2 leading-snug">
           Kancelář si na každém kurzu bere osm procent. Není to charita, je to hospoda.
-          {s.levy > 0 && ` Na odvodech soutěži jsi zaplatil ${czk(s.levy)}.`}
+          {s.levy > 0 && ` Na odvodech soutěži jsi zaplatil ${formatKc(s.levy)}.`}
         </p>
       </div>
 

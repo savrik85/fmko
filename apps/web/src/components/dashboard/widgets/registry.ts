@@ -189,7 +189,7 @@ export const WIDGETS: WidgetDef[] = [
   // ── Kádr ──────────────────────────────────────────────────────────────────
   {
     id: "squad-status", title: "Stav kádru", icon: "👥", category: "kadr",
-    description: "Počet hráčů, kondice, rating, morálka a rozpad podle postů.",
+    description: "Počet hráčů, kondice, hodnocení, morálka a rozpad podle postů.",
     defaultWidth: 1, defaultHeight: 3, needs: ["players", "team"], Component: SquadStatusWidget,
   },
   {
@@ -443,7 +443,7 @@ export const WIDGETS: WidgetDef[] = [
 
   // ── Analýza ───────────────────────────────────────────────────────────────
   {
-    id: "squad-scatter", title: "Věk a rating", icon: "🎯", category: "kadr",
+    id: "squad-scatter", title: "Věk a hodnocení", icon: "🎯", category: "kadr",
     description: "Bodový graf kádru se čtyřmi poli, kdo je opora, koho vychovat a kdo je na odchod.",
     defaultWidth: 1, defaultHeight: 2, needs: ["players"], Component: SquadScatterWidget,
   },

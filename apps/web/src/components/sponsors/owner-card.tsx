@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 import { apiFetch } from "@/lib/api";
-import { Card, CardBody, useConfirm } from "@/components/ui";
+import { Card, CardBody, useConfirm, ProgressBar } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
-import { favorLabel, formatCZK, personalityHint, personalityLabel } from "@/lib/sponsor-owners";
+import { favorLabel, personalityHint, personalityLabel } from "@/lib/sponsor-owners";
 import { RequestSection } from "./request-section";
+import { formatKc } from "@/lib/format";
 
 export interface OwnerInfo {
   firstName: string;
@@ -44,7 +45,7 @@ export function OwnerCard({ sponsorId, teamId, owner, myTeam, onChanged }: {
   const [acting, setActing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const { confirm, dialog } = useConfirm();
+  const { confirm, dialog } = useConfirm({ sheet: true });
   const name = `${owner.firstName} ${owner.lastName}`;
   const match = myTeam?.nextHomeMatch ?? null;
   const date = match ? new Date(match.scheduledAt).toLocaleDateString("cs", { day: "numeric", month: "numeric" }) : "";
@@ -54,7 +55,7 @@ export function OwnerCard({ sponsorId, teamId, owner, myTeam, onChanged }: {
     const ok = await confirm({
       title: `Pozvat ${name} na zápas?`,
       description: `Domácí zápas ${date} proti ${match.opponentName}. Když pozvání přijme, náklonnost stoupne a po zápase se promítne i výsledek.`,
-      details: [{ label: "Dárek a občerstvení", value: `-${formatCZK(match.giftCost)}`, color: "text-card-red" }],
+      details: [{ label: "Dárek a občerstvení", value: `−${formatKc(match.giftCost)}`, color: "text-card-red" }],
       confirmLabel: "Pozvat",
     });
     if (!ok) return;
@@ -90,13 +91,11 @@ export function OwnerCard({ sponsorId, teamId, owner, myTeam, onChanged }: {
                 <span className="text-muted">Náklonnost k vašemu klubu</span>
                 <span className="font-heading font-bold">{favorLabel(myTeam.favor)} ({myTeam.favor})</span>
               </div>
-              <div className="h-2 rounded-full bg-gray-100 mt-1 overflow-hidden">
-                <div className="h-full bg-pitch-500" style={{ width: `${myTeam.favor}%` }} />
-              </div>
+              <ProgressBar value={myTeam.favor} label="Přízeň" className="mt-1" />
             </div>
             <div className="text-sm text-muted">
-              Jako hlavní sponzor by dal bez slibů zhruba {formatCZK(myTeam.budgetEstimate.base.low)} až {formatCZK(myTeam.budgetEstimate.base.high)},
-              se sliby až {formatCZK(myTeam.budgetEstimate.cap.high)} měsíčně. Čím lepší vztah, tím přesnější odhad.
+              Jako hlavní sponzor by dal bez slibů zhruba {formatKc(myTeam.budgetEstimate.base.low)} až {formatKc(myTeam.budgetEstimate.base.high)},
+              se sliby až {formatKc(myTeam.budgetEstimate.cap.high)} měsíčně. Čím lepší vztah, tím přesnější odhad.
             </div>
 
             {teamId && <RequestSection teamId={teamId} sponsorId={sponsorId} />}
@@ -104,7 +103,7 @@ export function OwnerCard({ sponsorId, teamId, owner, myTeam, onChanged }: {
             {match ? (
               <div className="pt-3 border-t border-gray-100">
                 <div className="text-sm">
-                  Nejbližší domácí zápas {date} proti {match.opponentName}. Dárek {formatCZK(match.giftCost)}.
+                  Nejbližší domácí zápas {date} proti {match.opponentName}. Dárek {formatKc(match.giftCost)}.
                 </div>
                 {match.invitation ? (
                   <div className="text-sm text-muted mt-1">

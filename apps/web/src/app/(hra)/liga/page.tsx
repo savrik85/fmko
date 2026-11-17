@@ -5,11 +5,12 @@ import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
-import { Spinner, SectionLabel, BadgePreview, PositionBadge, PageHeader, Tabs } from "@/components/ui";
+import { SectionLabel, BadgePreview, PositionBadge, PageHeader, Tabs, DataTable, EntityCell, ListCard, ListRow, ListEmpty, RowGroup, RowIcon, ResultChip, type DataColumn, type MatchOutcome, PageLoading, SectionLoading, ChoiceGroup } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 import { PreseasonNotice } from "@/components/team/preseason-notice";
 import { LeagueStatsTab, type StatsData } from "@/components/league/league-stats";
 import { CoachName } from "@/components/manager/coach-name";
+import { FixtureGroup, FixtureRow, type FixtureSide } from "@/components/match/fixture-row";
 import { TeamName } from "@/components/manager/team-name";
 
 // ═══ Types ═══
@@ -33,11 +34,9 @@ interface LeagueRound {
 
 // ═══ Helpers ═══
 
-const FORM_COLORS: Record<string, string> = { W: "bg-pitch-400", D: "bg-gold-500", L: "bg-card-red" };
 
 interface LeagueMovement { promotion: boolean; relegation: boolean }
 const NO_MOVEMENT: LeagueMovement = { promotion: false, relegation: false };
-const FORM_LABELS: Record<string, string> = { W: "V", D: "R", L: "P" };
 
 function ini(n: string) { return n.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase(); }
 
@@ -224,7 +223,7 @@ function LigaPage() {
     setTab("tabulka");
   };
 
-  if (loadingStandings) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
+  if (loadingStandings) return <PageLoading />;
 
   const displayName = seasonNum ? `${leagueName}. Sezóna ${seasonNum}` : (leagueName || "Liga");
 
@@ -244,18 +243,9 @@ function LigaPage() {
         if (district.length < 2) return null;
         const ownId = district.find((l) => l.name === ownLeagueName)?.id ?? null;
         return (
-          <div className="flex flex-wrap gap-2" role="group" aria-label={`Soutěže okresu ${ctx.district}`}>
-            {district.map((l) => {
-              const active = selectedLeagueId ? selectedLeagueId === l.id : l.id === ownId;
-              return (
-                <button key={l.id} type="button" aria-pressed={active}
-                  onClick={() => handleLeagueChange(l.id === ownId ? "own" : l.id)}
-                  className={`px-3 py-1.5 rounded-full text-sm font-heading font-bold transition-colors ${active ? "bg-pitch-600 text-white" : "bg-white text-ink border border-gray-200 hover:bg-gray-50"}`}>
-                  {l.name}{l.id === ownId ? " (moje)" : ""}
-                </button>
-              );
-            })}
-          </div>
+          <ChoiceGroup ariaLabel={`Soutěže okresu ${ctx.district}`} size="sm" value={selectedLeagueId ?? ownId}
+            onChange={(id) => handleLeagueChange(id === ownId ? "own" : id)}
+            options={district.map((l) => ({ value: l.id, label: `${l.name}${l.id === ownId ? " (moje)" : ""}` }))} />
         );
       })()}
 
@@ -323,22 +313,36 @@ function LigaPage() {
       {tab === "vysledky" && <ScheduleTab rounds={rounds} loaded={loadedTabs.has("vysledky")} teamId={teamId!} showAll={false} />}
       {tab === "statistiky" && <LeagueStatsTab data={statsData} loaded={loadedTabs.has("statistiky")} />}
       {isOtherLeague && tab === "zpravodaj" && (
-        !loadedTabs.has("zpravodaj") ? <div className="flex justify-center py-8"><Spinner /></div> : (
-          <div className="space-y-3">
-            {newsArticles.length === 0 && <p className="text-muted text-sm text-center py-8">Zatím žádné zprávy</p>}
-            {newsArticles.map((a) => (
-              <div key={a.id} className="card p-4">
-                <div className="flex items-start gap-3">
-                  <span className="text-2xl">{a.icon}</span>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-heading font-bold text-base text-ink">{a.headline}</h3>
-                    <ArticleBody article={a} />
-                    <p className="text-xs text-muted/60 mt-2">{a.date ? formatDate(a.date) : ""}{a.gameWeek ? ` ${a.gameWeek}. kolo` : ""}</p>
+        !loadedTabs.has("zpravodaj") ? <SectionLoading /> : (
+          <ListCard title="Zpravodaj" count={newsArticles.length || undefined}>
+            {newsArticles.length === 0 && <ListEmpty icon="📰">Zatím žádné zprávy.</ListEmpty>}
+            {newsArticles.map((a) => {
+              const when = `${a.date ? formatDate(a.date) : ""}${a.gameWeek ? ` ${a.gameWeek}. kolo` : ""}`.trim();
+              const results = a.type === "round_results" ? parseRoundResults(a.body) : [];
+              // Výsledky kola jsou zápasy: stejný řádek zápasu jako v rozpisu, nadpis článku nad nimi.
+              if (results.length > 0) {
+                return (
+                  <div key={a.id}>
+                    <RowGroup label={<>{a.icon} {a.headline}</>} aside={when || undefined} />
+                    {results.map((r, i) => {
+                      const [h, aw] = r.score.split(":").map(Number);
+                      return (
+                        <FixtureRow key={i} home={{ name: r.home }} away={{ name: r.away }}
+                          score={{ home: h, away: aw }} winner={h > aw ? "home" : aw > h ? "away" : null} />
+                      );
+                    })}
                   </div>
-                </div>
-              </div>
-            ))}
-          </div>
+                );
+              }
+              return (
+                <ListRow key={a.id}
+                  leading={<RowIcon>{a.icon}</RowIcon>}
+                  title={a.headline}
+                  meta={when || undefined}
+                  detail={<ArticleBody article={a} />} />
+              );
+            })}
+          </ListCard>
         )
       )}
       </>
@@ -368,32 +372,24 @@ function PastSeasonView({ entry, myTeamId }: { entry: HistoryEntry; myTeamId: st
 
       {/* Konečná tabulka */}
       {entry.finalStandings && entry.finalStandings.length > 0 && (
-        <div className="card overflow-x-auto table-scroll">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b-2 border-gray-200 text-muted">
-                <th className="py-2.5 px-1.5 text-xs font-heading uppercase text-center w-8">#</th>
-                <th className="py-2.5 px-3 text-xs font-heading uppercase text-left">Tým</th>
-                <th className="py-2.5 px-1.5 text-xs font-heading uppercase text-center w-8 hidden sm:table-cell">Z</th>
-                <th className="py-2.5 px-1.5 text-xs font-heading uppercase text-center">V-R-P</th>
-                <th className="py-2.5 px-1.5 text-xs font-heading uppercase text-center w-14">Skóre</th>
-                <th className="py-2.5 px-1.5 text-xs font-heading uppercase text-center w-10">B</th>
-              </tr>
-            </thead>
-            <tbody>
-              {entry.finalStandings.map((r, idx) => (
-                <tr key={r.teamId} className={`border-b border-gray-50 ${r.teamId === myTeamId ? "bg-pitch-50/60" : idx % 2 === 1 ? "bg-gray-50/30" : ""}`}>
-                  <td className="py-3 px-1.5 text-center"><span className={`font-heading font-[800] text-base tabular-nums ${r.pos === 1 ? "text-gold-500" : r.pos <= 3 ? "text-pitch-500" : "text-muted"}`}>{r.pos}</span></td>
-                  <td className="py-3 px-3"><PastTeamLink teamId={r.teamId} name={r.teamName} highlight={r.teamId === myTeamId} /></td>
-                  <td className="py-3 px-1.5 text-center tabular-nums text-muted hidden sm:table-cell">{r.played}</td>
-                  <td className="py-3 px-1.5 text-center tabular-nums text-muted">{r.wins}-{r.draws}-{r.losses}</td>
-                  <td className="py-3 px-1.5 text-center tabular-nums">{r.gf}:{r.ga}</td>
-                  <td className="py-3 px-1.5 text-center"><span className="font-heading font-[800] text-lg tabular-nums">{r.points}</span></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <ListCard title="Konečná tabulka">
+          <DataTable
+            rows={entry.finalStandings} rowKey={(r) => r.teamId}
+            rowHref={(r) => `/tym/${r.teamId}`}
+            rowTone={(r) => ({ own: r.teamId === myTeamId })}
+            empty="Konečná tabulka téhle sezóny se nedochovala."
+            columns={[
+              { key: "pos", header: "#", width: "w-10", align: "center",
+                cell: (r) => <span className={`font-bold ${r.pos === 1 ? "text-gold-700" : "text-muted"}`}>{r.pos}</span> },
+              { key: "team", header: "Klub", align: "left",
+                cell: (r) => <EntityCell name={r.teamName} bold={r.teamId === myTeamId}
+                  meta={`${r.wins}-${r.draws}-${r.losses} · ${r.gf}:${r.ga}`} metaMobileOnly /> },
+              { key: "played", header: "Z", title: "Zápasy", width: "w-10", cell: (r) => r.played },
+              { key: "record", header: "V-R-P", width: "w-20", priority: 2, cell: (r) => `${r.wins}-${r.draws}-${r.losses}` },
+              { key: "score", header: "Skóre", width: "w-16", priority: 2, cell: (r) => `${r.gf}:${r.ga}` },
+              { key: "points", header: "Body", width: "w-14", emphasis: true, cell: (r) => r.points },
+            ]} />
+        </ListCard>
       )}
 
       {/* Nejlepší jedenáctka */}
@@ -459,6 +455,14 @@ function PastStat({ label, value, sub }: { label: string; value: string; sub?: s
 
 // ═══ Article body renderer ═══
 
+/** Výsledky kola vytažené z textu článku („X porazil Y 2:1“). */
+function parseRoundResults(body: string): Array<{ home: string; away: string; score: string }> {
+  const re = /(.+?)\s+(?:porazil|remizoval\s+s|zvítězil\s+nad)\s+(.+?)\s+(\d+:\d+)/g;
+  return Array.from(body.matchAll(re)).map((m) => ({
+    home: m[1].replace(/^\.\s*/, "").trim(), away: m[2].trim(), score: m[3],
+  }));
+}
+
 function ArticleBody({ article }: { article: NewsArticle }) {
   if (article.type === "interview") {
     let meta: { article?: string } = {};
@@ -470,170 +474,64 @@ function ArticleBody({ article }: { article: NewsArticle }) {
       </div>
     );
   }
-  if (article.type === "round_results") {
-    const re = /(.+?)\s+(?:porazil|remizoval\s+s|zvítězil\s+nad)\s+(.+?)\s+(\d+:\d+)/g;
-    const structured = Array.from(article.body.matchAll(re)).map((m) => ({
-      home: m[1].replace(/^\.\s*/, "").trim(), away: m[2].trim(), score: m[3],
-    }));
-    if (structured.length === 0) return <p className="text-sm text-muted mt-1 whitespace-pre-wrap">{article.body}</p>;
-    return (
-      <div className="mt-1 space-y-1">
-        {structured.map((r, i) => {
-          const [h, a] = r.score.split(":").map(Number);
-          const isDraw = h === a;
-          const homeWin = h > a;
-          return (
-            <div key={i} className="flex items-center text-sm py-1 border-b border-gray-50 last:border-b-0">
-              <span className={`flex-1 text-right truncate pr-2 ${homeWin ? "font-heading font-bold" : ""}`}>{r.home}</span>
-              <span className={`font-heading font-bold text-xs tabular-nums px-2 py-0.5 rounded min-w-[40px] text-center ${
-                isDraw ? "bg-gray-100 text-muted" : "bg-gray-50 text-ink"
-              }`}>{r.score}</span>
-              <span className={`flex-1 truncate pl-2 ${!homeWin && !isDraw ? "font-heading font-bold" : ""}`}>{r.away}</span>
-            </div>
-          );
-        })}
-      </div>
-    );
-  }
+  // Výsledky kola s rozpoznanými zápasy vykresluje seznam nad tímhle (FixtureRow),
+  // sem se dostane jen článek, ze kterého se zápasy vytáhnout nepodařilo.
   return <p className="text-sm text-muted mt-1 whitespace-pre-wrap">{article.body}</p>;
 }
 
 // ═══ Tabulka ═══
 
-type SortKey = "pos" | "team" | "played" | "wins" | "draws" | "losses" | "gd" | "points";
-type SortDir = "asc" | "desc";
-
 function StandingsTab({ standings, teamId, movement }: { standings: Standing[]; teamId: string; movement: LeagueMovement }) {
-  const [sortKey, setSortKey] = useState<SortKey>("pos");
-  const [sortDir, setSortDir] = useState<SortDir>("asc");
-
-  if (standings.length === 0) return <div className="card p-8 text-center text-muted">Zatím žádné výsledky.</div>;
-
-  const handleSort = (key: SortKey) => {
-    if (sortKey === key) setSortDir((d) => d === "asc" ? "desc" : "asc");
-    else { setSortKey(key); setSortDir(key === "team" ? "asc" : "desc"); }
-  };
-
-  const sorted = [...standings].sort((a, b) => {
-    let cmp = 0;
-    switch (sortKey) {
-      case "pos": cmp = a.pos - b.pos; break;
-      case "team": cmp = a.team.localeCompare(b.team, "cs"); break;
-      case "played": cmp = a.played - b.played; break;
-      case "wins": cmp = a.wins - b.wins; break;
-      case "draws": cmp = a.draws - b.draws; break;
-      case "losses": cmp = a.losses - b.losses; break;
-      case "gd": cmp = (a.gf - a.ga) - (b.gf - b.ga); break;
-      case "points": cmp = a.points - b.points; break;
-    }
-    return sortDir === "asc" ? cmp : -cmp;
-  });
-
   const totalTeams = standings.length;
-  const cols: Array<{ key: SortKey; label: string; w: string }> = [
-    { key: "pos", label: "#", w: "w-8" },
-    { key: "team", label: "Tým", w: "flex-1" },
-    { key: "played", label: "Z", w: "w-8" },
-    { key: "wins", label: "V", w: "w-8" },
-    { key: "draws", label: "R", w: "w-8" },
-    { key: "losses", label: "P", w: "w-8" },
-    { key: "gd", label: "Skóre", w: "w-14" },
-    { key: "points", label: "B", w: "w-10" },
+  const columns: DataColumn<Standing>[] = [
+    { key: "pos", header: "#", width: "w-10", align: "center", sortValue: (r) => r.pos, firstDir: "asc",
+      cell: (r) => <span className={`font-bold ${r.pos === 1 ? "text-gold-700" : "text-muted"}`}>{r.pos}</span> },
+    { key: "team", header: "Klub", align: "left", sortValue: (r) => r.team,
+      cell: (r) => (
+        <EntityCell
+          leading={<BadgePreview primary={r.primaryColor || "#2D5F2D"} secondary={r.secondaryColor || "#FFF"}
+            pattern={(r.badgePattern as BadgePattern) || "shield"} initials={ini(r.team)} size={24} />}
+          name={<TeamName name={r.team} isAi={r.isAi === true} wrap />} bold={r.isPlayer}
+          meta={`${r.wins}-${r.draws}-${r.losses} · ${r.gf}:${r.ga}`} metaMobileOnly />
+      ) },
+    { key: "played", header: "Z", title: "Zápasy", width: "w-10", sortValue: (r) => r.played, cell: (r) => r.played },
+    { key: "wins", header: "V", title: "Výhry", width: "w-10", priority: 2, sortValue: (r) => r.wins, cell: (r) => r.wins },
+    { key: "draws", header: "R", title: "Remízy", width: "w-10", priority: 2, sortValue: (r) => r.draws, cell: (r) => r.draws },
+    { key: "losses", header: "P", title: "Prohry", width: "w-10", priority: 2, sortValue: (r) => r.losses, cell: (r) => r.losses },
+    { key: "gd", header: "Skóre", width: "w-16", priority: 2, sortValue: (r) => r.gf - r.ga, cell: (r) => `${r.gf}:${r.ga}` },
+    { key: "form", header: "Forma", width: "w-32", priority: 3,
+      cell: (r) => (
+        <span className="inline-flex gap-1">
+          {(r.form ?? []).slice(0, 5).map((f, i) => <ResultChip key={i} result={f as MatchOutcome} />)}
+        </span>
+      ) },
+    { key: "points", header: "Body", width: "w-14", emphasis: true, sortValue: (r) => r.points, cell: (r) => r.points },
   ];
 
   return (
-    <div className="card overflow-x-auto table-scroll">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b-2 border-gray-200">
-            {cols.map((col) => {
-              const hideMobile = ["played", "wins", "draws", "losses"].includes(col.key);
-              return (
-                <th key={col.key} onClick={() => handleSort(col.key)}
-                  colSpan={col.key === "team" ? 2 : undefined}
-                  className={`py-2.5 px-1.5 text-xs font-heading uppercase cursor-pointer select-none hover:text-pitch-500 transition-colors whitespace-nowrap ${
-                    col.key === "team" ? "text-left pl-3" : "text-center"
-                  } ${sortKey === col.key ? "text-pitch-600" : "text-muted"} ${hideMobile ? "hidden sm:table-cell" : ""}`}>
-                  {col.label}{sortKey === col.key ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
-                </th>
-              );
-            })}
-            <th className="py-2.5 px-1.5 text-xs font-heading uppercase text-muted text-center w-28 hidden sm:table-cell">Forma</th>
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.map((row, idx) => {
-            const isPromo = movement.promotion && row.pos <= 2;
-            const isRel = movement.relegation && row.pos >= totalTeams - 1;
-            return (
-              <tr key={row.teamId ?? row.pos}
-                className={`border-b border-gray-50 transition-colors ${
-                  row.isPlayer ? "bg-pitch-50/60" : idx % 2 === 1 ? "bg-gray-50/30" : "hover:bg-gray-50/50"
-                }`}>
-                {/* Position */}
-                <td className="py-3 px-1.5 text-center">
-                  <span className={`font-heading font-[800] text-base tabular-nums ${
-                    row.pos === 1 ? "text-gold-500" : isPromo ? "text-pitch-500" : isRel ? "text-card-red" : "text-muted"
-                  }`}>
-                    {row.pos}
-                  </span>
-                </td>
-                {/* Badge */}
-                <td className="py-3 pl-2 pr-0 w-8" style={{ verticalAlign: "middle" }}>
-                  <BadgePreview primary={row.primaryColor || "#2D5F2D"} secondary={row.secondaryColor || "#FFF"}
-                    pattern={(row.badgePattern as BadgePattern) || "shield"} initials={ini(row.team)} size={24} />
-                </td>
-                {/* Team */}
-                <td className="py-3 px-1.5" style={{ verticalAlign: "middle" }}>
-                  {/* AI klub je odkaz jako každý jiný klub, rozdíl je jen štítek u trenéra. */}
-                  {row.teamId ? (
-                    <Link href={`/tym/${row.teamId}`} className={`font-heading font-bold hover:text-pitch-500 transition-colors ${row.isPlayer ? "text-pitch-600" : ""}`}>
-                      <TeamName name={row.team} isAi={row.isAi === true} />
-                    </Link>
-                  ) : (
-                    <span className="font-heading font-bold"><TeamName name={row.team} isAi={row.isAi === true} /></span>
-                  )}
-                </td>
-                {/* Stats — hidden on mobile */}
-                <td className="py-3 px-1.5 text-center tabular-nums text-muted hidden sm:table-cell">{row.played}</td>
-                <td className="py-3 px-1.5 text-center tabular-nums font-medium hidden sm:table-cell">{row.wins}</td>
-                <td className="py-3 px-1.5 text-center tabular-nums font-medium hidden sm:table-cell">{row.draws}</td>
-                <td className="py-3 px-1.5 text-center tabular-nums font-medium hidden sm:table-cell">{row.losses}</td>
-                <td className="py-3 px-1.5 text-center tabular-nums">{row.gf}:{row.ga}</td>
-                {/* Points */}
-                <td className="py-3 px-1.5 text-center">
-                  <span className="font-heading font-[800] text-xl tabular-nums">{row.points}</span>
-                </td>
-                {/* Form — hidden on mobile */}
-                <td className="py-3 px-1.5 hidden sm:table-cell">
-                  <div className="flex gap-1 justify-center">
-                    {(row.form ?? []).slice(0, 5).map((f, i) => (
-                      <div key={i} className={`w-5 h-5 rounded ${FORM_COLORS[f] ?? "bg-gray-200"} flex items-center justify-center text-white text-micro font-bold`}>
-                        {FORM_LABELS[f] ?? f}
-                      </div>
-                    ))}
-                  </div>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+    <ListCard>
+      <DataTable columns={columns} rows={standings} rowKey={(r) => r.teamId ?? String(r.pos)}
+        rowHref={(r) => (r.teamId ? `/tym/${r.teamId}` : undefined)}
+        rowTone={(r) => ({
+          own: r.isPlayer,
+          bar: movement.promotion && r.pos <= 2 ? "up" : movement.relegation && r.pos >= totalTeams - 1 ? "down" : undefined,
+        })}
+        empty="Tabulka se naplní po prvním odehraném kole." emptyIcon="🏆" />
       {/* Legenda jen pro postup a sestup, které liga opravdu má */}
-      {(movement.promotion || movement.relegation) && (
-        <div className="flex items-center gap-4 px-4 py-2 border-t border-gray-100 text-xs text-muted">
-          {movement.promotion && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-pitch-500" /> Postup</span>}
-          {movement.relegation && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-card-red" /> Sestup</span>}
+      {standings.length > 0 && (movement.promotion || movement.relegation) && (
+        <div className="flex items-center gap-4 px-4 py-2 border-t border-line text-meta text-muted">
+          {movement.promotion && <span className="flex items-center gap-1.5"><span className="w-[3px] h-3 bg-pitch-500" /> Postup</span>}
+          {movement.relegation && <span className="flex items-center gap-1.5"><span className="w-[3px] h-3 bg-card-red" /> Sestup</span>}
         </div>
       )}
-    </div>
+    </ListCard>
   );
 }
 
 // ═══ Rozpis / Výsledky ═══
 
 function ScheduleTab({ rounds, loaded, teamId, showAll }: { rounds: LeagueRound[]; loaded: boolean; teamId: string; showAll: boolean }) {
-  if (!loaded) return <div className="flex items-center justify-center py-12"><Spinner /></div>;
+  if (!loaded) return <SectionLoading />;
 
   const displayRounds = showAll
     ? rounds
@@ -643,68 +541,29 @@ function ScheduleTab({ rounds, loaded, teamId, showAll }: { rounds: LeagueRound[
     return <div className="card p-8 text-center text-muted">{showAll ? "Rozpis není dostupný" : "Žádné odehrané zápasy"}</div>;
   }
 
+  const side = (id: string, name: string, color: string, secondary: string, badge: string): FixtureSide => ({
+    name, href: id ? `/tym/${id}` : null, color,
+    crest: { pattern: badge, primary: color, secondary, initials: null, symbol: null },
+  });
   return (
     <div className="space-y-4">
       {displayRounds.map((round) => (
-        <div key={round.round} className="card overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50 border-b border-gray-100">
-            <span className="font-heading font-bold text-sm">{round.round}. kolo</span>
-            {round.scheduledAt && <span className="text-xs text-muted">{formatDate(round.scheduledAt)}</span>}
-          </div>
-          <div>
-            {round.matches.map((m, i) => {
-              const isPlayed = m.status === "simulated";
-              const isMyMatch = m.homeTeamId === teamId || m.awayTeamId === teamId;
-              const rowCls = `px-4 py-3 ${i < round.matches.length - 1 ? "border-b border-gray-50" : ""} ${isMyMatch ? "bg-pitch-50/40" : ""} ${isPlayed ? "hover:bg-gray-50 transition-colors cursor-pointer" : ""}`;
-              const content = (
-                <div className={rowCls}>
-                  {/* Mobil — každý tým na svém řádku, aby se vešel celý název */}
-                  <div className="sm:hidden flex items-center gap-3">
-                    <div className="flex-1 min-w-0 space-y-1">
-                      <div className="flex items-center gap-2 h-7 min-w-0">
-                        <BadgePreview primary={m.homeColor} secondary={m.homeSecondary} pattern={m.homeBadge as BadgePattern} initials={ini(m.homeName)} size={22} />
-                        <span className={`text-base font-heading truncate ${m.homeTeamId === teamId ? "font-bold text-pitch-600" : ""}`}>{m.homeName}</span>
-                      </div>
-                      <div className="flex items-center gap-2 h-7 min-w-0">
-                        <BadgePreview primary={m.awayColor} secondary={m.awaySecondary} pattern={m.awayBadge as BadgePattern} initials={ini(m.awayName)} size={22} />
-                        <span className={`text-base font-heading truncate ${m.awayTeamId === teamId ? "font-bold text-pitch-600" : ""}`}>{m.awayName}</span>
-                      </div>
-                    </div>
-                    {isPlayed ? (
-                      <div className="shrink-0 space-y-1 text-right font-heading font-[800] text-lg tabular-nums">
-                        <div className="h-7 flex items-center justify-end">{m.homeScore}</div>
-                        <div className="h-7 flex items-center justify-end">{m.awayScore}</div>
-                      </div>
-                    ) : (
-                      <span className="shrink-0 text-sm text-muted font-heading">vs</span>
-                    )}
-                  </div>
-
-                  {/* Desktop — klasicky proti sobě */}
-                  <div className="hidden sm:flex items-center">
-                    <div className="flex items-center gap-2 flex-1 min-w-0 justify-end">
-                      <span className={`text-sm font-heading truncate ${m.homeTeamId === teamId ? "font-bold text-pitch-600" : ""}`}>{m.homeName}</span>
-                      <BadgePreview primary={m.homeColor} secondary={m.homeSecondary} pattern={m.homeBadge as BadgePattern} initials={ini(m.homeName)} size={22} />
-                    </div>
-                    <div className="shrink-0 w-20 text-center">
-                      {isPlayed ? (
-                        <span className="font-heading font-[800] text-lg tabular-nums">{m.homeScore} : {m.awayScore}</span>
-                      ) : (
-                        <span className="text-xs text-muted font-heading">vs</span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <BadgePreview primary={m.awayColor} secondary={m.awaySecondary} pattern={m.awayBadge as BadgePattern} initials={ini(m.awayName)} size={22} />
-                      <span className={`text-sm font-heading truncate ${m.awayTeamId === teamId ? "font-bold text-pitch-600" : ""}`}>{m.awayName}</span>
-                    </div>
-                  </div>
-                </div>
-              );
-              if (isPlayed) return <Link key={m.id} href={`/zapas/${m.id}`}>{content}</Link>;
-              return <div key={m.id}>{content}</div>;
-            })}
-          </div>
-        </div>
+        <FixtureGroup key={round.round} title={`${round.round}. kolo`} note={round.scheduledAt ? formatDate(round.scheduledAt) : undefined}>
+          {round.matches.map((m) => {
+            const isPlayed = m.status === "simulated" && m.homeScore != null && m.awayScore != null;
+            const isMine = m.homeTeamId === teamId || m.awayTeamId === teamId;
+            return (
+              <FixtureRow key={m.id}
+                home={side(m.homeTeamId, m.homeName, m.homeColor, m.homeSecondary, m.homeBadge)}
+                away={side(m.awayTeamId, m.awayName, m.awayColor, m.awaySecondary, m.awayBadge)}
+                score={isPlayed ? { home: m.homeScore!, away: m.awayScore! } : null}
+                kickoff="vs"
+                winner={isPlayed ? (m.homeScore! > m.awayScore! ? "home" : m.awayScore! > m.homeScore! ? "away" : null) : null}
+                href={isPlayed ? `/zapas/${m.id}` : null}
+                accent={isMine ? "var(--color-pitch-500)" : null} />
+            );
+          })}
+        </FixtureGroup>
       ))}
     </div>
   );

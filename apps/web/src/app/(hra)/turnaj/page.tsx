@@ -4,10 +4,11 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
-import { Spinner, SectionLabel, PageHeader, Button } from "@/components/ui";
+import { SectionLabel, PageHeader, Button, ListCard, ListRow, ListEmpty, RowIcon, PageLoading } from "@/components/ui";
 import { bestTextOn } from "@/lib/team-color";
 import { BRAND, CompetitionView, type Competition } from "./competition";
 import { PMobileLogo, PMobileMark, SignalWaves, pMobileTheme } from "@/components/brand/p-mobile";
+import { formatKc } from "@/lib/format";
 
 /** Hlavička turnaje v barvách pořadatele: logo P-Mobile, název, ročník a dějiště. */
 function Hero({ name, edition, venueName, city, extra }: { name: string; edition: number; venueName: string; city: string; extra?: string }) {
@@ -102,9 +103,6 @@ function remainingLabel(iso: string, now: number): string {
   return "zbývá pár minut";
 }
 
-function kc(n: number): string {
-  return `${n.toLocaleString("cs")} Kč`;
-}
 
 function clubsLabel(n: number): string {
   return `${n} ${plural(n, "klub", "kluby", "klubů")}`;
@@ -126,7 +124,7 @@ function PrizeCell({ label, amount, note }: { label: string; amount: number; not
   return (
     <div>
       <div className="text-sm text-muted">{label}</div>
-      <div className="font-heading font-bold tabular-nums text-base leading-tight">{kc(amount)}</div>
+      <div className="font-heading font-bold tabular-nums text-base leading-tight">{formatKc(amount)}</div>
       {note && <div className="text-sm text-muted">{note}</div>}
     </div>
   );
@@ -171,7 +169,7 @@ export default function TurnajPage() {
     }
   };
 
-  if (loading) return <div className="flex justify-center py-20"><Spinner /></div>;
+  if (loading) return <PageLoading />;
 
   const t = data?.tournament;
   if (!t) {
@@ -188,7 +186,7 @@ export default function TurnajPage() {
   const entries = data?.entries ?? [];
   const open = !!data?.registrationOpen;
   const myEntry = !!data?.myEntry;
-  const winOn = (amount: number) => kc(amount * 3);
+  const winOn = (amount: number) => formatKc(amount * 3);
   const competition = data?.competition ?? null;
 
   // Po losu propozice říkají skutečný formát a délku, před ním jen rámec.
@@ -248,42 +246,29 @@ export default function TurnajPage() {
       </div>
 
       {/* Přihlášené kluby */}
-      <div>
-        <SectionLabel>Přihlášené kluby · {clubsLabel(entries.length)}</SectionLabel>
-        <div className="card mt-2">
-          {entries.length === 0 ? (
-            <div className="px-4 py-5 text-sm text-muted text-center">Zatím se nikdo nepřihlásil. Buď první.</div>
-          ) : entries.map((e) => {
-            const color = e.primaryColor || "#9aa18c";
-            const mine = e.teamId === teamId;
-            return (
-              <div key={e.teamId} className={`flex items-center gap-3 px-4 py-2.5 border-b border-gray-50 last:border-b-0 ${mine ? "bg-pitch-50" : ""}`}>
-                {/* Bílé dresy splývají s kartou, proto obrys u světlých barev. */}
-                <span
-                  className={`w-3.5 h-3.5 rounded-full shrink-0 border ${bestTextOn(color) === "light" ? "border-transparent" : "border-gray-300"}`}
-                  style={{ background: color }}
-                  aria-hidden
-                />
-                <Link href={`/tym/${e.teamId}`} className="flex-1 min-w-0 truncate text-base font-bold hover:underline">{e.name}</Link>
-                {e.district && <span className="text-sm text-muted shrink-0">{e.district}</span>}
-              </div>
-            );
-          })}
-        </div>
-      </div>
+      <ListCard title="Přihlášené kluby" count={clubsLabel(entries.length)}>
+        {entries.length === 0 && <ListEmpty icon="⚽">Zatím se nikdo nepřihlásil. Buď první.</ListEmpty>}
+        {entries.map((e) => {
+          const color = e.primaryColor || "#9aa18c";
+          return (
+            <ListRow key={e.teamId} dense href={`/tym/${e.teamId}`}
+              tone={e.teamId === teamId ? "new" : undefined}
+              // Bílé dresy splývají s kartou, proto obrys u světlých barev.
+              leading={<span className={`w-3.5 h-3.5 rounded-full border ${bestTextOn(color) === "light" ? "border-transparent" : "border-gray-300"}`} style={{ background: color }} aria-hidden />}
+              title={e.name}
+              trailing={e.district ? <span className="text-meta text-muted">{e.district}</span> : undefined} />
+          );
+        })}
+      </ListCard>
       {competition && competition.venues.length > 0 && (
-        <div>
-          <SectionLabel>Hřiště areálu · {t.city}</SectionLabel>
-          <div className="card mt-2">
-            {competition.venues.map((v) => (
-              <Link key={v.id} href={`/turnaj/hriste/${v.id}`} className="flex items-center gap-3 px-4 py-2.5 border-b border-gray-50 last:border-b-0 hover:bg-gray-50">
-                <span className="flex-1 min-w-0 truncate text-base font-bold">{v.isMain ? "🏟️ " : ""}{v.name}</span>
-                <span className="text-sm text-muted shrink-0">{v.capacity.toLocaleString("cs")} míst</span>
-                <span className="text-sm text-muted shrink-0" aria-hidden>›</span>
-              </Link>
-            ))}
-          </div>
-        </div>
+        <ListCard title={`Hřiště areálu · ${t.city}`}>
+          {competition.venues.map((v) => (
+            <ListRow key={v.id} href={`/turnaj/hriste/${v.id}`}
+              leading={<RowIcon>{v.isMain ? "🏟️" : "⚽"}</RowIcon>}
+              title={v.name}
+              trailing={<span className="text-meta text-muted whitespace-nowrap">{v.capacity.toLocaleString("cs")} míst</span>} />
+          ))}
+        </ListCard>
       )}
     </div>
   );

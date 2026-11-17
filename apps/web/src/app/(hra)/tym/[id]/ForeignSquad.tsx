@@ -30,8 +30,9 @@ export function ForeignSquad({ players, color, onColorText, ratingColor }: {
   }));
 
   return (
-    <div className="card p-4 sm:p-5">
-      <div className="mb-3"><SectionLabel>Kádr ({players.length})</SectionLabel></div>
+    // Karta jen od md: na telefonu je seznam hráčů sám kartou (ListCard v PlayerBrowseTable).
+    <div className="md:p-5 md:bg-[var(--color-surface)] md:rounded-[var(--radius-card)] md:shadow-[var(--shadow-card)]">
+      <div className="mb-3 px-1 md:px-0"><SectionLabel>Kádr ({players.length})</SectionLabel></div>
       <PlayerBrowseTable rows={rows} color={color} onColorText={onColorText} ratingColor={ratingColor} columns={{ condition: true }} />
     </div>
   );

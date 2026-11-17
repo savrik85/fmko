@@ -6,6 +6,7 @@ import { FaceAvatar } from "./face-avatar";
 import { nationalityFlag } from "@/lib/nationality";
 import { readableOnLight, bestTextOn } from "@/lib/team-color";
 import { formatKg } from "@/lib/player-attrs";
+import { StatusChip } from "@/components/ui";
 
 interface RevealCardProps {
   player: Player;
@@ -188,9 +189,9 @@ export function PlayerRevealCard({ player, teamColor, delay = 0, onRevealed }: R
       {/* Celebrity badge */}
       {isCeleb && (
         <div className="text-center pb-1">
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-micro font-heading font-bold uppercase tracking-wider bg-amber-50 text-amber-700 border border-amber-200">
+          <StatusChip tone="warn">
             ⭐ Celebrita
-          </span>
+          </StatusChip>
         </div>
       )}
 

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 import { sponsorTypeLabel } from "@/lib/sponsor-types";
-import { Card, CardBody, Spinner, SectionLabel, ErrorBox } from "@/components/ui";
+import { Card, CardBody, SectionLabel, ErrorBox, ListCard, ListRow, ListEmpty, SectionLoading } from "@/components/ui";
 import { useTeam } from "@/context/team-context";
 import { OwnerCard, type OwnerInfo, type MyTeamInfo } from "@/components/sponsors/owner-card";
 import { NegotiationEntry } from "@/components/sponsors/negotiation-entry";
@@ -69,7 +69,7 @@ export default function SponsorDetailPage() {
   useEffect(load, [id, teamId, isLoading]);
 
   if (error) return <div className="page-container"><ErrorBox message={error} /></div>;
-  if (!data) return <div className="flex justify-center py-12"><Spinner /></div>;
+  if (!data) return <SectionLoading />;
 
   const others = data.activeContracts.filter((c) => c.category !== "main");
 
@@ -114,44 +114,22 @@ export default function SponsorDetailPage() {
       </div>
 
       {others.length > 0 && (
-        <div>
-          <SectionLabel>{"\u{1F3AF}"} Další smlouvy</SectionLabel>
-          <Card>
-            <CardBody>
-              <ul className="divide-y divide-gray-100">
-                {others.map((c, i) => (
-                  <li key={i} className="py-2 flex items-center justify-between gap-3">
-                    <TeamLink id={c.teamId} name={c.teamName} />
-                    <span className="text-sm text-muted shrink-0">{CATEGORY_LABEL[c.category]}</span>
-                  </li>
-                ))}
-              </ul>
-            </CardBody>
-          </Card>
-        </div>
+        <ListCard title={"\u{1F3AF} Další smlouvy"} count={others.length}>
+          {others.map((c, i) => (
+            <ListRow key={i} href={c.teamId ? `/tym/${c.teamId}` : undefined}
+              title={c.teamName} trailing={<span className="text-meta text-muted whitespace-nowrap">{CATEGORY_LABEL[c.category]}</span>} />
+          ))}
+        </ListCard>
       )}
 
-      <div>
-        <SectionLabel>{"\u{1F4DC}"} Dřívější spolupráce</SectionLabel>
-        <Card>
-          <CardBody>
-            {data.history.length === 0 ? (
-              <p className="text-center text-muted py-3">Zatím žádné.</p>
-            ) : (
-              <ul className="divide-y divide-gray-100">
-                {data.history.map((c, i) => (
-                  <li key={i} className="py-2">
-                    <TeamLink id={c.teamId} name={c.teamName} />
-                    <div className="text-sm text-muted">
-                      {CATEGORY_LABEL[c.category]} · {sezony(c.seasonsTotal)} · {STATUS_LABEL[c.status]}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardBody>
-        </Card>
-      </div>
+      <ListCard title={"\u{1F4DC} Dřívější spolupráce"}>
+        {data.history.length === 0 && <ListEmpty icon="📜">Zatím žádné. Tady se objeví kluby, které tahle firma podporovala dřív.</ListEmpty>}
+        {data.history.map((c, i) => (
+          <ListRow key={i} href={c.teamId ? `/tym/${c.teamId}` : undefined}
+            title={c.teamName}
+            meta={`${CATEGORY_LABEL[c.category]} · ${sezony(c.seasonsTotal)} · ${STATUS_LABEL[c.status]}`} />
+        ))}
+      </ListCard>
     </div>
   );
 }

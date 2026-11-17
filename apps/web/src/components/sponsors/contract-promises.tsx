@@ -1,8 +1,9 @@
 "use client";
 
-import { formatCZK } from "@/lib/sponsor-owners";
+
 import { promiseMoneyParts, promiseStatusClass, promiseStatusLabel, promiseTermText } from "@/lib/sponsor-promises";
 import type { SponsorPromiseView } from "@/lib/sponsor-page-types";
+import { formatKc } from "@/lib/format";
 
 /** Sliby u aktivní smlouvy: co klub slíbil, do kdy, jak to dopadlo a o kolik jde. Jeden slib na řádek. */
 export function ContractPromises({ promises, acting, onSleeveLogo }: {
@@ -34,7 +35,7 @@ export function ContractPromises({ promises, acting, onSleeveLogo }: {
                   {p.status === "pending" && <span className="text-muted">v sázce:</span>}
                   {moneyParts.map((part, i) => (
                     <span key={part.kind} className={part.kind === "bonus" ? "text-pitch-500" : "text-card-red"}>
-                      {part.kind === "bonus" ? "bonus" : "pokuta"} {formatCZK(part.amount)}{i < moneyParts.length - 1 ? "," : ""}
+                      {part.kind === "bonus" ? "bonus" : "pokuta"} {formatKc(part.amount)}{i < moneyParts.length - 1 ? "," : ""}
                     </span>
                   ))}
                 </div>

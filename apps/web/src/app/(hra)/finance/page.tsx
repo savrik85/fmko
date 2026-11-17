@@ -5,9 +5,10 @@ import { sponsorMonthlyPayout } from "@okresni-masina/shared";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
 import { sponsorTypeIcon, sponsorTypeLabel } from "@/lib/sponsor-types";
-import { Spinner, SectionLabel, PositionBadge, Tabs, useTabParam } from "@/components/ui";
+import { SectionLabel, PositionBadge, Tabs, useTabParam, ListCard, ListRow, ListEmpty, RowIcon, RowValue, PageLoading, SectionLoading, ErrorBox, ProgressBar } from "@/components/ui";
 import { TXN_ICONS, TXN_LABELS } from "@/lib/transaction-labels";
 import { weeksText } from "@/lib/weeks-text";
+import { formatKc } from "@/lib/format";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Typy
@@ -86,9 +87,6 @@ type FlowSide = "income" | "expenses";
 // ────────────────────────────────────────────────────────────────────────────
 
 
-function formatCZK(amount: number): string {
-  return amount.toLocaleString("cs") + " Kč";
-}
 
 function timeAgo(iso: string): string {
   if (!iso) return "";
@@ -155,7 +153,7 @@ export default function FinancesPage() {
     loadTransactions(txnFilter);
   };
 
-  if (loading) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
+  if (loading) return <PageLoading />;
   if (!data) return <div className="page-container">Data nenalezena.</div>;
 
   const tabs: [Tab, string, string][] = [
@@ -174,19 +172,16 @@ export default function FinancesPage() {
           <div>
             <div className="text-micro text-muted uppercase tracking-wide">Aktuální rozpočet</div>
             <div className={`font-heading font-[800] text-3xl sm:text-4xl tabular-nums ${data.budget < 0 ? "text-card-red" : "text-ink"}`}>
-              {formatCZK(data.budget)}
+              {formatKc(data.budget)}
             </div>
           </div>
           {data.purchaseBlocked && (
-            <div className="bg-red-50 border border-red-200 rounded-soft px-3 py-2 text-xs text-card-red max-w-sm">
-              <div className="font-heading font-bold mb-0.5">⛔ Nákupy blokovány</div>
-              <div>Dokud rozpočet nevyrovnáš na nulu, nelze utrácet za přestupy, upgrady ani inzeráty.</div>
-            </div>
+            <div className="max-w-sm"><ErrorBox><strong>Nákupy blokovány.</strong> Dokud rozpočet nevyrovnáš na nulu, nelze utrácet za přestupy, upgrady ani inzeráty.</ErrorBox></div>
           )}
           {data.loan && !data.purchaseBlocked && (
             <div className="bg-amber-50 border border-amber-200 rounded-soft px-3 py-2 text-xs text-amber-900">
               <div className="font-heading font-bold">Aktivní půjčka</div>
-              <div>Zbývá {formatCZK(data.loan.remaining)} • {data.loan.installmentsRemaining} splátek</div>
+              <div>Zbývá {formatKc(data.loan.remaining)} • {data.loan.installmentsRemaining} splátek</div>
             </div>
           )}
         </div>
@@ -236,15 +231,15 @@ function OverviewTab({ data, transactions, txnTotal, txnFilter, onFilter }: {
           castka („+7 275" / „Kč" na dva radky) ani popisek. Bilance je
           nejdulezitejsi, takze dostane cely druhy radek. */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-4">
-        <MetricCard label="Příjmy / týd" value={`+${formatCZK(data.weekly.income.total + (data.weekly.income.transferInstallments ?? 0))}`} color="text-pitch-500" />
+        <MetricCard label="Příjmy / týd" value={`+${formatKc(data.weekly.income.total + (data.weekly.income.transferInstallments ?? 0))}`} color="text-pitch-500" />
         <MetricCard
           label="Výdaje / týd"
-          value={`-${formatCZK(data.weekly.expenses.total + data.weekly.expenses.loanRepayment + (data.weekly.expenses.transferInstallments ?? 0))}`}
+          value={`−${formatKc(data.weekly.expenses.total + data.weekly.expenses.loanRepayment + (data.weekly.expenses.transferInstallments ?? 0))}`}
           color="text-card-red"
         />
         <MetricCard
           label="Bilance"
-          value={`${isPositive ? "+" : ""}${formatCZK(data.weekly.netWithLoan)}`}
+          value={`${isPositive ? "+" : ""}${formatKc(data.weekly.netWithLoan)}`}
           color={isPositive ? "text-pitch-500" : "text-card-red"}
           className="col-span-2 sm:col-span-1"
         />
@@ -274,8 +269,8 @@ function OverviewTab({ data, transactions, txnTotal, txnFilter, onFilter }: {
         <SectionLabel>Rychlý pohled na sezónu</SectionLabel>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
           <StatBox label="Zbývá zápasů" value={String(data.remainingMatches)} />
-          <StatBox label="Za 4 týdny" value={formatCZK(data.forecast.in4Weeks)} colorRed={data.forecast.in4Weeks < 0} />
-          <StatBox label="Na konci sezóny" value={formatCZK(data.forecast.inSeason)} colorRed={data.forecast.inSeason < 0} />
+          <StatBox label="Za 4 týdny" value={formatKc(data.forecast.in4Weeks)} colorRed={data.forecast.in4Weeks < 0} />
+          <StatBox label="Na konci sezóny" value={formatKc(data.forecast.inSeason)} colorRed={data.forecast.inSeason < 0} />
           {/* Bankrot ve hře není: v mínusu se jen zablokují nákupy a investice. */}
           <StatBox
             label="Peníze dojdou"
@@ -341,7 +336,7 @@ function FlowsTab({ data }: { data: BudgetData }) {
             side === "income" ? "bg-white text-pitch-600 shadow-sm" : "text-muted"
           }`}
         >
-          💰 Příjmy <span className="tabular-nums">+{formatCZK(data.weekly.income.total)}</span>
+          💰 Příjmy <span className="tabular-nums">+{formatKc(data.weekly.income.total)}</span>
         </button>
         <button
           onClick={() => setSide("expenses")}
@@ -349,7 +344,7 @@ function FlowsTab({ data }: { data: BudgetData }) {
             side === "expenses" ? "bg-white text-pitch-600 shadow-sm" : "text-muted"
           }`}
         >
-          💸 Výdaje <span className="tabular-nums">-{formatCZK(totalExpWithLoan)}</span>
+          💸 Výdaje <span className="tabular-nums">−{formatKc(totalExpWithLoan)}</span>
         </button>
       </div>
 
@@ -358,7 +353,7 @@ function FlowsTab({ data }: { data: BudgetData }) {
           <div className="card p-4 sm:p-5">
             <div className="flex justify-between items-baseline mb-3">
               <SectionLabel>Struktura příjmů / týden</SectionLabel>
-              <span className="font-heading font-bold text-pitch-500 tabular-nums">+{formatCZK(totalIncome)}</span>
+              <span className="font-heading font-bold text-pitch-500 tabular-nums">+{formatKc(totalIncome)}</span>
             </div>
             <div className="space-y-2.5">
               <BarRow label="Sponzorské smlouvy" amount={data.weekly.income.sponsors} max={totalIncome} positive icon="💰" />
@@ -381,26 +376,15 @@ function FlowsTab({ data }: { data: BudgetData }) {
             </div>
           )}
           {data.sponsors.length > 0 && (
-            <div className="card p-4 sm:p-5">
-              <SectionLabel>Sponzorské smlouvy ({data.sponsors.length})</SectionLabel>
-              <div className="mt-2 space-y-2">
-                {data.sponsors.map((s, i) => (
-                  <div key={i} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-b-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-base">{sponsorTypeIcon(s.type)}</span>
-                      <div>
-                        <div className="text-sm font-heading font-bold">{s.name}</div>
-                        <div className="text-micro text-muted">Obor: {sponsorTypeLabel(s.type)}{s.winBonus > 0 ? ` • bonus za výhru ${formatCZK(s.winBonus)}` : ""}</div>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-sm tabular-nums text-pitch-500 font-heading font-bold">{formatCZK(s.weeklyAmount)}/týd</div>
-                      <div className="text-micro text-muted">{formatCZK(sponsorMonthlyPayout(s.monthlyAmount))}/měs</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+            <ListCard title="Sponzorské smlouvy" count={data.sponsors.length}>
+              {data.sponsors.map((s, i) => (
+                <ListRow key={i}
+                  leading={<RowIcon>{sponsorTypeIcon(s.type)}</RowIcon>}
+                  title={s.name}
+                  meta={`${sponsorTypeLabel(s.type)}${s.winBonus > 0 ? ` · bonus za výhru ${formatKc(s.winBonus)}` : ""}`}
+                  trailing={<RowValue tone="plus" sub={`${formatKc(sponsorMonthlyPayout(s.monthlyAmount))}/měs`}>{formatKc(s.weeklyAmount)}/týd</RowValue>} />
+              ))}
+            </ListCard>
           )}
 
           <div className="card p-4 sm:p-5">
@@ -418,7 +402,7 @@ function FlowsTab({ data }: { data: BudgetData }) {
           <div className="card p-4 sm:p-5">
             <div className="flex justify-between items-baseline mb-3">
               <SectionLabel>Struktura výdajů / týden</SectionLabel>
-              <span className="font-heading font-bold text-card-red tabular-nums">-{formatCZK(totalExpWithLoan)}</span>
+              <span className="font-heading font-bold text-card-red tabular-nums">−{formatKc(totalExpWithLoan)}</span>
             </div>
             <div className="space-y-2.5">
               <BarRow label="Mzdy hráčů" amount={data.weekly.expenses.wages} max={totalExpWithLoan} icon="💸" />
@@ -443,22 +427,20 @@ function FlowsTab({ data }: { data: BudgetData }) {
           <div className="card p-4 sm:p-5">
             <SectionLabel>Mzdový rozpočet ({data.playerCount} hráčů)</SectionLabel>
             <div className="bg-gray-50 rounded-soft py-3 text-center my-3">
-              <div className="font-heading font-bold text-2xl tabular-nums">{formatCZK(data.wageBill.weekly)}</div>
+              <div className="font-heading font-bold text-2xl tabular-nums">{formatKc(data.wageBill.weekly)}</div>
               <div className="text-micro text-muted uppercase tracking-wide">týdně</div>
             </div>
             {data.wageBill.topPlayers.length > 0 && (
               <>
                 <div className="text-micro text-muted uppercase mb-2">Nejlépe placení</div>
-                {data.wageBill.topPlayers.map((p) => (
-                  <a key={p.id} href={`/hrac/${p.id}`}
-                    className="flex items-center justify-between py-2 border-b border-gray-50 last:border-b-0 hover:bg-gray-50/50 transition-colors -mx-2 px-2 rounded">
-                    <div className="flex items-center gap-2">
-                      <PositionBadge position={p.position as "GK" | "DEF" | "MID" | "FWD"} />
-                      <span className="text-sm font-heading font-bold">{p.name}</span>
-                    </div>
-                    <span className="text-sm tabular-nums font-heading font-bold">{formatCZK(p.weeklyWage)}/t</span>
-                  </a>
-                ))}
+                <div className="-mx-4 sm:-mx-5 -mb-4 sm:-mb-5 border-t border-line-soft">
+                  {data.wageBill.topPlayers.map((p) => (
+                    <ListRow key={p.id} href={`/hrac/${p.id}`}
+                      title={p.name}
+                      meta={<PositionBadge position={p.position as "GK" | "DEF" | "MID" | "FWD"} />}
+                      trailing={<RowValue>{formatKc(p.weeklyWage)}/t</RowValue>} />
+                  ))}
+                </div>
               </>
             )}
           </div>
@@ -546,7 +528,7 @@ function ForecastTab({ data }: { data: BudgetData }) {
                   <g key={i}>
                     <circle cx={(i * stepX).toFixed(2)} cy={toY(p.value).toFixed(2)} r="1.2" fill="#15803d" vectorEffect="non-scaling-stroke" />
                     <circle cx={(i * stepX).toFixed(2)} cy={toY(p.value).toFixed(2)} r="3" fill="transparent">
-                      <title>{`Týden ${p.week}: ${formatCZK(p.value)}`}</title>
+                      <title>{`Týden ${p.week}: ${formatKc(p.value)}`}</title>
                     </circle>
                   </g>
                 ))}
@@ -568,8 +550,8 @@ function ForecastTab({ data }: { data: BudgetData }) {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <MetricCard label="Za 4 týdny" value={formatCZK(data.forecast.in4Weeks)} color={data.forecast.in4Weeks < 0 ? "text-card-red" : "text-ink"} />
-        <MetricCard label="Na konci sezóny" value={formatCZK(data.forecast.inSeason)} color={data.forecast.inSeason < 0 ? "text-card-red" : "text-ink"} />
+        <MetricCard label="Za 4 týdny" value={formatKc(data.forecast.in4Weeks)} color={data.forecast.in4Weeks < 0 ? "text-card-red" : "text-ink"} />
+        <MetricCard label="Na konci sezóny" value={formatKc(data.forecast.inSeason)} color={data.forecast.inSeason < 0 ? "text-card-red" : "text-ink"} />
         <MetricCard
           label="Peníze dojdou"
           value={data.forecast.weeksUntilBankrupt != null ? `za ${weeksText(data.forecast.weeksUntilBankrupt)}` : "nehrozí"}
@@ -588,23 +570,23 @@ function ForecastTab({ data }: { data: BudgetData }) {
       <div className="card p-4 sm:p-5">
         <SectionLabel>Předpoklady výpočtu</SectionLabel>
         <ul className="mt-2 text-sm text-muted space-y-1">
-          <li>• Týdenní bilance <span className="font-heading font-bold text-ink tabular-nums">{data.weekly.net >= 0 ? "+" : ""}{formatCZK(data.weekly.net)}</span> (bez půjčky)</li>
+          <li>• Týdenní bilance <span className="font-heading font-bold text-ink tabular-nums">{data.weekly.net >= 0 ? "+" : ""}{formatKc(data.weekly.net)}</span> (bez půjčky)</li>
           {data.loan && (
-            <li>• Splátka <span className="font-heading font-bold text-ink tabular-nums">{formatCZK(data.loan.perMatchInstallment)}</span> × {data.loan.installmentsRemaining} zápasů = {formatCZK(data.loan.remaining)} do doplacení</li>
+            <li>• Splátka <span className="font-heading font-bold text-ink tabular-nums">{formatKc(data.loan.perMatchInstallment)}</span> × {data.loan.installmentsRemaining} zápasů = {formatKc(data.loan.remaining)} do doplacení</li>
           )}
           {data.forecast.matchDays && (data.forecast.matchDays.homeLeft + data.forecast.matchDays.awayLeft) > 0 && (
             <li>
               • Zápasové dny (vstupné, bufet, tombola, výdaje, autobus) podle posledních zápasů: doma{" "}
-              <span className="font-heading font-bold text-ink tabular-nums">{data.forecast.matchDays.perHome == null ? "zatím bez údajů" : `${data.forecast.matchDays.perHome >= 0 ? "+" : ""}${formatCZK(data.forecast.matchDays.perHome)}`}</span>
+              <span className="font-heading font-bold text-ink tabular-nums">{data.forecast.matchDays.perHome == null ? "zatím bez údajů" : `${data.forecast.matchDays.perHome >= 0 ? "+" : ""}${formatKc(data.forecast.matchDays.perHome)}`}</span>
               {" "}× {data.forecast.matchDays.homeLeft}, venku{" "}
-              <span className="font-heading font-bold text-ink tabular-nums">{data.forecast.matchDays.perAway == null ? "zatím bez údajů" : `${data.forecast.matchDays.perAway >= 0 ? "+" : ""}${formatCZK(data.forecast.matchDays.perAway)}`}</span>
+              <span className="font-heading font-bold text-ink tabular-nums">{data.forecast.matchDays.perAway == null ? "zatím bez údajů" : `${data.forecast.matchDays.perAway >= 0 ? "+" : ""}${formatKc(data.forecast.matchDays.perAway)}`}</span>
               {" "}× {data.forecast.matchDays.awayLeft}
             </li>
           )}
           {(data.forecast.otherRunningPerWeek ?? 0) !== 0 && (
             <li>
               • Ostatní pravidelné výdaje (události, skaut, úkoly zaměstnanců, poplatky soutěži, akademie) podle posledních 4 týdnů:{" "}
-              <span className="font-heading font-bold text-ink tabular-nums">{formatCZK(data.forecast.otherRunningPerWeek ?? 0)}</span> týdně
+              <span className="font-heading font-bold text-ink tabular-nums">{formatKc(data.forecast.otherRunningPerWeek ?? 0)}</span> týdně
             </li>
           )}
           <li>• Bez přestupů, odměn za umístění a sázek</li>
@@ -630,7 +612,7 @@ function LastHomeMatchCard({ account }: { account: NonNullable<BudgetData["lastH
               {l.detail && <span className="block text-micro text-muted truncate">{l.detail}</span>}
             </span>
             <span className={`tabular-nums font-heading font-bold shrink-0 ${l.amount >= 0 ? "text-pitch-600" : "text-card-red"}`}>
-              {l.amount >= 0 ? "+" : ""}{formatCZK(l.amount)}
+              {l.amount >= 0 ? "+" : ""}{formatKc(l.amount)}
             </span>
           </div>
         ))}
@@ -640,14 +622,14 @@ function LastHomeMatchCard({ account }: { account: NonNullable<BudgetData["lastH
               <span className="font-heading font-bold text-ink">Zboží do bufetu</span>
               <span className="block text-micro text-muted">odhad: nákupy za 4 týdny rozpočtené na domácí zápasy</span>
             </span>
-            <span className="tabular-nums font-heading font-bold shrink-0 text-card-red">{formatCZK(account.wholesaleEstimate)}</span>
+            <span className="tabular-nums font-heading font-bold shrink-0 text-card-red">{formatKc(account.wholesaleEstimate)}</span>
           </div>
         )}
       </div>
       <div className="mt-3 pt-2 border-t border-gray-100 flex items-baseline justify-between">
         <span className="font-heading font-bold text-sm">Zápas vynesl</span>
         <span className={`tabular-nums font-heading font-[800] text-lg ${account.total >= 0 ? "text-pitch-600" : "text-card-red"}`}>
-          {account.total >= 0 ? "+" : ""}{formatCZK(account.total)}
+          {account.total >= 0 ? "+" : ""}{formatKc(account.total)}
         </span>
       </div>
     </div>
@@ -678,7 +660,7 @@ function LoanTab({ teamId, data, info, onChange, reload }: {
   }, [info?.rules.minPrincipal, info?.rules.maxPrincipal]);
 
   if (!info) {
-    return <div className="card p-8 text-center"><Spinner /></div>;
+    return <div className="card"><SectionLoading /></div>;
   }
 
   const take = async () => {
@@ -690,7 +672,7 @@ function LoanTab({ teamId, data, info, onChange, reload }: {
         `/api/teams/${teamId}/cash-loans`,
         { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ amount }) },
       );
-      setSuccess(`Půjčka vzata: ${formatCZK(res.loan.principal)}. Splácej ${formatCZK(res.loan.perMatchInstallment)} za každý zápas.`);
+      setSuccess(`Půjčka vzata: ${formatKc(res.loan.principal)}. Splácej ${formatKc(res.loan.perMatchInstallment)} za každý zápas.`);
       onChange();
     } catch (e: any) {
       setError(e?.message ?? "Půjčku se nepodařilo vzít.");
@@ -709,7 +691,7 @@ function LoanTab({ teamId, data, info, onChange, reload }: {
       <div className="card p-4 sm:p-5">
         <SectionLabel>Jak půjčka funguje</SectionLabel>
         <ul className="mt-2 text-sm space-y-1.5">
-          <li>💰 Výše: <span className="font-heading font-bold">{formatCZK(info.rules.minPrincipal)}</span> až <span className="font-heading font-bold">{formatCZK(info.rules.maxPrincipal)}</span></li>
+          <li>💰 Výše: <span className="font-heading font-bold">{formatKc(info.rules.minPrincipal)}</span> až <span className="font-heading font-bold">{formatKc(info.rules.maxPrincipal)}</span></li>
           <li>📈 Úrok: <span className="font-heading font-bold">{Math.round(info.rules.interestRate * 100)} %</span> z půjčené částky</li>
           <li>📅 Splátky: rovnoměrně po každém zápase až do konce sezóny</li>
           <li>🚫 Najednou pouze jedna aktivní půjčka</li>
@@ -723,23 +705,18 @@ function LoanTab({ teamId, data, info, onChange, reload }: {
         <div className="card p-4 sm:p-5 bg-amber-50/50 border border-amber-200">
           <SectionLabel>Aktivní půjčka</SectionLabel>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
-            <StatBox label="Půjčeno" value={formatCZK(data.loan.principal)} />
-            <StatBox label="K doplacení" value={formatCZK(data.loan.remaining)} colorRed />
-            <StatBox label="Splátka / zápas" value={formatCZK(data.loan.perMatchInstallment)} />
+            <StatBox label="Půjčeno" value={formatKc(data.loan.principal)} />
+            <StatBox label="K doplacení" value={formatKc(data.loan.remaining)} colorRed />
+            <StatBox label="Splátka / zápas" value={formatKc(data.loan.perMatchInstallment)} />
             <StatBox label="Splátek zbývá" value={`${data.loan.installmentsRemaining} / ${data.loan.totalInstallments}`} />
           </div>
           {/* Progress bar */}
           <div className="mt-4">
             <div className="flex justify-between text-micro text-muted mb-1">
-              <span>Splaceno {formatCZK(data.loan.totalToRepay - data.loan.remaining)}</span>
+              <span>Splaceno {formatKc(data.loan.totalToRepay - data.loan.remaining)}</span>
               <span>{Math.round(((data.loan.totalToRepay - data.loan.remaining) / data.loan.totalToRepay) * 100)} %</span>
             </div>
-            <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-pitch-500 transition-all"
-                style={{ width: `${((data.loan.totalToRepay - data.loan.remaining) / data.loan.totalToRepay) * 100}%` }}
-              />
-            </div>
+            <ProgressBar value={((data.loan.totalToRepay - data.loan.remaining) / data.loan.totalToRepay) * 100} label="Splaceno z půjčky" />
           </div>
         </div>
       )}
@@ -752,7 +729,7 @@ function LoanTab({ teamId, data, info, onChange, reload }: {
             <div>
               <div className="flex justify-between items-baseline mb-2">
                 <span className="text-sm font-heading font-bold">Částka</span>
-                <span className="text-xl font-heading font-bold tabular-nums">{formatCZK(amount)}</span>
+                <span className="text-xl font-heading font-bold tabular-nums">{formatKc(amount)}</span>
               </div>
               <input
                 type="range"
@@ -764,19 +741,19 @@ function LoanTab({ teamId, data, info, onChange, reload }: {
                 className="w-full accent-pitch-500"
               />
               <div className="flex justify-between text-micro text-muted mt-1">
-                <span>{formatCZK(info.rules.minPrincipal)}</span>
-                <span>{formatCZK(info.rules.maxPrincipal)}</span>
+                <span>{formatKc(info.rules.minPrincipal)}</span>
+                <span>{formatKc(info.rules.maxPrincipal)}</span>
               </div>
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-gray-100">
-              <StatBox label="Půjčíš si" value={formatCZK(amount)} />
-              <StatBox label={`Úrok (${Math.round(info.rules.interestRate * 100)} %)`} value={formatCZK(interestAmount)} colorRed />
-              <StatBox label="Splatíš celkem" value={formatCZK(totalRepay)} />
-              <StatBox label="Splátka / zápas" value={formatCZK(perMatch)} sub={`${info.remainingMatches} splátek`} />
+              <StatBox label="Půjčíš si" value={formatKc(amount)} />
+              <StatBox label={`Úrok (${Math.round(info.rules.interestRate * 100)} %)`} value={formatKc(interestAmount)} colorRed />
+              <StatBox label="Splatíš celkem" value={formatKc(totalRepay)} />
+              <StatBox label="Splátka / zápas" value={formatKc(perMatch)} sub={`${info.remainingMatches} splátek`} />
             </div>
 
-            {error && <div className="bg-red-50 border border-red-200 rounded-soft p-3 text-sm text-card-red">{error}</div>}
+            {error && <ErrorBox message={error} />}
             {success && <div className="bg-green-50 border border-green-200 rounded-soft p-3 text-sm text-pitch-600">{success}</div>}
 
             <button
@@ -784,7 +761,7 @@ function LoanTab({ teamId, data, info, onChange, reload }: {
               disabled={submitting}
               className="w-full py-3 rounded-xl bg-pitch-500 hover:bg-pitch-600 text-white font-heading font-bold transition-colors disabled:opacity-50"
             >
-              {submitting ? "Zpracovávám..." : `Vzít půjčku ${formatCZK(amount)}`}
+              {submitting ? "Zpracovávám..." : `Vzít půjčku ${formatKc(amount)}`}
             </button>
           </div>
         </div>
@@ -797,28 +774,23 @@ function LoanTab({ teamId, data, info, onChange, reload }: {
 
       {/* Historie půjček */}
       {info.history.length > 0 && (
-        <div className="card p-4 sm:p-5">
-          <SectionLabel>Historie půjček</SectionLabel>
-          <div className="mt-2 space-y-2">
-            {info.history.map((h) => (
-              <div key={h.id} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-b-0">
-                <div>
-                  <div className="text-sm font-heading font-bold">{formatCZK(h.principal)} → {formatCZK(h.totalToRepay)}</div>
-                  <div className="text-micro text-muted">
-                    Vzato: {h.takenGameDate.slice(0, 10)} • {h.status === "active" ? "Aktivní" : h.status === "paid" ? `Splaceno ${h.paidOffAt?.slice(0, 10) ?? ""}` : h.status}
-                  </div>
-                </div>
-                <div className="text-right text-sm tabular-nums">
-                  {h.status === "active" ? (
-                    <span className="text-amber-700 font-heading font-bold">Zbývá {formatCZK(h.remaining)}</span>
-                  ) : (
-                    <span className="text-muted">{h.installmentsPaid} splátek</span>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+        <ListCard title="Historie půjček">
+          {/* Data jdou pod částku celá: v jednom řádku vedle zůstatku by se datum splacení uřízlo. */}
+          {info.history.map((h) => (
+            <ListRow key={h.id}
+              title={`${formatKc(h.principal)} → ${formatKc(h.totalToRepay)}`}
+              detail={
+                <span className="text-muted">
+                  Vzato: {h.takenGameDate.slice(0, 10)} · {h.status === "active" ? "Aktivní" : h.status === "paid" ? `Splaceno ${h.paidOffAt?.slice(0, 10) ?? ""}` : h.status}
+                </span>
+              }
+              trailing={h.status === "active" ? (
+                <span className="text-meta text-amber-700 font-heading font-bold tabular-nums whitespace-nowrap">Zbývá {formatKc(h.remaining)}</span>
+              ) : (
+                <span className="text-meta text-muted tabular-nums whitespace-nowrap">{h.installmentsPaid} splátek</span>
+              )} />
+          ))}
+        </ListCard>
       )}
     </div>
   );
@@ -835,57 +807,39 @@ function HistorySection({ transactions, total, filter, onFilter }: {
   onFilter: (f: TxnFilter) => void;
 }) {
   return (
-    <div className="card p-4 sm:p-5">
-      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-        <SectionLabel>Historie transakcí ({total})</SectionLabel>
+    <ListCard title="Historie transakcí" count={total}
+      controls={
         <div className="flex gap-1">
           {(["all", "income", "expense"] as TxnFilter[]).map((f) => (
             <button key={f} onClick={() => onFilter(f)}
-              className={`text-xs px-2.5 py-1 rounded-full font-heading font-bold transition-colors ${
+              className={`text-meta px-2.5 py-1 rounded-full font-bold transition-colors ${
                 filter === f ? "bg-ink text-white" : "bg-gray-100 text-muted hover:bg-gray-200"
               }`}>
               {f === "all" ? "Vše" : f === "income" ? "Příjmy" : "Výdaje"}
             </button>
           ))}
         </div>
-      </div>
-
-      {transactions.length > 0 ? (
-        <div className="overflow-x-auto -mx-4 sm:-mx-5 table-scroll">
-          <table className="w-full text-sm min-w-[500px]">
-            <thead>
-              <tr className="text-left text-label border-b border-gray-200 text-micro uppercase tracking-wide">
-                <th className="pb-2 pl-4 sm:pl-5 pr-2 w-8"></th>
-                <th className="pb-2 pr-2">Popis</th>
-                <th className="pb-2 pr-2 text-right w-28">Částka</th>
-                <th className="pb-2 pr-2 text-right w-28">Zůstatek</th>
-                <th className="pb-2 pr-4 sm:pr-5 text-right w-16">Kdy</th>
-              </tr>
-            </thead>
-            <tbody>
-              {transactions.map((t) => (
-                <tr key={t.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
-                  <td className="py-2 pl-4 sm:pl-5 pr-2 text-center text-sm">{TXN_ICONS[t.type] ?? "📋"}</td>
-                  <td className="py-2 pr-2">
-                    <div className="font-heading font-bold text-sm">{t.description}</div>
-                    <div className="text-micro text-muted">{TXN_LABELS[t.type] ?? t.type}</div>
-                  </td>
-                  <td className={`py-2 pr-2 text-right tabular-nums font-heading font-bold text-sm ${t.amount >= 0 ? "text-pitch-500" : "text-card-red"}`}>
-                    {t.amount >= 0 ? "+" : ""}{formatCZK(t.amount)}
-                  </td>
-                  <td className={`py-2 pr-2 text-right tabular-nums text-sm ${t.balanceAfter < 0 ? "text-card-red" : "text-muted"}`}>
-                    {formatCZK(t.balanceAfter)}
-                  </td>
-                  <td className="py-2 pr-4 sm:pr-5 text-right text-micro text-muted">{timeAgo(t.createdAt)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <div className="text-center text-muted text-sm py-8 italic">Zatím žádné transakce.</div>
+      }>
+      {transactions.length === 0 && (
+        <ListEmpty icon="🧾">
+          {filter === "all" ? "Na účtu se zatím nic nepohnulo. První pohyby přijdou po domácím zápase a výplatě." : "Tomuhle filtru žádný pohyb neodpovídá."}
+        </ListEmpty>
       )}
-    </div>
+      {transactions.map((t) => (
+        <ListRow key={t.id}
+          leading={<RowIcon>{TXN_ICONS[t.type] ?? "📋"}</RowIcon>}
+          title={t.description}
+          // Zůstatek je na telefonu v řádku podrobností: vedle částky bral titulku šířku a řádky rostly.
+          // Druh pohybu na telefonu říká ikona; text by zůstatek vytlačil za okraj.
+          meta={<><span className="hidden sm:inline">{TXN_LABELS[t.type] ?? t.type} · </span>{timeAgo(t.createdAt)}<span className="sm:hidden"> · zůstatek {formatKc(t.balanceAfter)}</span></>}
+          trailing={
+            <RowValue tone={t.amount >= 0 ? "plus" : "minus"}
+              sub={<span className={`hidden sm:inline ${t.balanceAfter < 0 ? "text-card-red" : ""}`}>zůstatek {formatKc(t.balanceAfter)}</span>}>
+              {t.amount >= 0 ? "+" : "−"}{formatKc(Math.abs(t.amount))}
+            </RowValue>
+          } />
+      ))}
+    </ListCard>
   );
 }
 
@@ -925,15 +879,10 @@ function BarRow({ label, amount, max, positive, icon }: { label: string; amount:
           <span>{label}</span>
         </span>
         <span className={`text-sm font-heading font-bold tabular-nums ${positive ? "text-pitch-500" : "text-card-red"}`}>
-          {positive ? "+" : "-"}{formatCZK(amount)}
+          {positive ? "+" : "-"}{formatKc(amount)}
         </span>
       </div>
-      <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-        <div
-          className={`h-full ${positive ? "bg-pitch-500" : "bg-card-red"}`}
-          style={{ width: `${pct}%` }}
-        />
-      </div>
+      <ProgressBar value={pct} tone={positive ? "ok" : "danger"} size="sm" label={label} />
     </div>
   );
 }

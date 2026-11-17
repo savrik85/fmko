@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { BadgePreview, type BadgePattern } from "@/components/ui";
+import { BadgePreview, ListRow, type BadgePattern } from "@/components/ui";
+import { formatKc } from "@/lib/format";
 
 export interface CostLine { label: string; amount: number }
 
@@ -91,7 +92,6 @@ export interface FriendliesData {
   limits: FriendlyLimits;
 }
 
-export const formatCZK = (v: number) => `${v.toLocaleString("cs")} Kč`;
 
 /** „úterý 27. 10." */
 export function dayLabel(date: string): string {
@@ -119,9 +119,6 @@ export function venueText(venue: FriendlyView["venue"], neutralVillage: string |
   return neutralVillage ? `Neutrální hřiště, ${neutralVillage}` : "Neutrální hřiště";
 }
 
-export const CHIP = "min-h-11 px-3 rounded-control text-sm font-heading font-bold transition-colors";
-export const chipClass = (on: boolean, disabled = false) =>
-  `${CHIP} ${disabled ? "bg-black/5 text-muted/60 line-through cursor-not-allowed" : on ? "bg-pitch-500 text-white" : "bg-black/5 text-ink hover:bg-black/10"}`;
 export const TAG = "px-2 py-0.5 rounded-full bg-surface border border-gray-100 text-sm font-heading font-bold text-ink tabular-nums";
 export const PRIMARY_BUTTON = "inline-flex items-center justify-center min-h-11 sm:min-h-0 py-1.5 px-4 rounded-soft text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors disabled:opacity-50";
 export const SECONDARY_BUTTON = "inline-flex items-center justify-center min-h-11 sm:min-h-0 py-1.5 px-4 rounded-soft text-sm font-heading font-bold bg-black/5 text-ink hover:bg-black/10 transition-colors disabled:opacity-50";
@@ -140,31 +137,12 @@ export function TeamLink({ id, name }: { id: string; name: string }) {
   );
 }
 
-/** Dlaždice s datem jako v rozpisu na nástěnce: den v týdnu, velké číslo dne, měsíc. */
-export function DateTile({ date, today }: { date: string | null; today?: boolean }) {
-  if (!date) {
-    return (
-      <div className="w-16 shrink-0 flex flex-col items-center justify-center bg-black/5 text-muted px-1 text-center">
-        <span className="text-sm font-heading font-bold leading-tight">první volný den</span>
-      </div>
-    );
-  }
-  const d = dayShort(date);
-  return (
-    <div className={`w-16 shrink-0 flex flex-col items-center justify-center py-3 ${today ? "bg-pitch-500 text-white" : "bg-black/5 text-ink"}`}>
-      <span className={`text-sm font-heading font-bold ${today ? "text-white/80" : "text-muted"}`}>{today ? "dnes" : d.weekday}</span>
-      <span className="font-heading font-[800] text-2xl leading-none tabular-nums">{d.dayNumber}</span>
-      <span className={`text-sm font-heading font-bold tabular-nums ${today ? "text-white/80" : "text-muted"}`}>{d.month}.</span>
-    </div>
-  );
-}
-
 /** Sázka: zlatý štítek s mincí v barvách hry (emoji mince se v systémech kreslí šedě). */
 export function StakeTag({ stake }: { stake: number }) {
   return (
     <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-gold-50 border border-gold-200 text-sm font-heading font-bold text-gold-700 tabular-nums">
       <span aria-hidden className="w-3 h-3 rounded-full bg-gold-400 border border-gold-600" />
-      o {formatCZK(stake)}
+      o {formatKc(stake)}
     </span>
   );
 }
@@ -178,15 +156,26 @@ export function TermsTags({ stake, costPayer, myCosts }: { stake: number; costPa
       {costPayer === "me" && <span className={TAG}>platíš náklady za oba</span>}
       {costPayer === "opponent" && <span className={TAG}>náklady platí soupeř</span>}
       {myCosts && (
-        <span className={TAG} title={myCosts.map((l) => `${l.label}: ${formatCZK(l.amount)}`).join(", ")}>
-          {total > 0 ? `tvoje náklady ${formatCZK(total)}` : "neplatíš nic"}
+        <span className={TAG} title={myCosts.map((l) => `${l.label}: ${formatKc(l.amount)}`).join(", ")}>
+          {total > 0 ? `tvoje náklady ${formatKc(total)}` : "neplatíš nic"}
         </span>
       )}
     </div>
   );
 }
 
-/** Přátelák v rozpisu: vlevo den, uprostřed soupeř s erbem a podmínky, akce pod tím. */
+/** Den přáteláku slovy: „dnes“, „po 24. 11.“, u výzvy bez data „první volný den“. */
+function dayText(date: string | null, today?: boolean): string {
+  if (!date) return "první volný den";
+  if (today) return "dnes";
+  const d = dayShort(date);
+  return `${d.weekday} ${d.dayNumber}. ${d.month}.`;
+}
+
+/**
+ * Přátelák v seznamu: erb soupeře, soupeř a stav, pod tím den, místo a podmínky, akce dole.
+ * Řádek patří do `ListCard`; dnešní zápas má zelený proužek.
+ */
 export function FixtureCard({ date, today, crest, title, status, place, tags, message, warning, actions }: {
   date: string | null;
   today?: boolean;
@@ -200,26 +189,19 @@ export function FixtureCard({ date, today, crest, title, status, place, tags, me
   actions?: ReactNode;
 }) {
   return (
-    <div className="card p-0 overflow-hidden flex">
-      <DateTile date={date} today={today} />
-      <div className="flex-1 min-w-0 p-3 sm:p-4">
-        <div className="flex flex-col sm:flex-row sm:items-start gap-3">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2.5">
-              <ClubCrest crest={crest} size={36} />
-              <div className="min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">{title}{status}</div>
-                <div className="text-sm text-muted">{place}</div>
-              </div>
-            </div>
-            {tags}
-            {message && <div className="text-sm text-muted italic mt-2">„{message}“</div>}
-            {warning && <div className="text-sm text-card-red font-heading font-bold mt-2">{warning}</div>}
-          </div>
-          {actions && <div className="flex gap-2 sm:shrink-0 flex-wrap">{actions}</div>}
-        </div>
-      </div>
-    </div>
+    <ListRow tone={today ? "new" : undefined}
+      leading={<ClubCrest crest={crest} size={36} />}
+      title={<span className="inline-flex items-center gap-2 flex-wrap">{title}{status}</span>}
+      meta={dayText(date, today)}
+      detail={
+        <>
+          <span className="block text-muted">{place}</span>
+          {tags}
+          {message && <span className="block text-muted italic mt-2">„{message}“</span>}
+          {warning && <span className="block text-card-red font-heading font-bold mt-2">{warning}</span>}
+          {actions && <span className="flex gap-2 flex-wrap mt-2">{actions}</span>}
+        </>
+      } />
   );
 }
 

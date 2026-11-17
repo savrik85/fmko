@@ -8,7 +8,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, apiAction } from "@/lib/api";
-import { Spinner, SectionLabel, PositionBadge, useConfirm } from "@/components/ui";
+import { SectionLabel, PositionBadge, useConfirm, ListCard, ListRow, ListEmpty, StatusChip, PageLoading, ChoiceGroup } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { ScoutReportSheet, daysLeft, type ScoutReport } from "@/components/scouting/ScoutReportSheet";
 import { ratingText } from "@/components/scouting/WillingnessBadge";
@@ -16,6 +16,7 @@ import {
   SCOUT_POSITION_LABELS, SCOUT_POSITIONS, SCOUT_REPORT_STATUS_LABELS, SCOUT_YOUTH_AGE_MAX,
   SCOUT_LEAGUE_WEEKLY_COST, type ScoutPosition, type ScoutAssignmentType,
 } from "@okresni-masina/shared";
+import { formatKc } from "@/lib/format";
 
 interface Assignment {
   id: string;
@@ -82,7 +83,6 @@ interface ScoutData {
   pastReports: ScoutReport[];
 }
 
-const kc = (v: number) => `${v.toLocaleString("cs")} Kč`;
 
 /** České tvary počtu: 1 klub, 2–4 kluby, 5+ klubů. */
 function plural(n: number, one: string, few: string, many: string): string {
@@ -99,26 +99,16 @@ function ScoutFace({ avatar, size }: { avatar?: Record<string, unknown>; size: n
 function ReportRow({ r, onOpen }: { r: ScoutReport; onOpen: () => void }) {
   const live = r.status === "active" || r.status === "negotiating";
   return (
-    <button onClick={onOpen} className="card p-3 w-full text-left flex items-center gap-3 hover:bg-pitch-50/40 transition-colors">
-      {Object.keys(r.avatar ?? {}).length > 0
-        ? <FaceAvatar faceConfig={r.avatar} size={40} className="rounded-full shrink-0" />
-        : <div className="w-10 h-10 rounded-full bg-gray-100 shrink-0" />}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="font-heading font-bold text-base">{r.firstName} {r.lastName}</span>
-          <PositionBadge position={r.position as "GK" | "DEF" | "MID" | "FWD"} />
-          <span className="text-sm text-muted">{r.age} let</span>
-          <span className="text-sm font-heading font-bold tabular-nums">{ratingText(r.ratingLo, r.ratingHi)}</span>
-        </div>
-        <div className="text-sm text-muted truncate">
-          {r.source === "free_agent" ? `Volný hráč · okres ${r.district}` : r.clubName} · {r.distanceKm} km
-        </div>
-        <div className="text-sm font-heading font-bold text-muted">
-          {r.status === "active" ? `Platí ještě ${daysLeft(r.expiresAt)} d` : SCOUT_REPORT_STATUS_LABELS[r.status]}
-        </div>
-      </div>
-      <span className={`shrink-0 ${live ? "text-pitch-500" : "text-muted"}`}>→</span>
-    </button>
+    <ListRow onClick={onOpen} tone={live ? "new" : undefined}
+      leading={Object.keys(r.avatar ?? {}).length > 0
+        ? <FaceAvatar faceConfig={r.avatar} size={30} className="rounded-full" />
+        : <span className="w-9 h-9 rounded-full bg-surface-3" />}
+      title={<>{r.firstName} {r.lastName}<span className="ml-2 align-middle"><PositionBadge position={r.position as "GK" | "DEF" | "MID" | "FWD"} /></span></>}
+      meta={[`hod. ${ratingText(r.ratingLo, r.ratingHi)}`, `${r.age} let`,
+        r.source === "free_agent" ? `volný hráč, okres ${r.district}` : r.clubName, `${r.distanceKm} km`].join(" · ")}
+      trailing={live
+        ? <StatusChip tone="ok">{r.status === "active" ? `Platí ${daysLeft(r.expiresAt)} d` : SCOUT_REPORT_STATUS_LABELS[r.status]}</StatusChip>
+        : <span className="text-meta text-muted whitespace-nowrap">{SCOUT_REPORT_STATUS_LABELS[r.status]}</span>} />
   );
 }
 
@@ -171,7 +161,7 @@ export default function ScoutPage() {
     if (rep) setOpenReport(rep);
   }, []);
 
-  if (loading && !data) return <div className="min-h-[40vh] flex items-center justify-center"><Spinner /></div>;
+  if (loading && !data) return <PageLoading />;
   if (!data || !teamId) return <div className="p-6 text-center text-muted">Skauta se nepodařilo načíst.</div>;
 
   const scoutsList: ScoutItem[] = data.scouts && data.scouts.length > 0
@@ -200,8 +190,8 @@ export default function ScoutPage() {
       details: [
         { label: "Soutěž", value: leagueName, color: "text-ink font-bold" },
         { label: "Délka mise", value: `${weeks} ${plural(weeks, "týden", "týdny", "týdnů")}`, color: "text-ink" },
-        { label: "Cestovné", value: `${kc(SCOUT_LEAGUE_WEEKLY_COST)} / týden`, color: "text-card-red" },
-        { label: "Celkem za misi", value: kc(totalCost), color: "text-ink font-bold" },
+        { label: "Cestovné", value: `${formatKc(SCOUT_LEAGUE_WEEKLY_COST)} / týden`, color: "text-card-red" },
+        { label: "Celkem za misi", value: formatKc(totalCost), color: "text-ink font-bold" },
         { label: "Hlášení", value: "Každé pondělí (nejvýš 1 hlášení)", color: "text-pitch-600 font-bold" },
       ],
       confirmLabel: `Vyslat skauta na ${weeks} ${plural(weeks, "týden", "týdny", "týdnů")}`,
@@ -283,9 +273,6 @@ export default function ScoutPage() {
     if (!ok) return;
     if (await apiAction(apiFetch(`/api/teams/${teamId}/scout/assignment?assignmentId=${mission.id}`, { method: "DELETE" }), "Sledování se nepodařilo zrušit")) await load();
   };
-
-  const chip = (active: boolean) =>
-    `px-3 py-2 rounded-soft text-sm font-heading font-bold transition-colors ${active ? "bg-pitch-500 text-white" : "bg-gray-100 text-muted hover:bg-gray-200"}`;
 
   return (
     <div className="max-w-3xl mx-auto p-4 sm:p-6 space-y-5">
@@ -418,9 +405,9 @@ export default function ScoutPage() {
                 {a.assignment_type === "u21_league"
                   ? "Skaut jezdí na zápasy U21 ligy a v pondělí pošle zprávu o největším talentu soupeřů včetně odhadu jeho stropu."
                   : "Skaut jezdí na ligové zápasy soupeřů a v pondělí pošle zprávu o vybraném hráči včetně odhadu hodnocení."}
-                {" "}Nabídku na přestup pak pošleš z profilu hráče. Cestovné {kc(a.weekly_cost || SCOUT_LEAGUE_WEEKLY_COST)} týdně se strhává v pondělí po odvedené práci.
+                {" "}Nabídku na přestup pak pošleš z profilu hráče. Cestovné {formatKc(a.weekly_cost || SCOUT_LEAGUE_WEEKLY_COST)} týdně se strhává v pondělí po odvedené práci.
               </div>
-              <button onClick={stop} className="w-full py-2.5 rounded-xl font-heading font-bold border-2 border-red-200 text-red-700 bg-white hover:bg-red-50 transition-colors">
+              <button onClick={stop} className="btn btn-danger btn-md w-full">
                 Ukončit úkol
               </button>
             </>
@@ -436,7 +423,7 @@ export default function ScoutPage() {
               <div className="text-sm text-muted">
                 Skaut se na hráče podívá dvakrát. Mise trvá 2 dny, pak dorazí hlášení s odhadem hodnocení, u mladých do 21 let i stropu, a s povahou hráče. Nabídku na přestup mu pošleš z jeho profilu.
               </div>
-              <button onClick={stop} className="w-full py-2.5 rounded-xl font-heading font-bold border-2 border-red-200 text-red-700 bg-white hover:bg-red-50 transition-colors">
+              <button onClick={stop} className="btn btn-danger btn-md w-full">
                 Ukončit úkol
               </button>
             </>
@@ -452,7 +439,7 @@ export default function ScoutPage() {
               <div className="text-sm text-muted">
                 Skaut sleduje hru a rozestavení soupeře. Připravuje taktické pokyny, které tvému týmu poskytnou bonus (+2 k technice, +3 k morálce) pro vzájemný zápas na 14 dní.
               </div>
-              <button onClick={stop} className="w-full py-2.5 rounded-xl font-heading font-bold border-2 border-red-200 text-red-700 bg-white hover:bg-red-50 transition-colors">
+              <button onClick={stop} className="btn btn-danger btn-md w-full">
                 Ukončit úkol
               </button>
             </>
@@ -485,10 +472,10 @@ export default function ScoutPage() {
                 </div>
               </div>
               <div className="text-sm text-muted">
-                Jezdí každý týden a v pondělí ti napíše. Cestovné {kc(a.weekly_cost)} týdně se strhává v pondělí.
+                Jezdí každý týden a v pondělí ti napíše. Cestovné {formatKc(a.weekly_cost)} týdně se strhává v pondělí.
                 {a.age_max <= SCOUT_YOUTH_AGE_MAX ? " Mladé hlásí podle toho, kam to můžou dotáhnout." : ""}
               </div>
-              <button onClick={stop} className="w-full py-2.5 rounded-xl font-heading font-bold border-2 border-red-200 text-red-700 bg-white hover:bg-red-50 transition-colors">
+              <button onClick={stop} className="btn btn-danger btn-md w-full">
                 Ukončit úkol
               </button>
             </>
@@ -497,44 +484,27 @@ export default function ScoutPage() {
       )}
 
       {currentScout && (
-        <div className="card p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <SectionLabel>Sledovaní hráči</SectionLabel>
-            <span className="text-xs bg-gray-100 text-muted font-heading font-bold px-2 py-0.5 rounded">{watchedPlayers.length}</span>
-          </div>
-          {watchedPlayers.length === 0 ? (
-            <div className="text-sm text-muted">
-              {currentScout.name} teď nikoho nesleduje. Otevři profil hráče kdekoli ve hře a klikni na <strong>Poslat skauta</strong>.
-            </div>
-          ) : (
-            <ul className="divide-y divide-gray-100">
-              {watchedPlayers.map((m) => (
-                <li key={m.id} className="flex items-center justify-between gap-3 py-2">
-                  <div className="min-w-0">
-                    {m.target_player_id ? (
-                      <Link href={`/hrac/${m.target_player_id}`} className="font-heading font-bold text-sm text-ink hover:text-pitch-600 truncate block">
-                        {m.targetPlayerName ?? "Hráč"}
-                      </Link>
-                    ) : (
-                      <span className="font-heading font-bold text-sm text-ink">{m.targetPlayerName ?? "Hráč"}</span>
-                    )}
-                    <div className="text-xs text-muted">Hlášení do 2 dnů · cestovné {kc(m.weekly_cost || 500)}</div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => stopWatching(m)}
-                    className="shrink-0 px-3 py-2 rounded-soft text-xs font-heading font-bold border border-red-200 text-red-700 bg-white hover:bg-red-50"
-                  >
-                    Zrušit
-                  </button>
-                </li>
-              ))}
-            </ul>
+        <ListCard title="Sledovaní hráči" count={watchedPlayers.length}>
+          {watchedPlayers.length === 0 && (
+            <ListEmpty icon="👀">{currentScout.name} teď nikoho nesleduje. Otevři profil hráče kdekoli ve hře a klikni na <strong>Poslat skauta</strong>.</ListEmpty>
           )}
-          <div className="text-xs text-muted">
+          {watchedPlayers.map((m) => (
+            <ListRow key={m.id}
+              title={m.target_player_id
+                ? <Link href={`/hrac/${m.target_player_id}`} className="hover:text-pitch-600">{m.targetPlayerName ?? "Hráč"}</Link>
+                : (m.targetPlayerName ?? "Hráč")}
+              meta={`Hlášení do 2 dnů · cestovné ${formatKc(m.weekly_cost || 500)}`}
+              trailing={
+                <button type="button" onClick={() => stopWatching(m)}
+                  className="btn btn-danger btn-sm">
+                  Zrušit
+                </button>
+              } />
+          ))}
+          <p className="px-4 py-3 border-t border-line text-meta text-muted">
             Sledovat můžeš kolik hráčů chceš najednou, i když je skaut na jiném úkolu. Za každého zaplatíš jedno cestovné 500 Kč, až hlášení dorazí.
-          </div>
-        </div>
+          </p>
+        </ListCard>
       )}
 
       {currentScout && !a && (
@@ -612,38 +582,28 @@ export default function ScoutPage() {
                   <div>
                     <div className="text-sm text-muted font-heading uppercase mb-1.5">Koho hledat</div>
                     <div className="text-sm text-muted mb-1.5">Můžeš zaškrtnout víc postů nebo nechat všechny.</div>
-                    <div className="flex flex-wrap gap-2">
-                      <button type="button" className={chip(positions.length === 0)} onClick={() => setPositions([])}>Všechny posty</button>
-                      {SCOUT_POSITIONS.map((p) => (
-                        <button key={p} type="button" aria-pressed={positions.includes(p)} className={chip(positions.includes(p))} onClick={() => togglePosition(p)}>
-                          {positions.includes(p) ? "✓ " : ""}{SCOUT_POSITION_LABELS[p]}
-                        </button>
-                      ))}
-                    </div>
+                    <ChoiceGroup ariaLabel="Posty" multiple size="sm" value={positions.length === 0 ? ["all"] : positions}
+                      onChange={(v) => (v === "all" ? setPositions([]) : togglePosition(v as typeof SCOUT_POSITIONS[number]))}
+                      options={[{ value: "all", label: "Všechny posty" }, ...SCOUT_POSITIONS.map((p) => ({ value: p as string, label: SCOUT_POSITION_LABELS[p] }))]} />
                   </div>
 
                   <div>
                     <div className="text-sm text-muted font-heading uppercase mb-1.5">Jak dlouho sledovat soutěž</div>
-                    <div className="flex flex-wrap gap-2">
-                      {data.options.weeks.map((w) => (
-                        <button key={w} type="button" className={chip(weeks === w)} onClick={() => setWeeks(w)}>
-                          {plural(w, "týden", "týdny", "týdnů")}
-                        </button>
-                      ))}
-                    </div>
+                    <ChoiceGroup ariaLabel="Jak dlouho" size="sm" value={String(weeks)} onChange={(v) => setWeeks(Number(v))}
+                      options={data.options.weeks.map((w) => ({ value: String(w), label: plural(w, "týden", "týdny", "týdnů") }))} />
                   </div>
 
                   <div className="rounded-xl bg-white/70 border border-gray-100 p-3 space-y-1.5 text-sm">
                     <div className="flex items-center justify-between">
                       <span className="text-muted">Cestovné za týden:</span>
-                      <span className="font-heading font-bold tabular-nums text-ink">{kc(SCOUT_LEAGUE_WEEKLY_COST)}</span>
+                      <span className="font-heading font-bold tabular-nums text-ink">{formatKc(SCOUT_LEAGUE_WEEKLY_COST)}</span>
                     </div>
                     <div className="flex items-center justify-between border-t border-gray-100 pt-1.5">
                       <span className="text-muted">Celkem za {weeks} {plural(weeks, "týden", "týdny", "týdnů")}:</span>
-                      <span className="font-heading font-bold tabular-nums text-ink">{kc(SCOUT_LEAGUE_WEEKLY_COST * weeks)}</span>
+                      <span className="font-heading font-bold tabular-nums text-ink">{formatKc(SCOUT_LEAGUE_WEEKLY_COST * weeks)}</span>
                     </div>
                     <div className="text-xs text-muted pt-1">
-                      Cestovné ({kc(SCOUT_LEAGUE_WEEKLY_COST)} / týden) se strhává každé pondělí po odvedené práci, i když skaut zrovna nikoho nenajde.
+                      Cestovné ({formatKc(SCOUT_LEAGUE_WEEKLY_COST)} / týden) se strhává každé pondělí po odvedené práci, i když skaut zrovna nikoho nenajde.
                     </div>
                   </div>
 
@@ -651,7 +611,7 @@ export default function ScoutPage() {
                     onClick={() => startLeague("u21_league")}
                     className="w-full py-3 rounded-xl font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors shadow-xs"
                   >
-                    Vyslat skauta na U21 ligu ({kc(SCOUT_LEAGUE_WEEKLY_COST * weeks)})
+                    Vyslat skauta na U21 ligu ({formatKc(SCOUT_LEAGUE_WEEKLY_COST * weeks)})
                   </button>
                 </>
               ) : (
@@ -685,38 +645,28 @@ export default function ScoutPage() {
                   <div>
                     <div className="text-sm text-muted font-heading uppercase mb-1.5">Koho hledat</div>
                     <div className="text-sm text-muted mb-1.5">Můžeš zaškrtnout víc postů nebo nechat všechny.</div>
-                    <div className="flex flex-wrap gap-2">
-                      <button type="button" className={chip(positions.length === 0)} onClick={() => setPositions([])}>Všechny posty</button>
-                      {SCOUT_POSITIONS.map((p) => (
-                        <button key={p} type="button" aria-pressed={positions.includes(p)} className={chip(positions.includes(p))} onClick={() => togglePosition(p)}>
-                          {positions.includes(p) ? "✓ " : ""}{SCOUT_POSITION_LABELS[p]}
-                        </button>
-                      ))}
-                    </div>
+                    <ChoiceGroup ariaLabel="Posty" multiple size="sm" value={positions.length === 0 ? ["all"] : positions}
+                      onChange={(v) => (v === "all" ? setPositions([]) : togglePosition(v as typeof SCOUT_POSITIONS[number]))}
+                      options={[{ value: "all", label: "Všechny posty" }, ...SCOUT_POSITIONS.map((p) => ({ value: p as string, label: SCOUT_POSITION_LABELS[p] }))]} />
                   </div>
 
                   <div>
                     <div className="text-sm text-muted font-heading uppercase mb-1.5">Jak dlouho sledovat soutěž</div>
-                    <div className="flex flex-wrap gap-2">
-                      {data.options.weeks.map((w) => (
-                        <button key={w} type="button" className={chip(weeks === w)} onClick={() => setWeeks(w)}>
-                          {plural(w, "týden", "týdny", "týdnů")}
-                        </button>
-                      ))}
-                    </div>
+                    <ChoiceGroup ariaLabel="Jak dlouho" size="sm" value={String(weeks)} onChange={(v) => setWeeks(Number(v))}
+                      options={data.options.weeks.map((w) => ({ value: String(w), label: plural(w, "týden", "týdny", "týdnů") }))} />
                   </div>
 
                   <div className="rounded-xl bg-white/70 border border-gray-100 p-3 space-y-1.5 text-sm">
                     <div className="flex items-center justify-between">
                       <span className="text-muted">Cestovné za týden:</span>
-                      <span className="font-heading font-bold tabular-nums text-ink">{kc(SCOUT_LEAGUE_WEEKLY_COST)}</span>
+                      <span className="font-heading font-bold tabular-nums text-ink">{formatKc(SCOUT_LEAGUE_WEEKLY_COST)}</span>
                     </div>
                     <div className="flex items-center justify-between border-t border-gray-100 pt-1.5">
                       <span className="text-muted">Celkem za {weeks} {plural(weeks, "týden", "týdny", "týdnů")}:</span>
-                      <span className="font-heading font-bold tabular-nums text-ink">{kc(SCOUT_LEAGUE_WEEKLY_COST * weeks)}</span>
+                      <span className="font-heading font-bold tabular-nums text-ink">{formatKc(SCOUT_LEAGUE_WEEKLY_COST * weeks)}</span>
                     </div>
                     <div className="text-xs text-muted pt-1">
-                      Cestovné ({kc(SCOUT_LEAGUE_WEEKLY_COST)} / týden) se strhává každé pondělí po odvedené práci, i když skaut zrovna nikoho nenajde.
+                      Cestovné ({formatKc(SCOUT_LEAGUE_WEEKLY_COST)} / týden) se strhává každé pondělí po odvedené práci, i když skaut zrovna nikoho nenajde.
                     </div>
                   </div>
 
@@ -724,7 +674,7 @@ export default function ScoutPage() {
                     onClick={() => startLeague("league")}
                     className="w-full py-3 rounded-xl font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors shadow-xs"
                   >
-                    Vyslat skauta na naši ligu ({kc(SCOUT_LEAGUE_WEEKLY_COST * weeks)})
+                    Vyslat skauta na naši ligu ({formatKc(SCOUT_LEAGUE_WEEKLY_COST * weeks)})
                   </button>
                 </>
               ) : (
@@ -743,14 +693,9 @@ export default function ScoutPage() {
               <div>
                 <div className="text-sm text-muted font-heading uppercase mb-1.5">Koho hledat</div>
                 <div className="text-sm text-muted mb-1.5">Můžeš zaškrtnout víc postů.</div>
-                <div className="flex flex-wrap gap-2">
-                  <button type="button" className={chip(positions.length === 0)} onClick={() => setPositions([])}>Kdokoli</button>
-                  {SCOUT_POSITIONS.map((p) => (
-                    <button key={p} type="button" aria-pressed={positions.includes(p)} className={chip(positions.includes(p))} onClick={() => togglePosition(p)}>
-                      {positions.includes(p) ? "✓ " : ""}{SCOUT_POSITION_LABELS[p]}
-                    </button>
-                  ))}
-                </div>
+                <ChoiceGroup ariaLabel="Posty" multiple size="sm" value={positions.length === 0 ? ["all"] : positions}
+                  onChange={(v) => (v === "all" ? setPositions([]) : togglePosition(v as typeof SCOUT_POSITIONS[number]))}
+                  options={[{ value: "all", label: "Kdokoli" }, ...SCOUT_POSITIONS.map((p) => ({ value: p as string, label: SCOUT_POSITION_LABELS[p] }))]} />
               </div>
 
               <div>
@@ -783,12 +728,12 @@ export default function ScoutPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <select value={ageMin} onChange={(e) => { const v = Number(e.target.value); setAgeMin(v); if (v > ageMax) setAgeMax(v); }}
-                    className="px-3 py-2 rounded-xl border border-gray-200 bg-white text-base font-heading font-bold">
+                    className="select !py-2 !text-base !font-heading font-bold">
                     {Array.from({ length: data.options.ageMax - data.options.ageMin + 1 }, (_, i) => data.options.ageMin + i).map((v) => <option key={v} value={v}>{v}</option>)}
                   </select>
                   <span className="text-muted">až</span>
                   <select value={ageMax} onChange={(e) => { const v = Number(e.target.value); setAgeMax(v); if (v < ageMin) setAgeMin(v); }}
-                    className="px-3 py-2 rounded-xl border border-gray-200 bg-white text-base font-heading font-bold">
+                    className="select !py-2 !text-base !font-heading font-bold">
                     {Array.from({ length: data.options.ageMax - data.options.ageMin + 1 }, (_, i) => data.options.ageMin + i).map((v) => <option key={v} value={v}>{v}</option>)}
                   </select>
                   <span className="text-muted">let</span>
@@ -805,29 +750,19 @@ export default function ScoutPage() {
 
               <div>
                 <div className="text-sm text-muted font-heading uppercase mb-1.5">Kam jezdit</div>
-                <div className="grid grid-cols-3 gap-2">
-                  {data.options.radiusTiers.map((t) => (
-                    <button key={t.km} type="button" onClick={() => setRadius(t.km)}
-                      className={`rounded-xl border-2 p-3 text-center transition-colors ${radius === t.km ? "border-pitch-500 bg-pitch-50" : "border-gray-100 bg-white hover:border-gray-200"}`}>
-                      <div className="font-heading font-bold text-lg tabular-nums">{t.km} km</div>
-                      <div className="text-sm text-muted">{t.km <= 15 ? "okolí" : t.km <= 30 ? "sousední okresy" : "daleko"}</div>
-                    </button>
-                  ))}
-                </div>
-                <div className="text-sm text-muted mt-1.5">Cestovné {kc(tier.weeklyCost)} týdně. Čím dál, tím víc klubů, ale hráčům se nechce tak daleko dojíždět.</div>
+                <ChoiceGroup ariaLabel="Kam jezdit" columns={3} value={String(radius)} onChange={(v) => setRadius(Number(v))}
+                  options={data.options.radiusTiers.map((t) => ({ value: String(t.km), label: `${t.km} km`, hint: t.km <= 15 ? "okolí" : t.km <= 30 ? "sousední okresy" : "daleko" }))} />
+                <div className="text-sm text-muted mt-1.5">Cestovné {formatKc(tier.weeklyCost)} týdně. Čím dál, tím víc klubů, ale hráčům se nechce tak daleko dojíždět.</div>
               </div>
 
               <div>
                 <div className="text-sm text-muted font-heading uppercase mb-1.5">Jak dlouho</div>
-                <div className="flex flex-wrap gap-2">
-                  {data.options.weeks.map((w) => (
-                    <button key={w} type="button" className={chip(weeks === w)} onClick={() => setWeeks(w)}>{plural(w, "týden", "týdny", "týdnů")}</button>
-                  ))}
-                </div>
+                <ChoiceGroup ariaLabel="Jak dlouho" size="sm" value={String(weeks)} onChange={(v) => setWeeks(Number(v))}
+                  options={data.options.weeks.map((w) => ({ value: String(w), label: plural(w, "týden", "týdny", "týdnů") }))} />
               </div>
 
               <div className="rounded-xl bg-white/70 border border-gray-100 px-3 py-2 text-sm">
-                Celkem až <span className="font-heading font-bold tabular-nums">{kc(tier.weeklyCost * weeks)}</span> za cestovné.
+                Celkem až <span className="font-heading font-bold tabular-nums">{formatKc(tier.weeklyCost * weeks)}</span> za cestovné.
                 Každý týden objede pár klubů a pošle nejvýš jedno hlášení. Když nikoho nenajde, napíše ti to.
               </div>
 
@@ -845,7 +780,7 @@ export default function ScoutPage() {
                   <select
                     value={targetTeamId}
                     onChange={(e) => setTargetTeamId(e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-base font-heading font-bold text-ink"
+                    className="select w-full !py-2.5 !text-base !font-heading font-bold"
                   >
                     {data.opponents.map((opp) => (
                       <option key={opp.id} value={opp.id}>
@@ -893,30 +828,22 @@ export default function ScoutPage() {
         </div>
       )}
 
-      <div>
-        <SectionLabel>Hlášení ({data.reports.length})</SectionLabel>
-        {data.reports.length === 0 ? (
-          <div className="card p-5 text-center text-muted text-sm">
-            {scoutsList.length > 0 ? "Zatím nic. Skaut píše v pondělí." : "Bez skauta žádná hlášení."}
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {data.reports.map((r) => <ReportRow key={r.id} r={r} onOpen={() => setOpenReport(r.id)} />)}
-          </div>
+      <ListCard title="Hlášení" count={data.reports.length}>
+        {data.reports.length === 0 && (
+          <ListEmpty icon="🕵️">{scoutsList.length > 0 ? "Zatím nic. Skaut píše v pondělí." : "Bez skauta žádná hlášení. Najmi ho v Zaměstnancích."}</ListEmpty>
         )}
-      </div>
+        {data.reports.map((r) => <ReportRow key={r.id} r={r} onOpen={() => setOpenReport(r.id)} />)}
+      </ListCard>
 
       {data.pastReports.length > 0 && (
-        <div>
-          <button onClick={() => setShowPast((v) => !v)} className="text-sm font-heading font-bold text-muted hover:text-ink">
-            Starší hlášení ({data.pastReports.length}) {showPast ? "▲" : "▼"}
-          </button>
-          {showPast && (
-            <div className="space-y-2 mt-2">
-              {data.pastReports.map((r) => <ReportRow key={r.id} r={r} onOpen={() => setOpenReport(r.id)} />)}
-            </div>
-          )}
-        </div>
+        <ListCard title="Starší hlášení" count={data.pastReports.length}
+          controls={
+            <button onClick={() => setShowPast((v) => !v)} className="text-meta font-bold text-pitch-600 hover:underline min-h-11 px-2">
+              {showPast ? "Skrýt" : "Ukázat"}
+            </button>
+          }>
+          {showPast && data.pastReports.map((r) => <ReportRow key={r.id} r={r} onOpen={() => setOpenReport(r.id)} />)}
+        </ListCard>
       )}
 
       {openReport && (

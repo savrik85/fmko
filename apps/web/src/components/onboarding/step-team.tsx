@@ -45,9 +45,6 @@ function deriveStadiumSponsors(teamSponsors: SponsorOffer[]): Array<{ name: stri
   }));
 }
 
-function formatMoney(amount: number): string {
-  return amount.toLocaleString("cs") + " Kč";
-}
 
 /* ═══════════════════════════════════════
    JERSEY SVG PATTERNS

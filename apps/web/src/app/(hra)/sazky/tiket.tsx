@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { Sheet, ErrorBox, IconButton } from "@/components/ui";
+import { Sheet, ErrorBox, IconButton, ListRow, RowValue } from "@/components/ui";
 import { apiFetch } from "@/lib/api";
-import { czk, kurz, Radek, TYP_TIKETU } from "./ui";
+import { kurz, Radek, TYP_TIKETU } from "./ui";
 import type { Board, VybranyTip } from "./types";
+import { formatKc } from "@/lib/format";
 
 /** Lepivá lišta s košíkem. Částka v ní ZÁMĚRNĚ není — ceny nepatří do tlačítek. */
 export function TiketLista({ vybrane, celkovyKurz, onOpen }: {
@@ -114,9 +115,9 @@ export function TiketSheet({ open, onClose, vybrane, celkovyKurz, board, teamId,
           <div className="font-heading font-[800] text-xl">Tiket přijat</div>
           <div className="font-commentary text-base tabular-nums tracking-widest">č. {hotovo.cislo}</div>
           <div className="rounded-card border border-dashed border-line-strong bg-paper p-3 text-left space-y-1">
-            <Radek label="Vklad" value={czk(hotovo.stake)} />
+            <Radek label="Vklad" value={formatKc(hotovo.stake)} />
             <Radek label="Kurz" value={kurz(hotovo.totalOddsX100)} />
-            <Radek label={hotovo.capped ? "Vyplatíme" : "Možná výhra"} value={czk(hotovo.payout)} strong />
+            <Radek label={hotovo.capped ? "Vyplatíme" : "Možná výhra"} value={formatKc(hotovo.payout)} strong />
           </div>
           <p className="text-sm text-muted">Výsledek ti přijde do telefonu hned po kole.</p>
           <button type="button" onClick={zavri}
@@ -129,7 +130,7 @@ export function TiketSheet({ open, onClose, vybrane, celkovyKurz, board, teamId,
   }
 
   return (
-    <Sheet open={open} onClose={zavri} title="Tiket" maxWidth="520px" zavritKlikemVedle={false}>
+    <Sheet open={open} onClose={zavri} title="Tiket" maxWidth="520px" closeOnBackdrop={false}>
       <div className="p-4 sm:p-5 space-y-4">
         <div className="flex items-baseline justify-between gap-2">
           <div className="font-heading font-[800] text-xl">Tiket</div>
@@ -138,20 +139,18 @@ export function TiketSheet({ open, onClose, vybrane, celkovyKurz, board, teamId,
           </div>
         </div>
 
-        <ul className="rounded-card border border-dashed border-line-strong bg-paper divide-y divide-dashed divide-line">
+        <ul className="rounded-card border border-dashed border-line-strong bg-paper overflow-hidden divide-y divide-dashed divide-line">
           {vybrane.map((t) => (
-            <li key={`${t.matchId}|${t.selection}`} className="flex items-start gap-2 p-3">
-              <div className="flex-1 min-w-0">
-                <div className="text-base font-semibold leading-tight break-words">{t.zapas}</div>
-                <div className="text-sm text-muted leading-tight break-words">{t.label}</div>
-              </div>
-              <span className="text-base font-heading font-bold tabular-nums shrink-0 mt-0.5">
-                {kurz(t.oddsX100)}
-              </span>
-              <IconButton label={`Odebrat ${t.zapas} z tiketu`}
-                          onClick={() => onOdeber(`${t.matchId}|${t.selection}`)}>
-                ✕
-              </IconButton>
+            <li key={`${t.matchId}|${t.selection}`}>
+              <ListRow
+                title={t.zapas}
+                detail={t.label}
+                trailing={
+                  <span className="flex items-center gap-1">
+                    <RowValue>{kurz(t.oddsX100)}</RowValue>
+                    <IconButton label={`Odebrat ${t.zapas} z tiketu`} onClick={() => onOdeber(`${t.matchId}|${t.selection}`)}>✕</IconButton>
+                  </span>
+                } />
             </li>
           ))}
         </ul>
@@ -179,17 +178,17 @@ export function TiketSheet({ open, onClose, vybrane, celkovyKurz, board, teamId,
 
         <div className="rounded-card bg-pitch-50 p-3 space-y-1">
           <Radek label="Celkový kurz" value={kurz(celkovyKurz)} />
-          <Radek label={strop ? "Spočítaná výhra" : "Možná výhra"} value={czk(hruba)} strong={!strop} />
-          {strop && <Radek label="Vyplatíme" value={czk(L.maxPayout)} strong />}
+          <Radek label={strop ? "Spočítaná výhra" : "Možná výhra"} value={formatKc(hruba)} strong={!strop} />
+          {strop && <Radek label="Vyplatíme" value={formatKc(L.maxPayout)} strong />}
           {strop && (
             <p className="text-sm text-gold-700 leading-snug pt-1">
-              Strop kanceláře je {czk(L.maxPayout)} na tiket. Víc ti nevyplatíme, na vyšší vklad
+              Strop kanceláře je {formatKc(L.maxPayout)} na tiket. Víc ti nevyplatíme, na vyšší vklad
               už se nevyplatí sázet.
             </p>
           )}
-          {odvod > 0 && <Radek label={`Odvod soutěži (${L.levyPct} %)`} value={czk(odvod)} />}
+          {odvod > 0 && <Radek label={`Odvod soutěži (${L.levyPct} %)`} value={formatKc(odvod)} />}
           <div className="text-sm text-muted pt-1 leading-snug">
-            Z klubové kasy odejde {czk(vklad + odvod)}. Zůstane {czk(board.budget - vklad - odvod)}.
+            Z klubové kasy odejde {formatKc(vklad + odvod)}. Zůstane {formatKc(board.budget - vklad - odvod)}.
           </div>
         </div>
 
@@ -203,8 +202,8 @@ export function TiketSheet({ open, onClose, vybrane, celkovyKurz, board, teamId,
         ) : (
           <div className="space-y-2">
             <div className="rounded-card bg-gold-50 border border-gold-200 p-3 text-sm leading-snug">
-              Vsadíš <b className="tabular-nums">{czk(vklad + odvod)}</b> z klubové kasy.
-              Když to vyjde, kancelář vyplatí <b className="tabular-nums">{czk(vyplata)}</b>.
+              Vsadíš <b className="tabular-nums">{formatKc(vklad + odvod)}</b> z klubové kasy.
+              Když to vyjde, kancelář vyplatí <b className="tabular-nums">{formatKc(vyplata)}</b>.
               Když ne, jsou ty peníze pryč.
             </div>
             <button type="button" onClick={podat} disabled={odesilam}

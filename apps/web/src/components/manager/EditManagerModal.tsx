@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { clientOnly } from "@/components/client-only";
 import { apiFetch, type ManagerProfile } from "@/lib/api";
 import { generateManagerFace } from "@/lib/manager-avatar";
-import { Button, Sheet, IconButton } from "@/components/ui";
+import { Button, Sheet, IconButton, ErrorBox } from "@/components/ui";
 
 const FaceAvatar = clientOnly(
   () => import("@/components/players/face-avatar").then((m) => m.FaceAvatar),
@@ -100,7 +100,7 @@ export function EditManagerModal({ manager, teamId, onClose, onSaved }: Props) {
               value={name}
               onChange={(e) => setName(e.target.value)}
               maxLength={NAME_MAX}
-              className="w-full px-3 py-2 border border-gray-200 rounded-soft text-sm focus:outline-none focus:border-pitch-500"
+              className="input !w-full !px-3 !py-2 !text-sm"
               placeholder="Jméno Příjmení"
             />
             <div className="mt-1 flex items-baseline justify-between text-micro">
@@ -127,7 +127,7 @@ export function EditManagerModal({ manager, teamId, onClose, onSaved }: Props) {
                 onChange={(e) => setAge(e.target.value)}
                 min={18}
                 max={80}
-                className="w-full px-3 py-2 border border-gray-200 rounded-soft text-sm focus:outline-none focus:border-pitch-500 tabular-nums"
+                className="input !w-full !px-3 !py-2 !text-sm tabular-nums"
                 placeholder="40"
               />
               <div className="mt-1 text-micro text-muted-light">
@@ -152,7 +152,7 @@ export function EditManagerModal({ manager, teamId, onClose, onSaved }: Props) {
               onChange={(e) => setBio(e.target.value)}
               maxLength={BIO_MAX}
               rows={4}
-              className="w-full px-3 py-2 border border-gray-200 rounded-soft text-sm focus:outline-none focus:border-pitch-500 resize-none"
+              className="input !w-full !px-3 !py-2 !text-sm resize-none"
               placeholder="Filozofie, motto, něco o sobě..."
             />
             <div className="mt-1 flex items-baseline justify-between text-micro">
@@ -164,9 +164,7 @@ export function EditManagerModal({ manager, teamId, onClose, onSaved }: Props) {
           </div>
 
           {error && (
-            <div className="text-sm text-card-red bg-red-50 border border-red-200 rounded-soft px-3 py-2">
-              {error}
-            </div>
+            <ErrorBox message={error} />
           )}
         </div>
 
@@ -220,7 +218,7 @@ function VillagePicker({ value, onChange }: { value: { id: string | null; name: 
         value={query}
         onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
         onFocus={() => setOpen(true)}
-        className="w-full px-3 py-2 border border-gray-200 rounded-soft text-sm focus:outline-none focus:border-pitch-500"
+        className="input !w-full !px-3 !py-2 !text-sm"
         placeholder={value.name ? `${value.name} (vyber ze seznamu)` : "Začni psát obec"}
         aria-label="Bydliště"
         autoComplete="off"

@@ -5,10 +5,11 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
-import { Card, CardBody, Spinner, SectionLabel, Modal, Button, Tabs, useTabParam } from "@/components/ui";
+import { Card, CardBody, SectionLabel, Modal, Button, Tabs, useTabParam, ListCard, ListRow, ListEmpty, RowIcon, RowValue, SectionLoading, ProgressBar, type ProgressTone, CollapsibleCard } from "@/components/ui";
 import { DistrictMap, clubBadgeSvg, villageSizeLabel, type MapVillage } from "@/components/map/DistrictMap";
 import { DistrictVillages } from "./DistrictVillages";
 import { FaceAvatar } from "@/components/players/face-avatar";
+import { formatKc } from "@/lib/format";
 
 type OfficialRole = "starosta" | "mistostarosta" | "zastupitel_1" | "zastupitel_2";
 type Personality = "podnikatel" | "aktivista" | "sportovec" | "tradicionalista" | "populista";
@@ -243,11 +244,10 @@ function investmentTargetLabel(facility: string | null, type: string): string {
   return facility ?? type;
 }
 
-function favorColor(favor: number): string {
-  if (favor >= 70) return "bg-pitch-500";
-  if (favor >= 50) return "bg-pitch-400";
-  if (favor >= 30) return "bg-amber-400";
-  return "bg-card-red";
+function favorTone(favor: number): ProgressTone {
+  if (favor >= 50) return "ok";
+  if (favor >= 30) return "warn";
+  return "danger";
 }
 
 function favorLabel(favor: number): string {
@@ -269,9 +269,7 @@ function FavorBar({ value, label }: { value: number; label?: string }) {
           <span className="font-semibold tabular-nums">{value}/100</span>
         </div>
       )}
-      <div className="h-2 w-full rounded-full bg-gray-100 overflow-hidden">
-        <div className={`h-full ${favorColor(value)}`} style={{ width: `${Math.max(0, Math.min(100, value))}%` }} />
-      </div>
+      <ProgressBar value={Math.max(0, Math.min(100, value))} tone={favorTone(value)} label="Přízeň" />
     </div>
   );
 }
@@ -400,7 +398,7 @@ function OwnVillage() {
         },
       );
       const msg = res.action === "accept"
-        ? `Hotovo, obec přispěla ${res.offeredAmount?.toLocaleString("cs")} Kč.`
+        ? `Hotovo, obec přispěla ${formatKc(res.offeredAmount ?? 0)}.`
         : "Nabídka odmítnuta.";
       setToast(msg);
       setTimeout(() => setToast(null), 4000);
@@ -485,7 +483,7 @@ function OwnVillage() {
   }, [teamId]);
 
   if (loading) {
-    return <div className="p-8 flex justify-center"><Spinner /></div>;
+    return <SectionLoading />;
   }
 
   if (error || !village || !favor) {
@@ -542,116 +540,95 @@ function OwnVillage() {
 
       {/* Co čeká na rozhodnutí: hospoda, investice, petice */}
       {waiting > 0 && (
-        <div>
-          <SectionLabel>Čeká na tebe</SectionLabel>
-          <div className="space-y-3">
-            {pubEncounters.map((p) => (
-              <div key={p.id} className="card border-2 border-amber-300 bg-amber-50 p-4">
-                <div className="flex items-start gap-3">
-                  <FaceAvatar faceConfig={parseFace(p.face_config)} size={52} className="shrink-0 rounded-full bg-white overflow-hidden" />
-                  <div className="min-w-0 flex-1">
-                    <div className="text-xs text-muted">🍺 V hospodě · {ROLE_LABEL[p.role]}</div>
-                    <div className="font-heading font-bold">{p.first_name} {p.last_name}</div>
-                    <p className="text-sm text-ink-light mt-0.5">Zaškoupil si pivo a čeká, jestli ho přemluvíš na další. Buď se sblížíte, nebo je z toho skandál.</p>
-                    <div className="text-xs text-muted mt-1">{PERSONALITY_LABEL[p.personality]} · vyprší {formatDay(p.expires_at)}</div>
-                  </div>
-                </div>
-                <div className="flex justify-end gap-2 mt-3">
+        <ListCard title="Čeká na tebe" count={waiting}>
+          {pubEncounters.map((p) => (
+            <ListRow key={p.id} tone="warn"
+              leading={<FaceAvatar faceConfig={parseFace(p.face_config)} size={36} className="rounded-full bg-white overflow-hidden" />}
+              title={`${p.first_name} ${p.last_name}`}
+              meta={`🍺 V hospodě · ${ROLE_LABEL[p.role]}`}
+              detail={<>
+                <span className="block">Zaškoupil si pivo a čeká, jestli ho přemluvíš na další. Buď se sblížíte, nebo je z toho skandál.</span>
+                <span className="block text-muted mt-1">{PERSONALITY_LABEL[p.personality]} · vyprší {formatDay(p.expires_at)}</span>
+                <span className="flex gap-2 mt-2">
                   <Button variant="secondary" size="sm" disabled={respondingPubId === p.id} onClick={() => respondPub(p.id, "ignore")}>Nechat být</Button>
                   <Button size="sm" disabled={respondingPubId === p.id} onClick={() => respondPub(p.id, "invite_beer")}>Pozvat na pivo</Button>
-                </div>
-              </div>
-            ))}
-            {investments.map((i) => (
-              <div key={i.id} className="card border-2 border-green-200 bg-green-50 p-4">
-                <div className="text-xs text-muted">💰 Obec nabízí investici</div>
-                <div className="font-heading font-bold">{investmentTargetLabel(i.target_facility, i.type)}</div>
+                </span>
+              </>} />
+          ))}
+          {investments.map((i) => (
+            <ListRow key={i.id} tone="new"
+              leading={<RowIcon>💰</RowIcon>}
+              title={investmentTargetLabel(i.target_facility, i.type)}
+              meta={`Obec nabízí investici · vyprší ${formatDay(i.expires_at)}`}
+              detail={<>
                 <Chips items={[
-                  { text: `obec dá ${i.offered_amount.toLocaleString("cs-CZ")} Kč`, tone: "good" },
-                  { text: `ty doplatíš ${i.required_contribution.toLocaleString("cs-CZ")} Kč`, tone: "bad" },
+                  { text: `obec dá ${formatKc(i.offered_amount)}`, tone: "good" },
+                  { text: `ty doplatíš ${formatKc(i.required_contribution)}`, tone: "bad" },
                   ...(i.political_cost > 0 ? [{ text: `opozice −${i.political_cost} přízeň`, tone: "bad" as const }] : []),
                 ]} />
-                <div className="flex items-center justify-between gap-2 mt-3">
-                  <span className="text-xs text-muted">vyprší {formatDay(i.expires_at)}</span>
-                  <div className="flex gap-2">
-                    <Button variant="secondary" size="sm" disabled={respondingInvId === i.id} onClick={() => respondInvestment(i.id, "decline")}>Odmítnout</Button>
-                    <Button size="sm" disabled={respondingInvId === i.id} onClick={() => respondInvestment(i.id, "accept")}>Přijmout</Button>
-                  </div>
-                </div>
-              </div>
-            ))}
-            {petitions.map((p) => (
-              <div key={p.id} className="card border-2 border-amber-200 bg-amber-50/60 p-4">
-                <div className="text-xs text-muted">📜 Petice občanů</div>
-                <div className="font-heading font-bold">{p.title}</div>
-                <p className="text-sm text-ink-light mt-0.5">{p.description}</p>
+                <span className="flex gap-2 mt-2">
+                  <Button variant="secondary" size="sm" disabled={respondingInvId === i.id} onClick={() => respondInvestment(i.id, "decline")}>Odmítnout</Button>
+                  <Button size="sm" disabled={respondingInvId === i.id} onClick={() => respondInvestment(i.id, "accept")}>Přijmout</Button>
+                </span>
+              </>} />
+          ))}
+          {petitions.map((p) => (
+            <ListRow key={p.id} tone="warn"
+              leading={<RowIcon>📜</RowIcon>}
+              title={p.title}
+              meta={`Petice občanů · vyprší ${formatDay(p.expires_at)}`}
+              detail={<>
+                <span className="block">{p.description}</span>
                 <Chips items={[
-                  { text: `−${p.cost_money.toLocaleString("cs-CZ")} Kč`, tone: "bad" },
+                  { text: `−${formatKc(p.cost_money)}`, tone: "bad" },
                   { text: `+${p.reward_favor} přízeň`, tone: "good" },
                   { text: `když ji přejdeš ${p.ignore_penalty} přízeň`, tone: "neutral" },
                 ]} />
-                <div className="flex items-center justify-between gap-2 mt-3">
-                  <span className="text-xs text-muted">vyprší {formatDay(p.expires_at)}</span>
-                  <div className="flex gap-2">
-                    <Button variant="secondary" size="sm" disabled={respondingPetitionId === p.id} onClick={() => respondPetition(p.id, "ignore")}>Přejít</Button>
-                    <Button size="sm" disabled={respondingPetitionId === p.id} onClick={() => respondPetition(p.id, "accept")}>Vyhovět</Button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+                <span className="flex gap-2 mt-2">
+                  <Button variant="secondary" size="sm" disabled={respondingPetitionId === p.id} onClick={() => respondPetition(p.id, "ignore")}>Přejít</Button>
+                  <Button size="sm" disabled={respondingPetitionId === p.id} onClick={() => respondPetition(p.id, "accept")}>Vyhovět</Button>
+                </span>
+              </>} />
+          ))}
+        </ListCard>
       )}
 
       {/* Zastupitelstvo */}
-      <div>
-        <SectionLabel>Zastupitelstvo</SectionLabel>
-        <div className="grid gap-3 sm:grid-cols-2">
-          {officials.map((o) => {
-            const f = favor.perOfficial.find((p) => p.officialId === o.id)?.favor ?? 50;
-            const rivals = teams.filter((t) => t.id !== teamId);
-            return (
-              <Card key={o.id}>
-                <CardBody>
-                  <div className="flex gap-3">
-                    <FaceAvatar faceConfig={o.faceConfig} size={64} className="shrink-0 rounded-full bg-surface overflow-hidden" />
-                    <div className="flex-1 min-w-0">
-                      <div className="text-xs text-muted">{ROLE_LABEL[o.role]}</div>
-                      <div className="font-heading font-bold leading-tight">{o.firstName} {o.lastName}</div>
-                      <div className="text-xs text-muted truncate">{o.age} let · {o.occupation}</div>
-                      <span className="inline-block mt-1 text-xs font-medium px-1.5 py-0.5 rounded bg-surface text-ink-light" title={PERSONALITY_DESC[o.personality]}>
-                        {PERSONALITY_LABEL[o.personality]}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="mt-3 space-y-1.5">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-ink-light">K nám</span>
-                      <span className="font-heading font-bold">{favorLabel(f)}</span>
-                    </div>
-                    <FavorBar value={f} label="" />
-                    {rivals.length > 0 && (
-                      <ul className="pt-1 space-y-1">
-                        {rivals.map((t) => {
-                          const tf = favorMatrix[t.id]?.[o.id] ?? 50;
-                          return (
-                            <li key={t.id} className="flex items-center gap-2 text-xs text-muted">
-                              <span className="inline-block w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: t.primary_color }} aria-hidden />
-                              <span className="truncate flex-1">{t.name}</span>
-                              <span>{favorLabel(tf)}</span>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    )}
-                    <div className="text-xs text-muted pt-1">{PERSONALITY_DESC[o.personality]}. {termRemaining(o.termEndAt)}.</div>
-                  </div>
-                </CardBody>
-              </Card>
-            );
-          })}
-        </div>
-      </div>
+      <ListCard title="Zastupitelstvo" count={officials.length}>
+        {officials.map((o) => {
+          const f = favor.perOfficial.find((p) => p.officialId === o.id)?.favor ?? 50;
+          const rivals = teams.filter((t) => t.id !== teamId);
+          return (
+            <ListRow key={o.id}
+              leading={<FaceAvatar faceConfig={o.faceConfig} size={36} className="rounded-full bg-surface overflow-hidden" />}
+              title={`${o.firstName} ${o.lastName}`}
+              meta={`${ROLE_LABEL[o.role]} · ${o.age} let`}
+              trailing={<span className="text-meta font-bold whitespace-nowrap" title="Jak to má s námi">{favorLabel(f)}</span>}
+              detail={<>
+                <span className="block text-muted">{o.occupation}</span>
+                <span className="inline-block mt-1 text-xs font-medium px-1.5 py-0.5 rounded bg-surface text-ink-light" title={PERSONALITY_DESC[o.personality]}>
+                  {PERSONALITY_LABEL[o.personality]}
+                </span>
+                <span className="block mt-2 max-w-[260px]"><FavorBar value={f} label="" /></span>
+                {rivals.length > 0 && (
+                  <span className="block pt-1.5 space-y-1">
+                    {rivals.map((t) => {
+                      const tf = favorMatrix[t.id]?.[o.id] ?? 50;
+                      return (
+                        <span key={t.id} className="flex items-center gap-2 text-xs text-muted">
+                          <span className="inline-block w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: t.primary_color }} aria-hidden />
+                          <span className="truncate flex-1">{t.name}</span>
+                          <span>{favorLabel(tf)}</span>
+                        </span>
+                      );
+                    })}
+                  </span>
+                )}
+                <span className="block text-xs text-muted pt-1.5">{PERSONALITY_DESC[o.personality]}. {termRemaining(o.termEndAt)}.</span>
+              </>} />
+          );
+        })}
+      </ListCard>
 
       {/* Pozvánky na zápas */}
       {upcoming?.match && (
@@ -664,7 +641,7 @@ function OwnVillage() {
                 {" · "}{new Date(upcoming.match.scheduled_at).toLocaleDateString("cs-CZ", { weekday: "long", day: "numeric", month: "numeric" })}.
                 {" "}Jestli přijde, záleží na vztahu a povaze. Dárek platíš vždy.
               </p>
-              <ul className="divide-y divide-gray-100">
+              <div className="-mx-5 -mb-4 border-t border-line">
                 {upcoming.officials.map((o) => {
                   const myInv = upcoming.myInvitations.find((i) => i.official_id === o.id);
                   const slotTakenByOther = o.slot_taken_by && o.slot_taken_by !== teamId;
@@ -677,13 +654,10 @@ function OwnVillage() {
                     catch (e) { console.warn("Důvod odmítnutí pozvánky:", e); }
                   }
                   return (
-                    <li key={o.id} className="flex items-center justify-between gap-3 py-2.5">
-                      <div className="min-w-0">
-                        <div className="text-xs text-muted">{ROLE_LABEL[o.role as OfficialRole]}</div>
-                        <div className="text-sm font-heading font-bold truncate">{o.first_name} {o.last_name}</div>
-                        <div className="text-xs text-muted">{favorLabel(o.favor)} · {PERSONALITY_LABEL[o.personality as Personality]}</div>
-                      </div>
-                      <div className="text-right shrink-0 max-w-[55%]">
+                    <ListRow key={o.id}
+                      title={`${o.first_name} ${o.last_name}`}
+                      meta={`${ROLE_LABEL[o.role as OfficialRole]} · ${favorLabel(o.favor)} · ${PERSONALITY_LABEL[o.personality as Personality]}`}
+                      trailing={<span className="block text-right max-w-[150px]">
                         {slotTakenByMe ? <span className="text-xs font-medium px-1.5 py-0.5 rounded bg-pitch-50 text-pitch-700">Přijde ✓</span>
                           : slotTakenByOther ? <span className="text-xs text-muted">Jde k {o.slot_taken_by_name}</span>
                           : myInv?.status === "declined" ? (
@@ -693,73 +667,60 @@ function OwnVillage() {
                               {isInviting ? "…" : myInv ? "Pozváno" : "Pozvat"}
                             </Button>
                           )}
-                        {!slotTakenByMe && !slotTakenByOther && !myInv && <div className="text-xs text-muted mt-0.5">dárek {giftCost.toLocaleString("cs-CZ")} Kč</div>}
-                      </div>
-                    </li>
+                        {!slotTakenByMe && !slotTakenByOther && !myInv && <span className="block text-xs text-muted mt-0.5">dárek {formatKc(giftCost)}</span>}
+                      </span>} />
                   );
                 })}
-              </ul>
+              </div>
             </CardBody>
           </Card>
         </div>
       )}
 
       {/* Brigády */}
-      <div>
-        <SectionLabel>Brigády pro obec</SectionLabel>
+      <ListCard title="Brigády pro obec" count={brigades.length || undefined}>
         {brigades.length === 0 ? (
-          <Card><CardBody><p className="text-sm text-muted">Teď žádná brigáda není. Nové obec vyhlašuje v pondělí.</p></CardBody></Card>
+          <ListEmpty icon="🛠️">Teď žádná brigáda není. Nové obec vyhlašuje v pondělí.</ListEmpty>
         ) : (
-          <div className="space-y-3">
-            {brigades.map((b) => {
-              const isOpen = b.status === "open";
-              const isMine = !!b.taken_team_name && myTeam?.name === b.taken_team_name;
-              return (
-                <div key={b.id} className={`card p-4 ${isOpen ? "border-2 border-green-200 bg-green-50" : "opacity-70"}`}>
-                  <div className="text-xs text-muted">🛠️ {b.offering_official_name ? `Vyhlásil ${b.offering_official_name}` : "Obec"} · {b.required_player_count} hráčů</div>
-                  <div className="font-heading font-bold">{b.title}</div>
-                  <p className="text-sm text-ink-light mt-0.5">{b.description}</p>
-                  <Chips items={[
-                    { text: `+${b.reward_favor} přízeň`, tone: "good" },
-                    { text: `−${b.condition_drain} kondice`, tone: "bad" },
-                    ...(b.morale_change !== 0 ? [{ text: `${b.morale_change > 0 ? "+" : ""}${b.morale_change} nálada`, tone: (b.morale_change > 0 ? "good" : "bad") as "good" | "bad" }] : []),
-                  ]} />
-                  <div className="flex items-center justify-between gap-2 mt-3">
-                    <span className="text-xs text-muted">
+          brigades.map((b) => {
+            const isOpen = b.status === "open";
+            const isMine = !!b.taken_team_name && myTeam?.name === b.taken_team_name;
+            return (
+              <div key={b.id} className={isOpen ? "" : "opacity-70"}>
+                <ListRow tone={isOpen ? "new" : undefined}
+                  leading={<RowIcon>🛠️</RowIcon>}
+                  title={b.title}
+                  meta={`${b.offering_official_name ? `Vyhlásil ${b.offering_official_name}` : "Obec"} · ${b.required_player_count} hráčů`}
+                  detail={<>
+                    <span className="block">{b.description}</span>
+                    <Chips items={[
+                      { text: `+${b.reward_favor} přízeň`, tone: "good" },
+                      { text: `−${b.condition_drain} kondice`, tone: "bad" },
+                      ...(b.morale_change !== 0 ? [{ text: `${b.morale_change > 0 ? "+" : ""}${b.morale_change} nálada`, tone: (b.morale_change > 0 ? "good" : "bad") as "good" | "bad" }] : []),
+                    ]} />
+                    <span className="block text-muted mt-1.5">
                       {isOpen ? "Kdo dřív přijde, ten bere. Ostatní kluby v obci ji vidí taky." : `Vzal ${isMine ? "náš klub" : b.taken_team_name ?? "jiný klub"}${b.taken_at ? `, ${formatDay(b.taken_at)}` : ""}`}
                     </span>
-                    {isOpen && <Button size="sm" onClick={() => setTakeBrigade(b)}>Vzít brigádu</Button>}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                    {isOpen && <span className="block mt-2"><Button size="sm" onClick={() => setTakeBrigade(b)}>Vzít brigádu</Button></span>}
+                  </>} />
+              </div>
+            );
+          })
         )}
-      </div>
+      </ListCard>
 
       {/* Kluby v obci */}
-      <div>
-        <SectionLabel>{teams.length === 1 ? "Klub v obci" : `Kluby v obci (${teams.length})`}</SectionLabel>
-        <Card>
-          <CardBody>
-            {teams.length === 1 && <p className="text-sm text-muted mb-2">V obci jsme jediný klub, o přízeň radnice se nedělíme.</p>}
-            <ul className="divide-y divide-gray-100">
-              {[...teams].sort((a, b) => b.global_favor - a.global_favor).map((t) => (
-                <li key={t.id} className="flex items-center gap-3 py-2.5">
-                  <span className="shrink-0" dangerouslySetInnerHTML={{ __html: clubBadgeSvg(mapVillage.clubs.find((c) => c.id === t.id)!, 30) }} />
-                  <div className="min-w-0 flex-1">
-                    <Link href={`/tym/${t.id}`} className={`font-heading font-bold text-sm hover:text-pitch-600 ${t.id === teamId ? "text-pitch-700" : ""}`}>
-                      {t.name}{t.id === teamId && " (my)"}
-                    </Link>
-                    <div className="mt-1 max-w-[220px]"><FavorBar value={t.global_favor} label="" /></div>
-                  </div>
-                  <span className="text-sm font-heading font-bold shrink-0">{favorLabel(t.global_favor)}</span>
-                </li>
-              ))}
-            </ul>
-          </CardBody>
-        </Card>
-      </div>
+      <ListCard title={teams.length === 1 ? "Klub v obci" : "Kluby v obci"} count={teams.length > 1 ? teams.length : undefined}>
+        {teams.length === 1 && <p className="px-4 pt-3 text-meta text-muted">V obci jsme jediný klub, o přízeň radnice se nedělíme.</p>}
+        {[...teams].sort((a, b) => b.global_favor - a.global_favor).map((t) => (
+          <ListRow key={t.id} href={`/tym/${t.id}`} chevron={false}
+            tone={t.id === teamId ? "new" : undefined}
+            leading={<span dangerouslySetInnerHTML={{ __html: clubBadgeSvg(mapVillage.clubs.find((c) => c.id === t.id)!, 30) }} />}
+            title={<>{t.name}{t.id === teamId && <span className="font-normal text-muted"> (my)</span>}</>}
+            detail={<span className="block max-w-[220px]"><FavorBar value={t.global_favor} label="" /></span>}
+            trailing={<span className="text-meta font-bold whitespace-nowrap">{favorLabel(t.global_favor)}</span>} />
+        ))}
+      </ListCard>
 
       {/* Místní hrdost */}
       {localPride && (
@@ -776,7 +737,7 @@ function OwnVillage() {
                     {[
                       { v: localPride.totalLocalCount, l: "místních v kádru" },
                       { v: localPride.recentStartersTotal, l: "startů za 90 dní" },
-                      { v: localPride.avgRating ?? "?", l: "průměrný rating" },
+                      { v: localPride.avgRating ?? "?", l: "průměrné hodnocení" },
                     ].map((x) => (
                       <div key={x.l} className="rounded-xl bg-surface p-2">
                         <div className="text-2xl font-heading font-bold tabular-nums">{x.v}</div>
@@ -784,18 +745,14 @@ function OwnVillage() {
                       </div>
                     ))}
                   </div>
-                  <ul className="divide-y divide-gray-100">
+                  <div className="-mx-5 -mb-4 border-t border-line">
                     {localPride.locals.map((p) => (
-                      <li key={p.id} className="flex items-center justify-between gap-2 py-2 text-sm">
-                        <Link href={`/hrac/${p.id}`} className="font-heading font-bold hover:text-pitch-600 underline decoration-pitch-500/20 truncate">
-                          {p.firstName} {p.lastName}
-                        </Link>
-                        <span className="text-xs text-muted shrink-0 tabular-nums">
-                          {p.position} {p.overallRating} · {p.recentStarts} zápasů · {p.recentGoals}+{p.recentAssists}{p.recentAvgRating ? ` · známka ${p.recentAvgRating}` : ""}
-                        </span>
-                      </li>
+                      <ListRow key={p.id} href={`/hrac/${p.id}`}
+                        title={`${p.firstName} ${p.lastName}`}
+                        meta={`${p.recentStarts} zápasů · ${p.recentGoals}+${p.recentAssists}${p.recentAvgRating ? ` · známka ${p.recentAvgRating}` : ""}`}
+                        trailing={<RowValue sub={p.position}>{p.overallRating}</RowValue>} />
                     ))}
-                  </ul>
+                  </div>
                 </>
               )}
             </CardBody>
@@ -804,41 +761,20 @@ function OwnVillage() {
       )}
 
       {/* Kronika obce */}
-      <div>
-        <SectionLabel>Kronika obce</SectionLabel>
-        <Card>
-          <CardBody>
-            {feed.length === 0 ? (
-              <p className="text-sm text-muted">Zatím se v obci nic nezapsalo.</p>
-            ) : (
-              <ul className="space-y-2.5">
-                {feed.map((e) => (
-                  <li key={e.id} className="flex items-start gap-2.5 text-sm">
-                    <span className="shrink-0 leading-5" aria-hidden>{CHRONICLE_ICON[e.event_type] ?? "\u{1F4DC}"}</span>
-                    <div className="min-w-0">
-                      <p className="leading-snug">{withoutLongDash(e.description)}</p>
-                      <div className="text-xs text-muted">
-                        {formatDay(e.game_date || e.created_at)}
-                        {e.team_name && ` · ${e.team_name}`}
-                        {e.official_name && ` · ${e.official_name}`}
-                      </div>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardBody>
-        </Card>
-      </div>
+      <ListCard title="Kronika obce">
+        {feed.length === 0 && <ListEmpty icon="📜">Zatím se v obci nic nezapsalo. Kronikář zapíše brigády, pozvánky i petice.</ListEmpty>}
+        {feed.map((e) => (
+          <ListRow key={e.id}
+            leading={<RowIcon>{CHRONICLE_ICON[e.event_type] ?? "\u{1F4DC}"}</RowIcon>}
+            title={formatDay(e.game_date || e.created_at)}
+            meta={[e.team_name, e.official_name].filter(Boolean).join(" · ") || undefined}
+            detail={withoutLongDash(e.description)} />
+        ))}
+      </ListCard>
 
       {/* Jak to s obcí funguje */}
-      <details className="card p-4 sm:p-5 group">
-        <summary className="cursor-pointer font-heading font-bold text-sm flex items-center justify-between">
-          <span>💡 Jak to s obcí funguje</span>
-          <span className="text-xs text-muted group-open:hidden">rozbalit</span>
-          <span className="text-xs text-muted hidden group-open:inline">sbalit</span>
-        </summary>
-        <div className="mt-3 space-y-3 text-sm leading-relaxed text-ink-light">
+      <CollapsibleCard title="💡 Jak to s obcí funguje" startCollapsed>
+        <div className="space-y-3 text-sm leading-relaxed text-ink-light">
           <p>Klub žije v obci a s její radnicí. <strong className="text-ink">Přízeň obce</strong> rozhoduje o dotaci: při nejhorším dostaneš polovinu, při nejlepším jeden a půl násobek. Za sezónu jsou to tisíce korun.</p>
           <p>V <strong className="text-ink">zastupitelstvu</strong> sedí starosta a tři zastupitelé. Každý má svou povahu a svůj vztah k tobě. Když je v obci víc klubů, rozhodují se podle toho, koho mají radši.</p>
           <ul className="space-y-1.5 ml-4 list-disc">
@@ -852,7 +788,7 @@ function OwnVillage() {
           <p><strong className="text-ink">Volby</strong> 🗳️: na konci každé sezóny se vymění celé vedení obce a přízeň u všech klubů začíná znovu napůl.</p>
           <p><strong className="text-ink">Krize</strong> ⚠️: když přízeň spadne hodně nízko, obec se otočí proti klubu. Cesta zpátky vede přes brigády a petice.</p>
         </div>
-      </details>
+      </CollapsibleCard>
 
       {toast && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[var(--z-sheet)] bg-gray-900 text-white px-4 py-2 rounded-soft shadow-lg text-sm">
@@ -1022,37 +958,25 @@ function BrigadeTakeDialog({ brigade, teamId, onClose, onSuccess }: BrigadeTakeD
             </div>
           </div>
           {loading ? (
-            <Spinner />
+            <SectionLoading />
           ) : eligible.length < brigade.required_player_count ? (
             <div className="text-sm text-card-red">
               Nemáš dost způsobilých hráčů (potřeba ≥ 60 kondice, bez zranění).
             </div>
           ) : (
-            <div className="max-h-72 overflow-y-auto border rounded-soft divide-y divide-gray-100">
+            <div className="max-h-72 overflow-y-auto border border-line rounded-soft divide-y divide-line-soft">
+              {/* Celý řádek je popisek zaškrtávátka. */}
               {eligible.map((p) => {
                 let lc: { condition?: number; morale?: number } = {};
                 try { lc = JSON.parse(p.life_context); } catch { lc = {}; }
                 const isSelected = selected.has(p.id);
                 const disabled = !isSelected && selected.size >= brigade.required_player_count;
                 return (
-                  <label
-                    key={p.id}
-                    className={`flex items-center gap-3 px-3 py-2 cursor-pointer ${disabled ? "opacity-40 cursor-not-allowed" : "hover:bg-gray-50"}`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={() => toggle(p.id)}
-                      disabled={disabled}
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium truncate">
-                        {p.first_name} {p.last_name} <span className="text-xs text-gray-500">({p.position})</span>
-                      </div>
-                    </div>
-                    <div className="text-xs text-gray-500 tabular-nums">
-                      {lc.condition ?? 100} k · {lc.morale ?? 50} m
-                    </div>
+                  <label key={p.id} className={`block ${disabled ? "opacity-40 cursor-not-allowed" : "cursor-pointer hover:bg-surface-2"}`}>
+                    <ListRow dense
+                      leading={<input type="checkbox" checked={isSelected} onChange={() => toggle(p.id)} disabled={disabled} className="w-4 h-4" />}
+                      title={<>{p.first_name} {p.last_name} <span className="text-meta font-normal text-muted">({p.position})</span></>}
+                      trailing={<span className="text-meta text-muted tabular-nums">{lc.condition ?? 100} k · {lc.morale ?? 50} m</span>} />
                   </label>
                 );
               })}

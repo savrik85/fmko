@@ -42,6 +42,3 @@ export const FAVOR_BAND_LABELS: Record<FavorBand, string> = {
   hostile: "Nemá vás rád",
 };
 
-export function formatCZK(v: number): string {
-  return v.toLocaleString("cs") + " Kč";
-}

@@ -4,14 +4,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, showError } from "@/lib/api";
-import { SectionLabel, Spinner, Tabs, useTabParam, useConfirm } from "@/components/ui";
+import { SectionLabel, Tabs, useTabParam, useConfirm, ListCard, ListEmpty, PageLoading } from "@/components/ui";
 import { FriendlyForm } from "./FriendlyForm";
 import { FriendlyRecord } from "./FriendlyRecord";
-import {
-  FixtureCard, FriendlyCard, PRIMARY_BUTTON, SECONDARY_BUTTON, StakeTag, StatusPill, TAG, TeamLink,
-  dayLabel, formatCZK, sumCosts, venueText,
-  type FriendliesData, type FriendlyView, type OfferView,
-} from "./friendly-ui";
+import { FixtureCard, FriendlyCard, PRIMARY_BUTTON, SECONDARY_BUTTON, StakeTag, StatusPill, TAG, TeamLink, dayLabel, sumCosts, venueText, type FriendliesData, type FriendlyView, type OfferView } from "./friendly-ui";
+import { formatKc } from "@/lib/format";
 
 const TAB_KEYS = ["matches", "challenge", "offers", "record"] as const;
 
@@ -67,8 +64,8 @@ export default function FriendlyPage() {
     const details = [
       { label: "Kdy", value: f.date ? `${dayLabel(f.date)} v 18:00` : "nejbližší volný den" },
       { label: "Kde", value: venueText(f.venue, f.neutralVillage) },
-      ...(f.stake > 0 ? [{ label: "Sázka", value: `${formatCZK(f.stake)} složíš hned` }] : []),
-      { label: "Tvoje náklady", value: sumCosts(f.myCosts) > 0 ? formatCZK(sumCosts(f.myCosts)) : "nic" },
+      ...(f.stake > 0 ? [{ label: "Sázka", value: `${formatKc(f.stake)} složíš hned` }] : []),
+      { label: "Tvoje náklady", value: sumCosts(f.myCosts) > 0 ? formatKc(sumCosts(f.myCosts)) : "nic" },
     ];
     const ok = await confirm({ title: `Přátelák s ${f.opponent.name}?`, details, confirmLabel: "Přijmout" });
     if (ok) await act(f.id, `/api/teams/${teamId}/challenge/${f.id}/accept`, "Výzvu se nepodařilo přijmout", `Přátelák s ${f.opponent.name} je domluvený${f.date ? ` na ${dayLabel(f.date)}` : "."}`);
@@ -78,8 +75,8 @@ export default function FriendlyPage() {
     const details = [
       { label: "Kdy", value: `${dayLabel(o.date)} v 18:00` },
       { label: "Kde", value: o.venue === "neutral" && o.neutralVillage ? `neutrální hřiště, ${o.neutralVillage}` : OFFER_VENUE_TEXT[o.venue] },
-      ...(o.stake > 0 ? [{ label: "Sázka", value: `${formatCZK(o.stake)} složíš hned` }] : []),
-      { label: "Tvoje náklady", value: sumCosts(o.myCosts) > 0 ? formatCZK(sumCosts(o.myCosts)) : "nic" },
+      ...(o.stake > 0 ? [{ label: "Sázka", value: `${formatKc(o.stake)} složíš hned` }] : []),
+      { label: "Tvoje náklady", value: sumCosts(o.myCosts) > 0 ? formatKc(sumCosts(o.myCosts)) : "nic" },
     ];
     const ok = await confirm({ title: `Hrát s ${o.team.name}?`, details, confirmLabel: "Beru termín" });
     if (ok) await act(o.id, `/api/teams/${teamId}/friendly-offers/${o.id}/take`, "Termín se nepodařilo vzít", `Přátelák s ${o.team.name} je domluvený na ${dayLabel(o.date)}`);
@@ -93,7 +90,7 @@ export default function FriendlyPage() {
     setTimeout(() => topRef.current?.scrollIntoView({ block: "start" }), 0);
   };
 
-  if (loading) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
+  if (loading) return <PageLoading />;
   if (!data || !teamId) return <div className="page-container"><div className="card p-6 text-center text-muted">Přáteláky se nepodařilo načíst.</div></div>;
 
   const openOffers = data.offers.filter((o) => !o.blocked).length;
@@ -136,12 +133,11 @@ export default function FriendlyPage() {
 
       {tab === "offers" && (
         <div className="space-y-5">
-          <div>
-            <SectionLabel>Nabízejí termín ({data.offers.length})</SectionLabel>
+          <ListCard title="Nabízejí termín" count={data.offers.length}>
             {data.offers.length === 0 ? (
-              <div className="card p-6 text-center text-muted text-sm">Teď nikdo volný termín nenabízí. Nabídni svůj, ať tě někdo vyzve.</div>
+              <ListEmpty icon="📅">Teď nikdo volný termín nenabízí. Nabídni svůj, ať tě někdo vyzve.</ListEmpty>
             ) : (
-              <div className="space-y-3">
+              <>
                 {data.offers.map((o) => (
                   <FixtureCard key={o.id}
                     date={o.date}
@@ -152,7 +148,7 @@ export default function FriendlyPage() {
                       <div className="flex flex-wrap gap-1.5 mt-2">
                         {o.stake > 0 && <StakeTag stake={o.stake} />}
                         {o.costPayer === "poster" && <span className={TAG}>náklady platí oni</span>}
-                        {o.myCosts && <span className={TAG}>{sumCosts(o.myCosts) > 0 ? `tvoje náklady ${formatCZK(sumCosts(o.myCosts))}` : "neplatíš nic"}</span>}
+                        {o.myCosts && <span className={TAG}>{sumCosts(o.myCosts) > 0 ? `tvoje náklady ${formatKc(sumCosts(o.myCosts))}` : "neplatíš nic"}</span>}
                       </div>
                     }
                     message={o.message}
@@ -162,14 +158,13 @@ export default function FriendlyPage() {
                     }
                   />
                 ))}
-              </div>
+              </>
             )}
-          </div>
+          </ListCard>
 
           <div>
-            <SectionLabel>Moje nabídky ({data.myOffers.length}/{data.limits.maxOpenOffers})</SectionLabel>
-            {data.myOffers.length > 0 && (
-              <div className="space-y-3 mb-3">
+            {data.myOffers.length > 0 ? (
+              <ListCard title="Moje nabídky" count={`${data.myOffers.length}/${data.limits.maxOpenOffers}`} className="mb-3">
                 {data.myOffers.map((o) => (
                   <FixtureCard key={o.id}
                     date={o.date}
@@ -186,7 +181,9 @@ export default function FriendlyPage() {
                     }
                   />
                 ))}
-              </div>
+              </ListCard>
+            ) : (
+              <SectionLabel>Moje nabídky ({data.myOffers.length}/{data.limits.maxOpenOffers})</SectionLabel>
             )}
             {data.myOffers.length < data.limits.maxOpenOffers && (
               showOfferForm ? (
@@ -218,23 +215,18 @@ function MatchesTab({ data, busyId, onAccept, onDecline, onCancel, onGoChallenge
   return (
     <div className="space-y-5">
       {data.incoming.length > 0 && (
-        <div>
-          <SectionLabel>Výzvy pro tebe ({data.incoming.length})</SectionLabel>
-          <div className="space-y-3">
+        <ListCard title="Výzvy pro tebe" count={data.incoming.length}>
             {data.incoming.map((f) => (
               <FriendlyCard key={f.id} f={f} status={<StatusPill tone="gold">čeká na tebe</StatusPill>}>
                 <button onClick={() => onAccept(f)} disabled={busyId === f.id || !!f.clash} className={PRIMARY_BUTTON}>Přijmout</button>
                 <button onClick={() => onDecline(f)} disabled={busyId === f.id} className={SECONDARY_BUTTON}>Odmítnout</button>
               </FriendlyCard>
             ))}
-          </div>
-        </div>
+        </ListCard>
       )}
 
       {data.upcoming.length > 0 && (
-        <div>
-          <SectionLabel>Domluvené ({data.upcoming.length})</SectionLabel>
-          <div className="space-y-3">
+        <ListCard title="Domluvené" count={data.upcoming.length}>
             {data.upcoming.map((f) => {
               const today = f.matchStatus === "lineups_open";
               return (
@@ -245,33 +237,26 @@ function MatchesTab({ data, busyId, onAccept, onDecline, onCancel, onGoChallenge
                 </FriendlyCard>
               );
             })}
-          </div>
-        </div>
+        </ListCard>
       )}
 
       {data.outgoing.length > 0 && (
-        <div>
-          <SectionLabel>Odeslané výzvy ({data.outgoing.length})</SectionLabel>
-          <div className="space-y-3">
+        <ListCard title="Odeslané výzvy" count={data.outgoing.length}>
             {data.outgoing.map((f) => (
               <FriendlyCard key={f.id} f={f} status={<StatusPill tone="muted">čeká na odpověď</StatusPill>}>
                 <button onClick={() => onCancel(f)} disabled={busyId === f.id} className={SECONDARY_BUTTON}>Stáhnout</button>
               </FriendlyCard>
             ))}
-          </div>
-        </div>
+        </ListCard>
       )}
 
       {data.cancelled.length > 0 && (
-        <div>
-          <SectionLabel>Zrušené</SectionLabel>
-          <div className="space-y-3">
+        <ListCard title="Zrušené">
             {data.cancelled.map((f) => (
               // Důvod zrušení se ukáže na místě, kde u příchozí výzvy bývá kolize.
               <FriendlyCard key={f.id} f={{ ...f, myCosts: null, clash: f.cancelReason }} status={<StatusPill tone="red">nehrálo se</StatusPill>} />
             ))}
-          </div>
-        </div>
+        </ListCard>
       )}
 
       {empty && (

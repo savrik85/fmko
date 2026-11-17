@@ -5,6 +5,7 @@ import { FaceAvatar } from "@/components/players/face-avatar";
 import { BadgePreview, type BadgePattern } from "@/components/ui/badge-preview";
 import { CoachName } from "@/components/manager/coach-name";
 import { TeamName } from "@/components/manager/team-name";
+import { formatKc } from "@/lib/format";
 
 export interface TeamSummary {
   id: string;
@@ -99,7 +100,7 @@ export function TeamSide({
         <div className={`flex flex-wrap gap-1.5 mt-1 ${isRight ? "justify-end" : "justify-start"}`}>
           {team.budget != null && (
             <span className="px-2 py-0.5 rounded-full bg-gray-100 text-xs font-heading font-bold tabular-nums">
-              {team.budget.toLocaleString("cs")} Kč
+              {formatKc(team.budget)}
             </span>
           )}
           {team.reputation != null && (

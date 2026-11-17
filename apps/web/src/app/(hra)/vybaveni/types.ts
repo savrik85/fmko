@@ -100,9 +100,6 @@ export const EQUIPMENT_ICONS: Record<string, string> = {
   sports_drinks: "🥤", raffle: "🎟", pa_system: "🎙", trophy_case: "🏆", area_security: "🔒", nutrition: "⚖️",
 };
 
-export function formatCZK(v: number): string {
-  return v.toLocaleString("cs") + " Kč";
-}
 
 export function condColor(c: number): string {
   if (c >= 80) return "text-pitch-500";

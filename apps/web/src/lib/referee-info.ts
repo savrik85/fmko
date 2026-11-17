@@ -1,3 +1,4 @@
+import type { ProgressTone } from "@/components/ui";
 // Popisy rozhodčích a překlad jejich vlastností do rad pro manažera.
 // Cílem je, aby delegace dva dny předem měla praktický dopad na sestavu a taktiku,
 // ne aby hráč koukal na šest čísel a nevěděl, co s nimi.
@@ -60,10 +61,10 @@ export function axisWord(value: number): string {
 }
 
 /** Barva pruhu osy. Vysoká hodnota není sama o sobě dobrá ani špatná. */
-export function axisColor(value: number): string {
-  if (value >= 75) return "bg-card-red";
-  if (value >= 55) return "bg-gold-500";
-  return "bg-pitch-500";
+export function axisTone(value: number): ProgressTone {
+  if (value >= 75) return "danger";
+  if (value >= 55) return "warn";
+  return "ok";
 }
 
 /**

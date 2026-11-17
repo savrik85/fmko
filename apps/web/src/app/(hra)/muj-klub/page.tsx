@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
-import { Spinner, Card, CardHeader, CardBody, BadgePreview, JerseyPreview } from "@/components/ui";
+import { Card, CardHeader, CardBody, BadgePreview, JerseyPreview, PageLoading, ErrorBox, useConfirm } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 import { StadiumPhotoCard } from "@/app/klub/[teamId]/StadiumPhotoCard";
 import {
@@ -14,6 +14,7 @@ import {
   type ClubWebsiteTemplate,
   type ClubWebsiteAddon,
 } from "@okresni-masina/shared";
+import { formatKc } from "@/lib/format";
 
 interface ClubIdentityData {
   id: string;
@@ -137,6 +138,7 @@ export default function MujKlubPage() {
   const [saving, setSaving] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const { confirm, dialog: confirmDialog } = useConfirm({ sheet: true });
 
   // Editable fields in settings
   const [slugInput, setSlugInput] = useState("");
@@ -203,7 +205,11 @@ export default function MujKlubPage() {
   const handleBuyTemplate = async (templateId: ClubWebsiteTemplate) => {
     if (!teamId) return;
     const tpl = CLUB_WEBSITE_TEMPLATES[templateId];
-    if (!window.confirm(`Opravdu chceš zakoupit šablonu "${tpl.name}" za ${tpl.price.toLocaleString("cs")} Kč?`)) {
+    if (!(await confirm({
+      title: `Koupit šablonu „${tpl.name}“?`,
+      details: [{ label: "Cena", value: `−${formatKc(tpl.price)}`, color: "text-card-red" }],
+      confirmLabel: "Koupit",
+    }))) {
       return;
     }
     setSaving(true);
@@ -228,7 +234,11 @@ export default function MujKlubPage() {
   const handleBuyAddon = async (addonId: ClubWebsiteAddon) => {
     if (!teamId) return;
     const add = CLUB_WEBSITE_ADDONS[addonId];
-    if (!window.confirm(`Opravdu chceš zakoupit vylepšení "${add.name}" za ${add.price.toLocaleString("cs")} Kč?`)) {
+    if (!(await confirm({
+      title: `Koupit vylepšení „${add.name}“?`,
+      details: [{ label: "Cena", value: `−${formatKc(add.price)}`, color: "text-card-red" }],
+      confirmLabel: "Koupit",
+    }))) {
       return;
     }
     setSaving(true);
@@ -274,11 +284,7 @@ export default function MujKlubPage() {
   };
 
   if (loading) {
-    return (
-      <div className="page-container flex justify-center min-h-[50vh] items-center">
-        <Spinner />
-      </div>
-    );
+    return <PageLoading />;
   }
 
   const website = websiteData?.website;
@@ -289,6 +295,7 @@ export default function MujKlubPage() {
 
   return (
     <div className="page-container space-y-6">
+      {confirmDialog}
       {/* Top Banner & Title */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
@@ -330,10 +337,7 @@ export default function MujKlubPage() {
         </div>
       )}
       {errorMessage && (
-        <div className="p-4 rounded-soft bg-red-50 border border-red-200 text-red-800 text-sm font-heading font-bold animate-in fade-in flex items-center gap-2">
-          <span>⚠️</span>
-          <span>{errorMessage}</span>
-        </div>
+        <ErrorBox message={errorMessage} />
       )}
 
       {/* Tabs navigation */}
@@ -442,7 +446,7 @@ export default function MujKlubPage() {
                     value={slugInput}
                     onChange={(e) => setSlugInput(e.target.value)}
                     placeholder="např. fk-rohlik-brevnov"
-                    className="flex-1 min-w-0 px-3 py-2 text-sm rounded-soft border border-gray-200 focus:outline-none focus:ring-2 focus:ring-pitch-500 font-mono"
+                    className="input flex-1 min-w-0 !px-3 !py-2 !text-sm !font-mono"
                   />
                 </div>
                 <p className="text-sm text-muted mt-1">
@@ -458,7 +462,7 @@ export default function MujKlubPage() {
                   </label>
                   {!unlockedAddons.includes("press_officer") && (
                     <span className="text-sm text-amber-600 font-heading font-bold">
-                      Vyžaduje modul {CLUB_WEBSITE_ADDONS.press_officer.name} ({CLUB_WEBSITE_ADDONS.press_officer.price.toLocaleString("cs")} Kč)
+                      Vyžaduje modul {CLUB_WEBSITE_ADDONS.press_officer.name} ({formatKc(CLUB_WEBSITE_ADDONS.press_officer.price)})
                     </span>
                   )}
                 </div>
@@ -469,7 +473,7 @@ export default function MujKlubPage() {
                   onChange={(e) => setAnnouncementInput(e.target.value)}
                   disabled={!unlockedAddons.includes("press_officer")}
                   placeholder="Zde můžeš napsat aktuální zprávu pro fanoušky a novináře, která bude zvýrazněna na úvodní stránce..."
-                  className="w-full px-3 py-2 text-sm rounded-soft border border-gray-200 focus:outline-none focus:ring-2 focus:ring-pitch-500 disabled:bg-gray-50 disabled:text-gray-400"
+                  className="input !w-full !px-3 !py-2 !text-sm disabled:bg-gray-50 disabled:text-gray-400"
                 />
               </div>
 
@@ -495,7 +499,7 @@ export default function MujKlubPage() {
                   </label>
                 ) : (
                   <span className="text-sm text-amber-600 font-heading font-bold">
-                    Vyžaduje modul {CLUB_WEBSITE_ADDONS.sponsor_banner.name} ({CLUB_WEBSITE_ADDONS.sponsor_banner.price.toLocaleString("cs")} Kč)
+                    Vyžaduje modul {CLUB_WEBSITE_ADDONS.sponsor_banner.name} ({formatKc(CLUB_WEBSITE_ADDONS.sponsor_banner.price)})
                   </span>
                 )}
               </div>
@@ -567,7 +571,7 @@ export default function MujKlubPage() {
 
                     <div className="mt-6 pt-4 border-t border-gray-100 flex items-center justify-between">
                       <div className="text-sm font-heading font-extrabold text-ink">
-                        {tpl.price === 0 ? "Zdarma" : `${tpl.price.toLocaleString("cs")} Kč`}
+                        {tpl.price === 0 ? "Zdarma" : `${formatKc(tpl.price)}`}
                       </div>
 
                       {isActive ? (
@@ -635,7 +639,7 @@ export default function MujKlubPage() {
                           </span>
                         ) : (
                           <span className="text-sm font-heading font-bold text-muted">
-                            {add.price.toLocaleString("cs")} Kč
+                            {formatKc(add.price)}
                           </span>
                         )}
                       </div>

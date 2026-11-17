@@ -5,9 +5,10 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
-import { Spinner, SectionLabel } from "@/components/ui";
+import { SectionLabel, ListCard, ListRow, ListEmpty, RowIcon, PageLoading } from "@/components/ui";
 import { DetailIncidentu } from "./DetailIncidentu";
 import { datum, stavPilulka, VYSLEDEK_LABEL, type Incident } from "./typy";
+import { formatKc } from "@/lib/format";
 
 interface Poskozeni {
   id: string;
@@ -19,7 +20,7 @@ interface Poskozeni {
   gameDate: string | null;
 }
 
-const NACITANI = <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
+const NACITANI = <PageLoading />;
 
 export default function IncidentyStranka() {
   return <Suspense fallback={NACITANI}><Incidenty /></Suspense>;
@@ -98,116 +99,105 @@ function Incidenty() {
         </p>
       </div>
       {poskozeni.length > 0 && (
-        <div className="card p-4 sm:p-5">
-          <SectionLabel>Rozbité zařízení</SectionLabel>
-          <p className="text-sm text-muted">Dokud rozbité zařízení neopravíš, nefunguje.</p>
+        <ListCard title="Rozbité zařízení" count={poskozeni.length}>
+          <p className="px-4 pt-3 text-meta text-muted">Dokud rozbité zařízení neopravíš, nefunguje.</p>
           {opravaZprava && (
-            <p className={`text-sm mt-2 ${opravaZprava.typ === "ok" ? "text-pitch-600" : "text-card-red"}`}>
+            <p className={`px-4 pt-1 text-meta ${opravaZprava.typ === "ok" ? "text-pitch-600" : "text-card-red"}`}>
               {opravaZprava.text}
             </p>
           )}
-          <div className="mt-3 space-y-3">
-            {poskozeni.map((p) => (
-              <div key={p.id} className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="font-heading font-bold text-base">{p.label}</div>
-                  <div className="text-sm text-muted">
-                    Oprava {p.cost.toLocaleString("cs-CZ")} Kč · o {p.levels} {p.levels === 1 ? "úroveň" : "úrovně"}
-                  </div>
-                </div>
-                <button
-                  onClick={() => opravit(p)}
-                  disabled={opravujeId === p.id}
-                  className="shrink-0 px-3 py-2 rounded-soft text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 disabled:opacity-50"
-                >
+          {poskozeni.map((p) => (
+            <ListRow key={p.id} tone="danger"
+              leading={<RowIcon>🔧</RowIcon>}
+              title={p.label}
+              meta={`Oprava ${formatKc(p.cost)} · o ${p.levels} ${p.levels === 1 ? "úroveň" : "úrovně"}`}
+              trailing={
+                <button onClick={() => opravit(p)} disabled={opravujeId === p.id}
+                  className="px-3 py-2 rounded-control text-sm font-bold bg-pitch-500 text-white hover:bg-pitch-600 disabled:opacity-50">
                   Opravit
                 </button>
-              </div>
-            ))}
-          </div>
-        </div>
+              } />
+          ))}
+        </ListCard>
       )}
-      <Seznam titulek="Řeší se" incidenty={zive} prazdne="Teď je v klubu klid." />
-      {uzavrene.length > 0 && <Seznam titulek="Uzavřené za poslední měsíc" incidenty={uzavrene} />}
+      <IncidentList title="Řeší se" incidents={zive} empty="Teď je v klubu klid." />
+      {uzavrene.length > 0 && <IncidentList title="Uzavřené za poslední měsíc" incidents={uzavrene} />}
     </div>
   );
 }
 
-function Seznam({ titulek, incidenty, prazdne }: { titulek: string; incidenty: Incident[]; prazdne?: string }) {
+function IncidentList({ title, incidents, empty }: { title: string; incidents: Incident[]; empty?: string }) {
   return (
-    <div className="card p-4 sm:p-5">
-      <SectionLabel>{titulek}</SectionLabel>
-      {incidenty.length === 0
-        ? <div className="text-sm text-muted">{prazdne}</div>
-        : <div className="space-y-3">{incidenty.map((i) => <Karta key={i.id} incident={i} />)}</div>}
-    </div>
+    <ListCard title={title}>
+      {incidents.length === 0
+        ? <ListEmpty icon="🕊️">{empty}</ListEmpty>
+        : incidents.map((i) => <IncidentRow key={i.id} incident={i} />)}
+    </ListCard>
   );
 }
 
-function Karta({ incident: i }: { incident: Incident }) {
-  const vysledek = i.status === "uzavreny" && i.resolution ? VYSLEDEK_LABEL[i.resolution] : undefined;
-  const jePozitivni = i.category === "pozitivni";
-  const pilulka = stavPilulka(i);
-  const odkaz = `/incidenty?id=${encodeURIComponent(i.id)}`;
+/**
+ * Řádek incidentu. Celý řádek není odkaz: uvnitř jsou odkazy na hráče. Štítek stavu
+ * je u názvu, ne vpravo, aby popis pod ním měl na telefonu celou šířku.
+ */
+function IncidentRow({ incident: i }: { incident: Incident }) {
+  const outcome = i.status === "uzavreny" && i.resolution ? VYSLEDEK_LABEL[i.resolution] : undefined;
+  const positive = i.category === "pozitivni";
+  const pill = stavPilulka(i);
+  const href = `/incidenty?id=${encodeURIComponent(i.id)}`;
+  const playerLink = "font-heading font-bold text-ink underline decoration-pitch-500/20 hover:text-pitch-500";
   return (
-    <div className="border border-gray-100 rounded-soft p-3">
-      <div className="flex items-start gap-3">
-        <span className="text-2xl leading-none" aria-hidden>{i.emoji}</span>
-        <div className="flex-1 min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <Link href={odkaz} className="font-heading font-bold text-base hover:text-pitch-500">{i.label}</Link>
-            <span className={`text-sm font-heading font-bold px-2 py-0.5 rounded-full ${pilulka.trida}`}>{pilulka.label}</span>
-          </div>
-          <div className="text-sm text-muted">
-            {datum(i.gameDate)}
-            {i.status === "otevreny" && i.deadline && ` · uzavře se ${datum(i.deadline)}`}
-            {i.status === "hrozi" && i.deadline && ` · rozhodne se ${datum(i.deadline)}`}
-            {i.status === "probiha" && i.endsOn && ` · potrvá do ${datum(i.endsOn)}`}
-            {vysledek && ` · ${vysledek}`}
-          </div>
-          <p className="text-sm mt-2">{i.text}</p>
+    <ListRow
+      leading={<RowIcon>{i.emoji}</RowIcon>}
+      title={<>
+        <Link href={href} className="hover:text-pitch-500">{i.label}</Link>
+        <span className={`ml-2 align-middle inline-block px-2 py-0.5 rounded-full text-micro font-bold whitespace-nowrap ${pill.trida}`}>{pill.label}</span>
+      </>}
+      meta={<>
+        {datum(i.gameDate)}
+        {i.status === "otevreny" && i.deadline && ` · uzavře se ${datum(i.deadline)}`}
+        {i.status === "hrozi" && i.deadline && ` · rozhodne se ${datum(i.deadline)}`}
+        {i.status === "probiha" && i.endsOn && ` · potrvá do ${datum(i.endsOn)}`}
+        {outcome && ` · ${outcome}`}
+      </>}
+      detail={
+        <span className="block space-y-1.5 mt-1">
+          <span className="block text-ink">{i.text}</span>
           {i.ztraty.length > 0 && (
-            <ul className="mt-2 space-y-1">
+            <span className="block space-y-0.5">
               {i.ztraty.map((z, n) => (
-                <li key={n} className={`text-sm ${jePozitivni ? "text-pitch-600" : "text-card-red"}`}>{z}</li>
+                <span key={n} className={`block ${positive ? "text-pitch-600" : "text-card-red"}`}>{z}</span>
               ))}
-            </ul>
+            </span>
           )}
           {i.pachatel?.jmeno && (
-            <div className="text-sm mt-2">
+            <span className="block">
               Pachatel:{" "}
               {i.pachatel.playerId ? (
-                <Link href={`/hrac/${i.pachatel.playerId}`} className="text-base font-heading font-bold underline decoration-pitch-500/20 hover:text-pitch-500">
-                  {i.pachatel.jmeno}
-                </Link>
+                <Link href={`/hrac/${i.pachatel.playerId}`} className={playerLink}>{i.pachatel.jmeno}</Link>
               ) : (
-                <span className="text-base font-heading font-bold">{i.pachatel.jmeno}</span>
+                <span className="font-heading font-bold text-ink">{i.pachatel.jmeno}</span>
               )}
-            </div>
+            </span>
           )}
           {i.ohlasil?.jmeno && (
-            <div className="text-sm mt-2">
+            <span className="block">
               Ohlásil to:{" "}
-              <Link href={`/hrac/${i.ohlasil.playerId}`} className="text-base font-heading font-bold underline decoration-pitch-500/20 hover:text-pitch-500">
-                {i.ohlasil.jmeno}
-              </Link>
-            </div>
+              <Link href={`/hrac/${i.ohlasil.playerId}`} className={playerLink}>{i.ohlasil.jmeno}</Link>
+            </span>
           )}
           {i.dotceny?.jmeno && (
-            <div className="text-sm mt-2">
+            <span className="block">
               Týká se:{" "}
-              <Link href={`/hrac/${i.dotceny.playerId}`} className="text-base font-heading font-bold underline decoration-pitch-500/20 hover:text-pitch-500">
-                {i.dotceny.jmeno}
-              </Link>
-            </div>
+              <Link href={`/hrac/${i.dotceny.playerId}`} className={playerLink}>{i.dotceny.jmeno}</Link>
+            </span>
           )}
-          <div className="mt-3">
-            <Link href={odkaz} className="text-sm font-heading font-bold text-pitch-600 hover:text-pitch-500">
+          <span className="block pt-0.5">
+            <Link href={href} className="font-heading font-bold text-pitch-600 hover:text-pitch-500">
               {i.status === "otevreny" ? "Vyšetřovat a rozhodnout →" : i.status === "hrozi" ? "Promluvit si →" : "Otevřít →"}
             </Link>
-          </div>
-        </div>
-      </div>
-    </div>
+          </span>
+        </span>
+      } />
   );
 }

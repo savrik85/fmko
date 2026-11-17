@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, showError } from "@/lib/api";
-import { Spinner, Card, CardHeader, CardBody, JerseyPreview, BadgePreview, ShortsPreview, SocksPreview, SectionLabel, Modal, StickyActions } from "@/components/ui";
+import { Card, CardHeader, CardBody, JerseyPreview, BadgePreview, ShortsPreview, SocksPreview, SectionLabel, Modal, StickyActions, PageLoading, choiceClass } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 import { ClubScarf, SCARF_PATTERNS, type ScarfPattern } from "@/components/team/club-scarf";
 
@@ -258,9 +258,7 @@ function PatternPicker({ value, onChange, options, primary, secondary, kind }: {
             type="button"
             key={opt.key}
             onClick={() => onChange(opt.key)}
-            className={`flex flex-col items-center gap-1.5 p-2 rounded-soft border-2 transition-all ${
-              active ? "border-pitch-500 bg-pitch-50" : "border-gray-200 hover:border-gray-300 bg-white"
-            }`}
+            className={`flex flex-col items-center gap-1.5 p-2 ${choiceClass(active)}`}
           >
             {kind === "jersey" ? (
               <JerseyPreview primary={primary} secondary={secondary} pattern={opt.key} size={44} />
@@ -372,7 +370,7 @@ export default function DresPage() {
   }
 
   if (loading) {
-    return <div className="page-container flex justify-center min-h-[50vh] items-center"><Spinner /></div>;
+    return <PageLoading />;
   }
   if (!club) {
     return <div className="page-container">Klub nenalezen.</div>;
@@ -463,7 +461,7 @@ export default function DresPage() {
             onChange={(e) => setBadgeInitials(e.target.value.slice(0, 5).toUpperCase())}
             placeholder={`Auto: ${autoInitials}`}
             maxLength={5}
-            className="w-full px-3 py-2 border border-gray-200 rounded-soft text-sm font-mono uppercase focus:border-pitch-500 focus:outline-none"
+            className="input !w-full !px-3 !py-2 !text-sm !font-mono uppercase"
           />
           <div className="text-xs text-muted mt-1">Max 5 znaků. Prázdné = auto z názvu klubu.</div>
         </div>
@@ -483,9 +481,7 @@ export default function DresPage() {
                   key={opt.value || "none"}
                   onClick={() => setBadgeSymbol(opt.value)}
                   title={opt.label}
-                  className={`aspect-square flex items-center justify-center text-xl rounded-soft border-2 transition-all ${
-                    active ? "border-pitch-500 bg-pitch-50" : "border-gray-200 hover:border-gray-300 bg-white"
-                  }`}
+                  className={`aspect-square flex items-center justify-center text-xl ${choiceClass(active)}`}
                 >
                   {opt.value === "svg:crescent" ? (
                     <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden>
@@ -512,9 +508,7 @@ export default function DresPage() {
             type="button"
             key={opt.key}
             onClick={() => setScarfPattern(opt.key)}
-            className={`flex flex-col items-center gap-1.5 p-2 rounded-soft border-2 transition-all ${
-              active ? "border-pitch-500 bg-pitch-50" : "border-gray-200 hover:border-gray-300 bg-white"
-            }`}
+            className={`flex flex-col items-center gap-1.5 p-2 ${choiceClass(active)}`}
           >
             <ClubScarf
               primary={badgePrimary}

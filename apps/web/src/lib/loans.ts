@@ -1,3 +1,5 @@
+import { formatKc } from "@/lib/format";
+import type { ChipTone } from "@/components/ui";
 /**
  * Hostování přes trh: popisky podmínky hraní, délky a stavu (API: transfers/loan-agreements.ts).
  */
@@ -32,19 +34,19 @@ export function loanDurationLabel(days: number | null | undefined): string {
 
 /** Podmínky inzerátu na jeden řádek: „2 měsíce · zdarma · hraje v základu“. */
 export function loanTermsLine(l: { loanDays?: number | null; askingPrice: number; loanPlayingTime?: string | null }): string {
-  const fee = l.askingPrice > 0 ? `${l.askingPrice.toLocaleString("cs-CZ")} Kč` : "zdarma";
+  const fee = l.askingPrice > 0 ? `${formatKc(l.askingPrice)}` : "zdarma";
   const pt = (l.loanPlayingTime ?? "none") as LoanPlayingTime;
   const condition = pt === "none" ? "bez podmínky" : LOAN_PLAYING_TIME_LABEL[pt].toLowerCase();
   return [loanDurationLabel(l.loanDays), fee, condition].filter(Boolean).join(" · ");
 }
 
-/** Stav podmínky hraní: popisek a barvy štítku (béžový design, čitelný kontrast). */
-export const LOAN_STATE_STYLE: Record<LoanPlayingTimeState, { label: string; className: string }> = {
-  none: { label: "Bez podmínky", className: "bg-gray-100 text-gray-700" },
-  pending: { label: "Zatím se nehodnotí", className: "bg-gray-100 text-gray-700" },
-  ok: { label: "Plní se", className: "bg-pitch-50 text-pitch-700" },
-  at_risk: { label: "Hrozí porušení", className: "bg-amber-100 text-amber-800" },
-  breached: { label: "Porušeno", className: "bg-red-100 text-red-800" },
+/** Stav podmínky hraní: popisek a tón štítku (`StatusChip`). */
+export const LOAN_STATE_STYLE: Record<LoanPlayingTimeState, { label: string; tone: ChipTone }> = {
+  none: { label: "Bez podmínky", tone: "neutral" },
+  pending: { label: "Zatím se nehodnotí", tone: "neutral" },
+  ok: { label: "Plní se", tone: "ok" },
+  at_risk: { label: "Hrozí porušení", tone: "warn" },
+  breached: { label: "Porušeno", tone: "danger" },
 };
 
 /** Souhrn hostování z `GET /teams/:id/loans`. */

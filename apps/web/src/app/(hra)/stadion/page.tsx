@@ -5,12 +5,13 @@ import { clientOnly } from "@/components/client-only";
 import { useTeam } from "@/context/team-context";
 import { useGuideVisit } from "@/components/team/first-week-guide";
 import { apiFetch, type Team } from "@/lib/api";
-import { Spinner, SectionLabel, useConfirm, LockDetail, type LockDetailData } from "@/components/ui";
+import { Spinner, SectionLabel, useConfirm, LockDetail, type LockDetailData, ListRow, RowValue, RowIcon, PageLoading } from "@/components/ui";
 import { StadiumView } from "@/components/stadium/stadium-view";
 import { KotelPrehravac } from "@/components/stadium/KotelPrehravac";
 import { moistureLabel, moistureHint } from "@/lib/pitch-moisture";
 import { amenityDetail, withAmenityNote, type AmenityOutlook } from "@/lib/amenity-outlook";
 import { AmenityGainChip } from "@/components/equipment/amenity-gain-chip";
+import { formatKc } from "@/lib/format";
 
 /** Počasí nad areálem — popisek do hlavičky karty. */
 const WEATHER_LABEL: Record<string, string> = {
@@ -301,7 +302,6 @@ function pitchBarColor(condition: number): string {
   return "bg-card-red";
 }
 
-function formatCZK(v: number): string { return v.toLocaleString("cs") + " Kč"; }
 
 /** Text tlačítka u nabídky přístavby: stavba, vylepšení, náhrada mobilní tribunky, nebo přestavba. */
 function extActionLabel(slot: { built: unknown | null }, option: { replaces?: boolean; converts?: boolean }): string {
@@ -512,7 +512,7 @@ export default function StadiumPage() {
   const [extError, setExtError] = useState<string | null>(null);
   /** Rozbalené místo pro přístavbu (vždy jen jedno, ať je přehled čitelný). */
   const [openSlot, setOpenSlot] = useState<string | null>(null);
-  const { confirm, dialog: confirmDialog } = useConfirm();
+  const { confirm, dialog: confirmDialog } = useConfirm({ sheet: true });
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -596,8 +596,8 @@ export default function StadiumPage() {
       const ok = await confirm({
         title: `Položit povrch: ${s.label}?`,
         description: `Vybudování a úprava nového povrchu v areálu a kolem hřiště.`,
-        details: [{ label: "Cena", value: `-${formatCZK(s.cost)}`, color: "text-card-red" }],
-        confirmLabel: `Koupit a položit za ${formatCZK(s.cost)}`,
+        details: [{ label: "Cena", value: `−${formatKc(s.cost)}`, color: "text-card-red" }],
+        confirmLabel: `Koupit a položit za ${formatKc(s.cost)}`,
       });
       if (!ok) return;
     }
@@ -611,8 +611,8 @@ export default function StadiumPage() {
     if (!teamId || acting) return;
     const ok = await confirm({
       title: `Pořídit: ${label}?`,
-      details: [{ label: "Cena", value: `-${formatCZK(cost)}`, color: "text-card-red" }],
-      confirmLabel: `Koupit za ${formatCZK(cost)}`,
+      details: [{ label: "Cena", value: `−${formatKc(cost)}`, color: "text-card-red" }],
+      confirmLabel: `Koupit za ${formatKc(cost)}`,
     });
     if (!ok) return;
     setActing("visual-" + kind);
@@ -632,9 +632,9 @@ export default function StadiumPage() {
       description: withAmenityNote(effect, amenity),
       details: [
         ...(amenity ? [amenityDetail(amenity)] : []),
-        { label: "Cena", value: `-${formatCZK(cost)}`, color: "text-card-red" },
+        { label: "Cena", value: `−${formatKc(cost)}`, color: "text-card-red" },
       ],
-      confirmLabel: `Koupit za ${formatCZK(cost)}`,
+      confirmLabel: `Koupit za ${formatKc(cost)}`,
     });
     if (!ok) return;
     setActing(facility);
@@ -651,7 +651,7 @@ export default function StadiumPage() {
     const ok = await confirm({
       title: `Vrátit stavbu: ${build.label}?`,
       description: `Tribuna se vrátí na úroveň ${build.fromLevel ?? 0} a celá zaplacená částka se připíše zpátky do pokladny. Jde to jen do ${formatDateTime(build.undo?.until ?? build.builtAt)}.`,
-      details: [{ label: "Vrátí se", value: `+${formatCZK(build.cost)}`, color: "text-pitch-600" }],
+      details: [{ label: "Vrátí se", value: `+${formatKc(build.cost)}`, color: "text-pitch-600" }],
       confirmLabel: "Vrátit stavbu",
       variant: "danger",
     });
@@ -709,7 +709,7 @@ export default function StadiumPage() {
           value: `průměr ${attendance.average}, nejvíc ${attendance.max}`,
           color: attendance.max < stadium.capacity ? "text-gold-600" : undefined,
         }] : []),
-        { label: "Cena", value: `-${formatCZK(option.cost)}`, color: "text-card-red" },
+        { label: "Cena", value: `−${formatKc(option.cost)}`, color: "text-card-red" },
       ],
       confirmLabel: extActionLabel(slot, option),
     });
@@ -763,7 +763,7 @@ export default function StadiumPage() {
             <div className="text-sm">
               <span className="font-heading font-bold tabular-nums">{o.capacityGain >= 0 ? "+" : ""}{o.capacityGain} míst</span>{" "}
               <span className="text-muted">·</span>{" "}
-              <span className="font-heading font-bold tabular-nums">{formatCZK(o.cost)}</span>
+              <span className="font-heading font-bold tabular-nums">{formatKc(o.cost)}</span>
             </div>
             {stadium && (() => {
               // Kapacita po stavbě vedle toho, kolik lidí doma opravdu chodí.
@@ -802,7 +802,7 @@ export default function StadiumPage() {
     </div>
   );
 
-  if (loading) return <div className="page-container flex items-center justify-center min-h-[50vh]"><Spinner /></div>;
+  if (loading) return <PageLoading />;
   if (!stadium || !team) return <div className="page-container">Stadion nenalezen.</div>;
 
   return (
@@ -908,7 +908,7 @@ export default function StadiumPage() {
                   {" → "}
                   <span className="font-heading font-bold tabular-nums">{stadium.capacity + extPreview.option.capacityGain}</span>
                   {" "}({extPreview.option.capacityGain >= 0 ? "+" : ""}{extPreview.option.capacityGain} míst), cena{" "}
-                  <span className="font-heading font-bold tabular-nums">{formatCZK(extPreview.option.cost)}</span>.
+                  <span className="font-heading font-bold tabular-nums">{formatKc(extPreview.option.cost)}</span>.
                   Ve scéně je přístavba průhledná.
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -1146,7 +1146,7 @@ export default function StadiumPage() {
                           <span className="text-sm font-heading font-bold text-pitch-600">Zaplaceno</span>
                         ) : (
                           <span className={`text-sm font-heading font-bold tabular-nums ${sur.cost === 0 ? "text-pitch-600" : dostupne ? "text-ink" : "text-card-red"}`}>
-                            {sur.cost === 0 ? "Zdarma" : formatCZK(sur.cost)}
+                            {sur.cost === 0 ? "Zdarma" : formatKc(sur.cost)}
                           </span>
                         )}
                       />
@@ -1182,7 +1182,7 @@ export default function StadiumPage() {
                     key={v.kind}
                     ikona={v.ikona}
                     nazev={<>{v.nazev} <span className="text-muted font-normal">L{v.uroven}/3</span></>}
-                    popis={u ? `${v.stav} · ${u.label} za ${formatCZK(u.cost)}` : v.stav}
+                    popis={u ? `${v.stav} · ${u.label} za ${formatKc(u.cost)}` : v.stav}
                     akce={u && (
                       <button
                         onClick={() => handleVisualUpgrade(v.kind, u.label, u.cost)}
@@ -1237,25 +1237,27 @@ export default function StadiumPage() {
           </div>
 
           {stadium.pitchActions.length > 0 && (
-            <div className="space-y-2 mb-3">
+            <div className="-mx-4 sm:-mx-5 mb-3">
               {stadium.pitchActions.map((a) => {
                 const canAfford = team.budget >= a.cost;
+                // Čísla se vejdou do řádku podrobností, popis práce jde pod ně celý.
                 return (
-                  <Radek
+                  <ListRow
                     key={a.level}
-                    ikona="🌿"
-                    nazev={a.label}
-                    popis={`${a.desc} · +${a.improvement} % stav · ${formatCZK(a.cost)}`}
-                    akce={<button
+                    leading={<RowIcon>🌿</RowIcon>}
+                    title={a.label}
+                    meta={`+${a.improvement} % stav · ${formatKc(a.cost)}`}
+                    detail={a.desc}
+                    trailing={<button
                       onClick={async () => {
                         const ok = await confirm({
                           title: a.label,
                           description: a.desc,
                           details: [
                             { label: "Zlepšení", value: `+${a.improvement}%`, color: "text-pitch-500" },
-                            { label: "Cena", value: `-${formatCZK(a.cost)}`, color: "text-card-red" },
+                            { label: "Cena", value: `−${formatKc(a.cost)}`, color: "text-card-red" },
                           ],
-                          confirmLabel: `Provést za ${formatCZK(a.cost)}`,
+                          confirmLabel: `Provést za ${formatKc(a.cost)}`,
                         });
                         if (!ok || !teamId) return;
                         setActing("pitch-" + a.level);
@@ -1297,9 +1299,9 @@ export default function StadiumPage() {
                       <div className="flex flex-wrap items-baseline justify-between gap-x-3">
                         <span>🔥 Vyhřívání (mráz a sníh)</span>
                         <span className="font-heading font-bold tabular-nums">
-                          {formatCZK(stadium.pitchCare.heatingCost)} <span className="text-muted font-normal">za zápas</span>
+                          {formatKc(stadium.pitchCare.heatingCost)} <span className="text-muted font-normal">za zápas</span>
                           {stadium.pitchCare.heatingDailyCost != null && (
-                            <> · {formatCZK(stadium.pitchCare.heatingDailyCost)} <span className="text-muted font-normal">za den</span></>
+                            <> · {formatKc(stadium.pitchCare.heatingDailyCost)} <span className="text-muted font-normal">za den</span></>
                           )}
                         </span>
                       </div>
@@ -1308,9 +1310,9 @@ export default function StadiumPage() {
                       <div className="flex flex-wrap items-baseline justify-between gap-x-3">
                         <span>💧 Zavlažování (výheň)</span>
                         <span className="font-heading font-bold tabular-nums">
-                          {formatCZK(stadium.pitchCare.irrigationCost)} <span className="text-muted font-normal">za zápas</span>
+                          {formatKc(stadium.pitchCare.irrigationCost)} <span className="text-muted font-normal">za zápas</span>
                           {stadium.pitchCare.irrigationDailyCost != null && (
-                            <> · {formatCZK(stadium.pitchCare.irrigationDailyCost)} <span className="text-muted font-normal">za den</span></>
+                            <> · {formatKc(stadium.pitchCare.irrigationDailyCost)} <span className="text-muted font-normal">za den</span></>
                           )}
                         </span>
                       </div>
@@ -1380,7 +1382,7 @@ export default function StadiumPage() {
               <Radek
                 ikona="❄️"
                 nazev="Úklid sněhu"
-                popis={`Parta s lopatami na jeden zápas. Zabere i bez vyhřívání, ale rozbředlý podklad neřeší. ${formatCZK(stadium.pitchCare.snowClearingCost)}, platí se až u zápasu.`}
+                popis={`Parta s lopatami na jeden zápas. Zabere i bez vyhřívání, ale rozbředlý podklad neřeší. ${formatKc(stadium.pitchCare.snowClearingCost)}, platí se až u zápasu.`}
                 akce={<button
                   onClick={async () => {
                     setActing("snow");
@@ -1408,39 +1410,42 @@ export default function StadiumPage() {
           {stadium.pitchUpgrades.length > 0 && (
             <div className="pt-3 border-t border-gray-100">
               <Podnadpis>Upgrade povrchu</Podnadpis>
-              {stadium.pitchUpgrades.map((u) => {
-                const canAfford = team.budget >= u.cost;
-                return (
-                  <Radek
-                    key={u.pitchType}
-                    ikona={u.pitchType === "hybrid" ? "🌾" : "🟩"}
-                    nazev={u.label}
-                    popis={`${u.desc} · ${formatCZK(u.cost)}`}
-                    akce={<button
-                      onClick={async () => {
-                        const ok = await confirm({
-                          title: `Upgrade na ${u.label}?`,
-                          description: u.desc,
-                          details: [{ label: "Cena", value: `-${formatCZK(u.cost)}`, color: "text-card-red" }],
-                          confirmLabel: `Upgradovat za ${formatCZK(u.cost)}`,
-                        });
-                        if (!ok || !teamId) return;
-                        setActing("pitch-up-" + u.pitchType);
-                        await apiFetch(`/api/teams/${teamId}/stadium/upgrade-pitch`, {
-                          method: "POST", headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ pitchType: u.pitchType }),
-                        }).catch((e) => console.error("upgrade pitch failed:", e));
-                        await refresh();
-                        setActing(null);
-                      }}
-                      disabled={!canAfford || !!acting}
-                      className="btn btn-primary btn-sm"
-                    >
-                      {acting === "pitch-up-" + u.pitchType ? "…" : "Upgradovat"}
-                    </button>}
-                  />
-                );
-              })}
+              <div className="-mx-4 sm:-mx-5">
+                {stadium.pitchUpgrades.map((u) => {
+                  const canAfford = team.budget >= u.cost;
+                  return (
+                    <ListRow
+                      key={u.pitchType}
+                      leading={<RowIcon>{u.pitchType === "hybrid" ? "🌾" : "🟩"}</RowIcon>}
+                      title={u.label}
+                      meta={formatKc(u.cost)}
+                      detail={u.desc}
+                      trailing={<button
+                        onClick={async () => {
+                          const ok = await confirm({
+                            title: `Upgrade na ${u.label}?`,
+                            description: u.desc,
+                            details: [{ label: "Cena", value: `−${formatKc(u.cost)}`, color: "text-card-red" }],
+                            confirmLabel: `Upgradovat za ${formatKc(u.cost)}`,
+                          });
+                          if (!ok || !teamId) return;
+                          setActing("pitch-up-" + u.pitchType);
+                          await apiFetch(`/api/teams/${teamId}/stadium/upgrade-pitch`, {
+                            method: "POST", headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ pitchType: u.pitchType }),
+                          }).catch((e) => console.error("upgrade pitch failed:", e));
+                          await refresh();
+                          setActing(null);
+                        }}
+                        disabled={!canAfford || !!acting}
+                        className="btn btn-primary btn-sm"
+                      >
+                        {acting === "pitch-up-" + u.pitchType ? "…" : "Upgradovat"}
+                      </button>}
+                    />
+                  );
+                })}
+              </div>
             </div>
           )}
         </Sekce>
@@ -1511,7 +1516,7 @@ export default function StadiumPage() {
                             <div className="text-sm">
                               <span className="font-heading font-bold">Úroveň {upgrade.nextLevel}</span>{" "}
                               <span className="text-muted">·</span>{" "}
-                              <span className="font-heading font-bold tabular-nums">{formatCZK(upgrade.cost)}</span>
+                              <span className="font-heading font-bold tabular-nums">{formatKc(upgrade.cost)}</span>
                             </div>
                             <div className="text-sm text-pitch-600 leading-snug">{upgrade.effect}</div>
                             <button
@@ -1543,7 +1548,7 @@ export default function StadiumPage() {
                                 <button
                                   onClick={() => handleRevertBuild(lastBuild)}
                                   disabled={!!acting}
-                                  className="min-h-11 w-full sm:w-auto px-4 py-2 rounded-soft text-sm font-heading font-bold border-2 border-red-200 text-red-700 bg-white hover:bg-red-50 disabled:opacity-50"
+                                  className="btn btn-danger btn-md min-h-11 w-full sm:w-auto"
                                 >
                                   Vrátit stavbu
                                 </button>
@@ -1551,7 +1556,7 @@ export default function StadiumPage() {
                                 <div className="text-sm text-muted leading-snug">Teď vrátit nejde: {lastBuild.undo.blockedReason}</div>
                               )}
                               {lastBuild.undo.available && (
-                                <div className="text-sm text-muted">Do pokladny se vrátí {formatCZK(lastBuild.cost)}.</div>
+                                <div className="text-sm text-muted">Do pokladny se vrátí {formatKc(lastBuild.cost)}.</div>
                               )}
                             </div>
                           );
@@ -1627,7 +1632,7 @@ export default function StadiumPage() {
               {key === "vip_box" && level > 0 && stadium.vipBox && (
                 <div className="text-sm text-muted leading-snug mb-2">
                   Teď: o {stadium.vipBox.seatsLost} míst méně pro platící diváky, provoz{" "}
-                  <span className="tabular-nums">{formatCZK(stadium.vipBox.matchCost)}</span> za domácí zápas.
+                  <span className="tabular-nums">{formatKc(stadium.vipBox.matchCost)}</span> za domácí zápas.
                   Šance, že pozvaný majitel pozvání přijme, +{stadium.vipBox.sponsorAcceptancePct} procentních bodů;
                   po zápase přidá +{stadium.vipBox.sponsorFavorBonus} náklonnosti, každý zastupitel v lóži +{stadium.vipBox.villageFavorBonus} přízně.
                 </div>
@@ -1640,7 +1645,7 @@ export default function StadiumPage() {
                     <div className="text-sm">
                       <span className="font-heading font-bold">Úroveň {upgrade.nextLevel}</span>{" "}
                       <span className="text-muted">·</span>{" "}
-                      <span className="font-heading font-bold tabular-nums">{formatCZK(upgrade.cost)}</span>
+                      <span className="font-heading font-bold tabular-nums">{formatKc(upgrade.cost)}</span>
                     </div>
                     <div className="text-sm text-pitch-600 leading-snug">{upgrade.effect}</div>
                     {upgrade.amenity && <AmenityGainChip amenity={upgrade.amenity} />}
@@ -1678,22 +1683,14 @@ export default function StadiumPage() {
           <span className="text-xl shrink-0" aria-hidden>{historyOpen ? "▾" : "▸"}</span>
         </button>
         {historyOpen && builds.length > 0 && (
-          <ul className="divide-y divide-gray-100">
+          <div className="-mx-4 border-y border-line">
             {builds.map((b) => (
-              <li key={b.id} className="py-2 flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className={`font-heading font-bold text-sm ${b.revertedAt ? "line-through text-muted" : "text-ink"}`}>
-                    {b.label}{b.toLevel != null ? `, úroveň ${b.toLevel}` : ""}
-                  </div>
-                  <div className="text-sm text-muted">
-                    {formatDateTime(b.builtAt)}
-                    {b.revertedAt ? ` · vráceno ${formatDateTime(b.revertedAt)}` : ""}
-                  </div>
-                </div>
-                <div className="shrink-0 font-heading font-bold text-sm tabular-nums text-ink">{formatCZK(b.cost)}</div>
-              </li>
+              <ListRow key={b.id}
+                title={<span className={b.revertedAt ? "line-through text-muted" : ""}>{b.label}{b.toLevel != null ? `, úroveň ${b.toLevel}` : ""}</span>}
+                meta={`${formatDateTime(b.builtAt)}${b.revertedAt ? ` · vráceno ${formatDateTime(b.revertedAt)}` : ""}`}
+                trailing={<RowValue>{formatKc(b.cost)}</RowValue>} />
             ))}
-          </ul>
+          </div>
         )}
         {historyOpen && (
           <p className="text-sm text-muted leading-snug">

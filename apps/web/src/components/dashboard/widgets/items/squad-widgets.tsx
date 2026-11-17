@@ -43,7 +43,7 @@ export function SquadStatusWidget({ data }: WidgetProps) {
       <div className="grid grid-cols-3 gap-2">
         <MiniTile value={String(players.length)} label="Hráčů" color={safeTeamColor(data.team.data)} />
         <MiniTile value={`${avgCondition} %`} label="Kondice" className={conditionLabel(avgCondition).color} />
-        <MiniTile value={String(avgRating)} label="Rating" />
+        <MiniTile value={String(avgRating)} label="Hodnocení" />
       </div>
       <div className="space-y-1">
         <StatRow label="Prům. morálka" value={String(avgMorale)} />
@@ -244,7 +244,7 @@ export function SquadValueWidget({ data, height }: WidgetProps) {
           href: `/hrac/${p.id}`,
         }))}
       />
-      <div className="text-micro text-muted text-center">Odhad podle ratingu a věku, ne nabídková cena.</div>
+      <div className="text-micro text-muted text-center">Odhad podle hodnocení a věku, ne nabídková cena.</div>
     </div>
   );
 }

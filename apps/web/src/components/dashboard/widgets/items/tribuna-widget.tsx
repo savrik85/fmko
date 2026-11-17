@@ -10,12 +10,16 @@
 
 import Link from "next/link";
 import { FaceAvatar } from "@/components/players/face-avatar";
+import { ListRow, type RowTone } from "@/components/ui";
 import type { WidgetProps } from "../types";
 
-const TON_PRUH: Record<string, string> = {
-  pozitivni: "border-l-pitch-500",
-  negativni: "border-l-card-red",
-  neutralni: "border-l-gray-200",
+/**
+ * Tón příspěvku jako proužek vlevo: zelený u pochvaly, červený u nadávky, neutrální bez proužku.
+ * Klíče jsou hodnoty `tone` z API. „new“ je tu jen zelená barva proužku, ne „nepřečtené“.
+ */
+const POST_TONE: Record<string, RowTone | undefined> = {
+  pozitivni: "new",
+  negativni: "danger",
 };
 
 function pred(iso: string): string {
@@ -50,26 +54,22 @@ export function TribunaWidget({ data }: WidgetProps) {
         </span>
       </div>
 
-      <div className="space-y-2">
+      <div className="-mx-4 sm:-mx-5">
         {posts.slice(0, 5).map((p) => (
-          <article key={p.id} className={`flex gap-2.5 pl-2 border-l-4 ${TON_PRUH[p.tone] ?? "border-l-gray-200"}`}>
-            {p.avatar ? (
-              <div className="w-8 h-8 rounded-full overflow-hidden bg-gray-100 shrink-0 flex items-center justify-center">
-                <FaceAvatar faceConfig={p.avatar} size={27} />
-              </div>
-            ) : (
-              <div className="w-8 h-8 rounded-full bg-gray-200 text-ink-light flex items-center justify-center text-xs font-heading font-bold shrink-0">
-                {p.author.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase() || "?"}
-              </div>
-            )}
-            <div className="min-w-0 flex-1">
-              <div className="flex items-baseline gap-1.5 flex-wrap">
-                <span className="font-heading font-bold text-sm text-ink truncate">{p.author}</span>
-                <span className="text-xs text-muted shrink-0">· {pred(p.createdAt)}</span>
-              </div>
-              <p className="text-sm text-ink-light leading-snug break-words">{p.body}</p>
-            </div>
-          </article>
+          <ListRow key={p.id} dense tone={POST_TONE[p.tone]}
+            leading={
+              p.avatar ? (
+                <span className="w-6 h-6 rounded-full overflow-hidden bg-surface-3 flex items-center justify-center">
+                  <FaceAvatar faceConfig={p.avatar} size={20} />
+                </span>
+              ) : (
+                <span className="w-6 h-6 rounded-full bg-surface-3 text-ink-light flex items-center justify-center text-micro font-heading font-bold">
+                  {p.author.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase() || "?"}
+                </span>
+              )
+            }
+            title={<>{p.author} <span className="text-meta font-normal text-muted">· {pred(p.createdAt)}</span></>}
+            detail={<span className="break-words">{p.body}</span>} />
         ))}
       </div>
 

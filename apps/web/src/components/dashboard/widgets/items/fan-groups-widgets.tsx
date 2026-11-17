@@ -10,7 +10,9 @@
  */
 
 import Link from "next/link";
-import type { WidgetProps } from "../types";
+import { ListRow, RowGroup, ProgressBar, type ProgressTone } from "@/components/ui";
+import type { FanGroupsData, WidgetProps } from "../types";
+import { formatKc } from "@/lib/format";
 
 const KIND_IKONA: Record<string, string> = {
   kotel: "🔥", stamgasti: "🍺", rodiny: "👨‍👩‍👧", pametnici: "🎩", parta_z_okoli: "🚌",
@@ -19,13 +21,12 @@ const KIND_IKONA: Record<string, string> = {
 /** Pruh 0–100. Barva podle toho, jestli je vyšší číslo dobře, nebo špatně. */
 function Pruh({ value, dobre }: { value: number; dobre: boolean }) {
   const v = Math.max(0, Math.min(100, value));
-  const barva = dobre
-    ? (v >= 60 ? "bg-pitch-500" : v >= 35 ? "bg-amber-500" : "bg-card-red")
-    : (v >= 60 ? "bg-card-red" : v >= 35 ? "bg-amber-500" : "bg-pitch-500");
+  const tone: ProgressTone = dobre
+    ? (v >= 60 ? "ok" : v >= 35 ? "warn" : "danger")
+    : (v >= 60 ? "danger" : v >= 35 ? "warn" : "ok");
+  // Span místo div: pruh stojí i uvnitř řádku seznamu (ListRow), kde je obsah ve <span>.
   return (
-    <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
-      <div className={`h-full rounded-full ${barva}`} style={{ width: `${v}%` }} />
-    </div>
+    <ProgressBar value={v} tone={tone} size="sm" label="Hodnota" />
   );
 }
 
@@ -51,30 +52,32 @@ export function FanGroupsMoodWidget({ data }: WidgetProps) {
   return (
     <div>
       <Nadradek vpravo={<span className="text-xs text-muted">{lidi} lidí</span>} />
-      <div className="space-y-3">
+      <div className="-mx-4 sm:-mx-5">
         {d.groups.map((g) => (
-          <div key={g.id}>
-            <div className="flex items-baseline justify-between gap-2">
-              <span className="text-sm font-heading font-bold text-ink truncate">
-                {KIND_IKONA[g.kind] ?? "👥"} {g.name}
-              </span>
-              <span className="text-xs text-muted shrink-0">
+          <ListRow key={g.id} dense
+            leading={<span className="text-base leading-none" aria-hidden="true">{KIND_IKONA[g.kind] ?? "👥"}</span>}
+            title={g.name}
+            trailing={
+              <span className="text-meta text-muted">
                 {g.sectorClosed ? "🔒 zavřeno" : `${g.size} lidí`}
               </span>
-            </div>
-            <div className="flex items-center gap-2 mt-1">
-              <span className="text-xs text-muted w-14 shrink-0">nálada</span>
-              <div className="flex-1"><Pruh value={g.mood} dobre /></div>
-              <span className="text-xs text-ink-light w-24 text-right truncate">{g.moodWord}</span>
-            </div>
-            {g.heat > 0 && (
-              <div className="flex items-center gap-2 mt-1">
-                <span className="text-xs text-muted w-14 shrink-0">zloba</span>
-                <div className="flex-1"><Pruh value={g.heat} dobre={false} /></div>
-                <span className="text-xs text-ink-light w-24 text-right truncate">{g.heatWord}</span>
-              </div>
-            )}
-          </div>
+            }
+            detail={
+              <>
+                <span className="flex items-center gap-2">
+                  <span className="text-muted w-14 shrink-0">nálada</span>
+                  <span className="flex-1"><Pruh value={g.mood} dobre /></span>
+                  <span className="w-24 text-right truncate">{g.moodWord}</span>
+                </span>
+                {g.heat > 0 && (
+                  <span className="flex items-center gap-2 mt-1">
+                    <span className="text-muted w-14 shrink-0">zloba</span>
+                    <span className="flex-1"><Pruh value={g.heat} dobre={false} /></span>
+                    <span className="w-24 text-right truncate">{g.heatWord}</span>
+                  </span>
+                )}
+              </>
+            } />
         ))}
       </div>
       <Link href="/fanousci" className="block mt-3 text-xs text-pitch-600 font-semibold hover:underline text-center">
@@ -95,14 +98,16 @@ export function FanCoreWidget({ data }: WidgetProps) {
   return (
     <div>
       <Nadradek vpravo={<span className="text-xs text-muted">{celkem} lidí</span>} />
-      <div className="space-y-2">
+      <div className="-mx-4 sm:-mx-5">
         {sJadrem.map((g) => (
-          <div key={g.id} className="flex items-baseline justify-between gap-2">
-            <span className="text-sm text-ink truncate">{KIND_IKONA[g.kind] ?? "👥"} {g.name}</span>
-            <span className="text-sm font-heading font-bold tabular-nums shrink-0">
-              {g.core} <span className="text-xs font-normal text-muted">z {g.size}</span>
-            </span>
-          </div>
+          <ListRow key={g.id} dense
+            leading={<span className="text-base leading-none" aria-hidden="true">{KIND_IKONA[g.kind] ?? "👥"}</span>}
+            title={g.name}
+            trailing={
+              <span className="text-body font-bold text-ink tabular-nums">
+                {g.core} <span className="text-meta font-normal text-muted">z {g.size}</span>
+              </span>
+            } />
         ))}
       </div>
       <p className="text-xs text-muted mt-3 leading-snug">
@@ -119,19 +124,16 @@ export function FanRivalsWidget({ data }: WidgetProps) {
   if (!d || d.rivals.length === 0) return <Prazdno text="S nikým si to zatím nerozdali." />;
   return (
     <div>
-      <div className="space-y-2.5">
+      <div className="-mx-4 sm:-mx-5">
         {d.rivals.map((r) => (
-          <div key={r.teamId}>
-            <div className="flex items-baseline justify-between gap-2">
-              <Link href={`/tym/${r.teamId}`} className="text-sm font-heading font-bold text-ink hover:underline truncate">
-                {r.name}
-              </Link>
-              <span className="text-xs text-muted shrink-0">
+          <ListRow key={r.teamId} dense href={`/tym/${r.teamId}`}
+            title={r.name}
+            trailing={
+              <span className="text-meta text-muted">
                 {r.word}{r.fights > 0 ? ` · ${r.fights}× rvačka` : ""}
               </span>
-            </div>
-            <div className="mt-1"><Pruh value={r.heat} dobre={false} /></div>
-          </div>
+            }
+            detail={<span className="block mt-0.5"><Pruh value={r.heat} dobre={false} /></span>} />
         ))}
       </div>
     </div>
@@ -147,38 +149,27 @@ export function FanFavouritesWidget({ data }: WidgetProps) {
   const milacci = d.favourites.filter((f) => f.stance === "oblibenec");
   const otloukanci = d.favourites.filter((f) => f.stance === "otloukanek");
 
+  // Jméno je jediný odkaz v řádku, takže odkazem je celý řádek; důvod je věta v `detail`.
+  const renderRow = (f: FanGroupsData["favourites"][number]) => (
+    <ListRow key={`${f.groupKind}-${f.playerId}`} dense href={`/hrac/${f.playerId}`}
+      title={<>{f.playerName}<span className="text-meta font-normal text-muted"> · {f.groupName}</span></>}
+      detail={f.duvod} />
+  );
+
   return (
-    <div>
-      <div className="space-y-3">
-        {milacci.length > 0 && (
-          <div>
-      <div className="text-xs font-semibold text-pitch-600 mb-1">❤️ Berou je za svoje</div>
-            {milacci.map((f) => (
-              <div key={`${f.groupKind}-${f.playerId}`} className="py-1">
-                <Link href={`/hrac/${f.playerId}`} className="text-sm font-heading font-bold text-ink hover:underline">
-                  {f.playerName}
-                </Link>
-                <span className="text-xs text-muted"> · {f.groupName}</span>
-                <p className="text-xs text-ink-light leading-snug">{f.duvod}</p>
-              </div>
-            ))}
-          </div>
-        )}
-        {otloukanci.length > 0 && (
-          <div>
-      <div className="text-xs font-semibold text-card-red mb-1">😤 Nemůžou ho vystát</div>
-            {otloukanci.map((f) => (
-              <div key={`${f.groupKind}-${f.playerId}`} className="py-1">
-                <Link href={`/hrac/${f.playerId}`} className="text-sm font-heading font-bold text-ink hover:underline">
-                  {f.playerName}
-                </Link>
-                <span className="text-xs text-muted"> · {f.groupName}</span>
-                <p className="text-xs text-ink-light leading-snug">{f.duvod}</p>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+    <div className="-mx-4 sm:-mx-5">
+      {milacci.length > 0 && (
+        <>
+          <RowGroup label={<span className="text-pitch-600">❤️ Berou je za svoje</span>} />
+          {milacci.map(renderRow)}
+        </>
+      )}
+      {otloukanci.length > 0 && (
+        <>
+          <RowGroup label={<span className="text-card-red">😤 Nemůžou ho vystát</span>} />
+          {otloukanci.map(renderRow)}
+        </>
+      )}
     </div>
   );
 }
@@ -190,29 +181,29 @@ export function FanCampaignsWidget({ data }: WidgetProps) {
     return <Prazdno text="Nikdo po nikom nechce hlavu. Zatím." />;
   }
   return (
-    <div>
-      <div className="space-y-3">
-        {d.campaigns.map((k) => {
-          const pct = Math.min(100, Math.round((k.podpisy / Math.max(1, k.prah)) * 100));
-          const splneno = k.status === "splnena";
-          return (
-            <div key={k.id}>
-              <div className="flex items-baseline justify-between gap-2">
-                <span className="text-sm font-heading font-bold text-ink truncate">
-                  {k.kind === "trener_ven" ? "📣 " : "🚫 "}{k.target} ven
+    <div className="-mx-4 sm:-mx-5">
+      {d.campaigns.map((k) => {
+        const pct = Math.min(100, Math.round((k.podpisy / Math.max(1, k.prah)) * 100));
+        const splneno = k.status === "splnena";
+        return (
+          <ListRow key={k.id} dense
+            leading={<span className="text-base leading-none" aria-hidden="true">{k.kind === "trener_ven" ? "📣" : "🚫"}</span>}
+            title={`${k.target} ven`}
+            trailing={
+              <span className={`text-meta tabular-nums ${splneno ? "text-card-red font-semibold" : "text-muted"}`}>
+                {k.podpisy} / {k.prah}
+              </span>
+            }
+            detail={
+              <>
+                <span className="block mt-0.5"><Pruh value={pct} dobre={false} /></span>
+                <span className="block mt-1">
+                  {splneno ? "Podpisovka je hotová a předaná." : k.duvod}
                 </span>
-                <span className={`text-xs shrink-0 ${splneno ? "text-card-red font-semibold" : "text-muted"}`}>
-                  {k.podpisy} / {k.prah}
-                </span>
-              </div>
-              <div className="mt-1"><Pruh value={pct} dobre={false} /></div>
-              <p className="text-xs text-ink-light leading-snug mt-1">
-                {splneno ? "Podpisovka je hotová a předaná." : k.duvod}
-              </p>
-            </div>
-          );
-        })}
-      </div>
+              </>
+            } />
+        );
+      })}
     </div>
   );
 }
@@ -237,24 +228,24 @@ export function FanTroubleWidget({ data }: WidgetProps) {
         <div>
           <div className="text-xs text-muted">Pokuty</div>
           <div className="font-heading font-bold text-lg tabular-nums text-card-red">
-            {pokuty.toLocaleString("cs-CZ")} Kč
+            {formatKc(pokuty)}
           </div>
         </div>
         <div>
           <div className="text-xs text-muted">Čeká na opravu</div>
           <div className={`font-heading font-bold text-lg tabular-nums ${opravy > 0 ? "text-card-red" : "text-ink"}`}>
-            {opravy.toLocaleString("cs-CZ")} Kč
+            {formatKc(opravy)}
           </div>
         </div>
       </div>
 
       {d.damage.length > 0 && (
-        <div className="space-y-1 mb-3">
+        <div className="-mx-4 sm:-mx-5 mb-3">
           {d.damage.map((x) => (
-            <div key={x.id} className="flex items-baseline justify-between gap-2 text-sm">
-              <span className="text-ink truncate">🔧 {x.label}</span>
-              <span className="text-muted tabular-nums shrink-0">{x.cost.toLocaleString("cs-CZ")} Kč</span>
-            </div>
+            <ListRow key={x.id} dense
+              leading={<span className="text-base leading-none" aria-hidden="true">🔧</span>}
+              title={x.label}
+              trailing={<span className="text-meta text-muted tabular-nums">{formatKc(x.cost)}</span>} />
           ))}
         </div>
       )}

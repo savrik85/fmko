@@ -9,8 +9,8 @@ import { useTeam } from "@/context/team-context";
 import { useOpenPlayerConversation } from "@/hooks/use-open-player-conversation";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { PotentialProgress } from "@/components/players/potential-progress";
-import { usePotencial, PotentialBox, PotentialBadge } from "@/components/players/potential-summary";
-import { PositionBadge, SectionLabel, Spinner, BadgePreview, JerseyPreview, useConfirm } from "@/components/ui";
+import { usePotencial, PotentialStars, PotentialBadge } from "@/components/players/potential-summary";
+import { PositionBadge, SectionLabel, BadgePreview, JerseyPreview, useConfirm, DataTable, EntityCell, ScoreChip, RatingPill, ListCard, ListRow, RowIcon, ShowMore, type MatchOutcome, SectionLoading, PageLoading, StatusChip, ProgressBar, Sheet, ChoiceGroup } from "@/components/ui";
 import { SquadNumberEditor } from "./SquadNumberEditor";
 import { PlayerCompare } from "./PlayerCompare";
 import { generateCharacteristics, type PlayerTag } from "@/lib/characteristics";
@@ -28,7 +28,9 @@ import { attrBg, attrValue, withBody, bodyNote, formatKg, formatKgChange, WEIGHT
 
 import type { BadgePattern } from "@/components/ui";
 import { HeroBackdrop } from "@/components/ui/hero-backdrop";
-import { isLightColor } from "@/lib/team-color";
+import { isLightColor, readableOnLight } from "@/lib/team-color";
+import { HERO_ACTIONS_ROW, HERO_BUTTON, HeroNavButton, HeroStat, HeroStats, heroTone } from "@/components/ui/hero-kit";
+import { formatKc } from "@/lib/format";
 
 // Stejný strop hlídá API (apps/api/src/transfers/swap-players.ts).
 const MAX_SWAP_PLAYERS = 2;
@@ -172,7 +174,7 @@ export default function PlayerDetailPage() {
   const [scoutLoading, setScoutLoading] = useState(false);
   const [scoutSent, setScoutSent] = useState(false);
   const { open: openConversation, openingPlayerId: openingConversationFor } = useOpenPlayerConversation(teamId);
-  const { confirm, dialog: confirmDialog } = useConfirm();
+  const { confirm, dialog: confirmDialog } = useConfirm({ sheet: true });
   const [coachLog, setCoachLog] = useState<CoachRelationLogItem[]>([]);
   const [profileExtras, setProfileExtras] = useState<{
     personality: Record<string, number>;
@@ -477,19 +479,22 @@ export default function PlayerDetailPage() {
     setOfferSending(false);
   }
 
-  if (loading) return <div className="min-h-dvh flex items-center justify-center"><Spinner size="lg" /></div>;
+  if (loading) return <PageLoading />;
   if (!player || !team) return <div className="page-container">Hráč nenalezen.</div>;
 
-  const cond = conditionLabel(player.lifeContext?.condition ?? 50);
+  const condition = player.lifeContext?.condition ?? 50;
   const displayTeam = isOwnPlayer ? team : (playerTeam ?? team);
   const color = displayTeam.primary_color || "#2D5F2D";
   const light = isLightColor(color);
   const txt = light ? "text-gray-900" : "text-white";
   const txtMuted = light ? "text-gray-500" : "text-white/60";
-  const txtSoft = light ? "text-gray-400" : "text-white/40";
   const boxBg = light ? "bg-black/5" : "bg-white/10";
-  const boxBgHover = light ? "hover:bg-black/10" : "hover:bg-white/20";
-  const boxLabel = light ? "text-gray-400" : "text-white/50";
+  const tone = heroTone(color);
+  // Hodnocení stojí na plné destičce; na ní se píše barvou klubu.
+  const plateText = tone.light ? "#FFFFFF" : readableOnLight(color);
+  // Plná kondice barvu nepotřebuje, upozorňuje až únava.
+  const conditionFill = condition >= 80 ? tone.fill : condition >= 50 ? "bg-gold-400" : condition >= 20 ? "bg-orange-400" : "bg-red-500";
+  const hasFace = !!player.avatar && typeof player.avatar === "object" && Object.keys(player.avatar).length > 2;
 
   // Injury info (rendered as inline pill on both layouts)
   const injuryInfo = (player as unknown as { injury?: { daysRemaining: number; type?: string } | null }).injury ?? null;
@@ -521,142 +526,104 @@ export default function PlayerDetailPage() {
     </span>
   ) : null;
 
+  const metaLine = (
+    <>
+      <PositionBadge position={player.position} />
+      <span className={`${tone.muted} text-sm`}>{player.age} let</span>
+      {player.lifeContext?.occupation && (
+        <>
+          <span className={tone.soft}>&middot;</span>
+          <span className={`${tone.muted} text-sm`}>{player.lifeContext.occupation}</span>
+        </>
+      )}
+      <span className={tone.soft}>&middot;</span>
+      <a href={`/tym/${displayTeam.id}`} className={`${tone.muted} text-sm hover:opacity-80 underline decoration-current/30 transition-colors flex items-center gap-1.5`}>
+        <BadgePreview primary={color} secondary={displayTeam.secondary_color || "#FFF"} pattern={(displayTeam.badge_pattern as BadgePattern) || "shield"}
+          initials={displayTeam.name.split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={18} />
+        {displayTeam.name}
+      </a>
+      {player.loan_from_team_id && (
+        <StatusChip tone="warn">Na hostování</StatusChip>
+      )}
+      {injuryPill}
+      {absencePill}
+      {unrestPill}
+    </>
+  );
+
   return (
     <>
       {/* ═══ Player header ═══ */}
-      <div className="hero-gradient hero-detail px-3 sm:px-8 py-4 sm:py-5" style={{ backgroundColor: color }}>
+      <div className="hero-gradient hero-detail px-3 sm:px-8 py-3 sm:py-5" style={{ backgroundColor: color }}>
         <HeroBackdrop primary={color} secondary={displayTeam.secondary_color} pattern={displayTeam.badge_pattern ?? null} />
         <div className="max-w-[1280px] mx-auto">
-          {/* ─── Desktop: jednořádkový layout ─── */}
-          <div className="hidden sm:flex items-center gap-4">
+          {/* Jedno rozložení pro mobil i desktop: na mobilu se ukazatele zalomí
+              pod jméno přes celou šířku, na desktopu stojí vpravo. */}
+          <div className="flex flex-wrap items-center gap-x-3 sm:gap-x-4 gap-y-2 sm:gap-y-3">
             {allPlayers.length > 1 && (
-              <button onClick={() => prevPlayer && router.push(`/hrac/${prevPlayer.id}`)}
-                className={`w-10 h-10 rounded-xl ${boxBg} ${boxBgHover} flex items-center justify-center ${txt} shrink-0 transition-colors`}>&#9664;</button>
+              <HeroNavButton tone={tone} direction="prev" label="Předchozí hráč" className="hidden sm:flex"
+                onClick={() => prevPlayer && router.push(`/hrac/${prevPlayer.id}`)} />
             )}
-            {player.avatar && typeof player.avatar === "object" && Object.keys(player.avatar).length > 2 ? (
-              <FaceAvatar faceConfig={player.avatar} size={72} className={`shrink-0 ${boxBg} rounded-xl`} />
-            ) : (
-              <div className={`shrink-0 w-[72px] h-[72px] rounded-xl ${boxBg} flex items-center justify-center ${txt} font-heading font-bold text-2xl`}>
-                {player.first_name[0]}
-              </div>
-            )}
-            <div className="flex-1 min-w-0">
-              <h1 className={`font-heading font-extrabold ${txt} text-2xl leading-tight`}>
-                {player.first_name} {player.last_name}
-              </h1>
-              {player.nickname && (
-                <div className={`${txtMuted} text-sm`}>&bdquo;{player.nickname}&ldquo;</div>
-              )}
-              <div className="flex items-center gap-3 mt-1 flex-wrap">
-                <PositionBadge position={player.position} />
-                <span className={`${txtMuted} text-sm`}>{player.age} let</span>
-                <span className={txtSoft}>&middot;</span>
-                <span className={`${txtMuted} text-sm`}>{player.lifeContext?.occupation ?? ""}</span>
-                {player.loan_from_team_id && (
-                  <>
-                    <span className={txtSoft}>&middot;</span>
-                    <span className="bg-yellow-400/20 text-yellow-700 text-xs font-heading font-bold px-2 py-0.5 rounded-full">Na hostování</span>
-                  </>
-                )}
-                <span className={txtSoft}>&middot;</span>
-                <a href={`/tym/${displayTeam.id}`} className={`${txtMuted} text-sm hover:opacity-80 underline transition-colors flex items-center gap-1.5`}>
-                  <BadgePreview primary={color} secondary={displayTeam.secondary_color || "#FFF"} pattern={(displayTeam.badge_pattern as BadgePattern) || "shield"}
-                    initials={displayTeam.name.split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={18} />
-                  {displayTeam.name}
-                </a>
-                {injuryPill}
-                {absencePill}
-                {unrestPill}
-              </div>
-            </div>
-            <div className="flex items-center gap-2.5 shrink-0">
-              <div className={`${boxBg} rounded-xl py-2.5 text-center min-w-[64px]`}>
-                <div className={`font-heading font-extrabold text-lg tabular-nums leading-none ${cond.color}`}>
-                  {player.lifeContext?.condition ?? 50}%
-                </div>
-                <div className={`${boxLabel} text-micro font-heading font-bold uppercase mt-0.5`}>Kondice</div>
-              </div>
-              <div className={`${boxBg} rounded-xl py-2.5 text-center min-w-[64px]`}>
-                <div className="text-xl leading-none">{getMoraleEmoji(player.lifeContext?.morale ?? 50)}</div>
-                <div className={`${boxLabel} text-micro font-heading font-bold uppercase mt-0.5`}>Morálka</div>
-              </div>
-              <div className={`${boxBg} rounded-xl py-2.5 text-center min-w-[64px]`}>
-                <div className={`font-heading font-extrabold text-xl tabular-nums leading-none ${txt}`}>
-                  {player.overall_rating}
-                </div>
-                <div className={`${boxLabel} text-micro font-heading font-bold uppercase mt-0.5`}>Rating</div>
-              </div>
-              <PotentialBox data={potencial} boxBg={boxBg} boxLabel={boxLabel} klic="hl-desktop" />
-            </div>
-            {allPlayers.length > 1 && (
-              <button onClick={() => nextPlayer && router.push(`/hrac/${nextPlayer.id}`)}
-                className={`w-10 h-10 rounded-xl ${boxBg} ${boxBgHover} flex items-center justify-center ${txt} shrink-0 transition-colors`}>&#9654;</button>
-            )}
-          </div>
-
-          {/* ─── Mobil: kompaktní layout ─── */}
-          <div className="sm:hidden">
-            {/* Řádek 1: avatar + jméno/info + šipky */}
-            <div className="flex items-center gap-3">
-              {player.avatar && typeof player.avatar === "object" && Object.keys(player.avatar).length > 2 ? (
-                <FaceAvatar faceConfig={player.avatar} size={56} className={`shrink-0 ${boxBg} rounded-xl`} />
+            <div className="shrink-0">
+              {hasFace ? (
+                <>
+                  <FaceAvatar faceConfig={player.avatar} size={46} className={`sm:hidden ${tone.panel} rounded-xl`} />
+                  <FaceAvatar faceConfig={player.avatar} size={80} className={`hidden sm:block ${tone.panel} rounded-xl`} />
+                </>
               ) : (
-                <div className={`shrink-0 w-14 h-14 rounded-xl ${boxBg} flex items-center justify-center ${txt} font-heading font-bold text-xl`}>
+                <div className={`w-[46px] h-14 sm:w-20 sm:h-24 rounded-xl ${tone.panel} flex items-center justify-center ${tone.text} font-heading font-bold text-xl sm:text-3xl`}>
                   {player.first_name[0]}
                 </div>
               )}
-              <div className="flex-1 min-w-0">
-                <h1 className={`font-heading font-extrabold ${txt} text-xl leading-tight`}>
-                  {player.first_name} {player.last_name}
-                </h1>
-                {player.nickname && (
-                  <div className={`${txtMuted} text-sm`}>&bdquo;{player.nickname}&ldquo;</div>
-                )}
-              </div>
-              {allPlayers.length > 1 && (
-                <div className="flex gap-1.5 shrink-0">
-                  <button onClick={() => prevPlayer && router.push(`/hrac/${prevPlayer.id}`)}
-                    className={`w-8 h-8 rounded-soft ${boxBg} ${boxBgHover} flex items-center justify-center ${txt} transition-colors text-sm`}>&#9664;</button>
-                  <button onClick={() => nextPlayer && router.push(`/hrac/${nextPlayer.id}`)}
-                    className={`w-8 h-8 rounded-soft ${boxBg} ${boxBgHover} flex items-center justify-center ${txt} transition-colors text-sm`}>&#9654;</button>
-                </div>
+            </div>
+            <div className="flex-1 min-w-0">
+              <h1 className={`font-heading font-extrabold ${tone.text} text-lg sm:text-3xl leading-tight`}>
+                {player.first_name} {player.last_name}
+              </h1>
+              {player.nickname && (
+                <div className={`${tone.muted} text-sm`}>&bdquo;{player.nickname}&ldquo;</div>
               )}
+              <div className="hidden sm:flex items-center gap-x-3 gap-y-1 mt-1.5 flex-wrap">{metaLine}</div>
             </div>
-            {/* Řádek 2: pozice, věk, povolání, tým, injury pill */}
-            <div className="flex items-center gap-2 mt-2 flex-wrap">
-              <PositionBadge position={player.position} />
-              <span className={`${txtMuted} text-sm`}>{player.age} let</span>
-              <span className={txtSoft}>&middot;</span>
-              <span className={`${txtMuted} text-sm`}>{player.lifeContext?.occupation ?? ""}</span>
-              <span className={txtSoft}>&middot;</span>
-              <a href={`/tym/${displayTeam.id}`} className={`${txtMuted} text-sm hover:opacity-80 flex items-center gap-1.5`}>
-                <BadgePreview primary={color} secondary={displayTeam.secondary_color || "#FFF"} pattern={(displayTeam.badge_pattern as BadgePattern) || "shield"}
-                  initials={displayTeam.name.split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={16} />
-                {displayTeam.name}
-              </a>
-              {injuryPill}
-              {absencePill}
-              {unrestPill}
-            </div>
-            {/* Řádek 3: staty přes celou šířku. Nízké boxy — na mobilu se za ně vejde
-                víc obsahu, aniž by manažer musel scrollovat. */}
-            <div className="flex gap-1.5 mt-2">
-              <div className={`flex-1 ${boxBg} rounded-soft py-1 text-center`}>
-                <div className={`font-heading font-extrabold text-sm tabular-nums leading-none ${cond.color}`}>
-                  {player.lifeContext?.condition ?? 50}%
-                </div>
-                <div className={`${boxLabel} text-micro font-heading font-bold uppercase mt-0.5`}>Kondice</div>
+            {allPlayers.length > 1 && (
+              <div className="flex sm:hidden gap-1.5 shrink-0">
+                <HeroNavButton tone={tone} direction="prev" label="Předchozí hráč" className="flex"
+                  onClick={() => prevPlayer && router.push(`/hrac/${prevPlayer.id}`)} />
+                <HeroNavButton tone={tone} direction="next" label="Další hráč" className="flex"
+                  onClick={() => nextPlayer && router.push(`/hrac/${nextPlayer.id}`)} />
               </div>
-              <div className={`flex-1 ${boxBg} rounded-soft py-1 text-center`}>
-                <div className="text-sm leading-none">{getMoraleEmoji(player.lifeContext?.morale ?? 50)}</div>
-                <div className={`${boxLabel} text-micro font-heading font-bold uppercase mt-0.5`}>Morálka</div>
-              </div>
-              <div className={`flex-1 ${boxBg} rounded-soft py-1 text-center`}>
-                <div className={`font-heading font-extrabold text-sm tabular-nums leading-none ${txt}`}>{player.overall_rating}</div>
-                <div className={`${boxLabel} text-micro font-heading font-bold uppercase mt-0.5`}>Rating</div>
-              </div>
-              <PotentialBox data={potencial} boxBg={`flex-1 ${boxBg}`} boxLabel={boxLabel} klic="hl-mobil" kompaktni />
-            </div>
+            )}
+            <div className="sm:hidden w-full flex items-center gap-x-2 gap-y-1 flex-wrap">{metaLine}</div>
+
+            <HeroStats tone={tone}>
+              <HeroStat tone={tone} label="Hodnocení">
+                <span className={`min-w-[38px] sm:min-w-[54px] h-7 sm:h-11 px-1.5 sm:px-2 rounded-control flex items-center justify-center font-heading font-extrabold text-lg sm:text-3xl tabular-nums leading-none ${tone.plate}`}
+                  style={{ color: plateText }}>
+                  {player.overall_rating}
+                </span>
+              </HeroStat>
+              {potencial?.nadejnost && (
+                <HeroStat tone={tone} label="Potenciál">
+                  <PotentialStars data={potencial} klic="hero" />
+                </HeroStat>
+              )}
+              <HeroStat tone={tone} label="Kondice" title={conditionLabel(condition).text}>
+                <span className="font-heading font-extrabold text-base sm:text-2xl tabular-nums leading-none">
+                  {condition}<span className="text-xs sm:text-sm">%</span>
+                </span>
+                <span className={`block w-12 h-1 rounded-full overflow-hidden ${tone.track}`}>
+                  <span className={`block h-full rounded-full ${conditionFill}`} style={{ width: `${Math.max(4, Math.min(100, condition))}%` }} />
+                </span>
+              </HeroStat>
+              <HeroStat tone={tone} label="Morálka">
+                <span className="text-xl sm:text-2xl leading-none">{getMoraleEmoji(player.lifeContext?.morale ?? 50)}</span>
+              </HeroStat>
+            </HeroStats>
+
+            {allPlayers.length > 1 && (
+              <HeroNavButton tone={tone} direction="next" label="Další hráč" className="hidden sm:flex"
+                onClick={() => nextPlayer && router.push(`/hrac/${nextPlayer.id}`)} />
+            )}
           </div>
 
           {/* ─── Hostování — kdo hráče vlastní a kdy se vrací ───
@@ -676,7 +643,7 @@ export default function PlayerDetailPage() {
                   : "Vrací se v nejbližším zpracování dne"}
                 {player.loan.until ? ` · ${new Date(player.loan.until).toLocaleDateString("cs")}` : ""}
                 {player.loan.fee > 0
-                  ? ` · hostování za ${player.loan.fee.toLocaleString("cs")} Kč`
+                  ? ` · hostování za ${formatKc(player.loan.fee)}`
                   : " · hostování zdarma"}
               </div>
             </div>
@@ -684,22 +651,16 @@ export default function PlayerDetailPage() {
 
           {/* ─── Action row — same styling mobile + desktop ─── */}
           {(() => {
-            const btnBase = `flex-1 sm:flex-initial min-w-[120px] rounded-xl px-4 py-2 text-sm font-heading font-bold transition-colors flex items-center justify-center gap-1.5`;
-            const btnNeutral = light
-              ? "bg-black/10 hover:bg-black/20 text-gray-900"
-              : "bg-white/10 hover:bg-white/20 text-white";
-            const btnNeutralActive = light ? "bg-black/25 text-gray-900" : "bg-white/25 text-white";
-            const btnWatched = light
-              ? "bg-gold-500/40 text-gray-900 ring-1 ring-gold-600/50"
-              : "bg-gold-400/30 text-white ring-1 ring-gold-300/50";
-            const btnDanger = light
-              ? "bg-red-500/20 hover:bg-red-500/30 text-red-700"
-              : "bg-red-500/20 hover:bg-red-500/30 text-white";
+            const btnBase = `${HERO_BUTTON} flex-1 sm:flex-initial`;
+            const btnNeutral = tone.button;
+            const btnNeutralActive = tone.buttonActive;
+            const btnWatched = tone.buttonAccent;
+            const btnDanger = tone.buttonDanger;
             const btnListing = light
               ? "bg-gold-500/30 text-gray-900"
               : "bg-gold-500/20 text-white";
             return (
-              <div className="mt-3 flex flex-wrap gap-2">
+              <div className={`${HERO_ACTIONS_ROW} ${tone.rule}`}>
                 {/* Nabídka / Odkoupit */}
                 {canSendOffer && !offerSent && (offerState?.activeOfferId ? (
                   <Link href={`/prestupy/nabidka/${offerState.activeOfferId}`} className={`${btnBase} ${btnNeutral}`}>
@@ -769,7 +730,7 @@ export default function PlayerDetailPage() {
                     // Krátký popisek a bez roztahování přes celou šířku: s plnou
                     // šířkou by se řada tlačítek na mobilu zalomila o řádek navíc
                     // a hlavička hráče by zabrala půl displeje.
-                    className={`shrink-0 sm:flex-initial min-w-0 sm:min-w-[120px] rounded-xl px-3 sm:px-4 py-2 text-sm font-heading font-bold transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50 ${btnNeutral}`}>
+                    className={`${HERO_BUTTON} shrink-0 ${btnNeutral}`}>
                     💬 SMS
                   </button>
                 )}
@@ -780,7 +741,7 @@ export default function PlayerDetailPage() {
                       <span>{myListing.dealType === "loan" ? "🤝" : "🏷️"}</span>
                       <span>{myListing.dealType === "loan"
                         ? `Na hostování · ${loanTermsLine(myListing)}`
-                        : `Na trhu za ${myListing.askingPrice.toLocaleString("cs")} Kč`}</span>
+                        : `Na trhu za ${formatKc(myListing.askingPrice)}`}</span>
                     </div>
                     <button onClick={withdrawFromMarket} disabled={actionLoading}
                       className={`${btnBase} min-w-[140px] disabled:opacity-50 ${btnNeutral}`}>
@@ -801,8 +762,12 @@ export default function PlayerDetailPage() {
                 ))}
                 {isOwnPlayer && !isLoanedToUs && (
                   <button onClick={releasePlayer} disabled={actionLoading}
-                    className={`${btnBase} disabled:opacity-50 ${btnDanger}`}>
-                    🗑️ Propustit
+                    // Vpravo a stranou: nevratná akce nemá stát v řadě s ostatními.
+                    aria-label="Propustit hráče" title="Propustit hráče"
+                    // Na mobilu jen ikona: se čtvrtým popiskem by se řada zalomila
+                    // a hlavička by zabrala přes třetinu displeje.
+                    className={`${HERO_BUTTON} flex-none sm:ml-auto ${btnDanger}`}>
+                    🗑️ <span className="hidden sm:inline">Propustit</span>
                   </button>
                 )}
               </div>
@@ -981,7 +946,9 @@ export default function PlayerDetailPage() {
     <div className="page-container space-y-5">
 
       {/* ═══ Tab navigation ═══ */}
-      <div className="flex gap-1 border-b border-gray-200 -mt-1 overflow-x-auto">
+      {/* Na mobilu se záložky dělí o šířku rovným dílem: dřív se pátá schovala
+          za okraj a nic nenaznačovalo, že se řada dá posunout. */}
+      <div className="flex sm:gap-1 border-b border-gray-200 -mt-1">
         {([
           { id: "prehled", label: "Přehled" },
           { id: "statistiky", label: "Statistiky" },
@@ -992,11 +959,12 @@ export default function PlayerDetailPage() {
           <button
             key={t.id}
             onClick={() => switchTab(t.id)}
-            className={`px-4 py-2.5 text-sm font-heading font-bold transition-colors border-b-2 -mb-px shrink-0 ${
-              activeTab === t.id
-                ? "text-pitch-600 border-pitch-500"
-                : "text-muted border-transparent hover:text-ink hover:border-gray-300"
+            aria-current={activeTab === t.id ? "page" : undefined}
+            className={`flex-1 sm:flex-initial min-w-0 px-1 sm:px-4 py-2.5 text-[13px] sm:text-sm font-heading font-bold transition-colors border-b-[3px] -mb-px ${
+              activeTab === t.id ? "" : "text-muted border-transparent hover:text-ink hover:border-gray-300"
             }`}
+            // Aktivní záložka v barvě klubu, stejně jako lišta a hlavička nad ní.
+            style={activeTab === t.id ? { color: readableOnLight(color), borderColor: readableOnLight(color) } : undefined}
           >
             {t.label}
           </button>
@@ -1108,15 +1076,15 @@ export default function PlayerDetailPage() {
             <DetailRow label="Bydliště" value={player.residence ?? "-"} />
             <DetailRow label="Dojíždění" value={player.commute_km != null ? `${player.commute_km} km` : "-"} />
             {isOwnPlayer && player.weekly_wage != null && (
-              <DetailRow label="Mzda" value={`${player.weekly_wage.toLocaleString("cs")} Kč/týd`} />
+              <DetailRow label="Mzda" value={`${formatKc(player.weekly_wage)}/týd`} />
             )}
             {/* U každého hráče: stejný vzorec jako nabídky a inzeráty cizích klubů. U cizího jen
                 odhad zaokrouhlený na tisíce, stejně jako vidíš jeho dovednosti jen přibližně. */}
             {(() => {
               const value = marketValue(player.overall_rating ?? 0, player.age ?? 27, player.position);
               const shown = isOwnPlayer
-                ? `${value.toLocaleString("cs")} Kč`
-                : `cca ${marketValueEstimate(value).toLocaleString("cs")} Kč`;
+                ? `${formatKc(value)}`
+                : `cca ${formatKc(marketValueEstimate(value))}`;
               return <DetailRow label="Tržní cena" value={shown} />;
             })()}
             <DetailRow label="Výška" value={player.physical?.height ? `${player.physical.height} cm` : "-"} />
@@ -1229,64 +1197,37 @@ export default function PlayerDetailPage() {
 
       {/* ═══ Historie klubů ═══ */}
       {contracts.length > 0 && (
-        <div className="card p-4 sm:p-5">
-          <SectionLabel>Historie klubů</SectionLabel>
-          <div className="space-y-0">
-            {contracts.map((c) => (
-              <div key={c.id} className="py-3 border-b border-gray-50 last:border-b-0">
-                <a href={`/tym/${c.teamId}`} className="flex items-center gap-2.5 group">
-                  <BadgePreview primary={c.teamColor} secondary={c.teamSecondary}
-                    pattern={(c.teamBadge as BadgePattern) || "shield"}
-                    initials={(c.teamName ?? "").split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={32} />
-                  <div className="min-w-0 flex-1">
-                    <div className="font-heading font-bold text-sm group-hover:underline truncate">{c.teamName}</div>
-                    <div className="text-micro text-muted">
-                      {/* Datum příchodu i odchodu: kdy přesně ke změně klubu došlo. */}
-                      {c.isActive ? (
-                        <span>
-                          Sezóna {c.seasonNumber}{c.joinedAt ? ` · přišel ${formatLeaveDate(c.joinedAt)}` : ""}
-                          {" "}&middot; <span className="text-pitch-500 font-bold">Aktivní</span>
-                        </span>
-                      ) : (
-                        <span>
-                          Sezóna {c.seasonNumber}
-                          {c.joinedAt ? ` · přišel ${formatLeaveDate(c.joinedAt)}` : ""}
-                          {c.leftAt ? ` · odešel ${formatLeaveDate(c.leftAt)}` : ""}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <div className="shrink-0">
-                    <span className={`text-micro px-2 py-0.5 rounded-full font-heading font-bold ${
-                      c.joinType === "generated" ? "bg-gray-100 text-muted"
-                      : c.joinType === "transfer" ? "bg-blue-50 text-blue-600"
-                      : c.joinType === "free_agent" ? "bg-green-50 text-green-600"
-                      : c.joinType === "youth" ? "bg-purple-50 text-purple-600"
-                      : c.joinType === "swap" || c.swapPartner ? "bg-gold-50 text-gold-600"
-                      : c.joinType === "loan" ? "bg-yellow-50 text-yellow-700"
-                      : c.joinType === "pub" || c.joinType === "friend" || c.joinType === "recommendation" ? "bg-amber-50 text-amber-700"
-                      : "bg-gray-100 text-muted"
-                    }`}>{c.joinLabel}</span>
-                  </div>
-                </a>
-                {c.swapPartner ? (
-                  /* U výměny není `fee` cena hráče, ale doplatek — a druhý hráč
-                     obchodu musí být vidět, jinak to vypadá jako prodej za pár korun. */
-                  <div className="text-micro text-muted mt-1 ml-[42px]">
-                    Výměna za: {c.swapPartner}
-                    {c.fee > 0 ? ` · doplatek ${c.fee.toLocaleString("cs")} Kč` : ""}
-                  </div>
-                ) : c.fee > 0 ? (
-                  <div className="text-sm text-muted mt-1 ml-[42px]">
-                    Přestupní částka: {c.fee.toLocaleString("cs")} Kč
-                    {c.installments ? ` · na splátky (${c.installments}× týdně)` : ""}
-                    {c.sellOnPct ? ` · ${c.sellOnPct} % z dalšího prodeje pro předchozí klub` : ""}
-                  </div>
-                ) : null}
-              </div>
-            ))}
-          </div>
-        </div>
+        <ListCard title="Historie klubů" count={contracts.length}>
+          {contracts.map((c) => {
+            const chip = c.joinType === "generated" ? "bg-gray-100 text-muted"
+              : c.joinType === "transfer" ? "bg-blue-50 text-blue-600"
+              : c.joinType === "free_agent" ? "bg-green-50 text-green-600"
+              : c.joinType === "youth" ? "bg-purple-50 text-purple-600"
+              : c.joinType === "swap" || c.swapPartner ? "bg-gold-50 text-gold-600"
+              : c.joinType === "loan" ? "bg-yellow-50 text-yellow-700"
+              : c.joinType === "pub" || c.joinType === "friend" || c.joinType === "recommendation" ? "bg-amber-50 text-amber-700"
+              : "bg-gray-100 text-muted";
+            return (
+              <ListRow key={c.id} href={`/tym/${c.teamId}`} chevron={false}
+                tone={c.isActive ? "new" : undefined}
+                leading={<BadgePreview primary={c.teamColor} secondary={c.teamSecondary}
+                  pattern={(c.teamBadge as BadgePattern) || "shield"}
+                  initials={(c.teamName ?? "").split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={32} />}
+                title={c.teamName}
+                // Datum příchodu i odchodu: kdy přesně ke změně klubu došlo.
+                meta={[`Sezóna ${c.seasonNumber}`, c.joinedAt ? `přišel ${formatLeaveDate(c.joinedAt)}` : null,
+                  c.isActive ? "aktivní" : c.leftAt ? `odešel ${formatLeaveDate(c.leftAt)}` : null].filter(Boolean).join(" · ")}
+                /* U výměny není `fee` cena hráče, ale doplatek: druhý hráč obchodu musí být vidět,
+                   jinak to vypadá jako prodej za pár korun. */
+                detail={c.swapPartner
+                  ? `Výměna za: ${c.swapPartner}${c.fee > 0 ? ` · doplatek ${formatKc(c.fee)}` : ""}`
+                  : c.fee > 0
+                    ? `Přestupní částka: ${formatKc(c.fee)}${c.installments ? ` · na splátky (${c.installments}× týdně)` : ""}${c.sellOnPct ? ` · ${c.sellOnPct} % z dalšího prodeje pro předchozí klub` : ""}`
+                    : undefined}
+                trailing={<span className={`text-micro px-2 py-0.5 rounded-full font-bold whitespace-nowrap ${chip}`}>{c.joinLabel}</span>} />
+            );
+          })}
+        </ListCard>
       )}
 
       </>}
@@ -1302,7 +1243,6 @@ export default function PlayerDetailPage() {
       {isOwnPlayer && (() => {
         const rel = player.coach_relationship ?? 50;
         const band = coachRelationBand(rel);
-        const tone = band.tone === "good" ? "bg-pitch-500" : band.tone === "neutral" ? "bg-amber-400" : "bg-red-500";
         const labelColor = band.tone === "good" ? "text-pitch-700" : band.tone === "neutral" ? "text-amber-700" : "text-red-700";
         return (
           <div className="card p-4 sm:p-5 mb-5">
@@ -1310,19 +1250,19 @@ export default function PlayerDetailPage() {
             <div className="mt-2 mb-1.5">
               <span className={`text-base font-heading font-bold ${labelColor}`}>{band.icon} {band.label}</span>
             </div>
-            <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-              <div className={`h-full ${tone} transition-all`} style={{ width: `${rel}%` }} />
-            </div>
+            <ProgressBar value={rel} tone={band.tone === "good" ? "ok" : band.tone === "neutral" ? "warn" : "danger"} label={band.label} />
             {coachLog.length > 0 ? (
               <div className="mt-3">
                 <div className="text-sm font-heading font-bold text-muted mb-1">Proč</div>
-                {coachLog.slice(0, 5).map((l, i) => (
-                  <div key={i} className="flex items-start gap-2 py-1.5 border-b border-gray-50 last:border-b-0 text-sm">
-                    <RelationTrend delta={l.delta} />
-                    <span className="flex-1 text-ink-light">{l.description}</span>
-                    <span className="shrink-0 text-muted tabular-nums">{formatLogDate(l.date)}</span>
-                  </div>
-                ))}
+                {/* Řádky až k okrajům karty (ta má p-4 sm:p-5). */}
+                <div className="-mx-4 sm:-mx-5">
+                  {coachLog.slice(0, 5).map((l, i) => (
+                    <ListRow key={i} dense
+                      leading={<RelationTrend delta={l.delta} />}
+                      detail={l.description}
+                      trailing={<span className="text-meta text-muted tabular-nums">{formatLogDate(l.date)}</span>} />
+                  ))}
+                </div>
               </div>
             ) : (
               <p className="text-sm text-muted mt-2 leading-snug">
@@ -1337,35 +1277,25 @@ export default function PlayerDetailPage() {
       {(((isOwnPlayer && profileExtras && profileExtras.relationships.length > 0))) && (
         <div className="grid grid-cols-1 gap-5">
           {isOwnPlayer && profileExtras && profileExtras.relationships.length > 0 ? (
-            <div className="card p-4 sm:p-5">
-              <SectionLabel>Vztahy v kádru</SectionLabel>
-              <div className="space-y-1.5">
-                {(showAllRelationships ? profileExtras.relationships : profileExtras.relationships.slice(0, 3)).map((rel) => {
-                  const EMOJI: Record<string, string> = {
-                    brothers: "👨‍👦", father_son: "👴", in_laws: "🤝", classmates: "🎓",
-                    coworkers: "💼", neighbors: "🏠", drinking_buddies: "🍻", rivals: "⚔️", mentor_pupil: "📚",
-                  };
-                  return (
-                    <div key={rel.relatedPlayerId} className="py-1.5 border-b border-gray-50 last:border-b-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm shrink-0">{EMOJI[rel.type] ?? "👥"}</span>
-                        <Link href={`/hrac/${rel.relatedPlayerId}`} className="text-sm font-heading font-bold hover:text-pitch-500 underline decoration-pitch-500/20">
-                          {rel.relatedPlayerName}
-                        </Link>
-                        <PositionBadge position={rel.relatedPlayerPosition as "GK" | "DEF" | "MID" | "FWD"} />
-                        <span className="text-micro text-muted font-heading">· {rel.typeLabel}</span>
-                      </div>
-                      {rel.effect && <div className="text-micro text-muted italic ml-6 mt-0.5">{rel.effect}</div>}
-                    </div>
-                  );
-                })}
-                {!showAllRelationships && profileExtras.relationships.length > 3 && (
-                  <button onClick={() => setShowAllRelationships(true)} className="text-xs text-pitch-500 font-heading font-bold hover:underline pt-1">
-                    Zobrazit všechny ({profileExtras.relationships.length}) →
-                  </button>
-                )}
-              </div>
-            </div>
+            <ListCard title="Vztahy v kádru" count={profileExtras.relationships.length}>
+              {(showAllRelationships ? profileExtras.relationships : profileExtras.relationships.slice(0, 3)).map((rel) => {
+                const EMOJI: Record<string, string> = {
+                  brothers: "👨‍👦", father_son: "👴", in_laws: "🤝", classmates: "🎓",
+                  coworkers: "💼", neighbors: "🏠", drinking_buddies: "🍻", rivals: "⚔️", mentor_pupil: "📚",
+                };
+                return (
+                  <ListRow key={rel.relatedPlayerId} href={`/hrac/${rel.relatedPlayerId}`}
+                    leading={<RowIcon>{EMOJI[rel.type] ?? "👥"}</RowIcon>}
+                    title={<>{rel.relatedPlayerName}<span className="ml-2 align-middle"><PositionBadge position={rel.relatedPlayerPosition as "GK" | "DEF" | "MID" | "FWD"} /></span></>}
+                    meta={rel.typeLabel}
+                    detail={rel.effect || undefined} />
+                );
+              })}
+              {!showAllRelationships && profileExtras.relationships.length > 3 && (
+                <ShowMore shown={3} total={profileExtras.relationships.length} step={profileExtras.relationships.length}
+                  onMore={() => setShowAllRelationships(true)} />
+              )}
+            </ListCard>
           ) : null}
         </div>
       )}
@@ -1430,7 +1360,7 @@ export default function PlayerDetailPage() {
               })}
             </div>
             <div className="text-xs text-muted mt-3">
-              Průměrný rating posledních {recent.length} zápasů: <span className="font-heading font-bold text-ink">{recentAvg.toFixed(1)}</span>
+              Průměrné hodnocení posledních {recent.length} zápasů: <span className="font-heading font-bold text-ink">{recentAvg.toFixed(1)}</span>
             </div>
           </div>
         );
@@ -1454,7 +1384,7 @@ export default function PlayerDetailPage() {
         return (
           <div className="card p-4 sm:p-5">
             <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-              <SectionLabel>Trend ratingu · {series.length} zápasů</SectionLabel>
+              <SectionLabel>Trend hodnocení · {series.length} zápasů</SectionLabel>
               <div className="text-xs font-heading text-muted">
                 Průměr: <span className="font-bold text-ink">{avg.toFixed(2)}</span>
               </div>
@@ -1493,7 +1423,7 @@ export default function PlayerDetailPage() {
         const items = [
           { label: "Góly", icon: "⚽", rank: leagueRanks.goals },
           { label: "Asistence", icon: "👟", rank: leagueRanks.assists },
-          { label: "Průměr ratingu", icon: "⭐", rank: leagueRanks.rating, isRating: true },
+          { label: "Průměr hodnocení", icon: "⭐", rank: leagueRanks.rating, isRating: true },
         ].filter((i) => i.rank != null && i.rank.value > 0);
         if (items.length === 0) return null;
         return (
@@ -1645,44 +1575,34 @@ export default function PlayerDetailPage() {
 
             {/* Per-season table with team */}
             {careerStats.seasons.length > 0 && (
-              <div className="overflow-x-auto -mx-4 sm:-mx-5 table-scroll">
-                <table className="w-full text-sm min-w-[600px]">
-                  <thead>
-                    <tr className="text-left text-label border-b border-gray-200 text-micro uppercase tracking-wide">
-                      <th className="pb-2 pl-4 sm:pl-5 pr-2">Sezóna</th>
-                      <th className="pb-2 pr-2">Klub</th>
-                      <th className="pb-2 pr-2">Liga</th>
-                      <th className="pb-2 pr-2 text-center">Z</th>
-                      <th className="pb-2 pr-2 text-center">G</th>
-                      <th className="pb-2 pr-2 text-center">A</th>
-                      <th className="pb-2 pr-2 text-center">ŽK</th>
-                      <th className="pb-2 pr-2 text-center">ČK</th>
-                      <th className="pb-2 pr-4 sm:pr-5 text-center">Hod.</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {careerStats.seasons.map((s) => (
-                      <tr key={`${s.season}-${s.teamId}`} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
-                        <td className="py-2 pl-4 sm:pl-5 pr-2 font-heading font-bold tabular-nums">{s.season}</td>
-                        <td className="py-2 pr-2">
-                          <a href={`/tym/${s.teamId}`} className="flex items-center gap-1.5 hover:underline">
-                            <BadgePreview primary={s.teamColor} secondary={s.teamSecondary}
-                              pattern={(s.teamBadge as BadgePattern) || "shield"}
-                              initials={(s.teamName ?? "").split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={18} />
-                            <span className="font-heading font-bold text-ink truncate max-w-[140px]">{s.teamName}</span>
-                          </a>
-                        </td>
-                        <td className="py-2 pr-2 text-xs text-muted truncate max-w-[120px]">{s.leagueName ?? "-"}</td>
-                        <td className="py-2 pr-2 text-center tabular-nums">{s.appearances}</td>
-                        <td className="py-2 pr-2 text-center tabular-nums font-heading font-bold">{(s.goals as number) > 0 ? s.goals : "-"}</td>
-                        <td className="py-2 pr-2 text-center tabular-nums">{(s.assists as number) > 0 ? s.assists : "-"}</td>
-                        <td className="py-2 pr-2 text-center tabular-nums text-gold-500">{(s.yellowCards as number) > 0 ? s.yellowCards : ""}</td>
-                        <td className="py-2 pr-2 text-center tabular-nums text-card-red">{(s.redCards as number) > 0 ? s.redCards : ""}</td>
-                        <td className="py-2 pr-4 sm:pr-5 text-center tabular-nums font-heading font-bold">{typeof s.avgRating === "number" ? s.avgRating.toFixed(1) : "-"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="-mx-4 sm:-mx-5 -mb-4 sm:-mb-5 border-t border-line">
+                <DataTable
+                  rows={careerStats.seasons} rowKey={(c) => `${c.season}-${c.teamId}`}
+                  rowHref={(c) => `/tym/${c.teamId}`}
+                  empty="Zatím žádná odehraná sezóna."
+                  columns={[
+                    { key: "season", header: "Sez.", title: "Sezóna", width: "w-12", align: "left",
+                      cell: (c) => <span className="font-bold text-ink">{c.season}</span> },
+                    { key: "team", header: "Klub", align: "left",
+                      cell: (c) => (
+                        <EntityCell
+                          leading={<BadgePreview primary={c.teamColor} secondary={c.teamSecondary}
+                            pattern={(c.teamBadge as BadgePattern) || "shield"}
+                            initials={(c.teamName ?? "").split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={20} />}
+                          name={c.teamName}
+                          meta={[`${c.appearances} zápasů`, (c.assists as number) > 0 ? `${c.assists} asistencí` : null].filter(Boolean).join(" · ")} metaMobileOnly />
+                      ) },
+                    { key: "league", header: "Liga", align: "left", priority: 3, cell: (c) => c.leagueName ?? "-" },
+                    { key: "apps", header: "Z", title: "Zápasy", width: "w-10", priority: 2, cell: (c) => c.appearances },
+                    { key: "goals", header: "G", title: "Góly", width: "w-10", cell: (c) => ((c.goals as number) > 0 ? c.goals : "-") },
+                    { key: "assists", header: "A", title: "Asistence", width: "w-10", priority: 2, cell: (c) => ((c.assists as number) > 0 ? c.assists : "-") },
+                    { key: "yellow", header: "ŽK", title: "Žluté karty", width: "w-10", priority: 2,
+                      cell: (c) => <span className="text-gold-600">{(c.yellowCards as number) > 0 ? c.yellowCards : ""}</span> },
+                    { key: "red", header: "ČK", title: "Červené karty", width: "w-10", priority: 2,
+                      cell: (c) => <span className="text-card-red">{(c.redCards as number) > 0 ? c.redCards : ""}</span> },
+                    { key: "rating", header: "Hod.", title: "Průměrné hodnocení", width: "w-14", emphasis: true,
+                      cell: (c) => (typeof c.avgRating === "number" ? c.avgRating.toFixed(1) : "-") },
+                  ]} />
               </div>
             )}
           </div>
@@ -1731,81 +1651,45 @@ export default function PlayerDetailPage() {
               <Filter id="L" label="Prohry" count={lossesCount} color="bg-red-500" />
             </div>
           </div>
-          <div className="overflow-x-auto -mx-4 sm:-mx-5 table-scroll">
-            <table className="w-full text-sm min-w-[760px]">
-              <thead>
-                <tr className="text-left text-label border-b border-gray-200 text-micro uppercase tracking-wide">
-                  <th className="pb-2 pl-4 sm:pl-5 pr-2 w-12">Kolo</th>
-                  <th className="pb-2 pr-2">Soupeř</th>
-                  <th className="pb-2 pr-2 text-center w-20">Výsledek</th>
-                  <th className="pb-2 pr-2 text-center w-24" title="Hodnocení">Hodnocení</th>
-                  <th className="pb-2 pr-2 text-center w-12" title="Minuty">Min</th>
-                  <th className="pb-2 pr-2 text-center w-8" title="Góly">G</th>
-                  <th className="pb-2 pr-2 text-center w-8" title="Asistence">A</th>
-                  <th className="pb-2 pr-4 sm:pr-5 text-center w-16" title="Karty">Karty</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((m) => {
-                  const resultBg = m.result === "W" ? "bg-pitch-50" : m.result === "L" ? "bg-red-50" : "bg-gray-50";
-                  const resultText = m.result === "W" ? "text-pitch-600" : m.result === "L" ? "text-card-red" : "text-muted";
-                  const ratingColor = m.rating >= 7.5 ? "text-pitch-500 font-bold"
-                    : m.rating >= 6.5 ? "text-pitch-600"
-                    : m.rating >= 5.5 ? "text-ink"
-                    : m.rating >= 4.5 ? "text-gold-600"
-                    : "text-card-red font-bold";
-                  const barPct = Math.max(0, Math.min(100, ((m.rating - 1) / 9) * 100));
-                  const barColor = m.rating >= 7.5 ? "#10b981"
-                    : m.rating >= 6.5 ? "#f59e0b"
-                    : "#ef4444";
-                  const isBest = matchHistory.length >= 3 && m.rating === bestRating;
-                  const isWorst = matchHistory.length >= 3 && m.rating === worstRating;
-                  const rowBg = isBest ? "bg-pitch-50/30" : isWorst ? "bg-red-50/30" : "";
-
-                  return (
-                    <tr key={m.matchId} className={`border-b border-gray-50 hover:bg-gray-50/50 transition-colors ${rowBg}`}>
-                      <td className="py-2 pl-4 sm:pl-5 pr-2 tabular-nums text-muted">{m.round ?? "-"}</td>
-                      <td className="py-2 pr-2">
-                        <a href={`/zapas/${m.matchId}/zaznam`} className="flex items-center gap-2 hover:underline">
-                          <BadgePreview primary={m.opponentColor} secondary={m.opponentSecondary}
-                            pattern={(m.opponentBadge as BadgePattern) || "shield"}
-                            initials={(m.opponent ?? "").split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={20} />
-                          <span className="font-heading font-bold text-ink truncate max-w-[180px]">{m.opponent ?? "Soupeř"}</span>
-                          <span className="text-micro text-muted uppercase">{m.isHome ? "D" : "V"}</span>
-                          {isBest && <span title="Nejlepší rating sezóny" className="text-xs">🌟</span>}
-                          {isWorst && <span title="Nejhorší rating sezóny" className="text-xs">😞</span>}
-                        </a>
-                      </td>
-                      <td className="py-2 pr-2 text-center">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-control text-xs font-heading font-bold ${resultBg} ${resultText}`}>
-                          {m.homeScore}:{m.awayScore}
-                        </span>
-                      </td>
-                      <td className="py-2 pr-2">
-                        <div className="flex items-center justify-center gap-2">
-                          <div className="w-8 h-1.5 rounded-full bg-gray-100 overflow-hidden hidden sm:block" title={`Rating ${m.rating.toFixed(1)}/10`}>
-                            <div className="h-full rounded-full" style={{ width: `${barPct}%`, backgroundColor: barColor }} />
-                          </div>
-                          <span className={`tabular-nums font-heading font-bold ${ratingColor}`}>
-                            {m.rating.toFixed(1)}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="py-2 pr-2 text-center tabular-nums text-muted">{m.minutesPlayed}&apos;</td>
-                      <td className="py-2 pr-2 text-center tabular-nums font-heading font-bold">{m.goals > 0 ? m.goals : ""}</td>
-                      <td className="py-2 pr-2 text-center tabular-nums font-heading font-bold text-muted">{m.assists > 0 ? m.assists : ""}</td>
-                      <td className="py-2 pr-4 sm:pr-5 text-center">
-                        {m.yellowCards > 0 && <span className="inline-block w-3 h-4 rounded-[1px] bg-gold-400 mr-0.5" title="Žlutá karta" />}
-                        {m.redCards > 0 && <span className="inline-block w-3 h-4 rounded-[1px] bg-card-red" title="Červená karta" />}
-                      </td>
-                    </tr>
-                  );
-                })}
-                {filtered.length === 0 && (
-                  <tr><td colSpan={8} className="py-4 text-center text-sm text-muted italic">Žádný zápas neodpovídá filtru.</td></tr>
-                )}
-              </tbody>
-            </table>
+          <div className="-mx-4 sm:-mx-5 border-t border-line">
+            <DataTable
+              rows={filtered} rowKey={(m) => m.matchId}
+              rowHref={(m) => `/zapas/${m.matchId}/zaznam`}
+              empty="Žádný zápas neodpovídá filtru."
+              columns={[
+                { key: "opponent", header: "Soupeř", align: "left",
+                  cell: (m) => {
+                    const isBest = matchHistory.length >= 3 && m.rating === bestRating;
+                    const isWorst = matchHistory.length >= 3 && m.rating === worstRating;
+                    return (
+                      <EntityCell
+                        leading={<BadgePreview primary={m.opponentColor} secondary={m.opponentSecondary}
+                          pattern={(m.opponentBadge as BadgePattern) || "shield"}
+                          initials={(m.opponent ?? "").split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={22} />}
+                        name={<>{m.opponent ?? "Soupeř"}{isBest && <span title="Nejlepší hodnocení sezóny" className="ml-1">🌟</span>}{isWorst && <span title="Nejhorší hodnocení sezóny" className="ml-1">😞</span>}</>}
+                        meta={[m.round != null ? `${m.round}. kolo` : null, m.isHome ? "doma" : "venku", `${m.minutesPlayed}'`,
+                          m.goals > 0 ? `${m.goals} g` : null, m.assists > 0 ? `${m.assists} a` : null,
+                          m.redCards > 0 ? "červená" : m.yellowCards > 0 ? "žlutá" : null].filter(Boolean).join(" · ")} metaMobileOnly />
+                    );
+                  } },
+                { key: "round", header: "Kolo", width: "w-12", priority: 2, cell: (m) => m.round ?? "-" },
+                { key: "venue", header: "Kde", width: "w-14", priority: 2, cell: (m) => (m.isHome ? "doma" : "venku") },
+                { key: "score", header: "Výsledek", width: "w-20",
+                  cell: (m) => <ScoreChip result={(m.result === "W" || m.result === "L" ? m.result : "D") as MatchOutcome}>{m.homeScore}:{m.awayScore}</ScoreChip> },
+                { key: "minutes", header: "Min", title: "Minuty", width: "w-12", priority: 2, cell: (m) => `${m.minutesPlayed}'` },
+                { key: "goals", header: "G", title: "Góly", width: "w-10", priority: 2, cell: (m) => (m.goals > 0 ? m.goals : "") },
+                { key: "assists", header: "A", title: "Asistence", width: "w-10", priority: 2, cell: (m) => (m.assists > 0 ? m.assists : "") },
+                { key: "cards", header: "Karty", width: "w-14", priority: 2,
+                  cell: (m) => (
+                    <>
+                      {m.yellowCards > 0 && <span className="inline-block w-3 h-4 rounded-[1px] bg-gold-400 mr-0.5" title="Žlutá karta" />}
+                      {m.redCards > 0 && <span className="inline-block w-3 h-4 rounded-[1px] bg-card-red" title="Červená karta" />}
+                    </>
+                  ) },
+                // Známka ze zápasu je na škále 1–10, tam prahy smysl dávají (na rozdíl od hodnocení hráče).
+                { key: "rating", header: "Hod.", title: "Hodnocení v zápase", width: "w-14", emphasis: true,
+                  cell: (m) => <RatingPill value={m.rating.toFixed(1)} tone={m.rating >= 7.5 ? "top" : m.rating >= 6.5 ? "good" : m.rating < 4.5 ? "poor" : "neutral"} /> },
+              ]} />
           </div>
 
           {/* Summary — vždy z celé sezóny, ne z filtru */}
@@ -1836,7 +1720,7 @@ export default function PlayerDetailPage() {
       {activeTab === "ucast" && isOwnPlayer && (
         <>
           {!attendanceLoaded ? (
-            <div className="card p-6 flex items-center justify-center min-h-[120px]"><Spinner /></div>
+            <div className="card"><SectionLoading /></div>
           ) : !attendance ? (
             <div className="card p-4 text-sm text-muted">Data o docházce se nepodařilo načíst.</div>
           ) : (
@@ -1885,48 +1769,37 @@ export default function PlayerDetailPage() {
                     ? (m.isHome ? `${m.homeScore}:${m.awayScore}` : `${m.awayScore}:${m.homeScore}`)
                     : null;
                   const reasonColor =
-                    m.reason === "Zranění" ? "bg-red-50 text-red-700 border-red-200"
-                    : m.reason === "Stopka za karty" ? "bg-amber-50 text-amber-700 border-amber-200"
-                    : m.reason === "Na lavičce" ? "bg-gray-50 text-gray-600 border-gray-200"
-                    : m.reason === "Nenominován" ? "bg-gray-50 text-gray-500 border-gray-200"
-                    : "bg-blue-50 text-blue-700 border-blue-200";
+                    m.reason === "Zranění" ? "bg-red-50 text-red-700"
+                    : m.reason === "Stopka za karty" ? "bg-amber-50 text-amber-700"
+                    : m.reason === "Na lavičce" ? "bg-gray-50 text-gray-600"
+                    : m.reason === "Nenominován" ? "bg-gray-50 text-gray-500"
+                    : "bg-blue-50 text-blue-700";
                   return (
-                    <div key={m.matchId} className="flex flex-col sm:flex-row sm:items-center gap-2 p-3 rounded-soft bg-gray-50/60 hover:bg-gray-50 transition-colors">
-                      <div className="flex items-center gap-2 sm:w-[180px] shrink-0">
-                        <span className="text-micro font-heading font-bold text-muted uppercase tabular-nums shrink-0">
-                          {m.round != null ? `${m.round}. kolo` : "-"}
+                    <ListRow key={m.matchId} href={`/zapas/${m.matchId}`}
+                      title={`${m.isHome ? "vs" : "@"} ${m.opponent}`}
+                      meta={[m.round != null ? `${m.round}. kolo` : null, score].filter(Boolean).join(" · ") || undefined}
+                      detail={m.smsText ? <span className="italic text-muted">{"\u{1F4AC}"} &ldquo;{m.smsText}&rdquo;</span> : undefined}
+                      trailing={
+                        <span className={`inline-block text-micro px-2 py-0.5 rounded-full font-bold whitespace-nowrap ${reasonColor}`}>
+                          {m.reason ?? "-"}
                         </span>
-                        <Link href={`/zapas/${m.matchId}`} className="font-heading font-bold text-sm text-ink hover:text-pitch-500 truncate">
-                          {m.isHome ? "vs" : "@"} {m.opponent}
-                        </Link>
-                      </div>
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-heading font-bold border ${reasonColor} shrink-0`}>
-                        {m.reason ?? "-"}
-                      </span>
-                      {m.smsText && (
-                        <span className="text-xs text-muted italic flex-1 min-w-0">
-                          {"\u{1F4AC}"} &ldquo;{m.smsText}&rdquo;
-                        </span>
-                      )}
-                      {score && <span className="text-xs text-muted tabular-nums shrink-0 ml-auto">{score}</span>}
-                    </div>
+                      } />
                   );
                 };
                 return (
                   <>
                     {realAbsences.length > 0 && (
-                      <div className="card p-4 sm:p-5">
-                        <SectionLabel>Zameškal (zranění / stopka / výmluva)</SectionLabel>
-                        <div className="space-y-2 mt-2">{realAbsences.map(RowItem)}</div>
-                      </div>
+                      <ListCard title="Zameškal (zranění / stopka / výmluva)">
+                        {realAbsences.map(RowItem)}
+                      </ListCard>
                     )}
                     {benchOrNot.length > 0 && (
-                      <details className="card p-4 sm:p-5">
-                        <summary className="cursor-pointer flex items-center justify-between">
+                      <details className="card">
+                        <summary className="cursor-pointer flex items-center justify-between p-4 sm:p-5">
                           <SectionLabel>Nehrál ({benchOrNot.length}× lavička / nenominován)</SectionLabel>
                           <span className="text-xs text-muted">rozbalit</span>
                         </summary>
-                        <div className="space-y-2 mt-3">{benchOrNot.map(RowItem)}</div>
+                        <div className="border-t border-line">{benchOrNot.map(RowItem)}</div>
                       </details>
                     )}
                   </>
@@ -1972,7 +1845,7 @@ export default function PlayerDetailPage() {
     {loanDialogOpen && player && (
       <LoanListingDialog
         playerName={`${player.first_name} ${player.last_name}`}
-        playerLine={`${player.position}, ${player.age} let, rating ${player.overall_rating}`}
+        playerLine={`${player.position}, ${player.age} let, hodnocení ${player.overall_rating}`}
         onClose={() => setLoanDialogOpen(false)}
         onConfirm={listOnLoan}
         loading={actionLoading}
@@ -2015,13 +1888,12 @@ function PlayerPriceDialog({ player, onClose, onConfirm, loading }: {
   const [revealPotential, setRevealPotential] = useState(false);
 
   return (
-    // Kliknutí vedle dialog nezavírá — rozepsaná cena by se ztratila. Zavírá jen Zrušit.
-    <div className="fixed inset-0 z-[var(--z-sheet)] flex items-center justify-center bg-black/40 p-4">
-      <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+    // Kliknutí vedle dialog nezavírá, rozepsaná cena by se ztratila. Zavírá jen Zrušit.
+    <Sheet open onClose={onClose} maxWidth="384px" closeOnBackdrop={false} title="Nabídnout na trh">
         <div className="p-5">
           <h3 className="font-heading font-bold text-lg">Nabídnout na trh</h3>
           <p className="text-sm text-muted mt-1">
-            {player.first_name} {player.last_name} · {player.position}, {player.age} let, rating {player.overall_rating}
+            {player.first_name} {player.last_name} · {player.position}, {player.age} let, hodnocení {player.overall_rating}
           </p>
 
           <div className="mt-4">
@@ -2031,18 +1903,11 @@ function PlayerPriceDialog({ player, onClose, onConfirm, loading }: {
               onChange={setPrice}
               className="w-full px-3 py-2 rounded-soft border border-gray-200 font-heading font-bold text-lg tabular-nums focus:outline-none focus:border-pitch-500"
             />
-            <div className="flex gap-2 mt-2">
-              {[0.5, 1, 1.5, 2].map((mul) => (
-                <button
-                  key={mul}
-                  type="button"
-                  onClick={() => setPrice(Math.round(defaultPrice * mul))}
-                  className="flex-1 py-1 px-2 rounded text-xs font-heading font-bold bg-gray-50 hover:bg-gray-100 text-muted"
-                >
-                  {mul}×
-                </button>
-              ))}
-            </div>
+            <ChoiceGroup ariaLabel="Násobek ceny" size="sm" columns={4} className="mt-2" value={price != null ? String(price) : null}
+              onChange={(v) => setPrice(Number(v))}
+              options={[0.5, 1, 1.5, 2]
+                .map((mul) => ({ value: String(Math.round(defaultPrice * mul)), label: `${mul.toLocaleString("cs-CZ")}×` }))
+                .filter((o, i, all) => all.findIndex((x) => x.value === o.value) === i)} />
           </div>
 
           <div className="mt-4">
@@ -2065,8 +1930,7 @@ function PlayerPriceDialog({ player, onClose, onConfirm, loading }: {
             </button>
           </div>
         </div>
-      </div>
-    </div>
+    </Sheet>
   );
 }
 
@@ -2098,8 +1962,7 @@ function ScoutPlayerDialog({
   const alreadyWatching = scouts.find((s) => s.playerMissions?.some((m) => m.target_player_id === player.id)) ?? null;
 
   return (
-    <div className="fixed inset-0 z-[var(--z-sheet)] flex items-center justify-center bg-black/40 p-4">
-      <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+    <Sheet open onClose={onClose} maxWidth="384px" closeOnBackdrop={false} title="Poslat skauta na hráče">
         <div className="p-5 space-y-4">
           <div>
             <h3 className="font-heading font-bold text-lg text-ink">Poslat skauta na hráče</h3>
@@ -2200,8 +2063,7 @@ function ScoutPlayerDialog({
             )}
           </div>
         </div>
-      </div>
-    </div>
+    </Sheet>
   );
 }
 
@@ -2353,39 +2215,21 @@ function TrainingDevelopment({ teamId, playerId }: { teamId: string; playerId: s
             )}
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-100 text-xs text-muted uppercase">
-                  <th className="text-left py-2 pr-3 font-heading">Datum</th>
-                  <th className="text-left py-2 pr-3 font-heading">Atribut</th>
-                  <th className="text-left py-2 pr-3 font-heading hidden md:table-cell">Trénink</th>
-                  <th className="text-right py-2 font-heading">Změna</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visible.map((entry, i) => {
-                  const date = entry.game_date ? new Date(entry.game_date).toLocaleDateString("cs", { day: "numeric", month: "numeric" }) : "-";
-                  const trainingLabel = TRAIN_TYPE_LABELS[entry.training_type] ?? entry.training_type;
-                  return (
-                    <tr key={i} className="border-b border-gray-50 last:border-b-0 align-top">
-                      <td className="py-1.5 pr-3 tabular-nums text-muted text-micro whitespace-nowrap">{date}</td>
-                      <td className="py-1.5 pr-3">
-                        <div className="font-medium">{TRAIN_ATTR_LABELS[entry.attribute] ?? entry.attribute}</div>
-                        <div className="md:hidden text-micro text-muted leading-tight">{trainingLabel}</div>
-                      </td>
-                      <td className="py-1.5 pr-3 text-muted hidden md:table-cell">{trainingLabel}</td>
-                      <td className="py-1.5 text-right whitespace-nowrap">
-                        <span className={`font-heading font-bold ${entry.change > 0 ? "text-pitch-500" : "text-card-red"}`}>
-                          {entry.change > 0 ? `+${entry.change}` : entry.change}
-                        </span>
-                        <span className="text-muted text-xs ml-1">({entry.old_value}→{entry.new_value})</span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+          <div className="-mx-4 sm:-mx-5 border-t border-line">
+            <DataTable rows={visible} rowKey={(entry) => `${entry.game_date}-${entry.attribute}-${entry.old_value}-${entry.new_value}`}
+              empty="Žádné změny z tréninku."
+              columns={[
+                { key: "attr", header: "Atribut", align: "left",
+                  cell: (entry) => <EntityCell name={TRAIN_ATTR_LABELS[entry.attribute] ?? entry.attribute}
+                    meta={`${entry.game_date ? new Date(entry.game_date).toLocaleDateString("cs", { day: "numeric", month: "numeric" }) : "-"} · ${TRAIN_TYPE_LABELS[entry.training_type] ?? entry.training_type}`} /> },
+                { key: "change", header: "Změna", align: "right", emphasis: true,
+                  cell: (entry) => (
+                    <span className="whitespace-nowrap">
+                      <span className={entry.change > 0 ? "text-pitch-600" : "text-card-red"}>{entry.change > 0 ? `+${entry.change}` : entry.change}</span>
+                      <span className="text-muted text-meta font-normal ml-1">({entry.old_value}→{entry.new_value})</span>
+                    </span>
+                  ) },
+              ]} />
           </div>
           {log.length > PREVIEW_ROWS && (
             <button onClick={() => setShowAll((v) => !v)} className="text-xs text-pitch-500 font-heading font-bold hover:underline pt-2">
@@ -2435,33 +2279,24 @@ function WeightLog({ teamId, playerId, category }: { teamId: string; playerId: s
       {entries.length === 0 ? (
         <p className="text-sm text-muted">Zatím žádné záznamy. Váha se zapisuje každé pondělí.</p>
       ) : (
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-gray-100 text-sm text-muted uppercase">
-              <th className="text-left py-2 pr-3 font-heading">Kdy</th>
-              <th className="text-left py-2 pr-3 font-heading">Zdroj</th>
-              <th className="text-right py-2 pr-3 font-heading">Váha</th>
-              <th className="text-right py-2 font-heading">Změna</th>
-            </tr>
-          </thead>
-          <tbody>
-            {entries.map((entry, i) => {
-              const previous = entries[i + 1];
-              const change = previous ? Math.round((entry.weight - previous.weight) * 10) / 10 : null;
-              const date = new Date(entry.gameDate).toLocaleDateString("cs", { day: "numeric", month: "numeric" });
-              return (
-                <tr key={entry.id} className="border-b border-gray-50 last:border-b-0">
-                  <td className="py-1.5 pr-3 tabular-nums text-muted whitespace-nowrap">{date}</td>
-                  <td className="py-1.5 pr-3">{WEIGHT_SOURCE_LABEL[entry.source] ?? entry.source}</td>
-                  <td className="py-1.5 pr-3 text-right tabular-nums font-heading font-bold">{formatKg(entry.weight)} kg</td>
-                  <td className={`py-1.5 text-right tabular-nums whitespace-nowrap ${change === null ? "text-muted" : weightChangeColor(change, category)}`}>
-                    {change === null ? "" : formatKgChange(change)}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+        <div className="-mx-4 sm:-mx-5 -mb-4 sm:-mb-5 border-t border-line">
+          <DataTable rows={entries} rowKey={(entry) => String(entry.id)}
+            empty="Zatím žádné záznamy."
+            columns={[
+              { key: "when", header: "Kdy", align: "left",
+                cell: (entry) => <EntityCell name={new Date(entry.gameDate).toLocaleDateString("cs", { day: "numeric", month: "numeric" })}
+                  meta={WEIGHT_SOURCE_LABEL[entry.source] ?? entry.source} /> },
+              { key: "weight", header: "Váha", align: "right", cell: (entry) => <span className="font-bold text-ink whitespace-nowrap">{formatKg(entry.weight)} kg</span> },
+              { key: "change", header: "Změna", align: "right",
+                cell: (entry) => {
+                  const i = entries.indexOf(entry);
+                  const previous = entries[i + 1];
+                  const change = previous ? Math.round((entry.weight - previous.weight) * 10) / 10 : null;
+                  return change === null ? <span className="text-muted">-</span>
+                    : <span className={`font-bold whitespace-nowrap ${weightChangeColor(change, category)}`}>{formatKgChange(change)}</span>;
+                } },
+            ]} />
+        </div>
       )}
     </div>
   );
@@ -2537,43 +2372,25 @@ function ConditionLog({ teamId, playerId }: { teamId: string; playerId: string }
             )}
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-100 text-xs text-muted uppercase">
-                  <th className="text-left py-2 pr-3 font-heading">Kdy</th>
-                  <th className="text-left py-2 pr-3 font-heading">Zdroj</th>
-                  <th className="text-left py-2 pr-3 font-heading hidden md:table-cell">Detail</th>
-                  <th className="text-right py-2 font-heading">Změna</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visible.map((entry) => {
-                  const meta = CONDITION_SOURCE_META[entry.source] ?? { icon: "•", label: entry.source };
-                  const dateSrc = entry.gameDate ?? entry.createdAt;
-                  const date = new Date(dateSrc).toLocaleDateString("cs", { day: "numeric", month: "numeric" });
-                  return (
-                    <tr key={entry.id} className="border-b border-gray-50 last:border-b-0 align-top">
-                      <td className="py-1.5 pr-3 tabular-nums text-muted text-micro whitespace-nowrap">{date}</td>
-                      <td className="py-1.5 pr-3">
-                        <div className="whitespace-nowrap">
-                          <span className="mr-1">{meta.icon}</span>
-                          <span className="font-medium">{meta.label}</span>
-                        </div>
-                        <div className="md:hidden text-micro text-muted leading-tight">{entry.description ?? ""}</div>
-                      </td>
-                      <td className="py-1.5 pr-3 text-muted hidden md:table-cell">{entry.description ?? "-"}</td>
-                      <td className="py-1.5 text-right whitespace-nowrap">
-                        <span className={`font-heading font-bold ${entry.delta > 0 ? "text-pitch-500" : entry.delta < 0 ? "text-card-red" : "text-muted"}`}>
-                          {entry.delta > 0 ? `+${entry.delta}` : entry.delta}
-                        </span>
-                        <span className="text-muted text-xs ml-1">({entry.oldValue}→{entry.newValue})</span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+          <div className="-mx-4 sm:-mx-5 border-t border-line">
+            <DataTable rows={visible} rowKey={(entry) => String(entry.id)}
+              empty="Žádné změny kondice."
+              columns={[
+                { key: "source", header: "Zdroj", align: "left",
+                  cell: (entry) => {
+                    const m = CONDITION_SOURCE_META[entry.source] ?? { icon: "•", label: entry.source };
+                    const date = new Date(entry.gameDate ?? entry.createdAt).toLocaleDateString("cs", { day: "numeric", month: "numeric" });
+                    return <EntityCell leading={<span aria-hidden="true">{m.icon}</span>} name={m.label}
+                      meta={[date, entry.description].filter(Boolean).join(" · ")} />;
+                  } },
+                { key: "change", header: "Změna", align: "right", emphasis: true,
+                  cell: (entry) => (
+                    <span className="whitespace-nowrap">
+                      <span className={entry.delta > 0 ? "text-pitch-600" : entry.delta < 0 ? "text-card-red" : "text-muted"}>{entry.delta > 0 ? `+${entry.delta}` : entry.delta}</span>
+                      <span className="text-muted text-meta font-normal ml-1">({entry.oldValue}→{entry.newValue})</span>
+                    </span>
+                  ) },
+              ]} />
           </div>
           {entries.length > PREVIEW_ROWS && (
             <button onClick={() => setShowAll((v) => !v)} className="text-xs text-pitch-500 font-heading font-bold hover:underline pt-2">

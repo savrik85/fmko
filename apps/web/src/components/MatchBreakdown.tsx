@@ -157,7 +157,7 @@ export function MatchBreakdown({ teamId, matchId }: Props) {
         {/* Bar chart síly po liniích */}
         <div className="pt-2 border-t border-gray-100">
           <div className="text-micro text-muted font-heading uppercase tracking-wide mb-1.5">
-            Síla po liniích (průměrný rating)
+            Síla po liniích (průměrné hodnocení)
           </div>
           <div className="space-y-1.5">
             {(Object.keys(LINE_LABELS) as Array<keyof typeof LINE_LABELS>).map((line) => {

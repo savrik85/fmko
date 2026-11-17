@@ -7,6 +7,7 @@ import { PositionBadge } from "@/components/ui";
 import { InterestBadge, type PlayerInterest } from "./InterestBadge";
 import type { TransferTerms } from "@okresni-masina/shared";
 import { TermsBreakdown } from "@/components/transfers/transfer-terms";
+import { formatKc } from "@/lib/format";
 
 export interface PlayerSummary {
   id: string;
@@ -122,7 +123,7 @@ export function PlayerHero({
             : offeredPlayers.length > 0 ? "Nabídka + výměna" : "Aktuální nabídka"}
         </div>
         <div className="font-heading font-[900] text-3xl tabular-nums text-pitch-500 mt-1">
-          {currentAmount > 0 ? `${currentAmount.toLocaleString("cs")} Kč` : offeredPlayers.length > 0 ? "Bez doplatku" : "Zdarma"}
+          {currentAmount > 0 ? `${formatKc(currentAmount)}` : offeredPlayers.length > 0 ? "Bez doplatku" : "Zdarma"}
         </div>
         {offerType === "loan" && loanPlayingTime && loanPlayingTime !== "none" && (
           <div className="mt-1 text-sm">
@@ -135,7 +136,7 @@ export function PlayerHero({
           </div>
         ) : crossLeague && adminFee > 0 && (
           <div className="text-sm text-muted mt-1 tabular-nums">
-            + administrační poplatek {adminFee.toLocaleString("cs")} Kč
+            + administrační poplatek {formatKc(adminFee)}
           </div>
         )}
         {message && (

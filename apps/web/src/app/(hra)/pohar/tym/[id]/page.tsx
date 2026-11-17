@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, showError } from "@/lib/api";
-import { Spinner, SectionLabel } from "@/components/ui";
+import { SectionLabel, DataTable, EntityCell, ListCard, ListRow, StatusChip, PageLoading } from "@/components/ui";
 import { bestTextOn } from "@/lib/team-color";
 
 interface CupSquadPlayer { name: string; position: string; rating: number; age: number; condition: number; morale: number; suspended: boolean }
@@ -54,7 +54,7 @@ export default function CupTeamDetailPage() {
       .finally(() => setLoading(false));
   }, [teamId, params.id]);
 
-  if (loading) return <div className="flex items-center justify-center min-h-[50vh]"><Spinner size="lg" /></div>;
+  if (loading) return <PageLoading />;
   if (!data?.team) return <div className="page-container py-10 text-center text-muted">Pohárový tým nenalezen.</div>;
 
   const t = data.team;
@@ -91,62 +91,46 @@ export default function CupTeamDetailPage() {
 
       {/* Cesta pohárem */}
       {data.matches.length > 0 && (
-        <div>
-          <SectionLabel>Cesta pohárem</SectionLabel>
-          <div className="card mt-2">
-            {data.matches.map((m, i) => {
-              const sim = m.status === "simulated" && m.homeScore != null;
-              return (
-                <div key={i} className="flex items-center gap-3 px-4 py-2.5 border-b border-gray-50 last:border-b-0">
-                  <span className="text-xs text-muted shrink-0 w-24">{m.roundName}</span>
-                  <span className="flex-1 min-w-0 text-sm truncate">{m.homeName} <span className="text-muted">vs</span> {m.awayName}</span>
-                  {sim ? (
-                    <>
-                      <span className="font-heading font-bold text-sm tabular-nums shrink-0">
-                        {m.homeScore}:{m.awayScore}{m.homePens != null ? <span className="text-muted text-xs"> (p {m.homePens}:{m.awayPens})</span> : null}
-                      </span>
-                      <span className={`shrink-0 text-xs font-heading font-bold px-1.5 py-0.5 rounded ${m.won ? "bg-pitch-50 text-pitch-600" : "bg-card-red/10 text-card-red"}`}>{m.won ? "POSTUP" : "KONEC"}</span>
-                    </>
-                  ) : (
-                    <span className="text-xs text-muted shrink-0">naplánováno</span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
+        <ListCard title="Cesta pohárem">
+          {data.matches.map((m, i) => {
+            const sim = m.status === "simulated" && m.homeScore != null;
+            return (
+              <ListRow key={i}
+                tone={sim ? (m.won ? undefined : "danger") : undefined}
+                title={<>{m.homeName} <span className="text-muted font-normal">vs</span> {m.awayName}</>}
+                meta={m.roundName}
+                trailing={sim ? (
+                  <span className="flex items-center gap-2">
+                    <span className="text-body font-bold tabular-nums whitespace-nowrap">
+                      {m.homeScore}:{m.awayScore}{m.homePens != null ? <span className="text-muted text-meta font-normal"> (p {m.homePens}:{m.awayPens})</span> : null}
+                    </span>
+                    <StatusChip tone={m.won ? "ok" : "danger"}>{m.won ? "Postup" : "Konec"}</StatusChip>
+                  </span>
+                ) : <span className="text-meta text-muted">naplánováno</span>} />
+            );
+          })}
+        </ListCard>
       )}
 
       {/* Soupiska */}
       <div>
         <SectionLabel>Soupiska</SectionLabel>
         {data.squad.length > 0 ? (
-          <div className="card mt-2 overflow-x-auto table-scroll">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-xs text-muted uppercase font-heading">
-                  <th className="text-left px-4 py-2 w-10">Poz</th>
-                  <th className="text-left px-2 py-2">Hráč</th>
-                  <th className="text-right px-2 py-2">Věk</th>
-                  <th className="text-right px-2 py-2">Rating</th>
-                  <th className="text-right px-2 py-2">Kondice</th>
-                  <th className="text-right px-4 py-2">Morálka</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.squad.map((p, i) => (
-                  <tr key={i} className="border-t border-gray-50">
-                    <td className="px-4 py-1.5 text-xs font-heading font-bold text-muted">{POS_LABEL[p.position] ?? p.position}</td>
-                    <td className="px-2 py-1.5 font-bold text-base">{p.name}{p.suspended && <span className="ml-2 text-xs text-card-red">🟥 trest</span>}</td>
-                    <td className="px-2 py-1.5 text-right tabular-nums">{p.age}</td>
-                    <td className="px-2 py-1.5 text-right tabular-nums font-heading font-bold">{p.rating}</td>
-                    <td className="px-2 py-1.5 text-right tabular-nums">{p.condition}</td>
-                    <td className="px-4 py-1.5 text-right tabular-nums">{p.morale}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <ListCard>
+            <DataTable
+              rows={data.squad} rowKey={(p) => `${p.name}-${p.age}-${p.position}`}
+              empty="Soupiska je prázdná."
+              columns={[
+                { key: "name", header: "Hráč", align: "left",
+                  cell: (p) => <EntityCell
+                    leading={<span className="w-7 text-micro font-bold text-muted">{POS_LABEL[p.position] ?? p.position}</span>}
+                    name={<>{p.name}{p.suspended && <span className="ml-2 text-micro text-card-red">🟥 trest</span>}</>} /> },
+                { key: "age", header: "Věk", width: "w-12", cell: (p) => p.age },
+                { key: "condition", header: "Kondice", width: "w-20", priority: 2, cell: (p) => p.condition },
+                { key: "morale", header: "Morálka", width: "w-20", priority: 2, cell: (p) => p.morale },
+                { key: "rating", header: "Hod.", title: "Hodnocení", width: "w-14", emphasis: true, cell: (p) => p.rating },
+              ]} />
+          </ListCard>
         ) : (
           <div className="card mt-2 p-4 text-sm text-muted">
             {t.isBig

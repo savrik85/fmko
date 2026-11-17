@@ -9,12 +9,13 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { SectionLabel, useConfirm } from "@/components/ui";
+import { SectionLabel, useConfirm, ListCard, ListRow, ListEmpty, RowIcon, RowValue, CollapsibleCard, Disclosure } from "@/components/ui";
 import { apiFetch, showError } from "@/lib/api";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { odesloLidi, zavrenoNaZapasy, pripadu } from "@okresni-masina/shared";
 import { sentimentWord } from "@/lib/fan-info";
 import { ChoralyPanel, type ChantView } from "./ChoralyPanel";
+import { formatKc } from "@/lib/format";
 
 export interface FanLeaderView {
   id: string;
@@ -130,9 +131,6 @@ function heatBarColor(v: number): string {
   return "bg-pitch-500";
 }
 
-function formatCZK(v: number): string {
-  return v.toLocaleString("cs") + " Kč";
-}
 
 function formatDatum(s: string | null): string {
   if (!s) return "";
@@ -174,7 +172,7 @@ function Akce({ group, teamId, onChanged, confirm }: {
     const ok = await confirm({
       title: `${a.label} ${group.name}`,
       description: a.popis,
-      details: cena > 0 ? [{ label: "Cena", value: `−${formatCZK(cena)}`, color: "text-card-red" }] : [],
+      details: cena > 0 ? [{ label: "Cena", value: `−${formatKc(cena)}`, color: "text-card-red" }] : [],
       confirmLabel: a.label,
     });
     if (!ok) return;
@@ -211,7 +209,7 @@ function Akce({ group, teamId, onChanged, confirm }: {
               disabled={!a.available || busy !== null}
               onClick={() => proved(a)}
             >
-              {a.label}{a.cost > 0 ? ` · ${formatCZK(a.cost)}` : ""}
+              {a.label}{a.cost > 0 ? ` · ${formatKc(a.cost)}` : ""}
             </button>
           ) : (
             <details className="rounded-lg" style={{ background: "var(--color-paper)" }}>
@@ -227,7 +225,7 @@ function Akce({ group, teamId, onChanged, confirm }: {
                     disabled={!a.available || busy !== null}
                     onClick={() => proved(a, v)}
                   >
-                    {v.label}{v.cost > 0 ? ` · ${formatCZK(v.cost)}` : ""}
+                    {v.label}{v.cost > 0 ? ` · ${formatKc(v.cost)}` : ""}
                   </button>
                 ))}
               </div>
@@ -269,19 +267,14 @@ export function FanGroupsPanel({ data, teamId, onChanged }: {
   // Jeden dialog pro celý panel. Uvnitř <details> s akcemi by ho sbalený
   // element schoval (display:none platí na celý podstrom) a potvrzení by
   // se nikdy nezobrazilo.
-  const { confirm, dialog } = useConfirm();
+  const { confirm, dialog } = useConfirm({ sheet: true });
 
   return (
     <div className="space-y-5">
       {dialog}
       {/* ═══ Jak to funguje ═══ */}
-      <details className="card p-4 sm:p-5 group">
-        <summary className="cursor-pointer font-heading font-bold text-sm flex items-center justify-between">
-          <span>💡 Jak to s partami funguje</span>
-          <span className="text-xs text-muted group-open:hidden">rozbalit</span>
-          <span className="text-xs text-muted hidden group-open:inline">sbalit</span>
-        </summary>
-        <div className="mt-3 space-y-3 text-sm leading-relaxed">
+      <CollapsibleCard title="💡 Jak to s partami funguje" startCollapsed>
+        <div className="space-y-3 text-sm leading-relaxed">
           <p>
             Tvoji fanoušci nejsou jedna masa. Dělí se na několik part, každá má svou povahu,
             svého vůdce a vlastní náladu. Nejsou navíc k tvé základně, jsou to lidi z ní.
@@ -296,7 +289,7 @@ export function FanGroupsPanel({ data, teamId, onChanged }: {
             Pořadatelská služba na stadionu riziko sráží, ale kotel nemá rád, když ho někdo šacuje.
           </p>
         </div>
-      </details>
+      </CollapsibleCard>
 
       {/* ═══ Chorály ═══ */}
       <ChoralyPanel chants={data.chants ?? []} teamId={teamId} onChanged={onChanged} />
@@ -357,78 +350,56 @@ export function FanGroupsPanel({ data, teamId, onChanged }: {
             </div>
           )}
 
-          <details className="mt-3 group">
-            <summary className="cursor-pointer text-sm font-semibold">
-              <span className="group-open:hidden">Co s tím můžeš udělat</span>
-              <span className="hidden group-open:inline">Skrýt možnosti</span>
-            </summary>
+          <Disclosure className="mt-3" summary="Co s tím můžeš udělat">
             <Akce group={g} teamId={teamId} onChanged={onChanged} confirm={confirm} />
-          </details>
+          </Disclosure>
         </div>
       ))}
 
       {/* ═══ Proč je nálada taková, jaká je ═══ */}
       {data.recentEvents.length > 0 && (
-        <div className="card p-4 sm:p-5">
-          <SectionLabel>Co klub v poslední době potkalo</SectionLabel>
-          <ul className="mt-2 space-y-2">
-            {data.recentEvents.map((u, i) => (
-              <li key={`${u.kind}-${u.gameDate}-${i}`} className="text-sm flex items-baseline gap-2">
-                <span className="text-muted shrink-0">{formatDatum(u.gameDate)}</span>
-                <span>
-                  <strong>{u.label}</strong>
-                  {u.detail && <span className="text-muted">, {u.detail}</span>}
-                </span>
-              </li>
-            ))}
-          </ul>
-          <p className="mt-3 text-sm text-muted">
+        <ListCard title="Co klub v poslední době potkalo">
+          {data.recentEvents.map((u, i) => (
+            <ListRow key={`${u.kind}-${u.gameDate}-${i}`}
+              title={u.label}
+              meta={[formatDatum(u.gameDate), u.detail].filter(Boolean).join(" · ")} />
+          ))}
+          <p className="px-4 py-3 border-t border-line text-meta text-muted">
             Každá parta to bere jinak. Pamětníky urazí přejmenování klubu, kotel ne -
             a naopak.
           </p>
-        </div>
+        </ListCard>
       )}
 
       {/* ═══ Poslední bordel ═══ */}
-      <div className="card p-4 sm:p-5">
-        <SectionLabel>Co se stalo na tribunách</SectionLabel>
-        {data.recentIncidents.length === 0 ? (
-          <p className="mt-2 text-sm text-muted">
-            Zatím klid. Delegát nemá co zapsat a ty nemáš co platit.
-          </p>
-        ) : (
-          <>
-            <ul className="mt-2 space-y-3">
-              {data.recentIncidents.map((i) => (
-                <li key={i.id} className="text-sm leading-relaxed">
-                  <div className="flex items-baseline justify-between gap-3">
-                    <span className="text-muted">
-                      {formatDatum(i.gameDate)}
-                      {i.minute != null && ` · ${i.minute}′`}
-                    </span>
-                    {i.fine > 0 && (
-                      <span className="font-semibold text-card-red shrink-0">−{formatCZK(i.fine)}</span>
-                    )}
-                  </div>
-                  <div>{i.text}</div>
-                  {(i.sectorClosedMatches > 0 || i.fansLost > 0) && (
-                    <div className="text-muted">
-                      {i.sectorClosedMatches > 0 && `Sektor zavřený na ${zavrenoNaZapasy(i.sectorClosedMatches)}. `}
-                      {i.fansLost > 0 && odesloLidi(i.fansLost)}
-                    </div>
-                  )}
-                </li>
-              ))}
-            </ul>
-            {bordelCelkem > 0 && (
-              <p className="mt-3 pt-3 border-t border-gray-100 text-sm">
-                Za {pripadu(data.recentIncidents.length)} jsi zaplatil{" "}
-                <strong className="text-card-red">{formatCZK(bordelCelkem)}</strong>.
-              </p>
-            )}
-          </>
+      <ListCard title="Co se stalo na tribunách">
+        {data.recentIncidents.length === 0 && (
+          <ListEmpty icon="🧹">Zatím klid. Delegát nemá co zapsat a ty nemáš co platit.</ListEmpty>
         )}
-      </div>
+        {data.recentIncidents.map((i) => (
+          <ListRow key={i.id}
+            leading={<RowIcon>📣</RowIcon>}
+            title={`${formatDatum(i.gameDate)}${i.minute != null ? ` · ${i.minute}′` : ""}`}
+            detail={
+              <>
+                {i.text}
+                {(i.sectorClosedMatches > 0 || i.fansLost > 0) && (
+                  <span className="block text-muted">
+                    {i.sectorClosedMatches > 0 && `Sektor zavřený na ${zavrenoNaZapasy(i.sectorClosedMatches)}. `}
+                    {i.fansLost > 0 && odesloLidi(i.fansLost)}
+                  </span>
+                )}
+              </>
+            }
+            trailing={i.fine > 0 ? <RowValue tone="minus">−{formatKc(i.fine)}</RowValue> : undefined} />
+        ))}
+        {bordelCelkem > 0 && (
+          <p className="px-4 py-3 border-t border-line text-meta">
+            Za {pripadu(data.recentIncidents.length)} jsi zaplatil{" "}
+            <strong className="text-card-red">{formatKc(bordelCelkem)}</strong>.
+          </p>
+        )}
+      </ListCard>
     </div>
   );
 }

@@ -48,13 +48,12 @@ export function rozpetiMaxima(data: PotencialData): { dolni: number; horni: numb
   };
 }
 
-/** Hvězdy do hlavičky — vypadají jako ostatní ukazatele vedle nich. */
-export function PotentialBox(
-  { data, boxBg, boxLabel, klic, kompaktni }:
+/** Hvězdy do hlavičky. Popisek a rozložení si řeší hlavička sama, tady jsou jen hvězdy. */
+export function PotentialStars(
+  { data, klic }:
   {
-    data: PotencialData | null; boxBg: string; boxLabel: string;
+    data: PotencialData | null;
     /** Unikátní napříč stránkou — SVG gradienty se jinak přebijí. */ klic: string;
-    /** Nižší varianta do mobilní hlavičky, ať se na obrazovku vejde víc. */ kompaktni?: boolean;
   },
 ) {
   if (!data?.nadejnost) return null;
@@ -64,19 +63,16 @@ export function PotentialBox(
     .filter(Boolean).join(" · ");
 
   return (
-    <div className={`${boxBg} ${kompaktni ? "rounded-soft py-1 px-0.5" : "rounded-xl py-2.5 px-2"} text-center min-w-[64px]`} title={popis}>
-      <div className="flex justify-center leading-none">
-        <TalentStars
-          hodnoceni={data.hrac?.hodnoceni ?? 0}
-          odhadStropu={data.nadejnost.realnyStrop}
-          stropOpor={data.nadejnost.stropOpor}
-          kompaktni
-          klic={klic}
-          uroven={data.nadejnost.uroven as "hvezda" | "nadejny" | "prumer" | "slaby"}
-        />
-      </div>
-      <div className={`${boxLabel} text-micro font-heading font-bold uppercase ${kompaktni ? "mt-0.5" : "mt-1"}`}>Potenciál</div>
-    </div>
+    <span className="flex justify-center leading-none" title={popis}>
+      <TalentStars
+        hodnoceni={data.hrac?.hodnoceni ?? 0}
+        odhadStropu={data.nadejnost.realnyStrop}
+        stropOpor={data.nadejnost.stropOpor}
+        kompaktni
+        klic={klic}
+        uroven={data.nadejnost.uroven as "hvezda" | "nadejny" | "prumer" | "slaby"}
+      />
+    </span>
   );
 }
 
