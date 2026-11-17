@@ -904,30 +904,24 @@ export default function TrainingPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {/* Top improvers */}
             {stats.topImprovers.length > 0 && (
-              <div className="card p-4 sm:p-5">
-                <SectionLabel>Nejvíc se zlepšili</SectionLabel>
-                <div className="space-y-1.5">
-                  {stats.topImprovers.map((p, i) => {
-                    const maxGains = stats.topImprovers[0]?.totalGains ?? 1;
-                    return (
-                      <div key={p.playerId} className="flex items-center gap-2">
-                        <span className="text-xs text-muted w-4 tabular-nums shrink-0">{i + 1}.</span>
-                        <div className="flex-1 min-w-0">
-                          <Link href={`/hrac/${p.playerId}`} className="text-sm font-heading font-bold hover:text-pitch-500 transition-colors truncate block">
-                            {p.name}
-                          </Link>
-                          <div className="flex items-center gap-2 mt-0.5">
-                            <div className="flex-1 bg-gray-100 rounded-full h-1.5 overflow-hidden">
-                              <div className="h-full bg-pitch-400 rounded-full" style={{ width: `${(p.totalGains / maxGains) * 100}%` }} />
-                            </div>
-                            <span className="font-heading font-bold text-xs text-pitch-500 tabular-nums shrink-0">+{p.totalGains}</span>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
+              <ListCard title="Nejvíc se zlepšili">
+                {stats.topImprovers.map((p, i) => {
+                  const maxGains = stats.topImprovers[0]?.totalGains ?? 1;
+                  return (
+                    <ListRow key={p.playerId} dense href={`/hrac/${p.playerId}`}
+                      leading={<span className="text-meta text-muted tabular-nums">{i + 1}.</span>}
+                      title={p.name}
+                      trailing={
+                        <span className="flex items-center gap-2">
+                          <span className="w-16 sm:w-24 bg-gray-100 rounded-full h-1.5 overflow-hidden" aria-hidden="true">
+                            <span className="block h-full bg-pitch-400 rounded-full" style={{ width: `${(p.totalGains / maxGains) * 100}%` }} />
+                          </span>
+                          <span className="text-body font-bold text-pitch-600 tabular-nums w-8 text-right">+{p.totalGains}</span>
+                        </span>
+                      } />
+                  );
+                })}
+              </ListCard>
             )}
 
             {/* Skill breakdown */}

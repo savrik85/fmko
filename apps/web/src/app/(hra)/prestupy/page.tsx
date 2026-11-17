@@ -1518,56 +1518,38 @@ export default function TransfersPage() {
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {overview.topSellers.length > 0 && (
                   <ListCard title="💰 Nejvíc vydělali">
-                    <div className="px-4 py-3 space-y-2.5">
-                      {overview.topSellers.map((s, i) => {
-                        const max = overview.topSellers[0]?.earned ?? 1;
-                        const pct = (s.earned / max) * 100;
-                        return (
-                          <div key={s.teamId} className="flex items-center gap-2.5">
-                            <span className="font-heading font-bold text-xs text-muted w-4 tabular-nums shrink-0">{i + 1}.</span>
-                            <ClubBadge badge={s.badge} size={28} />
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center justify-between gap-2 mb-1">
-                                <Link href={`/tym/${s.teamId}`} className="text-sm font-heading font-bold text-ink hover:text-pitch-500 truncate">
-                                  {s.teamName}
-                                </Link>
-                                <span className="font-heading font-bold text-sm text-pitch-500 tabular-nums shrink-0">{s.earned.toLocaleString("cs")} Kč</span>
-                              </div>
-                              <div className="bg-gray-100 rounded-full h-2 overflow-hidden">
-                                <div className="h-full bg-gradient-to-r from-pitch-400 to-pitch-600 rounded-full transition-all" style={{ width: `${pct}%` }} />
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
+                    {overview.topSellers.map((s, i) => {
+                      const max = overview.topSellers[0]?.earned ?? 1;
+                      return (
+                        <ListRow key={s.teamId} dense href={`/tym/${s.teamId}`}
+                          leading={<span className="text-meta text-muted tabular-nums">{i + 1}.</span>}
+                          title={<span className="flex items-center gap-2"><ClubBadge badge={s.badge} size={24} /><span className="min-w-0">{s.teamName}</span></span>}
+                          trailing={<span className="text-body font-bold tabular-nums text-pitch-600">{s.earned.toLocaleString("cs")} Kč</span>}
+                          detail={
+                            <span className="block bg-gray-100 rounded-full h-1.5 overflow-hidden mt-1">
+                              <span className="block h-full bg-gradient-to-r from-pitch-400 to-pitch-600 rounded-full" style={{ width: `${(s.earned / max) * 100}%` }} />
+                            </span>
+                          } />
+                      );
+                    })}
                   </ListCard>
                 )}
                 {overview.topBuyers.length > 0 && (
                   <ListCard title="🛒 Nejvíc utratili">
-                    <div className="px-4 py-3 space-y-2.5">
-                      {overview.topBuyers.map((b, i) => {
-                        const max = overview.topBuyers[0]?.spent ?? 1;
-                        const pct = (b.spent / max) * 100;
-                        return (
-                          <div key={b.teamId} className="flex items-center gap-2.5">
-                            <span className="font-heading font-bold text-xs text-muted w-4 tabular-nums shrink-0">{i + 1}.</span>
-                            <ClubBadge badge={b.badge} size={28} />
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center justify-between gap-2 mb-1">
-                                <Link href={`/tym/${b.teamId}`} className="text-sm font-heading font-bold text-ink hover:text-pitch-500 truncate">
-                                  {b.teamName}
-                                </Link>
-                                <span className="font-heading font-bold text-sm text-card-red tabular-nums shrink-0">{b.spent.toLocaleString("cs")} Kč</span>
-                              </div>
-                              <div className="bg-gray-100 rounded-full h-2 overflow-hidden">
-                                <div className="h-full bg-gradient-to-r from-amber-400 to-card-red rounded-full transition-all" style={{ width: `${pct}%` }} />
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
+                    {overview.topBuyers.map((b, i) => {
+                      const max = overview.topBuyers[0]?.spent ?? 1;
+                      return (
+                        <ListRow key={b.teamId} dense href={`/tym/${b.teamId}`}
+                          leading={<span className="text-meta text-muted tabular-nums">{i + 1}.</span>}
+                          title={<span className="flex items-center gap-2"><ClubBadge badge={b.badge} size={24} /><span className="min-w-0">{b.teamName}</span></span>}
+                          trailing={<span className="text-body font-bold tabular-nums text-card-red">{b.spent.toLocaleString("cs")} Kč</span>}
+                          detail={
+                            <span className="block bg-gray-100 rounded-full h-1.5 overflow-hidden mt-1">
+                              <span className="block h-full bg-gradient-to-r from-amber-400 to-card-red rounded-full" style={{ width: `${(b.spent / max) * 100}%` }} />
+                            </span>
+                          } />
+                      );
+                    })}
                   </ListCard>
                 )}
               </div>
