@@ -1072,22 +1072,22 @@ function MatchPage() {
           {/* Desktop selector — inline, replaces XI table */}
           {editSlot !== null && (
             <div className="hidden lg:block card overflow-x-auto mb-3 table-scroll">
-              <div className="px-3 py-2 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
-                <span className="font-heading font-bold text-sm uppercase text-muted">Vybrat hráče, {slots[editSlot].pos}</span>
+              <div className="px-4 py-3 border-b border-line flex items-center justify-between">
+                <span className="section-label !mb-0">Vybrat hráče, {slots[editSlot].pos}</span>
                 <button onClick={() => setEditSlot(null)} className="text-muted hover:text-ink text-lg leading-none">✕</button>
               </div>
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-gray-200 text-muted">
-                    <th className="py-1.5 pl-3 w-8 text-center text-xs font-heading">#</th>
-                    <th className="py-1.5 text-left text-xs font-heading">Hráč</th>
-                    <th className="py-1.5 text-center text-xs font-heading w-8">Hod</th>
-                    <th className="py-1.5 text-center text-xs font-heading w-8">Rch</th>
-                    <th className="py-1.5 text-center text-xs font-heading w-8">Tch</th>
-                    <th className="py-1.5 text-center text-xs font-heading w-8">Stř</th>
-                    <th className="py-1.5 text-center text-xs font-heading w-8">Obr</th>
-                    <th className="py-1.5 text-center text-xs font-heading w-8">Kon</th>
-                    <th className="py-1.5 pr-3 text-center text-xs font-heading w-8">Mor</th>
+                  <tr className="h-9 bg-surface-2 border-b border-line text-muted">
+                    <th className="py-1.5 pl-3 w-8 text-center text-micro font-bold">#</th>
+                    <th className="py-1.5 text-left text-micro font-bold">Hráč</th>
+                    <th className="py-1.5 text-center text-micro font-bold w-8">Hod</th>
+                    <th className="py-1.5 text-center text-micro font-bold w-8">Rch</th>
+                    <th className="py-1.5 text-center text-micro font-bold w-8">Tch</th>
+                    <th className="py-1.5 text-center text-micro font-bold w-8">Stř</th>
+                    <th className="py-1.5 text-center text-micro font-bold w-8">Obr</th>
+                    <th className="py-1.5 text-center text-micro font-bold w-8">Kon</th>
+                    <th className="py-1.5 pr-3 text-center text-micro font-bold w-8">Mor</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1106,7 +1106,7 @@ function MatchPage() {
                       return (
                         <tr key={p.id}
                           onClick={() => { if (!isAbsent) { placeInLineup(editSlot, p.id); setEditSlot(null); } }}
-                          className={`border-b border-gray-50 last:border-b-0 transition-colors ${
+                          className={`border-b border-line-soft last:border-b-0 transition-colors ${
                             isAbsent ? "opacity-35 cursor-not-allowed" : isCurrent ? "bg-pitch-100" : "hover:bg-gray-50 cursor-pointer"
                           } ${isOOP && !isAbsent ? "bg-gold-50/50" : ""}`}>
                           <td className="py-1.5 pl-3 text-center">
@@ -1150,22 +1150,22 @@ function MatchPage() {
           <>
             {/* Starting XI table */}
               <div className="card overflow-x-auto mb-3 table-scroll">
-                <div className="px-3 py-2 bg-gray-50 border-b border-gray-100">
-                  <span className="font-heading font-bold text-sm uppercase text-muted">Základní sestava</span>
+                <div className="px-4 py-3 border-b border-line">
+                  <span className="section-label !mb-0">Základní sestava</span>
                 </div>
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-gray-200 text-muted">
-                      <th className="py-1.5 pl-3 w-8 text-center text-xs font-heading" title="Číslo dresu">#</th>
-                      <th className="py-1.5 text-left text-xs font-heading">Hráč</th>
-                      <th className="py-1.5 text-center text-xs font-heading w-8" title="Celkové hodnocení">Hod</th>
-                      <th className="py-1.5 text-center text-xs font-heading w-8" title="Rychlost">Rch</th>
-                      <th className="py-1.5 text-center text-xs font-heading w-8" title="Technika">Tch</th>
-                      <th className="py-1.5 text-center text-xs font-heading w-8" title="Střelba">Stř</th>
-                      <th className="py-1.5 text-center text-xs font-heading w-8" title="Obrana">Obr</th>
-                      <th className="py-1.5 text-center text-xs font-heading w-8" title="Kondice">Kon</th>
-                      <th className="py-1.5 text-center text-xs font-heading w-8" title="Morálka">Mor</th>
-                      <th className="py-1.5 pr-3 text-center text-xs font-heading w-8" title="Průměrné hodnocení">Hod</th>
+                    <tr className="h-9 bg-surface-2 border-b border-line text-muted">
+                      <th className="py-1.5 pl-3 w-8 text-center text-micro font-bold" title="Číslo dresu">#</th>
+                      <th className="py-1.5 text-left text-micro font-bold">Hráč</th>
+                      <th className="py-1.5 text-center text-micro font-bold w-8" title="Celkové hodnocení">Hod</th>
+                      <th className="py-1.5 text-center text-micro font-bold w-8" title="Rychlost">Rch</th>
+                      <th className="py-1.5 text-center text-micro font-bold w-8" title="Technika">Tch</th>
+                      <th className="py-1.5 text-center text-micro font-bold w-8" title="Střelba">Stř</th>
+                      <th className="py-1.5 text-center text-micro font-bold w-8" title="Obrana">Obr</th>
+                      <th className="py-1.5 text-center text-micro font-bold w-8" title="Kondice">Kon</th>
+                      <th className="py-1.5 text-center text-micro font-bold w-8" title="Morálka">Mor</th>
+                      <th className="py-1.5 pr-3 text-center text-micro font-bold w-8" title="Průměrné hodnocení">Hod</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1175,7 +1175,7 @@ function MatchPage() {
                       const isOOP = player.position !== slots[i].pos;
                       const s = player as any;
                       return (
-                        <tr key={i} className={`border-b border-gray-50 last:border-b-0 hover:bg-gray-50 cursor-pointer ${isOOP ? "bg-gold-50/50" : ""} ${swapSource === i ? "bg-gold-100 ring-1 ring-gold-400" : ""}`}
+                        <tr key={i} className={`border-b border-line-soft last:border-b-0 hover:bg-gray-50 cursor-pointer ${isOOP ? "bg-gold-50/50" : ""} ${swapSource === i ? "bg-gold-100 ring-1 ring-gold-400" : ""}`}
                           onClick={() => { setEditSlot(i); setSwapSource(null); }}>
                           <td className="py-1.5 pl-3 text-center">
                             <div className={`w-6 h-6 rounded-full flex items-center justify-center text-white font-heading font-bold text-xs mx-auto ${POS_BG[slots[i].pos]}`}>
@@ -1212,8 +1212,8 @@ function MatchPage() {
 
               {/* Lavička — jen ti, kdo na zápas pojedou. Zbytek kádru je oddělený pod ní. */}
               <div className="card overflow-x-auto table-scroll">
-                <div className="px-3 py-2 bg-gray-50 border-b border-gray-100">
-                  <span className="font-heading font-bold text-sm uppercase text-muted">
+                <div className="px-4 py-3 border-b border-line">
+                  <span className="section-label !mb-0">
                     Lavička ({subs.length + standIns.length})
                   </span>
                   <p className="text-sm text-muted leading-snug mt-0.5">
@@ -1231,17 +1231,17 @@ function MatchPage() {
                 </div>
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-gray-200 text-muted">
-                      <th className="py-1.5 pl-3 w-8 text-center text-xs font-heading" title="Číslo dresu">#</th>
-                      <th className="py-1.5 text-left text-xs font-heading">Hráč</th>
-                      <th className="py-1.5 text-center text-xs font-heading w-8" title="Celkové hodnocení">Hod</th>
-                      <th className="py-1.5 text-center text-xs font-heading w-8" title="Rychlost">Rch</th>
-                      <th className="py-1.5 text-center text-xs font-heading w-8" title="Technika">Tch</th>
-                      <th className="py-1.5 text-center text-xs font-heading w-8" title="Střelba">Stř</th>
-                      <th className="py-1.5 text-center text-xs font-heading w-8" title="Obrana">Obr</th>
-                      <th className="py-1.5 text-center text-xs font-heading w-8" title="Kondice">Kon</th>
-                      <th className="py-1.5 text-center text-xs font-heading w-8" title="Morálka">Mor</th>
-                      <th className="py-1.5 pr-3 text-center text-xs font-heading w-8" title="Průměrné hodnocení">Hod</th>
+                    <tr className="h-9 bg-surface-2 border-b border-line text-muted">
+                      <th className="py-1.5 pl-3 w-8 text-center text-micro font-bold" title="Číslo dresu">#</th>
+                      <th className="py-1.5 text-left text-micro font-bold">Hráč</th>
+                      <th className="py-1.5 text-center text-micro font-bold w-8" title="Celkové hodnocení">Hod</th>
+                      <th className="py-1.5 text-center text-micro font-bold w-8" title="Rychlost">Rch</th>
+                      <th className="py-1.5 text-center text-micro font-bold w-8" title="Technika">Tch</th>
+                      <th className="py-1.5 text-center text-micro font-bold w-8" title="Střelba">Stř</th>
+                      <th className="py-1.5 text-center text-micro font-bold w-8" title="Obrana">Obr</th>
+                      <th className="py-1.5 text-center text-micro font-bold w-8" title="Kondice">Kon</th>
+                      <th className="py-1.5 text-center text-micro font-bold w-8" title="Morálka">Mor</th>
+                      <th className="py-1.5 pr-3 text-center text-micro font-bold w-8" title="Průměrné hodnocení">Hod</th>
                     </tr>
                   </thead>
                   {(() => {
@@ -1251,7 +1251,7 @@ function MatchPage() {
                       return (
                         <tr key={p.id}
                           onClick={() => onBenchRowClick(p)}
-                          className={`border-b border-gray-50 last:border-b-0 ${isAbsent ? "opacity-35" : "cursor-pointer hover:bg-pitch-50"} ${isLeftOut && !isAbsent && benchPick !== p.id ? "opacity-60" : ""} ${benchPick === p.id ? "bg-gold-100 ring-1 ring-gold-400" : ""}`}>
+                          className={`border-b border-line-soft last:border-b-0 ${isAbsent ? "opacity-35" : "cursor-pointer hover:bg-pitch-50"} ${isLeftOut && !isAbsent && benchPick !== p.id ? "opacity-60" : ""} ${benchPick === p.id ? "bg-gold-100 ring-1 ring-gold-400" : ""}`}>
                           <td className="py-1.5 pl-3 w-8 text-center">
                             <div className={`w-6 h-6 rounded-full flex items-center justify-center text-white font-heading font-bold text-xs mx-auto ${POS_BG[p.position]}`}>
                               {p.squadNumber ?? "?"}
@@ -1305,7 +1305,7 @@ function MatchPage() {
                           <tbody>
                             <tr className="bg-gray-50 border-y border-gray-100">
                               <td colSpan={10} className="px-3 py-2">
-                                <span className="font-heading font-bold text-sm uppercase text-muted">
+                                <span className="section-label !mb-0">
                                   Nejedou na zápas ({leftOut.length})
                                 </span>
                                 <p className="text-sm text-muted leading-snug">

@@ -439,3 +439,23 @@ Po každé vlně jedna krátká zpráva česky:
 
 Když narazíš na chybu ve hře, která s redesignem nesouvisí, platí protokol z
 `CLAUDE.md`: reprodukuj, najdi příčinu, popiš, počkej na souhlas.
+
+## 10. Co zůstalo mimo sdílené díly a proč (stav 17. 11. 2026)
+
+Tyto seznamy jsem při převodu vědomě nechal ve vlastní podobě. Kdo plán převezme,
+ať je nepřevádí bez dohody s uživatelem.
+
+| Místo | Proč |
+|---|---|
+| Sestava (`/zapas`): výběr hráče, základní sestava, lavička | Je to editor: výběr pozice, výměna, stav každého řádku (mimo post, nepřítomný, vybraný). Sjednocené je jen záhlaví. |
+| Detail zápasu: sestavy obou týmů, klíčové momenty, góly, komentář | Zápasový protokol s barvou postu a časovou osou. |
+| Rozpisy zápasů (liga, `/rozpis`, pohár, turnaj, U21) | Řádek má dva týmy proti sobě; potřeboval by vlastní díl. |
+| Karty s rozhodnutím a více tlačítky (nabídky, výzvy na přáteláky, události k rozhodnutí, petice, kurzy trenéra) | Víc akcí a víc řádků textu než jeden řádek seznamu. |
+| Grémium (`/soutez`) a sázky (`/sazky`) | Vlastní vzhled (úřední zápis, tiket). |
+| Telefon, Zpravodaj | Vlastní vzhled (telefon, noviny). |
+| Widgety na Domů | Dlaždice si počítají, kolik řádků se vejde (`ROW_PX`); řádek 48 px by je rozbil. |
+| Hráči U21 a akademie | Rozbalovací řádky s akcemi (`<details>`). |
+| Nápověda a vliv trenéra na fanoušky | Referenční tabulky v textu nápovědy. |
+| Hospoda: výtržnosti a pozvaní trenéři | Vnořené v kartě večera s tlačítky. |
+| Pruhové žebříčky (nejvíc vydělali / utratili, zlepšení z tréninku) | Řádek nese ukazatel průběhu, ne hodnotu. |
+
