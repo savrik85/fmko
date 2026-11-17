@@ -71,7 +71,7 @@ export function FMTopBar() {
 
       {badge && <Link href="/prehled" aria-label="Domů" className="shrink-0 hidden min-[400px]:block">{badge}</Link>}
 
-      <h1 className="font-heading font-[800] text-white text-lg sm:text-xl leading-none truncate min-w-0 sm:shrink-0">
+      <h1 className="font-heading font-[800] text-white text-lg sm:text-xl leading-tight truncate min-w-0 sm:shrink-0">
         {title}
       </h1>
 
