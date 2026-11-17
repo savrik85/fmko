@@ -62,6 +62,11 @@ function isBottomNav(node: Node): boolean {
 export interface CaptureOptions {
   /** Bez spodní lišty: fotka ke sdílení, ne hlášení chyby. */
   hideBottomNav?: boolean;
+  /**
+   * Jen to, co je teď na displeji (jako screenshot telefonu), ne celá stránka.
+   * Pro sdílení: celá stránka vyšla jako dlouhá nudle, do Socek ani zprávy se nehodí.
+   */
+  visibleOnly?: boolean;
 }
 
 export interface PagePlan {
@@ -88,8 +93,22 @@ export function planPageCapture(page: {
   mainScrollHeight: number;
   mainScrollTop: number;
   devicePixelRatio: number;
+  visibleOnly?: boolean;
 }): PagePlan {
   const chrome = Math.max(0, page.viewportHeight - page.mainClientHeight);
+  if (page.visibleOnly) {
+    const height = page.viewportHeight;
+    const wantedScale = Math.min(page.devicePixelRatio || 1, MAX_SCALE);
+    const fit = Math.sqrt(MAX_CANVAS_PIXELS / (page.viewportWidth * height));
+    return {
+      width: page.viewportWidth,
+      height,
+      contentHeight: page.mainClientHeight,
+      contentOffset: Math.max(0, Math.round(page.mainScrollTop)),
+      scale: Math.max(MIN_SCALE, Math.min(wantedScale, fit)),
+      truncated: false,
+    };
+  }
   const fullContent = Math.max(page.mainScrollHeight, page.mainClientHeight);
   const contentHeight = Math.min(fullContent, MAX_CAPTURE_HEIGHT - chrome);
   const truncated = contentHeight < fullContent;
@@ -228,6 +247,7 @@ export async function capturePage(options: CaptureOptions = {}): Promise<Capture
     mainScrollHeight: main?.scrollHeight ?? target.clientHeight,
     mainScrollTop: main?.scrollTop ?? 0,
     devicePixelRatio: window.devicePixelRatio,
+    visibleOnly: options.visibleOnly,
   });
   const base = { width: plan.width, height: plan.height, truncated: plan.truncated };
   const started = performance.now();
