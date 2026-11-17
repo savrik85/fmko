@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
-import { CollapsibleCard, ListRow } from "@/components/ui";
+import { CollapsibleCard, ListRow, ChoiceCard, ErrorBox } from "@/components/ui";
 import { formatKc } from "@/lib/format";
 
 const BUS_TIERS_VESNICE = [
@@ -250,26 +250,10 @@ export function BusSelector({
             <label className="text-micro text-muted font-heading uppercase tracking-wide block mb-1">
               Velikost dopravního prostředku
             </label>
-            <div className="grid grid-cols-3 gap-1.5">
+            <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Velikost dopravního prostředku">
               {BUS_TIERS.map((t) => (
-                <button
-                  key={t.key}
-                  onClick={() => setBusSize(t.key)}
-                  className={`px-2 py-2 rounded border-2 text-left transition-all ${
-                    busSize === t.key
-                      ? "border-pitch-500 bg-pitch-500/10"
-                      : "border-gray-200 hover:border-gray-300"
-                  }`}
-                >
-                  <div className="text-xl">{t.icon}</div>
-                  <div className="font-heading font-bold text-xs leading-tight">
-                    {t.label}
-                  </div>
-                  <div className="text-micro text-muted">{t.range}</div>
-                  <div className="text-micro text-pitch-600 font-heading font-bold mt-0.5">
-                    {formatKc(t.cost)}
-                  </div>
-                </button>
+                <ChoiceCard key={t.key} selected={busSize === t.key} onSelect={() => setBusSize(t.key)}
+                  icon={t.icon} title={t.label} detail={t.range} aside={formatKc(t.cost)} />
               ))}
             </div>
             <div className="mt-1.5 text-micro text-muted italic">
@@ -277,16 +261,12 @@ export function BusSelector({
             </div>
           </div>
 
-          {error && (
-            <div className="text-xs text-card-red font-heading font-bold">
-              ⚠ {error}
-            </div>
-          )}
+          {error && <ErrorBox message={error} />}
 
           <button
             onClick={submit}
             disabled={submitting || !selectedVillage}
-            className="w-full py-2 rounded bg-pitch-500 text-white font-heading font-bold text-sm hover:bg-pitch-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="btn btn-primary btn-md w-full"
           >
             {submitting
               ? "Objednávám…"
