@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
-import { Spinner, SectionLabel, BadgePreview, PositionBadge, PageHeader, Tabs, DataTable, EntityCell, ListCard, ResultChip, type DataColumn, type MatchOutcome } from "@/components/ui";
+import { Spinner, SectionLabel, BadgePreview, PositionBadge, PageHeader, Tabs, DataTable, EntityCell, ListCard, ListRow, ListEmpty, RowGroup, RowIcon, ResultChip, type DataColumn, type MatchOutcome } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 import { PreseasonNotice } from "@/components/team/preseason-notice";
 import { LeagueStatsTab, type StatsData } from "@/components/league/league-stats";
@@ -323,21 +323,35 @@ function LigaPage() {
       {tab === "statistiky" && <LeagueStatsTab data={statsData} loaded={loadedTabs.has("statistiky")} />}
       {isOtherLeague && tab === "zpravodaj" && (
         !loadedTabs.has("zpravodaj") ? <div className="flex justify-center py-8"><Spinner /></div> : (
-          <div className="space-y-3">
-            {newsArticles.length === 0 && <p className="text-muted text-sm text-center py-8">Zatím žádné zprávy</p>}
-            {newsArticles.map((a) => (
-              <div key={a.id} className="card p-4">
-                <div className="flex items-start gap-3">
-                  <span className="text-2xl">{a.icon}</span>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-heading font-bold text-base text-ink">{a.headline}</h3>
-                    <ArticleBody article={a} />
-                    <p className="text-xs text-muted/60 mt-2">{a.date ? formatDate(a.date) : ""}{a.gameWeek ? ` ${a.gameWeek}. kolo` : ""}</p>
+          <ListCard title="Zpravodaj" count={newsArticles.length || undefined}>
+            {newsArticles.length === 0 && <ListEmpty icon="📰">Zatím žádné zprávy.</ListEmpty>}
+            {newsArticles.map((a) => {
+              const when = `${a.date ? formatDate(a.date) : ""}${a.gameWeek ? ` ${a.gameWeek}. kolo` : ""}`.trim();
+              const results = a.type === "round_results" ? parseRoundResults(a.body) : [];
+              // Výsledky kola jsou zápasy: stejný řádek zápasu jako v rozpisu, nadpis článku nad nimi.
+              if (results.length > 0) {
+                return (
+                  <div key={a.id}>
+                    <RowGroup label={<>{a.icon} {a.headline}</>} aside={when || undefined} />
+                    {results.map((r, i) => {
+                      const [h, aw] = r.score.split(":").map(Number);
+                      return (
+                        <FixtureRow key={i} home={{ name: r.home }} away={{ name: r.away }}
+                          score={{ home: h, away: aw }} winner={h > aw ? "home" : aw > h ? "away" : null} />
+                      );
+                    })}
                   </div>
-                </div>
-              </div>
-            ))}
-          </div>
+                );
+              }
+              return (
+                <ListRow key={a.id}
+                  leading={<RowIcon>{a.icon}</RowIcon>}
+                  title={a.headline}
+                  meta={when || undefined}
+                  detail={<ArticleBody article={a} />} />
+              );
+            })}
+          </ListCard>
         )
       )}
       </>
@@ -450,6 +464,14 @@ function PastStat({ label, value, sub }: { label: string; value: string; sub?: s
 
 // ═══ Article body renderer ═══
 
+/** Výsledky kola vytažené z textu článku („X porazil Y 2:1“). */
+function parseRoundResults(body: string): Array<{ home: string; away: string; score: string }> {
+  const re = /(.+?)\s+(?:porazil|remizoval\s+s|zvítězil\s+nad)\s+(.+?)\s+(\d+:\d+)/g;
+  return Array.from(body.matchAll(re)).map((m) => ({
+    home: m[1].replace(/^\.\s*/, "").trim(), away: m[2].trim(), score: m[3],
+  }));
+}
+
 function ArticleBody({ article }: { article: NewsArticle }) {
   if (article.type === "interview") {
     let meta: { article?: string } = {};
@@ -461,31 +483,8 @@ function ArticleBody({ article }: { article: NewsArticle }) {
       </div>
     );
   }
-  if (article.type === "round_results") {
-    const re = /(.+?)\s+(?:porazil|remizoval\s+s|zvítězil\s+nad)\s+(.+?)\s+(\d+:\d+)/g;
-    const structured = Array.from(article.body.matchAll(re)).map((m) => ({
-      home: m[1].replace(/^\.\s*/, "").trim(), away: m[2].trim(), score: m[3],
-    }));
-    if (structured.length === 0) return <p className="text-sm text-muted mt-1 whitespace-pre-wrap">{article.body}</p>;
-    return (
-      <div className="mt-1 space-y-1">
-        {structured.map((r, i) => {
-          const [h, a] = r.score.split(":").map(Number);
-          const isDraw = h === a;
-          const homeWin = h > a;
-          return (
-            <div key={i} className="flex items-center text-sm py-1 border-b border-gray-50 last:border-b-0">
-              <span className={`flex-1 text-right truncate pr-2 ${homeWin ? "font-heading font-bold" : ""}`}>{r.home}</span>
-              <span className={`font-heading font-bold text-xs tabular-nums px-2 py-0.5 rounded min-w-[40px] text-center ${
-                isDraw ? "bg-gray-100 text-muted" : "bg-gray-50 text-ink"
-              }`}>{r.score}</span>
-              <span className={`flex-1 truncate pl-2 ${!homeWin && !isDraw ? "font-heading font-bold" : ""}`}>{r.away}</span>
-            </div>
-          );
-        })}
-      </div>
-    );
-  }
+  // Výsledky kola s rozpoznanými zápasy vykresluje seznam nad tímhle (FixtureRow),
+  // sem se dostane jen článek, ze kterého se zápasy vytáhnout nepodařilo.
   return <p className="text-sm text-muted mt-1 whitespace-pre-wrap">{article.body}</p>;
 }
 
