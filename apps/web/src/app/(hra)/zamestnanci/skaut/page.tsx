@@ -17,6 +17,7 @@ import {
   SCOUT_LEAGUE_WEEKLY_COST, type ScoutPosition, type ScoutAssignmentType,
 } from "@okresni-masina/shared";
 import { formatKc } from "@/lib/format";
+import { choiceClass } from "@/components/ui/choice";
 
 interface Assignment {
   id: string;
@@ -519,44 +520,28 @@ export default function ScoutPage() {
             <button
               type="button"
               onClick={() => { setMissionTab("u21_league"); setPositions([]); }}
-              className={`px-3 py-1.5 rounded-soft text-sm font-heading font-bold transition-all ${
-                missionTab === "u21_league"
-                  ? "bg-pitch-500 text-white shadow-xs"
-                  : "bg-surface text-muted hover:text-ink"
-              }`}
+              className={`px-3 py-1.5 text-sm font-heading font-bold ${choiceClass(missionTab === "u21_league")}`}
             >
               🌟 U21 liga {data.leagues?.u21 ? `(${data.leagues.u21.name})` : ""}
             </button>
             <button
               type="button"
               onClick={() => { setMissionTab("league"); setPositions([]); }}
-              className={`px-3 py-1.5 rounded-soft text-sm font-heading font-bold transition-all ${
-                missionTab === "league"
-                  ? "bg-pitch-500 text-white shadow-xs"
-                  : "bg-surface text-muted hover:text-ink"
-              }`}
+              className={`px-3 py-1.5 text-sm font-heading font-bold ${choiceClass(missionTab === "league")}`}
             >
               🏆 Naše liga {data.leagues?.senior ? `(${data.leagues.senior.name})` : ""}
             </button>
             <button
               type="button"
               onClick={() => { setMissionTab("area"); setAgeMin(18); setAgeMax(32); }}
-              className={`px-3 py-1.5 rounded-soft text-sm font-heading font-bold transition-all ${
-                missionTab === "area"
-                  ? "bg-pitch-500 text-white shadow-xs"
-                  : "bg-surface text-muted hover:text-ink"
-              }`}
+              className={`px-3 py-1.5 text-sm font-heading font-bold ${choiceClass(missionTab === "area")}`}
             >
               🌍 Okolní vesnice
             </button>
             <button
               type="button"
               onClick={() => setMissionTab("match")}
-              className={`px-3 py-1.5 rounded-soft text-sm font-heading font-bold transition-all ${
-                missionTab === "match"
-                  ? "bg-pitch-500 text-white shadow-xs"
-                  : "bg-surface text-muted hover:text-ink"
-              }`}
+              className={`px-3 py-1.5 text-sm font-heading font-bold ${choiceClass(missionTab === "match")}`}
             >
               ⚽ Sledování soupeře
             </button>
@@ -705,22 +690,14 @@ export default function ScoutPage() {
                     <button
                       type="button"
                       onClick={() => { setAgeMin(16); setAgeMax(21); }}
-                      className={`text-xs px-2.5 py-1 rounded-lg font-heading font-bold border transition-colors ${
-                        ageMax <= 21
-                          ? "bg-pitch-500 text-white border-pitch-500 shadow-xs"
-                          : "bg-white text-ink border-gray-200 hover:border-pitch-300"
-                      }`}
+                      className={`text-xs px-2.5 py-1 font-heading font-bold ${choiceClass(ageMax <= 21)}`}
                     >
                       🌟 Jen talenty U21 (16–21)
                     </button>
                     <button
                       type="button"
                       onClick={() => { setAgeMin(16); setAgeMax(35); }}
-                      className={`text-xs px-2.5 py-1 rounded-lg font-heading font-bold border transition-colors ${
-                        ageMin === 16 && ageMax === 35
-                          ? "bg-pitch-500 text-white border-pitch-500 shadow-xs"
-                          : "bg-white text-ink border-gray-200 hover:border-pitch-300"
-                      }`}
+                      className={`text-xs px-2.5 py-1 font-heading font-bold ${choiceClass(ageMin === 16 && ageMax === 35)}`}
                     >
                       Všichni (16–35)
                     </button>

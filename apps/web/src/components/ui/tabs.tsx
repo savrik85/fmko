@@ -195,7 +195,8 @@ export function Tabs<T extends string>({
             tabIndex={isActive ? 0 : -1}
             onClick={() => onChange(t.key)}
             className={`${itemClass} ${
-              isActive ? "bg-surface-2 text-pitch-600 shadow-xs" : "text-muted hover:text-ink"
+              // Vzhled B jako volby (ChoiceGroup): světle zelená se zeleným rámečkem.
+              isActive ? "bg-pitch-50 text-pitch-600 shadow-[inset_0_0_0_2px_var(--color-pitch-500)]" : "text-muted hover:text-ink"
             }`}
           >
             {t.icon && <span aria-hidden="true" className={mobileIcons ? "mr-1" : "hidden sm:inline mr-1"}>{t.icon}</span>}
