@@ -468,4 +468,7 @@ Vlna 5 hotová lokálně: 64 polí na třídách `input`/`select` (rozměry jako
 karty „Jak to funguje“ jako `CollapsibleCard startCollapsed`, tři malá rozbalení `Disclosure`.
 Ponecháno: pole na tmavém podkladu a s dynamickou třídou, karty v Tréninku a rozboru kádru
 s vlastním záhlavím.
-Vše lokálně, nepushnuté; push jen na pokyn uživatele.
+Všech pět vln je na testingu od 17. 11. 2026 (a05cce20), ověřeno na test.prales.fun:
+45 stránek hry na 375 px bez chyby, přetečení a zaseknutého načítání.
+Řádky filtrů v Přestupy → Hledat uživatel nechal rolovat do strany (vzhled C mají).
+Na produkci zatím nic; nasazuje jen uživatel výslovným pokynem.
