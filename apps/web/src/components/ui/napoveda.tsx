@@ -1,8 +1,15 @@
 "use client";
 
-import { useEffect, useState, type Ref } from "react";
+import { useEffect, useRef, useState, type Ref } from "react";
 import { usePathname } from "next/navigation";
 import { HelpMenu } from "./help-menu";
+import { BugReportTrialDialog } from "@/components/bug-report/bug-report-trial-dialog";
+import { captureVisibleApp, type CaptureResult } from "@/lib/page-capture";
+
+/** Počká, až prohlížeč vykreslí zavřené menu, ať na snímku není. */
+function nextPaint(): Promise<void> {
+  return new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+}
 
 interface HelpSection {
   heading?: string;
@@ -366,8 +373,26 @@ export function Napoveda() {
   // Přechod na jinou stránku menu i nápovědu zavře; nápověda patří stránce.
   useEffect(() => { setMode("closed"); }, [pathname]);
 
-  const reportBug = () => {
+  // Focení: ref hlídá dvojí ťuknutí ještě před překreslením, stav ukazuje „Fotím stránku…“.
+  const capturingRef = useRef(false);
+  const [capturing, setCapturing] = useState(false);
+  const [captures, setCaptures] = useState<CaptureResult[] | null>(null);
+
+  const reportBug = async () => {
+    if (capturingRef.current) return;
+    capturingRef.current = true;
+    setCapturing(true);
     setMode("closed");
+    try {
+      await nextPaint();
+      // Postupně, ne naráz: obě knihovny by si přepisovaly dočasný posun `main`.
+      const first = await captureVisibleApp("modern-screenshot");
+      const second = await captureVisibleApp("snapdom");
+      setCaptures([first, second]);
+    } finally {
+      capturingRef.current = false;
+      setCapturing(false);
+    }
   };
 
   return (
@@ -383,12 +408,14 @@ export function Napoveda() {
         <HelpMenu
           anchor={anchor}
           hasHelp={help != null}
+          busy={capturing}
           onShowHelp={() => setMode("help")}
           onReportBug={reportBug}
           onClose={() => setMode("closed")}
         />
       )}
       {mode === "help" && help && <HelpPanel help={help} onClose={() => setMode("closed")} />}
+      {captures && <BugReportTrialDialog results={captures} onClose={() => setCaptures(null)} />}
     </>
   );
 }
