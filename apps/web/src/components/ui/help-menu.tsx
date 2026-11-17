@@ -6,9 +6,11 @@ import { createPortal } from "react-dom";
 const MENU_WIDTH = 240;
 const EDGE_GAP = 8;
 
+export type CaptureAction = "share" | "bug";
+
 /**
- * Rozbalovací menu u kroužku nápovědy v horní liště: nápověda ke stránce
- * a nahlášení chyby (později i sdílení do Socek).
+ * Rozbalovací menu u kroužku nápovědy v horní liště: nápověda ke stránce,
+ * fotka stránky ke sdílení a nahlášení chyby.
  *
  * Kreslí se přes portál do `body`, ne uvnitř lišty: lišta nese `.on-dark`
  * se světlými obrysy fokusu a tmavým pozadím, menu je světlé. Pozici bere
@@ -20,18 +22,20 @@ const EDGE_GAP = 8;
 export function HelpMenu({
   anchor,
   hasHelp,
-  busy = false,
+  busyAction = null,
   onShowHelp,
+  onShareScreenshot,
   onReportBug,
   onClose,
 }: {
   /** Kroužek, pod kterým se menu otevře. */
   anchor: HTMLElement | null;
-  /** Stránka má nápovědu; bez ní menu nabídne jen nahlášení chyby. */
+  /** Stránka má nápovědu; bez ní menu nabídne jen fotku a nahlášení chyby. */
   hasHelp: boolean;
-  /** Focení běží; nahlásit znovu nejde. */
-  busy?: boolean;
+  /** Které focení právě běží; další volby jsou do konce zamčené. */
+  busyAction?: CaptureAction | null;
   onShowHelp: () => void;
+  onShareScreenshot: () => void;
   onReportBug: () => void;
   onClose: () => void;
 }) {
@@ -75,7 +79,7 @@ export function HelpMenu({
       <div className="fixed inset-0 z-[var(--z-nav)]" onClick={onClose} aria-hidden />
       <div
         role="menu"
-        aria-label="Nápověda a nahlášení chyby"
+        aria-label="Nápověda, fotka a hlášení"
         className="fixed z-[var(--z-nav)] overflow-hidden rounded-card bg-white shadow-2xl border border-gray-200 animate-slide-up"
         style={{ top: position.top, left: position.left, width: MENU_WIDTH }}
       >
@@ -90,11 +94,21 @@ export function HelpMenu({
           type="button"
           role="menuitem"
           className={`${item} ${hasHelp ? "border-t border-gray-100" : ""}`}
+          onClick={onShareScreenshot}
+          disabled={busyAction != null}
+        >
+          <span aria-hidden className="text-lg leading-none">{"📸"}</span>
+          {busyAction === "share" ? "Fotím stránku…" : "Vyfotit stránku"}
+        </button>
+        <button
+          type="button"
+          role="menuitem"
+          className={`${item} border-t border-gray-100`}
           onClick={onReportBug}
-          disabled={busy}
+          disabled={busyAction != null}
         >
           <span aria-hidden className="text-lg leading-none">{"🐞"}</span>
-          {busy ? "Fotím stránku…" : "Nahlásit chybu"}
+          {busyAction === "bug" ? "Fotím stránku…" : "Nahlásit chybu"}
         </button>
       </div>
     </div>,
