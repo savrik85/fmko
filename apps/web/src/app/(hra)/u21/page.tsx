@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { LeagueStatsTab, type StatsData } from "@/components/league/league-stats";
 import { apiFetch } from "@/lib/api";
-import { Spinner, PositionBadge, BadgePreview, useConfirm, Tabs, useTabParam, DataTable, EntityCell, ListCard, type DataColumn } from "@/components/ui";
+import { Spinner, PositionBadge, BadgePreview, useConfirm, Tabs, useTabParam, DataTable, EntityCell, ListCard, ListRow, ListEmpty, RowValue, RatingPill, ratingToneIn, type DataColumn } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { U21Rozvoj } from "@/components/players/u21-rozvoj";
 import { YouthSectionNav } from "@/components/players/youth-section-nav";
@@ -320,12 +320,9 @@ export default function U21Page() {
       {tab === "kadr" && squadLoaded && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
           {/* A-tým — mladí hráči k odeslání */}
-          <section className="card min-w-0 p-3 md:p-4">
-            <h2 className="font-heading font-bold text-base mb-3">
-              A-tým: mladí hráči ({young.length})
-            </h2>
+          <ListCard title="A-tým: mladí hráči" count={young.length} className="min-w-0">
             {young.length === 0 ? (
-              <p className="text-sm text-gray-500">Žádný hráč do 21 let v A-týmu.</p>
+              <ListEmpty icon="🧒">Žádný hráč do 21 let v A-týmu.</ListEmpty>
             ) : (
               <PlayerList
                 players={young.map((p) => ({
@@ -356,15 +353,12 @@ export default function U21Page() {
                 )}
               />
             )}
-          </section>
+          </ListCard>
 
           {/* U21 kádr — povýšení */}
-          <section className="card min-w-0 p-3 md:p-4">
-            <h2 className="font-heading font-bold text-base mb-3">
-              U21 kádr ({u21Players.length})
-            </h2>
+          <ListCard title="U21 kádr" count={u21Players.length} className="min-w-0">
             {u21Players.length === 0 ? (
-              <p className="text-sm text-gray-500">Kádr je prázdný.</p>
+              <ListEmpty icon="🧒">Kádr U21 je prázdný. Mladé hráče sem pošleš ze seznamu áčka.</ListEmpty>
             ) : (
               <PlayerList
                 players={u21Players.map((p) => ({
@@ -391,7 +385,7 @@ export default function U21Page() {
                 )}
               />
             )}
-          </section>
+          </ListCard>
         </div>
       )}
 
@@ -600,6 +594,7 @@ function PlayerList({
 }) {
   const [sortKey, setSortKey] = useState<SortKey>("ovr");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [openId, setOpenId] = useState<string | null>(null);
 
   const toggle = (key: SortKey) => {
     if (key === sortKey) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -629,9 +624,11 @@ function PlayerList({
     return sortDir === "asc" ? cmp : -cmp;
   });
 
+  const ratings = players.map((p) => p.overallRating);
+
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
+    <>
+      <div className="flex items-center gap-2 px-4 py-2 border-b border-line-soft">
         <label className="min-w-0 flex-1 text-xs text-muted"><span className="sr-only">Řadit podle</span>
           <select className="w-full min-h-11 rounded-lg border border-gray-200 bg-surface px-2 text-sm text-ink" value={sortKey} onChange={(e) => { const key = e.target.value as SortKey; setSortKey(key); setSortDir(key === "name" || key === "age" || key === "pos" ? "asc" : "desc"); }}>
             {([["ovr", "Celkové hodnocení"], ["growth", "Tréninkový růst"], ["age", "Věk"], ["name", "Jméno"], ["pos", "Pozice"], ["apps", "Zápasy"], ["g", "Góly"], ["a", "Asistence"], ["rat", "Zápasová známka"]] as const).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
@@ -639,36 +636,36 @@ function PlayerList({
         </label>
         <button className="min-h-11 rounded-lg border border-gray-200 px-3 text-sm" onClick={() => toggle(sortKey)} aria-label="Obrátit směr řazení">{sortDir === "asc" ? "↑" : "↓"}</button>
       </div>
-      <div className="divide-y divide-gray-200">
-        {sorted.map((p) => {
-          const stat = statsMap.get(p.id);
-          const growth = growthMap.get(p.id) ?? 0;
-          return (
-            <details key={p.id} className="group">
-              <summary className="flex min-h-16 cursor-pointer list-none items-center gap-2 py-2 [&::-webkit-details-marker]:hidden">
-                <div className="flex h-10 w-9 shrink-0 items-center justify-center overflow-hidden rounded bg-pitch-50">
-                  {p.avatar ? <FaceAvatar faceConfig={p.avatar} size={30} /> : <span className="text-xs font-bold text-pitch-600">{p.firstName[0]}{p.lastName[0]}</span>}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-semibold text-ink">{p.firstName} {p.lastName}</span>
-                  <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted">
-                    <PositionBadge position={p.position} />
-                    <span>{p.age} let</span>
-                    {p.nextMatchReturn && <span className="text-amber-700">↩ do áčka</span>}
-                    {p.age >= 22 && <span className="text-amber-700">nad 21 let</span>}
+      {sorted.map((p) => {
+        const stat = statsMap.get(p.id);
+        const growth = growthMap.get(p.id) ?? 0;
+        const open = openId === p.id;
+        return (
+          <div key={p.id} className="border-b border-line-soft last:border-b-0">
+            {/* Řádek rozbalí panel se statistikami a akcemi; tlačítka a odkaz jsou
+                mimo řádek, protože tlačítko v tlačítku nejde. */}
+            <ListRow onClick={() => setOpenId(open ? null : p.id)} chevron={false}
+              leading={p.avatar ? <FaceAvatar faceConfig={p.avatar} size={36} /> : <span className="w-9 h-9 rounded-full bg-pitch-50 flex items-center justify-center text-meta font-bold text-pitch-600">{p.firstName[0]}{p.lastName[0]}</span>}
+              title={`${p.firstName} ${p.lastName}`}
+              meta={
+                <span className="inline-flex items-center gap-1.5">
+                  <PositionBadge position={p.position} />
+                  <span>{p.age} let</span>
+                  {p.nextMatchReturn && <span className="text-amber-700">↩ do áčka</span>}
+                  {p.age >= 22 && <span className="text-amber-700">nad 21 let</span>}
+                </span>
+              }
+              trailing={
+                <>
+                  <span title="Celkové hodnocení hráče"><RatingPill value={p.overallRating} tone={ratingToneIn(p.overallRating, ratings)} /></span>
+                  <span className="w-9 text-center" title="Body dovedností za 30 dní">
+                    <RowValue tone={growth > 0 ? "plus" : undefined} sub="Růst">{growth > 0 ? `+${growth}` : "-"}</RowValue>
                   </span>
-                </div>
-                <span className="w-14 shrink-0 text-center tabular-nums" title="Celkové hodnocení hráče">
-                  <span className="block text-base font-bold text-ink">{p.overallRating}</span>
-                  <span className="block text-[10px] text-muted">Hodnocení</span>
-                </span>
-                <span className="w-10 shrink-0 text-center tabular-nums" title="Body dovedností za 30 dní">
-                  <span className={`block text-sm font-semibold ${growth > 0 ? "text-pitch-600" : "text-muted"}`}>{growth > 0 ? `+${growth}` : "-"}</span>
-                  <span className="block text-[10px] text-muted">Růst</span>
-                </span>
-                <span aria-hidden="true" className="text-muted transition-transform group-open:rotate-180">⌄</span>
-              </summary>
-              <div className="space-y-3 rounded-lg bg-surface-2 p-3 mb-2">
+                  <span aria-hidden="true" className={`text-muted transition-transform ${open ? "rotate-180" : ""}`}>⌄</span>
+                </>
+              } />
+            {open && (
+              <div className="space-y-3 mx-4 mb-3 rounded-lg bg-surface-2 p-3">
                 <Link href={`/hrac/${p.id}`} className="inline-flex min-h-11 items-center text-sm font-semibold text-pitch-600 hover:underline">Profil: {p.firstName} {p.lastName} →</Link>
                 <dl className="grid grid-cols-4 gap-1 text-center">
                   {[["Zápasy", stat?.appearances ?? 0], ["Góly", stat?.goals ?? 0], ["Asistence", stat?.assists ?? 0], ["Známka", stat?.avgRating?.toFixed(1) ?? "-"]].map(([label, value]) => (
@@ -682,10 +679,10 @@ function PlayerList({
                 {p.nextMatchReturn && <p className="text-xs text-amber-700">Po nejbližším zápase se vrátí do áčka.</p>}
                 {renderActions(p)}
               </div>
-            </details>
-          );
-        })}
-      </div>
-    </div>
+            )}
+          </div>
+        );
+      })}
+    </>
   );
 }
