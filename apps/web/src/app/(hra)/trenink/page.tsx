@@ -867,13 +867,12 @@ export default function TrainingPage() {
                   <span className="text-micro text-muted group-open:rotate-90 transition-transform">&#9654;</span>
                   Omluvenky ({absentList.length})
                 </summary>
-                <div className="px-3 sm:px-4 pb-3 sm:pb-4 space-y-0.5">
+                <div className="border-t border-line-soft">
                   {absentList.map((a, i) => (
-                    <div key={i} className="flex items-baseline gap-2 py-1.5 border-b border-gray-50 last:border-b-0">
-                      <span className="text-card-red text-xs shrink-0">&#10005;</span>
-                      <span className="text-sm"><PlayerLink id={a.playerId} name={a.playerName} playerMap={playerMap} /></span>
-                      {a.reason && <span className="text-xs text-muted italic">&mdash; {a.reason}</span>}
-                    </div>
+                    <ListRow key={i} dense
+                      leading={<span className="text-card-red text-meta">&#10005;</span>}
+                      title={<PlayerLink id={a.playerId} name={a.playerName} playerMap={playerMap} />}
+                      trailing={a.reason ? <span className="text-meta text-muted italic text-right">{a.reason}</span> : undefined} />
                   ))}
                 </div>
               </details>

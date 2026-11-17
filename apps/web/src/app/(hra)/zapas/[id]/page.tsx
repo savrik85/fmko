@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { odesloLidi, zavrenoNaZapasy } from "@okresni-masina/shared";
 import { apiFetch } from "@/lib/api";
-import { Spinner, SectionLabel, BadgePreview, PositionBadge } from "@/components/ui";
+import { Spinner, SectionLabel, BadgePreview, PositionBadge, ListRow, RatingPill } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 import { useTeam } from "@/context/team-context";
 import { MatchBreakdown } from "@/components/MatchBreakdown";
@@ -555,35 +555,20 @@ export default function MatchDetailPage() {
                 <div className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
                 <span className="font-heading font-bold text-xs uppercase tracking-wide text-muted">Top výkony · {label}</span>
               </div>
-              <div className="divide-y divide-gray-100">
-                {top.length === 0 ? (
-                  <div className="px-3 py-3 text-sm text-muted italic">-</div>
-                ) : top.map((entry) => {
-                  const s = statsForPlayer(entry.id, teamId);
-                  const ratingColor = entry.rating >= 7.5 ? "bg-pitch-100 text-pitch-700"
-                    : entry.rating >= 6.5 ? "bg-amber-100 text-amber-700"
-                    : "bg-red-100 text-red-700";
-                  return (
-                    <div key={entry.id} className="flex items-center gap-3 px-3 py-2">
-                      <div className="flex-1 min-w-0">
-                        <Link href={`/hrac/${entry.id}`} className="block font-heading font-bold text-base hover:text-pitch-500 transition-colors truncate">
-                          {entry.player!.name}
-                        </Link>
-                        <div className="text-xs text-muted flex items-center gap-1.5 flex-wrap">
-                          <span>{POS_LABEL[entry.player!.position] ?? entry.player!.position}</span>
-                          {s.goals > 0 && <span>· ⚽{s.goals > 1 ? ` ${s.goals}` : ""}</span>}
-                          {s.assists > 0 && <span>· 👟{s.assists > 1 ? ` ${s.assists}` : ""}</span>}
-                          {s.yellow > 0 && <span>· 🟨</span>}
-                          {s.red > 0 && <span>· 🟥</span>}
-                        </div>
-                      </div>
-                      <span className={`shrink-0 px-2 py-1 rounded-control text-sm font-heading font-bold tabular-nums ${ratingColor}`}>
-                        {entry.rating.toFixed(1)}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
+              {top.length === 0 && <div className="px-4 py-3 text-meta text-muted">Bez hodnocení.</div>}
+              {top.map((entry) => {
+                const s = statsForPlayer(entry.id, teamId);
+                return (
+                  <ListRow key={entry.id} href={`/hrac/${entry.id}`} chevron={false}
+                    title={entry.player!.name}
+                    meta={[POS_LABEL[entry.player!.position] ?? entry.player!.position,
+                      s.goals > 0 ? `⚽${s.goals > 1 ? ` ${s.goals}` : ""}` : null,
+                      s.assists > 0 ? `👟${s.assists > 1 ? ` ${s.assists}` : ""}` : null,
+                      s.yellow > 0 ? "🟨" : null, s.red > 0 ? "🟥" : null].filter(Boolean).join(" · ")}
+                    // Známka ze zápasu je na škále 1–10, tam prahy smysl dávají.
+                    trailing={<RatingPill value={entry.rating.toFixed(1)} tone={entry.rating >= 7.5 ? "top" : entry.rating >= 6.5 ? "good" : "poor"} />} />
+                );
+              })}
             </div>
           ))}
         </div>
