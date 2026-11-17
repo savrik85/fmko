@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { clientOnly } from "@/components/client-only";
 import { apiFetch, type ManagerProfile } from "@/lib/api";
 import { generateManagerFace } from "@/lib/manager-avatar";
-import { Button, Sheet, IconButton } from "@/components/ui";
+import { Button, Sheet, IconButton, ErrorBox } from "@/components/ui";
 
 const FaceAvatar = clientOnly(
   () => import("@/components/players/face-avatar").then((m) => m.FaceAvatar),
@@ -164,9 +164,7 @@ export function EditManagerModal({ manager, teamId, onClose, onSaved }: Props) {
           </div>
 
           {error && (
-            <div className="text-sm text-card-red bg-red-50 border border-red-200 rounded-soft px-3 py-2">
-              {error}
-            </div>
+            <ErrorBox message={error} />
           )}
         </div>
 

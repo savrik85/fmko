@@ -265,7 +265,7 @@ export default function NegotiationPage() {
         </div>
       )}
 
-      {error && <div className="text-sm text-card-red bg-red-50 border border-red-200 rounded-soft px-3 py-2">{error}</div>}
+      {error && <ErrorBox message={error} />}
 
       {/* Odesílací tlačítka vždy na konci stránky, bez částek. */}
       <div className="flex flex-col gap-2">

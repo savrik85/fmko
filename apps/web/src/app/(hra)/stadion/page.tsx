@@ -1548,7 +1548,7 @@ export default function StadiumPage() {
                                 <button
                                   onClick={() => handleRevertBuild(lastBuild)}
                                   disabled={!!acting}
-                                  className="min-h-11 w-full sm:w-auto px-4 py-2 rounded-soft text-sm font-heading font-bold border-2 border-red-200 text-red-700 bg-white hover:bg-red-50 disabled:opacity-50"
+                                  className="btn btn-danger btn-md min-h-11 w-full sm:w-auto"
                                 >
                                   Vrátit stavbu
                                 </button>

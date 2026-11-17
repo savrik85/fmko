@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, showError } from "@/lib/api";
-import { Spinner, Card, CardHeader, CardBody, SectionLabel, PageLoading } from "@/components/ui";
+import { Spinner, Card, CardHeader, CardBody, SectionLabel, PageLoading, ErrorBox } from "@/components/ui";
 
 interface Anthem {
   id: string;
@@ -323,9 +323,7 @@ export default function HymnaPage() {
           </div>
 
           {musicError && (
-            <div className="mt-3 p-3 rounded-soft bg-red-50 border border-red-200 text-sm text-red-800">
-              {musicError}
-            </div>
+            <div className="mt-3"><ErrorBox message={musicError} /></div>
           )}
         </>
       )}

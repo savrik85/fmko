@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
-import { Card, CardHeader, CardBody, BadgePreview, JerseyPreview, PageLoading } from "@/components/ui";
+import { Card, CardHeader, CardBody, BadgePreview, JerseyPreview, PageLoading, ErrorBox } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 import { StadiumPhotoCard } from "@/app/klub/[teamId]/StadiumPhotoCard";
 import {
@@ -327,10 +327,7 @@ export default function MujKlubPage() {
         </div>
       )}
       {errorMessage && (
-        <div className="p-4 rounded-soft bg-red-50 border border-red-200 text-red-800 text-sm font-heading font-bold animate-in fade-in flex items-center gap-2">
-          <span>⚠️</span>
-          <span>{errorMessage}</span>
-        </div>
+        <ErrorBox message={errorMessage} />
       )}
 
       {/* Tabs navigation */}

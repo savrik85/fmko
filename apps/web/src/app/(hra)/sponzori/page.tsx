@@ -351,7 +351,7 @@ export default function SponsorsPage() {
       </Card>
 
       {actionError && (
-        <div className="text-sm text-card-red bg-red-50 border border-red-200 rounded-soft px-3 py-2">{actionError}</div>
+        <ErrorBox message={actionError} />
       )}
 
       {firms?.pub && (

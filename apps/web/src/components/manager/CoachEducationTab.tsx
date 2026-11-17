@@ -9,7 +9,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { apiAction, apiFetch } from "@/lib/api";
-import { SectionLabel, ListCard, ListRow, ListEmpty, RowIcon, RowGroup, SectionLoading } from "@/components/ui";
+import { SectionLabel, ListCard, ListRow, ListEmpty, RowIcon, RowGroup, SectionLoading, ErrorBox } from "@/components/ui";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { COURSE_ATTR_LABELS, type CourseAttr } from "@okresni-masina/shared";
 import { LicenceBadge } from "./LicenceBadge";
@@ -291,10 +291,10 @@ export function CoachEducationTab({ teamId, isOwn }: { teamId: string; isOwn: bo
           )}
 
           {isOwn && a.status === "retake_available" && (
-            <div className="mt-3 rounded-soft bg-red-50 border border-red-200 p-3 text-sm text-red-800">
+            <div className="mt-3"><ErrorBox>
               Test nevyšel{a.lastScore ? ` (${a.lastScore.score ?? 0} z ${a.lastScore.total}, potřeba ${a.lastScore.passScore})` : ""}.
               Opravný termín stojí {formatKc(a.retakePrice)}, přihlásit se můžeš ještě {days(a.examDaysRemaining ?? 0)}.
-            </div>
+            </ErrorBox></div>
           )}
 
           {isOwn && (

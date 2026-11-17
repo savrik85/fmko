@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, showError } from "@/lib/api";
-import { Card, CardHeader, CardBody, SectionLabel, PageLoading } from "@/components/ui";
+import { Card, CardHeader, CardBody, SectionLabel, PageLoading, ErrorBox } from "@/components/ui";
 
 interface Mascot {
   id: string;
@@ -268,7 +268,7 @@ export default function MaskotPage() {
             </button>
 
             {error && (
-              <div className="p-3 rounded-soft bg-red-50 border border-red-200 text-sm text-red-800">{error}</div>
+              <ErrorBox message={error} />
             )}
           </CardBody>
         </Card>

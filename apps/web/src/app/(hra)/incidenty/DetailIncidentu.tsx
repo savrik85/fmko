@@ -413,7 +413,7 @@ export function DetailIncidentu({ teamId, incidentId, onZmena }: { teamId: strin
                 <button
                   onClick={() => setPotvrditVyhazov(true)}
                   disabled={pracuje}
-                  className="w-full px-3 py-2 rounded-soft text-sm font-heading font-bold border border-red-200 text-card-red disabled:opacity-50"
+                  className="btn btn-danger btn-md w-full"
                 >
                   {TREST_LABEL.vyhodit}
                 </button>

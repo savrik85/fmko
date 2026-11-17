@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ListCard, ListEmpty, ListRow, RowValue } from "@/components/ui";
+import { ListCard, ListEmpty, ListRow, RowValue, ErrorBox } from "@/components/ui";
 
 import { seasonsAccusative, weeklyAmount, seasonsGenitive } from "@/lib/sponsor-format";
 import type { ActiveContract, SponsorCategory, SponsorOffer, SponsorPromiseView, SponsorsData } from "@/lib/sponsor-page-types";
@@ -72,9 +72,7 @@ export function ContractsTab({ data, reputation, favors, acting, onSign, onTermi
             {/* Upozornění a cesta k firmám pod řádky karty; bez řádků slouží jako prázdný stav. */}
             <div className="px-4 py-3 space-y-3">
               {cat === "main" && !data.canChangeMainSponsor && (
-                <div className="text-sm text-card-red bg-red-50 border border-red-200 rounded-soft px-3 py-2">
-                  Hlavního sponzora jde změnit jen jednou za sezónu, tahle sezóna je vyčerpaná. Prodloužit současnou smlouvu jde dál.
-                </div>
+                <ErrorBox message="Hlavního sponzora jde změnit jen jednou za sezónu, tahle sezóna je vyčerpaná. Prodloužit současnou smlouvu jde dál." />
               )}
               <p className="text-sm text-muted">
                 {cat === "main" ? "Nového hlavního sponzora" : "Sponzora názvu stadionu"} si vyjednáš s majitelem firmy z okresu.{" "}

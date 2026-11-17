@@ -5,7 +5,7 @@ import { sponsorMonthlyPayout } from "@okresni-masina/shared";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
 import { sponsorTypeIcon, sponsorTypeLabel } from "@/lib/sponsor-types";
-import { SectionLabel, PositionBadge, Tabs, useTabParam, ListCard, ListRow, ListEmpty, RowIcon, RowValue, PageLoading, SectionLoading } from "@/components/ui";
+import { SectionLabel, PositionBadge, Tabs, useTabParam, ListCard, ListRow, ListEmpty, RowIcon, RowValue, PageLoading, SectionLoading, ErrorBox } from "@/components/ui";
 import { TXN_ICONS, TXN_LABELS } from "@/lib/transaction-labels";
 import { weeksText } from "@/lib/weeks-text";
 import { formatKc } from "@/lib/format";
@@ -176,10 +176,7 @@ export default function FinancesPage() {
             </div>
           </div>
           {data.purchaseBlocked && (
-            <div className="bg-red-50 border border-red-200 rounded-soft px-3 py-2 text-xs text-card-red max-w-sm">
-              <div className="font-heading font-bold mb-0.5">⛔ Nákupy blokovány</div>
-              <div>Dokud rozpočet nevyrovnáš na nulu, nelze utrácet za přestupy, upgrady ani inzeráty.</div>
-            </div>
+            <div className="max-w-sm"><ErrorBox><strong>Nákupy blokovány.</strong> Dokud rozpočet nevyrovnáš na nulu, nelze utrácet za přestupy, upgrady ani inzeráty.</ErrorBox></div>
           )}
           {data.loan && !data.purchaseBlocked && (
             <div className="bg-amber-50 border border-amber-200 rounded-soft px-3 py-2 text-xs text-amber-900">
@@ -761,7 +758,7 @@ function LoanTab({ teamId, data, info, onChange, reload }: {
               <StatBox label="Splátka / zápas" value={formatKc(perMatch)} sub={`${info.remainingMatches} splátek`} />
             </div>
 
-            {error && <div className="bg-red-50 border border-red-200 rounded-soft p-3 text-sm text-card-red">{error}</div>}
+            {error && <ErrorBox message={error} />}
             {success && <div className="bg-green-50 border border-green-200 rounded-soft p-3 text-sm text-pitch-600">{success}</div>}
 
             <button

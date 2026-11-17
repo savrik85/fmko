@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { LeagueStatsTab, type StatsData } from "@/components/league/league-stats";
 import { apiFetch } from "@/lib/api";
-import { PositionBadge, BadgePreview, useConfirm, Tabs, useTabParam, DataTable, EntityCell, ListCard, ListRow, ListEmpty, RowValue, RatingPill, ratingToneIn, type DataColumn, SectionLoading } from "@/components/ui";
+import { PositionBadge, BadgePreview, useConfirm, Tabs, useTabParam, DataTable, EntityCell, ListCard, ListRow, ListEmpty, RowValue, RatingPill, ratingToneIn, type DataColumn, SectionLoading, ErrorBox } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { U21Rozvoj } from "@/components/players/u21-rozvoj";
 import { YouthSectionNav } from "@/components/players/youth-section-nav";
@@ -311,9 +311,7 @@ export default function U21Page() {
       )}
 
       {error && (
-        <div className="card border-l-4 border-card-red bg-red-50 p-3 text-sm text-red-800">
-          {error}
-        </div>
+        <ErrorBox message={error} />
       )}
 
       {tab === "kadr" && !squadLoaded && !error && <SectionLoading />}

@@ -410,7 +410,7 @@ export default function ScoutPage() {
                   : "Skaut jezdí na ligové zápasy soupeřů a v pondělí pošle zprávu o vybraném hráči včetně odhadu hodnocení."}
                 {" "}Nabídku na přestup pak pošleš z profilu hráče. Cestovné {formatKc(a.weekly_cost || SCOUT_LEAGUE_WEEKLY_COST)} týdně se strhává v pondělí po odvedené práci.
               </div>
-              <button onClick={stop} className="w-full py-2.5 rounded-xl font-heading font-bold border-2 border-red-200 text-red-700 bg-white hover:bg-red-50 transition-colors">
+              <button onClick={stop} className="btn btn-danger btn-md w-full">
                 Ukončit úkol
               </button>
             </>
@@ -426,7 +426,7 @@ export default function ScoutPage() {
               <div className="text-sm text-muted">
                 Skaut se na hráče podívá dvakrát. Mise trvá 2 dny, pak dorazí hlášení s odhadem hodnocení, u mladých do 21 let i stropu, a s povahou hráče. Nabídku na přestup mu pošleš z jeho profilu.
               </div>
-              <button onClick={stop} className="w-full py-2.5 rounded-xl font-heading font-bold border-2 border-red-200 text-red-700 bg-white hover:bg-red-50 transition-colors">
+              <button onClick={stop} className="btn btn-danger btn-md w-full">
                 Ukončit úkol
               </button>
             </>
@@ -442,7 +442,7 @@ export default function ScoutPage() {
               <div className="text-sm text-muted">
                 Skaut sleduje hru a rozestavení soupeře. Připravuje taktické pokyny, které tvému týmu poskytnou bonus (+2 k technice, +3 k morálce) pro vzájemný zápas na 14 dní.
               </div>
-              <button onClick={stop} className="w-full py-2.5 rounded-xl font-heading font-bold border-2 border-red-200 text-red-700 bg-white hover:bg-red-50 transition-colors">
+              <button onClick={stop} className="btn btn-danger btn-md w-full">
                 Ukončit úkol
               </button>
             </>
@@ -478,7 +478,7 @@ export default function ScoutPage() {
                 Jezdí každý týden a v pondělí ti napíše. Cestovné {formatKc(a.weekly_cost)} týdně se strhává v pondělí.
                 {a.age_max <= SCOUT_YOUTH_AGE_MAX ? " Mladé hlásí podle toho, kam to můžou dotáhnout." : ""}
               </div>
-              <button onClick={stop} className="w-full py-2.5 rounded-xl font-heading font-bold border-2 border-red-200 text-red-700 bg-white hover:bg-red-50 transition-colors">
+              <button onClick={stop} className="btn btn-danger btn-md w-full">
                 Ukončit úkol
               </button>
             </>
@@ -499,7 +499,7 @@ export default function ScoutPage() {
               meta={`Hlášení do 2 dnů · cestovné ${formatKc(m.weekly_cost || 500)}`}
               trailing={
                 <button type="button" onClick={() => stopWatching(m)}
-                  className="px-3 py-2 rounded-control text-meta font-bold border border-red-200 text-red-700 bg-white hover:bg-red-50">
+                  className="btn btn-danger btn-sm">
                   Zrušit
                 </button>
               } />

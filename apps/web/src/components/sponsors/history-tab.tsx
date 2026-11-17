@@ -1,6 +1,6 @@
 "use client";
 
-import { ListCard, ListEmpty, ListRow, StatusChip, SectionLoading } from "@/components/ui";
+import { ListCard, ListEmpty, ListRow, StatusChip, SectionLoading, ErrorBox } from "@/components/ui";
 import { seasonsAccusative, weeklyAmount } from "@/lib/sponsor-format";
 
 import type { ActiveContract, SponsorCategory, SponsorHistoryItem } from "@/lib/sponsor-page-types";
@@ -20,7 +20,7 @@ const STATUS_LABELS: Record<SponsorHistoryItem["status"], string> = {
 
 export function HistoryTab({ items, error, mainContract }: { items: SponsorHistoryItem[] | null; error: string | null; mainContract: ActiveContract | null }) {
   if (error) {
-    return <div className="text-sm text-card-red bg-red-50 border border-red-200 rounded-soft px-3 py-2">Historii se nepodařilo načíst: {error}</div>;
+    return <ErrorBox message={`Historii se nepodařilo načíst: ${error}`} />;
   }
   if (!items) return <SectionLoading />;
 

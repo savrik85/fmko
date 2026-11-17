@@ -1,6 +1,6 @@
 "use client";
 
-import { Card, CardBody, SectionLabel, ListCard, ListRow, ListEmpty, RowValue, SectionLoading } from "@/components/ui";
+import { Card, CardBody, SectionLabel, ListCard, ListRow, ListEmpty, RowValue, SectionLoading, ErrorBox } from "@/components/ui";
 import { formatFavorDelta, formatGameDay } from "@/lib/sponsor-format";
 import { FAVOR_BAND_LABELS, FAVOR_BAND_ORDER, favorLabel } from "@/lib/sponsor-owners";
 import type { FavorBand, FirmFavorItem, SponsorOverview } from "@/lib/sponsor-page-types";
@@ -29,7 +29,7 @@ function FirmList({ title, firms, empty }: { title: string; firms: FirmFavorItem
 
 export function PopularityTab({ overview, error }: { overview: SponsorOverview | null; error: string | null }) {
   if (error) {
-    return <div className="text-sm text-card-red bg-red-50 border border-red-200 rounded-soft px-3 py-2">Přehled se nepodařilo načíst: {error}</div>;
+    return <ErrorBox message={`Přehled se nepodařilo načíst: ${error}`} />;
   }
   if (!overview) return <SectionLoading />;
   if (overview.firmsCount === 0 || overview.avgFavor == null) {
