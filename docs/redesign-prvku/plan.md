@@ -149,8 +149,8 @@ export function formatSigned(amount: number): string {
 
 ### 3.4 Štítky (`chips`)
 
-Dnes 57 ručních pilulek (`rounded-full`, malé písmo) ve 12 kombinacích barev a
-komponenta `Badge`, použitá dvakrát. Cíl: všechno `StatusChip` z `list-kit.tsx`.
+Dnes 57 ručních pilulek (`rounded-full`, malé písmo) s 18 různými barvami podkladu
+a komponenta `Badge`, použitá dvakrát. Cíl: všechno `StatusChip` z `list-kit.tsx`.
 
 | Ruční štítek | `StatusChip tone` |
 |---|---|
@@ -166,8 +166,8 @@ komponenta `Badge`, použitá dvakrát. Cíl: všechno `StatusChip` z `list-kit.
 
 ### 3.5 Proužky průběhu (`progress`)
 
-Dnes 40 ručních proužků (výšky `h-1`, `h-1.5`, `h-2`, `h-2.5`, `h-3`, podklad
-`bg-gray-100` i `bg-gray-200`). Nový díl `components/ui/progress-bar.tsx`:
+Dnes 40 ručních proužků (výšky `h-1.5`, `h-2`, `h-2.5`, `h-3`; dráha `bg-gray-100`,
+`bg-gray-200`, `bg-ink/10`, `bg-surface-3`). Nový díl `components/ui/progress-bar.tsx`:
 
 ```tsx
 type ProgressTone = "ok" | "warn" | "danger" | "neutral";
