@@ -49,15 +49,6 @@ export function FMTopBar() {
   const showPosition = !override?.hideLeaguePosition && ctx.leaguePosition != null;
 
   return (
-    <>
-    {/* Jednobarevný pevný pruh pod hodinami. iOS 26 kreslí přes horní okraj
-        nainstalované aplikace rozmazání, pokud tam nenajde pevný prvek v jedné
-        plné barvě; přechod lišty proto začíná až pod ním (.topbar-club). */}
-    <div
-      aria-hidden
-      className="sm:hidden fixed top-0 inset-x-0 pointer-events-none"
-      style={{ height: "env(safe-area-inset-top, 0px)", backgroundColor: background }}
-    />
     <header
       /* h-14 je výška obsahu; horní inset se přičítá jako padding, aby barva
          sahala pod status bar a nevznikal nad lištou světlý pruh. */
@@ -137,6 +128,5 @@ export function FMTopBar() {
         )}
       </div>
     </header>
-    </>
   );
 }

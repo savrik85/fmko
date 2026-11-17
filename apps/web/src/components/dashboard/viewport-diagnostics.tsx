@@ -48,8 +48,7 @@ function collectLines(): string[] {
     `inset nahoře ${measureInset("top")}  dole ${measureInset("bottom")}`,
     `horní lišta ${rectSummary("header")}`,
     `obsah ${rectSummary("main")}  posun ${main ? Math.round(main.scrollTop) : "?"}`,
-    `spodní lišta ${rectSummary("nav.fixed > div")}  obal ${rectSummary("nav.fixed")}`,
-    `--bottom-nav-h ${getComputedStyle(document.documentElement).getPropertyValue("--bottom-nav-h") || "není"}`,
+    `spodní lišta ${rectSummary("nav.fixed")}`,
     `PWA ${standalone ? "ano" : "ne"}  ${os} ${version}`,
   ];
 }
@@ -73,7 +72,24 @@ export function ViewportDiagnostics() {
 
   if (!lines || hidden) return null;
 
+  // Zkouška, čím se dá kreslit do pruhu pod spodní lištou (pod hranou okna).
+  const gap = Math.max(0, window.screen.height - window.innerHeight);
+  const probeBase = "fixed pointer-events-none z-[var(--z-error)]";
+
   return (
+    <>
+    {gap > 0 && (
+      <>
+        {/* Růžová: fixed se záporným bottom. */}
+        <div className={probeBase} style={{ left: 0, width: "30%", bottom: -gap, height: gap, background: "#ff2bd6" }} />
+        {/* Žlutá: fixed u spodní hrany, posunutá přes transform. */}
+        <div className={probeBase} style={{ left: "35%", width: "30%", bottom: 0, height: gap, transform: `translateY(${gap}px)`, background: "#ffe100" }} />
+        {/* Tyrkysová: fixed od horní hrany, vysoká 100vh. */}
+        <div className={probeBase} style={{ right: 0, width: 10, top: 0, height: "100vh", background: "#00e5ff" }} />
+        {/* Oranžová: fixed od horní hrany, vysoká jako displej. */}
+        <div className={probeBase} style={{ right: 14, width: 10, top: 0, height: window.screen.height, background: "#ff7a00" }} />
+      </>
+    )}
     <button
       type="button"
       onClick={() => setHidden(true)}
@@ -84,5 +100,6 @@ export function ViewportDiagnostics() {
       ))}
       <span className="block text-white/60 mt-1">{"Diagnostika okrajů. Klepnutím schováš."}</span>
     </button>
+    </>
   );
 }
