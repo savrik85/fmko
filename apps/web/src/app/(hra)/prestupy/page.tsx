@@ -512,7 +512,7 @@ function FiltrRadek({ popisek, volby, aktivni, vyber }: {
 }) {
   return (
     <div className="flex items-center gap-2">
-      <span className="w-14 shrink-0 text-micro text-muted font-heading font-bold uppercase tracking-wide">
+      <span className="w-[4.5rem] shrink-0 text-micro text-muted font-heading font-bold uppercase tracking-wide">
         {popisek}
       </span>
       <div className="flex gap-1.5 overflow-x-auto no-scrollbar -my-0.5 py-0.5" role="group" aria-label={popisek}>

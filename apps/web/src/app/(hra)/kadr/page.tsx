@@ -212,7 +212,7 @@ export default function SquadPage() {
         <div className="card grid grid-cols-4 divide-x divide-gray-100">
           {[
             { value: String(players.length), label: "Hráčů", className: "" },
-            { value: String(avgRating), label: "Ø Hodnocení", className: "" },
+            { value: String(avgRating), label: "Ø Hod.", className: "" },
             { value: avgAge, label: "Ø Věk", className: "" },
             { value: totalWage.toLocaleString("cs"), label: "Mzdy/týd", className: "text-card-red" },
           ].map((s) => (
