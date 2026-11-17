@@ -76,7 +76,7 @@ export function DisciplinePanel({ data, state, teamId, isChair, myOpen, onChange
       {mine.length > 0 && (
         <div className="card p-5">
           <Ornament>Tresty tvého klubu</Ornament>
-          <div className="space-y-3">
+          <div className="-mx-5 -mb-5 border-t border-line">
             {mine.map((s) => (
               <SanctionRow key={s.id} s={s} teamId={teamId} onChanged={onChanged} canAppeal />
             ))}
@@ -94,7 +94,7 @@ export function DisciplinePanel({ data, state, teamId, isChair, myOpen, onChange
           : "Všechny pokuty sezóny i s odůvodněním."}
       >
         {data.sanctions.length > 0 && (
-          <div className="space-y-3">
+          <div className="-mx-4 sm:-mx-5 -mb-4 sm:-mb-5 mt-3 border-t border-line">
             {data.sanctions.map((s) => (
               <SanctionRow key={s.id} s={s} teamId={teamId} onChanged={onChanged} />
             ))}
@@ -130,30 +130,25 @@ function SanctionRow({ s, teamId, onChanged, canAppeal }: {
   };
 
   return (
-    <div className="rounded-lg p-3" style={{ background: "var(--color-paper)" }}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="text-base font-semibold break-words">
-            {s.managerName ? <CoachName name={s.managerName} isAi={s.coachIsAi === true} /> : s.teamName} · {czk(s.amount)}
-          </div>
-          <div className="text-sm text-muted break-words">{s.reason}</div>
-        </div>
-        <StatusPill status={s.status} />
-      </div>
-      {s.evidence && <div className="text-sm mt-1 break-words">Doloženo: {s.evidence}</div>}
-      <div className="text-sm text-muted mt-1">
-        {s.issuedBy === "chair"
-          ? "Uložil předseda disciplinární rady"
-          : s.issuedBy === "rule"
-            ? "Uloženo automaticky ze zápisu o utkání"
-            : "Rozhodlo zasedání grémia"}
-      </div>
-      {canAppeal && s.status === "issued" && (
-        <button className="btn btn-md btn-secondary w-full mt-2" disabled={busy} onClick={appeal}>
-          Odvolat se
-        </button>
-      )}
-    </div>
+    <ListRow
+      title={<>{s.managerName ? <CoachName name={s.managerName} isAi={s.coachIsAi === true} /> : s.teamName} · {czk(s.amount)}</>}
+      trailing={<StatusPill status={s.status} />}
+      detail={<>
+        <span className="block">{s.reason}</span>
+        {s.evidence && <span className="block mt-1">Doloženo: {s.evidence}</span>}
+        <span className="block text-muted mt-1">
+          {s.issuedBy === "chair"
+            ? "Uložil předseda disciplinární rady"
+            : s.issuedBy === "rule"
+              ? "Uloženo automaticky ze zápisu o utkání"
+              : "Rozhodlo zasedání grémia"}
+        </span>
+        {canAppeal && s.status === "issued" && (
+          <button className="btn btn-md btn-secondary w-full mt-2" disabled={busy} onClick={appeal}>
+            Odvolat se
+          </button>
+        )}
+      </>} />
   );
 }
 
