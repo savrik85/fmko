@@ -58,24 +58,6 @@ const EVENT_ICONS: Record<string, string> = {
   kontrola_svaz: "\u{1F4CB}",
 };
 
-const EVENT_COLORS: Record<string, string> = {
-  zabijacka: "bg-amber-100 border-amber-300",
-  ples: "bg-purple-50 border-purple-200",
-  vanocni_turnaj: "bg-red-50 border-red-200",
-  silvestr: "bg-yellow-50 border-yellow-200",
-  letni_soustredeni: "bg-green-50 border-green-200",
-  obecni_zpravodaj: "bg-blue-50 border-blue-200",
-  hospoda: "bg-amber-50 border-amber-200",
-  pratele: "bg-green-50 border-green-200",
-  adhoc_brigada: "bg-orange-50 border-orange-200",
-  stolni_fotbalek: "bg-blue-50 border-blue-200",
-  sponzor_vecere: "bg-indigo-50 border-indigo-200",
-  obecni_slavnost: "bg-pink-50 border-pink-200",
-  exligovec: "bg-yellow-50 border-yellow-200",
-  narozeniny: "bg-rose-50 border-rose-200",
-  vylet_zapas: "bg-emerald-50 border-emerald-200",
-  kontrola_svaz: "bg-gray-100 border-gray-300",
-};
 
 const EFFECT_NAMES: Record<string, string> = {
   budget: "Peníze",
@@ -210,40 +192,33 @@ export default function EventsPage() {
       {confirmDialog}
 
       {pending.length > 0 && (
-        <div>
-          <SectionLabel>Čeká na tvoje rozhodnutí</SectionLabel>
-          <div className="space-y-4">
-            {pending.map((ev) => {
-              const left = decisionWindow - (currentGameWeek - ev.gameWeek);
-              return (
-                <div key={ev.id} className={`card border-2 p-4 sm:p-5 ${EVENT_COLORS[ev.type] ?? "bg-surface border-gray-200"}`}>
-                  <div className="flex items-start gap-3">
-                    <span className="text-3xl leading-none shrink-0" aria-hidden>{EVENT_ICONS[ev.type] ?? "\u{1F4C5}"}</span>
-                    <div className="min-w-0">
-                      <h3 className="font-heading font-bold text-lg leading-tight">{ev.title}</h3>
-                      <p className="text-sm text-ink-light mt-1">{ev.description}</p>
-                      <div className={`text-xs mt-1.5 font-heading font-bold ${left <= 1 ? "text-card-red" : "text-muted"}`}>
-                        {left <= 1 ? "Rozhodni se ještě před dalším kolem, pak to propadne." : `Na rozhodnutí máš ${left} ${kola(left)}.`}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="space-y-2 mt-3">
-                    {ev.choices!.map((ch) => (
-                      <button
-                        key={ch.id}
-                        onClick={() => handleChoice(ev, ch)}
-                        disabled={choosing === ev.id}
-                        className="w-full text-left p-3 rounded-xl bg-white/80 hover:bg-white transition-colors border border-transparent hover:border-pitch-500/30 disabled:opacity-50"
-                      >
-                        <div className="font-heading font-bold text-sm">{ch.label}</div>
-                        <EffectChips effects={ch.effects} />
-                      </button>
-                    ))}
-                  </div>
+        <div className="space-y-4">
+          {pending.map((ev) => {
+            const left = decisionWindow - (currentGameWeek - ev.gameWeek);
+            // Každá událost je karta: nahoře co se stalo, pod tím volby jako klikací řádky.
+            return (
+              <ListCard key={ev.id} title="Čeká na tvoje rozhodnutí">
+                <ListRow tone={left <= 1 ? "danger" : "warn"}
+                  leading={<RowIcon>{EVENT_ICONS[ev.type] ?? "\u{1F4C5}"}</RowIcon>}
+                  title={ev.title}
+                  detail={<>
+                    <span className="block">{ev.description}</span>
+                    <span className={`block mt-1.5 font-heading font-bold ${left <= 1 ? "text-card-red" : "text-muted"}`}>
+                      {left <= 1 ? "Rozhodni se ještě před dalším kolem, pak to propadne." : `Na rozhodnutí máš ${left} ${kola(left)}.`}
+                    </span>
+                  </>} />
+                <div className={choosing === ev.id ? "opacity-50 pointer-events-none" : ""}>
+                  {ev.choices!.map((ch) => (
+                    <ListRow key={ch.id}
+                      onClick={() => handleChoice(ev, ch)}
+                      leading={<span className="w-9" aria-hidden="true" />}
+                      title={ch.label}
+                      detail={ch.effects.length > 0 ? <EffectChips effects={ch.effects} /> : undefined} />
+                  ))}
                 </div>
-              );
-            })}
-          </div>
+              </ListCard>
+            );
+          })}
         </div>
       )}
 
@@ -410,18 +385,18 @@ function PubAction({ teamId }: { teamId: string | null }) {
           )}
 
           {open && (
-            <div className="space-y-2 mt-3 pt-3 border-t border-gray-100">
+            <div className={`-mx-5 -mb-4 mt-3 border-t border-line ${sending ? "opacity-50 pointer-events-none" : ""}`}>
               {PUB_CHOICES.map((c) => (
-                <button key={c.id} onClick={() => visit(c.id)} disabled={sending}
-                  className="w-full text-left p-3 rounded-xl bg-amber-50 hover:bg-amber-100 transition-colors border border-amber-200 disabled:opacity-50">
-                  <div className="font-heading font-bold text-sm">{c.label}</div>
-                  {c.hint && <div className="text-xs text-muted mt-0.5">{c.hint}</div>}
-                  <div className="flex flex-wrap gap-1 mt-1.5">
-                    {c.effects.map((e, i) => (
-                      <span key={i} className={`text-xs font-medium px-1.5 py-0.5 rounded ${TONE_CHIP[e.tone]}`}>{e.text}</span>
-                    ))}
-                  </div>
-                </button>
+                <ListRow key={c.id} onClick={() => visit(c.id)}
+                  title={c.label}
+                  meta={c.hint || undefined}
+                  detail={
+                    <span className="flex flex-wrap gap-1 mt-1">
+                      {c.effects.map((e, i) => (
+                        <span key={i} className={`text-xs font-medium px-1.5 py-0.5 rounded ${TONE_CHIP[e.tone]}`}>{e.text}</span>
+                      ))}
+                    </span>
+                  } />
               ))}
             </div>
           )}
