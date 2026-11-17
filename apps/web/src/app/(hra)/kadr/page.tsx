@@ -260,7 +260,7 @@ export default function SquadPage() {
           )}
           <ListCard>
             <DataTable rows={statsFiltered} rowKey={(r) => r.playerId}
-              rowHref={(r) => `/hrac/${r.playerId}`} scroll={{ minWidth: 620 }}
+              rowHref={(r) => `/hrac/${r.playerId}`} scroll={{ minWidth: "content" }}
               defaultSort={{ key: "g", dir: "desc" }}
               empty="Žádní hráči neodpovídají filtru."
               columns={[
@@ -355,7 +355,7 @@ function DochazkaTab({ rows }: { rows: AttendanceRow[] }) {
       )}
       <ListCard>
         <DataTable rows={rows} rowKey={(r) => r.playerId}
-          rowHref={(r) => `/hrac/${r.playerId}#ucast`} scroll={{ minWidth: 820 }}
+          rowHref={(r) => `/hrac/${r.playerId}#ucast`} scroll={{ minWidth: "content" }}
           defaultSort={{ key: "trainPct", dir: "desc" }}
           empty="Žádní hráči neodpovídají filtru."
           columns={[

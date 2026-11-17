@@ -1142,7 +1142,7 @@ function MatchPage() {
           <>
             {/* Starting XI table */}
             <ListCard title="Základní sestava" className="mb-3 overflow-hidden">
-              <DataTable dense scroll={{ minWidth: 600, until: "lg" }}
+              <DataTable dense scroll={{ minWidth: "content", until: "lg" }}
                 columns={[
                   {
                     key: "name", header: "Hráč",
@@ -1188,7 +1188,7 @@ function MatchPage() {
                       : "Zatím je vybral automat podle hodnocení. Klepni na hráče a pak na toho, kdo má jet místo něj."}
                 </p>
               </div>
-              <DataTable dense scroll={{ minWidth: 600, until: "lg" }}
+              <DataTable dense scroll={{ minWidth: "content", until: "lg" }}
                 columns={[
                   { key: "name", header: "Hráč", cell: (r: BenchRow) => benchNameCell(r.p, r.note) },
                   ...playerStatColumns((r: BenchRow) => r.p, true),
@@ -1209,7 +1209,7 @@ function MatchPage() {
                       Zůstávají doma a střídat nemůžou. Na hřiště je dostaneš jen do základu.
                     </p>
                   </div>
-                  <DataTable dense scroll={{ minWidth: 600, until: "lg" }}
+                  <DataTable dense scroll={{ minWidth: "content", until: "lg" }}
                     columns={[
                       { key: "name", header: "Hráč", cell: (p: AvailablePlayer) => benchNameCell(p) },
                       ...playerStatColumns((p: AvailablePlayer) => p, true),

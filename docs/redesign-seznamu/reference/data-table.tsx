@@ -57,6 +57,8 @@ const ALIGN_CLASS = { left: "text-left", center: "text-center", right: "text-rig
 const BAR_CLASS = { up: "before:bg-pitch-500", down: "before:bg-card-red", warn: "before:bg-gold-500" } as const;
 /** `!important` přebije minWidth v atributu style. */
 const SCROLL_UNTIL_CLASS = { sm: "sm:!min-w-0", lg: "lg:!min-w-0" } as const;
+/** Šířka podle obsahu: `w-max` dá sloupcům jejich přirozenou šířku, od `until` se tabulka zase vejde do karty. */
+const CONTENT_UNTIL_CLASS = { sm: "sm:w-full", lg: "lg:w-full" } as const;
 
 export function DataTable<T>({
   columns, rows, rowKey, rowHref, onRowClick, rowTone, defaultSort, pageSize, empty, emptyIcon, emptyAction, scroll, dense,
@@ -77,10 +79,13 @@ export function DataTable<T>({
   emptyAction?: ReactNode;
   /**
    * Tabulka s mnoha sloupci: posouvá se do strany, první sloupec je přilepený.
+   * `minWidth: "content"`: tabulka je široká podle obsahu (nejmíň přes kartu). Sloupec
+   * bez pevné šířky (jméno) pak má šířku nejdelšího jména, místo aby polykal zbytek
+   * pevné minimální šířky a odsouval čísla mimo obrazovku.
    * `until`: od této šířky obrazovky se minimální šířka vypne a tabulka se vejde
    * (Sestava: na desktopu je panel úzký, ale sloupce se do něj vejdou).
    */
-  scroll?: { minWidth: number; until?: "sm" | "lg" };
+  scroll?: { minWidth: number | "content"; until?: "sm" | "lg" };
   /**
    * Hustá tabulka (řádek 40 px) pro soupisky vedle hřiště a tabulky v dlaždicích na Domů,
    * kde se řádky počítají do pevné výšky. Běžné tabulky ji nepoužívají.
@@ -124,7 +129,11 @@ export function DataTable<T>({
     scroll && index === 0 ? `sticky left-0 z-[1] ${background} shadow-[6px_0_8px_-6px_rgba(26,23,20,0.18)]` : "";
 
   const table = (
-    <table className={`w-full border-collapse ${scroll?.until ? SCROLL_UNTIL_CLASS[scroll.until] : ""}`} style={scroll ? { minWidth: scroll.minWidth } : undefined}>
+    <table
+      className={`border-collapse ${scroll?.minWidth === "content"
+        ? `w-max min-w-full ${scroll.until ? CONTENT_UNTIL_CLASS[scroll.until] : ""}`
+        : `w-full ${scroll?.until ? SCROLL_UNTIL_CLASS[scroll.until] : ""}`}`}
+      style={scroll && scroll.minWidth !== "content" ? { minWidth: scroll.minWidth } : undefined}>
       <thead>
         <tr>
           {columns.map((column, index) => {

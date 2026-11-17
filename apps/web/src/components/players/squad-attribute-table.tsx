@@ -261,7 +261,7 @@ export function SquadAttributeTable({ players, potential = new Map(), promises =
     <>
       <ListCard>
         <DataTable columns={columns} rows={players} rowKey={(p) => p.id}
-          rowHref={(p) => `/hrac/${p.id}`} scroll={{ minWidth: 1120 }}
+          rowHref={(p) => `/hrac/${p.id}`} scroll={{ minWidth: "content" }}
           defaultSort={{ key: "rat", dir: "desc" }}
           empty="Žádní hráči neodpovídají filtru." />
       </ListCard>
