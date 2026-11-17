@@ -726,17 +726,13 @@ export default function MatchDetailPage() {
 
       {/* ═══ GOALS ═══ */}
       {goals.length > 0 && (
-        <div className="card p-4 sm:p-5">
-          <SectionLabel>Góly</SectionLabel>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              {homeGoals.map((g, i) => <GoalRow key={i} goal={g} />)}
-            </div>
-            <div className="space-y-1.5">
-              {awayGoals.map((g, i) => <GoalRow key={i} goal={g} />)}
-            </div>
+        <ListCard title="Góly">
+          {/* Dva sloupce, domácí a hosté: jeden společný seznam by byl na telefonu o polovinu vyšší. */}
+          <div className="grid grid-cols-2 divide-x divide-line-soft">
+            <div>{homeGoals.map((g, i) => <GoalRow key={i} goal={g} />)}</div>
+            <div>{awayGoals.map((g, i) => <GoalRow key={i} goal={g} />)}</div>
           </div>
-        </div>
+        </ListCard>
       )}
 
       {/* ═══ TIMELINE — celý průběh (collapsible) ═══ */}
@@ -865,12 +861,13 @@ const GOAL_SOURCE_LABEL: Record<string, string> = {
 function GoalRow({ goal }: { goal: MatchEvent }) {
   const label = goal.source ? GOAL_SOURCE_LABEL[goal.source] : null;
   return (
-    <div className="flex items-center gap-2">
-      <span className="text-xs text-muted tabular-nums w-6 text-right">{goal.minute}&apos;</span>
-      <span className="text-sm">{goal.source === "penalty" ? "🥅" : "⚽"}</span>
-      <span className="text-sm font-heading font-bold">{goal.playerName}</span>
-      {label && <span className="text-xs text-muted">{label}</span>}
-    </div>
+    <ListRow dense
+      leading={<span className="text-meta font-heading font-bold tabular-nums text-muted">{goal.minute}&apos;</span>}
+      detail={<>
+        <span className="mr-1" aria-hidden="true">{goal.source === "penalty" ? "🥅" : "⚽"}</span>
+        <span className="font-heading font-bold">{goal.playerName}</span>
+        {label && <span className="block text-muted">{label}</span>}
+      </>} />
   );
 }
 

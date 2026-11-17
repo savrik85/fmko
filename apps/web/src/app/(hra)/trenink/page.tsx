@@ -926,24 +926,27 @@ export default function TrainingPage() {
 
             {/* Skill breakdown */}
             {stats.skillBreakdown.length > 0 && (
-              <div className="card p-4 sm:p-5">
-                <SectionLabel>Podle atributů</SectionLabel>
-                <div className="space-y-1.5">
+              <ListCard title="Podle atributů" className="overflow-hidden">
+                {/* Po dvou vedle sebe: osm hustých řádků pod sebou by byl na telefonu o třetinu vyšší než původní graf. */}
+                <div className="grid grid-cols-2 -mb-px [&>*:nth-child(odd)]:border-r [&>*:nth-child(odd)]:border-line-soft">
                   {stats.skillBreakdown.filter((s) => s.gains > 0).slice(0, 8).map((s) => {
                     const maxGains = stats.skillBreakdown[0]?.gains ?? 1;
                     return (
-                      <div key={s.attribute} className="flex items-center gap-2">
-                        <span className="text-sm w-5 shrink-0">{ATTR_EMOJI[s.attribute] ?? ""}</span>
-                        <span className="text-xs font-heading font-bold w-16 shrink-0 truncate">{ATTR_LABELS[s.attribute] ?? s.attribute}</span>
-                        <div className="flex-1 bg-gray-100 rounded-full h-1.5 overflow-hidden">
-                          <div className="h-full bg-pitch-300 rounded-full" style={{ width: `${(s.gains / maxGains) * 100}%` }} />
-                        </div>
-                        <span className="font-heading font-bold text-xs tabular-nums text-pitch-500 w-6 text-right shrink-0">+{s.gains}</span>
-                      </div>
+                      <ListRow key={s.attribute} dense
+                        leading={<span className="text-base leading-none" aria-hidden="true">{ATTR_EMOJI[s.attribute] ?? ""}</span>}
+                        title={ATTR_LABELS[s.attribute] ?? s.attribute}
+                        detail={
+                          <span className="flex items-center gap-2 mt-0.5">
+                            <span className="flex-1 bg-gray-100 rounded-full h-1.5 overflow-hidden">
+                              <span className="block h-full bg-pitch-300 rounded-full" style={{ width: `${(s.gains / maxGains) * 100}%` }} />
+                            </span>
+                            <span className="font-bold tabular-nums text-pitch-600">+{s.gains}</span>
+                          </span>
+                        } />
                     );
                   })}
                 </div>
-              </div>
+              </ListCard>
             )}
           </div>
 
