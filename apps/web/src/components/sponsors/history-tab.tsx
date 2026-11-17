@@ -1,6 +1,6 @@
 "use client";
 
-import { Card, CardBody, SectionLabel, Spinner } from "@/components/ui";
+import { ListCard, ListEmpty, ListRow, Spinner, StatusChip } from "@/components/ui";
 import { seasonsAccusative, weeklyAmount } from "@/lib/sponsor-format";
 import { formatCZK } from "@/lib/sponsor-owners";
 import type { ActiveContract, SponsorCategory, SponsorHistoryItem } from "@/lib/sponsor-page-types";
@@ -32,56 +32,30 @@ export function HistoryTab({ items, error, mainContract }: { items: SponsorHisto
   return (
     <div className="space-y-5">
       {(mains.length > 0 || mainContract) && (
-        <section>
-          <SectionLabel>Hlavní sponzoři podle sezón</SectionLabel>
-          <Card>
-            <CardBody className="space-y-2">
-              {mains.map((m) => (
-                <div key={m.id} className="flex items-baseline gap-3">
-                  <span className="w-28 shrink-0 text-sm text-muted tabular-nums">od sezóny {m.signedSeason}</span>
-                  <SponsorLink id={m.sponsorId} name={m.sponsorName} className="font-heading font-bold text-base min-w-0 break-words" />
-                </div>
-              ))}
-              {mainContract && (
-                <div className="flex items-baseline gap-3">
-                  <span className="w-28 shrink-0 text-sm text-pitch-500 font-heading font-bold tabular-nums">současný</span>
-                  <SponsorLink id={mainContract.sponsorId} name={mainContract.sponsorName} className="font-heading font-bold text-base min-w-0 break-words" />
-                </div>
-              )}
-            </CardBody>
-          </Card>
-        </section>
+        <ListCard title="Hlavní sponzoři podle sezón">
+          {mains.map((m) => (
+            <ListRow key={m.id} dense
+              title={<SponsorLink id={m.sponsorId} name={m.sponsorName} />}
+              trailing={<span className="text-sm text-muted tabular-nums">od sezóny {m.signedSeason}</span>} />
+          ))}
+          {mainContract && (
+            <ListRow dense
+              title={<SponsorLink id={mainContract.sponsorId} name={mainContract.sponsorName} />}
+              trailing={<StatusChip tone="ok">současný</StatusChip>} />
+          )}
+        </ListCard>
       )}
 
-      <section>
-        <SectionLabel>Skončené smlouvy</SectionLabel>
-        {items.length === 0 ? (
-          <Card><CardBody><p className="text-center text-sm text-muted py-3">Zatím žádná skončená smlouva.</p></CardBody></Card>
-        ) : (
-          <div className="space-y-2">
-            {items.map((i) => (
-              <Card key={i.id}>
-                <CardBody>
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 break-words">
-                      <SponsorLink id={i.sponsorId} name={i.sponsorName} className="font-heading font-bold text-base" />
-                      <div className="text-sm text-muted">
-                        {CATEGORY_LABELS[i.category]}
-                        {i.signedSeason != null ? ` · podepsána v sezóně ${i.signedSeason}` : ""}
-                        {` · na ${seasonsAccusative(i.seasonsTotal)}`}
-                      </div>
-                      <div className="text-sm">Naposledy {formatCZK(weeklyAmount(i.monthlyAmount))} týdně</div>
-                    </div>
-                    <span className={`shrink-0 text-sm font-heading font-bold ${i.status === "terminated" ? "text-card-red" : "text-muted"}`}>
-                      {STATUS_LABELS[i.status]}
-                    </span>
-                  </div>
-                </CardBody>
-              </Card>
-            ))}
-          </div>
-        )}
-      </section>
+      <ListCard title="Skončené smlouvy">
+        {items.length === 0 && <ListEmpty icon="📄">Zatím žádná skončená smlouva.</ListEmpty>}
+        {items.map((i) => (
+          <ListRow key={i.id}
+            title={<SponsorLink id={i.sponsorId} name={i.sponsorName} />}
+            meta={CATEGORY_LABELS[i.category]}
+            detail={`${i.signedSeason != null ? `Podepsána v sezóně ${i.signedSeason}, ` : ""}na ${seasonsAccusative(i.seasonsTotal)}. Naposledy ${formatCZK(weeklyAmount(i.monthlyAmount))} týdně.`}
+            trailing={<StatusChip tone={i.status === "terminated" ? "danger" : "neutral"}>{STATUS_LABELS[i.status]}</StatusChip>} />
+        ))}
+      </ListCard>
     </div>
   );
 }
