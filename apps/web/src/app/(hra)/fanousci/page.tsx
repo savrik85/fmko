@@ -5,7 +5,7 @@ import Link from "next/link";
 import { MANAGER_FANS, MANAGER_FANS_BANDS } from "@okresni-masina/shared";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, showError, type Team } from "@/lib/api";
-import { Spinner, SectionLabel, useConfirm, Tabs } from "@/components/ui";
+import { Spinner, SectionLabel, useConfirm, Tabs, ListCard, ListRow, ListEmpty, RowIcon, RowValue, ResultChip } from "@/components/ui";
 import { BusSelector } from "../zapas/BusSelector";
 import { FanGroupsPanel, type FanGroupsData } from "./FanGroupsPanel";
 
@@ -235,13 +235,6 @@ function formatGamedate(s: string): string {
   const d = new Date(s.length > 10 ? s : s + "T00:00:00");
   if (isNaN(d.getTime())) return s;
   return `${d.getDate()}.${d.getMonth() + 1}.`;
-}
-
-function resultBadge(r: string | null): { label: string; cls: string } {
-  if (r === "win") return { label: "V", cls: "bg-pitch-500 text-white" };
-  if (r === "draw") return { label: "R", cls: "bg-gold-500 text-white" };
-  if (r === "loss") return { label: "P", cls: "bg-card-red text-white" };
-  return { label: "?", cls: "bg-gray-200 text-gray-500" };
 }
 
 /** Výsledek slovem — písmeno V se plete s „venku". */
@@ -826,40 +819,21 @@ export default function FansPage() {
       </div>
 
       {/* ═══ Spádové obce (autobusy) ═══ */}
-      <div className="card p-4 sm:p-5">
-        <SectionLabel>Spádové obce (autobusy)</SectionLabel>
-        {fanbase.satellites.length === 0 ? (
-          <div className="text-sm text-muted">
-            Zatím žádné spádové obce. Před domácím zápasem objednej autobus z okolí (sekce u zápasu).
-          </div>
-        ) : (
-          <div className="space-y-1.5">
-            {fanbase.satellites.map((s) => {
-              const total = s.casualCount + s.regularCount + s.hardcoreCount;
-              return (
-                <div
-                  key={s.villageId}
-                  className="flex items-center gap-2 text-sm py-1.5 border-b border-gray-100 last:border-b-0"
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="font-heading font-bold truncate">{s.villageName}</div>
-                    <div className="text-micro text-muted">
-                      {s.distanceKm} km · {s.population.toLocaleString("cs")} obyv. · konverze ×{s.conversionMod}
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="font-heading font-bold text-pitch-600">★ {total}</div>
-                    <div className="text-micro text-muted">streak {s.consecutiveBuses}</div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+      <ListCard title="Spádové obce (autobusy)" count={fanbase.satellites.length || undefined}>
+        {fanbase.satellites.length === 0 && (
+          <ListEmpty icon="🚌">Zatím žádné spádové obce. Před domácím zápasem objednej autobus z okolí (sekce u zápasu).</ListEmpty>
         )}
-        <div className="mt-2 text-micro text-muted">
+        {fanbase.satellites.map((s) => (
+          <ListRow key={s.villageId}
+            leading={<RowIcon>🚌</RowIcon>}
+            title={s.villageName}
+            meta={`${s.distanceKm} km · ${s.population.toLocaleString("cs")} obyv. · konverze ×${s.conversionMod}`}
+            trailing={<RowValue sub={`streak ${s.consecutiveBuses}`}><span className="text-pitch-600">★ {s.casualCount + s.regularCount + s.hardcoreCount}</span></RowValue>} />
+        ))}
+        <div className="px-4 py-3 border-t border-line text-meta text-muted">
           Bližší obce mají vyšší konverzi (3 km = ×1.2, 10 km = ×0.5). Lidi z blízka snadněji udělají z busu pravidelný návyk.
         </div>
-      </div>
+      </ListCard>
 
       {/* ═══ Propagační kampaň ═══ */}
       <div className="card p-4 sm:p-5">
@@ -1077,45 +1051,20 @@ export default function FansPage() {
             </div>
 
             {/* Seznam zápasů */}
-            <div className="space-y-2">
+            <div className="-mx-4 sm:-mx-5 -mb-4 sm:-mb-5 border-t border-line">
               {history.map((h) => {
-                const badge = resultBadge(h.result);
+                const outcome = h.result === "win" ? "W" : h.result === "loss" ? "L" : h.result === "draw" ? "D" : null;
                 return (
-                  <div key={h.id} className="flex items-start gap-3 py-2 border-b border-gray-50 last:border-b-0">
-                    <div className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-heading font-bold ${badge.cls}`}>
-                      {badge.label}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-heading font-bold text-ink">
-                          {h.opponentName ?? "Neznámý soupeř"}
-                        </span>
-                        <span className="text-xs text-muted">{formatGamedate(h.gamedate)}</span>
-                        {h.attendance > 0 && (
-                          <span className="text-xs text-muted">· {h.attendance} diváků</span>
-                        )}
-                      </div>
-                      {h.reasons.length > 0 && (
-                        <div className="flex items-center gap-1.5 flex-wrap mt-1">
-                          {h.reasons.map((r, i) => (
-                            <span key={i} className="text-xs text-muted">
-                              {r}{i < h.reasons.length - 1 ? " ·" : ""}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                    <div className="shrink-0 text-right">
-                      <div className={`font-heading font-bold text-sm tabular-nums ${
-                        h.delta > 0 ? "text-pitch-500" : h.delta < 0 ? "text-card-red" : "text-muted"
-                      }`}>
-                        {h.delta > 0 ? "+" : ""}{h.delta}
-                      </div>
-                      <div className="text-xs text-muted tabular-nums">
-                        {h.satisfactionBefore}→{h.satisfactionAfter}
-                      </div>
-                    </div>
-                  </div>
+                  <ListRow key={h.id}
+                    leading={outcome ? <ResultChip result={outcome} /> : <span className="w-[22px] h-[22px] rounded-tight bg-gray-200 text-gray-500 text-micro font-bold flex items-center justify-center">?</span>}
+                    title={h.opponentName ?? "Neznámý soupeř"}
+                    meta={[formatGamedate(h.gamedate), h.attendance > 0 ? `${h.attendance} diváků` : null].filter(Boolean).join(" · ")}
+                    detail={h.reasons.length > 0 ? h.reasons.join(" · ") : undefined}
+                    trailing={
+                      <RowValue tone={h.delta > 0 ? "plus" : h.delta < 0 ? "minus" : undefined} sub={`${h.satisfactionBefore}→${h.satisfactionAfter}`}>
+                        {h.delta > 0 ? "+" : h.delta < 0 ? "−" : ""}{Math.abs(h.delta)}
+                      </RowValue>
+                    } />
                 );
               })}
             </div>

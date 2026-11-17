@@ -5,7 +5,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, apiAction } from "@/lib/api";
-import { Card, CardBody, Spinner, SectionLabel, useConfirm } from "@/components/ui";
+import { Card, CardBody, Spinner, SectionLabel, useConfirm, ListCard, ListRow, RowIcon, RowGroup } from "@/components/ui";
 import { DistrictEvents } from "./DistrictEvents";
 
 interface EventEffect {
@@ -118,11 +118,11 @@ function kola(n: number): string {
 function EffectChips({ effects }: { effects: EventEffect[] }) {
   if (!effects.length) return null;
   return (
-    <div className="flex flex-wrap gap-1 mt-1.5">
+    <span className="flex flex-wrap gap-1 mt-1.5">
       {effects.map((e, i) => (
         <span key={i} className={`text-xs font-medium px-1.5 py-0.5 rounded ${TONE_CHIP[effectTone(e)]}`}>{e.description}</span>
       ))}
-    </div>
+    </span>
   );
 }
 
@@ -258,48 +258,29 @@ export default function EventsPage() {
       )}
 
       {soon.length > 0 && (
-        <div>
-          <SectionLabel>Brzy</SectionLabel>
-          <div className="space-y-2">
-            {soon.map((ev) => {
-              const inRounds = ev.gameWeek - currentGameWeek;
-              return (
-                <Card key={ev.id}>
-                  <CardBody>
-                    <div className="flex items-center gap-3">
-                      <span className="text-2xl shrink-0" aria-hidden>{EVENT_ICONS[ev.type] ?? "\u{1F4C5}"}</span>
-                      <div className="flex-1 min-w-0">
-                        <div className="font-heading font-bold text-sm">{ev.title}</div>
-                        <div className="text-xs text-muted">{ev.description}</div>
-                      </div>
-                      <div className="text-xs text-muted shrink-0">za {inRounds} {kola(inRounds)}</div>
-                    </div>
-                  </CardBody>
-                </Card>
-              );
-            })}
-          </div>
-        </div>
+        <ListCard title="Brzy" count={soon.length}>
+          {soon.map((ev) => {
+            const inRounds = ev.gameWeek - currentGameWeek;
+            return (
+              <ListRow key={ev.id}
+                leading={<RowIcon>{EVENT_ICONS[ev.type] ?? "\u{1F4C5}"}</RowIcon>}
+                title={ev.title}
+                detail={ev.description}
+                trailing={<span className="text-meta text-muted whitespace-nowrap">za {inRounds} {kola(inRounds)}</span>} />
+            );
+          })}
+        </ListCard>
       )}
 
       {diaryByWeek.length > 0 && (
-        <div>
-          <SectionLabel>Deník klubu</SectionLabel>
-          <Card>
-            <CardBody className="space-y-5">
-              {diaryByWeek.map(({ week, items }) => (
-                <div key={week}>
-                  <div className="text-xs font-heading font-bold uppercase tracking-wide text-muted mb-2">
-                    {week === 0 ? "Před sezónou" : `${week}. kolo`}
-                  </div>
-                  <ul className="space-y-3">
-                    {items.map((ev) => <DiaryItem key={ev.id} ev={ev} applied={appliedEffects[ev.id]} />)}
-                  </ul>
-                </div>
-              ))}
-            </CardBody>
-          </Card>
-        </div>
+        <ListCard title="Deník klubu">
+          {diaryByWeek.map(({ week, items }) => (
+            <div key={week}>
+              <RowGroup label={week === 0 ? "Před sezónou" : `${week}. kolo`} />
+              {items.map((ev) => <DiaryItem key={ev.id} ev={ev} applied={appliedEffects[ev.id]} />)}
+            </div>
+          ))}
+        </ListCard>
       )}
 
       {!loadError && events.length === 0 && (
@@ -320,18 +301,20 @@ function DiaryItem({ ev, applied }: { ev: SeasonalEvent; applied?: EventEffect[]
   const chosen = ev.choices?.find((c) => c.id === ev.chosenChoiceId) ?? null;
   const missed = ev.chosenChoiceId === "missed";
   const effects = applied ?? (chosen ? chosen.effects : missed ? [] : ev.effects);
-  const icon = ev.type === "between_round" ? null : (EVENT_ICONS[ev.type] ?? "\u{1F4C5}");
+  const icon = ev.type === "between_round" ? "\u{1F4AC}" : (EVENT_ICONS[ev.type] ?? "\u{1F4C5}");
   return (
-    <li className={`flex items-start gap-3 ${missed ? "opacity-60" : ""}`}>
-      {icon && <span className="text-xl leading-none shrink-0 mt-0.5" aria-hidden>{icon}</span>}
-      <div className="min-w-0 flex-1">
-        <div className="font-heading font-bold text-sm leading-tight">{ev.title}</div>
-        {ev.type === "between_round" && <p className="text-sm text-ink-light mt-0.5">{ev.description}</p>}
-        {chosen && <div className="text-sm text-ink-light mt-0.5">Rozhodl jsi: <span className="text-ink font-medium">{chosen.label}</span></div>}
-        {missed && <div className="text-sm text-muted mt-0.5">{ev.choices ? "Nerozhodl ses včas, propadlo." : "Prošlo bez tebe."}</div>}
-        <EffectChips effects={effects} />
-      </div>
-    </li>
+    // Propadlé rozhodnutí nese zlatý proužek; dřív se jen ztlumilo.
+    <ListRow tone={missed ? "warn" : undefined}
+      leading={<RowIcon>{icon}</RowIcon>}
+      title={ev.title}
+      detail={
+        <>
+          {ev.type === "between_round" && <span className="block">{ev.description}</span>}
+          {chosen && <span className="block">Rozhodl jsi: <span className="text-ink font-medium">{chosen.label}</span></span>}
+          {missed && <span className="block text-muted">{ev.choices ? "Nerozhodl ses včas, propadlo." : "Prošlo bez tebe."}</span>}
+          <EffectChips effects={effects} />
+        </>
+      } />
   );
 }
 

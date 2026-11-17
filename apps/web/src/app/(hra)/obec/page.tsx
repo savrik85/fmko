@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
-import { Card, CardBody, Spinner, SectionLabel, Modal, Button, Tabs, useTabParam } from "@/components/ui";
+import { Card, CardBody, Spinner, SectionLabel, Modal, Button, Tabs, useTabParam, ListCard, ListRow, ListEmpty, RowIcon, RowValue } from "@/components/ui";
 import { DistrictMap, clubBadgeSvg, villageSizeLabel, type MapVillage } from "@/components/map/DistrictMap";
 import { DistrictVillages } from "./DistrictVillages";
 import { FaceAvatar } from "@/components/players/face-avatar";
@@ -738,28 +738,17 @@ function OwnVillage() {
       </div>
 
       {/* Kluby v obci */}
-      <div>
-        <SectionLabel>{teams.length === 1 ? "Klub v obci" : `Kluby v obci (${teams.length})`}</SectionLabel>
-        <Card>
-          <CardBody>
-            {teams.length === 1 && <p className="text-sm text-muted mb-2">V obci jsme jediný klub, o přízeň radnice se nedělíme.</p>}
-            <ul className="divide-y divide-gray-100">
-              {[...teams].sort((a, b) => b.global_favor - a.global_favor).map((t) => (
-                <li key={t.id} className="flex items-center gap-3 py-2.5">
-                  <span className="shrink-0" dangerouslySetInnerHTML={{ __html: clubBadgeSvg(mapVillage.clubs.find((c) => c.id === t.id)!, 30) }} />
-                  <div className="min-w-0 flex-1">
-                    <Link href={`/tym/${t.id}`} className={`font-heading font-bold text-sm hover:text-pitch-600 ${t.id === teamId ? "text-pitch-700" : ""}`}>
-                      {t.name}{t.id === teamId && " (my)"}
-                    </Link>
-                    <div className="mt-1 max-w-[220px]"><FavorBar value={t.global_favor} label="" /></div>
-                  </div>
-                  <span className="text-sm font-heading font-bold shrink-0">{favorLabel(t.global_favor)}</span>
-                </li>
-              ))}
-            </ul>
-          </CardBody>
-        </Card>
-      </div>
+      <ListCard title={teams.length === 1 ? "Klub v obci" : "Kluby v obci"} count={teams.length > 1 ? teams.length : undefined}>
+        {teams.length === 1 && <p className="px-4 pt-3 text-meta text-muted">V obci jsme jediný klub, o přízeň radnice se nedělíme.</p>}
+        {[...teams].sort((a, b) => b.global_favor - a.global_favor).map((t) => (
+          <ListRow key={t.id} href={`/tym/${t.id}`} chevron={false}
+            tone={t.id === teamId ? "new" : undefined}
+            leading={<span dangerouslySetInnerHTML={{ __html: clubBadgeSvg(mapVillage.clubs.find((c) => c.id === t.id)!, 30) }} />}
+            title={<>{t.name}{t.id === teamId && <span className="font-normal text-muted"> (my)</span>}</>}
+            detail={<span className="block max-w-[220px]"><FavorBar value={t.global_favor} label="" /></span>}
+            trailing={<span className="text-meta font-bold whitespace-nowrap">{favorLabel(t.global_favor)}</span>} />
+        ))}
+      </ListCard>
 
       {/* Místní hrdost */}
       {localPride && (
@@ -784,18 +773,14 @@ function OwnVillage() {
                       </div>
                     ))}
                   </div>
-                  <ul className="divide-y divide-gray-100">
+                  <div className="-mx-5 -mb-4 border-t border-line">
                     {localPride.locals.map((p) => (
-                      <li key={p.id} className="flex items-center justify-between gap-2 py-2 text-sm">
-                        <Link href={`/hrac/${p.id}`} className="font-heading font-bold hover:text-pitch-600 underline decoration-pitch-500/20 truncate">
-                          {p.firstName} {p.lastName}
-                        </Link>
-                        <span className="text-xs text-muted shrink-0 tabular-nums">
-                          {p.position} {p.overallRating} · {p.recentStarts} zápasů · {p.recentGoals}+{p.recentAssists}{p.recentAvgRating ? ` · známka ${p.recentAvgRating}` : ""}
-                        </span>
-                      </li>
+                      <ListRow key={p.id} href={`/hrac/${p.id}`}
+                        title={`${p.firstName} ${p.lastName}`}
+                        meta={`${p.recentStarts} zápasů · ${p.recentGoals}+${p.recentAssists}${p.recentAvgRating ? ` · známka ${p.recentAvgRating}` : ""}`}
+                        trailing={<RowValue sub={p.position}>{p.overallRating}</RowValue>} />
                     ))}
-                  </ul>
+                  </div>
                 </>
               )}
             </CardBody>
@@ -804,32 +789,16 @@ function OwnVillage() {
       )}
 
       {/* Kronika obce */}
-      <div>
-        <SectionLabel>Kronika obce</SectionLabel>
-        <Card>
-          <CardBody>
-            {feed.length === 0 ? (
-              <p className="text-sm text-muted">Zatím se v obci nic nezapsalo.</p>
-            ) : (
-              <ul className="space-y-2.5">
-                {feed.map((e) => (
-                  <li key={e.id} className="flex items-start gap-2.5 text-sm">
-                    <span className="shrink-0 leading-5" aria-hidden>{CHRONICLE_ICON[e.event_type] ?? "\u{1F4DC}"}</span>
-                    <div className="min-w-0">
-                      <p className="leading-snug">{withoutLongDash(e.description)}</p>
-                      <div className="text-xs text-muted">
-                        {formatDay(e.game_date || e.created_at)}
-                        {e.team_name && ` · ${e.team_name}`}
-                        {e.official_name && ` · ${e.official_name}`}
-                      </div>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardBody>
-        </Card>
-      </div>
+      <ListCard title="Kronika obce">
+        {feed.length === 0 && <ListEmpty icon="📜">Zatím se v obci nic nezapsalo. Kronikář zapíše brigády, pozvánky i petice.</ListEmpty>}
+        {feed.map((e) => (
+          <ListRow key={e.id}
+            leading={<RowIcon>{CHRONICLE_ICON[e.event_type] ?? "\u{1F4DC}"}</RowIcon>}
+            title={formatDay(e.game_date || e.created_at)}
+            meta={[e.team_name, e.official_name].filter(Boolean).join(" · ") || undefined}
+            detail={withoutLongDash(e.description)} />
+        ))}
+      </ListCard>
 
       {/* Jak to s obcí funguje */}
       <details className="card p-4 sm:p-5 group">

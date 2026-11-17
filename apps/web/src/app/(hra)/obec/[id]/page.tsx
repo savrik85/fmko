@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { API_BASE, apiFetch } from "@/lib/api";
-import { Card, CardBody, SectionLabel, Spinner } from "@/components/ui";
+import { Card, CardBody, SectionLabel, Spinner, ListCard, ListRow, RowIcon } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { DistrictMap, clubBadgeSvg, villageSizeLabel, type MapVillage } from "@/components/map/DistrictMap";
 import { StadiumPreview } from "./StadiumPreview";
@@ -468,24 +468,15 @@ export default function VillageProfilePage() {
       )}
 
       {data.chronicle.length > 0 && (
-        <div>
-          <SectionLabel>Kronika obce</SectionLabel>
-          <Card>
-            <CardBody>
-              <ul className="space-y-2.5">
-                {data.chronicle.map((h, i) => (
-                  <li key={i} className="flex items-start gap-2.5 text-sm">
-                    <span className="shrink-0 leading-5" aria-hidden>{CHRONICLE_ICON[h.type] ?? "\u{1F4DC}"}</span>
-                    <div className="min-w-0">
-                      <p className="leading-snug">{h.text}</p>
-                      <div className="text-xs text-muted">{formatDate(h.date)}{h.teamName ? ` · ${h.teamName}` : ""}</div>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </CardBody>
-          </Card>
-        </div>
+        <ListCard title="Kronika obce">
+          {data.chronicle.map((h, i) => (
+            <ListRow key={i}
+              leading={<RowIcon>{CHRONICLE_ICON[h.type] ?? "\u{1F4DC}"}</RowIcon>}
+              title={formatDate(h.date)}
+              meta={h.teamName ?? undefined}
+              detail={h.text} />
+          ))}
+        </ListCard>
       )}
     </div>
     </>

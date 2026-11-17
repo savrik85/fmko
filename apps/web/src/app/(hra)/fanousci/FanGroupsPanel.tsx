@@ -9,7 +9,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { SectionLabel, useConfirm } from "@/components/ui";
+import { SectionLabel, useConfirm, ListCard, ListRow, ListEmpty, RowIcon, RowValue } from "@/components/ui";
 import { apiFetch, showError } from "@/lib/api";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { odesloLidi, zavrenoNaZapasy, pripadu } from "@okresni-masina/shared";
@@ -369,66 +369,48 @@ export function FanGroupsPanel({ data, teamId, onChanged }: {
 
       {/* ═══ Proč je nálada taková, jaká je ═══ */}
       {data.recentEvents.length > 0 && (
-        <div className="card p-4 sm:p-5">
-          <SectionLabel>Co klub v poslední době potkalo</SectionLabel>
-          <ul className="mt-2 space-y-2">
-            {data.recentEvents.map((u, i) => (
-              <li key={`${u.kind}-${u.gameDate}-${i}`} className="text-sm flex items-baseline gap-2">
-                <span className="text-muted shrink-0">{formatDatum(u.gameDate)}</span>
-                <span>
-                  <strong>{u.label}</strong>
-                  {u.detail && <span className="text-muted">, {u.detail}</span>}
-                </span>
-              </li>
-            ))}
-          </ul>
-          <p className="mt-3 text-sm text-muted">
+        <ListCard title="Co klub v poslední době potkalo">
+          {data.recentEvents.map((u, i) => (
+            <ListRow key={`${u.kind}-${u.gameDate}-${i}`}
+              title={u.label}
+              meta={[formatDatum(u.gameDate), u.detail].filter(Boolean).join(" · ")} />
+          ))}
+          <p className="px-4 py-3 border-t border-line text-meta text-muted">
             Každá parta to bere jinak. Pamětníky urazí přejmenování klubu, kotel ne -
             a naopak.
           </p>
-        </div>
+        </ListCard>
       )}
 
       {/* ═══ Poslední bordel ═══ */}
-      <div className="card p-4 sm:p-5">
-        <SectionLabel>Co se stalo na tribunách</SectionLabel>
-        {data.recentIncidents.length === 0 ? (
-          <p className="mt-2 text-sm text-muted">
-            Zatím klid. Delegát nemá co zapsat a ty nemáš co platit.
-          </p>
-        ) : (
-          <>
-            <ul className="mt-2 space-y-3">
-              {data.recentIncidents.map((i) => (
-                <li key={i.id} className="text-sm leading-relaxed">
-                  <div className="flex items-baseline justify-between gap-3">
-                    <span className="text-muted">
-                      {formatDatum(i.gameDate)}
-                      {i.minute != null && ` · ${i.minute}′`}
-                    </span>
-                    {i.fine > 0 && (
-                      <span className="font-semibold text-card-red shrink-0">−{formatCZK(i.fine)}</span>
-                    )}
-                  </div>
-                  <div>{i.text}</div>
-                  {(i.sectorClosedMatches > 0 || i.fansLost > 0) && (
-                    <div className="text-muted">
-                      {i.sectorClosedMatches > 0 && `Sektor zavřený na ${zavrenoNaZapasy(i.sectorClosedMatches)}. `}
-                      {i.fansLost > 0 && odesloLidi(i.fansLost)}
-                    </div>
-                  )}
-                </li>
-              ))}
-            </ul>
-            {bordelCelkem > 0 && (
-              <p className="mt-3 pt-3 border-t border-gray-100 text-sm">
-                Za {pripadu(data.recentIncidents.length)} jsi zaplatil{" "}
-                <strong className="text-card-red">{formatCZK(bordelCelkem)}</strong>.
-              </p>
-            )}
-          </>
+      <ListCard title="Co se stalo na tribunách">
+        {data.recentIncidents.length === 0 && (
+          <ListEmpty icon="🧹">Zatím klid. Delegát nemá co zapsat a ty nemáš co platit.</ListEmpty>
         )}
-      </div>
+        {data.recentIncidents.map((i) => (
+          <ListRow key={i.id}
+            leading={<RowIcon>📣</RowIcon>}
+            title={`${formatDatum(i.gameDate)}${i.minute != null ? ` · ${i.minute}′` : ""}`}
+            detail={
+              <>
+                {i.text}
+                {(i.sectorClosedMatches > 0 || i.fansLost > 0) && (
+                  <span className="block text-muted">
+                    {i.sectorClosedMatches > 0 && `Sektor zavřený na ${zavrenoNaZapasy(i.sectorClosedMatches)}. `}
+                    {i.fansLost > 0 && odesloLidi(i.fansLost)}
+                  </span>
+                )}
+              </>
+            }
+            trailing={i.fine > 0 ? <RowValue tone="minus">−{formatCZK(i.fine)}</RowValue> : undefined} />
+        ))}
+        {bordelCelkem > 0 && (
+          <p className="px-4 py-3 border-t border-line text-meta">
+            Za {pripadu(data.recentIncidents.length)} jsi zaplatil{" "}
+            <strong className="text-card-red">{formatCZK(bordelCelkem)}</strong>.
+          </p>
+        )}
+      </ListCard>
     </div>
   );
 }
