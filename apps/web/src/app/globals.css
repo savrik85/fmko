@@ -658,7 +658,8 @@ input[type="number"] { -moz-appearance: textfield; }
    `-webkit-touch-callout` zná jen iOS, Androidu se to netýká. */
 @media (display-mode: standalone) and (max-width: 639px) {
   @supports (-webkit-touch-callout: none) {
-    .topbar-club {
+    /* `header.` kvůli váze: základní .topbar-club je v souboru níž a jinak by vyhrál. */
+    header.topbar-club {
       background-image:
         linear-gradient(180deg,
           rgba(0,0,0,0.30) 0,
