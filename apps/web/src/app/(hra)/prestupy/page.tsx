@@ -9,7 +9,7 @@ import { useTeam } from "@/context/team-context";
 import { apiFetch, apiAction, showError, type Player } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
 import { nationalityFlag } from "@/lib/nationality";
-import { Spinner, SectionLabel, PositionBadge, useConfirm, BadgePreview, type BadgePattern, Tabs, useTabParam, Sheet, SheetDialog, Button, DataTable, EntityCell, ListCard, ListRow, ListEmpty, RatingPill, StatusChip, ratingToneIn } from "@/components/ui";
+import { Spinner, SectionLabel, PositionBadge, useConfirm, BadgePreview, type BadgePattern, Tabs, useTabParam, Sheet, SheetDialog, Button, DataTable, EntityCell, ListCard, ListRow, ListEmpty, RowIcon, RowValue, RatingPill, StatusChip, ratingToneIn } from "@/components/ui";
 import { attrBg } from "@/lib/player-attrs";
 import { PlayerRevealCard } from "@/components/players/reveal-card";
 import { FaceAvatar } from "@/components/players/face-avatar";
@@ -286,171 +286,165 @@ function HeroTransfer({ t }: { t: TransfersOverview["biggest"][number] }) {
   );
 }
 
-// Kompaktní karta #2-#5
-function MidTransferCard({ rank, t }: { rank: number; t: TransfersOverview["biggest"][number] }) {
-  const hasAvatar = t.playerAvatar && Object.keys(t.playerAvatar).length > 0;
+/** Portrét vlevo v řádku seznamu; bez portrétu šedé kolečko stejné velikosti. */
+function RowFace({ avatar }: { avatar?: Record<string, unknown> | null }) {
+  return avatar && Object.keys(avatar).length > 0
+    ? <FaceAvatar faceConfig={avatar} size={30} className="rounded-full bg-surface-3" />
+    : <span className="w-9 h-9 rounded-full bg-surface-3" />;
+}
+
+/**
+ * Odkud → kam v podrobnostech řádku, na jednom řádku jako dřív: dlouhé názvy klubů
+ * se zkrátí (celý název je v odkazu), zalomení by seznam na telefonu protáhlo o polovinu.
+ */
+function TransferRoute({ from, to }: { from: ReactNode; to: ReactNode }) {
+  return (
+    <span className="flex items-center gap-1.5 min-w-0">
+      <span className="min-w-0 shrink truncate">{from}</span>
+      <span className="shrink-0"><FancyArrow size="xs" /></span>
+      <span className="min-w-0 shrink truncate">{to}</span>
+    </span>
+  );
+}
+
+// Řádek #2 až #5 nejdražších přestupů
+function MidTransferRow({ rank, t }: { rank: number; t: TransfersOverview["biggest"][number] }) {
   const medal = rank === 2 ? "from-gray-300 to-gray-400 text-gray-900" : rank === 3 ? "from-amber-300 to-amber-500 text-amber-950" : "from-gray-100 to-gray-200 text-gray-600";
   return (
-    <div className="relative bg-white rounded-xl border border-gray-200 hover:border-pitch-300 hover:shadow-md transition-all p-3 sm:p-4">
-      <div className="flex items-start gap-3">
-        {hasAvatar ? (
-          <div className="shrink-0 rounded-xl overflow-hidden bg-gray-50 ring-2 ring-white shadow-sm">
-            <FaceAvatar faceConfig={t.playerAvatar as Record<string, unknown>} size={56} />
-          </div>
-        ) : (
-          <div className="shrink-0 w-14 h-[67px] rounded-xl bg-gray-100" />
-        )}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-start justify-between gap-2 mb-1">
-            <Link href={`/hrac/${t.playerId}`} className="font-heading font-bold text-sm sm:text-base text-ink hover:text-pitch-500 truncate flex-1 min-w-0">
-              {t.playerName}
-              {t.isCrossLeague && <span className="ml-1 text-micro">🔄</span>}
-            </Link>
-            <span className={`shrink-0 px-1.5 py-0.5 rounded text-micro font-heading font-bold bg-gradient-to-br ${medal}`}>#{rank}</span>
-          </div>
-          {(t.position || t.age) && (
-            <div className="flex items-center gap-1.5 mb-1.5">
-              {t.position && <PositionBadge position={t.position} />}
-              {t.age ? <span className="text-micro text-muted tabular-nums">{t.age}&nbsp;let</span> : null}
-            </div>
-          )}
-          <div className="flex items-center gap-1.5 text-xs sm:text-sm text-muted mb-2 min-w-0">
-            {t.fromTeam ? (
-              <ClubLink teamId={t.fromTeamId} name={t.fromTeam} badge={t.fromTeamBadge} href={t.fromTeamId ? `/tym/${t.fromTeamId}` : null} bold={false} />
-            ) : (
-              <FreeAgentLabel />
-            )}
-            <FancyArrow size="sm" />
-            <ClubLink teamId={t.toVirtual ? null : t.toTeamId} name={t.toTeam} badge={t.toTeamBadge} href={t.toVirtual ? null : `/tym/${t.toTeamId}`} bold={false} />
-          </div>
-          <div className="font-heading font-[800] text-base sm:text-lg text-pitch-500 tabular-nums">
-            {t.fee.toLocaleString("cs")} <span className="text-xs text-pitch-700">Kč</span>
-          </div>
-        </div>
-      </div>
-    </div>
+    <ListRow
+      leading={<RowFace avatar={t.playerAvatar} />}
+      title={<>
+        <Link href={`/hrac/${t.playerId}`} className="hover:text-pitch-500 underline decoration-pitch-500/20 transition-colors">
+          {t.playerName}
+        </Link>
+        {t.isCrossLeague && <span className="ml-1.5 text-micro">🔄</span>}
+      </>}
+      meta={<>
+        <span className={`inline-block px-1.5 rounded text-micro font-heading font-bold bg-gradient-to-br ${medal}`}>#{rank}</span>
+        {t.position && <> <PositionBadge position={t.position} /></>}
+        {t.age ? ` ${t.age} let` : null}
+      </>}
+      trailing={<RowValue>{formatCZK(t.fee)}</RowValue>}
+      detail={
+        <TransferRoute
+          from={t.fromTeam
+            ? <ClubLink teamId={t.fromTeamId} name={t.fromTeam} badge={t.fromTeamBadge} href={t.fromTeamId ? `/tym/${t.fromTeamId}` : null} bold={false} />
+            : <FreeAgentLabel />}
+          to={<ClubLink teamId={t.toVirtual ? null : t.toTeamId} name={t.toTeam} badge={t.toTeamBadge} href={t.toVirtual ? null : `/tym/${t.toTeamId}`} bold={false} />} />
+      } />
   );
 }
 
-// Karta spekulace
-function SpeculationCard({ s }: { s: NonNullable<TransfersOverview["speculations"]>[number] }) {
-  const hasAvatar = s.playerAvatar && Object.keys(s.playerAvatar).length > 0;
+// Řádek spekulace: hráč, o kterého se zajímají jiné týmy
+function SpeculationRow({ s, ratings }: { s: NonNullable<TransfersOverview["speculations"]>[number]; ratings: number[] }) {
   const hot = s.watcherCount >= 3;
   return (
-    <div className="bg-white rounded-xl border border-gray-200 hover:border-amber-400 hover:shadow-md transition-all p-3 sm:p-4">
-      <div className="flex items-start gap-3">
-        <div className="relative shrink-0">
-          {hasAvatar ? (
-            <div className="rounded-xl overflow-hidden bg-gray-50 ring-2 ring-white shadow-sm">
-              <FaceAvatar faceConfig={s.playerAvatar as Record<string, unknown>} size={48} />
-            </div>
-          ) : (
-            <div className="w-12 h-[58px] rounded-xl bg-gray-100" />
-          )}
-          {hot && <span className="absolute -top-1 -right-1 text-base" title="Hot">🔥</span>}
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5 mb-1">
-            <Link href={`/hrac/${s.playerId}`} className="font-heading font-bold text-sm sm:text-base text-ink hover:text-pitch-500 truncate">
-              {s.playerName}
-            </Link>
-            <span className="shrink-0 text-micro text-muted tabular-nums">{s.position}·{s.overallRating}</span>
-          </div>
-          <div className="text-xs sm:text-sm text-muted mb-1.5 min-w-0">
-            <ClubLink teamId={s.currentTeamId} name={s.currentTeamName} badge={s.currentTeamBadge} href={`/tym/${s.currentTeamId}`} bold={false} badgeSize={20} />
-          </div>
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1 min-w-0">
-              <span aria-hidden className="text-micro">👁️</span>
-              {(s.watcherBadges && s.watcherBadges.length > 0 ? s.watcherBadges : []).slice(0, 5).map((b, i) => (
-                <span key={i} className="relative inline-block" title="Zájem skrytého klubu">
-                  <ClubBadge badge={b} size={20} />
-                  <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-amber-500 text-white text-[9px] font-heading font-bold flex items-center justify-center ring-1 ring-white">?</span>
-                </span>
-              ))}
-              {s.watcherBadges && s.watcherBadges.length > 5 && (
-                <span className="text-micro text-muted font-heading font-bold ml-1">+{s.watcherBadges.length - 5}</span>
-              )}
-              {(!s.watcherBadges || s.watcherBadges.length === 0) && (
-                <span className="text-micro text-amber-800 font-heading font-bold">{s.watcherCount} {s.watcherCount === 1 ? "tým" : s.watcherCount < 5 ? "týmy" : "týmů"}</span>
-              )}
-            </div>
-            <span className="text-micro text-muted shrink-0">{relativeTimeCs(s.latestWatchedAt)}</span>
-          </div>
-        </div>
-      </div>
-    </div>
+    <ListRow
+      leading={
+        <span className="relative inline-flex">
+          <RowFace avatar={s.playerAvatar} />
+          {hot && <span className="absolute -top-1 -right-1 text-sm leading-none" title="Hot">🔥</span>}
+        </span>
+      }
+      title={
+        <Link href={`/hrac/${s.playerId}`} className="hover:text-pitch-500 underline decoration-pitch-500/20 transition-colors">
+          {s.playerName}
+        </Link>
+      }
+      meta={<PositionBadge position={s.position} />}
+      trailing={<RatingPill value={s.overallRating} tone={ratingToneIn(s.overallRating, ratings)} />}
+      detail={<>
+        <span className="flex min-w-0">
+          <ClubLink teamId={s.currentTeamId} name={s.currentTeamName} badge={s.currentTeamBadge} href={`/tym/${s.currentTeamId}`} bold={false} badgeSize={20} />
+        </span>
+        <span className="flex items-center justify-between gap-2 mt-1">
+          <span className="flex items-center gap-1 min-w-0">
+            <span aria-hidden className="text-micro">👁️</span>
+            {(s.watcherBadges && s.watcherBadges.length > 0 ? s.watcherBadges : []).slice(0, 5).map((b, i) => (
+              <span key={i} className="relative inline-block" title="Zájem skrytého klubu">
+                <ClubBadge badge={b} size={20} />
+                <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-amber-500 text-white text-[9px] font-heading font-bold flex items-center justify-center ring-1 ring-white">?</span>
+              </span>
+            ))}
+            {s.watcherBadges && s.watcherBadges.length > 5 && (
+              <span className="text-micro text-muted font-heading font-bold ml-1">+{s.watcherBadges.length - 5}</span>
+            )}
+            {(!s.watcherBadges || s.watcherBadges.length === 0) && (
+              <span className="text-micro text-amber-800 font-heading font-bold">{s.watcherCount} {s.watcherCount === 1 ? "tým" : s.watcherCount < 5 ? "týmy" : "týmů"}</span>
+            )}
+          </span>
+          <span className="text-micro text-muted shrink-0">{relativeTimeCs(s.latestWatchedAt)}</span>
+        </span>
+      </>} />
   );
 }
 
-// Kompaktní řádek pro Poslední přestupy
+/** Cena vpravo v řádku posledního přestupu. U hostování a výměny štítek, částka pod ním. */
+function RecentTransferPrice({ t }: { t: TransfersOverview["recent"][number] }) {
+  if (t.joinType === "loan") {
+    // Hostování není prodej, cena by se pletla s přestupní částkou.
+    return (
+      <RowValue sub={t.fee > 0 ? formatCZK(t.fee) : undefined}>
+        <span className="text-meta text-yellow-700">🤝 {t.loanEnded ? "Hostování skončilo" : "Hostování"}</span>
+      </RowValue>
+    );
+  }
+  if (t.joinType === "free_agent") return <RowValue><span className="text-meta text-amber-700">★ Zdarma</span></RowValue>;
+  if (t.isSwap) {
+    // U výměny je částka jen doplatek. Napsat ji jako cenu by z obchodu
+    // za hráče udělalo výprodej za pár korun.
+    return (
+      <RowValue sub={t.fee > 0 ? `doplatek ${formatCZK(t.fee)}` : undefined}>
+        <span className="text-meta text-sky-700">⇄ Výměna</span>
+      </RowValue>
+    );
+  }
+  return t.fee > 0 ? <RowValue>{formatCZK(t.fee)}</RowValue> : <span className="text-muted">-</span>;
+}
+
+// Řádek pro Poslední přestupy: odkud → kam a splátky jsou v podrobnostech, ty se neořezávají.
 function RecentTransferRow({ t }: { t: TransfersOverview["recent"][number] }) {
-  const hasAvatar = t.playerAvatar && Object.keys(t.playerAvatar).length > 0;
+  // Cena je celková; jen připomenout, že se splácí a že prodávající má procenta.
+  const terms = [
+    t.installments ? `na splátky (${t.installments}× týdně)` : null,
+    t.sellOnPct ? `+ ${t.sellOnPct} % z dalšího prodeje` : null,
+  ].filter(Boolean).join(" · ");
   return (
-    /* items-start, ne items-center: prostřední sloupec je dvouřádkový, takže
-       se cena centrovala proti jeho středu a končila 17 px pod jménem -
-       vypadalo to, že patří k řádku pod ním. Cena je proto na lince se
-       jménem; druhý řádek (odkud → kam) tím dostal celou šířku a názvy
-       klubů se ořezávají mnohem míň. */
-    <div className="flex items-start gap-3 px-4 py-2.5 min-h-[56px] border-b border-line-soft last:border-b-0">
-      {hasAvatar ? (
-        <div className="shrink-0 rounded-soft overflow-hidden bg-gray-50">
-          <FaceAvatar faceConfig={t.playerAvatar as Record<string, unknown>} size={32} />
-        </div>
-      ) : (
-        <div className="shrink-0 w-8 h-[38px] rounded-soft bg-gray-100" />
-      )}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5 min-w-0">
-          <Link href={`/hrac/${t.playerId}`} className="font-heading font-bold text-sm text-ink hover:text-pitch-500 truncate">
-            {t.playerName}
-          </Link>
-          {t.position && <PositionBadge position={t.position} />}
-          {t.age ? <span className="text-micro text-muted tabular-nums shrink-0">{t.age}&nbsp;l.</span> : null}
-          {t.isCrossLeague && <span className="text-micro shrink-0">🔄</span>}
-          <span className="ml-auto shrink-0 font-heading font-bold text-sm text-pitch-500 tabular-nums whitespace-nowrap">
-            {t.joinType === "loan" ? (
-              /* Hostování není prodej — cena by se pletla s přestupní částkou. */
-              <span className="text-yellow-700">
-                🤝&nbsp;{t.loanEnded ? "HOSTOVÁNÍ SKONČILO" : "HOSTOVÁNÍ"}
-                {t.fee > 0 ? <span className="text-muted">&nbsp;· {t.fee.toLocaleString("cs")}&nbsp;Kč</span> : null}
-              </span>
-            ) : t.joinType === "free_agent" ? (
-              <span className="text-amber-700">★&nbsp;ZDARMA</span>
-            ) : t.isSwap ? (
-              /* U výměny je částka jen doplatek. Napsat ji jako cenu by z obchodu
-                 za hráče udělalo výprodej za pár korun. */
-              <span className="text-sky-700">
-                ⇄&nbsp;VÝMĚNA
-                {t.fee > 0 ? <span className="text-muted">&nbsp;· doplatek {t.fee.toLocaleString("cs")}&nbsp;Kč</span> : null}
-              </span>
-            ) : t.fee > 0 ? (
-              <>{t.fee.toLocaleString("cs")}&nbsp;<span className="text-micro text-muted">Kč</span></>
-            ) : "-"}
+    <ListRow
+      leading={<RowFace avatar={t.playerAvatar} />}
+      /* Post a věk u jména jako dřív: třetí řádek by seznam na telefonu protáhl o polovinu. */
+      /* Cena na řádku se jménem, ne vpravo přes celý řádek: odkud → kam pak má celou
+         šířku a názvy klubů se ořezávají mnohem míň. */
+      title={
+        <span className="flex items-start justify-between gap-2">
+          <span className="min-w-0">
+            <Link href={`/hrac/${t.playerId}`} className="hover:text-pitch-500 underline decoration-pitch-500/20 transition-colors">
+              {t.playerName}
+            </Link>
+            {t.position && <span className="ml-1.5 align-middle"><PositionBadge position={t.position} /></span>}
+            {t.age ? <span className="ml-1 text-meta font-normal text-muted whitespace-nowrap">{t.age} let</span> : null}
+            {t.isCrossLeague && <span className="ml-1.5 text-micro">🔄</span>}
           </span>
-        </div>
-        {/* Cena je celková; jen připomenout, že se splácí a že prodávající má procenta. */}
-        {(t.installments || t.sellOnPct) ? (
-          <div className="text-sm text-muted text-right">
-            {[t.installments ? `na splátky (${t.installments}× týdně)` : null, t.sellOnPct ? `+ ${t.sellOnPct} % z dalšího prodeje` : null].filter(Boolean).join(" · ")}
-          </div>
-        ) : null}
-        <div className="flex items-center gap-1 text-xs text-muted mt-0.5 min-w-0">
-          {/* U hostování „odkud" znamená kmenový klub, ne pool volných hráčů. */}
-          {!t.fromTeam ? (
-            t.joinType === "loan"
-              ? <span className="text-muted shrink-0">kmenový klub neznámý</span>
-              : <FreeAgentLabel />
-          ) : t.joinType === "free_agent" ? (
-            <FreeAgentLabel />
-          ) : (
-            <ClubLink teamId={t.fromTeamId} name={t.fromTeam} badge={t.fromTeamBadge} href={t.fromTeamId ? `/tym/${t.fromTeamId}` : null} bold={false} />
-          )}
-          <FancyArrow size="xs" />
-          <ClubLink teamId={t.toVirtual ? null : t.toTeamId} name={t.toTeam} badge={t.toTeamBadge} href={t.toVirtual ? null : `/tym/${t.toTeamId}`} bold={false} />
-        </div>
-      </div>
-    </div>
+          <span className="shrink-0 text-right"><RecentTransferPrice t={t} /></span>
+        </span>
+      }
+      detail={<>
+        <TransferRoute
+          from={
+            /* U hostování „odkud" znamená kmenový klub, ne pool volných hráčů. */
+            !t.fromTeam ? (
+              t.joinType === "loan"
+                ? <span className="text-muted">kmenový klub neznámý</span>
+                : <FreeAgentLabel />
+            ) : t.joinType === "free_agent" ? (
+              <FreeAgentLabel />
+            ) : (
+              <ClubLink teamId={t.fromTeamId} name={t.fromTeam} badge={t.fromTeamBadge} href={t.fromTeamId ? `/tym/${t.fromTeamId}` : null} bold={false} />
+            )
+          }
+          to={<ClubLink teamId={t.toVirtual ? null : t.toTeamId} name={t.toTeam} badge={t.toTeamBadge} href={t.toVirtual ? null : `/tym/${t.toTeamId}`} bold={false} />} />
+        {terms && <span className="block text-muted mt-0.5">{terms}</span>}
+      </>} />
   );
 }
 
@@ -1207,97 +1201,94 @@ export default function TransfersPage() {
   const loanRows: BrowseRow[] = loanListings.map(toListingRow);
 
   // Moje inzeráty: prodej v podzáložce Prodej, hostování (se žádostmi) v podzáložce Hostování.
+  // Pod každým inzerátem jeho žádosti o hostování (🤝) a nabídky z trhu (💰) jako vlastní řádky.
   const renderMyListings = (items: MyListing[], title: string): ReactNode => items.length === 0 ? null : (
-              <div>
-                <SectionLabel>{title} ({items.length})</SectionLabel>
-                <div className="space-y-3">
-                  {items.map((l) => {
-                    const mlAvatar = (() => { try { const a = (l as any).avatar; return typeof a === "string" ? JSON.parse(a) : a; } catch { return null; } })();
-                    return (
-                    <div key={l.id} className="card p-4">
-                      <div className="flex items-center gap-3 mb-2">
-                        {mlAvatar && Object.keys(mlAvatar).length > 0
-                          ? <FaceAvatar faceConfig={mlAvatar} size={40} className="rounded-full shrink-0" />
-                          : <div className="w-10 h-10 rounded-full bg-gray-100 shrink-0" />}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <Link href={`/hrac/${l.playerId}`} className="font-heading font-bold hover:text-pitch-500 underline decoration-pitch-500/20 transition-colors">
-                              {l.playerName}
-                            </Link>
-                            <PositionBadge position={l.position as "GK" | "DEF" | "MID" | "FWD"} />
-                            <span className="text-sm text-muted">{l.playerAge} let</span>
-                          </div>
-                          {l.dealType === "loan" ? (
-                            <div className="text-xs text-muted">Na hostování: <span className="font-heading font-bold text-ink">{loanTermsLine(l)}</span></div>
-                          ) : (
-                            <div className="text-xs text-muted">Cena: <span className="font-heading font-bold text-ink">{formatCZK(l.askingPrice)}</span></div>
-                          )}
-                        </div>
-                        <button
-                          onClick={async () => {
-                            if (!teamId) return;
-                            if (await apiAction(apiFetch(`/api/teams/${teamId}/listings/${l.id}`, { method: "DELETE" }), "Stažení inzerátu se nezdařilo")) await refresh();
-                          }}
-                          className="shrink-0 py-1 px-3 rounded-soft text-xs font-heading font-bold bg-gray-100 text-muted hover:bg-gray-200 transition-colors"
-                        >
-                          Stáhnout
-                        </button>
-                      </div>
-                      {l.dealType === "loan" && (
-                        <div className="border-t border-gray-100 pt-2">
-                          {(l.loanRequests ?? []).length === 0 ? (
-                            <p className="text-sm text-muted">Zatím nikdo nepožádal.</p>
-                          ) : (
-                            <div className="space-y-2">
-                              <p className="text-sm text-muted">Žádosti ({l.loanRequests!.length}). Přijmeš jednu, ostatní dostanou odmítnutí.</p>
-                              {l.loanRequests!.map((r) => (
-                                <div key={r.offerId} className="flex items-center justify-between gap-3">
-                                  <div className="text-sm min-w-0">
-                                    <span className="font-heading font-bold">{r.teamName}</span>
-                                    {r.leagueName && <span className="text-muted"> · {r.leagueName}</span>}
-                                  </div>
-                                  <Link href={`/prestupy/nabidka/${r.offerId}`}
-                                    className="shrink-0 py-1 px-3 rounded-soft text-xs font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">
-                                    Rozhodnout
-                                  </Link>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                      {l.bids.length > 0 && (
-                        <div className="border-t border-gray-100 pt-2 space-y-2">
-                          {l.bids.map((b) => (
-                            <div key={b.id} className="flex items-center justify-between gap-3">
-                              <div className="text-sm">
-                                <span className="font-heading font-bold">{b.bidderName}</span>
-                                <span className="text-muted"> nabízí </span>
-                                <span className="font-heading font-bold text-pitch-500">{formatCZK(b.amount)}</span>
-                              </div>
-                              <div className="flex gap-2">
-                                <button onClick={async () => {
-                                  const ok = await confirm({ title: `Přijmout nabídku ${formatCZK(b.amount)}?`, description: `Od: ${b.bidderName}`, confirmLabel: "Přijmout" });
-                                  if (!ok || !teamId) return;
-                                  if (await apiAction(apiFetch(`/api/teams/${teamId}/bids/${b.id}/accept`, { method: "POST" }), "Přijetí nabídky se nezdařilo")) await refresh();
-                                }} className="py-1 px-3 rounded-soft text-xs font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">
-                                  Přijmout
-                                </button>
-                                <button onClick={async () => {
-                                  if (!teamId) return;
-                                  if (await apiAction(apiFetch(`/api/teams/${teamId}/bids/${b.id}/reject`, { method: "POST" }), "Odmítnutí nabídky se nezdařilo")) await refresh();
-                                }} className="py-1 px-3 rounded-soft text-xs font-heading font-bold bg-gray-100 text-muted hover:bg-gray-200 transition-colors">
-                                  Odmítnout
-                                </button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  ); })}
-                </div>
-              </div>
+    <ListCard title={title} count={items.length}>
+      {items.flatMap((l) => {
+        const listingAvatar = (() => {
+          try {
+            const a = (l as any).avatar;
+            return typeof a === "string" ? JSON.parse(a) : a;
+          } catch (e) {
+            console.warn("Avatar hráče v inzerátu nejde přečíst:", e);
+            return null;
+          }
+        })();
+        const requests = l.loanRequests ?? [];
+        const listingRow = (
+          <ListRow key={l.id}
+            leading={<RowFace avatar={listingAvatar} />}
+            title={
+              <Link href={`/hrac/${l.playerId}`} className="hover:text-pitch-500 underline decoration-pitch-500/20 transition-colors">
+                {l.playerName}
+              </Link>
+            }
+            meta={<><PositionBadge position={l.position} /> {l.playerAge} let</>}
+            trailing={
+              <button
+                onClick={async () => {
+                  if (!teamId) return;
+                  if (await apiAction(apiFetch(`/api/teams/${teamId}/listings/${l.id}`, { method: "DELETE" }), "Stažení inzerátu se nezdařilo")) await refresh();
+                }}
+                className="py-1 px-3 rounded-soft text-xs font-heading font-bold bg-gray-100 text-muted hover:bg-gray-200 transition-colors"
+              >
+                Stáhnout
+              </button>
+            }
+            detail={<>
+              {l.dealType === "loan" ? (
+                <span className="block"><span className="text-muted">Na hostování:</span> <span className="font-bold text-ink">{loanTermsLine(l)}</span></span>
+              ) : (
+                <span className="block"><span className="text-muted">Cena:</span> <span className="font-bold text-ink">{formatCZK(l.askingPrice)}</span></span>
+              )}
+              {l.dealType === "loan" && (
+                <span className="block text-muted mt-0.5">
+                  {requests.length === 0
+                    ? "Zatím nikdo nepožádal."
+                    : `Žádosti (${requests.length}). Přijmeš jednu, ostatní dostanou odmítnutí.`}
+                </span>
+              )}
+            </>} />
+        );
+        const requestRows = l.dealType === "loan" ? requests.map((r) => (
+          <ListRow key={`${l.id}-request-${r.offerId}`} tone="new"
+            leading={<RowIcon>🤝</RowIcon>}
+            title={r.teamName}
+            meta={r.leagueName ?? undefined}
+            trailing={
+              <Link href={`/prestupy/nabidka/${r.offerId}`}
+                className="py-1 px-3 rounded-soft text-xs font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">
+                Rozhodnout
+              </Link>
+            } />
+        )) : [];
+        const bidRows = l.bids.map((b) => (
+          <ListRow key={`${l.id}-bid-${b.id}`} tone="new"
+            leading={<RowIcon>💰</RowIcon>}
+            title={b.bidderName}
+            meta="nabízí"
+            trailing={<RowValue tone="plus">{formatCZK(b.amount)}</RowValue>}
+            detail={
+              <span className="flex flex-wrap gap-2 mt-1">
+                <button onClick={async () => {
+                  const ok = await confirm({ title: `Přijmout nabídku ${formatCZK(b.amount)}?`, description: `Od: ${b.bidderName}`, confirmLabel: "Přijmout" });
+                  if (!ok || !teamId) return;
+                  if (await apiAction(apiFetch(`/api/teams/${teamId}/bids/${b.id}/accept`, { method: "POST" }), "Přijetí nabídky se nezdařilo")) await refresh();
+                }} className="py-1 px-3 rounded-soft text-xs font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">
+                  Přijmout
+                </button>
+                <button onClick={async () => {
+                  if (!teamId) return;
+                  if (await apiAction(apiFetch(`/api/teams/${teamId}/bids/${b.id}/reject`, { method: "POST" }), "Odmítnutí nabídky se nezdařilo")) await refresh();
+                }} className="py-1 px-3 rounded-soft text-xs font-heading font-bold bg-gray-100 text-muted hover:bg-gray-200 transition-colors">
+                  Odmítnout
+                </button>
+              </span>
+            } />
+        ));
+        return [listingRow, ...requestRows, ...bidRows];
+      })}
+    </ListCard>
   );
 
   const searchRows: BrowseRow[] = filteredSearch.slice(0, VYPIS_MAX).map((p) => ({
@@ -1475,19 +1466,13 @@ export default function TransfersPage() {
                 </div>
               </div>
 
-              {/* Top 2-5 nejdražších — grid karet */}
+              {/* Top 2-5 nejdražších */}
               {overview.biggest.length > 1 && (
-                <div>
-                  <div className="flex items-center justify-between mb-2 px-1">
-                    <SectionLabel>Další přestupy roku</SectionLabel>
-                    <span className="text-micro text-muted uppercase tracking-wide">#2 – #{Math.min(overview.biggest.length, 5)}</span>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {overview.biggest.slice(1, 5).map((t, i) => (
-                      <MidTransferCard key={`${t.playerId}-${t.date}`} rank={i + 2} t={t} />
-                    ))}
-                  </div>
-                </div>
+                <ListCard title="Další přestupy roku" count={`#2 až #${Math.min(overview.biggest.length, 5)}`}>
+                  {overview.biggest.slice(1, 5).map((t, i) => (
+                    <MidTransferRow key={`${t.playerId}-${t.date}`} rank={i + 2} t={t} />
+                  ))}
+                </ListCard>
               )}
 
               {/* Poslední přestupy */}
@@ -1500,19 +1485,17 @@ export default function TransfersPage() {
               )}
 
               {/* Spekulace */}
-              {overview.speculations && overview.speculations.length > 0 && (
-                <div>
-                  <div className="flex items-center justify-between mb-2 px-1">
-                    <SectionLabel>Spekulace</SectionLabel>
-                    <span className="text-micro sm:text-xs text-muted">Ve hledáčku jiných týmů</span>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {overview.speculations.slice(0, 4).map((s) => (
-                      <SpeculationCard key={s.playerId} s={s} />
+              {overview.speculations && overview.speculations.length > 0 && (() => {
+                const shownSpeculations = overview.speculations.slice(0, 4);
+                const speculationRatings = shownSpeculations.map((s) => s.overallRating);
+                return (
+                  <ListCard title="Spekulace" count="Ve hledáčku jiných týmů">
+                    {shownSpeculations.map((s) => (
+                      <SpeculationRow key={s.playerId} s={s} ratings={speculationRatings} />
                     ))}
-                  </div>
-                </div>
-              )}
+                  </ListCard>
+                );
+              })()}
 
               {/* Top sellers + buyers */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

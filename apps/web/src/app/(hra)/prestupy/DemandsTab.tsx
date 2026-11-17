@@ -6,11 +6,11 @@
  * Klub mimo hru rozhodne o nabídnutém hráči hned; manažerovi přijde zpráva do telefonu.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { apiFetch, apiAction, showError } from "@/lib/api";
-import { Spinner, SectionLabel, PositionBadge, SheetDialog, useConfirm } from "@/components/ui";
+import { Spinner, PositionBadge, SheetDialog, useConfirm, ListCard, ListRow, ListEmpty, RowIcon, StatusChip } from "@/components/ui";
 import { MoneyInput } from "@/components/ui/money-input";
 import { OriginBadge } from "@/components/transfers/origin-badge";
 
@@ -61,58 +61,67 @@ const ageText = (d: { ageMin: number; ageMax: number }) => (d.ageMin <= 16 ? `do
 
 const CHIP = "min-h-11 px-3 rounded-control text-sm font-heading font-bold transition-colors";
 const REQ_CHIP = "px-2 py-0.5 rounded-full bg-surface border border-gray-100 text-sm font-heading font-bold text-ink tabular-nums";
-// Na telefonu tlačítko pod poptávkou, aby nezužovalo text; od tabletu vpravo jako na trhu.
-const PITCH_BUTTON = "self-start sm:shrink-0 min-h-11 sm:min-h-0 py-1.5 px-4 rounded-soft text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors";
+// Tlačítko je pod poptávkou (v podrobnostech řádku), aby nezužovalo text; na telefonu má plnou výšku pro prst.
+const PITCH_BUTTON = "min-h-11 sm:min-h-0 py-1.5 px-4 rounded-soft text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors";
 const chipClass = (on: boolean) => `${CHIP} ${on ? "bg-pitch-500 text-white" : "bg-black/5 text-ink hover:bg-black/10"}`;
 
-/** Hlavička poptávky: post, kam a věk; pod tím kdo, strop ceny, poznámka a do kdy platí. */
-function DemandHead({ d, who }: { d: DemandBase; who: React.ReactNode }) {
+/**
+ * Řádek poptávky: post a kam (název), věk a do kdy platí (podrobnosti); pod tím kdo,
+ * strop ceny, požadavky a poznámka. `extra` je věta nebo tlačítka pod tím, `trailing` jedno tlačítko vpravo.
+ */
+function DemandRow({ d, who, extra, trailing }: { d: DemandBase; who: ReactNode; extra?: ReactNode; trailing?: ReactNode }) {
   return (
-    <>
-      <div className="flex items-center gap-2 flex-wrap mb-0.5">
-        <PositionBadge position={d.position} />
-        <span className="font-heading font-bold text-base">{capitalize(d.roleLabel)}</span>
-        <span className="text-sm text-muted">{ageText(d)}</span>
-      </div>
-      <div className="text-sm text-muted">
-        {who}
-        {d.maxPrice ? <> · do <span className="font-heading font-bold text-ink">{formatCZK(d.maxPrice)}</span></> : " · cena dohodou"}
-      </div>
-      {(d.minRating || d.skills.length > 0) && (
-        <div className="flex flex-wrap gap-1.5 mt-1.5">
-          {d.minRating ? <span className={REQ_CHIP}>Hodnocení {d.minRating}+</span> : null}
-          {d.skills.map((x) => <span key={x.skill} className={REQ_CHIP}>{x.label} {x.min}+</span>)}
-        </div>
-      )}
-      {d.note && <p className="text-sm text-ink-light italic mt-1">„{d.note}“</p>}
-      <div className="text-sm text-muted mt-1">Platí do {dateCz(d.expiresAt)}</div>
-    </>
+    <ListRow
+      title={
+        <span className="inline-flex items-center gap-2 flex-wrap">
+          <PositionBadge position={d.position} />
+          {capitalize(d.roleLabel)}
+        </span>
+      }
+      meta={`${ageText(d)} · platí do ${dateCz(d.expiresAt)}`}
+      trailing={trailing}
+      detail={<>
+        <span className="block">
+          {who}
+          {d.maxPrice ? <> · do <span className="font-bold text-ink">{formatCZK(d.maxPrice)}</span></> : " · cena dohodou"}
+        </span>
+        {(d.minRating || d.skills.length > 0) && (
+          <span className="flex flex-wrap gap-1.5 mt-1.5">
+            {d.minRating ? <span className={REQ_CHIP}>Hodnocení {d.minRating}+</span> : null}
+            {d.skills.map((x) => <span key={x.skill} className={REQ_CHIP}>{x.label} {x.min}+</span>)}
+          </span>
+        )}
+        {d.note && <span className="block italic mt-1">„{d.note}“</span>}
+        {extra}
+      </>} />
   );
 }
 
-/** Koho jsem k cizí poptávce nabídl a co na to klub řekl. */
+/** Koho jsem k cizí poptávce nabídl a co na to klub řekl: řádky hned pod poptávkou. */
 function MyPitches({ pitches }: { pitches: MyPitch[] }) {
   if (pitches.length === 0) return null;
   return (
-    <div className="mt-2 space-y-1.5">
+    <>
       {pitches.map((p) => (
-        <div key={p.playerId} className="text-sm bg-surface rounded-soft px-3 py-2">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-muted">Nabídl jsi</span>
-            <Link href={`/hrac/${p.playerId}`} className="font-heading font-bold hover:text-pitch-500 underline decoration-pitch-500/20">{p.playerName}</Link>
-            {p.status === "accepted" && <span className="text-pitch-700 font-heading font-bold">✓ chtějí ho</span>}
-            {p.status === "declined" && <span className="text-card-red font-heading font-bold">✗ nechtějí</span>}
-            {p.status === "pitched" && <span className="text-muted">· manažer dostal zprávu</span>}
-          </div>
-          {p.reply && <p className="text-ink-light italic mt-0.5">„{p.reply}“</p>}
-          {p.offerId && (
-            <Link href={`/prestupy/nabidka/${p.offerId}`} className="inline-block mt-1 font-heading font-bold text-pitch-600 hover:underline">
-              Otevřít nabídku →
-            </Link>
-          )}
-        </div>
+        <ListRow key={p.playerId}
+          leading={<RowIcon>📤</RowIcon>}
+          title={<Link href={`/hrac/${p.playerId}`} className="hover:text-pitch-500 underline decoration-pitch-500/20">{p.playerName}</Link>}
+          meta="Nabídl jsi"
+          trailing={
+            p.status === "accepted" ? <StatusChip tone="ok">✓ chtějí ho</StatusChip>
+            : p.status === "declined" ? <StatusChip tone="danger">✗ nechtějí</StatusChip>
+            : <StatusChip>manažer dostal zprávu</StatusChip>
+          }
+          detail={p.reply || p.offerId ? <>
+            {p.reply && <span className="block italic">„{p.reply}“</span>}
+            {p.offerId && (
+              <Link href={`/prestupy/nabidka/${p.offerId}`} className="inline-block mt-1 font-bold text-pitch-600 hover:underline">
+                Otevřít nabídku →
+              </Link>
+            )}
+          </> : undefined} />
       ))}
-    </div>
+    </>
   );
 }
 
@@ -148,117 +157,97 @@ export function DemandsTab({ teamId }: { teamId: string }) {
       {confirmDialog}
 
       {/* ═══ Manažeři ═══ */}
-      <div>
-        <SectionLabel>Manažeři hledají ({data.managers.length})</SectionLabel>
+      <ListCard title="Manažeři hledají" count={data.managers.length}>
         {data.managers.length === 0 ? (
-          <div className="card p-6 text-center text-muted text-sm">Zatím nikdo z manažerů nic nehledá.</div>
+          <ListEmpty icon="🔎">Zatím nikdo z manažerů nic nehledá.</ListEmpty>
         ) : (
-          <div className="space-y-3">
-            {data.managers.map((d) => {
-              const full = d.myPitches.length >= data.limits.pitchesPerDemand;
-              return (
-                <div key={d.id} className="card p-4">
-                  <div className="flex flex-col sm:flex-row sm:items-start gap-3">
-                    <div className="flex-1 min-w-0">
-                      <DemandHead d={d} who={<><OriginBadge origin={d.origin} /><Link href={`/tym/${d.teamId}`} className="font-heading font-bold text-ink hover:text-pitch-500 underline decoration-pitch-500/20">{d.teamName}</Link></>} />
-                    </div>
-                    {!full && (
-                      <button onClick={() => setPitchFor({ demand: d, who: d.teamName })}
-                        className={PITCH_BUTTON}>
+          data.managers.map((d) => {
+            const full = d.myPitches.length >= data.limits.pitchesPerDemand;
+            return (
+              <Fragment key={d.id}>
+                <DemandRow d={d}
+                  who={<><OriginBadge origin={d.origin} /><Link href={`/tym/${d.teamId}`} className="font-bold text-ink hover:text-pitch-500 underline decoration-pitch-500/20">{d.teamName}</Link></>}
+                  extra={!full && (
+                    <span className="flex flex-wrap gap-2 mt-2">
+                      <button onClick={() => setPitchFor({ demand: d, who: d.teamName })} className={PITCH_BUTTON}>
                         Nabídnout
                       </button>
-                    )}
-                  </div>
-                  <MyPitches pitches={d.myPitches} />
-                </div>
-              );
-            })}
-          </div>
+                    </span>
+                  )} />
+                <MyPitches pitches={d.myPitches} />
+              </Fragment>
+            );
+          })
         )}
-      </div>
+      </ListCard>
 
       {/* ═══ Kluby mimo hru ═══ */}
-      <div>
-        <SectionLabel>Kluby z okolí hledají ({data.clubs.length})</SectionLabel>
+      <ListCard title="Kluby z okolí hledají" count={data.clubs.length}>
         {data.clubs.length === 0 ? (
-          <div className="card p-6 text-center text-muted text-sm">Teď žádný klub z okolí nikoho nehledá. Nové poptávky přibývají průběžně.</div>
+          <ListEmpty icon="🔎">Teď žádný klub z okolí nikoho nehledá. Nové poptávky přibývají průběžně.</ListEmpty>
         ) : (
-          <div className="space-y-3">
-            {data.clubs.map((d) => {
-              const full = d.myPitches.length >= data.limits.pitchesPerDemand;
-              // „SV Grafenau, Grafenau“ by opakovalo město; přidá se jen, když v názvu klubu není.
-              const who = d.clubCity && !d.clubName.includes(d.clubCity) ? `${d.clubName}, ${d.clubCity}` : d.clubName;
-              return (
-                <div key={d.id} className="card p-4">
-                  <div className="flex flex-col sm:flex-row sm:items-start gap-3">
-                    <div className="flex-1 min-w-0">
-                      <DemandHead d={d} who={<>{d.abroad && <span title="Německo">🇩🇪 </span>}<span className="font-heading font-bold text-ink">{who}</span></>} />
-                    </div>
-                    {!d.filled && !full && (
-                      <button onClick={() => setPitchFor({ demand: d, who })}
-                        className={PITCH_BUTTON}>
+          data.clubs.map((d) => {
+            const full = d.myPitches.length >= data.limits.pitchesPerDemand;
+            // „SV Grafenau, Grafenau“ by opakovalo město; přidá se jen, když v názvu klubu není.
+            const who = d.clubCity && !d.clubName.includes(d.clubCity) ? `${d.clubName}, ${d.clubCity}` : d.clubName;
+            return (
+              <Fragment key={d.id}>
+                <DemandRow d={d}
+                  who={<>{d.abroad && <span title="Německo">🇩🇪 </span>}<span className="font-bold text-ink">{who}</span></>}
+                  extra={!d.filled && !full && (
+                    <span className="flex flex-wrap gap-2 mt-2">
+                      <button onClick={() => setPitchFor({ demand: d, who })} className={PITCH_BUTTON}>
                         Nabídnout
                       </button>
-                    )}
-                  </div>
-                  <MyPitches pitches={d.myPitches} />
-                </div>
-              );
-            })}
-          </div>
+                    </span>
+                  )} />
+                <MyPitches pitches={d.myPitches} />
+              </Fragment>
+            );
+          })
         )}
-      </div>
+      </ListCard>
 
       {/* ═══ Moje poptávky ═══ */}
-      <div>
-        <div className="flex items-center justify-between gap-3 mb-2">
-          <SectionLabel>Moje poptávky ({data.mine.length}/{data.limits.maxActive})</SectionLabel>
-          {canCreate && (
-            <button onClick={() => setCreating(true)}
-              className="shrink-0 py-1.5 px-4 rounded-soft text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">
-              Zadat poptávku
-            </button>
-          )}
-        </div>
+      <ListCard title="Moje poptávky" count={`${data.mine.length}/${data.limits.maxActive}`}
+        controls={canCreate && (
+          <button onClick={() => setCreating(true)}
+            className="shrink-0 py-1.5 px-4 rounded-soft text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">
+            Zadat poptávku
+          </button>
+        )}>
         {data.mine.length === 0 ? (
-          <div className="card p-6 text-center text-muted text-sm">
+          <ListEmpty icon="📝">
             Hledáš někoho konkrétního? Zadej poptávku a ostatní manažeři ti hráče nabídnou sami.
-          </div>
+          </ListEmpty>
         ) : (
-          <div className="space-y-3">
-            {data.mine.map((d) => (
-              <div key={d.id} className="card p-4">
-                <div className="flex items-start gap-3">
-                  <div className="flex-1 min-w-0">
-                    <DemandHead d={d} who="Tvoje poptávka" />
-                  </div>
-                  <button onClick={() => withdraw(d)} className="shrink-0 min-h-11 px-2 text-sm font-heading font-bold text-muted hover:text-card-red">
+          data.mine.map((d) => (
+            <Fragment key={d.id}>
+              <DemandRow d={d} who="Tvoje poptávka"
+                trailing={
+                  <button onClick={() => withdraw(d)} className="min-h-11 px-2 text-sm font-heading font-bold text-muted hover:text-card-red">
                     Stáhnout
                   </button>
-                </div>
-                <div className="mt-3 border-t border-gray-100 pt-2">
-                  {d.pitches.length === 0 ? (
-                    <p className="text-sm text-muted">Zatím ti nikdo nikoho nenabídl.</p>
-                  ) : (
-                    <>
-                      <div className="text-sm font-heading font-bold text-muted mb-1">Nabídli ti ({d.pitches.length})</div>
-                      {d.pitches.map((p) => (
-                        <div key={`${p.playerId}-${p.teamId}`} className="flex items-center gap-2 flex-wrap py-1.5 border-b border-gray-50 last:border-b-0">
-                          <Link href={`/hrac/${p.playerId}`} className="font-heading font-bold text-base hover:text-pitch-500 underline decoration-pitch-500/20">{p.playerName}</Link>
-                          <PositionBadge position={p.position} />
-                          <span className="text-sm text-muted">{p.age} let</span>
-                          <span className="text-sm text-muted">· <Link href={`/tym/${p.teamId}`} className="hover:text-ink underline decoration-gray-300">{p.teamName}</Link></span>
-                        </div>
-                      ))}
-                      <p className="text-sm text-muted mt-1.5">Nabídku pošleš z profilu hráče.</p>
-                    </>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
+                }
+                extra={
+                  <span className="block mt-1.5 text-muted">
+                    {d.pitches.length === 0
+                      ? "Zatím ti nikdo nikoho nenabídl."
+                      : <>Nabídli ti ({d.pitches.length}). Nabídku pošleš z profilu hráče.</>}
+                  </span>
+                } />
+              {d.pitches.map((p) => (
+                <ListRow key={`${p.playerId}-${p.teamId}`}
+                  leading={<RowIcon>📥</RowIcon>}
+                  title={<Link href={`/hrac/${p.playerId}`} className="hover:text-pitch-500 underline decoration-pitch-500/20">{p.playerName}</Link>}
+                  meta={<>
+                    <PositionBadge position={p.position} /> {p.age} let · <Link href={`/tym/${p.teamId}`} className="hover:text-ink underline decoration-gray-300">{p.teamName}</Link>
+                  </>} />
+              ))}
+            </Fragment>
+          ))
         )}
-      </div>
+      </ListCard>
 
       {creating && (
         <CreateDemandSheet teamId={teamId} noteMax={data.limits.noteMax} days={data.limits.days}
@@ -444,20 +433,22 @@ function PitchSheet({ teamId, demand, who, players, already, onClose, onDone }: 
         : ""}`}
       confirmLabel="Nabídnout" confirmDisabled={!chosen} onConfirm={submit} onCancel={onClose}>
       {fitting.length === 0 ? (
-        <p className="text-sm text-muted">{hasRequirements ? "Nikdo z tvého kádru nesplňuje post, věk a požadavky." : "Nikdo z tvého kádru nesedí na post a věk."}</p>
+        <ListEmpty icon="🔎">{hasRequirements ? "Nikdo z tvého kádru nesplňuje post, věk a požadavky." : "Nikdo z tvého kádru nesedí na post a věk."}</ListEmpty>
       ) : (
-        <div className="space-y-1.5">
+        <div className="rounded-control border border-line-soft overflow-hidden divide-y divide-line-soft">
           {fitting.map((p) => (
-            <label key={p.id} className={`flex items-center gap-3 min-h-11 px-3 rounded-soft cursor-pointer border ${chosen === p.id ? "border-pitch-500 bg-pitch-50" : "border-gray-100 bg-white"}`}>
-              <input type="radio" name="pitch-player" checked={chosen === p.id} onChange={() => setChosen(p.id)} className="accent-pitch-500" />
-              <span className="font-heading font-bold text-base flex-1 min-w-0 truncate">{p.name}</span>
-              <PositionBadge position={p.position} />
-              <span className="text-sm text-muted shrink-0">{p.age} let</span>
-              {hasRequirements && (
-                <span className="text-sm text-muted shrink-0 tabular-nums hidden sm:inline">
-                  {[demand.minRating ? `Hodn. ${p.rating}` : null, ...demand.skills.map((x) => `${x.label} ${p.skills[x.skill] ?? 0}`)].filter(Boolean).join(", ")}
-                </span>
-              )}
+            <label key={p.id} className={`block cursor-pointer ${chosen === p.id ? "bg-pitch-50" : ""}`}>
+              <ListRow
+                leading={<input type="radio" name="pitch-player" checked={chosen === p.id} onChange={() => setChosen(p.id)} className="accent-pitch-500 w-4 h-4" />}
+                title={p.name}
+                meta={<>
+                  <PositionBadge position={p.position} /> {p.age} let
+                  {hasRequirements && (
+                    <span className="tabular-nums">
+                      {" · "}{[demand.minRating ? `Hodn. ${p.rating}` : null, ...demand.skills.map((x) => `${x.label} ${p.skills[x.skill] ?? 0}`)].filter(Boolean).join(", ")}
+                    </span>
+                  )}
+                </>} />
             </label>
           ))}
         </div>

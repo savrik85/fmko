@@ -6,13 +6,27 @@
  */
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { apiFetch } from "@/lib/api";
-import { PositionBadge, SectionLabel, Spinner } from "@/components/ui";
+import { ListCard, ListEmpty, ListRow, PositionBadge, RatingPill, Spinner, StatusChip, type RowTone } from "@/components/ui";
 import { LOAN_STATE_STYLE, daysWord, type LoanOverview, type LoanSummary } from "@/lib/loans";
 
-function LoanCard({ s, lent }: { s: LoanSummary; lent: boolean }) {
+const STATE_CHIP_TONE: Record<LoanSummary["playingTimeState"], "ok" | "warn" | "danger" | "neutral"> = {
+  none: "neutral",
+  pending: "neutral",
+  ok: "ok",
+  at_risk: "warn",
+  breached: "danger",
+};
+
+const STATE_ROW_TONE: Partial<Record<LoanSummary["playingTimeState"], RowTone>> = {
+  at_risk: "warn",
+  breached: "danger",
+};
+
+/** Jeden hráč na hostování; celý řádek vede na podrobný přehled. */
+function LoanRow({ s, lent }: { s: LoanSummary; lent: boolean }) {
   const state = LOAN_STATE_STYLE[s.playingTimeState];
+  const hasCondition = s.playingTime !== "none";
   const stats = [
     `${s.matches} ${s.matches === 1 ? "zápas" : s.matches >= 2 && s.matches <= 4 ? "zápasy" : "zápasů"}`,
     `${s.starts}× v základu`,
@@ -21,34 +35,37 @@ function LoanCard({ s, lent }: { s: LoanSummary; lent: boolean }) {
     s.avgRating != null ? `známka ${s.avgRating.toLocaleString("cs-CZ")}` : null,
   ].filter(Boolean).join(" · ");
   return (
-    <Link href={`/prestupy/hostovani/${s.agreementId}`} className="card p-4 block hover:shadow-md transition-shadow">
-      <div className="flex items-center gap-2 flex-wrap">
-        <span className="font-heading font-bold text-base">{s.playerName}</span>
-        <PositionBadge position={s.position as "GK" | "DEF" | "MID" | "FWD"} />
-        <span className="text-sm text-muted">{s.age} let</span>
-        <span className="text-sm text-muted">· hodnocení <span className="font-heading font-bold text-ink">{s.rating ?? "–"}</span></span>
-        {s.ratingChange != null && s.ratingChange !== 0 && (
-          <span className={`text-sm font-heading font-bold ${s.ratingChange > 0 ? "text-pitch-700" : "text-red-800"}`}>
-            {s.ratingChange > 0 ? `+${s.ratingChange}` : s.ratingChange}
-          </span>
-        )}
-      </div>
-      <div className="text-sm mt-1">
-        {lent ? <>v klubu <span className="font-heading font-bold">{s.borrowerName}</span></> : <>od klubu <span className="font-heading font-bold">{s.lenderName}</span></>}
-        <span className="text-muted">, vrací se za {s.daysLeft} {daysWord(s.daysLeft)}</span>
-      </div>
-      <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
-        <span>{s.playingTimeLabel}</span>
-        {s.playingTime !== "none" && (
-          <>
-            <span className={`text-xs font-heading font-bold px-2 py-0.5 rounded-full ${state.className}`}>{state.label}</span>
-            <span className="text-muted">{s.playingTimeSummary}</span>
-          </>
-        )}
-      </div>
-      <div className="text-sm text-muted mt-1">{stats}</div>
-      <div className="text-sm font-heading font-bold text-pitch-500 mt-2">Podrobný přehled →</div>
-    </Link>
+    <ListRow href={`/prestupy/hostovani/${s.agreementId}`}
+      tone={hasCondition ? STATE_ROW_TONE[s.playingTimeState] : undefined}
+      title={s.playerName}
+      meta={<><PositionBadge position={s.position} /> {s.age} let</>}
+      trailing={
+        // Hodnocení a o kolik se změnilo od začátku hostování.
+        <span className="inline-flex items-center gap-1.5">
+          {s.ratingChange != null && s.ratingChange !== 0 && (
+            <span className={`text-meta font-bold tabular-nums ${s.ratingChange > 0 ? "text-pitch-700" : "text-red-800"}`}>
+              {s.ratingChange > 0 ? `+${s.ratingChange}` : s.ratingChange}
+            </span>
+          )}
+          <RatingPill value={s.rating ?? "-"} />
+        </span>
+      }
+      detail={<>
+        <span className="block">
+          {lent ? <>v klubu <span className="font-bold text-ink">{s.borrowerName}</span></> : <>od klubu <span className="font-bold text-ink">{s.lenderName}</span></>}
+          <span className="text-muted">, vrací se za {s.daysLeft} {daysWord(s.daysLeft)}</span>
+        </span>
+        <span className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1">
+          <span>{s.playingTimeLabel}</span>
+          {hasCondition && (
+            <>
+              <StatusChip tone={STATE_CHIP_TONE[s.playingTimeState]}>{state.label}</StatusChip>
+              <span className="text-muted">{s.playingTimeSummary}</span>
+            </>
+          )}
+        </span>
+        <span className="block text-muted mt-1">{stats}</span>
+      </>} />
   );
 }
 
@@ -65,21 +82,19 @@ export function LoansTab({ teamId }: { teamId: string }) {
 
   return (
     <div className="space-y-5">
-      <div>
-        <SectionLabel>Půjčení hráči ({data.lent.length})</SectionLabel>
+      <ListCard title="Půjčení hráči" count={data.lent.length}>
         {data.lent.length === 0 ? (
-          <div className="card p-5 text-sm text-muted">
+          <ListEmpty icon="🤝">
             Nikoho nemáš půjčeného. Hráče nabídneš na hostování z jeho profilu tlačítkem „Na hostování“.
-          </div>
+          </ListEmpty>
         ) : (
-          <div className="space-y-3">{data.lent.map((s) => <LoanCard key={s.agreementId} s={s} lent />)}</div>
+          data.lent.map((s) => <LoanRow key={s.agreementId} s={s} lent />)
         )}
-      </div>
+      </ListCard>
       {data.borrowed.length > 0 && (
-        <div>
-          <SectionLabel>U nás na hostování ({data.borrowed.length})</SectionLabel>
-          <div className="space-y-3">{data.borrowed.map((s) => <LoanCard key={s.agreementId} s={s} lent={false} />)}</div>
-        </div>
+        <ListCard title="U nás na hostování" count={data.borrowed.length}>
+          {data.borrowed.map((s) => <LoanRow key={s.agreementId} s={s} lent={false} />)}
+        </ListCard>
       )}
     </div>
   );
