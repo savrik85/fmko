@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { odesloLidi, zavrenoNaZapasy } from "@okresni-masina/shared";
 import { apiFetch } from "@/lib/api";
-import { Spinner, SectionLabel, BadgePreview, PositionBadge, ListRow, RatingPill } from "@/components/ui";
+import { Spinner, SectionLabel, BadgePreview, PositionBadge, ListRow, RatingPill, ListCard, RowGroup, StatusChip, type RowTone } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 import { useTeam } from "@/context/team-context";
 import { MatchBreakdown } from "@/components/MatchBreakdown";
@@ -419,24 +419,16 @@ export default function MatchDetailPage() {
             </div>
 
             {incidents.length > 0 ? (
-              <div className="mt-3 space-y-2">
+              <div className="-mx-4 -mb-4 mt-3 border-t border-line">
                 {incidents.map((inc, i) => (
-                  <div
-                    key={i}
-                    className="rounded-r-xl border-l-4 px-3 py-2"
-                    style={{
-                      borderColor: inc.severity === "high" ? "var(--color-card-red)" : "var(--color-gold-500)",
-                      background: inc.severity === "high" ? "rgba(217,64,50,0.07)" : "rgba(196,160,53,0.07)",
-                    }}
-                  >
-                    <div className="font-heading font-bold text-sm">
+                  <ListRow key={i} dense tone={inc.severity === "high" ? "danger" : "warn"}
+                    title={<>
                       {inc.minute}&apos; · {incidentLabel(inc.kind)}
                       {teamNameById[inc.againstTeamId] && (
                         <span className="font-normal text-muted">, proti {teamNameById[inc.againstTeamId]}</span>
                       )}
-                    </div>
-                    <p className="text-sm mt-0.5">{inc.text}</p>
-                  </div>
+                    </>}
+                    detail={inc.text} />
                 ))}
               </div>
             ) : (
@@ -450,29 +442,20 @@ export default function MatchDetailPage() {
       {fanIncidents.length > 0 && (
         <div className="card p-4 mt-3">
           <div className="font-heading font-bold text-base">🚨 Na tribunách</div>
-          <div className="mt-3 space-y-2">
+          <div className="-mx-4 -mb-4 mt-3 border-t border-line">
             {fanIncidents.map((inc) => (
-              <div
-                key={inc.id}
-                className="rounded-r-xl border-l-4 px-3 py-2"
-                style={{
-                  borderColor: inc.severity >= 3 ? "var(--color-card-red)" : "var(--color-gold-500)",
-                  background: inc.severity >= 3 ? "rgba(217,64,50,0.07)" : "rgba(196,160,53,0.07)",
-                }}
-              >
-                <div className="font-heading font-bold text-sm">
-                  {inc.minute}&apos; · {inc.label}
-                  <span className="font-normal text-muted">, {inc.groupName}</span>
-                </div>
-                <p className="text-sm mt-0.5">{inc.text}</p>
-                {(inc.fine > 0 || inc.closedMatches > 0 || inc.fansLost > 0) && (
-                  <p className="text-sm text-muted mt-1">
-                    {inc.fine > 0 && `Pokuta ${inc.fine.toLocaleString("cs")} Kč. `}
-                    {inc.closedMatches > 0 && `Sektor zavřený na ${zavrenoNaZapasy(inc.closedMatches)}. `}
-                    {inc.fansLost > 0 && odesloLidi(inc.fansLost)}
-                  </p>
-                )}
-              </div>
+              <ListRow key={inc.id} dense tone={inc.severity >= 3 ? "danger" : "warn"}
+                title={<>{inc.minute}&apos; · {inc.label}<span className="font-normal text-muted">, {inc.groupName}</span></>}
+                detail={<>
+                  <span className="block">{inc.text}</span>
+                  {(inc.fine > 0 || inc.closedMatches > 0 || inc.fansLost > 0) && (
+                    <span className="block text-muted mt-1">
+                      {inc.fine > 0 && `Pokuta ${inc.fine.toLocaleString("cs")} Kč. `}
+                      {inc.closedMatches > 0 && `Sektor zavřený na ${zavrenoNaZapasy(inc.closedMatches)}. `}
+                      {inc.fansLost > 0 && odesloLidi(inc.fansLost)}
+                    </span>
+                  )}
+                </>} />
             ))}
           </div>
         </div>
@@ -576,12 +559,9 @@ export default function MatchDetailPage() {
 
       {/* ═══ KLÍČOVÉ MOMENTY ═══ */}
       {keyMoments.length > 0 && (
-        <div className="card p-4 sm:p-5">
-          <SectionLabel>Klíčové momenty</SectionLabel>
-          <div className="space-y-1">
-            {keyMoments.map((e, i) => <EventRow key={i} event={e} hc={hc} ac={ac} />)}
-          </div>
-        </div>
+        <ListCard title="Klíčové momenty">
+          {keyMoments.map((e, i) => <EventRow key={i} event={e} hc={hc} ac={ac} />)}
+        </ListCard>
       )}
 
       {/* ═══ LINEUPS — mobile: stacked, desktop: 2 columns ═══ */}
@@ -649,58 +629,46 @@ export default function MatchDetailPage() {
               };
             };
             return (
-            <div key={label} className="card overflow-hidden">
-              <div className="px-3 py-2 border-b border-gray-100" style={{ backgroundColor: `color-mix(in srgb, ${color} 10%, white)` }}>
-                <div className="flex items-center justify-between gap-2 flex-wrap">
-                  <span className="font-heading font-bold text-sm">{label}</span>
-                  {(data.formation || data.tactic) && (
-                    <span className="text-micro text-muted">
-                      {data.formation && <span className="font-heading font-bold mr-2">{data.formation}</span>}
-                      {data.tactic && <span>{TACTIC_LABEL[data.tactic] ?? data.tactic}</span>}
-                    </span>
-                  )}
-                </div>
-              </div>
-              <div className="divide-y divide-gray-100">
-                {groups.map((g, gi) => {
-                  const cfg = g.pos ? (posConfig[g.pos] ?? posConfig.MID) : null;
-                  return (
-                    <div key={g.pos ?? `flat-${gi}`}>
-                      {cfg && (
-                        <div className={`px-3 py-1 ${cfg.bg} ${cfg.text} text-micro font-heading font-bold uppercase tracking-wider`}>
-                          {cfg.label}
-                        </div>
-                      )}
-                      {g.players.map((p) => {
-                        const s = statsFor(p.name);
-                        const matchRating = ratings[p.id];
-                        const ratingColor = matchRating == null ? "bg-gray-100 text-gray-500"
-                          : matchRating >= 7.5 ? "bg-pitch-100 text-pitch-700"
-                          : matchRating >= 6.5 ? "bg-amber-100 text-amber-700"
-                          : "bg-red-100 text-red-700";
-                        const barPct = matchRating == null ? 0 : Math.max(0, Math.min(100, ((matchRating - 1) / 9) * 100));
-                        const barColor = matchRating == null ? "#d1d5db"
-                          : matchRating >= 7.5 ? "#10b981"
-                          : matchRating >= 6.5 ? "#f59e0b"
-                          : "#ef4444";
-                        const isMvp = mvp?.id === p.id;
-                        // Při sort=rating používáme position-color border (z přirozené pozice hráče); při sort=position bere se z group cfg
-                        const rowBorderClass = cfg ? cfg.border : (posConfig[p.position] ?? posConfig.MID).border;
-                        return (
-                        <div key={p.id} className={`flex items-center gap-2 px-3 py-1.5 border-l-3 ${rowBorderClass} ${isMvp ? "bg-gold-50/50 ring-1 ring-inset ring-gold-300" : ""}`}>
-                          <span className="shrink-0 w-6 h-6 rounded-full bg-gray-100 text-gray-600 text-micro font-heading font-bold flex items-center justify-center tabular-nums">{p.squadNumber ?? "?"}</span>
-                          <span className="flex-1 min-w-0 truncate text-base leading-6">
+            <ListCard key={label} className="overflow-hidden"
+              title={<><span className="inline-block w-2 h-2 rounded-full mr-1.5 align-middle" style={{ backgroundColor: color }} aria-hidden="true" />{label}</>}
+              controls={(data.formation || data.tactic) ? (
+                <span className="text-micro text-muted">
+                  {data.formation && <span className="font-heading font-bold mr-2">{data.formation}</span>}
+                  {data.tactic && <span>{TACTIC_LABEL[data.tactic] ?? data.tactic}</span>}
+                </span>
+              ) : undefined}>
+              {groups.map((g, gi) => {
+                const cfg = g.pos ? (posConfig[g.pos] ?? posConfig.MID) : null;
+                return (
+                  <div key={g.pos ?? `flat-${gi}`}>
+                    {cfg && <RowGroup label={cfg.label} />}
+                    {g.players.map((p) => {
+                      const s = statsFor(p.name);
+                      const matchRating = ratings[p.id];
+                      // Známka zápasu je škála 1–10, prahy tu platí (na rozdíl od hodnocení hráče).
+                      const ratingColor = matchRating == null ? "bg-gray-100 text-gray-500"
+                        : matchRating >= 7.5 ? "bg-pitch-100 text-pitch-700"
+                        : matchRating >= 6.5 ? "bg-amber-100 text-amber-700"
+                        : "bg-red-100 text-red-700";
+                      const barPct = matchRating == null ? 0 : Math.max(0, Math.min(100, ((matchRating - 1) / 9) * 100));
+                      const barColor = matchRating == null ? "#d1d5db"
+                        : matchRating >= 7.5 ? "#10b981"
+                        : matchRating >= 6.5 ? "#f59e0b"
+                        : "#ef4444";
+                      const isMvp = mvp?.id === p.id;
+                      return (
+                        <ListRow key={p.id} dense href={p.id ? `/hrac/${p.id}` : undefined} tone={isMvp ? "warn" : undefined}
+                          leading={<span className="w-6 h-6 rounded-full bg-surface-3 text-ink-light text-micro font-heading font-bold flex items-center justify-center tabular-nums">{p.squadNumber ?? "?"}</span>}
+                          title={<>
                             {isMvp && <span className="text-sm mr-1 align-middle" title="Hráč zápasu">🏆</span>}
-                            {p.id ? (
-                              <Link href={`/hrac/${p.id}`} className="font-heading font-bold hover:text-pitch-500 transition-colors">{p.name}</Link>
-                            ) : (
-                              <span className="font-heading font-bold">{p.name}</span>
-                            )}
+                            {p.name}
+                            {/* Řazení podle hodnocení nemá nadpisy postů, post je proto u jména. */}
+                            {!cfg && <span className="ml-1.5 align-middle"><PositionBadge position={p.position} /></span>}
                             {data.captainId && p.id === data.captainId && (
                               <span className="text-gold-600 text-sm ml-1.5 font-bold align-middle" title="Kapitán">©</span>
                             )}
                             {p.position !== p.naturalPosition && (
-                              <span className="text-amber-500 text-xs ml-1.5" title={`Přirozená pozice: ${p.naturalPosition}`}>({p.naturalPosition})</span>
+                              <span className="text-amber-500 text-xs ml-1.5 font-normal" title={`Přirozená pozice: ${p.naturalPosition}`}>({p.naturalPosition})</span>
                             )}
                             {s.goals > 0 && (
                               <span className="text-sm ml-1.5 align-middle" title={`${s.goals} gól${s.goals > 1 ? "y" : ""}`}>
@@ -714,31 +682,28 @@ export default function MatchDetailPage() {
                                 <span>↑</span><span className="tabular-nums">{s.subOutMin}&apos;</span>
                               </span>
                             )}
-                          </span>
-                          <div className="shrink-0 w-12 h-1.5 rounded-full bg-gray-100 overflow-hidden hidden sm:block" title={matchRating != null ? `Hodnocení ${matchRating.toFixed(1)}/10` : "Bez hodnocení"}>
-                            <div className="h-full rounded-full transition-all" style={{ width: `${barPct}%`, backgroundColor: barColor }} />
-                          </div>
-                          <span className={`shrink-0 px-2 py-0.5 rounded-control text-xs font-heading font-bold tabular-nums ${ratingColor}`} title="Hodnocení hráče v zápase">{matchRating != null ? matchRating.toFixed(1) : "-"}</span>
-                        </div>
-                        );
-                      })}
-                    </div>
-                  );
-                })}
-                {data.subs.length > 0 && (
-                  <div>
-                    <div className="px-3 py-1 bg-gray-100 text-micro text-muted font-heading font-bold uppercase tracking-wider">Lavička</div>
-                    {data.subs.map((p) => {
-                      const s = statsFor(p.name);
-                      return (
-                      <div key={p.id} className="flex items-center gap-2 px-3 py-1 border-l-3 border-l-gray-300 text-muted">
-                        <span className="shrink-0 w-6 h-6 rounded-full bg-gray-100 text-gray-500 text-micro font-heading font-bold flex items-center justify-center tabular-nums">{p.squadNumber ?? "?"}</span>
-                        <span className="flex-1 min-w-0 truncate leading-6">
-                          {p.id ? (
-                            <Link href={`/hrac/${p.id}`} className="font-heading font-bold hover:text-pitch-500 transition-colors">{p.name}</Link>
-                          ) : (
-                            <span className="font-heading font-bold">{p.name}</span>
-                          )}
+                          </>}
+                          trailing={<>
+                            <span className="w-12 h-1.5 rounded-full bg-gray-100 overflow-hidden hidden sm:block" title={matchRating != null ? `Hodnocení ${matchRating.toFixed(1)}/10` : "Bez hodnocení"}>
+                              <span className="block h-full rounded-full" style={{ width: `${barPct}%`, backgroundColor: barColor }} />
+                            </span>
+                            <span className={`px-2 py-0.5 rounded-control text-xs font-heading font-bold tabular-nums ${ratingColor}`} title="Hodnocení hráče v zápase">{matchRating != null ? matchRating.toFixed(1) : "-"}</span>
+                          </>} />
+                      );
+                    })}
+                  </div>
+                );
+              })}
+              {data.subs.length > 0 && (
+                <div>
+                  <RowGroup label="Lavička" />
+                  {data.subs.map((p) => {
+                    const s = statsFor(p.name);
+                    return (
+                      <ListRow key={p.id} dense href={p.id ? `/hrac/${p.id}` : undefined}
+                        leading={<span className="w-6 h-6 rounded-full bg-surface-3 text-muted text-micro font-heading font-bold flex items-center justify-center tabular-nums">{p.squadNumber ?? "?"}</span>}
+                        title={<span className="text-ink-light">
+                          {p.name}
                           {s.subInMin != null && (
                             <span className="text-micro ml-1.5 align-middle text-pitch-600 font-heading font-bold inline-flex items-center gap-0.5" title={`Nastoupil v ${s.subInMin}. minutě`}>
                               <span>↓</span><span className="tabular-nums">{s.subInMin}&apos;</span>
@@ -747,14 +712,12 @@ export default function MatchDetailPage() {
                           {s.goals > 0 && <span className="text-sm ml-1.5 align-middle">⚽{s.goals > 1 ? ` ${s.goals}` : ""}</span>}
                           {s.yellow > 0 && <span className="text-xs ml-1 align-middle">🟨</span>}
                           {s.red > 0 && <span className="text-xs ml-1 align-middle">🟥</span>}
-                        </span>
-                      </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            </div>
+                        </span>} />
+                    );
+                  })}
+                </div>
+              )}
+            </ListCard>
             );
           })}
         </div>
@@ -787,23 +750,16 @@ export default function MatchDetailPage() {
             <span className="text-sm font-heading font-bold text-pitch-500">{showFullTimeline ? "Skrýt" : "Zobrazit"}</span>
           </button>
           {showFullTimeline && (
-            <div className="px-4 sm:px-5 pb-4 border-t border-gray-100 pt-3">
+            <div className="border-t border-line">
               {firstHalf.length > 0 && (
                 <div>
-                  <div className="text-xs font-heading uppercase text-muted mb-2 mt-1">1. poločas</div>
+                  <RowGroup label="1. poločas" />
                   {firstHalf.map((e, i) => <EventRow key={i} event={e} hc={hc} ac={ac} />)}
-                </div>
-              )}
-              {firstHalf.length > 0 && secondHalf.length > 0 && (
-                <div className="flex items-center gap-3 my-3">
-                  <div className="flex-1 h-px bg-gray-200" />
-                  <span className="text-xs font-heading text-muted uppercase">Poločas</span>
-                  <div className="flex-1 h-px bg-gray-200" />
                 </div>
               )}
               {secondHalf.length > 0 && (
                 <div>
-                  {firstHalf.length === 0 && <div className="text-xs font-heading uppercase text-muted mb-2 mt-1">2. poločas</div>}
+                  <RowGroup label="2. poločas" />
                   {secondHalf.map((e, i) => <EventRow key={i} event={e} hc={hc} ac={ac} />)}
                 </div>
               )}
@@ -819,45 +775,20 @@ export default function MatchDetailPage() {
         // Starší data bez teamId — zobraz všechny dohromady
         const legacy = match.absences.filter((a) => !a.teamId);
         return (
-          <div className="card p-4 sm:p-5">
-            <SectionLabel>Omluvení hráči</SectionLabel>
+          <ListCard title="Omluvení hráči">
             {legacy.length > 0 ? (
-              <div className="space-y-2">
-                {legacy.map((a, i) => (
-                  <div key={i} className="flex items-start gap-3">
-                    <span className="text-xs font-heading font-bold px-2 py-0.5 rounded-control bg-amber-500/15 text-amber-700 shrink-0 mt-0.5">{a.reason}</span>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-heading font-bold text-sm">{a.name}</div>
-                      <div className="text-xs text-muted italic">„{a.smsText}"</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              legacy.map((a, i) => <AbsenceRow key={i} name={a.name} reason={a.reason} sms={a.smsText} />)
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {[{ label: match.home_name, color: hc, list: homeAbs }, { label: match.away_name, color: ac, list: awayAbs }].map(({ label, color, list }) => (
-                  <div key={label} className="space-y-2">
-                    <div className="flex items-center gap-2 text-xs font-heading uppercase">
-                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
-                      <span className="text-muted">{label}</span>
-                      <span className="text-muted">({list.length})</span>
-                    </div>
-                    {list.length === 0 ? (
-                      <div className="text-xs text-muted italic">Všichni dorazili</div>
-                    ) : list.map((a, i) => (
-                      <div key={i} className="flex items-start gap-2">
-                        <span className="text-micro font-heading font-bold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 shrink-0 mt-0.5">{a.reason}</span>
-                        <div className="flex-1 min-w-0">
-                          <div className="font-heading font-bold text-sm">{a.name}</div>
-                          <div className="text-xs text-muted italic">„{a.smsText}"</div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ))}
-              </div>
+              [{ label: match.home_name, color: hc, list: homeAbs }, { label: match.away_name, color: ac, list: awayAbs }].map(({ label, color, list }) => (
+                <div key={label}>
+                  <RowGroup label={<><span className="inline-block w-2 h-2 rounded-full mr-1.5" style={{ backgroundColor: color }} aria-hidden="true" />{label}</>} aside={list.length} />
+                  {list.length === 0 ? (
+                    <p className="px-4 py-2 text-meta text-muted italic">Všichni dorazili</p>
+                  ) : list.map((a, i) => <AbsenceRow key={i} name={a.name} reason={a.reason} sms={a.smsText} />)}
+                </div>
+              ))
             )}
-          </div>
+          </ListCard>
         );
       })()}
 
@@ -901,20 +832,16 @@ export default function MatchDetailPage() {
             <span className="text-sm font-heading font-bold text-pitch-500">{showCommentary ? "Skrýt" : "Zobrazit"}</span>
           </button>
           {showCommentary && (
-            <div className="max-h-[500px] overflow-y-auto border-t border-gray-100 divide-y divide-gray-50">
+            <div className="max-h-[500px] overflow-y-auto border-t border-line">
               {match.commentary.map((line, i) => {
                 const m = line.match(/^(\d+)'\s*[—–-]\s*(.+)$/);
                 const minute = m?.[1];
                 const text = m?.[2] ?? line;
+                // Věta komentáře je celý obsah řádku, proto řádek bez názvu.
                 return (
-                  <div key={i} className="flex items-start gap-3 px-4 sm:px-5 py-2.5 hover:bg-gray-50/50 transition-colors">
-                    {minute && (
-                      <span className="shrink-0 min-w-[2.25rem] text-center inline-flex items-center justify-center h-6 px-1.5 rounded-control bg-pitch-50 text-pitch-700 text-xs font-heading font-bold tabular-nums">
-                        {minute}&apos;
-                      </span>
-                    )}
-                    <span className="text-sm text-ink leading-relaxed flex-1">{text}</span>
-                  </div>
+                  <ListRow key={i} dense
+                    leading={minute ? <span className="text-meta font-heading font-bold tabular-nums text-pitch-700">{minute}&apos;</span> : undefined}
+                    detail={text} />
                 );
               })}
             </div>
@@ -952,36 +879,47 @@ function EventRow({ event: e, hc, ac }: { event: MatchEvent; hc: string; ac: str
   const teamColor = isHome ? hc : ac;
 
   let icon: string;
-  let bgColor: string;
+  let tone: RowTone | undefined;
   switch (e.type) {
-    case "goal": icon = e.source === "penalty" ? "🥅" : "⚽"; bgColor = "bg-pitch-50"; break;
-    case "card": icon = e.detail === "red" ? "🟥" : "🟨"; bgColor = e.detail === "red" ? "bg-red-50" : "bg-yellow-50"; break;
-    case "injury": icon = "🩹"; bgColor = "bg-orange-50"; break;
-    case "substitution": icon = "🔄"; bgColor = "bg-blue-50"; break;
-    case "penalty": icon = "🥅"; bgColor = "bg-gold-50"; break;
-    case "corner": icon = "🚩"; bgColor = ""; break;
-    case "freekick": icon = "🎯"; bgColor = ""; break;
+    case "goal": icon = e.source === "penalty" ? "🥅" : "⚽"; tone = "new"; break;
+    case "card": icon = e.detail === "red" ? "🟥" : "🟨"; tone = e.detail === "red" ? "danger" : undefined; break;
+    case "injury": icon = "🩹"; break;
+    case "substitution": icon = "🔄"; break;
+    case "penalty": icon = "🥅"; break;
+    case "corner": icon = "🚩"; break;
+    case "freekick": icon = "🎯"; break;
     case "chance":
       // V průběhu zápasu se ze šancí objeví jen zahozená penalta
-      icon = "❌"; bgColor = "bg-red-50"; break;
+      icon = "❌"; break;
     case "special":
       // Sporné verdikty rozhodčího mají vlastní ikonu, ať se v timeline neztratí
-      if (e.detail?.startsWith("ref_error:")) { icon = "🧑‍⚖️"; bgColor = "bg-amber-50"; }
-      else if (e.detail?.startsWith("plan:")) { icon = "📋"; bgColor = "bg-blue-50"; }
-      else { icon = ""; bgColor = ""; }
+      if (e.detail?.startsWith("ref_error:")) { icon = "🧑‍⚖️"; tone = "warn"; }
+      else if (e.detail?.startsWith("plan:")) { icon = "📋"; }
+      else { icon = ""; }
       break;
-    default: icon = ""; bgColor = "";
+    default: icon = "";
   }
 
+  // Barevná tečka nese tým, ikona druh události.
+  const head = (
+    <>
+      <span className="inline-block w-2 h-2 rounded-full mr-1.5 align-middle" style={{ backgroundColor: teamColor }} aria-hidden="true" />
+      {icon && <span className="mr-1" aria-hidden="true">{icon}</span>}
+    </>
+  );
   return (
-    <div className={`flex items-center gap-3 py-2 px-3 rounded-soft mb-1 ${bgColor}`}>
-      <span className="text-xs text-muted tabular-nums w-7 text-right font-heading font-bold">{e.minute}&apos;</span>
-      <div className="w-1 h-6 rounded-full shrink-0" style={{ backgroundColor: teamColor }} />
-      <span className="text-base shrink-0">{icon}</span>
-      <div className="flex-1 min-w-0">
-        <span className="text-sm font-heading font-bold">{e.playerName}</span>
-        <span className="text-xs text-muted ml-2">{e.description}</span>
-      </div>
-    </div>
+    <ListRow dense tone={tone}
+      leading={<span className="text-meta font-heading font-bold tabular-nums text-muted">{e.minute}&apos;</span>}
+      title={e.playerName ? <>{head}{e.playerName}</> : undefined}
+      detail={e.playerName ? (e.description || undefined) : <>{head}{e.description}</>} />
+  );
+}
+
+/** Omluvený hráč: důvod jako štítek u jména, jeho SMS pod ním. */
+function AbsenceRow({ name, reason, sms }: { name: string; reason: string; sms: string }) {
+  return (
+    <ListRow dense
+      title={<>{name} <span className="ml-1 align-middle"><StatusChip tone="warn">{reason}</StatusChip></span></>}
+      detail={<span className="italic text-muted">„{sms}“</span>} />
   );
 }
