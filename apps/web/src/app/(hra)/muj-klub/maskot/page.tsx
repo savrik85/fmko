@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, showError } from "@/lib/api";
-import { Card, CardHeader, CardBody, SectionLabel, PageLoading, ErrorBox, choiceClass, SelectedMark } from "@/components/ui";
+import { Card, CardHeader, CardBody, SectionLabel, PageLoading, ErrorBox, choiceClass } from "@/components/ui";
 
 interface Mascot {
   id: string;
@@ -235,7 +235,6 @@ export default function MaskotPage() {
                       className={`flex flex-col items-center gap-1 p-2 ${choiceClass(active)}`}>
                       <span className="text-2xl leading-none">{a.emoji}</span>
                       <span className={`text-micro font-medium text-center ${active ? "text-pitch-700 font-bold" : "text-muted"}`}>{a.label}</span>
-                      {active && <SelectedMark />}
                     </button>
                   );
                 })}
@@ -252,7 +251,6 @@ export default function MaskotPage() {
                       className={`px-3 py-2.5 text-sm text-left ${choiceClass(active)}`}>
                       <div className="font-bold">{s.label}</div>
                       <div className="text-micro text-muted font-normal">{s.desc}</div>
-                      {active && <SelectedMark />}
                     </button>
                   );
                 })}

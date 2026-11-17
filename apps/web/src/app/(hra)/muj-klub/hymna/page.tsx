@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, showError } from "@/lib/api";
-import { Spinner, Card, CardHeader, CardBody, SectionLabel, PageLoading, ErrorBox, StatusChip, ChoiceGroup, choiceClass, SelectedMark } from "@/components/ui";
+import { Spinner, Card, CardHeader, CardBody, SectionLabel, PageLoading, ErrorBox, StatusChip, ChoiceGroup, choiceClass } from "@/components/ui";
 
 interface Anthem {
   id: string;
@@ -290,7 +290,6 @@ export default function HymnaPage() {
                     <button type="button" key={preset.value} onClick={() => setStyle(preset.value)}
                       className={`px-3 py-2.5 text-sm text-left ${active ? "font-bold" : ""} ${choiceClass(active)}`}>
                       {preset.label}
-                      {active && <SelectedMark />}
                     </button>
                   );
                 })}

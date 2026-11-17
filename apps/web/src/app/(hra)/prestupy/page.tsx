@@ -9,7 +9,7 @@ import { useTeam } from "@/context/team-context";
 import { apiFetch, apiAction, showError, type Player } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
 import { nationalityFlag } from "@/lib/nationality";
-import { SectionLabel, PositionBadge, useConfirm, BadgePreview, type BadgePattern, Tabs, useTabParam, Sheet, SheetDialog, Button, DataTable, EntityCell, ListCard, ListRow, ListEmpty, RowIcon, RowValue, RatingPill, StatusChip, ratingToneIn, PageLoading, SectionLoading, ChoiceGroup, choiceClass, SelectedMark } from "@/components/ui";
+import { SectionLabel, PositionBadge, useConfirm, BadgePreview, type BadgePattern, Tabs, useTabParam, Sheet, SheetDialog, Button, DataTable, EntityCell, ListCard, ListRow, ListEmpty, RowIcon, RowValue, RatingPill, StatusChip, ratingToneIn, PageLoading, SectionLoading, ChoiceGroup, choiceClass } from "@/components/ui";
 import { attrBg } from "@/lib/player-attrs";
 import { PlayerRevealCard } from "@/components/players/reveal-card";
 import { FaceAvatar } from "@/components/players/face-avatar";
@@ -515,9 +515,7 @@ function FiltrRadek({ popisek, volby, aktivni, vyber }: {
       <span className="w-[4.5rem] shrink-0 text-micro text-muted font-heading font-bold uppercase tracking-wide">
         {popisek}
       </span>
-      {/* Vzhled volby C (fajfka v rohu). -mt-2 pt-2 a pr-2 dávají fajfce místo uvnitř
-          rolovacího pásu, aby ji ořez nesnědl, a řádek přitom nezvýší. */}
-      <div className="flex gap-1.5 overflow-x-auto no-scrollbar -mt-2 pt-2 pb-0.5 -mb-0.5 pr-2" role="group" aria-label={popisek}>
+      <div className="flex gap-1.5 overflow-x-auto no-scrollbar -my-0.5 py-0.5 px-px" role="group" aria-label={popisek}>
         {volby.map(({ k, l }) => (
           <button
             key={k}
@@ -526,7 +524,6 @@ function FiltrRadek({ popisek, volby, aktivni, vyber }: {
             className={`shrink-0 px-3 min-h-9 text-sm font-heading font-bold ${choiceClass(aktivni === k)}`}
           >
             {l}
-            {aktivni === k && <SelectedMark />}
           </button>
         ))}
       </div>

@@ -199,12 +199,14 @@ Největší a nejviditelnější oblast: 115 míst v 53 souborech. Vybraná volb
 nejméně pět vzhledů (plná `bg-pitch-500` s bílým textem, `bg-pitch-50` se zeleným
 rámečkem, jen zelený rámeček, `ring`, tmavá `bg-pitch-700`).
 
-**Rozhodnuto 17. 11. 2026: varianta C.** Uživatel vybíral ze tří variant v `maketa.html`:
+**Rozhodnuto 17. 11. 2026: varianta B.** Nejdřív padla volba C, po náhledu na skutečných
+obrazovkách v telefonu ji uživatel změnil na B (fajfky se v hustých mřížkách hromadily).
+Vzhled stojí jen v `components/ui/choice.tsx` (`IDLE`, `SELECTED`, `DISABLED`). Varianty:
 
 - **A, plná:** vybraná volba `bg-pitch-500 text-white`, ostatní `bg-surface-2`.
 - **B, světlá:** vybraná `bg-pitch-50 border-2 border-pitch-500 text-pitch-700`,
   ostatní bílé s `border-line`.
-- **C, bílá s fajfkou (vybraná):** vybraná bílá s dvoupixelovým zeleným rámečkem
+- **C, bílá s fajfkou (nakonec nepoužitá):** vybraná bílá s dvoupixelovým zeleným rámečkem
   (`pitch-500`) a ✓ v pravém horním rohu, ostatní `bg-surface-3` bez rámečku.
   Nedostupná volba přeškrtnutá, `text-muted-light`, bez podkladu.
 

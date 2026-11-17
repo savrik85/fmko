@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, showError } from "@/lib/api";
-import { Card, CardHeader, CardBody, JerseyPreview, BadgePreview, ShortsPreview, SocksPreview, SectionLabel, Modal, StickyActions, PageLoading, choiceClass, SelectedMark } from "@/components/ui";
+import { Card, CardHeader, CardBody, JerseyPreview, BadgePreview, ShortsPreview, SocksPreview, SectionLabel, Modal, StickyActions, PageLoading, choiceClass } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 import { ClubScarf, SCARF_PATTERNS, type ScarfPattern } from "@/components/team/club-scarf";
 
@@ -268,7 +268,6 @@ function PatternPicker({ value, onChange, options, primary, secondary, kind }: {
             <span className={`text-micro font-medium leading-tight text-center ${active ? "text-pitch-700" : "text-muted"}`}>
               {opt.label}
             </span>
-          {active && <SelectedMark />}
           </button>
         );
       })}
@@ -491,7 +490,6 @@ export default function DresPage() {
                       <circle cx="13.5" cy="11" r="5.5" fill="#1f2937" />
                     </svg>
                   ) : opt.value || <span className="text-xs text-muted">-</span>}
-                {active && <SelectedMark />}
                 </button>
               );
             })}
@@ -525,7 +523,6 @@ export default function DresPage() {
             <span className={`text-micro font-medium leading-tight text-center ${active ? "text-pitch-700" : "text-muted"}`}>
               {opt.label}
             </span>
-          {active && <SelectedMark />}
           </button>
         );
       })}

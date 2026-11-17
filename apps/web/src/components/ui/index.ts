@@ -4,7 +4,7 @@ export { Badge } from "./badge";
 export { StatBar } from "./stat-bar";
 export { Spinner, PageLoading, SectionLoading } from "./spinner";
 export { ProgressBar, type ProgressTone } from "./progress-bar";
-export { ChoiceGroup, ChoiceCard, SelectedMark, choiceClass, type ChoiceOption } from "./choice";
+export { ChoiceGroup, ChoiceCard, choiceClass, type ChoiceOption } from "./choice";
 export { Disclosure } from "./disclosure";
 export { CollapsibleCard, useOpenOnDesktop } from "./CollapsibleCard";
 export { Input } from "./input";

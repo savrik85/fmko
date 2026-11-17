@@ -14,7 +14,7 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { apiFetch, apiAction } from "@/lib/api";
 import { FaceAvatar } from "@/components/players/face-avatar";
-import { Tabs, useTabParam, ListRow, RowValue, RatingPill, ratingToneIn, StatusChip, choiceClass, SelectedMark, Disclosure } from "@/components/ui";
+import { Tabs, useTabParam, ListRow, RowValue, RatingPill, ratingToneIn, StatusChip, choiceClass, Disclosure } from "@/components/ui";
 import { formatKc } from "@/lib/format";
 
 const TAB_KEYS = ["prehled", "zaci", "novi", "trener", "vybaveni"] as const;
@@ -421,7 +421,6 @@ export function AcademyCard({ teamId }: { teamId: string }) {
                     <span className="font-heading font-bold text-sm text-ink">{l.label}{active ? " (teď)" : ""}</span>
                   </span>
                   <span className="block text-xs text-muted mt-1">{l.text}</span>
-                  {active && <SelectedMark />}
                 </button>
                 <p className="text-xs text-muted mt-1 px-1">{formatKc(l.base)} + {formatKc(l.perKid)} za žáka, teď {formatKc(l.weekly)} týdně</p>
               </li>

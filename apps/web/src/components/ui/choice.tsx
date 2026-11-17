@@ -4,15 +4,15 @@ import type { ReactNode } from "react";
 
 /**
  * Výběr z voleb: jeden vzhled pro místo zápasu, sázku, den, velikost autobusu,
- * filtry i uložené sestavy (vzhled C z docs/redesign-prvku/maketa.html).
- * Vybraná volba je bílá se zeleným rámečkem a fajfkou v rohu, ostatní šedé.
+ * filtry i uložené sestavy (vzhled B z docs/redesign-prvku/maketa.html).
+ * Vybraná volba je světle zelená se zeleným rámečkem, ostatní bílé s linkou.
  * Záložky stránky sem nepatří, ty dělá `Tabs`.
  */
 
 const BASE = "relative rounded-control transition-[background-color,box-shadow,color] duration-150 "
   + "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pitch-500";
-const IDLE = "bg-surface-3 text-ink-light hover:bg-line";
-const SELECTED = "bg-surface text-ink shadow-[inset_0_0_0_2px_var(--color-pitch-500),0_1px_3px_rgba(26,23,20,0.08)]";
+const IDLE = "bg-surface text-ink-light shadow-[inset_0_0_0_1px_var(--color-line)] hover:shadow-[inset_0_0_0_1px_var(--color-muted-light)]";
+const SELECTED = "bg-pitch-50 text-pitch-600 shadow-[inset_0_0_0_2px_var(--color-pitch-500)]";
 const DISABLED = "bg-transparent text-muted-light line-through cursor-not-allowed";
 
 function stateClass(selected: boolean, disabled: boolean | undefined): string {
@@ -22,20 +22,10 @@ function stateClass(selected: boolean, disabled: boolean | undefined): string {
 
 /**
  * Vzhled volby pro výběry s vlastním rozložením (náhled dresu, erbu, maskota), které
- * ChoiceGroup ani ChoiceCard nepokryjí. Tlačítko dostane tuhle třídu a při výběru `<SelectedMark />`.
+ * ChoiceGroup ani ChoiceCard nepokryjí. Tlačítko dostane tuhle třídu.
  */
 export function choiceClass(selected: boolean, disabled?: boolean): string {
   return `${BASE} ${stateClass(selected, disabled)}`;
-}
-
-/** Fajfka v pravém horním rohu vybrané volby. */
-export function SelectedMark() {
-  return (
-    <span aria-hidden="true"
-      className="absolute -top-1.5 -right-1.5 w-[18px] h-[18px] rounded-full bg-pitch-500 text-white text-[11px] font-extrabold leading-none grid place-items-center ring-2 ring-surface">
-      ✓
-    </span>
-  );
 }
 
 export interface ChoiceOption<T extends string> {
@@ -94,7 +84,6 @@ export function ChoiceGroup<T extends string>(props: ChoiceGroupProps<T>) {
             className={`${BASE} ${sizing} flex flex-col items-center justify-center text-center font-bold leading-tight ${stateClass(selected, o.disabled)}`}>
             <span>{o.label}</span>
             {o.hint != null && <span className="block self-stretch text-micro font-medium text-muted mt-px">{o.hint}</span>}
-            {selected && !o.disabled && <SelectedMark />}
           </button>
         );
       })}
@@ -123,7 +112,6 @@ export function ChoiceCard({ selected, onSelect, disabled, icon, title, detail, 
       <span className="text-sm font-bold leading-snug">{title}</span>
       {detail != null && <span className="text-micro text-muted">{detail}</span>}
       {aside != null && <span className="text-[13px] font-extrabold tabular-nums mt-0.5">{aside}</span>}
-      {selected && !disabled && <SelectedMark />}
     </button>
   );
 }
