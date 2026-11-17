@@ -44,6 +44,8 @@ export interface DataRowTone {
   bar?: "up" | "down" | "warn";
   /** Ztlumený řádek: hráč nedostupný, odešel, nejede na zápas. Klikat se na něj dá dál, pokud má odkaz. */
   dim?: boolean;
+  /** Řádek vybraný v editoru (Sestava: hráč, kterého právě přesouváš): zlatý podklad. */
+  selected?: boolean;
 }
 
 const PRIORITY_CLASS: Record<1 | 2 | 3, string> = {
@@ -53,6 +55,8 @@ const PRIORITY_CLASS: Record<1 | 2 | 3, string> = {
 };
 const ALIGN_CLASS = { left: "text-left", center: "text-center", right: "text-right" } as const;
 const BAR_CLASS = { up: "before:bg-pitch-500", down: "before:bg-card-red", warn: "before:bg-gold-500" } as const;
+/** `!important` přebije minWidth v atributu style. */
+const SCROLL_UNTIL_CLASS = { sm: "sm:!min-w-0", lg: "lg:!min-w-0" } as const;
 
 export function DataTable<T>({
   columns, rows, rowKey, rowHref, onRowClick, rowTone, defaultSort, pageSize, empty, emptyIcon, emptyAction, scroll, dense,
@@ -71,8 +75,12 @@ export function DataTable<T>({
   empty: ReactNode;
   emptyIcon?: string;
   emptyAction?: ReactNode;
-  /** Tabulka s mnoha sloupci: posouvá se do strany, první sloupec je přilepený. */
-  scroll?: { minWidth: number };
+  /**
+   * Tabulka s mnoha sloupci: posouvá se do strany, první sloupec je přilepený.
+   * `until`: od této šířky obrazovky se minimální šířka vypne a tabulka se vejde
+   * (Sestava: na desktopu je panel úzký, ale sloupce se do něj vejdou).
+   */
+  scroll?: { minWidth: number; until?: "sm" | "lg" };
   /**
    * Hustá tabulka (řádek 40 px) pro soupisky vedle hřiště a tabulky v dlaždicích na Domů,
    * kde se řádky počítají do pevné výšky. Běžné tabulky ji nepoužívají.
@@ -116,7 +124,7 @@ export function DataTable<T>({
     scroll && index === 0 ? `sticky left-0 z-[1] ${background} shadow-[6px_0_8px_-6px_rgba(26,23,20,0.18)]` : "";
 
   const table = (
-    <table className="w-full border-collapse" style={scroll ? { minWidth: scroll.minWidth } : undefined}>
+    <table className={`w-full border-collapse ${scroll?.until ? SCROLL_UNTIL_CLASS[scroll.until] : ""}`} style={scroll ? { minWidth: scroll.minWidth } : undefined}>
       <thead>
         <tr>
           {columns.map((column, index) => {
@@ -148,7 +156,7 @@ export function DataTable<T>({
           const href = rowHref?.(row);
           const clickable = !!href || !!onRowClick;
           const open = () => { if (href) router.push(href); else onRowClick?.(row); };
-          const background = tone?.own ? "bg-pitch-50" : "bg-surface";
+          const background = tone?.selected ? "bg-gold-100" : tone?.own ? "bg-pitch-50" : "bg-surface";
           return (
             <tr key={rowKey(row)}
               onClick={clickable ? open : undefined}
@@ -159,7 +167,7 @@ export function DataTable<T>({
               {columns.map((column, index) => (
                 <td key={column.key}
                   className={`${dense ? "h-10" : "h-[52px] sm:h-12"} border-b border-line-soft group-last:border-b-0 tabular-nums ${background} ${tone?.dim ? "opacity-50" : ""} ${
-                    tone?.own ? "" : "group-hover:bg-surface-2"
+                    tone?.own || tone?.selected ? "" : "group-hover:bg-surface-2"
                   } ${column.emphasis ? "text-body font-bold text-ink" : "text-ink-light"} ${alignOf(column, index)} ${hideOf(column)} ${edgeOf(index)} ${
                     index === 0 && tone?.bar ? `relative before:absolute before:left-0 before:inset-y-0 before:w-[3px] ${BAR_CLASS[tone.bar]}` : ""
                   } ${stickyOf(index, background)}`}>
