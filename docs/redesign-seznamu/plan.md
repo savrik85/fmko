@@ -167,6 +167,11 @@ neořízne. Je pro historie a kroniky, kde je hlavní informací popis (odkud se
 vlastnost, co se stalo v obci, výtržnost v hospodě). Řádek s odstavcem má obsah
 zarovnaný nahoru. Údaje, které se vejdou na jeden řádek, patří do `meta`.
 
+Položka, která je celá jednou větou a krátký název nemá (výtržnost v hospodě),
+vynechá `title` a větu dá do `detail`; ta se pak vykreslí barvou hlavního textu.
+Takový výčet bývá dlouhý, proto `dense` a ikona bez dlaždice
+(`leading={<span className="text-base">🍺</span>}`), jinak by karta na telefonu narostla.
+
 ### 3.4 Prázdný stav
 
 Vždy `ListEmpty` (v tabulce prop `empty`). Text je celá věta: co prázdný seznam

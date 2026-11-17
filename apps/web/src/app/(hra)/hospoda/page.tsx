@@ -5,7 +5,7 @@ import Link from "next/link";
 import { apiFetch, type Team, type Player } from "@/lib/api";
 import { useTeam } from "@/context/team-context";
 import { StammtischCard } from "@/components/relations/StammtischCard";
-import { SectionLabel, Spinner, type BadgePattern } from "@/components/ui";
+import { Spinner, ListCard, ListRow, type BadgePattern } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { ClubScarf, type ScarfPattern } from "@/components/team/club-scarf";
 
@@ -265,78 +265,66 @@ export default function HospodaPage() {
 
       {/* NPC v hospodě — náhodné setkání se zastupitelem obce */}
       {npcEncounters.length > 0 && (
-        <div className="card p-4 sm:p-5 border-l-4 border-amber-400">
-          <SectionLabel>Někdo z radnice je dnes tady</SectionLabel>
-          <div className="space-y-3 mt-2">
-            {npcEncounters.map((p) => {
-              let face: Record<string, unknown> = {};
-              try { face = JSON.parse(p.face_config); } catch { face = {}; }
-              const ROLE_LABEL: Record<string, string> = {
-                starosta: "Starosta", mistostarosta: "Místostarosta",
-                zastupitel_1: "Zastupitel", zastupitel_2: "Zastupitel",
-              };
-              return (
-                <div key={p.id} className="flex items-center gap-4 bg-amber-50/40 rounded-soft p-3">
-                  <FaceAvatar faceConfig={face} size={64} />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-xs uppercase tracking-wider text-gray-500">{ROLE_LABEL[p.role] ?? "Zastupitel"}</div>
-                    <div className="font-semibold text-base">{p.first_name} {p.last_name}</div>
-                    <div className="text-sm text-gray-700 mt-0.5">
-                      Sedí u baru a popíjí sám. Řeší se, jestli si k němu sedneš.
-                    </div>
-                    <div className="text-xs text-gray-500 mt-1">
-                      Vyprší {new Date(p.expires_at).toLocaleDateString("cs")}
-                    </div>
-                  </div>
-                  <div className="flex flex-col gap-1.5 shrink-0">
-                    <button
-                      className="btn btn-primary btn-sm"
-                      disabled={respondingNpc === p.id}
-                      onClick={() => respondNpc(p.id, "invite_beer")}
-                    >
-                      Pozvat na pivo
-                    </button>
-                    <button
-                      className="btn btn-secondary btn-sm"
-                      disabled={respondingNpc === p.id}
-                      onClick={() => respondNpc(p.id, "ignore")}
-                    >
-                      Ignorovat
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+        <ListCard title="Někdo z radnice je dnes tady">
+          {npcEncounters.map((p) => {
+            let face: Record<string, unknown> = {};
+            try { face = JSON.parse(p.face_config); } catch { face = {}; }
+            const ROLE_LABEL: Record<string, string> = {
+              starosta: "Starosta", mistostarosta: "Místostarosta",
+              zastupitel_1: "Zastupitel", zastupitel_2: "Zastupitel",
+            };
+            return (
+              <ListRow key={p.id} tone="warn"
+                leading={<FaceAvatar faceConfig={face} size={36} />}
+                title={`${p.first_name} ${p.last_name}`}
+                meta={`${ROLE_LABEL[p.role] ?? "Zastupitel"} · vyprší ${new Date(p.expires_at).toLocaleDateString("cs")}`}
+                detail={
+                  <>
+                    <span className="block">Sedí u baru a popíjí sám. Řeší se, jestli si k němu sedneš.</span>
+                    <span className="flex flex-wrap gap-2 mt-2">
+                      <button
+                        className="btn btn-primary btn-sm"
+                        disabled={respondingNpc === p.id}
+                        onClick={() => respondNpc(p.id, "invite_beer")}
+                      >
+                        Pozvat na pivo
+                      </button>
+                      <button
+                        className="btn btn-secondary btn-sm"
+                        disabled={respondingNpc === p.id}
+                        onClick={() => respondNpc(p.id, "ignore")}
+                      >
+                        Ignorovat
+                      </button>
+                    </span>
+                  </>
+                } />
+            );
+          })}
+        </ListCard>
       )}
 
       {/* Síň slávy štamgastů */}
       {topDrinkers.length > 0 && (
-        <div className="card p-4 sm:p-5">
-          <SectionLabel>Síň slávy štamgastů</SectionLabel>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-1">
-            {topDrinkers.map((d, i) => {
-              const medal = i === 0 ? "🥇" : i === 1 ? "🥈" : "🥉";
-              const ringColor = i === 0 ? "ring-amber-400" : i === 1 ? "ring-gray-300" : "ring-orange-400";
-              const avatar = avatarsById[d.id];
-              return (
-                <Link key={d.id} href={`/hrac/${d.id}`} className="flex items-center gap-3 p-3 rounded-soft bg-gray-50 hover:bg-pitch-50/50 transition-colors group">
-                  <div className="relative shrink-0">
+        <ListCard title="Síň slávy štamgastů">
+          {topDrinkers.map((d, i) => {
+            const medal = i === 0 ? "🥇" : i === 1 ? "🥈" : "🥉";
+            const avatar = avatarsById[d.id];
+            return (
+              <ListRow key={d.id} href={`/hrac/${d.id}`}
+                leading={
+                  <span className="relative">
                     {avatar
-                      ? <FaceAvatar faceConfig={avatar} size={64} className={`rounded-full ring-2 ${ringColor} bg-white`} />
-                      : <div className={`rounded-full ring-2 ${ringColor} bg-gray-100 flex items-center justify-center font-heading font-bold text-base text-muted`} style={{ width: 64, height: 64 }}>{d.name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("")}</div>}
-                    <span className="absolute -bottom-1 -right-1 text-xl drop-shadow-sm">{medal}</span>
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="font-heading font-bold text-sm group-hover:text-pitch-500 truncate">{d.name}</div>
-                    <div className="text-xs text-muted">{d.count}× {d.count === 1 ? "večer" : d.count < 5 ? "večery" : "večerů"} v hospodě</div>
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
-        </div>
+                      ? <FaceAvatar faceConfig={avatar} size={36} className="rounded-full bg-white" />
+                      : <span className="rounded-full bg-surface-3 flex items-center justify-center text-meta font-heading font-bold text-muted" style={{ width: 36, height: 36 }}>{d.name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("")}</span>}
+                    <span className="absolute -bottom-1 -right-1.5 text-sm leading-none drop-shadow-sm" aria-hidden="true">{medal}</span>
+                  </span>
+                }
+                title={d.name}
+                meta={`${d.count}× ${d.count === 1 ? "večer" : d.count < 5 ? "večery" : "večerů"} v hospodě`} />
+            );
+          })}
+        </ListCard>
       )}
 
       {/* Sessions history */}
@@ -430,35 +418,41 @@ export default function HospodaPage() {
                 )}
 
                 {s.incidents.length > 0 && (
-                  <ul className="divide-y divide-gray-100 mt-2">
+                  <ul className="-mx-4 sm:-mx-5 -mb-4 sm:-mb-5 mt-2 border-t border-line divide-y divide-line-soft">
                     {s.incidents.map((inc, i) => {
                       const playerNameById = (id: string) => {
                         const a = s.attendees.find((x) => x.playerId === id);
                         return a ? `${a.firstName} ${a.lastName}` : "?";
                       };
                       return (
-                        <li key={i} className="text-sm py-2 first:pt-0 last:pb-0">
-                          <div className="flex gap-2 items-start">
-                            <span className="shrink-0">{INCIDENT_ICON[inc.type] ?? "•"}</span>
-                            <span className="text-ink leading-snug">{colorizeIncidentText(inc.text)}</span>
-                          </div>
-                          {inc.effects && inc.effects.length > 0 && (
-                            <div className="ml-7 mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-micro">
-                              {inc.effects.map((ef, ei) => (
-                                <span key={ei} className={effectColor(ef)}>
-                                  <span className="text-muted">{playerNameById(ef.playerId)}:</span> <span className="font-heading font-bold">{ef.label}</span>
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                          {inc.incidentId && (
-                            <Link
-                              href={`/incidenty?id=${encodeURIComponent(inc.incidentId)}`}
-                              className="ml-7 mt-1 inline-block text-sm font-heading font-bold text-pitch-600 hover:text-pitch-500"
-                            >
-                              Otevřít incident →
-                            </Link>
-                          )}
+                        <li key={i}>
+                          {/* Výtržnost je celá jednou větou, proto řádek bez názvu. Hustý řádek
+                              a ikona bez dlaždice: večer jich má i deset a s běžným řádkem by
+                              karta na telefonu narostla o 40 %. */}
+                          <ListRow dense
+                            leading={<span className="text-base leading-none" aria-hidden="true">{INCIDENT_ICON[inc.type] ?? "•"}</span>}
+                            detail={
+                              <>
+                                <span className="block">{colorizeIncidentText(inc.text)}</span>
+                                {inc.effects && inc.effects.length > 0 && (
+                                  <span className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-micro">
+                                    {inc.effects.map((ef, ei) => (
+                                      <span key={ei} className={effectColor(ef)}>
+                                        <span className="text-muted">{playerNameById(ef.playerId)}:</span> <span className="font-heading font-bold">{ef.label}</span>
+                                      </span>
+                                    ))}
+                                  </span>
+                                )}
+                                {inc.incidentId && (
+                                  <Link
+                                    href={`/incidenty?id=${encodeURIComponent(inc.incidentId)}`}
+                                    className="mt-1 inline-block text-meta font-heading font-bold text-pitch-600 hover:text-pitch-500"
+                                  >
+                                    Otevřít incident →
+                                  </Link>
+                                )}
+                              </>
+                            } />
                         </li>
                       );
                     })}

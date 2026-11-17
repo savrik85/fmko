@@ -9,7 +9,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { apiFetch, showError } from "@/lib/api";
-import { AutoGrowTextarea, SectionLabel } from "@/components/ui";
+import { AutoGrowTextarea, SectionLabel, ListRow, RowIcon, StatusChip } from "@/components/ui";
 
 interface RelationListItem {
   teamId: string;
@@ -40,10 +40,10 @@ interface SocialInfo {
   incomingInvites: Array<{ id: string; hostTeamId: string; hostTeam: string; hostManager: string; topic?: string | null }>;
 }
 
-const INVITE_LABEL: Record<string, { text: string; cls: string }> = {
-  invited: { text: "Čeká na odpověď", cls: "text-amber-700 bg-amber-50 border-amber-200" },
-  accepted: { text: "Přijal, dorazí večer", cls: "text-pitch-600 bg-green-50 border-green-200" },
-  declined: { text: "Odmítl", cls: "text-card-red bg-red-50 border-red-200" },
+const INVITE_LABEL: Record<string, { text: string; tone: "ok" | "warn" | "danger" }> = {
+  invited: { text: "Čeká na odpověď", tone: "warn" },
+  accepted: { text: "Přijal, dorazí večer", tone: "ok" },
+  declined: { text: "Odmítl", tone: "danger" },
 };
 
 const BTN = "text-sm font-heading font-bold px-3 py-2 rounded-soft border transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed";
@@ -145,22 +145,28 @@ export function StammtischCard({ teamId }: { teamId: string }) {
 
       {/* Příchozí pozvánky od jiných trenérů */}
       {info.incomingInvites.length > 0 && (
-        <div className="mb-3 space-y-2">
+        <div className="-mx-4 sm:-mx-5 mt-2 mb-3 border-y border-line">
           {info.incomingInvites.map((inv) => (
-            <div key={inv.id} className="border border-amber-200 bg-amber-50 rounded-soft p-3 flex items-center gap-3 flex-wrap">
-              <span className="text-sm flex-1 min-w-[200px]">
-                🍻 Trenér <b>{inv.hostManager}</b> ({inv.hostTeam}) tě zve dnes večer na posezení s trenéry. Útratu platí on.
-                {inv.topic && <span className="block mt-1">Téma: „{inv.topic}“</span>}
-              </span>
-              <button disabled={busy} onClick={() => respondInvite(inv.id, true)}
-                className={`${BTN} bg-green-50 border-green-200 hover:bg-green-100`}>
-                Přijmout
-              </button>
-              <button disabled={busy} onClick={() => respondInvite(inv.id, false)}
-                className={`${BTN} bg-gray-50 border-gray-200 hover:bg-gray-100`}>
-                Odmítnout
-              </button>
-            </div>
+            <ListRow key={inv.id} tone="new"
+              leading={<RowIcon>🍻</RowIcon>}
+              title={`Trenér ${inv.hostManager}`}
+              meta={inv.hostTeam}
+              detail={
+                <>
+                  <span className="block">Zve tě dnes večer na posezení s trenéry. Útratu platí on.</span>
+                  {inv.topic && <span className="block mt-1">Téma: „{inv.topic}“</span>}
+                  <span className="flex flex-wrap gap-2 mt-2">
+                    <button disabled={busy} onClick={() => respondInvite(inv.id, true)}
+                      className={`${BTN} bg-green-50 border-green-200 hover:bg-green-100`}>
+                      Přijmout
+                    </button>
+                    <button disabled={busy} onClick={() => respondInvite(inv.id, false)}
+                      className={`${BTN} bg-gray-50 border-gray-200 hover:bg-gray-100`}>
+                      Odmítnout
+                    </button>
+                  </span>
+                </>
+              } />
           ))}
         </div>
       )}
@@ -170,22 +176,20 @@ export function StammtischCard({ teamId }: { teamId: string }) {
           <div className="w-full">
             <div className="text-sm font-heading font-bold mb-2">🍻 Posezení je domluvené, odpovědi pozvaných</div>
             {info.stammtisch.topic && <div className="text-sm mb-2">Téma: „{info.stammtisch.topic}“</div>}
-            <div className="space-y-1">
-              {info.stammtisch.plannedInvites.length === 0 ? (
-                <div className="text-sm text-muted">Pozvánky se rozesílají…</div>
-              ) : info.stammtisch.plannedInvites.map((inv) => {
-                const meta = INVITE_LABEL[inv.status] ?? { text: inv.status, cls: "text-muted bg-gray-50 border-gray-200" };
-                return (
-                  <div key={inv.teamId} className="flex items-center gap-2.5 py-1 px-2 rounded-control border border-gray-100">
-                    <div className="min-w-0 flex-1">
-                      <span className="font-heading font-bold text-sm">{inv.managerName}</span>
-                      <span className="text-xs text-muted ml-2">{inv.teamName}</span>
-                    </div>
-                    <span className={`text-xs font-heading font-bold px-2 py-0.5 rounded-full border ${meta.cls}`}>{meta.text}</span>
-                  </div>
-                );
-              })}
-            </div>
+            {info.stammtisch.plannedInvites.length === 0 ? (
+              <div className="text-sm text-muted">Pozvánky se rozesílají…</div>
+            ) : (
+              <div className="-mx-4 sm:-mx-5 border-y border-line">
+                {info.stammtisch.plannedInvites.map((inv) => {
+                  const label = INVITE_LABEL[inv.status];
+                  return (
+                    <ListRow key={inv.teamId} dense
+                      title={<>{inv.managerName}<span className="text-meta font-normal text-muted"> · {inv.teamName}</span></>}
+                      trailing={<StatusChip tone={label?.tone ?? "neutral"}>{label?.text ?? inv.status}</StatusChip>} />
+                  );
+                })}
+              </div>
+            )}
             <div className="text-xs text-muted mt-2">Vyhodnotí se večer. Kdo neodpoví do té doby, nedorazí.</div>
           </div>
         ) : (
@@ -219,18 +223,19 @@ export function StammtischCard({ teamId }: { teamId: string }) {
           {managers.filter((m) => !m.isAi).length === 0 && (
             <div className="text-sm text-muted">V lize zatím není žádný další lidský trenér.</div>
           )}
-          <div className="space-y-1 max-h-64 overflow-y-auto">
+          <div className="-mx-3 max-h-64 overflow-y-auto border-y border-line-soft">
+            {/* Celý řádek je popisek zaškrtávátka, klik kamkoli do řádku trenéra přidá. */}
             {managers.filter((m) => !m.isAi).map((m) => (
-              <label key={m.teamId}
-                className="flex items-center gap-2.5 py-1.5 px-2 rounded-control hover:bg-gray-50 cursor-pointer">
-                <input type="checkbox" checked={selected.has(m.teamId)} onChange={() => toggle(m.teamId)}
-                  disabled={!selected.has(m.teamId) && selected.size >= 4}
-                  className="accent-green-700" />
-                <div className="min-w-0 flex-1">
-                  <span className="font-heading font-bold text-sm">{m.managerName}</span>
-                  <span className="text-xs text-muted ml-2">{m.teamName}{m.archetypeLabel ? ` · ${m.archetypeLabel}` : ""}</span>
-                </div>
-                <span className="text-xs text-muted shrink-0">{m.label}</span>
+              <label key={m.teamId} className="block cursor-pointer hover:bg-surface-2 transition-colors">
+                <ListRow
+                  leading={
+                    <input type="checkbox" checked={selected.has(m.teamId)} onChange={() => toggle(m.teamId)}
+                      disabled={!selected.has(m.teamId) && selected.size >= 4}
+                      className="accent-green-700 w-4 h-4" />
+                  }
+                  title={m.managerName}
+                  meta={`${m.teamName}${m.archetypeLabel ? ` · ${m.archetypeLabel}` : ""}`}
+                  trailing={<span className="block max-w-[96px] text-meta text-muted leading-tight">{m.label}</span>} />
               </label>
             ))}
           </div>

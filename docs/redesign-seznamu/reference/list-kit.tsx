@@ -66,8 +66,11 @@ export function ListRow({ href, onClick, leading, title, meta, detail, trailing,
   onClick?: () => void;
   /** Vlevo: portrét, znak nebo `RowIcon`. Vždy 36 px. */
   leading?: ReactNode;
-  /** Hlavní text. Zalomí se nejvýš na dva řádky. */
-  title: ReactNode;
+  /**
+   * Hlavní text. Zalomí se nejvýš na dva řádky. Položka, která je celá jednou větou
+   * a krátký název nemá (výtržnost v hospodě), ho vynechá a větu dá do `detail`.
+   */
+  title?: ReactNode;
   /** Jeden řádek podrobností pod názvem. Smí skončit třemi tečkami. */
   meta?: ReactNode;
   /**
@@ -96,9 +99,11 @@ export function ListRow({ href, onClick, leading, title, meta, detail, trailing,
       {leading && <span className={`shrink-0 flex items-center justify-center ${dense ? "w-6" : "w-9 h-9"}`}>{leading}</span>}
       <span className="flex-1 min-w-0">
         {/* Bez `block`: přebil by display z line-clamp a titulek by se neomezil na dva řádky. */}
-        <span className="text-body font-bold text-ink leading-snug line-clamp-2">{title}</span>
+        {title && <span className="text-body font-bold text-ink leading-snug line-clamp-2">{title}</span>}
         {meta && <span className="block text-meta text-muted truncate">{meta}</span>}
-        {detail && <span className="block text-meta text-ink-light leading-snug mt-0.5">{detail}</span>}
+        {detail && (
+          <span className={`block text-meta leading-snug ${title ? "text-ink-light mt-0.5" : "text-ink"}`}>{detail}</span>
+        )}
       </span>
       {(trailing || showChevron) && (
         <span className="shrink-0 flex items-center gap-2 text-right">
