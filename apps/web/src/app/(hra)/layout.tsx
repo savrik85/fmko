@@ -6,7 +6,6 @@ import { FMSidebar } from "@/components/dashboard/fm-sidebar";
 import { FMTopBar } from "@/components/dashboard/fm-topbar";
 import { BottomNav } from "@/components/dashboard/bottom-nav";
 import { NotificationTitle } from "@/components/dashboard/notification-title";
-import { ViewportDiagnostics } from "@/components/dashboard/viewport-diagnostics";
 import { PageHeaderProvider } from "@/context/page-header-context";
 import { AnnouncementDialog } from "@/components/dashboard/announcement-dialog";
 import { useTeam } from "@/context/team-context";
@@ -77,8 +76,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       />
       <BottomNav />
       <NotificationTitle />
-      {/* DOČASNÉ: výpis rozměrů pro ladění okrajů v PWA, jen na testu. */}
-      <ViewportDiagnostics />
       {/* Jednorázové oznámení všem manažerům — při přehrávání zápasu neruší. */}
       {!isReplay && <AnnouncementDialog />}
     </div>
