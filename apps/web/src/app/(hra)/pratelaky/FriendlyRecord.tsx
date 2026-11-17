@@ -5,7 +5,7 @@ import { useState } from "react";
 import { pocet } from "@/lib/referee-info";
 import { isLightColor, isNeutralExtreme } from "@/lib/team-color";
 import { HeroStat, HeroStats, heroTone } from "@/components/ui/hero-kit";
-import { SectionLabel, DataTable, EntityCell, ListCard, ListRow, ScoreChip } from "@/components/ui";
+import { DataTable, EntityCell, ListCard, ListRow, ScoreChip, ShowMore } from "@/components/ui";
 import {
   ClubCrest, FormChip, PRIMARY_BUTTON, SECONDARY_BUTTON, TeamLink, dayShort, formatCZK, venueText,
   type Crest, type FriendliesData, type HeadToHead,
@@ -53,7 +53,11 @@ function rivalryStory(h: HeadToHead): string {
   return "";
 }
 
-function RivalryCard({ h, me, onChallenge }: { h: HeadToHead; me: FriendliesData["me"]; onChallenge: (teamId: string) => void }) {
+/**
+ * Rival jako řádek: vpravo kdo vede, pod jménem přetahovaná, bilance, příběh a výzva.
+ * Řádek nemá href, protože v něm je odkaz na klub i tlačítko.
+ */
+function RivalryRow({ h, me, onChallenge }: { h: HeadToHead; me: FriendliesData["me"]; onChallenge: (teamId: string) => void }) {
   const head = rivalryHeadline(h);
   const myColor = barColor(me?.crest, "#2D5F2D");
   let theirColor = barColor(h.crest, "#9CA3AF");
@@ -61,36 +65,37 @@ function RivalryCard({ h, me, onChallenge }: { h: HeadToHead; me: FriendliesData
   const pct = (n: number) => `${(n / Math.max(1, h.played)) * 100}%`;
   const stake = stakeText(h.stakeNet);
   return (
-    <div className="card p-4 flex flex-col gap-3">
-      <div className="flex items-start justify-between gap-2">
-        <TeamLink id={h.teamId} name={h.name} />
-        <span className={`font-heading font-[800] text-base whitespace-nowrap tabular-nums ${head.tone}`}>{head.text}</span>
-      </div>
-
-      {/* Přetahovaná: vlevo moje výhry v mé barvě, vpravo jejich v jejich, uprostřed remízy. */}
-      <div className="flex items-center gap-2" aria-label={`${h.won} výher, ${h.drawn} remíz, ${h.lost} proher`}>
-        <ClubCrest crest={me?.crest} size={30} />
-        <div className="flex-1 h-3 rounded-full overflow-hidden flex bg-black/5">
-          <div style={{ width: pct(h.won), backgroundColor: myColor }} />
-          <div style={{ width: pct(h.drawn) }} className="bg-gray-300" />
-          <div style={{ width: pct(h.lost), backgroundColor: theirColor }} />
-        </div>
-        <ClubCrest crest={h.crest} size={30} />
-      </div>
-      <div className="flex justify-between text-sm tabular-nums -mt-1">
-        <span><span className="font-heading font-bold">{h.won}</span> {h.won === 1 ? "výhra" : h.won >= 2 && h.won <= 4 ? "výhry" : "výher"}</span>
-        <span className="text-muted">{pocet(h.drawn, "remíza", "remízy", "remíz")} · skóre {h.goalsFor}:{h.goalsAgainst}</span>
-        <span><span className="font-heading font-bold">{h.lost}</span> {h.lost === 1 ? "prohra" : h.lost >= 2 && h.lost <= 4 ? "prohry" : "proher"}</span>
-      </div>
-
-      <p className="text-sm text-ink">
-        {rivalryStory(h)}
-        {stake && <span className="text-muted"> Celkem {stake}.</span>}
-      </p>
-      <button onClick={() => onChallenge(h.teamId)} className={`self-start ${h.lastResult === "L" ? PRIMARY_BUTTON : SECONDARY_BUTTON}`}>
-        {h.lastResult === "L" ? "Vyzvat na odvetu" : "Vyzvat znovu"}
-      </button>
-    </div>
+    <ListRow
+      title={<TeamLink id={h.teamId} name={h.name} />}
+      trailing={<span className={`text-body font-extrabold whitespace-nowrap tabular-nums ${head.tone}`}>{head.text}</span>}
+      detail={
+        <>
+          {/* Přetahovaná: vlevo moje výhry v mé barvě, vpravo jejich v jejich, uprostřed remízy. */}
+          <span className="flex items-center gap-2 mt-1.5" aria-label={`${h.won} výher, ${h.drawn} remíz, ${h.lost} proher`}>
+            <ClubCrest crest={me?.crest} size={24} />
+            <span className="flex-1 h-3 rounded-full overflow-hidden flex bg-black/5">
+              <span style={{ width: pct(h.won), backgroundColor: myColor }} />
+              <span style={{ width: pct(h.drawn) }} className="bg-gray-300" />
+              <span style={{ width: pct(h.lost), backgroundColor: theirColor }} />
+            </span>
+            <ClubCrest crest={h.crest} size={24} />
+          </span>
+          <span className="flex justify-between gap-2 mt-1 tabular-nums">
+            <span><span className="font-bold text-ink">{h.won}</span> {h.won === 1 ? "výhra" : h.won >= 2 && h.won <= 4 ? "výhry" : "výher"}</span>
+            <span className="text-muted text-center">{pocet(h.drawn, "remíza", "remízy", "remíz")} · skóre {h.goalsFor}:{h.goalsAgainst}</span>
+            <span><span className="font-bold text-ink">{h.lost}</span> {h.lost === 1 ? "prohra" : h.lost >= 2 && h.lost <= 4 ? "prohry" : "proher"}</span>
+          </span>
+          <span className="block mt-1.5 text-ink">
+            {rivalryStory(h)}
+            {stake && <span className="text-muted"> Celkem {stake}.</span>}
+          </span>
+          <span className="block mt-2.5">
+            <button onClick={() => onChallenge(h.teamId)} className={h.lastResult === "L" ? PRIMARY_BUTTON : SECONDARY_BUTTON}>
+              {h.lastResult === "L" ? "Vyzvat na odvetu" : "Vyzvat znovu"}
+            </button>
+          </span>
+        </>
+      } />
   );
 }
 
@@ -192,19 +197,18 @@ export function FriendlyRecord({ data, onChallenge }: { data: FriendliesData; on
       </div>
 
       {r.opponents.length > 0 && (
-        <div>
-          <SectionLabel>Rivalové</SectionLabel>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <ListCard title="Rivalové" count={r.opponents.length} className="overflow-hidden">
+          {/* Od 640 px po dvou vedle sebe jako dřív karty, jinak by se pruh přetahované roztáhl přes celou šířku. */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 -mb-px sm:[&>*:nth-child(odd)]:border-r sm:[&>*:nth-child(odd)]:border-line-soft">
             {(showAllRivals ? r.opponents : r.opponents.slice(0, RIVALS_SHOWN)).map((h) => (
-              <RivalryCard key={h.teamId} h={h} me={data.me} onChallenge={onChallenge} />
+              <RivalryRow key={h.teamId} h={h} me={data.me} onChallenge={onChallenge} />
             ))}
           </div>
-          {r.opponents.length > RIVALS_SHOWN && (
-            <button onClick={() => setShowAllRivals((v) => !v)} className={`w-full mt-3 ${SECONDARY_BUTTON}`}>
-              {showAllRivals ? "Jen hlavní rivalové" : `Všichni rivalové (${r.opponents.length})`}
-            </button>
-          )}
-        </div>
+          {/* Zbytek najednou, jako dřív tlačítko „Všichni rivalové“. */}
+          <ShowMore shown={showAllRivals ? r.opponents.length : Math.min(RIVALS_SHOWN, r.opponents.length)}
+            total={r.opponents.length} step={r.opponents.length - RIVALS_SHOWN}
+            onMore={() => setShowAllRivals(true)} />
+        </ListCard>
       )}
 
       {data.played.length > 0 && (

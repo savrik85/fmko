@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
-import { CollapsibleCard } from "@/components/ui";
+import { CollapsibleCard, ListRow } from "@/components/ui";
 
 const BUS_TIERS_VESNICE = [
   {
@@ -194,23 +194,19 @@ export function BusSelector({
       </div>
 
       {ordered.length > 0 && (
-        <div className="space-y-1">
+        // Objednané autobusy: hustý řádek, obec za názvem šedě, ať řádek nenaroste.
+        <div className="-mx-3 mb-3 border-y border-line-soft">
           {ordered.map((b) => {
             const tier = BUS_TIERS.find((t) => t.key === b.busSize);
             return (
-              <div
-                key={b.id}
-                className="flex items-center gap-2 px-2 py-1.5 rounded bg-pitch-500/10 text-sm"
-              >
-                <span className="text-base">{tier?.icon ?? "🚌"}</span>
-                <span className="font-heading font-bold">
-                  {tier?.label ?? b.busSize}
-                </span>
-                <span className="text-muted">z {b.sourceVillageName}</span>
-                <span className="ml-auto text-pitch-600 font-heading font-bold">
-                  ✓ {b.cost.toLocaleString("cs")} Kč
-                </span>
-              </div>
+              <ListRow key={b.id} dense
+                leading={<span className="text-base leading-none" aria-hidden="true">{tier?.icon ?? "🚌"}</span>}
+                title={<>{tier?.label ?? b.busSize} <span className="text-meta font-normal text-muted">z {b.sourceVillageName}</span></>}
+                trailing={
+                  <span className="text-meta text-pitch-600 font-bold tabular-nums whitespace-nowrap">
+                    ✓ {b.cost.toLocaleString("cs")} Kč
+                  </span>
+                } />
             );
           })}
         </div>

@@ -302,13 +302,13 @@ export function RelationCard({ myTeamId, otherTeamId, otherManagerName }: {
           <div className="text-micro text-muted uppercase tracking-wide font-heading font-bold mb-1.5">
             Společná historie s trenérem {otherManagerName}
           </div>
-          <div className="space-y-1.5 max-h-64 overflow-y-auto">
+          {/* Moment je celý jednou větou, proto hustý řádek bez názvu a ikona bez dlaždice. */}
+          <div className="-mx-4 sm:-mx-5 max-h-64 overflow-y-auto border-y border-line-soft">
             {detail.history.map((m, i) => (
-              <div key={i} className="flex items-start gap-2 text-sm py-1 border-b border-gray-50 last:border-b-0">
-                <span className="shrink-0">{m.icon}</span>
-                <span className="flex-1 text-ink-light leading-snug">{m.text}</span>
-                <span className="shrink-0 text-xs text-muted whitespace-nowrap">{momentAgo(m.date)}</span>
-              </div>
+              <ListRow key={i} dense
+                leading={<span className="text-base leading-none" aria-hidden="true">{m.icon}</span>}
+                detail={m.text}
+                trailing={<span className="text-meta text-muted whitespace-nowrap">{momentAgo(m.date)}</span>} />
             ))}
           </div>
         </div>
@@ -535,18 +535,14 @@ export function FamilyCard({ teamId }: { teamId: string }) {
   if (family.length === 0) return null;
 
   return (
-    <div className="card p-4 sm:p-5">
-      <SectionLabel>Rodina</SectionLabel>
+    // Řádek nemá href: trenér i klub jsou dva různé odkazy.
+    <ListCard title="Rodina">
       {family.map((f) => (
-        <div key={f.teamId} className="py-2 border-b border-gray-50 last:border-b-0">
-          <div className="text-base">
-            <span className="text-muted">{f.label}: </span>
-            <Link href={`/manazer/${f.teamId}`} className="entity-link font-heading font-bold">{f.managerName}</Link>
-          </div>
-          <Link href={`/tym/${f.teamId}`} className="text-sm text-muted hover:text-ink">{f.teamName}</Link>
-        </div>
+        <ListRow key={f.teamId}
+          title={<><span className="font-normal text-muted">{f.label}: </span><Link href={`/manazer/${f.teamId}`} className="entity-link">{f.managerName}</Link></>}
+          meta={<Link href={`/tym/${f.teamId}`} className="hover:text-ink">{f.teamName}</Link>} />
       ))}
-    </div>
+    </ListCard>
   );
 }
 

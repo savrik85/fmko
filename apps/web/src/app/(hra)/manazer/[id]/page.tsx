@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Fragment } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { apiFetch, showError, type ManagerProfile, type Team } from "@/lib/api";
 import { useTeam } from "@/context/team-context";
 import { FaceAvatar } from "@/components/players/face-avatar";
-import { SectionLabel, Spinner, BadgePreview, Tabs, useTabParam, ListCard, ListRow, ListEmpty, RowValue, DeltaMark, type TabItem } from "@/components/ui";
+import { SectionLabel, Spinner, BadgePreview, Tabs, useTabParam, ListCard, ListRow, ListEmpty, RowGroup, RowValue, DeltaMark, type TabItem } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 import { HeroBackdrop } from "@/components/ui/hero-backdrop";
 import { EditManagerModal } from "@/components/manager/EditManagerModal";
@@ -425,10 +425,10 @@ interface AchievementsPayload {
   totalCount: number;
 }
 
-const TIER_COLORS: Record<string, { bg: string; border: string; text: string; label: string }> = {
-  bronze: { bg: "#8B451312", border: "#8B4513", text: "#8B4513", label: "Bronz" },
-  silver: { bg: "#8B8B8B14", border: "#8B8B8B", text: "#595959", label: "Stříbro" },
-  gold:   { bg: "#B8860B18", border: "#B8860B", text: "#8B6914", label: "Zlato" },
+const TIER_COLORS: Record<string, { border: string; text: string; label: string }> = {
+  bronze: { border: "#8B4513", text: "#8B4513", label: "Bronz" },
+  silver: { border: "#8B8B8B", text: "#595959", label: "Stříbro" },
+  gold:   { border: "#B8860B", text: "#8B6914", label: "Zlato" },
 };
 
 function AchievementsSection({ data }: { data: AchievementsPayload }) {
@@ -436,41 +436,37 @@ function AchievementsSection({ data }: { data: AchievementsPayload }) {
   for (const a of data.achievements) byTier[a.tier]?.push(a);
 
   return (
-    <div className="card p-4 sm:p-5">
-      <div className="flex items-center justify-between gap-3 mb-3">
-        <SectionLabel>Úspěchy ({data.earnedCount}/{data.totalCount})</SectionLabel>
-      </div>
+    <ListCard title="Úspěchy" count={`${data.earnedCount}/${data.totalCount}`} className="overflow-hidden">
       {(["gold", "silver", "bronze"] as const).map((tier) => {
         const list = byTier[tier];
         if (!list || list.length === 0) return null;
         const tc = TIER_COLORS[tier];
         const earned = list.filter((a) => !!a.earnedAt);
         return (
-          <div key={tier} className="mt-3">
-            <div className="text-micro text-muted uppercase tracking-wide font-heading font-bold mb-1.5">{tc.label} ({earned.length}/{list.length})</div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+          <Fragment key={tier}>
+            <RowGroup label={<span style={{ color: tc.text }}>{tc.label}</span>} aside={`${earned.length}/${list.length}`} />
+            {/* Po dvou vedle sebe jako dřív dlaždice: pod sebou by karta na telefonu narostla skoro o polovinu.
+                Získaný úspěch má vlevo proužek barvy stupně, nezískaný je vybledlý. Popis je drobným
+                písmem jako dřív, ať řádek na telefonu nenaroste. */}
+            <div className="grid grid-cols-2 -mb-px [&>*]:border-b [&>*]:border-line-soft [&>*:nth-child(odd)]:border-r">
               {list.map((a) => {
                 const isEarned = !!a.earnedAt;
                 return (
-                  <div
-                    key={a.key}
-                    className={`rounded-soft p-2.5 flex items-start gap-2 ${isEarned ? "" : "opacity-40 grayscale"}`}
-                    style={isEarned ? { borderLeft: `3px solid ${tc.border}`, background: tc.bg } : { background: "#f5f5f5" }}
-                    title={a.desc}
-                  >
-                    <div className="text-xl shrink-0 leading-none">{a.icon}</div>
-                    <div className="min-w-0 flex-1">
-                      <div className="font-heading font-bold text-xs truncate">{a.title}</div>
-                      <div className="text-micro text-muted leading-snug line-clamp-2">{a.desc}</div>
-                    </div>
+                  <div key={a.key} title={a.desc}
+                    className={isEarned ? "" : "opacity-40 grayscale"}
+                    style={isEarned ? { boxShadow: `inset 3px 0 0 ${tc.border}` } : undefined}>
+                    <ListRow dense
+                      leading={<span className="text-lg leading-none" aria-hidden="true">{a.icon}</span>}
+                      title={a.title}
+                      detail={<span className="block text-micro text-muted">{a.desc}</span>} />
                   </div>
                 );
               })}
             </div>
-          </div>
+          </Fragment>
         );
       })}
-    </div>
+    </ListCard>
   );
 }
 

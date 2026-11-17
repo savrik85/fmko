@@ -7,7 +7,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, apiAction, type Player } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
-import { Spinner, Button, PositionBadge, BadgePreview, JerseyPreview, DataTable, EntityCell, ListCard, type DataColumn } from "@/components/ui";
+import { Spinner, Button, PositionBadge, BadgePreview, JerseyPreview, DataTable, EntityCell, ListCard, ListRow, type DataColumn } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 import { BusSelector } from "./BusSelector";
 import { RefereeCard } from "@/components/match/referee-card";
@@ -1380,7 +1380,7 @@ function MatchPage() {
               <span className="font-heading font-bold text-sm uppercase text-muted">Vybrat, {slots[editSlot].pos}</span>
               <button onClick={() => setEditSlot(null)} className="w-8 h-8 flex items-center justify-center text-muted hover:text-ink text-xl">✕</button>
             </div>
-            <div className="overflow-y-auto" style={{ maxHeight: "calc(65vh - 48px)" }}>
+            <div className="overflow-y-auto divide-y divide-line-soft" style={{ maxHeight: "calc(65vh - 48px)" }}>
               {players
                 .filter((p) => !selected.includes(p.id) || p.id === selected[editSlot])
                 .sort((a, b) => {
@@ -1392,23 +1392,19 @@ function MatchPage() {
                   const isCurrent = p.id === selected[editSlot];
                   const isAbsent = p.absent;
                   return (
-                    <button key={p.id} disabled={isAbsent}
-                      onClick={() => { placeInLineup(editSlot, p.id); setEditSlot(null); }}
-                      className={`w-full flex items-center gap-3 px-4 py-3 border-b border-gray-50 text-left ${
-                        isAbsent ? "opacity-30" : isCurrent ? "bg-pitch-50" : "active:bg-gray-100"
-                      }`}>
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-heading font-bold text-xs shrink-0 ${POS_BG[p.position]}`}>
-                        {p.squadNumber ?? "?"}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-heading font-bold text-sm">{p.lastName}</span>
-                          <PositionBadge position={p.position as Pos} />
-                        </div>
-                        <div className="text-xs text-muted">{p.firstName} · {p.overallRating} rat · {p.condition}%</div>
-                      </div>
-                      <span className="text-sm shrink-0">{moraleIcon(p.morale)}</span>
-                    </button>
+                    // Chybějícího hráče nejde vybrat: jeho řádek nedostane onClick, je to jen vybledlý text.
+                    <div key={p.id} className={isAbsent ? "opacity-30" : isCurrent ? "bg-pitch-50" : "active:bg-gray-100"}>
+                      <ListRow chevron={false}
+                        onClick={isAbsent ? undefined : () => { placeInLineup(editSlot, p.id); setEditSlot(null); }}
+                        leading={
+                          <span className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-heading font-bold text-xs ${POS_BG[p.position]}`}>
+                            {p.squadNumber ?? "?"}
+                          </span>
+                        }
+                        title={<>{p.lastName} <span className="inline-block align-middle"><PositionBadge position={p.position as Pos} /></span></>}
+                        meta={<>{p.firstName} · {p.overallRating} rat · {p.condition}%</>}
+                        trailing={<span className="text-sm">{moraleIcon(p.morale)}</span>} />
+                    </div>
                   );
                 })}
             </div>

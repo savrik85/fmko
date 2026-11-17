@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, apiAction, type Player } from "@/lib/api";
 import Link from "next/link";
@@ -524,69 +524,47 @@ export default function TrainingPage() {
             <div className="mt-3 pt-3 border-t border-gray-100">
               <div className="text-micro text-muted font-heading uppercase tracking-wide mb-2">Kdo tomu pomáhá</div>
 
-              {forecast.managerImpact && (() => {
-                const mi = forecast.managerImpact;
-                let face: Record<string, unknown> | null = null;
-                try { face = mi.avatar ? JSON.parse(mi.avatar) : null; }
-                catch (e) { console.error("manager avatar parse:", e); }
-                const positive = !mi.detail.startsWith("-");
-                return (
-                  <Link
-                    href={`/manazer/${teamId}`}
-                    className="flex items-center gap-2.5 py-1.5 hover:bg-gray-50 rounded-soft px-1 -mx-1 transition-colors"
-                  >
-                    <div className="shrink-0 w-9 h-9 rounded-full overflow-hidden bg-gray-100 flex items-center justify-center">
-                      {face ? <FaceAvatar faceConfig={face} size={30} /> : <span className="text-base">🧑‍🏫</span>}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="font-heading font-bold text-sm leading-tight truncate">{mi.name}</div>
-                      <div className="text-micro text-muted leading-tight">
-                        {mi.role}{mi.youthDetail ? ` · ${mi.youthDetail}` : ""}
-                      </div>
-                    </div>
-                    <span className={`shrink-0 text-xs font-heading font-bold ${positive ? "text-pitch-600" : "text-card-red"}`}>
-                      {mi.detail}
-                    </span>
-                  </Link>
-                );
-              })()}
+              {/* Husté řádky s malým portrétem: běžný řádek by byl na telefonu o čtvrtinu vyšší.
+                  Přínos vpravo se na telefonu zalomí do dvou řádků, ať zbyde místo na jméno. */}
+              <div className="-mx-4 sm:-mx-5 border-t border-line-soft">
+                {forecast.managerImpact && (() => {
+                  const mi = forecast.managerImpact;
+                  let face: Record<string, unknown> | null = null;
+                  try { face = mi.avatar ? JSON.parse(mi.avatar) : null; }
+                  catch (e) { console.error("manager avatar parse:", e); }
+                  const positive = !mi.detail.startsWith("-");
+                  return (
+                    <ListRow dense href={`/manazer/${teamId}`}
+                      leading={<ImpactAvatar face={face} fallback="🧑‍🏫" />}
+                      title={mi.name}
+                      meta={mi.role}
+                      // Práce s mládeží je u trenéra navíc a nesmí se useknout, proto pod roli celá.
+                      detail={mi.youthDetail ?? undefined}
+                      trailing={<ImpactValue tone={positive ? "plus" : "minus"}>{mi.detail}</ImpactValue>} />
+                  );
+                })()}
 
-              {(forecast.staffImpact ?? []).map((st) => {
-                let face: Record<string, unknown> | null = null;
-                try { face = st.avatar ? JSON.parse(st.avatar) : null; }
-                catch (e) { console.error("staff avatar parse:", e); }
-                return (
-                  <Link
-                    key={st.staffId}
-                    href="/zamestnanci"
-                    className="flex items-center gap-2.5 py-1.5 hover:bg-gray-50 rounded-soft px-1 -mx-1 transition-colors"
-                  >
-                    <div className="shrink-0 w-9 h-9 rounded-full overflow-hidden bg-gray-100 flex items-center justify-center">
-                      {face ? <FaceAvatar faceConfig={face} size={30} /> : <span className="text-base">👔</span>}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="font-heading font-bold text-sm leading-tight truncate">{st.name}</div>
-                      <div className="text-micro text-muted leading-tight">{st.role}</div>
-                    </div>
-                    <span className="shrink-0 text-xs font-heading font-bold text-pitch-600">{st.detail}</span>
-                  </Link>
-                );
-              })}
+                {(forecast.staffImpact ?? []).map((st) => {
+                  let face: Record<string, unknown> | null = null;
+                  try { face = st.avatar ? JSON.parse(st.avatar) : null; }
+                  catch (e) { console.error("staff avatar parse:", e); }
+                  return (
+                    <ListRow key={st.staffId} dense href="/zamestnanci"
+                      leading={<ImpactAvatar face={face} fallback="👔" />}
+                      title={st.name}
+                      meta={st.role}
+                      trailing={<ImpactValue tone="plus">{st.detail}</ImpactValue>} />
+                  );
+                })}
 
-              {(forecast.equipmentImpact ?? []).map((eq) => (
-                <Link
-                  key={eq.label}
-                  href="/vybaveni"
-                  className="flex items-center gap-2.5 py-1.5 hover:bg-gray-50 rounded-soft px-1 -mx-1 transition-colors"
-                >
-                  <div className="shrink-0 w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-base">🎒</div>
-                  <div className="min-w-0 flex-1">
-                    <div className="font-heading font-bold text-sm leading-tight truncate">{eq.label}</div>
-                    <div className="text-micro text-muted leading-tight">Vybavení</div>
-                  </div>
-                  <span className="shrink-0 text-xs font-heading font-bold text-pitch-600">{eq.detail}</span>
-                </Link>
-              ))}
+                {(forecast.equipmentImpact ?? []).map((eq) => (
+                  <ListRow key={eq.label} dense href="/vybaveni"
+                    leading={<ImpactAvatar face={null} fallback="🎒" />}
+                    title={eq.label}
+                    meta="Vybavení"
+                    trailing={<ImpactValue tone="plus">{eq.detail}</ImpactValue>} />
+                ))}
+              </div>
             </div>
           )}
 
@@ -618,48 +596,56 @@ export default function TrainingPage() {
           Vybraní hráči dostanou od trenéra volno, nejbližší trénink vynechají. Neztratí kondici,
           ale ani se nezlepší. Po proběhnutí tréninku se volno automaticky zruší.
         </p>
-        <div className="mt-3 max-h-80 overflow-y-auto rounded-soft border border-gray-100 divide-y divide-gray-50">
+        <div className="-mx-4 sm:-mx-5 mt-3 max-h-80 overflow-y-auto border-y border-line-soft divide-y divide-line-soft">
           {squad.map((p) => {
             const checked = restIds.has(p.id);
             // Zraněnému nejde volno dát (netrénuje tak jako tak), ale dřív nastavené jde odvolat
             const locked = !!p.injury && !checked;
             const cond = p.lifeContext?.condition ?? 100;
+            const checkboxId = `rest-${p.id}`;
             return (
-              <div
-                key={p.id}
-                onClick={() => { if (!locked) toggleRest(p.id); }}
-                className={`flex items-center gap-3 px-3 py-2 ${locked ? "opacity-40" : "cursor-pointer hover:bg-gray-50"} ${checked ? "bg-pitch-50/40" : ""}`}
-              >
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  disabled={locked}
-                  onChange={() => toggleRest(p.id)}
-                  onClick={(e) => e.stopPropagation()}
-                  className="accent-pitch-500 w-4 h-4 shrink-0"
-                />
-                {/* Jméno bere zbylé místo, pozice i kondice mají pevnou šířku — jinak by
-                    pozice plavala podle délky jména a sloupce by se na mobilu rozjely. */}
-                <Link
-                  href={`/hrac/${p.id}`}
-                  onClick={(e) => e.stopPropagation()}
-                  className="font-heading font-bold text-base hover:text-pitch-500 transition-colors truncate flex-1 min-w-0"
-                >
-                  {p.first_name} {p.last_name}
-                </Link>
-                <span className="text-sm text-muted shrink-0 w-9">{p.position}</span>
-                {p.injury ? (
-                  <span className="text-sm text-card-red shrink-0 text-right">
-                    🤕<span className="hidden sm:inline"> Zraněný, netrénuje</span>
-                  </span>
-                ) : (
-                  <span className="text-sm text-muted shrink-0 text-right w-20 sm:w-28">
-                    <span className="hidden sm:inline">Kondice </span>
-                    <span className={`font-heading font-bold tabular-nums ${cond >= 70 ? "text-pitch-500" : cond >= 40 ? "text-gold-600" : "text-card-red"}`}>
-                      {cond}
-                    </span>
-                  </span>
-                )}
+              <div key={p.id}
+                className={`${locked ? "opacity-40" : "hover:bg-surface-2 transition-colors"} ${checked ? "bg-pitch-50/40" : ""}`}>
+                <ListRow dense
+                  leading={
+                    <>
+                      {/* Popisek zaškrtávátka přes celý řádek: klik kamkoli do řádku přepne volno.
+                          Zaškrtávátko i jméno (odkaz na hráče) leží nad ním, takže se nic nevnořuje
+                          a klik na jméno volno nepřepne. Zraněnému zamčené zaškrtávátko nic nepřepne. */}
+                      <label htmlFor={checkboxId} className={`absolute inset-0 ${locked ? "" : "cursor-pointer"}`} />
+                      <input
+                        id={checkboxId}
+                        type="checkbox"
+                        checked={checked}
+                        disabled={locked}
+                        onChange={() => toggleRest(p.id)}
+                        className="relative accent-pitch-500 w-4 h-4"
+                      />
+                    </>
+                  }
+                  title={
+                    <Link href={`/hrac/${p.id}`} className="relative hover:text-pitch-500 transition-colors">
+                      {p.first_name} {p.last_name}
+                    </Link>
+                  }
+                  trailing={
+                    // Pozice i kondice mají pevnou šířku, jinak by sloupce plavaly podle délky jména.
+                    <>
+                      <span className="text-meta text-muted w-9 text-left">{p.position}</span>
+                      {p.injury ? (
+                        <span className="text-meta text-card-red">
+                          🤕<span className="hidden sm:inline"> Zraněný, netrénuje</span>
+                        </span>
+                      ) : (
+                        <span className="text-meta text-muted w-20 sm:w-28">
+                          <span className="hidden sm:inline">Kondice </span>
+                          <span className={`font-bold tabular-nums ${cond >= 70 ? "text-pitch-500" : cond >= 40 ? "text-gold-600" : "text-card-red"}`}>
+                            {cond}
+                          </span>
+                        </span>
+                      )}
+                    </>
+                  } />
               </div>
             );
           })}
@@ -747,6 +733,8 @@ export default function TrainingPage() {
               {result.moraleChanges && result.moraleChanges.length > 0 && (
                 <div className="mt-3 pt-3 border-t border-gray-100">
                   <div className="text-micro text-muted font-heading uppercase tracking-wide mb-1.5">Nálada po tréninku</div>
+                  {/* Dvojice hráč a změna nálady, ne seznam položek (plán, sekce 5): hustý řádek
+                      ListRow má minimum 40 px a tyhle krátké řádky by na telefonu narostly o 70 %. */}
                   <div className="space-y-1">
                     {result.moraleChanges.map((m, i) => (
                       <div key={`${m.playerId}-${i}`} className="flex items-center justify-between gap-3 text-sm">
@@ -778,7 +766,8 @@ export default function TrainingPage() {
                   Zlepšení ({totalUpgrades})
                   {groupedNegative.length > 0 && <span className="text-card-red font-normal text-xs ml-1">· {groupedNegative.length} pokles</span>}
                 </summary>
-                <div className="px-3 sm:px-4 pb-3 sm:pb-4 space-y-1">
+                {/* Řádek na hráče: vlevo součet, pod jménem pruhy atributů. Bez href, jméno je odkaz. */}
+                <div className="border-t border-line-soft">
                   {(() => {
                     const maxDelta = Math.max(
                       1,
@@ -791,48 +780,46 @@ export default function TrainingPage() {
                           const posAttrs = data.attrs.filter((a) => a.change > 0).slice(0, 5);
                           const totalGain = data.attrs.reduce((s, a) => s + Math.max(0, a.change), 0);
                           return (
-                            <div key={name} className="py-1.5 border-b border-gray-50 last:border-b-0">
-                              <div className="flex items-baseline gap-2">
-                                <span className="font-heading font-[800] text-pitch-500 text-sm tabular-nums w-7 text-center shrink-0">+{totalGain}</span>
-                                <span className="text-sm"><PlayerLink id={data.playerId} name={name} playerMap={playerMap} /></span>
-                              </div>
-                              <div className="mt-1 ml-9 space-y-1">
-                                {posAttrs.map((a, i) => (
-                                  <div key={i} className="flex items-center gap-2">
-                                    <span className="text-xs w-4 text-center shrink-0">{ATTR_EMOJI[a.attribute] ?? ""}</span>
-                                    <span className="text-xs text-pitch-600 w-20 sm:w-24 shrink-0 truncate">{ATTR_LABELS[a.attribute] ?? a.attribute}</span>
-                                    <div className="flex-1 bg-gray-100 rounded-full h-1.5 overflow-hidden min-w-0">
-                                      <div className="h-full bg-pitch-400 rounded-full transition-all duration-700" style={{ width: `${(a.change / maxDelta) * 100}%` }} />
-                                    </div>
-                                    <span className="font-heading font-bold text-xs tabular-nums text-pitch-500 w-7 text-right shrink-0">+{a.change}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
+                            <ListRow key={name} dense
+                              leading={<span className="text-meta font-extrabold text-pitch-500 tabular-nums">+{totalGain}</span>}
+                              title={<PlayerLink id={data.playerId} name={name} playerMap={playerMap} />}
+                              detail={
+                                <span className="block mt-1 space-y-1">
+                                  {posAttrs.map((a, i) => (
+                                    <span key={i} className="flex items-center gap-2">
+                                      <span className="text-xs w-4 text-center shrink-0">{ATTR_EMOJI[a.attribute] ?? ""}</span>
+                                      <span className="text-xs text-pitch-600 w-20 sm:w-24 shrink-0 truncate">{ATTR_LABELS[a.attribute] ?? a.attribute}</span>
+                                      <span className="flex-1 bg-gray-100 rounded-full h-1.5 overflow-hidden min-w-0">
+                                        <span className="block h-full bg-pitch-400 rounded-full transition-all duration-700" style={{ width: `${(a.change / maxDelta) * 100}%` }} />
+                                      </span>
+                                      <span className="font-bold text-xs tabular-nums text-pitch-500 w-7 text-right shrink-0">+{a.change}</span>
+                                    </span>
+                                  ))}
+                                </span>
+                              } />
                           );
                         })}
                         {groupedNegative.map(([name, data]) => {
                           const negAttrs = data.attrs.slice(0, 5);
                           const totalLoss = data.attrs.reduce((s, a) => s + a.change, 0);
                           return (
-                            <div key={name} className="py-1.5 border-b border-gray-50 last:border-b-0">
-                              <div className="flex items-baseline gap-2">
-                                <span className="font-heading font-[800] text-card-red text-sm tabular-nums w-7 text-center shrink-0">{totalLoss}</span>
-                                <span className="text-sm"><PlayerLink id={data.playerId} name={name} playerMap={playerMap} /></span>
-                              </div>
-                              <div className="mt-1 ml-9 space-y-1">
-                                {negAttrs.map((a, i) => (
-                                  <div key={i} className="flex items-center gap-2">
-                                    <span className="text-xs w-4 text-center shrink-0">{ATTR_EMOJI[a.attribute] ?? ""}</span>
-                                    <span className="text-xs text-card-red w-20 sm:w-24 shrink-0 truncate">{ATTR_LABELS[a.attribute] ?? a.attribute}</span>
-                                    <div className="flex-1 bg-gray-100 rounded-full h-1.5 overflow-hidden min-w-0">
-                                      <div className="h-full bg-card-red rounded-full transition-all duration-700" style={{ width: `${(Math.abs(a.change) / maxDelta) * 100}%` }} />
-                                    </div>
-                                    <span className="font-heading font-bold text-xs tabular-nums text-card-red w-7 text-right shrink-0">{a.change}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
+                            <ListRow key={name} dense
+                              leading={<span className="text-meta font-extrabold text-card-red tabular-nums">{totalLoss}</span>}
+                              title={<PlayerLink id={data.playerId} name={name} playerMap={playerMap} />}
+                              detail={
+                                <span className="block mt-1 space-y-1">
+                                  {negAttrs.map((a, i) => (
+                                    <span key={i} className="flex items-center gap-2">
+                                      <span className="text-xs w-4 text-center shrink-0">{ATTR_EMOJI[a.attribute] ?? ""}</span>
+                                      <span className="text-xs text-card-red w-20 sm:w-24 shrink-0 truncate">{ATTR_LABELS[a.attribute] ?? a.attribute}</span>
+                                      <span className="flex-1 bg-gray-100 rounded-full h-1.5 overflow-hidden min-w-0">
+                                        <span className="block h-full bg-card-red rounded-full transition-all duration-700" style={{ width: `${(Math.abs(a.change) / maxDelta) * 100}%` }} />
+                                      </span>
+                                      <span className="font-bold text-xs tabular-nums text-card-red w-7 text-right shrink-0">{a.change}</span>
+                                    </span>
+                                  ))}
+                                </span>
+                              } />
                           );
                         })}
                       </>
@@ -992,6 +979,24 @@ export default function TrainingPage() {
         Tréninky probíhají automaticky ve dnech z tvého plánu, v den zápasu se netrénuje
       </p>
     </div>
+  );
+}
+
+/** Malý portrét do hustého řádku „Kdo tomu pomáhá“; bez obličeje emoji role. */
+function ImpactAvatar({ face, fallback }: { face: Record<string, unknown> | null; fallback: string }) {
+  return (
+    <span className="w-6 h-6 rounded-full overflow-hidden bg-surface-3 flex items-center justify-center">
+      {face ? <FaceAvatar faceConfig={face} size={20} /> : <span className="text-meta leading-none" aria-hidden="true">{fallback}</span>}
+    </span>
+  );
+}
+
+/** Přínos vpravo v řádku. Na telefonu se zalomí, aby jméno nezůstalo na pár písmenech. */
+function ImpactValue({ tone, children }: { tone: "plus" | "minus"; children: ReactNode }) {
+  return (
+    <span className={`block max-w-[120px] sm:max-w-none text-meta font-bold leading-tight ${tone === "plus" ? "text-pitch-600" : "text-card-red"}`}>
+      {children}
+    </span>
   );
 }
 
