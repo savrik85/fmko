@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { useMenuBadges, MenuBadgesState } from "@/hooks/use-menu-badges";
-import { MenuLineIcon } from "@/components/dashboard/menu-line-icons";
 import { MENU_BADGE_BG, MENU_FOOTER_ITEMS, menuBadgeFor, menuGroupsFor, type MenuItem } from "@/lib/menu-structure";
 
 interface Section {
@@ -55,37 +54,42 @@ function getTileBadge(href: string, badges: MenuBadgesState): TileBadge | null {
 const ADMIN_ITEM: MenuItem = { href: "/admin", icon: "🛠️", label: "Administrace", color: "#8B4513" };
 
 /**
- * Skupina menu: bílý čtvereček se zelenou kreslenou ikonou, název pod ním,
- * po čtyřech v řadě. Ikony mají stejný rukopis jako spodní lišta.
- * Odznak sedí na rohu čtverečku, takže název má celou šířku sloupce.
+ * Skupina menu: bílé zaoblené dlaždice po třech, velká barevná ikona v měkké
+ * záři barvy položky a název pod ní. Odznak sedí v pravém horním rohu dlaždice.
  */
 function MenuSection({ title, items, badges }: { title: string; items: MenuItem[]; badges: MenuBadgesState }) {
   return (
     <section className="mb-6">
-      <h2 className="px-1 mb-2.5 text-xs font-heading font-bold text-muted uppercase tracking-wide">{title}</h2>
-      <div className="grid grid-cols-4 gap-x-2 gap-y-4">
+      <h2 className="px-1 mb-2.5 text-[17px] font-bold text-ink leading-tight">{title}</h2>
+      <div className="grid grid-cols-3 gap-2.5">
         {items.map((item) => {
           const badge = getTileBadge(item.href, badges);
           return (
             <Link
               key={item.href}
               href={item.href}
-              className="flex flex-col items-center gap-1.5 min-w-0 active:scale-95 transition-transform"
+              className="relative flex flex-col items-center gap-1.5 min-w-0 rounded-[22px] bg-surface px-1.5 pt-3 pb-[13px] shadow-[0_1px_1px_rgba(60,45,20,0.05),0_10px_20px_-14px_rgba(60,45,20,0.45)] active:scale-[0.97] transition-transform"
             >
-              <span className="relative w-14 h-14 rounded-2xl flex items-center justify-center text-[26px] leading-none bg-surface text-pitch-500 shadow-[0_1px_2px_rgba(35,40,31,0.12),0_0_0_1px_rgba(35,40,31,0.05)]">
-                <MenuLineIcon href={item.href} fallback={item.icon} />
-                {badge && badge.type === "count" && badge.count > 0 && (
-                  <span className={`absolute -top-1.5 -right-1.5 ${badge.bg ?? "bg-card-red"} text-white text-[10px] font-bold min-w-5 h-5 px-1 rounded-full flex items-center justify-center border-2 border-paper`}>
-                    {badge.count > 99 ? "99+" : badge.count}
-                  </span>
-                )}
-                {badge && badge.type === "tag" && (
-                  <span className={`absolute -top-1.5 -right-2.5 ${badge.bg ?? "bg-pitch-500"} text-white text-[9px] font-bold h-5 px-1.5 rounded-full flex items-center border-2 border-paper`}>
-                    {badge.label}
-                  </span>
-                )}
+              <span
+                className="w-[58px] h-[58px] rounded-full flex items-center justify-center text-[31px] leading-none"
+                style={{
+                  background: `radial-gradient(circle at 50% 52%, color-mix(in srgb, ${item.color} 50%, transparent) 0, color-mix(in srgb, ${item.color} 22%, transparent) 46%, transparent 72%)`,
+                }}
+                aria-hidden="true"
+              >
+                {item.icon}
               </span>
-              <span className="w-full text-[11px] font-medium text-ink text-center leading-tight break-words">{item.label}</span>
+              <span className="w-full text-[13.5px] font-semibold text-ink text-center leading-[1.15] break-words">{item.label}</span>
+              {badge && badge.type === "count" && badge.count > 0 && (
+                <span className={`absolute top-2 right-2 ${badge.bg ?? "bg-card-red"} text-white text-[11px] font-bold min-w-[21px] h-[21px] px-1.5 rounded-full flex items-center justify-center`}>
+                  {badge.count > 99 ? "99+" : badge.count}
+                </span>
+              )}
+              {badge && badge.type === "tag" && (
+                <span className={`absolute top-2 right-2 ${badge.bg ?? "bg-pitch-500"} text-white text-[10px] font-bold h-[21px] px-1.5 rounded-full flex items-center`}>
+                  {badge.label}
+                </span>
+              )}
             </Link>
           );
         })}
