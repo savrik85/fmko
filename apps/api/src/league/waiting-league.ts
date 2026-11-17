@@ -13,6 +13,7 @@
  * domlouvaly přáteláky a psalo se o nich ve Zpravodaji.
  */
 
+import { cancelAiClubFriendlies } from "../ai-clubs/overwrite";
 import { logger } from "../lib/logger";
 
 const M = "waiting-league";
@@ -38,7 +39,9 @@ export interface CloseWaitingLeagueResult {
   demandsWithdrawn: number;
   friendlyOffersWithdrawn: number;
   challengesDeclined: number;
-  /** Co už s lidmi proběhlo a zavření to nevrací: domluvené přáteláky a dokončené přestupy. */
+  /** Domluvené přáteláky: zruší se, sázka se vrátí, lidský soupeř dostane SMS. */
+  friendliesCancelled: string[];
+  /** Co už s lidmi proběhlo a zavření to nevrací: dokončené přestupy. */
   keptWithHumans: string[];
 }
 
@@ -51,7 +54,7 @@ export async function closeWaitingLeague(
 ): Promise<CloseWaitingLeagueResult> {
   const { dryRun } = opts;
   const now = (opts.now ?? new Date()).toISOString();
-  const empty = { leagueIds: [], listingsWithdrawn: 0, offersWithdrawn: 0, demandsWithdrawn: 0, friendlyOffersWithdrawn: 0, challengesDeclined: 0, keptWithHumans: [] };
+  const empty = { leagueIds: [], listingsWithdrawn: 0, offersWithdrawn: 0, demandsWithdrawn: 0, friendlyOffersWithdrawn: 0, challengesDeclined: 0, friendliesCancelled: [], keptWithHumans: [] };
   const stop = (reason: string): CloseWaitingLeagueResult => ({ ok: false, reason, dryRun, ...empty });
 
   const league = await db.prepare("SELECT id, name, COALESCE(league_type, 'senior') AS league_type, status FROM leagues WHERE id = ?")
@@ -82,6 +85,7 @@ export async function closeWaitingLeague(
     demandsWithdrawn: await count(`SELECT COUNT(*) AS n FROM transfer_demands WHERE status = 'active' AND team_id IN (${teamsSql})`),
     friendlyOffersWithdrawn: await count(`SELECT COUNT(*) AS n FROM friendly_offers WHERE status = 'open' AND team_id IN (${teamsSql})`),
     challengesDeclined: 0,
+    friendliesCancelled: [],
     keptWithHumans: [],
   };
   // Nabídky v obou směrech: dva výskyty seznamu týmů, každý se svými parametry.
@@ -100,7 +104,7 @@ export async function closeWaitingLeague(
       WHERE c.status = 'accepted' AND (c.challenger_team_id IN (${teamsSql}) OR c.challenged_team_id IN (${teamsSql}))`,
   ).bind(...leagueIds, ...leagueIds).all<{ match_date: string | null; challenger: string; challenged: string }>()
     .catch((e) => { logger.warn({ module: M }, "domluvené přáteláky", e); return { results: [] }; });
-  for (const a of accepted.results) result.keptWithHumans.push(`přátelák ${a.challenger} – ${a.challenged} (${a.match_date ?? "?"})`);
+  for (const a of accepted.results) result.friendliesCancelled.push(`${a.challenger} – ${a.challenged} (${a.match_date ?? "?"})`);
   const sold = await db.prepare(
     `SELECT o.offer_amount, f.name AS buyer, tt.name AS seller, p.first_name || ' ' || p.last_name AS player
        FROM transfer_offers o JOIN teams f ON f.id = o.from_team_id JOIN teams tt ON tt.id = o.to_team_id
@@ -126,6 +130,16 @@ export async function closeWaitingLeague(
           AND (challenger_team_id IN (${teamsSql}) OR challenged_team_id IN (${teamsSql}))`,
     ).bind(...leagueIds, ...leagueIds),
   ]);
+  // Domluvené přáteláky AI klubů zavřené ligy: zrušit, sázku vrátit, lidskému soupeři SMS.
+  const clubs = await db.prepare(`SELECT id, name FROM teams WHERE league_id IN (${marks})`).bind(...leagueIds)
+    .all<{ id: string; name: string }>();
+  for (const club of clubs.results) {
+    await cancelAiClubFriendlies(db, club.id, {
+      clubName: club.name,
+      reason: `${league.name} se zatím nehraje, klub ${club.name} čeká na otevření soutěže.`,
+      smsReason: "jeho soutěž se zatím nehraje",
+    }, opts.now ?? new Date());
+  }
   logger.info({ module: M }, `${league.name} zavřena do první přihlášky`);
   return result;
 }
