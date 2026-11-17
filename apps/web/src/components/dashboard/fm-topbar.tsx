@@ -55,8 +55,10 @@ export function FMTopBar() {
       className="on-dark topbar-club flex items-center pl-1 pr-2 sm:pl-3 sm:pr-5 gap-1 sm:gap-3 shrink-0"
       style={{
         backgroundColor: background,
-        height: "calc(3.5rem + env(safe-area-inset-top, 0px))",
-        paddingTop: "env(safe-area-inset-top, 0px)",
+        // --edge-blur-clearance: kousek navíc v nainstalované aplikaci na iOS,
+        // aby text lišty neležel v rozmazání pod hodinami (globals.css).
+        height: "calc(3.5rem + env(safe-area-inset-top, 0px) + var(--edge-blur-clearance, 0px))",
+        paddingTop: "calc(env(safe-area-inset-top, 0px) + var(--edge-blur-clearance, 0px))",
       }}
     >
       <button
