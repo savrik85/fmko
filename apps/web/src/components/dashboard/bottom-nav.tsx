@@ -27,6 +27,15 @@ function useSchodekViewportu(): number {
       // Jen na výšku — na šířku se rozměry takhle porovnávat nedají.
       const naVysku = window.innerHeight > window.innerWidth;
       if (!naVysku || !window.screen?.height) { setSchodek(0); return; }
+      // Schodek vzniká jen s průhledným stavovým řádkem, kdy je horní inset
+      // nenulový. S neprůhledným řádkem je okno kratší právem (řádek leží nad
+      // ním), inset je 0 a lišta si musí nechat místo na systémovou čárku.
+      const probe = document.createElement("div");
+      probe.style.cssText = "position:fixed;visibility:hidden;pointer-events:none;height:env(safe-area-inset-top, 0px)";
+      document.body.appendChild(probe);
+      const topInset = probe.getBoundingClientRect().height;
+      probe.remove();
+      if (topInset < 1) { setSchodek(0); return; }
       const rozdil = Math.round(window.screen.height - window.innerHeight);
       // Nad 200 px už to nebude safe-area, ale něco jiného (klávesnice apod.).
       setSchodek(rozdil > 4 && rozdil < 200 ? rozdil : 0);
