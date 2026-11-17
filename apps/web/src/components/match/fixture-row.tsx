@@ -94,14 +94,20 @@ function Board({ score, kickoff, winner, color }: { score?: FixtureScore | null;
       </span>
     );
   }
-  const digit = (v: number, side: "home" | "away") => (
-    <span className={`tabular-nums ${winner && winner !== side ? "text-white/55" : "text-white"}`}>{v}</span>
-  );
+  // Světlá tabule (šedá jako neutrální štítek, tmavá čísla, poražený šedě). Černá
+  // působila na telefonu v dlouhém rozpisu příliš tvrdě. V barvě klubu zůstává
+  // tabule plná a čísla bílá, aby byla na barevném podkladu čitelná.
+  const onColor = !!color;
+  const digit = (v: number, side: "home" | "away") => {
+    const lost = !!winner && winner !== side;
+    const tone = onColor ? (lost ? "text-white/55" : "text-white") : (lost ? "text-muted-light" : "text-ink");
+    return <span className={`tabular-nums ${tone}`}>{v}</span>;
+  };
   return (
     // Na mobilu čísla sedí přesně na řádky klubů (znak 28 px + mezera 8 px → středy 36 px od sebe).
-    <span style={color ? { background: color } : undefined} className="flex flex-col sm:flex-row items-center justify-center gap-[18px] sm:gap-1.5 rounded-md bg-ink px-2.5 py-[5px] sm:py-0 sm:h-9 min-w-[2.5rem] sm:min-w-[3.75rem] font-heading font-[800] text-lg leading-none">
+    <span style={color ? { background: color } : undefined} className={`flex flex-col sm:flex-row items-center justify-center gap-[18px] sm:gap-1.5 rounded-md ${onColor ? "" : "bg-surface-3"} px-2.5 py-[5px] sm:py-0 sm:h-9 min-w-[2.5rem] sm:min-w-[3.75rem] font-heading font-[800] text-lg leading-none`}>
       {digit(score.home, "home")}
-      <span className="hidden sm:inline text-white/40 font-bold">:</span>
+      <span className={`hidden sm:inline font-bold ${onColor ? "text-white/40" : "text-muted"}`}>:</span>
       {digit(score.away, "away")}
     </span>
   );
