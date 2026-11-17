@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
-import { Card, CardBody, SectionLabel, Spinner } from "@/components/ui";
+import { Card, CardBody, SectionLabel, Spinner, ListCard, ListRow, ListEmpty } from "@/components/ui";
 import { DistrictMap, clubBadgeSvg, villageSizeLabel, type MapVillage } from "@/components/map/DistrictMap";
 
 interface MapResponse {
@@ -15,6 +15,18 @@ interface MapResponse {
 
 function Badge({ club, size }: { club: MapVillage["clubs"][number]; size: number }) {
   return <span className="inline-block shrink-0" style={{ width: size, height: size }} dangerouslySetInnerHTML={{ __html: clubBadgeSvg(club, size) }} />;
+}
+
+/** Znaky až tří klubů obce přes sebe, zmenšené tak, aby se vešly do 36px místa vlevo v řádku. */
+function BadgeStack({ clubs }: { clubs: MapVillage["clubs"] }) {
+  const shown = clubs.slice(0, 3);
+  // 1 × 32, 2 × 24 a 3 × 20 px; s překryvem 12 px vychází nejvýš 36 px.
+  const size = shown.length === 1 ? 32 : shown.length === 2 ? 24 : 20;
+  return (
+    <span className="flex -space-x-3">
+      {shown.map((c) => <Badge key={c.id} club={c} size={size} />)}
+    </span>
+  );
 }
 
 /** Záložka „Obce okresu“ na stránce Obec: mapa, kde jsou kluby, kolik tu bylo akcí; detail obce na /obec/[id]. */
@@ -87,21 +99,16 @@ export function DistrictVillages() {
                     </div>
                   </div>
                   {selected.clubs.length > 0 ? (
-                    <ul className="space-y-2">
+                    <div className="-mx-5 border-y border-line-soft">
                       {selected.clubs.map((c) => (
-                        <li key={c.id}>
-                          <Link href={`/tym/${c.id}`} className="flex items-center gap-2.5 hover:text-pitch-600">
-                            <Badge club={c} size={32} />
-                            <span className="min-w-0">
-                              <span className="block font-heading font-bold text-sm leading-tight">{c.name}</span>
-                              <span className="block text-xs text-muted">{c.leagueName ?? "bez soutěže"}</span>
-                            </span>
-                          </Link>
-                        </li>
+                        <ListRow key={c.id} href={`/tym/${c.id}`}
+                          leading={<Badge club={c} size={32} />}
+                          title={c.name}
+                          meta={c.leagueName ?? "bez soutěže"} />
                       ))}
-                    </ul>
+                    </div>
                   ) : (
-                    <p className="text-sm text-muted">V obci nehraje žádný klub.</p>
+                    <ListEmpty icon="🏟️">V obci nehraje žádný klub.</ListEmpty>
                   )}
                   <Link href={`/obec/${selected.id}`} className="btn-primary inline-flex items-center justify-center w-full min-h-10 text-sm">
                     Profil obce
@@ -116,22 +123,14 @@ export function DistrictVillages() {
       )}
 
       {withClubs.length > 0 && (
-        <div>
-          <SectionLabel>Obce s klubem ({withClubs.length})</SectionLabel>
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {withClubs.map((v) => (
-              <Link key={v.id} href={`/obec/${v.id}`} className="card p-3 flex items-center gap-3 hover:shadow-md transition-shadow">
-                <div className="flex -space-x-1">
-                  {v.clubs.slice(0, 3).map((c) => <Badge key={c.id} club={c} size={30} />)}
-                </div>
-                <div className="min-w-0">
-                  <div className="font-heading font-bold text-sm leading-tight">{v.name}</div>
-                  <div className="text-xs text-muted truncate">{v.clubs.map((c) => c.name).join(", ")}</div>
-                </div>
-              </Link>
-            ))}
-          </div>
-        </div>
+        <ListCard title="Obce s klubem" count={withClubs.length}>
+          {withClubs.map((v) => (
+            <ListRow key={v.id} href={`/obec/${v.id}`}
+              leading={<BadgeStack clubs={v.clubs} />}
+              title={v.name}
+              meta={v.clubs.map((c) => c.name).join(", ")} />
+          ))}
+        </ListCard>
       )}
 
       {data && villages.length > withClubs.length && (

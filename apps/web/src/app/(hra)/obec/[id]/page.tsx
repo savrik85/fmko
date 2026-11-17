@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { API_BASE, apiFetch } from "@/lib/api";
-import { Card, CardBody, SectionLabel, Spinner, ListCard, ListRow, RowIcon } from "@/components/ui";
+import { Card, CardBody, SectionLabel, Spinner, ListCard, ListRow, RowIcon, RowGroup, RowValue, ListEmpty } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { DistrictMap, clubBadgeSvg, villageSizeLabel, type MapVillage } from "@/components/map/DistrictMap";
 import { StadiumPreview } from "./StadiumPreview";
@@ -113,32 +113,24 @@ function stadiumChips(s: Club["stadium"]): string[] {
 function ClubCard({ club }: { club: Club }) {
   const mapClub = { id: club.id, name: club.name, isAi: club.isAi, leagueName: club.leagueName, primaryColor: club.colors.primary, secondaryColor: club.colors.secondary, badge: club.badge };
   const chips = stadiumChips(club.stadium);
+  // Karta klubu zůstává kartou (fotka stadionu), řádky v ní jsou ze sdílených dílů.
   return (
-    <Card>
-      <CardBody className="space-y-3">
-        <div className="flex items-center gap-3">
-          <span className="shrink-0" dangerouslySetInnerHTML={{ __html: clubBadgeSvg(mapClub, 48) }} />
-          <div className="min-w-0 flex-1">
-            <Link href={`/tym/${club.id}`} className="font-heading font-bold text-lg leading-tight hover:text-pitch-600 underline decoration-pitch-500/20">
-              {club.name}
-            </Link>
-            <div className="text-sm text-muted">
-              {[club.leagueName, club.position && club.teamsInLeague ? `${club.position}. místo z ${club.teamsInLeague}` : null]
-                .filter(Boolean).join(" · ") || "bez soutěže"}
-            </div>
-            <div className="text-sm text-muted">
-              {club.fans != null && <>📣 <span className="font-heading font-bold text-ink">{club.fans.toLocaleString("cs-CZ")}</span> fanoušků</>}
-            </div>
-          </div>
-        </div>
+    <ListCard>
+      <ListRow href={`/tym/${club.id}`}
+        leading={<span dangerouslySetInnerHTML={{ __html: clubBadgeSvg(mapClub, 32) }} />}
+        title={club.name}
+        meta={[club.leagueName, club.position && club.teamsInLeague ? `${club.position}. místo z ${club.teamsInLeague}` : null]
+          .filter(Boolean).join(" · ") || "bez soutěže"}
+        trailing={club.fans != null ? <RowValue sub="fanoušků">{club.fans.toLocaleString("cs-CZ")}</RowValue> : undefined} />
 
-        {club.coach && (
-          <div className="flex items-center gap-2.5 text-sm">
-            <Avatar face={club.coach.avatar} size={32} fallback={club.coach.name} />
-            <span>Trenér <span className="font-heading font-bold">{club.coach.name}</span>{club.isAi && <span className="text-muted"> · klub vede AI</span>}</span>
-          </div>
-        )}
+      {club.coach && (
+        <ListRow
+          leading={<Avatar face={club.coach.avatar} size={36} fallback={club.coach.name} />}
+          title={club.coach.name}
+          meta={club.isAi ? "trenér · klub vede AI" : "trenér"} />
+      )}
 
+      <div className="px-4 py-3">
         <div className="rounded-xl bg-surface overflow-hidden">
           {club.stadium.photoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -155,24 +147,19 @@ function ClubCard({ club }: { club: Club }) {
             )}
           </div>
         </div>
+      </div>
 
-        {club.recentHomeMatches.length > 0 && (
-          <div>
-            <div className="text-xs font-heading font-bold uppercase tracking-wide text-muted mb-1">Naposledy na tomhle hřišti</div>
-            <ul className="text-sm space-y-0.5">
-              {club.recentHomeMatches.map((m) => (
-                <li key={m.id}>
-                  <Link href={`/zapas/${m.id}`} className="hover:text-pitch-600">
-                    {m.home} <span className="font-heading font-bold tabular-nums">{m.score}</span> {m.away}
-                    {m.attendance ? <span className="text-muted"> · {m.attendance} diváků</span> : null}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </CardBody>
-    </Card>
+      {club.recentHomeMatches.length > 0 && (
+        <>
+          <RowGroup label="Naposledy na tomhle hřišti" />
+          {club.recentHomeMatches.map((m) => (
+            <ListRow key={m.id} dense href={`/zapas/${m.id}`}
+              title={`${m.home} – ${m.away}`}
+              trailing={<RowValue sub={m.attendance ? `${m.attendance} diváků` : undefined}>{m.score}</RowValue>} />
+          ))}
+        </>
+      )}
+    </ListCard>
   );
 }
 
@@ -354,21 +341,18 @@ export default function VillageProfilePage() {
       </div>
 
       {data.officials.length > 0 && (
-        <div>
-          <SectionLabel>Zastupitelstvo</SectionLabel>
-          <div className="grid gap-2 grid-cols-2 lg:grid-cols-4">
+        <ListCard title="Zastupitelstvo" className="overflow-hidden">
+          {/* Po dvou vedle sebe jako dřív dlaždice: pod sebou by sekce na telefonu narostla o třetinu. */}
+          <div className="grid grid-cols-2 -mb-px [&>*:nth-child(odd)]:border-r [&>*:nth-child(odd)]:border-line-soft">
             {data.officials.map((o) => (
-              <div key={o.role} className="card p-3 flex items-center gap-2.5">
-                <Avatar face={o.face} size={40} fallback={o.name} />
-                <div className="min-w-0">
-                  <div className="text-xs text-muted">{ROLE_LABEL[o.role] ?? o.role}</div>
-                  <div className="font-heading font-bold text-sm leading-tight">{o.name}</div>
-                  <div className="text-xs text-muted truncate">{o.occupation}, {PERSONALITY_LABEL[o.personality] ?? o.personality}</div>
-                </div>
-              </div>
+              <ListRow key={o.role} dense
+                leading={<Avatar face={o.face} size={24} fallback={o.name} />}
+                title={o.name}
+                meta={ROLE_LABEL[o.role] ?? o.role}
+                detail={`${o.occupation}, ${PERSONALITY_LABEL[o.personality] ?? o.personality}`} />
             ))}
           </div>
-        </div>
+        </ListCard>
       )}
 
       <div>
@@ -378,93 +362,70 @@ export default function VillageProfilePage() {
             {data.clubs.map((c) => <ClubCard key={c.id} club={c} />)}
           </div>
         ) : (
-          <Card><CardBody><p className="text-sm text-muted">V obci teď nehraje žádný klub.</p></CardBody></Card>
+          <ListCard><ListEmpty icon="🏟️">V obci teď nehraje žádný klub.</ListEmpty></ListCard>
         )}
       </div>
 
       <RecordsCard records={data.records} residents={data.residents} />
 
       {data.events.length > 0 && (
-        <div>
-          <SectionLabel>Akce v obci</SectionLabel>
-          <div className="space-y-3">
-            {data.events.map((e) => (
-              <Card key={e.id}>
-                <CardBody className="space-y-2">
-                  <div className="flex items-start gap-3">
-                    <span className="text-2xl leading-none" aria-hidden>{"\u{1F3A1}"}</span>
-                    <div className="min-w-0">
-                      <div className="font-heading font-bold">{e.title}</div>
-                      <div className="text-sm text-muted">{e.place} · {formatDate(e.date)}</div>
-                    </div>
-                  </div>
-                  {e.headline && <div className="font-heading font-bold text-sm">{e.headline}</div>}
-                  {e.body && <p className="text-sm text-ink-light leading-relaxed">{e.body}</p>}
-                  {e.scenes.map((s, i) => <p key={i} className="text-sm leading-relaxed border-l-2 border-pitch-500/30 pl-3">{s}</p>)}
-                </CardBody>
-              </Card>
-            ))}
-          </div>
-        </div>
+        <ListCard title="Akce v obci">
+          {data.events.map((e) => (
+            <ListRow key={e.id}
+              leading={<RowIcon>{"\u{1F3A1}"}</RowIcon>}
+              title={e.title}
+              meta={`${e.place} · ${formatDate(e.date)}`}
+              detail={e.headline || e.body || e.scenes.length > 0 ? (
+                <>
+                  {e.headline && <span className="block font-bold text-ink">{e.headline}</span>}
+                  {e.body && <span className="block mt-1 leading-relaxed">{e.body}</span>}
+                  {e.scenes.map((s, i) => <span key={i} className="block mt-1.5 leading-relaxed border-l-2 border-pitch-500/30 pl-3">{s}</span>)}
+                </>
+              ) : undefined} />
+          ))}
+        </ListCard>
       )}
 
       {(data.residents.length > 0 || data.coachesFrom.length > 0) && (
-        <div>
-          <SectionLabel>Lidé odtud</SectionLabel>
-          <Card>
-            <CardBody className="space-y-4">
-              {data.coachesFrom.length > 0 && (
-                <div>
-                  <div className="text-xs font-heading font-bold uppercase tracking-wide text-muted mb-2">Trenéři, kteří tu bydlí</div>
-                  <ul className="grid gap-2 sm:grid-cols-2">
-                    {data.coachesFrom.map((m) => (
-                      <li key={`${m.teamId}-${m.name}`} className="flex items-center gap-2.5">
-                        <Avatar face={m.avatar} size={34} fallback={m.name} />
-                        <div className="min-w-0 text-sm">
-                          <div className="font-heading font-bold leading-tight">{m.name}</div>
-                          {m.teamName && <Link href={`/tym/${m.teamId}`} className="text-muted hover:text-pitch-600">{m.teamName}</Link>}
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {data.residents.length > 0 && (
-                <div>
-                  <div className="text-xs font-heading font-bold uppercase tracking-wide text-muted mb-2">Hráči, kteří tu bydlí</div>
-                  <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                    {data.residents.map((p) => (
-                      <li key={p.id} className="flex items-center gap-2.5">
-                        <Avatar face={p.avatar} size={34} fallback={p.name} />
-                        <div className="min-w-0 text-sm">
-                          <Link href={`/hrac/${p.id}`} className="font-heading font-bold leading-tight hover:text-pitch-600 underline decoration-pitch-500/20">{p.name}</Link>
-                          <div className="text-xs text-muted truncate">
-                            {POS_LABEL[p.position] ?? p.position} · {p.age} let · <Link href={`/tym/${p.teamId}`} className="hover:text-pitch-600 underline decoration-pitch-500/20">{p.teamName}</Link>
-                          </div>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </CardBody>
-          </Card>
-        </div>
+        // Dřív mřížka portrétů; husté řádky drží na telefonu skoro stejnou výšku.
+        // Řádek nemá href: jméno hráče i klub jsou dva různé odkazy.
+        <ListCard title="Lidé odtud">
+          {data.coachesFrom.length > 0 && (
+            <>
+              <RowGroup label="Trenéři, kteří tu bydlí" />
+              {data.coachesFrom.map((m) => (
+                <ListRow key={`${m.teamId}-${m.name}`} dense
+                  leading={<Avatar face={m.avatar} size={20} fallback={m.name} />}
+                  title={m.name}
+                  meta={m.teamName ? <Link href={`/tym/${m.teamId}`} className="hover:text-pitch-600">{m.teamName}</Link> : undefined} />
+              ))}
+            </>
+          )}
+          {data.residents.length > 0 && (
+            <>
+              <RowGroup label="Hráči, kteří tu bydlí" />
+              {data.residents.map((p) => (
+                <ListRow key={p.id} dense
+                  leading={<Avatar face={p.avatar} size={20} fallback={p.name} />}
+                  title={<Link href={`/hrac/${p.id}`} className="hover:text-pitch-600 underline decoration-pitch-500/20">{p.name}</Link>}
+                  meta={<>
+                    {POS_LABEL[p.position] ?? p.position} · {p.age} let · <Link href={`/tym/${p.teamId}`} className="hover:text-pitch-600 underline decoration-pitch-500/20">{p.teamName}</Link>
+                  </>} />
+              ))}
+            </>
+          )}
+        </ListCard>
       )}
 
       {data.busFans.length > 0 && (
-        <div>
-          <SectionLabel>Odsud se jezdí fandit</SectionLabel>
-          <Card>
-            <CardBody>
-              <ul className="text-sm space-y-1">
-                {data.busFans.map((b) => (
-                  <li key={b.teamId}>🚌 <Link href={`/tym/${b.teamId}`} className="font-heading font-bold hover:text-pitch-600">{b.teamName}</Link> <span className="text-muted">· {b.fans} fanoušků</span></li>
-                ))}
-              </ul>
-            </CardBody>
-          </Card>
-        </div>
+        <ListCard title="Odsud se jezdí fandit">
+          {data.busFans.map((b) => (
+            <ListRow key={b.teamId} dense href={`/tym/${b.teamId}`}
+              leading={<span className="text-base leading-none" aria-hidden="true">🚌</span>}
+              title={b.teamName}
+              trailing={<RowValue sub="fanoušků">{b.fans}</RowValue>} />
+          ))}
+        </ListCard>
       )}
 
       {data.chronicle.length > 0 && (
