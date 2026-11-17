@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { BadgePreview, type BadgePattern } from "@/components/ui";
+import { BadgePreview, ListRow, type BadgePattern } from "@/components/ui";
 
 export interface CostLine { label: string; amount: number }
 
@@ -140,25 +140,6 @@ export function TeamLink({ id, name }: { id: string; name: string }) {
   );
 }
 
-/** Dlaždice s datem jako v rozpisu na nástěnce: den v týdnu, velké číslo dne, měsíc. */
-export function DateTile({ date, today }: { date: string | null; today?: boolean }) {
-  if (!date) {
-    return (
-      <div className="w-16 shrink-0 flex flex-col items-center justify-center bg-black/5 text-muted px-1 text-center">
-        <span className="text-sm font-heading font-bold leading-tight">první volný den</span>
-      </div>
-    );
-  }
-  const d = dayShort(date);
-  return (
-    <div className={`w-16 shrink-0 flex flex-col items-center justify-center py-3 ${today ? "bg-pitch-500 text-white" : "bg-black/5 text-ink"}`}>
-      <span className={`text-sm font-heading font-bold ${today ? "text-white/80" : "text-muted"}`}>{today ? "dnes" : d.weekday}</span>
-      <span className="font-heading font-[800] text-2xl leading-none tabular-nums">{d.dayNumber}</span>
-      <span className={`text-sm font-heading font-bold tabular-nums ${today ? "text-white/80" : "text-muted"}`}>{d.month}.</span>
-    </div>
-  );
-}
-
 /** Sázka: zlatý štítek s mincí v barvách hry (emoji mince se v systémech kreslí šedě). */
 export function StakeTag({ stake }: { stake: number }) {
   return (
@@ -186,7 +167,18 @@ export function TermsTags({ stake, costPayer, myCosts }: { stake: number; costPa
   );
 }
 
-/** Přátelák v rozpisu: vlevo den, uprostřed soupeř s erbem a podmínky, akce pod tím. */
+/** Den přáteláku slovy: „dnes“, „po 24. 11.“, u výzvy bez data „první volný den“. */
+function dayText(date: string | null, today?: boolean): string {
+  if (!date) return "první volný den";
+  if (today) return "dnes";
+  const d = dayShort(date);
+  return `${d.weekday} ${d.dayNumber}. ${d.month}.`;
+}
+
+/**
+ * Přátelák v seznamu: erb soupeře, soupeř a stav, pod tím den, místo a podmínky, akce dole.
+ * Řádek patří do `ListCard`; dnešní zápas má zelený proužek.
+ */
 export function FixtureCard({ date, today, crest, title, status, place, tags, message, warning, actions }: {
   date: string | null;
   today?: boolean;
@@ -200,26 +192,19 @@ export function FixtureCard({ date, today, crest, title, status, place, tags, me
   actions?: ReactNode;
 }) {
   return (
-    <div className="card p-0 overflow-hidden flex">
-      <DateTile date={date} today={today} />
-      <div className="flex-1 min-w-0 p-3 sm:p-4">
-        <div className="flex flex-col sm:flex-row sm:items-start gap-3">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2.5">
-              <ClubCrest crest={crest} size={36} />
-              <div className="min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">{title}{status}</div>
-                <div className="text-sm text-muted">{place}</div>
-              </div>
-            </div>
-            {tags}
-            {message && <div className="text-sm text-muted italic mt-2">„{message}“</div>}
-            {warning && <div className="text-sm text-card-red font-heading font-bold mt-2">{warning}</div>}
-          </div>
-          {actions && <div className="flex gap-2 sm:shrink-0 flex-wrap">{actions}</div>}
-        </div>
-      </div>
-    </div>
+    <ListRow tone={today ? "new" : undefined}
+      leading={<ClubCrest crest={crest} size={36} />}
+      title={<span className="inline-flex items-center gap-2 flex-wrap">{title}{status}</span>}
+      meta={dayText(date, today)}
+      detail={
+        <>
+          <span className="block text-muted">{place}</span>
+          {tags}
+          {message && <span className="block text-muted italic mt-2">„{message}“</span>}
+          {warning && <span className="block text-card-red font-heading font-bold mt-2">{warning}</span>}
+          {actions && <span className="flex gap-2 flex-wrap mt-2">{actions}</span>}
+        </>
+      } />
   );
 }
 

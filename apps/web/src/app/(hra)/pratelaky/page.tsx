@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, showError } from "@/lib/api";
-import { SectionLabel, Spinner, Tabs, useTabParam, useConfirm } from "@/components/ui";
+import { SectionLabel, Spinner, Tabs, useTabParam, useConfirm, ListCard, ListEmpty } from "@/components/ui";
 import { FriendlyForm } from "./FriendlyForm";
 import { FriendlyRecord } from "./FriendlyRecord";
 import {
@@ -136,12 +136,11 @@ export default function FriendlyPage() {
 
       {tab === "offers" && (
         <div className="space-y-5">
-          <div>
-            <SectionLabel>Nabízejí termín ({data.offers.length})</SectionLabel>
+          <ListCard title="Nabízejí termín" count={data.offers.length}>
             {data.offers.length === 0 ? (
-              <div className="card p-6 text-center text-muted text-sm">Teď nikdo volný termín nenabízí. Nabídni svůj, ať tě někdo vyzve.</div>
+              <ListEmpty icon="📅">Teď nikdo volný termín nenabízí. Nabídni svůj, ať tě někdo vyzve.</ListEmpty>
             ) : (
-              <div className="space-y-3">
+              <>
                 {data.offers.map((o) => (
                   <FixtureCard key={o.id}
                     date={o.date}
@@ -162,14 +161,13 @@ export default function FriendlyPage() {
                     }
                   />
                 ))}
-              </div>
+              </>
             )}
-          </div>
+          </ListCard>
 
           <div>
-            <SectionLabel>Moje nabídky ({data.myOffers.length}/{data.limits.maxOpenOffers})</SectionLabel>
-            {data.myOffers.length > 0 && (
-              <div className="space-y-3 mb-3">
+            {data.myOffers.length > 0 ? (
+              <ListCard title="Moje nabídky" count={`${data.myOffers.length}/${data.limits.maxOpenOffers}`} className="mb-3">
                 {data.myOffers.map((o) => (
                   <FixtureCard key={o.id}
                     date={o.date}
@@ -186,7 +184,9 @@ export default function FriendlyPage() {
                     }
                   />
                 ))}
-              </div>
+              </ListCard>
+            ) : (
+              <SectionLabel>Moje nabídky ({data.myOffers.length}/{data.limits.maxOpenOffers})</SectionLabel>
             )}
             {data.myOffers.length < data.limits.maxOpenOffers && (
               showOfferForm ? (
@@ -218,23 +218,18 @@ function MatchesTab({ data, busyId, onAccept, onDecline, onCancel, onGoChallenge
   return (
     <div className="space-y-5">
       {data.incoming.length > 0 && (
-        <div>
-          <SectionLabel>Výzvy pro tebe ({data.incoming.length})</SectionLabel>
-          <div className="space-y-3">
+        <ListCard title="Výzvy pro tebe" count={data.incoming.length}>
             {data.incoming.map((f) => (
               <FriendlyCard key={f.id} f={f} status={<StatusPill tone="gold">čeká na tebe</StatusPill>}>
                 <button onClick={() => onAccept(f)} disabled={busyId === f.id || !!f.clash} className={PRIMARY_BUTTON}>Přijmout</button>
                 <button onClick={() => onDecline(f)} disabled={busyId === f.id} className={SECONDARY_BUTTON}>Odmítnout</button>
               </FriendlyCard>
             ))}
-          </div>
-        </div>
+        </ListCard>
       )}
 
       {data.upcoming.length > 0 && (
-        <div>
-          <SectionLabel>Domluvené ({data.upcoming.length})</SectionLabel>
-          <div className="space-y-3">
+        <ListCard title="Domluvené" count={data.upcoming.length}>
             {data.upcoming.map((f) => {
               const today = f.matchStatus === "lineups_open";
               return (
@@ -245,33 +240,26 @@ function MatchesTab({ data, busyId, onAccept, onDecline, onCancel, onGoChallenge
                 </FriendlyCard>
               );
             })}
-          </div>
-        </div>
+        </ListCard>
       )}
 
       {data.outgoing.length > 0 && (
-        <div>
-          <SectionLabel>Odeslané výzvy ({data.outgoing.length})</SectionLabel>
-          <div className="space-y-3">
+        <ListCard title="Odeslané výzvy" count={data.outgoing.length}>
             {data.outgoing.map((f) => (
               <FriendlyCard key={f.id} f={f} status={<StatusPill tone="muted">čeká na odpověď</StatusPill>}>
                 <button onClick={() => onCancel(f)} disabled={busyId === f.id} className={SECONDARY_BUTTON}>Stáhnout</button>
               </FriendlyCard>
             ))}
-          </div>
-        </div>
+        </ListCard>
       )}
 
       {data.cancelled.length > 0 && (
-        <div>
-          <SectionLabel>Zrušené</SectionLabel>
-          <div className="space-y-3">
+        <ListCard title="Zrušené">
             {data.cancelled.map((f) => (
               // Důvod zrušení se ukáže na místě, kde u příchozí výzvy bývá kolize.
               <FriendlyCard key={f.id} f={{ ...f, myCosts: null, clash: f.cancelReason }} status={<StatusPill tone="red">nehrálo se</StatusPill>} />
             ))}
-          </div>
-        </div>
+        </ListCard>
       )}
 
       {empty && (
