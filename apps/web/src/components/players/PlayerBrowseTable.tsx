@@ -15,7 +15,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { marketValue, marketValueEstimate } from "@okresni-masina/shared";
-import { PositionBadge, DataTable, EntityCell, RatingPill, ratingToneIn, ListCard, ListRow, ListEmpty, type DataColumn } from "@/components/ui";
+import { PositionBadge, DataTable, EntityCell, RatingPill, ratingToneIn, ListCard, ListRow, ListEmpty, type DataColumn, ChoiceGroup } from "@/components/ui";
 import { attrBg } from "@/lib/player-attrs";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { TeamName } from "@/components/manager/team-name";
@@ -233,16 +233,12 @@ export function PlayerBrowseTable({ rows, color, onColorText, ratingColor, colum
   return (
     <div>
       <div className="flex flex-wrap items-center gap-2 mb-4">
-        {/* Mobil: pět stejně širokých tlačítek v jednom řádku, zalomené zabíraly půl displeje. */}
-        <div className="grid grid-cols-5 gap-1 w-full md:flex md:w-auto md:gap-2">
-          {(["all", "GK", "DEF", "MID", "FWD"] as PosFilter[]).map((pos) => (
-            <button key={pos} onClick={() => setFilter(pos)}
-              className={`px-1 py-1.5 md:px-3 rounded-full text-sm font-heading font-bold whitespace-nowrap transition-colors ${filter === pos ? onColorText : "bg-gray-100 text-muted hover:bg-gray-200"}`}
-              style={filter === pos ? { backgroundColor: color } : undefined}>
-              {pos === "all" ? "Vše" : `${POS_LABELS[pos]} ${rows.filter((r) => r.position === pos).length}`}
-            </button>
-          ))}
-        </div>
+        {/* Mobil: pět stejně širokých voleb v jednom řádku, zalomené zabíraly půl displeje. */}
+        <ChoiceGroup ariaLabel="Filtr pozice" columns={5} className="w-full md:w-auto" value={filter} onChange={setFilter}
+          options={(["all", "GK", "DEF", "MID", "FWD"] as PosFilter[]).map((pos) => ({
+            value: pos,
+            label: <span className="whitespace-nowrap">{pos === "all" ? "Vše" : `${POS_LABELS[pos]} ${rows.filter((r) => r.position === pos).length}`}</span>,
+          }))} />
         {/* Mobil nemá záhlaví tabulky, řadí se výběrem */}
         <label className="md:hidden flex items-center gap-2 text-sm text-muted ml-auto">
           Řadit
