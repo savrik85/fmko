@@ -9,7 +9,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { apiAction, apiFetch } from "@/lib/api";
-import { SectionLabel, Spinner, ListCard, ListRow, ListEmpty, RowIcon } from "@/components/ui";
+import { SectionLabel, Spinner, ListCard, ListRow, ListEmpty, RowIcon, RowGroup } from "@/components/ui";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { COURSE_ATTR_LABELS, type CourseAttr } from "@okresni-masina/shared";
 import { LicenceBadge } from "./LicenceBadge";
@@ -199,7 +199,7 @@ export function CoachEducationTab({ teamId, isOwn }: { teamId: string; isOwn: bo
             {SOURCE_LABEL[data.licence.source] ?? ""} · strop vlastností <strong className="text-ink tabular-nums">{data.licence.cap}</strong>
           </span>
         </div>
-        <div className="mt-4 space-y-2">
+        <div className="-mx-4 sm:-mx-5 mt-4 border-y border-line">
           {data.ladder.map((l) => {
             // Zvýrazněná je vždycky licence, kterou trenér MÁ. Další krok a ceny
             // se ukazují jen na vlastním profilu, cizího trenéra zajímá jen jeho licence.
@@ -207,39 +207,36 @@ export function CoachEducationTab({ teamId, isOwn }: { teamId: string; isOwn: bo
             const next = isOwn && l.level === data.licence.level + 1;
             const below = l.level < data.licence.level;
             return (
-              <div key={l.level} className={`flex items-start sm:items-center gap-3 p-3 rounded-xl transition-all ${
-                current ? "bg-pitch-50/80 border-2 border-pitch-400 shadow-xs" :
-                below ? "bg-surface/50 border border-gray-100/60 opacity-65" :
-                "bg-surface border border-gray-100"
-              }`}>
-                <span className="shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-base bg-white shadow-2xs border border-gray-100">
-                  {current ? "🎓" : below ? "✅" : "🔒"}
-                </span>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-base font-heading font-bold text-ink">{l.label}</span>
-                    {current && (
-                      <span className="text-xs font-heading font-bold px-2.5 py-0.5 rounded-full bg-pitch-600 text-white shadow-2xs">
-                        {isOwn ? "Tvoje licence" : "Aktuální licence"}
-                      </span>
-                    )}
+              <div key={l.level} className={below ? "opacity-65" : ""}>
+                <ListRow tone={current ? "new" : next ? "warn" : undefined}
+                  leading={<RowIcon>{current ? "🎓" : below ? "✅" : "🔒"}</RowIcon>}
+                  title={
+                    <span className="inline-flex items-center gap-2 flex-wrap">
+                      {l.label}
+                      {current && (
+                        <span className="text-xs font-heading font-bold px-2.5 py-0.5 rounded-full bg-pitch-600 text-white">
+                          {isOwn ? "Tvoje licence" : "Aktuální licence"}
+                        </span>
+                      )}
+                      {next && (
+                        <span className="text-xs font-heading font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-200">
+                          Cíl k dosažení
+                        </span>
+                      )}
+                    </span>
+                  }
+                  detail={<>
+                    <span className="block">
+                      Strop vlastností <strong className="text-ink">{l.cap}</strong>
+                      {l.minReputation > 0 && ` · reputace aspoň ${l.minReputation}`}
+                      {l.level >= 2 && " · otevírá pokročilé kurzy"}
+                    </span>
                     {next && (
-                      <span className="text-xs font-heading font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-200">
-                        Cíl k dosažení
+                      <span className="block font-medium text-pitch-700 mt-1">
+                        Další krok: licenční kurz za {czk(l.price)}, {days(l.days)}
                       </span>
                     )}
-                  </div>
-                  <div className="text-xs sm:text-sm text-muted mt-0.5">
-                    Strop vlastností <strong className="text-ink">{l.cap}</strong>
-                    {l.minReputation > 0 && ` · reputace aspoň ${l.minReputation}`}
-                    {l.level >= 2 && " · otevírá pokročilé kurzy"}
-                  </div>
-                  {next && (
-                    <div className="text-xs sm:text-sm font-medium text-pitch-700 mt-1">
-                      Další krok: licenční kurz za {czk(l.price)}, {days(l.days)}
-                    </div>
-                  )}
-                </div>
+                  </>} />
               </div>
             );
           })}
@@ -322,10 +319,9 @@ export function CoachEducationTab({ teamId, isOwn }: { teamId: string; isOwn: bo
       {isOwn && data.offers && (
         <>
           {licenceOffer && (
-            <div className="card p-4 sm:p-5">
-              <SectionLabel>Licenční kurz</SectionLabel>
+            <ListCard title="Licenční kurz">
               <OfferRow o={licenceOffer} busy={busy} onEnroll={enroll} />
-            </div>
+            </ListCard>
           )}
 
           <div className="card p-4 sm:p-5">
@@ -334,36 +330,36 @@ export function CoachEducationTab({ teamId, isOwn }: { teamId: string; isOwn: bo
               Letos {data.season.attrUsed} z {data.season.attrMax} kurzů vlastností, {data.season.licenceUsed} z {data.season.licenceMax} licenčních.
               Vlastnost roste jen do stropu licence.
             </p>
-            <div className="text-xs font-heading font-extrabold uppercase tracking-wide text-muted mt-3 mb-1">Základní (+3, test 8 otázek)</div>
-            {basic.map((o) => <OfferRow key={`${o.kind}-${o.attr}`} o={o} busy={busy} onEnroll={enroll} />)}
+            <div className="-mx-4 sm:-mx-5 -mb-4 sm:-mb-5 mt-3 border-t border-line">
+              <RowGroup label="Základní (+3, test 8 otázek)" />
+              {basic.map((o) => <OfferRow key={`${o.kind}-${o.attr}`} o={o} busy={busy} onEnroll={enroll} />)}
 
-            {data.licence.level < 2 ? (
-              <div className="mt-4 pt-3 border-t border-gray-100">
-                <div className="flex items-center justify-between gap-3 bg-amber-50/70 border border-amber-200/80 rounded-xl p-3.5">
-                  <div className="flex items-center gap-3">
-                    <span className="text-2xl shrink-0">🔒</span>
-                    <div>
-                      <div className="text-sm font-heading font-bold text-amber-950">Pokročilé kurzy (+5 k vlastnostem)</div>
-                      <div className="text-xs text-amber-800">Odemknou se po získání licence UEFA B (5 specializovaných kurzů)</div>
+              {data.licence.level < 2 ? (
+                <>
+                  <RowGroup label="Pokročilé (+5 k vlastnostem)" />
+                  <ListRow tone="warn"
+                    leading={<RowIcon>🔒</RowIcon>}
+                    title="Pokročilé kurzy (+5 k vlastnostem)"
+                    detail="Odemknou se po získání licence UEFA B (5 specializovaných kurzů)"
+                    trailing={
+                      <button type="button" onClick={() => setShowLockedAdvanced((v) => !v)}
+                        className="text-xs font-heading font-bold text-amber-900 px-3 py-1.5 rounded-lg bg-amber-100/80 hover:bg-amber-100 transition-colors cursor-pointer">
+                        {showLockedAdvanced ? "Skrýt" : "Náhled kurzů"}
+                      </button>
+                    } />
+                  {showLockedAdvanced && (
+                    <div className="opacity-80">
+                      {advanced.map((o) => <OfferRow key={`${o.kind}-${o.attr}`} o={o} busy={busy} onEnroll={enroll} />)}
                     </div>
-                  </div>
-                  <button type="button" onClick={() => setShowLockedAdvanced((s) => !s)}
-                    className="text-xs font-heading font-bold text-amber-900 px-3 py-1.5 rounded-lg bg-amber-100/80 hover:bg-amber-100 transition-colors shrink-0 cursor-pointer">
-                    {showLockedAdvanced ? "Skrýt" : "Náhled kurzů"}
-                  </button>
-                </div>
-                {showLockedAdvanced && (
-                  <div className="mt-2 space-y-1 opacity-80">
-                    {advanced.map((o) => <OfferRow key={`${o.kind}-${o.attr}`} o={o} busy={busy} onEnroll={enroll} />)}
-                  </div>
-                )}
-              </div>
-            ) : (
-              <>
-                <div className="text-xs font-heading font-extrabold uppercase tracking-wide text-muted mt-4 mb-1">Pokročilé (+5, od UEFA B, test 10 otázek)</div>
-                {advanced.map((o) => <OfferRow key={`${o.kind}-${o.attr}`} o={o} busy={busy} onEnroll={enroll} />)}
-              </>
-            )}
+                  )}
+                </>
+              ) : (
+                <>
+                  <RowGroup label="Pokročilé (+5, od UEFA B, test 10 otázek)" />
+                  {advanced.map((o) => <OfferRow key={`${o.kind}-${o.attr}`} o={o} busy={busy} onEnroll={enroll} />)}
+                </>
+              )}
+            </div>
           </div>
         </>
       )}
@@ -392,56 +388,47 @@ function OfferRow({ o, busy, onEnroll }: { o: Offer; busy: boolean; onEnroll: (o
   const isLicence = o.kind === "licence";
   const title = isLicence ? o.title : (o.title.split(": ")[1] ?? o.title);
   return (
-    <div className="py-3 sm:py-3.5 border-b border-gray-100/80 last:border-b-0">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-base font-heading font-extrabold text-ink">{title}</span>
+    <ListRow
+      title={
+        <span className="inline-flex items-center gap-2 flex-wrap">
+          {title}
+          {o.points > 0 && (
+            <span className="text-xs font-heading font-bold px-2 py-0.5 rounded-full bg-pitch-50 text-pitch-700 border border-pitch-200">
+              +{o.points}
+            </span>
+          )}
+        </span>
+      }
+      meta={`${o.topic} (${lessonsLabel(o.lessons)})`}
+      detail={<>
+        {!isLicence && o.current !== null && (
+          <span className="flex items-center gap-2 flex-wrap">
+            <span>Aktuálně <strong className="tabular-nums text-ink">{o.current}</strong></span>
             {o.points > 0 && (
-              <span className="text-xs font-heading font-bold px-2 py-0.5 rounded-full bg-pitch-50 text-pitch-700 border border-pitch-200 shadow-2xs">
-                +{o.points}
-              </span>
+              <>
+                <span>→</span>
+                <span>po kurzu <strong className="tabular-nums text-pitch-600 font-extrabold">{o.current + o.points}</strong></span>
+              </>
             )}
-            <span className="text-xs text-muted">· {o.topic} ({lessonsLabel(o.lessons)})</span>
-          </div>
-
-          {!isLicence && o.current !== null && (
-            <div className="text-xs sm:text-sm text-ink-light mt-1 flex items-center gap-2 flex-wrap">
-              <span>Aktuálně <strong className="tabular-nums text-ink">{o.current}</strong></span>
-              {o.points > 0 && (
-                <>
-                  <span>→</span>
-                  <span>po kurzu <strong className="tabular-nums text-pitch-600 font-extrabold">{o.current + o.points}</strong></span>
-                </>
-              )}
-              {o.cap && <span className="text-muted text-xs">· strop licence {o.cap}</span>}
-            </div>
-          )}
-
-          <div className="flex items-center gap-1.5 mt-1.5 flex-wrap text-xs">
-            <span className="inline-flex items-center gap-1 font-semibold px-2 py-0.5 rounded bg-surface border border-gray-100 tabular-nums text-ink">
-              💰 {czk(o.price)}
-            </span>
-            <span className="inline-flex items-center gap-1 font-semibold px-2 py-0.5 rounded bg-surface border border-gray-100 tabular-nums text-ink">
-              ⏱️ {days(o.days)}
-            </span>
-            <span className="inline-flex items-center gap-1 font-semibold px-2 py-0.5 rounded bg-surface border border-gray-100 tabular-nums text-ink">
-              📝 test {o.exam.questions} ot. / {o.exam.timeLimitMin} min
-            </span>
-          </div>
-
-          {!o.available && o.blockers.length > 0 && (
-            <div className="text-xs text-amber-900 bg-amber-50 border border-amber-200/80 rounded-md px-2.5 py-1 mt-2 inline-flex items-center gap-1.5 font-medium">
-              <span>🔒</span> {o.blockers[0]}
-            </div>
-          )}
-        </div>
-
-        <button type="button" disabled={!o.available || busy} onClick={() => onEnroll(o)}
-          className="self-start sm:self-center shrink-0 btn btn-primary btn-sm disabled:opacity-40 disabled:cursor-not-allowed">
-          Přihlásit se
-        </button>
-      </div>
-    </div>
+            {o.cap && <span className="text-muted">· strop licence {o.cap}</span>}
+          </span>
+        )}
+        <span className="flex items-center gap-1.5 mt-1.5 flex-wrap text-xs">
+          <span className="inline-flex items-center gap-1 font-semibold px-2 py-0.5 rounded bg-surface border border-gray-100 tabular-nums text-ink">💰 {czk(o.price)}</span>
+          <span className="inline-flex items-center gap-1 font-semibold px-2 py-0.5 rounded bg-surface border border-gray-100 tabular-nums text-ink">⏱️ {days(o.days)}</span>
+          <span className="inline-flex items-center gap-1 font-semibold px-2 py-0.5 rounded bg-surface border border-gray-100 tabular-nums text-ink">📝 test {o.exam.questions} ot. / {o.exam.timeLimitMin} min</span>
+        </span>
+        {!o.available && o.blockers.length > 0 && (
+          <span className="text-xs text-amber-900 bg-amber-50 border border-amber-200/80 rounded-md px-2.5 py-1 mt-2 inline-flex items-center gap-1.5 font-medium">
+            <span>🔒</span> {o.blockers[0]}
+          </span>
+        )}
+        <span className="block mt-2">
+          <button type="button" disabled={!o.available || busy} onClick={() => onEnroll(o)}
+            className="btn btn-primary btn-sm disabled:opacity-40 disabled:cursor-not-allowed">
+            Přihlásit se
+          </button>
+        </span>
+      </>} />
   );
 }
