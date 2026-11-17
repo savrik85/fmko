@@ -5,7 +5,7 @@ import { sponsorMonthlyPayout } from "@okresni-masina/shared";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
 import { sponsorTypeIcon, sponsorTypeLabel } from "@/lib/sponsor-types";
-import { Spinner, SectionLabel, PositionBadge, Tabs, useTabParam } from "@/components/ui";
+import { Spinner, SectionLabel, PositionBadge, Tabs, useTabParam, ListCard, ListRow, ListEmpty, RowIcon, RowValue } from "@/components/ui";
 import { TXN_ICONS, TXN_LABELS } from "@/lib/transaction-labels";
 import { weeksText } from "@/lib/weeks-text";
 
@@ -381,26 +381,15 @@ function FlowsTab({ data }: { data: BudgetData }) {
             </div>
           )}
           {data.sponsors.length > 0 && (
-            <div className="card p-4 sm:p-5">
-              <SectionLabel>Sponzorské smlouvy ({data.sponsors.length})</SectionLabel>
-              <div className="mt-2 space-y-2">
-                {data.sponsors.map((s, i) => (
-                  <div key={i} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-b-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-base">{sponsorTypeIcon(s.type)}</span>
-                      <div>
-                        <div className="text-sm font-heading font-bold">{s.name}</div>
-                        <div className="text-micro text-muted">Obor: {sponsorTypeLabel(s.type)}{s.winBonus > 0 ? ` • bonus za výhru ${formatCZK(s.winBonus)}` : ""}</div>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-sm tabular-nums text-pitch-500 font-heading font-bold">{formatCZK(s.weeklyAmount)}/týd</div>
-                      <div className="text-micro text-muted">{formatCZK(sponsorMonthlyPayout(s.monthlyAmount))}/měs</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+            <ListCard title="Sponzorské smlouvy" count={data.sponsors.length}>
+              {data.sponsors.map((s, i) => (
+                <ListRow key={i}
+                  leading={<RowIcon>{sponsorTypeIcon(s.type)}</RowIcon>}
+                  title={s.name}
+                  meta={`${sponsorTypeLabel(s.type)}${s.winBonus > 0 ? ` · bonus za výhru ${formatCZK(s.winBonus)}` : ""}`}
+                  trailing={<RowValue tone="plus" sub={`${formatCZK(sponsorMonthlyPayout(s.monthlyAmount))}/měs`}>{formatCZK(s.weeklyAmount)}/týd</RowValue>} />
+              ))}
+            </ListCard>
           )}
 
           <div className="card p-4 sm:p-5">
@@ -449,16 +438,14 @@ function FlowsTab({ data }: { data: BudgetData }) {
             {data.wageBill.topPlayers.length > 0 && (
               <>
                 <div className="text-micro text-muted uppercase mb-2">Nejlépe placení</div>
-                {data.wageBill.topPlayers.map((p) => (
-                  <a key={p.id} href={`/hrac/${p.id}`}
-                    className="flex items-center justify-between py-2 border-b border-gray-50 last:border-b-0 hover:bg-gray-50/50 transition-colors -mx-2 px-2 rounded">
-                    <div className="flex items-center gap-2">
-                      <PositionBadge position={p.position as "GK" | "DEF" | "MID" | "FWD"} />
-                      <span className="text-sm font-heading font-bold">{p.name}</span>
-                    </div>
-                    <span className="text-sm tabular-nums font-heading font-bold">{formatCZK(p.weeklyWage)}/t</span>
-                  </a>
-                ))}
+                <div className="-mx-4 sm:-mx-5 -mb-4 sm:-mb-5 border-t border-line-soft">
+                  {data.wageBill.topPlayers.map((p) => (
+                    <ListRow key={p.id} href={`/hrac/${p.id}`}
+                      title={p.name}
+                      meta={<PositionBadge position={p.position as "GK" | "DEF" | "MID" | "FWD"} />}
+                      trailing={<RowValue>{formatCZK(p.weeklyWage)}/t</RowValue>} />
+                  ))}
+                </div>
               </>
             )}
           </div>
@@ -835,57 +822,39 @@ function HistorySection({ transactions, total, filter, onFilter }: {
   onFilter: (f: TxnFilter) => void;
 }) {
   return (
-    <div className="card p-4 sm:p-5">
-      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-        <SectionLabel>Historie transakcí ({total})</SectionLabel>
+    <ListCard title="Historie transakcí" count={total}
+      controls={
         <div className="flex gap-1">
           {(["all", "income", "expense"] as TxnFilter[]).map((f) => (
             <button key={f} onClick={() => onFilter(f)}
-              className={`text-xs px-2.5 py-1 rounded-full font-heading font-bold transition-colors ${
+              className={`text-meta px-2.5 py-1 rounded-full font-bold transition-colors ${
                 filter === f ? "bg-ink text-white" : "bg-gray-100 text-muted hover:bg-gray-200"
               }`}>
               {f === "all" ? "Vše" : f === "income" ? "Příjmy" : "Výdaje"}
             </button>
           ))}
         </div>
-      </div>
-
-      {transactions.length > 0 ? (
-        <div className="overflow-x-auto -mx-4 sm:-mx-5 table-scroll">
-          <table className="w-full text-sm min-w-[500px]">
-            <thead>
-              <tr className="text-left text-label border-b border-gray-200 text-micro uppercase tracking-wide">
-                <th className="pb-2 pl-4 sm:pl-5 pr-2 w-8"></th>
-                <th className="pb-2 pr-2">Popis</th>
-                <th className="pb-2 pr-2 text-right w-28">Částka</th>
-                <th className="pb-2 pr-2 text-right w-28">Zůstatek</th>
-                <th className="pb-2 pr-4 sm:pr-5 text-right w-16">Kdy</th>
-              </tr>
-            </thead>
-            <tbody>
-              {transactions.map((t) => (
-                <tr key={t.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
-                  <td className="py-2 pl-4 sm:pl-5 pr-2 text-center text-sm">{TXN_ICONS[t.type] ?? "📋"}</td>
-                  <td className="py-2 pr-2">
-                    <div className="font-heading font-bold text-sm">{t.description}</div>
-                    <div className="text-micro text-muted">{TXN_LABELS[t.type] ?? t.type}</div>
-                  </td>
-                  <td className={`py-2 pr-2 text-right tabular-nums font-heading font-bold text-sm ${t.amount >= 0 ? "text-pitch-500" : "text-card-red"}`}>
-                    {t.amount >= 0 ? "+" : ""}{formatCZK(t.amount)}
-                  </td>
-                  <td className={`py-2 pr-2 text-right tabular-nums text-sm ${t.balanceAfter < 0 ? "text-card-red" : "text-muted"}`}>
-                    {formatCZK(t.balanceAfter)}
-                  </td>
-                  <td className="py-2 pr-4 sm:pr-5 text-right text-micro text-muted">{timeAgo(t.createdAt)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <div className="text-center text-muted text-sm py-8 italic">Zatím žádné transakce.</div>
+      }>
+      {transactions.length === 0 && (
+        <ListEmpty icon="🧾">
+          {filter === "all" ? "Na účtu se zatím nic nepohnulo. První pohyby přijdou po domácím zápase a výplatě." : "Tomuhle filtru žádný pohyb neodpovídá."}
+        </ListEmpty>
       )}
-    </div>
+      {transactions.map((t) => (
+        <ListRow key={t.id}
+          leading={<RowIcon>{TXN_ICONS[t.type] ?? "📋"}</RowIcon>}
+          title={t.description}
+          // Zůstatek je na telefonu v řádku podrobností: vedle částky bral titulku šířku a řádky rostly.
+          // Druh pohybu na telefonu říká ikona; text by zůstatek vytlačil za okraj.
+          meta={<><span className="hidden sm:inline">{TXN_LABELS[t.type] ?? t.type} · </span>{timeAgo(t.createdAt)}<span className="sm:hidden"> · zůstatek {formatCZK(t.balanceAfter)}</span></>}
+          trailing={
+            <RowValue tone={t.amount >= 0 ? "plus" : "minus"}
+              sub={<span className={`hidden sm:inline ${t.balanceAfter < 0 ? "text-card-red" : ""}`}>zůstatek {formatCZK(t.balanceAfter)}</span>}>
+              {t.amount >= 0 ? "+" : "−"}{formatCZK(Math.abs(t.amount))}
+            </RowValue>
+          } />
+      ))}
+    </ListCard>
   );
 }
 

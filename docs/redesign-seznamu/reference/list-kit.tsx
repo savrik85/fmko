@@ -85,7 +85,8 @@ export function ListRow({ href, onClick, leading, title, meta, trailing, tone, c
     <>
       {leading && <span className="shrink-0 w-9 h-9 flex items-center justify-center">{leading}</span>}
       <span className="flex-1 min-w-0">
-        <span className="block text-body font-bold text-ink leading-snug line-clamp-2">{title}</span>
+        {/* Bez `block`: přebil by display z line-clamp a titulek by se neomezil na dva řádky. */}
+        <span className="text-body font-bold text-ink leading-snug line-clamp-2">{title}</span>
         {meta && <span className="block text-meta text-muted truncate">{meta}</span>}
       </span>
       {(trailing || showChevron) && (
