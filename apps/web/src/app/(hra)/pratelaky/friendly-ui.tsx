@@ -119,9 +119,6 @@ export function venueText(venue: FriendlyView["venue"], neutralVillage: string |
   return neutralVillage ? `Neutrální hřiště, ${neutralVillage}` : "Neutrální hřiště";
 }
 
-export const CHIP = "min-h-11 px-3 rounded-control text-sm font-heading font-bold transition-colors";
-export const chipClass = (on: boolean, disabled = false) =>
-  `${CHIP} ${disabled ? "bg-black/5 text-muted/60 line-through cursor-not-allowed" : on ? "bg-pitch-500 text-white" : "bg-black/5 text-ink hover:bg-black/10"}`;
 export const TAG = "px-2 py-0.5 rounded-full bg-surface border border-gray-100 text-sm font-heading font-bold text-ink tabular-nums";
 export const PRIMARY_BUTTON = "inline-flex items-center justify-center min-h-11 sm:min-h-0 py-1.5 px-4 rounded-soft text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors disabled:opacity-50";
 export const SECONDARY_BUTTON = "inline-flex items-center justify-center min-h-11 sm:min-h-0 py-1.5 px-4 rounded-soft text-sm font-heading font-bold bg-black/5 text-ink hover:bg-black/10 transition-colors disabled:opacity-50";

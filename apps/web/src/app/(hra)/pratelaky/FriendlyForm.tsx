@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch, showError } from "@/lib/api";
-import { PRIMARY_BUTTON, chipClass, dayLabel, dayShort, sumCosts, type CostLine, type DayOption, type FriendlyLimits, type TeamOption } from "./friendly-ui";
+import { ChoiceGroup } from "@/components/ui";
+import { PRIMARY_BUTTON, dayLabel, dayShort, sumCosts, type CostLine, type DayOption, type FriendlyLimits, type TeamOption } from "./friendly-ui";
 import { formatKc } from "@/lib/format";
 
 type Mode = "challenge" | "offer";
@@ -137,20 +138,12 @@ export function FriendlyForm({ mode, teamId, teams, days, limits, budget, onDone
 
       <div>
         <div className={label}>Den (hraje se v 18:00)</div>
-        <div className="grid grid-cols-4 sm:grid-cols-7 gap-1.5">
-          {days.map((d) => {
+        <ChoiceGroup ariaLabel="Den zápasu" columns={7} value={date} onChange={setDate}
+          options={days.map((d) => {
             const reason = blockedReason(d);
             const s = dayShort(d.date);
-            return (
-              <button key={d.date} type="button" disabled={!!reason} title={reason ?? undefined}
-                onClick={() => setDate(d.date)}
-                className={`${chipClass(date === d.date, !!reason)} flex flex-col items-center justify-center py-1 leading-tight`}>
-                <span className="text-sm">{s.weekday}</span>
-                <span className="text-sm tabular-nums">{s.day}</span>
-              </button>
-            );
-          })}
-        </div>
+            return { value: d.date, label: s.weekday, hint: s.day, disabled: !!reason, title: reason ?? undefined };
+          })} />
         {(busyList.length > 0 || opponentBusy.size > 0) && (
           <ul className="text-sm text-muted mt-2 space-y-0.5">
             {busyList.map((d) => <li key={d.date}>{dayShort(d.date).day} {d.busy}</li>)}
@@ -163,11 +156,8 @@ export function FriendlyForm({ mode, teamId, teams, days, limits, budget, onDone
 
       <div>
         <div className={label}>Kde se hraje</div>
-        <div className="flex gap-1.5 flex-wrap">
-          {venueOptions.map((o) => (
-            <button key={o.key} type="button" onClick={() => setVenue(o.key)} className={`flex-1 ${chipClass(venue === o.key)}`}>{o.label}</button>
-          ))}
-        </div>
+        <ChoiceGroup ariaLabel="Kde se hraje" columns={3} value={venue} onChange={setVenue}
+          options={venueOptions.map((o) => ({ value: o.key, label: o.label }))} />
         <p className="text-sm text-muted mt-1.5">
           {venue === "neutral"
             ? mode === "challenge" && quote?.neutralVillage
@@ -179,10 +169,8 @@ export function FriendlyForm({ mode, teamId, teams, days, limits, budget, onDone
 
       <div>
         <div className={label}>Kdo platí náklady</div>
-        <div className="flex gap-1.5 flex-wrap">
-          <button type="button" onClick={() => setPayer("each")} className={`flex-1 ${chipClass(payer === "each")}`}>Každý své</button>
-          <button type="button" disabled={linked} onClick={() => setPayer("me")} className={`flex-1 ${chipClass(payer === "me", linked)}`}>Platím za oba</button>
-        </div>
+        <ChoiceGroup ariaLabel="Kdo platí náklady" columns={2} value={payer} onChange={setPayer}
+          options={[{ value: "each", label: "Každý své" }, { value: "me", label: "Platím za oba", disabled: linked }]} />
         {mode === "challenge" && quote ? (
           <div className="text-sm mt-2 space-y-0.5">
             <div className="text-muted">Vzdálenost {quote.distanceKm} km</div>
@@ -199,16 +187,8 @@ export function FriendlyForm({ mode, teamId, teams, days, limits, budget, onDone
 
       <div>
         <div className={label}>O kolik se hraje</div>
-        <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
-          {STAKES.map((v) => {
-            const disabled = v > 0 && (linked || v > budget);
-            return (
-              <button key={v} type="button" disabled={disabled} onClick={() => setStake(v)} className={chipClass(stake === v, disabled)}>
-                {v === 0 ? "Bez sázky" : formatKc(v)}
-              </button>
-            );
-          })}
-        </div>
+        <ChoiceGroup ariaLabel="O kolik se hraje" columns={6} value={String(stake)} onChange={(v) => setStake(Number(v))}
+          options={STAKES.map((v) => ({ value: String(v), label: v === 0 ? "Bez sázky" : formatKc(v), disabled: v > 0 && (linked || v > budget) }))} />
         <p className="text-sm text-muted mt-1.5">
           {stake > 0
             ? `Sázku složíte oba, až soupeř kývne. Vítěz bere ${formatKc(stake * 2)}, při remíze se vrací.`

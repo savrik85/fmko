@@ -36,6 +36,8 @@ export interface ChoiceOption<T extends string> {
   /** Drobný druhý řádek pod popiskem (datum pod dnem v týdnu, formace pod sestavou). */
   hint?: ReactNode;
   disabled?: boolean;
+  /** Nápověda po najetí myší (třeba proč nejde den vybrat). */
+  title?: string;
 }
 
 const COLUMNS: Record<2 | 3 | 4 | 6 | 7, string> = {
@@ -76,7 +78,7 @@ export function ChoiceGroup<T extends string>(props: ChoiceGroupProps<T>) {
       {options.map((o) => {
         const selected = isSelected(o.value);
         return (
-          <button key={o.value} type="button" disabled={o.disabled}
+          <button key={o.value} type="button" disabled={o.disabled} title={o.title}
             {...(props.multiple ? { "aria-pressed": selected } : { role: "radio", "aria-checked": selected })}
             onClick={() => props.onChange(o.value)}
             className={`${BASE} ${sizing} flex flex-col items-center justify-center text-center font-bold leading-tight ${stateClass(selected, o.disabled)}`}>
