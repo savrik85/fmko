@@ -10,7 +10,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
-import { PositionBadge } from "@/components/ui";
+import { PositionBadge, ListCard, ListRow, ListEmpty } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { TalentStars } from "@/components/players/talent-stars";
 
@@ -232,11 +232,9 @@ export function U21Rozvoj({ teamId }: { teamId: string }) {
         )}
       </section>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+      <ListCard>
         {serazeni.length === 0 && (
-          <div className="card p-4 text-sm text-muted lg:col-span-2">
-            Tomuhle filtru neodpovídá žádný kluk.
-          </div>
+          <ListEmpty icon="🔍">Tomuhle filtru neodpovídá žádný kluk.</ListEmpty>
         )}
         {serazeni.map((h) => {
           const k = kdy(h);
@@ -244,24 +242,24 @@ export function U21Rozvoj({ teamId }: { teamId: string }) {
           const rozptyl = h.rozptylStropu ?? 0;
 
           return (
-            <div key={h.id} className={`card p-4 border ${h.nadejnost?.uroven === "hvezda" ? "border-gold-300" : "border-transparent"}`}>
-              <div className="flex items-start gap-3">
-                <div className="shrink-0 w-11 h-11 rounded-full overflow-hidden bg-gray-100 flex items-end justify-center">
+            <ListRow key={h.id} href={`/hrac/${h.id}`} chevron={false}
+              leading={
+                <span className="w-9 h-9 rounded-full overflow-hidden bg-gray-100 flex items-end justify-center">
                   {/* size = strana / 1,2 — obličej se kreslí na výšku, jinak se ořízne brada */}
-                  <FaceAvatar faceConfig={parsujAvatar(h.avatar)} size={37} />
-                </div>
-
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-baseline gap-2 flex-wrap">
-                    <Link href={`/hrac/${h.id}`} className="font-heading font-bold text-base hover:underline">
-                      {h.jmeno}
-                    </Link>
-                    <PositionBadge position={h.pozice} />
-                    <span className="text-sm text-muted">{h.vek} let</span>
-                  </div>
-
+                  <FaceAvatar faceConfig={parsujAvatar(h.avatar)} size={30} />
+                </span>
+              }
+              title={h.jmeno}
+              meta={<span className="inline-flex items-center gap-1.5"><PositionBadge position={h.pozice} /><span>{h.vek} let</span></span>}
+              trailing={
+                <span className={`text-micro px-2 py-0.5 rounded-full font-heading font-bold whitespace-nowrap ${k.barva}`}>
+                  {k.text}
+                </span>
+              }
+              detail={
+                <>
                   {h.nadejnost && (
-                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                    <span className="flex items-center gap-2 mt-1 flex-wrap">
                       <TalentStars
                         hodnoceni={h.hodnoceni}
                         odhadStropu={h.strop}
@@ -270,50 +268,45 @@ export function U21Rozvoj({ teamId }: { teamId: string }) {
                         klic={h.id}
                         uroven={h.nadejnost?.uroven}
                       />
-                      <span className={`text-sm px-2 py-0.5 rounded-full font-heading font-bold border whitespace-nowrap ${ramecek}`}>
+                      <span className={`text-micro px-2 py-0.5 rounded-full font-heading font-bold border whitespace-nowrap ${ramecek}`}>
                         {h.nadejnost.uroven === "hvezda" ? "✨ " : ""}{h.nadejnost.slovne}
                       </span>
-                    </div>
+                    </span>
                   )}
-                </div>
 
-                <span className={`shrink-0 text-sm px-2.5 py-1 rounded-full font-heading font-bold whitespace-nowrap ${k.barva}`}>
-                  {k.text}
-                </span>
-              </div>
+                  {/* Kde je teď (plná), kam až podle odhadu (světlá), laťka áčka (čárka) */}
+                  <span className="block relative h-2 rounded-full bg-gray-100 overflow-hidden mt-2 mb-1.5">
+                    {h.strop !== null && (
+                      <span className="absolute inset-y-0 left-0 bg-pitch-100" style={{ width: pct(h.strop) }} />
+                    )}
+                    <span
+                      className={`absolute inset-y-0 left-0 ${h.pripravenyDoAcka ? "bg-pitch-500" : "bg-pitch-300"}`}
+                      style={{ width: pct(h.hodnoceni) }}
+                    />
+                    <span className="absolute inset-y-0 w-0.5 bg-ink/50" style={{ left: pct(cil) }} />
+                  </span>
 
-              {/* Kde je teď (plná), kam až podle odhadu (světlá), laťka áčka (čárka) */}
-              <div className="relative h-2.5 rounded-full bg-gray-100 overflow-hidden mt-3 mb-2">
-                {h.strop !== null && (
-                  <div className="absolute inset-y-0 left-0 bg-pitch-100" style={{ width: pct(h.strop) }} />
-                )}
-                <div
-                  className={`absolute inset-y-0 left-0 ${h.pripravenyDoAcka ? "bg-pitch-500" : "bg-pitch-300"}`}
-                  style={{ width: pct(h.hodnoceni) }}
-                />
-                <div className="absolute inset-y-0 w-0.5 bg-ink/50" style={{ left: pct(cil) }} />
-              </div>
-
-              <div className="flex items-baseline gap-x-3 gap-y-1 flex-wrap text-sm">
-                <span className="tabular-nums">
-                  <strong className="font-heading text-ink text-base">{h.hodnoceni}</strong>
-                  {h.strop !== null ? (
-                    <span className="text-muted"> → odhad {Math.max(h.hodnoceni, h.strop - rozptyl)}–{Math.min(100, h.strop + rozptyl)}</span>
-                  ) : (
-                    <span className="text-muted"> → strop neznámý</span>
-                  )}
-                </span>
-                {h.dospivaniLetos > 0 && (
-                  <span className="text-pitch-500 font-heading font-bold tabular-nums">+{h.dospivaniLetos} dospíváním</span>
-                )}
-                {h.rustZa120Dni > 0 && (
-                  <span className="text-muted tabular-nums">+{h.rustZa120Dni} tréninkem</span>
-                )}
-              </div>
-            </div>
+                  <span className="flex items-baseline gap-x-3 gap-y-0.5 flex-wrap">
+                    <span className="tabular-nums">
+                      <strong className="font-heading text-ink">{h.hodnoceni}</strong>
+                      {h.strop !== null ? (
+                        <span className="text-muted"> → odhad {Math.max(h.hodnoceni, h.strop - rozptyl)}–{Math.min(100, h.strop + rozptyl)}</span>
+                      ) : (
+                        <span className="text-muted"> → strop neznámý</span>
+                      )}
+                    </span>
+                    {h.dospivaniLetos > 0 && (
+                      <span className="text-pitch-500 font-heading font-bold tabular-nums">+{h.dospivaniLetos} dospíváním</span>
+                    )}
+                    {h.rustZa120Dni > 0 && (
+                      <span className="text-muted tabular-nums">+{h.rustZa120Dni} tréninkem</span>
+                    )}
+                  </span>
+                </>
+              } />
           );
         })}
-      </div>
+      </ListCard>
     </div>
   );
 }
