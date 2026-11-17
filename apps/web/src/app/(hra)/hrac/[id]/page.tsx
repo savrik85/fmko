@@ -10,7 +10,7 @@ import { useOpenPlayerConversation } from "@/hooks/use-open-player-conversation"
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { PotentialProgress } from "@/components/players/potential-progress";
 import { usePotencial, PotentialStars, PotentialBadge } from "@/components/players/potential-summary";
-import { PositionBadge, SectionLabel, Spinner, BadgePreview, JerseyPreview, useConfirm } from "@/components/ui";
+import { PositionBadge, SectionLabel, Spinner, BadgePreview, JerseyPreview, useConfirm, DataTable, EntityCell, ScoreChip, RatingPill, type MatchOutcome } from "@/components/ui";
 import { SquadNumberEditor } from "./SquadNumberEditor";
 import { PlayerCompare } from "./PlayerCompare";
 import { generateCharacteristics, type PlayerTag } from "@/lib/characteristics";
@@ -1612,44 +1612,34 @@ export default function PlayerDetailPage() {
 
             {/* Per-season table with team */}
             {careerStats.seasons.length > 0 && (
-              <div className="overflow-x-auto -mx-4 sm:-mx-5 table-scroll">
-                <table className="w-full text-sm min-w-[600px]">
-                  <thead>
-                    <tr className="text-left text-label border-b border-gray-200 text-micro uppercase tracking-wide">
-                      <th className="pb-2 pl-4 sm:pl-5 pr-2">Sezóna</th>
-                      <th className="pb-2 pr-2">Klub</th>
-                      <th className="pb-2 pr-2">Liga</th>
-                      <th className="pb-2 pr-2 text-center">Z</th>
-                      <th className="pb-2 pr-2 text-center">G</th>
-                      <th className="pb-2 pr-2 text-center">A</th>
-                      <th className="pb-2 pr-2 text-center">ŽK</th>
-                      <th className="pb-2 pr-2 text-center">ČK</th>
-                      <th className="pb-2 pr-4 sm:pr-5 text-center">Hod.</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {careerStats.seasons.map((s) => (
-                      <tr key={`${s.season}-${s.teamId}`} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
-                        <td className="py-2 pl-4 sm:pl-5 pr-2 font-heading font-bold tabular-nums">{s.season}</td>
-                        <td className="py-2 pr-2">
-                          <a href={`/tym/${s.teamId}`} className="flex items-center gap-1.5 hover:underline">
-                            <BadgePreview primary={s.teamColor} secondary={s.teamSecondary}
-                              pattern={(s.teamBadge as BadgePattern) || "shield"}
-                              initials={(s.teamName ?? "").split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={18} />
-                            <span className="font-heading font-bold text-ink truncate max-w-[140px]">{s.teamName}</span>
-                          </a>
-                        </td>
-                        <td className="py-2 pr-2 text-xs text-muted truncate max-w-[120px]">{s.leagueName ?? "-"}</td>
-                        <td className="py-2 pr-2 text-center tabular-nums">{s.appearances}</td>
-                        <td className="py-2 pr-2 text-center tabular-nums font-heading font-bold">{(s.goals as number) > 0 ? s.goals : "-"}</td>
-                        <td className="py-2 pr-2 text-center tabular-nums">{(s.assists as number) > 0 ? s.assists : "-"}</td>
-                        <td className="py-2 pr-2 text-center tabular-nums text-gold-500">{(s.yellowCards as number) > 0 ? s.yellowCards : ""}</td>
-                        <td className="py-2 pr-2 text-center tabular-nums text-card-red">{(s.redCards as number) > 0 ? s.redCards : ""}</td>
-                        <td className="py-2 pr-4 sm:pr-5 text-center tabular-nums font-heading font-bold">{typeof s.avgRating === "number" ? s.avgRating.toFixed(1) : "-"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="-mx-4 sm:-mx-5 -mb-4 sm:-mb-5 border-t border-line">
+                <DataTable
+                  rows={careerStats.seasons} rowKey={(c) => `${c.season}-${c.teamId}`}
+                  rowHref={(c) => `/tym/${c.teamId}`}
+                  empty="Zatím žádná odehraná sezóna."
+                  columns={[
+                    { key: "season", header: "Sez.", title: "Sezóna", width: "w-12", align: "left",
+                      cell: (c) => <span className="font-bold text-ink">{c.season}</span> },
+                    { key: "team", header: "Klub", align: "left",
+                      cell: (c) => (
+                        <EntityCell
+                          leading={<BadgePreview primary={c.teamColor} secondary={c.teamSecondary}
+                            pattern={(c.teamBadge as BadgePattern) || "shield"}
+                            initials={(c.teamName ?? "").split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={20} />}
+                          name={c.teamName}
+                          meta={[`${c.appearances} zápasů`, (c.assists as number) > 0 ? `${c.assists} asistencí` : null].filter(Boolean).join(" · ")} metaMobileOnly />
+                      ) },
+                    { key: "league", header: "Liga", align: "left", priority: 3, cell: (c) => c.leagueName ?? "-" },
+                    { key: "apps", header: "Z", title: "Zápasy", width: "w-10", priority: 2, cell: (c) => c.appearances },
+                    { key: "goals", header: "G", title: "Góly", width: "w-10", cell: (c) => ((c.goals as number) > 0 ? c.goals : "-") },
+                    { key: "assists", header: "A", title: "Asistence", width: "w-10", priority: 2, cell: (c) => ((c.assists as number) > 0 ? c.assists : "-") },
+                    { key: "yellow", header: "ŽK", title: "Žluté karty", width: "w-10", priority: 2,
+                      cell: (c) => <span className="text-gold-600">{(c.yellowCards as number) > 0 ? c.yellowCards : ""}</span> },
+                    { key: "red", header: "ČK", title: "Červené karty", width: "w-10", priority: 2,
+                      cell: (c) => <span className="text-card-red">{(c.redCards as number) > 0 ? c.redCards : ""}</span> },
+                    { key: "rating", header: "Hod.", title: "Průměrné hodnocení", width: "w-14", emphasis: true,
+                      cell: (c) => (typeof c.avgRating === "number" ? c.avgRating.toFixed(1) : "-") },
+                  ]} />
               </div>
             )}
           </div>
@@ -1698,81 +1688,45 @@ export default function PlayerDetailPage() {
               <Filter id="L" label="Prohry" count={lossesCount} color="bg-red-500" />
             </div>
           </div>
-          <div className="overflow-x-auto -mx-4 sm:-mx-5 table-scroll">
-            <table className="w-full text-sm min-w-[760px]">
-              <thead>
-                <tr className="text-left text-label border-b border-gray-200 text-micro uppercase tracking-wide">
-                  <th className="pb-2 pl-4 sm:pl-5 pr-2 w-12">Kolo</th>
-                  <th className="pb-2 pr-2">Soupeř</th>
-                  <th className="pb-2 pr-2 text-center w-20">Výsledek</th>
-                  <th className="pb-2 pr-2 text-center w-24" title="Hodnocení">Hodnocení</th>
-                  <th className="pb-2 pr-2 text-center w-12" title="Minuty">Min</th>
-                  <th className="pb-2 pr-2 text-center w-8" title="Góly">G</th>
-                  <th className="pb-2 pr-2 text-center w-8" title="Asistence">A</th>
-                  <th className="pb-2 pr-4 sm:pr-5 text-center w-16" title="Karty">Karty</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((m) => {
-                  const resultBg = m.result === "W" ? "bg-pitch-50" : m.result === "L" ? "bg-red-50" : "bg-gray-50";
-                  const resultText = m.result === "W" ? "text-pitch-600" : m.result === "L" ? "text-card-red" : "text-muted";
-                  const ratingColor = m.rating >= 7.5 ? "text-pitch-500 font-bold"
-                    : m.rating >= 6.5 ? "text-pitch-600"
-                    : m.rating >= 5.5 ? "text-ink"
-                    : m.rating >= 4.5 ? "text-gold-600"
-                    : "text-card-red font-bold";
-                  const barPct = Math.max(0, Math.min(100, ((m.rating - 1) / 9) * 100));
-                  const barColor = m.rating >= 7.5 ? "#10b981"
-                    : m.rating >= 6.5 ? "#f59e0b"
-                    : "#ef4444";
-                  const isBest = matchHistory.length >= 3 && m.rating === bestRating;
-                  const isWorst = matchHistory.length >= 3 && m.rating === worstRating;
-                  const rowBg = isBest ? "bg-pitch-50/30" : isWorst ? "bg-red-50/30" : "";
-
-                  return (
-                    <tr key={m.matchId} className={`border-b border-gray-50 hover:bg-gray-50/50 transition-colors ${rowBg}`}>
-                      <td className="py-2 pl-4 sm:pl-5 pr-2 tabular-nums text-muted">{m.round ?? "-"}</td>
-                      <td className="py-2 pr-2">
-                        <a href={`/zapas/${m.matchId}/zaznam`} className="flex items-center gap-2 hover:underline">
-                          <BadgePreview primary={m.opponentColor} secondary={m.opponentSecondary}
-                            pattern={(m.opponentBadge as BadgePattern) || "shield"}
-                            initials={(m.opponent ?? "").split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={20} />
-                          <span className="font-heading font-bold text-ink truncate max-w-[180px]">{m.opponent ?? "Soupeř"}</span>
-                          <span className="text-micro text-muted uppercase">{m.isHome ? "D" : "V"}</span>
-                          {isBest && <span title="Nejlepší hodnocení sezóny" className="text-xs">🌟</span>}
-                          {isWorst && <span title="Nejhorší hodnocení sezóny" className="text-xs">😞</span>}
-                        </a>
-                      </td>
-                      <td className="py-2 pr-2 text-center">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-control text-xs font-heading font-bold ${resultBg} ${resultText}`}>
-                          {m.homeScore}:{m.awayScore}
-                        </span>
-                      </td>
-                      <td className="py-2 pr-2">
-                        <div className="flex items-center justify-center gap-2">
-                          <div className="w-8 h-1.5 rounded-full bg-gray-100 overflow-hidden hidden sm:block" title={`Hodnocení ${m.rating.toFixed(1)}/10`}>
-                            <div className="h-full rounded-full" style={{ width: `${barPct}%`, backgroundColor: barColor }} />
-                          </div>
-                          <span className={`tabular-nums font-heading font-bold ${ratingColor}`}>
-                            {m.rating.toFixed(1)}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="py-2 pr-2 text-center tabular-nums text-muted">{m.minutesPlayed}&apos;</td>
-                      <td className="py-2 pr-2 text-center tabular-nums font-heading font-bold">{m.goals > 0 ? m.goals : ""}</td>
-                      <td className="py-2 pr-2 text-center tabular-nums font-heading font-bold text-muted">{m.assists > 0 ? m.assists : ""}</td>
-                      <td className="py-2 pr-4 sm:pr-5 text-center">
-                        {m.yellowCards > 0 && <span className="inline-block w-3 h-4 rounded-[1px] bg-gold-400 mr-0.5" title="Žlutá karta" />}
-                        {m.redCards > 0 && <span className="inline-block w-3 h-4 rounded-[1px] bg-card-red" title="Červená karta" />}
-                      </td>
-                    </tr>
-                  );
-                })}
-                {filtered.length === 0 && (
-                  <tr><td colSpan={8} className="py-4 text-center text-sm text-muted italic">Žádný zápas neodpovídá filtru.</td></tr>
-                )}
-              </tbody>
-            </table>
+          <div className="-mx-4 sm:-mx-5 border-t border-line">
+            <DataTable
+              rows={filtered} rowKey={(m) => m.matchId}
+              rowHref={(m) => `/zapas/${m.matchId}/zaznam`}
+              empty="Žádný zápas neodpovídá filtru."
+              columns={[
+                { key: "opponent", header: "Soupeř", align: "left",
+                  cell: (m) => {
+                    const isBest = matchHistory.length >= 3 && m.rating === bestRating;
+                    const isWorst = matchHistory.length >= 3 && m.rating === worstRating;
+                    return (
+                      <EntityCell
+                        leading={<BadgePreview primary={m.opponentColor} secondary={m.opponentSecondary}
+                          pattern={(m.opponentBadge as BadgePattern) || "shield"}
+                          initials={(m.opponent ?? "").split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={22} />}
+                        name={<>{m.opponent ?? "Soupeř"}{isBest && <span title="Nejlepší hodnocení sezóny" className="ml-1">🌟</span>}{isWorst && <span title="Nejhorší hodnocení sezóny" className="ml-1">😞</span>}</>}
+                        meta={[m.round != null ? `${m.round}. kolo` : null, m.isHome ? "doma" : "venku", `${m.minutesPlayed}'`,
+                          m.goals > 0 ? `${m.goals} g` : null, m.assists > 0 ? `${m.assists} a` : null,
+                          m.redCards > 0 ? "červená" : m.yellowCards > 0 ? "žlutá" : null].filter(Boolean).join(" · ")} metaMobileOnly />
+                    );
+                  } },
+                { key: "round", header: "Kolo", width: "w-12", priority: 2, cell: (m) => m.round ?? "-" },
+                { key: "venue", header: "Kde", width: "w-14", priority: 2, cell: (m) => (m.isHome ? "doma" : "venku") },
+                { key: "score", header: "Výsledek", width: "w-20",
+                  cell: (m) => <ScoreChip result={(m.result === "W" || m.result === "L" ? m.result : "D") as MatchOutcome}>{m.homeScore}:{m.awayScore}</ScoreChip> },
+                { key: "minutes", header: "Min", title: "Minuty", width: "w-12", priority: 2, cell: (m) => `${m.minutesPlayed}'` },
+                { key: "goals", header: "G", title: "Góly", width: "w-10", priority: 2, cell: (m) => (m.goals > 0 ? m.goals : "") },
+                { key: "assists", header: "A", title: "Asistence", width: "w-10", priority: 2, cell: (m) => (m.assists > 0 ? m.assists : "") },
+                { key: "cards", header: "Karty", width: "w-14", priority: 2,
+                  cell: (m) => (
+                    <>
+                      {m.yellowCards > 0 && <span className="inline-block w-3 h-4 rounded-[1px] bg-gold-400 mr-0.5" title="Žlutá karta" />}
+                      {m.redCards > 0 && <span className="inline-block w-3 h-4 rounded-[1px] bg-card-red" title="Červená karta" />}
+                    </>
+                  ) },
+                // Známka ze zápasu je na škále 1–10, tam prahy smysl dávají (na rozdíl od hodnocení hráče).
+                { key: "rating", header: "Hod.", title: "Hodnocení v zápase", width: "w-14", emphasis: true,
+                  cell: (m) => <RatingPill value={m.rating.toFixed(1)} tone={m.rating >= 7.5 ? "top" : m.rating >= 6.5 ? "good" : m.rating < 4.5 ? "poor" : "neutral"} /> },
+              ]} />
           </div>
 
           {/* Summary — vždy z celé sezóny, ne z filtru */}
