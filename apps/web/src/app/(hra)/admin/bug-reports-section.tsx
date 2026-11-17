@@ -48,6 +48,19 @@ const FILTERS: Array<{ key: StatusFilter; label: string }> = [
   { key: "all", label: "Vše" },
 ];
 
+const REPLAY_ORIGIN = "https://eu.posthog.com";
+
+/** Odkaz z kontextu posílá hráč: zobrazí se jen nahrávka na PostHogu přes https. */
+function safeReplayUrl(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  try {
+    return new URL(value).origin === REPLAY_ORIGIN ? value : null;
+  } catch (e) {
+    console.warn("odkaz na nahrávku není URL:", e);
+    return null;
+  }
+}
+
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleString("cs-CZ", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Prague" });
 }
@@ -153,6 +166,7 @@ function ReportItem({ report, onChanged }: { report: BugReport; onChanged: () =>
   };
 
   const ctx = report.context;
+  const replayUrl = safeReplayUrl(ctx?.replayUrl);
   return (
     <li className="rounded-card border border-gray-200 p-3">
       <div className="text-sm text-muted">
@@ -177,8 +191,8 @@ function ReportItem({ report, onChanged }: { report: BugReport; onChanged: () =>
       )}
 
       <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-sm">
-        {ctx?.replayUrl && (
-          <a href={ctx.replayUrl} target="_blank" rel="noreferrer" className="font-semibold text-pitch-600 hover:underline">Nahrávka v PostHogu</a>
+        {replayUrl && (
+          <a href={replayUrl} target="_blank" rel="noopener noreferrer" className="font-semibold text-pitch-600 hover:underline">Nahrávka v PostHogu</a>
         )}
         <button type="button" onClick={() => setShowDetails(!showDetails)} className="font-semibold text-pitch-600 hover:underline">
           {showDetails ? "Skrýt podrobnosti" : "Podrobnosti"}

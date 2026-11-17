@@ -63,7 +63,7 @@ bugReportsRouter.post("/bug-reports", async (c) => {
   const pageUrl = String(form.get("pageUrl") ?? "").slice(0, MAX_URL);
   if (!pageUrl) return c.json({ error: "Chybí stránka." }, 400);
   const comment = String(form.get("comment") ?? "").trim().slice(0, MAX_COMMENT) || null;
-  const context = String(form.get("context") ?? "").slice(0, MAX_CONTEXT) || null;
+  const context = sanitizeContext(String(form.get("context") ?? "").slice(0, MAX_CONTEXT));
   const image = form.get("image");
   const hasImage = image instanceof File && image.size > 0;
   if (!hasImage && !comment) return c.json({ error: "Přidej screen nebo napiš, co se stalo." }, 400);
@@ -92,6 +92,38 @@ bugReportsRouter.post("/bug-reports", async (c) => {
   await notifyAdmins(c.env, team?.name ?? null, comment, pageUrl);
   return c.json({ id });
 });
+
+const REPLAY_ORIGIN = "https://eu.posthog.com";
+
+/**
+ * Kontext posílá hráč, takže mu nevěříme: musí to být JSON objekt a odkaz na nahrávku
+ * se nechá jen na PostHog přes https. Jinak by v adminu šel podstrčit odkaz
+ * `javascript:` nebo na cizí web, na který autor klikne.
+ */
+function sanitizeContext(raw: string): string | null {
+  if (!raw) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (e) {
+    logger.warn({ module: M }, "kontext hlášení není JSON, zahazuji ho", e);
+    return null;
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return null;
+  const ctx = parsed as Record<string, unknown>;
+  if (!isReplayUrl(ctx.replayUrl)) ctx.replayUrl = null;
+  return JSON.stringify(ctx);
+}
+
+export function isReplayUrl(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  try {
+    return new URL(value).origin === REPLAY_ORIGIN;
+  } catch (e) {
+    logger.warn({ module: M }, "odkaz na nahrávku není URL", e);
+    return false;
+  }
+}
 
 /** Oznámení (s pushem) na hlavní klub každého admina. */
 async function notifyAdmins(env: Bindings, teamName: string | null, comment: string | null, pageUrl: string): Promise<void> {
