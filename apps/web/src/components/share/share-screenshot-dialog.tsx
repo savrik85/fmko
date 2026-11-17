@@ -109,20 +109,7 @@ export function ShareScreenshotDialog({
           Dole je pruh s klubem a adresou hry. Pošli ji kamarádům nebo ji ulož.
         </p>
 
-        <div className="mt-4 max-h-[45vh] overflow-y-auto overscroll-contain rounded-card border border-gray-300 bg-white">
-          {!canvas ? (
-            <p className="px-3 py-6 text-center text-sm text-card-red">
-              Fotku se nepodařilo udělat: {error ?? "neznámá chyba"}
-            </p>
-          ) : jpeg ? (
-            // eslint-disable-next-line @next/next/no-img-element -- blob URL, next/image ho neumí
-            <img src={jpeg.url} alt="Fotka stránky" className="w-full h-auto" />
-          ) : (
-            <p className="px-3 py-6 text-center text-sm text-gray-600">Připravuju fotku…</p>
-          )}
-        </div>
-
-        <div className="mt-4 flex flex-wrap gap-2">
+        <div className="mt-3 flex flex-wrap gap-2">
           {canShare && (
             <button type="button" onClick={share} className={`${button} bg-pitch-500 hover:bg-pitch-600 text-white`}>
               Sdílet
@@ -144,6 +131,19 @@ export function ShareScreenshotDialog({
           )}
         </div>
         {status && <p className="mt-2 text-sm text-gray-700" role="status">{status}</p>}
+        <div className="mt-4 max-h-[45vh] overflow-y-auto overscroll-contain rounded-card border border-gray-300 bg-white">
+          {!canvas ? (
+            <p className="px-3 py-6 text-center text-sm text-card-red">
+              Fotku se nepodařilo udělat: {error ?? "neznámá chyba"}
+            </p>
+          ) : jpeg ? (
+            // eslint-disable-next-line @next/next/no-img-element -- blob URL, next/image ho neumí
+            <img src={jpeg.url} alt="Fotka stránky" className="w-full h-auto" />
+          ) : (
+            <p className="px-3 py-6 text-center text-sm text-gray-600">Připravuju fotku…</p>
+          )}
+        </div>
+
       </div>
     </Sheet>
   );
