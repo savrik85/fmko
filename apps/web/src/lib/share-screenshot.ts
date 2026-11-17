@@ -1,11 +1,13 @@
 /**
- * Fotka stránky ke sdílení: pod snímek se přidá pruh v barvě hry s klubem
+ * Fotka stránky ke sdílení: snímek v tenkém rámečku v barvě hry s klubem
  * a adresou prales.fun, aby kdo fotku dostane, věděl, odkud je a kde hru najde.
  */
 
-/** Výška pruhu v CSS pixelech stránky; v obrázku se násobí měřítkem snímku. */
-const BAND_HEIGHT = 52;
-const PADDING = 16;
+/** Tloušťka rámečku v CSS pixelech stránky; v obrázku se násobí měřítkem snímku. */
+const FRAME = 6;
+/** Spodní okraj rámečku, je v něm drobný popisek. */
+const FRAME_BOTTOM = 22;
+const CORNER = 10;
 const SITE_LABEL = "prales.fun";
 const FALLBACK_BAND_COLOR = "#153615";
 
@@ -41,8 +43,9 @@ function fitText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number):
 }
 
 /**
- * Snímek + pruh dole: vlevo „Prales · klub“, vpravo „prales.fun“.
- * `cssWidth` je šířka stránky v CSS pixelech; z ní se počítá měřítko pruhu.
+ * Snímek v tenkém rámečku v barvě hry: po stranách a nahoře úzký okraj, dole
+ * o kousek širší s drobným „Prales · klub“ vlevo a „prales.fun“ vpravo.
+ * `cssWidth` je šířka snímku v CSS pixelech; z ní se počítá měřítko rámečku.
  */
 export async function brandScreenshot(
   source: Blob,
@@ -51,34 +54,41 @@ export async function brandScreenshot(
 ): Promise<HTMLCanvasElement> {
   const image = await decodeImage(source);
   const ratio = cssWidth > 0 ? image.naturalWidth / cssWidth : 1;
-  const band = Math.round(BAND_HEIGHT * ratio);
-  const pad = Math.round(PADDING * ratio);
+  const edge = Math.round(FRAME * ratio);
+  const bottom = Math.round(FRAME_BOTTOM * ratio);
+  const radius = Math.round(CORNER * ratio);
 
   const canvas = document.createElement("canvas");
-  canvas.width = image.naturalWidth;
-  canvas.height = image.naturalHeight + band;
+  canvas.width = image.naturalWidth + edge * 2;
+  canvas.height = image.naturalHeight + edge + bottom;
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("2D kontext není k dispozici");
 
-  ctx.drawImage(image, 0, 0);
   ctx.fillStyle = bandColor();
-  ctx.fillRect(0, image.naturalHeight, canvas.width, band);
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  // Snímek se zaoblenými rohy uvnitř rámečku.
+  ctx.save();
+  ctx.beginPath();
+  // roundRect umí Safari až od 16; na starším telefonu bez zaoblení.
+  if (typeof ctx.roundRect === "function") ctx.roundRect(edge, edge, image.naturalWidth, image.naturalHeight, radius);
+  else ctx.rect(edge, edge, image.naturalWidth, image.naturalHeight);
+  ctx.clip();
+  ctx.drawImage(image, edge, edge);
+  ctx.restore();
 
   const font = headingFont();
-  const middle = image.naturalHeight + band / 2;
+  const middle = edge + image.naturalHeight + bottom / 2;
   ctx.textBaseline = "middle";
-
-  ctx.font = `700 ${Math.round(15 * ratio)}px ${font}`;
+  ctx.font = `700 ${Math.round(11 * ratio)}px ${font}`;
   ctx.textAlign = "right";
-  ctx.fillStyle = "rgba(255,255,255,0.85)";
-  ctx.fillText(SITE_LABEL, canvas.width - pad, middle);
+  ctx.fillStyle = "rgba(255,255,255,0.8)";
+  ctx.fillText(SITE_LABEL, canvas.width - edge - Math.round(4 * ratio), middle);
   const siteWidth = ctx.measureText(SITE_LABEL).width;
-
-  ctx.font = `800 ${Math.round(17 * ratio)}px ${font}`;
+  ctx.font = `800 ${Math.round(11 * ratio)}px ${font}`;
   ctx.textAlign = "left";
   ctx.fillStyle = "#FFFFFF";
   const label = clubName ? `Prales · ${clubName}` : "Prales";
-  ctx.fillText(fitText(ctx, label, canvas.width - siteWidth - pad * 3), pad, middle);
+  ctx.fillText(fitText(ctx, label, canvas.width - siteWidth - edge * 2 - Math.round(16 * ratio)), edge + Math.round(4 * ratio), middle);
 
   return canvas;
 }

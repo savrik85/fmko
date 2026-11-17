@@ -175,16 +175,79 @@ async function toJpeg(canvas: HTMLCanvasElement, background: string): Promise<Bl
 /** Pokusy: Safari často vykreslí až napodruhé, pak ještě v menším rozlišení. */
 const ATTEMPT_SCALES = (scale: number) => [scale, scale, 1];
 
-async function renderFullPage(target: HTMLElement, plan: PagePlan, options: CaptureOptions): Promise<Blob> {
+type CanvasOptions = import("modern-screenshot").Options;
+
+/** Vykreslí kopii a když vyjde prázdná (Safari napoprvé), zkusí to znovu. */
+async function renderWithRetry(target: HTMLElement, baseScale: number, makeOptions: (scale: number) => CanvasOptions): Promise<Blob> {
   loadLazyImages(target);
   const { domToCanvas } = await import("modern-screenshot");
   const background = getComputedStyle(document.body).backgroundColor || "#ffffff";
-  for (const scale of ATTEMPT_SCALES(plan.scale)) {
-    const canvas = await domToCanvas(target, canvasOptions(target, plan, options, scale, background));
+  for (const scale of ATTEMPT_SCALES(baseScale)) {
+    const canvas = await domToCanvas(target, makeOptions(scale));
     if (!isBlank(canvas)) return toJpeg(canvas, background);
     console.warn("Focení stránky: prázdný snímek, zkouším znovu", { scale });
   }
   throw new Error("Stránku se nepodařilo vyfotit (prázdný snímek)");
+}
+
+async function renderFullPage(target: HTMLElement, plan: PagePlan, options: CaptureOptions): Promise<Blob> {
+  const background = getComputedStyle(document.body).backgroundColor || "#ffffff";
+  return renderWithRetry(target, plan.scale, (scale) => canvasOptions(target, plan, options, scale, background));
+}
+
+/**
+ * Fotka ke sdílení: jen obsah stránky, který je teď na displeji, bez horní lišty
+ * a bez spodní navigace (na telefonu ji zakrývá, tak se její výška odečte).
+ * Celá stránka ani lišty se do Socek ani do zprávy nehodí.
+ */
+export async function captureVisibleContent(): Promise<CaptureResult> {
+  const main = captureTarget().querySelector("main");
+  if (!main) return capturePage({ hideBottomNav: true, visibleOnly: true });
+  const navHeight = window.innerWidth < 640
+    ? parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--bottom-nav-h")) || 0
+    : 0;
+  const width = main.clientWidth;
+  const height = Math.max(120, Math.round(main.clientHeight - navHeight));
+  const scrollTop = Math.round(main.scrollTop);
+  const fit = Math.sqrt(MAX_CANVAS_PIXELS / (width * height));
+  const baseScale = Math.max(MIN_SCALE, Math.min(window.devicePixelRatio || 1, MAX_SCALE, fit));
+  const background = getComputedStyle(document.body).backgroundColor || "#ffffff";
+  const started = performance.now();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`Focení trvalo déle než ${CAPTURE_TIMEOUT_MS / 1000} s`)), CAPTURE_TIMEOUT_MS);
+    });
+    const blob = await Promise.race([
+      renderWithRetry(main, baseScale, (scale) => ({
+        scale,
+        width,
+        height,
+        backgroundColor: background,
+        font: false as const,
+        filter: (node: Node) => !isIgnored(node),
+        timeout: MEDIA_TIMEOUT_MS,
+        // Kopie `main` ukáže výřez od místa, kam hráč odscrolloval.
+        onCloneNode: (cloned: Node) => {
+          if (!(cloned instanceof HTMLElement)) return;
+          cloned.style.setProperty("height", `${height}px`, "important");
+          cloned.style.setProperty("overflow", "hidden", "important");
+          if (scrollTop > 0) {
+            [...cloned.children].forEach((child) => {
+              if (child instanceof HTMLElement) child.style.setProperty("transform", `translateY(-${scrollTop}px)`, "important");
+            });
+          }
+        },
+      })),
+      timeout,
+    ]);
+    return { blob, width, height, truncated: false, ms: Math.round(performance.now() - started) };
+  } catch (e) {
+    console.error("Focení obsahu stránky selhalo:", e);
+    return { blob: null, width, height, truncated: false, ms: Math.round(performance.now() - started), error: e instanceof Error ? e.message : String(e) };
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function canvasOptions(target: HTMLElement, plan: PagePlan, options: CaptureOptions, scale: number, background: string) {
