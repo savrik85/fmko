@@ -455,6 +455,10 @@ telefonu), Kancelář (zaměstnanci, vybavení, bazar, stadion, incidenty, půj�
 prodej), sponzoři, Tréninky, trenér, obec a okres, grémium a hlasování, přáteláky.
 Každá skupina je změřená na 375 px před a po (pravidlo 8) a prošlá na desktopu.
 
+Ověření na skutečných datech na `test.prales.fun` (17. 11.): splátky v Závazcích,
+hostování (seznam i detail), objednané autobusy v Sestavě, domluvené a odehrané
+přáteláky, žebříček přáteláků a rivalové v Bilanci. Vše na 375 px i desktopu.
+
 Mimo zůstává jen to, co podle sekce 5 seznam není, nebo co plán vynechává sám:
 
 | Místo | Proč |
