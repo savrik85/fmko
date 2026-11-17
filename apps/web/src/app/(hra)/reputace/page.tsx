@@ -253,20 +253,13 @@ export default function ReputacePage() {
           </div>
         )}
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <div className="-mx-4 sm:-mx-5 -mb-4 sm:-mb-5 border-t border-line">
           {data.unlocks.all.map((u) => (
-            <div
-              key={`${u.kind}-${u.level}`}
-              className={`rounded-soft border p-3 ${u.unlocked ? "border-gray-100 bg-gray-50" : "border-gray-200"}`}
-            >
-              <div className="flex items-baseline justify-between gap-2">
-                <span className={`text-sm font-heading font-bold ${u.unlocked ? "text-muted" : "text-ink"}`}>
-                  {u.unlocked ? "✓ " : "🔒 "}{u.label}
-                </span>
-              </div>
-              <div className="text-sm text-muted tabular-nums mt-0.5">
-                reputace {u.reputation} · {u.matches} zápasů · sezóna {u.season}
-              </div>
+            <div key={`${u.kind}-${u.level}`} className={u.unlocked ? "opacity-60" : ""}>
+              <ListRow dense
+                leading={<span className="text-base leading-none" aria-hidden="true">{u.unlocked ? "✓" : "🔒"}</span>}
+                title={u.label}
+                trailing={<span className="text-meta text-muted tabular-nums text-right">rep. {u.reputation} · {u.matches} záp. · {u.season}. sez.</span>} />
             </div>
           ))}
         </div>
@@ -282,7 +275,7 @@ export default function ReputacePage() {
             to je práh dalšího zámku.
           </div>
         )}
-        <div className="space-y-1">
+        <div className="-mx-4 sm:-mx-5 -mb-4 sm:-mb-5 border-t border-line">
           <EarnRow icon="🏪" label="Podpora místních podnikatelů" note="vyplácí se týdně, zaměstnanci ji můžou zvýšit"
             now={CZK(data.earns.baseSponsorMonthly) + "/měs"}
             next={data.atNextUnlock ? CZK(data.atNextUnlock.baseSponsorMonthly) + "/měs" : null} />
@@ -312,7 +305,7 @@ export default function ReputacePage() {
             Většina zdrojů se vyhodnotí sama, po zápase, na konci sezóny nebo jednou měsíčně.
             Ovlivnit můžeš hlavně výsledky, volby v akcích a vztah s obcí.
           </p>
-          <div className="space-y-2.5">
+          <div className="-mx-4 sm:-mx-5 -mb-4 sm:-mb-5 border-t border-line">
             {SOURCES_UP.map((s) => (
               <SourceRow key={s.label} label={s.label} detail={s.detail} href={s.href} positive />
             ))}
@@ -324,12 +317,12 @@ export default function ReputacePage() {
           <p className="text-sm text-muted mb-3">
             Ztráty se na rozdíl od zisků nekrátí, spadnout jde vždycky plnou rychlostí.
           </p>
-          <div className="space-y-2.5">
+          <div className="-mx-4 sm:-mx-5 border-y border-line">
             {SOURCES_DOWN.map((s) => (
               <SourceRow key={s.label} label={s.label} detail={s.detail} href={null} positive={false} />
             ))}
           </div>
-          <div className="text-sm text-muted mt-3 pt-3 border-t border-gray-100">
+          <div className="text-sm text-muted mt-3">
             Útlum tě nikdy nestlačí pod{" "}
             <span className="tabular-nums font-heading font-bold text-ink">{data.baseline}</span> -
             to je práh pro velikost tvé obce.
@@ -446,21 +439,16 @@ function ConditionTile({ label, need, have, missing }: { label: string; need: nu
 
 function EarnRow({ icon, label, now, next, note }: { icon: string; label: string; now: string; next: string | null; note?: string }) {
   return (
-    <div className="flex items-baseline gap-3 py-2 border-b border-gray-50 last:border-b-0">
-      <span className="shrink-0 text-base leading-none">{icon}</span>
-      <span className="flex-1 min-w-0 text-sm text-ink">
-        {label}
-        {note && <span className="block text-sm text-muted leading-snug">{note}</span>}
-      </span>
-      <span className="shrink-0 text-sm font-heading font-bold tabular-nums text-ink text-right whitespace-nowrap">
-        {now}
-      </span>
-      {next !== null && (
-        <span className="shrink-0 text-sm tabular-nums text-pitch-600 text-right whitespace-nowrap w-28">
-          → {next}
+    <ListRow dense
+      leading={<span className="text-base leading-none" aria-hidden="true">{icon}</span>}
+      title={<span className="font-normal">{label}</span>}
+      detail={note || undefined}
+      trailing={
+        <span className="flex items-baseline gap-3 tabular-nums whitespace-nowrap">
+          <span className="text-body font-bold text-ink">{now}</span>
+          {next !== null && <span className="text-meta text-pitch-600 w-24 text-right">→ {next}</span>}
         </span>
-      )}
-    </div>
+      } />
   );
 }
 
@@ -475,14 +463,10 @@ function SourceRow({
   href: string | null;
   positive: boolean;
 }) {
+  // Proužek nese směr: zelený zdroj reputaci zvedá, červený ji sráží.
   return (
-    <div className={`pl-3 border-l-2 ${positive ? "border-pitch-400" : "border-card-red/60"}`}>
-      <div className="text-sm font-heading font-bold text-ink">
-        {href ? (
-          <Link href={href} className="hover:text-pitch-600 underline decoration-pitch-500/20">{label}</Link>
-        ) : label}
-      </div>
-      <div className="text-sm text-muted leading-snug">{detail}</div>
-    </div>
+    <ListRow dense href={href ?? undefined} tone={positive ? "new" : "danger"}
+      title={label}
+      detail={detail} />
   );
 }
