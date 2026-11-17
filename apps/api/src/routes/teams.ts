@@ -770,6 +770,9 @@ teamsRouter.post("/", async (c) => {
     await c.env.DB.prepare(
       "INSERT INTO teams (id, user_id, village_id, name, primary_color, secondary_color, budget, league_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
     ).bind(aiTeamId, "ai", aiVillageId, lt.teamName, lt.primaryColor, lt.secondaryColor, aiBudget, leagueId).run();
+    // Stadion hned se vznikem klubu. AI kluby Strakonic (2026-11-14) ho neměly a zápasy
+    // u nich běžely na výchozím trávníku, bez opotřebení i údržby.
+    await ensureStadiumRow(c.env.DB, aiTeamId);
 
     step = `insert-ai-players-${lt.teamName}`;
     if (lt.aiTeam?.squad) {

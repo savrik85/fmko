@@ -62,6 +62,7 @@ import { cryptoSeed } from "../generators/rng";
 import { findAbandonedClubs, MAX_TAKEOVERS_PER_RUN, runAbandonedClubTakeover } from "../ai-clubs/abandoned";
 import { openDistrictRegistration } from "../ai-clubs/district-opening";
 import { alignLeagueSchedule } from "../league/align-schedule";
+import { settleCaughtUpLeague } from "../league/catch-up-round";
 import { enqueueLeagueCatchUp, startWaitingLeague } from "../league/start-league";
 import { clearLeagueSchedule, deleteLeague } from "../league/delete-league";
 import { extendLeagueToDouble } from "../league/extend-schedule";
@@ -168,6 +169,20 @@ adminAiClubsRouter.post("/align-schedule", async (c) => {
   } catch (e) {
     logger.error({ module: M }, `srovnání rozpisu ligy ${leagueId}`, e);
     return c.json({ error: "Srovnání rozpisu selhalo, podrobnosti jsou v logu" }, 500);
+  }
+});
+
+// Zpětné vyrovnání kol, která liga dohnala po termínu dřív, než to runner uměl sám
+// (Strakonice 2026-11-16): zkrácení zranění a vrácení kondice. S dryRun=1 jen náhled.
+adminAiClubsRouter.post("/settle-catch-up", async (c) => {
+  const leagueId = c.req.query("leagueId")?.trim();
+  if (!leagueId) return c.json({ error: "Chybí leagueId" }, 400);
+  try {
+    const result = await settleCaughtUpLeague(c.env.DB, c.env.CACHE_KV, leagueId, { dryRun: isDryRun(c.req.query("dryRun")) });
+    return c.json(result, result.ok ? 200 : 400);
+  } catch (e) {
+    logger.error({ module: M }, `vyrovnání dohnaných kol ligy ${leagueId}`, e);
+    return c.json({ error: "Vyrovnání dohnaných kol selhalo, podrobnosti jsou v logu" }, 500);
   }
 });
 

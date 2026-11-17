@@ -1086,6 +1086,7 @@ export async function executeDailyTick(
   // Condition recovery: stamina-based + age modifier
   // Young players recover faster, older players slower
   // newCondSql musí být IDENTICKÝ se SQL v UPDATE — log se počítá ze stejného výrazu.
+  // Sazbu opakuje `dailyConditionRecovery` (league/catch-up-round.ts) pro kola hraná po termínu.
   const recoveryNewCondSql = `MIN(100, json_extract(life_context, '$.condition') +
     (CASE
       WHEN COALESCE(json_extract(physical, '$.stamina'), json_extract(skills, '$.stamina'), 40) >= 75 THEN 20

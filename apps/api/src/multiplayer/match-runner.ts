@@ -24,6 +24,8 @@ import {logger} from "../lib/logger";
 import {parseStoredBench, benchColumn} from "../lib/lineup-bench";
 import {typZraneniZPopisu, zavaznostZeDnu} from "../injuries/injury-types";
 import {matchInjuryDays} from "../injuries/injury-generator";
+import {catchUpInjuryDaysRemaining, catchUpLagDays, catchUpRecoveryStatements, healedInjuryStmt} from "../league/catch-up-round";
+import {ensureStadiumRow} from "../stadium/stadium-service";
 import {seedFromString} from "../lib/seed";
 import {FORM_BASELINE, playerFormFromRatings} from "../engine/form";
 import {applyBodyEffects} from "../generators/physicals";
@@ -171,10 +173,10 @@ export async function runScheduledMatches(
         "SELECT * FROM matches WHERE calendar_id = ? AND status = 'lineups_open'"
     ).bind(calendarId).all();
 
-    // Kalendář kola — season_number a league_id pro bilanci rozhodčího.
+    // Kalendář kola — season_number a league_id pro bilanci rozhodčího, termín pro dohnané kolo.
     const calRow = await db.prepare(
-        "SELECT season_number, league_id FROM season_calendar WHERE id = ?"
-    ).bind(calendarId).first<{ season_number: number; league_id: string }>()
+        "SELECT season_number, league_id, scheduled_at FROM season_calendar WHERE id = ?"
+    ).bind(calendarId).first<{ season_number: number; league_id: string; scheduled_at: string | null }>()
         .catch((e) => { logger.warn({module: "match-runner"}, "load calendar for referee stats", e); return null; });
 
     // Sazebník soutěže — JEDNOU na kolo, ne per tým. Sedm zápasů znamená čtrnáct volání
@@ -201,6 +203,13 @@ export async function runScheduledMatches(
         logger.warn({module: "match-runner"}, `počasí kola ${calendarId} se neodvodilo, jede se na zataženo`);
     }
     const weather: Weather = roundW?.weather ?? "cloudy";
+
+    // Kolo hrané po termínu (liga dohání zmeškaná kola): zranění a kondice se srovnají, jako
+    // by se hrálo v termínu. Mezi dohnanými koly neběží denní tick (league/catch-up-round.ts).
+    const catchUpLag = catchUpLagDays(calRow?.scheduled_at, new Date());
+    if (catchUpLag > 0) {
+        logger.info({module: "match-runner"}, `kolo ${calendarId} se hraje ${catchUpLag} dní po termínu, zranění a kondice se vyrovnají`);
+    }
 
     // Zápas, který spadne na chybě, dostane v tomtéž běhu ještě jeden pokus na konci kola.
     // Opakování je bezpečné: výsledek se zapisuje podmíněně z 'lineups_open', takže zápas,
@@ -378,12 +387,10 @@ export async function runScheduledMatches(
                 plan: awayPlan,
             };
 
-            // Load stadium info for pitch condition + facilities
-            const stadiumRow = await db.prepare("SELECT * FROM stadiums WHERE team_id = ?")
-                .bind(homeTeamId).first<Record<string, unknown>>().catch((e) => {
-                    logger.warn({module: "match-runner"}, "Failed to load stadium", e);
-                    return null;
-                });
+            // Stadion domácích pro stav trávníku a zázemí. Klub bez řádku stadionu (AI kluby
+            // nové ligy, prod 2026-11-16) ho tu dostane, jinak by hrál napořád na výchozím
+            // trávníku 50 a údržba ani opotřebení by se ho netýkaly.
+            const stadiumRow = await ensureStadiumRow(db, homeTeamId);
             const pitchCondition = (stadiumRow?.pitch_condition as number) ?? 50;
             // Nasáklost půdy: rozmáčené hřiště se hraje jinak než suché, i když prší stejně.
             const pitchMoisture = (stadiumRow?.pitch_moisture as number) ?? 50;
@@ -1199,9 +1206,17 @@ export async function runScheduledMatches(
                             const days = matchInjuryDays(injuryRng, event.detail, injured?.age ?? 25, injured?.injuryProneness ?? 50, injuryReduction);
                             const injType = typZraneniZPopisu(event.detail);
                             const severity = zavaznostZeDnu(days);
+                            // Dohnané kolo: zranění se léčí od termínu kola. Co by se do dneška
+                            // zahojilo, se rovnou zapíše jako doléčené.
+                            const daysLeft = catchUpInjuryDaysRemaining(days, catchUpLag);
+                            if (daysLeft <= 0) {
+                                injuryStmts.push(healedInjuryStmt(db, realPlayerId,
+                                    {description: event.detail ?? "zranění", daysTotal: days}, new Date().toISOString()));
+                                continue;
+                            }
                             injuryStmts.push(db.prepare(
                                 "INSERT INTO injuries (id, player_id, team_id, type, description, severity, days_remaining, days_total, match_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
-                            ).bind(crypto.randomUUID(), realPlayerId, evTeamId, injType, event.detail ?? "zranění", severity, days, days, matchId));
+                            ).bind(crypto.randomUUID(), realPlayerId, evTeamId, injType, event.detail ?? "zranění", severity, daysLeft, days, matchId));
                         }
                     }
                 }
@@ -1333,6 +1348,19 @@ export async function runScheduledMatches(
                     {teamId: awayTeamId, idMap: awayBuild.idMap});
                 const stmts = postMatchPlayerStatements(db, played,
                     {source: "match", description: `Zápas (${result.homeScore}:${result.awayScore})`});
+                if (catchUpLag > 0) {
+                    const engineByDbId = new Map<string, MatchPlayer>();
+                    for (const [list, idMap] of [[result.homeParticipants, homeBuild.idMap], [result.awayParticipants, awayBuild.idMap]] as const) {
+                        for (const p of list) {
+                            const dbId = idMap.get(p.id);
+                            if (dbId) engineByDbId.set(dbId, p);
+                        }
+                    }
+                    stmts.push(...catchUpRecoveryStatements(db, played.map((p) => ({
+                        dbId: p.dbId, teamId: p.teamId, conditionAfter: p.conditionAfter,
+                        stamina: engineByDbId.get(p.dbId)?.stamina, age: engineByDbId.get(p.dbId)?.age,
+                    })), catchUpLag));
+                }
                 if (stmts.length > 0) await db.batch(stmts);
             } catch (e) {
                 logger.error({module: "match-runner"}, "Condition persist failed", e);
