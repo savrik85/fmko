@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, showError } from "@/lib/api";
-import { Spinner, SectionLabel } from "@/components/ui";
+import { Spinner, SectionLabel, DataTable, EntityCell, ListCard } from "@/components/ui";
 import { bestTextOn } from "@/lib/team-color";
 
 interface CupSquadPlayer { name: string; position: string; rating: number; age: number; condition: number; morale: number; suspended: boolean }
@@ -121,32 +121,21 @@ export default function CupTeamDetailPage() {
       <div>
         <SectionLabel>Soupiska</SectionLabel>
         {data.squad.length > 0 ? (
-          <div className="card mt-2 overflow-x-auto table-scroll">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-xs text-muted uppercase font-heading">
-                  <th className="text-left px-4 py-2 w-10">Poz</th>
-                  <th className="text-left px-2 py-2">Hráč</th>
-                  <th className="text-right px-2 py-2">Věk</th>
-                  <th className="text-right px-2 py-2">Hodnocení</th>
-                  <th className="text-right px-2 py-2">Kondice</th>
-                  <th className="text-right px-4 py-2">Morálka</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.squad.map((p, i) => (
-                  <tr key={i} className="border-t border-gray-50">
-                    <td className="px-4 py-1.5 text-xs font-heading font-bold text-muted">{POS_LABEL[p.position] ?? p.position}</td>
-                    <td className="px-2 py-1.5 font-bold text-base">{p.name}{p.suspended && <span className="ml-2 text-xs text-card-red">🟥 trest</span>}</td>
-                    <td className="px-2 py-1.5 text-right tabular-nums">{p.age}</td>
-                    <td className="px-2 py-1.5 text-right tabular-nums font-heading font-bold">{p.rating}</td>
-                    <td className="px-2 py-1.5 text-right tabular-nums">{p.condition}</td>
-                    <td className="px-4 py-1.5 text-right tabular-nums">{p.morale}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <ListCard>
+            <DataTable
+              rows={data.squad} rowKey={(p) => `${p.name}-${p.age}-${p.position}`}
+              empty="Soupiska je prázdná."
+              columns={[
+                { key: "name", header: "Hráč", align: "left",
+                  cell: (p) => <EntityCell
+                    leading={<span className="w-7 text-micro font-bold text-muted">{POS_LABEL[p.position] ?? p.position}</span>}
+                    name={<>{p.name}{p.suspended && <span className="ml-2 text-micro text-card-red">🟥 trest</span>}</>} /> },
+                { key: "age", header: "Věk", width: "w-12", cell: (p) => p.age },
+                { key: "condition", header: "Kondice", width: "w-20", priority: 2, cell: (p) => p.condition },
+                { key: "morale", header: "Morálka", width: "w-20", priority: 2, cell: (p) => p.morale },
+                { key: "rating", header: "Hod.", title: "Hodnocení", width: "w-14", emphasis: true, cell: (p) => p.rating },
+              ]} />
+          </ListCard>
         ) : (
           <div className="card mt-2 p-4 text-sm text-muted">
             {t.isBig

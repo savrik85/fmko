@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { LeagueStatsTab, type StatsData } from "@/components/league/league-stats";
 import { apiFetch } from "@/lib/api";
-import { Spinner, PositionBadge, BadgePreview, useConfirm, Tabs, useTabParam } from "@/components/ui";
+import { Spinner, PositionBadge, BadgePreview, useConfirm, Tabs, useTabParam, DataTable, EntityCell, ListCard, type DataColumn } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { U21Rozvoj } from "@/components/players/u21-rozvoj";
 import { YouthSectionNav } from "@/components/players/youth-section-nav";
@@ -545,107 +545,33 @@ function NextMatchBanner({ data, gameDate }: { data: { round: LeagueRound; m: Le
   );
 }
 
-type StandingSortKey = "pos" | "team" | "played" | "wins" | "draws" | "losses" | "gd" | "points";
 
 function StandingsTable({ standings, ownTeamId }: { standings: Standing[]; ownTeamId: string }) {
-  const [sortKey, setSortKey] = useState<StandingSortKey>("pos");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
-
-  const toggle = (key: StandingSortKey) => {
-    if (key === sortKey) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    else {
-      setSortKey(key);
-      setSortDir(key === "pos" || key === "team" ? "asc" : "desc");
-    }
-  };
-
-  const sorted = [...standings].sort((a, b) => {
-    let cmp = 0;
-    switch (sortKey) {
-      case "pos": cmp = a.pos - b.pos; break;
-      case "team": cmp = a.team.localeCompare(b.team, "cs"); break;
-      case "played": cmp = a.played - b.played; break;
-      case "wins": cmp = a.wins - b.wins; break;
-      case "draws": cmp = a.draws - b.draws; break;
-      case "losses": cmp = a.losses - b.losses; break;
-      case "gd": cmp = (a.gf - a.ga) - (b.gf - b.ga); break;
-      case "points": cmp = a.points - b.points; break;
-    }
-    return sortDir === "asc" ? cmp : -cmp;
-  });
-
-  const arrow = (key: StandingSortKey) => sortKey === key ? (sortDir === "asc" ? " ↑" : " ↓") : "";
-
-  const Th = ({ k, label, align = "center", bold = false, desktop = false }: { k: StandingSortKey; label: string; align?: "left" | "center"; bold?: boolean; desktop?: boolean }) => (
-    <th
-      aria-sort={sortKey === k ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
-      className={`${desktop ? "hidden sm:table-cell" : ""} px-1 sm:px-3 py-1 hover:text-gray-700 select-none ${align === "left" ? "text-left" : "text-center"} ${bold ? "font-bold" : ""}`}
-    >
-      <button onClick={() => toggle(k)} className="min-h-11 whitespace-nowrap" aria-label={`Řadit: ${label}`}>{label}{arrow(k)}</button>
-    </th>
-  );
-
+  const columns: DataColumn<Standing>[] = [
+    { key: "pos", header: "#", width: "w-10", align: "center", sortValue: (r) => r.pos, firstDir: "asc",
+      cell: (r) => <span className={`font-bold ${r.pos === 1 ? "text-gold-700" : "text-muted"}`}>{r.pos}</span> },
+    { key: "team", header: "Klub", align: "left", sortValue: (r) => r.team,
+      cell: (r) => (
+        <EntityCell
+          leading={<BadgePreview primary={r.primaryColor || "#2D5F2D"} secondary={r.secondaryColor || "#FFFFFF"}
+            pattern={(r.badgePattern as BadgePattern) || "shield"} initials={ini(r.team)} size={24} />}
+          name={r.team.replace(/ U21$/, "")} bold={r.teamId === ownTeamId}
+          meta={`${r.wins}-${r.draws}-${r.losses} · ${r.gf}:${r.ga}`} metaMobileOnly />
+      ) },
+    { key: "played", header: "Z", title: "Zápasy", width: "w-10", sortValue: (r) => r.played, cell: (r) => r.played },
+    { key: "wins", header: "V", title: "Výhry", width: "w-10", priority: 2, sortValue: (r) => r.wins, cell: (r) => r.wins },
+    { key: "draws", header: "R", title: "Remízy", width: "w-10", priority: 2, sortValue: (r) => r.draws, cell: (r) => r.draws },
+    { key: "losses", header: "P", title: "Prohry", width: "w-10", priority: 2, sortValue: (r) => r.losses, cell: (r) => r.losses },
+    { key: "gd", header: "Skóre", width: "w-16", priority: 2, sortValue: (r) => r.gf - r.ga, cell: (r) => `${r.gf}:${r.ga}` },
+    { key: "points", header: "Body", width: "w-14", emphasis: true, sortValue: (r) => r.points, cell: (r) => r.points },
+  ];
   return (
-    <div className="card overflow-hidden">
-      <table className="w-full text-sm">
-        <caption className="sr-only">Tabulka ligy U21. Z: zápasy, V: výhry, R: remízy, P: prohry, B: body.</caption>
-        <thead>
-          <tr className="border-b border-gray-200 text-left text-xs text-gray-500 uppercase">
-            <Th k="pos" label="#" />
-            <Th k="team" label="Tým" align="left" />
-            <Th k="played" label="Z" />
-            <Th k="wins" label="V" desktop />
-            <Th k="draws" label="R" desktop />
-            <Th k="losses" label="P" desktop />
-            <Th k="gd" label="Skóre" />
-            <Th k="points" label="B" bold />
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.map((s) => (
-            <tr
-              key={s.pos}
-              className={`border-b border-gray-100 ${s.teamId === ownTeamId ? "bg-pitch-50 font-semibold" : ""}`}
-            >
-              <td className="px-1 sm:px-3 py-2 text-center">{s.pos}</td>
-              <td className="px-1 sm:px-3 py-2 w-full">
-                <div className="flex items-center gap-1.5">
-                  <BadgePreview
-                    primary={s.primaryColor || "#2D5F2D"}
-                    secondary={s.secondaryColor || "#FFFFFF"}
-                    pattern={(s.badgePattern as BadgePattern) || "shield"}
-                    initials={ini(s.team)}
-                    size={22}
-                  />
-                  {/* AI klub je odkaz jako každý jiný klub, rozdíl je jen štítek u trenéra. */}
-                  {s.teamId ? (
-                    <Link href={`/tym/${s.teamId}`} className="break-words hover:text-pitch-600 transition-colors">
-                      {s.team.replace(/ U21$/, "")}
-                    </Link>
-                  ) : (
-                    <span>{s.team.replace(/ U21$/, "")}</span>
-                  )}
-                </div>
-                <div className="mt-1 pl-7 text-[10px] font-normal text-muted sm:hidden">{s.wins} V · {s.draws} R · {s.losses} P</div>
-              </td>
-              <td className="px-1 sm:px-3 py-2 text-center tabular-nums">{s.played}</td>
-              <td className="hidden sm:table-cell px-3 py-2 text-center tabular-nums">{s.wins}</td>
-              <td className="hidden sm:table-cell px-3 py-2 text-center tabular-nums">{s.draws}</td>
-              <td className="hidden sm:table-cell px-3 py-2 text-center tabular-nums">{s.losses}</td>
-              <td className="px-1 sm:px-3 py-2 text-center whitespace-nowrap tabular-nums">{s.gf}:{s.ga}</td>
-              <td className="px-1 sm:px-3 py-2 text-center tabular-nums font-bold">{s.points}</td>
-            </tr>
-          ))}
-          {sorted.length === 0 && (
-            <tr>
-              <td colSpan={8} className="text-center text-gray-500 py-6">
-                Žádné odehrané zápasy
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-    </div>
+    <ListCard>
+      <DataTable columns={columns} rows={standings} rowKey={(r) => String(r.pos)}
+        rowHref={(r) => (r.teamId ? `/tym/${r.teamId}` : undefined)}
+        rowTone={(r) => ({ own: r.teamId === ownTeamId })}
+        empty="Tabulka U21 se naplní po prvním odehraném kole." emptyIcon="🏆" />
+    </ListCard>
   );
 }
 

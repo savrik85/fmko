@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { BadgePreview, Tabs, useTabParam, type BadgePattern } from "@/components/ui";
+import { BadgePreview, Tabs, useTabParam, DataTable, EntityCell, ListCard, ListRow, ListEmpty, RowValue, type BadgePattern } from "@/components/ui";
 import { FixtureGroup, FixtureRow, type FixtureCrest } from "@/components/match/fixture-row";
 import { RoundPager } from "@/components/match/round-pager";
 import { PMOBILE, PMobileLogo } from "@/components/brand/p-mobile";
@@ -185,38 +185,33 @@ export function DayBlock({ title, matches, myTeamId, showTags = true }: { title:
 
 function Standings({ rows, advancing, myTeamId, footer }: { rows: StandingRow[]; advancing: number; myTeamId: string | null; footer: string | null }) {
   return (
-    <div className="card overflow-hidden">
-      <div className="flex items-center gap-2 px-4 py-2 text-sm text-muted border-b border-gray-100">
-        <span className="w-6 text-right">#</span>
-        <span className="flex-1">Tým</span>
-        <span className="w-8 text-center">Z</span>
-        <span className="w-14 text-center">Skóre</span>
-        <span className="w-8 text-right">B</span>
-      </div>
-      {rows.map((r) => (
-        <div
-          key={r.teamId}
-          className={`flex items-center gap-2 px-4 py-2.5 ${r.position === advancing ? "border-b-2 border-pitch-400" : "border-b border-gray-50"} ${r.teamId === myTeamId ? "bg-pitch-50" : ""}`}
-        >
-          <span className={`w-6 text-right text-sm tabular-nums ${r.position <= advancing ? "font-bold text-pitch-600" : "text-muted"}`}>{r.position}.</span>
-          <span className="flex-1 min-w-0 flex items-center gap-2">
-            <BadgePreview
-              primary={r.crest?.primary || r.color || "#5c6b52"}
-              secondary={r.crest?.secondary || "#FFFFFF"}
-              pattern={(r.crest?.pattern as BadgePattern) || "shield"}
-              initials={r.crest?.initials || r.name.split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase()}
-              symbol={r.crest?.symbol}
-              size={22}
-            />
-            <Link href={`/tym/${r.teamId}`} className="truncate text-base font-bold hover:underline">{r.name}</Link>
-          </span>
-          <span className="w-8 text-center text-sm tabular-nums">{r.played}</span>
-          <span className="w-14 text-center text-sm tabular-nums">{r.goalsFor}:{r.goalsAgainst}</span>
-          <span className="w-8 text-right font-heading font-[800] text-base tabular-nums">{r.points}</span>
-        </div>
-      ))}
-      {footer && <div className="px-4 py-2 text-sm text-muted">{footer}</div>}
-    </div>
+    <ListCard>
+      <DataTable
+        rows={rows} rowKey={(r) => r.teamId}
+        rowHref={(r) => `/tym/${r.teamId}`}
+        // Postupová místa značí proužek vlevo, stejně jako v ligové tabulce.
+        rowTone={(r) => ({ own: r.teamId === myTeamId, bar: r.position <= advancing ? "up" : undefined })}
+        empty="Tabulka se naplní po prvních zápasech."
+        columns={[
+          { key: "pos", header: "#", width: "w-10", align: "center",
+            cell: (r) => <span className={`font-bold ${r.position <= advancing ? "text-pitch-600" : "text-muted"}`}>{r.position}</span> },
+          { key: "team", header: "Klub", align: "left",
+            cell: (r) => (
+              <EntityCell
+                leading={<BadgePreview
+                  primary={r.crest?.primary || r.color || "#5c6b52"} secondary={r.crest?.secondary || "#FFFFFF"}
+                  pattern={(r.crest?.pattern as BadgePattern) || "shield"}
+                  initials={r.crest?.initials || r.name.split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase()}
+                  symbol={r.crest?.symbol} size={24} />}
+                name={r.name} bold={r.teamId === myTeamId}
+                meta={`skóre ${r.goalsFor}:${r.goalsAgainst}`} metaMobileOnly />
+            ) },
+          { key: "played", header: "Z", title: "Zápasy", width: "w-10", cell: (r) => r.played },
+          { key: "score", header: "Skóre", width: "w-16", priority: 2, cell: (r) => `${r.goalsFor}:${r.goalsAgainst}` },
+          { key: "points", header: "Body", width: "w-14", emphasis: true, cell: (r) => r.points },
+        ]} />
+      {footer && <div className="px-4 py-2 border-t border-line text-meta text-muted">{footer}</div>}
+    </ListCard>
   );
 }
 
@@ -383,21 +378,17 @@ export function CompetitionView({
 
       {tab === "strelci" && (
         scorers.length === 0 ? (
-          <div className="card p-8 text-center text-muted text-sm">Střelci se objeví po prvních zápasech.</div>
+          <ListCard><ListEmpty icon="⚽">Střelci se objeví po prvních zápasech.</ListEmpty></ListCard>
         ) : (
-          <div className="card">
+          <ListCard title="Střelci turnaje">
             {scorers.map((s, i) => (
-              <div key={s.playerId} className="flex items-center gap-3 px-4 py-2.5 border-b border-gray-50 last:border-b-0">
-                <span className="w-6 text-right text-sm text-muted tabular-nums shrink-0">{i + 1}.</span>
-                <span className="flex-1 min-w-0">
-                  <Link href={`/hrac/${s.playerId}`} className="block truncate text-base font-bold hover:underline">{s.name}</Link>
-                  <Link href={`/tym/${s.teamId}`} className="block truncate text-sm text-muted hover:underline">{s.teamName}</Link>
-                </span>
-                {s.assists > 0 && <span className="text-sm text-muted shrink-0">{s.assists} A</span>}
-                <span className="font-heading font-[800] text-base tabular-nums shrink-0 w-6 text-right">{s.goals}</span>
-              </div>
+              <ListRow key={s.playerId} href={`/hrac/${s.playerId}`} chevron={false}
+                leading={<span className={`text-body font-bold tabular-nums ${i === 0 ? "text-gold-700" : "text-muted"}`}>{i + 1}</span>}
+                title={s.name}
+                meta={s.assists > 0 ? `${s.teamName} · ${s.assists} asistencí` : s.teamName}
+                trailing={<RowValue>{s.goals}</RowValue>} />
             ))}
-          </div>
+          </ListCard>
         )
       )}
 

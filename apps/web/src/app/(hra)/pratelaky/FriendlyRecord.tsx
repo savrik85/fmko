@@ -6,7 +6,7 @@ import Link from "next/link";
 import { pocet } from "@/lib/referee-info";
 import { isLightColor, isNeutralExtreme } from "@/lib/team-color";
 import { HeroStat, HeroStats, heroTone } from "@/components/ui/hero-kit";
-import { SectionLabel } from "@/components/ui";
+import { SectionLabel, DataTable, EntityCell, ListCard } from "@/components/ui";
 import {
   ClubCrest, FormChip, PRIMARY_BUTTON, SECONDARY_BUTTON, TeamLink, dayShort, formatCZK, venueText,
   type Crest, type FriendliesData, type HeadToHead,
@@ -171,48 +171,25 @@ export function FriendlyRecord({ data, onChallenge }: { data: FriendliesData; on
       </div>
 
       <div>
-        <SectionLabel>Žebříček přáteláků v sezóně</SectionLabel>
-        <div className="card p-0 overflow-hidden">
-          <div className="px-4 py-3 text-sm font-heading font-bold text-ink border-b border-gray-100">{tableMotivation(data)}</div>
-          {data.table.length === 0 ? (
-            <div className="px-4 py-4 text-sm text-muted">V téhle sezóně se zatím žádný přátelák nehrál.</div>
-          ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b-2 border-gray-200 text-muted">
-                  <th className="py-2.5 px-1.5 text-sm font-heading text-center w-9">#</th>
-                  <th className="py-2.5 px-2 text-sm font-heading text-left">Klub</th>
-                  <th className="py-2.5 px-1.5 text-sm font-heading text-center hidden sm:table-cell">Z</th>
-                  <th className="py-2.5 px-1.5 text-sm font-heading text-center">V-R-P</th>
-                  <th className="py-2.5 px-1.5 text-sm font-heading text-center hidden sm:table-cell">Skóre</th>
-                  <th className="py-2.5 px-2 text-sm font-heading text-center w-10">B</th>
-                </tr>
-              </thead>
-              <tbody>
-                {[...shownTable, ...(mineOutside ? [mineOutside] : [])].map((t) => {
-                  const mine = t.teamId === meId;
-                  return (
-                    <tr key={t.teamId} className={`border-b border-gray-50 ${mine ? "bg-pitch-50/60" : ""}`}>
-                      <td className="py-2.5 px-1.5 text-center">
-                        <span className={`font-heading font-[800] text-base tabular-nums ${t.pos === 1 ? "text-gold-500" : t.pos <= 3 ? "text-pitch-500" : "text-muted"}`}>{t.pos}</span>
-                      </td>
-                      <td className="py-2.5 px-2">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <ClubCrest crest={t.crest} size={24} />
-                          <Link href={`/tym/${t.teamId}`} className={`font-heading text-base truncate hover:text-pitch-500 ${mine ? "font-[800] text-ink" : "font-bold text-ink"}`}>{t.name}</Link>
-                        </div>
-                      </td>
-                      <td className="py-2.5 px-1.5 text-center tabular-nums text-muted hidden sm:table-cell">{t.played}</td>
-                      <td className="py-2.5 px-1.5 text-center tabular-nums text-muted whitespace-nowrap">{t.won}-{t.drawn}-{t.lost}</td>
-                      <td className="py-2.5 px-1.5 text-center tabular-nums hidden sm:table-cell">{t.goalsFor}:{t.goalsAgainst}</td>
-                      <td className="py-2.5 px-2 text-center"><span className="font-heading font-[800] text-lg tabular-nums">{t.points}</span></td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
-        </div>
+        <ListCard title="Žebříček přáteláků v sezóně">
+          <div className="px-4 py-3 text-body font-bold text-ink border-b border-line-soft">{tableMotivation(data)}</div>
+          <DataTable
+            rows={[...shownTable, ...(mineOutside ? [mineOutside] : [])]} rowKey={(t) => t.teamId}
+            rowHref={(t) => `/tym/${t.teamId}`}
+            rowTone={(t) => ({ own: t.teamId === meId })}
+            empty="V téhle sezóně se zatím žádný přátelák nehrál. Vyzvi někoho a žebříček otevřeš ty."
+            columns={[
+              { key: "pos", header: "#", width: "w-10", align: "center",
+                cell: (t) => <span className={`font-bold ${t.pos === 1 ? "text-gold-700" : "text-muted"}`}>{t.pos}</span> },
+              { key: "team", header: "Klub", align: "left",
+                cell: (t) => <EntityCell leading={<ClubCrest crest={t.crest} size={24} />} name={t.name} bold={t.teamId === meId}
+                  meta={`${t.won}-${t.drawn}-${t.lost} · ${t.goalsFor}:${t.goalsAgainst}`} metaMobileOnly /> },
+              { key: "played", header: "Z", title: "Zápasy", width: "w-10", cell: (t) => t.played },
+              { key: "record", header: "V-R-P", width: "w-20", priority: 2, cell: (t) => `${t.won}-${t.drawn}-${t.lost}` },
+              { key: "score", header: "Skóre", width: "w-16", priority: 2, cell: (t) => `${t.goalsFor}:${t.goalsAgainst}` },
+              { key: "points", header: "Body", width: "w-14", emphasis: true, cell: (t) => t.points },
+            ]} />
+        </ListCard>
       </div>
 
       {r.opponents.length > 0 && (
