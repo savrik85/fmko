@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type Ref } from "react";
 import { usePathname } from "next/navigation";
+import { HelpMenu } from "./help-menu";
 
 interface HelpSection {
   heading?: string;
@@ -314,11 +315,16 @@ function HelpButton({
   onClick,
   variant = "floating",
   className,
+  label,
+  buttonRef,
 }: {
   open: boolean;
   onClick: () => void;
   variant?: "bar" | "floating";
   className?: string;
+  /** Popisek zavřeného tlačítka; v liště otevírá menu, ne rovnou nápovědu. */
+  label?: string;
+  buttonRef?: Ref<HTMLButtonElement>;
 }) {
   const spolecne = "flex items-center justify-center font-heading font-bold rounded-full transition-colors";
   const styl =
@@ -329,10 +335,12 @@ function HelpButton({
       : `fixed z-[var(--z-nav)] w-11 h-11 text-lg bg-pitch-700 text-white shadow-lg hover:bg-pitch-600 ${className ?? "bottom-24 sm:bottom-6 right-4"}`;
   return (
     <button
+      ref={buttonRef}
       onClick={onClick}
       className={`${spolecne} ${styl}`}
-      title={open ? "Zavřít nápovědu" : "Nápověda"}
-      aria-label={open ? "Zavřít nápovědu" : "Nápověda"}
+      title={open ? "Zavřít" : (label ?? "Nápověda")}
+      aria-label={open ? "Zavřít" : (label ?? "Nápověda")}
+      aria-expanded={open}
     >
       {variant === "bar" ? (
         <span className="flex items-center justify-center w-[22px] h-[22px] rounded-full border-[1.5px] border-white/55 group-hover:border-white transition-colors">
@@ -345,16 +353,42 @@ function HelpButton({
 
 // ── Exports ────────────────────────────────────────────────
 
+/**
+ * Kroužek v horní liště. Otevírá menu s nápovědou ke stránce a nahlášením chyby,
+ * proto je na každé stránce, i kde nápověda není (menu pak nabídne jen nahlášení).
+ */
 export function Napoveda() {
-  const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState<"closed" | "menu" | "help">("closed");
+  const [anchor, setAnchor] = useState<HTMLButtonElement | null>(null);
   const pathname = usePathname();
   const help = findHelp(pathname);
-  if (!help) return null;
+
+  // Přechod na jinou stránku menu i nápovědu zavře; nápověda patří stránce.
+  useEffect(() => { setMode("closed"); }, [pathname]);
+
+  const reportBug = () => {
+    setMode("closed");
+  };
 
   return (
     <>
-      <HelpButton open={open} onClick={() => setOpen(!open)} variant="bar" />
-      {open && <HelpPanel help={help} onClose={() => setOpen(false)} />}
+      <HelpButton
+        open={mode !== "closed"}
+        onClick={() => setMode(mode === "closed" ? "menu" : "closed")}
+        variant="bar"
+        label="Nápověda a nahlášení chyby"
+        buttonRef={setAnchor}
+      />
+      {mode === "menu" && (
+        <HelpMenu
+          anchor={anchor}
+          hasHelp={help != null}
+          onShowHelp={() => setMode("help")}
+          onReportBug={reportBug}
+          onClose={() => setMode("closed")}
+        />
+      )}
+      {mode === "help" && help && <HelpPanel help={help} onClose={() => setMode("closed")} />}
     </>
   );
 }
