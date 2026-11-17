@@ -3,9 +3,10 @@
 import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { FaceAvatar } from "@/components/players/face-avatar";
-import { formatCZK } from "@/lib/sponsor-owners";
+
 import { seasonsAccusative } from "@/lib/sponsor-format";
 import { RESPONSE_LABELS, type NegotiationRound } from "@/lib/sponsor-negotiation";
+import { formatKc } from "@/lib/format";
 
 const RESULT_CHIP_CLASS: Record<string, string> = {
   accept: "bg-pitch-50 text-pitch-600",
@@ -84,12 +85,12 @@ export function OwnerReplyDialog({
             <div className="mt-3 bg-surface rounded-xl p-3 space-y-1.5">
               <div className="flex items-center justify-between text-sm">
                 <span className="text-muted">Měsíčně</span>
-                <span className="font-heading font-bold">{formatCZK(counter.demands.monthly)}</span>
+                <span className="font-heading font-bold">{formatKc(counter.demands.monthly)}</span>
               </div>
               {counter.demands.signingBonus > 0 && (
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted">Za podpis</span>
-                  <span className="font-heading font-bold">{formatCZK(counter.demands.signingBonus)}</span>
+                  <span className="font-heading font-bold">{formatKc(counter.demands.signingBonus)}</span>
                 </div>
               )}
               <div className="flex items-center justify-between text-sm">

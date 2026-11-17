@@ -5,7 +5,8 @@ import { FaceAvatar } from "@/components/players/face-avatar";
 import { SponsorLink } from "@/components/sponsors/sponsor-link";
 import { formatGameDay, remainingSeasonsText } from "@/lib/sponsor-format";
 import { categoryLabel, PROMISE_LABELS, type NegotiationView, type Range } from "@/lib/sponsor-negotiation";
-import { favorLabel, formatCZK, personalityLabel } from "@/lib/sponsor-owners";
+import { favorLabel, personalityLabel } from "@/lib/sponsor-owners";
+import { formatKc } from "@/lib/format";
 
 function pokusy(n: number): string {
   return n === 1 ? "1 pokus" : n >= 2 && n <= 4 ? `${n} pokusy` : `${n} pokusů`;
@@ -46,8 +47,8 @@ export function NegotiationHeader({ view, estimate, cost }: { view: NegotiationV
           <div>Trpělivost: <span className="font-heading font-bold">{pokusy(view.patience)}</span> na odmítnutí</div>
           <div className="text-muted">Jednání platí do {formatGameDay(view.expiresGameDate)}.</div>
           <div>
-            Ochota zhruba <span className="font-heading font-bold">{formatCZK(estimate.low)} až {formatCZK(estimate.high)}</span> měsíčně.
-            Tvůj návrh ho stojí <span className={`font-heading font-bold ${over ? "text-card-red" : under ? "text-pitch-600" : "text-gold-600"}`}>{formatCZK(cost)}</span> měsíčně.
+            Ochota zhruba <span className="font-heading font-bold">{formatKc(estimate.low)} až {formatKc(estimate.high)}</span> měsíčně.
+            Tvůj návrh ho stojí <span className={`font-heading font-bold ${over ? "text-card-red" : under ? "text-pitch-600" : "text-gold-600"}`}>{formatKc(cost)}</span> měsíčně.
           </div>
           <p className="text-sm text-muted">Čím lepší vztah s majitelem, tím přesnější odhad.</p>
         </div>
@@ -56,11 +57,11 @@ export function NegotiationHeader({ view, estimate, cost }: { view: NegotiationV
           <div className="pt-3 border-t border-line-soft text-sm">
             <div className="text-muted">
               {view.current.sameSponsor ? "Současná smlouva" : `Současný sponzor ${view.current.sponsorName}`}:{" "}
-              <span className="font-heading font-bold text-ink">{formatCZK(view.current.monthlyAmount)}</span> měsíčně
-              {view.current.winBonus > 0 ? `, ${formatCZK(view.current.winBonus)} za výhru` : ""}, {remainingSeasonsText(view.current.seasonsRemaining).toLowerCase()}.
+              <span className="font-heading font-bold text-ink">{formatKc(view.current.monthlyAmount)}</span> měsíčně
+              {view.current.winBonus > 0 ? `, ${formatKc(view.current.winBonus)} za výhru` : ""}, {remainingSeasonsText(view.current.seasonsRemaining).toLowerCase()}.
             </div>
             {!view.current.sameSponsor && view.current.terminationFee > 0 && (
-              <div className="text-card-red">Přechod znamená výpovědní pokutu {formatCZK(view.current.terminationFee)}.</div>
+              <div className="text-card-red">Přechod znamená výpovědní pokutu {formatKc(view.current.terminationFee)}.</div>
             )}
             {!view.current.sameSponsor && view.current.isLegacy && (
               <div className="text-pitch-600">Přechod ze staré smlouvy je zdarma: žádná výpovědní pokuta ani ztráta reputace.</div>

@@ -21,6 +21,7 @@ import {
   type StaffTaskType,
   type StaffTaskView,
 } from "@okresni-masina/shared";
+import { formatKc } from "@/lib/format";
 
 export interface StaffTasksData {
   gameDate: string;
@@ -40,7 +41,6 @@ interface Member {
 
 const POSITION_LABEL: Record<string, string> = { GK: "BRA", DEF: "OBR", MID: "ZÁL", FWD: "ÚTO" };
 
-function czk(n: number): string { return `${n.toLocaleString("cs")} Kč`; }
 
 function czDate(day: string): string {
   const [, m, d] = day.split("-").map(Number);
@@ -212,7 +212,7 @@ export function StaffTaskBox({ teamId, member, data, onChanged }: {
       title: `Zrušit úkol ${def.label}?`,
       description: started
         ? `${name} už začal${member.gender === "f" ? "a" : ""} pracovat, peníze se nevrátí.`
-        : `Zatím se nezačalo, ${czk(t.costPaid)} se vrátí do pokladny.`,
+        : `Zatím se nezačalo, ${formatKc(t.costPaid)} se vrátí do pokladny.`,
       confirmLabel: "Zrušit úkol",
       cancelLabel: "Nechat běžet",
       variant: "danger",
@@ -290,7 +290,7 @@ export function StaffTaskBox({ teamId, member, data, onChanged }: {
                   <div className="text-sm text-muted">{d.description}</div>
                   <div className="text-sm text-ink">
                     {d.kind === "match" ? "Na příští ligový zápas" : `Na ${d.durations?.map((x) => `${x}`).join(" nebo ")} dní`}
-                    {" · "}{czk(staffTaskCost(t, d.durations?.[0]))}
+                    {" · "}{formatKc(staffTaskCost(t, d.durations?.[0]))}
                     {unavailable && <span className="text-card-red"> · {data.nextMatch ? "příští zápas je venku" : "žádný zápas v plánu"}</span>}
                   </div>
                 </button>
@@ -377,7 +377,7 @@ export function StaffTaskBox({ teamId, member, data, onChanged }: {
 
             <div className="text-sm border-t border-gray-100 pt-3 flex justify-between">
               <span className="text-muted">Cena</span>
-              <span className="font-heading font-bold tabular-nums">{czk(staffTaskCost(picked!, duration ?? undefined))}</span>
+              <span className="font-heading font-bold tabular-nums">{formatKc(staffTaskCost(picked!, duration ?? undefined))}</span>
             </div>
 
             <div className="flex gap-2 justify-between">

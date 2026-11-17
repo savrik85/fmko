@@ -9,6 +9,7 @@ import { Card, CardBody, Spinner, SectionLabel, Modal, Button, Tabs, useTabParam
 import { DistrictMap, clubBadgeSvg, villageSizeLabel, type MapVillage } from "@/components/map/DistrictMap";
 import { DistrictVillages } from "./DistrictVillages";
 import { FaceAvatar } from "@/components/players/face-avatar";
+import { formatKc } from "@/lib/format";
 
 type OfficialRole = "starosta" | "mistostarosta" | "zastupitel_1" | "zastupitel_2";
 type Personality = "podnikatel" | "aktivista" | "sportovec" | "tradicionalista" | "populista";
@@ -400,7 +401,7 @@ function OwnVillage() {
         },
       );
       const msg = res.action === "accept"
-        ? `Hotovo, obec přispěla ${res.offeredAmount?.toLocaleString("cs")} Kč.`
+        ? `Hotovo, obec přispěla ${formatKc(res.offeredAmount ?? 0)}.`
         : "Nabídka odmítnuta.";
       setToast(msg);
       setTimeout(() => setToast(null), 4000);
@@ -564,8 +565,8 @@ function OwnVillage() {
               meta={`Obec nabízí investici · vyprší ${formatDay(i.expires_at)}`}
               detail={<>
                 <Chips items={[
-                  { text: `obec dá ${i.offered_amount.toLocaleString("cs-CZ")} Kč`, tone: "good" },
-                  { text: `ty doplatíš ${i.required_contribution.toLocaleString("cs-CZ")} Kč`, tone: "bad" },
+                  { text: `obec dá ${formatKc(i.offered_amount)}`, tone: "good" },
+                  { text: `ty doplatíš ${formatKc(i.required_contribution)}`, tone: "bad" },
                   ...(i.political_cost > 0 ? [{ text: `opozice −${i.political_cost} přízeň`, tone: "bad" as const }] : []),
                 ]} />
                 <span className="flex gap-2 mt-2">
@@ -582,7 +583,7 @@ function OwnVillage() {
               detail={<>
                 <span className="block">{p.description}</span>
                 <Chips items={[
-                  { text: `−${p.cost_money.toLocaleString("cs-CZ")} Kč`, tone: "bad" },
+                  { text: `−${formatKc(p.cost_money)}`, tone: "bad" },
                   { text: `+${p.reward_favor} přízeň`, tone: "good" },
                   { text: `když ji přejdeš ${p.ignore_penalty} přízeň`, tone: "neutral" },
                 ]} />
@@ -669,7 +670,7 @@ function OwnVillage() {
                               {isInviting ? "…" : myInv ? "Pozváno" : "Pozvat"}
                             </Button>
                           )}
-                        {!slotTakenByMe && !slotTakenByOther && !myInv && <span className="block text-xs text-muted mt-0.5">dárek {giftCost.toLocaleString("cs-CZ")} Kč</span>}
+                        {!slotTakenByMe && !slotTakenByOther && !myInv && <span className="block text-xs text-muted mt-0.5">dárek {formatKc(giftCost)}</span>}
                       </span>} />
                   );
                 })}

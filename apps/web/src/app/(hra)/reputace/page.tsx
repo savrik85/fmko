@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
 import { Spinner, SectionLabel, ListCard, ListRow, ListEmpty, RowValue, DeltaMark } from "@/components/ui";
+import { formatKc } from "@/lib/format";
 
 interface Unlock {
   kind: string;
@@ -54,7 +55,6 @@ interface ReputationData {
   };
 }
 
-const CZK = (n: number) => `${n.toLocaleString("cs")} Kč`;
 
 function barColor(v: number): string {
   if (v >= 70) return "bg-pitch-500";
@@ -277,8 +277,8 @@ export default function ReputacePage() {
         )}
         <div className="-mx-4 sm:-mx-5 -mb-4 sm:-mb-5 border-t border-line">
           <EarnRow icon="🏪" label="Podpora místních podnikatelů" note="vyplácí se týdně, zaměstnanci ji můžou zvýšit"
-            now={CZK(data.earns.baseSponsorMonthly) + "/měs"}
-            next={data.atNextUnlock ? CZK(data.atNextUnlock.baseSponsorMonthly) + "/měs" : null} />
+            now={formatKc(data.earns.baseSponsorMonthly) + "/měs"}
+            next={data.atNextUnlock ? formatKc(data.atNextUnlock.baseSponsorMonthly) + "/měs" : null} />
           <EarnRow icon="💼" label="Nabídek sponzorů"
             now={String(data.earns.sponsorOfferCount)}
             next={data.atNextUnlock ? String(data.atNextUnlock.sponsorOfferCount) : null} />
@@ -289,8 +289,8 @@ export default function ReputacePage() {
             now={`+${data.earns.attendanceBonusPct} %`}
             next={data.atNextUnlock ? `+${data.atNextUnlock.attendanceBonusPct} %` : null} />
           <EarnRow icon="🍺" label="Pronájem bufetu" note="jen v režimu externího provozovatele"
-            now={CZK(data.earns.concessionWeeklyExternal) + "/týden"}
-            next={data.atNextUnlock ? CZK(data.atNextUnlock.concessionWeeklyExternal) + "/týden" : null} />
+            now={formatKc(data.earns.concessionWeeklyExternal) + "/týden"}
+            next={data.atNextUnlock ? formatKc(data.atNextUnlock.concessionWeeklyExternal) + "/týden" : null} />
           <EarnRow icon="🤝" label="Zájem hráčů o přestup k tobě"
             now={`${data.earns.transferInterestScore > 0 ? "+" : ""}${data.earns.transferInterestScore} bodů`}
             next={data.atNextUnlock ? `${data.atNextUnlock.transferInterestScore > 0 ? "+" : ""}${data.atNextUnlock.transferInterestScore} bodů` : null} />

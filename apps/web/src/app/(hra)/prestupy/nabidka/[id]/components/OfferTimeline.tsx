@@ -2,6 +2,7 @@
 
 import { clientOnly } from "@/components/client-only";
 import { termsNote } from "@/components/transfers/transfer-terms";
+import { formatKc } from "@/lib/format";
 
 const FaceAvatar = clientOnly(
   () => import("@/components/players/face-avatar").then((m) => m.FaceAvatar),
@@ -119,7 +120,7 @@ export function OfferTimeline({
               </div>
               {e.amount != null && (
                 <div className="font-heading font-bold tabular-nums text-lg leading-tight">
-                  {e.amount > 0 ? `${e.amount.toLocaleString("cs")} Kč` : hasSwap ? "bez doplatku" : "zdarma"}
+                  {e.amount > 0 ? `${formatKc(e.amount)}` : hasSwap ? "bez doplatku" : "zdarma"}
                 </div>
               )}
               {e.amount != null && e.amount > 0 && (e.installments || e.sell_on_pct) ? (

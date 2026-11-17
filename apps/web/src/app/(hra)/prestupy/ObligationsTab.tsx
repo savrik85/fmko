@@ -11,6 +11,7 @@ import Link from "next/link";
 import { apiFetch } from "@/lib/api";
 import { Spinner, ListCard, ListEmpty, ListRow, RowValue } from "@/components/ui";
 import { CPU_CLUB_ID } from "@okresni-masina/shared";
+import { formatKc } from "@/lib/format";
 
 /** Klub jako odkaz; cizí klub z trhu stránku nemá. */
 function ClubName({ id, name }: { id: string; name: string }) {
@@ -30,7 +31,6 @@ interface Obligations {
   totals: { payThisWeek: number; receiveThisWeek: number; owedTotal: number; receivableTotal: number };
 }
 
-const kc = (v: number) => `${v.toLocaleString("cs-CZ")} Kč`;
 const dueLabel = (iso: string | null) => (iso ? new Date(`${iso}T12:00:00Z`).toLocaleDateString("cs-CZ", { weekday: "short", day: "numeric", month: "numeric" }) : "pondělí");
 
 /** Splátky jednoho přestupu: řádek do `ListCard`. Jméno je odkaz, proto řádek sám odkazem není. */
@@ -46,7 +46,7 @@ export function DealCard({ deal, side }: { deal: Deal; side: "paying" | "receivi
           <Link href={`/hrac/${deal.playerId}`} className="min-w-0 hover:text-pitch-500 underline decoration-pitch-500/20 transition-colors">
             {deal.playerName}
           </Link>
-          <span className="shrink-0 tabular-nums">{kc(deal.totalAmount)}</span>
+          <span className="shrink-0 tabular-nums">{formatKc(deal.totalAmount)}</span>
         </span>
       }
       meta={<>{side === "paying" ? "od " : "do "}<ClubName id={deal.otherTeamId} name={deal.otherTeamName} /></>}
@@ -55,10 +55,10 @@ export function DealCard({ deal, side }: { deal: Deal; side: "paying" | "receivi
           <span className="block h-full bg-pitch-500" style={{ width: `${pct}%` }} />
         </span>
         <span className="grid grid-cols-2 gap-x-3 gap-y-0.5 mt-2 tabular-nums">
-          <span className="text-muted">Záloha</span><span className="text-right">{kc(deal.upfrontAmount)}</span>
-          <span className="text-muted">Splátky</span><span className="text-right">{deal.installmentsPaid} z {deal.installmentsTotal} · {kc(deal.installmentAmount)} týdně</span>
-          <span className="text-muted">Zbývá {side === "paying" ? "doplatit" : "dostat"}</span><span className="text-right font-bold text-ink">{kc(deal.remaining)}</span>
-          <span className="text-muted">Příští splátka</span><span className="text-right">{kc(deal.nextPayment)} · {dueLabel(deal.nextDue)}</span>
+          <span className="text-muted">Záloha</span><span className="text-right">{formatKc(deal.upfrontAmount)}</span>
+          <span className="text-muted">Splátky</span><span className="text-right">{deal.installmentsPaid} z {deal.installmentsTotal} · {formatKc(deal.installmentAmount)} týdně</span>
+          <span className="text-muted">Zbývá {side === "paying" ? "doplatit" : "dostat"}</span><span className="text-right font-bold text-ink">{formatKc(deal.remaining)}</span>
+          <span className="text-muted">Příští splátka</span><span className="text-right">{formatKc(deal.nextPayment)} · {dueLabel(deal.nextDue)}</span>
         </span>
         {side === "paying" && (
           <span className="block mt-1.5 text-muted">Když hráče prodáš dál, zbytek se doplatí hned z ceny prodeje.</span>
@@ -106,13 +106,13 @@ export function ObligationsTab({ teamId, loans }: { teamId: string; loans: React
         <div className="card p-4 grid grid-cols-2 gap-3 text-sm tabular-nums">
           <div>
             <div className="text-muted">Příští pondělí zaplatím</div>
-            <div className={`font-heading font-bold text-lg ${totals.payThisWeek > 0 ? "text-card-red" : "text-ink"}`}>{kc(totals.payThisWeek)}</div>
-            <div className="text-muted">celkem dlužím {kc(totals.owedTotal)}</div>
+            <div className={`font-heading font-bold text-lg ${totals.payThisWeek > 0 ? "text-card-red" : "text-ink"}`}>{formatKc(totals.payThisWeek)}</div>
+            <div className="text-muted">celkem dlužím {formatKc(totals.owedTotal)}</div>
           </div>
           <div className="text-right">
             <div className="text-muted">Příští pondělí dostanu</div>
-            <div className={`font-heading font-bold text-lg ${totals.receiveThisWeek > 0 ? "text-pitch-600" : "text-ink"}`}>{kc(totals.receiveThisWeek)}</div>
-            <div className="text-muted">celkem mi dluží {kc(totals.receivableTotal)}</div>
+            <div className={`font-heading font-bold text-lg ${totals.receiveThisWeek > 0 ? "text-pitch-600" : "text-ink"}`}>{formatKc(totals.receiveThisWeek)}</div>
+            <div className="text-muted">celkem mi dluží {formatKc(totals.receivableTotal)}</div>
           </div>
           <div className="col-span-2 text-muted">Splátky se strhávají každé pondělí, i když je klub v minusu.</div>
         </div>

@@ -8,6 +8,7 @@ import { Spinner, SectionLabel, PageHeader, Button, ListCard, ListRow, ListEmpty
 import { bestTextOn } from "@/lib/team-color";
 import { BRAND, CompetitionView, type Competition } from "./competition";
 import { PMobileLogo, PMobileMark, SignalWaves, pMobileTheme } from "@/components/brand/p-mobile";
+import { formatKc } from "@/lib/format";
 
 /** Hlavička turnaje v barvách pořadatele: logo P-Mobile, název, ročník a dějiště. */
 function Hero({ name, edition, venueName, city, extra }: { name: string; edition: number; venueName: string; city: string; extra?: string }) {
@@ -102,9 +103,6 @@ function remainingLabel(iso: string, now: number): string {
   return "zbývá pár minut";
 }
 
-function kc(n: number): string {
-  return `${n.toLocaleString("cs")} Kč`;
-}
 
 function clubsLabel(n: number): string {
   return `${n} ${plural(n, "klub", "kluby", "klubů")}`;
@@ -126,7 +124,7 @@ function PrizeCell({ label, amount, note }: { label: string; amount: number; not
   return (
     <div>
       <div className="text-sm text-muted">{label}</div>
-      <div className="font-heading font-bold tabular-nums text-base leading-tight">{kc(amount)}</div>
+      <div className="font-heading font-bold tabular-nums text-base leading-tight">{formatKc(amount)}</div>
       {note && <div className="text-sm text-muted">{note}</div>}
     </div>
   );
@@ -188,7 +186,7 @@ export default function TurnajPage() {
   const entries = data?.entries ?? [];
   const open = !!data?.registrationOpen;
   const myEntry = !!data?.myEntry;
-  const winOn = (amount: number) => kc(amount * 3);
+  const winOn = (amount: number) => formatKc(amount * 3);
   const competition = data?.competition ?? null;
 
   // Po losu propozice říkají skutečný formát a délku, před ním jen rámec.

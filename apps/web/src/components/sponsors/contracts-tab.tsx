@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { ListCard, ListEmpty, ListRow, RowValue } from "@/components/ui";
-import { formatCZK } from "@/lib/sponsor-owners";
+
 import { seasonsAccusative, weeklyAmount, seasonsGenitive } from "@/lib/sponsor-format";
 import type { ActiveContract, SponsorCategory, SponsorOffer, SponsorPromiseView, SponsorsData } from "@/lib/sponsor-page-types";
 import { sponsorTypeLabel } from "@/lib/sponsor-types";
 import { ContractPromises } from "./contract-promises";
 import { FavorLine } from "./favor-badge";
 import { SponsorLink } from "./sponsor-link";
+import { formatKc } from "@/lib/format";
 
 export function ContractsTab({ data, reputation, favors, acting, onSign, onTerminate, onRenew, promisesByContract, onSleeveLogo }: {
   data: SponsorsData;
@@ -115,13 +116,13 @@ function ContractRow({ contract, favor, onTerminate, onRenew, acting, promises, 
     <ListRow
       title={<SponsorLink id={contract.sponsorId} name={contract.sponsorName} />}
       meta={sponsorTypeLabel(contract.sponsorType)}
-      trailing={<RowValue tone="plus" sub="týdně">+{formatCZK(weeklyAmount(contract.monthlyAmount))}</RowValue>}
+      trailing={<RowValue tone="plus" sub="týdně">+{formatKc(weeklyAmount(contract.monthlyAmount))}</RowValue>}
       detail={<>
         <span className="flex flex-wrap gap-x-4 gap-y-1 text-sm tabular-nums">
-          {contract.winBonus > 0 && <span className="text-pitch-400">+{formatCZK(contract.winBonus)} za výhru</span>}
+          {contract.winBonus > 0 && <span className="text-pitch-400">+{formatKc(contract.winBonus)} za výhru</span>}
           <span className="text-muted">zbývá {contract.seasonsRemaining} z {contract.seasonsTotal} {seasonsGenitive(contract.seasonsTotal)}</span>
           {!(contract.isLegacy && contract.category !== "banner") && (
-            <span className="text-card-red">výpovědní pokuta {formatCZK(contract.terminationFee)}</span>
+            <span className="text-card-red">výpovědní pokuta {formatKc(contract.terminationFee)}</span>
           )}
         </span>
         {contract.isLegacy && contract.category !== "banner" && (
@@ -133,7 +134,7 @@ function ContractRow({ contract, favor, onTerminate, onRenew, acting, promises, 
         )}
         {contract.renewal ? (
           <span className="block mt-1 text-sm text-muted">
-            Prodloužení: <span className="text-pitch-500 font-heading font-bold">+{formatCZK(weeklyAmount(contract.renewal.monthlyAmount))}/týd</span>{" "}
+            Prodloužení: <span className="text-pitch-500 font-heading font-bold">+{formatKc(weeklyAmount(contract.renewal.monthlyAmount))}/týd</span>{" "}
             na {seasonsAccusative(contract.renewal.seasons)}
           </span>
         ) : contract.renewable ? (
@@ -196,10 +197,10 @@ function OffersList({ offers, category, onSign, acting, current, signDisabled }:
             }
             detail={<>
               <span className="flex flex-wrap gap-x-4 gap-y-1 text-sm tabular-nums">
-                <span className="text-pitch-500 font-heading font-bold">+{formatCZK(offerWeekly)}/týd</span>
-                {offer.winBonus > 0 && <span className="text-pitch-400">+{formatCZK(offer.winBonus)} za výhru</span>}
+                <span className="text-pitch-500 font-heading font-bold">+{formatKc(offerWeekly)}/týd</span>
+                {offer.winBonus > 0 && <span className="text-pitch-400">+{formatKc(offer.winBonus)} za výhru</span>}
                 <span className="text-muted">na {seasonsAccusative(offer.seasons)}</span>
-                <span className="text-card-red">výpovědní pokuta {formatCZK(offer.earlyTerminationFee)}</span>
+                <span className="text-card-red">výpovědní pokuta {formatKc(offer.earlyTerminationFee)}</span>
               </span>
               {(category === "main" || offer.requirement) && (
                 <span className="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-sm text-gold-600">
@@ -211,9 +212,9 @@ function OffersList({ offers, category, onSign, acting, current, signDisabled }:
                 <span className="block mt-1.5 pt-1.5 border-t border-line-soft text-sm">
                   <span className="text-muted">Oproti {current.sponsorName}: </span>
                   <span className={weeklyDelta > 0 ? "text-pitch-500 font-heading font-bold" : weeklyDelta < 0 ? "text-card-red font-heading font-bold" : "text-muted"}>
-                    {weeklyDelta > 0 ? "+" : ""}{formatCZK(weeklyDelta)}/týd
+                    {weeklyDelta > 0 ? "+" : ""}{formatKc(weeklyDelta)}/týd
                   </span>
-                  <span className="text-muted">. Výpovědní pokuta za ukončení: <span className="text-card-red font-bold">{formatCZK(currentTerminationFee)}</span>.</span>
+                  <span className="text-muted">. Výpovědní pokuta za ukončení: <span className="text-card-red font-bold">{formatKc(currentTerminationFee)}</span>.</span>
                   {payback && (
                     <span className="text-muted"> Návratnost změny: <span className="font-bold">{payback} {payback === 1 ? "týden" : payback < 5 ? "týdny" : "týdnů"}</span>.</span>
                   )}

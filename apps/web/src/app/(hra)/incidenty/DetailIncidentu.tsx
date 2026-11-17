@@ -5,10 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 import { Spinner, SectionLabel } from "@/components/ui";
-import {
-  datum, kc, OBVINENI_LABEL, stavPilulka, TREST_HOTOVO, TREST_LABEL, VYSLEDEK_LABEL, ZDROJ_EMOJI,
-  type AkceTrestu, type DetailIncidentuData, type VysledekObvineni,
-} from "./typy";
+import { datum, OBVINENI_LABEL, stavPilulka, TREST_HOTOVO, TREST_LABEL, VYSLEDEK_LABEL, ZDROJ_EMOJI, type AkceTrestu, type DetailIncidentuData, type VysledekObvineni } from "./typy";
+import { formatKc } from "@/lib/format";
 
 const ODKAZ_HRACE = "text-base font-heading font-bold underline decoration-pitch-500/20 hover:text-pitch-500";
 
@@ -185,7 +183,7 @@ export function DetailIncidentu({ teamId, incidentId, onZmena }: { teamId: strin
           {jeSituace && i.status === "probiha" && i.endsOn && <p className="text-sm text-muted mt-1">Potrvá do {datum(i.endsOn)}</p>}
           {jeSituace && i.status === "probiha" && <AbsenceSituace kind={i.kind} absence={detail.situace?.absence ?? null} />}
           {jeSituace && detail.situace?.zaloha === "pujceno" && detail.situace.castka != null && (
-            <p className="text-sm text-muted mt-1">Zálohu jsi půjčil: {kc(detail.situace.castka)}, splácí se čtyři pondělky ze mzdy.</p>
+            <p className="text-sm text-muted mt-1">Zálohu jsi půjčil: {formatKc(detail.situace.castka)}, splácí se čtyři pondělky ze mzdy.</p>
           )}
           {jeSituace && detail.situace?.zaloha === "odmitnuto" && <p className="text-sm text-muted mt-1">Zálohu jsi odmítl.</p>}
         </div>
@@ -354,9 +352,9 @@ export function DetailIncidentu({ teamId, incidentId, onZmena }: { teamId: strin
               <SectionLabel>Co s pachatelem</SectionLabel>
               <ul className="text-sm text-muted space-y-1">
                 {detail.castky && akce.tresty.includes("srazka") && (
-                  <li>Srážka ze mzdy: celkem {kc(detail.castky.srazka)} během {detail.castky.tydnu} týdnů.</li>
+                  <li>Srážka ze mzdy: celkem {formatKc(detail.castky.srazka)} během {detail.castky.tydnu} týdnů.</li>
                 )}
-                {detail.castky && akce.tresty.includes("pokuta") && <li>Pokuta: {kc(detail.castky.pokuta)} najednou.</li>}
+                {detail.castky && akce.tresty.includes("pokuta") && <li>Pokuta: {formatKc(detail.castky.pokuta)} najednou.</li>}
                 {akce.tresty.includes("vyradit") && <li>Vyřadit: hráč vynechá příští 1 až 3 ligová kola, do té doby nenastoupí ani v poháru.</li>}
                 {akce.tresty.includes("policie") && <li>Předat policii: soud mu dá podmínku, v klubu zůstane.</li>}
                 {akce.tresty.includes("vyhodit") && <li>Vyhodit: hráč odejde mezi volné hráče.</li>}

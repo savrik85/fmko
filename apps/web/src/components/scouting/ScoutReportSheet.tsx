@@ -16,6 +16,7 @@ import { MoneyInput, formatAmount } from "@/components/ui/money-input";
 import { TransferTermsFields, PLAIN_TERMS, type TermsValue } from "@/components/transfers/transfer-terms";
 import { WillingnessBadge, ratingText } from "./WillingnessBadge";
 import { SCOUT_REPORT_STATUS_LABELS, type ScoutReportStatus } from "@okresni-masina/shared";
+import { formatKc } from "@/lib/format";
 
 export interface ScoutReport {
   id: string;
@@ -205,10 +206,10 @@ export function ScoutReportSheet({ teamId, reportId, onClose, onChanged }: {
                 <div className="flex items-center gap-2 flex-wrap"><span className="text-muted">Ochota přejít:</span><WillingnessBadge level={r.willingness.level} /></div>
               )}
               {r.source === "village_club" && r.askHint != null && (
-                <div><span className="text-muted">Klub si řekne asi </span><span className="font-heading font-bold tabular-nums">{r.askHint.toLocaleString("cs")} Kč</span></div>
+                <div><span className="text-muted">Klub si řekne asi </span><span className="font-heading font-bold tabular-nums">{formatKc(r.askHint)}</span></div>
               )}
               {r.source === "free_agent" && r.weeklyWage != null && (
-                <div><span className="text-muted">Chce </span><span className="font-heading font-bold tabular-nums">{r.weeklyWage.toLocaleString("cs")} Kč týdně</span></div>
+                <div><span className="text-muted">Chce </span><span className="font-heading font-bold tabular-nums">{formatKc(r.weeklyWage)} týdně</span></div>
               )}
               {r.gamePlayerId && (active || r.status === "negotiating") && (
                 <div className="text-muted">Hraje za {r.clubName ?? "klub ve hře"}. Nabídku na přestup mu pošleš z jeho profilu.</div>

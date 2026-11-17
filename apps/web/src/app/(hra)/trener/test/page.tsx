@@ -19,6 +19,7 @@ import { SectionLabel, Spinner } from "@/components/ui";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { COURSE_RULES } from "@okresni-masina/shared";
 import { announceExamRunning } from "@/lib/coach-exam-channel";
+import { formatKc } from "@/lib/format";
 
 interface Rules {
   questions: number;
@@ -460,7 +461,7 @@ function ResultView({ result, teamId, courseId }: { result: Result; teamId: stri
         )}
         {result.retakePrice !== null && (
           <p className="text-sm text-red-800 mt-2">
-            Máš jeden opravný termín. Přihlásit se na něj můžeš v záložce Vzdělání (cena {result.retakePrice.toLocaleString("cs")} Kč).
+            Máš jeden opravný termín. Přihlásit se na něj můžeš v záložce Vzdělání (cena {formatKc(result.retakePrice)}).
           </p>
         )}
         <div className="flex flex-col sm:flex-row gap-2 mt-4">

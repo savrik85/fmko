@@ -1,3 +1,4 @@
+import { formatKc } from "@/lib/format";
 /**
  * Hostování přes trh: popisky podmínky hraní, délky a stavu (API: transfers/loan-agreements.ts).
  */
@@ -32,7 +33,7 @@ export function loanDurationLabel(days: number | null | undefined): string {
 
 /** Podmínky inzerátu na jeden řádek: „2 měsíce · zdarma · hraje v základu“. */
 export function loanTermsLine(l: { loanDays?: number | null; askingPrice: number; loanPlayingTime?: string | null }): string {
-  const fee = l.askingPrice > 0 ? `${l.askingPrice.toLocaleString("cs-CZ")} Kč` : "zdarma";
+  const fee = l.askingPrice > 0 ? `${formatKc(l.askingPrice)}` : "zdarma";
   const pt = (l.loanPlayingTime ?? "none") as LoanPlayingTime;
   const condition = pt === "none" ? "bez podmínky" : LOAN_PLAYING_TIME_LABEL[pt].toLowerCase();
   return [loanDurationLabel(l.loanDays), fee, condition].filter(Boolean).join(" · ");

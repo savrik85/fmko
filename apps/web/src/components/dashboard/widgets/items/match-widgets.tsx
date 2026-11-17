@@ -11,6 +11,7 @@ import type { WidgetProps, ScheduleMatch } from "../types";
 import { rowsForHeight, ROW_PX } from "../widget-heights";
 import { initials } from "./shared";
 import { TeamName } from "@/components/manager/team-name";
+import { formatKc } from "@/lib/format";
 
 // ── Dnešní program ──────────────────────────────────────────────────────────
 
@@ -94,7 +95,7 @@ export function NextMatchWidget({ data, teamId }: WidgetProps) {
 
   const promoteMatch = async (m: ScheduleMatch) => {
     if (!teamId || promoting) return;
-    const priceStr = promotionPrice != null ? `${promotionPrice.toLocaleString("cs")} Kč` : "500–2 500 Kč";
+    const priceStr = promotionPrice != null ? `${formatKc(promotionPrice)}` : "500–2 500 Kč";
     const ok = await confirm({
       title: `Propagovat zápas proti ${m.awayName}?`,
       description: `Doma · ${m.scheduledAt ? new Date(m.scheduledAt).toLocaleDateString("cs") : ""}. Vyjde článek ve Zpravodaji a přijde +25 % diváků.`,

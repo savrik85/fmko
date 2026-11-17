@@ -13,6 +13,7 @@ import { apiFetch, apiAction, showError } from "@/lib/api";
 import { Spinner, PositionBadge, SheetDialog, useConfirm, ListCard, ListRow, ListEmpty, RowIcon, StatusChip } from "@/components/ui";
 import { MoneyInput } from "@/components/ui/money-input";
 import { OriginBadge } from "@/components/transfers/origin-badge";
+import { formatKc } from "@/lib/format";
 
 type Position = "GK" | "DEF" | "MID" | "FWD";
 type Role = "starter" | "squad" | "prospect";
@@ -54,7 +55,6 @@ const ROLE_OPTIONS: Array<{ key: Role; label: string; ages: [number, number] }> 
 ];
 const AGES = Array.from({ length: 26 }, (_, i) => 15 + i);
 
-const formatCZK = (v: number) => `${v.toLocaleString("cs")}\u00a0Kč`;
 const dateCz = (iso: string) => new Date(iso).toLocaleDateString("cs-CZ", { day: "numeric", month: "numeric" });
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 const ageText = (d: { ageMin: number; ageMax: number }) => (d.ageMin <= 16 ? `do ${d.ageMax} let` : `${d.ageMin} až ${d.ageMax} let`);
@@ -83,7 +83,7 @@ function DemandRow({ d, who, extra, trailing }: { d: DemandBase; who: ReactNode;
       detail={<>
         <span className="block">
           {who}
-          {d.maxPrice ? <> · do <span className="font-bold text-ink">{formatCZK(d.maxPrice)}</span></> : " · cena dohodou"}
+          {d.maxPrice ? <> · do <span className="font-bold text-ink">{formatKc(d.maxPrice)}</span></> : " · cena dohodou"}
         </span>
         {(d.minRating || d.skills.length > 0) && (
           <span className="flex flex-wrap gap-1.5 mt-1.5">

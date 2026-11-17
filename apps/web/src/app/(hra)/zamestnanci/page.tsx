@@ -21,6 +21,7 @@ import {
   licenceLabel,
   maxScoutsForLicence,
 } from "@okresni-masina/shared";
+import { formatKc } from "@/lib/format";
 
 // ── Typy (odpovídají API camelCase) ──
 interface CourseQuote { attribute: StaffAttributeKey; points: number; weeks: number; cost: number; }
@@ -65,7 +66,6 @@ const ATTR_SHORT: Record<StaffAttributeKey, string> = {
 };
 const GROUP_ORDER: StaffGroup[] = ["trenerske", "zdravi", "provoz", "scouting"];
 
-function czk(n: number): string { return `${n.toLocaleString("cs")} Kč`; }
 
 function attrColor(v: number): string {
   if (v >= 15) return "text-pitch-400 font-bold";
@@ -258,8 +258,8 @@ export default function ZamestnanciPage() {
       title: `Najmout ${cand.firstName} ${cand.lastName}?`,
       description: `${ROLE_DEFS[role].label} · efektivita ${eff}/20`,
       details: [
-        { label: "Podpisné", value: `−${czk(cand.signingFee)}`, color: "text-card-red" },
-        { label: "Mzda", value: `${czk(cand.weeklyWage)}/týd`, color: "text-ink" },
+        { label: "Podpisné", value: `−${formatKc(cand.signingFee)}`, color: "text-card-red" },
+        { label: "Mzda", value: `${formatKc(cand.weeklyWage)}/týd`, color: "text-ink" },
       ],
       confirmLabel: "Najmout",
     });
@@ -353,7 +353,7 @@ export default function ZamestnanciPage() {
             },
           ]
         : []),
-      { label: "Cena", value: `−${czk(q.cost)}`, color: "text-card-red" },
+      { label: "Cena", value: `−${formatKc(q.cost)}`, color: "text-card-red" },
       { label: "Délka", value: `${q.weeks} týdnů`, color: "text-ink" },
     ];
 
@@ -492,7 +492,7 @@ export default function ZamestnanciPage() {
                               </span>
                             )}
                             <span className="text-muted tabular-nums text-xs whitespace-nowrap">
-                              {q.weeks} týd · {czk(q.cost)}
+                              {q.weeks} týd · {formatKc(q.cost)}
                             </span>
                           </div>
                         </button>
@@ -504,7 +504,7 @@ export default function ZamestnanciPage() {
 
             {/* Info řádek + akce */}
             <span className="flex flex-wrap items-center justify-between gap-2 border-t border-line-soft pt-2">
-              <span className="text-xs text-muted">Mzda <span className="font-heading font-bold text-ink tabular-nums">{czk(m.weeklyWage)}</span>/týd</span>
+              <span className="text-xs text-muted">Mzda <span className="font-heading font-bold text-ink tabular-nums">{formatKc(m.weeklyWage)}</span>/týd</span>
               <span className="flex items-center gap-2">
                 <select
                   value=""
@@ -690,9 +690,9 @@ export default function ZamestnanciPage() {
                               {/* Info řádek + akce */}
                               <span className="flex items-center justify-between gap-3 border-t border-line-soft pt-2">
                                 <span className="text-xs text-muted">
-                                  Podpisné <span className="font-heading font-bold text-ink tabular-nums">{czk(cand.signingFee)}</span>
+                                  Podpisné <span className="font-heading font-bold text-ink tabular-nums">{formatKc(cand.signingFee)}</span>
                                   <span className="mx-1">·</span>
-                                  mzda <span className="font-heading font-bold text-ink tabular-nums">{czk(cand.weeklyWage)}</span>/týd
+                                  mzda <span className="font-heading font-bold text-ink tabular-nums">{formatKc(cand.weeklyWage)}</span>/týd
                                 </span>
                                 <button onClick={() => doHire(cand, selected)}
                                   disabled={occupied || needsLicence}

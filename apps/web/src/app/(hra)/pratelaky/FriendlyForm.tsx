@@ -2,10 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch, showError } from "@/lib/api";
-import {
-  PRIMARY_BUTTON, chipClass, dayLabel, dayShort, formatCZK, sumCosts,
-  type CostLine, type DayOption, type FriendlyLimits, type TeamOption,
-} from "./friendly-ui";
+import { PRIMARY_BUTTON, chipClass, dayLabel, dayShort, sumCosts, type CostLine, type DayOption, type FriendlyLimits, type TeamOption } from "./friendly-ui";
+import { formatKc } from "@/lib/format";
 
 type Mode = "challenge" | "offer";
 
@@ -188,13 +186,13 @@ export function FriendlyForm({ mode, teamId, teams, days, limits, budget, onDone
         {mode === "challenge" && quote ? (
           <div className="text-sm mt-2 space-y-0.5">
             <div className="text-muted">Vzdálenost {quote.distanceKm} km</div>
-            <div><span className="font-heading font-bold">Ty zaplatíš:</span> {quote.myCosts.length ? quote.myCosts.map((l) => `${l.label.toLowerCase()} ${formatCZK(l.amount)}`).join(", ") : "nic"}{quote.myCosts.length > 1 ? `, celkem ${formatCZK(sumCosts(quote.myCosts))}` : ""}</div>
-            <div><span className="font-heading font-bold">Soupeř zaplatí:</span> {quote.opponentCosts.length ? quote.opponentCosts.map((l) => `${l.label.toLowerCase()} ${formatCZK(l.amount)}`).join(", ") : "nic"}</div>
+            <div><span className="font-heading font-bold">Ty zaplatíš:</span> {quote.myCosts.length ? quote.myCosts.map((l) => `${l.label.toLowerCase()} ${formatKc(l.amount)}`).join(", ") : "nic"}{quote.myCosts.length > 1 ? `, celkem ${formatKc(sumCosts(quote.myCosts))}` : ""}</div>
+            <div><span className="font-heading font-bold">Soupeř zaplatí:</span> {quote.opponentCosts.length ? quote.opponentCosts.map((l) => `${l.label.toLowerCase()} ${formatKc(l.amount)}`).join(", ") : "nic"}</div>
           </div>
         ) : (
           <p className="text-sm text-muted mt-1.5">
-            Hostitel platí rozhodčího ({formatCZK(limits.refereeFee)}), host cestovné ({formatCZK(limits.travelBase)} a {limits.travelPerKm} Kč za km).
-            Na neutrálu se rozhodčí i pronájem hřiště ({formatCZK(limits.rentalFee)}) dělí napůl. Strhává se v den zápasu.
+            Hostitel platí rozhodčího ({formatKc(limits.refereeFee)}), host cestovné ({formatKc(limits.travelBase)} a {limits.travelPerKm} Kč za km).
+            Na neutrálu se rozhodčí i pronájem hřiště ({formatKc(limits.rentalFee)}) dělí napůl. Strhává se v den zápasu.
           </p>
         )}
       </div>
@@ -206,14 +204,14 @@ export function FriendlyForm({ mode, teamId, teams, days, limits, budget, onDone
             const disabled = v > 0 && (linked || v > budget);
             return (
               <button key={v} type="button" disabled={disabled} onClick={() => setStake(v)} className={chipClass(stake === v, disabled)}>
-                {v === 0 ? "Bez sázky" : formatCZK(v)}
+                {v === 0 ? "Bez sázky" : formatKc(v)}
               </button>
             );
           })}
         </div>
         <p className="text-sm text-muted mt-1.5">
           {stake > 0
-            ? `Sázku složíte oba, až soupeř kývne. Vítěz bere ${formatCZK(stake * 2)}, při remíze se vrací.`
+            ? `Sázku složíte oba, až soupeř kývne. Vítěz bere ${formatKc(stake * 2)}, při remíze se vrací.`
             : "Přátelák jen na trénink, bez peněz navíc."}
         </p>
       </div>

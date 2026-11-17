@@ -26,6 +26,7 @@ import { AiNegotiationsList } from "@/components/transfers/AiNegotiationsList";
 import { termsNote, TransferTermsFields, PLAIN_TERMS, type TermsValue } from "@/components/transfers/transfer-terms";
 import { markOffersSeen, getUnseenOffersCount } from "@/lib/seen-offers";
 import { setIncomingOffersCount, triggerMenuBadgesRefresh } from "@/hooks/use-menu-badges";
+import { formatKc } from "@/lib/format";
 
 // Na telefonu se 7 záložek nevešlo, proto 4 hlavní a pod nimi podzáložky:
 // Hledat = všechno, kde vybírám cizí hráče; Můj tým = vlastní kádr a peníze za přestupy.
@@ -74,7 +75,6 @@ interface TeamBadge {
   symbol: string | null;
 }
 
-function formatCZK(v: number): string { return v.toLocaleString("cs") + " Kč"; }
 
 interface SwapPlayerBrief {
   id: string;
@@ -96,7 +96,7 @@ function czechList(items: string[]): string {
 
 /** Částka nabídky; u výměny bez doplatku by „0 Kč" vypadalo jako dar. */
 function offerAmountLabel(amount: number, swapCount: number): string {
-  return swapCount > 0 && amount === 0 ? "bez doplatku" : formatCZK(amount);
+  return swapCount > 0 && amount === 0 ? "bez doplatku" : formatKc(amount);
 }
 
 function SwapPlayerChips({ players }: { players: SwapPlayerBrief[] }) {
@@ -324,7 +324,7 @@ function MidTransferRow({ rank, t }: { rank: number; t: TransfersOverview["bigge
         {t.position && <> <PositionBadge position={t.position} /></>}
         {t.age ? ` ${t.age} let` : null}
       </>}
-      trailing={<RowValue>{formatCZK(t.fee)}</RowValue>}
+      trailing={<RowValue>{formatKc(t.fee)}</RowValue>}
       detail={
         <TransferRoute
           from={t.fromTeam
@@ -384,7 +384,7 @@ function RecentTransferPrice({ t }: { t: TransfersOverview["recent"][number] }) 
   if (t.joinType === "loan") {
     // Hostování není prodej, cena by se pletla s přestupní částkou.
     return (
-      <RowValue sub={t.fee > 0 ? formatCZK(t.fee) : undefined}>
+      <RowValue sub={t.fee > 0 ? formatKc(t.fee) : undefined}>
         <span className="text-meta text-yellow-700">🤝 {t.loanEnded ? "Hostování skončilo" : "Hostování"}</span>
       </RowValue>
     );
@@ -394,12 +394,12 @@ function RecentTransferPrice({ t }: { t: TransfersOverview["recent"][number] }) 
     // U výměny je částka jen doplatek. Napsat ji jako cenu by z obchodu
     // za hráče udělalo výprodej za pár korun.
     return (
-      <RowValue sub={t.fee > 0 ? `doplatek ${formatCZK(t.fee)}` : undefined}>
+      <RowValue sub={t.fee > 0 ? `doplatek ${formatKc(t.fee)}` : undefined}>
         <span className="text-meta text-sky-700">⇄ Výměna</span>
       </RowValue>
     );
   }
-  return t.fee > 0 ? <RowValue>{formatCZK(t.fee)}</RowValue> : <span className="text-muted">-</span>;
+  return t.fee > 0 ? <RowValue>{formatKc(t.fee)}</RowValue> : <span className="text-muted">-</span>;
 }
 
 // Řádek pro Poslední přestupy: odkud → kam a splátky jsou v podrobnostech, ty se neořezávají.
@@ -1082,8 +1082,8 @@ export default function TransfersPage() {
   const openListingBid = (l: MarketListing) => setPriceDialog({
     title: `Nabídnout za ${l.playerName}`,
     description: l.isAiListing
-      ? `Požadovaná cena: ${formatCZK(l.askingPrice)}. O ceně se s klubem dá jednat, předseda odpoví hned.`
-      : `Požadovaná cena: ${formatCZK(l.askingPrice)}`,
+      ? `Požadovaná cena: ${formatKc(l.askingPrice)}. O ceně se s klubem dá jednat, předseda odpoví hned.`
+      : `Požadovaná cena: ${formatKc(l.askingPrice)}`,
     defaultPrice: l.askingPrice,
     // Splátky jdou u obou; procenta a výměna jen s lidským klubem.
     payment: { allowSellOn: !l.isAiListing },
@@ -1162,7 +1162,7 @@ export default function TransfersPage() {
     </Link>
   ) : l.myBidAmount ? (
     <span className="inline-block py-1.5 px-4 rounded-soft text-sm font-heading font-bold bg-pitch-50 text-pitch-600">
-      Nabídnuto {formatCZK(l.myBidAmount)}
+      Nabídnuto {formatKc(l.myBidAmount)}
     </span>
   ) : (
     <button onClick={() => openListingBid(l)}
@@ -1239,7 +1239,7 @@ export default function TransfersPage() {
               {l.dealType === "loan" ? (
                 <span className="block"><span className="text-muted">Na hostování:</span> <span className="font-bold text-ink">{loanTermsLine(l)}</span></span>
               ) : (
-                <span className="block"><span className="text-muted">Cena:</span> <span className="font-bold text-ink">{formatCZK(l.askingPrice)}</span></span>
+                <span className="block"><span className="text-muted">Cena:</span> <span className="font-bold text-ink">{formatKc(l.askingPrice)}</span></span>
               )}
               {l.dealType === "loan" && (
                 <span className="block text-muted mt-0.5">
@@ -1267,11 +1267,11 @@ export default function TransfersPage() {
             leading={<RowIcon>💰</RowIcon>}
             title={b.bidderName}
             meta="nabízí"
-            trailing={<RowValue tone="plus">{formatCZK(b.amount)}</RowValue>}
+            trailing={<RowValue tone="plus">{formatKc(b.amount)}</RowValue>}
             detail={
               <span className="flex flex-wrap gap-2 mt-1">
                 <button onClick={async () => {
-                  const ok = await confirm({ title: `Přijmout nabídku ${formatCZK(b.amount)}?`, description: `Od: ${b.bidderName}`, confirmLabel: "Přijmout" });
+                  const ok = await confirm({ title: `Přijmout nabídku ${formatKc(b.amount)}?`, description: `Od: ${b.bidderName}`, confirmLabel: "Přijmout" });
                   if (!ok || !teamId) return;
                   if (await apiAction(apiFetch(`/api/teams/${teamId}/bids/${b.id}/accept`, { method: "POST" }), "Přijetí nabídky se nezdařilo")) await refresh();
                 }} className="py-1 px-3 rounded-soft text-xs font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">
@@ -1303,8 +1303,8 @@ export default function TransfersPage() {
       title: `Podepsat ${fa.firstName} ${fa.lastName}?`,
       description: `${fa.position}, ${fa.age} let, hodnocení ${fa.overallRating} ${fa.occupation}`,
       details: [
-        { label: "Mzda", value: `${formatCZK(fa.weeklyWage)}/týd`, color: "text-ink" },
-        { label: "Registrace", value: `-${formatCZK(500)}`, color: "text-card-red" },
+        { label: "Mzda", value: `${formatKc(fa.weeklyWage)}/týd`, color: "text-ink" },
+        { label: "Registrace", value: `−${formatKc(500)}`, color: "text-card-red" },
       ],
       confirmLabel: "Podepsat",
     });
@@ -1333,7 +1333,7 @@ export default function TransfersPage() {
     id: fa.id, firstName: fa.firstName, lastName: fa.lastName, nickname: fa.nickname ?? null, age: fa.age,
     position: fa.position as BrowseRow["position"], rating: fa.overallRating,
     skills: fa.skills as BrowseRow["skills"], avatar: fa.avatar,
-    clubLabel: [fa.occupation, `${formatCZK(fa.weeklyWage)}/týd`, fa.distanceKm !== null ? `${fa.distanceKm} km` : null, fa.villageName]
+    clubLabel: [fa.occupation, `${formatKc(fa.weeklyWage)}/týd`, fa.distanceKm !== null ? `${fa.distanceKm} km` : null, fa.villageName]
       .filter(Boolean).join(" · "),
     tag: (fa.origin || fa.isCelebrity || fa.source === "released") ? (
       <span className="text-sm">
@@ -1507,7 +1507,7 @@ export default function TransfersPage() {
                         <ListRow key={s.teamId} dense href={`/tym/${s.teamId}`}
                           leading={<span className="text-meta text-muted tabular-nums">{i + 1}.</span>}
                           title={<span className="flex items-center gap-2"><ClubBadge badge={s.badge} size={24} /><span className="min-w-0">{s.teamName}</span></span>}
-                          trailing={<span className="text-body font-bold tabular-nums text-pitch-600">{s.earned.toLocaleString("cs")} Kč</span>}
+                          trailing={<span className="text-body font-bold tabular-nums text-pitch-600">{formatKc(s.earned)}</span>}
                           detail={
                             <span className="block bg-gray-100 rounded-full h-1.5 overflow-hidden mt-1">
                               <span className="block h-full bg-gradient-to-r from-pitch-400 to-pitch-600 rounded-full" style={{ width: `${(s.earned / max) * 100}%` }} />
@@ -1525,7 +1525,7 @@ export default function TransfersPage() {
                         <ListRow key={b.teamId} dense href={`/tym/${b.teamId}`}
                           leading={<span className="text-meta text-muted tabular-nums">{i + 1}.</span>}
                           title={<span className="flex items-center gap-2"><ClubBadge badge={b.badge} size={24} /><span className="min-w-0">{b.teamName}</span></span>}
-                          trailing={<span className="text-body font-bold tabular-nums text-card-red">{b.spent.toLocaleString("cs")} Kč</span>}
+                          trailing={<span className="text-body font-bold tabular-nums text-card-red">{formatKc(b.spent)}</span>}
                           detail={
                             <span className="block bg-gray-100 rounded-full h-1.5 overflow-hidden mt-1">
                               <span className="block h-full bg-gradient-to-r from-amber-400 to-card-red rounded-full" style={{ width: `${(b.spent / max) * 100}%` }} />
@@ -2090,7 +2090,7 @@ export default function TransfersPage() {
                           : <span className="w-9 h-9 rounded-full bg-surface-3" />}
                         title={<>{jmeno}{pozice && <span className="ml-2 align-middle"><PositionBadge position={pozice as "GK" | "DEF" | "MID" | "FWD"} /></span>}</>}
                         meta={[`${prichod ? "←" : "→"} ${otherName}`, druh, poznamka,
-                          castka != null && castka > 0 ? `${castka.toLocaleString("cs")} Kč` : null, when || null].filter(Boolean).join(" · ")}
+                          castka != null && castka > 0 ? `${formatKc(castka)}` : null, when || null].filter(Boolean).join(" · ")}
                         trailing={<StatusChip tone={s.tone}>{s.label}</StatusChip>} />
                     );
 
@@ -2258,7 +2258,7 @@ export default function TransfersPage() {
                           )}
                           <span className="text-muted"> nabízí </span>
                           {o.offer_type === "loan" ? (
-                            <span className="text-yellow-600 font-heading font-bold">Hostování{o.loan_duration ? ` (${o.loan_duration} dní)` : ""}{(o.counter_amount ?? o.offer_amount) > 0 ? ` za ${formatCZK(o.counter_amount ?? o.offer_amount)}` : " zdarma"}</span>
+                            <span className="text-yellow-600 font-heading font-bold">Hostování{o.loan_duration ? ` (${o.loan_duration} dní)` : ""}{(o.counter_amount ?? o.offer_amount) > 0 ? ` za ${formatKc(o.counter_amount ?? o.offer_amount)}` : " zdarma"}</span>
                           ) : (
                             <span className="font-heading font-bold text-pitch-500">{offerAmountLabel(o.counter_amount ?? o.offer_amount, o.swap_players?.length ?? 0)}</span>
                           )}
@@ -2267,7 +2267,7 @@ export default function TransfersPage() {
                         {o.offer_type !== "loan" && owedByPlayer[o.player_id] && (() => {
                           const ow = owedByPlayer[o.player_id];
                           const cut = ow.remaining + sellOnShare(o.counter_amount ?? o.offer_amount, ow.pct);
-                          return <div className="text-sm text-gold-600 tabular-nums">Z ceny se ti hned strhne {formatCZK(cut)} ({[ow.remaining > 0 ? "doplacení splátek" : null, ow.pct > 0 ? `${ow.pct} %` : null].filter(Boolean).join(" a ")} pro {ow.to})</div>;
+                          return <div className="text-sm text-gold-600 tabular-nums">Z ceny se ti hned strhne {formatKc(cut)} ({[ow.remaining > 0 ? "doplacení splátek" : null, ow.pct > 0 ? `${ow.pct} %` : null].filter(Boolean).join(" a ")} pro {ow.to})</div>;
                         })()}
                         <SwapPlayerChips players={o.swap_players ?? []} />
                         {o.player_interest != null && (
@@ -2284,7 +2284,7 @@ export default function TransfersPage() {
                           </div>
                         )}
                         {o.message && <div className="text-xs text-muted mt-1 italic">&ldquo;{o.message}&rdquo;</div>}
-                        {o.status === "countered" && <div className="text-xs text-gold-600 mt-1">Protinabídka: {formatCZK(o.counter_amount!)}</div>}
+                        {o.status === "countered" && <div className="text-xs text-gold-600 mt-1">Protinabídka: {formatKc(o.counter_amount!)}</div>}
                         {o.on_turn === false && <div className="text-xs text-muted mt-1 italic">Čeká se na odpověď soupeře</div>}
                       <span className="flex flex-wrap items-center gap-2 mt-2">
                         <Link href={`/prestupy/nabidka/${o.id}`} className="py-1.5 px-3 rounded-soft text-sm font-heading font-bold bg-ink text-white hover:bg-ink/80 transition-colors">
@@ -2295,11 +2295,11 @@ export default function TransfersPage() {
                           const amount = o.counter_amount ?? o.offer_amount;
                           const isCrossLeague = myLeagueId && (o as any).from_league_id && (o as any).from_league_id !== myLeagueId;
                           const adminFee = Number((o as any).admin_fee ?? 0);
-                          const podminky = o.offer_type === "loan" ? formatCZK(amount) : formatTermsSummary(termsFromRow(o, amount));
+                          const podminky = o.offer_type === "loan" ? formatKc(amount) : formatTermsSummary(termsFromRow(o, amount));
                           const ow = o.offer_type !== "loan" ? owedByPlayer[o.player_id] : undefined;
-                          const srazka = ow ? `\n\nZ ceny se ti hned strhne ${formatCZK(ow.remaining + sellOnShare(amount, ow.pct))} (doplacení splátek a procenta pro ${ow.to}).` : "";
+                          const srazka = ow ? `\n\nZ ceny se ti hned strhne ${formatKc(ow.remaining + sellOnShare(amount, ow.pct))} (doplacení splátek a procenta pro ${ow.to}).` : "";
                           const desc = (adminFee > 0
-                            ? `Za ${o.first_name} ${o.last_name}: ${podminky}\n\nMeziligový přestup, kupující zaplatí navíc administrační poplatek ${formatCZK(adminFee)}`
+                            ? `Za ${o.first_name} ${o.last_name}: ${podminky}\n\nMeziligový přestup, kupující zaplatí navíc administrační poplatek ${formatKc(adminFee)}`
                             : `Za ${o.first_name} ${o.last_name}: ${podminky}`) + srazka;
                           const ok = await confirm({ title: "Přijmout nabídku?", description: desc, confirmLabel: "Přijmout" });
                           if (!ok || !teamId) return;
@@ -2315,7 +2315,7 @@ export default function TransfersPage() {
                           const currentAmount = o.counter_amount ?? o.offer_amount;
                           setPriceDialog({
                             title: `Protinabídka za ${o.first_name} ${o.last_name}`,
-                            description: `${o.from_team_name} nabízí ${formatCZK(currentAmount)}. Zadej částku, za kterou jsi ochotný hráče pustit.`,
+                            description: `${o.from_team_name} nabízí ${formatKc(currentAmount)}. Zadej částku, za kterou jsi ochotný hráče pustit.`,
                             defaultPrice: Math.round(currentAmount * 1.25),
                             onConfirm: async (price) => {
                               if (!teamId) return;
@@ -2392,7 +2392,7 @@ export default function TransfersPage() {
                             // i výjimku pro mládež (přesun mezi áčkem a rezervou se neplatí).
                             const fee = Number((o as any).admin_fee ?? 0);
                             if (fee <= 0) return null;
-                            return <span className="text-xs text-card-red ml-2">+ poplatek {formatCZK(fee)}</span>;
+                            return <span className="text-xs text-card-red ml-2">+ poplatek {formatKc(fee)}</span>;
                           })()}
                         </div>
                         <SwapPlayerChips players={o.swap_players ?? []} />
@@ -2405,9 +2405,9 @@ export default function TransfersPage() {
                             const amount = o.counter_amount ?? o.offer_amount;
                             const isCrossLeague = myLeagueId && (o as any).to_league_id && (o as any).to_league_id !== myLeagueId;
                             const adminFee = Number((o as any).admin_fee ?? 0);
-                            const podminky = o.offer_type === "loan" ? formatCZK(amount) : formatTermsSummary(termsFromRow(o, amount));
+                            const podminky = o.offer_type === "loan" ? formatKc(amount) : formatTermsSummary(termsFromRow(o, amount));
                             const desc = adminFee > 0
-                              ? `Za ${o.first_name} ${o.last_name}: ${podminky}\n\nMeziligový přestup, zaplatíš navíc administrační poplatek ${formatCZK(adminFee)}`
+                              ? `Za ${o.first_name} ${o.last_name}: ${podminky}\n\nMeziligový přestup, zaplatíš navíc administrační poplatek ${formatKc(adminFee)}`
                               : `Za ${o.first_name} ${o.last_name}: ${podminky}`;
                             const ok = await confirm({ title: "Přijmout protinabídku?", description: desc, confirmLabel: "Přijmout" });
                             if (!ok || !teamId) return;
@@ -2420,7 +2420,7 @@ export default function TransfersPage() {
                             const currentAmount = o.counter_amount ?? o.offer_amount;
                             setPriceDialog({
                               title: `Protinabídka za ${o.first_name} ${o.last_name}`,
-                              description: `${o.to_team_name} chce ${formatCZK(currentAmount)}. Zadej novou částku.`,
+                              description: `${o.to_team_name} chce ${formatKc(currentAmount)}. Zadej novou částku.`,
                               defaultPrice: Math.round(currentAmount * 0.9),
                               onConfirm: async (price) => {
                                 if (!teamId) return;
@@ -2477,17 +2477,17 @@ export default function TransfersPage() {
                           <div className="text-sm">
                             <span className="font-heading font-bold">{b.buyer_team_name}</span>
                             <span className="text-muted"> nabízí </span>
-                            <span className="font-heading font-bold text-pitch-500">{formatCZK(currentAmount)}</span>
-                            <span className="text-xs text-muted ml-2">(požadovaná cena {formatCZK(b.asking_price)})</span>
+                            <span className="font-heading font-bold text-pitch-500">{formatKc(currentAmount)}</span>
+                            <span className="text-xs text-muted ml-2">(požadovaná cena {formatKc(b.asking_price)})</span>
                           </div>
-                          {b.status === "countered" && <div className="text-xs text-gold-600 mt-1">Tvá protinabídka: {formatCZK(b.counter_amount!)}</div>}
+                          {b.status === "countered" && <div className="text-xs text-gold-600 mt-1">Tvá protinabídka: {formatKc(b.counter_amount!)}</div>}
                           {!b.on_turn && <div className="text-xs text-muted mt-1 italic">Čeká se na odpověď druhé strany</div>}
                         </div>
                         <div className="flex flex-wrap gap-2 shrink-0 justify-end">
                           {b.on_turn && (<>
                             <button onClick={async () => {
                               if (!teamId) return;
-                              const ok = await confirm({ title: `Přijmout ${formatCZK(currentAmount)}?`, description: `Za ${b.first_name} ${b.last_name}`, confirmLabel: "Přijmout" });
+                              const ok = await confirm({ title: `Přijmout ${formatKc(currentAmount)}?`, description: `Za ${b.first_name} ${b.last_name}`, confirmLabel: "Přijmout" });
                               if (!ok) return;
                               if (await apiAction(apiFetch(`/api/teams/${teamId}/bids/${b.id}/accept`, { method: "POST" }), "Přijetí nabídky se nezdařilo")) await refresh();
                             }} className="py-1.5 px-4 rounded-soft text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">
@@ -2496,7 +2496,7 @@ export default function TransfersPage() {
                             <button onClick={() => {
                               setPriceDialog({
                                 title: `Protinabídka za ${b.first_name} ${b.last_name}`,
-                                description: `${b.buyer_team_name} nabízí ${formatCZK(currentAmount)}. Zadej částku.`,
+                                description: `${b.buyer_team_name} nabízí ${formatKc(currentAmount)}. Zadej částku.`,
                                 defaultPrice: Math.round(currentAmount * 1.25),
                                 onConfirm: async (price) => {
                                   if (!teamId) return;
@@ -2549,17 +2549,17 @@ export default function TransfersPage() {
                             <span className="text-xs px-2 py-0.5 rounded-full bg-gold-50 text-gold-700 font-heading font-bold">Z trhu</span>
                           </div>
                           <div className="text-sm text-muted">
-                            Nabídnuto: <span className="font-heading font-bold text-ink">{formatCZK(b.amount)}</span>
-                            <span className="ml-2 text-xs">(cena {formatCZK(b.asking_price)})</span>
+                            Nabídnuto: <span className="font-heading font-bold text-ink">{formatKc(b.amount)}</span>
+                            <span className="ml-2 text-xs">(cena {formatKc(b.asking_price)})</span>
                           </div>
-                          {b.status === "countered" && <div className="text-sm text-gold-600 mt-1">Protinabídka prodávajícího: <span className="font-heading font-bold">{formatCZK(b.counter_amount!)}</span></div>}
+                          {b.status === "countered" && <div className="text-sm text-gold-600 mt-1">Protinabídka prodávajícího: <span className="font-heading font-bold">{formatKc(b.counter_amount!)}</span></div>}
                           {!b.on_turn && b.status !== "countered" && <div className="text-xs text-muted mt-1 italic">Čeká se na prodávajícího</div>}
                         </div>
                         <div className="flex flex-wrap gap-2 shrink-0 justify-end">
                           {b.on_turn && b.status === "countered" && (<>
                             <button onClick={async () => {
                               if (!teamId) return;
-                              const ok = await confirm({ title: `Přijmout protinabídku ${formatCZK(currentAmount)}?`, description: `Za ${b.first_name} ${b.last_name}`, confirmLabel: "Přijmout" });
+                              const ok = await confirm({ title: `Přijmout protinabídku ${formatKc(currentAmount)}?`, description: `Za ${b.first_name} ${b.last_name}`, confirmLabel: "Přijmout" });
                               if (!ok) return;
                               if (await apiAction(apiFetch(`/api/teams/${teamId}/bids/${b.id}/accept`, { method: "POST" }), "Přijetí nabídky se nezdařilo")) await refresh();
                             }} className="py-1.5 px-4 rounded-soft text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">
@@ -2568,7 +2568,7 @@ export default function TransfersPage() {
                             <button onClick={() => {
                               setPriceDialog({
                                 title: `Protinabídka za ${b.first_name} ${b.last_name}`,
-                                description: `${b.seller_team_name} chce ${formatCZK(currentAmount)}. Zadej novou částku.`,
+                                description: `${b.seller_team_name} chce ${formatKc(currentAmount)}. Zadej novou částku.`,
                                 defaultPrice: Math.round(currentAmount * 0.9),
                                 onConfirm: async (price) => {
                                   if (!teamId) return;
@@ -2784,7 +2784,7 @@ function SquadTransferTable({ players, myListings, teamId, confirm, setPriceDial
                   <EntityCell name={`${p.first_name} ${p.last_name}`}
                     meta={<>
                       <span className="sm:hidden mr-1.5 align-middle"><PositionBadge position={p.position as "GK" | "DEF" | "MID" | "FWD"} /></span>
-                      <span className="lg:hidden">{formatCZK(playerValue(p))}</span>
+                      <span className="lg:hidden">{formatKc(playerValue(p))}</span>
                       {isQuit && <span className="ml-1.5"><StatusChip tone="danger">Odmítá</StatusChip></span>}
                       {isListed && <span className="ml-1.5"><StatusChip tone="warn">Na trhu</StatusChip></span>}
                     </>} />
@@ -2808,9 +2808,9 @@ function SquadTransferTable({ players, myListings, teamId, confirm, setPriceDial
               { key: "stamina", header: "Výd", title: "Výdrž", width: "w-11", priority: 2, sortValue: (p) => getPlayerSortValue(p, "stamina"),
                 cell: (p) => { const v = (p.skills as Record<string, number> | undefined)?.stamina; return v == null ? "-" : <span className={`inline-flex w-[30px] h-6 rounded-tight items-center justify-center text-meta font-bold ${attrBg(v)}`}>{v}</span>; } },
             { key: "wage", header: "Mzda", width: "w-24", align: "right", priority: 3, sortValue: (p) => p.weekly_wage ?? 0,
-              cell: (p) => <span className="whitespace-nowrap">{formatCZK(p.weekly_wage ?? 0)}</span> },
+              cell: (p) => <span className="whitespace-nowrap">{formatKc(p.weekly_wage ?? 0)}</span> },
             { key: "value", header: "Hodnota", title: "Tržní hodnota", width: "w-28", align: "right", priority: 3, emphasis: true, sortValue: (p) => playerValue(p),
-              cell: (p) => <span className="whitespace-nowrap">{formatCZK(playerValue(p))}</span> },
+              cell: (p) => <span className="whitespace-nowrap">{formatKc(playerValue(p))}</span> },
             { key: "action", header: "", align: "right", width: "w-24",
               cell: (p) => (
                 <button onClick={(e) => { e.stopPropagation(); setChoice(p); }}
@@ -2821,7 +2821,7 @@ function SquadTransferTable({ players, myListings, teamId, confirm, setPriceDial
           ]} />
       </ListCard>
       <p className="text-sm text-muted mt-2 px-1">
-        Hodnota kádru <span className="font-heading font-bold text-ink tabular-nums">{formatCZK(players.reduce((sum, p) => sum + playerValue(p), 0))}</span>
+        Hodnota kádru <span className="font-heading font-bold text-ink tabular-nums">{formatKc(players.reduce((sum, p) => sum + playerValue(p), 0))}</span>
         {" "}· tržní cena podle hodnocení, věku a pozice ze skutečných přestupů
       </p>
 
@@ -2831,10 +2831,10 @@ function SquadTransferTable({ players, myListings, teamId, confirm, setPriceDial
           return (
             <div className="px-5 pt-3 sm:pt-5 space-y-3" style={{ paddingBottom: "max(1.25rem, env(safe-area-inset-bottom, 0px))" }}>
               <h3 className="font-heading font-bold text-lg">{choice.first_name} {choice.last_name}</h3>
-              <p className="text-sm text-ink-light">Tržní cena {formatCZK(playerValue(choice))}</p>
+              <p className="text-sm text-ink-light">Tržní cena {formatKc(playerValue(choice))}</p>
               {listed ? (
                 <div className="rounded-xl bg-gold-50 border border-gold-300/60 p-3 text-sm flex items-center gap-3">
-                  <span className="flex-1">Už je na trhu za <span className="font-heading font-bold">{formatCZK(listed.askingPrice)}</span>.</span>
+                  <span className="flex-1">Už je na trhu za <span className="font-heading font-bold">{formatKc(listed.askingPrice)}</span>.</span>
                   <button onClick={async () => {
                     setChoice(null);
                     if (await apiAction(apiFetch(`/api/teams/${teamId}/listings/${listed.id}`, { method: "DELETE" }), "Stažení inzerátu se nezdařilo")) await refresh();

@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
-import { formatCZK } from "@/lib/sponsor-owners";
+
 import { blockText, dayMonth, REQUEST_STATUS_LABELS, type RequestInfo } from "@/lib/sponsor-requests";
+import { formatKc } from "@/lib/format";
 
 /** Karta majitele: prosby o příspěvek (co už dal, co musíš utratit) a cesta do SMS s ním. */
 export function RequestSection({ teamId, sponsorId }: { teamId: string; sponsorId: number }) {
@@ -38,7 +39,7 @@ export function RequestSection({ teamId, sponsorId }: { teamId: string; sponsorI
     <div className="pt-3 border-t border-gray-100 space-y-2">
       <div className="text-sm">
         {info.given > 0
-          ? <>Za posledních 90 dní ti dal <span className="font-heading font-bold">{formatCZK(info.given)}</span>.</>
+          ? <>Za posledních 90 dní ti dal <span className="font-heading font-bold">{formatKc(info.given)}</span>.</>
           : "Můžeš mu napsat SMS a poprosit o příspěvek na trenéra, přestup, vybavení, stadion nebo mládež."}
       </div>
 
@@ -47,9 +48,9 @@ export function RequestSection({ teamId, sponsorId }: { teamId: string; sponsorI
         return (
           <div key={o.id} className="bg-surface rounded-xl p-3">
             <div className="text-sm">
-              Dal {formatCZK(o.granted)} na {o.label}. Do <span className="font-heading font-bold">{dayMonth(o.checkDay)}</span> je musíš utratit.
+              Dal {formatKc(o.granted)} na {o.label}. Do <span className="font-heading font-bold">{dayMonth(o.checkDay)}</span> je musíš utratit.
             </div>
-            <div className="text-sm text-muted mt-0.5">Utraceno {formatCZK(o.spent)} z {formatCZK(o.required)}</div>
+            <div className="text-sm text-muted mt-0.5">Utraceno {formatKc(o.spent)} z {formatKc(o.required)}</div>
             <div className="h-2 rounded-full bg-gray-100 mt-1 overflow-hidden">
               <div className={`h-full ${pct >= 100 ? "bg-pitch-500" : "bg-gold-500"}`} style={{ width: `${pct}%` }} />
             </div>
@@ -64,8 +65,8 @@ export function RequestSection({ teamId, sponsorId }: { teamId: string; sponsorI
         <ul className="text-sm text-muted space-y-0.5">
           {info.history.slice(0, 3).map((h, i) => (
             <li key={i}>
-              {dayMonth(h.day)} na {h.label}: chtěl jsi {formatCZK(h.asked)}
-              {h.granted > 0 ? `, dal ${formatCZK(h.granted)}` : ""} · {REQUEST_STATUS_LABELS[h.status] ?? h.status}
+              {dayMonth(h.day)} na {h.label}: chtěl jsi {formatKc(h.asked)}
+              {h.granted > 0 ? `, dal ${formatKc(h.granted)}` : ""} · {REQUEST_STATUS_LABELS[h.status] ?? h.status}
             </li>
           ))}
         </ul>

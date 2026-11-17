@@ -19,6 +19,7 @@ import { WillingnessBadge, ratingText } from "@/components/scouting/WillingnessB
 import { TeamSide, type TeamSummary, type ManagerSummary } from "../../nabidka/[id]/components/TeamSide";
 import { OfferTimeline, type OfferEvent } from "../../nabidka/[id]/components/OfferTimeline";
 import { AI_NEGOTIATION_STATUS_LABELS, formatTermsSummary, type AiNegotiationStatus, type TransferTerms } from "@okresni-masina/shared";
+import { formatKc } from "@/lib/format";
 
 interface Detail {
   negotiation: {
@@ -271,7 +272,7 @@ export default function AiNegotiationPage() {
               <div className="text-sm text-muted font-heading uppercase tracking-wider">
                 {n.status === "agreed" ? "Klub souhlasí s tvou nabídkou" : `${n.clubName} chce`}
               </div>
-              <div className="font-heading font-[900] text-2xl tabular-nums mt-1">{n.terms.amount.toLocaleString("cs")} Kč</div>
+              <div className="font-heading font-[900] text-2xl tabular-nums mt-1">{formatKc(n.terms.amount)}</div>
             </div>
             <div className="max-w-sm mx-auto w-full"><TermsBreakdown terms={n.terms} /></div>
             {n.status === "agreed" && (
@@ -303,7 +304,7 @@ export default function AiNegotiationPage() {
               )}
             </div>
             <div className="text-center text-sm text-muted tabular-nums">
-              Podpisem zaplatíš hned {payNow.toLocaleString("cs")} Kč{n.terms.installments > 0 ? `, zbytek ve ${n.terms.installments} týdenních splátkách` : ""}.
+              Podpisem zaplatíš hned {formatKc(payNow)}{n.terms.installments > 0 ? `, zbytek ve ${n.terms.installments} týdenních splátkách` : ""}.
             </div>
           </>
         )}

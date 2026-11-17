@@ -11,8 +11,9 @@ import { useState } from "react";
 import { apiAction, apiFetch } from "@/lib/api";
 import { EntityLink, ListRow, RowValue } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
-import { czk, kurz, IkonaTipu, Prazdno, StavPill, TYP_TIKETU } from "./ui";
+import { kurz, IkonaTipu, Prazdno, StavPill, TYP_TIKETU } from "./ui";
 import type { ArenaOdpoved, ArenaTiket } from "./types";
+import { formatKc } from "@/lib/format";
 
 /**
  * Název trhu před popiskem tipu. Prázdný řetězec = popisek mluví sám za sebe
@@ -199,13 +200,13 @@ function ArenaKarta({ t, maxComment, teamId, onZmena }: {
       </ol>
 
       <div className="px-3 py-2 bg-gray-50/60 flex items-center gap-3 flex-wrap text-sm tabular-nums">
-        <span className="text-muted">vklad <b className="font-heading text-ink">{czk(t.stake)}</b></span>
+        <span className="text-muted">vklad <b className="font-heading text-ink">{formatKc(t.stake)}</b></span>
         <span className="text-gray-300">·</span>
         <span className="text-muted">kurz <b className="font-heading text-ink">{kurz(t.totalOddsX100)}</b></span>
         <span className="text-gray-300">·</span>
         <span className={t.status === "won" ? "text-pitch-600"
           : t.status === "lost" || t.status === "confiscated" ? "text-card-red" : "text-muted"}>
-          {slovo} <b className="font-heading">{czk(castka)}</b>
+          {slovo} <b className="font-heading">{formatKc(castka)}</b>
         </span>
         {t.jeMuj && (
           <button type="button" onClick={stahni}

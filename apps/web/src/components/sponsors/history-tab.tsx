@@ -2,9 +2,10 @@
 
 import { ListCard, ListEmpty, ListRow, Spinner, StatusChip } from "@/components/ui";
 import { seasonsAccusative, weeklyAmount } from "@/lib/sponsor-format";
-import { formatCZK } from "@/lib/sponsor-owners";
+
 import type { ActiveContract, SponsorCategory, SponsorHistoryItem } from "@/lib/sponsor-page-types";
 import { SponsorLink } from "./sponsor-link";
+import { formatKc } from "@/lib/format";
 
 const CATEGORY_LABELS: Record<SponsorCategory, string> = {
   main: "Hlavní sponzor",
@@ -52,7 +53,7 @@ export function HistoryTab({ items, error, mainContract }: { items: SponsorHisto
           <ListRow key={i.id}
             title={<SponsorLink id={i.sponsorId} name={i.sponsorName} />}
             meta={CATEGORY_LABELS[i.category]}
-            detail={`${i.signedSeason != null ? `Podepsána v sezóně ${i.signedSeason}, ` : ""}na ${seasonsAccusative(i.seasonsTotal)}. Naposledy ${formatCZK(weeklyAmount(i.monthlyAmount))} týdně.`}
+            detail={`${i.signedSeason != null ? `Podepsána v sezóně ${i.signedSeason}, ` : ""}na ${seasonsAccusative(i.seasonsTotal)}. Naposledy ${formatKc(weeklyAmount(i.monthlyAmount))} týdně.`}
             trailing={<StatusChip tone={i.status === "terminated" ? "danger" : "neutral"}>{STATUS_LABELS[i.status]}</StatusChip>} />
         ))}
       </ListCard>

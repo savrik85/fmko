@@ -9,6 +9,7 @@ import { BadgePreview } from "@/components/ui/badge-preview";
 import type { BadgePattern } from "@/components/ui/badge-preview";
 import { pageTitleFor } from "@/lib/page-title";
 import { chromeColorFor } from "@/lib/team-color";
+import { formatKc } from "@/lib/format";
 
 /** Stránky s vlastním nadpisem hned pod lištou: lišta místo něj ukáže název klubu. */
 const PAGES_WITH_OWN_TITLE = ["/telefon"];
@@ -104,7 +105,7 @@ export function FMTopBar() {
         {budget != null && (
           <Link href="/finance" className={`${CHIP} tabular-nums`} title="Finance klubu">
             <span className="hidden md:inline" aria-hidden="true">{"💰"}</span>
-            <span className="font-bold">{budget.toLocaleString("cs")} {"Kč"}</span>
+            <span className="font-bold">{formatKc(budget)}</span>
           </Link>
         )}
         {nextMatch && (

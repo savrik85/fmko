@@ -12,6 +12,7 @@ import { MatchBreakdown } from "@/components/MatchBreakdown";
 import { PostMatchGestureCard } from "@/components/relations/RelationSection";
 import { isLightColor } from "@/lib/team-color";
 import { formatGrade, gradeColor, gradeWord, incidentLabel, type RefereeIncidentView } from "@/lib/referee-info";
+import { formatKc } from "@/lib/format";
 
 interface MatchEvent {
   minute: number; type: string; playerId: number; playerName: string;
@@ -450,7 +451,7 @@ export default function MatchDetailPage() {
                   <span className="block">{inc.text}</span>
                   {(inc.fine > 0 || inc.closedMatches > 0 || inc.fansLost > 0) && (
                     <span className="block text-muted mt-1">
-                      {inc.fine > 0 && `Pokuta ${inc.fine.toLocaleString("cs")} Kč. `}
+                      {inc.fine > 0 && `Pokuta ${formatKc(inc.fine)}. `}
                       {inc.closedMatches > 0 && `Sektor zavřený na ${zavrenoNaZapasy(inc.closedMatches)}. `}
                       {inc.fansLost > 0 && odesloLidi(inc.fansLost)}
                     </span>

@@ -15,6 +15,7 @@ import Link from "next/link";
 import { apiFetch, apiAction } from "@/lib/api";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { Tabs, useTabParam, ListRow, RowValue, RatingPill, ratingToneIn } from "@/components/ui";
+import { formatKc } from "@/lib/format";
 
 const TAB_KEYS = ["prehled", "zaci", "novi", "trener", "vybaveni"] as const;
 
@@ -98,7 +99,6 @@ const AGE_GROUPS = [
 ];
 const EQUIPMENT_LEVEL = ["nemáš", "základní", "dobré", "špičkové"];
 
-const kc = (n: number) => `${n.toLocaleString("cs")} Kč`;
 
 function choiceKey(coach: { type: CoachType | null; playerId: string | null }): string {
   if (coach.type === "volunteer") return coach.playerId ? `volunteer:${coach.playerId}` : "";
@@ -279,8 +279,8 @@ export function AcademyCard({ teamId }: { teamId: string }) {
   const budgetBanner = data.budgetWarning ? (
     <div className="card p-4 text-sm border-l-4 border-gold-500 bg-gold-50" role="alert">
       {data.founded
-        ? `Na účtu je ${kc(data.budgetWarning.budget)}, sezóna akademie stojí ${kc(data.budgetWarning.seasonCost)}. Bez dalších příjmů peníze ${data.budgetWarning.weeks === 0 ? "nevystačí ani na týden" : data.budgetWarning.weeks === 1 ? "vystačí na 1 týden" : data.budgetWarning.weeks < 5 ? `vystačí na ${data.budgetWarning.weeks} týdny` : `vystačí na ${data.budgetWarning.weeks} týdnů`}, pak by klub šel do mínusu.${data.level !== "modest" ? " Zvaž skromnější úroveň." : data.coach.type === "staff" ? " Ušetřit jde, když žáky povede dobrovolník z áčka místo placeného trenéra." : ""}`
-        : `Na účtu je ${kc(data.budgetWarning.budget)}, běžná akademie by za sezónu stála zhruba ${kc(data.budgetWarning.seasonCost)}. S tímhle rozpočtem by klub šel do mínusu.`}
+        ? `Na účtu je ${formatKc(data.budgetWarning.budget)}, sezóna akademie stojí ${formatKc(data.budgetWarning.seasonCost)}. Bez dalších příjmů peníze ${data.budgetWarning.weeks === 0 ? "nevystačí ani na týden" : data.budgetWarning.weeks === 1 ? "vystačí na 1 týden" : data.budgetWarning.weeks < 5 ? `vystačí na ${data.budgetWarning.weeks} týdny` : `vystačí na ${data.budgetWarning.weeks} týdnů`}, pak by klub šel do mínusu.${data.level !== "modest" ? " Zvaž skromnější úroveň." : data.coach.type === "staff" ? " Ušetřit jde, když žáky povede dobrovolník z áčka místo placeného trenéra." : ""}`
+        : `Na účtu je ${formatKc(data.budgetWarning.budget)}, běžná akademie by za sezónu stála zhruba ${formatKc(data.budgetWarning.seasonCost)}. S tímhle rozpočtem by klub šel do mínusu.`}
     </div>
   ) : null;
 
@@ -304,8 +304,8 @@ export function AcademyCard({ teamId }: { teamId: string }) {
             : ` To stačí na okresní soutěž žáků (od ${data.minSquad} žáků): žáci díky zápasům rostou naplno a méně jich skončí. Zápasy žáků se ve hře neukazují.`}
         </p>
         <p className="text-sm text-muted">
-          Akademie se platí každý týden podle počtu žáků. Kolik do ní dáváš, vybereš po založení: skromná od {kc(data.levels[0].base)} + {kc(data.levels[0].perKid)} za žáka, běžná {kc(data.levels[1].base)} + {kc(data.levels[1].perKid)}, ambiciózní {kc(data.levels[2].base)} + {kc(data.levels[2].perKid)}.
-          {Math.round(total) <= 1 ? "S jedním žákem" : `S ${Math.round(total)} žáky`} vyjde běžná zhruba na {kc(data.levels[1].base + data.levels[1].perKid * Math.max(1, Math.round(total)))} týdně. Pak vybereš trenéra.
+          Akademie se platí každý týden podle počtu žáků. Kolik do ní dáváš, vybereš po založení: skromná od {formatKc(data.levels[0].base)} + {formatKc(data.levels[0].perKid)} za žáka, běžná {formatKc(data.levels[1].base)} + {formatKc(data.levels[1].perKid)}, ambiciózní {formatKc(data.levels[2].base)} + {formatKc(data.levels[2].perKid)}.
+          {Math.round(total) <= 1 ? "S jedním žákem" : `S ${Math.round(total)} žáky`} vyjde běžná zhruba na {formatKc(data.levels[1].base + data.levels[1].perKid * Math.max(1, Math.round(total)))} týdně. Pak vybereš trenéra.
         </p>
         {budgetBanner}
         {data.canFound ? (
@@ -423,15 +423,15 @@ export function AcademyCard({ teamId }: { teamId: string }) {
                   </span>
                   <span className="block text-xs text-muted mt-1">{l.text}</span>
                 </button>
-                <p className="text-xs text-muted mt-1 px-1">{kc(l.base)} + {kc(l.perKid)} za žáka, teď {kc(l.weekly)} týdně</p>
+                <p className="text-xs text-muted mt-1 px-1">{formatKc(l.base)} + {formatKc(l.perKid)} za žáka, teď {formatKc(l.weekly)} týdně</p>
               </li>
             );
           })}
         </ul>
         {resultBox("level")}
         <p className="text-sm text-muted">
-          Provoz akademie tě teď stojí <strong className="text-ink">{kc(data.weeklyCost)}</strong> týdně za {boysAcc(data.prospects.length)}.
-          {data.coach.type === "staff" && data.coach.weeklyWage > 0 ? ` K tomu trenér mládeže ${data.coach.name} bere ${kc(data.coach.weeklyWage)} týdně jako zaměstnanec, dohromady ${kc(data.weeklyCost + data.coach.weeklyWage)}.` : ""}
+          Provoz akademie tě teď stojí <strong className="text-ink">{formatKc(data.weeklyCost)}</strong> týdně za {boysAcc(data.prospects.length)}.
+          {data.coach.type === "staff" && data.coach.weeklyWage > 0 ? ` K tomu trenér mládeže ${data.coach.name} bere ${formatKc(data.coach.weeklyWage)} týdně jako zaměstnanec, dohromady ${formatKc(data.weeklyCost + data.coach.weeklyWage)}.` : ""}
         </p>
           {confirmClose ? (
             <div className="flex flex-wrap gap-2">
@@ -494,7 +494,7 @@ export function AcademyCard({ teamId }: { teamId: string }) {
                           <span className="block text-xs text-muted">{p.traits.length > 0 && <>{p.traits.join(", ")} · </>}Nálada: {p.mood}</span>
                           {p.offered && <span className="block text-muted">Trenér ho doporučil do dorostu, nabídku najdeš v Přestupy → Nabídky.</span>}
                           {p.canPlayUp && p.graduateWage !== null && (
-                            <span className="block text-xs text-muted">V dorostu by bral zhruba {kc(p.graduateWage)} týdně.</span>
+                            <span className="block text-xs text-muted">V dorostu by bral zhruba {formatKc(p.graduateWage)} týdně.</span>
                           )}
                           {p.canPlayUp && p.playUpFrom && (
                             <span className="block text-xs text-muted">U žáků musí být aspoň 4 týdny, do dorostu ho můžeš dát od {new Date(`${p.playUpFrom}T12:00:00Z`).toLocaleDateString("cs", { day: "numeric", month: "numeric" })}</span>
@@ -540,7 +540,7 @@ export function AcademyCard({ teamId }: { teamId: string }) {
             <p className="text-sm text-muted">
               {data.recruitDay.repeatable
                 ? `Dokud nemáš ${data.minSquad} žáků na soutěž, jde nábor opakovat jednou za týden. Pak jednou za sezónu.`
-                : "Jednou za sezónu."} Stojí {kc(data.recruitDay.cost)}. Přijdou žáci 11–12 let, čekej {classText(data.recruitDay.expected)}. Víc dětí přivede hráč áčka (děti k němu vzhlížejí) a táta (zná rodiče, přivede žáka navíc).
+                : "Jednou za sezónu."} Stojí {formatKc(data.recruitDay.cost)}. Přijdou žáci 11–12 let, čekej {classText(data.recruitDay.expected)}. Víc dětí přivede hráč áčka (děti k němu vzhlížejí) a táta (zná rodiče, přivede žáka navíc).
             </p>
             <CoachCompareLine compare={data.recruitDay.byCoach} current={data.coach.type} />
             {resultBox("recruit")}
@@ -565,7 +565,7 @@ export function AcademyCard({ teamId }: { teamId: string }) {
           <div className="rounded-soft border border-gray-200 bg-white p-3 space-y-2">
             <p className="text-sm"><strong className="font-heading text-ink">Den otevřených dveří na hřišti</strong></p>
             <p className="text-sm text-muted">
-              Jednou za sezónu, nezávisle na náboru ve škole, stojí {kc(data.openDay.cost)} (občerstvení, míče a dresy na vyzkoušení).
+              Jednou za sezónu, nezávisle na náboru ve škole, stojí {formatKc(data.openDay.cost)} (občerstvení, míče a dresy na vyzkoušení).
               Čekej {classText(data.openDay.expected)}, děti přijdou i z okolních obcí a je jim 11 až 14 let.
               Chodí ty, které fotbal opravdu chtějí, takže tolik nekončí. A trenér je vidí hrát, takže jejich talent odhadne přesněji.
             </p>
@@ -617,8 +617,8 @@ export function AcademyCard({ teamId }: { teamId: string }) {
             <p className="text-sm text-muted">
               {data.coach.type ? "Trenér slyšel o těchhle žácích z klubů do 15 km." : "Bez trenéra o žácích v okolí nic nevíš. Vyber trenéra v záložce Trenér."}
               {data.coach.type && <> Pozvi je na trénink, slib rodičům dorost a odvoz na zápasy, nebo jim dej na kopačky.
-              V létě žák přestoupí jen k jednomu klubu, tam, kam ho to táhne nejvíc, a ty zaplatíš jeho klubu tabulkové odstupné podle FAČR: {kc(data.poach.feeYounger)} za mladšího žáka (11–12 let), {kc(data.poach.feeOlder)} za staršího (13–14). {data.poach.remaining > 0 ? `Za sezónu můžeš lákat ještě ${boysAcc(data.poach.remaining)}.` : "Letos už další žáky lákat nemůžeš."}
-              Kopačky stojí {kc(data.poach.bootsCost)} a když se to provalí, jeho klub se to dozví.</>}
+              V létě žák přestoupí jen k jednomu klubu, tam, kam ho to táhne nejvíc, a ty zaplatíš jeho klubu tabulkové odstupné podle FAČR: {formatKc(data.poach.feeYounger)} za mladšího žáka (11–12 let), {formatKc(data.poach.feeOlder)} za staršího (13–14). {data.poach.remaining > 0 ? `Za sezónu můžeš lákat ještě ${boysAcc(data.poach.remaining)}.` : "Letos už další žáky lákat nemůžeš."}
+              Kopačky stojí {formatKc(data.poach.bootsCost)} a když se to provalí, jeho klub se to dozví.</>}
             </p>
             {!data.coach.type ? null : data.poach.targets.length === 0 ? <p className="text-sm text-muted">V okolí teď nikdo šikovný není.</p> : (
               <div className="-mx-4 sm:-mx-5 border-y border-line">
@@ -738,7 +738,7 @@ export function AcademyCard({ teamId }: { teamId: string }) {
                     <ListRow key={m.id}
                       title={m.name}
                       meta={`${m.age} let, ${m.quality}`}
-                      trailing={<RowValue sub={`nástup ${kc(m.signingFee)}`}>{kc(m.weeklyWage)} týdně</RowValue>}
+                      trailing={<RowValue sub={`nástup ${formatKc(m.signingFee)}`}>{formatKc(m.weeklyWage)} týdně</RowValue>}
                       detail={
                         <span className="block space-y-2">
                           {m.description && <span className="block text-xs text-muted">{m.description}</span>}

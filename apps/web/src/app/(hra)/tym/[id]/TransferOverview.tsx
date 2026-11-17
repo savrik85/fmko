@@ -6,6 +6,7 @@ import { apiFetch } from "@/lib/api";
 import { BadgePreview, ListCard, ListRow, ListEmpty } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
+import { formatKc } from "@/lib/format";
 
 interface TransferRow {
   direction: "in" | "out";
@@ -28,7 +29,6 @@ const KIND_LABEL: Record<TransferRow["kind"], string> = {
   released: "Propuštěn",
 };
 
-const fmtCZK = (v: number) => `${v.toLocaleString("cs")} Kč`;
 
 /** Přehled přestupů klubu (vlastního i cizího): kdo přišel, kdo odešel, odkud/kam a za kolik. */
 export function TransferOverview({ teamId }: { teamId: string }) {
@@ -79,7 +79,7 @@ export function TransferOverview({ teamId }: { teamId: string }) {
                   )}
                 </>
               )}
-              {r.fee > 0 && <span>· {fmtCZK(r.fee)}</span>}
+              {r.fee > 0 && <span>· {formatKc(r.fee)}</span>}
               {r.seasonNumber != null && <span>· sezóna {r.seasonNumber}</span>}
             </span>
           } />

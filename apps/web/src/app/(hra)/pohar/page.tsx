@@ -8,6 +8,7 @@ import { Spinner, SectionLabel, PageHeader, Tabs, useTabParam, ListCard, ListRow
 import { FixtureGroup, FixtureRow, type FixtureCrest, type FixtureSide } from "@/components/match/fixture-row";
 import { RoundPager } from "@/components/match/round-pager";
 import { TeamName } from "@/components/manager/team-name";
+import { formatKc } from "@/lib/format";
 
 // Pořadí určuje i výchozí záložku — první je ta bez ?tab= v adrese.
 const TAB_KEYS = ["pavouk", "strelci"] as const;
@@ -143,7 +144,7 @@ export default function PoharPage() {
             {data.prizes.map((p) => (
               <div key={p.round}>
                 <div className="text-xs text-muted">{p.roundName}</div>
-                <div className="font-heading font-bold tabular-nums text-base leading-tight">{p.prize.toLocaleString("cs")} Kč</div>
+                <div className="font-heading font-bold tabular-nums text-base leading-tight">{formatKc(p.prize)}</div>
               </div>
             ))}
           </div>
@@ -157,7 +158,7 @@ export default function PoharPage() {
         return (
           <FixtureGroup
             title="Tvoje cesta"
-            note={myEarnings > 0 ? `${status}, vyděláno ${myEarnings.toLocaleString("cs")} Kč` : status}
+            note={myEarnings > 0 ? `${status}, vyděláno ${formatKc(myEarnings)}` : status}
           >
             {myMatches.length === 0 ? (
               <div className="px-4 py-4 text-sm text-muted text-center">

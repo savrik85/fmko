@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { Spinner, EntityLink, ListCard, ListRow, RowValue, StatusChip } from "@/components/ui";
+import { formatKc } from "@/lib/format";
 
 interface Fine {
   id: string;
@@ -55,7 +56,7 @@ function FineRows({ fines }: { fines: Fine[] }) {
             {denPokuty(f.gameDate)}
           </>}
           detail={f.reason}
-          trailing={<RowValue tone="minus">−{f.amount.toLocaleString("cs")} Kč</RowValue>} />
+          trailing={<RowValue tone="minus">−{formatKc(f.amount)}</RowValue>} />
       ))}
     </>
   );
@@ -115,7 +116,7 @@ export function DisciplinaryPanel({ teamId }: { teamId: string | null }) {
         <div>
           <div className="text-sm text-muted">Uloženo celkem</div>
           <div className="font-heading font-bold text-lg tabular-nums">
-            {total.toLocaleString("cs")} Kč
+            {formatKc(total)}
           </div>
         </div>
         <div className="text-right">
@@ -132,7 +133,7 @@ export function DisciplinaryPanel({ teamId }: { teamId: string | null }) {
               : <span className="text-body font-bold text-muted tabular-nums">{i + 1}</span>}
             title={t.teamName}
             meta={`${t.count}× ${pocetPokut(t.count)}`}
-            trailing={<RowValue tone="minus">−{t.sum.toLocaleString("cs")} Kč</RowValue>} />
+            trailing={<RowValue tone="minus">−{formatKc(t.sum)}</RowValue>} />
         ))}
       </ListCard>
 

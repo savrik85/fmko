@@ -4,10 +4,8 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { LockDetail, Spinner, ListCard, ListRow, ListEmpty, RowIcon, RowValue } from "@/components/ui";
 import { AmenityGainChip } from "@/components/equipment/amenity-gain-chip";
-import {
-  EQUIPMENT_ICONS, condBarColor, condColor, daysLeft, formatCZK,
-  type BazarData, type BazarListing, type MyListing,
-} from "./types";
+import { EQUIPMENT_ICONS, condBarColor, condColor, daysLeft, type BazarData, type BazarListing, type MyListing } from "./types";
+import { formatKc } from "@/lib/format";
 
 interface Props {
   data: BazarData | null;
@@ -53,7 +51,7 @@ export function BazarTab({ data, loading, budget, busy, onBuy, onWithdraw, onRep
             <ListRow key={l.id}
               leading={<RowIcon>{EQUIPMENT_ICONS[l.category] ?? "📦"}</RowIcon>}
               title={<>{l.categoryLabel} <span className="text-muted font-normal">· úroveň {l.level}</span></>}
-              meta={<>{formatCZK(l.price)} · stav <span className={condColor(l.condition)}>{l.condition} %</span> · {daysLeft(l.expiresAt)}</>}
+              meta={<>{formatKc(l.price)} · stav <span className={condColor(l.condition)}>{l.condition} %</span> · {daysLeft(l.expiresAt)}</>}
               trailing={
                 <button onClick={() => onWithdraw(l)} disabled={!!busy}
                   className="py-1.5 px-4 rounded-control text-sm font-bold border border-gray-300 text-muted hover:text-ink hover:border-gray-400 disabled:opacity-50 transition-colors">
@@ -107,7 +105,7 @@ export function BazarTab({ data, loading, budget, busy, onBuy, onWithdraw, onRep
             <ListRow key={l.id}
               leading={<RowIcon>{EQUIPMENT_ICONS[l.category] ?? "📦"}</RowIcon>}
               title={l.categoryLabel}
-              trailing={<RowValue>{formatCZK(l.price)}</RowValue>}
+              trailing={<RowValue>{formatKc(l.price)}</RowValue>}
               detail={
                 <span className="block space-y-1.5 mt-0.5">
                   <span className="flex items-start gap-2">
@@ -165,15 +163,15 @@ export function BazarTab({ data, loading, budget, busy, onBuy, onWithdraw, onRep
 
                   {l.shopPrice > 0 && (
                     <span className="block text-muted">
-                      v obchodě {formatCZK(l.shopPrice)}{" "}
+                      v obchodě {formatKc(l.shopPrice)}{" "}
                       {l.savings > 0
-                        ? <span className="text-pitch-600 font-heading font-bold">(ušetříš {formatCZK(l.savings)})</span>
+                        ? <span className="text-pitch-600 font-heading font-bold">(ušetříš {formatKc(l.savings)})</span>
                         : <span className="text-card-red font-heading font-bold">(v obchodě levněji)</span>}
                     </span>
                   )}
                   <span className="block text-muted">
                     Máš úroveň {l.myLevel}
-                    {l.repairCostAfterBuy > 0 && <> · po koupi oprava {formatCZK(l.repairCostAfterBuy)}</>}
+                    {l.repairCostAfterBuy > 0 && <> · po koupi oprava {formatKc(l.repairCostAfterBuy)}</>}
                   </span>
 
                   {l.lockDetail && <LockDetail detail={l.lockDetail} fallback={l.blockReason ?? undefined} />}
@@ -218,8 +216,8 @@ export function BazarTab({ data, loading, budget, busy, onBuy, onWithdraw, onRep
               title={<>{h.categoryLabel} <span className="text-muted font-normal">· úroveň {h.level}</span></>}
               trailing={
                 <span className="text-meta text-muted text-right">
-                  {h.status === "sold" && <>prodáno {h.buyerName ? `do ${h.buyerName}` : ""} za <span className="font-bold text-pitch-600">{formatCZK(h.soldPrice ?? 0)}</span></>}
-                  {h.status === "pawned" && <>zastaveno za <span className="font-bold text-gold-600">{formatCZK(h.soldPrice ?? 0)}</span></>}
+                  {h.status === "sold" && <>prodáno {h.buyerName ? `do ${h.buyerName}` : ""} za <span className="font-bold text-pitch-600">{formatKc(h.soldPrice ?? 0)}</span></>}
+                  {h.status === "pawned" && <>zastaveno za <span className="font-bold text-gold-600">{formatKc(h.soldPrice ?? 0)}</span></>}
                   {h.status === "expired" && "inzerát vypršel"}
                   {h.status === "withdrawn" && "staženo"}
                 </span>

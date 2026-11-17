@@ -17,6 +17,7 @@ import { readableOnLight, bestTextOn } from "@/lib/team-color";
 import { HERO_BUTTON, HeroActions, HeroNavButton, HeroStat, HeroStats, heroTone } from "@/components/ui/hero-kit";
 import { CoachName } from "@/components/manager/coach-name";
 import { TeamName } from "@/components/manager/team-name";
+import { formatKc } from "@/lib/format";
 
 const POS_LABELS: Record<string, string> = { GK: "BRA", DEF: "OBR", MID: "ZÁL", FWD: "ÚTO" };
 const POS_ORDER: Record<string, number> = { GK: 0, DEF: 1, MID: 2, FWD: 3 };
@@ -306,7 +307,7 @@ export default function TeamPage() {
             <InfoRow label="Region" value={team.region} />
             <InfoRow label="Populace" value={team.population.toLocaleString("cs")} />
             <InfoRow label="Reputace" value={`${team.reputation}`} />
-            {isOwnTeam && <InfoRow label="Rozpočet" value={`${team.budget.toLocaleString("cs")} Kč`} />}
+            {isOwnTeam && <InfoRow label="Rozpočet" value={`${formatKc(team.budget)}`} />}
           </div>
           {(team as any).stadium && (
             <>

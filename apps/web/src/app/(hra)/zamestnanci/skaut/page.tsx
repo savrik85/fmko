@@ -16,6 +16,7 @@ import {
   SCOUT_POSITION_LABELS, SCOUT_POSITIONS, SCOUT_REPORT_STATUS_LABELS, SCOUT_YOUTH_AGE_MAX,
   SCOUT_LEAGUE_WEEKLY_COST, type ScoutPosition, type ScoutAssignmentType,
 } from "@okresni-masina/shared";
+import { formatKc } from "@/lib/format";
 
 interface Assignment {
   id: string;
@@ -82,7 +83,6 @@ interface ScoutData {
   pastReports: ScoutReport[];
 }
 
-const kc = (v: number) => `${v.toLocaleString("cs")} Kč`;
 
 /** České tvary počtu: 1 klub, 2–4 kluby, 5+ klubů. */
 function plural(n: number, one: string, few: string, many: string): string {
@@ -190,8 +190,8 @@ export default function ScoutPage() {
       details: [
         { label: "Soutěž", value: leagueName, color: "text-ink font-bold" },
         { label: "Délka mise", value: `${weeks} ${plural(weeks, "týden", "týdny", "týdnů")}`, color: "text-ink" },
-        { label: "Cestovné", value: `${kc(SCOUT_LEAGUE_WEEKLY_COST)} / týden`, color: "text-card-red" },
-        { label: "Celkem za misi", value: kc(totalCost), color: "text-ink font-bold" },
+        { label: "Cestovné", value: `${formatKc(SCOUT_LEAGUE_WEEKLY_COST)} / týden`, color: "text-card-red" },
+        { label: "Celkem za misi", value: formatKc(totalCost), color: "text-ink font-bold" },
         { label: "Hlášení", value: "Každé pondělí (nejvýš 1 hlášení)", color: "text-pitch-600 font-bold" },
       ],
       confirmLabel: `Vyslat skauta na ${weeks} ${plural(weeks, "týden", "týdny", "týdnů")}`,
@@ -408,7 +408,7 @@ export default function ScoutPage() {
                 {a.assignment_type === "u21_league"
                   ? "Skaut jezdí na zápasy U21 ligy a v pondělí pošle zprávu o největším talentu soupeřů včetně odhadu jeho stropu."
                   : "Skaut jezdí na ligové zápasy soupeřů a v pondělí pošle zprávu o vybraném hráči včetně odhadu hodnocení."}
-                {" "}Nabídku na přestup pak pošleš z profilu hráče. Cestovné {kc(a.weekly_cost || SCOUT_LEAGUE_WEEKLY_COST)} týdně se strhává v pondělí po odvedené práci.
+                {" "}Nabídku na přestup pak pošleš z profilu hráče. Cestovné {formatKc(a.weekly_cost || SCOUT_LEAGUE_WEEKLY_COST)} týdně se strhává v pondělí po odvedené práci.
               </div>
               <button onClick={stop} className="w-full py-2.5 rounded-xl font-heading font-bold border-2 border-red-200 text-red-700 bg-white hover:bg-red-50 transition-colors">
                 Ukončit úkol
@@ -475,7 +475,7 @@ export default function ScoutPage() {
                 </div>
               </div>
               <div className="text-sm text-muted">
-                Jezdí každý týden a v pondělí ti napíše. Cestovné {kc(a.weekly_cost)} týdně se strhává v pondělí.
+                Jezdí každý týden a v pondělí ti napíše. Cestovné {formatKc(a.weekly_cost)} týdně se strhává v pondělí.
                 {a.age_max <= SCOUT_YOUTH_AGE_MAX ? " Mladé hlásí podle toho, kam to můžou dotáhnout." : ""}
               </div>
               <button onClick={stop} className="w-full py-2.5 rounded-xl font-heading font-bold border-2 border-red-200 text-red-700 bg-white hover:bg-red-50 transition-colors">
@@ -496,7 +496,7 @@ export default function ScoutPage() {
               title={m.target_player_id
                 ? <Link href={`/hrac/${m.target_player_id}`} className="hover:text-pitch-600">{m.targetPlayerName ?? "Hráč"}</Link>
                 : (m.targetPlayerName ?? "Hráč")}
-              meta={`Hlášení do 2 dnů · cestovné ${kc(m.weekly_cost || 500)}`}
+              meta={`Hlášení do 2 dnů · cestovné ${formatKc(m.weekly_cost || 500)}`}
               trailing={
                 <button type="button" onClick={() => stopWatching(m)}
                   className="px-3 py-2 rounded-control text-meta font-bold border border-red-200 text-red-700 bg-white hover:bg-red-50">
@@ -609,14 +609,14 @@ export default function ScoutPage() {
                   <div className="rounded-xl bg-white/70 border border-gray-100 p-3 space-y-1.5 text-sm">
                     <div className="flex items-center justify-between">
                       <span className="text-muted">Cestovné za týden:</span>
-                      <span className="font-heading font-bold tabular-nums text-ink">{kc(SCOUT_LEAGUE_WEEKLY_COST)}</span>
+                      <span className="font-heading font-bold tabular-nums text-ink">{formatKc(SCOUT_LEAGUE_WEEKLY_COST)}</span>
                     </div>
                     <div className="flex items-center justify-between border-t border-gray-100 pt-1.5">
                       <span className="text-muted">Celkem za {weeks} {plural(weeks, "týden", "týdny", "týdnů")}:</span>
-                      <span className="font-heading font-bold tabular-nums text-ink">{kc(SCOUT_LEAGUE_WEEKLY_COST * weeks)}</span>
+                      <span className="font-heading font-bold tabular-nums text-ink">{formatKc(SCOUT_LEAGUE_WEEKLY_COST * weeks)}</span>
                     </div>
                     <div className="text-xs text-muted pt-1">
-                      Cestovné ({kc(SCOUT_LEAGUE_WEEKLY_COST)} / týden) se strhává každé pondělí po odvedené práci, i když skaut zrovna nikoho nenajde.
+                      Cestovné ({formatKc(SCOUT_LEAGUE_WEEKLY_COST)} / týden) se strhává každé pondělí po odvedené práci, i když skaut zrovna nikoho nenajde.
                     </div>
                   </div>
 
@@ -624,7 +624,7 @@ export default function ScoutPage() {
                     onClick={() => startLeague("u21_league")}
                     className="w-full py-3 rounded-xl font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors shadow-xs"
                   >
-                    Vyslat skauta na U21 ligu ({kc(SCOUT_LEAGUE_WEEKLY_COST * weeks)})
+                    Vyslat skauta na U21 ligu ({formatKc(SCOUT_LEAGUE_WEEKLY_COST * weeks)})
                   </button>
                 </>
               ) : (
@@ -682,14 +682,14 @@ export default function ScoutPage() {
                   <div className="rounded-xl bg-white/70 border border-gray-100 p-3 space-y-1.5 text-sm">
                     <div className="flex items-center justify-between">
                       <span className="text-muted">Cestovné za týden:</span>
-                      <span className="font-heading font-bold tabular-nums text-ink">{kc(SCOUT_LEAGUE_WEEKLY_COST)}</span>
+                      <span className="font-heading font-bold tabular-nums text-ink">{formatKc(SCOUT_LEAGUE_WEEKLY_COST)}</span>
                     </div>
                     <div className="flex items-center justify-between border-t border-gray-100 pt-1.5">
                       <span className="text-muted">Celkem za {weeks} {plural(weeks, "týden", "týdny", "týdnů")}:</span>
-                      <span className="font-heading font-bold tabular-nums text-ink">{kc(SCOUT_LEAGUE_WEEKLY_COST * weeks)}</span>
+                      <span className="font-heading font-bold tabular-nums text-ink">{formatKc(SCOUT_LEAGUE_WEEKLY_COST * weeks)}</span>
                     </div>
                     <div className="text-xs text-muted pt-1">
-                      Cestovné ({kc(SCOUT_LEAGUE_WEEKLY_COST)} / týden) se strhává každé pondělí po odvedené práci, i když skaut zrovna nikoho nenajde.
+                      Cestovné ({formatKc(SCOUT_LEAGUE_WEEKLY_COST)} / týden) se strhává každé pondělí po odvedené práci, i když skaut zrovna nikoho nenajde.
                     </div>
                   </div>
 
@@ -697,7 +697,7 @@ export default function ScoutPage() {
                     onClick={() => startLeague("league")}
                     className="w-full py-3 rounded-xl font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors shadow-xs"
                   >
-                    Vyslat skauta na naši ligu ({kc(SCOUT_LEAGUE_WEEKLY_COST * weeks)})
+                    Vyslat skauta na naši ligu ({formatKc(SCOUT_LEAGUE_WEEKLY_COST * weeks)})
                   </button>
                 </>
               ) : (
@@ -787,7 +787,7 @@ export default function ScoutPage() {
                     </button>
                   ))}
                 </div>
-                <div className="text-sm text-muted mt-1.5">Cestovné {kc(tier.weeklyCost)} týdně. Čím dál, tím víc klubů, ale hráčům se nechce tak daleko dojíždět.</div>
+                <div className="text-sm text-muted mt-1.5">Cestovné {formatKc(tier.weeklyCost)} týdně. Čím dál, tím víc klubů, ale hráčům se nechce tak daleko dojíždět.</div>
               </div>
 
               <div>
@@ -800,7 +800,7 @@ export default function ScoutPage() {
               </div>
 
               <div className="rounded-xl bg-white/70 border border-gray-100 px-3 py-2 text-sm">
-                Celkem až <span className="font-heading font-bold tabular-nums">{kc(tier.weeklyCost * weeks)}</span> za cestovné.
+                Celkem až <span className="font-heading font-bold tabular-nums">{formatKc(tier.weeklyCost * weeks)}</span> za cestovné.
                 Každý týden objede pár klubů a pošle nejvýš jedno hlášení. Když nikoho nenajde, napíše ti to.
               </div>
 

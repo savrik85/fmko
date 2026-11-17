@@ -8,6 +8,7 @@ import { apiFetch } from "@/lib/api";
 import { Spinner, SectionLabel, ListCard, ListRow, ListEmpty, RowIcon } from "@/components/ui";
 import { DetailIncidentu } from "./DetailIncidentu";
 import { datum, stavPilulka, VYSLEDEK_LABEL, type Incident } from "./typy";
+import { formatKc } from "@/lib/format";
 
 interface Poskozeni {
   id: string;
@@ -109,7 +110,7 @@ function Incidenty() {
             <ListRow key={p.id} tone="danger"
               leading={<RowIcon>🔧</RowIcon>}
               title={p.label}
-              meta={`Oprava ${p.cost.toLocaleString("cs-CZ")} Kč · o ${p.levels} ${p.levels === 1 ? "úroveň" : "úrovně"}`}
+              meta={`Oprava ${formatKc(p.cost)} · o ${p.levels} ${p.levels === 1 ? "úroveň" : "úrovně"}`}
               trailing={
                 <button onClick={() => opravit(p)} disabled={opravujeId === p.id}
                   className="px-3 py-2 rounded-control text-sm font-bold bg-pitch-500 text-white hover:bg-pitch-600 disabled:opacity-50">

@@ -7,11 +7,8 @@ import { apiFetch, showError } from "@/lib/api";
 import { SectionLabel, Spinner, Tabs, useTabParam, useConfirm, ListCard, ListEmpty } from "@/components/ui";
 import { FriendlyForm } from "./FriendlyForm";
 import { FriendlyRecord } from "./FriendlyRecord";
-import {
-  FixtureCard, FriendlyCard, PRIMARY_BUTTON, SECONDARY_BUTTON, StakeTag, StatusPill, TAG, TeamLink,
-  dayLabel, formatCZK, sumCosts, venueText,
-  type FriendliesData, type FriendlyView, type OfferView,
-} from "./friendly-ui";
+import { FixtureCard, FriendlyCard, PRIMARY_BUTTON, SECONDARY_BUTTON, StakeTag, StatusPill, TAG, TeamLink, dayLabel, sumCosts, venueText, type FriendliesData, type FriendlyView, type OfferView } from "./friendly-ui";
+import { formatKc } from "@/lib/format";
 
 const TAB_KEYS = ["matches", "challenge", "offers", "record"] as const;
 
@@ -67,8 +64,8 @@ export default function FriendlyPage() {
     const details = [
       { label: "Kdy", value: f.date ? `${dayLabel(f.date)} v 18:00` : "nejbližší volný den" },
       { label: "Kde", value: venueText(f.venue, f.neutralVillage) },
-      ...(f.stake > 0 ? [{ label: "Sázka", value: `${formatCZK(f.stake)} složíš hned` }] : []),
-      { label: "Tvoje náklady", value: sumCosts(f.myCosts) > 0 ? formatCZK(sumCosts(f.myCosts)) : "nic" },
+      ...(f.stake > 0 ? [{ label: "Sázka", value: `${formatKc(f.stake)} složíš hned` }] : []),
+      { label: "Tvoje náklady", value: sumCosts(f.myCosts) > 0 ? formatKc(sumCosts(f.myCosts)) : "nic" },
     ];
     const ok = await confirm({ title: `Přátelák s ${f.opponent.name}?`, details, confirmLabel: "Přijmout" });
     if (ok) await act(f.id, `/api/teams/${teamId}/challenge/${f.id}/accept`, "Výzvu se nepodařilo přijmout", `Přátelák s ${f.opponent.name} je domluvený${f.date ? ` na ${dayLabel(f.date)}` : "."}`);
@@ -78,8 +75,8 @@ export default function FriendlyPage() {
     const details = [
       { label: "Kdy", value: `${dayLabel(o.date)} v 18:00` },
       { label: "Kde", value: o.venue === "neutral" && o.neutralVillage ? `neutrální hřiště, ${o.neutralVillage}` : OFFER_VENUE_TEXT[o.venue] },
-      ...(o.stake > 0 ? [{ label: "Sázka", value: `${formatCZK(o.stake)} složíš hned` }] : []),
-      { label: "Tvoje náklady", value: sumCosts(o.myCosts) > 0 ? formatCZK(sumCosts(o.myCosts)) : "nic" },
+      ...(o.stake > 0 ? [{ label: "Sázka", value: `${formatKc(o.stake)} složíš hned` }] : []),
+      { label: "Tvoje náklady", value: sumCosts(o.myCosts) > 0 ? formatKc(sumCosts(o.myCosts)) : "nic" },
     ];
     const ok = await confirm({ title: `Hrát s ${o.team.name}?`, details, confirmLabel: "Beru termín" });
     if (ok) await act(o.id, `/api/teams/${teamId}/friendly-offers/${o.id}/take`, "Termín se nepodařilo vzít", `Přátelák s ${o.team.name} je domluvený na ${dayLabel(o.date)}`);
@@ -151,7 +148,7 @@ export default function FriendlyPage() {
                       <div className="flex flex-wrap gap-1.5 mt-2">
                         {o.stake > 0 && <StakeTag stake={o.stake} />}
                         {o.costPayer === "poster" && <span className={TAG}>náklady platí oni</span>}
-                        {o.myCosts && <span className={TAG}>{sumCosts(o.myCosts) > 0 ? `tvoje náklady ${formatCZK(sumCosts(o.myCosts))}` : "neplatíš nic"}</span>}
+                        {o.myCosts && <span className={TAG}>{sumCosts(o.myCosts) > 0 ? `tvoje náklady ${formatKc(sumCosts(o.myCosts))}` : "neplatíš nic"}</span>}
                       </div>
                     }
                     message={o.message}

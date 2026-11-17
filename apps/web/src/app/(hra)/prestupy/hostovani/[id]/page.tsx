@@ -16,8 +16,8 @@ import { FaceAvatar } from "@/components/players/face-avatar";
 import {
   LOAN_STATE_STYLE, SKILL_LABELS, daysWord, shortDate, type LoanMatchLine, type LoanReport,
 } from "@/lib/loans";
+import { formatKc } from "@/lib/format";
 
-const kc = (v: number) => `${v.toLocaleString("cs-CZ")} Kč`;
 
 /** Jak hráč v zápase hrál: „v základu, 90 min, 1× gól“, „nehrál“, nebo proč chyběl. */
 function playedText(m: LoanMatchLine) {
@@ -81,7 +81,7 @@ export default function LoanReportPage() {
         : data.recall.refund > 0
           ? `Podmínka se plní, proto ${data.borrowerName} vrátíš část poplatku za dny, které u nich už nebude. Hráč se vrací hned.`
           : "Hráč se vrací hned.",
-      details: data.recall.refund > 0 ? [{ label: "Vrátíš", value: kc(data.recall.refund), color: "text-card-red" }] : undefined,
+      details: data.recall.refund > 0 ? [{ label: "Vrátíš", value: formatKc(data.recall.refund), color: "text-card-red" }] : undefined,
       confirmLabel: "Stáhnout zpátky",
       variant: "danger",
     });
@@ -142,7 +142,7 @@ export default function LoanReportPage() {
             : <>Na hostování od klubu <Link href={`/tym/${data.lenderTeamId}`} className="font-heading font-bold underline decoration-pitch-500/20">{data.lenderName}</Link></>}
           {" "}od {shortDate(data.startedAt)} do {shortDate(data.until)}
           {active && <> (zbývá {data.daysLeft} {daysWord(data.daysLeft)})</>}.
-          {" "}Poplatek {data.fee > 0 ? kc(data.fee) : "žádný"}.
+          {" "}Poplatek {data.fee > 0 ? formatKc(data.fee) : "žádný"}.
         </p>
         {!active && <p className="text-sm text-muted mt-1">Hostování už skončilo.</p>}
       </div>
@@ -288,7 +288,7 @@ export default function LoanReportPage() {
             {data.recall.breached
               ? `${data.borrowerName} neplní podmínku hraní. Když hráče stáhneš, poplatek ti zůstane.`
               : data.recall.refund > 0
-                ? `Podmínka se plní. Když hráče stáhneš teď, vrátíš ${data.borrowerName} ${kc(data.recall.refund)} z poplatku za zbývající dny.`
+                ? `Podmínka se plní. Když hráče stáhneš teď, vrátíš ${data.borrowerName} ${formatKc(data.recall.refund)} z poplatku za zbývající dny.`
                 : "Hráče můžeš stáhnout kdykoli, vrátí se hned."}
           </p>
           <button onClick={recall} disabled={busy}

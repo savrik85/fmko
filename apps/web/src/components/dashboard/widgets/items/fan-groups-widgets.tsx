@@ -12,6 +12,7 @@
 import Link from "next/link";
 import { ListRow, RowGroup } from "@/components/ui";
 import type { FanGroupsData, WidgetProps } from "../types";
+import { formatKc } from "@/lib/format";
 
 const KIND_IKONA: Record<string, string> = {
   kotel: "🔥", stamgasti: "🍺", rodiny: "👨‍👩‍👧", pametnici: "🎩", parta_z_okoli: "🚌",
@@ -229,13 +230,13 @@ export function FanTroubleWidget({ data }: WidgetProps) {
         <div>
           <div className="text-xs text-muted">Pokuty</div>
           <div className="font-heading font-bold text-lg tabular-nums text-card-red">
-            {pokuty.toLocaleString("cs-CZ")} Kč
+            {formatKc(pokuty)}
           </div>
         </div>
         <div>
           <div className="text-xs text-muted">Čeká na opravu</div>
           <div className={`font-heading font-bold text-lg tabular-nums ${opravy > 0 ? "text-card-red" : "text-ink"}`}>
-            {opravy.toLocaleString("cs-CZ")} Kč
+            {formatKc(opravy)}
           </div>
         </div>
       </div>
@@ -246,7 +247,7 @@ export function FanTroubleWidget({ data }: WidgetProps) {
             <ListRow key={x.id} dense
               leading={<span className="text-base leading-none" aria-hidden="true">🔧</span>}
               title={x.label}
-              trailing={<span className="text-meta text-muted tabular-nums">{x.cost.toLocaleString("cs-CZ")} Kč</span>} />
+              trailing={<span className="text-meta text-muted tabular-nums">{formatKc(x.cost)}</span>} />
           ))}
         </div>
       )}

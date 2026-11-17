@@ -6,6 +6,7 @@ import { formatTermsSummary, type TransferTerms } from "@okresni-masina/shared";
 import { TransferTermsFields, type TermsValue } from "@/components/transfers/transfer-terms";
 import { SheetDialog } from "@/components/ui";
 import { MessageDialog } from "./MessageDialog";
+import { formatKc } from "@/lib/format";
 
 type DialogKind = "accept" | "counter" | "reject" | null;
 
@@ -79,21 +80,21 @@ export function ActionBar({
         </div>
         <div className="text-center text-sm text-muted tabular-nums">
           {role === "buyer"
-            ? `Přijetím zaplatíš hned ${payNow.toLocaleString("cs")} Kč${terms.installments > 0 ? `, zbytek ve ${terms.installments} týdenních splátkách` : ""}.`
-            : `Kupující při přijetí pošle hned ${(payNow - adminFee).toLocaleString("cs")} Kč${terms.installments > 0 ? `, zbytek ve ${terms.installments} týdenních splátkách` : ""}.`}
+            ? `Přijetím zaplatíš hned ${formatKc(payNow)}${terms.installments > 0 ? `, zbytek ve ${terms.installments} týdenních splátkách` : ""}.`
+            : `Kupující při přijetí pošle hned ${formatKc(payNow - adminFee)}${terms.installments > 0 ? `, zbytek ve ${terms.installments} týdenních splátkách` : ""}.`}
         </div>
         {saleDeductions && (
           <div className="mx-auto w-full max-w-sm rounded-xl bg-gold-50 border border-gold-300/60 px-3 py-2 text-sm tabular-nums">
             <div className="font-heading font-bold mb-1">Z ceny se ti hned strhne</div>
             {saleDeductions.settle > 0 && (
-              <div className="flex justify-between gap-3"><span>Doplacení splátek pro {saleDeductions.settleTo}</span><span className="font-heading font-bold">{saleDeductions.settle.toLocaleString("cs")} Kč</span></div>
+              <div className="flex justify-between gap-3"><span>Doplacení splátek pro {saleDeductions.settleTo}</span><span className="font-heading font-bold">{formatKc(saleDeductions.settle)}</span></div>
             )}
             {saleDeductions.sellOnPct > 0 && (
-              <div className="flex justify-between gap-3"><span>{saleDeductions.sellOnPct} % pro {saleDeductions.sellOnTo}</span><span className="font-heading font-bold">{saleDeductions.sellOn.toLocaleString("cs")} Kč{saleDeductions.withSwap ? " a víc" : ""}</span></div>
+              <div className="flex justify-between gap-3"><span>{saleDeductions.sellOnPct} % pro {saleDeductions.sellOnTo}</span><span className="font-heading font-bold">{formatKc(saleDeductions.sellOn)}{saleDeductions.withSwap ? " a víc" : ""}</span></div>
             )}
             <div className="flex justify-between gap-3 border-t border-gold-300/60 mt-1 pt-1">
               <span>Zůstane ti z ceny</span>
-              <span className="font-heading font-bold">{(currentAmount - saleDeductions.settle - saleDeductions.sellOn).toLocaleString("cs")} Kč</span>
+              <span className="font-heading font-bold">{formatKc(currentAmount - saleDeductions.settle - saleDeductions.sellOn)}</span>
             </div>
             {saleDeductions.withSwap && (
               <div className="text-muted mt-1">U výměny se procenta počítají i z tržní ceny hráče, kterého dostaneš.</div>

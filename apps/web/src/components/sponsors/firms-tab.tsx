@@ -4,11 +4,12 @@ import { useState } from "react";
 import Link from "next/link";
 import { Card, CardBody, ListCard, ListEmpty, ListRow } from "@/components/ui";
 import { FIRM_FILTERS, FIRM_SORTS, filterFirms, sortFirms, type FirmFilter, type FirmSort } from "@/lib/sponsor-firms";
-import { formatCZK, personalityLabel } from "@/lib/sponsor-owners";
+import { personalityLabel } from "@/lib/sponsor-owners";
 import type { DistrictFirm } from "@/lib/sponsor-page-types";
 import { sponsorTypeLabel } from "@/lib/sponsor-types";
 import { FavorBadge } from "./favor-badge";
 import { SponsorLink } from "./sponsor-link";
+import { formatKc } from "@/lib/format";
 
 /**
  * Firma z okresu: obor, majitel, čí je hlavním sponzorem (nebo odhad rozpočtu), náklonnost k nám.
@@ -29,7 +30,7 @@ export function FirmRow({ firm: f, isOurStadiumSponsor = false }: { firm: Distri
               ? <>Hlavní sponzor klubu <Link href={`/tym/${f.mainHolder.teamId}`} className="underline text-base">{f.mainHolder.teamName}</Link></>
               : isOurStadiumSponsor
                 ? "Váš sponzor stadionu"
-                : `Volný, bez slibů zhruba ${formatCZK(f.budgetEstimate.base.low)} až ${formatCZK(f.budgetEstimate.base.high)}, se sliby až ${formatCZK(f.budgetEstimate.cap.high)} měsíčně`}
+                : `Volný, bez slibů zhruba ${formatKc(f.budgetEstimate.base.low)} až ${formatKc(f.budgetEstimate.base.high)}, se sliby až ${formatKc(f.budgetEstimate.cap.high)} měsíčně`}
         </span>
         {!f.isMine && !f.mainHolder && (
           <Link href={`/sponzor/${f.sponsorId}`} className="inline-block min-h-11 leading-[2.75rem] text-sm text-pitch-600 font-heading font-bold">

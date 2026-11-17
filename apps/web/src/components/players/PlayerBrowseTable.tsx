@@ -19,6 +19,7 @@ import { PositionBadge, DataTable, EntityCell, RatingPill, ratingToneIn, ListCar
 import { attrBg } from "@/lib/player-attrs";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { TeamName } from "@/components/manager/team-name";
+import { formatKc } from "@/lib/format";
 
 type Position = "GK" | "DEF" | "MID" | "FWD";
 type SkillKey = "speed" | "technique" | "shooting" | "passing" | "heading" | "defense" | "goalkeeping";
@@ -85,8 +86,7 @@ const MOBILE_SORTS: Array<{ key: SortKey; label: string }> = [
 const PRICE_SORT: { key: SortKey; label: string } = { key: "price", label: "Cena" };
 
 const rowValue = (r: BrowseRow) => marketValueEstimate(marketValue(r.rating, r.age, r.position));
-const formatValue = (v: number) => `cca ${v.toLocaleString("cs")} Kč`;
-const formatPrice = (v: number) => `${v.toLocaleString("cs")} Kč`;
+const formatValue = (v: number) => `cca ${formatKc(v)}`;
 const skillShort = (k: SkillKey) => SKILL_COLUMNS.find((c) => c.key === k)?.short ?? k;
 const formatForm = (f: NonNullable<BrowseRow["form"]>) =>
   `${f.matches} z · ${f.goals} g · ${f.assists} a${f.matches > 0 ? ` · ${f.avgRating.toFixed(1)}` : ""}`;
@@ -209,7 +209,7 @@ export function PlayerBrowseTable({ rows, color, onColorText, ratingColor, colum
     }] : []),
     ...(columns.price ? [{
       key: "price", header: "Cena", title: "Cena z inzerátu", align: "right" as const, emphasis: true, sortValue: (r: BrowseRow) => r.price ?? 0,
-      cell: (r: BrowseRow) => <span className="whitespace-nowrap">{r.price != null ? formatPrice(r.price) : "-"}</span>,
+      cell: (r: BrowseRow) => <span className="whitespace-nowrap">{r.price != null ? formatKc(r.price) : "-"}</span>,
     }] : []),
     ...(showValue ? [{
       key: "value", header: "Cena", title: "Tržní cena (odhad)", align: "right" as const, emphasis: true, sortValue: (r: BrowseRow) => rowValue(r),
@@ -313,7 +313,7 @@ export function PlayerBrowseTable({ rows, color, onColorText, ratingColor, colum
                   {columns.price || columns.action ? (
                     <span className="flex items-center justify-between gap-2 mt-1.5">
                       <span className="tabular-nums min-w-0">
-                        {columns.price && r.price != null && <span className="font-heading font-bold text-ink">{formatPrice(r.price)}</span>}
+                        {columns.price && r.price != null && <span className="font-heading font-bold text-ink">{formatKc(r.price)}</span>}
                       </span>
                       {columns.action && <span className="shrink-0">{r.action}</span>}
                     </span>

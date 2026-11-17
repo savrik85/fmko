@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { Modal } from "@/components/ui";
-import { EQUIPMENT_ICONS, condBarColor, condColor, formatCZK, type SellOption } from "./types";
+import { EQUIPMENT_ICONS, condBarColor, condColor, type SellOption } from "./types";
+import { formatKc } from "@/lib/format";
 
 interface Props {
   option: SellOption | null;
@@ -62,7 +63,7 @@ export function SellDialog({ option, busy, onClose, onList, onPawn, onRepair }: 
           <div className="bg-gold-50 border border-gold-200 rounded-soft p-3 text-sm">
             <div className="text-ink">
               Opotřebené vybavení se prodává hůř. Oprava za{" "}
-              <span className="font-heading font-bold">{formatCZK(repairCost)}</span> zvedne stav na 100 % a s ním i cenu.
+              <span className="font-heading font-bold">{formatKc(repairCost)}</span> zvedne stav na 100 % a s ním i cenu.
             </div>
             <button
               onClick={() => onRepair(option.category)}
@@ -102,8 +103,8 @@ export function SellDialog({ option, busy, onClose, onList, onPawn, onRepair }: 
 
           <div className="text-sm text-muted">
             Cenu si řekni jakou chceš, buď to někdo koupí, nebo ne. Nové vyjde na{" "}
-            <span className="tabular-nums">{formatCZK(option.invested)}</span>, spodní hranice je{" "}
-            <span className="tabular-nums">{formatCZK(option.bazarMin)}</span> (tolik dá zastavárna bez čekání).
+            <span className="tabular-nums">{formatKc(option.invested)}</span>, spodní hranice je{" "}
+            <span className="tabular-nums">{formatKc(option.bazarMin)}</span> (tolik dá zastavárna bez čekání).
           </div>
 
           <div className="text-sm text-muted">
@@ -112,7 +113,7 @@ export function SellDialog({ option, busy, onClose, onList, onPawn, onRepair }: 
 
           {!priceValid && (
             <div className="text-sm text-card-red">
-              Nejmíň {formatCZK(option.bazarMin)}, pod tím se to vyplatí rovnou zastavit.
+              Nejmíň {formatKc(option.bazarMin)}, pod tím se to vyplatí rovnou zastavit.
             </div>
           )}
 
@@ -129,8 +130,8 @@ export function SellDialog({ option, busy, onClose, onList, onPawn, onRepair }: 
         <div className="border border-gray-200 rounded-xl p-4 space-y-2">
           <div className="font-heading font-bold flex items-center gap-2">💸 Zastavárna, hned</div>
           <div className="text-sm text-muted">
-            Dostaneš <span className="font-heading font-bold text-ink tabular-nums">{formatCZK(option.pawnQuote)}</span>.
-            Investoval jsi <span className="tabular-nums">{formatCZK(option.invested)}</span>. Vybavení zmizí natrvalo,
+            Dostaneš <span className="font-heading font-bold text-ink tabular-nums">{formatKc(option.pawnQuote)}</span>.
+            Investoval jsi <span className="tabular-nums">{formatKc(option.invested)}</span>. Vybavení zmizí natrvalo,
             v bazaru se už neobjeví.
           </div>
 
@@ -152,7 +153,7 @@ export function SellDialog({ option, busy, onClose, onList, onPawn, onRepair }: 
                   disabled={busy}
                   className="flex-1 py-2.5 rounded-soft text-base font-heading font-bold bg-card-red text-white hover:opacity-90 disabled:bg-gray-100 disabled:text-gray-400 transition-opacity"
                 >
-                  {busy ? "..." : `Zastavit za ${formatCZK(option.pawnQuote)}`}
+                  {busy ? "..." : `Zastavit za ${formatKc(option.pawnQuote)}`}
                 </button>
               </div>
             </div>

@@ -13,6 +13,7 @@ import { SectionLabel, Spinner, ListCard, ListRow, ListEmpty, RowIcon, RowGroup 
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { COURSE_ATTR_LABELS, type CourseAttr } from "@okresni-masina/shared";
 import { LicenceBadge } from "./LicenceBadge";
+import { formatKc } from "@/lib/format";
 
 interface ExamRules {
   questions: number;
@@ -76,7 +77,6 @@ interface Education {
   away: AwayPreview | null;
 }
 
-const czk = (v: number) => `${v.toLocaleString("cs")} Kč`;
 
 function lessonsLabel(n: number): string {
   if (n === 1) return "1 lekce";
@@ -145,7 +145,7 @@ export function CoachEducationTab({ teamId, isOwn }: { teamId: string; isOwn: bo
         + `Skripta dostaneš hned. Na konci tě čeká test: ${o.exam.questions} otázek, ${o.exam.timeLimitMin} minut bez pauzy, `
         + `projdeš s ${o.exam.passScore} správnými. Když nevyjde, je jeden opravný termín za pětinu ceny.`,
       details: [
-        { label: "Cena kurzu", value: `−${czk(o.price)}`, color: "text-card-red" },
+        { label: "Cena kurzu", value: `−${formatKc(o.price)}`, color: "text-card-red" },
         { label: "Délka", value: days(o.days), color: "text-ink" },
         ...(data?.away ? awayRows(data.away, o.days) : []),
         ...(o.kind === "licence"
@@ -168,7 +168,7 @@ export function CoachEducationTab({ teamId, isOwn }: { teamId: string; isOwn: bo
     const ok = await confirm({
       title: "Přihlásit na opravný termín?",
       description: `${a.title}. Otázky budou jiné než minule, pokud jich škola má dost. Když nevyjde ani opravný termín, kurz propadá i s penězi.`,
-      details: [{ label: "Opravný termín", value: `−${czk(a.retakePrice)}`, color: "text-card-red" }],
+      details: [{ label: "Opravný termín", value: `−${formatKc(a.retakePrice)}`, color: "text-card-red" }],
       confirmLabel: "Přihlásit",
     });
     if (!ok) return;
@@ -233,7 +233,7 @@ export function CoachEducationTab({ teamId, isOwn }: { teamId: string; isOwn: bo
                     </span>
                     {next && (
                       <span className="block font-medium text-pitch-700 mt-1">
-                        Další krok: licenční kurz za {czk(l.price)}, {days(l.days)}
+                        Další krok: licenční kurz za {formatKc(l.price)}, {days(l.days)}
                       </span>
                     )}
                   </>} />
@@ -293,7 +293,7 @@ export function CoachEducationTab({ teamId, isOwn }: { teamId: string; isOwn: bo
           {isOwn && a.status === "retake_available" && (
             <div className="mt-3 rounded-soft bg-red-50 border border-red-200 p-3 text-sm text-red-800">
               Test nevyšel{a.lastScore ? ` (${a.lastScore.score ?? 0} z ${a.lastScore.total}, potřeba ${a.lastScore.passScore})` : ""}.
-              Opravný termín stojí {czk(a.retakePrice)}, přihlásit se můžeš ještě {days(a.examDaysRemaining ?? 0)}.
+              Opravný termín stojí {formatKc(a.retakePrice)}, přihlásit se můžeš ještě {days(a.examDaysRemaining ?? 0)}.
             </div>
           )}
 
@@ -414,7 +414,7 @@ function OfferRow({ o, busy, onEnroll }: { o: Offer; busy: boolean; onEnroll: (o
           </span>
         )}
         <span className="flex items-center gap-1.5 mt-1.5 flex-wrap text-xs">
-          <span className="inline-flex items-center gap-1 font-semibold px-2 py-0.5 rounded bg-surface border border-gray-100 tabular-nums text-ink">💰 {czk(o.price)}</span>
+          <span className="inline-flex items-center gap-1 font-semibold px-2 py-0.5 rounded bg-surface border border-gray-100 tabular-nums text-ink">💰 {formatKc(o.price)}</span>
           <span className="inline-flex items-center gap-1 font-semibold px-2 py-0.5 rounded bg-surface border border-gray-100 tabular-nums text-ink">⏱️ {days(o.days)}</span>
           <span className="inline-flex items-center gap-1 font-semibold px-2 py-0.5 rounded bg-surface border border-gray-100 tabular-nums text-ink">📝 test {o.exam.questions} ot. / {o.exam.timeLimitMin} min</span>
         </span>

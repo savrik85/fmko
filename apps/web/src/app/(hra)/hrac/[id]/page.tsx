@@ -30,6 +30,7 @@ import type { BadgePattern } from "@/components/ui";
 import { HeroBackdrop } from "@/components/ui/hero-backdrop";
 import { isLightColor, readableOnLight } from "@/lib/team-color";
 import { HERO_ACTIONS_ROW, HERO_BUTTON, HeroNavButton, HeroStat, HeroStats, heroTone } from "@/components/ui/hero-kit";
+import { formatKc } from "@/lib/format";
 
 // Stejný strop hlídá API (apps/api/src/transfers/swap-players.ts).
 const MAX_SWAP_PLAYERS = 2;
@@ -642,7 +643,7 @@ export default function PlayerDetailPage() {
                   : "Vrací se v nejbližším zpracování dne"}
                 {player.loan.until ? ` · ${new Date(player.loan.until).toLocaleDateString("cs")}` : ""}
                 {player.loan.fee > 0
-                  ? ` · hostování za ${player.loan.fee.toLocaleString("cs")} Kč`
+                  ? ` · hostování za ${formatKc(player.loan.fee)}`
                   : " · hostování zdarma"}
               </div>
             </div>
@@ -740,7 +741,7 @@ export default function PlayerDetailPage() {
                       <span>{myListing.dealType === "loan" ? "🤝" : "🏷️"}</span>
                       <span>{myListing.dealType === "loan"
                         ? `Na hostování · ${loanTermsLine(myListing)}`
-                        : `Na trhu za ${myListing.askingPrice.toLocaleString("cs")} Kč`}</span>
+                        : `Na trhu za ${formatKc(myListing.askingPrice)}`}</span>
                     </div>
                     <button onClick={withdrawFromMarket} disabled={actionLoading}
                       className={`${btnBase} min-w-[140px] disabled:opacity-50 ${btnNeutral}`}>
@@ -1075,15 +1076,15 @@ export default function PlayerDetailPage() {
             <DetailRow label="Bydliště" value={player.residence ?? "-"} />
             <DetailRow label="Dojíždění" value={player.commute_km != null ? `${player.commute_km} km` : "-"} />
             {isOwnPlayer && player.weekly_wage != null && (
-              <DetailRow label="Mzda" value={`${player.weekly_wage.toLocaleString("cs")} Kč/týd`} />
+              <DetailRow label="Mzda" value={`${formatKc(player.weekly_wage)}/týd`} />
             )}
             {/* U každého hráče: stejný vzorec jako nabídky a inzeráty cizích klubů. U cizího jen
                 odhad zaokrouhlený na tisíce, stejně jako vidíš jeho dovednosti jen přibližně. */}
             {(() => {
               const value = marketValue(player.overall_rating ?? 0, player.age ?? 27, player.position);
               const shown = isOwnPlayer
-                ? `${value.toLocaleString("cs")} Kč`
-                : `cca ${marketValueEstimate(value).toLocaleString("cs")} Kč`;
+                ? `${formatKc(value)}`
+                : `cca ${formatKc(marketValueEstimate(value))}`;
               return <DetailRow label="Tržní cena" value={shown} />;
             })()}
             <DetailRow label="Výška" value={player.physical?.height ? `${player.physical.height} cm` : "-"} />
@@ -1219,9 +1220,9 @@ export default function PlayerDetailPage() {
                 /* U výměny není `fee` cena hráče, ale doplatek: druhý hráč obchodu musí být vidět,
                    jinak to vypadá jako prodej za pár korun. */
                 detail={c.swapPartner
-                  ? `Výměna za: ${c.swapPartner}${c.fee > 0 ? ` · doplatek ${c.fee.toLocaleString("cs")} Kč` : ""}`
+                  ? `Výměna za: ${c.swapPartner}${c.fee > 0 ? ` · doplatek ${formatKc(c.fee)}` : ""}`
                   : c.fee > 0
-                    ? `Přestupní částka: ${c.fee.toLocaleString("cs")} Kč${c.installments ? ` · na splátky (${c.installments}× týdně)` : ""}${c.sellOnPct ? ` · ${c.sellOnPct} % z dalšího prodeje pro předchozí klub` : ""}`
+                    ? `Přestupní částka: ${formatKc(c.fee)}${c.installments ? ` · na splátky (${c.installments}× týdně)` : ""}${c.sellOnPct ? ` · ${c.sellOnPct} % z dalšího prodeje pro předchozí klub` : ""}`
                     : undefined}
                 trailing={<span className={`text-micro px-2 py-0.5 rounded-full font-bold whitespace-nowrap ${chip}`}>{c.joinLabel}</span>} />
             );

@@ -27,13 +27,7 @@ export function OddsButton({ tip, label, oddsX100, vybrano, onClick }: {
   );
 }
 
-export function czk(n: number): string {
-  return `${n.toLocaleString("cs")} Kč`;
-}
 
-export function signed(n: number): string {
-  return `${n > 0 ? "+" : n < 0 ? "−" : ""}${Math.abs(n).toLocaleString("cs")} Kč`;
-}
 
 /** Názvy tiketů podle počtu tipů — lidové, jak se jim říká u přepážky. */
 export const TYP_TIKETU: Record<number, string> = {

@@ -1,10 +1,11 @@
 "use client";
 
-import { formatCZK } from "@/lib/sponsor-owners";
+
 import { seasonsAccusative, weeklyAmount } from "@/lib/sponsor-format";
 import {
   allowedSeasonsOf, findOption, PROMISE_LABELS, proposalOneTimeTotal, type Demands, type NegotiationView, type Proposal,
 } from "@/lib/sponsor-negotiation";
+import { formatKc } from "@/lib/format";
 
 function MoneyInput({ label, hint, value, onChange }: { label: string; hint?: string; value: number; onChange: (v: number) => void }) {
   return (
@@ -33,7 +34,7 @@ export function DemandsForm({ view, proposal, onChange }: {
     <div className="space-y-4">
       <MoneyInput
         label="Měsíčně"
-        hint={`Na účet přijde ${formatCZK(weeklyAmount(d.monthly))} každé pondělí.`}
+        hint={`Na účet přijde ${formatKc(weeklyAmount(d.monthly))} každé pondělí.`}
         value={d.monthly}
         onChange={(v) => set({ monthly: v })}
       />
@@ -65,7 +66,7 @@ export function DemandsForm({ view, proposal, onChange }: {
           >
             <option value="">Nic</option>
             {view.construction.map((o) => (
-              <option key={o.key} value={o.key}>{o.label} na úroveň {o.level} ({formatCZK(o.cost)})</option>
+              <option key={o.key} value={o.key}>{o.label} na úroveň {o.level} ({formatKc(o.cost)})</option>
             ))}
           </select>
         </label>
@@ -80,7 +81,7 @@ export function DemandsForm({ view, proposal, onChange }: {
           >
             <option value="">Nic</option>
             {view.equipment.map((o) => (
-              <option key={o.key} value={o.key}>{o.label} na úroveň {o.level} ({formatCZK(o.cost)})</option>
+              <option key={o.key} value={o.key}>{o.label} na úroveň {o.level} ({formatKc(o.cost)})</option>
             ))}
           </select>
         </label>
@@ -93,7 +94,7 @@ export function DemandsForm({ view, proposal, onChange }: {
             className="mt-1 h-5 w-5 shrink-0"
           />
           <span className="text-sm">
-            Ať sponzor zaplatí výpovědní pokutu u {view.current.sponsorName} ({formatCZK(view.current.terminationFee)}).
+            Ať sponzor zaplatí výpovědní pokutu u {view.current.sponsorName} ({formatKc(view.current.terminationFee)}).
           </span>
         </label>
       )}

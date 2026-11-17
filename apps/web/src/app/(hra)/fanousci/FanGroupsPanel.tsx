@@ -15,6 +15,7 @@ import { FaceAvatar } from "@/components/players/face-avatar";
 import { odesloLidi, zavrenoNaZapasy, pripadu } from "@okresni-masina/shared";
 import { sentimentWord } from "@/lib/fan-info";
 import { ChoralyPanel, type ChantView } from "./ChoralyPanel";
+import { formatKc } from "@/lib/format";
 
 export interface FanLeaderView {
   id: string;
@@ -130,9 +131,6 @@ function heatBarColor(v: number): string {
   return "bg-pitch-500";
 }
 
-function formatCZK(v: number): string {
-  return v.toLocaleString("cs") + " Kč";
-}
 
 function formatDatum(s: string | null): string {
   if (!s) return "";
@@ -174,7 +172,7 @@ function Akce({ group, teamId, onChanged, confirm }: {
     const ok = await confirm({
       title: `${a.label} ${group.name}`,
       description: a.popis,
-      details: cena > 0 ? [{ label: "Cena", value: `−${formatCZK(cena)}`, color: "text-card-red" }] : [],
+      details: cena > 0 ? [{ label: "Cena", value: `−${formatKc(cena)}`, color: "text-card-red" }] : [],
       confirmLabel: a.label,
     });
     if (!ok) return;
@@ -211,7 +209,7 @@ function Akce({ group, teamId, onChanged, confirm }: {
               disabled={!a.available || busy !== null}
               onClick={() => proved(a)}
             >
-              {a.label}{a.cost > 0 ? ` · ${formatCZK(a.cost)}` : ""}
+              {a.label}{a.cost > 0 ? ` · ${formatKc(a.cost)}` : ""}
             </button>
           ) : (
             <details className="rounded-lg" style={{ background: "var(--color-paper)" }}>
@@ -227,7 +225,7 @@ function Akce({ group, teamId, onChanged, confirm }: {
                     disabled={!a.available || busy !== null}
                     onClick={() => proved(a, v)}
                   >
-                    {v.label}{v.cost > 0 ? ` · ${formatCZK(v.cost)}` : ""}
+                    {v.label}{v.cost > 0 ? ` · ${formatKc(v.cost)}` : ""}
                   </button>
                 ))}
               </div>
@@ -402,12 +400,12 @@ export function FanGroupsPanel({ data, teamId, onChanged }: {
                 )}
               </>
             }
-            trailing={i.fine > 0 ? <RowValue tone="minus">−{formatCZK(i.fine)}</RowValue> : undefined} />
+            trailing={i.fine > 0 ? <RowValue tone="minus">−{formatKc(i.fine)}</RowValue> : undefined} />
         ))}
         {bordelCelkem > 0 && (
           <p className="px-4 py-3 border-t border-line text-meta">
             Za {pripadu(data.recentIncidents.length)} jsi zaplatil{" "}
-            <strong className="text-card-red">{formatCZK(bordelCelkem)}</strong>.
+            <strong className="text-card-red">{formatKc(bordelCelkem)}</strong>.
           </p>
         )}
       </ListCard>

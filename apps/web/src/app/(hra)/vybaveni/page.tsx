@@ -10,11 +10,8 @@ import { amenityDetail, withAmenityNote } from "@/lib/amenity-outlook";
 import { AmenityGainChip } from "@/components/equipment/amenity-gain-chip";
 import { SellDialog } from "./SellDialog";
 import { BazarTab } from "./BazarTab";
-import {
-  EQUIPMENT_ICONS, condBarColor, condColor, daysLeft, formatCZK,
-  type BazarData, type BazarListing, type EquipmentData, type MyListing,
-  type RepairOption, type SellOption, type UpgradeOption,
-} from "./types";
+import { EQUIPMENT_ICONS, condBarColor, condColor, daysLeft, type BazarData, type BazarListing, type EquipmentData, type MyListing, type RepairOption, type SellOption, type UpgradeOption } from "./types";
+import { formatKc } from "@/lib/format";
 
 type Tab = "mine" | "bazar";
 
@@ -101,9 +98,9 @@ function EquipmentPage() {
       details: [
         { label: "Bonus", value: u.effect, color: "text-pitch-500" },
         ...(u.amenity ? [amenityDetail(u.amenity)] : []),
-        { label: "Cena", value: `-${formatCZK(u.cost)}`, color: "text-card-red" },
+        { label: "Cena", value: `−${formatKc(u.cost)}`, color: "text-card-red" },
       ],
-      confirmLabel: `Koupit za ${formatCZK(u.cost)}`,
+      confirmLabel: `Koupit za ${formatKc(u.cost)}`,
     });
     if (!ok) return;
     setActing(u.category);
@@ -131,8 +128,8 @@ function EquipmentPage() {
     const ok = await confirm({
       title: `Opravit ${label}?`,
       description: `Stav ${condition} % se obnoví na 100 %.`,
-      details: [{ label: "Cena", value: `-${formatCZK(cost)}`, color: "text-card-red" }],
-      confirmLabel: `Opravit za ${formatCZK(cost)}`,
+      details: [{ label: "Cena", value: `−${formatKc(cost)}`, color: "text-card-red" }],
+      confirmLabel: `Opravit za ${formatKc(cost)}`,
     });
     if (!ok) return;
     await repairNow(category);
@@ -185,10 +182,10 @@ function EquipmentPage() {
       { label: "Stav", value: `${l.condition} %`, color: condColor(l.condition) },
       { label: "Efektivní úroveň", value: `${myEffective} → ${newEffective}`, color: newEffective >= myEffective ? "text-pitch-500" : "text-card-red" },
       ...(l.amenity ? [amenityDetail(l.amenity)] : []),
-      { label: "Cena", value: `-${formatCZK(l.price)}`, color: "text-card-red" },
+      { label: "Cena", value: `−${formatKc(l.price)}`, color: "text-card-red" },
     ];
     if (l.repairCostAfterBuy > 0) {
-      details.push({ label: "Oprava na 100 %", value: formatCZK(l.repairCostAfterBuy), color: "text-muted" });
+      details.push({ label: "Oprava na 100 %", value: formatKc(l.repairCostAfterBuy), color: "text-muted" });
     }
 
     const ok = await confirm({
@@ -197,7 +194,7 @@ function EquipmentPage() {
         ? "Pozor: vybavení je sice vyšší úrovně, ale v horším stavu, efektivní úroveň ti klesne. Po opravě bude vyšší."
         : l.levelDescription, l.amenity),
       details,
-      confirmLabel: `Koupit za ${formatCZK(l.price)}`,
+      confirmLabel: `Koupit za ${formatKc(l.price)}`,
     });
     if (!ok) return;
     setActing("b-" + l.id);
@@ -368,7 +365,7 @@ function EquipmentPage() {
                       {upgrade && !upgrade.locked && (
                         <span className="flex items-center justify-between gap-3">
                           <span className="min-w-0">
-                            <span className="block"><span className="font-heading font-bold text-ink">Úroveň {upgrade.nextLevel}</span> <span className="text-muted">·</span> <span className="font-heading font-bold text-ink tabular-nums">{formatCZK(upgrade.cost)}</span></span>
+                            <span className="block"><span className="font-heading font-bold text-ink">Úroveň {upgrade.nextLevel}</span> <span className="text-muted">·</span> <span className="font-heading font-bold text-ink tabular-nums">{formatKc(upgrade.cost)}</span></span>
                             <span className="block text-pitch-600 leading-snug">{upgrade.effect}</span>
                             {upgrade.effectNote && <span className="block text-muted leading-snug mt-0.5">{upgrade.effectNote}</span>}
                           </span>
@@ -392,7 +389,7 @@ function EquipmentPage() {
                       {/* Oprava */}
                       {repair && (
                         <span className="flex items-center justify-between gap-3">
-                          <span className="text-muted">Oprava na 100 %: <span className="font-heading font-bold text-ink tabular-nums whitespace-nowrap">{formatCZK(repair.cost)}</span></span>
+                          <span className="text-muted">Oprava na 100 %: <span className="font-heading font-bold text-ink tabular-nums whitespace-nowrap">{formatKc(repair.cost)}</span></span>
                           <button onClick={() => handleRepair(repair.category, repair.label, repair.condition, repair.cost)} disabled={!canRepair || !!acting}
                             className={`${CARD_BTN} ${
                               canRepair ? "bg-gold-500 text-white hover:bg-gold-600" : "bg-gray-100 text-gray-400 cursor-not-allowed"
@@ -406,7 +403,7 @@ function EquipmentPage() {
                       {sell && (sell.listingId ? (
                         <span className="flex items-center justify-between gap-3">
                           <span className="text-muted min-w-0">
-                            🏷 V bazaru za <span className="font-heading font-bold text-ink tabular-nums">{formatCZK(sell.listedPrice ?? 0)}</span>
+                            🏷 V bazaru za <span className="font-heading font-bold text-ink tabular-nums">{formatKc(sell.listedPrice ?? 0)}</span>
                             <span className="block text-xs">{sell.listedUntil ? daysLeft(sell.listedUntil) : ""}</span>
                           </span>
                           <button
@@ -421,7 +418,7 @@ function EquipmentPage() {
                           {/* Cenu v bazaru si určuje hráč, žádné číslo mu tu nepodsouváme.
                               Výkup zastavárny je naopak pevně daný, ten smysl má. */}
                           <span className="text-muted">
-                            Prodej: zastavárna dá hned <span className="font-heading font-bold text-ink tabular-nums whitespace-nowrap">{formatCZK(sell.pawnQuote)}</span>
+                            Prodej: zastavárna dá hned <span className="font-heading font-bold text-ink tabular-nums whitespace-nowrap">{formatKc(sell.pawnQuote)}</span>
                           </span>
                           <button onClick={() => setSelling(sell)} disabled={!!acting}
                             className={`${CARD_BTN} border border-gray-300 text-muted hover:text-ink hover:border-gray-400 disabled:opacity-50`}>

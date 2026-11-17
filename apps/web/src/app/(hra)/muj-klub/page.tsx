@@ -14,6 +14,7 @@ import {
   type ClubWebsiteTemplate,
   type ClubWebsiteAddon,
 } from "@okresni-masina/shared";
+import { formatKc } from "@/lib/format";
 
 interface ClubIdentityData {
   id: string;
@@ -203,7 +204,7 @@ export default function MujKlubPage() {
   const handleBuyTemplate = async (templateId: ClubWebsiteTemplate) => {
     if (!teamId) return;
     const tpl = CLUB_WEBSITE_TEMPLATES[templateId];
-    if (!window.confirm(`Opravdu chceš zakoupit šablonu "${tpl.name}" za ${tpl.price.toLocaleString("cs")} Kč?`)) {
+    if (!window.confirm(`Opravdu chceš zakoupit šablonu "${tpl.name}" za ${formatKc(tpl.price)}?`)) {
       return;
     }
     setSaving(true);
@@ -228,7 +229,7 @@ export default function MujKlubPage() {
   const handleBuyAddon = async (addonId: ClubWebsiteAddon) => {
     if (!teamId) return;
     const add = CLUB_WEBSITE_ADDONS[addonId];
-    if (!window.confirm(`Opravdu chceš zakoupit vylepšení "${add.name}" za ${add.price.toLocaleString("cs")} Kč?`)) {
+    if (!window.confirm(`Opravdu chceš zakoupit vylepšení "${add.name}" za ${formatKc(add.price)}?`)) {
       return;
     }
     setSaving(true);
@@ -458,7 +459,7 @@ export default function MujKlubPage() {
                   </label>
                   {!unlockedAddons.includes("press_officer") && (
                     <span className="text-sm text-amber-600 font-heading font-bold">
-                      Vyžaduje modul {CLUB_WEBSITE_ADDONS.press_officer.name} ({CLUB_WEBSITE_ADDONS.press_officer.price.toLocaleString("cs")} Kč)
+                      Vyžaduje modul {CLUB_WEBSITE_ADDONS.press_officer.name} ({formatKc(CLUB_WEBSITE_ADDONS.press_officer.price)})
                     </span>
                   )}
                 </div>
@@ -495,7 +496,7 @@ export default function MujKlubPage() {
                   </label>
                 ) : (
                   <span className="text-sm text-amber-600 font-heading font-bold">
-                    Vyžaduje modul {CLUB_WEBSITE_ADDONS.sponsor_banner.name} ({CLUB_WEBSITE_ADDONS.sponsor_banner.price.toLocaleString("cs")} Kč)
+                    Vyžaduje modul {CLUB_WEBSITE_ADDONS.sponsor_banner.name} ({formatKc(CLUB_WEBSITE_ADDONS.sponsor_banner.price)})
                   </span>
                 )}
               </div>
@@ -567,7 +568,7 @@ export default function MujKlubPage() {
 
                     <div className="mt-6 pt-4 border-t border-gray-100 flex items-center justify-between">
                       <div className="text-sm font-heading font-extrabold text-ink">
-                        {tpl.price === 0 ? "Zdarma" : `${tpl.price.toLocaleString("cs")} Kč`}
+                        {tpl.price === 0 ? "Zdarma" : `${formatKc(tpl.price)}`}
                       </div>
 
                       {isActive ? (
@@ -635,7 +636,7 @@ export default function MujKlubPage() {
                           </span>
                         ) : (
                           <span className="text-sm font-heading font-bold text-muted">
-                            {add.price.toLocaleString("cs")} Kč
+                            {formatKc(add.price)}
                           </span>
                         )}
                       </div>

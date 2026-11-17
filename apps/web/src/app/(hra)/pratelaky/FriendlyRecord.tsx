@@ -6,10 +6,8 @@ import { pocet } from "@/lib/referee-info";
 import { isLightColor, isNeutralExtreme } from "@/lib/team-color";
 import { HeroStat, HeroStats, heroTone } from "@/components/ui/hero-kit";
 import { DataTable, EntityCell, ListCard, ListRow, ScoreChip, ShowMore } from "@/components/ui";
-import {
-  ClubCrest, FormChip, PRIMARY_BUTTON, SECONDARY_BUTTON, TeamLink, dayShort, formatCZK, venueText,
-  type Crest, type FriendliesData, type HeadToHead,
-} from "./friendly-ui";
+import { ClubCrest, FormChip, PRIMARY_BUTTON, SECONDARY_BUTTON, TeamLink, dayShort, venueText, type Crest, type FriendliesData, type HeadToHead } from "./friendly-ui";
+import { formatKc } from "@/lib/format";
 
 /** Věta pod erbem: co se teď děje a co dál. Bez čísel tam, kde nejsou potřeba. */
 function streakSentence(r: FriendliesData["record"]): string {
@@ -25,7 +23,7 @@ function streakSentence(r: FriendliesData["record"]): string {
 
 function stakeText(v: number): string | null {
   if (v === 0) return null;
-  return v > 0 ? `na sázkách +${formatCZK(v)}` : `na sázkách −${formatCZK(-v)}`;
+  return v > 0 ? `na sázkách +${formatKc(v)}` : `na sázkách −${formatKc(-v)}`;
 }
 
 /** Barva klubu do pruhu. Bílá nebo skoro bílá by na světlém pozadí zmizela, vezme se druhá barva. */
@@ -220,7 +218,7 @@ export function FriendlyRecord({ data, onChallenge }: { data: FriendliesData; on
               <ListRow key={f.id} href={f.matchId ? `/zapas/${f.matchId}/zaznam` : undefined}
                 leading={<ClubCrest crest={f.opponent.crest} size={30} />}
                 title={f.opponent.name}
-                meta={`${f.date ? `${dayShort(f.date).day} · ` : ""}${venueText(f.venue, f.neutralVillage)}${f.stake > 0 ? ` · o ${formatCZK(f.stake)}` : ""}`}
+                meta={`${f.date ? `${dayShort(f.date).day} · ` : ""}${venueText(f.venue, f.neutralVillage)}${f.stake > 0 ? ` · o ${formatKc(f.stake)}` : ""}`}
                 trailing={result
                   ? <ScoreChip result={result}>{f.myScore}:{f.opponentScore}</ScoreChip>
                   : <span className="text-meta text-muted">-</span>} />

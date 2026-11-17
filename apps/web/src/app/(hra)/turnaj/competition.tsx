@@ -5,6 +5,7 @@ import { BadgePreview, Tabs, useTabParam, DataTable, EntityCell, ListCard, ListR
 import { FixtureGroup, FixtureRow, type FixtureCrest } from "@/components/match/fixture-row";
 import { RoundPager } from "@/components/match/round-pager";
 import { PMOBILE, PMobileLogo } from "@/components/brand/p-mobile";
+import { formatKc } from "@/lib/format";
 
 export const BRAND = "#C8006A";
 
@@ -84,9 +85,6 @@ const TAB_KEYS = ["prehled", "tabulka", "rozpis", "playoff", "strelci", "info"] 
 const STAGE_NAME: Record<string, string> = { qf: "Čtvrtfinále", sf: "Semifinále", third: "O 3. místo", final: "Finále" };
 const WEEKDAY = ["ne", "po", "út", "st", "čt", "pá", "so"];
 
-function kc(n: number): string {
-  return `${n.toLocaleString("cs")} Kč`;
-}
 
 /** „st 14. 10." z výkopu (UTC půlnoc nehrozí, výkop je odpoledne). */
 export function dayLabel(iso: string): string {
@@ -296,7 +294,7 @@ export function CompetitionView({
           )}
           <div className="text-sm">
             <span className="text-muted">Od P-Mobile tvůj klub zatím dostal: </span>
-            <span className="font-heading font-bold text-base" style={{ color: BRAND }}>{kc(myEarnings)}</span>
+            <span className="font-heading font-bold text-base" style={{ color: BRAND }}>{formatKc(myEarnings)}</span>
           </div>
         </div>
       )}

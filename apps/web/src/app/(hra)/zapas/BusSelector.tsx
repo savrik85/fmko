@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { CollapsibleCard, ListRow } from "@/components/ui";
+import { formatKc } from "@/lib/format";
 
 const BUS_TIERS_VESNICE = [
   {
@@ -205,7 +206,7 @@ export function BusSelector({
                 title={<>{tier?.label ?? b.busSize} <span className="text-meta font-normal text-muted">· {b.sourceVillageName}</span></>}
                 trailing={
                   <span className="text-meta text-pitch-600 font-bold tabular-nums whitespace-nowrap">
-                    ✓ {b.cost.toLocaleString("cs")} Kč
+                    ✓ {formatKc(b.cost)}
                   </span>
                 } />
             );
@@ -266,7 +267,7 @@ export function BusSelector({
                   </div>
                   <div className="text-micro text-muted">{t.range}</div>
                   <div className="text-micro text-pitch-600 font-heading font-bold mt-0.5">
-                    {t.cost.toLocaleString("cs")} Kč
+                    {formatKc(t.cost)}
                   </div>
                 </button>
               ))}
@@ -289,7 +290,7 @@ export function BusSelector({
           >
             {submitting
               ? "Objednávám…"
-              : `Objednat za ${selectedTier.cost.toLocaleString("cs")} Kč`}
+              : `Objednat za ${formatKc(selectedTier.cost)}`}
           </button>
         </>
       )}

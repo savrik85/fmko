@@ -3,6 +3,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { BadgePreview, ListRow, type BadgePattern } from "@/components/ui";
+import { formatKc } from "@/lib/format";
 
 export interface CostLine { label: string; amount: number }
 
@@ -91,7 +92,6 @@ export interface FriendliesData {
   limits: FriendlyLimits;
 }
 
-export const formatCZK = (v: number) => `${v.toLocaleString("cs")} Kč`;
 
 /** „úterý 27. 10." */
 export function dayLabel(date: string): string {
@@ -145,7 +145,7 @@ export function StakeTag({ stake }: { stake: number }) {
   return (
     <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-gold-50 border border-gold-200 text-sm font-heading font-bold text-gold-700 tabular-nums">
       <span aria-hidden className="w-3 h-3 rounded-full bg-gold-400 border border-gold-600" />
-      o {formatCZK(stake)}
+      o {formatKc(stake)}
     </span>
   );
 }
@@ -159,8 +159,8 @@ export function TermsTags({ stake, costPayer, myCosts }: { stake: number; costPa
       {costPayer === "me" && <span className={TAG}>platíš náklady za oba</span>}
       {costPayer === "opponent" && <span className={TAG}>náklady platí soupeř</span>}
       {myCosts && (
-        <span className={TAG} title={myCosts.map((l) => `${l.label}: ${formatCZK(l.amount)}`).join(", ")}>
-          {total > 0 ? `tvoje náklady ${formatCZK(total)}` : "neplatíš nic"}
+        <span className={TAG} title={myCosts.map((l) => `${l.label}: ${formatKc(l.amount)}`).join(", ")}>
+          {total > 0 ? `tvoje náklady ${formatKc(total)}` : "neplatíš nic"}
         </span>
       )}
     </div>

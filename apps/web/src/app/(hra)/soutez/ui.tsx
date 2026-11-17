@@ -12,18 +12,19 @@ import React from "react";
 import { EntityLink } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { CoachName } from "@/components/manager/coach-name";
+import { formatKc } from "@/lib/format";
 
 export const GOLD = "#C4A035";
 export const GOLD_SOFT = "#FBF6E6";
 
 export function czk(n: number | null | undefined): string {
   if (n === null || n === undefined) return "-";
-  return `${Math.round(n).toLocaleString("cs")} Kč`;
+  return `${formatKc(Math.round(n))}`;
 }
 
 export function signed(n: number): string {
   if (n === 0) return "0 Kč";
-  return `${n > 0 ? "+" : "−"}${Math.abs(Math.round(n)).toLocaleString("cs")} Kč`;
+  return `${n > 0 ? "+" : "−"}${formatKc(Math.abs(Math.round(n)))}`;
 }
 
 /** České skloňování po číslovce: 1 hlas, 2–4 hlasy, 5+ hlasů. */

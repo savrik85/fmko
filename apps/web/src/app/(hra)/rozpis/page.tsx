@@ -8,6 +8,7 @@ import { FixtureGroup, FixtureRow, type FixtureSide } from "@/components/match/f
 import type { BadgePattern } from "@/components/ui";
 import { PreseasonNotice } from "@/components/team/preseason-notice";
 import { TeamName } from "@/components/manager/team-name";
+import { formatKc } from "@/lib/format";
 
 interface ScheduleMatch {
   id: string;
@@ -117,7 +118,7 @@ export default function SchedulePage() {
 
   const promoteMatch = async (m: ScheduleMatch) => {
     if (!teamId || acting) return;
-    const priceStr = promotionPrice != null ? `${promotionPrice.toLocaleString("cs")} Kč` : "500–2 500 Kč";
+    const priceStr = promotionPrice != null ? `${formatKc(promotionPrice)}` : "500–2 500 Kč";
     const ok = await confirm({
       title: `Propagovat zápas proti ${m.isHome ? m.awayName : m.homeName}?`,
       description: "Vyjde článek ve Zpravodaji a přijde více diváků (+25 %).",
@@ -192,7 +193,7 @@ export default function SchedulePage() {
                   <div className="text-xs sm:text-sm text-muted mt-0.5 leading-tight">
                     vs <TeamName name={nextHome.awayName} isAi={nextHome.awayIsAi === true} /> · {nextHome.isCup ? `🏆 ${nextHome.roundName ?? "Pohár"} · ` : ""}{formatDate(nextHome.scheduledAt)}
                     {nextHome.promoted && nextHome.promotionCost
-                      ? <span className="hidden sm:inline">, zaplaceno {nextHome.promotionCost.toLocaleString("cs")} Kč</span>
+                      ? <span className="hidden sm:inline">, zaplaceno {formatKc(nextHome.promotionCost)}</span>
                       : null}
                   </div>
                 </div>

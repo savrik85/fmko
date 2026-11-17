@@ -9,6 +9,7 @@ import { apiFetch, showError, type Team } from "@/lib/api";
 import { Spinner, SectionLabel, useConfirm, Tabs, ListCard, ListRow, ListEmpty, RowIcon, RowValue, ResultChip } from "@/components/ui";
 import { BusSelector } from "../zapas/BusSelector";
 import { FanGroupsPanel, type FanGroupsData } from "./FanGroupsPanel";
+import { formatKc } from "@/lib/format";
 
 interface ScheduleMatch {
   id: string;
@@ -215,9 +216,6 @@ const PRODUCT_ICONS: Record<string, string> = {
 };
 
 
-function formatCZK(v: number): string {
-  return v.toLocaleString("cs") + " Kč";
-}
 
 function satBarColor(value: number): string {
   if (value >= 75) return "bg-pitch-500";
@@ -385,7 +383,7 @@ export default function FansPage() {
 
   const promoteNext = async () => {
     if (!teamId || !nextHomeMatch || promoting) return;
-    const priceStr = promotionPrice != null ? `${promotionPrice.toLocaleString("cs")} Kč` : "500–2 500 Kč";
+    const priceStr = promotionPrice != null ? `${formatKc(promotionPrice)}` : "500–2 500 Kč";
     const ok = await confirm({
       title: `Propagovat zápas proti ${nextHomeMatch.awayName}?`,
       description: `Doma · ${nextHomeMatch.scheduledAt ? new Date(nextHomeMatch.scheduledAt).toLocaleDateString("cs") : ""}. Vyjde článek ve Zpravodaji a přijde +25 % diváků.`,
@@ -495,8 +493,8 @@ export default function FansPage() {
     const ok = await confirm({
       title: `Doplnit sklad ${product.label}?`,
       description: `${qty} ks × ${tier.wholesalePrice} Kč (${tier.label})`,
-      details: [{ label: "Celkem", value: `-${formatCZK(total)}`, color: "text-card-red" }],
-      confirmLabel: `Nakoupit za ${formatCZK(total)}`,
+      details: [{ label: "Celkem", value: `−${formatKc(total)}`, color: "text-card-red" }],
+      confirmLabel: `Nakoupit za ${formatKc(total)}`,
     });
     if (!ok) return;
     setActing("restock-" + key);
@@ -715,7 +713,7 @@ export default function FansPage() {
                 📢 {promoting ? "Propaguji…" : "Propagovat zápas"}
                 {promotionPrice != null && (
                   <span className="text-xs text-muted font-normal">
-                    {promotionPrice.toLocaleString("cs")} Kč
+                    {formatKc(promotionPrice)}
                   </span>
                 )}
               </button>
@@ -1276,7 +1274,7 @@ export default function FansPage() {
                 : "Týdenní pasivní příjem z pronájmu občerstvení"}
             </div>
             <div className="font-heading font-bold text-xl tabular-nums text-pitch-500">
-              {formatCZK(concession.externalWeeklyIncome)}
+              {formatKc(concession.externalWeeklyIncome)}
             </div>
             <div className="text-xs text-muted mt-1">
               {concession.refreshmentsLevel === 0
@@ -1475,19 +1473,19 @@ export default function FansPage() {
               <div className="bg-gray-50 rounded-soft p-3 text-center">
                 <div className="text-xs text-muted uppercase mb-1">Celkový výnos</div>
                 <div className="font-heading font-bold text-lg tabular-nums text-pitch-500">
-                  {formatCZK(salesHistory.reduce((s, m) => s + m.totalRevenue, 0))}
+                  {formatKc(salesHistory.reduce((s, m) => s + m.totalRevenue, 0))}
                 </div>
               </div>
               <div className="bg-gray-50 rounded-soft p-3 text-center">
                 <div className="text-xs text-muted uppercase mb-1">Čistý zisk</div>
                 <div className="font-heading font-bold text-lg tabular-nums text-pitch-500">
-                  {formatCZK(salesHistory.reduce((s, m) => s + m.totalProfit, 0))}
+                  {formatKc(salesHistory.reduce((s, m) => s + m.totalProfit, 0))}
                 </div>
               </div>
               <div className="bg-gray-50 rounded-soft p-3 text-center">
                 <div className="text-xs text-muted uppercase mb-1">Ø na zápas</div>
                 <div className="font-heading font-bold text-lg tabular-nums text-ink">
-                  {formatCZK(Math.round(salesHistory.reduce((s, m) => s + m.totalProfit, 0) / salesHistory.length))}
+                  {formatKc(Math.round(salesHistory.reduce((s, m) => s + m.totalProfit, 0) / salesHistory.length))}
                 </div>
               </div>
             </div>
@@ -1512,8 +1510,8 @@ export default function FansPage() {
                     detail={
                       <span className="block mt-0.5">
                         <span className="block">
-                          <span className="font-heading font-bold tabular-nums text-pitch-500">{formatCZK(m.totalRevenue)}</span>
-                          <span className="text-xs text-muted"> · zisk {formatCZK(m.totalProfit)}</span>
+                          <span className="font-heading font-bold tabular-nums text-pitch-500">{formatKc(m.totalRevenue)}</span>
+                          <span className="text-xs text-muted"> · zisk {formatKc(m.totalProfit)}</span>
                         </span>
                         <span className="grid grid-cols-3 gap-2 mt-1.5">
                           {m.products.map((p) => (
@@ -1526,10 +1524,10 @@ export default function FansPage() {
                                 {p.stockout && <span className="text-card-red">⚠</span>}
                               </span>
                               <span className="block text-muted tabular-nums">
-                                {p.sellPrice} Kč → {formatCZK(p.revenue)}
+                                {p.sellPrice} Kč → {formatKc(p.revenue)}
                               </span>
                               <span className={`block tabular-nums ${p.profit >= 0 ? "text-pitch-500" : "text-card-red"}`}>
-                                {p.profit > 0 ? "+" : ""}{formatCZK(p.profit)}
+                                {p.profit > 0 ? "+" : ""}{formatKc(p.profit)}
                               </span>
                             </span>
                           ))}
