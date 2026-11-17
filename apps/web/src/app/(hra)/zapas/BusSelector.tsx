@@ -195,13 +195,14 @@ export function BusSelector({
 
       {ordered.length > 0 && (
         // Objednané autobusy: hustý řádek, obec za názvem šedě, ať řádek nenaroste.
+        // Obec bez předložky: názvy obcí nemáme ve druhém pádě („z Střešovice“).
         <div className="-mx-3 mb-3 border-y border-line-soft">
           {ordered.map((b) => {
             const tier = BUS_TIERS.find((t) => t.key === b.busSize);
             return (
               <ListRow key={b.id} dense
                 leading={<span className="text-base leading-none" aria-hidden="true">{tier?.icon ?? "🚌"}</span>}
-                title={<>{tier?.label ?? b.busSize} <span className="text-meta font-normal text-muted">z {b.sourceVillageName}</span></>}
+                title={<>{tier?.label ?? b.busSize} <span className="text-meta font-normal text-muted">· {b.sourceVillageName}</span></>}
                 trailing={
                   <span className="text-meta text-pitch-600 font-bold tabular-nums whitespace-nowrap">
                     ✓ {b.cost.toLocaleString("cs")} Kč
