@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { useMenuBadges, MenuBadgesState } from "@/hooks/use-menu-badges";
+import { MenuLineIcon } from "@/components/dashboard/menu-line-icons";
 import { MENU_BADGE_BG, MENU_FOOTER_ITEMS, menuBadgeFor, menuGroupsFor, type MenuItem } from "@/lib/menu-structure";
 
 interface Section {
@@ -54,9 +55,9 @@ function getTileBadge(href: string, badges: MenuBadgesState): TileBadge | null {
 const ADMIN_ITEM: MenuItem = { href: "/admin", icon: "🛠️", label: "Administrace", color: "#8B4513" };
 
 /**
- * Skupina menu jako ikony aplikací na ploše telefonu: plochá jednobarevná ikona se
- * zaoblenými rohy, bez přechodu a stínu, přímo na papíře, název pod ní, po čtyřech v řadě.
- * Odznak sedí na rohu ikony, takže název má celou šířku sloupce.
+ * Skupina menu: bílý čtvereček se zelenou kreslenou ikonou, název pod ním,
+ * po čtyřech v řadě. Ikony mají stejný rukopis jako spodní lišta.
+ * Odznak sedí na rohu čtverečku, takže název má celou šířku sloupce.
  */
 function MenuSection({ title, items, badges }: { title: string; items: MenuItem[]; badges: MenuBadgesState }) {
   return (
@@ -71,11 +72,8 @@ function MenuSection({ title, items, badges }: { title: string; items: MenuItem[
               href={item.href}
               className="flex flex-col items-center gap-1.5 min-w-0 active:scale-95 transition-transform"
             >
-              <span
-                className="relative w-14 h-14 rounded-2xl flex items-center justify-center text-[26px] leading-none"
-                style={{ background: item.color }}
-              >
-                <span aria-hidden="true">{item.icon}</span>
+              <span className="relative w-14 h-14 rounded-2xl flex items-center justify-center text-[26px] leading-none bg-surface text-pitch-500 shadow-[0_1px_2px_rgba(35,40,31,0.12),0_0_0_1px_rgba(35,40,31,0.05)]">
+                <MenuLineIcon href={item.href} fallback={item.icon} />
                 {badge && badge.type === "count" && badge.count > 0 && (
                   <span className={`absolute -top-1.5 -right-1.5 ${badge.bg ?? "bg-card-red"} text-white text-[10px] font-bold min-w-5 h-5 px-1 rounded-full flex items-center justify-center border-2 border-paper`}>
                     {badge.count > 99 ? "99+" : badge.count}
