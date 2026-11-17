@@ -39,13 +39,17 @@ export function DealCard({ deal, side }: { deal: Deal; side: "paying" | "receivi
   const pct = deal.totalAmount > 0 ? Math.round((paidSoFar / deal.totalAmount) * 100) : 0;
   return (
     <ListRow
+      /* Částka na řádku se jménem, ne vpravo přes celý řádek: tabulka splátek pod ním
+         pak má celou šířku a „511 Kč týdně“ ani datum splátky se nezalomí. */
       title={
-        <Link href={`/hrac/${deal.playerId}`} className="hover:text-pitch-500 underline decoration-pitch-500/20 transition-colors">
-          {deal.playerName}
-        </Link>
+        <span className="flex items-start justify-between gap-2">
+          <Link href={`/hrac/${deal.playerId}`} className="min-w-0 hover:text-pitch-500 underline decoration-pitch-500/20 transition-colors">
+            {deal.playerName}
+          </Link>
+          <span className="shrink-0 tabular-nums">{kc(deal.totalAmount)}</span>
+        </span>
       }
       meta={<>{side === "paying" ? "od " : "do "}<ClubName id={deal.otherTeamId} name={deal.otherTeamName} /></>}
-      trailing={<RowValue>{kc(deal.totalAmount)}</RowValue>}
       detail={<>
         <span className="block h-2 mt-1.5 rounded-full bg-gray-100 overflow-hidden" aria-label={`Splaceno ${pct} %`}>
           <span className="block h-full bg-pitch-500" style={{ width: `${pct}%` }} />
