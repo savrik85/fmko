@@ -7,7 +7,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, apiAction, type Player } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
-import { Button, PositionBadge, BadgePreview, JerseyPreview, DataTable, EntityCell, ListCard, ListRow, type DataColumn, PageLoading, ProgressBar } from "@/components/ui";
+import { Button, PositionBadge, BadgePreview, JerseyPreview, DataTable, EntityCell, ListCard, ListRow, type DataColumn, PageLoading, ProgressBar, ChoiceGroup } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 import { BusSelector } from "./BusSelector";
 import { RefereeCard } from "@/components/match/referee-card";
@@ -883,33 +883,13 @@ function MatchPage() {
               : "Klepnutím vybereš sestavu"}
           </div>
         </div>
-        <div className="grid grid-cols-3 gap-2">
-          {(["A", "B", "C"] as const).map((slot) => {
-            const preset = presets[slot];
-            const filled = !!preset;
-            const active = activePreset === slot;
-            return (
-              <div key={slot} className="relative">
-                <button
-                  onClick={() => { onPresetClick(slot); setSaved(false); }}
-                  className={`w-full py-2 px-2 rounded-soft text-xs font-heading font-bold border-2 transition-all ${
-                    active ? "bg-pitch-500 border-pitch-600 text-white shadow-md"
-                    : filled ? "bg-gold-50 border-pitch-300 text-ink hover:border-pitch-500"
-                    : "bg-gray-50 border-gray-200 text-muted hover:bg-gray-100"
-                  }`}
-                >
-                  {/* flex-col: na 375 px se „Sestava A" a stav vedle sebe nevesly
-                      a nazev se lamal na dva radky. Pod sebou to sedi. */}
-                  <div className="flex flex-col items-center leading-tight">
-                    <span className="whitespace-nowrap">Sestava {slot}</span>
-                    {filled && <span className={`text-micro ${active ? "opacity-90" : "opacity-70"}`}>{preset.formation}</span>}
-                    {!filled && <span className="text-micro opacity-70">prázdná</span>}
-                  </div>
-                </button>
-              </div>
-            );
-          })}
-        </div>
+        <ChoiceGroup ariaLabel="Uložené sestavy" columns={3} value={activePreset}
+          onChange={(slot) => { onPresetClick(slot); setSaved(false); }}
+          options={(["A", "B", "C"] as const).map((slot) => ({
+            value: slot,
+            label: <span className="whitespace-nowrap">Sestava {slot}</span>,
+            hint: presets[slot]?.formation ?? "prázdná",
+          }))} />
       </div>
 
       {/* ═══ Formation + Tactic — one row, with chemistry badge ═══ */}
@@ -922,31 +902,24 @@ function MatchPage() {
                 Sehranost: <span className={`font-bold ${famColor(formationFam[formation] ?? 15)}`}>{Math.round(formationFam[formation] ?? 15)}</span>/100
               </div>
             </div>
-            <div className="grid grid-cols-3 sm:grid-cols-6 rounded-xl bg-gray-50 p-0.5 gap-0.5">
-              {FORMATIONS.map((f) => {
+            <ChoiceGroup ariaLabel="Formace" columns={6} size="sm" value={formation}
+              onChange={(f) => { setFormation(f); autoFill(players, f); }}
+              options={FORMATIONS.map((f) => {
                 const fam = formationFam[f] ?? 15;
-                return (
-                  <button key={f} onClick={() => { setFormation(f); autoFill(players, f); }}
-                    title={getFormationTooltip(f)}
-                    className={`py-1.5 rounded-soft text-center text-xs font-heading font-bold transition-all cursor-help ${formation === f ? "bg-white shadow-sm text-pitch-600" : "text-muted hover:text-ink"}`}>
-                    {f}
-                    <div className={`mt-0.5 h-1 rounded-full ${famBgColor(fam)}`} style={{ width: `${Math.max(8, fam)}%`, marginInline: "auto" }} />
-                  </button>
-                );
-              })}
-            </div>
+                return {
+                  value: f, label: f, title: getFormationTooltip(f),
+                  hint: <span className={`block mt-0.5 h-1 rounded-full ${famBgColor(fam)}`} style={{ width: `${Math.max(8, fam)}%`, marginInline: "auto" }} />,
+                };
+              })} />
           </div>
           <div className="flex-1 min-w-0">
             <div className="text-micro text-muted font-heading uppercase tracking-wide mb-1">Taktika</div>
-            <div className="grid grid-cols-3 sm:grid-cols-6 rounded-xl bg-gray-50 p-0.5 gap-0.5">
-              {TACTICS.map((t) => (
-                <button key={t.key} onClick={() => { setTactic(t.key); setSaved(false); }}
-                  title={getTacticTooltip(t.key as TacticKey)}
-                  className={`py-1.5 rounded-soft text-center text-xs font-heading font-bold transition-all cursor-help ${tactic === t.key ? "bg-white shadow-sm text-pitch-600" : "text-muted hover:text-ink"}`}>
-                  <span className="hidden sm:inline">{t.icon} </span>{t.label}
-                </button>
-              ))}
-            </div>
+            <ChoiceGroup ariaLabel="Taktika" columns={6} size="sm" value={tactic}
+              onChange={(k) => { setTactic(k); setSaved(false); }}
+              options={TACTICS.map((t) => ({
+                value: t.key, title: getTacticTooltip(t.key as TacticKey),
+                label: <><span className="hidden sm:inline">{t.icon} </span>{t.label}</>,
+              }))} />
           </div>
         </div>
         {/* Tvrdost hry — vlastní řádek, aby se třetí osa na desktopu nervala s formací a taktikou */}
@@ -962,15 +935,12 @@ function MatchPage() {
               </span>
             )}
           </div>
-          <div className="grid grid-cols-3 rounded-xl bg-gray-50 p-0.5 gap-0.5">
-            {HARDNESS.map((h) => (
-              <button key={h.key} onClick={() => { setHardness(h.key); setSaved(false); }}
-                title={getHardnessTooltip(h.key)}
-                className={`py-1.5 rounded-soft text-center text-xs font-heading font-bold transition-all cursor-help ${hardness === h.key ? "bg-white shadow-sm text-pitch-600" : "text-muted hover:text-ink"}`}>
-                <span className="hidden sm:inline">{h.icon} </span>{h.label}
-              </button>
-            ))}
-          </div>
+          <ChoiceGroup ariaLabel="Tvrdost hry" columns={3} size="sm" value={hardness}
+            onChange={(k) => { setHardness(k); setSaved(false); }}
+            options={HARDNESS.map((h) => ({
+              value: h.key, title: getHardnessTooltip(h.key),
+              label: <><span className="hidden sm:inline">{h.icon} </span>{h.label}</>,
+            }))} />
           {/* Varování jen když má smysl — u benevolentního sudího by jen šumělo */}
           {hardness === "hard" && referee && referee.strictness >= 65 && (
             <p className="text-micro text-card-red mt-1.5">

@@ -83,7 +83,7 @@ export function ChoiceGroup<T extends string>(props: ChoiceGroupProps<T>) {
             onClick={() => props.onChange(o.value)}
             className={`${BASE} ${sizing} flex flex-col items-center justify-center text-center font-bold leading-tight ${stateClass(selected, o.disabled)}`}>
             <span>{o.label}</span>
-            {o.hint != null && <span className="block text-micro font-medium text-muted mt-px">{o.hint}</span>}
+            {o.hint != null && <span className="block self-stretch text-micro font-medium text-muted mt-px">{o.hint}</span>}
             {selected && !o.disabled && <SelectedMark />}
           </button>
         );
