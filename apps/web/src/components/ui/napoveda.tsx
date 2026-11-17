@@ -3,10 +3,11 @@
 import { useEffect, useRef, useState, type Ref } from "react";
 import { usePathname } from "next/navigation";
 import { HelpMenu, type CaptureAction } from "./help-menu";
-import { BugReportTrialDialog } from "@/components/bug-report/bug-report-trial-dialog";
+import { BugReportDialog } from "@/components/bug-report/bug-report-dialog";
 import { ShareScreenshotDialog } from "@/components/share/share-screenshot-dialog";
 import { useTeam } from "@/context/team-context";
 import { capturePage, type CaptureResult } from "@/lib/page-capture";
+import { installDiagnostics, recordPageVisit } from "@/lib/client-diagnostics";
 import { brandScreenshot } from "@/lib/share-screenshot";
 
 /** Počká, až prohlížeč vykreslí „Fotím stránku…“, než ho focení na chvíli zablokuje. */
@@ -374,7 +375,12 @@ export function Napoveda() {
   const help = findHelp(pathname);
 
   // Přechod na jinou stránku menu i nápovědu zavře; nápověda patří stránce.
-  useEffect(() => { setMode("closed"); }, [pathname]);
+  // Zároveň se stránka zapíše do podrobností k případnému hlášení chyby.
+  useEffect(() => {
+    setMode("closed");
+    installDiagnostics();
+    recordPageVisit(pathname);
+  }, [pathname]);
 
   const { teamId, teamName } = useTeam();
 
@@ -444,7 +450,7 @@ export function Napoveda() {
         />
       )}
       {mode === "help" && help && <HelpPanel help={help} onClose={() => setMode("closed")} />}
-      {capture && <BugReportTrialDialog result={capture} onClose={() => setCapture(null)} />}
+      {capture && <BugReportDialog capture={capture} teamId={teamId} onClose={() => setCapture(null)} />}
       {share && (
         <ShareScreenshotDialog
           canvas={share.canvas}

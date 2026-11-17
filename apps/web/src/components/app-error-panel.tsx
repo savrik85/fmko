@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { BugReportDialog } from "@/components/bug-report/bug-report-dialog";
 import { captureError } from "@/lib/analytics";
+import { capturePage, type CaptureResult } from "@/lib/page-capture";
 import { claimModuleReload, isModuleLoadError } from "@/lib/module-load-error";
 
 /**
@@ -20,6 +22,19 @@ export function AppErrorPanel({ error, boundary, showHomeLink = false }: {
 }) {
   const moduleError = isModuleLoadError(error);
   const [reloading, setReloading] = useState(false);
+  // Nahlášení chyby: jen v herním obalu, globální hranice nemá TeamProvider ani obal hry.
+  const canReport = boundary === "game" && !moduleError;
+  const [capturing, setCapturing] = useState(false);
+  const [report, setReport] = useState<{ capture: CaptureResult } | null>(null);
+  const openReport = async () => {
+    if (capturing) return;
+    setCapturing(true);
+    try {
+      setReport({ capture: await capturePage() });
+    } finally {
+      setCapturing(false);
+    }
+  };
 
   useEffect(() => {
     console.error("chyba na stránce:", error);
@@ -63,7 +78,34 @@ export function AppErrorPanel({ error, boundary, showHomeLink = false }: {
         {showHomeLink && (
           <a href="/prehled" className="btn btn-secondary btn-md">Na Přehled</a>
         )}
+        {canReport && (
+          <button type="button" onClick={openReport} disabled={capturing} className="btn btn-secondary btn-md">
+            {capturing ? "Fotím stránku…" : "Nahlásit chybu"}
+          </button>
+        )}
       </div>
+      {report && (
+        <BugReportDialog
+          capture={report.capture}
+          teamId={readTeamId()}
+          extraContext={{ errorPage: { boundary, message: error.message, digest: error.digest ?? null } }}
+          onClose={() => setReport(null)}
+        />
+      )}
     </div>
   );
+}
+
+/**
+ * Klub z uloženého přihlášení. Chybová stránka nemůže sáhnout na TeamProvider
+ * (chyba mohla vzniknout v něm), tak se čte přímo z localStorage.
+ */
+function readTeamId(): string | null {
+  try {
+    const raw = localStorage.getItem("om_team");
+    return raw ? (JSON.parse(raw) as { teamId?: string }).teamId ?? null : null;
+  } catch (e) {
+    console.warn("Klub pro hlášení z chybové stránky:", e);
+    return null;
+  }
 }
