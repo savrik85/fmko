@@ -27,7 +27,7 @@ export declare function RowGroup({ label, aside }: {
     label: ReactNode;
     aside?: ReactNode;
 }): import("react").JSX.Element;
-export declare function ListRow({ href, onClick, leading, title, meta, trailing, tone, chevron, dense }: {
+export declare function ListRow({ href, onClick, leading, title, meta, detail, trailing, tone, chevron, dense }: {
     /** Celý řádek je odkaz. Nepoužívat spolu s tlačítkem v `trailing`. */
     href?: string;
     onClick?: () => void;
@@ -37,6 +37,11 @@ export declare function ListRow({ href, onClick, leading, title, meta, trailing,
     title: ReactNode;
     /** Jeden řádek podrobností pod názvem. Smí skončit třemi tečkami. */
     meta?: ReactNode;
+    /**
+     * Celá věta pod podrobnostmi, která se nesmí useknout (popis události, zápis v kronice).
+     * Zalomí se na libovolný počet řádků. Pro údaje, které se vejdou do `meta`, nepoužívat.
+     */
+    detail?: ReactNode;
     /** Vpravo: hlavní číslo, štítek nebo tlačítko. */
     trailing?: ReactNode;
     tone?: RowTone;
@@ -51,6 +56,10 @@ export declare function ListRow({ href, onClick, leading, title, meta, trailing,
 /** Ikona v šedé dlaždici pro řádky bez portrétu a znaku (pohyby na účtu, události). */
 export declare function RowIcon({ children }: {
     children: ReactNode;
+}): import("react").JSX.Element;
+/** Změna o kolik jako kolečko vlevo v řádku historie: zeleně nahoru, červeně dolů. */
+export declare function DeltaMark({ value }: {
+    value: number;
 }): import("react").JSX.Element;
 /** Hlavní hodnota vpravo s volitelným drobným popiskem pod ní. */
 export declare function RowValue({ children, sub, tone }: {

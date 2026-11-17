@@ -9,7 +9,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { apiAction, apiFetch } from "@/lib/api";
-import { SectionLabel, Spinner } from "@/components/ui";
+import { SectionLabel, Spinner, ListCard, ListRow, ListEmpty, RowIcon } from "@/components/ui";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { COURSE_ATTR_LABELS, type CourseAttr } from "@okresni-masina/shared";
 import { LicenceBadge } from "./LicenceBadge";
@@ -369,28 +369,20 @@ export function CoachEducationTab({ teamId, isOwn }: { teamId: string; isOwn: bo
       )}
 
       {/* ═══ Absolvované ═══ */}
-      <div className="card p-4 sm:p-5">
-        <SectionLabel>Absolvované kurzy</SectionLabel>
-        {data.completed.length === 0 ? (
-          <p className="text-sm text-muted">Zatím žádný. Trenérská škola čeká.</p>
-        ) : data.completed.map((c) => (
-          <div key={c.id} className="flex items-center gap-3 py-2.5 border-b border-gray-100/80 last:border-b-0">
-            <span className="shrink-0 text-lg">{c.status === "passed" ? "✅" : "❌"}</span>
-            <div className="flex-1 min-w-0">
-              <div className="text-base font-heading font-bold truncate">{c.title}</div>
-              <div className="text-xs sm:text-sm text-muted">
-                {c.status === "passed" ? "Úspěšně" : "Propadl"}
-                {c.score !== null && ` · nejlepší test ${c.score} z ${c.total}`}
-              </div>
-            </div>
-            {isOwn && (
-              <Link href={`/trener/skripta?kurz=${c.id}`} className="shrink-0 text-xs sm:text-sm font-heading font-bold text-pitch-600 hover:underline min-h-11 flex items-center px-2">
+      <ListCard title="Absolvované kurzy" count={data.completed.length || undefined}>
+        {data.completed.length === 0 && <ListEmpty icon="🎓">Zatím žádný. Trenérská škola čeká.</ListEmpty>}
+        {data.completed.map((c) => (
+          <ListRow key={c.id}
+            leading={<RowIcon>{c.status === "passed" ? "✅" : "❌"}</RowIcon>}
+            title={c.title}
+            meta={`${c.status === "passed" ? "Úspěšně" : "Propadl"}${c.score !== null ? ` · nejlepší test ${c.score} z ${c.total}` : ""}`}
+            trailing={isOwn ? (
+              <Link href={`/trener/skripta?kurz=${c.id}`} className="text-meta font-bold text-pitch-600 hover:underline min-h-11 flex items-center px-2">
                 Skripta
               </Link>
-            )}
-          </div>
+            ) : undefined} />
         ))}
-      </div>
+      </ListCard>
       {dialog}
     </div>
   );

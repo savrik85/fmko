@@ -6,7 +6,7 @@ import Link from "next/link";
 import { apiFetch, showError, type ManagerProfile, type Team } from "@/lib/api";
 import { useTeam } from "@/context/team-context";
 import { FaceAvatar } from "@/components/players/face-avatar";
-import { SectionLabel, Spinner, BadgePreview, Tabs, useTabParam, type TabItem } from "@/components/ui";
+import { SectionLabel, Spinner, BadgePreview, Tabs, useTabParam, ListCard, ListRow, ListEmpty, RowValue, DeltaMark, type TabItem } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 import { HeroBackdrop } from "@/components/ui/hero-backdrop";
 import { EditManagerModal } from "@/components/manager/EditManagerModal";
@@ -367,38 +367,18 @@ export default function ManagerDetailPage() {
 
         {/* ═══ Historie: odkud se vzaly vlastnosti + úspěchy ═══ */}
         {tab === "historie" && attrHistory.length === 0 && !(achievements && achievements.achievements.length > 0) && (
-          <div className="card p-4 text-sm text-muted">Zatím tu nic není.</div>
+          <ListCard><ListEmpty icon="📜">Zatím tu nic není. Vlastnosti se mění tréninkem, kurzy a zápasy.</ListEmpty></ListCard>
         )}
         {tab === "historie" && attrHistory.length > 0 && (
-          <div className="card p-4 sm:p-5">
-            <SectionLabel>Odkud se vzaly vlastnosti</SectionLabel>
-            <div className="space-y-1">
-              {attrHistory.map((h, i) => (
-                <div key={i} className="flex items-start gap-3 py-2 border-b border-gray-50 last:border-b-0">
-                  <div className={`shrink-0 w-9 h-9 rounded-full flex items-center justify-center font-heading font-bold text-sm tabular-nums ${
-                    h.delta > 0 ? "bg-pitch-50 text-pitch-600"
-                      : h.delta < 0 ? "bg-red-50 text-card-red"
-                      : "bg-gray-50 text-muted"
-                  }`}>
-                    {h.delta > 0 ? "+" : ""}{h.delta}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-heading font-bold text-ink">{h.attrLabel}</div>
-                    <div className="text-sm text-muted">{h.description}</div>
-                    {h.delta === 0 && h.rawDelta !== 0 && (
-                      <div className="text-sm text-muted">
-                        Mělo být {h.rawDelta > 0 ? "+" : ""}{h.rawDelta}, ale atribut je na hranici.
-                      </div>
-                    )}
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <div className="text-sm text-muted tabular-nums">{formatShortDate(h.date)}</div>
-                    <div className="text-sm font-heading font-bold text-ink tabular-nums">{h.newValue}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+          <ListCard title="Odkud se vzaly vlastnosti">
+            {attrHistory.map((h, i) => (
+              <ListRow key={i}
+                leading={<DeltaMark value={h.delta} />}
+                title={h.attrLabel}
+                detail={<>{h.description}{h.delta === 0 && h.rawDelta !== 0 && <> Mělo být {h.rawDelta > 0 ? "+" : ""}{h.rawDelta}, ale atribut je na hranici.</>}</>}
+                trailing={<RowValue sub={formatShortDate(h.date)}>{h.newValue}</RowValue>} />
+            ))}
+          </ListCard>
         )}
 
         {tab === "historie" && achievements && achievements.achievements.length > 0 && (

@@ -6,10 +6,9 @@
  */
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { coachRelationBand, coachRelationBandByKey, COACH_RELATION_BAND_ORDER, type CoachRelationBandKey } from "@okresni-masina/shared";
 import { apiFetch } from "@/lib/api";
-import { SectionLabel, Spinner, PositionBadge } from "@/components/ui";
+import { SectionLabel, Spinner, PositionBadge, ListCard, ListRow, ListEmpty, RowValue } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 
 interface KabinaPlayer {
@@ -106,7 +105,7 @@ export function RelationTrend({ delta }: { delta: number }) {
 function DeltaBubble({ delta }: { delta: number }) {
   return (
     <div aria-label={delta > 0 ? "Vztah se zlepšil" : delta < 0 ? "Vztah se zhoršil" : "Beze změny"}
-      className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center font-heading font-bold text-xs ${
+      className={`shrink-0 w-9 h-9 rounded-full flex items-center justify-center font-heading font-bold text-xs ${
       delta > 0 ? "bg-pitch-50 text-pitch-600" : delta < 0 ? "bg-red-50 text-card-red" : "bg-gray-50 text-muted"
     }`}>
       {trendArrows(delta)}
@@ -191,96 +190,75 @@ export function CoachKabinaTab({ teamId }: { teamId: string }) {
       </div>
 
       {/* ═══ Hráči ═══ */}
-      <div className="card p-4 sm:p-5">
-        <div className="flex items-center justify-between gap-3 mb-2">
-          <SectionLabel>Hráči ({summary.total})</SectionLabel>
-          {troubleCount > 0 && (
-            <button type="button" onClick={() => setOnlyTrouble((v) => !v)}
-              className={`text-sm font-heading font-bold px-3 py-1.5 rounded-full border transition-colors ${
-                onlyTrouble ? "bg-red-50 text-red-700 border-red-200" : "bg-surface text-muted border-gray-100 hover:text-ink"
-              }`}>
-              {onlyTrouble ? "Ukázat všechny" : `Jen problémy (${troubleCount})`}
-            </button>
-          )}
-        </div>
-        <div>
-          {shown.map((p) => {
-            const band = coachRelationBand(p.relationship);
-            return (
-              <div key={p.id} className="py-3 sm:py-3.5 border-b border-gray-100/80 last:border-b-0">
-                <div className="flex items-start sm:items-center gap-3">
-                  {p.avatar && Object.keys(p.avatar).length > 2 ? (
-                    <FaceAvatar faceConfig={p.avatar} size={40} className="shrink-0 bg-surface rounded-xl border border-gray-100 shadow-2xs mt-0.5 sm:mt-0" />
-                  ) : (
-                    <div className="shrink-0 w-10 h-10 rounded-xl bg-surface flex items-center justify-center font-heading font-bold text-sm text-ink border border-gray-100 mt-0.5 sm:mt-0">{p.lastName[0]}</div>
+      <ListCard title="Hráči" count={summary.total}
+        controls={troubleCount > 0 ? (
+          <button type="button" onClick={() => setOnlyTrouble((v) => !v)}
+            className={`text-meta font-bold px-3 py-1.5 rounded-full border transition-colors ${
+              onlyTrouble ? "bg-red-50 text-red-700 border-red-200" : "bg-surface text-muted border-gray-100 hover:text-ink"
+            }`}>
+            {onlyTrouble ? "Ukázat všechny" : `Jen problémy (${troubleCount})`}
+          </button>
+        ) : undefined}>
+        {shown.map((p) => {
+          const band = coachRelationBand(p.relationship);
+          const trouble = p.sulking || p.wantsOut;
+          return (
+            <ListRow key={p.id} href={`/hrac/${p.id}`} chevron={false}
+              tone={p.sulking ? "danger" : trouble || p.lowMorale ? "warn" : undefined}
+              leading={p.avatar && Object.keys(p.avatar).length > 2
+                ? <FaceAvatar faceConfig={p.avatar} size={30} className="rounded-full bg-surface-3" />
+                : <span className="w-9 h-9 rounded-full bg-surface-3 flex items-center justify-center text-meta font-bold text-ink">{p.lastName[0]}</span>}
+              title={<>{p.firstName} {p.lastName}<span className="ml-2 align-middle"><PositionBadge position={p.position} /></span></>}
+              trailing={<span className={`text-meta font-bold whitespace-nowrap ${TONE_TEXT[band.tone]}`}>{band.icon} {band.label}</span>}
+              detail={
+                <>
+                  <span className="block h-1.5 rounded-full bg-gray-100 overflow-hidden mt-1">
+                    <span className={`block h-full rounded-full ${TONE_BAR[band.tone]}`} style={{ width: `${Math.max(3, p.relationship)}%` }} />
+                  </span>
+                  {(p.sulking || p.wantsOut || p.lowMorale || p.injuredDays || p.leftOutStreak >= 2) && (
+                    <span className="flex flex-wrap gap-1.5 mt-2">
+                      {p.sulking && <Flag tone="bad">😤 Trucuje</Flag>}
+                      {p.wantsOut && <Flag tone="warn">✈️ Chce pryč</Flag>}
+                      {p.lowMorale && <Flag tone="warn">📉 Nízká morálka</Flag>}
+                      {p.leftOutStreak >= 2 && !p.sulking && <Flag tone="warn">🪑 {p.leftOutStreak}× nejel na zápas</Flag>}
+                      {p.injuredDays ? <Flag tone="warn">🩹 Zraněný {p.injuredDays} d</Flag> : null}
+                    </span>
                   )}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-2 flex-wrap sm:flex-nowrap">
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <Link href={`/hrac/${p.id}`} className="entity-link text-base font-heading font-bold truncate">
-                          {p.firstName} {p.lastName}
-                        </Link>
-                        <PositionBadge position={p.position} />
-                      </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <span className={`text-sm font-heading font-bold ${TONE_TEXT[band.tone]}`}>{band.icon} {band.label}</span>
-                      </div>
-                    </div>
-                    <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden mt-1.5">
-                      <div className={`h-full rounded-full ${TONE_BAR[band.tone]}`} style={{ width: `${Math.max(3, p.relationship)}%` }} />
-                    </div>
-                    {(p.sulking || p.wantsOut || p.lowMorale || p.injuredDays || p.leftOutStreak >= 2) && (
-                      <div className="flex flex-wrap gap-1.5 mt-2">
-                        {p.sulking && <Flag tone="bad">😤 Trucuje</Flag>}
-                        {p.wantsOut && <Flag tone="warn">✈️ Chce pryč</Flag>}
-                        {p.lowMorale && <Flag tone="warn">📉 Nízká morálka</Flag>}
-                        {p.leftOutStreak >= 2 && !p.sulking && <Flag tone="warn">🪑 {p.leftOutStreak}× nejel na zápas</Flag>}
-                        {p.injuredDays ? <Flag tone="warn">🩹 Zraněný {p.injuredDays} d</Flag> : null}
-                      </div>
-                    )}
-                    {p.lastChange && (
-                      <div className="text-sm text-muted mt-1.5 flex items-start gap-1">
-                        <RelationTrend delta={p.lastChange.delta} />
-                        <span className="flex-1 min-w-0">
-                          <span className="text-ink-light">{p.lastChange.description}</span>
-                          <span className="text-muted"> · {formatLogDate(p.lastChange.date)}</span>
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
+                  {p.lastChange && (
+                    <span className="flex items-start gap-1 mt-1.5">
+                      <RelationTrend delta={p.lastChange.delta} />
+                      <span className="flex-1 min-w-0">
+                        {p.lastChange.description}
+                        <span className="text-muted"> · {formatLogDate(p.lastChange.date)}</span>
+                      </span>
+                    </span>
+                  )}
+                </>
+              } />
+          );
+        })}
+      </ListCard>
 
       {/* ═══ Co se v kabině dělo ═══ */}
-      <div className="card p-4 sm:p-5">
-        <SectionLabel>Co se v kabině dělo</SectionLabel>
-        {data.feed.length === 0 ? (
-          <p className="text-sm text-muted">
+      <ListCard title="Co se v kabině dělo">
+        {data.feed.length === 0 && (
+          <ListEmpty icon="🗣️">
             Zatím nic. Vztah hráčů k tobě se mění rozhovory v telefonu, nominací na zápasy,
             odmítnutými přestupy, řešením incidentů a tím, co se řekne v hospodě.
-          </p>
-        ) : (
-          <div>
-            {data.feed.map((f, i) => (
-              <div key={i} className="flex items-start gap-3 py-2.5 border-b border-gray-50 last:border-b-0">
-                <DeltaBubble delta={f.delta} />
-                <div className="flex-1 min-w-0">
-                  <Link href={`/hrac/${f.playerId}`} className="entity-link text-base font-heading font-bold">{f.playerName}</Link>
-                  <div className="text-sm text-ink-light">{f.description}</div>
-                </div>
-                <div className="shrink-0 text-right">
-                  <div className="text-sm text-muted tabular-nums">{formatLogDate(f.date)}</div>
-                  <div className="text-sm" title={coachRelationBand(f.newValue).label}>{coachRelationBand(f.newValue).icon}</div>
-                </div>
-              </div>
-            ))}
-          </div>
+          </ListEmpty>
         )}
-      </div>
+        {data.feed.map((f, i) => (
+          <ListRow key={i} href={`/hrac/${f.playerId}`} chevron={false}
+            leading={<DeltaBubble delta={f.delta} />}
+            title={f.playerName}
+            detail={f.description}
+            trailing={
+              <RowValue sub={formatLogDate(f.date)}>
+                <span title={coachRelationBand(f.newValue).label}>{coachRelationBand(f.newValue).icon}</span>
+              </RowValue>
+            } />
+        ))}
+      </ListCard>
     </div>
   );
 }

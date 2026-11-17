@@ -10,7 +10,7 @@ import { useOpenPlayerConversation } from "@/hooks/use-open-player-conversation"
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { PotentialProgress } from "@/components/players/potential-progress";
 import { usePotencial, PotentialStars, PotentialBadge } from "@/components/players/potential-summary";
-import { PositionBadge, SectionLabel, Spinner, BadgePreview, JerseyPreview, useConfirm, DataTable, EntityCell, ScoreChip, RatingPill, type MatchOutcome } from "@/components/ui";
+import { PositionBadge, SectionLabel, Spinner, BadgePreview, JerseyPreview, useConfirm, DataTable, EntityCell, ScoreChip, RatingPill, ListCard, ListRow, RowIcon, ShowMore, type MatchOutcome } from "@/components/ui";
 import { SquadNumberEditor } from "./SquadNumberEditor";
 import { PlayerCompare } from "./PlayerCompare";
 import { generateCharacteristics, type PlayerTag } from "@/lib/characteristics";
@@ -1196,64 +1196,37 @@ export default function PlayerDetailPage() {
 
       {/* ═══ Historie klubů ═══ */}
       {contracts.length > 0 && (
-        <div className="card p-4 sm:p-5">
-          <SectionLabel>Historie klubů</SectionLabel>
-          <div className="space-y-0">
-            {contracts.map((c) => (
-              <div key={c.id} className="py-3 border-b border-gray-50 last:border-b-0">
-                <a href={`/tym/${c.teamId}`} className="flex items-center gap-2.5 group">
-                  <BadgePreview primary={c.teamColor} secondary={c.teamSecondary}
-                    pattern={(c.teamBadge as BadgePattern) || "shield"}
-                    initials={(c.teamName ?? "").split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={32} />
-                  <div className="min-w-0 flex-1">
-                    <div className="font-heading font-bold text-sm group-hover:underline truncate">{c.teamName}</div>
-                    <div className="text-micro text-muted">
-                      {/* Datum příchodu i odchodu: kdy přesně ke změně klubu došlo. */}
-                      {c.isActive ? (
-                        <span>
-                          Sezóna {c.seasonNumber}{c.joinedAt ? ` · přišel ${formatLeaveDate(c.joinedAt)}` : ""}
-                          {" "}&middot; <span className="text-pitch-500 font-bold">Aktivní</span>
-                        </span>
-                      ) : (
-                        <span>
-                          Sezóna {c.seasonNumber}
-                          {c.joinedAt ? ` · přišel ${formatLeaveDate(c.joinedAt)}` : ""}
-                          {c.leftAt ? ` · odešel ${formatLeaveDate(c.leftAt)}` : ""}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <div className="shrink-0">
-                    <span className={`text-micro px-2 py-0.5 rounded-full font-heading font-bold ${
-                      c.joinType === "generated" ? "bg-gray-100 text-muted"
-                      : c.joinType === "transfer" ? "bg-blue-50 text-blue-600"
-                      : c.joinType === "free_agent" ? "bg-green-50 text-green-600"
-                      : c.joinType === "youth" ? "bg-purple-50 text-purple-600"
-                      : c.joinType === "swap" || c.swapPartner ? "bg-gold-50 text-gold-600"
-                      : c.joinType === "loan" ? "bg-yellow-50 text-yellow-700"
-                      : c.joinType === "pub" || c.joinType === "friend" || c.joinType === "recommendation" ? "bg-amber-50 text-amber-700"
-                      : "bg-gray-100 text-muted"
-                    }`}>{c.joinLabel}</span>
-                  </div>
-                </a>
-                {c.swapPartner ? (
-                  /* U výměny není `fee` cena hráče, ale doplatek — a druhý hráč
-                     obchodu musí být vidět, jinak to vypadá jako prodej za pár korun. */
-                  <div className="text-micro text-muted mt-1 ml-[42px]">
-                    Výměna za: {c.swapPartner}
-                    {c.fee > 0 ? ` · doplatek ${c.fee.toLocaleString("cs")} Kč` : ""}
-                  </div>
-                ) : c.fee > 0 ? (
-                  <div className="text-sm text-muted mt-1 ml-[42px]">
-                    Přestupní částka: {c.fee.toLocaleString("cs")} Kč
-                    {c.installments ? ` · na splátky (${c.installments}× týdně)` : ""}
-                    {c.sellOnPct ? ` · ${c.sellOnPct} % z dalšího prodeje pro předchozí klub` : ""}
-                  </div>
-                ) : null}
-              </div>
-            ))}
-          </div>
-        </div>
+        <ListCard title="Historie klubů" count={contracts.length}>
+          {contracts.map((c) => {
+            const chip = c.joinType === "generated" ? "bg-gray-100 text-muted"
+              : c.joinType === "transfer" ? "bg-blue-50 text-blue-600"
+              : c.joinType === "free_agent" ? "bg-green-50 text-green-600"
+              : c.joinType === "youth" ? "bg-purple-50 text-purple-600"
+              : c.joinType === "swap" || c.swapPartner ? "bg-gold-50 text-gold-600"
+              : c.joinType === "loan" ? "bg-yellow-50 text-yellow-700"
+              : c.joinType === "pub" || c.joinType === "friend" || c.joinType === "recommendation" ? "bg-amber-50 text-amber-700"
+              : "bg-gray-100 text-muted";
+            return (
+              <ListRow key={c.id} href={`/tym/${c.teamId}`} chevron={false}
+                tone={c.isActive ? "new" : undefined}
+                leading={<BadgePreview primary={c.teamColor} secondary={c.teamSecondary}
+                  pattern={(c.teamBadge as BadgePattern) || "shield"}
+                  initials={(c.teamName ?? "").split(" ").map((w: string) => w[0]).filter(Boolean).slice(0, 3).join("").toUpperCase()} size={32} />}
+                title={c.teamName}
+                // Datum příchodu i odchodu: kdy přesně ke změně klubu došlo.
+                meta={[`Sezóna ${c.seasonNumber}`, c.joinedAt ? `přišel ${formatLeaveDate(c.joinedAt)}` : null,
+                  c.isActive ? "aktivní" : c.leftAt ? `odešel ${formatLeaveDate(c.leftAt)}` : null].filter(Boolean).join(" · ")}
+                /* U výměny není `fee` cena hráče, ale doplatek: druhý hráč obchodu musí být vidět,
+                   jinak to vypadá jako prodej za pár korun. */
+                detail={c.swapPartner
+                  ? `Výměna za: ${c.swapPartner}${c.fee > 0 ? ` · doplatek ${c.fee.toLocaleString("cs")} Kč` : ""}`
+                  : c.fee > 0
+                    ? `Přestupní částka: ${c.fee.toLocaleString("cs")} Kč${c.installments ? ` · na splátky (${c.installments}× týdně)` : ""}${c.sellOnPct ? ` · ${c.sellOnPct} % z dalšího prodeje pro předchozí klub` : ""}`
+                    : undefined}
+                trailing={<span className={`text-micro px-2 py-0.5 rounded-full font-bold whitespace-nowrap ${chip}`}>{c.joinLabel}</span>} />
+            );
+          })}
+        </ListCard>
       )}
 
       </>}
@@ -1304,35 +1277,25 @@ export default function PlayerDetailPage() {
       {(((isOwnPlayer && profileExtras && profileExtras.relationships.length > 0))) && (
         <div className="grid grid-cols-1 gap-5">
           {isOwnPlayer && profileExtras && profileExtras.relationships.length > 0 ? (
-            <div className="card p-4 sm:p-5">
-              <SectionLabel>Vztahy v kádru</SectionLabel>
-              <div className="space-y-1.5">
-                {(showAllRelationships ? profileExtras.relationships : profileExtras.relationships.slice(0, 3)).map((rel) => {
-                  const EMOJI: Record<string, string> = {
-                    brothers: "👨‍👦", father_son: "👴", in_laws: "🤝", classmates: "🎓",
-                    coworkers: "💼", neighbors: "🏠", drinking_buddies: "🍻", rivals: "⚔️", mentor_pupil: "📚",
-                  };
-                  return (
-                    <div key={rel.relatedPlayerId} className="py-1.5 border-b border-gray-50 last:border-b-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm shrink-0">{EMOJI[rel.type] ?? "👥"}</span>
-                        <Link href={`/hrac/${rel.relatedPlayerId}`} className="text-sm font-heading font-bold hover:text-pitch-500 underline decoration-pitch-500/20">
-                          {rel.relatedPlayerName}
-                        </Link>
-                        <PositionBadge position={rel.relatedPlayerPosition as "GK" | "DEF" | "MID" | "FWD"} />
-                        <span className="text-micro text-muted font-heading">· {rel.typeLabel}</span>
-                      </div>
-                      {rel.effect && <div className="text-micro text-muted italic ml-6 mt-0.5">{rel.effect}</div>}
-                    </div>
-                  );
-                })}
-                {!showAllRelationships && profileExtras.relationships.length > 3 && (
-                  <button onClick={() => setShowAllRelationships(true)} className="text-xs text-pitch-500 font-heading font-bold hover:underline pt-1">
-                    Zobrazit všechny ({profileExtras.relationships.length}) →
-                  </button>
-                )}
-              </div>
-            </div>
+            <ListCard title="Vztahy v kádru" count={profileExtras.relationships.length}>
+              {(showAllRelationships ? profileExtras.relationships : profileExtras.relationships.slice(0, 3)).map((rel) => {
+                const EMOJI: Record<string, string> = {
+                  brothers: "👨‍👦", father_son: "👴", in_laws: "🤝", classmates: "🎓",
+                  coworkers: "💼", neighbors: "🏠", drinking_buddies: "🍻", rivals: "⚔️", mentor_pupil: "📚",
+                };
+                return (
+                  <ListRow key={rel.relatedPlayerId} href={`/hrac/${rel.relatedPlayerId}`}
+                    leading={<RowIcon>{EMOJI[rel.type] ?? "👥"}</RowIcon>}
+                    title={<>{rel.relatedPlayerName}<span className="ml-2 align-middle"><PositionBadge position={rel.relatedPlayerPosition as "GK" | "DEF" | "MID" | "FWD"} /></span></>}
+                    meta={rel.typeLabel}
+                    detail={rel.effect || undefined} />
+                );
+              })}
+              {!showAllRelationships && profileExtras.relationships.length > 3 && (
+                <ShowMore shown={3} total={profileExtras.relationships.length} step={profileExtras.relationships.length}
+                  onMore={() => setShowAllRelationships(true)} />
+              )}
+            </ListCard>
           ) : null}
         </div>
       )}
@@ -2274,39 +2237,21 @@ function TrainingDevelopment({ teamId, playerId }: { teamId: string; playerId: s
             )}
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-100 text-xs text-muted uppercase">
-                  <th className="text-left py-2 pr-3 font-heading">Datum</th>
-                  <th className="text-left py-2 pr-3 font-heading">Atribut</th>
-                  <th className="text-left py-2 pr-3 font-heading hidden md:table-cell">Trénink</th>
-                  <th className="text-right py-2 font-heading">Změna</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visible.map((entry, i) => {
-                  const date = entry.game_date ? new Date(entry.game_date).toLocaleDateString("cs", { day: "numeric", month: "numeric" }) : "-";
-                  const trainingLabel = TRAIN_TYPE_LABELS[entry.training_type] ?? entry.training_type;
-                  return (
-                    <tr key={i} className="border-b border-gray-50 last:border-b-0 align-top">
-                      <td className="py-1.5 pr-3 tabular-nums text-muted text-micro whitespace-nowrap">{date}</td>
-                      <td className="py-1.5 pr-3">
-                        <div className="font-medium">{TRAIN_ATTR_LABELS[entry.attribute] ?? entry.attribute}</div>
-                        <div className="md:hidden text-micro text-muted leading-tight">{trainingLabel}</div>
-                      </td>
-                      <td className="py-1.5 pr-3 text-muted hidden md:table-cell">{trainingLabel}</td>
-                      <td className="py-1.5 text-right whitespace-nowrap">
-                        <span className={`font-heading font-bold ${entry.change > 0 ? "text-pitch-500" : "text-card-red"}`}>
-                          {entry.change > 0 ? `+${entry.change}` : entry.change}
-                        </span>
-                        <span className="text-muted text-xs ml-1">({entry.old_value}→{entry.new_value})</span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+          <div className="-mx-4 sm:-mx-5 border-t border-line">
+            <DataTable rows={visible} rowKey={(entry) => `${entry.game_date}-${entry.attribute}-${entry.old_value}-${entry.new_value}`}
+              empty="Žádné změny z tréninku."
+              columns={[
+                { key: "attr", header: "Atribut", align: "left",
+                  cell: (entry) => <EntityCell name={TRAIN_ATTR_LABELS[entry.attribute] ?? entry.attribute}
+                    meta={`${entry.game_date ? new Date(entry.game_date).toLocaleDateString("cs", { day: "numeric", month: "numeric" }) : "-"} · ${TRAIN_TYPE_LABELS[entry.training_type] ?? entry.training_type}`} /> },
+                { key: "change", header: "Změna", align: "right", emphasis: true,
+                  cell: (entry) => (
+                    <span className="whitespace-nowrap">
+                      <span className={entry.change > 0 ? "text-pitch-600" : "text-card-red"}>{entry.change > 0 ? `+${entry.change}` : entry.change}</span>
+                      <span className="text-muted text-meta font-normal ml-1">({entry.old_value}→{entry.new_value})</span>
+                    </span>
+                  ) },
+              ]} />
           </div>
           {log.length > PREVIEW_ROWS && (
             <button onClick={() => setShowAll((v) => !v)} className="text-xs text-pitch-500 font-heading font-bold hover:underline pt-2">
@@ -2356,33 +2301,24 @@ function WeightLog({ teamId, playerId, category }: { teamId: string; playerId: s
       {entries.length === 0 ? (
         <p className="text-sm text-muted">Zatím žádné záznamy. Váha se zapisuje každé pondělí.</p>
       ) : (
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-gray-100 text-sm text-muted uppercase">
-              <th className="text-left py-2 pr-3 font-heading">Kdy</th>
-              <th className="text-left py-2 pr-3 font-heading">Zdroj</th>
-              <th className="text-right py-2 pr-3 font-heading">Váha</th>
-              <th className="text-right py-2 font-heading">Změna</th>
-            </tr>
-          </thead>
-          <tbody>
-            {entries.map((entry, i) => {
-              const previous = entries[i + 1];
-              const change = previous ? Math.round((entry.weight - previous.weight) * 10) / 10 : null;
-              const date = new Date(entry.gameDate).toLocaleDateString("cs", { day: "numeric", month: "numeric" });
-              return (
-                <tr key={entry.id} className="border-b border-gray-50 last:border-b-0">
-                  <td className="py-1.5 pr-3 tabular-nums text-muted whitespace-nowrap">{date}</td>
-                  <td className="py-1.5 pr-3">{WEIGHT_SOURCE_LABEL[entry.source] ?? entry.source}</td>
-                  <td className="py-1.5 pr-3 text-right tabular-nums font-heading font-bold">{formatKg(entry.weight)} kg</td>
-                  <td className={`py-1.5 text-right tabular-nums whitespace-nowrap ${change === null ? "text-muted" : weightChangeColor(change, category)}`}>
-                    {change === null ? "" : formatKgChange(change)}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+        <div className="-mx-4 sm:-mx-5 -mb-4 sm:-mb-5 border-t border-line">
+          <DataTable rows={entries} rowKey={(entry) => String(entry.id)}
+            empty="Zatím žádné záznamy."
+            columns={[
+              { key: "when", header: "Kdy", align: "left",
+                cell: (entry) => <EntityCell name={new Date(entry.gameDate).toLocaleDateString("cs", { day: "numeric", month: "numeric" })}
+                  meta={WEIGHT_SOURCE_LABEL[entry.source] ?? entry.source} /> },
+              { key: "weight", header: "Váha", align: "right", cell: (entry) => <span className="font-bold text-ink whitespace-nowrap">{formatKg(entry.weight)} kg</span> },
+              { key: "change", header: "Změna", align: "right",
+                cell: (entry) => {
+                  const i = entries.indexOf(entry);
+                  const previous = entries[i + 1];
+                  const change = previous ? Math.round((entry.weight - previous.weight) * 10) / 10 : null;
+                  return change === null ? <span className="text-muted">-</span>
+                    : <span className={`font-bold whitespace-nowrap ${weightChangeColor(change, category)}`}>{formatKgChange(change)}</span>;
+                } },
+            ]} />
+        </div>
       )}
     </div>
   );
@@ -2458,43 +2394,25 @@ function ConditionLog({ teamId, playerId }: { teamId: string; playerId: string }
             )}
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-100 text-xs text-muted uppercase">
-                  <th className="text-left py-2 pr-3 font-heading">Kdy</th>
-                  <th className="text-left py-2 pr-3 font-heading">Zdroj</th>
-                  <th className="text-left py-2 pr-3 font-heading hidden md:table-cell">Detail</th>
-                  <th className="text-right py-2 font-heading">Změna</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visible.map((entry) => {
-                  const meta = CONDITION_SOURCE_META[entry.source] ?? { icon: "•", label: entry.source };
-                  const dateSrc = entry.gameDate ?? entry.createdAt;
-                  const date = new Date(dateSrc).toLocaleDateString("cs", { day: "numeric", month: "numeric" });
-                  return (
-                    <tr key={entry.id} className="border-b border-gray-50 last:border-b-0 align-top">
-                      <td className="py-1.5 pr-3 tabular-nums text-muted text-micro whitespace-nowrap">{date}</td>
-                      <td className="py-1.5 pr-3">
-                        <div className="whitespace-nowrap">
-                          <span className="mr-1">{meta.icon}</span>
-                          <span className="font-medium">{meta.label}</span>
-                        </div>
-                        <div className="md:hidden text-micro text-muted leading-tight">{entry.description ?? ""}</div>
-                      </td>
-                      <td className="py-1.5 pr-3 text-muted hidden md:table-cell">{entry.description ?? "-"}</td>
-                      <td className="py-1.5 text-right whitespace-nowrap">
-                        <span className={`font-heading font-bold ${entry.delta > 0 ? "text-pitch-500" : entry.delta < 0 ? "text-card-red" : "text-muted"}`}>
-                          {entry.delta > 0 ? `+${entry.delta}` : entry.delta}
-                        </span>
-                        <span className="text-muted text-xs ml-1">({entry.oldValue}→{entry.newValue})</span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+          <div className="-mx-4 sm:-mx-5 border-t border-line">
+            <DataTable rows={visible} rowKey={(entry) => String(entry.id)}
+              empty="Žádné změny kondice."
+              columns={[
+                { key: "source", header: "Zdroj", align: "left",
+                  cell: (entry) => {
+                    const m = CONDITION_SOURCE_META[entry.source] ?? { icon: "•", label: entry.source };
+                    const date = new Date(entry.gameDate ?? entry.createdAt).toLocaleDateString("cs", { day: "numeric", month: "numeric" });
+                    return <EntityCell leading={<span aria-hidden="true">{m.icon}</span>} name={m.label}
+                      meta={[date, entry.description].filter(Boolean).join(" · ")} />;
+                  } },
+                { key: "change", header: "Změna", align: "right", emphasis: true,
+                  cell: (entry) => (
+                    <span className="whitespace-nowrap">
+                      <span className={entry.delta > 0 ? "text-pitch-600" : entry.delta < 0 ? "text-card-red" : "text-muted"}>{entry.delta > 0 ? `+${entry.delta}` : entry.delta}</span>
+                      <span className="text-muted text-meta font-normal ml-1">({entry.oldValue}→{entry.newValue})</span>
+                    </span>
+                  ) },
+              ]} />
           </div>
           {entries.length > PREVIEW_ROWS && (
             <button onClick={() => setShowAll((v) => !v)} className="text-xs text-pitch-500 font-heading font-bold hover:underline pt-2">

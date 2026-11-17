@@ -10,7 +10,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { apiFetch, showError } from "@/lib/api";
-import { SectionLabel, Spinner } from "@/components/ui";
+import { SectionLabel, Spinner, ListCard, ListRow, ListEmpty } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { LicenceBadge } from "@/components/manager/LicenceBadge";
 import { CoachName } from "@/components/manager/coach-name";
@@ -561,31 +561,24 @@ const GROUPS: Array<{ key: RelationListItem["group"]; title: string; empty: stri
 function PeerRow({ r }: { r: RelationListItem }) {
   const tone = r.group === "rivals" ? "text-card-red" : r.group === "allies" ? "text-pitch-600" : "text-muted";
   return (
-    <div className="flex items-center gap-3 py-2.5 border-b border-gray-50 last:border-b-0">
-      {r.managerAvatar && Object.keys(r.managerAvatar).length > 2 ? (
-        <FaceAvatar faceConfig={r.managerAvatar} size={36} className="shrink-0 bg-surface rounded-lg" />
-      ) : (
-        <div className="shrink-0 w-9 h-9 rounded-lg bg-surface flex items-center justify-center font-heading font-bold text-sm">{r.managerName[0]}</div>
-      )}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 min-w-0">
-          <Link href={`/manazer/${r.teamId}`} className="entity-link text-base font-heading font-bold truncate"><CoachName name={r.managerName} isAi={r.isAi} /></Link>
-          <LicenceBadge level={r.licenceLevel ?? 0} />
-        </div>
-        <Link href={`/tym/${r.teamId}`} className="text-sm text-muted hover:text-ink flex items-center gap-1.5 min-w-0">
-          <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: r.primaryColor ?? "#999" }} />
-          <span className="truncate">{r.teamName}{r.archetypeLabel ? ` · ${r.archetypeLabel}` : ""}</span>
-        </Link>
-        <div className={`text-sm font-heading font-bold mt-0.5 ${tone}`}>
-          {r.label}
-          {r.loyalAlly && <span className="ml-1.5">🏅</span>}
-        </div>
-      </div>
-      <div className="shrink-0 text-right text-sm tabular-nums">
-        <div title="Respekt" className={r.respect >= 0 ? "text-pitch-600" : "text-card-red"}>🤝 {r.respect >= 0 ? "+" : ""}{r.respect}</div>
-        <div title="Napětí" className={r.heat >= 60 ? "text-card-red font-bold" : "text-ink"}>🔥 {r.heat}</div>
-      </div>
-    </div>
+    <ListRow href={`/manazer/${r.teamId}`} chevron={false}
+      leading={r.managerAvatar && Object.keys(r.managerAvatar).length > 2
+        ? <FaceAvatar faceConfig={r.managerAvatar} size={30} className="rounded-full bg-surface-3" />
+        : <span className="w-9 h-9 rounded-full bg-surface-3 flex items-center justify-center text-meta font-bold text-ink">{r.managerName[0]}</span>}
+      title={<><CoachName name={r.managerName} isAi={r.isAi} /><span className="ml-2 align-middle"><LicenceBadge level={r.licenceLevel ?? 0} /></span></>}
+      meta={
+        <>
+          <span className="inline-block w-2.5 h-2.5 rounded-full mr-1.5 align-middle" style={{ backgroundColor: r.primaryColor ?? "#999" }} />
+          {r.teamName}{r.archetypeLabel ? ` · ${r.archetypeLabel}` : ""}
+        </>
+      }
+      detail={<span className={`font-bold ${tone}`}>{r.label}{r.loyalAlly && <span className="ml-1.5">🏅</span>}</span>}
+      trailing={
+        <span className="block text-right text-meta tabular-nums">
+          <span title="Respekt" className={`block ${r.respect >= 0 ? "text-pitch-600" : "text-card-red"}`}>🤝 {r.respect >= 0 ? "+" : ""}{r.respect}</span>
+          <span title="Napětí" className={`block ${r.heat >= 60 ? "text-card-red font-bold" : "text-ink"}`}>🔥 {r.heat}</span>
+        </span>
+      } />
   );
 }
 
@@ -611,19 +604,16 @@ export function RelationsOverview({ teamId }: { teamId: string }) {
         const collapsible = g.key === "others";
         const open = !collapsible || showOthers;
         return (
-          <div key={g.key} className="card p-4 sm:p-5">
-            <div className="flex items-center justify-between gap-3">
-              <SectionLabel>{g.title} ({list.length})</SectionLabel>
-              {collapsible && list.length > 0 && (
-                <button type="button" onClick={() => setShowOthers((v) => !v)}
-                  className="text-sm font-heading font-bold text-pitch-600 hover:underline min-h-11 px-2">
-                  {showOthers ? "Skrýt" : "Ukázat"}
-                </button>
-              )}
-            </div>
-            {list.length === 0 && g.empty && <p className="text-sm text-muted">{g.empty}</p>}
+          <ListCard key={g.key} title={g.title} count={list.length}
+            controls={collapsible && list.length > 0 ? (
+              <button type="button" onClick={() => setShowOthers((v) => !v)}
+                className="text-meta font-bold text-pitch-600 hover:underline min-h-11 px-2">
+                {showOthers ? "Skrýt" : "Ukázat"}
+              </button>
+            ) : undefined}>
+            {list.length === 0 && g.empty && <ListEmpty icon={g.key === "allies" ? "🍺" : "🤝"}>{g.empty}</ListEmpty>}
             {open && list.map((r) => <PeerRow key={r.teamId} r={r} />)}
-          </div>
+          </ListCard>
         );
       })}
     </div>

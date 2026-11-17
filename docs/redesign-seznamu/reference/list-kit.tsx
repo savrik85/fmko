@@ -60,7 +60,7 @@ export function RowGroup({ label, aside }: { label: ReactNode; aside?: ReactNode
   );
 }
 
-export function ListRow({ href, onClick, leading, title, meta, trailing, tone, chevron, dense }: {
+export function ListRow({ href, onClick, leading, title, meta, detail, trailing, tone, chevron, dense }: {
   /** Celý řádek je odkaz. Nepoužívat spolu s tlačítkem v `trailing`. */
   href?: string;
   onClick?: () => void;
@@ -70,6 +70,11 @@ export function ListRow({ href, onClick, leading, title, meta, trailing, tone, c
   title: ReactNode;
   /** Jeden řádek podrobností pod názvem. Smí skončit třemi tečkami. */
   meta?: ReactNode;
+  /**
+   * Celá věta pod podrobnostmi, která se nesmí useknout (popis události, zápis v kronice).
+   * Zalomí se na libovolný počet řádků. Pro údaje, které se vejdou do `meta`, nepoužívat.
+   */
+  detail?: ReactNode;
   /** Vpravo: hlavní číslo, štítek nebo tlačítko. */
   trailing?: ReactNode;
   tone?: RowTone;
@@ -83,7 +88,7 @@ export function ListRow({ href, onClick, leading, title, meta, trailing, tone, c
 }) {
   const clickable = !!href || !!onClick;
   const showChevron = chevron ?? (clickable && !dense);
-  const shape = `relative flex items-center ${dense ? "gap-2.5 min-h-[40px] py-1.5" : "gap-3 min-h-[56px] py-2.5"} px-4 border-b border-line-soft last:border-b-0 text-left w-full ${
+  const shape = `relative flex ${detail ? "items-start" : "items-center"} ${dense ? "gap-2.5 min-h-[40px] py-1.5" : "gap-3 min-h-[56px] py-2.5"} px-4 border-b border-line-soft last:border-b-0 text-left w-full ${
     clickable ? "hover:bg-surface-2 transition-colors cursor-pointer" : ""
   } ${tone ? `before:absolute before:left-0 before:inset-y-0 before:w-[3px] ${ROW_TONE_BAR[tone]}` : ""}`;
   const body = (
@@ -93,6 +98,7 @@ export function ListRow({ href, onClick, leading, title, meta, trailing, tone, c
         {/* Bez `block`: přebil by display z line-clamp a titulek by se neomezil na dva řádky. */}
         <span className="text-body font-bold text-ink leading-snug line-clamp-2">{title}</span>
         {meta && <span className="block text-meta text-muted truncate">{meta}</span>}
+        {detail && <span className="block text-meta text-ink-light leading-snug mt-0.5">{detail}</span>}
       </span>
       {(trailing || showChevron) && (
         <span className="shrink-0 flex items-center gap-2 text-right">
@@ -114,6 +120,16 @@ export function ListRow({ href, onClick, leading, title, meta, trailing, tone, c
 /** Ikona v šedé dlaždici pro řádky bez portrétu a znaku (pohyby na účtu, události). */
 export function RowIcon({ children }: { children: ReactNode }) {
   return <span className="w-9 h-9 rounded-control bg-surface-3 flex items-center justify-center text-lg leading-none" aria-hidden="true">{children}</span>;
+}
+
+/** Změna o kolik jako kolečko vlevo v řádku historie: zeleně nahoru, červeně dolů. */
+export function DeltaMark({ value }: { value: number }) {
+  const color = value > 0 ? "bg-pitch-50 text-pitch-600" : value < 0 ? "bg-danger-soft text-card-red" : "bg-surface-3 text-muted";
+  return (
+    <span className={`w-9 h-9 rounded-full flex items-center justify-center text-meta font-bold tabular-nums ${color}`}>
+      {value > 0 ? "+" : value < 0 ? "−" : ""}{Math.abs(value)}
+    </span>
+  );
 }
 
 /** Hlavní hodnota vpravo s volitelným drobným popiskem pod ní. */

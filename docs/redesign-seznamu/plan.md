@@ -160,6 +160,13 @@ a krátké výčty v dlaždicích (pořadí, jméno, jedno číslo): TOP v Kádr
 v Trénincích, „Chybí dnes“. Běžné seznamy zůstávají na 56 px. Hustý řádek nemá
 druhý řádek podrobností; když ho položka potřebuje, není to hustý řádek.
 
+### 3.3b Odstavec v řádku (`detail`)
+
+`<ListRow detail={…}>` přidá pod podrobnosti celou větu, která se zalomí a nikdy
+neořízne. Je pro historie a kroniky, kde je hlavní informací popis (odkud se vzala
+vlastnost, co se stalo v obci, výtržnost v hospodě). Řádek s odstavcem má obsah
+zarovnaný nahoru. Údaje, které se vejdou na jeden řádek, patří do `meta`.
+
 ### 3.4 Prázdný stav
 
 Vždy `ListEmpty` (v tabulce prop `empty`). Text je celá věta: co prázdný seznam

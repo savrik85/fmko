@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
-import { Spinner, SectionLabel } from "@/components/ui";
+import { Spinner, SectionLabel, ListCard, ListRow, ListEmpty, RowValue, DeltaMark } from "@/components/ui";
 
 interface Unlock {
   kind: string;
@@ -338,42 +338,19 @@ export default function ReputacePage() {
       </div>
 
       {/* ═══ Historie ═══ */}
-      <div className="card p-4 sm:p-5">
-        <SectionLabel>
-          {data.history.length > 0 ? `Odkud se vzala (posledních ${data.history.length})` : "Odkud se vzala"}
-        </SectionLabel>
-        {data.history.length === 0 ? (
-          <div className="py-6 text-sm text-muted text-center">
-            Zatím žádná změna. Historie se začne plnit, jakmile se reputace pohne.
-          </div>
-        ) : (
-          <div className="space-y-1">
-            {data.history.map((h, i) => (
-              <div key={i} className="flex items-start gap-3 py-2 border-b border-gray-50 last:border-b-0">
-                <div className={`shrink-0 w-9 h-9 rounded-full flex items-center justify-center font-heading font-bold text-sm tabular-nums ${
-                  h.delta > 0 ? "bg-pitch-50 text-pitch-600"
-                    : h.delta < 0 ? "bg-red-50 text-card-red"
-                    : "bg-gray-50 text-muted"
-                }`}>
-                  {h.delta > 0 ? "+" : ""}{h.delta}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm text-ink">{h.description}</div>
-                  {h.delta !== h.rawDelta && (
-                    <div className="text-sm text-muted">
-                      Ze {h.rawDelta > 0 ? "+" : ""}{h.rawDelta} se započítalo {h.delta > 0 ? "+" : ""}{h.delta}, jsi vysoko.
-                    </div>
-                  )}
-                </div>
-                <div className="shrink-0 text-right">
-                  <div className="text-sm text-muted tabular-nums">{formatDate(h.gameDate)}</div>
-                  <div className="text-sm font-heading font-bold text-ink tabular-nums">{h.newValue}</div>
-                </div>
-              </div>
-            ))}
-          </div>
+      <ListCard title="Odkud se vzala" count={data.history.length > 0 ? `posledních ${data.history.length}` : undefined}>
+        {data.history.length === 0 && (
+          <ListEmpty icon="⭐">Zatím žádná změna. Historie se začne plnit, jakmile se reputace pohne.</ListEmpty>
         )}
-      </div>
+        {data.history.map((h, i) => (
+          <ListRow key={i}
+            leading={<DeltaMark value={h.delta} />}
+            // Popis bývá celá věta: patří do odstavce, v titulku by se ořízl.
+            title={formatDate(h.gameDate)}
+            detail={<>{h.description}{h.delta !== h.rawDelta && <span className="text-muted"> Ze {h.rawDelta > 0 ? "+" : ""}{h.rawDelta} se započítalo {h.delta > 0 ? "+" : ""}{h.delta}, jsi vysoko.</span>}</>}
+            trailing={<RowValue sub="reputace">{h.newValue}</RowValue>} />
+        ))}
+      </ListCard>
     </div>
   );
 }
