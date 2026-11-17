@@ -742,15 +742,20 @@ function MatchPage() {
           router.replace(`/zapas?calendarId=${um.calendarId}`, { scroll: false });
           // myName z contextu — jinak by se mixovalo při přepínání doma↔venku
           const myName = ourTeamName ?? (nextMatch?.isHome ? nextMatch.homeName : nextMatch?.awayName ?? "");
+          // matchId v seznamu nadcházejících zápasů není; do odpovědi next-match zůstane prázdné,
+          // jinak by autobusy a porovnání sestav běžely nad předchozím zápasem.
           setNextMatch((prev) => prev ? {
-            ...prev, calendarId: um.calendarId, gameWeek: um.gameWeek, scheduledAt: um.scheduledAt, isHome: um.isHome, isFriendly: um.isFriendly, isCup: um.isCup, isTournament: um.isTournament, venueName: um.isTournament ? prev.venueName : null, roundName: um.roundName,
+            ...prev, matchId: "", calendarId: um.calendarId, gameWeek: um.gameWeek, scheduledAt: um.scheduledAt, isHome: um.isHome, isFriendly: um.isFriendly, isCup: um.isCup, isTournament: um.isTournament, venueName: um.isTournament ? prev.venueName : null, roundName: um.roundName,
             homeName: um.isHome ? myName : um.opponentName,
             awayName: um.isHome ? um.opponentName : myName,
           } : prev);
           if (teamId) {
             // Použij next-match endpoint s calendarId — vrací lineup+source (explicit/default) + availablePlayers
-            apiFetch<{ referee?: DelegatedReferee | null; forecast?: { icon: string; expected: string; temperature: number; description: string } | null; tacticHints?: Array<{ tone: "warning" | "opportunity" | "info"; label: string; detail: string }>; lineup: { formation: string; tactic: string; hardness?: string; captainId: string | null; presetSlot: "A" | "B" | "C" | null; matchPlan?: MatchPlanRule[]; bench?: string[] | null; source?: "explicit" | "default" | null; players: Array<{ playerId: string }> } | null; availablePlayers: AvailablePlayer[] }>(`/api/teams/${teamId}/next-match?calendarId=${um.calendarId}`)
+            apiFetch<{ nextMatch?: { matchId: string } | null; referee?: DelegatedReferee | null; forecast?: { icon: string; expected: string; temperature: number; description: string } | null; tacticHints?: Array<{ tone: "warning" | "opportunity" | "info"; label: string; detail: string }>; lineup: { formation: string; tactic: string; hardness?: string; captainId: string | null; presetSlot: "A" | "B" | "C" | null; matchPlan?: MatchPlanRule[]; bench?: string[] | null; source?: "explicit" | "default" | null; players: Array<{ playerId: string }> } | null; availablePlayers: AvailablePlayer[] }>(`/api/teams/${teamId}/next-match?calendarId=${um.calendarId}`)
               .then((data) => {
+                // Hráč mohl mezitím přepnout jinam: ID patří jen zápasu, pro který se ptalo.
+                const loadedMatchId = data.nextMatch?.matchId;
+                if (loadedMatchId) setNextMatch((prev) => prev && prev.calendarId === um.calendarId ? { ...prev, matchId: loadedMatchId } : prev);
                 setReferee(data.referee ?? null);
                 setForecast(data.forecast ?? null);
                 setTacticHints(data.tacticHints ?? []);
@@ -862,7 +867,7 @@ function MatchPage() {
       )}
 
       {/* Bus z okolí — domácí ligové i pohárové zápasy (ne přátelák, ne turnaj na neutrální půdě) */}
-      {nextMatch?.isHome && !nextMatch.isFriendly && !nextMatch.isTournament && teamId && (
+      {nextMatch?.isHome && !nextMatch.isFriendly && !nextMatch.isTournament && nextMatch.matchId && teamId && (
         <BusSelector teamId={teamId} matchId={nextMatch.matchId} />
       )}
 
@@ -1348,7 +1353,7 @@ function MatchPage() {
       {teamId && nextMatch && selected.filter(Boolean).length === 11 && (
         <LineupPreview
           teamId={teamId}
-          matchId={nextMatch.isCup || nextMatch.isTournament ? undefined : nextMatch.matchId}
+          matchId={nextMatch.isCup || nextMatch.isTournament ? undefined : nextMatch.matchId || undefined}
           formation={formation}
           tactic={tactic}
           hardness={hardness}
@@ -1402,7 +1407,7 @@ function MatchPage() {
                           </span>
                         }
                         title={<>{p.lastName} <span className="inline-block align-middle"><PositionBadge position={p.position as Pos} /></span></>}
-                        meta={<>{p.firstName} · {p.overallRating} rat · {p.condition}%</>}
+                        meta={<>{p.firstName} · hod. {p.overallRating} · {p.condition}%</>}
                         trailing={<span className="text-sm">{moraleIcon(p.morale)}</span>} />
                     </div>
                   );
