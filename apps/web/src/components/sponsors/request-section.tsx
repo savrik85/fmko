@@ -6,6 +6,7 @@ import { apiFetch } from "@/lib/api";
 
 import { blockText, dayMonth, REQUEST_STATUS_LABELS, type RequestInfo } from "@/lib/sponsor-requests";
 import { formatKc } from "@/lib/format";
+import { ProgressBar } from "@/components/ui";
 
 /** Karta majitele: prosby o příspěvek (co už dal, co musíš utratit) a cesta do SMS s ním. */
 export function RequestSection({ teamId, sponsorId }: { teamId: string; sponsorId: number }) {
@@ -51,9 +52,7 @@ export function RequestSection({ teamId, sponsorId }: { teamId: string; sponsorI
               Dal {formatKc(o.granted)} na {o.label}. Do <span className="font-heading font-bold">{dayMonth(o.checkDay)}</span> je musíš utratit.
             </div>
             <div className="text-sm text-muted mt-0.5">Utraceno {formatKc(o.spent)} z {formatKc(o.required)}</div>
-            <div className="h-2 rounded-full bg-gray-100 mt-1 overflow-hidden">
-              <div className={`h-full ${pct >= 100 ? "bg-pitch-500" : "bg-gold-500"}`} style={{ width: `${pct}%` }} />
-            </div>
+            <ProgressBar value={pct} tone={pct >= 100 ? "ok" : "warn"} label="Splněno" className="mt-1" />
           </div>
         );
       })}

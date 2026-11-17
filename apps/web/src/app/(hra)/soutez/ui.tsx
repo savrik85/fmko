@@ -9,7 +9,7 @@
  */
 
 import React from "react";
-import { EntityLink } from "@/components/ui";
+import { EntityLink, StatusChip, ChipTone } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { CoachName } from "@/components/manager/coach-name";
 import { formatKc } from "@/lib/format";
@@ -141,24 +141,21 @@ export function Row({ label, value, strong, danger }: {
 
 /** Barevný štítek stavu. */
 export function StatusPill({ status }: { status: string }) {
-  const map: Record<string, { label: string; bg: string; fg: string }> = {
-    passed: { label: "Přijato", bg: "#E8F5E8", fg: "#1E4A1E" },
-    rejected: { label: "Zamítnuto", bg: "#FBEAE8", fg: "#A32B1F" },
-    no_quorum: { label: "Neusnášeníschopné", bg: "#F0EEE9", fg: "#5B5348" },
-    withdrawn: { label: "Staženo", bg: "#F0EEE9", fg: "#5B5348" },
-    gatekept: { label: "Nezařazeno", bg: "#F0EEE9", fg: "#5B5348" },
-    issued: { label: "Uložena", bg: "#FBEAE8", fg: "#A32B1F" },
-    appealed: { label: "Odvolání", bg: "#FBF6E6", fg: "#866D1E" },
-    overturned: { label: "Zrušena", bg: "#E8F5E8", fg: "#1E4A1E" },
+  const map: Record<string, { label: string; tone: ChipTone }> = {
+    passed: { label: "Přijato", tone: "ok" },
+    rejected: { label: "Zamítnuto", tone: "danger" },
+    no_quorum: { label: "Neusnášeníschopné", tone: "neutral" },
+    withdrawn: { label: "Staženo", tone: "neutral" },
+    gatekept: { label: "Nezařazeno", tone: "neutral" },
+    issued: { label: "Uložena", tone: "danger" },
+    appealed: { label: "Odvolání", tone: "warn" },
+    overturned: { label: "Zrušena", tone: "ok" },
   };
-  const s = map[status] ?? { label: status, bg: "#F0EEE9", fg: "#5B5348" };
+  const s = map[status] ?? { label: status, tone: "neutral" };
   return (
-    <span
-      className="text-xs font-semibold px-2 py-1 rounded-full shrink-0 whitespace-nowrap"
-      style={{ background: s.bg, color: s.fg }}
-    >
+    <StatusChip tone={s.tone}>
       {s.label}
-    </span>
+    </StatusChip>
   );
 }
 

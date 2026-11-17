@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
-import { SectionLabel } from "@/components/ui";
+import { SectionLabel, StatusChip } from "@/components/ui";
 import { currentPushSubscription, disablePush, enablePush, pushAvailability, type EnablePushResult, type PushAvailability } from "@/lib/push";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
@@ -188,9 +188,9 @@ export default function SettingsPage() {
                 {["min. 8 znaků", "malé písmeno", "velké písmeno", "číslo"].map((req) => {
                   const ok = !pwErrors.includes(req);
                   return (
-                    <span key={req} className={`text-micro px-1.5 py-0.5 rounded-full font-heading font-bold ${ok ? "bg-pitch-50 text-pitch-600" : "bg-gray-100 text-muted"}`}>
+                    <StatusChip tone={ok ? "ok" : "neutral"} key={req}>
                       {ok ? "✓" : "○"} {req}
-                    </span>
+                    </StatusChip>
                   );
                 })}
               </div>

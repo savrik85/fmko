@@ -7,7 +7,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, apiAction, type Player } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
-import { Button, PositionBadge, BadgePreview, JerseyPreview, DataTable, EntityCell, ListCard, ListRow, type DataColumn, PageLoading } from "@/components/ui";
+import { Button, PositionBadge, BadgePreview, JerseyPreview, DataTable, EntityCell, ListCard, ListRow, type DataColumn, PageLoading, ProgressBar } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 import { BusSelector } from "./BusSelector";
 import { RefereeCard } from "@/components/match/referee-card";
@@ -1289,9 +1289,7 @@ function MatchPage() {
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
-              <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
-                <div className={`h-full rounded-full transition-all duration-500 ${chemistry >= 65 ? "bg-pitch-400" : chemistry >= 45 ? "bg-gold-400" : "bg-card-red"}`} style={{ width: `${chemistry}%` }} />
-              </div>
+              <ProgressBar value={chemistry} tone={chemistry >= 65 ? "ok" : chemistry >= 45 ? "warn" : "danger"} label="Chemie" className="flex-1" />
               <span className={`text-xs font-heading font-bold ${chemColor} shrink-0`}>{chemLabel}</span>
             </div>
             {relSummary.length > 0 && (

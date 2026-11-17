@@ -10,7 +10,7 @@
 
 import { useEffect, useState } from "react";
 import { apiAction, apiFetch } from "@/lib/api";
-import { Modal, EntityLink, ListRow, RowValue } from "@/components/ui";
+import { Modal, EntityLink, ListRow, RowValue, StatusChip, ChipTone } from "@/components/ui";
 import { Empty, Ornament, Rozbaleni, czk, plural } from "./ui";
 import { ClubAuditSection } from "./club-audit-section";
 import type { State } from "./types";
@@ -37,10 +37,10 @@ interface FriendlyStakeRecord {
 
 interface BookData { tickets: ZaznamKnihy[]; transfers: ZaznamPrestupu[]; friendlyStakes?: FriendlyStakeRecord[] }
 
-const FRIENDLY_STAKE_STATUS: Record<string, { label: string; bg: string; fg: string }> = {
-  held: { label: "Složeno", bg: "#F0EEE9", fg: "#5B5348" },
-  paid: { label: "Vyplaceno", bg: "#E8F5E8", fg: "#1E4A1E" },
-  refunded: { label: "Vráceno", bg: "#FBF6E6", fg: "#866D1E" },
+const FRIENDLY_STAKE_STATUS: Record<string, { label: string; tone: ChipTone }> = {
+  held: { label: "Složeno", tone: "neutral" },
+  paid: { label: "Vyplaceno", tone: "ok" },
+  refunded: { label: "Vráceno", tone: "warn" },
 };
 
 /** „2026-11-09" → „9. 11." */
@@ -51,12 +51,12 @@ const shortDay = (day: string) => {
 
 const kurz = (x: number) => (x / 100).toFixed(2).replace(".", ",");
 
-const STAV: Record<string, { label: string; bg: string; fg: string }> = {
-  open: { label: "Běží", bg: "#F0EEE9", fg: "#5B5348" },
-  won: { label: "Vyhraný", bg: "#E8F5E8", fg: "#1E4A1E" },
-  lost: { label: "Prohraný", bg: "#FBEAE8", fg: "#A32B1F" },
-  void: { label: "Vrácený", bg: "#FBF6E6", fg: "#866D1E" },
-  confiscated: { label: "Zabaveno", bg: "#FBEAE8", fg: "#A32B1F" },
+const STAV: Record<string, { label: string; tone: ChipTone }> = {
+  open: { label: "Běží", tone: "neutral" },
+  won: { label: "Vyhraný", tone: "ok" },
+  lost: { label: "Prohraný", tone: "danger" },
+  void: { label: "Vrácený", tone: "warn" },
+  confiscated: { label: "Zabaveno", tone: "danger" },
 };
 
 export function IntegrityPanel({ state, teamId, jsemKomisar, onChanged }: {
@@ -202,7 +202,7 @@ export function IntegrityPanel({ state, teamId, jsemKomisar, onChanged }: {
                         </span>
                       </>
                     }
-                    trailing={<span className="text-micro font-bold uppercase tracking-wide px-2 py-0.5 rounded-full whitespace-nowrap" style={{ background: s.bg, color: s.fg }}>{s.label}</span>} />
+                    trailing={<StatusChip tone={s.tone}>{s.label}</StatusChip>} />
                 </li>
               );
             })}
@@ -233,7 +233,7 @@ export function IntegrityPanel({ state, teamId, jsemKomisar, onChanged }: {
                     </>}
                     meta={<>{f.date ? `${shortDay(f.date)} · ` : ""}každý složil <b className="font-heading text-ink">{czk(f.stake)}</b></>}
                     detail={f.linked ? <span style={{ color: "#A32B1F" }}>⚠ Kluby mají podle listiny stejného majitele.</span> : undefined}
-                    trailing={<span className="text-micro font-bold uppercase tracking-wide px-2 py-0.5 rounded-full whitespace-nowrap" style={{ background: s.bg, color: s.fg }}>{s.label}</span>} />
+                    trailing={<StatusChip tone={s.tone}>{s.label}</StatusChip>} />
                 </li>
               );
             })}

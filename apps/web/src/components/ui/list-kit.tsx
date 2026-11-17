@@ -240,11 +240,17 @@ export function ratingToneIn(value: number, all: number[]): RatingTone {
   return value > mean ? "good" : "neutral";
 }
 
-/** Stavový štítek vpravo v řádku. */
-export function StatusChip({ tone = "neutral", children }: { tone?: "ok" | "warn" | "danger" | "neutral"; children: ReactNode }) {
+export type ChipTone = "ok" | "warn" | "danger" | "neutral";
+
+/** Stavový štítek: vpravo v řádku, za jménem, u karty. Jediný vzhled štítku ve hře. */
+export function StatusChip({ tone = "neutral", title, children }: { tone?: ChipTone; title?: string; children: ReactNode }) {
   const color = tone === "ok" ? "bg-pitch-50 text-pitch-600"
     : tone === "warn" ? "bg-warn-soft text-warn"
     : tone === "danger" ? "bg-danger-soft text-card-red"
     : "bg-surface-3 text-muted";
-  return <span className={`inline-block px-2 py-0.5 rounded-full text-micro font-bold whitespace-nowrap ${color}`}>{children}</span>;
+  return (
+    <span title={title} className={`inline-block px-2 py-0.5 rounded-full text-micro font-bold whitespace-nowrap ${title ? "cursor-help" : ""} ${color}`}>
+      {children}
+    </span>
+  );
 }

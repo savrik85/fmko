@@ -11,7 +11,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiAction, apiFetch } from "@/lib/api";
-import { DataTable, EntityCell, PositionBadge, SectionLabel, useConfirm, SectionLoading } from "@/components/ui";
+import { DataTable, EntityCell, PositionBadge, SectionLabel, useConfirm, SectionLoading, StatusChip } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import {
   LOAN_STATE_STYLE, SKILL_LABELS, daysWord, shortDate, type LoanMatchLine, type LoanReport,
@@ -153,7 +153,7 @@ export default function LoanReportPage() {
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-heading font-bold">{data.playingTimeLabel}</span>
           {data.playingTime !== "none" && (
-            <span className={`text-xs font-heading font-bold px-2 py-0.5 rounded-full ${state.className}`}>{state.label}</span>
+            <StatusChip tone={state.tone}>{state.label}</StatusChip>
           )}
         </div>
         {data.playingTime !== "none" && (

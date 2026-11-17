@@ -5,7 +5,7 @@ import { sponsorMonthlyPayout } from "@okresni-masina/shared";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
 import { sponsorTypeIcon, sponsorTypeLabel } from "@/lib/sponsor-types";
-import { SectionLabel, PositionBadge, Tabs, useTabParam, ListCard, ListRow, ListEmpty, RowIcon, RowValue, PageLoading, SectionLoading, ErrorBox } from "@/components/ui";
+import { SectionLabel, PositionBadge, Tabs, useTabParam, ListCard, ListRow, ListEmpty, RowIcon, RowValue, PageLoading, SectionLoading, ErrorBox, ProgressBar } from "@/components/ui";
 import { TXN_ICONS, TXN_LABELS } from "@/lib/transaction-labels";
 import { weeksText } from "@/lib/weeks-text";
 import { formatKc } from "@/lib/format";
@@ -716,12 +716,7 @@ function LoanTab({ teamId, data, info, onChange, reload }: {
               <span>Splaceno {formatKc(data.loan.totalToRepay - data.loan.remaining)}</span>
               <span>{Math.round(((data.loan.totalToRepay - data.loan.remaining) / data.loan.totalToRepay) * 100)} %</span>
             </div>
-            <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-pitch-500 transition-all"
-                style={{ width: `${((data.loan.totalToRepay - data.loan.remaining) / data.loan.totalToRepay) * 100}%` }}
-              />
-            </div>
+            <ProgressBar value={((data.loan.totalToRepay - data.loan.remaining) / data.loan.totalToRepay) * 100} label="Splaceno z půjčky" />
           </div>
         </div>
       )}
@@ -887,12 +882,7 @@ function BarRow({ label, amount, max, positive, icon }: { label: string; amount:
           {positive ? "+" : "-"}{formatKc(amount)}
         </span>
       </div>
-      <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-        <div
-          className={`h-full ${positive ? "bg-pitch-500" : "bg-card-red"}`}
-          style={{ width: `${pct}%` }}
-        />
-      </div>
+      <ProgressBar value={pct} tone={positive ? "ok" : "danger"} size="sm" label={label} />
     </div>
   );
 }

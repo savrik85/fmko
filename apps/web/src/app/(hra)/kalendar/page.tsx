@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
-import { PageLoading } from "@/components/ui";
+import { PageLoading, ProgressBar } from "@/components/ui";
 import { PreseasonNotice } from "@/components/team/preseason-notice";
 
 interface UpcomingEvent {
@@ -84,9 +84,7 @@ export default function CalendarPage() {
           <span className="font-heading font-bold">Sezóna {data.season}</span>
           <span className="font-heading font-bold tabular-nums text-pitch-600">Den {data.currentDay}/{data.totalDays}</span>
         </div>
-        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-          <div className="h-full bg-pitch-400 rounded-full transition-all" style={{ width: `${progress}%` }} />
-        </div>
+        <ProgressBar value={progress} label="Průběh sezóny" />
       </div>
 
       {/* Month navigation */}

@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, apiAction } from "@/lib/api";
-import { PageLoading } from "@/components/ui";
+import { PageLoading, StatusChip } from "@/components/ui";
 import { TeamSide, type TeamSummary, type ManagerSummary } from "./components/TeamSide";
 import { PlayerHero, type PlayerSummary } from "./components/PlayerHero";
 import { OfferTimeline, type OfferEvent } from "./components/OfferTimeline";
@@ -223,9 +223,9 @@ export default function OfferDetailPage() {
       <div className="card p-4 sm:p-6">
         <div className="flex items-center justify-between mb-4">
           <h1 className="font-heading font-[900] text-2xl sm:text-3xl">Jednání o přestupu</h1>
-          <span className="px-3 py-1 rounded-full bg-gray-100 text-xs font-heading font-bold uppercase tracking-wider text-muted">
+          <StatusChip tone="neutral">
             {statusLabel[offer.status]}
-          </span>
+          </StatusChip>
         </div>
 
         {/* Mobile: hráč nahoře přes celou šířku, trenéři pod ním v gridu 2 sloupce */}

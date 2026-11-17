@@ -10,7 +10,7 @@ import { useOpenPlayerConversation } from "@/hooks/use-open-player-conversation"
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { PotentialProgress } from "@/components/players/potential-progress";
 import { usePotencial, PotentialStars, PotentialBadge } from "@/components/players/potential-summary";
-import { PositionBadge, SectionLabel, BadgePreview, JerseyPreview, useConfirm, DataTable, EntityCell, ScoreChip, RatingPill, ListCard, ListRow, RowIcon, ShowMore, type MatchOutcome, SectionLoading, PageLoading } from "@/components/ui";
+import { PositionBadge, SectionLabel, BadgePreview, JerseyPreview, useConfirm, DataTable, EntityCell, ScoreChip, RatingPill, ListCard, ListRow, RowIcon, ShowMore, type MatchOutcome, SectionLoading, PageLoading, StatusChip, ProgressBar } from "@/components/ui";
 import { SquadNumberEditor } from "./SquadNumberEditor";
 import { PlayerCompare } from "./PlayerCompare";
 import { generateCharacteristics, type PlayerTag } from "@/lib/characteristics";
@@ -543,7 +543,7 @@ export default function PlayerDetailPage() {
         {displayTeam.name}
       </a>
       {player.loan_from_team_id && (
-        <span className="bg-yellow-300 text-gray-900 text-xs font-heading font-bold px-2 py-0.5 rounded-full whitespace-nowrap">Na hostování</span>
+        <StatusChip tone="warn">Na hostování</StatusChip>
       )}
       {injuryPill}
       {absencePill}
@@ -1243,7 +1243,6 @@ export default function PlayerDetailPage() {
       {isOwnPlayer && (() => {
         const rel = player.coach_relationship ?? 50;
         const band = coachRelationBand(rel);
-        const tone = band.tone === "good" ? "bg-pitch-500" : band.tone === "neutral" ? "bg-amber-400" : "bg-red-500";
         const labelColor = band.tone === "good" ? "text-pitch-700" : band.tone === "neutral" ? "text-amber-700" : "text-red-700";
         return (
           <div className="card p-4 sm:p-5 mb-5">
@@ -1251,9 +1250,7 @@ export default function PlayerDetailPage() {
             <div className="mt-2 mb-1.5">
               <span className={`text-base font-heading font-bold ${labelColor}`}>{band.icon} {band.label}</span>
             </div>
-            <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-              <div className={`h-full ${tone} transition-all`} style={{ width: `${rel}%` }} />
-            </div>
+            <ProgressBar value={rel} tone={band.tone === "good" ? "ok" : band.tone === "neutral" ? "warn" : "danger"} label={band.label} />
             {coachLog.length > 0 ? (
               <div className="mt-3">
                 <div className="text-sm font-heading font-bold text-muted mb-1">Proč</div>

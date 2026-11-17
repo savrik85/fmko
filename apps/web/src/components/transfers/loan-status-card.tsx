@@ -9,7 +9,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
-import { SectionLabel } from "@/components/ui";
+import { SectionLabel, StatusChip } from "@/components/ui";
 import { LOAN_STATE_STYLE, daysWord, type LoanOverview, type LoanSummary } from "@/lib/loans";
 
 export function LoanStatusCard({ teamId, playerId }: { teamId: string; playerId: string }) {
@@ -46,7 +46,7 @@ export function LoanStatusCard({ teamId, playerId }: { teamId: string; playerId:
         <span className="font-heading font-bold">{s.playingTimeLabel}</span>
         {s.playingTime !== "none" && (
           <>
-            <span className={`text-xs font-heading font-bold px-2 py-0.5 rounded-full ${state.className}`}>{state.label}</span>
+            <StatusChip tone={state.tone}>{state.label}</StatusChip>
             <span className="text-muted">{s.playingTimeSummary}</span>
           </>
         )}

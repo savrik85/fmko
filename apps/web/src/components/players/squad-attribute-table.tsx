@@ -10,7 +10,7 @@
 
 import { PromiseBadge } from "@/components/players/promise-card";
 import { attributeImportance, coachRelationBand } from "@okresni-masina/shared";
-import { PositionBadge, DataTable, ListCard, type DataColumn } from "@/components/ui";
+import { PositionBadge, DataTable, ListCard, type DataColumn, StatusChip } from "@/components/ui";
 import type { Player } from "@/lib/api";
 import { ATTRIBUTE_INFO, getTooltip, type AttrKey } from "@/lib/attribute-info";
 import { attrBg, attrValue } from "@/lib/player-attrs";
@@ -221,10 +221,10 @@ export function SquadAttributeTable({ players, potential = new Map(), promises =
         return (
           <span className={`inline-flex items-center gap-1.5 whitespace-nowrap py-1.5 ${p.status === "quit" ? "opacity-40" : ""}`}>
             <span className="text-body font-bold text-ink"><StickyPlayerName firstName={p.first_name} lastName={p.last_name} /></span>
-            {p.loan_from_team_id && <span className="text-micro bg-yellow-100 text-yellow-700 font-bold px-1.5 py-0.5 rounded-full">Host.</span>}
+            {p.loan_from_team_id && <StatusChip tone="warn">Host.</StatusChip>}
             {promises.has(p.id) && <PromiseBadge text={promises.get(p.id)!} />}
-            {inj && <span className="text-micro bg-red-100 text-red-700 font-bold px-1.5 py-0.5 rounded-full cursor-help" title={injTip} aria-label={injTip}>🩹</span>}
-            {abs && <span className="text-micro bg-amber-100 text-amber-700 font-bold px-1.5 py-0.5 rounded-full cursor-help" title={absTip} aria-label={absTip}>🚫</span>}
+            {inj && <StatusChip tone="danger" title={injTip}><span role="img" aria-label={injTip}>🩹</span></StatusChip>}
+            {abs && <StatusChip tone="warn" title={absTip}><span role="img" aria-label={absTip}>🚫</span></StatusChip>}
             {(lc as unknown as { hangover?: number | boolean } | undefined)?.hangover ? (
               <span className="cursor-help" title="Ranní kocovina po včerejší výhře (−15 kondice)" aria-label="Kocovina">🍺</span>
             ) : null}

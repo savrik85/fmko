@@ -14,7 +14,7 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { apiFetch, apiAction } from "@/lib/api";
 import { FaceAvatar } from "@/components/players/face-avatar";
-import { Tabs, useTabParam, ListRow, RowValue, RatingPill, ratingToneIn } from "@/components/ui";
+import { Tabs, useTabParam, ListRow, RowValue, RatingPill, ratingToneIn, StatusChip } from "@/components/ui";
 import { formatKc } from "@/lib/format";
 
 const TAB_KEYS = ["prehled", "zaci", "novi", "trener", "vybaveni"] as const;
@@ -477,16 +477,16 @@ export function AcademyCard({ teamId }: { teamId: string }) {
                       ) : undefined}
                       title={<>
                         {p.name}
-                        {p.promising && <span className="ml-2 align-middle rounded-full bg-pitch-50 px-2 py-0.5 text-micro font-bold text-pitch-600">nadějný</span>}
-                        {p.coachSon && <span className="ml-2 align-middle rounded-full bg-gold-50 px-2 py-0.5 text-micro font-bold text-gold-700">syn trenéra</span>}
+                        {p.promising && <StatusChip tone="ok">nadějný</StatusChip>}
+                        {p.coachSon && <StatusChip tone="warn">syn trenéra</StatusChip>}
                       </>}
                       meta={`${p.age} let · ${p.positionSure ? POSITION_CS[p.position] ?? p.position : `nejspíš ${POSITION_CS[p.position] ?? p.position}`}`}
                       detail={
                         <span className="block space-y-2 mt-1">
                           {(p.strengths.length > 0 || p.weakness) && (
                             <span className="flex flex-wrap gap-1.5">
-                              {p.strengths.map((st) => <span key={st} className="rounded-full bg-pitch-50 px-2 py-0.5 text-xs font-semibold text-pitch-600">{st}</span>)}
-                              {p.weakness && <span className="rounded-full bg-red-50 px-2 py-0.5 text-xs text-red-700">slabina: {p.weakness}</span>}
+                              {p.strengths.map((st) => <StatusChip tone="ok" key={st}>{st}</StatusChip>)}
+                              {p.weakness && <StatusChip tone="danger">slabina: {p.weakness}</StatusChip>}
                             </span>
                           )}
                           {p.verdict && <span className="block text-ink">„{p.verdict}“</span>}
@@ -646,7 +646,7 @@ export function AcademyCard({ teamId }: { teamId: string }) {
                         <span className="block space-y-2">
                           <span className="block text-muted">{t.club}, {t.km.toLocaleString("cs")} km</span>
                           {t.strengths.length > 0 && (
-                            <span className="flex flex-wrap gap-1.5">{t.strengths.map((x) => <span key={x} className="rounded-full bg-pitch-50 px-2 py-0.5 text-xs font-semibold text-pitch-600">{x}</span>)}</span>
+                            <span className="flex flex-wrap gap-1.5">{t.strengths.map((x) => <StatusChip tone="ok" key={x}>{x}</StatusChip>)}</span>
                           )}
                           <span className="block text-ink">„{t.verdict}“</span>
                           {t.age >= 14 && (

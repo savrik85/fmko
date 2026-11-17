@@ -12,7 +12,7 @@
  * znamená zamítnutí, u prosté přijetí, a z čísel se to nepozná.
  */
 
-import { ListRow } from "@/components/ui";
+import { ListRow, StatusChip, ChipTone } from "@/components/ui";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useTeam } from "@/context/team-context";
@@ -41,36 +41,33 @@ export interface Decision {
  */
 export function decisionPill(
   kind: string | null | undefined, status: string,
-): { label: string; bg: string; fg: string } {
+): { label: string; tone: ChipTone } {
   if (kind === "compliance") {
     return status === "passed"
-      ? { label: "Pokuta", bg: "#FBEAE8", fg: "#A32B1F" }
-      : { label: "Napomenutí", bg: "#F0EEE9", fg: "#5B5348" };
+      ? { label: "Pokuta", tone: "danger" }
+      : { label: "Napomenutí", tone: "neutral" };
   }
-  if (kind === "vacated") return { label: "Uvolněno", bg: "#F0EEE9", fg: "#5B5348" };
+  if (kind === "vacated") return { label: "Uvolněno", tone: "neutral" };
   if (kind === "election") {
     return status === "passed"
-      ? { label: "Zvolen", bg: "#E8F5E8", fg: "#1E4A1E" }
-      : { label: "Neobsazeno", bg: "#F0EEE9", fg: "#5B5348" };
+      ? { label: "Zvolen", tone: "ok" }
+      : { label: "Neobsazeno", tone: "neutral" };
   }
   switch (status) {
-    case "passed": return { label: "Přijato", bg: "#E8F5E8", fg: "#1E4A1E" };
-    case "rejected": return { label: "Zamítnuto", bg: "#FBEAE8", fg: "#A32B1F" };
-    case "no_quorum": return { label: "Neusnášeníschopné", bg: "#F0EEE9", fg: "#5B5348" };
-    case "withdrawn": return { label: "Staženo", bg: "#F0EEE9", fg: "#5B5348" };
-    default: return { label: status, bg: "#F0EEE9", fg: "#5B5348" };
+    case "passed": return { label: "Přijato", tone: "ok" };
+    case "rejected": return { label: "Zamítnuto", tone: "danger" };
+    case "no_quorum": return { label: "Neusnášeníschopné", tone: "neutral" };
+    case "withdrawn": return { label: "Staženo", tone: "neutral" };
+    default: return { label: status, tone: "neutral" };
   }
 }
 
 export function DecisionPill({ kind, status }: { kind?: string | null; status: string }) {
   const s = decisionPill(kind, status);
   return (
-    <span
-      className="inline-block text-micro font-bold px-2 py-0.5 rounded-full shrink-0 whitespace-nowrap"
-      style={{ background: s.bg, color: s.fg }}
-    >
+    <StatusChip tone={s.tone}>
       {s.label}
-    </span>
+    </StatusChip>
   );
 }
 

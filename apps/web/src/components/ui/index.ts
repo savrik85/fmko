@@ -31,6 +31,6 @@ export { IconButton } from "./icon-button";
 export { DataTable, EntityCell, type DataColumn, type DataRowTone } from "./data-table";
 export {
   ListCard, ListRow, RowGroup, RowIcon, RowValue, ListEmpty, ShowMore, DeltaMark,
-  ResultChip, ScoreChip, RatingPill, StatusChip, ratingToneIn,
+  ResultChip, ScoreChip, RatingPill, StatusChip, ratingToneIn, type ChipTone,
   type RowTone, type RatingTone, type MatchOutcome,
 } from "./list-kit";

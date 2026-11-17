@@ -48,8 +48,8 @@ export function PromiseCard({ promises }: { promises: PlayerPromiseView[] }) {
 export function PromiseBadge({ text }: { text: string }) {
   const tip = `Slíbil jsi: ${text}`;
   return (
-    <span className="ml-1.5 text-micro bg-amber-100 text-amber-800 font-heading font-bold px-1.5 py-0.5 rounded-full cursor-help" title={tip} aria-label={tip}>
+    <StatusChip tone="warn" title={tip}>
       🤞
-    </span>
+    </StatusChip>
   );
 }

@@ -10,7 +10,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { apiFetch, showError } from "@/lib/api";
-import { SectionLabel, ListCard, ListRow, ListEmpty, SectionLoading } from "@/components/ui";
+import { SectionLabel, ListCard, ListRow, ListEmpty, SectionLoading, StatusChip } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { LicenceBadge } from "@/components/manager/LicenceBadge";
 import { CoachName } from "@/components/manager/coach-name";
@@ -68,9 +68,9 @@ interface RelationListItem {
 
 function LoyalAllyBadge() {
   return (
-    <span className="text-xs font-heading font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-300" title="Trvalý spojenec. 3+ společných posezení v hospodě">
+    <StatusChip tone="warn" title="Trvalý spojenec. 3+ společných posezení v hospodě">
       🏅 Trvalý spojenec
-    </span>
+    </StatusChip>
   );
 }
 

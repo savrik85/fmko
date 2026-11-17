@@ -8,7 +8,7 @@
 import { useEffect, useState } from "react";
 import { coachRelationBand, coachRelationBandByKey, COACH_RELATION_BAND_ORDER, type CoachRelationBandKey } from "@okresni-masina/shared";
 import { apiFetch } from "@/lib/api";
-import { SectionLabel, PositionBadge, ListCard, ListRow, ListEmpty, RowValue, SectionLoading } from "@/components/ui";
+import { SectionLabel, PositionBadge, ListCard, ListRow, ListEmpty, RowValue, SectionLoading, ProgressBar, type ProgressTone } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 
 interface KabinaPlayer {
@@ -70,7 +70,7 @@ function bandVerb(key: CoachRelationBandKey, n: number): string {
   return pick(n, BAND_VERB[key]);
 }
 
-const TONE_BAR: Record<string, string> = { good: "bg-pitch-500", neutral: "bg-amber-400", bad: "bg-red-500" };
+const TONE_BAR: Record<string, ProgressTone> = { good: "ok", neutral: "warn", bad: "danger" };
 const TONE_TEXT: Record<string, string> = { good: "text-pitch-700", neutral: "text-amber-700", bad: "text-red-700" };
 
 /** Datum z logu: herní den `YYYY-MM-DD` nebo `YYYY-MM-DD HH:MM:SS` z SQLite. */
@@ -212,9 +212,7 @@ export function CoachKabinaTab({ teamId }: { teamId: string }) {
               trailing={<span className={`text-meta font-bold whitespace-nowrap ${TONE_TEXT[band.tone]}`}>{band.icon} {band.label}</span>}
               detail={
                 <>
-                  <span className="block h-1.5 rounded-full bg-gray-100 overflow-hidden mt-1">
-                    <span className={`block h-full rounded-full ${TONE_BAR[band.tone]}`} style={{ width: `${Math.max(3, p.relationship)}%` }} />
-                  </span>
+                  <ProgressBar value={Math.max(3, p.relationship)} tone={TONE_BAR[band.tone]} size="sm" label="Vztah" className="mt-1" />
                   {(p.sulking || p.wantsOut || p.lowMorale || p.injuredDays || p.leftOutStreak >= 2) && (
                     <span className="flex flex-wrap gap-1.5 mt-2">
                       {p.sulking && <Flag tone="bad">😤 Trucuje</Flag>}

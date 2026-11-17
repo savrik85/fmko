@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { apiFetch } from "@/lib/api";
-import { Card, CardBody, useConfirm } from "@/components/ui";
+import { Card, CardBody, useConfirm, ProgressBar } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { favorLabel, personalityHint, personalityLabel } from "@/lib/sponsor-owners";
 import { RequestSection } from "./request-section";
@@ -91,9 +91,7 @@ export function OwnerCard({ sponsorId, teamId, owner, myTeam, onChanged }: {
                 <span className="text-muted">Náklonnost k vašemu klubu</span>
                 <span className="font-heading font-bold">{favorLabel(myTeam.favor)} ({myTeam.favor})</span>
               </div>
-              <div className="h-2 rounded-full bg-gray-100 mt-1 overflow-hidden">
-                <div className="h-full bg-pitch-500" style={{ width: `${myTeam.favor}%` }} />
-              </div>
+              <ProgressBar value={myTeam.favor} label="Přízeň" className="mt-1" />
             </div>
             <div className="text-sm text-muted">
               Jako hlavní sponzor by dal bez slibů zhruba {formatKc(myTeam.budgetEstimate.base.low)} až {formatKc(myTeam.budgetEstimate.base.high)},

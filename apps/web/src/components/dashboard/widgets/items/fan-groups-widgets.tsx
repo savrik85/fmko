@@ -10,7 +10,7 @@
  */
 
 import Link from "next/link";
-import { ListRow, RowGroup } from "@/components/ui";
+import { ListRow, RowGroup, ProgressBar, type ProgressTone } from "@/components/ui";
 import type { FanGroupsData, WidgetProps } from "../types";
 import { formatKc } from "@/lib/format";
 
@@ -21,14 +21,12 @@ const KIND_IKONA: Record<string, string> = {
 /** Pruh 0–100. Barva podle toho, jestli je vyšší číslo dobře, nebo špatně. */
 function Pruh({ value, dobre }: { value: number; dobre: boolean }) {
   const v = Math.max(0, Math.min(100, value));
-  const barva = dobre
-    ? (v >= 60 ? "bg-pitch-500" : v >= 35 ? "bg-amber-500" : "bg-card-red")
-    : (v >= 60 ? "bg-card-red" : v >= 35 ? "bg-amber-500" : "bg-pitch-500");
+  const tone: ProgressTone = dobre
+    ? (v >= 60 ? "ok" : v >= 35 ? "warn" : "danger")
+    : (v >= 60 ? "danger" : v >= 35 ? "warn" : "ok");
   // Span místo div: pruh stojí i uvnitř řádku seznamu (ListRow), kde je obsah ve <span>.
   return (
-    <span className="block h-1.5 rounded-full bg-gray-100 overflow-hidden">
-      <span className={`block h-full rounded-full ${barva}`} style={{ width: `${v}%` }} />
-    </span>
+    <ProgressBar value={v} tone={tone} size="sm" label="Hodnota" />
   );
 }
 

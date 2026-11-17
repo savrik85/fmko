@@ -11,7 +11,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
-import { SectionLabel, PageLoading } from "@/components/ui";
+import { SectionLabel, PageLoading, ProgressBar, type ProgressTone } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { axisWord } from "@/lib/referee-info";
 import { sentimentWord } from "@/lib/fan-info";
@@ -42,15 +42,15 @@ const LEADER_AXES = [
 /**
  * Barva pruhu podle toho, jestli je vysoká hodnota pro klub dobrá.
  *
- * `axisColor` z profilu rozhodčího tu použít nejde — ta barví vysoké červeně vždycky,
+ * `axisTone` z profilu rozhodčího tu použít nejde — ta barví vysoké červeně vždycky,
  * takže charismatický vůdce by svítil jako hrozba.
  */
-function osaColor(value: number, dobreVysoke: boolean): string {
+function osaTone(value: number, dobreVysoke: boolean): ProgressTone {
   const dobre = dobreVysoke ? value >= 60 : value <= 35;
   const spatne = dobreVysoke ? value <= 35 : value >= 60;
-  if (dobre) return "bg-pitch-500";
-  if (spatne) return "bg-card-red";
-  return "bg-gold-500";
+  if (dobre) return "ok";
+  if (spatne) return "danger";
+  return "warn";
 }
 
 export default function VudceDetailPage() {
@@ -126,9 +126,7 @@ export default function VudceDetailPage() {
             <div key={axis.key}>
               <div className="flex items-center gap-2">
                 <span className="text-sm w-36 shrink-0">{axis.label}</span>
-                <div className="flex-1 h-2 rounded-full bg-ink/10 overflow-hidden">
-                  <div className={`h-full rounded-full ${osaColor(value, axis.dobreVysoke)}`} style={{ width: `${value}%` }} />
-                </div>
+                <ProgressBar value={value} tone={osaTone(value, axis.dobreVysoke)} label={axis.label} className="flex-1" />
                 <span className="text-sm text-muted w-28 shrink-0 text-right">{axisWord(value)}</span>
               </div>
               <p className="text-sm text-ink-light mt-0.5 mb-2">{axis.popis}</p>

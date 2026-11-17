@@ -1188,7 +1188,7 @@ export default function TransfersPage() {
         <span className="inline-flex flex-wrap items-center gap-1">
           {l.origin && <OriginBadge origin={l.origin} />}
           {l.dealType === "loan" && (
-            <span className="text-xs font-heading font-bold px-2 py-0.5 rounded-full bg-pitch-50 text-pitch-700">{loanTermsLine(l)}</span>
+            <StatusChip tone="ok">{loanTermsLine(l)}</StatusChip>
           )}
           {l.revealedPotential && <RevealedPotentialBadge age={l.playerAge} potential={l.revealedPotential} />}
         </span>
@@ -2151,7 +2151,7 @@ export default function TransfersPage() {
                           {nationalityFlag((o as { nationality?: string }).nationality) && <span title={(o as { nationality?: string }).nationality}>{nationalityFlag((o as { nationality?: string }).nationality)}</span>}
                           <PositionBadge position={o.position as "GK" | "DEF" | "MID" | "FWD"} />
                           <span className="text-meta font-normal text-muted">{o.age} let</span>
-                          {isYouth && <span className="text-xs bg-pitch-100 text-pitch-700 px-2 py-0.5 rounded-full font-heading font-bold">{fromAcademy ? (academyVillage ? `Žák z obce ${academyVillage}` : "Žák z akademie") : "Dorostenec"}</span>}
+                          {isYouth && <StatusChip tone="ok">{fromAcademy ? (academyVillage ? `Žák z obce ${academyVillage}` : "Žák z akademie") : "Dorostenec"}</StatusChip>}
                         </span>
                       }
                       detail={<>
@@ -2472,7 +2472,7 @@ export default function TransfersPage() {
                               {b.first_name} {b.last_name}
                             </Link>
                             <PositionBadge position={b.position as "GK" | "DEF" | "MID" | "FWD"} />
-                            <span className="text-xs px-2 py-0.5 rounded-full bg-gold-50 text-gold-700 font-heading font-bold">Z trhu</span>
+                            <StatusChip tone="warn">Z trhu</StatusChip>
                           </div>
                           <div className="text-sm">
                             <span className="font-heading font-bold">{b.buyer_team_name}</span>
@@ -2546,7 +2546,7 @@ export default function TransfersPage() {
                             <span className="font-heading font-bold">{b.first_name} {b.last_name}</span>
                             <PositionBadge position={b.position as "GK" | "DEF" | "MID" | "FWD"} />
                             <span className="text-sm text-muted">→ {b.seller_team_name}</span>
-                            <span className="text-xs px-2 py-0.5 rounded-full bg-gold-50 text-gold-700 font-heading font-bold">Z trhu</span>
+                            <StatusChip tone="warn">Z trhu</StatusChip>
                           </div>
                           <div className="text-sm text-muted">
                             Nabídnuto: <span className="font-heading font-bold text-ink">{formatKc(b.amount)}</span>

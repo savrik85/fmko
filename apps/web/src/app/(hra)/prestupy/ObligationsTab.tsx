@@ -9,7 +9,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
-import { ListCard, ListEmpty, ListRow, RowValue, SectionLoading } from "@/components/ui";
+import { ListCard, ListEmpty, ListRow, RowValue, SectionLoading, ProgressBar } from "@/components/ui";
 import { CPU_CLUB_ID } from "@okresni-masina/shared";
 import { formatKc } from "@/lib/format";
 
@@ -51,9 +51,7 @@ export function DealCard({ deal, side }: { deal: Deal; side: "paying" | "receivi
       }
       meta={<>{side === "paying" ? "od " : "do "}<ClubName id={deal.otherTeamId} name={deal.otherTeamName} /></>}
       detail={<>
-        <span className="block h-2 mt-1.5 rounded-full bg-gray-100 overflow-hidden" aria-label={`Splaceno ${pct} %`}>
-          <span className="block h-full bg-pitch-500" style={{ width: `${pct}%` }} />
-        </span>
+        <ProgressBar value={pct} label={`Splaceno ${pct} %`} className="mt-1.5" />
         <span className="grid grid-cols-2 gap-x-3 gap-y-0.5 mt-2 tabular-nums">
           <span className="text-muted">Záloha</span><span className="text-right">{formatKc(deal.upfrontAmount)}</span>
           <span className="text-muted">Splátky</span><span className="text-right">{deal.installmentsPaid} z {deal.installmentsTotal} · {formatKc(deal.installmentAmount)} týdně</span>

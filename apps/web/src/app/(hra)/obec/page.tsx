@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
-import { Card, CardBody, SectionLabel, Modal, Button, Tabs, useTabParam, ListCard, ListRow, ListEmpty, RowIcon, RowValue, SectionLoading } from "@/components/ui";
+import { Card, CardBody, SectionLabel, Modal, Button, Tabs, useTabParam, ListCard, ListRow, ListEmpty, RowIcon, RowValue, SectionLoading, ProgressBar, type ProgressTone } from "@/components/ui";
 import { DistrictMap, clubBadgeSvg, villageSizeLabel, type MapVillage } from "@/components/map/DistrictMap";
 import { DistrictVillages } from "./DistrictVillages";
 import { FaceAvatar } from "@/components/players/face-avatar";
@@ -244,11 +244,10 @@ function investmentTargetLabel(facility: string | null, type: string): string {
   return facility ?? type;
 }
 
-function favorColor(favor: number): string {
-  if (favor >= 70) return "bg-pitch-500";
-  if (favor >= 50) return "bg-pitch-400";
-  if (favor >= 30) return "bg-amber-400";
-  return "bg-card-red";
+function favorTone(favor: number): ProgressTone {
+  if (favor >= 50) return "ok";
+  if (favor >= 30) return "warn";
+  return "danger";
 }
 
 function favorLabel(favor: number): string {
@@ -270,9 +269,7 @@ function FavorBar({ value, label }: { value: number; label?: string }) {
           <span className="font-semibold tabular-nums">{value}/100</span>
         </div>
       )}
-      <div className="h-2 w-full rounded-full bg-gray-100 overflow-hidden">
-        <div className={`h-full ${favorColor(value)}`} style={{ width: `${Math.max(0, Math.min(100, value))}%` }} />
-      </div>
+      <ProgressBar value={Math.max(0, Math.min(100, value))} tone={favorTone(value)} label="Přízeň" />
     </div>
   );
 }

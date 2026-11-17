@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
-import { SectionLabel, ListCard, ListRow, ListEmpty, StatusChip } from "@/components/ui";
+import { SectionLabel, ListCard, ListRow, ListEmpty, StatusChip, ProgressBar } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { CoachName } from "@/components/manager/coach-name";
 
@@ -87,12 +87,7 @@ function VoteRow({ vote, teamId, token, onVoted }: { vote: Vote; teamId: string 
               </span>
               <span className="text-muted tabular-nums">{vote.ano_count} hlasů · {anoPercent}%</span>
             </span>
-            <span className="block h-2 bg-gray-100 rounded-full overflow-hidden">
-              <span
-                className="block h-full bg-pitch-400 rounded-full transition-all duration-500"
-                style={{ width: `${anoPercent}%` }}
-              />
-            </span>
+            <ProgressBar value={anoPercent} label="Pro" />
           </span>
           {/* NE */}
           <span className="block">
@@ -102,12 +97,7 @@ function VoteRow({ vote, teamId, token, onVoted }: { vote: Vote; teamId: string 
               </span>
               <span className="text-muted tabular-nums">{vote.ne_count} hlasů · {nePercent}%</span>
             </span>
-            <span className="block h-2 bg-gray-100 rounded-full overflow-hidden">
-              <span
-                className="block h-full bg-card-red rounded-full transition-all duration-500"
-                style={{ width: `${nePercent}%` }}
-              />
-            </span>
+            <ProgressBar value={nePercent} tone="danger" label="Proti" />
           </span>
         </span>
 

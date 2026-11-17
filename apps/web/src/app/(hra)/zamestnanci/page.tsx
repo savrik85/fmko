@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, apiAction } from "@/lib/api";
-import { Tabs, useTabParam, ListCard, ListRow, ListEmpty, RowIcon, StatusChip, PageLoading } from "@/components/ui";
+import { Tabs, useTabParam, ListCard, ListRow, ListEmpty, RowIcon, StatusChip, PageLoading, type ChipTone } from "@/components/ui";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { StaffTaskBox, type StaffTasksData } from "@/components/staff/StaffTaskBox";
@@ -73,6 +73,12 @@ function attrColor(v: number): string {
   if (v >= 7) return "text-ink";
   if (v >= 4) return "text-gold-600";
   return "text-card-red";
+}
+
+function effTone(v: number): ChipTone {
+  if (v >= 15) return "ok";
+  if (v >= 10) return "warn";
+  return "neutral";
 }
 
 function effClass(v: number): string {
@@ -387,9 +393,9 @@ export default function ZamestnanciPage() {
         leading={<Avatar m={m} />}
         title={<>
           {m.firstName} {m.lastName}
-          <span className={`ml-2 align-middle inline-block rounded-full bg-surface-3 px-2 py-0.5 text-micro font-bold tabular-nums whitespace-nowrap ${effClass(eff)}`}>
+          <StatusChip tone={effTone(eff)}>
             efektivita {eff}/20
-          </span>
+          </StatusChip>
         </>}
         meta={`${def.label} · ${m.age} let${m.gender === "f" ? " · žena" : ""}`}
         detail={

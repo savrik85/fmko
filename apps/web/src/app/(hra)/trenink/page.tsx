@@ -4,7 +4,7 @@ import { useState, useEffect, type ReactNode } from "react";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, apiAction, type Player } from "@/lib/api";
 import Link from "next/link";
-import { SectionLabel, ListCard, ListRow, PageLoading } from "@/components/ui";
+import { SectionLabel, ListCard, ListRow, PageLoading, ProgressBar } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 
 type TrainingType = "conditioning" | "technique" | "tactics" | "match_practice";
@@ -725,9 +725,7 @@ export default function TrainingPage() {
                   </div>
                 </div>
               </div>
-              <div className="mt-2.5 bg-gray-100 rounded-full h-1.5 overflow-hidden">
-                <div className="h-full bg-pitch-400 rounded-full transition-all duration-700" style={{ width: `${pct}%` }} />
-              </div>
+              <ProgressBar value={pct} size="sm" label="Účast na tréninku" className="mt-2.5" />
 
               {/* Jak hráčům sedí nastavená zátěž a přístup */}
               {result.moraleChanges && result.moraleChanges.length > 0 && (

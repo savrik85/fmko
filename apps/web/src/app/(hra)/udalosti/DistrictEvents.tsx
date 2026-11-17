@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
-import { Card, CardBody, SectionLabel, ListRow } from "@/components/ui";
+import { Card, CardBody, SectionLabel, ListRow, StatusChip } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 
 /** Okresní akce (pouť, bál…): co se na ní stalo lidem klubu. Data z GET /teams/:id/district-events. */
@@ -96,9 +96,9 @@ function EventCard({ ev }: { ev: DistrictEvent }) {
           <div className="min-w-0 flex-1">
             <div className="font-heading font-bold text-lg leading-tight">{ev.title}</div>
             <div className="text-sm text-muted">{ev.place} · {formatDate(ev.eventDate)}</div>
-            <span className="inline-block mt-1.5 text-xs font-heading font-bold px-2 py-0.5 rounded-full bg-surface text-ink">
+            <StatusChip tone="neutral">
               {(done ? CHOICE_TEXT : PENDING_TEXT)[ev.myChoice ?? "none"]}
-            </span>
+            </StatusChip>
           </div>
         </div>
 

@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, showError } from "@/lib/api";
-import { Spinner, Card, CardHeader, CardBody, SectionLabel, PageLoading, ErrorBox } from "@/components/ui";
+import { Spinner, Card, CardHeader, CardBody, SectionLabel, PageLoading, ErrorBox, StatusChip } from "@/components/ui";
 
 interface Anthem {
   id: string;
@@ -183,7 +183,7 @@ export default function HymnaPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <h3 className="font-heading font-bold text-base text-ink truncate">{a.title}</h3>
-                      {a.isSelected && <span className="text-micro font-bold bg-pitch-500 text-white px-2 py-0.5 rounded-full">AKTUÁLNÍ</span>}
+                      {a.isSelected && <StatusChip tone="ok">AKTUÁLNÍ</StatusChip>}
                     </div>
                     <div className="text-xs text-muted mt-0.5">
                       {STYLE_PRESETS.find((p) => p.value === a.style)?.label || a.style}

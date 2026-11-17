@@ -9,7 +9,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { apiAction, apiFetch } from "@/lib/api";
-import { SectionLabel, ListCard, ListRow, ListEmpty, RowIcon, RowGroup, SectionLoading, ErrorBox } from "@/components/ui";
+import { SectionLabel, ListCard, ListRow, ListEmpty, RowIcon, RowGroup, SectionLoading, ErrorBox, StatusChip, ProgressBar } from "@/components/ui";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { COURSE_ATTR_LABELS, type CourseAttr } from "@okresni-masina/shared";
 import { LicenceBadge } from "./LicenceBadge";
@@ -214,14 +214,14 @@ export function CoachEducationTab({ teamId, isOwn }: { teamId: string; isOwn: bo
                     <span className="inline-flex items-center gap-2 flex-wrap">
                       {l.label}
                       {current && (
-                        <span className="text-xs font-heading font-bold px-2.5 py-0.5 rounded-full bg-pitch-600 text-white">
+                        <StatusChip tone="ok">
                           {isOwn ? "Tvoje licence" : "Aktuální licence"}
-                        </span>
+                        </StatusChip>
                       )}
                       {next && (
-                        <span className="text-xs font-heading font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-200">
+                        <StatusChip tone="warn">
                           Cíl k dosažení
-                        </span>
+                        </StatusChip>
                       )}
                     </span>
                   }
@@ -262,9 +262,7 @@ export function CoachEducationTab({ teamId, isOwn }: { teamId: string; isOwn: bo
                 <span className="text-muted">Zbývá {days(a.daysRemaining)} z {a.daysTotal}</span>
                 <span className="text-muted">pak test</span>
               </div>
-              <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
-                <div className="h-full rounded-full bg-pitch-500" style={{ width: `${Math.round(((a.daysTotal - a.daysRemaining) / a.daysTotal) * 100)}%` }} />
-              </div>
+              <ProgressBar value={Math.round(((a.daysTotal - a.daysRemaining) / a.daysTotal) * 100)} label="Průběh kurzu" />
               {isOwn && data.away ? (
                 <div className="mt-3 rounded-soft bg-surface p-3">
                   <div className="text-sm font-heading font-bold mb-1">Co to dělá s tréninkem</div>
@@ -393,9 +391,9 @@ function OfferRow({ o, busy, onEnroll }: { o: Offer; busy: boolean; onEnroll: (o
         <span className="inline-flex items-center gap-2 flex-wrap">
           {title}
           {o.points > 0 && (
-            <span className="text-xs font-heading font-bold px-2 py-0.5 rounded-full bg-pitch-50 text-pitch-700 border border-pitch-200">
+            <StatusChip tone="ok">
               +{o.points}
-            </span>
+            </StatusChip>
           )}
         </span>
       }
