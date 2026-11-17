@@ -173,26 +173,39 @@ async function toJpeg(canvas: HTMLCanvasElement, background: string): Promise<Bl
 }
 
 /** Pokusy: Safari často vykreslí až napodruhé, pak ještě v menším rozlišení. */
-const ATTEMPT_SCALES = (scale: number) => [scale, scale, 1];
+/**
+ * Pokusy: nejdřív s písmem hry (bez něj se texty v systémovém písmu lámou a přetékají),
+ * dvakrát, protože Safari občas vykreslí až napodruhé. Bez písma jen jako poslední možnost.
+ */
+const ATTEMPTS = (scale: number): Array<{ scale: number; fonts: boolean }> => [
+  { scale, fonts: true },
+  { scale, fonts: true },
+  { scale, fonts: false },
+  { scale: 1, fonts: false },
+];
+
+/** Písmo hry do kopie stránky jen ve woff2, ať je kopie co nejmenší. */
+function fontOption(fonts: boolean): CanvasOptions["font"] {
+  return fonts ? { preferredFormat: "woff2" } : false;
+}
 
 type CanvasOptions = import("modern-screenshot").Options;
 
 /** Vykreslí kopii a když vyjde prázdná (Safari napoprvé), zkusí to znovu. */
-async function renderWithRetry(target: HTMLElement, baseScale: number, makeOptions: (scale: number) => CanvasOptions): Promise<Blob> {
+async function renderWithRetry(target: HTMLElement, baseScale: number, makeOptions: (scale: number, fonts: boolean) => CanvasOptions, background: string): Promise<Blob> {
   loadLazyImages(target);
   const { domToCanvas } = await import("modern-screenshot");
-  const background = getComputedStyle(document.body).backgroundColor || "#ffffff";
-  for (const scale of ATTEMPT_SCALES(baseScale)) {
-    const canvas = await domToCanvas(target, makeOptions(scale));
+  for (const attempt of ATTEMPTS(baseScale)) {
+    const canvas = await domToCanvas(target, makeOptions(attempt.scale, attempt.fonts));
     if (!isBlank(canvas)) return toJpeg(canvas, background);
-    console.warn("Focení stránky: prázdný snímek, zkouším znovu", { scale });
+    console.warn("Focení stránky: prázdný snímek, zkouším znovu", attempt);
   }
   throw new Error("Stránku se nepodařilo vyfotit (prázdný snímek)");
 }
 
 async function renderFullPage(target: HTMLElement, plan: PagePlan, options: CaptureOptions): Promise<Blob> {
   const background = getComputedStyle(document.body).backgroundColor || "#ffffff";
-  return renderWithRetry(target, plan.scale, (scale) => canvasOptions(target, plan, options, scale, background));
+  return renderWithRetry(target, plan.scale, (scale, fonts) => canvasOptions(target, plan, options, scale, background, fonts), background);
 }
 
 /**
@@ -211,7 +224,11 @@ export async function captureVisibleContent(): Promise<CaptureResult> {
   const scrollTop = Math.round(main.scrollTop);
   const fit = Math.sqrt(MAX_CANVAS_PIXELS / (width * height));
   const baseScale = Math.max(MIN_SCALE, Math.min(window.devicePixelRatio || 1, MAX_SCALE, fit));
-  const background = getComputedStyle(document.body).backgroundColor || "#ffffff";
+  // Pozadí obsahu stránky (papír), ne těla: tělo má barvu zelené lišty a fotka pak byla tmavě zelená.
+  const mainBackground = getComputedStyle(main).backgroundColor;
+  const background = mainBackground && mainBackground !== "rgba(0, 0, 0, 0)" && mainBackground !== "transparent"
+    ? mainBackground
+    : getComputedStyle(document.documentElement).getPropertyValue("--color-paper").trim() || "#f4efe6";
   const started = performance.now();
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
@@ -219,12 +236,12 @@ export async function captureVisibleContent(): Promise<CaptureResult> {
       timer = setTimeout(() => reject(new Error(`Focení trvalo déle než ${CAPTURE_TIMEOUT_MS / 1000} s`)), CAPTURE_TIMEOUT_MS);
     });
     const blob = await Promise.race([
-      renderWithRetry(main, baseScale, (scale) => ({
+      renderWithRetry(main, baseScale, (scale, fonts) => ({
         scale,
         width,
         height,
         backgroundColor: background,
-        font: false as const,
+        font: fontOption(fonts),
         filter: (node: Node) => !isIgnored(node),
         timeout: MEDIA_TIMEOUT_MS,
         // Kopie `main` ukáže výřez od místa, kam hráč odscrolloval.
@@ -238,7 +255,7 @@ export async function captureVisibleContent(): Promise<CaptureResult> {
             });
           }
         },
-      })),
+      }), background),
       timeout,
     ]);
     return { blob, width, height, truncated: false, ms: Math.round(performance.now() - started) };
@@ -250,7 +267,7 @@ export async function captureVisibleContent(): Promise<CaptureResult> {
   }
 }
 
-function canvasOptions(target: HTMLElement, plan: PagePlan, options: CaptureOptions, scale: number, background: string) {
+function canvasOptions(target: HTMLElement, plan: PagePlan, options: CaptureOptions, scale: number, background: string, fonts: boolean): CanvasOptions {
   const main = target.querySelector("main");
   const column = main?.parentElement ?? null;
   const columnHeight = column && main ? column.clientHeight + (plan.contentHeight - main.clientHeight) : 0;
@@ -259,9 +276,7 @@ function canvasOptions(target: HTMLElement, plan: PagePlan, options: CaptureOpti
     width: plan.width,
     height: plan.height,
     backgroundColor: background,
-    // Bez vkládání webových písem: s nimi je kopie stránky o megabajty větší
-    // a Safari na iPhonu ji nevykreslil (černá fotka). Text je pak v systémovém písmu.
-    font: false as const,
+    font: fontOption(fonts),
     filter: (node: Node) => !isIgnored(node) && !(options.hideBottomNav && isBottomNav(node)),
     timeout: MEDIA_TIMEOUT_MS,
     // Kopie má výšky živé stránky natvrdo ve stylu; `main` a sloupec nad ním se
