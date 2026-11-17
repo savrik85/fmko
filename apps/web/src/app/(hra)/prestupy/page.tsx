@@ -2140,9 +2140,7 @@ export default function TransfersPage() {
 
           {/* ── Organické nabídky hráčů (skauting) ── */}
           {playerOffers.length > 0 && (
-            <div>
-              <SectionLabel>Noví zájemci ({playerOffers.length})</SectionLabel>
-              <div className="space-y-3">
+            <ListCard title="Noví zájemci" count={playerOffers.length}>
                 {playerOffers.map((o) => {
                   const sourceIcon: Record<string, string> = {
                     pub: "🍺", youth: "🌱", friend: "🤝", recommendation: "🏛️",
@@ -2160,19 +2158,20 @@ export default function TransfersPage() {
                   const nowMs = gameDate ? new Date(gameDate).getTime() : Date.now();
                   const daysLeft = Math.max(0, Math.ceil((new Date(o.expiresAt).getTime() - nowMs) / 86400000));
                   return (
-                    <div key={o.id} className="card p-4">
-                      <div className="flex items-start gap-3">
-                        {o.avatar && Object.keys(o.avatar).length > 0
-                          ? <FaceAvatar faceConfig={o.avatar} size={44} className="rounded-full shrink-0 mt-0.5" />
-                          : <div className="w-11 h-11 rounded-full bg-surface shrink-0 mt-0.5 flex items-center justify-center text-xl">{sourceIcon[o.source] ?? "👤"}</div>}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                            <span className="font-heading font-bold text-base">{o.firstName} {o.lastName}</span>
-                            {nationalityFlag((o as { nationality?: string }).nationality) && <span title={(o as { nationality?: string }).nationality}>{nationalityFlag((o as { nationality?: string }).nationality)}</span>}
-                            <PositionBadge position={o.position as "GK" | "DEF" | "MID" | "FWD"} />
-                            <span className="text-sm text-muted">{o.age} let</span>
-                            {isYouth && <span className="text-xs bg-pitch-100 text-pitch-700 px-2 py-0.5 rounded-full font-heading font-bold">{fromAcademy ? (academyVillage ? `Žák z obce ${academyVillage}` : "Žák z akademie") : "Dorostenec"}</span>}
-                          </div>
+                    <ListRow key={o.id} tone="new"
+                      leading={o.avatar && Object.keys(o.avatar).length > 0
+                        ? <FaceAvatar faceConfig={o.avatar} size={36} className="rounded-full" />
+                        : <span className="w-9 h-9 rounded-full bg-surface flex items-center justify-center text-lg">{sourceIcon[o.source] ?? "👤"}</span>}
+                      title={
+                        <span className="inline-flex items-center gap-2 flex-wrap">
+                          {o.firstName} {o.lastName}
+                          {nationalityFlag((o as { nationality?: string }).nationality) && <span title={(o as { nationality?: string }).nationality}>{nationalityFlag((o as { nationality?: string }).nationality)}</span>}
+                          <PositionBadge position={o.position as "GK" | "DEF" | "MID" | "FWD"} />
+                          <span className="text-meta font-normal text-muted">{o.age} let</span>
+                          {isYouth && <span className="text-xs bg-pitch-100 text-pitch-700 px-2 py-0.5 rounded-full font-heading font-bold">{fromAcademy ? (academyVillage ? `Žák z obce ${academyVillage}` : "Žák z akademie") : "Dorostenec"}</span>}
+                        </span>
+                      }
+                      detail={<>
                           <div className="text-xs text-muted mb-1">
                             {sourceIcon[o.source]} <span className="font-heading font-bold text-ink">{o.sourceName}</span>
                           </div>
@@ -2203,8 +2202,7 @@ export default function TransfersPage() {
                             Plat: <span className="font-heading font-bold text-ink">{o.weeklyWage} Kč/týden</span>
                             <span className="ml-3">Vyprší za: <span className={daysLeft <= 1 ? "text-card-red font-bold" : ""}>{daysLeft} {daysLeft === 1 ? "den" : daysLeft < 5 ? "dny" : "dní"}</span></span>
                           </div>
-                        </div>
-                        <div className="flex flex-col gap-2 shrink-0">
+                        <span className="flex flex-wrap items-center gap-2 mt-2">
                           <button
                             disabled={playerOfferLoading === o.id}
                             onClick={async () => {
@@ -2235,36 +2233,33 @@ export default function TransfersPage() {
                             {fromAcademy && !academyVillage ? "Nechat u žáků" : "Odmítnout"}
                           </button>
                           {academyVillage && (
-                            <p className="w-full text-xs text-muted">Jeho klub nemá dorost: když ho nevezmeš, nemá kde hrát a s fotbalem skončí. Za přijetí zaplatíš jeho klubu tabulkové odstupné.</p>
+                            <span className="block w-full text-xs text-muted">Jeho klub nemá dorost: když ho nevezmeš, nemá kde hrát a s fotbalem skončí. Za přijetí zaplatíš jeho klubu tabulkové odstupné.</span>
                           )}
-                        </div>
-                      </div>
-                    </div>
+                        </span>
+                      </>} />
                   );
                 })}
-              </div>
-            </div>
+            </ListCard>
           )}
 
           {incoming.length > 0 && (
-            <div>
-              <SectionLabel>Příchozí nabídky ({incoming.length})</SectionLabel>
-              <div className="space-y-3">
+            <ListCard title="Příchozí nabídky" count={incoming.length}>
                 {incoming.map((o) => {
                   const oAvatar = (() => { try { const raw = (o as any).player_avatar ?? o.avatar; return typeof raw === "string" ? JSON.parse(raw) : raw; } catch { return null; } })();
                   return (
-                  <div key={o.id} className="card p-4">
-                    <div className="flex items-start gap-3 flex-wrap sm:flex-nowrap">
-                      {oAvatar && Object.keys(oAvatar).length > 0
-                        ? <FaceAvatar faceConfig={oAvatar} size={40} className="rounded-full shrink-0 mt-0.5" />
-                        : <div className="w-10 h-10 rounded-full bg-gray-100 shrink-0 mt-0.5" />}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-0.5">
-                          <Link href={`/hrac/${o.player_id}`} className="font-heading font-bold hover:text-pitch-500 underline decoration-pitch-500/20 transition-colors">
-                            {o.first_name} {o.last_name}
-                          </Link>
-                          <PositionBadge position={o.position as "GK" | "DEF" | "MID" | "FWD"} />
-                        </div>
+                  <ListRow key={o.id} tone={o.on_turn === false ? undefined : "warn"}
+                    leading={oAvatar && Object.keys(oAvatar).length > 0
+                      ? <FaceAvatar faceConfig={oAvatar} size={36} className="rounded-full" />
+                      : <span className="w-9 h-9 rounded-full bg-gray-100" />}
+                    title={
+                      <span className="inline-flex items-center gap-2 flex-wrap">
+                        <Link href={`/hrac/${o.player_id}`} className="hover:text-pitch-500 underline decoration-pitch-500/20 transition-colors">
+                          {o.first_name} {o.last_name}
+                        </Link>
+                        <PositionBadge position={o.position as "GK" | "DEF" | "MID" | "FWD"} />
+                      </span>
+                    }
+                    detail={<>
                         {(() => {
                           const ps = (() => { try { const raw = (o as any).player_skills; return typeof raw === "string" ? JSON.parse(raw) : raw; } catch { return null; } })();
                           if (!ps || Object.keys(ps).length === 0) return null;
@@ -2308,8 +2303,7 @@ export default function TransfersPage() {
                         {o.message && <div className="text-xs text-muted mt-1 italic">&ldquo;{o.message}&rdquo;</div>}
                         {o.status === "countered" && <div className="text-xs text-gold-600 mt-1">Protinabídka: {formatCZK(o.counter_amount!)}</div>}
                         {o.on_turn === false && <div className="text-xs text-muted mt-1 italic">Čeká se na odpověď soupeře</div>}
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2 shrink-0 justify-start sm:justify-end w-full sm:w-auto mt-2 sm:mt-0">
+                      <span className="flex flex-wrap items-center gap-2 mt-2">
                         <Link href={`/prestupy/nabidka/${o.id}`} className="py-1.5 px-3 rounded-soft text-sm font-heading font-bold bg-ink text-white hover:bg-ink/80 transition-colors">
                           Jednání →
                         </Link>
@@ -2369,34 +2363,31 @@ export default function TransfersPage() {
                         }} className="py-1.5 px-3 rounded-soft text-sm font-heading font-bold bg-gray-100 text-muted hover:bg-gray-200 transition-colors">
                           Ukončit
                         </button>
-                      </div>
-                    </div>
-                  </div>
+                      </span>
+                    </>} />
                 ); })}
-              </div>
-            </div>
+            </ListCard>
           )}
 
           <AiNegotiationsList teamId={teamId} view="active" />
 
           {outgoing.length > 0 && (
-            <div>
-              <SectionLabel>Moje nabídky ({outgoing.length})</SectionLabel>
-              <div className="space-y-3">
+            <ListCard title="Moje nabídky" count={outgoing.length}>
                 {outgoing.map((o) => {
                   const oAvatar = (() => { try { const raw = (o as any).player_avatar ?? o.avatar; return typeof raw === "string" ? JSON.parse(raw) : raw; } catch { return null; } })();
                   return (
-                  <div key={o.id} className="card p-4">
-                    <div className="flex items-start sm:items-center gap-3 flex-wrap sm:flex-nowrap">
-                      {oAvatar && Object.keys(oAvatar).length > 0
-                        ? <FaceAvatar faceConfig={oAvatar} size={40} className="rounded-full shrink-0" />
-                        : <div className="w-10 h-10 rounded-full bg-gray-100 shrink-0" />}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-0.5">
-                          <span className="font-heading font-bold">{o.first_name} {o.last_name}</span>
-                          <PositionBadge position={o.position as "GK" | "DEF" | "MID" | "FWD"} />
-                          <span className="text-sm text-muted">→ {o.to_team_name}</span>
-                        </div>
+                  <ListRow key={o.id} tone={o.on_turn ? "warn" : undefined}
+                    leading={oAvatar && Object.keys(oAvatar).length > 0
+                      ? <FaceAvatar faceConfig={oAvatar} size={36} className="rounded-full" />
+                      : <span className="w-9 h-9 rounded-full bg-gray-100" />}
+                    title={
+                      <span className="inline-flex items-center gap-2 flex-wrap">
+                        {o.first_name} {o.last_name}
+                        <PositionBadge position={o.position as "GK" | "DEF" | "MID" | "FWD"} />
+                      </span>
+                    }
+                    meta={`→ ${o.to_team_name}`}
+                    detail={<>
                         {(() => {
                           const ps = (() => { try { const raw = (o as any).player_skills; return typeof raw === "string" ? JSON.parse(raw) : raw; } catch { return null; } })();
                           if (!ps || Object.keys(ps).length === 0) return null;
@@ -2422,8 +2413,7 @@ export default function TransfersPage() {
                           })()}
                         </div>
                         <SwapPlayerChips players={o.swap_players ?? []} />
-                      </div>
-                      <div className="flex flex-wrap items-stretch gap-2 shrink-0 justify-start sm:justify-end w-full sm:w-auto mt-2 sm:mt-0">
+                      <span className="flex flex-wrap items-stretch gap-2 mt-2">
                         <Link href={`/prestupy/nabidka/${o.id}`} className="inline-flex items-center justify-center py-1.5 px-3 rounded-soft text-xs font-heading font-bold bg-ink text-white hover:bg-ink/80 transition-colors">
                           Jednání →
                         </Link>
@@ -2473,12 +2463,10 @@ export default function TransfersPage() {
                         }} className="inline-flex items-center justify-center py-1.5 px-3 rounded-soft text-xs font-heading font-bold bg-gray-100 text-muted hover:bg-gray-200 transition-colors">
                           Stáhnout
                         </button>
-                      </div>
-                    </div>
-                  </div>
+                      </span>
+                    </>} />
                 ); })}
-              </div>
-            </div>
+            </ListCard>
           )}
 
           {/* Legacy bidy (před sjednocením s offers) — postupně zmizí */}
@@ -2631,7 +2619,7 @@ export default function TransfersPage() {
           )}
 
           {playerOffers.length === 0 && incoming.length === 0 && outgoing.length === 0 && (
-            <div className="card p-6 text-center text-muted">Žádné aktivní nabídky. Hostování a splátky najdeš v záložce Závazky.</div>
+            <ListCard><ListEmpty icon="🤝">Žádné aktivní nabídky. Hostování a splátky najdeš v záložce Závazky.</ListEmpty></ListCard>
           )}
 
           </>}
@@ -2646,47 +2634,55 @@ export default function TransfersPage() {
             <>
       {/* Loaned out players */}
       {loanedOut.length > 0 && (
-        <div>
-          <SectionLabel>Na hostování (odchozí)</SectionLabel>
-          <div className="space-y-2">
+        <ListCard title="Na hostování (odchozí)" count={loanedOut.length}>
             {loanedOut.map((p) => (
-              <div key={p.id} className="card p-3 flex items-center gap-3 flex-wrap">
-                <Link href={`/hrac/${p.id}`} className="font-heading font-bold text-base hover:text-pitch-500 underline decoration-pitch-500/20 transition-colors">
-                  {p.first_name} {p.last_name}
-                </Link>
-                <PositionBadge position={p.position as "GK" | "DEF" | "MID" | "FWD"} />
-                <span className="text-sm text-muted">→ {p.loan_team_name}</span>
-                <span className="ml-auto text-sm text-yellow-600 font-heading font-bold">
-                  {p.days_left > 0 ? `zpět za ${p.days_left} ${dnySlovem(p.days_left)}` : "vrací se"}
-                  {" · "}{new Date(p.loan_until).toLocaleDateString("cs")}
-                </span>
-                {/* Jak hraje a stažení zpátky (s pravidly o poplatku) jsou v přehledu hostování. */}
-                <Link href="/prestupy?tab=squad&tym=hostovani"
-                  className="shrink-0 py-1 px-3 rounded-soft text-sm font-heading font-bold bg-pitch-500/10 text-pitch-600 hover:bg-pitch-500/20 transition-colors">
-                  Přehled hostování
-                </Link>
-              </div>
+              <ListRow key={p.id}
+                title={
+                  <span className="inline-flex items-center gap-2 flex-wrap">
+                    <Link href={`/hrac/${p.id}`} className="hover:text-pitch-500 underline decoration-pitch-500/20 transition-colors">
+                      {p.first_name} {p.last_name}
+                    </Link>
+                    <PositionBadge position={p.position as "GK" | "DEF" | "MID" | "FWD"} />
+                  </span>
+                }
+                meta={`→ ${p.loan_team_name}`}
+                detail={
+                  <span className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                    <span className="text-yellow-600 font-heading font-bold">
+                      {p.days_left > 0 ? `zpět za ${p.days_left} ${dnySlovem(p.days_left)}` : "vrací se"}
+                      {" · "}{new Date(p.loan_until).toLocaleDateString("cs")}
+                    </span>
+                    {/* Jak hraje a stažení zpátky (s pravidly o poplatku) jsou v přehledu hostování. */}
+                    <Link href="/prestupy?tab=squad&tym=hostovani"
+                      className="py-1 px-3 rounded-soft text-sm font-heading font-bold bg-pitch-500/10 text-pitch-600 hover:bg-pitch-500/20 transition-colors">
+                      Přehled hostování
+                    </Link>
+                  </span>
+                } />
             ))}
-          </div>
-        </div>
+        </ListCard>
       )}
 
       {/* Loaned in players */}
       {loanedIn.length > 0 && (
-        <div>
-          <SectionLabel>Na hostování (příchozí)</SectionLabel>
-          <div className="space-y-2">
+        <ListCard title="Na hostování (příchozí)" count={loanedIn.length}>
             {loanedIn.map((p) => (
-              <div key={p.id} className="card p-3 flex items-center gap-3 flex-wrap">
-                <Link href={`/hrac/${p.id}`} className="font-heading font-bold text-base hover:text-pitch-500 underline decoration-pitch-500/20 transition-colors">
-                  {p.first_name} {p.last_name}
-                </Link>
-                <PositionBadge position={p.position as "GK" | "DEF" | "MID" | "FWD"} />
-                <span className="text-sm text-muted">z {p.owner_team_name}</span>
-                <span className="ml-auto text-sm text-yellow-600 font-heading font-bold">
-                  {p.days_left > 0 ? `končí za ${p.days_left} ${dnySlovem(p.days_left)}` : "končí dnes"}
-                  {" · "}{new Date(p.loan_until).toLocaleDateString("cs")}
-                </span>
+              <ListRow key={p.id}
+                title={
+                  <span className="inline-flex items-center gap-2 flex-wrap">
+                    <Link href={`/hrac/${p.id}`} className="hover:text-pitch-500 underline decoration-pitch-500/20 transition-colors">
+                      {p.first_name} {p.last_name}
+                    </Link>
+                    <PositionBadge position={p.position as "GK" | "DEF" | "MID" | "FWD"} />
+                  </span>
+                }
+                meta={`z ${p.owner_team_name}`}
+                detail={
+                  <span className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                    <span className="text-yellow-600 font-heading font-bold">
+                      {p.days_left > 0 ? `končí za ${p.days_left} ${dnySlovem(p.days_left)}` : "končí dnes"}
+                      {" · "}{new Date(p.loan_until).toLocaleDateString("cs")}
+                    </span>
                 <button
                   onClick={async () => {
                     const ok = await confirm({
@@ -2698,14 +2694,14 @@ export default function TransfersPage() {
                     if (!ok || !teamId) return;
                     if (await apiAction(apiFetch(`/api/teams/${teamId}/loans/${p.id}/terminate`, { method: "POST" }), "Ukončení hostování se nezdařilo")) await refresh();
                   }}
-                  className="shrink-0 py-1 px-3 rounded-soft text-xs font-heading font-bold bg-card-red/10 text-card-red hover:bg-card-red/20 transition-colors"
+                  className="py-1 px-3 rounded-soft text-xs font-heading font-bold bg-card-red/10 text-card-red hover:bg-card-red/20 transition-colors"
                 >
                   Ukončit
                 </button>
-              </div>
+                  </span>
+                } />
             ))}
-          </div>
-        </div>
+        </ListCard>
       )}
             </>
           ) : null}
