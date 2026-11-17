@@ -403,7 +403,7 @@ export function Napoveda() {
         setCapture(await capturePage());
         return;
       }
-      const result = await capturePage({ hideBottomNav: true });
+      const result = await capturePage({ hideBottomNav: true, visibleOnly: true });
       if (!result.blob) { setShare({ canvas: null, error: result.error }); return; }
       try {
         setShare({ canvas: await brandScreenshot(result.blob, result.width, teamName) });
