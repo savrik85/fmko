@@ -119,7 +119,7 @@ export function SquadBodyTab({ teamId, filter }: { teamId: string; filter: PosFi
 
       <ListCard>
         <DataTable rows={rows} rowKey={(p) => p.id}
-          rowHref={(p) => `/hrac/${p.id}`} scroll={{ minWidth: 720 }}
+          rowHref={(p) => `/hrac/${p.id}`} scroll={{ minWidth: "content" }}
           // Hráči s problémem s váhou mají zlatý proužek; dřív se ostatní řádky jen ztlumily.
           rowTone={(p) => (p.problem ? { bar: "warn" } : undefined)}
           empty="Žádní hráči neodpovídají filtru."

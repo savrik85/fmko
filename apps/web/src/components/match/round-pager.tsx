@@ -1,5 +1,7 @@
 "use client";
 
+import { choiceClass } from "@/components/ui/choice";
+
 /**
  * Stránkování kol: šipky na předchozí a další kolo a řada kol k přímému skoku.
  * Ukazuje vždy jen jedno kolo — v poháru jich je deset a pod sebou se v nich nedalo vyznat.
@@ -13,11 +15,11 @@ export interface RoundPage {
   label: string;
 }
 
-export function RoundPager({ pages, initialKey, accent, children }: {
+// Vybrané kolo má vzhled B jako ostatní volby a záložky (světle zelená se zeleným
+// rámečkem); vlastní barva turnaje se tu už nepoužívá, aby výběr vypadal všude stejně.
+export function RoundPager({ pages, initialKey, children }: {
   pages: RoundPage[];
   initialKey?: string | null;
-  /** Barva aktivního kola (výchozí tmavá ink). */
-  accent?: string | null;
   children: (key: string) => ReactNode;
 }) {
   const [current, setCurrent] = useState<string | null>(initialKey ?? pages.at(-1)?.key ?? null);
@@ -72,10 +74,7 @@ export function RoundPager({ pages, initialKey, accent, children }: {
                 aria-selected={active}
                 aria-current={active ? "true" : undefined}
                 onClick={() => setCurrent(p.key)}
-                style={active && accent ? { background: accent, borderColor: accent } : undefined}
-                className={`shrink-0 px-3 h-10 rounded-full text-sm font-heading font-bold whitespace-nowrap border transition-colors ${
-                  active ? "bg-ink text-white border-ink" : "bg-white text-ink/70 border-gray-200 hover:border-pitch-300"
-                }`}
+                className={`shrink-0 px-3 h-10 text-sm font-heading font-bold whitespace-nowrap ${choiceClass(active)}`}
               >
                 {p.label}
               </button>

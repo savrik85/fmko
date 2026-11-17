@@ -6,6 +6,7 @@ export const ADMIN_TABS = [
   { key: "ai", label: "AI kluby", icon: "🤖" },
   { key: "hra", label: "Hra", icon: "⏭️" },
   { key: "lide", label: "Lidé", icon: "👥" },
+  { key: "hlaseni", label: "Hlášení", icon: "🐞" },
   { key: "data", label: "Data", icon: "🗂️" },
 ] as const satisfies ReadonlyArray<TabItem>;
 

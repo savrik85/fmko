@@ -53,6 +53,17 @@ function isIgnored(node: Node): boolean {
   return node instanceof Element && node.hasAttribute(IGNORE_ATTRIBUTE);
 }
 
+/** Spodní lišta a výplň pod ní (layout hry); na fotce ke sdílení jen překáží. */
+function isBottomNav(node: Node): boolean {
+  return node instanceof Element
+    && (node.classList.contains("app-bottom-nav") || node.classList.contains("app-bottom-safe-area"));
+}
+
+export interface CaptureOptions {
+  /** Bez spodní lišty: fotka ke sdílení, ne hlášení chyby. */
+  hideBottomNav?: boolean;
+}
+
 export interface PagePlan {
   width: number;
   /** Výška fotky v CSS pixelech: lišty + vyfocený obsah. */
@@ -102,7 +113,7 @@ function loadLazyImages(target: HTMLElement): void {
   });
 }
 
-async function renderFullPage(target: HTMLElement, plan: PagePlan): Promise<Blob> {
+async function renderFullPage(target: HTMLElement, plan: PagePlan, options: CaptureOptions): Promise<Blob> {
   loadLazyImages(target);
   const { domToBlob } = await import("modern-screenshot");
   const main = target.querySelector("main");
@@ -115,7 +126,7 @@ async function renderFullPage(target: HTMLElement, plan: PagePlan): Promise<Blob
     width: plan.width,
     height: plan.height,
     backgroundColor: getComputedStyle(document.body).backgroundColor,
-    filter: (node) => !isIgnored(node),
+    filter: (node) => !isIgnored(node) && !(options.hideBottomNav && isBottomNav(node)),
     timeout: MEDIA_TIMEOUT_MS,
     // Kopie má výšky živé stránky natvrdo ve stylu; `main` a sloupec nad ním se
     // natáhnou na vyfocený obsah, aby se nescrollovalo. Živá stránka se nemění.
@@ -140,8 +151,11 @@ async function renderFullPage(target: HTMLElement, plan: PagePlan): Promise<Blob
       }
       // Spodní lišta a výplň pod ní mají v kopii vypočtené `top` z displeje
       // (např. 749px) a zůstaly by uprostřed dlouhé fotky. Ke spodku je vrátí `top: auto`.
+      // V nainstalované aplikaci na iPhonu je lišta `absolute` (globals.css, standalone),
+      // jinde `fixed`. `top: 0px` mají překryvy přes celou plochu (inset-0), ty zůstávají.
       cloned.querySelectorAll<HTMLElement>("*").forEach((el) => {
-        if (el.style.position === "fixed" && el.style.bottom === "0px") {
+        const { position, top, bottom } = el.style;
+        if ((position === "fixed" || position === "absolute") && bottom === "0px" && top !== "0px") {
           el.style.setProperty("top", "auto", "important");
         }
       });
@@ -150,7 +164,7 @@ async function renderFullPage(target: HTMLElement, plan: PagePlan): Promise<Blob
 }
 
 /** Vyfotí celou stránku hry. Nikdy nevyhodí: chyba je v `error`, `blob` je pak `null`. */
-export async function capturePage(): Promise<CaptureResult> {
+export async function capturePage(options: CaptureOptions = {}): Promise<CaptureResult> {
   const target = captureTarget();
   const main = target.querySelector("main");
   const plan = planPageCapture({
@@ -168,7 +182,7 @@ export async function capturePage(): Promise<CaptureResult> {
     const timeout = new Promise<never>((_, reject) => {
       timer = setTimeout(() => reject(new Error(`Focení trvalo déle než ${CAPTURE_TIMEOUT_MS / 1000} s`)), CAPTURE_TIMEOUT_MS);
     });
-    const blob = await Promise.race([renderFullPage(target, plan), timeout]);
+    const blob = await Promise.race([renderFullPage(target, plan, options), timeout]);
     return { ...base, blob, ms: Math.round(performance.now() - started) };
   } catch (e) {
     console.error("Focení stránky selhalo:", e);

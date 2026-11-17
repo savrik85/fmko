@@ -2,9 +2,13 @@
 
 import { useEffect, useRef, useState, type Ref } from "react";
 import { usePathname } from "next/navigation";
-import { HelpMenu } from "./help-menu";
-import { BugReportTrialDialog } from "@/components/bug-report/bug-report-trial-dialog";
+import { HelpMenu, type CaptureAction } from "./help-menu";
+import { BugReportDialog } from "@/components/bug-report/bug-report-dialog";
+import { ShareScreenshotDialog } from "@/components/share/share-screenshot-dialog";
+import { useTeam } from "@/context/team-context";
 import { capturePage, type CaptureResult } from "@/lib/page-capture";
+import { installDiagnostics, recordPageVisit } from "@/lib/client-diagnostics";
+import { brandScreenshot } from "@/lib/share-screenshot";
 
 /** Počká, až prohlížeč vykreslí „Fotím stránku…“, než ho focení na chvíli zablokuje. */
 function nextPaint(): Promise<void> {
@@ -371,29 +375,53 @@ export function Napoveda() {
   const help = findHelp(pathname);
 
   // Přechod na jinou stránku menu i nápovědu zavře; nápověda patří stránce.
-  useEffect(() => { setMode("closed"); }, [pathname]);
+  // Zároveň se stránka zapíše do podrobností k případnému hlášení chyby.
+  useEffect(() => {
+    setMode("closed");
+    installDiagnostics();
+    recordPageVisit(pathname);
+  }, [pathname]);
+
+  const { teamId, teamName } = useTeam();
 
   // Focení: ref hlídá dvojí ťuknutí ještě před překreslením, stav ukazuje „Fotím stránku…“.
   const capturingRef = useRef(false);
-  const [capturing, setCapturing] = useState(false);
+  const [busyAction, setBusyAction] = useState<CaptureAction | null>(null);
   const [capture, setCapture] = useState<CaptureResult | null>(null);
+  const [share, setShare] = useState<{ canvas: HTMLCanvasElement | null; error?: string } | null>(null);
 
   // Menu zůstává během focení otevřené s „Fotím stránku…“: je mimo `.app-shell`
   // (portál), na snímek se nedostane, a jeho průhledná vrstva nepustí ťuknutí
   // na stránku pod ním. Zavřít ho do konce focení nejde.
-  const reportBug = async () => {
+  const runCapture = async (action: CaptureAction) => {
     if (capturingRef.current) return;
     capturingRef.current = true;
-    setCapturing(true);
+    setBusyAction(action);
     try {
       await nextPaint();
-      setCapture(await capturePage());
+      if (action === "bug") {
+        setCapture(await capturePage());
+        return;
+      }
+      const result = await capturePage({ hideBottomNav: true });
+      if (!result.blob) { setShare({ canvas: null, error: result.error }); return; }
+      try {
+        setShare({ canvas: await brandScreenshot(result.blob, result.width, teamName) });
+      } catch (e) {
+        console.error("Pruh na fotku stránky:", e);
+        setShare({ canvas: null, error: e instanceof Error ? e.message : String(e) });
+      }
     } finally {
       capturingRef.current = false;
-      setCapturing(false);
+      setBusyAction(null);
       setMode("closed");
     }
   };
+
+  const pageSlug = pathname.split("/").filter(Boolean)[0] ?? "prehled";
+  const inviteUrl = typeof window !== "undefined"
+    ? (teamId ? `${window.location.origin}/pozvanka/${teamId}` : window.location.origin)
+    : "";
 
   const closeMenu = () => {
     if (capturingRef.current) return;
@@ -404,24 +432,34 @@ export function Napoveda() {
     <>
       <HelpButton
         // Během focení je menu otevřené, ale na snímku má být v kroužku „?“, ne křížek.
-        open={mode !== "closed" && !capturing}
+        open={mode !== "closed" && busyAction == null}
         onClick={() => (mode === "closed" ? setMode("menu") : closeMenu())}
         variant="bar"
-        label="Nápověda a nahlášení chyby"
+        label="Nápověda, fotka a hlášení"
         buttonRef={setAnchor}
       />
       {mode === "menu" && (
         <HelpMenu
           anchor={anchor}
           hasHelp={help != null}
-          busy={capturing}
+          busyAction={busyAction}
           onShowHelp={() => setMode("help")}
-          onReportBug={reportBug}
+          onShareScreenshot={() => runCapture("share")}
+          onReportBug={() => runCapture("bug")}
           onClose={closeMenu}
         />
       )}
       {mode === "help" && help && <HelpPanel help={help} onClose={() => setMode("closed")} />}
-      {capture && <BugReportTrialDialog result={capture} onClose={() => setCapture(null)} />}
+      {capture && <BugReportDialog capture={capture} teamId={teamId} onClose={() => setCapture(null)} />}
+      {share && (
+        <ShareScreenshotDialog
+          canvas={share.canvas}
+          error={share.error}
+          fileName={`prales-${pageSlug}`}
+          shareText={`Hraju Prales, okresní fotbalový manažer. Přidej se: ${inviteUrl}`}
+          onClose={() => setShare(null)}
+        />
+      )}
     </>
   );
 }

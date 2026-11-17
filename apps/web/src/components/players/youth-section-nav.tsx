@@ -7,6 +7,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { choiceClass } from "@/components/ui/choice";
 
 const SECTIONS = [
   { href: "/u21", label: "U21", note: "dorost, hraje svoji ligu" },
@@ -24,12 +25,10 @@ export function YouthSectionNav() {
             key={s.href}
             href={s.href}
             aria-current={active ? "page" : undefined}
-            className={`rounded-soft border px-3 py-2.5 min-h-11 text-center transition-colors ${
-              active ? "border-pitch-500 bg-pitch-500 text-white" : "border-gray-200 bg-white text-ink hover:border-pitch-500"
-            }`}
+            className={`px-3 py-2.5 min-h-11 text-center ${choiceClass(active)}`}
           >
             <span className="block font-heading font-bold text-sm">{s.label}</span>
-            <span className={`block text-xs ${active ? "text-white/80" : "text-muted"}`}>{s.note}</span>
+            <span className={`block text-xs ${active ? "text-pitch-600/80" : "text-muted"}`}>{s.note}</span>
           </Link>
         );
       })}

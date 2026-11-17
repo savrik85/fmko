@@ -9,6 +9,7 @@ import { SectionLabel, Tabs, useTabParam } from "@/components/ui";
 import { AiCoachSection } from "./ai-coach-section";
 import { DashboardSection } from "./dashboard-section";
 import { SocialReportsSection } from "./social-reports-section";
+import { BugReportsSection } from "./bug-reports-section";
 import { ADMIN_TAB_KEYS, ADMIN_TABS, type AdminTab } from "./admin-tabs";
 
 interface SeedTable { key: string; label: string; count: number; editable: boolean; districts?: string[] }
@@ -91,6 +92,8 @@ export default function AdminPage() {
           <SocialReportsSection />
         </div>
       )}
+
+      {tab === "hlaseni" && <BugReportsSection />}
 
       {tab === "data" && (
         <div className="space-y-3">

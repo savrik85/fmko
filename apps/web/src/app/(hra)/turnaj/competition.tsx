@@ -333,7 +333,6 @@ export function CompetitionView({
           <RoundPager
             pages={days.map((d) => ({ key: String(d), label: dayShortTitle(byDay(d)) }))}
             initialKey={initial != null ? String(initial) : null}
-            accent={BRAND}
           >
             {(key) => {
               const d = Number(key);
