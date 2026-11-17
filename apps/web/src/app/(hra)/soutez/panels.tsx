@@ -10,7 +10,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { apiAction, apiFetch } from "@/lib/api";
 import { CoachName } from "@/components/manager/coach-name";
-import { Modal } from "@/components/ui";
+import { Modal, ListRow, RowValue } from "@/components/ui";
 import { EntityLink } from "@/components/ui";
 import { licenceLabel } from "@okresni-masina/shared";
 import { DecisionPill } from "@/components/dashboard/gremium-vyveska";
@@ -171,20 +171,13 @@ export function PokladnaPanel({ state, ledger }: {
         <div className="card p-5">
           <Ornament right={`${ledger.entries.length} posledních`}>Pohyby</Ornament>
           {ledger.entries.length === 0 && <div className="text-sm text-muted">Zatím žádné pohyby.</div>}
-          <div className="divide-y" style={{ borderColor: "var(--color-line)" }}>
+          {/* Řádky jako ve zbytku hry; úřední nadpis s ornamentem zůstává. */}
+          <div className="-mx-5 -mb-5 border-t border-line">
             {ledger.entries.map((e) => (
-              <div key={e.id} className="flex items-start justify-between gap-3 py-2">
-                <div className="min-w-0">
-                  <div className="text-sm break-words">{e.description}</div>
-                  <div className="text-xs text-muted break-words">
-                    {LEDGER_LABEL[e.type] ?? e.type}
-                    {e.team_name && e.team_id && <> · <EntityLink type="team" id={e.team_id}>{e.team_name}</EntityLink></>}
-                  </div>
-                </div>
-                <div className={`text-sm tabular-nums shrink-0 ${e.amount < 0 ? "text-danger" : ""}`}>
-                  {signed(e.amount)}
-                </div>
-              </div>
+              <ListRow key={e.id}
+                title={e.description}
+                meta={<>{LEDGER_LABEL[e.type] ?? e.type}{e.team_name && e.team_id && <> · <EntityLink type="team" id={e.team_id}>{e.team_name}</EntityLink></>}</>}
+                trailing={<RowValue tone={e.amount < 0 ? "minus" : undefined}>{signed(e.amount)}</RowValue>} />
             ))}
           </div>
         </div>
@@ -1078,25 +1071,27 @@ export function ZapisyPanel({ meetings }: { meetings: Meeting[] }) {
               ? ` · k usnesení bylo potřeba ${m.attendance.quorum} ${plural(m.attendance.quorum, "hlas", "hlasy", "hlasů")}, aktivních klubů ${m.attendance.active ?? 0}`
               : ""}
           </div>
-          <div className="divide-y" style={{ borderColor: "var(--color-line)" }}>
+          <div className="-mx-5 -mb-5 border-t border-line">
             {m.items?.map((it, i) => (
-              <div key={i} className="flex items-start justify-between gap-3 py-2">
-                <div className="text-sm min-w-0 break-words">
-                  {it.title}
-                  {/* Volba je tajná — do zápisu jde jen jméno vítěze, nikdy poměr hlasů. */}
-                  {it.resultNote && <div className="text-muted break-words">{it.resultNote}</div>}
-                  {/* Poměr sám o sobě neřekne, jak bod dopadl: u kvalifikované
-                      většiny je 4:3 zamítnutí, u prosté přijetí. */}
-                  {typeof it.pro === "number" && typeof it.proti === "number" && (
-                    <div className="text-muted tabular-nums">
-                      {`${it.pro}:${it.proti}${it.zdrzel ? ` (${it.zdrzel} se zdrželo)` : ""}`}
-                    </div>
-                  )}
-                </div>
-                {/* Dřív tu u pokuty za pravidlo svítilo „zvoleno" — štítek se
-                    řídil jen stavem a o druhu bodu nevěděl. */}
-                <DecisionPill kind={it.kind} status={it.status} />
-              </div>
+              <ListRow key={i}
+                title={it.title}
+                detail={
+                  <>
+                    {/* Štítek pod názvem, ne vpravo: široký štítek by usekl název bodu.
+                        Dřív tu u pokuty za pravidlo svítilo „zvoleno" — štítek se
+                        řídil jen stavem a o druhu bodu nevěděl. */}
+                    <span className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-0.5">
+                      <DecisionPill kind={it.kind} status={it.status} />
+                      {/* Volba je tajná — do zápisu jde jen jméno vítěze, nikdy poměr hlasů. */}
+                      {it.resultNote && <span>{it.resultNote}</span>}
+                    </span>
+                    {/* Poměr sám o sobě neřekne, jak bod dopadl: u kvalifikované
+                        většiny je 4:3 zamítnutí, u prosté přijetí. */}
+                    {typeof it.pro === "number" && typeof it.proti === "number" && (
+                      <span className="block tabular-nums text-muted">{`${it.pro}:${it.proti}${it.zdrzel ? ` (${it.zdrzel} se zdrželo)` : ""}`}</span>
+                    )}
+                  </>
+                } />
             ))}
           </div>
         </div>

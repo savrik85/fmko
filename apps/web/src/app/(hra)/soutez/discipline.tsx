@@ -10,7 +10,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { apiAction, apiFetch } from "@/lib/api";
 import { CoachName } from "@/components/manager/coach-name";
-import { EntityLink, Modal } from "@/components/ui";
+import { EntityLink, Modal, ListRow, RowValue } from "@/components/ui";
 import { Empty, OpenProposalNote, Ornament, PersonLine, Portrait, Rozbaleni, StatusPill, czk, plural } from "./ui";
 import type { DisciplineData, PitchData, PitchRow, Sanction, State } from "./types";
 
@@ -336,7 +336,7 @@ function PitchOverview({ pitches }: { pitches: PitchData }) {
 
   return (
     <Rozbaleni title="Stav hřišť" right={`${teams.length} ${plural(teams.length, "klub", "kluby", "klubů")}`} note={note}>
-      <div className="divide-y" style={{ borderColor: "var(--color-line)" }}>
+      <div className="-mx-4 sm:-mx-5 mt-3 border-t border-line">
         {teams.map((t) => <PitchLine key={t.teamId} t={t} limit={limit} />)}
       </div>
       {/* Pomlčka místo čísla vypadá jako chyba dat, a přitom je to nepostavené
@@ -363,21 +363,14 @@ function pitchColor(pitch: number | null, limit: number): string {
 function PitchLine({ t, limit }: { t: PitchRow; limit: number }) {
   const barva = pitchColor(t.pitch, limit);
   return (
-    <div className="flex items-center gap-3 py-2.5">
-      <div className="min-w-0 flex-1">
-        <div className="text-base font-semibold break-words">
-          <EntityLink type="team" id={t.teamId}>{t.teamName}</EntityLink>
-          {t.breaches && <span className="text-sm" style={{ color: "#A32B1F" }}> · pod hranicí</span>}
-        </div>
-        {/* Pruh nese stav rychleji než číslo — na mobilu se čte jedním pohledem. */}
-        <div className="h-1.5 rounded-full mt-1.5 overflow-hidden" style={{ background: "var(--color-line)" }}>
-          <div className="h-full rounded-full"
-            style={{ width: `${Math.max(0, Math.min(100, t.pitch ?? 0))}%`, background: barva }} />
-        </div>
-      </div>
-      <div className="text-lg font-heading tabular-nums shrink-0" style={{ color: barva }}>
-        {t.pitch ?? "-"}
-      </div>
-    </div>
+    <ListRow tone={t.breaches ? "danger" : undefined}
+      title={<><EntityLink type="team" id={t.teamId}>{t.teamName}</EntityLink>{t.breaches && <span className="text-meta font-normal" style={{ color: "#A32B1F" }}> · pod hranicí</span>}</>}
+      // Pruh nese stav rychleji než číslo, na mobilu se čte jedním pohledem.
+      detail={
+        <span className="block h-1.5 rounded-full mt-1 overflow-hidden" style={{ background: "var(--color-line)" }}>
+          <span className="block h-full rounded-full" style={{ width: `${Math.max(0, Math.min(100, t.pitch ?? 0))}%`, background: barva }} />
+        </span>
+      }
+      trailing={<RowValue><span style={{ color: barva }}>{t.pitch ?? "-"}</span></RowValue>} />
   );
 }

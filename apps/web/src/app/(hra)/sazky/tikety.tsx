@@ -1,6 +1,6 @@
 "use client";
 
-import { SectionLabel } from "@/components/ui";
+import { SectionLabel, ListRow, RowValue } from "@/components/ui";
 import { useState } from "react";
 import { apiAction, apiFetch } from "@/lib/api";
 import { Sheet } from "@/components/ui";
@@ -47,21 +47,14 @@ function TiketKarta({ t, teamId, onZmena }: { t: Tiket; teamId: string; onZmena:
         )}
       </div>
 
-      <ol className="divide-y divide-gray-50">
+      <ol className="divide-y divide-line-soft">
         {t.selections.map((s) => (
-          <li key={`${s.matchId}-${s.label}`} className="flex items-start gap-2 px-3 py-2.5">
-            <span className="mt-0.5"><IkonaTipu stav={s.result} /></span>
-            <div className="flex-1 min-w-0">
-              <div className="text-base font-semibold leading-tight break-words">{s.zapas}</div>
-              <div className="text-sm text-muted leading-tight break-words">
-                {s.label}
-                {s.vysledek && <> · <span className="tabular-nums text-ink">{s.vysledek}</span></>}
-              </div>
-            </div>
-            <span className={`text-base font-heading font-bold tabular-nums shrink-0
-                             ${s.result === "lost" ? "text-muted line-through" : ""}`}>
-              {kurz(s.oddsX100)}
-            </span>
+          <li key={`${s.matchId}-${s.label}`}>
+            <ListRow
+              leading={<IkonaTipu stav={s.result} />}
+              title={s.zapas}
+              detail={<>{s.label}{s.vysledek && <> · <span className="tabular-nums text-ink">{s.vysledek}</span></>}</>}
+              trailing={<RowValue><span className={s.result === "lost" ? "text-muted line-through" : ""}>{kurz(s.oddsX100)}</span></RowValue>} />
           </li>
         ))}
       </ol>

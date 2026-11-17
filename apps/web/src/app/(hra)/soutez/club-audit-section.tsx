@@ -10,7 +10,7 @@
 
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
-import { EntityLink, Modal } from "@/components/ui";
+import { EntityLink, Modal, ListRow, RowValue, RowIcon } from "@/components/ui";
 import { TXN_ICONS, TXN_LABELS } from "@/lib/transaction-labels";
 import { Rozbaleni, czk, formatDate, plural } from "./ui";
 
@@ -45,18 +45,12 @@ function signedCzk(n: number): string {
 
 function ItemRow({ item }: { item: LedgerItem }) {
   return (
-    <li className="py-2 flex items-baseline gap-2">
-      <span className="text-sm shrink-0" aria-hidden="true">{TXN_ICONS[item.type] ?? "📋"}</span>
-      <div className="min-w-0 flex-1">
-        <div className="text-sm leading-snug">{item.description || TXN_LABELS[item.type] || item.type}</div>
-        <div className="text-micro text-muted">
-          {TXN_LABELS[item.type] ?? item.type}
-          {item.gameDate && ` · ${formatDate(item.gameDate)}`}
-        </div>
-      </div>
-      <span className="text-sm font-heading font-bold tabular-nums shrink-0" style={amountStyle(item.amount)}>
-        {signedCzk(item.amount)}
-      </span>
+    <li>
+      <ListRow
+        leading={<RowIcon>{TXN_ICONS[item.type] ?? "📋"}</RowIcon>}
+        title={item.description || TXN_LABELS[item.type] || item.type}
+        meta={`${TXN_LABELS[item.type] ?? item.type}${item.gameDate ? ` · ${formatDate(item.gameDate)}` : ""}`}
+        trailing={<RowValue><span style={amountStyle(item.amount)}>{signedCzk(item.amount)}</span></RowValue>} />
     </li>
   );
 }
@@ -115,25 +109,22 @@ export function ClubAuditSection({ teamId }: { teamId: string }) {
           <p className="text-sm text-muted">V soutěži není žádný další klub s trenérem.</p>
         )}
         {targets && targets.length > 0 && (
-          <ul className="divide-y divide-gray-50">
+          <ul className="-mx-4 sm:-mx-5 mt-3 border-t border-line divide-y divide-line-soft">
             {targets.map((t) => (
-              <li key={t.teamId} className="py-2.5 flex items-center gap-3">
-                <div className="min-w-0 flex-1">
-                  <EntityLink type="team" id={t.teamId} className="text-base font-semibold truncate block">
-                    {t.name}
-                  </EntityLink>
-                  <div className="text-sm text-muted">
-                    {t.auditedAt ? `Revidováno ${formatDate(t.auditedAt)}` : "Letos bez revize"}
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => openAudit(t)}
-                  disabled={loadingId !== null}
-                  className="shrink-0 min-h-10 px-4 rounded-soft border border-gray-200 bg-white font-heading font-bold text-sm cursor-pointer disabled:opacity-50"
-                >
-                  {loadingId === t.teamId ? "Načítám…" : t.auditedAt ? "Otevřít" : "Nahlédnout"}
-                </button>
+              <li key={t.teamId}>
+                <ListRow
+                  title={<EntityLink type="team" id={t.teamId}>{t.name}</EntityLink>}
+                  meta={t.auditedAt ? `Revidováno ${formatDate(t.auditedAt)}` : "Letos bez revize"}
+                  trailing={
+                    <button
+                      type="button"
+                      onClick={() => openAudit(t)}
+                      disabled={loadingId !== null}
+                      className="btn btn-md btn-secondary disabled:opacity-50"
+                    >
+                      {loadingId === t.teamId ? "Načítám…" : t.auditedAt ? "Otevřít" : "Nahlédnout"}
+                    </button>
+                  } />
               </li>
             ))}
           </ul>
@@ -210,7 +201,7 @@ export function ClubAuditSection({ teamId }: { teamId: string }) {
             {audit.largest.length > 0 && (
               <div>
                 <div className="section-label mb-1">Největší položky</div>
-                <ul className="divide-y divide-gray-50">
+                <ul className="divide-y divide-line-soft -mx-4">
                   {audit.largest.map((item, i) => <ItemRow key={i} item={item} />)}
                 </ul>
               </div>
@@ -221,7 +212,7 @@ export function ClubAuditSection({ teamId }: { teamId: string }) {
                 <summary className="cursor-pointer text-sm font-semibold">
                   Všechny položky ({audit.items.length})
                 </summary>
-                <ul className="divide-y divide-gray-50 mt-1">
+                <ul className="divide-y divide-line-soft mt-1 -mx-4">
                   {audit.items.map((item, i) => <ItemRow key={i} item={item} />)}
                 </ul>
               </details>

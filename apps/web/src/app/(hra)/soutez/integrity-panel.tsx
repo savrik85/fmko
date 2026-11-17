@@ -10,7 +10,7 @@
 
 import { useEffect, useState } from "react";
 import { apiAction, apiFetch } from "@/lib/api";
-import { Modal, EntityLink } from "@/components/ui";
+import { Modal, EntityLink, ListRow, RowValue } from "@/components/ui";
 import { Empty, Ornament, Rozbaleni, czk, plural } from "./ui";
 import { ClubAuditSection } from "./club-audit-section";
 import type { State } from "./types";
@@ -148,32 +148,20 @@ export function IntegrityPanel({ state, teamId, jsemKomisar, onChanged }: {
       >
         {data.transfers.length > 0 && (
           <>
-            <ul className="divide-y divide-gray-50">
+            <ul className="-mx-4 sm:-mx-5 mt-3 border-t border-line divide-y divide-line-soft">
               {data.transfers.map((t, i) => (
-                <li key={i} className="py-2.5">
-                  <div className="flex items-baseline justify-between gap-2 flex-wrap">
-                    <span className="text-base font-semibold">
-                      {t.playerId
-                        ? <EntityLink type="player" id={t.playerId}>{t.hrac}</EntityLink>
-                        : t.hrac}
-                    </span>
-                    <span className="text-sm font-heading font-bold tabular-nums shrink-0">
-                      {/* U výměny nese peníze jen jedna strana; „zdarma" by u té
-                          druhé lhalo, protihodnotou byl hráč. */}
-                      {t.castka > 0
-                        ? (t.vymena ? `doplatek ${czk(t.castka)}` : czk(t.castka))
-                        : t.vymena ? "bez doplatku" : "zdarma"}
-                    </span>
-                  </div>
-                  <div className="text-sm text-muted leading-snug">
-                    {t.druh} · {t.zKlubu ?? "volný hráč"} → {t.doKlubu}
-                    {t.vymena && t.protihrac && ` · za ${t.protihrac}`}
-                  </div>
-                  {t.priznaky.map((p, j) => (
-                    <div key={j} className="text-sm mt-1 leading-snug" style={{ color: "#A32B1F" }}>
-                      ⚠ {p}
-                    </div>
-                  ))}
+                <li key={i}>
+                  <ListRow tone={t.priznaky.length > 0 ? "danger" : undefined}
+                    title={t.playerId ? <EntityLink type="player" id={t.playerId}>{t.hrac}</EntityLink> : t.hrac}
+                    /* Odkud kam je u kontroly přestupu hlavní údaj, proto zalamovací
+                       řádek a ne `meta`, která by cílový klub na telefonu usekla. */
+                    detail={<>
+                      <span className="block text-muted">{`${t.druh} · ${t.zKlubu ?? "volný hráč"} → ${t.doKlubu}${t.vymena && t.protihrac ? ` · za ${t.protihrac}` : ""}`}</span>
+                      {t.priznaky.map((p, j) => <span key={j} className="block" style={{ color: "#A32B1F" }}>⚠ {p}</span>)}
+                    </>}
+                    /* U výměny nese peníze jen jedna strana; „zdarma" by u té
+                       druhé lhalo, protihodnotou byl hráč. */
+                    trailing={<RowValue>{t.castka > 0 ? (t.vymena ? `doplatek ${czk(t.castka)}` : czk(t.castka)) : t.vymena ? "bez doplatku" : "zdarma"}</RowValue>} />
                 </li>
               ))}
             </ul>
@@ -190,48 +178,31 @@ export function IntegrityPanel({ state, teamId, jsemKomisar, onChanged }: {
           : "Všechny tikety klubů soutěže včetně těch, které ještě běží. Kromě tebe do ní vidí jen prezident soutěže."}
       >
         {data.tickets.length > 0 && (
-          <ul className="divide-y divide-gray-50">
+          <ul className="-mx-4 sm:-mx-5 mt-3 border-t border-line divide-y divide-line-soft">
             {data.tickets.map((t) => {
               const s = STAV[t.status] ?? STAV.open;
               return (
-                <li key={t.ticketId} className="py-2.5">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-micro font-heading font-bold uppercase tracking-wide px-2 py-0.5 rounded-full"
-                          style={{ background: s.bg, color: s.fg }}>
-                      {s.label}
-                    </span>
-                    <EntityLink type="team" id={t.teamId} className="text-base font-semibold truncate">
-                      {t.teamName}
-                    </EntityLink>
-                    <span className="font-commentary text-micro tabular-nums tracking-widest text-muted">
-                      č. {t.cislo}
-                    </span>
-                    {t.gameWeek != null && (
-                      <span className="ml-auto text-micro text-muted tabular-nums">{t.gameWeek}. kolo</span>
-                    )}
-                  </div>
-
-                  <div className="text-sm text-muted mt-1 leading-snug">
-                    {t.tipy.map((x) => `${x.zapas} ${x.label}`).join(" + ")}
-                  </div>
-
-                  <div className="flex items-center gap-3 mt-1 flex-wrap text-sm tabular-nums">
-                    <span>vklad <b className="font-heading">{czk(t.stake)}</b></span>
-                    <span className="text-gray-300">·</span>
-                    <span>kurz <b className="font-heading">{kurz(t.totalOddsX100)}</b></span>
-                    {t.payout > 0 && (
+                <li key={t.ticketId}>
+                  <ListRow
+                    title={<EntityLink type="team" id={t.teamId}>{t.teamName}</EntityLink>}
+                    meta={<><span className="font-commentary tabular-nums tracking-widest">č. {t.cislo}</span>{t.gameWeek != null && ` · ${t.gameWeek}. kolo`}</>}
+                    detail={
                       <>
-                        <span className="text-gray-300">·</span>
-                        <span className="text-pitch-600">výplata <b className="font-heading">{czk(t.payout)}</b></span>
+                        <span className="block">{t.tipy.map((x) => `${x.zapas} ${x.label}`).join(" + ")}</span>
+                        <span className="flex items-center gap-3 mt-1 flex-wrap tabular-nums">
+                          <span>vklad <b className="font-heading">{czk(t.stake)}</b></span>
+                          <span>kurz <b className="font-heading">{kurz(t.totalOddsX100)}</b></span>
+                          {t.payout > 0 && <span className="text-pitch-600">výplata <b className="font-heading">{czk(t.payout)}</b></span>}
+                          {jsemKomisar && t.status === "won" && t.teamId !== teamId && (
+                            <button type="button" onClick={() => { setZabavit(t); setDuvod(""); }}
+                              className="ml-auto font-heading font-bold text-card-red cursor-pointer">
+                              Zabavit výhru
+                            </button>
+                          )}
+                        </span>
                       </>
-                    )}
-                    {jsemKomisar && t.status === "won" && t.teamId !== teamId && (
-                      <button type="button" onClick={() => { setZabavit(t); setDuvod(""); }}
-                        className="ml-auto text-sm font-heading font-bold text-card-red cursor-pointer">
-                        Zabavit výhru
-                      </button>
-                    )}
-                  </div>
+                    }
+                    trailing={<span className="text-micro font-bold uppercase tracking-wide px-2 py-0.5 rounded-full whitespace-nowrap" style={{ background: s.bg, color: s.fg }}>{s.label}</span>} />
                 </li>
               );
             })}
@@ -248,34 +219,21 @@ export function IntegrityPanel({ state, teamId, jsemKomisar, onChanged }: {
           : "Přáteláky klubů soutěže, ve kterých si obě strany složily sázku. Vítěz bere obě."}
       >
         {friendlyStakes.length > 0 && (
-          <ul className="divide-y divide-gray-50">
+          <ul className="-mx-4 sm:-mx-5 mt-3 border-t border-line divide-y divide-line-soft">
             {friendlyStakes.map((f) => {
               const s = FRIENDLY_STAKE_STATUS[f.status] ?? FRIENDLY_STAKE_STATUS.held;
               const played = f.challengerGoals != null && f.opponentGoals != null;
               return (
-                <li key={f.challengeId} className="py-2.5">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-micro font-heading font-bold uppercase tracking-wide px-2 py-0.5 rounded-full"
-                          style={{ background: s.bg, color: s.fg }}>
-                      {s.label}
-                    </span>
-                    <span className="text-base font-semibold min-w-0">
+                <li key={f.challengeId}>
+                  <ListRow tone={f.linked ? "danger" : undefined}
+                    title={<>
                       <EntityLink type="team" id={f.challengerId}>{f.challengerName}</EntityLink>
-                      {played ? ` ${f.challengerGoals}:${f.opponentGoals} ` : " a "}
+                      <span className="font-normal">{played ? ` ${f.challengerGoals}:${f.opponentGoals} ` : " a "}</span>
                       <EntityLink type="team" id={f.opponentId}>{f.opponentName}</EntityLink>
-                    </span>
-                    {f.date && (
-                      <span className="ml-auto text-micro text-muted tabular-nums">{shortDay(f.date)}</span>
-                    )}
-                  </div>
-                  <div className="text-sm mt-1 tabular-nums">
-                    každý složil <b className="font-heading">{czk(f.stake)}</b>
-                  </div>
-                  {f.linked && (
-                    <div className="text-sm mt-1 leading-snug" style={{ color: "#A32B1F" }}>
-                      ⚠ Kluby mají podle listiny stejného majitele.
-                    </div>
-                  )}
+                    </>}
+                    meta={<>{f.date ? `${shortDay(f.date)} · ` : ""}každý složil <b className="font-heading text-ink">{czk(f.stake)}</b></>}
+                    detail={f.linked ? <span style={{ color: "#A32B1F" }}>⚠ Kluby mají podle listiny stejného majitele.</span> : undefined}
+                    trailing={<span className="text-micro font-bold uppercase tracking-wide px-2 py-0.5 rounded-full whitespace-nowrap" style={{ background: s.bg, color: s.fg }}>{s.label}</span>} />
                 </li>
               );
             })}

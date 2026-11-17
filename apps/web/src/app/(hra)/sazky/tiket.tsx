@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Sheet, ErrorBox, IconButton } from "@/components/ui";
+import { Sheet, ErrorBox, IconButton, ListRow, RowValue } from "@/components/ui";
 import { apiFetch } from "@/lib/api";
 import { czk, kurz, Radek, TYP_TIKETU } from "./ui";
 import type { Board, VybranyTip } from "./types";
@@ -138,20 +138,18 @@ export function TiketSheet({ open, onClose, vybrane, celkovyKurz, board, teamId,
           </div>
         </div>
 
-        <ul className="rounded-card border border-dashed border-line-strong bg-paper divide-y divide-dashed divide-line">
+        <ul className="rounded-card border border-dashed border-line-strong bg-paper overflow-hidden divide-y divide-dashed divide-line">
           {vybrane.map((t) => (
-            <li key={`${t.matchId}|${t.selection}`} className="flex items-start gap-2 p-3">
-              <div className="flex-1 min-w-0">
-                <div className="text-base font-semibold leading-tight break-words">{t.zapas}</div>
-                <div className="text-sm text-muted leading-tight break-words">{t.label}</div>
-              </div>
-              <span className="text-base font-heading font-bold tabular-nums shrink-0 mt-0.5">
-                {kurz(t.oddsX100)}
-              </span>
-              <IconButton label={`Odebrat ${t.zapas} z tiketu`}
-                          onClick={() => onOdeber(`${t.matchId}|${t.selection}`)}>
-                ✕
-              </IconButton>
+            <li key={`${t.matchId}|${t.selection}`}>
+              <ListRow
+                title={t.zapas}
+                detail={t.label}
+                trailing={
+                  <span className="flex items-center gap-1">
+                    <RowValue>{kurz(t.oddsX100)}</RowValue>
+                    <IconButton label={`Odebrat ${t.zapas} z tiketu`} onClick={() => onOdeber(`${t.matchId}|${t.selection}`)}>✕</IconButton>
+                  </span>
+                } />
             </li>
           ))}
         </ul>
