@@ -14,7 +14,7 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { apiFetch, apiAction } from "@/lib/api";
 import { FaceAvatar } from "@/components/players/face-avatar";
-import { Tabs, useTabParam, ListRow, RowValue, RatingPill, ratingToneIn, StatusChip } from "@/components/ui";
+import { Tabs, useTabParam, ListRow, RowValue, RatingPill, ratingToneIn, StatusChip, choiceClass, SelectedMark } from "@/components/ui";
 import { formatKc } from "@/lib/format";
 
 const TAB_KEYS = ["prehled", "zaci", "novi", "trener", "vybaveni"] as const;
@@ -416,12 +416,13 @@ export function AcademyCard({ teamId }: { teamId: string }) {
                   onClick={() => { if (!active) post(`level:${l.key}`, `/api/teams/${teamId}/academy/level`, { level: l.key }, "Úroveň akademie se nepodařilo změnit", `Akademie je teď ${l.label.toLowerCase()}, platí od příští týdenní uzávěrky. Na odchody a nové žáky v létě má vliv podle toho, kolik týdnů sezóny trvala.`); }}
                   disabled={busy !== null}
                   aria-pressed={active}
-                  className={`w-full flex-1 text-left rounded-soft border p-3 min-h-11 transition-colors ${active ? "border-pitch-500 bg-pitch-50" : "border-gray-200 bg-white hover:border-pitch-500"}`}
+                  className={`w-full flex-1 text-left p-3 min-h-11 ${choiceClass(active)}`}
                 >
                   <span className="flex items-baseline justify-between gap-2">
                     <span className="font-heading font-bold text-sm text-ink">{l.label}{active ? " (teď)" : ""}</span>
                   </span>
                   <span className="block text-xs text-muted mt-1">{l.text}</span>
+                  {active && <SelectedMark />}
                 </button>
                 <p className="text-xs text-muted mt-1 px-1">{formatKc(l.base)} + {formatKc(l.perKid)} za žáka, teď {formatKc(l.weekly)} týdně</p>
               </li>

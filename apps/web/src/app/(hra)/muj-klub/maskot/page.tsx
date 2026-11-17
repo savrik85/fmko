@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, showError } from "@/lib/api";
-import { Card, CardHeader, CardBody, SectionLabel, PageLoading, ErrorBox } from "@/components/ui";
+import { Card, CardHeader, CardBody, SectionLabel, PageLoading, ErrorBox, choiceClass, SelectedMark } from "@/components/ui";
 
 interface Mascot {
   id: string;
@@ -232,11 +232,10 @@ export default function MaskotPage() {
                   const active = animal === a.value;
                   return (
                     <button type="button" key={a.value} onClick={() => setAnimal(a.value)}
-                      className={`flex flex-col items-center gap-1 p-2 rounded-soft border-2 transition-all ${
-                        active ? "border-pitch-500 bg-pitch-50" : "border-gray-200 hover:border-gray-300 bg-white"
-                      }`}>
+                      className={`flex flex-col items-center gap-1 p-2 ${choiceClass(active)}`}>
                       <span className="text-2xl leading-none">{a.emoji}</span>
                       <span className={`text-micro font-medium text-center ${active ? "text-pitch-700 font-bold" : "text-muted"}`}>{a.label}</span>
+                      {active && <SelectedMark />}
                     </button>
                   );
                 })}
@@ -250,11 +249,10 @@ export default function MaskotPage() {
                   const active = style === s.value;
                   return (
                     <button type="button" key={s.value} onClick={() => setStyle(s.value)}
-                      className={`px-3 py-2.5 rounded-soft text-sm text-left border-2 transition-all ${
-                        active ? "border-pitch-500 bg-pitch-50 text-pitch-700 font-bold" : "border-gray-200 hover:border-gray-300 bg-white text-ink"
-                      }`}>
-                      <div>{s.label}</div>
-                      <div className={`text-micro ${active ? "text-pitch-600" : "text-muted"} font-normal`}>{s.desc}</div>
+                      className={`px-3 py-2.5 text-sm text-left ${choiceClass(active)}`}>
+                      <div className="font-bold">{s.label}</div>
+                      <div className="text-micro text-muted font-normal">{s.desc}</div>
+                      {active && <SelectedMark />}
                     </button>
                   );
                 })}

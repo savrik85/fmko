@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, showError } from "@/lib/api";
-import { Card, CardHeader, CardBody, JerseyPreview, BadgePreview, ShortsPreview, SocksPreview, SectionLabel, Modal, StickyActions, PageLoading } from "@/components/ui";
+import { Card, CardHeader, CardBody, JerseyPreview, BadgePreview, ShortsPreview, SocksPreview, SectionLabel, Modal, StickyActions, PageLoading, choiceClass, SelectedMark } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 import { ClubScarf, SCARF_PATTERNS, type ScarfPattern } from "@/components/team/club-scarf";
 
@@ -258,9 +258,7 @@ function PatternPicker({ value, onChange, options, primary, secondary, kind }: {
             type="button"
             key={opt.key}
             onClick={() => onChange(opt.key)}
-            className={`flex flex-col items-center gap-1.5 p-2 rounded-soft border-2 transition-all ${
-              active ? "border-pitch-500 bg-pitch-50" : "border-gray-200 hover:border-gray-300 bg-white"
-            }`}
+            className={`flex flex-col items-center gap-1.5 p-2 ${choiceClass(active)}`}
           >
             {kind === "jersey" ? (
               <JerseyPreview primary={primary} secondary={secondary} pattern={opt.key} size={44} />
@@ -270,6 +268,7 @@ function PatternPicker({ value, onChange, options, primary, secondary, kind }: {
             <span className={`text-micro font-medium leading-tight text-center ${active ? "text-pitch-700" : "text-muted"}`}>
               {opt.label}
             </span>
+          {active && <SelectedMark />}
           </button>
         );
       })}
@@ -483,9 +482,7 @@ export default function DresPage() {
                   key={opt.value || "none"}
                   onClick={() => setBadgeSymbol(opt.value)}
                   title={opt.label}
-                  className={`aspect-square flex items-center justify-center text-xl rounded-soft border-2 transition-all ${
-                    active ? "border-pitch-500 bg-pitch-50" : "border-gray-200 hover:border-gray-300 bg-white"
-                  }`}
+                  className={`aspect-square flex items-center justify-center text-xl ${choiceClass(active)}`}
                 >
                   {opt.value === "svg:crescent" ? (
                     <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden>
@@ -494,6 +491,7 @@ export default function DresPage() {
                       <circle cx="13.5" cy="11" r="5.5" fill="#1f2937" />
                     </svg>
                   ) : opt.value || <span className="text-xs text-muted">-</span>}
+                {active && <SelectedMark />}
                 </button>
               );
             })}
@@ -512,9 +510,7 @@ export default function DresPage() {
             type="button"
             key={opt.key}
             onClick={() => setScarfPattern(opt.key)}
-            className={`flex flex-col items-center gap-1.5 p-2 rounded-soft border-2 transition-all ${
-              active ? "border-pitch-500 bg-pitch-50" : "border-gray-200 hover:border-gray-300 bg-white"
-            }`}
+            className={`flex flex-col items-center gap-1.5 p-2 ${choiceClass(active)}`}
           >
             <ClubScarf
               primary={badgePrimary}
@@ -529,6 +525,7 @@ export default function DresPage() {
             <span className={`text-micro font-medium leading-tight text-center ${active ? "text-pitch-700" : "text-muted"}`}>
               {opt.label}
             </span>
+          {active && <SelectedMark />}
           </button>
         );
       })}

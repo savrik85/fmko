@@ -451,4 +451,13 @@ Krok 1 hotový: `PageLoading`, `SectionLoading`, `ErrorBox` s `children`, `.btn-
 Vlna 1 hotová lokálně: částky (27 formátovačů a 80 ručních zápisů → `formatKc`,
 spojovník před výdajem → minus), načítání (70 obalů → `PageLoading`/`SectionLoading`),
 chyby (13 hlášek → `ErrorBox`, 7 destruktivních tlačítek → `btn-danger`).
-Čeká na souhlas uživatele a pokyn k pushi; pak vlna 2.
+Vlna 2 hotová lokálně: štítky (`StatusChip` s `ChipTone` a `title`), proužky (`ProgressBar`).
+Vlna 3 hotová lokálně: `ChoiceGroup`/`ChoiceCard` v přátelácích, Sestavě, autobusu, Přestupech,
+Poptávkách, Lize, hymně, identitě, vyjednávání, U21, kádru, u skauta, sponzorů a hostování;
+`choiceClass` + `SelectedMark` pro výběry s náhledem (Dres, Maskot, styl hymny, úroveň akademie).
+Ponecháno k rozhodnutí uživatele: řádky filtrů v Hledat (rolují do strany, zalomení by kartu
+na telefonu zvětšilo o víc než 15 %). Ponecháno: záložky (mise skauta, Aktivní/Historie nabídek,
+sekce mládeže), tlačítka otevírající panel (Filtrovat, Víc) a přepínače vedle nich, kvíz trenéra,
+konfigurátor stadionu, ovládání dlaždic na Domů, sázková tabule, onboarding (vlastní vzhled),
+volby s radiem v popisku (hostování podmínka, úkoly zaměstnanců).
+Vše lokálně, nepushnuté; push jen na pokyn uživatele.

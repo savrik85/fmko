@@ -20,8 +20,16 @@ function stateClass(selected: boolean, disabled: boolean | undefined): string {
   return selected ? SELECTED : IDLE;
 }
 
+/**
+ * Vzhled volby pro výběry s vlastním rozložením (náhled dresu, erbu, maskota), které
+ * ChoiceGroup ani ChoiceCard nepokryjí. Tlačítko dostane tuhle třídu a při výběru `<SelectedMark />`.
+ */
+export function choiceClass(selected: boolean, disabled?: boolean): string {
+  return `${BASE} ${stateClass(selected, disabled)}`;
+}
+
 /** Fajfka v pravém horním rohu vybrané volby. */
-function SelectedMark() {
+export function SelectedMark() {
   return (
     <span aria-hidden="true"
       className="absolute -top-1.5 -right-1.5 w-[18px] h-[18px] rounded-full bg-pitch-500 text-white text-[11px] font-extrabold leading-none grid place-items-center ring-2 ring-surface">
