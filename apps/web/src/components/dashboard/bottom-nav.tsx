@@ -93,7 +93,7 @@ export function BottomNav() {
       className="app-bottom-nav fixed bottom-0 left-0 right-0 z-[var(--z-nav)] sm:hidden rounded-t-[18px] border-t border-gray-300 shadow-[0_-10px_26px_-6px_rgba(26,23,20,0.42)]"
       style={{
         // Světlá lišta: spodek splyne s obsahem a místo pod ikonami nepůsobí
-        // jako zelený blok. Kde hráč je, ukazuje zelená barva a proužek nahoře.
+        // jako zelený blok. Kde hráč je, ukazuje zelená vyplněná ikona na pilulce.
         background: "var(--color-surface)",
         // Lišta zůstává ukotvená na spodku viewportu. Posouvat ji níž
         // (`bottom: -47px`) nejde — `fixed` prvky se na iOS ořežou na
@@ -133,10 +133,16 @@ export function BottomNav() {
               }`}
               aria-current={isActive ? "page" : undefined}
             >
-              {isActive && <span aria-hidden className="absolute -top-[7px] w-8 h-[3px] rounded-b-full bg-pitch-500" />}
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                {item.icon}
-              </svg>
+              {/* Aktivní záložka: ikona vyplněná zeleným nádechem na světle zelené pilulce. */}
+              <span className={`flex items-center justify-center w-12 h-7 rounded-full transition-colors ${isActive ? "bg-pitch-100" : ""}`}>
+                <svg
+                  width="22" height="22" viewBox="0 0 24 24"
+                  fill={isActive ? "currentColor" : "none"} fillOpacity={0.22}
+                  stroke="currentColor" strokeWidth={isActive ? 2 : 1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"
+                >
+                  {item.icon}
+                </svg>
+              </span>
               <span className="text-micro leading-none">{item.label}</span>
               {item.badge != null && item.badge > 0 && (
                 <span className="absolute top-0 right-2 bg-card-red text-white text-[9px] font-bold min-w-[16px] h-4 px-1 rounded-full flex items-center justify-center">
