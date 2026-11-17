@@ -54,48 +54,46 @@ function getTileBadge(href: string, badges: MenuBadgesState): TileBadge | null {
 const ADMIN_ITEM: MenuItem = { href: "/admin", icon: "🛠️", label: "Administrace", color: "#8B4513" };
 
 /**
- * Skupina menu jako bílá karta s řádky ve dvou sloupcích.
- *
- * Dřív to byly barevné dlaždice po čtyřech: dlouhé názvy se lámaly na dva
- * řádky a barevné plochy se praly mezi sebou. Řádek má ikonu, celý název
- * a odznak v jedné lince a na výšku 48 px pro prst.
+ * Skupina menu jako ikony aplikací na ploše telefonu: plná barevná ikona se
+ * zaoblenými rohy přímo na papíře, název pod ní, po čtyřech v řadě.
+ * Odznak sedí na rohu ikony, takže název má celou šířku sloupce.
  */
 function MenuSection({ title, items, badges }: { title: string; items: MenuItem[]; badges: MenuBadgesState }) {
   return (
-    <section className="mb-4 rounded-2xl bg-surface border border-line shadow-xs overflow-hidden">
-      <h2 className="px-3.5 pt-3 pb-2 text-xs font-heading font-bold text-muted uppercase tracking-wide">{title}</h2>
-      {/* Mezery v barvě linky dělají dělicí čáry mezi řádky i sloupci. */}
-      <div className="grid grid-cols-2 gap-px bg-line border-t border-line">
+    <section className="mb-6">
+      <h2 className="px-1 mb-2.5 text-xs font-heading font-bold text-muted uppercase tracking-wide">{title}</h2>
+      <div className="grid grid-cols-4 gap-x-2 gap-y-4">
         {items.map((item) => {
           const badge = getTileBadge(item.href, badges);
           return (
             <Link
               key={item.href}
               href={item.href}
-              className="flex items-center gap-2.5 h-12 pl-3 pr-2.5 bg-surface active:bg-gray-100 transition-colors min-w-0"
+              className="flex flex-col items-center gap-1.5 min-w-0 active:scale-95 transition-transform"
             >
               <span
-                className="w-8 h-8 rounded-lg flex items-center justify-center text-base shrink-0"
-                style={{ background: `${item.color}1F` }}
-                aria-hidden="true"
+                className="relative w-14 h-14 rounded-2xl flex items-center justify-center text-[26px] leading-none"
+                style={{
+                  background: `linear-gradient(160deg, color-mix(in srgb, ${item.color} 78%, #fff), ${item.color})`,
+                  boxShadow: `0 4px 8px -4px color-mix(in srgb, ${item.color} 70%, #000)`,
+                }}
               >
-                {item.icon}
+                <span aria-hidden="true">{item.icon}</span>
+                {badge && badge.type === "count" && badge.count > 0 && (
+                  <span className={`absolute -top-1.5 -right-1.5 ${badge.bg ?? "bg-card-red"} text-white text-[10px] font-bold min-w-5 h-5 px-1 rounded-full flex items-center justify-center border-2 border-paper`}>
+                    {badge.count > 99 ? "99+" : badge.count}
+                  </span>
+                )}
+                {badge && badge.type === "tag" && (
+                  <span className={`absolute -top-1.5 -right-2.5 ${badge.bg ?? "bg-pitch-500"} text-white text-[9px] font-bold h-5 px-1.5 rounded-full flex items-center border-2 border-paper`}>
+                    {badge.label}
+                  </span>
+                )}
               </span>
-              <span className="text-sm font-medium text-ink truncate min-w-0 flex-1">{item.label}</span>
-              {badge && badge.type === "count" && badge.count > 0 && (
-                <span className={`${badge.bg ?? "bg-card-red"} text-white text-[10px] font-bold min-w-[18px] h-[18px] px-1 rounded-full flex items-center justify-center shrink-0`}>
-                  {badge.count > 99 ? "99+" : badge.count}
-                </span>
-              )}
-              {badge && badge.type === "tag" && (
-                // Štítek „Nové“ by v půlce šířky uřízl název, stačí zelená tečka.
-                <span className="w-2.5 h-2.5 rounded-full bg-pitch-500 shrink-0" role="img" aria-label={badge.label} />
-              )}
+              <span className="w-full text-[11px] font-medium text-ink text-center leading-tight break-words">{item.label}</span>
             </Link>
           );
         })}
-        {/* Lichý počet: prázdná buňka, ať pod ní neprosvítá barva linky. */}
-        {items.length % 2 === 1 && <span aria-hidden="true" className="bg-surface" />}
       </div>
     </section>
   );
