@@ -42,6 +42,8 @@ export interface DataRowTone {
   own?: boolean;
   /** Proužek vlevo: postupová zóna, sestupová zóna, upozornění. */
   bar?: "up" | "down" | "warn";
+  /** Ztlumený řádek: hráč nedostupný, odešel, nejede na zápas. Klikat se na něj dá dál, pokud má odkaz. */
+  dim?: boolean;
 }
 
 const PRIORITY_CLASS: Record<1 | 2 | 3, string> = {
@@ -53,7 +55,7 @@ const ALIGN_CLASS = { left: "text-left", center: "text-center", right: "text-rig
 const BAR_CLASS = { up: "before:bg-pitch-500", down: "before:bg-card-red", warn: "before:bg-gold-500" } as const;
 
 export function DataTable<T>({
-  columns, rows, rowKey, rowHref, onRowClick, rowTone, defaultSort, pageSize, empty, emptyIcon, emptyAction, scroll,
+  columns, rows, rowKey, rowHref, onRowClick, rowTone, defaultSort, pageSize, empty, emptyIcon, emptyAction, scroll, dense,
 }: {
   columns: DataColumn<T>[];
   rows: T[];
@@ -71,6 +73,11 @@ export function DataTable<T>({
   emptyAction?: ReactNode;
   /** Tabulka s mnoha sloupci: posouvá se do strany, první sloupec je přilepený. */
   scroll?: { minWidth: number };
+  /**
+   * Hustá tabulka (řádek 40 px) pro soupisky vedle hřiště a tabulky v dlaždicích na Domů,
+   * kde se řádky počítají do pevné výšky. Běžné tabulky ji nepoužívají.
+   */
+  dense?: boolean;
 }) {
   const router = useRouter();
   const [sort, setSort] = useState(defaultSort ?? null);
@@ -151,7 +158,7 @@ export function DataTable<T>({
               className={`group ${clickable ? "cursor-pointer" : ""}`}>
               {columns.map((column, index) => (
                 <td key={column.key}
-                  className={`h-[52px] sm:h-12 border-b border-line-soft group-last:border-b-0 tabular-nums ${background} ${
+                  className={`${dense ? "h-10" : "h-[52px] sm:h-12"} border-b border-line-soft group-last:border-b-0 tabular-nums ${background} ${tone?.dim ? "opacity-50" : ""} ${
                     tone?.own ? "" : "group-hover:bg-surface-2"
                   } ${column.emphasis ? "text-body font-bold text-ink" : "text-ink-light"} ${alignOf(column, index)} ${hideOf(column)} ${edgeOf(index)} ${
                     index === 0 && tone?.bar ? `relative before:absolute before:left-0 before:inset-y-0 before:w-[3px] ${BAR_CLASS[tone.bar]}` : ""

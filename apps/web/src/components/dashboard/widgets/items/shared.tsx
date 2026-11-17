@@ -2,6 +2,7 @@
 
 /** Drobnosti sdílené několika widgety. */
 
+import { ListRow } from "@/components/ui";
 import type { ReactNode } from "react";
 import Link from "next/link";
 import type { Team } from "@/lib/api";
@@ -48,23 +49,12 @@ export function ScorerRow({
   i: number;
   children: ReactNode;
 }) {
-  const inner = (
-    <>
-      <span className="text-sm text-muted w-4 tabular-nums">{i + 1}.</span>
-      <div className="min-w-0 flex-1">
-        <div className="font-heading font-bold text-sm truncate">
-          {p.name}
-          {p.isDeparted && <span className="ml-1.5 text-micro text-muted uppercase font-normal">(bývalý)</span>}
-        </div>
-      </div>
-      {children}
-    </>
-  );
-  const base = "flex items-center gap-2 py-1.5 border-b border-gray-50 last:border-b-0 -mx-1 px-1 rounded";
-  return p.isDeparted ? (
-    <div className={`${base} opacity-60`}>{inner}</div>
-  ) : (
-    <a href={`/hrac/${p.playerId}`} className={`${base} hover:bg-gray-50/50 transition-colors`}>{inner}</a>
+  // Seznam řádků obaluje volající do `-mx-4 sm:-mx-5`, ať řádek sahá k okrajům dlaždice.
+  return (
+    <ListRow dense href={p.isDeparted ? undefined : `/hrac/${p.playerId}`}
+      leading={<span className="text-meta text-muted tabular-nums">{i + 1}.</span>}
+      title={<>{p.name}{p.isDeparted && <span className="ml-1.5 text-micro text-muted uppercase font-normal">(bývalý)</span>}</>}
+      trailing={children} />
   );
 }
 

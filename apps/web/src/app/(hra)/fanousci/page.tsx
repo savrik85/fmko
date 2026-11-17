@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { MANAGER_FANS, MANAGER_FANS_BANDS } from "@okresni-masina/shared";
+import { MANAGER_FANS } from "@okresni-masina/shared";
+import { ManagerFansBandsTable } from "@/components/fans/manager-fans-bands";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, showError, type Team } from "@/lib/api";
 import { Spinner, SectionLabel, useConfirm, Tabs, ListCard, ListRow, ListEmpty, RowIcon, RowValue, ResultChip } from "@/components/ui";
@@ -1153,45 +1154,8 @@ export default function FansPage() {
           {/* — Žebříček stupňů — */}
           <div className="mb-4">
             <div className="text-sm font-heading font-bold text-ink mb-2">Stupně vlivu</div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-200">
-                    <th className="text-left py-1.5 pr-3 font-heading uppercase text-xs text-muted tracking-widest">Vliv</th>
-                    <th className="text-right py-1.5 px-2 font-heading uppercase text-xs text-muted tracking-widest whitespace-nowrap">Po zápase</th>
-                    <th className="text-right py-1.5 px-2 font-heading uppercase text-xs text-muted tracking-widest">Loajalita</th>
-                    <th className="text-left py-1.5 pl-3 font-heading uppercase text-xs text-muted tracking-widest">Jak to fanoušci berou</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {MANAGER_FANS_BANDS.map((band, i) => {
-                    const isCurrent = band.key === m.bandKey;
-                    const upper = i === 0 ? null : MANAGER_FANS_BANDS[i - 1].min - 1;
-                    const range = upper === null
-                      ? `${band.min} a víc`
-                      : band.min === 0 ? `${upper} a míň` : `${band.min}–${upper}`;
-                    return (
-                      <tr
-                        key={band.key}
-                        className={isCurrent
-                          ? "bg-pitch-50 border-l-2 border-pitch-500"
-                          : "border-b border-gray-50"}
-                      >
-                        <td className={`py-2 pr-3 tabular-nums whitespace-nowrap ${isCurrent ? "pl-2 font-heading font-bold text-ink" : "text-muted"}`}>
-                          {range}
-                        </td>
-                        <td className={`py-2 px-2 text-right tabular-nums font-heading font-bold ${tone(band.matchBoost)}`}>
-                          {sign(band.matchBoost)}
-                        </td>
-                        <td className={`py-2 px-2 text-right tabular-nums ${isCurrent ? "text-ink" : "text-muted"}`}>
-                          {sign(band.loyaltyOffset)}
-                        </td>
-                        <td className={`py-2 pl-3 ${isCurrent ? "text-ink" : "text-muted"}`}>{band.fanView}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+            <div className="-mx-4 sm:-mx-5 border-y border-line">
+              <ManagerFansBandsTable currentKey={m.bandKey} />
             </div>
             <div className="text-sm text-muted mt-3 space-y-1">
               <p>

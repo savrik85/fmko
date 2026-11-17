@@ -5,7 +5,7 @@
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { apiFetch, showError } from "@/lib/api";
-import { BadgePreview, useConfirm, type BadgePattern } from "@/components/ui";
+import { BadgePreview, useConfirm, type BadgePattern, DataTable, ScoreChip, type MatchOutcome } from "@/components/ui";
 import { WidgetSkeleton, WidgetError } from "../widget-frame";
 import type { WidgetProps, ScheduleMatch } from "../types";
 import { rowsForHeight, ROW_PX } from "../widget-heights";
@@ -395,41 +395,24 @@ export function RecentMatchesWidget({ data, height }: WidgetProps) {
 
   return (
     <>
-      <div className="overflow-x-auto -mx-4 sm:-mx-5 table-scroll">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-label border-b border-gray-200 text-micro uppercase tracking-wide">
-              <th className="pb-2 pl-4 sm:pl-5 pr-2 w-10">Kolo</th>
-              <th className="pb-2 pr-2">Soupeř</th>
-              <th className="pb-2 pr-4 sm:pr-5 text-center w-20">Výsledek</th>
-            </tr>
-          </thead>
-          <tbody>
-            {matches.slice(0, rowsForHeight(height, ROW_PX.tableBadge, 60)).map((m) => {
-              const resultBg = m.result === "W" ? "bg-pitch-50" : m.result === "L" ? "bg-red-50" : "bg-gray-50";
-              const resultText = m.result === "W" ? "text-pitch-600" : m.result === "L" ? "text-card-red" : "text-muted";
-              return (
-                <tr key={m.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
-                  <td className="py-2 pl-4 sm:pl-5 pr-2 tabular-nums text-muted">{m.round ?? "-"}</td>
-                  <td className="py-2 pr-2">
-                    <a href={`/zapas/${m.id}`} className="flex items-center gap-2 hover:underline">
-                      <BadgePreview primary={m.opponentColor} secondary={m.opponentSecondary}
-                        pattern={(m.opponentBadge as BadgePattern) || "shield"}
-                        initials={initials(m.opponent ?? "")} size={20} />
-                      <span className="font-heading font-bold text-ink truncate max-w-[200px]">{m.opponent}</span>
-                      <span className="text-micro text-muted uppercase">{m.isHome ? "D" : "V"}</span>
-                    </a>
-                  </td>
-                  <td className="py-2 pr-4 sm:pr-5 text-center">
-                    <a href={`/zapas/${m.id}`} className={`inline-flex items-center px-2 py-0.5 rounded-control text-sm font-heading font-bold hover:opacity-80 transition-opacity ${resultBg} ${resultText}`}>
-                      {m.homeScore}:{m.awayScore}
-                    </a>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+      <div className="-mx-4 sm:-mx-5 border-t border-line">
+        <DataTable dense rows={matches.slice(0, rowsForHeight(height, ROW_PX.tableBadge, 60))}
+          rowKey={(m) => m.id} rowHref={(m) => `/zapas/${m.id}`}
+          empty="Zatím žádný odehraný zápas."
+          columns={[
+            { key: "round", header: "Kolo", width: "w-12", align: "center", cell: (m) => <span className="text-muted">{m.round ?? "-"}</span> },
+            { key: "opponent", header: "Soupeř", align: "left",
+              cell: (m) => (
+                <span className="flex items-center gap-2 min-w-0">
+                  <BadgePreview primary={m.opponentColor} secondary={m.opponentSecondary}
+                    pattern={(m.opponentBadge as BadgePattern) || "shield"} initials={initials(m.opponent ?? "")} size={20} />
+                  <span className="font-bold text-ink leading-tight">{m.opponent}</span>
+                  <span className="text-micro text-muted uppercase">{m.isHome ? "D" : "V"}</span>
+                </span>
+              ) },
+            { key: "score", header: "Výsledek", width: "w-20",
+              cell: (m) => <ScoreChip result={(m.result === "W" || m.result === "L" ? m.result : "D") as MatchOutcome}>{m.homeScore}:{m.awayScore}</ScoreChip> },
+          ]} />
       </div>
       <div className="text-center pt-2">
         <Link href="/rozpis" className="text-sm text-pitch-500 font-heading font-bold hover:underline">Všechny zápasy →</Link>

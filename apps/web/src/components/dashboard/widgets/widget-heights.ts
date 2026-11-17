@@ -65,8 +65,8 @@ export const ROW_PX = {
   bar: 45,
   /** Prostý řádek: jméno a hodnota vedle sebe. */
   list: 41,
-  /** Řádek tabulky bez grafiky. */
-  table: 33,
+  /** Řádek tabulky bez grafiky (hustá DataTable, 40 px, s rezervou na zalomený dlouhý název). */
+  table: 43,
   /** Řádek tabulky s erbem soupeře. */
   tableBadge: 41,
   /** Řádek s ikonou a dvěma řádky textu. */
