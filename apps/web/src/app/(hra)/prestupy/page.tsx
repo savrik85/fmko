@@ -9,7 +9,7 @@ import { useTeam } from "@/context/team-context";
 import { apiFetch, apiAction, showError, type Player } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
 import { nationalityFlag } from "@/lib/nationality";
-import { SectionLabel, PositionBadge, useConfirm, BadgePreview, type BadgePattern, Tabs, useTabParam, Sheet, SheetDialog, Button, DataTable, EntityCell, ListCard, ListRow, ListEmpty, RowIcon, RowValue, RatingPill, StatusChip, ratingToneIn, PageLoading, SectionLoading } from "@/components/ui";
+import { SectionLabel, PositionBadge, useConfirm, BadgePreview, type BadgePattern, Tabs, useTabParam, Sheet, SheetDialog, Button, DataTable, EntityCell, ListCard, ListRow, ListEmpty, RowIcon, RowValue, RatingPill, StatusChip, ratingToneIn, PageLoading, SectionLoading, ChoiceGroup } from "@/components/ui";
 import { attrBg } from "@/lib/player-attrs";
 import { PlayerRevealCard } from "@/components/players/reveal-card";
 import { FaceAvatar } from "@/components/players/face-avatar";
@@ -1764,21 +1764,9 @@ export default function TransfersPage() {
               {/* Position pills */}
               <div>
                 <label className="text-xs font-heading uppercase text-muted mb-1.5 block">Pozice</label>
-                <div className="flex gap-1.5">
-                  {POS_PILLS.map((p) => (
-                    <button
-                      key={p.value}
-                      onClick={() => setFilters((f) => ({ ...f, position: p.value }))}
-                      className={`px-3 py-1.5 rounded-soft text-sm font-heading font-bold transition-colors ${
-                        filters.position === p.value
-                          ? "bg-pitch-500 text-white"
-                          : "bg-surface text-muted hover:text-ink"
-                      }`}
-                    >
-                      {p.label}
-                    </button>
-                  ))}
-                </div>
+                <ChoiceGroup ariaLabel="Pozice" size="sm" value={filters.position}
+                  onChange={(v) => setFilters((f) => ({ ...f, position: v }))}
+                  options={POS_PILLS.map((p) => ({ value: p.value, label: p.label }))} />
               </div>
 
               {/* Rating */}
@@ -1799,19 +1787,9 @@ export default function TransfersPage() {
                     className="w-20 px-2 py-1.5 rounded-soft border border-gray-200 text-sm font-heading tabular-nums text-center focus:outline-none focus:ring-2 focus:ring-pitch-500/30"
                   />
                 </div>
-                <div className="flex gap-1.5 mt-1.5">
-                  {[30, 50, 60].map((v) => (
-                    <button
-                      key={v}
-                      onClick={() => setFilters((f) => ({ ...f, ratingMin: v }))}
-                      className={`px-2.5 py-1 rounded text-xs font-heading font-bold transition-colors ${
-                        filters.ratingMin === v ? "bg-pitch-500 text-white" : "bg-surface text-muted hover:text-ink"
-                      }`}
-                    >
-                      {v}+
-                    </button>
-                  ))}
-                </div>
+                <ChoiceGroup ariaLabel="Hodnocení od" size="sm" className="mt-1.5" value={String(filters.ratingMin)}
+                  onChange={(v) => setFilters((f) => ({ ...f, ratingMin: Number(v) }))}
+                  options={[30, 50, 60].map((v) => ({ value: String(v), label: `${v}+` }))} />
               </div>
 
               {/* Age */}
@@ -2892,19 +2870,14 @@ function PriceDialog({ title, description, defaultPrice, onConfirm, onClose, neg
         autoFocus
         className="w-full mt-1 px-3 py-2.5 rounded-xl border border-gray-200 bg-white font-heading font-bold text-lg tabular-nums text-center focus:outline-none focus:ring-2 focus:ring-pitch-500/30 focus:border-pitch-500"
       />
-      <div className="flex justify-center gap-2 mt-2">
-        {/* Násobky výchozí ceny (tržní hodnota / požadovaná cena), stejně jako na detailu hráče.
-            Pevné částky 1k–10k neseděly k tržním cenám v desítkách tisíc. */}
-        {[0.5, 1, 1.5, 2].map((mul) => {
+      {/* Násobky výchozí ceny (tržní hodnota / požadovaná cena), stejně jako na detailu hráče.
+          Pevné částky 1k–10k neseděly k tržním cenám v desítkách tisíc. */}
+      <ChoiceGroup ariaLabel="Násobek ceny" size="sm" className="justify-center mt-2" value={price != null ? String(price) : null}
+        onChange={(v) => setPrice(Number(v))}
+        options={[0.5, 1, 1.5, 2].map((mul) => {
           const v = Math.round((defaultPrice * mul) / 100) * 100;
-          return (
-            <button key={mul} type="button" onClick={() => setPrice(v)}
-              className={`px-2.5 py-1 rounded text-sm font-heading font-bold transition-colors ${price === v ? "bg-pitch-500 text-white" : "bg-black/5 text-muted hover:bg-black/10"}`}>
-              {mul.toLocaleString("cs-CZ")}×
-            </button>
-          );
-        })}
-      </div>
+          return { value: String(v), label: `${mul.toLocaleString("cs-CZ")}×` };
+        }).filter((o, i, all) => all.findIndex((x) => x.value === o.value) === i)} />
       {listing && (
         <div className="mt-4 text-left">
           <RevealPotentialToggle checked={revealPotential} onChange={setRevealPotential} />

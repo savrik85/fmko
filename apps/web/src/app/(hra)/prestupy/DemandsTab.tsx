@@ -10,7 +10,7 @@ import { Fragment, useCallback, useEffect, useState, type ReactNode } from "reac
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { apiFetch, apiAction, showError } from "@/lib/api";
-import { PositionBadge, SheetDialog, useConfirm, ListCard, ListRow, ListEmpty, RowIcon, StatusChip, SectionLoading } from "@/components/ui";
+import { PositionBadge, SheetDialog, useConfirm, ListCard, ListRow, ListEmpty, RowIcon, StatusChip, SectionLoading, ChoiceGroup } from "@/components/ui";
 import { MoneyInput } from "@/components/ui/money-input";
 import { OriginBadge } from "@/components/transfers/origin-badge";
 import { formatKc } from "@/lib/format";
@@ -59,11 +59,9 @@ const dateCz = (iso: string) => new Date(iso).toLocaleDateString("cs-CZ", { day:
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 const ageText = (d: { ageMin: number; ageMax: number }) => (d.ageMin <= 16 ? `do ${d.ageMax} let` : `${d.ageMin} až ${d.ageMax} let`);
 
-const CHIP = "min-h-11 px-3 rounded-control text-sm font-heading font-bold transition-colors";
 const REQ_CHIP = "px-2 py-0.5 rounded-full bg-surface border border-gray-100 text-sm font-heading font-bold text-ink tabular-nums";
 // Tlačítko je pod poptávkou (v podrobnostech řádku), aby nezužovalo text; na telefonu má plnou výšku pro prst.
 const PITCH_BUTTON = "min-h-11 sm:min-h-0 py-1.5 px-4 rounded-soft text-sm font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors";
-const chipClass = (on: boolean) => `${CHIP} ${on ? "bg-pitch-500 text-white" : "bg-black/5 text-ink hover:bg-black/10"}`;
 
 /**
  * Řádek poptávky: post a kam (název), věk a do kdy platí (podrobnosti); pod tím kdo,
@@ -320,19 +318,13 @@ function CreateDemandSheet({ teamId, noteMax, days, skillOptions, maxSkills, onC
       <div className="space-y-4">
         <div>
           <div className="text-sm font-heading font-bold text-muted mb-1.5">Post</div>
-          <div className="flex gap-1.5">
-            {POSITION_OPTIONS.map((o) => (
-              <button key={o.key} type="button" onClick={() => setPosition(o.key)} className={`flex-1 ${chipClass(position === o.key)}`}>{o.label}</button>
-            ))}
-          </div>
+          <ChoiceGroup ariaLabel="Post" columns={4} value={position} onChange={setPosition}
+            options={POSITION_OPTIONS.map((o) => ({ value: o.key, label: o.label }))} />
         </div>
         <div>
           <div className="text-sm font-heading font-bold text-muted mb-1.5">Kam ho chceš</div>
-          <div className="flex gap-1.5 flex-wrap">
-            {ROLE_OPTIONS.map((o) => (
-              <button key={o.key} type="button" onClick={() => pickRole(o.key)} className={`flex-1 ${chipClass(role === o.key)}`}>{o.label}</button>
-            ))}
-          </div>
+          <ChoiceGroup ariaLabel="Kam ho chceš" columns={ROLE_OPTIONS.length === 2 ? 2 : 3} value={role} onChange={pickRole}
+            options={ROLE_OPTIONS.map((o) => ({ value: o.key, label: o.label }))} />
         </div>
         <div>
           <div className="text-sm font-heading font-bold text-muted mb-1.5">Věk</div>
