@@ -140,8 +140,11 @@ async function renderFullPage(target: HTMLElement, plan: PagePlan): Promise<Blob
       }
       // Spodní lišta a výplň pod ní mají v kopii vypočtené `top` z displeje
       // (např. 749px) a zůstaly by uprostřed dlouhé fotky. Ke spodku je vrátí `top: auto`.
+      // V nainstalované aplikaci na iPhonu je lišta `absolute` (globals.css, standalone),
+      // jinde `fixed`. `top: 0px` mají překryvy přes celou plochu (inset-0), ty zůstávají.
       cloned.querySelectorAll<HTMLElement>("*").forEach((el) => {
-        if (el.style.position === "fixed" && el.style.bottom === "0px") {
+        const { position, top, bottom } = el.style;
+        if ((position === "fixed" || position === "absolute") && bottom === "0px" && top !== "0px") {
           el.style.setProperty("top", "auto", "important");
         }
       });
