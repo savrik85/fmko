@@ -68,7 +68,7 @@ export function DistrictVillages() {
             value={district ?? ""}
             onChange={(e) => setDistrict(e.target.value)}
             aria-label="Okres"
-            className="min-h-9 px-3 rounded-control border border-gray-200 bg-white text-sm font-heading"
+            className="select min-h-9 !text-sm !font-heading"
           >
             {data.districts.map((d) => <option key={d} value={d}>{d}</option>)}
           </select>
@@ -142,7 +142,7 @@ export function DistrictVillages() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Hledat obec"
-              className="min-h-9 px-3 rounded-control border border-gray-200 bg-white text-sm w-full sm:w-56"
+              className="input min-h-9 !px-3 !text-sm !w-full sm:!w-56"
             />}
           </div>
           <div className="flex flex-wrap gap-1.5">

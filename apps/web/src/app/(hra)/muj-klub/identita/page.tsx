@@ -176,14 +176,14 @@ export default function IdentitaPage() {
             <SectionLabel>Přezdívka klubu</SectionLabel>
             <input type="text" value={nickname} onChange={(e) => setNickname(e.target.value.slice(0, 40))}
               placeholder="např. Medvědi, Zelené pruhy, Šumavské psy"
-              className="w-full px-3 py-2 border border-gray-200 rounded-soft text-sm focus:border-pitch-500 focus:outline-none" />
+              className="input !w-full !px-3 !py-2 !text-sm" />
             <div className="text-xs text-muted mt-1">Jak týmu říkají fanoušci.</div>
           </div>
           <div>
             <SectionLabel>Rok založení klubu</SectionLabel>
             <input type="number" value={foundingYear} onChange={(e) => setFoundingYear(e.target.value.slice(0, 4))}
               placeholder="1923" min={1800} max={2100}
-              className="w-full sm:max-w-[160px] px-3 py-2 border border-gray-200 rounded-soft text-sm focus:border-pitch-500 focus:outline-none" />
+              className="input !w-full sm:max-w-[160px] !px-3 !py-2 !text-sm" />
           </div>
         </CardBody>
       </Card>
@@ -200,7 +200,7 @@ export default function IdentitaPage() {
         <CardBody>
           <input type="text" value={motto} onChange={(e) => setMotto(e.target.value.slice(0, 120))}
             placeholder='např. "Síla z lesa", "Nikdy se nevzdáme"'
-            className="w-full px-3 py-2 border border-gray-200 rounded-soft text-sm focus:border-pitch-500 focus:outline-none" />
+            className="input !w-full !px-3 !py-2 !text-sm" />
           <div className="text-xs text-muted mt-1">{motto.length}/120 znaků</div>
         </CardBody>
       </Card>
@@ -218,7 +218,7 @@ export default function IdentitaPage() {
           <textarea value={foundingStory} onChange={(e) => setFoundingStory(e.target.value.slice(0, 2000))}
             placeholder="Jak klub vznikl. Kdo ho založil, kde, za jakých okolností..."
             rows={6}
-            className="w-full px-3 py-2 border border-gray-200 rounded-soft text-sm focus:border-pitch-500 focus:outline-none resize-vertical" />
+            className="input !w-full !px-3 !py-2 !text-sm resize-vertical" />
           <div className="text-xs text-muted mt-1">{foundingStory.length}/2000 znaků</div>
         </CardBody>
       </Card>
@@ -236,7 +236,7 @@ export default function IdentitaPage() {
           <textarea value={colorsMeaning} onChange={(e) => setColorsMeaning(e.target.value.slice(0, 500))}
             placeholder="Co klubové barvy symbolizují..."
             rows={3}
-            className="w-full px-3 py-2 border border-gray-200 rounded-soft text-sm focus:border-pitch-500 focus:outline-none resize-vertical" />
+            className="input !w-full !px-3 !py-2 !text-sm resize-vertical" />
           <div className="text-xs text-muted mt-1">{colorsMeaning.length}/500 znaků</div>
         </CardBody>
       </Card>

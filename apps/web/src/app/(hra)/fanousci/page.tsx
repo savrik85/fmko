@@ -1002,7 +1002,7 @@ export default function FansPage() {
             max={500}
             value={ticketPriceDraft}
             onChange={(e) => setTicketPriceDraft(e.target.value)}
-            className="w-20 px-2.5 py-1.5 border border-gray-200 rounded-soft text-sm tabular-nums text-right bg-white focus:outline-none focus:border-pitch-500 shrink-0"
+            className="input !w-20 !px-2.5 !py-1.5 !text-sm tabular-nums text-right shrink-0"
           />
           <span className="text-xs text-muted shrink-0">Kč</span>
           <button
@@ -1396,7 +1396,7 @@ export default function FansPage() {
                       min={0}
                       value={priceDraft}
                       onChange={(e) => setProductDrafts((d) => ({ ...d, [p.key]: { sellPrice: e.target.value } }))}
-                      className="w-20 px-2.5 py-1.5 border border-gray-200 rounded-soft text-sm tabular-nums text-right bg-white focus:outline-none focus:border-pitch-500 shrink-0"
+                      className="input !w-20 !px-2.5 !py-1.5 !text-sm tabular-nums text-right shrink-0"
                     />
                     <span className="text-xs text-muted shrink-0 w-3 text-center">Kč</span>
                     <button
@@ -1427,7 +1427,7 @@ export default function FansPage() {
                       placeholder="0"
                       value={qty}
                       onChange={(e) => setRestockQty((r) => ({ ...r, [p.key]: e.target.value }))}
-                      className="w-20 px-2.5 py-1.5 border border-gray-200 rounded-soft text-sm tabular-nums text-right bg-white focus:outline-none focus:border-pitch-500 shrink-0"
+                      className="input !w-20 !px-2.5 !py-1.5 !text-sm tabular-nums text-right shrink-0"
                     />
                     <span className="text-xs text-muted shrink-0 w-3 text-center">ks</span>
                     <button

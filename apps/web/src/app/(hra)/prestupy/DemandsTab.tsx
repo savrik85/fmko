@@ -342,7 +342,7 @@ function CreateDemandSheet({ teamId, noteMax, days, skillOptions, maxSkills, onC
           <div className="text-sm font-heading font-bold text-muted mb-1.5">Hodnocení aspoň (nepovinné)</div>
           <input type="number" inputMode="numeric" min={1} max={85} value={minRating} onChange={(e) => setMinRating(e.target.value)}
             placeholder="Třeba 45" aria-label="Hodnocení aspoň"
-            className="w-full min-h-11 rounded-control bg-black/5 px-3 text-sm font-heading font-bold text-ink" />
+            className="input !w-full min-h-11 !px-3 !text-sm !font-heading font-bold" />
         </div>
         <div>
           <div className="text-sm font-heading font-bold text-muted mb-1.5">Dovednosti aspoň (nepovinné, nejvýš {maxSkills})</div>
@@ -357,7 +357,7 @@ function CreateDemandSheet({ teamId, noteMax, days, skillOptions, maxSkills, onC
                 </select>
                 <input type="number" inputMode="numeric" min={1} max={99} value={r.min} onChange={(e) => updateRow(i, { min: e.target.value })}
                   placeholder="aspoň" aria-label="Dovednost aspoň"
-                  className="w-24 min-h-11 rounded-control bg-black/5 px-3 text-sm font-heading font-bold text-ink" />
+                  className="input !w-24 min-h-11 !px-3 !text-sm !font-heading font-bold" />
                 <button type="button" onClick={() => setSkillRows((rows) => rows.filter((_, j) => j !== i))} aria-label="Odebrat dovednost"
                   className="shrink-0 min-h-11 min-w-11 rounded-control text-muted hover:text-card-red hover:bg-black/5 font-heading font-bold">
                   ✕
@@ -381,7 +381,7 @@ function CreateDemandSheet({ teamId, noteMax, days, skillOptions, maxSkills, onC
           <div className="text-sm font-heading font-bold text-muted mb-1.5">Poznámka (nepovinná)</div>
           <textarea value={note} onChange={(e) => setNote(e.target.value.slice(0, noteMax))} rows={2}
             placeholder="Třeba: hledáme rychlého beka, co vydrží celý zápas"
-            className="w-full rounded-control bg-black/5 px-3 py-2 text-sm text-ink" />
+            className="input !w-full !px-3 !py-2 !text-sm" />
           <div className="text-sm text-muted text-right">{note.length}/{noteMax}</div>
         </div>
       </div>

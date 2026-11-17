@@ -1652,11 +1652,11 @@ export default function TransfersPage() {
                     <div className="flex gap-1.5 items-center">
                       <input type="number" value={searchAgeMin || ""} onChange={(e) => setSearchAgeMin(parseInt(e.target.value) || 0)}
                         placeholder="od" min={0} max={60} aria-label="Věk od"
-                        className="w-20 px-2 min-h-11 rounded-control border border-line text-sm font-heading tabular-nums text-center" />
+                        className="input !w-20 !px-2 min-h-11 !text-sm !font-heading tabular-nums text-center" />
                       <span className="text-muted">–</span>
                       <input type="number" value={searchAgeMax < 99 ? searchAgeMax : ""} onChange={(e) => setSearchAgeMax(parseInt(e.target.value) || 99)}
                         placeholder="do" min={0} max={60} aria-label="Věk do"
-                        className="w-20 px-2 min-h-11 rounded-control border border-line text-sm font-heading tabular-nums text-center" />
+                        className="input !w-20 !px-2 min-h-11 !text-sm !font-heading tabular-nums text-center" />
                     </div>
                   </div>
 
@@ -1777,14 +1777,14 @@ export default function TransfersPage() {
                     type="number" min={0} max={99} placeholder="Min"
                     value={filters.ratingMin || ""}
                     onChange={(e) => setFilters((f) => ({ ...f, ratingMin: parseInt(e.target.value) || 0 }))}
-                    className="w-20 px-2 py-1.5 rounded-soft border border-gray-200 text-sm font-heading tabular-nums text-center focus:outline-none focus:ring-2 focus:ring-pitch-500/30"
+                    className="input !w-20 !px-2 !py-1.5 !text-sm !font-heading tabular-nums text-center"
                   />
                   <span className="text-muted text-sm">-</span>
                   <input
                     type="number" min={0} max={99} placeholder="Max"
                     value={filters.ratingMax < 99 ? filters.ratingMax : ""}
                     onChange={(e) => setFilters((f) => ({ ...f, ratingMax: parseInt(e.target.value) || 99 }))}
-                    className="w-20 px-2 py-1.5 rounded-soft border border-gray-200 text-sm font-heading tabular-nums text-center focus:outline-none focus:ring-2 focus:ring-pitch-500/30"
+                    className="input !w-20 !px-2 !py-1.5 !text-sm !font-heading tabular-nums text-center"
                   />
                 </div>
                 <ChoiceGroup ariaLabel="Hodnocení od" size="sm" className="mt-1.5" value={String(filters.ratingMin)}
@@ -1800,14 +1800,14 @@ export default function TransfersPage() {
                     type="number" min={15} max={50} placeholder="Min"
                     value={filters.ageMin > 15 ? filters.ageMin : ""}
                     onChange={(e) => setFilters((f) => ({ ...f, ageMin: parseInt(e.target.value) || 15 }))}
-                    className="w-20 px-2 py-1.5 rounded-soft border border-gray-200 text-sm font-heading tabular-nums text-center focus:outline-none focus:ring-2 focus:ring-pitch-500/30"
+                    className="input !w-20 !px-2 !py-1.5 !text-sm !font-heading tabular-nums text-center"
                   />
                   <span className="text-muted text-sm">-</span>
                   <input
                     type="number" min={15} max={50} placeholder="Max"
                     value={filters.ageMax < 50 ? filters.ageMax : ""}
                     onChange={(e) => setFilters((f) => ({ ...f, ageMax: parseInt(e.target.value) || 50 }))}
-                    className="w-20 px-2 py-1.5 rounded-soft border border-gray-200 text-sm font-heading tabular-nums text-center focus:outline-none focus:ring-2 focus:ring-pitch-500/30"
+                    className="input !w-20 !px-2 !py-1.5 !text-sm !font-heading tabular-nums text-center"
                   />
                 </div>
               </div>
@@ -1819,7 +1819,7 @@ export default function TransfersPage() {
                   type="number" min={0} step={100} placeholder="Bez limitu"
                   value={filters.maxWage || ""}
                   onChange={(e) => setFilters((f) => ({ ...f, maxWage: parseInt(e.target.value) || 0 }))}
-                  className="w-32 px-2 py-1.5 rounded-soft border border-gray-200 text-sm font-heading tabular-nums text-center focus:outline-none focus:ring-2 focus:ring-pitch-500/30"
+                  className="input !w-32 !px-2 !py-1.5 !text-sm !font-heading tabular-nums text-center"
                 />
               </div>
 
@@ -1847,7 +1847,7 @@ export default function TransfersPage() {
                           type="number" min={0} max={99} placeholder="0"
                           value={(filters[key] as number) || ""}
                           onChange={(e) => setFilters((f) => ({ ...f, [key]: parseInt(e.target.value) || 0 }))}
-                          className="w-full px-2 py-1.5 rounded-soft border border-gray-200 text-sm font-heading tabular-nums text-center focus:outline-none focus:ring-2 focus:ring-pitch-500/30"
+                          className="input !w-full !px-2 !py-1.5 !text-sm !font-heading tabular-nums text-center"
                         />
                       </div>
                     ))}
@@ -1861,7 +1861,7 @@ export default function TransfersPage() {
                 <select
                   value={filters.sort}
                   onChange={(e) => setFilters((f) => ({ ...f, sort: e.target.value as FASortKey }))}
-                  className="px-3 py-1.5 rounded-soft border border-gray-200 text-sm font-heading focus:outline-none focus:ring-2 focus:ring-pitch-500/30"
+                  className="select !py-1.5 !text-sm !font-heading"
                 >
                   {SORT_OPTIONS.map((o) => (
                     <option key={o.value} value={o.value}>{o.label}</option>
@@ -1886,7 +1886,7 @@ export default function TransfersPage() {
                       onChange={(e) => setPresetName(e.target.value)}
                       onKeyDown={(e) => { if (e.key === "Enter") handleSavePreset(); if (e.key === "Escape") setShowPresetInput(false); }}
                       placeholder="Název filtru"
-                      className="px-2 py-1 rounded-soft border border-gray-200 text-sm font-heading focus:outline-none focus:ring-2 focus:ring-pitch-500/30 w-32"
+                      className="input !px-2 !py-1 !text-sm !font-heading !w-32"
                       autoFocus
                     />
                     <button onClick={handleSavePreset} className="py-1 px-2.5 rounded-soft text-xs font-heading font-bold bg-pitch-500 text-white hover:bg-pitch-600 transition-colors">

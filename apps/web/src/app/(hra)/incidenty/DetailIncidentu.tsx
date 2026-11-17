@@ -265,7 +265,7 @@ export function DetailIncidentu({ teamId, incidentId, onZmena }: { teamId: strin
                   value={tazanyId}
                   onChange={(e) => setTazanyId(e.target.value)}
                   aria-label="Koho se zeptat"
-                  className="flex-1 min-w-0 rounded-soft border border-gray-200 bg-white px-3 py-2 text-base"
+                  className="select flex-1 min-w-0 !py-2 !text-base"
                 >
                   <option value="">Vyber hráče</option>
                   {detail.kadr.map((h) => <option key={h.playerId} value={h.playerId}>{h.jmeno}</option>)}
@@ -290,7 +290,7 @@ export function DetailIncidentu({ teamId, incidentId, onZmena }: { teamId: strin
                 <select
                   value={obvinenyId}
                   onChange={(e) => setObvinenyId(e.target.value)}
-                  className="flex-1 min-w-0 rounded-soft border border-gray-200 bg-white px-3 py-2 text-base"
+                  className="select flex-1 min-w-0 !py-2 !text-base"
                 >
                   <option value="">Vyber hráče</option>
                   {detail.kadr.map((h) => <option key={h.playerId} value={h.playerId}>{h.jmeno}</option>)}
@@ -377,7 +377,7 @@ export function DetailIncidentu({ teamId, incidentId, onZmena }: { teamId: strin
                     value={kolVyrazeni}
                     onChange={(e) => setKolVyrazeni(e.target.value)}
                     aria-label="Počet ligových kol"
-                    className="rounded-soft border border-gray-200 bg-white px-3 py-2 text-base"
+                    className="select !py-2 !text-base"
                   >
                     <option value="1">1 kolo</option>
                     <option value="2">2 kola</option>

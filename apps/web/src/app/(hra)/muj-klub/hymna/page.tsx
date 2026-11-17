@@ -247,7 +247,7 @@ export default function HymnaPage() {
                   <textarea value={hints} onChange={(e) => setHints(e.target.value.slice(0, 500))}
                     placeholder="Např.: Medvědi, hospoda U Lípy, nikdy nezapomeneme, bratři Novákové"
                     rows={3}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-soft text-sm focus:border-pitch-500 focus:outline-none resize-none" />
+                    className="input !w-full !px-3 !py-2 !text-sm resize-none" />
                   <div className="text-xs text-muted mt-1">{hints.length}/500 znaků</div>
                 </div>
               )}
@@ -263,13 +263,13 @@ export default function HymnaPage() {
                   <div>
                     <SectionLabel>Název hymny</SectionLabel>
                     <input type="text" value={title} onChange={(e) => setTitle(e.target.value.slice(0, 100))}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-soft text-sm focus:border-pitch-500 focus:outline-none" />
+                      className="input !w-full !px-3 !py-2 !text-sm" />
                   </div>
                   <div>
                     <SectionLabel>Text (můžeš upravit)</SectionLabel>
                     <textarea value={lyrics} onChange={(e) => setLyrics(e.target.value.slice(0, 3000))}
                       rows={12}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-soft text-sm font-mono focus:border-pitch-500 focus:outline-none resize-vertical" />
+                      className="input !w-full !px-3 !py-2 !text-sm !font-mono resize-vertical" />
                     <div className="text-xs text-muted mt-1">{lyrics.length}/3000 znaků</div>
                   </div>
                 </>

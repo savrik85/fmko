@@ -200,7 +200,7 @@ export function FriendlyForm({ mode, teamId, teams, days, limits, budget, onDone
         <div className={label}>Vzkaz (nepovinný)</div>
         <textarea value={message} onChange={(e) => setMessage(e.target.value.slice(0, limits.maxMessage))} rows={2}
           placeholder={mode === "challenge" ? "Třeba: přijeďte, po zápase guláš a pivo" : "Třeba: hledáme soupeře na rozehrání před ligou"}
-          className="w-full rounded-control bg-black/5 px-3 py-2 text-sm text-ink" />
+          className="input !w-full !px-3 !py-2 !text-sm" />
         <div className="text-sm text-muted text-right">{message.length}/{limits.maxMessage}</div>
       </div>
 

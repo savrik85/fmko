@@ -222,7 +222,7 @@ export default function MaskotPage() {
               <SectionLabel>Jméno maskota</SectionLabel>
               <input type="text" value={name} onChange={(e) => setName(e.target.value.slice(0, 50))}
                 placeholder="např. Medvěd Bohuš, Ryska, Hot Pepper Joe"
-                className="w-full px-3 py-2 border border-gray-200 rounded-soft text-sm focus:border-pitch-500 focus:outline-none" />
+                className="input !w-full !px-3 !py-2 !text-sm" />
             </div>
 
             <div>

@@ -183,7 +183,7 @@ function CounterDialog({ initial, allowZero, initialTerms, onCancel, onConfirm }
           onChange={(e) => setMsg(e.target.value.slice(0, 200))}
           rows={2}
           placeholder="např. Klub přistupuje vstřícně..."
-          className="w-full mt-1 px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-gold-500/30 focus:border-gold-500 resize-none"
+          className="input !w-full mt-1 !px-3 !py-2 !text-sm resize-none"
         />
         <div className="text-sm text-muted text-right mt-0.5 tabular-nums">{msg.length}/200</div>
       </div>

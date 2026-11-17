@@ -16,7 +16,7 @@ function MoneyInput({ label, hint, value, onChange }: { label: string; hint?: st
       <input
         type="number" inputMode="numeric" min={0} step={100} value={value}
         onChange={(e) => onChange(Math.max(0, Math.round(Number(e.target.value) || 0)))}
-        className="input w-full min-h-11 text-base mt-1 tabular-nums"
+        className="input !w-full min-h-11 text-base mt-1 tabular-nums"
       />
     </label>
   );
@@ -63,7 +63,7 @@ export function DemandsForm({ view, proposal, onChange }: {
           <span className="block text-sm font-heading font-bold">Stavba, kterou sponzor zaplatí</span>
           <select
             value={d.construction ?? ""} onChange={(e) => set({ construction: e.target.value || null })}
-            className="input w-full min-h-11 text-base mt-1"
+            className="select w-full min-h-11 !text-base mt-1"
           >
             <option value="">Nic</option>
             {view.construction.map((o) => (
@@ -78,7 +78,7 @@ export function DemandsForm({ view, proposal, onChange }: {
           <span className="block text-sm font-heading font-bold">Vybavení od sponzora</span>
           <select
             value={d.equipment ?? ""} onChange={(e) => set({ equipment: e.target.value || null })}
-            className="input w-full min-h-11 text-base mt-1"
+            className="select w-full min-h-11 !text-base mt-1"
           >
             <option value="">Nic</option>
             {view.equipment.map((o) => (

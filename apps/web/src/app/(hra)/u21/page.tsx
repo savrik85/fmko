@@ -401,7 +401,7 @@ export default function U21Page() {
           {!onlyOurMatches && sortedRounds.length > 0 && (
             <div className="flex items-center gap-2">
               <button aria-label="Předchozí kolo" disabled={roundIndex <= 0} onClick={() => setSelectedRound(sortedRounds[roundIndex - 1].round)} className="min-h-11 min-w-11 rounded-lg bg-surface disabled:opacity-30">←</button>
-              <select aria-label="Kolo soutěže" value={activeRound} onChange={(e) => setSelectedRound(Number(e.target.value))} className="min-h-11 min-w-0 flex-1 rounded-lg border border-gray-200 bg-surface px-3 text-sm">
+              <select aria-label="Kolo soutěže" value={activeRound} onChange={(e) => setSelectedRound(Number(e.target.value))} className="select min-h-11 min-w-0 flex-1 !text-sm">
                 {sortedRounds.map((r) => <option key={r.round} value={r.round}>{r.round}. kolo · {formatDate(r.scheduledAt)}</option>)}
               </select>
               <button aria-label="Další kolo" disabled={roundIndex >= sortedRounds.length - 1} onClick={() => setSelectedRound(sortedRounds[roundIndex + 1].round)} className="min-h-11 min-w-11 rounded-lg bg-surface disabled:opacity-30">→</button>
@@ -628,7 +628,7 @@ function PlayerList({
     <>
       <div className="flex items-center gap-2 px-4 py-2 border-b border-line-soft">
         <label className="min-w-0 flex-1 text-xs text-muted"><span className="sr-only">Řadit podle</span>
-          <select className="w-full min-h-11 rounded-lg border border-gray-200 bg-surface px-2 text-sm text-ink" value={sortKey} onChange={(e) => { const key = e.target.value as SortKey; setSortKey(key); setSortDir(key === "name" || key === "age" || key === "pos" ? "asc" : "desc"); }}>
+          <select className="select w-full min-h-11 !text-sm" value={sortKey} onChange={(e) => { const key = e.target.value as SortKey; setSortKey(key); setSortDir(key === "name" || key === "age" || key === "pos" ? "asc" : "desc"); }}>
             {([["ovr", "Celkové hodnocení"], ["growth", "Tréninkový růst"], ["age", "Věk"], ["name", "Jméno"], ["pos", "Pozice"], ["apps", "Zápasy"], ["g", "Góly"], ["a", "Asistence"], ["rat", "Zápasová známka"]] as const).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select>
         </label>

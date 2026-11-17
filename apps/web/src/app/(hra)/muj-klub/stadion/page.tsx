@@ -183,14 +183,14 @@ export default function StadionPage() {
             ) : (
               <input type="text" value={name} onChange={(e) => setName(e.target.value.slice(0, 60))}
                 placeholder="např. Sportovní areál Bohdalec"
-                className="w-full px-3 py-2 border border-gray-200 rounded-soft text-sm focus:border-pitch-500 focus:outline-none" />
+                className="input !w-full !px-3 !py-2 !text-sm" />
             )}
           </div>
           <div>
             <SectionLabel>Přezdívka (volitelné)</SectionLabel>
             <input type="text" value={nickname} onChange={(e) => setNickname(e.target.value.slice(0, 40))}
               placeholder="např. Kotel, Pekelné hřiště, U Lípy"
-              className="w-full px-3 py-2 border border-gray-200 rounded-soft text-sm focus:border-pitch-500 focus:outline-none" />
+              className="input !w-full !px-3 !py-2 !text-sm" />
             <div className="text-xs text-muted mt-1">Jak říkají stadionu domácí fanoušci.</div>
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -198,7 +198,7 @@ export default function StadionPage() {
               <SectionLabel>Rok výstavby</SectionLabel>
               <input type="number" value={builtYear} onChange={(e) => setBuiltYear(e.target.value.slice(0, 4))}
                 placeholder="1923" min={1800} max={2100}
-                className="w-full px-3 py-2 border border-gray-200 rounded-soft text-sm focus:border-pitch-500 focus:outline-none" />
+                className="input !w-full !px-3 !py-2 !text-sm" />
             </div>
             <div>
               <SectionLabel>Kapacita</SectionLabel>
@@ -222,13 +222,13 @@ export default function StadionPage() {
             <SectionLabel>Severní tribuna</SectionLabel>
             <input type="text" value={tribunaNorth} onChange={(e) => setTribunaNorth(e.target.value.slice(0, 40))}
               placeholder="např. Medvědí tribuna"
-              className="w-full px-3 py-2 border border-gray-200 rounded-soft text-sm focus:border-pitch-500 focus:outline-none" />
+              className="input !w-full !px-3 !py-2 !text-sm" />
           </div>
           <div>
             <SectionLabel>Jižní tribuna</SectionLabel>
             <input type="text" value={tribunaSouth} onChange={(e) => setTribunaSouth(e.target.value.slice(0, 40))}
               placeholder="např. U Pekaře"
-              className="w-full px-3 py-2 border border-gray-200 rounded-soft text-sm focus:border-pitch-500 focus:outline-none" />
+              className="input !w-full !px-3 !py-2 !text-sm" />
           </div>
         </CardBody>
       </Card>
@@ -243,7 +243,7 @@ export default function StadionPage() {
           <SectionLabel>Co se u nás peče, pije, grilujeme</SectionLabel>
           <input type="text" value={specialita} onChange={(e) => setSpecialita(e.target.value.slice(0, 80))}
             placeholder="např. smažák a pivo Kozel, klobása od řezníka Vepřáka"
-            className="w-full px-3 py-2 border border-gray-200 rounded-soft text-sm focus:border-pitch-500 focus:outline-none" />
+            className="input !w-full !px-3 !py-2 !text-sm" />
           <div className="text-xs text-muted mt-1">Co návštěvník zápasu ochutná v bufetu nebo za tribunou.</div>
         </CardBody>
       </Card>

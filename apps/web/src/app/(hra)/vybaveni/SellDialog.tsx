@@ -86,7 +86,7 @@ export function SellDialog({ option, busy, onClose, onList, onPawn, onRepair }: 
               min={option.bazarMin}
               step={100}
               onChange={(e) => setPrice(Number(e.target.value))}
-              className="w-40 border border-gray-300 rounded-soft px-3 py-2 text-base font-heading font-bold tabular-nums focus:outline-none focus:border-pitch-400"
+              className="input !w-40 !px-3 !py-2 !text-base !font-heading font-bold tabular-nums"
             />
             <span className="text-base text-muted">Kč</span>
           </div>

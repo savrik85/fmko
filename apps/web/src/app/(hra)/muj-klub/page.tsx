@@ -446,7 +446,7 @@ export default function MujKlubPage() {
                     value={slugInput}
                     onChange={(e) => setSlugInput(e.target.value)}
                     placeholder="např. fk-rohlik-brevnov"
-                    className="flex-1 min-w-0 px-3 py-2 text-sm rounded-soft border border-gray-200 focus:outline-none focus:ring-2 focus:ring-pitch-500 font-mono"
+                    className="input flex-1 min-w-0 !px-3 !py-2 !text-sm !font-mono"
                   />
                 </div>
                 <p className="text-sm text-muted mt-1">
@@ -473,7 +473,7 @@ export default function MujKlubPage() {
                   onChange={(e) => setAnnouncementInput(e.target.value)}
                   disabled={!unlockedAddons.includes("press_officer")}
                   placeholder="Zde můžeš napsat aktuální zprávu pro fanoušky a novináře, která bude zvýrazněna na úvodní stránce..."
-                  className="w-full px-3 py-2 text-sm rounded-soft border border-gray-200 focus:outline-none focus:ring-2 focus:ring-pitch-500 disabled:bg-gray-50 disabled:text-gray-400"
+                  className="input !w-full !px-3 !py-2 !text-sm disabled:bg-gray-50 disabled:text-gray-400"
                 />
               </div>
 

@@ -728,12 +728,12 @@ export default function ScoutPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <select value={ageMin} onChange={(e) => { const v = Number(e.target.value); setAgeMin(v); if (v > ageMax) setAgeMax(v); }}
-                    className="px-3 py-2 rounded-xl border border-gray-200 bg-white text-base font-heading font-bold">
+                    className="select !py-2 !text-base !font-heading font-bold">
                     {Array.from({ length: data.options.ageMax - data.options.ageMin + 1 }, (_, i) => data.options.ageMin + i).map((v) => <option key={v} value={v}>{v}</option>)}
                   </select>
                   <span className="text-muted">až</span>
                   <select value={ageMax} onChange={(e) => { const v = Number(e.target.value); setAgeMax(v); if (v < ageMin) setAgeMin(v); }}
-                    className="px-3 py-2 rounded-xl border border-gray-200 bg-white text-base font-heading font-bold">
+                    className="select !py-2 !text-base !font-heading font-bold">
                     {Array.from({ length: data.options.ageMax - data.options.ageMin + 1 }, (_, i) => data.options.ageMin + i).map((v) => <option key={v} value={v}>{v}</option>)}
                   </select>
                   <span className="text-muted">let</span>
@@ -780,7 +780,7 @@ export default function ScoutPage() {
                   <select
                     value={targetTeamId}
                     onChange={(e) => setTargetTeamId(e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-base font-heading font-bold text-ink"
+                    className="select w-full !py-2.5 !text-base !font-heading font-bold"
                   >
                     {data.opponents.map((opp) => (
                       <option key={opp.id} value={opp.id}>

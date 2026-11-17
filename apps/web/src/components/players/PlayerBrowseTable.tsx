@@ -247,7 +247,7 @@ export function PlayerBrowseTable({ rows, color, onColorText, ratingColor, colum
         <label className="md:hidden flex items-center gap-2 text-sm text-muted ml-auto">
           Řadit
           <select value={sortKey} onChange={(e) => { const k = e.target.value as SortKey; setSortKey(k); setSortDir(k === "position" ? "asc" : "desc"); }}
-            className="text-sm font-heading font-bold text-ink bg-gray-100 rounded-soft px-2 py-1.5">
+            className="select !text-sm !font-heading font-bold !py-1.5">
             {mobileSorts.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
           </select>
         </label>

@@ -515,7 +515,7 @@ export default function ZamestnanciPage() {
                 <select
                   value=""
                   onChange={(e) => { const r = e.target.value as StaffRole; if (r) doReassign(m, r); }}
-                  className="text-xs border border-gray-200 rounded-soft px-2 py-1 font-heading text-muted bg-white">
+                  className="select !text-xs !py-1 !font-heading">
                   <option value="">Přeřadit…</option>
                   {STAFF_ROLE_ORDER.filter((r) => r !== role && !isRoleOccupied(r, m.id)).map((r) => (
                     <option key={r} value={r}>{ROLE_DEFS[r].label} ({staffEffectiveness(m, r)}/20)</option>
@@ -625,7 +625,7 @@ export default function ZamestnanciPage() {
                   <select
                     value={marketRoleFilter}
                     onChange={(e) => setMarketRoleFilter(e.target.value as StaffRole | "all")}
-                    className="text-sm border border-gray-200 rounded-soft px-2.5 py-1.5 font-heading bg-white flex-1 min-w-[10rem]">
+                    className="select !text-sm !py-1.5 !font-heading flex-1 min-w-[10rem]">
                     <option value="all">Všechny role ({market.length})</option>
                     {STAFF_ROLE_ORDER.map((r) => {
                       const n = market.filter((c) => c.profession === r).length;
@@ -665,7 +665,7 @@ export default function ZamestnanciPage() {
                                 <select
                                   value={selected}
                                   onChange={(e) => setPickRole((p) => ({ ...p, [cand.id]: e.target.value as StaffRole }))}
-                                  className="text-xs border border-gray-200 rounded-soft px-2 py-1 font-heading bg-white flex-1 min-w-[10rem]">
+                                  className="select !text-xs !py-1 !font-heading flex-1 min-w-[10rem]">
                                   {STAFF_ROLE_ORDER.map((r) => {
                                     const roleFull = isRoleOccupied(r);
                                     return (

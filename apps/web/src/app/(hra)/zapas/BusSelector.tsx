@@ -227,7 +227,7 @@ export function BusSelector({
             <select
               value={selectedVillage}
               onChange={(e) => setSelectedVillage(e.target.value)}
-              className="w-full px-2 py-2 rounded border border-gray-300 bg-white text-sm"
+              className="select w-full !py-2 !text-sm"
             >
               {availableVillages.map((v) => (
                 <option key={v.id} value={v.id}>

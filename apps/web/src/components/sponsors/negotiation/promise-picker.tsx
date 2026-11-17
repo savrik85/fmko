@@ -58,7 +58,7 @@ export function PromisePicker({ view, seasons, promises, onChange }: {
                 {options.length > 1 ? (
                   <select
                     value={optionKey(chosen.params)} onChange={(e) => pick(kind, e.target.value)}
-                    className="input w-full min-h-11 text-base" aria-label={`Parametr slibu ${PROMISE_LABELS[kind]}`}
+                    className="select w-full min-h-11 !text-base" aria-label={`Parametr slibu ${PROMISE_LABELS[kind]}`}
                   >
                     {options.map((o) => <option key={optionKey(o.params)} value={optionKey(o.params)}>{o.label}</option>)}
                   </select>

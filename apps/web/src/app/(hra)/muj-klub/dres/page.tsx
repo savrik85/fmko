@@ -462,7 +462,7 @@ export default function DresPage() {
             onChange={(e) => setBadgeInitials(e.target.value.slice(0, 5).toUpperCase())}
             placeholder={`Auto: ${autoInitials}`}
             maxLength={5}
-            className="w-full px-3 py-2 border border-gray-200 rounded-soft text-sm font-mono uppercase focus:border-pitch-500 focus:outline-none"
+            className="input !w-full !px-3 !py-2 !text-sm !font-mono uppercase"
           />
           <div className="text-xs text-muted mt-1">Max 5 znaků. Prázdné = auto z názvu klubu.</div>
         </div>
