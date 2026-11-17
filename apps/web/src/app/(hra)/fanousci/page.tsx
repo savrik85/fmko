@@ -1492,52 +1492,50 @@ export default function FansPage() {
               </div>
             </div>
 
-            {/* Per match list */}
-            <div className="space-y-3">
+            {/* Per match list. Výnos a zisk nejsou vpravo, ale v odstavci: sloupec vpravo
+                by na telefonu zúžil mřížku produktů pod ním. */}
+            <div className="-mx-4 sm:-mx-5">
               {salesHistory.map((m, idx) => {
-                const vysledek = resultLabel(m.result);
+                const outcome = resultLabel(m.result);
                 return (
-                  <div key={(m.matchId ?? "") + idx} className="border border-gray-100 rounded-soft p-3">
-                    <div className="flex items-center gap-2.5 mb-2">
-                      <span className="shrink-0 text-lg" title={m.isCup ? "Pohárový zápas" : "Ligový zápas"}>
-                        {m.isCup ? "🏆" : "⚽"}
+                  <ListRow key={(m.matchId ?? "") + idx}
+                    leading={
+                      <span className="block" title={m.isCup ? "Pohárový zápas" : "Ligový zápas"}>
+                        <RowIcon>{m.isCup ? "🏆" : "⚽"}</RowIcon>
                       </span>
-                      <div className="flex-1 min-w-0">
-                        <div className="font-heading font-bold text-sm text-ink">
-                          {m.opponentName ?? "Neznámý soupeř"}
-                        </div>
-                        <div className="text-xs text-muted">
-                          Doma · {formatGamedate(m.gamedate)} · {m.attendance} diváků
-                          {vysledek.text && <span className={`ml-1 font-bold ${vysledek.cls}`}>{vysledek.text}</span>}
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="font-heading font-bold text-sm tabular-nums text-pitch-500">
-                          {formatCZK(m.totalRevenue)}
-                        </div>
-                        <div className="text-xs text-muted">zisk {formatCZK(m.totalProfit)}</div>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-3 gap-2 mt-2 pt-2 border-t border-gray-50">
-                      {m.products.map((p) => (
-                        <div key={p.productKey} className="text-xs">
-                          <div className="flex items-center gap-1 mb-0.5">
-                            <span>{PRODUCT_ICONS[p.productKey] ?? "🍽"}</span>
-                            <span className="font-heading font-bold tabular-nums text-ink">
-                              {p.soldCount} ks
+                    }
+                    title={m.opponentName ?? "Neznámý soupeř"}
+                    meta={<>
+                      Doma · {formatGamedate(m.gamedate)} · {m.attendance} diváků
+                      {outcome.text && <span className={`ml-1 font-bold ${outcome.cls}`}>{outcome.text}</span>}
+                    </>}
+                    detail={
+                      <span className="block mt-0.5">
+                        <span className="block">
+                          <span className="font-heading font-bold tabular-nums text-pitch-500">{formatCZK(m.totalRevenue)}</span>
+                          <span className="text-xs text-muted"> · zisk {formatCZK(m.totalProfit)}</span>
+                        </span>
+                        <span className="grid grid-cols-3 gap-2 mt-1.5">
+                          {m.products.map((p) => (
+                            <span key={p.productKey} className="block text-xs">
+                              <span className="flex items-center gap-1 mb-0.5">
+                                <span>{PRODUCT_ICONS[p.productKey] ?? "🍽"}</span>
+                                <span className="font-heading font-bold tabular-nums text-ink">
+                                  {p.soldCount} ks
+                                </span>
+                                {p.stockout && <span className="text-card-red">⚠</span>}
+                              </span>
+                              <span className="block text-muted tabular-nums">
+                                {p.sellPrice} Kč → {formatCZK(p.revenue)}
+                              </span>
+                              <span className={`block tabular-nums ${p.profit >= 0 ? "text-pitch-500" : "text-card-red"}`}>
+                                {p.profit > 0 ? "+" : ""}{formatCZK(p.profit)}
+                              </span>
                             </span>
-                            {p.stockout && <span className="text-card-red">⚠</span>}
-                          </div>
-                          <div className="text-muted tabular-nums">
-                            {p.sellPrice} Kč → {formatCZK(p.revenue)}
-                          </div>
-                          <div className={`tabular-nums ${p.profit >= 0 ? "text-pitch-500" : "text-card-red"}`}>
-                            {p.profit > 0 ? "+" : ""}{formatCZK(p.profit)}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+                          ))}
+                        </span>
+                      </span>
+                    } />
                 );
               })}
             </div>

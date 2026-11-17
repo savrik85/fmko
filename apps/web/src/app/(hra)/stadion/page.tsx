@@ -5,7 +5,7 @@ import { clientOnly } from "@/components/client-only";
 import { useTeam } from "@/context/team-context";
 import { useGuideVisit } from "@/components/team/first-week-guide";
 import { apiFetch, type Team } from "@/lib/api";
-import { Spinner, SectionLabel, useConfirm, LockDetail, type LockDetailData, ListRow, RowValue } from "@/components/ui";
+import { Spinner, SectionLabel, useConfirm, LockDetail, type LockDetailData, ListRow, RowValue, RowIcon } from "@/components/ui";
 import { StadiumView } from "@/components/stadium/stadium-view";
 import { KotelPrehravac } from "@/components/stadium/KotelPrehravac";
 import { moistureLabel, moistureHint } from "@/lib/pitch-moisture";
@@ -1237,16 +1237,18 @@ export default function StadiumPage() {
           </div>
 
           {stadium.pitchActions.length > 0 && (
-            <div className="space-y-2 mb-3">
+            <div className="-mx-4 sm:-mx-5 mb-3">
               {stadium.pitchActions.map((a) => {
                 const canAfford = team.budget >= a.cost;
+                // Čísla se vejdou do řádku podrobností, popis práce jde pod ně celý.
                 return (
-                  <Radek
+                  <ListRow
                     key={a.level}
-                    ikona="🌿"
-                    nazev={a.label}
-                    popis={`${a.desc} · +${a.improvement} % stav · ${formatCZK(a.cost)}`}
-                    akce={<button
+                    leading={<RowIcon>🌿</RowIcon>}
+                    title={a.label}
+                    meta={`+${a.improvement} % stav · ${formatCZK(a.cost)}`}
+                    detail={a.desc}
+                    trailing={<button
                       onClick={async () => {
                         const ok = await confirm({
                           title: a.label,
@@ -1408,39 +1410,42 @@ export default function StadiumPage() {
           {stadium.pitchUpgrades.length > 0 && (
             <div className="pt-3 border-t border-gray-100">
               <Podnadpis>Upgrade povrchu</Podnadpis>
-              {stadium.pitchUpgrades.map((u) => {
-                const canAfford = team.budget >= u.cost;
-                return (
-                  <Radek
-                    key={u.pitchType}
-                    ikona={u.pitchType === "hybrid" ? "🌾" : "🟩"}
-                    nazev={u.label}
-                    popis={`${u.desc} · ${formatCZK(u.cost)}`}
-                    akce={<button
-                      onClick={async () => {
-                        const ok = await confirm({
-                          title: `Upgrade na ${u.label}?`,
-                          description: u.desc,
-                          details: [{ label: "Cena", value: `-${formatCZK(u.cost)}`, color: "text-card-red" }],
-                          confirmLabel: `Upgradovat za ${formatCZK(u.cost)}`,
-                        });
-                        if (!ok || !teamId) return;
-                        setActing("pitch-up-" + u.pitchType);
-                        await apiFetch(`/api/teams/${teamId}/stadium/upgrade-pitch`, {
-                          method: "POST", headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ pitchType: u.pitchType }),
-                        }).catch((e) => console.error("upgrade pitch failed:", e));
-                        await refresh();
-                        setActing(null);
-                      }}
-                      disabled={!canAfford || !!acting}
-                      className="btn btn-primary btn-sm"
-                    >
-                      {acting === "pitch-up-" + u.pitchType ? "…" : "Upgradovat"}
-                    </button>}
-                  />
-                );
-              })}
+              <div className="-mx-4 sm:-mx-5">
+                {stadium.pitchUpgrades.map((u) => {
+                  const canAfford = team.budget >= u.cost;
+                  return (
+                    <ListRow
+                      key={u.pitchType}
+                      leading={<RowIcon>{u.pitchType === "hybrid" ? "🌾" : "🟩"}</RowIcon>}
+                      title={u.label}
+                      meta={formatCZK(u.cost)}
+                      detail={u.desc}
+                      trailing={<button
+                        onClick={async () => {
+                          const ok = await confirm({
+                            title: `Upgrade na ${u.label}?`,
+                            description: u.desc,
+                            details: [{ label: "Cena", value: `-${formatCZK(u.cost)}`, color: "text-card-red" }],
+                            confirmLabel: `Upgradovat za ${formatCZK(u.cost)}`,
+                          });
+                          if (!ok || !teamId) return;
+                          setActing("pitch-up-" + u.pitchType);
+                          await apiFetch(`/api/teams/${teamId}/stadium/upgrade-pitch`, {
+                            method: "POST", headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ pitchType: u.pitchType }),
+                          }).catch((e) => console.error("upgrade pitch failed:", e));
+                          await refresh();
+                          setActing(null);
+                        }}
+                        disabled={!canAfford || !!acting}
+                        className="btn btn-primary btn-sm"
+                      >
+                        {acting === "pitch-up-" + u.pitchType ? "…" : "Upgradovat"}
+                      </button>}
+                    />
+                  );
+                })}
+              </div>
             </div>
           )}
         </Sekce>

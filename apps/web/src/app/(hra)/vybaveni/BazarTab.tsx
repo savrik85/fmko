@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { LockDetail, SectionLabel, Spinner, ListCard, ListRow, RowIcon } from "@/components/ui";
+import { LockDetail, Spinner, ListCard, ListRow, ListEmpty, RowIcon, RowValue } from "@/components/ui";
 import { AmenityGainChip } from "@/components/equipment/amenity-gain-chip";
 import {
   EQUIPMENT_ICONS, condBarColor, condColor, daysLeft, formatCZK,
@@ -91,130 +91,123 @@ export function BazarTab({ data, loading, budget, busy, onBuy, onWithdraw, onRep
         </div>
       )}
 
-      {/* Nabídky */}
-      {listings.length === 0 && (
-        <div className="card p-8 text-center">
-          <div className="text-3xl mb-2">📦</div>
-          <div className="text-base text-muted">
+      {/* Nabídky. Řádek není odkaz: uvnitř je odkaz na klub, na incident a tlačítka. */}
+      <ListCard>
+        {listings.length === 0 && (
+          <ListEmpty icon="📦">
             {data.listings.length === 0
               ? "V bazaru je zatím prázdno. Buď první, kdo něco nabídne."
               : "Žádná nabídka neprošla filtrem."}
-          </div>
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          </ListEmpty>
+        )}
         {listings.map((l) => {
           const affordable = budget >= l.price;
           const canBuy = l.canBuy && affordable;
           return (
-            <div key={l.id} className="card p-4 flex flex-col">
-              <div className="flex items-center gap-2.5 mb-3">
-                <span className="text-2xl">{EQUIPMENT_ICONS[l.category] ?? "📦"}</span>
-                <div className="flex-1 min-w-0">
-                  <div className="font-heading font-bold">{l.categoryLabel}</div>
-                  <div className="text-xs text-muted">{l.levelDescription}</div>
-                </div>
-                <div className="flex gap-1 shrink-0">
-                  {[1, 2, 3].map((n) => (
-                    <div key={n} className={`w-3 h-3 rounded-full ${n <= l.level ? "bg-pitch-400" : "bg-gray-200"}`} />
-                  ))}
-                </div>
-              </div>
+            <ListRow key={l.id}
+              leading={<RowIcon>{EQUIPMENT_ICONS[l.category] ?? "📦"}</RowIcon>}
+              title={l.categoryLabel}
+              trailing={<RowValue>{formatCZK(l.price)}</RowValue>}
+              detail={
+                <span className="block space-y-1.5 mt-0.5">
+                  <span className="flex items-start gap-2">
+                    <span className="flex gap-1 shrink-0 pt-[3px]">
+                      {[1, 2, 3].map((n) => (
+                        <span key={n} className={`w-3 h-3 rounded-full ${n <= l.level ? "bg-pitch-400" : "bg-gray-200"}`} />
+                      ))}
+                    </span>
+                    <span className="text-muted">{l.levelDescription}</span>
+                  </span>
 
-              <div className="text-sm text-muted mb-3">
-                od{" "}
-                {l.teamId ? (
-                  <Link href={`/tym/${l.teamId}`} className="font-heading font-bold text-ink hover:text-pitch-600 transition-colors">{l.teamName}</Link>
-                ) : (
-                  // Virtuální klub ze sousedního okresu — nemá stránku, na kterou odkázat.
-                  <span className="font-heading font-bold text-ink">{l.teamName}</span>
-                )}
-                {l.isPrivateListing
-                  ? <span className="text-sm"> · soukromý inzerát</span>
-                  : l.isAiListing && <span className="text-xs"> · z okolí</span>}
-              </div>
+                  <span className="block text-muted">
+                    od{" "}
+                    {l.teamId ? (
+                      <Link href={`/tym/${l.teamId}`} className="font-heading font-bold text-ink hover:text-pitch-600 transition-colors">{l.teamName}</Link>
+                    ) : (
+                      // Virtuální klub ze sousedního okresu: nemá stránku, na kterou odkázat.
+                      <span className="font-heading font-bold text-ink">{l.teamName}</span>
+                    )}
+                    {l.isPrivateListing
+                      ? <span> · soukromý inzerát</span>
+                      : l.isAiListing && <span className="text-xs"> · z okolí</span>}
+                  </span>
 
-              {l.vypadaJakoVase && (
-                <div className="mb-3 rounded-soft bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-800">
-                  Vypadá to jako vaše ukradené vybavení: {l.categoryLabel}.
-                  {l.incidentId && (
-                    <>
-                      {" "}
-                      <Link href={`/incidenty?id=${encodeURIComponent(l.incidentId)}`} className="font-heading font-bold underline">
-                        Otevřít incident
-                      </Link>
-                    </>
+                  {l.vypadaJakoVase && (
+                    <span className="block rounded-soft bg-amber-50 border border-amber-200 px-3 py-2 text-amber-800">
+                      Vypadá to jako vaše ukradené vybavení: {l.categoryLabel}.
+                      {l.incidentId && (
+                        <>
+                          {" "}
+                          <Link href={`/incidenty?id=${encodeURIComponent(l.incidentId)}`} className="font-heading font-bold underline">
+                            Otevřít incident
+                          </Link>
+                        </>
+                      )}
+                    </span>
                   )}
-                </div>
-              )}
 
-              {/* Stav je hlavní rozhodovací informace — proto nahoře a velký. */}
-              <div className="mb-3">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs text-muted uppercase">Stav</span>
-                  <span className={`text-sm font-heading font-bold tabular-nums ${condColor(l.condition)}`}>{l.condition} %</span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div className={`h-2 rounded-full ${condBarColor(l.condition)}`} style={{ width: `${l.condition}%` }} />
-                </div>
-              </div>
+                  {/* Stav je hlavní rozhodovací informace, proto hned nahoře. */}
+                  <span className="flex items-center gap-2">
+                    <span className="text-xs text-muted uppercase">Stav</span>
+                    <span className="flex-1 bg-gray-200 rounded-full h-2">
+                      <span className={`block h-2 rounded-full ${condBarColor(l.condition)}`} style={{ width: `${l.condition}%` }} />
+                    </span>
+                    <span className={`font-heading font-bold tabular-nums ${condColor(l.condition)}`}>{l.condition} %</span>
+                  </span>
 
-              {l.effect && (
-                <div className="mb-3">
-                  <div className="text-sm text-pitch-600">{l.effect}</div>
-                  {l.effectNote && <div className="text-sm text-muted leading-snug mt-0.5">{l.effectNote}</div>}
-                  {l.amenity && <AmenityGainChip amenity={l.amenity} />}
-                </div>
-              )}
+                  {l.effect && (
+                    <span className="block">
+                      <span className="block text-pitch-600">{l.effect}</span>
+                      {l.effectNote && <span className="block text-muted leading-snug mt-0.5">{l.effectNote}</span>}
+                      {l.amenity && <AmenityGainChip amenity={l.amenity} />}
+                    </span>
+                  )}
 
-              <div className="mt-auto space-y-1">
-                <div className="text-base font-heading font-bold tabular-nums">{formatCZK(l.price)}</div>
-                <div className="text-sm text-muted">
                   {l.shopPrice > 0 && (
-                    <>
+                    <span className="block text-muted">
                       v obchodě {formatCZK(l.shopPrice)}{" "}
                       {l.savings > 0
                         ? <span className="text-pitch-600 font-heading font-bold">(ušetříš {formatCZK(l.savings)})</span>
                         : <span className="text-card-red font-heading font-bold">(v obchodě levněji)</span>}
-                    </>
+                    </span>
                   )}
-                </div>
-                <div className="text-sm text-muted">
-                  Máš úroveň {l.myLevel}
-                  {l.repairCostAfterBuy > 0 && <> · po koupi oprava {formatCZK(l.repairCostAfterBuy)}</>}
-                </div>
+                  <span className="block text-muted">
+                    Máš úroveň {l.myLevel}
+                    {l.repairCostAfterBuy > 0 && <> · po koupi oprava {formatCZK(l.repairCostAfterBuy)}</>}
+                  </span>
 
-                {l.lockDetail
-                  ? <div className="pt-2"><LockDetail detail={l.lockDetail} fallback={l.blockReason ?? undefined} /></div>
-                  : (
-                    <button
-                      onClick={() => onBuy(l)}
-                      disabled={!canBuy || !!busy}
-                      className={`w-full mt-2 py-2 rounded-soft text-sm font-heading font-bold transition-colors ${
-                        canBuy ? "bg-pitch-500 text-white hover:bg-pitch-600" : "bg-gray-100 text-gray-400 cursor-not-allowed"
-                      }`}
-                    >
-                      {busy === `b-${l.id}` ? "..." : !l.canBuy ? (l.blockReason ?? "Nedostupné") : !affordable ? "Nedostatek peněz" : "Koupit"}
-                    </button>
+                  {l.lockDetail && <LockDetail detail={l.lockDetail} fallback={l.blockReason ?? undefined} />}
+                  {(!l.lockDetail || l.lzeNahlasit) && (
+                    <span className="flex flex-wrap gap-2 pt-1">
+                      {!l.lockDetail && (
+                        <button
+                          onClick={() => onBuy(l)}
+                          disabled={!canBuy || !!busy}
+                          className={`py-2 px-4 rounded-soft text-sm font-heading font-bold transition-colors ${
+                            canBuy ? "bg-pitch-500 text-white hover:bg-pitch-600" : "bg-gray-100 text-gray-400 cursor-not-allowed"
+                          }`}
+                        >
+                          {busy === `b-${l.id}` ? "..." : !l.canBuy ? (l.blockReason ?? "Nedostupné") : !affordable ? "Nedostatek peněz" : "Koupit"}
+                        </button>
+                      )}
+                      {l.lzeNahlasit && (
+                        <button
+                          onClick={() => onReport(l)}
+                          disabled={!!busy}
+                          className="py-2 px-4 rounded-soft text-sm font-heading font-bold border border-blue-200 text-blue-700 hover:bg-blue-50 disabled:opacity-50 transition-colors"
+                        >
+                          {busy === `n-${l.id}` ? "..." : "Nahlásit policii"}
+                        </button>
+                      )}
+                    </span>
                   )}
 
-                {l.lzeNahlasit && (
-                  <button
-                    onClick={() => onReport(l)}
-                    disabled={!!busy}
-                    className="w-full mt-2 py-2 rounded-soft text-sm font-heading font-bold border border-blue-200 text-blue-700 hover:bg-blue-50 disabled:opacity-50 transition-colors"
-                  >
-                    {busy === `n-${l.id}` ? "..." : "Nahlásit policii"}
-                  </button>
-                )}
-
-                <div className="text-xs text-muted pt-1">{daysLeft(l.expiresAt)}</div>
-              </div>
-            </div>
+                  <span className="block text-xs text-muted">{daysLeft(l.expiresAt)}</span>
+                </span>
+              } />
           );
         })}
-      </div>
+      </ListCard>
 
       {/* Historie */}
       {data.history.length > 0 && (

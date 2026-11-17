@@ -784,28 +784,23 @@ function LoanTab({ teamId, data, info, onChange, reload }: {
 
       {/* Historie půjček */}
       {info.history.length > 0 && (
-        <div className="card p-4 sm:p-5">
-          <SectionLabel>Historie půjček</SectionLabel>
-          <div className="mt-2 space-y-2">
-            {info.history.map((h) => (
-              <div key={h.id} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-b-0">
-                <div>
-                  <div className="text-sm font-heading font-bold">{formatCZK(h.principal)} → {formatCZK(h.totalToRepay)}</div>
-                  <div className="text-micro text-muted">
-                    Vzato: {h.takenGameDate.slice(0, 10)} • {h.status === "active" ? "Aktivní" : h.status === "paid" ? `Splaceno ${h.paidOffAt?.slice(0, 10) ?? ""}` : h.status}
-                  </div>
-                </div>
-                <div className="text-right text-sm tabular-nums">
-                  {h.status === "active" ? (
-                    <span className="text-amber-700 font-heading font-bold">Zbývá {formatCZK(h.remaining)}</span>
-                  ) : (
-                    <span className="text-muted">{h.installmentsPaid} splátek</span>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+        <ListCard title="Historie půjček">
+          {/* Data jdou pod částku celá: v jednom řádku vedle zůstatku by se datum splacení uřízlo. */}
+          {info.history.map((h) => (
+            <ListRow key={h.id}
+              title={`${formatCZK(h.principal)} → ${formatCZK(h.totalToRepay)}`}
+              detail={
+                <span className="text-muted">
+                  Vzato: {h.takenGameDate.slice(0, 10)} · {h.status === "active" ? "Aktivní" : h.status === "paid" ? `Splaceno ${h.paidOffAt?.slice(0, 10) ?? ""}` : h.status}
+                </span>
+              }
+              trailing={h.status === "active" ? (
+                <span className="text-meta text-amber-700 font-heading font-bold tabular-nums whitespace-nowrap">Zbývá {formatCZK(h.remaining)}</span>
+              ) : (
+                <span className="text-meta text-muted tabular-nums whitespace-nowrap">{h.installmentsPaid} splátek</span>
+              )} />
+          ))}
+        </ListCard>
       )}
     </div>
   );
