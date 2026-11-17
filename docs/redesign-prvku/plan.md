@@ -447,4 +447,8 @@ Po každé vlně jedna krátká zpráva česky:
 Krok 0 hotový: maketa v `maketa.html`, uživatel vybral volbu C a červené tlačítko R2.
 Krok 1 hotový: `PageLoading`, `SectionLoading`, `ErrorBox` s `children`, `.btn-danger`
 (`Button variant="danger"`), `lib/format.ts`, `ProgressBar`, `ChoiceGroup`, `ChoiceCard`,
-`Disclosure`. Ověřené na dočasné stránce na 375 px i desktopu. Následuje vlna 1.
+`Disclosure`. Ověřené na dočasné stránce na 375 px i desktopu.
+Vlna 1 hotová lokálně: částky (27 formátovačů a 80 ručních zápisů → `formatKc`,
+spojovník před výdajem → minus), načítání (70 obalů → `PageLoading`/`SectionLoading`),
+chyby (13 hlášek → `ErrorBox`, 7 destruktivních tlačítek → `btn-danger`).
+Čeká na souhlas uživatele a pokyn k pushi; pak vlna 2.
