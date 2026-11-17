@@ -10,7 +10,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
 import { useOpenPlayerConversation } from "@/hooks/use-open-player-conversation";
-import { Spinner, PositionBadge } from "@/components/ui";
+import { Spinner, PositionBadge, DataTable, ListCard } from "@/components/ui";
 import { formatKg, formatKgChange, WEIGHT_CATEGORY, type WeightCategoryKey } from "@/lib/player-attrs";
 import type { PosFilter } from "@/components/players/squad-attribute-table";
 
@@ -117,81 +117,51 @@ export function SquadBodyTab({ teamId, filter }: { teamId: string; filter: PosFi
         </div>
       </div>
 
-      {rows.length === 0 ? (
-        <div className="card p-4 text-sm text-muted text-center">Žádní hráči neodpovídají filtru.</div>
-      ) : (
-        <div className="card overflow-x-auto table-scroll">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="border-b-2 border-gray-200">
-                {([
-                  ["Jméno", "Jméno hráče", "left"],
-                  ["Poz", "Pozice", "center"],
-                  ["Váha", "Aktuální váha", "center"],
-                  ["Stav", "Váha proti ideálu podle výšky", "center"],
-                  ["Měsíc", "Změna váhy za poslední měsíc", "center"],
-                  ["Postih", "O kolik nadváha snižuje rychlost a výdrž", "center"],
-                  ["Proč", "Příčina přírůstku, plán hubnutí, slib", "center"],
-                  ["", "Napsat hráči", "center"],
-                ] as Array<[string, string, "left" | "center"]>).map(([label, tip, align], i) => (
-                  <th key={i} title={tip}
-                    className={`py-2.5 px-1.5 font-heading uppercase text-muted whitespace-nowrap ${
-                      align === "left" ? "text-left pl-3 sticky left-0 bg-white z-10" : "text-center"
-                    }`}>
-                    {label}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((p) => {
+      <ListCard>
+        <DataTable rows={rows} rowKey={(p) => p.id}
+          rowHref={(p) => `/hrac/${p.id}`} scroll={{ minWidth: 720 }}
+          // Hráči s problémem s váhou mají zlatý proužek; dřív se ostatní řádky jen ztlumily.
+          rowTone={(p) => (p.problem ? { bar: "warn" } : undefined)}
+          empty="Žádní hráči neodpovídají filtru."
+          columns={[
+            { key: "name", header: "Jméno", title: "Jméno hráče", align: "left",
+              cell: (p) => <span className="text-body font-bold text-ink whitespace-nowrap">{p.name}</span> },
+            { key: "pos", header: "Poz", title: "Pozice", width: "w-14", cell: (p) => <PositionBadge position={p.position} /> },
+            { key: "weight", header: "Váha", title: "Aktuální váha",
+              cell: (p) => <span className="font-bold text-ink whitespace-nowrap">{p.weight !== null ? formatKg(p.weight) : "-"}</span> },
+            { key: "state", header: "Stav", title: "Váha proti ideálu podle výšky",
+              cell: (p) => {
                 const cat = p.weightCategory ? WEIGHT_CATEGORY[p.weightCategory] : null;
+                return <span className={`font-bold whitespace-nowrap ${cat?.color ?? "text-muted"}`}>{cat?.label ?? "-"}</span>;
+              } },
+            { key: "month", header: "Měsíc", title: "Změna váhy za poslední měsíc",
+              cell: (p) => <span className={`whitespace-nowrap ${p.trend30d !== null ? trendTone(p.trend30d, p.weightCategory) : "text-muted"}`}>{p.trend30d !== null ? formatKgChange(p.trend30d) : "-"}</span> },
+            { key: "penalty", header: "Postih", title: "O kolik nadváha snižuje rychlost a výdrž",
+              cell: (p) => {
                 const { speed, stamina } = p.effects;
-                return (
-                  <tr key={p.id} className={`border-b border-gray-50 hover:bg-pitch-50/30 transition-colors ${p.problem ? "" : "opacity-70"}`}>
-                    <td className="py-2 px-1.5 pl-3 sticky left-0 bg-white z-10">
-                      <Link href={`/hrac/${p.id}`}
-                        className="font-heading font-bold text-sm hover:text-pitch-500 underline decoration-pitch-500/20 transition-colors whitespace-nowrap">
-                        {p.name}
-                      </Link>
-                    </td>
-                    <td className="py-2 px-1.5 text-center"><PositionBadge position={p.position} /></td>
-                    <td className="py-2 px-1.5 text-center tabular-nums font-heading font-bold whitespace-nowrap">
-                      {p.weight !== null ? formatKg(p.weight) : "-"}
-                    </td>
-                    <td className={`py-2 px-1.5 text-center whitespace-nowrap font-heading font-bold ${cat?.color ?? "text-muted"}`}>
-                      {cat?.label ?? "-"}
-                    </td>
-                    <td className={`py-2 px-1.5 text-center tabular-nums whitespace-nowrap ${p.trend30d !== null ? trendTone(p.trend30d, p.weightCategory) : "text-muted"}`}>
-                      {p.trend30d !== null ? formatKgChange(p.trend30d) : "-"}
-                    </td>
-                    <td className={`py-2 px-1.5 text-center tabular-nums whitespace-nowrap ${speed || stamina ? "text-card-red font-heading font-bold" : "text-muted"}`}>
-                      {!speed && !stamina ? "-" : speed === stamina ? signed(speed) : `${signed(speed)}/${signed(stamina)}`}
-                    </td>
-                    <td className="py-2 px-1.5 text-center whitespace-nowrap text-sm">
-                      {p.cause && <span title={CAUSE[p.cause].label}>{CAUSE[p.cause].icon}</span>}
-                      {p.planUntil && (p.planKind === "gain"
-                        ? <span title={`Plán nabírání do ${czDate(p.planUntil)}`}>💪</span>
-                        : <span title={`Plán hubnutí do ${czDate(p.planUntil)}`}>🏃</span>)}
-                      {p.pledgeUntil && <span title={`Slíbil omezit hospodu do ${czDate(p.pledgeUntil)}`}>🤝</span>}
-                      {!p.cause && !p.planUntil && !p.pledgeUntil && <span className="text-muted text-xs">-</span>}
-                    </td>
-                    <td className="py-1 px-1.5 text-center">
-                      {p.problem && (
-                        <button onClick={() => openSms(p.id)} disabled={openingPlayerId !== null}
-                          aria-label={`Napsat hráči ${p.name}`} title="Napsat SMS"
-                          className="min-w-9 min-h-9 rounded-control hover:bg-pitch-50 transition-colors text-sm disabled:opacity-50">
-                          💬
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+                return <span className={`whitespace-nowrap ${speed || stamina ? "text-card-red font-bold" : "text-muted"}`}>{!speed && !stamina ? "-" : speed === stamina ? signed(speed) : `${signed(speed)}/${signed(stamina)}`}</span>;
+              } },
+            { key: "why", header: "Proč", title: "Příčina přírůstku, plán hubnutí, slib",
+              cell: (p) => (
+                <span className="whitespace-nowrap">
+                  {p.cause && <span title={CAUSE[p.cause].label}>{CAUSE[p.cause].icon}</span>}
+                  {p.planUntil && (p.planKind === "gain"
+                    ? <span title={`Plán nabírání do ${czDate(p.planUntil)}`}>💪</span>
+                    : <span title={`Plán hubnutí do ${czDate(p.planUntil)}`}>🏃</span>)}
+                  {p.pledgeUntil && <span title={`Slíbil omezit hospodu do ${czDate(p.pledgeUntil)}`}>🤝</span>}
+                  {!p.cause && !p.planUntil && !p.pledgeUntil && <span className="text-muted">-</span>}
+                </span>
+              ) },
+            { key: "sms", header: "", title: "Napsat hráči", width: "w-12",
+              cell: (p) => p.problem ? (
+                <button onClick={(e) => { e.stopPropagation(); openSms(p.id); }} disabled={openingPlayerId !== null}
+                  aria-label={`Napsat hráči ${p.name}`} title="Napsat SMS"
+                  className="min-w-9 min-h-9 rounded-control hover:bg-pitch-50 transition-colors text-sm disabled:opacity-50">
+                  💬
+                </button>
+              ) : null },
+          ]} />
+      </ListCard>
 
       <div className="card p-3 text-sm text-muted space-y-1">
         <div>
