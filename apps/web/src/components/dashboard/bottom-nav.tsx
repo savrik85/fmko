@@ -92,9 +92,10 @@ export function BottomNav() {
       ref={navRef}
       className="app-bottom-nav fixed bottom-0 left-0 right-0 z-[var(--z-nav)] sm:hidden rounded-t-[18px] border-t border-gray-300 shadow-[0_-10px_26px_-6px_rgba(26,23,20,0.42)]"
       style={{
-        // Světlá lišta: spodek splyne s obsahem a místo pod ikonami nepůsobí
-        // jako zelený blok. Kde hráč je, ukazuje zelená barva a proužek nahoře.
-        background: "var(--color-surface)",
+        // Světlá lišta se slabým nádechem zelené (pitch-50, stejný odstín jako
+        // vybraná volba): odliší se od bílých karet nad ní, ale nepůsobí jako
+        // zelený blok. Kde hráč je, ukazuje tmavě zelená ikona a proužek nahoře.
+        background: "var(--color-pitch-50)",
         // Lišta zůstává ukotvená na spodku viewportu. Posouvat ji níž
         // (`bottom: -47px`) nejde — `fixed` prvky se na iOS ořežou na
         // layoutový viewport, takže se tím jen odřízly popisky. Zelenou pod

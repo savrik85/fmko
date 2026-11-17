@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type Ref } from "react";
 import { usePathname } from "next/navigation";
 import { HelpMenu } from "./help-menu";
 import { BugReportTrialDialog } from "@/components/bug-report/bug-report-trial-dialog";
-import { captureVisibleApp, type CaptureResult } from "@/lib/page-capture";
+import { capturePage, type CaptureResult } from "@/lib/page-capture";
 
 /** Počká, až prohlížeč vykreslí „Fotím stránku…“, než ho focení na chvíli zablokuje. */
 function nextPaint(): Promise<void> {
@@ -376,7 +376,7 @@ export function Napoveda() {
   // Focení: ref hlídá dvojí ťuknutí ještě před překreslením, stav ukazuje „Fotím stránku…“.
   const capturingRef = useRef(false);
   const [capturing, setCapturing] = useState(false);
-  const [captures, setCaptures] = useState<CaptureResult[] | null>(null);
+  const [capture, setCapture] = useState<CaptureResult | null>(null);
 
   // Menu zůstává během focení otevřené s „Fotím stránku…“: je mimo `.app-shell`
   // (portál), na snímek se nedostane, a jeho průhledná vrstva nepustí ťuknutí
@@ -387,10 +387,7 @@ export function Napoveda() {
     setCapturing(true);
     try {
       await nextPaint();
-      // Postupně, ne naráz: dvě kopie stránky najednou by se přetahovaly o výkon a časy by nešly porovnat.
-      const first = await captureVisibleApp("modern-screenshot");
-      const second = await captureVisibleApp("snapdom");
-      setCaptures([first, second]);
+      setCapture(await capturePage());
     } finally {
       capturingRef.current = false;
       setCapturing(false);
@@ -424,7 +421,7 @@ export function Napoveda() {
         />
       )}
       {mode === "help" && help && <HelpPanel help={help} onClose={() => setMode("closed")} />}
-      {captures && <BugReportTrialDialog results={captures} onClose={() => setCaptures(null)} />}
+      {capture && <BugReportTrialDialog result={capture} onClose={() => setCapture(null)} />}
     </>
   );
 }
