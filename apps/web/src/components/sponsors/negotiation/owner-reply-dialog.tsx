@@ -7,6 +7,7 @@ import { FaceAvatar } from "@/components/players/face-avatar";
 import { seasonsAccusative } from "@/lib/sponsor-format";
 import { RESPONSE_LABELS, type NegotiationRound } from "@/lib/sponsor-negotiation";
 import { formatKc } from "@/lib/format";
+import { Sheet } from "@/components/ui";
 
 const RESULT_CHIP_CLASS: Record<string, string> = {
   accept: "bg-pitch-50 text-pitch-600",
@@ -55,15 +56,7 @@ export function OwnerReplyDialog({
   const counter = kind === "counter_money" || kind === "counter_wish" ? round.response.counter : undefined;
 
   return (
-    <div className="fixed inset-0 z-[var(--z-dialog)] flex items-center justify-center p-4" onClick={onClose}>
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-      <div
-        className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-label="Odpověď majitele"
-      >
+    <Sheet open onClose={onClose} maxWidth="384px" title="Odpověď majitele">
         <div className="p-5">
           <div className="flex items-center gap-3">
             <FaceAvatar faceConfig={faceConfig} size={48} className="shrink-0" />
@@ -138,7 +131,6 @@ export function OwnerReplyDialog({
             </button>
           </div>
         )}
-      </div>
-    </div>
+    </Sheet>
   );
 }

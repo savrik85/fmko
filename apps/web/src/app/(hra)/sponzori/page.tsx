@@ -43,7 +43,7 @@ export default function SponsorsPage() {
   const [renameInput, setRenameInput] = useState("");
   const [showRename, setShowRename] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
-  const { confirm, dialog: confirmDialog } = useConfirm();
+  const { confirm, dialog: confirmDialog } = useConfirm({ sheet: true });
   const [overview, setOverview] = useState<SponsorOverview | null>(null);
   const [overviewError, setOverviewError] = useState<string | null>(null);
   const [history, setHistory] = useState<SponsorHistoryItem[] | null>(null);

@@ -95,7 +95,7 @@ function TiketKarta({ t, teamId, onZmena }: { t: Tiket; teamId: string; onZmena:
         </button>
       )}
 
-      <Sheet open={vyvesuji} onClose={() => setVyvesuji(false)} title="Vyvěsit tiket" maxWidth="480px" zavritKlikemVedle={false}>
+      <Sheet open={vyvesuji} onClose={() => setVyvesuji(false)} title="Vyvěsit tiket" maxWidth="480px" closeOnBackdrop={false}>
         <div className="p-4 space-y-3">
           <p className="text-sm text-muted leading-snug">
             Tiket uvidí všechny kluby v soutěži a můžou se pod ním vyjádřit.

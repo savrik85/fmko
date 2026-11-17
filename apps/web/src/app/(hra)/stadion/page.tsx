@@ -512,7 +512,7 @@ export default function StadiumPage() {
   const [extError, setExtError] = useState<string | null>(null);
   /** Rozbalené místo pro přístavbu (vždy jen jedno, ať je přehled čitelný). */
   const [openSlot, setOpenSlot] = useState<string | null>(null);
-  const { confirm, dialog: confirmDialog } = useConfirm();
+  const { confirm, dialog: confirmDialog } = useConfirm({ sheet: true });
 
   useEffect(() => {
     if (typeof window === "undefined") return;

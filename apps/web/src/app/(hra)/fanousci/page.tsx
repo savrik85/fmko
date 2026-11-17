@@ -302,7 +302,7 @@ export default function FansPage() {
   const [productDrafts, setProductDrafts] = useState<Record<string, { sellPrice: string }>>({});
   const [restockQty, setRestockQty] = useState<Record<string, string>>({});
   const [acting, setActing] = useState<string | null>(null);
-  const { confirm, dialog: confirmDialog } = useConfirm();
+  const { confirm, dialog: confirmDialog } = useConfirm({ sheet: true });
 
   const refresh = async () => {
     if (!teamId) return;

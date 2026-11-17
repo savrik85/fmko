@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
-import { Card, CardHeader, CardBody, BadgePreview, JerseyPreview, PageLoading, ErrorBox } from "@/components/ui";
+import { Card, CardHeader, CardBody, BadgePreview, JerseyPreview, PageLoading, ErrorBox, useConfirm } from "@/components/ui";
 import type { BadgePattern } from "@/components/ui";
 import { StadiumPhotoCard } from "@/app/klub/[teamId]/StadiumPhotoCard";
 import {
@@ -138,6 +138,7 @@ export default function MujKlubPage() {
   const [saving, setSaving] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const { confirm, dialog: confirmDialog } = useConfirm({ sheet: true });
 
   // Editable fields in settings
   const [slugInput, setSlugInput] = useState("");
@@ -204,7 +205,11 @@ export default function MujKlubPage() {
   const handleBuyTemplate = async (templateId: ClubWebsiteTemplate) => {
     if (!teamId) return;
     const tpl = CLUB_WEBSITE_TEMPLATES[templateId];
-    if (!window.confirm(`Opravdu chceš zakoupit šablonu "${tpl.name}" za ${formatKc(tpl.price)}?`)) {
+    if (!(await confirm({
+      title: `Koupit šablonu „${tpl.name}“?`,
+      details: [{ label: "Cena", value: `−${formatKc(tpl.price)}`, color: "text-card-red" }],
+      confirmLabel: "Koupit",
+    }))) {
       return;
     }
     setSaving(true);
@@ -229,7 +234,11 @@ export default function MujKlubPage() {
   const handleBuyAddon = async (addonId: ClubWebsiteAddon) => {
     if (!teamId) return;
     const add = CLUB_WEBSITE_ADDONS[addonId];
-    if (!window.confirm(`Opravdu chceš zakoupit vylepšení "${add.name}" za ${formatKc(add.price)}?`)) {
+    if (!(await confirm({
+      title: `Koupit vylepšení „${add.name}“?`,
+      details: [{ label: "Cena", value: `−${formatKc(add.price)}`, color: "text-card-red" }],
+      confirmLabel: "Koupit",
+    }))) {
       return;
     }
     setSaving(true);
@@ -286,6 +295,7 @@ export default function MujKlubPage() {
 
   return (
     <div className="page-container space-y-6">
+      {confirmDialog}
       {/* Top Banner & Title */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>

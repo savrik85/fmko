@@ -37,7 +37,7 @@ export default function DashboardPage() {
   const [draft, setDraft] = useState<LayoutItem[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const { confirm, dialog: confirmDialog } = useConfirm();
+  const { confirm, dialog: confirmDialog } = useConfirm({ sheet: true });
 
   // ── Layout ────────────────────────────────────────────────────────────────
   useEffect(() => {

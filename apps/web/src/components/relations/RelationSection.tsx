@@ -10,7 +10,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { apiFetch, showError } from "@/lib/api";
-import { SectionLabel, ListCard, ListRow, ListEmpty, SectionLoading, StatusChip } from "@/components/ui";
+import { SectionLabel, ListCard, ListRow, ListEmpty, SectionLoading, StatusChip, useConfirm } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { LicenceBadge } from "@/components/manager/LicenceBadge";
 import { CoachName } from "@/components/manager/coach-name";
@@ -126,6 +126,7 @@ export function RelationCard({ myTeamId, otherTeamId, otherManagerName }: {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const { confirm, dialog: confirmDialog } = useConfirm({ sheet: true });
 
   const load = useCallback(() => {
     apiFetch<RelationDetail>(`/api/teams/${myTeamId}/relations/${otherTeamId}`)
@@ -137,7 +138,7 @@ export function RelationCard({ myTeamId, otherTeamId, otherManagerName }: {
   useEffect(() => { load(); }, [load]);
 
   const interact = async (body: Record<string, unknown>, confirmText?: string) => {
-    if (confirmText && !window.confirm(confirmText)) return;
+    if (confirmText && !(await confirm({ title: "Opravdu?", description: confirmText, confirmLabel: "Pokračovat" }))) return;
     setBusy(true);
     setFeedback(null);
     try {
@@ -163,6 +164,7 @@ export function RelationCard({ myTeamId, otherTeamId, otherManagerName }: {
 
   return (
     <div className="card p-4 sm:p-5">
+      {confirmDialog}
       <div className="flex items-center justify-between gap-2 flex-wrap mb-1">
         <SectionLabel>Vztah s trenérem</SectionLabel>
         <div className="flex items-center gap-2">
@@ -327,6 +329,7 @@ export function PreMatchCard({ myTeamId, otherTeamId, otherTeamName }: {
   const [detail, setDetail] = useState<RelationDetail | null>(null);
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const { confirm, dialog: confirmDialog } = useConfirm({ sheet: true });
 
   const load = useCallback(() => {
     apiFetch<RelationDetail>(`/api/teams/${myTeamId}/relations/${otherTeamId}`)
@@ -342,7 +345,7 @@ export function PreMatchCard({ myTeamId, otherTeamId, otherTeamName }: {
   if (!hasContent && !feedback) return null;
 
   const interact = async (body: Record<string, unknown>, confirmText?: string) => {
-    if (confirmText && !window.confirm(confirmText)) return;
+    if (confirmText && !(await confirm({ title: "Opravdu?", description: confirmText, confirmLabel: "Pokračovat" }))) return;
     setBusy(true);
     try {
       const res = await apiFetch<{ ok: boolean; message: string; aiResponse?: string | null }>(
@@ -363,6 +366,7 @@ export function PreMatchCard({ myTeamId, otherTeamId, otherTeamName }: {
 
   return (
     <div className="card p-4 sm:p-5 border-l-4 border-l-amber-400">
+      {confirmDialog}
       <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
         <SectionLabel>Před zápasem · {roundLabel}</SectionLabel>
         <div className="flex items-center gap-3 text-sm tabular-nums">
@@ -449,6 +453,7 @@ export function PostMatchGestureCard({ myTeamId, opponentTeamId, opponentName, m
   const [detail, setDetail] = useState<RelationDetail | null>(null);
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const { confirm, dialog: confirmDialog } = useConfirm({ sheet: true });
 
   useEffect(() => {
     apiFetch<RelationDetail>(`/api/teams/${myTeamId}/relations/${opponentTeamId}`)
@@ -460,7 +465,7 @@ export function PostMatchGestureCard({ myTeamId, opponentTeamId, opponentName, m
   if (!feedback && (!gesture || gesture.matchId !== matchId)) return null;
 
   const choose = async (choice: "handshake" | "silent" | "jab") => {
-    if (choice === "jab" && !window.confirm("Rýpnutí vyjde v novinách a zvedne napětí. Pokračovat?")) return;
+    if (choice === "jab" && !(await confirm({ title: "Opravdu?", description: "Rýpnutí vyjde v novinách a zvedne napětí. Pokračovat?", confirmLabel: "Pokračovat" }))) return;
     setBusy(true);
     try {
       const res = await apiFetch<{ ok: boolean; message: string; aiResponse?: string | null }>(
@@ -479,6 +484,7 @@ export function PostMatchGestureCard({ myTeamId, opponentTeamId, opponentName, m
 
   return (
     <div className="card p-4 sm:p-5">
+      {confirmDialog}
       <SectionLabel>Po zápase</SectionLabel>
       {feedback ? (
         <div className="text-sm bg-amber-50 border border-amber-200 rounded-soft p-3 leading-relaxed">

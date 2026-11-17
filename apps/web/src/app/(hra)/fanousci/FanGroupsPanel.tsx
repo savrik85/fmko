@@ -267,7 +267,7 @@ export function FanGroupsPanel({ data, teamId, onChanged }: {
   // Jeden dialog pro celý panel. Uvnitř <details> s akcemi by ho sbalený
   // element schoval (display:none platí na celý podstrom) a potvrzení by
   // se nikdy nezobrazilo.
-  const { confirm, dialog } = useConfirm();
+  const { confirm, dialog } = useConfirm({ sheet: true });
 
   return (
     <div className="space-y-5">

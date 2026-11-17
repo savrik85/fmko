@@ -253,7 +253,7 @@ export function IntegrityPanel({ state, teamId, jsemKomisar, onChanged }: {
       )}
 
       {/* ── Zabavení výhry ───────────────────────────────────────────────── */}
-      <Modal isOpen={!!zabavit} onClose={() => setZabavit(null)} title="Zabavit výhru" zavritKlikemVedle={false}>
+      <Modal isOpen={!!zabavit} onClose={() => setZabavit(null)} title="Zabavit výhru" closeOnBackdrop={false}>
         <div className="p-4 space-y-3">
           <p className="text-sm leading-snug">
             Tiket č. {zabavit?.cislo} klubu <b>{zabavit?.teamName}</b>, výhra{" "}
@@ -277,7 +277,7 @@ export function IntegrityPanel({ state, teamId, jsemKomisar, onChanged }: {
       </Modal>
 
       {/* ── Zákaz sázení ─────────────────────────────────────────────────── */}
-      <Modal isOpen={zablokovat} onClose={() => setZablokovat(false)} title="Zakázat klubu sázení" zavritKlikemVedle={false}>
+      <Modal isOpen={zablokovat} onClose={() => setZablokovat(false)} title="Zakázat klubu sázení" closeOnBackdrop={false}>
         <div className="p-4 space-y-3">
           <p className="text-sm text-muted leading-snug">
             Zákaz platí okamžitě a klub se proti němu může odvolat k zasedání.

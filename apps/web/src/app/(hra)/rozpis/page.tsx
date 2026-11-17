@@ -97,7 +97,7 @@ export default function SchedulePage() {
   const [leagueLoading, setLeagueLoading] = useState(false);
   const [leagueLoaded, setLeagueLoaded] = useState(false);
   const [acting, setActing] = useState(false);
-  const { confirm, dialog: confirmDialog } = useConfirm();
+  const { confirm, dialog: confirmDialog } = useConfirm({ sheet: true });
 
   const loadSchedule = async () => {
     if (!teamId) return;

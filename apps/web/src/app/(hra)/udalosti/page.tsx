@@ -130,7 +130,7 @@ export default function EventsPage() {
       .catch((e) => { console.error("seasonal-events fetch:", e); setLoadError(true); setLoading(false); });
   }, [teamId]);
 
-  const { confirm, dialog: confirmDialog } = useConfirm();
+  const { confirm, dialog: confirmDialog } = useConfirm({ sheet: true });
 
   const handleChoice = async (ev: SeasonalEvent, choice: EventChoice) => {
     if (!teamId || choosing) return;
@@ -317,7 +317,7 @@ function PubAction({ teamId }: { teamId: string | null }) {
   const [open, setOpen] = useState(false);
   const [result, setResult] = useState<PubResult | null>(null);
   const [sending, setSending] = useState(false);
-  const { confirm, dialog } = useConfirm();
+  const { confirm, dialog } = useConfirm({ sheet: true });
 
   useEffect(() => {
     if (!teamId) return;

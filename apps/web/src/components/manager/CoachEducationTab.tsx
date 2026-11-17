@@ -120,7 +120,7 @@ const SOURCE_LABEL: Record<string, string> = {
 
 export function CoachEducationTab({ teamId, isOwn }: { teamId: string; isOwn: boolean }) {
   const router = useRouter();
-  const { confirm, dialog } = useConfirm();
+  const { confirm, dialog } = useConfirm({ sheet: true });
   const [data, setData] = useState<Education | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);

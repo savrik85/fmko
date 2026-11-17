@@ -225,7 +225,7 @@ function Intro({ exam, teamId, courseId, onStarted }: { exam: Ready; teamId: str
 function RunningExam({ exam, teamId, courseId, onFinished, onReload }: {
   exam: Running; teamId: string; courseId: string; onFinished: (e: Exam) => void; onReload: () => void;
 }) {
-  const { confirm, dialog } = useConfirm();
+  const { confirm, dialog } = useConfirm({ sheet: true });
   const [answers, setAnswers] = useState<number[]>(exam.answers);
   const [index, setIndex] = useState(() => Math.max(0, exam.answers.findIndex((a) => a < 0)));
   const [now, setNow] = useState(() => Date.now());

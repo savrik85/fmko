@@ -511,7 +511,7 @@ function SuspendForm({ role, teamId, onClose, onSaved }: {
   };
 
   return (
-    <Modal isOpen onClose={onClose} title="Pozastavit pravomoc" zavritKlikemVedle={false}>
+    <Modal isOpen onClose={onClose} title="Pozastavit pravomoc" closeOnBackdrop={false}>
       <div className="p-5 space-y-4">
         <div className="text-lg font-heading">Pozastavit pravomoc: {role.label}</div>
 
@@ -563,7 +563,7 @@ function ResignForm({ role, teamId, hrozbaOdvolani, onClose, onSaved }: {
   };
 
   return (
-    <Modal isOpen onClose={onClose} title="Rezignovat na funkci" zavritKlikemVedle={false}>
+    <Modal isOpen onClose={onClose} title="Rezignovat na funkci" closeOnBackdrop={false}>
       <div className="p-5 space-y-4">
         <div className="text-lg font-heading">Rezignovat: {role.label}</div>
 
@@ -692,7 +692,7 @@ function OwnGrantForm({ data, teamId, onClose, onSaved }: {
   };
 
   return (
-    <Modal isOpen onClose={onClose} title="Žádost o dotaci" zavritKlikemVedle={false}>
+    <Modal isOpen onClose={onClose} title="Žádost o dotaci" closeOnBackdrop={false}>
       <div className="p-5 space-y-4">
         <div className="text-lg font-heading">Žádost o dotaci pro svůj klub</div>
         <p className="text-sm text-muted">
@@ -785,7 +785,7 @@ function GrantForm({ data, teamId, onClose, onSaved }: {
   const podHranici = data.teams.filter((t) => t.hristePodHranici).length;
 
   return (
-    <Modal isOpen onClose={onClose} title="Návrh na dotaci" zavritKlikemVedle={false}>
+    <Modal isOpen onClose={onClose} title="Návrh na dotaci" closeOnBackdrop={false}>
       <div className="p-5 space-y-4">
         <div className="text-lg font-heading">Návrh na dotaci</div>
 

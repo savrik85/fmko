@@ -81,7 +81,7 @@ export function NextMatchWidget({ data, teamId }: WidgetProps) {
   const promotionPrice = data.schedule.data?.promotionPrice ?? null;
   const [promoting, setPromoting] = useState(false);
   const [localMatches, setLocalMatches] = useState<ScheduleMatch[] | null>(null);
-  const { confirm, dialog: confirmDialog } = useConfirm();
+  const { confirm, dialog: confirmDialog } = useConfirm({ sheet: true });
 
   const list = localMatches ?? matches;
   const nextMatch = list.find((m) => m.status !== "simulated");

@@ -834,7 +834,7 @@ function ProposalForm({ teamId, state, gesce, onClose, onSaved }: {
   };
 
   return (
-    <Modal isOpen onClose={onClose} title="Nový návrh" zavritKlikemVedle={false}>
+    <Modal isOpen onClose={onClose} title="Nový návrh" closeOnBackdrop={false}>
       <div className="p-5 space-y-4">
         <div className="text-lg font-heading">Nový návrh {GESCE_KOMU[gesce]}</div>
 

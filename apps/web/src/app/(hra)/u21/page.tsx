@@ -104,7 +104,7 @@ function ini(name: string): string {
 
 export default function U21Page() {
   const { teamId, gameDate: ctxGameDate } = useTeam();
-  const { confirm, dialog: confirmDialog } = useConfirm();
+  const { confirm, dialog: confirmDialog } = useConfirm({ sheet: true });
   const [tab, setTab] = useTabParam(TAB_KEYS);
 
   // Akademie byla záložkou U21 (?tab=akademie), teď má vlastní stránku v menu Mládež

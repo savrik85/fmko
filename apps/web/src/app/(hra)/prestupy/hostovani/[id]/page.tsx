@@ -58,7 +58,7 @@ export default function LoanReportPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const { teamId } = useTeam();
-  const { confirm, dialog: confirmDialog } = useConfirm();
+  const { confirm, dialog: confirmDialog } = useConfirm({ sheet: true });
   const [data, setData] = useState<LoanReport | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);

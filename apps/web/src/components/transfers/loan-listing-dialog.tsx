@@ -9,7 +9,7 @@ import { useState } from "react";
 import { MoneyInput } from "@/components/ui/money-input";
 import { LOAN_DURATIONS, LOAN_PLAYING_TIME_OPTIONS, type LoanPlayingTime } from "@/lib/loans";
 import { RevealPotentialToggle } from "./revealed-potential";
-import { ChoiceGroup } from "@/components/ui";
+import { ChoiceGroup, Sheet } from "@/components/ui";
 
 export interface LoanListingValue { days: number; fee: number; playingTime: LoanPlayingTime; revealPotential: boolean }
 
@@ -27,8 +27,7 @@ export function LoanListingDialog({ playerName, playerLine, onClose, onConfirm, 
 
   return (
     // Kliknutí vedle dialog nezavírá, rozepsané podmínky by se ztratily. Zavírá jen Zrušit.
-    <div className="fixed inset-0 z-[var(--z-sheet)] flex items-center justify-center bg-black/40 p-4">
-      <div className="bg-white rounded-2xl w-full max-w-md shadow-xl max-h-[90vh] overflow-y-auto">
+    <Sheet open onClose={onClose} maxWidth="448px" closeOnBackdrop={false} title="Nabídnout na hostování">
         <div className="p-5 space-y-5">
           <div>
             <h3 className="font-heading font-bold text-lg text-ink">Nabídnout na hostování</h3>
@@ -88,7 +87,6 @@ export function LoanListingDialog({ playerName, playerLine, onClose, onConfirm, 
             </button>
           </div>
         </div>
-      </div>
-    </div>
+    </Sheet>
   );
 }

@@ -46,7 +46,7 @@ function EquipmentPage() {
   const [acting, setActing] = useState<string | null>(null);
   const [selling, setSelling] = useState<SellOption | null>(null);
   const [bonusesOpen, setBonusesOpen] = useState(false);
-  const { confirm, dialog: confirmDialog } = useConfirm();
+  const { confirm, dialog: confirmDialog } = useConfirm({ sheet: true });
 
   // Deep-link z SMS a notifikací míří rovnou na bazar.
   const tab: Tab = searchParams.get("tab") === "bazar" ? "bazar" : "mine";

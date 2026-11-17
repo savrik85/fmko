@@ -45,7 +45,7 @@ export function OwnerCard({ sponsorId, teamId, owner, myTeam, onChanged }: {
   const [acting, setActing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const { confirm, dialog } = useConfirm();
+  const { confirm, dialog } = useConfirm({ sheet: true });
   const name = `${owner.firstName} ${owner.lastName}`;
   const match = myTeam?.nextHomeMatch ?? null;
   const date = match ? new Date(match.scheduledAt).toLocaleDateString("cs", { day: "numeric", month: "numeric" }) : "";

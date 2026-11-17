@@ -10,7 +10,7 @@ import { useOpenPlayerConversation } from "@/hooks/use-open-player-conversation"
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { PotentialProgress } from "@/components/players/potential-progress";
 import { usePotencial, PotentialStars, PotentialBadge } from "@/components/players/potential-summary";
-import { PositionBadge, SectionLabel, BadgePreview, JerseyPreview, useConfirm, DataTable, EntityCell, ScoreChip, RatingPill, ListCard, ListRow, RowIcon, ShowMore, type MatchOutcome, SectionLoading, PageLoading, StatusChip, ProgressBar } from "@/components/ui";
+import { PositionBadge, SectionLabel, BadgePreview, JerseyPreview, useConfirm, DataTable, EntityCell, ScoreChip, RatingPill, ListCard, ListRow, RowIcon, ShowMore, type MatchOutcome, SectionLoading, PageLoading, StatusChip, ProgressBar, Sheet, ChoiceGroup } from "@/components/ui";
 import { SquadNumberEditor } from "./SquadNumberEditor";
 import { PlayerCompare } from "./PlayerCompare";
 import { generateCharacteristics, type PlayerTag } from "@/lib/characteristics";
@@ -174,7 +174,7 @@ export default function PlayerDetailPage() {
   const [scoutLoading, setScoutLoading] = useState(false);
   const [scoutSent, setScoutSent] = useState(false);
   const { open: openConversation, openingPlayerId: openingConversationFor } = useOpenPlayerConversation(teamId);
-  const { confirm, dialog: confirmDialog } = useConfirm();
+  const { confirm, dialog: confirmDialog } = useConfirm({ sheet: true });
   const [coachLog, setCoachLog] = useState<CoachRelationLogItem[]>([]);
   const [profileExtras, setProfileExtras] = useState<{
     personality: Record<string, number>;
@@ -1888,9 +1888,8 @@ function PlayerPriceDialog({ player, onClose, onConfirm, loading }: {
   const [revealPotential, setRevealPotential] = useState(false);
 
   return (
-    // Kliknutí vedle dialog nezavírá — rozepsaná cena by se ztratila. Zavírá jen Zrušit.
-    <div className="fixed inset-0 z-[var(--z-sheet)] flex items-center justify-center bg-black/40 p-4">
-      <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+    // Kliknutí vedle dialog nezavírá, rozepsaná cena by se ztratila. Zavírá jen Zrušit.
+    <Sheet open onClose={onClose} maxWidth="384px" closeOnBackdrop={false} title="Nabídnout na trh">
         <div className="p-5">
           <h3 className="font-heading font-bold text-lg">Nabídnout na trh</h3>
           <p className="text-sm text-muted mt-1">
@@ -1904,18 +1903,11 @@ function PlayerPriceDialog({ player, onClose, onConfirm, loading }: {
               onChange={setPrice}
               className="w-full px-3 py-2 rounded-soft border border-gray-200 font-heading font-bold text-lg tabular-nums focus:outline-none focus:border-pitch-500"
             />
-            <div className="flex gap-2 mt-2">
-              {[0.5, 1, 1.5, 2].map((mul) => (
-                <button
-                  key={mul}
-                  type="button"
-                  onClick={() => setPrice(Math.round(defaultPrice * mul))}
-                  className="flex-1 py-1 px-2 rounded text-xs font-heading font-bold bg-gray-50 hover:bg-gray-100 text-muted"
-                >
-                  {mul}×
-                </button>
-              ))}
-            </div>
+            <ChoiceGroup ariaLabel="Násobek ceny" size="sm" columns={4} className="mt-2" value={price != null ? String(price) : null}
+              onChange={(v) => setPrice(Number(v))}
+              options={[0.5, 1, 1.5, 2]
+                .map((mul) => ({ value: String(Math.round(defaultPrice * mul)), label: `${mul.toLocaleString("cs-CZ")}×` }))
+                .filter((o, i, all) => all.findIndex((x) => x.value === o.value) === i)} />
           </div>
 
           <div className="mt-4">
@@ -1938,8 +1930,7 @@ function PlayerPriceDialog({ player, onClose, onConfirm, loading }: {
             </button>
           </div>
         </div>
-      </div>
-    </div>
+    </Sheet>
   );
 }
 
@@ -1971,8 +1962,7 @@ function ScoutPlayerDialog({
   const alreadyWatching = scouts.find((s) => s.playerMissions?.some((m) => m.target_player_id === player.id)) ?? null;
 
   return (
-    <div className="fixed inset-0 z-[var(--z-sheet)] flex items-center justify-center bg-black/40 p-4">
-      <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+    <Sheet open onClose={onClose} maxWidth="384px" closeOnBackdrop={false} title="Poslat skauta na hráče">
         <div className="p-5 space-y-4">
           <div>
             <h3 className="font-heading font-bold text-lg text-ink">Poslat skauta na hráče</h3>
@@ -2073,8 +2063,7 @@ function ScoutPlayerDialog({
             )}
           </div>
         </div>
-      </div>
-    </div>
+    </Sheet>
   );
 }
 

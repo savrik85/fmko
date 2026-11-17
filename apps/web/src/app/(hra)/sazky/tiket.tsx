@@ -130,7 +130,7 @@ export function TiketSheet({ open, onClose, vybrane, celkovyKurz, board, teamId,
   }
 
   return (
-    <Sheet open={open} onClose={zavri} title="Tiket" maxWidth="520px" zavritKlikemVedle={false}>
+    <Sheet open={open} onClose={zavri} title="Tiket" maxWidth="520px" closeOnBackdrop={false}>
       <div className="p-4 sm:p-5 space-y-4">
         <div className="flex items-baseline justify-between gap-2">
           <div className="font-heading font-[800] text-xl">Tiket</div>

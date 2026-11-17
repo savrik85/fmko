@@ -188,7 +188,7 @@ function PauseForm({ referee, teamId, weeks, fromWeek, maxPauses, onClose, onSav
   };
 
   return (
-    <Modal isOpen onClose={onClose} title="Stopka rozhodčímu" zavritKlikemVedle={false}>
+    <Modal isOpen onClose={onClose} title="Stopka rozhodčímu" closeOnBackdrop={false}>
       <div className="p-5 space-y-4">
         <div className="text-lg font-heading">Stopka na {weeks} kola: {referee.name}</div>
         <p className="text-sm text-muted">
@@ -268,7 +268,7 @@ function BanForm({ referee, teamId, deposit, jeKomisar, onClose, onSaved }: {
   };
 
   return (
-    <Modal isOpen onClose={onClose} title="Vyškrtnutí rozhodčího" zavritKlikemVedle={false}>
+    <Modal isOpen onClose={onClose} title="Vyškrtnutí rozhodčího" closeOnBackdrop={false}>
       <div className="p-5 space-y-4">
         <div className="text-lg font-heading">
           {primo ? "Vyškrtnout" : "Navrhnout vyškrtnutí"}: {referee.name}
@@ -406,7 +406,7 @@ function SwapForm({ match, teamId, volni, gameWeek, onClose, onSaved }: {
   };
 
   return (
-    <Modal isOpen onClose={onClose} title="Výměna rozhodčího" zavritKlikemVedle={false}>
+    <Modal isOpen onClose={onClose} title="Výměna rozhodčího" closeOnBackdrop={false}>
       <div className="p-5 space-y-4">
         <div className="text-lg font-heading">
           {match.homeTeamName} – {match.awayTeamName}

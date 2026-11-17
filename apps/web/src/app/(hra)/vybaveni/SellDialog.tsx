@@ -21,7 +21,7 @@ interface Props {
 export function SellDialog({ option, busy, onClose, onList, onPawn, onRepair }: Props) {
   const [price, setPrice] = useState(0);
   // Zastavárna je nevratná, takže chce potvrzení — ale JEN uvnitř tohohle dialogu.
-  // useConfirm() se tu použít nesmí: jeho dialog by se otevřel nad modalem a hráč
+  // useConfirm({ sheet: true }) se tu použít nesmí: jeho dialog by se otevřel nad modalem a hráč
   // by klikal do prázdna (viz komentář u z-indexu v confirm-dialog.tsx).
   const [pawnArmed, setPawnArmed] = useState(false);
 

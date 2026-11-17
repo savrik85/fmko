@@ -200,7 +200,7 @@ function Avatar({ m }: { m: StaffMember }) {
 
 export default function ZamestnanciPage() {
   const { teamId } = useTeam();
-  const { confirm, dialog } = useConfirm();
+  const { confirm, dialog } = useConfirm({ sheet: true });
   const [tab, setTab] = useTabParam(TAB_KEYS);
   const [loading, setLoading] = useState(true);
   const [hired, setHired] = useState<StaffMember[]>([]);

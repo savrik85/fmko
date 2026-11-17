@@ -69,7 +69,7 @@ export default function NegotiationPage() {
   const replyRef = useRef<HTMLDivElement | null>(null);
   // Dialog s odpovědí hned po návrhu (jako u přestupů), ať hráč nemusí hledat, co majitel řekl.
   const [replyOpen, setReplyOpen] = useState(false);
-  const { confirm, dialog } = useConfirm();
+  const { confirm, dialog } = useConfirm({ sheet: true });
 
   useEffect(() => {
     setNegId(new URLSearchParams(window.location.search).get("id"));
