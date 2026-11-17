@@ -462,7 +462,7 @@ Mimo zůstává jen to, co podle sekce 5 seznam není, nebo co plán vynechává
 | Telefon, Zpravodaj, Redakce | Vynechané plánem (sekce 4, vlny): vlastní vzhled telefonu a novin. |
 | Volba úrovně akademie, karty trenéra žáků, výběr skauta, typy úkolů, kurzy zaměstnance | Přepínač mezi několika volbami, ne seznam. |
 | Účastníci večera v hospodě, zlepšení hráče na hostování, kluby sledující hráče, nejlepší jedenáctka v Lize | Štítky, ne seznam. |
-| Morálka po tréninku, „Co to dělá s tréninkem“ u kurzu, podmínky zámku v reputaci, atributy trenéra, rekordy obce | Dvojice štítek a hodnota. Morálka jako hustý řádek narostla o 70 %. |
+| „Co to dělá s tréninkem“ u kurzu, podmínky zámku v reputaci, atributy trenéra, rekordy obce | Dvojice štítek a hodnota. |
 | Grafy: liga proti nám v rozboru kádru, příjmy a výdaje ve financích, pořadí hráče v lize | Graf, ne seznam. |
 | Sázkový přehled s kurzy, komentáře v aréně, vlákna zpráv, vyjednávání, rozhovory | Tabule s tlačítky kurzů a chat, ne řádkový seznam. |
 | Konfigurátor tribun a zařízení stadionu, správa sortimentu stánku | Stavebnice a formulář, ne seznam. |

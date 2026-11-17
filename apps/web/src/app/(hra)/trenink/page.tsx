@@ -731,29 +731,32 @@ export default function TrainingPage() {
 
               {/* Jak hráčům sedí nastavená zátěž a přístup */}
               {result.moraleChanges && result.moraleChanges.length > 0 && (
-                <div className="mt-3 pt-3 border-t border-gray-100">
-                  <div className="text-micro text-muted font-heading uppercase tracking-wide mb-1.5">Nálada po tréninku</div>
-                  {/* Dvojice hráč a změna nálady, ne seznam položek (plán, sekce 5): hustý řádek
-                      ListRow má minimum 40 px a tyhle krátké řádky by na telefonu narostly o 70 %. */}
-                  <div className="space-y-1">
-                    {result.moraleChanges.map((m, i) => (
-                      <div key={`${m.playerId}-${i}`} className="flex items-center justify-between gap-3 text-sm">
-                        {m.playerId ? (
-                          <Link href={`/hrac/${m.playerId}`} className="font-heading font-bold hover:text-pitch-600 truncate">
-                            {m.playerName}
-                          </Link>
-                        ) : (
-                          <span className="font-heading font-bold truncate">{m.playerName}</span>
-                        )}
-                        <span className="flex items-center gap-2 shrink-0">
-                          <span className="text-muted text-xs">{m.reason}</span>
-                          <span className={`font-heading font-bold text-xs ${m.change > 0 ? "text-pitch-600" : "text-card-red"}`}>
-                            {m.change > 0 ? "+" : ""}{m.change} nálada
+                <div className="-mx-3 sm:-mx-4 -mb-3 sm:-mb-4 mt-3 border-t border-line-soft">
+                  {/* Jeden řádek se všemi změnami v detailu: řádek na hráče by měl minimum 40 px
+                      a krátké poznámky by na telefonu narostly o 70 %. */}
+                  <ListRow
+                    title="Nálada po tréninku"
+                    detail={
+                      <span className="block space-y-0.5 mt-0.5">
+                        {result.moraleChanges.map((m, i) => (
+                          <span key={`${m.playerId}-${i}`} className="flex items-baseline justify-between gap-3">
+                            {m.playerId ? (
+                              <Link href={`/hrac/${m.playerId}`} className="font-heading font-bold text-ink hover:text-pitch-600 truncate">
+                                {m.playerName}
+                              </Link>
+                            ) : (
+                              <span className="font-heading font-bold text-ink truncate">{m.playerName}</span>
+                            )}
+                            <span className="flex items-baseline gap-2 shrink-0">
+                              <span className="text-muted text-xs">{m.reason}</span>
+                              <span className={`font-heading font-bold text-xs ${m.change > 0 ? "text-pitch-600" : "text-card-red"}`}>
+                                {m.change > 0 ? "+" : ""}{m.change} nálada
+                              </span>
+                            </span>
                           </span>
-                        </span>
-                      </div>
-                    ))}
-                  </div>
+                        ))}
+                      </span>
+                    } />
                 </div>
               )}
             </div>
