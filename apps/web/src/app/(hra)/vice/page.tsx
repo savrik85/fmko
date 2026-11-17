@@ -54,8 +54,8 @@ function getTileBadge(href: string, badges: MenuBadgesState): TileBadge | null {
 const ADMIN_ITEM: MenuItem = { href: "/admin", icon: "🛠️", label: "Administrace", color: "#8B4513" };
 
 /**
- * Skupina menu jako ikony aplikací na ploše telefonu: plná barevná ikona se
- * zaoblenými rohy přímo na papíře, název pod ní, po čtyřech v řadě.
+ * Skupina menu jako ikony aplikací na ploše telefonu: plochá jednobarevná ikona se
+ * zaoblenými rohy, bez přechodu a stínu, přímo na papíře, název pod ní, po čtyřech v řadě.
  * Odznak sedí na rohu ikony, takže název má celou šířku sloupce.
  */
 function MenuSection({ title, items, badges }: { title: string; items: MenuItem[]; badges: MenuBadgesState }) {
@@ -73,10 +73,7 @@ function MenuSection({ title, items, badges }: { title: string; items: MenuItem[
             >
               <span
                 className="relative w-14 h-14 rounded-2xl flex items-center justify-center text-[26px] leading-none"
-                style={{
-                  background: `linear-gradient(160deg, color-mix(in srgb, ${item.color} 78%, #fff), ${item.color})`,
-                  boxShadow: `0 4px 8px -4px color-mix(in srgb, ${item.color} 70%, #000)`,
-                }}
+                style={{ background: item.color }}
               >
                 <span aria-hidden="true">{item.icon}</span>
                 {badge && badge.type === "count" && badge.count > 0 && (
