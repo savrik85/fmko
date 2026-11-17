@@ -27,7 +27,7 @@ const MAX_SCALE = 2;
  * Safari na iPhonu neumí plátno větší než ~16,7 Mpx (4096 × 4096) a místo chyby
  * vrátí prázdný obrázek. S rezervou se měřítko sníží tak, aby se fotka vešla.
  */
-const MAX_CANVAS_PIXELS = 16_000_000;
+const MAX_CANVAS_PIXELS = 8_000_000;
 const MIN_SCALE = 1;
 /**
  * Nejvyšší fotka v CSS pixelech (~7 obrazovek telefonu). Kádr (1 800) i Dres (5 700)
@@ -113,24 +113,78 @@ function loadLazyImages(target: HTMLElement): void {
   });
 }
 
+/**
+ * Prázdný snímek: Safari na iPhonu občas obrázek s kopií stránky vůbec nevykreslí
+ * a plátno zůstane průhledné (z JPEG pak byla černá fotka). Kontroluje mřížku bodů:
+ * když jsou všechny průhledné, nebo všechny stejné jako podklad, snímek je prázdný.
+ */
+function isBlank(canvas: HTMLCanvasElement): boolean {
+  const ctx = canvas.getContext("2d");
+  if (!ctx || canvas.width === 0 || canvas.height === 0) return true;
+  const probe = document.createElement("canvas");
+  probe.width = 24;
+  probe.height = 48;
+  const pctx = probe.getContext("2d");
+  if (!pctx) return false;
+  pctx.drawImage(canvas, 0, 0, probe.width, probe.height);
+  const data = pctx.getImageData(0, 0, probe.width, probe.height).data;
+  let opaque = 0;
+  const first = [data[0], data[1], data[2]];
+  let varied = false;
+  for (let i = 0; i < data.length; i += 4) {
+    if (data[i + 3] > 0) opaque++;
+    if (Math.abs(data[i] - first[0]) + Math.abs(data[i + 1] - first[1]) + Math.abs(data[i + 2] - first[2]) > 24) varied = true;
+  }
+  return opaque === 0 || !varied;
+}
+
+/** Snímek na neprůhledný podklad stránky a do JPEG (průhledná místa jinak zčernají). */
+async function toJpeg(canvas: HTMLCanvasElement, background: string): Promise<Blob> {
+  const out = document.createElement("canvas");
+  out.width = canvas.width;
+  out.height = canvas.height;
+  const ctx = out.getContext("2d");
+  if (!ctx) throw new Error("2D kontext není k dispozici");
+  ctx.fillStyle = background;
+  ctx.fillRect(0, 0, out.width, out.height);
+  ctx.drawImage(canvas, 0, 0);
+  return new Promise((resolve, reject) => {
+    out.toBlob((blob) => (blob ? resolve(blob) : reject(new Error("Fotku se nepodařilo uložit"))), "image/jpeg", JPEG_QUALITY);
+  });
+}
+
+/** Pokusy: Safari často vykreslí až napodruhé, pak ještě v menším rozlišení. */
+const ATTEMPT_SCALES = (scale: number) => [scale, scale, 1];
+
 async function renderFullPage(target: HTMLElement, plan: PagePlan, options: CaptureOptions): Promise<Blob> {
   loadLazyImages(target);
-  const { domToBlob } = await import("modern-screenshot");
+  const { domToCanvas } = await import("modern-screenshot");
+  const background = getComputedStyle(document.body).backgroundColor || "#ffffff";
+  for (const scale of ATTEMPT_SCALES(plan.scale)) {
+    const canvas = await domToCanvas(target, canvasOptions(target, plan, options, scale, background));
+    if (!isBlank(canvas)) return toJpeg(canvas, background);
+    console.warn("Focení stránky: prázdný snímek, zkouším znovu", { scale });
+  }
+  throw new Error("Stránku se nepodařilo vyfotit (prázdný snímek)");
+}
+
+function canvasOptions(target: HTMLElement, plan: PagePlan, options: CaptureOptions, scale: number, background: string) {
   const main = target.querySelector("main");
   const column = main?.parentElement ?? null;
   const columnHeight = column && main ? column.clientHeight + (plan.contentHeight - main.clientHeight) : 0;
-  return domToBlob(target, {
-    type: "image/jpeg",
-    quality: JPEG_QUALITY,
-    scale: plan.scale,
+  return {
+    scale,
     width: plan.width,
     height: plan.height,
-    backgroundColor: getComputedStyle(document.body).backgroundColor,
-    filter: (node) => !isIgnored(node) && !(options.hideBottomNav && isBottomNav(node)),
+    backgroundColor: background,
+    // Bez vkládání webových písem: s nimi je kopie stránky o megabajty větší
+    // a Safari na iPhonu ji nevykreslil (černá fotka). Text je pak v systémovém písmu.
+    font: false as const,
+    filter: (node: Node) => !isIgnored(node) && !(options.hideBottomNav && isBottomNav(node)),
     timeout: MEDIA_TIMEOUT_MS,
     // Kopie má výšky živé stránky natvrdo ve stylu; `main` a sloupec nad ním se
     // natáhnou na vyfocený obsah, aby se nescrollovalo. Živá stránka se nemění.
-    onCloneNode: (cloned) => {
+    onCloneNode: (cloned: Node) => {
       if (!(cloned instanceof HTMLElement) || !main) return;
       const clonedMain = cloned.querySelector("main");
       if (!clonedMain) return;
@@ -160,7 +214,7 @@ async function renderFullPage(target: HTMLElement, plan: PagePlan, options: Capt
         }
       });
     },
-  });
+  };
 }
 
 /** Vyfotí celou stránku hry. Nikdy nevyhodí: chyba je v `error`, `blob` je pak `null`. */

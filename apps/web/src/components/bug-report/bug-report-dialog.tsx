@@ -62,8 +62,8 @@ export function BugReportDialog({
   };
 
   return (
-    <Sheet open onClose={onClose} title="Nahlásit chybu" closeOnBackdrop={false} maxWidth="520px">
-      <div data-capture-ignore className="px-5 pb-6 pt-2 sm:pt-5">
+    <Sheet open onClose={onClose} title="Nahlásit chybu" closeOnBackdrop={false} maxWidth="520px" centered>
+      <div data-capture-ignore className="px-5 pb-6 pt-5">
         <div className="flex items-start justify-between gap-3">
           <h2 className="font-heading font-bold text-lg text-ink">Nahlásit chybu</h2>
           <button
@@ -85,7 +85,29 @@ export function BugReportDialog({
           </>
         ) : (
           <>
-            <div className="mt-3 max-h-[35vh] overflow-y-auto overscroll-contain rounded-card border border-gray-300 bg-white">
+            <label htmlFor="bug-report-comment" className="block mt-3 text-sm font-semibold text-ink">
+              Co se stalo? <span className="font-normal text-gray-600">(nepovinné)</span>
+            </label>
+            <textarea
+              id="bug-report-comment"
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              rows={3}
+              maxLength={2000}
+              placeholder="Třeba: kliknul jsem na Uložit a nic se nestalo."
+              className="mt-1 w-full rounded-control border border-gray-300 bg-white px-3 py-2 text-sm text-ink"
+            />
+
+            {error && <p className="mt-2 text-sm text-card-red" role="alert">{error}</p>}
+            <button
+              type="button"
+              onClick={send}
+              disabled={state === "sending"}
+              className="btn btn-primary btn-md w-full mt-4"
+            >
+              {state === "sending" ? "Odesílám…" : "Odeslat"}
+            </button>
+            <div className="mt-4 max-h-[35vh] overflow-y-auto overscroll-contain rounded-card border border-gray-300 bg-white">
               {url ? (
                 // eslint-disable-next-line @next/next/no-img-element -- blob URL, next/image ho neumí
                 <img src={url} alt="Screen k hlášení" className="w-full h-auto" />
@@ -113,28 +135,6 @@ export function BugReportDialog({
               onChange={(e) => setOwnImage(e.target.files?.[0] ?? null)}
             />
 
-            <label htmlFor="bug-report-comment" className="block mt-4 text-sm font-semibold text-ink">
-              Co se stalo? <span className="font-normal text-gray-600">(nepovinné)</span>
-            </label>
-            <textarea
-              id="bug-report-comment"
-              value={comment}
-              onChange={(e) => setComment(e.target.value)}
-              rows={3}
-              maxLength={2000}
-              placeholder="Třeba: kliknul jsem na Uložit a nic se nestalo."
-              className="mt-1 w-full rounded-control border border-gray-300 bg-white px-3 py-2 text-sm text-ink"
-            />
-
-            {error && <p className="mt-2 text-sm text-card-red" role="alert">{error}</p>}
-            <button
-              type="button"
-              onClick={send}
-              disabled={state === "sending"}
-              className="btn btn-primary btn-md w-full mt-4"
-            >
-              {state === "sending" ? "Odesílám…" : "Odeslat"}
-            </button>
           </>
         )}
       </div>

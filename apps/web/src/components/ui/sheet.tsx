@@ -24,6 +24,7 @@ export function Sheet({
   maxWidth = "560px",
   className = "",
   closeOnBackdrop = true,
+  centered = false,
 }: {
   open: boolean;
   onClose: () => void;
@@ -37,6 +38,12 @@ export function Sheet({
    * by zahodil rozepsaný návrh a hráč by nepochopil, kam se mu poděl.
    */
   closeOnBackdrop?: boolean;
+  /**
+   * Na mobilu uprostřed obrazovky místo plachty u spodního okraje. Pro okna, která
+   * se otevírají nad celou stránkou (fotka, hlášení chyby): u spodního okraje je na
+   * iPhonu s nainstalovanou aplikací tlačítka nebylo vidět.
+   */
+  centered?: boolean;
 }) {
   const restoreFocusTo = useRef<HTMLElement | null>(null);
   const panel = useRef<HTMLDivElement>(null);
@@ -76,7 +83,7 @@ export function Sheet({
 
   return (
     <div
-      className="fixed inset-0 z-[var(--z-sheet)] flex items-end sm:items-center justify-center"
+      className={`fixed inset-0 z-[var(--z-sheet)] flex justify-center ${centered ? "items-center px-3" : "items-end sm:items-center"}`}
       onClick={closeOnBackdrop ? onClose : undefined}
     >
       <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px]" aria-hidden="true" />
@@ -88,11 +95,11 @@ export function Sheet({
         tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
         style={{ maxWidth }}
-        className={`relative w-full max-h-[92vh] overflow-y-auto overscroll-contain bg-paper shadow-[var(--shadow-modal)] rounded-t-[20px] sm:rounded-soft outline-none ${className}`}
+        className={`relative w-full overflow-y-auto overscroll-contain bg-paper shadow-[var(--shadow-modal)] outline-none ${centered ? "max-h-[85dvh] rounded-soft" : "max-h-[92vh] rounded-t-[20px] sm:rounded-soft"} ${className}`}
       >
         {/* Úchyt — na mobilu říká, že se plachta dá stáhnout pohledem i prstem.
             z-20: jinak se přes něj při posouvání kreslí obsah s position (relative, sticky). */}
-        <div className="sm:hidden sticky top-0 z-20 pt-2 pb-1 flex justify-center bg-paper" aria-hidden="true">
+        <div className={`${centered ? "hidden" : "sm:hidden"} sticky top-0 z-20 pt-2 pb-1 flex justify-center bg-paper`} aria-hidden="true">
           <span className="h-1 w-9 rounded-full bg-line-strong" />
         </div>
         {children}
