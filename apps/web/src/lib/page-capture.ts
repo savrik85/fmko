@@ -23,29 +23,11 @@ export interface CaptureResult {
 const JPEG_QUALITY = 0.85;
 const MAX_SCALE = 2;
 const IGNORE_ATTRIBUTE = "data-capture-ignore";
+/** Zaseknuté stahování obrázku nesmí nechat hráče čekat napořád. */
+const CAPTURE_TIMEOUT_MS = 15_000;
 
 function captureTarget(): HTMLElement {
   return document.querySelector<HTMLElement>(".app-shell") ?? document.body;
-}
-
-/**
- * `main` hry scrolluje sám, okno stojí. Knihovny fotí kopii stránky a ta začíná
- * nahoře, takže by snímek ukázal začátek stránky místo místa, kam hráč dojel.
- * Posun se proto na dobu focení převede na `transform` dětí `main`: vizuálně se nic
- * nehne a kopie už posunutá je. Vrácená funkce stav obnoví.
- */
-function freezeMainScroll(target: HTMLElement): () => void {
-  const main = target.querySelector("main");
-  if (!main || main.scrollTop === 0) return () => undefined;
-  const scrollTop = main.scrollTop;
-  const children = [...main.children] as HTMLElement[];
-  const previousTransforms = children.map((child) => child.style.transform);
-  children.forEach((child) => { child.style.transform = `translateY(-${scrollTop}px)`; });
-  main.scrollTop = 0;
-  return () => {
-    children.forEach((child, i) => { child.style.transform = previousTransforms[i]; });
-    main.scrollTop = scrollTop;
-  };
 }
 
 function isIgnored(node: Node): boolean {
@@ -63,6 +45,10 @@ async function renderWith(engine: CaptureEngine, target: HTMLElement): Promise<B
       scale,
       backgroundColor,
       filter: (node) => !isIgnored(node),
+      // `main` hry scrolluje sám, okno stojí. Bez toho by kopie začínala nahoře
+      // a snímek ukázal začátek stránky. Posun se dělá jen na kopii, živá
+      // stránka (přilepené lišty) zůstává, jak je. snapdom to umí sám.
+      features: { restoreScrollPosition: true },
     });
   }
   const { snapdom } = await import("@zumer/snapdom");
@@ -84,9 +70,12 @@ export async function captureVisibleApp(engine: CaptureEngine): Promise<CaptureR
   const width = target.clientWidth;
   const height = target.clientHeight;
   const started = performance.now();
-  const restoreScroll = freezeMainScroll(target);
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    const blob = await renderWith(engine, target);
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error("Focení trvalo déle než 15 s")), CAPTURE_TIMEOUT_MS);
+    });
+    const blob = await Promise.race([renderWith(engine, target), timeout]);
     return { engine, blob, width, height, ms: Math.round(performance.now() - started) };
   } catch (e) {
     console.error("Focení stránky selhalo:", engine, e);
@@ -99,6 +88,6 @@ export async function captureVisibleApp(engine: CaptureEngine): Promise<CaptureR
       error: e instanceof Error ? e.message : String(e),
     };
   } finally {
-    restoreScroll();
+    clearTimeout(timer);
   }
 }

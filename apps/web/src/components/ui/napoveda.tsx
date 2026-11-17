@@ -6,7 +6,7 @@ import { HelpMenu } from "./help-menu";
 import { BugReportTrialDialog } from "@/components/bug-report/bug-report-trial-dialog";
 import { captureVisibleApp, type CaptureResult } from "@/lib/page-capture";
 
-/** Počká, až prohlížeč vykreslí zavřené menu, ať na snímku není. */
+/** Počká, až prohlížeč vykreslí „Fotím stránku…“, než ho focení na chvíli zablokuje. */
 function nextPaint(): Promise<void> {
   return new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
 }
@@ -378,28 +378,37 @@ export function Napoveda() {
   const [capturing, setCapturing] = useState(false);
   const [captures, setCaptures] = useState<CaptureResult[] | null>(null);
 
+  // Menu zůstává během focení otevřené s „Fotím stránku…“: je mimo `.app-shell`
+  // (portál), na snímek se nedostane, a jeho průhledná vrstva nepustí ťuknutí
+  // na stránku pod ním. Zavřít ho do konce focení nejde.
   const reportBug = async () => {
     if (capturingRef.current) return;
     capturingRef.current = true;
     setCapturing(true);
-    setMode("closed");
     try {
       await nextPaint();
-      // Postupně, ne naráz: obě knihovny by si přepisovaly dočasný posun `main`.
+      // Postupně, ne naráz: dvě kopie stránky najednou by se přetahovaly o výkon a časy by nešly porovnat.
       const first = await captureVisibleApp("modern-screenshot");
       const second = await captureVisibleApp("snapdom");
       setCaptures([first, second]);
     } finally {
       capturingRef.current = false;
       setCapturing(false);
+      setMode("closed");
     }
+  };
+
+  const closeMenu = () => {
+    if (capturingRef.current) return;
+    setMode("closed");
   };
 
   return (
     <>
       <HelpButton
-        open={mode !== "closed"}
-        onClick={() => setMode(mode === "closed" ? "menu" : "closed")}
+        // Během focení je menu otevřené, ale na snímku má být v kroužku „?“, ne křížek.
+        open={mode !== "closed" && !capturing}
+        onClick={() => (mode === "closed" ? setMode("menu") : closeMenu())}
         variant="bar"
         label="Nápověda a nahlášení chyby"
         buttonRef={setAnchor}
@@ -411,7 +420,7 @@ export function Napoveda() {
           busy={capturing}
           onShowHelp={() => setMode("help")}
           onReportBug={reportBug}
-          onClose={() => setMode("closed")}
+          onClose={closeMenu}
         />
       )}
       {mode === "help" && help && <HelpPanel help={help} onClose={() => setMode("closed")} />}
