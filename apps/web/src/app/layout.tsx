@@ -33,12 +33,7 @@ export default function RootLayout({
     <html lang="cs" className={fontVariables}>
       <head>
         <meta name="apple-mobile-web-app-capable" content="yes" />
-        {/* Neprůhledný stavový řádek. S `black-translucent` počítá iOS 26 okno
-            nainstalované aplikace o výšku výřezu kratší (pod spodní lištou zbylo
-            62 px prázdna) a přes horní okraj kreslí rozmazání; CSS to neobejde
-            (zkoušeno 2026-11-17). iOS čte tuhle značku jen při přidání na plochu,
-            starší instalace zůstávají průhledné, dokud se nepřidají znovu. */}
-        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="apple-mobile-web-app-title" content="Prales" />
         <link rel="manifest" href="/manifest.json" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
