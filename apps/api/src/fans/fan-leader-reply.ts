@@ -12,6 +12,7 @@
 import { logger } from "../lib/logger";
 import { klasifikujOdpoved, dopadOdpovedi } from "../engine/fan-reactions";
 import { fanLeaderFullName, type FanLeaderRow } from "./fan-group-generator";
+import type { ChatEnv } from "../messaging/ai-player-chat";
 
 const M = "fan-leader-reply";
 
@@ -21,6 +22,8 @@ interface ThreadState {
   groupId?: string;
   tema?: string | null;
   awaiting?: string;
+  /** Kolik odpovědí trenéra už vůdce dostal (druhá je jen doplňující, bez dopadu). */
+  replies?: number;
 }
 
 /**
@@ -33,6 +36,7 @@ export async function handleFanLeaderReply(
   db: D1Database,
   convId: string,
   odpovedTrenera: string,
+  env?: ChatEnv,
 ): Promise<boolean> {
   try {
     const conv = await db
@@ -67,25 +71,39 @@ export async function handleFanLeaderReply(
       vyjednavani: leader.vyjednavani,
       radikalnost: leader.radikalnost,
     });
+    // Druhá odpověď trenéra (doplňující otázka) už náladou party nehýbe: dopad má jen ta první.
+    const followUp = (state.replies ?? 0) >= 1;
+
+    // Text odpovědi napíše model (téma, povaha vůdce, nálada party, jak trenér odpověděl).
+    // Dopad zůstává deterministický; bez modelu zůstane hotová věta (dřív na všechno „Jasně. Tak nic.“).
+    const text = await leaderReplyText(db, env, {
+      convId, leader, groupId: state.groupId, coachMessage: odpovedTrenera,
+      outcome: followUp ? "followup" : dopad.sentiment > 0 ? "calmed" : dopad.sentiment < 0 ? "annoyed" : "neutral",
+    }) ?? dopad.odpoved;
+    // Trenér se ptá („kolik je přijatelná cena?“): vůdce odpoví a nechá mu ještě jednu odpověď.
+    const keepOpen = !followUp && odpovedTrenera.includes("?");
+    const nextState = keepOpen ? JSON.stringify({ ...state, replies: 1, awaiting: "coach" }) : null;
 
     await db.batch([
-      db.prepare(
-        `UPDATE fan_leaders SET sentiment = MAX(-100, MIN(100, sentiment + ?)), duvod = ?,
-           updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE id = ?`,
-      ).bind(dopad.sentiment, zkratitDuvod(postoj, odpovedTrenera), leader.id),
-      db.prepare(
-        `UPDATE fan_groups SET mood = MAX(0, MIN(100, mood + ?)), heat = MAX(0, MIN(100, heat + ?)),
-           updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE id = ?`,
-      ).bind(dopad.mood, dopad.heat, state.groupId),
+      ...(followUp ? [] : [
+        db.prepare(
+          `UPDATE fan_leaders SET sentiment = MAX(-100, MIN(100, sentiment + ?)), duvod = ?,
+             updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE id = ?`,
+        ).bind(dopad.sentiment, zkratitDuvod(postoj, odpovedTrenera), leader.id),
+        db.prepare(
+          `UPDATE fan_groups SET mood = MAX(0, MIN(100, mood + ?)), heat = MAX(0, MIN(100, heat + ?)),
+             updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE id = ?`,
+        ).bind(dopad.mood, dopad.heat, state.groupId),
+      ]),
       db.prepare(
         `INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, sent_at)
          VALUES (?, ?, 'system', ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ','now'))`,
-      ).bind(crypto.randomUUID(), convId, leader.id, fanLeaderFullName(leader), dopad.odpoved),
+      ).bind(crypto.randomUUID(), convId, leader.id, fanLeaderFullName(leader), text),
       db.prepare(
         `UPDATE conversations SET unread_count = unread_count + 1, last_message_text = ?,
-           last_message_at = strftime('%Y-%m-%dT%H:%M:%SZ','now'), ai_thread_state = NULL
+           last_message_at = strftime('%Y-%m-%dT%H:%M:%SZ','now'), ai_thread_state = ?, ai_thread_active = ?
          WHERE id = ?`,
-      ).bind(dopad.odpoved.slice(0, 100), convId),
+      ).bind(text.slice(0, 100), nextState, keepOpen ? 1 : 0, convId),
     ]);
 
     logger.info(
@@ -96,6 +114,53 @@ export async function handleFanLeaderReply(
   } catch (e) {
     logger.warn({ module: M }, `odpověď vůdci v konverzaci ${convId}`, e);
     return false;
+  }
+}
+
+/**
+ * Odpověď vůdce party napsaná modelem. Zná, s čím za trenérem přišel (jeho poslední zpráva),
+ * náladu party a výsledek, který rozhodla hra. Na otázku odpoví věcně: manažeři se ptali
+ * „Kolik je přijatelná cena?“, „Myslíš, že je to hodně?“ a dostali „Jasně. Tak nic.“
+ * Null = model nic nevrátil, platí hotová věta.
+ */
+async function leaderReplyText(
+  db: D1Database,
+  env: ChatEnv | undefined,
+  o: { convId: string; leader: FanLeaderRow; groupId: string; coachMessage: string; outcome: "calmed" | "annoyed" | "neutral" | "followup" },
+): Promise<string | null> {
+  if (!env) return null;
+  try {
+    const chat = await import("../messaging/ai-player-chat");
+    const [said, group] = await Promise.all([
+      db.prepare("SELECT body FROM messages WHERE conversation_id = ? AND sender_id = ? ORDER BY sent_at DESC LIMIT 2")
+        .bind(o.convId, o.leader.id).all<{ body: string }>(),
+      db.prepare("SELECT name, mood, heat FROM fan_groups WHERE id = ?").bind(o.groupId).first<{ name: string; mood: number; heat: number }>(),
+    ]);
+    const mood = (group?.mood ?? 50) >= 65 ? "spokojená" : (group?.mood ?? 50) >= 40 ? "nejistá, něco ji štve" : "naštvaná";
+    const how = {
+      calmed: "Trenérova odpověď tě uklidnila, ber to smířlivě, ale po svém.",
+      annoyed: "Trenérova odpověď tě naštvala nebo urazila, dej to najevo podle povahy.",
+      neutral: "Trenérova odpověď s tebou moc nepohnula, odpověz stroze.",
+      followup: "Je to doplňující otázka trenéra, odpověz na ni a uzavři to.",
+    }[o.outcome];
+    const parsed = await chat.askModelJson<{ body?: unknown }>(env, [
+      chat.COACH_TEXT_RULE,
+      `Jsi ${fanLeaderFullName(o.leader)}, ${o.leader.age} let, ${o.leader.occupation}, vůdce fanouškovské party${group?.name ? ` „${group.name}“` : ""} vesnického fotbalového klubu.`,
+      `Povaha: radikálnost ${o.leader.radikalnost}/100, ochota vyjednávat ${o.leader.vyjednavani}/100. ${o.leader.bio ?? ""}`.trim(),
+      `Parta je teď ${mood}.`,
+      said.results.length > 0 ? `Trenérovi jsi napsal: „${said.results.reverse().map((m) => m.body).join(" … ")}“` : "",
+      `Trenér ti odpověděl: ${chat.coachQuote(o.coachMessage)}`,
+      "",
+      how,
+      "Když se trenér na něco ptá (třeba jaká cena je pro kluky ještě přijatelná, jestli to vadí), odpověz mu věcně a konkrétně za partu.",
+      "Piš jako chlap z kotle v SMS: 1–2 věty, hovorově, bez spisovných obratů, bez podpisu, bez dlouhé pomlčky.",
+      "Vrať POUZE JSON: {\"body\": \"text SMS\"}",
+    ].filter(Boolean).join("\n"), 160);
+    const body = typeof parsed?.body === "string" ? parsed.body.replace(/\s+/g, " ").replace(/—/g, ",").trim().slice(0, 280) : "";
+    return body.length > 0 ? body : null;
+  } catch (e) {
+    logger.warn({ module: M }, `text odpovědi vůdce ${o.leader.id}`, e);
+    return null;
   }
 }
 
