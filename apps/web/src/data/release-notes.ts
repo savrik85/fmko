@@ -12,6 +12,18 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    date: "2026-11-19",
+    emoji: "💬",
+    title: "Lidé ve hře víc reagují na tvoje zprávy",
+    items: [
+      "Na základě dat z konverzací v Telefonu přibyly reakce lidí ve hře na to, co jim píšeš.",
+      "Sliby napsané v SMS (základ, pozice, prémie, vyšší odměny, odchod) si hráči pamatují a hra je hlídá. Peníze se vyplácí tlačítkem pod zprávou.",
+      "Hráče jde pozvat na pivo nebo na schůzku, vsadit se s ním o gól nebo výhru a dát mu pokutu.",
+      "V kabině odpovídá ten, koho oslovíš, na delší zprávu víc hráčů a proslov před zápasem ovlivní náladu.",
+      "U incidentu záleží, jak se ptáš, a hráče jde požádat, ať se poptá. Vůdce kotle odpovídá na to, co mu napíšeš.",
+    ],
+  },
+  {
     date: "2026-11-18",
     emoji: "✨",
     title: "Redesign, aktualizovaná nápověda a hlášení chyb",
