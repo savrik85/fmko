@@ -59,7 +59,7 @@ import type { Bindings } from "../index";
 import { requireAdmin, requireAuth } from "../auth/middleware";
 import { applyLeveling, LEVELING_MODES, planLeveling, type LevelingMode } from "../ai-clubs/leveling";
 import { cryptoSeed } from "../generators/rng";
-import { findAbandonedClubs, MAX_TAKEOVERS_PER_RUN, runAbandonedClubTakeover } from "../ai-clubs/abandoned";
+import { findAbandonedClubs, MAX_TAKEOVERS_PER_RUN, releaseClubForNewcomer, runAbandonedClubTakeover } from "../ai-clubs/abandoned";
 import { openDistrictRegistration } from "../ai-clubs/district-opening";
 import { alignLeagueSchedule } from "../league/align-schedule";
 import { settleCaughtUpLeague } from "../league/catch-up-round";
@@ -305,5 +305,28 @@ adminAiClubsRouter.post("/takeover", async (c) => {
   } catch (e) {
     logger.error({ module: M }, "ruční převzetí opuštěných klubů", e);
     return c.json({ error: "Převzetí selhalo, podrobnosti jsou v logu" }, 500);
+  }
+});
+
+// Ruční uvolnění klubu neaktivního vlastníka pro nového hráče: klub převezme AI a příští
+// registrace v okrese ho hned přepíše vlastním klubem. S dryRun=1 jen ukáže, o který klub jde.
+adminAiClubsRouter.post("/release", async (c) => {
+  const teamId = c.req.query("teamId")?.trim();
+  if (!teamId) return c.json({ error: "Chybí teamId" }, 400);
+  try {
+    const club = await c.env.DB.prepare(
+      `SELECT t.name, t.user_id, t.ai_former_user_id, l.name AS league, u.display_name, u.last_activity_at, u.last_login_at
+         FROM teams t
+         LEFT JOIN leagues l ON l.id = t.league_id
+         LEFT JOIN users u ON u.id = CASE WHEN t.user_id = 'ai' THEN t.ai_former_user_id ELSE t.user_id END
+        WHERE t.id = ?`,
+    ).bind(teamId).first();
+    if (!club) return c.json({ error: "Klub neexistuje" }, 404);
+    if (isDryRun(c.req.query("dryRun"))) return c.json({ dryRun: true, club });
+    const result = await releaseClubForNewcomer(c.env.DB, teamId, new Date());
+    return c.json({ dryRun: false, club, ...result }, result.released ? 200 : 409);
+  } catch (e) {
+    logger.error({ module: M }, `uvolnění klubu ${teamId}`, e);
+    return c.json({ error: "Uvolnění klubu selhalo, podrobnosti jsou v logu" }, 500);
   }
 });

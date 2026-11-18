@@ -16,7 +16,7 @@ import { Hono } from "hono";
 import { teamsRouter } from "../routes/teams";
 import { createSession, getSession } from "../auth/session";
 import { resolveDistrictSlot } from "../league/district-leagues";
-import { findAbandonedClubs, isTakeoverEnabled, MAX_TAKEOVERS_PER_RUN, runAbandonedClubTakeover, takeOverAbandonedClub } from "./abandoned";
+import { findAbandonedClubs, isTakeoverEnabled, MAX_TAKEOVERS_PER_RUN, releaseClubForNewcomer, runAbandonedClubTakeover, takeOverAbandonedClub } from "./abandoned";
 import { runWatchdog } from "../lib/watchdog";
 import { pickOverwritableAiTeam } from "./overwrite";
 import { findReclaimableClub } from "./reclaim";
@@ -374,6 +374,39 @@ describe("nová registrace a převzatý klub", () => {
     const startBudget = newcomerTeam!.size === "small_city" || newcomerTeam!.size === "city" ? 80000
       : newcomerTeam!.size === "town" || newcomerTeam!.size === "village" ? 40000 : 20000;
     expect(newcomerTeam!.budget).toBe(startBudget);
+  }, 240_000);
+});
+
+describe("ruční uvolnění klubu pro nováčka", () => {
+  it("klub neaktivního vlastníka hned dostane nová registrace; aktivní a propojený klub se neuvolní", async () => {
+    await freshDb();
+    const { leagueId, aiTeams } = await foundLeague();
+    const [gone, recent, linked, ...rest] = aiTeams;
+    for (const [i, id] of rest.entries()) await makeHuman(id, `filler-${i}`, 0);
+    await makeHuman(gone, "u-gone", 16);
+    await makeHuman(recent, "u-recent", 3);
+    await makeHuman(linked, "u-linked", 20);
+    await db.prepare("INSERT INTO club_links (team_id, group_id, note) VALUES (?, 'g-test', 'test')").bind(linked).run();
+
+    expect(await releaseClubForNewcomer(db, recent, new Date())).toEqual({ released: false, reason: "active_owner" });
+    expect(await releaseClubForNewcomer(db, linked, new Date())).toEqual({ released: false, reason: "linked" });
+    expect(await releaseClubForNewcomer(db, "missing", new Date())).toEqual({ released: false, reason: "not_found" });
+    expect(await count("SELECT COUNT(*) AS n FROM teams WHERE id IN (?, ?) AND user_id = 'ai'", recent, linked)).toBe(0);
+
+    const { result, problems } = await withLogs(() => releaseClubForNewcomer(db, gone, new Date()));
+    expect(result).toEqual({ released: true });
+    expect(problems).toEqual([]);
+    // Áčko i U21 vede AI a bývalý vlastník nemá ochranu: klub je volný hned.
+    expect(await count("SELECT COUNT(*) AS n FROM teams WHERE (id = ?1 OR parent_team_id = ?1) AND user_id = 'ai' AND ai_former_user_id IS NULL", gone)).toBe(2);
+    expect(await findReclaimableClub(db, "u-gone")).toBeNull();
+    expect(await releaseClubForNewcomer(db, gone, new Date())).toEqual({ released: false, reason: "already_free" });
+    expect(await pickOverwritableAiTeam(db, leagueId, new Date())).toBe(gone);
+
+    const newcomer = await createTeam("newcomer-release", await freeVillage(), "FK Místo Něj");
+    expect(newcomer.status).toBe(201);
+    expect(newcomer.body.id).toBe(gone);
+    const team = await db.prepare("SELECT user_id, name FROM teams WHERE id = ?").bind(gone).first<{ user_id: string; name: string }>();
+    expect(team).toEqual({ user_id: "newcomer-release", name: "FK Místo Něj" });
   }, 240_000);
 });
 
