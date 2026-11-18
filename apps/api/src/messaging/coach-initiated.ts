@@ -23,7 +23,7 @@ import {
 } from "./ai-player-chat";
 import { coachStreak, leftOnReadChance, markCoachMessagesRead, readDelayMs } from "./left-on-read";
 import {
-  INJURY_COLUMN, afterPlayerReply, loadLastMatchContext, loadLastOwnMessageAt, loadPlayerSnapshot, loadTeamContext, nactiSituaceTymu,
+  INJURY_COLUMN, afterPlayerReply, loadLastMatchContext, loadLastOwnMessageAt, loadPlayerSnapshot, loadRecentlyPostponed, loadTeamContext, nactiSituaceTymu,
   pockejNezDopise, pushPlayerReply, scheduleRetryReply,
 } from "./ai-player-spawn";
 import type { OptionalPushKeys } from "../community/phone-push";
@@ -110,6 +110,9 @@ export async function startCoachThread(
     if (teamGameDate?.game_date) player.weightTalk = weightTalkFromState(vlakno?.ai_thread_state, teamGameDate.game_date);
     player.znalostiIncidentu = await nactiZnalostiHrace(db, { teamId: opts.teamId, playerId: opts.playerId, tema });
     player.lastOwnMessageAt = await loadLastOwnMessageAt(db, opts.convId, player.id);
+    // Otázka na incident je vážná věc, a kdo už jednou odložil, odpoví hned (ai-player-chat.ts mustAnswerNow).
+    player.seriousTopic = !!tema;
+    player.recentlyPostponed = await loadRecentlyPostponed(db, opts.convId);
     player.lateReply = opts.lateReply;
     const memory = await loadChatMemory(db, player, { teamId: opts.teamId, convId: opts.convId });
 

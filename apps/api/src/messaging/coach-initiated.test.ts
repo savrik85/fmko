@@ -25,6 +25,7 @@ vi.mock("./ai-player-spawn", () => ({
   pockejNezDopise: vi.fn(async () => undefined),
   nactiSituaceTymu: vi.fn(async () => new Map()),
   loadLastOwnMessageAt: vi.fn(async () => undefined),
+  loadRecentlyPostponed: vi.fn(async () => false),
   afterPlayerReply: vi.fn(async () => undefined),
   scheduleRetryReply: vi.fn(async () => undefined),
   pushPlayerReply: vi.fn(async () => undefined),

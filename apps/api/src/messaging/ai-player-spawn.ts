@@ -30,6 +30,7 @@ import {
   evaluateResolution,
   GeminiUnavailableError,
   playerTimeContext,
+  PROMISES_LATER_RE,
   type ChatEnv,
   type ReplyResult,
   type ThreadMessage,
@@ -1136,6 +1137,9 @@ async function handleAiPlayerReplyInner(
     .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "herní den pro domluvu o váze", e); return null; });
   if (teamGameDate?.game_date) player.weightTalk = weightTalkFromState(conv.ai_thread_state, teamGameDate.game_date);
   player.lastOwnMessageAt = await loadLastOwnMessageAt(db, convId, player.id);
+  // Stížnost, truc, odmítnutý přestup: na vážnou věc hráč odpoví hned, ne „ozvu se pak“.
+  player.seriousTopic = scenario.category === "complaint" || scenario.category === "transfer" || state.trigger === "left_out";
+  player.recentlyPostponed = await loadRecentlyPostponed(db, convId);
   player.lateReply = opts.lateReply;
   const memory = await loadChatMemory(db, player, { teamId: conv.team_id, convId });
   const teamCtx = await loadTeamContext(db, conv.team_id, playerRow.team_id as string | null);
@@ -1793,6 +1797,19 @@ export async function scheduleRetryReply(
  * Přes `julianday`, protože část zpráv má `sent_at` z `datetime('now')`
  * s mezerou místo `T` a jako řetězec by se se zbytkem neporovnala správně.
  */
+/**
+ * Napsal hráč v téhle konverzaci za posledních 24 h „ozvu se pak“? Podruhé to neodkládá
+ * (ai-player-chat.ts mustAnswerNow).
+ */
+export async function loadRecentlyPostponed(db: D1Database, convId: string): Promise<boolean> {
+  const rows = await db.prepare(
+    `SELECT body FROM messages WHERE conversation_id = ? AND sender_type = 'player'
+      AND julianday(sent_at) > julianday('now', '-1 day') ORDER BY julianday(sent_at) DESC LIMIT 6`,
+  ).bind(convId).all<{ body: string }>()
+    .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "odložené odpovědi hráče", e); return { results: [] as Array<{ body: string }> }; });
+  return rows.results.some((r) => PROMISES_LATER_RE.test(r.body));
+}
+
 export async function loadLastOwnMessageAt(
   db: D1Database, convId: string, playerId: string,
 ): Promise<string | undefined> {

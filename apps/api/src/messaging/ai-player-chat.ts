@@ -298,7 +298,7 @@ export function buildSystemPrompt(
     `Aktuální nálada: ${player.morale}/100, kondice: ${player.condition}/100, vztah s trenérem: ${player.coachRelationship}/100.`,
     popisZdravi(player),
     domacnostSeSituaci(player.age, player.zivotniSituace?.kind),
-    popisSituace(cas, player.occupation, vymluva),
+    popisSituace(cas, player.occupation, vymluva, { mustAnswerNow: mustAnswerNow(player) }),
     // Kdo je na druhé straně, musí být jasné TADY, ne až mezi fakty o klubu.
     // Dokud trenérovo jméno leželo v seznamu vedle spoluhráčů, model ho bral
     // jako dalšího člověka z klubu a posílal trenéra za trenérem:
@@ -368,13 +368,25 @@ export function buildSystemPrompt(
  * Pole JSON odpovědi, která hra potřebuje vědět navíc (odložená odpověď, postoj k nabídce).
  * Postoj k nabídce se ptá jen u hráče, na kterého nějaká nabídka čeká.
  */
+/**
+ * Odpovědět hned, ne „ozvu se pak“: vážná věc (incident, nabídka, stížnost, truc) nebo už
+ * jednou v posledních 24 h odložil. Dřív to bylo 14 % odpovědí; ze 98 slibů „ozvu se“ se hráč
+ * sám ozval jen ve 42, ve 36 trenér nevydržel a napsal dřív (prod 25. 10. – 18. 11.).
+ */
+export function mustAnswerNow(player: PlayerSnapshot): boolean {
+  return !!player.recentlyPostponed || !!player.seriousTopic || (player.pendingOffers?.length ?? 0) > 0
+    || (player.znalostiIncidentu?.length ?? 0) > 0;
+}
+
 function replyFlagFields(player: PlayerSnapshot): { schema: string; rules: string[] } {
   const offers = (player.pendingOffers?.length ?? 0) > 0;
   const invite = player.pendingInvite;
   return {
     schema: `, "write_later": <true|false>${offers ? `, "transfer_stance": "stay"|"leave"|"none"` : ""}${invite ? `, "accepts_invite": true|false|null` : ""}`,
     rules: [
-      "- write_later: true JEN když v téhle zprávě trenérovi slibuješ, že se ozveš později (teď nemáš čas). Jinak false.",
+      mustAnswerNow(player)
+        ? "- write_later: false. Teď odpovídáš hned, neodkládej to."
+        : "- write_later: true JEN když v téhle zprávě trenérovi slibuješ, že se ozveš později (teď nemáš čas). Jinak false.",
       ...(offers
         // Dohoda „teď zůstanu, na jaře mě pustíš“ dřív spadla do "none" a platilo staré "leave",
         // takže odmítnutí hráče potrestalo, i když s ním souhlasil (Tomáš Bláha, prod 2026-10-29).
@@ -405,7 +417,7 @@ function parseReplyFlags(
 }
 
 /** „Ozvu se pak", „napíšu potom", slovensky „ozvem sa", lámaně „ja ozvat potom". */
-const PROMISES_LATER_RE = /\b(ozvu se|ozvem sa|ozvat se? potom|napíšu (ti |vám )?(pak|potom|později|večer)|zavolám (ti |vám )?(pak|potom|později)|ozvu (se )?(pak|potom|později|večer))/i;
+export const PROMISES_LATER_RE = /\b(ozvu se|ozvem sa|ozvat se? potom|napíšu (ti |vám )?(pak|potom|později|večer)|zavolám (ti |vám )?(pak|potom|později)|ozvu (se )?(pak|potom|později|večer))/i;
 
 /**
  * Rozhovor po zatrhnutém přestupu (2026-10-18): hráč zná svůj skutečný důvod odchodu
