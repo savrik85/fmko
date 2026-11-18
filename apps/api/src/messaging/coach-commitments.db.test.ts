@@ -351,3 +351,15 @@ describe("pokuta a úkol „poptej se“", () => {
     expect((await smsTo("p1"))[1]).not.toContain("Mikeš");
   });
 });
+
+describe("pokuta netiskne peníze", () => {
+  it("strop odměny a 1 000 Kč, jednomu hráči jednou za týden, klubu třikrát", async () => {
+    const big = await record({ kind: "fine", amount: 20000 }, "pokuta 20 000");
+    const btn = await db.prepare("SELECT body FROM messages WHERE sender_type = 'system'").first<{ body: string }>();
+    expect(btn?.body).toContain("pokuta 400 Kč");
+    expect(await fulfilMoneyCommitment(db, { teamId: "club", commitmentId: big, now: T0 })).toMatchObject({ ok: true });
+    const again = await record({ kind: "fine", amount: 300 });
+    expect(await fulfilMoneyCommitment(db, { teamId: "club", commitmentId: again, now: T0 })).toMatchObject({ ok: false, status: 409 });
+    expect((await db.prepare("SELECT budget FROM teams WHERE id = 'club'").first<{ budget: number }>())?.budget).toBe(5400);
+  });
+});

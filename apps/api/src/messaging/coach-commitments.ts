@@ -335,8 +335,8 @@ export async function recordCommitment(
   const now = o.now ?? new Date();
   const nowIso = now.toISOString();
   const id = crypto.randomUUID();
-  // Pokuta bez částky: týdenní odměna hráče („strhnu ti to z výplaty“).
-  const amount = o.detected.kind === "fine" && !o.detected.amount ? Math.max(100, o.weeklyWage ?? 500) : o.detected.amount;
+  // Pokuta: bez částky týdenní odměna hráče („strhnu ti to z výplaty“), vždy nejvýš `fineCap`.
+  const amount = o.detected.kind === "fine" ? fineCap(o.detected.amount ?? o.weeklyWage ?? 500, o.weeklyWage) : o.detected.amount;
   const details: CommitmentDetails = {
     ...(o.detected.position ? { position: o.detected.position } : {}),
     ...(amount ? { amount } : {}),
@@ -392,6 +392,19 @@ export async function recordCommitment(
   logger.info({ module: M, teamId: o.clubTeamId }, `slib ${o.detected.kind} hráči ${o.playerId}`);
   return id;
 }
+
+/**
+ * Pokuta jde do kasy, takže by šlo „tisknout peníze“ („pokuta 20 000“ každému). Strop:
+ * týdenní odměna hráče a nejvýš 1 000 Kč, nejméně 100 Kč.
+ */
+export function fineCap(amount: number, weeklyWage: number | null | undefined): number {
+  const cap = Math.min(FINE_MAX, Math.max(100, weeklyWage ?? FINE_MAX));
+  return Math.max(100, Math.min(Math.round(amount), cap));
+}
+const FINE_MAX = 1000;
+/** Pokut z SMS nejvýš: jednomu hráči jedna za 7 dní, klubu tři za 7 dní. */
+const FINE_PLAYER_DAYS = 7;
+const FINE_CLUB_PER_WEEK = 3;
 
 export function raisedBy(wage: number, percent: number): number {
   return Math.round((wage * (100 + percent)) / 100);
@@ -1070,7 +1083,14 @@ export async function fulfilMoneyCommitment(
   const name = `${r.first_name} ${r.last_name}`;
   let effect: string;
   if (r.kind === "fine") {
-    const fine = d.amount ?? 0;
+    const weekAgo = new Date(now.getTime() - FINE_PLAYER_DAYS * DAY_MS).toISOString();
+    const recentFines = await db.prepare(
+      `SELECT SUM(player_id = ?) AS player, COUNT(*) AS club FROM coach_commitments
+        WHERE team_id = ? AND kind = 'fine' AND status = 'kept' AND resolved_at > ?`,
+    ).bind(r.player_id, r.team_id, weekAgo).first<{ player: number | null; club: number | null }>();
+    if ((recentFines?.player ?? 0) > 0) return { ok: false, error: "Tenhle hráč už pokutu tento týden dostal.", status: 409 };
+    if ((recentFines?.club ?? 0) >= FINE_CLUB_PER_WEEK) return { ok: false, error: "Víc pokut tento týden kabina nesnese.", status: 409 };
+    const fine = fineCap(d.amount ?? 0, r.weekly_wage);
     const { recordTransaction } = await import("../season/finance-processor");
     await recordTransaction(db, r.team_id, "incident_fine", fine, `Pokuta: ${name}`, r.game_date ?? now.toISOString().slice(0, 10), r.player_id);
     effect = `Pokuta ${fine.toLocaleString("cs-CZ")} Kč udělena`;
