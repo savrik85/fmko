@@ -64,6 +64,7 @@ import { openDistrictRegistration } from "../ai-clubs/district-opening";
 import { alignLeagueSchedule } from "../league/align-schedule";
 import { settleCaughtUpLeague } from "../league/catch-up-round";
 import { closeWaitingLeague } from "../league/waiting-league";
+import { withdrawStaleAiListings } from "../ai-clubs/stale-listings";
 import { enqueueLeagueCatchUp, startWaitingLeague } from "../league/start-league";
 import { clearLeagueSchedule, deleteLeague } from "../league/delete-league";
 import { extendLeagueToDouble } from "../league/extend-schedule";
@@ -184,6 +185,20 @@ adminAiClubsRouter.post("/settle-catch-up", async (c) => {
   } catch (e) {
     logger.error({ module: M }, `vyrovnání dohnaných kol ligy ${leagueId}`, e);
     return c.json({ error: "Vyrovnání dohnaných kol selhalo, podrobnosti jsou v logu" }, 500);
+  }
+});
+
+// Inzeráty AI klubů s cenou pod pojistkou 60 % dnešní tržní ceny (hráči po vystavení stouplo
+// hodnocení, typicky narovnáním): AI by nabídku ve výši inzerátu odmítla, stáhnou se. S dryRun=1 náhled.
+adminAiClubsRouter.post("/withdraw-stale-listings", async (c) => {
+  const leagueId = c.req.query("leagueId")?.trim();
+  if (!leagueId) return c.json({ error: "Chybí leagueId" }, 400);
+  try {
+    const result = await withdrawStaleAiListings(c.env.DB, leagueId, { dryRun: isDryRun(c.req.query("dryRun")) });
+    return c.json(result, result.ok ? 200 : 400);
+  } catch (e) {
+    logger.error({ module: M }, `zastaralé inzeráty AI klubů ligy ${leagueId}`, e);
+    return c.json({ error: "Stažení inzerátů selhalo, podrobnosti jsou v logu" }, 500);
   }
 });
 

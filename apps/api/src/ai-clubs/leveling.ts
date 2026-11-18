@@ -217,6 +217,8 @@ export interface LevelingResult {
   playersCreated: number;
   staffHired: number;
   managersRaised: number;
+  /** Stažené inzeráty zvednutých hráčů (cena v nich byla ze starého hodnocení). */
+  listingsWithdrawn: number;
   failedStatements: number;
 }
 
@@ -1544,7 +1546,7 @@ type Bindable = string | number | null;
  * takže opakované provedení nic nezhorší.
  */
 export async function applyLeveling(db: D1Database, plan: LevelingPlan): Promise<LevelingResult> {
-  const result: LevelingResult = { clubs: 0, playersRaised: 0, playersCreated: 0, staffHired: 0, managersRaised: 0, failedStatements: 0 };
+  const result: LevelingResult = { clubs: 0, playersRaised: 0, playersCreated: 0, staffHired: 0, managersRaised: 0, listingsWithdrawn: 0, failedStatements: 0 };
   if (plan.clubs.length === 0) return result;
 
   const targetsById = new Map(plan.clubs.map((c) => [c.teamId, c.target]));
@@ -1567,6 +1569,7 @@ export async function applyLeveling(db: D1Database, plan: LevelingPlan): Promise
   const facilityStmts: D1PreparedStatement[] = [];
   const staffStmts: D1PreparedStatement[] = [];
   const teamStmts: D1PreparedStatement[] = [];
+  const listingStmts: D1PreparedStatement[] = [];
 
   for (const club of clubs) {
     const targets = targetsById.get(club.teamId);
@@ -1582,6 +1585,9 @@ export async function applyLeveling(db: D1Database, plan: LevelingPlan): Promise
         "UPDATE players SET skills = ?, physical = ?, skills_max = ?, overall_rating = ?, weekly_wage = ? WHERE id = ?",
       ).bind(JSON.stringify(r.shifted.skills), JSON.stringify(r.shifted.physical), JSON.stringify(r.shifted.skillsMax),
         r.shifted.rating, r.wage, r.id));
+      // Cena inzerátu vznikla ze starého hodnocení: po zvednutí by visel hluboko pod tržní cenou
+      // a AI by nabídky ve výši inzerátu odmítala (pojistka 60 % trhu). AI trenér hráče vystaví znovu.
+      listingStmts.push(db.prepare("UPDATE transfer_listings SET status = 'withdrawn' WHERE player_id = ? AND status = 'active'").bind(r.id));
     }
     result.playersRaised += changes.raised.length;
 
@@ -1715,6 +1721,16 @@ export async function applyLeveling(db: D1Database, plan: LevelingPlan): Promise
   result.failedStatements += await runInBatches(db, facilityStmts, "stadion a vybavení");
   result.failedStatements += await runInBatches(db, staffStmts, "zaměstnanci");
   result.failedStatements += await runInBatches(db, teamStmts, "rozpočet, reputace a sehranost");
-  logger.info({ module: M }, `liga ${plan.leagueId} (${plan.mode}): ${result.clubs} klubů, zvednuto ${result.playersRaised} hráčů, nových ${result.playersCreated}, zaměstnanců ${result.staffHired}, chyb ${result.failedStatements}`);
+  for (let i = 0; i < listingStmts.length; i += BATCH_SIZE) {
+    const chunk = listingStmts.slice(i, i + BATCH_SIZE);
+    try {
+      const res = await db.batch(chunk);
+      result.listingsWithdrawn += res.reduce((sum, r) => sum + (r.meta?.changes ?? 0), 0);
+    } catch (e) {
+      result.failedStatements += chunk.length;
+      logger.error({ module: M }, `inzeráty zvednutých hráčů: dávka ${i}–${i + chunk.length} selhala`, e);
+    }
+  }
+  logger.info({ module: M }, `liga ${plan.leagueId} (${plan.mode}): ${result.clubs} klubů, zvednuto ${result.playersRaised} hráčů, nových ${result.playersCreated}, zaměstnanců ${result.staffHired}, stažených inzerátů ${result.listingsWithdrawn}, chyb ${result.failedStatements}`);
   return result;
 }

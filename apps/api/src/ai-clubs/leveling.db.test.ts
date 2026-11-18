@@ -13,6 +13,7 @@ import { createRng } from "../generators/rng";
 import type { VillageInfo } from "../generators/player";
 import { adminAiClubsRouter } from "../routes/admin-ai-clubs";
 import type { Bindings } from "../index";
+import { marketValue } from "@okresni-masina/shared";
 import { applyLeveling, planLeveling, TOP11_TOLERANCE, type LevelingPlan } from "./leveling";
 
 const LEAGUE = "league-level-test";
@@ -60,6 +61,15 @@ async function top11(teamId: string): Promise<number> {
     "SELECT overall_rating AS r FROM players WHERE team_id = ? AND (status IS NULL OR status = 'active') ORDER BY overall_rating DESC LIMIT 11",
   ).bind(teamId).all<{ r: number }>();
   return rows.results.reduce((s, x) => s + x.r, 0) / rows.results.length;
+}
+
+async function listPlayer(listingId: string, playerId: string, teamId: string, price: number, leagueId = LEAGUE): Promise<void> {
+  await db.prepare("INSERT INTO transfer_listings (id, player_id, team_id, asking_price, league_id, expires_at) VALUES (?, ?, ?, ?, ?, '2099-01-01T00:00:00Z')")
+    .bind(listingId, playerId, teamId, price, leagueId).run();
+}
+
+async function listingStatus(listingId: string): Promise<string | undefined> {
+  return (await db.prepare("SELECT status FROM transfer_listings WHERE id = ?").bind(listingId).first<{ status: string }>())?.status;
 }
 
 async function count(sql: string, ...binds: unknown[]): Promise<number> {
@@ -181,8 +191,26 @@ describe("narovnání AI klubů v lize s lidmi", () => {
   });
 
   it("naostro zvedne AI kluby do rozsahu vzoru a založí stadion, vybavení i zaměstnance", async () => {
+    // Celý kádr AI klubu na trhu za ceny z hodnocení před narovnáním, lidský hráč taky.
+    const aiSquad = await db.prepare("SELECT id, overall_rating FROM players WHERE team_id = 'team-ai-a'").all<{ id: string; overall_rating: number }>();
+    for (const p of aiSquad.results) await listPlayer(`listing-${p.id}`, p.id, "team-ai-a", 1000);
+    await listPlayer("listing-human", "team-human-a-p0", "team-human-a", 1000);
+
     const result = await applyLeveling(db, plan);
     expect(result.failedStatements).toBe(0);
+    // Inzeráty zvednutých hráčů jsou stažené (cena ze starého hodnocení), ostatní visí dál.
+    let raised = 0;
+    for (const p of aiSquad.results) {
+      const now = (await db.prepare("SELECT overall_rating FROM players WHERE id = ?").bind(p.id).first<{ overall_rating: number }>())!.overall_rating;
+      if (now > p.overall_rating) {
+        raised++;
+        expect(await listingStatus(`listing-${p.id}`), p.id).toBe("withdrawn");
+      }
+    }
+    expect(raised).toBeGreaterThan(0);
+    expect(result.listingsWithdrawn).toBe(await count("SELECT COUNT(*) AS n FROM transfer_listings WHERE status = 'withdrawn'"));
+    expect(result.listingsWithdrawn).toBeGreaterThanOrEqual(raised);
+    expect(await listingStatus("listing-human")).toBe("active");
     expect(result.clubs).toBe(2);
     expect(result.playersRaised).toBeGreaterThan(0);
     expect(result.staffHired).toBeGreaterThan(0);
@@ -297,6 +325,41 @@ describe("narovnání AI klubů v lize s lidmi", () => {
     expect(badMode.status).toBe(400);
     const missing = await app.request("/api/admin/ai-clubs/level?leagueId=nope&mode=league-humans&dryRun=1", { method: "POST", headers: { Authorization: `Bearer ${adminToken}` } }, env);
     expect(missing.status).toBe(404);
+  });
+
+  it("zastaralé inzeráty: endpoint stáhne jen inzeráty AI klubů pod pojistkou 60 % dnešní tržní ceny", async () => {
+    const adminToken = await createSession(env.SESSION_KV, "admin", "admin@example.test", null);
+    await db.prepare("UPDATE transfer_listings SET status = 'expired' WHERE status = 'active'").run();
+    const players = await db.prepare(
+      "SELECT id, team_id, age, position, overall_rating FROM players WHERE team_id IN ('team-ai-a', 'team-ai-b') AND overall_rating > 30 ORDER BY id LIMIT 2",
+    ).all<{ id: string; team_id: string; age: number; position: string; overall_rating: number }>();
+    const [cheap, fair] = players.results;
+    const value = (p: typeof cheap) => marketValue(p.overall_rating, p.age, p.position);
+    await listPlayer("stale-cheap", cheap.id, cheap.team_id, Math.floor(value(cheap) * 0.3));
+    await listPlayer("stale-fair", fair.id, fair.team_id, Math.ceil(value(fair) * 1.2));
+    const u21Player = (await db.prepare("SELECT id, age, position, overall_rating FROM players WHERE team_id = 'team-ai-a-u21' LIMIT 1")
+      .first<{ id: string; age: number; position: string; overall_rating: number }>())!;
+    await listPlayer("stale-u21", u21Player.id, "team-ai-a-u21", 0, U21_LEAGUE);
+    await listPlayer("stale-human", "team-human-a-p1", "team-human-a", 0);
+
+    const call = (dry: boolean) => app.request(`/api/admin/ai-clubs/withdraw-stale-listings?leagueId=${LEAGUE}${dry ? "&dryRun=1" : ""}`,
+      { method: "POST", headers: { Authorization: `Bearer ${adminToken}` } }, env);
+    const preview = await call(true);
+    expect(preview.status).toBe(200);
+    const previewBody = await preview.json() as { dryRun: boolean; checked: number; withdrawn: Array<{ listingId: string }> };
+    expect(previewBody.dryRun).toBe(true);
+    expect(previewBody.checked).toBe(3);
+    expect(previewBody.withdrawn.map((w) => w.listingId).sort()).toEqual(["stale-cheap", "stale-u21"]);
+    expect(await listingStatus("stale-cheap")).toBe("active");
+
+    expect((await call(false)).status).toBe(200);
+    expect(await listingStatus("stale-cheap")).toBe("withdrawn");
+    expect(await listingStatus("stale-u21")).toBe("withdrawn");
+    expect(await listingStatus("stale-fair")).toBe("active");
+    expect(await listingStatus("stale-human")).toBe("active");
+
+    const missing = await app.request("/api/admin/ai-clubs/withdraw-stale-listings?leagueId=nope", { method: "POST", headers: { Authorization: `Bearer ${adminToken}` } }, env);
+    expect(missing.status).toBe(400);
   });
 
   it("vzor z jiné ligy: lidé z vzorové ligy, jen pro league-humans, neznámá vzorová liga 404", async () => {
