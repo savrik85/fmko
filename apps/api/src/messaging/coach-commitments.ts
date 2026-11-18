@@ -806,13 +806,18 @@ async function resolveCommitment(
   r: Pick<SettleRow, "id" | "team_id" | "player_id" | "kind" | "details" | "first_name" | "last_name" | "nickname" | "avatar" | "club_user_id" | "game_date">,
   status: "kept" | "broken" | "expired",
   now: Date,
+  /** Slib už zabral volající (vyplacení tlačítkem): jen dopad. */
+  opts: { claimed?: boolean } = {},
 ): Promise<void> {
   const nowIso = now.toISOString();
-  const upd = await db.prepare("UPDATE coach_commitments SET status = ?, resolved_at = ? WHERE id = ? AND status = 'active'")
-    .bind(status, nowIso, r.id).run()
-    .catch((e) => { logger.warn({ module: M }, `uzavření slibu ${r.id}`, e); return null; });
-  // Souběžné vyhodnocení (tlačítko a denní běh): dopad jen jednou.
-  if ((upd?.meta?.changes ?? 0) === 0 || status === "expired") return;
+  if (!opts.claimed) {
+    const upd = await db.prepare("UPDATE coach_commitments SET status = ?, resolved_at = ? WHERE id = ? AND status = 'active'")
+      .bind(status, nowIso, r.id).run()
+      .catch((e) => { logger.warn({ module: M }, `uzavření slibu ${r.id}`, e); return null; });
+    // Souběžné vyhodnocení (tlačítko a denní běh): dopad jen jednou.
+    if ((upd?.meta?.changes ?? 0) === 0) return;
+  }
+  if (status === "expired") return;
   const dd = detailsOf(r.details);
   if (dd.squad) {
     // Sázka celé kabiny: nálada všech, žádný vztah jednoho hráče; ozve se v kabině.
@@ -1081,50 +1086,80 @@ export async function fulfilMoneyCommitment(
   if (r.player_club_id !== r.team_id) return { ok: false, error: "Hráč už v klubu není.", status: 409 };
   const d = detailsOf(r.details);
   const name = `${r.first_name} ${r.last_name}`;
-  let effect: string;
+  const gameDate = r.game_date ?? now.toISOString().slice(0, 10);
+  const { recordTransaction } = await import("../season/finance-processor");
+
+  // Kontroly bez zápisu. Peníze se pohnou až po atomickém zabrání slibu níž (dvojklik nesmí
+  // vyplatit prémii ani udělit pokutu dvakrát).
+  let move: () => Promise<string>;
   if (r.kind === "fine") {
-    const weekAgo = new Date(now.getTime() - FINE_PLAYER_DAYS * DAY_MS).toISOString();
-    const recentFines = await db.prepare(
-      `SELECT SUM(player_id = ?) AS player, COUNT(*) AS club FROM coach_commitments
-        WHERE team_id = ? AND kind = 'fine' AND status = 'kept' AND resolved_at > ?`,
-    ).bind(r.player_id, r.team_id, weekAgo).first<{ player: number | null; club: number | null }>();
-    if ((recentFines?.player ?? 0) > 0) return { ok: false, error: "Tenhle hráč už pokutu tento týden dostal.", status: 409 };
-    if ((recentFines?.club ?? 0) >= FINE_CLUB_PER_WEEK) return { ok: false, error: "Víc pokut tento týden kabina nesnese.", status: 409 };
     const fine = fineCap(d.amount ?? 0, r.weekly_wage);
-    const { recordTransaction } = await import("../season/finance-processor");
-    await recordTransaction(db, r.team_id, "incident_fine", fine, `Pokuta: ${name}`, r.game_date ?? now.toISOString().slice(0, 10), r.player_id);
-    effect = `Pokuta ${fine.toLocaleString("cs-CZ")} Kč udělena`;
+    move = async () => {
+      await recordTransaction(db, r.team_id, "incident_fine", fine, `Pokuta: ${name}`, gameDate, r.player_id);
+      return `Pokuta ${fine.toLocaleString("cs-CZ")} Kč udělena`;
+    };
   } else if (r.kind === "bet") {
     if (!d.won) return { ok: false, error: "Sázka ještě nevyšla.", status: 409 };
     const price = betPrice(d);
     if ((r.budget ?? 0) < price) return { ok: false, error: `Na ${price.toLocaleString("cs-CZ")} Kč v kase nemáš.`, status: 400 };
-    const { recordTransaction } = await import("../season/finance-processor");
-    const gameDate = r.game_date ?? now.toISOString().slice(0, 10);
-    if (d.reward === "pub") {
-      // Hospoda pro celou kabinu jako „Pojedeme na jedno“ (routes/game.ts /pub-visit): posezení s příběhy.
-      const { createCoachLedSession } = await import("../season/pub");
-      const session = await createCoachLedSession(db, r.roster_team_id ?? r.team_id, gameDate.slice(0, 10), "all")
-        .catch((e) => { logger.warn({ module: M }, `hospoda za sázku ${r.id}`, e); return null; });
-      if (session && !session.ok) logger.warn({ module: M }, `hospoda za sázku ${r.id} se nezapsala: ${session.reason}`);
-      await recordTransaction(db, r.team_id, "event", -price, "Hospoda za sázku s kabinou", gameDate);
-    } else {
-      await recordTransaction(db, r.team_id, d.reward === "money" ? "player_bonus" : "manager_social", -price,
-        d.squad ? "Sázka s kabinou" : `Sázka s hráčem: ${name}`, gameDate, r.player_id);
-    }
-    effect = `Sázka zaplacena (${price.toLocaleString("cs-CZ")} Kč)`;
+    move = async () => {
+      if (d.reward === "pub") {
+        // Hospoda pro celou kabinu jako „Pojedeme na jedno“ (routes/game.ts /pub-visit): posezení s příběhy.
+        const { createCoachLedSession } = await import("../season/pub");
+        const session = await createCoachLedSession(db, r.roster_team_id ?? r.team_id, gameDate.slice(0, 10), "all")
+          .catch((e) => { logger.warn({ module: M }, `hospoda za sázku ${r.id}`, e); return null; });
+        if (session && !session.ok) logger.warn({ module: M }, `hospoda za sázku ${r.id} se nezapsala: ${session.reason}`);
+        await recordTransaction(db, r.team_id, "event", -price, "Hospoda za sázku s kabinou", gameDate);
+      } else {
+        await recordTransaction(db, r.team_id, d.reward === "money" ? "player_bonus" : "manager_social", -price,
+          d.squad ? "Sázka s kabinou" : `Sázka s hráčem: ${name}`, gameDate, r.player_id);
+      }
+      return `Sázka zaplacena (${price.toLocaleString("cs-CZ")} Kč)`;
+    };
   } else if (r.kind === "bonus") {
     const amount = d.amount ?? 0;
     if ((r.budget ?? 0) < amount) return { ok: false, error: `Na prémii ${amount.toLocaleString("cs-CZ")} Kč v kase nemáš.`, status: 400 };
-    const { recordTransaction } = await import("../season/finance-processor");
-    await recordTransaction(db, r.team_id, "player_bonus", -amount, `Prémie: ${name}`, r.game_date ?? now.toISOString().slice(0, 10), r.player_id);
-    effect = `Prémie ${amount.toLocaleString("cs-CZ")} Kč vyplacena`;
+    move = async () => {
+      await recordTransaction(db, r.team_id, "player_bonus", -amount, `Prémie: ${name}`, gameDate, r.player_id);
+      return `Prémie ${amount.toLocaleString("cs-CZ")} Kč vyplacena`;
+    };
   } else {
     const oldWage = r.weekly_wage ?? 0;
     const newWage = raisedBy(oldWage, d.percent ?? 0);
-    await db.prepare("UPDATE players SET weekly_wage = ? WHERE id = ?").bind(newWage, r.player_id).run();
-    effect = `Týdenní odměna ${oldWage} → ${newWage} Kč`;
+    move = async () => {
+      await db.prepare("UPDATE players SET weekly_wage = ? WHERE id = ?").bind(newWage, r.player_id).run();
+      return `Týdenní odměna ${oldWage} → ${newWage} Kč`;
+    };
   }
-  await resolveCommitment(db, r, "kept", now);
+
+  // Atomické zabrání: jeden příkaz, D1 ho provede celý najednou. U pokuty v něm jsou i limity
+  // (jednomu hráči jedna za 7 dní, klubu tři), ať je dva souběžné požadavky neobejdou.
+  const weekAgo = new Date(now.getTime() - FINE_PLAYER_DAYS * DAY_MS).toISOString();
+  const fineCaps = r.kind === "fine"
+    ? ` AND NOT EXISTS (SELECT 1 FROM coach_commitments x WHERE x.player_id = ? AND x.kind = 'fine' AND x.status = 'kept' AND x.resolved_at > ?)
+        AND (SELECT COUNT(*) FROM coach_commitments x WHERE x.team_id = ? AND x.kind = 'fine' AND x.status = 'kept' AND x.resolved_at > ?) < ${FINE_CLUB_PER_WEEK}`
+    : "";
+  const claim = await db.prepare(
+    `UPDATE coach_commitments SET status = 'kept', resolved_at = ? WHERE id = ? AND status = 'active'${fineCaps}`,
+  ).bind(now.toISOString(), r.id, ...(r.kind === "fine" ? [r.player_id, weekAgo, r.team_id, weekAgo] : [])).run();
+  if ((claim.meta?.changes ?? 0) === 0) {
+    if (r.kind !== "fine") return { ok: false, error: "Už je to vyřízené.", status: 409 };
+    const recent = await db.prepare(
+      "SELECT 1 FROM coach_commitments WHERE player_id = ? AND kind = 'fine' AND status = 'kept' AND resolved_at > ? AND id != ? LIMIT 1",
+    ).bind(r.player_id, weekAgo, r.id).first();
+    return { ok: false, error: recent ? "Tenhle hráč už pokutu tento týden dostal." : "Víc pokut tento týden kabina nesnese.", status: 409 };
+  }
+  let effect: string;
+  try {
+    effect = await move();
+  } catch (e) {
+    // Peníze se nepohnuly: slib zase platí, ať ho jde vyplatit znovu.
+    logger.error({ module: M }, `vyplacení slibu ${r.id}`, e);
+    await db.prepare("UPDATE coach_commitments SET status = 'active', resolved_at = NULL WHERE id = ?").bind(r.id).run()
+      .catch((err) => logger.error({ module: M }, `vrácení slibu po chybě ${r.id}`, err));
+    return { ok: false, error: "Platba se nepovedla, zkus to znovu.", status: 500 };
+  }
+  await resolveCommitment(db, r, "kept", now, { claimed: true });
   if (d.buttonMessageId) {
     await db.prepare("UPDATE messages SET metadata = json_set(metadata, '$.done', json('true'), '$.effect', ?) WHERE id = ?")
       .bind(effect, d.buttonMessageId).run().catch((e) => logger.warn({ module: M }, "tlačítko slibu po vyplacení", e));
