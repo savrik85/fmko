@@ -6136,11 +6136,19 @@ gameRouter.get("/teams/:teamId/players/:playerId/promises", async (c) => {
   const clubTeamId = (await resolveClubTeamId(c.env.DB, teamId)) ?? teamId;
   const { listPromises, promiseText, PROMISE_STATUS_LABELS } = await import("../transfers/promises");
   const promises = await listPromises(c.env.DB, c.req.param("playerId"), clubTeamId);
-  return c.json({
-    promises: promises.map((p) => ({
+  // Sliby napsané v SMS (messaging/coach-commitments.ts) jdou do stejného seznamu.
+  const { listCommitments } = await import("../messaging/coach-commitments");
+  const fromSms = await listCommitments(c.env.DB, c.req.param("playerId"), clubTeamId);
+  const all = [
+    ...promises.map((p) => ({
       id: p.id, text: promiseText(p), status: p.status, statusLabel: PROMISE_STATUS_LABELS[p.status], madeAt: p.madeAt, resolvedAt: p.resolvedAt,
     })),
-  });
+    ...fromSms.map((p) => ({
+      id: p.id, text: p.text, status: p.status, statusLabel: PROMISE_STATUS_LABELS[p.status], madeAt: p.madeAt, resolvedAt: p.resolvedAt,
+      quote: p.quote,
+    })),
+  ].sort((a, b) => Number(b.status === "active") - Number(a.status === "active") || b.madeAt.localeCompare(a.madeAt));
+  return c.json({ promises: all });
 });
 
 gameRouter.post("/teams/:teamId/offers/:offerId/accept", async (c) => {

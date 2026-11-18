@@ -249,6 +249,10 @@ export async function processTeamDay(
               const { remindMinutesPromises } = await import("../transfers/promises");
               await remindMinutesPromises(env.DB, teamId, String(tomorrowMatch.id))
                 .catch((e) => logger.warn({ module: "daily-tick", teamId }, "připomínka slibu sestavy", e));
+              // Totéž u slibu napsaného v SMS (messaging/coach-commitments.ts).
+              const { remindCoachCommitments } = await import("../messaging/coach-commitments");
+              await remindCoachCommitments(env.DB, teamId, String(tomorrowMatch.id))
+                .catch((e) => logger.warn({ module: "daily-tick", teamId }, "připomínka slibu z SMS", e));
               // Hostující hráč s podmínkou hraní, které hrozí porušení: varování trenérovi.
               const { warnLoanBorrowersBeforeMatch } = await import("../transfers/loan-agreements");
               await warnLoanBorrowersBeforeMatch(env.DB, teamId, String(tomorrowMatch.id))

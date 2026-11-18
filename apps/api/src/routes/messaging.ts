@@ -488,6 +488,22 @@ messagingRouter.post("/teams/:teamId/player-conversation/:playerId", async (c) =
   return c.json({ conversationId: convId });
 });
 
+// POST /api/teams/:teamId/commitments/:id/fulfil — vyplatit prémii nebo zvýšit odměny,
+// které trenér hráči slíbil v SMS (messaging/coach-commitments.ts). Peníze jen tímhle tlačítkem.
+messagingRouter.post("/teams/:teamId/commitments/:id/fulfil", async (c) => {
+  const { fulfilMoneyCommitment } = await import("../messaging/coach-commitments");
+  const res = await fulfilMoneyCommitment(c.env.DB, { teamId: c.req.param("teamId"), commitmentId: c.req.param("id") });
+  return res.ok ? c.json(res) : c.json({ error: res.error }, res.status as 400 | 404 | 409);
+});
+
+// POST /api/teams/:teamId/commitments/:id/cancel — „To nebyl slib“: hra si ze zprávy vyčetla
+// slib, který trenér nedal. Jen hodinu po zprávě (messaging/coach-commitments.ts).
+messagingRouter.post("/teams/:teamId/commitments/:id/cancel", async (c) => {
+  const { cancelCommitment } = await import("../messaging/coach-commitments");
+  const res = await cancelCommitment(c.env.DB, { teamId: c.req.param("teamId"), commitmentId: c.req.param("id") });
+  return res.ok ? c.json(res) : c.json({ error: res.error }, res.status as 404 | 409);
+});
+
 // POST /api/teams/:teamId/conversations/:convId — odeslat zprávu
 messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
   const teamId = c.req.param("teamId");
@@ -619,6 +635,16 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
       handleCoachMessageForInvite(c.env.DB, c.env, convId, body.body.trim())
         .then(() => undefined)
         .catch((e) => logger.error({ module: "messaging" }, "odpověď na pozvání", e)),
+    );
+  }
+
+  // Slib napsaný vlastními slovy („zítra hraješ“, „tady máš prémii“): hra ho zapíše a pak
+  // hlídá (messaging/coach-commitments.ts). Hotové odpovědi (optionId) slib nedávají.
+  if (conv?.type === "player" && conv.participant_id && !body.optionId) {
+    const { handleCoachMessageForCommitment } = await import("../messaging/coach-commitments");
+    c.executionCtx.waitUntil(
+      handleCoachMessageForCommitment(c.env.DB, c.env, { teamId, convId, playerId: conv.participant_id, text: body.body.trim() })
+        .then(() => undefined),
     );
   }
 

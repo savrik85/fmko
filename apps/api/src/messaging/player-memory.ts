@@ -13,6 +13,7 @@
 import { logger } from "../lib/logger";
 import { computeInterestForOffer, interestOfferOf, type InterestLevel } from "../transfers/player-interest";
 import type { PlayerSnapshot } from "./ai-player-scenarios";
+import { commitmentPromptLines, loadCommitmentMemory } from "./coach-commitments";
 
 const M = "player-memory";
 
@@ -37,7 +38,7 @@ export async function loadChatMemory(
   opts: { teamId: string; convId: string },
 ): Promise<{ offerIds: string[] }> {
   const fullName = `${player.firstName} ${player.lastName}`;
-  const [call, drunk, offers] = await Promise.all([
+  const [call, drunk, offers, commitments] = await Promise.all([
     db.prepare(
       `SELECT pocet FROM missed_calls
         WHERE team_id = ? AND volajici = 'hrac' AND jmeno = ? AND julianday(created_at) > julianday('now', ?)
@@ -52,7 +53,9 @@ export async function loadChatMemory(
     ).bind(opts.convId).first<{ x: number }>()
       .catch((e) => { logger.warn({ module: M }, "opilá hlasovka hráče", e); return null; }),
     loadPendingOffers(db, player.id),
+    loadCommitmentMemory(db, player.id),
   ]);
+  if (commitments.length > 0) player.coachCommitments = commitments;
   if (call) player.missedCall = { count: call.pocet ?? 1 };
   if (drunk) player.drunkVoiceRecently = true;
   if (offers.length > 0) player.pendingOffers = offers.map(({ club, interest }) => ({ club, interest }));
@@ -145,6 +148,7 @@ export function memoryPromptLines(player: PlayerSnapshot): string[] {
   if (player.missedCall) {
     lines.push(`- V posledních dnech jsi trenérovi ${player.missedCall.count > 1 ? `${player.missedCall.count}× ` : ""}volal a nevzal to. Volal jsi, protože tým prohrává a ty máš blbou náladu. Když se na to ptá, víš o tom.`);
   }
+  lines.push(...commitmentPromptLines(player.coachCommitments));
   for (const o of player.pendingOffers ?? []) {
     lines.push(`- NABÍDKA: ${o.club} o tebe stojí a trenér ještě nerozhodl. Jak tě to láká: ${INTEREST_WORDS[o.interest]}. Když se tě na to trenér ptá, odpovídej podle toho. Rozmyslet si to můžeš, jen když tě opravdu přesvědčí (konkrétní slib, ocenění, víc peněz); samotné „zůstaň" nestačí.`);
   }

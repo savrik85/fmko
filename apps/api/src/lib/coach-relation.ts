@@ -22,6 +22,8 @@ export type CoachRelationSource =
   // Okresní akce (pouť, bál…), events/district-event-db.ts.
   | "district_event"
   | "incident"
+  // Slib napsaný v SMS (messaging/coach-commitments.ts): dodržel, nebo porušil.
+  | "promise"
   | "left_out"
   | "arrival"
   | "admin";
