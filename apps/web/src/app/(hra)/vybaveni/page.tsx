@@ -5,12 +5,12 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { useGuideVisit } from "@/components/team/first-week-guide";
 import { apiAction, apiFetch, type Team } from "@/lib/api";
-import { SectionLabel, useConfirm, LockDetail, Tabs, ListCard, ListRow, RowIcon, PageLoading } from "@/components/ui";
+import { SectionLabel, useConfirm, LockDetail, Tabs, PageLoading, ProgressBar, UpgradeCard, UpgradeGrid, UpgradeAction, upgradeButtonClass, type ProgressTone } from "@/components/ui";
 import { amenityDetail, withAmenityNote } from "@/lib/amenity-outlook";
 import { AmenityGainChip } from "@/components/equipment/amenity-gain-chip";
 import { SellDialog } from "./SellDialog";
 import { BazarTab } from "./BazarTab";
-import { EQUIPMENT_ICONS, condBarColor, condColor, daysLeft, type BazarData, type BazarListing, type EquipmentData, type MyListing, type RepairOption, type SellOption, type UpgradeOption } from "./types";
+import { EQUIPMENT_ICONS, condColor, daysLeft, type BazarData, type BazarListing, type EquipmentData, type MyListing, type RepairOption, type SellOption, type UpgradeOption } from "./types";
 import { formatKc } from "@/lib/format";
 
 type Tab = "mine" | "bazar";
@@ -20,7 +20,10 @@ type Tab = "mine" | "bazar";
  * Jsou pod sebou ve sloupci, takže musí mít stejný tvar i šířku — jinak to
  * vypadá jako tři náhodná tlačítka místo jedné sady.
  */
-const CARD_BTN = "shrink-0 w-24 py-1.5 rounded-soft text-xs font-heading font-bold transition-colors text-center";
+/** Barva proužku stavu: stejné prahy jako `condColor` u čísla. */
+function condTone(c: number): ProgressTone {
+  return c >= 80 ? "ok" : c >= 50 ? "warn" : "danger";
+}
 
 // useSearchParams (deep-link ?tab=bazar) musí být pod Suspense, jinak build padá
 // na prerenderu — stejný vzor jako liga/page.tsx:90.
@@ -324,9 +327,8 @@ function EquipmentPage() {
             Bonusy platí na tréninky i zápasy. Čísla u vylepšení platí v plném stavu, s opotřebením slábnou.
           </p>
 
-          {/* ═══ Vybavení: řádek na kategorii ═══
-              Řádek není odkaz, každá akce má vlastní tlačítko vpravo od své ceny. */}
-          <ListCard>
+          {/* ═══ Vybavení: karta na kategorii, stejná jako zázemí stadionu ═══ */}
+          <UpgradeGrid>
             {data.categories.map((cat) => {
               const upgrade = data.upgrades.find((u) => u.category === cat.key);
               const repair = data.repairs.find((r: RepairOption) => r.category === cat.key);
@@ -335,102 +337,88 @@ function EquipmentPage() {
               const canRepair = repair && team.budget >= repair.cost;
 
               return (
-                <ListRow key={cat.key}
-                  leading={<RowIcon>{EQUIPMENT_ICONS[cat.key] ?? "📦"}</RowIcon>}
+                <UpgradeCard key={cat.key}
+                  icon={EQUIPMENT_ICONS[cat.key] ?? "📦"}
                   title={cat.label}
-                  detail={
-                    <span className="block space-y-2 mt-0.5">
-                      {/* Úroveň a popis */}
-                      <span className="flex items-start gap-2">
-                        <span className="flex gap-1 shrink-0 pt-[3px]">
-                          {[1, 2, 3].map((l) => (
-                            <span key={l} className={`w-3 h-3 rounded-full ${l <= cat.level ? "bg-pitch-400" : "bg-gray-200"}`} />
-                          ))}
-                        </span>
-                        <span className="text-muted">{cat.description}</span>
+                  description={cat.description}
+                  level={cat.level}>
+                  {/* Stav */}
+                  {cat.level > 0 && (
+                    <div className="flex items-center gap-2 text-sm">
+                      <span className="text-xs text-muted uppercase">Stav</span>
+                      <ProgressBar value={cat.condition} tone={condTone(cat.condition)} label={`Stav: ${cat.condition} %`} className="flex-1" />
+                      <span className={`font-heading font-bold tabular-nums ${condColor(cat.condition)}`}>{cat.condition}%</span>
+                    </div>
+                  )}
+
+                  {/* Vylepšení */}
+                  {upgrade && !upgrade.locked && (
+                    <UpgradeAction action={
+                      <button onClick={() => handleUpgrade(upgrade)} disabled={!canUpgrade || !!acting} className={upgradeButtonClass()}>
+                        {acting === cat.key ? "…" : "Koupit"}
+                      </button>
+                    }>
+                      <div>
+                        <span className="font-heading font-bold">Úroveň {upgrade.nextLevel}</span>{" "}
+                        <span className="text-muted">·</span>{" "}
+                        <span className="font-heading font-bold tabular-nums">{formatKc(upgrade.cost)}</span>
+                      </div>
+                      <div className="text-pitch-600 leading-snug">{upgrade.effect}</div>
+                      {upgrade.effectNote && <div className="text-muted leading-snug mt-0.5">{upgrade.effectNote}</div>}
+                    </UpgradeAction>
+                  )}
+                  {upgrade && !upgrade.locked && upgrade.amenity && <AmenityGainChip amenity={upgrade.amenity} />}
+                  {upgrade?.locked && (
+                    <LockDetail detail={upgrade.lockDetail} hint={upgrade.lockHint} fallback={upgrade.lockReason} />
+                  )}
+                  {!upgrade && cat.level === 3 && (
+                    <div className="text-sm text-pitch-600 font-heading font-bold">Maximální úroveň</div>
+                  )}
+
+                  {/* Oprava */}
+                  {repair && (
+                    <UpgradeAction action={
+                      <button onClick={() => handleRepair(repair.category, repair.label, repair.condition, repair.cost)} disabled={!canRepair || !!acting}
+                        className={upgradeButtonClass("secondary")}>
+                        {acting === "r-" + cat.key ? "…" : "Opravit"}
+                      </button>
+                    }>
+                      <span className="text-muted">Oprava na 100 %: <span className="font-heading font-bold text-ink tabular-nums whitespace-nowrap">{formatKc(repair.cost)}</span></span>
+                    </UpgradeAction>
+                  )}
+
+                  {/* Prodej: vystavené v bazaru vypadá jinak než dostupné k prodeji */}
+                  {sell && (sell.listingId ? (
+                    <UpgradeAction action={
+                      <button
+                        onClick={() => handleWithdraw({ id: sell.listingId as string, category: sell.category, categoryLabel: sell.label, level: sell.level, price: sell.listedPrice ?? 0, condition: sell.condition, conditionAtListing: sell.condition, expiresAt: sell.listedUntil ?? "" })}
+                        disabled={!!acting}
+                        className={upgradeButtonClass("secondary")}>
+                        {acting === "w-" + sell.listingId ? "…" : "Stáhnout"}
+                      </button>
+                    }>
+                      <span className="text-muted">
+                        🏷 V bazaru za <span className="font-heading font-bold text-ink tabular-nums">{formatKc(sell.listedPrice ?? 0)}</span>
+                        <span className="block text-xs">{sell.listedUntil ? daysLeft(sell.listedUntil) : ""}</span>
                       </span>
-
-                      {/* Stav */}
-                      {cat.level > 0 && (
-                        <span className="flex items-center gap-2">
-                          <span className="text-xs text-muted uppercase">Stav</span>
-                          <span className="flex-1 bg-gray-200 rounded-full h-2">
-                            <span className={`block h-2 rounded-full transition-all ${condBarColor(cat.condition)}`} style={{ width: `${cat.condition}%` }} />
-                          </span>
-                          <span className={`font-heading font-bold tabular-nums ${condColor(cat.condition)}`}>{cat.condition}%</span>
-                        </span>
-                      )}
-
-                      {/* Vylepšení */}
-                      {upgrade && !upgrade.locked && (
-                        <span className="flex items-center justify-between gap-3">
-                          <span className="min-w-0">
-                            <span className="block"><span className="font-heading font-bold text-ink">Úroveň {upgrade.nextLevel}</span> <span className="text-muted">·</span> <span className="font-heading font-bold text-ink tabular-nums">{formatKc(upgrade.cost)}</span></span>
-                            <span className="block text-pitch-600 leading-snug">{upgrade.effect}</span>
-                            {upgrade.effectNote && <span className="block text-muted leading-snug mt-0.5">{upgrade.effectNote}</span>}
-                          </span>
-                          <button onClick={() => handleUpgrade(upgrade)} disabled={!canUpgrade || !!acting}
-                            className={`${CARD_BTN} ${
-                              canUpgrade ? "bg-pitch-500 text-white hover:bg-pitch-600" : "bg-gray-100 text-gray-400 cursor-not-allowed"
-                            }`}>
-                            {acting === cat.key ? "..." : "Koupit"}
-                          </button>
-                        </span>
-                      )}
-                      {/* Pod řádkem s tlačítkem, ať má štítek celou šířku a nezalamuje se. */}
-                      {upgrade && !upgrade.locked && upgrade.amenity && <AmenityGainChip amenity={upgrade.amenity} />}
-                      {upgrade?.locked && (
-                        <LockDetail detail={upgrade.lockDetail} hint={upgrade.lockHint} fallback={upgrade.lockReason} />
-                      )}
-                      {!upgrade && cat.level === 3 && (
-                        <span className="block text-xs text-pitch-600 font-heading font-bold">Maximální úroveň</span>
-                      )}
-
-                      {/* Oprava */}
-                      {repair && (
-                        <span className="flex items-center justify-between gap-3">
-                          <span className="text-muted">Oprava na 100 %: <span className="font-heading font-bold text-ink tabular-nums whitespace-nowrap">{formatKc(repair.cost)}</span></span>
-                          <button onClick={() => handleRepair(repair.category, repair.label, repair.condition, repair.cost)} disabled={!canRepair || !!acting}
-                            className={`${CARD_BTN} ${
-                              canRepair ? "bg-gold-500 text-white hover:bg-gold-600" : "bg-gray-100 text-gray-400 cursor-not-allowed"
-                            }`}>
-                            {acting === "r-" + cat.key ? "..." : "Opravit"}
-                          </button>
-                        </span>
-                      )}
-
-                      {/* Prodej: vystavené v bazaru vypadá jinak než dostupné k prodeji */}
-                      {sell && (sell.listingId ? (
-                        <span className="flex items-center justify-between gap-3">
-                          <span className="text-muted min-w-0">
-                            🏷 V bazaru za <span className="font-heading font-bold text-ink tabular-nums">{formatKc(sell.listedPrice ?? 0)}</span>
-                            <span className="block text-xs">{sell.listedUntil ? daysLeft(sell.listedUntil) : ""}</span>
-                          </span>
-                          <button
-                            onClick={() => handleWithdraw({ id: sell.listingId as string, category: sell.category, categoryLabel: sell.label, level: sell.level, price: sell.listedPrice ?? 0, condition: sell.condition, conditionAtListing: sell.condition, expiresAt: sell.listedUntil ?? "" })}
-                            disabled={!!acting}
-                            className={`${CARD_BTN} border border-gray-300 text-muted hover:text-ink hover:border-gray-400 disabled:opacity-50`}>
-                            {acting === "w-" + sell.listingId ? "..." : "Stáhnout"}
-                          </button>
-                        </span>
-                      ) : (
-                        <span className="flex items-center justify-between gap-3">
-                          {/* Cenu v bazaru si určuje hráč, žádné číslo mu tu nepodsouváme.
-                              Výkup zastavárny je naopak pevně daný, ten smysl má. */}
-                          <span className="text-muted">
-                            Prodej: zastavárna dá hned <span className="font-heading font-bold text-ink tabular-nums whitespace-nowrap">{formatKc(sell.pawnQuote)}</span>
-                          </span>
-                          <button onClick={() => setSelling(sell)} disabled={!!acting}
-                            className={`${CARD_BTN} border border-gray-300 text-muted hover:text-ink hover:border-gray-400 disabled:opacity-50`}>
-                            Prodat
-                          </button>
-                        </span>
-                      ))}
-                    </span>
-                  } />
+                    </UpgradeAction>
+                  ) : (
+                    <UpgradeAction action={
+                      <button onClick={() => setSelling(sell)} disabled={!!acting} className={upgradeButtonClass("secondary")}>
+                        Prodat
+                      </button>
+                    }>
+                      {/* Cenu v bazaru si určuje hráč, žádné číslo mu tu nepodsouváme.
+                          Výkup zastavárny je naopak pevně daný, ten smysl má. */}
+                      <span className="text-muted">
+                        Prodej: zastavárna dá hned <span className="font-heading font-bold text-ink tabular-nums whitespace-nowrap">{formatKc(sell.pawnQuote)}</span>
+                      </span>
+                    </UpgradeAction>
+                  ))}
+                </UpgradeCard>
               );
             })}
-          </ListCard>
+          </UpgradeGrid>
         </>
       )}
     </div>

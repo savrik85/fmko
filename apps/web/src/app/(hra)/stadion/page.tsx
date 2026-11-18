@@ -5,7 +5,7 @@ import { clientOnly } from "@/components/client-only";
 import { useTeam } from "@/context/team-context";
 import { useGuideVisit } from "@/components/team/first-week-guide";
 import { apiFetch, type Team } from "@/lib/api";
-import { Spinner, SectionLabel, useConfirm, LockDetail, type LockDetailData, ListRow, RowValue, RowIcon, PageLoading } from "@/components/ui";
+import { Spinner, SectionLabel, useConfirm, LockDetail, type LockDetailData, ListRow, RowValue, RowIcon, PageLoading, UpgradeCard, UpgradeGrid, UpgradeAction, upgradeButtonClass, ChoiceGroup } from "@/components/ui";
 import { StadiumView } from "@/components/stadium/stadium-view";
 import { KotelPrehravac } from "@/components/stadium/KotelPrehravac";
 import { moistureLabel, moistureHint } from "@/lib/pitch-moisture";
@@ -416,26 +416,23 @@ function Dlazdice({ vybrano, disabled, onClick, ikona, nazev, popis, meta }: {
   );
 }
 
-/** Přepínač režimů. Na mobilu roztažený na celou šířku — palec míří doprostřed. */
-function Prepinac<T extends string>({ hodnoty, aktivni, onChange, disabled }: {
+/**
+ * Přepínač režimů (pohled na areál, péče o trávník) ve vzhledu voleb B jako jinde ve hře.
+ * Na mobilu roztažený na celou šířku, palec míří doprostřed. Během ukládání klik nic
+ * nedělá, ale volby nezešednou (přeškrtnutí patří volbám, které nejdou vybrat vůbec).
+ */
+function Prepinac<T extends string>({ hodnoty, aktivni, onChange, disabled, ariaLabel }: {
   hodnoty: ReadonlyArray<{ id: T; label: string }>;
-  aktivni: T; onChange: (id: T) => void; disabled?: boolean;
+  aktivni: T; onChange: (id: T) => void; disabled?: boolean; ariaLabel: string;
 }) {
   return (
-    <div className="grid gap-1.5 p-1 bg-gray-100 rounded-soft" style={{ gridTemplateColumns: `repeat(${hodnoty.length}, minmax(0, 1fr))` }}>
-      {hodnoty.map((h) => (
-        <button
-          key={h.id}
-          onClick={() => onChange(h.id)}
-          disabled={disabled}
-          className={`py-2.5 px-3 rounded-soft text-sm font-heading font-bold transition-colors ${
-            aktivni === h.id ? "bg-pitch-500 text-white shadow-sm" : "text-muted hover:text-ink"
-          }`}
-        >
-          {h.label}
-        </button>
-      ))}
-    </div>
+    <ChoiceGroup
+      options={hodnoty.map((h) => ({ value: h.id, label: h.label }))}
+      value={aktivni}
+      columns={hodnoty.length === 3 ? 3 : 2}
+      ariaLabel={ariaLabel}
+      onChange={(id) => { if (!disabled) onChange(id); }}
+    />
   );
 }
 
@@ -856,6 +853,7 @@ export default function StadiumPage() {
           hodnoty={[{ id: "2d" as ViewMode, label: "2D plán" }, { id: "3d" as ViewMode, label: "3D areál" }]}
           aktivni={viewMode}
           onChange={switchView}
+          ariaLabel="Pohled na areál"
         />
 
         {viewMode === "3d" ? (
@@ -1326,6 +1324,7 @@ export default function StadiumPage() {
                       { id: "off" as const, label: "Nezapínat" },
                     ]}
                     aktivni={stadium.pitchCare.mode}
+                    ariaLabel="Péče o trávník"
                     disabled={!!acting}
                     onChange={async (mode) => {
                       setActing("care-mode");
@@ -1608,29 +1607,19 @@ export default function StadiumPage() {
       )}
 
       <SectionLabel>Zázemí</SectionLabel>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <UpgradeGrid>
         {Object.entries(stadium.facilities).filter(([key]) => key !== "stands" && !key.startsWith("stand_")).map(([key, level]) => {
           const upgrade = stadium.upgrades.find((u) => u.facility === key);
           const canUpgrade = upgrade && !upgrade.locked && team.budget >= upgrade.cost;
 
           return (
-            <div key={key} className="card p-4">
-              {/* Header */}
-              <div className="flex items-center gap-2.5 mb-3">
-                <span className="text-2xl">{FACILITY_ICONS[key] ?? "📦"}</span>
-                <div className="flex-1 min-w-0">
-                  <div className="font-heading font-bold">{FACILITY_LABELS[key] ?? key}</div>
-                  <div className="text-sm text-muted leading-snug">{FACILITY_DESCRIPTIONS[key]?.[level] ?? LEVEL_LABELS[level]}</div>
-                </div>
-                <div className="flex gap-1 shrink-0">
-                  {[1, 2, 3].map((l) => (
-                    <div key={l} className={`w-3 h-3 rounded-full ${l <= level ? "bg-pitch-400" : "bg-gray-200"}`} />
-                  ))}
-                </div>
-              </div>
-
+            <UpgradeCard key={key}
+              icon={FACILITY_ICONS[key] ?? "📦"}
+              title={FACILITY_LABELS[key] ?? key}
+              description={FACILITY_DESCRIPTIONS[key]?.[level] ?? LEVEL_LABELS[level]}
+              level={level}>
               {key === "vip_box" && level > 0 && stadium.vipBox && (
-                <div className="text-sm text-muted leading-snug mb-2">
+                <div className="text-sm text-muted leading-snug">
                   Teď: o {stadium.vipBox.seatsLost} míst méně pro platící diváky, provoz{" "}
                   <span className="tabular-nums">{formatKc(stadium.vipBox.matchCost)}</span> za domácí zápas.
                   Šance, že pozvaný majitel pozvání přijme, +{stadium.vipBox.sponsorAcceptancePct} procentních bodů;
@@ -1638,37 +1627,35 @@ export default function StadiumPage() {
                 </div>
               )}
 
-              {/* Upgrade info + action */}
               {upgrade && !upgrade.locked && (
-                <div className="flex flex-col gap-2 mt-1 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
-                  <div className="min-w-0">
-                    <div className="text-sm">
-                      <span className="font-heading font-bold">Úroveň {upgrade.nextLevel}</span>{" "}
-                      <span className="text-muted">·</span>{" "}
-                      <span className="font-heading font-bold tabular-nums">{formatKc(upgrade.cost)}</span>
-                    </div>
-                    <div className="text-sm text-pitch-600 leading-snug">{upgrade.effect}</div>
-                    {upgrade.amenity && <AmenityGainChip amenity={upgrade.amenity} />}
-                  </div>
+                <UpgradeAction action={
                   <button
                     onClick={() => handleUpgrade(upgrade.facility, upgrade.label, upgrade.cost, upgrade.effect, upgrade.amenity)}
                     disabled={!canUpgrade || !!acting}
-                    className="btn btn-primary btn-sm min-h-11 w-full sm:w-auto"
+                    className={upgradeButtonClass()}
                   >
                     {acting === key ? "…" : "Koupit"}
                   </button>
-                </div>
+                }>
+                  <div>
+                    <span className="font-heading font-bold">Úroveň {upgrade.nextLevel}</span>{" "}
+                    <span className="text-muted">·</span>{" "}
+                    <span className="font-heading font-bold tabular-nums">{formatKc(upgrade.cost)}</span>
+                  </div>
+                  <div className="text-pitch-600 leading-snug">{upgrade.effect}</div>
+                </UpgradeAction>
               )}
+              {upgrade && !upgrade.locked && upgrade.amenity && <AmenityGainChip amenity={upgrade.amenity} />}
               {upgrade?.locked && (
                 <LockDetail detail={upgrade.lockDetail} hint={upgrade.lockHint} fallback={upgrade.lockReason} />
               )}
               {!upgrade && level === 3 && (
-                <div className="text-sm text-pitch-600 font-heading font-bold mt-2">Maximální úroveň</div>
+                <div className="text-sm text-pitch-600 font-heading font-bold">Maximální úroveň</div>
               )}
-            </div>
+            </UpgradeCard>
           );
         })}
-      </div>
+      </UpgradeGrid>
 
       {/* ═══ Historie staveb ═══ */}
       <div className="card p-4 space-y-3">
