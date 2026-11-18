@@ -713,8 +713,9 @@ async function resolveCommitment(
     await db.prepare(
       `UPDATE players SET life_context = json_set(CASE WHEN json_valid(life_context) THEN life_context ELSE '{}' END,
          '$.morale', MAX(0, MIN(100, COALESCE(json_extract(life_context, '$.morale'), 50) + ?)))
-        WHERE team_id = (SELECT team_id FROM players WHERE id = ?) AND (status IS NULL OR status = 'active')`,
-    ).bind(moraleAll, r.player_id).run().catch((e) => logger.warn({ module: M }, `nálada kabiny po sázce ${r.id}`, e));
+        WHERE team_id = ? AND (status IS NULL OR status = 'active')`,
+      // Kabina klubu, kterému sázka patří: zástupce mezitím mohl odejít třeba na hostování.
+    ).bind(moraleAll, r.team_id).run().catch((e) => logger.warn({ module: M }, `nálada kabiny po sázce ${r.id}`, e));
     const conv = await db.prepare("SELECT conversation_id FROM coach_commitments WHERE id = ?").bind(r.id).first<{ conversation_id: string | null }>()
       .catch((e) => { logger.warn({ module: M }, "kabina sázky", e); return null; });
     if (conv?.conversation_id && r.club_user_id !== "ai") {
