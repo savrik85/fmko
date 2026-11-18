@@ -253,3 +253,38 @@ describe("sázka a pozvání", () => {
     expect(await status(no)).toBe("expired");
   });
 });
+
+describe("vztah se nedá koupit", () => {
+  const relLogs = async () => (await db.prepare("SELECT COUNT(*) AS n FROM coach_relation_log WHERE player_id = 'p1'").first<{ n: number }>())?.n;
+
+  it("druhá prémie do 14 dní a prémie pod týdenní odměnu vztah nezmění", async () => {
+    const small = await record({ kind: "bonus", amount: 200 }, "tady máš dvě stovky");
+    await fulfilMoneyCommitment(db, { teamId: "club", commitmentId: small, now: T0 });
+    expect(await relLogs()).toBe(0);
+    const big = await record({ kind: "bonus", amount: 1000 });
+    await fulfilMoneyCommitment(db, { teamId: "club", commitmentId: big, now: T0 });
+    expect(await relLogs()).toBe(1);
+    const again = await record({ kind: "bonus", amount: 1000 });
+    await fulfilMoneyCommitment(db, { teamId: "club", commitmentId: again, now: new Date(T0.getTime() + 2 * 86400000) });
+    expect(await relLogs()).toBe(1);
+    expect(await status(again)).toBe("kept");
+  });
+
+  it("druhé pozvání do týdne: hráč přijde, ale poděkování se neplánuje", async () => {
+    const first = await record({ kind: "invite_talk" });
+    expect(await respondToCoachInvite(db, { teamId: "club", convId: "c1", playerId: "p1", playerFirstName: "Filip", commitmentId: first, kind: "invite_talk", accepted: true, now: T0 })).toBe(true);
+    await db.prepare("UPDATE player_follow_ups SET done_at = ?").bind(T0.toISOString()).run();
+    const second = await record({ kind: "invite_talk" });
+    expect(await respondToCoachInvite(db, { teamId: "club", convId: "c1", playerId: "p1", playerFirstName: "Filip", commitmentId: second, kind: "invite_talk", accepted: true, now: new Date(T0.getTime() + 86400000) })).toBe(false);
+    expect(await status(second)).toBe("kept");
+    expect((await db.prepare("SELECT COUNT(*) AS n FROM player_follow_ups").first<{ n: number }>())?.n).toBe(1);
+  });
+
+  it("vyhranou sázku ani pozvání zrušit nejde, ani přímým voláním", async () => {
+    const bet = await record({ kind: "bet", condition: "goal", reward: "keg" });
+    await db.prepare("UPDATE coach_commitments SET details = json_set(details, '$.won', json('true')) WHERE id = ?").bind(bet).run();
+    expect(await cancelCommitment(db, { teamId: "club", commitmentId: bet, now: T0 })).toMatchObject({ ok: false, status: 409 });
+    const inv = await record({ kind: "invite_pub" });
+    expect(await cancelCommitment(db, { teamId: "club", commitmentId: inv, now: T0 })).toMatchObject({ ok: false, status: 409 });
+  });
+});

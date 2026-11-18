@@ -65,6 +65,8 @@ export interface CommitmentDetails {
   matchId?: string;
   /** Id systémové zprávy s tlačítkem (peníze). */
   buttonMessageId?: string;
+  /** Dodržený slib opravdu změnil vztah (od něj se počítá lhůta proti „farmení“). */
+  effect?: number;
 }
 
 /** Jak dlouho slib platí, než se vyhodnotí bez zápasu nebo bez vyplacení. */
@@ -79,6 +81,10 @@ const BET_PAY_DAYS = 5;
 const MONEY_REMINDER_DAYS = 3;
 /** Dodržený slib sestavy zlepší vztah nejvýš jednou za tolik dní (jinak by šel „farmit“). */
 const KEPT_EFFECT_COOLDOWN_DAYS = 14;
+/** Peníze (prémie, odměny, sázka) zlepší vztah nejvýš jednou za tolik dní, jinak by šel koupit po stokorunách. */
+const MONEY_EFFECT_COOLDOWN_DAYS = 14;
+/** Pozvání od trenéra má dopad nejvýš jednou za tolik dní. */
+const INVITE_EFFECT_COOLDOWN_DAYS = 7;
 
 /**
  * Předběžné síto: model se volá jen u zpráv, kde slib může být. Projde i „platím“ nebo
@@ -644,16 +650,34 @@ async function resolveCommitment(
   // Souběžné vyhodnocení (tlačítko a denní běh): dopad jen jednou.
   if ((upd?.meta?.changes ?? 0) === 0 || status === "expired") return;
 
-  const [relation, morale] = EFFECTS[r.kind][status];
+  let [relation, morale] = EFFECTS[r.kind][status];
+  if (status === "kept" && (r.kind === "bonus" || r.kind === "wage" || r.kind === "bet")) {
+    // Prémie pod týdenní odměnu potěší, ale vztah nezmění; peníze zlepší vztah nejvýš jednou
+    // za 14 dní. Jinak by šel vztah koupit po stokorunách.
+    const d = detailsOf(r.details);
+    const wage = await db.prepare("SELECT weekly_wage FROM players WHERE id = ?").bind(r.player_id).first<{ weekly_wage: number | null }>()
+      .catch((e) => { logger.warn({ module: M }, "odměna hráče u prémie", e); return null; });
+    const recentMoney = await db.prepare(
+      `SELECT 1 FROM coach_commitments WHERE player_id = ? AND id != ? AND status = 'kept'
+         AND kind IN ('bonus', 'wage', 'bet') AND resolved_at > ? AND json_extract(details, '$.effect') = 1 LIMIT 1`,
+    ).bind(r.player_id, r.id, new Date(now.getTime() - MONEY_EFFECT_COOLDOWN_DAYS * DAY_MS).toISOString()).first()
+      .catch((e) => { logger.warn({ module: M }, "nedávné peníze od trenéra", e); return null; });
+    if (recentMoney || (r.kind === "bonus" && (d.amount ?? 0) < (wage?.weekly_wage ?? 0))) [relation, morale] = [0, 1];
+  }
   if (status === "kept" && (r.kind === "start_next" || r.kind === "start_soon" || r.kind === "position")) {
     const recent = await db.prepare(
       `SELECT 1 FROM coach_commitments WHERE player_id = ? AND id != ? AND status = 'kept'
-         AND kind IN ('start_next', 'start_soon', 'position') AND resolved_at > ? LIMIT 1`,
+         AND kind IN ('start_next', 'start_soon', 'position') AND resolved_at > ? AND json_extract(details, '$.effect') = 1 LIMIT 1`,
     ).bind(r.player_id, r.id, new Date(now.getTime() - KEPT_EFFECT_COOLDOWN_DAYS * DAY_MS).toISOString()).first()
       .catch((e) => { logger.warn({ module: M }, "nedávno dodržený slib", e); return null; });
     if (recent) return;
   }
   if (relation !== 0) {
+    // Lhůta proti „farmení“ se počítá jen od slibu, který vztah opravdu změnil.
+    if (status === "kept") {
+      await db.prepare("UPDATE coach_commitments SET details = json_set(COALESCE(details, '{}'), '$.effect', 1) WHERE id = ?")
+        .bind(r.id).run().catch((e) => logger.warn({ module: M }, `značka dopadu slibu ${r.id}`, e));
+    }
     await applyCoachRelationDelta(db, {
       playerId: r.player_id, delta: relation, source: "promise",
       description: `${status === "kept" ? "Dodržel jsi" : "Nedodržel jsi"} slib: ${lowerFirst(commitmentText(r.kind, detailsOf(r.details)))}`,
@@ -887,13 +911,17 @@ export async function cancelCommitment(
   o: { teamId: string; commitmentId: string; now?: Date },
 ): Promise<{ ok: true } | { ok: false; error: string; status: number }> {
   const now = o.now ?? new Date();
-  const r = await db.prepare("SELECT team_id, status, made_at, details FROM coach_commitments WHERE id = ?").bind(o.commitmentId)
-    .first<{ team_id: string; status: string; made_at: string; details: string | null }>()
+  const r = await db.prepare("SELECT team_id, kind, status, made_at, details FROM coach_commitments WHERE id = ?").bind(o.commitmentId)
+    .first<{ team_id: string; kind: CommitmentKind; status: string; made_at: string; details: string | null }>()
     .catch((e) => { logger.warn({ module: M }, "slib ke zrušení", e); return null; });
   const club = await db.prepare("SELECT COALESCE(parent_team_id, id) AS id FROM teams WHERE id = ?").bind(o.teamId).first<{ id: string }>()
     .catch((e) => { logger.warn({ module: M }, "klub u zrušení slibu", e); return null; });
   if (!r || r.team_id !== (club?.id ?? o.teamId)) return { ok: false, error: "Slib nenalezen.", status: 404 };
   if (r.status !== "active") return { ok: false, error: "Tenhle slib už neplatí.", status: 409 };
+  // Vyhraná sázka už slibem byla. Pozvání se neruší, odpovídá na něj hráč.
+  if ((r.kind === "bet" && detailsOf(r.details).won) || r.kind === "invite_pub" || r.kind === "invite_talk") {
+    return { ok: false, error: "Tohle zrušit nejde.", status: 409 };
+  }
   if (now.getTime() - new Date(r.made_at).getTime() > CANCEL_WINDOW_MS) {
     return { ok: false, error: "Už je pozdě, hráč s tím slibem počítá.", status: 409 };
   }
@@ -951,11 +979,24 @@ export async function respondToCoachInvite(
     .bind(o.accepted ? "kept" : "expired", now.toISOString(), o.commitmentId).run()
     .catch((e) => { logger.warn({ module: M }, `odpověď na pozvání ${o.commitmentId}`, e); return null; });
   if ((upd?.meta?.changes ?? 0) === 0 || !o.accepted) return false;
+  // Pozvání od trenéra má dopad nejvýš jednou za týden: schůzka je zdarma a denní „stav se“
+  // by jinak vztah jen sbíral. Hráč přijde, ale poděkování ani vztah navíc nedostane.
+  const recent = await db.prepare(
+    `SELECT 1 FROM coach_commitments WHERE player_id = ? AND id != ? AND status = 'kept'
+       AND kind IN ('invite_pub', 'invite_talk') AND resolved_at > ? AND json_extract(details, '$.effect') = 1 LIMIT 1`,
+  ).bind(o.playerId, o.commitmentId, new Date(now.getTime() - INVITE_EFFECT_COOLDOWN_DAYS * DAY_MS).toISOString()).first()
+    .catch((e) => { logger.warn({ module: M }, "nedávné pozvání od trenéra", e); return null; });
+  if (recent) return false;
   const { applyAcceptedInvite } = await import("./casual-messages");
-  return applyAcceptedInvite(db, {} as Parameters<typeof applyAcceptedInvite>[1], {
+  const applied = await applyAcceptedInvite(db, {} as Parameters<typeof applyAcceptedInvite>[1], {
     kind: o.kind === "invite_pub" ? "coach_pub" : "coach_talk", topicId: "coach_invite",
     teamId: o.teamId, playerId: o.playerId, playerFirstName: o.playerFirstName, convId: o.convId,
   }, now);
+  if (applied) {
+    await db.prepare("UPDATE coach_commitments SET details = json_set(COALESCE(details, '{}'), '$.effect', 1) WHERE id = ?")
+      .bind(o.commitmentId).run().catch((e) => logger.warn({ module: M }, `značka dopadu pozvání ${o.commitmentId}`, e));
+  }
+  return applied;
 }
 
 /** Řádky do promptu: hráč o slibech ví a může se na ně odvolat. */
