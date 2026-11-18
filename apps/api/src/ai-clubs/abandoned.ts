@@ -114,6 +114,55 @@ export async function takeOverAbandonedClub(
   return true;
 }
 
+/** Nejkratší nečinnost vlastníka, po které smí admin klub ručně uvolnit pro nového hráče. */
+export const RELEASE_MIN_INACTIVE_DAYS = 7;
+
+export type ReleaseResult =
+  | { released: true }
+  | { released: false; reason: "not_found" | "already_free" | "linked" | "active_owner" };
+
+/**
+ * Ruční uvolnění klubu pro nového hráče (admin). Klub převezme AI trenér jako opuštěný klub,
+ * jen bez ochrany bývalého vlastníka: příští registrace v okrese ho hned přepíše vlastním
+ * klubem (ai-clubs/overwrite.ts). Bývalý vlastník se k němu už nevrátí, po přihlášení si
+ * založí nový klub. Jde to i u klubu, který AI trenér už převzal a ještě ho chrání 90 dní.
+ *
+ * Propojený klub (`club_links` nebo jiné áčko pod stejným účtem) se neuvolní: přepsání
+ * propojení nemaže, takže by ho zdědil nováček.
+ */
+export async function releaseClubForNewcomer(db: D1Database, teamId: string, now: Date): Promise<ReleaseResult> {
+  const team = await db.prepare(
+    `SELECT user_id, ai_former_user_id FROM teams WHERE id = ? AND parent_team_id IS NULL AND COALESCE(team_type, 'senior') <> 'u21'`,
+  ).bind(teamId).first<{ user_id: string; ai_former_user_id: string | null }>();
+  if (!team) return { released: false, reason: "not_found" };
+  const ownerId = team.user_id === "ai" ? team.ai_former_user_id : team.user_id;
+  if (!ownerId) return { released: false, reason: "already_free" };
+
+  const linked = await db.prepare(
+    `SELECT 1 AS x FROM club_links WHERE team_id = ?1
+     UNION ALL
+     SELECT 1 AS x FROM teams WHERE user_id = ?2 AND id <> ?1 AND parent_team_id IS NULL AND COALESCE(team_type, 'senior') <> 'u21'
+     LIMIT 1`,
+  ).bind(teamId, ownerId).first<{ x: number }>();
+  if (linked) return { released: false, reason: "linked" };
+
+  if (team.user_id !== "ai") {
+    const taken = await takeOverAbandonedClub(db, teamId, now, { minInactiveDays: RELEASE_MIN_INACTIVE_DAYS });
+    if (!taken) return { released: false, reason: "active_owner" };
+  } else {
+    const activity = await lastActivitySql(db, "u");
+    const active = await db.prepare(`SELECT 1 AS x FROM users u WHERE u.id = ? AND julianday(${activity}) > julianday(?)`)
+      .bind(ownerId, daysBefore(now, RELEASE_MIN_INACTIVE_DAYS)).first<{ x: number }>();
+    if (active) return { released: false, reason: "active_owner" };
+  }
+
+  await db.prepare(
+    `UPDATE teams SET ai_former_user_id = NULL WHERE (id = ?1 OR parent_team_id = ?1) AND user_id = 'ai' AND ai_former_user_id = ?2`,
+  ).bind(teamId, ownerId).run();
+  logger.info({ module: M, teamId }, `klub uvolněn pro nového hráče (bývalý vlastník ${ownerId})`);
+  return { released: true };
+}
+
 /** Přepínač v CACHE_KV: `off` denní převzetí vypne (např. před zálohou produkce). Bez klíče platí `on`. */
 export const TAKEOVER_SWITCH_KEY = "ai_club_takeover";
 
