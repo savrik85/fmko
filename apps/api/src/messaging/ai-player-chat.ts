@@ -924,6 +924,8 @@ export async function generateSquadGroupReaction(
   coachMessage: string,
   /** Posledních pár replik CHRONOLOGICKY, ve tvaru „TRENÉR: …" / „Jméno: …". */
   historie: string[],
+  /** Trenér oslovil právě jeho; jak kabina vzala proslov před zápasem (squad-talk.ts). */
+  opts: { addressed?: boolean; mood?: string; afterTeammates?: boolean } = {},
 ): Promise<string> {
   const system = buildSystemPrompt(player, team);
   const kontext = historie.length > 0
@@ -945,6 +947,9 @@ export async function generateSquadGroupReaction(
     "- Když trenér jen pozdravil nebo napsal něco běžného, odpověz stejně krátce a obyčejně.",
     "  Na „Zdar\" se odpovídá „Zdar trenére\", ne projevem.",
     "- Nikoho neoslovuj jménem, pokud ho trenér nezmínil.",
+    opts.addressed ? "- Trenér oslovil přímo TEBE. Odpověz mu ty, osobně." : "",
+    opts.mood ? `- Jak trenérova slova kabina vzala: ${opts.mood} Tvoje reakce tomu odpovídá.` : "",
+    opts.afterTeammates ? "- Spoluhráči už odpověděli (jsou v hovoru výše). Neopakuj je, přidej vlastní pohled, klidně jim i odpověz." : "",
     "- Trenéra nikdy nekomentuj ve třetí osobě. Když mu chceš něco vzkázat, řekni to jemu.",
     "",
     "Zareaguj jednou krátkou větou, jak by se ozval člověk v partě, souhlas, rýpnutí, vtip, povzdech.",

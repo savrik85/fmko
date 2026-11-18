@@ -28,6 +28,8 @@ import {
 } from "./ai-player-spawn";
 import type { OptionalPushKeys } from "../community/phone-push";
 import { loadChatMemory } from "./player-memory";
+import { addressedPlayers, applySpeech, persuadeAbsentees, pickResponders } from "./squad-talk";
+import { handleSquadBet } from "./coach-commitments";
 import { refundCoachSms } from "./phone-credit";
 import type { PlayerSnapshot } from "./ai-player-scenarios";
 import { carryWeightTalk, weightTalkFromState } from "../season/weight-talk";
@@ -304,59 +306,103 @@ async function replyInSquadGroupInner(
       snap.zivotniSituace = kind ? { kind, label: nazevSituace(kind) } : undefined;
       return snap;
     });
-    const mluvci = vyberMluvciho(await awakeFirst(db, opts.convId, kadr));
-    if (!mluvci) return false;
-
-    // Před celou kabinou nikdo nic neprozradí: jen veřejné znalosti (spec 10b).
-    mluvci.znalostiIncidentu = await nactiZnalostiHrace(db, { teamId: opts.teamId, playerId: mluvci.id });
-    mluvci.lastOwnMessageAt = await loadLastOwnMessageAt(db, opts.convId, mluvci.id);
+    // Komu trenér odpovídá: kdo v kabině psal poslední (před trenérovou zprávou).
+    const last = await db.prepare(
+      `SELECT sender_id, sent_at FROM messages WHERE conversation_id = ? AND sender_type = 'player'
+        ORDER BY julianday(sent_at) DESC LIMIT 1`,
+    ).bind(opts.convId).first<{ sender_id: string; sent_at: string }>()
+      .catch((e) => { logger.warn({ module: M }, "kdo v kabině psal poslední", e); return null; });
+    const awake = await awakeFirst(db, opts.convId, kadr);
+    // Když spí všichni, `awakeFirst` vrací celý kádr a SMS vzbudí jen jednoho, ne celou partu.
+    const allAsleep = kadr.every((p) => playerTimeContext(p, new Date()).situace === "spi");
+    // Oslovený hráč odpoví, i když zrovna spí: trenér ho volá jménem (squad-talk.ts).
+    const responders = pickResponders(
+      [...awake, ...kadr.filter((p) => !awake.includes(p) && addressedPlayers([p], opts.coachMessage).length > 0)],
+      opts.coachMessage,
+      last ? { id: last.sender_id, at: last.sent_at } : null,
+      (pool) => vyberMluvciho([...pool]),
+    ).slice(0, allAsleep ? 1 : 3);
+    if (responders.length === 0) return false;
+    const addressed = new Set(addressedPlayers(kadr, opts.coachMessage).map((p) => p.id));
 
     const team = await loadTeamContext(db, opts.teamId);
 
-    /*
-     * Poslední výměna v kabině — CHRONOLOGICKY a včetně toho, co psal trenér.
-     *
-     * Dřív se posílaly jen hlášky hráčů, navíc od nejnovější. Model z toho četl
-     * rozhovor pozpátku bez poloviny replik a reagoval na nejstarší téma, které
-     * uviděl: na „Zdar" odpovídal hráčům, že z prvního místa se neodchází.
-     *
-     * Systémová oznámení (nabídky, absence) se vynechávají — do hovoru nepatří
-     * a model je bral jako repliky.
-     */
-    const predchozi = await db
-      .prepare(
-        `SELECT * FROM (
-           SELECT sender_type, sender_name, body, sent_at FROM messages
-           WHERE conversation_id = ? AND sender_type IN ('player','user')
-           ORDER BY sent_at DESC LIMIT 6
-         ) ORDER BY sent_at ASC`,
-      ).bind(opts.convId).all<{ sender_type: string; sender_name: string; body: string }>()
-      .catch((e) => { logger.warn({ module: M }, "historie kabiny", e); return null; });
-
-    const text = await generateSquadGroupReaction(
-      env, mluvci, team, opts.coachMessage,
-      (predchozi?.results ?? []).map((m) =>
-        m.sender_type === "user" ? `TRENÉR: ${coachQuote(m.body)}` : `${m.sender_name}: ${m.body}`),
-    );
-    if (!text) return false;
-
-    const now = new Date().toISOString();
-    const jmeno = `${mluvci.firstName} ${mluvci.lastName}`;
-    await db.batch([
-      db.prepare(
-        `INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, metadata, sent_at, read)
-         VALUES (?, ?, 'player', ?, ?, ?, ?, ?, 0)`,
-      ).bind(
-        crypto.randomUUID(), opts.convId, mluvci.id, jmeno, text,
-        JSON.stringify({ ai_generated: true, kabina: true }), now,
-      ),
-      db.prepare(
-        `UPDATE conversations SET unread_count = unread_count + 1, last_message_text = ?, last_message_at = ?
-         WHERE id = ?`,
-      ).bind(`${jmeno}: ${text}`.slice(0, 100), now, opts.convId),
+    // Proslov před zápasem, výzva „žádné omluvenky“ a sázka kabiny (squad-talk.ts, coach-commitments.ts).
+    // Selhání žádné z nich nesmí zastavit odpověď kabiny.
+    // Běží souběžně, celá odpověď kabiny se musí vejít do limitu práce na pozadí (~30 s).
+    const captainId = await db.prepare("SELECT captain_id FROM teams WHERE id = ?").bind(opts.teamId).first<{ captain_id: string | null }>()
+      .then((r) => r?.captain_id ?? null)
+      .catch((e) => { logger.warn({ module: M }, "kapitán kabiny", e); return null; });
+    const representative = kadr.find((p) => p.id === captainId) ?? responders[0];
+    const [speech] = await Promise.all([
+      applySpeech(db, env, { teamId: opts.teamId, convId: opts.convId, message: opts.coachMessage, nextMatch: team.nextMatch })
+        .catch((e) => { logger.warn({ module: M, teamId: opts.teamId }, "proslov před zápasem", e); return null; }),
+      persuadeAbsentees(db, { teamId: opts.teamId, convId: opts.convId, message: opts.coachMessage, squad: kadr })
+        .catch((e) => { logger.warn({ module: M, teamId: opts.teamId }, "přemlouvání omluvených", e); return []; }),
+      handleSquadBet(db, env, { teamId: opts.teamId, convId: opts.convId, message: opts.coachMessage, representative }),
     ]);
 
-    return true;
+    let posted = 0;
+    for (const [i, mluvci] of responders.entries()) {
+      try {
+        // Před celou kabinou nikdo nic neprozradí: jen veřejné znalosti (spec 10b).
+        mluvci.znalostiIncidentu = await nactiZnalostiHrace(db, { teamId: opts.teamId, playerId: mluvci.id });
+        mluvci.lastOwnMessageAt = await loadLastOwnMessageAt(db, opts.convId, mluvci.id);
+
+        /*
+         * Poslední výměna v kabině — CHRONOLOGICKY a včetně toho, co psal trenér
+         * i co už na jeho zprávu odpověděli spoluhráči.
+         *
+         * Dřív se posílaly jen hlášky hráčů, navíc od nejnovější. Model z toho četl
+         * rozhovor pozpátku bez poloviny replik a reagoval na nejstarší téma, které
+         * uviděl: na „Zdar" odpovídal hráčům, že z prvního místa se neodchází.
+         *
+         * Systémová oznámení (nabídky, absence) se vynechávají — do hovoru nepatří
+         * a model je bral jako repliky.
+         */
+        const predchozi = await db
+          .prepare(
+            `SELECT * FROM (
+               SELECT sender_type, sender_name, body, sent_at FROM messages
+               WHERE conversation_id = ? AND sender_type IN ('player','user')
+               ORDER BY julianday(sent_at) DESC LIMIT 6
+             ) ORDER BY julianday(sent_at) ASC`,
+          ).bind(opts.convId).all<{ sender_type: string; sender_name: string; body: string }>()
+          .catch((e) => { logger.warn({ module: M }, "historie kabiny", e); return null; });
+
+        const text = await generateSquadGroupReaction(
+          env, mluvci, team, opts.coachMessage,
+          (predchozi?.results ?? []).map((m) =>
+            m.sender_type === "user" ? `TRENÉR: ${coachQuote(m.body)}` : `${m.sender_name}: ${m.body}`),
+          { addressed: addressed.has(mluvci.id), mood: speech?.mood || undefined, afterTeammates: i > 0 },
+        );
+        if (!text) continue;
+
+        // Další hlas pár vteřin po předchozím, ať se zprávy nepřekrývají.
+        const at = new Date(Date.now() + i * 3000).toISOString();
+        const jmeno = `${mluvci.firstName} ${mluvci.lastName}`;
+        await db.batch([
+          db.prepare(
+            `INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, metadata, sent_at, read)
+             VALUES (?, ?, 'player', ?, ?, ?, ?, ?, 0)`,
+          ).bind(
+            crypto.randomUUID(), opts.convId, mluvci.id, jmeno, text,
+            JSON.stringify({ ai_generated: true, kabina: true }), at,
+          ),
+          db.prepare(
+            `UPDATE conversations SET unread_count = unread_count + 1, last_message_text = ?, last_message_at = ?
+             WHERE id = ?`,
+          ).bind(`${jmeno}: ${text}`.slice(0, 100), at, opts.convId),
+        ]);
+        posted++;
+      } catch (e) {
+        // První odpověď je zaplacená SMS; když spadne až druhý hlas, kabina už odpověděla.
+        if (posted === 0) throw e;
+        logger.warn({ module: M, teamId: opts.teamId }, `další hlas v kabině (${mluvci.id})`, e);
+      }
+    }
+
+    return posted > 0;
   } catch (e) {
     if (e instanceof GeminiUnavailableError) {
       logger.warn({ module: M }, `model nedostupný pro kabinu ${opts.teamId}`);
