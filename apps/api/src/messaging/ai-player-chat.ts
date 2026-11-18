@@ -370,8 +370,9 @@ export function buildSystemPrompt(
  */
 function replyFlagFields(player: PlayerSnapshot): { schema: string; rules: string[] } {
   const offers = (player.pendingOffers?.length ?? 0) > 0;
+  const invite = player.pendingInvite;
   return {
-    schema: `, "write_later": <true|false>${offers ? `, "transfer_stance": "stay"|"leave"|"none"` : ""}`,
+    schema: `, "write_later": <true|false>${offers ? `, "transfer_stance": "stay"|"leave"|"none"` : ""}${invite ? `, "accepts_invite": true|false|null` : ""}`,
     rules: [
       "- write_later: true JEN když v téhle zprávě trenérovi slibuješ, že se ozveš později (teď nemáš čas). Jinak false.",
       ...(offers
@@ -379,15 +380,19 @@ function replyFlagFields(player: PlayerSnapshot): { schema: string; rules: strin
         // takže odmítnutí hráče potrestalo, i když s ním souhlasil (Tomáš Bláha, prod 2026-10-29).
         ? ["- transfer_stance: \"stay\", když v téhle zprávě jasně říkáš, že zůstaneš nebo ať trenér nabídku odmítne, i když jen výměnou za slib (pustí tě později, víc peněz, místo v sestavě), na který jsi kývl; \"leave\", když jasně chceš odejít nebo ať ji přijme; jinak \"none\"."]
         : []),
+      // Na konci: odložená odpověď (generateFollowUpMessage) bere `rules.slice(1)` bez write_later.
+      ...(invite
+        ? [`- accepts_invite: true, když v téhle zprávě trenérovi kývneš, že ${invite.kind === "invite_pub" ? "s ním na pivo půjdeš" : "se za ním stavíš"}; false, když odmítneš; null, když jsi to ještě nerozhodl.`]
+        : []),
     ],
   };
 }
 
 function parseReplyFlags(
-  parsed: { write_later?: unknown; transfer_stance?: unknown },
+  parsed: { write_later?: unknown; transfer_stance?: unknown; accepts_invite?: unknown },
   body: string,
   player: PlayerSnapshot,
-): Pick<ReplyResult, "writeLater" | "transferStance"> {
+): Pick<ReplyResult, "writeLater" | "transferStance" | "acceptsInvite"> {
   // Postoj platí jen tam, kde se na něj ptáme: „zůstávám" bez čekající nabídky by se jinak
   // přilepil k první nabídce, která přijde.
   const asked = (player.pendingOffers?.length ?? 0) > 0;
@@ -395,6 +400,7 @@ function parseReplyFlags(
     // Model pole občas vynechá, i když napíše „ozvu se pak". Text je pojistka.
     writeLater: parsed.write_later === true || PROMISES_LATER_RE.test(body),
     transferStance: asked && (parsed.transfer_stance === "stay" || parsed.transfer_stance === "leave") ? parsed.transfer_stance : undefined,
+    acceptsInvite: player.pendingInvite && typeof parsed.accepts_invite === "boolean" ? parsed.accepts_invite : undefined,
   };
 }
 
@@ -568,6 +574,8 @@ export interface ReplyResult {
   writeLater?: boolean;
   /** Co hráč v odpovědi řekl o čekající nabídce. Jen u hráče, na kterého nějaká čeká. */
   transferStance?: OfferStance;
+  /** Kývl hráč na pozvání od trenéra (coach-commitments.ts)? Jen když nějaké čeká. */
+  acceptsInvite?: boolean;
 }
 
 export async function generateReply(
@@ -625,7 +633,7 @@ export async function generateReply(
 
   const raw = await callModel(env, prompt, { json: true, maxTokens: 256, temperature: 1.0 });
 
-  const parsed = tryParseJson<{ body?: unknown; conversation_complete?: unknown; write_later?: unknown; transfer_stance?: unknown }>(raw);
+  const parsed = tryParseJson<{ body?: unknown; conversation_complete?: unknown; write_later?: unknown; transfer_stance?: unknown; accepts_invite?: unknown }>(raw);
   if (!parsed) {
     logger.warn({ module: "ai-player-chat" }, `reply JSON parse failed: ${raw.slice(0, 300)}`);
     throw new GeminiUnavailableError("Reply JSON parse failed");
@@ -828,7 +836,7 @@ export async function generateCoachInitiatedReply(
   const parsed = tryParseJson<{
     body?: unknown; conversation_complete?: unknown;
     relationship_delta?: unknown; morale_delta?: unknown; summary?: unknown;
-    write_later?: unknown; transfer_stance?: unknown;
+    write_later?: unknown; transfer_stance?: unknown; accepts_invite?: unknown;
   }>(raw);
   if (!parsed || typeof parsed.body !== "string" || !parsed.body.trim()) {
     throw new GeminiUnavailableError("Coach-initiated reply JSON parse failed");

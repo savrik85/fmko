@@ -13,7 +13,7 @@
 import { logger } from "../lib/logger";
 import { computeInterestForOffer, interestOfferOf, type InterestLevel } from "../transfers/player-interest";
 import type { PlayerSnapshot } from "./ai-player-scenarios";
-import { commitmentPromptLines, loadCommitmentMemory } from "./coach-commitments";
+import { commitmentPromptLines, loadCommitmentMemory, pendingInviteOf } from "./coach-commitments";
 
 const M = "player-memory";
 
@@ -56,6 +56,7 @@ export async function loadChatMemory(
     loadCommitmentMemory(db, player.id),
   ]);
   if (commitments.length > 0) player.coachCommitments = commitments;
+  player.pendingInvite = pendingInviteOf(commitments);
   if (call) player.missedCall = { count: call.pocet ?? 1 };
   if (drunk) player.drunkVoiceRecently = true;
   if (offers.length > 0) player.pendingOffers = offers.map(({ club, interest }) => ({ club, interest }));

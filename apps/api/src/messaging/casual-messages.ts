@@ -412,7 +412,7 @@ export async function applyAcceptedInvite(
     return false;
   }
 
-  if (invite.kind === "pub") {
+  if (invite.kind === "pub" || invite.kind === "coach_pub") {
     // Když už dnes trenér s klukama v hospodě byl, druhá návštěva by přepsala tu první.
     // Poděkování ale platí: trenér za nimi stejně přišel.
     const today = await db.prepare("SELECT incidents FROM pub_sessions WHERE team_id = ? AND game_date = ?")

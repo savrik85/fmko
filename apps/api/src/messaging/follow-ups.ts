@@ -241,7 +241,8 @@ async function deliverOne(db: D1Database, env: FollowUpEnv, row: FollowUpRow, no
     photoSceneId = info.photo;
     effect = {
       relation: info.relation, morale: info.morale,
-      description: kind === "visit" ? "Udělal sis na něj čas, když se za tebou stavil" : `Přišel jsi na jeho pozvání (${info.label})`,
+      description: info.relationText
+        ?? (kind === "visit" ? "Udělal sis na něj čas, když se za tebou stavil" : `Přišel jsi na jeho pozvání (${info.label})`),
     };
   }
 
