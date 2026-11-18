@@ -34,3 +34,4 @@ export {
   ResultChip, ScoreChip, RatingPill, StatusChip, ratingToneIn, type ChipTone,
   type RowTone, type RatingTone, type MatchOutcome,
 } from "./list-kit";
+export { UpgradeCard, UpgradeGrid, UpgradeAction, LevelDots, upgradeButtonClass } from "./upgrade-card";

@@ -16,6 +16,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import { ChoiceGroup } from "@/components/ui";
 
 const KLIC = "stadion-kotel-zvuk";
 
@@ -183,25 +184,16 @@ export function KotelPrehravac({ teamId, zapasovyDen, cizi }: {
       {choraly.length > 1 && (
         <div className="mt-3 pt-3 border-t border-gray-100">
           <div className="text-sm text-muted mb-1.5">Co pustit</div>
-          <div className="flex gap-2 flex-wrap">
-            {choraly.map((ch) => {
+          <ChoiceGroup
+            size="sm"
+            ariaLabel="Co pustit"
+            options={choraly.map((ch) => {
               const dd = druh(ch.kind);
-              return (
-                <button
-                  key={ch.id}
-                  type="button"
-                  onClick={() => prepniChoral(ch.id)}
-                  className={`px-3 py-1.5 rounded-soft text-sm border ${
-                    ch.id === vybrany.id
-                      ? "bg-pitch-500 text-white border-pitch-500 font-bold"
-                      : "bg-white border-gray-200 hover:bg-gray-50"
-                  }`}
-                >
-                  {dd.ikona} {dd.label}
-                </button>
-              );
+              return { value: ch.id, label: `${dd.ikona} ${dd.label}` };
             })}
-          </div>
+            value={vybrany.id}
+            onChange={prepniChoral}
+          />
         </div>
       )}
     </div>
