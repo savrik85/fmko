@@ -10,6 +10,7 @@ import { executeDailyTick } from "../season/daily-tick";
 import { recordTransaction } from "../season/finance-processor";
 import { DECISION_WINDOW, getSeasonalEventsForWeek, type SeasonalEventDef } from "../season/seasonal-events";
 import { logger } from "../lib/logger";
+import { villageSizeMod } from "../sponsors/budget";
 import { validateMatchPlan, parseStoredPlan } from "../lib/match-plan-validation";
 import { validateBench, parseStoredBench, benchColumn } from "../lib/lineup-bench";
 import { saveLineup, setTeamRoles, VALID_TACTICS, VALID_HARDNESS, VALID_FORMATIONS } from "../services/lineup";
@@ -2355,7 +2356,7 @@ function computeRenewalTerms(
   const category = contract.category || "main";
   const seasons = category === "banner" ? 2 : 3;
   const repMod = reputation / 50;
-  const sizeMod = size === "mesto" ? 1.3 : size === "mestys" ? 1.1 : size === "obec" ? 1.0 : 0.8;
+  const sizeMod = villageSizeMod(size);
   const catMult = category === "main" ? 3 : category === "stadium" ? 1.5 : 0.8;
   const cleanSp = (nm: string) => nm.replace(/\s*s\.r\.o\.?\s*/gi, "").trim();
   const baseName = category === "stadium" ? contract.sponsor_name.replace(/\s+Arena$/i, "").trim() : contract.sponsor_name;

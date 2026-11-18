@@ -24,6 +24,7 @@ export const LOAN_DURATIONS: Array<{ days: number; label: string }> = [
   { days: 30, label: "Měsíc" },
   { days: 60, label: "2 měsíce" },
   { days: 90, label: "3 měsíce" },
+  { days: 120, label: "4 měsíce" },
   { days: 180, label: "Půl roku" },
 ];
 

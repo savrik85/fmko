@@ -22,7 +22,7 @@ import { PlayerObligationsCard } from "@/components/transfers/player-obligations
 import { LoanStatusCard } from "@/components/transfers/loan-status-card";
 import { LoanListingDialog, type LoanListingValue } from "@/components/transfers/loan-listing-dialog";
 import { RevealPotentialToggle, RevealedPotentialBadge, type RevealedPotential } from "@/components/transfers/revealed-potential";
-import { loanTermsLine } from "@/lib/loans";
+import { LOAN_DURATIONS, loanTermsLine } from "@/lib/loans";
 import { formatLogDate, RelationTrend } from "@/components/manager/CoachKabinaTab";
 import { attrBg, attrValue, withBody, bodyNote, formatKg, formatKgChange, WEIGHT_CATEGORY, type WeightCategoryKey } from "@/lib/player-attrs";
 
@@ -852,12 +852,11 @@ export default function PlayerDetailPage() {
                       onChange={(e) => setLoanDuration(e.target.value)}
                       className={`w-full rounded-soft px-3 py-2 text-sm font-heading font-bold focus:outline-none ${light ? "bg-black/5 text-gray-900 border border-black/20 focus:border-black/40" : "bg-white/10 text-white border border-white/20 focus:border-white/50"}`}
                     >
-                      <option value="14" className="bg-gray-800 text-white">14 dní</option>
-                      <option value="30" className="bg-gray-800 text-white">30 dní</option>
-                      <option value="60" className="bg-gray-800 text-white">60 dní</option>
-                      <option value="90" className="bg-gray-800 text-white">90 dní</option>
-                      <option value="120" className="bg-gray-800 text-white">Půl sezóny</option>
-                      <option value="180" className="bg-gray-800 text-white">Celá sezóna</option>
+                      {/* Stejné délky jako inzerát na hostování. Dřív tu 120 dní stálo jako „Půl sezóny“
+                          a 180 jako „Celá sezóna“, sezóna má ale kolem 120 dní. */}
+                      {LOAN_DURATIONS.map((d) => (
+                        <option key={d.days} value={String(d.days)} className="bg-gray-800 text-white">{d.label}</option>
+                      ))}
                     </select>
                   </div>
                 )}
