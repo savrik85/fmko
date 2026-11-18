@@ -12,6 +12,7 @@ import { jeRecOHrozicim, najdiIncidentVTextu, temaZeStavu } from "./tema";
 import { vyslechni } from "./vyslech";
 import type { VysledekVyslechu } from "./znalosti";
 
+import { isInquiryRequest, tacticOf } from "./interrogation-tactics";
 const M = "incidents-zprava";
 
 /**
@@ -73,7 +74,15 @@ export async function zpracujZpravuTrenera(
     await nastavTema(db, opts.convId, incidentId, den);
   }
 
-  const vyslech = await vyslechni(db, { teamId: opts.teamId, incidentId, playerId: opts.playerId, gameDate: zaklad.game_date });
+  // Úkol „poptej se“: hráč se druhý den ozve s tím, co podle DB opravdu slyšel (coach-commitments.ts).
+  if (isInquiryRequest(opts.text)) {
+    const { recordInquiryTask } = await import("../messaging/coach-commitments");
+    await recordInquiryTask(db, { teamId: opts.teamId, convId: opts.convId, playerId: opts.playerId, incidentId, coachMessage: opts.text })
+      .catch((e) => logger.warn({ module: M }, `úkol poptat se ${incidentId}`, e));
+  }
+  // Blaf s důkazem, slib mírnějšího trestu, policie, úplatek (interrogation-tactics.ts).
+  const tactic = tacticOf(opts.text);
+  const vyslech = await vyslechni(db, { teamId: opts.teamId, incidentId, playerId: opts.playerId, gameDate: zaklad.game_date, ...(tactic ? { tactic } : {}) });
   if (vyslech) return { incidentId, vyslech: vyslech.vysledek };
   // Hrozící čin se nevyslýchá. Rozhovor s tím, kdo ho ohlásil, sníží šanci, že to udělá (spec 9a).
   // U jiného incidentu nebo jiného hráče hlídaný UPDATE nic nezmění.

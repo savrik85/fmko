@@ -457,7 +457,7 @@ export default function ConversationPage() {
             onClick={() => handleCommitment(id, "fulfil")}
             className={`${WA_LINK_BUTTON} w-[calc(100%+1.25rem)] disabled:opacity-50`}
           >
-            {commitmentBusy === id ? "Moment…" : msg.metadata.kind === "wage" ? "Zvýšit odměny" : msg.metadata.kind === "bet" ? "Zaplatit" : "Vyplatit"}
+            {commitmentBusy === id ? "Moment…" : msg.metadata.kind === "wage" ? "Zvýšit odměny" : msg.metadata.kind === "bet" ? "Zaplatit" : msg.metadata.kind === "fine" ? "Udělit pokutu" : "Vyplatit"}
           </button>
         )}
         {canCancel && (

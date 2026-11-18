@@ -6,7 +6,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { Miniflare } from "miniflare";
 import { readFileSync } from "node:fs";
 import {
-  breakReleaseCommitment, cancelCommitment, fulfilMoneyCommitment, respondToCoachInvite, listCommitments, loadCommitmentMemory, recordCommitment, settleCoachCommitments,
+  breakReleaseCommitment, cancelCommitment, fulfilMoneyCommitment, recordInquiryTask, respondToCoachInvite, listCommitments, loadCommitmentMemory, recordCommitment, settleCoachCommitments,
 } from "./coach-commitments";
 
 let miniflare: Miniflare;
@@ -40,6 +40,7 @@ beforeAll(async () => {
     "ALTER TABLE players ADD COLUMN personality TEXT",
     "ALTER TABLE players ADD COLUMN age INTEGER",
     "ALTER TABLE players ADD COLUMN status TEXT",
+    "CREATE TABLE club_incident_knowledge (incident_id TEXT, player_id TEXT, team_id TEXT, role TEXT, willingness INTEGER, interrogation TEXT)",
     "ALTER TABLE matches ADD COLUMN home_score INTEGER",
     "ALTER TABLE matches ADD COLUMN away_score INTEGER",
     "ALTER TABLE match_player_stats ADD COLUMN goals INTEGER",
@@ -53,7 +54,7 @@ beforeAll(async () => {
 afterAll(async () => { await miniflare.dispose(); });
 
 beforeEach(async () => {
-  for (const t of ["coach_commitments", "teams", "players", "matches", "match_player_stats", "injuries", "conversations", "messages", "coach_relation_log", "transactions", "player_follow_ups"]) {
+  for (const t of ["coach_commitments", "teams", "players", "matches", "match_player_stats", "injuries", "conversations", "messages", "coach_relation_log", "transactions", "player_follow_ups", "club_incident_knowledge"]) {
     await db.prepare(`DELETE FROM ${t}`).run();
   }
   await db.batch([
@@ -309,5 +310,44 @@ describe("sázka celé kabiny", () => {
     expect(await morale("p1")).toBe(53);
     expect(await morale("p2")).toBe(53);
     expect((await db.prepare("SELECT COUNT(*) AS n FROM coach_relation_log").first<{ n: number }>())?.n).toBe(0);
+  });
+});
+
+describe("pokuta a úkol „poptej se“", () => {
+  it("pokuta bez částky = týdenní odměna, udělí se tlačítkem a zhorší vztah", async () => {
+    const id = await record({ kind: "fine" }, "strhnu ti to z výplaty");
+    const btn = await db.prepare("SELECT body FROM messages WHERE sender_type = 'system'").first<{ body: string }>();
+    expect(btn?.body).toBe("⚖️ Filip: pokuta 400 Kč. Udělit ji musíš sám, peníze půjdou do kasy.");
+    expect(await fulfilMoneyCommitment(db, { teamId: "club", commitmentId: id, now: T0 })).toMatchObject({ ok: true, effect: "Pokuta 400 Kč udělena" });
+    expect((await db.prepare("SELECT budget FROM teams WHERE id = 'club'").first<{ budget: number }>())?.budget).toBe(5400);
+    expect((await db.prepare("SELECT delta FROM coach_relation_log WHERE player_id = 'p1'").first<{ delta: number }>())?.delta).toBe(-5);
+    expect(await morale("p1")).toBe(46);
+    expect(await smsTo("p1")).toHaveLength(1);
+  });
+
+  it("neudělená pokuta tiše propadne", async () => {
+    const id = await record({ kind: "fine", amount: 300 });
+    await settleCoachCommitments(db, new Date("2026-11-14T10:00:00Z"));
+    expect(await status(id)).toBe("expired");
+    expect(await smsTo("p1")).toEqual([]);
+  });
+
+  it("poptá se: druhý den jméno toho, kdo ví víc; pachatel nikoho neprozradí", async () => {
+    await db.batch([
+      db.prepare("INSERT INTO club_incident_knowledge VALUES ('inc', 'p2', 'club', 'svedek', 70, NULL)"),
+      db.prepare("INSERT INTO club_incident_knowledge VALUES ('inc2', 'p1', 'club', 'pachatel', 0, NULL)"),
+      db.prepare("INSERT INTO club_incident_knowledge VALUES ('inc2', 'p2', 'club', 'svedek', 70, NULL)"),
+    ]);
+    const asked = await recordInquiryTask(db, { teamId: "club", convId: "c1", playerId: "p1", incidentId: "inc", coachMessage: "zkus se poptat", now: T0 });
+    expect(await recordInquiryTask(db, { teamId: "club", convId: "c1", playerId: "p1", incidentId: "inc", coachMessage: "znova", now: T0 })).toBeNull();
+    await settleCoachCommitments(db, new Date(T0.getTime() + 2 * 3600_000));
+    expect(await smsTo("p1")).toEqual([]);
+    await settleCoachCommitments(db, new Date(T0.getTime() + 25 * 3600_000));
+    expect(await status(asked!)).toBe("kept");
+    expect((await smsTo("p1"))[0]).toContain("Jan Mikeš");
+
+    await recordInquiryTask(db, { teamId: "club", convId: "c1", playerId: "p1", incidentId: "inc2", coachMessage: "zjisti to", now: T0 });
+    await settleCoachCommitments(db, new Date(T0.getTime() + 25 * 3600_000));
+    expect((await smsTo("p1"))[1]).not.toContain("Mikeš");
   });
 });
