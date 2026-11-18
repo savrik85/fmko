@@ -64,6 +64,10 @@ export interface PlayerSnapshot {
   previousMatch?: { kind: "league" | "cup"; played: boolean; minutes: number; goals: number };
   /** Co mu trenér v SMS slíbil a jak to dopadlo (messaging/coach-commitments.ts). */
   coachCommitments?: CommitmentMemory[];
+  /** V tomhle rozhovoru za posledních 24 h už napsal „ozvu se pak“: podruhé to neodkládá. */
+  recentlyPostponed?: boolean;
+  /** Rozhovor je o vážné věci (stížnost, truc, odmítnutý přestup): odpovídá hned. */
+  seriousTopic?: boolean;
   /** Trenér ho právě pozval (na pivo, ať se staví): v odpovědi řekne, jestli přijde (`accepts_invite`). */
   pendingInvite?: { commitmentId: string; kind: "invite_pub" | "invite_talk" };
   lastMatchGoals?: number;

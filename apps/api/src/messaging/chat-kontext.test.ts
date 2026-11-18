@@ -303,3 +303,14 @@ describe("jak opilost zní", () => {
     }
   });
 });
+
+describe("ozvu se pak jen u nedůležitého", () => {
+  const prace = { situace: "prace", den: "pondělí", hodina: 10, castDne: "dopoledne", jeVikend: false, podnapilost: 0 } as unknown as Parameters<typeof popisSituace>[0];
+
+  it("v práci smí odložit jen nedůležité, u vážné věci odpoví hned", () => {
+    expect(popisSituace(prace, "Zedník", [])).toContain("Když to není nic důležitého, můžeš napsat, že se ozveš potom");
+    const now = popisSituace(prace, "Zedník", [], { mustAnswerNow: true });
+    expect(now).toContain("ODPOVĚZ hned");
+    expect(now).not.toContain("ozveš potom");
+  });
+});

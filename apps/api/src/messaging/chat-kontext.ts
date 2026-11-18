@@ -266,7 +266,11 @@ export function pravidloEmoji(vek: number, temper: number, podnapilost: Podnapil
 }
 
 /** Věta do promptu o tom, kdy a kde ho SMS zastihla. */
-export function popisSituace(k: CasovyKontext, povolani: string | undefined, vyluky: string[]): string {
+export function popisSituace(
+  k: CasovyKontext, povolani: string | undefined, vyluky: string[],
+  /** Vážná věc nebo už jednou odložené (ai-player-chat.ts mustAnswerNow): v práci odpoví hned, krátce. */
+  opts: { mustAnswerNow?: boolean } = {},
+): string {
   const kdy = `Je ${k.den} ${k.hodina}:00, ${k.castDne}.`;
   const prace = povolani ? `Děláš jako ${povolani.toLowerCase()}.` : "";
   const smena = k.smenaDnes ? ` Dneska máš ${k.smenaDnes}.` : "";
@@ -290,7 +294,10 @@ export function popisSituace(k: CasovyKontext, povolani: string | undefined, vyl
     return [
       kdy, prace + smena,
       "JSI PRÁVĚ V PRÁCI a psát si teď nemůžeš pořádně.",
-      "Napiš to narychlo, ať je poznat, že nemáš čas, a klidně se ozvi, že se ozveš potom.",
+      // Dřív „ozvu se pak“ bylo 14 % všech odpovědí, i na krádež nebo nabídku (prod 10-11/2026).
+      opts.mustAnswerNow
+        ? "Napiš to narychlo, ať je poznat, že nemáš čas, ale ODPOVĚZ hned na to, na co se trenér ptá. Neodkládej to na potom."
+        : "Napiš to narychlo, ať je poznat, že nemáš čas. Když to není nic důležitého, můžeš napsat, že se ozveš potom.",
       vymluva,
     ].filter(Boolean).join(" ");
   }
