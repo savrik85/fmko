@@ -21,6 +21,7 @@ export const RELEASE_NOTES: ReleaseNote[] = [
       "Hráče jde pozvat na pivo nebo na schůzku, vsadit se s ním o gól nebo výhru a dát mu pokutu.",
       "V kabině odpovídá ten, koho oslovíš, na delší zprávu víc hráčů a proslov před zápasem ovlivní náladu.",
       "U incidentu záleží, jak se ptáš, a hráče jde požádat, ať se poptá. Vůdce kotle odpovídá na to, co mu napíšeš.",
+      "Pachatele krádeže nebo poškození jde v SMS přemluvit, ať to vrátí nebo zaplatí.",
     ],
   },
   {
