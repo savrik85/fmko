@@ -327,7 +327,7 @@ const HELP: Record<string, HelpEntry> = {
       { heading: "Rozvoj", text: "Záložka Rozvoj ukazuje, kdo z kluků má na áčko a za jak dlouho. Odhad stropu uvidíš, jen když máš v Zaměstnancích skauta." },
     ],
   },
-  "/manazer": {
+  "/manazer/": {
     title: "Profil trenéra",
     icon: "\u{1F454}",
     sections: [
@@ -422,7 +422,7 @@ const HELP: Record<string, HelpEntry> = {
       { text: "Když hráč v hospodě vyhrožoval, promluv si s ním přes SMS. Čím lepší má k tobě vztah, tím spíš poslechne.", tip: true },
     ],
   },
-  "/redakce": {
+  "/redakce/": {
     title: "Redaktor Zpravodaje",
     icon: "\u{270D}\u{FE0F}",
     sections: [
@@ -528,9 +528,9 @@ const HELP: Record<string, HelpEntry> = {
 function findHelp(pathname: string): HelpEntry | null {
   if (HELP[pathname]) return HELP[pathname];
   if (pathname.startsWith("/onboarding")) return null;
-  if (pathname.startsWith("/manazer/")) return HELP["/manazer"];
+  if (pathname.startsWith("/manazer/")) return HELP["/manazer/"];
   if (pathname.startsWith("/rozhodci/")) return HELP["/rozhodci"];
-  if (pathname.startsWith("/redakce/")) return HELP["/redakce"];
+  if (pathname.startsWith("/redakce/")) return HELP["/redakce/"];
   if (pathname.startsWith("/muj-klub/")) return HELP["/muj-klub"];
   if (/^\/sponzor\/[^/]+\/jednani\/?$/.test(pathname)) return HELP["/sponzor/[id]/jednani"];
   if (/^\/sponzor\/[^/]+\/?$/.test(pathname)) return HELP["/sponzor/[id]"];
