@@ -781,7 +781,7 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
       .catch((e) => logger.warn({ module: "messaging" }, "odpověď na pozvánku na okresní akci", e));
   } else if (conv?.type === "system" && conv.ai_thread_active === 1) {
     const { handleFanLeaderReply } = await import("../fans/fan-leader-reply");
-    await handleFanLeaderReply(c.env.DB, convId, body.body.trim())
+    await handleFanLeaderReply(c.env.DB, convId, body.body.trim(), c.env)
       .catch((e) => logger.warn({ module: "messaging" }, "odpověď vůdci fanoušků", e));
   }
 
