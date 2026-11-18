@@ -35,7 +35,8 @@ export function SquadStatusWidget({ data }: WidgetProps) {
   const avgMorale = Math.round(avg(players.map((p) => p.lifeContext?.morale ?? 50)));
   const avgRating = Math.round(avg(players.map((p) => p.overall_rating)));
   const avgAge = Math.round(avg(players.map((p) => p.age)) * 10) / 10;
-  const injured = players.filter((p) => (p.lifeContext?.condition ?? 100) < 30).length;
+  // Skutečná zranění z API (`injury`), ne kondice: hráč s kondicí pod 30 tu dřív svítil jako zraněný.
+  const injured = players.filter((p) => (p.injury?.daysRemaining ?? 0) > 0).length;
   const lowMorale = players.filter((p) => (p.lifeContext?.morale ?? 50) < 30).length;
 
   return (

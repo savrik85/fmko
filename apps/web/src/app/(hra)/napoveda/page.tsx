@@ -22,7 +22,7 @@ const POS_COLOR: Record<Pos, string> = {
 };
 
 // Skill atributy seřazené podle významu pro zápas
-const SKILL_KEYS: AttrKey[] = ["spd", "tec", "sho", "pas", "hea", "def", "gk", "sta", "str"];
+const SKILL_KEYS: AttrKey[] = ["spd", "tec", "sho", "pas", "hea", "def", "vis", "cre", "exp", "set", "gk", "sta", "str"];
 
 export default function NapovedaPage() {
   return (
@@ -40,7 +40,7 @@ export default function NapovedaPage() {
           ⚽ <span>Atributy a pozice</span>
         </h2>
         <p className="text-sm text-muted">
-          Každá pozice se hodnotí podle jiných atributů. Zelená tečka = klíčový atribut pro pozici.
+          Každá pozice se hodnotí podle jiných atributů. Zatržítko = klíčový atribut pro pozici.
         </p>
         <div className="-mx-4 border-y border-line">
           <DataTable rows={SKILL_KEYS} rowKey={(key) => key}
@@ -67,7 +67,7 @@ export default function NapovedaPage() {
           🎯 <span>Taktiky</span>
         </h2>
         <p className="text-sm text-muted">
-          Taktika modifikuje sílu útoku, obrany a šanci na góly. Vyber tu, která sedí na tvůj tým a soupeře.
+          Taktika mění sílu útoku a obrany a počet šancí, které tým vytvoří. Plně zabere, jen když na ni máš hráče a sedí k formaci.
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {(Object.keys(TACTIC_INFO) as TacticKey[]).map((key) => {
@@ -107,9 +107,9 @@ export default function NapovedaPage() {
             jestli na ni máš kádr (agresivita, síla, pracovitost), jak přísný je sudí, a kolik hráčů už má
             žlutou. Riziko se naproti tomu neškáluje: fauly a karty přijdou v plné výši, i když tvrdou
             hru neumíš. Technický kádr si tím tedy spíš uškodí.</p>
-          <p><span className="font-heading font-bold">Červená karta nově opravdu oslabuje.</span> Dřív se
-            síla týmu počítala průměrem, takže vyloučení nebylo znát. Teď každý chybějící hráč ubere z útoku
-            i z obrany, a útok padá víc. Deset lidí ubrání skoro totéž, ale dopředu už nemá kdo běhat.</p>
+          <p><span className="font-heading font-bold">Červená karta oslabuje.</span> Vyloučený chybí
+            přesně tam, kde hrál: bez stopera je slabší obrana, bez útočníka útok. Zbytek týmu navíc musí
+            pokrýt jeho prostor, a víc to bolí dopředu než dozadu.</p>
           <p><span className="font-heading font-bold">Tvrdá hra zraňuje.</span> Víc soupeře než vlastní
             hráče, ale obě strany na to doplácejí.</p>
         </div>
@@ -121,7 +121,7 @@ export default function NapovedaPage() {
           📋 <span>Formace</span>
         </h2>
         <p className="text-sm text-muted">
-          Formace ovlivňuje, kolik máš obránců, záložníků a útočníků. Sehranost se zvyšuje hraním stejné formace.
+          Formace určuje, kolik hráčů máš v každé řadě. Síla řady je součet jejích hráčů, takže víc obránců znamená silnější obranu a víc záložníků víc míče. Formace ladí i s taktikou. Sehranost roste každým zápasem ve stejné formaci a taktickým tréninkem, ostatní formace mezitím pomalu zapomínáte.
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {Object.entries(FORMATION_INFO).map(([key, f]) => {
@@ -153,6 +153,7 @@ export default function NapovedaPage() {
             <div className="font-heading font-bold text-sm">Kondice (0–100 %)</div>
             <p className="text-muted text-xs leading-relaxed">
               Unavený hráč hraje slabší: s plnou kondicí naplno, úplně vyčerpaný zhruba na 85 % své síly.
+              Víc ale bolí únava celé sestavy: tým si vytvoří jen tolik procent šancí, kolik má průměrnou kondici, nejméně 45 %.
               Kondice klesá po zápase a tréninku a denně se vrací podle staminy: +20 % (stamina 75 a víc),
               +16 % (50+), +13 % (25+), +10 % (pod 25). Hráči do 21 let mají +3 % navíc, nad 35 let −3 %.
               Mezi koly se kondice většinou vrátí skoro celá, šetřit má smysl hlavně po zranění nebo při zápasech den po dni.

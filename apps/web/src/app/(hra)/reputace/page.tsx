@@ -140,7 +140,7 @@ const SOURCES_DOWN = [
   },
   {
     label: "Prázdné hlediště",
-    detail: "−1, když na domácí zápas přijde nejvýš třetina kapacity. Týká se stadionů od dvou set míst a začíná se počítat po pěti domácích zápasech v sezóně.",
+    detail: "−1, když na domácí zápas přijde nejvýš 35 % kapacity. Týká se stadionů od dvou set míst a začíná se počítat po pěti domácích zápasech.",
   },
   {
     label: "Zapomenutí rodáci",
@@ -279,9 +279,6 @@ export default function ReputacePage() {
           <EarnRow icon="🏪" label="Podpora místních podnikatelů" note="vyplácí se týdně, zaměstnanci ji můžou zvýšit"
             now={formatKc(data.earns.baseSponsorMonthly) + "/měs"}
             next={data.atNextUnlock ? formatKc(data.atNextUnlock.baseSponsorMonthly) + "/měs" : null} />
-          <EarnRow icon="💼" label="Nabídek sponzorů"
-            now={String(data.earns.sponsorOfferCount)}
-            next={data.atNextUnlock ? String(data.atNextUnlock.sponsorOfferCount) : null} />
           <EarnRow icon="📈" label="Násobič částky od sponzorů"
             now={`${data.earns.sponsorOfferMultiplier.toFixed(2).replace(".", ",")}×`}
             next={data.atNextUnlock ? `${data.atNextUnlock.sponsorOfferMultiplier.toFixed(2).replace(".", ",")}×` : null} />

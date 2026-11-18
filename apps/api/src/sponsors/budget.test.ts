@@ -2,7 +2,7 @@
  * Rozpočet sponzora B a odhad, který klub vidí (čisté funkce).
  */
 import { describe, it, expect } from "vitest";
-import { budgetEstimateRange, sponsorBudgetB } from "./budget";
+import { budgetEstimateRange, sponsorBudgetB, villageSizeMod } from "./budget";
 
 describe("sponsorBudgetB", () => {
   it("hlavní sponzor, reputace 50, obec, neutrální náklonnost 50 = max × 3", () => {
@@ -19,6 +19,24 @@ describe("sponsorBudgetB", () => {
     const base = { monthlyMax: 1000, reputation: 50, villageSize: "obec", category: "main" as const };
     expect(sponsorBudgetB({ ...base, favor: 0 })).toBe(2400);
     expect(sponsorBudgetB({ ...base, favor: 100 })).toBe(3600);
+  });
+});
+
+describe("villageSizeMod", () => {
+  it("bere velikost obce z DB (villages.size) stejně jako českou kategorii", () => {
+    expect(villageSizeMod("hamlet")).toBe(0.8);
+    expect(villageSizeMod("village")).toBe(1.0);
+    expect(villageSizeMod("town")).toBe(1.1);
+    expect(villageSizeMod("small_city")).toBe(1.3);
+    expect(villageSizeMod("city")).toBe(1.3);
+    expect(villageSizeMod("mesto")).toBe(1.3);
+    expect(villageSizeMod("obec")).toBe(1.0);
+  });
+
+  it("hlavní sponzor ve městě dostane víc než na samotě", () => {
+    const base = { monthlyMax: 1000, reputation: 50, category: "main" as const, favor: 50 };
+    expect(sponsorBudgetB({ ...base, villageSize: "city" })).toBe(3900);
+    expect(sponsorBudgetB({ ...base, villageSize: "hamlet" })).toBe(2400);
   });
 });
 

@@ -17,11 +17,11 @@ export const TACTIC_INFO: Record<TacticKey, { label: string; description: string
   },
   long_ball: {
     label: "Nakopávané",
-    description: "Míč nakopnout dopředu a doufat v hlavu. Chce to vysoké a silné útočníky; v dešti a ve větru, kdy kombinace stejně nedrží, je to nejrozumnější volba.",
+    description: "Míč nakopnout dopředu a doufat v hlavu. Chce to útočníky, co umí hlavičkovat a ustojí souboj. Nejvíc se vyplatí v dešti, na sněhu a na rozbitém nebo rozmáčeném hřišti, kde kombinace nedrží. Ve větru naopak ne, tam balon uletí.",
   },
   possession: {
     label: "Držení míče",
-    description: "Míč si necháte a soupeř běhá. Vytvoříte nejvíc příležitostí ze všech taktik, ale jen když máš ve středu hráče, co umí přihrát. Bez nich to skončí ztrátou na vlastní půlce.",
+    description: "Trpělivá kombinace přes střed. Vytvoříte víc příležitostí a vzadu nic neztratíte, ale jen když máš ve středu hráče, co umí přihrát, zpracovat míč a vidí hru. Bez nich se z toho nic nevytvoří.",
   },
   pressing: {
     label: "Vysoký presink",

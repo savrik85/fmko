@@ -2,8 +2,19 @@
  * Rozpočet sponzora B (měsíčně) — ze stejných veličin jako dřívější nabídky, ale z horní
  * hranice sponzora, takže nová smlouva typicky vychází nad dnešními náhodnými.
  */
+/** Velikost obce z DB (`villages.size`) na kategorii ekonomiky (stejně jako `mapVillageSize`). */
+const CATEGORY_BY_DB_SIZE: Record<string, string> = {
+  hamlet: "vesnice", village: "obec", town: "mestys", small_city: "mesto", city: "mesto",
+};
+
+/**
+ * Násobek částek sponzorů podle velikosti obce. Bere `villages.size` z DB i českou kategorii.
+ * Do 2026-11-18 čekal jen kategorii, volající ale posílali syrové `villages.size`,
+ * takže všichni dostávali 0,8× jako vesnice.
+ */
 export function villageSizeMod(size: string): number {
-  return size === "mesto" ? 1.3 : size === "mestys" ? 1.1 : size === "obec" ? 1.0 : 0.8;
+  const category = CATEGORY_BY_DB_SIZE[size] ?? size;
+  return category === "mesto" ? 1.3 : category === "mestys" ? 1.1 : category === "obec" ? 1.0 : 0.8;
 }
 
 export function sponsorBudgetB(i: {

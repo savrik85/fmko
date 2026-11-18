@@ -5,6 +5,7 @@
  */
 
 import { createRng } from "../generators/rng";
+import { villageSizeMod } from "../sponsors/budget";
 import { mustSeason } from "../lib/season";
 import { logger } from "../lib/logger";
 import type { ServiceError } from "./lineup";
@@ -36,7 +37,7 @@ export function computeBannerOffers(input: {
   seedFromString: (s: string) => number;
 }): BannerOffer[] {
   const repMod = input.reputation / 50;
-  const sizeMod = input.size === "mesto" ? 1.3 : input.size === "mestys" ? 1.1 : input.size === "obec" ? 1.0 : 0.8;
+  const sizeMod = villageSizeMod(input.size);
   // Stable seed: same team + same season = same offers
   const rng = createRng(input.seedFromString(input.teamId + "sponsors" + input.seedSeason));
 
@@ -174,7 +175,7 @@ export async function signSponsorContract(db: D1Database, teamId: string, body: 
     if (holder) return { ok: false, status: 409, error: sectorBlockMessage(holder, "sign") };
   }
   const repMod = econ.reputation / 50;
-  const sizeMod = econ.size === "mesto" ? 1.3 : econ.size === "mestys" ? 1.1 : econ.size === "obec" ? 1.0 : 0.8;
+  const sizeMod = villageSizeMod(econ.size);
   const catMult = category === "main" ? 3 : category === "stadium" ? 1.5 : 0.8;
   const maxMonthly = Math.ceil(spRow.monthly_max * repMod * sizeMod * catMult) + 1;
   const maxWinBonus = category === "main" ? Math.ceil(spRow.win_bonus_max * repMod * 2) + 1 : 0;

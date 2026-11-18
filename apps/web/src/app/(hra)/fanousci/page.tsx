@@ -1152,9 +1152,10 @@ export default function FansPage() {
                 pro srovnání: výhra je +6, prohra −5, drahé vstupné −2.
               </p>
               <p>
-                <strong className="text-ink">Loajalita</strong> je hladina, ke které se spokojenost
-                každý den o bod vrací. Trenér tu hladinu posouvá proti reputaci klubu. Přes 100 se
-                ale nedostane, když má klub reputaci 100, kladný posun se ztratí ve stropu.
+                <strong className="text-ink">Loajalita</strong> se každý den posune o bod k reputaci
+                klubu, kterou trenér posouvá o −2 až +2. Přes 100 se ale nedostane, když má klub
+                reputaci 100, kladný posun se ztratí ve stropu. Spokojenost se mezi zápasy vrací
+                ke klidové hodnotě 45 až 60, čím vyšší loajalita, tím výš.
               </p>
             </div>
           </div>
@@ -1196,13 +1197,13 @@ export default function FansPage() {
               </div>
               <div>
                 <div className="text-sm font-heading font-bold text-ink mb-1.5">
-                  Motivace <span className="text-muted font-normal">(1–99, teď {m.motivation})</span>
+                  Motivace <span className="text-muted font-normal">(10–99, teď {m.motivation})</span>
                 </div>
                 <ul className="text-sm text-muted space-y-1 list-disc list-inside">
                   <li>Konec sezóny v horní polovině tabulky: <strong className="text-ink">+1</strong>.</li>
                   <li>Ve spodní polovině je padesátiprocentní šance na <strong className="text-ink">−1</strong>.</li>
                   <li>Zhruba každá osmá prohra (debakl každá čtvrtá) sebere bod motivace nebo disciplíny.</li>
-                  <li>Motivace sama neroste. Jediná spolehlivá cesta je držet tým v horní polovině.</li>
+                  <li>Ze zápasů sama neroste. Zvedne ji kurz v trenérské škole (+3, pokročilý +5), nejvýš ke stropu licence.</li>
                 </ul>
               </div>
             </div>
