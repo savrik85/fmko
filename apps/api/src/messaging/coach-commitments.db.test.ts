@@ -363,3 +363,16 @@ describe("pokuta netiskne peníze", () => {
     expect((await db.prepare("SELECT budget FROM teams WHERE id = 'club'").first<{ budget: number }>())?.budget).toBe(5400);
   });
 });
+
+describe("dvojklik", () => {
+  it("dvě souběžná vyplacení prémie: peníze odejdou jednou", async () => {
+    const id = await record({ kind: "bonus", amount: 1000 });
+    const results = await Promise.all([
+      fulfilMoneyCommitment(db, { teamId: "club", commitmentId: id, now: T0 }),
+      fulfilMoneyCommitment(db, { teamId: "club", commitmentId: id, now: T0 }),
+    ]);
+    expect(results.filter((r) => r.ok)).toHaveLength(1);
+    expect((await db.prepare("SELECT budget FROM teams WHERE id = 'club'").first<{ budget: number }>())?.budget).toBe(4000);
+    expect((await db.prepare("SELECT COUNT(*) AS n FROM transactions").first<{ n: number }>())?.n).toBe(1);
+  });
+});
