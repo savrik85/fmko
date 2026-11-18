@@ -127,7 +127,7 @@ describe("příští zápas", () => {
     const s = buildSystemPrompt(player(), { teamName: "SK Budvar Spůle", nextMatch: "DNES (čtvrtek 29. 10.) v 18:00 venku s FK Madeta Volary" });
     expect(s).toContain("Příští mistrovský zápas: DNES (čtvrtek 29. 10.) v 18:00 venku s FK Madeta Volary");
     expect(s).toContain("NEVYMÝŠLEJ si, kdy se hraje");
-    expect(buildSystemPrompt(player(), { teamName: "SK Budvar Spůle" })).toContain("Termín dalšího zápasu neznáš");
+    expect(buildSystemPrompt(player(), { teamName: "SK Budvar Spůle" })).toContain("Termín dalšího mistrovského zápasu neznáš");
   });
 });
 

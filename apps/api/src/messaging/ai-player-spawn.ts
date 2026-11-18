@@ -37,6 +37,9 @@ import {
 } from "./ai-player-chat";
 import { loadChatMemory, offerStanceStmt } from "./player-memory";
 import {
+  cupOutcome, describeLastCupMatch, describeNextCupMatch, isLater, loadLastCupMatch, loadNextCupMatch, withinPreviousWindow,
+} from "./cup-facts";
+import {
   pickScenarioForPlayer,
   getScenarioById,
   type AiScenario,
@@ -197,6 +200,10 @@ export interface LastMatchContext {
    * (Linhart, Chlumany 2026-11-08).
    */
   upcomingAbsences?: Map<string, { reason: string; text: string; when: "dnes" | "zítra"; opponent: string | null }>;
+  /** Mistrovský, nebo pohárový (cup_matches). Pohár dřív v kontextu chyběl úplně. */
+  kind?: "league" | "cup";
+  /** Zápas druhého druhu pár dní před posledním (pohár ve středu, liga v sobotu): kdo v něm hrál. */
+  previous?: { kind: "league" | "cup"; stats: Map<string, Record<string, unknown>> };
 }
 
 /**
@@ -251,13 +258,13 @@ export async function loadUpcomingAbsences(db: D1Database, teamId: string, now: 
  */
 export async function loadLastMatchContext(db: D1Database, teamId: string): Promise<LastMatchContext> {
   const recent = await db.prepare(
-    `SELECT m.id, m.home_team_id, m.home_score, m.away_score, m.home_lineup_data, m.away_lineup_data, m.absences
+    `SELECT m.id, m.home_team_id, m.home_score, m.away_score, m.home_lineup_data, m.away_lineup_data, m.absences, m.simulated_at
        FROM matches m
       WHERE (m.home_team_id = ? OR m.away_team_id = ?) AND m.status = 'simulated'
       ORDER BY m.simulated_at DESC LIMIT 5`,
   ).bind(teamId, teamId).all<{
     id: string; home_team_id: string; home_score: number | null; away_score: number | null;
-    home_lineup_data: string | null; away_lineup_data: string | null; absences: string | null;
+    home_lineup_data: string | null; away_lineup_data: string | null; absences: string | null; simulated_at: string | null;
   }>()
     .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "load recent matches", e); return { results: [] as never[] }; });
 
@@ -280,11 +287,45 @@ export async function loadLastMatchContext(db: D1Database, teamId: string): Prom
 
   const upcomingAbsences = await loadUpcomingAbsences(db, teamId);
   const last = recent.results[0];
+  // Pohár leží v jiné tabulce (cup-facts.ts). Poslední zápas je ten novější z obou, ten
+  // druhý se hráči připomene jako „předtím“, když byl jen pár dní před ním.
+  const cup = await loadLastCupMatch(db, teamId);
+  const cupFirst = cup != null && isLater(cup.simulatedAt, last?.simulated_at);
+  const previousOf = async (kind: "cup" | "league"): Promise<LastMatchContext["previous"]> => {
+    if (kind === "cup") {
+      if (!cup || !last || !withinPreviousWindow(cup.simulatedAt, last.simulated_at)) return undefined;
+      return { kind, stats: (await matchDetails(db, cup.id, cup.lineupData, null, [])).stats };
+    }
+    if (!last || !cup || !withinPreviousWindow(last.simulated_at, cup.simulatedAt)) return undefined;
+    return { kind, stats: (await matchDetails(db, last.id, null, null, [])).stats };
+  };
+
+  if (cup && cupFirst) {
+    const details = await matchDetails(db, cup.id, cup.lineupData, cup.absences, [cup.cupTeamId, teamId]);
+    return {
+      matchId: cup.id, kind: "cup", lastOutcome: cupOutcome(cup), teamStreak, ...details, upcomingAbsences,
+      previous: await previousOf("league"),
+    };
+  }
   if (!last) return { matchId: null, lastOutcome: null, teamStreak, squad: null, stats: new Map(), upcomingAbsences };
   const lastOutcome = last.home_score != null ? outcomeOf(last) : null;
-
-  let squad: LastMatchContext["squad"] = null;
   const rawLineup = last.home_team_id === teamId ? last.home_lineup_data : last.away_lineup_data;
+  const details = await matchDetails(db, last.id, rawLineup, last.absences, [teamId]);
+  return { matchId: last.id, kind: "league", lastOutcome, teamStreak, ...details, upcomingAbsences, previous: await previousOf("cup") };
+}
+
+/**
+ * Sestava, absence a statistiky jednoho zápasu (ligového i pohárového). `absenceTeamIds`:
+ * pod kterým id týmu jsou absence zapsané (u poháru je to `cup_teams.id`).
+ */
+async function matchDetails(
+  db: D1Database,
+  matchId: string,
+  rawLineup: string | null,
+  rawAbsences: string | null,
+  absenceTeamIds: string[],
+): Promise<Pick<LastMatchContext, "squad" | "stats" | "absences">> {
+  let squad: LastMatchContext["squad"] = null;
   if (rawLineup) {
     try {
       const lineup = JSON.parse(rawLineup) as { starters?: Array<{ id?: string }>; subs?: Array<{ id?: string }> };
@@ -293,19 +334,19 @@ export async function loadLastMatchContext(db: D1Database, teamId: string): Prom
         subs: new Set((lineup.subs ?? []).map((p) => p.id ?? "").filter(Boolean)),
       };
     } catch (e) {
-      logger.warn({ module: "ai-player-spawn" }, `nečitelná sestava zápasu ${last.id}`, e);
+      logger.warn({ module: "ai-player-spawn" }, `nečitelná sestava zápasu ${matchId}`, e);
     }
   }
 
   const absences = new Map<string, { reason: string; text: string }>();
-  if (last.absences) {
+  if (rawAbsences) {
     try {
-      const list = JSON.parse(last.absences) as Array<{ playerId?: string; teamId?: string; reason?: string; smsText?: string }>;
+      const list = JSON.parse(rawAbsences) as Array<{ playerId?: string; teamId?: string; reason?: string; smsText?: string }>;
       for (const a of Array.isArray(list) ? list : []) {
-        if (a.playerId && a.teamId === teamId) absences.set(a.playerId, { reason: a.reason ?? "", text: a.smsText ?? "" });
+        if (a.playerId && a.teamId && absenceTeamIds.includes(a.teamId)) absences.set(a.playerId, { reason: a.reason ?? "", text: a.smsText ?? "" });
       }
     } catch (e) {
-      logger.warn({ module: "ai-player-spawn" }, `nečitelné absence zápasu ${last.id}`, e);
+      logger.warn({ module: "ai-player-spawn" }, `nečitelné absence zápasu ${matchId}`, e);
     }
   }
 
@@ -313,11 +354,19 @@ export async function loadLastMatchContext(db: D1Database, teamId: string): Prom
     `SELECT player_id, minutes_played AS last_minutes, goals AS last_goals, assists AS last_assists,
             yellow_cards AS last_yellow, red_cards AS last_red, rating AS last_rating
        FROM match_player_stats WHERE match_id = ?`,
-  ).bind(last.id).all<Record<string, unknown>>()
+  ).bind(matchId).all<Record<string, unknown>>()
     .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "statistiky posledního zápasu", e); return { results: [] as Array<Record<string, unknown>> }; });
   const stats = new Map(statRows.results.map((r) => [r.player_id as string, r]));
+  return { squad, stats, absences };
+}
 
-  return { matchId: last.id, lastOutcome, teamStreak, squad, stats, absences, upcomingAbsences };
+/** Účast hráče v zápase druhého druhu těsně před posledním (pohár a liga v jednom týdnu). */
+function previousMatchOf(matchCtx: LastMatchContext | undefined, playerId: string): PlayerSnapshot["previousMatch"] {
+  const prev = matchCtx?.previous;
+  if (!prev) return undefined;
+  const st = prev.stats.get(playerId) ?? {};
+  const minutes = (st.last_minutes as number | null | undefined) ?? 0;
+  return { kind: prev.kind, played: minutes > 0, minutes, goals: (st.last_goals as number | null | undefined) ?? 0 };
 }
 
 export function loadPlayerSnapshot(
@@ -377,6 +426,7 @@ export function loadPlayerSnapshot(
     lastMatchYellow: ((lastStats.last_yellow as number) ?? 0) > 0,
     lastMatchRating: (lastStats.last_rating as number) ?? undefined,
     teamStreak: matchCtx?.teamStreak ?? 0,
+    previousMatch: previousMatchOf(matchCtx, row.id as string),
   };
 }
 
@@ -466,7 +516,7 @@ export async function loadTeamContext(db: D1Database, teamId: string, playerTeam
   // Poslední odehraný zápas — bez něj si model výsledek vymyslí a gratuluje k prohře,
   // kterou tým vyhrál. Formát stejný jako v rozhovorech pro Zpravodaj.
   const lm = await db.prepare(
-    `SELECT m.home_team_id, m.away_team_id, m.home_score, m.away_score,
+    `SELECT m.home_team_id, m.away_team_id, m.home_score, m.away_score, m.simulated_at,
             ht.name AS home_name, at.name AS away_name
        FROM matches m
        JOIN teams ht ON ht.id = m.home_team_id
@@ -476,15 +526,31 @@ export async function loadTeamContext(db: D1Database, teamId: string, playerTeam
   ).bind(teamId, teamId).first<Record<string, unknown>>()
     .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "loadTeamContext last match", e); return null; });
 
-  let lastMatchResult: string | undefined;
+  let leagueResult: string | undefined;
   if (lm && lm.home_score != null && lm.away_score != null) {
     const isHome = lm.home_team_id === teamId;
     const my = (isHome ? lm.home_score : lm.away_score) as number;
     const opp = (isHome ? lm.away_score : lm.home_score) as number;
     const oppName = (isHome ? lm.away_name : lm.home_name) as string;
     const verdict = my > opp ? "výhra" : my < opp ? "prohra" : "remíza";
-    lastMatchResult = `${verdict} ${my}:${opp} ${isHome ? "doma s" : "venku s"} ${oppName}`;
+    leagueResult = `${verdict} ${my}:${opp} ${isHome ? "doma s" : "venku s"} ${oppName}`;
   }
+
+  // Pohár (cup-facts.ts) stejným pravidlem jako `loadLastMatchContext`: poslední je novější
+  // z obou, starší se připomene jako „předtím“, když byl jen pár dní před ním.
+  const cupLast = await loadLastCupMatch(db, teamId);
+  const leagueAt = (lm?.simulated_at as string | null | undefined) ?? null;
+  const cupResult = cupLast ? describeLastCupMatch(cupLast) : undefined;
+  let lastMatchResult = leagueResult;
+  let previousMatchResult: string | undefined;
+  if (cupLast && isLater(cupLast.simulatedAt, leagueAt)) {
+    lastMatchResult = cupResult;
+    if (leagueResult && withinPreviousWindow(leagueAt, cupLast.simulatedAt)) previousMatchResult = `mistrovský zápas: ${leagueResult}`;
+  } else if (cupLast && cupResult && withinPreviousWindow(cupLast.simulatedAt, leagueAt)) {
+    previousMatchResult = cupResult;
+  }
+  const nextCup = await loadNextCupMatch(db, teamId);
+  const nextCupMatch = nextCup ? describeNextCupMatch(nextCup) : undefined;
 
   // Příští mistrovský zápas. Staré neodehrané zápasy z minulých sezón v DB zůstaly
   // jako 'scheduled', proto jen termíny od teď dál.
@@ -528,7 +594,9 @@ export async function loadTeamContext(db: D1Database, teamId: string, playerTeam
     urban: row?.district === "Praha" || ["town", "small_city", "city"].includes(row?.village_size ?? ""),
     managerName: row?.manager_name ?? undefined,
     lastMatchResult,
+    previousMatchResult,
     nextMatch,
+    nextCupMatch,
     leaguePosition,
     squadNames: squad.results.map((r) => `${r.first_name} ${r.last_name}`),
   };

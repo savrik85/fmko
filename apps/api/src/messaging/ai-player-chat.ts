@@ -68,6 +68,10 @@ export interface TeamContext {
   lastMatchResult?: string;
   /** Příští mistrovský zápas, např. „dnes (čtvrtek 29. 10.) v 18:00 venku s X“. Bez něj hráč tvrdil, že se nehraje. */
   nextMatch?: string;
+  /** Příští pohárový zápas (cup-facts.ts). Bez něj hráč den před pohárem tvrdil „O tom nic nevím“. */
+  nextCupMatch?: string;
+  /** Zápas druhého druhu pár dní před posledním, např. „mistrovský zápas: prohra 0:2 doma s X“. */
+  previousMatchResult?: string;
   managerName?: string;
   /** Jména spoluhráčů — bez nich si model vymýšlí neexistující hráče. */
   squadNames?: string[];
@@ -208,6 +212,19 @@ export function buildLastMatchFacts(p: PlayerSnapshot, lastMatchResult?: string)
 }
 
 /**
+ * Zápas druhého druhu těsně před posledním (pohár ve středu, liga v sobotu). Maun den
+ * po poháru, kde odehrál hodinu, odepsal „Jakej pohár zase?“ (2026-11-15).
+ */
+export function buildPreviousMatchFacts(p: PlayerSnapshot, previousMatchResult?: string): string {
+  const prev = p.previousMatch;
+  if (!prev || !previousMatchResult) return "";
+  const kind = prev.kind === "cup" ? "pohárovém zápase" : "mistrovském zápase";
+  if (!prev.played) return `- V tom předchozím ${kind} jsi NEHRÁL. NIKDY netvrď, že jsi v něm byl na hřišti.`;
+  const goals = prev.goals > 0 ? `, dal jsi ${prev.goals} ${prev.goals === 1 ? "gól" : prev.goals < 5 ? "góly" : "gólů"}` : "";
+  return `- V tom předchozím ${kind} jsi hrál (${prev.minutes} minut${goals}). Víš o něm, když se na něj trenér ptá.`;
+}
+
+/**
  * `kdy` je normálně teď. Jde předat kvůli testům a kvůli tomu, aby dvě volání
  * v jednom zpracování nespadla každé do jiné hodiny.
  */
@@ -319,9 +336,11 @@ export function buildSystemPrompt(
     team.lastMatchResult
       ? `- Poslední zápas: ${team.lastMatchResult}. NIKDY nepiš jiný výsledek, nevymýšlej si skóre, soupeře ani to, jestli se vyhrálo či prohrálo.`
       : "- O posledním zápase nic nevíš. NEZMIŇUJ žádný výsledek, skóre ani soupeře.",
+    team.previousMatchResult ? `- Předtím: ${team.previousMatchResult}.` : "",
     team.nextMatch
       ? `- Příští mistrovský zápas: ${team.nextMatch}.`
-      : "- Termín dalšího zápasu neznáš.",
+      : "- Termín dalšího mistrovského zápasu neznáš.",
+    team.nextCupMatch ? `- Příští pohárový zápas: ${team.nextCupMatch}.` : "",
     team.leaguePosition
       ? `- ${team.playingFor ? `Tým, za který hraješ (${team.playingFor.teamName}),` : "Tým"} je v tabulce na ${team.leaguePosition}. místě.`
       : "",
@@ -329,8 +348,9 @@ export function buildSystemPrompt(
       ? `- Spoluhráči (JEDINÁ povolená jména, o kterých smíš mluvit): ${team.squadNames.join(", ")}. NIKOHO jiného nejmenuj — žádná vymyšlená jména.`
       : "- Jména spoluhráčů neznáš. NIKOHO nejmenuj.",
     buildLastMatchFacts(player, team.lastMatchResult),
+    buildPreviousMatchFacts(player, team.previousMatchResult),
     buildUpcomingAbsenceFacts(player),
-    "- O termínech zápasů, sestavě a o tom, kdo hrál, víš JEN to, co stojí v těchto faktech. NEVYMÝŠLEJ si, kdy se hraje, že se nehraje, ani kdo nastoupil. Když to nevíš, řekni to nebo se zeptej trenéra.",
+    "- Kromě mistrovských zápasů se hraje i pohár. O termínech zápasů, sestavě a o tom, kdo hrál, víš JEN to, co stojí v těchto faktech. NEVYMÝŠLEJ si, kdy se hraje, ani kdo nastoupil. Když trenér mluví o zápase, který ve faktech nemáš, nehádej se s ním, že se nehrálo: zeptej se ho, nebo řekni, že nevíš.",
     team.subjectPlayerName
       ? `- Konverzace je o konkrétním spoluhráči: ${team.subjectPlayerName}. Mluv VÝHRADNĚ o něm, nikoho jiného nejmenuj.`
       : "",

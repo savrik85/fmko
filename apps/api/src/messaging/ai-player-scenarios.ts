@@ -56,6 +56,11 @@ export interface PlayerSnapshot {
   lastMatchAbsence?: { reason: string; text: string };
   /** Omluvil se na dnešní nebo zítřejší zápas (stejně jako v sestavě). */
   upcomingAbsence?: { reason: string; text: string; when: "dnes" | "zítra"; opponent: string | null };
+  /**
+   * Zápas druhého druhu pár dní před posledním (pohár ve středu, liga v sobotu). Bez něj
+   * Maun den po poháru, kde odehrál hodinu, odepsal „Jakej pohár zase?“ (2026-11-15).
+   */
+  previousMatch?: { kind: "league" | "cup"; played: boolean; minutes: number; goals: number };
   lastMatchGoals?: number;
   lastMatchAssists?: number;
   lastMatchRedCard?: boolean;
