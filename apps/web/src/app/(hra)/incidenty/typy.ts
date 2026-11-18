@@ -84,6 +84,8 @@ export const VYSLEDEK_LABEL: Record<string, string> = {
   skoncila: "Skončilo",
   hrac_odesel: "Hráč odešel z klubu",
   prerostla_v_dluhy: "Přerostlo v dluhy",
+  vratil: "Hráč to vrátil",
+  nahradil: "Hráč škodu zaplatil",
 };
 
 export const TREST_LABEL: Record<AkceTrestu, string> = {
