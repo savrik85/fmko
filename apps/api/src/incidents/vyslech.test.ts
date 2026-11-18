@@ -3,6 +3,7 @@ import type { IncidentRadek } from "./incident-db";
 import { FalesnaD1, jakoD1, type Pravidlo } from "./testovaci-d1";
 import { hrac, hracRadek, incidentRadek } from "./testovaci-stav";
 import { rozhodniPachatele, rozhodniSvedka, sanceProzrazeni, vyslechni } from "./vyslech";
+import { isInquiryRequest, tacticBonus, tacticOf, type InterrogationTactic } from "./interrogation-tactics";
 
 const DNES = "2026-09-16T16:00:00.000Z";
 
@@ -30,13 +31,13 @@ describe("šance a rozhodnutí výslechu", () => {
   });
 });
 
-type Role = { role: string; willingness: number; interrogation: string | null };
+type Role = { role: string; willingness: number; interrogation: string | null; tactics?: string | null };
 
 function prostredi(opts: { incident?: IncidentRadek; role: Role[]; hracOver?: Record<string, unknown>; dalsi?: Pravidlo[] }) {
   return new FalesnaD1([
     ...(opts.dalsi ?? []),
     { sql: /FROM club_incidents WHERE id = \? AND team_id = \?/, first: opts.incident ?? incidentRadek() },
-    { sql: /SELECT role, willingness, interrogation FROM club_incident_knowledge/, all: opts.role },
+    { sql: /SELECT role, willingness, interrogation, tactics FROM club_incident_knowledge/, all: opts.role },
     { sql: /FROM players WHERE id = \? AND team_id = \?/, first: hracRadek("s", "Jan", "Svědek", opts.hracOver) },
     { sql: /SELECT COUNT\(\*\) AS n FROM relationships/, first: { n: 0 } },
     // Pachatel "p" je defaultně pořád v kádru, vztahy se tak posouvají jako dřív.
@@ -44,8 +45,8 @@ function prostredi(opts: { incident?: IncidentRadek; role: Role[]; hracOver?: Re
   ]);
 }
 
-const zeptej = (db: FalesnaD1, playerId = "s") =>
-  vyslechni(jakoD1(db), { teamId: "tym-a", incidentId: "inc-1", playerId, gameDate: DNES });
+const zeptej = (db: FalesnaD1, playerId = "s", tactic?: InterrogationTactic) =>
+  vyslechni(jakoD1(db), { teamId: "tym-a", incidentId: "inc-1", playerId, gameDate: DNES, tactic });
 
 describe("výslech v DB", () => {
   it("rival, který práskne: uloží výsledek, najde jeho stopu a rivalita zesílí", async () => {
@@ -111,7 +112,7 @@ describe("výslech v DB", () => {
   it("pachatel se stopou na sebe se přizná: odhalení, lhůta a stopa přiznání", async () => {
     const db = new FalesnaD1([
       { sql: /FROM club_incidents WHERE id = \? AND team_id = \?/, first: incidentRadek() },
-      { sql: /SELECT role, willingness, interrogation FROM club_incident_knowledge/, all: [{ role: "pachatel", willingness: 0, interrogation: null }] },
+      { sql: /SELECT role, willingness, interrogation, tactics FROM club_incident_knowledge/, all: [{ role: "pachatel", willingness: 0, interrogation: null }] },
       { sql: /FROM players WHERE id = \? AND team_id = \?/, first: hracRadek("p", "Pepa", "Průšvih", {
         personality: JSON.stringify({ discipline: 100, temper: 0 }), coach_relationship: 100,
       }) },
@@ -159,5 +160,50 @@ describe("výslech v DB", () => {
     });
     expect(await zeptej(db)).toBeNull();
     expect(db.davky).toHaveLength(0);
+  });
+});
+
+describe("taktiky výslechu", () => {
+  it("svědek, který kryl: policie mu dá novou šanci a stopa se najde", async () => {
+    const db = prostredi({ role: [{ role: "svedek", willingness: 100, interrogation: "kryje" }], hracOver: { coach_relationship: 100 } });
+    expect(await zeptej(db, "s", "police")).toEqual({ vysledek: "prozradil", novy: true });
+    expect(db.dotazy.find((d) => /SET tactics = json_insert/.test(d.sql))?.params[0]).toBe("police");
+    const claim = db.dotazy.find((d) => /UPDATE club_incident_knowledge SET interrogation = \?, interrogated_on = \?/.test(d.sql) && /interrogation = \?$/.test(d.sql.trim()));
+    expect(claim?.params.at(-1)).toBe("kryje");
+    expect(db.davky.flat().some((d) => /UPDATE club_incident_clues SET found = 1/.test(d.sql))).toBe(true);
+  });
+
+  it("stejná taktika podruhé ani urážka novou šanci nedají", async () => {
+    const used = prostredi({ role: [{ role: "svedek", willingness: 100, interrogation: "kryje", tactics: JSON.stringify(["police"]) }], hracOver: { coach_relationship: 100 } });
+    expect(await zeptej(used, "s", "police")).toEqual({ vysledek: "kryje", novy: false });
+    const insult = prostredi({ role: [{ role: "svedek", willingness: 100, interrogation: "kryje" }], hracOver: { coach_relationship: 100 } });
+    expect(await zeptej(insult, "s", "insult")).toEqual({ vysledek: "kryje", novy: false });
+    expect(insult.pocet(/SET tactics/)).toBe(0);
+  });
+
+  it("kdo už práskl, toho taktika neposune zpátky", async () => {
+    const db = prostredi({ role: [{ role: "svedek", willingness: 0, interrogation: "prozradil" }] });
+    expect((await zeptej(db, "s", "bribe"))?.vysledek).toBe("prozradil");
+    expect(db.pocet(/SET tactics/)).toBe(0);
+  });
+});
+
+describe("rozpoznání taktiky", () => {
+  it("skutečné věty z produ", () => {
+    expect(tacticOf("Mám záznam z kamerového systému, chci aby se přiznal dobrovolně")).toBe("evidence");
+    expect(tacticOf("Když se přizná hned, zmírním trest")).toBe("leniency");
+    expect(tacticOf("Ok, volám policii ahoj")).toBe("police");
+    expect(tacticOf("Zkus se nenápadně optat, koupím ti valkýro ruma")).toBe("bribe");
+    expect(tacticOf("Ty zloději jeden")).toBe("insult");
+    expect(tacticOf("Nevíš něco o té světlici?")).toBeNull();
+    expect(isInquiryRequest("Zkus se nenápadně optat, koupím ti rum")).toBe(true);
+    expect(isInquiryRequest("Nevíš něco o té světlici?")).toBe(false);
+  });
+
+  it("bonus podle role a stopy", () => {
+    expect(tacticBonus("evidence", "culprit", true)).toBe(25);
+    expect(tacticBonus("evidence", "culprit", false)).toBe(10);
+    expect(tacticBonus("bribe", "witness", false)).toBe(20);
+    expect(tacticBonus("insult", "witness", false)).toBe(-15);
   });
 });
