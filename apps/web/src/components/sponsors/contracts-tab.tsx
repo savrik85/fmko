@@ -30,7 +30,7 @@ export function ContractsTab({ data, reputation, favors, acting, onSign, onTermi
   return (
     <div className="space-y-5">
       <p className="text-sm text-muted">
-        Nabídky závisí na reputaci tvého klubu ({reputation}), ta určuje jejich počet i částku.{" "}
+        Částky v nabídkách závisí na reputaci tvého klubu ({reputation}).{" "}
         <Link href="/reputace" className="text-pitch-600 underline">Jak ji zvednout →</Link>
       </p>
 
