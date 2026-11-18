@@ -17,8 +17,8 @@ export const RELEASE_NOTES: ReleaseNote[] = [
     title: "Redesign, aktualizovaná nápověda a hlášení chyb",
     items: [
       "Proběhl redesign a sjednocení všech prvků hry.",
-      "Aktualizoval jsem obsah nápovědy ke všem stránkám.",
-      "Děkuji za aktivní hlášení chyb. Nově můžeš nahlásit chybu nebo jakoukoli připomínku přes otazník nahoře na každé konkrétní stránce.",
+      "Proběhla aktualizace obsahu nápovědy ke všem stránkám.",
+      "Díky za aktivní hlášení chyb. Nově můžeš nahlásit chybu nebo jakoukoli připomínku přes otazník nahoře na každé konkrétní stránce.",
       "Přes stejný otazník jde udělat i screen konkrétní stránky.",
     ],
   },
