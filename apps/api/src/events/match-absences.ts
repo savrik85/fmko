@@ -71,12 +71,17 @@ export async function recordedExcuses(db: D1Database, teamId: string, matchKey: 
        FROM messages m JOIN conversations c ON c.id = m.conversation_id
       WHERE c.team_id = ? AND c.type = 'squad_group' AND m.sender_type = 'player'
         AND json_extract(m.metadata, '$.calendarId') = ?
-      ORDER BY m.sent_at`,
+      ORDER BY julianday(m.sent_at)`,
   ).bind(teamId, matchKey).all<{ sender_id: string; body: string; response: string | null }>()
     .catch((e) => { logger.warn({ module: "match-absences" }, "omluvenky z kabiny", e); return null; });
   if (!r || r.results.length === 0) return null;
+  // Platí poslední odpověď hráče: trenér ho v kabině může přemluvit („přijdu“ po „nemůžu“,
+  // messaging/squad-talk.ts persuadeAbsentees). Časy jsou v D1 ve dvou formátech, proto julianday.
   const out = new Map<string, string>();
-  for (const row of r.results) if (row.response === "no") out.set(row.sender_id, row.body);
+  for (const row of r.results) {
+    if (row.response === "no") out.set(row.sender_id, row.body);
+    else if (row.response === "yes") out.delete(row.sender_id);
+  }
   return out;
 }
 

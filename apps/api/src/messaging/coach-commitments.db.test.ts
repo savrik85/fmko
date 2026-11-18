@@ -39,6 +39,7 @@ beforeAll(async () => {
     "CREATE TABLE transactions (id TEXT PRIMARY KEY, team_id TEXT, type TEXT, amount INTEGER, balance_after INTEGER, description TEXT, reference_id TEXT, game_date TEXT)",
     "ALTER TABLE players ADD COLUMN personality TEXT",
     "ALTER TABLE players ADD COLUMN age INTEGER",
+    "ALTER TABLE players ADD COLUMN status TEXT",
     "ALTER TABLE matches ADD COLUMN home_score INTEGER",
     "ALTER TABLE matches ADD COLUMN away_score INTEGER",
     "ALTER TABLE match_player_stats ADD COLUMN goals INTEGER",
@@ -286,5 +287,27 @@ describe("vztah se nedá koupit", () => {
     expect(await cancelCommitment(db, { teamId: "club", commitmentId: bet, now: T0 })).toMatchObject({ ok: false, status: 409 });
     const inv = await record({ kind: "invite_pub" });
     expect(await cancelCommitment(db, { teamId: "club", commitmentId: inv, now: T0 })).toMatchObject({ ok: false, status: 409 });
+  });
+});
+
+describe("sázka celé kabiny", () => {
+  it("vyhráli jsme: připomene se v kabině, zaplacení zlepší náladu všem", async () => {
+    await db.prepare("INSERT INTO conversations (id, team_id, type, title, created_at) VALUES ('k1', 'club', 'squad_group', 'Kabina', '2026-11-01')").run();
+    const id = await recordCommitment(db, {
+      clubTeamId: "club", playerId: "p2", convId: "k1", coachMessage: "Když vyhrajeme, basa je na mě",
+      detected: { kind: "bet", condition: "win", reward: "keg", squad: true }, playerFirstName: "Jan", now: T0,
+    });
+    const note = await db.prepare("SELECT body FROM messages WHERE conversation_id = 'k1' AND sender_type = 'system'").first<{ body: string }>();
+    expect(note?.body).toBe("📝 Kabina si sázku zapamatovala: když tým vyhraje, trenér platí basu.");
+    await db.prepare("INSERT INTO matches (id, home_team_id, away_team_id, status, simulated_at, home_lineup_data, home_score, away_score) VALUES ('m1', 'club', 'rival', 'simulated', '2026-11-12T17:05:00Z', ?, 2, 1)").bind(lineup(["p1"])).run();
+    await settleCoachCommitments(db, new Date("2026-11-13T10:00:00Z"));
+    const inSquad = (await db.prepare("SELECT body FROM messages WHERE conversation_id = 'k1' AND sender_type = 'player'").all<{ body: string }>()).results;
+    expect(inSquad).toHaveLength(1);
+    // Soukromá SMS nepřišla, sázka je věc kabiny.
+    expect(await smsTo("p2")).toEqual([]);
+    expect(await fulfilMoneyCommitment(db, { teamId: "club", commitmentId: id, now: new Date("2026-11-13T12:00:00Z") })).toMatchObject({ ok: true });
+    expect(await morale("p1")).toBe(53);
+    expect(await morale("p2")).toBe(53);
+    expect((await db.prepare("SELECT COUNT(*) AS n FROM coach_relation_log").first<{ n: number }>())?.n).toBe(0);
   });
 });

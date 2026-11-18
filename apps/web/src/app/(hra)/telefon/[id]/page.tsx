@@ -425,6 +425,58 @@ export default function ConversationPage() {
     setCommitmentBusy(null);
   };
 
+  /**
+   * Tlačítka pod slibem z SMS (api messaging/coach-commitments.ts): Vyplatit / Zvýšit odměny /
+   * Zaplatit sázku a „To nebyl slib“. Stejně v konverzaci s hráčem i v kabině (sázka kabiny).
+   */
+  const commitmentActions = (msg: Message) => {
+    if ((msg.metadata?.type !== "coach_commitment" && msg.metadata?.type !== "coach_commitment_note")
+      || typeof msg.metadata.commitmentId !== "string") return null;
+
+    const id = msg.metadata.commitmentId as string;
+    const money = msg.metadata.type === "coach_commitment";
+    if (msg.metadata.cancelled === true) {
+      return <p className="-mx-2.5 mt-1.5 border-t border-black/10 pt-1.5 pb-0.5 text-center text-sm text-[#667781]">Nebyl to slib, hra ho nepočítá.</p>;
+    }
+    if (money && msg.metadata.done === true) {
+      return (
+        <p className="-mx-2.5 mt-1.5 border-t border-black/10 pt-1.5 pb-0.5 text-center text-sm text-[#667781]">
+          ✓ {typeof msg.metadata.effect === "string" ? msg.metadata.effect : "Hotovo"}
+        </p>
+      );
+    }
+    // „To nebyl slib“ jde hodinu po zprávě (api coach-commitments.ts CANCEL_WINDOW_MS).
+    // Vyhraná sázka už slibem byla, tu zrušit nejde.
+    const canCancel = msg.metadata.kind !== "bet" && Date.now() - new Date(msg.sentAt).getTime() < 60 * 60 * 1000;
+    return (
+      <>
+        {money && (
+          <button
+            type="button"
+            disabled={commitmentBusy !== null}
+            onClick={() => handleCommitment(id, "fulfil")}
+            className={`${WA_LINK_BUTTON} w-[calc(100%+1.25rem)] disabled:opacity-50`}
+          >
+            {commitmentBusy === id ? "Moment…" : msg.metadata.kind === "wage" ? "Zvýšit odměny" : msg.metadata.kind === "bet" ? "Zaplatit" : "Vyplatit"}
+          </button>
+        )}
+        {canCancel && (
+          <button
+            type="button"
+            disabled={commitmentBusy !== null}
+            onClick={() => handleCommitment(id, "cancel")}
+            className={`${WA_LINK_BUTTON} w-[calc(100%+1.25rem)] !text-[#667781] font-normal disabled:opacity-50`}
+          >
+            To nebyl slib
+          </button>
+        )}
+        {commitmentError?.id === id && (
+          <p className="text-sm text-card-red text-center pb-0.5">{commitmentError.text}</p>
+        )}
+      </>
+    );
+  };
+
   const handleUnrestAction = async (deal: { id: string; message: string }) => {
     if (!teamId || !participantId || unrestBusy) return;
     setUnrestBusy(true);
@@ -644,9 +696,11 @@ export default function ConversationPage() {
                   const isVoice = msg.metadata?.type === "voice" && !!teamId;
 
                   if (isSystem && conv?.type === "squad_group") {
+                    const actions = commitmentActions(msg);
                     return (
                       <div key={msg.id} className="text-center py-1">
                         <span className="text-sm text-muted italic">{emoticonize(msg.body)}</span>
+                        {actions && <div className="max-w-xs mx-auto bg-white rounded-lg px-2.5 mt-1">{actions}</div>}
                       </div>
                     );
                   }
@@ -788,51 +842,7 @@ export default function ConversationPage() {
                               {typeof msg.metadata.label === "string" ? msg.metadata.label : "Otevřít"}
                             </Link>
                           )}
-                          {(msg.metadata?.type === "coach_commitment" || msg.metadata?.type === "coach_commitment_note")
-                            && typeof msg.metadata.commitmentId === "string" && (() => {
-                            const id = msg.metadata.commitmentId as string;
-                            const money = msg.metadata.type === "coach_commitment";
-                            if (msg.metadata.cancelled === true) {
-                              return <p className="-mx-2.5 mt-1.5 border-t border-black/10 pt-1.5 pb-0.5 text-center text-sm text-[#667781]">Nebyl to slib, hra ho nepočítá.</p>;
-                            }
-                            if (money && msg.metadata.done === true) {
-                              return (
-                                <p className="-mx-2.5 mt-1.5 border-t border-black/10 pt-1.5 pb-0.5 text-center text-sm text-[#667781]">
-                                  ✓ {typeof msg.metadata.effect === "string" ? msg.metadata.effect : "Hotovo"}
-                                </p>
-                              );
-                            }
-                            // „To nebyl slib“ jde hodinu po zprávě (api coach-commitments.ts CANCEL_WINDOW_MS).
-                            // Vyhraná sázka už slibem byla, tu zrušit nejde.
-                            const canCancel = msg.metadata.kind !== "bet" && Date.now() - new Date(msg.sentAt).getTime() < 60 * 60 * 1000;
-                            return (
-                              <>
-                                {money && (
-                                  <button
-                                    type="button"
-                                    disabled={commitmentBusy !== null}
-                                    onClick={() => handleCommitment(id, "fulfil")}
-                                    className={`${WA_LINK_BUTTON} w-[calc(100%+1.25rem)] disabled:opacity-50`}
-                                  >
-                                    {commitmentBusy === id ? "Moment…" : msg.metadata.kind === "wage" ? "Zvýšit odměny" : msg.metadata.kind === "bet" ? "Zaplatit" : "Vyplatit"}
-                                  </button>
-                                )}
-                                {canCancel && (
-                                  <button
-                                    type="button"
-                                    disabled={commitmentBusy !== null}
-                                    onClick={() => handleCommitment(id, "cancel")}
-                                    className={`${WA_LINK_BUTTON} w-[calc(100%+1.25rem)] !text-[#667781] font-normal disabled:opacity-50`}
-                                  >
-                                    To nebyl slib
-                                  </button>
-                                )}
-                                {commitmentError?.id === id && (
-                                  <p className="text-sm text-card-red text-center pb-0.5">{commitmentError.text}</p>
-                                )}
-                              </>
-                            );
-                          })()}
+                          {commitmentActions(msg)}
                           {msg.metadata?.type === "tournament" && (
                             <Link
                               href="/turnaj"

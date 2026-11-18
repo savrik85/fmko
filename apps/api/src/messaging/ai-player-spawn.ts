@@ -215,12 +215,13 @@ export interface LastMatchContext {
 export async function loadUpcomingAbsences(db: D1Database, teamId: string, now: Date = new Date()): Promise<LastMatchContext["upcomingAbsences"]> {
   const since = new Date(now.getTime() - 2 * 86400000).toISOString().slice(0, 10);
   const rows = await db.prepare(
-    `SELECT m.sender_id, m.body, json_extract(m.metadata, '$.calendarId') AS cal, c.title
+    `SELECT m.sender_id, m.body, json_extract(m.metadata, '$.calendarId') AS cal, json_extract(m.metadata, '$.response') AS response, c.title
        FROM messages m JOIN conversations c ON c.id = m.conversation_id
       WHERE c.team_id = ? AND c.type = 'squad_group' AND m.sender_type = 'player'
-        AND json_extract(m.metadata, '$.response') = 'no' AND substr(m.sent_at, 1, 10) >= ?
-      ORDER BY m.sent_at DESC LIMIT 60`,
-  ).bind(teamId, since).all<{ sender_id: string; body: string; cal: string | null; title: string | null }>()
+        AND (json_extract(m.metadata, '$.response') = 'no' OR json_extract(m.metadata, '$.persuaded') = 1)
+        AND substr(m.sent_at, 1, 10) >= ?
+      ORDER BY julianday(m.sent_at) DESC LIMIT 60`,
+  ).bind(teamId, since).all<{ sender_id: string; body: string; cal: string | null; response: string | null; title: string | null }>()
     .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "omluvenky z kabiny", e); return { results: [] as never[] }; });
   if (rows.results.length === 0) return undefined;
 
@@ -243,7 +244,14 @@ export async function loadUpcomingAbsences(db: D1Database, teamId: string, now: 
   }
 
   const out = new Map<string, { reason: string; text: string; when: "dnes" | "zítra"; opponent: string | null }>();
+  // Nejnovější odpověď hráče k danému zápasu rozhoduje: trenér ho v kabině přemluvil
+  // (squad-talk.ts) = na ten zápas přijde. Omluvenka na jiný zápas platí dál.
+  const decided = new Set<string>();
   for (const r of rows.results) {
+    const key = `${r.sender_id}|${r.cal ?? ""}`;
+    if (decided.has(key)) continue;
+    decided.add(key);
+    if (r.response !== "no") continue;
     const when = r.cal ? whenOf.get(r.cal) : undefined;
     if (!when || out.has(r.sender_id)) continue;
     const opponent = r.title?.replace(/^⚽\s*vs\s*/u, "").trim() || null;
