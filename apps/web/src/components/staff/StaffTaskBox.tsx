@@ -39,6 +39,14 @@ interface Member {
   taskCooldownUntil?: string | null;
 }
 
+/**
+ * Tlačítko do řádku tabulky Zaměstnanců: běžné zelené tlačítko aplikace. Výběr
+ * „Upravit…“ vedle se mu přizpůsobí výškou (`ROW_CONTROL_TOUCH` na dotykovém displeji,
+ * kde mají tlačítka globálně 44 px, viz globals.css).
+ */
+export const ROW_CONTROL_TOUCH = "[@media(pointer:coarse)]:min-h-[44px]";
+export const ROW_BUTTON_CLASS = `btn btn-primary btn-sm h-9 ${ROW_CONTROL_TOUCH}`;
+
 const POSITION_LABEL: Record<string, string> = { GK: "BRA", DEF: "OBR", MID: "ZÁL", FWD: "ÚTO" };
 
 
@@ -158,11 +166,25 @@ function sortForTask(type: StaffTaskType, players: StaffTaskPlayer[]): StaffTask
   return arr;
 }
 
-export function StaffTaskBox({ teamId, member, data, onChanged }: {
+/** Jde mu teď zadat úkol: role nějaké má, nic nedělá a neodpočívá. */
+export function canAssignTask(member: Pick<Member, "id" | "role" | "taskCooldownUntil">, data: StaffTasksData | null): boolean {
+  if (!data || staffTasksForRole(member.role).length === 0) return false;
+  if (data.tasks.some((t) => t.staffId === member.id && t.status === "active")) return false;
+  return !(member.taskCooldownUntil && member.taskCooldownUntil > data.gameDate);
+}
+
+/**
+ * `part`: celé (sloupec tabulky na počítači), jen stav úkolu, nebo jen tlačítko
+ * „Zadat úkol“ (na telefonu leží v řádku vedle „Upravit…“).
+ */
+export function StaffTaskBox({ teamId, member, data, onChanged, part = "all", className = "", buttonClassName = "" }: {
   teamId: string;
   member: Member;
   data: StaffTasksData | null;
   onChanged: () => void | Promise<void>;
+  part?: "all" | "status" | "button";
+  className?: string;
+  buttonClassName?: string;
 }) {
   const { confirm, dialog } = useConfirm({ sheet: true });
   const [open, setOpen] = useState(false);
@@ -239,157 +261,163 @@ export function StaffTaskBox({ teamId, member, data, onChanged }: {
     && (def.target !== "player" || !!playerId)
     && (def.target !== "players" || playerIds.length > 0);
 
-  return (
-    <div className="space-y-2">
-      {active ? (
-        <div className="rounded-soft bg-pitch-500/10 border border-pitch-500/30 px-3 py-2.5 space-y-1">
-          <div className="text-sm font-heading font-bold text-pitch-700">🧰 {STAFF_TASK_DEFS[active.taskType].label}</div>
-          <div className="text-sm text-ink">
-            {active.targetMatchLabel && <>Zápas {active.targetMatchLabel}, {czDate(active.endsGameDate)}</>}
-            {active.targetPlayerId && (
-              <><Link href={`/hrac/${active.targetPlayerId}`} className="font-bold underline decoration-dotted">{active.targetPlayerName}</Link>, do {czDate(active.endsGameDate)}</>
-            )}
-            {!active.targetMatchLabel && !active.targetPlayerId && <>Do {czDate(active.endsGameDate)}</>}
-          </div>
-          {active.playerNames.length > 0 && <div className="text-sm text-muted">Hráči: {active.playerNames.join(", ")}</div>}
-          {active.resultText && <div className="text-sm text-ink">{active.resultText}</div>}
-          <div className="flex justify-end">
-            <button type="button" onClick={() => cancel(active)} className="text-sm text-muted hover:text-card-red font-heading">Zrušit úkol</button>
-          </div>
+  // Do buňky tabulky Zaměstnanců: úkol na jednom řádku, výsledek posledního pod ním.
+  const target = active
+    ? active.targetPlayerName ?? active.targetMatchLabel ?? (active.playerNames.length > 0 ? active.playerNames.join(", ") : null)
+    : null;
+  const status = active ? (
+    // Na telefonu se dlouhý úkol zalomí, v řádku tabulky se zkrátí třemi tečkami.
+    <div className="flex items-baseline justify-between lg:justify-start gap-3 min-w-0 text-sm leading-snug">
+      <span className="min-w-0 lg:truncate" title={[STAFF_TASK_DEFS[active.taskType].label, target, active.resultText].filter(Boolean).join(" · ")}>
+        <span className="font-bold text-pitch-700">{STAFF_TASK_DEFS[active.taskType].label}</span>
+        {target && <>: {active.targetPlayerId
+          ? <Link href={`/hrac/${active.targetPlayerId}`} className="underline decoration-dotted">{target}</Link>
+          : target}</>}
+        <span className="text-muted">, do {czDate(active.endsGameDate)}</span>
+      </span>
+      <button type="button" onClick={() => cancel(active)} className="shrink-0 text-meta text-muted hover:text-card-red font-heading">Zrušit</button>
+    </div>
+  ) : resting ? (
+    <div className="text-sm text-muted">Odpočívá, další úkol od {czDate(resting)}</div>
+  ) : null;
+  const lastResult = last?.resultText && !active
+    ? <div className="mt-1 text-meta text-muted truncate" title={last.resultText}>Naposledy: {last.resultText}</div>
+    : null;
+  const button = canAssignTask(member, data)
+    ? <button type="button" onClick={() => setOpen(true)} className={`${ROW_BUTTON_CLASS} ${buttonClassName}`}>Zadat úkol</button>
+    : null;
+  const sheet = (
+    <Sheet open={open} onClose={close} title={def ? def.label : `Úkol: ${name}`}>
+      <div className="px-5 pt-3 sm:pt-5 pb-5 space-y-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="font-heading font-bold text-lg">{def ? def.label : "Zadat úkol"}</div>
+          <div className="text-sm text-muted">{name}</div>
         </div>
-      ) : resting ? (
-        <div className="text-sm rounded-soft bg-surface px-3 py-2 text-muted">
-          😮‍💨 Po zápasovém úkolu si oddechne, další úkol vezme od {czDate(resting)}.
+        <button type="button" onClick={close} aria-label="Zavřít" className="text-muted hover:text-ink text-xl leading-none px-1">✕</button>
+      </div>
+      {!def ? (
+        <div className="space-y-2">
+          {types.map((t) => {
+            const d = STAFF_TASK_DEFS[t];
+            const unavailable = d.kind === "match" && (!data.nextMatch || (d.homeOnly && !data.nextMatch.isHome));
+            return (
+              <button key={t} type="button" onClick={() => choose(t)}
+                className="w-full text-left card p-3 space-y-1 hover:border-pitch-500/50 transition-colors">
+                <div className="font-heading font-bold text-base">{d.label}</div>
+                <div className="text-sm text-muted">{d.description}</div>
+                <div className="text-sm text-ink">
+                  {d.kind === "match" ? "Na příští ligový zápas" : `Na ${d.durations?.map((x) => `${x}`).join(" nebo ")} dní`}
+                  {" · "}{formatKc(staffTaskCost(t, d.durations?.[0]))}
+                  {unavailable && <span className="text-card-red"> · {data.nextMatch ? "příští zápas je venku" : "žádný zápas v plánu"}</span>}
+                </div>
+              </button>
+            );
+          })}
         </div>
       ) : (
-        <button type="button" onClick={() => setOpen(true)} className="btn btn-primary btn-sm">Zadat úkol</button>
-      )}
+        <div className="space-y-4">
+          <div className="text-sm text-muted">{def.description}</div>
 
-      {last?.resultText && !active && (
-        <div className="text-sm text-muted">Naposledy: {last.resultText}</div>
-      )}
+          {def.kind === "match" && (
+            <div className="text-sm">
+              <span className="text-muted">Zápas: </span>
+              {matchLine ?? <span className="text-card-red">Klub teď nemá žádný ligový zápas.</span>}
+              {blocked && data.nextMatch && <div className="text-card-red mt-1">Tohle jde jen na domácí zápas.</div>}
+            </div>
+          )}
 
-      <Sheet open={open} onClose={close} title={def ? def.label : `Úkol: ${name}`}>
-        <div className="px-5 pt-3 sm:pt-5 pb-5 space-y-4">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <div className="font-heading font-bold text-lg">{def ? def.label : "Zadat úkol"}</div>
-            <div className="text-sm text-muted">{name}</div>
-          </div>
-          <button type="button" onClick={close} aria-label="Zavřít" className="text-muted hover:text-ink text-xl leading-none px-1">✕</button>
-        </div>
-        {!def ? (
-          <div className="space-y-2">
-            {types.map((t) => {
-              const d = STAFF_TASK_DEFS[t];
-              const unavailable = d.kind === "match" && (!data.nextMatch || (d.homeOnly && !data.nextMatch.isHome));
-              return (
-                <button key={t} type="button" onClick={() => choose(t)}
-                  className="w-full text-left card p-3 space-y-1 hover:border-pitch-500/50 transition-colors">
-                  <div className="font-heading font-bold text-base">{d.label}</div>
-                  <div className="text-sm text-muted">{d.description}</div>
-                  <div className="text-sm text-ink">
-                    {d.kind === "match" ? "Na příští ligový zápas" : `Na ${d.durations?.map((x) => `${x}`).join(" nebo ")} dní`}
-                    {" · "}{formatKc(staffTaskCost(t, d.durations?.[0]))}
-                    {unavailable && <span className="text-card-red"> · {data.nextMatch ? "příští zápas je venku" : "žádný zápas v plánu"}</span>}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <div className="text-sm text-muted">{def.description}</div>
+          {def.durations && def.durations.length > 1 && (
+            <div className="flex gap-2">
+              {def.durations.map((d) => (
+                <button key={d} type="button" onClick={() => setDuration(d)}
+                  className={`btn btn-sm ${duration === d ? "btn-primary" : "btn-secondary"}`}>{d} dní</button>
+              ))}
+            </div>
+          )}
 
-            {def.kind === "match" && (
-              <div className="text-sm">
-                <span className="text-muted">Zápas: </span>
-                {matchLine ?? <span className="text-card-red">Klub teď nemá žádný ligový zápas.</span>}
-                {blocked && data.nextMatch && <div className="text-card-red mt-1">Tohle jde jen na domácí zápas.</div>}
+          {def.target !== "none" && (
+            <div className="space-y-1.5">
+              <div className="text-sm font-heading font-bold">
+                {def.target === "players" ? `Vyber hráče (nejvýš ${def.maxPlayers})` : "Vyber hráče"}
               </div>
-            )}
-
-            {def.durations && def.durations.length > 1 && (
-              <div className="flex gap-2">
-                {def.durations.map((d) => (
-                  <button key={d} type="button" onClick={() => setDuration(d)}
-                    className={`btn btn-sm ${duration === d ? "btn-primary" : "btn-secondary"}`}>{d} dní</button>
-                ))}
-              </div>
-            )}
-
-            {def.target !== "none" && (
-              <div className="space-y-1.5">
-                <div className="text-sm font-heading font-bold">
-                  {def.target === "players" ? `Vyber hráče (nejvýš ${def.maxPlayers})` : "Vyber hráče"}
+              {noLineupYet && (
+                <div className="text-sm text-muted">Sestavu na zápas ještě nemáš. Masáž dej hráčům, se kterými počítáš.</div>
+              )}
+              {candidates.length === 0 ? (
+                <div className="text-sm text-muted">
+                  {picked === "doctor_injury_care" ? "Nikdo není zraněný."
+                    : picked === "gk_plan" ? "V klubu není brankář."
+                    : picked === "weight_plan" ? "Nikdo v kádru nemá nadváhu."
+                    : picked === "weight_gain" ? "Nikdo v kádru nemá podváhu."
+                    : "V klubu není nikdo vhodný."}
                 </div>
-                {noLineupYet && (
-                  <div className="text-sm text-muted">Sestavu na zápas ještě nemáš. Masáž dej hráčům, se kterými počítáš.</div>
-                )}
-                {candidates.length === 0 ? (
-                  <div className="text-sm text-muted">
-                    {picked === "doctor_injury_care" ? "Nikdo není zraněný."
-                      : picked === "gk_plan" ? "V klubu není brankář."
-                      : picked === "weight_plan" ? "Nikdo v kádru nemá nadváhu."
-                      : picked === "weight_gain" ? "Nikdo v kádru nemá podváhu."
-                      : "V klubu není nikdo vhodný."}
-                  </div>
-                ) : (
-                  <div className="max-h-72 overflow-y-auto divide-y divide-line-soft border border-line rounded-soft">
-                    {/* Celý řádek je popisek přepínače, klik kamkoli do řádku hráče vybere. */}
-                    {candidates.map(({ p, blockedBy }) => {
-                      const selected = def.target === "players" ? playerIds.includes(p.id) : playerId === p.id;
-                      const full = def.target === "players" && !selected && playerIds.length >= (def.maxPlayers ?? 5);
-                      const disabled = full || !!blockedBy;
-                      const info = blockedBy ? [] : playerInfo(picked!, p);
-                      // S druhým řádkem je řádek zarovnaný nahoru: přepínač posunout k prvnímu řádku jména.
-                      return (
-                        <label key={p.id} className={`block ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"} ${selected ? "bg-pitch-500/10" : disabled ? "" : "hover:bg-surface-2"}`}>
-                          <ListRow dense
-                            leading={
-                              <input
-                                type={def.target === "players" ? "checkbox" : "radio"}
-                                name={`task-player-${member.id}`}
-                                checked={selected}
-                                disabled={disabled}
-                                onChange={() => {
-                                  if (def.target === "players") {
-                                    setPlayerIds((cur) => cur.includes(p.id) ? cur.filter((x) => x !== p.id) : [...cur, p.id]);
-                                  } else setPlayerId(p.id);
-                                }}
-                                className={blockedBy || info.length > 0 ? "mt-1" : undefined}
-                              />
-                            }
-                            title={`${p.name}${p.isU21 ? " (U21)" : ""}`}
-                            detail={blockedBy
-                              ? <span className="text-muted">{blockedBy}</span>
-                              : info.length > 0
-                                ? <span className="flex flex-wrap gap-x-2">{info.map((i) => <span key={i.text} className={i.tone}>{i.text}</span>)}</span>
-                                : undefined}
-                            trailing={<span className="text-meta font-heading text-muted">{POSITION_LABEL[p.position] ?? p.position}</span>} />
-                        </label>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
-
-            <div className="text-sm border-t border-gray-100 pt-3 flex justify-between">
-              <span className="text-muted">Cena</span>
-              <span className="font-heading font-bold tabular-nums">{formatKc(staffTaskCost(picked!, duration ?? undefined))}</span>
+              ) : (
+                <div className="max-h-72 overflow-y-auto divide-y divide-line-soft border border-line rounded-soft">
+                  {/* Celý řádek je popisek přepínače, klik kamkoli do řádku hráče vybere. */}
+                  {candidates.map(({ p, blockedBy }) => {
+                    const selected = def.target === "players" ? playerIds.includes(p.id) : playerId === p.id;
+                    const full = def.target === "players" && !selected && playerIds.length >= (def.maxPlayers ?? 5);
+                    const disabled = full || !!blockedBy;
+                    const info = blockedBy ? [] : playerInfo(picked!, p);
+                    // S druhým řádkem je řádek zarovnaný nahoru: přepínač posunout k prvnímu řádku jména.
+                    return (
+                      <label key={p.id} className={`block ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"} ${selected ? "bg-pitch-500/10" : disabled ? "" : "hover:bg-surface-2"}`}>
+                        <ListRow dense
+                          leading={
+                            <input
+                              type={def.target === "players" ? "checkbox" : "radio"}
+                              name={`task-player-${member.id}`}
+                              checked={selected}
+                              disabled={disabled}
+                              onChange={() => {
+                                if (def.target === "players") {
+                                  setPlayerIds((cur) => cur.includes(p.id) ? cur.filter((x) => x !== p.id) : [...cur, p.id]);
+                                } else setPlayerId(p.id);
+                              }}
+                              className={blockedBy || info.length > 0 ? "mt-1" : undefined}
+                            />
+                          }
+                          title={`${p.name}${p.isU21 ? " (U21)" : ""}`}
+                          detail={blockedBy
+                            ? <span className="text-muted">{blockedBy}</span>
+                            : info.length > 0
+                              ? <span className="flex flex-wrap gap-x-2">{info.map((i) => <span key={i.text} className={i.tone}>{i.text}</span>)}</span>
+                              : undefined}
+                          trailing={<span className="text-meta font-heading text-muted">{POSITION_LABEL[p.position] ?? p.position}</span>} />
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
             </div>
+          )}
 
-            <div className="flex gap-2 justify-between">
-              <button type="button" onClick={reset} className="btn btn-secondary btn-sm">← Jiný úkol</button>
-              <button type="button" onClick={submit} disabled={!ready || busy} className="btn btn-primary btn-sm">
-                {busy ? "Zadávám…" : "Zadat úkol"}
-              </button>
-            </div>
+          <div className="text-sm border-t border-gray-100 pt-3 flex justify-between">
+            <span className="text-muted">Cena</span>
+            <span className="font-heading font-bold tabular-nums">{formatKc(staffTaskCost(picked!, duration ?? undefined))}</span>
           </div>
-        )}
+
+          <div className="flex gap-2 justify-between">
+            <button type="button" onClick={reset} className="btn btn-secondary btn-sm">← Jiný úkol</button>
+            <button type="button" onClick={submit} disabled={!ready || busy} className="btn btn-primary btn-sm">
+              {busy ? "Zadávám…" : "Zadat úkol"}
+            </button>
+          </div>
         </div>
-      </Sheet>
+      )}
+      </div>
+    </Sheet>
+  );
+
+  if (part === "button") return button ? <>{button}{sheet}</> : null;
+  if (part === "status" && !status && !lastResult) return null;
+  return (
+    <div className={`min-w-0 ${className}`}>
+      {part === "all" && button}
+      {status}
+      {lastResult}
+      {part === "all" && sheet}
       {dialog}
     </div>
   );
