@@ -213,6 +213,7 @@ export async function applyOfferRejectionImpact(
   // AI klub: stejný dopad na hráče, ale žádná SMS, rozhovor ani oznámení.
   const silent = await isAiClub(db, sellerClubTeamId);
 
+
   // Jméno nabízejícího klubu
   let teamName = "Neznámý klub";
   let virtualCountry: string | null = null;
@@ -272,6 +273,14 @@ export async function applyOfferRejectionImpact(
   // stupeň: kdo váhal nebo chtěl jít, se po přemluvení nezlobí; kdo velmi chtěl přestoupit,
   // se zlobí dál, jen míň. Jinak by šlo trest obejít tím, co manažer hráči napíše.
   const stance = stanceForOffer(lc.offerStance, offer.id as string);
+  // Trenér hráči v SMS slíbil, že ho při další nabídce pustí (messaging/coach-commitments.ts),
+  // a teď nabídku zamítl nebo nechal propadnout. Kdo sám řekl „zůstávám“, ten se nezlobí.
+  // Hostování se nepočítá, slib byl o odchodu.
+  if (!isLoan && stance !== "stay") {
+    const { breakReleaseCommitment } = await import("../messaging/coach-commitments");
+    await breakReleaseCommitment(db, playerId)
+      .catch((e) => logger.warn({ module: "rejection-impact" }, "slib odchodu z SMS", e));
+  }
   if (stance) {
     await db.prepare("UPDATE players SET life_context = json_remove(life_context, '$.offerStance') WHERE id = ?")
       .bind(playerId).run().catch((e) => logger.warn({ module: "rejection-impact" }, "smazání postoje k nabídce", e));

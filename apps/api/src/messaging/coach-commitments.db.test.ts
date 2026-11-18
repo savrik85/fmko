@@ -1,0 +1,193 @@
+/**
+ * Sliby z SMS nad skutečnou D1 (Miniflare): zápis, vyhodnocení po zápase, vyplacení
+ * tlačítkem, porušení zamítnutím nabídky a lhůta peněz.
+ */
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { Miniflare } from "miniflare";
+import { readFileSync } from "node:fs";
+import {
+  breakReleaseCommitment, cancelCommitment, fulfilMoneyCommitment, listCommitments, loadCommitmentMemory, recordCommitment, settleCoachCommitments,
+} from "./coach-commitments";
+
+let miniflare: Miniflare;
+let db: D1Database;
+
+const T0 = new Date("2026-11-10T10:00:00Z");
+const lineup = (starters: string[], subs: string[] = []) =>
+  JSON.stringify({ starters: starters.map((id) => ({ id, position: id === "p1" ? "FWD" : "MID" })), subs: subs.map((id) => ({ id })) });
+
+beforeAll(async () => {
+  miniflare = new Miniflare({
+    modules: true,
+    script: "export default { fetch() { return new Response('ok'); } }",
+    d1Databases: ["DB"],
+  });
+  db = await miniflare.getD1Database("DB");
+  const migration = readFileSync(new URL("../../migrations/0316_coach_commitments.sql", import.meta.url), "utf8")
+    .replace(/--[^\n]*/g, "").replace(/\n/g, " ");
+  await db.exec(migration);
+  for (const sql of [
+    "CREATE TABLE teams (id TEXT PRIMARY KEY, name TEXT, user_id TEXT, parent_team_id TEXT, budget INTEGER, game_date TEXT)",
+    "CREATE TABLE players (id TEXT PRIMARY KEY, team_id TEXT, first_name TEXT, last_name TEXT, nickname TEXT, avatar TEXT, nationality TEXT, position TEXT, weekly_wage INTEGER, life_context TEXT, coach_relationship INTEGER, loan_from_team_id TEXT)",
+    "CREATE TABLE matches (id TEXT PRIMARY KEY, home_team_id TEXT, away_team_id TEXT, status TEXT, simulated_at TEXT, home_lineup_data TEXT, away_lineup_data TEXT)",
+    "CREATE TABLE match_player_stats (match_id TEXT, player_id TEXT, minutes_played INTEGER)",
+    "CREATE TABLE injuries (player_id TEXT, days_remaining INTEGER)",
+    "CREATE TABLE conversations (id TEXT PRIMARY KEY, team_id TEXT, type TEXT, title TEXT, participant_id TEXT, participant_avatar TEXT, last_message_text TEXT, last_message_at TEXT, unread_count INTEGER DEFAULT 0, created_at TEXT)",
+    "CREATE TABLE messages (id TEXT PRIMARY KEY, conversation_id TEXT, sender_type TEXT, sender_id TEXT, sender_name TEXT, body TEXT, metadata TEXT, sent_at TEXT, read INTEGER DEFAULT 0)",
+    "CREATE TABLE coach_relation_log (id INTEGER PRIMARY KEY AUTOINCREMENT, player_id TEXT, team_id TEXT, old_value INTEGER, new_value INTEGER, delta INTEGER, raw_delta INTEGER, source TEXT, description TEXT, reference_id TEXT, game_date TEXT, created_at TEXT)",
+    "CREATE UNIQUE INDEX idx_ref ON coach_relation_log(reference_id) WHERE reference_id IS NOT NULL",
+    "CREATE TABLE transactions (id TEXT PRIMARY KEY, team_id TEXT, type TEXT, amount INTEGER, balance_after INTEGER, description TEXT, reference_id TEXT, game_date TEXT)",
+  ]) await db.prepare(sql).run();
+}, 30_000);
+
+afterAll(async () => { await miniflare.dispose(); });
+
+beforeEach(async () => {
+  for (const t of ["coach_commitments", "teams", "players", "matches", "match_player_stats", "injuries", "conversations", "messages", "coach_relation_log", "transactions"]) {
+    await db.prepare(`DELETE FROM ${t}`).run();
+  }
+  await db.batch([
+    db.prepare("INSERT INTO teams VALUES ('club', 'TJ Dvory', 'u1', NULL, 5000, '2026-11-10'), ('rival', 'SK Lhota', 'u2', NULL, 0, '2026-11-10')"),
+    db.prepare(`INSERT INTO players VALUES
+      ('p1', 'club', 'Filip', 'Pešek', NULL, NULL, 'CZ', 'MID', 400, '{"morale":50}', 50, NULL),
+      ('p2', 'club', 'Jan', 'Mikeš', NULL, NULL, 'CZ', 'GK', 300, '{"morale":50}', 50, NULL)`),
+    db.prepare("INSERT INTO conversations (id, team_id, type, title, participant_id, created_at) VALUES ('c1', 'club', 'player', 'Filip Pešek', 'p1', '2026-11-01')"),
+  ]);
+});
+
+const status = async (id: string) => (await db.prepare("SELECT status FROM coach_commitments WHERE id = ?").bind(id).first<{ status: string }>())?.status;
+const morale = async (pid: string) => (await db.prepare("SELECT json_extract(life_context, '$.morale') AS m FROM players WHERE id = ?").bind(pid).first<{ m: number }>())?.m;
+const smsTo = async (pid: string) => (await db.prepare(
+  "SELECT m.body FROM messages m JOIN conversations c ON c.id = m.conversation_id WHERE c.participant_id = ? AND m.sender_type = 'player'",
+).bind(pid).all<{ body: string }>()).results.map((r) => r.body);
+
+const record = (kind: Parameters<typeof recordCommitment>[1]["detected"], text = "zítra hraješ") =>
+  recordCommitment(db, { clubTeamId: "club", playerId: "p1", convId: "c1", coachMessage: text, detected: kind, playerFirstName: "Filip", weeklyWage: 400, now: T0 });
+
+describe("slib sestavy z SMS", () => {
+  it("začal v příštím zápase: dodržel, hráč poděkuje a vztah se zlepší", async () => {
+    const id = await record({ kind: "start_next" });
+    expect(await settleCoachCommitments(db, new Date("2026-11-11T10:00:00Z"))).toBe(0);
+    await db.prepare("INSERT INTO matches VALUES ('m1', 'club', 'rival', 'simulated', '2026-11-12T17:05:00Z', ?, NULL)").bind(lineup(["p1"])).run();
+    expect(await settleCoachCommitments(db, new Date("2026-11-13T10:00:00Z"))).toBe(1);
+    expect(await status(id)).toBe("kept");
+    expect((await smsTo("p1"))[0]).toMatch(/dodržel/);
+    const log = await db.prepare("SELECT source, delta FROM coach_relation_log WHERE player_id = 'p1'").first<{ source: string; delta: number }>();
+    expect(log).toEqual({ source: "promise", delta: 4 });
+    expect(await morale("p1")).toBe(53);
+  });
+
+  it("seděl na lavičce: porušil, hráč se ozve a nálada klesne", async () => {
+    const id = await record({ kind: "start_next" });
+    await db.prepare("INSERT INTO matches VALUES ('m1', 'club', 'rival', 'simulated', '2026-11-12T17:05:00Z', ?, NULL)").bind(lineup(["p2"], ["p1"])).run();
+    await settleCoachCommitments(db, new Date("2026-11-13T10:00:00Z"));
+    expect(await status(id)).toBe("broken");
+    expect((await smsTo("p1"))[0]).toMatch(/základ|od začátku/);
+    expect(await morale("p1")).toBe(44);
+  });
+
+  it("zraněného trenér postavit nemohl: slib jen vyprší", async () => {
+    const id = await record({ kind: "start_next" });
+    await db.batch([
+      db.prepare("INSERT INTO matches VALUES ('m1', 'club', 'rival', 'simulated', '2026-11-12T17:05:00Z', ?, NULL)").bind(lineup(["p2"])),
+      db.prepare("INSERT INTO injuries VALUES ('p1', 5)"),
+    ]);
+    await settleCoachCommitments(db, new Date("2026-11-13T10:00:00Z"));
+    expect(await status(id)).toBe("expired");
+    expect(await smsTo("p1")).toEqual([]);
+  });
+
+  it("pozice: začal v útoku, jak trenér slíbil", async () => {
+    const id = await record({ kind: "position", position: "FWD" }, "v neděli půjdeš do útoku");
+    await db.prepare("INSERT INTO matches VALUES ('m1', 'rival', 'club', 'simulated', '2026-11-12T17:05:00Z', NULL, ?)").bind(lineup(["p1"])).run();
+    await settleCoachCommitments(db, new Date("2026-11-13T10:00:00Z"));
+    expect(await status(id)).toBe("kept");
+  });
+
+  it("druhý stejný slib nahradí první a hráč ho zná v paměti", async () => {
+    const first = await record({ kind: "start_next" });
+    const second = await record({ kind: "start_next" }, "fakt, zítra jdeš od začátku");
+    expect(await status(first)).toBe("expired");
+    expect(await status(second)).toBe("active");
+    const mem = await loadCommitmentMemory(db, "p1", T0);
+    expect(mem.map((m) => m.kind)).toEqual(["start_next"]);
+    expect((await listCommitments(db, "p1", "club"))[0]).toMatchObject({ text: "Místo v základu v příštím zápase", status: "active", quote: "fakt, zítra jdeš od začátku" });
+  });
+});
+
+describe("„To nebyl slib“", () => {
+  it("do hodiny slib zmizí i z profilu, pak už ne", async () => {
+    const id = await record({ kind: "start_next" });
+    const note = await db.prepare("SELECT body FROM messages WHERE conversation_id = 'c1' AND sender_type = 'system'").first<{ body: string }>();
+    expect(note?.body).toBe("📝 Filip si slib zapamatoval: místo v základu v příštím zápase.");
+    expect(await cancelCommitment(db, { teamId: "rival", commitmentId: id, now: T0 })).toMatchObject({ ok: false, status: 404 });
+    expect(await cancelCommitment(db, { teamId: "club", commitmentId: id, now: new Date(T0.getTime() + 30 * 60_000) })).toEqual({ ok: true });
+    expect(await status(id)).toBe("cancelled");
+    expect(await listCommitments(db, "p1", "club")).toEqual([]);
+    const meta = await db.prepare("SELECT metadata FROM messages WHERE conversation_id = 'c1' AND sender_type = 'system'").first<{ metadata: string }>();
+    expect(JSON.parse(meta?.metadata ?? "{}")).toMatchObject({ cancelled: true });
+
+    const late = await record({ kind: "start_next" });
+    expect(await cancelCommitment(db, { teamId: "club", commitmentId: late, now: new Date(T0.getTime() + 2 * 3600_000) })).toMatchObject({ ok: false, status: 409 });
+    expect(await status(late)).toBe("active");
+  });
+});
+
+describe("peníze z SMS jen tlačítkem", () => {
+  it("prémie: pod zprávou tlačítko, vyplacení strhne kasu a slib je dodržený", async () => {
+    const id = await record({ kind: "bonus", amount: 1000 }, "tady máš tisícovku prémii");
+    const btn = await db.prepare("SELECT body, metadata FROM messages WHERE conversation_id = 'c1' AND sender_type = 'system'").first<{ body: string; metadata: string }>();
+    expect(btn?.body).toMatch(/prémii 1\s000 Kč/);
+    expect(JSON.parse(btn?.metadata ?? "{}")).toMatchObject({ type: "coach_commitment", commitmentId: id, done: false });
+
+    const res = await fulfilMoneyCommitment(db, { teamId: "club", commitmentId: id, now: T0 });
+    expect(res).toMatchObject({ ok: true });
+    expect((await db.prepare("SELECT budget FROM teams WHERE id = 'club'").first<{ budget: number }>())?.budget).toBe(4000);
+    expect(await status(id)).toBe("kept");
+    const after = await db.prepare("SELECT metadata FROM messages WHERE conversation_id = 'c1' AND sender_type = 'system'").first<{ metadata: string }>();
+    expect(JSON.parse(after?.metadata ?? "{}")).toMatchObject({ done: true });
+    // Podruhé už ne.
+    expect(await fulfilMoneyCommitment(db, { teamId: "club", commitmentId: id, now: T0 })).toMatchObject({ ok: false, status: 409 });
+  });
+
+  it("cizí klub slib nevyplatí, na prázdnou kasu nic", async () => {
+    const id = await record({ kind: "bonus", amount: 9000 });
+    expect(await fulfilMoneyCommitment(db, { teamId: "rival", commitmentId: id, now: T0 })).toMatchObject({ ok: false, status: 404 });
+    expect(await fulfilMoneyCommitment(db, { teamId: "club", commitmentId: id, now: T0 })).toMatchObject({ ok: false, status: 400 });
+    expect(await status(id)).toBe("active");
+  });
+
+  it("zvýšení odměn zapíše novou týdenní odměnu", async () => {
+    const id = await record({ kind: "wage", percent: 20 }, "od příštího týdne ti přidám pětinu");
+    expect(await fulfilMoneyCommitment(db, { teamId: "club", commitmentId: id, now: T0 })).toMatchObject({ ok: true, effect: "Týdenní odměna 400 → 480 Kč" });
+    expect((await db.prepare("SELECT weekly_wage FROM players WHERE id = 'p1'").first<{ weekly_wage: number }>())?.weekly_wage).toBe(480);
+    // Popis ve vztahu nese podmínky slibu (dřív „o 0 %“, detaily se nepředaly).
+    expect((await db.prepare("SELECT description FROM coach_relation_log WHERE player_id = 'p1'").first<{ description: string }>())?.description)
+      .toBe("Dodržel slib: vyšší odměny (o 20 %)");
+  });
+
+  it("nevyplacená prémie: po 3 dnech připomínka, po týdnu porušeno", async () => {
+    const id = await record({ kind: "bonus", amount: 500 });
+    await settleCoachCommitments(db, new Date("2026-11-14T10:00:00Z"));
+    expect(await smsTo("p1")).toHaveLength(1);
+    await settleCoachCommitments(db, new Date("2026-11-15T10:00:00Z"));
+    expect(await smsTo("p1")).toHaveLength(1);
+    await settleCoachCommitments(db, new Date("2026-11-18T10:00:00Z"));
+    expect(await status(id)).toBe("broken");
+    expect(await smsTo("p1")).toHaveLength(2);
+  });
+});
+
+describe("slib odchodu", () => {
+  it("zamítnutá nabídka slib poruší, odchod z klubu ho splní", async () => {
+    const id = await record({ kind: "release_offer" }, "když přijde další nabídka, pustím tě");
+    expect(await breakReleaseCommitment(db, "p1", T0)).toBe(true);
+    expect(await status(id)).toBe("broken");
+    expect((await smsTo("p1"))[0]).toMatch(/pustíte/);
+
+    const kept = await record({ kind: "release_offer" });
+    await db.prepare("UPDATE players SET team_id = 'rival' WHERE id = 'p1'").run();
+    await settleCoachCommitments(db, new Date("2026-11-12T10:00:00Z"));
+    expect(await status(kept)).toBe("kept");
+  });
+});

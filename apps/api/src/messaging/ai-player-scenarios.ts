@@ -10,6 +10,7 @@
  */
 
 import type { RadekZnalosti } from "../incidents/znalosti";
+import type { CommitmentMemory } from "./coach-commitments";
 import type { TransferTalk } from "../transfers/unrest-reasons";
 import type { InterestLevel } from "../transfers/player-interest";
 import { CASUAL_TOPICS, type InviteKind } from "./casual-topics";
@@ -61,6 +62,8 @@ export interface PlayerSnapshot {
    * Maun den po poháru, kde odehrál hodinu, odepsal „Jakej pohár zase?“ (2026-11-15).
    */
   previousMatch?: { kind: "league" | "cup"; played: boolean; minutes: number; goals: number };
+  /** Co mu trenér v SMS slíbil a jak to dopadlo (messaging/coach-commitments.ts). */
+  coachCommitments?: CommitmentMemory[];
   lastMatchGoals?: number;
   lastMatchAssists?: number;
   lastMatchRedCard?: boolean;

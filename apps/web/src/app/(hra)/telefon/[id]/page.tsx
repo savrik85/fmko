@@ -191,6 +191,9 @@ export default function ConversationPage() {
   const [participantId, setParticipantId] = useState<string | null>(null);
   const [unrestBusy, setUnrestBusy] = useState(false);
   const [unrestError, setUnrestError] = useState<string | null>(null);
+  // Slib peněz napsaný v SMS (api messaging/coach-commitments.ts): vyplatí se až tlačítkem.
+  const [commitmentBusy, setCommitmentBusy] = useState<string | null>(null);
+  const [commitmentError, setCommitmentError] = useState<{ id: string; text: string } | null>(null);
   // Seznam dohod je dlouhý: na mobilu by zakryl rozhovor, proto se rozbaluje až na klepnutí.
   const [unrestOpen, setUnrestOpen] = useState(false);
   // Rozhovory, které ještě čekají na odpověď — jen u nich má proklik smysl.
@@ -405,6 +408,21 @@ export default function ConversationPage() {
       id: res.id, senderType: "user", senderId: teamId, senderName: "Ty", body: note.transcript,
       metadata: { type: "voice", durationSec: note.durationSec, peaks: note.peaks }, sentAt: res.sentAt, read: true,
     }]);
+  };
+
+  const handleCommitment = async (commitmentId: string, action: "fulfil" | "cancel") => {
+    if (!teamId || commitmentBusy) return;
+    setCommitmentBusy(commitmentId);
+    setCommitmentError(null);
+    try {
+      await apiFetch<{ ok: boolean }>(`/api/teams/${teamId}/commitments/${encodeURIComponent(commitmentId)}/${action}`, { method: "POST" });
+      const fresh = await apiFetch<ConvDetailResponse>(messagesUrl);
+      setMessages(fresh.messages);
+    } catch (e) {
+      console.error("vyplacení slibu:", e);
+      setCommitmentError({ id: commitmentId, text: e instanceof Error ? e.message : "Nepovedlo se to." });
+    }
+    setCommitmentBusy(null);
   };
 
   const handleUnrestAction = async (deal: { id: string; message: string }) => {
@@ -770,6 +788,50 @@ export default function ConversationPage() {
                               {typeof msg.metadata.label === "string" ? msg.metadata.label : "Otevřít"}
                             </Link>
                           )}
+                          {(msg.metadata?.type === "coach_commitment" || msg.metadata?.type === "coach_commitment_note")
+                            && typeof msg.metadata.commitmentId === "string" && (() => {
+                            const id = msg.metadata.commitmentId as string;
+                            const money = msg.metadata.type === "coach_commitment";
+                            if (msg.metadata.cancelled === true) {
+                              return <p className="-mx-2.5 mt-1.5 border-t border-black/10 pt-1.5 pb-0.5 text-center text-sm text-[#667781]">Nebyl to slib, hra ho nepočítá.</p>;
+                            }
+                            if (money && msg.metadata.done === true) {
+                              return (
+                                <p className="-mx-2.5 mt-1.5 border-t border-black/10 pt-1.5 pb-0.5 text-center text-sm text-[#667781]">
+                                  ✓ {typeof msg.metadata.effect === "string" ? msg.metadata.effect : "Hotovo"}
+                                </p>
+                              );
+                            }
+                            // „To nebyl slib“ jde hodinu po zprávě (api coach-commitments.ts CANCEL_WINDOW_MS).
+                            const canCancel = Date.now() - new Date(msg.sentAt).getTime() < 60 * 60 * 1000;
+                            return (
+                              <>
+                                {money && (
+                                  <button
+                                    type="button"
+                                    disabled={commitmentBusy !== null}
+                                    onClick={() => handleCommitment(id, "fulfil")}
+                                    className={`${WA_LINK_BUTTON} w-[calc(100%+1.25rem)] disabled:opacity-50`}
+                                  >
+                                    {commitmentBusy === id ? "Moment…" : msg.metadata.kind === "wage" ? "Zvýšit odměny" : "Vyplatit"}
+                                  </button>
+                                )}
+                                {canCancel && (
+                                  <button
+                                    type="button"
+                                    disabled={commitmentBusy !== null}
+                                    onClick={() => handleCommitment(id, "cancel")}
+                                    className={`${WA_LINK_BUTTON} w-[calc(100%+1.25rem)] !text-[#667781] font-normal disabled:opacity-50`}
+                                  >
+                                    To nebyl slib
+                                  </button>
+                                )}
+                                {commitmentError?.id === id && (
+                                  <p className="text-sm text-card-red text-center pb-0.5">{commitmentError.text}</p>
+                                )}
+                              </>
+                            );
+                          })()}
                           {msg.metadata?.type === "tournament" && (
                             <Link
                               href="/turnaj"

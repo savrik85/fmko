@@ -489,6 +489,15 @@ async function callModel(
   return text;
 }
 
+/**
+ * Krátký dotaz na model s odpovědí v JSON (rozpoznání slibu v SMS apod.). Teplota 0,
+ * ať stejná zpráva dopadne pokaždé stejně. Null = model nevrátil nic použitelného.
+ */
+export async function askModelJson<T>(env: ChatEnv, prompt: string, maxTokens = 120): Promise<T | null> {
+  const raw = await callModel(env, prompt, { json: true, maxTokens, temperature: 0 });
+  return tryParseJson<T>(raw);
+}
+
 /** Robustní parse JSON i když Gemini obalí do markdown bloku ```json...``` nebo přidá text okolo. */
 function tryParseJson<T>(raw: string): T | null {
   const trimmed = raw.trim();
