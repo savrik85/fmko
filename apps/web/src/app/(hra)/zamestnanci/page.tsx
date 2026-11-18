@@ -4,10 +4,10 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useTeam } from "@/context/team-context";
 import { apiFetch, apiAction } from "@/lib/api";
-import { Tabs, useTabParam, ListCard, ListRow, ListEmpty, RowIcon, StatusChip, PageLoading, type ChipTone } from "@/components/ui";
+import { Tabs, useTabParam, ListCard, ListEmpty, PageLoading, Sheet } from "@/components/ui";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { FaceAvatar } from "@/components/players/face-avatar";
-import { StaffTaskBox, type StaffTasksData } from "@/components/staff/StaffTaskBox";
+import { StaffTaskBox, ROW_BUTTON_CLASS, ROW_CONTROL_TOUCH, canAssignTask, type StaffTasksData } from "@/components/staff/StaffTaskBox";
 import {
   ROLE_DEFS,
   STAFF_ROLE_ORDER,
@@ -67,20 +67,6 @@ const ATTR_SHORT: Record<StaffAttributeKey, string> = {
 const GROUP_ORDER: StaffGroup[] = ["trenerske", "zdravi", "provoz", "scouting"];
 
 
-function attrColor(v: number): string {
-  if (v >= 15) return "text-pitch-400 font-bold";
-  if (v >= 11) return "text-pitch-600";
-  if (v >= 7) return "text-ink";
-  if (v >= 4) return "text-gold-600";
-  return "text-card-red";
-}
-
-function effTone(v: number): ChipTone {
-  if (v >= 15) return "ok";
-  if (v >= 10) return "warn";
-  return "neutral";
-}
-
 function effClass(v: number): string {
   if (v >= 15) return "text-pitch-500";
   if (v >= 10) return "text-gold-600";
@@ -100,92 +86,67 @@ function staffWithUpdatedAttr(m: StaffMember, attr: StaffAttributeKey, points: n
   };
 }
 
-function AttrGrid({
-  m,
-  role,
-  activeCourse,
-}: {
-  m: StaffMember;
-  role?: StaffRole | null;
-  activeCourse?: StaffAttributeKey | null;
-}) {
-  const def = role ? ROLE_DEFS[role] : null;
+/**
+ * Tabulka zaměstnanců jako ve Football Manageru: na počítači jeden řádek na člověka
+ * (jméno, efektivita, sedm atributů, úkol, mzda, akce), na telefonu malá karta.
+ * Dřív měl každý kartu přes celou obrazovku, i když v ní bylo pár řádků textu (2026-11-18).
+ */
+const ROW_GRID = "lg:grid lg:grid-cols-[minmax(0,14rem)_3.5rem_repeat(7,2.25rem)_minmax(0,1fr)_6.5rem_9rem] lg:items-center lg:gap-x-2";
 
+function TableHead({ task, money }: { task: string; money: string }) {
   return (
-    <div className="space-y-1.5">
-      <div className="grid grid-cols-7 gap-1 sm:gap-1.5">
-        {ATTR_ORDER.map((a) => {
-          const v = staffAttributeValue(m, a);
-          const isPrimary = def?.primary === a;
-          const isSecondary = def?.secondary === a;
-          const isStudying = activeCourse === a;
-
-          return (
-            <div
-              key={a}
-              className={`text-center py-1 px-0.5 rounded-soft transition-all ${
-                isPrimary
-                  ? "bg-pitch-500/10 border border-pitch-500/40 shadow-xs"
-                  : isSecondary
-                  ? "bg-gold-500/10 border border-gold-500/40 shadow-xs"
-                  : "bg-surface/40 border border-transparent opacity-65 hover:opacity-100"
-              } ${isStudying ? "ring-2 ring-gold-400" : ""}`}
-            >
-              <div className="h-3.5 flex items-center justify-center">
-                {isPrimary ? (
-                  <span
-                    className="text-[9px] font-heading font-black text-pitch-700 bg-pitch-500/20 px-1 rounded-xs leading-none"
-                    title="Klíčový atribut pro roli (2× váha)"
-                  >
-                    2×
-                  </span>
-                ) : isSecondary ? (
-                  <span
-                    className="text-[9px] font-heading font-bold text-gold-700 bg-gold-500/20 px-1 rounded-xs leading-none"
-                    title="Důležitý atribut pro roli (1× váha)"
-                  >
-                    1×
-                  </span>
-                ) : (
-                  <span className="text-[9px] text-transparent select-none leading-none">·</span>
-                )}
-              </div>
-              <div className={`text-sm sm:text-base font-heading font-bold tabular-nums leading-tight ${attrColor(v)}`}>
-                {v}
-              </div>
-              <div
-                className={`text-[10px] sm:text-micro uppercase font-heading truncate leading-tight ${
-                  isPrimary
-                    ? "text-pitch-700 font-bold"
-                    : isSecondary
-                    ? "text-gold-700 font-bold"
-                    : "text-muted"
-                }`}
-                title={STAFF_ATTRIBUTE_LABELS[a]}
-              >
-                {ATTR_SHORT[a]}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {def && (
-        <div className="flex items-center gap-1.5 text-[11px] text-muted font-heading flex-wrap">
-          <span>Role {def.label}:</span>
-          <span className="inline-flex items-center gap-1 text-pitch-700 font-bold">
-            <span className="w-1.5 h-1.5 rounded-full bg-pitch-500 inline-block" />
-            ★ {STAFF_ATTRIBUTE_LABELS[def.primary]} (2×)
-          </span>
-          <span className="text-muted/40">·</span>
-          <span className="inline-flex items-center gap-1 text-gold-700 font-semibold">
-            <span className="w-1.5 h-1.5 rounded-full bg-gold-500 inline-block" />
-            {STAFF_ATTRIBUTE_LABELS[def.secondary]} (1×)
-          </span>
-        </div>
-      )}
+    <div className={`hidden ${ROW_GRID} px-4 py-2 border-b border-line text-micro font-bold uppercase tracking-wider text-muted`}>
+      <span>Jméno</span>
+      <span className="text-center">Efekt.</span>
+      {ATTR_ORDER.map((a) => (
+        <span key={a} className="text-center" title={STAFF_ATTRIBUTE_LABELS[a]}>{ATTR_SHORT[a]}</span>
+      ))}
+      <span>{task}</span>
+      <span className="text-right">{money}</span>
+      <span />
     </div>
   );
+}
+
+/** Sedm atributů. Ty, které rozhodují o efektivitě v roli, jsou podbarvené. */
+function AttrCells({ m, role, activeCourse }: {
+  m: StaffMember;
+  role: StaffRole;
+  activeCourse?: StaffAttributeKey | null;
+}) {
+  const def = ROLE_DEFS[role];
+  return (
+    <div className="grid grid-cols-7 gap-1 lg:contents">
+      {ATTR_ORDER.map((a) => {
+        const v = staffAttributeValue(m, a);
+        const tone = def.primary === a
+          ? "bg-pitch-500/15 text-pitch-700 font-bold"
+          : def.secondary === a
+          ? "bg-gold-500/15 text-gold-700 font-bold"
+          : "text-ink-light";
+        const weight = def.primary === a ? ", rozhoduje 2×" : def.secondary === a ? ", rozhoduje 1×" : "";
+        return (
+          <span key={a} title={`${STAFF_ATTRIBUTE_LABELS[a]}${weight}${activeCourse === a ? ", právě na kurzu" : ""}`}
+            className={`flex flex-col items-center justify-center rounded-tight py-1.5 text-sm tabular-nums ${tone} ${activeCourse === a ? "ring-1 ring-gold-500" : ""}`}>
+            <span className="lg:hidden text-micro font-normal text-muted leading-none mb-1">{ATTR_SHORT[a]}</span>
+            {v}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+function Eff({ value }: { value: number }) {
+  return (
+    <span className={`text-body font-bold tabular-nums ${effClass(value)}`}>
+      {value}<span className="text-meta font-normal text-muted">/20</span>
+    </span>
+  );
+}
+
+function weeksWord(n: number): string {
+  return n === 1 ? "týden" : n < 5 ? "týdny" : "týdnů";
 }
 
 /** Portrét v kruhu do levého sloupce řádku; bez obličeje první písmeno jména. */
@@ -210,6 +171,8 @@ export default function ZamestnanciPage() {
   const [pickRole, setPickRole] = useState<Record<string, StaffRole>>({});
   const [marketRoleFilter, setMarketRoleFilter] = useState<StaffRole | "all">("all");
   const [tasksData, setTasksData] = useState<StaffTasksData | null>(null);
+  // Plachta s nabídkou kurzů: komu a v jaké roli.
+  const [courseFor, setCourseFor] = useState<{ m: StaffMember; role: StaffRole } | null>(null);
 
   const refresh = async () => {
     if (!teamId) return;
@@ -382,182 +345,177 @@ export default function ZamestnanciPage() {
   const tabs: [Tab, string, number][] = [["team", "Tým", hired.length], ["market", "Volní", market.length]];
   const filteredMarket = marketRoleFilter === "all" ? market : market.filter((c) => c.profession === marketRoleFilter);
 
-  // Řádek bez odkazu: uvnitř je výběr role, tlačítka a úkol. Efektivita je štítkem
-  // u jména, ne vpravo: sloupec vpravo by na telefonu zúžil mřížku atributů.
+  const onAction = (m: StaffMember, role: StaffRole, value: string) => {
+    if (value === "course") setCourseFor({ m, role });
+    else if (value === "fire") doFire(m);
+    else if (value.startsWith("role:")) doReassign(m, value.slice(5) as StaffRole);
+  };
+
   const renderMemberRow = (m: StaffMember, role: StaffRole) => {
     const def = ROLE_DEFS[role];
     const eff = staffEffectiveness(m, role);
+    const reassignTo = STAFF_ROLE_ORDER.filter((r) => r !== role && !isRoleOccupied(r, m.id));
+    const member = { id: m.id, role, firstName: m.firstName, lastName: m.lastName, gender: m.gender, taskCooldownUntil: m.taskCooldownUntil };
+    const courseLine = m.courseAttribute && (
+      <div className="mt-1 text-meta text-gold-700 lg:truncate">
+        Kurz {STAFF_ATTRIBUTE_LABELS[m.courseAttribute]}, ještě {m.courseWeeksRemaining} {weeksWord(m.courseWeeksRemaining ?? 0)}
+      </div>
+    );
 
+    // Na počítači řádek tabulky. Na telefonu karta: jméno, atributy, stav úkolu
+    // a dole jeden řádek přes celou šířku se „Zadat úkol“ a „Upravit…“ vedle sebe.
     return (
-      <ListRow key={m.id}
-        leading={<Avatar m={m} />}
-        title={<>
-          {m.firstName} {m.lastName}
-          <StatusChip tone={effTone(eff)}>
-            efektivita {eff}/20
-          </StatusChip>
-        </>}
-        meta={`${def.label} · ${m.age} let${m.gender === "f" ? " · žena" : ""}`}
-        detail={
-          <span className="block space-y-2 mt-1">
-            {m.description && <span className="block text-xs text-gold-600 italic truncate">„{m.description}"</span>}
-
-            <AttrGrid m={m} role={role} activeCourse={m.courseAttribute} />
-
-            <span className="block text-xs text-muted">{def.effectDesc}</span>
-
-            {role === "skaut" ? (
-              <span className="block">
-                <Link href={`/zamestnanci/skaut?scoutId=${m.id}`} className="btn btn-primary btn-sm inline-block">
-                  Úkol a hlášení →
-                </Link>
-              </span>
-            ) : teamId && (
-              <StaffTaskBox
-                teamId={teamId}
-                member={{ id: m.id, role, firstName: m.firstName, lastName: m.lastName, gender: m.gender, taskCooldownUntil: m.taskCooldownUntil }}
-                data={tasksData}
-                onChanged={refresh}
-              />
-            )}
-
-            {/* Kurz */}
-            {m.courseAttribute ? (
-              <div className="text-xs bg-gold-50 text-gold-700 rounded-soft px-3 py-2 font-heading">
-                🎓 Kurz {STAFF_ATTRIBUTE_LABELS[m.courseAttribute]} - zbývá {m.courseWeeksRemaining} {m.courseWeeksRemaining === 1 ? "týden" : (m.courseWeeksRemaining ?? 0) < 5 ? "týdny" : "týdnů"}
-              </div>
-            ) : m.courses && m.courses.length > 0 ? (
-              <details className="text-xs group">
-                <summary className="cursor-pointer text-muted hover:text-ink font-heading flex items-center justify-between py-1 select-none">
-                  <span>📚 Poslat na kurz…</span>
-                  <span className="text-[11px] text-pitch-700 font-normal">
-                    Doporučeno: <strong>{STAFF_ATTRIBUTE_LABELS[def.primary]}</strong> / <strong>{STAFF_ATTRIBUTE_LABELS[def.secondary]}</strong>
-                  </span>
-                </summary>
-                <div className="mt-2 space-y-1.5">
-                  {[...m.courses]
-                    .sort((a, b) => {
-                      const getWeight = (k: StaffAttributeKey) => {
-                        if (k === def.primary) return 0;
-                        if (k === def.secondary) return 1;
-                        return 2;
-                      };
-                      const diff = getWeight(a.attribute) - getWeight(b.attribute);
-                      if (diff !== 0) return diff;
-                      return a.attribute.localeCompare(b.attribute);
-                    })
-                    .map((q) => {
-                      const isPrim = q.attribute === def.primary;
-                      const isSec = q.attribute === def.secondary;
-                      const curVal = staffAttributeValue(m, q.attribute);
-                      const nextVal = curVal + q.points;
-                      const nextEff = staffEffectiveness(staffWithUpdatedAttr(m, q.attribute, q.points), role);
-                      const effDiff = nextEff - eff;
-
-                      return (
-                        <button
-                          key={q.attribute}
-                          type="button"
-                          onClick={() => doCourse(m, q)}
-                          className={`w-full flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 text-left rounded-soft border p-2 transition-all ${
-                            isPrim
-                              ? "bg-pitch-500/10 border-pitch-500/30 hover:border-pitch-500/60 hover:bg-pitch-500/15"
-                              : isSec
-                              ? "bg-gold-500/10 border-gold-500/30 hover:border-gold-500/60 hover:bg-gold-500/15"
-                              : "border-gray-100 hover:border-gray-300 opacity-70 hover:opacity-100 bg-white"
-                          }`}
-                        >
-                          <div className="flex items-center gap-2 min-w-0">
-                            {isPrim ? (
-                              <span className="text-[10px] font-heading font-black text-pitch-700 bg-pitch-500/20 border border-pitch-500/30 rounded px-1.5 py-0.5 shrink-0">
-                                ★ Klíčový (2×)
-                              </span>
-                            ) : isSec ? (
-                              <span className="text-[10px] font-heading font-bold text-gold-700 bg-gold-500/20 border border-gold-500/30 rounded px-1.5 py-0.5 shrink-0">
-                                Důležitý (1×)
-                              </span>
-                            ) : (
-                              <span className="text-[10px] font-heading text-muted bg-gray-100 rounded px-1.5 py-0.5 shrink-0">
-                                Ostatní
-                              </span>
-                            )}
-                            <div className="truncate">
-                              <span className="font-heading font-bold text-ink">{STAFF_ATTRIBUTE_LABELS[q.attribute]}</span>
-                              <span className="text-muted ml-1 tabular-nums">+{q.points} ({curVal} → {nextVal})</span>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0 text-right pl-7 sm:pl-0">
-                            {effDiff > 0 ? (
-                              <span className="text-pitch-600 font-heading font-bold text-[11px] tabular-nums whitespace-nowrap">
-                                → efektivita {nextEff}/20 (+{effDiff})
-                              </span>
-                            ) : (
-                              <span className="text-muted text-[11px] tabular-nums whitespace-nowrap">
-                                {isPrim || isSec ? "beze změny efektivity" : "neovlivní roli"}
-                              </span>
-                            )}
-                            <span className="text-muted tabular-nums text-xs whitespace-nowrap">
-                              {q.weeks} týd · {formatKc(q.cost)}
-                            </span>
-                          </div>
-                        </button>
-                      );
-                    })}
-                </div>
-              </details>
-            ) : null}
-
-            {/* Info řádek + akce */}
-            <span className="flex flex-wrap items-center justify-between gap-2 border-t border-line-soft pt-2">
-              <span className="text-xs text-muted">Mzda <span className="font-heading font-bold text-ink tabular-nums">{formatKc(m.weeklyWage)}</span>/týd</span>
-              <span className="flex items-center gap-2">
-                <select
-                  value=""
-                  onChange={(e) => { const r = e.target.value as StaffRole; if (r) doReassign(m, r); }}
-                  className="select !text-xs !py-1 !font-heading">
-                  <option value="">Přeřadit…</option>
-                  {STAFF_ROLE_ORDER.filter((r) => r !== role && !isRoleOccupied(r, m.id)).map((r) => (
-                    <option key={r} value={r}>{ROLE_DEFS[r].label} ({staffEffectiveness(m, r)}/20)</option>
-                  ))}
-                </select>
-                <button onClick={() => doFire(m)}
-                  className="text-xs text-muted hover:text-card-red font-heading uppercase transition-colors">✕ propustit</button>
-              </span>
+      <div key={m.id} className={`px-4 py-3 lg:py-2 border-b border-line-soft last:border-b-0 space-y-3 lg:space-y-0 ${ROW_GRID}`}>
+        <div className="flex items-center gap-3 min-w-0">
+          <span className="shrink-0"><Avatar m={m} /></span>
+          <span className="flex-1 min-w-0">
+            <span className="block text-body font-bold text-ink truncate" title={m.description ?? undefined}>{m.firstName} {m.lastName}</span>
+            <span className="block mt-0.5 text-meta text-muted truncate" title={def.effectDesc}>
+              {def.label} · {m.age} let<span className="lg:hidden"> · {formatKc(m.weeklyWage)}/týd</span>
             </span>
           </span>
-        } />
+          <span className="lg:hidden shrink-0"><Eff value={eff} /></span>
+        </div>
+        <span className="hidden lg:block text-center"><Eff value={eff} /></span>
+
+        <AttrCells m={m} role={role} activeCourse={m.courseAttribute} />
+
+        {/* Sloupec Úkol na počítači */}
+        <div className="hidden lg:block min-w-0">
+          {role === "skaut" ? (
+            <Link href={`/zamestnanci/skaut?scoutId=${m.id}`} className="text-sm font-bold text-pitch-700 hover:underline">
+              Úkol a hlášení →
+            </Link>
+          ) : teamId && (
+            <StaffTaskBox teamId={teamId} member={member} data={tasksData} onChanged={refresh} />
+          )}
+          {courseLine}
+        </div>
+
+        {/* Stav úkolu na telefonu */}
+        {role !== "skaut" && teamId && (
+          <StaffTaskBox teamId={teamId} member={member} data={tasksData} onChanged={refresh} part="status" className="lg:hidden" />
+        )}
+        {courseLine && <div className="lg:hidden">{courseLine}</div>}
+
+        <div className="flex items-center gap-2 lg:contents">
+          <span className="hidden lg:block text-sm text-muted tabular-nums text-right">
+            <strong className="text-ink">{formatKc(m.weeklyWage)}</strong>/týd
+          </span>
+          {/* Obal schovává tlačítko na počítači: `.btn` nastavuje display mimo vrstvy
+              Tailwindu, takže `lg:hidden` přímo na tlačítku nezabere. */}
+          {role === "skaut" ? (
+            <span className="flex grow basis-1/2 min-w-0 lg:hidden">
+              <Link href={`/zamestnanci/skaut?scoutId=${m.id}`} className={`${ROW_BUTTON_CLASS} w-full`}>Úkol a hlášení</Link>
+            </span>
+          ) : teamId && canAssignTask(member, tasksData) && (
+            <span className="flex grow basis-1/2 min-w-0 lg:hidden">
+              <StaffTaskBox teamId={teamId} member={member} data={tasksData} onChanged={refresh} part="button" buttonClassName="w-full" />
+            </span>
+          )}
+          <select value="" onChange={(e) => onAction(m, role, e.target.value)}
+            aria-label={`Upravit: ${m.firstName} ${m.lastName}`}
+            className={`select !text-sm !py-0 h-9 !font-heading grow basis-1/2 min-w-0 lg:w-full ${ROW_CONTROL_TOUCH}`}>
+            <option value="">Upravit…</option>
+            {!m.courseAttribute && (m.courses?.length ?? 0) > 0 && <option value="course">Poslat na kurz</option>}
+            {reassignTo.length > 0 && (
+              <optgroup label="Přeřadit na">
+                {reassignTo.map((r) => (
+                  <option key={r} value={`role:${r}`}>{ROLE_DEFS[r].label} ({staffEffectiveness(m, r)}/20)</option>
+                ))}
+              </optgroup>
+            )}
+            <option value="fire">Propustit</option>
+          </select>
+        </div>
+      </div>
     );
   };
 
   const renderEmptySlot = (role: StaffRole, labelOverride?: string) => {
     const def = ROLE_DEFS[role];
     return (
-      <ListRow key={`empty-${role}-${labelOverride ?? "slot"}`}
-        leading={<RowIcon>👤</RowIcon>}
-        title={<>{labelOverride ?? def.label}<span className="ml-2 align-middle"><StatusChip tone="ok">Volný slot</StatusChip></span></>}
-        detail={
-          <span className="block space-y-1.5">
-            <span className="block text-muted">{def.effectDesc}</span>
-            <span className="flex items-center gap-1.5 flex-wrap text-xs text-muted">
-              <span>Klíčové:</span>
-              <span className="text-pitch-700 font-bold">★ {STAFF_ATTRIBUTE_LABELS[def.primary]} (2×)</span>
-              <span className="text-muted/40">·</span>
-              <span className="text-gold-700 font-semibold">{STAFF_ATTRIBUTE_LABELS[def.secondary]} (1×)</span>
-            </span>
-            <span className="block pt-0.5">
-              <button onClick={() => { setMarketRoleFilter(role); setTab("market"); }}
-                className="btn btn-primary btn-sm">Najmout →</button>
-            </span>
+      <div key={`empty-${role}-${labelOverride ?? "slot"}`}
+        className={`flex items-center gap-3 px-4 py-3 lg:py-2 border-b border-line-soft last:border-b-0 ${ROW_GRID}`}>
+        <div className="flex flex-1 items-center gap-3 min-w-0 lg:col-span-10">
+          <span className="shrink-0 w-9 h-9 rounded-full border-2 border-dashed border-line" aria-hidden="true" />
+          <span className="min-w-0">
+            <span className="block text-body font-bold text-muted truncate">{labelOverride ?? def.label}</span>
+            <span className="block text-meta text-muted truncate">Volné místo · {def.effectDesc}</span>
           </span>
-        } />
+        </div>
+        <span className="hidden lg:block" />
+        <button onClick={() => { setMarketRoleFilter(role); setTab("market"); }}
+          className={`${ROW_BUTTON_CLASS} shrink-0 lg:justify-self-end`}>Najmout</button>
+      </div>
     );
   };
+
+  const renderCandidateRow = (cand: StaffMember & { requiredLicence?: number }) => {
+    const selected = pickRole[cand.id] ?? cand.profession;
+    const eff = staffEffectiveness(cand, selected);
+    const needsLicence = (cand.requiredLicence ?? 0) > coachLicence;
+    const occupied = isRoleOccupied(selected);
+
+    return (
+      <div key={cand.id} className={`px-4 py-3 lg:py-2 border-b border-line-soft last:border-b-0 space-y-3 lg:space-y-0 ${ROW_GRID}`}>
+        <div className="flex items-center gap-3 min-w-0">
+          <span className="shrink-0"><Avatar m={cand} /></span>
+          <span className="flex-1 min-w-0">
+            <span className="block text-body font-bold text-ink truncate" title={cand.description ?? undefined}>{cand.firstName} {cand.lastName}</span>
+            <span className="block mt-0.5 text-meta text-muted truncate">
+              {ROLE_DEFS[cand.profession].label} · {cand.age} let
+              {needsLicence && <span className="text-card-red"> · chce licenci {licenceLabel(cand.requiredLicence ?? 0)}</span>}
+            </span>
+          </span>
+          <span className="lg:hidden shrink-0"><Eff value={eff} /></span>
+        </div>
+        <span className="hidden lg:block text-center"><Eff value={eff} /></span>
+
+        <AttrCells m={cand} role={selected} />
+
+        <div className="min-w-0">
+          <select value={selected}
+            onChange={(e) => setPickRole((p) => ({ ...p, [cand.id]: e.target.value as StaffRole }))}
+            aria-label={`Najmout jako: ${cand.firstName} ${cand.lastName}`}
+            className="select !text-sm !py-1 !font-heading w-full">
+            {STAFF_ROLE_ORDER.map((r) => {
+              const roleFull = isRoleOccupied(r);
+              return (
+                <option key={r} value={r} disabled={roleFull}>
+                  {ROLE_DEFS[r].label} ({staffEffectiveness(cand, r)}/20){roleFull ? ", obsazeno" : ""}
+                </option>
+              );
+            })}
+          </select>
+          {selected === "skaut" && occupied && (
+            <div className="text-meta text-card-red truncate">Skautů máš plno ({hiredScouts.length}/{maxScouts})</div>
+          )}
+        </div>
+
+        <div className="flex items-center justify-between gap-3 lg:contents">
+          <span className="text-sm text-muted tabular-nums lg:text-right">
+            <strong className="text-ink">{formatKc(cand.weeklyWage)}</strong>/týd
+            <span className="block text-meta">podpis {formatKc(cand.signingFee)}</span>
+          </span>
+          <button onClick={() => doHire(cand, selected)}
+            disabled={occupied || needsLicence}
+            title={needsLicence ? `Chce trenéra s licencí aspoň ${licenceLabel(cand.requiredLicence ?? 0)}` : undefined}
+            className={`${ROW_BUTTON_CLASS} shrink-0 lg:justify-self-end`}>
+            Najmout
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  const course = courseFor;
+  const courseDef = course ? ROLE_DEFS[course.role] : null;
+  const courseEff = course ? staffEffectiveness(course.m, course.role) : 0;
 
   return (
     <>
       <div className="page-container space-y-4">
-        {/* Tab bar */}
         <Tabs
           value={tab}
           onChange={setTab}
@@ -566,28 +524,27 @@ export default function ZamestnanciPage() {
         />
 
         {tab === "team" && (
-          <div className="space-y-5">
+          <div className="space-y-4">
             <p className="text-sm text-muted">
-              Zaměstnanci nejsou povinní - jsou to bonusy. Role můžeš obsadit jedním specialistou, skautů můžeš mít podle své trenérské licence až 5. Kohokoli můžeš najmout na jakoukoli roli a jeho <strong>atributy</strong> určují, jak dobrý v roli bude.
+              Zaměstnanci nejsou povinní, jsou to bonusy. Každou roli obsadí jeden člověk, skautů můžeš mít podle licence až 5.
+              Efektivitu v roli určují podbarvené atributy: <span className="text-pitch-700 font-bold">zelený</span> dvojnásob, <span className="text-gold-700 font-bold">žlutý</span> jednou.
             </p>
             {GROUP_ORDER.map((group) => {
               if (group === "scouting") {
                 return (
                   <div key={group} className="space-y-2">
-                    <ListCard title={STAFF_GROUP_LABELS[group]}>
+                    <ListCard title={STAFF_GROUP_LABELS[group]} count={`${hiredScouts.length}/${maxScouts}`}>
+                      <TableHead task="Úkol" money="Mzda" />
                       {hiredScouts.map((m) => renderMemberRow(m, "skaut"))}
                       {hiredScouts.length < maxScouts && (
                         renderEmptySlot("skaut", hiredScouts.length === 0 ? undefined : `Další skaut (${hiredScouts.length + 1}/${maxScouts})`)
                       )}
                     </ListCard>
-                    <div className="text-xs text-muted flex items-center gap-2 pt-1 flex-wrap">
-                      <span>Kapacita skautů: <strong>{hiredScouts.length}/{maxScouts}</strong>.</span>
-                      {maxScouts < 5 ? (
-                        <span>Další slot odemkneš s vyšší trenérskou licencí ({coachLicence < 2 ? "UEFA B" : coachLicence === 2 ? "UEFA A" : "UEFA Pro"}).</span>
-                      ) : (
-                        <span>Máš odemčený maximální počet skautů (5).</span>
-                      )}
-                    </div>
+                    {maxScouts < 5 && (
+                      <p className="text-sm text-muted">
+                        Dalšího skauta odemkneš s licencí {coachLicence < 2 ? "UEFA B" : coachLicence === 2 ? "UEFA A" : "UEFA Pro"}.
+                      </p>
+                    )}
                   </div>
                 );
               }
@@ -595,12 +552,10 @@ export default function ZamestnanciPage() {
               const rolesInGroup = STAFF_ROLE_ORDER.filter((r) => ROLE_DEFS[r].group === group);
               return (
                 <ListCard key={group} title={STAFF_GROUP_LABELS[group]}>
+                  <TableHead task="Úkol" money="Mzda" />
                   {rolesInGroup.map((role) => {
                     const m = byRole.get(role);
-                    if (!m) {
-                      return renderEmptySlot(role);
-                    }
-                    return renderMemberRow(m, role);
+                    return m ? renderMemberRow(m, role) : renderEmptySlot(role);
                   })}
                 </ListCard>
               );
@@ -619,13 +574,12 @@ export default function ZamestnanciPage() {
               </ListCard>
             ) : (
               <>
-                {/* Filtr podle role (zaměření kandidáta) */}
                 <div className="flex items-center gap-2">
                   <span className="text-micro uppercase font-heading font-bold text-muted tracking-wide shrink-0">Filtr role</span>
                   <select
                     value={marketRoleFilter}
                     onChange={(e) => setMarketRoleFilter(e.target.value as StaffRole | "all")}
-                    className="select !text-sm !py-1.5 !font-heading flex-1 min-w-[10rem]">
+                    className="select !text-sm !py-1.5 !font-heading flex-1 min-w-[10rem] lg:flex-none">
                     <option value="all">Všechny role ({market.length})</option>
                     {STAFF_ROLE_ORDER.map((r) => {
                       const n = market.filter((c) => c.profession === r).length;
@@ -640,76 +594,10 @@ export default function ZamestnanciPage() {
                       Pro roli <strong>{marketRoleFilter !== "all" ? ROLE_DEFS[marketRoleFilter].label : ""}</strong> zrovna nikdo volný není.
                     </ListEmpty>
                   ) : (
-                    filteredMarket.map((cand) => {
-                      const selected = pickRole[cand.id] ?? cand.profession;
-                      const eff = staffEffectiveness(cand, selected);
-                      const needsLicence = (cand.requiredLicence ?? 0) > coachLicence;
-                      const occupied = isRoleOccupied(selected);
-                      // Zaměření a věk jdou do odstavce: v jednom řádku by se dlouhá role uřízla.
-                      return (
-                        <ListRow key={cand.id}
-                          leading={<Avatar m={cand} />}
-                          title={`${cand.firstName} ${cand.lastName}`}
-                          detail={
-                            <span className="block space-y-1.5">
-                              <span className="block text-xs text-muted">
-                                umí nejlíp: <strong>{ROLE_DEFS[cand.profession].label}</strong> · {cand.age} let{cand.gender === "f" ? " · žena" : ""}
-                              </span>
-                              {cand.description && <span className="block text-xs text-gold-600 italic truncate">„{cand.description}"</span>}
-
-                              <AttrGrid m={cand} role={selected} />
-
-                              {/* Výběr role + fit */}
-                              <span className="flex items-center gap-2 flex-wrap">
-                                <span className="text-xs text-muted font-heading">Najmout jako:</span>
-                                <select
-                                  value={selected}
-                                  onChange={(e) => setPickRole((p) => ({ ...p, [cand.id]: e.target.value as StaffRole }))}
-                                  className="select !text-xs !py-1 !font-heading flex-1 min-w-[10rem]">
-                                  {STAFF_ROLE_ORDER.map((r) => {
-                                    const roleFull = isRoleOccupied(r);
-                                    return (
-                                      <option key={r} value={r} disabled={roleFull}>
-                                        {ROLE_DEFS[r].label} ({staffEffectiveness(cand, r)}/20){roleFull ? ", obsazeno" : ""}
-                                      </option>
-                                    );
-                                  })}
-                                </select>
-                                <span className={`text-sm font-heading font-bold tabular-nums ${effClass(eff)}`}>{eff}/20</span>
-                              </span>
-
-                              <span className="block text-xs text-muted">{ROLE_DEFS[selected].effectDesc}</span>
-
-                              {selected === "skaut" && occupied && (
-                                <span className="block text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-soft px-3 py-1.5 font-heading">
-                                  Kapacita skautů je plná ({hiredScouts.length}/{maxScouts}). Dalšího skauta odemkneš s vyšší trenérskou licencí.
-                                </span>
-                              )}
-
-                              {(cand.requiredLicence ?? 0) > 0 && (
-                                <span className={`block text-sm rounded-soft px-3 py-2 border ${needsLicence ? "bg-amber-50 border-amber-200 text-amber-800" : "bg-surface border-gray-100 text-muted"}`}>
-                                  🎓 Chce trenéra s licencí aspoň <strong>{licenceLabel(cand.requiredLicence ?? 0)}</strong>
-                                  {needsLicence ? ". Tvůj trenér ji zatím nemá." : ". Tvůj trenér ji má."}
-                                </span>
-                              )}
-
-                              {/* Info řádek + akce */}
-                              <span className="flex items-center justify-between gap-3 border-t border-line-soft pt-2">
-                                <span className="text-xs text-muted">
-                                  Podpisné <span className="font-heading font-bold text-ink tabular-nums">{formatKc(cand.signingFee)}</span>
-                                  <span className="mx-1">·</span>
-                                  mzda <span className="font-heading font-bold text-ink tabular-nums">{formatKc(cand.weeklyWage)}</span>/týd
-                                </span>
-                                <button onClick={() => doHire(cand, selected)}
-                                  disabled={occupied || needsLicence}
-                                  className="btn btn-primary btn-sm shrink-0 disabled:opacity-40 disabled:cursor-not-allowed">
-                                  Najmout
-                                </button>
-                              </span>
-                            </span>
-                          } />
-                      );
-                    })
+                    <>
+                      <TableHead task="Najmout jako" money="Mzda" />
+                      {filteredMarket.map(renderCandidateRow)}
+                    </>
                   )}
                 </ListCard>
               </>
@@ -717,6 +605,53 @@ export default function ZamestnanciPage() {
           </div>
         )}
       </div>
+
+      <Sheet open={!!course} onClose={() => setCourseFor(null)} title="Poslat na kurz">
+        {course && courseDef && (
+          <div className="px-5 pt-3 sm:pt-5 pb-5 space-y-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="font-heading font-bold text-lg">Poslat na kurz</div>
+                <div className="text-sm text-muted">{course.m.firstName} {course.m.lastName} · {courseDef.label} · efektivita {courseEff}/20</div>
+              </div>
+              <button type="button" onClick={() => setCourseFor(null)} aria-label="Zavřít" className="text-muted hover:text-ink text-xl leading-none px-1">✕</button>
+            </div>
+            <p className="text-sm text-muted">
+              Pro roli se vyplatí <strong className="text-pitch-700">{STAFF_ATTRIBUTE_LABELS[courseDef.primary]}</strong> a <strong className="text-gold-700">{STAFF_ATTRIBUTE_LABELS[courseDef.secondary]}</strong>. Na kurzu dál normálně pracuje.
+            </p>
+            <div className="divide-y divide-line-soft border border-line rounded-soft">
+              {[...(course.m.courses ?? [])]
+                .sort((x, y) => {
+                  const w = (k: StaffAttributeKey) => (k === courseDef.primary ? 0 : k === courseDef.secondary ? 1 : 2);
+                  return w(x.attribute) - w(y.attribute) || x.attribute.localeCompare(y.attribute);
+                })
+                .map((q) => {
+                  const cur = staffAttributeValue(course.m, q.attribute);
+                  const nextEff = staffEffectiveness(staffWithUpdatedAttr(course.m, q.attribute, q.points), course.role);
+                  const gain = nextEff - courseEff;
+                  return (
+                    <button key={q.attribute} type="button"
+                      onClick={() => { const c = course; setCourseFor(null); doCourse(c.m, q); }}
+                      className="w-full flex items-center justify-between gap-3 px-3 py-2.5 text-left hover:bg-surface-2 transition-colors">
+                      <span className="min-w-0">
+                        <span className="block text-sm font-bold text-ink">
+                          {STAFF_ATTRIBUTE_LABELS[q.attribute]} <span className="font-normal text-muted tabular-nums">{cur} → {cur + q.points}</span>
+                        </span>
+                        <span className={`block text-meta ${gain > 0 ? "text-pitch-700 font-semibold" : "text-muted"}`}>
+                          {gain > 0 ? `efektivita ${nextEff}/20 (+${gain})` : "efektivitu v roli nezmění"}
+                        </span>
+                      </span>
+                      <span className="shrink-0 text-right text-sm tabular-nums">
+                        <strong className="text-ink">{formatKc(q.cost)}</strong>
+                        <span className="block text-meta text-muted">{q.weeks} {weeksWord(q.weeks)}</span>
+                      </span>
+                    </button>
+                  );
+                })}
+            </div>
+          </div>
+        )}
+      </Sheet>
       {dialog}
     </>
   );
