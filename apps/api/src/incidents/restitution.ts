@@ -45,8 +45,8 @@ export function restitutionChance(
   o: { revealed: boolean; clueOnHim: boolean; leniency: boolean; insult: boolean },
 ): number {
   const base = (p.disciplina + (100 - p.temperament) + p.vztahKTrenerovi) / 3 - 15;
-  const sance = base + (o.revealed ? 25 : 0) + (o.clueOnHim ? 10 : 0) + (o.leniency ? 15 : 0) - (o.insult ? 20 : 0);
-  return Math.max(5, Math.min(90, Math.round(sance)));
+  const score = base + (o.revealed ? 25 : 0) + (o.clueOnHim ? 10 : 0) + (o.leniency ? 15 : 0) - (o.insult ? 20 : 0);
+  return Math.max(5, Math.min(90, Math.round(score)));
 }
 
 export type RestitutionOutcome = { outcome: "returned" | "paid"; amount: number } | { outcome: "refused" };
