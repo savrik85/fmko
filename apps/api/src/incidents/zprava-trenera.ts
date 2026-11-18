@@ -46,6 +46,11 @@ export async function zpracujZpravuTrenera(
   if (!zaklad?.game_date || zaklad.sezona == null) return null;
   const den = zaklad.game_date.slice(0, 10);
 
+  // „Vrať to“ / „zaplať tu škodu“ pachateli (restitution.ts): rozhodne se dřív, než hráč odpoví.
+  const { tryRestitution } = await import("./restitution");
+  await tryRestitution(db, { teamId: opts.teamId, playerId: opts.playerId, text: opts.text, gameDate: zaklad.game_date })
+    .catch((e) => logger.warn({ module: M }, `přemlouvání pachatele ${opts.playerId}`, e));
+
   let incidentId = temaZeStavu(zaklad.ai_thread_state, den)?.incidentId ?? null;
   if (!incidentId) {
     const kandidati = await db.prepare(
