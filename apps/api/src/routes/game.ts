@@ -6447,6 +6447,24 @@ gameRouter.post("/admin/district-events", async (c) => {
   }
 });
 
+// Vlastní článek do Zpravodaje okresu („Z okresu“, týden nahoře). Body: { district, headline, body, teamId? }.
+// ?dryRun=1 jen ukáže upravený text a ligy, kam by článek šel.
+gameRouter.post("/admin/news/district-article", async (c) => {
+  const body = await c.req.json<{ district?: string; headline?: string; body?: string; teamId?: string }>()
+    .catch((e) => { logger.warn({ module: "game" }, "tělo článku do Zpravodaje", e); return null; });
+  if (!body) return c.json({ error: "Neplatné tělo požadavku" }, 400);
+  const { publishDistrictArticle } = await import("../news/district-article");
+  try {
+    const result = await publishDistrictArticle(c.env.DB, {
+      district: body.district ?? "", headline: body.headline ?? "", body: body.body ?? "", teamId: body.teamId ?? null,
+    }, { dryRun: c.req.query("dryRun") === "1" });
+    return c.json(result, result.ok ? 200 : 400);
+  } catch (e) {
+    logger.error({ module: "game" }, "článek do Zpravodaje okresu", e);
+    return c.json({ error: "Článek se nepodařilo vydat, podrobnosti jsou v logu" }, 500);
+  }
+});
+
 gameRouter.get("/admin/district-events", async (c) => {
   const rows = await c.env.DB.prepare(
     `SELECT e.id, e.district, e.title, e.place, e.event_date, e.status, e.attempts,
