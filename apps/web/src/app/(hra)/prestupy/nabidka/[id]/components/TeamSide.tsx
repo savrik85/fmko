@@ -69,8 +69,25 @@ export function TeamSide({
         ) : (
           <div className="font-heading font-bold text-base text-muted italic">{team.is_virtual ? "Cizí klub" : "bez trenéra"}</div>
         )}
+        {/* Dlouhé názvy („SK Slavoj Albrechtice nad Vltavou“) se na mobilu zalomí do své poloviny.
+            Dřív řádek neměl omezenou šířku, název vytekl z buňky a ležel přes název druhého klubu. */}
         {team.is_virtual ? (
-          <div className={`flex items-center gap-2 ${isRight ? "flex-row-reverse" : ""}`}>
+          <div className={`flex items-center gap-2 min-w-0 max-w-full ${isRight ? "flex-row-reverse" : ""}`}>
+            <span className="shrink-0">
+              <BadgePreview
+                primary={team.primary_color}
+                secondary={team.secondary_color}
+                pattern={badgePattern}
+                symbol={team.badge_symbol}
+                initials={initials}
+                size={32}
+              />
+            </span>
+            <span className="font-heading font-bold text-sm leading-tight min-w-0 break-words">{team.name}</span>
+          </div>
+        ) : (
+        <Link href={`/tym/${team.id}`} className={`flex items-center gap-2 min-w-0 max-w-full group ${isRight ? "flex-row-reverse" : ""}`}>
+          <span className="shrink-0">
             <BadgePreview
               primary={team.primary_color}
               secondary={team.secondary_color}
@@ -79,19 +96,10 @@ export function TeamSide({
               initials={initials}
               size={32}
             />
-            <span className="font-heading font-bold text-sm truncate">{team.name}</span>
-          </div>
-        ) : (
-        <Link href={`/tym/${team.id}`} className={`flex items-center gap-2 group ${isRight ? "flex-row-reverse" : ""}`}>
-          <BadgePreview
-            primary={team.primary_color}
-            secondary={team.secondary_color}
-            pattern={badgePattern}
-            symbol={team.badge_symbol}
-            initials={initials}
-            size={32}
-          />
-          <span className="font-heading font-bold text-sm group-hover:text-pitch-500 transition-colors min-w-0"><TeamName name={team.name} isAi={manager?.coachIsAi === true} /></span>
+          </span>
+          <span className="font-heading font-bold text-sm leading-tight group-hover:text-pitch-500 transition-colors min-w-0 break-words">
+            <TeamName name={team.name} isAi={manager?.coachIsAi === true} wrap />
+          </span>
         </Link>
         )}
         {team.is_virtual && team.city && (
