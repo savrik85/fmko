@@ -14,13 +14,12 @@ export const RELEASE_NOTES: ReleaseNote[] = [
   {
     date: "2026-11-18",
     emoji: "✨",
-    title: "Nový vzhled, aktuální nápověda a hlášení chyb z každé stránky",
+    title: "Redesign, aktualizovaná nápověda a hlášení chyb",
     items: [
-      "Hra prošla redesignem. Tlačítka, karty, tabulky, záložky a další prvky jsou teď všude stejné, takže se v nich snáz vyznáš a na mobilu se lépe ovládají.",
-      "Nápověda je aktualizovaná. Každý text jsme prošli proti tomu, jak hra dnes opravdu funguje, opravili stará čísla a doplnili, co chybělo. Nápovědu mají nově i stránky, které ji dřív neměly: Akademie, Hospoda, Pohár, Přáteláky, U21, profil trenéra, Zaměstnanci, Obec, Rozhodčí, Grémium, Turnaj, Incidenty, Rozpis, klubový web, jednání se sponzorem i jednání o přestupu.",
-      "Díky všem, kdo aktivně hlásí chyby. Hodně nám to pomáhá.",
-      "Chybu, nápad nebo jakoukoli připomínku teď nahlásíš přímo ze stránky, které se týká. Klepni na otazník vedle názvu stránky nahoře a vyber Nahlásit chybu. Napiš, co se stalo, a hlášení odejde i s fotkou stránky, takže hned vidíme, o co jde. Odpověď ti přijde SMS do Telefonu.",
-      "Pod stejným otazníkem je i Vyfotit stránku. Udělá obrázek celé stránky, který pošleš kamarádům přes WhatsApp nebo Messenger, zkopíruješ nebo stáhneš.",
+      "Proběhl redesign a sjednocení všech prvků hry.",
+      "Aktualizoval jsem obsah nápovědy ke všem stránkám.",
+      "Děkuji za aktivní hlášení chyb. Nově můžeš nahlásit chybu nebo jakoukoli připomínku přes otazník nahoře na každé konkrétní stránce.",
+      "Přes stejný otazník jde udělat i screen konkrétní stránky.",
     ],
   },
   {
