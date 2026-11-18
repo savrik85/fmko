@@ -803,7 +803,8 @@ export default function ConversationPage() {
                               );
                             }
                             // „To nebyl slib“ jde hodinu po zprávě (api coach-commitments.ts CANCEL_WINDOW_MS).
-                            const canCancel = Date.now() - new Date(msg.sentAt).getTime() < 60 * 60 * 1000;
+                            // Vyhraná sázka už slibem byla, tu zrušit nejde.
+                            const canCancel = msg.metadata.kind !== "bet" && Date.now() - new Date(msg.sentAt).getTime() < 60 * 60 * 1000;
                             return (
                               <>
                                 {money && (
@@ -813,7 +814,7 @@ export default function ConversationPage() {
                                     onClick={() => handleCommitment(id, "fulfil")}
                                     className={`${WA_LINK_BUTTON} w-[calc(100%+1.25rem)] disabled:opacity-50`}
                                   >
-                                    {commitmentBusy === id ? "Moment…" : msg.metadata.kind === "wage" ? "Zvýšit odměny" : "Vyplatit"}
+                                    {commitmentBusy === id ? "Moment…" : msg.metadata.kind === "wage" ? "Zvýšit odměny" : msg.metadata.kind === "bet" ? "Zaplatit" : "Vyplatit"}
                                   </button>
                                 )}
                                 {canCancel && (

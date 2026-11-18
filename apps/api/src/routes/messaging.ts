@@ -638,14 +638,14 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
     );
   }
 
-  // Slib napsaný vlastními slovy („zítra hraješ“, „tady máš prémii“): hra ho zapíše a pak
-  // hlídá (messaging/coach-commitments.ts). Hotové odpovědi (optionId) slib nedávají.
+  // Slib napsaný vlastními slovy („zítra hraješ“, „tady máš prémii“, „pojď na pivo“): hra ho
+  // zapíše a pak hlídá (messaging/coach-commitments.ts). Hotové odpovědi (optionId) slib nedávají.
+  // Odpověď hráče čeká, až rozpoznání doběhne: o slibu a pozvání má vědět už v první odpovědi.
+  let commitmentReady: Promise<unknown> = Promise.resolve(null);
   if (conv?.type === "player" && conv.participant_id && !body.optionId) {
     const { handleCoachMessageForCommitment } = await import("../messaging/coach-commitments");
-    c.executionCtx.waitUntil(
-      handleCoachMessageForCommitment(c.env.DB, c.env, { teamId, convId, playerId: conv.participant_id, text: body.body.trim() })
-        .then(() => undefined),
-    );
+    commitmentReady = handleCoachMessageForCommitment(c.env.DB, c.env, { teamId, convId, playerId: conv.participant_id, text: body.body.trim() });
+    c.executionCtx.waitUntil(commitmentReady.then(() => undefined));
   }
 
   // AI player chat hook: pokud je thread aktivní a čeká na trenéra,
@@ -662,7 +662,7 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
     if (updateRes && (updateRes.meta?.changes ?? 0) > 0) {
       const { handleAiPlayerReply } = await import("../messaging/ai-player-spawn");
       c.executionCtx.waitUntil(
-        handleAiPlayerReply(c.env.DB, c.env, convId)
+        commitmentReady.then(() => handleAiPlayerReply(c.env.DB, c.env, convId))
           .catch((e) => logger.error({ module: "messaging" }, "handleAiPlayerReply failed", e)),
       );
     } else {
@@ -710,7 +710,7 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
         sulkThreadStarted = true;
         const { handleAiPlayerReply } = await import("../messaging/ai-player-spawn");
         c.executionCtx.waitUntil(
-          handleAiPlayerReply(c.env.DB, c.env, convId)
+          commitmentReady.then(() => handleAiPlayerReply(c.env.DB, c.env, convId))
             .catch((e) => logger.error({ module: "messaging" }, "odpověď trucujícího hráče", e)),
         );
       }
@@ -720,10 +720,11 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
   // Trenér napsal hráči sám od sebe — dosud zpráva zapadla bez reakce.
   if (!sulkThreadStarted && conv?.type === "player" && conv.ai_thread_active !== 1 && conv.participant_id) {
     const { startCoachThread } = await import("../messaging/coach-initiated");
+    const playerId = conv.participant_id;
     c.executionCtx.waitUntil(
-      startCoachThread(c.env.DB, c.env, {
-        convId, teamId, playerId: conv.participant_id, coachMessage: body.body.trim(),
-      }).catch((e) => logger.error({ module: "messaging" }, "konverzace zahájená trenérem", e)),
+      commitmentReady.then(() => startCoachThread(c.env.DB, c.env, {
+        convId, teamId, playerId, coachMessage: body.body.trim(),
+      })).catch((e) => logger.error({ module: "messaging" }, "konverzace zahájená trenérem", e)),
     );
   }
 

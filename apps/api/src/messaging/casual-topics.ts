@@ -18,7 +18,9 @@ import type { KdePije, Situace } from "./chat-kontext";
 import type { AiScenario, PlayerSnapshot } from "./ai-player-scenarios";
 
 /** Kam hráč trenéra zve. Přijaté pozvání má dopad (casual-messages.ts `applyAcceptedInvite`). */
-export type InviteKind = "pub" | "bbq" | "fishing" | "pig_slaughter" | "feast" | "wedding" | "baby" | "visit";
+export type InviteKind = "pub" | "bbq" | "fishing" | "pig_slaughter" | "feast" | "wedding" | "baby" | "visit"
+  // Pozval trenér, ne hráč (messaging/coach-commitments.ts).
+  | "coach_pub" | "coach_talk";
 
 /** Co se o chvíli, kdy hráč píše, ví. */
 export interface CasualContext {
@@ -329,6 +331,8 @@ export const CASUAL_TOPICS: CasualTopic[] = [
  */
 export const INVITES: Record<InviteKind, {
   label: string; thanks: string; photo?: string; afterHours: number; relation: number; morale: number;
+  /** Důvod změny vztahu pro hráče, když nesedí obecné „Přišel jsi na jeho pozvání“. */
+  relationText?: string;
   /** Poděkování smí přijít i z práce (ráno po hospodě s kocovinou). */
   fromWork?: boolean;
 }> = {
@@ -372,6 +376,18 @@ export const INVITES: Record<InviteKind, {
     thanks: "Trenér na tvoje pozvání přišel na zábavu ve vsi. Píšeš mu, že to bylo fajn, že dorazil, a že lidi ho rádi viděli.",
     // Bez fotky: stejné pozvání platí pro posvícení i hasičský bál, koláče by k bálu neseděly.
     afterHours: 36, relation: 6, morale: 4,
+  },
+  coach_pub: {
+    label: "na pivo s trenérem",
+    thanks: "Trenér tě včera sám pozval na pivo a zaplatil rundu. Je ráno a ty mu píšeš, jaké to bylo a že sis toho vážil. Klidně s narážkou na kocovinu.",
+    photo: "pub_celebration", afterHours: 10, relation: 6, morale: 4, fromWork: true,
+    relationText: "Pozval jsi ho na pivo a zaplatil rundu",
+  },
+  coach_talk: {
+    label: "sejít se s trenérem a probrat to",
+    thanks: "Sešel ses s trenérem, jak navrhl, a probrali jste tvůj fotbal. Děkuješ mu za čas a píšeš, co si z toho bereš. Co přesně říkal, si nevymýšlej.",
+    afterHours: 26, relation: 5, morale: 5,
+    relationText: "Udělal sis na něj čas a probrali jste to",
   },
 };
 

@@ -4,7 +4,8 @@
  */
 import { describe, expect, it } from "vitest";
 import {
-  COMMITMENT_HINT_RE, commitmentPromptLines, commitmentText, lineupVerdict, parseDetection, quoteHoldsUp, raisedBy, type CommitmentMatch,
+  COMMITMENT_HINT_RE, betPrice, betVerdict, commitmentPromptLines, commitmentText, lineupVerdict, parseDetection, pendingInviteOf, quoteHoldsUp, raisedBy,
+  type CommitmentMatch,
 } from "./coach-commitments";
 
 describe("předběžné síto", () => {
@@ -112,11 +113,72 @@ describe("texty", () => {
 
   it("hráč ví o běžícím i porušeném slibu", () => {
     const lines = commitmentPromptLines([
-      { kind: "start_next", status: "active", details: {}, madeAt: "2026-11-18T10:00:00Z", resolvedAt: null },
-      { kind: "bonus", status: "broken", details: { amount: 1000 }, madeAt: "2026-11-01T10:00:00Z", resolvedAt: "2026-11-08T10:00:00Z" },
+      { id: "a", kind: "start_next", status: "active", details: {}, madeAt: "2026-11-18T10:00:00Z", resolvedAt: null },
+      { id: "b", kind: "bonus", status: "broken", details: { amount: 1000 }, madeAt: "2026-11-01T10:00:00Z", resolvedAt: "2026-11-08T10:00:00Z" },
     ]);
     expect(lines[0]).toContain("slíbil: místo v základu v příštím zápase");
     expect(lines[1]).toContain("NEDODRŽEL slib: prémii 1");
     expect(commitmentPromptLines(undefined)).toEqual([]);
+  });
+});
+
+describe("pozvání a sázky", () => {
+  it("sázka smí být podmínka, slib ne", () => {
+    const bet = "Dobre kdyz das ten hattrick a vyhrajem basu platím ja";
+    expect(parseDetection({ kind: "bet", quote: "kdyz das ten hattrick a vyhrajem basu platím ja", condition: "hattrick", reward: "keg" }, "FWD", bet))
+      .toEqual({ kind: "bet", condition: "hattrick", reward: "keg" });
+    expect(parseDetection({ kind: "start_next", quote: "kdyz das ten hattrick a vyhrajem basu platím ja" }, "FWD", bet)).toBeNull();
+    // Oslava po výhře sázka není.
+    expect(quoteHoldsUp("Dneska platim", "Ty kanec jeden! Dneska platim!! Super vykon", "bet")).toBe(false);
+    expect(quoteHoldsUp("Jestli dáš Gola, máš u mě navíc pár piv", "Takovej přístup se mi líbí! Jestli dáš Gola , máš u mě navíc pár piv", "bet")).toBe(true);
+    // Peníze bez částky ani neznámá podmínka nejdou.
+    expect(parseDetection({ kind: "bet", quote: "dej gól", condition: "goal", reward: "money", amount: null }, "FWD", "dej gól")).toBeNull();
+    expect(parseDetection({ kind: "bet", quote: "dej gól", condition: "penalta", reward: "keg" }, "FWD", "dej gól")).toBeNull();
+  });
+
+  it("pozvání může být otázka i „pojď“, ale ne „někdy“", () => {
+    expect(quoteHoldsUp("zajdeme dneska na jedno", "Zajdeme dneska na jedno?", "invite_pub")).toBe(true);
+    expect(quoteHoldsUp("pojď na pivo, platím", "Pojď na pivo, platím.", "invite_pub")).toBe(true);
+    expect(quoteHoldsUp("někdy zajdeme na pivo", "Někdy zajdeme na pivo.", "invite_pub")).toBe(false);
+    // Bez času to schůzka není (skutečné SMS z produ).
+    expect(quoteHoldsUp("Ozvi se a proberem to", "Ok. Ozvi se a proberem to", "invite_talk")).toBe(false);
+    // Čas musí být ve větě s pozváním, ne kdekoli ve zprávě.
+    expect(quoteHoldsUp("Pokecáme určitě", "Pokecáme určitě. Teď jsem neměl moc času.", "invite_talk")).toBe(false);
+    expect(quoteHoldsUp("Nedáme večer dvě piva a partičku karet", "Nedáme večer dvě piva a partičku karet?", "invite_pub")).toBe(true);
+    expect(quoteHoldsUp("pojď na pivo, platím", "Pojď na pivo, platím.", "start_next")).toBe(false);
+  });
+
+  it("síto pustí pozvání a sázky", () => {
+    for (const t of ["Pojď na pivo, platím", "Stav se zítra po tréninku", "Dej gól a platím basu", "Když vyhrajeme, platím rundu"]) {
+      expect(COMMITMENT_HINT_RE.test(t)).toBe(true);
+    }
+  });
+
+  it("texty a ceny sázek", () => {
+    expect(commitmentText("bet", { condition: "goal", reward: "keg" })).toBe("Když dá gól, trenér platí basu");
+    expect(commitmentText("bet", { condition: "win", reward: "money", amount: 500 })).toMatch(/^Když tým vyhraje, trenér dá 500 Kč$/);
+    expect(betPrice({ reward: "round" })).toBe(600);
+    expect(betPrice({ reward: "money", amount: 300 })).toBe(300);
+  });
+
+  it("verdikt sázky: o výkon jen když hrál, o výhru podle týmu", () => {
+    const played = m({ goals: 1, assists: 0, scored: 2, conceded: 1 });
+    expect(betVerdict({ condition: "goal" }, [played], "club", { duePassed: false }).verdict).toBe("won");
+    expect(betVerdict({ condition: "hattrick" }, [played], "club", { duePassed: false }).verdict).toBe("lost");
+    expect(betVerdict({ condition: "win" }, [played], "club", { duePassed: false }).verdict).toBe("won");
+    expect(betVerdict({ condition: "clean_sheet" }, [played], "club", { duePassed: false }).verdict).toBe("lost");
+    const bench = m({ started: false, minutes: null, goals: 0, scored: 0, conceded: 3 });
+    expect(betVerdict({ condition: "goal" }, [bench], "club", { duePassed: false }).verdict).toBe("expired");
+    expect(betVerdict({ condition: "win" }, [bench], "club", { duePassed: false }).verdict).toBe("lost");
+    expect(betVerdict({ condition: "goal" }, [], "club", { duePassed: false }).verdict).toBe("pending");
+  });
+
+  it("čekající pozvání jen čerstvé a jen běžící", () => {
+    const now = new Date("2026-11-18T20:00:00Z");
+    const base = { details: {}, resolvedAt: null };
+    expect(pendingInviteOf([{ ...base, id: "i", kind: "invite_pub", status: "active", madeAt: "2026-11-18T19:00:00Z" }], now))
+      .toEqual({ commitmentId: "i", kind: "invite_pub" });
+    expect(pendingInviteOf([{ ...base, id: "i", kind: "invite_pub", status: "active", madeAt: "2026-11-17T19:00:00Z" }], now)).toBeUndefined();
+    expect(pendingInviteOf([{ ...base, id: "i", kind: "invite_talk", status: "kept", madeAt: "2026-11-18T19:00:00Z" }], now)).toBeUndefined();
   });
 });

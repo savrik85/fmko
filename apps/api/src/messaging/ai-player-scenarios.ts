@@ -64,6 +64,8 @@ export interface PlayerSnapshot {
   previousMatch?: { kind: "league" | "cup"; played: boolean; minutes: number; goals: number };
   /** Co mu trenér v SMS slíbil a jak to dopadlo (messaging/coach-commitments.ts). */
   coachCommitments?: CommitmentMemory[];
+  /** Trenér ho právě pozval (na pivo, ať se staví): v odpovědi řekne, jestli přijde (`accepts_invite`). */
+  pendingInvite?: { commitmentId: string; kind: "invite_pub" | "invite_talk" };
   lastMatchGoals?: number;
   lastMatchAssists?: number;
   lastMatchRedCard?: boolean;

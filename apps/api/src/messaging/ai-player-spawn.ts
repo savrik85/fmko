@@ -1727,8 +1727,16 @@ async function offendPlayer(
  */
 export async function afterPlayerReply(
   db: D1Database,
-  r: { teamId: string; convId: string; player: PlayerSnapshot; reply: Pick<ReplyResult, "writeLater" | "transferStance">; at: string; offerIds: string[] },
+  r: { teamId: string; convId: string; player: PlayerSnapshot; reply: Pick<ReplyResult, "writeLater" | "transferStance" | "acceptsInvite">; at: string; offerIds: string[] },
 ): Promise<void> {
+  // Pozvání od trenéra (coach-commitments.ts): hráč v odpovědi kývl nebo odmítl.
+  if (r.reply.acceptsInvite !== undefined && r.player.pendingInvite) {
+    const { respondToCoachInvite } = await import("./coach-commitments");
+    await respondToCoachInvite(db, {
+      teamId: r.teamId, convId: r.convId, playerId: r.player.id, playerFirstName: r.player.firstName,
+      commitmentId: r.player.pendingInvite.commitmentId, kind: r.player.pendingInvite.kind, accepted: r.reply.acceptsInvite,
+    }).catch((e) => logger.warn({ module: "ai-player-spawn", teamId: r.teamId }, "odpověď na pozvání od trenéra", e));
+  }
   if (r.reply.transferStance) {
     await offerStanceStmt(db, r.player.id, r.reply.transferStance, r.offerIds).run()
       .catch((e) => logger.warn({ module: "ai-player-spawn", teamId: r.teamId }, "zápis postoje k nabídce", e));
