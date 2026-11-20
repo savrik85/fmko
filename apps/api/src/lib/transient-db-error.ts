@@ -10,6 +10,9 @@ const TRANSIENT_DB_ERROR_PATTERNS: RegExp[] = [
   /long-running export/i,
   /Network connection lost/i,
   /caused object to be reset/i,
+  // Krátký výpadek na straně Cloudflaru, bez těžkého dotazu u nás: 17. 11. 2026 ve 20:01,
+  // 19. 11. v 17:04 a 19:16, 20. 11. 20 s ve 13:14 UTC. Chyba v SQL vypadá jinak („no such column…“).
+  /D1_ERROR: internal error/i,
 ];
 
 export function isTransientDbError(err: unknown): boolean {

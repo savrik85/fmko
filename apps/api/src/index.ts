@@ -49,6 +49,7 @@ import {
   TRANSIENT_DB_ERROR_MESSAGE,
   TRANSIENT_DB_RETRY_AFTER_SECONDS,
 } from "./lib/transient-db-error";
+import { withDbReadRetry } from "./lib/d1-read-retry";
 import type { MatchQueueMessage, ReportQueueMessage } from "./queue/messages";
 
 export type Bindings = {
@@ -184,9 +185,11 @@ app.route("/api/admin/ai-clubs", adminAiClubsRouter);
 app.route("/api/admin/ai-coach", adminAiCoachRouter);
 
 export default {
-  fetch: app.fetch,
+  // Čtení z D1 se při krátkém výpadku zopakuje (lib/d1-read-retry.ts), ve všech vstupech Workeru.
+  fetch: (request: Request, env: Bindings, ctx?: ExecutionContext) => app.fetch(request, withDbReadRetry(env), ctx),
 
-  async scheduled(event: ScheduledEvent, env: Bindings, ctx: ExecutionContext) {
+  async scheduled(event: ScheduledEvent, rawEnv: Bindings, ctx: ExecutionContext) {
+    let env = withDbReadRetry(rawEnv);
     const cron = event.cron;
     const log = (level: string, msg: string, err?: any) => {
       const entry: Record<string, unknown> = { ts: new Date().toISOString(), level, mod: "cron", msg };
@@ -682,9 +685,10 @@ export default {
    */
   async queue(
     batch: MessageBatch<MatchQueueMessage | ReportQueueMessage>,
-    env: Bindings,
+    rawEnv: Bindings,
     ctx: ExecutionContext,
   ): Promise<void> {
+    const env = withDbReadRetry(rawEnv);
     const { handleQueueBatch, handleDeadLetterBatch } = await import("./queue/consumer");
     if (batch.queue.includes("-dlq")) {
       await handleDeadLetterBatch(batch, env);

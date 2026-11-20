@@ -361,9 +361,26 @@ export default function ConversationPage() {
       .catch((e) => console.error("načtení kreditu:", e));
   }, [teamId]);
 
+  /**
+   * Id zprávy pro server. Po chybě se stejná zpráva pošle se stejným id, takže když první
+   * pokus na serveru prošel (výpadek D1 až po uložení), neuloží se ani nezaplatí podruhé.
+   */
+  const pendingSendRef = useRef<{ key: string; clientId: string } | null>(null);
+  const clientIdFor = (key: string): string => {
+    if (pendingSendRef.current?.key !== key) pendingSendRef.current = { key, clientId: crypto.randomUUID() };
+    return pendingSendRef.current.clientId;
+  };
+  /** Už nahraná fotka (náhled → klíč v odkladu). Opakované odeslání ji nenahrává znovu. */
+  const uploadedPhotoRef = useRef<{ url: string; photoKey: string } | null>(null);
+
   const clearPhotoDraft = useCallback(() => setPhotoDraft(null), []);
   // Náhled vybrané fotky se uvolní, když se fotka změní, odešle, zahodí nebo trenér odejde.
   useEffect(() => () => { if (photoDraft) URL.revokeObjectURL(photoDraft.url); }, [photoDraft]);
+
+  /** Odeslaná zpráva do seznamu, jen jednou (mohl ji mezitím přinést i polling). */
+  const appendSent = (msg: Message) => {
+    setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]));
+  };
 
   /** Fotka s popiskem: nahrání do odkladu a pak odeslání jako zpráva (cena MMS). */
   const handleSendPhoto = async () => {
@@ -371,22 +388,30 @@ export default function ConversationPage() {
     setSending(true);
     setCreditError(null);
     const caption = newMsg.trim();
+    const clientId = clientIdFor(`photo:${photoDraft.url}:${caption}`);
     try {
-      const upload = await apiFetch<{ photoKey: string }>(`/api/teams/${teamId}/conversations/${convId}/photo`, {
-        method: "POST",
-        headers: { "Content-Type": "image/jpeg" },
-        body: photoDraft.blob,
-      });
+      let photoKey = uploadedPhotoRef.current?.url === photoDraft.url ? uploadedPhotoRef.current.photoKey : null;
+      if (!photoKey) {
+        const upload = await apiFetch<{ photoKey: string }>(`/api/teams/${teamId}/conversations/${convId}/photo`, {
+          method: "POST",
+          headers: { "Content-Type": "image/jpeg" },
+          body: photoDraft.blob,
+        });
+        photoKey = upload.photoKey;
+        uploadedPhotoRef.current = { url: photoDraft.url, photoKey };
+      }
       const res = await apiFetch<{ id: string; sentAt: string; photoKey?: string; credit?: { zbyva: number; cenaSms: number; zprav: number; mmsPrice?: number } }>(messagesUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ body: caption, photo: { photoKey: upload.photoKey } }),
+        body: JSON.stringify({ body: caption, photo: { photoKey }, clientId }),
       });
       if (res.credit) setCredit(res.credit);
-      setMessages((prev) => [...prev, {
+      appendSent({
         id: res.id, senderType: "user", senderId: teamId, senderName: "Ty", body: caption,
         metadata: { type: "photo", photoKey: res.photoKey ?? "", photoAlt: "Fotka" }, sentAt: res.sentAt, read: true,
-      }]);
+      });
+      pendingSendRef.current = null;
+      uploadedPhotoRef.current = null;
       setNewMsg("");
       clearPhotoDraft();
     } catch (e) {
@@ -403,12 +428,14 @@ export default function ConversationPage() {
     if (!newMsg.trim() || sending || !teamId) return;
     setSending(true);
     setCreditError(null);
+    const clientId = clientIdFor(`text:${newMsg.trim()}`);
     try {
       const res = await apiFetch<{ id: string; sentAt: string; credit?: { zbyva: number; cenaSms: number; zprav: number } }>(messagesUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ body: newMsg.trim() }),
+        body: JSON.stringify({ body: newMsg.trim(), clientId }),
       });
+      pendingSendRef.current = null;
       if (res.credit) setCredit(res.credit);
       if (isGroup) {
         setMessages((prev) => [...prev, {
@@ -416,10 +443,10 @@ export default function ConversationPage() {
           senderTeamId: teamId, senderTeamName: "Ty",
         }]);
       } else {
-        setMessages((prev) => [...prev, {
+        appendSent({
           id: res.id, senderType: "user", senderId: teamId, senderName: "Ty",
           body: newMsg.trim(), metadata: null, sentAt: res.sentAt, read: true,
-        }]);
+        });
       }
       setNewMsg("");
     } catch (e) {

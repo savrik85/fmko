@@ -36,6 +36,9 @@ function uuid(): string {
   return crypto.randomUUID();
 }
 
+/** Id zprávy z webu (crypto.randomUUID). */
+const CLIENT_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
 function parseAiThreadState(raw: unknown): { awaiting: "coach" | "player" | "done"; scenarioId?: string; resolution?: { summary?: string; tone?: string; offended?: boolean } | null } | null {
   if (typeof raw !== "string" || raw.length === 0) return null;
   try {
@@ -573,10 +576,31 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
   // `optionId` = tlačítko hotové odpovědi (SMS od majitele firmy). Tón z něj bere jen server.
   // `voice` = hlasová odpověď nahraná přes /voice-note, `body` je pak její přepis.
   // `photo` = fotka nahraná přes /photo, `body` je popisek a smí být prázdný.
+  // `clientId` = id zprávy z webu. Web ho po chybě pošle znovu se stejnou zprávou.
   const body = await c.req.json<{
     body: string; optionId?: string; voice?: { audioKey?: unknown; durationSec?: unknown; peaks?: unknown };
-    photo?: { photoKey?: unknown };
+    photo?: { photoKey?: unknown }; clientId?: unknown;
   }>();
+
+  // Opakované odeslání téže zprávy (výpadek D1 po uložení, web ukázal chybu a trenér poslal
+  // znovu) se neuloží podruhé ani znovu nestrhne kredit: odpovědí je zpráva z prvního pokusu.
+  // 20. 11. 2026 tak odešla jedna SMS dvakrát a hráč na ni dvakrát odpověděl.
+  let msgId = uuid();
+  if (typeof body.clientId === "string" && CLIENT_ID_RE.test(body.clientId)) {
+    const existing = await c.env.DB.prepare(
+      `SELECT m.id, m.conversation_id, m.sent_at, json_extract(m.metadata, '$.photoKey') AS photo_key, cv.team_id
+         FROM messages m JOIN conversations cv ON cv.id = m.conversation_id WHERE m.id = ?`,
+    ).bind(body.clientId).first<{ id: string; conversation_id: string; sent_at: string; photo_key: string | null; team_id: string }>();
+    if (existing && existing.conversation_id === convId && existing.team_id === teamId) {
+      const { loadCredit } = await import("../messaging/phone-credit");
+      return c.json({
+        id: existing.id, sentAt: existing.sent_at, credit: await loadCredit(c.env.DB, teamId), duplicate: true,
+        ...(existing.photo_key ? { photoKey: existing.photo_key } : {}),
+      });
+    }
+    // Cizí id (jiná konverzace) se nepoužije, zpráva dostane vlastní.
+    if (!existing) msgId = body.clientId;
+  }
   if (body.photo && body.voice) return c.json({ error: "Fotka a hlasovka nejdou poslat naráz." }, 400);
   const withoutCaption = !!body.photo && (typeof body.body !== "string" || body.body.trim() === "");
 
@@ -676,7 +700,6 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
     .bind(teamId).first<{ name: string }>();
   const senderName = team?.name ?? "Trenér";
 
-  const msgId = uuid();
   const now = new Date().toISOString();
 
   // Odeslaná hlasová odpověď se přesune z odkladu, jinak by ji noční úklid smazal.
