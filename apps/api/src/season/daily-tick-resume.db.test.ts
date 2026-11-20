@@ -153,7 +153,10 @@ describe("záznamy kroků", () => {
   });
 });
 
-describe("denní tick po pádu", () => {
+// Každý test pouští celý denní tick: samotný trvá kolem 1,5 s, při souběhu všech testů
+// (a v CI) přes 5 s. S výchozím limitem 5 s test vypršel, tick doběhl na pozadí
+// a následující test pak našel cizí „done“ místo „running“.
+describe("denní tick po pádu", { timeout: 30_000 }, () => {
   it("první běh posune herní datum, odtrénuje a ubere trávník jednou", async () => {
     await tick();
     const s = await state();
