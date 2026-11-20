@@ -30,6 +30,7 @@ import { getDistrictDataFromDB } from "../data/districts";
 import { FIRSTNAMES } from "../data/czech-names";
 import { deriveLicenceLevel, type ManagerBackstory } from "@okresni-masina/shared";
 import { logger } from "../lib/logger";
+import { anthemRejectedMessage, readSunoTaskReply } from "../lib/suno";
 import { playerBodyView } from "../generators/physicals";
 import { getSession, getTokenFromRequest, updateSessionTeamId } from "../auth/session";
 import { findReclaimableClub, reclaimClub } from "../ai-clubs/reclaim";
@@ -2098,6 +2099,15 @@ teamsRouter.post("/:id/club/anthem/generate", async (c) => {
     return c.json({ error: "Hudební generace není aktivovaná (chybí API klíč)" }, 503);
   }
 
+  // Bez kreditu Suno zadání odmítne. Zjistit to předem je levnější a manažer dostane
+  // srozumitelnou odpověď. Když se zůstatek přečíst nedá, zkusí se zadání stejně.
+  const { zbyvajiciKredit, KREDITU_ZA_NAHRAVKU } = await import("../fans/fan-chant-audio");
+  const credit = await zbyvajiciKredit(sunoApiKey);
+  if (credit !== null && credit < KREDITU_ZA_NAHRAVKU) {
+    logger.error({ module: "teams", teamId }, `hymna: u Suna zbývá ${credit} kreditů, generace stojí ${KREDITU_ZA_NAHRAVKU}, dobij na sunoapi.org`);
+    return c.json({ error: anthemRejectedMessage(null) }, 503);
+  }
+
   const sunoRes = await fetch("https://api.sunoapi.org/api/v1/generate", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${sunoApiKey}` },
@@ -2110,13 +2120,17 @@ teamsRouter.post("/:id/club/anthem/generate", async (c) => {
 
   if (!sunoRes.ok) {
     const errBody = await sunoRes.text().catch((e) => { logger.warn({ module: "teams" }, "tělo chybové odpovědi Suno", e); return ""; });
-    logger.warn({ module: "teams" }, `Suno API error: ${sunoRes.status} ${errBody.slice(0, 200)}`);
-    return c.json({ error: "Hudební generace selhala (Suno API chyba)" }, 502);
+    logger.warn({ module: "teams", teamId }, `Suno API error: ${sunoRes.status} ${errBody.slice(0, 200)}`);
+    return c.json({ error: anthemRejectedMessage(sunoRes.status) }, 502);
   }
 
-  const sunoJson = await sunoRes.json() as { code?: number; data?: { taskId?: string } };
-  const taskId = sunoJson.data?.taskId;
-  if (!taskId) return c.json({ error: "Suno nevrátilo task ID" }, 502);
+  // Odmítnutí chodí i s HTTP 200, důvod je jen v `code` a `msg`.
+  const reply = readSunoTaskReply(await sunoRes.json());
+  const taskId = reply.taskId;
+  if (!taskId) {
+    logger.error({ module: "teams", teamId }, `Suno hymnu nepřijalo: code ${reply.code ?? "?"} ${reply.msg ?? ""}`.trim());
+    return c.json({ error: anthemRejectedMessage(reply.code) }, 502);
+  }
 
   const anthemId = crypto.randomUUID();
   await c.env.DB.prepare(

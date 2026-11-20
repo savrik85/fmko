@@ -14,6 +14,7 @@
 
 import type { Bindings } from "../index";
 import { logger } from "./logger";
+import { SUNO_CREDIT_ALARM } from "./suno";
 
 /** Prefix, na který se dá navěsit upozornění v Cloudflare. */
 export const WATCHDOG_MARKER = "PRALES_WATCHDOG_ALERT";
@@ -305,6 +306,21 @@ export async function runWatchdog(env: Bindings): Promise<WatchdogResult> {
     }
   } catch (e) {
     logger.warn({ module: "watchdog" }, "kontrola převzetí klubů selhala", e);
+  }
+
+  // ── 11. Dochází kredit u Suna ──
+  // Taky ticho: bez kreditu Suno zadání hymny i nahrávky chorálu jen odmítne. Chorály
+  // přestaly přibývat 24. 10. 2026 a přišlo se na to až 20. 11. z hlášení manažera.
+  if (env.SUNO_API_KEY) {
+    const { zbyvajiciKredit, KREDITU_ZA_NAHRAVKU } = await import("../fans/fan-chant-audio");
+    const credit = await zbyvajiciKredit(env.SUNO_API_KEY);
+    if (credit !== null && credit < SUNO_CREDIT_ALARM) {
+      problemy.push({
+        kod: "suno_kredit",
+        popis: "Dochází kredit u Suna (hymny a nahrávky chorálů), dobij ho na sunoapi.org",
+        hodnota: `${credit} kreditů, jedna generace stojí ${KREDITU_ZA_NAHRAVKU}`,
+      });
+    }
   }
 
   return { ok: problemy.length === 0, problemy };
