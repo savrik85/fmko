@@ -23,6 +23,7 @@ tváří, že běží, jen se v ní nic neděje.
 | `dlq` | zprávy, které selhaly i po opakování |
 | `backlog` | nedohraných splatných kol je víc než 15 |
 | `retry` | zprávy se musely doručovat opakovaně |
+| `suno_kredit` | u Suna zbývá méně než 100 kreditů (generace stojí 12), hymny a nahrávky chorálů se brzy zastaví; dobít na sunoapi.org |
 
 Při nálezu udělá dvě věci:
 1. zaloguje `console.error` s prefixem **`PRALES_WATCHDOG_ALERT`** — na ten se dá

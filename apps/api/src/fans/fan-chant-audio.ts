@@ -16,6 +16,7 @@
  */
 
 import { logger } from "../lib/logger";
+import { readSunoTaskReply } from "../lib/suno";
 import type { Bindings } from "../index";
 
 const M = "fan-chant-audio";
@@ -174,8 +175,12 @@ async function zadejSunu(key: string, text: string): Promise<string | null> {
     logger.warn({ module: M }, `Suno ${res.status}: ${(await res.text()).slice(0, 200)}`);
     return null;
   }
-  const j = await res.json() as { data?: { taskId?: string } };
-  return j.data?.taskId ?? null;
+  // Odmítnutí (třeba došlý kredit) chodí i s HTTP 200, důvod je jen v `code` a `msg`.
+  const reply = readSunoTaskReply(await res.json());
+  if (!reply.taskId) {
+    logger.warn({ module: M }, `Suno chorál nepřijalo: code ${reply.code ?? "?"} ${reply.msg ?? ""}`.trim());
+  }
+  return reply.taskId;
 }
 
 /**
@@ -266,7 +271,11 @@ export async function zbyvajiciKredit(key: string | undefined): Promise<number |
   const res = await fetch(`${SUNO_API}/generate/credit`, {
     headers: { Authorization: `Bearer ${key}` },
   }).catch((e) => { logger.warn({ module: M }, "kredit", e); return null; });
-  if (!res?.ok) return null;
+  if (!res) return null;
+  if (!res.ok) {
+    logger.warn({ module: M }, `kredit: Suno vrátilo HTTP ${res.status}`);
+    return null;
+  }
   const j = await res.json() as { data?: number | { credits?: number } };
   return typeof j.data === "number" ? j.data : j.data?.credits ?? null;
 }
