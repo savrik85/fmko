@@ -75,11 +75,16 @@ export async function attachCoachAudio(bucket: R2Bucket, pendingKey: string): Pr
 
 /** Noční úklid: smaže nahrávky, které trenér nahrál, ale do dne neodeslal. */
 export async function cleanupPendingCoachAudio(bucket: R2Bucket, now = new Date()): Promise<number> {
-  const cutoff = now.getTime() - COACH_AUDIO_PENDING_TTL_MS;
+  return cleanupPendingUploads(bucket, COACH_AUDIO_PENDING_PREFIX, COACH_AUDIO_PENDING_TTL_MS, now);
+}
+
+/** Smaže z odkladu `prefix` všechno nahrané před víc než `ttlMs`. Vrací počet smazaných. */
+export async function cleanupPendingUploads(bucket: R2Bucket, prefix: string, ttlMs: number, now = new Date()): Promise<number> {
+  const cutoff = now.getTime() - ttlMs;
   let deleted = 0;
   let cursor: string | undefined;
   do {
-    const page = await bucket.list({ prefix: COACH_AUDIO_PENDING_PREFIX, cursor, limit: 1000 });
+    const page = await bucket.list({ prefix, cursor, limit: 1000 });
     const stale = page.objects.filter((o) => o.uploaded.getTime() < cutoff).map((o) => o.key);
     if (stale.length > 0) {
       await bucket.delete(stale);
@@ -97,7 +102,7 @@ export function sanitizePeaks(value: unknown): number[] | undefined {
   return value.map((v) => Math.round(v * 100) / 100);
 }
 
-function toBase64(bytes: Uint8Array): string {
+export function toBase64(bytes: Uint8Array): string {
   // Po kouscích: jeden dlouhý řetězec po znacích shodil worker na megabajtové nahrávce.
   let bin = "";
   for (let i = 0; i < bytes.length; i += 0x8000) {

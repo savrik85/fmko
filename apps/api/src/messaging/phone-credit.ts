@@ -25,6 +25,8 @@ const M = "phone-credit";
  */
 export const DENNI_KREDIT = 36;
 export const CENA_SMS = 3;
+/** Fotka od trenéra stojí jako MMS (messaging/coach-photo.ts). */
+export const MMS_PRICE = 5;
 
 export interface CreditState {
   /** Zbývající kredit v korunách. */
@@ -35,6 +37,8 @@ export interface CreditState {
   cenaSms: number;
   /** Kolik zpráv se z toho ještě dá poslat. */
   zprav: number;
+  /** Cena fotky (MMS). */
+  mmsPrice: number;
 }
 
 /** Herní den, podle kterého se kredit obnovuje. */
@@ -86,7 +90,7 @@ export async function loadCredit(db: D1Database, teamId: string): Promise<Credit
 
 function stav(zbyva: number): CreditState {
   const kc = Math.max(0, zbyva);
-  return { zbyva: kc, denni: DENNI_KREDIT, cenaSms: CENA_SMS, zprav: Math.floor(kc / CENA_SMS) };
+  return { zbyva: kc, denni: DENNI_KREDIT, cenaSms: CENA_SMS, zprav: Math.floor(kc / CENA_SMS), mmsPrice: MMS_PRICE };
 }
 
 /**
@@ -121,21 +125,31 @@ export async function spendCredit(db: D1Database, teamId: string, kolik = CENA_S
  */
 export async function refundCoachSms(db: D1Database, teamId: string, convId: string, reason: string): Promise<boolean> {
   try {
+    // Fotka stála víc než SMS, cenu si nese v metadatech (`creditPrice`, coach-photo.ts).
+    const last = await db.prepare(
+      `SELECT id, json_extract(COALESCE(metadata, '{}'), '$.creditPrice') AS price
+         FROM messages WHERE conversation_id = ? AND sender_type = 'user'
+        ORDER BY julianday(sent_at) DESC LIMIT 1`,
+    ).bind(convId).first<{ id: string; price: number | null }>();
+    if (!last) return false;
     const claimed = await db.prepare(
       `UPDATE messages SET metadata = json_set(COALESCE(metadata, '{}'), '$.creditRefunded', 1)
-        WHERE id = (SELECT id FROM messages WHERE conversation_id = ? AND sender_type = 'user'
-                     ORDER BY julianday(sent_at) DESC LIMIT 1)
-          AND json_extract(COALESCE(metadata, '{}'), '$.creditRefunded') IS NULL`,
-    ).bind(convId).run();
+        WHERE id = ? AND json_extract(COALESCE(metadata, '{}'), '$.creditRefunded') IS NULL`,
+    ).bind(last.id).run();
     if ((claimed.meta?.changes ?? 0) !== 1) return false;
-    await db.prepare("UPDATE teams SET phone_credit = MIN(?, COALESCE(phone_credit, 0) + ?) WHERE id = ?")
-      .bind(DENNI_KREDIT, CENA_SMS, teamId).run();
+    await returnCredit(db, teamId, typeof last.price === "number" && last.price > 0 ? last.price : CENA_SMS);
     logger.info({ module: M, teamId }, `kredit za SMS vrácen (${reason}), konverzace ${convId}`);
     return true;
   } catch (e) {
     logger.warn({ module: M, teamId }, `vrácení kreditu (${reason}), konverzace ${convId}`, e);
     return false;
   }
+}
+
+/** Vrátí `amount` Kč na kredit, nikdy nad denní dobití. */
+export async function returnCredit(db: D1Database, teamId: string, amount: number): Promise<void> {
+  await db.prepare("UPDATE teams SET phone_credit = MIN(?, COALESCE(phone_credit, 0) + ?) WHERE id = ?")
+    .bind(DENNI_KREDIT, amount, teamId).run();
 }
 
 /** Kredit slovem — do UI, ať se to nepočítá na dvou místech. */

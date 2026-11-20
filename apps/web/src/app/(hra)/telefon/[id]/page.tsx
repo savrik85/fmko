@@ -12,6 +12,7 @@ import { SponsorLink } from "@/components/sponsors/sponsor-link";
 import { VoiceMessage } from "../VoiceMessage";
 import { PlayerPhoto } from "../PlayerPhoto";
 import { CoachVoiceRecorder, SendIcon, isVoiceRecordingSupported, type CoachVoiceNote } from "../CoachVoiceRecorder";
+import { CoachPhotoButton, PhotoDraftBar, type PhotoDraft } from "../CoachPhotoPicker";
 interface Message {
   id: string;
   body: string;
@@ -206,7 +207,7 @@ export default function ConversationPage() {
   const [pise, setPise] = useState(false);
   /** Po rychlé odpovědi (majitel, dohoda) čekáme na odpověď, kterou server teprve skládá. */
   const [awaitingReply, setAwaitingReply] = useState(false);
-  const [credit, setCredit] = useState<{ zbyva: number; cenaSms: number; zprav: number } | null>(null);
+  const [credit, setCredit] = useState<{ zbyva: number; cenaSms: number; zprav: number; mmsPrice?: number } | null>(null);
   // Skupinové chaty vlastní detail endpoint nemají — tam se píše vždycky.
   const [canReply, setCanReply] = useState(true);
   const [channel, setChannel] = useState<"sms" | "imessage" | null>("imessage");
@@ -214,6 +215,8 @@ export default function ConversationPage() {
   const [creditError, setCreditError] = useState<string | null>(null);
   // Trenér nahrává nebo kontroluje hlasovou odpověď: řádek pro SMS ustoupí nahrávání.
   const [voiceActive, setVoiceActive] = useState(false);
+  /** Vybraná fotka k odeslání (jen hráči), text v poli je pak popisek. */
+  const [photoDraft, setPhotoDraft] = useState<PhotoDraft | null>(null);
   // MediaRecorder existuje až v prohlížeči, ne při renderu na serveru.
   const [voiceSupported, setVoiceSupported] = useState(false);
   useEffect(() => { setVoiceSupported(isVoiceRecordingSupported()); }, []);
@@ -358,7 +361,45 @@ export default function ConversationPage() {
       .catch((e) => console.error("načtení kreditu:", e));
   }, [teamId]);
 
+  const clearPhotoDraft = useCallback(() => setPhotoDraft(null), []);
+  // Náhled vybrané fotky se uvolní, když se fotka změní, odešle, zahodí nebo trenér odejde.
+  useEffect(() => () => { if (photoDraft) URL.revokeObjectURL(photoDraft.url); }, [photoDraft]);
+
+  /** Fotka s popiskem: nahrání do odkladu a pak odeslání jako zpráva (cena MMS). */
+  const handleSendPhoto = async () => {
+    if (!photoDraft || sending || !teamId) return;
+    setSending(true);
+    setCreditError(null);
+    const caption = newMsg.trim();
+    try {
+      const upload = await apiFetch<{ photoKey: string }>(`/api/teams/${teamId}/conversations/${convId}/photo`, {
+        method: "POST",
+        headers: { "Content-Type": "image/jpeg" },
+        body: photoDraft.blob,
+      });
+      const res = await apiFetch<{ id: string; sentAt: string; photoKey?: string; credit?: { zbyva: number; cenaSms: number; zprav: number; mmsPrice?: number } }>(messagesUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ body: caption, photo: { photoKey: upload.photoKey } }),
+      });
+      if (res.credit) setCredit(res.credit);
+      setMessages((prev) => [...prev, {
+        id: res.id, senderType: "user", senderId: teamId, senderName: "Ty", body: caption,
+        metadata: { type: "photo", photoKey: res.photoKey ?? "", photoAlt: "Fotka" }, sentAt: res.sentAt, read: true,
+      }]);
+      setNewMsg("");
+      clearPhotoDraft();
+    } catch (e) {
+      console.error("odeslání fotky:", e);
+      const message = (e as { message?: string }).message ?? "";
+      // Server říká česky, proč fotka neodešla (kredit, denní strop, velikost, formát).
+      setCreditError(isPhotoRefusal(e) && message ? message : "Fotku se nepodařilo odeslat.");
+    }
+    setSending(false);
+  };
+
   const handleSend = async () => {
+    if (photoDraft) { await handleSendPhoto(); return; }
     if (!newMsg.trim() || sending || !teamId) return;
     setSending(true);
     setCreditError(null);
@@ -924,6 +965,9 @@ export default function ConversationPage() {
             />
           </div>
         )}
+        {photoDraft && (
+          <PhotoDraftBar draft={photoDraft} sending={sending} onRemove={clearPhotoDraft} />
+        )}
         {creditError && (
           <p className="text-sm text-card-red mb-1.5 px-1">{creditError}</p>
         )}
@@ -933,6 +977,11 @@ export default function ConversationPage() {
               <>
                 <span className="text-blue-600 font-medium">iMessage</span>
                 <span>· přes data, zdarma · kredit {credit.zbyva} Kč</span>
+              </>
+            ) : photoDraft ? (
+              <>
+                <span className="text-pitch-600 font-medium">MMS</span>
+                <span>· {credit.mmsPrice ?? 5} Kč za fotku · kredit {credit.zbyva} Kč</span>
               </>
             ) : credit.zbyva >= credit.cenaSms ? (
               <>
@@ -951,6 +1000,14 @@ export default function ConversationPage() {
           </p>
         )}
         <div className="flex items-end gap-2">
+          {/* Fotka jen hráči, jako hlasovka. Popis fotky pro hráče dodá server. */}
+          {!isGroup && conv?.type === "player" && teamId && !voiceActive && !photoDraft && (
+            <CoachPhotoButton
+              disabled={sending || cekaSeNaHrace || nemaNaSms}
+              onPick={setPhotoDraft}
+              onError={setCreditError}
+            />
+          )}
           {!voiceActive && (
           /* Roste s textem, ať je vidět celá zpráva. Enter odesílá, Shift+Enter dělá nový řádek. */
           <AutoGrowTextarea
@@ -969,6 +1026,7 @@ export default function ConversationPage() {
             placeholder={
               cekaSeNaHrace ? (ownerSponsorId ? "Píše…" : "Hráč píše…")
                 : nemaNaSms ? "Došel kredit"
+                : photoDraft ? "Popisek k fotce"
                   : ownerSponsorId ? "Třeba: 20 000 na přestup"
                   : jeImessage ? "iMessage"
                     : "SMS"
@@ -979,7 +1037,7 @@ export default function ConversationPage() {
           )}
           {/* Jako ve WhatsAppu: prázdné pole má vpravo mikrofon, s textem šipku.
               Hlasová odpověď jen hráči, přepis čte AI stejně jako SMS. */}
-          {!isGroup && conv?.type === "player" && teamId && voiceSupported && !newMsg.trim() ? (
+          {!isGroup && conv?.type === "player" && teamId && voiceSupported && !newMsg.trim() && !photoDraft ? (
             <CoachVoiceRecorder
               teamId={teamId}
               convId={convId}
@@ -991,7 +1049,7 @@ export default function ConversationPage() {
           ) : !voiceActive && (
           <button
             onClick={handleSend}
-            disabled={!newMsg.trim() || sending || cekaSeNaHrace || nemaNaSms}
+            disabled={(!newMsg.trim() && !photoDraft) || sending || cekaSeNaHrace || nemaNaSms}
             aria-label="Odeslat zprávu"
             className="shrink-0 w-11 h-11 rounded-full bg-[#00A884] text-white flex items-center justify-center disabled:opacity-40"
           >
@@ -1014,6 +1072,12 @@ const MESSAGE_COUNTER_FROM = 450;
 function isSendRefusal(e: unknown): boolean {
   const status = (e as { status?: number }).status;
   return status === 400 || status === 409 || status === 429;
+}
+
+/** U fotky navíc 413 velikost, 415 formát, 422 nevhodná fotka a 503 vypnuté odpovídání, vše s českým vysvětlením. */
+function isPhotoRefusal(e: unknown): boolean {
+  const status = (e as { status?: number }).status;
+  return isSendRefusal(e) || status === 413 || status === 415 || status === 422 || status === 503;
 }
 
 /**

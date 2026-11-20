@@ -322,6 +322,13 @@ export default {
       } catch (e: any) {
         log("error", "úklid neodeslaných hlasových odpovědí selhal", e);
       }
+      try {
+        const { cleanupPendingCoachPhotos } = await import("./messaging/coach-photo");
+        const removed = await cleanupPendingCoachPhotos(env.SEED_DATA);
+        if (removed > 0) log("info", `neodeslané fotky trenéra: smazáno ${removed}`);
+      } catch (e: any) {
+        log("error", "úklid neodeslaných fotek trenéra selhal", e);
+      }
     }
 
     // ── DAILY TICK: 4:00 CET (3:00 UTC) — posouvá dny, tréninky, zprávy ──
