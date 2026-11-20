@@ -607,7 +607,9 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
     };
   }
 
-  let photoMeta: { type: "photo"; photoKey: string; photoAlt: string; coachPhoto: 1; creditPrice: number } | null = null;
+  // `creditPrice` se zapíše, jen když se kredit opravdu strhl: podle něj vrací kredit refundCoachSms.
+  let photoMeta: { type: "photo"; photoKey: string; photoAlt: string; coachPhoto: 1; creditPrice?: number } | null = null;
+  let photoPrice = 0;
   if (body.photo) {
     const { isPendingCoachPhotoKey, loadCoachPhotoAlt, COACH_PHOTO_PRICE } = await import("../messaging/coach-photo");
     const key = body.photo.photoKey;
@@ -615,9 +617,8 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
       ? await c.env.SEED_DATA.head(key).catch((e) => { logger.warn({ module: "messaging" }, "kontrola fotky trenéra", e); return null; })
       : null;
     if (!isPendingCoachPhotoKey(teamId, key) || !stored) return c.json({ error: "Fotka nenalezena, vyber ji znovu." }, 400);
-    photoMeta = {
-      type: "photo", photoKey: key, photoAlt: await loadCoachPhotoAlt(c.env.CACHE_KV, key), coachPhoto: 1, creditPrice: COACH_PHOTO_PRICE,
-    };
+    photoMeta = { type: "photo", photoKey: key, photoAlt: await loadCoachPhotoAlt(c.env.CACHE_KV, key), coachPhoto: 1 };
+    photoPrice = COACH_PHOTO_PRICE;
   }
 
   // Ověřit že konverzace patří tomuto týmu
@@ -657,16 +658,17 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
       return c.json({ error: "Telefon je bez signálu, odpovídání je dočasně vypnuté." }, 503);
     }
     // Bez argumentu se strhne cena jedné SMS — modul je jediný, kdo ji zná. Fotka stojí jako MMS.
-    const ok = await spendCredit(c.env.DB, teamId, photoMeta?.creditPrice);
+    const ok = await spendCredit(c.env.DB, teamId, photoMeta ? photoPrice : undefined);
     if (!ok) {
       const stav = await loadCredit(c.env.DB, teamId);
       return c.json({
         error: photoMeta
-          ? `Na MMS ti nezbývá kredit, máš ${stav.zbyva} Kč a fotka stojí ${photoMeta.creditPrice} Kč. Dobije se zítra ráno.`
+          ? `Na MMS ti nezbývá kredit, máš ${stav.zbyva} Kč a fotka stojí ${photoPrice} Kč. Dobije se zítra ráno.`
           : `Na SMS ti nezbývá kredit, máš ${stav.zbyva} Kč a zpráva stojí ${stav.cenaSms} Kč. Dobije se zítra ráno.`,
         credit: stav,
       }, 400);
     }
+    if (photoMeta) photoMeta.creditPrice = photoPrice;
   }
 
   // Get team name for sender
@@ -694,7 +696,7 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
     const finalKey = await attachCoachPhoto(c.env.SEED_DATA, photoMeta.photoKey);
     if (!finalKey) {
       logger.error({ module: "messaging" }, `fotku trenéra ${photoMeta.photoKey} se nepodařilo přesunout`);
-      if (platiSeKredit) {
+      if (photoMeta.creditPrice) {
         const { returnCredit } = await import("../messaging/phone-credit");
         await returnCredit(c.env.DB, teamId, photoMeta.creditPrice)
           .catch((e) => logger.error({ module: "messaging" }, "vrácení kreditu za neodeslanou fotku", e));
