@@ -464,6 +464,68 @@ messagingRouter.post("/teams/:teamId/conversations/:convId/voice-note", async (c
   return c.json({ audioKey, transcript, durationSec });
 });
 
+// POST /api/teams/:teamId/conversations/:convId/photo — trenér přikládá fotku k SMS hráči
+// (messaging/coach-photo.ts). Model fotku hned popíše a zkontroluje (kolem 15 s), nevhodná
+// neodejde. Fotka s popisem čeká v odkladu, odeslání jde přes běžné odeslání zprávy
+// (`photo` v těle). Tělo je JPEG zmenšený prohlížečem.
+messagingRouter.post("/teams/:teamId/conversations/:convId/photo", async (c) => {
+  const teamId = c.req.param("teamId");
+  const convId = c.req.param("convId");
+  const conv = await c.env.DB.prepare(
+    "SELECT team_id, type, participant_id, ai_thread_active FROM conversations WHERE id = ?",
+  ).bind(convId).first<{ team_id: string; type: string; participant_id: string | null; ai_thread_active: number }>()
+    .catch((e) => { logger.warn({ module: "messaging" }, "konverzace pro fotku", e); return null; });
+  if (!conv || conv.team_id !== teamId) return c.json({ error: "Konverzace nenalezena" }, 404);
+  if (conv.type !== "player") return c.json({ error: "Fotku jde zatím poslat jen hráči." }, 400);
+  const rule = odpovidatLze(conv.type, conv.ai_thread_active === 1, { participantId: conv.participant_id });
+  if (!rule.canReply) return c.json({ error: "Do téhle konverzace se odpovídat nedá." }, 400);
+  if (!(await playerStillReachable(c.env.DB, conv.participant_id, teamId))) {
+    return c.json({ error: PLAYER_GONE_HINT, readOnly: true }, 409);
+  }
+
+  const {
+    COACH_PHOTO_MAX_BYTES, COACH_PHOTO_PRICE, COACH_PHOTO_UNREADABLE_ALT,
+    describeCoachPhoto, isJpeg, pendingCoachPhotoKey, saveCoachPhotoAlt, takeCoachPhotoQuota,
+  } = await import("../messaging/coach-photo");
+  const contentType = (c.req.header("Content-Type") ?? "").split(";")[0].trim().toLowerCase();
+  if (contentType !== "image/jpeg") return c.json({ error: "Fotka je v nepodporovaném formátu." }, 415);
+  // Velikost podle hlavičky dřív, než se tělo načte do paměti.
+  const declaredBytes = Number(c.req.header("Content-Length") ?? NaN);
+  if (!Number.isFinite(declaredBytes)) return c.json({ error: "Chybí velikost fotky." }, 411);
+  if (declaredBytes > COACH_PHOTO_MAX_BYTES) return c.json({ error: "Fotka je moc velká." }, 413);
+
+  // Stejné brzdy jako u SMS: vypnuté AI a došlý kredit se poznají před uložením fotky.
+  const { isAiEnabled } = await import("../lib/ai-provider");
+  if (!c.env.AI || !(await isAiEnabled(c.env))) return c.json({ error: "Telefon je bez signálu, odpovídání je dočasně vypnuté." }, 503);
+  const { loadCredit } = await import("../messaging/phone-credit");
+  const credit = await loadCredit(c.env.DB, teamId);
+  if (credit.zbyva < COACH_PHOTO_PRICE) {
+    return c.json({ error: `Na MMS ti nezbývá kredit, máš ${credit.zbyva} Kč a fotka stojí ${COACH_PHOTO_PRICE} Kč. Dobije se zítra ráno.` }, 400);
+  }
+
+  const photo = new Uint8Array(await c.req.arrayBuffer());
+  if (photo.length > COACH_PHOTO_MAX_BYTES) return c.json({ error: "Fotka je moc velká." }, 413);
+  if (!isJpeg(photo)) return c.json({ error: "Fotka je poškozená, zkus jinou." }, 400);
+  if (!(await takeCoachPhotoQuota(c.env.CACHE_KV, teamId))) {
+    return c.json({ error: "Dnes už jsi poslal fotek dost, zkus to zítra." }, 429);
+  }
+
+  // Popis pro hráče a kontrola obsahu. Když model nedoběhne, fotka odejde s náhradním popisem.
+  const view = await describeCoachPhoto(c.env.AI, photo);
+  if (view?.inappropriate) {
+    logger.warn({ module: "messaging", teamId }, `nevhodná fotka trenéra neodešla: ${view.alt.slice(0, 120)}`);
+    return c.json({ error: "Tuhle fotku hráči poslat nejde, vyber jinou." }, 422);
+  }
+  if (!view) logger.warn({ module: "messaging", teamId }, "fotku trenéra se nepodařilo popsat, odejde s náhradním popisem");
+
+  const photoKey = pendingCoachPhotoKey(teamId, uuid());
+  const saved = await c.env.SEED_DATA.put(photoKey, photo, { httpMetadata: { contentType: "image/jpeg" } })
+    .catch((e) => { logger.warn({ module: "messaging" }, `uložení fotky trenéra ${photoKey}`, e); return null; });
+  if (!saved) return c.json({ error: "Fotku se nepodařilo uložit." }, 500);
+  await saveCoachPhotoAlt(c.env.CACHE_KV, photoKey, view?.alt ?? COACH_PHOTO_UNREADABLE_ALT);
+  return c.json({ photoKey });
+});
+
 // POST /api/teams/:teamId/player-conversation/:playerId — najdi/založ 1:1 konverzaci s hráčem
 // (pro CTA "Promluvit si" z profilu hráče / kádru)
 messagingRouter.post("/teams/:teamId/player-conversation/:playerId", async (c) => {
@@ -510,12 +572,18 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
   const convId = c.req.param("convId");
   // `optionId` = tlačítko hotové odpovědi (SMS od majitele firmy). Tón z něj bere jen server.
   // `voice` = hlasová odpověď nahraná přes /voice-note, `body` je pak její přepis.
+  // `photo` = fotka nahraná přes /photo, `body` je popisek a smí být prázdný.
   const body = await c.req.json<{
     body: string; optionId?: string; voice?: { audioKey?: unknown; durationSec?: unknown; peaks?: unknown };
+    photo?: { photoKey?: unknown };
   }>();
+  if (body.photo && body.voice) return c.json({ error: "Fotka a hlasovka nejdou poslat naráz." }, 400);
+  const withoutCaption = !!body.photo && (typeof body.body !== "string" || body.body.trim() === "");
 
   // Hlasovka: `body` je přepis od modelu, ne text od hráče, takže se zkrátí místo odmítnutí.
-  const cleaned = cleanPhoneMessage(body.voice && typeof body.body === "string" ? body.body.slice(0, PHONE_MESSAGE_MAX) : body.body);
+  const cleaned = withoutCaption
+    ? { text: "" }
+    : cleanPhoneMessage(body.voice && typeof body.body === "string" ? body.body.slice(0, PHONE_MESSAGE_MAX) : body.body);
   if ("error" in cleaned) {
     return c.json({ error: cleaned.error === "too_long" ? TOO_LONG_ERROR : "Zpráva je prázdná." }, 400);
   }
@@ -539,6 +607,20 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
     };
   }
 
+  // `creditPrice` se zapíše, jen když se kredit opravdu strhl: podle něj vrací kredit refundCoachSms.
+  let photoMeta: { type: "photo"; photoKey: string; photoAlt: string; coachPhoto: 1; creditPrice?: number } | null = null;
+  let photoPrice = 0;
+  if (body.photo) {
+    const { isPendingCoachPhotoKey, loadCoachPhotoAlt, COACH_PHOTO_PRICE } = await import("../messaging/coach-photo");
+    const key = body.photo.photoKey;
+    const stored = isPendingCoachPhotoKey(teamId, key)
+      ? await c.env.SEED_DATA.head(key).catch((e) => { logger.warn({ module: "messaging" }, "kontrola fotky trenéra", e); return null; })
+      : null;
+    if (!isPendingCoachPhotoKey(teamId, key) || !stored) return c.json({ error: "Fotka nenalezena, vyber ji znovu." }, 400);
+    photoMeta = { type: "photo", photoKey: key, photoAlt: await loadCoachPhotoAlt(c.env.CACHE_KV, key), coachPhoto: 1 };
+    photoPrice = COACH_PHOTO_PRICE;
+  }
+
   // Ověřit že konverzace patří tomuto týmu
   const convOwner = await c.env.DB.prepare("SELECT team_id FROM conversations WHERE id = ?")
     .bind(convId).first<{ team_id: string }>().catch((e) => { logger.warn({ module: "messaging" }, "conv ownership check on send", e); return null; });
@@ -558,6 +640,8 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
     return c.json({ error: "Do téhle konverzace se odpovídat nedá, je to jen oznámení." }, 400);
   }
   const platiSeKredit = pravidlo.channel === "sms";
+  // Fotky jen hráčům: AI odpovídá jen tam a fotku nikdy neuvidí jiný člověk.
+  if (photoMeta && conv?.type !== "player") return c.json({ error: "Fotku jde zatím poslat jen hráči." }, 400);
 
   // Adresát se ověřuje před stržením kreditu: hráč mimo klub neodpoví.
   if (conv?.type === "player" && !(await playerStillReachable(c.env.DB, conv.participant_id, teamId))) {
@@ -573,15 +657,18 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
     if (!(await isAiEnabled(c.env))) {
       return c.json({ error: "Telefon je bez signálu, odpovídání je dočasně vypnuté." }, 503);
     }
-    // Bez argumentu se strhne cena jedné SMS — modul je jediný, kdo ji zná.
-    const ok = await spendCredit(c.env.DB, teamId);
+    // Bez argumentu se strhne cena jedné SMS — modul je jediný, kdo ji zná. Fotka stojí jako MMS.
+    const ok = await spendCredit(c.env.DB, teamId, photoMeta ? photoPrice : undefined);
     if (!ok) {
       const stav = await loadCredit(c.env.DB, teamId);
       return c.json({
-        error: `Na SMS ti nezbývá kredit, máš ${stav.zbyva} Kč a zpráva stojí ${stav.cenaSms} Kč. Dobije se zítra ráno.`,
+        error: photoMeta
+          ? `Na MMS ti nezbývá kredit, máš ${stav.zbyva} Kč a fotka stojí ${photoPrice} Kč. Dobije se zítra ráno.`
+          : `Na SMS ti nezbývá kredit, máš ${stav.zbyva} Kč a zpráva stojí ${stav.cenaSms} Kč. Dobije se zítra ráno.`,
         credit: stav,
       }, 400);
     }
+    if (photoMeta) photoMeta.creditPrice = photoPrice;
   }
 
   // Get team name for sender
@@ -603,20 +690,44 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
     voiceMeta.audioKey = finalKey;
   }
 
+  // Odeslaná fotka se přesune z odkladu k fotkám ze zpráv (web ji ukáže jako fotku od hráče).
+  if (photoMeta) {
+    const { attachCoachPhoto } = await import("../messaging/coach-photo");
+    const finalKey = await attachCoachPhoto(c.env.SEED_DATA, photoMeta.photoKey);
+    if (!finalKey) {
+      logger.error({ module: "messaging" }, `fotku trenéra ${photoMeta.photoKey} se nepodařilo přesunout`);
+      if (photoMeta.creditPrice) {
+        const { returnCredit } = await import("../messaging/phone-credit");
+        await returnCredit(c.env.DB, teamId, photoMeta.creditPrice)
+          .catch((e) => logger.error({ module: "messaging" }, "vrácení kreditu za neodeslanou fotku", e));
+      }
+      return c.json({ error: "Fotku se nepodařilo odeslat." }, 500);
+    }
+    photoMeta.photoKey = finalKey;
+  }
+
+  const metadata = voiceMeta ?? photoMeta;
   await c.env.DB.prepare(
     "INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, metadata, sent_at, read) VALUES (?, ?, 'user', ?, ?, ?, ?, ?, 1)"
-  ).bind(msgId, convId, teamId, senderName, body.body.trim(), voiceMeta ? JSON.stringify(voiceMeta) : null, now).run();
+  ).bind(msgId, convId, teamId, senderName, body.body.trim(), metadata ? JSON.stringify(metadata) : null, now).run();
 
   // Update conversation
   const { voicePreviewText } = await import("../messaging/voice-message");
-  const trimmedText = voiceMeta ? voicePreviewText(voiceMeta.durationSec) : body.body.trim().slice(0, 100);
+  const { COACH_PHOTO_PREVIEW } = await import("../messaging/coach-photo");
+  const trimmedText = voiceMeta
+    ? voicePreviewText(voiceMeta.durationSec)
+    : photoMeta
+      ? (body.body.trim() ? `📷 ${body.body.trim()}` : COACH_PHOTO_PREVIEW).slice(0, 100)
+      : body.body.trim().slice(0, 100);
   await c.env.DB.prepare(
     "UPDATE conversations SET last_message_text = ?, last_message_at = ? WHERE id = ?"
   ).bind(trimmedText, now, convId).run();
 
   // Otázka na incident (spec 7a): výsledek výslechu rozhoduje DB, a to dřív, než se
   // začne generovat odpověď, aby ho model dostal v promptu jako pokyn.
-  if (conv?.type === "player" && conv.participant_id) {
+  // Fotka bez popisku nemá text, který by šlo posoudit.
+  const hasText = body.body.trim() !== "";
+  if (conv?.type === "player" && conv.participant_id && hasText) {
     const { zpracujZpravuTrenera } = await import("../incidents/zprava-trenera");
     await zpracujZpravuTrenera(c.env.DB, { teamId, convId, playerId: conv.participant_id, text: body.body.trim() })
       .catch((e) => logger.warn({ module: "messaging" }, "otázka na incident", e));
@@ -629,7 +740,7 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
   // Hráč trenéra pozval (hospoda, zabijačka…): když v téhle zprávě slíbil, že přijde, splní se to
   // (messaging/casual-messages.ts). Posuzuje se jen pár hodin po pozvání, jinak nic nestojí.
   // U hlasové odpovědi je `body` její přepis, „jdu“ do mikrofonu platí stejně.
-  if (conv?.type === "player") {
+  if (conv?.type === "player" && hasText) {
     const { handleCoachMessageForInvite } = await import("../messaging/casual-messages");
     c.executionCtx.waitUntil(
       handleCoachMessageForInvite(c.env.DB, c.env, convId, body.body.trim())
@@ -642,7 +753,7 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
   // zapíše a pak hlídá (messaging/coach-commitments.ts). Hotové odpovědi (optionId) slib nedávají.
   // Odpověď hráče čeká, až rozpoznání doběhne: o slibu a pozvání má vědět už v první odpovědi.
   let commitmentReady: Promise<unknown> = Promise.resolve(null);
-  if (conv?.type === "player" && conv.participant_id && !body.optionId) {
+  if (conv?.type === "player" && conv.participant_id && !body.optionId && hasText) {
     const { handleCoachMessageForCommitment } = await import("../messaging/coach-commitments");
     commitmentReady = handleCoachMessageForCommitment(c.env.DB, c.env, { teamId, convId, playerId: conv.participant_id, text: body.body.trim() });
     c.executionCtx.waitUntil(commitmentReady.then(() => undefined));
@@ -720,10 +831,12 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
   // Trenér napsal hráči sám od sebe — dosud zpráva zapadla bez reakce.
   if (!sulkThreadStarted && conv?.type === "player" && conv.ai_thread_active !== 1 && conv.participant_id) {
     const { startCoachThread } = await import("../messaging/coach-initiated");
+    const { historyBody } = await import("../messaging/player-photo");
     const playerId = conv.participant_id;
     c.executionCtx.waitUntil(
+      // Zpráva s fotkou jde do promptu stejně jako v historii, s popisem fotky.
       commitmentReady.then(() => startCoachThread(c.env.DB, c.env, {
-        convId, teamId, playerId, coachMessage: body.body.trim(),
+        convId, teamId, playerId, coachMessage: historyBody(body.body.trim(), photoMeta?.photoAlt),
       })).catch((e) => logger.error({ module: "messaging" }, "konverzace zahájená trenérem", e)),
     );
   }
@@ -835,7 +948,10 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
     })().catch((e) => logger.warn({ module: "messaging" }, "push zprávy od trenéra", e)));
   }
 
-  return c.json({ id: msgId, sentAt: now, credit: await loadCredit(c.env.DB, teamId) });
+  return c.json({
+    id: msgId, sentAt: now, credit: await loadCredit(c.env.DB, teamId),
+    ...(photoMeta ? { photoKey: photoMeta.photoKey } : {}),
+  });
 });
 
 // GET /api/teams/:teamId/unread-count — celkový počet nepřečtených
