@@ -14,7 +14,7 @@ import type { VillageInfo } from "../generators/player";
 import { adminAiClubsRouter } from "../routes/admin-ai-clubs";
 import type { Bindings } from "../index";
 import { marketValue } from "@okresni-masina/shared";
-import { applyLeveling, planLeveling, TOP11_TOLERANCE, type LevelingPlan } from "./leveling";
+import { applyLeveling, planLeveling, TOP11_TOLERANCE, youthRatingCaps, type LevelingPlan } from "./leveling";
 
 const LEAGUE = "league-level-test";
 const U21_LEAGUE = "league-level-test-u21";
@@ -373,5 +373,74 @@ describe("narovnání AI klubů v lize s lidmi", () => {
     expect(await snapshot()).toEqual(before);
     expect((await call(`leagueId=${LEAGUE}&mode=newcomer&refLeagueId=${U21_LEAGUE}&dryRun=1`)).status).toBe(400);
     expect((await call(`leagueId=${LEAGUE}&mode=league-humans&refLeagueId=nope&dryRun=1`)).status).toBe(404);
+  });
+
+  it("lidský klub výslovně: jen přidává, dorostence nesníží, bez hráčů, zaměstnanců, AI povahy a stahování inzerátů", async () => {
+    const adminToken = await createSession(env.SESSION_KV, "admin", "admin@example.test", null);
+    const call = (query: string) => app.request(`/api/admin/ai-clubs/level?${query}`, { method: "POST", headers: { Authorization: `Bearer ${adminToken}` } }, env);
+    expect((await call(`leagueId=${LEAGUE}&mode=league-humans&percentile=1.5&teamIds=team-human-b&dryRun=1`)).status).toBe(400);
+    expect((await call(`leagueId=${LEAGUE}&mode=league-humans&percentile=0.5&dryRun=1`)).status).toBe(400);
+
+    // Silný sedmnáctiletý dorostenec: AI klubu by ho narovnání stáhlo na strop vrstevníků.
+    const rng = createRng(77);
+    const kid = createPlayer(rng, { position: "MID", village, names, level: "village", shift: 45, age: 17 });
+    await db.prepare(
+      `INSERT INTO players (id, team_id, first_name, last_name, nickname, age, position, overall_rating, skills, physical,
+         personality, life_context, avatar, description, skills_max, hidden_talent, experience, weekly_wage, nationality)
+       VALUES ('team-human-b-kid', 'team-human-b', ?, ?, '', 17, 'MID', ?, ?, ?, ?, ?, '{}', '', ?, ?, ?, 100, 'CZ')`,
+    ).bind(kid.firstName, kid.lastName, kid.rating, JSON.stringify(kid.skills), JSON.stringify(kid.physical),
+      JSON.stringify(kid.personality), JSON.stringify(kid.lifeContext), JSON.stringify(kid.skillsMax), kid.hiddenTalent, kid.experience).run();
+    await db.prepare("UPDATE transfer_listings SET status = 'expired' WHERE status = 'active'").run();
+    await listPlayer("listing-human-b", "team-human-b-p0", "team-human-b", 1000);
+
+    type Row = { id: string; overall_rating: number; skills: string; skills_max: string };
+    const load = async () => new Map((await db.prepare("SELECT id, overall_rating, skills, skills_max FROM players WHERE team_id = 'team-human-b'")
+      .all<Row>()).results.map((r) => [r.id, r]));
+    const before = await load();
+    const team = async () => (await db.prepare("SELECT budget, reputation FROM teams WHERE id = 'team-human-b'").first<{ budget: number; reputation: number }>())!;
+    const teamBefore = await team();
+    const staffBefore = await count("SELECT COUNT(*) AS n FROM staff_members WHERE team_id = 'team-human-b'");
+
+    const plan = await planLeveling(db, { leagueId: LEAGUE, mode: "league-humans", seed: 9, teamIds: ["team-human-b"], percentile: 0.85 });
+    expect(plan.clubs).toHaveLength(1);
+    const club = plan.clubs[0];
+    expect(club.human).toBe(true);
+    expect(club.percentile).toBe(0.85);
+    expect(club.newPlayers).toBe(0);
+    expect(club.youthLowered).toBe(0);
+    expect(club.after.top11).toBeGreaterThan(club.before.top11);
+    expect(plan.warnings.some((w) => w.includes("inzerát"))).toBe(true);
+    // Dorostenec je nad stropem vrstevníků, AI klubu by ho narovnání snížilo.
+    const kidCap = youthRatingCaps([{ id: "kid", age: 17, position: "MID", rating: kid.rating }], plan.reference.youthRatings ?? {});
+    expect(kidCap.get("kid")).toBeLessThan(kid.rating);
+
+    const result = await applyLeveling(db, plan);
+    expect(result.failedStatements).toBe(0);
+    expect(result.playersCreated).toBe(0);
+    expect(result.staffHired).toBe(0);
+    expect(result.managersRaised).toBe(0);
+    expect(result.listingsWithdrawn).toBe(0);
+    expect(await listingStatus("listing-human-b")).toBe("active");
+    expect(await count("SELECT COUNT(*) AS n FROM staff_members WHERE team_id = 'team-human-b'")).toBe(staffBefore);
+    expect(await count("SELECT COUNT(*) AS n FROM managers WHERE team_id = 'team-human-b' AND ai_profile IS NOT NULL")).toBe(0);
+    expect((await db.prepare("SELECT coaching FROM managers WHERE id = 'mgr-b'").first<{ coaching: number }>())!.coaching).toBe(60);
+
+    // Nikomu se nic nevzalo: hodnocení, dovednosti ani strop pod původní.
+    const after = await load();
+    expect(after.size).toBe(before.size);
+    for (const [id, b] of before) {
+      const a = after.get(id)!;
+      expect(a.overall_rating, id).toBeGreaterThanOrEqual(b.overall_rating);
+      const [bs, as] = [JSON.parse(b.skills) as Record<string, number>, JSON.parse(a.skills) as Record<string, number>];
+      for (const [k, v] of Object.entries(bs)) if (typeof v === "number") expect(as[k], `${id} ${k}`).toBeGreaterThanOrEqual(v);
+      const [bm, am] = [JSON.parse(b.skills_max) as Record<string, { maxPotential?: number }>, JSON.parse(a.skills_max) as Record<string, { maxPotential?: number }>];
+      for (const [k, v] of Object.entries(bm)) {
+        if (typeof v?.maxPotential === "number") expect(am[k]?.maxPotential, `${id} ${k} strop`).toBeGreaterThanOrEqual(v.maxPotential);
+      }
+    }
+    expect(Math.abs((await top11("team-human-b")) - club.after.top11)).toBeLessThanOrEqual(0.1);
+    const teamAfter = await team();
+    expect(teamAfter.budget).toBeGreaterThanOrEqual(teamBefore.budget);
+    expect(teamAfter.reputation).toBeGreaterThanOrEqual(teamBefore.reputation);
   });
 });

@@ -32,6 +32,13 @@
  * U21 tým se narovnává stejným voláním s id U21 ligy (vzorem jsou lidské U21 týmy).
  * U rezervy se zvedají jen hráči a sehranost: zázemí, rozpočet i reputaci nese áčko.
  *
+ * Lidský klub se narovná jen výslovně (`teamIds`), typicky nováček v lize, kde AI kluby
+ * narovnání zvedlo nad něj (Strakonice a ČB 11/2026). Pevný percentil (`percentile`, 0,5 =
+ * střed vzoru) mu dá cíl uprostřed AI klubů. Lidskému klubu se jen přidává: hráči, zázemí,
+ * sehranost, rozpočet a reputace nahoru. Dorostenec nad stropem vrstevníků se nezvedne,
+ * ale ani nesníží. Nedostane hráče, zaměstnance ani povahu AI trenéra navíc (kádr a lidi
+ * si skládá sám) a jeho inzeráty zůstanou, plán na ně jen upozorní.
+ *
  * Plán (`planLeveling`) nic nezapisuje, je to tabulka před a po pro každý klub.
  * Provedení (`applyLeveling`) stav znovu načte a změny spočítá stejně (stejné cíle,
  * stejné semínko). Zápisy jdou v dávkách po 80, aby se liga se 14 kluby vešla do jednoho
@@ -178,6 +185,8 @@ export interface LevelingPlanClub {
   teamType: TeamType;
   /** Klub převzatý od člověka: nic se mu nebere. */
   takenOver: boolean;
+  /** Klub vede člověk (narovnává se jen výslovně): jen přidávat, nic AI navíc. */
+  human: boolean;
   percentile: number;
   /** Posun plochých dovedností stávajících hráčů v bodech. */
   skillShift: number;
@@ -716,6 +725,8 @@ interface ClubState {
   userId: string;
   teamType: TeamType;
   takenOver: boolean;
+  /** Klub vede člověk (`user_id` není `ai`), i jeho U21. */
+  human: boolean;
   villageName: string;
   villageSize: string;
   villageDistrict: string;
@@ -900,6 +911,7 @@ async function loadClubStates(db: D1Database, teamIds: readonly string[]): Promi
     states.push({
       teamId: t.id, name: t.name, userId: t.user_id, teamType,
       takenOver: !!t.ai_former_user_id,
+      human: t.user_id !== "ai",
       villageName: t.village_name ?? "", villageSize,
       villageDistrict: t.village_district ?? "", villagePopulation: t.village_population ?? 500,
       villageRegion: t.village_region ?? "CZ031",
@@ -1107,8 +1119,13 @@ async function loadReference(db: D1Database, leagueIds: readonly string[], now: 
 
 // ── Cíle ──────────────────────────────────────────────────────────────────
 
+/**
+ * Cíle klubu. `fixedPercentile` (0–1) nahradí percentil z pořadí obcí: u league-humans je to
+ * přímo percentil vzoru, u nižších režimů díl jejich rozsahu (1 = horní hranice).
+ */
 function targetsFor(
   ref: ReferenceStats, mode: LevelingMode, unit: number, club: ClubState, newcomerTop11: number | null,
+  fixedPercentile?: number,
 ): { percentile: number; targets: LevelingTargets } {
   const isU21 = club.teamType === "u21";
   const before = summarize(club);
@@ -1116,14 +1133,15 @@ function targetsFor(
   let top11: number;
   let top18: number;
   if (mode === "league-humans") {
-    percentile = LEAGUE_HUMANS_RANGE[0] + unit * (LEAGUE_HUMANS_RANGE[1] - LEAGUE_HUMANS_RANGE[0]);
+    percentile = fixedPercentile ?? LEAGUE_HUMANS_RANGE[0] + unit * (LEAGUE_HUMANS_RANGE[1] - LEAGUE_HUMANS_RANGE[0]);
     top11 = quantile(ref.top11, percentile);
     top18 = quantile(ref.top18, percentile);
   } else {
-    percentile = unit * MODEST_MAX_PERCENTILE;
+    const u = fixedPercentile ?? unit;
+    percentile = u * MODEST_MAX_PERCENTILE;
     const hi = Math.min(...ref.top11);
     const lo = mode === "below-league" ? hi - BELOW_LEAGUE_TOP11_GAP : Math.min(newcomerTop11 ?? hi, hi);
-    top11 = lo + unit * (hi - lo);
+    top11 = lo + u * (hi - lo);
     top18 = top11 - ref.top18Gap;
   }
 
@@ -1231,11 +1249,30 @@ export function modestBudgetTarget(population: number, percentile: number): numb
 }
 
 /**
- * Rozpočet nebo reputace po narovnání: původní AI klub jde na cíl i dolů, klubu převzatému
- * od člověka se nikdy nic nebere (vlastník se k němu může vrátit).
+ * Rozpočet nebo reputace po narovnání: původní AI klub jde na cíl i dolů. Klubu převzatému
+ * od člověka (vlastník se k němu může vrátit) ani lidskému klubu se nikdy nic nebere (`onlyUp`).
  */
-export function leveledFinance(current: number, target: number, takenOver: boolean): number {
-  return takenOver ? Math.max(current, target) : target;
+export function leveledFinance(current: number, target: number, onlyUp: boolean): number {
+  return onlyUp ? Math.max(current, target) : target;
+}
+
+/**
+ * Dorostenec lidského klubu: posun dovedností jen tak velký, aby hodnocení nepřešlo strop
+ * podle vrstevníků (`cap`). Na rozdíl od `lowerToRating` nic nebere, dovednosti ani strop
+ * nikdy neklesnou pod dnešní stav.
+ */
+export function shiftWithinCap(m: SquadMember, shift: number, capShare: number, cap: number): ShiftedMember {
+  const full = shiftMember(m, shift, capShare);
+  if (full.rating <= cap) return full;
+  if (m.rating >= cap) return shiftMember(m, 0, capShare);
+  let lo = 0;
+  let hi = shift;
+  for (let i = 0; i < 30; i++) {
+    const mid = (lo + hi) / 2;
+    if (shiftMember(m, mid, capShare).rating <= cap) lo = mid;
+    else hi = mid;
+  }
+  return shiftMember(m, lo, capShare);
 }
 
 function wageFor(rating: number, teamType: TeamType): number {
@@ -1263,8 +1300,9 @@ function computeClubChanges(
   const isU21 = club.teamType === "u21";
 
   // 1. Chybějící hráči do cílové velikosti kádru, jediným generátorem na úroveň hloubky kádru.
+  //    Lidský klub si kádr skládá sám, hráče navíc nedostane.
   const rng = createRng(playerSeed(seed, club.teamId));
-  const missing = Math.max(0, targets.squadSize - club.members.length);
+  const missing = club.human ? 0 : Math.max(0, targets.squadSize - club.members.length);
   const counts: Partial<Record<Position, number>> = {};
   for (const m of club.members) {
     const pos = (POSITIONS as readonly string[]).includes(m.position) ? m.position as Position : "MID";
@@ -1289,6 +1327,13 @@ function computeClubChanges(
     ...club.members.map((m) => ({ id: m.id, age: m.age, position: m.position, rating: m.rating })),
     ...newPlayers.map((p, i) => ({ id: newIdOf(i), age: p.created.age, position: p.position, rating: p.created.rating })),
   ], youthReference);
+  // Lidskému dorostenci nad stropem se nebere: strop je aspoň jeho dnešní hodnocení.
+  if (club.human) {
+    for (const m of club.members) {
+      const cap = youthCaps.get(m.id);
+      if (cap !== undefined && cap < m.rating) youthCaps.set(m.id, m.rating);
+    }
+  }
   newPlayers.forEach((p, i) => {
     const cap = youthCaps.get(newIdOf(i));
     if (cap === undefined || p.created.rating <= cap) return;
@@ -1312,7 +1357,10 @@ function computeClubChanges(
   for (const m of club.members) {
     let shifted = shiftMember(m, shift, capShare);
     const cap = youthCaps.get(m.id);
-    const lowered = cap !== undefined && shifted.rating > cap;
+    const overCap = cap !== undefined && shifted.rating > cap;
+    // AI dorostenec se sníží na strop, lidský se jen nezvedne nad něj.
+    if (cap !== undefined && overCap && club.human) shifted = shiftWithinCap(m, shift, capShare, cap);
+    const lowered = cap !== undefined && overCap && !club.human;
     if (lowered) shifted = lowerToRating({ ...m, ...shifted }, cap);
     ratingsAfter.push(shifted.rating);
     membersAfter.push({ position: m.position, skills: shifted.skills, skillsMax: shifted.skillsMax });
@@ -1320,7 +1368,7 @@ function computeClubChanges(
       youthLowered++;
       // Snížený dorostenec si nechá dosavadní mzdu, narovnání nikomu nebere peníze.
       raised.push({ id: m.id, shifted, wage: club.meta.get(m.id)?.wage ?? wageFor(shifted.rating, club.teamType) });
-    } else if (shift > 0) {
+    } else if (shift > 0 && shifted.skills !== m.skills) {
       const oldWage = club.meta.get(m.id)?.wage ?? 0;
       raised.push({ id: m.id, shifted, wage: Math.max(oldWage, wageFor(shifted.rating, club.teamType)) });
     }
@@ -1359,11 +1407,11 @@ function computeClubChanges(
     }
   }
 
-  // 5. Zaměstnanci: jen chybějící místa z cílového složení.
+  // 5. Zaměstnanci: jen chybějící místa z cílového složení. Lidský klub si lidi najímá sám.
   const have = new Map<string, number>();
   for (const r of club.staffRoles) have.set(r, (have.get(r) ?? 0) + 1);
   const hireRoles: string[] = [];
-  if (!isU21) {
+  if (!isU21 && !club.human) {
     for (const role of targets.staffRoles) {
       const n = have.get(role) ?? 0;
       if (n > 0) have.set(role, n - 1);
@@ -1371,9 +1419,10 @@ function computeClubChanges(
     }
   }
 
-  // 6. Rozpočet a reputace: původní AI klub na cíl, převzatému klubu nic nebrat. U21 nic.
-  const budget = isU21 ? null : leveledFinance(club.budget, targets.budget, club.takenOver);
-  const reputation = isU21 ? null : leveledFinance(club.reputation, targets.reputation, club.takenOver);
+  // 6. Rozpočet a reputace: původní AI klub na cíl, převzatému a lidskému klubu nic nebrat. U21 nic.
+  const onlyUp = club.takenOver || club.human;
+  const budget = isU21 ? null : leveledFinance(club.budget, targets.budget, onlyUp);
+  const reputation = isU21 ? null : leveledFinance(club.reputation, targets.reputation, onlyUp);
 
   // 7. Sehranost formací jen nahoru.
   const familiarity = { ...club.familiarity };
@@ -1445,6 +1494,11 @@ export interface PlanLevelingOptions {
    * přeboru okresu (vždy seniorská liga, U21 si vezme její U21). Viz referenceLeagueIds.
    */
   referenceLeagueId?: string;
+  /**
+   * Pevný percentil vzoru (0–1) pro všechny narovnávané kluby místo pořadí podle obcí.
+   * Pro lidský klub nováčka, který má dostat střed (0,5), viz `targetsFor`.
+   */
+  percentile?: number;
 }
 
 /** Tabulka před a po pro každý narovnávaný klub. Nic nezapisuje. */
@@ -1500,14 +1554,26 @@ export async function planLeveling(db: D1Database, opts: PlanLevelingOptions): P
     const newcomerTop11 = opts.mode === "newcomer"
       ? measureNewcomerTop11(club.villageSize, (opts.seed ^ seedFromText(`newcomer:${club.villageSize}`)) >>> 0, club.teamType)
       : null;
-    const { percentile, targets } = targetsFor(ref, opts.mode, units[i], club, newcomerTop11);
+    const { percentile, targets } = targetsFor(ref, opts.mode, units[i], club, newcomerTop11, opts.percentile);
     const changes = computeClubChanges(club, targets, opts.seed, ref.ages, names.get(club.villageDistrict)!, ref.youthRatings);
     plan.clubs.push({
-      teamId: club.teamId, name: club.name, teamType: club.teamType, takenOver: club.takenOver,
+      teamId: club.teamId, name: club.name, teamType: club.teamType, takenOver: club.takenOver, human: club.human,
       percentile, skillShift: changes.shift, capShare: changes.capShare, newPlayers: changes.newPlayers.length,
       youthLowered: changes.youthLowered, before: summarize(club), target: targets, after: changes.after,
     });
   });
+
+  // Inzeráty lidských klubů se nestahují (rozhoduje vlastník), ale cena v nich je ze starého hodnocení.
+  const humanIds = clubs.filter((c) => c.human).map((c) => c.teamId);
+  if (humanIds.length > 0) {
+    const listed = await db.prepare(
+      `SELECT p.team_id, COUNT(*) AS n FROM transfer_listings tl JOIN players p ON p.id = tl.player_id
+        WHERE tl.status = 'active' AND p.team_id IN (${placeholders(humanIds.length)}) GROUP BY p.team_id`,
+    ).bind(...humanIds).all<{ team_id: string; n: number }>();
+    for (const r of listed.results) {
+      warnings.push(`Lidský klub ${r.team_id} má ${r.n} aktivních inzerátů s cenou ze starého hodnocení, nestahuji je.`);
+    }
+  }
   return plan;
 }
 
@@ -1554,7 +1620,8 @@ export async function applyLeveling(db: D1Database, plan: LevelingPlan): Promise
     if (c.teamType !== "senior") continue;
     await ensureStadiumRow(db, c.teamId);
     await ensureEquipmentRow(db, c.teamId);
-    await ensureAiProfile(db, c.teamId);
+    // Povaha AI trenéra jen AI klubům.
+    if (!c.human) await ensureAiProfile(db, c.teamId);
   }
   const clubs = await loadClubStates(db, plan.clubs.map((c) => c.teamId));
   const ages = agesFromProfile(plan.reference.ageProfile);
@@ -1587,7 +1654,8 @@ export async function applyLeveling(db: D1Database, plan: LevelingPlan): Promise
         r.shifted.rating, r.wage, r.id));
       // Cena inzerátu vznikla ze starého hodnocení: po zvednutí by visel hluboko pod tržní cenou
       // a AI by nabídky ve výši inzerátu odmítala (pojistka 60 % trhu). AI trenér hráče vystaví znovu.
-      listingStmts.push(db.prepare("UPDATE transfer_listings SET status = 'withdrawn' WHERE player_id = ? AND status = 'active'").bind(r.id));
+      // Inzeráty lidského klubu nechává narovnání vlastníkovi (plán na ně upozorní).
+      if (!club.human) listingStmts.push(db.prepare("UPDATE transfer_listings SET status = 'withdrawn' WHERE player_id = ? AND status = 'active'").bind(r.id));
     }
     result.playersRaised += changes.raised.length;
 
