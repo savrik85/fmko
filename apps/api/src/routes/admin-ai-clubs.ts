@@ -8,6 +8,8 @@
  *   Volitelně `teamIds=a,b` jen pro vybrané kluby. U21 liga se narovná stejným voláním.
  *   Volitelně `refLeagueId`: vzorem jsou lidé z jiné ligy (league-humans: ČB podle Prahy,
  *   below-league: IV. třída pod III. třídu místo pod přebor).
+ *   Lidský klub jen výslovně v `teamIds`, s `percentile=0.5` na střed vzoru: jen přidává,
+ *   nic nebere, bez hráčů, zaměstnanců a AI povahy navíc (Strakonice a ČB 11/2026).
  *
  * POST /api/admin/ai-clubs/lower-league?district=Prachatice&seed=&dryRun=1
  *   III. třída okresu uprostřed sezóny (část 2): 14 AI klubů z největších obcí bez klubu,
@@ -103,6 +105,13 @@ adminAiClubsRouter.post("/level", async (c) => {
   const teamIds = c.req.query("teamIds")?.split(",").map((s) => s.trim()).filter(Boolean);
   const referenceLeagueId = c.req.query("refLeagueId") || undefined;
   if (referenceLeagueId && mode === "newcomer") return c.json({ error: "refLeagueId jde jen s režimy league-humans a below-league" }, 400);
+  // Pevný percentil vzoru (lidský nováček na střed = 0.5); jen s výslovným seznamem klubů.
+  const rawPercentile = c.req.query("percentile");
+  const percentile = rawPercentile !== undefined && rawPercentile !== "" ? Number(rawPercentile) : undefined;
+  if (percentile !== undefined && !(Number.isFinite(percentile) && percentile >= 0 && percentile <= 1)) {
+    return c.json({ error: "percentile musí být číslo 0 až 1" }, 400);
+  }
+  if (percentile !== undefined && !teamIds?.length) return c.json({ error: "percentile jde jen s teamIds" }, 400);
 
   const league = await c.env.DB.prepare("SELECT id FROM leagues WHERE id = ?").bind(leagueId).first<{ id: string }>();
   if (!league) return c.json({ error: "Liga neexistuje" }, 404);
@@ -112,7 +121,7 @@ adminAiClubsRouter.post("/level", async (c) => {
   }
 
   try {
-    const plan = await planLeveling(c.env.DB, { leagueId, mode, seed, teamIds, referenceLeagueId });
+    const plan = await planLeveling(c.env.DB, { leagueId, mode, seed, teamIds, referenceLeagueId, percentile });
     if (isDryRun(c.req.query("dryRun"))) return c.json({ dryRun: true, plan });
     const result = await applyLeveling(c.env.DB, plan);
     return c.json({ dryRun: false, plan, result });
