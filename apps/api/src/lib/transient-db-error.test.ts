@@ -13,6 +13,10 @@ describe("přechodné chyby D1", () => {
     expect(isTransientDbError(new Error("D1 DB storage operation exceeded timeout which caused object to be reset."))).toBe(true);
   });
 
+  it("výpadek D1 „internal error“ je přechodný (text z produkce 20. 11. 2026)", () => {
+    expect(isTransientDbError(new Error("D1_ERROR: internal error; reference = 5d47d44unt9ro022tuerluod"))).toBe(true);
+  });
+
   it("chyba v SQL nebo v kódu přechodná není", () => {
     expect(isTransientDbError(new Error("D1_ERROR: no such column: match_date: SQLITE_ERROR"))).toBe(false);
     expect(isTransientDbError(new TypeError("Cannot read properties of undefined (reading 'id')"))).toBe(false);

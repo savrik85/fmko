@@ -297,3 +297,55 @@ describe("fotka od trenéra hráči", () => {
     expect(await credit()).toBe(23);
   }, 60_000);
 });
+
+describe("opakované odeslání téže zprávy (clientId)", () => {
+  const send = (payload: Record<string, unknown>) => call(`/api/teams/${TEAM}/conversations/${CONV}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const coachMessages = async () => (await db.prepare(
+    "SELECT COUNT(*) AS n FROM messages WHERE conversation_id = ? AND sender_type = 'user'",
+  ).bind(CONV).first<{ n: number }>())?.n ?? -1;
+
+  it("SMS poslaná podruhé se stejným id se neuloží ani nezaplatí znovu", async () => {
+    const clientId = crypto.randomUUID();
+    const first = await send({ body: "Zdar, v sobotu hraješ", clientId });
+    expect(first.status).toBe(200);
+    expect(first.body.id).toBe(clientId);
+    const afterFirst = await credit();
+    expect(afterFirst).toBe(36 - 3);
+    const repliesAfterFirst = vi.mocked(generateText).mock.calls.length;
+
+    const again = await send({ body: "Zdar, v sobotu hraješ", clientId });
+    expect(again.status).toBe(200);
+    expect(again.body).toMatchObject({ id: clientId, duplicate: true });
+    expect(await coachMessages()).toBe(1);
+    expect(await credit()).toBe(afterFirst);
+    // Hráč na zopakovanou zprávu znovu neodpovídá.
+    expect(vi.mocked(generateText).mock.calls.length).toBe(repliesAfterFirst);
+  }, 60_000);
+
+  it("fotka poslaná znovu vrátí uloženou fotku, i když odklad už je prázdný", async () => {
+    const clientId = crypto.randomUUID();
+    const upload = await uploadPhoto();
+    const first = await send({ body: "", photo: { photoKey: upload.body.photoKey }, clientId });
+    expect(first.status).toBe(200);
+    const again = await send({ body: "", photo: { photoKey: upload.body.photoKey }, clientId });
+    expect(again.body).toMatchObject({ id: clientId, duplicate: true, photoKey: first.body.photoKey });
+    expect(await coachMessages()).toBe(1);
+    expect(await credit()).toBe(36 - COACH_PHOTO_PRICE);
+  }, 60_000);
+
+  it("id zprávy z jiné konverzace se nepoužije a zpráva dostane vlastní", async () => {
+    const foreignId = crypto.randomUUID();
+    await db.prepare(
+      "INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, sent_at, read) VALUES (?, ?, 'user', ?, 'SK Fotka', 'v kabině', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 1)",
+    ).bind(foreignId, SQUAD_CONV, TEAM).run();
+    const res = await send({ body: "Ahoj", clientId: foreignId });
+    expect(res.status).toBe(200);
+    expect(res.body.id).not.toBe(foreignId);
+    expect(res.body.duplicate).toBeUndefined();
+    expect(await coachMessages()).toBe(1);
+  }, 60_000);
+});
