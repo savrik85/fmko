@@ -97,14 +97,16 @@ export function learningEffect(
 
 /** Slova o sestavě a roli: „řekl mu to předem“ platí jen pro takovou SMS, ne pro „ahoj“. */
 export const LINEUP_TALK_RE = /(sestav|z[aá]klad|lavi[cč]k|st[rř][ií]d|nehraj|nebude[sš] hr[aá]t|nepojede|nejede[sš]|nastoup|p[aá]sk|kapit[aá]n|br[aá]n[aěeu]|chytat|nominac|soupisk|na z[aá]pas nep|tribun)/i;
+/** U pásky stačí jen zmínka o pásce nebo kapitánovi (lavička kvůli bráchovi se nepočítá). */
+export const CAPTAINCY_TALK_RE = /(p[aá]sk|kapit[aá]n)/i;
 
 /**
- * Psal trenér hráči v jejich konverzaci 1:1 od `sinceIso`? S `aboutLineup` jen zprávu
- * o sestavě, pásce, lavičce či bráně (závěrečná kontrola: jinak by stačilo „ahoj“).
+ * Psal trenér hráči v jejich konverzaci 1:1 od `sinceIso`? S `about` jen zprávu o sestavě
+ * (`lineup`) nebo o pásce (`captaincy`); jinak by stačilo „ahoj“ (závěrečná kontrola).
  */
 export async function coachTalkedSince(
   db: D1Database,
-  o: { clubTeamId: string; playerId: string; sinceIso: string; aboutLineup?: boolean },
+  o: { clubTeamId: string; playerId: string; sinceIso: string; about?: "lineup" | "captaincy" },
 ): Promise<boolean> {
   const rows = await db.prepare(
     `SELECT m.body FROM conversations c JOIN messages m ON m.conversation_id = c.id
@@ -113,7 +115,8 @@ export async function coachTalkedSince(
       ORDER BY m.sent_at DESC LIMIT 20`,
   ).bind(o.clubTeamId, o.playerId, o.sinceIso).all<{ body: string }>()
     .catch((e) => { logger.warn({ module: M }, `psal trenér hráči ${o.playerId}`, e); return { results: [] as Array<{ body: string }> }; });
-  return o.aboutLineup ? rows.results.some((r) => LINEUP_TALK_RE.test(r.body)) : rows.results.length > 0;
+  const re = o.about === "captaincy" ? CAPTAINCY_TALK_RE : o.about === "lineup" ? LINEUP_TALK_RE : null;
+  return re ? rows.results.some((r) => re.test(r.body)) : rows.results.length > 0;
 }
 
 const DESCRIPTION: Record<SaidKind, string> = {
@@ -180,7 +183,8 @@ export async function learningEffectStmts(
   const behindBack = o.via !== "squad_chat" && o.via !== "direct";
   const coachTalkedFirst = behindBack && o.item.kind === "decision_against" && await coachTalkedSince(db, {
     clubTeamId: o.item.clubTeamId, playerId: o.playerId,
-    sinceIso: new Date(Date.parse(o.item.createdAt) - DAY_MS).toISOString(), aboutLineup: true,
+    sinceIso: new Date(Date.parse(o.item.createdAt) - DAY_MS).toISOString(),
+    about: o.item.origin === "captain_change" || o.item.origin === "lineup_armband" ? "captaincy" : "lineup",
   });
   const seededRoll = createRng(seedFromString(`${o.item.id}:${o.playerId}`)).random();
   const eff = learningEffect(o.item.kind, o.via, { coachTalkedFirst, seededRoll });

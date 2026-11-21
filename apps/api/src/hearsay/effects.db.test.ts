@@ -76,14 +76,21 @@ describe("dopad v databázi", () => {
 
   it("„řekl mu to předem“ jen když mu psal o sestavě, pásce nebo lavičce", async () => {
     await db.prepare("INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, sent_at) VALUES ('m0', 'c-smejkal', 'user', 'Trenér', 'Ahoj, jak se máš?', '2026-11-21T07:00:00Z')").run();
-    expect(await coachTalkedSince(db, { clubTeamId: "club", playerId: "smejkal", sinceIso: "2026-11-20T12:00:00Z", aboutLineup: true })).toBe(false);
+    expect(await coachTalkedSince(db, { clubTeamId: "club", playerId: "smejkal", sinceIso: "2026-11-20T12:00:00Z", about: "lineup" })).toBe(false);
     await db.prepare("INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, sent_at) VALUES ('m2', 'c-smejkal', 'user', 'Trenér', 'V neděli půjdeš na lavičku, nezlob se.', '2026-11-21T08:30:00Z')").run();
-    expect(await coachTalkedSince(db, { clubTeamId: "club", playerId: "smejkal", sinceIso: "2026-11-20T12:00:00Z", aboutLineup: true })).toBe(true);
+    expect(await coachTalkedSince(db, { clubTeamId: "club", playerId: "smejkal", sinceIso: "2026-11-20T12:00:00Z", about: "lineup" })).toBe(true);
   });
 
   it("když mu trenér den předtím psal, ví to coachTalkedSince", async () => {
     await db.prepare("INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, sent_at) VALUES ('m1', 'c-smejkal', 'user', 'Trenér', 'Rosťo, musíš víc makat', '2026-11-21T08:00:00Z')").run();
     expect(await coachTalkedSince(db, { clubTeamId: "club", playerId: "smejkal", sinceIso: "2026-11-20T12:00:00Z" })).toBe(true);
     expect(await coachTalkedSince(db, { clubTeamId: "club", playerId: "smejkal", sinceIso: "2026-11-21T09:00:00Z" })).toBe(false);
+  });
+
+  it("u pásky platí „řekl předem“ jen zmínka o pásce nebo kapitánovi, lavička kvůli bráchovi ne", async () => {
+    await db.prepare("INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, sent_at) VALUES ('m5', 'c-smejkal', 'user', 'Trenér', 'Brácha Lukáš sedne na lavičku.', '2026-11-21T08:30:00Z')").run();
+    expect(await coachTalkedSince(db, { clubTeamId: "club", playerId: "smejkal", sinceIso: "2026-11-20T12:00:00Z", about: "captaincy" })).toBe(false);
+    await db.prepare("INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, sent_at) VALUES ('m6', 'c-smejkal', 'user', 'Trenér', 'Rosťo, pásku dám Lukášovi, nezlob se.', '2026-11-21T09:30:00Z')").run();
+    expect(await coachTalkedSince(db, { clubTeamId: "club", playerId: "smejkal", sinceIso: "2026-11-20T12:00:00Z", about: "captaincy" })).toBe(true);
   });
 });

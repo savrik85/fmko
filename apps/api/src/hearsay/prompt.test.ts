@@ -44,4 +44,10 @@ describe("paměť toho, co hráč slyšel", () => {
     const all = hearsayPromptLines([aboutMe, aboutOther, { ...aboutMe, origin: "captain_change", quote: "Kapitánem je teď David Daniel", kind: "decision_against", recipientName: null }]);
     for (const l of all) expect(l).not.toMatch(/[—–]/);
   });
+
+  it("o pásku přišel on, ne že ji dostal (naživo to model pochopil obráceně)", () => {
+    const [line] = hearsayPromptLines([{ ...aboutMe, origin: "captain_change", quote: "Kapitánem je teď Lukáš Novotný", kind: "decision_against", recipientName: null, fromName: "Rostislav Havlík", via: "teammate" }]);
+    expect(line).toContain("Přišel jsi o kapitánskou pásku");
+    expect(line).toContain("Kapitánem je teď Lukáš Novotný");
+  });
 });

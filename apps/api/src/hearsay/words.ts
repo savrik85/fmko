@@ -38,8 +38,10 @@ export function heardFact(o: { origin: HearsayOrigin; quote: string; recipientNa
   if (o.origin === "transfer") {
     return `${o.quote}. ${o.via === "competitor" ? "Hraje na stejném postu jako ty." : `Je to ${viaWord(o.via)}.`}`;
   }
-  const what = o.origin === "captain_change" ? `Trenér změnil kapitána: ${o.quote}.`
-    : o.origin === "lineup_armband" ? `Na zápas dostal kapitánskou pásku místo tebe někdo jiný: ${o.quote}.`
+  // Výslovně „přišel jsi“: s „Trenér změnil kapitána: Kapitánem je teď X“ si to model
+  // naživo vyložil obráceně („Že jsem už kapitánem?“).
+  const what = o.origin === "captain_change" ? `Přišel jsi o kapitánskou pásku. ${o.quote}.`
+    : o.origin === "lineup_armband" ? `Na zápas jsi přišel o kapitánskou pásku. ${o.quote}.`
       : o.recipientName ? `Spoluhráč ${o.recipientName} dostal od trenéra SMS, kde o tobě stojí: „${o.quote}“.`
         : `Trenér o tobě napsal: „${o.quote}“.`;
   return `${what} ${sourceSentence(o.via, o.fromName)}`;
