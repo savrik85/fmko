@@ -49,7 +49,11 @@ export async function loadHearsayMemory(
   now: Date = new Date(),
 ): Promise<HearsayMemoryLine[]> {
   const { loadPlayerHearsay } = await import("./store");
-  const known = await loadPlayerHearsay(db, playerId, now);
+  // Jen věci z klubu, kterému hráč teď píše. Po přestupu by jinak novému trenérovi (jinému
+  // hráči hry) vyklopil, co o kom psal ten bývalý.
+  const club = await db.prepare("SELECT COALESCE(parent_team_id, id) AS id FROM teams WHERE id = ?").bind(teamId).first<{ id: string }>();
+  if (!club) return [];
+  const known = (await loadPlayerHearsay(db, playerId, now)).filter((k) => k.clubTeamId === club.id);
   if (known.length === 0) return [];
   const ids = [...new Set(known.flatMap((k) => [k.subjectPlayerId, k.recipientPlayerId, k.knowledge.fromPlayerId]).filter((x): x is string => !!x))];
   const names = await db.prepare(

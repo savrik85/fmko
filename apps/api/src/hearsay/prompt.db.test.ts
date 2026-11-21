@@ -41,4 +41,11 @@ describe("paměť hráče z databáze", () => {
     expect(lines).toHaveLength(1);
     expect(lines[0]).toMatchObject({ quote: "b", recipientName: null });
   });
+
+  it("věc z jiného klubu (hráč přestoupil) se v novém klubu neukáže", async () => {
+    await db.prepare("UPDATE players SET team_id = 'other' WHERE id IN ('smejkal', 'sima')").run();
+    await recordHearsay(db, { clubTeamId: "club", subjectPlayerId: "smejkal", kind: "criticism", origin: "coach_sms", recipientPlayerId: "sima", conversationId: null, quote: "tajné", createdAt: at },
+      [{ playerId: "smejkal", via: "brothers" }]);
+    expect(await loadHearsayMemory(db, "smejkal", "other", NOW)).toEqual([]);
+  });
 });
