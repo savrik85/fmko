@@ -22,6 +22,7 @@ const MAX_LINES = 3;
 function line(l: HearsayMemoryLine): string {
   if (l.aboutMe) {
     if (l.via === "squad_chat") return `- Trenér o tobě napsal do kabiny před všemi: „${l.quote}“.`;
+    if (l.origin === "transfer") return `- PŘESTUP, KTERÝ SE TĚ TÝKÁ: ${heardFact({ origin: l.origin, quote: l.quote, recipientName: null, via: l.via, fromName: null })}`;
     return `- VÍŠ, CO O TOBĚ TRENÉR ŘÍKAL: ${heardFact({ origin: l.origin, quote: l.quote, recipientName: l.recipientName, via: l.via, fromName: l.fromName })}`;
   }
   if (l.via === "direct") return `- Trenér ti napsal o spoluhráči (${l.subjectName}): „${l.quote}“.`;

@@ -14,15 +14,27 @@ import { postPlayerMessageStmts } from "../messaging/follow-ups";
 import { playerInClub } from "../messaging/player-reach";
 import { DAY_MS, type HearsayKind, type HearsayOrigin, type KnowledgeVia } from "./types";
 import { heardFact } from "./words";
+import { isTransferKind, learningEffect } from "./effects";
 
 const M = "hearsay-messages";
 
 export const MAX_HEARSAY_MESSAGES_PER_DAY = 2;
 const PENDING_HOURS = 48;
-const PRIORITY: Record<HearsayKind, number> = { decision_against: 3, criticism: 2, praise: 1, decision_for: 0 };
+const PRIORITY: Record<HearsayKind, number> = {
+  decision_against: 3, teammate_left: 2.5, teammate_arrived: 2.5, criticism: 2, praise: 1, decision_for: 0,
+};
 const SCENARIO: Partial<Record<HearsayKind, string>> = {
   decision_against: "heard_decision", criticism: "heard_criticism", praise: "heard_praise",
 };
+
+/** Scénář zprávy; u přestupu podle toho, jestli ho to těší (rival odešel, brácha přišel), nebo štve. */
+function scenarioIdFor(kind: HearsayKind, via: KnowledgeVia): string | null {
+  if (isTransferKind(kind)) {
+    const effect = learningEffect(kind, via, { coachTalkedFirst: false, seededRoll: 1 });
+    return effect.morale > 0 ? "transfer_reaction_good" : "transfer_reaction_bad";
+  }
+  return SCENARIO[kind] ?? null;
+}
 
 interface PendingRow {
   hearsay_id: string; player_id: string; via: string; from_player_id: string | null; learned_at: string;
@@ -97,7 +109,8 @@ export async function deliverHearsayMessages(
 
 async function deliverOne(db: D1Database, env: PhoneEnv, row: PendingRow, now: Date): Promise<"sent" | "wait" | "gone" | "model_down"> {
   const kind = row.kind as HearsayKind;
-  const scenarioBase = SCENARIO[kind] ? getScenarioById(SCENARIO[kind]!) : null;
+  const scenarioId = scenarioIdFor(kind, row.via as KnowledgeVia);
+  const scenarioBase = scenarioId ? getScenarioById(scenarioId) : null;
   const markState = (state: string) => db.prepare(
     "UPDATE squad_hearsay_knowledge SET message_state = ? WHERE hearsay_id = ? AND player_id = ?",
   ).bind(state, row.hearsay_id, row.player_id).run();
@@ -152,7 +165,7 @@ async function deliverOne(db: D1Database, env: PhoneEnv, row: PendingRow, now: D
   const state = {
     trigger: scenario.id, scenario_id: scenario.id, max_replies: scenario.expectedTurns, current_replies: 0,
     awaiting: "coach", initiated_at: sentAt, player_id: player.id, resolution: null,
-    hearsay_id: row.hearsay_id, ...(kind === "praise" ? { casual: true } : {}),
+    hearsay_id: row.hearsay_id, ...(scenarioBase.category === "casual" ? { casual: true } : {}),
   };
   await db.batch([
     ...postPlayerMessageStmts(db, {

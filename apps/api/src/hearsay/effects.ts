@@ -18,8 +18,12 @@ export interface LearningEffect { relation: number; morale: number; unrest: numb
 
 type Row = Omit<LearningEffect, "message"> & { message: "always" | "never" | number };
 
+type SaidKind = "praise" | "criticism" | "decision_against" | "decision_for";
+type TransferKind = "teammate_left" | "teammate_arrived";
+type TieGroup = "family" | "friends" | "coworkers" | "rivals" | "competitor";
+
 /** Za zády: vztah, nálada, nespokojenost (jen kdo ji má) a jestli o tom hráč napíše. */
-const BEHIND_BACK: Record<HearsayKind, Row> = {
+const BEHIND_BACK: Record<SaidKind, Row> = {
   praise: { relation: 3, morale: 2, unrest: 0, message: 0.5 },
   criticism: { relation: -4, morale: -3, unrest: 0, message: "always" },
   decision_against: { relation: -3, morale: -4, unrest: 10, message: "always" },
@@ -27,12 +31,41 @@ const BEHIND_BACK: Record<HearsayKind, Row> = {
 };
 
 /** Před kabinou (trenér to napsal do skupiny a hráč to čte sám). */
-const IN_FRONT: Record<HearsayKind, Omit<LearningEffect, "message">> = {
+const IN_FRONT: Record<SaidKind, Omit<LearningEffect, "message">> = {
   praise: { relation: 4, morale: 3, unrest: 0 },
   criticism: { relation: -5, morale: -4, unrest: 0 },
   decision_against: { relation: -2, morale: -3, unrest: 0 },
   decision_for: { relation: 0, morale: 3, unrest: 0 },
 };
+
+/** Přestup kamaráda, bráchy, rivala nebo konkurenta na postu (spec 3b). Chybějící = nic. */
+const TRANSFER: Record<TransferKind, Partial<Record<TieGroup, Row>>> = {
+  teammate_left: {
+    family: { relation: -5, morale: -6, unrest: 15, message: "always" },
+    friends: { relation: -2, morale: -3, unrest: 0, message: 0.5 },
+    coworkers: { relation: 0, morale: -1, unrest: 0, message: "never" },
+    rivals: { relation: 0, morale: 2, unrest: 0, message: 0.3 },
+  },
+  teammate_arrived: {
+    family: { relation: 4, morale: 5, unrest: 0, message: "always" },
+    friends: { relation: 0, morale: 2, unrest: 0, message: 0.3 },
+    rivals: { relation: 0, morale: -2, unrest: 0, message: 0.5 },
+    competitor: { relation: 0, morale: -3, unrest: 5, message: 0.5 },
+  },
+};
+
+export function tieGroup(via: KnowledgeVia): TieGroup | null {
+  if (via === "brothers" || via === "father_son") return "family";
+  if (via === "drinking_buddies" || via === "mentor_pupil" || via === "classmates" || via === "neighbors" || via === "in_laws") return "friends";
+  if (via === "coworkers" || via === "rivals" || via === "competitor") return via;
+  return null;
+}
+
+export const isTransferKind = (kind: HearsayKind): kind is TransferKind => kind === "teammate_left" || kind === "teammate_arrived";
+
+function messageOf(row: Row, roll: number): boolean {
+  return row.message === "always" ? true : row.message === "never" ? false : roll < row.message;
+}
 
 /** Stejná věc o sobě (stejný druh) do tolika dnů už nic nepřidá: „to už vím“. */
 const SAME_KIND_DAYS = 3;
@@ -44,6 +77,12 @@ export function learningEffect(
   via: KnowledgeVia,
   o: { coachTalkedFirst: boolean; seededRoll: number },
 ): LearningEffect {
+  if (isTransferKind(kind)) {
+    const group = tieGroup(via);
+    const row = group ? TRANSFER[kind][group] : undefined;
+    if (!row) return { relation: 0, morale: 0, unrest: 0, message: false };
+    return { relation: row.relation, morale: row.morale, unrest: row.unrest, message: messageOf(row, o.seededRoll) };
+  }
   if (via === "squad_chat" || via === "direct") return { ...IN_FRONT[kind], message: false };
   const row = BEHIND_BACK[kind];
   // Když to trenér hráči řekl sám dřív, než se to dozvěděl jinudy, zabolí to míň.
@@ -52,7 +91,7 @@ export function learningEffect(
     relation: HALF_IF(o.coachTalkedFirst, row.relation, negative),
     morale: HALF_IF(o.coachTalkedFirst, row.morale, negative),
     unrest: HALF_IF(o.coachTalkedFirst, row.unrest, negative),
-    message: row.message === "always" ? true : row.message === "never" ? false : o.seededRoll < row.message,
+    message: messageOf(row, o.seededRoll),
   };
 }
 
@@ -71,14 +110,20 @@ export async function coachTalkedSince(
   return !!row;
 }
 
-const DESCRIPTION: Record<HearsayKind, string> = {
+const DESCRIPTION: Record<SaidKind, string> = {
   praise: "Doslechl se, žes ho chválil",
   criticism: "Doslechl se, žes ho za zády kritizoval",
   decision_against: "Rozhodnutí na jeho úkor se dozvěděl od ostatních",
   decision_for: "Doslechl se, že s ním počítáš",
 };
 
-const IN_FRONT_SUMMARY: Record<HearsayKind, string> = {
+function description(kind: HearsayKind, via: KnowledgeVia, relation: number): string {
+  if (kind === "teammate_left") return relation < 0 ? "Z klubu odešel někdo, kdo mu je blízký" : "Z klubu odešel ten, koho nemusí";
+  if (kind === "teammate_arrived") return relation > 0 ? "Do klubu jsi přivedl někoho, kdo mu je blízký" : via === "competitor" ? "Přivedl jsi konkurenta na jeho post" : "Do klubu přišel ten, koho nemusí";
+  return DESCRIPTION[kind];
+}
+
+const IN_FRONT_SUMMARY: Record<SaidKind, string> = {
   praise: "Trenér ho pochválil před celou kabinou",
   criticism: "Trenér ho zkritizoval před celou kabinou",
   decision_against: "Trenér před kabinou oznámil rozhodnutí na jeho úkor",
@@ -103,8 +148,9 @@ export async function learningEffectStmts(
 ): Promise<{ stmts: D1PreparedStatement[]; message: boolean }> {
   const none = { stmts: [] as D1PreparedStatement[], message: false };
   if (o.playerId !== o.item.subjectPlayerId) return none;
+  const transfer = isTransferKind(o.item.kind);
 
-  const already = await db.prepare(
+  const already = transfer ? null : await db.prepare(
     `SELECT 1 AS x FROM squad_hearsay_knowledge k JOIN squad_hearsay h ON h.id = k.hearsay_id
       WHERE k.player_id = ? AND h.subject_player_id = ? AND h.kind = ? AND h.id != ?
         AND julianday(k.learned_at) >= julianday(?)
@@ -123,11 +169,11 @@ export async function learningEffectStmts(
   const seededRoll = createRng(seedFromString(`${o.item.id}:${o.playerId}`)).random();
   const eff = learningEffect(o.item.kind, o.via, { coachTalkedFirst, seededRoll });
 
-  if (!behindBack) {
+  if (!behindBack && !transfer) {
     // Před kabinou: stejná cesta a strop jako rozhovor, který začal trenér.
     const { dopadRozhovoru } = await import("../messaging/coach-initiated");
     const stmts = await dopadRozhovoru(db, o.item.clubTeamId, o.playerId, {
-      relationshipDelta: eff.relation, moraleDelta: eff.morale, summary: IN_FRONT_SUMMARY[o.item.kind],
+      relationshipDelta: eff.relation, moraleDelta: eff.morale, summary: IN_FRONT_SUMMARY[o.item.kind as SaidKind],
     });
     return { stmts, message: false };
   }
@@ -142,7 +188,7 @@ export async function learningEffectStmts(
   }
 
   const stmts: D1PreparedStatement[] = [
-    ...coachRelationStmts(db, { playerId: o.playerId, delta: relation, source: "hearsay", description: DESCRIPTION[o.item.kind], gameDate: o.gameDay }),
+    ...coachRelationStmts(db, { playerId: o.playerId, delta: relation, source: "hearsay", description: description(o.item.kind, o.via, relation), gameDate: o.gameDay }),
   ];
   if (morale !== 0) stmts.push(moraleStmt(db, o.playerId, morale));
   if (eff.unrest !== 0) {

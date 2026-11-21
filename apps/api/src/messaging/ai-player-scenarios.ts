@@ -559,6 +559,25 @@ export const AI_PLAYER_SCENARIOS: AiScenario[] = [
       "Kluci ti řekli, že tě trenér chválil. Potěšilo tě to, poděkuj po svém, klidně s vtipem.",
     weight: () => 0,
   },
+  // Přestup kamaráda, bráchy, rivala nebo konkurenta na postu (hearsay/transfers.ts, spec 3b).
+  {
+    id: "transfer_reaction_bad",
+    label: "Štve ho přestup",
+    category: "complaint",
+    expectedTurns: 3,
+    description:
+      "Klub prodal nebo koupil hráče a týká se to tebe (co přesně, máš v CO ZNÁŠ). Mrzí tě to nebo tě to štve. Napiš to trenérovi po svém.",
+    weight: () => 0,
+  },
+  {
+    id: "transfer_reaction_good",
+    label: "Těší ho přestup",
+    category: "casual",
+    expectedTurns: 2,
+    description:
+      "Klub prodal nebo koupil hráče a tebe to těší (co přesně, máš v CO ZNÁŠ). Napiš to trenérovi po svém, klidně s vtipem.",
+    weight: () => 0,
+  },
 ];
 
 /**

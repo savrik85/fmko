@@ -12,7 +12,7 @@ import { seedFromString } from "../lib/seed";
 import { createRng } from "../generators/rng";
 import { learningEffectStmts } from "./effects";
 import { knowledgeStmts, loadClubHearsay } from "./store";
-import { DAY_MS, SPREAD_WINDOW_DAYS, type HearsayItem, type HearsayKind, type HearsayKnowledge, type KnowledgeVia } from "./types";
+import { DAY_MS, SPREAD_WINDOW_DAYS, SPREADABLE_KINDS, type HearsayItem, type HearsayKind, type HearsayKnowledge, type KnowledgeVia } from "./types";
 
 const M = "hearsay-spread";
 
@@ -32,7 +32,11 @@ export interface SpreadInput {
 
 /** Kalibrace: Task 12 (simulace nad kopií produ). Jediná páka na četnost je HOURLY_BASE. */
 export const HOURLY_BASE = 0.05;
-const KIND_FACTOR: Record<HearsayKind, number> = { praise: 1, criticism: 1, decision_for: 1, decision_against: 1.4 };
+const KIND_FACTOR: Record<HearsayKind, number> = {
+  praise: 1, criticism: 1, decision_for: 1, decision_against: 1.4,
+  // Přestup ví všichni hned, nešíří se.
+  teammate_left: 0, teammate_arrived: 0,
+};
 const TIE_FACTOR: Record<string, number> = {
   brothers: 1, father_son: 1, drinking_buddies: 0.8, mentor_pupil: 0.6, in_laws: 0.5, neighbors: 0.5, classmates: 0.5, coworkers: 0.3,
 };
@@ -70,6 +74,7 @@ export function spreadStep(input: SpreadInput): HearsayKnowledge[] {
   const out: HearsayKnowledge[] = [];
 
   for (const item of input.items) {
+    if (!SPREADABLE_KINDS.has(item.kind)) continue;
     if (Date.parse(item.expiresAt) <= at || at - Date.parse(item.createdAt) > SPREAD_WINDOW_DAYS * DAY_MS) continue;
     const known = new Set(input.knowledge.filter((k) => k.hearsayId === item.id).map((k) => k.playerId));
     const knowers = [...known].filter((id) => id !== item.subjectPlayerId && roster.has(id)).sort();

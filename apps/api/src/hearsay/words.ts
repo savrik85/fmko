@@ -18,6 +18,7 @@ const VIA_WORDS: Record<KnowledgeVia, string> = {
   drinking_buddies: "kámoš od piva",
   rivals: "ten, kdo tě nemusí",
   mentor_pupil: "parťák, se kterým trénuješ",
+  competitor: "konkurent na tvém postu",
 };
 
 export function viaWord(via: KnowledgeVia): string {
@@ -33,6 +34,10 @@ export function sourceSentence(via: KnowledgeVia, fromName: string | null): stri
 
 /** Co se hráč doslechl, jednou větou pro model (jména v 1. pádě). */
 export function heardFact(o: { origin: HearsayOrigin; quote: string; recipientName: string | null; via: KnowledgeVia; fromName: string | null }): string {
+  // Přestup ví celá kabina, zdroj není potřeba. Jen kdo to je.
+  if (o.origin === "transfer") {
+    return `${o.quote}. ${o.via === "competitor" ? "Hraje na stejném postu jako ty." : `Je to ${viaWord(o.via)}.`}`;
+  }
   const what = o.origin === "captain_change" ? `Trenér změnil kapitána: ${o.quote}.`
     : o.origin === "lineup_armband" ? `Na zápas dostal kapitánskou pásku místo tebe někdo jiný: ${o.quote}.`
       : o.recipientName ? `Spoluhráč ${o.recipientName} dostal od trenéra SMS, kde o tobě stojí: „${o.quote}“.`
