@@ -512,6 +512,10 @@ export default function ConversationPage() {
     if (msg.metadata.cancelled === true) {
       return <p className="-mx-2.5 mt-1.5 border-t border-black/10 pt-1.5 pb-0.5 text-center text-sm text-[#667781]">{brigade ? "Nebyla to brigáda, hra ji nepočítá." : "Nebyl to slib, hra ho nepočítá."}</p>;
     }
+    // Brigáda proběhla (api settleBrigade zapíše `done`): zrušit už nejde.
+    if (brigade && msg.metadata.done === true) {
+      return <p className="-mx-2.5 mt-1.5 border-t border-black/10 pt-1.5 pb-0.5 text-center text-sm text-[#667781]">✓ Brigáda proběhla</p>;
+    }
     if (money && msg.metadata.done === true) {
       return (
         <p className="-mx-2.5 mt-1.5 border-t border-black/10 pt-1.5 pb-0.5 text-center text-sm text-[#667781]">
@@ -521,7 +525,9 @@ export default function ConversationPage() {
     }
     // „To nebyl slib“ jde hodinu po zprávě (api coach-commitments.ts CANCEL_WINDOW_MS).
     // Vyhraná sázka už slibem byla, tu zrušit nejde.
-    const canCancel = msg.metadata.kind !== "bet" && Date.now() - new Date(msg.sentAt).getTime() < 60 * 60 * 1000;
+    // Brigádu, jejíž čas už nastal, zrušit nejde (a hra by to stejně odmítla, až proběhne).
+    const brigadeStarted = brigade && typeof msg.metadata.at === "string" && Date.parse(msg.metadata.at) <= Date.now();
+    const canCancel = msg.metadata.kind !== "bet" && !brigadeStarted && Date.now() - new Date(msg.sentAt).getTime() < 60 * 60 * 1000;
     return (
       <>
         {money && (
@@ -1057,7 +1063,7 @@ export default function ConversationPage() {
             maxLength={MESSAGE_MAX}
             maxRows={6}
             placeholder={
-              cekaSeNaHrace ? (ownerSponsorId ? "Píše…" : "Hráč píše…")
+              cekaSeNaHrace ? (conv?.type === "player" ? "Hráč píše…" : "Píše…")
                 : nemaNaSms ? "Došel kredit"
                 : photoDraft ? "Popisek k fotce"
                   : ownerSponsorId ? "Třeba: 20 000 na přestup"
