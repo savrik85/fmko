@@ -144,25 +144,27 @@ async function editorOf(db: D1Database, leagueIds: string[]): Promise<string> {
   return j ? `${j.first_name} ${j.last_name}` : NEWS_DESK;
 }
 
-/** Redaktor vybere deset z užšího výběru. Neplatné odpovědi doplní pravidlo. */
-async function editorPicks(ai: AiContext | null, district: string, shortlist: SeasonPlayer[]): Promise<{ ids: string[]; blurbs: Map<string, string> }> {
-  const lines = shortlist.map((p) => `${p.playerId} | ${p.name} | ${p.teamName} | ${p.position} | ${p.apps} zápasů, ${p.goals} gólů, ${p.assists} asistencí, průměrná známka ${p.avgRating}`);
+/**
+ * Redaktor vybere deset z užšího výběru. Neplatné odpovědi doplní pravidlo. Popisek kandidáta
+ * píše kód (`plainBlurb`), model by čísla jen opsal bez správných tvarů.
+ */
+async function editorPicks(ai: AiContext | null, district: string, shortlist: SeasonPlayer[]): Promise<{ ids: string[] }> {
+  const lines = shortlist.map((p) => `${p.playerId} | ${p.name} | ${p.teamName} | ${p.position} | ${plainBlurb(p)}`);
   const prompt = `Jsi sportovní redaktor okresního zpravodaje (okres ${district}). Vyber 10 kandidátů do ankety Fotbalista okresu `
-    + `z tohoto seznamu. Nejvýš 2 hráči z jednoho klubu. Ke každému napiš krátké zdůvodnění česky (do 70 znaků, bez pomlček, jen fakta ze seznamu).\n`
+    + `z tohoto seznamu. Nejvýš 2 hráči z jednoho klubu.\n`
     + `${lines.join("\n")}\n`
-    + `Odpověz jen JSON {"picks": [{"id": "...", "blurb": "..."}]}.`;
-  const parsed = await askJson(ai, prompt, 900);
-  const picks = Array.isArray(parsed?.picks) ? parsed!.picks as Array<{ id?: unknown; blurb?: unknown }> : [];
+    + `Odpověz jen JSON {"picks": [{"id": "..."}]}.`;
+  const parsed = await askJson(ai, prompt, 600);
+  const picks = Array.isArray(parsed?.picks) ? parsed!.picks as Array<{ id?: unknown } | string> : [];
   const valid = new Set(shortlist.map((p) => p.playerId));
   const ids: string[] = [];
-  const blurbs = new Map<string, string>();
   for (const p of picks) {
-    if (typeof p.id !== "string" || !valid.has(p.id)) continue;
-    ids.push(p.id);
-    if (typeof p.blurb === "string" && p.blurb.trim()) blurbs.set(p.id, cleanText(p.blurb).slice(0, 90));
+    const id = typeof p === "string" ? p : p?.id;
+    if (typeof id !== "string" || !valid.has(id) || ids.includes(id)) continue;
+    ids.push(id);
   }
   if (!ids.length) logger.warn({ module: M }, `nominace okresu ${district} bez modelu, pravidlo podle sezóny`);
-  return { ids, blurbs };
+  return { ids };
 }
 
 function cleanText(text: string): string {
@@ -194,7 +196,7 @@ export async function openDistrictPoll(env: Env, district: string, season: numbe
   const editor = await editorOf(db, leagues);
   const candidates: CandidateRow[] = nominees.map((p, i) => ({
     player_id: p.playerId, team_id: p.teamId, name: p.name, team_name: p.teamName, position: p.position,
-    blurb: picks.blurbs.get(p.playerId) ?? plainBlurb(p), rank: i + 1,
+    blurb: plainBlurb(p), rank: i + 1,
   }));
 
   const teams = await db.prepare(
@@ -423,13 +425,14 @@ export async function closePoll(env: Env, pollId: string): Promise<boolean> {
 
   const points = (n: number) => (Number.isInteger(n) ? `${n}` : n.toLocaleString("cs-CZ"));
   const humanVotes = ballots.filter((b) => b.voter_kind === "team" && b.conv_id && b.player_id)
-    .map((b) => `${b.voter_team}: ${byId.get(b.player_id!)?.name ?? "?"}`);
+    .map((b) => `${b.voter_team}: ${byId.get(b.player_id!)?.name ?? "?"}.`);
   const headline = `Fotbalistou okresu ${poll.district} je ${winner.name}`;
+  // Jména jen v 1. pádu (generovaný text neumí skloňovat), za položkou pořadí „b.“ už tečka nejde.
   const lines = [
-    `Anketa Zpravodaje má vítěze. Trenéři klubů a kotle (jejich hlas váží polovinu) zvolili Fotbalistou okresu ${winner.name} z klubu ${winner.team_name}. ${winner.blurb}.`,
-    `Pořadí: ${tally.slice(0, 5).map((r, i) => `${i + 1}. ${byId.get(r.playerId)?.name} (${byId.get(r.playerId)?.team_name}) ${points(r.points)} b.`).join(", ")}.`,
-    humanVotes.length ? `Kdo koho volil: ${humanVotes.join(", ")}.` : "",
-    `Anketu připravil ${poll.editor_name}.`,
+    `Anketa Zpravodaje má vítěze. Trenéři klubů a kotle (jejich hlas váží polovinu) rozhodli: Fotbalistou okresu je ${winner.name} z klubu ${winner.team_name}. Za sezónu ${winner.blurb}.`,
+    `Pořadí: ${tally.slice(0, 5).map((r, i) => `${i + 1}. ${byId.get(r.playerId)?.name} (${byId.get(r.playerId)?.team_name}) ${points(r.points)} b.`).join(", ")}`,
+    humanVotes.length ? `Kdo koho volil. ${humanVotes.join(" ")}` : "",
+    poll.editor_name && poll.editor_name !== NEWS_DESK ? `Za redakci: ${poll.editor_name}` : "",
   ].filter(Boolean);
   const newsId = await publishPollArticle(db, poll, winner.team_id, headline, lines.map(cleanText).join("\n\n"))
     .catch((e) => { logger.warn({ module: M }, "článek ankety", e); return null; });

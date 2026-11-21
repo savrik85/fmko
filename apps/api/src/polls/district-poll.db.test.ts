@@ -161,8 +161,12 @@ describe("anketa Fotbalista okresu", () => {
     const news = await db.prepare("SELECT league_id, headline, body FROM news WHERE type = 'player_of_district' ORDER BY league_id").all<{ league_id: string; headline: string; body: string }>();
     expect(news.results.map((x) => x.league_id)).toEqual(["l1", "l2"]);
     expect(news.results[0].headline).toBe("Fotbalistou okresu Prachatice je Jan Horák");
-    expect(news.results[0].body).toContain("Kdo koho volil:");
-    expect(news.results[0].body).toContain("Baník Vimperk: Jan Horák");
+    expect(news.results[0].body).toContain("Kdo koho volil.");
+    expect(news.results[0].body).toContain("Baník Vimperk: Jan Horák.");
+    // Jméno vítěze v 1. pádu, bez dvou teček za pořadím a bez rodu u redaktora.
+    expect(news.results[0].body).toContain("Fotbalistou okresu je Jan Horák z klubu");
+    expect(news.results[0].body).not.toMatch(/\.\./);
+    expect(news.results[0].body).not.toContain("připravil");
     expect(news.results[0].body).not.toContain("—");
     const desk = await db.prepare("SELECT c.team_id FROM conversations c JOIN messages m ON m.conversation_id = c.id WHERE c.title = 'Redakce Zpravodaje' ORDER BY c.team_id").all<{ team_id: string }>();
     expect(desk.results.map((d) => d.team_id)).toEqual(["t1", "t2", "t3", "t4"]);

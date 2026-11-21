@@ -25,9 +25,14 @@ describe("anketa: nominace", () => {
   });
 
   it("popisek bez modelu", () => {
-    expect(plainBlurb({ goals: 12, assists: 3, apps: 22, position: "FWD" })).toBe("12 gólů, 3 asist., 22 zápasů");
-    expect(plainBlurb({ goals: 2, assists: 0, apps: 3, position: "DEF" })).toBe("2 góly, 3 zápasy");
+    expect(plainBlurb({ goals: 12, assists: 3, apps: 22, position: "FWD" })).toBe("22 zápasů, 12 gólů, 3 asistence");
+    expect(plainBlurb({ goals: 2, assists: 0, apps: 3, position: "DEF" })).toBe("3 zápasy, 2 góly");
     expect(plainBlurb({ goals: 0, assists: 0, apps: 20, position: "GK" })).toBe("20 zápasů v bráně");
+    // Správné tvary, čárky a známka s desetinnou čárkou (dřív „4 asistencí“, „3 gólů“, „7.95“).
+    expect(plainBlurb({ goals: 17, assists: 24, apps: 19, position: "MID", avgRating: 7.94 })).toBe("19 zápasů, 17 gólů, 24 asistencí, průměrná známka 7,9");
+    expect(plainBlurb({ goals: 3, assists: 4, apps: 5, position: "MID", avgRating: 8.06 })).toBe("5 zápasů, 3 góly, 4 asistence, průměrná známka 8,1");
+    expect(plainBlurb({ goals: 1, assists: 1, apps: 1, position: "FWD" })).toBe("1 zápas, 1 gól, 1 asistence");
+    expect(plainBlurb({ goals: 0, assists: 0, apps: 20, position: "GK", avgRating: 7.1 })).toBe("20 zápasů v bráně, průměrná známka 7,1");
   });
 });
 
