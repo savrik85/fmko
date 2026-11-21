@@ -179,6 +179,8 @@ function odpovidatLze(
   // model jako hráč (sponsors/owner-chat.ts), proto placená SMS. Musí být před pravidlem
   // otevřeného vlákna: během „píše…" a při čekající SMS majitele je vlákno otevřené taky.
   if (opts.participantId?.startsWith("so-")) return { canReply: true, channel: "sms" };
+  // Hala Vánoční sálovky: přihláška a odhlášení přes SMS, odpovídá automat zdarma.
+  if (opts.participantId?.startsWith("hc-")) return { canReply: true, channel: "imessage" };
   // Vůdce fanoušků čeká na odpověď jen dokud vlákno běží; pak už se nemá kdo ozvat.
   if (type === "system" && threadActive) return { canReply: true, channel: "imessage" };
 
@@ -915,6 +917,12 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
     const optionId = typeof body.optionId === "string" ? body.optionId : null;
     await handleDistrictEventReply(c.env.DB, convId, teamId, body.body.trim(), optionId)
       .catch((e) => logger.warn({ module: "messaging" }, "odpověď na pozvánku na okresní akci", e));
+  } else if (conv?.type === "system" && conv.participant_id?.startsWith("hc-")) {
+    // Pozvánka na Vánoční sálovku: přihláška nebo odmítnutí, hala hned odepíše.
+    const { handleHallCupReply } = await import("../hall-cup/db");
+    const optionId = typeof body.optionId === "string" ? body.optionId : null;
+    await handleHallCupReply(c.env.DB, convId, teamId, body.body.trim(), optionId)
+      .catch((e) => logger.warn({ module: "messaging" }, "odpověď na pozvánku na sálovku", e));
   } else if (conv?.type === "system" && conv.ai_thread_active === 1) {
     const { handleFanLeaderReply } = await import("../fans/fan-leader-reply");
     await handleFanLeaderReply(c.env.DB, convId, body.body.trim(), c.env)

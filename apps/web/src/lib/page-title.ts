@@ -46,6 +46,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/akademie": "Mládež",
   "/pohar": "Pohár",
   "/turnaj": "Turnaj",
+  "/salovka": "Sálovka",
   "/rozhodci": "Rozhodčí",
   "/soutez": "Grémium",
   "/vice": "Více",

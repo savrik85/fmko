@@ -32,6 +32,7 @@ import { incidentsRouter } from "./routes/incidents";
 import competitionRouter from "./routes/competition";
 import bettingRouter from "./routes/betting";
 import tournamentRouter from "./routes/tournament";
+import hallCupRouter from "./routes/hall-cup";
 import clubPrefixRouter from "./routes/club-prefix";
 import { clubWebsiteRouter } from "./routes/club-website";
 import { squadAnalysisRouter } from "./routes/squad-analysis";
@@ -178,6 +179,7 @@ app.route("/api", incidentsRouter);
 app.route("/api", competitionRouter);
 app.route("/api", bettingRouter);
 app.route("/api", tournamentRouter);
+app.route("/api", hallCupRouter);
 app.route("/api", clubPrefixRouter);
 app.route("/api", squadAnalysisRouter);
 app.route("/api", menuBadgesRouter);
@@ -236,6 +238,14 @@ export default {
       } catch (e: any) {
         log("error", "propadnutí přestupových nabídek selhalo", e);
       }
+      // Vánoční sálovka: pozvánky od 1. 12., los po uzávěrce, v den turnaje splatné zápasy.
+      try {
+        const { tickHallCup } = await import("./hall-cup/db");
+        const r = await tickHallCup(env);
+        if (r.status !== "none") log("info", `sálovka: ${r.status}, odehráno ${r.played}`);
+      } catch (e: any) {
+        log("error", "běh sálovky selhal", e);
+      }
       // Průvodce prvním týdnem: kapitán pošle další úkol, nebo starosta odměnu.
       try {
         const { advanceAllFirstWeekGuides } = await import("./onboarding/first-week");
@@ -255,6 +265,16 @@ export default {
     //         fronta patří kolu.
     // Bloky níž se řídí pražskou hodinou (pohár od poledne), tyhle crony by je spouštěly navíc.
     if (cron === "0 7 * * *" || cron === "45 12 * * *" || cron === "15 * * * *") {
+      // Sálovka hraje po 25 minutách, takže v den turnaje i ve čtvrt (jinak jen v půl).
+      if (cron === "15 * * * *") {
+        try {
+          const { tickHallCup } = await import("./hall-cup/db");
+          const r = await tickHallCup(env);
+          if (r.played > 0) log("info", `sálovka: odehráno ${r.played}`);
+        } catch (e: any) {
+          log("error", "běh sálovky selhal", e);
+        }
+      }
       try {
         const { enqueueAiCoachJobs } = await import("./ai-coach/jobs");
         const now = new Date();

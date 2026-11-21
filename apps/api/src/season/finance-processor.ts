@@ -68,6 +68,10 @@ export type TransactionType =
   | "cup_prize"
   // Turnaj P-Mobile: body v ligové fázi a prémie za umístění (platí sponzor turnaje).
   | "tournament_prize"
+  // Vánoční sálovka (hall-cup/): startovné se strhne při losu i do mínusu (klub se přihlásil sám
+  // a na účtu měl dost), výhra z banku je příjem.
+  | "hall_cup_fee"
+  | "hall_cup_prize"
   | "staff_wage"
   // Cestovné skauta na úkolu (scouting/scout-work.ts). Běžný provoz jako mzdy, ne nákup:
   // skaut, který nemá na benzín, ten týden prostě nejede.
@@ -233,7 +237,7 @@ const PURCHASE_TYPES = new Set<TransactionType>([
   "pitch_repair", "pitch_upgrade", "promotional_campaign", "bus_subsidy",
   "concession_wholesale", "transfer_admin_fee", "loan_fee",
   "manager_social", "player_bonus", "staff_signing", "course_fee", "staff_task", "coach_course", "coach_exam_retake", "fan_relations",
-  "bet_stake", "bet_levy", "friendly_stake",
+  "bet_stake", "bet_levy", "friendly_stake", "hall_cup_fee",
 ]);
 
 /**

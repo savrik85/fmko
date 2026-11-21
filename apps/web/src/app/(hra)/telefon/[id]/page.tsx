@@ -161,7 +161,7 @@ function isGroupChatId(id: string): boolean {
   return id === "global" || id.startsWith("league:");
 }
 
-/** Hotová odpověď na SMS od majitele firmy nebo na pozvánku na okresní akci (`messages.metadata.options`). */
+/** Hotová odpověď na SMS od majitele firmy, na pozvánku na okresní akci nebo na sálovku (`messages.metadata.options`). */
 interface OwnerOption {
   id: string;
   label: string;
@@ -170,7 +170,7 @@ interface OwnerOption {
 
 function ownerOptionsOf(msg: Message | undefined): OwnerOption[] {
   const meta = msg?.metadata;
-  if (!meta || (meta.type !== "sponsor_owner" && meta.type !== "district_event") || !Array.isArray(meta.options)) return [];
+  if (!meta || (meta.type !== "sponsor_owner" && meta.type !== "district_event" && meta.type !== "hall_cup") || !Array.isArray(meta.options)) return [];
   return (meta.options as unknown[]).filter((o): o is OwnerOption => {
     const x = o as Partial<OwnerOption> | null;
     return !!x && typeof x.id === "string" && typeof x.label === "string" && typeof x.text === "string";
