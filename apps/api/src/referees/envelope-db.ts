@@ -426,7 +426,7 @@ async function reportEnvelope(env: EnvelopeEnv, e: EnvelopeRow, ctx: EnvelopeCon
     ? sendSystemSMS(db, e.team_id, COMMISSION_SENDER, body, metadata)
       .catch((err) => logger.warn({ module: M }, "SMS komise trenérovi, který nahlásil sudího", err))
     : Promise.resolve();
-  const competitionLink = { type: "guide", href: "/soutez", label: "Otevřít Soutěž" };
+  const competitionLink = { type: "guide", href: "/soutez", label: "Otevřít Grémium" };
   const { applyRefereePause, canPauseReferee, PAUSE_WEEKS } = await import("../competition/referee-roster");
   const weeks = ({ 2: "dvě", 3: "tři", 4: "čtyři" } as Record<number, string>)[PAUSE_WEEKS] ?? String(PAUSE_WEEKS);
 
@@ -440,14 +440,14 @@ async function reportEnvelope(env: EnvelopeEnv, e: EnvelopeRow, ctx: EnvelopeCon
 
   const commissioner = await findRefereeCommissioner(db, e.league_id, e.season_number);
   if (commissioner === e.team_id) {
-    await tellReporter(`Oznámení máme. Jako komisař rozhodčích můžeš sudímu ${ctx.refereeName} dát stopku sám na stránce Soutěž.`, competitionLink);
+    await tellReporter(`Oznámení máme. Sudí ${ctx.refereeName} je teď na tobě: jako komisař rozhodčích mu můžeš dát stopku sám na stránce Grémium.`, competitionLink);
     return "self";
   }
   if (commissioner) {
     const evidence = e.message ? ` „${e.message}“` : "";
     await sendSystemSMS(db, commissioner, COMMISSION_SENDER,
-      `Oznámení na rozhodčího ${ctx.refereeName}: trenér klubu ${ctx.teamName} hlásí, že mu sudí před zápasem s ${ctx.opponentName} `
-        + `poslal tuhle SMS:${evidence} Stopku na ${weeks} kola můžeš dát na stránce Soutěž.`,
+      `Oznámení, rozhodčí ${ctx.refereeName}: trenér klubu ${ctx.teamName} hlásí, že mu sudí před zápasem s ${ctx.opponentName} `
+        + `poslal tuhle SMS:${evidence} Stopku na ${weeks} kola můžeš dát na stránce Grémium.`,
       competitionLink,
     ).catch((err) => logger.warn({ module: M }, "SMS komisaři rozhodčích s důkazem", err));
     await tellReporter("Děkujeme za oznámení. Předali jsme ho i s jeho SMS komisaři rozhodčích, rozhodnutí je na něm.");

@@ -243,7 +243,22 @@ describe("nahlášení komisaři", () => {
     ).first<{ body: string; metadata: string }>();
     expect(toCommissioner?.body).toContain("guláš");
     expect(toCommissioner?.body).toContain("Strunkovice");
-    expect(JSON.parse(toCommissioner!.metadata).href).toBe("/soutez");
+    expect(toCommissioner?.body).toMatch(/^Oznámení, rozhodčí /);
+    expect(toCommissioner?.body).toContain("na stránce Grémium");
+    expect(JSON.parse(toCommissioner!.metadata)).toMatchObject({ href: "/soutez", label: "Otevřít Grémium" });
+  });
+
+  it("komisař nahlásil sudího sám: jméno v 1. pádu a stránka Grémium", async () => {
+    // Komisařem rozhodčích je od minulého testu t7, teď nahlašuje on sám.
+    const e = await pendingEnvelope("env-rep3", "m-rep3", "t7", "ref-amb");
+    await handleRefereeEnvelopeReply(env(), e.conv_id!, "t7", "", "report");
+    expect((await envelope("m-rep3")).status).toBe("reported");
+    const self = await db.prepare(
+      "SELECT m.body, m.metadata FROM messages m JOIN conversations c ON c.id = m.conversation_id WHERE c.team_id = 't7' AND c.title = 'Komise rozhodčích OFS' ORDER BY m.rowid DESC",
+    ).first<{ body: string; metadata: string }>();
+    expect(self?.body).toMatch(/^Oznámení máme\. Sudí .+ je teď na tobě: jako komisař rozhodčích mu můžeš dát stopku sám na stránce Grémium\.$/);
+    expect(self?.body).not.toContain("sudímu");
+    expect(JSON.parse(self!.metadata)).toMatchObject({ href: "/soutez", label: "Otevřít Grémium" });
   });
 
   it("zaplatit bez peněz nejde: sudí odepíše a obálka dál čeká", async () => {
