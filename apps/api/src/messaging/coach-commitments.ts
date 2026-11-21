@@ -30,7 +30,9 @@ export type CommitmentKind = "start_next" | "start_soon" | "position" | "release
   // Bod 2 rozboru: trenér zve hráče (hospoda, schůzka) a sázky o výkon v příštím zápase.
   | "invite_pub" | "invite_talk" | "bet"
   // Bod 4: pokuta napsaná v SMS a úkol „poptej se“ k incidentu (incidents/zprava-trenera.ts).
-  | "fine" | "task_inquiry";
+  | "fine" | "task_inquiry"
+  // F1: brigáda svolaná v kabině (messaging/squad-brigade.ts), hráč u slibu jen zastupuje kabinu.
+  | "brigade";
 export type CommitmentStatus = "active" | "kept" | "broken" | "expired" | "cancelled";
 export type LineupRole = "GK" | "DEF" | "MID" | "FWD";
 export type BetCondition = "goal" | "hattrick" | "assist" | "win" | "clean_sheet";
@@ -84,6 +86,8 @@ export interface CommitmentDetails {
 const DUE_DAYS: Record<CommitmentKind, number> = {
   start_next: 10, start_soon: 21, position: 10, release_offer: 30, bonus: 7, wage: 7,
   invite_pub: 2, invite_talk: 3, bet: 10, fine: 3, task_inquiry: 1,
+  // Brigáda má vlastní termín z textu výzvy (squad-brigade.ts), tohle je jen strop.
+  brigade: 7,
 };
 /** Kolik dní má trenér na zaplacení vyhrané sázky. */
 const BET_PAY_DAYS = 5;
@@ -129,6 +133,7 @@ export function commitmentText(kind: CommitmentKind, d: CommitmentDetails = {}):
     case "bet": return `Když ${BET_CONDITION_TEXT[d.condition ?? "goal"]}, trenér ${betRewardText(d)}`;
     case "fine": return `Pokutu ${(d.amount ?? 0).toLocaleString("cs-CZ")} Kč`;
     case "task_inquiry": return "Poptat se kvůli incidentu";
+    case "brigade": return "Brigádu na hřišti";
   }
 }
 
@@ -682,6 +687,7 @@ const KEPT_SMS: Record<CommitmentKind, string[]> = {
   invite_pub: [],
   invite_talk: [],
   task_inquiry: [],
+  brigade: [],
   fine: [
     "No jo, trenére. Zasloužil jsem si to.",
     "Dobře, pokutu beru. Ale radost z toho nemám.",
@@ -719,6 +725,7 @@ const BROKEN_SMS: Record<CommitmentKind, string[]> = {
   invite_pub: [],
   invite_talk: [],
   task_inquiry: [],
+  brigade: [],
   fine: [],
   bet: [
     "Trenére, sázka platila a pořád nic. Tak tolik k vašemu slovu.",
@@ -776,6 +783,8 @@ const EFFECTS: Record<CommitmentKind, { kept: [number, number]; broken: [number,
   // Udělená pokuta vztah i náladu zhorší, neudělená nic (hráč si nestěžuje, že pokutu nedostal).
   fine: { kept: [-5, -4], broken: [0, 0] },
   task_inquiry: { kept: [0, 0], broken: [0, 0] },
+  // Brigáda má vlastní dopad (nálada podle účasti, hřiště), vyhodnocuje ji squad-brigade.ts.
+  brigade: { kept: [0, 0], broken: [0, 0] },
   bonus: { kept: [6, 5], broken: [-8, -5] },
   wage: { kept: [8, 6], broken: [-8, -5] },
 };
@@ -885,8 +894,15 @@ async function resolveCommitment(
     pick(pool, r.id)).catch((e) => logger.warn({ module: M }, `SMS po slibu ${r.id}`, e));
 }
 
-/** Denně: vyhodnotí běžící sliby. Vrací počet uzavřených. */
-export async function settleCoachCommitments(db: D1Database, now: Date = new Date()): Promise<number> {
+/**
+ * Denně: vyhodnotí běžící sliby. Vrací počet uzavřených. `env` potřebuje jen brigáda
+ * (fotka kapitána od Workers AI); bez něj se vyhodnotí stejně, jen bez fotky.
+ */
+export async function settleCoachCommitments(
+  db: D1Database,
+  now: Date = new Date(),
+  env: import("./squad-brigade").BrigadeEnv = {},
+): Promise<number> {
   const rows = await db.prepare(
     `SELECT cc.id, cc.team_id, cc.player_id, cc.kind, cc.made_at, cc.due_at, cc.details, cc.last_reminder_key, cc.conversation_id,
             p.first_name, p.last_name, p.nickname, p.avatar, p.team_id AS roster_team_id,
@@ -904,6 +920,13 @@ export async function settleCoachCommitments(db: D1Database, now: Date = new Dat
   for (const r of rows.results) {
     try {
       const duePassed = new Date(r.due_at).getTime() < now.getTime();
+      if (r.kind === "brigade") {
+        // Brigáda patří kabině, ne hráči, který ji zastupuje: jeho odchod ji nezruší.
+        if (!duePassed) continue;
+        const { settleBrigade } = await import("./squad-brigade");
+        if (await settleBrigade(db, env, r, now)) closed++;
+        continue;
+      }
       // Hráč z klubu odešel: slib odchodu dodržel, ostatní vypršely.
       const loanedAway = await db.prepare("SELECT loan_from_team_id FROM players WHERE id = ?").bind(r.player_id)
         .first<{ loan_from_team_id: string | null }>().then((x) => x?.loan_from_team_id ?? null)
@@ -1280,6 +1303,10 @@ export function commitmentPromptLines(list: CommitmentMemory[] | undefined): str
         ? `- Vyhrál jsi s trenérem sázku (${text}). Čekáš, až zaplatí, a klidně mu to připomeneš.`
         : `- Máte s trenérem sázku: ${text}. Těšíš se na to.`;
     }
+    if (c.kind === "brigade") {
+      return c.status === "active" ? "- Trenér svolal do kabiny brigádu na hřišti. Víš o ní a v kabině se o ní mluví."
+        : c.status === "kept" ? "- Nedávno byla brigáda na hřišti, kterou svolal trenér. Pamatuješ si, kdo přišel a kdo se vymluvil." : "";
+    }
     if (c.kind === "task_inquiry") {
       return c.status === "active" ? "- Trenér tě požádal, ať se poptáš kvůli incidentu v klubu. Kývl jsi na to a ozveš se mu, až něco zjistíš (zítra)." : "";
     }
@@ -1300,7 +1327,7 @@ export async function listCommitments(db: D1Database, playerId: string, clubTeam
   // Zrušené („to nebyl slib“) se neukazují: slib nikdy nebyl.
   const rows = await db.prepare(
     `SELECT id, kind, status, details, made_at, resolved_at, quote FROM coach_commitments
-      WHERE player_id = ? AND team_id = ? AND status != 'cancelled' AND kind NOT IN ('fine', 'task_inquiry')
+      WHERE player_id = ? AND team_id = ? AND status != 'cancelled' AND kind NOT IN ('fine', 'task_inquiry', 'brigade')
       ORDER BY status = 'active' DESC, made_at DESC LIMIT 20`,
   ).bind(playerId, clubTeamId)
     .all<{ id: string; kind: CommitmentKind; status: Exclude<CommitmentStatus, "cancelled">; details: string | null; made_at: string; resolved_at: string | null; quote: string | null }>()

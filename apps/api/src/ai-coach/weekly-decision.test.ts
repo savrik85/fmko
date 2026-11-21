@@ -718,3 +718,69 @@ describe("bufet: dorovnání před domácím zápasem", () => {
     expect(planConcessionTopUp(concessionCtx(100_000, { mode: "self" }), external, budget).purchases).toEqual([]);
   });
 });
+
+/** Týden, kdy jde svolat brigádu (messaging/squad-brigade.ts loadBrigadeOutlook). */
+function withBrigade(ctx: WeeklyContext, o: Partial<NonNullable<WeeklyContext["brigade"]>> = {}): WeeklyContext {
+  return {
+    ...ctx,
+    brigade: { available: true, snowAtNextHome: false, nextHomeMatchAt: "2026-11-05T17:00:00.000Z", dueAt: "2026-11-04T09:00:00.000Z", ...o },
+  };
+}
+
+describe("brigáda AI klubu", () => {
+  it("model o brigádě rozhoduje, jen když ji tento týden jde svolat", () => {
+    type Schema = { required: string[]; properties: Record<string, unknown> };
+    const schema = weeklyDecisionSchema(withBrigade(context(50_000))) as Schema;
+    expect(schema.required).toContain("brigade");
+    expect(schema.properties.brigade).toEqual({ type: "boolean" });
+    for (const ctx of [withBrigade(context(50_000), { available: false }), context(50_000)]) {
+      const s = weeklyDecisionSchema(ctx) as Schema;
+      expect(s.required).not.toContain("brigade");
+      expect(s.properties.brigade).toBeUndefined();
+    }
+  });
+
+  it("prompt řekne, jestli u domácího zápasu sněží a kolik lidí je potřeba", () => {
+    const prompt = renderWeeklyPrompt(withBrigade(context(50_000), { snowAtNextHome: true }));
+    expect(prompt).toContain("BRIGADE");
+    expect(prompt).toContain("snow is forecast");
+    expect(prompt).toContain("at least 6");
+    expect(prompt).toContain("costs 4,500 CZK");
+    expect(prompt).not.toContain("${");
+    expect(prompt).toContain("brigade true/false");
+    expect(renderWeeklyPrompt(context(50_000))).not.toContain("BRIGADE");
+  });
+
+  it("odpověď modelu: true svolá, nesmysl se zahodí a zbytek týdne platí", () => {
+    const ctx = withBrigade(context(50_000));
+    const yes = validateWeeklyDecision({ ...everything, brigade: true }, ctx);
+    expect(yes.ok && yes.decision.brigade).toBe(true);
+    const junk = validateWeeklyDecision({ ...everything, brigade: "ano" }, ctx);
+    expect(junk.ok).toBe(true);
+    if (junk.ok) {
+      expect(junk.decision.brigade).toBe(false);
+      expect(junk.rejected.join(" ")).toContain("brigade");
+    }
+    // Druhou brigádu v týdnu model nesvolá, ani kdyby chtěl (mez hlídá kód).
+    const blocked = validateWeeklyDecision({ ...everything, brigade: true }, withBrigade(context(50_000), { available: false }));
+    expect(blocked.ok && blocked.decision.brigade).toBe(false);
+  });
+
+  it("plán: brigáda nic nestojí a má termín z podkladu, bez možnosti se nenaplánuje", () => {
+    const plan = planWeeklyActions(withBrigade(context(50_000)), { ...everything, brigade: true });
+    expect(plan.actions).toContainEqual({ kind: "brigade", dueAt: "2026-11-04T09:00:00.000Z", beer: expect.any(Boolean) });
+    expect(plan.totalCost).toBe(paid(plan));
+    const blocked = planWeeklyActions(withBrigade(context(50_000), { available: false }), { ...everything, brigade: true });
+    expect(blocked.actions.some((a) => a.kind === "brigade")).toBe(false);
+    expect(planWeeklyActions(withBrigade(context(50_000)), everything).actions.some((a) => a.kind === "brigade")).toBe(false);
+  });
+
+  it("bez modelu (AI vypnutá) svolá pravidlo brigádu při sněhu nebo rozbitém hřišti", () => {
+    expect(fallbackWeeklyDecision(withBrigade(context(50_000), { snowAtNextHome: true })).brigade).toBe(true);
+    // Hřiště v kontextu má kondici 40.
+    expect(fallbackWeeklyDecision(withBrigade(context(50_000))).brigade).toBe(true);
+    const fine = withBrigade(context(50_000));
+    expect(fallbackWeeklyDecision({ ...fine, pitch: { ...fine.pitch, condition: 80 } }).brigade).toBe(false);
+    expect(fallbackWeeklyDecision(withBrigade(context(50_000), { available: false, snowAtNextHome: true })).brigade).toBe(false);
+  });
+});

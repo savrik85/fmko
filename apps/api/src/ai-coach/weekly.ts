@@ -314,6 +314,10 @@ export async function loadWeeklyContext(db: D1Database, teamId: string, gameDayO
   const concessions = await loadConcessionContext(db, teamId, {
     gameDay, days: CONCESSION_WINDOW_DAYS, spendable: Math.max(0, team.budget - reserve),
   });
+  // Brigáda na hřišti: jde svolat, sněží u domácího zápasu (messaging/squad-brigade.ts). Bez podkladu se nerozhoduje.
+  const { loadBrigadeOutlook } = await import("../messaging/squad-brigade");
+  const brigade = await loadBrigadeOutlook(db, teamId, new Date())
+    .catch((e) => { logger.warn({ module: M, teamId }, "podklad pro brigádu", e); return null; });
   return {
     teamId,
     teamName: team.name,
@@ -366,6 +370,7 @@ export async function loadWeeklyContext(db: D1Database, teamId: string, gameDayO
       surplus,
     },
     concessions,
+    brigade,
   };
 }
 
@@ -482,6 +487,12 @@ async function executeAction(db: D1Database, teamId: string, ctx: WeeklyContext,
       case "stadium_upgrade": {
         const res = await upgradeStadiumFacility(db, teamId, a.facility);
         return { ok: res.ok, detail: res.ok ? `${a.facility} -> ${res.newLevel}, ${res.cost} Kč` : res.error };
+      }
+      case "brigade": {
+        // Stejný zápis jako brigáda z kabiny, vyhodnotí ji denní settleCoachCommitments.
+        const { scheduleClubBrigade } = await import("../messaging/squad-brigade");
+        const id = await scheduleClubBrigade(db, { clubTeamId: teamId, at: new Date(a.dueAt), beer: a.beer });
+        return { ok: !!id, detail: id ? `brigáda ${a.dueAt}${a.beer ? ", pivo" : ""}` : "brigáda tento týden už je" };
       }
       case "concession_mode": {
         const res = await setConcessionMode(db, teamId, a.mode);

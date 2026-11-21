@@ -30,6 +30,7 @@ import type { OptionalPushKeys } from "../community/phone-push";
 import { loadChatMemory } from "./player-memory";
 import { addressedPlayers, applySpeech, persuadeAbsentees, pickResponders } from "./squad-talk";
 import { handleSquadBet } from "./coach-commitments";
+import { handleSquadBrigade } from "./squad-brigade";
 import { refundCoachSms } from "./phone-credit";
 import type { PlayerSnapshot } from "./ai-player-scenarios";
 import { carryWeightTalk, weightTalkFromState } from "../season/weight-talk";
@@ -330,7 +331,8 @@ async function replyInSquadGroupInner(
 
     const team = await loadTeamContext(db, opts.teamId);
 
-    // Proslov před zápasem, výzva „žádné omluvenky“ a sázka kabiny (squad-talk.ts, coach-commitments.ts).
+    // Proslov před zápasem, výzva „žádné omluvenky“, sázka kabiny a brigáda (squad-talk.ts,
+    // coach-commitments.ts, squad-brigade.ts).
     // Selhání žádné z nich nesmí zastavit odpověď kabiny.
     // Běží souběžně, celá odpověď kabiny se musí vejít do limitu práce na pozadí (~30 s).
     const captainId = await db.prepare("SELECT captain_id FROM teams WHERE id = ?").bind(opts.teamId).first<{ captain_id: string | null }>()
@@ -343,6 +345,7 @@ async function replyInSquadGroupInner(
       persuadeAbsentees(db, { teamId: opts.teamId, convId: opts.convId, message: opts.coachMessage, squad: kadr })
         .catch((e) => { logger.warn({ module: M, teamId: opts.teamId }, "přemlouvání omluvených", e); return []; }),
       handleSquadBet(db, env, { teamId: opts.teamId, convId: opts.convId, message: opts.coachMessage, representative }),
+      handleSquadBrigade(db, env, { teamId: opts.teamId, convId: opts.convId, message: opts.coachMessage, representative }),
     ]);
 
     let posted = 0;

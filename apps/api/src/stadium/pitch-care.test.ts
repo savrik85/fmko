@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   decidePitchCare, serviceForWeather, serviceCost, careEffectiveness,
-  SNOW_CLEARING_COST, HEATING_COST_PER_MATCH, IRRIGATION_COST_PER_MATCH,
+  SNOW_CLEARING_COST, HEATING_COST_PER_MATCH, IRRIGATION_COST_PER_MATCH, VOLUNTEER_FULL_CREW,
   type PitchCareDecisionInput,
 } from "./pitch-care";
 
@@ -129,5 +129,41 @@ describe("účinnost zapnuté péče", () => {
       decidePitchCare(vstup({ weather: "snow", heatingLevel: 3 })), 1, 1);
     expect(shrnuto.heatingMod).toBeGreaterThan(0);
     expect(shrnuto.heatingMod).toBeLessThan(vyhrivano.heatingMod);
+  });
+});
+
+describe("brigáda z kabiny (lopaty zdarma)", () => {
+  it("aspoň 6 lidí odklidí sníh zdarma, i bez vyhřívání a v ručním režimu", () => {
+    for (const over of [{}, { heatingLevel: 0 }, { mode: "manual" as const }, { budget: 0 }]) {
+      const d = decidePitchCare(vstup({ ...over, snowClearingVolunteers: VOLUNTEER_FULL_CREW }));
+      expect(d).toMatchObject({ service: "snow_clearing", cost: 0, skipped: null, volunteers: VOLUNTEER_FULL_CREW });
+    }
+  });
+
+  it("plná parta brigádníků má přednost před zaplacenou firmou: nic se neplatí", () => {
+    const d = decidePitchCare(vstup({ snowClearingOrdered: true, snowClearingVolunteers: 8 }));
+    expect(d).toMatchObject({ service: "snow_clearing", cost: 0 });
+  });
+
+  it("plná parta uklidí se stejnou účinností jako firma", () => {
+    const volunteers = careEffectiveness(decidePitchCare(vstup({ heatingLevel: 0, snowClearingVolunteers: 6 })), 1, 1);
+    const paid = careEffectiveness(decidePitchCare(vstup({ heatingLevel: 0, snowClearingOrdered: true })), 1, 1);
+    expect(volunteers.heatingMod).toBe(paid.heatingMod);
+  });
+
+  it("málo lidí odklidí jen část, a jen když nic lepšího neběží", () => {
+    const few = decidePitchCare(vstup({ heatingLevel: 0, snowClearingVolunteers: 4 }));
+    expect(few).toMatchObject({ service: "snow_clearing", cost: 0, volunteers: 4 });
+    const half = careEffectiveness(few, 1, 1).heatingMod;
+    expect(half).toBeGreaterThan(0);
+    expect(half).toBeLessThan(careEffectiveness(decidePitchCare(vstup({ heatingLevel: 0, snowClearingOrdered: true })), 1, 1).heatingMod);
+    // Zaplacená firma nebo topení uklidí líp než polovičatá brigáda.
+    expect(decidePitchCare(vstup({ snowClearingOrdered: true, snowClearingVolunteers: 4 }))).toMatchObject({ service: "snow_clearing", cost: SNOW_CLEARING_COST });
+    expect(decidePitchCare(vstup({ snowClearingVolunteers: 4 })).service).toBe("heating");
+  });
+
+  it("bez sněhu brigádníci u zápasu nic nedělají", () => {
+    expect(decidePitchCare(vstup({ weather: "rain", snowClearingVolunteers: 9 })).service).toBe("heating");
+    expect(decidePitchCare(vstup({ weather: "cloudy", snowClearingVolunteers: 9 })).service).toBeNull();
   });
 });

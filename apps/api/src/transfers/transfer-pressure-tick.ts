@@ -92,9 +92,9 @@ export async function executeTransferPressureTick(
     // Sliby hráčů, kteří z klubu odešli: prodej splněn, sestava vypršela.
     const { settleDepartedPromises } = await import("./promises");
     await settleDepartedPromises(env.DB);
-    // Sliby napsané v SMS (sestava, pozice, peníze, odchod).
+    // Sliby napsané v SMS (sestava, pozice, peníze, odchod) a brigády z kabiny (env kvůli fotce kapitána).
     const { settleCoachCommitments } = await import("../messaging/coach-commitments");
-    await settleCoachCommitments(env.DB);
+    await settleCoachCommitments(env.DB, now, env);
   } catch (e) {
     logger.error({ module: "transfer-pressure" }, "unrest processing failed", e);
   }

@@ -121,6 +121,19 @@ export const PHOTO_SCENES: Record<string, PhotoScene> = {
     alt: "malé pletené botičky na dečce vedle plyšáka",
     portrait: true,
   },
+  // Kapitán po brigádě v kabině (squad-brigade.ts). Kraj trávníku zblízka, žádné tribuny ani budovy.
+  brigade_snow: {
+    id: "brigade_snow",
+    prompt: `${PHONE_PHOTO} Several snow shovels stuck upright in a big pile of freshly shovelled snow at the edge of a small grass football field in a South Bohemian village, a cleared strip of muddy green turf with boot prints, a thermos and plastic cups on a wooden bench, grey winter morning. No buildings, no stands. ${NO_TEXT}`,
+    alt: "lopaty zapíchnuté v hromadě odklizeného sněhu na kraji hřiště",
+    portrait: true,
+  },
+  brigade_pitch: {
+    id: "brigade_pitch",
+    prompt: `${PHONE_PHOTO} Garden rakes, a wheelbarrow with sand and a crate of brown beer bottles without labels at the edge of a small grass football field in a South Bohemian village, freshly raked turf and filled holes in front of the goal, overcast late autumn day. No buildings, no stands. ${NO_TEXT}`,
+    alt: "hrábě, kolečko s pískem a basa piv na kraji hřiště po brigádě",
+    portrait: true,
+  },
 };
 
 /** Pohled z práce podle pracoviště (`WORKPLACE_AMBIENCE` ve voice-message.ts). */

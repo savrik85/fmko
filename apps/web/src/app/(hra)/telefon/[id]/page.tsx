@@ -503,8 +503,10 @@ export default function ConversationPage() {
 
     const id = msg.metadata.commitmentId as string;
     const money = msg.metadata.type === "coach_commitment";
+    // Brigáda svolaná v kabině (api messaging/squad-brigade.ts) se ruší stejně, jen to není slib.
+    const brigade = msg.metadata.kind === "brigade";
     if (msg.metadata.cancelled === true) {
-      return <p className="-mx-2.5 mt-1.5 border-t border-black/10 pt-1.5 pb-0.5 text-center text-sm text-[#667781]">Nebyl to slib, hra ho nepočítá.</p>;
+      return <p className="-mx-2.5 mt-1.5 border-t border-black/10 pt-1.5 pb-0.5 text-center text-sm text-[#667781]">{brigade ? "Nebyla to brigáda, hra ji nepočítá." : "Nebyl to slib, hra ho nepočítá."}</p>;
     }
     if (money && msg.metadata.done === true) {
       return (
@@ -535,7 +537,7 @@ export default function ConversationPage() {
             onClick={() => handleCommitment(id, "cancel")}
             className={`${WA_LINK_BUTTON} w-[calc(100%+1.25rem)] !text-[#667781] font-normal disabled:opacity-50`}
           >
-            To nebyl slib
+            {brigade ? "To nebyla brigáda" : "To nebyl slib"}
           </button>
         )}
         {commitmentError?.id === id && (
