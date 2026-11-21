@@ -22,8 +22,6 @@ export interface HovorRow {
   game_date: string;
   seen: number;
   created_at: string;
-  /** Kdo volal, jen u hráče (migrace 0324). Starší hovory ho nemají. */
-  player_id?: string | null;
 }
 
 /** Zmeškané hovory klubu, od nejnovějších. */
@@ -75,9 +73,9 @@ export async function tikHovoru(
 
   const den = gameDate.slice(0, 10);
   const stmts = hovory.map((h) => db.prepare(
-    `INSERT OR IGNORE INTO missed_calls (id, team_id, volajici, jmeno, duvod, pocet, game_date, player_id)
-     VALUES (?,?,?,?,?,?,?,?)`,
-  ).bind(`call-${teamId}-${h.volajici}-${den}`, teamId, h.volajici, h.jmeno, h.duvod, h.pocet, gameDate, h.playerId ?? null));
+    `INSERT OR IGNORE INTO missed_calls (id, team_id, volajici, jmeno, duvod, pocet, game_date)
+     VALUES (?,?,?,?,?,?,?)`,
+  ).bind(`call-${teamId}-${h.volajici}-${den}`, teamId, h.volajici, h.jmeno, h.duvod, h.pocet, gameDate));
 
   await db.batch(stmts).catch((e) => { logger.warn({ module: M }, `zápis hovorů ${teamId}`, e); });
 
@@ -85,10 +83,6 @@ export async function tikHovoru(
   await db.prepare(
     "DELETE FROM missed_calls WHERE team_id = ? AND created_at < datetime('now', '-14 days')",
   ).bind(teamId).run().catch((e) => logger.warn({ module: M }, "úklid hovorů", e));
-  // Zpětné hovory (call-back.ts): seznam ukazuje jen poslední dva týdny.
-  await db.prepare(
-    "DELETE FROM missed_call_callbacks WHERE team_id = ? AND julianday(created_at) < julianday('now', '-30 days')",
-  ).bind(teamId).run().catch((e) => logger.warn({ module: M }, "úklid zpětných hovorů", e));
 
   return hovory;
 }
@@ -116,10 +110,10 @@ async function sestavStav(
       .bind(teamId).first<{ f: number }>()
       .catch((e) => { logger.warn({ module: M }, "pokuty", e); return null; }),
     db.prepare(
-      `SELECT id, first_name, last_name FROM players
+      `SELECT first_name, last_name FROM players
         WHERE team_id = ? AND status = 'active'
         ORDER BY COALESCE(json_extract(life_context, '$.morale'), 50) ASC LIMIT 1`,
-    ).bind(teamId).first<{ id: string; first_name: string; last_name: string }>()
+    ).bind(teamId).first<{ first_name: string; last_name: string }>()
       .catch((e) => { logger.warn({ module: M }, "naštvaný hráč", e); return null; }),
     db.prepare("SELECT v.name FROM teams t JOIN villages v ON v.id = t.village_id WHERE t.id = ?")
       .bind(teamId).first<{ name: string }>()
@@ -136,7 +130,6 @@ async function sestavStav(
     pokutaZaBordel: pokuta?.f ?? 0,
     // Hráč volá jen občas, ne každý den. Jinak by to zevšednělo.
     nastvanyHrac: hrac && forma.serie <= -2 ? `${hrac.first_name} ${hrac.last_name}` : null,
-    angryPlayerId: hrac && forma.serie <= -2 ? hrac.id : null,
     obec: obec?.name ?? null,
   };
 }

@@ -130,14 +130,8 @@ messagingRouter.get("/teams/:teamId/missed-calls", async (c) => {
     neprectenychHovoru(c.env.DB, teamId),
   ]);
   const { VOLAJICI_LABEL } = await import("../engine/missed-calls");
-  // Zavolat zpátky (F9): komu jde volat a komu už se volalo.
-  const { isCallableCaller } = await import("../messaging/call-back-reasons");
-  const { loadCallBackState } = await import("../messaging/call-back");
-  const { CALL_BACK_PRICE } = await import("../messaging/phone-credit");
-  const callBacks = await loadCallBackState(c.env.DB, teamId);
   return c.json({
     unread: neprectene,
-    callBack: { price: CALL_BACK_PRICE, usedToday: callBacks.usedToday },
     calls: hovory.map((h) => ({
       id: h.id,
       volajici: h.volajici,
@@ -147,25 +141,8 @@ messagingRouter.get("/teams/:teamId/missed-calls", async (c) => {
       pocet: h.pocet,
       gameDate: h.game_date,
       seen: h.seen === 1,
-      canCallBack: isCallableCaller(h.volajici),
-      calledBack: callBacks.calls.get(h.id) ?? null,
     })),
   });
-});
-
-/**
- * Zavolat zpátky (F9): hráč pošle hlasovku, sponzor nebo vůdce kotle napíše do vlákna.
- * Stojí kredit, jednou za herní den na klub (messaging/call-back.ts).
- */
-messagingRouter.post("/teams/:teamId/missed-calls/:callId/call-back", async (c) => {
-  const teamId = c.req.param("teamId");
-  const { callBackMissedCall, CALL_BACK_HTTP_STATUS } = await import("../messaging/call-back");
-  const work = callBackMissedCall(c.env.DB, c.env, { teamId, callId: c.req.param("callId") });
-  // Hlasovka se namlouvá pár vteřin. Když trenér stránku mezitím zavře, hovor se dokončí.
-  c.executionCtx.waitUntil(work.then(() => undefined));
-  const result = await work;
-  if (!result.ok) return c.json({ error: result.error, code: result.code, credit: result.credit ?? null }, CALL_BACK_HTTP_STATUS[result.code]);
-  return c.json(result);
 });
 
 /** Seznam otevřen, hovory přestávají svítit. */

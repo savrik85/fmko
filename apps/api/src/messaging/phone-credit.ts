@@ -27,8 +27,6 @@ export const DENNI_KREDIT = 36;
 export const CENA_SMS = 3;
 /** Fotka od trenéra stojí jako MMS (messaging/coach-photo.ts). */
 export const MMS_PRICE = 5;
-/** Zpětný hovor na zmeškaný hovor (messaging/call-back.ts), jednou za herní den. */
-export const CALL_BACK_PRICE = 6;
 
 export interface CreditState {
   /** Zbývající kredit v korunách. */

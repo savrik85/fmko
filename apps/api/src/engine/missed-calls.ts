@@ -30,8 +30,6 @@ export interface StavHovoru {
   pokutaZaBordel: number;
   /** Jméno hráče, který dlouho nehrál a má nejhorší náladu. */
   nastvanyHrac: string | null;
-  /** Jeho id, ať jde zavolat zpátky (messaging/call-back.ts). */
-  angryPlayerId?: string | null;
   /** Obec, ať starosta volá odněkud. */
   obec: string | null;
 }
@@ -42,8 +40,6 @@ export interface Hovor {
   duvod: string;
   /** Kolikrát zvonil. Víc zvonění = větší průšvih. */
   pocet: number;
-  /** Jen u hráče: kdo volal (`missed_calls.player_id`). */
-  playerId?: string;
 }
 
 /**
@@ -132,7 +128,6 @@ export function kdoVolal(s: StavHovoru, roll: number): Hovor[] {
         "Prý to není nic důležitého. Volal dvakrát.",
       ]),
       pocet: 2,
-      ...(s.angryPlayerId ? { playerId: s.angryPlayerId } : {}),
     });
   }
 

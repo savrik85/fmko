@@ -24,7 +24,6 @@ import { weightTalkFromState } from "../season/weight-talk";
 import { coachStreak, leftOnReadChance, markCoachMessagesRead, readDelayMs } from "./left-on-read";
 import { describeNextMatch } from "./next-match";
 import { refundCoachSms } from "./phone-credit";
-import type { CallBackThreadState } from "./call-back";
 import {
   generateInitialMessage,
   generateReply,
@@ -110,8 +109,6 @@ interface AiThreadStateData {
   subject_player_name?: string;
   /** Zpráva „jen tak" (casual-messages.ts): neodpovězená nikoho neurazí. */
   casual?: boolean;
-  /** Vlákno po zpětném hovoru trenéra (call-back.ts): důvod a kolik hlasovek ještě smí přijít. */
-  call_back?: CallBackThreadState;
   /** Incident, na který se trenér ptá (spec 7a). Platí jen v herní den `incidentDen`. */
   incidentId?: string;
   incidentDen?: string;
@@ -1212,21 +1209,11 @@ async function handleAiPlayerReplyInner(
     return;
   }
 
-  const shouldClose = reply.conversationComplete || isHardCap;
-  // Po zpětném hovoru (call-back.ts) může hráč odpovědět ještě jednou hlasem. Nahrává se
-  // před čekáním na dopsání, ať se doba nahrávání do čekání započítá.
-  const replyId = uuid();
-  const callBackVoice = state.call_back && !shouldClose
-    ? await (await import("./call-back")).callBackReplyVoice(db, env, {
-      teamId: conv.team_id, messageId: replyId, state: state.call_back, body: reply.body,
-      scene: scenario.description, player, playerRow, startedAt: zacatek,
-    })
-    : null;
-
   await pockejNezDopise(zacatek, reply.body, player);
 
   const now = new Date().toISOString();
   const senderName = `${player.firstName} ${player.lastName}`;
+  const shouldClose = reply.conversationComplete || isHardCap;
   await afterPlayerReply(db, { teamId: conv.team_id, convId, player, reply, at: now, offerIds: memory.offerIds });
 
   if (!shouldClose) {
@@ -1235,19 +1222,16 @@ async function handleAiPlayerReplyInner(
       ...state,
       current_replies: newRepliesCount,
       awaiting: "coach",
-      ...(callBackVoice ? { call_back: callBackVoice.state } : {}),
     };
-    const voice = callBackVoice?.voice.meta ?? null;
-    const replyBody = callBackVoice?.voice.transcript ?? reply.body;
     await db.batch([
       db.prepare(
         "INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, metadata, sent_at, read) VALUES (?, ?, 'player', ?, ?, ?, ?, ?, 0)",
-      ).bind(replyId, convId, player.id, senderName, replyBody, JSON.stringify({ ai_generated: true, scenario_id: scenario.id, turn: newRepliesCount, ...(voice ?? {}) }), now),
+      ).bind(uuid(), convId, player.id, senderName, reply.body, JSON.stringify({ ai_generated: true, scenario_id: scenario.id, turn: newRepliesCount }), now),
       db.prepare(
         "UPDATE conversations SET ai_thread_state = ?, last_message_text = ?, last_message_at = ?, unread_count = unread_count + 1 WHERE id = ?",
-      ).bind(JSON.stringify(newState), voice ? voicePreviewText(voice.durationSec) : replyBody.slice(0, 100), now, convId),
+      ).bind(JSON.stringify(newState), reply.body.slice(0, 100), now, convId),
     ]);
-    await pushPlayerReply(db, env, { teamId: conv.team_id, convId, sender: senderName, text: voice ? "🎤 Hlasová zpráva" : replyBody });
+    await pushPlayerReply(db, env, { teamId: conv.team_id, convId, sender: senderName, text: reply.body });
     return;
   }
 

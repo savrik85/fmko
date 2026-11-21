@@ -73,9 +73,6 @@ export type TransactionType =
   // Vánoční sálovka (hall-cup/): startovné se strhne při losu i do mínusu (klub se přihlásil sám
   // a na účtu měl dost), výhra z banku je příjem.
   | "hall_cup_fee"
-  // Dražba hráčů z opuštěných klubů (transfers/auctions.ts): peníze se ověří při příhozu
-  // i při uzavření, strhne se pak i do mínusu (klub dražbu vyhrál).
-  | "auction_purchase"
   | "hall_cup_prize"
   | "staff_wage"
   // Cestovné skauta na úkolu (scouting/scout-work.ts). Běžný provoz jako mzdy, ne nákup:
