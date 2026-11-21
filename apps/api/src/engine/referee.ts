@@ -407,23 +407,13 @@ export function matchErrorChance(r: RefereeProfile): number {
 }
 
 /**
- * Sporné situace, do kterých mluví pomezní s praporkem: neuznaný gól je odmávnutý ofsajd.
- * Penalty, karty ani přímáky pomezní nerozhoduje.
- */
-export const LINESMAN_INCIDENT_KINDS: ReadonlySet<RefereeIncidentKind> = new Set(["neuznany_gol"]);
-
-/**
  * Naplánuje NEJVÝŠ JEDNU spornou situaci na zápas.
  *
  * Strop je strukturální, ne pravděpodobnostní — volá se jednou před minutovou smyčkou
  * a po použití se výsledek zahodí. Funkce spotřebuje VŽDY čtyři hodnoty RNG, ať k chybě
  * dojde nebo ne; podmíněné čerpání by rozhodilo stream a znemožnilo reprodukovatelnost.
- *
- * `homeLinesmanTilt` je domácí pomezní s praporkem (F15, `referees/linesman.ts`):
- * posune práh strany jen u ofsajdu (neuznaný gól), nic dalšího nečerpá ani nemění.
- * Bez pomezního (0) je výsledek bit po bitu stejný jako dřív.
  */
-export function planRefereeError(rng: Rng, r: RefereeProfile, homeLinesmanTilt = 0): PlannedRefereeError | null {
+export function planRefereeError(rng: Rng, r: RefereeProfile): PlannedRefereeError | null {
   const roll = rng.random();
   const minuteRoll = rng.random();
   const typeRoll = rng.random();
@@ -431,20 +421,15 @@ export function planRefereeError(rng: Rng, r: RefereeProfile, homeLinesmanTilt =
 
   if (roll >= matchErrorChance(r)) return null;
 
+  // Náchylnost k domácímu prostředí posouvá, komu chyba nahraje (bias 90 → ~70 % domácím).
+  const favourHome = sideRoll < clamp(0.5 + (r.homeBias - 50) / 200, 0.15, 0.85);
+
   let acc = 0;
   let picked = INCIDENT_TABLE[INCIDENT_TABLE.length - 1];
   for (const row of INCIDENT_TABLE) {
     acc += row.weight;
     if (typeRoll <= acc) { picked = row; break; }
   }
-
-  // Náchylnost k domácímu prostředí posouvá, komu chyba nahraje (bias 90 → ~70 % domácím).
-  const sideThreshold = clamp(0.5 + (r.homeBias - 50) / 200, 0.15, 0.85);
-  // Domácí pomezní zvedne praporek spíš proti hostům. Práh se mění jen s pomezním,
-  // jinak zůstává přesně původní hodnota.
-  const favourHome = homeLinesmanTilt !== 0 && LINESMAN_INCIDENT_KINDS.has(picked.kind)
-    ? sideRoll < clamp(sideThreshold + homeLinesmanTilt, 0.05, 0.95)
-    : sideRoll < sideThreshold;
 
   return {
     minute: 3 + Math.floor(minuteRoll * 85),

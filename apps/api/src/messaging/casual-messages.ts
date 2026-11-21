@@ -78,10 +78,6 @@ export async function runPhoneHourly(
   const { tickLegends } = await import("../season/legends-db");
   await tickLegends(db, env, now)
     .catch((e) => logger.warn({ module: M }, "hodinový běh legend", e));
-  // Fotbaloví rodiče v U21: vznik rodičů, SMS po zápasech dorostu, ticho trenéra a příspěvky táty podnikatele.
-  const { tickYouthParents } = await import("../youth/parents-db");
-  await tickYouthParents(db, env, now)
-    .catch((e) => logger.warn({ module: M }, "hodinový běh rodičů z U21", e));
   // Zasedání zastupitelstva: pozvánky a odpovědi starosty, rozdělení obecních peněz po zasedání.
   const { tickVillageCouncil } = await import("../villages/council-db");
   await tickVillageCouncil(db, env, now)

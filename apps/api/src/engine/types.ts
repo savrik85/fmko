@@ -128,11 +128,6 @@ export interface MatchConfig {
   awayEquipment?: EquipmentMods;
   /** Delegovaný rozhodčí. Chybí-li (nedelegováno, přátelák), použije se NEUTRAL_REFEREE. */
   referee?: RefereeProfile;
-  /**
-   * Domácí pomezní s praporkem: posun strany u ofsajdu (`planRefereeError`).
-   * Chybí-li nebo je 0, zápas běží beze změny. Počítá ho `referees/linesman.ts`.
-   */
-  homeLinesmanTilt?: number;
   /** Malá kopaná v hale. Chybí-li, velký fotbal. */
   format?: MatchFormat;
 }

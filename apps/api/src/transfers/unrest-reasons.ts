@@ -8,8 +8,6 @@
 import type { InterestFactor } from "./player-interest";
 
 export type UnrestReason = "money" | "better_club" | "minutes" | "coach" | "morale"
-  // F12: máma hráče z U21 doma tlačí k přestupu do Vimperka (youth/parents-db.ts), ne faktor zájmu.
-  | "parent"
   // Soupeř k nabídce přidal práci („práce na pile", transfers/job-lure.ts).
   | "job";
 
@@ -24,7 +22,6 @@ export const REASON_LABELS: Record<UnrestReason, string> = {
   minutes: "tomu, že málo hraje",
   coach: "vztahu s trenérem",
   morale: "špatné náladě v klubu",
-  parent: "tomu, že ho máma doma tlačí k přestupu do Vimperka",
   job: "slíbené práci",
 };
 
@@ -129,6 +126,5 @@ export const REASON_SMS: Record<UnrestReason, string> = {
   minutes: "Tady stejně skoro nehraju.",
   coach: "S vámi si stejně moc nerozumíme.",
   morale: "Poslední dobou mě to tady vůbec nebaví.",
-  parent: "Máma doma pořád mluví o Vimperku. Prý by mi tam dali víc prostoru.",
   job: "Sehnali by mi tam i práci, to tady nikdo neudělá.",
 };

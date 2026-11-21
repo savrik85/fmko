@@ -17,8 +17,7 @@ import { callCoachModel, COACH_MODEL } from "./llm";
 import {
   assembleLineup, fallbackMatchDecision, formationOptions, matchDecisionSchema, MATCH_SYSTEM_PROMPT, renderMatchPrompt,
   slotRatings, validateMatchDecision,
-  type AssembledLineup, type FixtureKind, type LinesmanCandidate, type MatchContext, type MatchDecision, type Slot, type SquadPlayer,
-  type UnavailablePlayer,
+  type AssembledLineup, type FixtureKind, type MatchContext, type MatchDecision, type Slot, type SquadPlayer, type UnavailablePlayer,
 } from "./match-decision";
 import { readCoachMode } from "./mode";
 import { ensureAiProfile } from "./profile";
@@ -221,30 +220,6 @@ async function daysToNextCompetitive(db: D1Database, teamId: string, leagueId: s
   return days <= 7 ? days : null;
 }
 
-/**
- * Kdo může u domácího ligového zápasu vzít praporek: vůdci fanoušků a hráči, kteří
- * dnes nehrají (zranění, stopka). Omluvení na zápas nepřijdou, ti praporek nedrží.
- */
-async function loadLinesmanContext(
-  db: D1Database, teamId: string, calendarId: string, unavailable: UnavailablePlayer[],
-): Promise<MatchContext["linesman"]> {
-  const { LINESMAN_BIAS_LIMIT, countHomerLinesmen, loadLinesmanFanLeaders } = await import("../referees/linesman");
-  const leaders = await loadLinesmanFanLeaders(db, teamId);
-  const players = unavailable.filter((u) => u.reason !== "excused").slice(0, 3);
-  const candidates: LinesmanCandidate[] = [
-    ...leaders.slice(0, 2).map((l) => ({ kind: "fan_leader" as const, id: l.id, name: l.name, note: l.groupName ? `fan leader of ${l.groupName}` : "fan leader" })),
-    ...players.map((u) => ({ kind: "player" as const, id: u.id, name: u.name, note: `${u.reason} player` })),
-  ].map((c, i) => ({ ...c, key: `L${i + 1}` }));
-  const cal = await db.prepare("SELECT league_id, season_number FROM season_calendar WHERE id = ?")
-    .bind(calendarId).first<{ league_id: string; season_number: number }>()
-    .catch((e) => { logger.warn({ module: M, teamId }, "kolo pro domácího pomezního", e); return null; });
-  const homerUses = cal
-    ? await countHomerLinesmen(db, { teamId, leagueId: cal.league_id, seasonNumber: cal.season_number })
-      .catch((e) => { logger.warn({ module: M, teamId }, "nadržující pomezní za sezónu", e); return 0; })
-    : 0;
-  return { candidates, homerUses, limit: LINESMAN_BIAS_LIMIT };
-}
-
 /** Načte všechno, co trenér před zápasem ví. Null = zápas nebo tým nejde najít. */
 export async function loadMatchContext(db: D1Database, teamId: string, fixture: CoachFixture): Promise<MatchContext | null> {
   const team = await db.prepare(
@@ -402,9 +377,6 @@ export async function loadMatchContext(db: D1Database, teamId: string, fixture: 
     lastLineup: last ?? null,
     promisedStarters,
     clubCaptain,
-    ...(fixture.kind === "league" && info.isHome
-      ? { linesman: await loadLinesmanContext(db, teamId, fixture.calendarId, unavailable) }
-      : {}),
   };
   // Síla vlastního týmu na stejné škále jako soupeř: průměr hodnocení nejlepších jedenácti dostupných.
   const top = [...squad].sort((a, b) => b.rating - a.rating).slice(0, 11);
@@ -420,7 +392,6 @@ function summarizeLineup(ctx: MatchContext, l: AssembledLineup): Record<string, 
     xi: l.players.map((p) => `${p.matchPosition} ${nameOf.get(p.playerId) ?? p.playerId}`),
     bench: l.bench.map((id) => nameOf.get(id) ?? id),
     captain: l.captainId ? nameOf.get(l.captainId) ?? l.captainId : null,
-    ...(l.linesman !== undefined ? { linesman: l.linesman ? `${l.linesman.style} ${l.linesman.kind} ${l.linesman.id}` : null } : {}),
     plan: l.matchPlan.length,
     notes: l.notes,
   };
@@ -519,7 +490,6 @@ export async function prepareAiLineup(
       captainId: lineup.captainId,
       matchPlan: lineup.matchPlan,
       bench: lineup.bench.length > 0 ? lineup.bench : null,
-      linesman: lineup.linesman,
       players: lineup.players,
     });
     if (!saved.ok && decided.used === "model") {
@@ -530,8 +500,7 @@ export async function prepareAiLineup(
       lineup = fillWithExcused(ctx, assembleLineup(ctx, replacedBy, squadIds));
       saved = await saveLineup(db, teamId, {
         calendarId: fixture.calendarId, formation: lineup.formation, tactic: lineup.tactic, hardness: lineup.hardness,
-        captainId: lineup.captainId, matchPlan: lineup.matchPlan, bench: lineup.bench.length > 0 ? lineup.bench : null,
-        linesman: lineup.linesman, players: lineup.players,
+        captainId: lineup.captainId, matchPlan: lineup.matchPlan, bench: lineup.bench.length > 0 ? lineup.bench : null, players: lineup.players,
       });
     }
     if (saved.ok) {

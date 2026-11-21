@@ -53,13 +53,6 @@ describe("dohody podle důvodu", () => {
     expect(ids(unrest({ reasons: ["morale", "coach"] }))).toEqual(["personal_talk"]);
   });
 
-  it("máma ho tlačí do Vimperka: místo v sestavě a pivo, bez nabídky ani pustit ho nejde", () => {
-    expect(ids(unrest({ reasons: ["parent"] }))).toEqual(["promise_minutes", "personal_talk"]);
-    expect(ids(unrest({ reasons: ["parent"], pledge: { type: "minutes", madeAt: "2026-10-18T12:00:00Z", deadline: "2026-10-30T12:00:00Z" } }))).toEqual(["personal_talk"]);
-    expect(reasonsText(["parent"])).toContain("Vimperka");
-    expect(reasonSms("parent", undefined)).toContain("Vimperku");
-  });
-
   it("srdcař a zpražení jen tam, kde zaberou", () => {
     expect(ids(unrest({ reasons: ["money"] }), {}, { patriotism: 80 })).toContain("appeal_loyalty");
     expect(ids(unrest({ reasons: ["money"] }), {}, { discipline: 75 })).toContain("tough_love");

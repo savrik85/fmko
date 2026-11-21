@@ -25,11 +25,6 @@ export interface SaveLineupInput {
   presetSlot?: "A" | "B" | "C" | null;
   matchPlan?: unknown;
   bench?: unknown;
-  /**
-   * Domácí pomezní (`referees/linesman.ts`). `undefined` = nechat, jak je;
-   * `null` = bez pomezního; objekt = nová volba (neplatná sestavu odmítne).
-   */
-  linesman?: unknown;
   players: Array<{ playerId: string; matchPosition: string }>;
 }
 
@@ -129,10 +124,6 @@ export async function saveLineup(db: D1Database, teamId: string, body: SaveLineu
   if (!benchCheck.ok) return { ok: false, status: 400, error: benchCheck.error };
   const benchJson = benchColumn(benchCheck.bench);
 
-  // Domácí pomezní s praporkem: hráč mimo zápas nebo vůdce fanoušků vlastního klubu.
-  const linesman = await checkLinesman(db, teamId, body.linesman, new Set([...playerIds, ...(benchCheck.bench ?? [])]));
-  if (!linesman.ok) return linesman;
-
   // Upsert lineup
   const existing = await db.prepare("SELECT id FROM lineups WHERE team_id = ? AND calendar_id = ?")
     .bind(teamId, body.calendarId).first<{ id: string }>();
@@ -175,39 +166,7 @@ export async function saveLineup(db: D1Database, teamId: string, body: SaveLineu
       .run().catch((e) => logger.warn({ module: "game" }, "auto-upsert preset", e));
   }
 
-  // Pomezní zvlášť: bez sloupce (migrace 0329) se sestava uloží, jen bez pomezního.
-  if (linesman.value !== undefined) {
-    await db.prepare("UPDATE lineups SET linesman = ? WHERE id = ?").bind(linesman.value, lineupId).run()
-      .catch((e) => logger.warn({ module: "game" }, "uložení domácího pomezního", e));
-    if (presetSlot) {
-      await db.prepare("UPDATE lineup_presets SET linesman = ? WHERE team_id = ? AND slot = ?").bind(linesman.value, teamId, presetSlot).run()
-        .catch((e) => logger.warn({ module: "game" }, "domácí pomezní do presetu", e));
-    }
-  }
-
   return { ok: true, lineupId };
-}
-
-/**
- * Zkontroluje volbu domácího pomezního. `value` je hodnota do sloupce `linesman`
- * (`undefined` = sloupec nechat, `null` = bez pomezního).
- */
-export async function checkLinesman(
-  db: D1Database, teamId: string, raw: unknown, occupiedIds: ReadonlySet<string>,
-): Promise<{ ok: true; value: string | null | undefined } | ServiceError> {
-  if (raw === undefined) return { ok: true, value: undefined };
-  if (raw === null) return { ok: true, value: null };
-  const { parseLinesman, validateLinesmanForTeam, linesmanColumn } = await import("../referees/linesman");
-  const choice = parseLinesman(raw);
-  if (!choice) return { ok: false, status: 400, error: "Neplatná volba domácího pomezního" };
-  try {
-    const check = await validateLinesmanForTeam(db, teamId, choice, occupiedIds);
-    if (!check.ok) return { ok: false, status: 400, error: check.error };
-  } catch (e) {
-    logger.warn({ module: "game" }, "kontrola domácího pomezního", e);
-    return { ok: false, status: 500, error: "Sestavu se nepodařilo uložit, zkus to prosím znovu." };
-  }
-  return { ok: true, value: linesmanColumn(choice) };
 }
 
 export interface TeamRolesInput {
