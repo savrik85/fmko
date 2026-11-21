@@ -114,6 +114,8 @@ const REASON_TEXT: Record<UnrestReason, string> = {
   minutes: "he plays too little",
   coach: "his relationship with you",
   morale: "the bad mood in the club",
+  // AI kluby rodiče z U21 nemají (youth/parents-db.ts), mapa jen musí být úplná.
+  parent: "his mother pushing him to move to Vimperk",
 };
 
 const IMPORTANCE_TEXT: Record<SquadImportance, string> = {

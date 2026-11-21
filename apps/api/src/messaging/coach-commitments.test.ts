@@ -120,6 +120,18 @@ describe("texty", () => {
     expect(lines[1]).toContain("NEDODRŽEL slib: prémii 1");
     expect(commitmentPromptLines(undefined)).toEqual([]);
   });
+
+  it("dohoda s tátou z U21: v profilu s částkou, hráč o ní ví jako o dohodě s tátou, ne jako o slibu jemu", () => {
+    expect(commitmentText("parent_deal", { amount: 4500, parentId: "yp-k1" })).toMatch(/^Místo v základu, za které táta přispěje klubu 4\s500 Kč$/);
+    const [active, kept] = commitmentPromptLines([
+      { id: "a", kind: "parent_deal", status: "active", details: { amount: 4500 }, madeAt: "2026-11-18T10:00:00Z", resolvedAt: null },
+      { id: "b", kind: "parent_deal", status: "kept", details: { amount: 4500 }, madeAt: "2026-11-01T10:00:00Z", resolvedAt: "2026-11-08T10:00:00Z" },
+    ]);
+    expect(active).toContain("s tvým tátou");
+    expect(active).not.toContain("slíbil:");
+    expect(kept).toContain("Táta nedávno přispěl");
+    expect(`${active} ${kept}`).not.toMatch(/\d/);
+  });
 });
 
 describe("pozvání a sázky", () => {

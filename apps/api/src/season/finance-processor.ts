@@ -135,6 +135,9 @@ export type TransactionType =
   // Svatební dar hráči (weddings/, „Svatba v kabině“). Dobrovolný výdaj trenéra, PATŘÍ do
   // PURCHASE_TYPES: klub v mínusu dar neposílá.
   | "wedding_gift"
+  // Příspěvek táty podnikatele z U21 za dohodu, že syn nastoupí od začátku (youth/parents-db.ts).
+  // Příjem, ne nákup, proto NENÍ v PURCHASE_TYPES.
+  | "parent_contribution"
   | "other";
 
 /** Základní cena vstupenek podle kategorie obce — reference pro satisfaction delta calc. */

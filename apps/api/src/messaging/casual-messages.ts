@@ -75,6 +75,10 @@ export async function runPhoneHourly(
   const { tickLegends } = await import("../season/legends-db");
   await tickLegends(db, env, now)
     .catch((e) => logger.warn({ module: M }, "hodinový běh legend", e));
+  // Fotbaloví rodiče v U21: vznik rodičů, SMS po zápasech dorostu, ticho trenéra a příspěvky táty podnikatele.
+  const { tickYouthParents } = await import("../youth/parents-db");
+  await tickYouthParents(db, env, now)
+    .catch((e) => logger.warn({ module: M }, "hodinový běh rodičů z U21", e));
   // Okresní akce se vyhodnotí v noci: v 19 h připomenout těm, kdo neodpověděli.
   if (pragueClock(now).hour === 19) {
     const { remindUnansweredDistrictEvents } = await import("../events/district-event-db");

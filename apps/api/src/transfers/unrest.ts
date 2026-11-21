@@ -200,6 +200,10 @@ export function availableActions(
     } else if (reason === "better_club") {
       if (unrest.pledge?.type !== "transfer") add("promise_transfer");
       if (ctx.ownedHere && ctx.leadership >= 55 && !ctx.isCaptain) add("captaincy");
+    } else if (reason === "parent") {
+      // Máma ho tlačí do Vimperka, protože tu nehraje (youth/parents-db.ts): místo v sestavě, nebo pivo a vyříkat si to.
+      if (unrest.pledge?.type !== "minutes") add("promise_minutes");
+      add("personal_talk");
     } else {
       add("personal_talk");
     }

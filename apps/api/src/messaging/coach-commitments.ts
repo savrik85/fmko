@@ -32,7 +32,10 @@ export type CommitmentKind = "start_next" | "start_soon" | "position" | "release
   // Bod 4: pokuta napsaná v SMS a úkol „poptej se“ k incidentu (incidents/zprava-trenera.ts).
   | "fine" | "task_inquiry"
   // F1: brigáda svolaná v kabině (messaging/squad-brigade.ts), hráč u slibu jen zastupuje kabinu.
-  | "brigade";
+  | "brigade"
+  // F12: dohoda s tátou podnikatelem hráče z U21 (youth/parents-db.ts): syn nastoupí od začátku,
+  // táta přispěje klubu. Vyhodnocuje ji hodinový běh rodičů, ne settleCoachCommitments.
+  | "parent_deal";
 export type CommitmentStatus = "active" | "kept" | "broken" | "expired" | "cancelled";
 export type LineupRole = "GK" | "DEF" | "MID" | "FWD";
 export type BetCondition = "goal" | "hattrick" | "assist" | "win" | "clean_sheet";
@@ -80,6 +83,8 @@ export interface CommitmentDetails {
   effect?: number;
   /** Úkol „poptej se“: o jaký incident jde. */
   incidentId?: string;
+  /** Dohoda s rodičem z U21: kdo příspěvek slíbil (youth_parents.id). */
+  parentId?: string;
 }
 
 /** Jak dlouho slib platí, než se vyhodnotí bez zápasu nebo bez vyplacení. */
@@ -88,6 +93,8 @@ const DUE_DAYS: Record<CommitmentKind, number> = {
   invite_pub: 2, invite_talk: 3, bet: 10, fine: 3, task_inquiry: 1,
   // Brigáda má vlastní termín z textu výzvy (squad-brigade.ts), tohle je jen strop.
   brigade: 7,
+  // Dohodu s rodičem zakládá youth/parents-db.ts s vlastní lhůtou (PARENT_DEAL_DAYS), tady stejná.
+  parent_deal: 10,
 };
 /** Kolik dní má trenér na zaplacení vyhrané sázky. */
 const BET_PAY_DAYS = 5;
@@ -134,6 +141,7 @@ export function commitmentText(kind: CommitmentKind, d: CommitmentDetails = {}):
     case "fine": return `Pokutu ${(d.amount ?? 0).toLocaleString("cs-CZ")} Kč`;
     case "task_inquiry": return "Poptat se kvůli incidentu";
     case "brigade": return "Brigádu na hřišti";
+    case "parent_deal": return `Místo v základu, za které táta přispěje klubu ${(d.amount ?? 0).toLocaleString("cs-CZ")} Kč`;
   }
 }
 
@@ -602,8 +610,8 @@ export function lineupVerdict(
   return first.started ? "kept" : "broken";
 }
 
-/** Zápasy klubu (áčko i U21) od slibu, chronologicky, s účastí hráče. */
-async function loadCommitmentMatches(db: D1Database, playerId: string, clubTeamId: string, madeAt: string): Promise<CommitmentMatch[]> {
+/** Zápasy klubu (áčko i U21) od slibu, chronologicky, s účastí hráče. Sdílí i dohoda s rodičem z U21. */
+export async function loadCommitmentMatches(db: D1Database, playerId: string, clubTeamId: string, madeAt: string): Promise<CommitmentMatch[]> {
   const clubTeams = "(SELECT id FROM teams WHERE id = ? OR parent_team_id = ?)";
   const rows = await db.prepare(
     `SELECT m.id, m.home_team_id, m.away_team_id, m.home_lineup_data, m.away_lineup_data, m.home_score, m.away_score,
@@ -689,6 +697,8 @@ const KEPT_SMS: Record<CommitmentKind, string[]> = {
   invite_talk: [],
   task_inquiry: [],
   brigade: [],
+  // Dohoda s rodičem: po zápase píše táta (youth/parents-db.ts), ne hráč.
+  parent_deal: [],
   fine: [
     "No jo, trenére. Zasloužil jsem si to.",
     "Dobře, pokutu beru. Ale radost z toho nemám.",
@@ -727,6 +737,8 @@ const BROKEN_SMS: Record<CommitmentKind, string[]> = {
   invite_talk: [],
   task_inquiry: [],
   brigade: [],
+  // Dohoda s rodičem: po zápase píše táta (youth/parents-db.ts), ne hráč.
+  parent_deal: [],
   fine: [],
   bet: [
     "Trenére, sázka platila a pořád nic. Tak tolik k vašemu slovu.",
@@ -786,6 +798,8 @@ const EFFECTS: Record<CommitmentKind, { kept: [number, number]; broken: [number,
   task_inquiry: { kept: [0, 0], broken: [0, 0] },
   // Brigáda má vlastní dopad (nálada podle účasti, hřiště), vyhodnocuje ji squad-brigade.ts.
   brigade: { kept: [0, 0], broken: [0, 0] },
+  // Dohoda s rodičem: dopad (peníze, nálada rodiče) řeší youth/parents-db.ts.
+  parent_deal: { kept: [0, 0], broken: [0, 0] },
   bonus: { kept: [6, 5], broken: [-8, -5] },
   wage: { kept: [8, 6], broken: [-8, -5] },
 };
@@ -921,6 +935,9 @@ export async function settleCoachCommitments(
   for (const r of rows.results) {
     try {
       const duePassed = new Date(r.due_at).getTime() < now.getTime();
+      // Dohodu s rodičem z U21 vyhodnocuje přes den hodinový běh rodičů (youth/parents-db.ts):
+      // peníze a SMS táty patří tam, jinak by je odbyl denní běh v noci.
+      if (r.kind === "parent_deal") continue;
       if (r.kind === "brigade") {
         // Brigáda patří kabině, ne hráči, který ji zastupuje: jeho odchod ji nezruší.
         if (!duePassed) continue;
@@ -1307,6 +1324,11 @@ export function commitmentPromptLines(list: CommitmentMemory[] | undefined): str
     if (c.kind === "brigade") {
       return c.status === "active" ? "- Trenér svolal do kabiny brigádu na hřišti. Víš o ní a v kabině se o ní mluví."
         : c.status === "kept" ? "- Nedávno byla brigáda na hřišti, kterou svolal trenér. Pamatuješ si, kdo přišel a kdo se vymluvil." : "";
+    }
+    if (c.kind === "parent_deal") {
+      return c.status === "active" ? "- Trenér se domluvil s tvým tátou: když nastoupíš od začátku, táta přispěje klubu penězi. Víš o tom a trochu tě to tíží."
+        : c.status === "kept" ? "- Táta nedávno přispěl klubu, protože jsi nastoupil od začátku. Je ti to trochu trapné, ale máš radost, že hraješ."
+        : c.status === "broken" ? "- Trenér se domluvil s tvým tátou, že budeš hrát od začátku, a pak jsi stejně seděl. Doma se o tom mluví." : "";
     }
     if (c.kind === "task_inquiry") {
       return c.status === "active" ? "- Trenér tě požádal, ať se poptáš kvůli incidentu v klubu. Kývl jsi na to a ozveš se mu, až něco zjistíš (zítra)." : "";
