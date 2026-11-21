@@ -210,6 +210,8 @@ function odpovidatLze(
   if (opts.participantId?.startsWith("yp-")) return { canReply: true, channel: "sms" };
   // Hala Vánoční sálovky: přihláška a odhlášení přes SMS, odpovídá automat zdarma.
   if (opts.participantId?.startsWith("hc-")) return { canReply: true, channel: "imessage" };
+  // Starosta (zasedání zastupitelstva, villages/council-db.ts): proslov se píše zdarma, odpověď s prodlevou.
+  if (opts.participantId?.startsWith("vo-")) return { canReply: true, channel: "imessage" };
   // Vůdce fanoušků čeká na odpověď jen dokud vlákno běží; pak už se nemá kdo ozvat.
   if (type === "system" && threadActive) return { canReply: true, channel: "imessage" };
 
@@ -1004,6 +1006,11 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
     const optionId = typeof body.optionId === "string" ? body.optionId : null;
     await handleRumourReply(c.env.DB, convId, teamId, body.body.trim(), optionId)
       .catch((e) => logger.warn({ module: "messaging" }, "odpověď hospodskému na drb", e));
+  } else if (conv?.type === "system" && conv.participant_id?.startsWith("vo-")) {
+    // Starosta zve na zasedání zastupitelstva: SMS do začátku zasedání jsou proslov, starosta odepíše z hodinového běhu.
+    const { handleCouncilReply } = await import("../villages/council-db");
+    await handleCouncilReply(c.env.DB, { teamId, convId, participantId: conv.participant_id, text: body.body.trim() })
+      .catch((e) => logger.warn({ module: "messaging" }, "proslov pro zastupitelstvo", e));
   } else if (conv?.type === "system" && conv.ai_thread_active === 1) {
     const { handleFanLeaderReply } = await import("../fans/fan-leader-reply");
     await handleFanLeaderReply(c.env.DB, convId, body.body.trim(), c.env)

@@ -82,6 +82,10 @@ export async function runPhoneHourly(
   const { tickYouthParents } = await import("../youth/parents-db");
   await tickYouthParents(db, env, now)
     .catch((e) => logger.warn({ module: M }, "hodinový běh rodičů z U21", e));
+  // Zasedání zastupitelstva: pozvánky a odpovědi starosty, rozdělení obecních peněz po zasedání.
+  const { tickVillageCouncil } = await import("../villages/council-db");
+  await tickVillageCouncil(db, env, now)
+    .catch((e) => logger.warn({ module: M }, "hodinový běh zastupitelstva", e));
   // Okresní akce se vyhodnotí v noci: v 19 h připomenout těm, kdo neodpověděli.
   if (pragueClock(now).hour === 19) {
     const { remindUnansweredDistrictEvents } = await import("../events/district-event-db");

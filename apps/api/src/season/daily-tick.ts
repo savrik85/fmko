@@ -249,6 +249,19 @@ export async function executeDailyTick(
   }
   });
 
+  // ── Zasedání zastupitelstva: v pondělí, jedno za herní měsíc (villages/council-db.ts). Vlastní krok:
+  // založení je idempotentní, pozvánky a rozdělení dělá hodinový běh Telefonu přes den. ──
+  if (dayOfWeek === 1) {
+    await steps.run("village-council", async () => {
+    try {
+      const { createMonthlyCouncilSessions } = await import("../villages/council-db");
+      await createMonthlyCouncilSessions(env.DB, todayKey, now);
+    } catch (e) {
+      logger.error({ module: "daily-tick" }, "zasedání zastupitelstva se nezaložila", e);
+    }
+    });
+  }
+
   // ── Setkání s majiteli firem v hospodě (vlastní try: chyba nesmí shodit cyklus obce) ──
   await steps.once("sponsor-pub-meetings", async () => {
   try {

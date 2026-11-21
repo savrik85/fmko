@@ -84,6 +84,7 @@ const CHRONICLE_ICON: Record<string, string> = {
   investment_accepted: "\u{1F3D7}️",
   brigade_completed: "\u{1F528}",
   pub_scandal: "\u{1F37A}",
+  council_grant: "\u{1F3DB}️",
 };
 
 const PITCH_LABEL: Record<string, string> = { natural: "přírodní tráva", hybrid: "hybridní trávník", artificial: "umělá tráva" };

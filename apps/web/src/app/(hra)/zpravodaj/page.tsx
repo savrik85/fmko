@@ -269,7 +269,10 @@ export default function NewsPage() {
       const seen = new Set<string>();
       // Reportáž z okresní akce vychází v každé lize okresu zvlášť (jiné id); ukázat ji jen jednou.
       // Totéž platí pro článek o pohárovém kole: vychází v každé lize, odkud někdo hrál.
-      const key = (a: Article) => (a.type === "district_event" || a.type === "cup_round" ? `${a.type}:${a.headline}` : a.id);
+      // Zápis ze zastupitelstva obce vychází v každé soutěži, kde klub obce hraje, se stejným textem.
+      const key = (a: Article) => (a.type === "district_event" || a.type === "cup_round"
+        ? `${a.type}:${a.headline}`
+        : a.type === "village_council" ? `${a.type}:${a.headline}:${a.body.slice(0, 120)}` : a.id);
       const merged = parts.flatMap(({ d, label: lab }) => d.articles.map((a) => ({ ...a, leagueLabel: lab })))
         .filter((a) => (seen.has(key(a)) ? false : (seen.add(key(a)), true)))
         .sort((x, y) => (y.date ?? "").localeCompare(x.date ?? ""));
@@ -432,7 +435,10 @@ export default function NewsPage() {
   const legendStories = articles.filter((a) => a.type === "legend_farewell" && a.id !== leadStory?.id && a.id !== secondaryStory?.id).slice(0, 3);
   // Drby od výčepu (trenér pustil drb o přestupu do novin) mají vlastní rubriku vedle přestupů.
   const rumourStories = articles.filter((a) => a.type === "transfer_rumour" && a.id !== leadStory?.id && a.id !== secondaryStory?.id).slice(0, 3);
-  const miscArticles = otherArticles.filter((a) => a.type !== "legend_farewell" && a.type !== "transfer_rumour");
+  // Zasedání zastupitelstva (obce soutěže zasedají jednou za měsíc ve stejný večer): vlastní obecní rubrika,
+  // každá obec zvlášť, ať odkaz ze SMS od Redakce najde svůj článek.
+  const councilStories = articles.filter((a) => a.type === "village_council" && a.id !== leadStory?.id && a.id !== secondaryStory?.id).slice(0, 10);
+  const miscArticles = otherArticles.filter((a) => !["legend_farewell", "transfer_rumour", "village_council"].includes(a.type));
 
   const today = new Date().toLocaleDateString("cs", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
   const selectedLeague = selectedLeagueId && selectedLeagueId !== DISTRICT ? allLeagues.find(l => l.id === selectedLeagueId) : null;
@@ -768,6 +774,27 @@ export default function NewsPage() {
                       <NovinoveOdstavce body={a.body} />
                     </div>
                     <div className="flex items-center justify-center gap-3 mt-3">
+                      <span className="text-micro text-muted italic">{timeAgo(a.date)}</span>
+                      <ShareButton articleId={a.id} />
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* ═══ Ze zastupitelstva: obecní peníze pro spolky ═══ */}
+          {councilStories.length > 0 && (
+            <section className="border-t border-ink/20 pt-6">
+              <Kicker>{rubrikaProTyp("village_council")}</Kicker>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-8">
+                {councilStories.map((a) => (
+                  <article key={a.id} id={`news-${a.id}`} className="py-4 border-b border-ink/10 min-w-0">
+                    <h3 className="np-titulek text-xl sm:text-2xl mb-2"><LeagueTag a={a} />{a.headline}</h3>
+                    <div className="np-text text-[15px]">
+                      <NovinoveOdstavce body={a.body} />
+                    </div>
+                    <div className="flex items-center gap-3 mt-3">
                       <span className="text-micro text-muted italic">{timeAgo(a.date)}</span>
                       <ShareButton articleId={a.id} />
                     </div>
@@ -1133,6 +1160,7 @@ function rubrikaProTyp(type: string): string {
     case "district_selection": return "🎽 Výběr okresu";
     case "club_wedding": return "💍 Ze života klubů";
     case "transfer_rumour": return "🤫 Šušká se u výčepu";
+    case "village_council": return "🏛️ Ze zastupitelstva";
     default: return "Aktualita";
   }
 }

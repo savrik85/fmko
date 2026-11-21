@@ -35,6 +35,8 @@ export type TransactionType =
   | "sponsor_signing"
   // Prosba o příspěvek u majitele firmy (sponsors/requests.ts). Příjem, ne nákup.
   | "sponsor_request"
+  // Dotace ze zasedání zastupitelstva (villages/council-db.ts). Příjem, ne nákup, proto NENÍ v PURCHASE_TYPES.
+  | "village_grant"
   | "season_reward"
   | "event"
   | "transfer_fee"

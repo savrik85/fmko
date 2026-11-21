@@ -822,6 +822,7 @@ const CHRONICLE_ICON: Record<string, string> = {
   brigade_completed: "\u{1F528}",
   brigade_taken: "\u{1F528}",
   pub_scandal: "\u{1F37A}",
+  council_grant: "\u{1F3DB}️",
 };
 
 const CHIP_TONE: Record<string, string> = {
