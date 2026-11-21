@@ -286,7 +286,7 @@ export function calcChanceProb(
   // Přeskupení po vyloučení: chybějícího hráče nese jeho role v součtu, ale zbytek
   // týmu musí navíc pokrýt jeho zónu. Proto i mírná paušální srážka, s citlivostí 1
   // (dřív 2, kdy role nebyly a vyloučení jinak nic nestálo).
-  const manpowerRatio = manpowerFactor(attacking.lineup, attacking.squadSize).attack / manpowerFactor(defending.lineup, defending.squadSize).defense;
+  const manpowerRatio = manpowerFactor(attacking.lineup).attack / manpowerFactor(defending.lineup).defense;
   const chance = BASE_CHANCE * skillRatio ** STRENGTH_EXPONENT
     * (attackMods / defenseMods) ** MODIFIER_ELASTICITY * manpowerRatio * tacticRatio * longBallFactor;
   return Math.min(MAX_CHANCE, Math.max(MIN_CHANCE, chance)) * effMod(tacticMod.chanceMod, attEff);
@@ -444,10 +444,9 @@ function getGK(lineup: MatchPlayer[]): MatchPlayer {
  * Při jedenácti hráčích je faktor přesně 1,0, takže zápasy bez vyloučení
  * zůstávají identické s dřívějškem.
  */
-function manpowerFactor(lineup: MatchPlayer[], squadSize = 11): { attack: number; defense: number } {
+function manpowerFactor(lineup: MatchPlayer[]): { attack: number; defense: number } {
   // Pod sedm hráčů se zápas v reálu kontumuje; engine tam nedojde, clamp jen drží vzorec konečný.
-  // Sálovka má plný počet 6, takže chybějící se počítají od něj.
-  const missing = Math.max(0, Math.min(4, squadSize - lineup.length));
+  const missing = Math.max(0, Math.min(4, 11 - lineup.length));
   return { attack: 1 - 0.075 * missing, defense: 1 - 0.055 * missing };
 }
 
@@ -657,13 +656,6 @@ function pickSubIndexForPosition(subs: MatchPlayer[], outPos: Position, excludeI
  */
 export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
   const { home, away, weather, isHomeAdvantage } = config;
-  // Sálovka: menší plný počet hráčů a víc šancí. Bez formátu se nic z toho nepoužije.
-  const format = config.format;
-  const chanceScale = format?.chanceScale ?? 1;
-  if (format) {
-    home.squadSize = format.squadSize;
-    away.squadSize = format.squadSize;
-  }
   const homeAdvantage = config.homeAdvantage ?? (isHomeAdvantage ? 0.05 : 0);
   const events: MatchEvent[] = [];
   let homeScore = 0;
@@ -1262,7 +1254,7 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
     // Low condition has significant impact — floor at 0.45
     const conditionMod = Math.max(0.45, teamAvg(attacking.lineup, "condition") / 100);
     if (chanceSample) addSample(isHomePossession ? homeFactors : awayFactors, { ...(chanceSample as Omit<TeamMatchFactors, "condition">), condition: conditionMod });
-    const adjustedChanceProb = chanceProb * conditionMod * chanceScale;
+    const adjustedChanceProb = chanceProb * conditionMod;
 
     if (rng.random() < adjustedChanceProb) {
       const attacker = pickAttacker(rng, attacking.lineup);
@@ -1377,7 +1369,7 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
     const counterHardBonus = hardnessMods(defending.hardness).counterBonus
       * hardEff(defending.lineup, defending.hardness ?? "normal", ref, yellowCards);
     const effectiveCounterMod = (defTacticMods.counterMod * defEffForCounter + counterHardBonus)
-      * manpowerFactor(defending.lineup, defending.squadSize).attack;
+      * manpowerFactor(defending.lineup).attack;
     if (effectiveCounterMod > 0 && rng.random() < effectiveCounterMod * conditionMod) {
       const counterAttacker = pickAttacker(rng, defending.lineup);
       const counterGk = getGK(attacking.lineup);
@@ -1745,17 +1737,6 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
   addEvent(90, "special", lastPlayer, home.teamId,
     `Konec zápasu! ${home.teamName} ${homeScore}:${awayScore} ${away.teamName}`,
     "full_time");
-
-  // Sálovka se hraje 90 kroků jako velký fotbal, do zápisu jdou skutečné minuty (2 × 20).
-  if (format && format.durationMinutes !== 90) {
-    const toReal = (m: number) => Math.max(1, Math.min(format.durationMinutes, Math.round((m * format.durationMinutes) / 90)));
-    for (const e of events) e.minute = toReal(e.minute);
-    for (const i of refereeIncidents) i.minute = toReal(i.minute);
-    for (const track of Object.values(playerMinutes)) {
-      track.entered = track.entered === 0 ? 0 : toReal(track.entered);
-      if (track.left != null) track.left = toReal(track.left);
-    }
-  }
 
   // Sort events by minute
   events.sort((a, b) => a.minute - b.minute);

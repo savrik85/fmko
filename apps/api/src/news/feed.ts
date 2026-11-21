@@ -30,7 +30,6 @@ const KVOTY: Record<string, number> = {
   // Zasedání je jednou týdně a zápis je dlouhý — dva vedle sebe by noviny zavalily.
   governance_minutes: 1,
   district_event: 1,
-  hall_cup: 1,
   // Ročenky lidských klubů po konci sezóny: v listu soutěže jen jedna, celé jsou na klubových webech.
   season_yearbook: 1,
   // Svatba v kabině (weddings/): vlastní rubrika Ze života klubů, víc než dvě naráz se nevykreslí.
@@ -66,7 +65,6 @@ export const NEWS_ICONS: Record<string, string> = {
   announcement: "\u{1F4E3}",
   story: "\u{1F4D6}",
   district_event: "\u{1F3A1}",
-  hall_cup: "\u{1F945}",
   season_yearbook: "\u{1F4D6}",
   club_wedding: "\u{1F48D}",
   village_council: "\u{1F3DB}️",

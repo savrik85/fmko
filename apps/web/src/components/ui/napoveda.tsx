@@ -393,15 +393,6 @@ const HELP: Record<string, HelpEntry> = {
       { heading: "Pokuty", text: "Pokutu jde navrhnout jen za skutek doložitelný z dat, bez důkazu jen za nesportovní chování a manipulaci se sázkami. Od grémia dostane klub nejvýš dvě pokuty za sezónu. O pokutě pro svůj klub nehlasuješ, můžeš napsat obhajobu a zdarma se odvolat." },
     ],
   },
-  "/salovka": {
-    title: "Vánoční sálovka",
-    icon: "\u{1F945}",
-    sections: [
-      { text: "Halový turnaj okresu mezi svátky: malá kopaná 5+1, 2 × 10 minut, od 9:00 na dvou hřištích. Pozvánka přijde začátkem prosince do Telefonu od haly, přihlásíš se odpovědí. Startovné se strhne při losu den po uzávěrce." },
-      { heading: "Soupiska", text: "Vyber šest až deset hráčů, nejlepší brankář jde do branky a pět do pole. Měnit ji můžeš do prvního výkopu. Když nevybereš nikoho, pojedou nejlepší zdraví." },
-      { heading: "Bank a následky", text: "Celé startovné si rozdělí první tři: 50, 30 a 20 %. Vítěz dostane pohár do vitríny a o turnaji vyjde článek ve Zpravodaji. Zranění, karty ani únava ze sálovky se do ligy nepočítají." },
-    ],
-  },
   "/turnaj": {
     title: "Turnaj",
     icon: "\u{26BD}",

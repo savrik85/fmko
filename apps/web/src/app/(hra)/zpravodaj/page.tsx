@@ -389,15 +389,9 @@ export default function NewsPage() {
   const wrapArticles = articles.filter((a) => a.type === "season_wrap");
   // Reportáž z okresní akce (pouť, bál…) je tři dny nahoře nad úvodníkem, pak spadne do drobných zpráv.
   // Dřív rovnou končila v drobných zprávách na konci listu a nikdo ji nenašel; týden nahoře byl moc dlouho.
-  const districtEventOnly = articles.find(
+  const districtEventStory = articles.find(
     (a) => a.type === "district_event" && Date.now() - new Date(a.date).getTime() < 3 * 24 * 3600 * 1000,
   ) ?? null;
-  // Vánoční sálovka: reportáž nahoře na tři dny jako okresní akce (sdílí její místo, novější vyhraje).
-  const hallCupStory = articles.find(
-    (a) => a.type === "hall_cup" && Date.now() - new Date(a.date).getTime() < 3 * 24 * 3600 * 1000,
-  ) ?? null;
-  const districtEventStory = [districtEventOnly, hallCupStory].filter((a): a is NonNullable<typeof a> => !!a)
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0] ?? null;
   // Pohárové kolo: vlastní rubrika nahoře na tři dny, pak spadne do drobných zpráv.
   const cupStory = articles.find(
     (a) => a.type === "cup_round" && Date.now() - new Date(a.date).getTime() < 3 * 24 * 3600 * 1000,
@@ -1101,7 +1095,6 @@ function rubrikaProTyp(type: string): string {
     case "standing": return "Tabulka";
     case "district_event": return "🎡 Z okresu";
     case "cup_round": return "🏆 Pohár";
-    case "hall_cup": return "🥅 Sálovka";
     case "season_yearbook": return "📖 Ročenka";
     case "club_wedding": return "💍 Ze života klubů";
     case "village_council": return "🏛️ Ze zastupitelstva";

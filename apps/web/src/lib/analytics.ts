@@ -89,7 +89,6 @@ export function categorizePath(pathname: string): { normalizedPath: string; feat
     pathname.startsWith("/liga") ||
     pathname.startsWith("/pohar") ||
     pathname.startsWith("/turnaj") ||
-    pathname.startsWith("/salovka") ||
     pathname.startsWith("/soutez") ||
     pathname.startsWith("/rozpis") ||
     pathname.startsWith("/kalendar") ||

@@ -81,21 +81,6 @@ export interface TeamSetup {
    */
   plan?: EngineMatchPlan;
   weatherResist?: number;  // 0-0.45 ze zimní výbavy — tlumí postih počasí (nastavuje simulateMatch)
-  /** Plný počet hráčů na hřišti (nastavuje simulateMatch z formátu). Chybí-li, 11. */
-  squadSize?: number;
-}
-
-/**
- * Formát zápasu, když se nehraje velká kopaná (sálovka 5+1 na 2 × 20 minut).
- * Chybí-li, hraje se 11 na 90 minut a výsledky jsou bit po bitu stejné jako dřív.
- */
-export interface MatchFormat {
-  /** Hráčů na hřišti včetně brankáře. */
-  squadSize: number;
-  /** Skutečná délka zápasu; engine hraje 90 kroků a minuty v zápisu přepočítá. */
-  durationMinutes: number;
-  /** Násobek šancí z otevřené hry (malé hřiště = víc zakončení). */
-  chanceScale: number;
 }
 
 export interface EquipmentMods {
@@ -128,8 +113,6 @@ export interface MatchConfig {
   awayEquipment?: EquipmentMods;
   /** Delegovaný rozhodčí. Chybí-li (nedelegováno, přátelák), použije se NEUTRAL_REFEREE. */
   referee?: RefereeProfile;
-  /** Malá kopaná v hale. Chybí-li, velký fotbal. */
-  format?: MatchFormat;
 }
 
 export interface MatchMinuteState {

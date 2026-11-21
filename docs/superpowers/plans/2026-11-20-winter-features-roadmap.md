@@ -92,18 +92,21 @@ Oprava až po OK, ověřit v běhu nanečisto (F7).
 - **Testy:** šance podle vztahu a kocoviny; sníh + 6 lidí = úklid bez poplatku; dvojí vyhodnocení = jeden efekt;
   druhá brigáda v týdnu se nespustí.
 
-### F2: Vánoční sálovka (hotovo lokálně 2026-11-21)
+### F2: Vánoční sálovka
 
-- **Jak je to postavené:** samostatný modul `apps/api/src/hall-cup/` s vlastními tabulkami (migrace 0318), ne `kind`
-  v `tournaments`: `loadCurrentTournament` bere poslední ročník a P-Mobile může běžet souběžně.
-- **Rozhodnutí (upravená):** malá kopaná 5+1, **2 × 10 minut** (při 2 × 20 by se 16 týmů za den nestihlo), dvě hřiště,
-  od 9:00 slot po 25 minutách, finále do 16:00. Neděle 27. 12. (26. 12. je sobota). Pozvánka 1. 12. v 9:00 přes SMS
-  od „Sportovní hala Prachatice“ (`hc-<cupId>`), přihlášky do 20. 12., los 21. 12., startovné 1 000 Kč při losu,
-  bank 50/30/20 %, max 16 týmů kdo dřív přijde, pod 4 se ruší. Zvaní jsou lidské kluby **všech okresů**,
-  AI kluby jen z Prachaticka (přes model, při výpadku pravidlo). Sálovka nemá trvalé následky (zranění, karty, únava).
-- **Engine:** `MatchConfig.format` (`squadSize`, `durationMinutes`, `chanceScale` 1,3); bez formátu bit po bitu stejné.
-- **Web:** `/salovka` (soupiska 6 až 10, skupiny, rozpis, střelci), rubrika „Sálovka“ ve Zpravodaji, SMS od redakce.
-- **Běh:** hodinový cron `30 * * * *` a v den turnaje i `15 * * * *`; admin `POST /api/admin/hall-cup/tick?now=`.
+- **Rozhodnutí:** turnaj v hale, malý fotbal 5+1, 2 × 20 minut, sobota 27. 12. 2026 odpoledne a večer.
+  Přihlášky od 1. 12. přes SMS od pořadatele („Sportovní hala Prachatice“), startovné 1 000 Kč do banku,
+  vítěz 50 %, druhý 30 %, třetí 20 %. Okres Prachatice, ostatní okresy podle zájmu. Sázky na sálovku ve v1 nejsou.
+  Musí doběhnout před 28. 1. (brána `end-season.ts:159`).
+- **Engine:** dnes jen 11 (`tournament/match.ts:135 splice(11)`, `simulation.ts:447 manpowerFactor` od 11,
+  `auto-lineup.ts`, `lineup-loader.ts:95`). Přidat `MatchFormat { squadSize, durationMinutes }`, výchozí 11/90
+  beze změny výsledků (zámek přes existující balanční testy), formace pro 5+1.
+- **Turnaj:** `tournaments` ADD COLUMN `kind` (`pmobile` výchozí | `hall`), `format`, `entry_fee`;
+  `loadCurrentTournament(db, kind)` všude s parametrem; admin endpoint pro založení (dnes jen migrací).
+- **Sestava:** manažer vybere 6 + 4 na stránce turnaje, jinak automat; AI kluby se přihlásí a sestaví přes model.
+- **Napojení:** `tournament/service.ts:47,101`, `tournament/advance.ts:333` (cron už ho volá), `payOnce`, web `/turnaj`.
+- **Testy:** formát 11 dává stejné výsledky jako dřív (seed); 6 hráčů bez trvalé penalizace; startovné jednou,
+  bank rozdělen přesně; dva turnaje různých druhů souběžně se nepletou.
 
 ### F3: Svatba v kabině
 

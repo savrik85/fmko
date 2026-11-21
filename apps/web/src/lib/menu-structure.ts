@@ -58,7 +58,6 @@ export const MENU_GROUPS: MenuGroup[] = [
       { href: "/rozpis", label: "Rozpis", icon: "📅", color: "#3D6B5C" },
       { href: "/pohar", label: "Pohár", icon: "🏅", color: "#A0722D" },
       { href: "/turnaj", label: "Turnaj", icon: "⚽", color: "#A3155F" },
-      { href: "/salovka", label: "Sálovka", icon: "🥅", color: "#2F5D8A" },
       { href: "/pratelaky", label: "Přáteláky", icon: "🤜", color: "#4A7A5C" },
       { href: "/kalendar", label: "Kalendář", icon: "🗓️", color: "#6B7B3D" },
       { href: "/rozhodci", label: "Rozhodčí", icon: "🧑‍⚖️", color: "#4E4E4E" },
