@@ -13,7 +13,7 @@ import { logger } from "../lib/logger";
 import { villageSizeMod } from "../sponsors/budget";
 import { validateMatchPlan, parseStoredPlan } from "../lib/match-plan-validation";
 import { validateBench, parseStoredBench, benchColumn } from "../lib/lineup-bench";
-import { saveLineup, setTeamRoles, VALID_TACTICS, VALID_HARDNESS, VALID_FORMATIONS } from "../services/lineup";
+import { saveLineup, setTeamRoles, checkLinesman, VALID_TACTICS, VALID_HARDNESS, VALID_FORMATIONS } from "../services/lineup";
 import { setTrainingPlan } from "../services/training";
 import { repairEquipment, upgradeEquipment } from "../services/equipment";
 import { maintainPitch, setPitchCareMode, upgradeStadiumFacility } from "../services/stadium";
@@ -4428,10 +4428,22 @@ gameRouter.get("/teams/:teamId/lineup/:calendarId", async (c) => {
 // POST save lineup for next match
 gameRouter.post("/teams/:teamId/lineup", async (c) => {
   const teamId = c.req.param("teamId");
-  const body = await c.req.json<{ calendarId: string; formation: string; tactic: string; hardness?: string; captainId?: string; presetSlot?: "A" | "B" | "C" | null; matchPlan?: unknown; bench?: unknown; players: Array<{ playerId: string; matchPosition: string }> }>();
+  const body = await c.req.json<{ calendarId: string; formation: string; tactic: string; hardness?: string; captainId?: string; presetSlot?: "A" | "B" | "C" | null; matchPlan?: unknown; bench?: unknown; linesman?: unknown; players: Array<{ playerId: string; matchPosition: string }> }>();
   const res = await saveLineup(c.env.DB, teamId, body);
   if (!res.ok) return c.json({ error: res.error }, res.status);
   return c.json({ ok: true });
+});
+
+// GET domácí pomezní na zápas: uložená volba, vůdci fanoušků a kolikrát letos nadržoval.
+// Soukromé čtení: soupeř nemá vědět, koho domácí postaví k čáře.
+gameRouter.get("/teams/:teamId/linesman", async (c) => {
+  const teamId = c.req.param("teamId");
+  const denied = await requireOwnedTeamRead(c, teamId);
+  if (denied) return denied;
+  const calendarId = c.req.query("calendarId");
+  if (!calendarId) return c.json({ error: "Chybí calendarId" }, 400);
+  const { loadLinesmanOverview } = await import("../referees/linesman");
+  return c.json(await loadLinesmanOverview(c.env.DB, teamId, calendarId));
 });
 
 // ═══ LINEUP PRESETS — fixní sloty A/B/C ═══
@@ -4459,6 +4471,15 @@ gameRouter.get("/teams/:teamId/lineup-presets", async (c) => {
       updatedAt: r.updated_at,
     };
   }
+  // Domácí pomezní presetu zvlášť: bez sloupce (migrace 0329) presety fungují dál.
+  const linesmen = await c.env.DB.prepare("SELECT slot, linesman FROM lineup_presets WHERE team_id = ?")
+    .bind(teamId).all<{ slot: string; linesman: string | null }>()
+    .catch((e) => { logger.warn({ module: "game" }, "domácí pomezní presetů", e); return { results: [] }; });
+  const { parseLinesman } = await import("../referees/linesman");
+  for (const r of linesmen.results) {
+    const preset = presets[r.slot];
+    if (preset) Object.assign(preset, { linesman: parseLinesman(r.linesman) });
+  }
   return c.json({ presets });
 });
 
@@ -4467,7 +4488,7 @@ gameRouter.put("/teams/:teamId/lineup-presets/:slot", async (c) => {
   const slot = c.req.param("slot") as PresetSlot;
   if (!PRESET_SLOTS.includes(slot)) return c.json({ error: "Neplatný slot (A/B/C)" }, 400);
 
-  const body = await c.req.json<{ formation: string; tactic: string; hardness?: string; captainId?: string; matchPlan?: unknown; bench?: unknown; players: Array<{ playerId: string; matchPosition: string }> }>();
+  const body = await c.req.json<{ formation: string; tactic: string; hardness?: string; captainId?: string; matchPlan?: unknown; bench?: unknown; linesman?: unknown; players: Array<{ playerId: string; matchPosition: string }> }>();
   if (!body.players || body.players.length !== 11) return c.json({ error: "Sestava musí mít 11 hráčů" }, 400);
   if (!VALID_TACTICS.includes(body.tactic as typeof VALID_TACTICS[number])) {
     return c.json({ error: `Neplatná taktika "${body.tactic}"` }, 400);
@@ -4497,6 +4518,8 @@ gameRouter.put("/teams/:teamId/lineup-presets/:slot", async (c) => {
     squadIds: new Set(squadRows.results.map((r) => r.id)),
   });
   if (!benchCheck.ok) return c.json({ error: benchCheck.error }, 400);
+  const linesman = await checkLinesman(c.env.DB, teamId, body.linesman, new Set([...playerIds, ...(benchCheck.bench ?? [])]));
+  if (!linesman.ok) return c.json({ error: linesman.error }, linesman.status);
 
   await c.env.DB.prepare(
     `INSERT INTO lineup_presets (team_id, slot, formation, tactic, hardness, captain_id, players_data, match_plan, bench_data, updated_at)
@@ -4511,6 +4534,10 @@ gameRouter.put("/teams/:teamId/lineup-presets/:slot", async (c) => {
        bench_data = excluded.bench_data,
        updated_at = excluded.updated_at`
   ).bind(teamId, slot, body.formation, body.tactic, hardness, captainId, JSON.stringify(body.players), JSON.stringify(planCheck.plan), benchColumn(benchCheck.bench)).run();
+  if (linesman.value !== undefined) {
+    await c.env.DB.prepare("UPDATE lineup_presets SET linesman = ? WHERE team_id = ? AND slot = ?").bind(linesman.value, teamId, slot).run()
+      .catch((e) => logger.warn({ module: "game" }, "domácí pomezní do presetu", e));
+  }
 
   return c.json({ ok: true });
 });
@@ -4605,6 +4632,16 @@ gameRouter.post("/teams/:teamId/lineup-presets/:slot/apply", async (c) => {
   // do základu jako náhrada. Volné místo doplní automat při sestavování zápasu.
   const bench = benchForLineup(parseStoredBench(preset.bench_data), lineupIds);
 
+  // Domácí pomezní presetu. Hráč, který mezitím skončil v sestavě, praporek nedrží.
+  const { parseLinesman } = await import("../referees/linesman");
+  const linesmanRow = await c.env.DB.prepare("SELECT linesman FROM lineup_presets WHERE team_id = ? AND slot = ?")
+    .bind(teamId, slot).first<{ linesman: string | null }>()
+    .catch((e) => { logger.warn({ module: "game" }, "domácí pomezní presetu", e); return null; });
+  let linesman = parseLinesman(linesmanRow?.linesman ?? null);
+  if (linesman?.kind === "player" && (lineupIds.starterIds.has(linesman.id) || (bench ?? []).includes(linesman.id) || !playerMap.has(linesman.id))) {
+    linesman = null;
+  }
+
   return c.json({
     formation: preset.formation,
     tactic: preset.tactic,
@@ -4613,6 +4650,7 @@ gameRouter.post("/teams/:teamId/lineup-presets/:slot/apply", async (c) => {
     players: finalPlayers,
     matchPlan,
     bench,
+    linesman,
     warnings,
   });
 });

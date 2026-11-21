@@ -22,7 +22,11 @@ interface MatchEvent {
 }
 
 interface LineupPlayer { id: string; name: string; position: string; naturalPosition: string; rating: number; squadNumber?: number | null }
-interface LineupData { starters: LineupPlayer[]; subs: LineupPlayer[]; formation?: string; tactic?: string; captainId?: string | null }
+interface LineupData {
+  starters: LineupPlayer[]; subs: LineupPlayer[]; formation?: string; tactic?: string; captainId?: string | null;
+  /** Domácí pomezní s praporkem (jen u domácích, od F15). */
+  linesman?: { name: string; style: "fair" | "homer"; swapped: boolean } | null;
+}
 
 const TACTIC_LABEL: Record<string, string> = {
   offensive: "Útočná", balanced: "Vyrovnaná", defensive: "Defenzivní",
@@ -419,6 +423,13 @@ export default function MatchDetailPage() {
               )}
             </div>
 
+            {match.home_lineup_data?.linesman && (
+              <p className="text-micro text-muted mt-2">
+                {match.home_lineup_data.linesman.swapped
+                  ? <>Domácího pomezního {match.home_lineup_data.linesman.name} sudí před zápasem poslal od čáry pryč.</>
+                  : <>Praporek u čáry držel domácí {match.home_lineup_data.linesman.name}{match.home_lineup_data.linesman.style === "homer" ? ", ofsajd viděl hlavně u hostů." : "."}</>}
+              </p>
+            )}
             {incidents.length > 0 ? (
               <div className="-mx-4 -mb-4 mt-3 border-t border-line">
                 {incidents.map((inc, i) => (

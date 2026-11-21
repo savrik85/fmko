@@ -15,6 +15,7 @@ import { CollapsibleCard } from "@/components/ui";
 import type { RefereeProfileView, RefereeStatsView } from "@/lib/referee-info";
 import { getTacticTooltip, getFormationTooltip, getHardnessTooltip, TACTIC_INFO, FORMATION_INFO, HARDNESS_INFO, type TacticKey, type HardnessKey } from "@/lib/tactic-info";
 import { MatchPlanEditor } from "./MatchPlanEditor";
+import { LinesmanPicker, type LinesmanChoice } from "./LinesmanPicker";
 import type { MatchPlanRule, SubMismatch } from "@okresni-masina/shared";
 import { computeLineupChemistry, splitPlanByLineup, benchForLineup, type RelationshipType } from "@okresni-masina/shared";
 import { LineupPreview, type CardRisk } from "@/components/LineupPreview";
@@ -293,6 +294,10 @@ function MatchPage() {
   const [benchIds, setBenchIds] = useState<string[] | null>(null);
   // Hráč označený na lavičce nebo mezi těmi, co nejedou — čeká na toho, s kým se prohodí
   const [benchPick, setBenchPick] = useState<string | null>(null);
+  // Domácí pomezní (jen domácí ligový zápas). undefined = nenačteno nebo se neřeší, pak se
+  // s uložením sestavy neposílá a uložená volba zůstane.
+  const [linesman, setLinesman] = useState<LinesmanChoice | null | undefined>(undefined);
+  const linesmanApplies = !!nextMatch && nextMatch.isHome && !nextMatch.isFriendly && !nextMatch.isCup && !nextMatch.isTournament;
 
   useEffect(() => {
     if (!teamId) return;
@@ -426,7 +431,7 @@ function MatchPage() {
     try {
       await apiFetch(`/api/teams/${teamId}/lineup-presets/${slot}`, {
         method: "PUT", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ formation, tactic, hardness, captainId, players, matchPlan: fitted.matchPlan, bench: fitted.bench }),
+        body: JSON.stringify({ formation, tactic, hardness, captainId, players, matchPlan: fitted.matchPlan, bench: fitted.bench, linesman: linesmanApplies ? linesman : undefined }),
       });
       if (fitted.dropped.length > 0) {
         setMatchPlan(fitted.matchPlan);
@@ -444,7 +449,7 @@ function MatchPage() {
     const myReqId = ++loadPresetReqId.current;
     try {
       const matchCalId = nextMatch?.calendarId ?? nextMatch?.matchId ?? null;
-      const data = await apiFetch<{ formation: string; tactic: string; hardness?: string; captainId: string | null; players: Array<{ playerId: string; matchPosition: string }>; matchPlan?: MatchPlanRule[]; bench?: string[] | null; warnings: string[] }>(
+      const data = await apiFetch<{ formation: string; tactic: string; hardness?: string; captainId: string | null; players: Array<{ playerId: string; matchPosition: string }>; matchPlan?: MatchPlanRule[]; bench?: string[] | null; linesman?: LinesmanChoice | null; warnings: string[] }>(
         `/api/teams/${teamId}/lineup-presets/${slot}/apply`,
         { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(matchCalId ? { calendarId: matchCalId } : {}) }
       );
@@ -462,6 +467,7 @@ function MatchPage() {
       setCaptainId(captainInLineup(data.captainId, newSel, players));
       setMatchPlan(data.matchPlan ?? []);
       setBenchIds(data.bench ?? null);
+      if (linesmanApplies && data.linesman !== undefined) setLinesman(data.linesman);
       setSaved(false);
     } catch (e) { console.error("load preset:", e); }
   };
@@ -565,7 +571,7 @@ function MatchPage() {
       const fitted = fitToLineup();
       const res = await apiFetch<{ ok?: boolean; error?: string }>(`/api/teams/${teamId}/lineup`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ calendarId: nextMatch.calendarId, formation, tactic, hardness, captainId, presetSlot: activePreset, matchPlan: fitted.matchPlan, bench: fitted.bench, players: selected.map((id, i) => ({ playerId: id!, matchPosition: slots[i].pos })).filter((p) => p.playerId) }),
+        body: JSON.stringify({ calendarId: nextMatch.calendarId, formation, tactic, hardness, captainId, presetSlot: activePreset, matchPlan: fitted.matchPlan, bench: fitted.bench, linesman: linesmanApplies ? linesman : undefined, players: selected.map((id, i) => ({ playerId: id!, matchPosition: slots[i].pos })).filter((p) => p.playerId) }),
       });
       if (res.ok) {
         setSaved(true);
@@ -616,6 +622,17 @@ function MatchPage() {
 
   // Kdo z hráčů mimo základ pojede na zápas (7 náhradníků) a kdo zůstane doma
   const { subs, autoFilled, standIns, leftOut } = splitBench(players, selected, slots.map((s) => s.pos), benchIds);
+  // Praporek může vzít hráč, který nehraje ani nesedí na lavičce. Zraněný nebo vyloučený
+  // na zápas přijde, omluvený (práce, rodina) ne.
+  const matchdaySquad = new Set<string>([
+    ...selected.filter((id): id is string => !!id), ...subs.map((p) => p.id), ...standIns.map((x) => x.player.id),
+  ]);
+  const linesmanPlayers = players
+    .filter((p) => !matchdaySquad.has(p.id) && (!p.absent || p.absenceReason === "Zranění" || p.absenceReason === "Stopka"))
+    .map((p) => ({
+      id: p.id, name: `${p.firstName} ${p.lastName}`,
+      note: !p.absent ? null : p.absenceReason === "Stopka" ? "stopka" : "zraněný",
+    }));
   /** Buňka hráče na lavičce a ve výběru: nedostupný přeškrtnutý s důvodem, jinak post, forma a poznámka. */
   const benchNameCell = (p: AvailablePlayer, note?: string, outOfPosition?: boolean) => {
     const extra = p as AvailablePlayer & { injured?: boolean; injuryDays?: number; absenceSms?: string; absenceReason?: string; hangover?: boolean };
@@ -744,6 +761,8 @@ function MatchPage() {
           const myName = ourTeamName ?? (nextMatch?.isHome ? nextMatch.homeName : nextMatch?.awayName ?? "");
           // matchId v seznamu nadcházejících zápasů není; do odpovědi next-match zůstane prázdné,
           // jinak by autobusy a porovnání sestav běžely nad předchozím zápasem.
+          // Pomezní si picker načte znovu pro nový zápas.
+          setLinesman(undefined);
           setNextMatch((prev) => prev ? {
             ...prev, matchId: "", calendarId: um.calendarId, gameWeek: um.gameWeek, scheduledAt: um.scheduledAt, isHome: um.isHome, isFriendly: um.isFriendly, isCup: um.isCup, isTournament: um.isTournament, venueName: um.isTournament ? prev.venueName : null, roundName: um.roundName,
             homeName: um.isHome ? myName : um.opponentName,
@@ -991,6 +1010,19 @@ function MatchPage() {
         </div>
         )}
       </div>
+
+      {/* ═══ Domácí pomezní s praporkem, jen domácí ligový zápas ═══ */}
+      {linesmanApplies && teamId && (
+        <LinesmanPicker
+          teamId={teamId}
+          calendarId={nextMatch.calendarId}
+          value={linesman}
+          onChange={(next) => { setLinesman(next); setSaved(false); }}
+          onLoad={setLinesman}
+          players={linesmanPlayers}
+          referee={referee ? { name: referee.name, strictness: referee.strictness } : null}
+        />
+      )}
 
       {/* ═══ Pokyny na lavičce — přednastavené scénáře pro engine ═══ */}
       <MatchPlanEditor

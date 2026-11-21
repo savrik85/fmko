@@ -16,6 +16,7 @@ import { calcFormationSynergy, calcTacticFit } from "../engine/tactics";
 import type { MatchPlayer } from "../engine/types";
 import { MAX_BENCH, validateBench } from "../lib/lineup-bench";
 import { validateMatchPlan } from "../lib/match-plan-validation";
+import { LINESMAN_STYLES, type LinesmanChoice, type LinesmanKind, type LinesmanStyle } from "../referees/linesman";
 import { FORMATIONS, TACTICS, type AiCoachProfile, type Formation, type Tactic } from "./profile";
 import { promptName } from "./prompt-text";
 
@@ -95,6 +96,27 @@ export interface MatchContext {
    * i nedostupného. Když hraje od začátku, pásku nosí on; model volí kapitána jen pro zápas bez něj.
    */
   clubCaptain?: string | null;
+  /**
+   * Domácí pomezní s praporkem (`referees/linesman.ts`): jen u domácího ligového zápasu.
+   * Kandidáti jsou vůdci fanoušků a hráči, kteří nehrají (zranění, stopka).
+   */
+  linesman?: {
+    candidates: LinesmanCandidate[];
+    /** Kolikrát klub letos doma nasadil nadržujícího pomezního. */
+    homerUses: number;
+    /** Kolikátý nadržující v sezóně už je pokuta. */
+    limit: number;
+  };
+}
+
+/** Kdo může vzít praporek (klíč `L1…` kvůli modelu). */
+export interface LinesmanCandidate {
+  key: string;
+  kind: LinesmanKind;
+  id: string;
+  name: string;
+  /** Kdo to je, anglicky do promptu („fan leader of …", „injured player"). */
+  note: string;
 }
 
 /** Pokyn na lavičce, jak ho píše model (ploché pole, kód ho převede na MatchPlanRule). */
@@ -122,6 +144,8 @@ export interface MatchDecision {
   freekickTaker: string | null;
   plan: DecisionPlanRule[];
   reasoning: string;
+  /** Domácí pomezní: jen když ho kontext nabízí (`ctx.linesman`); null = bez pomezního. */
+  linesman?: { key: string; style: LinesmanStyle } | null;
 }
 
 export interface AssembledLineup {
@@ -134,6 +158,8 @@ export interface AssembledLineup {
   matchPlan: MatchPlanRule[];
   penaltyTakerId: string | null;
   freekickTakerId: string | null;
+  /** Domácí pomezní do sestavy; chybí, když se u zápasu neřeší. */
+  linesman?: LinesmanChoice | null;
   /** Co se z rozhodnutí nepodařilo splnit (do deníku). */
   notes: string[];
 }
@@ -353,6 +379,23 @@ function bestBy(players: readonly SquadPlayer[], score: (p: SquadPlayer) => numb
   return [...players].sort((a, b) => score(b) - score(a))[0] ?? null;
 }
 
+/**
+ * Domácí pomezní podle povahy, když nerozhoduje model. Odvážný trenér (a v derby i ten
+ * průměrný) postaví nadržujícího, nejradši vůdce kotle, ale ne toho, za kterého by už
+ * přišla pokuta. Jinak poctivý pomezní, nejradši hráč, který dnes nehraje.
+ */
+export function ruleLinesman(ctx: MatchContext): MatchDecision["linesman"] {
+  const l = ctx.linesman;
+  if (!l) return undefined;
+  if (l.candidates.length === 0) return null;
+  const p = ctx.profile;
+  const bold = p.risk >= 65 || (ctx.fixture.isDerby && p.risk >= 50);
+  const style: LinesmanStyle = bold && l.homerUses < l.limit - 1 ? "homer" : "fair";
+  const preferred: LinesmanKind = style === "homer" ? "fan_leader" : "player";
+  const who = l.candidates.find((c) => c.kind === preferred) ?? l.candidates[0];
+  return { key: who.key, style };
+}
+
 export function fallbackMatchDecision(ctx: MatchContext): MatchDecision {
   const p = ctx.profile;
   const friendly = ctx.fixture.kind === "friendly";
@@ -431,7 +474,31 @@ export function fallbackMatchDecision(ctx: MatchContext): MatchDecision {
     formation, tactic, hardness, captain, rest, mustStart, penaltyTaker, freekickTaker,
     plan: plan.slice(0, MAX_PLAN_RULES),
     reasoning: "fallback rule",
+    ...(ctx.linesman ? { linesman: ruleLinesman(ctx) } : {}),
   };
+}
+
+/**
+ * Pomezní z odpovědi modelu. Neznámý kandidát nebo styl rozhodnutí neshodí, jen se
+ * zahodí (bez pomezního, poctivý styl). Když model pomezního vynechá, rozhodne pravidlo.
+ */
+function decisionLinesman(r: Record<string, unknown>, ctx: MatchContext, rejected: string[]): MatchDecision["linesman"] {
+  if (!ctx.linesman) return undefined;
+  if (r.linesman === undefined || r.linesman === null) {
+    rejected.push("pomezní chybí, rozhodlo pravidlo");
+    return ruleLinesman(ctx);
+  }
+  if (r.linesman === "none" || r.linesman === "") return null;
+  const who = ctx.linesman.candidates.find((c) => c.key === r.linesman);
+  if (!who) {
+    rejected.push(`pomezní: neznámý kandidát ${String(r.linesman)}`);
+    return null;
+  }
+  if (!(LINESMAN_STYLES as readonly unknown[]).includes(r.linesmanStyle)) {
+    rejected.push(`pomezní: neznámý styl ${String(r.linesmanStyle)}, poctivý`);
+    return { key: who.key, style: "fair" };
+  }
+  return { key: who.key, style: r.linesmanStyle as LinesmanStyle };
 }
 
 // ── Kontrola rozhodnutí modelu ─────────────────────────────────────────────
@@ -562,6 +629,7 @@ export function validateMatchDecision(raw: unknown, ctx: MatchContext): Decision
       freekickTaker: freekickTaker as string | null,
       plan,
       reasoning: typeof r.reasoning === "string" ? r.reasoning.slice(0, 400) : "",
+      ...(ctx.linesman ? { linesman: decisionLinesman(r, ctx, rejected) } : {}),
     },
   };
 }
@@ -678,6 +746,15 @@ export function assembleLineup(ctx: MatchContext, decision: MatchDecision, squad
     return bestBy(xiPlayers, score)?.id ?? null;
   };
 
+  // Domácí pomezní: hráč, který se nakonec dostal do sestavy nebo na lavičku, praporek nedrží.
+  let linesman: LinesmanChoice | null | undefined;
+  if (ctx.linesman) {
+    const who = decision.linesman ? ctx.linesman.candidates.find((c) => c.key === decision.linesman?.key) : undefined;
+    const busy = who?.kind === "player" && (starterIds.has(who.id) || benchIds.includes(who.id));
+    if (busy) notes.push(`pomezní ${who?.key} hraje, praporek nikdo nedrží`);
+    linesman = who && decision.linesman && !busy ? { kind: who.kind, id: who.id, style: decision.linesman.style } : null;
+  }
+
   return {
     formation: decision.formation,
     tactic: decision.tactic,
@@ -688,6 +765,7 @@ export function assembleLineup(ctx: MatchContext, decision: MatchDecision, squad
     matchPlan,
     penaltyTakerId: taker(decision.penaltyTaker, ctx.currentRoles.penaltyTakerId, (p) => p.shooting * 0.6 + p.setPieces * 0.4),
     freekickTakerId: taker(decision.freekickTaker, ctx.currentRoles.freekickTakerId, (p) => p.setPieces),
+    ...(linesman !== undefined ? { linesman } : {}),
     notes,
   };
 }
@@ -771,9 +849,16 @@ export function renderMatchPrompt(ctx: MatchContext): string {
       ? `CAPTAIN: ${ctx.clubCaptain} is your club captain. Whenever he starts he wears the armband (the engine sees to it), so your captain choice only counts if he does not start.`
       : `CAPTAIN: your club captain ${ctx.clubCaptain} cannot play today, so choose today's captain.`);
   }
+  const ls = ctx.linesman;
+  if (ls && ls.candidates.length > 0) {
+    lines.push("");
+    lines.push(`HOME LINESMAN: as the home club you may put your own assistant referee with a flag on the touchline. Candidates: ${ls.candidates.map((c) => `${c.key} ${promptName(c.name)} (${c.note})`).join(", ")}; or none.`);
+    lines.push(`Style fair = honest, no effect on the match. Style homer = flags offside against the visitors, a disputed offside goal then goes your way about 80% of the time instead of 50%; the referee may spot him and replace him before kick-off (a strict referee more often), and the league fines a club for each homer linesman from number ${ls.limit} on in a season. You have used a homer linesman ${ls.homerUses} time(s) this season.`);
+  }
   lines.push("");
   lines.push("DECIDE (JSON keys):");
   lines.push('formation, tactic, hardness, captain (key), rest (keys to keep OUT of the starting XI, e.g. tired players or key men before a big match; max 6), mustStart (keys you insist on starting, e.g. to give a youngster a chance; max 3), penaltyTaker (key), freekickTaker (key), plan (0-5 in-game rules), reasoning (max 30 words).');
+  if (ls && ls.candidates.length > 0) lines.push('Also linesman (candidate key L1, L2, ... or "none") and linesmanStyle ("fair" | "homer").');
   lines.push('Plan rule: {"fromMinute": 1-90, "when": "losing"|"winning"|"drawing"|"minute"|"down_a_man"|"up_a_man"|"tired", "byAtLeast": 1-3 (losing/winning only), "below": 10-60 (tired only, condition threshold), "action": "tactic"|"hardness"|"sub", "tactic": ..., "hardness": ..., "out": key of a starter, "in": key of a non-starter}.');
   lines.push("The engine starts the strongest XI for your formation by itself: use mustStart only to force in players it would leave out, and rest only for players you deliberately keep out. It also fills the bench (max 7); a substitution rule needs a starter out and a non-starter in.");
   lines.push("Remember: every fit regular you rest and every weaker player you force in lowers your chances today. A real manager rotates in friendlies, against much weaker opponents or before a more important match within two days; in other league and cup matches he fields his best side, in his own style.");
@@ -787,6 +872,8 @@ export function renderMatchPrompt(ctx: MatchContext): string {
 export function matchDecisionSchema(ctx: MatchContext): Record<string, unknown> {
   const keys = ctx.squad.map((p) => p.key);
   const keyOrEmpty = { type: "string", enum: [...keys, ""] };
+  // Domácí pomezní jen u domácího ligového zápasu, a jen když má kdo praporek vzít.
+  const linesmanKeys = (ctx.linesman?.candidates ?? []).map((c) => c.key);
   return {
     type: "object",
     additionalProperties: false,
@@ -819,7 +906,14 @@ export function matchDecisionSchema(ctx: MatchContext): Record<string, unknown> 
         },
       },
       reasoning: { type: "string" },
+      ...(linesmanKeys.length > 0 ? {
+        linesman: { type: "string", enum: [...linesmanKeys, "none"] },
+        linesmanStyle: { type: "string", enum: [...LINESMAN_STYLES] },
+      } : {}),
     },
-    required: ["formation", "tactic", "hardness", "captain", "rest", "mustStart", "penaltyTaker", "freekickTaker", "plan", "reasoning"],
+    required: [
+      "formation", "tactic", "hardness", "captain", "rest", "mustStart", "penaltyTaker", "freekickTaker", "plan", "reasoning",
+      ...(linesmanKeys.length > 0 ? ["linesman", "linesmanStyle"] : []),
+    ],
   };
 }

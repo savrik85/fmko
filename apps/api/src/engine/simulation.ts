@@ -683,7 +683,7 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
     : 1.0;
   const refereeIncidents: RefereeIncident[] = [];
   // Naplánovaná sporná situace — nejvýš jedna na zápas, strukturálně.
-  let plannedError = planRefereeError(rng, ref);
+  let plannedError = planRefereeError(rng, ref, config.homeLinesmanTilt ?? 0);
   // Když sudí neuznal gól, škrtne se PRVNÍ gól poškozeného týmu, který po tom padne.
   let disallowGoalFor: number | null = null;
   let refFouls = 0;

@@ -10,6 +10,7 @@ import {generateMatchCommentary, loadCommentaryFromDB} from "../engine/commentar
 import {createRng} from "../generators/rng";
 import {experienceGainChance} from "../skills/training";
 import type {MatchPlayer, TeamSetup, Weather, Hardness} from "../engine/types";
+import type {MatchLinesman} from "../referees/linesman";
 import {
     calculatePlayerRatings,
     playedTeamsMap,
@@ -782,6 +783,20 @@ export async function runScheduledMatches(
                 logger.warn({module: "match-runner"}, "AI hardness decision", e);
             }
 
+            // Domácí pomezní s praporkem (F15). Výměnu sudím rozhoduje vlastní náhoda
+            // z id zápasu, hlavní RNG zápasu se tu nečerpá. Bez pomezního je posun 0.
+            let homeLinesman: MatchLinesman | null = null;
+            try {
+                const { resolveMatchLinesman } = await import("../referees/linesman");
+                homeLinesman = await resolveMatchLinesman(db, {
+                    matchId, calendarId, homeTeamId,
+                    refereeStrictness: referee.profile.strictness,
+                    playingIds: new Set(homeBuild.idMap.values()),
+                });
+            } catch (e) {
+                logger.warn({module: "match-runner"}, `domácí pomezní zápasu ${matchId}`, e);
+            }
+
             // Simulate
             const result = simulateMatch(rng, {
                 home: homeSetup,
@@ -796,6 +811,7 @@ export async function runScheduledMatches(
                 homeEquipment,
                 awayEquipment,
                 referee: referee.profile,
+                homeLinesmanTilt: homeLinesman?.tilt ?? 0,
             });
 
             // Označit pozvánky jako attended
@@ -883,7 +899,11 @@ export async function runScheduledMatches(
                 result.homeScore, result.awayScore,
                 JSON.stringify(result.events), JSON.stringify(commentary),
                 attendanceWithOfficials, stadiumName, pitchCondition, weather,
-                JSON.stringify(buildLineupData(homeLineupPreSim, homeSubsPreSim, homeBuild.idMap, homeFormation, homeTactic, homeSetup.hardness ?? "normal", homeCaptainEngineId)),
+                // Domácí pomezní do zápisu: z něj se počítá opakované nadržování za sezónu.
+                JSON.stringify({
+                    ...buildLineupData(homeLineupPreSim, homeSubsPreSim, homeBuild.idMap, homeFormation, homeTactic, homeSetup.hardness ?? "normal", homeCaptainEngineId),
+                    ...(homeLinesman ? { linesman: homeLinesman.stored } : {}),
+                }),
                 JSON.stringify(buildLineupData(awayLineupPreSim, awaySubsPreSim, awayBuild.idMap, awayFormation, awayTactic, awaySetup.hardness ?? "normal", awayCaptainEngineId)),
                 matchAbsences.length > 0 ? JSON.stringify(matchAbsences) : null,
                 result.possessionHome,
@@ -967,6 +987,23 @@ export async function runScheduledMatches(
                     }));
                 } catch (e) {
                     logger.warn({module: "referees"}, "zápis bilance rozhodčího", e);
+                }
+            }
+
+            // Nadržující domácí pomezní potřetí v sezóně = pokuta (skutek linesman_bias).
+            // Až za zámkem zápasu: počítá se z uloženého zápisu a klíč pokuty je id zápasu.
+            if (homeLinesman?.stored.style === "homer" && calRow) {
+                try {
+                    const { punishLinesmanBias } = await import("../referees/linesman");
+                    const gd = (await db.prepare("SELECT game_date FROM teams WHERE id = ?")
+                        .bind(homeTeamId).first<{ game_date: string | null }>())?.game_date
+                        ?? new Date().toISOString().slice(0, 10);
+                    await punishLinesmanBias(db, {
+                        matchId, teamId: homeTeamId, leagueId: calRow.league_id,
+                        seasonNumber: calRow.season_number, gameDate: gd,
+                    });
+                } catch (e) {
+                    logger.warn({module: "match-runner"}, `pokuta za domácího pomezního ${matchId}`, e);
                 }
             }
 
@@ -2046,13 +2083,14 @@ export async function copyOrCreateLineup(db: D1Database, teamId: string, calenda
     // Jen sestavy uložené před výkopem tohoto kola: jinak by šlo po zamčení kola uložit
     // sestavu na příští kolo a tenhle zápas (bez vlastní sestavy) by si ji zkopíroval.
     const lastLineup = await db.prepare(
-        `SELECT l.formation, l.tactic, l.hardness, l.players_data, l.captain_id, l.preset_slot, l.match_plan, l.bench_data, l.submitted_at
+        `SELECT l.id, l.formation, l.tactic, l.hardness, l.players_data, l.captain_id, l.preset_slot, l.match_plan, l.bench_data, l.submitted_at
          FROM lineups l
          WHERE l.team_id = ?
            AND l.is_auto = 0
            AND l.submitted_at <= COALESCE((SELECT scheduled_at FROM season_calendar WHERE id = ?), '9999')
          ORDER BY l.submitted_at DESC, l.id ASC LIMIT 1`
     ).bind(teamId, calendarId).first<{
+        id: string;
         formation: string;
         tactic: string;
         players_data: string;
@@ -2095,9 +2133,15 @@ export async function copyOrCreateLineup(db: D1Database, teamId: string, calenda
                 // POZOR: zachovej původní submitted_at, aby kopie nepřepsala "poslední user-saved"
                 // pro budoucí copyOrCreateLineup volání. Bez toho by se každou simulací posouval
                 // "poslední lineup" na auto-kopii a metadata se postupně ztrácela.
+                const copyId = crypto.randomUUID();
                 await db.prepare(
                     "INSERT INTO lineups (id, team_id, calendar_id, formation, tactic, hardness, players_data, captain_id, preset_slot, match_plan, bench_data, is_auto, submitted_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)"
-                ).bind(crypto.randomUUID(), teamId, calendarId, lastLineup.formation, lastLineup.tactic, lastLineup.hardness ?? "normal", JSON.stringify(copiedPicks), captainStillActive, lastLineup.preset_slot, JSON.stringify(copiedPlan), benchColumn(copiedBench), lastLineup.submitted_at).run();
+                ).bind(copyId, teamId, calendarId, lastLineup.formation, lastLineup.tactic, lastLineup.hardness ?? "normal", JSON.stringify(copiedPicks), captainStillActive, lastLineup.preset_slot, JSON.stringify(copiedPlan), benchColumn(copiedBench), lastLineup.submitted_at).run();
+                // Domácí pomezní jde se sestavou taky (jako tvrdost). Zvlášť, aby kopie sestavy
+                // prošla i bez sloupce z migrace 0329. Kdo mezitím nastoupil, vyřadí runner.
+                await db.prepare("UPDATE lineups SET linesman = (SELECT linesman FROM lineups WHERE id = ?) WHERE id = ?")
+                    .bind(lastLineup.id, copyId).run()
+                    .catch((e) => logger.warn({module: "match-runner"}, `kopie domácího pomezního pro ${teamId}`, e));
                 return;
             } catch (e) {
                 logger.error({module: "match-runner"}, `copyOrCreateLineup INSERT failed for ${teamId} cal=${calendarId}`, e);
