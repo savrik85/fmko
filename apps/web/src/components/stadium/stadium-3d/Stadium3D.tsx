@@ -123,6 +123,12 @@ interface Stadium3DProps {
   lastMatch?: LastMatchScore | null;
   initialTimeOfDay?: TimeOfDay;
   initialViewpoint?: CameraViewpoint;
+  /** Řízený pohled kamery: změna přepne kameru (záznam zápasu). */
+  viewpoint?: CameraViewpoint;
+  /** Míč na středovém puntíku; záznam zápasu má vlastní. */
+  showCenterBall?: boolean;
+  /** Další objekty ve scéně (hráči a míč záznamu zápasu). */
+  children?: React.ReactNode;
   initialWeather?: WeatherType;
   weather?: WeatherType;
   initialMode?: StadiumMode;
@@ -178,6 +184,9 @@ export function Stadium3D({
   lastMatch,
   initialTimeOfDay = "day",
   initialViewpoint = "overview",
+  viewpoint: viewpointProp,
+  showCenterBall = true,
+  children,
   initialWeather = "sunny",
   weather: weatherProp,
   initialMode = "match_day",
@@ -239,7 +248,7 @@ export function Stadium3D({
   // Stav denní doby, počasí, kamerového pohledu, režimu areálu a návštěvnosti
   const [timeOfDay, setTimeOfDay] = useState<TimeOfDay>(initialTimeOfDay);
   const [weather, setWeather] = useState<WeatherType>(weatherProp ?? initialWeather);
-  const [viewpoint, setViewpoint] = useState<CameraViewpoint>(initialViewpoint);
+  const [viewpoint, setViewpoint] = useState<CameraViewpoint>(viewpointProp ?? initialViewpoint);
   const [mode, setMode] = useState<StadiumMode>(modeProp ?? initialMode);
   const [attendanceRatio, setAttendanceRatio] = useState<number>(attendanceProp ?? initialAttendanceRatio);
 
@@ -254,6 +263,12 @@ export function Stadium3D({
       setMode(modeProp);
     }
   }, [modeProp]);
+
+  useEffect(() => {
+    if (viewpointProp) {
+      setViewpoint(viewpointProp);
+    }
+  }, [viewpointProp]);
 
   useEffect(() => {
     if (attendanceProp !== undefined) {
@@ -586,7 +601,10 @@ export function Stadium3D({
             snowCleared={snowClearingOrdered}
             grassBlades={!isMobile}
             timeOfDay={timeOfDay}
+            showCenterBall={showCenterBall}
           />
+
+          {children}
 
           {/* Tribuny okolo hřiště (v tréninkový den prázdné bez diváků) */}
           <Stand
@@ -919,7 +937,7 @@ export function Stadium3D({
 
                 {/* 3. Kamery */}
                 <div className="flex items-center gap-0.5 bg-white/10 p-0.5 rounded-xl shrink-0">
-                  {(Object.keys(VIEWPOINTS) as CameraViewpoint[]).map((key) => {
+                  {(Object.keys(VIEWPOINTS) as CameraViewpoint[]).filter((key) => key !== "broadcast").map((key) => {
                     const vp = VIEWPOINTS[key];
                     const active = viewpoint === key;
                     return (

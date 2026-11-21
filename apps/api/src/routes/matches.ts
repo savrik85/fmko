@@ -7,6 +7,7 @@ import type { Bindings } from "../index";
 import { requireAdmin, requireTeamOwnership } from "../auth/middleware";
 import { getSession, getTokenFromRequest } from "../auth/session";
 import { logger } from "../lib/logger";
+import { matchKits, playerLook, type PlayerLook } from "../lib/match-look";
 import { mustSeason } from "../lib/season";
 import { STAND_COLUMNS, standFacilities, type StandSide } from "../stadium/stands-model";
 import { cupKickoffIso, pragueKickoffIso } from "../lib/match-tick-schedule";
@@ -939,6 +940,9 @@ matchesRouter.get("/matches/:id", async (c) => {
     `SELECT m.*,
        ht.name as home_name, ht.primary_color as home_color, ht.badge_pattern as home_badge, ht.secondary_color as home_secondary, ht.village_id as home_village_id,
        at.name as away_name, at.primary_color as away_color, at.badge_pattern as away_badge, at.secondary_color as away_secondary, at.village_id as away_village_id,
+       ht.home_shorts_color AS home_kit_shorts, ht.home_socks_color AS home_kit_socks,
+       at.home_shorts_color AS away_team_home_shorts, at.home_socks_color AS away_team_home_socks,
+       at.away_primary_color AS away_kit_shirt, at.away_shorts_color AS away_kit_shorts, at.away_socks_color AS away_kit_socks,
        (SELECT sc.scheduled_at FROM season_calendar sc WHERE sc.id = m.calendar_id) AS calendar_at
      FROM matches m
      LEFT JOIN teams ht ON m.home_team_id = ht.id
@@ -954,7 +958,9 @@ matchesRouter.get("/matches/:id", async (c) => {
 
   // Merge current squad_number from players table (stored lineup_data
   // doesn't have it). Match rating is in player_ratings JSON.
-  type LP = { id: string; name: string; position: string; naturalPosition: string; rating: number; squadNumber?: number | null };
+  // Vzhled (pleť, vlasy, výška) potřebuje 3D záznam zápasu; bere se aktuální, jako číslo dresu.
+  type LP = { id: string; name: string; position: string; naturalPosition: string; rating: number; squadNumber?: number | null } & PlayerLook;
+  type PlayerLookRow = { id: string; squad_number: number | null; avatar: string | null; physical: string | null };
   const collectIds = (ld: { starters: LP[]; subs: LP[] } | null): string[] =>
     ld ? [...ld.starters, ...ld.subs].map((p) => p.id).filter(Boolean) : [];
   const allIds = [...collectIds(homeLineup), ...collectIds(awayLineup)];
@@ -962,15 +968,21 @@ matchesRouter.get("/matches/:id", async (c) => {
     try {
       const placeholders = allIds.map(() => "?").join(",");
       const players = await c.env.DB.prepare(
-        `SELECT id, squad_number FROM players WHERE id IN (${placeholders})`
-      ).bind(...allIds).all<{ id: string; squad_number: number | null }>();
-      const byId = new Map(players.results.map((p) => [p.id, p.squad_number]));
+        `SELECT id, squad_number, avatar, physical FROM players WHERE id IN (${placeholders})`
+      ).bind(...allIds).all<PlayerLookRow>();
+      const byId = new Map(players.results.map((p) => [p.id, p]));
       const merge = (ld: { starters: LP[]; subs: LP[] } | null) => {
         if (!ld) return;
         for (const list of [ld.starters, ld.subs]) {
           for (const p of list) {
-            const num = byId.get(p.id);
-            if (num != null) p.squadNumber = num;
+            const row = byId.get(p.id);
+            if (!row) continue;
+            if (row.squad_number != null) p.squadNumber = row.squad_number;
+            try {
+              Object.assign(p, playerLook(row));
+            } catch (e) {
+              logger.warn({ module: "matches" }, `nečitelný vzhled hráče ${p.id}`, e);
+            }
           }
         }
       };
@@ -979,8 +991,19 @@ matchesRouter.get("/matches/:id", async (c) => {
     } catch (e) { logger.warn({ module: "matches" }, "merge squad numbers", e); }
   }
 
+  const {
+    home_kit_shorts, home_kit_socks, away_team_home_shorts, away_team_home_socks,
+    away_kit_shirt, away_kit_shorts, away_kit_socks, ...matchRow
+  } = row as Record<string, string | null>;
   return c.json({
-    ...row,
+    ...matchRow,
+    ...matchKits(
+      { primary: row.home_color as string, homeShorts: home_kit_shorts, homeSocks: home_kit_socks },
+      {
+        primary: row.away_color as string, homeShorts: away_team_home_shorts, homeSocks: away_team_home_socks,
+        awayShirt: away_kit_shirt, awayShorts: away_kit_shorts, awaySocks: away_kit_socks,
+      },
+    ),
     events: JSON.parse((row.events as string) ?? "[]"),
     commentary: JSON.parse((row.commentary as string) ?? "[]"),
     player_ratings: JSON.parse((row.player_ratings as string) ?? "{}"),

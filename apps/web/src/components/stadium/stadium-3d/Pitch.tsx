@@ -36,6 +36,8 @@ interface PitchProps {
   /** Stébla trávy u nízkých kamer (jen počítač — na mobilu by stála moc výkonu). */
   grassBlades?: boolean;
   timeOfDay?: TimeOfDay;
+  /** Míč na středovém puntíku; při záznamu zápasu má vlastní míč. */
+  showCenterBall?: boolean;
 }
 
 /**
@@ -192,6 +194,7 @@ export function Pitch({
   snowCleared = false,
   grassBlades = false,
   timeOfDay = "day",
+  showCenterBall = true,
 }: PitchProps) {
   // Vyhřívání roztaví sníh na hrací ploše — okolí, střídačky ani terén ale
   // zasněžené zůstanou, takže je zelený obdélník uprostřed bílého areálu vidět.
@@ -348,7 +351,7 @@ export function Pitch({
       {isCleared && <SnowPiles />}
 
       {/* Zápasový fotbalový míč na středu */}
-      {hasCenter && <MatchBall />}
+      {hasCenter && showCenterBall && <MatchBall />}
 
       {/* Branky */}
       <Goal

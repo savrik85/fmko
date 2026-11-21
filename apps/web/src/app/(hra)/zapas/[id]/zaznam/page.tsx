@@ -16,6 +16,8 @@ interface LineupData { starters: LineupPlayer[]; subs: LineupPlayer[]; formation
 interface MatchData {
   id: string; home_team_id: string; away_team_id: string; home_score: number; away_score: number; round: number | null;
   roundName: string | null; isCup: boolean;
+  /** Ligový detail nese dresy, zápas jde přehrát i ve 3D na stadionu. */
+  has3d: boolean;
   events: MatchEvent[]; commentary: string[];
   home_name: string; away_name: string; home_color: string; away_color: string;
   home_secondary: string; away_secondary: string; home_badge: string; away_badge: string;
@@ -121,7 +123,7 @@ export default function MatchReplayPage() {
       setMatch({
         id: r.id as string, home_team_id: r.home_team_id as string, away_team_id: r.away_team_id as string,
         home_score: r.home_score as number, away_score: r.away_score as number, round: r.round as number | null,
-        roundName: (r.roundName as string) ?? null, isCup: r.isCup === true,
+        roundName: (r.roundName as string) ?? null, isCup: r.isCup === true, has3d: r.home_kit != null,
         events: ev, commentary: co,
         home_name: (r.home_name as string) ?? "Domácí", away_name: (r.away_name as string) ?? "Hosté",
         home_color: (r.home_color as string) ?? "#2D5F2D", away_color: (r.away_color as string) ?? "#D94032",
@@ -634,6 +636,9 @@ export default function MatchReplayPage() {
             }`} style={speed === s ? { backgroundColor: hc } : undefined}
           >{s === "live" ? "\u25B6 Živě" : s === "fast" ? "\u25B6\u25B6 Rychle" : "\u25B6\u25B6\u25B6 Konec"}</button>
         ))}
+        {match.has3d && (
+          <button onClick={() => router.push(`/zapasovy-den/${matchId}`)} className="px-6 py-3 rounded-xl text-base font-heading font-bold uppercase tracking-wide bg-white text-muted hover:text-ink shadow-md">3D</button>
+        )}
         {/* Pozadím je dres domácích — u bílého (#FFFFFF) by bílý popisek zmizel a tlačítko nešlo přečíst. */}
         {htPause && <button onClick={() => { setHtPause(false); setHtDone(true); setKickoff("2nd"); }} className={`px-8 py-3 rounded-xl text-base font-heading font-bold uppercase shadow-lg ${bestTextOn(hc) === "light" ? "text-white" : "text-gray-900"}`} style={{ backgroundColor: hc }}>2. poločas {"\u25B6"}</button>}
         {finished && <button onClick={() => router.push(`/zapas/${matchId}`)} className={`px-10 py-3 rounded-xl text-lg font-heading font-bold uppercase shadow-lg ${bestTextOn(hc) === "light" ? "text-white" : "text-gray-900"}`} style={{ backgroundColor: hc }}>Pokračovat na přehled</button>}

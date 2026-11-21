@@ -16,15 +16,23 @@ const OVERVIEW_HALF_WIDTH = THREE.MathUtils.degToRad(31);
 const OVERVIEW_MAX_FOV = 56;
 /** Kamera nesmí dál, než pustí OrbitControls (maxDistance 140), jinak by dojezd nikdy neskončil. */
 const OVERVIEW_MAX_DISTANCE = 132;
+/** Záznam zápasu na plátně na výšku: vysoko zpoza severní branky, hřiště běží nahoru. */
+const BROADCAST_PORTRAIT: Pick<ViewpointDef, "position" | "target" | "fov"> = { position: [0, 62, 48], target: [0, 0, 2], fov: 50 };
+const BROADCAST_PORTRAIT_HALF_WIDTH = THREE.MathUtils.degToRad(17);
 
 /**
  * Pohled na areál přizpůsobený poměru stran plátna. Souřadnice v `VIEWPOINTS` sedí na široké
  * plátno na desktopu; na skoro čtvercovém plátně v mobilu a na výšku by boční tribuny
  * utekly ze záběru. Úzké plátno proto dostane širší záběr a kamera případně poodstoupí.
  */
-function fitToAspect(vp: ViewpointDef, aspect: number): ViewpointDef {
-  if (vp.id !== "overview" || !(aspect > 0)) return vp;
-  const needed = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(OVERVIEW_HALF_WIDTH) / aspect));
+function fitToAspect(raw: ViewpointDef, aspect: number): ViewpointDef {
+  if ((raw.id !== "overview" && raw.id !== "broadcast") || !(aspect > 0)) return raw;
+  // Zápas na výšku: hřiště se podél nevejde, kamera se proto dívá zpoza branky a do šířky
+  // stačí vměstnat šířku hřiště.
+  const portraitMatch = raw.id === "broadcast" && aspect < 0.8;
+  const vp = portraitMatch ? { ...raw, ...BROADCAST_PORTRAIT } : raw;
+  const halfWidth = portraitMatch ? BROADCAST_PORTRAIT_HALF_WIDTH : OVERVIEW_HALF_WIDTH;
+  const needed = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(halfWidth) / aspect));
   if (needed <= vp.fov) return vp;
   const fov = Math.min(needed, OVERVIEW_MAX_FOV);
   const target = new THREE.Vector3(...vp.target);
