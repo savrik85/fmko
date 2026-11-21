@@ -162,17 +162,17 @@ function garble(seed: RumourSignal, w: RumourWorld, valid: RumourSignal[], rng: 
 
 const TEMPLATES: Record<RumourSignalKind, readonly string[]> = {
   scout: [
-    "Na posledním zápase prý stál u lajny skaut z klubu {club} a celou dobu si psal poznámky o hráči {player}.",
-    "Jeden štamgast přísahá, že viděl skauta z klubu {club}, jak se po zápase vyptával na hráče {player}.",
-    "U výčepu se říká, že klub {club} posílá skauta na hráče {player}.",
+    "Na posledním zápase prý stál u lajny skaut z klubu {club} a celou dobu si psal poznámky jen o jednom: {player}.",
+    "Jeden štamgast přísahá, že viděl skauta z klubu {club}, jak se po zápase vyptával, kolik toho umí {player}.",
+    "U výčepu se říká, že {player} je v hledáčku skautů z klubu {club}.",
   ],
   ai_interest: [
     "Prý v klubu {club} shánějí posilu a v jejich kabině padlo jméno {player}.",
     "Někdo od klubu {club} se tu vyptával, kolik by stál {player} a jak dlouho má smlouvu.",
-    "U vedlejšího stolu se šuškalo, že klub {club} by rád bral hráče {player}.",
+    "U vedlejšího stolu se šuškalo, že {player} by se klubu {club} hodil do sestavy.",
   ],
   ai_sell: [
-    "V klubu {club} se prý chtějí zbavit hráče {player} ({position}). Kdo by ho chtěl, ať se ozve brzo.",
+    "V klubu {club} prý {player} ({position}) přebývá a pustili by ho. Kdo by ho chtěl, ať se ozve brzo.",
     "Od lidí z klubu {club} jsem slyšel, že {player} ({position}) jim přebývá a pustili by ho.",
   ],
   unhappy: [
@@ -228,7 +228,7 @@ export function rumourSms(r: Pick<Rumour, "subject" | "text" | "firstName">): st
 
 const HEADLINES = [
   "Šušká se: {player} v hledáčku klubu {club}",
-  "Kuloáry: o hráče {player} se zajímá klub {club}",
+  "Kuloáry: {player} by se hodil klubu {club}",
   "Drby od výčepu: {player} a klub {club}",
 ];
 
@@ -236,13 +236,13 @@ const BODIES: Record<"scout" | "ai_interest", readonly string[]> = {
   scout: [
     "{player} ({team}) prý zaujal skauty klubu {club}. Podle štamgastů si o něm na posledním zápase dělali poznámky. "
     + "Trenér se k tomu nevyjádřil, v kabině se ale o ničem jiném nemluví. Jestli je na tom něco pravdy, ukáže až přestupní trh.",
-    "U výčepu se tvrdí, že na hráče {player} ({team}) jezdí skaut z klubu {club}. "
+    "U výčepu se tvrdí, že {player} ({team}) má na zápasech pravidelnou společnost: skauta z klubu {club}. "
     + "Sám hráč prý zatím mlčí a v klubu se tváří, že o ničem nevědí.",
   ],
   ai_interest: [
-    "V klubu {club} prý shánějí posilu a nejčastěji se tam mluví o hráči {player} ({team}). "
+    "V klubu {club} prý shánějí posilu a nejčastěji tam padá jedno jméno: {player} ({team}). "
     + "Oficiálně to nikdo nepotvrdil, ale v hospodě už se sázejí, kdy přijde první nabídka.",
-    "Podle hospodských zdrojů by klub {club} rád získal hráče {player} ({team}). "
+    "Podle hospodských zdrojů je {player} ({team}) na seznamu přání klubu {club}. "
     + "Trenér se k tomu nevyjádřil. Jestli je na tom něco pravdy, ukáže až přestupní trh.",
   ],
 };
