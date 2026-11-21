@@ -344,7 +344,8 @@ export default function ConversationPage() {
   const lzePsat = isGroup || canReply;
   // Tlačítka jen dokud majitel čeká odpověď.
   // Hledá se zpětně: za čekající SMS mohla přibýt výměna o příspěvek (bez tlačítek).
-  const nabidkaOdpovedi = !isGroup && aiThreadActive && canReply && !cekaSeNaHrace
+  // Hala sálovky vlákno aktivní nemá (blokovalo by rozhovory hráčů), tlačítka ukáže i tak.
+  const nabidkaOdpovedi = !isGroup && (aiThreadActive || !!participantId?.startsWith("hc-")) && canReply && !cekaSeNaHrace
     ? (messages.slice().reverse().map(ownerOptionsOf).find((o) => o.length > 0) ?? [])
     : [];
   // Dohody s hráčem, který chtěl odejít: jen když jdou (na tahu je trenér, dnes ještě žádná nebyla).
