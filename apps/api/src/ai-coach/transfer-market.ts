@@ -24,6 +24,7 @@
 import type { Bindings } from "../index";
 import { marketValue } from "@okresni-masina/shared";
 import { logger } from "../lib/logger";
+import { loadRumourHype } from "../pub/rumours-db";
 import { createTransferOffer, FREE_AGENT_SIGNING_FEE, placeListingBid, signFreeAgent } from "../services/transfer-actions";
 import { AI_SELLER } from "../transfers/ai-seller";
 import type { DemandInput } from "../transfers/demands";
@@ -315,6 +316,12 @@ async function buyCandidates(env: Bindings, club: AiClubState, need: PositionNee
     const f = fitness.get(c.playerId) ?? null;
     if (f && f.injuryDays !== null && f.injuryDays > MAX_INJURY_DAYS_TO_BUY) out.delete(c.playerId);
     else c.fitness = f;
+  }
+  // O hráči vyšel drb ve Zpravodaji (pub/rumours-db.ts): trh ho cení výš, AI za něj nabídne víc.
+  const hype = await loadRumourHype(db, inGame.map((c) => c.playerId), pragueDay(now));
+  for (const c of inGame) {
+    const mult = hype.get(c.playerId);
+    if (mult) c.marketValue = Math.round((c.marketValue * mult) / 100) * 100;
   }
   // Obchody mezi AI kluby jsou vzácné: hráče jiného AI klubu AI zvažuje jen některé dny.
   const aiDay = stableUnit(`ai-to-ai|${club.teamId}|${pragueDay(now)}`) < AI_TO_AI_CHANCE;

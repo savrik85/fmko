@@ -998,6 +998,12 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
     const optionId = typeof body.optionId === "string" ? body.optionId : null;
     await handleHallCupReply(c.env.DB, convId, teamId, body.body.trim(), optionId)
       .catch((e) => logger.warn({ module: "messaging" }, "odpověď na pozvánku na sálovku", e));
+  } else if (conv?.type === "system" && conv.participant_id?.startsWith("pk-")) {
+    // Hospodský s drbem o přestupu (pub/rumours-db.ts): pustit do novin, nebo hráče uklidnit.
+    const { handleRumourReply } = await import("../pub/rumours-db");
+    const optionId = typeof body.optionId === "string" ? body.optionId : null;
+    await handleRumourReply(c.env.DB, convId, teamId, body.body.trim(), optionId)
+      .catch((e) => logger.warn({ module: "messaging" }, "odpověď hospodskému na drb", e));
   } else if (conv?.type === "system" && conv.ai_thread_active === 1) {
     const { handleFanLeaderReply } = await import("../fans/fan-leader-reply");
     await handleFanLeaderReply(c.env.DB, convId, body.body.trim(), c.env)

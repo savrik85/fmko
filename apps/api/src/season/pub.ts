@@ -14,6 +14,7 @@ import { logger } from "../lib/logger";
 import { currentSeasonSql } from "../lib/season";
 import { coachRelationStmts } from "../lib/coach-relation";
 import { districtPoolFor, type DistrictPool } from "../data/flavor/district-pool";
+import { transferRumourForPub } from "../pub/rumours-db";
 
 export interface PubAttendee {
   playerId: string;
@@ -1404,6 +1405,10 @@ export async function createCoachLedSession(
     trener: true, jiste: false, uzZaznelo: new Set(zachovane.map((i) => `${i.type}|${i.incidentId}`)),
   });
   incidents.push(...hospoda.pribehy);
+  // Drb o přestupu (pub/rumours-db.ts): s trenérem u stolu dvojnásobná šance. Dnešní drb se
+  // vrátí znovu bez další SMS, protože session se tu přepisuje. Nikdy nehází.
+  const rumour = await transferRumourForPub(db, { teamId, gameDate, coach: true, localAttendees: attendees.length });
+  if (rumour) incidents.push(rumour);
 
   // Idempotentně: pokud už dnes existuje (emergent), přepiš ji coach-led variantou.
   await db.prepare(
@@ -1609,6 +1614,12 @@ export async function generatePubSessionsForAllTeams(db: D1Database, gameDate: s
     // Incidenty v klubu: drby, chlubení, ohlášené činy (spec incidentů, Část 9). Nikdy nehází.
     const hospoda = await udalostiHospody(db, { teamId: team.id, leagueId: team.league_id, gameDate }, attendees, { trener: false, jiste: false });
     incidents.push(...hospoda.pribehy);
+
+    // Drb o přestupu (pub/rumours-db.ts): cizí skaut, zájem AI klubu, tip na trh. Nikdy nehází.
+    const rumour = await transferRumourForPub(db, {
+      teamId: team.id, gameDate, coach: false, localAttendees: attendees.filter((a) => !a.isVisitor).length,
+    });
+    if (rumour) incidents.push(rumour);
 
     // Vůdci fanoušků. Hospoda je jediné místo, kde se v okrese potkává kabina
     // s tribunou, takže se tam potkat musí i v číslech: hráči si odnesou

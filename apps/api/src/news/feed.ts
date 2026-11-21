@@ -39,6 +39,8 @@ const KVOTY: Record<string, number> = {
   district_selection: 1,
   // Svatba v kabině (weddings/): vlastní rubrika Ze života klubů, víc než dvě naráz se nevykreslí.
   club_wedding: 2,
+  // Drby od výčepu (pub/rumours-db.ts): krátké zprávy ve vlastní rubrice, ukáže tři.
+  transfer_rumour: 3,
 };
 const KVOTA_OSTATNI = 2;
 
@@ -72,6 +74,7 @@ export const NEWS_ICONS: Record<string, string> = {
   season_yearbook: "\u{1F4D6}",
   district_selection: "\u{1F3BD}",
   club_wedding: "\u{1F48D}",
+  transfer_rumour: "\u{1F92B}",
 };
 
 export function newsIcon(type: string): string {
