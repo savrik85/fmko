@@ -15,6 +15,8 @@ import { logger } from "../lib/logger";
 import { recordCompetitionEntry } from "./ledger";
 import { districtLeagueIds, sqlPlaceholders, treasuryLeagueForTeam } from "./rules";
 
+import type { CompetitionRules } from "./defaults";
+
 const M = "competition-grants";
 
 /** Na co všechno může soutěž dát peníze. Zrcadlí CHECK v migraci 0150. */
@@ -48,6 +50,27 @@ export const OWN_GRANT_TITLE: Partial<Record<GrantKind, string>> = {
   pitch: "Žádost o dotaci na opravu hřiště",
   travel: "Žádost o příspěvek na cestovné",
 };
+
+/**
+ * Smí klub podat žádost o dotaci pro vlastní klub? Když grémium odsouhlasilo pravidlo
+ * „jen jednou za sezónu“ (`grant_once_per_season`), počítá se každá žádost téhle sezóny
+ * kromě stažené. Vrací důvod pro manažera, nebo null.
+ */
+export async function ownGrantRequestBlocked(
+  db: D1Database,
+  o: { teamId: string; seasonNumber: number; rules: CompetitionRules },
+): Promise<string | null> {
+  if (o.rules.grant_once_per_season !== 1) return null;
+  const earlier = await db.prepare(
+    `SELECT 1 AS x FROM competition_proposals
+      WHERE proposed_by_team_id = ? AND season_number = ? AND kind = 'grant'
+        AND json_extract(payload, '$.request') = 1 AND status != 'withdrawn'
+      LIMIT 1`,
+  ).bind(o.teamId, o.seasonNumber).first<{ x: number }>();
+  return earlier
+    ? "Grémium odsouhlasilo, že o dotaci pro vlastní klub jde žádat jen jednou za sezónu. Letos už jsi žádal."
+    : null;
+}
 
 export interface GrantPayment {
   teamId: string;

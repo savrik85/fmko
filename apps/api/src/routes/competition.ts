@@ -19,7 +19,7 @@ import {
 } from "../competition/defaults";
 import { readBalance, recordCompetitionEntry, seasonSummary } from "../competition/ledger";
 import {
-  GRANT_LABEL, GRANT_MAX, GRANT_MIN, OWN_GRANT_KINDS, OWN_GRANT_MAX, OWN_GRANT_NOTE_MIN, OWN_GRANT_TITLE,
+  GRANT_LABEL, GRANT_MAX, GRANT_MIN, OWN_GRANT_KINDS, OWN_GRANT_MAX, OWN_GRANT_NOTE_MIN, OWN_GRANT_TITLE, ownGrantRequestBlocked,
   SURPLUS_MAX_PCT, type GrantKind,
 } from "../competition/grants";
 import {
@@ -1617,6 +1617,11 @@ competitionRouter.post("/teams/:teamId/competition/grants", async (c) => {
   // Dotaci odhlasuje grémium okresu, vyplácí ji ale pokladna soutěže, ve které
   // klub hraje (grants.ts). Strop proto musí vyjít každé pokladně, která bude platit.
   const rules = await resolveRules(c.env.DB, leagueId, meta.season_number);
+  // Pravidlo grémia „žádost o dotaci jen jednou za sezónu“ (competition/grants.ts).
+  if (forOwnClub) {
+    const blocked = await ownGrantRequestBlocked(c.env.DB, { teamId, seasonNumber: meta.season_number, rules });
+    if (blocked) return c.json({ error: blocked }, 409);
+  }
   const treasuries = await treasuryStates(c.env.DB, leagueId, rules, meta.level);
   const needs = new Map<string, number>();
   if (kind === "award" || kind === "surplus") {
@@ -1734,6 +1739,8 @@ competitionRouter.get("/teams/:teamId/competition/grants", async (c) => {
     freeBalance: Math.max(0, free),
     min: GRANT_MIN, max: GRANT_MAX, surplusMaxPct: SURPLUS_MAX_PCT,
     ownMax: OWN_GRANT_MAX, ownNoteMin: OWN_GRANT_NOTE_MIN, ownKinds: OWN_GRANT_KINDS,
+    // Grémium odsouhlasilo „jen jednou za sezónu“ a klub už letos žádal: formulář žádost nenabídne.
+    ownBlocked: await ownGrantRequestBlocked(c.env.DB, { teamId, seasonNumber: meta.season_number, rules }),
     kinds: (Object.keys(GRANT_LABEL) as GrantKind[]).map((k) => ({
       kind: k, label: GRANT_LABEL[k],
       targeted: k === "loan" || k === "travel" || k === "award",

@@ -49,6 +49,8 @@ export const DEFAULT_RULES = {
   // Úrok v celých procentech — na podíl se převádí až při podpisu půjčky.
   cash_loan_max: 40_000,
   cash_loan_interest_pct: 15,
+  // Žádost o dotaci pro vlastní klub jen jednou za sezónu (1 = platí). Výchozí 0: žádá se jako dřív.
+  grant_once_per_season: 0,
 } as const;
 
 export type CompetitionRules = { -readonly [K in keyof typeof DEFAULT_RULES]: number };
@@ -273,6 +275,7 @@ export const PROPOSAL_KINDS: Record<string, ProposalSpec> = {
   min_coach_licence: { rulesField: "min_coach_licence", gesce: "soutez", label: "Minimální licence trenéra", majority: QUALIFIED_MAJORITY, nextSeason: true, min: 0, max: 4, unit: "licence", note: "Klub, jehož trenér nemá aspoň tuhle licenci, dostane před každým zasedáním pokutu za porušení pravidla. Platí od příští sezóny, ať mají trenéři čas si licenci udělat. AI kluby se nehlídají." },
 
   cash_loan_max: { rulesField: "cash_loan_max", gesce: "hospodarska", label: "Strop půjčky od banky", majority: SIMPLE_MAJORITY, nextSeason: false, min: 5_000, max: 250_000, unit: "czk", note: "Nejvyšší částka, kterou si klub může půjčit na stránce Finance. Splácí se po zápasech do konce sezóny, jednou za sezónu. Běžících půjček se změna netýká." },
+  grant_once_per_season: { rulesField: "grant_once_per_season", gesce: "hospodarska", label: "Žádost o dotaci jen jednou za sezónu", majority: SIMPLE_MAJORITY, nextSeason: false, min: 0, max: 1, unit: "switch", note: "Každý klub smí v sezóně požádat o dotaci pro vlastní klub jen jednou, i když žádost neprojde. Stažená žádost se nepočítá. Dotací pro všechny se to netýká." },
   cash_loan_interest_pct: { rulesField: "cash_loan_interest_pct", gesce: "hospodarska", label: "Úrok z půjčky od banky", majority: SIMPLE_MAJORITY, nextSeason: false, min: 0, max: 40, unit: "pct", note: "Kolik klub vrátí navíc. Při patnácti procentech splatí ze 40 000 celkem 46 000 Kč. Sazba se zmrazí při podpisu, takže už běžící půjčky nezdraží." },
 
   // ── Komisař pro integritu: sázková kancelář ──────────────────────────────

@@ -11,6 +11,8 @@ export interface Rules {
   min_coach_licence: number;
   ban_betting: number; levy_bet_pct: number;
   bet_max_stake: number; bet_max_payout: number;
+  /** Žádost o dotaci pro vlastní klub jen jednou za sezónu (1 = platí). */
+  grant_once_per_season: number;
 }
 
 export type ProposalUnit = "czk" | "pct" | "switch" | "ratio" | "count" | "licence";
@@ -233,6 +235,8 @@ export interface GrantsData {
   min: number; max: number; surplusMaxPct: number;
   /** Žádost o dotaci pro vlastní klub: strop, nejkratší odůvodnění a druhy. Starší API je neposílá. */
   ownMax?: number; ownNoteMin?: number; ownKinds?: string[];
+  /** Grémium odsouhlasilo „žádost jen jednou za sezónu“ a klub už letos žádal: důvod, proč to nejde. */
+  ownBlocked?: string | null;
   pitchThreshold: number;
   kinds: Array<{ kind: string; label: string; targeted: boolean; seasonEnd: boolean }>;
   teams: Array<{
