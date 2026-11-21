@@ -30,7 +30,12 @@ export interface SpreadInput {
   hourKey: string;
 }
 
-/** Kalibrace: Task 12 (simulace nad kopií produ). Jediná páka na četnost je HOURLY_BASE. */
+/**
+ * Kalibrace 2026-11-21 (scripts/hearsay-sim.ts, SMS trenérů z produ 7.–21. 11., 12 klubů):
+ * k dotčenému dojde 82 % věcí (pochvaly 89 %, kritiky 77 %), ~0,5 zprávy „slyšel jsem“
+ * na klub a týden, strop 2 za den se nenaplní. Četnost zpráv neomezuje šíření, ale to,
+ * jak často trenéři o spoluhráčích píšou; HOURLY_BASE proto beze změny.
+ */
 export const HOURLY_BASE = 0.05;
 const KIND_FACTOR: Record<HearsayKind, number> = {
   praise: 1, criticism: 1, decision_for: 1, decision_against: 1.4,
