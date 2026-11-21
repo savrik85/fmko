@@ -2,9 +2,17 @@
  * Ročenka sezóny nad SQLite (Miniflare): fakta z databáze, šablona bez AI, jeden článek
  * a jedna SMS i při opakovaném běhu, odkaz v rekapitulaci, AI kluby bez ročenky.
  */
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { Miniflare } from "miniflare";
+import type { AiContext } from "../lib/ai-provider";
 import { collectYearbookFacts, factLines, fallbackYearbook, safeName, writeTeamYearbook } from "./season-yearbook";
+
+// Model v testu vrací titulek s vymyšleným rokem a velkými písmeny (tak to dopadlo na testu 11-21).
+const MODEL_BODY = "Sokol Lhenice má za sebou sezónu - na kterou se v hospodě bude ještě dlouho vzpomínat. ".repeat(4);
+vi.mock("../lib/ai-provider", async (orig) => ({
+  ...(await orig<typeof import("../lib/ai-provider")>()),
+  generateText: vi.fn(async () => `ROČENKA SOKOL LHENICE 2023\n${MODEL_BODY}`),
+}));
 
 let miniflare: Miniflare;
 let db: D1Database;
@@ -96,6 +104,16 @@ describe("ročenka sezóny", () => {
     expect(JSON.parse(sms.results[0].metadata).href).toBe("/klub/t1");
     const recap = await db.prepare("SELECT json_extract(data, '$.yearbookNewsId') AS id FROM season_recap WHERE team_id = 't1'").first<{ id: string }>();
     expect(recap?.id).toBe(id1);
+  });
+
+  it("s modelem: text od modelu, titulek vždy z kódu (model si vymýšlel rok)", async () => {
+    await db.prepare("DELETE FROM news WHERE type = 'season_yearbook' AND team_id = 't1'").run();
+    const id = await writeTeamYearbook(db, {} as AiContext, "t1", "l1", 3);
+    const row = await db.prepare("SELECT headline, body FROM news WHERE id = ?").bind(id).first<{ headline: string; body: string }>();
+    expect(row?.headline).toBe("Ročenka Sokol Lhenice: 3. sezóna");
+    expect(row?.body).toContain("v hospodě bude ještě dlouho vzpomínat");
+    expect(row?.body).not.toContain("2023");
+    expect(row?.body).not.toMatch(/ - |[—–]/);
   });
 
   it("klub bez rekapitulace dostane ročenku taky (pořadí chybí, zbytek z faktů)", async () => {

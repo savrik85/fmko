@@ -120,8 +120,9 @@ export function fallbackYearbook(raw: YearbookFacts): { headline: string; body: 
   return { headline: `Ročenka ${f.teamName}: ${f.seasonNumber}. sezóna`, body: paragraphs.join("\n\n") };
 }
 
+/** Bez pomlček (ani spojovníku s mezerami místo pomlčky „incidentů - třikrát“) a bez markdownu. */
 function cleanText(text: string): string {
-  return text.replace(/[—–]/g, ",").replace(/[*#]/g, "").trim();
+  return text.replace(/\s*[—–]\s*/g, ", ").replace(/ +- +/g, ", ").replace(/[*#]/g, "").trim();
 }
 
 /** Text od modelu. Null = model nic použitelného nevrátil. */
@@ -277,8 +278,11 @@ export async function writeTeamYearbook(db: D1Database, ai: AiContext | null, te
   if (existing) return existing.id;
   const facts = await collectYearbookFacts(db, teamId, leagueId, season);
   if (!facts) return null;
-  const text = (ai ? await modelYearbook(ai, facts) : null) ?? fallbackYearbook(facts);
-  if (ai && text.headline.startsWith("Ročenka ")) logger.warn({ module: M }, `ročenka ${teamId} ze šablony, model nevrátil použitelný text`);
+  const fromModel = ai ? await modelYearbook(ai, facts) : null;
+  if (ai && !fromModel) logger.warn({ module: M }, `ročenka ${teamId} ze šablony, model nevrátil použitelný text`);
+  const template = fallbackYearbook(facts);
+  // Titulek vždy z kódu: model si v něm vymýšlel rok („ROČENKA … 2023“) a psal velkými písmeny.
+  const text = { headline: template.headline, body: fromModel?.body ?? template.body };
   const newsId = crypto.randomUUID();
   // Unikátní článek bez unikátního indexu: INSERT jen když ještě není (souběžný krok nic nezdvojí).
   const res = await db.prepare(
