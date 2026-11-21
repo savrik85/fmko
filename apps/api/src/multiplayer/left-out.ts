@@ -17,6 +17,7 @@
 
 import { leftOutRelationDrop, motivationLeftOutSoftening, motivationSulkMod } from "@okresni-masina/shared";
 import { logger } from "../lib/logger";
+import { coachTalkedSince } from "../hearsay/effects";
 import { coachRelationStmts } from "../lib/coach-relation";
 import { createRng } from "../generators/rng";
 import { seedFromString } from "../lib/seed";
@@ -32,6 +33,8 @@ export interface LeftOutPlayer {
   discipline: number;
   /** Kolikrát po sobě hráč nejel už PŘED tímhle zápasem. */
   previousStreak: number;
+  /** Trenér mu před zápasem sám psal (Kabina má uši): zklamání i truc jsou poloviční. */
+  toldInAdvance?: boolean;
 }
 
 export interface BenchPlayer {
@@ -67,7 +70,7 @@ export function moraleLoss(player: LeftOutPlayer, bench: BenchPlayer[], coachMot
   let loss = 3;
   if (skippedFor(player, bench)) loss += 2;
   if (player.previousStreak >= 1) loss += 2;
-  return Math.max(1, Math.round(loss * (1 - motivationLeftOutSoftening(coachMotivation))));
+  return Math.max(1, Math.round(loss * (1 - motivationLeftOutSoftening(coachMotivation)) * (player.toldInAdvance ? 0.5 : 1)));
 }
 
 /**
@@ -187,7 +190,8 @@ export function sulkChance(
     + (player.temper > 60 ? 0.2 : 0)
     - (player.discipline > 70 ? 0.25 : 0)
     + motivationSulkMod(coachMotivation);
-  return Math.max(0.05, Math.min(0.9, chance));
+  const told = player.toldInAdvance ? 0.5 : 1;
+  return Math.max(0.05, Math.min(0.9, chance) * told);
 }
 
 /** Dovětek SMS, když hráč začne trucovat — trenér se to dozví hned, ne až z docházky. */
@@ -372,6 +376,10 @@ export async function reactToLeftOut(
       temper: Number(personality.temper ?? 40),
       discipline: Number(personality.discipline ?? 50),
       previousStreak: leftOutStreakFor(life, teamId),
+      // Trenér mu v posledních dvou dnech sám psal: ví to od něj, ne až ze sestavy.
+      toldInAdvance: writesToCoach && await coachTalkedSince(db, {
+        clubTeamId: teamId, playerId: row.id, sinceIso: new Date(Date.now() - 2 * 86_400_000).toISOString(),
+      }),
       row,
       life,
     });

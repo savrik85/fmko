@@ -166,6 +166,14 @@ export async function saveLineup(db: D1Database, teamId: string, body: SaveLineu
       .run().catch((e) => logger.warn({ module: "game" }, "auto-upsert preset", e));
   }
 
+  // Klubový kapitán hraje, ale pásku na zápas má jiný: rozkřikne se to (hearsay/captain.ts).
+  const clubCaptain = await db.prepare("SELECT captain_id FROM teams WHERE id = ?").bind(teamId).first<{ captain_id: string | null }>()
+    .catch((e) => { logger.warn({ module: "game" }, "klubový kapitán", e); return null; });
+  const { recordArmbandSnub } = await import("../hearsay/captain");
+  await recordArmbandSnub(db, {
+    teamId, clubCaptainId: clubCaptain?.captain_id ?? null, matchCaptainId: captainId, starterIds: playerIds, matchKey: body.calendarId,
+  });
+
   return { ok: true, lineupId };
 }
 
@@ -199,10 +207,19 @@ export async function setTeamRoles(db: D1Database, teamId: string, body: TeamRol
   if (body.penaltyTakerId !== undefined) { updates.push("penalty_taker_id = ?"); binds.push(body.penaltyTakerId || null); }
   if (body.freekickTakerId !== undefined) { updates.push("freekick_taker_id = ?"); binds.push(body.freekickTakerId || null); }
 
+  const previousCaptain = body.captainId !== undefined
+    ? (await db.prepare("SELECT captain_id FROM teams WHERE id = ?").bind(teamId).first<{ captain_id: string | null }>()
+      .catch((e) => { logger.warn({ module: "game" }, "dosavadní kapitán", e); return null; }))?.captain_id ?? null
+    : null;
   if (updates.length > 0) {
     binds.push(teamId);
     await db.prepare(`UPDATE teams SET ${updates.join(", ")} WHERE id = ?`)
       .bind(...binds).run().catch((e) => logger.warn({ module: "game" }, "update team roles", e));
+  }
+  // Starý kapitán přišel o pásku: rozkřikne se to (hearsay/captain.ts, Kabina má uši).
+  if (body.captainId) {
+    const { recordCaptainChange } = await import("../hearsay/captain");
+    await recordCaptainChange(db, { teamId, oldCaptainId: previousCaptain, newCaptainId: body.captainId });
   }
 
   return { ok: true };

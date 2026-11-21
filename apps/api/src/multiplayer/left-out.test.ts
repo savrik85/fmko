@@ -135,3 +135,13 @@ describe("truc po nenominaci", () => {
     expect(withoutSulk.filter((d) => d.attended).length).toBeGreaterThan(attended);
   });
 });
+
+describe("trenér mu to řekl předem (Kabina má uši)", () => {
+  it("když mu to trenér předem napsal, zklamání je poloviční", () => {
+    expect(moraleLoss(player({ overallRating: 45 }), bench)).toBe(5);
+    expect(moraleLoss(player({ overallRating: 45, toldInAdvance: true }), bench)).toBe(3);
+    const complaint = { reason: "skipped_for_weaker" as const, streak: 0 };
+    expect(sulkChance(player({ toldInAdvance: true }), complaint)).toBeCloseTo(sulkChance(player(), complaint) / 2, 5);
+  });
+});
+
