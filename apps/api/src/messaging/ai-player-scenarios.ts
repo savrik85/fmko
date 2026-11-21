@@ -64,6 +64,8 @@ export interface PlayerSnapshot {
   previousMatch?: { kind: "league" | "cup"; played: boolean; minutes: number; goals: number };
   /** Co mu trenér v SMS slíbil a jak to dopadlo (messaging/coach-commitments.ts). */
   coachCommitments?: CommitmentMemory[];
+  /** Co se doslechl o sobě i o ostatních (hearsay/prompt.ts, Kabina má uši). */
+  hearsay?: import("../hearsay/prompt").HearsayMemoryLine[];
   /** V tomhle rozhovoru za posledních 24 h už napsal „ozvu se pak“: podruhé to neodkládá. */
   recentlyPostponed?: boolean;
   /** Rozhovor je o vážné věci (stížnost, truc, odmítnutý přestup): odpovídá hned. */

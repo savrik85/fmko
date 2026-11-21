@@ -13,7 +13,7 @@ import { ACTIVE_MANAGER_DAYS, type PhoneEnv } from "../messaging/casual-messages
 import { postPlayerMessageStmts } from "../messaging/follow-ups";
 import { playerInClub } from "../messaging/player-reach";
 import { DAY_MS, type HearsayKind, type HearsayOrigin, type KnowledgeVia } from "./types";
-import { sourceSentence } from "./words";
+import { heardFact } from "./words";
 
 const M = "hearsay-messages";
 
@@ -32,15 +32,6 @@ interface PendingRow {
 
 function pragueHour(now: Date): number {
   return Number(new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Prague", hour: "2-digit", hour12: false }).format(now)) % 24;
-}
-
-/** Co se hráč doslechl, jednou větou pro model (jména v 1. pádě). */
-export function heardFact(o: { origin: HearsayOrigin; quote: string; recipientName: string | null; via: KnowledgeVia; fromName: string | null }): string {
-  const what = o.origin === "captain_change" ? `Trenér změnil kapitána: ${o.quote}.`
-    : o.origin === "lineup_armband" ? `Na zápas dostal kapitánskou pásku místo tebe někdo jiný: ${o.quote}.`
-      : o.recipientName ? `Spoluhráč ${o.recipientName} dostal od trenéra SMS, kde o tobě stojí: „${o.quote}“.`
-        : `Trenér o tobě napsal: „${o.quote}“.`;
-  return `${what} ${sourceSentence(o.via, o.fromName)}`;
 }
 
 export async function deliverHearsayMessages(
