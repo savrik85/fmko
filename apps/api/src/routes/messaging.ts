@@ -181,8 +181,6 @@ function odpovidatLze(
   if (opts.participantId?.startsWith("so-")) return { canReply: true, channel: "sms" };
   // Redaktor ankety Fotbalista okresu: hlas se píše zdarma, odpověď přijde s prodlevou.
   if (opts.participantId?.startsWith("po-")) return { canReply: true, channel: "imessage" };
-  // Legenda (bývalý hráč, season/legends-db.ts): odpovídá model jako majitel firmy, placená SMS.
-  if (opts.participantId?.startsWith("ex-")) return { canReply: true, channel: "sms" };
   // Hala Vánoční sálovky: přihláška a odhlášení přes SMS, odpovídá automat zdarma.
   if (opts.participantId?.startsWith("hc-")) return { canReply: true, channel: "imessage" };
   // Starosta (zasedání zastupitelstva, villages/council-db.ts): proslov se píše zdarma, odpověď s prodlevou.
@@ -924,23 +922,6 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
     } else {
       // Majitel ještě píše odpověď na předchozí SMS, na tuhle nikdo neodpoví.
       await refundCoachSms(c.env.DB, teamId, convId, "majitel firmy zrovna píše");
-    }
-  } else if (conv?.type === "system" && conv.participant_id?.startsWith("ex-")) {
-    // Legenda odpovídá jako majitel firmy: chvíli „píše…“, pak odpověď od modelu (season/legends-db.ts).
-    const text = body.body.trim();
-    const departedPlayerId = conv.participant_id.slice(3);
-    const { claimOwnerTyping, replyAfterTyping } = await import("../sponsors/owner-typing");
-    const claimed = await claimOwnerTyping(c.env.DB, convId)
-      .catch((e) => { logger.warn({ module: "messaging" }, "legenda píše", e); return false; });
-    if (claimed) {
-      c.executionCtx.waitUntil(replyAfterTyping(c.env.DB, convId, text, async (_active, pace) => {
-        const { replyToLegendMessage } = await import("../season/legends-db");
-        const replied = await replyToLegendMessage(c.env.DB, c.env, { teamId, convId, departedPlayerId, text }, pace);
-        if (!replied) await refundCoachSms(c.env.DB, teamId, convId, "legenda neodpoví");
-      }).catch((e) => logger.warn({ module: "messaging" }, "odpověď legendy", e)));
-    } else {
-      // Legenda ještě píše odpověď na předchozí zprávu, na tuhle nikdo neodpoví.
-      await refundCoachSms(c.env.DB, teamId, convId, "legenda zrovna píše");
     }
   } else if (conv?.type === "system" && conv.participant_id?.startsWith("de-")) {
     // Pozvánka na okresní akci (pouť, bál…): přijdu s hráči / sám / nepřijdu.

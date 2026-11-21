@@ -27,8 +27,6 @@ const KVOTY: Record<string, number> = {
   matchday_preview: 1,
   season_opener: 1,
   season_wrap: 1,
-  // Rozloučení s legendou: po konci sezóny jich vyjde víc naráz, rubrika ukáže tři.
-  legend_farewell: 3,
   // Zasedání je jednou týdně a zápis je dlouhý — dva vedle sebe by noviny zavalily.
   governance_minutes: 1,
   district_event: 1,
