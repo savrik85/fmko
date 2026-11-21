@@ -26,6 +26,8 @@ export type CoachRelationSource =
   | "promise"
   // Trenér hráči přes sponzora sehnal práci (sponsors/player-jobs-db.ts).
   | "job"
+  // Trenér ho jmenoval v proslovu po zápase, pochvala nebo výtka (messaging/match-speech.ts).
+  | "speech"
   | "left_out"
   | "arrival"
   | "admin";

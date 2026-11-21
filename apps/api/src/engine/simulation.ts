@@ -17,7 +17,7 @@ import type {
   Weather,
 } from "./types";
 import { calcTacticEffectiveness, tacticDrainMod, formationChemistryFactor, TACTIC_MODS, effMod } from "./tactics";
-import { MATCH_DAY_SWING, teamFormFactor } from "./form";
+import { MATCH_DAY_SWING, speechAdjustedRoll, teamFormFactor } from "./form";
 import { freshness, finishingValue, gkValue, GK_SHOT_WEIGHT, possessionShare, slotOf, teamAttack, teamDefense, teamPossession, type GkSituation } from "./roles";
 import { squadChemistryFactor } from "./squad-chemistry";
 import { hardnessMods, hardEff, intimidationPenalty, type Hardness } from "./hardness";
@@ -765,8 +765,9 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
 
   // Forma dne: náhodný výkyv ±15 % krát forma sestavy z posledních zápasů (±10 %).
   // Dřív jen kostka 0,75–1,25 a nic jiného (engine/form.ts).
-  const homeForm = (1 - MATCH_DAY_SWING + rng.random() * 2 * MATCH_DAY_SWING) * teamFormFactor(home.lineup);
-  const awayForm = (1 - MATCH_DAY_SWING + rng.random() * 2 * MATCH_DAY_SWING) * teamFormFactor(away.lineup);
+  // Proslov trenéra posune náhodu formy dne (speechAdjustedRoll), počet hodů kostkou se nemění.
+  const homeForm = (1 - MATCH_DAY_SWING + speechAdjustedRoll(rng.random(), config.homeSpeechShift) * 2 * MATCH_DAY_SWING) * teamFormFactor(home.lineup);
+  const awayForm = (1 - MATCH_DAY_SWING + speechAdjustedRoll(rng.random(), config.awaySpeechShift) * 2 * MATCH_DAY_SWING) * teamFormFactor(away.lineup);
 
   // Accumulate per-minute possession to compute final 0-100 figure
   let homePossSum = 0;

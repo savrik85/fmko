@@ -11,6 +11,7 @@ import { incidentsHourlyHook } from "./incidents";
 import { playerOffersHourlyHook } from "./player-offers";
 import type { AiCoachProfile } from "./profile";
 import { seasonDuelsHourlyHook } from "./season-duels";
+import { postMatchSpeechHourlyHook } from "./speech";
 import { transferMarketHourlyHook } from "./transfer-market";
 import { transferRepliesHourlyHook } from "./transfer-replies";
 import { unrestHourlyHook } from "./unhappy-players";
@@ -34,4 +35,6 @@ export const HOURLY_HOOKS: HourlyHookEntry[] = [
   { name: "weddings", run: weddingsHourlyHook },
   { name: "season_duels", run: seasonDuelsHourlyHook },
   { name: "player_offers", run: playerOffersHourlyHook },
+  // Proslov kabině do 12 hodin po zápase (messaging/match-speech.ts), jako u lidského trenéra.
+  { name: "post_match_speech", run: postMatchSpeechHourlyHook },
 ];

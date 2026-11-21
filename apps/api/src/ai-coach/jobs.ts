@@ -217,6 +217,11 @@ export async function runAiCoachTask(
       try {
         const r = await prepareAiLineup(env, teamId, f, { dryRun: opts.dryRun, model: opts.model });
         done.push({ fixture: f.calendarId, used: r.used, lineupId: r.lineupId });
+        // Proslov před zápasem (posune formu dne jako u lidského trenéra). Nanečisto ne.
+        if (!opts.dryRun) {
+          const { prepareAiPreSpeech } = await import("./speech");
+          await prepareAiPreSpeech(env, teamId, f);
+        }
       } catch (e) {
         if (useClaims) await releaseCoachTask(db, teamId, claimKey, gameDay);
         throw e;

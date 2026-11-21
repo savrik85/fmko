@@ -113,7 +113,7 @@ export async function judgeSpeech(env: ChatEnv, message: string, nextMatch: stri
     "Jak to kabinu nabudí? delta: −2 (urazil je, zesměšnil, vyhrožoval), −1 (otrávil, odbyl), 0 (nic moc, prázdné fráze),",
     "+1 (slušná motivace), +2 (dobrý proslov, konkrétní, osobní), +3 (výjimečný, kabina by za něj dýchala).",
     "Buď přísný, většina zpráv je 0 nebo +1. mood: jedna krátká věta česky, jak to kluci vzali, bez čísel.",
-    "Vrať POUZE JSON: {\"delta\": číslo, \"mood\": \"...\"}",
+    "Vrať POUZE JSON: {\"delta\": číslo, \"mood\": \"...\"}, delta celé číslo bez znaménka plus (např. 2, ne +2).",
   ].join("\n"), 100);
   const delta = Math.round(Number(parsed?.delta));
   if (!parsed || !Number.isFinite(delta)) return null;
@@ -124,8 +124,9 @@ export async function judgeSpeech(env: ChatEnv, message: string, nextMatch: stri
 }
 
 /**
- * Proslov se počítá jednou za zápas: zapíše se do zprávy trenéra (`speechFor`), další
- * proslov ke stejnému zápasu už náladou nehne. Vrací verdikt, nebo null.
+ * Proslov se počítá jednou za zápas: zapíše se do `match_speeches` (messaging/match-speech.ts)
+ * a v zápase posune formu dne. Fráze, které kabina slyšela minule, nezaberou. Vrací verdikt,
+ * nebo null.
  */
 export async function applySpeech(
   db: D1Database,
@@ -136,10 +137,8 @@ export async function applySpeech(
   const { findUpcomingMatchContext } = await import("../events/match-absences");
   const ctx = await findUpcomingMatchContext(db, o.teamId);
   if (!ctx) return null;
-  const done = await db.prepare(
-    `SELECT 1 FROM messages m JOIN conversations c ON c.id = m.conversation_id
-      WHERE c.team_id = ? AND c.type = 'squad_group' AND json_extract(m.metadata, '$.speechFor') = ? LIMIT 1`,
-  ).bind(o.teamId, ctx.matchKey).first()
+  const done = await db.prepare("SELECT 1 FROM match_speeches WHERE team_id = ? AND kind = 'pre' AND match_key = ? LIMIT 1")
+    .bind(o.teamId, ctx.matchKey).first()
     .catch((e) => { logger.warn({ module: M }, "proslov k zápasu už byl", e); return null; });
   if (done) return null;
   const verdict = await judgeSpeech(env, o.message, o.nextMatch ?? "").catch((e) => {
@@ -151,6 +150,17 @@ export async function applySpeech(
     "SELECT id FROM messages WHERE conversation_id = ? AND sender_type = 'user' ORDER BY sent_at DESC LIMIT 1",
   ).bind(o.convId).first<{ id: string }>();
   if (!coachMsg) return null;
+  const { recentSpeechTexts, recordSpeech, tooSimilar } = await import("./match-speech");
+  if (verdict.delta > 0 && (await recentSpeechTexts(db, o.teamId)).some((p) => tooSimilar(p, o.message))) {
+    verdict.delta = 0;
+    verdict.mood = "Kluci to od trenéra slyšeli už minule, moc to s nimi nehnulo.";
+  }
+  // Zámek: druhý proslov k témuž zápasu (souběžný požadavek) nic nezapíše ani nepohne náladou.
+  const speechId = await recordSpeech(db, {
+    teamId: o.teamId, kind: "pre", matchKey: ctx.matchKey, author: "coach", score: verdict.delta, mood: verdict.mood,
+    moraleDelta: verdict.delta, messageId: coachMsg.id,
+  });
+  if (!speechId) return null;
   await db.batch([
     db.prepare("UPDATE messages SET metadata = json_set(COALESCE(metadata, '{}'), '$.speechFor', ?, '$.speechDelta', ?) WHERE id = ?")
       .bind(ctx.matchKey, verdict.delta, coachMsg.id),

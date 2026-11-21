@@ -50,6 +50,8 @@ interface MatchDetail {
   referee_incidents?: string | RefereeIncidentView[] | null;
   referee_grade?: number | null;
   fan_incidents?: string | FanIncidentSnapshot[] | null;
+  /** Proslovy trenérů, které se v zápase uplatnily (api messaging/match-speech.ts), slovy. */
+  speeches?: Array<{ teamId: string; kind: "pre" | "post"; summary: string }>;
 }
 
 /** Co se dělo na tribunách — zapisuje `fans/resolve-match-incidents.ts`. */
@@ -753,6 +755,22 @@ export default function MatchDetailPage() {
             </div>
           )}
         </div>
+      )}
+
+      {/* ═══ PROSLOVY TRENÉRŮ (před zápasem a po minulém, posunuly formu dne) ═══ */}
+      {match.speeches && match.speeches.length > 0 && (
+        <ListCard title="Proslovy trenérů">
+          {[{ id: match.home_team_id, label: match.home_name, color: hc }, { id: match.away_team_id, label: match.away_name, color: ac }].map(({ id, label, color }) => {
+            const list = match.speeches!.filter((sp) => sp.teamId === id);
+            if (list.length === 0) return null;
+            return (
+              <div key={id}>
+                <RowGroup label={<><span className="inline-block w-2 h-2 rounded-full mr-1.5" style={{ backgroundColor: color }} aria-hidden="true" />{label}</>} />
+                {list.map((sp) => <p key={sp.kind} className="px-4 py-2 text-sm">{sp.summary}</p>)}
+              </div>
+            );
+          })}
+        </ListCard>
       )}
 
       {/* ═══ OMLUVENÍ HRÁČI ═══ */}

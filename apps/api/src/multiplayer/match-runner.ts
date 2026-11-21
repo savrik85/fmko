@@ -782,6 +782,14 @@ export async function runScheduledMatches(
                 logger.warn({module: "match-runner"}, "AI hardness decision", e);
             }
 
+            // Proslovy trenérů (messaging/match-speech.ts): před tímto zápasem a po minulém posunou formu dne.
+            const { loadSpeechShift, markSpeechesApplied } = await import("../messaging/match-speech");
+            const kickoffIso = new Date().toISOString();
+            const [homeSpeech, awaySpeech] = await Promise.all([
+                loadSpeechShift(db, homeTeamId, calendarId, kickoffIso),
+                loadSpeechShift(db, awayTeamId, calendarId, kickoffIso),
+            ]);
+
             // Simulate
             const result = simulateMatch(rng, {
                 home: homeSetup,
@@ -796,7 +804,11 @@ export async function runScheduledMatches(
                 homeEquipment,
                 awayEquipment,
                 referee: referee.profile,
+                homeSpeechShift: homeSpeech.shift,
+                awaySpeechShift: awaySpeech.shift,
             });
+            await markSpeechesApplied(db, [...homeSpeech.ids, ...awaySpeech.ids], matchId)
+                .catch((e) => logger.warn({module: "match-runner"}, `proslovy v zápase ${matchId}`, e));
 
             // Označit pozvánky jako attended
             if (officialCount > 0) {

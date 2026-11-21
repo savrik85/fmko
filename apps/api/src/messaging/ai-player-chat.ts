@@ -522,12 +522,14 @@ export async function askModelJson<T>(env: ChatEnv, prompt: string, maxTokens = 
 }
 
 /** Robustní parse JSON i když Gemini obalí do markdown bloku ```json...``` nebo přidá text okolo. */
-function tryParseJson<T>(raw: string): T | null {
+export function tryParseJson<T>(raw: string): T | null {
   const trimmed = raw.trim();
   // Zkouší se postupně: celý text, bez markdown bloku, první {...} v textu.
   const fenced = trimmed.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
   const match = trimmed.match(/\{[\s\S]*\}/);
-  const candidates = [trimmed, fenced, match?.[0]].filter((x): x is string => !!x);
+  // Model u hodnocení píše číslo se znaménkem („"delta": +2“), JSON plus nezná: opraví se.
+  const unsigned = (s: string) => s.replace(/(:\s*)\+(\d)/g, "$1$2");
+  const candidates = [trimmed, fenced, match?.[0]].filter((x): x is string => !!x).flatMap((c) => [c, unsigned(c)]);
   let lastError: unknown = null;
   for (const candidate of candidates) {
     try { return JSON.parse(candidate) as T; } catch (e) { lastError = e; }
