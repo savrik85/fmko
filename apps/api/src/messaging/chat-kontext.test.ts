@@ -341,8 +341,8 @@ describe("noční buzení: stížnost jen občas a jen na toho, kdo doma opravdu
     expect(wokenAtHome(50)).toBe("ženu");
     // Při rozvodu spí v kabině nebo u kamaráda, nikoho doma nemá.
     expect(wokenAtHome(31, "rozvod")).toBeNull();
-    // Čerstvý táta: v noci vzbudí i malého.
-    expect(wokenAtHome(24, "narozeni_ditete")).toBe("malého");
+    // Čerstvý táta: v noci vzbudí i miminko (kluk nebo holka, proto ne „malého“).
+    expect(wokenAtHome(24, "narozeni_ditete")).toBe("miminko");
   });
 
   it("u vážné věci si na buzení nestěžuje a nejdřív věcně odpoví", () => {

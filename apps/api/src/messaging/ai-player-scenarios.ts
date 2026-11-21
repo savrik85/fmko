@@ -148,6 +148,11 @@ export interface PlayerSnapshot {
    * nejstarší první). Jde do promptu jako zakázané věty a hlídá se proti nim odpověď.
    */
   ownRecentLines?: string[];
+  /**
+   * Co se hráči nedávno stalo a skončilo (porod, rodič z nemocnice), s fakty z hry
+   * (incidents/life-news.ts `loadRecentLifeEvent`). `kind` je druh situace.
+   */
+  recentLifeEvent?: { kind: string; fact: string };
 }
 
 export interface AiScenario {

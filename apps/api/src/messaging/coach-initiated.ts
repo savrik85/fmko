@@ -16,6 +16,7 @@ import { coachChatAlreadyCounted, coachRelationStmts } from "../lib/coach-relati
 import { getTeamGameDate } from "../community/manager-relations";
 import { createRng, cryptoSeed } from "../generators/rng";
 import { nazevSituace } from "../incidents/situace";
+import { loadRecentLifeEvent } from "../incidents/life-news";
 import { temaZeStavu } from "../incidents/tema";
 import { nactiZnalostiHrace } from "../incidents/znalosti-db";
 import {
@@ -97,6 +98,7 @@ export async function startCoachThread(
     const player = loadPlayerSnapshot(row, matchCtx);
     const situaceKind = (await nactiSituaceTymu(db, opts.teamId)).get(opts.playerId);
     player.zivotniSituace = situaceKind ? { kind: situaceKind, label: nazevSituace(situaceKind) } : undefined;
+    player.recentLifeEvent = await loadRecentLifeEvent(db, opts.teamId, opts.playerId);
     const team = await loadTeamContext(db, opts.teamId, playerTeamId);
 
     // Téma incidentu z tlačítka „Zeptat se" nebo z dřívější otázky (spec 7a).

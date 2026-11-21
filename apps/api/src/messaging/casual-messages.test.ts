@@ -145,13 +145,15 @@ describe("témata zpráv jen tak", () => {
     expect(topicFits(topic("casual_mushrooms"), makePlayer(), ctx({ month: 12 }))).toBe(0);
   });
 
-  it("svatbu a miminko jen ten, kdo je má v životní situaci; pozvánku na svatbu s datem posílá svatba sama", () => {
+  it("svatbu a miminko jen ten, kdo je má v životní situaci; pozvánky s datem a jménem posílá svatba a zpráva po porodu samy", () => {
     expect(topicFits(topic("casual_wedding"), makePlayer(), ctx())).toBe(0);
     // Svatba má datum a pozvánku pošle ženich při ohlášení (weddings/), náhodná zpráva by se s ní hádala.
     expect(topicFits(topic("casual_wedding"), makePlayer({ zivotniSituace: { kind: "svatba_spoluhrace", label: "Svatba" } }), ctx())).toBe(0);
     expect(topicAllowed(topic("casual_wedding"), makePlayer({ zivotniSituace: { kind: "svatba_spoluhrace", label: "Svatba" } }))).toBe(true);
     expect(topicFits(topic("casual_baby"), makePlayer(), ctx())).toBe(0);
-    expect(topicFits(topic("casual_baby"), makePlayer({ zivotniSituace: { kind: "narozeni_ditete", label: "Narození dítěte" } }), ctx())).toBeGreaterThan(0);
+    // Po porodu napíše hráč sám se jménem, váhou a pozváním (incidents/life-news.ts); náhodná zpráva by zvala podruhé.
+    expect(topicFits(topic("casual_baby"), makePlayer({ zivotniSituace: { kind: "narozeni_ditete", label: "Narození dítěte" } }), ctx())).toBe(0);
+    expect(topicAllowed(topic("casual_baby"), makePlayer({ zivotniSituace: { kind: "narozeni_ditete", label: "Narození dítěte" } }))).toBe(true);
   });
 
   it("pozvánka z hospody jen z hospody večer", () => {
