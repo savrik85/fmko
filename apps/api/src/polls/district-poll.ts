@@ -34,7 +34,8 @@ const MAX_MODEL_VOTES = 60;
 
 type FullEnv = Pick<Bindings, "DB" | "CACHE_KV" | "GEMINI_API_KEY" | "AI" | "AI_GATEWAY_URL"> & OptionalPushKeys;
 /** Konec sezóny má jen DB a klíč, AI kontext tam není: hlasy pak rozhodne pravidlo. */
-type Env = Pick<Bindings, "DB"> & Partial<FullEnv>;
+export type PollEnv = Pick<Bindings, "DB"> & Partial<FullEnv>;
+type Env = PollEnv;
 
 export interface PollRow {
   id: string;
@@ -58,7 +59,7 @@ interface CandidateRow {
   rank: number;
 }
 
-function pragueNow(now: Date): { date: string; hour: number; minutes: number } {
+export function pragueNow(now: Date): { date: string; hour: number; minutes: number } {
   const parts = new Intl.DateTimeFormat("en-GB", {
     timeZone: "Europe/Prague", hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit",
   }).formatToParts(now);
@@ -66,7 +67,7 @@ function pragueNow(now: Date): { date: string; hour: number; minutes: number } {
   return { date: `${get("year")}-${get("month")}-${get("day")}`, hour: Number(get("hour")), minutes: Number(get("minute")) };
 }
 
-function czDate(date: string): string {
+export function czDate(date: string): string {
   const [, m, d] = date.split("-").map(Number);
   return `${d}. ${m}.`;
 }
@@ -75,12 +76,12 @@ function slug(text: string): string {
   return text.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
 
-async function aiOrNull(env: Env): Promise<AiContext | null> {
+export async function aiOrNull(env: Env): Promise<AiContext | null> {
   if (!env.CACHE_KV) return null;
   return aiContextFromEnv(env as FullEnv).catch((e) => { logger.warn({ module: M }, "AI kontext pro anketu", e); return null; });
 }
 
-async function askJson(ai: AiContext | null, prompt: string, maxTokens: number): Promise<Record<string, unknown> | null> {
+export async function askJson(ai: AiContext | null, prompt: string, maxTokens: number): Promise<Record<string, unknown> | null> {
   if (!ai) return null;
   const raw = await generateText(ai, prompt, { maxTokens, temperature: 0.6, module: M })
     .catch((e) => { logger.warn({ module: M }, "odpověď modelu pro anketu", e); return null; });
@@ -88,7 +89,7 @@ async function askJson(ai: AiContext | null, prompt: string, maxTokens: number):
 }
 
 /** Hrající seniorské soutěže okresu (čekající ne). */
-async function districtLeagues(db: D1Database, district: string): Promise<string[]> {
+export async function districtLeagues(db: D1Database, district: string): Promise<string[]> {
   const rows = await db.prepare(
     "SELECT id FROM leagues WHERE district = ? AND league_type = 'senior' AND COALESCE(waiting, 0) = 0",
   ).bind(district).all<{ id: string }>();
@@ -270,10 +271,16 @@ export const POLL_REPLIES = {
 export async function handlePollReply(env: Env, convId: string, teamId: string, text: string, now: Date = new Date()): Promise<void> {
   const db = env.DB;
   const ballot = await db.prepare(
-    `SELECT b.poll_id, b.player_id, p.status, p.editor_name FROM district_poll_ballots b JOIN district_polls p ON p.id = b.poll_id
+    `SELECT b.poll_id, b.player_id, p.status, p.editor_name, p.kind FROM district_poll_ballots b JOIN district_polls p ON p.id = b.poll_id
       WHERE b.conv_id = ? AND b.voter_team_id = ?`,
-  ).bind(convId, teamId).first<{ poll_id: string; player_id: string | null; status: string; editor_name: string }>();
+  ).bind(convId, teamId).first<{ poll_id: string; player_id: string | null; status: string; editor_name: string; kind: string }>();
   if (!ballot) return;
+  if (ballot.kind === "selection") {
+    // Nominace do výběru okresu: až tři jména (polls/district-selection.ts).
+    const { handleSelectionReply } = await import("./district-selection");
+    await handleSelectionReply(env, ballot.poll_id, ballot.status, teamId, text, now);
+    return;
+  }
   const due = replyDueAt(now, Math.floor(now.getTime() / 1000));
   const queueReply = (body: string) => db.prepare(
     "UPDATE district_poll_ballots SET pending_reply = ?, reply_due_at = ? WHERE poll_id = ? AND voter_kind = 'team' AND voter_id = ?",
@@ -488,8 +495,8 @@ async function publishPollArticle(db: D1Database, poll: PollRow, winnerTeamId: s
 
 /** Konec sezóny ve fázi ocenění: uzavřít ankety sezóny, které ještě běží. */
 export async function closeOpenPollsForSeason(env: Env, season: number): Promise<number> {
-  const open = await env.DB.prepare("SELECT id FROM district_polls WHERE season_number = ? AND status = 'voting'")
-    .bind(season).all<{ id: string }>();
+  const open = await env.DB.prepare("SELECT id FROM district_polls WHERE season_number = ? AND status = 'voting' AND kind = ?")
+    .bind(season, POLL_KIND).all<{ id: string }>();
   let closed = 0;
   for (const p of open.results) if (await closePoll(env, p.id)) closed++;
   return closed;
@@ -519,8 +526,8 @@ export async function tickDistrictPolls(env: Env, now: Date = new Date()): Promi
       if (await openDistrictPoll(env, district, season, closeOn)) opened++;
     }
   }
-  const due = await db.prepare("SELECT id, closes_on FROM district_polls WHERE status = 'voting' AND season_number = ?")
-    .bind(season).all<{ id: string; closes_on: string }>();
+  const due = await db.prepare("SELECT id, closes_on FROM district_polls WHERE status = 'voting' AND season_number = ? AND kind = ?")
+    .bind(season, POLL_KIND).all<{ id: string; closes_on: string }>();
   for (const p of due.results) {
     if (date > p.closes_on || (date === p.closes_on && hour >= CLOSE_HOUR)) {
       if (await closePoll(env, p.id)) closed++;

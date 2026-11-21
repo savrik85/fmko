@@ -20,6 +20,7 @@ const hallCupRouter = new Hono<{ Bindings: Bindings }>();
 hallCupRouter.use("/teams/:teamId/hall-cup", requireTeamOwnership);
 hallCupRouter.use("/teams/:teamId/hall-cup/*", requireTeamOwnership);
 hallCupRouter.use("/admin/hall-cup/*", requireAdmin);
+hallCupRouter.use("/admin/district-selection", requireAdmin);
 
 function parseEvents(raw: string | null): HallEvent[] {
   if (!raw) return [];
@@ -144,6 +145,28 @@ hallCupRouter.post("/admin/hall-cup/tick", async (c) => {
   if (Number.isNaN(now.getTime())) return c.json({ error: "Neplatné datum now" }, 400);
   const result = await tickHallCup(c.env, now);
   return c.json(result);
+});
+
+// POST /api/admin/district-selection — vypsat zápas výběrů dvou okresů (nominace jde hned trenérům)
+// Tělo: { homeDistrict, awayDistrict, venue, matchDate: "YYYY-MM-DD" }
+hallCupRouter.post("/admin/district-selection", async (c) => {
+  const body = await c.req.json<Record<string, unknown>>().catch((e) => {
+    logger.warn({ module: M }, "nečitelné tělo výběru okresu", e);
+    return {} as Record<string, unknown>;
+  });
+  const str = (k: string) => (typeof body[k] === "string" ? (body[k] as string).trim() : "");
+  const input = { homeDistrict: str("homeDistrict"), awayDistrict: str("awayDistrict"), venue: str("venue"), matchDate: str("matchDate") };
+  if (!input.homeDistrict || !input.awayDistrict || !input.venue || !/^\d{4}-\d{2}-\d{2}$/.test(input.matchDate)) {
+    return c.json({ error: "Chybí okresy, místo nebo datum (YYYY-MM-DD)." }, 400);
+  }
+  try {
+    const { announceDistrictSelection } = await import("../polls/district-selection");
+    const id = await announceDistrictSelection(c.env, input);
+    return c.json({ ok: true, id });
+  } catch (e) {
+    logger.warn({ module: M }, "vypsání výběru okresu", e);
+    return c.json({ error: e instanceof Error ? e.message : "Výběr se nepodařilo vypsat." }, 400);
+  }
 });
 
 export default hallCupRouter;
