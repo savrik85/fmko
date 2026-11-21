@@ -3,7 +3,7 @@ import { gameExpiry } from "../lib/game-time";
 import { FalesnaD1, jakoD1 } from "./testovaci-d1";
 import { PROBLEMOVY, stavKlubu } from "./testovaci-stav";
 import type { NavrhIncidentu } from "./typy";
-import type { RadekZnalostiDb } from "./znalosti";
+import { BEZ_ZNALOSTI, blokZnalosti, type RadekZnalostiDb } from "./znalosti";
 import { nactiZnalostiHrace, zapisZnalosti } from "./znalosti-db";
 
 const DNES = "2026-09-16T16:00:00.000Z";
@@ -60,6 +60,15 @@ describe("načtení znalostí hráče", () => {
     expect(dnes?.map((r) => r.role)).toEqual(["kadr", "svedek"]);
     const vcera = await nactiZnalostiHrace(jakoD1(sRadky(radky)), { teamId: "tym-a", playerId: "s", tema: { incidentId: "inc-1", den: "2026-09-15" } });
     expect(vcera?.map((r) => r.role)).toEqual(["kadr"]);
+  });
+
+  it("odhalenému pachateli po vypršení veřejné znalosti zůstane vlastní průšvih i bez tématu", async () => {
+    // Dotaz už řádek kádru nevrátí (until vypršel), pachatelův platí 60 dní.
+    const rows = [radekDb({ role: "pachatel", fact: "Tohle jsi udělal ty: Vloupání do skladu.", status: "uzavreny", resolution: "pokuta", culprit_revealed: 1 })];
+    const loaded = await nactiZnalostiHrace(jakoD1(sRadky(rows)), { teamId: "tym-a", playerId: "p" });
+    expect(loaded?.map((r) => r.role)).toEqual(["pachatel"]);
+    expect(blokZnalosti(loaded)).not.toBe(BEZ_ZNALOSTI);
+    expect(blokZnalosti(loaded)).toContain("Trenér ti dal pokutu.");
   });
 
   it("bez herního dne nic nenačte a netvrdí, že hráč nic neví", async () => {
