@@ -1552,6 +1552,15 @@ export async function runScheduledMatches(
         logger.error({module: "betting"}, "vypořádání sázek kola", e);
     }
 
+    // Tipovačka v hospodě: kolo okresu se vyhodnotí, až jsou dohrané všechny jeho zápasy.
+    try {
+        const {settlePubTips} = await import("../pub/tip-game");
+        const n = await settlePubTips(db);
+        if (n > 0) logger.info({module: "pub-tips"}, `vyhodnoceno ${n} kol tipovačky`);
+    } catch (e) {
+        logger.error({module: "pub-tips"}, "vyhodnocení tipovačky", e);
+    }
+
     return results;
 }
 

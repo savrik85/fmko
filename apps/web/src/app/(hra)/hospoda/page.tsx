@@ -5,6 +5,7 @@ import Link from "next/link";
 import { apiFetch, type Team, type Player } from "@/lib/api";
 import { useTeam } from "@/context/team-context";
 import { StammtischCard } from "@/components/relations/StammtischCard";
+import { TipGameCard } from "@/components/pub/TipGameCard";
 import { ListCard, ListRow, type BadgePattern, PageLoading } from "@/components/ui";
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { ClubScarf, type ScarfPattern } from "@/components/team/club-scarf";
@@ -262,6 +263,9 @@ export default function HospodaPage() {
 
       {/* Trenérský stůl — posezení s trenéry a runda pro hospodu */}
       {teamId && <StammtischCard teamId={teamId} />}
+
+      {/* Tipovačka u výčepu — lístek na nejbližší kolo okresu */}
+      {teamId && <TipGameCard teamId={teamId} />}
 
       {/* NPC v hospodě — náhodné setkání se zastupitelem obce */}
       {npcEncounters.length > 0 && (

@@ -1513,6 +1513,15 @@ export async function executeDailyTick(
       }
     } catch (e) { logger.error({ module: "betting" }, "dovypořádání tiketů", e); }
     });
+
+    // Záchranná síť tipovačky v hospodě: kolo, které se po pádu dohrálo jinou cestou.
+    await steps.run("pub-tips-settle", async () => {
+    try {
+      const { settlePubTips } = await import("../pub/tip-game");
+      const n = await settlePubTips(env.DB);
+      if (n > 0) logger.warn({ module: "pub-tips" }, `dovyhodnoceno ${n} kol tipovačky, uniklo hlavní cestě`);
+    } catch (e) { logger.error({ module: "pub-tips" }, "dovyhodnocení tipovačky", e); }
+    });
   }
   // (Chybějící game_clock už je zalogováno jako error na začátku ticku.)
 
