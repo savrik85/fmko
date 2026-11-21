@@ -137,9 +137,6 @@ export type TransactionType =
   // Příspěvek táty podnikatele z U21 za dohodu, že syn nastoupí od začátku (youth/parents-db.ts).
   // Příjem, ne nákup, proto NENÍ v PURCHASE_TYPES.
   | "parent_contribution"
-  // Obálka pro sudího (referees/envelope-db.ts): hotovost bez dokladu, kterou revize účetnictví
-  // může najít. Dobrovolný výdaj, PATŘÍ do PURCHASE_TYPES: klub v mínusu obálku nedá.
-  | "referee_envelope"
   | "other";
 
 /** Základní cena vstupenek podle kategorie obce — reference pro satisfaction delta calc. */
@@ -251,7 +248,7 @@ const PURCHASE_TYPES = new Set<TransactionType>([
   "pitch_repair", "pitch_upgrade", "promotional_campaign", "bus_subsidy",
   "concession_wholesale", "transfer_admin_fee", "loan_fee",
   "manager_social", "player_bonus", "staff_signing", "course_fee", "staff_task", "coach_course", "coach_exam_retake", "fan_relations",
-  "bet_stake", "bet_levy", "friendly_stake", "hall_cup_fee", "wedding_gift", "referee_envelope",
+  "bet_stake", "bet_levy", "friendly_stake", "hall_cup_fee", "wedding_gift",
 ]);
 
 /**

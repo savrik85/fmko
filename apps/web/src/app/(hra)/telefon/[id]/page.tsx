@@ -161,7 +161,7 @@ function isGroupChatId(id: string): boolean {
   return id === "global" || id.startsWith("league:");
 }
 
-/** Hotová odpověď na SMS od majitele firmy, na pozvánku na okresní akci, na sálovku, na drb od hospodského nebo sudímu s obálkou (`messages.metadata.options`). */
+/** Hotová odpověď na SMS od majitele firmy, na pozvánku na okresní akci, na sálovku nebo na drb od hospodského (`messages.metadata.options`). */
 interface OwnerOption {
   id: string;
   label: string;
@@ -170,7 +170,7 @@ interface OwnerOption {
 
 function ownerOptionsOf(msg: Message | undefined): OwnerOption[] {
   const meta = msg?.metadata;
-  if (!meta || (meta.type !== "sponsor_owner" && meta.type !== "district_event" && meta.type !== "hall_cup" && meta.type !== "pub_rumour" && meta.type !== "referee_envelope") || !Array.isArray(meta.options)) return [];
+  if (!meta || (meta.type !== "sponsor_owner" && meta.type !== "district_event" && meta.type !== "hall_cup" && meta.type !== "pub_rumour") || !Array.isArray(meta.options)) return [];
   return (meta.options as unknown[]).filter((o): o is OwnerOption => {
     const x = o as Partial<OwnerOption> | null;
     return !!x && typeof x.id === "string" && typeof x.label === "string" && typeof x.text === "string";
@@ -345,10 +345,7 @@ export default function ConversationPage() {
   // Tlačítka jen dokud majitel čeká odpověď.
   // Hledá se zpětně: za čekající SMS mohla přibýt výměna o příspěvek (bez tlačítek).
   // Hala sálovky vlákno aktivní nemá (blokovalo by rozhovory hráčů), tlačítka ukáže i tak.
-  // Sudí s obálkou: tlačítka jen pod jeho poslední zprávou, po rozhodnutí je už další zpráva nenese.
-  const nabidkaOdpovedi = !isGroup && participantId?.startsWith("rf-") && canReply
-    ? ownerOptionsOf(messages[messages.length - 1])
-    : !isGroup && (aiThreadActive || !!participantId?.startsWith("hc-")) && canReply && !cekaSeNaHrace
+  const nabidkaOdpovedi = !isGroup && (aiThreadActive || !!participantId?.startsWith("hc-")) && canReply && !cekaSeNaHrace
     ? (messages.slice().reverse().map(ownerOptionsOf).find((o) => o.length > 0) ?? [])
     : [];
   // Dohody s hráčem, který chtěl odejít: jen když jdou (na tahu je trenér, dnes ještě žádná nebyla).
@@ -512,10 +509,6 @@ export default function ConversationPage() {
     if (msg.metadata.cancelled === true) {
       return <p className="-mx-2.5 mt-1.5 border-t border-black/10 pt-1.5 pb-0.5 text-center text-sm text-[#667781]">{brigade ? "Nebyla to brigáda, hra ji nepočítá." : "Nebyl to slib, hra ho nepočítá."}</p>;
     }
-    // Brigáda proběhla (api settleBrigade zapíše `done`): zrušit už nejde.
-    if (brigade && msg.metadata.done === true) {
-      return <p className="-mx-2.5 mt-1.5 border-t border-black/10 pt-1.5 pb-0.5 text-center text-sm text-[#667781]">✓ Brigáda proběhla</p>;
-    }
     if (money && msg.metadata.done === true) {
       return (
         <p className="-mx-2.5 mt-1.5 border-t border-black/10 pt-1.5 pb-0.5 text-center text-sm text-[#667781]">
@@ -525,9 +518,7 @@ export default function ConversationPage() {
     }
     // „To nebyl slib“ jde hodinu po zprávě (api coach-commitments.ts CANCEL_WINDOW_MS).
     // Vyhraná sázka už slibem byla, tu zrušit nejde.
-    // Brigádu, jejíž čas už nastal, zrušit nejde (a hra by to stejně odmítla, až proběhne).
-    const brigadeStarted = brigade && typeof msg.metadata.at === "string" && Date.parse(msg.metadata.at) <= Date.now();
-    const canCancel = msg.metadata.kind !== "bet" && !brigadeStarted && Date.now() - new Date(msg.sentAt).getTime() < 60 * 60 * 1000;
+    const canCancel = msg.metadata.kind !== "bet" && Date.now() - new Date(msg.sentAt).getTime() < 60 * 60 * 1000;
     return (
       <>
         {money && (
@@ -1063,7 +1054,7 @@ export default function ConversationPage() {
             maxLength={MESSAGE_MAX}
             maxRows={6}
             placeholder={
-              cekaSeNaHrace ? (conv?.type === "player" ? "Hráč píše…" : "Píše…")
+              cekaSeNaHrace ? (ownerSponsorId ? "Píše…" : "Hráč píše…")
                 : nemaNaSms ? "Došel kredit"
                 : photoDraft ? "Popisek k fotce"
                   : ownerSponsorId ? "Třeba: 20 000 na přestup"

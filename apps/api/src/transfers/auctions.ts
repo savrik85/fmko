@@ -48,17 +48,6 @@ export interface AuctionRow {
   sold_price: number | null;
 }
 
-/**
- * Volní hráči, kteří jsou právě v dražbě (na běžném trhu se neukazují). Samostatný dotaz
- * s logovanou chybou: bez migrace 0328 nesmí spadnout celý seznam volných hráčů.
- */
-export async function auctionedFreeAgentIds(db: D1Database): Promise<Set<string>> {
-  const rows = await db.prepare("SELECT free_agent_id FROM player_auctions WHERE status IN ('open', 'closing')")
-    .all<{ free_agent_id: string }>()
-    .catch((e) => { logger.warn({ module: M }, "volní hráči v dražbě", e); return { results: [] as Array<{ free_agent_id: string }> }; });
-  return new Set(rows.results.map((r) => r.free_agent_id));
-}
-
 /** Start dražby: polovina tržní ceny zaokrouhlená na stovky, aspoň 1 000 Kč. */
 export function startPrice(rating: number, age: number, position: string | null): number {
   return Math.max(1000, Math.round((marketValue(rating, age, position) * START_SHARE) / 100) * 100);

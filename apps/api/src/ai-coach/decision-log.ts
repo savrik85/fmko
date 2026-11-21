@@ -22,8 +22,7 @@ export interface DecisionEntry {
    * `promise_listing` (inzerát hráče, kterému AI slíbila prodej),
    * `replacement_demand` (poptávka po náhradě za prodanou oporu),
    * `sponsor_invite` (koho pozvat do VIP lóže na nejbližší domácí zápas),
-   * `wedding` (svatba hráče: přijde, pošle dar, nebo klukům pít zakáže),
-   * `referee_envelope` (obálka od sudího před derby: zaplatí, ignoruje, nebo ho nahlásí).
+   * `wedding` (svatba hráče: přijde, pošle dar, nebo klukům pít zakáže).
    */
   kind: string;
   mode: DecisionMode;

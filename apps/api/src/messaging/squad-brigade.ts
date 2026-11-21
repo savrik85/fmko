@@ -79,11 +79,6 @@ const PART_OF_DAY: Array<[RegExp, number]> = [
   [/\bpo obede\b/, 13], [/\bpoledne\b/, 12], [/\bdopoledne\b/, 10], [/\brano\b/, 9],
 ];
 const AFTERNOON_RE = /\b(odpoledne|vecer|po praci|po treninku|po obede)\b/;
-/**
- * „Po práci pivo“, „pivo po tréninku“: odměna po brigádě, ne její čas. Před hledáním času
- * se vynechá, jinak by z „v 9 …, po práci pivo platím“ byla brigáda ve 21:00.
- */
-const BEER_AFTER_RE = /\bpo (praci|treninku|obede|brigade|akci)\s+(\w+\s+){0,2}?(piv\w*|basa|basu|bas|rund\w*|gulas\w*|klobas\w*|burt\w*|grilovack\w*|opekan\w*)\b|\b(piv\w*|basa|basu|rund\w*)\s+(\w+\s+)?po (praci|treninku|obede|brigade|akci)\b/g;
 
 /** „Aby bylo hřiště…“, „kdo by byl ochotný“, „bylo by fajn“: podmiňovací způsob, ne minulost. */
 const CONDITIONAL_STRIP_RE = /\b(aby|by|bys|bysme|bychom|byste|kdyby|kdybys|kdybysme|kdybychom)\b(\s+\w+)?\s+(byl|byla|bylo|byli)\b|\b(byl|byla|bylo|byli)\s+(by|bys|bysme|bychom|byste)\b/g;
@@ -195,13 +190,8 @@ function pragueDayKey(at: Date): string {
  */
 export function parseBrigadeTime(message: string, now: Date): Date {
   const kept = sentences(message).filter((s) => { const p = plain(s); return p.length > 0 && !isPast(p); });
-  const current = (kept.map(plain).join(" ") || plain(message)).replace(BEER_AFTER_RE, " ");
+  const current = kept.map(plain).join(" ") || plain(message);
   const today = pragueParts(now);
-  // Části vět (čárka, středník). Odpoledne podle slov platí jen ve stejné části jako hodina:
-  // „v 9 na hřišti, večer grilovačka“ je pořád ráno.
-  const parts = (kept.length ? kept : [message]).flatMap((s) => s.split(/[,;]/)).map((s) => s.trim()).filter(Boolean);
-  const hourPart = parts.find((s) => { const p = plain(s); return HOUR_DIGIT_RE.test(p) || HOUR_WORD_RE.test(p) || RAW_CLOCK_RE.test(s); });
-  const hourContext = hourPart ? plain(hourPart).replace(BEER_AFTER_RE, " ") : current;
 
   let hour: number | null = null;
   let minute = 0;
@@ -224,13 +214,12 @@ export function parseBrigadeTime(message: string, now: Date): Date {
     hour = Number(clock[1]);
     minute = Number(clock[2]);
   }
-  const fromNumber = hour !== null;
-  if (hour === null) hour = partOfDayHour(parts);
+  if (hour === null) hour = PART_OF_DAY.find(([re]) => re.test(current))?.[1] ?? null;
   const explicitTime = hour !== null;
   if (hour === null) hour = 10;
   // Na brigádu se nechodí ve dvě ráno: „ve dvě“, „v pět“ je odpoledne.
-  if (fromNumber && hour >= 1 && hour <= 6) hour += 12;
-  else if (fromNumber && hour <= 11 && AFTERNOON_RE.test(hourContext)) hour += 12;
+  if (hour >= 1 && hour <= 6) hour += 12;
+  else if (hour <= 11 && AFTERNOON_RE.test(current)) hour += 12;
 
   const at = (offset: number) => pragueTimeToUtc(today.y, today.m, today.d + offset, hour as number, minute);
   const dayMatch = DAY_RE.exec(current);
@@ -250,20 +239,6 @@ export function parseBrigadeTime(message: string, now: Date): Date {
   const result = at(offset);
   if (result.getTime() <= now.getTime()) return new Date(now.getTime() + 30 * 60_000);
   return result;
-}
-
-/**
- * Část dne bez hodiny („ráno brigáda, večer grilovačka“): přednost má část věty s brigádou,
- * pak ostatní v pořadí, v jakém je trenér napsal. Odměna po brigádě se nepočítá.
- */
-function partOfDayHour(parts: string[]): number | null {
-  const plainParts = parts.map((s) => plain(s).replace(BEER_AFTER_RE, " "));
-  const brigade = plainParts.filter((p) => STRONG_TERMS_RE.test(p) || WEAK_TERMS_RE.test(p));
-  for (const p of [...brigade, ...plainParts]) {
-    const hit = PART_OF_DAY.find(([re]) => re.test(p));
-    if (hit) return hit[1];
-  }
-  return null;
 }
 
 const WEEKDAY_ACC = ["v neděli", "v pondělí", "v úterý", "ve středu", "ve čtvrtek", "v pátek", "v sobotu"];
@@ -468,7 +443,7 @@ export async function handleSquadBrigade(
       return null;
     }
     await postSystemNote(db, o.convId, `📝 Kabina si zapsala brigádu: ${brigadeWhenText(call.at, now)}${call.beer ? ", pivo platí trenér" : ""}.`,
-      { type: "coach_commitment_note", commitmentId: id, kind: "brigade", at: call.at.toISOString() }, now);
+      { type: "coach_commitment_note", commitmentId: id, kind: "brigade" }, now);
     logger.info({ module: M, teamId: clubTeamId }, `brigáda ${call.at.toISOString()} (${call.via})`);
     return id;
   } catch (e) {
@@ -827,10 +802,5 @@ async function postCaptainReport(
     }), at),
     db.prepare("UPDATE conversations SET unread_count = unread_count + 1, last_message_text = ?, last_message_at = ? WHERE id = ?")
       .bind(`${name}: ${photo ? "📷 " : ""}${text}`.slice(0, 100), at, convId),
-    // Zápis brigády v kabině: proběhla, tlačítko „To nebyla brigáda“ už nemá smysl (web/telefon).
-    db.prepare(
-      `UPDATE messages SET metadata = json_set(metadata, '$.done', json('true'))
-        WHERE conversation_id = ? AND json_extract(metadata, '$.type') = 'coach_commitment_note' AND json_extract(metadata, '$.commitmentId') = ?`,
-    ).bind(convId, r.id),
   ]).catch((e) => logger.warn({ module: M, teamId: r.team_id }, `zpráva kapitána po brigádě ${r.id}`, e));
 }

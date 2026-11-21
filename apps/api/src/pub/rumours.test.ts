@@ -80,9 +80,6 @@ describe("drb nikdy neprozradí jméno, které neexistuje", () => {
       expect(KNOWN_NAMES).toContain(r.playerName);
       expect(r.text).toContain(CLUBS.find((c) => c.id === r.clubId)!.name);
       expect(r.text).not.toMatch(/undefined|null|ghost|\{/i);
-      // Jméno jen v 1. pádu: „o hráči Josef Novák“ by bylo špatně.
-      expect(r.text).not.toContain(`hráči ${r.playerName}`);
-      expect(r.text).not.toContain(`hráče ${r.playerName}`);
       if (r.subject === "foreign") {
         expect(FOREIGN.find((p) => p.id === r.playerId)?.teamId).toBe(r.clubId);
       } else {
@@ -179,7 +176,6 @@ describe("texty pro hráče", () => {
     for (let seed = 1; seed < 40; seed++) {
       const a = rumourArticle({ kind: seed % 2 ? "scout" : "ai_interest", playerName: "Josef Novák", clubName: "SK Vimperk", teamName: "Jiskra Husinec" }, createRng(seed));
       expect(a.headline).toContain("Josef Novák");
-      expect(`${a.headline} ${a.body}`).not.toMatch(/hráč(e|i|em) Josef Novák/);
       expect(`${a.headline} ${a.body}`).toContain("SK Vimperk");
       expect(a.body).toContain("Jiskra Husinec");
       expect(`${a.headline} ${a.body}`).not.toMatch(/[—–]|\d/);

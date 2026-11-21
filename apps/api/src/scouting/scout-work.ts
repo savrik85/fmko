@@ -1109,7 +1109,8 @@ async function freeAgentCandidates(
       WHERE fa.district != ? AND fa.expires_at > ? AND COALESCE(fa.is_celebrity, 0) = 0
         AND fa.age BETWEEN ? AND ? ${faPositions ? `AND fa.position IN (${faPositions.map(() => "?").join(",")})` : ""}
         AND v.lat BETWEEN ? AND ? AND v.lng BETWEEN ? AND ?
-        AND NOT EXISTS (SELECT 1 FROM scout_reports sr WHERE sr.free_agent_id = fa.id AND sr.team_id = ?)`,
+        AND NOT EXISTS (SELECT 1 FROM scout_reports sr WHERE sr.free_agent_id = fa.id AND sr.team_id = ?)
+        AND NOT EXISTS (SELECT 1 FROM player_auctions pa WHERE pa.free_agent_id = fa.id AND pa.status IN ('open', 'closing'))`,
   ).bind(
     home.district, team?.game_date ?? new Date().toISOString(), a.age_min, a.age_max,
     ...(faPositions ?? []), box.minLat, box.maxLat, box.minLng, box.maxLng, a.team_id,
@@ -1118,11 +1119,7 @@ async function freeAgentCandidates(
 
   const youth = isYouthScoutTask(a.age_max);
   const out: Candidate[] = [];
-  // Hráč v dražbě se skautovi nenabízí, dokud dražba běží (transfers/auctions.ts).
-  const { auctionedFreeAgentIds } = await import("../transfers/auctions");
-  const auctioned = await auctionedFreeAgentIds(db);
   for (const fa of rows.results) {
-    if (auctioned.has(fa.id)) continue;
     const distanceKm = Math.round(haversineKm(home.lat, home.lng, fa.lat, fa.lng));
     if (distanceKm > a.radius_km) continue;
     try {

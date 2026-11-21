@@ -723,13 +723,10 @@ export async function runScheduledMatches(
             // případě píská neutrální sudí, zápas se nikdy nezastaví.
             const { loadRefereeForMatch, withRefereeMemory } = await import("../referees/load");
             const loaded = await loadRefereeForMatch(db, matchId, calendarId);
-            // Co si sudí o obou klubech pamatuje z pozápasových rozhovorů a jestli za tenhle
-            // zápas nedostal obálku (referees/envelope-db.ts, nakloní jen spornou situaci).
-            const { withRefereeEnvelope } = await import("../referees/envelope-db");
+            // Co si sudí o obou klubech pamatuje z pozápasových rozhovorů.
             const referee = {
                 ...loaded,
-                profile: await withRefereeEnvelope(db,
-                    await withRefereeMemory(db, loaded.profile, homeTeamId, awayTeamId), matchId, homeTeamId, awayTeamId),
+                profile: await withRefereeMemory(db, loaded.profile, homeTeamId, awayTeamId),
             };
 
             // ── Tvrdost hry u AI týmů ──

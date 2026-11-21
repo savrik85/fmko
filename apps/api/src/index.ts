@@ -265,14 +265,6 @@ export default {
       } catch (e: any) {
         log("error", "běh výběru okresu selhal", e);
       }
-      // Obálka pro sudího: SMS od sudího přes den, rozhodnutí AI klubů, propadlé obálky.
-      try {
-        const { tickRefereeEnvelopes } = await import("./referees/envelope-db");
-        const r = await tickRefereeEnvelopes(env);
-        if (r.sent || r.decided || r.expired) log("info", `obálky pro sudí: SMS ${r.sent}, AI rozhodla ${r.decided}, propadlo ${r.expired}`);
-      } catch (e: any) {
-        log("error", "běh obálek pro sudí selhal", e);
-      }
       // Anketa Fotbalista okresu: odpovědi redaktora, nominace a uzávěrka.
       try {
         const { tickDistrictPolls } = await import("./polls/district-poll");

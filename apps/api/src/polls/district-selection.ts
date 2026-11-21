@@ -420,17 +420,12 @@ export async function playSelectionMatch(env: PollEnv, m: SelectionMatchRow): Pr
     ).bind(result.homeScore, result.awayScore, JSON.stringify(goals), JSON.stringify(lineups), m.id).run();
 
     const scorers = (side: "home" | "away") => goals.filter((g) => g.side === side && !g.ownGoal).map((g) => `${g.name} (${g.minute}.)`).join(", ");
-    // Název okresu se neskloňuje („Za Praha“ by bylo špatně), proto „výběru okresu Praha“.
-    const goalLine = (side: "home" | "away", district: string) => {
-      const n = goals.filter((g) => g.side === side && !g.ownGoal).length;
-      return n ? ` ${n === 1 ? "Gól" : "Góly"} výběru okresu ${district}: ${scorers(side)}.` : "";
-    };
     const headline = `Výběr okresu ${m.home_district} ${result.homeScore}:${result.awayScore} ${m.away_district}`;
     const body = [
       `Na hřišti ${m.venue} se ${czDate(m.match_date)} potkaly výběry okresů ${m.home_district} a ${m.away_district}. Hráče nominovali trenéři klubů, každý mohl jmenovat tři z cizích klubů.`,
-      `Skončilo to ${result.homeScore}:${result.awayScore}.${goalLine("home", m.home_district)}${goalLine("away", m.away_district)}`,
-      `Sestava výběru okresu ${m.home_district}: ${lineups.home.map((p) => p.name).join(", ")}.`,
-      `Sestava výběru okresu ${m.away_district}: ${lineups.away.map((p) => p.name).join(", ")}.`,
+      `Skončilo to ${result.homeScore}:${result.awayScore}.${scorers("home") ? ` Za ${m.home_district} dali góly ${scorers("home")}.` : ""}${scorers("away") ? ` Za ${m.away_district} ${scorers("away")}.` : ""}`,
+      `Základní sestava ${m.home_district}: ${lineups.home.map((p) => p.name).join(", ")}.`,
+      `Základní sestava ${m.away_district}: ${lineups.away.map((p) => p.name).join(", ")}.`,
       injuries.length ? `Zranění: ${injuries.map((p) => p.name).join(", ")}.` : "",
     ].filter(Boolean).join("\n\n");
     const newsId = await publishSelectionArticle(db, m, headline, body).catch((e) => { logger.warn({ module: M }, "článek o výběru", e); return null; });

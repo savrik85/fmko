@@ -58,27 +58,11 @@ export function pickNominees<T extends SeasonPlayer>(shortlist: T[], editorPicks
 }
 
 /** Popisek kandidáta bez modelu: góly, asistence, zápasy. */
-/** Číslo se slovem ve správném tvaru: 1 gól, 3 góly, 5 gólů. */
-function count(n: number, one: string, few: string, many: string): string {
-  return `${n} ${n === 1 ? one : n >= 2 && n <= 4 ? few : many}`;
-}
-
-/**
- * Popisek kandidáta v anketě, vždy z kódu (model ho psal s chybnými tvary a bez čárek):
- * „19 zápasů, 17 gólů, 24 asistencí, průměrná známka 7,9“. Nuly se vynechají.
- */
-export function plainBlurb(p: Pick<SeasonPlayer, "goals" | "assists" | "apps" | "position"> & { avgRating?: number }): string {
-  const apps = count(p.apps, "zápas", "zápasy", "zápasů");
-  const rating = typeof p.avgRating === "number" && p.avgRating > 0
-    ? `průměrná známka ${(Math.round(p.avgRating * 10) / 10).toLocaleString("cs-CZ", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}`
-    : null;
-  if (p.position === "GK") return [`${apps} v bráně`, rating].filter(Boolean).join(", ");
-  return [
-    apps,
-    p.goals > 0 ? count(p.goals, "gól", "góly", "gólů") : null,
-    p.assists > 0 ? count(p.assists, "asistence", "asistence", "asistencí") : null,
-    rating,
-  ].filter(Boolean).join(", ");
+export function plainBlurb(p: Pick<SeasonPlayer, "goals" | "assists" | "apps" | "position">): string {
+  const goals = p.goals === 1 ? "1 gól" : p.goals >= 2 && p.goals <= 4 ? `${p.goals} góly` : `${p.goals} gólů`;
+  const apps = p.apps === 1 ? "1 zápas" : p.apps >= 2 && p.apps <= 4 ? `${p.apps} zápasy` : `${p.apps} zápasů`;
+  if (p.position === "GK") return `${apps} v bráně`;
+  return p.assists > 0 ? `${goals}, ${p.assists} asist., ${apps}` : `${goals}, ${apps}`;
 }
 
 export function normalize(text: string): string {
