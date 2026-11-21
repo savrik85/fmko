@@ -5,6 +5,7 @@
  * Tvrdé pravidlo: model mluví jen z toho, co je v DB. Tajné role (svědek, kamarád,
  * rival, pachatel) se do promptu dostanou jen v rozhovoru o incidentu a vždy s pokynem
  * podle uloženého výsledku výslechu. Jinak by model sám „prozradil" něco, co DB nemá.
+ * Výjimka: odhalený pachatel o svém provaleném průšvihu ví v každém hovoru (`isOwnRevealedOffence`).
  */
 
 import type { Rng } from "../generators/rng";
@@ -151,16 +152,32 @@ export function radekZnalosti(r: RadekZnalostiDb, playerId: string, dnes: string
   };
 }
 
-/** Tajné role jen k incidentu v tématu, nejvýš 3 incidenty: téma, pak závažnost, pak nejnovější. */
+/**
+ * Pachatel, na kterého se přišlo (incident ho odhalil, nebo se trenérovi přiznal). Svůj průšvih
+ * nese po celou platnost role i mimo téma hovoru: veřejná znalost kádru vyprší za 14 dní a bez
+ * tohoto řádku by do promptu šlo „o žádné krádeži nevíš“ a hráč by zapřel, k čemu se přiznal.
+ * Hrozba z hospody a životní situace sem nepatří, ty nejsou provalený čin.
+ */
+export function isOwnRevealedOffence(r: RadekZnalosti): boolean {
+  return r.role === "pachatel" && r.kategorie !== "zivotni" && r.stav !== "hrozi"
+    && (r.odhalen || r.vyslech === "priznal");
+}
+
+/**
+ * Tajné role jen k incidentu v tématu (kromě vlastního provaleného průšvihu), nejvýš 3 incidenty:
+ * téma, pak vlastní provalený průšvih, pak závažnost, pak nejnovější.
+ */
 export function vyberZnalosti(radky: readonly RadekZnalosti[], temaId: string | null): RadekZnalosti[] {
   const skupiny = new Map<string, RadekZnalosti[]>();
   for (const r of radky) {
-    if (!VEREJNE_ROLE.has(r.role) && r.incidentId !== temaId) continue;
+    if (!VEREJNE_ROLE.has(r.role) && r.incidentId !== temaId && !isOwnRevealedOffence(r)) continue;
     skupiny.set(r.incidentId, [...(skupiny.get(r.incidentId) ?? []), r]);
   }
+  const hasOwnOffence = (skupina: readonly RadekZnalosti[]) => Number(skupina.some(isOwnRevealedOffence));
   return [...skupiny.values()]
     .sort((a, b) =>
       Number(b[0].incidentId === temaId) - Number(a[0].incidentId === temaId)
+      || hasOwnOffence(b) - hasOwnOffence(a)
       || b[0].zavaznost - a[0].zavaznost
       || b[0].den.localeCompare(a[0].den))
     .slice(0, MAX_INCIDENTU_V_PROMPTU)
@@ -185,6 +202,8 @@ const VYSLEDEK_V_PROMPTU: Record<string, readonly [string, string]> = {
   vyreseno_policii: ["Policie pachatele dopadla.", "Policie pachatele dopadla."],
   nehoda: ["Nakonec se ukázalo, že to byla nehoda.", "Nakonec se ukázalo, že to byla nehoda."],
   nestalo_se: ["Nakonec z toho nic nebylo.", "Nakonec jsi nic neudělal."],
+  vratil: ["Lup vrátil.", "Lup jsi vrátil."],
+  nahradil: ["Škodu zaplatil ze svého.", "Škodu jsi zaplatil ze svého."],
 };
 
 function kdy(dni: number): string {
@@ -223,8 +242,22 @@ function pokynPachatele(r: RadekZnalosti): string {
   if (r.kategorie === "zivotni") return "Je to tvoje starost. Když se trenér zeptá, mluv o tom normálně.";
   // Čin ohlášený v hospodě se ještě nestal (spec 9a).
   if (r.stav === "hrozi") return "Byl jsi v hospodě opilý a vykládal jsi to. Zlehčuj to, a když ti trenér domluví, slib, že nic neuděláš.";
-  if (r.odhalen) return "Už se na to přišlo, nezapírej.";
-  return r.vyslech === "priznal" ? "Přiznej se trenérovi." : "Zapírej, nic nepřiznávej.";
+  if (r.odhalen || r.vyslech === "priznal") {
+    return "Už se na to přišlo, nezapírej. Když na to přijde řeč, přiznej to a nevykrucuj se, i když je ti to trapné.";
+  }
+  return "Zapírej, nic nepřiznávej.";
+}
+
+/** Provalený vlastní průšvih: co, kdy, jak se na to přišlo a jak to dopadlo, s pokynem nezapírat. */
+function ownOffenceLine(r: RadekZnalosti): string {
+  const parts = [
+    r.fact, `Stalo se to ${kdy(r.predDny)}.`,
+    r.odhalen ? "Přišlo se na to, že jsi to byl ty." : "Trenérovi ses k tomu přiznal.",
+  ];
+  const outcome = r.vysledek ? VYSLEDEK_V_PROMPTU[r.vysledek] : undefined;
+  if (outcome) parts.push(outcome[1]);
+  else if (r.stav === "policie") parts.push("Vyšetřuje to policie.");
+  return `- ${parts.join(" ")} POKYN: ${pokynPachatele(r)}`;
 }
 
 export function radekDoPromptu(r: RadekZnalosti): string {
@@ -237,7 +270,7 @@ export function radekDoPromptu(r: RadekZnalosti): string {
     case "obvineny":
       return `- ${r.fact}`;
     case "pachatel":
-      return `- ${r.fact} POKYN: ${pokynPachatele(r)}`;
+      return isOwnRevealedOffence(r) ? ownOffenceLine(r) : `- ${r.fact} POKYN: ${pokynPachatele(r)}`;
     case "svedek":
     case "kamarad":
     case "rival":

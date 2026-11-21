@@ -137,7 +137,65 @@ describe("výběr znalostí do promptu", () => {
   });
 });
 
-describe("blok znalostí v promptu", () => {
+describe("odhalený pachatel a vlastní průšvih mimo téma", () => {
+  // Petr Hrdlička (prod 21. 11.): krádež dresů se provalila 5. 11., veřejná znalost
+  // kádru vypršela po 14 dnech a do promptu šlo „o žádné krádeži nevíš“, takže zapřel.
+  const OWN_OFFENCE = {
+    role: "pachatel" as const, fact: "Tohle jsi udělal ty: Vloupání do skladu.",
+    status: "uzavreny", resolution: "srazka", ...ODHALENY,
+  };
+
+  it("odhalený pachatel nese vlastní průšvih i v hovoru o něčem jiném", () => {
+    const selected = vyberZnalosti([radek(OWN_OFFENCE, "p")], null);
+    expect(selected.map((r) => r.role)).toEqual(["pachatel"]);
+    const block = blokZnalosti(selected);
+    expect(block).not.toBe(BEZ_ZNALOSTI);
+    expect(block).not.toContain("nic nevíš");
+    expect(block).toContain("Tohle jsi udělal ty: Vloupání do skladu.");
+    expect(block).toContain("Přišlo se na to, že jsi to byl ty.");
+    expect(block).toContain("Trenér ti strhává peníze ze mzdy.");
+    expect(block).toContain("nezapírej");
+  });
+
+  it("kdo se trenérovi přiznal při výslechu, nezapírá, i když incident nebyl označený jako odhalený", () => {
+    const selected = vyberZnalosti([radek({ ...OWN_OFFENCE, culprit_revealed: 0, interrogation: "priznal" }, "p")], "jiny-incident");
+    expect(selected).toHaveLength(1);
+    expect(blokZnalosti(selected)).toContain("Trenérovi ses k tomu přiznal.");
+    expect(blokZnalosti(selected)).toContain("nezapírej");
+  });
+
+  it("neodhalený pachatel mimo téma dál nic neprozradí", () => {
+    expect(vyberZnalosti([radek({ ...OWN_OFFENCE, culprit_revealed: 0 }, "p")], null)).toEqual([]);
+    expect(vyberZnalosti([radek({ ...OWN_OFFENCE, culprit_revealed: 0, interrogation: "zapira" }, "p")], null)).toEqual([]);
+  });
+
+  it("hrozba z hospody a životní situace zůstávají jen k tématu", () => {
+    expect(vyberZnalosti([radek({ role: "pachatel", status: "hrozi" }, "p")], null)).toEqual([]);
+    expect(vyberZnalosti([radek({ role: "pachatel", category: "zivotni", status: "probiha", culprit_revealed: 1 }, "p")], null)).toEqual([]);
+  });
+
+  it("vlastní odhalený průšvih má přednost před cizími závažnějšími, strop tří incidentů platí", () => {
+    const others = ["a", "b", "c"].map((id) => radek({ incident_id: id, severity: 3 }, "p"));
+    const own = radek({ ...OWN_OFFENCE, incident_id: "own", severity: 1 }, "p");
+    const selected = vyberZnalosti([...others, own], null);
+    expect(new Set(selected.map((r) => r.incidentId)).size).toBe(3);
+    expect(selected[0].incidentId).toBe("own");
+    // Téma hovoru je pořád první.
+    expect(vyberZnalosti([...others, own], "b")[0].incidentId).toBe("b");
+  });
+
+  it("s veřejnou znalostí téhož incidentu jsou v promptu obě řádky, pachatelova s pokynem", () => {
+    const selected = vyberZnalosti([radek({ ...ODHALENY, status: "uzavreny", resolution: "pokuta" }, "p"), radek({ ...OWN_OFFENCE, resolution: "pokuta" }, "p")], null);
+    expect(selected.map((r) => r.role)).toEqual(["kadr", "pachatel"]);
+  });
+
+  it("vrácený lup a zaplacená škoda mají v promptu výsledek", () => {
+    expect(radekDoPromptu(radek({ ...OWN_OFFENCE, resolution: "vratil" }, "p"))).toContain("Lup jsi vrátil.");
+    expect(radekDoPromptu(radek({ ...ODHALENY, status: "uzavreny", resolution: "nahradil" }))).toContain("Škodu zaplatil ze svého.");
+  });
+});
+
+describe("block znalostí v promptu", () => {
   it("nenačtené znalosti nepřidají nic, prázdné řeknou, že nic neví", () => {
     expect(blokZnalosti(undefined)).toBe("");
     expect(blokZnalosti([])).toBe(BEZ_ZNALOSTI);
@@ -145,9 +203,9 @@ describe("blok znalostí v promptu", () => {
   });
 
   it("veřejný řádek: co se stalo, kdy a že se neví kdo", () => {
-    const blok = blokZnalosti([radek()]);
-    expect(blok.startsWith(HLAVICKA_ZNALOSTI)).toBe(true);
-    expect(blok).toContain("Ze skladu zmizelo vybavení: Dresy. Stalo se to před 3 dny. Kdo to byl, se v klubu neví.");
+    const block = blokZnalosti([radek()]);
+    expect(block.startsWith(HLAVICKA_ZNALOSTI)).toBe(true);
+    expect(block).toContain("Ze skladu zmizelo vybavení: Dresy. Stalo se to před 3 dny. Kdo to byl, se v klubu neví.");
   });
 
   it("odhalený pachatel: ostatní vědí kdo, on ví, že na to přišli, a jak to dopadlo", () => {
@@ -165,7 +223,8 @@ describe("blok znalostí v promptu", () => {
     expect(radekDoPromptu(radek({ role: "kamarad", interrogation: "kryje" }))).toContain("jméno trenérovi neřekni");
     expect(radekDoPromptu(radek({ role: "svedek", interrogation: null }))).toContain("jméno trenérovi neřekni");
     expect(radekDoPromptu(radek({ role: "pachatel", interrogation: null }, "p"))).toContain("POKYN: Zapírej");
-    expect(radekDoPromptu(radek({ role: "pachatel", interrogation: "priznal" }, "p"))).toContain("POKYN: Přiznej se");
+    // Přiznání při výslechu: hráč už nezapírá (dřív „Přiznej se trenérovi“, teď i mimo téma).
+    expect(radekDoPromptu(radek({ role: "pachatel", interrogation: "priznal" }, "p"))).toContain("přiznej to a nevykrucuj se");
     expect(radekDoPromptu(radek({ role: "pachatel", culprit_revealed: 1 }, "p"))).toContain("nezapírej");
   });
 
