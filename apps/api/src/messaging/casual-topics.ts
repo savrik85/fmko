@@ -233,13 +233,15 @@ export const CASUAL_TOPICS: CasualTopic[] = [
     category: "casual",
     expectedTurns: 3,
     minRelation: 40,
-    description: `${JUST_BECAUSE} Dneska ses oženil a večer je zábava v sále. Pošli trenérovi fotku prstýnků a pozvi ho, `
-      + "ať večer přijde, aspoň na chvíli.",
+    description: `${JUST_BECAUSE} Za pár dní se ženíš (kdy přesně, stojí v historii konverzace) a svatba bude v sále. `
+      + "Pošli trenérovi fotku prstýnků a pozvi ho, kluci z kabiny jsou pozvaní taky.",
     weight: () => 0,
     photo: "wedding_rings",
     invite: "wedding",
     lifeSituation: "svatba_spoluhrace",
-    fit: (_p, ctx) => ctx.situation === "spi" || !between(ctx.hour, 9, 20) ? 0 : 8,
+    // Svatba má datum a pozvánku s ním posílá sám ženich při ohlášení (weddings/). Náhodně se
+    // téma nevybírá: dřívější „dneska ses oženil“ by se se svatbou za pár dní hádalo.
+    fit: () => 0,
   },
   {
     id: "casual_baby",
@@ -347,9 +349,9 @@ export const INVITES: Record<InviteKind, {
     photo: "pig_slaughter_table", afterHours: 13, relation: 6, morale: 4,
   },
   wedding: {
-    label: "na jeho svatební zábavu",
-    thanks: "Trenér na tvoje pozvání přišel na tvoji svatební zábavu. Děkuješ mu, žena i rodina byli rádi.",
-    photo: "wedding_rings", afterHours: 14, relation: 8, morale: 4,
+    label: "na jeho svatbu",
+    thanks: "Trenér na tvoje pozvání přišel na tvoji svatbu a dohlížel, aby to kluci z kabiny nepřehnali. Děkuješ mu, žena i rodina byli rádi. Co přesně se dělo, si nevymýšlej.",
+    photo: "wedding_party", afterHours: 14, relation: 8, morale: 4,
   },
   visit: {
     label: "jestli se za ním může zítra po práci stavit probrat svůj fotbal",

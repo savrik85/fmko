@@ -989,6 +989,9 @@ matchesRouter.get("/matches/:id", async (c) => {
     absences: JSON.parse((row.absences as string) ?? "[]"),
     isLocalDerby,
     temperature,
+    // Proslovy trenérů, které se v zápase uplatnily (messaging/match-speech.ts), slovy.
+    speeches: await (await import("../messaging/match-speech")).loadMatchSpeeches(c.env.DB, row.id as string)
+      .catch((e) => { logger.warn({ module: "matches" }, `proslovy v zápase ${row.id as string}`, e); return []; }),
   });
 });
 

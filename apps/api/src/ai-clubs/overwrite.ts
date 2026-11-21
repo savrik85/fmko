@@ -299,7 +299,8 @@ export async function wipeAiClubForNewcomer(db: D1Database, teamId: string, opts
 
   // ── Incidenty AI klubu (krádeže, škody, situace hráčů): nový klub je nezdědí ──
   // Id týmu zůstává, bez úklidu by nový trenér viděl otevřené případy hráčů, kteří už nejsou.
-  for (const table of ["club_incident_absences", "club_incident_knowledge", "club_incident_clues", "club_incidents"]) {
+  // Svatby hráčů (weddings/) visí na situaci svatba_spoluhrace, mizí s ní.
+  for (const table of ["club_incident_absences", "club_incident_knowledge", "club_incident_clues", "weddings", "club_incidents"]) {
     await runStatement(db, table, `DELETE FROM ${table} WHERE team_id = ?`, teamId);
   }
 

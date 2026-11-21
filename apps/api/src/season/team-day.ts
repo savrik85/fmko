@@ -193,7 +193,7 @@ export async function processTeamDay(
               const opponentName = matchRow ? (matchRow.home_team_id === teamId ? matchRow.away_name : matchRow.home_name) as string : "Soupeř";
               // Vynech zraněné a suspendované — ti nedostanou absence SMS (mají vlastní kanál)
               const squadRows = await env.DB.prepare(
-                `SELECT p.id, p.first_name, p.last_name, p.nationality, p.age, p.personality, p.life_context, p.physical, p.commute_km, p.is_celebrity
+                `SELECT p.id, p.team_id, p.first_name, p.last_name, p.nationality, p.age, p.personality, p.life_context, p.physical, p.commute_km, p.is_celebrity
                    FROM players p
                    LEFT JOIN injuries i ON p.id = i.player_id AND i.days_remaining > 0
                    WHERE p.team_id = ? AND (p.status IS NULL OR p.status = 'active')
@@ -674,7 +674,7 @@ export async function processTeamDay(
             // (match-runner, next-match preview, day-before SMS) — jinak RNG indexuje do různě
             // seřazeného pole a výsledky se liší.
             const squadRows = await env.DB.prepare(
-              `SELECT p.id, p.first_name, p.last_name, p.nationality, p.age, p.personality, p.life_context, p.physical, p.commute_km, p.is_celebrity
+              `SELECT p.id, p.team_id, p.first_name, p.last_name, p.nationality, p.age, p.personality, p.life_context, p.physical, p.commute_km, p.is_celebrity
                  FROM players p
                  LEFT JOIN injuries i ON p.id = i.player_id AND i.days_remaining > 0
                  WHERE p.team_id = ? AND (p.status IS NULL OR p.status = 'active')

@@ -46,6 +46,9 @@ const ACTIVE_MANAGER_DAYS = 3;
  */
 const INVITE_TTL_SECONDS = 36 * 3600;
 
+/** Téma, po kterém hráč čeká, jestli mu trenér sežene práci (F8). */
+const JOB_TIP_TOPIC_ID = "casual_job_tip";
+
 const inviteKey = (convId: string) => `open_invite:${convId}`;
 const recentTopicsKey = (teamId: string) => `casual_topics:${teamId}`;
 
@@ -67,6 +70,14 @@ export async function runPhoneHourly(
 ): Promise<{ casual: number; followUps: { delivered: number; cancelled: number; retried: number } }> {
   const followUps = await deliverDueFollowUps(db, env, now);
   const casual = await spawnCasualMessages(db, env, now);
+  // Svatba v kabině: článek do Zpravodaje a SMS od Redakce přes den, ne v noci z denního ticku.
+  const { publishWeddingArticles } = await import("../weddings/wedding-db");
+  await publishWeddingArticles(db, env, now)
+    .catch((e) => logger.warn({ module: M }, "články o svatbách", e));
+  // Zasedání zastupitelstva: pozvánky a odpovědi starosty, rozdělení obecních peněz po zasedání.
+  const { tickVillageCouncil } = await import("../villages/council-db");
+  await tickVillageCouncil(db, env, now)
+    .catch((e) => logger.warn({ module: M }, "hodinový běh zastupitelstva", e));
   // Okresní akce se vyhodnotí v noci: v 19 h připomenout těm, kdo neodpověděli.
   if (pragueClock(now).hour === 19) {
     const { remindUnansweredDistrictEvents } = await import("../events/district-event-db");
@@ -271,6 +282,11 @@ async function spawnCasualForTeam(
       .bind(at, player.id),
   ]);
   if (topic.invite) await openInvite(env.CACHE_KV, convId, { kind: topic.invite, topicId: topic.id, teamId, playerId: player.id, playerFirstName: player.firstName });
+  // „Nevíte o práci?": když trenér slíbí, že se poptá, zeptá se hra firmy (messaging/job-tip.ts).
+  if (topic.id === JOB_TIP_TOPIC_ID) {
+    const { openJobTip } = await import("./job-tip");
+    await openJobTip(env.CACHE_KV, convId, { teamId, playerId: player.id, playerFirstName: player.firstName });
+  }
   await rememberTopic(env.CACHE_KV, teamId, topic.id);
   await pushPhoneMessage(db, env, { teamId, convId, sender: `${player.firstName} ${player.lastName}`, text: photo ? `📷 ${text}` : voice ? "🎤 Hlasová zpráva" : text });
   logger.info({ module: M, teamId }, `zpráva jen tak: ${player.firstName} ${player.lastName} → ${topic.id}${photo ? " (fotka)" : voice ? " (hlasovka)" : ""}`);
@@ -357,16 +373,30 @@ export async function handleCoachMessageForInvite(
   convId: string,
   coachMessage: string,
 ): Promise<boolean> {
+  // Svatba s datem (weddings/): odpověď má tři cesty (přijdu, dar, zákaz), ne jen ano a ne.
+  // `null` = v téhle konverzaci žádná svatba nečeká.
+  const { handleWeddingReply } = await import("../weddings/wedding-db");
+  const wedding = await handleWeddingReply(db, env, convId, coachMessage)
+    .catch((e) => { logger.warn({ module: M }, "odpověď na svatbu", e); return null; });
   const raw = await env.CACHE_KV?.get(inviteKey(convId))
     .catch((e) => { logger.warn({ module: M }, "čtení pozvání", e); return null; });
-  if (!raw) return false;
+  if (!raw) return wedding === true;
   let invite: OpenInvite;
   try {
     invite = JSON.parse(raw) as OpenInvite;
   } catch (e) {
     logger.warn({ module: M }, "pozvání není JSON", e);
-    return false;
+    return wedding === true;
   }
+  // Staré pozvání na svatební zábavu (ruční téma z adminu) svatbu s datem nepřebije.
+  if (invite.kind === "wedding" && wedding !== null) {
+    if (wedding) {
+      await env.CACHE_KV?.delete(inviteKey(convId))
+        .catch((e) => logger.warn({ module: M }, "smazání pozvání na svatbu", e));
+    }
+    return wedding;
+  }
+  if (wedding === true) return true;
   const info = INVITES[invite.kind];
   if (!info) return false;
   const accepted = await coachAcceptsInvite(env, { label: info.label, playerFirstName: invite.playerFirstName }, coachMessage)

@@ -8,7 +8,6 @@
 import { createRng } from "../generators/rng";
 import type { Bindings } from "../index";
 import { isAiEnabled } from "../lib/ai-provider";
-import { logConditionStmt } from "../lib/condition-log";
 import { gameExpiry } from "../lib/game-time";
 import { logger } from "../lib/logger";
 import { seedFromString } from "../lib/seed";
@@ -27,6 +26,8 @@ import {
 } from "./nastaveni";
 import { ABSENCE_HLEDAT_ZAPAS_DNI, naCooldownu, nazevSituace, oknoAbsence, SITUACE_PODLE_KIND } from "./situace";
 import { text, type KlicTextu } from "./texty";
+import { czechDayWords, czechDeadlineWords, dayPlus, daysBetween, planWeddingDate, type WeddingPlan } from "../weddings/wedding";
+import { insertWedding } from "../weddings/wedding-db";
 import type { NavrhIncidentu, StavKlubu } from "./typy";
 
 const M = "incidents-situace";
@@ -57,21 +58,6 @@ async function dnyZapasuTymu(db: D1Database, stav: StavKlubu): Promise<string[]>
 }
 
 const ref = (h: RadekHrace) => ({ id: h.id, firstName: h.first_name, lastName: h.last_name, nickname: h.nickname, avatar: h.avatar });
-
-/** Kocovina po svatbě: kdo pije, ten to ráno pozná (spec 4c). */
-function prikazyKocoviny(db: D1Database, stav: StavKlubu, subjectId: string, rng: ReturnType<typeof createRng>): D1PreparedStatement[] {
-  const prikazy: D1PreparedStatement[] = [];
-  for (const h of stav.kadr) {
-    if (h.id === subjectId || h.alkohol < 50) continue;
-    const dolu = rng.int(10, 20);
-    prikazy.push(db.prepare(
-      `UPDATE players SET life_context = json_set(life_context, '$.condition',
-         MAX(15, COALESCE(json_extract(life_context, '$.condition'), 100) - ?)) WHERE id = ?`,
-    ).bind(dolu, h.id));
-    prikazy.push(logConditionStmt(db, h.id, stav.teamId, 100, 100 - dolu, "pub", "Svatba spoluhráče"));
-  }
-  return prikazy;
-}
 
 /**
  * Založí životní situaci: incident, morálka, incidentní absence, SMS hráče a u dluhů
@@ -104,8 +90,24 @@ export async function zalozSituaci(env: Bindings, stav: StavKlubu, navrh: NavrhI
     }
   }
 
+  // Svatba má datum (weddings/, F3): často pátek před zápasem. Situace trvá do dne po svatbě
+  // a kocovina přijde až po ní, podle toho, co trenér na pozvánku odpoví.
+  let weddingPlan: WeddingPlan | null = null;
+  if (navrh.kind === "svatba_spoluhrace") {
+    weddingPlan = planWeddingDate({ today: stav.den, matchDays: await dnyZapasuTymu(db, stav), rng });
+    const groom = stav.kadr.find((h) => h.id === subjectId);
+    navrhZapis = {
+      ...navrhZapis,
+      dniTrvani: daysBetween(stav.den, weddingPlan.weddingDate) + 1,
+      text: groom ? text(rng, "wedding_announcement", { player: groom.jmeno, day: czechDayWords(weddingPlan.weddingDate) }) : navrhZapis.text,
+    };
+  }
+
   const zapsany = await zapisIncident(db, stav, navrhZapis, id);
   if (!zapsany) return null;
+  if (weddingPlan) {
+    await insertWedding(db, { id, teamId: stav.teamId, playerId: subjectId, seasonNumber: stav.seasonNumber, announcedOn: stav.den, plan: weddingPlan });
+  }
 
   const hrac = await nactiHrace(db, stav.teamId, subjectId);
 
@@ -118,7 +120,11 @@ export async function zalozSituaci(env: Bindings, stav: StavKlubu, navrh: NavrhI
     });
     if (p) davka.push(p);
   }
-  if (navrh.kind === "svatba_spoluhrace") davka.push(...prikazyKocoviny(db, stav, subjectId, rng));
+  // Kdo přišel o práci, u sponzora už nedělá: šéf ho na zápasy pouštět nebude (sponsors/player-jobs.ts).
+  if (navrh.kind === "prisel_o_praci") {
+    davka.push(db.prepare("UPDATE players SET life_context = json_remove(life_context, '$.sponsorJob') WHERE id = ? AND json_extract(life_context, '$.sponsorJob') IS NOT NULL")
+      .bind(subjectId));
+  }
   if (davka.length > 0) {
     await db.batch(davka).catch((e) => logger.error({ module: M }, `dopady situace ${id}`, e));
   }
@@ -131,7 +137,12 @@ export async function zalozSituaci(env: Bindings, stav: StavKlubu, navrh: NavrhI
   }
 
   if (hrac) {
-    await sendIncidentPlayerSms(db, stav.teamId, ref(hrac), text(rng, `sms_situace_${navrh.kind}` as KlicTextu), smsIncidentu(id))
+    const sms = weddingPlan
+      ? text(rng, weddingPlan.matchDate ? "wedding_invite_before_match" : "wedding_invite", {
+        day: czechDayWords(weddingPlan.weddingDate), deadline: czechDeadlineWords(dayPlus(weddingPlan.weddingDate, -2)),
+      })
+      : text(rng, `sms_situace_${navrh.kind}` as KlicTextu);
+    await sendIncidentPlayerSms(db, stav.teamId, ref(hrac), sms, smsIncidentu(id))
       .catch((e) => logger.warn({ module: M }, `SMS situace ${id}`, e));
     if (navrh.kind === "dluhy") await otevriVlaknoZalohy(env, stav.teamId, subjectId, hrac);
   }

@@ -7,7 +7,9 @@
 
 import type { InterestFactor } from "./player-interest";
 
-export type UnrestReason = "money" | "better_club" | "minutes" | "coach" | "morale";
+export type UnrestReason = "money" | "better_club" | "minutes" | "coach" | "morale"
+  // Soupeř k nabídce přidal práci („práce na pile", transfers/job-lure.ts).
+  | "job";
 
 /**
  * Jak důvod zní v promptu („chtěl odejít kvůli …“). „Peníze“ znamenají, kolik za hráče
@@ -20,6 +22,7 @@ export const REASON_LABELS: Record<UnrestReason, string> = {
   minutes: "tomu, že málo hraje",
   coach: "vztahu s trenérem",
   morale: "špatné náladě v klubu",
+  job: "slíbené práci",
 };
 
 /** Faktor zájmu → důvod. Faktory, které se dohodou řešit nedají (věk, patriotismus), chybí. */
@@ -35,6 +38,7 @@ const FACTOR_REASON: Record<string, UnrestReason> = {
   "Hraje málo": "minutes",
   "Vztah s trenérem": "coach",
   "Morálka": "morale",
+  "Práce u nich": "job",
 };
 
 /** Od kolika bodů zájmu je důvod skutečný (menší faktory hráč sám nevnímá). */
@@ -68,6 +72,7 @@ export const DEAL_TEXTS: Record<string, string> = {
   appeal_loyalty: "trenér ti připomněl, co pro tebe klub znamená",
   tough_love: "trenér tě zpražil, ať přestaneš trucovat a makáš",
   release: "trenér volal do klubu, který tě chtěl, a slíbil přijmout jejich novou nabídku",
+  find_job: "trenér ti přes sponzora klubu sehnal práci, šéf tě na zápasy pustí",
 };
 
 /** Truc hráče do promptu rozhovoru po zatrhnutém přestupu. */
@@ -121,4 +126,5 @@ export const REASON_SMS: Record<UnrestReason, string> = {
   minutes: "Tady stejně skoro nehraju.",
   coach: "S vámi si stejně moc nerozumíme.",
   morale: "Poslední dobou mě to tady vůbec nebaví.",
+  job: "Sehnali by mi tam i práci, to tady nikdo neudělá.",
 };

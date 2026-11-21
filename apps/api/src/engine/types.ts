@@ -113,6 +113,9 @@ export interface MatchConfig {
   awayEquipment?: EquipmentMods;
   /** Delegovaný rozhodčí. Chybí-li (nedelegováno, přátelák), použije se NEUTRAL_REFEREE. */
   referee?: RefereeProfile;
+  /** Proslov trenéra před zápasem a po minulém (messaging/match-speech.ts): posun formy dne. */
+  homeSpeechShift?: number;
+  awaySpeechShift?: number;
 }
 
 export interface MatchMinuteState {

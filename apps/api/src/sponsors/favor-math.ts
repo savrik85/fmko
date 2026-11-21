@@ -86,6 +86,9 @@ export const FAVOR_REASONS = {
   requestRefused: "odmítl prosbu o příspěvek",
   requestTooSoon: "otravoval jsi ho s penězi",
   requestBroken: "peníze z prosby nešly na slíbený účel",
+  jobFavorHelped: "slíbil jsi mu laskavost za práci pro hráče",
+  jobFavorRefused: "odmítl jsi mu laskavost, i když vzal tvého hráče do práce",
+  jobFavorIgnored: "neozval ses, když za práci pro hráče chtěl laskavost",
 } as const;
 
 /** Důvod změny po zápase, na kterém majitel seděl: výsledek a skóre z pohledu domácích. */

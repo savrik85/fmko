@@ -78,12 +78,18 @@ describe("založení situace", () => {
     expect(db.pocet(/INSERT OR IGNORE INTO club_incidents/)).toBe(1);
   });
 
-  it("svatba dá kocovinu jen pijákům z kádru, ženich nepije za trest", async () => {
+  it("svatba dostane datum, situace trvá do dne po ní a kocovina hned nepřijde", async () => {
     const { db, env } = prostredi();
     const stav = stavKlubu({ gameDate: DNES, den: "2026-09-17", kadr: [SUBJEKT, PARTA, hrac({ id: "a", jmeno: "Abstinent Nový", alkohol: 20 })] });
-    await zalozSituaci(env, stav, navrh({ kind: "svatba_spoluhrace", dniTrvani: 1, text: "Jan Svědek se ženil." }));
-    const kondice = db.davky.flat().filter((d) => /json_set\(life_context, '\$\.condition'/.test(d.sql));
-    expect(kondice.map((d) => d.params[d.params.length - 1])).toEqual(["k"]);
+    await zalozSituaci(env, stav, navrh({ kind: "svatba_spoluhrace", dniTrvani: 1, text: "Jan Svědek se bude ženit." }));
+    // Bez zápasu v dosahu: první sobota aspoň čtyři dny po ohlášení.
+    const weddingInsert = db.dotazy.find((d) => /INSERT OR IGNORE INTO weddings/.test(d.sql));
+    expect(weddingInsert?.params.slice(1, 7)).toEqual(["tym-a", "s", 4, "2026-09-17", "2026-09-26", null]);
+    const inc = db.dotazy.find((d) => /INSERT OR IGNORE INTO club_incidents/.test(d.sql));
+    expect(String(inc?.params[15]).slice(0, 10)).toBe("2026-09-27");
+    expect(String(inc?.params[17])).toContain("v sobotu 26. 9.");
+    expect(db.pocet(/'\$\.condition'/)).toBe(0);
+    expect(sendPlayerSMS).toHaveBeenCalledWith(expect.anything(), "tym-a", expect.objectContaining({ id: "s" }), expect.stringContaining("v sobotu 26. 9."), expect.objectContaining({ type: "incident" }));
   });
 });
 

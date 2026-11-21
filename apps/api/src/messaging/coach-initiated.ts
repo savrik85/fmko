@@ -337,9 +337,18 @@ async function replyInSquadGroupInner(
       .then((r) => r?.captain_id ?? null)
       .catch((e) => { logger.warn({ module: M }, "kapitán kabiny", e); return null; });
     const representative = kadr.find((p) => p.id === captainId) ?? responders[0];
+    // Proslov po zápase má přednost (do 12 hodin od konce zápasu), jinak proslov před zápasem
+    // (messaging/match-speech.ts). Obojí má dopad na zápas, ne jen na náladu.
+    const speechStep = async () => {
+      const { applyPostSpeech } = await import("./match-speech");
+      const post = await applyPostSpeech(db, env, { teamId: opts.teamId, convId: opts.convId, message: opts.coachMessage })
+        .catch((e) => { logger.warn({ module: M, teamId: opts.teamId }, "proslov po zápase", e); return null; });
+      if (post) return post;
+      return applySpeech(db, env, { teamId: opts.teamId, convId: opts.convId, message: opts.coachMessage, nextMatch: team.nextMatch })
+        .catch((e) => { logger.warn({ module: M, teamId: opts.teamId }, "proslov před zápasem", e); return null; });
+    };
     const [speech] = await Promise.all([
-      applySpeech(db, env, { teamId: opts.teamId, convId: opts.convId, message: opts.coachMessage, nextMatch: team.nextMatch })
-        .catch((e) => { logger.warn({ module: M, teamId: opts.teamId }, "proslov před zápasem", e); return null; }),
+      speechStep(),
       persuadeAbsentees(db, { teamId: opts.teamId, convId: opts.convId, message: opts.coachMessage, squad: kadr })
         .catch((e) => { logger.warn({ module: M, teamId: opts.teamId }, "přemlouvání omluvených", e); return []; }),
       handleSquadBet(db, env, { teamId: opts.teamId, convId: opts.convId, message: opts.coachMessage, representative }),

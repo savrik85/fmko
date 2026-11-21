@@ -243,4 +243,12 @@ describe("poděkování po přijatém pozvání", () => {
     const conv = await db.prepare("SELECT ai_thread_state FROM conversations WHERE id = 'c1'").first<{ ai_thread_state: string }>();
     expect(JSON.parse(conv!.ai_thread_state)).toMatchObject({ scenario_id: "casual_invite_thanks", casual: true });
   });
+
+  it("svatba si vztah za účast započítala sama: poděkování ho nezdvojí", async () => {
+    await schedule("after_invite", { invite: "wedding", topicId: "casual_wedding", effectApplied: true });
+    expect((await deliverDueFollowUps(db, {}, NOW)).delivered).toBe(1);
+    expect(await db.prepare("SELECT COUNT(*) AS n FROM coach_relation_log").first<{ n: number }>()).toEqual({ n: 0 });
+    const p = await db.prepare("SELECT coach_relationship FROM players WHERE id = 'p1'").first<{ coach_relationship: number }>();
+    expect(p?.coach_relationship).toBe(60);
+  });
 });

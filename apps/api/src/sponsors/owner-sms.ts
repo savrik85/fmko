@@ -110,9 +110,10 @@ export async function deliverOwnerSmsForTeam(db: D1Database, teamId: string, tod
   await db.prepare("UPDATE sponsor_owner_sms SET status = 'dropped' WHERE team_id = ? AND status = 'pending' AND deliver_by < ?")
     .bind(teamId, today).run();
 
+  // created_day v budoucnu = odložená SMS (protislužba za práci pro hráče přijde až po týdnu).
   const pending = await db.prepare(
-    "SELECT id, sponsor_id, occasion, created_day, reference_id, vars FROM sponsor_owner_sms WHERE team_id = ? AND status = 'pending'",
-  ).bind(teamId).all<PendingRow>();
+    "SELECT id, sponsor_id, occasion, created_day, reference_id, vars FROM sponsor_owner_sms WHERE team_id = ? AND status = 'pending' AND created_day <= ?",
+  ).bind(teamId, today).all<PendingRow>();
   if (pending.results.length === 0) return false;
 
   // ABS: rollover vrací herní čas zpátky, starší odeslání pak leží „v budoucnu".
@@ -234,8 +235,8 @@ export async function handleOwnerSmsReply(
     const claim = await db.prepare(
       `UPDATE sponsor_owner_sms SET status = 'replied', reply_tone = ?
        WHERE id = ? AND status = 'awaiting' AND team_id = ?
-       RETURNING occasion, vars`,
-    ).bind(tone, state.smsId, conv.team_id).all<{ occasion: string; vars: string | null }>();
+       RETURNING occasion, vars, reference_id`,
+    ).bind(tone, state.smsId, conv.team_id).all<{ occasion: string; vars: string | null; reference_id: string | null }>();
     if (claim.results.length !== 1) {
       // Vlákno přežilo svou SMS (vypršela, nahradila ji novější, nebo ji deliverOwnerSmsForTeam
       // zahodil po chybě doručení): jen ho zavřít, bez dopadu na náklonnost.
@@ -251,8 +252,8 @@ export async function handleOwnerSmsReply(
     try {
       const owner = await ensureSponsorOwner(db, state.sponsorId);
       const personality: OwnerPersonality = owner?.personality ?? "businessman";
-      const delta = replyFavorDelta(personality, tone);
       const occasionRaw = claim.results[0].occasion;
+      const delta = replyFavorDelta(personality, tone, isOwnerSmsOccasion(occasionRaw) ? occasionRaw : undefined);
       let occasion: OwnerSmsOccasion;
       if (isOwnerSmsOccasion(occasionRaw)) {
         occasion = occasionRaw;
@@ -269,7 +270,9 @@ export async function handleOwnerSmsReply(
         : null;
       const back = written ?? ownerReplyBack(personality, occasion, delta, `owner-reply|${state.smsId}`, parseVars(claim.results[0].vars));
       const senderName = owner ? `${owner.firstName} ${owner.lastName}` : "Majitel firmy";
-      const reason = tone === "dismissive" ? FAVOR_REASONS.smsDismissed : FAVOR_REASONS.smsReply;
+      const reason = occasion === "job_favor"
+        ? (tone === "dismissive" ? FAVOR_REASONS.jobFavorRefused : FAVOR_REASONS.jobFavorHelped)
+        : tone === "dismissive" ? FAVOR_REASONS.smsDismissed : FAVOR_REASONS.smsReply;
 
       await db.batch([
         ...(delta !== 0 ? favorDeltaStmts(db, state.sponsorId, conv.team_id, delta, reason) : []),
@@ -284,6 +287,12 @@ export async function handleOwnerSmsReply(
         ).bind(back.slice(0, 100), convId),
       ]);
       logger.info({ module: M, teamId: conv.team_id }, `odpověď majiteli ${state.sponsorId}: ${tone}, náklonnost ${delta}`);
+      // Kývnul na protislužbu za práci: hráči opravdu jdou pomáhat a v den zápasu jsou unavenější.
+      if (occasion === "job_favor" && tone !== "dismissive" && claim.results[0].reference_id) {
+        const { scheduleSponsorHelp } = await import("./player-jobs-db");
+        await scheduleSponsorHelp(db, claim.results[0].reference_id, state.smsId)
+          .catch((e) => logger.warn({ module: M, teamId: conv.team_id }, `pomoc sponzorovi po SMS ${state.smsId}`, e));
+      }
     } catch (e) {
       logger.error({ module: M, teamId: conv.team_id }, `zápis odpovědi majiteli ${state.sponsorId} (sms ${state.smsId})`, e);
     }
@@ -300,11 +309,12 @@ export async function handleOwnerSmsReply(
  */
 export async function expireOwnerSmsReplies(db: D1Database, today: string): Promise<number> {
   const rows = await db.prepare(
-    `SELECT s.id, s.sponsor_id, s.team_id, s.expects_reply, s.conversation_id, so.personality
+    `SELECT s.id, s.sponsor_id, s.team_id, s.expects_reply, s.conversation_id, s.occasion, so.personality
      FROM sponsor_owner_sms s LEFT JOIN sponsor_owners so ON so.sponsor_id = s.sponsor_id
      WHERE s.status = 'awaiting' AND s.reply_by < ?`,
   ).bind(today.slice(0, 10)).all<{
-    id: string; sponsor_id: number; team_id: string; expects_reply: number; conversation_id: string | null; personality: string | null;
+    id: string; sponsor_id: number; team_id: string; expects_reply: number; conversation_id: string | null; occasion: string;
+    personality: string | null;
   }>();
   let n = 0;
   for (const r of rows.results) {
@@ -315,7 +325,9 @@ export async function expireOwnerSmsReplies(db: D1Database, today: string): Prom
     const p: OwnerPersonality = isOwnerPersonality(r.personality) ? r.personality : "businessman";
     const stmts: D1PreparedStatement[] = [];
     if (r.expects_reply === 1) {
-      stmts.push(...favorDeltaStmts(db, r.sponsor_id, r.team_id, ignoreFavorDelta(p), FAVOR_REASONS.smsIgnored));
+      const occasion = isOwnerSmsOccasion(r.occasion) ? r.occasion : undefined;
+      stmts.push(...favorDeltaStmts(db, r.sponsor_id, r.team_id, ignoreFavorDelta(p, occasion),
+        occasion === "job_favor" ? FAVOR_REASONS.jobFavorIgnored : FAVOR_REASONS.smsIgnored));
     }
     if (r.conversation_id) {
       stmts.push(db.prepare(

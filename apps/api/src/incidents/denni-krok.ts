@@ -48,6 +48,15 @@ export async function zpracujIncidentyDne(env: Bindings, team: Record<string, un
   const stav = await nactiStavKlubu(env.DB, { id: teamId, league_id: (team.league_id as string | null) ?? null }, gameDate, sezona.number);
   if (!stav) return;
 
+  // Svatby hráčů (weddings/): den před svatbou se uzavře rozhodnutí trenéra (kocovina v sestavě),
+  // den po svatbě kondice pijáků a vztah ženicha. Běží každý den, nezávisle na losu incidentu.
+  const { processWeddingsForDay } = await import("../weddings/wedding-db");
+  await processWeddingsForDay(env, stav).catch((e) => logger.warn({ module: M, teamId }, "svatby hráčů", e));
+
+  // Protislužba sponzorovi (sponsors/player-jobs-db.ts): kdo dnes dopoledne pomáhá firmě, je na zápas unavenější.
+  const { applySponsorHelpDay } = await import("../sponsors/player-jobs-db");
+  await applySponsorHelpDay(env.DB, teamId, stav.den).catch((e) => logger.warn({ module: M, teamId }, "pomoc sponzorovi", e));
+
   // Konec životních situací a propadlé lhůty na zálohu běží každý den, bez ohledu na hrozící činy (spec 6b kroky 3–4).
   await ukonciSituace(env, { teamId, gameDate }).catch((e) => logger.warn({ module: M, teamId }, "konec situací", e));
   await propadleZalohy(env, { teamId, gameDate }).catch((e) => logger.warn({ module: M, teamId }, "propadlé zálohy", e));

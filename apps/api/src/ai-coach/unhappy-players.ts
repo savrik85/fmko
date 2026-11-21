@@ -279,6 +279,13 @@ async function guardDeal(
       return PERSONAL_TALK_COST <= club.spendable ? { id, cost: PERSONAL_TALK_COST, weeklyCost: 0 } : null;
     case "release":
       return releaseOption(db, club, row, unrest);
+    case "find_job": {
+      // Jen když ho některá firma, se kterou má klub vztah, opravdu vezme (sponsors/player-jobs.ts).
+      const { bestHiringSponsor } = await import("../sponsors/player-jobs-db");
+      const sponsorId = await bestHiringSponsor(db, club.teamId, row.id)
+        .catch((e) => { logger.warn({ module: M, teamId: club.teamId }, `práce u sponzora pro hráče ${row.id}`, e); return null; });
+      return sponsorId === null ? null : { id, cost: 0, weeklyCost: 0 };
+    }
     default:
       return { id, cost: 0, weeklyCost: 0 };
   }

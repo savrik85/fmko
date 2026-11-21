@@ -25,6 +25,19 @@ export const TEAM_FORM_WEIGHT = 0.1;
 export const MATCH_DAY_SWING = 0.15;
 
 /**
+ * Proslov trenéra (messaging/match-speech.ts) posune náhodu formy dne. Kostka zůstává stejná
+ * (stejný počet hodů, zápasy bez proslovu dopadnou bit po bitu stejně): kladný posun zvedne
+ * spodek, takže se hůř stane, že tým „nemá svůj den“, záporný srazí strop. Průměrná forma dne
+ * se posune o `MATCH_DAY_SWING × shift`.
+ */
+export function speechAdjustedRoll(r: number, shift: number | undefined): number {
+  const s = Math.max(-0.5, Math.min(0.5, shift ?? 0));
+  if (s > 0) return s + (1 - s) * r;
+  if (s < 0) return (1 + s) * r;
+  return r;
+}
+
+/**
  * Forma hráče −1 (krize) až +1 (forma života) z hodnocení, nejnovější první.
  * Měří se proti hráčovu vlastnímu průměru, ne proti lize. Jinak by kvalitní hráč měl
  * „formu" trvale a kvalita by se do síly týmu započítala dvakrát.

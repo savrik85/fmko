@@ -121,9 +121,43 @@ Odpověz jen JSON: {"chce_penize": true nebo false, "ucel": "coach" | "transfer"
   return { wantsMoney: parsed.chce_penize, purpose: isRequestPurpose(parsed.ucel) ? parsed.ucel : null, amount };
 }
 
+export interface JobAsk { wantsJob: boolean; playerName: string | null }
+
+/**
+ * Shání trenér u majitele práci pro hráče, a pro kterého (F8)? `roster` = jména hráčů klubu.
+ * null = model nejede nebo odpověděl nesmysl, rozhodne pak `parseJobAsk`.
+ */
+export async function extractJobAsk(env: OwnerChatEnv, f: OwnerChatFacts, roster: readonly string[]): Promise<JobAsk | null> {
+  const prompt = `Z SMS trenéra fotbalového klubu majiteli firmy zjisti, jestli trenér shání práci ve firmě (místo, brigádu, zaměstnání) pro některého svého hráče.
+Žádost o peníze, sponzorský příspěvek, pozvání na zápas nebo na pivo NENÍ shánění práce.
+Když trenér jen odpovídá na tvou otázku, pro koho práci chce (třeba napíše jen jméno), je to shánění práce.
+
+Hráči klubu: ${roster.join(", ") || "(neznámí)"}
+
+Předchozí rozhovor:
+${conversationBlock(f)}
+
+Nová zpráva trenéra: "${f.coachText}"
+
+Odpověz jen JSON: {"wants_job": true nebo false, "player": "jméno a příjmení hráče ze seznamu, jak ho trenér myslí" nebo null}`;
+  const parsed = parseJson<{ wants_job?: unknown; player?: unknown }>(await callModel(env, prompt, 96, 0.1));
+  if (!parsed || typeof parsed.wants_job !== "boolean") return null;
+  const name = typeof parsed.player === "string" && parsed.player.trim() ? parsed.player.trim().slice(0, 80) : null;
+  return { wantsJob: parsed.wants_job, playerName: name };
+}
+
 /** Pouze číslice: „15 000 Kč" i „15.000" → „15000". */
 function digitsOnly(s: string): string {
   return s.replace(/[^\d]/g, "");
+}
+
+/** Co musí odpověď modelu obsahovat přesně (jinak volající použije připravenou větu). */
+export interface OwnerReplyChecks {
+  amounts?: number[];
+  days?: string[];
+  allowed?: number[];
+  /** Kmeny slov malými písmeny bez diakritiky (např. příjmení hráče). */
+  words?: string[];
 }
 
 /**
@@ -133,7 +167,7 @@ function digitsOnly(s: string): string {
  */
 export async function writeOwnerReply(
   env: OwnerChatEnv, f: OwnerChatFacts, instruction: string,
-  mustContain: { amounts?: number[]; days?: string[]; allowed?: number[] } = {},
+  mustContain: OwnerReplyChecks = {},
 ): Promise<string | null> {
   const prompt = `Jsi ${f.ownerName}, je ti ${f.age} let a vlastníš firmu ${f.firmName}. Povahou jsi ${PERSONALITY_TEXT[f.personality]}.
 Právě si píšeš SMS s trenérem klubu ${f.teamName}. Trenér je ten, kdo ti píše: vykej mu a nemluv o něm ve třetí osobě.
@@ -162,7 +196,7 @@ Odpověz jen JSON: {"body": "text SMS"}`;
  * Očistí odpověď modelu a ověří, že říká přesně to, co hra rozhodla: požadované částky a data
  * v ní jsou a jiná částka (od 1 000 Kč) ne. Jinak null a volající použije připravenou větu.
  */
-export function checkOwnerReply(raw: string, mustContain: { amounts?: number[]; days?: string[]; allowed?: number[] } = {}): string | null {
+export function checkOwnerReply(raw: string, mustContain: OwnerReplyChecks = {}): string | null {
   const body = cleanDashes(raw.trim().replace(/^["„“]+|["“”]+$/g, "")).trim();
   if (!body || body.length > 600) return null;
   const digits = digitsOnly(body);
@@ -181,10 +215,26 @@ export function checkOwnerReply(raw: string, mustContain: { amounts?: number[]; 
       return null;
     }
   }
+  // Slova (kmeny bez diakritiky), která v odpovědi musí být: u práce pro hráče jeho příjmení.
+  const plain = body.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  for (const w of mustContain.words ?? []) {
+    if (!plain.includes(w)) {
+      logger.warn({ module: M }, `odpověď majitele bez slova ${w}, beru připravenou větu: ${body}`);
+      return null;
+    }
+  }
   const compact = body.replace(/\s/g, "");
   for (const d of mustContain.days ?? []) {
     if (!compact.includes(dayMonth(d).replace(/\s/g, "").replace(/\.$/, ""))) {
       logger.warn({ module: M }, `odpověď majitele bez data ${d}, beru připravenou větu: ${body}`);
+      return null;
+    }
+  }
+  // Datum, které hra neurčila, si model vymyslel („kluky čekám před zápasem 29. 10.“): nepravda.
+  const allowedDays = new Set((mustContain.days ?? []).map((d) => dayMonth(d).replace(/\s/g, "").replace(/\.$/, "")));
+  for (const m of body.matchAll(/\b(\d{1,2})\.\s?(\d{1,2})\.(?!\d)/g)) {
+    if (!allowedDays.has(`${Number(m[1])}.${Number(m[2])}`)) {
+      logger.warn({ module: M }, `odpověď majitele s datem ${m[0]}, které hra neurčila, beru připravenou větu: ${body}`);
       return null;
     }
   }

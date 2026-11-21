@@ -28,7 +28,7 @@ vi.mock("../season/pub", () => ({ createCoachLedSession: fx.createCoachLedSessio
 vi.mock("../season/finance-processor", () => ({ recordTransaction: fx.recordTransaction }));
 
 import { handleCoachMessageForInvite, spawnCasualMessages } from "./casual-messages";
-import { CASUAL_MIN_RELATION, CASUAL_TOPICS, INVITES, topicFits, type CasualContext } from "./casual-topics";
+import { CASUAL_MIN_RELATION, CASUAL_TOPICS, INVITES, topicAllowed, topicFits, type CasualContext } from "./casual-topics";
 import { PHOTO_SCENES } from "./player-photo";
 import type { PlayerSnapshot } from "./ai-player-scenarios";
 
@@ -145,9 +145,13 @@ describe("témata zpráv jen tak", () => {
     expect(topicFits(topic("casual_mushrooms"), makePlayer(), ctx({ month: 12 }))).toBe(0);
   });
 
-  it("svatbu a miminko jen ten, kdo je má v životní situaci", () => {
+  it("svatbu a miminko jen ten, kdo je má v životní situaci; pozvánku na svatbu s datem posílá svatba sama", () => {
     expect(topicFits(topic("casual_wedding"), makePlayer(), ctx())).toBe(0);
-    expect(topicFits(topic("casual_wedding"), makePlayer({ zivotniSituace: { kind: "svatba_spoluhrace", label: "Svatba" } }), ctx())).toBeGreaterThan(0);
+    // Svatba má datum a pozvánku pošle ženich při ohlášení (weddings/), náhodná zpráva by se s ní hádala.
+    expect(topicFits(topic("casual_wedding"), makePlayer({ zivotniSituace: { kind: "svatba_spoluhrace", label: "Svatba" } }), ctx())).toBe(0);
+    expect(topicAllowed(topic("casual_wedding"), makePlayer({ zivotniSituace: { kind: "svatba_spoluhrace", label: "Svatba" } }))).toBe(true);
+    expect(topicFits(topic("casual_baby"), makePlayer(), ctx())).toBe(0);
+    expect(topicFits(topic("casual_baby"), makePlayer({ zivotniSituace: { kind: "narozeni_ditete", label: "Narození dítěte" } }), ctx())).toBeGreaterThan(0);
   });
 
   it("pozvánka z hospody jen z hospody večer", () => {
@@ -204,6 +208,16 @@ describe("kdo dostane zprávu jen tak", () => {
     await addPlayer("p1", 85);
     await db.prepare("INSERT INTO conversations (id, team_id, type, participant_id, ai_thread_active, ai_thread_state) VALUES ('c1', 't1', 'player', 'p1', 1, '{}')").run();
     expect((await spawnCasualMessages(db, { CACHE_KV: kv }, SATURDAY_EVENING, { teamId: "t1" })).sent).toBe(0);
+  });
+
+  it("„Nevíte o práci?“ od hráče bez práce: otázka čeká na trenérův slib (F8)", async () => {
+    await addPlayer("p1", 85);
+    await db.prepare("INSERT INTO club_incidents VALUES ('inc-lost-job', 't1', 'probiha', 'zivotni', 'p1', 'prisel_o_praci')").run();
+    const r = await spawnCasualMessages(db, { CACHE_KV: kv }, SATURDAY_EVENING, { teamId: "t1", topicId: "casual_job_tip" });
+    expect(r.sent).toBe(1);
+    const convId = (await db.prepare("SELECT id FROM conversations WHERE participant_id = 'p1'").first<{ id: string }>())!.id;
+    expect(JSON.parse((await kv.get(`open_job_tip:${convId}`)) ?? "null")).toEqual({ teamId: "t1", playerId: "p1", playerFirstName: "Franta" });
+    await kv.delete(`open_job_tip:${convId}`);
   });
 });
 

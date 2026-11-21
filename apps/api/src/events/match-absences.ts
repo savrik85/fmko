@@ -253,7 +253,7 @@ export async function getAbsentPlayersMap(
 
   const [playersRes, injRes, district] = await Promise.all([
     db.prepare(
-      "SELECT p.id, p.first_name, p.last_name, p.age, p.life_context, p.personality, p.physical, p.commute_km, p.suspended_matches, p.is_celebrity, p.overall_rating FROM players p WHERE p.team_id = ? AND (p.status IS NULL OR p.status = 'active') ORDER BY p.overall_rating DESC",
+      "SELECT p.id, p.team_id, p.first_name, p.last_name, p.age, p.life_context, p.personality, p.physical, p.commute_km, p.suspended_matches, p.is_celebrity, p.overall_rating FROM players p WHERE p.team_id = ? AND (p.status IS NULL OR p.status = 'active') ORDER BY p.overall_rating DESC",
     ).bind(teamId).all<Record<string, unknown>>()
       .catch((e) => { logger.warn({ module: "match-absences" }, "players query", e); return { results: [] as Record<string, unknown>[] }; }),
     db.prepare(

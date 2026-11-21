@@ -14,6 +14,7 @@ export const LANDING_CACHE_KEY = "public-landing:v4";
 const CACHE_KEY = LANDING_CACHE_KEY;
 const CACHE_TTL_S = 600;
 /** Rubriky psané o vymyšlených hráčích a klubech, ne o lidech za klávesnicí. */
+// Ročenka (season_yearbook) sem nepatří: uvádí přestupy mezi kluby s částkami a incidenty, patří jen na klubový web.
 const SAFE_NEWS_TYPES = ["ai_report", "player_interview", "ultras_report", "season_wrap", "celebrity_arrival", "legend_farewell"];
 
 export interface LandingData {

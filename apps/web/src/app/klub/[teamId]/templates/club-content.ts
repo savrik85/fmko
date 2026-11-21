@@ -28,6 +28,7 @@ export const PRESS_NEWS_TYPES: ReadonlyMap<string, string> = new Map([
   ["manager_arrival", "Nový trenér"],
   ["manager_feud", "Slovo trenéra"],
   ["legend_farewell", "Rozlučka"],
+  ["season_yearbook", "Ročenka"],
 ]);
 
 export function pressInterviews(data: ClubWebsiteData): Interview[] {

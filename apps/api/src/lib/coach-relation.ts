@@ -24,6 +24,10 @@ export type CoachRelationSource =
   | "incident"
   // Slib napsaný v SMS (messaging/coach-commitments.ts): dodržel, nebo porušil.
   | "promise"
+  // Trenér hráči přes sponzora sehnal práci (sponsors/player-jobs-db.ts).
+  | "job"
+  // Trenér ho jmenoval v proslovu po zápase, pochvala nebo výtka (messaging/match-speech.ts).
+  | "speech"
   | "left_out"
   | "arrival"
   | "admin";

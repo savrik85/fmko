@@ -115,6 +115,13 @@ export const PHOTO_SCENES: Record<string, PhotoScene> = {
     alt: "snubní prstýnky na stole vedle kytice a sklenic",
     portrait: true,
   },
+  // Svatba v kabině (weddings/): fotka do článku ve Zpravodaji a k poděkování ženicha.
+  wedding_party: {
+    id: "wedding_party",
+    prompt: `${PHONE_PHOTO} A village wedding party in a festively decorated village hall in South Bohemia in the evening: long tables with white tablecloths, plates of open sandwiches and wedding cake, the bride in a white dress and the groom in a dark suit dancing in the middle seen from behind, a group of young men from an amateur football team in white shirts and loosened ties raising plain dimpled glass mugs of lager, a small brass band in the corner, paper garlands under the ceiling, warm yellow light. ${NO_TEXT}`,
+    alt: "svatba v sále, novomanželé tančí a kluci z kabiny zvedají půllitry",
+    portrait: false,
+  },
   baby_shoes: {
     id: "baby_shoes",
     prompt: `${PHONE_PHOTO} Tiny knitted baby shoes lying on a soft white blanket next to a small plush teddy bear, warm soft light, no baby in the photo. ${NO_TEXT}`,

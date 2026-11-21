@@ -172,6 +172,7 @@ export const INCIDENT_KIND_TEXT: Record<string, string> = {
   dodavka_ukradena: "the club van was stolen",
   kradez_kamery: "the security cameras were stolen",
   oslava_v_kabine: "a drunken celebration damaged the dressing room",
+  stag_party: "a stag party before a player's wedding damaged the dressing room",
   kopnute_dvere: "a player kicked a door in after being sent off",
   koleje_trakturek: "someone drove the mower across the pitch and left ruts",
   pozar_grilu: "the barbecue set the refreshment stand on fire",

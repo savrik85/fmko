@@ -177,6 +177,11 @@ describe("kontrola odpovědi majitele od modelu", () => {
     expect(checkOwnerReply("Pošlu 15 000 Kč, příště klidně 50 000. Do 29. 10.", { amounts: [15000], days: ["2026-10-29"] })).toBeNull();
     expect(checkOwnerReply("Nemám na to, ale dejte vědět.", { allowed: [72600] })).toBe("Nemám na to, ale dejte vědět.");
   });
+  it("neprojde s datem, které hra neurčila (model si ho vymyslel)", () => {
+    expect(checkOwnerReply("Díky moc! Kluky očekávám před zápasem 29. 10.")).toBeNull();
+    expect(checkOwnerReply("Pošlu 15 000 Kč. Do 29. 10., nebo radši do 3. 11.", { amounts: [15000], days: ["2026-10-29"] })).toBeNull();
+    expect(checkOwnerReply("Díky, kluky čekám dopoledne před zápasem.")).toBe("Díky, kluky čekám dopoledne před zápasem.");
+  });
   it("dlouhou pomlčku nahradí čárkou", () => {
     expect(checkOwnerReply("Dobře — uvidíme.")).toBe("Dobře, uvidíme.");
   });

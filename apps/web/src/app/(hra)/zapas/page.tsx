@@ -155,6 +155,8 @@ interface NextMatchInfo {
   venueName?: string | null;
   roundName?: string | null;
   isLocalDerby?: boolean;
+  /** Trenér má na tohle ligové kolo distanc na lavičce (kritika sudího na Sockách): pokyny neplatí. */
+  benchBan?: boolean;
 }
 
 type DelegatedReferee = RefereeProfileView & {
@@ -993,12 +995,22 @@ function MatchPage() {
       </div>
 
       {/* ═══ Pokyny na lavičce — přednastavené scénáře pro engine ═══ */}
-      <MatchPlanEditor
-        plan={matchPlan}
-        onChange={(next) => { setMatchPlan(next); setSaved(false); }}
-        starters={planStarters}
-        bench={planBench}
-      />
+      {nextMatch?.benchBan ? (
+        <div className="card p-4 border border-card-red/40 bg-red-50">
+          <p className="font-heading font-bold text-card-red">Distanc na lavičce</p>
+          <p className="text-sm mt-1">
+            Za kritiku rozhodčího máš na tenhle zápas distanc. Pokyny na lavičce se neuplatní, střídat bude automat.
+            Sestavu a taktiku nastavit můžeš.
+          </p>
+        </div>
+      ) : (
+        <MatchPlanEditor
+          plan={matchPlan}
+          onChange={(next) => { setMatchPlan(next); setSaved(false); }}
+          starters={planStarters}
+          bench={planBench}
+        />
+      )}
 
       {/* Main layout: pitch left, player list right */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">

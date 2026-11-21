@@ -250,6 +250,18 @@ export async function nactiStavKlubu(
     if (penize && penize.castka > 0) utekBezDopisu = { id: String(utekBezDopisuRadek.id), castka: penize.castka };
   }
 
+  // Nejbližší svatba hráče z kádru (rozlučka se svobodou, weddings/). Mimo dávku a s vlastním
+  // záchytem: tabulka přibyla migrací 0320 a bez ní nesmí spadnout celý stav klubu.
+  const weddingRow = await db.prepare(
+    `SELECT player_id, wedding_date FROM weddings
+      WHERE team_id = ? AND wedding_date > ? AND settled_at IS NULL
+      ORDER BY wedding_date LIMIT 1`,
+  ).bind(teamId, den).first<{ player_id: string; wedding_date: string }>()
+    .catch((e) => { logger.warn({ module: M }, `nejbližší svatba ${teamId}`, e); return null; });
+  const upcomingWedding = weddingRow && idKadru.has(weddingRow.player_id)
+    ? { groomId: String(weddingRow.player_id), date: String(weddingRow.wedding_date).slice(0, 10) }
+    : null;
+
   return {
     teamId, leagueId: team.league_id, seasonNumber, gameDate, den,
     vybaveni, stadion, kadr, vcera: vceraZapas, hospodaVcera,
@@ -259,6 +271,6 @@ export async function nactiStavKlubu(
     rozpocet: cislo((rozpocetRes.results[0] as { budget?: number } | undefined)?.budget, 0),
     situace,
     utekLetos: utekRes.results.length > 0,
-    ekonom, obsluha, poskozeni, utekBezDopisu,
+    ekonom, obsluha, poskozeni, utekBezDopisu, upcomingWedding,
   };
 }

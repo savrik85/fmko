@@ -21,6 +21,11 @@ export interface OccasionRule {
   priority: number;
   /** Kolik herních dní po zařazení smí SMS ještě odejít (0 = jen ten den). */
   deliverDays: number;
+  /**
+   * Násobek náklonnosti za odpověď i za mlčení. Protislužba za práci pro hráče váží dvojnásob:
+   * majitel hráče vzal a teď prosí on, odbytí ho zamrzí víc než u běžné SMS.
+   */
+  replyWeight?: number;
 }
 
 export const OCCASION_RULES: Record<OwnerSmsOccasion, OccasionRule> = {
@@ -38,6 +43,7 @@ export const OCCASION_RULES: Record<OwnerSmsOccasion, OccasionRule> = {
   main_new: { expectsReply: false, priority: 11, deliverDays: 3 },
   season_complaint: { expectsReply: true, priority: 12, deliverDays: 3 },
   season_thanks: { expectsReply: false, priority: 13, deliverDays: 3 },
+  job_favor: { expectsReply: true, priority: 5, deliverDays: 4, replyWeight: 2 },
 };
 
 /** Není správná odpověď pro všechny: podnikateli sedí věcnost, fanouškovi srdce. */
@@ -50,12 +56,12 @@ const REPLY_FAVOR: Record<OwnerPersonality, Record<ReplyTone, number>> = {
 
 const IGNORE_FAVOR: Record<OwnerPersonality, number> = { fan: -2, patriot: -2, businessman: -1, cautious: -2 };
 
-export function replyFavorDelta(personality: OwnerPersonality, tone: ReplyTone): number {
-  return REPLY_FAVOR[personality][tone];
+export function replyFavorDelta(personality: OwnerPersonality, tone: ReplyTone, occasion?: OwnerSmsOccasion): number {
+  return REPLY_FAVOR[personality][tone] * (occasion ? OCCASION_RULES[occasion].replyWeight ?? 1 : 1);
 }
 
-export function ignoreFavorDelta(personality: OwnerPersonality): number {
-  return IGNORE_FAVOR[personality];
+export function ignoreFavorDelta(personality: OwnerPersonality, occasion?: OwnerSmsOccasion): number {
+  return IGNORE_FAVOR[personality] * (occasion ? OCCASION_RULES[occasion].replyWeight ?? 1 : 1);
 }
 
 /**

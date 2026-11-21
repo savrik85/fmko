@@ -259,7 +259,16 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
       const friendlyAttendance = isNeutral
         ? Math.round(10 + Math.random() * 20)
         : Math.round((20 + Math.random() * 50) * ticketAttendanceMul);
+      // Proslovy trenérů (messaging/match-speech.ts) platí i v přáteláku: klíč je id zápasu.
+      const { loadSpeechShift, markSpeechesApplied } = await import("../messaging/match-speech");
+      const kickoffIso = new Date().toISOString();
+      const [homeSpeech, awaySpeech] = await Promise.all([
+        loadSpeechShift(db, homeTeamId, matchId, kickoffIso),
+        loadSpeechShift(db, awayTeamId, matchId, kickoffIso),
+      ]);
       const result = simulateMatch(rng, {
+        homeSpeechShift: homeSpeech.shift,
+        awaySpeechShift: awaySpeech.shift,
         home: homeSetup,
         away: awaySetup,
         weather,
@@ -273,6 +282,8 @@ export async function simulateFriendlyMatches(db: D1Database): Promise<number> {
         homeEquipment,
         awayEquipment,
       });
+      await markSpeechesApplied(db, [...homeSpeech.ids, ...awaySpeech.ids], matchId)
+        .catch((e) => logger.warn({ module: "friendly-runner" }, `proslovy v přáteláku ${matchId}`, e));
 
       // Commentary (okresově dle domácího = dějiště)
       await loadCommentaryFromDB(db);

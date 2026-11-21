@@ -72,6 +72,14 @@ async function relationEffects(env: Bindings, input: ToneInput): Promise<number>
   return applySocialToneEffects(env.DB, modelToneClassifier(env), input);
 }
 
+/** Příspěvek o sudím: stejné dopady jako pozápasový rozhovor (social/referee-criticism.ts). */
+async function refereeEffects(env: Bindings, postKey: string, authorTeamId: string, text: string): Promise<void> {
+  const { applySocialRefereeEffects, mentionsReferee, modelRefereeStanceClassifier } = await import("../social/referee-criticism");
+  if (!mentionsReferee(text)) return;
+  const classify = await aiMode(env) === "off" ? null : modelRefereeStanceClassifier(env);
+  await applySocialRefereeEffects(env.DB, classify, { postKey, authorTeamId, text });
+}
+
 /** Odpověď novináři nebo komentář, který na něj míří, hýbe jeho vztahem ke klubu. */
 async function journalistEffects(env: Bindings, input: JournalistToneInput): Promise<number> {
   if (input.journalistIds.length === 0 && !input.repliedJournalistId) return 0;
@@ -130,6 +138,7 @@ socialRouter.post("/teams/:teamId/social/posts", async (c) => {
     authorTeamId: viewer.teamId, authorName, text, sourceKey: key, context: "nový příspěvek na zdi",
     targetTeamIds: relationTargets(viewer.teamId, mentions.map((m) => m.teamId)),
   }));
+  await runLater(c, refereeEffects(c.env, key, viewer.teamId, text));
 
   const trigger: ReplyTrigger = {
     key, text, authorName, authorTeamId: viewer.teamId, authorTeamName: viewer.teamName,
@@ -196,6 +205,8 @@ socialRouter.post("/teams/:teamId/social/comments", async (c) => {
       replyTo?.authorKind === "manager" ? replyTo.teamId : null,
     ]),
   }));
+
+  await runLater(c, refereeEffects(c.env, `comment:${id}`, viewer.teamId, text));
 
   await runLater(c, journalistEffects(c.env, {
     authorTeamId: viewer.teamId, text, sourceKey: `comment:${id}`, context: target.title,

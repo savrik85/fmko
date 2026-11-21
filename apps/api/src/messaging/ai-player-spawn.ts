@@ -418,6 +418,7 @@ export function loadPlayerSnapshot(
     isCelebrity: !!(row.is_celebrity as number),
     transferUnrest: lifeContext.transferUnrest?.level ?? 0,
     occupation: lifeContext.occupation,
+    sponsorJobFirm: typeof lifeContext.sponsorJob?.firm === "string" ? lifeContext.sponsorJob.firm : undefined,
     nationality: (row.nationality as string | null | undefined) ?? null,
     romani: lifeContext.romani === true,
     transferTalk: transferTalkFrom(lifeContext.transferUnrest),

@@ -212,3 +212,25 @@ describe("výmluvy se v jednom zápase neopakují", () => {
   });
 
 });
+
+describe("práce u sponzora (F8)", () => {
+  const row = (lc: Record<string, unknown>) => ({
+    first_name: "Pepa", last_name: "Hasič", age: 30, personality: JSON.stringify({ discipline: 40 }),
+    life_context: JSON.stringify({ morale: 50, ...lc }), physical: "{}", commute_km: 0, is_celebrity: 0,
+  });
+
+  it("hráč s prací u sponzora chybí u zápasů méně než směnař", () => {
+    const shiftWorker = hracProAbsenci(row({ occupation: "Hasič" }));
+    const atSponsor = hracProAbsenci(row({
+      occupation: "Zedník", sponsorJob: { sponsorId: 1, firm: "Stavby Novák", since: "2026-11-20", previous: "Hasič" },
+    }));
+    expect(shiftWorker.sponsorJob).toBeUndefined();
+    expect(atSponsor.sponsorJob).toBe(true);
+    const absences = (p: PlayerForAbsence) => {
+      let n = 0;
+      for (let seed = 1; seed <= 3000; seed++) n += generateAbsences(createRng(seed), [p], { timing: "match_day" }).length;
+      return n;
+    };
+    expect(absences(atSponsor)).toBeLessThan(absences(shiftWorker));
+  });
+});

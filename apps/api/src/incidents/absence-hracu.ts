@@ -18,7 +18,9 @@ import { nactiObvineni } from "./vysetrovani";
 
 const M = "incidents-absence";
 
-export type DruhAbsence = "vyslech" | "soud" | "vyrazen" | "porod" | "nemocna_mama" | "stehovani";
+export type DruhAbsence = "vyslech" | "soud" | "vyrazen" | "porod" | "nemocna_mama" | "stehovani"
+  // Kocovina po svatbě spoluhráče (weddings/): víc hráčů jedné svatby, každý s vlastním id incidentu.
+  | "hangover";
 export type DruhVlivu = "obvineny" | "pachatel" | "dluhy" | "prisel_o_praci" | "rozvod" | "zabaveny_ridicak";
 
 export interface IncidentniAbsence {
@@ -222,7 +224,7 @@ export interface NovaAbsence {
   sms: string;
 }
 
-const PORADI: Record<DruhAbsence, number> = { vyslech: 1, soud: 2, vyrazen: 3, porod: 4, nemocna_mama: 5, stehovani: 6 };
+const PORADI: Record<DruhAbsence, number> = { vyslech: 1, soud: 2, vyrazen: 3, porod: 4, nemocna_mama: 5, stehovani: 6, hangover: 7 };
 
 export function absencePlatnaKZapisu(a: NovaAbsence): boolean {
   if (a.druh === "vyrazen") return a.zapasu !== null && a.zapasu >= 1 && a.zapasu <= VYRAZENI_MAX_ZAPASU;

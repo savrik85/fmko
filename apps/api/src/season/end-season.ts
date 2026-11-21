@@ -29,6 +29,7 @@ import { beginRollover, findPendingRollover, runRolloverStep } from "./season-ro
 import { ROLLOVER_KEY } from "./season-progress";
 import { createRng, cryptoSeed } from "../generators/rng";
 import { logger } from "../lib/logger";
+import type { AiContext } from "../lib/ai-provider";
 
 const WRAP_PHASES = [
   "finalize", "rewards", "awards", "archive", "departures",
@@ -36,6 +37,8 @@ const WRAP_PHASES = [
   // přidat vedle něj.
   "academy",
   "replenish", "village", "articles", "interviews", "recap",
+  // Ročenka lidských klubů až po rekapitulaci: bere z ní pořadí a ocenění.
+  "yearbook",
 ] as const;
 type WrapPhase = (typeof WRAP_PHASES)[number];
 
@@ -129,7 +132,8 @@ async function getGameDate(db: D1Database, leagueId: string): Promise<string> {
 export async function runEndSeasonStep(
   db: D1Database,
   geminiApiKey: string | undefined,
-  opts: { force?: boolean } = {},
+  /** `ai` = poskytovatel modelu (Workers AI / Gemini) pro ročenku; bez něj píše šablona. */
+  opts: { force?: boolean; ai?: AiContext | null } = {},
 ): Promise<EndSeasonStepResult> {
   // 0. Rozběhnutý rollover dokončit dřív, než se cokoli posoudí. Nová sezóna je v tu chvíli
   //    už aktivní a nic se v ní nehrálo, takže by ji kontrola níž odbyla „sezóna zatím
@@ -193,7 +197,7 @@ export async function runEndSeasonStep(
       if (prog?.status !== "done") { firstPending = phase; break; }
     }
     if (firstPending) {
-      const status = await runWrapPhase(db, geminiApiKey, st.leagueId, seasonNumber, firstPending);
+      const status = await runWrapPhase(db, geminiApiKey, st.leagueId, seasonNumber, firstPending, opts.ai ?? null);
       return { allDone: false, ready: true, seasonNumber, leagueId: st.leagueId, phase: firstPending, status, remainingLeagues: started.length, detail: `${firstPending} → ${status}` };
     }
   }
@@ -275,6 +279,7 @@ async function runWrapPhase(
   leagueId: string,
   seasonNumber: number,
   phase: WrapPhase,
+  ai: AiContext | null = null,
 ): Promise<"done" | "in_progress" | "error"> {
   try {
     switch (phase) {
@@ -400,6 +405,30 @@ async function runWrapPhase(
         }
         await setProgress(db, leagueId, seasonNumber, phase, "done");
         return "done";
+      }
+      case "yearbook": {
+        // Po jednom lidském klubu na krok (model píše delší text). Kurzor = hotové kluby.
+        const prog = await getProgress(db, leagueId, seasonNumber, phase);
+        let processed: string[] = [];
+        try {
+          processed = JSON.parse(prog?.cursor ?? "[]") as string[];
+        } catch (e) {
+          logger.warn({ module: "end-season" }, `nečitelný kurzor ročenky ligy ${leagueId}`, e);
+        }
+        const humans = await db.prepare(
+          "SELECT id FROM teams WHERE league_id = ? AND user_id IS NOT NULL AND user_id != 'ai' AND parent_team_id IS NULL ORDER BY id",
+        ).bind(leagueId).all<{ id: string }>();
+        const next = humans.results.find((h) => !processed.includes(h.id));
+        if (!next) {
+          await setProgress(db, leagueId, seasonNumber, phase, "done", JSON.stringify(processed));
+          return "done";
+        }
+        const { writeTeamYearbook } = await import("../news/season-yearbook");
+        await writeTeamYearbook(db, ai, next.id, leagueId, seasonNumber);
+        processed.push(next.id);
+        const done = humans.results.every((h) => processed.includes(h.id));
+        await setProgress(db, leagueId, seasonNumber, phase, done ? "done" : "pending", JSON.stringify(processed));
+        return done ? "done" : "in_progress";
       }
     }
   } catch (e) {

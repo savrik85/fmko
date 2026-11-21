@@ -3825,7 +3825,7 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
   // Batch: existing lineup + all players (including injured)
   const [lineupRes, playersRes] = await c.env.DB.batch([
     lineupQuery,
-    c.env.DB.prepare("SELECT p.id, p.first_name, p.last_name, p.position, p.overall_rating, p.age, p.weekly_wage, p.skills, p.life_context, p.personality, p.physical, p.squad_number, p.commute_km, p.suspended_matches, p.is_celebrity, ps.avg_rating, i.days_remaining as injury_days, i.type as injury_type FROM players p LEFT JOIN injuries i ON p.id = i.player_id AND i.days_remaining > 0 LEFT JOIN player_stats ps ON ps.player_id = p.id AND ps.team_id = p.team_id AND ps.season_id = (SELECT id FROM seasons WHERE status = 'active' LIMIT 1) WHERE p.team_id = ? AND (p.status IS NULL OR p.status = 'active') ORDER BY p.overall_rating DESC").bind(teamId),
+    c.env.DB.prepare("SELECT p.id, p.team_id, p.first_name, p.last_name, p.position, p.overall_rating, p.age, p.weekly_wage, p.skills, p.life_context, p.personality, p.physical, p.squad_number, p.commute_km, p.suspended_matches, p.is_celebrity, ps.avg_rating, i.days_remaining as injury_days, i.type as injury_type FROM players p LEFT JOIN injuries i ON p.id = i.player_id AND i.days_remaining > 0 LEFT JOIN player_stats ps ON ps.player_id = p.id AND ps.team_id = p.team_id AND ps.season_id = (SELECT id FROM seasons WHERE status = 'active' LIMIT 1) WHERE p.team_id = ? AND (p.status IS NULL OR p.status = 'active') ORDER BY p.overall_rating DESC").bind(teamId),
   ]);
   let lineup = (lineupRes.results[0] as { formation: string; tactic: string; hardness: string | null; players_data: string; is_auto: number; captain_id: string | null; preset_slot: string | null; match_plan: string | null; bench_data: string | null } | undefined) ?? null;
   let lineupSource: "explicit" | "default" | null = lineup ? "explicit" : null;
@@ -4210,6 +4210,18 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
     temperature: forecast.temperature,
   });
 
+  // Distanc trenéra na lavičce (kritika sudího na Sockách, social/referee-criticism.ts): v ligovém
+  // kole se pokyny na lavičce neuplatní a střídá automat. Stránka sestavy to musí říct.
+  let benchBan = false;
+  if (!isFriendly && !isCup && !isTournament && gameWeek != null && calendarId) {
+    const cal = await c.env.DB.prepare("SELECT season_number FROM season_calendar WHERE id = ?").bind(calendarId)
+      .first<{ season_number: number }>()
+      .catch((e) => { logger.warn({ module: "game" }, "sezóna kola pro distanc", e); return null; });
+    if (cal) {
+      const { hasBenchBan } = await import("../social/referee-criticism");
+      benchBan = await hasBenchBan(c.env.DB, teamId, gameWeek, cal.season_number);
+    }
+  }
   return c.json({
     referee: refereeInfo,
     forecast: {
@@ -4237,6 +4249,7 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
       venueName: isTournament ? (match.venue_name as string | null) ?? null : null,
       roundName: cupRoundName,
       isLocalDerby,
+      benchBan,
     },
     lineup: lineup ? {
       formation: lineup.formation, tactic: lineup.tactic,
@@ -6024,8 +6037,10 @@ gameRouter.get("/teams/:teamId/offers/:offerId", async (c) => {
     if (isOfferActive && playerRow) {
       const virtualRating = virtualFromTeam ? (virtualFromTeam.reputation as number | null) : null;
       const virtualCountry = virtualFromTeam ? (virtualFromTeam.country as string | null) : null;
+      const { jobLureOf } = await import("../transfers/job-lure");
       const fresh = await computeInterestForOffer(c.env.DB, offer.player_id as string, {
         fromTeamId: offer.from_team_id as string, offerAmount: currentAmount, virtualRating, virtualCountry,
+        virtualJob: isVirtualOffer && jobLureOf(offer.virtual_team_data) !== null,
       });
       if (fresh) {
         playerInterest = { level: fresh.level, label: INTEREST_LABELS[fresh.level] };
@@ -7232,7 +7247,9 @@ gameRouter.post("/admin/rollover-phase", async (c) => {
 gameRouter.post("/admin/end-season", async (c) => {
   const force = c.req.query("force") === "1";
   const { runEndSeasonStep } = await import("../season/end-season");
-  const result = await runEndSeasonStep(c.env.DB, (c.env as any).GEMINI_API_KEY, { force });
+  const { aiContextFromEnv } = await import("../lib/ai-provider");
+  const ai = await aiContextFromEnv(c.env).catch((e) => { logger.warn({ module: "end-season" }, "AI kontext pro konec sezóny", e); return null; });
+  const result = await runEndSeasonStep(c.env.DB, (c.env as any).GEMINI_API_KEY, { force, ai });
   return c.json(result);
 });
 
@@ -8769,7 +8786,7 @@ gameRouter.post("/admin/leagues/:leagueId/trigger-day-before", async (c) => {
 
     // Vyloučit zraněné a suspendované — ti nedostanou absence SMS (mají vlastní kanál)
     const squadRows = await c.env.DB.prepare(
-      `SELECT p.id, p.first_name, p.last_name, p.nationality, p.age, p.personality, p.life_context, p.physical, p.commute_km, p.is_celebrity, p.suspended_matches
+      `SELECT p.id, p.team_id, p.first_name, p.last_name, p.nationality, p.age, p.personality, p.life_context, p.physical, p.commute_km, p.is_celebrity, p.suspended_matches
          FROM players p
          LEFT JOIN injuries i ON p.id = i.player_id AND i.days_remaining > 0
          WHERE p.team_id = ? AND (p.status IS NULL OR p.status = 'active')

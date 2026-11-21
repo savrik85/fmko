@@ -35,6 +35,8 @@ export type TransactionType =
   | "sponsor_signing"
   // Prosba o příspěvek u majitele firmy (sponsors/requests.ts). Příjem, ne nákup.
   | "sponsor_request"
+  // Dotace ze zasedání zastupitelstva (villages/council-db.ts). Příjem, ne nákup, proto NENÍ v PURCHASE_TYPES.
+  | "village_grant"
   | "season_reward"
   | "event"
   | "transfer_fee"
@@ -122,6 +124,9 @@ export type TransactionType =
   | "sponsor_penalty"
   // Úkoly zaměstnanců (staff/staff-tasks.ts): platba předem, při zrušení před začátkem vratka.
   | "staff_task"
+  // Svatební dar hráči (weddings/, „Svatba v kabině“). Dobrovolný výdaj trenéra, PATŘÍ do
+  // PURCHASE_TYPES: klub v mínusu dar neposílá.
+  | "wedding_gift"
   | "other";
 
 /** Základní cena vstupenek podle kategorie obce — reference pro satisfaction delta calc. */
@@ -233,7 +238,7 @@ const PURCHASE_TYPES = new Set<TransactionType>([
   "pitch_repair", "pitch_upgrade", "promotional_campaign", "bus_subsidy",
   "concession_wholesale", "transfer_admin_fee", "loan_fee",
   "manager_social", "player_bonus", "staff_signing", "course_fee", "staff_task", "coach_course", "coach_exam_retake", "fan_relations",
-  "bet_stake", "bet_levy", "friendly_stake",
+  "bet_stake", "bet_levy", "friendly_stake", "wedding_gift",
 ]);
 
 /**

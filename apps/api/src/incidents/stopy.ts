@@ -23,6 +23,7 @@ export const MISTO_INCIDENTU: Record<string, MistoIncidentu> = {
   dodavka_ukradena: "parkoviste",
   kradez_kamery: "kabiny",
   oslava_v_kabine: "kabiny",
+  stag_party: "kabiny",
   kopnute_dvere: "kabiny",
   koleje_trakturek: "hriste",
   pozar_grilu: "stanek",

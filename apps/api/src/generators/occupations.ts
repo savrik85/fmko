@@ -1001,9 +1001,12 @@ const MATCH_ABSENCE_BY_SHIFT: Record<Smena, number> = {
   smenny: 0.025, vecerni: 0.015, rano: 0.01, denni: 0, volny: -0.005,
 };
 
-export function occupationMatchAbsence(name: string | undefined): number {
+export function occupationMatchAbsence(name: string | undefined, opts: { sponsorJob?: boolean } = {}): number {
   const occ = name ? getOccupationByName(name) : undefined;
-  return MATCH_ABSENCE_BY_SHIFT[smenaProPovolani(name)] + (occ?.overtimeRisk ?? 0) * 0.03;
+  const base = MATCH_ABSENCE_BY_SHIFT[smenaProPovolani(name)] + (occ?.overtimeRisk ?? 0) * 0.03;
+  // Práce u firmy, která klub sponzoruje (sponsors/player-jobs.ts): šéf hráče na zápas pustí,
+  // směna ani přesčas ho od zápasu neberou víc, než kdyby si rozvrh určoval sám.
+  return opts.sponsorJob ? Math.min(base, MATCH_ABSENCE_BY_SHIFT.volny) : base;
 }
 
 /**
