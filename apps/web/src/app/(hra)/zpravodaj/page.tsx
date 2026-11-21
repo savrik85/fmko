@@ -1080,6 +1080,7 @@ function rubrikaProTyp(type: string): string {
     case "cup_round": return "🏆 Pohár";
     case "hall_cup": return "🥅 Sálovka";
     case "player_of_district": return "🏅 Fotbalista okresu";
+    case "season_yearbook": return "📖 Ročenka";
     case "club_wedding": return "💍 Ze života klubů";
     default: return "Aktualita";
   }

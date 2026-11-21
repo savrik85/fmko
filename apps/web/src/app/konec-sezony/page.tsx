@@ -36,6 +36,8 @@ interface RecapData {
   awards: { playerOfSeason: Award | null; topScorer: Award | null; managerOfSeason: Award | null; discovery: Award | null; bestEleven: BestEleven[]; bestElevenMine: BestEleven[] };
   trophy: { place: number; title: string } | null;
   seasonStats: SeasonStats;
+  /** Ročenka klubu ve Zpravodaji (fáze yearbook konce sezóny), čte se na klubovém webu. */
+  yearbookNewsId?: string;
   relationships?: {
     rival?: { teamName: string; managerName: string | null; coachIsAi?: boolean; heat: number; moment: string | null; verdict: string } | null;
     ally?: { teamName: string; managerName: string | null; coachIsAi?: boolean; respect: number } | null;
@@ -444,6 +446,13 @@ function Recap({ data, onEnter }: { data: RecapData; onEnter: (leaving?: string[
           <div className="se-cta-kicker">Píšťalka zazněla. Začíná</div>
           <div className="se-cta-season" style={{ color: mood.accent }}>SEZÓNA {data.newSeasonNumber}</div>
           <p className="se-cta-text">Nový rozpis, čistá tabulka, nové naděje. Hodně štěstí, trenére.</p>
+          {data.yearbookNewsId && myTeamId && (
+            <p className="se-cta-text">
+              <a href={`/klub/${myTeamId}`} target="_blank" rel="noopener" style={{ color: mood.accent, textDecoration: "underline" }}>
+                📖 Přečíst ročenku klubu za sezónu {data.seasonNumber}
+              </a>
+            </p>
+          )}
           {duels.length > 0 && !allDecided && <p className="se-cta-warn">U nerozhodnutých dvojic zůstane silnější hráč.</p>}
           <button className="se-enter" onClick={() => onEnter(computeLeaving())}>
             {duels.length > 0 ? "Potvrdit a vstoupit do nové sezóny →" : "Vstoupit do nové sezóny →"}

@@ -876,7 +876,7 @@ clubWebsiteRouter.get("/:id/website", async (c) => {
     // ceny z přestupové listiny nebo výhry v sázkovce. Nový typ se na web dostane jen vědomě.
     db.prepare(
       `SELECT id, type, headline, body, created_at FROM news
-       WHERE team_id = ? AND type IN ('promotion', 'manager_arrival', 'manager_feud', 'legend_farewell')
+       WHERE team_id = ? AND type IN ('promotion', 'manager_arrival', 'manager_feud', 'legend_farewell', 'season_yearbook')
        ORDER BY created_at DESC LIMIT 4`,
     )
       .bind(teamId).all<NewsRow>().catch(warnEmpty<NewsRow>("fetch news")),

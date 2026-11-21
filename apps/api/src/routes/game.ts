@@ -7232,7 +7232,9 @@ gameRouter.post("/admin/rollover-phase", async (c) => {
 gameRouter.post("/admin/end-season", async (c) => {
   const force = c.req.query("force") === "1";
   const { runEndSeasonStep } = await import("../season/end-season");
-  const result = await runEndSeasonStep(c.env.DB, (c.env as any).GEMINI_API_KEY, { force });
+  const { aiContextFromEnv } = await import("../lib/ai-provider");
+  const ai = await aiContextFromEnv(c.env).catch((e) => { logger.warn({ module: "end-season" }, "AI kontext pro konec sezóny", e); return null; });
+  const result = await runEndSeasonStep(c.env.DB, (c.env as any).GEMINI_API_KEY, { force, ai });
   return c.json(result);
 });
 

@@ -14,7 +14,7 @@ export const LANDING_CACHE_KEY = "public-landing:v4";
 const CACHE_KEY = LANDING_CACHE_KEY;
 const CACHE_TTL_S = 600;
 /** Rubriky psané o vymyšlených hráčích a klubech, ne o lidech za klávesnicí. */
-const SAFE_NEWS_TYPES = ["ai_report", "player_interview", "ultras_report", "season_wrap", "celebrity_arrival", "legend_farewell"];
+const SAFE_NEWS_TYPES = ["ai_report", "player_interview", "ultras_report", "season_wrap", "celebrity_arrival", "legend_farewell", "season_yearbook"];
 
 export interface LandingData {
   /** `season` = číslo právě hrané sezóny (texty webu ho nesmí mít napevno). */

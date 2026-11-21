@@ -32,6 +32,8 @@ const KVOTY: Record<string, number> = {
   district_event: 1,
   hall_cup: 1,
   player_of_district: 1,
+  // Ročenky lidských klubů po konci sezóny: v listu soutěže jen jedna, celé jsou na klubových webech.
+  season_yearbook: 1,
   // Svatba v kabině (weddings/): vlastní rubrika Ze života klubů, víc než dvě naráz se nevykreslí.
   club_wedding: 2,
 };
@@ -64,6 +66,7 @@ export const NEWS_ICONS: Record<string, string> = {
   district_event: "\u{1F3A1}",
   hall_cup: "\u{1F945}",
   player_of_district: "\u{1F3C5}",
+  season_yearbook: "\u{1F4D6}",
   club_wedding: "\u{1F48D}",
 };
 
