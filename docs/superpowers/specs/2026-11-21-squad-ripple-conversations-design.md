@@ -168,6 +168,28 @@ Když se X dozví věc o sobě, hra:
   - (truc za vynechání ze sestavy už existuje, `leftOutSulk`: **nezdvojovat**; jen když mu
     to trenér předem napsal, truc je menší, to je napojení, ne nová mechanika).
 
+### 3b. Reakce na prodej a nákup (doplněno 2026-11-21 na přání uživatele)
+
+Uživatel: „ať taky třeba reagujou na prodej nebo nákup pokud…“ (věta useknutá). Výklad:
+reagují hráči, kteří k přestupujícímu **mají vztah** (rodina, kamarádi, rival), a u nákupu
+i **konkurent na stejném postu**.
+
+- Prodej hráče X z klubu, který vede člověk: každý v kádru s vazbou na X.
+  Rodina (bratři, otec–syn): nálada a vztah k trenérovi výrazně dolů, nespokojenost nahoru
+  (jen když už nějaká je), SMS vždy („Prodals mi bráchu?“). Kamarádi (parťáci od piva,
+  mentor, spolužáci, sousedé, švagři): menší pokles, SMS někdy. Kolegové z práce: jen
+  drobný pokles nálady. Rival: nálada nahoru, někdy škodolibá SMS.
+- Nákup hráče Y: rodina v kádru nálada a vztah nahoru, SMS vždy („Díky, žes vzal bráchu“);
+  kamarádi drobně nahoru; rival dolů; **konkurent na postu** (stejný post, je mezi dvěma
+  nejlepšími na něm a Y je aspoň zhruba stejně dobrý): nálada dolů, někdy SMS („Další
+  gólman? To se mnou nepočítáš?“), nespokojenost mírně nahoru, jen když už nějaká je.
+- Používá stejnou vrstvu: věc o dotčeném (`teammate_left` / `teammate_arrived`), dopad hned,
+  SMS přes stejný strop 2 na klub a den a stejné doručení, hráč si to pamatuje. Nešíří se
+  (přestup ví všichni). Vazby se při přestupu nemažou, jen `removePlayer` je maže, takže
+  reakce se musí spočítat **před** smazáním.
+- Kabina při příchodu bráchy už dnes reaguje textem (vítání v kabině); tohle přidává dopad
+  a SMS, nezdvojuje to.
+
 ### 4. Stížnost dotažená do konce (A)
 
 - Stížnost hráče A na X (scénář `team_chemistry`, ale i volný text „Král má blbý kecy“)

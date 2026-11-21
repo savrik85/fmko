@@ -323,14 +323,48 @@ CREATE INDEX IF NOT EXISTS idx_hearsay_knowledge_pending ON squad_hearsay_knowle
 - [ ] **Step 2:** FAIL. **Step 3:** implementace + napojení (volat po úspěšném UPDATE, chyba → `logger.warn`, nesmí shodit uložení rolí ani sestavy). **Step 4:** PASS.
 - [ ] **Step 5:** Commit `feat(hearsay): starý kapitán se ozve, truc menší, když to trenér řekl sám`.
 
-### Task 11: Kalibrace a ověření jako hráč
+### Task 11: Reakce spoluhráčů na prodej a nákup (spec 3b)
+
+**Files:**
+- Create: `apps/api/src/hearsay/transfers.ts`
+- Modify: `apps/api/src/hearsay/types.ts` (kind `teammate_left` | `teammate_arrived`, origin `transfer`, via `competitor`), `apps/api/src/hearsay/effects.ts` (tabulka níže), `apps/api/src/hearsay/spread.ts` (šíří jen základní 4 druhy), `apps/api/src/hearsay/messages.ts` (scénáře `transfer_reaction_bad` (complaint) a `transfer_reaction_good` (casual), priorita mezi `decision_against` a `criticism`), `apps/api/src/hearsay/prompt.ts` (řádky „Tvůj brácha X přestoupil do Y.“), volající místa přestupu
+- Test: `apps/api/src/hearsay/transfers.test.ts`, `apps/api/src/hearsay/transfers.db.test.ts`
+
+**Interfaces:**
+- Produces:
+  ```ts
+  export interface TransferReactionInput {
+    movedPlayer: { id: string; firstName: string; lastName: string; position: string; overall: number };
+    direction: "left" | "arrived"; otherClubName: string | null;
+    squad: Array<{ id: string; position: string; overall: number }>;   // kádr klubu bez přestupujícího
+    ties: Array<{ playerId: string; type: string }>;                   // vazby přestupujícího na kádr
+  }
+  export function transferReactions(i: TransferReactionInput): Array<{ playerId: string; via: KnowledgeVia }>
+  export async function recordTransferReactions(db: D1Database, o: { playerId: string; clubTeamId: string; direction: "left" | "arrived"; otherClubName: string | null; now?: Date }): Promise<number>
+  ```
+- `via` u přestupu = typ vazby k přestupujícímu (`brothers`, `father_son`, …, `rivals`) nebo `competitor`. Konkurent: stejný `position`, mezi dvěma nejlepšími `overall` na postu v kádru, `movedPlayer.overall ≥ jeho overall − 2`; jen u `arrived`; hráč s vazbou se jako konkurent nepočítá podruhé.
+- Dopady (do `learningEffect`; „rodina“ = brothers, father_son; „kamarádi“ = drinking_buddies, mentor_pupil, classmates, neighbors, in_laws):
+
+  | kind | rodina | kamarádi | coworkers | rivals | competitor |
+  |---|---|---|---|---|---|
+  | teammate_left | vztah −5, nálada −6, nespokojenost +15, SMS vždy | vztah −2, nálada −3, SMS při roll < 0,5 | nálada −1 | nálada +2, SMS při roll < 0,3 | – |
+  | teammate_arrived | vztah +4, nálada +5, SMS vždy | nálada +2, SMS při roll < 0,3 | – | nálada −2, SMS při roll < 0,5 | nálada −3, nespokojenost +5, SMS při roll < 0,5 |
+
+  Nespokojenost jen když `transferUnrest` existuje (jako jinde). Kladné spadá pod denní strop kladného z Task 5. Deduplikace „stejný druh za 3 dny“ pro přestupy neplatí; id věci `transfer:{movedId}:{affectedId}:{direction}` brání dvojímu zápisu.
+- Volající (najít `grep`em a ověřit každou cestu): odchod: `onPlayerTransferred` (`services/transfer-actions.ts:185`, stará strana) a `removePlayer` s důvodem `transfer` (`transfers/remove-player.ts`) **před** `DELETE FROM relationships`; příchod: po `attachNewcomerRelations` (`services/transfer-actions.ts`, `services/player-offer-actions.ts`, `transfers/virtual-purchase.ts`, `signFreeAgent`). Hostování (`permanent: false`) nespouští nic. Jen kluby, které vede člověk; chyba → `logger.warn`, přestup nesmí spadnout.
+
+- [ ] **Step 1: Failing testy:** `transfers.test.ts`: `it("prodej bráchy: brácha reaguje, kolega skoro ne")`, `it("nákup gólmana: jednička na postu je konkurent, čtyřka ne")`, `it("rival s vazbou není zároveň konkurent")`, `effects.test.ts` doplnit `it("prodej bráchy: vztah −5, nálada −6, SMS vždy")`; `transfers.db.test.ts`: `it("removePlayer: reakce vznikne dřív, než se smažou vazby")`, `it("hostování nic")`, `it("AI klub nic")`.
+- [ ] **Step 2:** FAIL. **Step 3:** implementace + volající. **Step 4:** PASS a `npx vitest run src/hearsay src/services src/transfers`.
+- [ ] **Step 5:** Commit `feat(hearsay): spoluhráči reagují na prodej a nákup kamaráda, bráchy i konkurenta`.
+
+### Task 12: Kalibrace a ověření jako hráč
 
 **Files:**
 - Create: `apps/api/scripts/hearsay-sim.ts` (necommitovaný výstup do scratchpadu)
 
 - [ ] **Step 1:** Skript nad lokální kopií produ (`reference_lokalni_vyvoj`): vezme SMS trenérů z posledních 14 dní, pustí na ně síto + `parseMentions` s Workers AI, pak 7 dní hodinového `spreadStep`. Výstup: věcí na klub a týden, kolik se jich dozvěděl dotčený, kolik zpráv „slyšel jsem“ by šlo (po stropu 2/den), poměr pochval a kritik došlých k dotčenému.
 - [ ] **Step 2:** Cíl: aktivní klub 2–6 zpráv „slyšel jsem“ týdně, pochvaly a kritiky došlé v poměru jako napsané (±20 %). Mimo cíl → upravit `HOURLY_BASE` (jediná páka), zapsat do komentáře konstanty datum a čísla.
-- [ ] **Step 3:** Lokálně (localhost:8787 + web): jako trenér napsat Šímovi dlouhou přirozenou větou kritiku Šmejkala, pak pochvalu jiného hráče do kabiny, změnit kapitána. Pustit `runPhoneHourly` ručně (admin `POST /api/admin/phone-hourly`), zkontrolovat: zápis v `squad_hearsay*`, vztah/nálada Šmejkala, SMS „slyšel jsem…“ se skutečným zdrojem, odpověď na omluvu trenéra, paměť v dalším rozhovoru. 375 px.
+- [ ] **Step 3:** Lokálně (localhost:8787 + web): jako trenér napsat Šímovi dlouhou přirozenou větou kritiku Šmejkala, pak pochvalu jiného hráče do kabiny, změnit kapitána, prodat hráče, který má v kádru bráchu, a koupit gólmana. Pustit `runPhoneHourly` ručně (admin `POST /api/admin/phone-hourly`), zkontrolovat: zápis v `squad_hearsay*`, vztah/nálada Šmejkala, SMS „slyšel jsem…“ se skutečným zdrojem, odpověď na omluvu trenéra, paměť v dalším rozhovoru. 375 px.
 - [ ] **Step 4:** Kontrolní tabulka ze specu (řádky fáze 1): ke každému „co hráč uvidí“ dohledat zápis i místo dopadu; nic, co jen mluví.
 - [ ] **Step 5:** `npm run typecheck` a `cd apps/api && npx vitest run` → zelené (předem selhávající testy nahlásit, ne opravovat).
 - [ ] **Step 6:** Commit skriptu `chore(hearsay): simulace šíření nad kopií produ`. Testing až na pokyn uživatele (`/ship-test`).
