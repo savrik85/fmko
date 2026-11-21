@@ -67,6 +67,10 @@ export async function runPhoneHourly(
 ): Promise<{ casual: number; followUps: { delivered: number; cancelled: number; retried: number } }> {
   const followUps = await deliverDueFollowUps(db, env, now);
   const casual = await spawnCasualMessages(db, env, now);
+  // Svatba v kabině: článek do Zpravodaje a SMS od Redakce přes den, ne v noci z denního ticku.
+  const { publishWeddingArticles } = await import("../weddings/wedding-db");
+  await publishWeddingArticles(db, env, now)
+    .catch((e) => logger.warn({ module: M }, "články o svatbách", e));
   // Okresní akce se vyhodnotí v noci: v 19 h připomenout těm, kdo neodpověděli.
   if (pragueClock(now).hour === 19) {
     const { remindUnansweredDistrictEvents } = await import("../events/district-event-db");
@@ -357,16 +361,30 @@ export async function handleCoachMessageForInvite(
   convId: string,
   coachMessage: string,
 ): Promise<boolean> {
+  // Svatba s datem (weddings/): odpověď má tři cesty (přijdu, dar, zákaz), ne jen ano a ne.
+  // `null` = v téhle konverzaci žádná svatba nečeká.
+  const { handleWeddingReply } = await import("../weddings/wedding-db");
+  const wedding = await handleWeddingReply(db, env, convId, coachMessage)
+    .catch((e) => { logger.warn({ module: M }, "odpověď na svatbu", e); return null; });
   const raw = await env.CACHE_KV?.get(inviteKey(convId))
     .catch((e) => { logger.warn({ module: M }, "čtení pozvání", e); return null; });
-  if (!raw) return false;
+  if (!raw) return wedding === true;
   let invite: OpenInvite;
   try {
     invite = JSON.parse(raw) as OpenInvite;
   } catch (e) {
     logger.warn({ module: M }, "pozvání není JSON", e);
-    return false;
+    return wedding === true;
   }
+  // Staré pozvání na svatební zábavu (ruční téma z adminu) svatbu s datem nepřebije.
+  if (invite.kind === "wedding" && wedding !== null) {
+    if (wedding) {
+      await env.CACHE_KV?.delete(inviteKey(convId))
+        .catch((e) => logger.warn({ module: M }, "smazání pozvání na svatbu", e));
+    }
+    return wedding;
+  }
+  if (wedding === true) return true;
   const info = INVITES[invite.kind];
   if (!info) return false;
   const accepted = await coachAcceptsInvite(env, { label: info.label, playerFirstName: invite.playerFirstName }, coachMessage)

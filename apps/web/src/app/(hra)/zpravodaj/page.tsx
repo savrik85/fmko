@@ -403,11 +403,16 @@ export default function NewsPage() {
   const cupStory = articles.find(
     (a) => a.type === "cup_round" && Date.now() - new Date(a.date).getTime() < 3 * 24 * 3600 * 1000,
   ) ?? null;
+  // Svatba v kabině: vlastní rubrika Ze života klubů na deset dní. Článek nese v body JSON s fotkou,
+  // do drobných zpráv proto nepatří nikdy (vypsal by se surový JSON).
+  const weddingArticles = articles
+    .filter((a) => a.type === "club_wedding" && Date.now() - new Date(a.date).getTime() < 10 * 24 * 3600 * 1000)
+    .slice(0, 2);
   const leadStory = [openerArticles[0], gremiumArticles[0], previewArticles[0], aiReportArticles[0], matchArticles[0]]
     .filter(Boolean)
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]
     || standingArticles[0]
-    || articles.find((a) => !["ultras_report", "round_summary"].includes(a.type) && a.id !== districtEventStory?.id && a.id !== cupStory?.id);
+    || articles.find((a) => !["ultras_report", "round_summary", "club_wedding"].includes(a.type) && a.id !== districtEventStory?.id && a.id !== cupStory?.id);
   // Druhý hlavní článek — kolem přelomu sezóny je to ohlédnutí za sezónou (season_wrap),
   // jinak ai_report (podle toho, co není lead).
   const secondaryStory =
@@ -416,7 +421,7 @@ export default function NewsPage() {
     ?? (aiReportArticles[0] && aiReportArticles[0].id !== leadStory?.id ? aiReportArticles[0] : null);
   // Ostatní drobnosti — bez typů z hlavních sekcí a bez duplicit s lead/secondary (podle id)
   const otherArticles = articles.filter(
-    (a) => !["match", "round_results", "round_summary", "standing", "ai_report", "matchday_preview", "promotion", "transfer", "celebrity_arrival", "celebrity_signing", "interview", "player_interview", "post_match_interview", "ultras_report", "governance_minutes"].includes(a.type)
+    (a) => !["match", "round_results", "round_summary", "standing", "ai_report", "matchday_preview", "promotion", "transfer", "celebrity_arrival", "celebrity_signing", "interview", "player_interview", "post_match_interview", "ultras_report", "governance_minutes", "club_wedding"].includes(a.type)
       && a.id !== leadStory?.id && a.id !== secondaryStory?.id && a.id !== districtEventStory?.id && a.id !== cupStory?.id,
   );
   const miscArticles = otherArticles;
@@ -583,6 +588,16 @@ export default function NewsPage() {
               <div className="flex items-center justify-center gap-3 mt-4">
                 <span className="text-micro text-muted italic">{timeAgo(roundSummaryStory.date)}</span>
                 <ShareButton articleId={roundSummaryStory.id} />
+              </div>
+            </section>
+          )}
+
+          {/* ═══ Ze života klubů: svatba v kabině ═══ */}
+          {weddingArticles.length > 0 && (
+            <section className="border-t border-ink/20 pt-6">
+              <Kicker>{rubrikaProTyp("club_wedding")}</Kicker>
+              <div className="divide-y divide-ink/10">
+                {weddingArticles.map((a) => <WeddingStory key={a.id} article={a} />)}
               </div>
             </section>
           )}
@@ -1065,8 +1080,52 @@ function rubrikaProTyp(type: string): string {
     case "cup_round": return "🏆 Pohár";
     case "hall_cup": return "🥅 Sálovka";
     case "player_of_district": return "🏅 Fotbalista okresu";
+    case "club_wedding": return "💍 Ze života klubů";
     default: return "Aktualita";
   }
+}
+
+/**
+ * Zpráva o svatbě hráče (weddings/ v API). V `body` je JSON: text článku, ženich a svatební
+ * fotka od AI (`photos/<id>.jpg`, veřejná přes /api/player-photos/:id jako fotky ve zprávách).
+ */
+function WeddingStory({ article }: { article: Article }) {
+  let meta: { article?: string; playerId?: string; playerName?: string; teamName?: string; photoKey?: string; photoAlt?: string } = {};
+  try {
+    meta = JSON.parse(article.body);
+  } catch (e) {
+    console.error("parse zprávy o svatbě:", e);
+  }
+  const photoId = meta.photoKey ? /^photos\/([0-9a-f-]{36})\.jpg$/.exec(meta.photoKey)?.[1] : undefined;
+  return (
+    <article id={`news-${article.id}`} className="py-5 first:pt-0">
+      <h3 className="np-titulek text-2xl sm:text-[1.75rem] text-center mb-2"><LeagueTag a={article} />{article.headline}</h3>
+      <Podpis clanek={article} stred />
+      {photoId && (
+        <figure className="mt-3">
+          <img
+            src={`${API_BASE}/api/player-photos/${photoId}`}
+            alt={meta.photoAlt ?? "Svatba v sále"}
+            width={1024}
+            height={640}
+            className="w-full h-auto border border-ink/25"
+            loading="lazy"
+          />
+          {meta.photoAlt && <figcaption className="text-micro text-muted mt-1 leading-snug">{meta.photoAlt}</figcaption>}
+        </figure>
+      )}
+      <div className="np-text np-sloupce np-sloupce-2 text-[15px] mt-3">
+        <NovinoveOdstavce body={meta.article ?? ""} />
+      </div>
+      {meta.playerId && meta.playerName && (
+        <p className="text-micro text-muted mt-2">
+          Ženich:{" "}
+          <EntityLink type="player" id={meta.playerId} className="font-heading font-bold text-ink">{meta.playerName}</EntityLink>
+          {meta.teamName ? `, ${meta.teamName}` : ""}
+        </p>
+      )}
+    </article>
+  );
 }
 
 function ArticleWrapper({ article, children }: { article: Article; children: React.ReactNode }) {

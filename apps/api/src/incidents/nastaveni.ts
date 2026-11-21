@@ -29,6 +29,8 @@ export const ZPRONEVERA_SANCE_USUDEK_20 = 0.15;
 /** Šance, že se spouštěný incident stane, když je spouštěč splněný. */
 export const SANCE_SPOUSTENYCH: Record<string, number> = {
   oslava_v_kabine: 0.25,
+  // Rozlučka se svobodou: denní šance v posledních dnech před svatbou (weddings/wedding.ts).
+  stag_party: 0.3,
   kopnute_dvere: 0.35,
   svetlice: 0.15,
   kasa_obcerstveni: 0.25,
@@ -110,9 +112,10 @@ export const OKNO_VLIVU_DNI = 45;
 export const DUVOD_ABSENCE = {
   vyslech: "Výslech na policii", soud: "Soudní jednání", vyrazen: "Vyřazen trenérem",
   porod: "Narodilo se mu dítě", nemocna_mama: "Nemocný rodič", stehovani: "Stěhování po rozvodu",
+  hangover: "Kocovina po svatbě",
 } as const;
 export const EMOJI_ABSENCE: Record<string, string> = {
-  vyslech: "🚓", soud: "⚖️", vyrazen: "⛔", porod: "👶", nemocna_mama: "🏥", stehovani: "📦",
+  vyslech: "🚓", soud: "⚖️", vyrazen: "⛔", porod: "👶", nemocna_mama: "🏥", stehovani: "📦", hangover: "🥴",
 };
 
 /** Znalosti hráčů o incidentech (spec 10a). */

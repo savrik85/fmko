@@ -98,6 +98,8 @@ export interface StavKlubu {
   poskozeni: Array<{ id: string; zarizeni: string }>;
   /** Útěk s penězi, ke kterému ještě nepřišel omluvný dopis (spec 4d). `null`, když žádný není. */
   utekBezDopisu: { id: string; castka: number } | null;
+  /** Nejbližší svatba hráče z kádru (weddings/), kvůli rozlučce se svobodou. `null`, když žádná není. */
+  upcomingWedding?: { groomId: string; date: string } | null;
 }
 
 export interface NavrhIncidentu {

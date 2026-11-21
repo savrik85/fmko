@@ -33,6 +33,7 @@ const SLOVA_DRUHU: Record<string, readonly string[]> = {
   dodavka_ukradena: ["dodavk"],
   kradez_kamery: ["zabezpec"],
   oslava_v_kabine: ["oslav", "kabin"],
+  stag_party: ["rozluc", "svobod", "kabin"],
   kopnute_dvere: ["dver", "kabin"],
   koleje_trakturek: ["trakt", "kolej"],
   pozar_grilu: ["gril", "pozar", "ohen", "ohne", "stanek", "stank"],

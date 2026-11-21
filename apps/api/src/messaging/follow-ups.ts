@@ -239,7 +239,8 @@ async function deliverOne(db: D1Database, env: FollowUpEnv, row: FollowUpRow, no
     instruction = info.thanks;
     topicId = "casual_invite_thanks";
     photoSceneId = info.photo;
-    effect = {
+    // Svatba (weddings/) si vztah za účast započítala sama den po svatbě, poděkování ho nezdvojí.
+    effect = payload.effectApplied === true ? null : {
       relation: info.relation, morale: info.morale,
       description: info.relationText
         ?? (kind === "visit" ? "Udělal sis na něj čas, když se za tebou stavil" : `Přišel jsi na jeho pozvání (${info.label})`),

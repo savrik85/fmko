@@ -16,6 +16,7 @@ import {
   TOMBOLA_PODIL_MAX, TOMBOLA_PODIL_MIN, VAHA_HRDINY, ZPRONEVERA_MAX_KC, ZPRONEVERA_MIN_KC, ZPRONEVERA_SANCE_USUDEK_1,
   ZPRONEVERA_SANCE_USUDEK_20, ZPRONEVERA_STROP_PODIL,
 } from "./nastaveni";
+import { daysBetween, STAG_PARTY_DAYS_BEFORE } from "../weddings/wedding";
 import { sanceUspechuZvenku, vyberHrace } from "./pachatel";
 import { TEXTY, text, vypln } from "./texty";
 import type { HracKlubu, KategorieIncidentu, NavrhIncidentu, StavKlubu, Ztrata } from "./typy";
@@ -72,6 +73,23 @@ function pijaciZHospody(s: StavKlubu): HracKlubu[] {
   const byli = new Set(s.hospodaVcera);
   return s.kadr
     .filter((h) => byli.has(h.id) && h.alkohol >= 60)
+    .sort((a, b) => b.alkohol - a.alkohol || a.id.localeCompare(b.id));
+}
+
+/** Ženich, jehož svatba je za 1 až `STAG_PARTY_DAYS_BEFORE` dní a který je pořád v kádru. */
+function stagPartyGroom(s: StavKlubu): HracKlubu | null {
+  const w = s.upcomingWedding;
+  if (!w) return null;
+  const days = daysBetween(s.den, w.date);
+  if (days < 1 || days > STAG_PARTY_DAYS_BEFORE) return null;
+  return s.kadr.find((h) => h.id === w.groomId) ?? null;
+}
+
+/** Kdo to na rozlučce rozjede: pijáci kromě ženicha, nejtvrdší první. */
+function stagPartyCrew(s: StavKlubu): HracKlubu[] {
+  const groomId = s.upcomingWedding?.groomId;
+  return s.kadr
+    .filter((h) => h.id !== groomId && h.alkohol >= 60)
     .sort((a, b) => b.alkohol - a.alkohol || a.id.localeCompare(b.id));
 }
 
@@ -317,6 +335,24 @@ export const KATALOG: DefiniceIncidentu[] = [
         culpritType: "hrac", culpritPlayerId: pijaci[0].id, culpritRevealed: false,
         ztraty: [{ typ: "stadion", zarizeni: kde, urovni: 1 }],
         text: text(rng, "oslava_v_kabine", { zarizeni: FACILITY_LABELS[kde] ?? kde }),
+      };
+    },
+  },
+  {
+    // Svatba v kabině (weddings/): pár dní před svatbou si kabina udělá rozlučku se svobodou.
+    kind: "stag_party", label: "Rozlučka se svobodou", emoji: "🥂", category: "poskozeni", vaha: 0, spousteny: true,
+    muze: (s) => stagPartyGroom(s) !== null && stagPartyCrew(s).length >= 2 && KABINY.some((k) => zarizeni(s, k) >= 1),
+    vytvor: (s, rng) => {
+      const groom = stagPartyGroom(s);
+      const crew = stagPartyCrew(s);
+      const rooms = KABINY.filter((k) => zarizeni(s, k) >= 1);
+      if (!groom || crew.length < 2 || rooms.length === 0) return null;
+      const room = rng.pick(rooms);
+      return {
+        kind: "stag_party", category: "poskozeni", status: "otevreny", severity: 2,
+        culpritType: "hrac", culpritPlayerId: crew[0].id, culpritRevealed: false,
+        ztraty: [{ typ: "stadion", zarizeni: room, urovni: 1 }],
+        text: text(rng, "stag_party", { player: groom.jmeno, room: FACILITY_LABELS[room] ?? room }),
       };
     },
   },

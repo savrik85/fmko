@@ -541,9 +541,9 @@ export const TEXTY = {
     "{hrac} nemá řidičák, na venkovní zápasy se bude vozit.",
   ],
   situace_svatba_spoluhrace: [
-    "{hrac} se ženil a půlka kabiny slavila do rána.",
-    "{hrac} měl svatbu. Kluci to oslavili za něj i za sebe.",
-    "{hrac} se oženil a svatba se protáhla do rána.",
+    "{hrac} se bude ženit a zve celou kabinu.",
+    "{hrac} se žení. Kluci už vybírají oblek.",
+    "{hrac} bude mít svatbu, kabina se těší.",
   ],
   situace_narozeni_ditete: [
     "{hrac} čeká narození dítěte.",
@@ -576,9 +576,9 @@ export const TEXTY = {
     "Trenére, jsem bez řidičáku. Domluvím se s klukama na odvoz.",
   ],
   sms_situace_svatba_spoluhrace: [
-    "Trenére, ženil jsem se. Kluci to vzali vážně, ráno bude v kabině ticho.",
-    "Trenére, měl jsem svatbu. Díky všem, co dorazili.",
-    "Trenére, oženil jsem se. Omlouvám se za stav mužstva.",
+    "Trenére, budu se ženit! Zvu vás na svatbu, kluci jsou pozvaní taky.",
+    "Trenére, je to tady, žením se. Budu rád, když přijdete.",
+    "Trenére, chystám svatbu a počítám s vámi i s klukama.",
   ],
   sms_situace_narozeni_ditete: [
     "Trenére, jedeme do porodnice. Dám vědět, jak to dopadlo.",
@@ -622,6 +622,48 @@ export const TEXTY = {
     "Trenére, stěhuju se od ženy. Tenhle zápas vynechám.",
     "Trenére, musím se vystěhovat, jinak to nestihnu. Omlouvám se.",
     "Trenére, stěhování mi vyšlo přesně na zápas. Nedorazím.",
+  ],
+  // Svatba v kabině (weddings/): kocovina na zápas den po svatbě. Platí pro SMS den předem i v den zápasu.
+  absence_hangover: [
+    "Trenére, po té svatbě mě na zápas nečekejte, to nedám.",
+    "Trenére, ze svatby se do zápasu nedám dohromady. Omlouvám se.",
+    "Trenére, po svatbě nebudu k ničemu, na zápas to nevidím. Promiňte.",
+  ],
+  wedding_announcement: [
+    "{player} se {day} žení a zve celou kabinu.",
+    "{player} bude mít svatbu {day}. Kluci už vybírají oblek.",
+    "{player} se {day} žení, kabina se těší na zábavu v sále.",
+  ],
+  wedding_invite: [
+    "Trenére, {day} se žením! Zvu vás na svatbu, kluci z kabiny jsou pozvaní taky. Dejte mi vědět {deadline}, jestli dorazíte.",
+    "Trenére, je to tady, {day} mám svatbu. Budu rád, když přijdete. Napište mi {deadline}, ať vím, s kým počítat.",
+    "Trenére, {day} se žením a v sále bude veselo. Přijďte, ať je to pořádná svatba. Dejte vědět {deadline}.",
+  ],
+  wedding_invite_before_match: [
+    "Trenére, {day} se žením! Zvu vás i kluky, i když druhý den hrajeme. Dejte mi vědět {deadline}, jak to vidíte.",
+    "Trenére, {day} mám svatbu, den před zápasem, já vím. Budu rád, když přijdete a pohlídáte kluky. Napište mi {deadline}.",
+    "Trenére, {day} se žením a kluci se už těší. Druhý den je zápas, tak dejte vědět {deadline}, co s tím.",
+  ],
+  wedding_thanks_attend: [
+    "Trenére, díky, že jste přišel. Žena říkala, že jste byl nejlepší host.",
+    "Trenére, díky za včerejšek. Bez vás by to kluci rozjeli úplně.",
+    "Trenére, moc díky, že jste dorazil. Doma z vás byli nadšení.",
+  ],
+  wedding_thanks_gift: [
+    "Trenére, díky za dar, to jste nemusel. Žena vás pozdravuje.",
+    "Trenére, moc díky za dárek. Škoda, že jste nebyl s námi.",
+    "Trenére, dar dorazil, děkujeme. Příště už přijďte osobně.",
+  ],
+  wedding_after_ban: [
+    "Trenére, svatba byla. Kluci pili kofolu a tvářili se jak na pohřbu.",
+    "Trenére, tak jsme se oženili. Nejsušší svatba ve vsi, díky vám.",
+    "Trenére, svatba proběhla, kluci byli střízliví. Doufám, že to v zápase oceníte.",
+  ],
+  // Rozlučka se svobodou pár dní před svatbou (spouštěný incident `stag_party` v katalog.ts).
+  stag_party: [
+    "{player} měl v kabině rozlučku se svobodou a kluci to přehnali. Rozbité: {room}.",
+    "Rozlučka se svobodou se protáhla do rána. {player} slavil a kabina to odnesla. Rozbité: {room}.",
+    "{player} se loučil se svobodou v kabině a nebylo to tiché loučení. Rozbité: {room}.",
   ],
 
   // Pozitivní incidenty (spec 4d, 4e). Stejná pravidla jako výš, jen bez dlouhé

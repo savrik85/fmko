@@ -28,7 +28,7 @@ vi.mock("../season/pub", () => ({ createCoachLedSession: fx.createCoachLedSessio
 vi.mock("../season/finance-processor", () => ({ recordTransaction: fx.recordTransaction }));
 
 import { handleCoachMessageForInvite, spawnCasualMessages } from "./casual-messages";
-import { CASUAL_MIN_RELATION, CASUAL_TOPICS, INVITES, topicFits, type CasualContext } from "./casual-topics";
+import { CASUAL_MIN_RELATION, CASUAL_TOPICS, INVITES, topicAllowed, topicFits, type CasualContext } from "./casual-topics";
 import { PHOTO_SCENES } from "./player-photo";
 import type { PlayerSnapshot } from "./ai-player-scenarios";
 
@@ -145,9 +145,13 @@ describe("témata zpráv jen tak", () => {
     expect(topicFits(topic("casual_mushrooms"), makePlayer(), ctx({ month: 12 }))).toBe(0);
   });
 
-  it("svatbu a miminko jen ten, kdo je má v životní situaci", () => {
+  it("svatbu a miminko jen ten, kdo je má v životní situaci; pozvánku na svatbu s datem posílá svatba sama", () => {
     expect(topicFits(topic("casual_wedding"), makePlayer(), ctx())).toBe(0);
-    expect(topicFits(topic("casual_wedding"), makePlayer({ zivotniSituace: { kind: "svatba_spoluhrace", label: "Svatba" } }), ctx())).toBeGreaterThan(0);
+    // Svatba má datum a pozvánku pošle ženich při ohlášení (weddings/), náhodná zpráva by se s ní hádala.
+    expect(topicFits(topic("casual_wedding"), makePlayer({ zivotniSituace: { kind: "svatba_spoluhrace", label: "Svatba" } }), ctx())).toBe(0);
+    expect(topicAllowed(topic("casual_wedding"), makePlayer({ zivotniSituace: { kind: "svatba_spoluhrace", label: "Svatba" } }))).toBe(true);
+    expect(topicFits(topic("casual_baby"), makePlayer(), ctx())).toBe(0);
+    expect(topicFits(topic("casual_baby"), makePlayer({ zivotniSituace: { kind: "narozeni_ditete", label: "Narození dítěte" } }), ctx())).toBeGreaterThan(0);
   });
 
   it("pozvánka z hospody jen z hospody večer", () => {

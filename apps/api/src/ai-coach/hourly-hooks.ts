@@ -14,6 +14,7 @@ import { seasonDuelsHourlyHook } from "./season-duels";
 import { transferMarketHourlyHook } from "./transfer-market";
 import { transferRepliesHourlyHook } from "./transfer-replies";
 import { unrestHourlyHook } from "./unhappy-players";
+import { weddingsHourlyHook } from "./weddings";
 
 export type HourlyHook = (env: Bindings, teamId: string, profile: AiCoachProfile, now: Date) => Promise<void>;
 
@@ -30,6 +31,7 @@ export const HOURLY_HOOKS: HourlyHookEntry[] = [
   { name: "friendlies", run: friendliesHourlyHook },
   { name: "unrest", run: unrestHourlyHook },
   { name: "incidents", run: incidentsHourlyHook },
+  { name: "weddings", run: weddingsHourlyHook },
   { name: "season_duels", run: seasonDuelsHourlyHook },
   { name: "player_offers", run: playerOffersHourlyHook },
 ];
