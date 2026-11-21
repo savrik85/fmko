@@ -3,7 +3,7 @@ import { getOccupationByName, occupationMatchAbsence } from "../generators/occup
 import { SPONSOR_TYPES } from "./types";
 import {
   JOB_BY_TYPE, JOB_MIN_FAVOR, JOB_REPEAT_DAYS, JOB_SLOTS_BY_TYPE, JOB_STRANGER_MIN_FAVOR,
-  decideJob, jobForFirm, jobPlayerEffect, jobRequiredFavor, type JobInput,
+  decideJob, jobForFirm, jobPlayerEffect, jobRequiredFavor, sponsorJobActive, type JobInput,
 } from "./player-jobs";
 import {
   ALL_JOB_TEMPLATES, jobAskWhoText, jobDuplicateText, jobHiredText, jobInstruction, jobPlayerThanksText, jobRefusedText,
@@ -115,5 +115,19 @@ describe("práce u sponzora a zápasy", () => {
   it("kdo byl bez práce, má větší radost než ten, kdo jen mění místo", () => {
     expect(jobPlayerEffect(true).morale).toBeGreaterThan(jobPlayerEffect(false).morale);
     expect(jobPlayerEffect(true).relation).toBeGreaterThan(0);
+  });
+});
+
+describe("práce u sponzora platí jen v klubu, kde ji trenér sehnal", () => {
+  const job = { sponsorId: 1, firm: "Pila", since: "2026-11-20", previous: "Hasič", teamIds: ["club", "club-u21"] };
+  it("v áčku i v U21 klubu ano, po přestupu jinam ne", () => {
+    expect(sponsorJobActive(job, "club")).toBe(true);
+    expect(sponsorJobActive(job, "club-u21")).toBe(true);
+    expect(sponsorJobActive(job, "jiny-klub")).toBe(false);
+  });
+  it("bez práce ne, starší záznam bez týmů a neznámý tým hráče ano", () => {
+    expect(sponsorJobActive(undefined, "club")).toBe(false);
+    expect(sponsorJobActive({ ...job, teamIds: undefined }, "jiny-klub")).toBe(true);
+    expect(sponsorJobActive(job, null)).toBe(true);
   });
 });

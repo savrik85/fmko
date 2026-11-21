@@ -155,4 +155,21 @@ export interface SponsorJob {
   /** Herní den nástupu YYYY-MM-DD. */
   since: string;
   previous: string;
+  /** Áčko a U21 klubu, který práci sehnal. Šéf hráče pouští kvůli tomuhle klubu. */
+  teamIds?: string[];
 }
+
+/**
+ * Platí práce u sponzora pro hráče v týmu `playerTeamId`? Jen v klubu, kde ji trenér sehnal:
+ * po přestupu nebo na hostování jinde šéf hráče na zápasy kvůli cizímu klubu nepouští.
+ * Starší záznam bez `teamIds`, nebo když tým hráče neznáme, platí.
+ */
+export function sponsorJobActive(raw: unknown, playerTeamId?: string | null): boolean {
+  if (!raw || typeof raw !== "object") return false;
+  const ids = (raw as { teamIds?: unknown }).teamIds;
+  if (!Array.isArray(ids) || !playerTeamId) return true;
+  return ids.includes(playerTeamId);
+}
+
+/** O kolik bodů kondice přijde hráč, který v den zápasu dopoledne pomáhal sponzorovi. */
+export const SPONSOR_HELP_CONDITION_DROP = 15;

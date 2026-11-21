@@ -13,6 +13,7 @@
 import { isYouthAge, pickYouthExcuse } from "./youth-excuses";
 import type { Rng } from "../generators/rng";
 import { getOccupationByName, occupationMatchAbsence, pickProfessionalExcuse, type Occupation } from "../generators/occupations";
+import { sponsorJobActive } from "../sponsors/player-jobs";
 import type { Weather } from "../engine/types";
 import { logger } from "../lib/logger";
 import { injuryPronenessOf } from "../injuries/proneness";
@@ -100,7 +101,8 @@ export function hracProAbsenci(row: Record<string, unknown>, druhy?: readonly st
     celebrityType: pers.celebrityType,
     celebrityTier: pers.celebrityTier,
     ...(druhy && druhy.length > 0 ? { incident: { druhy: [...druhy] } } : {}),
-    ...(lc.sponsorJob ? { sponsorJob: true } : {}),
+    // Práce u sponzora jen v klubu, kde ji trenér sehnal (po přestupu jinam neplatí).
+    ...(sponsorJobActive(lc.sponsorJob, (row.team_id as string | undefined) ?? null) ? { sponsorJob: true } : {}),
   };
 }
 
@@ -832,6 +834,8 @@ export function generateAbsences(
 
     // Kdo nemá práci, se na práci nevymluví (spec 4c).
     if (situace("prisel_o_praci")) weights.professional = 0;
+    // Šéf u sponzora hráče na zápas pustí: na práci se vymluvit nemůže.
+    if (p.sponsorJob) weights.professional = 0;
     const situacniVaha = situace("dluhy") ? DLUHY_VAHA_VYMLUVY
       : ridicakVadi ? RIDICAK_VAHA_VYMLUVY
       : situace("prisel_o_praci") ? BEZ_PRACE_VAHA_VYMLUVY : 0;

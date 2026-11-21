@@ -75,25 +75,26 @@ type Pools = Partial<Record<OwnerPersonality, readonly string[]>>;
  * vlídná odpověď (slib) ho potěší, odbytí nebo mlčení ho mrzí víc než jindy, vzal přece hráče.
  */
 const JOB_FAVOR_TEXTS: Pools = {
+  // Pomoc je dopoledne v den nejbližšího zápasu (player-jobs-db.ts scheduleSponsorHelp): hráči pak hrají unavenější.
   fan: [
-    "{player} u nás maká dobře, díky za tip. Teď bych potřeboval já: v sobotu stěhujeme dílnu, nepošleš mi pár kluků z týmu?",
-    "{player} se u nás osvědčil. Za týden máme firemní den, přijdou kluci z týmu podepisovat míče?",
-    "{player} je u nás spokojenej a já taky. Teď něco za něco: na firemní akci potřebuju pořadatele, půjčíš mi pár kluků?",
+    "{player} u nás maká dobře, díky za tip. Teď bych potřeboval já: stěhujeme dílnu, nepošleš mi pár kluků z týmu? Stačí dopoledne před zápasem.",
+    "{player} se u nás osvědčil. Máme firemní den, přišli by kluci z týmu dopoledne před zápasem podepisovat míče?",
+    "{player} je u nás spokojenej a já taky. Teď něco za něco: na firemní akci potřebuju pořadatele, půjčíš mi pár kluků na dopoledne před zápasem?",
   ],
   patriot: [
-    "{player} u nás dělá poctivě, to se cení. V sobotu uklízíme okolí firmy, přišli by kluci z týmu pomoct?",
-    "{player} se osvědčil, díky. Teď bych prosil já: obec chystá brigádu u hasičárny a potřebuju chlapy. Pošleš pár kluků?",
-    "{player} si u nás zvyká dobře. Za týden máme ve firmě výročí, udělali by kluci z týmu pořadatele?",
+    "{player} u nás dělá poctivě, to se cení. Uklízíme okolí firmy, přišli by kluci z týmu dopoledne před zápasem pomoct?",
+    "{player} se osvědčil, díky. Teď bych prosil já: obec chystá brigádu u hasičárny a potřebuju chlapy. Pošleš pár kluků dopoledne před zápasem?",
+    "{player} si u nás zvyká dobře. Máme ve firmě výročí, udělali by kluci z týmu dopoledne před zápasem pořadatele?",
   ],
   businessman: [
-    "{player} se u nás zapracoval. Teď laskavost za laskavost: v sobotu máme den otevřených dveří a potřebuji pár hráčů jako pořadatele. Dá se to zařídit?",
-    "{player} plní, co se od něj čeká. Na oplátku bych rád viděl hráče na naší firemní akci, podepisovat a fotit se. Domluvíme se?",
-    "{player} je u nás spokojený. Teď potřebuji já: v sobotu stěhujeme sklad a chybí mi lidi. Pošlete mi pár hráčů?",
+    "{player} se u nás zapracoval. Teď laskavost za laskavost: máme den otevřených dveří a potřebuji pár hráčů jako pořadatele, dopoledne před vaším zápasem. Dá se to zařídit?",
+    "{player} plní, co se od něj čeká. Na oplátku bych rád viděl hráče na naší firemní akci dopoledne před zápasem, podepisovat a fotit se. Domluvíme se?",
+    "{player} je u nás spokojený. Teď potřebuji já: stěhujeme sklad a chybí mi lidi. Pošlete mi pár hráčů dopoledne před zápasem?",
   ],
   cautious: [
-    "{player} u nás pracuje spolehlivě, děkuji. Mohl bych vás teď poprosit o pomoc? V sobotu máme ve firmě akci a potřebuji pár lidí na pořádek.",
-    "{player} se u nás osvědčil. Za týden stěhujeme dílnu, pomohli by nám kluci z týmu? Sám to nezvládnu.",
-    "{player} u nás je a jsem rád. Teď bych potřeboval laskavost: na firemní den potřebuji pořadatele z vašeho týmu. Šlo by to?",
+    "{player} u nás pracuje spolehlivě, děkuji. Mohl bych vás teď poprosit o pomoc? Máme ve firmě akci a potřebuji pár lidí na pořádek, dopoledne před vaším zápasem.",
+    "{player} se u nás osvědčil. Stěhujeme dílnu, pomohli by nám kluci z týmu dopoledne před zápasem? Sám to nezvládnu.",
+    "{player} u nás je a jsem rád. Teď bych potřeboval laskavost: na firemní den potřebuji pořadatele z vašeho týmu, dopoledne před zápasem. Šlo by to?",
   ],
 };
 

@@ -53,6 +53,10 @@ export async function zpracujIncidentyDne(env: Bindings, team: Record<string, un
   const { processWeddingsForDay } = await import("../weddings/wedding-db");
   await processWeddingsForDay(env, stav).catch((e) => logger.warn({ module: M, teamId }, "svatby hráčů", e));
 
+  // Protislužba sponzorovi (sponsors/player-jobs-db.ts): kdo dnes dopoledne pomáhá firmě, je na zápas unavenější.
+  const { applySponsorHelpDay } = await import("../sponsors/player-jobs-db");
+  await applySponsorHelpDay(env.DB, teamId, stav.den).catch((e) => logger.warn({ module: M, teamId }, "pomoc sponzorovi", e));
+
   // Konec životních situací a propadlé lhůty na zálohu běží každý den, bez ohledu na hrozící činy (spec 6b kroky 3–4).
   await ukonciSituace(env, { teamId, gameDate }).catch((e) => logger.warn({ module: M, teamId }, "konec situací", e));
   await propadleZalohy(env, { teamId, gameDate }).catch((e) => logger.warn({ module: M, teamId }, "propadlé zálohy", e));

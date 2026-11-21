@@ -230,6 +230,14 @@ export function checkOwnerReply(raw: string, mustContain: OwnerReplyChecks = {})
       return null;
     }
   }
+  // Datum, které hra neurčila, si model vymyslel („kluky čekám před zápasem 29. 10.“): nepravda.
+  const allowedDays = new Set((mustContain.days ?? []).map((d) => dayMonth(d).replace(/\s/g, "").replace(/\.$/, "")));
+  for (const m of body.matchAll(/\b(\d{1,2})\.\s?(\d{1,2})\.(?!\d)/g)) {
+    if (!allowedDays.has(`${Number(m[1])}.${Number(m[2])}`)) {
+      logger.warn({ module: M }, `odpověď majitele s datem ${m[0]}, které hra neurčila, beru připravenou větu: ${body}`);
+      return null;
+    }
+  }
   return body;
 }
 

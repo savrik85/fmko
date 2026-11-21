@@ -310,6 +310,7 @@ messagingRouter.get("/teams/:teamId/conversations/:convId", async (c) => {
             leadership: pers.leadership ?? 30, coachRelationship: playerRow?.coach_relationship ?? 50,
             isCaptain: playerRow?.captain_id === convOwner.participant_id,
             ownedHere: playerRow?.loan_from_team_id == null && playerRow?.current_club_id === teamId,
+            clubId: teamId,
           }).map((a) => ({ ...a, message: a.message.replace("{name}", playerRow?.first_name ?? "") })),
         };
       }

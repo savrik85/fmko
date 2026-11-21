@@ -28,8 +28,9 @@ import { extractJobAsk, writeOwnerReply, type OwnerChatEnv, type OwnerChatFacts 
 import { enqueueOwnerSms, loadRelationshipOwners } from "./owner-sms";
 import { addDays, dayDiff, pickRelationshipOwner } from "./owner-sms-rules";
 import {
-  decideJob, JOB_ASK_META, JOB_FAVOR_AFTER_DAYS, jobPlayerEffect, type JobDecision, type JobRefusal, type JobSource, type SponsorJob,
+  decideJob, JOB_ASK_META, JOB_FAVOR_AFTER_DAYS, jobPlayerEffect, SPONSOR_HELP_CONDITION_DROP, type JobDecision, type JobRefusal, type JobSource, type SponsorJob,
 } from "./player-jobs";
+import { seedFromString } from "../lib/seed";
 import { normalize } from "./request-parse";
 import type { RequestRelation } from "./requests";
 
@@ -179,7 +180,12 @@ export async function requestPlayerJob(
   )];
 
   const effect = jobPlayerEffect(ctx.unemployed);
-  const sponsorJob: SponsorJob = { sponsorId: ctx.sponsor.id, firm: ctx.sponsor.name, since: ctx.day, previous: ctx.occupation };
+  const clubTeams = await db.prepare("SELECT id FROM teams WHERE id = ?1 OR parent_team_id = ?1").bind(r.teamId).all<{ id: string }>()
+    .catch((e) => { logger.warn({ module: M, teamId: r.teamId }, "týmy klubu pro práci u sponzora", e); return { results: [{ id: r.teamId }] }; });
+  const sponsorJob: SponsorJob = {
+    sponsorId: ctx.sponsor.id, firm: ctx.sponsor.name, since: ctx.day, previous: ctx.occupation,
+    teamIds: clubTeams.results.map((t) => t.id),
+  };
   if (decision.kind === "hired") {
     stmts.push(playerEffects
       ? db.prepare(
@@ -191,11 +197,12 @@ export async function requestPlayerJob(
         `UPDATE players SET life_context = json_set(COALESCE(life_context, '{}'), '$.occupation', ?, '$.sponsorJob', json(?))
          WHERE id = ? AND ${guard}`,
       ).bind(decision.occupation, JSON.stringify(sponsorJob), r.playerId, id));
-    // Situace „přišel o práci" končí: práci má.
+    // Situace „přišel o práci" končí: práci má. Konec i v `ends_on`, jinak by omluvenky
+    // (incidents/absence-hracu.ts čte okno) dál tvrdily, že práci nemá.
     stmts.push(db.prepare(
-      `UPDATE club_incidents SET status = 'uzavreny', resolution = 'found_job', resolved_on = ?
-       WHERE subject_player_id = ? AND kind = 'prisel_o_praci' AND status = 'probiha' AND ${guard}`,
-    ).bind(ctx.team.game_date ?? ctx.day, r.playerId, id));
+      `UPDATE club_incidents SET status = 'uzavreny', resolution = 'found_job', resolved_on = ?1, ends_on = ?2
+       WHERE subject_player_id = ?3 AND kind = 'prisel_o_praci' AND status = 'probiha' AND EXISTS (SELECT 1 FROM sponsor_jobs WHERE id = ?4)`,
+    ).bind(ctx.team.game_date ?? ctx.day, ctx.day, r.playerId, id));
   }
 
   let inserted = false;
@@ -234,6 +241,80 @@ export async function requestPlayerJob(
     day: addDays(ctx.day, JOB_FAVOR_AFTER_DAYS), vars: { player: playerName },
   }).catch((e) => logger.warn({ module: M, teamId: r.teamId }, `protislužba za práci ${id}`, e));
   return { ...base, kind: "hired", occupation: decision.occupation, unemployed: ctx.unemployed, sponsorJob };
+}
+
+/**
+ * Trenér kývl na protislužbu (SMS `job_favor`): zaměstnaný hráč a jeden další z áčka jdou firmě
+ * pomoct dopoledne v den nejbližšího zápasu. Ten den ráno přijdou o kondici (`applySponsorHelpDay`),
+ * v kabině se to trenér dozví. Vrací jména pomocníků, nebo prázdné pole (není zápas ani hráč).
+ */
+export async function scheduleSponsorHelp(db: D1Database, referenceId: string, seed: string): Promise<string[]> {
+  const jobId = referenceId.startsWith("job-favor:") ? referenceId.slice("job-favor:".length) : null;
+  if (!jobId) return [];
+  const job = await db.prepare(
+    `SELECT j.team_id, j.player_id, s.name AS firm FROM sponsor_jobs j LEFT JOIN district_sponsors s ON s.id = j.sponsor_id
+      WHERE j.id = ? AND j.status = 'hired'`,
+  ).bind(jobId).first<{ team_id: string; player_id: string; firm: string | null }>();
+  if (!job) return [];
+  const next = await db.prepare(
+    `SELECT substr(sc.scheduled_at, 1, 10) AS day FROM matches m JOIN season_calendar sc ON sc.id = m.calendar_id
+      WHERE (m.home_team_id = ?1 OR m.away_team_id = ?1) AND m.status IN ('scheduled', 'lineups_open')
+        AND sc.scheduled_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+      ORDER BY sc.scheduled_at LIMIT 1`,
+  ).bind(job.team_id).first<{ day: string }>();
+  if (!next?.day) return [];
+  const squad = (await db.prepare(
+    `SELECT p.id, p.first_name, p.last_name FROM players p
+      WHERE p.team_id = ? AND (p.status IS NULL OR p.status = 'active') AND p.loan_from_team_id IS NULL
+        AND NOT EXISTS (SELECT 1 FROM injuries i WHERE i.player_id = p.id AND i.days_remaining > 0)
+      ORDER BY p.id`,
+  ).bind(job.team_id).all<{ id: string; first_name: string; last_name: string }>()).results;
+  const worker = squad.find((p) => p.id === job.player_id);
+  const others = squad.filter((p) => p.id !== job.player_id);
+  const second = others.length ? others[Math.abs(seedFromString(seed)) % others.length] : undefined;
+  const helpers = [worker, second].filter((p): p is { id: string; first_name: string; last_name: string } => !!p);
+  if (helpers.length === 0) return [];
+  const help = JSON.stringify({ day: next.day, firm: job.firm ?? "firma sponzora" });
+  const names = helpers.map((p) => `${p.first_name} ${p.last_name}`);
+  const squadChat = await db.prepare("SELECT id FROM conversations WHERE team_id = ? AND type = 'squad_group' AND title = 'Kabina' LIMIT 1")
+    .bind(job.team_id).first<{ id: string }>();
+  const note = `📝 ${names.join(" a ")} ${helpers.length > 1 ? "jdou" : "jde"} pomáhat firmě ${job.firm ?? "sponzora"}. `
+    + `V den zápasu (${czDay(next.day)}) ${helpers.length > 1 ? "budou" : "bude"} unavenější.`;
+  await db.batch([
+    ...helpers.map((p) => db.prepare(
+      "UPDATE players SET life_context = json_set(COALESCE(life_context, '{}'), '$.sponsorHelp', json(?)) WHERE id = ?",
+    ).bind(help, p.id)),
+    ...(squadChat ? [
+      db.prepare(
+        `INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, metadata, sent_at, read)
+         VALUES (?, ?, 'system', 'system', 'Kabina', ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), 0)`,
+      ).bind(crypto.randomUUID(), squadChat.id, note, JSON.stringify({ type: "sponsor_help", day: next.day })),
+      db.prepare("UPDATE conversations SET unread_count = unread_count + 1, last_message_text = ?, last_message_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?")
+        .bind(note.slice(0, 100), squadChat.id),
+    ] : []),
+  ]);
+  return names;
+}
+
+/** „pondělí 23. 11.“ pro poznámku v kabině. */
+function czDay(day: string): string {
+  const d = new Date(`${day}T12:00:00Z`);
+  const names = ["neděle", "pondělí", "úterý", "středa", "čtvrtek", "pátek", "sobota"];
+  return `${names[d.getUTCDay()]} ${d.getUTCDate()}. ${d.getUTCMonth() + 1}.`;
+}
+
+/**
+ * Denní krok klubu: kdo dnes dopoledne pomáhá sponzorovi, přijde o kondici (po ranní regeneraci,
+ * takže to platí na dnešní zápas). Vrací počet hráčů.
+ */
+export async function applySponsorHelpDay(db: D1Database, clubTeamId: string, day: string): Promise<number> {
+  const res = await db.prepare(
+    `UPDATE players SET life_context = json_remove(json_set(life_context, '$.condition',
+       MAX(15, COALESCE(json_extract(life_context, '$.condition'), 100) - ?1)), '$.sponsorHelp')
+     WHERE team_id IN (SELECT id FROM teams WHERE id = ?2 OR parent_team_id = ?2)
+       AND json_valid(life_context) AND json_extract(life_context, '$.sponsorHelp.day') = ?3`,
+  ).bind(SPONSOR_HELP_CONDITION_DROP, clubTeamId, day).run();
+  return res.meta?.changes ?? 0;
 }
 
 /** Hráč poděkuje trenérovi za práci. AI klubu se nepíše. */

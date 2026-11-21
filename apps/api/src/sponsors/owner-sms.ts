@@ -235,8 +235,8 @@ export async function handleOwnerSmsReply(
     const claim = await db.prepare(
       `UPDATE sponsor_owner_sms SET status = 'replied', reply_tone = ?
        WHERE id = ? AND status = 'awaiting' AND team_id = ?
-       RETURNING occasion, vars`,
-    ).bind(tone, state.smsId, conv.team_id).all<{ occasion: string; vars: string | null }>();
+       RETURNING occasion, vars, reference_id`,
+    ).bind(tone, state.smsId, conv.team_id).all<{ occasion: string; vars: string | null; reference_id: string | null }>();
     if (claim.results.length !== 1) {
       // Vlákno přežilo svou SMS (vypršela, nahradila ji novější, nebo ji deliverOwnerSmsForTeam
       // zahodil po chybě doručení): jen ho zavřít, bez dopadu na náklonnost.
@@ -287,6 +287,12 @@ export async function handleOwnerSmsReply(
         ).bind(back.slice(0, 100), convId),
       ]);
       logger.info({ module: M, teamId: conv.team_id }, `odpověď majiteli ${state.sponsorId}: ${tone}, náklonnost ${delta}`);
+      // Kývnul na protislužbu za práci: hráči opravdu jdou pomáhat a v den zápasu jsou unavenější.
+      if (occasion === "job_favor" && tone !== "dismissive" && claim.results[0].reference_id) {
+        const { scheduleSponsorHelp } = await import("./player-jobs-db");
+        await scheduleSponsorHelp(db, claim.results[0].reference_id, state.smsId)
+          .catch((e) => logger.warn({ module: M, teamId: conv.team_id }, `pomoc sponzorovi po SMS ${state.smsId}`, e));
+      }
     } catch (e) {
       logger.error({ module: M, teamId: conv.team_id }, `zápis odpovědi majiteli ${state.sponsorId} (sms ${state.smsId})`, e);
     }

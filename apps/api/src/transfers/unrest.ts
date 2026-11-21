@@ -10,6 +10,7 @@ import { sendPlayerSMS } from "../messaging/system-sms";
 import { parseUnrest, type TransferUnrest } from "./offer-rejection-impact";
 import type { UnrestReason } from "./unrest-reasons";
 import { promiseInsert } from "./promises";
+import { sponsorJobActive } from "../sponsors/player-jobs";
 
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 const DAY_MS = 86400000;
@@ -130,6 +131,8 @@ export interface UnrestContext {
    * cizí tým.
    */
   ownedHere: boolean;
+  /** Klub, který s hráčem jedná (práce u jeho sponzora platí jen tady, `sponsorJobActive`). */
+  clubId?: string;
   now?: Date;
 }
 
@@ -163,6 +166,7 @@ export function unrestContextFor(
     coachRelationship: (player.coach_relationship as number | null) ?? 50,
     isCaptain: player.captain_id === playerId,
     ownedHere: player.loan_from_team_id == null && player.current_club_id === teamId,
+    clubId: teamId,
     now,
   };
 }
@@ -215,7 +219,7 @@ export function availableActions(
     } else if (reason === "job") {
       // Kdo už u sponzora dělá, toho prací nalákat nejde (`life_context.sponsorJob`). Hráč na
       // hostování hraje jinde, práci mu klub u svého sponzora nesežene.
-      if (!lifeContext.sponsorJob && ctx.ownedHere) add("find_job");
+      if (!sponsorJobActive(lifeContext.sponsorJob, ctx.clubId) && ctx.ownedHere) add("find_job");
     } else {
       add("personal_talk");
     }

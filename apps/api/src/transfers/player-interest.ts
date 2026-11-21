@@ -11,6 +11,7 @@ import { estimateMarketValue } from "../season/economy";
 import { coachTransferPull, type CoachStanding } from "@okresni-masina/shared";
 import { logger } from "../lib/logger";
 import { canTakeJob, jobLureOf, jobLurePull } from "./job-lure";
+import { sponsorJobActive } from "../sponsors/player-jobs";
 
 /** 0 = nechce odejít, 1 = váhá, 2 = chce přestoupit, 3 = velmi chce přestoupit */
 export type InterestLevel = 0 | 1 | 2 | 3;
@@ -175,7 +176,7 @@ export async function loadInterestInputs(
     const lc = player.life_context ? JSON.parse(player.life_context as string) : {};
     morale = typeof lc.morale === "number" ? lc.morale : 50;
     occupation = typeof lc.occupation === "string" ? lc.occupation : "";
-    sponsorJob = !!lc.sponsorJob;
+    sponsorJob = sponsorJobActive(lc.sponsorJob, (player.team_id as string | null) ?? null);
   } catch (e) { logger.warn({ module: "player-interest" }, "parse life_context", e); }
 
   // Práce od soupeře: bez práce je hráč, kterému běží „přišel o práci", nebo nezaměstnaný.

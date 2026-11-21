@@ -25,7 +25,7 @@ import { applyOfferRejectionImpact } from "../transfers/offer-rejection-impact";
 import type { TransferUnrest } from "../transfers/offer-rejection-impact";
 import { availableActions, performUnrestAction } from "../transfers/unrest";
 import { deliverOwnerSmsForTeam, handleOwnerSmsReply } from "./owner-sms";
-import { requestPlayerJob } from "./player-jobs-db";
+import { applySponsorHelpDay, requestPlayerJob } from "./player-jobs-db";
 import { handleOwnerText } from "./requests-db";
 
 let mf: Miniflare;
@@ -112,7 +112,7 @@ beforeEach(async () => {
   ai.respond = () => null;
   await kv.delete(`open_job_tip:conv-tip`);
   for (const t of [
-    "notifications", "injuries", "sponsor_jobs", "sponsor_owner_sms", "sponsor_favor_log", "sponsor_team_favor", "sponsor_contracts", "sponsor_owners",
+    "notifications", "injuries", "matches", "season_calendar", "sponsor_jobs", "sponsor_owner_sms", "sponsor_favor_log", "sponsor_team_favor", "sponsor_contracts", "sponsor_owners",
     "sponsor_requests", "district_sponsors", "messages", "conversations", "players", "club_incidents", "coach_relation_log",
     "transactions", "teams", "villages", "users", "seasons",
   ]) await db.prepare(`DELETE FROM ${t}`).run();
@@ -153,10 +153,11 @@ describe("requestPlayerJob: zápis a opakovaný běh", () => {
     expect(out.kind).toBe("hired");
     const lc = await lifeOf(NOVAK);
     expect(lc.occupation).toBe("Truhlář");
-    expect(lc.sponsorJob).toMatchObject({ sponsorId: SAWMILL, firm: "Pila Kučera", since: DAY, previous: "Hasič" });
+    expect(lc.sponsorJob).toMatchObject({ sponsorId: SAWMILL, firm: "Pila Kučera", since: DAY, previous: "Hasič", teamIds: [TEAM] });
     expect(lc.morale).toBe(58);
-    const inc = await db.prepare("SELECT status, resolution FROM club_incidents WHERE id = 'inc-lost-job'").first<{ status: string; resolution: string }>();
-    expect(inc).toEqual({ status: "uzavreny", resolution: "found_job" });
+    // Situace končí i v okně omluvenek (ends_on), ne jen stavem.
+    const inc = await db.prepare("SELECT status, resolution, ends_on FROM club_incidents WHERE id = 'inc-lost-job'").first<{ status: string; resolution: string; ends_on: string }>();
+    expect(inc).toEqual({ status: "uzavreny", resolution: "found_job", ends_on: DAY });
     expect(await count("SELECT COUNT(*) AS n FROM coach_relation_log WHERE player_id = ? AND source = 'job'", NOVAK)).toBe(1);
     const favor = await db.prepare("SELECT occasion, created_day, status, vars FROM sponsor_owner_sms WHERE team_id = ?").bind(TEAM).first<{
       occasion: string; created_day: string; status: string; vars: string;
@@ -269,6 +270,55 @@ describe("protislužba za práci (vzor slibu pořadatelské služby)", () => {
     const log = await db.prepare("SELECT reason FROM sponsor_favor_log WHERE sponsor_id = ? ORDER BY rowid DESC LIMIT 1").bind(PUB)
       .first<{ reason: string }>();
     expect(log?.reason).toMatch(/vzal tvého hráče/);
+  });
+});
+
+describe("protislužba se opravdu odpracuje", () => {
+  async function favorSms(): Promise<{ conversation_id: string }> {
+    await requestPlayerJob(db, { teamId: TEAM, sponsorId: PUB, playerId: DVORAK, source: "coach_sms" });
+    await deliverOwnerSmsForTeam(db, TEAM, "2026-11-27");
+    return (await db.prepare("SELECT conversation_id FROM sponsor_owner_sms WHERE occasion = 'job_favor'").first<{ conversation_id: string }>())!;
+  }
+  async function upcomingMatch(day: string): Promise<void> {
+    await db.batch([
+      db.prepare("INSERT INTO season_calendar (id, league_id, season_number, game_week, match_day, scheduled_at, status) VALUES ('sc-help', 'l-job', 5, 20, 'sunday', ?, 'scheduled')")
+        .bind(`${day}T17:00:00.000Z`),
+      db.prepare("INSERT INTO matches (id, calendar_id, league_id, home_team_id, away_team_id, status) VALUES ('m-help', 'sc-help', 'l-job', ?, ?, 'scheduled')")
+        .bind(TEAM, TEAM),
+      db.prepare("INSERT INTO conversations (id, team_id, type, title, created_at) VALUES ('kabina-job', ?, 'squad_group', 'Kabina', '2026-11-01')").bind(TEAM),
+    ]);
+  }
+
+  it("kývne: zaměstnaný a ještě jeden jdou pomáhat, v den zápasu jsou unavenější a kabina to ví", async () => {
+    await upcomingMatch("2099-01-05");
+    const sms = await favorSms();
+    expect(await handleOwnerSmsReply(db, sms.conversation_id, "Jasně, pomůžeme. Kluci přijdou.", "warm")).toBe(true);
+    const helpers = (await db.prepare("SELECT id FROM players WHERE json_extract(life_context, '$.sponsorHelp.day') = '2099-01-05' ORDER BY id")
+      .all<{ id: string }>()).results.map((r) => r.id);
+    expect(helpers).toHaveLength(2);
+    expect(helpers).toContain(DVORAK);
+    const note = await db.prepare("SELECT body FROM messages WHERE conversation_id = 'kabina-job'").first<{ body: string }>();
+    expect(note?.body).toMatch(/jdou pomáhat firmě Hospoda U Kubíčka\. V den zápasu \(pondělí 5\. 1\.\) budou unavenější\./);
+
+    await db.prepare("UPDATE players SET life_context = json_set(life_context, '$.condition', 95)").run();
+    expect(await applySponsorHelpDay(db, TEAM, "2099-01-04")).toBe(0);
+    expect(await applySponsorHelpDay(db, TEAM, "2099-01-05")).toBe(2);
+    for (const id of helpers) {
+      const lc = await lifeOf(id);
+      expect(lc.condition).toBe(80);
+      expect(lc.sponsorHelp).toBeUndefined();
+    }
+    expect((await lifeOf(STUDENT === helpers[0] || STUDENT === helpers[1] ? NOVAK : STUDENT)).condition).toBe(95);
+    // Druhý běh téhož dne nic nestrhne.
+    expect(await applySponsorHelpDay(db, TEAM, "2099-01-05")).toBe(0);
+  });
+
+  it("odbyde: nikdo nikam nejde", async () => {
+    await upcomingMatch("2099-01-05");
+    const sms = await favorSms();
+    await handleOwnerSmsReply(db, sms.conversation_id, "Na to teď nemáme čas.", "dismissive");
+    expect(await count("SELECT COUNT(*) AS n FROM players WHERE json_extract(life_context, '$.sponsorHelp') IS NOT NULL")).toBe(0);
+    expect(await count("SELECT COUNT(*) AS n FROM messages WHERE conversation_id = 'kabina-job'")).toBe(0);
   });
 });
 
