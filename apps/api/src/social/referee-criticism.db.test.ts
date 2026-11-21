@@ -16,7 +16,9 @@ const now = Date.now();
 const recent = new Date(now - 2 * 86400_000).toISOString();
 
 const SCHEMA = [
-  "CREATE TABLE teams (id TEXT PRIMARY KEY, name TEXT, league_id TEXT, game_date TEXT, budget INTEGER, user_id TEXT, parent_team_id TEXT, team_type TEXT)",
+  "CREATE TABLE teams (id TEXT PRIMARY KEY, name TEXT, league_id TEXT, game_date TEXT, budget INTEGER, user_id TEXT, parent_team_id TEXT, team_type TEXT, reputation INTEGER DEFAULT 50)",
+  `CREATE TABLE reputation_log (id INTEGER PRIMARY KEY AUTOINCREMENT, team_id TEXT, old_value INTEGER, new_value INTEGER, delta INTEGER, raw_delta INTEGER,
+     source TEXT, description TEXT, reference_id TEXT, game_date TEXT)`,
   "CREATE TABLE matches (id TEXT PRIMARY KEY, league_id TEXT, home_team_id TEXT, away_team_id TEXT, status TEXT, referee_id TEXT, simulated_at TEXT)",
   "CREATE TABLE season_calendar (id TEXT PRIMARY KEY, league_id TEXT, season_number INTEGER, game_week INTEGER, status TEXT)",
   "CREATE TABLE referee_team_relations (id TEXT PRIMARY KEY, referee_id TEXT, team_id TEXT, sentiment INTEGER, duvod TEXT, updated_at TEXT, UNIQUE(referee_id, team_id))",
@@ -38,7 +40,7 @@ beforeAll(async () => {
     .replace(/--.*$/gm, "").split(";").map((s) => s.trim()).filter(Boolean);
   for (const sql of migration) await db.prepare(sql).run();
   await db.batch([
-    db.prepare("INSERT INTO teams VALUES ('t1', 'Volary', 'l1', '2026-11-20', 50000, 'u1', NULL, 'senior'), ('t2', 'Lhenice', 'l1', '2026-11-20', 50000, 'u2', NULL, 'senior')"),
+    db.prepare("INSERT INTO teams VALUES ('t1', 'Volary', 'l1', '2026-11-20', 50000, 'u1', NULL, 'senior', 50), ('t2', 'Lhenice', 'l1', '2026-11-20', 50000, 'u2', NULL, 'senior', 50), ('t3', 'Vimperk', 'l1', '2026-11-20', 50000, 'u3', NULL, 'senior', 50)"),
     db.prepare("INSERT INTO matches VALUES ('m1', 'l1', 't1', 't2', 'simulated', 'ref-1', ?)").bind(recent),
     db.prepare("INSERT INTO season_calendar VALUES ('c20', 'l1', 3, 20, 'simulated'), ('c21', 'l1', 3, 21, 'scheduled'), ('c22', 'l1', 3, 22, 'scheduled')"),
     db.prepare("INSERT INTO team_fanbase VALUES ('t1', 100, NULL)"),
@@ -105,6 +107,19 @@ describe("kritika sudího na Sockách v databázi", () => {
     expect(sms?.body).not.toMatch(/[—–]/);
   });
 
+  it("ostrá kritika bere reputaci jako po rozhovoru, jednou na příspěvek", async () => {
+    const rep = async () => (await db.prepare("SELECT reputation FROM teams WHERE id = 't1'").first<{ reputation: number }>())!.reputation;
+    const log = await db.prepare("SELECT COUNT(*) AS n, COALESCE(SUM(delta), 0) AS d FROM reputation_log WHERE team_id = 't1' AND source = 'press'").first<{ n: number; d: number }>();
+    // post:a (síla 2) a post:d (síla 3) z předchozích testů: obě ostré, každá −1.
+    expect(log).toEqual({ n: 2, d: 2 * effectsFor("kritika", 2, false).reputation });
+    expect(await rep()).toBe(50 + 2 * effectsFor("kritika", 2, false).reputation);
+  });
+
+  it("pochvala bez sudího z posledního zápasu nic neudělá", async () => {
+    expect(await applySocialRefereeEffects(db, fixed("obhajoba", 3), { postKey: "post:nobody", authorTeamId: "t3", text: "Sudí byl výborný" })).toBeNull();
+    expect(await db.prepare("SELECT COUNT(*) AS n FROM social_referee_effects WHERE team_id = 't3'").first<{ n: number }>()).toEqual({ n: 0 });
+  });
+
   it("obhajoba sudího zlepší jeho paměť", async () => {
     await applySocialRefereeEffects(db, fixed("obhajoba", 2), { postKey: "post:e", authorTeamId: "t2", text: "Sudí to odpískal férově" });
     const rel = await db.prepare("SELECT sentiment FROM referee_team_relations WHERE referee_id = 'ref-1' AND team_id = 't2'").first<{ sentiment: number }>();
@@ -113,5 +128,16 @@ describe("kritika sudího na Sockách v databázi", () => {
     expect(await applySocialRefereeEffects(db, fixed("obhajoba", 3), { postKey: "comment:f", authorTeamId: "t2", text: "Sudí byl výborný" })).toBeNull();
     const again = await db.prepare("SELECT sentiment FROM referee_team_relations WHERE referee_id = 'ref-1' AND team_id = 't2'").first<{ sentiment: number }>();
     expect(again?.sentiment).toBe(rel?.sentiment);
+  });
+
+  it("opakovaná pochvala téhož sudího po týdnu má poloviční dopad", async () => {
+    // Pochvala z „obhajoba sudího zlepší jeho paměť“ se posune o 8 dní zpět: týdenní strop už neplatí, 14denní opakování ano.
+    await db.prepare("UPDATE social_referee_effects SET created_at = ? WHERE post_key = 'post:e'")
+      .bind(new Date(Date.now() - 8 * 86400_000).toISOString()).run();
+    const before = (await db.prepare("SELECT sentiment FROM referee_team_relations WHERE referee_id = 'ref-1' AND team_id = 't2'").first<{ sentiment: number }>())!.sentiment;
+    await applySocialRefereeEffects(db, fixed("obhajoba", 2), { postKey: "post:g", authorTeamId: "t2", text: "Sudí zase férový" });
+    const after = (await db.prepare("SELECT sentiment FROM referee_team_relations WHERE referee_id = 'ref-1' AND team_id = 't2'").first<{ sentiment: number }>())!.sentiment;
+    expect(after - before).toBe(effectsFor("obhajoba", 2, false, 1200, true).refereeRespect);
+    expect(effectsFor("obhajoba", 2, false, 1200, true).refereeRespect).toBeLessThan(effectsFor("obhajoba", 2, false).refereeRespect);
   });
 });

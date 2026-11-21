@@ -4210,6 +4210,18 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
     temperature: forecast.temperature,
   });
 
+  // Distanc trenéra na lavičce (kritika sudího na Sockách, social/referee-criticism.ts): v ligovém
+  // kole se pokyny na lavičce neuplatní a střídá automat. Stránka sestavy to musí říct.
+  let benchBan = false;
+  if (!isFriendly && !isCup && !isTournament && gameWeek != null && calendarId) {
+    const cal = await c.env.DB.prepare("SELECT season_number FROM season_calendar WHERE id = ?").bind(calendarId)
+      .first<{ season_number: number }>()
+      .catch((e) => { logger.warn({ module: "game" }, "sezóna kola pro distanc", e); return null; });
+    if (cal) {
+      const { hasBenchBan } = await import("../social/referee-criticism");
+      benchBan = await hasBenchBan(c.env.DB, teamId, gameWeek, cal.season_number);
+    }
+  }
   return c.json({
     referee: refereeInfo,
     forecast: {
@@ -4237,6 +4249,7 @@ gameRouter.get("/teams/:teamId/next-match", async (c) => {
       venueName: isTournament ? (match.venue_name as string | null) ?? null : null,
       roundName: cupRoundName,
       isLocalDerby,
+      benchBan,
     },
     lineup: lineup ? {
       formation: lineup.formation, tactic: lineup.tactic,

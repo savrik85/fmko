@@ -125,6 +125,15 @@ async function criticizedRecently(db: D1Database, teamId: string, excludeKey: st
   return !!interview;
 }
 
+/** Zastal se trenér téhož sudího v posledních 14 dnech? Opakovaná obhajoba má poloviční dopad. */
+async function defendedRecently(db: D1Database, teamId: string, refereeId: string, excludeKey: string): Promise<boolean> {
+  const since = new Date(Date.now() - REPEAT_DAYS * 86400_000).toISOString();
+  const row = await db.prepare(
+    "SELECT 1 AS x FROM social_referee_effects WHERE team_id = ? AND referee_id = ? AND post_key != ? AND postoj = 'obhajoba' AND created_at >= ? LIMIT 1",
+  ).bind(teamId, refereeId, excludeKey, since).first<{ x: number }>();
+  return !!row;
+}
+
 /**
  * Zaúčtuje dopady příspěvku o sudím. Idempotentní: řádek v `social_referee_effects`
  * je zámek, druhé volání se stejným příspěvkem nic neudělá.
@@ -138,7 +147,10 @@ export async function applySocialRefereeEffects(
   if (stance.postoj === "neutral" || stance.sila <= 0) return null;
 
   const match = await lastReferee(db, input.authorTeamId);
+  // Zastat se jde jen sudího z posledního zápasu: bez něj není koho chválit a pochvala nic nedělá.
+  if (stance.postoj === "obhajoba" && !match) return null;
   const repeated = stance.postoj === "kritika" && await criticizedRecently(db, input.authorTeamId, input.postKey);
+  const repeatedDefense = stance.postoj === "obhajoba" && !!match && await defendedRecently(db, input.authorTeamId, match.refereeId, input.postKey);
   // Zámek i strop v jednom příkazu (souběžné požadavky ho neobejdou): jeden příspěvek = jedny
   // dopady, a zastat se téhož sudího jde jednou za 7 dní. Jinak by si klub opakovanými
   // pochvalami pod příspěvky nahnal jeho přízeň. Kritika strop nemá, škodí jen autorovi.
@@ -162,7 +174,7 @@ export async function applySocialRefereeEffects(
     const { resolveRules } = await import("../competition/rules");
     fineRate = (await resolveRules(db, leagueId, seasonRow?.n ?? null)).fine_referee_abuse;
   }
-  const eff = effectsFor(stance.postoj, stance.sila, repeated, fineRate, false);
+  const eff = effectsFor(stance.postoj, stance.sila, repeated, fineRate, repeatedDefense);
   const rng = createRng(seedFromString(`social-fine-${input.postKey}`));
   const fine = eff.fineChance > 0 && rng.random() < eff.fineChance ? eff.fineBase + rng.int(0, 400) : 0;
   const benchBan = stance.postoj === "kritika" && stance.sila >= 3 && repeated;
@@ -221,6 +233,15 @@ export async function applySocialRefereeEffects(
   if (eff.fans !== 0) {
     await db.prepare("UPDATE team_fanbase SET casual_count = MAX(0, casual_count + ?), updated_at = datetime('now') WHERE team_id = ?")
       .bind(eff.fans, input.authorTeamId).run().catch((e) => logger.warn({ module: M }, "fanoušci", e));
+  }
+  // Reputace jako po rozhovoru (news/post-match-interview.ts): ostré výroky ji berou, sportovní vystupování přidá.
+  if (eff.reputation !== 0) {
+    const { applyReputationDelta } = await import("../lib/reputation");
+    await applyReputationDelta(
+      db, input.authorTeamId, eff.reputation, "press",
+      stance.postoj === "kritika" ? "Ostré výroky o rozhodčím na Sockách" : "Sportovní vystupování na Sockách",
+      { referenceId: `social-rep-${input.postKey}` },
+    ).catch((e) => logger.warn({ module: M }, "reputace po příspěvku o sudím", e));
   }
   await db.prepare("UPDATE social_referee_effects SET fine = ?, bench_ban = ? WHERE post_key = ?").bind(charged, banned ? 1 : 0, input.postKey).run()
     .catch((e) => logger.warn({ module: M }, "zápis výsledku kritiky", e));
