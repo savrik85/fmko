@@ -10,6 +10,7 @@
 
 import { DRINKING_BUDDY_ALCOHOL } from "../generators/relationships";
 import type { Smena } from "../generators/occupations";
+import { seedFromString } from "../lib/seed";
 
 /** Co hráč zrovna dělá, když mu přijde trenérova SMS. */
 export type Situace = "spi" | "prace" | "po_praci" | "volno" | "pije";
@@ -242,6 +243,32 @@ export function domacnost(vek: number): string {
 }
 
 /**
+ * Koho by noční SMS doma vzbudila. Drží se `domacnost`: kdo podle ní bydlí s přítelkyní
+ * „nebo sám“, ten nikoho jmenovat nesmí (hra neví, jestli s ní bydlí). `null` = nikdo.
+ * Dřív prompt nabízel „ženu, malého, psa nebo kočku“ každému a z 60 nočních stížností
+ * jich velká část mluvila o ženě a dítěti i u dvacetiletých (prod 11/2026).
+ */
+export function wokenAtHome(age: number, lifeSituation?: string): string | null {
+  if (lifeSituation === "rozvod") return null;
+  if (lifeSituation === "narozeni_ditete") return "malého";
+  if (age < 21) return "rodiče";
+  if (age < 26) return null;
+  if (age < 36) return "ženu";
+  if (age < 46) return "ženu a děti";
+  return "ženu";
+}
+
+/**
+ * Ohradí se hráč, že ho (a jeho doma) trenér vzbudil? Jen asi v každé třetí noci, jinak by
+ * to psal skoro každý stejnými slovy. Los podle hráče a noci (od poledne do poledne), takže
+ * ve 23:00 i ve 2:00 téže noci vyjde stejně.
+ */
+export function complainsAboutWaking(playerId: string, kdy: Date): boolean {
+  const night = Math.floor((kdy.getTime() - 12 * 3_600_000) / 86_400_000);
+  return seedFromString(`${playerId}|wake|${night}`) % 3 === 0;
+}
+
+/**
  * Kde hráč bydlí. Při rozvodu neplatí věkové pravidlo: spí v kabině nebo u kamaráda (spec 4c).
  */
 export function domacnostSeSituaci(vek: number, situace?: string): string {
@@ -268,21 +295,34 @@ export function pravidloEmoji(vek: number, temper: number, podnapilost: Podnapil
 /** Věta do promptu o tom, kdy a kde ho SMS zastihla. */
 export function popisSituace(
   k: CasovyKontext, povolani: string | undefined, vyluky: string[],
-  /** Vážná věc nebo už jednou odložené (ai-player-chat.ts mustAnswerNow): v práci odpoví hned, krátce. */
-  opts: { mustAnswerNow?: boolean } = {},
+  opts: {
+    /** Vážná věc nebo už jednou odložené (ai-player-chat.ts mustAnswerNow): v práci odpoví hned, krátce, v noci bez stížností. */
+    mustAnswerNow?: boolean;
+    /** V noci si smí postěžovat, že ho trenér vzbudil (`complainsAboutWaking`). */
+    complainAboutWaking?: boolean;
+    /** Koho tím doma vzbudil (`wokenAtHome`), `null` = nikoho nejmenuje. */
+    wokenAtHome?: string | null;
+  } = {},
 ): string {
   const kdy = `Je ${k.den} ${k.hodina}:00, ${k.castDne}.`;
   const prace = povolani ? `Děláš jako ${povolani.toLowerCase()}.` : "";
   const smena = k.smenaDnes ? ` Dneska máš ${k.smenaDnes}.` : "";
 
   if (k.situace === "spi") {
-    return [
-      kdy,
-      "SPAL JSI a trenérova SMS tě vzbudila. Dej to najevo: jsi rozespalý a naštvaný,",
-      "že ti někdo píše v tuhle hodinu. Klidně se ohradíš, že jsi kvůli tomu vzbudil",
-      "i ostatní doma (ženu, malého, psa nebo kočku). Jména si nevymýšlej.",
-      "Odpověz krátce a jdi zpátky spát.",
-    ].join(" ");
+    if (opts.mustAnswerNow) {
+      // Krádež, nabídka nebo už jednou odložená věc: nejdřív odpověď, ne stížnost na buzení.
+      return [
+        kdy, "SPAL JSI a trenérova SMS tě vzbudila, jsi rozespalý.",
+        "Jde ale o vážnou věc, tak věcně odpověz na to, na co se trenér ptá. Na buzení si nestěžuj.",
+        "Piš krátce.",
+      ].join(" ");
+    }
+    const complaint = !opts.complainAboutWaking
+      ? "Jsi rozespalý a stručný, vybavovat se teď nechceš. Nikoho dalšího doma nezmiňuj."
+      : opts.wokenAtHome
+        ? `Dej najevo, že tě to naštvalo, a klidně trenérovi vyčti, že jsi kvůli němu vzbudil i ${opts.wokenAtHome}. Jména si nevymýšlej.`
+        : "Dej najevo, že tě naštvalo, že ti někdo píše v tuhle hodinu. Nikoho dalšího doma nezmiňuj.";
+    return [kdy, "SPAL JSI a trenérova SMS tě vzbudila.", complaint, "Odpověz krátce a jdi zpátky spát."].join(" ");
   }
   if (k.situace === "prace") {
     // Schválně „obnáší například", ne „zrovna děláš". Část výmluv v katalogu

@@ -12,7 +12,9 @@ import { logger } from "../lib/logger";
 import { COACH_CHAT_MAX_MORALE, COACH_CHAT_MAX_RELATION } from "../lib/coach-relation";
 import { seedFromString } from "../lib/seed";
 import { getOccupationByName, smenaProPovolani } from "../generators/occupations";
-import { domacnostSeSituaci, kontextCasu, popisSituace, pravidloEmoji, type CasovyKontext } from "./chat-kontext";
+import {
+  complainsAboutWaking, domacnostSeSituaci, kontextCasu, popisSituace, pravidloEmoji, wokenAtHome, type CasovyKontext,
+} from "./chat-kontext";
 import { blokZnalosti } from "../incidents/znalosti";
 import type { PlayerSnapshot, AiScenario } from "./ai-player-scenarios";
 import { weightTalkPrompt } from "../season/weight-talk";
@@ -300,7 +302,11 @@ export function buildSystemPrompt(
     `Aktuální nálada: ${player.morale}/100, kondice: ${player.condition}/100, vztah s trenérem: ${player.coachRelationship}/100.`,
     popisZdravi(player),
     domacnostSeSituaci(player.age, player.zivotniSituace?.kind),
-    popisSituace(cas, player.occupation, vymluva, { mustAnswerNow: mustAnswerNow(player) }),
+    popisSituace(cas, player.occupation, vymluva, {
+      mustAnswerNow: mustAnswerNow(player),
+      complainAboutWaking: complainsAboutWaking(player.id, kdy),
+      wokenAtHome: wokenAtHome(player.age, player.zivotniSituace?.kind),
+    }),
     player.sponsorJobFirm
       ? `Práci ti sehnal trenér u sponzora klubu: děláš u firmy ${player.sponsorJobFirm} a šéf tě pouští na zápasy. Jsi mu za to vděčný.`
       : "",
