@@ -12,6 +12,28 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    date: "2026-11-21",
+    emoji: "❄️",
+    title: "Sálovka, brigády, svatby, dražba a zastupitelstvo",
+    items: [
+      "Brigádu svoláš zprávou do kabiny. Kdo přijde, upraví hřiště, a když sněží, odhází sníh.",
+      "Od 1. 12. zve Sportovní hala Prachatice přes SMS na Vánoční sálovku 27. 12. Soupisku nastavíš na stránce Sálovka.",
+      "Hráč tě může pozvat na svatbu. Můžeš přijít a pohlídat kluky, poslat dar, nebo jim zakázat pít.",
+      "Majitele sponzorské firmy jde požádat, jestli by vzal hráče do práce.",
+      "Na zmeškaný hovor jde v Hovorech zavolat zpátky.",
+      "Hospodský posílá drby o přestupech. Drb o tvém hráči můžeš pustit do Zpravodaje, nebo hráče uklidnit.",
+      "Rodiče hráčů z U21 píšou trenérovi. Někdo si stěžuje, jiný nabídne peníze, když bude syn hrát.",
+      "Když nový trenér převezme opuštěný klub, jeho nejlepší hráči jdou do dražby. Najdeš ji v Přestupech pod Hledat.",
+      "Kritika sudího na Sockách může skončit pokutou, nebo i distancem na lavičce.",
+      "K domácímu zápasu můžeš v Sestavě postavit vlastního pomezního s praporkem, poctivého, nebo nadržujícího.",
+      "Před derby se může ozvat sudí, že by si za obálku dal větší pozor. Můžeš zaplatit, nevšímat si, nebo ho nahlásit.",
+      "Jednou za měsíc dělí zastupitelstvo obecní peníze mezi hasiče, myslivce a fotbal. Starosta přečte tvůj proslov.",
+      "Hráč, který skončí s fotbalem, zůstane v okrese jako sudí, vůdce kotle, hospodský nebo trenér žáků. Na okresní akci si zahrají staří páni.",
+      "Na konci sezóny přibude anketa Fotbalista okresu, ve které hlasují trenéři, a ročenka klubu na klubovém webu.",
+      "OFS skládá výběr okresu, hráče do něj nominují trenéři přes SMS.",
+    ],
+  },
+  {
     date: "2026-11-19",
     emoji: "💬",
     title: "Lidé ve hře víc reagují na tvoje zprávy",
