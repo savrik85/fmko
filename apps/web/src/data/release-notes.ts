@@ -14,7 +14,7 @@ export const RELEASE_NOTES: ReleaseNote[] = [
   {
     date: "2026-11-22",
     emoji: "👂",
-    title: "Kabina má uši, reakce na přestupy a dotace v grémiu",
+    title: "Kabina má uši a reakce na přestupy",
     items: [
       "Co trenér napíše hráči o spoluhráči, se může roznést: přes bráchu, kámoše od piva, souseda nebo v hospodě.",
       "Kdo se o sobě něco doslechne, ozve se v Telefonu a řekne, od koho to ví. Kritika za zády bolí víc než do očí, pochvala za zády potěší víc.",
@@ -22,9 +22,6 @@ export const RELEASE_NOTES: ReleaseNote[] = [
       "Kdo přijde o kapitánskou pásku, ozve se.",
       "Na prodej nebo nákup hráče reaguje jeho brácha, kamarádi, rival i hráč na stejném postu.",
       "Když trenér hráči předem napíše o sestavě, nevezme si vynechání tolik k srdci.",
-      "Grémium může odhlasovat, že o dotaci pro vlastní klub jde žádat jen jednou za sezónu.",
-      "Jména v Telefonu vedou na profil hráče nebo manažera.",
-      "V menu na mobilu zmizela barevná záře za ikonami.",
     ],
   },
   {
