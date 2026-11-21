@@ -43,9 +43,41 @@ export function tacticBonus(tactic: InterrogationTactic, role: "culprit" | "witn
   return 5;
 }
 
-/** Trenér hráče žádá, ať se poptá nebo zjistí víc („zkus se nenápadně optat“, „zjisti, kdo to byl“). */
-const INQUIRY_RE = /\b(poptej|poptat|poptas|optat|vyptat|vyptej|zeptej se (kluku|ostatnich|v hospode)|zjisti|zjistis|zjistit|porozhledni|porozhlednes|vyzvidej|vyzvidat|optej se|ozvi se kdyz neco zjistis|dej vedet kdyz neco)\b/;
+/** Lidé a místa, kde se hráč poptá: „zeptej se kluků“, „i v hospodě“, „na tréninku“. */
+const ASK_AROUND = String.raw`(?:kluku|ostatnich|lidi|kamosu|chlapu|party|kolem|v hospode|v kabine|v satne|na treninku|u piva)`;
+
+/**
+ * Trenér hráče žádá, ať se poptá nebo zjistí víc („zkus se nenápadně optat“, „zjisti, kdo to byl“).
+ * I podmiňovací a zdvořilé tvary: „nepoptal by ses mi…“, „mohl by ses zeptat kluků“, „zkus se
+ * zeptat kluků“, „nezjistil bys…“, „dej mi vědět, kdybys něco slyšel“ (FK Geomapping 19.–20. 11.:
+ * dřív žádný úkol, ačkoli hráč slíbil, že se poptá).
+ */
+const INQUIRY_RE = new RegExp([
+  String.raw`\b(?:poptej|poptat|poptas|optat|vyptat|vyptej|zjisti|zjistis|zjistit|porozhledni|porozhlednes|vyzvidej|vyzvidat|optej se|ozvi se kdyz neco zjistis|dej vedet kdyz neco)\b`,
+  String.raw`\b(?:ne)?(?:poptal|zeptal|optal|vyptal|zjistil)a? (?:by ses|bys)\b`,
+  String.raw`\bmohla? (?:by ses|bys se) zeptat\b`,
+  String.raw`\bzkus(?:te)? se (?:nenapadne |taky |i )?zeptat\b`,
+  String.raw`\b(?:zeptej se|se zeptej) (?:i |taky |tez )?${ASK_AROUND}`,
+  String.raw`\bdej (?:mi )?vedet,? (?:kdybys|kdyby ses|kdyz|jestli) (?:\w+ )?(?:neco )?(?:slysel|zjistil|dozvedel|zaslechl|uslysis|zjistis|dozvis)\b`,
+  String.raw`\bnastraz(?:is)? usi\b`,
+].join("|"));
 
 export function isInquiryRequest(text: string): boolean {
-  return INQUIRY_RE.test(plain(text));
+  // „Zavolám policii, třeba něco zjistí“: třetí osoba není prosba („zjisti“ bez čárky je).
+  return INQUIRY_RE.test(plain(text.toLowerCase().replace(/zjistí(?![\p{L}])/gu, " ")));
+}
+
+/**
+ * Hráč v odpovědi slíbí, že se poptá („poptám se v šatně“, „zkusím to zjistit“, „u piva nastražím
+ * uši“). Bez úkolu by slib zůstal bez dopadu (messaging/ai-player-spawn.ts `afterPlayerReply`).
+ * „Zeptám se“ jen s lidmi nebo místem, kde se ptá („zeptám se doma, jestli můžu“ slib není).
+ */
+const PLAYER_INQUIRY_RE = new RegExp([
+  String.raw`\b(?:poptam se|optam se|vyptam se|zjistim|nastrazim usi|porozhlednu se|vyzvidnu)\b`,
+  String.raw`\b(?:zeptam se|budu se ptat) (?:\w+ ){0,2}?${ASK_AROUND}`,
+  String.raw`\bzkusim (?:se )?(?:to )?(?:poptat|optat|vyptat|zjistit|vyzvidet|zeptat)\b`,
+].join("|"));
+
+export function promisesInquiry(text: string): boolean {
+  return PLAYER_INQUIRY_RE.test(plain(text));
 }

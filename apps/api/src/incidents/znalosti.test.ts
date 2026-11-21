@@ -158,7 +158,7 @@ describe("odhalený pachatel a vlastní průšvih mimo téma", () => {
   });
 
   it("kdo se trenérovi přiznal při výslechu, nezapírá, i když incident nebyl označený jako odhalený", () => {
-    const selected = vyberZnalosti([radek({ ...OWN_OFFENCE, culprit_revealed: 0, interrogation: "priznal" }, "p")], "jiny-incident");
+    const selected = vyberZnalosti([radek({ ...OWN_OFFENCE, culprit_revealed: 0, interrogation: "priznal" }, "p")], "other-incident");
     expect(selected).toHaveLength(1);
     expect(blokZnalosti(selected)).toContain("Trenérovi ses k tomu přiznal.");
     expect(blokZnalosti(selected)).toContain("nezapírej");

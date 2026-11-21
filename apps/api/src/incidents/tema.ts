@@ -20,7 +20,7 @@ export function normalizuj(s: string): string {
 }
 
 /** Bez diakritiky, malými písmeny. Tahle sama stačí, ostatní jen se signálem průšvihu. */
-const OBECNA_SLOVA = ["krad", "zlodej", "vloup", "kdo to byl", "kdo to udelal", "kamer", "polici"] as const;
+const OBECNA_SLOVA = ["krad", "krast", "zlodej", "vloup", "kdo to byl", "kdo to udelal", "kamer", "polici"] as const;
 
 /** Podřetězce, které spolu s kmenem věci nebo místa znamenají průšvih, ne běžnou řeč. */
 const SIGNAL_PRUSVIHU = ["zmizel", "rozbi", "rozmlat", "znic", "poskod", "prusvih", "vykop", "spal"] as const;
@@ -39,6 +39,9 @@ const SLOVA_DRUHU: Record<string, readonly string[]> = {
   pozar_grilu: ["gril", "pozar", "ohen", "ohne", "stanek", "stank"],
   svetlice: ["svetlic", "pyro"],
   vandal: ["vandal"],
+  kasa_obcerstveni: ["obcerstv", "stank", "stanek"],
+  tombola: ["tombol"],
+  zpronevera_ekonoma: ["ekonom"],
 };
 
 /** Slova z názvů vybavení a zařízení, která by chytala běžnou řeč. */
@@ -47,8 +50,11 @@ const NEROZLISUJICI = new Set([
   "sektor", "kotel", "kotle", "sluzba",
 ]);
 
-/** Peněžní ztráta (kasa, tombola, zpronevěra, útěk s penězi) nemá kategorii ani zařízení, kmeny jsou ruční. */
-const KMENY_PENIZE = ["peniz", "hotovost", "kasa", "tombol", "pokladn"];
+/**
+ * Peněžní ztráta (kasa, tombola, zpronevěra, útěk s penězi) nemá kategorii ani zařízení, kmeny jsou ruční.
+ * Kasa po pádech („vykrást tu kasu“, Geomapping 11/2026), ne jen „kas“: to by chytlo i „kašle“.
+ */
+const KMENY_PENIZE = ["peniz", "hotovost", "prach", "trzb", "kasa", "kasu", "kase", "kasy", "kasou", "tombol", "pokladn"];
 
 /** Kmeny slov z názvu toho, co incident poškodil: bez poslední hlásky, aby „dresy" poznalo i „dresů". */
 function kmenyZtraty(z: Ztrata): string[] {
@@ -63,21 +69,33 @@ function kmenyZtraty(z: Ztrata): string[] {
     .map((slovo) => slovo.slice(0, -1));
 }
 
-export function jeOtazkaNaIncident(textZpravy: string, incident: { kind: string; ztraty: readonly Ztrata[] }): boolean {
+/** Zmiňuje zpráva místo nebo věc právě tohohle incidentu, se signálem průšvihu nebo obecným slovem? */
+function mentionsIncidentStems(textZpravy: string, incident: { kind: string; ztraty: readonly Ztrata[] }): boolean {
   const t = normalizuj(textZpravy);
-  if (OBECNA_SLOVA.some((s) => t.includes(s))) return true;
   const slova = t.split(/[^a-z]+/).filter(Boolean);
-  const maSignalPrusvihu = SIGNAL_PRUSVIHU.some((s) => t.includes(s)) || slova.includes("kdo");
-  if (!maSignalPrusvihu) return false;
+  const hasTroubleSignal = OBECNA_SLOVA.some((s) => t.includes(s))
+    || SIGNAL_PRUSVIHU.some((s) => t.includes(s)) || slova.includes("kdo");
+  if (!hasTroubleSignal) return false;
   const kmeny = [...(SLOVA_DRUHU[incident.kind] ?? []), ...incident.ztraty.flatMap(kmenyZtraty)];
   return kmeny.some((k) => slova.some((s) => s.startsWith(k)));
 }
 
-/** Nejnovější incident, na který se zpráva ptá. `incidenty` seřazené od nejnovějšího (spec 7a). */
+export function jeOtazkaNaIncident(textZpravy: string, incident: { kind: string; ztraty: readonly Ztrata[] }): boolean {
+  const t = normalizuj(textZpravy);
+  if (OBECNA_SLOVA.some((s) => t.includes(s))) return true;
+  return mentionsIncidentStems(textZpravy, incident);
+}
+
+/**
+ * Incident, na který se zpráva ptá. `incidenty` seřazené od nejnovějšího (spec 7a). Přednost má
+ * ten, jehož místo nebo věc zpráva jmenuje („vykrást tu kasu“ míří na kasu, i když je novější
+ * oslava v kabině), obecná otázka („kdo to byl?“) míří na nejnovější.
+ */
 export function najdiIncidentVTextu(
   textZpravy: string, incidenty: ReadonlyArray<{ id: string; kind: string; ztraty: readonly Ztrata[] }>,
 ): string | null {
-  return incidenty.find((i) => jeOtazkaNaIncident(textZpravy, i))?.id ?? null;
+  return incidenty.find((i) => mentionsIncidentStems(textZpravy, i))?.id
+    ?? incidenty.find((i) => jeOtazkaNaIncident(textZpravy, i))?.id ?? null;
 }
 
 /** Začátky slov, podle kterých trenér mluví o řečech z hospody (spec 9a). Bez diakritiky. */

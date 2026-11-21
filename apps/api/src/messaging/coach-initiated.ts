@@ -171,7 +171,10 @@ export async function startCoachThread(
 
     const now = new Date().toISOString();
     const jmeno = `${player.firstName} ${player.lastName}`;
-    await afterPlayerReply(db, { teamId: opts.teamId, convId: opts.convId, player, reply, at: now, offerIds: memory.offerIds });
+    await afterPlayerReply(db, {
+      teamId: opts.teamId, convId: opts.convId, player, reply, at: now, offerIds: memory.offerIds,
+      incidentId: tema && tema.den === teamGameDate?.game_date?.slice(0, 10) ? tema.incidentId : null,
+    });
     // Když hráč rovnou uzavřel, thread se neotevírá — jinak by konverzace
     // čekala na odpověď, kterou už nikdo nedluží.
     const pokracuje = !reply.conversationComplete;

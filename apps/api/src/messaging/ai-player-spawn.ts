@@ -14,6 +14,7 @@
 import { pushPhoneMessage, type OptionalPushKeys } from "../community/phone-push";
 import { transferTalkFrom } from "../transfers/unrest-reasons";
 import { nactiZnalostiHrace } from "../incidents/znalosti-db";
+import { promisesInquiry } from "../incidents/interrogation-tactics";
 import { nazevSituace } from "../incidents/situace";
 import { loadRecentLifeEvent } from "../incidents/life-news";
 import { logger } from "../lib/logger";
@@ -1222,7 +1223,10 @@ async function handleAiPlayerReplyInner(
   const now = new Date().toISOString();
   const senderName = `${player.firstName} ${player.lastName}`;
   const shouldClose = reply.conversationComplete || isHardCap;
-  await afterPlayerReply(db, { teamId: conv.team_id, convId, player, reply, at: now, offerIds: memory.offerIds });
+  await afterPlayerReply(db, {
+    teamId: conv.team_id, convId, player, reply, at: now, offerIds: memory.offerIds,
+    incidentId: state.incidentId && state.incidentDen === teamGameDate?.game_date?.slice(0, 10) ? state.incidentId : null,
+  });
 
   if (!shouldClose) {
     // Branch A: pokračuje v rozhovoru
@@ -1763,7 +1767,12 @@ async function offendPlayer(
  */
 export async function afterPlayerReply(
   db: D1Database,
-  r: { teamId: string; convId: string; player: PlayerSnapshot; reply: Pick<ReplyResult, "writeLater" | "transferStance" | "acceptsInvite">; at: string; offerIds: string[] },
+  r: {
+    teamId: string; convId: string; player: PlayerSnapshot; reply: Pick<ReplyResult, "body" | "writeLater" | "transferStance" | "acceptsInvite">;
+    at: string; offerIds: string[];
+    /** Incident, o kterém se dnes v hovoru mluví (téma vlákna), jinak nic. */
+    incidentId?: string | null;
+  },
 ): Promise<void> {
   // Pozvání od trenéra (coach-commitments.ts): hráč v odpovědi kývl nebo odmítl.
   if (r.reply.acceptsInvite !== undefined && r.player.pendingInvite) {
@@ -1777,6 +1786,13 @@ export async function afterPlayerReply(
     await offerStanceStmt(db, r.player.id, r.reply.transferStance, r.offerIds).run()
       .catch((e) => logger.warn({ module: "ai-player-spawn", teamId: r.teamId }, "zápis postoje k nabídce", e));
   }
+  // Hráč v hovoru o incidentu sám slíbil, že se poptá („poptám se v šatně“): ať má slib dopad,
+  // založí se úkol pátrání jako po trenérově „poptej se“ (jednou na incident, coach-commitments.ts).
+  if (r.incidentId && promisesInquiry(r.reply.body) && await incidentStillOpen(db, r.incidentId)) {
+    const { recordInquiryTask } = await import("./coach-commitments");
+    await recordInquiryTask(db, { teamId: r.teamId, convId: r.convId, playerId: r.player.id, incidentId: r.incidentId, coachMessage: r.reply.body, now: new Date(r.at) })
+      .catch((e) => logger.warn({ module: "ai-player-spawn", teamId: r.teamId }, `úkol pátrání ze slibu hráče ${r.incidentId}`, e));
+  }
   // „Poptám se a zítra dám vědět“: odpověď druhý den pošle úkol pátrání (deliverInquiry),
   // druhá odložená zpráva za pár hodin by jen opakovala, že nic neví.
   if (r.reply.writeLater && !(await inquiryJustRequested(db, r.convId, r.at))) {
@@ -1788,6 +1804,15 @@ export async function afterPlayerReply(
       payload: { anchorAt: r.at }, replace: true,
     });
   }
+}
+
+/** Incident jde ještě vyšetřovat (otevřený nebo u policie, pachatel neodhalený)? */
+async function incidentStillOpen(db: D1Database, incidentId: string): Promise<boolean> {
+  const row = await db.prepare(
+    "SELECT 1 AS x FROM club_incidents WHERE id = ? AND status IN ('otevreny', 'policie') AND culprit_revealed = 0",
+  ).bind(incidentId).first<{ x: number }>()
+    .catch((e) => { logger.warn({ module: "ai-player-spawn" }, `stav incidentu ${incidentId}`, e); return null; });
+  return !!row;
 }
 
 /** Trenér hráče v poslední hodině požádal, ať se poptá (coach-commitments.ts `recordInquiryTask`)? */
