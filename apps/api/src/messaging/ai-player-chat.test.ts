@@ -17,6 +17,7 @@ import { BEZ_ZNALOSTI, HLAVICKA_ZNALOSTI, type RadekZnalosti } from "../incident
 import { generateText } from "../lib/ai-provider";
 import { ZAKAZ_ZIVOTNICH_SITUACI, buildSystemPrompt, evaluateResolution, generateReply, popisZdravi } from "./ai-player-chat";
 import { getScenarioById } from "./ai-player-scenarios";
+import { complainsAboutWaking } from "./chat-kontext";
 import type { PlayerSnapshot } from "./ai-player-scenarios";
 
 const hrac = (o: Partial<PlayerSnapshot> = {}): PlayerSnapshot => ({
@@ -35,10 +36,19 @@ const kdy = (den: number, hodina: number) =>
   new Date(Date.UTC(2027, 0, 3 + den, hodina - 1, 0, 0));
 
 describe("hráč ví, kolik je hodin", () => {
-  it("v noci ho SMS vzbudí a smí se ohnat, koho vzbudil", () => {
+  it("v noci ho SMS vzbudí; na buzení rodiny si stěžuje jen podle losu noci a bez zvířat", () => {
     const p = buildSystemPrompt(hrac(), tym, kdy(2, 2));
     expect(p).toContain("SPAL JSI");
-    expect(p).toMatch(/psa|kočku/);
+    expect(p).not.toMatch(/kočku|psa nebo|vzbudil i malého/);
+    // Třicátník: když si stěžuje, tak na ženu (`wokenAtHome`), jinak nikoho nejmenuje.
+    expect(p).toContain(complainsAboutWaking("p-1", kdy(2, 2)) ? "vzbudil i ženu" : "Nikoho dalšího doma nezmiňuj");
+  });
+
+  it("v noci u vážné věci (nabídka) nejdřív věcně odpoví a na buzení si nestěžuje", () => {
+    const p = buildSystemPrompt(hrac({ pendingOffers: [{ club: "FK FORPSI Čkyně", interest: 2 }] }), tym, kdy(2, 2));
+    expect(p).toContain("věcně odpověz");
+    expect(p).toContain("Na buzení si nestěžuj");
+    expect(p).not.toContain("vzbudil i");
   });
 
   it("v pracovní době stojí v práci a má po ruce svou výmluvu", () => {

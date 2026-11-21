@@ -8,7 +8,7 @@
 import { describe, it, expect } from "vitest";
 import {
   kontextCasu, domacnost, pravidloEmoji, popisSituace,
-  zpozdeniOdpovedi, MAX_ZPOZDENI_MS,
+  zpozdeniOdpovedi, MAX_ZPOZDENI_MS, complainsAboutWaking, wokenAtHome,
 } from "./chat-kontext";
 
 /** Pražský čas v daném dni. Leden kvůli zimnímu času (UTC+1). */
@@ -67,11 +67,11 @@ describe("co hráč zrovna dělá", () => {
 });
 
 describe("co se dostane do promptu", () => {
-  it("v noci dostane hráč povolení ohnat se, koho vzbudil", () => {
+  it("v noci je rozespalý, ale bez stížnosti na buzení nikoho doma nejmenuje", () => {
     const t = popisSituace(kontextCasu(kdy(2, 2), "denni"), "Zedník", []);
     expect(t).toContain("SPAL JSI");
-    expect(t).toMatch(/psa|kočku/);
-    expect(t).toContain("Jména si nevymýšlej");
+    expect(t).not.toMatch(/ženu|malého|psa|kočku|vzbudil i/);
+    expect(t).toContain("Nikoho dalšího doma nezmiňuj");
   });
 
   it("v práci dostane svou profesní výmluvu", () => {
@@ -312,5 +312,57 @@ describe("ozvu se pak jen u nedůležitého", () => {
     const now = popisSituace(prace, "Zedník", [], { mustAnswerNow: true });
     expect(now).toContain("ODPOVĚZ hned");
     expect(now).not.toContain("ozveš potom");
+  });
+});
+
+describe("noční buzení: stížnost jen občas a jen na toho, kdo doma opravdu je", () => {
+  // Prod 11/2026: 60 zpráv od 56 hráčů „vzbudil jsi mi ženu i malýho“ skoro stejnými slovy,
+  // i od dvacetiletých, kteří podle `domacnost` bydlí u rodičů nebo s přítelkyní.
+  const night = kontextCasu(kdy(2, 2), "denni");
+
+  it("se stížností jmenuje jen domácnost podle věku, bez výčtu zvířat", () => {
+    const t = popisSituace(night, "Zedník", [], { complainAboutWaking: true, wokenAtHome: wokenAtHome(31) });
+    expect(t).toContain("vzbudil i ženu");
+    expect(t).not.toMatch(/psa|kočku|malého/);
+    expect(t).toContain("Jména si nevymýšlej");
+  });
+
+  it("kdo doma nikoho nemá (nebo to hra neví), vyčte jen pozdní hodinu", () => {
+    const t = popisSituace(night, "Zedník", [], { complainAboutWaking: true, wokenAtHome: wokenAtHome(23) });
+    expect(t).toContain("v tuhle hodinu");
+    expect(t).not.toMatch(/ženu|přítelkyni|malého|vzbudil i/);
+  });
+
+  it("kdo koho doma vzbudí", () => {
+    expect(wokenAtHome(18)).toBe("rodiče");
+    expect(wokenAtHome(23)).toBeNull();
+    expect(wokenAtHome(31)).toBe("ženu");
+    expect(wokenAtHome(40)).toBe("ženu a děti");
+    expect(wokenAtHome(50)).toBe("ženu");
+    // Při rozvodu spí v kabině nebo u kamaráda, nikoho doma nemá.
+    expect(wokenAtHome(31, "rozvod")).toBeNull();
+    // Čerstvý táta: v noci vzbudí i malého.
+    expect(wokenAtHome(24, "narozeni_ditete")).toBe("malého");
+  });
+
+  it("u vážné věci si na buzení nestěžuje a nejdřív věcně odpoví", () => {
+    const t = popisSituace(night, "Zedník", [], { mustAnswerNow: true, complainAboutWaking: true, wokenAtHome: "ženu" });
+    expect(t).toContain("SPAL JSI");
+    expect(t).toContain("věcně odpověz");
+    expect(t).toContain("Na buzení si nestěžuj");
+    expect(t).not.toMatch(/ženu|jdi zpátky spát/);
+  });
+
+  it("stížnost vychází zhruba na každou třetí noc, pro hráče a noc pořád stejně", () => {
+    const players = Array.from({ length: 600 }, (_, n) => `player-${n}`);
+    const share = players.filter((id) => complainsAboutWaking(id, kdy(2, 2))).length / players.length;
+    expect(share).toBeGreaterThan(0.25);
+    expect(share).toBeLessThan(0.42);
+    // Ve 23:00 a ve 2:00 je to tatáž noc: hráč neskáče mezi stížností a klidem.
+    for (const id of players.slice(0, 50)) {
+      expect(complainsAboutWaking(id, kdy(1, 23))).toBe(complainsAboutWaking(id, kdy(2, 2)));
+    }
+    // Jiná noc, jiný los: aspoň někdo se změní.
+    expect(players.some((id) => complainsAboutWaking(id, kdy(2, 2)) !== complainsAboutWaking(id, kdy(3, 2)))).toBe(true);
   });
 });
