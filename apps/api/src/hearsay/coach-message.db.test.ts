@@ -1,0 +1,89 @@
+/**
+ * Zpráva trenéra → zápis věci (plán Task 6). Model je zamockovaný, rozhodnutí o zmínce dává test.
+ */
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import type { Miniflare } from "miniflare";
+
+vi.mock("./detect", () => ({ detectMentions: vi.fn() }));
+
+import { createHearsayDb, resetHearsayDb } from "../test-support/hearsay-db";
+import { detectMentions } from "./detect";
+import { handleCoachMessageForHearsay } from "./coach-message";
+
+let miniflare: Miniflare;
+let db: D1Database;
+const NOW = new Date("2026-11-21T12:00:00Z");
+
+beforeAll(async () => { ({ miniflare, db } = await createHearsayDb()); }, 30_000);
+afterAll(async () => { await miniflare.dispose(); });
+beforeEach(async () => {
+  await resetHearsayDb(db);
+  vi.mocked(detectMentions).mockReset();
+  await db.batch([
+    db.prepare(`INSERT INTO teams (id, name, user_id, parent_team_id, game_date) VALUES
+      ('club', 'TJ Dvory', 'u1', NULL, '2026-11-21'), ('club-u21', 'TJ Dvory U21', 'u1', 'club', '2026-11-21'),
+      ('ai', 'SK Lhota', 'ai', NULL, '2026-11-21')`),
+    db.prepare(`INSERT INTO players (id, team_id, first_name, last_name, life_context, coach_relationship, status) VALUES
+      ('smejkal', 'club', 'Rostislav', 'Šmejkal', '{"morale":50}', 50, 'active'),
+      ('sima', 'club', 'Radek', 'Šíma', '{"morale":50}', 50, NULL),
+      ('kluk', 'club-u21', 'Tomáš', 'Malý', '{"morale":50}', 50, NULL),
+      ('pryc', 'club', 'Petr', 'Odešel', '{"morale":50}', 50, 'released'),
+      ('cizi', 'ai', 'Jan', 'Cizí', '{"morale":50}', 50, NULL)`),
+    db.prepare(`INSERT INTO conversations (id, team_id, type, title, participant_id) VALUES
+      ('c-sima', 'club', 'player', 'Radek Šíma', 'sima'), ('kabina', 'club', 'squad_group', 'Kabina', NULL),
+      ('zapas', 'club', 'squad_group', '⚽ vs SK Lhota', NULL), ('c-ai', 'ai', 'player', 'Jan Cizí', 'cizi')`),
+  ]);
+});
+
+const knowers = async () => (await db.prepare("SELECT player_id, via FROM squad_hearsay_knowledge ORDER BY player_id").all<{ player_id: string; via: string }>()).results;
+const player = async (id: string) => db.prepare("SELECT coach_relationship AS rel, json_extract(life_context, '$.morale') AS morale FROM players WHERE id = ?").bind(id).first<{ rel: number; morale: number }>();
+
+describe("zpráva trenéra o spoluhráči", () => {
+  it("SMS Šímovi o Šmejkalovi zapíše věc, kterou zná jen Šíma", async () => {
+    vi.mocked(detectMentions).mockResolvedValue([{ playerId: "smejkal", kind: "criticism", quote: "Se Šmejkalem si promluvím" }]);
+    const n = await handleCoachMessageForHearsay(db, {}, {
+      teamId: "club", convId: "c-sima", convType: "player", recipientPlayerId: "sima", text: "Se Šmejkalem si promluvím, flákání trpět nebudu.", now: NOW,
+    });
+    expect(n).toBe(1);
+    const item = await db.prepare("SELECT club_team_id, subject_player_id, kind, origin, recipient_player_id FROM squad_hearsay").first();
+    expect(item).toEqual({ club_team_id: "club", subject_player_id: "smejkal", kind: "criticism", origin: "coach_sms", recipient_player_id: "sima" });
+    expect(await knowers()).toEqual([{ player_id: "sima", via: "direct" }]);
+    expect(await player("smejkal")).toEqual({ rel: 50, morale: 50 });
+    const call = vi.mocked(detectMentions).mock.calls[0][1];
+    expect(call.excludeIds).toEqual(["sima"]);
+    expect(call.recipientName).toBe("Radek");
+    // Kádr pro síto: áčko i U21, ne hráč, který odešel.
+    expect(call.club.map((p) => p.id).sort()).toEqual(["kluk", "sima", "smejkal"]);
+  });
+
+  it("kritika v kabině: ví ji celá kabina a Šmejkalovi klesne nálada hned", async () => {
+    vi.mocked(detectMentions).mockResolvedValue([{ playerId: "smejkal", kind: "criticism", quote: "Šmejkal se fláká" }]);
+    await handleCoachMessageForHearsay(db, {}, {
+      teamId: "club", convId: "kabina", convType: "squad_group", recipientPlayerId: null, text: "Šmejkal se fláká, takhle ne.", now: NOW,
+    });
+    expect(await knowers()).toEqual([{ player_id: "sima", via: "squad_chat" }, { player_id: "smejkal", via: "squad_chat" }]);
+    expect(await player("smejkal")).toEqual({ rel: 45, morale: 46 });
+    expect(vi.mocked(detectMentions).mock.calls[0][1].squadChat).toBe(true);
+  });
+
+  it("zápasový chat ⚽ vs se nezpracuje", async () => {
+    expect(await handleCoachMessageForHearsay(db, {}, {
+      teamId: "club", convId: "zapas", convType: "squad_group", recipientPlayerId: null, text: "Šmejkal se fláká", now: NOW,
+    })).toBe(0);
+    expect(detectMentions).not.toHaveBeenCalled();
+  });
+
+  it("AI klub nic nezapíše", async () => {
+    expect(await handleCoachMessageForHearsay(db, {}, {
+      teamId: "ai", convId: "c-ai", convType: "player", recipientPlayerId: "cizi", text: "Šmejkal se fláká", now: NOW,
+    })).toBe(0);
+    expect(detectMentions).not.toHaveBeenCalled();
+  });
+
+  it("selhání modelu nic neshodí", async () => {
+    vi.mocked(detectMentions).mockRejectedValue(new Error("model mimo provoz"));
+    expect(await handleCoachMessageForHearsay(db, {}, {
+      teamId: "club", convId: "c-sima", convType: "player", recipientPlayerId: "sima", text: "Šmejkal se fláká", now: NOW,
+    })).toBe(0);
+  });
+});
