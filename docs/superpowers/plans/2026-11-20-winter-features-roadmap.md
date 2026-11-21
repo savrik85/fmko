@@ -329,5 +329,6 @@ Při nasazení pustit migrace 0318–0333 kromě 0326. Na `prales-db-test` jsou 
 
 **Proklikáno 11-21 na localhostu nad `prales-db-test`** (skutečné funkce spouštěné skriptem přes vzdálené vazby, odpovědi jako hráč v Chromu, 375 px):
 všechny funkce kromě F7. Hlasovka u zpětného hovoru (F9) jen jako SMS, lokálně chybí klíč Gemini TTS: ověřit na testingu.
-Nalezené chyby čekají na schválení: čas brigády („po práci“ = 21:00), pád jména v SMS komisaři a v drbu, titulky zastupitelstva bez obce,
-„Hráč píše…“ u nehráčů, popisky a článek ankety, rok v titulku ročenky, článek výběru okresu, tlačítko „To nebyla brigáda“ po vyhodnocení.
+Nalezených 10 chyb opraveno a ověřeno na localhostu 11-21 (ba3cbae4 až 27f77906): čas brigády, pád jména v SMS komisaři a v drbu,
+titulky zastupitelstva s obcí, „Píše…“ u nehráčů, popisky a článek ankety, titulek ročenky z kódu, článek výběru okresu, tlačítko po brigádě.
+Otevřené: `district_polls` má unikátní (okres, sezóna, typ), takže druhý výběr okresu v téže sezóně spadne na holé chybě D1 (čeká na rozhodnutí).
