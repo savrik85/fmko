@@ -1919,6 +1919,88 @@ export function resolveFreeAgentWage(
   return { ok: true, wage: offered };
 }
 
+/**
+ * Z volného hráče udělá hráče klubu: řádek v `players` (stropy, talent), bydliště, smlouva,
+ * vazby v kabině a vztah k trenérovi, smazání volného hráče a převod sledování. Sdílí ho podpis
+ * volného hráče i dražba. `ok: false` = volného hráče mezitím podepsal někdo jiný (nic nezůstane).
+ */
+export async function materializeFreeAgent(
+  db: D1Database,
+  input: { teamId: string; rosterTeamId: string; fa: Record<string, unknown>; faId: string; wage: number; joinType: "free_agent" | "transfer"; fee: number },
+): Promise<{ ok: true; playerId: string } | { ok: false }> {
+  const { teamId, rosterTeamId, fa, faId, wage, joinType, fee } = input;
+  const playerId = crypto.randomUUID();
+  const isCelebrity = (fa.is_celebrity as number) ?? 0;
+  // Extract skillsMax from life_context (fallen_star celebrities have it stored there)
+  const faLifeCtx = (() => {
+    try { return JSON.parse(fa.life_context as string); } catch (e) { logger.warn({ module: "game" }, "parse free agent life_context", e); return {}; }
+  })();
+  // Stropy: celebrity je mají v `life_context`, ostatní ve vlastním sloupci (migrace 0178).
+  //
+  // Dřív se za stropy dosazovaly ploché dovednosti `fa.skills`, takže vznikl tvar
+  // {"speed": 51} místo {"speed": {"current": 51, "maxPotential": 68}} a hráč neměl
+  // KAM RŮST — strop se rovnal dnešní hodnotě. Volní hráči z doby před migrací sloupec
+  // nemají vyplněný, proto se pro ně stropy dopočítají tady.
+  const capsRng = createRng(cryptoSeed());
+  const faSkillsMaxRaw = (() => {
+    if (faLifeCtx.skillsMax) return faLifeCtx.skillsMax as Record<string, unknown>;
+    const storedCaps = (() => {
+      try { return JSON.parse((fa.skills_max as string) ?? "{}"); } catch (e) { logger.warn({ module: "game" }, "parse free agent skills_max", e); return {}; }
+    })();
+    const hasCapObjects = Object.values(storedCaps).some((v) => v && typeof v === "object");
+    if (hasCapObjects) return storedCaps as Record<string, unknown>;
+    const flatSkills = (() => {
+      try { return JSON.parse((fa.skills as string) ?? "{}"); } catch (e) { logger.warn({ module: "game" }, "parse free agent skills", e); return {}; }
+    })();
+    return stropyZDovednosti(capsRng, flatSkills as Record<string, number>, Number(fa.age) || 25);
+  })();
+  const faSkillsMax = JSON.stringify(faSkillsMaxRaw);
+  const faTalent = (fa.hidden_talent as number) || talentPodleVeku(capsRng, Number(fa.age) || 25);
+  await db.prepare(
+    `INSERT INTO players (id, team_id, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, hidden_talent, weekly_wage, nationality, status, is_celebrity, skills_max)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)`
+  ).bind(playerId, rosterTeamId, fa.first_name, fa.last_name, (fa.nickname as string) ?? "", fa.age, fa.position, fa.overall_rating,
+    fa.skills, fa.physical, fa.personality, fa.life_context, fa.avatar, faTalent, wage, (fa.nationality as string) ?? "CZ", isCelebrity, faSkillsMax).run();
+
+  // Set residence & commute for new signing
+  const { generateResidence } = await import("../generators/residence");
+  const teamVillage = await db.prepare("SELECT v.name, v.size, v.district FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?")
+    .bind(teamId).first<{ name: string; size: string; district: string }>().catch((e) => { logger.warn({ module: "game" }, "db op failed", e); return null; });
+  if (teamVillage) {
+    const resRng = createRng(cryptoSeed());
+    const res = generateResidence(resRng, teamVillage.name, teamVillage.size, teamVillage.district);
+    await db.prepare("UPDATE players SET residence = ?, commute_km = ? WHERE id = ?")
+      .bind(res.residence, res.commuteKm, playerId).run().catch((e) => logger.warn({ module: "game" }, "db op failed", e));
+  }
+
+  const season = await db.prepare("SELECT id FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1").first<{ id: string }>().catch((e) => { logger.warn({ module: "game" }, "fetch season for signing contract", e); return null; });
+  await db.prepare("INSERT INTO player_contracts (id, player_id, team_id, season_id, join_type, fee, is_active) VALUES (?, ?, ?, ?, ?, ?, 1)")
+    .bind(crypto.randomUUID(), playerId, rosterTeamId, season?.id ?? "unknown", joinType, fee).run().catch((e) => logger.warn({ module: "game" }, "insert signing contract", e));
+
+  // Nováček si do kabiny přinese pár vazeb (soused, kolega z práce, vrstevník…)
+  const { attachNewcomerRelations } = await import("../transfers/attach-relations");
+  await attachNewcomerRelations(db, rosterTeamId, playerId);
+  const { initNewcomerCoachRelation } = await import("../lib/coach-relation");
+  await initNewcomerCoachRelation(db, rosterTeamId, playerId);
+
+  // Atomický DELETE — pokud FA mezitím podepsal jiný tým, RETURNING vrátí 0 řádků.
+  const deleted = await db.prepare("DELETE FROM free_agents WHERE id = ? RETURNING id").bind(faId).first<{ id: string }>();
+  if (!deleted) {
+    // Jiný tým ho stihl dřív — rollback: smazat hráče co jsme právě insertli
+    await db.prepare("DELETE FROM players WHERE id = ?").bind(playerId).run()
+      .catch((e) => logger.warn({ module: "game" }, "rollback player after FA race condition", e));
+    return { ok: false };
+  }
+
+  // Kdo volného hráče sledoval, sleduje ho dál v novém klubu. Podpisem dostal hráč
+  // nové id a sledování pod id volného hráče by jinak viselo na ničem.
+  await db.prepare("UPDATE player_watchlist SET player_id = ? WHERE player_id = ?")
+    .bind(playerId, faId).run()
+    .catch((e) => logger.warn({ module: "game" }, "převod sledování na podepsaného hráče", e));
+
+  return { ok: true, playerId };
+}
+
 /** POST /teams/:teamId/free-agents/:faId/sign — podpis volného hráče (rozhoduje hráč). */
 export async function signFreeAgent(env: Bindings, teamId: string, faId: string, offeredWageInput: number | null | undefined): Promise<SignFreeAgentResult> {
   const db = env.DB;
@@ -1929,6 +2011,10 @@ export async function signFreeAgent(env: Bindings, teamId: string, faId: string,
 
   const fa = await db.prepare("SELECT * FROM free_agents WHERE id = ?").bind(faId).first<Record<string, unknown>>();
   if (!fa) return fail(404, "Volný hráč nenalezen");
+  const inAuction = await db.prepare("SELECT 1 AS x FROM player_auctions WHERE free_agent_id = ? AND status IN ('open', 'closing')")
+    .bind(faId).first<{ x: number }>()
+    .catch((e) => { logger.warn({ module: "game" }, "kontrola dražby volného hráče", e); return null; });
+  if (inAuction) return fail(409, "Hráč je v dražbě. Přihodit můžeš v Přestupech v záložce Dražba.");
   const wageCheck = resolveFreeAgentWage(offeredWageInput, fa.weekly_wage as number, !!fa.is_celebrity);
   if (!wageCheck.ok) return fail(400, wageCheck.error);
   const offeredWage = wageCheck.wage;
@@ -1993,74 +2079,10 @@ export async function signFreeAgent(env: Bindings, teamId: string, faId: string,
     return { ok: true, success: false, decision };
   }
 
-  const playerId = crypto.randomUUID();
+  const made = await materializeFreeAgent(db, { teamId, rosterTeamId, fa, faId, wage: offeredWage, joinType: "free_agent", fee: 0 });
+  if (!made.ok) return fail(409, "Hráč již byl podepsán jiným týmem");
+  const playerId = made.playerId;
   const isCelebrity = (fa.is_celebrity as number) ?? 0;
-  // Extract skillsMax from life_context (fallen_star celebrities have it stored there)
-  const faLifeCtx = (() => {
-    try { return JSON.parse(fa.life_context as string); } catch (e) { logger.warn({ module: "game" }, "parse free agent life_context", e); return {}; }
-  })();
-  // Stropy: celebrity je mají v `life_context`, ostatní ve vlastním sloupci (migrace 0178).
-  //
-  // Dřív se za stropy dosazovaly ploché dovednosti `fa.skills`, takže vznikl tvar
-  // {"speed": 51} místo {"speed": {"current": 51, "maxPotential": 68}} a hráč neměl
-  // KAM RŮST — strop se rovnal dnešní hodnotě. Volní hráči z doby před migrací sloupec
-  // nemají vyplněný, proto se pro ně stropy dopočítají tady.
-  const capsRng = createRng(cryptoSeed());
-  const faSkillsMaxRaw = (() => {
-    if (faLifeCtx.skillsMax) return faLifeCtx.skillsMax as Record<string, unknown>;
-    const storedCaps = (() => {
-      try { return JSON.parse((fa.skills_max as string) ?? "{}"); } catch (e) { logger.warn({ module: "game" }, "parse free agent skills_max", e); return {}; }
-    })();
-    const hasCapObjects = Object.values(storedCaps).some((v) => v && typeof v === "object");
-    if (hasCapObjects) return storedCaps as Record<string, unknown>;
-    const flatSkills = (() => {
-      try { return JSON.parse((fa.skills as string) ?? "{}"); } catch (e) { logger.warn({ module: "game" }, "parse free agent skills", e); return {}; }
-    })();
-    return stropyZDovednosti(capsRng, flatSkills as Record<string, number>, Number(fa.age) || 25);
-  })();
-  const faSkillsMax = JSON.stringify(faSkillsMaxRaw);
-  const faTalent = (fa.hidden_talent as number) || talentPodleVeku(capsRng, Number(fa.age) || 25);
-  await db.prepare(
-    `INSERT INTO players (id, team_id, first_name, last_name, nickname, age, position, overall_rating, skills, physical, personality, life_context, avatar, hidden_talent, weekly_wage, nationality, status, is_celebrity, skills_max)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)`
-  ).bind(playerId, rosterTeamId, fa.first_name, fa.last_name, (fa.nickname as string) ?? "", fa.age, fa.position, fa.overall_rating,
-    fa.skills, fa.physical, fa.personality, fa.life_context, fa.avatar, faTalent, offeredWage, (fa.nationality as string) ?? "CZ", isCelebrity, faSkillsMax).run();
-
-  // Set residence & commute for new signing
-  const { generateResidence } = await import("../generators/residence");
-  const teamVillage = await db.prepare("SELECT v.name, v.size, v.district FROM teams t JOIN villages v ON t.village_id = v.id WHERE t.id = ?")
-    .bind(teamId).first<{ name: string; size: string; district: string }>().catch((e) => { logger.warn({ module: "game" }, "db op failed", e); return null; });
-  if (teamVillage) {
-    const resRng = createRng(cryptoSeed());
-    const res = generateResidence(resRng, teamVillage.name, teamVillage.size, teamVillage.district);
-    await db.prepare("UPDATE players SET residence = ?, commute_km = ? WHERE id = ?")
-      .bind(res.residence, res.commuteKm, playerId).run().catch((e) => logger.warn({ module: "game" }, "db op failed", e));
-  }
-
-  const season = await db.prepare("SELECT id FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1").first<{ id: string }>().catch((e) => { logger.warn({ module: "game" }, "fetch season for signing contract", e); return null; });
-  await db.prepare("INSERT INTO player_contracts (id, player_id, team_id, season_id, join_type, fee, is_active) VALUES (?, ?, ?, ?, 'free_agent', 0, 1)")
-    .bind(crypto.randomUUID(), playerId, rosterTeamId, season?.id ?? "unknown").run().catch((e) => logger.warn({ module: "game" }, "insert signing contract", e));
-
-  // Nováček si do kabiny přinese pár vazeb (soused, kolega z práce, vrstevník…)
-  const { attachNewcomerRelations } = await import("../transfers/attach-relations");
-  await attachNewcomerRelations(db, rosterTeamId, playerId);
-  const { initNewcomerCoachRelation } = await import("../lib/coach-relation");
-  await initNewcomerCoachRelation(db, rosterTeamId, playerId);
-
-  // Atomický DELETE — pokud FA mezitím podepsal jiný tým, RETURNING vrátí 0 řádků.
-  const deleted = await db.prepare("DELETE FROM free_agents WHERE id = ? RETURNING id").bind(faId).first<{ id: string }>();
-  if (!deleted) {
-    // Jiný tým ho stihl dřív — rollback: smazat hráče co jsme právě insertli
-    await db.prepare("DELETE FROM players WHERE id = ?").bind(playerId).run()
-      .catch((e) => logger.warn({ module: "game" }, "rollback player after FA race condition", e));
-    return fail(409, "Hráč již byl podepsán jiným týmem");
-  }
-
-  // Kdo volného hráče sledoval, sleduje ho dál v novém klubu. Podpisem dostal hráč
-  // nové id a sledování pod id volného hráče by jinak viselo na ničem.
-  await db.prepare("UPDATE player_watchlist SET player_id = ? WHERE player_id = ?")
-    .bind(playerId, faId).run()
-    .catch((e) => logger.warn({ module: "game" }, "převod sledování na podepsaného hráče", e));
 
   const gameDate = (team.game_date as string) ?? new Date().toISOString();
   await recordTransaction(db, teamId, "signing_fee", -FREE_AGENT_SIGNING_FEE, `Registrace: ${fa.first_name} ${fa.last_name}`, gameDate);

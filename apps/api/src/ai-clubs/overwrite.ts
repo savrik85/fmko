@@ -242,6 +242,13 @@ export async function wipeAiClubForNewcomer(db: D1Database, teamId: string, opts
 
   // ── Hráči ──
   await settleLoans(db, teamId, opts, summary);
+  // Nejlepších pět se nesmaže: jdou mezi volné hráče a do dražby (transfers/auctions.ts).
+  try {
+    const { auctionTopPlayers } = await import("../transfers/auctions");
+    await auctionTopPlayers(db, teamId, opts.previousName, opts.now);
+  } catch (e) {
+    logger.warn({ module: M, teamId }, "dražba hráčů přepsaného klubu", e);
+  }
   summary.playersDeleted = await deleteOwnPlayers(db, teamId, nowIso);
 
   // ── Odehrané zápasy AI klubu nový trenér „viděl“ ──

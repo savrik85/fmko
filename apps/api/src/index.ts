@@ -34,6 +34,7 @@ import bettingRouter from "./routes/betting";
 import tournamentRouter from "./routes/tournament";
 import hallCupRouter from "./routes/hall-cup";
 import pubTipsRouter from "./routes/pub-tips";
+import auctionsRouter from "./routes/auctions";
 import clubPrefixRouter from "./routes/club-prefix";
 import { clubWebsiteRouter } from "./routes/club-website";
 import { squadAnalysisRouter } from "./routes/squad-analysis";
@@ -182,6 +183,7 @@ app.route("/api", bettingRouter);
 app.route("/api", tournamentRouter);
 app.route("/api", hallCupRouter);
 app.route("/api", pubTipsRouter);
+app.route("/api", auctionsRouter);
 app.route("/api", clubPrefixRouter);
 app.route("/api", squadAnalysisRouter);
 app.route("/api", menuBadgesRouter);
@@ -247,6 +249,15 @@ export default {
         if (r.status !== "none") log("info", `sálovka: ${r.status}, odehráno ${r.played}`);
       } catch (e: any) {
         log("error", "běh sálovky selhal", e);
+      }
+      // Dražba hráčů z opuštěných klubů: příhozy AI klubů a uzavření skončených dražeb.
+      try {
+        const { aiAuctionBids, closeDueAuctions } = await import("./transfers/auctions");
+        const bids = await aiAuctionBids(env);
+        const r = await closeDueAuctions(env.DB);
+        if (bids || r.sold || r.unsold) log("info", `dražba: příhozů AI ${bids}, prodáno ${r.sold}, neprodáno ${r.unsold}`);
+      } catch (e: any) {
+        log("error", "běh dražby selhal", e);
       }
       // Anketa Fotbalista okresu: odpovědi redaktora, nominace a uzávěrka.
       try {

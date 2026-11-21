@@ -74,6 +74,9 @@ export type TransactionType =
   // Tipovačka v hospodě (pub/tip-game.ts): vklad je dobrovolný nákup, výhra z banku příjem.
   | "pub_tip_stake"
   | "pub_tip_win"
+  // Dražba hráčů z opuštěných klubů (transfers/auctions.ts): peníze se ověří při příhozu
+  // i při uzavření, strhne se pak i do mínusu (klub dražbu vyhrál).
+  | "auction_purchase"
   | "hall_cup_prize"
   | "staff_wage"
   // Cestovné skauta na úkolu (scouting/scout-work.ts). Běžný provoz jako mzdy, ne nákup:

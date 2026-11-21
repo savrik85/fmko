@@ -18,6 +18,7 @@ import { WatchlistTab } from "./WatchlistTab";
 import { PlayerBrowseTable, type BrowseRow } from "@/components/players/PlayerBrowseTable";
 import { ObligationsTab } from "./ObligationsTab";
 import { DemandsTab } from "./DemandsTab";
+import { AuctionsTab } from "./AuctionsTab";
 import { LoansTab } from "./LoansTab";
 import { loanTermsLine } from "@/lib/loans";
 import { RevealPotentialToggle, RevealedPotentialBadge, type RevealedPotential } from "@/components/transfers/revealed-potential";
@@ -35,7 +36,7 @@ type Tab = "overview" | "hledat" | "offers" | "squad" | "demands" | LegacyTab;
 type LegacyTab = "search" | "free_agents" | "market" | "sledovani" | "zavazky";
 // Pořadí určuje i výchozí záložku — první je ta bez ?tab= v adrese.
 const TAB_KEYS = ["overview", "hledat", "offers", "squad", "demands", "search", "free_agents", "market", "sledovani", "zavazky"] as const;
-const HLEDAT_SUBTABS = ["hledani", "na-prodej", "na-hostovani", "volni", "sledovani"] as const;
+const HLEDAT_SUBTABS = ["hledani", "na-prodej", "na-hostovani", "volni", "drazba", "sledovani"] as const;
 const SQUAD_SUBTABS = ["hraci", "hostovani", "zavazky"] as const;
 
 interface TransfersOverview {
@@ -1404,6 +1405,7 @@ export default function TransfersPage() {
             { key: "na-prodej", label: "Prodej", count: visibleListings.length || null },
             { key: "na-hostovani", label: "Hostování", count: loanListings.length || null },
             { key: "volni", label: "Volní", count: (ownDistrictOnly ? freeAgents.filter((fa) => !fa.origin).length : freeAgents.length) || null },
+            { key: "drazba", label: "Dražba", count: null },
             { key: "sledovani", label: "Sledovaní", count: watchCount || null },
           ]}
         />
@@ -1721,6 +1723,7 @@ export default function TransfersPage() {
 
       {/* ═══ Hledat / Sledovaní ═══ */}
       {tab === "demands" && teamId && <DemandsTab teamId={teamId} />}
+      {tab === "hledat" && hledatSub === "drazba" && teamId && <AuctionsTab teamId={teamId} />}
 
       {tab === "hledat" && hledatSub === "sledovani" && teamId && (
         <WatchlistTab teamId={teamId} onCount={setWatchCount} onOpenFreeAgents={() => setHledatSub("volni")}

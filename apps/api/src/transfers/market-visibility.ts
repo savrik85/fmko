@@ -34,6 +34,8 @@ export async function findVisibleFreeAgents(
        LEFT JOIN villages v ON fa.village_id = v.id
        LEFT JOIN teams rt ON rt.id = fa.released_from_team_id
       WHERE fa.expires_at > strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+        -- Hráč v dražbě se na běžném trhu neukazuje, dokud dražba běží.
+        AND NOT EXISTS (SELECT 1 FROM player_auctions pa WHERE pa.free_agent_id = fa.id AND pa.status IN ('open', 'closing'))
         AND (fa.district = ?
              OR (fa.source IN ('released', 'quit') AND rt.user_id IS NOT NULL
                  AND (rt.user_id = 'ai' OR rt.user_id != ?)))
