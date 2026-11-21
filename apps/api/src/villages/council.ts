@@ -11,8 +11,18 @@
  */
 
 import { cleanDashes } from "../lib/dashes";
-import { pragueTimeToUtc } from "../hall-cup/format";
 import { parseModelJson } from "../ai-coach/llm";
+
+/** Pražský čas dne `date` (YYYY-MM-DD), `minutes` od půlnoci, jako UTC ISO (zimní i letní čas). */
+function pragueTimeToUtc(date: string, minutes: number): string {
+  const naive = Date.parse(`${date}T00:00:00Z`) + minutes * 60_000;
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Prague", hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit",
+  }).formatToParts(new Date(naive));
+  const get = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? 0);
+  const wall = Date.UTC(get("year"), get("month") - 1, get("day"), get("hour"), get("minute"));
+  return new Date(naive - (wall - naive)).toISOString();
+}
 
 export const COUNCIL_PREFIX = "vo-";
 export const COUNCIL_NEWS_TYPE = "village_council";
