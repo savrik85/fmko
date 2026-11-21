@@ -666,6 +666,14 @@ export default function ConversationPage() {
               id={ownerSponsorId} name={conv?.title ?? "..."} className="font-heading font-bold text-base truncate"
               hoverClassName="hover:text-white hover:underline"
             />
+          ) : participantId && (conv?.type === "player" || conv?.type === "manager") ? (
+            // Jméno vede na profil: hráč na /hrac, manažer na /manazer (route bere id jeho týmu).
+            <Link
+              href={conv.type === "player" ? `/hrac/${participantId}` : `/manazer/${participantId}`}
+              className="font-heading font-bold text-base truncate hover:underline"
+            >
+              {conv?.title ?? "..."}
+            </Link>
           ) : (
             <span className="font-heading font-bold text-base truncate">{conv?.title ?? "..."}</span>
           )}
@@ -783,7 +791,17 @@ export default function ConversationPage() {
                         } ${first && !isSystem ? (isUser ? "rounded-tr-none" : "rounded-tl-none") : ""}`}>
                           {first && !isSystem && <BubbleTail outgoing={isUser} />}
                           {!isUser && first && conv?.type === "squad_group" && (
-                            <div className="text-sm font-medium truncate" style={{ color: nameColor(msg.senderName ?? "") }}>{msg.senderName}</div>
+                            msg.senderType === "player" && msg.senderId ? (
+                              <Link
+                                href={`/hrac/${msg.senderId}`}
+                                className="block text-sm font-medium truncate hover:underline"
+                                style={{ color: nameColor(msg.senderName ?? "") }}
+                              >
+                                {msg.senderName}
+                              </Link>
+                            ) : (
+                              <div className="text-sm font-medium truncate" style={{ color: nameColor(msg.senderName ?? "") }}>{msg.senderName}</div>
+                            )
                           )}
                           {isVoice && teamId ? (
                             <>
