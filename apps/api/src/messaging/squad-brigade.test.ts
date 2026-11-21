@@ -145,6 +145,18 @@ describe("čas brigády (pražský čas)", () => {
     expect(at.getTime() - WED.getTime()).toBeLessThanOrEqual(60 * 60 * 1000);
   });
 
+  it("pivo po práci není čas brigády, odpoledne platí jen u hodiny", () => {
+    // Sobota 21. 11. v 10:03: „v sobotu v 9“ už minulo, takže příští sobota v 9:00, ne dnes ve 21:00.
+    const sat = new Date("2026-11-21T09:03:00Z");
+    expect(parseBrigadeTime("Kluci, v sobotu v 9 brigáda na hřišti, vemte lopaty, po práci pivo platím.", sat).toISOString()).toBe("2026-11-28T08:00:00.000Z");
+    expect(parseBrigadeTime("zítra v 9 brigáda na hřišti, pivo po práci platím", WED).toISOString()).toBe("2026-11-26T08:00:00.000Z");
+    expect(parseBrigadeTime("v sobotu v 9 na hřišti brigáda, večer grilovačka", WED).toISOString()).toBe("2026-11-28T08:00:00.000Z");
+    expect(parseBrigadeTime("zítra ráno brigáda, po práci pivo", WED).toISOString()).toBe("2026-11-26T08:00:00.000Z");
+    // Odpoledne u samotné hodiny pořád platí.
+    expect(parseBrigadeTime("zítra v 7 po práci brigáda na hřišti", WED).toISOString()).toBe("2026-11-26T18:00:00.000Z");
+    expect(parseBrigadeTime("v pátek v 5 večer brigáda", WED).toISOString()).toBe("2026-11-27T16:00:00.000Z");
+  });
+
   it("popis pro kabinu slovy", () => {
     expect(brigadeWhenText(new Date("2026-11-28T08:00:00Z"), WED)).toBe("v sobotu v 9:00");
     expect(brigadeWhenText(new Date("2026-11-26T09:00:00Z"), WED)).toBe("zítra v 10:00");

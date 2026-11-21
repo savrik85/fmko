@@ -140,6 +140,17 @@ describe("výzva v kabině", () => {
     expect(JSON.parse(note!.metadata)).toMatchObject({ type: "coach_commitment_note", commitmentId: id, kind: "brigade" });
   });
 
+  it("proběhlá brigáda označí zápis v kabině, zrušit ji pak nejde", async () => {
+    await squad(keen(8));
+    const id = await handleSquadBrigade(db, {}, { teamId: "club", convId: "squad-chat", message: CALL, representative: rep, now: WED });
+    const noteMeta = async () => JSON.parse((await one<{ metadata: string }>("SELECT metadata FROM messages WHERE conversation_id = 'squad-chat' AND sender_type = 'system'"))!.metadata);
+    const before = await noteMeta();
+    expect(before).toMatchObject({ commitmentId: id, at: "2026-11-28T08:00:00.000Z" });
+    expect(before.done).toBeUndefined();
+    expect(await settleCoachCommitments(db, new Date("2026-11-28T10:00:00Z"))).toBe(1);
+    expect(await noteMeta()).toMatchObject({ commitmentId: id, done: true });
+  });
+
   it("vzpomínka na minulou brigádu ani sázka o basu brigádu nezaloží", async () => {
     for (const message of ["Brigáda na sprchy byla super, díky všem co přišli", "kdyz v nedeli vyhrajem, platim basu"]) {
       expect(await handleSquadBrigade(db, {}, { teamId: "club", convId: "squad-chat", message, representative: rep, now: WED })).toBeNull();
