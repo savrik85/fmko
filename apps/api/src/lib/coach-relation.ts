@@ -28,6 +28,8 @@ export type CoachRelationSource =
   | "job"
   // Trenér ho jmenoval v proslovu po zápase, pochvala nebo výtka (messaging/match-speech.ts).
   | "speech"
+  // Hráč se doslechl, co o něm trenér řekl jinému hráči (hearsay/effects.ts).
+  | "hearsay"
   | "left_out"
   | "arrival"
   | "admin";
