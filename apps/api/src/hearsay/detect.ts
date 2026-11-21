@@ -36,9 +36,13 @@ const MAX_MENTIONS = 3;
  */
 export function mentionCandidates(club: MentionCandidate[], message: string, excludeIds: string[]): MentionCandidate[] {
   const words = plainWords(message);
-  const hits = (name: string | null | undefined) => !!name && words.some((w) => wordMatchesName(w, name));
   const skip = new Set(excludeIds);
-  return club.filter((p) => !skip.has(p.id) && (hits(p.nickname) || hits(p.lastName) || hits(p.firstName)));
+  const excluded = club.filter((p) => skip.has(p.id));
+  // „Tomáši, hrál jsi skvěle“: oslovení adresáta není zmínka jeho jmenovce.
+  const addressWord = (w: string) => excluded.some((p) => wordMatchesName(w, p.firstName));
+  const hits = (name: string | null | undefined) => !!name && words.some((w) => wordMatchesName(w, name));
+  const firstNameHit = (name: string) => words.some((w) => wordMatchesName(w, name) && !addressWord(w));
+  return club.filter((p) => !skip.has(p.id) && (hits(p.nickname) || hits(p.lastName) || firstNameHit(p.firstName)));
 }
 
 function fullName(c: MentionCandidate): string {

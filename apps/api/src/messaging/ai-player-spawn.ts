@@ -19,7 +19,7 @@ import { logger } from "../lib/logger";
 import { seedFromString } from "../lib/seed";
 import { pickAmbience, recordVoiceMessage, voicePreviewText, type RecordedVoiceMessage } from "./voice-message";
 import { PHOTO_CHANCE, PHOTO_SCENES, generatePlayerPhoto, historyBody, pickPhotoScene } from "./player-photo";
-import { coachRelationStmts } from "../lib/coach-relation";
+import { COACH_CHAT_MAX_MORALE, coachRelationStmts } from "../lib/coach-relation";
 import { weightTalkFromState } from "../season/weight-talk";
 import { coachStreak, leftOnReadChance, markCoachMessagesRead, readDelayMs } from "./left-on-read";
 import { describeNextMatch } from "./next-match";
@@ -109,6 +109,8 @@ interface AiThreadStateData {
   subject_player_name?: string;
   /** Zpráva „jen tak" (casual-messages.ts): neodpovězená nikoho neurazí. */
   casual?: boolean;
+  /** Vlákno „slyšel jsem…“ (hearsay/messages.ts): o čem hráč slyšel. */
+  hearsay_id?: string;
   /** Incident, na který se trenér ptá (spec 7a). Platí jen v herní den `incidentDen`. */
   incidentId?: string;
   incidentDen?: string;
@@ -1302,6 +1304,21 @@ async function leaveOnReadAndClose(
   await applyResolutionAndClose(db, conv.id, conv.team_id, player.id, null, `${player.firstName} ${player.lastName}`, scenario.id, state, resolution);
 }
 
+/**
+ * Uzavírá se vlákno jako rozhovor od trenéra (malý dopad, strop zlepšení jednou za den)?
+ * Rozhovor, který začal trenér, zpráva „jen tak“ a vlákno „slyšel jsem…“ (hearsay): to si
+ * trenér umí vyrobit sám tím, že o hráči napíše jinému, takže omluva za něj nesmí dát
+ * velký kladný výsledek (závěrečná kontrola Kabina má uši, 2026-11-21).
+ */
+/** Nálada z výsledku vlákna: u vlákna „slyšel jsem…“ kladná nejvýš jako rozhovor od trenéra. */
+export function resolutionMoraleDelta(state: { hearsay_id?: string }, delta: number): number {
+  return state.hearsay_id ? Math.min(delta, COACH_CHAT_MAX_MORALE) : delta;
+}
+
+export function closesLikeCoachChat(scenarioId: string, state: { hearsay_id?: string }): boolean {
+  return scenarioId === "coach_initiated" || getScenarioById(scenarioId)?.category === "casual" || !!state.hearsay_id;
+}
+
 async function applyResolutionAndClose(
   db: D1Database,
   convId: string,
@@ -1329,7 +1346,7 @@ async function applyResolutionAndClose(
   // hráče naštval, vidí trenér ve vztahu v profilu. Hlášku dostane jen schválené volno,
   // o tom se trenér dozvědět musí.
   // Zpráva „jen tak" se počítá jako rozhovor od trenéra: malý dopad se stropem jednou denně.
-  const jeOdTrenera = scenarioId === "coach_initiated" || getScenarioById(scenarioId)?.category === "casual";
+  const jeOdTrenera = closesLikeCoachChat(scenarioId, state);
   const hlasitUkonceni = absenceDays > 0;
 
   const stmts: D1PreparedStatement[] = [
@@ -1347,7 +1364,7 @@ async function applyResolutionAndClose(
            '$.condition', MAX(0, MIN(100, COALESCE(json_extract(life_context, '$.condition'), 100) + ?))
          )
        WHERE id = ?`,
-    ).bind(resolution.morale_delta, resolution.condition_delta, playerId),
+    ).bind(resolutionMoraleDelta(state, resolution.morale_delta), resolution.condition_delta, playerId),
 
     // Vztah k trenérovi i s důvodem pro Kabinu. Rozhovor od trenéra má menší rozsah
     // a strop jednou za herní den (viz `dopadRozhovoru`), vlákno od hráče jede jako dřív.

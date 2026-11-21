@@ -171,12 +171,13 @@ export async function spreadHearsay(db: D1Database, now: Date = new Date()): Pro
       if (fresh.length === 0) continue;
 
       const items = new Map(state.items.map((i) => [i.id, i]));
+      const runState = new Set<string>();
       const stmts: D1PreparedStatement[] = [];
       const rows: HearsayKnowledge[] = [];
       for (const k of fresh) {
         const item = items.get(k.hearsayId)!;
         if (k.playerId === item.subjectPlayerId) {
-          const effect = await learningEffectStmts(db, { item, playerId: k.playerId, via: k.via, gameDay: club.game_date ?? at.slice(0, 10), now });
+          const effect = await learningEffectStmts(db, { item, playerId: k.playerId, via: k.via, gameDay: club.game_date ?? at.slice(0, 10), now, runState });
           stmts.push(...effect.stmts);
           rows.push(effect.message ? { ...k, messageState: "pending" } : k);
         } else {

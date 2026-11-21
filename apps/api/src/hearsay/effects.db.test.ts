@@ -74,6 +74,13 @@ describe("dopad v databázi", () => {
     expect(await learningEffectStmts(db, { item, playerId: "kral", via: "teammate", gameDay: DAY, now: NOW })).toEqual({ stmts: [], message: false });
   });
 
+  it("„řekl mu to předem“ jen když mu psal o sestavě, pásce nebo lavičce", async () => {
+    await db.prepare("INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, sent_at) VALUES ('m0', 'c-smejkal', 'user', 'Trenér', 'Ahoj, jak se máš?', '2026-11-21T07:00:00Z')").run();
+    expect(await coachTalkedSince(db, { clubTeamId: "club", playerId: "smejkal", sinceIso: "2026-11-20T12:00:00Z", aboutLineup: true })).toBe(false);
+    await db.prepare("INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, sent_at) VALUES ('m2', 'c-smejkal', 'user', 'Trenér', 'V neděli půjdeš na lavičku, nezlob se.', '2026-11-21T08:30:00Z')").run();
+    expect(await coachTalkedSince(db, { clubTeamId: "club", playerId: "smejkal", sinceIso: "2026-11-20T12:00:00Z", aboutLineup: true })).toBe(true);
+  });
+
   it("když mu trenér den předtím psal, ví to coachTalkedSince", async () => {
     await db.prepare("INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, sent_at) VALUES ('m1', 'c-smejkal', 'user', 'Trenér', 'Rosťo, musíš víc makat', '2026-11-21T08:00:00Z')").run();
     expect(await coachTalkedSince(db, { clubTeamId: "club", playerId: "smejkal", sinceIso: "2026-11-20T12:00:00Z" })).toBe(true);

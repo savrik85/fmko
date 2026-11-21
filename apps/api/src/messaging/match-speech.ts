@@ -219,6 +219,18 @@ async function latestCoachMessageId(db: D1Database, convId: string): Promise<str
  * zápas. Změní náladu kabiny a vztah jmenovaných, posun formy dne se uplatní v dalším zápase.
  * Vrací verdikt (nálada pro reakce kabiny), nebo null, když to proslov po zápase není.
  */
+/**
+ * Je zpráva do kabiny kandidát na proslov po zápase (dost dlouhá, v okně po odehraném zápase)?
+ * Jmenovaným hráčům pak dopad dává proslov (`applyPostSpeech`), hearsay jen zapíše, kdo co ví,
+ * ať se pochvala nebo výtka nezapočítá dvakrát (závěrečná kontrola Kabina má uši).
+ */
+export async function isPostSpeechWindow(db: D1Database, teamId: string, message: string, now: Date = new Date()): Promise<boolean> {
+  if (message.trim().length < MIN_SPEECH_CHARS) return false;
+  const match = await lastFinishedMatch(db, teamId)
+    .catch((e) => { logger.warn({ module: M, teamId }, "poslední zápas pro okno proslovu", e); return null; });
+  return !!match && postSpeechInWindow(match.simulatedAt, now);
+}
+
 export async function applyPostSpeech(
   db: D1Database, env: ChatEnv, o: { teamId: string; convId: string; message: string; now?: Date },
 ): Promise<PostSpeechVerdict | null> {

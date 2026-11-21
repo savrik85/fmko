@@ -376,9 +376,9 @@ export async function reactToLeftOut(
       temper: Number(personality.temper ?? 40),
       discipline: Number(personality.discipline ?? 50),
       previousStreak: leftOutStreakFor(life, teamId),
-      // Trenér mu v posledních dvou dnech sám psal: ví to od něj, ne až ze sestavy.
+      // Trenér mu v posledních dvou dnech sám psal o sestavě: ví to od něj, ne až ze sestavy.
       toldInAdvance: writesToCoach && await coachTalkedSince(db, {
-        clubTeamId: teamId, playerId: row.id, sinceIso: new Date(Date.now() - 2 * 86_400_000).toISOString(),
+        clubTeamId: teamId, playerId: row.id, sinceIso: new Date(Date.now() - 2 * 86_400_000).toISOString(), aboutLineup: true,
       }),
       row,
       life,

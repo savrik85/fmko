@@ -6,6 +6,7 @@ import { logger } from "../lib/logger";
 import type { ChatEnv } from "../messaging/ai-player-chat";
 import { detectMentions, type MentionCandidate } from "./detect";
 import { learningEffectStmts } from "./effects";
+import { isPostSpeechWindow } from "../messaging/match-speech";
 import { hearsayItemStmt, knowledgeStmts, newHearsayItem } from "./store";
 import type { HearsayKnowledge, KnowledgeVia } from "./types";
 
@@ -61,6 +62,10 @@ export async function handleCoachMessageForHearsay(
     // Kabinu čte áčko (kabina patří týmu, kterému trenér píše).
     const inSquadChat = roster.results.filter((p) => p.team_id === o.teamId).map((p) => p.id);
     const at = now.toISOString();
+    // Proslov po zápase dává jmenovaným dopad sám (messaging/match-speech.ts): tady jen kdo co ví.
+    const speechTakesIt = squadChat && await isPostSpeechWindow(db, o.teamId, o.text, now);
+    // Dvě zmínky téhož hráče v jedné zprávě: strop a „to už vím“ platí i uvnitř zprávy.
+    const runState = new Set<string>();
     const stmts: D1PreparedStatement[] = [];
     for (const m of mentions) {
       const item = newHearsayItem({
@@ -70,8 +75,8 @@ export async function handleCoachMessageForHearsay(
       const knowers: Array<{ playerId: string; via: KnowledgeVia }> = squadChat
         ? inSquadChat.map((playerId) => ({ playerId, via: "squad_chat" as const }))
         : o.recipientPlayerId ? [{ playerId: o.recipientPlayerId, via: "direct" }] : [];
-      if (squadChat && inSquadChat.includes(m.playerId)) {
-        const effect = await learningEffectStmts(db, { item, playerId: m.playerId, via: "squad_chat", gameDay, now });
+      if (squadChat && inSquadChat.includes(m.playerId) && !speechTakesIt) {
+        const effect = await learningEffectStmts(db, { item, playerId: m.playerId, via: "squad_chat", gameDay, now, runState });
         stmts.push(...effect.stmts);
       }
       stmts.push(hearsayItemStmt(db, item), ...knowledgeStmts(db, knowers.map((k): HearsayKnowledge => ({

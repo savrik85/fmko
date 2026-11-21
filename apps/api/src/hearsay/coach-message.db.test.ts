@@ -5,9 +5,11 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 import type { Miniflare } from "miniflare";
 
 vi.mock("./detect", () => ({ detectMentions: vi.fn() }));
+vi.mock("../messaging/match-speech", () => ({ isPostSpeechWindow: vi.fn(async () => false) }));
 
 import { createHearsayDb, resetHearsayDb } from "../test-support/hearsay-db";
 import { detectMentions } from "./detect";
+import { isPostSpeechWindow } from "../messaging/match-speech";
 import { handleCoachMessageForHearsay } from "./coach-message";
 
 let miniflare: Miniflare;
@@ -68,6 +70,16 @@ describe("zpráva trenéra o spoluhráči", () => {
     expect(await knowers()).toEqual([{ player_id: "sima", via: "squad_chat" }, { player_id: "smejkal", via: "squad_chat" }]);
     expect(await player("smejkal")).toEqual({ rel: 45, morale: 46 });
     expect(vi.mocked(detectMentions).mock.calls[0][1].squadChat).toBe(true);
+  });
+
+  it("proslov po zápase: jmenovaným dopad dává proslov, hearsay jen zapíše, kdo co ví", async () => {
+    vi.mocked(isPostSpeechWindow).mockResolvedValueOnce(true);
+    vi.mocked(detectMentions).mockResolvedValue([{ playerId: "smejkal", kind: "criticism", quote: "Šmejkal se fláká" }]);
+    await handleCoachMessageForHearsay(db, {}, {
+      teamId: "club", convId: "kabina", convType: "squad_group", recipientPlayerId: null, text: "Šmejkal se fláká, takhle ne.", now: NOW,
+    });
+    expect(await knowers()).toHaveLength(2);
+    expect(await player("smejkal")).toEqual({ rel: 50, morale: 50 });
   });
 
   it("zápasový chat ⚽ vs se nezpracuje", async () => {

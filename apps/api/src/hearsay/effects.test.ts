@@ -14,8 +14,8 @@ describe("dopad toho, co se hráč doslechl", () => {
     expect(learningEffect("decision_against", "teammate", quiet)).toEqual({ relation: -3, morale: -4, unrest: 10, message: true });
   });
 
-  it("když to trenér řekl první, kritika bolí polovinu", () => {
-    expect(learningEffect("criticism", "brothers", { ...quiet, coachTalkedFirst: true })).toEqual({ relation: -2, morale: -1, unrest: 0, message: true });
+  it("když to trenér řekl první, rozhodnutí na úkor bolí polovinu, kritika ne (spec 3)", () => {
+    expect(learningEffect("criticism", "brothers", { ...quiet, coachTalkedFirst: true })).toEqual({ relation: -4, morale: -3, unrest: 0, message: true });
     expect(learningEffect("decision_against", "pub", { ...quiet, coachTalkedFirst: true })).toEqual({ relation: -1, morale: -2, unrest: 5, message: true });
     // Pochvalu to nezmenší.
     expect(learningEffect("praise", "pub", { ...quiet, coachTalkedFirst: true }).relation).toBe(3);

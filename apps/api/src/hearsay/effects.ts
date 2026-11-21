@@ -85,8 +85,8 @@ export function learningEffect(
   }
   if (via === "squad_chat" || via === "direct") return { ...IN_FRONT[kind], message: false };
   const row = BEHIND_BACK[kind];
-  // Když to trenér hráči řekl sám dřív, než se to dozvěděl jinudy, zabolí to míň.
-  const negative = row.relation < 0 || row.morale < 0 || row.unrest > 0;
+  // Rozhodnutí na úkor, které mu trenér řekl sám dřív, než se to dozvěděl jinudy, zabolí míň (spec 3).
+  const negative = kind === "decision_against";
   return {
     relation: HALF_IF(o.coachTalkedFirst, row.relation, negative),
     morale: HALF_IF(o.coachTalkedFirst, row.morale, negative),
@@ -95,19 +95,25 @@ export function learningEffect(
   };
 }
 
-/** Psal trenér hráči v jejich konverzaci 1:1 od `sinceIso`? */
+/** Slova o sestavě a roli: „řekl mu to předem“ platí jen pro takovou SMS, ne pro „ahoj“. */
+export const LINEUP_TALK_RE = /(sestav|z[aá]klad|lavi[cč]k|st[rř][ií]d|nehraj|nebude[sš] hr[aá]t|nepojede|nejede[sš]|nastoup|p[aá]sk|kapit[aá]n|br[aá]n[aěeu]|chytat|nominac|soupisk|na z[aá]pas nep|tribun)/i;
+
+/**
+ * Psal trenér hráči v jejich konverzaci 1:1 od `sinceIso`? S `aboutLineup` jen zprávu
+ * o sestavě, pásce, lavičce či bráně (závěrečná kontrola: jinak by stačilo „ahoj“).
+ */
 export async function coachTalkedSince(
   db: D1Database,
-  o: { clubTeamId: string; playerId: string; sinceIso: string },
+  o: { clubTeamId: string; playerId: string; sinceIso: string; aboutLineup?: boolean },
 ): Promise<boolean> {
-  const row = await db.prepare(
-    `SELECT 1 AS x FROM conversations c JOIN messages m ON m.conversation_id = c.id
+  const rows = await db.prepare(
+    `SELECT m.body FROM conversations c JOIN messages m ON m.conversation_id = c.id
       WHERE c.team_id = ? AND c.type = 'player' AND c.participant_id = ?
         AND m.sender_type = 'user' AND julianday(m.sent_at) >= julianday(?)
-      LIMIT 1`,
-  ).bind(o.clubTeamId, o.playerId, o.sinceIso).first<{ x: number }>()
-    .catch((e) => { logger.warn({ module: M }, `psal trenér hráči ${o.playerId}`, e); return null; });
-  return !!row;
+      ORDER BY m.sent_at DESC LIMIT 20`,
+  ).bind(o.clubTeamId, o.playerId, o.sinceIso).all<{ body: string }>()
+    .catch((e) => { logger.warn({ module: M }, `psal trenér hráči ${o.playerId}`, e); return { results: [] as Array<{ body: string }> }; });
+  return o.aboutLineup ? rows.results.some((r) => LINEUP_TALK_RE.test(r.body)) : rows.results.length > 0;
 }
 
 const DESCRIPTION: Record<SaidKind, string> = {
@@ -144,11 +150,22 @@ function moraleStmt(db: D1Database, playerId: string, delta: number): D1Prepared
  */
 export async function learningEffectStmts(
   db: D1Database,
-  o: { item: HearsayItem; playerId: string; via: KnowledgeVia; gameDay: string; now: Date },
+  o: {
+    item: HearsayItem; playerId: string; via: KnowledgeVia; gameDay: string; now: Date;
+    /**
+     * Co už v tomhle běhu (hodina šíření, jedna zpráva trenéra) dostal: databáze to ještě
+     * nevidí, zápis jde až na konci jedním batchem. Bez toho dvě pochvaly v jednom běhu
+     * prošly stropem i „to už vím“ (závěrečná kontrola).
+     */
+    runState?: Set<string>;
+  },
 ): Promise<{ stmts: D1PreparedStatement[]; message: boolean }> {
   const none = { stmts: [] as D1PreparedStatement[], message: false };
   if (o.playerId !== o.item.subjectPlayerId) return none;
   const transfer = isTransferKind(o.item.kind);
+  const kindKey = `${o.playerId}:${o.item.kind}`;
+  const positiveKey = `${o.playerId}:+`;
+  if (!transfer && o.runState?.has(kindKey)) return none;
 
   const already = transfer ? null : await db.prepare(
     `SELECT 1 AS x FROM squad_hearsay_knowledge k JOIN squad_hearsay h ON h.id = k.hearsay_id
@@ -160,25 +177,31 @@ export async function learningEffectStmts(
     .catch((e) => { logger.warn({ module: M }, `už to ví ${o.playerId}`, e); return { x: 1 }; });
   if (already) return none;
 
-  const negative = o.item.kind === "criticism" || o.item.kind === "decision_against";
   const behindBack = o.via !== "squad_chat" && o.via !== "direct";
-  const coachTalkedFirst = behindBack && negative && await coachTalkedSince(db, {
+  const coachTalkedFirst = behindBack && o.item.kind === "decision_against" && await coachTalkedSince(db, {
     clubTeamId: o.item.clubTeamId, playerId: o.playerId,
-    sinceIso: new Date(Date.parse(o.item.createdAt) - DAY_MS).toISOString(),
+    sinceIso: new Date(Date.parse(o.item.createdAt) - DAY_MS).toISOString(), aboutLineup: true,
   });
   const seededRoll = createRng(seedFromString(`${o.item.id}:${o.playerId}`)).random();
   const eff = learningEffect(o.item.kind, o.via, { coachTalkedFirst, seededRoll });
+
+  if (!transfer) o.runState?.add(kindKey);
+  const positiveDone = o.runState?.has(positiveKey) ?? false;
+  if (eff.relation > 0 || eff.morale > 0) o.runState?.add(positiveKey);
 
   if (!behindBack && !transfer) {
     // Před kabinou: stejná cesta a strop jako rozhovor, který začal trenér.
     const { dopadRozhovoru } = await import("../messaging/coach-initiated");
     const stmts = await dopadRozhovoru(db, o.item.clubTeamId, o.playerId, {
-      relationshipDelta: eff.relation, moraleDelta: eff.morale, summary: IN_FRONT_SUMMARY[o.item.kind as SaidKind],
+      relationshipDelta: positiveDone ? Math.min(0, eff.relation) : eff.relation,
+      moraleDelta: positiveDone ? Math.min(0, eff.morale) : eff.morale,
+      summary: IN_FRONT_SUMMARY[o.item.kind as SaidKind],
     });
     return { stmts, message: false };
   }
 
   let { relation, morale } = eff;
+  if (positiveDone) { relation = Math.min(0, relation); morale = Math.min(0, morale); }
   if (relation > 0 || morale > 0) {
     const counted = await db.prepare(
       "SELECT 1 AS x FROM coach_relation_log WHERE player_id = ? AND source = 'hearsay' AND delta > 0 AND substr(game_date, 1, 10) = ? LIMIT 1",

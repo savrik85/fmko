@@ -33,6 +33,14 @@ describe("síto jmen", () => {
       .toEqual(["smejkal"]);
   });
 
+  it("oslovení adresáta křestním jménem nestáhne jeho jmenovce", () => {
+    const tomasN: MentionCandidate = { id: "tnovotny", firstName: "Tomáš", lastName: "Novotný" };
+    const tomasK: MentionCandidate = { id: "tklima", firstName: "Tomáš", lastName: "Klíma" };
+    expect(mentionCandidates([tomasN, tomasK], "Tomáši, hrál jsi skvěle", ["tnovotny"])).toEqual([]);
+    // Příjmení jmenovce ale platí.
+    expect(mentionCandidates([tomasN, tomasK], "Tomáši, Klíma hrál skvěle", ["tnovotny"]).map((c) => c.id)).toEqual(["tklima"]);
+  });
+
   it("adresát sám není zmínka", () => {
     expect(mentionCandidates(club, "Šímo, makal jsi dobře", ["sima"])).toEqual([]);
   });

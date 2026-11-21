@@ -48,6 +48,23 @@ describe("hodinové šíření", () => {
       .toEqual({ rel: 46, morale: 47 });
   });
 
+  it("dvě pochvaly dorazí v jednom běhu: kladný dopad jednou a jedna zpráva", async () => {
+    await db.prepare("INSERT INTO pub_sessions (team_id, game_date, attendees, incidents, created_at) VALUES ('club', '2026-11-21', ?, '[]', '2026-11-21T08:30:00Z')")
+      .bind(JSON.stringify([{ playerId: "sima" }, { playerId: "smejkal" }])).run();
+    for (let i = 0; i < 12; i++) {
+      await recordHearsay(db, { ...base, kind: "praise", quote: `pochvala ${i}`, clubTeamId: "club", subjectPlayerId: "smejkal", recipientPlayerId: "sima" }, [{ playerId: "sima", via: "direct" }]);
+    }
+    const known = async () => (await db.prepare("SELECT COUNT(*) AS n FROM squad_hearsay_knowledge WHERE player_id = 'smejkal'").first<{ n: number }>())!.n;
+    await runUntil(async () => (await known()) >= 2, 48);
+    expect(await known()).toBeGreaterThanOrEqual(2);
+    expect(await db.prepare("SELECT coach_relationship AS rel, json_extract(life_context, '$.morale') AS morale FROM players WHERE id = 'smejkal'").first())
+      .toEqual({ rel: 53, morale: 52 });
+    expect(await db.prepare("SELECT COUNT(*) AS n FROM squad_hearsay_knowledge WHERE player_id = 'smejkal' AND message_state = 'pending'").first())
+      .toEqual({ n: expect.any(Number) });
+    const pending = (await db.prepare("SELECT COUNT(*) AS n FROM squad_hearsay_knowledge WHERE player_id = 'smejkal' AND message_state = 'pending'").first<{ n: number }>())!.n;
+    expect(pending).toBeLessThanOrEqual(1);
+  });
+
   it("AI klub se nešíří", async () => {
     await recordHearsay(db, { ...base, clubTeamId: "ai", subjectPlayerId: "a2", recipientPlayerId: "a1" }, [{ playerId: "a1", via: "direct" }]);
     await runUntil(async () => false, 48);
