@@ -43,15 +43,6 @@ export const IRRIGATION_COST_PER_MATCH = [0, 250, 600, 1_200];
  */
 export const SNOW_CLEARING_COST = 4_500;
 
-/**
- * Brigáda z kabiny (messaging/squad-brigade.ts): od tolika lidí s lopatou odklidí sníh zdarma
- * se stejnou účinností jako placená parta. Méně lidí (ale aspoň někdo) odklidí jen část.
- */
-export const VOLUNTEER_FULL_CREW = 6;
-
-/** Jak moc odklizený sníh tlumí rozbahnění (vyhřívání úrovně 3 v plné kondici je 1). */
-const SNOW_CLEARING_MOD = 0.6;
-
 /** Jakou péči si dané počasí žádá. Zataženo a vítr nic nepotřebují. */
 export function serviceForWeather(weather: Weather | null | undefined): PitchService | null {
   switch (weather) {
@@ -82,8 +73,6 @@ export interface PitchCareDecisionInput {
   orderedThisMatch: boolean;
   /** Objednaný úklid sněhu na tenhle zápas. Funguje i bez vyhřívání. */
   snowClearingOrdered: boolean;
-  /** Kolik lidí z kabiny přišlo na brigádu s lopatou (messaging/squad-brigade.ts). 0 = nikdo. */
-  snowClearingVolunteers?: number;
   budget: number;
 }
 
@@ -94,8 +83,6 @@ export interface PitchCareDecision {
   cost: number;
   /** Proč se nic nezapnulo — pro zápis do zápasu i pro hlášku manažerovi. */
   skipped: "not_needed" | "no_equipment" | "mode_off" | "not_ordered" | "no_money" | null;
-  /** Sníh odklidili brigádníci z kabiny zdarma: kolik jich bylo (účinnost podle `VOLUNTEER_FULL_CREW`). */
-  volunteers?: number;
 }
 
 /**
@@ -106,20 +93,6 @@ export interface PitchCareDecision {
  * takže když si ho manažer zaplatil, nemá smysl k tomu ještě topit.
  */
 export function decidePitchCare(input: PitchCareDecisionInput): PitchCareDecision {
-  const volunteers = Math.max(0, Math.floor(input.snowClearingVolunteers ?? 0));
-  // Plná parta z brigády odklidí sníh zdarma a stejně dobře jako placená firma: má přednost.
-  if (input.weather === "snow" && volunteers >= VOLUNTEER_FULL_CREW) {
-    return { service: "snow_clearing", cost: 0, skipped: null, volunteers };
-  }
-  const decision = decidePaidPitchCare(input);
-  // Pár brigádníků odklidí aspoň kus, když nic lepšího (firma, topení) neběží.
-  if (input.weather === "snow" && volunteers > 0 && decision.service === null) {
-    return { service: "snow_clearing", cost: 0, skipped: null, volunteers };
-  }
-  return decision;
-}
-
-function decidePaidPitchCare(input: PitchCareDecisionInput): PitchCareDecision {
   const needed = serviceForWeather(input.weather);
   if (!needed) return { service: null, cost: 0, skipped: "not_needed" };
 
@@ -147,8 +120,7 @@ function decidePaidPitchCare(input: PitchCareDecisionInput): PitchCareDecision {
  * Účinnost péče, která se reálně zapnula (0–1) — tlumí navýšení opotřebení z počasí.
  *
  * Úklid sněhu neumí to, co vyhřívání: lopatami se sníh shrne, ale rozbředlý
- * podklad pod ním zůstane. Proto jen částečný účinek. Brigáda s méně než plnou
- * partou (`VOLUNTEER_FULL_CREW`) odklidí jen polovinu toho, co firma.
+ * podklad pod ním zůstane. Proto jen částečný účinek.
  */
 export function careEffectiveness(
   decision: PitchCareDecision,
@@ -157,10 +129,7 @@ export function careEffectiveness(
 ): { heatingMod: number; irrigationMod: number } {
   if (decision.service === "heating") return { heatingMod, irrigationMod: 0 };
   if (decision.service === "irrigation") return { heatingMod: 0, irrigationMod };
-  if (decision.service === "snow_clearing") {
-    const fewVolunteers = (decision.volunteers ?? 0) > 0 && (decision.volunteers ?? 0) < VOLUNTEER_FULL_CREW;
-    return { heatingMod: fewVolunteers ? SNOW_CLEARING_MOD / 2 : SNOW_CLEARING_MOD, irrigationMod: 0 };
-  }
+  if (decision.service === "snow_clearing") return { heatingMod: 0.6, irrigationMod: 0 };
   return { heatingMod: 0, irrigationMod: 0 };
 }
 
@@ -203,7 +172,7 @@ export function dailyServiceCost(service: PitchService, level: number): number {
 }
 
 export type DailyPitchCareInput = Omit<
-  PitchCareDecisionInput, "orderedThisMatch" | "snowClearingOrdered" | "snowClearingVolunteers"
+  PitchCareDecisionInput, "orderedThisMatch" | "snowClearingOrdered"
 >;
 
 /**

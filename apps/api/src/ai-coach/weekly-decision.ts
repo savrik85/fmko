@@ -19,7 +19,6 @@ import {
   type ConcessionAction, type ConcessionContext, type ConcessionDecision, type ConcessionTopUpPlan,
 } from "./concession-decision";
 import type { AiCoachProfile } from "./profile";
-import { SNOW_CLEARING_COST, VOLUNTEER_FULL_CREW } from "../stadium/pitch-care";
 import { promptName } from "./prompt-text";
 
 export const TRAINING_FOCUS = ["conditioning", "technique", "tactics", "match_practice", "mixed"] as const;
@@ -180,17 +179,6 @@ export interface WeeklyContext {
   transfers: { squadSize: number; targetSize: number; needs: TransferNeedInfo[]; surplus: SurplusOption[] };
   /** Bufet: provoz, produkty, kvality a meze cen i nákupu (concession-decision.ts). */
   concessions: ConcessionContext;
-  /** Brigáda na hřišti (messaging/squad-brigade.ts loadBrigadeOutlook). Bez podkladu se o ní nerozhoduje. */
-  brigade?: BrigadeContext | null;
-}
-
-/** Podklad pro brigádu: jde tento týden svolat, sněží u nejbližšího domácího zápasu a kdy by byla. */
-export interface BrigadeContext {
-  available: boolean;
-  snowAtNextHome: boolean;
-  nextHomeMatchAt: string | null;
-  /** Navržený začátek (ISO): den před domácím zápasem dopoledne. */
-  dueAt: string;
 }
 
 /** Lákaný žák v nabídce pro model. */
@@ -244,8 +232,6 @@ export interface WeeklyDecision {
   sendDown: string[];
   transfers: { stance: TransferStance; focus: TransferPosition[]; sell: string[]; fill?: SquadFillChoice };
   concessions: ConcessionDecision;
-  /** Svolat brigádu na hřišti (starší uložená rozhodnutí ji nemají: nesvolá se). */
-  brigade?: boolean;
   reasoning: string;
 }
 
@@ -267,8 +253,7 @@ export type WeeklyAction =
   | { kind: "pitch_maintenance"; level: Exclude<PitchMaintenanceChoice, "none">; cost: number }
   | { kind: "hire"; key: string; staffId: string; role: string; cost: number; weeklyWage: number }
   | { kind: "equipment_upgrade"; key: string; category: string; cost: number }
-  | { kind: "stadium_upgrade"; key: string; facility: string; cost: number }
-  | { kind: "brigade"; dueAt: string; beer: boolean };
+  | { kind: "stadium_upgrade"; key: string; facility: string; cost: number };
 
 export interface WeeklyPlan {
   actions: WeeklyAction[];
@@ -285,10 +270,6 @@ const MAX_STADIUM = 2;
 const MAX_EQUIPMENT = 3;
 const MAX_HIRES = 1;
 const MAX_U21_MOVES = 2;
-/** Pod jakou kondicí hřiště svolá brigádu i náhradní pravidlo. */
-const FALLBACK_BRIGADE_PITCH = 50;
-/** Šetrnější trenér brigádníkům pivo neplatí. */
-const BRIGADE_BEER_MAX_THRIFT = 70;
 /** Minimální rezerva, i kdyby provoz nic nestál. */
 export const MIN_RESERVE = 15_000;
 
@@ -410,8 +391,6 @@ export function fallbackWeeklyDecision(ctx: WeeklyContext): WeeklyDecision {
 
   const promote = ctx.u21.promote.slice(0, p.youthFocus >= 60 ? 2 : 1).map((u) => u.key);
   const sendDown = ctx.u21.sendDown.slice(0, 1).map((u) => u.key);
-  // Brigáda nic nestojí: při sněhu u domácího zápasu nebo rozbitém hřišti ji svolá každý.
-  const brigade = hasBrigadeChoice(ctx) && (!!ctx.brigade?.snowAtNextHome || c < FALLBACK_BRIGADE_PITCH);
 
   return {
     training: { focus, intensity, sessions, approach },
@@ -419,7 +398,6 @@ export function fallbackWeeklyDecision(ctx: WeeklyContext): WeeklyDecision {
     // Provoz akademie (úroveň, nábor, obrana žáků) je rozhodnutí modelu: pravidlo ho nemění.
     academyCare: NO_ACADEMY_CARE,
     promote, sendDown, transfers: fallbackTransfers(ctx), concessions: fallbackConcessions(ctx.concessions, p),
-    brigade,
     reasoning: "fallback rule",
   };
 }
@@ -469,22 +447,6 @@ function validateTransfers(raw: unknown, ctx: WeeklyContext, rejected: string[])
     sell: Array.isArray(sell) ? sell : [],
     fill,
   };
-}
-
-/** Jde tento týden svolat brigádu? (Nejvýš jedna za týden, hlídá squad-brigade.ts.) */
-export function hasBrigadeChoice(ctx: Pick<WeeklyContext, "brigade">): boolean {
-  return !!ctx.brigade?.available;
-}
-
-/**
- * Brigáda je samostatná volba: chybějící znamená „nesvolat“ (jako prázdný seznam u ostatních
- * položek), neplatná hodnota totéž s poznámkou do deníku. Zbytek týdne platí.
- */
-function validateBrigade(raw: unknown, ctx: WeeklyContext, rejected: string[]): boolean {
-  if (!hasBrigadeChoice(ctx) || raw === undefined || raw === null) return false;
-  if (typeof raw === "boolean") return raw;
-  rejected.push(`brigade: neplatná hodnota ${String(raw)}, brigáda se nesvolá`);
-  return false;
 }
 
 /** Je o provozu akademie co rozhodovat? (Akademie běží.) */
@@ -600,7 +562,6 @@ export function validateWeeklyDecision(raw: unknown, ctx: WeeklyContext): Weekly
       transfers: validateTransfers(r.transfers, ctx, rejected),
       academyCare: validateAcademyCare(r.academyCare, ctx, rejected),
       concessions: validateConcessions(r.concessions, ctx.concessions, ctx.profile, rejected),
-      brigade: validateBrigade(r.brigade, ctx, rejected),
       reasoning: typeof r.reasoning === "string" ? r.reasoning.slice(0, 600) : "",
     },
   };
@@ -624,11 +585,6 @@ export function planWeeklyActions(ctx: WeeklyContext, d: WeeklyDecision): Weekly
     if (price !== ctx.fans.ticketPrice) actions.push({ kind: "ticket_price", price, from: ctx.fans.ticketPrice });
   }
   if (d.pitchCareMode !== "keep" && d.pitchCareMode !== ctx.pitch.careMode) actions.push({ kind: "pitch_care_mode", mode: d.pitchCareMode });
-  // Brigáda nic nestojí (pivo pro brigádníky je pár stovek a platí se až po ní). Mez „jedna za týden“
-  // hlídá kód i tady, ne jen model.
-  if (d.brigade && ctx.brigade && hasBrigadeChoice(ctx)) {
-    actions.push({ kind: "brigade", dueAt: ctx.brigade.dueAt, beer: ctx.profile.thrift < BRIGADE_BEER_MAX_THRIFT });
-  }
   const academySame = d.academy === "none" ? !ctx.academy.founded : d.academy === ctx.academy.current;
   if (d.academy !== "keep" && !academySame) {
     // Kód hlídá meze: placený trenér jen najatý, dobrovolník jen když je kdo
@@ -837,10 +793,6 @@ export function renderWeeklyPrompt(ctx: WeeklyContext): string {
   L.push("");
   L.push(`FANS: satisfaction ${ctx.fans.satisfaction}/100. Ticket price ${ctx.fans.ticketPrice} CZK (village standard ${ctx.fans.villageBasePrice} CZK)${ctx.fans.daysSinceTicketChange !== null ? `, last changed ${ctx.fans.daysSinceTicketChange} days ago` : ""}. Options: keep / lower / raise (by about 10 %). Fans dislike price rises, especially when unhappy.`);
   L.push(`PITCH: condition ${ctx.pitch.condition}/100 (${ctx.pitch.type}), drops about 1 point a day without a mower${ctx.pitch.hasMower ? " (you have a mower)" : ""}. Maintenance now: none / basic (+10, 1,600 CZK) / thorough (+25, 3,000 CZK) / renovation (+50, 5,000 CZK). Pitch care mode (heating/irrigation on match days): ${ctx.pitch.careMode}${ctx.pitch.hasCareEquipment ? "" : " (you own no heating or irrigation)"}; options keep / auto / manual / off.`);
-  if (ctx.brigade && hasBrigadeChoice(ctx)) {
-    const b = ctx.brigade;
-    L.push(`BRIGADE: you may call the squad to a volunteer work day at your ground this week (free, at most once a week; players who skip it with a lame excuse get grumpy). ${b.nextHomeMatchAt ? `Next home match ${b.nextHomeMatchAt.slice(0, 10)}: ${b.snowAtNextHome ? `snow is forecast, so if at least ${VOLUNTEER_FULL_CREW} players come they clear it for free (a paid snow clearing costs ${czk(SNOW_CLEARING_COST)}); fewer players clear only part of it` : `no snow forecast, so the brigade improves the pitch condition a little (more with at least ${VOLUNTEER_FULL_CREW} players)`}.` : "No home match in the next days: the brigade only improves the pitch condition a little."}`);
-  }
   L.push("");
   L.push(...renderConcessionPrompt(ctx.concessions));
   L.push("");
@@ -885,7 +837,7 @@ export function renderWeeklyPrompt(ctx: WeeklyContext): string {
   const concessionKeys = hasConcessionChoice(ctx.concessions)
     ? `, concessions {mode ${ctx.concessions.modeOptions.join("/")}, products {${ctx.concessions.products.map((p) => p.key).join(", ")}: each {tier, price, buy}}}`
     : "";
-  L.push(`DECIDE (JSON keys): training {focus, intensity, sessions 1-5, approach}, ticketPrice, pitchMaintenance, pitchCareMode, stadium (keys, max 2), equipmentUpgrades (keys, max 3), equipmentRepairs (keys), hire (candidate keys, max 1), academy${hasAcademyCare(ctx) ? ", academyCare {level keep/modest/standard/ambitious, recruitDay true/false, openDay true/false, defend (keys of lured boys)}" : ""}, banners (offer keys), promote (keys, max 2), sendDown (keys, max 2), transfers {stance buy/hold/sell, focus (positions GK/DEF/MID/FWD, max 2), sell (surplus keys, max 3)${below ? ", fill none/free_agents/market/both" : ""}}${concessionKeys}${hasBrigadeChoice(ctx) ? ", brigade true/false" : ""}, reasoning (max 40 words).`);
+  L.push(`DECIDE (JSON keys): training {focus, intensity, sessions 1-5, approach}, ticketPrice, pitchMaintenance, pitchCareMode, stadium (keys, max 2), equipmentUpgrades (keys, max 3), equipmentRepairs (keys), hire (candidate keys, max 1), academy${hasAcademyCare(ctx) ? ", academyCare {level keep/modest/standard/ambitious, recruitDay true/false, openDay true/false, defend (keys of lured boys)}" : ""}, banners (offer keys), promote (keys, max 2), sendDown (keys, max 2), transfers {stance buy/hold/sell, focus (positions GK/DEF/MID/FWD, max 2), sell (surplus keys, max 3)${below ? ", fill none/free_agents/market/both" : ""}}${concessionKeys}, reasoning (max 40 words).`);
   L.push("Paid items are executed in the order repairs, pitch, refreshment stock, hiring, equipment, stadium and stop when the money above the reserve runs out.");
   return L.join("\n");
 }
@@ -948,13 +900,11 @@ export function weeklyDecisionSchema(ctx: WeeklyContext): Record<string, unknown
         required: ["stance", "focus", "sell", ...(squadBelowTarget(ctx) ? ["fill"] : [])],
       },
       ...(concessions ? { concessions } : {}),
-      ...(hasBrigadeChoice(ctx) ? { brigade: { type: "boolean" } } : {}),
       reasoning: { type: "string" },
     },
     required: [
       "training", "ticketPrice", "pitchMaintenance", "pitchCareMode", "stadium", "equipmentUpgrades", "equipmentRepairs", "hire",
-      "academy", ...(hasAcademyCare(ctx) ? ["academyCare"] : []), "banners", "promote", "sendDown", "transfers", ...(concessions ? ["concessions"] : []),
-      ...(hasBrigadeChoice(ctx) ? ["brigade"] : []), "reasoning",
+      "academy", ...(hasAcademyCare(ctx) ? ["academyCare"] : []), "banners", "promote", "sendDown", "transfers", ...(concessions ? ["concessions"] : []), "reasoning",
     ],
   };
 }

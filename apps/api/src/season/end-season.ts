@@ -307,13 +307,6 @@ async function runWrapPhase(
         return "done";
       }
       case "awards": {
-        // Anketa Fotbalista okresu, která ještě běží (konec sezóny před uzávěrkou): uzavřít teď.
-        try {
-          const { closeOpenPollsForSeason } = await import("../polls/district-poll");
-          await closeOpenPollsForSeason({ DB: db, GEMINI_API_KEY: geminiApiKey }, seasonNumber);
-        } catch (e) {
-          logger.warn({ module: "end-season" }, "uzavření ankety Fotbalista okresu", e);
-        }
         await generateSeasonAwards(db, geminiApiKey, leagueId, seasonNumber);
         // Kořaly „Šampion" vítězi ligy. Vítěz se čte ze zapsaných ocenění, takže
         // opakovaný běh fáze nic neudělí podruhé. Dřív trofej neuděloval nikdo.

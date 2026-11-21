@@ -144,11 +144,6 @@ export async function applyPitchWear(
     const budget = (await db.prepare("SELECT budget FROM teams WHERE id = ?")
       .bind(homeTeamId).first<{ budget: number }>()
       .catch((e) => { logger.warn({ module: "pitch-wear" }, "rozpocet pro peci o travnik", e); return null; }))?.budget ?? 0;
-    // Brigáda z kabiny (messaging/squad-brigade.ts, migrace 0319). Zvlášť, ať chybějící sloupec
-    // (kód nasazený před migrací) neshodí opotřebení ani účtování péče.
-    const volunteers = (await db.prepare("SELECT pitch_snow_clearing_volunteer AS n FROM stadiums WHERE team_id = ?")
-      .bind(homeTeamId).first<{ n: number | null }>()
-      .catch((e) => { logger.warn({ module: "pitch-wear" }, "brigadnici na uklid snehu", e); return null; }))?.n ?? 0;
 
     const decision = decidePitchCare({
       weather,
@@ -157,7 +152,6 @@ export async function applyPitchWear(
       irrigationLevel: equip.irrigationLevel,
       orderedThisMatch: (stadium.pitch_care_ordered ?? 0) > 0,
       snowClearingOrdered: (stadium.pitch_snow_clearing_ordered ?? 0) > 0,
-      snowClearingVolunteers: volunteers,
       budget,
     });
 
@@ -168,11 +162,6 @@ export async function applyPitchWear(
         "UPDATE stadiums SET pitch_care_ordered = 0, pitch_snow_clearing_ordered = 0 WHERE team_id = ?"
       ).bind(homeTeamId).run()
         .catch((e) => logger.warn({ module: "pitch-wear" }, "spotrebovani objednavky pece", e));
-    }
-    // Stejně tak brigádníci: odklízeli sníh na tenhle zápas, na další už ne.
-    if (volunteers > 0) {
-      await db.prepare("UPDATE stadiums SET pitch_snow_clearing_volunteer = 0 WHERE team_id = ?").bind(homeTeamId).run()
-        .catch((e) => logger.warn({ module: "pitch-wear" }, "spotrebovani brigady na snih", e));
     }
 
     if (decision.cost > 0) {

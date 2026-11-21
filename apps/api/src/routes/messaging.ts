@@ -179,8 +179,6 @@ function odpovidatLze(
   // model jako hráč (sponsors/owner-chat.ts), proto placená SMS. Musí být před pravidlem
   // otevřeného vlákna: během „píše…" a při čekající SMS majitele je vlákno otevřené taky.
   if (opts.participantId?.startsWith("so-")) return { canReply: true, channel: "sms" };
-  // Redaktor ankety Fotbalista okresu: hlas se píše zdarma, odpověď přijde s prodlevou.
-  if (opts.participantId?.startsWith("po-")) return { canReply: true, channel: "imessage" };
   // Hala Vánoční sálovky: přihláška a odhlášení přes SMS, odpovídá automat zdarma.
   if (opts.participantId?.startsWith("hc-")) return { canReply: true, channel: "imessage" };
   // Starosta (zasedání zastupitelstva, villages/council-db.ts): proslov se píše zdarma, odpověď s prodlevou.
@@ -929,11 +927,6 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
     const optionId = typeof body.optionId === "string" ? body.optionId : null;
     await handleDistrictEventReply(c.env.DB, convId, teamId, body.body.trim(), optionId)
       .catch((e) => logger.warn({ module: "messaging" }, "odpověď na pozvánku na okresní akci", e));
-  } else if (conv?.type === "system" && conv.participant_id?.startsWith("po-")) {
-    // Anketa Fotbalista okresu: hlas trenéra, redaktor odpoví s prodlevou z hodinového běhu.
-    const { handlePollReply } = await import("../polls/district-poll");
-    await handlePollReply(c.env, convId, teamId, body.body.trim())
-      .catch((e) => logger.warn({ module: "messaging" }, "hlas v anketě Fotbalista okresu", e));
   } else if (conv?.type === "system" && conv.participant_id?.startsWith("hc-")) {
     // Pozvánka na Vánoční sálovku: přihláška nebo odmítnutí, hala hned odepíše.
     const { handleHallCupReply } = await import("../hall-cup/db");
