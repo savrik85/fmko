@@ -19,7 +19,6 @@ import { LEVEL_RANK } from "../league/district-leagues";
 import { resolvePromises } from "./promises";
 import { stanceForOffer } from "../messaging/player-memory";
 import { marketValue } from "@okresni-masina/shared";
-import { rumourCalmMultiplier } from "../pub/rumours";
 
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 const DAY_MS = 86400000;
@@ -326,9 +325,7 @@ export async function applyOfferRejectionImpact(
   const patriotism: number = pers.patriotism ?? 50;
   const loyaltyMod = Math.min(0.6, trophyFx * (patriotism >= 70 ? 2 : 1));
 
-  // Trenér hráče po drbu z hospody včas uklidnil (pub/rumours.ts): nespokojenost naroste míň.
-  const calmMod = rumourCalmMultiplier(lc, nowIso, sellerClubTeamId);
-  let unrestAdd = Math.round((level === 3 ? 55 : 35) * loanFactor * stackFactor * (1 - loyaltyMod) * calmMod);
+  let unrestAdd = Math.round((level === 3 ? 55 : 35) * loanFactor * stackFactor * (1 - loyaltyMod));
   let newLevel = clamp(Math.round(unrest.level + unrestAdd), 0, 100);
 
   if (brokenTransferPledge) {

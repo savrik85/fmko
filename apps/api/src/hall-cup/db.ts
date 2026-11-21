@@ -145,15 +145,14 @@ export async function inviteHallCup(env: Env, cup: HallCupRow): Promise<number> 
   const stmts: D1PreparedStatement[] = [];
   const convIds = new Map<string, string>();
   const humans = teams.filter((t) => t.user_id !== "ai");
-  // ai_thread_active zůstává 0: aktivní vlákno bez hráče by úklid nikdy nezavřel a klubu by
-  // blokovalo rozhovory od hráčů (ai-player-spawn). Tlačítka pod pozvánkou Telefon ukáže i tak.
+  // ai_thread_active = 1 jako u okresních akcí: Telefon pak pod pozvánkou ukáže hotové odpovědi.
   for (const t of humans) {
     const convId = crypto.randomUUID();
     convIds.set(t.id, convId);
     stmts.push(
       db.prepare(
         `INSERT INTO conversations (id, team_id, type, title, participant_id, ai_thread_active, pinned, unread_count, last_message_text, last_message_at, created_at)
-         VALUES (?, ?, 'system', ?, ?, 0, 0, 1, ?, strftime('%Y-%m-%dT%H:%M:%SZ','now'), strftime('%Y-%m-%dT%H:%M:%SZ','now'))`,
+         VALUES (?, ?, 'system', ?, ?, 1, 0, 1, ?, strftime('%Y-%m-%dT%H:%M:%SZ','now'), strftime('%Y-%m-%dT%H:%M:%SZ','now'))`,
       ).bind(convId, t.id, cup.venue, `${HALL_PARTICIPANT_PREFIX}${cup.id}`, text.slice(0, 100)),
       db.prepare(
         `INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, metadata, sent_at)

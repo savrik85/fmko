@@ -96,9 +96,6 @@ describe("Vánoční sálovka v databázi", () => {
     expect((await tickHallCup(env(), at("2026-12-01T09:45:00Z"))).status).toBe("registration");
     const convs = await db.prepare("SELECT team_id FROM conversations WHERE participant_id LIKE 'hc-%' ORDER BY team_id").all<{ team_id: string }>();
     expect(convs.results.map((r) => r.team_id)).toEqual(["cb1", ...HUMANS]);
-    // Aktivní vlákno bez hráče by úklid nezavřel a blokovalo by klubu rozhovory od hráčů.
-    const active = await db.prepare("SELECT COUNT(*) AS n FROM conversations WHERE participant_id LIKE 'hc-%' AND ai_thread_active = 1").first<{ n: number }>();
-    expect(active?.n).toBe(0);
     const ai = await db.prepare("SELECT team_id, status FROM hall_cup_entries WHERE team_id LIKE 'ai%' OR team_id = 'cbai'").all<{ team_id: string; status: string }>();
     expect(ai.results).toEqual([{ team_id: "ai1", status: "registered" }]);
     const invite = await db.prepare("SELECT body, metadata FROM messages WHERE conversation_id = ?").bind(await convOf("t1")).first<{ body: string; metadata: string }>();

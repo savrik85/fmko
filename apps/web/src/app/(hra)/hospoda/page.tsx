@@ -96,7 +96,6 @@ const INCIDENT_ICON: Record<string, string> = {
   chlubi_se: "🦚",
   ohlasuje_cin: "⚠️",
   vudce_zlodej: "🧣",
-  transfer_rumour: "🤫",
 };
 
 /**

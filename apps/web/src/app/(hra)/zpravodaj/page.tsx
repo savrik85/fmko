@@ -433,12 +433,10 @@ export default function NewsPage() {
   );
   // Loučení s legendou (bývalý hráč dostal v okrese druhý život) má vlastní rubriku, ne drobné zprávy.
   const legendStories = articles.filter((a) => a.type === "legend_farewell" && a.id !== leadStory?.id && a.id !== secondaryStory?.id).slice(0, 3);
-  // Drby od výčepu (trenér pustil drb o přestupu do novin) mají vlastní rubriku vedle přestupů.
-  const rumourStories = articles.filter((a) => a.type === "transfer_rumour" && a.id !== leadStory?.id && a.id !== secondaryStory?.id).slice(0, 3);
   // Zasedání zastupitelstva (obce soutěže zasedají jednou za měsíc ve stejný večer): vlastní obecní rubrika,
   // každá obec zvlášť, ať odkaz ze SMS od Redakce najde svůj článek.
   const councilStories = articles.filter((a) => a.type === "village_council" && a.id !== leadStory?.id && a.id !== secondaryStory?.id).slice(0, 10);
-  const miscArticles = otherArticles.filter((a) => !["legend_farewell", "transfer_rumour", "village_council"].includes(a.type));
+  const miscArticles = otherArticles.filter((a) => !["legend_farewell", "village_council"].includes(a.type));
 
   const today = new Date().toLocaleDateString("cs", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
   const selectedLeague = selectedLeagueId && selectedLeagueId !== DISTRICT ? allLeagues.find(l => l.id === selectedLeagueId) : null;
@@ -823,25 +821,6 @@ export default function NewsPage() {
             </section>
           )}
 
-          {/* ═══ Drby od výčepu ═══ */}
-          {rumourStories.length > 0 && (
-            <section className="border-t border-ink/20 pt-6">
-              <Kicker>{rubrikaProTyp("transfer_rumour")}</Kicker>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6">
-                {rumourStories.map((a) => (
-                  <div key={a.id} id={`news-${a.id}`} className="py-3 border-b border-ink/10">
-                    <h4 className="np-titulek text-[15px] mb-1"><LeagueTag a={a} />{a.headline}</h4>
-                    <p className="np-text text-[13px]">{a.body}</p>
-                    <div className="flex items-center justify-between mt-1.5">
-                      <span className="text-micro text-muted italic">{timeAgo(a.date)}</span>
-                      <ShareButton articleId={a.id} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
-
           {/* ═══ Spodek listu — výsledky kola a drobné zprávy ═══ */}
           {(roundArticles.length > 0 || miscArticles.length > 0) && (
             <div className="border-t border-ink/20 pt-6">
@@ -1159,7 +1138,6 @@ function rubrikaProTyp(type: string): string {
     case "season_yearbook": return "📖 Ročenka";
     case "district_selection": return "🎽 Výběr okresu";
     case "club_wedding": return "💍 Ze života klubů";
-    case "transfer_rumour": return "🤫 Šušká se u výčepu";
     case "village_council": return "🏛️ Ze zastupitelstva";
     default: return "Aktualita";
   }

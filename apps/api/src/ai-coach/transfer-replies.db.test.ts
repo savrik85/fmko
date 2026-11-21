@@ -1294,28 +1294,6 @@ describe("AI klub na trhu", () => {
     expect((await db.prepare("SELECT team_id FROM players WHERE id = 'h-fwd'").first<{ team_id: string }>())?.team_id).toBe("ai-club");
   });
 
-  it("po drbu ve Zpravodaji (pub/rumours) AI za hráče nabídne víc, po datu zase normálně", async () => {
-    await db.prepare("DELETE FROM players WHERE id IN ('ai-fwd1', 'ai-fwd2', 'ai-fwd3', 'ai-fwd4')").run();
-    const profile = { ...PROFILE, ambition: 80, thrift: 20 };
-    const at = later();
-    const offered = async () => {
-      await runTransferMarket(env, "ai-club", at, { profile, ignoreSchedule: true });
-      const o = await db.prepare("SELECT offer_amount FROM transfer_offers WHERE from_team_id = 'ai-club' AND player_id = 'h-fwd'").first<{ offer_amount: number }>();
-      await executeStatements("DELETE FROM transfer_offer_events; DELETE FROM transfer_offers; DELETE FROM ai_coach_decisions");
-      return o?.offer_amount ?? 0;
-    };
-    const hype = (until: string) => db.prepare("UPDATE players SET life_context = json_set(COALESCE(life_context, '{}'), '$.rumourHype', json(?)) WHERE id = 'h-fwd'")
-      .bind(JSON.stringify({ until, pct: 0.15 })).run();
-    const day = (offsetDays: number) => new Date(at.getTime() + offsetDays * 86_400_000).toISOString().slice(0, 10);
-
-    const plain = await offered();
-    expect(plain).toBeGreaterThan(0);
-    await hype(day(10));
-    expect(await offered()).toBeGreaterThan(plain);
-    await hype(day(-2));
-    expect(await offered()).toBe(plain);
-  });
-
   it("na protinávrh člověka AI kupující přistoupí do stropu, jinak jednání ukončí", async () => {
     await db.prepare("UPDATE players SET team_id = 'third' WHERE id IN ('ai-fwd1', 'ai-fwd2', 'ai-fwd3', 'ai-fwd4')").run();
     const mv = marketValue(58, 25, "FWD");
