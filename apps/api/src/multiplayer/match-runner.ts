@@ -357,8 +357,15 @@ export async function runScheduledMatches(
             // u kapitána. Pravidlo, jehož hráč dnes nenastoupil, se zahodí tady;
             // engine by ho stejně nedokázal provést.
             const { toEnginePlan } = await import("../engine/plan-mapping");
-            const homePlan = toEnginePlan(homeBuild.idMap, homeLineupRow?.match_plan);
-            const awayPlan = toEnginePlan(awayBuild.idMap, awayLineupRow?.match_plan);
+            // Trenér s distancem na lavičce (kritika sudího) dnes pokyny nedává, střídá automat.
+            const { hasBenchBan } = await import("../social/referee-criticism");
+            const banRow = await db.prepare("SELECT game_week, season_number FROM season_calendar WHERE id = ?").bind(calendarId)
+                .first<{ game_week: number; season_number: number }>()
+                .catch((e) => { logger.warn({module: "match-runner"}, "kolo pro distanc na lavičce", e); return null; });
+            const homeBanned = banRow ? await hasBenchBan(db, homeTeamId, banRow.game_week, banRow.season_number) : false;
+            const awayBanned = banRow ? await hasBenchBan(db, awayTeamId, banRow.game_week, banRow.season_number) : false;
+            const homePlan = homeBanned ? undefined : toEnginePlan(homeBuild.idMap, homeLineupRow?.match_plan);
+            const awayPlan = awayBanned ? undefined : toEnginePlan(awayBuild.idMap, awayLineupRow?.match_plan);
 
             const homeSetup: TeamSetup = {
                 teamId: 1,
