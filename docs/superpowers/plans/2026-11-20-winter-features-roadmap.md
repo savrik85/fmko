@@ -300,3 +300,29 @@ Na okresní akci (pouť) zápas legend klubu proti bývalému klubu přes přát
 | 2 | F4 anketa, F5 legendy, F6 ročenka, F7 nanečisto | nominace 4. 1., nanečisto ~20. 1., konec 28. 1. |
 | 3 | F8–F13 | únor |
 | 4 | F14–F18 + staří páni | březen |
+
+## Stav 2026-11-21 (lokálně na `testing`, nepushnuto)
+
+| Funkce | Commit | Migrace |
+|---|---|---|
+| F1 brigáda | cd71070d | 0319 |
+| F2 sálovka | 8b002db5, 414ec168 | 0318 |
+| F3 svatba | 76257d5b | 0320 |
+| F4 Fotbalista okresu | 8d55ecdd | 0321 |
+| F5 legendy | 1101b823 | 0322 |
+| F6 ročenka | 17410f54, a642d995 | – |
+| F7 nanečisto | čeká na ~20. 1. | – |
+| F8 práce u sponzora | 8b4a1406 | 0323 |
+| F9 zavolat zpátky | 7214b0f3 | 0324 |
+| F10 drby | 92efbc4d | 0325 |
+| F11 tipovačka | cdedb9e1 | 0326 |
+| F12 rodiče U21 | 7fdebb48 | 0327 |
+| F13 dražba | d67258e0 | 0328 |
+| F14 kritika sudího na Sockách | 4c6f9023, 1b32d786, 4111323b | 0330 |
+| F15 domácí pomezní | 487be769 | 0329 |
+| F16 obálka pro sudího | 993dcb7a | 0331 |
+| F17 výběr okresu | 732c12b3 | 0333 |
+| F18 zastupitelstvo | 954f4c38, 85a60fd4 | 0332 |
+| staří páni | 0005076d | – |
+
+Při nasazení pustit všechny migrace 0318–0333 (na `prales-db-test` jsou zatím jen 0318, 0326, 0328).
