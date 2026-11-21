@@ -246,6 +246,14 @@ export default {
       } catch (e: any) {
         log("error", "běh sálovky selhal", e);
       }
+      // Anketa Fotbalista okresu: odpovědi redaktora, nominace a uzávěrka.
+      try {
+        const { tickDistrictPolls } = await import("./polls/district-poll");
+        const r = await tickDistrictPolls(env);
+        if (r.opened || r.closed || r.replies) log("info", `anketa okresu: založeno ${r.opened}, uzavřeno ${r.closed}, odpovědí ${r.replies}`);
+      } catch (e: any) {
+        log("error", "běh ankety okresu selhal", e);
+      }
       // Průvodce prvním týdnem: kapitán pošle další úkol, nebo starosta odměnu.
       try {
         const { advanceAllFirstWeekGuides } = await import("./onboarding/first-week");
