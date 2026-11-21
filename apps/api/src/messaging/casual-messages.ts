@@ -71,6 +71,10 @@ export async function runPhoneHourly(
   const { publishWeddingArticles } = await import("../weddings/wedding-db");
   await publishWeddingArticles(db, env, now)
     .catch((e) => logger.warn({ module: M }, "články o svatbách", e));
+  // Legendy (bývalí hráči v okrese): role, rozloučení ve Zpravodaji a jejich SMS trenérovi.
+  const { tickLegends } = await import("../season/legends-db");
+  await tickLegends(db, env, now)
+    .catch((e) => logger.warn({ module: M }, "hodinový běh legend", e));
   // Okresní akce se vyhodnotí v noci: v 19 h připomenout těm, kdo neodpověděli.
   if (pragueClock(now).hour === 19) {
     const { remindUnansweredDistrictEvents } = await import("../events/district-event-db");

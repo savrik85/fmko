@@ -99,6 +99,8 @@ export async function decideSeasonDuels(db: D1Database, teamId: string, leaving:
     if (!toRemove) return { ok: false, status: 400, error: DUELS_ONE_PER_PAIR_ERROR };
 
     const removed: Array<Record<string, unknown>> = [];
+    // Legenda klubu (30+ nebo dvě sezóny v klubu) dostane druhý život v okrese (legends-db.ts).
+    const { loadLegendSnapshot, recordLegendCandidate } = await import("./legends-db");
     for (const id of toRemove) {
       const info = byId.get(id)!;
       // Souboje sestavené před opravou výběru mohly obsahovat hostujícího hráče.
@@ -108,8 +110,17 @@ export async function decideSeasonDuels(db: D1Database, teamId: string, leaving:
         logger.warn({ module: M, teamId, playerId: id }, "souboj s hostujícím hráčem, neodchází");
         continue;
       }
+      // Snímek před odchodem: removePlayer řádek smaže a smlouvu (délku působení) ukončí.
+      const snapshot = await loadLegendSnapshot(db, id, teamId)
+        .catch((e) => { logger.warn({ module: M, teamId, playerId: id }, "snímek hráče pro legendu", e); return null; });
       const r = await removePlayer(db, id, "quit", { toFreeAgent: false, teamId });
-      if (r.ok) removed.push({ name: info.name, age: info.age, position: info.position, overallRating: info.overallRating, kind: "decision", reason: "Trenér se rozhodl dát mu sbohem." });
+      if (r.ok) {
+        removed.push({ name: info.name, age: info.age, position: info.position, overallRating: info.overallRating, kind: "decision", reason: "Trenér se rozhodl dát mu sbohem." });
+        if (snapshot) {
+          await recordLegendCandidate(db, snapshot, row.season_number)
+            .catch((e) => logger.warn({ module: M, teamId, playerId: id }, "zápis legendy po odchodu", e));
+        }
+      }
     }
     data.decision = null;
     data.departures = removed;

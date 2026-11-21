@@ -424,7 +424,9 @@ export default function NewsPage() {
     (a) => !["match", "round_results", "round_summary", "standing", "ai_report", "matchday_preview", "promotion", "transfer", "celebrity_arrival", "celebrity_signing", "interview", "player_interview", "post_match_interview", "ultras_report", "governance_minutes", "club_wedding"].includes(a.type)
       && a.id !== leadStory?.id && a.id !== secondaryStory?.id && a.id !== districtEventStory?.id && a.id !== cupStory?.id,
   );
-  const miscArticles = otherArticles;
+  // Loučení s legendou (bývalý hráč dostal v okrese druhý život) má vlastní rubriku, ne drobné zprávy.
+  const legendStories = articles.filter((a) => a.type === "legend_farewell" && a.id !== leadStory?.id && a.id !== secondaryStory?.id).slice(0, 3);
+  const miscArticles = otherArticles.filter((a) => a.type !== "legend_farewell");
 
   const today = new Date().toLocaleDateString("cs", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
   const selectedLeague = selectedLeagueId && selectedLeagueId !== DISTRICT ? allLeagues.find(l => l.id === selectedLeagueId) : null;
@@ -747,6 +749,27 @@ export default function NewsPage() {
             .filter((r) => r.node)
             .sort((a, b) => new Date(b.datum ?? 0).getTime() - new Date(a.datum ?? 0).getTime())
             .map((r) => <Fragment key={r.klic}>{r.node}</Fragment>)}
+
+          {/* ═══ Loučení s legendou ═══ */}
+          {legendStories.length > 0 && (
+            <section className="border-t border-ink/20 pt-6">
+              <Kicker>{rubrikaProTyp("legend_farewell")}</Kicker>
+              <div className="divide-y divide-ink/10">
+                {legendStories.map((a) => (
+                  <article key={a.id} id={`news-${a.id}`} className="py-4 first:pt-0">
+                    <h3 className="np-titulek text-xl sm:text-2xl text-center mb-2"><LeagueTag a={a} />{a.headline}</h3>
+                    <div className="np-text np-sloupce np-sloupce-2 text-[15px] mt-2">
+                      <NovinoveOdstavce body={a.body} />
+                    </div>
+                    <div className="flex items-center justify-center gap-3 mt-3">
+                      <span className="text-micro text-muted italic">{timeAgo(a.date)}</span>
+                      <ShareButton articleId={a.id} />
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </section>
+          )}
 
           {/* ═══ Přestupy — krátké zprávy ve sloupcích ═══ */}
           {transferArticles.length > 0 && (
@@ -1072,6 +1095,7 @@ function rubrikaProTyp(type: string): string {
     case "round_summary": return "🏆 Hráč a trenér kola";
     case "season_opener": return "🎺 Otevírák sezóny";
     case "season_wrap": return "📜 Ohlédnutí za sezónou";
+    case "legend_farewell": return "🎖️ Loučení s legendou";
     case "league_movement": return "Postupy a sestupy";
     case "ai_report": return "Komentář kola";
     case "match": return "Zápasová zpráva";
