@@ -598,7 +598,7 @@ bettingRouter.post("/teams/:teamId/integrity/audits/:targetTeamId", async (c) =>
     .catch((e) => { logger.warn({ module: M }, "herní datum revize", e); return null; }))?.game_date
     ?? new Date().toISOString();
 
-  const { findAuditTarget, loadClubAudit, recordAudit, AUDIT_WINDOW_DAYS } = await import("../competition/club-audit");
+  const { findAuditTarget, loadClubAudit, recordAudit, windowStart, AUDIT_WINDOW_DAYS } = await import("../competition/club-audit");
   const target = await findAuditTarget(c.env.DB, kde.leagueId, targetTeamId);
   if (!target) return c.json({ error: "Klub v téhle soutěži nehraje." }, 404);
 
@@ -616,6 +616,14 @@ bettingRouter.post("/teams/:teamId/integrity/audits/:targetTeamId", async (c) =>
       `Dobrý den, v rámci dohledu nad soutěží jsem si vyžádal k revizi účetnictví vašeho klubu za posledních ${AUDIT_WINDOW_DAYS} dní. Není to obvinění, kontrolu může dostat kterýkoli klub.`)
       .catch((e) => logger.warn({ module: M }, "SMS o revizi účetnictví", e));
   }
+
+  // Obálka pro sudího v okně revize = skutek úplatek (referees/envelope-db.ts). Před načtením
+  // účetnictví, ať komisař vidí i uloženou pokutu. Jedna pokuta na obálku i při opakované revizi.
+  const { sanctionEnvelopePayments } = await import("../referees/envelope-db");
+  await sanctionEnvelopePayments(c.env.DB, {
+    leagueId: kde.leagueId, seasonNumber: kde.seasonNumber, targetTeamId, auditorTeamId: teamId, gameDate,
+    since: windowStart(gameDate),
+  }).catch((e) => logger.warn({ module: M }, "pokuta za obálku pro sudího po revizi", e));
 
   const audit = await loadClubAudit(c.env.DB, {
     leagueId: kde.leagueId, seasonNumber: kde.seasonNumber, targetTeamId, gameDate,

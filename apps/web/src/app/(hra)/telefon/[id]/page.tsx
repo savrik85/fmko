@@ -161,7 +161,7 @@ function isGroupChatId(id: string): boolean {
   return id === "global" || id.startsWith("league:");
 }
 
-/** Hotová odpověď na SMS od majitele firmy, na pozvánku na okresní akci, na sálovku nebo na drb od hospodského (`messages.metadata.options`). */
+/** Hotová odpověď na SMS od majitele firmy, na pozvánku na okresní akci, na sálovku, na drb od hospodského nebo sudímu s obálkou (`messages.metadata.options`). */
 interface OwnerOption {
   id: string;
   label: string;
@@ -170,7 +170,7 @@ interface OwnerOption {
 
 function ownerOptionsOf(msg: Message | undefined): OwnerOption[] {
   const meta = msg?.metadata;
-  if (!meta || (meta.type !== "sponsor_owner" && meta.type !== "district_event" && meta.type !== "hall_cup" && meta.type !== "pub_rumour") || !Array.isArray(meta.options)) return [];
+  if (!meta || (meta.type !== "sponsor_owner" && meta.type !== "district_event" && meta.type !== "hall_cup" && meta.type !== "pub_rumour" && meta.type !== "referee_envelope") || !Array.isArray(meta.options)) return [];
   return (meta.options as unknown[]).filter((o): o is OwnerOption => {
     const x = o as Partial<OwnerOption> | null;
     return !!x && typeof x.id === "string" && typeof x.label === "string" && typeof x.text === "string";
@@ -345,7 +345,10 @@ export default function ConversationPage() {
   // Tlačítka jen dokud majitel čeká odpověď.
   // Hledá se zpětně: za čekající SMS mohla přibýt výměna o příspěvek (bez tlačítek).
   // Hala sálovky vlákno aktivní nemá (blokovalo by rozhovory hráčů), tlačítka ukáže i tak.
-  const nabidkaOdpovedi = !isGroup && (aiThreadActive || !!participantId?.startsWith("hc-")) && canReply && !cekaSeNaHrace
+  // Sudí s obálkou: tlačítka jen pod jeho poslední zprávou, po rozhodnutí je už další zpráva nenese.
+  const nabidkaOdpovedi = !isGroup && participantId?.startsWith("rf-") && canReply
+    ? ownerOptionsOf(messages[messages.length - 1])
+    : !isGroup && (aiThreadActive || !!participantId?.startsWith("hc-")) && canReply && !cekaSeNaHrace
     ? (messages.slice().reverse().map(ownerOptionsOf).find((o) => o.length > 0) ?? [])
     : [];
   // Dohody s hráčem, který chtěl odejít: jen když jdou (na tahu je trenér, dnes ještě žádná nebyla).

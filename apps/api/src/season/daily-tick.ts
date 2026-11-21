@@ -1455,6 +1455,15 @@ export async function executeDailyTick(
     } catch (e) { logger.error({ module: "referees" }, "delegace rozhodčích selhala", e); }
     });
 
+    // ── Obálka pro sudího: úplatný sudí delegovaný na derby si řekne o „cestovné“ ──
+    // Hned po delegaci, stejné okno. SMS pošle až hodinový Telefon přes den.
+    await steps.run("referee-envelopes", async () => {
+    try {
+      const { planRefereeEnvelopes } = await import("../referees/envelope-db");
+      await planRefereeEnvelopes(env.DB, tickGameDate);
+    } catch (e) { logger.warn({ module: "referee-envelopes" }, "obálky pro sudí selhaly", e); }
+    });
+
     // ── Předzápasové výroky AI trenérů ──
     // Stejné okno jako delegace: výrok musí vyjít před zápasem, jinak na něj
     // pozápasový rozhovor nemá jak navázat.

@@ -61,6 +61,12 @@ function czk(n: number): string {
   return `${Math.round(n).toLocaleString("cs-CZ")} Kč`;
 }
 
+/** „21. 10.“ z herního data. */
+function czDay(iso: string): string {
+  const d = new Date(iso);
+  return Number.isFinite(d.getTime()) ? `${d.getUTCDate()}. ${d.getUTCMonth() + 1}.` : iso.slice(0, 10);
+}
+
 /** Tržba bufetu na domácí zápas pro každý klub soutěže v okně revize. */
 export async function concessionPerMatch(
   db: D1Database, leagueId: string, since: string,
@@ -108,8 +114,16 @@ export function auditFlags(opts: {
   betting: Map<string, number>;
   transferFlags: Array<{ hrac: string; zKlubu: string | null; doKlubu: string; priznaky: string[] }>;
   prices?: ConcessionPrice[];
+  /** Zaplacené obálky pro sudího v okně revize (referees/envelope-db.ts `findEnvelopePayments`). */
+  envelopePayments?: Array<{ amount: number; paidOn: string | null; refereeName: string }>;
 }): string[] {
   const flags: string[] = [];
+
+  // Obálka pro sudího se v knize schová jako hotovost bez dokladu, revize ji ale spáruje se zápasem.
+  for (const p of opts.envelopePayments ?? []) {
+    const day = p.paidOn ? ` (${czDay(p.paidOn)})` : "";
+    flags.push(`Hotovost bez dokladu ${czk(Math.abs(p.amount))}${day} skončila u rozhodčího ${p.refereeName} před zápasem, který pískal. Disciplinární rada za úplatek uložila pokutu.`);
+  }
 
   // Tržba za zápas přemrštěnou cenu neprozradí (běžné kluby vyberou 140–190 tisíc
   // na zápas taky), cena ano.
@@ -173,7 +187,8 @@ export async function loadClubAudit(
 
   const since = windowStart(opts.gameDate);
 
-  const [categories, largest, items, concession, betting, transfers, prices] = await Promise.all([
+  const { findEnvelopePayments } = await import("../referees/envelope-db");
+  const [categories, largest, items, concession, betting, transfers, prices, envelopes] = await Promise.all([
     db.prepare(
       `SELECT type,
               SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END) AS income,
@@ -200,6 +215,7 @@ export async function loadClubAudit(
       "SELECT product_key, quality_level, sell_price FROM concession_products WHERE team_id = ? AND quality_level > 0"
     ).bind(team.id).all<{ product_key: string; quality_level: number; sell_price: number }>()
       .catch((e) => { logger.warn({ module: M }, `ceny bufetu ${team.id}`, e); return { results: [] }; }),
+    findEnvelopePayments(db, team.id, since),
   ]);
 
   const toItem = (r: { type: string; amount: number; description: string | null; game_date: string | null }): LedgerItem =>
@@ -220,6 +236,7 @@ export async function loadClubAudit(
     flags: auditFlags({
       teamId: team.id, teamName: team.name, concession, betting, transferFlags: transfers,
       prices: prices.results.map((p) => ({ productKey: p.product_key, qualityLevel: p.quality_level, sellPrice: p.sell_price })),
+      envelopePayments: envelopes,
     }),
   };
 }

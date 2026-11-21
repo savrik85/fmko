@@ -73,6 +73,14 @@ describe("příznaky revize účetnictví", () => {
   it("okno revize sahá 60 dní zpět", () => {
     expect(windowStart("2026-10-23T16:00:00.000Z")).toBe("2026-08-24");
   });
+
+  it("obálka pro sudího v účetnictví je nápadná: částka, den a sudí", () => {
+    const base = { teamId: "t1", teamName: "FK Test", concession: new Map(), betting: new Map(), transferFlags: NO_TRANSFERS };
+    expect(auditFlags({ ...base, envelopePayments: [] })).toEqual([]);
+    const flags = auditFlags({ ...base, envelopePayments: [{ amount: 5000, paidOn: "2026-10-21T16:00:00.000Z", refereeName: "Josef Novák" }] })
+      .map((f) => f.replace(/\u00a0/g, " "));
+    expect(flags).toEqual(["Hotovost bez dokladu 5 000 Kč (21. 10.) skončila u rozhodčího Josef Novák před zápasem, který pískal. Disciplinární rada za úplatek uložila pokutu."]);
+  });
 });
 
 describe("revize účetnictví přes routu", () => {

@@ -37,6 +37,11 @@ export interface RefereeProfile {
   homeRespect?: number;
   /** Totéž o hostech. */
   awayRespect?: number;
+  /**
+   * Obálka pro sudího (referees/envelope-db.ts `withRefereeEnvelope`): komu sudí za úplatek
+   * nahraje spornou situaci. Nese ji jen profil zápasu, za který se zaplatilo.
+   */
+  envelopeSide?: "home" | "away" | null;
 }
 
 export const NEUTRAL_REFEREE: RefereeProfile = {
@@ -401,6 +406,12 @@ const INCIDENT_TABLE: ReadonlyArray<{ kind: RefereeIncidentKind; weight: number;
   { kind: "sporny_primak", weight: 0.10, severity: "low" },
 ];
 
+/** O kolik zaplacený sudí spíš „chybuje“. Strop drží jednu spornou situaci jako možnost, ne jistotu. */
+const ENVELOPE_ERROR_BONUS = 0.35;
+const ENVELOPE_MAX_ERROR_CHANCE = 0.85;
+/** Podíl sporných situací zaplaceného sudího, které padnou ve prospěch plátce. */
+const ENVELOPE_PAYER_SHARE = 0.9;
+
 /** Šance, že sudí v zápase viditelně chybuje. Zelenáč 0,54 · neutrál 0,37 · veterán 0,13. */
 export function matchErrorChance(r: RefereeProfile): number {
   return 0.06 + 0.55 * Math.pow(1 - r.experience / 100, 0.85);
@@ -429,7 +440,11 @@ export function planRefereeError(rng: Rng, r: RefereeProfile, homeLinesmanTilt =
   const typeRoll = rng.random();
   const sideRoll = rng.random();
 
-  if (roll >= matchErrorChance(r)) return null;
+  // Zaplacený sudí si spornou chvíli „najde“ a nahraje plátci. Čerpá se pořád stejně,
+  // takže zápas bez obálky vyjde ze seedu přesně jako dřív.
+  const paid = r.envelopeSide ?? null;
+  const chance = paid ? Math.min(ENVELOPE_MAX_ERROR_CHANCE, matchErrorChance(r) + ENVELOPE_ERROR_BONUS) : matchErrorChance(r);
+  if (roll >= chance) return null;
 
   let acc = 0;
   let picked = INCIDENT_TABLE[INCIDENT_TABLE.length - 1];
@@ -442,9 +457,12 @@ export function planRefereeError(rng: Rng, r: RefereeProfile, homeLinesmanTilt =
   const sideThreshold = clamp(0.5 + (r.homeBias - 50) / 200, 0.15, 0.85);
   // Domácí pomezní zvedne praporek spíš proti hostům. Práh se mění jen s pomezním,
   // jinak zůstává přesně původní hodnota.
-  const favourHome = homeLinesmanTilt !== 0 && LINESMAN_INCIDENT_KINDS.has(picked.kind)
-    ? sideRoll < clamp(sideThreshold + homeLinesmanTilt, 0.05, 0.95)
-    : sideRoll < sideThreshold;
+  // Zaplacený sudí nahraje plátci bez ohledu na pomezního (obálka přebije praporek).
+  const favourHome = paid
+    ? sideRoll < (paid === "home" ? ENVELOPE_PAYER_SHARE : 1 - ENVELOPE_PAYER_SHARE)
+    : homeLinesmanTilt !== 0 && LINESMAN_INCIDENT_KINDS.has(picked.kind)
+      ? sideRoll < clamp(sideThreshold + homeLinesmanTilt, 0.05, 0.95)
+      : sideRoll < sideThreshold;
 
   return {
     minute: 3 + Math.floor(minuteRoll * 85),
