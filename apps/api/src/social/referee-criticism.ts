@@ -138,6 +138,15 @@ export async function applySocialRefereeEffects(
   if (stance.postoj === "neutral" || stance.sila <= 0) return null;
 
   const match = await lastReferee(db, input.authorTeamId);
+  // Zastat se sudího jde jednou za 7 dní u téhož sudího: jinak by si klub opakovanými
+  // pochvalami pod příspěvky nahnal jeho přízeň. Kritika strop nemá, škodí jen autorovi.
+  if (stance.postoj === "obhajoba" && match?.refereeId) {
+    const since = new Date(Date.now() - MATCH_WINDOW_DAYS * 86400_000).toISOString();
+    const praised = await db.prepare(
+      "SELECT 1 AS x FROM social_referee_effects WHERE team_id = ? AND referee_id = ? AND postoj = 'obhajoba' AND created_at >= ? LIMIT 1",
+    ).bind(input.authorTeamId, match.refereeId, since).first<{ x: number }>();
+    if (praised) return null;
+  }
   const repeated = stance.postoj === "kritika" && await criticizedRecently(db, input.authorTeamId, input.postKey);
   const lock = await db.prepare(
     `INSERT OR IGNORE INTO social_referee_effects (post_key, team_id, referee_id, postoj, sila)

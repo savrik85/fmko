@@ -109,5 +109,9 @@ describe("kritika sudího na Sockách v databázi", () => {
     await applySocialRefereeEffects(db, fixed("obhajoba", 2), { postKey: "post:e", authorTeamId: "t2", text: "Sudí to odpískal férově" });
     const rel = await db.prepare("SELECT sentiment FROM referee_team_relations WHERE referee_id = 'ref-1' AND team_id = 't2'").first<{ sentiment: number }>();
     expect(rel?.sentiment).toBe(effectsFor("obhajoba", 2, false).refereeRespect);
+    // Druhá pochvala téhož sudího do týdne už nic nepřidá.
+    expect(await applySocialRefereeEffects(db, fixed("obhajoba", 3), { postKey: "comment:f", authorTeamId: "t2", text: "Sudí byl výborný" })).toBeNull();
+    const again = await db.prepare("SELECT sentiment FROM referee_team_relations WHERE referee_id = 'ref-1' AND team_id = 't2'").first<{ sentiment: number }>();
+    expect(again?.sentiment).toBe(rel?.sentiment);
   });
 });
