@@ -73,9 +73,6 @@ export type TransactionType =
   // Vánoční sálovka (hall-cup/): startovné se strhne při losu i do mínusu (klub se přihlásil sám
   // a na účtu měl dost), výhra z banku je příjem.
   | "hall_cup_fee"
-  // Tipovačka v hospodě (pub/tip-game.ts): vklad je dobrovolný nákup, výhra z banku příjem.
-  | "pub_tip_stake"
-  | "pub_tip_win"
   // Dražba hráčů z opuštěných klubů (transfers/auctions.ts): peníze se ověří při příhozu
   // i při uzavření, strhne se pak i do mínusu (klub dražbu vyhrál).
   | "auction_purchase"
@@ -254,7 +251,7 @@ const PURCHASE_TYPES = new Set<TransactionType>([
   "pitch_repair", "pitch_upgrade", "promotional_campaign", "bus_subsidy",
   "concession_wholesale", "transfer_admin_fee", "loan_fee",
   "manager_social", "player_bonus", "staff_signing", "course_fee", "staff_task", "coach_course", "coach_exam_retake", "fan_relations",
-  "bet_stake", "bet_levy", "friendly_stake", "hall_cup_fee", "wedding_gift", "pub_tip_stake", "referee_envelope",
+  "bet_stake", "bet_levy", "friendly_stake", "hall_cup_fee", "wedding_gift", "referee_envelope",
 ]);
 
 /**
