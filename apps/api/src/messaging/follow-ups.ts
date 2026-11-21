@@ -25,6 +25,7 @@ import { INVITES, type InviteKind } from "./casual-topics";
 import { PHOTO_SCENES, generatePlayerPhoto, historyBody } from "./player-photo";
 import { loadChatMemory, offerStanceStmt } from "./player-memory";
 import { refundCoachSms } from "./phone-credit";
+import { loadOwnRecentLines } from "./repetition";
 import { playerInClub } from "./player-reach";
 import type { PlayerSnapshot } from "./ai-player-scenarios";
 
@@ -220,14 +221,18 @@ async function deliverOne(db: D1Database, env: FollowUpEnv, row: FollowUpRow, no
   const memory = await loadChatMemory(db, player, { teamId: row.team_id, convId: row.conversation_id });
   const team = await loadTeamContext(db, row.team_id, playerTeamId);
   const history = await loadHistory(db, row.conversation_id);
+  player.ownRecentLines = await loadOwnRecentLines(db, { playerId: player.id, convId: row.conversation_id });
 
   let instruction: string;
   let topicId: string | null = null;
   let photoSceneId: string | undefined;
   let effect: { relation: number; morale: number; description: string } | null = null;
   if (row.kind === "reply_later") {
+    // Dřív tu stálo „na začátku se krátce ozvi, že už můžeš“ a 93 odložených odpovědí začínalo
+    // „Už mám po šichtě / padla, trenére.“ (prod 9–11/2026). Úvod je teď na hráči.
     instruction = "Před pár hodinami jsi trenérovi napsal, že se ozveš, až budeš mít čas. Teď už máš klid. Odpověz mu pořádně "
-      + "na to, co ti psal (jeho poslední zprávy v historii), jako bys v rozhovoru pokračoval. Na začátku se nanejvýš krátce ozvi, že už můžeš.";
+      + "na to, co ti psal (jeho poslední zprávy v historii), jako bys v rozhovoru pokračoval. Klidně začni rovnou k věci. "
+      + "Jestli zmíníš, že máš konečně chvilku, řekni to po svém a jinak než dřív, ne hlášením, že máš po šichtě.";
   } else if (row.kind === "hangover") {
     const { getScenarioById } = await import("./ai-player-scenarios");
     instruction = getScenarioById("casual_hangover")?.description ?? "";

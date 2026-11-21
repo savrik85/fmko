@@ -594,6 +594,8 @@ export async function performUnrestAction(
     const { nactiZnalostiHrace } = await import("../incidents/znalosti-db");
     snapshot.znalostiIncidentu = await nactiZnalostiHrace(db, { teamId, playerId });
     snapshot.lastOwnMessageAt = await loadLastOwnMessageAt(db, convId, playerId);
+    const { loadOwnRecentLines } = await import("../messaging/repetition");
+    snapshot.ownRecentLines = await loadOwnRecentLines(db, { playerId, convId });
     playerReply = await generateUnrestReply(env, snapshot, { teamName: teamRow?.name ?? "", villageName: teamRow?.village_name ?? undefined }, {
       coachMessage,
       unrestReason: unrest.teamName ? `trenér odmítl nabídku od ${unrest.teamName}, o kterou jsi stál` : "trenér ti zatrhl přestup, o který jsi stál",

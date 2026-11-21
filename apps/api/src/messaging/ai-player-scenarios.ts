@@ -143,6 +143,11 @@ export interface PlayerSnapshot {
    * nedostal hned (výpadek modelu). Jen pro odložené zprávy (follow-ups.ts).
    */
   lateReply?: "busy" | "offline";
+  /**
+   * Co hráč trenérovi v téhle konverzaci naposledy napsal (repetition.ts `loadOwnRecentLines`,
+   * nejstarší první). Jde do promptu jako zakázané věty a hlídá se proti nim odpověď.
+   */
+  ownRecentLines?: string[];
 }
 
 export interface AiScenario {

@@ -15,7 +15,10 @@ vi.mock("../lib/ai-provider", () => ({
 
 import { BEZ_ZNALOSTI, HLAVICKA_ZNALOSTI, type RadekZnalosti } from "../incidents/znalosti";
 import { generateText } from "../lib/ai-provider";
-import { ZAKAZ_ZIVOTNICH_SITUACI, buildSystemPrompt, evaluateResolution, generateReply, popisZdravi } from "./ai-player-chat";
+import {
+  ZAKAZ_ZIVOTNICH_SITUACI, buildSystemPrompt, evaluateResolution, generateFollowUpMessage, generateInitialMessage, generateReply,
+  generateUnrestReply, popisZdravi,
+} from "./ai-player-chat";
 import { getScenarioById } from "./ai-player-scenarios";
 import { complainsAboutWaking } from "./chat-kontext";
 import type { PlayerSnapshot } from "./ai-player-scenarios";
@@ -324,5 +327,56 @@ describe("co hra z odpovědi pozná navíc", () => {
     expect(String(vi.mocked(generateText).mock.calls[0][1])).not.toContain("transfer_stance");
     expect(noOffer.transferStance).toBeUndefined();
     expect(noOffer.writeLater).toBe(false);
+  });
+});
+
+describe("hráč neopakuje sám sebe", () => {
+  // Prod 25. a 26. 9.: „No potěš koště… Teď si mě vychutná žena.“ hráč opsal ze své zprávy den předtím.
+  const own = ["Trenére, to jste mi to teda řekl. No potěš koště. Teď si mě vychutná žena."];
+
+  it("v promptu jsou věty, které trenérovi už napsal, a pravidlo proti ohraným větám", () => {
+    const p = buildSystemPrompt(hrac({ ownRecentLines: own }), tym, kdy(2, 18));
+    expect(p).toContain("CO UŽ JSI TRENÉROVI NAPSAL");
+    expect(p).toContain("„Trenére, to jste mi to teda řekl. No potěš koště. Teď si mě vychutná žena.“");
+    expect(p).toContain("„Už mám po šichtě“");
+    expect(buildSystemPrompt(hrac(), tym, kdy(2, 18))).not.toContain("CO UŽ JSI TRENÉROVI NAPSAL");
+  });
+
+  it("odpověď, která opakuje dřívější větu, se jednou přegeneruje s tou větou zakázanou", async () => {
+    vi.mocked(generateText).mockClear();
+    vi.mocked(generateText)
+      .mockResolvedValueOnce(JSON.stringify({ body: "No potěš koště. Teď si mě vychutná žena.", conversation_complete: false }))
+      .mockResolvedValueOnce(JSON.stringify({ body: "Tak to mě teda zabil, ale beru to.", conversation_complete: false }));
+    const r = await generateReply({}, hrac({ ownRecentLines: own }), [{ sender: "coach", body: "Můžeš si za to sám." }], getScenarioById("coach_initiated")!, tym, false);
+    expect(r.body).toBe("Tak to mě teda zabil, ale beru to.");
+    expect(vi.mocked(generateText)).toHaveBeenCalledTimes(2);
+    const retryPrompt = String(vi.mocked(generateText).mock.calls[1][1]);
+    expect(retryPrompt).toContain("POZOR: tohle jsi trenérovi už napsal");
+    expect(retryPrompt).toContain("„No potěš koště.“");
+    // Pokyn je před formátem odpovědi, ne za ním.
+    expect(retryPrompt.indexOf("POZOR:")).toBeLessThan(retryPrompt.indexOf("Vrať POUZE JSON"));
+  });
+
+  it("odložená odpověď bez ohraného „Už mám po šichtě“: když ho model napíše i podruhé, věta se vyškrtne", async () => {
+    vi.mocked(generateText).mockClear();
+    vi.mocked(generateText)
+      .mockResolvedValueOnce(JSON.stringify({ body: "Už mám po šichtě, trenére. Ta noha je v cajku, v sobotu můžu." }))
+      .mockResolvedValueOnce(JSON.stringify({ body: "Tak už mám padla, trenére. Ta noha je v cajku, v sobotu můžu." }));
+    const r = await generateFollowUpMessage({}, hrac(), tym, [{ sender: "coach", body: "Jak noha?" }], "Odpověz trenérovi.");
+    expect(vi.mocked(generateText)).toHaveBeenCalledTimes(2);
+    expect(r.body).toBe("Ta noha je v cajku, v sobotu můžu.");
+  });
+
+  it("úvodní zpráva i truc hlídají opakování stejně", async () => {
+    vi.mocked(generateText).mockClear();
+    vi.mocked(generateText)
+      .mockResolvedValueOnce("No potěš koště. Zase lavička.")
+      .mockResolvedValueOnce("Zase lavička, trenére? Fakt nechápu proč.");
+    expect(await generateInitialMessage({}, hrac({ ownRecentLines: own }), getScenarioById("coach_initiated")!, tym, kdy(2, 18)))
+      .toBe("Zase lavička, trenére? Fakt nechápu proč.");
+    vi.mocked(generateText).mockClear();
+    vi.mocked(generateText).mockResolvedValueOnce("Teď si mě vychutná žena. Ale beru to.").mockResolvedValueOnce("Dobře, beru to, uvidíme.");
+    expect(await generateUnrestReply({}, hrac({ ownRecentLines: own }), tym, { coachMessage: "Promiň.", unrestReason: "trenér odmítl nabídku", outcome: "partial" }))
+      .toBe("Dobře, beru to, uvidíme.");
   });
 });

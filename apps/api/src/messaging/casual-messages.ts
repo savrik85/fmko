@@ -23,6 +23,7 @@ import {
 } from "./casual-topics";
 import { coachAcceptsInvite, generateInitialMessage, GeminiUnavailableError, playerTimeContext } from "./ai-player-chat";
 import { PHOTO_SCENES, generatePlayerPhoto, workPhotoScene } from "./player-photo";
+import { loadOwnRecentLines } from "./repetition";
 import { pickAmbience, recordVoiceMessage, voicePreviewText } from "./voice-message";
 import { deliverDueFollowUps, nextFreeMoment, postPlayerMessageStmts, scheduleFollowUp, type FollowUpEnv } from "./follow-ups";
 import type { PlayerSnapshot } from "./ai-player-scenarios";
@@ -231,6 +232,7 @@ async function spawnCasualForTeam(
   // („ať to první místo spláchnem", náhled 2026-10-24) a zprávy jen tak zněly všechny stejně.
   const topicTeam = { ...team, leaguePosition: undefined, lastMatchResult: topic.id === "casual_how_are_you" ? team.lastMatchResult : undefined };
 
+  player.ownRecentLines = await loadOwnRecentLines(db, { playerId: player.id, teamId });
   let text: string;
   try {
     text = await generateInitialMessage(env, player, topic, topicTeam, now, photo ? { alt: photo.alt } : undefined);
