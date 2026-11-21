@@ -25,7 +25,7 @@ import type { CoachMode } from "../ai-coach/mode";
 import {
   addDays, buildAiSpeechPrompt, buildArticlePrompt, buildJudgePrompt, checkCouncilArticle, COUNCIL_NEWS_DESK, COUNCIL_NEWS_TYPE,
   COUNCIL_PREFIX, COUNCIL_REPLIES, councilParticipantId, councilPot, councilReplyDueAt, councilSchedule, councilTaste, czk,
-  DAY_END, DAY_START, decisionReady, fallbackAiSpeech, pragueParts, fallbackCouncilArticle, favorDelta, invitationText, parseAiSpeech, parseJudgeAnswer,
+  DAY_END, DAY_START, decisionReady, headlineNamesVillage, fallbackAiSpeech, pragueParts, fallbackCouncilArticle, favorDelta, invitationText, parseAiSpeech, parseJudgeAnswer,
   reminderDue, reminderText, redakceSmsText, ruleSpeechVerdict, sessionInProgress, splitCouncilPot, weekdayAdjective,
   type ArticleClub, type ArticleFacts, type PotApplicant, type SpeechVerdict,
 } from "./council";
@@ -517,7 +517,11 @@ async function writeArticle(db: D1Database, ai: AiContext | null, s: SessionRow,
   if (stored.headline && stored.body) return stored;
   const fromModel = checkCouncilArticle(await askModel(ai, buildArticlePrompt(facts), 900, 0.7), facts);
   if (!fromModel && modelOn(ai)) logger.warn({ module: M }, `článek ze zasedání ${s.id} od modelu neprošel, beru připravený`);
-  const article = fromModel ?? fallbackCouncilArticle(facts, seedFromString(s.id));
+  const fallback = fallbackCouncilArticle(facts, seedFromString(s.id));
+  // Text od modelu ano, ale titulek bez obce by na listu splynul s ostatními obcemi: pak připravený.
+  const article = fromModel
+    ? { headline: headlineNamesVillage(fromModel.headline, facts.village) ? fromModel.headline : fallback.headline, body: fromModel.body }
+    : fallback;
   const result: StoredResult = { ...stored, headline: article.headline, body: article.body, articleBy: fromModel ? "model" : "rule" };
   await db.prepare("UPDATE village_council_sessions SET result = ? WHERE id = ?").bind(JSON.stringify(result), s.id).run();
   return result;

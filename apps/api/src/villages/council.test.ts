@@ -5,7 +5,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildJudgePrompt, checkCouncilArticle, clubMinimum, councilPot, councilReplyDueAt, councilSchedule, councilTaste,
-  decisionReady, fallbackAiSpeech, fallbackCouncilArticle, favorDelta, invitationText, parseAiSpeech, parseJudgeAnswer,
+  decisionReady, fallbackAiSpeech, fallbackCouncilArticle, favorDelta, headlineNamesVillage, invitationText, parseAiSpeech, parseJudgeAnswer,
   pragueParts, ruleSpeechVerdict, splitCouncilPot, type ArticleFacts, type PotApplicant,
 } from "./council";
 
@@ -228,6 +228,14 @@ describe("článek ze zastupitelstva", () => {
       { teamName: "Jiskra Husinec", coachName: "Petr Vrba", amount: 4_500, spoke: true, reaction: "Zastupitelé pokývali.", speechExcerpt: "Míče pro žáky." },
     ],
   };
+
+  it("titulek od modelu musí zmínit obec, stačí skloňovaný tvar", () => {
+    expect(headlineNamesVillage("Husinec: obecní kasa se dělila mezi spolky", "Husinec")).toBe(true);
+    expect(headlineNamesVillage("V Kunraticích se dělily obecní peníze", "Kunratice")).toBe(true);
+    expect(headlineNamesVillage("Na Břevnově rozdělili peníze spolkům", "Břevnov")).toBe(true);
+    expect(headlineNamesVillage("Dotace pro spolky", "Kunratice")).toBe(false);
+    expect(headlineNamesVillage("Zastupitelstvo rozhodlo o dotacích pro spolky", "Michle")).toBe(false);
+  });
 
   it("připravený článek uvede všechny částky a titulek je bez čísel", () => {
     const a = fallbackCouncilArticle(facts, 3);

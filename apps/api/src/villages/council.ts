@@ -516,9 +516,24 @@ export function buildArticlePrompt(f: ArticleFacts): string {
     `- Pro spolky bylo v kase ${czk(f.pot)}.`,
     `- Hasiči dostali ${czk(f.firefighters)}, myslivci ${czk(f.hunters)}.`,
     ...clubs,
-    "Pravidla: česky, bez dlouhých pomlček, částky piš přesně tak, jak jsou uvedené, žádná jiná čísla, titulek bez čísel.",
+    `Pravidla: česky, bez dlouhých pomlček, částky piš přesně tak, jak jsou uvedené, žádná jiná čísla, titulek bez čísel a s názvem obce (${f.village}).`,
     "Vrať POUZE JSON: {\"headline\": \"...\", \"body\": \"...\"} (odstavce v body odděl prázdným řádkem).",
   ].join("\n");
+}
+
+/** Malá písmena bez diakritiky. */
+function fold(text: string): string {
+  return text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
+/**
+ * Titulek říká, o kterou obec jde (na listu Zpravodaje jich bývá víc). Stačí kmen slova
+ * z názvu, ať projde i skloňovaný tvar („v Kunraticích“, „Břevnově“).
+ */
+export function headlineNamesVillage(headline: string, village: string): boolean {
+  const h = fold(headline);
+  const stems = fold(village).split(/[^a-z]+/).filter((w) => w.length >= 4).map((w) => w.slice(0, Math.max(4, w.length - 2)));
+  return stems.length === 0 || stems.some((s) => h.includes(s));
 }
 
 /** Čísla v textu (tisíce oddělené mezerou nebo tečkou). */

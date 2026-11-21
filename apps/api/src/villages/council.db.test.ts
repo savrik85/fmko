@@ -412,7 +412,7 @@ describe("rozdělení s modelem", () => {
       if (prompt.includes("Napiš krátký proslov")) return { speech: "Pane starosto, opravíme kabiny a uděláme den otevřených dveří pro děti z obce." };
       if (prompt.includes("Jsi redaktor")) {
         const facts = prompt.split("\n").filter((l) => l.startsWith("- ")).map((l) => l.slice(2)).join(" ");
-        return { headline: "Fotbal na zastupitelstvu uspěl", body: `Ze zasedání. ${facts}` };
+        return { headline: "Fotbal na zastupitelstvu v Husinci uspěl", body: `Ze zasedání. ${facts}` };
       }
       return null;
     });
@@ -427,6 +427,6 @@ describe("rozdělení s modelem", () => {
     expect((await grants(HUMAN))[0].amount).toBeGreaterThan((await grants(AI_CLUB))[0].amount);
 
     const news = await db.prepare("SELECT headline FROM news WHERE type = 'village_council'").first<{ headline: string }>();
-    expect(news?.headline).toBe("Fotbal na zastupitelstvu uspěl");
+    expect(news?.headline).toBe("Fotbal na zastupitelstvu v Husinci uspěl");
   }, 60_000);
 });
