@@ -30,7 +30,7 @@ import {
   evaluateResolution,
   GeminiUnavailableError,
   playerTimeContext,
-  PROMISES_LATER_RE,
+  promisesLater,
   type ChatEnv,
   type ReplyResult,
   type ThreadMessage,
@@ -1774,7 +1774,9 @@ export async function afterPlayerReply(
     await offerStanceStmt(db, r.player.id, r.reply.transferStance, r.offerIds).run()
       .catch((e) => logger.warn({ module: "ai-player-spawn", teamId: r.teamId }, "zápis postoje k nabídce", e));
   }
-  if (r.reply.writeLater) {
+  // „Poptám se a zítra dám vědět“: odpověď druhý den pošle úkol pátrání (deliverInquiry),
+  // druhá odložená zpráva za pár hodin by jen opakovala, že nic neví.
+  if (r.reply.writeLater && !(await inquiryJustRequested(db, r.convId, r.at))) {
     const { nextFreeMoment, scheduleFollowUp } = await import("./follow-ups");
     // `replace`: kdo „ozvu se pak" napsal podruhé, se ozve po té druhé (kotva se posune).
     await scheduleFollowUp(db, {
@@ -1783,6 +1785,16 @@ export async function afterPlayerReply(
       payload: { anchorAt: r.at }, replace: true,
     });
   }
+}
+
+/** Trenér hráče v poslední hodině požádal, ať se poptá (coach-commitments.ts `recordInquiryTask`)? */
+async function inquiryJustRequested(db: D1Database, convId: string, at: string): Promise<boolean> {
+  const row = await db.prepare(
+    `SELECT 1 AS x FROM coach_commitments WHERE conversation_id = ? AND kind = 'task_inquiry' AND status = 'active'
+        AND julianday(made_at) > julianday(?) - 1.0 / 24 LIMIT 1`,
+  ).bind(convId, at).first<{ x: number }>()
+    .catch((e) => { logger.warn({ module: "ai-player-spawn" }, `úkol pátrání v konverzaci ${convId}`, e); return null; });
+  return !!row;
 }
 
 /**
@@ -1828,7 +1840,7 @@ export async function loadRecentlyPostponed(db: D1Database, convId: string): Pro
       AND julianday(sent_at) > julianday('now', '-1 day') ORDER BY julianday(sent_at) DESC LIMIT 6`,
   ).bind(convId).all<{ body: string }>()
     .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "odložené odpovědi hráče", e); return { results: [] as Array<{ body: string }> }; });
-  return rows.results.some((r) => PROMISES_LATER_RE.test(r.body));
+  return rows.results.some((r) => promisesLater(r.body));
 }
 
 export async function loadLastOwnMessageAt(

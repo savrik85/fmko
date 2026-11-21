@@ -424,14 +424,49 @@ function parseReplyFlags(
   const asked = (player.pendingOffers?.length ?? 0) > 0;
   return {
     // Model pole občas vynechá, i když napíše „ozvu se pak". Text je pojistka.
-    writeLater: parsed.write_later === true || PROMISES_LATER_RE.test(body),
+    writeLater: parsed.write_later === true || promisesLater(body),
     transferStance: asked && (parsed.transfer_stance === "stay" || parsed.transfer_stance === "leave") ? parsed.transfer_stance : undefined,
     acceptsInvite: player.pendingInvite && typeof parsed.accepts_invite === "boolean" ? parsed.accepts_invite : undefined,
   };
 }
 
-/** „Ozvu se pak", „napíšu potom", slovensky „ozvem sa", lámaně „ja ozvat potom". */
-export const PROMISES_LATER_RE = /\b(ozvu se|ozvem sa|ozvat se? potom|napíšu (ti |vám )?(pak|potom|později|večer)|zavolám (ti |vám )?(pak|potom|později)|ozvu (se )?(pak|potom|později|večer))/i;
+/** Kdy se ozve (text bez diakritiky): „pak“, „večer“, „k večeru“, „po šichtě“, „až budu mít klid“… */
+const LATER = String.raw`(?:pak|potom|pozdeji|pozdejc|vecer|k vecer\w*|odpoledne|rano|zitra|zejtra|hned|brzo|jindy|pred srazem|po (?:sichte|smene|praci|obede|zapase|treninku)|az|jak)\b`;
+/** Konec slibu: tečka, čárka, emoji nebo konec textu, ne další slovo („cinknu Tomášovi“). */
+const END = String.raw`(?=\s*(?:$|[^\p{L}\s]))`;
+/** Osobně, ne SMS: „proberem to večer u piva / na tréninku“. */
+const IN_PERSON = String.raw`(?![^.!?]*\b(?:u piva|u pivka|na treninku|v kabine|v satne|osobne|na hristi|v hospode)\b)`;
+
+/**
+ * Slib, že se hráč trenérovi ozve později (text bez diakritiky, malými písmeny). Dřív jen
+ * „ozvu se“, „napíšu pak“, „zavolám pak“; „Pak se ozvu“, „cinknu odpoledne“, „brnknu ti večer“,
+ * „Zavolám ti, až budu mít klid“ nebo „Dám vědět, až se uvolním“ hra nepoznala a hráč se
+ * neozval nikdy (od 18. 11. 12 z 23 slibů bez odložené zprávy).
+ */
+export const PROMISES_LATER_RE = new RegExp([
+  String.raw`\bozvu se\b`, String.raw`\bse (?:ti |vam )?ozvu\b`, String.raw`\bozvem (?:se|sa)\b`, String.raw`\bozvu ${LATER}`,
+  String.raw`\bozvat(?: se)?,? (?:${LATER}|po\b)`,
+  String.raw`\bnapisu(?: ti| vam)?,? (?:vic |neco )?${LATER}`, String.raw`\b(?:pak|potom|pozdeji|vecer|odpoledne|zitra|tak) (?:ti |vam )?napisu\b`,
+  String.raw`\bzavolam(?: ti| vam)?,? ${LATER}`, String.raw`\b(?:pak|potom|pozdeji|vecer|odpoledne|zitra|tak) (?:ti |vam )?zavolam\b`,
+  String.raw`\b(?:cinknu|brnknu|prozvonim)(?: ti| vam)?(?: k tomu)?(?:${END}|,? ${LATER}|,? z\b)`,
+  String.raw`\b(?:pak|potom|pozdeji|vecer|odpoledne|zitra) (?:ti |vam )?(?:cinknu|brnknu)\b`,
+  String.raw`\bdam (?:ti |vam )?(?:vedet|echo)(?!,? (?:kdyby|kdybych|jestli|kdyz)\b)(?:${END}|,? (?:${LATER}|co\b|kdy\b|termin))`,
+  String.raw`\bproberem(?:e)?(?: to)?(?: v klidu| podrobne| detailne\w*)? (?:pak|potom|pozdeji|pozdejc|vecer|odpoledne|rano|jindy|po sichte|po smene)\b${IN_PERSON}`,
+  String.raw`\b(?:pak|potom|vecer|odpoledne|pozdeji) to proberem(?:e)?\b${IN_PERSON}`,
+].join("|"), "gu");
+
+/** Podmínka před slibem ve stejné větě („Kdyby se něco dělo, hned se ozvu“): to slib odpovědi není. */
+const CONDITION_BEFORE_RE = /\b(?:kdyby\w*|kdyz by|jestli by)\b/;
+
+/** Slibuje hráč v textu, že se trenérovi ozve později? Pozná i text bez diakritiky (opilý, cizinec). */
+export function promisesLater(text: string): boolean {
+  const plain = text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  for (const m of plain.matchAll(PROMISES_LATER_RE)) {
+    const sentenceStart = Math.max(...[".", "!", "?", "\n"].map((c) => plain.lastIndexOf(c, m.index - 1))) + 1;
+    if (!CONDITION_BEFORE_RE.test(plain.slice(sentenceStart, m.index))) return true;
+  }
+  return false;
+}
 
 /**
  * Rozhovor po zatrhnutém přestupu (2026-10-18): hráč zná svůj skutečný důvod odchodu

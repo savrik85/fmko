@@ -8,6 +8,8 @@ import { readFileSync } from "node:fs";
 import {
   breakReleaseCommitment, cancelCommitment, fulfilMoneyCommitment, recordInquiryTask, respondToCoachInvite, listCommitments, loadCommitmentMemory, recordCommitment, settleCoachCommitments,
 } from "./coach-commitments";
+import { afterPlayerReply } from "./ai-player-spawn";
+import type { PlayerSnapshot } from "./ai-player-scenarios";
 
 let miniflare: Miniflare;
 let db: D1Database;
@@ -374,5 +376,27 @@ describe("dvojklik", () => {
     expect(results.filter((r) => r.ok)).toHaveLength(1);
     expect((await db.prepare("SELECT budget FROM teams WHERE id = 'club'").first<{ budget: number }>())?.budget).toBe(4000);
     expect((await db.prepare("SELECT COUNT(*) AS n FROM transactions").first<{ n: number }>())?.n).toBe(1);
+  });
+});
+
+describe("„ozvu se pak“ po odpovědi hráče", () => {
+  const snapshot = { id: "p1", firstName: "Filip", lastName: "Pešek", age: 27, alcohol: 30, occupation: "Zedník" } as unknown as PlayerSnapshot;
+  const reply = (at: string) => afterPlayerReply(db, { teamId: "club", convId: "c1", player: snapshot, reply: { writeLater: true }, at, offerIds: [] });
+  const followUps = async () => (await db.prepare("SELECT payload FROM player_follow_ups WHERE kind = 'reply_later' AND done_at IS NULL").all<{ payload: string }>())
+    .results.map((r) => JSON.parse(r.payload) as { anchorAt: string });
+
+  it("druhý slib posune kotvu, hráč se ozve po něm (ne vůbec)", async () => {
+    await reply("2026-11-10T08:00:00.000Z");
+    await reply("2026-11-10T08:20:00.000Z");
+    expect(await followUps()).toEqual([{ anchorAt: "2026-11-10T08:20:00.000Z" }]);
+  });
+
+  it("„poptám se a zítra dám vědět“ po žádosti o pátrání: odpověď pošle úkol, ne druhá odložená zpráva", async () => {
+    await recordInquiryTask(db, { teamId: "club", convId: "c1", playerId: "p1", incidentId: "inc", coachMessage: "nepoptal by ses mi?", now: new Date("2026-11-10T08:00:00.000Z") });
+    await reply("2026-11-10T08:00:30.000Z");
+    expect(await followUps()).toEqual([]);
+    // Úkol starší než hodina odloženou odpověď na novou otázku nezruší.
+    await reply("2026-11-10T12:00:00.000Z");
+    expect(await followUps()).toEqual([{ anchorAt: "2026-11-10T12:00:00.000Z" }]);
   });
 });
