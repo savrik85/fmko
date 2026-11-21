@@ -60,6 +60,14 @@ describe("kdo volá a proč", () => {
   it("naštvaný hráč volá, ať je stav jakýkoli", () => {
     expect(kdo({ nastvanyHrac: "David Novák" })).toContain("hrac");
   });
+
+  it("hovor od hráče nese jeho id, ať jde zavolat zpátky", () => {
+    const h = kdoVolal({ ...KLID, nastvanyHrac: "David Novák", angryPlayerId: "p-77" }, 0.5).find((x) => x.volajici === "hrac")!;
+    expect(h.playerId).toBe("p-77");
+    // Ostatní volající hráče nemají.
+    const sponsorCall = kdoVolal({ ...KLID, serie: -4, nastvanyHrac: "David Novák", angryPlayerId: "p-77" }, 0.5).find((x) => x.volajici === "sponzor")!;
+    expect(sponsorCall.playerId).toBeUndefined();
+  });
 });
 
 describe("texty", () => {

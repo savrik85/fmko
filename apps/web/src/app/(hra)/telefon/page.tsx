@@ -313,7 +313,7 @@ export default function PhonePage() {
       </div>
 
       {hovoryOtevrene && teamId && (
-        <Hovory teamId={teamId} onZavrit={() => setHovoryOtevrene(false)} />
+        <Hovory teamId={teamId} onZavrit={() => setHovoryOtevrene(false)} onCreditChange={setCredit} />
       )}
 
       {tribunaOtevrena && teamId && (

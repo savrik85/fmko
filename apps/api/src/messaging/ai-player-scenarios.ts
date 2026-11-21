@@ -14,6 +14,7 @@ import type { CommitmentMemory } from "./coach-commitments";
 import type { TransferTalk } from "../transfers/unrest-reasons";
 import type { InterestLevel } from "../transfers/player-interest";
 import { CASUAL_TOPICS, type InviteKind } from "./casual-topics";
+import { CALL_BACK_SCENARIOS } from "./call-back-reasons";
 
 /** `casual` = zpráva „jen tak" (casual-topics.ts): bez stížnosti, neodpovězená nikoho neurazí. */
 export type ScenarioCategory = "complaint" | "positive" | "personal" | "transfer" | "casual";
@@ -555,5 +556,7 @@ export function pickScenarioForPlayer(
 }
 
 export function getScenarioById(id: string): AiScenario | null {
-  return AI_PLAYER_SCENARIOS.find((s) => s.id === id) ?? CASUAL_TOPICS.find((s) => s.id === id) ?? null;
+  return AI_PLAYER_SCENARIOS.find((s) => s.id === id) ?? CASUAL_TOPICS.find((s) => s.id === id)
+    // Vlákno po zpětném hovoru (call-back.ts): bez něj by se na první SMS trenéra zavřelo bez odpovědi.
+    ?? CALL_BACK_SCENARIOS.find((s) => s.id === id) ?? null;
 }

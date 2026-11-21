@@ -15,9 +15,13 @@
  * hovoru a modré „i" na detail. Kdyby to vypadalo jako další tabulka ve hře,
  * nefungovalo by to. Proto tu jsou i systémové barvy iOS natvrdo, ne tokeny
  * hry: tohle místo má působit jako cizí aplikace, ne jako Prales.
+ *
+ * Hráči, sponzorovi a vůdci kotle jde zavolat zpátky (F9, jednou denně za kredit).
+ * Hráč to nezvedne a pošle hlasovku, sponzor a vůdce napíšou do svého vlákna.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Spinner } from "@/components/ui";
 import { apiFetch } from "@/lib/api";
 
@@ -26,6 +30,8 @@ const MODRA = "#007AFF";
 const CERVENA = "#FF3B30";
 const SEDA = "#8E8E93";
 const LINKA = "#C6C6C8";
+/** Zelená volání z iOS, ztmavená, ať je bílý text na tlačítku čitelný. */
+const GREEN = "#248A3D";
 
 interface Hovor {
   id: string;
@@ -36,6 +42,31 @@ interface Hovor {
   pocet: number;
   gameDate: string;
   seen: boolean;
+  /** Hráč, sponzor a vůdce kotle. Starosta, komise a redakce ne. */
+  canCallBack?: boolean;
+  /** Už se mu volalo zpátky (a kam vedla odpověď). */
+  calledBack?: { outcome: string | null; conversationId: string | null } | null;
+}
+
+/** Zavolat zpátky (F9): cena a jestli je dnešní hovor ještě volný. */
+interface CallBackInfo {
+  price: number;
+  usedToday: boolean;
+}
+
+/** Kredit, jak ho vrací API (stejný tvar jako /phone-credit). */
+export interface CallBackCredit {
+  zbyva: number;
+  denni: number;
+  cenaSms: number;
+  zprav: number;
+  label: string;
+}
+
+interface CallBackOutcome {
+  ok: boolean;
+  text: string;
+  conversationId?: string;
 }
 
 /** „1 hovor", „3 hovory", „7 hovorů". Číslo se ke slovu nelepí samo. */
@@ -58,18 +89,56 @@ function kdy(gameDate: string): string {
   return `${d.getDate()}. ${d.getMonth() + 1}.`;
 }
 
-export function Hovory({ teamId, onZavrit }: { teamId: string; onZavrit: () => void }) {
+export function Hovory({ teamId, onZavrit, onCreditChange }: {
+  teamId: string;
+  onZavrit: () => void;
+  /** Zpětný hovor strhl kredit: telefon pod seznamem ukáže nový stav. */
+  onCreditChange?: (credit: CallBackCredit) => void;
+}) {
+  const router = useRouter();
   const [hovory, setHovory] = useState<Hovor[] | null>(null);
   const [rozbaleny, setRozbaleny] = useState<string | null>(null);
+  const [callBackInfo, setCallBackInfo] = useState<CallBackInfo | null>(null);
+  const [callingId, setCallingId] = useState<string | null>(null);
+  const [outcomes, setOutcomes] = useState<Record<string, CallBackOutcome>>({});
+  // Stav se při dvojkliku nestihne překreslit, zámek proto drží ref.
+  const callInFlight = useRef(false);
 
   useEffect(() => {
-    apiFetch<{ calls: Hovor[] }>(`/api/teams/${teamId}/missed-calls`)
-      .then((d) => setHovory(d.calls ?? []))
+    apiFetch<{ calls: Hovor[]; callBack?: CallBackInfo }>(`/api/teams/${teamId}/missed-calls`)
+      .then((d) => { setHovory(d.calls ?? []); setCallBackInfo(d.callBack ?? null); })
       .catch((e) => { console.error("zmeškané hovory:", e); setHovory([]); });
     // Otevřením seznamu hovory přestávají svítit.
     apiFetch(`/api/teams/${teamId}/missed-calls/seen`, { method: "POST" })
       .catch((e) => console.error("označení hovorů:", e));
   }, [teamId]);
+
+  async function callBack(call: Hovor) {
+    // Rozdělaný hovor nejde spustit podruhé (dvojklik). Server to hlídá taky.
+    if (callInFlight.current) return;
+    callInFlight.current = true;
+    setCallingId(call.id);
+    try {
+      const r = await apiFetch<{ text: string; conversationId: string; credit?: CallBackCredit }>(
+        `/api/teams/${teamId}/missed-calls/${encodeURIComponent(call.id)}/call-back`,
+        { method: "POST" },
+      );
+      setOutcomes((prev) => ({ ...prev, [call.id]: { ok: true, text: r.text, conversationId: r.conversationId } }));
+      setCallBackInfo((prev) => (prev ? { ...prev, usedToday: true } : prev));
+      if (r.credit) onCreditChange?.(r.credit);
+    } catch (e) {
+      console.error("zpětný hovor:", e);
+      const text = e instanceof Error && e.message ? e.message : "Hovor se nepovedl.";
+      setOutcomes((prev) => ({ ...prev, [call.id]: { ok: false, text } }));
+    } finally {
+      callInFlight.current = false;
+      setCallingId(null);
+    }
+  }
+
+  function openConversation(conversationId: string) {
+    router.push(`/telefon/${encodeURIComponent(conversationId)}`);
+  }
 
   return (
     <div className="absolute inset-0 z-30 bg-white flex flex-col">
@@ -155,9 +224,15 @@ export function Hovory({ teamId, onZavrit }: { teamId: string; onZavrit: () => v
                 {otevreny && (
                   <div className="pl-9 pr-4 py-3 bg-[#F2F2F7]" style={{ boxShadow: `inset 0 -0.5px 0 ${LINKA}` }}>
                     <p className="text-sm leading-snug text-black">{h.duvod}</p>
-                    <p className="text-sm mt-1.5" style={{ color: SEDA }}>
-                      Zpátky se volat nedá, na vsi se to řeší osobně.
-                    </p>
+                    <CallBackPanel
+                      call={h}
+                      info={callBackInfo}
+                      calling={callingId === h.id}
+                      busy={callingId !== null}
+                      outcome={outcomes[h.id]}
+                      onCall={() => callBack(h)}
+                      onOpen={openConversation}
+                    />
                   </div>
                 )}
               </div>
@@ -165,6 +240,89 @@ export function Hovory({ teamId, onZavrit }: { teamId: string; onZavrit: () => v
           })
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Zavolat zpátky. Cena stojí pod tlačítkem, ne v něm, a tlačítko je zelené jako
+ * volání v iPhonu. Po hovoru se místo něj ukáže, co se stalo, a odkaz na zprávu.
+ */
+function CallBackPanel({ call, info, calling, busy, outcome, onCall, onOpen }: {
+  call: Hovor;
+  info: CallBackInfo | null;
+  calling: boolean;
+  busy: boolean;
+  outcome: CallBackOutcome | undefined;
+  onCall: () => void;
+  onOpen: (conversationId: string) => void;
+}) {
+  if (!call.canCallBack) {
+    return (
+      <p className="text-sm mt-1.5" style={{ color: SEDA }}>
+        Zpátky se volat nedá, na vsi se to řeší osobně.
+      </p>
+    );
+  }
+
+  const openButton = (conversationId: string) => (
+    <button
+      type="button"
+      onClick={() => onOpen(conversationId)}
+      className="mt-2 min-h-[44px] px-1 text-base font-medium"
+      style={{ color: MODRA }}
+    >
+      Otevřít zprávu &#8250;
+    </button>
+  );
+
+  if (outcome?.ok) {
+    return (
+      <div className="mt-1.5">
+        <p className="text-sm leading-snug text-black">{outcome.text}</p>
+        {outcome.conversationId && openButton(outcome.conversationId)}
+      </div>
+    );
+  }
+
+  if (call.calledBack) {
+    return (
+      <div className="mt-1.5">
+        <p className="text-sm" style={{ color: SEDA }}>Volal jsi zpátky.</p>
+        {call.calledBack.conversationId && openButton(call.calledBack.conversationId)}
+      </div>
+    );
+  }
+
+  if (info?.usedToday) {
+    return (
+      <p className="text-sm mt-1.5" style={{ color: SEDA }}>
+        Dnes už jsi zpátky volal. Další hovor až zítra.
+      </p>
+    );
+  }
+
+  return (
+    <div className="mt-2.5">
+      <button
+        type="button"
+        onClick={onCall}
+        disabled={busy}
+        aria-busy={calling}
+        className="w-full sm:w-auto min-h-[44px] px-5 rounded-full text-base font-semibold text-white flex items-center justify-center gap-2 disabled:opacity-60"
+        style={{ backgroundColor: GREEN }}
+      >
+        <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+          <path d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.25c1.1.37 2.3.57 3.6.57a1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.45.57 3.57a1 1 0 0 1-.25 1L6.6 10.8z" />
+        </svg>
+        {calling ? "Volám…" : "Zavolat zpátky"}
+      </button>
+      <p className="text-sm mt-1.5" style={{ color: SEDA }}>
+        Hovor stojí {info?.price ?? 6} Kč z kreditu. Zpátky se dá volat jednou denně.
+      </p>
+      {outcome && !outcome.ok && (
+        <p role="alert" className="text-sm mt-1.5" style={{ color: CERVENA }}>{outcome.text}</p>
+      )}
     </div>
   );
 }
