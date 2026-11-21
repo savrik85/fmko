@@ -132,6 +132,9 @@ describe("výběr okresu v databázi", () => {
     const news = await db.prepare("SELECT league_id, body FROM news WHERE type = 'district_selection' ORDER BY league_id").all<{ league_id: string; body: string }>();
     expect(news.results.map((n) => n.league_id)).toEqual(["lp", "ls"]);
     expect(news.results[0].body).not.toMatch(/[—–]/);
+    // Název okresu se neskloňuje: „Za Prachatice dali góly“ nahradila „výběru okresu Prachatice“.
+    expect(news.results[0].body).not.toMatch(/\bZa (Prachatice|Strakonice)\b/);
+    expect(news.results[0].body).toContain("Sestava výběru okresu Prachatice:");
     const desk = await db.prepare("SELECT COUNT(*) AS n FROM messages m JOIN conversations c ON c.id = m.conversation_id WHERE c.title = 'Redakce Zpravodaje'").first<{ n: number }>();
     expect(desk!.n).toBe(6);
     const teams = await db.prepare("SELECT COUNT(*) AS n FROM teams").first<{ n: number }>();
