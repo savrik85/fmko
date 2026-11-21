@@ -18,11 +18,13 @@ const SCHEMA = [
   "CREATE TABLE messages (id TEXT PRIMARY KEY, conversation_id TEXT, sender_type TEXT, sender_id TEXT, sender_name TEXT, body TEXT, metadata TEXT, sent_at TEXT, read INTEGER DEFAULT 0)",
   `CREATE TABLE coach_relation_log (id INTEGER PRIMARY KEY AUTOINCREMENT, player_id TEXT, team_id TEXT, old_value INTEGER, new_value INTEGER,
      delta INTEGER, raw_delta INTEGER, source TEXT, description TEXT, reference_id TEXT, game_date TEXT, created_at TEXT)`,
+  `CREATE TABLE injuries (id TEXT PRIMARY KEY, player_id TEXT, team_id TEXT, type TEXT, description TEXT, severity TEXT,
+     days_remaining INTEGER, days_total INTEGER, created_at TEXT, osobni_volno INTEGER DEFAULT 0, is_fake INTEGER DEFAULT 0)`,
   "CREATE TABLE pub_sessions (id INTEGER PRIMARY KEY AUTOINCREMENT, team_id TEXT, game_date TEXT, attendees TEXT, incidents TEXT, created_at TEXT)",
 ];
 
 export const HEARSAY_TABLES = [
-  "users", "teams", "players", "relationships", "conversations", "messages", "coach_relation_log", "pub_sessions",
+  "users", "teams", "players", "relationships", "conversations", "messages", "coach_relation_log", "pub_sessions", "injuries",
   "squad_hearsay", "squad_hearsay_knowledge",
 ] as const;
 

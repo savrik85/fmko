@@ -71,6 +71,9 @@ export async function runPhoneHourly(
   // Kabina má uši: co trenér řekl o hráčích, se rozšíří po vazbách (hearsay/spread.ts).
   const { spreadHearsay } = await import("../hearsay/spread");
   await spreadHearsay(db, now).catch((e) => logger.warn({ module: M }, "šíření toho, co trenér řekl", e));
+  // Kdo se o sobě něco doslechl, ozve se trenérovi (nejvýš dvě zprávy na klub a den).
+  const { deliverHearsayMessages } = await import("../hearsay/messages");
+  await deliverHearsayMessages(db, env, now).catch((e) => logger.warn({ module: M }, "zprávy slyšel jsem", e));
   const followUps = await deliverDueFollowUps(db, env, now);
   const casual = await spawnCasualMessages(db, env, now);
   // Svatba v kabině: článek do Zpravodaje a SMS od Redakce přes den, ne v noci z denního ticku.

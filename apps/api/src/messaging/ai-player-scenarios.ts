@@ -527,6 +527,36 @@ export const AI_PLAYER_SCENARIOS: AiScenario[] = [
       "Trenér ti napsal sám od sebe, ty jsi o nic nežádal. Odpovídej na to, co ti píše, a drž se tématu, které nadhodil. NEVYMÝŠLEJ si vlastní stížnost ani žádost.",
     weight: () => 0,
   },
+  // Kabina má uši (hearsay/messages.ts): hráč se doslechl, co o něm trenér řekl jinému.
+  // Konkrétní větu, komu ji trenér napsal a kdo to hráči řekl, přidává k popisu doručení.
+  // weight 0 → náhodný spawn je nevybere.
+  {
+    id: "heard_criticism",
+    label: "Slyšel, co o něm trenér říkal",
+    category: "complaint",
+    expectedTurns: 3,
+    description:
+      "Od spoluhráče ses dozvěděl, co o tobě trenér napsal někomu jinému. Jsi dotčený, chceš to slyšet do očí. Řekni, od koho to víš.",
+    weight: () => 0,
+  },
+  {
+    id: "heard_decision",
+    label: "Rozhodnutí na jeho úkor slyšel od jiných",
+    category: "complaint",
+    expectedTurns: 3,
+    description:
+      "Od spoluhráče ses dozvěděl rozhodnutí trenéra na tvůj úkor. Mrzí tě, že ti to neřekl sám. Řekni, od koho to víš.",
+    weight: () => 0,
+  },
+  {
+    id: "heard_praise",
+    label: "Slyšel, že ho trenér chválil",
+    category: "casual",
+    expectedTurns: 2,
+    description:
+      "Kluci ti řekli, že tě trenér chválil. Potěšilo tě to, poděkuj po svém, klidně s vtipem.",
+    weight: () => 0,
+  },
 ];
 
 /**
