@@ -790,6 +790,13 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
     const { handleCoachMessageForCommitment } = await import("../messaging/coach-commitments");
     commitmentReady = handleCoachMessageForCommitment(c.env.DB, c.env, { teamId, convId, playerId: conv.participant_id, text: body.body.trim() });
     c.executionCtx.waitUntil(commitmentReady.then(() => undefined));
+    // Co trenér napsal o jiném hráči, se může roznést (hearsay/, Kabina má uši). Odpověď hráče na to nečeká.
+    const { detectCoachMessage } = await import("../hearsay/coach-message");
+    c.executionCtx.waitUntil(
+      detectCoachMessage(c.env.DB, c.env, {
+        teamId, convId, convType: "player", recipientPlayerId: conv.participant_id, text: body.body.trim(),
+      }).then(() => undefined).catch((e) => logger.error({ module: "messaging" }, "zmínky o spoluhráčích", e)),
+    );
   }
 
   // AI player chat hook: pokud je thread aktivní a čeká na trenéra,
@@ -881,6 +888,15 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
       replyInSquadGroup(c.env.DB, c.env, { convId, teamId, coachMessage: body.body.trim() })
         .catch((e) => logger.error({ module: "messaging" }, "reakce v kabině", e)),
     );
+    // Pochvala nebo kritika před celou kabinou: ví ji všichni a jmenovaného zasáhne hned.
+    if (hasText) {
+      const { detectCoachMessage } = await import("../hearsay/coach-message");
+      c.executionCtx.waitUntil(
+        detectCoachMessage(c.env.DB, c.env, {
+          teamId, convId, convType: "squad_group", recipientPlayerId: null, text: body.body.trim(),
+        }).then(() => undefined).catch((e) => logger.error({ module: "messaging" }, "zmínky v kabině", e)),
+      );
+    }
   }
 
   // Vůdce fanouškovské party čeká na odpověď. Používá stejné sloupce jako AI

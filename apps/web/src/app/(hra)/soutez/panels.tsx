@@ -65,6 +65,7 @@ export function PokladnaPanel({ state, ledger }: {
       ["bet_max_stake", "Nejvyšší sázka na tiket", czk],
       ["bet_max_payout", "Strop výhry z tiketu", czk],
       ["ban_betting", "Zákaz sázení klubům", (v) => (v ? "platí" : "neplatí")],
+      ["grant_once_per_season", "Žádost o dotaci jen jednou za sezónu", (v) => (v ? "platí" : "neplatí")],
       ["min_coach_licence", "Minimální licence trenéra", (v) => (v > 0 ? licenceLabel(v) : "nehlídá se")],
     ];
     return popis
@@ -156,6 +157,8 @@ export function PokladnaPanel({ state, ledger }: {
           value={state.rules.squad_max > 0 ? String(state.rules.squad_max) : "bez omezení"} />
         <Row label="Minimální licence trenéra"
           value={state.rules.min_coach_licence > 0 ? licenceLabel(state.rules.min_coach_licence) : "nehlídá se"} />
+        <Row label="Žádost o dotaci pro vlastní klub"
+          value={state.rules.grant_once_per_season ? "jen jednou za sezónu" : "bez omezení"} />
       </div>
 
       {ledger && ledger.summary.length > 0 && (
@@ -630,12 +633,15 @@ export function GrantsPanel({ data, teamId, myOpen, onChanged }: {
         </p>
       ) : (
         <div className="mt-3 space-y-2">
-          {canRequestOwn && (
+          {canRequestOwn && !data.ownBlocked && (
             <button className="btn btn-lg btn-primary w-full" onClick={() => setOwnOpen(true)}>
               Požádat o dotaci pro svůj klub
             </button>
           )}
-          <button className={`btn btn-lg w-full ${canRequestOwn ? "btn-secondary" : "btn-primary"}`} onClick={() => setOpen(true)}>
+          {canRequestOwn && data.ownBlocked && (
+            <p className="text-sm text-muted">{data.ownBlocked}</p>
+          )}
+          <button className={`btn btn-lg w-full ${canRequestOwn && !data.ownBlocked ? "btn-secondary" : "btn-primary"}`} onClick={() => setOpen(true)}>
             Navrhnout dotaci pro kluby soutěže
           </button>
         </div>

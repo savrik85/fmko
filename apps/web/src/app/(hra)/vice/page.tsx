@@ -54,8 +54,9 @@ function getTileBadge(href: string, badges: MenuBadgesState): TileBadge | null {
 const ADMIN_ITEM: MenuItem = { href: "/admin", icon: "🛠️", label: "Administrace", color: "#8B4513" };
 
 /**
- * Skupina menu: bílé zaoblené dlaždice po třech, velká barevná ikona v měkké
- * záři barvy položky a název pod ní. Odznak sedí v pravém horním rohu dlaždice.
+ * Skupina menu: bílé zaoblené dlaždice po třech, velká ikona bez podkladu
+ * (záři za ní uživatel 2026-11-21 nechtěl) a název pod ní. Odznak sedí v pravém
+ * horním rohu dlaždice.
  */
 function MenuSection({ title, items, badges }: { title: string; items: MenuItem[]; badges: MenuBadgesState }) {
   return (
@@ -71,10 +72,7 @@ function MenuSection({ title, items, badges }: { title: string; items: MenuItem[
               className="relative flex flex-col items-center gap-1.5 min-w-0 rounded-[22px] bg-surface px-1.5 pt-3 pb-[13px] shadow-[0_1px_1px_rgba(60,45,20,0.05),0_10px_20px_-14px_rgba(60,45,20,0.45)] active:scale-[0.97] transition-transform"
             >
               <span
-                className="w-[58px] h-[58px] rounded-full flex items-center justify-center text-[31px] leading-none"
-                style={{
-                  background: `radial-gradient(circle at 50% 52%, color-mix(in srgb, ${item.color} 50%, transparent) 0, color-mix(in srgb, ${item.color} 22%, transparent) 46%, transparent 72%)`,
-                }}
+                className="w-[58px] h-[58px] flex items-center justify-center text-[31px] leading-none"
                 aria-hidden="true"
               >
                 {item.icon}

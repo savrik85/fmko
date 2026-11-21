@@ -11,6 +11,7 @@
  */
 
 import { logger } from "../lib/logger";
+import { hearsayPromptLines } from "../hearsay/prompt";
 import { computeInterestForOffer, interestOfferOf, type InterestLevel } from "../transfers/player-interest";
 import type { PlayerSnapshot } from "./ai-player-scenarios";
 import { commitmentPromptLines, loadCommitmentMemory, pendingInviteOf } from "./coach-commitments";
@@ -55,6 +56,10 @@ export async function loadChatMemory(
     loadPendingOffers(db, player.id),
     loadCommitmentMemory(db, player.id),
   ]);
+  const { loadHearsayMemory } = await import("../hearsay/prompt");
+  const hearsay = await loadHearsayMemory(db, player.id, opts.teamId)
+    .catch((e) => { logger.warn({ module: M }, "co se hráč doslechl", e); return []; });
+  if (hearsay.length > 0) player.hearsay = hearsay;
   if (commitments.length > 0) player.coachCommitments = commitments;
   player.pendingInvite = pendingInviteOf(commitments);
   if (call) player.missedCall = { count: call.pocet ?? 1 };
@@ -150,6 +155,7 @@ export function memoryPromptLines(player: PlayerSnapshot): string[] {
     lines.push(`- V posledních dnech jsi trenérovi ${player.missedCall.count > 1 ? `${player.missedCall.count}× ` : ""}volal a nevzal to. Volal jsi, protože tým prohrává a ty máš blbou náladu. Když se na to ptá, víš o tom.`);
   }
   lines.push(...commitmentPromptLines(player.coachCommitments));
+  lines.push(...hearsayPromptLines(player.hearsay));
   for (const o of player.pendingOffers ?? []) {
     lines.push(`- NABÍDKA: ${o.club} o tebe stojí a trenér ještě nerozhodl. Jak tě to láká: ${INTEREST_WORDS[o.interest]}. Když se tě na to trenér ptá, odpovídej podle toho. Rozmyslet si to můžeš, jen když tě opravdu přesvědčí (konkrétní slib, ocenění, víc peněz); samotné „zůstaň" nestačí.`);
   }

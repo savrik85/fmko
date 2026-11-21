@@ -182,7 +182,11 @@ async function pushToWatchers(env: Bindings, playerId: string, buyerTeamId: stri
  * After transfer: recalculate commute distance and give the player a free squad number in the new team.
  * `permanent` = hráč klub opouští natrvalo (přestup, odkup z hostování, výměna), ne hostování ani návrat z něj.
  */
-export async function onPlayerTransferred(db: D1Database, playerId: string, newTeamId: string, opts: { permanent: boolean }) {
+export async function onPlayerTransferred(
+  db: D1Database, playerId: string, newTeamId: string,
+  /** `fromTeamId`: odkud hráč natrvalo odešel (spoluhráči tam i v novém klubu zareagují, hearsay/transfers.ts). */
+  opts: { permanent: boolean; fromTeamId?: string },
+) {
   // Kupec si vzal hráče nabídnutého k jeho poptávce → poptávka je vyřízená.
   const { closeDemandsForArrival } = await import("../transfers/demands");
   await closeDemandsForArrival(db, playerId, newTeamId)
@@ -226,6 +230,19 @@ export async function onPlayerTransferred(db: D1Database, playerId: string, newT
   await attachNewcomerRelations(db, newTeamId, playerId);
   const { initNewcomerCoachRelation } = await import("../lib/coach-relation");
   await initNewcomerCoachRelation(db, newTeamId, playerId);
+
+  // Kamarádi, brácha, rival a konkurent na postu zareagují (Kabina má uši, spec 3b). Hostování ne.
+  if (opts.permanent) {
+    const { recordTransferReactions } = await import("../hearsay/transfers");
+    const names = await db.prepare("SELECT id, name FROM teams WHERE id IN (?, ?)").bind(newTeamId, opts.fromTeamId ?? "")
+      .all<{ id: string; name: string }>()
+      .catch((e) => { logger.warn({ module: "game" }, "názvy klubů k přestupu", e); return { results: [] as Array<{ id: string; name: string }> }; });
+    const nameOf = (id: string | undefined) => names.results.find((t) => t.id === id)?.name ?? null;
+    if (opts.fromTeamId) {
+      await recordTransferReactions(db, { playerId, clubTeamId: opts.fromTeamId, direction: "left", otherClubName: nameOf(newTeamId) });
+    }
+    await recordTransferReactions(db, { playerId, clubTeamId: newTeamId, direction: "arrived", otherClubName: nameOf(opts.fromTeamId) });
+  }
 }
 
 // ═══ Přímá nabídka (přestup, hostování, výměna, odkup z hostování) ═══
@@ -670,7 +687,7 @@ export async function acceptListingBid(env: Bindings, actorTeamId: string, bidId
   await settleOnResale(db, { playerId, ownerClubTeamId: sellerClubTeamId, saleAmount: amount, saleOfferId: bidId, gameDate })
     .catch((e) => logger.error({ module: "game" }, "doplacení splátek a procent při přijetí bidu", e));
 
-  await onPlayerTransferred(db, playerId, buyerTeamId, { permanent: true });
+  await onPlayerTransferred(db, playerId, buyerTeamId, { permanent: true, fromTeamId: sellerTeamId });
 
   // Kořaly kupce: první koupě, celebrita v týmu.
   {
@@ -1011,6 +1028,9 @@ export async function acceptTransferOffer(
 
     // removePlayer: FK úklid + archiv departed_players + uzavření kontraktu + DELETE hráče.
     // Zároveň stáhne všechny pending nabídky na hráče (včetně této — hned poté ji přepíšeme na accepted).
+    // Spoluhráči zareagují teď: removePlayer smaže vazby (Kabina má uši, spec 3b).
+    const { recordTransferReactions } = await import("../hearsay/transfers");
+    await recordTransferReactions(db, { playerId, clubTeamId: sellerRosterTeamId, direction: "left", otherClubName: virtualName });
     const { removePlayer } = await import("../transfers/remove-player");
     const removed = await removePlayer(db, playerId, "transfer", { toFreeAgent: false, teamId: sellerRosterTeamId })
       .catch(async (e) => {
@@ -1479,9 +1499,9 @@ export async function acceptTransferOffer(
     .catch((e) => logger.warn({ module: "game" }, "insert accept event", e));
 
   // Update commute + reset squad number (odkup z hostování je trvalý přestup, samo hostování ne)
-  await onPlayerTransferred(db, playerId, buyerDestTeamId, { permanent: offerType !== "loan" });
+  await onPlayerTransferred(db, playerId, buyerDestTeamId, { permanent: offerType !== "loan", fromTeamId: sellerTeamId });
   for (const swapId of swapPlayerIds) {
-    await onPlayerTransferred(db, swapId, swapDestTeamIds.get(swapId) ?? sellerTeamId, { permanent: true });
+    await onPlayerTransferred(db, swapId, swapDestTeamIds.get(swapId) ?? sellerTeamId, { permanent: true, fromTeamId: buyerTeamId });
   }
 
   // Kořaly kupce (klub, ne jeho dorost): první koupě, celebrita v týmu. Hostování
@@ -2046,6 +2066,9 @@ export async function signFreeAgent(env: Bindings, teamId: string, faId: string,
   await attachNewcomerRelations(db, rosterTeamId, playerId);
   const { initNewcomerCoachRelation } = await import("../lib/coach-relation");
   await initNewcomerCoachRelation(db, rosterTeamId, playerId);
+  // Konkurent na postu a případní kamarádi zareagují (Kabina má uši, spec 3b).
+  const { recordTransferReactions } = await import("../hearsay/transfers");
+  await recordTransferReactions(db, { playerId, clubTeamId: rosterTeamId, direction: "arrived", otherClubName: null });
 
   // Atomický DELETE — pokud FA mezitím podepsal jiný tým, RETURNING vrátí 0 řádků.
   const deleted = await db.prepare("DELETE FROM free_agents WHERE id = ? RETURNING id").bind(faId).first<{ id: string }>();

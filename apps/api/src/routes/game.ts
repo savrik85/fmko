@@ -7934,7 +7934,21 @@ gameRouter.post("/admin/phone-hourly", async (c) => {
   const r = await deliverDueFollowUps(c.env.DB, c.env)
     .catch((e) => { logger.error({ module: "game.ts" }, "ruční doručení odložených zpráv", e); return null; });
   if (!r) return c.json({ error: "doručení selhalo" }, 500);
-  return c.json({ ok: true, ...r });
+  // Kabina má uši: šíření a zprávy „slyšel jsem…“ jako v hodinovém běhu (hearsay/).
+  const { processPendingDetections } = await import("../hearsay/coach-message");
+  const { spreadHearsay } = await import("../hearsay/spread");
+  const { deliverHearsayMessages } = await import("../hearsay/messages");
+  // `&at=2026-11-22T09:00:00Z`: šíření a zprávy „slyšel jsem“ jako by běžely v tu hodinu
+  // (simulace mimo 7–22 h a po hodinách, šíření je deterministické podle hodiny).
+  const atRaw = c.req.query("at");
+  const at = atRaw && Number.isFinite(Date.parse(atRaw)) ? new Date(atRaw) : new Date();
+  const detected = await processPendingDetections(c.env.DB, c.env, at)
+    .catch((e) => { logger.error({ module: "game.ts" }, "ruční dodělání rozpoznání", e); return null; });
+  const spread = await spreadHearsay(c.env.DB, at)
+    .catch((e) => { logger.error({ module: "game.ts" }, "ruční šíření hearsay", e); return null; });
+  const hearsay = await deliverHearsayMessages(c.env.DB, c.env, at)
+    .catch((e) => { logger.error({ module: "game.ts" }, "ruční doručení slyšel jsem", e); return null; });
+  return c.json({ ok: true, ...r, detected, spread, hearsay });
 });
 
 // POST /api/admin/cup/notify-draw?round= — SMS o losu kola lidským klubům (bez round aktuální kolo).

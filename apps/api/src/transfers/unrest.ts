@@ -527,6 +527,13 @@ export async function performUnrestAction(
   lc.morale = newMorale;
   dbUpdates.push(db.prepare("UPDATE players SET life_context = json(?) WHERE id = ?").bind(JSON.stringify(lc), playerId));
   await db.batch(dbUpdates);
+  // Starý kapitán přišel o pásku: rozkřikne se to (hearsay/captain.ts, Kabina má uši).
+  if (action.id === "captaincy") {
+    const { recordCaptainChange } = await import("../hearsay/captain");
+    await recordCaptainChange(db, {
+      teamId: player.team_id as string, oldCaptainId: (player.captain_id as string | null) ?? null, newCaptainId: playerId, now,
+    });
+  }
 
   const playerRef = {
     id: playerId,

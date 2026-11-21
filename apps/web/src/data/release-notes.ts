@@ -12,6 +12,19 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    date: "2026-11-22",
+    emoji: "👂",
+    title: "Kabina má uši a reakce na přestupy",
+    items: [
+      "Co trenér napíše hráči o spoluhráči, se může roznést: přes bráchu, kámoše od piva, souseda nebo v hospodě.",
+      "Kdo se o sobě něco doslechne, ozve se v Telefonu a řekne, od koho to ví. Kritika za zády bolí víc než do očí, pochvala za zády potěší víc.",
+      "Pochvala nebo kritika napsaná do Kabiny platí před všemi a jmenovaný ji pocítí hned.",
+      "Kdo přijde o kapitánskou pásku, ozve se.",
+      "Na prodej nebo nákup hráče reaguje jeho brácha, kamarádi, rival i hráč na stejném postu.",
+      "Když trenér hráči předem napíše o sestavě, nevezme si vynechání tolik k srdci.",
+    ],
+  },
+  {
     date: "2026-11-21",
     emoji: "📣",
     title: "Proslovy v kabině, zastupitelstvo, svatby a práce u sponzora",

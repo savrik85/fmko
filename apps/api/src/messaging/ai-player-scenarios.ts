@@ -64,6 +64,8 @@ export interface PlayerSnapshot {
   previousMatch?: { kind: "league" | "cup"; played: boolean; minutes: number; goals: number };
   /** Co mu trenér v SMS slíbil a jak to dopadlo (messaging/coach-commitments.ts). */
   coachCommitments?: CommitmentMemory[];
+  /** Co se doslechl o sobě i o ostatních (hearsay/prompt.ts, Kabina má uši). */
+  hearsay?: import("../hearsay/prompt").HearsayMemoryLine[];
   /** V tomhle rozhovoru za posledních 24 h už napsal „ozvu se pak“: podruhé to neodkládá. */
   recentlyPostponed?: boolean;
   /** Rozhovor je o vážné věci (stížnost, truc, odmítnutý přestup): odpovídá hned. */
@@ -525,6 +527,55 @@ export const AI_PLAYER_SCENARIOS: AiScenario[] = [
     expectedTurns: 2,
     description:
       "Trenér ti napsal sám od sebe, ty jsi o nic nežádal. Odpovídej na to, co ti píše, a drž se tématu, které nadhodil. NEVYMÝŠLEJ si vlastní stížnost ani žádost.",
+    weight: () => 0,
+  },
+  // Kabina má uši (hearsay/messages.ts): hráč se doslechl, co o něm trenér řekl jinému.
+  // Konkrétní větu, komu ji trenér napsal a kdo to hráči řekl, přidává k popisu doručení.
+  // weight 0 → náhodný spawn je nevybere.
+  {
+    id: "heard_criticism",
+    label: "Slyšel, co o něm trenér říkal",
+    category: "complaint",
+    expectedTurns: 3,
+    description:
+      "Od spoluhráče ses dozvěděl, co o tobě trenér napsal někomu jinému. Jsi dotčený, chceš to slyšet do očí. Řekni, od koho to víš.",
+    weight: () => 0,
+  },
+  {
+    id: "heard_decision",
+    label: "Rozhodnutí na jeho úkor slyšel od jiných",
+    category: "complaint",
+    expectedTurns: 3,
+    description:
+      "Od spoluhráče ses dozvěděl rozhodnutí trenéra na tvůj úkor. Mrzí tě, že ti to neřekl sám. Řekni, od koho to víš.",
+    weight: () => 0,
+  },
+  {
+    id: "heard_praise",
+    label: "Slyšel, že ho trenér chválil",
+    category: "casual",
+    expectedTurns: 2,
+    description:
+      "Kluci ti řekli, že tě trenér chválil. Potěšilo tě to, poděkuj po svém, klidně s vtipem.",
+    weight: () => 0,
+  },
+  // Přestup kamaráda, bráchy, rivala nebo konkurenta na postu (hearsay/transfers.ts, spec 3b).
+  {
+    id: "transfer_reaction_bad",
+    label: "Štve ho přestup",
+    category: "complaint",
+    expectedTurns: 3,
+    description:
+      "Klub prodal nebo koupil hráče a týká se to tebe (co přesně, máš v CO ZNÁŠ). Mrzí tě to nebo tě to štve. Napiš to trenérovi po svém.",
+    weight: () => 0,
+  },
+  {
+    id: "transfer_reaction_good",
+    label: "Těší ho přestup",
+    category: "casual",
+    expectedTurns: 2,
+    description:
+      "Klub prodal nebo koupil hráče a tebe to těší (co přesně, máš v CO ZNÁŠ). Napiš to trenérovi po svém, klidně s vtipem.",
     weight: () => 0,
   },
 ];

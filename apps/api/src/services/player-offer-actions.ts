@@ -183,6 +183,9 @@ export async function acceptPlayerOffer(db: D1Database, teamId: string, offerId:
   await attachNewcomerRelations(db, targetTeamId, playerId);
   const { initNewcomerCoachRelation } = await import("../lib/coach-relation");
   await initNewcomerCoachRelation(db, targetTeamId, playerId);
+  // Kamarádi a konkurent na postu zareagují (Kabina má uši, spec 3b).
+  const { recordTransferReactions } = await import("../hearsay/transfers");
+  await recordTransferReactions(db, { playerId, clubTeamId: targetTeamId, direction: "arrived", otherClubName: null });
 
   // Contract
   const season = await db.prepare("SELECT id FROM seasons WHERE status = 'active' ORDER BY number DESC LIMIT 1").first<{ id: string }>().catch((e) => { logger.warn({ module: M }, "db op failed", e); return null; });

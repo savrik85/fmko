@@ -157,6 +157,9 @@ export async function purchaseVirtualPlayer(p: VirtualPurchase): Promise<Virtual
     await attachNewcomerRelations(db, p.destTeamId, p.playerId);
     const { initNewcomerCoachRelation } = await import("../lib/coach-relation");
     await initNewcomerCoachRelation(db, p.destTeamId, p.playerId);
+    // Kamarádi a konkurent na postu zareagují (Kabina má uši, spec 3b).
+    const { recordTransferReactions } = await import("../hearsay/transfers");
+    await recordTransferReactions(db, { playerId: p.playerId, clubTeamId: p.destTeamId, direction: "arrived", otherClubName: null });
   } catch (e) {
     logger.warn({ module: "virtual-purchase" }, "vazby nového hráče", e);
   }
