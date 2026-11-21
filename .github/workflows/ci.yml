@@ -7,7 +7,39 @@ on:
     branches: [main]
 
 jobs:
+  # Main vzniká ze stromu testingu (commit-tree s rodiči main + testing). Když má
+  # některý rodič stejný strom a jeho CI prošlo, testy už proběhly a nasazení
+  # na produkci na ně nemusí čekat podruhé.
+  tested-tree:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      tested: ${{ steps.check.outputs.tested }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tested=false
+          if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            tree=$(git rev-parse HEAD^{tree})
+            for p in $(git rev-list --parents -n1 HEAD | cut -d' ' -f2-); do
+              [ "$(git rev-parse "$p^{tree}")" = "$tree" ] || continue
+              n=$(gh run list --commit "$p" --workflow ci.yml --status success --json databaseId --jq length)
+              echo "rodič $p má stejný strom, úspěšných běhů CI: $n"
+              [ "$n" != "0" ] && tested=true
+            done
+          fi
+          echo "tested=$tested" >> "$GITHUB_OUTPUT"
+
   typecheck:
+    needs: tested-tree
+    if: needs.tested-tree.outputs.tested != 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -17,12 +49,35 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx turbo typecheck
-      - run: npx turbo test
+      - run: npx turbo test --filter=!@okresni-masina/api
       - run: node apps/web/check-links.mjs
 
+  # Testy API (~6 000) na čtyřech strojích souběžně. fail-fast vypnutý, aby šlo
+  # po nestabilním pádu Miniflare zopakovat jen spadlou část (gh run rerun --failed).
+  test-api:
+    needs: tested-tree
+    if: needs.tested-tree.outputs.tested != 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx vitest run --shard=${{ matrix.shard }}/4
+        working-directory: apps/api
+
   deploy-api-prod:
-    needs: typecheck
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: [tested-tree, typecheck, test-api]
+    if: >-
+      !cancelled() && github.ref == 'refs/heads/main' && github.event_name == 'push'
+      && (needs.tested-tree.outputs.tested == 'true'
+          || (needs.typecheck.result == 'success' && needs.test-api.result == 'success'))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -38,8 +93,11 @@ jobs:
           command: deploy
 
   deploy-web-prod:
-    needs: typecheck
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: [tested-tree, typecheck, test-api]
+    if: >-
+      !cancelled() && github.ref == 'refs/heads/main' && github.event_name == 'push'
+      && (needs.tested-tree.outputs.tested == 'true'
+          || (needs.typecheck.result == 'success' && needs.test-api.result == 'success'))
     runs-on: ubuntu-latest
     env:
       NEXT_PUBLIC_API_URL: https://api.prales.fun
@@ -73,8 +131,10 @@ jobs:
           command: pages deploy .vercel/output/static --project-name=prales-web --branch=main
 
   deploy-api-test:
-    needs: typecheck
-    if: github.ref == 'refs/heads/testing' && github.event_name == 'push'
+    needs: [typecheck, test-api]
+    if: >-
+      !cancelled() && github.ref == 'refs/heads/testing' && github.event_name == 'push'
+      && needs.typecheck.result == 'success' && needs.test-api.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -90,8 +150,10 @@ jobs:
           command: deploy --env testing
 
   deploy-web-test:
-    needs: typecheck
-    if: github.ref == 'refs/heads/testing' && github.event_name == 'push'
+    needs: [typecheck, test-api]
+    if: >-
+      !cancelled() && github.ref == 'refs/heads/testing' && github.event_name == 'push'
+      && needs.typecheck.result == 'success' && needs.test-api.result == 'success'
     runs-on: ubuntu-latest
     env:
       NEXT_PUBLIC_API_URL: https://api-test.prales.fun
