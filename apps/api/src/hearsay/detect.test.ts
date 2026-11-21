@@ -57,6 +57,17 @@ describe("volání modelu", () => {
     expect(out).toEqual([]);
   });
 
+  it("prompt zná vazbu kandidáta na adresáta: tvůj brácha Lukáš je Novotný", () => {
+    const lukasN: MentionCandidate = { id: "lnovotny", firstName: "Lukáš", lastName: "Novotný", tieToRecipient: "brothers" };
+    const lukasK: MentionCandidate = { id: "lkratochvil", firstName: "Lukáš", lastName: "Kratochvíl" };
+    const p = buildMentionPrompt({ message: "tvůj brácha Lukáš se fláká", recipientName: "Tomáš Novotný", squadChat: false, candidates: [lukasN, lukasK] });
+    expect(p).toContain("lnovotny: Lukáš Novotný (brácha adresáta)");
+    expect(p).toContain("lkratochvil: Lukáš Kratochvíl");
+    expect(p).not.toContain("Kratochvíl (");
+    expect(p).toContain("Tomáš Novotný");
+    expect(p).toMatch(/stejné křestní jméno/i);
+  });
+
   it("prompt zná kandidáty s id a pravidla pro shodná příjmení a běžná slova", () => {
     const p = buildMentionPrompt({ message: "mezi Růžičkou a Tomanem", recipientName: null, squadChat: true, candidates: [miroslavToman, martinToman] });
     expect(p).toContain("mtoman");

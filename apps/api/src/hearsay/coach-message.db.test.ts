@@ -29,6 +29,7 @@ beforeEach(async () => {
       ('kluk', 'club-u21', 'Tomáš', 'Malý', '{"morale":50}', 50, NULL),
       ('pryc', 'club', 'Petr', 'Odešel', '{"morale":50}', 50, 'released'),
       ('cizi', 'ai', 'Jan', 'Cizí', '{"morale":50}', 50, NULL)`),
+    db.prepare("INSERT INTO relationships (id, player_a_id, player_b_id, type, strength) VALUES ('r1', 'sima', 'smejkal', 'brothers', 80)"),
     db.prepare(`INSERT INTO conversations (id, team_id, type, title, participant_id) VALUES
       ('c-sima', 'club', 'player', 'Radek Šíma', 'sima'), ('kabina', 'club', 'squad_group', 'Kabina', NULL),
       ('zapas', 'club', 'squad_group', '⚽ vs SK Lhota', NULL), ('c-ai', 'ai', 'player', 'Jan Cizí', 'cizi')`),
@@ -51,9 +52,12 @@ describe("zpráva trenéra o spoluhráči", () => {
     expect(await player("smejkal")).toEqual({ rel: 50, morale: 50 });
     const call = vi.mocked(detectMentions).mock.calls[0][1];
     expect(call.excludeIds).toEqual(["sima"]);
-    expect(call.recipientName).toBe("Radek");
     // Kádr pro síto: áčko i U21, ne hráč, který odešel.
     expect(call.club.map((p) => p.id).sort()).toEqual(["kluk", "sima", "smejkal"]);
+    // Vazba na adresáta jde do modelu (rozliší „tvůj brácha Lukáš“ od jiného Lukáše).
+    expect(call.club.find((p) => p.id === "smejkal")?.tieToRecipient).toBe("brothers");
+    expect(call.club.find((p) => p.id === "kluk")?.tieToRecipient).toBeUndefined();
+    expect(call.recipientName).toBe("Radek Šíma");
   });
 
   it("kritika v kabině: ví ji celá kabina a Šmejkalovi klesne nálada hned", async () => {

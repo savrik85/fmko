@@ -36,11 +36,22 @@ export async function handleCoachMessageForHearsay(
       `SELECT id, team_id, first_name, last_name, nickname FROM players
         WHERE team_id IN (?, (SELECT id FROM teams WHERE parent_team_id = ?)) AND (status IS NULL OR status = 'active')`,
     ).bind(clubId, clubId).all<{ id: string; team_id: string; first_name: string; last_name: string; nickname: string | null }>();
-    const club: MentionCandidate[] = roster.results.map((p) => ({ id: p.id, firstName: p.first_name, lastName: p.last_name, nickname: p.nickname }));
     const recipient = o.recipientPlayerId ? roster.results.find((p) => p.id === o.recipientPlayerId) : undefined;
+    // Vazby adresáta na spoluhráče: „tvůj brácha Lukáš“ pak model rozliší mezi Lukáši.
+    const ties = new Map<string, string>();
+    if (recipient) {
+      const rows = await db.prepare(
+        `SELECT CASE WHEN player_a_id = ? THEN player_b_id ELSE player_a_id END AS other, type
+           FROM relationships WHERE player_a_id = ? OR player_b_id = ? ORDER BY strength DESC`,
+      ).bind(recipient.id, recipient.id, recipient.id).all<{ other: string; type: string }>();
+      for (const r of rows.results) if (!ties.has(r.other)) ties.set(r.other, r.type);
+    }
+    const club: MentionCandidate[] = roster.results.map((p) => ({
+      id: p.id, firstName: p.first_name, lastName: p.last_name, nickname: p.nickname, ...(ties.has(p.id) ? { tieToRecipient: ties.get(p.id) } : {}),
+    }));
 
     const mentions = await detectMentions(env, {
-      message: o.text, recipientName: recipient?.first_name ?? null, squadChat, club,
+      message: o.text, recipientName: recipient ? `${recipient.first_name} ${recipient.last_name}` : null, squadChat, club,
       excludeIds: o.recipientPlayerId ? [o.recipientPlayerId] : [],
     });
     if (mentions.length === 0) return 0;

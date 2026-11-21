@@ -13,7 +13,17 @@ import type { HearsayKind } from "./types";
 
 const M = "hearsay-detect";
 
-export interface MentionCandidate { id: string; firstName: string; lastName: string; nickname?: string | null }
+export interface MentionCandidate {
+  id: string; firstName: string; lastName: string; nickname?: string | null;
+  /** Vazba na adresáta SMS (`relationships.type`): „tvůj brácha Lukáš“ pak model pozná mezi třemi Lukáši. */
+  tieToRecipient?: string;
+}
+
+const TIE_LABEL: Record<string, string> = {
+  brothers: "brácha adresáta", father_son: "táta nebo syn adresáta", in_laws: "švagr adresáta",
+  drinking_buddies: "kámoš adresáta od piva", classmates: "spolužák adresáta", neighbors: "soused adresáta",
+  coworkers: "kolega adresáta z práce", rivals: "rival adresáta", mentor_pupil: "parťák adresáta z tréninku",
+};
 
 export interface DetectedMention { playerId: string; kind: HearsayKind; quote: string }
 
@@ -32,7 +42,8 @@ export function mentionCandidates(club: MentionCandidate[], message: string, exc
 }
 
 function fullName(c: MentionCandidate): string {
-  return `${c.firstName} ${c.lastName}${c.nickname ? ` („${c.nickname}“)` : ""}`;
+  const tie = c.tieToRecipient ? TIE_LABEL[c.tieToRecipient] : undefined;
+  return `${c.firstName} ${c.lastName}${c.nickname ? ` („${c.nickname}“)` : ""}${tie ? ` (${tie})` : ""}`;
 }
 
 export function buildMentionPrompt(o: { message: string; recipientName: string | null; squadChat: boolean; candidates: MentionCandidate[] }): string {
@@ -56,6 +67,7 @@ export function buildMentionPrompt(o: { message: string; recipientName: string |
     "PRAVIDLA:",
     "- Jméno, které je zároveň běžné slovo, není zmínka hráče, když ho trenér používá jako to slovo („pořádně“ ≠ Pořádek, „pivko“ ≠ Pivko, „Německo“ ≠ Němec, „dělo“ ≠ Dělo). Pak none.",
     "- Když mají dva hráči stejné příjmení a z věty nejde poznat, kterého trenér myslí (chybí křestní jméno nebo přezdívka), dej none oběma.",
+    "- Stejné křestní jméno u víc hráčů: rozhoduje příjmení, přezdívka, nebo vazba v závorce („tvůj brácha Lukáš“ = ten Lukáš, který je brácha adresáta). Když to z věty nejde poznat, dej none.",
     o.recipientName ? `- Adresát SMS (${o.recipientName}) v seznamu není, o něm nerozhoduj.` : "",
     "- decision_for a decision_against jen když trenér oznamuje hotové rozhodnutí (kdo bude hrát, chytat, mít pásku, sedět na lavičce). Přání nebo doufání („doufám, že Šimek přijde“, „Šimka potřebujeme“) rozhodnutí není: je to praise, nebo none.",
     "- Do quote dej DOSLOVA tu část zprávy, která to říká.",
