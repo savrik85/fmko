@@ -19,7 +19,7 @@ import {
 } from "../competition/defaults";
 import { readBalance, recordCompetitionEntry, seasonSummary } from "../competition/ledger";
 import {
-  GRANT_LABEL, GRANT_MAX, GRANT_MIN, OWN_GRANT_KINDS, OWN_GRANT_MAX, OWN_GRANT_NOTE_MIN, OWN_GRANT_TITLE, ownGrantRequestBlocked,
+  GRANT_LABEL, GRANT_MAX, GRANT_MIN, OWN_GRANT_KINDS, OWN_GRANT_MAX, OWN_GRANT_NOTE_MIN, OWN_GRANT_TITLE, isSelfGrant, ownGrantRequestBlocked,
   SURPLUS_MAX_PCT, type GrantKind,
 } from "../competition/grants";
 import {
@@ -1618,7 +1618,7 @@ competitionRouter.post("/teams/:teamId/competition/grants", async (c) => {
   // klub hraje (grants.ts). Strop proto musí vyjít každé pokladně, která bude platit.
   const rules = await resolveRules(c.env.DB, leagueId, meta.season_number);
   // Pravidlo grémia „žádost o dotaci jen jednou za sezónu“ (competition/grants.ts).
-  if (forOwnClub) {
+  if (isSelfGrant(teamId, { forOwnClub, kind, targetTeamId: body?.targetTeamId })) {
     const blocked = await ownGrantRequestBlocked(c.env.DB, { teamId, seasonNumber: meta.season_number, rules });
     if (blocked) return c.json({ error: blocked }, 409);
   }

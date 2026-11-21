@@ -52,6 +52,19 @@ export const OWN_GRANT_TITLE: Partial<Record<GrantKind, string>> = {
 };
 
 /**
+ * Jdou peníze z návrhu klubu, který ho podal? Pak je to žádost pro vlastní klub, i když
+ * ji podal jako „dotaci pro kluby“ s cílem na sebe (cestovné, cena): jinak by šel limit
+ * „jen jednou za sezónu“ obejít. Bezúročná půjčka dotace není, vrací se.
+ */
+export function isSelfGrant(
+  teamId: string,
+  o: { forOwnClub: boolean; kind: GrantKind; targetTeamId: string | null | undefined },
+): boolean {
+  if (o.forOwnClub) return true;
+  return o.kind !== "loan" && !!o.targetTeamId && o.targetTeamId === teamId;
+}
+
+/**
  * Smí klub podat žádost o dotaci pro vlastní klub? Když grémium odsouhlasilo pravidlo
  * „jen jednou za sezónu“ (`grant_once_per_season`), počítá se každá žádost téhle sezóny
  * kromě stažené. Vrací důvod pro manažera, nebo null.
@@ -63,8 +76,9 @@ export async function ownGrantRequestBlocked(
   if (o.rules.grant_once_per_season !== 1) return null;
   const earlier = await db.prepare(
     `SELECT 1 AS x FROM competition_proposals
-      WHERE proposed_by_team_id = ? AND season_number = ? AND kind = 'grant'
-        AND json_extract(payload, '$.request') = 1 AND status != 'withdrawn'
+      WHERE proposed_by_team_id = ? AND season_number = ? AND kind = 'grant' AND status != 'withdrawn'
+        AND (json_extract(payload, '$.request') = 1
+          OR (target_team_id = proposed_by_team_id AND COALESCE(json_extract(payload, '$.grantKind'), '') != 'loan'))
       LIMIT 1`,
   ).bind(o.teamId, o.seasonNumber).first<{ x: number }>();
   return earlier

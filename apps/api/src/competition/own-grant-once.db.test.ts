@@ -6,7 +6,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { Miniflare } from "miniflare";
 import { DEFAULT_RULES, PROPOSAL_KINDS, type CompetitionRules } from "./defaults";
-import { ownGrantRequestBlocked } from "./grants";
+import { isSelfGrant, ownGrantRequestBlocked } from "./grants";
 
 let miniflare: Miniflare;
 let db: D1Database;
@@ -16,7 +16,7 @@ beforeAll(async () => {
   db = await miniflare.getD1Database("DB") as unknown as D1Database;
   await db.prepare(
     `CREATE TABLE competition_proposals (id TEXT PRIMARY KEY, league_id TEXT, season_number INTEGER, kind TEXT, payload TEXT,
-       proposed_by_team_id TEXT, status TEXT NOT NULL DEFAULT 'open')`,
+       proposed_by_team_id TEXT, target_team_id TEXT, status TEXT NOT NULL DEFAULT 'open')`,
   ).run();
 }, 30_000);
 afterAll(async () => { await miniflare.dispose(); });
@@ -50,5 +50,26 @@ describe("žádost o dotaci jen jednou za sezónu", () => {
     await request("p3", { season: 2 });
     await request("p4", { request: false });
     expect(await ownGrantRequestBlocked(db, { teamId: "club", seasonNumber: 3, rules: rules(1) })).toBeNull();
+  });
+
+  it("návrh s penězi pro vlastní klub je žádost, i když se tak nepodá (bezpečnostní kontrola)", () => {
+    expect(isSelfGrant("club", { forOwnClub: true, kind: "equipment", targetTeamId: "club" })).toBe(true);
+    expect(isSelfGrant("club", { forOwnClub: false, kind: "travel", targetTeamId: "club" })).toBe(true);
+    expect(isSelfGrant("club", { forOwnClub: false, kind: "award", targetTeamId: "club" })).toBe(true);
+    // Bezúročná půjčka není dotace, vrací se.
+    expect(isSelfGrant("club", { forOwnClub: false, kind: "loan", targetTeamId: "club" })).toBe(false);
+    expect(isSelfGrant("club", { forOwnClub: false, kind: "travel", targetTeamId: "jiny" })).toBe(false);
+    expect(isSelfGrant("club", { forOwnClub: false, kind: "equipment", targetTeamId: null })).toBe(false);
+  });
+
+  it("příspěvek na cestovné pro sebe se do limitu počítá, půjčka pro sebe ne", async () => {
+    await db.prepare(
+      "INSERT INTO competition_proposals (id, league_id, season_number, kind, payload, proposed_by_team_id, target_team_id, status) VALUES ('l1', 'l', 3, 'grant', ?, 'club', 'club', 'rejected')",
+    ).bind(JSON.stringify({ grantKind: "loan", amount: 20000, targetTeamId: "club" })).run();
+    expect(await ownGrantRequestBlocked(db, { teamId: "club", seasonNumber: 3, rules: rules(1) })).toBeNull();
+    await db.prepare(
+      "INSERT INTO competition_proposals (id, league_id, season_number, kind, payload, proposed_by_team_id, target_team_id, status) VALUES ('t1', 'l', 3, 'grant', ?, 'club', 'club', 'passed')",
+    ).bind(JSON.stringify({ grantKind: "travel", amount: 20000, targetTeamId: "club" })).run();
+    expect(await ownGrantRequestBlocked(db, { teamId: "club", seasonNumber: 3, rules: rules(1) })).toMatch(/jednou za sezónu/);
   });
 });
