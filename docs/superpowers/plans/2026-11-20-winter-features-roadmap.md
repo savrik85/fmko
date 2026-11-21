@@ -315,7 +315,7 @@ Na okresní akci (pouť) zápas legend klubu proti bývalému klubu přes přát
 | F8 práce u sponzora | 8b4a1406 | 0323 |
 | F9 zavolat zpátky | 7214b0f3 | 0324 |
 | F10 drby | 92efbc4d | 0325 |
-| F11 tipovačka | cdedb9e1 | 0326 |
+| F11 tipovačka | zamítnuta 11-21 (máme sázkovku), revert 388d2ade | 0326 se nepouští |
 | F12 rodiče U21 | 7fdebb48 | 0327 |
 | F13 dražba | d67258e0 | 0328 |
 | F14 kritika sudího na Sockách | 4c6f9023, 1b32d786, 4111323b | 0330 |
@@ -325,4 +325,9 @@ Na okresní akci (pouť) zápas legend klubu proti bývalému klubu přes přát
 | F18 zastupitelstvo | 954f4c38, 85a60fd4 | 0332 |
 | staří páni | 0005076d | – |
 
-Při nasazení pustit všechny migrace 0318–0333 (na `prales-db-test` jsou zatím jen 0318, 0326, 0328).
+Při nasazení pustit migrace 0318–0333 kromě 0326. Na `prales-db-test` jsou od 11-21 všechny (0326 tam zůstala zbytečně).
+
+**Proklikáno 11-21 na localhostu nad `prales-db-test`** (skutečné funkce spouštěné skriptem přes vzdálené vazby, odpovědi jako hráč v Chromu, 375 px):
+všechny funkce kromě F7. Hlasovka u zpětného hovoru (F9) jen jako SMS, lokálně chybí klíč Gemini TTS: ověřit na testingu.
+Nalezené chyby čekají na schválení: čas brigády („po práci“ = 21:00), pád jména v SMS komisaři a v drbu, titulky zastupitelstva bez obce,
+„Hráč píše…“ u nehráčů, popisky a článek ankety, rok v titulku ročenky, článek výběru okresu, tlačítko „To nebyla brigáda“ po vyhodnocení.
