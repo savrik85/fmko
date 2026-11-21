@@ -12,6 +12,22 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    date: "2026-11-21",
+    emoji: "📣",
+    title: "Proslovy v kabině, zastupitelstvo, svatby a práce u sponzora",
+    items: [
+      "Proslov se píše v Telefonu do skupinového chatu Kabina (nebo do kabiny zápasu). Za proslov se počítá zpráva aspoň na 80 znaků, jeden k zápasu.",
+      "Proslov den před zápasem nebo v den zápasu ovlivní formu týmu v zápase. Konkrétní a osobní proslov pomůže, prázdné fráze nic neudělají, urážka uškodí. Co zaznělo minule, podruhé nezabere.",
+      "Proslov po zápase (do 12 hodin) ovlivní náladu kabiny i další zápas. Hráč, kterého jmenovitě pochválíš nebo zkritizuješ, si to zapamatuje.",
+      "Proslovy obou trenérů jsou vidět v detailu zápasu.",
+      "Jednou za měsíc dělí zastupitelstvo obecní peníze mezi hasiče, myslivce a fotbalové kluby obce. Kolik dostane fotbal, rozhodne i tvůj proslov starostovi.",
+      "Hráč tě může pozvat na svatbu. Můžeš přijít a pohlídat kluky, poslat dar, nebo jim zakázat pít.",
+      "Majitele sponzorské firmy jde požádat, jestli by vzal hráče do práce. Hráč, který tam dělá, se na práci nevymluví. Sponzor si za to později řekne o pomoc v den zápasu.",
+      "Kritika sudího na Sockách může skončit pokutou, nebo i distancem na lavičce, pak v zápase neplatí pokyny na lavičce.",
+      "Na konci sezóny dostane každý klub ročenku na klubový web.",
+    ],
+  },
+  {
     date: "2026-11-19",
     emoji: "💬",
     title: "Lidé ve hře víc reagují na tvoje zprávy",
