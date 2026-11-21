@@ -84,6 +84,7 @@ export const VYSLEDEK_LABEL: Record<string, string> = {
   skoncila: "Skončilo",
   hrac_odesel: "Hráč odešel z klubu",
   prerostla_v_dluhy: "Přerostlo v dluhy",
+  found_job: "Našel práci",
   vratil: "Hráč to vrátil",
   nahradil: "Hráč škodu zaplatil",
 };

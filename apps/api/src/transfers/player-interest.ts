@@ -10,6 +10,7 @@
 import { estimateMarketValue } from "../season/economy";
 import { coachTransferPull, type CoachStanding } from "@okresni-masina/shared";
 import { logger } from "../lib/logger";
+import { canTakeJob, jobLureOf, jobLurePull } from "./job-lure";
 
 /** 0 = nechce odejít, 1 = váhá, 2 = chce přestoupit, 3 = velmi chce přestoupit */
 export type InterestLevel = 0 | 1 | 2 | 3;
@@ -48,6 +49,8 @@ export interface InterestInputs {
   sellerCoach?: CoachStanding | null;
   /** Nabídka od klubu v cizině (německý klub): hráče to láká víc. */
   abroad?: boolean;
+  /** Klub k nabídce přidal práci (transfers/job-lure.ts) a hráč by ji vzal. */
+  jobLure?: { unemployed: boolean; sponsorJob: boolean; occupation: string } | null;
 }
 
 /** O kolik víc láká hráče nabídka německého klubu (vyšší soutěž, jiný svět než okres). */
@@ -80,6 +83,7 @@ export function computePlayerInterest(input: InterestInputs): InterestResult {
   else if (input.offerAmount > 0 && input.offerAmount <= marketValue * 0.5) add("Urážlivě málo", -6);
 
   if (input.abroad) add("Fotbal v Německu", ABROAD_INTEREST_BONUS);
+  if (input.jobLure) add("Práce u nich", jobLurePull(input.jobLure));
 
   // Spokojenost brzdí — jen opravdu spokojený a spřízněný hráč zůstane
   add("Morálka", (50 - input.morale) * 0.4);
@@ -110,6 +114,8 @@ export interface InterestOffer {
   offerAmount: number;
   virtualRating?: number | null;
   virtualCountry?: string | null;
+  /** Virtuální klub k nabídce přidal práci („práce na pile"). */
+  virtualJob?: boolean;
 }
 
 /**
@@ -131,7 +137,8 @@ export function interestOfferOf(offer: {
       if (vd?.country) virtualCountry = vd.country;
     } catch (e) { logger.warn({ module: "player-interest" }, "parse virtual_team_data", e); }
   }
-  return { fromTeamId, offerAmount, virtualRating, virtualCountry };
+  const virtualJob = fromTeamId === "virtual_ai" && jobLureOf(offer.virtual_team_data) !== null;
+  return { fromTeamId, offerAmount, virtualRating, virtualCountry, ...(virtualJob ? { virtualJob } : {}) };
 }
 
 /**
@@ -161,11 +168,25 @@ export async function loadInterestInputs(
 
   let personality: Record<string, number> = {};
   let morale = 50;
+  let occupation = "";
+  let sponsorJob = false;
   try { personality = player.personality ? JSON.parse(player.personality as string) : {}; } catch (e) { logger.warn({ module: "player-interest" }, "parse personality", e); }
   try {
     const lc = player.life_context ? JSON.parse(player.life_context as string) : {};
     morale = typeof lc.morale === "number" ? lc.morale : 50;
+    occupation = typeof lc.occupation === "string" ? lc.occupation : "";
+    sponsorJob = !!lc.sponsorJob;
   } catch (e) { logger.warn({ module: "player-interest" }, "parse life_context", e); }
+
+  // Práce od soupeře: bez práce je hráč, kterému běží „přišel o práci", nebo nezaměstnaný.
+  let jobLure: InterestInputs["jobLure"] = null;
+  if (offer.virtualJob && canTakeJob((player.age as number) ?? 25, occupation)) {
+    const lost = await db.prepare(
+      "SELECT 1 AS x FROM club_incidents WHERE subject_player_id = ? AND kind = 'prisel_o_praci' AND status = 'probiha' LIMIT 1",
+    ).bind(playerId).first<{ x: number }>()
+      .catch((e) => { logger.warn({ module: "player-interest" }, "ztráta práce u hráče", e); return null; });
+    jobLure = { unemployed: !!lost || occupation === "Nezaměstnaný", sponsorJob, occupation };
+  }
 
   const avgStrength = async (teamId: string): Promise<number> => {
     const row = await db.prepare(
@@ -199,6 +220,7 @@ export async function loadInterestInputs(
     buyerCoach: coaches.get(offer.fromTeamId) ?? null,
     sellerCoach: coaches.get(player.team_id as string) ?? null,
     abroad: offer.fromTeamId === "virtual_ai" && !!offer.virtualCountry && offer.virtualCountry !== "CZ",
+    jobLure,
   };
 }
 

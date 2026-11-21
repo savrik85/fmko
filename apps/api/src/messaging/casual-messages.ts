@@ -46,6 +46,9 @@ const ACTIVE_MANAGER_DAYS = 3;
  */
 const INVITE_TTL_SECONDS = 36 * 3600;
 
+/** Téma, po kterém hráč čeká, jestli mu trenér sežene práci (F8). */
+const JOB_TIP_TOPIC_ID = "casual_job_tip";
+
 const inviteKey = (convId: string) => `open_invite:${convId}`;
 const recentTopicsKey = (teamId: string) => `casual_topics:${teamId}`;
 
@@ -283,6 +286,11 @@ async function spawnCasualForTeam(
       .bind(at, player.id),
   ]);
   if (topic.invite) await openInvite(env.CACHE_KV, convId, { kind: topic.invite, topicId: topic.id, teamId, playerId: player.id, playerFirstName: player.firstName });
+  // „Nevíte o práci?": když trenér slíbí, že se poptá, zeptá se hra firmy (messaging/job-tip.ts).
+  if (topic.id === JOB_TIP_TOPIC_ID) {
+    const { openJobTip } = await import("./job-tip");
+    await openJobTip(env.CACHE_KV, convId, { teamId, playerId: player.id, playerFirstName: player.firstName });
+  }
   await rememberTopic(env.CACHE_KV, teamId, topic.id);
   await pushPhoneMessage(db, env, { teamId, convId, sender: `${player.firstName} ${player.lastName}`, text: photo ? `📷 ${text}` : voice ? "🎤 Hlasová zpráva" : text });
   logger.info({ module: M, teamId }, `zpráva jen tak: ${player.firstName} ${player.lastName} → ${topic.id}${photo ? " (fotka)" : voice ? " (hlasovka)" : ""}`);

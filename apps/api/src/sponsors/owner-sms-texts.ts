@@ -18,6 +18,8 @@ export const OWNER_SMS_OCCASIONS = [
   "match_eve", "after_win", "after_loss", "losing_streak", "riot",
   "main_lost", "main_new", "season_thanks", "season_complaint", "scandal",
   "promise_kept", "promise_broken", "sponsor_terminates",
+  // Protislužba za práci pro hráče (F8, sponsors/player-jobs-db.ts).
+  "job_favor",
 ] as const;
 export type OwnerSmsOccasion = (typeof OWNER_SMS_OCCASIONS)[number];
 
@@ -36,12 +38,14 @@ export function isReplyTone(v: unknown): v is ReplyTone {
  * Proměnné šablon: `{skore}` z pohledu domácích („2:1"), `{serie}` = počet proher v řadě,
  * `{slib}` = popisek slibu v 1. pádě (`promiseLabel`), v šablonách vždy za dvojtečkou.
  * `{incident}` = co se v klubu stalo (`SCANDAL_INCIDENT_LABELS`), 1. pád, za dvojtečkou nebo za „jako".
+ * `{player}` = jméno a příjmení hráče, kterého firma vzala do práce, 1. pád, vždy jako podmět.
  */
 export interface OwnerSmsVars {
   skore?: string;
   serie?: number;
   slib?: string;
   incident?: string;
+  player?: string;
 }
 
 /**
@@ -65,6 +69,33 @@ export const SCANDAL_INCIDENT_LABELS: Readonly<Record<string, string>> = {
 };
 
 type Pools = Partial<Record<OwnerPersonality, readonly string[]>>;
+
+/**
+ * Protislužba za práci pro hráče (F8). Vzor je slib pořadatelské služby: majitel o něco požádá,
+ * vlídná odpověď (slib) ho potěší, odbytí nebo mlčení ho mrzí víc než jindy, vzal přece hráče.
+ */
+const JOB_FAVOR_TEXTS: Pools = {
+  fan: [
+    "{player} u nás maká dobře, díky za tip. Teď bych potřeboval já: v sobotu stěhujeme dílnu, nepošleš mi pár kluků z týmu?",
+    "{player} se u nás osvědčil. Za týden máme firemní den, přijdou kluci z týmu podepisovat míče?",
+    "{player} je u nás spokojenej a já taky. Teď něco za něco: na firemní akci potřebuju pořadatele, půjčíš mi pár kluků?",
+  ],
+  patriot: [
+    "{player} u nás dělá poctivě, to se cení. V sobotu uklízíme okolí firmy, přišli by kluci z týmu pomoct?",
+    "{player} se osvědčil, díky. Teď bych prosil já: obec chystá brigádu u hasičárny a potřebuju chlapy. Pošleš pár kluků?",
+    "{player} si u nás zvyká dobře. Za týden máme ve firmě výročí, udělali by kluci z týmu pořadatele?",
+  ],
+  businessman: [
+    "{player} se u nás zapracoval. Teď laskavost za laskavost: v sobotu máme den otevřených dveří a potřebuji pár hráčů jako pořadatele. Dá se to zařídit?",
+    "{player} plní, co se od něj čeká. Na oplátku bych rád viděl hráče na naší firemní akci, podepisovat a fotit se. Domluvíme se?",
+    "{player} je u nás spokojený. Teď potřebuji já: v sobotu stěhujeme sklad a chybí mi lidi. Pošlete mi pár hráčů?",
+  ],
+  cautious: [
+    "{player} u nás pracuje spolehlivě, děkuji. Mohl bych vás teď poprosit o pomoc? V sobotu máme ve firmě akci a potřebuji pár lidí na pořádek.",
+    "{player} se u nás osvědčil. Za týden stěhujeme dílnu, pomohli by nám kluci z týmu? Sám to nezvládnu.",
+    "{player} u nás je a jsem rád. Teď bych potřeboval laskavost: na firemní den potřebuji pořadatele z vašeho týmu. Šlo by to?",
+  ],
+};
 
 export const OWNER_SMS_TEXTS: Record<OwnerSmsOccasion, Pools> = {
   match_eve: {
@@ -340,7 +371,9 @@ export const OWNER_SMS_TEXTS: Record<OwnerSmsOccasion, Pools> = {
       "Smlouvu vypovídám. Slib nevyšel: {slib}. Přeji klubu klid a pořádek.",
     ],
   },
+  job_favor: JOB_FAVOR_TEXTS,
 };
+
 
 /** „3 prohry" / „5 proher". Šablona počet neohýbá, jinak vzniká „5 prohry". */
 export function proherTvar(n: number): string {
@@ -351,7 +384,7 @@ export function proherTvar(n: number): string {
 function fill(t: string, vars: OwnerSmsVars): string {
   const serie = vars.serie === undefined ? "" : proherTvar(vars.serie);
   return t.replace(/\{skore\}/g, vars.skore ?? "").replace(/\{serie\}/g, serie).replace(/\{slib\}/g, vars.slib ?? "")
-    .replace(/\{incident\}/g, vars.incident ?? "");
+    .replace(/\{incident\}/g, vars.incident ?? "").replace(/\{player\}/g, vars.player ?? "");
 }
 
 /**
@@ -369,12 +402,13 @@ export function renderOwnerSms(
   if (pool.some((t) => t.includes("{serie}")) && vars.serie === undefined) return null;
   if (pool.some((t) => t.includes("{slib}")) && vars.slib === undefined) return null;
   if (pool.some((t) => t.includes("{incident}")) && vars.incident === undefined) return null;
+  if (pool.some((t) => t.includes("{player}")) && !vars.player) return null;
   const rendered = pool.map((t) => fill(t, vars));
   const fresh = rendered.filter((t) => !recent.includes(t));
   return createRng(seedFromString(seedKey)).pick(fresh.length > 0 ? fresh : rendered);
 }
 
-type ReplyKind = "positive" | "concern" | "trouble" | "farewell";
+type ReplyKind = "positive" | "concern" | "trouble" | "farewell" | "favor";
 
 const OCCASION_REPLY_KIND: Record<OwnerSmsOccasion, ReplyKind> = {
   match_eve: "positive",
@@ -390,6 +424,7 @@ const OCCASION_REPLY_KIND: Record<OwnerSmsOccasion, ReplyKind> = {
   promise_kept: "positive",
   promise_broken: "concern",
   sponsor_terminates: "farewell",
+  job_favor: "favor",
 };
 
 const REPLY_OPTION_TEXTS: Record<ReplyKind, Record<ReplyTone, string>> = {
@@ -412,6 +447,11 @@ const REPLY_OPTION_TEXTS: Record<ReplyKind, Record<ReplyTone, string>> = {
     warm: "Děkujeme za všechno, dveře u nás máte otevřené.",
     neutral: "Beru na vědomí, díky za spolupráci.",
     dismissive: "Tak nic, sbohem.",
+  },
+  favor: {
+    warm: "Jasně, pomůžeme. Kluci přijdou.",
+    neutral: "Zkusím to dát dohromady.",
+    dismissive: "Na to teď nemáme čas.",
   },
 };
 
@@ -438,7 +478,8 @@ type ReplyMood = "positive" | "negative";
  * nesmí sáhnout do poolu s pokračovacími frázemi typu „Jdeme dál").
  */
 function occasionReplyMood(occasion: OwnerSmsOccasion): ReplyMood {
-  return OCCASION_REPLY_KIND[occasion] === "positive" ? "positive" : "negative";
+  const kind = OCCASION_REPLY_KIND[occasion];
+  return kind === "positive" || kind === "favor" ? "positive" : "negative";
 }
 
 /**

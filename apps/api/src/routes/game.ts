@@ -6024,8 +6024,10 @@ gameRouter.get("/teams/:teamId/offers/:offerId", async (c) => {
     if (isOfferActive && playerRow) {
       const virtualRating = virtualFromTeam ? (virtualFromTeam.reputation as number | null) : null;
       const virtualCountry = virtualFromTeam ? (virtualFromTeam.country as string | null) : null;
+      const { jobLureOf } = await import("../transfers/job-lure");
       const fresh = await computeInterestForOffer(c.env.DB, offer.player_id as string, {
         fromTeamId: offer.from_team_id as string, offerAmount: currentAmount, virtualRating, virtualCountry,
+        virtualJob: isVirtualOffer && jobLureOf(offer.virtual_team_data) !== null,
       });
       if (fresh) {
         playerInterest = { level: fresh.level, label: INTEREST_LABELS[fresh.level] };

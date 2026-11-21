@@ -16,7 +16,9 @@ const DAY_MS = 86400000;
 
 export type UnrestActionId =
   | "promise_minutes" | "raise_wage" | "bonus" | "promise_transfer" | "release"
-  | "personal_talk" | "captaincy" | "appeal_loyalty" | "tough_love";
+  | "personal_talk" | "captaincy" | "appeal_loyalty" | "tough_love"
+  // Soupeř ho lákal prací: trenér mu ji sežene u sponzora (sponsors/player-jobs-db.ts).
+  | "find_job";
 
 type Outcome = "calmed" | "partial" | "backfired";
 
@@ -80,6 +82,12 @@ export const UNREST_ACTIONS: UnrestActionDef[] = [
     label: "Zpražit ho",
     coachMessage: "Poslouchej. Trucování ti nepomůže. Buď makáš jako ostatní, nebo si sedneš na lavku. Tvoje volba.",
     description: "Disciplinovaný hráč si to vezme k srdci.",
+  },
+  {
+    id: "find_job",
+    label: "Sehnat mu práci u sponzora",
+    coachMessage: "Vím, že tě lákali i prací. Mluvil jsem se sponzorem, můžeš u něj nastoupit a na zápasy tě pustí. Tak zůstaň a makej tady.",
+    description: "Zeptáš se firmy, se kterou má klub nejlepší vztah. Když ho vezme, hráč se výrazně uklidní a šéf ho bude pouštět na zápasy. Když ho nevezme žádná, nic se nestane.",
   },
   {
     id: "release",
@@ -204,6 +212,10 @@ export function availableActions(
       // Máma ho tlačí do Vimperka, protože tu nehraje (youth/parents-db.ts): místo v sestavě, nebo pivo a vyříkat si to.
       if (unrest.pledge?.type !== "minutes") add("promise_minutes");
       add("personal_talk");
+    } else if (reason === "job") {
+      // Kdo už u sponzora dělá, toho prací nalákat nejde (`life_context.sponsorJob`). Hráč na
+      // hostování hraje jinde, práci mu klub u svého sponzora nesežene.
+      if (!lifeContext.sponsorJob && ctx.ownedHere) add("find_job");
     } else {
       add("personal_talk");
     }
@@ -463,6 +475,22 @@ export async function performUnrestAction(
       effects.push("Disciplinovaný, zpražení zabralo");
       break;
     }
+    case "find_job": {
+      // Bez textů (AI trenér) se trenérovi nepíše ani majitel. Nálada a vztah jdou přes dohodu níž.
+      const { bestHiringSponsor, postJobExchange, requestPlayerJob } = await import("../sponsors/player-jobs-db");
+      const sponsorId = await bestHiringSponsor(db, teamId, playerId);
+      const job = sponsorId === null ? null
+        : await requestPlayerJob(db, { teamId, sponsorId, playerId, source: "unrest_deal" }, { playerEffects: false })
+          .catch((e) => { logger.warn({ module: "unrest" }, `práce u sponzora pro hráče ${playerId}`, e); return null; });
+      if (job?.kind !== "hired") return { ok: false, error: "Žádná firma, se kterou má klub vztah, ho teď nevezme.", status: 409 };
+      if (!silent) await postJobExchange(db, job);
+      // Celý life_context se níž přepisuje z paměti: povolání a práci u sponzora do něj.
+      lc.occupation = job.occupation;
+      lc.sponsorJob = job.sponsorJob;
+      unrestDelta = -40; moraleDelta = 6;
+      effects.push(`Nastoupí do práce: ${job.owner.firmName ?? "firma sponzora"}`);
+      break;
+    }
     case "release": {
       const offerId = await recreateOffer(db, teamId, player, unrest);
       if (!offerId) return { ok: false, error: "Klub už o hráče nestojí.", status: 409 };
@@ -593,8 +621,10 @@ async function recreateOffer(db: D1Database, teamId: string, player: Record<stri
   if (!vd?.name) return null;
   const { offerReplyDeadline } = await import("./offer-deadline");
   const { computeInterestForOffer } = await import("./player-interest");
+  const { jobLureOf } = await import("./job-lure");
   const interest = await computeInterestForOffer(db, player.id as string, {
     fromTeamId: "virtual_ai", offerAmount: offer.amount, virtualRating: vd.rating ?? null, virtualCountry: vd.country ?? null,
+    virtualJob: jobLureOf(offer.virtualTeamData) !== null,
   }).catch((e) => { logger.warn({ module: "unrest" }, "zájem u obnovené nabídky", e); return null; });
   const price = offer.amount.toLocaleString("cs");
   const message = vd.country === "DE"

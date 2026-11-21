@@ -209,6 +209,16 @@ describe("kdo dostane zprávu jen tak", () => {
     await db.prepare("INSERT INTO conversations (id, team_id, type, participant_id, ai_thread_active, ai_thread_state) VALUES ('c1', 't1', 'player', 'p1', 1, '{}')").run();
     expect((await spawnCasualMessages(db, { CACHE_KV: kv }, SATURDAY_EVENING, { teamId: "t1" })).sent).toBe(0);
   });
+
+  it("„Nevíte o práci?“ od hráče bez práce: otázka čeká na trenérův slib (F8)", async () => {
+    await addPlayer("p1", 85);
+    await db.prepare("INSERT INTO club_incidents VALUES ('inc-lost-job', 't1', 'probiha', 'zivotni', 'p1', 'prisel_o_praci')").run();
+    const r = await spawnCasualMessages(db, { CACHE_KV: kv }, SATURDAY_EVENING, { teamId: "t1", topicId: "casual_job_tip" });
+    expect(r.sent).toBe(1);
+    const convId = (await db.prepare("SELECT id FROM conversations WHERE participant_id = 'p1'").first<{ id: string }>())!.id;
+    expect(JSON.parse((await kv.get(`open_job_tip:${convId}`)) ?? "null")).toEqual({ teamId: "t1", playerId: "p1", playerFirstName: "Franta" });
+    await kv.delete(`open_job_tip:${convId}`);
+  });
 });
 
 describe("pozvání", () => {

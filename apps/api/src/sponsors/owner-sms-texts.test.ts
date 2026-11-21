@@ -8,7 +8,7 @@ import {
   OWNER_REPLY_BACK, OWNER_SMS_OCCASIONS, OWNER_SMS_TEXTS, SCANDAL_INCIDENT_LABELS, ownerReplyBack, proherTvar, renderOwnerSms, replyOptions,
 } from "./owner-sms-texts";
 
-const VARS = { skore: "2:1", serie: 4, slib: "umístění do 3. místa", incident: "krádež pohárů z vitríny" };
+const VARS = { skore: "2:1", serie: 4, slib: "umístění do 3. místa", incident: "krádež pohárů z vitríny", player: "Jan Novák" };
 
 describe("OWNER_SMS_TEXTS", () => {
   it("každá příležitost má pro každou povahu aspoň tři věty (skandál jen opatrný)", () => {
@@ -29,7 +29,7 @@ describe("OWNER_SMS_TEXTS", () => {
       for (const p of OWNER_PERSONALITIES) {
         for (const t of OWNER_SMS_TEXTS[o][p] ?? []) {
           const out = renderOwnerSms(o, p, VARS, `test|${t}`, (OWNER_SMS_TEXTS[o][p] ?? []).filter((x) => x !== t)
-            .map((x) => x.replace("{skore}", "2:1").replace("{serie}", "4 prohry").replace("{slib}", "umístění do 3. místa").replace("{incident}", "krádež pohárů z vitríny")));
+            .map((x) => x.replace("{skore}", "2:1").replace("{serie}", "4 prohry").replace("{slib}", "umístění do 3. místa").replace("{incident}", "krádež pohárů z vitríny").replace("{player}", "Jan Novák")));
           expect(out, `${o}/${p}`).not.toBeNull();
           expect(out).not.toMatch(/[{}]/);
           expect(out).not.toContain("—");
@@ -218,5 +218,22 @@ describe("průšvih: majitel řekne, o co jde", () => {
     }
     // Bez popisku (staré SMS) zůstane obecná věta.
     expect(ownerReplyBack("cautious", "scandal", 2, "owner-reply|old")).not.toMatch(/[{}]/);
+  });
+});
+
+describe("protislužba za práci pro hráče (F8)", () => {
+  it("každá věta jmenuje hráče a bez jména se SMS nepošle", () => {
+    for (const p of OWNER_PERSONALITIES) {
+      for (const t of OWNER_SMS_TEXTS.job_favor[p] ?? []) expect(t).toContain("{player}");
+      expect(renderOwnerSms("job_favor", p, {}, "job-favor:j1", [])).toBeNull();
+      expect(renderOwnerSms("job_favor", p, { player: "Jan Novák" }, "job-favor:j1", [])).toContain("Jan Novák");
+    }
+  });
+
+  it("hotové odpovědi: slíbit pomoc, zkusit to, odbýt", () => {
+    const opts = replyOptions("job_favor");
+    expect(opts.map((o) => o.id)).toEqual(["warm", "neutral", "dismissive"]);
+    expect(opts[0].text).toMatch(/pomůžeme/);
+    for (const o of opts) expect(o.text).not.toMatch(/[—{}]/);
   });
 });

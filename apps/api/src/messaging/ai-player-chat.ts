@@ -301,6 +301,9 @@ export function buildSystemPrompt(
     popisZdravi(player),
     domacnostSeSituaci(player.age, player.zivotniSituace?.kind),
     popisSituace(cas, player.occupation, vymluva, { mustAnswerNow: mustAnswerNow(player) }),
+    player.sponsorJobFirm
+      ? `Práci ti sehnal trenér u sponzora klubu: děláš u firmy ${player.sponsorJobFirm} a šéf tě pouští na zápasy. Jsi mu za to vděčný.`
+      : "",
     // Kdo je na druhé straně, musí být jasné TADY, ne až mezi fakty o klubu.
     // Dokud trenérovo jméno leželo v seznamu vedle spoluhráčů, model ho bral
     // jako dalšího člověka z klubu a posílal trenéra za trenérem:
@@ -798,6 +801,32 @@ export async function coachAcceptsInvite(
   ].join("\n");
   const raw = await callModel(env, prompt, { json: true, maxTokens: 40, temperature: 0 });
   return tryParseJson<{ accepted?: unknown }>(raw)?.accepted === true;
+}
+
+/**
+ * Hráč, který přišel o práci, se trenéra ptal, jestli neví o místě (casual_job_tip, F8).
+ * Slíbil trenér v téhle zprávě, že se poptá nebo mu práci sežene? null = nečitelná odpověď;
+ * když model nejede, hází `GeminiUnavailableError` a rozhodne pravidlo (job-parse.ts).
+ */
+export async function coachPromisesJobHelp(
+  env: ChatEnv,
+  tip: { playerFirstName: string },
+  coachMessage: string,
+): Promise<boolean | null> {
+  const prompt = [
+    `Hráč ${tip.playerFirstName} přišel o práci a ptal se trenéra, jestli neví o nějaké práci nebo brigádě.`,
+    `Trenér mu teď napsal: ${coachQuote(coachMessage)}`,
+    COACH_TEXT_RULE,
+    "",
+    "Slíbil trenér v TÉHLE zprávě, že mu práci zkusí sehnat? Tedy že se poptá, zavolá, zeptá se u sponzora nebo známého,",
+    "nebo že mu práci sežene (\"zeptám se u Kubíčka\", \"zkusím to u sponzorů\", \"seženu ti něco\", \"mám známýho na pile\").",
+    "Soucit bez slibu (\"to je blbý, drž se\"), rada ať hledá sám nebo odmítnutí = false.",
+    "",
+    "Vrať POUZE JSON: {\"helps\": true|false}",
+  ].join("\n");
+  const raw = await callModel(env, prompt, { json: true, maxTokens: 40, temperature: 0 });
+  const helps = tryParseJson<{ helps?: unknown }>(raw)?.helps;
+  return typeof helps === "boolean" ? helps : null;
 }
 
 /**

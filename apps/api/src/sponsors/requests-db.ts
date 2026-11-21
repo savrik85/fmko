@@ -15,6 +15,7 @@ import { activeSeason, loadNegotiationSponsor, loadNegotiationTeam, type Negotia
 import { addDays, dayDiff } from "./owner-sms-rules";
 import { askText, ownerAlreadyAnswered, ownerSmallTalk, requestCheckText, requestReplyText } from "./request-texts";
 import { dayMonth, extractMoneyAsk, kc, writeOwnerReply, type OwnerChatEnv, type OwnerChatFacts } from "./owner-chat";
+import { JOB_ASK_META } from "./player-jobs";
 import { parseRequestText } from "./request-parse";
 import {
   BROKEN_FAVOR, decideRequest, exhaustedBelow, isRequestPurpose, MAX_ASK, MIN_ASK, PURPOSE_LABELS, PURPOSE_SPEND_TYPES, REPEAT_DAYS,
@@ -323,12 +324,15 @@ export async function handleOwnerText(
      ORDER BY sent_at DESC LIMIT 1`,
   ).bind(convId).first<{ metadata: string | null }>();
   let pending: { purpose: RequestPurpose | null; amount: number | null } | null = null;
+  // Majitel se ptal, pro koho trenér práci shání (player-jobs-db.ts).
+  let pendingJob = false;
   if (prev?.metadata) {
     try {
       const m = JSON.parse(prev.metadata) as { type?: string; purpose?: unknown; amount?: unknown };
       if (m.type === ASK_META) {
         pending = { purpose: isRequestPurpose(m.purpose) ? m.purpose : null, amount: typeof m.amount === "number" ? m.amount : null };
       }
+      pendingJob = m.type === JOB_ASK_META;
     } catch (e) {
       logger.warn({ module: M, teamId }, `nečitelná metadata zprávy majitele ${sponsorId}`, e);
     }
@@ -346,6 +350,12 @@ export async function handleOwnerText(
     await postOwnerMessages(db, teamId, owner, [{ from: "owner", body, meta }], { coachName: ctx.team.name, unread: false });
   };
   const allowed = [ctx.given];
+
+  // Práce pro hráče (F8): „máte u vás místo pro Nováka?". Rozhodne oblíbenost a obor firmy.
+  const { handleOwnerJobText } = await import("./player-jobs-db");
+  const jobHandled = await handleOwnerJobText(db, env, { teamId, sponsorId, convId, text, facts, pendingJob, say })
+    .catch((e) => { logger.warn({ module: M, teamId }, `práce pro hráče u majitele ${sponsorId}`, e); return false; });
+  if (jobHandled) return true;
 
   // Model s kontextem rozhovoru, bez něj slova ze zprávy.
   const parsed = parseRequestText(text);

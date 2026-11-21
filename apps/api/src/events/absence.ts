@@ -48,6 +48,8 @@ export interface PlayerForAbsence {
   transferUnrest?: number; // 0-100 — truc po odmítnutém přestupu
   /** Vliv incidentu v klubu (spec 17a). Ve fázi 3 jen `obvineny`. */
   incident?: { druhy: string[] };
+  /** Dělá u firmy, která klub sponzoruje (sponsors/player-jobs.ts): šéf ho na zápas pustí. */
+  sponsorJob?: boolean;
 }
 
 function nactiJson(raw: unknown, co: string): Record<string, any> {
@@ -98,6 +100,7 @@ export function hracProAbsenci(row: Record<string, unknown>, druhy?: readonly st
     celebrityType: pers.celebrityType,
     celebrityTier: pers.celebrityTier,
     ...(druhy && druhy.length > 0 ? { incident: { druhy: [...druhy] } } : {}),
+    ...(lc.sponsorJob ? { sponsorJob: true } : {}),
   };
 }
 
@@ -755,7 +758,7 @@ export function generateAbsences(
     // jen druh výmluvy, ne to, jestli hráč přijde. Obě přirážky dělají v průměru kádru
     // +1,5 bodu, proto základ klesl z 0,02 na 0,01 a násobek z 0,95 na 0,88:
     // průměrná absence zůstává kolem 7 %, jen se přesunula k pijákům a směnařům.
-    const workFactor = occupationMatchAbsence(p.occupation);
+    const workFactor = occupationMatchAbsence(p.occupation, { sponsorJob: p.sponsorJob });
     const alcoholFactor = p.alcohol > 70 ? 0.015 : 0;
     let baseChance = (0.01 + disciplineFactor * 0.10 + patriotismFactor * 0.03 + moraleFactor * 0.02 + commuteFactor
       + workFactor + alcoholFactor) * 0.88;

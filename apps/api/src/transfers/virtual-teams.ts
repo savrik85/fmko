@@ -15,6 +15,7 @@ import { shiftForRating } from "../skills/generator";
 import { villageClubName } from "../scouting/candidates";
 import { haversineKm } from "./player-agency";
 import { brokenCzech } from "../messaging/foreign-speech";
+import { canTakeJob, pickJobLure } from "./job-lure";
 
 // ═══════════════════════════════════════════════
 // HARDCODED VIRTUAL TEAMS PER DISTRICT
@@ -455,10 +456,14 @@ async function maybeOfferForTeam(
 
   // Kolikátý prodej klubu mimo hru by to pro tenhle klub v sezóně byl: od třetího cena klesá.
   const priorSales = await outsideSalesThisSeason(db, targetTeamId);
+  // Český klub občas přidá i práci („seženeme mu práci na pile", F8). Vlastní los z klíče,
+  // hlavní `rng` se tím neposune.
+  const lure = abroad ? null : pickJobLure(`${targetTeamId}|${new Date().toISOString().slice(0, 10)}`);
   let target = rng.pick(candidates);
   let offerPrice = calcOfferPrice(target.overall_rating as number, (target.age as number) ?? 25, target.position as string, rng, abroad, priorSales);
   let interest = await computeInterestForOffer(db, target.id as string, {
     fromTeamId: "virtual_ai", offerAmount: offerPrice, virtualRating: virtualTeam.rating, virtualCountry: virtualTeam.country,
+    virtualJob: lure !== null,
   }).catch((e) => { logger.warn({ module: "virtual-teams" }, "compute interest", e); return null; });
 
   if (interest && interest.level === 0 && candidates.length > 1) {
@@ -466,6 +471,7 @@ async function maybeOfferForTeam(
     const otherPrice = calcOfferPrice(other.overall_rating as number, (other.age as number) ?? 25, other.position as string, rng, abroad, priorSales);
     const otherInterest = await computeInterestForOffer(db, other.id as string, {
       fromTeamId: "virtual_ai", offerAmount: otherPrice, virtualRating: virtualTeam.rating, virtualCountry: virtualTeam.country,
+      virtualJob: lure !== null,
     }).catch((e) => { logger.warn({ module: "virtual-teams" }, "compute interest #2", e); return null; });
     if (otherInterest && otherInterest.level >= 1) {
       target = other;
@@ -475,6 +481,17 @@ async function maybeOfferForTeam(
   }
 
   const rating = target.overall_rating as number;
+  // Práci nese nabídka jen pro toho, kdo by ji vzal (ne student, důchodce ani kluk).
+  const targetOccupation = (() => {
+    try {
+      const occ = (JSON.parse((target.life_context as string | null) ?? "{}") as { occupation?: unknown }).occupation;
+      return typeof occ === "string" ? occ : "";
+    } catch (e) {
+      logger.warn({ module: "virtual-teams" }, "life_context hráče pro práci v nabídce", e);
+      return "";
+    }
+  })();
+  const job = lure && canTakeJob((target.age as number) ?? 25, targetOccupation) ? lure : null;
 
   const offerId = crypto.randomUUID();
   await db.prepare(
@@ -484,10 +501,11 @@ async function maybeOfferForTeam(
     offerId, target.id, targetTeamId, offerPrice,
     abroad
       ? germanClubLetter(rng, virtualTeam.name, `${target.first_name} ${target.last_name}`, offerPrice)
-      : `Máme vážný zájem o vašeho hráče. Nabízíme ${offerPrice.toLocaleString("cs")} Kč, peníze máme připravené.`,
+      : `Máme vážný zájem o vašeho hráče. Nabízíme ${offerPrice.toLocaleString("cs")} Kč, peníze máme připravené.${job ? ` Hráči navíc seženeme ${job.label}.` : ""}`,
     JSON.stringify({
       name: virtualTeam.name, city: virtualTeam.city, district: virtualTeam.district, rating: virtualTeam.rating,
       ...(abroad ? { country: virtualTeam.country } : {}),
+      ...(job ? { job } : {}),
     }),
     interest?.level ?? null, offerReplyDeadline(),
   ).run();
@@ -517,7 +535,8 @@ async function maybeOfferForTeam(
     const msgText = brokenCzech(rng.pick(templates)
       .replace("{team}", virtualTeam.name)
       .replace("{city}", virtualTeam.city)
-      .replace("{price}", offerPrice.toLocaleString("cs")), target.nationality as string | null, offerId);
+      .replace("{price}", offerPrice.toLocaleString("cs")) + (job ? ` A prej by mi tam sehnali i ${job.label}.` : ""),
+      target.nationality as string | null, offerId);
 
     await db.prepare(
       "INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, sent_at) VALUES (?, ?, 'player', ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))"

@@ -116,6 +116,7 @@ const REASON_TEXT: Record<UnrestReason, string> = {
   morale: "the bad mood in the club",
   // AI kluby rodiče z U21 nemají (youth/parents-db.ts), mapa jen musí být úplná.
   parent: "his mother pushing him to move to Vimperk",
+  job: "the other club also promised him a job",
 };
 
 const IMPORTANCE_TEXT: Record<SquadImportance, string> = {
@@ -144,6 +145,8 @@ function optionText(o: UnrestOption, p: UnrestCandidate): string {
       return "tell him off and demand hard work, free; a disciplined player takes it to heart, calms him a little";
     case "release":
       return `let him go: ${o.sale?.club ?? "the club"} sends its ${czk(o.sale?.amount ?? 0)} offer again and you accept it; he leaves the club for good and you get the fee`;
+    case "find_job":
+      return "get him a day job at one of your sponsors' firms, free; the boss lets him off for matches; calms a player lured by a job strongly";
   }
 }
 
@@ -266,7 +269,8 @@ export function fallbackUnrestChoice(p: UnrestCandidate, profile: AiCoachProfile
   const needed = p.importance !== "surplus";
   const patient = profile.patience >= 60 || (profile.youthFocus >= 60 && p.age <= 21);
   const pays = p.importance === "key" ? profile.thrift < 80 : needed && p.level >= ANGRY_LEVEL && profile.thrift < 50;
-  const order: UnrestActionId[] = ["appeal_loyalty"];
+  // Práce u sponzora nic nestojí a míří přesně na důvod, proč chtěl pryč (lákali ho prací).
+  const order: UnrestActionId[] = needed ? ["find_job", "appeal_loyalty"] : ["appeal_loyalty"];
   if (p.importance === "key") order.push("captaincy");
   if (patient && needed) order.push("promise_minutes", "personal_talk");
   if (pays) order.push(...(p.importance === "key" ? ["raise_wage", "bonus"] as const : ["bonus", "raise_wage"] as const));

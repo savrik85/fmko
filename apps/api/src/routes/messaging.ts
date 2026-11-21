@@ -801,6 +801,13 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
         .then(() => undefined)
         .catch((e) => logger.error({ module: "messaging" }, "odpověď na pozvání", e)),
     );
+    // Hráč bez práce se ptal, jestli trenér neví o místě: slib „zeptám se" spustí žádost u firmy (F8).
+    const { handleCoachMessageForJobTip } = await import("../messaging/job-tip");
+    c.executionCtx.waitUntil(
+      handleCoachMessageForJobTip(c.env.DB, c.env, convId, body.body.trim())
+        .then(() => undefined)
+        .catch((e) => logger.error({ module: "messaging" }, "odpověď na otázku na práci", e)),
+    );
   }
 
   // Slib napsaný vlastními slovy („zítra hraješ“, „tady máš prémii“, „pojď na pivo“): hra ho

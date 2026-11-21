@@ -83,6 +83,8 @@ export interface PlayerSnapshot {
 
   // optional context
   occupation?: string;
+  /** Práci mu přes klub sehnal trenér (`life_context.sponsorJob`, sponsors/player-jobs.ts): název firmy. */
+  sponsorJobFirm?: string;
   /** Národnost (`players.nationality`); cizinec píše lámaně, Slovák slovensky. Chybí = Čech. */
   nationality?: string | null;
   /** Mluví i romsky (`life_context.romani`): občas romské slovo, jinak česky. */

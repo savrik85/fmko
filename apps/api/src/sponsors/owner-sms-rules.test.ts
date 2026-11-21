@@ -104,3 +104,12 @@ describe("priority slibů sponzorům", () => {
     expect(pickDeliverable([p("a", 1, "sponsor_terminates"), p("b", 2, "riot")], [], TODAY)?.id).toBe("b");
   });
 });
+
+describe("protislužba za práci pro hráče (F8)", () => {
+  it("odbytí a mlčení u protislužby mrzí dvojnásob, vlídnost těší dvojnásob", () => {
+    expect(replyFavorDelta("fan", "dismissive", "job_favor")).toBe(2 * replyFavorDelta("fan", "dismissive"));
+    expect(replyFavorDelta("patriot", "warm", "job_favor")).toBe(2 * replyFavorDelta("patriot", "warm"));
+    expect(ignoreFavorDelta("cautious", "job_favor")).toBe(2 * ignoreFavorDelta("cautious"));
+    expect(replyFavorDelta("fan", "warm", "after_win")).toBe(replyFavorDelta("fan", "warm"));
+  });
+});

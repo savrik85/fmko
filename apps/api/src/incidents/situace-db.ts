@@ -120,6 +120,11 @@ export async function zalozSituaci(env: Bindings, stav: StavKlubu, navrh: NavrhI
     });
     if (p) davka.push(p);
   }
+  // Kdo přišel o práci, u sponzora už nedělá: šéf ho na zápasy pouštět nebude (sponsors/player-jobs.ts).
+  if (navrh.kind === "prisel_o_praci") {
+    davka.push(db.prepare("UPDATE players SET life_context = json_remove(life_context, '$.sponsorJob') WHERE id = ? AND json_extract(life_context, '$.sponsorJob') IS NOT NULL")
+      .bind(subjectId));
+  }
   if (davka.length > 0) {
     await db.batch(davka).catch((e) => logger.error({ module: M }, `dopady situace ${id}`, e));
   }
