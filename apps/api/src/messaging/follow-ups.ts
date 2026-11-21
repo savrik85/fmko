@@ -26,6 +26,7 @@ import { PHOTO_SCENES, generatePlayerPhoto, historyBody } from "./player-photo";
 import { loadChatMemory, offerStanceStmt } from "./player-memory";
 import { refundCoachSms } from "./phone-credit";
 import { loadOwnRecentLines } from "./repetition";
+import { loadRecentLifeEvent } from "../incidents/life-news";
 import { playerInClub } from "./player-reach";
 import type { PlayerSnapshot } from "./ai-player-scenarios";
 
@@ -222,6 +223,8 @@ async function deliverOne(db: D1Database, env: FollowUpEnv, row: FollowUpRow, no
   const team = await loadTeamContext(db, row.team_id, playerTeamId);
   const history = await loadHistory(db, row.conversation_id);
   player.ownRecentLines = await loadOwnRecentLines(db, { playerId: player.id, convId: row.conversation_id });
+  // Poděkování za zapití miminka zná jeho jméno (incidents/life-news.ts).
+  player.recentLifeEvent = await loadRecentLifeEvent(db, row.team_id, player.id);
 
   let instruction: string;
   let topicId: string | null = null;

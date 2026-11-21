@@ -591,6 +591,8 @@ export async function performUnrestAction(
     const snapshot = loadPlayerSnapshot({ ...player, life_context: JSON.stringify(lc) });
     const situaceKind = (await nactiSituaceTymu(db, teamId)).get(playerId);
     snapshot.zivotniSituace = situaceKind ? { kind: situaceKind, label: nazevSituace(situaceKind) } : undefined;
+    const { loadRecentLifeEvent } = await import("../incidents/life-news");
+    snapshot.recentLifeEvent = await loadRecentLifeEvent(db, teamId, playerId);
     const { nactiZnalostiHrace } = await import("../incidents/znalosti-db");
     snapshot.znalostiIncidentu = await nactiZnalostiHrace(db, { teamId, playerId });
     snapshot.lastOwnMessageAt = await loadLastOwnMessageAt(db, convId, playerId);

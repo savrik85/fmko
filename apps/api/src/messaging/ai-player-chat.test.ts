@@ -16,7 +16,7 @@ vi.mock("../lib/ai-provider", () => ({
 import { BEZ_ZNALOSTI, HLAVICKA_ZNALOSTI, type RadekZnalosti } from "../incidents/znalosti";
 import { generateText } from "../lib/ai-provider";
 import {
-  ZAKAZ_ZIVOTNICH_SITUACI, buildSystemPrompt, evaluateResolution, generateFollowUpMessage, generateInitialMessage, generateReply,
+  OTHER_LIFE_EVENTS_BAN, ZAKAZ_ZIVOTNICH_SITUACI, buildSystemPrompt, evaluateResolution, generateFollowUpMessage, generateInitialMessage, generateReply,
   generateUnrestReply, popisZdravi,
 } from "./ai-player-chat";
 import { getScenarioById } from "./ai-player-scenarios";
@@ -378,5 +378,22 @@ describe("hráč neopakuje sám sebe", () => {
     vi.mocked(generateText).mockResolvedValueOnce("Teď si mě vychutná žena. Ale beru to.").mockResolvedValueOnce("Dobře, beru to, uvidíme.");
     expect(await generateUnrestReply({}, hrac({ ownRecentLines: own }), tym, { coachMessage: "Promiň.", unrestReason: "trenér odmítl nabídku", outcome: "partial" }))
       .toBe("Dobře, beru to, uvidíme.");
+  });
+});
+
+describe("po skončené životní situaci", () => {
+  // Po „máme kluka Matyáše“ dřív prompt dál říkal „nevymýšlej si narození dítěte“ a hráč to mohl zapřít.
+  const fresh = { kind: "narozeni_ditete", fact: "Před 2 dny jste se vrátili z porodnice, narodil se ti syn Matyáš (3,45 kila). Jsi čerstvý táta, doma máte miminko." };
+
+  it("hráč ví, že je čerstvý táta, a zákaz se týká jen jiných událostí", () => {
+    const p = buildSystemPrompt(hrac({ age: 24, recentLifeEvent: fresh }), tym, kdy(2, 18));
+    expect(p).toContain(`NEDÁVNO SE TI STALO (víš o tom a mluv o tom normálně, nic dalšího si nevymýšlej): ${fresh.fact}`);
+    expect(p).not.toContain(ZAKAZ_ZIVOTNICH_SITUACI);
+    expect(p).toContain(OTHER_LIFE_EVENTS_BAN);
+    expect(p).toContain("Bydlíš s přítelkyní a teď i s miminkem");
+  });
+
+  it("bez události zůstává původní zákaz", () => {
+    expect(buildSystemPrompt(hrac(), tym, kdy(2, 18))).toContain(ZAKAZ_ZIVOTNICH_SITUACI);
   });
 });

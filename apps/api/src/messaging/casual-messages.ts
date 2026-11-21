@@ -17,6 +17,7 @@ import { logger } from "../lib/logger";
 import { seedFromString } from "../lib/seed";
 import { carryWeightTalk } from "../season/weight-talk";
 import { nazevSituace } from "../incidents/situace";
+import { loadRecentLifeEvent } from "../incidents/life-news";
 import {
   CASUAL_MIN_RELATION, CASUAL_TOPICS, INVITES, topicAllowed, topicFits,
   type CasualContext, type CasualTopic, type InviteKind,
@@ -79,6 +80,9 @@ export async function runPhoneHourly(
   const { deliverHearsayMessages } = await import("../hearsay/messages");
   await deliverHearsayMessages(db, env, now).catch((e) => logger.warn({ module: M }, "zprávy slyšel jsem", e));
   const followUps = await deliverDueFollowUps(db, env, now);
+  // Po porodu nebo nemoci rodiče se hráč ozve, jak to dopadlo (slíbil „dám vědět“).
+  const { deliverLifeNews } = await import("../incidents/life-news");
+  await deliverLifeNews(db, env, now).catch((e) => logger.warn({ module: M }, "zprávy o skončených situacích", e));
   const casual = await spawnCasualMessages(db, env, now);
   // Svatba v kabině: článek do Zpravodaje a SMS od Redakce přes den, ne v noci z denního ticku.
   const { publishWeddingArticles } = await import("../weddings/wedding-db");
@@ -233,6 +237,7 @@ async function spawnCasualForTeam(
   const topicTeam = { ...team, leaguePosition: undefined, lastMatchResult: topic.id === "casual_how_are_you" ? team.lastMatchResult : undefined };
 
   player.ownRecentLines = await loadOwnRecentLines(db, { playerId: player.id, teamId });
+  player.recentLifeEvent = await loadRecentLifeEvent(db, teamId, player.id);
   let text: string;
   try {
     text = await generateInitialMessage(env, player, topic, topicTeam, now, photo ? { alt: photo.alt } : undefined);

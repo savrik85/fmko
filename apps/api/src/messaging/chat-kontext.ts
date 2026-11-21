@@ -250,7 +250,7 @@ export function domacnost(vek: number): string {
  */
 export function wokenAtHome(age: number, lifeSituation?: string): string | null {
   if (lifeSituation === "rozvod") return null;
-  if (lifeSituation === "narozeni_ditete") return "malého";
+  if (lifeSituation === "narozeni_ditete") return "miminko";
   if (age < 21) return "rodiče";
   if (age < 26) return null;
   if (age < 36) return "ženu";
@@ -274,6 +274,10 @@ export function complainsAboutWaking(playerId: string, kdy: Date): boolean {
 export function domacnostSeSituaci(vek: number, situace?: string): string {
   if (situace === "rozvod") return "Rozvádíš se, doma to skončilo. Spíš na kabině nebo u kamaráda.";
   if (situace === "prisel_o_praci") return `${domacnost(vek)} Práci teď nemáš, dny jsou dlouhé.`;
+  // Porod (běžící i čerstvě skončený, incidents/life-news.ts): doma je miminko, i u mladšího táty.
+  if (situace === "narozeni_ditete") {
+    return vek < 26 ? "Bydlíš s přítelkyní a teď i s miminkem, moc se nevyspíš." : `${domacnost(vek)} Teď máte doma miminko, moc se nevyspíš.`;
+  }
   return domacnost(vek);
 }
 

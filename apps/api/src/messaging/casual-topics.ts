@@ -255,7 +255,9 @@ export const CASUAL_TOPICS: CasualTopic[] = [
     photo: "baby_shoes",
     invite: "baby",
     lifeSituation: "narozeni_ditete",
-    fit: (_p, ctx) => ctx.situation === "spi" || !between(ctx.hour, 9, 21) ? 0 : 8,
+    // Náhodně se nevybírá: po skončení porodu hráč napíše sám, s jménem, váhou a pozváním
+    // (incidents/life-news.ts). Dřív by pozval dvakrát a podruhé už s jiným „malým“. Jen ruční téma.
+    fit: () => 0,
   },
   {
     id: "casual_ride",
@@ -280,6 +282,33 @@ export const CASUAL_TOPICS: CasualTopic[] = [
     weight: () => 0,
     lifeSituation: "prisel_o_praci",
     fit: (_p, ctx) => ctx.situation === "spi" || !between(ctx.hour, 9, 20) ? 0 : 4,
+  },
+
+  // Zpráva po skončení porodu a nemoci rodiče (incidents/life-news.ts). Náhodně se nevybírají,
+  // slouží jako scénář vlákna, když trenér odpoví. Fakta (jméno, váha, který rodič) jsou
+  // v promptu jako „nedávno se ti stalo“ (`recentLifeEvent`).
+  {
+    id: "life_news_baby",
+    label: "Narodilo se mu dítě",
+    category: "casual",
+    expectedTurns: 3,
+    minRelation: 0,
+    description: "Jste s miminkem doma z porodnice. Trenérovi jsi to napsal a pozval jsi ho, ať se staví zapít miminko. "
+      + "O dítěti víš jen to, co stojí výš v tom, co se ti nedávno stalo, nic dalšího si nevymýšlej.",
+    weight: () => 0,
+    invite: "baby",
+    fit: () => 0,
+  },
+  {
+    id: "life_news_parent",
+    label: "Rodič je zpátky doma",
+    category: "casual",
+    expectedTurns: 2,
+    minRelation: 0,
+    description: "Rodič je zpátky z nemocnice a je to lepší. Trenérovi jsi to napsal a poděkoval mu za pochopení. "
+      + "Žádnou diagnózu ani podrobnosti si nevymýšlej.",
+    weight: () => 0,
+    fit: () => 0,
   },
 
   // Navazující zprávy (follow-ups.ts). Náhodně se nevybírají (fit 0), slouží jako scénář
@@ -365,7 +394,7 @@ export const INVITES: Record<InviteKind, {
   },
   baby: {
     label: "zapít narození jeho dítěte",
-    thanks: "Trenér se na tvoje pozvání stavil zapít narození tvého dítěte. Děkuješ mu. Jméno ani pohlaví dítěte si nevymýšlej.",
+    thanks: "Trenér se na tvoje pozvání stavil zapít narození tvého dítěte. Děkuješ mu. Jméno a pohlaví dítěte znáš jen z toho, co o něm víš výš, jinak si nic nevymýšlej.",
     photo: "baby_shoes", afterHours: 30, relation: 6, morale: 4,
   },
   bbq: {

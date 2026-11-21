@@ -15,6 +15,7 @@ import { pushPhoneMessage, type OptionalPushKeys } from "../community/phone-push
 import { transferTalkFrom } from "../transfers/unrest-reasons";
 import { nactiZnalostiHrace } from "../incidents/znalosti-db";
 import { nazevSituace } from "../incidents/situace";
+import { loadRecentLifeEvent } from "../incidents/life-news";
 import { logger } from "../lib/logger";
 import { seedFromString } from "../lib/seed";
 import { pickAmbience, recordVoiceMessage, voicePreviewText, type RecordedVoiceMessage } from "./voice-message";
@@ -789,6 +790,7 @@ async function spawnForTeam(
 
   // Hráč začíná sám, nejde o výslech: jen veřejné znalosti (spec 10b).
   player.znalostiIncidentu = await nactiZnalostiHrace(db, { teamId, playerId: player.id });
+  player.recentLifeEvent = await loadRecentLifeEvent(db, teamId, player.id);
 
   // 3b. U scénářů o spoluhráči vybrat KONKRÉTNÍHO hráče předem — ať se model netrefuje
   //     naslepo a ať víme, čí vztah po rozhovoru upravit.
@@ -1136,6 +1138,7 @@ async function handleAiPlayerReplyInner(
   });
   const situaceKind = (await nactiSituaceTymu(db, conv.team_id)).get(player.id);
   player.zivotniSituace = situaceKind ? { kind: situaceKind, label: nazevSituace(situaceKind) } : undefined;
+  player.recentLifeEvent = await loadRecentLifeEvent(db, conv.team_id, player.id);
   // Domluva o váze (postava, část 3): výsledek rozhodla hra, model odpoví podle něj.
   const teamGameDate = await db.prepare("SELECT game_date FROM teams WHERE id = ?").bind(conv.team_id)
     .first<{ game_date: string | null }>()

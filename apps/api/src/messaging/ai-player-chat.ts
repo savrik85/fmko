@@ -133,6 +133,8 @@ export interface ResolutionResult {
  * porod nebo rozvod v SMS by neseděl s ničím dalším ve hře.
  */
 export const ZAKAZ_ZIVOTNICH_SITUACI = "- NEVYMÝŠLEJ si narození dítěte, rozvod, ztrátu práce ani nemoc rodiče. Nic takového se ti teď neděje.";
+/** Zákaz pro toho, komu se nedávno něco stalo (`recentLifeEvent`): o tom mluvit smí, nic dalšího si nevymýšlí. */
+export const OTHER_LIFE_EVENTS_BAN = "- Kromě toho, co se ti nedávno stalo (stojí níž), si NEVYMÝŠLEJ další narození dítěte, rozvod, ztrátu práce ani nemoc rodiče.";
 
 class GeminiUnavailableError extends Error {
   constructor(message: string) {
@@ -290,7 +292,12 @@ export function buildSystemPrompt(
   const situace = player.zivotniSituace
     ? `TVOJE ŽIVOTNÍ SITUACE (mluv o ní, když se hodí, nic dalšího si nevymýšlej): ${player.zivotniSituace.label}.`
     : "";
-  const zakaz = player.zivotniSituace ? "" : ZAKAZ_ZIVOTNICH_SITUACI;
+  // Skončená situace (porod, rodič z nemocnice): hráč o ní ví, jinak by zákaz níž říkal opak.
+  const recentEvent = player.recentLifeEvent
+    ? `NEDÁVNO SE TI STALO (víš o tom a mluv o tom normálně, nic dalšího si nevymýšlej): ${player.recentLifeEvent.fact}`
+    : "";
+  const zakaz = player.zivotniSituace ? "" : player.recentLifeEvent ? OTHER_LIFE_EVENTS_BAN : ZAKAZ_ZIVOTNICH_SITUACI;
+  const householdKind = player.zivotniSituace?.kind ?? player.recentLifeEvent?.kind;
   const language = foreignSpeechRule(player.nationality);
 
   return [
@@ -302,11 +309,11 @@ export function buildSystemPrompt(
     `Tvoje povaha: ${buildPersonalityHints(player)}.`,
     `Aktuální nálada: ${player.morale}/100, kondice: ${player.condition}/100, vztah s trenérem: ${player.coachRelationship}/100.`,
     popisZdravi(player),
-    domacnostSeSituaci(player.age, player.zivotniSituace?.kind),
+    domacnostSeSituaci(player.age, householdKind),
     popisSituace(cas, player.occupation, vymluva, {
       mustAnswerNow: mustAnswerNow(player),
       complainAboutWaking: complainsAboutWaking(player.id, kdy),
-      wokenAtHome: wokenAtHome(player.age, player.zivotniSituace?.kind),
+      wokenAtHome: wokenAtHome(player.age, householdKind),
     }),
     player.sponsorJobFirm
       ? `Práci ti sehnal trenér u sponzora klubu: děláš u firmy ${player.sponsorJobFirm} a šéf tě pouští na zápasy. Jsi mu za to vděčný.`
@@ -368,6 +375,7 @@ export function buildSystemPrompt(
       ? `- Konverzace je o konkrétním spoluhráči: ${team.subjectPlayerName}. Mluv VÝHRADNĚ o něm, nikoho jiného nejmenuj.`
       : "",
     situace,
+    recentEvent,
     blokZnalosti(player.znalostiIncidentu),
     player.weightTalk ? weightTalkPrompt(player.weightTalk) : "",
     ...memoryPromptLines(player),
@@ -799,7 +807,7 @@ export async function evaluateResolution(
     "- condition_delta je vzácný, jen když scénář souvisí s kondicí (alkohol, zranění, vyčerpání).",
     "- Buď přísný, žádné +15 zadarmo, jen za skutečně skvělé chování.",
     // Situace v DB (fáze 7): kdo ji má, tomu se v shrnutí nezakazuje o ní psát.
-    player.zivotniSituace
+    player.zivotniSituace || player.recentLifeEvent
       ? ""
       : "- V shrnutí NEVYMÝŠLEJ narození dítěte, rozvod, ztrátu práce ani nemoc rodiče. Nic takového se hráči teď neděje.",
     "- absence_days > 0 NASTAV POUZE pokud:",
