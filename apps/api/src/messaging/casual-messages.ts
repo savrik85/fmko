@@ -38,7 +38,7 @@ const PLAYER_COOLDOWN_DAYS = 10;
 /** Stejné téma se v klubu nezopakuje dřív. */
 const TOPIC_REPEAT_DAYS = 14;
 /** Píše se jen klubům, kde byl manažer ve hře nedávno. Opuštěnému telefonu by to bylo k ničemu. */
-const ACTIVE_MANAGER_DAYS = 3;
+export const ACTIVE_MANAGER_DAYS = 3;
 /**
  * Jak dlouho platí pozvání: na „jdu" za dva dny už se nečeká, do druhého dne ale ano.
  * Pozvánky chodí 7–22 h a trenér odpovídá často až druhý den. Dřív to bylo 6 hodin,
@@ -68,6 +68,9 @@ export async function runPhoneHourly(
   env: PhoneEnv,
   now = new Date(),
 ): Promise<{ casual: number; followUps: { delivered: number; cancelled: number; retried: number } }> {
+  // Kabina má uši: co trenér řekl o hráčích, se rozšíří po vazbách (hearsay/spread.ts).
+  const { spreadHearsay } = await import("../hearsay/spread");
+  await spreadHearsay(db, now).catch((e) => logger.warn({ module: M }, "šíření toho, co trenér řekl", e));
   const followUps = await deliverDueFollowUps(db, env, now);
   const casual = await spawnCasualMessages(db, env, now);
   // Svatba v kabině: článek do Zpravodaje a SMS od Redakce přes den, ne v noci z denního ticku.
