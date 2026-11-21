@@ -316,8 +316,16 @@ export async function resolveDistrictEvent(env: Env, eventId: string, rng: Rng =
   const pairs = await coachPairs(db, attendance.coaches.map((c) => c.teamId));
   const absentTeams = teams.filter((t) => !attendance.coaches.some((c) => c.teamId === t.teamId)).map((t) => t.teamName);
 
+  // Zápas starých pánů: legendy okresu, jejichž bývalý klub přišel s hráči (nejvýš tři).
+  const withPlayers = attendance.coaches.filter((c) => c.withPlayers).map((c) => c.teamId);
+  const legends = withPlayers.length ? await db.prepare(
+    `SELECT first_name || ' ' || last_name AS name, former_team_id FROM legends
+      WHERE district = ? AND status = 'active' AND former_team_id IN (${withPlayers.map(() => "?").join(",")}) LIMIT 3`,
+  ).bind(ev.district, ...withPlayers).all<{ name: string; former_team_id: string }>()
+    .catch((e) => { logger.warn({ module: M }, "legendy na akci", e); return { results: [] as Array<{ name: string; former_team_id: string }> }; }) : { results: [] };
   const prompt = buildEventPrompt({
     title: ev.title, place: ev.place, description: ev.description, district: ev.district, keys, coachPairs: pairs, absentTeams,
+    legends: legends.results.map((l) => ({ name: l.name, teamName: teamName.get(l.former_team_id) ?? "" })),
   });
   const ai = await aiContextFromEnv(env);
   const raw = attendance.coaches.length + attendance.players.length === 0

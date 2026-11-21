@@ -97,6 +97,17 @@ describe("odpověď modelu", () => {
     expect(prompt).toContain("P3: Jan Novákp3");
     expect(prompt).not.toContain("\"p1\"");
     expect(prompt).toContain("Klub D");
+    expect(prompt).not.toContain("starých pánů");
+  });
+
+  it("legenda bývalého klubu na akci: zadání chce zápas starých pánů, bez dlouhé pomlčky", () => {
+    const prompt = buildEventPrompt({
+      title: "Pouť", place: "Vacov", description: "Kolotoče.", district: "Prachatice", keys, coachPairs: [], absentTeams: [],
+      legends: [{ name: "Karel Starý", teamName: "Klub A" }],
+    });
+    expect(prompt).toContain("Karel Starý, bývalý hráč klubu Klub A");
+    expect(prompt).toContain("zápas starých pánů");
+    expect(prompt).not.toMatch(/[—–]/);
   });
 });
 

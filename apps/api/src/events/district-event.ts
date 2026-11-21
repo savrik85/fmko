@@ -164,6 +164,11 @@ export interface EventPromptInput {
   coachPairs: CoachPairInfo[];
   /** Kluby, které pozvánku dostaly, ale trenér nepřišel. */
   absentTeams: string[];
+  /**
+   * Legendy okresu (bývalí hráči, season/legends-db.ts), jejichž bývalý klub přišel s hráči.
+   * Zahrají si zápas starých pánů proti dnešnímu týmu. Nejsou mezi klíči, takže následky nemají.
+   */
+  legends?: Array<{ name: string; teamName: string }>;
 }
 
 function level(v: number): string {
@@ -195,6 +200,11 @@ export function buildEventPrompt(i: EventPromptInput): string {
     pairs.length ? "\nVZTAHY TRENÉRŮ, KTEŘÍ PŘIŠLI:" : "",
     ...pairs,
     i.absentTeams.length ? `\nTrenéři těchto klubů nepřišli: ${i.absentTeams.join(", ")}.` : "",
+    ...(i.legends?.length ? [
+      "\nLEGENDY (bývalí hráči klubů, dnes jinde v okrese):",
+      ...i.legends.map((l) => `- ${l.name}, bývalý hráč klubu ${l.teamName}`),
+      "Jedna scéna je zápas starých pánů: legendy klubu s pár dalšími veterány proti dnešnímu týmu toho klubu. Vymysli výsledek a kdo dal gól (jen jména výše), legendy ať se nedají zahanbit. Následky jen pro dnešní hráče z HRÁČŮ (kondice, nálada).",
+    ] : []),
     "",
     `Vymysli ${LIMITS.minScenes} až ${LIMITS.maxScenes} konkrétních scén z akce podle toho, kolik lidí přišlo. Ať je to pestré a uvěřitelné pro vesnickou akci:`,
     "rvačky, opilost, pomluvy, drby, nová přátelství, trapasy, smíření, sázky, šeptanda o přestupu, hádky trenérů, společné chlastání trenérů.",
