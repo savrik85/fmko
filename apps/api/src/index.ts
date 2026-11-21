@@ -257,14 +257,6 @@ export default {
       } catch (e: any) {
         log("error", "běh dražby selhal", e);
       }
-      // Výběr okresu: uzávěrka nominací a zápas v den výkopu.
-      try {
-        const { tickDistrictSelections } = await import("./polls/district-selection");
-        const r = await tickDistrictSelections(env);
-        if (r.closed || r.played) log("info", `výběr okresu: uzavřeno nominací ${r.closed}, odehráno ${r.played}`);
-      } catch (e: any) {
-        log("error", "běh výběru okresu selhal", e);
-      }
       // Anketa Fotbalista okresu: odpovědi redaktora, nominace a uzávěrka.
       try {
         const { tickDistrictPolls } = await import("./polls/district-poll");

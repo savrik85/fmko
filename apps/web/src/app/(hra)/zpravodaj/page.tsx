@@ -400,11 +400,7 @@ export default function NewsPage() {
   const playerOfDistrictStory = articles.find(
     (a) => a.type === "player_of_district" && Date.now() - new Date(a.date).getTime() < 3 * 24 * 3600 * 1000,
   ) ?? null;
-  // Zápas výběrů okresů: nahoře na tři dny jako okresní akce.
-  const selectionStory = articles.find(
-    (a) => a.type === "district_selection" && Date.now() - new Date(a.date).getTime() < 3 * 24 * 3600 * 1000,
-  ) ?? null;
-  const districtEventStory = [districtEventOnly, hallCupStory, playerOfDistrictStory, selectionStory].filter((a): a is NonNullable<typeof a> => !!a)
+  const districtEventStory = [districtEventOnly, hallCupStory, playerOfDistrictStory].filter((a): a is NonNullable<typeof a> => !!a)
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0] ?? null;
   // Pohárové kolo: vlastní rubrika nahoře na tři dny, pak spadne do drobných zpráv.
   const cupStory = articles.find(
@@ -1136,7 +1132,6 @@ function rubrikaProTyp(type: string): string {
     case "hall_cup": return "🥅 Sálovka";
     case "player_of_district": return "🏅 Fotbalista okresu";
     case "season_yearbook": return "📖 Ročenka";
-    case "district_selection": return "🎽 Výběr okresu";
     case "club_wedding": return "💍 Ze života klubů";
     case "village_council": return "🏛️ Ze zastupitelstva";
     default: return "Aktualita";
