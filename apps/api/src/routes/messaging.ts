@@ -791,9 +791,9 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
     commitmentReady = handleCoachMessageForCommitment(c.env.DB, c.env, { teamId, convId, playerId: conv.participant_id, text: body.body.trim() });
     c.executionCtx.waitUntil(commitmentReady.then(() => undefined));
     // Co trenér napsal o jiném hráči, se může roznést (hearsay/, Kabina má uši). Odpověď hráče na to nečeká.
-    const { handleCoachMessageForHearsay } = await import("../hearsay/coach-message");
+    const { detectCoachMessage } = await import("../hearsay/coach-message");
     c.executionCtx.waitUntil(
-      handleCoachMessageForHearsay(c.env.DB, c.env, {
+      detectCoachMessage(c.env.DB, c.env, {
         teamId, convId, convType: "player", recipientPlayerId: conv.participant_id, text: body.body.trim(),
       }).then(() => undefined).catch((e) => logger.error({ module: "messaging" }, "zmínky o spoluhráčích", e)),
     );
@@ -890,9 +890,9 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
     );
     // Pochvala nebo kritika před celou kabinou: ví ji všichni a jmenovaného zasáhne hned.
     if (hasText) {
-      const { handleCoachMessageForHearsay } = await import("../hearsay/coach-message");
+      const { detectCoachMessage } = await import("../hearsay/coach-message");
       c.executionCtx.waitUntil(
-        handleCoachMessageForHearsay(c.env.DB, c.env, {
+        detectCoachMessage(c.env.DB, c.env, {
           teamId, convId, convType: "squad_group", recipientPlayerId: null, text: body.body.trim(),
         }).then(() => undefined).catch((e) => logger.error({ module: "messaging" }, "zmínky v kabině", e)),
       );

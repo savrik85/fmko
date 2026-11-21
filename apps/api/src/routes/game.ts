@@ -7935,13 +7935,16 @@ gameRouter.post("/admin/phone-hourly", async (c) => {
     .catch((e) => { logger.error({ module: "game.ts" }, "ruční doručení odložených zpráv", e); return null; });
   if (!r) return c.json({ error: "doručení selhalo" }, 500);
   // Kabina má uši: šíření a zprávy „slyšel jsem…“ jako v hodinovém běhu (hearsay/).
+  const { processPendingDetections } = await import("../hearsay/coach-message");
   const { spreadHearsay } = await import("../hearsay/spread");
   const { deliverHearsayMessages } = await import("../hearsay/messages");
+  const detected = await processPendingDetections(c.env.DB, c.env)
+    .catch((e) => { logger.error({ module: "game.ts" }, "ruční dodělání rozpoznání", e); return null; });
   const spread = await spreadHearsay(c.env.DB)
     .catch((e) => { logger.error({ module: "game.ts" }, "ruční šíření hearsay", e); return null; });
   const hearsay = await deliverHearsayMessages(c.env.DB, c.env)
     .catch((e) => { logger.error({ module: "game.ts" }, "ruční doručení slyšel jsem", e); return null; });
-  return c.json({ ok: true, ...r, spread, hearsay });
+  return c.json({ ok: true, ...r, detected, spread, hearsay });
 });
 
 // POST /api/admin/cup/notify-draw?round= — SMS o losu kola lidským klubům (bez round aktuální kolo).

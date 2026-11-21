@@ -15,12 +15,19 @@ const M = "hearsay-coach-message";
 /** Jen hlavní Kabina klubu; zápasové chaty „⚽ vs …“ jsou docházka, ne hovor. */
 const SQUAD_CHAT_TITLE = "Kabina";
 
-export async function handleCoachMessageForHearsay(
-  db: D1Database,
-  env: ChatEnv,
-  o: { teamId: string; convId: string; convType: "player" | "squad_group"; recipientPlayerId: string | null; text: string; now?: Date },
-): Promise<number> {
-  try {
+export interface CoachMessageInput {
+  teamId: string; convId: string; convType: "player" | "squad_group"; recipientPlayerId: string | null; text: string; now?: Date;
+}
+
+/** Zpráva, kterou rozpoznání ještě nedodělalo (KV `hearsay_pending:…`), dodělá ji hodinový běh. */
+const PENDING_PREFIX = "hearsay_pending:";
+/** Hodinový běh sahá jen na záznamy starší než tohle: mladší ještě může zpracovávat požadavek. */
+const PENDING_MIN_AGE_MS = 5 * 60_000;
+const PENDING_TTL_S = 86_400;
+
+/** Varianta, která chyby nepolyká: volající rozhodne, jestli zprávu nechá na později. */
+async function recordMentions(db: D1Database, env: ChatEnv, o: CoachMessageInput): Promise<number> {
+  {
     const now = o.now ?? new Date();
     const team = await db.prepare("SELECT id, user_id, parent_team_id FROM teams WHERE id = ?")
       .bind(o.teamId).first<{ id: string; user_id: string | null; parent_team_id: string | null }>();
@@ -67,11 +74,19 @@ export async function handleCoachMessageForHearsay(
     // Dvě zmínky téhož hráče v jedné zprávě: strop a „to už vím“ platí i uvnitř zprávy.
     const runState = new Set<string>();
     const stmts: D1PreparedStatement[] = [];
+    // Id podle zprávy: druhé zpracování téže zprávy (hodinový běh po pozdě doběhlém požadavku) nic nezdvojí.
+    const idOf = (m: { playerId: string; kind: string }) => `msg:${o.convId}:${Date.parse(at)}:${m.playerId}:${m.kind}`;
+    const existing = new Set((await db.prepare(
+      `SELECT id FROM squad_hearsay WHERE id IN (${mentions.map(() => "?").join(",")})`,
+    ).bind(...mentions.map(idOf)).all<{ id: string }>()).results.map((r) => r.id));
+    let recorded = 0;
     for (const m of mentions) {
+      if (existing.has(idOf(m))) continue;
+      recorded++;
       const item = newHearsayItem({
         clubTeamId: clubId, subjectPlayerId: m.playerId, kind: m.kind, origin: squadChat ? "coach_squad" : "coach_sms",
         recipientPlayerId: o.recipientPlayerId, conversationId: o.convId, quote: m.quote, createdAt: at,
-      });
+      }, idOf(m));
       const knowers: Array<{ playerId: string; via: KnowledgeVia }> = squadChat
         ? inSquadChat.map((playerId) => ({ playerId, via: "squad_chat" as const }))
         : o.recipientPlayerId ? [{ playerId: o.recipientPlayerId, via: "direct" }] : [];
@@ -83,11 +98,69 @@ export async function handleCoachMessageForHearsay(
         hearsayId: item.id, playerId: k.playerId, via: k.via, fromPlayerId: null, learnedAt: at, messageState: "none", messagedAt: null,
       }))));
     }
-    await db.batch(stmts);
-    logger.info({ module: M, teamId: o.teamId }, `zapsáno ${mentions.length} věcí ze zprávy trenéra (${o.convType})`);
-    return mentions.length;
+    if (stmts.length > 0) await db.batch(stmts);
+    logger.info({ module: M, teamId: o.teamId }, `zapsáno ${recorded} věcí ze zprávy trenéra (${o.convType})`);
+    return recorded;
+  }
+}
+
+/** Rozpoznání a zápis; chyba se jen zaloguje (vrací 0). */
+export async function handleCoachMessageForHearsay(db: D1Database, env: ChatEnv, o: CoachMessageInput): Promise<number> {
+  try {
+    return await recordMentions(db, env, o);
   } catch (e) {
     logger.warn({ module: M, teamId: o.teamId }, `zmínky ve zprávě trenéra ${o.convId}`, e);
     return 0;
   }
+}
+
+/**
+ * Volá route po zprávě trenéra. Práce na pozadí má po odpovědi jen ~30 s a kabina v tu
+ * chvíli pouští i odpovědi hráčů a hodnocení proslovu: dlouhá zpráva se na testu (Workers AI)
+ * nestihla. Proto se zpráva nejdřív zapíše jako čekající a smaže se, až rozpoznání doběhne;
+ * co utne limit nebo výpadek modelu, dodělá hodinový běh (`processPendingDetections`).
+ */
+export async function detectCoachMessage(db: D1Database, env: ChatEnv, o: CoachMessageInput): Promise<number> {
+  const sentAt = (o.now ?? new Date()).toISOString();
+  const key = `${PENDING_PREFIX}${o.convId}:${Date.parse(sentAt)}`;
+  await env.CACHE_KV?.put(key, JSON.stringify({ ...o, now: sentAt }), { expirationTtl: PENDING_TTL_S })
+    .catch((e) => logger.warn({ module: M, teamId: o.teamId }, "čekající rozpoznání do KV", e));
+  try {
+    const n = await recordMentions(db, env, { ...o, now: new Date(sentAt) });
+    await env.CACHE_KV?.delete(key).catch((e) => logger.warn({ module: M, teamId: o.teamId }, "smazání čekajícího rozpoznání", e));
+    return n;
+  } catch (e) {
+    logger.warn({ module: M, teamId: o.teamId }, `rozpoznání zmínek ${o.convId} nechávám hodinovému běhu`, e);
+    return 0;
+  }
+}
+
+/** Hodinový běh: dodělá rozpoznání, které v požadavku nedoběhlo. Vrací počet dodělaných zpráv. */
+export async function processPendingDetections(db: D1Database, env: ChatEnv, now: Date = new Date()): Promise<number> {
+  if (!env.CACHE_KV) return 0;
+  const list = await env.CACHE_KV.list({ prefix: PENDING_PREFIX })
+    .catch((e) => { logger.warn({ module: M }, "seznam čekajících rozpoznání", e); return null; });
+  let done = 0;
+  for (const { name } of list?.keys ?? []) {
+    const raw = await env.CACHE_KV.get(name)
+      .catch((e) => { logger.warn({ module: M }, `čekající rozpoznání ${name}`, e); return null; });
+    if (!raw) continue;
+    let o: CoachMessageInput & { now: string };
+    try { o = JSON.parse(raw) as CoachMessageInput & { now: string }; } catch (e) {
+      logger.warn({ module: M }, `čekající rozpoznání ${name} není JSON`, e);
+      await env.CACHE_KV.delete(name).catch((err) => logger.warn({ module: M }, "smazání vadného záznamu", err));
+      continue;
+    }
+    if (Date.parse(o.now) > now.getTime() - PENDING_MIN_AGE_MS) continue;
+    try {
+      await recordMentions(db, env, { ...o, now: new Date(o.now) });
+      await env.CACHE_KV.delete(name);
+      done++;
+    } catch (e) {
+      // Model pořád nejde: zkusí se příští hodinu, KV záznam sám vyprší za den.
+      logger.warn({ module: M, teamId: o.teamId }, `dodělání rozpoznání ${name}`, e);
+    }
+  }
+  if (done > 0) logger.info({ module: M }, `dodělané rozpoznání zmínek: ${done}`);
+  return done;
 }

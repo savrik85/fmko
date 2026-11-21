@@ -10,7 +10,22 @@ vi.mock("../messaging/match-speech", () => ({ isPostSpeechWindow: vi.fn(async ()
 import { createHearsayDb, resetHearsayDb } from "../test-support/hearsay-db";
 import { detectMentions } from "./detect";
 import { isPostSpeechWindow } from "../messaging/match-speech";
-import { handleCoachMessageForHearsay } from "./coach-message";
+import { detectCoachMessage, handleCoachMessageForHearsay, processPendingDetections } from "./coach-message";
+
+/** KV v paměti: jen to, co hearsay používá (put, get, delete, list podle prefixu). */
+function memoryKv(): KVNamespace & { store: Map<string, string> } {
+  const store = new Map<string, string>();
+  return {
+    store,
+    get: async (k: string) => store.get(k) ?? null,
+    put: async (k: string, v: string) => { store.set(k, v); },
+    delete: async (k: string) => { store.delete(k); },
+    list: async (o?: { prefix?: string }) => ({
+      keys: [...store.keys()].filter((k) => !o?.prefix || k.startsWith(o.prefix)).map((name) => ({ name })),
+      list_complete: true, cacheStatus: null,
+    }),
+  } as unknown as KVNamespace & { store: Map<string, string> };
+}
 
 let miniflare: Miniflare;
 let db: D1Database;
@@ -101,5 +116,41 @@ describe("zpráva trenéra o spoluhráči", () => {
     expect(await handleCoachMessageForHearsay(db, {}, {
       teamId: "club", convId: "c-sima", convType: "player", recipientPlayerId: "sima", text: "Šmejkal se fláká", now: NOW,
     })).toBe(0);
+  });
+
+  it("rozpoznání doběhne: čekající záznam v KV se smaže", async () => {
+    const kv = memoryKv();
+    vi.mocked(detectMentions).mockResolvedValue([{ playerId: "smejkal", kind: "criticism", quote: "Šmejkal se fláká" }]);
+    await detectCoachMessage(db, { CACHE_KV: kv }, {
+      teamId: "club", convId: "c-sima", convType: "player", recipientPlayerId: "sima", text: "Šmejkal se fláká", now: NOW,
+    });
+    expect(kv.store.size).toBe(0);
+    expect(await knowers()).toEqual([{ player_id: "sima", via: "direct" }]);
+  });
+
+  it("rozpoznání utne limit nebo spadne model: hodinový běh ho dodělá a nic nezdvojí", async () => {
+    const kv = memoryKv();
+    vi.mocked(detectMentions).mockRejectedValueOnce(new Error("vypršel čas"));
+    await detectCoachMessage(db, { CACHE_KV: kv }, {
+      teamId: "club", convId: "kabina", convType: "squad_group", recipientPlayerId: null, text: "Šmejkal se fláká, takhle ne.", now: NOW,
+    });
+    expect(kv.store.size).toBe(1);
+    expect(await knowers()).toEqual([]);
+
+    vi.mocked(detectMentions).mockResolvedValue([{ playerId: "smejkal", kind: "criticism", quote: "Šmejkal se fláká" }]);
+    // Hned po odeslání se nesahá (rozpoznání může ještě běžet), až po pár minutách.
+    expect(await processPendingDetections(db, { CACHE_KV: kv }, new Date(NOW.getTime() + 60_000))).toBe(0);
+    expect(await processPendingDetections(db, { CACHE_KV: kv }, new Date(NOW.getTime() + 10 * 60_000))).toBe(1);
+    expect(kv.store.size).toBe(0);
+    expect(await player("smejkal")).toEqual({ rel: 45, morale: 46 });
+    const created = await db.prepare("SELECT created_at FROM squad_hearsay").first<{ created_at: string }>();
+    expect(created?.created_at).toBe(NOW.toISOString());
+
+    // Druhé zpracování téže zprávy (záznam se vrátil, třeba inline doběhl pozdě) nic nezdvojí.
+    await detectCoachMessage(db, { CACHE_KV: kv }, {
+      teamId: "club", convId: "kabina", convType: "squad_group", recipientPlayerId: null, text: "Šmejkal se fláká, takhle ne.", now: NOW,
+    });
+    expect(await db.prepare("SELECT COUNT(*) AS n FROM squad_hearsay").first()).toEqual({ n: 1 });
+    expect(await player("smejkal")).toEqual({ rel: 45, morale: 46 });
   });
 });

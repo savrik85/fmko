@@ -68,7 +68,10 @@ export async function runPhoneHourly(
   env: PhoneEnv,
   now = new Date(),
 ): Promise<{ casual: number; followUps: { delivered: number; cancelled: number; retried: number } }> {
-  // Kabina má uši: co trenér řekl o hráčích, se rozšíří po vazbách (hearsay/spread.ts).
+  // Kabina má uši: nejdřív dodělat rozpoznání zmínek, které v požadavku nestihlo doběhnout.
+  const { processPendingDetections } = await import("../hearsay/coach-message");
+  await processPendingDetections(db, env, now).catch((e) => logger.warn({ module: M }, "dodělání rozpoznání zmínek", e));
+  // Co trenér řekl o hráčích, se rozšíří po vazbách (hearsay/spread.ts).
   const { spreadHearsay } = await import("../hearsay/spread");
   await spreadHearsay(db, now).catch((e) => logger.warn({ module: M }, "šíření toho, co trenér řekl", e));
   // Kdo se o sobě něco doslechl, ozve se trenérovi (nejvýš dvě zprávy na klub a den).
