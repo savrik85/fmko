@@ -69,7 +69,10 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      - run: npx vitest run --shard=${{ matrix.shard }}/4
+      # Spadlé soubory se hned zopakují v novém procesu (pád Miniflare, viz skript).
+      - run: |
+          npx vitest run --shard=${{ matrix.shard }}/4 --reporter=default --reporter=json --outputFile=vitest-report.json && exit 0
+          node ../../scripts/ci-rerun-failed-tests.mjs vitest-report.json
         working-directory: apps/api
 
   deploy-api-prod:
