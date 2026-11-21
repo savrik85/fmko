@@ -37,6 +37,7 @@ import {
   type TeamContext,
 } from "./ai-player-chat";
 import { loadChatMemory, offerStanceStmt } from "./player-memory";
+import { loadOwnRecentLines } from "./repetition";
 import {
   cupOutcome, describeLastCupMatch, describeNextCupMatch, isLater, loadLastCupMatch, loadNextCupMatch, withinPreviousWindow,
 } from "./cup-facts";
@@ -849,6 +850,7 @@ async function spawnForTeam(
     }
   }
 
+  if (!(draftPlayer && saved)) player.ownRecentLines = await loadOwnRecentLines(db, { playerId: player.id, teamId });
   let initialBody: string;
   try {
     initialBody = draftPlayer && saved
@@ -1144,6 +1146,7 @@ async function handleAiPlayerReplyInner(
   player.seriousTopic = scenario.category === "complaint" || scenario.category === "transfer" || state.trigger === "left_out";
   player.recentlyPostponed = await loadRecentlyPostponed(db, convId);
   player.lateReply = opts.lateReply;
+  player.ownRecentLines = await loadOwnRecentLines(db, { playerId: player.id, convId });
   const memory = await loadChatMemory(db, player, { teamId: conv.team_id, convId });
   const teamCtx = await loadTeamContext(db, conv.team_id, playerRow.team_id as string | null);
   // Rozhovor „jen tak" bez tabulky, jinak ji model cpe do každé odpovědi (casual-messages.ts).

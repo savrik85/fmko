@@ -120,6 +120,13 @@ describe("ozvu se pak", () => {
     const history = (fx.generateFollowUpMessage.mock.calls[0] as unknown[])[3] as Array<{ body: string }>;
     expect(history.map((h) => h.body)).toContain("Kubo, zvednu ti plat jako Strakonice, zůstaneš?");
     expect((await followUps())[0].done_at).not.toBeNull();
+    // Úvod je na hráči: dřív povinné „ozvi se, že už můžeš“ dalo 93× „Už mám po šichtě / padla“.
+    const instruction = String((fx.generateFollowUpMessage.mock.calls[0] as unknown[])[4]);
+    expect(instruction).not.toContain("ozvi, že už můžeš");
+    expect(instruction).toContain("Klidně začni rovnou k věci");
+    // Co hráč v konverzaci už napsal, jde do promptu a hlídá se proti opakování.
+    const player = (fx.generateFollowUpMessage.mock.calls[0] as unknown[])[1] as { ownRecentLines?: string[] };
+    expect(player.ownRecentLines).toEqual(["Jsem v práci, ozvu se potom."]);
   });
 
   it("když hráč mezitím napsal sám, odložená zpráva se zruší", async () => {

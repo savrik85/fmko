@@ -12,6 +12,7 @@ import { getScenarioById } from "../messaging/ai-player-scenarios";
 import { ACTIVE_MANAGER_DAYS, type PhoneEnv } from "../messaging/casual-messages";
 import { postPlayerMessageStmts } from "../messaging/follow-ups";
 import { playerInClub } from "../messaging/player-reach";
+import { loadOwnRecentLines } from "../messaging/repetition";
 import { DAY_MS, type HearsayKind, type HearsayOrigin, type KnowledgeVia } from "./types";
 import { heardFact } from "./words";
 import { isTransferKind, learningEffect } from "./effects";
@@ -150,6 +151,7 @@ async function deliverOne(db: D1Database, env: PhoneEnv, row: PendingRow, now: D
   const scenario = { ...scenarioBase, description: `${scenarioBase.description} CO ZNÁŠ: ${fact}` };
   const team = await spawn.loadTeamContext(db, row.club_team_id, playerTeamId);
 
+  player.ownRecentLines = await loadOwnRecentLines(db, { playerId: player.id, convId });
   let body: string;
   try {
     body = await generateInitialMessage(env, player, scenario, team, now);

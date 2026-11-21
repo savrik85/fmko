@@ -19,6 +19,7 @@ import { blokZnalosti } from "../incidents/znalosti";
 import type { PlayerSnapshot, AiScenario } from "./ai-player-scenarios";
 import { weightTalkPrompt } from "../season/weight-talk";
 import { memoryPromptLines, type OfferStance } from "./player-memory";
+import { STOCK_PHRASES_RULE, generateWithoutRepeats, ownLinesPromptBlock } from "./repetition";
 
 
 export interface ThreadMessage {
@@ -336,6 +337,7 @@ export function buildSystemPrompt(
         : "",
     "- UKAZUJ EMOCE: když tě něco štve, dej to najevo (sarkasmus, frustrace, povzdech). Když jsi rád, projev to. Nebuď monotónní.",
     "- NIKDY se neopakuj, nepoužívej stejné fráze nebo slova jako v předchozí své zprávě.",
+    STOCK_PHRASES_RULE,
     pravidloEmoji(player.age, player.temper, cas.podnapilost),
     "- Do emoji nepatří ⚽ ani 🥅, jsi hráč, ne fanoušek.",
     zakaz,
@@ -369,6 +371,7 @@ export function buildSystemPrompt(
     blokZnalosti(player.znalostiIncidentu),
     player.weightTalk ? weightTalkPrompt(player.weightTalk) : "",
     ...memoryPromptLines(player),
+    ownLinesPromptBlock(player.ownRecentLines ?? []),
     player.lateReply === "offline"
       ? "- Na trenérovu poslední zprávu odpovídáš až teď, po pár hodinách, telefon jsi neměl u sebe. Klidně to jednou větou řekni."
       : "",
@@ -571,7 +574,7 @@ export async function generateInitialMessage(
   const contextLine = team.lastMatchResult ? ` Poslední zápas: ${team.lastMatchResult}.` : "";
   const positionLine = team.leaguePosition ? ` Tým je v lize na ${team.leaguePosition}. místě.` : "";
 
-  const prompt = [
+  const prompt = (retryRule: string) => [
     system,
     "",
     `SCÉNÁŘ: ${scenario.description}${contextLine}${positionLine}`,
@@ -579,11 +582,14 @@ export async function generateInitialMessage(
       ? ["", `K SMS přikládáš fotku z mobilu: ${photo.alt}. Text je popisek k ní jako ve WhatsAppu: fotku nepopisuj, jen na ni přirozeně navaž.`]
       : []),
     "",
+    ...(retryRule ? [retryRule] : []),
     `Napiš trenérovi PRVNÍ SMS k tomuto scénáři. Drž tón odpovídající své povaze a vztahu s trenérem (${player.coachRelationship}/100). NEPIŠ podpis. Vrať POUZE text SMS.`,
   ].join("\n");
 
-  const raw = await callModel(env, prompt, { maxTokens: 200, temperature: 0.9 });
-  return trimSms(raw);
+  const out = await generateWithoutRepeats(player.ownRecentLines, async (retryRule) => ({
+    body: trimSms(await callModel(env, prompt(retryRule), { maxTokens: 200, temperature: 0.9 })),
+  }), `úvodní zpráva ${scenario.id}`);
+  return out.body;
 }
 
 export interface ReplyResult {
@@ -620,7 +626,7 @@ export async function generateReply(
     : "";
 
   const contextLine = team.lastMatchResult ? ` Poslední zápas: ${team.lastMatchResult}.` : "";
-  const prompt = [
+  const prompt0 = [
     system,
     "",
     `SCÉNÁŘ: ${scenario.description}${contextLine}`,
@@ -651,30 +657,35 @@ export async function generateReply(
       : "",
     `Drž svou povahu (temperament ${player.temper}, vztah ${player.coachRelationship}/100). NEOPAKUJ slova ani fráze co jsi nebo trenér už použil v této konverzaci. NEPIŠ podpis.`,
     "",
+  ];
+  const format = [
     ...flags.rules,
     "Vrať POUZE JSON v tomto tvaru (žádný markdown, žádný komentář):",
     `{"body": "<text SMS, max 200 znaků>", "conversation_complete": <true pokud je téma vyřešené, jinak false>${flags.schema}}`,
-  ].filter(Boolean).join("\n");
+  ];
 
-  const raw = await callModel(env, prompt, { json: true, maxTokens: 256, temperature: 1.0 });
+  return generateWithoutRepeats(player.ownRecentLines, async (retryRule) => {
+    const prompt = [...prompt0, retryRule, ...format].filter(Boolean).join("\n");
+    const raw = await callModel(env, prompt, { json: true, maxTokens: 256, temperature: 1.0 });
 
-  const parsed = tryParseJson<{ body?: unknown; conversation_complete?: unknown; write_later?: unknown; transfer_stance?: unknown; accepts_invite?: unknown }>(raw);
-  if (!parsed) {
-    logger.warn({ module: "ai-player-chat" }, `reply JSON parse failed: ${raw.slice(0, 300)}`);
-    throw new GeminiUnavailableError("Reply JSON parse failed");
-  }
+    const parsed = tryParseJson<{ body?: unknown; conversation_complete?: unknown; write_later?: unknown; transfer_stance?: unknown; accepts_invite?: unknown }>(raw);
+    if (!parsed) {
+      logger.warn({ module: "ai-player-chat" }, `reply JSON parse failed: ${raw.slice(0, 300)}`);
+      throw new GeminiUnavailableError("Reply JSON parse failed");
+    }
 
-  const body = typeof parsed.body === "string" ? trimSms(parsed.body) : "";
-  if (!body) {
-    logger.warn({ module: "ai-player-chat" }, `reply JSON missing body, raw: ${raw.slice(0, 300)}`);
-    throw new GeminiUnavailableError("Reply JSON missing body");
-  }
+    const body = typeof parsed.body === "string" ? trimSms(parsed.body) : "";
+    if (!body) {
+      logger.warn({ module: "ai-player-chat" }, `reply JSON missing body, raw: ${raw.slice(0, 300)}`);
+      throw new GeminiUnavailableError("Reply JSON missing body");
+    }
 
-  return {
-    body,
-    conversationComplete: parsed.conversation_complete === true || isFinalTurn,
-    ...parseReplyFlags(parsed, body, player),
-  };
+    return {
+      body,
+      conversationComplete: parsed.conversation_complete === true || isFinalTurn,
+      ...parseReplyFlags(parsed, body, player),
+    };
+  }, `odpověď ${scenario.id}`);
 }
 
 /**
@@ -699,18 +710,21 @@ export async function generateUnrestReply(
       ? "Trenérova slova tě uklidnila JEN ČÁSTEČNĚ, odpověz zdrženlivě, dáš mu šanci, ale připomeneš že to sleduješ."
       : "Trenérova slova tě NEUKLIDNILA, spíš naštvala, odpověz odmítavě nebo sarkasticky, dle temperamentu.";
 
-  const prompt = [
+  const prompt = (retryRule: string) => [
     system,
     "",
     `KONTEXT: Trucuješ, protože ${context.unrestReason}.`,
     `TRENÉR ti právě napsal: "${context.coachMessage}"`,
     "",
     outcomeHint,
+    ...(retryRule ? [retryRule] : []),
     "NEPIŠ podpis. Vrať POUZE text SMS (1-2 věty, max 200 znaků).",
   ].join("\n");
 
-  const raw = await callModel(env, prompt, { maxTokens: 200, temperature: 0.9 });
-  return trimSms(raw);
+  const out = await generateWithoutRepeats(player.ownRecentLines, async (retryRule) => ({
+    body: trimSms(await callModel(env, prompt(retryRule), { maxTokens: 200, temperature: 0.9 })),
+  }), "truc");
+  return out.body;
 }
 
 export async function evaluateResolution(
@@ -857,7 +871,7 @@ export async function generateCoachInitiatedReply(
     .join("\n");
   const flags = replyFlagFields(player);
 
-  const prompt = [
+  const prompt0 = [
     system,
     "",
     "SITUACE: Trenér ti napsal sám od sebe. Ty jsi o nic nežádal, jen odpovídáš na to, co ti píše.",
@@ -879,27 +893,32 @@ export async function generateCoachInitiatedReply(
     "Při conversation_complete = false dej relationship_delta a morale_delta 0.",
     ...flags.rules,
     "",
+  ];
+  const format = [
     "Vrať POUZE JSON (žádný markdown):",
     `{"body": "<text SMS, max 200 znaků>", "conversation_complete": <true|false>, "relationship_delta": <číslo>, "morale_delta": <číslo>, "summary": "<věta>"${flags.schema}}`,
-  ].filter(Boolean).join("\n");
+  ];
 
-  const raw = await callModel(env, prompt, { json: true, maxTokens: 320, temperature: 0.95 });
-  const parsed = tryParseJson<{
-    body?: unknown; conversation_complete?: unknown;
-    relationship_delta?: unknown; morale_delta?: unknown; summary?: unknown;
-    write_later?: unknown; transfer_stance?: unknown; accepts_invite?: unknown;
-  }>(raw);
-  if (!parsed || typeof parsed.body !== "string" || !parsed.body.trim()) {
-    throw new GeminiUnavailableError("Coach-initiated reply JSON parse failed");
-  }
-  const complete = parsed.conversation_complete === true || isFinalTurn;
-  const body = trimSms(parsed.body);
-  return {
-    body,
-    conversationComplete: complete,
-    effect: complete ? coachChatEffect(parsed) : undefined,
-    ...parseReplyFlags(parsed, body, player),
-  };
+  return generateWithoutRepeats(player.ownRecentLines, async (retryRule) => {
+    const prompt = [...prompt0, retryRule, ...format].filter(Boolean).join("\n");
+    const raw = await callModel(env, prompt, { json: true, maxTokens: 320, temperature: 0.95 });
+    const parsed = tryParseJson<{
+      body?: unknown; conversation_complete?: unknown;
+      relationship_delta?: unknown; morale_delta?: unknown; summary?: unknown;
+      write_later?: unknown; transfer_stance?: unknown; accepts_invite?: unknown;
+    }>(raw);
+    if (!parsed || typeof parsed.body !== "string" || !parsed.body.trim()) {
+      throw new GeminiUnavailableError("Coach-initiated reply JSON parse failed");
+    }
+    const complete = parsed.conversation_complete === true || isFinalTurn;
+    const body = trimSms(parsed.body);
+    return {
+      body,
+      conversationComplete: complete,
+      effect: complete ? coachChatEffect(parsed) : undefined,
+      ...parseReplyFlags(parsed, body, player),
+    };
+  }, "odpověď trenérovi");
 }
 
 /**
@@ -917,7 +936,7 @@ export async function generateFollowUpMessage(
 ): Promise<Pick<ReplyResult, "body" | "transferStance">> {
   const system = buildSystemPrompt(player, team, opts.kdy);
   const offers = (player.pendingOffers?.length ?? 0) > 0;
-  const prompt = [
+  const prompt = (retryRule: string) => [
     system,
     "",
     `PROČ PÍŠEŠ TEĎ: ${instruction}`,
@@ -930,18 +949,21 @@ export async function generateFollowUpMessage(
     "",
     "Napiš JEDNU SMS. Neslibuj, že se ozveš později, teď už píšeš. NEOPAKUJ věty z historie. NEPIŠ podpis.",
     ...(offers ? replyFlagFields(player).rules.slice(1) : []),
+    retryRule,
     "",
     "Vrať POUZE JSON (žádný markdown):",
     `{"body": "<text SMS, max 200 znaků>"${offers ? `, "transfer_stance": "stay"|"leave"|"none"` : ""}}`,
   ].filter(Boolean).join("\n");
 
-  const raw = await callModel(env, prompt, { json: true, maxTokens: 256, temperature: 0.95 });
-  const parsed = tryParseJson<{ body?: unknown; transfer_stance?: unknown }>(raw);
-  if (!parsed || typeof parsed.body !== "string" || !parsed.body.trim()) {
-    throw new GeminiUnavailableError("Follow-up JSON parse failed");
-  }
-  const body = trimSms(parsed.body);
-  return { body, transferStance: parseReplyFlags(parsed, body, player).transferStance };
+  return generateWithoutRepeats(player.ownRecentLines, async (retryRule) => {
+    const raw = await callModel(env, prompt(retryRule), { json: true, maxTokens: 256, temperature: 0.95 });
+    const parsed = tryParseJson<{ body?: unknown; transfer_stance?: unknown }>(raw);
+    if (!parsed || typeof parsed.body !== "string" || !parsed.body.trim()) {
+      throw new GeminiUnavailableError("Follow-up JSON parse failed");
+    }
+    const body = trimSms(parsed.body);
+    return { body, transferStance: parseReplyFlags(parsed, body, player).transferStance };
+  }, "odložená zpráva");
 }
 
 /** Dopad rozhovoru od trenéra z odpovědi modelu, oříznutý na povolené meze. */

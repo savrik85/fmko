@@ -28,6 +28,7 @@ import {
 } from "./ai-player-spawn";
 import type { OptionalPushKeys } from "../community/phone-push";
 import { loadChatMemory } from "./player-memory";
+import { loadOwnRecentLines } from "./repetition";
 import { addressedPlayers, applySpeech, persuadeAbsentees, pickResponders } from "./squad-talk";
 import { handleSquadBet } from "./coach-commitments";
 import { refundCoachSms } from "./phone-credit";
@@ -114,6 +115,7 @@ export async function startCoachThread(
     player.seriousTopic = !!tema;
     player.recentlyPostponed = await loadRecentlyPostponed(db, opts.convId);
     player.lateReply = opts.lateReply;
+    player.ownRecentLines = await loadOwnRecentLines(db, { playerId: player.id, convId: opts.convId });
     const memory = await loadChatMemory(db, player, { teamId: opts.teamId, convId: opts.convId });
 
     /*
