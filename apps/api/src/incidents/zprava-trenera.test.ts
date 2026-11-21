@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("./vyslech", () => ({ vyslechni: vi.fn(async () => ({ vysledek: "kryje", novy: true })) }));
+vi.mock("../messaging/coach-commitments", () => ({ recordInquiryTask: vi.fn(async () => "task-1") }));
 
 import { FalesnaD1, jakoD1, type Pravidlo } from "./testovaci-d1";
+import { recordInquiryTask } from "../messaging/coach-commitments";
 import { vyslechni } from "./vyslech";
 import { zpracujZpravuTrenera } from "./zprava-trenera";
 
@@ -76,5 +78,18 @@ describe("zpráva trenéra hráči", () => {
     const d = db({ incidentId: "inc-h", incidentDen: "2026-09-16" });
     expect(await zprava(d, "Tak co, Franto?")).toEqual({ incidentId: "inc-h", vyslech: null });
     expect(d.pocet(/\$\.promluvil/)).toBe(1);
+  });
+
+  it("„nepoptal by ses mi, kdo by mohl vykrást tu kasu?“ najde kasu a založí úkol pátrání (Geomapping 19. 11.)", async () => {
+    const cashLoss = JSON.stringify([{ typ: "penize", castka: 2528 }]);
+    const d = new FalesnaD1([
+      { sql: /FROM conversations c JOIN teams t/, first: { ai_thread_state: null, game_date: DNES, sezona: 4 } },
+      { sql: /FROM club_incidents\s+WHERE team_id = \?/, all: [{ id: "inc-party", kind: "oslava_v_kabine", loss: "[]" }, { id: "inc-cash", kind: "kasa_obcerstveni", loss: cashLoss }] },
+    ]);
+    const text = "Ahoj Tome, měl bych prosbu, nepoptal by ses mi, kdo by mohl vykrást tu kasu?";
+    expect((await zprava(d, text))?.incidentId).toBe("inc-cash");
+    expect(recordInquiryTask).toHaveBeenCalledWith(expect.anything(), {
+      teamId: "tym-a", convId: "konv-1", playerId: "s", incidentId: "inc-cash", coachMessage: text,
+    });
   });
 });

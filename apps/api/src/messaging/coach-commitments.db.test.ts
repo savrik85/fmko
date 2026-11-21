@@ -381,7 +381,7 @@ describe("dvojklik", () => {
 
 describe("„ozvu se pak“ po odpovědi hráče", () => {
   const snapshot = { id: "p1", firstName: "Filip", lastName: "Pešek", age: 27, alcohol: 30, occupation: "Zedník" } as unknown as PlayerSnapshot;
-  const reply = (at: string) => afterPlayerReply(db, { teamId: "club", convId: "c1", player: snapshot, reply: { writeLater: true }, at, offerIds: [] });
+  const reply = (at: string) => afterPlayerReply(db, { teamId: "club", convId: "c1", player: snapshot, reply: { body: "Jsem v práci, ozvu se pak.", writeLater: true }, at, offerIds: [] });
   const followUps = async () => (await db.prepare("SELECT payload FROM player_follow_ups WHERE kind = 'reply_later' AND done_at IS NULL").all<{ payload: string }>())
     .results.map((r) => JSON.parse(r.payload) as { anchorAt: string });
 
@@ -398,5 +398,32 @@ describe("„ozvu se pak“ po odpovědi hráče", () => {
     // Úkol starší než hodina odloženou odpověď na novou otázku nezruší.
     await reply("2026-11-10T12:00:00.000Z");
     expect(await followUps()).toEqual([{ anchorAt: "2026-11-10T12:00:00.000Z" }]);
+  });
+});
+
+describe("hráč sám slíbí, že se poptá", () => {
+  const snapshot = { id: "p1", firstName: "Filip", lastName: "Pešek", age: 27, alcohol: 30, occupation: "Zedník" } as unknown as PlayerSnapshot;
+  const answer = (body: string, incidentId: string | null, writeLater = false) =>
+    afterPlayerReply(db, { teamId: "club", convId: "c1", player: snapshot, reply: { body, writeLater }, at: "2026-11-10T08:00:00.000Z", offerIds: [], incidentId });
+  const tasks = async () => (await db.prepare("SELECT json_extract(details, '$.incidentId') AS inc FROM coach_commitments WHERE kind = 'task_inquiry'").all<{ inc: string }>()).results.map((r) => r.inc);
+
+  beforeEach(async () => {
+    await db.prepare("DROP TABLE IF EXISTS club_incidents").run();
+    await db.prepare("CREATE TABLE club_incidents (id TEXT PRIMARY KEY, status TEXT, culprit_revealed INTEGER)").run();
+    await db.prepare("INSERT INTO club_incidents VALUES ('cash-box', 'otevreny', 0), ('closed', 'uzavreny', 1)").run();
+  });
+
+  it("v hovoru o otevřeném incidentu slib založí úkol pátrání a odložená odpověď se nenaplánuje", async () => {
+    // Hrbek (Geomapping 19. 11.): „poptám se v šatně, až bude klid“ a druhý den „nikdo nic neví“ jen proto, že se trenér zeptal znovu.
+    await answer("Trenére, mám havárku a spěchám, ale poptám se v šatně, až bude klid. 🔧", "cash-box", true);
+    expect(await tasks()).toEqual(["cash-box"]);
+    expect((await db.prepare("SELECT COUNT(*) AS n FROM player_follow_ups").first<{ n: number }>())?.n).toBe(0);
+  });
+
+  it("bez tématu, u uzavřeného incidentu nebo bez slibu nic", async () => {
+    await answer("Poptám se kluků.", null);
+    await answer("Poptám se kluků.", "closed");
+    await answer("Trenére, vůbec netuším, fakt ne.", "cash-box");
+    expect(await tasks()).toEqual([]);
   });
 });

@@ -105,6 +105,25 @@ describe("na který incident se ptá", () => {
     expect(najdiIncidentVTextu("Zmizely nám peníze z kasy!", [penize, travnik])).toBe("kasa");
     expect(najdiIncidentVTextu("Kdo nám zničil trávník?", [penize, travnik])).toBe("travnik");
   });
+
+  // FK Geomapping 19.–20. 11.: „vykrást tu kasu“ hra nepoznala, téma se nenastavilo a žádost
+  // „nepoptal by ses mi“ tak nemohla založit úkol pátrání.
+  it("„vykrást tu kasu“ a „prachy z občerstvení“ najdou vybranou kasu, i když je novější jiný incident", () => {
+    const cashBox = { id: "cash-box", kind: "kasa_obcerstveni", ztraty: [{ typ: "penize", castka: 2528 }] as Ztrata[] };
+    const party = { id: "party", ...OSLAVA_KABINA };
+    expect(najdiIncidentVTextu("Ahoj Tome, měl bych prosbu, nepoptal by ses mi, kdo by mohl vykrást tu kasu?", [party, cashBox])).toBe("cash-box");
+    expect(najdiIncidentVTextu("Maty, nevíš o někom s těma prachama z občerstvení? Nebo kdo by mohl vědět?", [party, cashBox])).toBe("cash-box");
+    expect(najdiIncidentVTextu("Z tržby někdo něco vzal, kdo to byl?", [party, cashBox])).toBe("cash-box");
+    // Obecná otázka dál míří na nejnovější.
+    expect(najdiIncidentVTextu("Kdo to byl?", [party, cashBox])).toBe("party");
+  });
+
+  it("kmeny kasy nechytají kašel ani kastrol", () => {
+    const cashBox = { kind: "kasa_obcerstveni", ztraty: [{ typ: "penize", castka: 2528 }] as Ztrata[] };
+    expect(jeOtazkaNaIncident("Kdo kašle na trénink?", cashBox)).toBe(false);
+    expect(jeOtazkaNaIncident("Kdo zničil ten kastrol?", cashBox)).toBe(false);
+    expect(jeOtazkaNaIncident("Kdo ukrást chtěl kasu?", cashBox)).toBe(true);
+  });
 });
 
 describe("téma ve vlákně", () => {
