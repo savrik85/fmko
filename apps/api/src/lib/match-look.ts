@@ -38,7 +38,7 @@ interface MatchLook {
   /** null = klub manažera nemá (velkoklub v poháru). */
   home_coach: MatchCoach | null;
   away_coach: MatchCoach | null;
-  /** Trenéři spolu vycházejí líp než neutrálně (respekt mezi kluby nad nulou): před výkopem se i obejmou. */
+  /** Trenéři jsou aspoň dobří známí: před výkopem se i obejmou. */
   coaches_on_good_terms: boolean;
 }
 
@@ -170,7 +170,7 @@ export async function loadMatchLook(
     rowsIn<{ team_id: string; name: string; avatar: string; motivation: number }>("SELECT team_id, name, avatar, motivation FROM managers WHERE team_id", teamIds),
     rowsIn<{ id: string; avatar: string | null; physical: string | null }>("SELECT id, avatar, physical FROM players WHERE id", playerIds),
     home.teamId && away.teamId
-      ? db.prepare("SELECT respect FROM manager_relations WHERE team_a_id = ? AND team_b_id = ?").bind(...orderPair(home.teamId, away.teamId)).first<{ respect: number }>()
+      ? db.prepare("SELECT respect, heat FROM manager_relations WHERE team_a_id = ? AND team_b_id = ?").bind(...orderPair(home.teamId, away.teamId)).first<{ respect: number; heat: number }>()
       : null,
     recordOf(home.teamId),
     recordOf(away.teamId),
@@ -191,9 +191,9 @@ export async function loadMatchLook(
     const row = lookById.get(p.id);
     if (row) Object.assign(p, playerLook(row));
   }
-  // Bez řádku v manager_relations je vztah neutrální (respekt 0).
+  // Aspoň „Dobří známí“ ze škály relationLabel: respekt od 10 a bez napětí. Bez řádku v manager_relations je vztah neutrální.
   return {
     home_kit, away_kit, home_coach: coachOf(home.teamId, homeRecord), away_coach: coachOf(away.teamId, awayRecord),
-    coaches_on_good_terms: (relation?.respect ?? 0) > 0,
+    coaches_on_good_terms: !!relation && relation.respect >= 10 && relation.heat < 20,
   };
 }
