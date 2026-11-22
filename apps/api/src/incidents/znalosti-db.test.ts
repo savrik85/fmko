@@ -71,6 +71,23 @@ describe("načtení znalostí hráče", () => {
     expect(blokZnalosti(loaded)).toContain("Trenér ti dal pokutu.");
   });
 
+  it("Hrdlička: dřívější zapírání v SMS od incidentu pozná, starší SMS ne", async () => {
+    const own = radekDb({
+      role: "pachatel", fact: "Tohle jsi udělal ty: Vloupání do skladu.", status: "uzavreny", resolution: "srazka", culprit_revealed: 1,
+      created_at: "2026-11-03T02:00:00Z", loss: JSON.stringify(NAVRH.ztraty),
+    });
+    const withSms = (bodies: Array<[string, string]>) => new FalesnaD1([
+      { sql: /FROM teams t WHERE t\.id = \?/, first: { game_date: DNES, sezona: 4 } },
+      { sql: /FROM club_incident_knowledge k/, all: [own] },
+      { sql: /m\.sender_type = 'player'/, all: bodies.map(([body, sent_at]) => ({ body, sent_at })) },
+    ]);
+    const denied = await nactiZnalostiHrace(jakoD1(withSms([["Jaký dresy proboha… Nic jsem neukradl", "2026-11-21 18:02:11"]])), { teamId: "tym-a", playerId: "p" });
+    expect(blokZnalosti(denied)).toContain("Dřív jsi to trenérovi zapíral, to už neplatí: přiznej, že jsi lhal.");
+    expect(blokZnalosti(denied)).toContain("Vzal jsi: dresy.");
+    const before = await nactiZnalostiHrace(jakoD1(withSms([["Nic jsem neukradl", "2026-11-01T10:00:00Z"]])), { teamId: "tym-a", playerId: "p" });
+    expect(blokZnalosti(before)).not.toContain("Dřív jsi to trenérovi zapíral,");
+  });
+
   it("bez herního dne nic nenačte a netvrdí, že hráč nic neví", async () => {
     const db = new FalesnaD1([{ sql: /FROM teams t WHERE t\.id = \?/, first: null }]);
     expect(await nactiZnalostiHrace(jakoD1(db), { teamId: "tym-a", playerId: "s" })).toBeUndefined();

@@ -5,7 +5,7 @@ import { nazevIncidentu } from "./katalog";
 import { PROBLEMOVY, hrac, stavKlubu } from "./testovaci-stav";
 import type { NavrhIncidentu, NavrhStopy } from "./typy";
 import {
-  BEZ_ZNALOSTI, HLAVICKA_ZNALOSTI, blokZnalosti, lootLine, radekDoPromptu, radekZnalosti, vyberZnalosti, znalostiIncidentu,
+  BEZ_ZNALOSTI, HLAVICKA_ZNALOSTI, blokZnalosti, deniesOffence, lootLine, radekDoPromptu, radekZnalosti, vyberZnalosti, znalostiIncidentu,
   type RadekZnalostiDb,
 } from "./znalosti";
 
@@ -187,6 +187,35 @@ describe("odhalený pachatel a vlastní průšvih mimo téma", () => {
   it("s veřejnou znalostí téhož incidentu jsou v promptu obě řádky, pachatelova s pokynem", () => {
     const selected = vyberZnalosti([radek({ ...ODHALENY, status: "uzavreny", resolution: "pokuta" }, "p"), radek({ ...OWN_OFFENCE, resolution: "pokuta" }, "p")], null);
     expect(selected.map((r) => r.role)).toEqual(["kadr", "pachatel"]);
+  });
+
+  it("Hrdlička (Kávoviny, E2E 22. 11.): dřív zapíral, teď ví, že to už neplatí, a ví, co vzal", () => {
+    const loss = JSON.stringify([{ typ: "vybaveni", kategorie: "jerseys", uroven: 2, stav: 70, urovniDolu: 2 }]);
+    const denied = radekDoPromptu({ ...radek({ ...OWN_OFFENCE, loss }, "p"), deniedBefore: true });
+    expect(denied).toContain("Vzal jsi: dresy.");
+    expect(denied).toContain("Dřív jsi to trenérovi zapíral, to už neplatí: přiznej, že jsi lhal.");
+    // Bez zjištěného zapírání pokyn počítá i s tím, co hra v SMS nepoznala.
+    const fresh = radekDoPromptu(radek({ ...OWN_OFFENCE, loss }, "p"));
+    expect(fresh).toContain("Jestli jsi to trenérovi dřív zapíral, to už neplatí");
+    expect(fresh).not.toContain("Dřív jsi to trenérovi zapíral,");
+  });
+
+  it("co vzal: hotovost i poháry z vitríny, u poškození nic", () => {
+    const cash = JSON.stringify([{ typ: "penize", castka: 31696 }]);
+    expect(radekDoPromptu(radek({ ...OWN_OFFENCE, kind: "kasa", loss: cash }, "p"))).toContain(`Vzal jsi: ${(31696).toLocaleString("cs-CZ")} Kč.`);
+    const trophies = JSON.stringify([{ typ: "vybaveni", kategorie: "trophy_case", uroven: 2, stav: 80, urovniDolu: 1 }]);
+    expect(radekDoPromptu(radek({ ...OWN_OFFENCE, kind: "vitrina", loss: trophies }, "p"))).toContain("Vzal jsi: poháry z vitríny.");
+    const broken = JSON.stringify([{ typ: "stadion", zarizeni: "showers", urovni: 1 }]);
+    expect(radekDoPromptu(radek({ ...OWN_OFFENCE, category: "poskozeni", kind: "sprchy", loss: broken }, "p"))).not.toContain("Vzal jsi");
+  });
+
+  it("zapírání poznáme z jeho SMS", () => {
+    for (const t of ["trenere nic sem neukradl diky za vse 🍺", "Jaký dresy proboha… Nic jsem neukradl", "v životě bych dresy nevzal", "Ne, trenére, nebyl jsem to."]) {
+      expect(deniesOffence(t), t).toBe(true);
+    }
+    for (const t of ["Trenére, jo, vzal. Promiň, bylo to blbý...", "Přijdu na trénink.", "Nevím, kdy je zápas."]) {
+      expect(deniesOffence(t), t).toBe(false);
+    }
   });
 
   it("vrácený lup a zaplacená škoda mají v promptu výsledek", () => {

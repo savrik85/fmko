@@ -7,7 +7,7 @@ import { seedFromString } from "../lib/seed";
 import { ZNALOST_PO_UZAVRENI_DNI } from "./nastaveni";
 import type { NavrhIncidentu, NavrhStopy, StavKlubu } from "./typy";
 import {
-  radekZnalosti, vyberZnalosti, znalostiIncidentu,
+  deniesOffence, isOwnRevealedOffence, radekZnalosti, vyberZnalosti, znalostiIncidentu,
   type NovaZnalost, type RadekZnalosti, type RadekZnalostiDb, type TemaKonverzace,
 } from "./znalosti";
 
@@ -45,6 +45,7 @@ export async function zapisZnalosti(
 const DOTAZ_ZNALOSTI = `
   SELECT k.incident_id, k.role, k.fact, k.interrogation,
          i.kind, i.category, i.severity, i.game_date, i.status, i.resolution, i.culprit_revealed, i.culprit_player_id, i.recovered,
+         i.loss, i.created_at,
          COALESCE(p.first_name, d.first_name) AS pachatel_jmeno, COALESCE(p.last_name, d.last_name) AS pachatel_prijmeni
     FROM club_incident_knowledge k
     JOIN club_incidents i ON i.id = k.incident_id
@@ -77,5 +78,34 @@ export async function nactiZnalostiHrace(
   if (!rows) return undefined;
 
   const temaId = opts.tema && opts.tema.den === dnes.slice(0, 10) ? opts.tema.incidentId : null;
-  return vyberZnalosti(rows.results.map((r) => radekZnalosti(r, opts.playerId, dnes)), temaId);
+  const selected = vyberZnalosti(rows.results.map((r) => radekZnalosti(r, opts.playerId, dnes)), temaId);
+  await markEarlierDenial(db, opts.teamId, opts.playerId, selected);
+  return selected;
+}
+
+/** Čas zprávy z D1 (ISO i „2026-11-21 18:02:11“) v ms UTC. */
+function sentAtMs(sentAt: string): number {
+  const iso = sentAt.includes("T") ? sentAt : `${sentAt.replace(" ", "T")}Z`;
+  return Date.parse(iso);
+}
+
+/**
+ * Odhalený pachatel, který trenérovi od incidentu v SMS zapíral, dostane v promptu výslovně,
+ * že zapírání už neplatí (`pokynPachatele`). Jeden dotaz, jen když je v promptu vlastní průšvih.
+ */
+async function markEarlierDenial(db: D1Database, teamId: string, playerId: string, rows: RadekZnalosti[]): Promise<void> {
+  const own = rows.filter((r) => isOwnRevealedOffence(r) && r.createdAt);
+  if (own.length === 0) return;
+  const since = own.map((r) => r.createdAt!).sort()[0];
+  const sms = await db.prepare(
+    `SELECT m.body, m.sent_at FROM messages m JOIN conversations c ON c.id = m.conversation_id
+      WHERE c.team_id = ? AND c.type = 'player' AND c.participant_id = ? AND m.sender_type = 'player'
+        AND julianday(m.sent_at) >= julianday(?)
+      ORDER BY julianday(m.sent_at) DESC LIMIT 40`,
+  ).bind(teamId, playerId, since).all<{ body: string | null; sent_at: string }>()
+    .catch((e) => { logger.warn({ module: M }, `zapírání pachatele ${playerId}`, e); return null; });
+  for (const r of own) {
+    const from = Date.parse(r.createdAt!);
+    r.deniedBefore = (sms?.results ?? []).some((m) => sentAtMs(m.sent_at) >= from && deniesOffence(m.body ?? ""));
+  }
 }
