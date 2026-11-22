@@ -24,6 +24,7 @@ import { STOCK_PHRASES_RULE, generateWithoutRepeats, ownLinesPromptBlock } from 
 import { GeminiUnavailableError } from "./model-errors";
 import { ATTENDANCE_PLEDGE_RULE, ATTENDANCE_PLEDGE_SCHEMA, absencePersuasionLine, parseAttendancePledge, type RawAttendancePledge } from "./attendance-pledge";
 import { persuasionLine } from "./persuasion";
+import { amendsDecisionLine } from "../incidents/amends-decision";
 import { requestRule } from "./coach-rules";
 
 
@@ -481,6 +482,8 @@ export function buildSystemPrompt(
     situace,
     recentEvent,
     blokZnalosti(player.znalostiIncidentu),
+    // Vrátit, zaplatit, opravit: rozhodla hra (incidents/restitution.ts), model jen napíše text.
+    player.amendsDecision ? amendsDecisionLine(player.amendsDecision) : "",
     player.weightTalk ? weightTalkPrompt(player.weightTalk) : "",
     ...memoryPromptLines(player),
     ownLinesPromptBlock(player.ownRecentLines ?? []),

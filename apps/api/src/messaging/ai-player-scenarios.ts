@@ -133,6 +133,8 @@ export interface PlayerSnapshot {
   matchPledge?: import("./attendance-pledge").MatchPledge;
   /** Trenér ho přemlouval, ať přijde, a hra rozhodla (persuasion.ts). Jen čerstvé rozhodnutí. */
   persuasion?: import("./persuasion").PersuasionState;
+  /** Trenér chtěl, ať to vrátí, zaplatí nebo opraví, a hra rozhodla (incidents/restitution.ts). Jen čerstvé. */
+  amendsDecision?: import("../incidents/amends-decision").AmendsDecision;
   /** Pokyn trenéra, na který má hráč odpovědět, jestli ho splní (kolečka, omluva kabině; coach-rules.ts). */
   pendingRequest?: { commitmentId: string; kind: string };
 

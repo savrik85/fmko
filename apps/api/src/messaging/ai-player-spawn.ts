@@ -44,6 +44,7 @@ import { loadOwnRecentLines } from "./repetition";
 import { loadCoachAddress } from "./address-form";
 import { pledgesFromLife, loadTrainingDays, trainingScheduleText } from "./attendance-pledge";
 import { persuasionFromLife, persuasionPending } from "./persuasion";
+import { amendsDecisionFromLife } from "../incidents/amends-decision";
 import { clubRuleLines, loadClubRules } from "./coach-rules";
 import {
   cupOutcome, describeLastCupMatch, describeNextCupMatch, isLater, loadLastCupMatch, loadNextCupMatch, withinPreviousWindow,
@@ -579,6 +580,8 @@ export function loadPlayerSnapshot(
     ...pledgesFromLife(lifeContext),
     // Trenér ho přemlouval, ať přijde, a hra rozhodla (persuasion.ts): pevný pokyn do promptu.
     persuasion: persuasionFromLife(lifeContext),
+    // Totéž u žádosti, ať to vrátí nebo zaplatí (incidents/restitution.ts).
+    amendsDecision: amendsDecisionFromLife(lifeContext),
   };
 }
 
