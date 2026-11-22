@@ -470,7 +470,7 @@ class Stage {
   }
 
   /**
-   * Trenér týmu `side` prožívá, co se děje. Jak silně, je pokaždé jiné a záleží na povaze: sopka skáče, padá
+   * Trenér týmu `side` prožívá, co se děje. Jak silně, je pokaždé jiné a záleží na povaze: sopka padá
    * na kolena a běží za rozhodčím častěji než kliďas, ten většinou jen zvedne ruku.
    */
   coach(side: Side, mood: Mood, delay = 0) {
@@ -484,7 +484,6 @@ class Stage {
     const room = SIDES.every((side) => this.roster[side].every((slot) => dist(this.pos(slot.figure), inside) > 1.5));
     if (mood === "joy") {
       this.pose(figure, "celebrate", 2 + 3 * fire, delay);
-      if (strong) [0.4, 1.2, 2].forEach((at) => this.jump(figure, delay + at));
     } else if (mood === "upset") {
       this.pose(figure, strong ? "slide" : "armUp", strong ? 2.5 : 0.9, delay);
     } else if (mood === "anger" && strong && room) {
@@ -1077,9 +1076,8 @@ export class Replay {
         st.pose(shooter, "armUp", 1, 0.3);
         return st.go(shooter, toward(from, mates, 4), 1.8, 0.7);
       case 1:
-        // Skáče na místě.
-        st.pose(shooter, "celebrate", Infinity, 0.3);
-        return [0.6, 1.3, 2].forEach((at) => st.jump(shooter, at));
+        // Zůstane stát s rukama nahoře.
+        return st.pose(shooter, "celebrate", Infinity, 0.3);
       case 2:
         // Běží ke spoluhráčům s rukama nahoře.
         st.pose(shooter, "celebrate", Infinity, 0.3);
@@ -1091,14 +1089,14 @@ export class Replay {
     }
   }
 
-  /** Oslava gólu, pokaždé jedna ze tří: běh před tribunu se spoluhráči, skluz po kolenou, nebo hlouček, který skáče. */
+  /** Oslava gólu, jedna ze dvou: běh před tribunu se spoluhráči, nebo skluz po kolenou. Neskáče se. */
   private celebrate(st: Stage, side: Side, shooter: number, gz: number) {
     const spot = celebrationSpot(gz);
-    const style = Math.floor(st.rng() * 3);
+    const kneeSlide = st.rng() < 0.5;
     // Spoluhráči, kteří to mají blízko (nikdo neběží přes celé hřiště).
     const mates = st.outfield(side, [shooter]).filter((m) => dist(st.pos(m), spot) < 22).sort((a, b) => dist(st.pos(a), spot) - dist(st.pos(b), spot)).slice(0, 3);
     const run = Math.max(2.2, dist(st.pos(shooter), spot) / 6.5);
-    if (style === 1) {
+    if (kneeSlide) {
       // Skluz po kolenou: rozběh a posledních pár metrů po kolenou se zakloněným tělem.
       st.go(shooter, toward(spot, st.pos(shooter), 3.5), run, 0.3);
       st.go(shooter, spot, 1.4, 0.3 + run);
@@ -1115,10 +1113,7 @@ export class Replay {
       const arrive = Math.max(run + 0.4, dist(st.pos(m), to) / 6.5);
       st.go(m, to, arrive, 0.6);
       st.pose(m, "celebrate", Infinity, arrive);
-      // Hlouček skáče (při skluzu a hloučku), při běhu před tribunu jen zvednou ruce.
-      if (style > 0) [0.5, 1.3].forEach((at) => st.jump(m, 0.6 + arrive + at));
     });
-    if (style === 2) [1.1, 1.9].forEach((at) => st.jump(shooter, 0.3 + run + at));
   }
 
   /** Akce ze hry: přihrávka do běhu a střela, u brejku sprint přes půl hřiště. */
