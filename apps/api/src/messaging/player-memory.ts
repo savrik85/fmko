@@ -21,7 +21,7 @@ import { claimPromptLines, loadCoachClaimMemory } from "./coach-claims";
 import { pendingRequestOf } from "./coach-rules";
 
 /** Pokyny trenéra, na které hráč v odpovědi kývne nebo je odmítne (accepts_request). */
-export const REQUEST_KINDS: readonly string[] = ["laps_penalty", "squad_apology"];
+export const REQUEST_KINDS: readonly string[] = ["laps_penalty", "squad_apology", "weight_target"];
 
 const M = "player-memory";
 

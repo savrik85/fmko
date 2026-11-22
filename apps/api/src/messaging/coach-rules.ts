@@ -173,7 +173,8 @@ export function clubRuleLines(rules: ReadonlyArray<{ kind: string; details: Rule
 export function requestRule(kind: string): string {
   const what = kind === "squad_apology" ? "se omluvíš celé kabině"
     : kind === "laps_penalty" ? "trestná kolečka odběháš"
-      : "do toho jdeš (dohoda s trenérem)";
+      : kind === "weight_target" ? "do dohody o hubnutí jdeš"
+        : "do toho jdeš (dohoda s trenérem)";
   return `- accepts_request: true, když v téhle zprávě trenérovi kývneš, že ${what}; false, když odmítneš; null, když se k tomu nevyjádříš.`;
 }
 
@@ -388,7 +389,19 @@ export async function respondToCoachRequest(db: D1Database, o: { commitmentId: s
       WHERE id = ? AND player_id = ? AND status = 'active' AND json_extract(details, '$.accepted') IS NULL`,
   ).bind(o.accepted ? "true" : "false", o.commitmentId, o.playerId).run()
     .catch((e) => { logger.warn({ module: M }, `odpověď na pokyn ${o.commitmentId}`, e); return null; });
-  return (r?.meta?.changes ?? 0) > 0;
+  if ((r?.meta?.changes ?? 0) === 0) return false;
+  // Dohoda o hubnutí (coach-rewards.ts): kývl → do termínu omezí hospodu; odmítl → dohoda neplatí.
+  const c = await db.prepare("SELECT kind, due_at FROM coach_commitments WHERE id = ?").bind(o.commitmentId).first<{ kind: string; due_at: string }>();
+  if (c?.kind === "weight_target") {
+    if (o.accepted) {
+      const { dietPledgeStmt } = await import("./coach-rewards");
+      await dietPledgeStmt(db, o.playerId, c.due_at).run();
+    } else {
+      await db.prepare("UPDATE coach_commitments SET status = 'expired', resolved_at = ? WHERE id = ? AND status = 'active'")
+        .bind(new Date().toISOString(), o.commitmentId).run();
+    }
+  }
+  return true;
 }
 
 /** Na co má hráč v odpovědi kývnout (nejnovější čerstvý pokyn bez odpovědi). */
