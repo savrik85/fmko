@@ -24,7 +24,8 @@ export type Pose = "down" | "diveLeft" | "diveRight" | "celebrate" | "armUp" | "
 export type ShotResult = "goal" | "saved" | "post" | "bar" | "wide" | "over" | "blocked";
 type CardColor = "yellow" | "red";
 
-export interface ReplayPlayer { id: string; name: string; position: string; skinColor?: string; hairColor?: string | null; height?: number }
+/** `avatar` = obličej hráče (facesjs) pro titulek u gólu, karty, zranění a střídání. */
+export interface ReplayPlayer { id: string; name: string; position: string; skinColor?: string; hairColor?: string | null; height?: number; avatar?: Record<string, unknown> }
 export interface ReplayKit { shirt: string; shorts: string; socks: string }
 export interface ReplayTeam { name: string; kit: ReplayKit; starters: ReplayPlayer[]; subs: ReplayPlayer[] }
 /** Událost zápasu, jak ji ukládá engine (detail zápasu z API). */

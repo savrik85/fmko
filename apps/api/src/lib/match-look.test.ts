@@ -40,11 +40,9 @@ async function kitsFor(away: TeamRow, home: TeamRow = HOME) {
 
 describe("vzhled hráče pro 3D záznam", () => {
   it("bere pleť a vlasy z obličeje a výšku z fyzických údajů", () => {
-    const look = playerLook({
-      avatar: JSON.stringify({ body: { color: "#e8c4a0" }, hair: { id: "crop-fade2", color: "#1a1a1a" } }),
-      physical: JSON.stringify({ height: 182 }),
-    });
-    expect(look).toEqual({ skinColor: "#e8c4a0", hairColor: "#1a1a1a", height: 182 });
+    const avatar = { body: { color: "#e8c4a0" }, hair: { id: "crop-fade2", color: "#1a1a1a" } };
+    const look = playerLook({ avatar: JSON.stringify(avatar), physical: JSON.stringify({ height: 182 }) });
+    expect(look).toEqual({ avatar, skinColor: "#e8c4a0", hairColor: "#1a1a1a", height: 182 });
   });
 
   it("hráč bez obličeje a fyzických údajů nemá nic", () => {
@@ -113,8 +111,8 @@ describe("vzhled hráčů v sestavách", () => {
     const homeLineup = { starters: [{ id: "p1" }], subs: [{ id: "p2" }] };
     const awayLineup = { starters: [{ id: "ghost" }], subs: [] };
     await loadMatchLook(db, { teamId: "h" }, { teamId: null }, homeLineup, awayLineup);
-    expect(homeLineup.starters[0]).toEqual({ id: "p1", skinColor: "#e8c4a0", hairColor: "#1a1a1a", height: 182 });
-    expect(homeLineup.subs[0]).toEqual({ id: "p2", skinColor: "#e8c4a0", hairColor: null });
+    expect(homeLineup.starters[0]).toEqual({ id: "p1", avatar: JSON.parse(avatar("crop-fade2")), skinColor: "#e8c4a0", hairColor: "#1a1a1a", height: 182 });
+    expect(homeLineup.subs[0]).toEqual({ id: "p2", avatar: JSON.parse(avatar("short-bald")), skinColor: "#e8c4a0", hairColor: null });
     expect(awayLineup.starters[0]).toEqual({ id: "ghost" });
   });
 

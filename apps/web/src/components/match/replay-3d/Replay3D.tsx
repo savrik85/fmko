@@ -7,7 +7,8 @@ import { builtExtensionsOf } from "@/components/stadium/stadium-3d/stand-levels"
 import type { WeatherType } from "@/components/stadium/stadium-3d/constants";
 import { venueExtensions, venueFacilities } from "@/app/(hra)/turnaj/venue-scene";
 import { ReplayScene, type ReplayStep } from "./ReplayScene";
-import { Replay, type ReplayEvent, type ReplayKit, type ReplayPlayer, type ShotResult } from "./scenes";
+import { EventCard, EventLabel } from "./graphics";
+import { Replay, type ReplayEvent, type ReplayKit, type ReplayPlayer } from "./scenes";
 
 const Stadium3D = clientOnly(() => import("@/components/stadium/stadium-3d/Stadium3D").then((m) => m.Stadium3D));
 
@@ -31,9 +32,6 @@ interface StadiumData {
   facilities: Record<string, number>;
   standExtensions?: { slots: { slot: string; built?: { kind: string; level: number } | null }[] };
 }
-
-const RESULT_LABELS: Record<ShotResult, string> = { goal: "GÓÓÓL!", saved: "CHYTIL!", post: "TYČ!", bar: "BŘEVNO!", wide: "MIMO!", over: "NAD!", blocked: "ZBLOKOVÁNO!" };
-const TONES = { goal: "bg-green-500 text-white", danger: "bg-orange-500 text-white", miss: "bg-red-500 text-white", yellow: "bg-yellow-400 text-gray-900", red: "bg-red-600 text-white", info: "bg-white/90 text-gray-900" };
 
 const initials = (name: string) => name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase();
 
@@ -89,29 +87,10 @@ export function Replay3D({ detail, events, progress }: { detail: Record<string, 
   const [fullscreen, setFullscreen] = useState(false);
   const replayBadge = useRef<HTMLDivElement>(null);
   const event = attack ? events[idx] : events[idx - 1];
-  const label = labelOf();
   const attendance = detail.attendance as number | null;
-
-  function labelOf(): { text: string; sub?: string; tone: keyof typeof TONES } | null {
-    if (finished) return { text: "KONEC ZÁPASU", sub: `${detail.home_score} : ${detail.away_score}${pens ? ` (pen. ${pens.home}:${pens.away})` : ""}`, tone: "info" };
-    if (kickoff) return { text: "VÝKOP", sub: kickoff === "2nd" ? "2. poločas" : undefined, tone: "info" };
-    if (still || !event) return null;
-    const name = event.playerName;
-    if (attack) return event.source === "penalty" ? { text: "PENALTA", sub: name, tone: "danger" } : { text: "ŠANCE!", sub: event.teamId === 1 ? homeName : awayName, tone: "danger" };
-    if (event.detail?.startsWith("shootout:")) return { text: "ROZSTŘEL", sub: `${name}: ${event.detail === "shootout:goal" ? "gól" : "nedal"}`, tone: event.detail === "shootout:goal" ? "goal" : "miss" };
-    switch (event.type) {
-      case "goal": return { text: "GÓÓÓL!", sub: name, tone: "goal" };
-      case "chance": return { text: event.detail?.startsWith("penalty_") ? "NEPROMĚNIL!" : RESULT_LABELS[scene.result!], sub: name, tone: "miss" };
-      case "card": return { text: event.detail === "red" ? "ČERVENÁ KARTA" : "ŽLUTÁ KARTA", sub: name, tone: event.detail === "red" ? "red" : "yellow" };
-      case "injury": return { text: "ZRANĚNÍ", sub: name, tone: "miss" };
-      case "penalty": return { text: "PENALTA!", sub: name, tone: "danger" };
-      case "corner": return { text: "ROH", sub: name, tone: "info" };
-      case "freekick": return { text: event.detail === "direct" ? "PŘÍMÝ KOP" : "STANDARDKA", sub: name, tone: "info" };
-      case "foul": return { text: "FAUL", sub: name, tone: "info" };
-      case "substitution": return { text: "STŘÍDÁNÍ", sub: event.description.replace(/^[^:]*:\s*/, ""), tone: "info" };
-      default: return null;
-    }
-  }
+  const graphics = { detail, events, idx, event: still || finished ? undefined : event, attack, result: scene.result };
+  const fixedLabel = finished ? { text: "KONEC ZÁPASU", sub: `${detail.home_score} : ${detail.away_score}${pens ? ` (pen. ${pens.home}:${pens.away})` : ""}`, tone: "info" as const }
+    : kickoff ? { text: "VÝKOP", sub: kickoff === "2nd" ? "2. poločas" : undefined, tone: "info" as const } : undefined;
 
   // Výkop a konec zápasu mají vlastní scénu, obraz ztmaví jen přestávka.
   const curtain = halfTime ? { text: "POLOČAS", sub: `${homeGoals} : ${awayGoals}` } : null;
@@ -139,14 +118,8 @@ export function Replay3D({ detail, events, progress }: { detail: Record<string, 
         replay={<ReplayScene replay={replay} kits={kits} snow={detail.weather === "snow"} step={step} replayBadge={replayBadge} />}
       />
 
-      {label && (
-        <div className="absolute top-2 inset-x-0 z-30 flex justify-center pointer-events-none">
-          <div key={`${idx}-${flash}`} className={`flex items-baseline gap-2 px-3 py-1 rounded-lg shadow-lg font-heading animate-in fade-in zoom-in-95 duration-200 ${TONES[label.tone]}`}>
-            <span className="font-[900] text-base sm:text-xl tracking-wide">{label.text}</span>
-            {label.sub && <span className="font-bold text-xs sm:text-sm opacity-90 truncate max-w-[50vw]">{label.sub}</span>}
-          </div>
-        </div>
-      )}
+      <EventLabel {...graphics} override={fixedLabel} />
+      <EventCard {...graphics} />
       <div ref={replayBadge} style={{ display: "none" }} className="absolute top-2 left-14 z-30 px-2 py-1 rounded-lg bg-red-600 text-white text-xs font-heading font-bold tracking-wide pointer-events-none">
         ↺ OPAKOVANÝ ZÁBĚR
       </div>
@@ -159,8 +132,8 @@ export function Replay3D({ detail, events, progress }: { detail: Record<string, 
         </div>
       )}
       {fullscreen && (
-        <div className="absolute bottom-3 inset-x-0 z-30 flex justify-center pointer-events-none">
-          <div className="px-3 py-1 rounded-lg bg-black/70 text-white font-heading font-bold text-sm tabular-nums">
+        <div className="absolute top-2 right-12 z-30 pointer-events-none">
+          <div className="px-3 py-1.5 rounded-lg bg-black/70 text-white font-heading font-bold text-sm tabular-nums">
             {homeName} {homeGoals} : {awayGoals} {awayName}{event ? ` · ${event.minute}'` : ""}
           </div>
         </div>

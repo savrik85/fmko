@@ -8,6 +8,8 @@ export interface PlayerLook {
   hairColor?: string | null;
   /** Výška v cm. */
   height?: number;
+  /** Celý obličej (facesjs) pro titulek s hráčem v záznamu. */
+  avatar?: Record<string, unknown>;
 }
 
 export interface MatchKit {
@@ -45,11 +47,12 @@ const BLACK = "#111111";
  */
 const MIN_KIT_DISTANCE = 100;
 
-/** Pleť a vlasy z obličeje (facesjs v `players.avatar`), výška z `players.physical`. */
+/** Obličej (facesjs v `players.avatar`) a z něj pleť a vlasy pro 3D postavu, výška z `players.physical`. */
 export function playerLook(row: { avatar: string | null; physical: string | null }): PlayerLook {
   const look: PlayerLook = {};
   if (row.avatar) {
     const avatar = JSON.parse(row.avatar) as { body?: { color?: string }; hair?: { id?: string; color?: string } };
+    look.avatar = avatar;
     if (avatar.body?.color) look.skinColor = avatar.body.color;
     if (avatar.hair?.id) look.hairColor = avatar.hair.id.includes("bald") ? null : (avatar.hair.color ?? null);
   }
