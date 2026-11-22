@@ -72,7 +72,7 @@ export function isStockSentence(sentence: string): boolean {
 
 /** Pravidlo do promptu proti ohraným větám. */
 export const STOCK_PHRASES_RULE =
-  "- Ohrané věty, které píše každý, nepoužívej: „Už mám po šichtě“, „Už mám padla“, „Tak to je super, trenére“, „Tak to je jiná“. Řekni to po svém.";
+  "- Ohrané věty, které píše každý, nepoužívej: „Už mám po šichtě“, „Už mám padla“, „Tak to je super, trenére“, „Tak to je jiná“, „Díky za otázku“. Řekni to po svém.";
 
 /** Věty zprávy (konec věty, nový řádek). Emoji zůstávají u své věty. */
 export function splitSentences(text: string): string[] {
@@ -100,6 +100,132 @@ export function sentencesRepeat(a: string, b: string): boolean {
 export function findRepeatedSentences(body: string, previous: readonly string[]): string[] {
   const old = previous.flatMap(splitSentences);
   return splitSentences(body).filter((s) => isStockSentence(s) || old.some((o) => sentencesRepeat(s, o)));
+}
+
+// ─── Krátké fráze a úvody ────────────────────────────────────────────────────
+//
+// Lokální E2E 22. 11.: „jen si užívám víkend 😅“ a hned další zpráva „Dneska jsem si užíval
+// víkend 😅“, „díky za otázku“ 5× za dopoledne u tří hráčů, 33 z 80 zpráv začínalo „Trenére,“
+// (Bartoš 7 ze 7). Hlídání vět to nechytí: fráze je kratší než věta a úvod je jen oslovení.
+// Škrtá se bez dalšího volání modelu (rozpočet), a jen když zbytek dává smysl.
+
+/** Fráze se porovnává podle začátku slov, ať „užívám“ a „užíval“ vyjdou stejně. */
+const STEM_CHARS = 5;
+/** Klauzule s opakovanou frází se škrtne, jen když je krátká (výplň), delší nese obsah. */
+const PHRASE_CLAUSE_MAX_WORDS = 6;
+/** Fráze se hlídá proti tolika posledním vlastním zprávám, úvod proti dvěma. */
+const PHRASE_LOOKBACK = 3;
+const OPENER_LOOKBACK = 2;
+
+/** Ohraná klauzule, kterou píše skoro každý: „díky za otázku“. */
+const STOCK_CLAUSE_RE = /^(?:a |no )?(?:diky|dik|dekuju|dekuji) (?:moc )?za (?:otazku|optani|zeptani|dotaz)$/;
+
+/** Citoslovce a souhlas na začátku zprávy: dvakrát po sobě se škrtnou, slovo s významem („Nevím, …“) ne. */
+const INTERJECTION_OPENERS = new Set([
+  "jo", "joo", "jj", "jojo", "jasne", "jasny", "jasan", "jasnacka", "no", "no jo", "no tak", "no jasne", "tak", "tak jo", "hele",
+  "dobre", "dobra", "dobry", "super", "ok", "okej", "oki", "diky", "dik", "dekuju", "fajn", "v pohode", "pohoda", "ty jo", "aha",
+  "hm", "hmm", "cau", "ahoj", "zdar", "nazdar", "cus", "jo jasne", "jasne ze jo",
+]);
+
+/** Oslovení na začátku zprávy i s interpunkcí za ním: „Trenére, …“, „Šéfe!“, opile „trenere vole…“. */
+const ADDRESS_OPENER_RE = /^\s*(?:tren[eé]r(?:e|ko)|[sš][eé]fe)(?![\p{L}])[\s,!.?…:;-]*/iu;
+/** Konec věty: interpunkce a emoji. */
+const SENTENCE_TAIL_RE = /^(.*?)([\s.!?…]*(?:[\p{Extended_Pictographic}\u{1F3FB}-\u{1F3FF}\uFE0F\u200D]+[\s.!?…]*)*)$/su;
+
+/** Slova bez oslovení. */
+function wordsWithoutAddress(text: string): string[] {
+  return plainWords(text).filter((w) => !ADDRESS_WORDS.has(w));
+}
+
+/** Začíná zpráva oslovením trenéra? */
+export function opensWithAddress(text: string): boolean {
+  const first = plainWords(text)[0];
+  return first !== undefined && ADDRESS_WORDS.has(first);
+}
+
+/**
+ * Trojice slov po sobě (podle začátku slov), které nesou frázi: aspoň dvě delší slova
+ * a jedno z nich ne výplňové. „si užívám víkend“, „díky za otázku“; „mám se dobře“ ne.
+ */
+function phraseKeys(text: string): string[] {
+  const words = wordsWithoutAddress(text);
+  const keys: string[] = [];
+  for (let i = 0; i + 3 <= words.length; i++) {
+    const t = words.slice(i, i + 3);
+    const long = t.filter((w) => w.length >= 4);
+    if (long.length < 2 || !long.some((w) => !FILLER_WORDS.has(w))) continue;
+    keys.push(t.map((w) => w.slice(0, STEM_CHARS)).join(" "));
+  }
+  return keys;
+}
+
+function capitalize(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/** Dává zbytek smysl (aspoň tři slova a jedno významové)? */
+function meaningful(text: string): boolean {
+  return significantWords(text).length >= 1 && plainWords(text).length >= 3;
+}
+
+/** První klauzule zprávy bez oslovení („Jasný trenére, …“ → „jasny“). */
+function openerKey(text: string): string {
+  const clause = text.trim().split(/[,.!?…\n]/)[0] ?? "";
+  return wordsWithoutAddress(clause).join(" ");
+}
+
+/** Zpráva bez první klauzule (a oslovení hned za ní). */
+function withoutOpenerClause(text: string): string {
+  const rest = text.trim().replace(/^[^,.!?…\n]*[,.!?…]*\s*/u, "").replace(ADDRESS_OPENER_RE, "");
+  return capitalize(rest);
+}
+
+/**
+ * Zpráva bez opakované krátké fráze a bez úvodu, který měla i jedna ze dvou posledních zpráv
+ * hráče (`own`, nejstarší první). Krátká klauzule (nejvýš šest slov), ve které je fráze z jedné
+ * ze tří posledních zpráv, nebo ohrané „díky za otázku“ se vyškrtne. Oslovení „Trenére,“ na
+ * začátku smí být, ale nejvýš v jedné ze tří zpráv po sobě; stejné citoslovce na začátku
+ * („Jasný trenére, …“) taky ne dvakrát po sobě. Když by zbytek nedával smysl, zpráva zůstane.
+ */
+export function withoutRepeatedPhrases(body: string, own: readonly string[]): string {
+  const seen = new Set(own.slice(-PHRASE_LOOKBACK).flatMap(phraseKeys));
+  const droppable = (clause: string) => {
+    const words = wordsWithoutAddress(clause);
+    return STOCK_CLAUSE_RE.test(words.join(" "))
+      || (words.length <= PHRASE_CLAUSE_MAX_WORDS && phraseKeys(clause).some((k) => seen.has(k)));
+  };
+  const addressOnly = (clause: string) => plainWords(clause).length > 0 && wordsWithoutAddress(clause).length === 0;
+
+  let changed = false;
+  const kept: string[] = [];
+  for (const sentence of splitSentences(body)) {
+    const [, core = sentence, tail = ""] = sentence.match(SENTENCE_TAIL_RE) ?? [];
+    const clauses = core.split(/,\s+/);
+    const keep = clauses.filter((c) => !droppable(c));
+    if (keep.length === clauses.length) { kept.push(sentence); continue; }
+    changed = true;
+    if (keep.every(addressOnly)) continue;
+    // Emoji patří k vyškrtnuté klauzuli („…užíval víkend 😅“), interpunkce zůstane.
+    const end = keep[keep.length - 1] === clauses[clauses.length - 1] ? tail : tail.replace(/[^.!?…]/gu, "");
+    const text = `${keep.join(", ")}${end}`.trim();
+    kept.push(keep[0] === clauses[0] ? text : capitalize(text));
+  }
+  let text = changed ? kept.join(" ") : body;
+
+  const recent = own.slice(-OPENER_LOOKBACK);
+  if (opensWithAddress(text)) {
+    if (recent.some(opensWithAddress)) {
+      const rest = capitalize(text.replace(ADDRESS_OPENER_RE, ""));
+      if (meaningful(rest)) text = rest;
+    }
+  } else {
+    const opener = openerKey(text);
+    if (INTERJECTION_OPENERS.has(opener) && recent.some((p) => openerKey(p) === opener)) {
+      const rest = withoutOpenerClause(text);
+      if (meaningful(rest)) text = rest;
+    }
+  }
+  return text === body || meaningful(text) ? text : body;
 }
 
 /**
@@ -186,6 +312,10 @@ export function ownLinesPromptBlock(lines: readonly string[]): string {
   return [
     "CO UŽ JSI TRENÉROVI NAPSAL (tyhle věty ani podobné znovu nepoužij, i začátek zprávy a obraty vymysli jinak):",
     ...lines.map((l) => `- ${quote(l)}`),
+    // Oslovení na začátku smí být, ale ne v každé zprávě (withoutRepeatedPhrases ho jinak škrtne).
+    ...(lines.slice(-OPENER_LOOKBACK).some(opensWithAddress)
+      ? ["Nedávno jsi zprávu začal oslovením „Trenére“: tuhle nezačínej oslovením, začni rovnou k věci."]
+      : []),
   ].join("\n");
 }
 
@@ -207,12 +337,19 @@ export async function generateWithoutRepeats<T extends { body: string }>(
   previous: readonly string[] | undefined,
   generate: (retryRule: string) => Promise<T>,
   where: string,
-  opts: { deadline?: number } = {},
+  /** `others`: věty spoluhráčů z téhož vlákna (kabina). Hlídají se celé věty, úvody a fráze jen vlastní. */
+  opts: { deadline?: number; others?: readonly string[] } = {},
 ): Promise<T> {
-  previous = previous ?? [];
+  const own = previous ?? [];
+  previous = [...own, ...(opts.others ?? [])];
+  // Krátké fráze a úvody se jen škrtají, kvůli nim se model znovu nevolá.
+  const finish = (r: T): T => {
+    const body = withoutRepeatedPhrases(r.body, own);
+    return body === r.body ? r : { ...r, body };
+  };
   const first = await generate("");
   const repeated = findRepeatedSentences(first.body, previous);
-  if (repeated.length === 0) return first;
+  if (repeated.length === 0) return finish(first);
 
   let best = first;
   let bestRepeated = repeated;
@@ -222,7 +359,7 @@ export async function generateWithoutRepeats<T extends { body: string }>(
     try {
       const second = await generate(repeatRetryRule(repeated));
       const again = findRepeatedSentences(second.body, previous);
-      if (again.length === 0) return second;
+      if (again.length === 0) return finish(second);
       if (again.length <= repeated.length) {
         best = second;
         bestRepeated = again;
@@ -234,7 +371,7 @@ export async function generateWithoutRepeats<T extends { body: string }>(
   const trimmed = withoutSentences(best.body, bestRepeated);
   if (trimmed) {
     logger.info({ module: M }, `vyškrtnuto opakování (${where}): ${bestRepeated.join(" | ")}`);
-    return { ...best, body: trimmed };
+    return finish({ ...best, body: trimmed });
   }
   // Doslovný duplikát neodejde nikdy (E2E 22. 11.: druhý pokus nestihl rozpočet a hráč poslal
   // tutéž větu jako před chvílí). Volající to bere jako nedostupný model: předem napsaná
@@ -291,3 +428,24 @@ export async function loadOwnLinesAcross(
     .catch((e) => { logger.warn({ module: M }, `poslední zprávy hráče ${o.playerId} napříč konverzacemi`, e); return null; });
   return (rows?.results ?? []).map((r) => (r.body ?? "").trim()).filter(Boolean).reverse();
 }
+
+/**
+ * Co v kabině (`convId`) v posledních hodinách napsali spoluhráči (bez `playerId`), nejstarší
+ * první. V E2E 22. 11. napsali dva hráči 9 s po sobě doslova „V neděli budu, trenére“: hlídalo
+ * se jen to, co psal hráč sám. Selhání nic neblokuje: prázdný seznam.
+ */
+export async function loadTeammateLines(
+  db: D1Database, o: { convId: string; playerId: string; limit?: number; since?: Date },
+): Promise<string[]> {
+  const since = o.since ?? new Date(Date.now() - TEAMMATE_LINES_HOURS * 3600_000);
+  const rows = await db.prepare(
+    `SELECT body FROM messages WHERE conversation_id = ? AND sender_type = 'player' AND COALESCE(sender_id, '') != ?
+        AND TRIM(COALESCE(body, '')) != '' AND julianday(sent_at) > julianday(?)
+      ORDER BY julianday(sent_at) DESC, rowid DESC LIMIT ?`,
+  ).bind(o.convId, o.playerId, since.toISOString(), o.limit ?? TEAMMATE_LINES_LIMIT).all<{ body: string | null }>()
+    .catch((e) => { logger.warn({ module: M }, `věty spoluhráčů v kabině ${o.convId}`, e); return null; });
+  return (rows?.results ?? []).map((r) => (r.body ?? "").trim()).filter(Boolean).reverse();
+}
+/** Věty spoluhráčů v kabině: kolik posledních a jak staré. */
+const TEAMMATE_LINES_LIMIT = 6;
+const TEAMMATE_LINES_HOURS = 3;

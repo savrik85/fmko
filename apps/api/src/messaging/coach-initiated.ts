@@ -30,7 +30,7 @@ import {
 } from "./ai-player-spawn";
 import type { OptionalPushKeys } from "../community/phone-push";
 import { loadChatMemory } from "./player-memory";
-import { loadOwnLinesAcross, loadOwnRecentLines } from "./repetition";
+import { loadOwnLinesAcross, loadOwnRecentLines, loadTeammateLines } from "./repetition";
 import { addressedPlayers, applySpeech, persuadeAbsentees, pickResponders } from "./squad-talk";
 import { handleSquadBet } from "./coach-commitments";
 import { handleSquadRule } from "./coach-rules";
@@ -376,6 +376,8 @@ async function replyInSquadGroupInner(
         mluvci.lastOwnMessageAt = await loadLastOwnMessageAt(db, opts.convId, mluvci.id);
         // Co už napsal v kabině i trenérovi 1:1: ať neopakuje pořád stejné hlášky (repetition.ts).
         mluvci.ownRecentLines = await loadOwnLinesAcross(db, { playerId: mluvci.id, convIds: [opts.convId], teamId: opts.teamId });
+        // A co v kabině právě napsali spoluhráči: dva hráči jinak píšou doslova totéž (E2E 22. 11.).
+        const teammateLines = await loadTeammateLines(db, { convId: opts.convId, playerId: mluvci.id });
 
         /*
          * Poslední výměna v kabině — CHRONOLOGICKY a včetně toho, co psal trenér
@@ -404,7 +406,7 @@ async function replyInSquadGroupInner(
           (predchozi?.results ?? []).map((m) =>
             m.sender_type === "user" ? `TRENÉR: ${coachQuote(m.body)}` : `${m.sender_name}: ${m.body}`),
           {
-            addressed: addressed.has(mluvci.id), mood: speech?.mood || undefined, afterTeammates: i > 0, deadline: opts.deadline,
+            addressed: addressed.has(mluvci.id), mood: speech?.mood || undefined, afterTeammates: i > 0, deadline: opts.deadline, teammateLines,
             onPledge: SQUAD_ATTENDANCE_TOPIC_RE.test(opts.coachMessage) ? (p) => { pledge = p; } : undefined,
           },
         );

@@ -5,7 +5,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   findRepeatedSentences, generateWithoutRepeats, isStockSentence, ownLinesPromptBlock, pickFreshVariant, pickUnusedIndex,
-  repeatRetryRule, repeatsAny, sentencesRepeat, splitSentences, withoutSentences,
+  repeatRetryRule, repeatsAny, sentencesRepeat, splitSentences, withoutRepeatedPhrases, withoutSentences,
 } from "./repetition";
 import { GeminiUnavailableError } from "./model-errors";
 
@@ -216,5 +216,67 @@ describe("předem napsané varianty bez opakování", () => {
     expect(repeatsAny("Jsem tady doma a jinam nechci.", [loyal[0]])).toBe(true);
     expect(repeatsAny("Díky, trenére.", ["Díky, trenére!"])).toBe(false);
     expect(repeatsAny("Tak to je jiná, trenére!", [])).toBe(false);
+  });
+});
+
+// Lokální E2E 22. 11.: „užívám víkend 😅“ → „užíval víkend 😅“ ve dvou zprávách po sobě,
+// „díky za otázku“ 5× za dopoledne, 33 z 80 zpráv začínalo „Trenére,“ (Bartoš 7 ze 7) a v kabině
+// dva hráči doslova „V neděli budu, trenére“. Krátké fráze a úvody se škrtají bez dalšího volání modelu.
+describe("krátké fráze a úvody", () => {
+  it("zopakovaná krátká fráze a ohrané „díky za otázku“ se vyškrtnou, oslovení jen občas (Bartoš)", () => {
+    expect(withoutRepeatedPhrases(
+      "Trenére, mám se dobře, díky za otázku! Dneska jsem si užíval víkend 😅",
+      ["Trenére, nic moc nedělám, jen si užívám víkend 😅"],
+    )).toBe("Mám se dobře!");
+    expect(withoutRepeatedPhrases("Trenére, díky za otázku! Dresy jsou fajn 😊", ["Trenére, plánuju jen relax."]))
+      .toBe("Dresy jsou fajn 😊");
+  });
+
+  it("„Trenére,“ na začátku nesmí být ve víc než jedné ze tří posledních zpráv (Dvořák)", () => {
+    expect(withoutRepeatedPhrases("Trenére, doma je všechno v pořádku, díky za otázku!", ["Trenére, přijedu.", "Fajn, cítím se dobře."]))
+      .toBe("Doma je všechno v pořádku!");
+    // Předposlední zpráva začínala oslovením: tahle bez něj.
+    expect(withoutRepeatedPhrases("Trenére, myslím že ano, zvládneme to.", ["Trenére, doma v pohodě.", "Líbí se mi Matěj."]))
+      .toBe("Myslím že ano, zvládneme to.");
+    // Dvě poslední bez oslovení: smí být.
+    expect(withoutRepeatedPhrases("Trenére, myslím že ano, zvládneme to.", ["Doma v pohodě.", "Líbí se mi Matěj."]))
+      .toBe("Trenére, myslím že ano, zvládneme to.");
+  });
+
+  it("stejné citoslovce na začátku po sobě se vyškrtne i s oslovením, slovo s významem ne", () => {
+    expect(withoutRepeatedPhrases("Jasný trenére, poptám se zítra u piva.", ["Jasný trenére, dorazím v úterý."]))
+      .toBe("Poptám se zítra u piva.");
+    expect(withoutRepeatedPhrases("Nevím, jestli to stihnu.", ["Nevím, trenére, uvidíme."])).toBe("Nevím, jestli to stihnu.");
+  });
+
+  it("dlouhou větu, desetinnou čárku ani jiná témata nechá být; když by nic nezbylo, nechá zprávu", () => {
+    const own = ["V příštím zápase proti Vimperku dám gól, uvidíte."];
+    expect(withoutRepeatedPhrases("V příštím zápase proti Vimperku konečně nastoupím od začátku a dám gól.", own))
+      .toBe("V příštím zápase proti Vimperku konečně nastoupím od začátku a dám gól.");
+    expect(withoutRepeatedPhrases("Malej má 2,96 kila, je zdravej.", ["Jsme doma."])).toBe("Malej má 2,96 kila, je zdravej.");
+    expect(withoutRepeatedPhrases("Díky za otázku!", [])).toBe("Díky za otázku!");
+  });
+
+  it("přegenerování hlídá i věty spoluhráčů v kabině, úvody a fráze jen vlastní", async () => {
+    const gen = vi.fn()
+      .mockResolvedValueOnce({ body: "V neděli budu, trenére" })
+      .mockResolvedValueOnce({ body: "Já v neděli taky dorazím." });
+    const out = await generateWithoutRepeats([], gen, "kabina", { others: ["V neděli budu, trenére"] });
+    expect(out.body).toBe("Já v neděli taky dorazím.");
+    expect(gen).toHaveBeenCalledTimes(2);
+    // Oslovení spoluhráče úvod hráče neomezuje.
+    const own = vi.fn(async () => ({ body: "Trenére, v neděli jsem tam." }));
+    expect((await generateWithoutRepeats([], own, "kabina", { others: ["Trenére, já taky."] })).body).toBe("Trenére, v neděli jsem tam.");
+  });
+
+  it("výsledek přegenerování projde i škrtnutím frází", async () => {
+    const gen = vi.fn(async () => ({ body: "Trenére, mám se dobře, díky za otázku!" }));
+    expect((await generateWithoutRepeats(["Trenére, jsem v práci."], gen, "test")).body).toBe("Mám se dobře!");
+    expect(gen).toHaveBeenCalledTimes(1);
+  });
+
+  it("prompt řekne, ať zprávu nezačíná oslovením, když ho měla jedna ze dvou posledních", () => {
+    expect(ownLinesPromptBlock(["Trenére, přijedu.", "Fajn."])).toContain("nezačínej oslovením");
+    expect(ownLinesPromptBlock(["Přijedu.", "Fajn."])).not.toContain("nezačínej oslovením");
   });
 });
