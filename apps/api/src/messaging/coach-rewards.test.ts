@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   REWARD_BROKEN_SMS, REWARD_KEPT_SMS, REWARD_REMINDER_SMS, WEIGHT_FAILED_SMS, WEIGHT_FORFEIT_KABINA, WEIGHT_SAVED_SMS, WEIGHT_WON_SMS,
-  parseReward, parseWeightTarget, realisticKg, rewardDetailsOf, rewardPrice, rewardPromptLine, rewardText, weightDealDetails, weightDealNote, weightGoalMet,
+  parseReward, parseWeightTarget, realisticKg, rewardDetailsOf, rewardLabel, rewardPrice, rewardPromptLine, rewardSummary, rewardText, weightDealDetails, weightDealNote, weightGoalMet,
 } from "./coach-rewards";
 import { COMMITMENT_HINT_RE, parseDetection } from "./coach-commitments";
 
@@ -51,6 +51,19 @@ describe("cíl a vyhodnocení", () => {
     expect(realisticKg(30)).toBe(4.5);
     expect(weightDealNote("Ladislav", { kg: 5, reward: "none", forfeit: true, startWeight: 96.4 }, "2026-12-02T19:24:00Z", 14))
       .toBe("📝 Ladislav: když shodí 5 kg, jinak platí kabině pivo (do 2. 12., teď 96,4 kg). Za 14 dní se dá reálně shodit kolem 2 kg. Platí, až hráč kývne.");
+  });
+  it("Bohuslav (E2E 22. 11.): „Kč“ velkým písmenem, i když začátek věty jde malým", () => {
+    const note = weightDealNote("Bohuslav", { kg: 7.2, reward: "money", amount: 1000, startWeight: 90.9 }, "2026-12-06T10:00:00Z", 14);
+    expect(note).toContain("když shodí 7,2 kg, trenér mu dá 1\u00a0000 Kč");
+    expect(note).not.toContain("kč");
+  });
+  it("odměna v 1. pádě, u peněz bez zdvojené částky", () => {
+    expect(rewardLabel({ reward: "bottle" })).toBe("flaška");
+    expect(rewardLabel({ reward: "round" })).toBe("runda");
+    expect(rewardLabel({ reward: "keg" })).toBe("basa piva");
+    expect(rewardLabel({ reward: "money", amount: 1000 })).toBe("1\u00a0000 Kč");
+    expect(rewardSummary({ reward: "bottle" })).toBe("flaška (300 Kč)");
+    expect(rewardSummary({ reward: "money", amount: 1000 })).toBe("1\u00a0000 Kč");
   });
   it("ceny a texty", () => {
     expect(rewardPrice({ reward: "bottle" })).toBe(300);

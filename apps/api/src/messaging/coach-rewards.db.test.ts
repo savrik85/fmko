@@ -92,7 +92,12 @@ describe("dohoda o hubnutí s odměnou", () => {
     expect(won.some((b) => WEIGHT_WON_SMS.some((t) => b.replace(/\d+,\d kg|\d+ kg/, "{kg}") === t))).toBe(true);
     const button = (await systemNotes("c2")).find((m) => JSON.parse(m.metadata).type === "coach_commitment");
     expect(button?.body).toContain("splnil dohodu o hubnutí");
-    expect(await fulfilMoneyCommitment(db, { teamId: "club", commitmentId: id, now: new Date("2026-12-03T12:00:00Z") })).toMatchObject({ ok: true });
+    // Bohuslav (E2E 22. 11.): tlačítko psalo cíl (7,2 kg), ne kolik opravdu shodil (7,3 kg).
+    const lost = JSON.parse((await db.prepare("SELECT details FROM coach_commitments WHERE id = ?").bind(id).first<{ details: string }>())!.details).lost;
+    expect(lost).toBeGreaterThan(target.kg);
+    expect(button?.body).toContain(`(${lost.toLocaleString("cs-CZ", { maximumFractionDigits: 1 })} kg dole)`);
+    expect(button?.body).toContain("Odměna: 1\u00a0000 Kč, vyplatit");
+    expect(await fulfilMoneyCommitment(db, { teamId: "club", commitmentId: id, now: new Date("2026-12-03T12:00:00Z") })).toMatchObject({ ok: true, effect: "Odměna předána (1\u00a0000 Kč)" });
     expect(await status(id)).toBe("kept");
     expect((await db.prepare("SELECT type, amount FROM transactions").first<{ type: string; amount: number }>())).toEqual({ type: "player_bonus", amount: -1000 });
     expect(REWARD_KEPT_SMS).toContain((await playerSms("c2")).at(-1));
@@ -172,8 +177,8 @@ describe("odměna za službu", () => {
     });
     const notes = await systemNotes("c3");
     expect(notes).toHaveLength(1);
-    expect(notes[0].body).toContain("flašku (300 Kč)");
-    expect(await fulfilMoneyCommitment(db, { teamId: "club", commitmentId: id, now: T0 })).toMatchObject({ ok: true });
+    expect(notes[0].body).toContain("Odměna: flaška (300 Kč)");
+    expect(await fulfilMoneyCommitment(db, { teamId: "club", commitmentId: id, now: T0 })).toMatchObject({ ok: true, effect: "Odměna předána (flaška, 300 Kč)" });
     expect((await db.prepare("SELECT type, amount FROM transactions").first<{ type: string; amount: number }>())).toEqual({ type: "manager_social", amount: -300 });
   });
 });

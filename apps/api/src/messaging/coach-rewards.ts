@@ -82,6 +82,22 @@ export function rewardWhat(d: Pick<RewardDetails, "reward" | "amount">): string 
   return d.reward && d.reward !== "none" ? REWARD_WORDS[d.reward] : "nic";
 }
 
+/** Odměna v 1. pádě („Odměna: flaška“), peníze částkou. */
+const REWARD_LABELS: Record<Exclude<RewardType, "none">, string> = { money: "peníze", round: "runda", keg: "basa piva", bottle: "flaška" };
+
+export function rewardLabel(d: Pick<RewardDetails, "reward" | "amount">): string {
+  if (d.reward === "money") return `${(d.amount ?? 0).toLocaleString("cs-CZ")} Kč`;
+  return d.reward && d.reward !== "none" ? REWARD_LABELS[d.reward] : "nic";
+}
+
+/**
+ * Odměna s cenou pro trenéra: „flaška (300 Kč)“, peníze jen částkou. Dřív „Odměna: flašku
+ * (300 Kč)“ (4. pád) a „Odměna: 1 000 Kč (1 000 Kč)“ (E2E 22. 11.).
+ */
+export function rewardSummary(d: Pick<RewardDetails, "reward" | "amount">): string {
+  return d.reward === "money" ? rewardLabel(d) : `${rewardLabel(d)} (${rewardPrice(d).toLocaleString("cs-CZ")} Kč)`;
+}
+
 function kgText(kg: number): string {
   return `${kg.toLocaleString("cs-CZ", { maximumFractionDigits: 1 })} kg`;
 }
@@ -258,7 +274,9 @@ export function weightDealDetails(base: RewardDetails, weight: number | null, fi
 
 /** Poznámka pod zprávu trenéra: co hra zapsala a kolik se dá reálně shodit. */
 export function weightDealNote(firstName: string, d: RewardDetails, dueAt: string, days: number): string {
-  return `📝 ${firstName}: ${rewardText("weight_target", d).toLowerCase()} (do ${datePhrase(dueAt)}, teď ${kgText(d.startWeight ?? 0)}). `
+  // Jen první písmeno: celé malými bylo „1 000 kč“ (E2E 22. 11.).
+  const text = rewardText("weight_target", d);
+  return `📝 ${firstName}: ${text.charAt(0).toLowerCase()}${text.slice(1)} (do ${datePhrase(dueAt)}, teď ${kgText(d.startWeight ?? 0)}). `
     + `Za ${days} dní se dá reálně shodit kolem ${kgText(realisticKg(days))}. Platí, až hráč kývne.`;
 }
 
@@ -378,13 +396,17 @@ async function payForfeit(db: D1Database, r: RewardRow, now: Date, human: boolea
  * dní. Vrací id zprávy s tlačítkem.
  */
 export async function markRewardEarned(db: D1Database, r: Pick<RewardRow, "id" | "team_id" | "player_id" | "kind" | "conversation_id" | "first_name" | "last_name" | "nickname" | "avatar" | "details">, now: Date): Promise<string | null> {
-  const d = rewardDetailsOf(r.details);
   const buttonMessageId = crypto.randomUUID();
   const upd = await db.prepare(
     `UPDATE coach_commitments SET details = json_set(COALESCE(details, '{}'), '$.won', json('true'), '$.buttonMessageId', ?), due_at = ?
       WHERE id = ? AND status = 'active'`,
   ).bind(buttonMessageId, new Date(now.getTime() + REWARD_PAY_DAYS * DAY_MS).toISOString(), r.id).run();
   if ((upd.meta?.changes ?? 0) === 0) return null;
+  // Podrobnosti čerstvě z DB: `$.lost` zapsal settleReward až po načtení řádku volajícím.
+  // Se starým řádkem tlačítko psalo cíl (7,2 kg) místo skutečně shozených 7,3 kg (E2E 22. 11.).
+  const fresh = await db.prepare("SELECT details FROM coach_commitments WHERE id = ?").bind(r.id).first<{ details: string | null }>()
+    .catch((e) => { logger.warn({ module: M }, `podrobnosti odměny ${r.id}`, e); return null; });
+  const d = rewardDetailsOf(fresh?.details ?? r.details);
   const { getOrCreatePlayerConversation } = await import("./ai-player-spawn");
   const convId = r.conversation_id ?? await getOrCreatePlayerConversation(db, r.team_id,
     { id: r.player_id, firstName: r.first_name, lastName: r.last_name, nickname: r.nickname, avatar: r.avatar });
@@ -399,7 +421,7 @@ export async function markRewardEarned(db: D1Database, r: Pick<RewardRow, "id" |
     `INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, metadata, sent_at, read)
      VALUES (?, ?, 'system', 'Systém', ?, ?, ?, 1)`,
   ).bind(buttonMessageId, convId,
-    `🎁 ${what}. Odměna: ${rewardWhat(d)} (${rewardPrice(d).toLocaleString("cs-CZ")} Kč), vyplatit ji musíš sám.`,
+    `🎁 ${what}. Odměna: ${rewardSummary(d)}, vyplatit ji musíš sám.`,
     JSON.stringify({ type: "coach_commitment", commitmentId: r.id, kind: r.kind, done: false }),
     new Date(Math.max(now.getTime(), lastMs) + 1000).toISOString()).run();
   return buttonMessageId;
