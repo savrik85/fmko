@@ -12,9 +12,16 @@
  * vrátí (vybavení zpátky, hotovost do kasy, `recovered = 1`) nebo opraví (oprava zdarma, trávník,
  * stav vybavení; hráč je po brigádě unavený), napíše „vráceno“ / „hotovo“ a kustod to potvrdí.
  * Když to nestihne, napíše výmluvu a škoda platí dál. Jednou na incident.
+ *
+ * E2E 22. 11. (Turek znovu): klub vitrínu mezitím dokoupil, takže „není co vracet“ a slib
+ * „Jo, vrátím je“ zůstal bez dopadu. Vrácené vybavení, které už klub nahradil, teď klub prodá
+ * do zastavárny (`resaleValue`, peníze do kasy). A úkol vzniká i ze slibu hráče v odpovědi
+ * (restitution.ts `recordPromisedAmends`); kdo podle povahy nekývl, ho má s `willFail` a nesplní.
  */
 
-import { CATEGORIES, CATEGORY_LABELS } from "../equipment/equipment-generator";
+import {
+  CATEGORIES, CATEGORY_LABELS, PAWN_RATE, cumulativeInvestment, equipmentConditionFactor,
+} from "../equipment/equipment-generator";
 import { createRng } from "../generators/rng";
 import { logger } from "../lib/logger";
 import { seedFromString } from "../lib/seed";
@@ -52,6 +59,34 @@ export async function returnableLosses(db: D1Database, teamId: string, losses: r
     if (row && (row.lvl ?? 0) < z.uroven) out.push(z);
   }
   return out;
+}
+
+/**
+ * Ukradené vybavení, které si klub mezitím koupil znovu (úroveň je zpátky). Turek (Fezko
+ * Výškovice): vitrínu klub 24. 10. dokoupil na úroveň 2, poháry ale zůstaly u něj. Vrátit je
+ * pořád může, jen klub originál nepotřebuje: prodá ho (`resaleValue`).
+ */
+export async function replacedLosses(db: D1Database, teamId: string, losses: readonly Ztrata[]): Promise<Ztrata[]> {
+  const out: Ztrata[] = [];
+  for (const z of losses) {
+    if (z.typ !== "vybaveni" || !(CATEGORIES as readonly string[]).includes(z.kategorie)) continue;
+    const row = await db.prepare(`SELECT ${z.kategorie} AS lvl FROM equipment WHERE team_id = ?`).bind(teamId).first<{ lvl: number | null }>()
+      .catch((e) => { logger.warn({ module: M }, `nahrazené vybavení ${z.kategorie} ${teamId}`, e); return null; });
+    if (row && (row.lvl ?? 0) >= z.uroven) out.push(z);
+  }
+  return out;
+}
+
+/**
+ * Kolik klub dostane za vrácené vybavení, které už nahradil: výkup zastavárny (30 % ceny
+ * ukradených úrovní podle stavu, `getPawnQuote`). Stejně by ho trenér zpeněžil sám.
+ */
+export function resaleValue(z: Ztrata): number {
+  if (z.typ !== "vybaveni") return 0;
+  const stolen = cumulativeInvestment(z.kategorie, z.uroven) - cumulativeInvestment(z.kategorie, Math.max(0, z.uroven - z.urovniDolu));
+  const value = stolen * PAWN_RATE * equipmentConditionFactor(z.stav);
+  // Zaokrouhlení jako u cen vybavení (equipment-generator.ts roundPrice).
+  return value >= 10000 ? Math.round(value / 100) * 100 : Math.round(value / 10) * 10;
 }
 
 /** Rozbité, co jde opravit brigádou: neopravená škoda na stadionu, trávník, opotřebené vybavení. */
@@ -146,7 +181,11 @@ export function dueWords(dueOn: string | undefined): string {
  */
 export async function recordAmendsTask(
   db: D1Database,
-  o: { teamId: string; playerId: string; incidentId: string; task: AmendsTask; coachMessage: string; gameDate: string; now?: Date },
+  o: {
+    teamId: string; playerId: string; incidentId: string; task: AmendsTask; coachMessage: string; gameDate: string; now?: Date;
+    /** Slíbil, ale podle povahy to neudělá (restitution.ts `recordPromisedAmends`): v termínu výmluva. */
+    willFail?: boolean;
+  },
 ): Promise<string | null> {
   const now = o.now ?? new Date();
   const dup = await db.prepare(
@@ -164,7 +203,8 @@ export async function recordAmendsTask(
     `INSERT INTO coach_commitments (id, team_id, player_id, conversation_id, kind, status, made_at, due_at, quote, details)
      VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)`,
   ).bind(crypto.randomUUID(), o.teamId, o.playerId, conv?.id ?? null, o.task, now.toISOString(),
-    new Date(now.getTime() + AMENDS_DUE_DAYS * DAY_MS).toISOString(), quote, JSON.stringify({ incidentId: o.incidentId, dueOn })).run()
+    new Date(now.getTime() + AMENDS_DUE_DAYS * DAY_MS).toISOString(), quote,
+    JSON.stringify({ incidentId: o.incidentId, dueOn, ...(o.willFail ? { willFail: true } : {}) })).run()
     .then(() => true)
     .catch((e) => { logger.error({ module: M }, `zápis úkolu napravit ${o.incidentId}`, e); return false; });
   return written ? dueOn : null;
@@ -244,7 +284,12 @@ async function claim(db: D1Database, id: string, status: "kept" | "broken" | "ex
 export async function settleAmendsTask(db: D1Database, r: AmendsTaskRow, now: Date = new Date()): Promise<"kept" | "broken" | "expired" | null> {
   const task = r.kind as AmendsTask;
   let incidentId: string | undefined;
-  try { incidentId = (JSON.parse(r.details ?? "{}") as { incidentId?: string }).incidentId; } catch (e) {
+  let willFail = false;
+  try {
+    const d = JSON.parse(r.details ?? "{}") as { incidentId?: string; willFail?: boolean };
+    incidentId = d.incidentId;
+    willFail = d.willFail === true;
+  } catch (e) {
     logger.warn({ module: M }, `detaily úkolu ${r.id}`, e);
   }
   const inc = incidentId ? await db.prepare(
@@ -255,8 +300,10 @@ export async function settleAmendsTask(db: D1Database, r: AmendsTaskRow, now: Da
 
   const losses = nactiZtraty(inc.loss);
   const pending = task === "task_return" ? await returnableLosses(db, r.team_id, losses) : await repairableLosses(db, r.team_id, losses);
-  // Mezitím to vyřešil někdo jiný (klub koupil nové, zaplatil opravu): úkol jen vyprší.
-  if (pending.length === 0 || (task === "task_return" && inc.recovered === 1)) {
+  // Klub si ukradené mezitím koupil znovu: vrácený originál prodá (`resaleValue`), slib má dopad dál.
+  const replaced = task === "task_return" ? await replacedLosses(db, r.team_id, losses) : [];
+  // Mezitím to vyřešil někdo jiný (zaplatil opravu, lup je zpátky): úkol jen vyprší.
+  if ((pending.length === 0 && replaced.length === 0) || (task === "task_return" && inc.recovered === 1)) {
     return (await claim(db, r.id, "expired", now)) ? "expired" : null;
   }
 
@@ -267,7 +314,8 @@ export async function settleAmendsTask(db: D1Database, r: AmendsTaskRow, now: Da
     .catch((e) => { logger.warn({ module: M }, `hráč úkolu ${r.id}`, e); return null; });
   const chance = amendsDeliveryChance({ discipline: p?.discipline ?? 50, relationship: p?.coach_relationship ?? 50, workRate: p?.work_rate ?? 50 }, task);
   // Los podle incidentu a úkolu: stejný úkol dopadne pokaždé stejně (i při opakovaném běhu).
-  const delivered = createRng(seedFromString(`amends|${inc.id}|${task}|${r.player_id}`)).random() * 100 < chance;
+  // Kdo slíbil, ačkoli to podle povahy neudělá (`willFail`), nesplní nikdy.
+  const delivered = !willFail && createRng(seedFromString(`amends|${inc.id}|${task}|${r.player_id}`)).random() * 100 < chance;
   if (!(await claim(db, r.id, delivered ? "kept" : "broken", now))) return null;
 
   const gameDate = (await db.prepare("SELECT game_date FROM teams WHERE id = ?").bind(r.team_id).first<{ game_date: string | null }>()
@@ -296,19 +344,26 @@ export async function settleAmendsTask(db: D1Database, r: AmendsTaskRow, now: Da
       await recordTransaction(db, r.team_id, "incident_recovery", cash, `Vrácený lup od hráče: ${name}`, gameDate, `returned-${inc.id}`)
         .catch((e) => logger.error({ module: M }, `vrácená hotovost ${inc.id}`, e));
     }
+    const resold = replaced.reduce((sum, z) => sum + resaleValue(z), 0);
+    if (resold > 0) {
+      await recordTransaction(db, r.team_id, "incident_recovery", resold, `Vrácený lup od hráče: ${name} (náhradu klub už měl, prodáno)`, gameDate, `resold-${inc.id}`)
+        .catch((e) => logger.error({ module: M }, `prodej vráceného lupu ${inc.id}`, e));
+    }
+    const items = [...returned, ...replaced.flatMap((z) => (z.typ === "vybaveni" ? [CATEGORY_LABELS[z.kategorie] ?? z.kategorie] : []))];
     await db.prepare(
       `UPDATE club_incidents SET recovered = 1,
          resolution_data = json_set(CASE WHEN json_valid(resolution_data) THEN resolution_data ELSE '{}' END, '$.returnedLater', json(?))
        WHERE id = ?`,
-    ).bind(JSON.stringify({ items: returned, amount: cash, day: gameDate.slice(0, 10) }), inc.id).run()
+    ).bind(JSON.stringify({ items, amount: cash, ...(resold > 0 ? { resold } : {}), day: gameDate.slice(0, 10) }), inc.id).run()
       .catch((e) => logger.error({ module: M }, `vrácení lupu do incidentu ${inc.id}`, e));
     await addCulpritFact(db, inc.id, r.player_id, "Pak jsi to klubu opravdu vrátil.");
-    const what = returnedWhat(inc.kind, returned, cash) || "co jsem vzal";
+    const what = returnedWhat(inc.kind, items, cash) || "co jsem vzal";
     if (writes) {
       await sendPlayerTemplateSMS(db, r.team_id, player, RETURNED_SMS.map((t) => t.replace("{what}", what)), {
         seed: r.id, metadata: { ...smsIncidentu(inc.id), amends: task, delivered: true },
       }).catch((e) => logger.warn({ module: M }, `SMS o vrácení ${r.id}`, e));
-      await sendIncidentSystemSms(db, r.team_id, SMS_ROLE_KUSTOD, `✋ ${name} vrátil, co vzal (${title}): ${what}.`, smsIncidentu(inc.id))
+      const sale = resold > 0 ? ` Klub už měl náhradu, vrácené prodal do zastavárny za ${resold.toLocaleString("cs-CZ")} Kč.` : "";
+      await sendIncidentSystemSms(db, r.team_id, SMS_ROLE_KUSTOD, `✋ ${name} vrátil, co vzal (${title}): ${what}.${sale}`, smsIncidentu(inc.id))
         .catch((e) => logger.warn({ module: M }, `kustod o vrácení ${r.id}`, e));
     }
     logger.info({ module: M, teamId: r.team_id }, `${name} vrátil ${inc.id}: ${what}`);

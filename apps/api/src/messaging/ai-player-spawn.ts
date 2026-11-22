@@ -2001,6 +2001,13 @@ export async function afterPlayerReply(
     await recordInquiryTask(db, { teamId: r.teamId, convId: r.convId, playerId: r.player.id, incidentId: r.incidentId, coachMessage: r.reply.body, now: new Date(r.at) })
       .catch((e) => logger.warn({ module: "ai-player-spawn", teamId: r.teamId }, `úkol pátrání ze slibu hráče ${r.incidentId}`, e));
   }
+  // Pachatel sám slíbil, že to vrátí nebo opraví („Jo, vrátím je“): slib se zapíše jako úkol
+  // s lhůtou, ať má dopad, i když podle povahy nesplní (incidents/restitution.ts).
+  const { promisesAmends, recordPromisedAmends } = await import("../incidents/restitution");
+  if (promisesAmends(r.reply.body)) {
+    await recordPromisedAmends(db, { teamId: r.teamId, playerId: r.player.id, reply: r.reply.body, now: new Date(r.at) })
+      .catch((e) => logger.warn({ module: "ai-player-spawn", teamId: r.teamId }, "slib nápravy z odpovědi hráče", e));
+  }
   // „Poptám se a zítra dám vědět“: odpověď druhý den pošle úkol pátrání (deliverInquiry),
   // druhá odložená zpráva za pár hodin by jen opakovala, že nic neví.
   if (r.reply.writeLater && !(await inquiryJustRequested(db, r.convId, r.at))) {

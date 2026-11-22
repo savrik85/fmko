@@ -19,13 +19,14 @@ import { recordTransaction } from "../season/finance-processor";
 import { sendIncidentSystemSms } from "./club-messages";
 import { nactiHraceKadru, smsIncidentu } from "./incident-db";
 import { nazevIncidentu } from "./katalog";
-import { SMS_ROLE_KUSTOD } from "./nastaveni";
+import { SMS_ROLE_KUSTOD, ZNALOST_PACHATEL_DNI } from "./nastaveni";
 import { nactiZtraty } from "./popis";
 import { nactiStopy } from "./stopy-db";
 import { castkaSrazky } from "./tresty";
 import {
-  dueWords, recordAmendsTask, repairableLosses, returnableLosses, returnLosses, type AmendsTask,
+  dueWords, recordAmendsTask, repairableLosses, replacedLosses, returnableLosses, returnLosses, type AmendsTask,
 } from "./amends";
+import type { Ztrata } from "./typy";
 import { stopaNaHrace } from "./vysetrovani";
 
 const M = "incidents-restitution";
@@ -80,8 +81,12 @@ interface IncidentRow {
   id: string; kind: string; category: string; status: string; loss: string | null; culprit_revealed: number;
 }
 
-/** Uzavřený incident, u kterého jde škodu ještě napravit, se hledá tolik dní zpátky. */
-const CLOSED_AMENDS_DAYS = 30;
+/**
+ * Uzavřený incident, u kterého jde škodu ještě napravit, se hledá tolik dní zpátky. Stejně
+ * dlouho si pachatel průšvih pamatuje (`ZNALOST_PACHATEL_DNI`): dokud mu prompt říká, že lup
+ * má u sebe a vrátit ho může (znalosti.ts `lootLine`), musí jít slib i zapsat.
+ */
+const CLOSED_AMENDS_DAYS = ZNALOST_PACHATEL_DNI;
 /** Výsledky, po kterých už není co vracet ani opravovat (nebo hráč v klubu není). */
 const SETTLED_RESOLUTIONS = ["vratil", "nahradil", "opravil", "vyhodit", "nestalo_se", "nehoda", "vyreseno_policii", "bez_skody", "policie"];
 
@@ -96,12 +101,10 @@ type AmendsPlan = "return_now" | "pay_now" | AmendsTask;
  * je co opravit a trenér o opravě píše). Uzavřený incident (trest už padl, lup ale u hráče
  * zůstal nebo je pořád rozbito): slíbí, že to do dvou dní vrátí nebo opraví (amends.ts).
  */
-export async function tryRestitution(
-  db: D1Database,
-  o: { teamId: string; playerId: string; text: string; gameDate: string },
-): Promise<RestitutionOutcome | null> {
-  const request = amendsRequestOf(o.text);
-  if (request.size === 0) return null;
+/** Incident hráče, u kterého jde škoda napravit: nejdřív otevřený, jinak uzavřený s lupem u něj. */
+async function amendableIncident(
+  db: D1Database, o: { teamId: string; playerId: string; gameDate: string },
+): Promise<{ inc: IncidentRow; open: boolean } | null> {
   const open = await db.prepare(
     `SELECT id, kind, category, status, loss, culprit_revealed FROM club_incidents
       WHERE team_id = ? AND culprit_type = 'hrac' AND culprit_player_id = ? AND status IN ('otevreny', 'policie')
@@ -109,7 +112,8 @@ export async function tryRestitution(
       ORDER BY game_date DESC LIMIT 1`,
   ).bind(o.teamId, o.playerId).first<IncidentRow>()
     .catch((e) => { logger.warn({ module: M }, `incident pachatele ${o.playerId}`, e); return null; });
-  const closedIncident = open ? null : await db.prepare(
+  if (open) return { inc: open, open: true };
+  const closed = await db.prepare(
     `SELECT id, kind, category, status, loss, culprit_revealed FROM club_incidents
       WHERE team_id = ? AND culprit_type = 'hrac' AND culprit_player_id = ? AND status = 'uzavreny' AND culprit_revealed = 1
         AND category IN ('kradez', 'poskozeni') AND COALESCE(recovered, 0) = 0
@@ -118,29 +122,55 @@ export async function tryRestitution(
       ORDER BY resolved_on DESC LIMIT 1`,
   ).bind(o.teamId, o.playerId, ...SETTLED_RESOLUTIONS, o.gameDate, CLOSED_AMENDS_DAYS).first<IncidentRow>()
     .catch((e) => { logger.warn({ module: M }, `uzavřený incident pachatele ${o.playerId}`, e); return null; });
-  const inc = open ?? closedIncident;
-  if (!inc) return null;
+  return closed ? { inc: closed, open: false } : null;
+}
+
+/** Je co vrátit: lup klub nemá zpátky, nebo si koupil náhradu (pak vrácené prodá, amends.ts). */
+async function somethingToReturn(db: D1Database, teamId: string, losses: readonly Ztrata[]): Promise<boolean> {
+  return (await returnableLosses(db, teamId, losses)).length > 0 || (await replacedLosses(db, teamId, losses)).length > 0;
+}
+
+/** Jednou na incident: značka v taktikách výslechu (řádek pachatele ve znalostech). Vrací, jestli ji teď zapsal. */
+async function markRestitutionTried(db: D1Database, incidentId: string, playerId: string, teamId: string): Promise<boolean> {
+  const mark = await db.prepare(
+    `UPDATE club_incident_knowledge SET tactics = json_insert(COALESCE(tactics, '[]'), '$[#]', 'restitution')
+      WHERE incident_id = ? AND player_id = ? AND team_id = ? AND role = 'pachatel'
+        AND NOT EXISTS (SELECT 1 FROM json_each(COALESCE(club_incident_knowledge.tactics, '[]')) WHERE value = 'restitution')`,
+  ).bind(incidentId, playerId, teamId).run()
+    .catch((e) => { logger.warn({ module: M }, `značka přemlouvání ${incidentId}`, e); return null; });
+  return (mark?.meta?.changes ?? 0) > 0;
+}
+
+/** Los, jestli pachatel napravit kývne. Stejné semínko pro žádost trenéra i jeho vlastní slib. */
+function agreesToAmends(incidentId: string, playerId: string, chance: number): boolean {
+  return createRng(seedFromString(`restitution|${incidentId}|${playerId}`)).random() * 100 < chance;
+}
+
+export async function tryRestitution(
+  db: D1Database,
+  o: { teamId: string; playerId: string; text: string; gameDate: string },
+): Promise<RestitutionOutcome | null> {
+  const request = amendsRequestOf(o.text);
+  if (request.size === 0) return null;
+  const found = await amendableIncident(db, o);
+  if (!found) return null;
+  const { inc } = found;
+  const closedIncident = found.open ? null : inc;
 
   const losses = nactiZtraty(inc.loss);
   let plan: AmendsPlan | null = null;
-  if (open) {
+  if (found.open) {
     const repair = inc.category === "poskozeni" && request.has("repair") && (await repairableLosses(db, o.teamId, losses)).length > 0;
     plan = repair ? "task_repair" : inc.category === "kradez" ? "return_now" : "pay_now";
   } else if (inc.category === "kradez" && (request.has("return") || request.has("pay"))) {
-    if ((await returnableLosses(db, o.teamId, losses)).length > 0) plan = "task_return";
+    // Turek: vitrínu klub dokoupil, poháry má pořád on. Vrátit je jde, klub je pak prodá.
+    if (await somethingToReturn(db, o.teamId, losses)) plan = "task_return";
   } else if (inc.category === "poskozeni" && request.has("repair")) {
     if ((await repairableLosses(db, o.teamId, losses)).length > 0) plan = "task_repair";
   }
   if (!plan) return null;
 
-  // Jednou na incident: značka v taktikách výslechu (řádek pachatele ve znalostech).
-  const mark = await db.prepare(
-    `UPDATE club_incident_knowledge SET tactics = json_insert(COALESCE(tactics, '[]'), '$[#]', 'restitution')
-      WHERE incident_id = ? AND player_id = ? AND team_id = ? AND role = 'pachatel'
-        AND NOT EXISTS (SELECT 1 FROM json_each(COALESCE(club_incident_knowledge.tactics, '[]')) WHERE value = 'restitution')`,
-  ).bind(inc.id, o.playerId, o.teamId).run()
-    .catch((e) => { logger.warn({ module: M }, `značka přemlouvání ${inc.id}`, e); return null; });
-  if ((mark?.meta?.changes ?? 0) === 0) return null;
+  if (!(await markRestitutionTried(db, inc.id, o.playerId, o.teamId))) return null;
 
   const player = await nactiHraceKadru(db, o.teamId, o.playerId);
   if (!player) return null;
@@ -149,8 +179,7 @@ export async function tryRestitution(
   const chance = restitutionChance(player, {
     revealed: inc.culprit_revealed === 1, clueOnHim, leniency: LENIENCY_RE.test(t), insult: INSULT_RE.test(t),
   });
-  const rng = createRng(seedFromString(`restitution|${inc.id}|${o.playerId}`));
-  if (rng.random() * 100 >= chance) {
+  if (!agreesToAmends(inc.id, o.playerId, chance)) {
     // Odmítl: hráč o tom ví a v odpovědi trenérovi nevyhoví (odhalený), nebo zapírá dál.
     if (inc.culprit_revealed === 1) {
       await addCulpritFact(db, inc.id, o.playerId, plan === "task_repair"
@@ -225,6 +254,82 @@ async function promiseAmends(
     : `Trenér chtěl, ať to opravíš, a ty jsi slíbil, že to s brigádou opravíš ${dueWords(dueOn)}.`);
   logger.info({ module: M, teamId: o.teamId }, `pachatel ${o.playerId} slíbil ${task} ${inc.id} do ${dueOn}`);
   return { outcome: "promised", task, dueOn };
+}
+
+// ── Slib v odpovědi hráče ──
+
+/**
+ * Hráč v odpovědi trenérovi slíbil, že to vrátí („Jo, vrátím je, trenére“, „Jasně, dám to
+ * zpátky“, „přinesu je zpátky“). Bez objektu („vrátím se na trénink“), záporu ani podmínky ne.
+ */
+const PROMISE_RETURN_RE = /\b(vratim (to|je|ty|vam|ti|vsechno|klubu|penize|pohary|dresy|mice|veci|co jsem vzal)|vratime (to|je|ty)|dam (to|je|ty|vam|ti|klubu|klukum|penize)( \w+)? (zpatky|zpet)|dam zpatky|prinesu (to|je|ty)|donesu (to|je|ty))\b/;
+/** Slíbil opravu („opravím to“, „spravíme to s klukama“, „uděláme brigádu“). */
+const PROMISE_REPAIR_RE = /\b(opravim (to|je|ty)|opravime (to|je|ty)|spravim (to|je|ty)|spravime (to|je|ty)|dam to do poradku|dame to do poradku|udelame brigadu|udelam brigadu)\b/;
+const PROMISE_CONDITION_RE = /\b(kdyby|kdybych|jestli|pokud)\b/;
+
+/** Co hráč ve zprávě slíbil napravit. Věta s podmínkou nebo otázka slib není. */
+export function promisedAmendsOf(reply: string): Set<"return" | "repair"> {
+  const out = new Set<"return" | "repair">();
+  for (const raw of reply.split(/(?<=[.!?…])\s+|\n+/)) {
+    const s = plain(raw.trim());
+    if (!s || s.endsWith("?") || PROMISE_CONDITION_RE.test(s)) continue;
+    if (PROMISE_RETURN_RE.test(s)) out.add("return");
+    if (PROMISE_REPAIR_RE.test(s)) out.add("repair");
+  }
+  return out;
+}
+
+export function promisesAmends(reply: string): boolean {
+  return promisedAmendsOf(reply).size > 0;
+}
+
+/**
+ * Hráč sám v odpovědi slíbil, že to vrátí nebo opraví: slib se zapíše jako úkol s lhůtou
+ * (amends.ts), ať má dopad. Turek (Fezko, E2E 22. 11.) odmítl podle losu a stejně napsal
+ * „Jo, vrátím je, trenére.“; hra nezapsala nic a poháry se nevrátily. Kdo podle povahy
+ * nekývne (stejný los jako na žádost trenéra), slib dostane také, ale v termínu ho nesplní:
+ * napíše výmluvu, škoda trvá a ví, že slib nedodržel. Jen u provaleného průšvihu, jednou
+ * na incident. Vrací lhůtu, nebo null.
+ */
+export async function recordPromisedAmends(
+  db: D1Database,
+  o: { teamId: string; playerId: string; reply: string; now?: Date },
+): Promise<{ task: AmendsTask; dueOn: string; willFail: boolean } | null> {
+  const promised = promisedAmendsOf(o.reply);
+  if (promised.size === 0) return null;
+  const team = await db.prepare("SELECT game_date FROM teams WHERE id = ?").bind(o.teamId).first<{ game_date: string | null }>()
+    .catch((e) => { logger.warn({ module: M }, `herní den pro slib nápravy ${o.teamId}`, e); return null; });
+  if (!team?.game_date) return null;
+  const found = await amendableIncident(db, { teamId: o.teamId, playerId: o.playerId, gameDate: team.game_date });
+  if (!found || found.inc.culprit_revealed !== 1) return null;
+  const { inc } = found;
+  const losses = nactiZtraty(inc.loss);
+  const task: AmendsTask | null = inc.category === "kradez" && promised.has("return") && await somethingToReturn(db, o.teamId, losses)
+    ? "task_return"
+    : inc.category === "poskozeni" && promised.has("repair") && (await repairableLosses(db, o.teamId, losses)).length > 0
+      ? "task_repair" : null;
+  if (!task) return null;
+
+  const player = await nactiHraceKadru(db, o.teamId, o.playerId);
+  if (!player) return null;
+  const clueOnHim = stopaNaHrace(await nactiStopy(db, inc.id), player.id);
+  const chance = restitutionChance(player, { revealed: true, clueOnHim, leniency: false, insult: false });
+  const willFail = !agreesToAmends(inc.id, o.playerId, chance);
+  const dueOn = await recordAmendsTask(db, {
+    teamId: o.teamId, playerId: o.playerId, incidentId: inc.id, task, coachMessage: o.reply, gameDate: team.game_date, now: o.now, willFail,
+  });
+  if (!dueOn) return null;
+  await markRestitutionTried(db, inc.id, o.playerId, o.teamId);
+  await addCulpritFact(db, inc.id, o.playerId, task === "task_return"
+    ? sentenceEnd(`Sám jsi trenérovi slíbil, že to vrátíš ${dueWords(dueOn)}`)
+    : sentenceEnd(`Sám jsi trenérovi slíbil, že to s brigádou opravíš ${dueWords(dueOn)}`));
+  logger.info({ module: M, teamId: o.teamId }, `pachatel ${o.playerId} sám slíbil ${task} ${inc.id} do ${dueOn}${willFail ? " (nesplní)" : ""}`);
+  return { task, dueOn, willFail };
+}
+
+/** Věta končí datem („14. 11.“): druhá tečka by byla navíc. */
+function sentenceEnd(text: string): string {
+  return text.endsWith(".") ? text : `${text}.`;
 }
 
 /** Doplní pachateli do znalostí, co se stalo, ať o tom v odpovědi trenérovi ví. */
