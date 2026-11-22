@@ -617,8 +617,9 @@ export default function ConversationPage() {
 
   // Moje zpráva je „přečtená", když na ni druhá strana už něco napsala, nebo když si ji
   // hráč jen přečetl a neodpověděl (`metadata.readAt`, api messaging/left-on-read.ts).
+  // Systémová poznámka (slib, oznámení bez akce ve hře) odpovědí není, fajfky nemodrají.
   const lastReplyAt = messages.reduce(
-    (latest, m) => (m.senderType && m.senderType !== "user" && m.sentAt > latest ? m.sentAt : latest), "",
+    (latest, m) => (m.senderType && m.senderType !== "user" && m.senderType !== "system" && m.sentAt > latest ? m.sentAt : latest), "",
   );
   const isRead = (m: Message) => m.sentAt <= lastReplyAt || Boolean(m.metadata?.readAt);
 
@@ -770,6 +771,24 @@ export default function ConversationPage() {
                   const first = !prev || prev.senderType !== msg.senderType
                     || (conv?.type === "squad_group" && prev.senderName !== msg.senderName);
                   const isVoice = msg.metadata?.type === "voice" && !!teamId;
+
+                  // Poznámka jen pro trenéra pod jeho SMS (api messaging/coach-claims.ts): oznámil
+                  // hráči akci, kterou ve hře neudělal. Nenápadně a s odkazem, kde to udělá.
+                  if (isSystem && msg.metadata?.type === "coach_claim_note") {
+                    const href = typeof msg.metadata.href === "string" && msg.metadata.href.startsWith("/") ? msg.metadata.href : null;
+                    return (
+                      <div key={msg.id} className="flex justify-end mt-1">
+                        <div className="max-w-[85%] rounded-lg bg-[#FFF3C4] px-2.5 py-1.5 text-sm leading-snug text-[#54656F]">
+                          <p>{emoticonize(msg.body)}</p>
+                          {href && (
+                            <Link href={href} className="mt-1 inline-block font-medium text-[#027EB5]">
+                              {typeof msg.metadata.label === "string" ? msg.metadata.label : "Otevřít"}
+                            </Link>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  }
 
                   if (isSystem && conv?.type === "squad_group") {
                     const actions = commitmentActions(msg);

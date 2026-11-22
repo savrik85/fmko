@@ -154,6 +154,11 @@ export interface PlayerSnapshot {
    */
   marketListing?: { kind: "transfer" | "loan"; since: string };
   /**
+   * Co mu trenér v SMS oznámil (vyhazov, prodej, policie, páska, plat, nestavění) a jestli se
+   * to ve hře stalo (messaging/coach-claims.ts). Neprovedené bere jako výhrůžku.
+   */
+  coachClaims?: import("./coach-claims").CoachClaimMemory[];
+  /**
    * Odpovídá se zpožděním: `busy` = slíbil, že se ozve po práci, `offline` = zprávu
    * nedostal hned (výpadek modelu). Jen pro odložené zprávy (follow-ups.ts).
    */
