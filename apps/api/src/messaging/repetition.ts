@@ -14,6 +14,7 @@ import { logger } from "../lib/logger";
 import { seedFromString } from "../lib/seed";
 import { RETRY_MIN_MS, remainingMs } from "../lib/time-budget";
 import { tooSimilar } from "./match-speech";
+import { GeminiUnavailableError } from "./model-errors";
 
 const M = "repetition";
 
@@ -196,8 +197,8 @@ export function repeatRetryRule(repeated: readonly string[]): string {
 /**
  * Text hráče bez opakování. Když první pokus opakuje dřívější větu (nebo ohranou větu), model zkusí ještě
  * jednou s výslovně zakázanou větou (nejvýš jedno přegenerování kvůli latenci a kvótě).
- * Když opakuje i potom, opakovaná věta se vyškrtne, pokud zbytek dává smysl; jinak
- * zpráva zůstane, jak je, a zaloguje se.
+ * Když opakuje i potom, opakovaná věta se vyškrtne, pokud zbytek dává smysl; jinak hodí
+ * `GeminiUnavailableError` (volající pošle předem napsanou variantu nebo odpoví později).
  *
  * `deadline` (lib/time-budget.ts): přegenerování jen s rezervou `RETRY_MIN_MS`. Práce na
  * pozadí končí po ~30 s a uříznutý druhý pokus by zahodil i hotový první text.
@@ -235,8 +236,11 @@ export async function generateWithoutRepeats<T extends { body: string }>(
     logger.info({ module: M }, `vyškrtnuto opakování (${where}): ${bestRepeated.join(" | ")}`);
     return { ...best, body: trimmed };
   }
-  logger.warn({ module: M }, `hráč opakuje větu a bez ní by ze zprávy nic nezbylo, nechávám (${where}): ${bestRepeated.join(" | ")}`);
-  return best;
+  // Doslovný duplikát neodejde nikdy (E2E 22. 11.: druhý pokus nestihl rozpočet a hráč poslal
+  // tutéž větu jako před chvílí). Volající to bere jako nedostupný model: předem napsaná
+  // varianta, nebo odpověď později (retry_reply), kdy má model čas na nový pokus.
+  logger.warn({ module: M }, `hráč opakuje větu a bez ní by ze zprávy nic nezbylo, neposílám (${where}): ${bestRepeated.join(" | ")}`);
+  throw new GeminiUnavailableError(`odpověď by jen opakovala, co hráč už napsal (${where})`);
 }
 
 /**

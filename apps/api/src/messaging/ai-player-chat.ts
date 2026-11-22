@@ -21,6 +21,7 @@ import type { PlayerSnapshot, AiScenario } from "./ai-player-scenarios";
 import { weightTalkPrompt } from "../season/weight-talk";
 import { memoryPromptLines, type OfferStance } from "./player-memory";
 import { STOCK_PHRASES_RULE, generateWithoutRepeats, ownLinesPromptBlock } from "./repetition";
+import { GeminiUnavailableError } from "./model-errors";
 import { ATTENDANCE_PLEDGE_RULE, ATTENDANCE_PLEDGE_SCHEMA, parseAttendancePledge, type RawAttendancePledge } from "./attendance-pledge";
 import { requestRule } from "./coach-rules";
 
@@ -147,13 +148,6 @@ export interface ResolutionResult {
 export const ZAKAZ_ZIVOTNICH_SITUACI = "- NEVYMÝŠLEJ si narození dítěte, rozvod, ztrátu práce ani nemoc rodiče. Nic takového se ti teď neděje.";
 /** Zákaz pro toho, komu se nedávno něco stalo (`recentLifeEvent`): o tom mluvit smí, nic dalšího si nevymýšlí. */
 export const OTHER_LIFE_EVENTS_BAN = "- Kromě toho, co se ti nedávno stalo (stojí níž), si NEVYMÝŠLEJ další narození dítěte, rozvod, ztrátu práce ani nemoc rodiče.";
-
-class GeminiUnavailableError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "GeminiUnavailableError";
-  }
-}
 
 function buildPersonalityHints(p: PlayerSnapshot): string {
   const hints: string[] = [];

@@ -7,6 +7,7 @@ import {
   findRepeatedSentences, generateWithoutRepeats, isStockSentence, ownLinesPromptBlock, pickFreshVariant, pickUnusedIndex,
   repeatRetryRule, repeatsAny, sentencesRepeat, splitSentences, withoutSentences,
 } from "./repetition";
+import { GeminiUnavailableError } from "./model-errors";
 
 describe("co je opakování", () => {
   it("stejná věta jen s jiným oslovením nebo interpunkcí", () => {
@@ -140,10 +141,19 @@ describe("jedno přegenerování", () => {
     expect(out).toEqual({ body: "V neděli tam budu.", writeLater: false });
   });
 
-  it("když by bez opakované věty nic nezbylo, zprávu nechá", async () => {
+  // Lokální E2E 22. 11. (Staš): druhý pokus nestihl rozpočet a hráč poslal doslova stejnou
+  // větu jako před chvílí. Opakovaná věta nikdy neodejde: volající pošle náhradu nebo odpoví později.
+  it("když by bez opakované věty nic nezbylo, zprávu nepošle (model jako nedostupný)", async () => {
     const gen = vi.fn(async () => ({ body: "Už mám po šichtě, trenére." }));
-    expect((await generateWithoutRepeats(previous, gen, "test")).body).toBe("Už mám po šichtě, trenére.");
+    await expect(generateWithoutRepeats(previous, gen, "test")).rejects.toBeInstanceOf(GeminiUnavailableError);
     expect(gen).toHaveBeenCalledTimes(2);
+  });
+
+  it("doslovný duplikát bez času na druhý pokus neodejde", async () => {
+    const said = ["No tak mi řekněte, proč jste to odmítl? Mám bejt rád, že mě někdo chce?"];
+    const gen = vi.fn(async () => ({ body: "No tak mi řekněte, proč jste to odmítl? Mám bejt rád, že mě někdo chce?" }));
+    await expect(generateWithoutRepeats(said, gen, "test", { deadline: Date.now() + 2_000 })).rejects.toBeInstanceOf(GeminiUnavailableError);
+    expect(gen).toHaveBeenCalledTimes(1);
   });
 
   it("když druhý pokus spadne, použije první bez opakované věty", async () => {
