@@ -5,7 +5,8 @@ import { PITCH } from "../../stadium/stadium-3d/constants";
 
 export const HALF_W = PITCH.width / 2;
 export const HALF_L = PITCH.depth / 2;
-const GOAL_HALF_W = 3.66, GOAL_H = 2.44, PENALTY_SPOT = PITCH.penaltySpot, BOX_DEPTH = PITCH.penaltyArea.depth;
+export const GOAL_HALF_W = 3.66, GOAL_H = 2.44;
+const PENALTY_SPOT = PITCH.penaltySpot, BOX_DEPTH = PITCH.penaltyArea.depth;
 /** Střídačky stojí u západní lajny. */
 const BENCH_X = -HALF_W;
 const MAX_SPEED = 9;
@@ -1371,10 +1372,6 @@ export class Replay {
     st.coach(sideOf(this.events[indices[0]].teamId), "shout", 1.2);
     swaps.forEach(({ outgoing }, n) => st.go(outgoing, { x: BENCH_X + 0.5, z: at(n) }, 1.2));
     st.wait(1);
-    for (const { incoming, outgoing } of swaps) {
-      st.pose(outgoing, "armUp", 0.5);
-      st.pose(incoming, "armUp", 0.5);
-    }
     st.wait(0.3);
     swaps.forEach(({ incoming, outgoing }, n) => {
       // Střídající běží rovně do hřiště, odcházející ho míjí bokem.

@@ -163,7 +163,7 @@ export function ReplayMark() {
   return (
     <div className="hidden group-data-[replaying]/shot:block absolute inset-x-2 top-16 bottom-20">
       {REPLAY_CORNERS.map((corner) => <span key={corner} className={`absolute w-9 h-9 border-red-600 ${corner}`} />)}
-      <div className="absolute top-2 left-1/2 -translate-x-1/2 px-3 py-1 rounded-lg bg-red-600 text-white text-lg font-heading font-[900] tracking-widest whitespace-nowrap shadow-xl">↺ OPAKOVANÝ ZÁBĚR</div>
+      <div className="absolute top-2 left-1/2 -translate-x-1/2 px-3 py-1 rounded-lg bg-red-600 text-white text-lg font-heading font-[900] tracking-widest whitespace-nowrap shadow-xl">OPAKOVANÝ ZÁBĚR</div>
     </div>
   );
 }
