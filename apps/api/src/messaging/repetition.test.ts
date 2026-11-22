@@ -412,3 +412,37 @@ describe("tvar oslovení trenéra ve vygenerované zprávě", () => {
     expect(pickFreshVariant(variants, ["Díky, trenére, jsi borec.", "Díky moc, trenére."], "a", { address: "ty" }).index).toBe(0);
   });
 });
+
+// E2E 22. 11. (Hrdlička, historie VY): druhý pokus kvůli tvaru nestihl rozpočet a odešlo
+// „Promiň, trenére“, „Seš krutej… Promiň“. Jednoznačné tvary na začátku a konci věty se opraví bez modelu.
+describe("tvar oslovení bez času na druhý pokus", () => {
+  it("bez rozpočtu opraví jednoznačné „Promiň“, „Seš“ a „víš?“ na začátku a konci věty", async () => {
+    for (const [first, fixed] of [
+      ["Jo, ukradl. Promiň, trenére. Vrátím to v pondělí už určitě.", "Jo, ukradl. Promiňte, trenére. Vrátím to v pondělí už určitě."],
+      ["Jo, ukradl. Seš krutej, ale už je to pryč. Promiň, bylo to blbý.", "Jo, ukradl. Jste krutej, ale už je to pryč. Promiňte, bylo to blbý."],
+      ["Jo, ukradl. Promiň, vrátím to.", "Jo, ukradl. Promiňte, vrátím to."],
+      ["Bylo to blbý, víš?", "Bylo to blbý, víte?"],
+    ] as const) {
+      const gen = vi.fn(async () => ({ body: first }));
+      expect((await generateWithoutRepeats([], gen, "test", { address: "vy", deadline: Date.now() + 2_000 })).body).toBe(fixed);
+      expect(gen).toHaveBeenCalledTimes(1);
+    }
+    const informal = vi.fn(async () => ({ body: "Díky, že jste se stavil, trenére! Promiňte ten nepořádek." }));
+    expect((await generateWithoutRepeats([], informal, "test", { address: "ty", deadline: Date.now() + 2_000 })).body)
+      .toBe("Díky, že ses stavil, trenére! Promiň ten nepořádek.");
+  });
+
+  it("druhý pokus spadne: opraví se první text", async () => {
+    const gen = vi.fn()
+      .mockResolvedValueOnce({ body: "Jo, ukradl. Promiň, trenére." })
+      .mockRejectedValueOnce(new GeminiUnavailableError("timeout"));
+    expect((await generateWithoutRepeats([], gen, "test", { address: "vy" })).body).toBe("Jo, ukradl. Promiňte, trenére.");
+  });
+
+  it("když si oprava není jistá (tvar i uprostřed věty), zpráva zůstane, jak je", async () => {
+    for (const body of ["Nevím, proč to vytahuješ teď.", "Promiň, ale máš pravdu.", "Měl bys se stavit, trenére."]) {
+      const gen = vi.fn(async () => ({ body }));
+      expect((await generateWithoutRepeats([], gen, "test", { address: "vy", deadline: Date.now() + 2_000 })).body).toBe(body);
+    }
+  });
+});

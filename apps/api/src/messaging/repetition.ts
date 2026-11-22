@@ -15,7 +15,7 @@ import { seedFromString } from "../lib/seed";
 import { RETRY_MIN_MS, remainingMs } from "../lib/time-budget";
 import { tooSimilar } from "./match-speech";
 import { GeminiUnavailableError } from "./model-errors";
-import { addressRetryRule, wrongAddress, type CoachAddress } from "./address-form";
+import { addressRetryRule, fixAddressForm, wrongAddress, type CoachAddress } from "./address-form";
 
 const M = "repetition";
 
@@ -446,9 +446,19 @@ export async function generateWithoutRepeats<T extends { body: string }>(
   const { recent, old } = splitByAge(own, Date.now());
   const fresh = [...recent, ...(opts.others ?? [])];
   const repeatsIn = (body: string) => findRepeatedSentences(body, fresh, { old, coachMessage: opts.coachMessage });
-  // Krátké fráze a úvody se jen škrtají, kvůli nim se model znovu nevolá.
+  // Krátké fráze a úvody se jen škrtají, kvůli nim se model znovu nevolá. Tvar oslovení, který
+  // ani přegenerování neopravilo (nebylo na něj kdy), se zkusí opravit bez modelu (address-form.ts).
   const finish = (r: T): T => {
-    const body = withoutRepeatedPhrases(r.body, own);
+    let body = withoutRepeatedPhrases(r.body, own);
+    if (opts.address && wrongAddress(body, opts.address)) {
+      const fixed = fixAddressForm(body, opts.address);
+      if (fixed) {
+        logger.info({ module: M }, `tvar oslovení opraven bez modelu (${where}): ${body} → ${fixed}`);
+        body = fixed;
+      } else {
+        logger.warn({ module: M }, `tvar oslovení nesedí a bez modelu opravit nejde, posílám (${where}): ${body}`);
+      }
+    }
     return body === r.body ? r : { ...r, body };
   };
   const first = await generate("");
