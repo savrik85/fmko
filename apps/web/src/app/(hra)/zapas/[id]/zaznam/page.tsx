@@ -37,6 +37,14 @@ const TACTIC_LABEL: Record<string, string> = {
 
 type Speed = "live" | "fast" | "instant";
 const SPEED_MS: Record<Speed, number> = { live: 3500, fast: 600, instant: 0 };
+/**
+ * Jak dlouho drží kroky záznamu (ms). Ve 3D podle délky scén: výkop a gól (oslava a opakovaný záběr) déle,
+ * ostatní kratší, ať obraz po odehrané akci nestojí.
+ */
+const STEP_MS = {
+  flat: { kickoff: 3000, secondHalf: 2500, goal: 6000, chance: 3000, drama: 4000, penalty: 7000 },
+  scene: { kickoff: 5000, secondHalf: 5000, goal: 8600, chance: 2200, drama: 3500, penalty: 4500 },
+};
 function ini(n: string) { return n.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase(); }
 
 /* ── Zone from event: 0=home defense, 1=midfield, 2=home attack ── */
@@ -126,8 +134,8 @@ export default function MatchReplayPage() {
   const switchView = () => { localStorage.setItem("replayView", view3d ? "2d" : "3d"); setView3d(!view3d); };
   // 3D záznam ukazuje jen důležité akce; události bez scény (držení míče, počasí…) v něm proběhnou hned.
   const can3d = !!match?.home_lineup_data && !!match?.away_lineup_data;
-  // Ve 3D trvá výkop, gól a karta/zranění/střídání déle, ať se scéna (i s opakovaným záběrem) stihne odehrát.
   const long3d = view3d && can3d;
+  const stepMs = STEP_MS[long3d ? "scene" : "flat"];
   // Zápas se rozběhne, až je 3D scéna načtená; jinak by výkop proběhl za načítacím kolečkem.
   const [ready3d, setReady3d] = useState(false);
   const started = useRef(false);
@@ -237,7 +245,7 @@ export default function MatchReplayPage() {
     setKickoff("1st");
     animating.current = true;
     const gen = run.current;
-    setTimeout(() => { if (gen !== run.current) return; setKickoff(null); animating.current = false; setTick((t) => t + 1); }, long3d ? 5000 : 3000);
+    setTimeout(() => { if (gen !== run.current) return; setKickoff(null); animating.current = false; setTick((t) => t + 1); }, stepMs.kickoff);
   }, [!!match, long3d, ready3d]);
 
   // Kickoff 2nd half — auto-dismiss
@@ -245,7 +253,7 @@ export default function MatchReplayPage() {
     if (kickoff !== "2nd") return;
     animating.current = true;
     const gen = run.current;
-    const t = setTimeout(() => { if (gen !== run.current) return; setKickoff(null); animating.current = false; setTick((t) => t + 1); }, long3d ? 5000 : 2500);
+    const t = setTimeout(() => { if (gen !== run.current) return; setKickoff(null); animating.current = false; setTick((t) => t + 1); }, stepMs.secondHalf);
     return () => clearTimeout(t);
   }, [kickoff]);
 
@@ -270,7 +278,7 @@ export default function MatchReplayPage() {
       setFlashEvent(next);
       setFlash("penalty");
       setIdx((i) => i + 1);
-      const dur = speed === "fast" ? 4000 : 7000;
+      const dur = speed === "fast" ? 4000 : stepMs.penalty;
       setTimeout(() => { if (gen !== run.current) return; setFlash(null); setFlashEvent(null); animating.current = false; setTick((t) => t + 1); }, dur);
       return;
     }
@@ -297,18 +305,18 @@ export default function MatchReplayPage() {
             if (next.teamId === 1) setHg((s) => s + 1); else setAg((s) => s + 1);
             setFlash("goal");
             setIdx((i) => i + 1);
-            setTimeout(() => { if (gen !== run.current) return; setFlash(null); setFlashEvent(null); animating.current = false; setTick((t) => t + 1); }, long3d ? 9500 : 6000);
+            setTimeout(() => { if (gen !== run.current) return; setFlash(null); setFlashEvent(null); animating.current = false; setTick((t) => t + 1); }, stepMs.goal);
           } else {
             setFlash("chance");
             setIdx((i) => i + 1);
-            setTimeout(() => { if (gen !== run.current) return; setFlash(null); setFlashEvent(null); animating.current = false; setTick((t) => t + 1); }, 3000);
+            setTimeout(() => { if (gen !== run.current) return; setFlash(null); setFlashEvent(null); animating.current = false; setTick((t) => t + 1); }, stepMs.chance);
           }
         }, atkDur);
       } else {
         setFlashEvent(next);
         setFlash(next.type === "card" ? "card" : isPenaltyOutcome ? "chance" : isSubScene ? "substitution" : "injury");
         setIdx((i) => i + 1);
-        const dur = speed === "fast" ? 2500 : long3d ? 6000 : 4000;
+        const dur = speed === "fast" ? 2500 : stepMs.drama;
         setTimeout(() => { if (gen !== run.current) return; setFlash(null); setFlashEvent(null); animating.current = false; setTick((t) => t + 1); }, dur);
       }
       return; // No cleanup — timeouts are fire-and-forget
