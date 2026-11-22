@@ -10,7 +10,7 @@ const event = (minute: number, type: string, teamId: 1 | 2, slot: number, extra:
   return { minute, type, playerId, playerName, teamId, description: `${type} ${playerName}`, ...extra };
 };
 const input = (events: ReplayEvent[]): ReplayInput => ({
-  matchId: "test", events, winner: "home", goodTerms: true,
+  matchId: "test", events, winner: "home", goodTerms: true, refereeGrade: 3.5,
   // Domácí trenér je sopka, hostující kliďas.
   home: { starters: squad("H"), subs: [{ name: "Sub 1", position: "MID" }], coach: { name: "Trenér D", motivation: 90, record: null } },
   away: { starters: squad("A"), subs: [], coach: { name: "Trenér H", motivation: 25, record: null } },

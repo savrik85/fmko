@@ -63,8 +63,9 @@ export interface ReplayLineup { starters: ReplayPlayer[]; subs: ReplayPlayer[] }
 interface ReplayTeam extends ReplayLineup { coach: ReplayCoach | null }
 /** Událost zápasu, jak ji ukládá engine (detail zápasu z API). */
 export interface ReplayEvent { minute: number; type: string; playerId: number; playerName: string; teamId: number; description: string; detail?: string; source?: string }
-/** `winner` = kdo zápas vyhrál (i na penalty), null = remíza. `goodTerms` = trenéři jsou aspoň dobří známí. */
-export interface ReplayInput { matchId: string; events: ReplayEvent[]; home: ReplayTeam; away: ReplayTeam; winner: Side | null; goodTerms: boolean }
+/** `winner` = kdo zápas vyhrál (i na penalty), null = remíza. `goodTerms` = trenéři jsou aspoň dobří známí.
+ * `refereeGrade` = známka rozhodčího (1 nejlepší, 5 nejhorší), null = zápas ji nemá. */
+export interface ReplayInput { matchId: string; events: ReplayEvent[]; home: ReplayTeam; away: ReplayTeam; winner: Side | null; goodTerms: boolean; refereeGrade: number | null }
 export interface Figure { team: Side | "referee"; player: ReplayPlayer; coach?: true }
 /** Kdo je ve scéně kromě hráčů: rozhodčí a trenéři. `fire` = jak moc trenér zápas prožívá (0 kliďas, 1 sopka). */
 interface Staff { referee: number; coaches: Partial<Record<Side, { figure: number; fire: number }>> }
@@ -866,24 +867,32 @@ export class Replay {
       st.go(host, toward(at, to, 0.3), 0.3, wait + walk - 0.3);
       st.pose(host, "shake", 1.2, wait + walk);
     });
-    // Rozhodčí odejde doprava (tam, kde mají střídačku hosté): podél lajny do rohu, přes zábradlí u hřiště a přes plot
-    // areálu, až zmizí i z pohledu z paneláku. Za chvíli odjede autem po cestě za plotem. `hop` = přeskok na konci úseku.
-    const right = Math.sign(st.bench("away").z);
-    const route = [
-      { to: { x: BENCH_X + 1, z: right * (HALF_L - 3) }, speed: 3.2, hop: false },
-      { to: { x: BENCH_X - 4.8, z: right * (HALF_L + 0.5) }, speed: 4.5, hop: true },
-      { to: { x: BENCH_X - 10, z: right * (FENCE_BOUNDS.depth / 2 - 0.5) }, speed: 6.5, hop: true },
-      { to: { x: BENCH_X - 10, z: right * 95 }, speed: 6.5, hop: false },
-    ];
-    let gone = 0;
-    for (const { to, speed, hop } of route) {
-      const seconds = dist(st.pos(this.referee, st.t + gone), to) / speed;
-      st.go(this.referee, to, seconds, gone);
-      gone += seconds;
-      if (hop) st.jump(this.referee, gone + 0.15);
+    // Rozhodčí podle toho, jak zápas odpískal (hranice známek jako gradeWord): po dobrém výkonu zůstane a sedne si
+    // na trávník, po průměrném v klidu odejde, po slabém zmizí rychle.
+    const grade = this.input.refereeGrade;
+    let drive: Scene["drive"];
+    if (grade !== null && grade <= 2.2) {
+      st.pose(this.referee, "rest", Infinity, 2);
+    } else {
+      // Odchází doprava (tam, kde mají střídačku hosté): podél lajny do rohu, přes zábradlí u hřiště a přes plot areálu,
+      // až zmizí i z pohledu z paneláku. Za chvíli odjede autem po cestě za plotem. `hop` = přeskok na konci úseku.
+      const right = Math.sign(st.bench("away").z), hurry = grade !== null && grade > 3;
+      const route = [
+        { to: { x: BENCH_X + 1, z: right * (HALF_L - 3) }, speed: hurry ? 3.2 : 1.6, hop: false },
+        { to: { x: BENCH_X - 4.8, z: right * (HALF_L + 0.5) }, speed: hurry ? 4.5 : 1.6, hop: true },
+        { to: { x: BENCH_X - 10, z: right * (FENCE_BOUNDS.depth / 2 - 0.5) }, speed: hurry ? 6.5 : 1.6, hop: true },
+        { to: { x: BENCH_X - 10, z: right * 95 }, speed: hurry ? 6.5 : 1.6, hop: false },
+      ];
+      let gone = 0;
+      for (const { to, speed, hop } of route) {
+        const seconds = dist(st.pos(this.referee, st.t + gone), to) / speed;
+        st.go(this.referee, to, seconds, gone);
+        gone += seconds;
+        if (hop) st.jump(this.referee, gone + 0.15);
+      }
+      st.leave(this.referee, gone);
+      drive = { from: st.t + gone + 3, to: st.t + gone + 3 + 12 };
     }
-    st.leave(this.referee, gone);
-    const drive = { from: st.t + gone + 3, to: st.t + gone + 3 + 12 };
     st.wait(calm - meet);
 
     // 3. Klid po zápase, beze spěchu.
@@ -906,7 +915,7 @@ export class Replay {
         }
       });
     }
-    st.wait(Math.max(settled + 1, drive.to + 0.5 - st.t));
+    st.wait(Math.max(settled + 1, drive ? drive.to + 0.5 - st.t : 0));
     this.closing = { clip: st.finish(), start: 0, split: 0, end: st.t, focus: [], card: null, replay: null, drive };
     return this.closing;
   }

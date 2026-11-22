@@ -43,6 +43,9 @@ export const PITCH = {
   penaltySpot: 6.5,
 };
 
+/** Jméno objektu branky ve scéně: záznam zápasu ji podle něj najde a po gólu obarví. */
+export const GOAL_NAME = "goal";
+
 // Trávník barvy podle pitch_condition (0-100). Stejné prahy jako v 2D verzi.
 export function pitchColor(condition: number): string {
   if (condition >= 85) return "#2A6E10";

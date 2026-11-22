@@ -4,7 +4,7 @@ import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import { useWind } from "./wind";
 import * as THREE from "three";
-import { PITCH, pitchColor, type WeatherType, type TimeOfDay, PITCH_SURFACE_Y } from "./constants";
+import { GOAL_NAME, PITCH, pitchColor, type WeatherType, type TimeOfDay, PITCH_SURFACE_Y } from "./constants";
 import { GrassBlades } from "./GrassBlades";
 import { generatePitchSurface, generateSnowPitchSurface, type MowingPattern } from "./grassTexture";
 import { generateNetTexture, type NetPattern, type NetStyle } from "./materialTextures";
@@ -695,7 +695,7 @@ function Goal({
   const braceColor = "#94A3B8";
 
   return (
-    <group position={position}>
+    <group position={position} name={GOAL_NAME}>
       {/* ─── Hlavní bílý rám branky ─── */}
       {/* Levý sloupek */}
       <mesh position={[-goalWidth / 2, goalHeight / 2, 0]} castShadow>

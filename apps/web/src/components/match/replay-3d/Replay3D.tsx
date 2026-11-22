@@ -73,6 +73,7 @@ function Replay3DView({ detail, events, progress, onReady }: Replay3DProps) {
   const margin = (detail.home_score as number) - (detail.away_score as number) || (pens ? pens.home - pens.away : 0);
   const replay = useMemo(() => new Replay({
     matchId: detail.id as string, events, winner: margin > 0 ? "home" : margin < 0 ? "away" : null, goodTerms: detail.coaches_on_good_terms === true,
+    refereeGrade: (detail.referee_grade as number | null | undefined) ?? null,
     home: { coach: detail.home_coach as ReplayCoach | null, ...(detail.home_lineup_data as ReplayLineup) },
     away: { coach: detail.away_coach as ReplayCoach | null, ...(detail.away_lineup_data as ReplayLineup) },
   }), [detail, events, margin]);

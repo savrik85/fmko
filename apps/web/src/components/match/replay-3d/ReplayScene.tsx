@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, type RefObject } from "react";
 import * as THREE from "three";
 import { addAfterEffect, useFrame, useThree } from "@react-three/fiber";
-import { FENCE_BOUNDS, PITCH_SURFACE_Y } from "@/components/stadium/stadium-3d/constants";
+import { FENCE_BOUNDS, GOAL_NAME, PITCH_SURFACE_Y } from "@/components/stadium/stadium-3d/constants";
 import { emptyFrame, GOAL_H, GOAL_HALF_W, HALF_L, HALF_W, REPLAY, sampleClip, sceneTime, type Clip, type Figure, type Replay, type ReplayKit, type Scene, type Side } from "./scenes";
 
 /** Záběr: scéna a její část. Nový objekt znamená hrát od začátku, i když jde o tutéž scénu (skok zpět na její začátek). */
@@ -90,7 +90,8 @@ const PARTS: PartDef[] = [
   { id: "boot", geometry: new THREE.BoxGeometry(0.14, 0.11, 0.25).translate(0, 0, 0.05), on: "knee", drop: 0.43, color: (_, __, fig) => (fig.team === "referee" || fig.coach ? "#111111" : "#9CA3AF") },
   { id: "torso", geometry: new THREE.BoxGeometry(0.44, 0.56, 0.25), on: [0, 1.2, 0], drop: 0, color: (_, shirt) => shirt },
   { id: "sleeve", geometry: new THREE.BoxGeometry(0.13, 0.27, 0.14), on: "shoulder", drop: 0.12, color: (_, shirt) => shirt },
-  { id: "forearm", geometry: new THREE.BoxGeometry(0.1, 0.3, 0.11), on: "elbow", drop: 0.14, color: skin },
+  // Trenér má dlouhý rukáv (mikina nebo bunda).
+  { id: "forearm", geometry: new THREE.BoxGeometry(0.1, 0.3, 0.11), on: "elbow", drop: 0.14, color: (kit, shirt, fig) => (fig.coach ? shirt : skin(kit, shirt, fig)) },
   { id: "head", geometry: new THREE.SphereGeometry(0.13, 12, 10), on: [0, 1.63, 0], drop: 0, color: skin },
   { id: "hair", geometry: new THREE.BoxGeometry(0.25, 0.09, 0.26), on: [0, 1.73, -0.01], drop: 0, color: (_, __, fig) => fig.player.hairColor ?? null },
 ];
@@ -145,6 +146,15 @@ const pickShirtTile = (shader: { vertexShader: string }) => {
 const TORSO = PARTS.find((part) => part.id === "torso")!;
 /** Barva branky po gólu: zelená nápisu „GÓÓÓL!“ (bg-green-500). */
 const GOAL_GREEN = "#22C55E";
+/** Obarví branku stadionu (tyče, síť i konstrukci, ať má jakýkoli tvar) na zeleno, nebo jí vrátí původní barvy. */
+function tintGoal(goal: THREE.Object3D, on: boolean) {
+  goal.traverse((part) => {
+    const material = (part as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
+    if (!material?.color) return;
+    material.userData.plain ??= material.color.getHex();
+    material.color.set(on ? GOAL_GREEN : material.userData.plain);
+  });
+}
 /** Auto, kterým po zápase odjíždí rozhodčí: jede po cestě za plotem areálu (x) zprava doleva (z), z obrazu ven i při pohledu z paneláku. */
 const CAR_ROAD = { x: -(FENCE_BOUNDS.width / 2 + 4), from: -110, to: 110 };
 
@@ -180,6 +190,11 @@ export function ReplayScene({ replay, kits, snow, overview, step, root, veil, on
   const frame = useMemo(() => emptyFrame(count), [count]);
   const states = useMemo<FigureState[]>(() => replay.figures.map(() => ({ x: 0, z: 0, yaw: 0, phase: 0, speed: 0 })), [replay]);
   const keepers = useMemo(() => keeperShirts(kits.home, kits.away), [kits]);
+  // Trenér má mikinu v barvě klubu; když sněží, tmavší bundu.
+  const coachTops = useMemo(() => {
+    const top = (side: Side) => (snow ? `#${new THREE.Color(kits[side].shirt).multiplyScalar(0.45).getHexString()}` : kits[side].shirt);
+    return { home: top("home"), away: top("away") };
+  }, [kits, snow]);
   const shirts = useMemo(() => {
     const canvas = document.createElement("canvas");
     canvas.width = TILE * Object.keys(SHIRT_TILES).length;
@@ -197,11 +212,8 @@ export function ReplayScene({ replay, kits, snow, overview, step, root, veil, on
     return texture;
   }, [kits]);
   useEffect(() => () => shirts.dispose(), [shirts]);
-  const tiles = useMemo(() => {
-    const attribute = new THREE.InstancedBufferAttribute(new Float32Array(count), 1);
-    TORSO.geometry.setAttribute("tile", attribute);
-    return attribute;
-  }, [count]);
+  const tiles = useMemo(() => new THREE.InstancedBufferAttribute(new Float32Array(count), 1), [count]);
+  useLayoutEffect(() => { TORSO.geometry.setAttribute("tile", tiles); }, [tiles]);
   const shadowGeometry = useMemo(() => new THREE.CircleGeometry(0.5, 16).rotateX(-Math.PI / 2), []);
   // Tmavé plošky jsou na míči proto, aby bylo poznat, že se točí.
   const ballGeometry = useMemo(() => {
@@ -218,7 +230,10 @@ export function ReplayScene({ replay, kits, snow, overview, step, root, veil, on
   const ball = useRef<THREE.Mesh>(null);
   const card = useRef<THREE.Mesh>(null);
   const car = useRef<THREE.Group>(null);
-  const scored = useRef<THREE.Group>(null);
+  /** Branka, která je po gólu zelená. */
+  const scored = useRef<THREE.Object3D | null>(null);
+  const world = useThree((s) => s.scene);
+  useEffect(() => () => { if (scored.current) tintGoal(scored.current, false); }, []);
   const camera = useThree((s) => s.camera) as THREE.PerspectiveCamera;
   const gl = useThree((s) => s.gl);
   /** Co se kreslilo minule: podle toho se pozná střih (hráči pak neběží, stojí rovnou na místě). */
@@ -257,7 +272,7 @@ export function ReplayScene({ replay, kits, snow, overview, step, root, veil, on
       const mesh = meshes.current[p];
       if (!mesh) return;
       replay.figures.forEach((fig, i) => {
-        const kit: Outfit = fig.team === "referee" ? REFEREE_KIT : fig.coach ? { shirt: kits[fig.team].shirt, shorts: COACH_TROUSERS, socks: COACH_TROUSERS } : kits[fig.team];
+        const kit: Outfit = fig.team === "referee" ? REFEREE_KIT : fig.coach ? { shirt: coachTops[fig.team], shorts: COACH_TROUSERS, socks: COACH_TROUSERS } : kits[fig.team];
         const shirt = fig.team !== "referee" && clip.keepers.has(i) ? keepers[fig.team] : kit.shirt;
         // Hráč v poli má dres se vzorem svého týmu: trup bere barvy z textury, rukávy jsou u vzoru „sleeves“ doplňkové.
         const design = fig.team !== "referee" && !fig.coach && !clip.keepers.has(i) ? kits[fig.team] : null;
@@ -415,10 +430,12 @@ export function ReplayScene({ replay, kits, snow, overview, step, root, veil, on
     // Karta ve zdvižené ruce rozhodčího; když ruku spustí, kartu schoval.
     const shown = scene.card && t >= scene.card.at && frame.figures[replay.referee].pose === "armUp" ? scene.card : null;
     // Gól: jakmile je míč za čárou mezi tyčemi a pod břevnem, branka zezelená (barva nápisu „GÓÓÓL!“).
-    if (scored.current) {
-      const inGoal = Math.abs(frame.ballZ) > HALF_L && Math.abs(frame.ballX) < GOAL_HALF_W && frame.ballY < GOAL_H;
-      scored.current.visible = inGoal;
-      if (inGoal) scored.current.scale.z = Math.sign(frame.ballZ);
+    const inGoal = Math.abs(frame.ballZ) > HALF_L && Math.abs(frame.ballX) < GOAL_HALF_W && frame.ballY < GOAL_H;
+    const goal = inGoal ? world.getObjectsByProperty("name", GOAL_NAME).find((g) => Math.sign(g.getWorldPosition(vPos).z) === Math.sign(frame.ballZ)) ?? null : null;
+    if (goal !== scored.current) {
+      if (scored.current) tintGoal(scored.current, false);
+      if (goal) tintGoal(goal, true);
+      scored.current = goal;
     }
     if (car.current) {
       const driving = scene.drive !== undefined && t >= scene.drive.from && t < scene.drive.to;
@@ -492,13 +509,6 @@ export function ReplayScene({ replay, kits, snow, overview, step, root, veil, on
           {part === TORSO ? <meshStandardMaterial roughness={0.8} map={shirts} onBeforeCompile={pickShirtTile} /> : <meshStandardMaterial roughness={0.8} />}
         </instancedMesh>
       ))}
-      <group ref={scored} visible={false}>
-        {[-GOAL_HALF_W, GOAL_HALF_W].map((x) => (
-          <mesh key={x} position={[x, PITCH_SURFACE_Y + GOAL_H / 2, HALF_L]}><boxGeometry args={[0.24, GOAL_H, 0.24]} /><meshBasicMaterial color={GOAL_GREEN} /></mesh>
-        ))}
-        <mesh position={[0, PITCH_SURFACE_Y + GOAL_H, HALF_L]}><boxGeometry args={[GOAL_HALF_W * 2 + 0.24, 0.24, 0.24]} /><meshBasicMaterial color={GOAL_GREEN} /></mesh>
-        <mesh position={[0, PITCH_SURFACE_Y + GOAL_H / 2, HALF_L + 0.75]}><boxGeometry args={[GOAL_HALF_W * 2, GOAL_H, 1.5]} /><meshBasicMaterial color={GOAL_GREEN} transparent opacity={0.4} depthWrite={false} /></mesh>
-      </group>
       <group ref={car} visible={false}>
         <mesh position={[0, 0.6, 0]}><boxGeometry args={[1.7, 0.7, 4.2]} /><meshStandardMaterial color="#B91C1C" roughness={0.4} /></mesh>
         <mesh position={[0, 1.25, -0.2]}><boxGeometry args={[1.5, 0.6, 2.2]} /><meshStandardMaterial color="#1F2937" roughness={0.3} /></mesh>
