@@ -15,17 +15,15 @@ const BANNERS = {
   penalty: { text: "PENALTA!", className: "text-3xl sm:text-5xl text-white" },
   yellow: { text: "ŽLUTÁ", className: "text-3xl sm:text-5xl text-yellow-300" },
   red: { text: "ČERVENÁ!", className: "text-3xl sm:text-5xl text-red-500" },
+  injury: { text: "✚ ZRANĚNÍ", className: "text-3xl sm:text-5xl text-red-400" },
+  sub: { text: "⇅ STŘÍDÁNÍ", className: "text-3xl sm:text-5xl text-sky-300" },
 };
 
 const BUTTON = "px-2 py-1.5 rounded-lg text-white/80 hover:text-white hover:bg-white/15 text-xs font-heading font-bold";
 
 /** Tabule se skóre, titulek komentáře a ovládání přehrávání nad 3D scénou. */
-export function ReplayOverlay({ plan, clock, onExit, onSwitch2D }: {
-  plan: ReplayPlan;
-  clock: ReplayClock;
-  onExit: () => void;
-  onSwitch2D: () => void;
-}) {
+export function ReplayOverlay({ plan, clock, matchId }: { plan: ReplayPlan; clock: ReplayClock; matchId: string }) {
+  const go = (path: string) => () => { window.location.href = `/zapas/${matchId}${path}`; };
   // Čas běží ve scéně; lišta si ho jen pár krát za vteřinu přečte.
   const [t, setT] = useState(clock.t);
   const [, rerender] = useState(0);
@@ -68,12 +66,12 @@ export function ReplayOverlay({ plan, clock, onExit, onSwitch2D }: {
       <div className="absolute bottom-3 sm:bottom-5 inset-x-0 z-30 flex flex-col items-center gap-2 px-3 pointer-events-none">
         {(caption || ended) && (
           <div className="max-w-xl w-full bg-black/80 backdrop-blur-md border border-white/15 rounded-xl px-3 py-2 text-white text-xs sm:text-sm shadow-2xl">
-            {ended ? `Konec zápasu · ${plan.home.name} ${score.home}:${score.away} ${plan.away.name}` : caption?.text}
+            {ended ? `Konec zápasu · ${plan.home.name} ${score.home}:${score.away} ${plan.away.name}${plan.shootout ? ` (pen. ${plan.shootout.home}:${plan.shootout.away})` : ""}` : caption?.text}
           </div>
         )}
         <div className="flex items-center gap-1 sm:gap-1.5 bg-black/85 backdrop-blur-xl border border-white/20 rounded-2xl px-2 py-1.5 shadow-2xl pointer-events-auto">
           <button
-            onClick={() => update(ended ? { t: 0, snap: true, playing: true } : { playing: !clock.playing })}
+            onClick={() => update(ended ? { t: 0, playing: true } : { playing: !clock.playing })}
             className={`${BUTTON} text-sm`}
             title={ended ? "Přehrát znovu" : clock.playing ? "Pozastavit" : "Pokračovat"}
           >
@@ -93,12 +91,12 @@ export function ReplayOverlay({ plan, clock, onExit, onSwitch2D }: {
               </button>
             ))}
           </div>
-          <button onClick={() => update({ t: plan.duration, snap: true })} disabled={ended} className={`${BUTTON} disabled:opacity-40`} title="Přeskočit na konec">
+          <button onClick={() => update({ t: plan.duration })} disabled={ended} className={`${BUTTON} disabled:opacity-40`} title="Přeskočit na konec">
             ▶▶▶<span className="hidden sm:inline"> Konec</span>
           </button>
-          <button onClick={onSwitch2D} className={BUTTON} title="Přepnout na 2D záznam">2D</button>
+          <button onClick={go("/zaznam")} className={BUTTON} title="Přepnout na 2D záznam">2D</button>
           <button
-            onClick={onExit}
+            onClick={go("")}
             className={ended ? "px-2.5 py-1.5 rounded-lg text-xs font-heading font-bold bg-pitch-500 hover:bg-pitch-600 text-white" : BUTTON}
             title="Detail zápasu"
           >

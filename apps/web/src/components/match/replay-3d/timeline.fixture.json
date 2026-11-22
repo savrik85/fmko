@@ -1,0 +1,1203 @@
+{
+ "id": "28e3c8f3-f268-4afc-8c41-16d2525884b6",
+ "home_name": "Union Lenora",
+ "away_name": "Sokol Čkyně",
+ "home_score": 1,
+ "away_score": 9,
+ "home_kit": {
+  "shirt": "#7C3AED",
+  "shorts": "#7C3AED",
+  "socks": "#7C3AED"
+ },
+ "away_kit": {
+  "shirt": "#F59E0B",
+  "shorts": "#F59E0B",
+  "socks": "#F59E0B"
+ },
+ "home_lineup_data": {
+  "starters": [
+   {
+    "id": "f377081d-f397-41a1-a494-3a48e1132600",
+    "name": "Jaroslav Toušek",
+    "position": "DEF"
+   },
+   {
+    "id": "9ef94851-15fc-42c9-8421-527920bf2a0b",
+    "name": "David Novák",
+    "position": "DEF"
+   },
+   {
+    "id": "a369324b-79db-4f86-9dad-1b09216da43e",
+    "name": "Jiří Havlík",
+    "position": "DEF"
+   },
+   {
+    "id": "d05f3a2d-fc3e-4c8e-a9e7-5f419df2f4e6",
+    "name": "Marek Toušek",
+    "position": "MID"
+   },
+   {
+    "id": "4b2528ae-3867-4e32-8c52-d4c79523027a",
+    "name": "Oleksandr Kravčenko",
+    "position": "MID"
+   },
+   {
+    "id": "7a2084c9-424f-4e9f-8f0d-0b0010cc9742",
+    "name": "David Šuba",
+    "position": "MID"
+   },
+   {
+    "id": "d59bfffb-3505-4c92-a0c6-940a0b421673",
+    "name": "Vilém Žiga",
+    "position": "MID"
+   },
+   {
+    "id": "707a6ca6-b5be-48e5-913f-2536cd952464",
+    "name": "Oliver Škopek",
+    "position": "FWD"
+   },
+   {
+    "id": "6c999aa1-23d7-4b08-a1b3-4adc8a380647",
+    "name": "Jonáš Socha",
+    "position": "FWD"
+   },
+   {
+    "id": "095a6124-3f96-4c6d-ac9c-c50ae90d0379",
+    "name": "Štěpán Janoušek",
+    "position": "FWD"
+   },
+   {
+    "id": "755905d8-6c25-4bd3-bd10-7f56846e23fa",
+    "name": "Ján Kováč",
+    "position": "GK"
+   }
+  ],
+  "subs": []
+ },
+ "away_lineup_data": {
+  "starters": [
+   {
+    "id": "7b114233-fd09-4bf2-9b71-840eff4b12b2",
+    "name": "Dušan Ježek",
+    "position": "GK"
+   },
+   {
+    "id": "8ced0e66-1951-41ea-b1e3-355b63fb6cec",
+    "name": "Petr Sippl",
+    "position": "DEF"
+   },
+   {
+    "id": "9d07b2d6-2732-4d52-b2d3-22fe2c688731",
+    "name": "Štefan Jiráň",
+    "position": "DEF"
+   },
+   {
+    "id": "78c90b43-5a38-4619-804e-d747eaf4871c",
+    "name": "Radomír Pivoňka",
+    "position": "DEF"
+   },
+   {
+    "id": "a917d18d-42f6-4f4e-a4fa-7f3cb1563f9b",
+    "name": "Jiří Smažík",
+    "position": "MID"
+   },
+   {
+    "id": "5c7a52b6-c8a6-48bf-b0ac-37798daf1c44",
+    "name": "Oskar Vorlíček",
+    "position": "MID"
+   },
+   {
+    "id": "4326d0ce-75de-4a1a-a1a7-e31443a5a32e",
+    "name": "Antonín Smažík",
+    "position": "MID"
+   },
+   {
+    "id": "0039409c-a28f-4487-95f8-5a667e900e3b",
+    "name": "Taras Rudenko",
+    "position": "MID"
+   },
+   {
+    "id": "d7d470a9-a317-404b-ac82-a63c313bb512",
+    "name": "Marek Šimko",
+    "position": "MID"
+   },
+   {
+    "id": "df01076f-f486-40ed-ac1c-af0ad6f57940",
+    "name": "Marek Pinter",
+    "position": "FWD"
+   },
+   {
+    "id": "94e97a93-97d0-43b5-8420-afc78619f1bb",
+    "name": "Matěj Fišer",
+    "position": "FWD"
+   }
+  ],
+  "subs": [
+   {
+    "id": "e925e5c5-db51-4e3a-ae76-cacc0bd51178",
+    "name": "Ondřej Sebera",
+    "position": "GK"
+   },
+   {
+    "id": "9638fbe6-513d-4a13-bec3-c3c1698e6ab2",
+    "name": "František Malý",
+    "position": "DEF"
+   },
+   {
+    "id": "2aed58df-f125-4398-b007-67ef181b5537",
+    "name": "Jan Janutka",
+    "position": "DEF"
+   }
+  ]
+ },
+ "events": [
+  {
+   "minute": 2,
+   "type": "special",
+   "playerId": 111,
+   "playerName": "Matěj Fišer",
+   "teamId": 2,
+   "description": "Sokol Čkyně kombinují přes střed hřiště.",
+   "detail": "possession"
+  },
+  {
+   "minute": 3,
+   "type": "goal",
+   "playerId": 107,
+   "playerName": "Antonín Smažík",
+   "teamId": 2,
+   "description": "Gól! Antonín Smažík skóruje",
+   "detail": "0:1",
+   "source": "open_play"
+  },
+  {
+   "minute": 3,
+   "type": "assist",
+   "playerId": 110,
+   "playerName": "Marek Pinter",
+   "teamId": 2,
+   "description": "Asistence: Marek Pinter",
+   "detail": ""
+  },
+  {
+   "minute": 3,
+   "type": "injury",
+   "playerId": 105,
+   "playerName": "Jiří Smažík",
+   "teamId": 2,
+   "description": "Jiří Smažík koleno",
+   "detail": "koleno"
+  },
+  {
+   "minute": 3,
+   "type": "substitution",
+   "playerId": 113,
+   "playerName": "František Malý",
+   "teamId": 2,
+   "description": "Střídání: František Malý za Jiří Smažík"
+  },
+  {
+   "minute": 4,
+   "type": "goal",
+   "playerId": 106,
+   "playerName": "Oskar Vorlíček",
+   "teamId": 2,
+   "description": "Gól! Oskar Vorlíček skóruje",
+   "detail": "0:2",
+   "source": "open_play"
+  },
+  {
+   "minute": 4,
+   "type": "assist",
+   "playerId": 108,
+   "playerName": "Taras Rudenko",
+   "teamId": 2,
+   "description": "Asistence: Taras Rudenko",
+   "detail": ""
+  },
+  {
+   "minute": 4,
+   "type": "foul",
+   "playerId": 2,
+   "playerName": "David Novák",
+   "teamId": 1,
+   "description": "Faul David Novák"
+  },
+  {
+   "minute": 4,
+   "type": "card",
+   "playerId": 2,
+   "playerName": "David Novák",
+   "teamId": 1,
+   "description": "Žlutá karta pro David Novák",
+   "detail": "yellow"
+  },
+  {
+   "minute": 4,
+   "type": "freekick",
+   "playerId": 102,
+   "playerName": "Petr Sippl",
+   "teamId": 2,
+   "description": "Přímý kop z dobré pozice, míč si bere Petr Sippl",
+   "detail": "direct"
+  },
+  {
+   "minute": 4,
+   "type": "goal",
+   "playerId": 102,
+   "playerName": "Petr Sippl",
+   "teamId": 2,
+   "description": "Přímý kop přesně k tyči! Petr Sippl",
+   "detail": "0:3",
+   "source": "freekick"
+  },
+  {
+   "minute": 4,
+   "type": "special",
+   "playerId": 6,
+   "playerName": "David Šuba",
+   "teamId": 1,
+   "description": "Sokol Čkyně stahují obranu, Union Lenora hledají prostor.",
+   "detail": "possession"
+  },
+  {
+   "minute": 5,
+   "type": "special",
+   "playerId": 1,
+   "playerName": "Jaroslav Toušek",
+   "teamId": 1,
+   "description": "Jaroslav Toušek přiběhl na hřiště pozdě",
+   "detail": "Dorazil až v 5. minutě"
+  },
+  {
+   "minute": 5,
+   "type": "foul",
+   "playerId": 113,
+   "playerName": "František Malý",
+   "teamId": 2,
+   "description": "Faul František Malý"
+  },
+  {
+   "minute": 5,
+   "type": "card",
+   "playerId": 113,
+   "playerName": "František Malý",
+   "teamId": 2,
+   "description": "Žlutá karta pro František Malý",
+   "detail": "yellow"
+  },
+  {
+   "minute": 5,
+   "type": "freekick",
+   "playerId": 4,
+   "playerName": "Marek Toušek",
+   "teamId": 1,
+   "description": "Přímý kop z dobré pozice, míč si bere Marek Toušek",
+   "detail": "direct"
+  },
+  {
+   "minute": 5,
+   "type": "chance",
+   "playerId": 4,
+   "playerName": "Marek Toušek",
+   "teamId": 1,
+   "description": "Marek Toušek pálí přímák, do zdi",
+   "detail": "freekick_missed"
+  },
+  {
+   "minute": 9,
+   "type": "special",
+   "playerId": 111,
+   "playerName": "Matěj Fišer",
+   "teamId": 2,
+   "description": "Tvrdý pressing Sokol Čkyně, Union Lenora se nemůžou dostat z vlastní půlky.",
+   "detail": "possession"
+  },
+  {
+   "minute": 10,
+   "type": "foul",
+   "playerId": 11,
+   "playerName": "Ján Kováč",
+   "teamId": 1,
+   "description": "Faul Ján Kováč"
+  },
+  {
+   "minute": 10,
+   "type": "card",
+   "playerId": 11,
+   "playerName": "Ján Kováč",
+   "teamId": 1,
+   "description": "Žlutá karta pro Ján Kováč",
+   "detail": "yellow"
+  },
+  {
+   "minute": 12,
+   "type": "special",
+   "playerId": 108,
+   "playerName": "Taras Rudenko",
+   "teamId": 2,
+   "description": "Sokol Čkyně kombinují přes střed hřiště.",
+   "detail": "possession"
+  },
+  {
+   "minute": 13,
+   "type": "special",
+   "playerId": 10,
+   "playerName": "Štěpán Janoušek",
+   "teamId": 1,
+   "description": "Union Lenora si nahrávají na polovině soupeře.",
+   "detail": "possession"
+  },
+  {
+   "minute": 14,
+   "type": "chance",
+   "playerId": 108,
+   "playerName": "Taras Rudenko",
+   "teamId": 2,
+   "description": "Šance! Taras Rudenko tyč",
+   "detail": "tyč"
+  },
+  {
+   "minute": 17,
+   "type": "injury",
+   "playerId": 103,
+   "playerName": "Štefan Jiráň",
+   "teamId": 2,
+   "description": "Štefan Jiráň křeče",
+   "detail": "křeče"
+  },
+  {
+   "minute": 17,
+   "type": "substitution",
+   "playerId": 114,
+   "playerName": "Jan Janutka",
+   "teamId": 2,
+   "description": "Střídání: Jan Janutka za Štefan Jiráň"
+  },
+  {
+   "minute": 18,
+   "type": "special",
+   "playerId": 9,
+   "playerName": "Jonáš Socha",
+   "teamId": 1,
+   "description": "Jonáš Socha rozehrává z hloubky pole.",
+   "detail": "possession"
+  },
+  {
+   "minute": 19,
+   "type": "special",
+   "playerId": 10,
+   "playerName": "Štěpán Janoušek",
+   "teamId": 1,
+   "description": "Štěpán Janoušek přiběhl na hřiště pozdě",
+   "detail": "Dorazil až v 19. minutě"
+  },
+  {
+   "minute": 19,
+   "type": "chance",
+   "playerId": 10,
+   "playerName": "Štěpán Janoušek",
+   "teamId": 1,
+   "description": "Šance! Štěpán Janoušek břevno",
+   "detail": "břevno"
+  },
+  {
+   "minute": 21,
+   "type": "foul",
+   "playerId": 111,
+   "playerName": "Matěj Fišer",
+   "teamId": 2,
+   "description": "Faul Matěj Fišer"
+  },
+  {
+   "minute": 21,
+   "type": "freekick",
+   "playerId": 4,
+   "playerName": "Marek Toušek",
+   "teamId": 1,
+   "description": "Standardka z boku, centruje Marek Toušek",
+   "detail": "cross"
+  },
+  {
+   "minute": 21,
+   "type": "goal",
+   "playerId": 1,
+   "playerName": "Jaroslav Toušek",
+   "teamId": 1,
+   "description": "Gól ze standardky! Jaroslav Toušek",
+   "detail": "1:3",
+   "source": "cross"
+  },
+  {
+   "minute": 21,
+   "type": "assist",
+   "playerId": 4,
+   "playerName": "Marek Toušek",
+   "teamId": 1,
+   "description": "Asistence: Marek Toušek",
+   "detail": ""
+  },
+  {
+   "minute": 22,
+   "type": "foul",
+   "playerId": 3,
+   "playerName": "Jiří Havlík",
+   "teamId": 1,
+   "description": "Faul Jiří Havlík"
+  },
+  {
+   "minute": 22,
+   "type": "special",
+   "playerId": 7,
+   "playerName": "Vilém Žiga",
+   "teamId": 1,
+   "description": "Union Lenora kontrolují tempo hry.",
+   "detail": "possession"
+  },
+  {
+   "minute": 26,
+   "type": "foul",
+   "playerId": 7,
+   "playerName": "Vilém Žiga",
+   "teamId": 1,
+   "description": "Faul Vilém Žiga"
+  },
+  {
+   "minute": 26,
+   "type": "card",
+   "playerId": 7,
+   "playerName": "Vilém Žiga",
+   "teamId": 1,
+   "description": "Žlutá karta pro Vilém Žiga",
+   "detail": "yellow"
+  },
+  {
+   "minute": 26,
+   "type": "freekick",
+   "playerId": 102,
+   "playerName": "Petr Sippl",
+   "teamId": 2,
+   "description": "Standardka z boku, centruje Petr Sippl",
+   "detail": "cross"
+  },
+  {
+   "minute": 26,
+   "type": "chance",
+   "playerId": 104,
+   "playerName": "Radomír Pivoňka",
+   "teamId": 2,
+   "description": "Radomír Pivoňka hlavičkuje, chytil brankář",
+   "detail": "header_missed"
+  },
+  {
+   "minute": 27,
+   "type": "special",
+   "playerId": 6,
+   "playerName": "David Šuba",
+   "teamId": 1,
+   "description": "David Šuba rozehrává z hloubky pole.",
+   "detail": "possession"
+  },
+  {
+   "minute": 28,
+   "type": "special",
+   "playerId": 11,
+   "playerName": "Ján Kováč",
+   "teamId": 1,
+   "description": "Ján Kováč se hádá s rozhodčím",
+   "detail": "argument"
+  },
+  {
+   "minute": 29,
+   "type": "special",
+   "playerId": 108,
+   "playerName": "Taras Rudenko",
+   "teamId": 2,
+   "description": "Taras Rudenko rozehrává z hloubky pole.",
+   "detail": "possession"
+  },
+  {
+   "minute": 30,
+   "type": "special",
+   "playerId": 8,
+   "playerName": "Oliver Škopek",
+   "teamId": 1,
+   "description": "Dlouhý míč od Oliver Škopek, Union Lenora zrychlují.",
+   "detail": "possession"
+  },
+  {
+   "minute": 31,
+   "type": "foul",
+   "playerId": 111,
+   "playerName": "Matěj Fišer",
+   "teamId": 2,
+   "description": "Faul Matěj Fišer"
+  },
+  {
+   "minute": 31,
+   "type": "freekick",
+   "playerId": 4,
+   "playerName": "Marek Toušek",
+   "teamId": 1,
+   "description": "Standardka z boku, centruje Marek Toušek",
+   "detail": "cross"
+  },
+  {
+   "minute": 31,
+   "type": "chance",
+   "playerId": 3,
+   "playerName": "Jiří Havlík",
+   "teamId": 1,
+   "description": "Jiří Havlík hlavičkuje, nad břevno",
+   "detail": "header_missed"
+  },
+  {
+   "minute": 31,
+   "type": "special",
+   "playerId": 109,
+   "playerName": "Marek Šimko",
+   "teamId": 2,
+   "description": "Divák u lajny komentuje situaci lépe než trenér",
+   "detail": "crowd"
+  },
+  {
+   "minute": 35,
+   "type": "corner",
+   "playerId": 4,
+   "playerName": "Marek Toušek",
+   "teamId": 1,
+   "description": "Roh zahrává Marek Toušek",
+   "detail": "taken"
+  },
+  {
+   "minute": 36,
+   "type": "special",
+   "playerId": 4,
+   "playerName": "Marek Toušek",
+   "teamId": 1,
+   "description": "Dlouhý míč od Marek Toušek, Union Lenora zrychlují.",
+   "detail": "possession"
+  },
+  {
+   "minute": 37,
+   "type": "special",
+   "playerId": 111,
+   "playerName": "Matěj Fišer",
+   "teamId": 2,
+   "description": "Sokol Čkyně si nahrávají na polovině soupeře.",
+   "detail": "possession"
+  },
+  {
+   "minute": 40,
+   "type": "foul",
+   "playerId": 3,
+   "playerName": "Jiří Havlík",
+   "teamId": 1,
+   "description": "Jiří Havlík, a sudí píská i tohle",
+   "detail": "petty"
+  },
+  {
+   "minute": 40,
+   "type": "special",
+   "playerId": 9,
+   "playerName": "Jonáš Socha",
+   "teamId": 1,
+   "description": "Dlouhý míč od Jonáš Socha, Union Lenora zrychlují.",
+   "detail": "possession"
+  },
+  {
+   "minute": 42,
+   "type": "goal",
+   "playerId": 110,
+   "playerName": "Marek Pinter",
+   "teamId": 2,
+   "description": "Gól! Marek Pinter skóruje",
+   "detail": "1:4",
+   "source": "open_play"
+  },
+  {
+   "minute": 42,
+   "type": "assist",
+   "playerId": 106,
+   "playerName": "Oskar Vorlíček",
+   "teamId": 2,
+   "description": "Asistence: Oskar Vorlíček",
+   "detail": ""
+  },
+  {
+   "minute": 45,
+   "type": "chance",
+   "playerId": 4,
+   "playerName": "Marek Toušek",
+   "teamId": 1,
+   "description": "Šance! Marek Toušek chytil brankář",
+   "detail": "chytil brankář"
+  },
+  {
+   "minute": 45,
+   "type": "special",
+   "playerId": 101,
+   "playerName": "Dušan Ježek",
+   "teamId": 2,
+   "description": "Dušan Ježek chytá střelu",
+   "detail": "save"
+  },
+  {
+   "minute": 45,
+   "type": "special",
+   "playerId": 110,
+   "playerName": "Marek Pinter",
+   "teamId": 2,
+   "description": "Dlouhý míč od Marek Pinter, Sokol Čkyně zrychlují.",
+   "detail": "possession"
+  },
+  {
+   "minute": 45,
+   "type": "special",
+   "playerId": 4,
+   "playerName": "Marek Toušek",
+   "teamId": 1,
+   "description": "Poločas 1:4",
+   "detail": "half_time"
+  },
+  {
+   "minute": 47,
+   "type": "foul",
+   "playerId": 10,
+   "playerName": "Štěpán Janoušek",
+   "teamId": 1,
+   "description": "Faul Štěpán Janoušek"
+  },
+  {
+   "minute": 47,
+   "type": "penalty",
+   "playerId": 102,
+   "playerName": "Petr Sippl",
+   "teamId": 2,
+   "description": "Penalta! Na puntík si to staví Petr Sippl",
+   "detail": "awarded"
+  },
+  {
+   "minute": 47,
+   "type": "goal",
+   "playerId": 102,
+   "playerName": "Petr Sippl",
+   "teamId": 2,
+   "description": "Proměněno! Petr Sippl z penalty",
+   "detail": "1:5",
+   "source": "penalty"
+  },
+  {
+   "minute": 48,
+   "type": "corner",
+   "playerId": 102,
+   "playerName": "Petr Sippl",
+   "teamId": 2,
+   "description": "Roh zahrává Petr Sippl",
+   "detail": "taken"
+  },
+  {
+   "minute": 48,
+   "type": "foul",
+   "playerId": 7,
+   "playerName": "Vilém Žiga",
+   "teamId": 1,
+   "description": "Faul Vilém Žiga"
+  },
+  {
+   "minute": 48,
+   "type": "card",
+   "playerId": 7,
+   "playerName": "Vilém Žiga",
+   "teamId": 1,
+   "description": "Druhá žlutá a červená pro Vilém Žiga!",
+   "detail": "red"
+  },
+  {
+   "minute": 48,
+   "type": "penalty",
+   "playerId": 102,
+   "playerName": "Petr Sippl",
+   "teamId": 2,
+   "description": "Penalta! Na puntík si to staví Petr Sippl",
+   "detail": "awarded"
+  },
+  {
+   "minute": 48,
+   "type": "goal",
+   "playerId": 102,
+   "playerName": "Petr Sippl",
+   "teamId": 2,
+   "description": "Proměněno! Petr Sippl z penalty",
+   "detail": "1:6",
+   "source": "penalty"
+  },
+  {
+   "minute": 51,
+   "type": "goal",
+   "playerId": 110,
+   "playerName": "Marek Pinter",
+   "teamId": 2,
+   "description": "Gól! Marek Pinter skóruje",
+   "detail": "1:7",
+   "source": "open_play"
+  },
+  {
+   "minute": 51,
+   "type": "assist",
+   "playerId": 113,
+   "playerName": "František Malý",
+   "teamId": 2,
+   "description": "Asistence: František Malý",
+   "detail": ""
+  },
+  {
+   "minute": 53,
+   "type": "corner",
+   "playerId": 102,
+   "playerName": "Petr Sippl",
+   "teamId": 2,
+   "description": "Roh zahrává Petr Sippl",
+   "detail": "taken"
+  },
+  {
+   "minute": 55,
+   "type": "corner",
+   "playerId": 102,
+   "playerName": "Petr Sippl",
+   "teamId": 2,
+   "description": "Roh zahrává Petr Sippl",
+   "detail": "taken"
+  },
+  {
+   "minute": 56,
+   "type": "foul",
+   "playerId": 114,
+   "playerName": "Jan Janutka",
+   "teamId": 2,
+   "description": "Faul Jan Janutka"
+  },
+  {
+   "minute": 56,
+   "type": "freekick",
+   "playerId": 4,
+   "playerName": "Marek Toušek",
+   "teamId": 1,
+   "description": "Standardka z boku, centruje Marek Toušek",
+   "detail": "cross"
+  },
+  {
+   "minute": 56,
+   "type": "chance",
+   "playerId": 8,
+   "playerName": "Oliver Škopek",
+   "teamId": 1,
+   "description": "Oliver Škopek hlavičkuje, nad břevno",
+   "detail": "header_missed"
+  },
+  {
+   "minute": 56,
+   "type": "special",
+   "playerId": 5,
+   "playerName": "Oleksandr Kravčenko",
+   "teamId": 1,
+   "description": "Union Lenora kombinují přes střed hřiště.",
+   "detail": "possession"
+  },
+  {
+   "minute": 57,
+   "type": "special",
+   "playerId": 107,
+   "playerName": "Antonín Smažík",
+   "teamId": 2,
+   "description": "Tvrdý pressing Sokol Čkyně, Union Lenora se nemůžou dostat z vlastní půlky.",
+   "detail": "possession"
+  },
+  {
+   "minute": 59,
+   "type": "corner",
+   "playerId": 102,
+   "playerName": "Petr Sippl",
+   "teamId": 2,
+   "description": "Roh zahrává Petr Sippl",
+   "detail": "taken"
+  },
+  {
+   "minute": 59,
+   "type": "chance",
+   "playerId": 106,
+   "playerName": "Oskar Vorlíček",
+   "teamId": 2,
+   "description": "Oskar Vorlíček hlavičkuje, chytil brankář",
+   "detail": "header_missed"
+  },
+  {
+   "minute": 59,
+   "type": "foul",
+   "playerId": 5,
+   "playerName": "Oleksandr Kravčenko",
+   "teamId": 1,
+   "description": "Oleksandr Kravčenko, a sudí píská i tohle",
+   "detail": "petty"
+  },
+  {
+   "minute": 60,
+   "type": "corner",
+   "playerId": 102,
+   "playerName": "Petr Sippl",
+   "teamId": 2,
+   "description": "Roh zahrává Petr Sippl",
+   "detail": "taken"
+  },
+  {
+   "minute": 60,
+   "type": "chance",
+   "playerId": 104,
+   "playerName": "Radomír Pivoňka",
+   "teamId": 2,
+   "description": "Radomír Pivoňka hlavičkuje, nad břevno",
+   "detail": "header_missed"
+  },
+  {
+   "minute": 60,
+   "type": "special",
+   "playerId": 107,
+   "playerName": "Antonín Smažík",
+   "teamId": 2,
+   "description": "Antonín Smažík rozehrává z hloubky pole.",
+   "detail": "possession"
+  },
+  {
+   "minute": 62,
+   "type": "chance",
+   "playerId": 108,
+   "playerName": "Taras Rudenko",
+   "teamId": 2,
+   "description": "Šance! Taras Rudenko tyč",
+   "detail": "tyč"
+  },
+  {
+   "minute": 62,
+   "type": "corner",
+   "playerId": 102,
+   "playerName": "Petr Sippl",
+   "teamId": 2,
+   "description": "Roh zahrává Petr Sippl",
+   "detail": "taken"
+  },
+  {
+   "minute": 63,
+   "type": "corner",
+   "playerId": 102,
+   "playerName": "Petr Sippl",
+   "teamId": 2,
+   "description": "Roh zahrává Petr Sippl",
+   "detail": "taken"
+  },
+  {
+   "minute": 63,
+   "type": "chance",
+   "playerId": 111,
+   "playerName": "Matěj Fišer",
+   "teamId": 2,
+   "description": "Matěj Fišer hlavičkuje, vedle",
+   "detail": "header_missed"
+  },
+  {
+   "minute": 65,
+   "type": "foul",
+   "playerId": 107,
+   "playerName": "Antonín Smažík",
+   "teamId": 2,
+   "description": "Faul Antonín Smažík"
+  },
+  {
+   "minute": 65,
+   "type": "card",
+   "playerId": 107,
+   "playerName": "Antonín Smažík",
+   "teamId": 2,
+   "description": "Žlutá karta pro Antonín Smažík",
+   "detail": "yellow"
+  },
+  {
+   "minute": 65,
+   "type": "freekick",
+   "playerId": 4,
+   "playerName": "Marek Toušek",
+   "teamId": 1,
+   "description": "Přímý kop z dobré pozice, míč si bere Marek Toušek",
+   "detail": "direct"
+  },
+  {
+   "minute": 65,
+   "type": "chance",
+   "playerId": 4,
+   "playerName": "Marek Toušek",
+   "teamId": 1,
+   "description": "Marek Toušek pálí přímák, těsně vedle",
+   "detail": "freekick_missed"
+  },
+  {
+   "minute": 65,
+   "type": "special",
+   "playerId": 11,
+   "playerName": "Ján Kováč",
+   "teamId": 1,
+   "description": "Ján Kováč rozehrává z hloubky pole.",
+   "detail": "possession"
+  },
+  {
+   "minute": 70,
+   "type": "special",
+   "playerId": 4,
+   "playerName": "Marek Toušek",
+   "teamId": 1,
+   "description": "Marek Toušek rozehrává z hloubky pole.",
+   "detail": "possession"
+  },
+  {
+   "minute": 71,
+   "type": "special",
+   "playerId": 111,
+   "playerName": "Matěj Fišer",
+   "teamId": 2,
+   "description": "Sokol Čkyně si nahrávají na polovině soupeře.",
+   "detail": "possession"
+  },
+  {
+   "minute": 73,
+   "type": "foul",
+   "playerId": 109,
+   "playerName": "Marek Šimko",
+   "teamId": 2,
+   "description": "Marek Šimko, a sudí píská i tohle",
+   "detail": "petty"
+  },
+  {
+   "minute": 76,
+   "type": "special",
+   "playerId": 8,
+   "playerName": "Oliver Škopek",
+   "teamId": 1,
+   "description": "Oliver Škopek rozehrává z hloubky pole.",
+   "detail": "possession"
+  },
+  {
+   "minute": 79,
+   "type": "injury",
+   "playerId": 10,
+   "playerName": "Štěpán Janoušek",
+   "teamId": 1,
+   "description": "Štěpán Janoušek křeče",
+   "detail": "křeče"
+  },
+  {
+   "minute": 80,
+   "type": "substitution",
+   "playerId": 112,
+   "playerName": "Ondřej Sebera",
+   "teamId": 2,
+   "description": "Střídání: Ondřej Sebera za Oskar Vorlíček"
+  },
+  {
+   "minute": 82,
+   "type": "chance",
+   "playerId": 113,
+   "playerName": "František Malý",
+   "teamId": 2,
+   "description": "Šance! František Malý vedle",
+   "detail": "vedle"
+  },
+  {
+   "minute": 82,
+   "type": "corner",
+   "playerId": 102,
+   "playerName": "Petr Sippl",
+   "teamId": 2,
+   "description": "Roh zahrává Petr Sippl",
+   "detail": "taken"
+  },
+  {
+   "minute": 82,
+   "type": "goal",
+   "playerId": 110,
+   "playerName": "Marek Pinter",
+   "teamId": 2,
+   "description": "Gól po rohu! Hlavou Marek Pinter",
+   "detail": "1:8",
+   "source": "corner"
+  },
+  {
+   "minute": 82,
+   "type": "assist",
+   "playerId": 102,
+   "playerName": "Petr Sippl",
+   "teamId": 2,
+   "description": "Asistence: Petr Sippl",
+   "detail": ""
+  },
+  {
+   "minute": 83,
+   "type": "special",
+   "playerId": 108,
+   "playerName": "Taras Rudenko",
+   "teamId": 2,
+   "description": "Taras Rudenko se hádá s rozhodčím",
+   "detail": "argument"
+  },
+  {
+   "minute": 83,
+   "type": "card",
+   "playerId": 108,
+   "playerName": "Taras Rudenko",
+   "teamId": 2,
+   "description": "Žlutá karta za protesty pro Taras Rudenko",
+   "detail": "yellow"
+  },
+  {
+   "minute": 86,
+   "type": "goal",
+   "playerId": 109,
+   "playerName": "Marek Šimko",
+   "teamId": 2,
+   "description": "Gól! Marek Šimko skóruje",
+   "detail": "1:9",
+   "source": "open_play"
+  },
+  {
+   "minute": 87,
+   "type": "special",
+   "playerId": 6,
+   "playerName": "David Šuba",
+   "teamId": 1,
+   "description": "Tvrdý pressing Union Lenora, Sokol Čkyně se nemůžou dostat z vlastní půlky.",
+   "detail": "possession"
+  },
+  {
+   "minute": 89,
+   "type": "special",
+   "playerId": 111,
+   "playerName": "Matěj Fišer",
+   "teamId": 2,
+   "description": "Dlouhý míč od Matěj Fišer, Sokol Čkyně zrychlují.",
+   "detail": "possession"
+  },
+  {
+   "minute": 90,
+   "type": "special",
+   "playerId": 8,
+   "playerName": "Oliver Škopek",
+   "teamId": 1,
+   "description": "Konec zápasu! Union Lenora 1:9 Sokol Čkyně",
+   "detail": "full_time"
+  }
+ ],
+ "commentary": [
+  "2' — Sokol Čkyně tlačí dopředu. Obrana soupeře má plné ruce práce.",
+  "3' — Antonín Smažík to tam dorazil z půl metru. Krása to nebyla, do tabulky se počítá stejně.",
+  "3' — Asistence: Marek Pinter",
+  "3' — Jiří Smažík leží na zemi. Masér už běží, i když má v ruce jen sprej a naději.",
+  "3' — František Malý nastupuje do hry. Přinesl s sebou energii — a vůni spreje.",
+  "4' — Gól po rychlém protiútoku! Oskar Vorlíček to zakončil na první dotek.",
+  "4' — Asistence: Taras Rudenko",
+  "4' — David Novák v souboji o míč trefil všechno kromě míče.",
+  "4' — David Novák schytal žlutou za zdržování hry.",
+  "4' — Přímý kop v dobré pozici! Míč si staví Petr Sippl.",
+  "4' — Nečekaná střela Petr Sippl z třiceti metrů — a je to tam! Babička s nákupní taškou se zastavila: 'Co to hrajete? Volejbal?'",
+  "4' — David Šuba se snaží projít přes dva hráče. Neúspěšně.",
+  "5' — Trenér kopnul do láhve s vodou. Frustrace roste.",
+  "5' — Tvrdý zákrok František Malý. To bolelo.",
+  "5' — František Malý dostal žlutou. Z lavičky se ozývá: 'Za co?!'",
+  "5' — Marek Toušek u míče, rozhodčí odměřuje devět metrů. Pes, co leží za brankou, zvedl hlavu.",
+  "5' — Marek Toušek to zkusil zpoza vápna — brankář vyrazil na roh. Slušný pokus.",
+  "9' — Sokol Čkyně tlačí dopředu. Obrana soupeře má plné ruce práce.",
+  "10' — Ján Kováč si spletl fotbal s hokejem. Tvrdý zásah!",
+  "10' — Rozhodčí neváhá — žlutá pro Ján Kováč za brutální skluz.",
+  "12' — Hra se přesouvá na polovinu soupeře.",
+  "13' — Hra se přelévá ze strany na stranu. Rozhodčí si mezitím upravuje ponožky.",
+  "14' — Tutovka! Taras Rudenko to poslal nad z pěti metrů a teď se dívá do trávy, jako by za to mohla.",
+  "17' — Štefan Jiráň leží na zemi a drží se za nohu. Vypadá to vážně.",
+  "17' — Na hřiště přichází Jan Janutka. Uvidíme, co přinese.",
+  "18' — Jonáš Socha rozehrává a rozhlíží se, jako by hledal někoho známého.",
+  "19' — Štěpán Janoušek si stěžuje, že ho spoluhráči nevidí. Asi má pravdu.",
+  "19' — Štěpán Janoušek má gól na kopačce a poslal to do nebe. Nad hřištěm zakroužil čáp.",
+  "21' — Šlápnutí od Matěj Fišer. Kopačky s kolíky si dneska vybírají daň.",
+  "21' — Volný kop ze strany — Marek Toušek hledá centrem někoho ve vápně.",
+  "21' — Jaroslav Toušek skóruje! Dechovka spustila fanfáru a hospodský narazil soudek na počest.",
+  "21' — Asistence: Marek Toušek",
+  "22' — Jiří Havlík v souboji o míč trefil všechno kromě míče.",
+  "22' — Union Lenora tlačí dopředu. Obrana soupeře má plné ruce práce.",
+  "26' — Strkanice po faulu Vilém Žiga. Rozhodčí uklidňuje situaci.",
+  "26' — Žlutá karta! Vilém Žiga si to mohl odpustit.",
+  "26' — Petr Sippl nahazuje volný kop do šestnáctky, kde už si to hlídají hlavičkáři.",
+  "26' — Radomír Pivoňka se ve vápně vytáhl výš než ostatní, ale hlavička jde vedle.",
+  "27' — Union Lenora tlačí dopředu. Obrana soupeře má plné ruce práce.",
+  "28' — Ján Kováč se hádá s rozhodčím. 'Máte to doma trénovat!'",
+  "29' — Sokol Čkyně hrají na jistotu. Míč koluje v obraně.",
+  "30' — Klid na kopačkách Union Lenora. Na tribuně klid na lavičkách.",
+  "31' — Matěj Fišer zastavil útok tak, jak to na okrese chodí — tělem.",
+  "31' — Marek Toušek nahazuje volný kop do šestnáctky, kde už si to hlídají hlavičkáři.",
+  "31' — Po rohu se Jiří Havlík dostal k hlavičce, ale trefil jen vzduch a záda spoluhráče.",
+  "31' — Děda u plotu: 'Za mých časů se hrálo líp!'",
+  "35' — Rohový kop. Marek Toušek centruje, obrana couvá k brance.",
+  "36' — Marek Toušek odkopává z vlastní šestnáctky. Trochu panika.",
+  "37' — Rozehrávka od brankáře. Sokol Čkyně začínají znovu.",
+  "40' — Jiří Havlík sekl soupeře jak myslivec, co si spletl srnce s divočákem. Rozhodčí píská.",
+  "40' — Union Lenora si míč posílají dozadu. Divákům to nevadí, mají pivo.",
+  "42' — Marek Pinter zakončuje a je to tam! 42. minuta!",
+  "42' — Asistence: Oskar Vorlíček",
+  "45' — Marek Toušek se dostal do gólové pozice, ale míč mu ujel z nohy.",
+  "45' — Dušan Ježek vytáhl zákrok, který si zaslouží víc diváků, než jich tu je.",
+  "45' — Marek Pinter si vodí míč po křídle, klid jak kráva na louce nad Husincem.",
+  "45' — Začíná druhá půle. Někteří hráči se vracejí od stánku.",
+  "47' — Štěpán Janoušek fauluje a hned zvedá ruce, že nic. Klasika.",
+  "47' — PENALTA! Petr Sippl to má na kopačce a hospoda ztichla jak o Štědrém večeru.",
+  "47' — Gól! Petr Sippl proměňuje penaltu. Brankář skákal doprava, míč šel doleva.",
+  "48' — Petr Sippl zvedá roh do vápna, kde se mele klubko těl.",
+  "48' — Přímý kop po faulu Vilém Žiga. Soupeř se zvedá ze země.",
+  "48' — Rovnou červená! Vilém Žiga to přehnal. Tohle nemá na hřišti co dělat.",
+  "48' — PENALTA! Rozhodčí ukazuje na puntík a míč si bere Petr Sippl.",
+  "48' — Gól! Petr Sippl proměňuje penaltu. Brankář skákal doprava, míč šel doleva.",
+  "51' — Brankář pustil míč pod rukama a Marek Pinter to dopíchl do prázdné.",
+  "51' — Asistence: František Malý",
+  "53' — Petr Sippl zvedá roh do vápna, kde se mele klubko těl.",
+  "55' — Roh pro Sokol Čkyně. Centr rozehrává Petr Sippl.",
+  "56' — Jan Janutka fauluje a hned zvedá ruce, že nic. Klasika.",
+  "56' — Marek Toušek nahazuje volný kop do šestnáctky, kde už si to hlídají hlavičkáři.",
+  "56' — Oliver Škopek hlavičkuje nad. Ve vápně to vypadalo jak fronta na klobásu.",
+  "56' — Rozehrávka od brankáře. Union Lenora začínají znovu.",
+  "57' — Antonín Smažík si stáhl míč patičkou. Pak ale ztratil přehled.",
+  "59' — Další roh pro Sokol Čkyně — Petr Sippl si opět bere balon k praporku.",
+  "59' — Oskar Vorlíček hlavičkuje nad. Ve vápně to vypadalo jak fronta na klobásu.",
+  "59' — Šlápnutí od Oleksandr Kravčenko. Kopačky s kolíky si dneska vybírají daň.",
+  "60' — Rohový kop. Petr Sippl centruje, obrana couvá k brance.",
+  "60' — Radomír Pivoňka se ve vápně vytáhl výš než ostatní, ale hlavička jde vedle.",
+  "60' — Antonín Smažík rozehrává a rozhlíží se, jako by hledal někoho známého.",
+  "62' — Brankář vyběhl a Taras Rudenko to netrefil prázdnou bránu. Nevěřím!",
+  "62' — Další roh pro Sokol Čkyně — Petr Sippl si opět bere balon k praporku.",
+  "63' — Balon jde za koncovou — roh. K praporku si to štrádá Petr Sippl.",
+  "63' — Po rohu se Matěj Fišer dostal k hlavičce, ale trefil jen vzduch a záda spoluhráče.",
+  "65' — Antonín Smažík zastavil útok tak, jak to na okrese chodí — tělem.",
+  "65' — Žlutá karta! Antonín Smažík si to mohl odpustit.",
+  "65' — Přímák z hranice vápna. Marek Toušek si odplivl a rozbíhá se.",
+  "65' — Přímý kop Marek Toušek letí nad břevno směrem k lesu. Balon hledají dobrovolníci.",
+  "65' — Ján Kováč rozehrává a rozhlíží se, jako by hledal někoho známého.",
+  "70' — Marek Toušek odkopává z vlastní šestnáctky. Trochu panika.",
+  "71' — Dlouhý nákop od Matěj Fišer — a hlavou pryč. Klasický okresní volejbal.",
+  "73' — Marek Šimko zastavil průnik soupeře. Ne zrovna čistě.",
+  "76' — Krátká nahrávka Oliver Škopek na spoluhráče. Tempo se zrychluje.",
+  "79' — Správce hřiště běží s houbou a studenou vodou. Štěpán Janoušek si drží koleno.",
+  "80' — Střídání — Ondřej Sebera se konečně dočkal. Sedel na lavičce od začátku.",
+  "82' — František Malý se dostal do gólové pozice, ale míč mu ujel z nohy.",
+  "82' — Petr Sippl zvedá roh do vápna, kde se mele klubko těl.",
+  "82' — Marek Pinter skóruje! Na tribuně vyskočil pes a rozštěkal celou vesnici.",
+  "82' — Asistence: Petr Sippl",
+  "83' — Taras Rudenko se hádá s rozhodčím. 'Máte to doma trénovat!'",
+  "83' — Rozhodčí tasí žlutou pro Taras Rudenko. Přísné, ale spravedlivé.",
+  "86' — Marek Šimko to zkusil z půlky a ono to spadlo! Gól roku okresu!",
+  "87' — David Šuba si to vede po lajně, kde ho slovně doprovází pán s termoskou.",
+  "89' — Matěj Fišer si zpracoval míč na hrudi a hledá řešení.",
+  "90' — Píská se konec! Rozhodčí utíká k autu — pro jistotu."
+ ]
+}

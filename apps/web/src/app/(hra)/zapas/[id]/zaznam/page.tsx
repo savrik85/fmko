@@ -8,6 +8,7 @@ import { Spinner, BadgePreview, JerseyPreview } from "@/components/ui";
 import { PositionBadge } from "@/components/ui/position-badge";
 import { bestTextOn } from "@/lib/team-color";
 import type { BadgePattern } from "@/components/ui";
+import { canPlay3d } from "@/components/match/replay-3d/useMatchReplay";
 
 interface MatchEvent { minute: number; type: string; playerId: number; playerName: string; teamId: number; description: string; detail?: string; }
 interface LineupPlayer { id: string; name: string; position: string; naturalPosition: string; rating: number }
@@ -16,7 +17,7 @@ interface LineupData { starters: LineupPlayer[]; subs: LineupPlayer[]; formation
 interface MatchData {
   id: string; home_team_id: string; away_team_id: string; home_score: number; away_score: number; round: number | null;
   roundName: string | null; isCup: boolean;
-  /** Ligový detail nese dresy, zápas jde přehrát i ve 3D na stadionu. */
+  /** Zápas jde přehrát i ve 3D na stadionu. */
   has3d: boolean;
   events: MatchEvent[]; commentary: string[];
   home_name: string; away_name: string; home_color: string; away_color: string;
@@ -123,7 +124,7 @@ export default function MatchReplayPage() {
       setMatch({
         id: r.id as string, home_team_id: r.home_team_id as string, away_team_id: r.away_team_id as string,
         home_score: r.home_score as number, away_score: r.away_score as number, round: r.round as number | null,
-        roundName: (r.roundName as string) ?? null, isCup: r.isCup === true, has3d: r.home_kit != null,
+        roundName: (r.roundName as string) ?? null, isCup: r.isCup === true, has3d: canPlay3d(r),
         events: ev, commentary: co,
         home_name: (r.home_name as string) ?? "Domácí", away_name: (r.away_name as string) ?? "Hosté",
         home_color: (r.home_color as string) ?? "#2D5F2D", away_color: (r.away_color as string) ?? "#D94032",

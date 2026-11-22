@@ -1,12 +1,10 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import type { MatchEvent } from "@okresni-masina/shared";
 import { clientOnly } from "@/components/client-only";
-import type { ReplayInput, ReplayKit, ReplayPlan, ReplayPlayer } from "@/components/match/replay-3d/timeline";
 import { ReplayOverlay } from "@/components/match/replay-3d/ReplayOverlay";
-import type { ReplayClock } from "@/components/match/replay-3d/ReplayActors";
+import { ReplayActors, useMatchReplay } from "@/components/match/replay-3d/useMatchReplay";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
@@ -19,31 +17,6 @@ import { venueExtensions, venueFacilities } from "@/app/(hra)/turnaj/venue-scene
 const Stadium3D = clientOnly(
   () => import("@/components/stadium/stadium-3d/Stadium3D").then((m) => m.Stadium3D),
 );
-const ReplayActors = clientOnly(
-  () => import("@/components/match/replay-3d/ReplayActors").then((m) => m.ReplayActors),
-);
-
-interface StoredLineup {
-  starters: ReplayPlayer[];
-  subs: ReplayPlayer[];
-}
-
-/** Data pro 3D záznam. Dresy a vzhled hráčů zatím nese jen detail ligového zápasu. */
-function replayInputOf(r: Record<string, unknown>): ReplayInput | null {
-  const events = r.events as MatchEvent[] | undefined;
-  const homeLineup = r.home_lineup_data as StoredLineup | null;
-  const awayLineup = r.away_lineup_data as StoredLineup | null;
-  const homeKit = r.home_kit as ReplayKit | undefined;
-  const awayKit = r.away_kit as ReplayKit | undefined;
-  if (!events?.length || !homeLineup || !awayLineup || !homeKit || !awayKit) return null;
-  return {
-    matchId: r.id as string,
-    events,
-    commentary: (r.commentary as string[]) ?? [],
-    home: { name: r.home_name as string, kit: homeKit, starters: homeLineup.starters, subs: homeLineup.subs },
-    away: { name: r.away_name as string, kit: awayKit, starters: awayLineup.starters, subs: awayLineup.subs },
-  };
-}
 
 function ini(n: string) {
   return n
@@ -103,9 +76,7 @@ export default function MatchDayPage() {
   const [loading, setLoading] = useState(true);
   const [skipping, setSkipping] = useState(false);
   const [uiMode, setUiMode] = useState<"full" | "minimal" | "hidden">("full");
-  const [replayInput, setReplayInput] = useState<ReplayInput | null>(null);
-  const [replay, setReplay] = useState<ReplayPlan | null>(null);
-  const replayClock = useRef<ReplayClock>({ t: 0, speed: 1, playing: true, snap: true });
+  const { plan: replay, clock: replayClock, available: has3d, load: load3d, start: start3d } = useMatchReplay();
 
   useEffect(() => {
     // Pohár má vlastní tabulky i endpoint. Zkoušíme ligu první, protože těch zápasů je
@@ -149,7 +120,7 @@ export default function MatchDayPage() {
           isTournament: r.isTournament === true,
           attendance: typeof r.attendance === "number" ? r.attendance : null,
         });
-        setReplayInput(replayInputOf(r));
+        load3d(r);
 
         // Turnaj: 3D podle hřiště z losu (úrovně tribun, střechy, světel z areálu).
         if (r.isTournament === true && venueLook) {
@@ -199,21 +170,16 @@ export default function MatchDayPage() {
     window.location.href = `/zapas/${matchId}`;
   };
 
-  // Ligový zápas se přehraje ve 3D rovnou tady na načteném stadionu, ostatní (pohár, turnaj) ve 2D.
+  // Zápas se přehraje ve 3D rovnou tady na načteném stadionu; když to nejde, ve 2D.
   const startMatch = async () => {
-    trackEvent("match_action", { action: replayInput ? "watch_replay_3d" : "watch_replay", matchId, isHome: match?.isHome });
+    trackEvent("match_action", { action: has3d ? "watch_replay_3d" : "watch_replay", matchId, isHome: match?.isHome });
     const tid = teamId ?? (match?.isHome ? match.home_team_id : match?.away_team_id);
     await apiFetch(`/api/matches/${matchId}/mark-seen`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ teamId: tid }),
     }).catch((e) => console.error("mark-seen on replay:", e));
-    if (!replayInput) {
-      window.location.href = `/zapas/${matchId}/zaznam`;
-      return;
-    }
-    const { ReplayPlan } = await import("@/components/match/replay-3d/timeline");
-    setReplay(new ReplayPlan(replayInput));
+    if (!(await start3d())) window.location.href = `/zapas/${matchId}/zaznam`;
   };
 
   if (loading) {
@@ -228,10 +194,6 @@ export default function MatchDayPage() {
   const hc = match.home_color;
   const ac = match.away_color;
   const weatherCfg = WEATHER_OPTIONS[match.weather] || WEATHER_OPTIONS.sunny;
-  // Na tribunách tolik lidí, kolik na zápas přišlo.
-  const attendanceRatio = match.attendance !== null && stadiumData?.capacity
-    ? Math.min(1, match.attendance / stadiumData.capacity)
-    : undefined;
 
   return (
     <div className="fixed inset-0 w-full h-full overflow-hidden bg-black select-none">
@@ -259,24 +221,16 @@ export default function MatchDayPage() {
           stadiumName={match.stadium_name ?? `Stadion ${match.home_name}`}
           viewpoint={replay ? "broadcast" : "orbit"}
           showCenterBall={!replay}
-          attendanceRatio={attendanceRatio}
+          // Na tribunách tolik lidí, kolik na zápas přišlo.
+          attendanceRatio={match.attendance !== null && stadiumData?.capacity ? Math.min(1, match.attendance / stadiumData.capacity) : undefined}
           initialWeather={match.weather}
           showControls={false}
         >
-          {replay && (
-            <ReplayActors plan={replay} clock={replayClock.current} />
-          )}
+          {replay && <ReplayActors plan={replay} clock={replayClock} />}
         </Stadium3D>
       </div>
 
-      {replay && (
-        <ReplayOverlay
-          plan={replay}
-          clock={replayClock.current}
-          onExit={() => { window.location.href = `/zapas/${matchId}`; }}
-          onSwitch2D={() => { window.location.href = `/zapas/${matchId}/zaznam`; }}
-        />
-      )}
+      {replay && <ReplayOverlay plan={replay} clock={replayClock} matchId={matchId} />}
 
       {!replay && (
       <>
