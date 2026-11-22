@@ -582,6 +582,48 @@ export const COMMITMENT_REPLY_WAIT_MS = 3_000;
  * nikdy nehází (slib nesmí shodit odeslání zprávy ani odpověď hráče).
  * `deadline`: vlastní rozpočet rozpoznání (běží souběžně s odpovědí hráče, ne před ní).
  */
+/** Jak dlouho po uzavření incidentu srážkou nebo pokutou patří „strhnu ti to“ ještě k němu (herní dny). */
+const INCIDENT_PUNISHMENT_DAYS = 2;
+
+interface PunishingIncident { id: string; kind: string; open: boolean }
+
+/**
+ * Incident, za který se odhalenému pachateli trest dává (otevřený), nebo právě dal (uzavřený
+ * srážkou či pokutou nejvýš před `INCIDENT_PUNISHMENT_DAYS` dny). Jinak null.
+ */
+async function incidentPunishingPlayer(db: D1Database, clubTeamId: string, playerId: string): Promise<PunishingIncident | null> {
+  const row = await db.prepare(
+    `SELECT i.id, i.kind, i.status FROM club_incidents i
+      WHERE i.team_id = ? AND i.culprit_type = 'hrac' AND i.culprit_player_id = ? AND i.culprit_revealed = 1
+        AND (i.status IN ('otevreny', 'policie')
+             OR (i.status = 'uzavreny' AND i.resolution IN ('srazka', 'pokuta')
+                 AND julianday(substr(i.resolved_on, 1, 10))
+                   >= julianday(substr(COALESCE((SELECT game_date FROM teams WHERE id = i.team_id), ?), 1, 10)) - ?))
+      ORDER BY (i.status != 'uzavreny') DESC, i.game_date DESC LIMIT 1`,
+  ).bind(clubTeamId, playerId, new Date().toISOString(), INCIDENT_PUNISHMENT_DAYS).first<{ id: string; kind: string; status: string }>()
+    .catch((e) => { logger.warn({ module: M }, `incident pachatele ${playerId} k pokutě`, e); return null; });
+  return row ? { id: row.id, kind: row.kind, open: row.status !== "uzavreny" } : null;
+}
+
+/** Poznámka jen pro trenéra pod jeho zprávou (jako coach-claims.ts): trest za incident patří k incidentu. */
+async function noteIncidentPunishment(
+  db: D1Database, o: { convId: string; name: string; incident: PunishingIncident; now?: Date },
+): Promise<void> {
+  const { nazevIncidentu } = await import("../incidents/katalog");
+  const title = nazevIncidentu(o.incident.kind);
+  const body = o.incident.open
+    ? `ℹ️ ${o.name} je odhalený pachatel (${title}). Srážku nebo pokutu za to dáš u incidentu, pokuta z SMS se nezapsala.`
+    : `ℹ️ ${o.name} už za incident (${title}) trest má. Druhá pokuta z SMS se nezapsala.`;
+  const at = new Date((o.now ?? new Date()).getTime() + 1000).toISOString();
+  await db.prepare(
+    `INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, metadata, sent_at, read)
+     VALUES (?, ?, 'system', 'Systém', ?, ?, ?, 1)`,
+  ).bind(crypto.randomUUID(), o.convId, body, JSON.stringify({
+    type: "coach_claim_note", kind: "incident_fine", href: `/incidenty?id=${encodeURIComponent(o.incident.id)}`, label: "Otevřít incident",
+  }), at).run()
+    .catch((e) => logger.warn({ module: M }, `poznámka o trestu u incidentu ${o.incident.id}`, e));
+}
+
 export async function handleCoachMessageForCommitment(
   db: D1Database,
   env: ChatEnv,
@@ -591,9 +633,9 @@ export async function handleCoachMessageForCommitment(
   try {
     if (!COMMITMENT_HINT_RE.test(o.text)) return null;
     const p = await db.prepare(
-      `SELECT p.first_name, p.position, p.weekly_wage, COALESCE(t.parent_team_id, t.id) AS club_id
+      `SELECT p.first_name, p.last_name, p.position, p.weekly_wage, COALESCE(t.parent_team_id, t.id) AS club_id
          FROM players p LEFT JOIN teams t ON t.id = ? WHERE p.id = ?`,
-    ).bind(o.teamId, o.playerId).first<{ first_name: string; position: string; weekly_wage: number | null; club_id: string | null }>();
+    ).bind(o.teamId, o.playerId).first<{ first_name: string; last_name: string | null; position: string; weekly_wage: number | null; club_id: string | null }>();
     if (!p) return null;
     const prev = await db.prepare(
       `SELECT body FROM messages WHERE conversation_id = ? AND sender_type = 'player' ORDER BY sent_at DESC LIMIT 1`,
@@ -609,6 +651,16 @@ export async function handleCoachMessageForCommitment(
       || (REWARD_KINDS as readonly string[]).includes(detected.kind)) {
       const { ownSquadTeamId } = await import("./player-reach");
       if (!(await ownSquadTeamId(db, o.playerId, p.club_id ?? o.teamId))) return null;
+    }
+    // „Strhnu ti to z výplaty“ odhalenému pachateli patří k incidentu: tam je srážka i pokuta.
+    // Chatová pokuta by byla druhý trest za totéž (Turek, FaSta, E2E 22. 11.: srážka 1 172 Kč
+    // u incidentu a vedle ní tlačítko na pokutu 293 Kč). Trenér dostane jen odkaz na incident.
+    if (detected.kind === "fine") {
+      const incident = await incidentPunishingPlayer(db, p.club_id ?? o.teamId, o.playerId);
+      if (incident) {
+        await noteIncidentPunishment(db, { convId: o.convId, name: `${p.first_name} ${p.last_name ?? ""}`.trim(), incident });
+        return null;
+      }
     }
     return await recordCommitment(db, {
       clubTeamId: p.club_id ?? o.teamId, playerId: o.playerId, convId: o.convId, coachMessage: o.text, detected,
