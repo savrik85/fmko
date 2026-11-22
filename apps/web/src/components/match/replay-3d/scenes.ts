@@ -40,8 +40,11 @@ export interface ReplayCoach {
   /** Bilance týmu v soutěži před zápasem; null = první zápas v soutěži. */
   record: { played: number; won: number } | null;
 }
-/** Před výkopem (sekundy): představení jednoho trenéra, po obou podání rukou. Stejné délky má krok záznamu (SCENE_MS). */
-const COACH_INTRO = 4, HANDSHAKE = 2.2;
+/**
+ * Před výkopem (sekundy): záběr na jednoho trenéra, pak odjezd kamery, při kterém k sobě dojdou, a podání rukou.
+ * Stejné délky mají kroky záznamu (SCENE_MS: coach, handshake = MEET + HANDSHAKE).
+ */
+const COACH_INTRO = 4, MEET = 1.6, HANDSHAKE = 2.2;
 /** `coach` = null: klub trenéra nemá a u lajny nikdo nestojí. */
 export interface ReplayTeam { name: string; kit: ReplayKit; starters: ReplayPlayer[]; subs: ReplayPlayer[]; coach: ReplayCoach | null }
 /** Událost zápasu, jak ji ukládá engine (detail zápasu z API). */
@@ -74,7 +77,12 @@ export interface Scene {
   result: ShotResult | null;
   /** Gól: úsek klipu se zakončením, který se po oslavě zpomaleně zopakuje. */
   replay: { from: number; to: number } | null;
+  /** Vlastní kamera scény (představení trenérů); jinak scénu točí televizní kamera z tribuny. */
+  camera?: CameraKey[];
 }
+interface Point3 extends Point { y: number }
+/** Kde kamera v čase `t` stojí a kam míří. Mezi klíči jede rovnoměrně, s `ease` se rozjede a dojede; na klíč s `cut` se střihne. */
+export interface CameraKey { t: number; from: Point3; at: Point3; cut?: true; ease?: true }
 type Window = Omit<Scene, "clip">;
 
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
@@ -300,7 +308,7 @@ class Stage {
     spots.set(this.staff.referee, { x: clamp(referee.x, -HALF_W + 2, HALF_W - 2), z: clamp(referee.z, -HALF_L + 3, HALF_L - 3) });
     for (const side of SIDES) {
       const coach = this.staff.coaches[side];
-      if (coach) spots.set(coach.figure, this.bench(side));
+      if (coach && !spots.has(coach.figure)) spots.set(coach.figure, this.bench(side));
     }
     // Volní hráči si udělají místo mezi sebou, kolem hráčů ze scénáře i kolem zón, kde se scéna odehraje.
     // V každém kole se sečtou všechny odstrky najednou; postupné odstrkování se ve vápně plném hráčů neustálilo.
@@ -634,26 +642,40 @@ export class Replay {
   }
 
   /**
-   * Před výkopem: trenéři jdou od střídaček na středový bod, záznam je cestou jednoho po druhém představí,
-   * a podají si ruce. Týmy stojí na svých polovinách.
+   * Před výkopem: trenéři jdou za postranní čárou od svých střídaček k půlce. Kamera je zblízka představí, nejdřív
+   * domácího, po střihu hostujícího; z jeho záběru odjede, až jsou v obraze oba, a ti si podají ruce. Týmy stojí
+   * na svých polovinách.
    */
   intro(): Scene {
     if (this.introScene) return this.introScene;
     const st = this.stage(this.rosters[0] ?? this.finalRoster, "intro", false);
-    const walk = 2 * COACH_INTRO;
     const coaches = SIDES.flatMap((side) => {
       const coach = this.staff.coaches[side];
-      return coach ? [{ figure: coach.figure, from: st.bench(side), to: { x: 0, z: side === "home" ? -0.7 : 0.7 } }] : [];
+      if (!coach) return [];
+      const bench = st.bench(side), out = Math.sign(bench.z);
+      return [{ figure: coach.figure, from: { x: bench.x, z: bench.z + out * 3.5 }, to: { x: bench.x, z: out * 0.6 } }];
     });
-    // Hráči nestojí trenérům v cestě.
-    const paths = coaches.flatMap(({ from, to }) => [0.2, 0.4, 0.6, 0.8].map((s) => ({ x: lerp(from.x, to.x, s), z: lerp(from.z, to.z, s), r: 2.2 })));
-    st.layout({ x: 0, z: 0 }, (slot, sd) => uvToWorld(sd, Math.min(slot.base.u * 0.8, 0.42), slot.base.v), new Map([[this.referee, { x: -4, z: 0 }]]), [{ x: 0, z: 0, r: 6 }, ...paths]);
-    for (const { figure, to } of coaches) {
-      st.go(figure, to, walk);
-      if (coaches.length === 2) st.pose(figure, "shake", HANDSHAKE, walk);
+    const walk = coaches.length * COACH_INTRO + MEET;
+    const spotAt = (c: typeof coaches[number], t: number): Point => ({ x: c.from.x, z: lerp(c.from.z, c.to.z, t / walk) });
+    // Kamera stojí na hřišti kousek před trenérem a jede s ním.
+    const closeUp = (c: typeof coaches[number], t: number, cut: boolean): CameraKey => {
+      const p = spotAt(c, t);
+      return { t, from: { x: p.x + 6.3, y: 1.9, z: p.z - Math.sign(c.from.z) * 2.8 }, at: { ...p, y: 1.35 }, ...(cut ? { cut: true as const } : {}) };
+    };
+    const camera = coaches.flatMap((c, n) => [closeUp(c, n * COACH_INTRO, n > 0), closeUp(c, (n + 1) * COACH_INTRO, false)]);
+    if (coaches.length === 2) camera.push({ t: walk, from: { x: BENCH_X + 13, y: 4, z: 0 }, at: { x: BENCH_X, y: 1.3, z: 0 }, ease: true });
+    // Hráči nestojí kameře ve výhledu: pruh podél lajny a prostor před místem podání rukou jsou volné.
+    const clear: Zone[] = [...[-12, -8, -4, 0, 4, 8, 12].map((z) => ({ x: BENCH_X + 3.5, z, r: 4.5 })), { x: BENCH_X + 9, z: 0, r: 4.5 }, { x: 0, z: 0, r: 6 }];
+    st.layout({ x: 0, z: 0 }, (slot, sd) => uvToWorld(sd, Math.min(slot.base.u * 0.8, 0.42), slot.base.v),
+      new Map([[this.referee, { x: 0, z: 2 }], ...coaches.map((c): [number, Point] => [c.figure, c.from])]), clear);
+    for (const c of coaches) {
+      st.go(c.figure, c.to, walk);
+      if (coaches.length === 2) st.pose(c.figure, "shake", HANDSHAKE, walk);
     }
+    // Střih mezi záběry na trenéry.
+    for (let n = 1; n < coaches.length; n++) st.clip.cuts.push(n * COACH_INTRO);
     st.t = walk + HANDSHAKE;
-    return this.introScene = { clip: st.finish(), start: 0, split: 0, end: st.t, focus: [], card: null, result: null, replay: null };
+    return this.introScene = { clip: st.finish(), start: 0, split: 0, end: st.t, focus: [], card: null, result: null, replay: null, camera };
   }
 
   /**

@@ -47,6 +47,8 @@ const CLIP_PLANES = [new THREE.Plane(new THREE.Vector3(-1, 0, 0), HALF_W + 1.2)]
 const DISSOLVE = 0.35;
 /** O tolik se smí lišit čas navazujícího záběru téhož klipu, aby se hrálo plynule dál bez střihu. */
 const SEAM = 0.25;
+/** Jak daleko dopředu v klipu (sekundy) se po střihu měří rychlost a směr postav. */
+const LOOKAHEAD = 0.1;
 
 function keeperShirts(home: ReplayKit, away: ReplayKit): { home: string; away: string } {
   const taken = [home.shirt, away.shirt, REFEREE_KIT.shirt].map((c) => new THREE.Color(c));
@@ -115,6 +117,8 @@ export function ReplayScene({ replay, kits, snow, step, replayBadge, veil, onRea
   onReady: () => void;
 }) {
   const count = replay.figures.length;
+  /** Obraz o kousek dál v klipu: po střihu z něj postavy vezmou rychlost a směr. */
+  const ahead = useMemo<Frame>(() => ({ figures: replay.figures.map(() => ({ visible: false, x: 0, y: 0, z: 0, pose: null })), ballX: 0, ballY: 0, ballZ: 0, cuts: 0 }), [replay]);
   const frame = useMemo<Frame>(() => ({ figures: replay.figures.map(() => ({ visible: false, x: 0, y: 0, z: 0, pose: null })), ballX: 0, ballY: 0, ballZ: 0, cuts: 0 }), [replay]);
   const states = useMemo<FigureState[]>(() => replay.figures.map(() => ({ x: 0, z: 0, yaw: 0, phase: 0, speed: 0 })), [replay]);
   const keepers = useMemo(() => keeperShirts(kits.home, kits.away), [kits]);
@@ -222,15 +226,18 @@ export function ReplayScene({ replay, kits, snow, step, replayBadge, veil, onRea
     last.current = { clip: scene.clip, t, cuts: frame.cuts, replaying };
     const now = performance.now() / 1000;
 
+    if (cut) sampleClip(scene.clip, t + LOOKAHEAD, ahead);
     frame.figures.forEach((f, i) => {
       const s = states[i];
       if (!f.visible) return;
-      const dx = f.x - s.x, dz = f.z - s.z;
+      // Po střihu se rychlost a směr berou z klipu: kdo ve střihu jde nebo běží, jde hned a čelem po směru.
+      const from = cut ? f : s, to = cut ? (ahead.figures[i].visible ? ahead.figures[i] : f) : f;
+      const dx = to.x - from.x, dz = to.z - from.z;
       const stride = cut ? 0 : Math.hypot(dx, dz);
       s.x = f.x;
       s.z = f.z;
       // Snímek bez uplynulého času (překreslení zastaveného obrazu) rychlost nemění.
-      if (cut) s.speed = 0;
+      if (cut) s.speed = Math.hypot(dx, dz) / LOOKAHEAD;
       else if (dt > 0) s.speed = THREE.MathUtils.lerp(s.speed, stride / dt, Math.min(1, dt * 8));
       s.phase += stride * 1.9;
       // Čelem po směru běhu, stojící čelem k míči; padající brankář čelem do pole, ležící napříč obrazem.
@@ -239,7 +246,8 @@ export function ReplayScene({ replay, kits, snow, step, replayBadge, veil, onRea
       const faceX = dive ? 0 : moving ? dx : frame.ballX - s.x;
       const faceZ = dive ? -s.z : moving ? dz : frame.ballZ - s.z;
       if (f.pose === "down") s.yaw = 0;
-      else if (Math.abs(faceX) + Math.abs(faceZ) > 0.01) {
+      // Při podání ruky zůstávají čelem k sobě, jak k sobě došli.
+      else if (f.pose !== "shake" && Math.abs(faceX) + Math.abs(faceZ) > 0.01) {
         const diff = Math.atan2(faceX, faceZ) - s.yaw;
         s.yaw += Math.atan2(Math.sin(diff), Math.cos(diff)) * (cut ? 1 : Math.min(1, dt * 7));
       }
@@ -286,7 +294,7 @@ export function ReplayScene({ replay, kits, snow, step, replayBadge, veil, onRea
           const raised = armsUp || (f.pose === "armUp" && k === 0);
           // Podání ruky: pravá natažená před tělo a potřásá.
           const shaking = f.pose === "shake" && k === 0;
-          const arm = shaking ? 1.25 + Math.sin(now * 11) * 0.12 : cheering ? 2.4 + Math.sin(now * 9 + i) * 0.15 : raised ? Math.PI - 0.25 : f.y > 0.05 ? 0.9 : swing * 0.8 * run + Math.sin(now * 1.3 + i * 2.1) * 0.05;
+          const arm = shaking ? -1.25 + Math.sin(now * 11) * 0.12 : cheering ? 2.4 + Math.sin(now * 9 + i) * 0.15 : raised ? Math.PI - 0.25 : f.y > 0.05 ? 0.9 : swing * 0.8 * run + Math.sin(now * 1.3 + i * 2.1) * 0.05;
           const elbow = shaking ? -0.25 : cheering ? -0.5 : raised ? -0.15 : f.y > 0.05 ? -0.9 : -(0.25 + 1.1 * run);
           joints.shoulder[k].makeTranslation(BODY.shoulder[0] * side, BODY.shoulder[1], 0).multiply(mTmp.makeRotationX(arm));
           joints.elbow[k].copy(joints.shoulder[k]).multiply(mTmp.makeTranslation(0, -BODY.elbow, 0)).multiply(mTmp.makeRotationX(elbow));
@@ -333,8 +341,18 @@ export function ReplayScene({ replay, kits, snow, step, replayBadge, veil, onRea
     vLook.set(CAMERA_AIM_X, 0, THREE.MathUtils.clamp(frame.ballZ * 0.5, -CAMERA.pan, CAMERA.pan));
     if (cut) look.current.copy(vLook);
     else look.current.lerp(vLook, 1 - Math.exp(-dt * 1.5));
-    camera.position.set(CAMERA.x, CAMERA.y, look.current.z * 0.3);
-    camera.lookAt(look.current);
+    const keys = scene.camera;
+    if (keys) {
+      // Vlastní kamera scény: mezi sousedními klíči jede, na klíč se střihem skočí.
+      const n = keys.findLastIndex((k) => k.t <= t), a = keys[Math.max(n, 0)], b = keys[n + 1];
+      const linear = b && !b.cut ? THREE.MathUtils.clamp((t - a.t) / (b.t - a.t), 0, 1) : 0;
+      const s = b?.ease ? THREE.MathUtils.smoothstep(linear, 0, 1) : linear, to = linear > 0 ? b : a;
+      camera.position.set(THREE.MathUtils.lerp(a.from.x, to.from.x, s), THREE.MathUtils.lerp(a.from.y, to.from.y, s), THREE.MathUtils.lerp(a.from.z, to.from.z, s));
+      camera.lookAt(THREE.MathUtils.lerp(a.at.x, to.at.x, s), THREE.MathUtils.lerp(a.at.y, to.at.y, s), THREE.MathUtils.lerp(a.at.z, to.at.z, s));
+    } else {
+      camera.position.set(CAMERA.x, CAMERA.y, look.current.z * 0.3);
+      camera.lookAt(look.current);
+    }
     camera.fov = CAMERA.fov;
     camera.updateProjectionMatrix();
 
