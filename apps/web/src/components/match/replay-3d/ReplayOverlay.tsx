@@ -6,7 +6,6 @@ import type { ReplayClock } from "./ReplayActors";
 
 /** Stejné volby jako 2D záznam: Živě, Rychle, Konec. */
 const SPEEDS = [{ value: 1, label: "▶ Živě", short: "▶" }, { value: 3, label: "▶▶ Rychle", short: "▶▶" }] as const;
-
 const BANNERS = {
   goal: { text: "GÓÓÓL!", className: "text-5xl sm:text-7xl text-white" },
   penalty: { text: "PENALTA!", className: "text-2xl sm:text-4xl text-white" },
@@ -15,7 +14,6 @@ const BANNERS = {
   injury: { text: "✚ ZRANĚNÍ", className: "text-2xl sm:text-4xl text-red-400" },
   sub: { text: "⇅ STŘÍDÁNÍ", className: "text-2xl sm:text-4xl text-sky-300" },
 };
-
 const BUTTON = "px-2 py-1.5 rounded-lg text-white/80 hover:text-white hover:bg-white/15 text-xs font-heading font-bold";
 
 /** Tabule se skóre, titulek komentáře a ovládání přehrávání nad 3D scénou. */
@@ -28,7 +26,6 @@ export function ReplayOverlay({ plan, clock, matchId }: { plan: ReplayPlan; cloc
     const id = setInterval(() => setT(clock.t), 150);
     return () => clearInterval(id);
   }, [clock]);
-
   const ended = t >= plan.duration;
   const score = plan.scoreAt(t);
   const caption = plan.captionAt(t);

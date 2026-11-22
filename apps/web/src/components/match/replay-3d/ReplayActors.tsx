@@ -26,7 +26,6 @@ function keeperShirts(homeKit: ReplayKit, awayKit: ReplayKit): Record<Side, stri
 /** Postavy jsou o kus větší než skutečnost, ať jsou z televizního pohledu čitelné i na mobilu. */
 const FIGURE_SCALE = 1.2;
 const BALL_RADIUS = 0.26;
-/** Jak dlouho po titulku jsou hráči, o kterých je, zvýraznění kroužkem a jmenovkou. */
 const HIGHLIGHT_SECONDS = 4;
 /** Televizní kamera jede za míčem (u zranění, karty a střídání za hráčem z titulku): na šířku z hlavní tribuny, na výšku zpoza branky. */
 const CAMERA = {
@@ -37,14 +36,13 @@ const FOLLOW_BANNERS = new Set(["injury", "sub", "red", "yellow"]);
 
 interface PartDef {
   id: string;
-  /** Kolik kusů má jedna postava (nohy a ruce dva). */
   perFigure: 1 | 2;
   geometry: THREE.BufferGeometry;
   /** Kloub (kyčel, rameno), kolem kterého se díl kývá; střed dílu je o `offset` níž. */
   pivot: [number, number, number];
   offset: number;
   swing: "leg" | "arm" | null;
-  /** Barva dílu podle dresu (u brankáře jeho dres), pleti a vlasů; holá hlava vlasy nemá (null). */
+  /** `shirt` je u brankáře jeho dres; holá hlava vlasy nemá (null). */
   color: (kit: ReplayKit, shirt: string, player: ReplayPlayer) => string | null;
 }
 
@@ -59,7 +57,7 @@ const PARTS: PartDef[] = [
 
 interface FigureState { x: number; z: number; yaw: number; phase: number; speed: number; keeper: boolean }
 
-// Pracovní objekty pro skládání matic.
+// Pracovní objekty, ať se v každém snímku nealokuje.
 const mRoot = new THREE.Matrix4(), mPart = new THREE.Matrix4(), mTmp = new THREE.Matrix4();
 const qRoot = new THREE.Quaternion(), qPose = new THREE.Quaternion();
 const vPos = new THREE.Vector3(), vScale = new THREE.Vector3(), vTmp = new THREE.Vector3();
@@ -103,7 +101,7 @@ export function ReplayActors({ plan, clock }: { plan: ReplayPlan; clock: ReplayC
     return () => tags.current.forEach((tag) => tag.remove());
   }, [container]);
 
-  // Barvy dresu, pleti a vlasů hráče; brankář (i náhradní v průběhu zápasu) má vlastní dres, holá hlava vlasy nemá.
+  // Brankář (i náhradní v průběhu zápasu) má vlastní dres.
   const paint = (i: number, keeper: boolean) => {
     const fig = plan.figures[i];
     const kit = plan[fig.side].kit;
@@ -125,7 +123,6 @@ export function ReplayActors({ plan, clock }: { plan: ReplayPlan; clock: ReplayC
     const dt = Math.min(delta, 0.1) * (clock.playing ? clock.speed : 0);
     if (clock.playing) clock.t = Math.min(plan.duration, clock.t + dt);
     plan.sample(clock.t, frame);
-
     // Hráči stojí přesně tam, kde je simulace; z posunu se počítá jen krok nohou a natočení.
     frame.figures.forEach((f, i) => {
       const s = states[i];
@@ -159,7 +156,6 @@ export function ReplayActors({ plan, clock }: { plan: ReplayPlan; clock: ReplayC
         }
         const s = states[i];
         const scale = ((fig.player.height ?? 178) / 178) * FIGURE_SCALE;
-        // Kořen postavy: poloha, natočení a póza (ležící, padající brankář).
         let lift = 0;
         let shift = 0;
         qRoot.setFromAxisAngle(THREE.Object3D.DEFAULT_UP, s.yaw);
@@ -175,7 +171,6 @@ export function ReplayActors({ plan, clock }: { plan: ReplayPlan; clock: ReplayC
           lift = 0.45;
         }
         mRoot.compose(vPos.set(s.x + Math.sin(s.yaw) * shift, PITCH_SURFACE_Y + lift, s.z + Math.cos(s.yaw) * shift), qRoot, vScale.setScalar(scale));
-
         const swingAmp = Math.min(0.9, s.speed * 0.13);
         for (let k = 0; k < part.perFigure; k++) {
           const mirror = k === 1 ? -1 : 1;
@@ -202,9 +197,8 @@ export function ReplayActors({ plan, clock }: { plan: ReplayPlan; clock: ReplayC
       ring.scale.setScalar(1 + 0.12 * Math.sin(clock.t * 7));
     });
 
-    // Kamera: plynule za míčem, po skoku v čase hned na místě.
+    // Kamera plynule za míčem, po skoku v čase hned na místě; u zranění, karty a střídání jen na hráče, jinak mezi míč a hráče z titulku.
     const cam = tall ? CAMERA.tall : CAMERA.wide;
-    // U zranění, karty a střídání jen na hráče; jinak mezi míč a hráče z titulku, ať je vidět obojí.
     const who = focus[0];
     const mix = who === undefined ? 0 : caption?.banner && FOLLOW_BANNERS.has(caption.banner) ? 1 : 0.5;
     const fx = who === undefined ? frame.ballX : THREE.MathUtils.lerp(frame.ballX, states[who].x, mix);
@@ -227,15 +221,14 @@ export function ReplayActors({ plan, clock }: { plan: ReplayPlan; clock: ReplayC
       tag.style.display = i === undefined ? "none" : "block";
       if (i === undefined) return;
       vTmp.set(states[i].x, PITCH_SURFACE_Y + 2.7, states[i].z).project(camera);
-      // Jmenovka zůstane na obrazovce, nad titulkem a ovládáním.
-      // Hráč mimo záběr jmenovku nemá; u kraje se jmenovka posune dovnitř.
+      // Hráč mimo záběr jmenovku nemá; u kraje se posune dovnitř, ať zůstane nad titulkem a ovládáním.
       if (Math.abs(vTmp.x) > 1 || Math.abs(vTmp.y) > 1) tag.style.display = "none";
       const x = THREE.MathUtils.clamp(((vTmp.x + 1) / 2) * size.width, 70, size.width - 70);
       const y = THREE.MathUtils.clamp(((1 - vTmp.y) / 2) * size.height, 80, size.height - 140);
       tag.style.transform = `translate(${x}px, ${y}px) translate(-50%, -100%)`;
     });
 
-    // Stíny: tmavé kolečko pod každým hráčem a pod míčem (levné, funguje i na mobilu).
+    // Stín jako tmavé kolečko je levný a funguje i na mobilu.
     const sh = shadows.current;
     if (sh) {
       frame.figures.forEach((f, i) => sh.setMatrixAt(i, f.visible ? mTmp.makeTranslation(states[i].x, PITCH_SURFACE_Y + 0.02, states[i].z) : HIDDEN));
