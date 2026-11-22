@@ -255,6 +255,7 @@ function detectionPrompt(
     "  - váhání a neurčitost („možná“, „uvidíme“, „zkusím zařídit“, „jakmile to půjde“, „rotace“),",
     "  - otázka („200 Kč za zápas?“, „co bys chtěl?“), přemlouvání, ať přijde („pojď, potřebujeme tě“),",
     "  - lavička nebo nominace bez základu („mám tě jako zálohu“, „jedeš s námi na zápas“),",
+    "  - šetření nebo volno („šetřím tě na Hradčany“, „dám ti volno“, „odpočiň si“): slib základu to není, spíš naopak,",
     "  - plán nebo popis tréninku („budeme hodně běhat“, „bude hodně běhání“, „v úterý dáme kondičku“),",
     "  - slib na příští sezónu nebo až po sezóně, minulost, vtip, slib někomu jinému",
     "  - a obecná podpora („počítám s tebou“, „věřím ti“, „šanci dostaneš“),",
@@ -287,6 +288,12 @@ const NOT_A_PROMISE_RE = new RegExp(`\\b(${CONDITION_WORDS}|${PERSUADE_WORDS}|${
 const NOT_A_BET_RE = new RegExp(`\\b(${PERSUADE_WORDS}|${VAGUE_WORDS})\\b`);
 /** Pozvání je klidně „pojď na pivo?“, ale ne „někdy zajdeme“ ani „když vyhrajeme“ (to je sázka). */
 const NOT_AN_INVITE_RE = new RegExp(`\\b(${CONDITION_WORDS}|${VAGUE_WORDS}|nekdy|casem)\\b`);
+/**
+ * Šetření nebo volno slib základu není: „Neber to jako trest, šetřím tě na Hradčany. Dám ti
+ * volno…“ se zapsalo jako místo v základu (přetest 3, 22. 11.). Jen ve větě se slibem.
+ */
+const REST_NOT_START_RE = /\b(setri\w* te|te setri\w*|setrit te|dam ti volno|davam ti volno|mas (ode me |ode mne )?volno|odpocin si|necham te odpocinout)\b/;
+const START_KINDS: readonly CommitmentKind[] = ["start_next", "start_soon"];
 
 /**
  * Zpráva mluví o příští sezóně („příští sezónu s tebou mám plány. Chci tě do základu“):
@@ -340,6 +347,7 @@ export function quoteHoldsUp(quote: unknown, coachMessage: string, kind: Commitm
   if (context.some((s) => not.test(plain(s)))) return false;
   if (invite && !context.some((s) => INVITE_TIME_RE.test(plain(s)))) return false;
   if (kind === "bet" && !context.some((s) => BET_CUE_RE.test(plain(s)))) return false;
+  if (START_KINDS.includes(kind) && context.some((s) => REST_NOT_START_RE.test(plain(s)))) return false;
   return true;
 }
 
