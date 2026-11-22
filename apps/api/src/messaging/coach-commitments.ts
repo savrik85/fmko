@@ -26,6 +26,10 @@ import {
   LAPS_TARGETS, RULE_DUE_DAYS, RULE_KINDS, lastChanceStmt, rulePromptLine, ruleText,
   type LapsTarget, type RuleDetails, type RuleKind,
 } from "./coach-rules";
+import {
+  REWARD_BROKEN_SMS, REWARD_KEPT_SMS, REWARD_KINDS, markRewardEarned, parseReward, parseWeightTarget, rewardPrice, rewardPromptLine,
+  rewardText, rewardWhat, weightDealDetails, weightDealNote, type RewardKind, type RewardType,
+} from "./coach-rewards";
 // Chat se načítá až za běhu: ai-player-chat → player-memory → tento modul by jinak byl kruh.
 import type { ChatEnv } from "./ai-player-chat";
 
@@ -40,7 +44,9 @@ export type CommitmentKind = "start_next" | "start_soon" | "position" | "release
   // Pachatel slíbil vrátit lup nebo opravit škodu brigádou (incidents/restitution.ts, amends.ts).
   | "task_return" | "task_repair"
   // Pravidla a tresty pro kabinu i jednotlivce (coach-rules.ts).
-  | RuleKind;
+  | RuleKind
+  // Odměny mimo zápas: dohoda o hubnutí a odměna za službu (coach-rewards.ts).
+  | RewardKind;
 export type CommitmentStatus = "active" | "kept" | "broken" | "expired" | "cancelled";
 export type LineupRole = "GK" | "DEF" | "MID" | "FWD";
 export type BetCondition = "goal" | "hattrick" | "assist" | "win" | "clean_sheet";
@@ -50,6 +56,7 @@ export type BetReward = "round" | "keg" | "money" | "pub";
 export const COMMITMENT_KINDS: readonly CommitmentKind[] = [
   "start_next", "start_soon", "position", "release_offer", "bonus", "wage", "invite_pub", "invite_talk", "bet", "fine",
   ...RULE_KINDS,
+  ...REWARD_KINDS,
 ];
 /** Pravidlo nebo trest, který platí pro celou kabinu (zastupuje ji jeden hráč, jako u sázky kabiny). */
 export function isSquadRule(kind: CommitmentKind, target?: LapsTarget): boolean {
@@ -76,9 +83,23 @@ export interface DetectedCommitment {
   squad?: boolean;
   /** Kolečka: komu (coach-rules.ts). */
   target?: LapsTarget;
+  /** Dohoda o hubnutí (coach-rewards.ts): kolik kg (null = na normální váhu), za kolik dní, sázka hráče. */
+  kg?: number | null;
+  days?: number;
+  forfeit?: boolean;
+  rewardType?: RewardType;
 }
 
 export interface CommitmentDetails extends RuleDetails {
+  /** Dohoda o hubnutí a odměna (coach-rewards.ts). */
+  kg?: number;
+  startWeight?: number;
+  targetWeight?: number;
+  forfeit?: boolean;
+  lost?: number;
+  rewardType?: RewardType;
+  /** Úkol „poptej se“: přinesl hráč jméno? */
+  lead?: number;
   position?: LineupRole;
   amount?: number;
   percent?: number;
@@ -104,6 +125,8 @@ const DUE_DAYS: Record<CommitmentKind, number> = {
   start_next: 10, start_soon: 21, position: 10, release_offer: 30, bonus: 7, wage: 7,
   invite_pub: 2, invite_talk: 3, bet: 10, fine: 3, task_inquiry: 1, task_return: 2, task_repair: 2,
   ...RULE_DUE_DAYS,
+  // Hubnutí: termín z dohody (výchozí 14 dní), odměna: lhůta na vyplacení.
+  weight_target: 14, reward: 5,
 };
 /** Kolik dní má trenér na zaplacení vyhrané sázky. */
 const BET_PAY_DAYS = 5;
@@ -132,6 +155,8 @@ export const COMMITMENT_HINT_RE = new RegExp([
   // Pokuta.
   "pokut", "strhn", "sr[aá][zž]k", "z v[yý]plat", "ze mzdy",
   // Pravidla a tresty: „kdo nechodí, nehraje“, kolečka, poslední šance, omluva kabině.
+  // Odměny mimo zápas: hubnutí, flaška, „litr“.
+  "hubn", "shod[ií]", "\\bkil", "fla[sš]k", "\\brum", "litr", "valk", "d[aá]rek", "koup[ií]m",
   "nehraje", "nebude hr[aá]t", "kole[cč]k", "b[eě]h[aá]", "odb[eě]h", "posledn[ií] [sš]anc", "let[ií][sš]\\b", "vyhod[ií]m", "omluv",
 ].join("|"), "i");
 
@@ -154,6 +179,7 @@ export function commitmentText(kind: CommitmentKind, d: CommitmentDetails = {}):
     case "task_return": return "Vrátit, co vzal";
     case "task_repair": return "Opravit škodu brigádou";
     case "training_rule": case "laps_penalty": case "last_chance": case "squad_apology": return ruleText(kind, d);
+    case "weight_target": case "reward": return rewardText(kind, { ...d, reward: d.rewardType });
   }
 }
 
@@ -201,13 +227,15 @@ function detectionPrompt(
     "- \"invite_pub\": zve ho na pivo nebo do hospody dnes nebo v nejbližších dnech („pojď na pivo, platím“, „zajdeme dneska na jedno?“). Obecné „někdy zajdeme“ není pozvání.",
     "- \"invite_talk\": chce, ať se za ním staví nebo se sejdou a něco proberou („stav se zítra po tréninku“, „sejdeme se a probereme to“).",
     "- \"fine\": dá mu pokutu nebo mu strhne peníze z výplaty („dostaneš pokutu 500 Kč“, „strhnu ti to z výplaty“). Vyplň amount v Kč, když v textu není, null. Výhrůžka s podmínkou („jestli ještě jednou…“) to není.",
+    "- \"weight_target\": dohoda o hubnutí: trenér dá odměnu, když hráč zhubne („1000 Kč, když zhubneš“, „shodíš 5 kilo za 2 týdny a dám ti litr“), nebo hráč platí, když nezhubne („když neshodíš 5 kilo, platíš pivo všem“). Vyplň kg (kolik kilo, „na normální váhu“ = null), days (za kolik dní, 2 týdny = 14, není-li = null), reward (money peníze a amount, round runda, keg basa, bottle flaška, none trenér nic nedá), forfeit (true, když hráč platí, pokud nezhubne). „Litr“ = 1000 Kč.",
+    "- \"reward\": dárek nebo odměna za službu mimo zápas („zjisti, kdo to byl, a koupím ti flašku rumu“, „za tu pomoc ti dám pětistovku“). Vyplň reward (bottle flaška, round runda nebo pivo, keg basa, money peníze a amount). „Litr“ = 1000 Kč.",
     "- \"training_rule\": pravidlo pro celý tým, že kdo nechodí nebo vynechá trénink, nehraje („kdo nebude chodit na tréninky, nebude hrát“).",
     "- \"laps_penalty\": trest kolečky nebo běháním na tréninku („budeš běhat kolečka“, „za omluvenku kolečka“). Vyplň target: self (jen tenhle hráč), absentees (každý, kdo se omluví nebo nepřijde na zápas), team (celá kabina).",
     "- \"last_chance\": poslední šance, při dalším průšvihu letí z klubu („máš poslední šanci, jedna blbost a letíš“).",
     "- \"squad_apology\": ať se omluví celé kabině nebo týmu („omluvíš se celé kabině“).",
     "- \"bet\": sázka o výkon v příštím zápase („dej gól a platím basu“, „když vyhrajeme, platím rundu“, „za hattrick ti dám 500 Kč“). Vyplň condition: goal (gól), hattrick, assist (přihrávka na gól), win (výhra), clean_sheet (čisté konto, nula). Vyplň reward: round (runda), keg (basa, sud), money (peníze, pak i amount v Kč).",
     "- \"none\": nic z toho. Sem patří:",
-    "  - podmínka, která není sázka o zápas („když budeš makat, budeš hrát“, „jestli ukážeš, můžeme se bavit“),",
+    "  - podmínka, která není sázka o zápas, dohoda o hubnutí ani odměna za službu („když budeš makat, budeš hrát“, „jestli ukážeš, můžeme se bavit“),",
     "  - váhání a neurčitost („možná“, „uvidíme“, „zkusím zařídit“, „jakmile to půjde“, „rotace“),",
     "  - otázka („200 Kč za zápas?“, „co bys chtěl?“), přemlouvání, ať přijde („pojď, potřebujeme tě“),",
     "  - lavička nebo nominace bez základu („mám tě jako zálohu“, „jedeš s námi na zápas“),",
@@ -217,7 +245,7 @@ function detectionPrompt(
     "Když si nejsi jistý, je to \"none\".",
     "",
     "Do quote dej DOSLOVA tu část SMS, ve které slib je (bez úprav), u none prázdný řetězec.",
-    "Vrať POUZE JSON: {\"kind\": \"start_next\"|\"start_soon\"|\"position\"|\"release_offer\"|\"bonus\"|\"wage\"|\"invite_pub\"|\"invite_talk\"|\"bet\"|\"fine\"|\"training_rule\"|\"laps_penalty\"|\"last_chance\"|\"squad_apology\"|\"none\", \"quote\": \"...\", \"position\": \"GK\"|\"DEF\"|\"MID\"|\"FWD\"|null, \"amount\": číslo|null, \"percent\": číslo|null, \"condition\": \"goal\"|\"hattrick\"|\"assist\"|\"win\"|\"clean_sheet\"|null, \"reward\": \"round\"|\"keg\"|\"money\"|null, \"target\": \"self\"|\"absentees\"|\"team\"|null}",
+    "Vrať POUZE JSON: {\"kind\": \"start_next\"|\"start_soon\"|\"position\"|\"release_offer\"|\"bonus\"|\"wage\"|\"invite_pub\"|\"invite_talk\"|\"bet\"|\"fine\"|\"training_rule\"|\"laps_penalty\"|\"last_chance\"|\"squad_apology\"|\"weight_target\"|\"reward\"|\"none\", \"quote\": \"...\", \"position\": \"GK\"|\"DEF\"|\"MID\"|\"FWD\"|null, \"amount\": číslo|null, \"percent\": číslo|null, \"condition\": \"goal\"|\"hattrick\"|\"assist\"|\"win\"|\"clean_sheet\"|null, \"reward\": \"round\"|\"keg\"|\"money\"|\"bottle\"|\"none\"|null, \"target\": \"self\"|\"absentees\"|\"team\"|null, \"kg\": číslo|null, \"days\": číslo|null, \"forfeit\": true|false|null}",
   ].filter(Boolean).join("\n");
 }
 
@@ -273,7 +301,7 @@ export function quoteHoldsUp(quote: unknown, coachMessage: string, kind: Commitm
   if (typeof quote !== "string" || quote.trim().length < 3) return false;
   const q = plain(quote);
   // Pravidlo a trest bývají podmínkou („kdo nechodí, nehraje“, „jestli ještě něco provedeš, letíš“).
-  const bet = kind === "bet" || (RULE_KINDS as readonly string[]).includes(kind);
+  const bet = kind === "bet" || (RULE_KINDS as readonly string[]).includes(kind) || (REWARD_KINDS as readonly string[]).includes(kind);
   const invite = kind === "invite_pub" || kind === "invite_talk";
   if (!q || !plain(coachMessage).includes(q) || (!bet && CONDITIONAL_RE.test(q))) return false;
   // Věta (nebo věty), přes kterou citace vede. Citace může přesahovat do další věty.
@@ -291,7 +319,10 @@ export function quoteHoldsUp(quote: unknown, coachMessage: string, kind: Commitm
 
 /** Odpověď modelu → slib, nebo null. Kontroluje meze, ať model nenadiktuje nesmysl. */
 export function parseDetection(
-  raw: { kind?: unknown; quote?: unknown; position?: unknown; amount?: unknown; percent?: unknown; condition?: unknown; reward?: unknown; target?: unknown } | null,
+  raw: {
+    kind?: unknown; quote?: unknown; position?: unknown; amount?: unknown; percent?: unknown; condition?: unknown; reward?: unknown; target?: unknown;
+    kg?: unknown; days?: unknown; forfeit?: unknown;
+  } | null,
   playerPosition: string,
   coachMessage?: string,
 ): DetectedCommitment | null {
@@ -322,6 +353,14 @@ export function parseDetection(
     if (!Number.isFinite(amount) || amount < 100 || amount > 20_000) return null;
     return { kind, amount };
   }
+  if (kind === "weight_target") {
+    const w = parseWeightTarget(raw);
+    return w ? { kind, kg: w.kg ?? null, days: w.days, forfeit: w.forfeit, rewardType: w.reward, ...(w.amount ? { amount: w.amount } : {}) } : null;
+  }
+  if (kind === "reward") {
+    const w = parseReward(raw);
+    return w ? { kind, rewardType: w.reward, ...(w.amount ? { amount: w.amount } : {}) } : null;
+  }
   if (kind === "laps_penalty") {
     return { kind, target: (LAPS_TARGETS as readonly unknown[]).includes(raw.target) ? raw.target as LapsTarget : "self" };
   }
@@ -343,7 +382,10 @@ export async function detectCommitment(
 ): Promise<DetectedCommitment | null> {
   if (!COMMITMENT_HINT_RE.test(o.coachMessage)) return null;
   const chat = await import("./ai-player-chat");
-  const parsed = await chat.askModelJson<{ kind?: unknown; quote?: unknown; position?: unknown; amount?: unknown; percent?: unknown; condition?: unknown; reward?: unknown; target?: unknown }>(env, detectionPrompt(o, chat), 200);
+  const parsed = await chat.askModelJson<{
+    kind?: unknown; quote?: unknown; position?: unknown; amount?: unknown; percent?: unknown; condition?: unknown; reward?: unknown; target?: unknown;
+    kg?: unknown; days?: unknown; forfeit?: unknown;
+  }>(env, detectionPrompt(o, chat), 220);
   return parseDetection(parsed, o.playerPosition, o.coachMessage);
 }
 
@@ -381,7 +423,24 @@ export async function recordCommitment(
     ...(o.detected.target ? { target: o.detected.target } : {}),
     ...(o.detected.kind === "laps_penalty" && !isSquadRule(o.detected.kind, o.detected.target) ? { playerIds: [o.playerId] } : {}),
   };
-  const dueAt = new Date(now.getTime() + DUE_DAYS[o.detected.kind] * DAY_MS).toISOString();
+  let dueAt = new Date(now.getTime() + DUE_DAYS[o.detected.kind] * DAY_MS).toISOString();
+  if (o.detected.rewardType) details.rewardType = o.detected.rewardType;
+  if (o.detected.kind === "weight_target") {
+    // Cíl podle skutečné váhy hráče; bez váhy, nebo když už je pod cílem, dohoda nedává smysl.
+    const { loadWeight } = await import("./coach-rewards");
+    const { weight, fit } = await loadWeight(db, o.playerId);
+    const deal = weightDealDetails({ reward: o.detected.rewardType, ...(o.detected.kg ? { kg: o.detected.kg } : {}), ...(o.detected.forfeit ? { forfeit: true } : {}) }, weight, fit);
+    if (!deal) return "";
+    Object.assign(details, { kg: deal.kg, startWeight: deal.startWeight, targetWeight: deal.targetWeight, ...(deal.forfeit ? { forfeit: true } : {}) });
+    dueAt = new Date(now.getTime() + (o.detected.days ?? 14) * DAY_MS).toISOString();
+  }
+  if (o.detected.kind === "reward") {
+    // Odměna za pátrání po pachateli: platí, až hráč přinese jméno (úkol „poptej se“).
+    const task = await db.prepare(
+      "SELECT json_extract(details, '$.incidentId') AS incident_id FROM coach_commitments WHERE player_id = ? AND kind = 'task_inquiry' AND status = 'active' ORDER BY made_at DESC LIMIT 1",
+    ).bind(o.playerId).first<{ incident_id: string | null }>();
+    if (task?.incident_id) details.incidentId = task.incident_id;
+  }
   const stmts: D1PreparedStatement[] = [
     // Pravidlo celé kabiny je jedno na klub (druhé „kdo nechodí, nehraje“ jen posune lhůtu),
     // trest jednotlivce jeden na hráče.
@@ -398,6 +457,16 @@ export async function recordCommitment(
 
   if (o.detected.kind === "invite_pub" || o.detected.kind === "invite_talk") {
     // Pozvání bez poznámky: jestli přijde, řekne hráč sám v odpovědi (accepts_invite).
+  } else if (o.detected.kind === "weight_target") {
+    stmts.push(db.prepare(
+      `INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, metadata, sent_at, read)
+       VALUES (?, ?, 'system', 'Systém', ?, ?, ?, 1)`,
+    ).bind(crypto.randomUUID(), o.convId,
+      weightDealNote(o.playerFirstName, { ...details, reward: details.rewardType }, dueAt, o.detected.days ?? 14),
+      JSON.stringify({ type: "coach_commitment_note", commitmentId: id }),
+      new Date(now.getTime() + 1000).toISOString()));
+  } else if (o.detected.kind === "reward" && !details.incidentId) {
+    // Odměna bez podmínky: tlačítko „Vyplatit“ přidá markRewardEarned po zápisu.
   } else if (o.detected.kind !== "bonus" && o.detected.kind !== "wage" && o.detected.kind !== "fine") {
     // Manažer vidí, co si hra ze zprávy zapsala: jinak by se o slibu dozvěděl až z výčitky.
     const rule = (RULE_KINDS as readonly string[]).includes(o.detected.kind);
@@ -435,6 +504,13 @@ export async function recordCommitment(
   ).bind(id, o.clubTeamId, o.playerId, o.convId, o.detected.kind, nowIso, dueAt, quoteOf(o.coachMessage), JSON.stringify(details)));
   await db.batch(stmts);
   logger.info({ module: M, teamId: o.clubTeamId }, `slib ${o.detected.kind} hráči ${o.playerId}`);
+  // Odměna bez podmínky je splatná hned: tlačítko jako u prémie.
+  if (o.detected.kind === "reward" && !details.incidentId) {
+    await markRewardEarned(db, {
+      id, team_id: o.clubTeamId, player_id: o.playerId, kind: "reward", conversation_id: o.convId,
+      first_name: o.playerFirstName, last_name: "", nickname: null, avatar: null, details: JSON.stringify({ ...details, reward: details.rewardType }),
+    }, now);
+  }
   return id;
 }
 
@@ -481,7 +557,8 @@ export async function handleCoachMessageForCommitment(
     if (!detected) return null;
     // Trest a pokyn jednotlivci jen hráči z vlastního kádru (áčko nebo U21): hráč na hostování
     // jinde ani bývalý hráč kolečka ani poslední šanci od cizího trenéra nedostane.
-    if ((RULE_KINDS as readonly string[]).includes(detected.kind) && !isSquadRule(detected.kind, detected.target)) {
+    if (((RULE_KINDS as readonly string[]).includes(detected.kind) && !isSquadRule(detected.kind, detected.target))
+      || (REWARD_KINDS as readonly string[]).includes(detected.kind)) {
       const { ownSquadTeamId } = await import("./player-reach");
       if (!(await ownSquadTeamId(db, o.playerId, p.club_id ?? o.teamId))) return null;
     }
@@ -597,6 +674,9 @@ async function deliverInquiry(db: D1Database, r: SettleRow): Promise<void> {
   const pool = lead
     ? INQUIRY_HINT_SMS.map((t) => t.replace("{name}", `${lead.first_name} ${lead.last_name}`))
     : INQUIRY_NOTHING_SMS;
+  // Odměna za pátrání (coach-rewards.ts) platí, jen když hráč jméno opravdu přinesl.
+  await db.prepare("UPDATE coach_commitments SET details = json_set(COALESCE(details, '{}'), '$.lead', ?) WHERE id = ?")
+    .bind(lead ? 1 : 0, r.id).run().catch((e) => logger.warn({ module: M }, `výsledek pátrání ${r.id}`, e));
   await sendPlayerTemplateSMS(db, r.team_id, { id: r.player_id, firstName: r.first_name, lastName: r.last_name, nickname: r.nickname, avatar: r.avatar },
     pool, { seed: r.id, metadata: { type: "commitment", kind: r.kind } })
     .catch((e) => logger.warn({ module: M }, `zpráva po poptávání ${r.id}`, e));
@@ -736,6 +816,8 @@ const KEPT_SMS: Record<CommitmentKind, readonly string[]> = {
   laps_penalty: [],
   last_chance: [],
   squad_apology: [],
+  weight_target: REWARD_KEPT_SMS,
+  reward: REWARD_KEPT_SMS,
   fine: [
     "No jo, trenére. Zasloužil jsem si to.",
     "Dobře, pokutu beru. Ale radost z toho nemám.",
@@ -775,6 +857,8 @@ const BROKEN_SMS: Record<CommitmentKind, readonly string[]> = {
   laps_penalty: [],
   last_chance: [],
   squad_apology: [],
+  weight_target: REWARD_BROKEN_SMS,
+  reward: REWARD_BROKEN_SMS,
   bet: [
     "Trenére, sázka platila a pořád nic. Tak tolik k vašemu slovu.",
     "Pořád čekám, až tu sázku zaplatíte, trenére. Kluci se mi smějou.",
@@ -847,6 +931,9 @@ const EFFECTS: Record<CommitmentKind, { kept: [number, number]; broken: [number,
   laps_penalty: { kept: [0, 0], broken: [0, 0] },
   last_chance: { kept: [0, 0], broken: [0, 0] },
   squad_apology: { kept: [0, 0], broken: [0, 0] },
+  // Odměna za splněnou dohodu jako sázka (bet), odměna za službu o stupeň menší.
+  weight_target: { kept: [5, 4], broken: [-8, -5] },
+  reward: { kept: [4, 3], broken: [-6, -4] },
 };
 
 interface SettleRow {
@@ -907,7 +994,7 @@ async function resolveCommitment(
   }
 
   let [relation, morale] = EFFECTS[r.kind][status];
-  if (status === "kept" && (r.kind === "bonus" || r.kind === "wage" || r.kind === "bet")) {
+  if (status === "kept" && (r.kind === "bonus" || r.kind === "wage" || r.kind === "bet" || r.kind === "weight_target" || r.kind === "reward")) {
     // Prémie pod týdenní odměnu potěší, ale vztah nezmění; peníze zlepší vztah nejvýš jednou
     // za 14 dní. Jinak by šel vztah koupit po stokorunách.
     const d = detailsOf(r.details);
@@ -915,7 +1002,7 @@ async function resolveCommitment(
       .catch((e) => { logger.warn({ module: M }, "odměna hráče u prémie", e); return null; });
     const recentMoney = await db.prepare(
       `SELECT 1 FROM coach_commitments WHERE player_id = ? AND id != ? AND status = 'kept'
-         AND kind IN ('bonus', 'wage', 'bet') AND resolved_at > ? AND json_extract(details, '$.effect') = 1 LIMIT 1`,
+         AND kind IN ('bonus', 'wage', 'bet', 'weight_target', 'reward') AND resolved_at > ? AND json_extract(details, '$.effect') = 1 LIMIT 1`,
     ).bind(r.player_id, r.id, new Date(now.getTime() - MONEY_EFFECT_COOLDOWN_DAYS * DAY_MS).toISOString()).first()
       .catch((e) => { logger.warn({ module: M }, "nedávné peníze od trenéra", e); return null; });
     if (recentMoney || (r.kind === "bonus" && (d.amount ?? 0) < (wage?.weekly_wage ?? 0))) [relation, morale] = [0, 1];
@@ -993,6 +1080,13 @@ export async function settleCoachCommitments(db: D1Database, now: Date = new Dat
       if (r.player_club_id !== r.team_id && loanedAway !== r.team_id) {
         await resolveCommitment(db, r, r.kind === "release_offer" ? "kept" : "expired", now);
         closed++;
+        continue;
+      }
+      if (r.kind === "weight_target" || r.kind === "reward") {
+        const { settleReward } = await import("./coach-rewards");
+        const outcome = await settleReward(db, env, r as Parameters<typeof settleReward>[2], now);
+        if (outcome === "earned") await markRewardEarned(db, { ...r, kind: r.kind }, now);
+        else if (outcome === "broken" || outcome === "expired") { await resolveCommitment(db, r, outcome, now); closed++; }
         continue;
       }
       if (r.kind === "start_next" || r.kind === "start_soon" || r.kind === "position") {
@@ -1169,7 +1263,8 @@ export async function fulfilMoneyCommitment(
     .catch((e) => { logger.warn({ module: M }, "slib k vyplacení", e); return null; });
   const club = await db.prepare("SELECT COALESCE(parent_team_id, id) AS id FROM teams WHERE id = ?").bind(o.teamId).first<{ id: string }>()
     .catch((e) => { logger.warn({ module: M }, "klub u vyplacení", e); return null; });
-  if (!r || r.team_id !== (club?.id ?? o.teamId) || (r.kind !== "bonus" && r.kind !== "wage" && r.kind !== "bet" && r.kind !== "fine")) {
+  if (!r || r.team_id !== (club?.id ?? o.teamId)
+    || (r.kind !== "bonus" && r.kind !== "wage" && r.kind !== "bet" && r.kind !== "fine" && r.kind !== "weight_target" && r.kind !== "reward")) {
     return { ok: false, error: "Slib nenalezen.", status: 404 };
   }
   if (r.status !== "active") return { ok: false, error: r.status === "kept" ? "Už je to vyplacené." : "Tenhle slib už neplatí.", status: 409 };
@@ -1205,6 +1300,17 @@ export async function fulfilMoneyCommitment(
           d.squad ? "Sázka s kabinou" : `Sázka s hráčem: ${name}`, gameDate, r.player_id);
       }
       return `Sázka zaplacena (${price.toLocaleString("cs-CZ")} Kč)`;
+    };
+  } else if (r.kind === "weight_target" || r.kind === "reward") {
+    if (!d.won) return { ok: false, error: r.kind === "weight_target" ? "Dohoda ještě není splněná." : "Odměnu si ještě nezasloužil.", status: 409 };
+    const reward = { reward: d.rewardType, amount: d.amount };
+    const price = rewardPrice(reward);
+    if ((r.budget ?? 0) < price) return { ok: false, error: `Na ${price.toLocaleString("cs-CZ")} Kč v kase nemáš.`, status: 400 };
+    move = async () => {
+      if (price > 0) {
+        await recordTransaction(db, r.team_id, d.rewardType === "money" ? "player_bonus" : "manager_social", -price, `Odměna: ${name}`, gameDate, r.player_id);
+      }
+      return `Odměna předána (${rewardWhat(reward)}, ${price.toLocaleString("cs-CZ")} Kč)`;
     };
   } else if (r.kind === "bonus") {
     const amount = d.amount ?? 0;
@@ -1277,7 +1383,7 @@ export async function cancelCommitment(
   if (!r || r.team_id !== (club?.id ?? o.teamId)) return { ok: false, error: "Slib nenalezen.", status: 404 };
   if (r.status !== "active") return { ok: false, error: "Tenhle slib už neplatí.", status: 409 };
   // Vyhraná sázka už slibem byla. Pozvání se neruší, odpovídá na něj hráč.
-  if ((r.kind === "bet" && detailsOf(r.details).won) || r.kind === "invite_pub" || r.kind === "invite_talk") {
+  if (((r.kind === "bet" || r.kind === "weight_target" || r.kind === "reward") && detailsOf(r.details).won) || r.kind === "invite_pub" || r.kind === "invite_talk") {
     return { ok: false, error: "Tohle zrušit nejde.", status: 409 };
   }
   if (now.getTime() - new Date(r.made_at).getTime() > CANCEL_WINDOW_MS) {
@@ -1379,6 +1485,9 @@ export function commitmentPromptLines(list: CommitmentMemory[] | undefined): str
         : `- Máte s trenérem sázku: ${text}. Těšíš se na to.`;
     }
     if ((RULE_KINDS as readonly string[]).includes(c.kind)) return rulePromptLine(c.kind as RuleKind, c.status, c.details, c.dueAt ?? c.madeAt);
+    if ((REWARD_KINDS as readonly string[]).includes(c.kind)) {
+      return rewardPromptLine(c.kind as RewardKind, c.status, { ...c.details, reward: c.details.rewardType }, c.dueAt ?? c.madeAt);
+    }
     if (c.kind === "task_inquiry") {
       return c.status === "active" ? "- Trenér tě požádal, ať se poptáš kvůli incidentu v klubu. Kývl jsi na to a ozveš se mu, až něco zjistíš (zítra)." : "";
     }
