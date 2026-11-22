@@ -309,8 +309,8 @@ export default function MatchReplayPage() {
       return; // No cleanup — timeouts are fire-and-forget
     }
 
-    // Čekání patří právě ukázané události (idx - 1); ve 3D se u události bez scény nečeká.
-    const t = setTimeout(() => { setIdx((i) => i + 1); }, view3d && scened && idx > 0 && !scened[idx - 1] ? 0 : SPEED_MS[speed]);
+    // Čekání patří právě ukázané události (idx - 1); ve 3D se u události bez scény nečeká, ani po výkopu.
+    const t = setTimeout(() => { setIdx((i) => i + 1); }, view3d && scened && (idx === 0 || !scened[idx - 1]) ? 0 : SPEED_MS[speed]);
     return () => clearTimeout(t);
   }, [match, idx, speed, finished, htPause, htDone, tick, markSeen, view3d, scened, paused]);
 

@@ -34,8 +34,17 @@ const BALL_RADIUS = 0.28;
 const CAMERA = { x: HALF_W + 26, y: 13, fov: 26, pan: 9 };
 /** Kam kamera míří napříč hřištěm: tak, aby bližší postranní čára ležela u spodního okraje záběru. */
 const CAMERA_AIM_X = -4.6;
-/** Opakovaný záběr gólu začne chvíli po gólu, trvá pár vteřin a běží zpomaleně z nízké kamery u protější lajny. */
-const REPLAY = { after: 1.8, seconds: 2.8 };
+/**
+ * Opakovaný záběr gólu přijde až po oslavě, jako v televizi: zpomalené zakončení z nízké kamery u protější
+ * lajny, občas z kamery rozhodčího. Skončí s krokem gólu ve 2D záznamu (6 s), pak jde další akce.
+ */
+const REPLAY = { after: 3.4, seconds: 2.6 };
+/** Kamera rozhodčího u zranění: kdy ve scéně začne a skončí (s). */
+const REF_LIVE = { from: 1.4, to: 3.8 };
+/** Hlavní kamera nekreslí nic za bližší postranní čárou (stojí tam, kde má stadion hlavní tribunu); ostatní kamery kreslí vše. */
+const MAIN_CLIP = [new THREE.Plane(new THREE.Vector3(-1, 0, 0), HALF_W + 1.2)];
+const NO_CLIP: THREE.Plane[] = [];
+const CAM_TEXT = { main: "", replay: "↺ OPAKOVANÝ ZÁBĚR", ref: "● REF CAM", refReplay: "● REF CAM · ↺ OPAKOVANÝ ZÁBĚR" };
 
 function keeperShirts(home: ReplayKit, away: ReplayKit): { home: string; away: string } {
   const taken = [home.shirt, away.shirt, REFEREE_KIT.shirt].map((c) => new THREE.Color(c));
@@ -90,14 +99,14 @@ const eTmp = new THREE.Euler(), cTmp = new THREE.Color();
 const HIDDEN = new THREE.Matrix4().makeScale(0, 0, 0);
 
 /** Hráči, rozhodčí a míč ve scéně stadionu; kreslí to, co právě hraje `step`, a řídí kameru. */
-export function ReplayScene({ replay, kits, snow, step, replayBadge }: {
+export function ReplayScene({ replay, kits, snow, step, camBadge }: {
   replay: Replay;
   kits: { home: ReplayKit; away: ReplayKit };
   /** Na sněhu se hraje s oranžovým míčem. */
   snow: boolean;
   step: { current: ReplayStep };
-  /** Nápis „opakovaný záběr“; scéna ho ukazuje jen během opakování gólu. */
-  replayBadge: RefObject<HTMLDivElement | null>;
+  /** Rámeček s nápisem kamery (opakovaný záběr, REF CAM); scéna ho ukazuje, jen když nekreslí hlavní kamera. */
+  camBadge: RefObject<HTMLDivElement | null>;
 }) {
   const count = replay.figures.length;
   const frame = useMemo<Frame>(() => ({ figures: replay.figures.map(() => ({ visible: false, x: 0, y: 0, z: 0, pose: null })), ballX: 0, ballY: 0, ballZ: 0, cuts: 0 }), [replay]);
@@ -121,14 +130,10 @@ export function ReplayScene({ replay, kits, snow, step, replayBadge }: {
   const camera = useThree((s) => s.camera) as THREE.PerspectiveCamera;
   const gl = useThree((s) => s.gl);
   /** Co se kreslilo minule: podle toho se pozná střih (hráči pak neběží, stojí rovnou na místě). */
-  const last = useRef<{ clip: Clip | null; t: number; cuts: number; replaying: boolean }>({ clip: null, t: 0, cuts: 0, replaying: false });
+  const last = useRef<{ clip: Clip | null; t: number; cuts: number; view: string }>({ clip: null, t: 0, cuts: 0, view: "main" });
   const look = useRef(new THREE.Vector3());
 
-  // Kamera stojí tam, kde má stadion hlavní tribunu: všechno za bližší postranní čárou se proto nekreslí.
-  useEffect(() => {
-    gl.clippingPlanes = [new THREE.Plane(new THREE.Vector3(-1, 0, 0), HALF_W + 1.2)];
-    return () => { gl.clippingPlanes = []; };
-  }, [gl]);
+  useEffect(() => () => { gl.clippingPlanes = NO_CLIP; }, [gl]);
 
   const paint = (clip: Clip) => {
     PARTS.forEach((part, p) => {
@@ -153,12 +158,21 @@ export function ReplayScene({ replay, kits, snow, step, replayBadge }: {
     const t = replaying && again ? THREE.MathUtils.lerp(again.from, again.to, (elapsed - REPLAY.after) / REPLAY.seconds)
       : sceneTime(scene, attack, again && elapsed >= REPLAY.after ? elapsed - REPLAY.seconds : elapsed);
     sampleClip(scene.clip, t, frame);
-    if (replayBadge.current) replayBadge.current.style.display = replaying ? "" : "none";
+    // Kamera rozhodčího: u některých gólů místo opakovaného záběru z lajny, u některých zranění živě uprostřed scény.
+    const refLive = !attack && scene.refCam && !again && elapsed > REF_LIVE.from && elapsed < REF_LIVE.to;
+    const view = replaying ? (scene.refCam ? "refReplay" : "replay") : refLive ? "ref" : "main";
+    const fromReferee = view === "ref" || view === "refReplay";
+    const badge = camBadge.current;
+    if (badge && badge.dataset.cam !== view) {
+      badge.dataset.cam = view;
+      badge.style.display = view === "main" ? "none" : "";
+      badge.firstElementChild!.textContent = CAM_TEXT[view];
+    }
     const dt = Math.min(delta, 0.1);
-    // Střih: jiný klip, střih uvnitř klipu, skok v čase, začátek a konec opakovaného záběru.
-    const cut = last.current.clip !== scene.clip || last.current.cuts !== frame.cuts || last.current.replaying !== replaying || t < last.current.t || t - last.current.t > 0.5;
+    // Střih: jiný klip, střih uvnitř klipu, skok v čase, přepnutí kamery.
+    const cut = last.current.clip !== scene.clip || last.current.cuts !== frame.cuts || last.current.view !== view || t < last.current.t || t - last.current.t > 0.5;
     if (last.current.clip !== scene.clip) paint(scene.clip);
-    last.current = { clip: scene.clip, t, cuts: frame.cuts, replaying };
+    last.current = { clip: scene.clip, t, cuts: frame.cuts, view };
     const now = performance.now() / 1000;
 
     frame.figures.forEach((f, i) => {
@@ -185,7 +199,9 @@ export function ReplayScene({ replay, kits, snow, step, replayBadge }: {
     frame.figures.forEach((f, i) => {
       const fig = replay.figures[i];
       const s = states[i];
-      if (f.visible) {
+      // Z vlastní kamery rozhodčí sám vidět není.
+      const visible = f.visible && !(fromReferee && i === replay.referee);
+      if (visible) {
         const scale = ((fig.player.height ?? 178) / 178) * FIGURE_SCALE;
         // Jak moc hráč běží (0 stojí, 1 sprint): podle toho se předklání, zvedá kolena a pracuje rukama.
         const run = Math.min(1, s.speed / 6);
@@ -228,7 +244,7 @@ export function ReplayScene({ replay, kits, snow, step, replayBadge }: {
       PARTS.forEach((part, p) => {
         const mesh = meshes.current[p];
         if (!mesh) return;
-        const hidden = !f.visible || (part.id === "hair" && !fig.player.hairColor);
+        const hidden = !visible || (part.id === "hair" && !fig.player.hairColor);
         for (let k = 0; k < perFigure(part); k++) {
           if (hidden) mesh.setMatrixAt(i * perFigure(part) + k, HIDDEN);
           else {
@@ -263,7 +279,14 @@ export function ReplayScene({ replay, kits, snow, step, replayBadge }: {
       ring.scale.setScalar(1 + 0.12 * Math.sin(now * 7));
     });
 
-    if (replaying && again) {
+    gl.clippingPlanes = view === "main" ? MAIN_CLIP : NO_CLIP;
+    if (fromReferee) {
+      // Kamera na hrudi rozhodčího: širokoúhlá, míří na míč (u zranění na hráče) a při běhu se pohupuje.
+      const r = states[replay.referee], about = again ? undefined : scene.focus[0];
+      camera.position.set(r.x, PITCH_SURFACE_Y + 1.9 + Math.sin(now * 9) * 0.03 * Math.min(1, r.speed), r.z);
+      camera.lookAt(about === undefined ? vLook.set(frame.ballX, 0.8, frame.ballZ) : vLook.set(states[about].x, 0.4, states[about].z));
+      camera.fov = 62;
+    } else if (view === "replay" && again) {
       // Opakovaný záběr: nízká kamera u protější lajny, šikmo na bránu.
       const toField = -Math.sign(again.goalZ);
       camera.position.set(-(HALF_W - 1), 2.6, again.goalZ + toField * 12);

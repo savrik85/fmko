@@ -55,6 +55,8 @@ export interface Scene {
   result: ShotResult | null;
   /** Gól: úsek klipu se zakončením, který se zopakuje z jiné kamery, a branka, do které padl. */
   replay: { from: number; to: number; goalZ: number } | null;
+  /** Část scény ukáže kamera rozhodčího: u gólu opakovaný záběr, u zranění chvíli uprostřed scény. */
+  refCam: boolean;
 }
 type Window = Omit<Scene, "clip">;
 
@@ -466,6 +468,8 @@ export class Replay {
         this.ids.set(`${side}:${n + (side === "home" ? 1 : 101)}`, figure);
         roster[side].push({ figure, base: bases[n], role: bases[n].role });
       });
+      // Tým bez brankáře v sestavě má v bráně prvního hráče (engine tam taky někoho postaví).
+      if (roster[side].length && !roster[side].some((x) => x.role === "GK")) roster[side][0] = { ...roster[side][0], role: "GK" };
     }
     this.referee = this.figures.push({ team: "referee", player: { id: "referee", name: "Rozhodčí", position: "MID", skinColor: "#E0B48C", hairColor: "#3B2F2F" } }) - 1;
 
@@ -545,17 +549,18 @@ export class Replay {
     const fixed = new Map<number, Point>([[this.referee, { x: -4, z: -fwd * 4 }]]);
     front.slice(0, 2).forEach((f, n) => fixed.set(f, { x: n * 2.4 - 0.5, z: -fwd * 0.8 }));
     if (front[2] !== undefined) fixed.set(front[2], { x: 3, z: -fwd * 9 });
-    st.layout({ x: 0, z: 0 }, (slot, sd) => uvToWorld(sd, Math.min(slot.base.u * 0.8, 0.42), slot.base.v), fixed, [{ x: 0, z: 0, r: 6 }, { x: 3, z: -fwd * 9, r: 3 }]);
+    st.layout({ x: 0, z: 0 }, (slot, sd) => uvToWorld(sd, Math.min(slot.base.u * 0.8, 0.42), slot.base.v), fixed, [{ x: 0, z: 0, r: 6 }, { x: 3, z: -fwd * 9, r: 3 }, { x: 8, z: fwd * 10, r: 2.6 }, { x: -7, z: fwd * 10, r: 2.6 }]);
     st.pose(this.referee, "armUp", 0.8, 0.4);
     st.wait(1.2);
     if (front[2] !== undefined) {
       st.pass(front[2], 0.8);
-      front.slice(0, 2).forEach((f, n) => st.go(f, { x: (n ? 7 : -6), z: fwd * 7 }, 1.8));
+      // Tým se rozbíhá ještě chvíli po konci výkopu, ať další akce nenaváže na stojící hráče.
+      front.slice(0, 2).forEach((f, n) => st.go(f, { x: (n ? 8 : -7), z: fwd * 10 }, 2.6));
       st.wait(0.8);
-      st.dribble(front[2], { x: 4, z: -fwd * 5 }, 1);
+      st.dribble(front[2], { x: 5, z: -fwd * 3 }, 1.8);
     }
-    st.t = 3;
-    const scene: Scene = { clip: st.finish(), start: 0, split: 0, end: 3, focus: [], card: null, result: null, replay: null };
+    st.t = 3.8;
+    const scene: Scene = { clip: st.finish(), start: 0, split: 0, end: 3.8, focus: [], card: null, result: null, replay: null, refCam: false };
     this.kickoffs.set(index, scene);
     return scene;
   }
@@ -602,7 +607,7 @@ export class Replay {
       });
       st.wait(7.5);
     }
-    this.closing = { clip: st.finish(), start: 0, split: 0, end: st.t, focus: [], card: null, result: null, replay: null };
+    this.closing = { clip: st.finish(), start: 0, split: 0, end: st.t, focus: [], card: null, result: null, replay: null, refCam: false };
     return this.closing;
   }
 
@@ -645,7 +650,11 @@ export class Replay {
     const e = events[head];
     const side = sideOf(e.teamId);
     const find = (...types: string[]) => rest.find((i) => types.includes(events[i].type));
-    const window = (i: number, start: number, w: Partial<Window> = {}) => windows.set(i, { start, split: start, end: st.t, focus: [], card: null, result: null, replay: null, ...w });
+    const window = (i: number, start: number, w: Partial<Window> = {}) => windows.set(i, { start, split: start, end: st.t, focus: [], card: null, result: null, replay: null, refCam: false, ...w });
+    // Kamera rozhodčího jen občas, párkrát za zápas: u zhruba třetiny gólů a poloviny zranění.
+    const refCam = (share: number) => seededRng(`${this.input.matchId}:${head}:refcam`)() < share;
+    /** Gól: po oslavě se zopakuje zakončení (od rozběhu ke střele po míč v síti). */
+    const goalShots = (split: number) => ({ replay: { from: split - 1.3, to: split + 0.5, goalZ: goalZ(side) }, refCam: refCam(0.34) });
     const finisher = find("goal", "chance");
     const result = finisher === undefined ? null : events[finisher].type === "goal" ? "goal" : chanceResult(events[finisher]);
 
@@ -658,7 +667,7 @@ export class Replay {
         const block = rest.find((i) => events[i].detail === "block");
         const split = this.openPlay(st, side, shooter, shotResult, e.source === "counter",
           assist === undefined ? null : this.onPitch(st, events[assist]), block === undefined ? null : this.onPitch(st, events[block]));
-        return window(head, 0, { split, focus: [shooter], result: shotResult, replay: e.type === "goal" ? { from: split - 1.6, to: split + 0.45, goalZ: goalZ(side) } : null });
+        return window(head, 0, { split, focus: [shooter], result: shotResult, ...(e.type === "goal" ? goalShots(split) : {}) });
       }
       case "corner":
       case "freekick": {
@@ -670,7 +679,7 @@ export class Replay {
         window(head, 0, { focus: [taker] });
         const start = st.t;
         const split = direct ? this.directKick(st, side, taker, result) : this.header(st, side, taker, header, result);
-        return window(finisher, start, { split, focus: [header], result, replay: result === "goal" ? { from: split - 1.6, to: split + 0.45, goalZ: goalZ(side) } : null });
+        return window(finisher, start, { split, focus: [header], result, ...(result === "goal" ? goalShots(split) : {}) });
       }
       case "penalty": {
         const kicker = this.onPitch(st, e);
@@ -681,7 +690,7 @@ export class Replay {
         const scored = result === "goal";
         const split = this.penaltyKick(st, side, kicker, result, scored ? ATTACK : 1.6, scored ? GOAL : DRAMA - 1.6, goalZ(side), false);
         // Zahozenou penaltu 2D záznam ukáže bez útočné fáze, celý kop se odehraje najednou.
-        return window(finisher, start, { split: scored ? split : start, focus: [kicker], result, replay: scored ? { from: split - 1.4, to: split + 0.45, goalZ: goalZ(side) } : null });
+        return window(finisher, start, { split: scored ? split : start, focus: [kicker], result, ...(scored ? goalShots(split) : {}) });
       }
       case "foul": {
         const fouler = this.onPitch(st, e);
@@ -706,7 +715,7 @@ export class Replay {
       case "injury": {
         const injured = this.onPitch(st, e);
         this.injury(st, side, injured);
-        window(head, 0, { focus: [injured] });
+        window(head, 0, { focus: [injured], refCam: refCam(0.5) });
         for (const i of rest.filter((n) => events[n].type === "substitution")) {
           const start = st.t;
           window(i, start, { focus: this.substitution(st, i) });
@@ -817,11 +826,12 @@ export class Replay {
     const gz = goalZ(side), fwd = attackSign(side), wing = st.rng() < 0.5 ? -1 : 1;
     const shotSpot = inFront(gz, wing * st.rng() * 5, 11 + st.rng() * 4);
     const celebration = { ...celebrationSpot(gz), r: 3.6 };
+    const refereeSpot = { ...toward(shotSpot, { x: -6, z: 0 }, 11), r: 2.4 };
     let marker: number | null;
     const helper = counter ? null : assister ?? st.pick(side, [shooter], ["MID", "FWD"]);
     if (helper === null) {
       const from = uvToWorld(side, 0.48, wing * 0.4);
-      this.open(st, from, side, [[shooter, from]], [{ ...shotSpot, r: 4.5 }, celebration]);
+      this.open(st, from, side, [[shooter, from]], [{ ...shotSpot, r: 4.5 }, celebration, refereeSpot]);
       // Jeden obránce se stihne postavit do rány, další dva dobíhají zezadu.
       const chasers = st.outfield(other(side), blocker === null ? [] : [blocker]).sort((a, b) => dist(st.pos(a), from) - dist(st.pos(b), from));
       marker = blocker ?? chasers.shift() ?? null;
@@ -833,7 +843,7 @@ export class Replay {
       st.wait(1.5);
     } else {
       const start = inView(inFront(gz, -wing * (7 + st.rng() * 5), 23 + st.rng() * 4)), runFrom = inFront(gz, wing * 4, 21);
-      this.open(st, start, side, [[helper, start], [shooter, runFrom]], [{ ...shotSpot, r: 4.5 }, { x: start.x, z: start.z + fwd * 5, r: 2.5 }, celebration]);
+      this.open(st, start, side, [[helper, start], [shooter, runFrom]], [{ ...shotSpot, r: 4.5 }, { x: start.x, z: start.z + fwd * 5, r: 2.5 }, celebration, refereeSpot]);
       marker = blocker ?? st.nearest(other(side), shotSpot);
       if (marker !== null) st.chase(marker, toward(shotSpot, { x: 0, z: gz }, 3), 2.6);
       st.dribble(helper, { x: start.x, z: start.z + fwd * 5 }, 1.4);
@@ -844,6 +854,7 @@ export class Replay {
       st.dribble(shooter, shotSpot, 0.4);
       st.wait(0.4);
     }
+    st.chase(this.referee, refereeSpot, 3, -3);
     return this.shoot(st, side, shooter, result, result === "goal" ? GOAL : CHANCE, gz, marker);
   }
 
