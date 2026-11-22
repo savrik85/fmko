@@ -1,7 +1,8 @@
+import { addressFormOf } from "./address-form";
 import { describe, expect, it } from "vitest";
 import {
   BROKEN_PLEDGE_SMS, COACH_REST_REASONS, MATCH_ATTEND_PLEDGE_TEXTS, MATCH_SKIP_PLEDGE_TEXTS, SKIP_PLEDGE_REASONS,
-  coachGrantsRest, excusedByCoach, isClearPledge, matchPledgeOverrides, parseAttendancePledge, pledgeNote, pledgeOutcome, pledgePromptLines, pledgedAttendProb,
+  coachGrantsRest, excusedByCoach, isClearPledge, matchPledgeOverrides, pickGroupLine, parseAttendancePledge, pledgeNote, pledgeOutcome, pledgePromptLines, pledgedAttendProb,
   resolveTrainingPledge, trainingPledgeIntent, trainingScheduleText, type TrainingPledge,
 } from "./attendance-pledge";
 import { simulateAttendance, trainingWeekdays } from "../season/training";
@@ -172,6 +173,33 @@ describe("kabina zápasu podle slibu", () => {
     expect([...out.skip.keys()]).toEqual(["a"]);
     expect(MATCH_SKIP_PLEDGE_TEXTS).toContain(out.skip.get("a"));
     expect([...out.attend]).toEqual(["b"]);
+  });
+});
+
+describe("kabina zápasu bez doslovných kopií (E2E 22. 11.)", () => {
+  it("šest omluvených slibem v nové kabině: každý jinou větou a bez tvaru oslovení", () => {
+    const life = JSON.stringify({ matchPledge: { intent: "skip", matchKey: "cal1", matchDay: "2026-11-22", at: "x", convId: "c", teamId: "club" } });
+    const out = matchPledgeOverrides(["a", "b", "c", "d", "e", "f"].map((id) => ({ id, life_context: life })), new Map(), "cal1", "club");
+    const texts = [...out.skip.values()];
+    expect(new Set(texts).size).toBe(6);
+    for (const t of texts) expect(addressFormOf(t), t).toBeNull();
+  });
+
+  it("věta k trenérovi drží tvar oslovení, neznámý tvar dostane jen větu bez tvaru", () => {
+    for (const pool of [MATCH_ATTEND_PLEDGE_TEXTS, MATCH_SKIP_PLEDGE_TEXTS]) {
+      expect(pool.filter((t) => addressFormOf(t) === null).length).toBeGreaterThanOrEqual(8);
+      expect(pool.some((t) => addressFormOf(t) === "ty")).toBe(true);
+      expect(pool.some((t) => addressFormOf(t) === "vy")).toBe(true);
+      for (const seed of ["a", "b", "c", "d", "e", "f", "g", "h"]) {
+        expect(addressFormOf(pickGroupLine([pool], [], seed, "ty"))).not.toBe("vy");
+        expect(addressFormOf(pickGroupLine([pool], [], seed, "vy"))).not.toBe("ty");
+        expect(addressFormOf(pickGroupLine([pool], [], seed, null))).toBeNull();
+      }
+    }
+  });
+
+  it("když je pool v kabině vyčerpaný, bere se z dalšího", () => {
+    expect(pickGroupLine([["Hlava třeští, ale přijdu."], ["Beru zpátky, budu tam."]], ["Hlava třeští, ale přijdu."], "s")).toBe("Beru zpátky, budu tam.");
   });
 });
 

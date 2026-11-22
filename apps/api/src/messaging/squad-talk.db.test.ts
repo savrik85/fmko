@@ -68,3 +68,26 @@ describe("přemlouvání omluvených", () => {
     expect(await persuadeAbsentees(db, { teamId: "tym", convId: "zapas", message: "Žádné omluvenky!", squad, rng: () => 0 })).toEqual([]);
   });
 });
+
+describe("přemluvení v jedné kabině píšou každý jinak (Jitona, E2E 22. 11.)", () => {
+  it("čtyři rozmluvené kocoviny: čtyři různé věty", async () => {
+    const ids = ["k1", "k2", "k3", "k4"];
+    await db.batch([
+      db.prepare("INSERT INTO conversations VALUES ('zapas2', 'tym', 'squad_group', '⚽ vs Hradčany')"),
+      db.prepare("INSERT INTO messages VALUES ('ann2', 'zapas2', 'user', 'tym', 'Trenér', '📋 Zítra hrajeme! Kdo může?', ?, datetime('now', '-2 hours'), 1)")
+        .bind(JSON.stringify({ type: "match_announce", calendarId: "cal-2" })),
+      ...ids.map((id) => db.prepare("INSERT INTO messages VALUES (?, 'zapas2', 'player', ?, ?, 'Hlava jak střep', ?, datetime('now', '-1 hour'), 0)")
+        .bind(`m-${id}`, id, id, JSON.stringify({ type: "attendance", response: "no", calendarId: "cal-2" }))),
+      db.prepare("INSERT INTO messages VALUES ('coach2', 'zapas2', 'user', 'tym', 'Trenér', 'Žádné omluvenky, chci tam všechny!', NULL, datetime('now'), 1)"),
+    ]);
+    const { findUpcomingMatchContext, getAbsentPlayersMap } = await import("../events/match-absences");
+    vi.mocked(findUpcomingMatchContext).mockResolvedValueOnce({ matchKey: "cal-2", isFriendly: false, scheduledAt: "2026-11-23T17:00:00Z", gameDate: "2026-11-22" } as never);
+    vi.mocked(getAbsentPlayersMap).mockResolvedValueOnce(new Map(ids.map((id) => [id, { reason: "Kocovina", category: "hangover", emoji: "🍺", smsText: "Hlava jak střep" }])) as never);
+    const persuaded = await persuadeAbsentees(db, { teamId: "tym", convId: "zapas2", message: "Žádné omluvenky, chci tam všechny!", squad: ids.map(hrac), rng: () => 0.1 });
+    expect(persuaded).toEqual(ids);
+    const said = (await db.prepare("SELECT body FROM messages WHERE conversation_id = 'zapas2' AND json_extract(metadata, '$.persuaded') = 1").all<{ body: string }>()).results.map((r) => r.body);
+    expect(said).toHaveLength(4);
+    expect(new Set(said).size).toBe(4);
+  });
+});
+

@@ -240,12 +240,15 @@ export async function processTeamDay(
                 .bind(crypto.randomUUID(), matchConvId, teamId, `📋 Zítra hrajeme proti ${opponentName}! Kdo může?`, JSON.stringify({ type: "match_announce", calendarId: tomorrowMatch.id }), 0)
                 .run().catch((e) => logger.warn({ module: "daily-tick" }, "match announce msg", e));
               let msgCount = 1;
+              // Věty, které v kabině už padly: dva hráči nenapíšou doslova totéž (E2E 22. 11.).
+              const usedLines = new Set<string>([...pledgeTexts.values(), ...dayBeforeAbsences.map((a) => a.smsText)]);
               for (const row of squadRows.results) {
                 const pid = row.id as string;
                 const available = !absentIds.has(pid);
                 const absence = available ? undefined : dayBeforeAbsences.find((a) => squadRows.results[a.playerIndex]?.id === pid);
                 const lc = (() => { try { return JSON.parse(row.life_context as string); } catch { return {}; } })();
-                const msg = generateAttendanceMessage(`${row.first_name} ${row.last_name}`, available, lc.condition ?? 100, absRng as any);
+                const ownText = pledgeTexts.has(pid) || !!absence;
+                const msg = generateAttendanceMessage(`${row.first_name} ${row.last_name}`, available, lc.condition ?? 100, absRng as any, ownText ? undefined : usedLines);
                 await env.DB.prepare(
                   "INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, metadata, sent_at) VALUES (?, ?, 'player', ?, ?, ?, ?, datetime('now', '+' || ? || ' seconds'))"
                 ).bind(crypto.randomUUID(), matchConvId, pid, msg.senderName,

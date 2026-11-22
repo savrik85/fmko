@@ -194,12 +194,16 @@ export function persuadeChance(category: string, p: Pick<PlayerSnapshot, "coachR
   return Math.max(0, Math.min(0.85, base + (p.coachRelationship - 50) / 200 + (p.discipline - 50) / 250));
 }
 
+/**
+ * Rozmyšlení podle druhu výmluvy. V jedné kabině se věta neopakuje (`pickGroupLine`): když jsou
+ * věty druhu vyčerpané, bere se obecné „přijdu“ z attendance-pledge.ts.
+ */
 const PERSUADED_SMS: Record<string, string[]> = {
-  absurd: ["Dobře, trenére, nějak to vyřeším a přijdu.", "Tak jo, beru zpátky. Budu tam."],
-  hangover: ["Hlava třeští, ale přijdu, trenére.", "Dobře, rozchodím to a dorazím."],
-  commute: ["Seženu nějaký odvoz, trenére, budu tam.", "Někdo mě hodí, přijdu."],
-  professional: ["Vyměnil jsem si šichtu, trenére. Přijdu.", "Domluvil jsem se v práci, budu tam."],
-  personal: ["Doma jsem to nějak ukecal, přijdu.", "Dobře, trenére, zařídím to a dorazím."],
+  absurd: ["Dobře, trenére, nějak to vyřeším a přijdu.", "Tak jo, beru zpátky. Budu tam.", "No jo, to byla blbost. Přijdu.", "Dobře, vymyslím to jinak a dorazím."],
+  hangover: ["Hlava třeští, ale přijdu, trenére.", "Dobře, rozchodím to a dorazím.", "Dám si sprchu a kafe, budu tam.", "Do zítřka to vyspím, přijdu."],
+  commute: ["Seženu nějaký odvoz, trenére, budu tam.", "Někdo mě hodí, přijdu.", "Pojedu s kluky, dorazím.", "Vezmu to na kole, budu tam."],
+  professional: ["Vyměnil jsem si šichtu, trenére. Přijdu.", "Domluvil jsem se v práci, budu tam.", "Šéf mě pustí, dorazím.", "Práci přehodím, přijdu."],
+  personal: ["Doma jsem to nějak ukecal, přijdu.", "Dobře, trenére, zařídím to a dorazím.", "Doma to vyřeším, budu tam.", "Přehodím to doma, přijdu."],
 };
 
 /**
@@ -245,15 +249,23 @@ export async function persuadeAbsentees(
   const now = o.now ?? new Date();
   const persuaded: string[] = [];
   const stmts: D1PreparedStatement[] = [];
+  // Co v kabině zápasu už kdo napsal: přemluvení nepíšou doslova totéž (Jitona, E2E 22. 11.).
+  const groupLines = ((await db.prepare(
+    "SELECT body FROM messages WHERE conversation_id = ? AND sender_type = 'player' AND TRIM(COALESCE(body, '')) != ''",
+  ).bind(o.convId).all<{ body: string }>()
+    .catch((e) => { logger.warn({ module: M }, "věty v kabině zápasu", e); return null; }))?.results ?? []).map((r) => r.body);
+  const { MATCH_ATTEND_PLEDGE_TEXTS, pickGroupLine } = await import("./attendance-pledge");
   for (const p of o.squad) {
     const a = settled.get(p.id);
     if (!a || !recorded.has(p.id) || rng() >= persuadeChance(a.category, p)) continue;
     persuaded.push(p.id);
     const pool = PERSUADED_SMS[a.category] ?? PERSUADED_SMS.personal;
+    const body = pickGroupLine([pool, MATCH_ATTEND_PLEDGE_TEXTS], groupLines, `${p.id}|${cal.cal}|${Math.floor(rng() * 1e9)}`);
+    groupLines.push(body);
     stmts.push(db.prepare(
       `INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, metadata, sent_at, read)
        VALUES (?, ?, 'player', ?, ?, ?, ?, ?, 0)`,
-    ).bind(crypto.randomUUID(), o.convId, p.id, `${p.firstName} ${p.lastName}`, pool[Math.floor(rng() * pool.length)],
+    ).bind(crypto.randomUUID(), o.convId, p.id, `${p.firstName} ${p.lastName}`, body,
       JSON.stringify({ type: "attendance", response: "yes", persuaded: 1, calendarId: cal.cal, timing: "persuaded" }),
       new Date(now.getTime() + (persuaded.length + 3) * 4000).toISOString()));
   }

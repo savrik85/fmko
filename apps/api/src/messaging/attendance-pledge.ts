@@ -23,6 +23,8 @@ import { applyCoachRelationDelta } from "../lib/coach-relation";
 import type { ChatEnv } from "./ai-player-chat";
 import type { PlayerSnapshot } from "./ai-player-scenarios";
 import { ownSquadTeamId } from "./player-reach";
+import { addressFormOf, loadCoachAddress, type CoachAddress } from "./address-form";
+import { pickFreshVariant, repeatsAny } from "./repetition";
 
 const M = "attendance-pledge";
 
@@ -139,7 +141,11 @@ export function excusedByCoach(raw: unknown, day: string, teamId?: string): bool
   return trainingPledgeIntent(raw, day, teamId) === "skip" && (raw as Partial<TrainingPledge>).coachGranted === true;
 }
 
-/** Odpověď hráče do kabiny zápasu, když trenérovi už v SMS řekl, že nemůže (≥ 8 variant). */
+/**
+ * Odpověď hráče do kabiny zápasu, když trenérovi už v SMS řekl, že nemůže. Aspoň 8 vět bez
+ * tvaru oslovení (jdou komukoli) a pár vět k trenérovi zvlášť s vykáním a s tykáním.
+ * V jedné kabině se věta neopakuje (`pickGroupLine`).
+ */
 export const MATCH_SKIP_PLEDGE_TEXTS: readonly string[] = [
   "Jak jsem psal trenérovi, tentokrát nemůžu.",
   "Já to trenérovi už říkal, na zápas nedorazím.",
@@ -149,9 +155,17 @@ export const MATCH_SKIP_PLEDGE_TEXTS: readonly string[] = [
   "Tentokrát beze mě, trenér o tom ví. Ať to klapne.",
   "Nemůžu, kluci. Trenérovi jsem se omluvil předem.",
   "Já vynechám, psal jsem to trenérovi. Snad to urvete.",
+  "Tentokrát to nedám, trenér už to ví.",
+  "Bohužel, na zápas to nestihnu. Psal jsem trenérovi.",
+  "Já to tentokrát musím pustit, trenérovi jsem se ozval.",
+  "Na zápas nedorazím, s trenérem jsme to probrali.",
+  "Trenére, jak jsem vám psal, nemůžu. Ať se daří.",
+  "Trenére, víte, že to tentokrát nejde. Držím palce.",
+  "Trenére, jak jsem ti psal, nemůžu. Ať se daří.",
+  "Trenére, víš, že to tentokrát nejde. Držím palce.",
 ];
 
-/** Odpověď do kabiny zápasu, když ho trenér v SMS přemluvil (≥ 8 variant). */
+/** Odpověď do kabiny zápasu, když ho trenér v SMS přemluvil. Stejně jako u „nemůžu“. */
 export const MATCH_ATTEND_PLEDGE_TEXTS: readonly string[] = [
   "Nakonec dorazím, domluvil jsem se s trenérem.",
   "Beru zpátky, budu tam.",
@@ -161,7 +175,35 @@ export const MATCH_ATTEND_PLEDGE_TEXTS: readonly string[] = [
   "Budu tam, slíbil jsem to trenérovi.",
   "Změna plánu, přijdu, kluci.",
   "Dorazím. S trenérem jsme to vyřešili.",
+  "Přehodnotil jsem to, budu tam.",
+  "Nakonec to klaplo, dorazím.",
+  "S trenérem jsme se domluvili, jdu hrát.",
+  "Tak nakonec jo, přijedu.",
+  "Trenére, přesvědčil jste mě, budu tam.",
+  "Trenére, máte pravdu, dorazím.",
+  "Trenére, přesvědčil jsi mě, budu tam.",
+  "Trenére, máš pravdu, dorazím.",
 ];
+
+/**
+ * Věta do kabiny zápasu, kterou tam ještě nikdo nenapsal (`groupLines`: věty všech hráčů
+ * v té kabině). Dřív se vybírala jen podle hráče a zápasu a čtyři přemluvení v kabině Jitony
+ * psali dvakrát doslova totéž (E2E 22. 11.). `pools` v pořadí přednosti: z dalšího se bere,
+ * až když v předchozím nezbývá nepoužitá věta. `address`: jak hráč trenérovi píše; neznámý =
+ * jen věty bez tvaru oslovení.
+ */
+export function pickGroupLine(
+  pools: ReadonlyArray<readonly string[]>, groupLines: readonly string[], seed: string, address?: CoachAddress | null,
+): string {
+  let fallback: readonly string[] = pools[0] ?? [];
+  for (const pool of pools) {
+    const fitting = address ? pool : pool.filter((v) => addressFormOf(v) === null);
+    if (fitting.length === 0) continue;
+    fallback = fitting;
+    if (fitting.some((v) => !repeatsAny(v, groupLines))) return pickFreshVariant(fitting, groupLines, seed, { address }).text;
+  }
+  return pickFreshVariant(fallback, groupLines, seed, { address }).text;
+}
 
 // ─── Odpověď modelu ─────────────────────────────────────────────────────────
 
@@ -301,7 +343,8 @@ export function matchPledgeOverrides(
   for (const row of squad) {
     const intent = matchPledgeIntent(lifeOf(row.life_context).matchPledge, matchKey, teamId);
     const drawn = lottery.get(row.id);
-    if (intent === "skip" && !drawn) skip.set(row.id, variantFor(MATCH_SKIP_PLEDGE_TEXTS, `${row.id}|${matchKey}`));
+    // Každý jinou větou (bez tvaru oslovení, kabina teprve vzniká a historii nikdo nenačítá).
+    if (intent === "skip" && !drawn) skip.set(row.id, pickGroupLine([MATCH_SKIP_PLEDGE_TEXTS], [...skip.values()], `${row.id}|${matchKey}`));
     else if (intent === "attend" && drawn && drawn.category !== "incident") attend.add(row.id);
   }
   return { skip, attend };
@@ -617,13 +660,6 @@ export async function recentCoachText(db: D1Database, convId: string, now: Date)
   return rows.results.map((r) => r.body ?? "").reverse().join(" ");
 }
 
-/** Index varianty podle semínka (stejné semínko, stejná věta). */
-export function variantFor(pool: readonly string[], seed: string): string {
-  let h = 0;
-  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
-  return pool[h % pool.length];
-}
-
 /**
  * Kabina zápasu už existuje (den před zápasem a v den zápasu): hráč v ní odpoví podle slibu.
  * Omluvenky se berou z poslední odpovědi hráče (`recordedExcuses`), takže „přijdu“ ho do zápasu
@@ -644,7 +680,14 @@ async function answerInMatchGroup(
   ).bind(conv.id, o.playerId).first<{ response: string | null }>();
   const wanted = o.pledge.intent === "attend" ? "yes" : "no";
   if (last?.response === wanted) return;
-  const body = variantFor(o.pledge.intent === "attend" ? MATCH_ATTEND_PLEDGE_TEXTS : MATCH_SKIP_PLEDGE_TEXTS, `${o.playerId}|${o.pledge.matchKey}`);
+  // Věta, kterou v téhle kabině ještě nikdo nenapsal, a k trenérovi v tvaru, jakým mu hráč píše.
+  const said = await db.prepare(
+    "SELECT body FROM messages WHERE conversation_id = ? AND sender_type = 'player' AND TRIM(COALESCE(body, '')) != '' ORDER BY julianday(sent_at), rowid",
+  ).bind(conv.id).all<{ body: string }>()
+    .catch((e) => { logger.warn({ module: M }, `věty v kabině zápasu ${conv.id}`, e); return null; });
+  const address = await loadCoachAddress(db, { playerId: o.playerId, convId: o.pledge.convId });
+  const body = pickGroupLine([o.pledge.intent === "attend" ? MATCH_ATTEND_PLEDGE_TEXTS : MATCH_SKIP_PLEDGE_TEXTS],
+    (said?.results ?? []).map((r) => r.body), `${o.playerId}|${o.pledge.matchKey}`, address);
   await db.batch([
     db.prepare(
       `INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, metadata, sent_at, read)

@@ -8845,12 +8845,14 @@ gameRouter.post("/admin/leagues/:leagueId/trigger-day-before", async (c) => {
       .catch((e) => logger.warn({ module: "game" }, "trigger-day-before announce", e));
 
     let msgCount = 1;
+    // Věty, které v kabině už padly: dva hráči nenapíšou doslova totéž (jako season/team-day.ts).
+    const usedLines = new Set<string>(dayBeforeAbsences.map((a) => a.smsText));
     for (const row of squadRows.results) {
       const pid = row.id as string;
       const absence = dayBeforeAbsences.find((a) => squadRows.results[a.playerIndex]?.id === pid);
       const available = !absentIds.has(pid);
       const lc = (() => { try { return JSON.parse(row.life_context as string); } catch { return {}; } })();
-      const msg = generateAttendanceMessage(`${row.first_name} ${row.last_name}`, available, lc.condition ?? 100, absRng as any);
+      const msg = generateAttendanceMessage(`${row.first_name} ${row.last_name}`, available, lc.condition ?? 100, absRng as any, absence ? undefined : usedLines);
       await c.env.DB.prepare(
         "INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, metadata, sent_at) VALUES (?, ?, 'player', ?, ?, ?, ?, datetime('now', '+' || ? || ' seconds'))"
       ).bind(crypto.randomUUID(), matchConvId, pid, msg.senderName,
