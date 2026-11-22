@@ -27,7 +27,7 @@ const CARD_UP = 1.4;
 export type Side = "home" | "away";
 const SIDES = ["home", "away"] as const;
 type Role = "GK" | "DEF" | "MID" | "FWD";
-export type Pose = "down" | "diveLeft" | "diveRight" | "celebrate" | "armUp" | "slide" | "shake";
+export type Pose = "down" | "diveLeft" | "diveRight" | "celebrate" | "armUp" | "slide" | "shake" | "sit";
 export type ShotResult = "goal" | "saved" | "post" | "bar" | "wide" | "over" | "blocked";
 type CardColor = "yellow" | "red";
 
@@ -66,7 +66,10 @@ interface BallKey extends Point { t: number; h: number; arc: number }
 interface Span { from: number; to: number; pose: Pose }
 interface SlotBase { u: number; v: number; role: Role }
 interface Slot { figure: number; base: SlotBase; role: Role }
-type Roster = Record<Side, Slot[]>;
+/** Kdo je na hřišti a kdo z náhradníků ještě sedí na střídačce. */
+type Roster = Record<Side, Slot[]> & { bench: Record<Side, number[]> };
+/** Sedačky ve střídačce (Dugouts.tsx): kolik jich je, jak daleko jsou od sebe a jak daleko za postranní čárou. */
+const SEATS = { count: 6, step: 0.84, behind: 2.4 };
 /** `hops` = časy vrcholu výskoku; `until` = od kdy figura ve scéně není (po střihu na jiné rozestavení); `keepers` = kdo má brankářský dres. */
 export interface Clip { tracks: Key[][]; poses: Span[][]; hops: number[][]; until: number[]; ball: BallKey[]; cuts: number[]; keepers: Set<number> }
 
@@ -312,6 +315,12 @@ class Stage {
       const coach = this.staff.coaches[side];
       if (coach && !spots.has(coach.figure)) spots.set(coach.figure, this.bench(side));
     }
+    // Náhradníci sedí na střídačce, pokud zrovna nejdou střídat.
+    const seated = SIDES.flatMap((side) => this.roster.bench[side].filter((figure) => !spots.has(figure)).slice(0, SEATS.count).map((figure, n) => {
+      const bench = this.bench(side);
+      spots.set(figure, { x: BENCH_X - SEATS.behind, z: bench.z + (n - (SEATS.count - 1) / 2) * SEATS.step });
+      return figure;
+    }));
     // Volní hráči si udělají místo mezi sebou, kolem hráčů ze scénáře i kolem zón, kde se scéna odehraje.
     // V každém kole se sečtou všechny odstrky najednou; postupné odstrkování se ve vápně plném hráčů neustálilo.
     for (let round = 0; round < 60; round++) {
@@ -349,6 +358,7 @@ class Stage {
       else if (keys.length) this.clip.until[i] = Math.min(this.clip.until[i], this.t);
       this.clip.poses[i] = this.clip.poses[i].map((s) => ({ ...s, to: Math.min(s.to, this.t) }));
     });
+    for (const figure of seated) this.clip.poses[figure].push({ from: this.t, to: Infinity, pose: "sit" });
     const flight = this.clip.ball;
     if (flight.length) {
       const last = flight[flight.length - 1];
@@ -562,7 +572,7 @@ export class Replay {
     this.heads = actionHeads(input.events);
     this.scened = scenedEvents(input.events);
     this.secondHalf = input.events.findIndex((e) => e.minute > 45);
-    let roster: Roster = { home: [], away: [] };
+    let roster: Roster = { home: [], away: [], bench: { home: [], away: [] } };
     for (const side of SIDES) {
       const bases = slotBases(input[side].starters);
       input[side].starters.forEach((player, n) => {
@@ -573,6 +583,7 @@ export class Replay {
       });
       roster[side] = withKeeper(roster[side]);
     }
+    for (const side of SIDES) roster.bench[side] = input[side].subs.map((player) => this.figures.push({ team: side, player }) - 1);
     this.referee = this.figures.push({ team: "referee", player: { id: "referee", name: "Rozhodčí", position: "MID", skinColor: "#E0B48C", hairColor: "#3B2F2F" } }) - 1;
     this.staff = { referee: this.referee, coaches: {} };
     for (const side of SIDES) {
@@ -592,14 +603,14 @@ export class Replay {
         const out = roster[side].find((s) => this.figures[s.figure].player.name === outName);
         if (!out) throw new Error(`Střídání v ${e.minute}. minutě: hráč „${outName}“ není na hřišti`);
         // Vzhled z uložené lavičky; starší pohárové a turnajové zápasy v ní střídající hráče nemají.
-        const player = input[side].subs.find((p) => p.name === e.playerName) ?? { id: "", name: e.playerName, position: out.role };
-        const figure = this.figures.push({ team: side, player }) - 1;
+        const seat = input[side].subs.findIndex((p) => p.name === e.playerName), bench = this.rosters[0].bench[side];
+        const figure = seat >= 0 ? bench[seat] : this.figures.push({ team: side, player: { id: "", name: e.playerName, position: out.role } }) - 1;
         this.ids.set(`${side}:${e.playerId}`, figure);
         this.swaps.set(i, { incoming: figure, outgoing: out.figure });
         // Náhradní brankář jde do brány jen za brankáře nebo když to engine napíše.
         const role = e.description.includes("do brány") ? "GK" : out.role;
         const swapped = roster[side].map((s) => (s === out ? { figure, base: out.base, role } : s));
-        roster = { ...roster, [side]: role === "GK" ? soleKeeper(swapped, figure) : swapped };
+        roster = { ...roster, [side]: role === "GK" ? soleKeeper(swapped, figure) : swapped, bench: { ...roster.bench, [side]: roster.bench[side].filter((f) => f !== figure) } };
       } else if (e.type === "card" && e.detail === "red") {
         const figure = this.figureOf(e);
         roster = { ...roster, [side]: withKeeper(roster[side].filter((s) => s.figure !== figure)) };
@@ -1252,7 +1263,7 @@ export class Replay {
     st.pose(incoming, "armUp", 0.6);
     st.wait(0.4);
     st.go(incoming, { x: BENCH_X + 8, z: z + 1.5 }, 2.2);
-    st.go(outgoing, { x: BENCH_X - 2.5, z: z + 2 }, 1.2);
+    st.go(outgoing, { x: BENCH_X - 1.3, z: z + 2 }, 1.2);
     st.t = end;
     return [incoming, outgoing];
   }

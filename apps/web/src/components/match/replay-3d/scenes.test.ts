@@ -43,7 +43,8 @@ function problems(replay: Replay, scene: Scene, label: string): string[] {
   for (const [when, t] of [["začátku", scene.start], ["konci", sceneTime(scene, false, Infinity)]] as const) {
     sampleClip(scene.clip, t, frame);
     frame.figures.forEach((a, i) => frame.figures.forEach((b, j) => {
-      if (j > i && a.visible && b.visible && Math.hypot(a.x - b.x, a.z - b.z) < 0.9) found.add(`figury ${i} a ${j} stojí na ${when} na sobě`);
+      // Náhradníci na střídačce sedí vedle sebe těsněji.
+      if (j > i && a.visible && b.visible && !(a.pose === "sit" && b.pose === "sit") && Math.hypot(a.x - b.x, a.z - b.z) < 0.9) found.add(`figury ${i} a ${j} stojí na ${when} na sobě`);
     }));
   }
   return [...found].map((p) => `${label}: ${p}`);

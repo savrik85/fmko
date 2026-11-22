@@ -47,6 +47,8 @@ const CLIP_PLANES = [new THREE.Plane(new THREE.Vector3(-1, 0, 0), HALF_W + 1.2)]
 const DISSOLVE = 0.35;
 /** O tolik se smí lišit čas navazujícího záběru téhož klipu, aby se hrálo plynule dál bez střihu. */
 const SEAM = 0.25;
+/** Výška boků sedícího náhradníka nad zemí (sedačka střídačky je ve výšce 0,5 m). */
+const SEAT_HIP_Y = 0.6;
 /** Jak daleko dopředu v klipu (sekundy) se po střihu měří rychlost a směr postav. */
 const LOOKAHEAD = 0.1;
 
@@ -243,8 +245,10 @@ export function ReplayScene({ replay, kits, snow, step, replayBadge, veil, onRea
       // Čelem po směru běhu, stojící čelem k míči; padající brankář čelem do pole, ležící napříč obrazem.
       const dive = f.pose === "diveLeft" || f.pose === "diveRight";
       const moving = s.speed > 0.8;
-      const faceX = dive ? 0 : moving ? dx : frame.ballX - s.x;
-      const faceZ = dive ? -s.z : moving ? dz : frame.ballZ - s.z;
+      // Náhradník na střídačce sedí čelem do hřiště.
+      const sit = f.pose === "sit";
+      const faceX = dive ? 0 : sit ? 1 : moving ? dx : frame.ballX - s.x;
+      const faceZ = dive ? -s.z : sit ? 0 : moving ? dz : frame.ballZ - s.z;
       if (f.pose === "down") s.yaw = 0;
       // Při podání ruky zůstávají čelem k sobě, jak k sobě došli.
       else if (f.pose !== "shake" && Math.abs(faceX) + Math.abs(faceZ) > 0.01) {
@@ -260,7 +264,7 @@ export function ReplayScene({ replay, kits, snow, step, replayBadge, veil, onRea
         const scale = ((fig.player.height ?? 178) / 178) * FIGURE_SCALE;
         // Jak moc hráč běží (0 stojí, 1 sprint): podle toho se předklání, zvedá kolena a pracuje rukama.
         const run = Math.min(1, s.speed / 6);
-        const slide = f.pose === "slide";
+        const slide = f.pose === "slide", sit = f.pose === "sit";
         let lift = f.y + Math.abs(Math.sin(s.phase)) * 0.05 * run, shift = 0;
         qRoot.setFromAxisAngle(THREE.Object3D.DEFAULT_UP, s.yaw);
         if (f.pose === "down") {
@@ -277,6 +281,8 @@ export function ReplayScene({ replay, kits, snow, step, replayBadge, veil, onRea
           // Předklon v běhu; při skluzu po kolenou je tělo zakloněné a níž.
           qRoot.multiply(qPose.setFromEuler(eTmp.set(slide ? -0.35 : 0.24 * run, 0, 0)));
           if (slide) lift = -0.4 * scale;
+          // Sedí: boky ve výšce sedačky.
+          if (sit) lift = SEAT_HIP_Y - BODY.hip[1] * scale;
         }
         mRoot.compose(vPos.set(s.x + Math.sin(s.yaw) * shift, PITCH_SURFACE_Y + lift, s.z + Math.cos(s.yaw) * shift), qRoot, vScale.setScalar(scale));
         const cheering = f.pose === "celebrate";
@@ -285,8 +291,8 @@ export function ReplayScene({ replay, kits, snow, step, replayBadge, veil, onRea
           const side = k === 0 ? 1 : -1;
           const swing = Math.sin(s.phase) * side;
           // Noha: stehno kmitá dopředu a dozadu, koleno se ohýbá, když jde noha vzad (při skluzu jsou kolena ohnutá pořád).
-          const thigh = slide ? 0.3 : -swing * 0.95 * run;
-          const knee = slide ? 1.5 : run * (0.25 + 0.9 * Math.max(0, Math.cos(s.phase) * side));
+          const thigh = sit ? -1.5 : slide ? 0.3 : -swing * 0.95 * run;
+          const knee = sit || slide ? 1.5 : run * (0.25 + 0.9 * Math.max(0, Math.cos(s.phase) * side));
           joints.hip[k].makeTranslation(BODY.hip[0] * side, BODY.hip[1], 0).multiply(mTmp.makeRotationX(thigh));
           joints.knee[k].copy(joints.hip[k]).multiply(mTmp.makeTranslation(0, -BODY.knee, 0)).multiply(mTmp.makeRotationX(knee));
           // Ruka: v běhu proti noze s ohnutým loktem; při oslavě zdvižená šikmo vzhůru, při výskoku na hlavičku jen
