@@ -40,7 +40,7 @@ export const PUNISHMENT_REPLIES: Record<PunishmentKind, Record<ReplyStance, read
       "Tak to bude hubená výplata. No co, beru.",
       "Paráda, tenhle měsíc budu jíst rohlíky. Dobře, trenére.",
       "Aspoň vím, kam mi letos půjdou peníze. Beru to.",
-      "No jo, srážka. Žena bude mít radost.",
+      "No jo, srážka. Doma budou mít radost.",
     ],
   },
   pokuta: {
@@ -57,7 +57,7 @@ export const PUNISHMENT_REPLIES: Record<PunishmentKind, Record<ReplyStance, read
       "Tak tu pokutu zaplatím. Víc k tomu říkat nebudu.",
     ],
     ironic: [
-      "Tak to jsem si zaplatil drahej večer. Beru.",
+      "Tak to mě vyšlo draho. Beru.",
       "Pokuta, no jasně. Aspoň má klubová kasa radost.",
       "Dobrá, zaplatím. Za tyhle peníze jsem mohl mít sud piva.",
       "No vida, a já myslel, že letos ušetřím. Beru, trenére.",

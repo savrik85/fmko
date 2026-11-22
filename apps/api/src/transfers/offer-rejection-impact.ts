@@ -159,7 +159,7 @@ export const REJECTED_SMS_BROKEN_RELEASE: readonly string[] = [
   "Tak vy zavoláte do {team}, že mě pustíte, a pak to necháte ležet? Fakt díky, trenére.",
   "Trenére, nabídka od {team} přišla, jak jste chtěl, a vy jste ji stejně zařízl. To se nedělá.",
   "Tohle jste slíbil vy, ne já. {team} poslal nabídku a vy nic. Se mnou už nepočítejte.",
-  "Trenére, kvůli čemu jste tam teda volal? Nabídka od {team} je pryč a já s ní.",
+  "Trenére, proč jste tam teda volal? Nabídka od {team} je pryč a já tu trčím dál.",
   "Já už fakt nevím, co vám věřit. Volal jste do {team} a pak ji odmítnete. Skončil jsem.",
 ];
 /** Trenér slíbil hráče pustit při další dobré nabídce (dohoda) a další odmítl. */
