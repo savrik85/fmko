@@ -314,6 +314,25 @@ describe("co hra z odpovědi pozná navíc", () => {
     expect(r.writeLater).toBe(true);
   });
 
+  // Lokální E2E 22. 11.: Lysenko („Změnil bych něco na tréninku, ale nevím co.“) a Říha
+  // („v pohodě, nějaký změny bych nedělal“) nic neslíbili, model vrátil write_later: true a hra
+  // naplánovala odloženou zprávu s pokynem „napsal jsi trenérovi, že se ozveš“, což nebyla pravda.
+  it("odložená zpráva jen když hráč v textu opravdu slíbil, že se ozve", async () => {
+    for (const body of [
+      "Trenér, já myslím, tým jde dobře. Změnil bych něco na tréninku, ale nevím co.",
+      "Trenére, v pohodě, nějaký změny bych nedělal, makáme dobře.",
+    ]) {
+      vi.mocked(generateText).mockResolvedValueOnce(JSON.stringify({ body, conversation_complete: false, write_later: true }));
+      const r = await generateReply({}, hrac(), [{ sender: "coach", body: "Co bys na tréninku změnil?" }], getScenarioById("coach_initiated")!, tym, false);
+      expect(r.writeLater, body).toBe(false);
+    }
+    vi.mocked(generateText).mockResolvedValueOnce(JSON.stringify({
+      body: "Trenére, mám toho teď moc, řeším tady jízdy. Řeknu ti to večer, jo?", conversation_complete: false, write_later: true,
+    }));
+    const promised = await generateReply({}, hrac(), [{ sender: "coach", body: "Co bys dělal jinak?" }], getScenarioById("coach_initiated")!, tym, false);
+    expect(promised.writeLater).toBe(true);
+  });
+
   it("postoj k nabídce se ptá jen u hráče, na kterého nějaká čeká", async () => {
     vi.mocked(generateText).mockClear();
     vi.mocked(generateText).mockResolvedValueOnce(JSON.stringify({ body: "Zůstávám, odmítněte to.", conversation_complete: true, write_later: false, transfer_stance: "stay" }));
