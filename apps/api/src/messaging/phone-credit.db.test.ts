@@ -97,6 +97,17 @@ describe("vrácení SMS", () => {
     expect((await credit()).c).toBe(6 + 2 * CENA_SMS);
   });
 
+  it("kabina: vratka patří zprávě, na kterou nikdo neodpověděl, ne novější (Fezko, E2E 22. 11.)", async () => {
+    // Trenér poslal 4. zprávu, model ji ještě zpracovával a mezitím přišla 5.; na 4. se nikdo neozval.
+    await db.batch([
+      db.prepare("INSERT INTO messages (id, conversation_id, sender_type, body, metadata, sent_at) VALUES ('k4', 'c1', 'user', 'Ještě k úternímu tréninku: začínáme v půl šesté a bude hodně běhání.', NULL, '2026-11-22T02:40:00Z')"),
+      db.prepare("INSERT INTO messages (id, conversation_id, sender_type, body, metadata, sent_at) VALUES ('k5', 'c1', 'user', 'Tak dobrou, kluci. A nezapomeňte na tu sobotu.', NULL, '2026-11-22T02:40:20Z')"),
+    ]);
+    expect(await refundCoachSms(db, "club", "c1", "v kabině se nikdo neozval", "Ještě k úternímu tréninku: začínáme v půl šesté a bude hodně běhání.")).toBe(true);
+    const refunded = (await db.prepare("SELECT id FROM messages WHERE json_extract(metadata, '$.creditRefunded') = 1").all<{ id: string }>()).results;
+    expect(refunded.map((r) => r.id)).toEqual(["k4"]);
+  });
+
   it("nikdy nevrátí nad denní dobití a bez zprávy trenéra nevrací nic", async () => {
     expect(await refundCoachSms(db, "club", "c1", "test")).toBe(false);
     await db.prepare("UPDATE teams SET phone_credit = ? WHERE id = 'club'").bind(DENNI_KREDIT - 1).run();

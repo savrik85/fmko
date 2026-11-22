@@ -123,14 +123,22 @@ export async function spendCredit(db: D1Database, teamId: string, kolik = CENA_S
  * Každá zpráva se vrací nejvýš jednou: vratku si zabere značka v metadatech zprávy,
  * takže opakované pokusy o odpověď nevrátí kredit dvakrát. Nikdy nad denní dobití.
  */
-export async function refundCoachSms(db: D1Database, teamId: string, convId: string, reason: string): Promise<boolean> {
+export async function refundCoachSms(
+  db: D1Database, teamId: string, convId: string, reason: string,
+  /**
+   * Text zprávy, na kterou odpověď nepřijde. Na pozadí (kabina, odpověď hráče) mezitím trenér
+   * mohl poslat další zprávu a vratka by patřila jí (Fezko, E2E 22. 11.). Bez textu poslední zpráva.
+   */
+  coachMessage?: string,
+): Promise<boolean> {
   try {
     // Fotka stála víc než SMS, cenu si nese v metadatech (`creditPrice`, coach-photo.ts).
-    const last = await db.prepare(
+    const pick = (match: boolean) => db.prepare(
       `SELECT id, json_extract(COALESCE(metadata, '{}'), '$.creditPrice') AS price
-         FROM messages WHERE conversation_id = ? AND sender_type = 'user'
+         FROM messages WHERE conversation_id = ? AND sender_type = 'user'${match ? " AND TRIM(body) = ?" : ""}
         ORDER BY julianday(sent_at) DESC LIMIT 1`,
-    ).bind(convId).first<{ id: string; price: number | null }>();
+    ).bind(convId, ...(match ? [coachMessage!.trim()] : [])).first<{ id: string; price: number | null }>();
+    const last = (coachMessage?.trim() ? await pick(true) : null) ?? await pick(false);
     if (!last) return false;
     const claimed = await db.prepare(
       `UPDATE messages SET metadata = json_set(COALESCE(metadata, '{}'), '$.creditRefunded', 1)

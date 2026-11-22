@@ -90,7 +90,7 @@ export async function startCoachThread(
       : null;
     if (!row) {
       logger.warn({ module: M }, `hráč ${opts.playerId} není v kádru ${opts.teamId}`);
-      await refundCoachSms(db, opts.teamId, opts.convId, "hráč už v klubu není");
+      await refundCoachSms(db, opts.teamId, opts.convId, "hráč už v klubu není", opts.coachMessage);
       return false;
     }
 
@@ -238,7 +238,7 @@ export async function startCoachThread(
     }
     logger.error({ module: M }, `konverzace s hráčem ${opts.playerId}`, e);
     // Tahle odpověď už nepřijde (žádný další pokus se neplánuje), SMS se vrací.
-    await refundCoachSms(db, opts.teamId, opts.convId, "odpověď hráče spadla");
+    await refundCoachSms(db, opts.teamId, opts.convId, "odpověď hráče spadla", opts.coachMessage);
     return false;
   }
 }
@@ -297,7 +297,7 @@ export async function replyInSquadGroup(
 ): Promise<boolean> {
   const replied = await replyInSquadGroupInner(db, env, opts);
   // Kabina se podruhé nezkouší: když se nikdo neozval, SMS se vrací.
-  if (!replied) await refundCoachSms(db, opts.teamId, opts.convId, "v kabině se nikdo neozval");
+  if (!replied) await refundCoachSms(db, opts.teamId, opts.convId, "v kabině se nikdo neozval", opts.coachMessage);
   return replied;
 }
 
