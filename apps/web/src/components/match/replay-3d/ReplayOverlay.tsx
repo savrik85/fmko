@@ -10,7 +10,7 @@ const SPEEDS = [{ value: 1, label: "▶ Živě", short: "▶" }, { value: 3, lab
 const BANNERS = {
   goal: { text: "GÓÓÓL!", className: "text-5xl sm:text-7xl text-white" },
   penalty: { text: "PENALTA!", className: "text-2xl sm:text-4xl text-white" },
-  yellow: { text: "ŽLUTÁ", className: "text-2xl sm:text-4xl text-yellow-300" },
+  yellow: { text: "ŽLUTÁ!", className: "text-2xl sm:text-4xl text-yellow-300" },
   red: { text: "ČERVENÁ!", className: "text-2xl sm:text-4xl text-red-500" },
   injury: { text: "✚ ZRANĚNÍ", className: "text-2xl sm:text-4xl text-red-400" },
   sub: { text: "⇅ STŘÍDÁNÍ", className: "text-2xl sm:text-4xl text-sky-300" },
@@ -45,7 +45,7 @@ export function ReplayOverlay({ plan, clock, matchId }: { plan: ReplayPlan; cloc
         <div className="flex items-center gap-2 sm:gap-3 bg-black/80 backdrop-blur-md border border-white/15 rounded-xl px-3 py-1.5 text-white shadow-2xl max-w-full">
           <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: plan.home.kit.shirt }} />
           <span className="font-heading font-bold text-xs sm:text-sm truncate max-w-[28vw]">{plan.home.name}</span>
-          <span className="font-heading font-black text-base sm:text-lg tabular-nums">{score.home}:{score.away}</span>
+          <span className="font-heading font-black text-base sm:text-lg tabular-nums">{score.home}:{score.away}{ended && plan.shootout && <span className="text-xs font-bold text-amber-300"> pen. {plan.shootout.home}:{plan.shootout.away}</span>}</span>
           <span className="font-heading font-bold text-xs sm:text-sm truncate max-w-[28vw]">{plan.away.name}</span>
           <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: plan.away.kit.shirt }} />
           <span className="font-mono text-xs text-amber-300 tabular-nums pl-1 border-l border-white/20">{plan.minuteAt(t)}&apos;</span>

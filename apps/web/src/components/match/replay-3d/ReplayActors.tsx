@@ -195,16 +195,20 @@ export function ReplayActors({ plan, clock }: { plan: ReplayPlan; clock: ReplayC
       if (!ring) return;
       ring.visible = i !== undefined;
       if (i === undefined) return;
-      ring.position.set(states[i].x, PITCH_SURFACE_Y + 0.03, states[i].z);
+      // Ležící hráč má kroužek pod tělem, ne pod nohama.
+      const lying = frame.figures[i].pose === "down" ? 0.9 : 0;
+      ring.position.set(states[i].x - Math.sin(states[i].yaw) * lying, PITCH_SURFACE_Y + 0.03, states[i].z - Math.cos(states[i].yaw) * lying);
       ring.scale.setScalar(1 + 0.12 * Math.sin(clock.t * 7));
     });
 
     // Kamera: plynule za míčem, po skoku v čase hned na místě.
     const cam = tall ? CAMERA.tall : CAMERA.wide;
-    const who = caption?.banner && FOLLOW_BANNERS.has(caption.banner) ? focus[0] : undefined;
-    const fx = who === undefined ? frame.ballX : states[who].x;
-    const fz = who === undefined ? frame.ballZ : states[who].z;
-    const wanted = vTmp.set(fx * cam.follow, 0, THREE.MathUtils.clamp(fz, -HALF_L + (tall ? 18 : 15), HALF_L - (tall ? 8 : 15)));
+    // U zranění, karty a střídání jen na hráče; jinak mezi míč a hráče z titulku, ať je vidět obojí.
+    const who = focus[0];
+    const mix = who === undefined ? 0 : caption?.banner && FOLLOW_BANNERS.has(caption.banner) ? 1 : 0.5;
+    const fx = who === undefined ? frame.ballX : THREE.MathUtils.lerp(frame.ballX, states[who].x, mix);
+    const fz = who === undefined ? frame.ballZ : THREE.MathUtils.lerp(frame.ballZ, states[who].z, mix);
+    const wanted = vTmp.set(fx * (who === undefined ? cam.follow : 0.9), 0, THREE.MathUtils.clamp(fz, -HALF_L + (tall ? 16 : 15), HALF_L - (tall ? 14 : 15)));
     if (!look.current || look.current.distanceTo(wanted) > 30) look.current = wanted.clone();
     else look.current.lerp(wanted, 1 - Math.exp(-Math.min(delta, 0.1) * 2.2));
     camera.position.copy(look.current).add(cam.offset);
@@ -223,6 +227,8 @@ export function ReplayActors({ plan, clock }: { plan: ReplayPlan; clock: ReplayC
       if (i === undefined) return;
       vTmp.set(states[i].x, PITCH_SURFACE_Y + 2.7, states[i].z).project(camera);
       // Jmenovka zůstane na obrazovce, nad titulkem a ovládáním.
+      // Hráč mimo záběr jmenovku nemá; u kraje se jmenovka posune dovnitř.
+      if (Math.abs(vTmp.x) > 1 || Math.abs(vTmp.y) > 1) tag.style.display = "none";
       const x = THREE.MathUtils.clamp(((vTmp.x + 1) / 2) * size.width, 70, size.width - 70);
       const y = THREE.MathUtils.clamp(((1 - vTmp.y) / 2) * size.height, 80, size.height - 140);
       tag.style.transform = `translate(${x}px, ${y}px) translate(-50%, -100%)`;
