@@ -1,5 +1,5 @@
-// 3D záznam je sestřih: každá událost zápasu má vlastní krátkou scénu, která začíná střihem na rozestavení
-// a končí, když ji 2D záznam vystřídá další událostí. Engine neukládá souřadnice, scény se proto skládají
+// 3D záznam je sestřih: každá důležitá událost zápasu má vlastní krátkou scénu, která začíná střihem na rozestavení
+// a končí, když ji záznam vystřídá další akcí. Engine neukládá souřadnice, scény se proto skládají
 // z uložených událostí; náhoda z id zápasu vybírá jen kosmetiku, takže přehrání vypadá vždy stejně.
 import { PITCH } from "../../stadium/stadium-3d/constants";
 
@@ -198,7 +198,7 @@ export function shootoutEvents(detail: Record<string, unknown>): ReplayEvent[] {
 }
 
 /**
- * Čas v klipu `elapsed` sekund po začátku kroku 2D záznamu: útočná fáze běží po `split`, zbytek scény od něj.
+ * Čas v klipu `elapsed` sekund po začátku záběru: útočná fáze běží po `split`, zbytek scény od něj.
  * Na konci scéna drží poslední snímek, těsně před případným střihem další scény.
  */
 export function sceneTime(scene: Scene, attack: boolean, elapsed: number): number {
@@ -457,6 +457,7 @@ export class Replay {
   private readonly heads: number[];
   private readonly scened: boolean[];
   private readonly clips = new Map<number, { clip: Clip; windows: Map<number, Window> }>();
+  private readonly scenes = new Map<number, Scene>();
   private readonly kickoffs = new Map<number, Scene>();
   private closing: Scene | null = null;
 
@@ -511,19 +512,11 @@ export class Replay {
     return figure;
   }
 
-  /**
-   * Scéna události `index`. Událost bez vlastní scény drží konec poslední akce před ní; před první akcí
-   * poločasu drží konec výkopu.
-   */
+  /** Scéna události `index`. Pro stejnou událost vrací stejný objekt: podle něj přehrávání pozná, že má hrát dál totéž. */
   scene(index: number): Scene {
-    const shown = this.scened.lastIndexOf(true, index);
-    const secondHalf = this.events.findIndex((e) => e.minute > 45);
-    const sinceKickoff = secondHalf >= 0 && index >= secondHalf ? secondHalf : 0;
-    if (shown < sinceKickoff) {
-      const kickoff = this.kickoff(sinceKickoff);
-      return { ...kickoff, start: kickoff.end, split: kickoff.end };
-    }
-    const head = this.heads[shown];
+    const cached = this.scenes.get(index);
+    if (cached) return cached;
+    const head = this.heads[index];
     let built = this.clips.get(head);
     if (!built) {
       const group = this.heads.flatMap((h, i) => (h === head ? [i] : []));
@@ -533,19 +526,32 @@ export class Replay {
       built = { clip: stage.finish(), windows };
       this.clips.set(head, built);
     }
-    const window = built.windows.get(shown);
-    if (!window) throw new Error(`Událost ${shown} (${this.events[shown].type}) má mít scénu, ale akce ji nepostavila`);
-    return shown === index ? { clip: built.clip, ...window } : { clip: built.clip, ...window, start: window.end, split: window.end };
+    const window = built.windows.get(index);
+    if (!window) throw new Error(`Událost ${index} (${this.events[index].type}) scénu nemá`);
+    const scene = { clip: built.clip, ...window };
+    this.scenes.set(index, scene);
+    return scene;
   }
 
   /**
-   * Výkop před událostí `index`: rozhodčí zapíská, míč jde ze středu dozadu a tým se rozbíhá. První poločas
-   * rozehrávají domácí, druhý hosté.
+   * Co je v obraze před událostí `next`: poslední akce téhož poločasu, a když v něm ještě žádná nebyla, výkop.
+   * Události bez vlastní scény (držení míče, počasí…) tak obraz nemění, poslední akce v něm běží dál.
+   */
+  before(next: number): Scene {
+    const secondHalf = this.events.findIndex((e) => e.minute > 45);
+    const kickoff = secondHalf >= 0 && next >= secondHalf ? secondHalf : 0;
+    const shown = this.scened.lastIndexOf(true, next - 1);
+    return shown < kickoff ? this.kickoff(kickoff) : this.scene(shown);
+  }
+
+  /**
+   * Výkop před událostí `index` (0 = začátek zápasu, jinak druhý poločas): rozhodčí zapíská, míč jde ze středu
+   * dozadu a tým se rozbíhá. První poločas rozehrávají domácí, druhý hosté.
    */
   kickoff(index: number): Scene {
     const cached = this.kickoffs.get(index);
     if (cached) return cached;
-    const second = index > 0 && this.events[index - 1].minute >= 45;
+    const second = index > 0;
     const side: Side = second ? "away" : "home", fwd = attackSign(side);
     const roster = index < this.rosters.length ? this.rosters[index] : this.finalRoster;
     const st = new Stage(this.figures.length, roster, seededRng(`${this.input.matchId}:kickoff:${second}`), this.referee);

@@ -12,14 +12,15 @@ import { Replay, type ReplayEvent, type ReplayKit, type ReplayPlayer } from "./s
 
 const Stadium3D = clientOnly(() => import("@/components/stadium/stadium-3d/Stadium3D").then((m) => m.Stadium3D));
 
-/** Stav 2D záznamu (zaznam/page.tsx); 3D kreslí totéž, co právě ukazuje on. */
+/** Stav záznamu (zaznam/page.tsx); 3D kreslí totéž, co právě ukazuje on. */
 export interface ReplayProgress {
-  /** Kolik událostí už 2D záznam ukázal. */
+  /** Kolik událostí už záznam ukázal. */
   idx: number;
   flash: "goal" | "card" | "chance" | "attacking" | "injury" | "penalty" | "substitution" | null;
   kickoff: "1st" | "2nd" | null;
   halfTime: boolean;
   finished: boolean;
+  /** Pauza: obraz stojí celý, i sníh, vlajky a diváci. */
   paused: boolean;
   /** Po skoku na akci: událost, jejíž scéna má chvíli stát na prvním snímku. */
   cue: number | null;
@@ -56,28 +57,25 @@ export function Replay3D({ detail, events, progress, onReady }: {
     away: { name: awayName, kit: kits.away, ...(detail.away_lineup_data as StoredLineup) },
   }), [detail, events, homeName, awayName, kits, margin]);
 
-  // Krok 2D záznamu → scéna: „ŠANCE!“ je útočná fáze události, která teprve přijde, jinak běží poslední ukázaná událost.
-  // Po skoku stojí scéna cílové akce na prvním snímku (u šance na začátku útoku).
+  // Krok záznamu → záběr: „ŠANCE“ je útočná fáze události, která teprve přijde; jinak je v obraze poslední akce
+  // (nebo výkop) a běží dál. Po skoku stojí cílová akce na prvním snímku (u šance na začátku útoku).
   const shot = flash === "attacking";
-  const still = cue === null && (kickoff !== null || halfTime || (idx === 0 && !shot));
-  /** Událost, jejíž scéna se hraje. */
+  /** Událost, které patří grafika. */
   const index = cue ?? (shot ? idx : idx - 1);
-  const scene = useMemo(() => (cue === null && finished ? replay.finale() : still ? replay.kickoff(idx) : replay.scene(index)), [replay, cue, finished, still, idx, index]);
+  const scene = useMemo(() => (cue !== null ? replay.scene(cue) : finished ? replay.finale() : shot ? replay.scene(idx) : replay.before(idx)), [replay, cue, finished, shot, idx]);
   const attack = cue !== null ? scene.split > scene.start : shot;
-  const started = useMemo(() => ({ scene, attack, startedAt: performance.now() }), [scene, attack, cue !== null]); // eslint-disable-line react-hooks/exhaustive-deps
-  const step = useRef<ReplayStep>({ ...started, rate: 1 });
+  // Skok začíná nový záběr, i když míří na akci, která zrovna běží.
+  const play = useMemo(() => ({ scene, attack }), [scene, attack, cue !== null]); // eslint-disable-line react-hooks/exhaustive-deps
   /** Jen při vývoji: scéna zastavená pro snímek obrazovky (window.__replay3d.freeze). */
   const frozen = useRef<ReplayStep | null>(null);
-  const rate = fast ? 2 : 1;
-  // Pauza zastaví scénu tam, kde zrovna je.
-  const pausedAt = useMemo(() => (paused ? ((performance.now() - started.startedAt) / 1000) * rate : undefined), [paused, started, rate]);
   // O přestávce stojí týmy připravené na výkop druhého poločasu.
-  step.current = frozen.current ?? { ...started, rate, hold: halfTime || cue !== null ? 0 : pausedAt };
+  const step = useRef<ReplayStep>({ play, rate: 1 });
+  step.current = frozen.current ?? { play, rate: fast ? 2 : 1, hold: halfTime || cue !== null ? 0 : undefined };
   useEffect(() => {
     if (process.env.NODE_ENV !== "development") return;
     const freeze = (index: number, attackBeat: boolean, seconds: number) => {
-      // Posledních 0,4 s se přehraje, ať mají hráči krok a natočení jako při sledování.
-      frozen.current = { scene: index === -2 ? replay.finale() : index < 0 ? replay.kickoff(0) : replay.scene(index), attack: attackBeat, startedAt: performance.now() - Math.max(0, seconds - 0.4) * 1000, rate: 1, hold: seconds };
+      // Poslední vteřina se přehraje, ať mají hráči krok a natočení jako při sledování.
+      frozen.current = { play: { scene: index === -2 ? replay.finale() : index < 0 ? replay.kickoff(0) : replay.scene(index), attack: attackBeat, from: Math.max(0, seconds - 1) }, rate: 1, hold: seconds };
       step.current = frozen.current;
     };
     Object.assign(window, { __replay3d: { replay, freeze } });
@@ -98,9 +96,11 @@ export function Replay3D({ detail, events, progress, onReady }: {
 
   const [fullscreen, setFullscreen] = useState(false);
   const camBadge = useRef<HTMLDivElement>(null);
-  const event = events[index];
+  const shade = useRef<HTMLDivElement>(null);
+  // Výkop, přestávka a konec zápasu grafiku události nemají.
+  const event = cue === null && (kickoff !== null || halfTime || finished) ? undefined : events[index];
   const attendance = detail.attendance as number | null;
-  const graphics = { detail, events, index, event: still || finished ? undefined : event, attack, result: scene.result };
+  const graphics = { detail, events, index, event, attack, result: scene.result };
   const fixedLabel = finished ? { text: "KONEC ZÁPASU", sub: `${detail.home_score} : ${detail.away_score}${pens ? ` (pen. ${pens.home}:${pens.away})` : ""}`, tone: "info" as const }
     : kickoff ? { text: "VÝKOP", sub: kickoff === "2nd" ? "2. poločas" : undefined, tone: "info" as const } : undefined;
 
@@ -125,10 +125,13 @@ export function Replay3D({ detail, events, progress, onReady }: {
         attendanceRatio={attendance !== null && stadium?.capacity ? Math.min(1, attendance / stadium.capacity) : undefined}
         initialWeather={(detail.weather as WeatherType | null) ?? "sunny"}
         showControls={false}
+        frozen={paused}
         // Pohled „z tribuny“ nemá rozostření okrajů, které stadion používá u pohledů z dálky.
         initialViewpoint="main_stand"
-        replay={<ReplayScene replay={replay} kits={kits} snow={detail.weather === "snow"} step={step} camBadge={camBadge} onReady={onReady} />}
+        replay={<ReplayScene replay={replay} kits={kits} snow={detail.weather === "snow"} step={step} camBadge={camBadge} shade={shade} onReady={onReady} />}
       />
+      {/* Střih se prolíná přes černou (scéna si průhlednost řídí sama); grafika zůstává nad ní. */}
+      <div ref={shade} style={{ opacity: 0 }} className="absolute inset-0 z-10 bg-black pointer-events-none" />
 
       <EventLabel {...graphics} override={fixedLabel} />
       <EventCard {...graphics} />
@@ -144,7 +147,7 @@ export function Replay3D({ detail, events, progress, onReady }: {
           </div>
         </div>
       )}
-      {fullscreen && <ScoreBug detail={detail} homeGoals={homeGoals} awayGoals={awayGoals} minute={event?.minute} />}
+      {fullscreen && <ScoreBug detail={detail} homeGoals={homeGoals} awayGoals={awayGoals} minute={events[index]?.minute} />}
       <button onClick={() => setFullscreen((v) => !v)} title={fullscreen ? "Zmenšit" : "Na celou obrazovku"}
         className="absolute top-2 right-2 z-40 w-8 h-8 rounded-lg bg-black/60 hover:bg-black/80 text-white text-base leading-none">
         {fullscreen ? "✕" : "⛶"}

@@ -103,23 +103,24 @@ describe("scény 3D záznamu", () => {
 
   it("vyloučený a vystřídaný hráč v dalších scénách není, střídající ano", () => {
     const frame: Frame = { figures: replay.figures.map(() => ({ visible: false, x: 0, y: 0, z: 0, pose: null })), ballX: 0, ballY: 0, ballZ: 0, cuts: 0 };
-    const last = replay.scene(events.length - 1);
+    const last = replay.before(events.length);
     sampleClip(last.clip, last.start, frame);
     const visible = (name: string) => frame.figures[replay.figures.findIndex((f) => f.player.name === name)].visible;
     expect([visible("H 2"), visible("H 5"), visible("Sub 1"), visible("Rozhodčí")]).toEqual([false, false, true, true]);
     expect(frame.figures.filter((f) => f.visible).length).toBe(10 + 11 + 1);
   });
 
-  it("scénu mají jen důležité akce; ostatní události drží konec poslední akce", () => {
+  it("scénu mají jen důležité akce; ostatní události obraz nemění", () => {
     const scened = scenedEvents(all);
     const types = (shown: boolean) => [...new Set(all.filter((_, i) => scened[i] === shown).map((e) => e.detail?.startsWith("shootout:") ? "shootout" : e.type))].sort();
     expect(types(true)).toEqual(["card", "chance", "corner", "foul", "freekick", "goal", "injury", "penalty", "shootout", "substitution"]);
     expect(types(false)).toEqual(["assist", "corner", "special"]);
-    // Držení míče před první akcí: výkop. Asistence po gólu: stojící konec gólové scény.
-    expect(replay.scene(0).focus).toEqual([]);
-    const goal = replay.scene(1), assist = replay.scene(2);
-    expect(assist.clip).toBe(goal.clip);
-    expect([assist.start, assist.split]).toEqual([goal.end, goal.end]);
+    // Držení míče před první akcí: běží výkop. Asistence po gólu: běží dál gólová scéna. Druhý poločas začíná výkopem.
+    expect(replay.before(1)).toBe(replay.kickoff(0));
+    expect(replay.before(3)).toBe(replay.scene(1));
+    const secondHalf = all.findIndex((e) => e.minute > 45);
+    expect(replay.before(secondHalf)).toBe(replay.kickoff(secondHalf));
+    expect(replay.before(secondHalf + 1)).toBe(replay.scene(secondHalf));
   });
 
   it("akce začínají první událostí se scénou: roh před gólem, faul před kartou, zranění před střídáním", () => {

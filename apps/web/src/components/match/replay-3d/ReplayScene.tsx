@@ -6,16 +6,21 @@ import { useFrame, useThree } from "@react-three/fiber";
 import { PITCH_SURFACE_Y } from "@/components/stadium/stadium-3d/constants";
 import { HALF_W, sampleClip, sceneTime, type Clip, type Figure, type Frame, type Replay, type ReplayKit, type Scene } from "./scenes";
 
-/** Co má scéna právě hrát: krok 2D záznamu převedený na scénu a čas, kdy začal. */
-export interface ReplayStep {
+/** Záběr: scéna a její část. Nový objekt znamená hrát od začátku, i když jde o tutéž scénu (skok zpět na její začátek). */
+export interface ReplayPlay {
   scene: Scene;
-  /** Útočná fáze šance (2D záznam ukazuje „ŠANCE!“), jinak zbytek scény. */
+  /** Útočná fáze šance (záznam ukazuje „ŠANCE“), jinak zbytek scény. */
   attack: boolean;
-  /** `performance.now()` ve chvíli, kdy krok začal. */
-  startedAt: number;
+  /** Kolik sekund záběru se přeskočí (při vývoji snímky obrazovky). */
+  from?: number;
+}
+
+/** Co má scéna právě hrát. Čas záběru si počítá sama ze snímků, takže stojí, kdykoli se scéna nekreslí (pauza). */
+export interface ReplayStep {
+  play: ReplayPlay;
   /** „Rychle“ přehrává scény dvakrát rychleji. */
   rate: number;
-  /** Scéna se v tomhle čase od začátku kroku zastaví (pauza; při vývoji snímky obrazovky). */
+  /** Záběr se v tomhle čase od svého začátku zastaví (stojící první snímek po skoku na akci). */
   hold?: number;
 }
 
@@ -42,6 +47,10 @@ const REPLAY = { after: 3.6, seconds: 5 };
 /** Hlavní kamera nekreslí nic za bližší postranní čárou (stojí tam, kde má stadion hlavní tribunu); kamera opakovaného záběru kreslí vše. */
 const MAIN_CLIP = [new THREE.Plane(new THREE.Vector3(-1, 0, 0), HALF_W + 1.2)];
 const NO_CLIP: THREE.Plane[] = [];
+/** Střih se prolíná přes černou: tolik sekund se obraz stmívá a tolik zase rozednívá. */
+const FADE = 0.3;
+/** O tolik se smí lišit čas navazujícího záběru téhož klipu, aby se hrálo plynule dál bez střihu. */
+const SEAM = 0.25;
 
 function keeperShirts(home: ReplayKit, away: ReplayKit): { home: string; away: string } {
   const taken = [home.shirt, away.shirt, REFEREE_KIT.shirt].map((c) => new THREE.Color(c));
@@ -96,7 +105,7 @@ const eTmp = new THREE.Euler(), cTmp = new THREE.Color();
 const HIDDEN = new THREE.Matrix4().makeScale(0, 0, 0);
 
 /** Hráči, rozhodčí a míč ve scéně stadionu; kreslí to, co právě hraje `step`, a řídí kameru. */
-export function ReplayScene({ replay, kits, snow, step, camBadge, onReady }: {
+export function ReplayScene({ replay, kits, snow, step, camBadge, shade, onReady }: {
   replay: Replay;
   kits: { home: ReplayKit; away: ReplayKit };
   /** Na sněhu se hraje s oranžovým míčem. */
@@ -104,6 +113,8 @@ export function ReplayScene({ replay, kits, snow, step, camBadge, onReady }: {
   step: { current: ReplayStep };
   /** Rámeček s nápisem „opakovaný záběr“; scéna ho ukazuje jen během opakování gólu. */
   camBadge: RefObject<HTMLDivElement | null>;
+  /** Černá plocha přes obraz; scéna jí řídí průhlednost při střizích. */
+  shade: RefObject<HTMLDivElement | null>;
   /** Zavolá se po prvním vykresleném snímku. */
   onReady: () => void;
 }) {
@@ -130,10 +141,19 @@ export function ReplayScene({ replay, kits, snow, step, camBadge, onReady }: {
   const gl = useThree((s) => s.gl);
   /** Co se kreslilo minule: podle toho se pozná střih (hráči pak neběží, stojí rovnou na místě). */
   const last = useRef<{ clip: Clip | null; t: number; cuts: number; replaying: boolean }>({ clip: null, t: 0, cuts: 0, replaying: false });
+  /** Záběr, který je právě v obraze: kolik z něj uběhlo (`elapsed`) a jak je obraz ztmavený (sekundy stmívání, 0 až FADE). */
+  const playback = useRef<{ play: ReplayPlay | null; elapsed: number; t: number; out: number; in: number; dark: number }>({ play: null, elapsed: 0, t: 0, out: 0, in: 0, dark: 0 });
   const look = useRef(new THREE.Vector3());
   const drawn = useRef(false);
 
   useEffect(() => () => { gl.clippingPlanes = NO_CLIP; }, [gl]);
+  // Zastavená scéna (pauza) se nekreslí; po změně velikosti plátna (celá obrazovka) by zůstala prázdná.
+  const size = useThree((s) => s.size);
+  const get = useThree((s) => s.get);
+  useEffect(() => {
+    const state = get();
+    if (state.frameloop === "never") state.advance(state.clock.elapsedTime);
+  }, [size, get]);
 
   const paint = (clip: Clip) => {
     PARTS.forEach((part, p) => {
@@ -154,16 +174,43 @@ export function ReplayScene({ replay, kits, snow, step, camBadge, onReady }: {
       drawn.current = true;
       onReady();
     }
-    const { scene, attack, startedAt, rate, hold = Infinity } = step.current;
-    const elapsed = Math.min(hold, ((performance.now() - startedAt) / 1000) * rate);
+    const { play, rate, hold = Infinity } = step.current;
+    const dt = Math.min(delta, 0.1);
+    const p = playback.current;
+    if (p.play === play) p.out = 0;
+    else {
+      const from = play.from ?? 0, first = sceneTime(play.scene, play.attack, from);
+      if (p.play?.scene.clip === play.scene.clip && Math.abs(first - p.t) < SEAM) {
+        // Nový záběr navazuje tam, kde ten starý právě je (rozehrání → útok → výsledek): hraje se plynule dál.
+        Object.assign(p, { play, elapsed: from + p.t - first, out: 0 });
+      } else if (p.play === null || p.out >= FADE) {
+        // Střih je schovaný ve tmě. Čas, který zabralo stmívání, se novému záběru odečte, ať drží krok se záznamem.
+        Object.assign(p, { play, elapsed: from + p.out * rate, out: 0, in: 0 });
+      } else {
+        // Starý záběr ještě dobíhá a stmívá se (od toho, jak tmavý už obraz je).
+        p.out = Math.max(p.out, p.dark) + dt;
+      }
+    }
+    const { scene, attack } = p.play!;
+    p.elapsed += delta * rate;
+    if (p.play === play) p.elapsed = Math.min(p.elapsed, hold);
+    p.in = Math.min(FADE, p.in + dt);
+    const elapsed = p.elapsed;
     // Gól: po chvíli oslavy se zpomaleně zopakuje zakončení z jiné kamery, pak oslava pokračuje.
     const again = !attack && scene.replay ? scene.replay : null;
     const replaying = again !== null && elapsed >= REPLAY.after && elapsed < REPLAY.after + REPLAY.seconds;
     const t = replaying && again ? THREE.MathUtils.lerp(again.from, again.to, (elapsed - REPLAY.after) / REPLAY.seconds)
       : sceneTime(scene, attack, again && elapsed >= REPLAY.after ? elapsed - REPLAY.seconds : elapsed);
+    p.t = t;
     sampleClip(scene.clip, t, frame);
     if (camBadge.current) camBadge.current.style.display = replaying ? "" : "none";
-    const dt = Math.min(delta, 0.1);
+    // Střihy uvnitř scény (konec zápasu) a opakovaný záběr jsou známé předem: obraz se před nimi stmívá sám.
+    let dark = Math.max(p.out, FADE - p.in);
+    for (const c of scene.clip.cuts) if (c > scene.start && c < scene.end - 2 * FADE) dark = Math.max(dark, FADE - Math.abs(t - c));
+    if (again) for (const edge of [REPLAY.after, REPLAY.after + REPLAY.seconds]) dark = Math.max(dark, FADE - Math.abs(elapsed - edge));
+    dark = THREE.MathUtils.clamp(dark, 0, FADE);
+    if (dark !== p.dark && shade.current) shade.current.style.opacity = String(dark / FADE);
+    p.dark = dark;
     // Střih: jiný klip, střih uvnitř klipu, skok v čase, začátek a konec opakovaného záběru.
     const cut = last.current.clip !== scene.clip || last.current.cuts !== frame.cuts || last.current.replaying !== replaying || t < last.current.t || t - last.current.t > 0.5;
     if (last.current.clip !== scene.clip) paint(scene.clip);
@@ -177,7 +224,9 @@ export function ReplayScene({ replay, kits, snow, step, camBadge, onReady }: {
       const stride = cut ? 0 : Math.hypot(dx, dz);
       s.x = f.x;
       s.z = f.z;
-      s.speed = cut ? 0 : THREE.MathUtils.lerp(s.speed, stride / dt, Math.min(1, dt * 8));
+      // Snímek bez uplynulého času (překreslení zastaveného obrazu) rychlost nemění.
+      if (cut) s.speed = 0;
+      else if (dt > 0) s.speed = THREE.MathUtils.lerp(s.speed, stride / dt, Math.min(1, dt * 8));
       s.phase += stride * 1.9;
       // Čelem po směru běhu, stojící čelem k míči; padající brankář čelem do pole, ležící napříč obrazem.
       const dive = f.pose === "diveLeft" || f.pose === "diveRight";

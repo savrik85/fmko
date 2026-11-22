@@ -45,6 +45,41 @@ const STEP_MS = {
   flat: { kickoff: 3000, secondHalf: 2500, goal: 6000, chance: 3000, drama: 4000, penalty: 7000 },
   scene: { kickoff: 5000, secondHalf: 5000, goal: 8600, chance: 2200, drama: 3500, penalty: 4500 },
 };
+/** Po skoku na akci stojí její první snímek, než se rozběhne (ať je vidět, kam se skočilo). */
+const CUE_MS = 700;
+
+/**
+ * Časovač kroků záznamu. Běží vždy jen jeden: další krok se plánuje, až ten předchozí skončí, a nový plán
+ * (skok na jinou akci) ten rozběhnutý ruší. Pauza ho zastaví a po ní doběhne zbytek.
+ */
+function useStepTimer(paused: boolean) {
+  const slot = useRef<{ fn: () => void; left: number; armedAt: number; id?: ReturnType<typeof setTimeout> } | null>(null);
+  const halted = useRef(paused);
+  const arm = () => {
+    const s = slot.current;
+    if (!s || halted.current) return;
+    s.armedAt = performance.now();
+    s.id = setTimeout(() => { slot.current = null; s.fn(); }, s.left);
+  };
+  useEffect(() => {
+    halted.current = paused;
+    const s = slot.current;
+    if (!s) return;
+    if (!paused) return arm();
+    clearTimeout(s.id);
+    s.left -= performance.now() - s.armedAt;
+  }, [paused]);
+  useEffect(() => () => clearTimeout(slot.current?.id), []);
+  /** Naplánuje krok a vrátí funkci, která ho zruší (pokud mezitím nebyl naplánován jiný). */
+  return (ms: number, fn: () => void) => {
+    clearTimeout(slot.current?.id);
+    const s: NonNullable<typeof slot.current> = { fn, left: ms, armedAt: 0 };
+    slot.current = s;
+    arm();
+    return () => { if (slot.current === s) { clearTimeout(s.id); slot.current = null; } };
+  };
+}
+
 function ini(n: string) { return n.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase(); }
 
 /* ── Zone from event: 0=home defense, 1=midfield, 2=home attack ── */
@@ -140,18 +175,14 @@ export default function MatchReplayPage() {
   const [ready3d, setReady3d] = useState(false);
   const started = useRef(false);
   const scened = useMemo(() => (match && can3d ? scenedEvents(match.events) : null), [match, can3d]);
-  // Pauza a skok na předchozí/další akci. Rozběhnuté časovače patří k běhu `run`; po skoku už nic nezmění.
+  // Pauza a skok na předchozí/další akci.
   const [paused, setPaused] = useState(false);
-  const run = useRef(0);
+  const later = useStepTimer(paused);
   const starts = useMemo(() => (match ? actionStarts(match.events) : []), [match]);
-  /** Po skoku: akce, jejíž první snímek se půl vteřiny drží, než se rozběhne (ať je vidět, kam se skočilo). */
+  /** Po skoku: akce, jejíž první snímek chvíli stojí, než se rozběhne. */
   const [cue, setCue] = useState<number | null>(null);
-  const jumped = useRef(false);
   const jumpTo = (k: number) => {
     if (!match) return;
-    const gen = ++run.current;
-    animating.current = false;
-    jumped.current = true;
     const before = match.events.slice(0, k);
     setHg(before.filter((e) => e.type === "goal" && e.teamId === 1).length);
     setAg(before.filter((e) => e.type === "goal" && e.teamId !== 1).length);
@@ -160,19 +191,14 @@ export default function MatchReplayPage() {
     setHtDone((match.events[k]?.minute ?? 0) > 45);
     setIdx(k);
     setCue(k);
-    setTimeout(() => { if (gen !== run.current) return; setCue(null); setTick((t) => t + 1); }, 500);
+    // Dokud snímek stojí, záznam čeká; akci pak rozběhne krok záznamu níž.
+    animating.current = true;
+    later(CUE_MS, () => { animating.current = false; setTick((t) => t + 1); });
   };
-  /** Událost, která se právě hraje (při „ŠANCE!“ ta, která teprve přijde). */
-  const playing = flash === "attacking" ? idx : idx - 1;
+  /** Událost, která se právě hraje (při „ŠANCE!“ ta, která teprve přijde; po skoku ta, na které záznam stojí). */
+  const playing = cue ?? (flash === "attacking" ? idx : idx - 1);
   const previousAction = starts.findLast((k) => k < (starts.findLast((x) => x <= playing) ?? 0));
   const nextAction = starts.find((k) => k > playing);
-  // Pauza zastaví obraz; pokračování pustí rozehranou akci znovu od začátku.
-  const togglePause = () => {
-    if (paused) return jumpTo(flash ? playing : idx);
-    run.current++;
-    animating.current = false;
-    setPaused(true);
-  };
 
   useEffect(() => {
     const hydrate = (r: Record<string, unknown>) => {
@@ -250,31 +276,28 @@ export default function MatchReplayPage() {
     started.current = true;
     setKickoff("1st");
     animating.current = true;
-    const gen = run.current;
-    setTimeout(() => { if (gen !== run.current) return; setKickoff(null); animating.current = false; setTick((t) => t + 1); }, stepMs.kickoff);
+    later(stepMs.kickoff, () => { setKickoff(null); animating.current = false; setTick((t) => t + 1); });
   }, [!!match, long3d, ready3d]);
 
   // Kickoff 2nd half — auto-dismiss
   useEffect(() => {
     if (kickoff !== "2nd") return;
     animating.current = true;
-    const gen = run.current;
-    const t = setTimeout(() => { if (gen !== run.current) return; setKickoff(null); animating.current = false; setTick((t) => t + 1); }, stepMs.secondHalf);
-    return () => clearTimeout(t);
+    return later(stepMs.secondHalf, () => { setKickoff(null); animating.current = false; setTick((t) => t + 1); });
   }, [kickoff]);
 
   // Auto-advance
   useEffect(() => {
-    if (!match || !started.current || finished || htPause || paused || cue !== null || animating.current) return;
-    const gen = run.current;
-    // Hned po skoku se na předchozí událost nečeká, akce začne rovnou.
-    const afterJump = jumped.current;
-    jumped.current = false;
+    if (!match || !started.current || finished || htPause || animating.current) return;
+    // Po skoku se akce rozběhne ve stejném kroku, ve kterém zmizí její stojící snímek.
+    const afterJump = cue !== null;
+    if (afterJump) setCue(null);
+    const endStep = () => { setFlash(null); setFlashEvent(null); animating.current = false; setTick((t) => t + 1); };
     if (idx >= match.events.length) { setFinished(true); setHg(match.home_score); setAg(match.away_score); markSeen(); return; }
     if (speed === "instant") {
       let h = 0, a = 0;
       for (const e of match.events) { if (e.type === "goal") { if (e.teamId === 1) h++; else a++; } }
-      setHg(h); setAg(a); setIdx(match.events.length); setFinished(true); setKickoff(null); markSeen(); return;
+      setHg(h); setAg(a); setIdx(match.events.length); setFinished(true); setKickoff(null); setPaused(false); markSeen(); return;
     }
     const next = match.events[idx];
     if (next.type === "special" && next.description.includes("Poločas")) { setIdx((i) => i + 1); return; }
@@ -288,7 +311,7 @@ export default function MatchReplayPage() {
       setFlash("penalty");
       setIdx((i) => i + 1);
       const dur = speed === "fast" ? 4000 : stepMs.penalty;
-      setTimeout(() => { if (gen !== run.current) return; setFlash(null); setFlashEvent(null); animating.current = false; setTick((t) => t + 1); }, dur);
+      later(dur, endStep);
       return;
     }
 
@@ -308,33 +331,33 @@ export default function MatchReplayPage() {
         setFlash("attacking");
         setFlashEvent(next);
         const atkDur = speed === "fast" ? 1800 : 3500;
-        setTimeout(() => {
-          if (gen !== run.current) return;
+        later(atkDur, () => {
           if (next.type === "goal") {
             if (next.teamId === 1) setHg((s) => s + 1); else setAg((s) => s + 1);
             setFlash("goal");
             setIdx((i) => i + 1);
-            setTimeout(() => { if (gen !== run.current) return; setFlash(null); setFlashEvent(null); animating.current = false; setTick((t) => t + 1); }, stepMs.goal);
+            later(stepMs.goal, endStep);
           } else {
             setFlash("chance");
             setIdx((i) => i + 1);
-            setTimeout(() => { if (gen !== run.current) return; setFlash(null); setFlashEvent(null); animating.current = false; setTick((t) => t + 1); }, stepMs.chance);
+            later(stepMs.chance, endStep);
           }
-        }, atkDur);
+        });
       } else {
         setFlashEvent(next);
         setFlash(next.type === "card" ? "card" : isPenaltyOutcome ? "chance" : isSubScene ? "substitution" : "injury");
         setIdx((i) => i + 1);
         const dur = speed === "fast" ? 2500 : stepMs.drama;
-        setTimeout(() => { if (gen !== run.current) return; setFlash(null); setFlashEvent(null); animating.current = false; setTick((t) => t + 1); }, dur);
+        later(dur, endStep);
       }
-      return; // No cleanup — timeouts are fire-and-forget
+      return;
     }
 
+    // Po skoku se nečeká a událost se ukáže hned, ve stejném kroku jako zmizí stojící snímek.
+    if (afterJump) { setIdx((i) => i + 1); return; }
     // Čekání patří právě ukázané události (idx - 1); ve 3D se u události bez scény nečeká, ani po výkopu.
-    const t = setTimeout(() => { setIdx((i) => i + 1); }, afterJump || (view3d && scened && (idx === 0 || !scened[idx - 1])) ? 0 : SPEED_MS[speed]);
-    return () => clearTimeout(t);
-  }, [match, idx, speed, finished, htPause, htDone, tick, markSeen, view3d, scened, paused, cue]);
+    return later(view3d && scened && (idx === 0 || !scened[idx - 1]) ? 0 : SPEED_MS[speed], () => setIdx((i) => i + 1));
+  }, [match, idx, speed, finished, htPause, htDone, tick, markSeen, view3d, scened, cue]);
 
   if (loading) return <div className="flex items-center justify-center min-h-[60vh]"><Spinner /></div>;
   if (!match || match.events.length === 0) return (
@@ -589,8 +612,8 @@ export default function MatchReplayPage() {
             </>
           )}
           <div className="absolute bottom-2 left-2 z-30 flex gap-1 text-white text-sm">
-            <button onClick={() => jumpTo(previousAction ?? 0)} title="Předchozí akce" className="w-8 h-8 rounded-lg bg-black/60 hover:bg-black/80">{"\u23EE"}</button>
-            <button onClick={togglePause} disabled={finished} title={paused ? "Pokračovat" : "Pauza"} className="w-8 h-8 rounded-lg bg-black/60 hover:bg-black/80 disabled:opacity-40">{paused ? "\u25B6" : "\u23F8"}</button>
+            <button onClick={() => jumpTo(previousAction ?? starts[0])} disabled={starts.length === 0} title="Předchozí akce" className="w-8 h-8 rounded-lg bg-black/60 hover:bg-black/80 disabled:opacity-40">{"\u23EE"}</button>
+            <button onClick={() => setPaused((p) => !p)} disabled={finished || htPause} title={paused ? "Pokračovat" : "Pauza"} className="w-8 h-8 rounded-lg bg-black/60 hover:bg-black/80 disabled:opacity-40">{paused ? "\u25B6" : "\u23F8"}</button>
             <button onClick={() => nextAction !== undefined && jumpTo(nextAction)} disabled={nextAction === undefined} title="Další akce" className="w-8 h-8 rounded-lg bg-black/60 hover:bg-black/80 disabled:opacity-40">{"\u23ED"}</button>
           </div>
 

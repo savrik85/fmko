@@ -125,6 +125,8 @@ interface Stadium3DProps {
   initialViewpoint?: CameraViewpoint;
   /** Záznam zápasu ve scéně: kameru si řídí sám a míč na středu se nekreslí. */
   replay?: React.ReactNode;
+  /** Zastavený obraz (pauza záznamu): scéna se přestane kreslit, takže stojí i sníh, vlajky a diváci. */
+  frozen?: boolean;
   initialWeather?: WeatherType;
   weather?: WeatherType;
   initialMode?: StadiumMode;
@@ -181,6 +183,7 @@ export function Stadium3D({
   initialTimeOfDay = "day",
   initialViewpoint = "overview",
   replay,
+  frozen = false,
   initialWeather = "sunny",
   weather: weatherProp,
   initialMode = "match_day",
@@ -500,7 +503,7 @@ export function Stadium3D({
         // (trávník vs. okolní dlažba) perou o pořadí a prosvítají skrz sebe.
         // Kamera je díky minDistance=15 vždy dost daleko, takže near=1 nic neořízne.
         camera={{ position: VIEWPOINTS.overview.position, fov: VIEWPOINTS.overview.fov, near: 1, far: 400 }}
-        frameloop={inView ? "always" : "never"}
+        frameloop={inView && !frozen ? "always" : "never"}
         dpr={[1, dpr]}
         onCreated={() => {
           setTimeout(() => setIsSceneReady(true), 120);
