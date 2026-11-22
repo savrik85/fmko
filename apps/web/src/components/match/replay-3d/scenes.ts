@@ -20,7 +20,7 @@ const PLAIN = 3.5, ATTACK = 3.5, GOAL = 6, CHANCE = 3, DRAMA = 4, PENALTY = 7;
 
 export type Side = "home" | "away";
 type Role = "GK" | "DEF" | "MID" | "FWD";
-export type Pose = "down" | "diveLeft" | "diveRight" | "celebrate" | "armUp";
+export type Pose = "down" | "diveLeft" | "diveRight" | "celebrate" | "armUp" | "slide";
 export type ShotResult = "goal" | "saved" | "post" | "bar" | "wide" | "over" | "blocked";
 type CardColor = "yellow" | "red";
 
@@ -51,6 +51,8 @@ export interface Scene {
   focus: number[];
   card: { at: number; color: CardColor } | null;
   result: ShotResult | null;
+  /** Gól: úsek klipu se zakončením, který se zopakuje z jiné kamery, a branka, do které padl. */
+  replay: { from: number; to: number; goalZ: number } | null;
 }
 type Window = Omit<Scene, "clip">;
 
@@ -522,7 +524,7 @@ export class Replay {
     const fixed = new Map<number, Point>([[this.referee, { x: 4, z: 5 }], ...pair.map((s, n): [number, Point] => [s.figure, { x: n * 2.5 - 0.6, z: 0.7 }])]);
     stage.layout({ x: 0, z: 0 }, (slot, side) => uvToWorld(side, Math.min(slot.base.u * 0.8, 0.42), slot.base.v), fixed);
     stage.wait(PLAIN);
-    return { clip: stage.finish(), start: 0, split: 0, end: PLAIN, focus: [], card: null, result: null };
+    return { clip: stage.finish(), start: 0, split: 0, end: PLAIN, focus: [], card: null, result: null, replay: null };
   }
 
   /**
@@ -564,7 +566,7 @@ export class Replay {
     const e = events[head];
     const side = sideOf(e.teamId);
     const find = (...types: string[]) => rest.find((i) => types.includes(events[i].type));
-    const window = (i: number, start: number, w: Partial<Window> = {}) => windows.set(i, { start, split: start, end: st.t, focus: [], card: null, result: null, ...w });
+    const window = (i: number, start: number, w: Partial<Window> = {}) => windows.set(i, { start, split: start, end: st.t, focus: [], card: null, result: null, replay: null, ...w });
     const finisher = find("goal", "chance");
     const result = finisher === undefined ? null : events[finisher].type === "goal" ? "goal" : chanceResult(events[finisher]);
 

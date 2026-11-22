@@ -39,7 +39,6 @@ import {
   ATTENDANCE_PRESETS,
   type TimeOfDay,
   type CameraViewpoint,
-  type ViewpointDef,
   type WeatherType,
   type StadiumMode,
   type AttendanceLevel,
@@ -124,8 +123,8 @@ interface Stadium3DProps {
   lastMatch?: LastMatchScore | null;
   initialTimeOfDay?: TimeOfDay;
   initialViewpoint?: CameraViewpoint;
-  /** Záznam zápasu ve scéně: dostane pohled z hlavní tribuny, kameru si řídí sám a míč na středu se nekreslí. */
-  replay?: (mainStand: ViewpointDef) => React.ReactNode;
+  /** Záznam zápasu ve scéně: kameru si řídí sám a míč na středu se nekreslí. */
+  replay?: React.ReactNode;
   initialWeather?: WeatherType;
   weather?: WeatherType;
   initialMode?: StadiumMode;
@@ -530,7 +529,7 @@ export function Stadium3D({
         <WeatherEffects weather={weather} timeOfDay={timeOfDay} isMobile={isMobile} />
 
         {/* Plynulý kontrolér kamery a filmový oblet */}
-        {replay ? replay(viewpoints.main_stand) : <CameraController viewpoint={viewpoint} isMobile={isMobile} viewpoints={viewpoints} instant={!!onSnapshotReady} />}
+        {replay ?? <CameraController viewpoint={viewpoint} isMobile={isMobile} viewpoints={viewpoints} instant={!!onSnapshotReady} />}
 
         {/* Post-processing: ambient occlusion, záře světel, vinětace, tone mapping (jen desktop) */}
         {fxActive && isSceneReady && <PostFX timeOfDay={timeOfDay} miniature={viewpoint === "overview" || viewpoint === "orbit"} />}

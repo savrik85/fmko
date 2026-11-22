@@ -84,6 +84,7 @@ export function Replay3D({ detail, events, progress }: { detail: Record<string, 
   }, [venue, homeTeamId]);
 
   const [fullscreen, setFullscreen] = useState(false);
+  const replayBadge = useRef<HTMLDivElement>(null);
   const event = attack ? events[idx] : events[idx - 1];
   const label = labelOf();
   const attendance = detail.attendance as number | null;
@@ -132,7 +133,7 @@ export function Replay3D({ detail, events, progress }: { detail: Record<string, 
         showControls={false}
         // Pohled „z tribuny“ nemá rozostření okrajů, které stadion používá u pohledů z dálky.
         initialViewpoint="main_stand"
-        replay={(mainStand) => <ReplayScene replay={replay} kits={kits} snow={detail.weather === "snow"} step={step} tv={mainStand} />}
+        replay={<ReplayScene replay={replay} kits={kits} snow={detail.weather === "snow"} step={step} replayBadge={replayBadge} />}
       />
 
       {label && (
@@ -143,6 +144,9 @@ export function Replay3D({ detail, events, progress }: { detail: Record<string, 
           </div>
         </div>
       )}
+      <div ref={replayBadge} style={{ display: "none" }} className="absolute top-2 left-14 z-30 px-2 py-1 rounded-lg bg-red-600 text-white text-xs font-heading font-bold tracking-wide pointer-events-none">
+        ↺ OPAKOVANÝ ZÁBĚR
+      </div>
       {curtain && (
         <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none bg-black/45">
           <div className="text-center font-heading text-white">
