@@ -118,4 +118,19 @@ describe("vlákno z hospody další den", () => {
     expect(prompt).not.toContain("Klidně ho pozvi, ať přijde na pivo");
     expect(prompt).not.toContain("OPILOU hlasovku nebo zprávu");
   }, 60_000);
+
+  it("ráno potom: na druhou otázku trenéra hráč odpoví, není to vynucená poslední zpráva (E2E 22. 11.: 4/4 jen omluvy)", async () => {
+    vi.mocked(generateText)
+      .mockResolvedValueOnce(JSON.stringify({ body: "Dobrý, trenére, jen trochu bolí hlava.", conversation_complete: false }))
+      .mockResolvedValueOnce(JSON.stringify({ body: "Kluci v kabině drží spolu, Jirka je teď nejlepší.", conversation_complete: false }));
+    await coachSays("Kevine, co děláš? Všechno v pohodě?");
+    vi.mocked(generateText).mockClear();
+    vi.mocked(generateText).mockResolvedValueOnce(JSON.stringify({ body: "Kluci v kabině drží spolu, Jirka je teď nejlepší.", conversation_complete: false }));
+    const second = await coachSays("To rád slyším. Jak to vidíš s klukama v kabině?");
+    expect(second).toContain("Jak to vidíš s klukama v kabině?");
+    expect(second).not.toContain("TOTO JE TVOJE POSLEDNÍ ZPRÁVA");
+    const conv = await db.prepare("SELECT ai_thread_active, ai_thread_state FROM conversations WHERE id = ?").bind(CONV).first<{ ai_thread_active: number; ai_thread_state: string }>();
+    expect(conv?.ai_thread_active).toBe(1);
+    expect(JSON.parse(conv!.ai_thread_state)).toMatchObject({ current_replies: 2, awaiting: "coach" });
+  }, 60_000);
 });

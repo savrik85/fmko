@@ -791,6 +791,21 @@ function lastCoachMessage(history: readonly ThreadMessage[]): string | undefined
   return undefined;
 }
 
+/**
+ * Pokyn k poslední zprávě vlákna. Dřív „uzavři ji (poděkuj, rozluč se…)“ přebil pokyn „když se
+ * trenér ptá na něco jiného, odpověz na to“: ve vláknech pub_voice ráno potom 4/4 poslední
+ * repliky na otázku trenéra neodpověděly a jen se omlouvaly za včerejšek (E2E 22. 11.). Když se
+ * trenér ptá, je odpověď na jeho otázku hlavní a rozloučení až po ní.
+ */
+export function finalTurnHint(lastCoach: string | undefined): string {
+  const question = lastCoach && lastCoach.includes("?") ? lastCoach.replace(/\s+/g, " ").trim().slice(0, 200) : null;
+  return question
+    ? `TOTO JE TVOJE POSLEDNÍ ZPRÁVA. Trenér se tě ptá („${question}“): NEJDŘÍV mu na to odpověz, to je v té zprávě hlavní. `
+      + "Teprve potom rozhovor krátce uzavři (poděkuj, rozluč se). Sám se už na nic nového neptej. Pole `conversation_complete` MUSÍ být true."
+    : "TOTO JE TVOJE POSLEDNÍ ZPRÁVA. Zareaguj na to, co ti trenér napsal, a rozhovor uzavři (poděkuj, smiř se, rozluč se, "
+      + "nebo prásknout dveřmi, když tě trenér naštval). Žádné nové otázky. Pole `conversation_complete` MUSÍ být true.";
+}
+
 export interface ReplyResult {
   body: string;
   /** Pokud true, AI usoudila že téma je probrané a další výměna nedává smysl — handler spustí resolution. */
@@ -826,9 +841,7 @@ export async function generateReply(
   const histText = formatHistory(history, player.firstName);
   const flags = replyFlagFields(player);
 
-  const closingHint = isFinalTurn
-    ? "TOTO JE TVOJE POSLEDNÍ ZPRÁVA — uzavři ji (poděkuj / smiř se / rozluč se / nebo prásknout dveřmi pokud tě trenér naštval). Žádné nové otázky. Pole `conversation_complete` MUSÍ být true."
-    : "";
+  const closingHint = isFinalTurn ? finalTurnHint(lastCoachMessage(history)) : "";
 
   const contextLine = team.lastMatchResult ? ` Poslední zápas: ${team.lastMatchResult}.` : "";
   const prompt0 = [
@@ -1125,7 +1138,7 @@ export async function generateCoachInitiatedReply(
     histText,
     "",
     isFinalTurn
-      ? "TOTO JE TVOJE POSLEDNÍ ZPRÁVA — rozluč se. Pole `conversation_complete` MUSÍ být true."
+      ? finalTurnHint(lastCoachMessage(history))
       : "conversation_complete dej true, když je téma vyčerpané (trenér se jen zeptal a ty jsi odpověděl). False jen když máš na co konkrétního navázat.",
     "",
     "Když dáš conversation_complete = true, zhodnoť i dopad z tvého pohledu. Hodnoť JEN POSLEDNÍ zprávu trenéra (a to, co jsi na ni odpověděl). Starší repliky v historii se už započítaly dřív, nezapočítávej je znovu:",
