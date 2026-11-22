@@ -117,6 +117,8 @@ export interface LeftOutSulk {
   matchId: string;
   /** Tým, za který hráč nejel. Starší truce ho nemají. */
   teamId?: string;
+  /** Proč nejel, jak to napsal trenérovi (`ComplaintReason` nebo `NotCountedOn`). Starší truce ho nemají. */
+  reason?: string;
 }
 
 /**
@@ -492,7 +494,7 @@ export async function reactToLeftOut(
     text += ` ${SULK_SUFFIXES[Math.floor(rng.random() * SULK_SUFFIXES.length)]}`;
     const until = new Date(`${gameDay}T12:00:00Z`);
     until.setUTCDate(until.getUTCDate() + SULK_DAYS);
-    const sulk: LeftOutSulk = { since: gameDay, until: until.toISOString().slice(0, 10), matchId, teamId };
+    const sulk: LeftOutSulk = { since: gameDay, until: until.toISOString().slice(0, 10), matchId, teamId, reason };
     await db.prepare("UPDATE players SET life_context = json_set(life_context, '$.leftOutSulk', json(?)) WHERE id = ?")
       .bind(JSON.stringify(sulk), sender.id).run();
   }
@@ -506,6 +508,28 @@ export async function reactToLeftOut(
     avatar: sender.row.avatar,
   }, text, { type: "left_out", matchId, reason, sulk: sulks });
   logger.info({ module: "left-out", teamId }, `${sender.row.last_name} píše trenérovi, nejel na zápas (${reason}${sulks ? ", trucuje" : ""})`);
+}
+
+const NOT_COUNTED_ON: readonly string[] = ["on_market", "on_loan", "told_out"];
+
+/**
+ * Proč trucující hráč ví, že nejede (trucové vlákno, routes/messaging.ts): je teď na listině
+ * nebo na hostování, nebo to napsal v SMS o nenominaci (`sulk.reason`, u starších trucu metadata
+ * jeho poslední takové SMS). `null` = neví, ptá se, proč nejel.
+ */
+export async function knownLeftOutReason(
+  db: D1Database, o: { playerId: string; convId: string; sulk?: Partial<LeftOutSulk> | null },
+): Promise<NotCountedOn | null> {
+  const listed = notCountedOn({ listing: await loadActiveListing(db, o.playerId), toldOut: false });
+  if (listed) return listed;
+  if (o.sulk?.reason) return NOT_COUNTED_ON.includes(o.sulk.reason) ? o.sulk.reason as NotCountedOn : null;
+  const row = await db.prepare(
+    `SELECT json_extract(metadata, '$.reason') AS reason FROM messages
+      WHERE conversation_id = ? AND sender_type = 'player' AND json_extract(metadata, '$.type') = 'left_out'
+      ORDER BY sent_at DESC LIMIT 1`,
+  ).bind(o.convId).first<{ reason: string | null }>()
+    .catch((e) => { logger.warn({ module: "left-out" }, `důvod nenominace v konverzaci ${o.convId}`, e); return null; });
+  return row?.reason && NOT_COUNTED_ON.includes(row.reason) ? row.reason as NotCountedOn : null;
 }
 
 /** Napsal hráč v posledním týdnu, že ví, že se s ním nepočítá? Pak po dalším zápase mlčí. */

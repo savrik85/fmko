@@ -848,9 +848,11 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
        FROM players p JOIN teams t ON t.id = p.team_id WHERE p.id = ? AND p.team_id = ?`,
     ).bind(conv.participant_id, teamId).first<{ sulk: string | null; game_date: string | null }>()
       .catch((e) => { logger.warn({ module: "messaging" }, "truc po nenominaci", e); return null; });
-    const { isSulking } = await import("../multiplayer/left-out");
+    const { isSulking, knownLeftOutReason } = await import("../multiplayer/left-out");
     const sulk = sulkRow?.sulk ? JSON.parse(sulkRow.sulk) : null;
     if (sulk && isSulking(sulk, sulkRow?.game_date ?? now, teamId)) {
+      // Na listině, na hostování nebo „nepočítám s tebou“: hráč ví, proč nejede (ai-player-scenarios.ts leftOutScenario).
+      const leftOutReason = await knownLeftOutReason(c.env.DB, { playerId: conv.participant_id, convId, sulk });
       // Nový stav nesmí zahodit výsledek domluvy o váze, který hook výše právě zapsal.
       const { carryWeightTalk } = await import("../season/weight-talk");
       const prevState = await c.env.DB.prepare("SELECT ai_thread_state FROM conversations WHERE id = ?")
@@ -869,6 +871,7 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
         initiated_at: now,
         player_id: conv.participant_id,
         resolution: null,
+        ...(leftOutReason ? { left_out_reason: leftOutReason } : {}),
         ...carryWeightTalk(prevState?.ai_thread_state),
       }), convId).run()
         .catch((e) => { logger.warn({ module: "messaging" }, "otevření vlákna s trucujícím hráčem", e); return null; });
