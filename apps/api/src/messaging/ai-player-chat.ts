@@ -773,6 +773,12 @@ export async function generateInitialMessage(
   return out.body;
 }
 
+/** Poslední zpráva trenéra v historii: na ni hráč odpovídá (hlídání opakování, repetition.ts). */
+function lastCoachMessage(history: readonly ThreadMessage[]): string | undefined {
+  for (let i = history.length - 1; i >= 0; i--) if (history[i].sender === "coach") return history[i].body;
+  return undefined;
+}
+
 export interface ReplyResult {
   body: string;
   /** Pokud true, AI usoudila že téma je probrané a další výměna nedává smysl — handler spustí resolution. */
@@ -872,7 +878,7 @@ export async function generateReply(
       conversationComplete: parsed.conversation_complete === true || isFinalTurn,
       ...parseReplyFlags(parsed, body, player),
     };
-  }, `odpověď ${scenario.id}`, { deadline: opts.deadline, address: coachAddressForm(player) });
+  }, `odpověď ${scenario.id}`, { deadline: opts.deadline, address: coachAddressForm(player), coachMessage: lastCoachMessage(history) });
 }
 
 /**
@@ -943,7 +949,7 @@ export async function generateUnrestReply(
 
   const out = await generateWithoutRepeats(player.ownRecentLines, async (retryRule) => ({
     body: trimSms(await callModel(env, prompt(retryRule), { maxTokens: 200, temperature: 0.9 })),
-  }), "truc", { address: coachAddressForm(player) });
+  }), "truc", { address: coachAddressForm(player), coachMessage: context.coachMessage });
   return out.body;
 }
 
@@ -1142,7 +1148,7 @@ export async function generateCoachInitiatedReply(
       effect: complete ? coachChatEffect(parsed) : undefined,
       ...parseReplyFlags(parsed, body, player),
     };
-  }, "odpověď trenérovi", { deadline: opts.deadline, address: coachAddressForm(player) });
+  }, "odpověď trenérovi", { deadline: opts.deadline, address: coachAddressForm(player), coachMessage: lastCoachMessage(history) });
 }
 
 /**
@@ -1190,7 +1196,7 @@ export async function generateFollowUpMessage(
     const body = trimSms(parsed.body);
     const flags = parseReplyFlags(parsed, body, player);
     return { body, transferStance: flags.transferStance, attendancePledge: flags.attendancePledge };
-  }, "odložená zpráva", { deadline: opts.deadline, address: coachAddressForm(player) });
+  }, "odložená zpráva", { deadline: opts.deadline, address: coachAddressForm(player), coachMessage: lastCoachMessage(history) });
 }
 
 /** Dopad rozhovoru od trenéra z odpovědi modelu, oříznutý na povolené meze. */
@@ -1292,7 +1298,7 @@ export async function generateSquadGroupReaction(
     }
     pledge = parseAttendancePledge(parsed.attendance_pledge);
     return { body: trimSms(parsed.text) };
-  }, "kabina", { deadline: opts.deadline, others: opts.teammateLines });
+  }, "kabina", { deadline: opts.deadline, others: opts.teammateLines, coachMessage });
   if (pledge && opts.onPledge) opts.onPledge(pledge);
   return out.body;
 }

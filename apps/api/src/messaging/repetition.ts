@@ -94,13 +94,72 @@ export function sentencesRepeat(a: string, b: string): boolean {
   return tooSimilar(wa.join(" "), wb.join(" "));
 }
 
+/** Starší vlastní zprávy se porovnávají jen s dlouhými větami (`LONG_SENTENCE_WORDS`). */
+export const RECENT_LINES_MS = 48 * 3600_000;
+/** Věta s tolika významovými slovy nese obsah: opakuje se, i když ji hráč napsal před týdnem. */
+const LONG_SENTENCE_WORDS = 4;
+/** Odpověď, která jen vrací slova z trenérovy otázky, smí mít nejvýš tolik významových slov. */
+const ECHO_MAX_WORDS = 3;
+/** Slova z otázky trenéra se porovnávají podle začátku („dorazíš“ a „dorazím“ jsou totéž). */
+const ECHO_STEM_CHARS = 5;
+
+/**
+ * Vlastní zprávy hráče a kdy je poslal (`sentAt`, ISO, stejné pořadí). Bez časů se všechny
+ * berou jako čerstvé. `loadOwnRecentLines` časy přidává, kopie pole (`[...lines]`) o ně přijde.
+ */
+export type OwnLines = string[] & { sentAt?: string[] };
+
+function stems(words: readonly string[]): string[] {
+  return words.map((w) => w.slice(0, ECHO_STEM_CHARS));
+}
+
+/**
+ * Krátká věcná odpověď na přímou otázku trenéra, která jen vrací jeho slova: „Dorazíš v úterý?“
+ * → „V úterý dorazím, trenére.“ To není opakování, i když to hráč napsal už dřív (Šmíd, E2E 22. 11.:
+ * hlídač odpověď zahodil kvůli „…v úterý dorazím a máknu“ z 19. 11. a hráč 56 minut mlčel).
+ */
+export function echoesCoach(sentence: string, coachMessage: string | undefined): boolean {
+  if (!coachMessage) return false;
+  const own = significantWords(sentence);
+  if (own.length === 0 || own.length > ECHO_MAX_WORDS) return false;
+  const coach = new Set(stems(significantWords(coachMessage)));
+  return stems(own).every((w) => coach.has(w));
+}
+
 /**
  * Věty nové zprávy, které hráč už napsal (stejně nebo skoro stejně) v některé z `previous`,
- * a ohrané věty, které píše každý (`isStockSentence`).
+ * a ohrané věty, které píše každý (`isStockSentence`). `old`: starší zprávy (víc než
+ * `RECENT_LINES_MS`), proti nim se hlídají jen dlouhé věty. Krátká odpověď, která vrací slova
+ * z trenérovy zprávy (`coachMessage`, `echoesCoach`), opakováním není.
  */
-export function findRepeatedSentences(body: string, previous: readonly string[]): string[] {
-  const old = previous.flatMap(splitSentences);
-  return splitSentences(body).filter((s) => isStockSentence(s) || old.some((o) => sentencesRepeat(s, o)));
+export function findRepeatedSentences(
+  body: string, previous: readonly string[], opts: { old?: readonly string[]; coachMessage?: string } = {},
+): string[] {
+  const recent = previous.flatMap(splitSentences);
+  const old = (opts.old ?? []).flatMap(splitSentences);
+  return splitSentences(body).filter((s) => {
+    if (isStockSentence(s)) return true;
+    if (echoesCoach(s, opts.coachMessage)) return false;
+    if (recent.some((o) => sentencesRepeat(s, o))) return true;
+    return significantWords(s).length >= LONG_SENTENCE_WORDS && old.some((o) => sentencesRepeat(s, o));
+  });
+}
+
+/** Je věta doslova (bez oslovení a interpunkce, aspoň tři slova) jedna z vět `lines`? */
+function literalRepeat(sentence: string, lines: readonly string[]): boolean {
+  const p = plainSentence(sentence);
+  return p.split(" ").length >= 3 && lines.flatMap(splitSentences).some((o) => plainSentence(o) === p);
+}
+
+/** Vlastní zprávy rozdělené na čerstvé a starší než `RECENT_LINES_MS` (podle `sentAt`). */
+function splitByAge(lines: readonly string[] & { sentAt?: readonly string[] }, now: number): { recent: string[]; old: string[] } {
+  const recent: string[] = [];
+  const old: string[] = [];
+  lines.forEach((line, i) => {
+    const at = Date.parse(lines.sentAt?.[i] ?? "");
+    (Number.isFinite(at) && now - at > RECENT_LINES_MS ? old : recent).push(line);
+  });
+  return { recent, old };
 }
 
 // ─── Krátké fráze a úvody ────────────────────────────────────────────────────
@@ -363,25 +422,28 @@ export function repeatRetryRule(repeated: readonly string[]): string {
  * pozadí končí po ~30 s a uříznutý druhý pokus by zahodil i hotový první text.
  */
 export async function generateWithoutRepeats<T extends { body: string }>(
-  previous: readonly string[] | undefined,
+  previous: (readonly string[] & { sentAt?: readonly string[] }) | undefined,
   generate: (retryRule: string) => Promise<T>,
   where: string,
   /**
    * `others`: věty spoluhráčů z téhož vlákna (kabina). Hlídají se celé věty, úvody a fráze jen vlastní.
    * `address`: jak hráč trenérovi píše (address-form.ts). Text s opačným tvarem se jednou přegeneruje,
    * když zbývá čas; jinak (nebo když ani druhý pokus tvar nedodrží) se pošle a zaloguje.
+   * `coachMessage`: na co hráč odpovídá. Krátká odpověď s jeho slovy se za opakování nepočítá.
    */
-  opts: { deadline?: number; others?: readonly string[]; address?: CoachAddress } = {},
+  opts: { deadline?: number; others?: readonly string[]; address?: CoachAddress; coachMessage?: string } = {},
 ): Promise<T> {
   const own = previous ?? [];
-  previous = [...own, ...(opts.others ?? [])];
+  const { recent, old } = splitByAge(own, Date.now());
+  const fresh = [...recent, ...(opts.others ?? [])];
+  const repeatsIn = (body: string) => findRepeatedSentences(body, fresh, { old, coachMessage: opts.coachMessage });
   // Krátké fráze a úvody se jen škrtají, kvůli nim se model znovu nevolá.
   const finish = (r: T): T => {
     const body = withoutRepeatedPhrases(r.body, own);
     return body === r.body ? r : { ...r, body };
   };
   const first = await generate("");
-  const repeated = findRepeatedSentences(first.body, previous);
+  const repeated = repeatsIn(first.body);
   const firstWrongAddress = wrongAddress(first.body, opts.address);
   if (repeated.length === 0 && !firstWrongAddress) return finish(first);
 
@@ -397,7 +459,7 @@ export async function generateWithoutRepeats<T extends { body: string }>(
         ...(firstWrongAddress && opts.address ? [addressRetryRule(opts.address)] : []),
       ].join("\n");
       const second = await generate(rule);
-      const again = findRepeatedSentences(second.body, previous);
+      const again = repeatsIn(second.body);
       // Opakování je horší než špatný tvar oslovení: druhý pokus bez opakování vyhrává,
       // když první opakoval, nebo když tvar opravil.
       if (again.length === 0 && (repeated.length > 0 || !wrongAddress(second.body, opts.address))) return finish(second);
@@ -419,8 +481,14 @@ export async function generateWithoutRepeats<T extends { body: string }>(
     logger.info({ module: M }, `vyškrtnuto opakování (${where}): ${bestRepeated.join(" | ")}`);
     return finish({ ...best, body: trimmed });
   }
-  // Doslovný duplikát neodejde nikdy (E2E 22. 11.: druhý pokus nestihl rozpočet a hráč poslal
-  // tutéž větu jako před chvílí). Volající to bere jako nedostupný model: předem napsaná
+  // Při pochybnosti zprávu nechat: podobná, ale ne stejná věta je menší chyba než hráč, který
+  // pak hodinu mlčí (Šmíd, Král, Dvořák v E2E 22. 11.: 3 z 11 odložených odpovědí).
+  if (!bestRepeated.some((r) => isStockSentence(r) || literalRepeat(r, fresh))) {
+    logger.warn({ module: M }, `zpráva se podobá dřívější, bez ní by nic nezbylo, posílám ji (${where}): ${bestRepeated.join(" | ")}`);
+    return finish(best);
+  }
+  // Doslovný duplikát ani ohraná věta neodejde (E2E 22. 11.: druhý pokus nestihl rozpočet a hráč
+  // poslal tutéž větu jako před chvílí). Volající to bere jako nedostupný model: předem napsaná
   // varianta, nebo odpověď později (retry_reply), kdy má model čas na nový pokus.
   logger.warn({ module: M }, `hráč opakuje větu a bez ní by ze zprávy nic nezbylo, neposílám (${where}): ${bestRepeated.join(" | ")}`);
   throw new GeminiUnavailableError(`odpověď by jen opakovala, co hráč už napsal (${where})`);
@@ -433,7 +501,7 @@ export async function generateWithoutRepeats<T extends { body: string }>(
  */
 export async function loadOwnRecentLines(
   db: D1Database, o: { playerId: string; convId?: string | null; teamId?: string; limit?: number },
-): Promise<string[]> {
+): Promise<OwnLines> {
   const convId = o.convId ?? (o.teamId
     ? (await db.prepare(
       "SELECT id FROM conversations WHERE team_id = ? AND type = 'player' AND participant_id = ? ORDER BY created_at, rowid LIMIT 1",
@@ -442,12 +510,30 @@ export async function loadOwnRecentLines(
     : undefined);
   if (!convId) return [];
   const rows = await db.prepare(
-    `SELECT body FROM messages WHERE conversation_id = ? AND sender_type = 'player' AND sender_id = ?
+    `SELECT body, sent_at FROM messages WHERE conversation_id = ? AND sender_type = 'player' AND sender_id = ?
         AND TRIM(COALESCE(body, '')) != ''
       ORDER BY sent_at DESC LIMIT ?`,
-  ).bind(convId, o.playerId, o.limit ?? OWN_LINES_LIMIT).all<{ body: string | null }>()
+  ).bind(convId, o.playerId, o.limit ?? OWN_LINES_LIMIT).all<{ body: string | null; sent_at: string | null }>()
     .catch((e) => { logger.warn({ module: M }, `poslední zprávy hráče ${o.playerId}`, e); return null; });
-  return (rows?.results ?? []).map((r) => (r.body ?? "").trim()).filter(Boolean).reverse();
+  return ownLinesOf(rows?.results ?? []);
+}
+
+/**
+ * Řádky z DB (nejnovější první) → `OwnLines` nejstarší první, s časy odeslání. Časy jsou
+ * neviditelná vlastnost pole: kdo s ním zachází jako se seznamem textů (prompt, porovnání), nic nepozná.
+ */
+function ownLinesOf(rows: ReadonlyArray<{ body: string | null; sent_at?: string | null }>): OwnLines {
+  const kept = rows.map((r) => ({ body: (r.body ?? "").trim(), at: sentAtIso(r.sent_at) })).filter((r) => r.body).reverse();
+  const lines: OwnLines = kept.map((r) => r.body);
+  Object.defineProperty(lines, "sentAt", { value: kept.map((r) => r.at), enumerable: false });
+  return lines;
+}
+
+/** Čas zprávy z D1 (ISO i „2026-11-21 18:02:11“) jako ISO, nečitelný jako prázdný řetězec. */
+function sentAtIso(sentAt: string | null | undefined): string {
+  if (!sentAt) return "";
+  const ms = Date.parse(sentAt.includes("T") ? sentAt : `${sentAt.replace(" ", "T")}Z`);
+  return Number.isFinite(ms) ? new Date(ms).toISOString() : "";
 }
 
 /**
@@ -457,7 +543,7 @@ export async function loadOwnRecentLines(
  */
 export async function loadOwnLinesAcross(
   db: D1Database, o: { playerId: string; convIds: readonly string[]; teamId?: string; limit?: number },
-): Promise<string[]> {
+): Promise<OwnLines> {
   const privateConv = o.teamId
     ? (await db.prepare(
       "SELECT id FROM conversations WHERE team_id = ? AND type = 'player' AND participant_id = ? ORDER BY created_at, rowid LIMIT 1",
@@ -467,12 +553,12 @@ export async function loadOwnLinesAcross(
   const convIds = [...new Set([...o.convIds, ...(privateConv ? [privateConv] : [])])];
   if (convIds.length === 0) return [];
   const rows = await db.prepare(
-    `SELECT body FROM messages WHERE conversation_id IN (${convIds.map(() => "?").join(", ")})
+    `SELECT body, sent_at FROM messages WHERE conversation_id IN (${convIds.map(() => "?").join(", ")})
         AND sender_type = 'player' AND sender_id = ? AND TRIM(COALESCE(body, '')) != ''
       ORDER BY julianday(sent_at) DESC, rowid DESC LIMIT ?`,
-  ).bind(...convIds, o.playerId, o.limit ?? OWN_LINES_LIMIT).all<{ body: string | null }>()
+  ).bind(...convIds, o.playerId, o.limit ?? OWN_LINES_LIMIT).all<{ body: string | null; sent_at: string | null }>()
     .catch((e) => { logger.warn({ module: M }, `poslední zprávy hráče ${o.playerId} napříč konverzacemi`, e); return null; });
-  return (rows?.results ?? []).map((r) => (r.body ?? "").trim()).filter(Boolean).reverse();
+  return ownLinesOf(rows?.results ?? []);
 }
 
 /**

@@ -301,6 +301,48 @@ describe("konec věty bez backtrackingu", () => {
   });
 });
 
+// Lokální E2E 22. 11. (Šmíd, Agrokat): na „dorazíš v úterý?“ napsal „V úterý dorazím, trenére.“
+// a hlídač to zahodil kvůli „…v úterý dorazím a máknu“ z 19. 11.; hráč pak 56 minut mlčel.
+describe("krátká odpověď na otázku trenéra a staré věty", () => {
+  const SMID = "V úterý dorazím, trenére.";
+  const COACH = "Tomáši, dorazíš v úterý na trénink? Potřebuju tě na standardky.";
+  const withTimes = (lines: string[], sentAt: string[]) => {
+    const out = [...lines];
+    Object.defineProperty(out, "sentAt", { value: sentAt, enumerable: false });
+    return out as string[] & { sentAt: string[] };
+  };
+  const daysAgo = (d: number) => new Date(Date.now() - d * 86_400_000).toISOString();
+
+  it("odpověď, která jen vrací slova z otázky trenéra, opakováním není", async () => {
+    expect(findRepeatedSentences(SMID, ["Jo trenére, v úterý dorazím a máknu."])).toEqual([SMID]);
+    expect(findRepeatedSentences(SMID, ["Jo trenére, v úterý dorazím a máknu."], { coachMessage: COACH })).toEqual([]);
+    const gen = vi.fn(async () => ({ body: SMID }));
+    expect((await generateWithoutRepeats(["Jo trenére, v úterý dorazím a máknu."], gen, "test", { coachMessage: COACH })).body).toBe(SMID);
+    expect(gen).toHaveBeenCalledTimes(1);
+  });
+
+  it("krátká věta se proti zprávám starším než 48 h nehlídá, dlouhá ano", async () => {
+    const own = withTimes(["Jo trenére, v úterý dorazím a máknu."], [daysAgo(3)]);
+    const gen = vi.fn(async () => ({ body: SMID }));
+    expect((await generateWithoutRepeats(own, gen, "test")).body).toBe(SMID);
+    expect(gen).toHaveBeenCalledTimes(1);
+
+    const long = "V neděli proti Vimperku nechám na place duši a dám gól.";
+    const ownLong = withTimes(["Proti Vimperku v neděli nechám na place duši, dám gól!"], [daysAgo(5)]);
+    expect(findRepeatedSentences(long, [], { old: ownLong })).toEqual([long]);
+    // Čerstvá zpráva (bez času nebo do 48 h) se hlídá jako dřív.
+    expect(findRepeatedSentences(SMID, withTimes(["Jo trenére, v úterý dorazím a máknu."], [daysAgo(1)]))).toEqual([SMID]);
+  });
+
+  it("při pochybnosti zprávu pošle: podobná, ne stejná věta je lepší než mlčení", async () => {
+    const gen = vi.fn()
+      .mockResolvedValueOnce({ body: "V úterý dorazím, trenére." })
+      .mockResolvedValueOnce({ body: "Jo, v úterý dorazím." });
+    expect((await generateWithoutRepeats(["Jo trenére, v úterý dorazím a máknu."], gen, "test")).body).toBe("Jo, v úterý dorazím.");
+    expect(gen).toHaveBeenCalledTimes(2);
+  });
+});
+
 // Lokální E2E 22. 11. (Král, Mráz): pokyn TYKÁŠ/VYKÁŠ model nedržel a výstup se nekontroloval.
 describe("tvar oslovení trenéra ve vygenerované zprávě", () => {
   it("opačný tvar: jednou přegeneruje s výslovným pokynem a pošle opravenou zprávu", async () => {
