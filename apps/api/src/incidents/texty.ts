@@ -616,7 +616,7 @@ export const TEXTY = {
     "Trenére, moc díky. Splatím to, jak jsme se domluvili.",
     "Díky, trenére, zachránil jste mě. Na hřišti vám to vrátím.",
     "Trenére, díky za důvěru. Nezklamu vás.",
-    "Díky moc, trenére. Teď můžu zase v klidu spát.",
+    "Trenére, díky. Teď můžu zase v klidu spát.",
   ],
   zaloha_odmitnuta: [
     "Tak nic, trenére. Nějak to zvládnu sám.",

@@ -106,19 +106,27 @@ export function withoutSentences(body: string, drop: readonly string[]): string 
 }
 
 /**
- * Opakuje text (některou svou větou) jednu z předchozích zpráv? Pro předem napsané varianty:
- * proti `sentencesRepeat` se počítá i krátká stejná věta („Beru to, trenére.“), u šablony
- * je to pořád tatáž věta. Ohrané věty se tu nepočítají.
+ * Je věta předem napsané varianty tatáž jako věta dřív poslané zprávy? Šablona se opakuje
+ * doslova (nanejvýš s jiným oslovením nebo lámaně), takže stačí přísnější shoda než u modelu:
+ * stejná věta i krátká („Beru to, trenére.“), nebo aspoň tři společná významová slova
+ * a tři čtvrtiny slov delší z vět. Volnější `sentencesRepeat` by za stejné bral i dvě různé
+ * varianty se stejným klubem („{klub} mě chtěl…“) a variant by ubylo.
  */
+function templateSentencesMatch(a: string, b: string): boolean {
+  const pa = plainSentence(a);
+  if (pa.split(" ").length >= 2 && pa === plainSentence(b)) return true;
+  const wa = significantWords(a);
+  const wb = new Set(significantWords(b));
+  const common = wa.filter((w) => wb.has(w)).length;
+  return common >= 3 && common / Math.max(wa.length, wb.size) >= 0.75;
+}
+
+/** Opakuje text (některou svou větou) jednu z předchozích zpráv? Pro předem napsané varianty. */
 export function repeatsAny(text: string, previous: readonly string[]): boolean {
   const own = splitSentences(text);
   return previous.some((p) => {
     const old = splitSentences(p);
-    const oldPlain = new Set(old.map(plainSentence));
-    return own.some((s) => {
-      const plain = plainSentence(s);
-      return (plain.split(" ").length >= 2 && oldPlain.has(plain)) || old.some((o) => sentencesRepeat(s, o));
-    });
+    return own.some((s) => old.some((o) => templateSentencesMatch(s, o)));
   });
 }
 
@@ -135,9 +143,9 @@ export function pickUnusedIndex(count: number, used: ReadonlySet<number>, seed: 
 
 /**
  * Předem napsaná varianta, kterou hráč trenérovi ještě neposlal. Porovnává se s jeho
- * posledními zprávami (`previous`, nejstarší první) stejně jako odpověď modelu
- * (`sentencesRepeat`), takže se pozná i šablona, kterou cizinec dostal lámaně. Když už
- * poslal všechny, vezme se ta, kterou poslal nejdávněji.
+ * posledními zprávami (`previous`, nejstarší první) po větách (`repeatsAny`), takže se pozná
+ * i šablona s jiným oslovením nebo bez diakritiky. Když už poslal všechny, vezme se ta,
+ * kterou poslal nejdávněji.
  */
 export function pickFreshVariant(
   variants: readonly string[], previous: readonly string[], seed: string,
