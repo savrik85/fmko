@@ -9,7 +9,7 @@ import type { Bindings } from "../index";
 import { createRng } from "../generators/rng";
 import { teamSeed } from "../lib/seed";
 import { simulateTraining, trainingTypeLabel } from "./training";
-import { lifeOf, pledgeOutcome, trainingPledgeIntent, type TrainingPledge } from "../messaging/attendance-pledge";
+import { excusedByCoach, lifeOf, pledgeOutcome, trainingPledgeIntent, type TrainingPledge } from "../messaging/attendance-pledge";
 import { trainingExperienceChance } from "../skills/training";
 import { logger } from "../lib/logger";
 import type { PitchCareMode } from "../stadium/pitch-care";
@@ -507,6 +507,8 @@ export async function executeDailyTick(
             leftOutSulk: isSulking(lifeContext.leftOutSulk, effectiveDate.toISOString(), teamId),
             // Co hráč trenérovi v SMS slíbil na dnešní trénink (messaging/attendance-pledge.ts).
             attendancePledge: trainingPledgeIntent(lifeContext.trainingPledge, effectiveDate.toISOString(), teamId),
+            // „Nepřijdu“, o které si řekl sám trenér: volno, ne vynechaný trénink.
+            attendancePledgeRest: excusedByCoach(lifeContext.trainingPledge, effectiveDate.toISOString(), teamId),
           };
         });
 
@@ -846,7 +848,8 @@ export async function executeDailyTick(
                 `UPDATE players SET life_context = json_set(life_context, '$.absence', json(?)) WHERE id = ?`
               ).bind(absencePayload, playerId),
               // Kdo kdy vynechal trénink: pravidlo „kdo nechodí, nehraje“ (messaging/coach-rules.ts).
-              missedTrainingStmt(env.DB, playerId, playerRow.life_context, effectiveDate.toISOString()),
+              // Volno od trenéra („dej si pauzu“) se jako vynechaný trénink nepočítá.
+              ...(a.restByCoach ? [] : [missedTrainingStmt(env.DB, playerId, playerRow.life_context, effectiveDate.toISOString())]),
             ]).catch((e) => logger.warn({ module: "daily-tick" }, "set training absence", e));
           }
         }

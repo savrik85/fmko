@@ -77,6 +77,17 @@ describe("zápis slibu z odpovědi hráče", () => {
     expect(order.map((m) => m.sent_at)).toEqual([at, "2026-11-19T17:25:01.000Z"]);
   });
 
+  it("„dej si od tréninku pauzu“ a hráč kývne: volno od trenéra, poznámka to říká (Jan Černý, E2E 22. 11.)", async () => {
+    await db.prepare("INSERT INTO messages (id, conversation_id, sender_type, body, sent_at) VALUES ('t1', 'c1', 'user', ?, '2026-11-19T17:24:00Z')")
+      .bind("Petře, v pátek si dej od tréninku pauzu, potřebuju tě v neděli čerstvýho. Takže nepřijdeš, jo?").run();
+    await recordAttendancePledge(db, {
+      clubTeamId: "club", convId: "c1", playerId: "p1", playerFirstName: "Petr", pledge: { event: "training", intent: "skip", when: "fri" },
+      now: new Date("2026-11-19T17:25:00Z"),
+    });
+    expect((await life()).trainingPledge).toMatchObject({ intent: "skip", from: "2026-11-20", coachGranted: true });
+    expect(await notes()).toEqual(["📝 Petr má na trénink v pátek 20. 11. od tebe volno."]);
+  });
+
   it("přemluvení přepíše starší „nepřijdu“", async () => {
     await recordAttendancePledge(db, { clubTeamId: "club", convId: "c1", playerId: "p1", playerFirstName: "Petr", pledge: { event: "training", intent: "skip", when: "week" } });
     expect((await life()).trainingPledge.intent).toBe("skip");

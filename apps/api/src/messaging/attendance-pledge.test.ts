@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  BROKEN_PLEDGE_SMS, MATCH_ATTEND_PLEDGE_TEXTS, MATCH_SKIP_PLEDGE_TEXTS, SKIP_PLEDGE_REASONS,
-  matchPledgeOverrides, parseAttendancePledge, pledgeNote, pledgeOutcome, pledgePromptLines, pledgedAttendProb,
+  BROKEN_PLEDGE_SMS, COACH_REST_REASONS, MATCH_ATTEND_PLEDGE_TEXTS, MATCH_SKIP_PLEDGE_TEXTS, SKIP_PLEDGE_REASONS,
+  coachGrantsRest, excusedByCoach, matchPledgeOverrides, parseAttendancePledge, pledgeNote, pledgeOutcome, pledgePromptLines, pledgedAttendProb,
   resolveTrainingPledge, trainingPledgeIntent, trainingScheduleText, type TrainingPledge,
 } from "./attendance-pledge";
 import { simulateAttendance, trainingWeekdays } from "../season/training";
@@ -127,6 +127,27 @@ describe("docházka se slibem", () => {
     const miss = Array.from({ length: 30 }, (_, i) => simulateAttendance(createRng(i), [p], "balanced")[0]).find((a) => !a.attended)!;
     expect(miss.pledge).toBe("skip");
     expect(SKIP_PLEDGE_REASONS).toContain(miss.reason);
+  });
+
+  it("volno od trenéra: chybí s důvodem „dal jsi mu volno“, ne jako vynechaný trénink (Jan Černý, E2E 22. 11.)", () => {
+    const p = player({ discipline: 90, attendancePledge: "skip", attendancePledgeRest: true });
+    const miss = Array.from({ length: 30 }, (_, i) => simulateAttendance(createRng(i), [p], "balanced")[0]).find((a) => !a.attended)!;
+    expect(COACH_REST_REASONS).toContain(miss.reason);
+    expect(miss.restByCoach).toBe(true);
+  });
+
+  it("volno od trenéra pozná ze slibu; vlastní „nepřijdu“ je pořád vynechaný trénink", () => {
+    const pledge = (o: Partial<TrainingPledge>) => ({ intent: "skip", from: "2026-11-22", until: "2026-11-22", once: true, at: "x", convId: "c", teamId: "club", ...o });
+    expect(excusedByCoach(pledge({ coachGranted: true }), "2026-11-22", "club")).toBe(true);
+    expect(excusedByCoach(pledge({}), "2026-11-22", "club")).toBe(false);
+    expect(excusedByCoach(pledge({ coachGranted: true, intent: "attend" }), "2026-11-22", "club")).toBe(false);
+    expect(excusedByCoach(pledge({ coachGranted: true }), "2026-11-24", "club")).toBe(false);
+    expect(pledgePromptLines({ trainingPledge: pledge({ coachGranted: true }) as TrainingPledge })[0]).toContain("sám dal volno");
+    for (const t of [
+      "Honzo, slyšíš? Zítra si dej od tréninku pauzu, potřebuju tě v pondělí čerstvýho. Takže zítra nepřijdeš, jo?",
+      "Hele, zítra v Hradčanech tě nechám odpočinout, zůstaneš doma.", "Klidně ho vynech, odpočiň si.", "Dám ti volno, ať se dáš do kupy.",
+    ]) expect(coachGrantsRest(t), t).toBe(true);
+    for (const t of ["Nedám ti volno, přijdeš.", "Zítra trénink v pět, dorazíš?", "Jestli nepřijdeš, letíš."]) expect(coachGrantsRest(t), t).toBe(false);
   });
 
   it("výslech přebije i slib", () => {
