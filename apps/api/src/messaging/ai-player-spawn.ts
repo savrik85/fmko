@@ -25,7 +25,7 @@ import { PHOTO_CHANCE, PHOTO_SCENES, generatePlayerPhoto, historyBody, pickPhoto
 import { COACH_CHAT_MAX_MORALE, coachRelationStmts } from "../lib/coach-relation";
 import { weightTalkFromState } from "../season/weight-talk";
 import { coachStreak, leftOnReadChance, markCoachMessagesRead, readDelayMs } from "./left-on-read";
-import { describeNextMatch } from "./next-match";
+import { describeNextFriendly, describeNextMatch, pragueDay } from "./next-match";
 import { refundCoachSms } from "./phone-credit";
 import {
   generateInitialMessage,
@@ -206,11 +206,63 @@ export interface LastMatchContext {
    * Osobní chat je dřív neznal a hráč pak trenérovi tvrdil, že je doma a fit
    * (Linhart, Chlumany 2026-11-08).
    */
-  upcomingAbsences?: Map<string, { reason: string; text: string; when: "dnes" | "zítra"; opponent: string | null }>;
+  upcomingAbsences?: Map<string, UpcomingAbsence>;
+  /** Kdo nesmí hrát: stopka za karty a vyřazení za trest (`loadTeamBans`). */
+  bans?: Map<string, { cards: number; coach: number }>;
   /** Mistrovský, nebo pohárový (cup_matches). Pohár dřív v kontextu chyběl úplně. */
   kind?: "league" | "cup";
   /** Zápas druhého druhu pár dní před posledním (pohár ve středu, liga v sobotu): kdo v něm hrál. */
   previous?: { kind: "league" | "cup"; stats: Map<string, Record<string, unknown>> };
+}
+
+type UpcomingAbsence = NonNullable<PlayerSnapshot["upcomingAbsence"]>;
+
+/**
+ * Skutečné důvody omluvenek k zápasu z losu (`getAbsentPlayersMap`, týž výpočet jako
+ * sestava): hráč → „Kocovina“, „Práce“… Omluvenka, kterou los nezná („Omluvenka“), důvod
+ * nemá. Selhání nic neblokuje, hráč pak zná jen svou výmluvu.
+ */
+async function excuseReasons(db: D1Database, teamId: string, matchKey: string): Promise<Map<string, string>> {
+  try {
+    const { getAbsentPlayersMap, resolveMatchContext } = await import("../events/match-absences");
+    const ctx = await resolveMatchContext(db, teamId, matchKey);
+    if (!ctx) return new Map();
+    const drawn = await getAbsentPlayersMap(db, teamId, ctx);
+    return new Map([...drawn].flatMap(([id, a]) => (a.reason && a.reason !== "Omluvenka" ? [[id, a.reason] as [string, string]] : [])));
+  } catch (e) {
+    logger.warn({ module: "ai-player-spawn" }, `skutečné důvody omluvenek ${matchKey}`, e);
+    return new Map();
+  }
+}
+
+/**
+ * Omluvenky na dnešní přátelák. Do kabiny se nepíšou, trenér je vidí v sestavě hned
+ * (`visibleAbsencePhases`: přátelák má obě fáze losu najednou). Sestava je otevřená jen
+ * v den zápasu (`lineups_open`), stejně jako `findUpcomingMatchContext`.
+ */
+async function friendlyAbsences(db: D1Database, teamId: string, gameDate: string): Promise<Map<string, UpcomingAbsence>> {
+  const out = new Map<string, UpcomingAbsence>();
+  const gameDay = gameDate.slice(0, 10);
+  const fr = await db.prepare(
+    `SELECT m.id, m.created_at, m.home_team_id, ht.name AS home_name, at.name AS away_name
+       FROM matches m LEFT JOIN teams ht ON ht.id = m.home_team_id LEFT JOIN teams at ON at.id = m.away_team_id
+      WHERE (m.home_team_id = ? OR m.away_team_id = ?) AND m.calendar_id IS NULL AND m.league_id IS NULL
+        AND m.status = 'lineups_open' AND substr(m.created_at, 1, 10) = ?
+      ORDER BY m.created_at LIMIT 1`,
+  ).bind(teamId, teamId, gameDay).first<{ id: string; created_at: string; home_team_id: string; home_name: string | null; away_name: string | null }>()
+    .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "dnešní přátelák pro omluvenky", e); return null; });
+  if (!fr) return out;
+  try {
+    const { getAbsentPlayersMap } = await import("../events/match-absences");
+    const drawn = await getAbsentPlayersMap(db, teamId, { matchKey: fr.id, isFriendly: true, scheduledAt: fr.created_at, gameDate });
+    const opponent = (fr.home_team_id === teamId ? fr.away_name : fr.home_name) ?? null;
+    for (const [id, a] of drawn) {
+      out.set(id, { reason: a.reason === "Omluvenka" ? "" : a.reason, text: a.smsText, when: "dnes", opponent, friendly: true });
+    }
+  } catch (e) {
+    logger.warn({ module: "ai-player-spawn" }, `omluvenky na přátelák ${fr.id}`, e);
+  }
+  return out;
 }
 
 /**
@@ -218,8 +270,23 @@ export interface LastMatchContext {
  * nehrál. Bere se text, který trenér viděl, ne nový výpočet: soutěže se starým neodehraným
  * kolem v kalendáři (ČB, U21) by výpočet poslaly k jinému zápasu. Staré skupiny se po
  * zápase nemažou vždycky, proto ta dvoudenní mez.
+ *
+ * K výmluvě se dohledá skutečný důvod z losu (`excuseReasons`): Nárovec (Budvar Spůle,
+ * 29. 10.) psal „Strejda slavil padesát“, v losu měl „Kocovina“, a znal jen výmluvu.
+ * K tomu omluvenky na dnešní přátelák, které do kabiny nechodí (`friendlyAbsences`).
  */
 export async function loadUpcomingAbsences(db: D1Database, teamId: string, now: Date = new Date()): Promise<LastMatchContext["upcomingAbsences"]> {
+  const team = await db.prepare("SELECT game_date FROM teams WHERE id = ?").bind(teamId).first<{ game_date: string | null }>()
+    .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "herní den pro omluvenky", e); return null; });
+  const gameDate = team?.game_date ?? now.toISOString();
+  const out = await squadChatAbsences(db, teamId, now, gameDate.slice(0, 10));
+  for (const [id, a] of await friendlyAbsences(db, teamId, gameDate)) {
+    if (!out.has(id)) out.set(id, a);
+  }
+  return out.size > 0 ? out : undefined;
+}
+
+async function squadChatAbsences(db: D1Database, teamId: string, now: Date, gameDay: string): Promise<Map<string, UpcomingAbsence>> {
   const since = new Date(now.getTime() - 2 * 86400000).toISOString().slice(0, 10);
   const rows = await db.prepare(
     `SELECT m.sender_id, m.body, json_extract(m.metadata, '$.calendarId') AS cal, json_extract(m.metadata, '$.response') AS response, c.title
@@ -230,19 +297,16 @@ export async function loadUpcomingAbsences(db: D1Database, teamId: string, now: 
       ORDER BY julianday(m.sent_at) DESC LIMIT 60`,
   ).bind(teamId, since).all<{ sender_id: string; body: string; cal: string | null; response: string | null; title: string | null }>()
     .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "omluvenky z kabiny", e); return { results: [] as never[] }; });
-  if (rows.results.length === 0) return undefined;
+  if (rows.results.length === 0) return new Map();
 
   const cals = [...new Set(rows.results.flatMap((r) => (r.cal ? [r.cal] : [])))];
-  if (cals.length === 0) return undefined;
+  if (cals.length === 0) return new Map();
   const ph = cals.map(() => "?").join(",");
   const open = await db.prepare(
     `SELECT id, scheduled_at FROM season_calendar WHERE id IN (${ph}) AND status = 'scheduled'
      UNION ALL SELECT id, created_at FROM matches WHERE id IN (${ph}) AND calendar_id IS NULL AND status != 'simulated'`,
   ).bind(...cals, ...cals).all<{ id: string; scheduled_at: string }>()
     .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "zápasy omluvenek z kabiny", e); return { results: [] as never[] }; });
-  const team = await db.prepare("SELECT game_date FROM teams WHERE id = ?").bind(teamId).first<{ game_date: string | null }>()
-    .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "herní den pro omluvenky", e); return null; });
-  const gameDay = (team?.game_date ?? now.toISOString()).slice(0, 10);
   const whenOf = new Map<string, "dnes" | "zítra">();
   for (const o of open.results) {
     const days = Math.round((Date.parse(o.scheduled_at.slice(0, 10)) - Date.parse(gameDay)) / 86400000);
@@ -250,7 +314,8 @@ export async function loadUpcomingAbsences(db: D1Database, teamId: string, now: 
     if (days <= 1) whenOf.set(o.id, days === 1 ? "zítra" : "dnes");
   }
 
-  const out = new Map<string, { reason: string; text: string; when: "dnes" | "zítra"; opponent: string | null }>();
+  const out = new Map<string, UpcomingAbsence>();
+  const calOf = new Map<string, string>();
   // Nejnovější odpověď hráče k danému zápasu rozhoduje: trenér ho v kabině přemluvil
   // (squad-talk.ts) = na ten zápas přijde. Omluvenka na jiný zápas platí dál.
   const decided = new Set<string>();
@@ -263,8 +328,16 @@ export async function loadUpcomingAbsences(db: D1Database, teamId: string, now: 
     if (!when || out.has(r.sender_id)) continue;
     const opponent = r.title?.replace(/^⚽\s*vs\s*/u, "").trim() || null;
     out.set(r.sender_id, { reason: "", text: r.body, when, opponent });
+    if (r.cal) calOf.set(r.sender_id, r.cal);
   }
-  return out.size > 0 ? out : undefined;
+  const reasonsByCal = new Map<string, Map<string, string>>();
+  for (const [id, cal] of calOf) {
+    if (!reasonsByCal.has(cal)) reasonsByCal.set(cal, await excuseReasons(db, teamId, cal));
+    const reason = reasonsByCal.get(cal)?.get(id);
+    const a = out.get(id);
+    if (reason && a) a.reason = reason;
+  }
+  return out;
 }
 
 /**
@@ -301,6 +374,7 @@ export async function loadLastMatchContext(db: D1Database, teamId: string): Prom
   }
 
   const upcomingAbsences = await loadUpcomingAbsences(db, teamId);
+  const bans = await loadTeamBans(db, teamId);
   const last = recent.results[0];
   // Pohár leží v jiné tabulce (cup-facts.ts). Poslední zápas je ten novější z obou, ten
   // druhý se hráči připomene jako „předtím“, když byl jen pár dní před ním.
@@ -318,15 +392,37 @@ export async function loadLastMatchContext(db: D1Database, teamId: string): Prom
   if (cup && cupFirst) {
     const details = await matchDetails(db, cup.id, cup.lineupData, cup.absences, [cup.cupTeamId, teamId]);
     return {
-      matchId: cup.id, kind: "cup", lastOutcome: cupOutcome(cup), teamStreak, ...details, upcomingAbsences,
+      matchId: cup.id, kind: "cup", lastOutcome: cupOutcome(cup), teamStreak, ...details, upcomingAbsences, bans,
       previous: await previousOf("league"),
     };
   }
-  if (!last) return { matchId: null, lastOutcome: null, teamStreak, squad: null, stats: new Map(), upcomingAbsences };
+  if (!last) return { matchId: null, lastOutcome: null, teamStreak, squad: null, stats: new Map(), upcomingAbsences, bans };
   const lastOutcome = last.home_score != null ? outcomeOf(last) : null;
   const rawLineup = last.home_team_id === teamId ? last.home_lineup_data : last.away_lineup_data;
   const details = await matchDetails(db, last.id, rawLineup, last.absences, [teamId]);
-  return { matchId: last.id, kind: "league", lastOutcome, teamStreak, ...details, upcomingAbsences, previous: await previousOf("cup") };
+  return { matchId: last.id, kind: "league", lastOutcome, teamStreak, ...details, upcomingAbsences, bans, previous: await previousOf("cup") };
+}
+
+/**
+ * Kdo z týmu nesmí hrát: stopka za karty (`players.suspended_matches`, ubývá s každým
+ * zápasem týmu) a vyřazení za trest (`club_incident_absences` druhu `vyrazen`). Selhání
+ * nic neblokuje, prompt pak o stopce mlčí jako dřív.
+ */
+export async function loadTeamBans(db: D1Database, teamId: string): Promise<LastMatchContext["bans"]> {
+  const [cards, coach] = await Promise.all([
+    db.prepare("SELECT id, suspended_matches AS n FROM players WHERE team_id = ? AND suspended_matches > 0")
+      .bind(teamId).all<{ id: string; n: number }>()
+      .catch((e) => { logger.warn({ module: "ai-player-spawn" }, `stopky hráčů ${teamId}`, e); return { results: [] as Array<{ id: string; n: number }> }; }),
+    db.prepare(
+      `SELECT player_id AS id, MAX(zapasu_zbyva) AS n FROM club_incident_absences
+        WHERE team_id = ? AND kind = 'vyrazen' AND zapasu_zbyva > 0 GROUP BY player_id`,
+    ).bind(teamId).all<{ id: string; n: number }>()
+      .catch((e) => { logger.warn({ module: "ai-player-spawn" }, `vyřazení hráčů ${teamId}`, e); return { results: [] as Array<{ id: string; n: number }> }; }),
+  ]);
+  const out = new Map<string, { cards: number; coach: number }>();
+  for (const r of cards.results) out.set(r.id, { cards: r.n, coach: 0 });
+  for (const r of coach.results) out.set(r.id, { cards: out.get(r.id)?.cards ?? 0, coach: r.n });
+  return out.size > 0 ? out : undefined;
 }
 
 /**
@@ -354,15 +450,22 @@ async function matchDetails(
   }
 
   const absences = new Map<string, { reason: string; text: string }>();
+  let list: Array<{ playerId?: string; teamId?: string; name?: string; reason?: string; smsText?: string }> = [];
   if (rawAbsences) {
     try {
-      const list = JSON.parse(rawAbsences) as Array<{ playerId?: string; teamId?: string; reason?: string; smsText?: string }>;
-      for (const a of Array.isArray(list) ? list : []) {
-        if (a.playerId && a.teamId && absenceTeamIds.includes(a.teamId)) absences.set(a.playerId, { reason: a.reason ?? "", text: a.smsText ?? "" });
-      }
+      const parsed = JSON.parse(rawAbsences) as typeof list;
+      list = Array.isArray(parsed) ? parsed : [];
     } catch (e) {
       logger.warn({ module: "ai-player-spawn" }, `nečitelné absence zápasu ${matchId}`, e);
     }
+  }
+  const mine = list.filter((a) => a.teamId && absenceTeamIds.includes(a.teamId));
+  // Absence zapsané před 1. 11. 2026 (commit 4efa0340) nemají playerId, jen jméno. Bez něj
+  // omluvený hráč dostal „trenér tě do nominace nedal“. Jméno se dohledá v kádru týmu.
+  const byName = mine.some((a) => !a.playerId && a.name) ? await rosterIdsByName(db, absenceTeamIds) : new Map<string, string>();
+  for (const a of mine) {
+    const id = a.playerId ?? (a.name ? byName.get(a.name) : undefined);
+    if (id) absences.set(id, { reason: a.reason ?? "", text: a.smsText ?? "" });
   }
 
   const statRows = await db.prepare(
@@ -373,6 +476,26 @@ async function matchDetails(
     .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "statistiky posledního zápasu", e); return { results: [] as Array<Record<string, unknown>> }; });
   const stats = new Map(statRows.results.map((r) => [r.player_id as string, r]));
   return { squad, stats, absences };
+}
+
+/**
+ * Hráči týmů podle celého jména („Daniel Nárovec“ → id). Dvě stejná jména v kádru se
+ * nehádají: takové jméno v mapě není.
+ */
+async function rosterIdsByName(db: D1Database, teamIds: readonly string[]): Promise<Map<string, string>> {
+  if (teamIds.length === 0) return new Map();
+  const rows = await db.prepare(
+    `SELECT id, first_name || ' ' || last_name AS name FROM players WHERE team_id IN (${teamIds.map(() => "?").join(",")})`,
+  ).bind(...teamIds).all<{ id: string; name: string }>()
+    .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "kádr pro absence podle jména", e); return { results: [] as Array<{ id: string; name: string }> }; });
+  const out = new Map<string, string>();
+  const ambiguous = new Set<string>();
+  for (const r of rows.results) {
+    if (out.has(r.name)) ambiguous.add(r.name);
+    out.set(r.name, r.id);
+  }
+  for (const name of ambiguous) out.delete(name);
+  return out;
 }
 
 /** Účast hráče v zápase druhého druhu těsně před posledním (pohár a liga v jednom týdnu). */
@@ -436,6 +559,7 @@ export function loadPlayerSnapshot(
     lastMatchSquad,
     lastMatchAbsence: lastMatchSquad === "absent" ? absence : undefined,
     upcomingAbsence: matchCtx?.upcomingAbsences?.get(row.id as string),
+    suspension: matchCtx?.bans?.get(row.id as string),
     lastMatchGoals: (lastStats.last_goals as number) ?? 0,
     lastMatchAssists: (lastStats.last_assists as number) ?? 0,
     lastMatchRedCard: ((lastStats.last_red as number) ?? 0) > 0,
@@ -584,6 +708,7 @@ export async function loadTeamContext(db: D1Database, teamId: string, playerTeam
   const nextMatch = nm
     ? describeNextMatch(new Date(nm.scheduled_at), nm.home_team_id === teamId, nm.home_team_id === teamId ? nm.away_name : nm.home_name)
     : undefined;
+  const nextFriendly = await loadNextFriendly(db, teamId);
 
   // Pozice v tabulce
   let leaguePosition: number | undefined;
@@ -613,6 +738,7 @@ export async function loadTeamContext(db: D1Database, teamId: string, playerTeam
     previousMatchResult,
     nextMatch,
     nextCupMatch,
+    nextFriendly,
     leaguePosition,
     squadNames: squad.results.map((r) => `${r.first_name} ${r.last_name}`),
   };
@@ -621,6 +747,36 @@ export async function loadTeamContext(db: D1Database, teamId: string, playerTeam
 /** Vyhodnocení rozhovoru po hotové odpovědi smí běžet ještě chvíli po rozpočtu (`WRAP_UP_MS`). */
 function wrapUpDeadline(deadline: number | undefined): number | undefined {
   return deadline === undefined ? undefined : deadline + WRAP_UP_MS;
+}
+
+/**
+ * Domluvený přátelák (multiplayer/friendly-actions.ts): `matches` bez kola i soutěže, den
+ * v `created_at`, hraje se s kolem v 18:00 v Praze. Prompt znal jen ligu přes kalendář a hráč
+ * v den přáteláku tvrdil, že se nic nehraje (stejně jako „ve čtvrtek se nikdy nehrálo“).
+ */
+async function loadNextFriendly(db: D1Database, teamId: string, now: Date = new Date()): Promise<string | undefined> {
+  const fr = await db.prepare(
+    `SELECT m.home_team_id, m.created_at, ht.name AS home_name, at.name AS away_name, v.name AS neutral_village
+       FROM matches m
+       JOIN teams ht ON ht.id = m.home_team_id
+       JOIN teams at ON at.id = m.away_team_id
+       LEFT JOIN challenges ch ON ch.match_id = m.id
+       LEFT JOIN villages v ON v.id = ch.neutral_village_id AND ch.venue = 'neutral'
+      WHERE (m.home_team_id = ? OR m.away_team_id = ?) AND m.calendar_id IS NULL AND m.league_id IS NULL
+        AND m.status IN ('scheduled', 'lineups_open') AND substr(m.created_at, 1, 10) >= ?
+      ORDER BY m.created_at LIMIT 1`,
+  ).bind(teamId, teamId, pragueDay(now)).first<{
+    home_team_id: string; created_at: string; home_name: string; away_name: string; neutral_village: string | null;
+  }>()
+    .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "loadTeamContext přátelák", e); return null; });
+  if (!fr) return undefined;
+  const [{ pragueKickoffIso }, { FRIENDLY_MATCH_HOUR }] = await Promise.all([
+    import("../lib/match-tick-schedule"), import("../multiplayer/friendlies"),
+  ]);
+  const isHome = fr.home_team_id === teamId;
+  return describeNextFriendly(new Date(pragueKickoffIso(fr.created_at.slice(0, 10), FRIENDLY_MATCH_HOUR)), {
+    isHome, opponentName: isHome ? fr.away_name : fr.home_name, neutralVillage: fr.neutral_village,
+  }, now);
 }
 
 /** Nejstarší konverzace týmu s hráčem. Zdvojené z doby před opravou se tak nestřídají. */

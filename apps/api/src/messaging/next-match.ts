@@ -35,12 +35,28 @@ export function matchDayLabel(at: Date, now: Date): string {
       : `${weekday} ${date}`;
 }
 
+function kickoffTime(at: Date): string {
+  return new Intl.DateTimeFormat("cs-CZ", { timeZone: TZ, hour: "2-digit", minute: "2-digit", hour12: false }).format(at);
+}
+
 export function describeNextMatch(
   scheduledAt: Date,
   isHome: boolean,
   opponentName: string,
   now: Date = new Date(),
 ): string {
-  const time = new Intl.DateTimeFormat("cs-CZ", { timeZone: TZ, hour: "2-digit", minute: "2-digit", hour12: false }).format(scheduledAt);
-  return `${matchDayLabel(scheduledAt, now)} v ${time} ${isHome ? "doma s" : "venku s"} ${opponentName}`;
+  return `${matchDayLabel(scheduledAt, now)} v ${kickoffTime(scheduledAt)} ${isHome ? "doma s" : "venku s"} ${opponentName}`;
+}
+
+/**
+ * Domluvený přátelák ve stejném tvaru jako ligový zápas. Na neutrální půdě (výzva s
+ * `venue = 'neutral'`) „na hřišti v obci X“ místo „doma“ a „venku“.
+ */
+export function describeNextFriendly(
+  kickoff: Date,
+  o: { isHome: boolean; opponentName: string; neutralVillage?: string | null },
+  now: Date = new Date(),
+): string {
+  if (!o.neutralVillage) return describeNextMatch(kickoff, o.isHome, o.opponentName, now);
+  return `${matchDayLabel(kickoff, now)} v ${kickoffTime(kickoff)} na hřišti v obci ${o.neutralVillage} s ${o.opponentName}`;
 }

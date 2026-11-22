@@ -4,8 +4,21 @@
  * Linhart (Chlumany 2026-11-08) ráno napsal do skupiny „⚽ vs FK Dřevostroj Radhostice“
  * „Došel mi benzín uprostřed lesa“ a v osobním chatu pak trenérovi tvrdil, že je doma a fit.
  */
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { Miniflare } from "miniflare";
+
+// Skutečný důvod omluvenky bere chat z losu (týž výpočet jako sestava); los tu stojí na pár řádcích.
+vi.mock("../events/match-absences", async (orig) => ({
+  ...(await orig<typeof import("../events/match-absences")>()),
+  getAbsentPlayersMap: vi.fn(async (_db: unknown, _teamId: string, ctx: { matchKey: string }) => ctx.matchKey === "cal-today"
+    ? new Map([
+      ["linhart", { reason: "Doprava", category: "commute", emoji: "⛽", smsText: "Došel mi benzín uprostřed lesa, jdu pěšky na pumpu" }],
+      ["vesely", { reason: "Kocovina", category: "hangover", emoji: "🍺", smsText: "Strejda slavil padesát" }],
+    ])
+    : new Map([["kratochvil", { reason: "Omluvenka", category: "personal", emoji: "📩", smsText: "Mám doktora" }]])),
+}));
+
+import { getAbsentPlayersMap } from "../events/match-absences";
 import { loadUpcomingAbsences } from "./ai-player-spawn";
 
 let miniflare: Miniflare;
@@ -62,8 +75,10 @@ describe("omluvenky z kabiny", () => {
   it("osobní chat zná ranní omluvenku na dnešní zápas i se soupeřem", async () => {
     const map = await loadUpcomingAbsences(db, "t-chl", now);
     expect(map?.get("linhart")).toEqual({
-      reason: "", text: "Došel mi benzín uprostřed lesa, jdu pěšky na pumpu", when: "dnes", opponent: "FK Dřevostroj Radhostice",
+      reason: "Doprava", text: "Došel mi benzín uprostřed lesa, jdu pěšky na pumpu", when: "dnes", opponent: "FK Dřevostroj Radhostice",
     });
+    // Los se ptá na týž zápas, ke kterému omluvenka patří (ligové kolo, ne přátelák).
+    expect(vi.mocked(getAbsentPlayersMap).mock.calls.some(([, team, ctx]) => team === "t-chl" && ctx.matchKey === "cal-today" && !ctx.isFriendly)).toBe(true);
   });
 
   it("omluvenka k odehranému zápasu ani stará zpráva z nesmazané skupiny neplatí", async () => {
@@ -79,5 +94,9 @@ describe("omluvenky z kabiny", () => {
       .run();
     expect((await loadUpcomingAbsences(db, "t-chl", now))?.get("kratochvil")?.when).toBe("zítra");
     expect(await loadUpcomingAbsences(db, "t-jiny", now)).toBeUndefined();
+  });
+
+  it("omluvenka, kterou los nezná, skutečný důvod nemá: hráč zná jen svou výmluvu", async () => {
+    expect((await loadUpcomingAbsences(db, "t-chl", now))?.get("kratochvil")?.reason).toBe("");
   });
 });
