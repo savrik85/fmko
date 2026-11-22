@@ -269,6 +269,27 @@ describe("krátké fráze a úvody", () => {
     expect((await generateWithoutRepeats([], own, "kabina", { others: ["Trenére, já taky."] })).body).toBe("Trenére, v neděli jsem tam.");
   });
 
+  // Rohde (E2E 22. 11.): druhý hlas napsal doslova Peckovu větu, zpráva se zahodila a kabina
+  // vypadala jako rozhovor s jedním. Druhý pokus dostal pokyn „tohle jsi trenérovi už napsal“,
+  // ačkoli větu napsal spoluhráč.
+  it("kopie věty spoluhráče: jeden nový pokus s pokynem, že to napsal spoluhráč, a odpověď odejde", async () => {
+    const pecka = "Trenére, zítra jsem doma, tak asi přijdu";
+    const gen = vi.fn()
+      .mockResolvedValueOnce({ body: pecka })
+      .mockResolvedValueOnce({ body: "Já budu taky, vezmu i kopačky navíc." });
+    const out = await generateWithoutRepeats(["Na sraz přijdu."], gen, "kabina", { others: [pecka], deadline: Date.now() + 20_000 });
+    expect(out.body).toBe("Já budu taky, vezmu i kopačky navíc.");
+    expect(gen).toHaveBeenCalledTimes(2);
+    expect(gen.mock.calls[1][0]).toContain("napsal spoluhráč");
+    expect(gen.mock.calls[1][0]).not.toContain("tohle jsi trenérovi už napsal");
+    // Vlastní opakování dostane pokyn jako dřív.
+    const ownRepeat = vi.fn()
+      .mockResolvedValueOnce({ body: "Na sraz přijdu." })
+      .mockResolvedValueOnce({ body: "Dorazím i s autem." });
+    await generateWithoutRepeats(["Na sraz přijdu, trenére."], ownRepeat, "kabina", { others: [pecka] });
+    expect(ownRepeat.mock.calls[1][0]).toContain("tohle jsi trenérovi už napsal");
+  });
+
   it("výsledek přegenerování projde i škrtnutím frází", async () => {
     const gen = vi.fn(async () => ({ body: "Trenére, mám se dobře, díky za otázku!" }));
     expect((await generateWithoutRepeats(["Trenére, jsem v práci."], gen, "test")).body).toBe("Mám se dobře!");
