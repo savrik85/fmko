@@ -11,6 +11,7 @@ import { coachRelationStmts } from "../lib/coach-relation";
 import { seedFromString } from "../lib/seed";
 import { createRng } from "../generators/rng";
 import { DAY_MS, type HearsayItem, type HearsayKind, type KnowledgeVia } from "./types";
+import { NOT_COUNTED_ON_PHRASES, phraseRegex } from "../messaging/coach-claims";
 
 const M = "hearsay-effects";
 
@@ -101,19 +102,14 @@ export const LINEUP_TALK_RE = /(sestav|z[aá]klad|lavi[cč]k|st[rř][ií]d|nehra
 export const CAPTAINCY_TALK_RE = /(p[aá]sk|kapit[aá]n)/i;
 /**
  * Trenér hráči napsal, že s ním nepočítá: dává ho na prodej nebo na hostování, nebude ho
- * stavět, má si hledat klub. Študlar (Výškovice, 7. 10.): „Dávám tě na seznam nepotřebných
- * hráčů určených k prodeji“ a druhý den přišla stížnost „Řekněte mi rovnou, jestli se se mnou
- * ještě počítá“. `LINEUP_TALK_RE` tohle nepoznal.
+ * stavět, má si hledat klub, vyhazuje ho. Študlar (Výškovice, 7. 10.): „Dávám tě na seznam
+ * nepotřebných hráčů určených k prodeji“ a druhý den přišla stížnost „Řekněte mi rovnou,
+ * jestli se se mnou ještě počítá“. `LINEUP_TALK_RE` tohle nepoznal.
+ *
+ * Slova jsou společná s oznámeními trenéra v chatu (messaging/coach-claims.ts), ať se
+ * stížnost po zápase a to, co hráč ví v chatu, nerozcházejí.
  */
-export const NOT_COUNTED_ON_RE = new RegExp([
-  "k prodeji", "na prodej", "prod[aá]m t[eě]", "prod[aá]me t[eě]", "p[rř]estupov\\S* listin", "seznam\\S* nepot[rř]ebn",
-  "na hostov[aá]n[ií]", "p[uů]j[cč][ií]m t[eě]",
-  "nebudu t[eě] stav[eě]t", "u[zž] t[eě] stav[eě]t nebudu", "nepostav[ií]m t[eě]", "nebude[sš] hr[aá]t",
-  "nepo[cč][ií]t[aá]m s tebou", "nepo[cč][ií]t[aá]me s tebou", "s tebou (u[zž] )?nepo[cč][ií]t[aá]",
-  "hledej si (klub|jin|nov|m[ií]sto|angaž)", "najdi si (klub|jin|nov|m[ií]sto)", "hledat (si )?(m[ií]sto|klub|jin|nov)",
-  "m[uů][zž]e[sš] (odej[ií]t|j[ií]t jinam)", "jsi nav[ií]c", "nepot[rř]ebuj(eme|u) t[eě]",
-  "na tr[eé]nink(y)? (chodit )?nemus[ií][sš]",
-].join("|"), "i");
+export const NOT_COUNTED_ON_RE = phraseRegex(NOT_COUNTED_ON_PHRASES);
 
 /**
  * Psal trenér hráči v jejich konverzaci 1:1 od `sinceIso`? S `about` jen zprávu o sestavě

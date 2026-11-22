@@ -16,6 +16,7 @@ import { loadActiveListing } from "../transfers/listing-status";
 import { computeInterestForOffer, interestOfferOf, type InterestLevel } from "../transfers/player-interest";
 import type { PlayerSnapshot } from "./ai-player-scenarios";
 import { commitmentPromptLines, loadCommitmentMemory, pendingInviteOf } from "./coach-commitments";
+import { claimPromptLines, loadCoachClaimMemory } from "./coach-claims";
 
 const M = "player-memory";
 
@@ -40,7 +41,7 @@ export async function loadChatMemory(
   opts: { teamId: string; convId: string },
 ): Promise<{ offerIds: string[] }> {
   const fullName = `${player.firstName} ${player.lastName}`;
-  const [call, drunk, offers, commitments, listing] = await Promise.all([
+  const [call, drunk, offers, commitments, listing, claims] = await Promise.all([
     db.prepare(
       `SELECT pocet FROM missed_calls
         WHERE team_id = ? AND volajici = 'hrac' AND jmeno = ? AND julianday(created_at) > julianday('now', ?)
@@ -57,6 +58,8 @@ export async function loadChatMemory(
     loadPendingOffers(db, player.id),
     loadCommitmentMemory(db, player.id),
     loadActiveListing(db, player.id),
+    // Co trenér v SMS oznámil (vyhazov, prodej, policie, páska, plat) a jestli se to ve hře stalo.
+    loadCoachClaimMemory(db, { clubTeamId: opts.teamId, playerId: player.id, convId: opts.convId }),
   ]);
   const { loadHearsayMemory } = await import("../hearsay/prompt");
   const hearsay = await loadHearsayMemory(db, player.id, opts.teamId)
@@ -68,6 +71,7 @@ export async function loadChatMemory(
   if (drunk) player.drunkVoiceRecently = true;
   if (offers.length > 0) player.pendingOffers = offers.map(({ club, interest }) => ({ club, interest }));
   if (listing) player.marketListing = listing;
+  if (claims.length > 0) player.coachClaims = claims;
   return { offerIds: offers.map((o) => o.id) };
 }
 
@@ -173,6 +177,7 @@ export function memoryPromptLines(player: PlayerSnapshot): string[] {
   lines.push(...commitmentPromptLines(player.coachCommitments));
   lines.push(...hearsayPromptLines(player.hearsay));
   if (player.marketListing) lines.push(marketListingLine(player.marketListing));
+  lines.push(...claimPromptLines(player.coachClaims));
   for (const o of player.pendingOffers ?? []) {
     lines.push(`- NABÍDKA: ${o.club} o tebe stojí a trenér ještě nerozhodl. Jak tě to láká: ${INTEREST_WORDS[o.interest]}. Když se tě na to trenér ptá, odpovídej podle toho. Rozmyslet si to můžeš, jen když tě opravdu přesvědčí (konkrétní slib, ocenění, víc peněz); samotné „zůstaň" nestačí.`);
   }

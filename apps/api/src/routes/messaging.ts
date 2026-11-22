@@ -764,6 +764,13 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
     const { handleWeightTalk } = await import("../season/weight-talk");
     await handleWeightTalk(c.env.DB, { teamId, convId, playerId: conv.participant_id, text: body.body.trim() })
       .catch((e) => logger.warn({ module: "messaging" }, "domluva o váze", e));
+    // Trenér oznámil akci, kterou ve hře neudělal („sbal se a vypadni“, „předal jsem to policii“):
+    // pod zprávu poznámka jen pro něj, kde to udělá (messaging/coach-claims.ts). Nikdy nehází.
+    const { noteUnbackedClaims } = await import("../messaging/coach-claims");
+    c.executionCtx.waitUntil(
+      noteUnbackedClaims(c.env.DB, { teamId, convId, playerId: conv.participant_id, text: body.body.trim(), now: new Date(now) })
+        .then(() => undefined),
+    );
   }
 
   // Hráč trenéra pozval (hospoda, zabijačka…): když v téhle zprávě slíbil, že přijde, splní se to

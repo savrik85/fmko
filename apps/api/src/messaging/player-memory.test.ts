@@ -25,3 +25,12 @@ describe("hráč na přestupové listině", () => {
     expect(memoryPromptLines({ ...base, marketListing: { kind: "transfer", since: "2026-10-07" } }).some((l) => l.includes("listinu"))).toBe(true);
   });
 });
+
+describe("oznámení trenéra v promptu (coach-claims.ts)", () => {
+  it("neprovedený vyhazov jde do faktů hráče jako výhrůžka", () => {
+    const base = { coachCommitments: undefined, hearsay: undefined } as unknown as PlayerSnapshot;
+    const lines = memoryPromptLines({ ...base, coachClaims: [{ kind: "dismissal", quote: "Tak půjdeš z týmu", on: "2026-09-26", holds: false }] });
+    expect(lines.join("\n")).toContain("Trenér ti 26. 9. napsal „Tak půjdeš z týmu“. Ve hře se ale nic nestalo");
+    expect(memoryPromptLines(base).join("\n")).not.toContain("napsal „");
+  });
+});
