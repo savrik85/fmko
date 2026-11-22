@@ -51,6 +51,12 @@ export const SMS_ROLE_KUSTOD = "Kustod";
 /** Recidivista: pachatel incidentu uzavřeného v posledních dnech (spec 5a). */
 export const RECIDIVA_DNI = 60;
 export const VAHA_RECIDIVY = 1.0;
+/**
+ * Poslední šance od trenéra (messaging/coach-rules.ts): váha pachatele −0,5, polovina přirážky
+ * za recidivu. Na produ 27 % činů hráčů následoval do 30 dní další čin téhož hráče (64 z 234,
+ * 22. 11.); varovaný recidivista je pak méně podezřelý, ale pořád víc než čistý hráč.
+ */
+export const LAST_CHANCE_CULPRIT_WEIGHT = 0.5;
 
 /** Vyšetřování (spec 7b–7d). */
 export const MAX_OBVINENI = 2;

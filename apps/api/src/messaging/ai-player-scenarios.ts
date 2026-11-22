@@ -129,6 +129,8 @@ export interface PlayerSnapshot {
   /** Co trenérovi v SMS řekl o tréninku a o zápase (attendance-pledge.ts, `life_context`). */
   trainingPledge?: import("./attendance-pledge").TrainingPledge;
   matchPledge?: import("./attendance-pledge").MatchPledge;
+  /** Pokyn trenéra, na který má hráč odpovědět, jestli ho splní (kolečka, omluva kabině; coach-rules.ts). */
+  pendingRequest?: { commitmentId: string; kind: string };
 
   /**
    * Kdy hráč ve vlákně naposledy sám psal (ISO). Načítá volající přes

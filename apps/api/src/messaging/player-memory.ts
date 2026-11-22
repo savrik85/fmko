@@ -18,6 +18,10 @@ import type { PlayerSnapshot } from "./ai-player-scenarios";
 import { commitmentPromptLines, loadCommitmentMemory, pendingInviteOf } from "./coach-commitments";
 import { pledgePromptLines } from "./attendance-pledge";
 import { claimPromptLines, loadCoachClaimMemory } from "./coach-claims";
+import { pendingRequestOf } from "./coach-rules";
+
+/** Pokyny trenéra, na které hráč v odpovědi kývne nebo je odmítne (accepts_request). */
+export const REQUEST_KINDS: readonly string[] = ["laps_penalty", "squad_apology"];
 
 const M = "player-memory";
 
@@ -68,6 +72,7 @@ export async function loadChatMemory(
   if (hearsay.length > 0) player.hearsay = hearsay;
   if (commitments.length > 0) player.coachCommitments = commitments;
   player.pendingInvite = pendingInviteOf(commitments);
+  player.pendingRequest = pendingRequestOf(commitments, REQUEST_KINDS);
   if (call) player.missedCall = { count: call.pocet ?? 1 };
   if (drunk) player.drunkVoiceRecently = true;
   if (offers.length > 0) player.pendingOffers = offers.map(({ club, interest }) => ({ club, interest }));

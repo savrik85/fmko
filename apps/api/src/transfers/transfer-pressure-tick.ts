@@ -94,7 +94,7 @@ export async function executeTransferPressureTick(
     await settleDepartedPromises(env.DB);
     // Sliby napsané v SMS (sestava, pozice, peníze, odchod).
     const { settleCoachCommitments } = await import("../messaging/coach-commitments");
-    await settleCoachCommitments(env.DB);
+    await settleCoachCommitments(env.DB, new Date(), env);
     // Co hráči slíbili o docházce (ranní trénink už proběhl): porušené „přijdu“ = omluva a vztah.
     const { settleAttendancePledges } = await import("../messaging/attendance-pledge");
     await settleAttendancePledges(env.DB, env);

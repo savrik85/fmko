@@ -68,6 +68,7 @@ export function hracZRadku(r: Record<string, unknown>, recidiviste: ReadonlySet<
     vek: cislo(r.age, 25),
     dluhy: kontext.situace?.get(id) === "dluhy",
     zalohaOdmitnuta: kontext.odmitnuteZalohy?.has(id) ?? false,
+    ...(typeof lc.lastChanceUntil === "string" ? { lastChance: true } : {}),
   };
 }
 

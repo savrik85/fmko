@@ -22,6 +22,7 @@ import { weightTalkPrompt } from "../season/weight-talk";
 import { memoryPromptLines, type OfferStance } from "./player-memory";
 import { STOCK_PHRASES_RULE, generateWithoutRepeats, ownLinesPromptBlock } from "./repetition";
 import { ATTENDANCE_PLEDGE_RULE, ATTENDANCE_PLEDGE_SCHEMA, parseAttendancePledge, type RawAttendancePledge } from "./attendance-pledge";
+import { requestRule } from "./coach-rules";
 
 
 export interface ThreadMessage {
@@ -99,6 +100,8 @@ export interface TeamContext {
    * Bez rozpisu hráč sliboval „v pátek dorazím“ na den bez tréninku (attendance-pledge.ts).
    */
   trainingSchedule?: string;
+  /** Pravidla celé kabiny, která trenér vyhlásil a teď platí (coach-rules.ts), hotové řádky do faktů. */
+  clubRules?: string[];
 }
 
 /** Řádek do faktů: za koho hráč hraje, když to není áčko klubu, se kterým si píše. */
@@ -457,6 +460,7 @@ export function buildSystemPrompt(
       : team.trainingSchedule
         ? `- Tréninky týmu: ${team.trainingSchedule}. V den zápasu se netrénuje. Jiné tréninky nejsou.`
         : "- Tým teď netrénuje, trenér žádné tréninky nenastavil.",
+    ...(team.clubRules ?? []),
     "- Kromě mistrovských zápasů se hraje i pohár a přáteláky. O termínech zápasů, sestavě a o tom, kdo hrál, víš JEN to, co stojí v těchto faktech. NEVYMÝŠLEJ si, kdy se hraje, ani kdo nastoupil. Když trenér mluví o zápase, který ve faktech nemáš, nehádej se s ním, že se nehrálo: zeptej se ho, nebo řekni, že nevíš.",
     team.subjectPlayerName
       ? `- Konverzace je o konkrétním spoluhráči: ${team.subjectPlayerName}. Mluv VÝHRADNĚ o něm, nikoho jiného nejmenuj.`
@@ -491,7 +495,7 @@ function replyFlagFields(player: PlayerSnapshot): { schema: string; rules: strin
   const offers = (player.pendingOffers?.length ?? 0) > 0;
   const invite = player.pendingInvite;
   return {
-    schema: `, "write_later": <true|false>${offers ? `, "transfer_stance": "stay"|"leave"|"none"` : ""}${invite ? `, "accepts_invite": true|false|null` : ""}${ATTENDANCE_PLEDGE_SCHEMA}`,
+    schema: `, "write_later": <true|false>${offers ? `, "transfer_stance": "stay"|"leave"|"none"` : ""}${invite ? `, "accepts_invite": true|false|null` : ""}${player.pendingRequest ? `, "accepts_request": true|false|null` : ""}${ATTENDANCE_PLEDGE_SCHEMA}`,
     rules: [
       mustAnswerNow(player)
         ? "- write_later: false. Teď odpovídáš hned, neodkládej to."
@@ -505,6 +509,8 @@ function replyFlagFields(player: PlayerSnapshot): { schema: string; rules: strin
       ...(invite
         ? [`- accepts_invite: true, když v téhle zprávě trenérovi kývneš, že ${invite.kind === "invite_pub" ? "s ním na pivo půjdeš" : "se za ním stavíš"}; false, když odmítneš; null, když jsi to ještě nerozhodl.`]
         : []),
+      // Pokyn trenéra (kolečka, omluva kabině; coach-rules.ts): hráč řekne, jestli ho splní.
+      ...(player.pendingRequest ? [requestRule(player.pendingRequest.kind)] : []),
       // Slib docházky (attendance-pledge.ts): co hráč řekne o tréninku nebo zápasu, hra dodrží.
       ATTENDANCE_PLEDGE_RULE,
     ],
@@ -512,10 +518,10 @@ function replyFlagFields(player: PlayerSnapshot): { schema: string; rules: strin
 }
 
 function parseReplyFlags(
-  parsed: { write_later?: unknown; transfer_stance?: unknown; accepts_invite?: unknown; attendance_pledge?: unknown },
+  parsed: { write_later?: unknown; transfer_stance?: unknown; accepts_invite?: unknown; attendance_pledge?: unknown; accepts_request?: unknown },
   body: string,
   player: PlayerSnapshot,
-): Pick<ReplyResult, "writeLater" | "transferStance" | "acceptsInvite" | "attendancePledge"> {
+): Pick<ReplyResult, "writeLater" | "transferStance" | "acceptsInvite" | "attendancePledge" | "acceptsRequest"> {
   // Postoj platí jen tam, kde se na něj ptáme: „zůstávám" bez čekající nabídky by se jinak
   // přilepil k první nabídce, která přijde.
   const asked = (player.pendingOffers?.length ?? 0) > 0;
@@ -525,6 +531,7 @@ function parseReplyFlags(
     transferStance: asked && (parsed.transfer_stance === "stay" || parsed.transfer_stance === "leave") ? parsed.transfer_stance : undefined,
     acceptsInvite: player.pendingInvite && typeof parsed.accepts_invite === "boolean" ? parsed.accepts_invite : undefined,
     attendancePledge: parseAttendancePledge(parsed.attendance_pledge) ?? undefined,
+    acceptsRequest: player.pendingRequest && typeof parsed.accepts_request === "boolean" ? parsed.accepts_request : undefined,
   };
 }
 
@@ -747,6 +754,8 @@ export interface ReplyResult {
   acceptsInvite?: boolean;
   /** Slíbil přijít, nebo řekl, že nepřijde na trénink či zápas (attendance-pledge.ts). */
   attendancePledge?: RawAttendancePledge;
+  /** Kývl na pokyn trenéra (kolečka, omluva kabině; coach-rules.ts)? Jen když nějaký čeká. */
+  acceptsRequest?: boolean;
 }
 
 export async function generateReply(
@@ -810,7 +819,7 @@ export async function generateReply(
     const prompt = [...prompt0, retryRule, ...format].filter(Boolean).join("\n");
     const raw = await callModel(env, prompt, { json: true, maxTokens: 256, temperature: 1.0, deadline: opts.deadline });
 
-    const parsed = tryParseJson<{ body?: unknown; conversation_complete?: unknown; write_later?: unknown; transfer_stance?: unknown; accepts_invite?: unknown; attendance_pledge?: unknown }>(raw);
+    const parsed = tryParseJson<{ body?: unknown; conversation_complete?: unknown; write_later?: unknown; transfer_stance?: unknown; accepts_invite?: unknown; attendance_pledge?: unknown; accepts_request?: unknown }>(raw);
     if (!parsed) {
       logger.warn({ module: "ai-player-chat" }, `reply JSON parse failed: ${raw.slice(0, 300)}`);
       throw new GeminiUnavailableError("Reply JSON parse failed");
@@ -1084,7 +1093,7 @@ export async function generateCoachInitiatedReply(
     const parsed = tryParseJson<{
       body?: unknown; conversation_complete?: unknown;
       relationship_delta?: unknown; morale_delta?: unknown; summary?: unknown;
-      write_later?: unknown; transfer_stance?: unknown; accepts_invite?: unknown; attendance_pledge?: unknown;
+      write_later?: unknown; transfer_stance?: unknown; accepts_invite?: unknown; attendance_pledge?: unknown; accepts_request?: unknown;
     }>(raw);
     if (!parsed || typeof parsed.body !== "string" || !parsed.body.trim()) {
       throw new GeminiUnavailableError("Coach-initiated reply JSON parse failed");

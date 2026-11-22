@@ -42,6 +42,7 @@ import {
 import { loadChatMemory, offerStanceStmt } from "./player-memory";
 import { loadOwnRecentLines } from "./repetition";
 import { pledgesFromLife, loadTrainingDays, trainingScheduleText } from "./attendance-pledge";
+import { clubRuleLines, loadClubRules } from "./coach-rules";
 import {
   cupOutcome, describeLastCupMatch, describeNextCupMatch, isLater, loadLastCupMatch, loadNextCupMatch, withinPreviousWindow,
 } from "./cup-facts";
@@ -745,6 +746,8 @@ export async function loadTeamContext(db: D1Database, teamId: string, playerTeam
     squadNames: squad.results.map((r) => `${r.first_name} ${r.last_name}`),
     // Rozpis tréninků týmu, za který hraje: na co může slíbit, že přijde (attendance-pledge.ts).
     trainingSchedule: trainingScheduleText(await loadTrainingDays(db, teamId)),
+    // Pravidla, která trenér vyhlásil kabině („kdo nechodí, nehraje“): zná je každý hráč klubu.
+    clubRules: clubRuleLines(await loadClubRules(db, clubTeamId)),
   };
 }
 
@@ -1938,7 +1941,7 @@ async function offendPlayer(
 export async function afterPlayerReply(
   db: D1Database,
   r: {
-    teamId: string; convId: string; player: PlayerSnapshot; reply: Pick<ReplyResult, "body" | "writeLater" | "transferStance" | "acceptsInvite" | "attendancePledge">;
+    teamId: string; convId: string; player: PlayerSnapshot; reply: Pick<ReplyResult, "body" | "writeLater" | "transferStance" | "acceptsInvite" | "attendancePledge" | "acceptsRequest">;
     at: string; offerIds: string[];
     /** Incident, o kterém se dnes v hovoru mluví (téma vlákna), jinak nic. */
     incidentId?: string | null;
@@ -1950,6 +1953,11 @@ export async function afterPlayerReply(
     await recordAttendancePledge(db, {
       clubTeamId: r.teamId, convId: r.convId, playerId: r.player.id, playerFirstName: r.player.firstName, pledge: r.reply.attendancePledge,
     });
+  }
+  // Pokyn trenéra (kolečka, omluva kabině): hráč odepsal, jestli ho splní (coach-rules.ts).
+  if (r.reply.acceptsRequest !== undefined && r.player.pendingRequest) {
+    const { respondToCoachRequest } = await import("./coach-rules");
+    await respondToCoachRequest(db, { commitmentId: r.player.pendingRequest.commitmentId, playerId: r.player.id, accepted: r.reply.acceptsRequest });
   }
   // Pozvání od trenéra (coach-commitments.ts): hráč v odpovědi kývl nebo odmítl.
   if (r.reply.acceptsInvite !== undefined && r.player.pendingInvite) {
