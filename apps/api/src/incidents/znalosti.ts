@@ -296,8 +296,12 @@ function pokynPachatele(r: RadekZnalosti): string {
   return "Zapírej, nic nepřiznávej.";
 }
 
-/** Výsledky, po kterých lup v klubu je (vrátil ho pachatel nebo policie). */
-const LOOT_BACK = new Set(["vratil", "nahradil", "vyreseno_policii", "nestalo_se", "nehoda"]);
+/**
+ * Výsledky, po kterých lup v klubu je (vrátil ho pachatel nebo policie), nebo se vracet nedá
+ * (předal ho policii, vyhodil ho): stejné jako `SETTLED_RESOLUTIONS` v restitution.ts, jinak by
+ * hráč slíbil vrácení, které hra nezapíše.
+ */
+const LOOT_BACK = new Set(["vratil", "nahradil", "vyreseno_policii", "nestalo_se", "nehoda", "opravil", "vyhodit", "bez_skody", "policie"]);
 
 /**
  * U uzavřené krádeže, kde lup zůstal u pachatele: ať nesliboval, co hra neumí. Turek po srážce

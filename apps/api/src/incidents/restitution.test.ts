@@ -3,8 +3,8 @@
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { Miniflare } from "miniflare";
-import { amendsRequestOf, isRestitutionRequest, restitutionChance, tryRestitution } from "./restitution";
-import { amendsDeliveryChance, settleAmendsTask, type AmendsTaskRow } from "./amends";
+import { amendsRequestOf, isRestitutionRequest, recordPromisedAmends, restitutionChance, tryRestitution } from "./restitution";
+import { amendsDeliveryChance, resaleValue, settleAmendsTask, type AmendsTaskRow } from "./amends";
 
 describe("žádost a šance", () => {
   it("pozná „vrať to“ a „zaplať škodu“", () => {
@@ -179,12 +179,84 @@ describe("vrácení po uzavřeném incidentu (Turek a poháry, 23.–24. 10.)", 
     expect((await db.prepare("SELECT fact FROM club_incident_knowledge").first<{ fact: string }>())?.fact).toContain("Odmítl jsi to");
   });
 
-  it("starší než 30 dní nebo už vrácené: nic", async () => {
+  it("starší, než si pachatel průšvih pamatuje (60 dní), nebo už vrácené: nic", async () => {
     await closedTheft();
-    await db.prepare("UPDATE club_incidents SET resolved_on = '2026-10-01T16:00:00.000Z'").run();
+    await db.prepare("UPDATE club_incidents SET resolved_on = '2026-09-10T16:00:00.000Z'").run();
     expect(await tryRestitution(db, { teamId: "tym", playerId: "p", text: "Vrať ty poháry.", gameDate: "2026-11-12T16:00:00.000Z" })).toBeNull();
     await db.prepare("UPDATE club_incidents SET resolved_on = '2026-11-11T16:00:00.000Z', recovered = 1").run();
     expect(await tryRestitution(db, { teamId: "tym", playerId: "p", text: "Vrať ty poháry.", gameDate: "2026-11-12T16:00:00.000Z" })).toBeNull();
+  });
+});
+
+describe("Turek a poháry podle kopie produ 22. 11. (C3a)", () => {
+  // Fezko Výškovice: vitrína ukradená 22. 10., srážka 23. 10., klub vitrínu 24. 10. dokoupil
+  // na úroveň 2. Turek: disciplína 17, vztah 1, los přemluvení 98,34 (strop šance 90).
+  const TEAM = "56efc60a-962a-4581-bd6e-9986bdc34f8f";
+  const TUREK = "f9df01f5-18d6-4cd2-a701-671eafcc6ac1";
+  const INC = `inc-${TEAM}-vitrina-2026-10-22-hrozi-${TUREK}`;
+  const LOSS = [{ typ: "vybaveni", kategorie: "trophy_case", uroven: 2, stav: 86, urovniDolu: 1 }];
+  const turekTask = () => db.prepare(
+    `SELECT cc.id, cc.team_id, cc.player_id, cc.kind, cc.details, p.first_name, p.last_name, NULL AS nickname, NULL AS avatar, t.user_id AS club_user_id
+       FROM coach_commitments cc JOIN players p ON p.id = cc.player_id JOIN teams t ON t.id = cc.team_id WHERE cc.player_id = ?`,
+  ).bind(TUREK).first<AmendsTaskRow>();
+  const fact = async () => (await db.prepare("SELECT fact FROM club_incident_knowledge WHERE player_id = ?").bind(TUREK).first<{ fact: string }>())?.fact ?? "";
+
+  beforeEach(async () => {
+    await db.batch([
+      db.prepare("INSERT INTO teams VALUES (?, 30000, 'u-fezko', '2026-11-21T16:00:00.000Z')").bind(TEAM),
+      db.prepare("INSERT INTO players VALUES (?, ?, 'Radek', 'Turek', ?, '{}', 1, 198, 27, 'active')")
+        .bind(TUREK, TEAM, JSON.stringify({ discipline: 17, temper: 24 })),
+      db.prepare("INSERT INTO equipment VALUES (?, 0, 0, 2, 85)").bind(TEAM),
+      db.prepare(`INSERT INTO club_incidents (id, team_id, kind, category, status, loss, culprit_type, culprit_player_id, culprit_revealed, resolution, resolution_data, resolved_on, game_date, recovered)
+        VALUES (?, ?, 'vitrina', 'kradez', 'uzavreny', ?, 'hrac', ?, 1, 'srazka', '{}', '2026-10-23T16:00:00.000Z', '2026-10-23T16:00:00.000Z', 0)`)
+        .bind(INC, TEAM, JSON.stringify(LOSS), TUREK),
+      db.prepare("INSERT INTO club_incident_knowledge VALUES (?, ?, ?, 'pachatel', 'Tohle jsi udělal ty: Poháry z vitríny.', 0, NULL, NULL, NULL)").bind(INC, TUREK, TEAM),
+    ]);
+  });
+
+  it("klub vitrínu dokoupil: žádost o vrácení má smysl dál, Turek podle losu odmítne", async () => {
+    expect(await tryRestitution(db, { teamId: TEAM, playerId: TUREK, text: "Radku, ještě k vitríně. Vrátíš ty poháry?", gameDate: "2026-11-21T16:00:00.000Z" }))
+      .toEqual({ outcome: "refused" });
+    expect(await fact()).toContain("Odmítl jsi to");
+  });
+
+  it("„Jo, vrátím je, trenére.“ po odmítnutí: zapsaný slib, který v termínu nesplní (výmluva, škoda trvá)", async () => {
+    await tryRestitution(db, { teamId: TEAM, playerId: TUREK, text: "Vrátíš ty poháry?", gameDate: "2026-11-21T16:00:00.000Z" });
+    expect(await recordPromisedAmends(db, { teamId: TEAM, playerId: TUREK, reply: "Jo, vrátím je, trenére.", now: new Date("2026-11-22T11:31:00Z") }))
+      .toEqual({ task: "task_return", dueOn: "2026-11-23", willFail: true });
+    expect(await fact()).toContain("Sám jsi trenérovi slíbil, že to vrátíš nejpozději v pondělí 23. 11.");
+    expect(await fact()).not.toContain("23. 11..");
+    expect(await settleAmendsTask(db, (await turekTask())!, new Date("2026-11-24T10:00:00Z"))).toBe("broken");
+    expect(await db.prepare("SELECT recovered FROM club_incidents").first()).toEqual({ recovered: 0 });
+    expect((await db.prepare("SELECT body FROM messages WHERE sender_type = 'player'").first<{ body: string }>())?.body)
+      .toMatch(/nevrátil|nestihl|nezvládl|nevyšlo|není zpátky|doma/i);
+    expect(await fact()).toContain("nevrátil jsi to");
+    // Druhý slib k témuž incidentu už nic nezapíše.
+    expect(await recordPromisedAmends(db, { teamId: TEAM, playerId: TUREK, reply: "Vrátím je, slibuju.", now: new Date("2026-11-24T11:00:00Z") })).toBeNull();
+  });
+
+  it("kdo kývne a poháry vrátí, když klub už má novou vitrínu: vrácené jde do zastavárny, peníze do kasy", async () => {
+    // Stejný incident, ale pachatel poslušný kluk (Turek by podle losu odmítl vždycky).
+    await db.batch([
+      db.prepare("INSERT INTO players VALUES ('hodny', ?, 'Pepa', 'Hodný', ?, '{}', 90, 300, 22, 'active')").bind(TEAM, JSON.stringify({ discipline: 100, temper: 0, workRate: 100 })),
+      db.prepare("UPDATE club_incidents SET culprit_player_id = 'hodny'"),
+      db.prepare("UPDATE club_incident_knowledge SET player_id = 'hodny'"),
+    ]);
+    expect(await tryRestitution(db, { teamId: TEAM, playerId: "hodny", text: "Vrať ty poháry a nebudu to řešit.", gameDate: "2026-11-21T16:00:00.000Z" }))
+      .toMatchObject({ outcome: "promised", task: "task_return" });
+    const row = await db.prepare(
+      `SELECT cc.id, cc.team_id, cc.player_id, cc.kind, cc.details, p.first_name, p.last_name, NULL AS nickname, NULL AS avatar, t.user_id AS club_user_id
+         FROM coach_commitments cc JOIN players p ON p.id = cc.player_id JOIN teams t ON t.id = cc.team_id WHERE cc.player_id = 'hodny'`,
+    ).first<AmendsTaskRow>();
+    expect(await settleAmendsTask(db, row!, new Date("2026-11-24T10:00:00Z"))).toBe("kept");
+    const resold = resaleValue(LOSS[0] as never);
+    expect(resold).toBeGreaterThan(0);
+    expect((await db.prepare("SELECT budget FROM teams WHERE id = ?").bind(TEAM).first<{ budget: number }>())?.budget).toBe(30000 + resold);
+    expect(await db.prepare("SELECT trophy_case FROM equipment WHERE team_id = ?").bind(TEAM).first()).toEqual({ trophy_case: 2 });
+    expect(await db.prepare("SELECT recovered FROM club_incidents").first()).toEqual({ recovered: 1 });
+    const kustod = (await db.prepare("SELECT body FROM messages WHERE sender_type = 'system'").first<{ body: string }>())?.body;
+    expect(kustod).toContain("poháry z vitríny");
+    expect(kustod).toContain("prodal do zastavárny");
   });
 });
 

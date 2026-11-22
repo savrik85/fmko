@@ -297,6 +297,9 @@ describe("lup po uzavřené krádeži (Turek a poháry, 23.–24. 10.)", () => {
     expect(lootLine({ kategorie: "kradez", stav: "uzavreny", vysledek: "vratil", recovered: true })).toBe("");
     expect(lootLine({ kategorie: "kradez", stav: "otevreny", vysledek: null, recovered: false })).toBe("");
     expect(lootLine({ kategorie: "poskozeni", stav: "uzavreny", vysledek: "pokuta", recovered: false })).toBe("");
+    // Předal ho policii nebo vyhodil: vrácení hra nezapíše, prompt ho nenabízí.
+    expect(lootLine({ kategorie: "kradez", stav: "uzavreny", vysledek: "policie", recovered: false })).toBe("");
+    expect(lootLine({ kategorie: "kradez", stav: "uzavreny", vysledek: "vyhodit", recovered: false })).toBe("");
   });
 
   it("jde do řádku pachatele i se srážkou", () => {
