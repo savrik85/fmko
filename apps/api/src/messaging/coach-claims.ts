@@ -69,12 +69,19 @@ export const DISMISSAL_PHRASES = [
   "(tady|u n[aá]s) (u[zž] )?si nezahraje[sš]", "u[zž] si (tady |u n[aá]s )?nezahraje[sš]", "u[zž] za n[aá]s nehraje[sš]",
   "ru[sš][ií]m ti smlouvu", "vypov[ií]d[aá]m ti smlouvu", "kon[cč][ií] ti smlouva",
 ];
+/** Policie i hovorově: „policii“, „policajtům“, „fízlům“, „čajkám“. */
+const POLICE_NOUN = "(polic|f[ií]zl|[cč]ajk)";
+/** Slovesa hotového předání policii (budoucí „předám“, „zavolám“ ne). */
+const POLICE_VERB = "(p[rř]edal|nahl[aá]sil|ohl[aá]sil|ozn[aá]mil|dal|(za)?volal)";
 /** Předání policii, hotové nebo právě teď (budoucí „zavolám policii“ je taktika výslechu). */
 export const POLICE_PHRASES = [
-  "(p[rř]edal|nahl[aá]sil|ohl[aá]sil|ozn[aá]mil|dal) jsem (to |t[eě] |v[aá]s |celou v[eě]c )?(na )?polic",
-  "jsem (to |t[eě] |v[aá]s )?(p[rř]edal|nahl[aá]sil|ohl[aá]sil|ozn[aá]mil|dal) (to )?(na )?polic",
-  "polici[ií]? jsem (to |t[eě] )?(p[rř]edal|nahl[aá]sil|ohl[aá]sil|ozn[aá]mil|dal)",
-  "(za)?volal jsem (na )?polic", "vol[aá]m polic", "udal jsem t[eě]", "ud[aá]v[aá]m t[eě]",
+  // „předal jsem (už) to policii“, „volal jsem už policajty“, „dal jsem to fízlům“
+  `${POLICE_VERB} jsem (u[zž] )?(to |t[eě] |v[aá]s |celou v[eě]c )?(u[zž] )?(na )?${POLICE_NOUN}`,
+  // „jsem už předal policii“, „už jsem zavolal policii“, „jsem to nahlásil na policii“ (E2E 22. 11.)
+  `jsem (u[zž] )?(to |t[eě] |v[aá]s |celou v[eě]c )?(u[zž] )?${POLICE_VERB} (to |t[eě] )?(u[zž] )?(na )?${POLICE_NOUN}`,
+  // „policii jsem to nahlásil“, „policajtům jsem to už dal“
+  `${POLICE_NOUN}\\S* jsem (u[zž] )?(to |t[eě] )?(u[zž] )?${POLICE_VERB}`,
+  "vol[aá]m polic", "udal jsem t[eě]", "ud[aá]v[aá]m t[eě]",
   "polici[ea] (u[zž] )?(to )?(u[zž] )?([rř]e[sš][ií]|vy[sš]et[rř]uje|[sš]et[rř][ií]|pro[sš]et[rř])",
   "([rř]e[sš][ií]|vy[sš]et[rř]uje|[sš]et[rř][ií]) (to |p[rř][ií]pad )?polici",
   "polici[ea] o tob[eě] v[ií]", "policajti (u[zž] )?(to )?([rř]e[sš][ií]|vy[sš]et[rř]uj)", "p[rř]ijdou (si pro tebe )?policajt",
@@ -82,6 +89,10 @@ export const POLICE_PHRASES = [
 /** Odebrání kapitánské pásky. */
 export const CAPTAINCY_PHRASES = [
   "ber[uů] ti (kapit[aá]nskou )?p[aá]sk", "sebral jsem ti (kapit[aá]nskou )?p[aá]sk", "odeb(er[uů]|ral jsem) ti (kapit[aá]nskou )?p[aá]sk",
+  // Slovosled „ti beru pásku“, „pásku ti beru“, „odebírám ti pásku“, „vzal jsem ti pásku“ (E2E 22. 11.).
+  "ti (ber[uů]|seber[uů]|odeb[ií]r[aá]m|odeber[uů]) (kapit[aá]nskou )?p[aá]sk", "odeb[ií]r[aá]m ti (kapit[aá]nskou )?p[aá]sk",
+  "(kapit[aá]nskou )?p[aá]sku ti (u[zž] )?(ber[uů]|seber[uů]|odeb[ií]r[aá]m|odeber[uů])",
+  "(vzal|sebral|odebral) jsem ti (kapit[aá]nskou )?p[aá]sk", "jsem ti (u[zž] )?(vzal|sebral|odebral) (kapit[aá]nskou )?p[aá]sk",
   "p[aá]sk[ua] (u[zž] )?nem[aá][sš]", "u[zž] nejsi kapit[aá]n", "nejsi u[zž] kapit[aá]n", "kapit[aá]nem (u[zž] )?nebude[sš]",
   "p[rř]ich[aá]z[ií][sš] o (kapit[aá]nskou )?p[aá]sk", "p[rř]i[sš]el jsi o (kapit[aá]nskou )?p[aá]sk", "konec s p[aá]skou",
   "p[aá]sk[ua] (je |jde )?pry[cč]", "zbavuj(i|u) t[eě] (kapit[aá]nsk|p[aá]sk)",

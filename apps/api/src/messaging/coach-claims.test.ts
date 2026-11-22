@@ -24,6 +24,18 @@ describe("oznámení akce v SMS trenéra", () => {
     ["Dobře. Dávám tě na seznam nepotřebných hráčů určených k prodeji a po sezoně tě připustíme. S platem nepočítej", ["transfer_list", "wage_cut"]],
     ["Půjčím tě na hostování do Dobrše.", ["loan_list"]],
     ["Měl jsi šanci tu si prosral. Já tě nebudu stavět a ani na trénink chodit nemusíš", ["not_counted_on"]],
+    // E2E 22. 11. (C7): běžný slovosled a vložená slova.
+    ["Milane, po tom, co jsi předvedl, ti beru pásku.", ["captaincy"]],
+    ["Pásku ti beru, kapitánem nebudeš.", ["captaincy"]],
+    ["Odebírám ti kapitánskou pásku.", ["captaincy"]],
+    ["Vzal jsem ti pásku, smiř se s tím.", ["captaincy"]],
+    ["Kubo, ty světlice na trávníku jsem už předal policii.", ["police"]],
+    ["Honzo, kvůli té kase jsem volal policii, třeba něco zjistí.", ["police"]],
+    ["Už jsem zavolal policii.", ["police"]],
+    ["Volal jsem už policajty, ať si to vyřeší.", ["police"]],
+    ["Nahlásil jsem to policajtům.", ["police"]],
+    ["Dal jsem to fízlům.", ["police"]],
+    ["Policajtům jsem to už nahlásil.", ["police"]],
   ])("%s", (text, expected) => {
     expect(kinds(text).sort()).toEqual([...expected].sort());
   });
@@ -40,6 +52,11 @@ describe("oznámení akce v SMS trenéra", () => {
       "Neboj, pásku ti neberu.",
       "Ok, zavolám policii",
       "Nechci volat policajty ani to šířit.",
+      "Jestli to uděláš ještě jednou, beru ti pásku.",
+      "Jestli to nevrátíš, předám to policii.",
+      "Policii jsem nevolal, neboj.",
+      "Pásku ti zatím nechám.",
+      "Zítra to předám fízlům.",
     ]) expect(kinds(t), t).toEqual([]);
   });
 
