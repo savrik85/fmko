@@ -1,6 +1,7 @@
 /**
  * Vzhled hráčů, dresy a trenéři pro 3D záznam zápasu (detail ligového, pohárového i turnajového zápasu).
  */
+import { orderPair } from "../community/manager-relations";
 import { currentSeasonSql } from "./season";
 
 export interface PlayerLook {
@@ -37,6 +38,8 @@ export interface MatchLook {
   /** null = klub manažera nemá (velkoklub v poháru). */
   home_coach: MatchCoach | null;
   away_coach: MatchCoach | null;
+  /** Trenéři spolu vycházejí líp než neutrálně (respekt mezi kluby nad nulou): před výkopem se i obejmou. */
+  coaches_on_good_terms: boolean;
 }
 
 interface TeamKitRow {
@@ -184,5 +187,8 @@ export async function loadMatchLook(
       if (row) Object.assign(p, playerLook(row));
     }
   }
-  return { home_kit, away_kit, home_coach: await coachOf("home"), away_coach: await coachOf("away") };
+  const relation = home.teamId && away.teamId
+    ? await db.prepare("SELECT respect FROM manager_relations WHERE team_a_id = ? AND team_b_id = ?").bind(...orderPair(home.teamId, away.teamId)).first<{ respect: number }>()
+    : null;
+  return { home_kit, away_kit, home_coach: await coachOf("home"), away_coach: await coachOf("away"), coaches_on_good_terms: (relation?.respect ?? 0) > 0 };
 }

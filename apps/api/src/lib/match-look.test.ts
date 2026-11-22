@@ -14,11 +14,12 @@ type TeamRow = {
 type PlayerRow = { id: string; avatar: string | null; physical: string | null };
 type ManagerRow = { team_id: string; name: string; avatar: string; motivation: number };
 
-/** Malá náhrada D1: tabulky teams, players a managers v paměti, filtr podle id z bind(). */
+/** Malá náhrada D1: tabulky teams, players a managers v paměti, filtr podle id z bind(); vztah mezi kluby žádný. */
 function fakeDb(teams: TeamRow[], players: PlayerRow[] = [], managers: ManagerRow[] = []): D1Database {
   return {
     prepare: (sql: string) => ({
       bind: (...ids: string[]) => ({
+        first: async () => null,
         all: async () => {
           if (sql.includes("FROM managers")) return { results: managers.filter((m) => ids.includes(m.team_id)) };
           const source: Array<{ id: string }> = sql.includes("FROM teams")
@@ -60,7 +61,7 @@ describe("dresy v zápase", () => {
     expect(kits).toEqual({
       home_kit: { shirt: "#1E5AA8", shorts: "#FFFFFF", socks: "#1E5AA8" },
       away_kit: { shirt: "#F2C200", shorts: "#222222", socks: "#F2C200" },
-      home_coach: null, away_coach: null,
+      home_coach: null, away_coach: null, coaches_on_good_terms: false,
     });
   });
 
@@ -94,7 +95,7 @@ describe("dresy v zápase", () => {
     expect(kits).toEqual({
       home_kit: { shirt: "#2D5F2D", shorts: "#2D5F2D", socks: "#2D5F2D" },
       away_kit: { shirt: "#D94032", shorts: "#D94032", socks: "#D94032" },
-      home_coach: null, away_coach: null,
+      home_coach: null, away_coach: null, coaches_on_good_terms: false,
     });
   });
 

@@ -1,6 +1,7 @@
 /**
  * Ligová bilance trenéra v detailu zápasu na skutečné D1 (Miniflare): počítá se jen aktuální sezóna
- * a jen odehraná kola před výkopem, ať jde o ligový zápas, nebo o pohár mezi dvěma koly.
+ * a jen odehraná kola před výkopem, ať jde o ligový zápas, nebo o pohár mezi dvěma koly. A vztah trenérů:
+ * objímají se jen ti, mezi jejichž kluby je respekt nad nulou.
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Miniflare } from "miniflare";
@@ -18,6 +19,7 @@ beforeAll(async () => {
     db.prepare(`CREATE TABLE teams (id TEXT PRIMARY KEY, primary_color TEXT, secondary_color TEXT, home_shorts_color TEXT, home_socks_color TEXT,
       away_primary_color TEXT, away_shorts_color TEXT, away_socks_color TEXT)`),
     db.prepare("CREATE TABLE managers (team_id TEXT, name TEXT, avatar TEXT, motivation INTEGER)"),
+    db.prepare("CREATE TABLE manager_relations (team_a_id TEXT, team_b_id TEXT, respect INTEGER, PRIMARY KEY (team_a_id, team_b_id))"),
     db.prepare("CREATE TABLE season_calendar (id TEXT PRIMARY KEY, league_id TEXT, season_number INTEGER, scheduled_at TEXT)"),
     db.prepare("CREATE TABLE matches (id TEXT PRIMARY KEY, calendar_id TEXT, home_team_id TEXT, away_team_id TEXT, home_score INTEGER, away_score INTEGER, status TEXT)"),
     db.prepare("INSERT INTO teams (id, primary_color) VALUES ('h', '#B91C1C'), ('a', '#1D4ED8')"),
@@ -55,5 +57,20 @@ describe("ligová bilance trenéra", () => {
 
   it("přátelák čas výkopu nemá a bilanci neukazuje", async () => {
     expect(await records(null)).toEqual([null, null]);
+  });
+});
+
+describe("vztah trenérů", () => {
+  const goodTerms = async () => (await loadMatchLook(db, { teamId: "h" }, { teamId: "a" }, null, null, null)).coaches_on_good_terms;
+
+  it("bez záznamu a s nulovým nebo záporným respektem se neobjímají, s kladným ano", async () => {
+    expect(await goodTerms()).toBe(false);
+    // Dvojice je uložená s menším id jako první.
+    await db.prepare("INSERT INTO manager_relations (team_a_id, team_b_id, respect) VALUES ('a', 'h', 0)").run();
+    expect(await goodTerms()).toBe(false);
+    await db.prepare("UPDATE manager_relations SET respect = -15").run();
+    expect(await goodTerms()).toBe(false);
+    await db.prepare("UPDATE manager_relations SET respect = 5").run();
+    expect(await goodTerms()).toBe(true);
   });
 });
