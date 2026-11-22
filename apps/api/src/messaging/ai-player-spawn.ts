@@ -1317,8 +1317,15 @@ async function handleAiPlayerReplyInner(
   // Kluk z U21 nebo hráč na hostování dostane účast v zápase svého týmu, ne áčka.
   const replyMatchCtx = await loadLastMatchContext(db, (playerRow.team_id as string | null) ?? conv.team_id);
   const player = loadPlayerSnapshot(playerRow, replyMatchCtx);
-  // Pozvánka z hospody: v celé konverzaci sedí v hospodě a píše opile, i když už je pozdě.
-  if (scenario.atPub) player.atPub = true;
+  // Pozvánka nebo hlasovka z hospody: v hospodě sedí a píše opile jen ten večer a noc, pak je
+  // střízlivý a mluví o tom jako o včerejšku (pub-night.ts; prod 22. 11. psal opile i v poledne).
+  if (scenario.atPub) {
+    const { pubThreadScenario } = await import("./pub-night");
+    const pub = pubThreadScenario(scenario, state.initiated_at, new Date());
+    scenario = pub.scenario;
+    player.atPub = pub.atPub;
+    player.pubMorningAfter = !pub.atPub;
+  }
   player.znalostiIncidentu = await nactiZnalostiHrace(db, {
     teamId: conv.team_id, playerId: player.id,
     tema: state.incidentId && state.incidentDen ? { incidentId: state.incidentId, den: state.incidentDen } : null,

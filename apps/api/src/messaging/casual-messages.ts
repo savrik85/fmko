@@ -51,6 +51,9 @@ const INVITE_TTL_SECONDS = 36 * 3600;
 /** Téma, po kterém hráč čeká, jestli mu trenér sežene práci (F8). */
 const JOB_TIP_TOPIC_ID = "casual_job_tip";
 
+/** Nejkratší doba platnosti klíče, kterou KV přijme. */
+const KV_MIN_TTL_SECONDS = 60;
+
 const inviteKey = (convId: string) => `open_invite:${convId}`;
 const recentTopicsKey = (teamId: string) => `casual_topics:${teamId}`;
 
@@ -373,9 +376,16 @@ async function rememberTopic(kv: KVNamespace | undefined, teamId: string, topicI
     .catch((e) => logger.warn({ module: M, teamId }, "uložení nedávných témat", e));
 }
 
-/** Pozvání čeká na odpověď trenéra. Volá i ruční rozeslání pozvánky z hospody (ai-player-spawn.ts). */
-export async function openInvite(kv: KVNamespace | undefined, convId: string, invite: OpenInvite): Promise<void> {
-  await kv?.put(inviteKey(convId), JSON.stringify(invite), { expirationTtl: INVITE_TTL_SECONDS })
+/**
+ * Pozvání čeká na odpověď trenéra. Volá i ruční rozeslání pozvánky z hospody (ai-player-spawn.ts).
+ * „Pojď na jedno“ platí jen ten večer a noc (pub-night.ts): ráno „jo, dorazím“ hospodu nezaloží.
+ */
+export async function openInvite(kv: KVNamespace | undefined, convId: string, invite: OpenInvite, now: Date = new Date()): Promise<void> {
+  const { pubNightUntil } = await import("./pub-night");
+  const ttl = invite.kind === "pub"
+    ? Math.max(KV_MIN_TTL_SECONDS, Math.round((pubNightUntil(now).getTime() - now.getTime()) / 1000))
+    : INVITE_TTL_SECONDS;
+  await kv?.put(inviteKey(convId), JSON.stringify(invite), { expirationTtl: ttl })
     .catch((e) => logger.warn({ module: M, teamId: invite.teamId }, "uložení pozvání", e));
 }
 

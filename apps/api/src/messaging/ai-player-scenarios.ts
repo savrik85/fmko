@@ -21,6 +21,8 @@ export type ScenarioCategory = "complaint" | "positive" | "personal" | "transfer
 export interface PlayerSnapshot {
   /** Píše z hospody (ruční téma s fotkou stolu): časový kontext se přepne na pití v hospodě. */
   atPub?: boolean;
+  /** Vlákno z hospody pokračuje další den (pub-night.ts): o opilé zprávě mluví scénář „ráno potom“. */
+  pubMorningAfter?: boolean;
   id: string;
   firstName: string;
   lastName: string;
