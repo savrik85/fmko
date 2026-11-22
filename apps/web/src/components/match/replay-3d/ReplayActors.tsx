@@ -135,11 +135,12 @@ export function ReplayActors({ plan, clock }: { plan: ReplayPlan; clock: ReplayC
       s.z = f.z;
       if (dt > 0) s.speed = THREE.MathUtils.lerp(s.speed, step / dt, Math.min(1, dt * 8));
       s.phase += step * 1.7;
-      // Čelem po směru běhu; stojící a padající brankář čelem k míči (padá do strany, ne do sítě).
-      const toBall = s.speed <= 0.8 || f.pose === "diveLeft" || f.pose === "diveRight";
-      const faceX = toBall ? frame.ballX - s.x : dx;
-      const faceZ = toBall ? frame.ballZ - s.z : dz;
-      if (Math.abs(faceX) + Math.abs(faceZ) > 0.01) {
+      // Čelem po směru běhu, stojící čelem k míči; padající brankář čelem do pole (padá podél brány), ležící se neotáčí.
+      const dive = f.pose === "diveLeft" || f.pose === "diveRight";
+      const toBall = s.speed <= 0.8;
+      const faceX = dive ? 0 : toBall ? frame.ballX - s.x : dx;
+      const faceZ = dive ? -s.z : toBall ? frame.ballZ - s.z : dz;
+      if (f.pose !== "down" && Math.abs(faceX) + Math.abs(faceZ) > 0.01) {
         const diff = Math.atan2(faceX, faceZ) - s.yaw;
         s.yaw += Math.atan2(Math.sin(diff), Math.cos(diff)) * Math.min(1, dt * 7);
       }
@@ -223,7 +224,7 @@ export function ReplayActors({ plan, clock }: { plan: ReplayPlan; clock: ReplayC
       // Hráč mimo záběr jmenovku nemá; u kraje se posune dovnitř, ať zůstane nad titulkem a ovládáním.
       if (Math.abs(vTmp.x) > 1 || Math.abs(vTmp.y) > 1) tag.style.display = "none";
       const x = THREE.MathUtils.clamp(((vTmp.x + 1) / 2) * size.width, 70, size.width - 70);
-      const y = THREE.MathUtils.clamp(((1 - vTmp.y) / 2) * size.height, 80, size.height - 140);
+      const y = THREE.MathUtils.clamp(((1 - vTmp.y) / 2) * size.height, 150, size.height - 140);
       tag.style.transform = `translate(${x}px, ${y}px) translate(-50%, -100%)`;
     });
 
