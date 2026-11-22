@@ -179,7 +179,7 @@ function Replay3DView({ detail, events, progress, onReady }: Replay3DProps) {
       {intro === null && (
         <button onClick={() => setOverview((v) => !v)} title={overview ? "Pohled z tribuny" : "Pohled z paneláku"}
           className={`absolute top-12 right-2 z-40 h-8 px-2.5 rounded-lg bg-black/85 hover:bg-black text-white text-xs font-heading font-bold ${OVERLAY_CONTROL}`}>
-          {overview ? "Z Tribuny" : "Z Paneláku"}
+          {overview ? "Pohled z tribuny" : "Pohled z paneláku"}
         </button>
       )}
       <button onClick={() => setFullscreen((v) => !v)} title={fullscreen ? "Zmenšit" : "Na celou obrazovku"}
