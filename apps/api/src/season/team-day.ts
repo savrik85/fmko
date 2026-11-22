@@ -219,6 +219,18 @@ export async function processTeamDay(
                 squadRows.results.map((r) => r.id as string), incKontext.absence, "day_before",
               );
               const absentIds = new Set(dayBeforeAbsences.map((a) => squadRows.results[a.playerIndex]?.id as string));
+              // Co hráč trenérovi předem slíbil v SMS (messaging/attendance-pledge.ts): „nemůžu“ ho omluví,
+              // „přijdu“ ho z losu vrátí. Omluvu kvůli incidentu (výslech, soud) slib nepřebije.
+              const { matchPledgeOverrides } = await import("../messaging/attendance-pledge");
+              const pledged = matchPledgeOverrides(
+                squadRows.results.map((r) => ({ id: r.id as string, life_context: r.life_context })),
+                new Map(dayBeforeAbsences.map((a) => [squadRows.results[a.playerIndex]?.id as string, a])),
+                tomorrowMatch.id as string,
+                teamId,
+              );
+              for (const pid of pledged.skip.keys()) absentIds.add(pid);
+              for (const pid of pledged.attend) absentIds.delete(pid);
+              const pledgeTexts = pledged.skip;
               const matchConvId = crypto.randomUUID();
               await env.DB.prepare(
                 "INSERT INTO conversations (id, team_id, type, title, pinned, unread_count, last_message_at, created_at) VALUES (?, ?, 'squad_group', ?, 0, 0, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))"
@@ -230,20 +242,20 @@ export async function processTeamDay(
               let msgCount = 1;
               for (const row of squadRows.results) {
                 const pid = row.id as string;
-                const absence = dayBeforeAbsences.find((a) => squadRows.results[a.playerIndex]?.id === pid);
                 const available = !absentIds.has(pid);
+                const absence = available ? undefined : dayBeforeAbsences.find((a) => squadRows.results[a.playerIndex]?.id === pid);
                 const lc = (() => { try { return JSON.parse(row.life_context as string); } catch { return {}; } })();
                 const msg = generateAttendanceMessage(`${row.first_name} ${row.last_name}`, available, lc.condition ?? 100, absRng as any);
                 await env.DB.prepare(
                   "INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, metadata, sent_at) VALUES (?, ?, 'player', ?, ?, ?, ?, datetime('now', '+' || ? || ' seconds'))"
                 ).bind(crypto.randomUUID(), matchConvId, pid, msg.senderName,
-                  brokenCzech(absence ? absence.smsText : msg.body, row.nationality as string | null, `${pid}|${tomorrowMatch.id}`),
+                  brokenCzech(pledgeTexts.get(pid) ?? (absence ? absence.smsText : msg.body), row.nationality as string | null, `${pid}|${tomorrowMatch.id}`),
                   JSON.stringify({ type: "attendance", response: available ? "yes" : "no", timing: "day_before", calendarId: tomorrowMatch.id }), msgCount * 10,
                 ).run().catch((e) => logger.warn({ module: "daily-tick" }, "day_before attendance msg", e));
                 msgCount++;
               }
               await env.DB.prepare("UPDATE conversations SET unread_count = ?, last_message_text = ?, last_message_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?")
-                .bind(msgCount, `📋 ${dayBeforeAbsences.length} omluvených z ${squadRows.results.length}`, matchConvId).run().catch((e) => logger.warn({ module: "daily-tick" }, "day_before conversation update", e));
+                .bind(msgCount, `📋 ${absentIds.size} omluvených z ${squadRows.results.length}`, matchConvId).run().catch((e) => logger.warn({ module: "daily-tick" }, "day_before conversation update", e));
               logger.info({ module: "daily-tick", teamId }, `day_before attendance: ${msgCount} msgs → ⚽ vs ${opponentName}`);
               // Hráč se slíbeným místem v sestavě se den před zápasem ozve.
               const { remindMinutesPromises } = await import("../transfers/promises");
@@ -700,6 +712,7 @@ export async function processTeamDay(
               // omluvenku poslat musí, jinak v zápase chybí a v chatu u něj zůstane „přijdu“.
               const { kontextDojizdeni: kontextDojizdeniMd, playersExcusedDayBefore } = await import("../events/match-absences");
               const alreadyIds = await playersExcusedDayBefore(env.DB, matchConvId);
+              const { lifeOf: lifeOfMd, matchPledgeIntent: matchPledgeIntentMd } = await import("../messaging/attendance-pledge");
 
               const teamDistrictMd = (team.village_district as string | null) ?? undefined;
               const { resolveRoundWeather: resolveMdWeather } = await import("./season-weather");
@@ -714,7 +727,10 @@ export async function processTeamDay(
               )
                 .filter((a) => {
                   const pid = squadRows.results[a.playerIndex]?.id as string;
-                  return pid && !alreadyIds.has(pid);
+                  if (!pid || alreadyIds.has(pid)) return false;
+                  // Kdo trenérovi v SMS slíbil, že na zápas přijde, se ráno neomlouvá (kromě incidentu).
+                  return a.category === "incident"
+                    || matchPledgeIntentMd(lifeOfMd(squadRows.results[a.playerIndex].life_context).matchPledge, todayMatch.id as string, teamId) !== "attend";
                 });
 
               if (matchDayAbsences.length > 0) {

@@ -22,6 +22,7 @@ import { nactiZnalostiHrace } from "../incidents/znalosti-db";
 import {
   coachQuote, generateCoachInitiatedReply, generateSquadGroupReaction, GeminiUnavailableError, playerTimeContext,
 } from "./ai-player-chat";
+import { SQUAD_ATTENDANCE_TOPIC_RE, recordAttendancePledge, type RawAttendancePledge } from "./attendance-pledge";
 import { coachStreak, leftOnReadChance, markCoachMessagesRead, readDelayMs } from "./left-on-read";
 import {
   INJURY_COLUMN, afterPlayerReply, loadLastMatchContext, loadLastOwnMessageAt, loadPlayerSnapshot, loadRecentlyPostponed, loadTeamContext, nactiSituaceTymu,
@@ -394,11 +395,15 @@ async function replyInSquadGroupInner(
           ).bind(opts.convId).all<{ sender_type: string; sender_name: string; body: string }>()
           .catch((e) => { logger.warn({ module: M }, "historie kabiny", e); return null; });
 
+        let pledge: RawAttendancePledge | null = null;
         const text = await generateSquadGroupReaction(
           env, mluvci, team, opts.coachMessage,
           (predchozi?.results ?? []).map((m) =>
             m.sender_type === "user" ? `TRENÉR: ${coachQuote(m.body)}` : `${m.sender_name}: ${m.body}`),
-          { addressed: addressed.has(mluvci.id), mood: speech?.mood || undefined, afterTeammates: i > 0, deadline: opts.deadline },
+          {
+            addressed: addressed.has(mluvci.id), mood: speech?.mood || undefined, afterTeammates: i > 0, deadline: opts.deadline,
+            onPledge: SQUAD_ATTENDANCE_TOPIC_RE.test(opts.coachMessage) ? (p) => { pledge = p; } : undefined,
+          },
         );
         if (!text) continue;
 
@@ -419,6 +424,13 @@ async function replyInSquadGroupInner(
           ).bind(`${jmeno}: ${text}`.slice(0, 100), at, opts.convId),
         ]);
         posted++;
+        // „Já dorazím“ před celou kabinou platí stejně jako v SMS (attendance-pledge.ts).
+        if (pledge) {
+          await recordAttendancePledge(db, {
+            clubTeamId: opts.teamId, convId: opts.convId, playerId: mluvci.id, playerFirstName: mluvci.firstName, pledge,
+            now: new Date(Date.parse(at)),
+          });
+        }
       } catch (e) {
         // První odpověď je zaplacená SMS; když spadne až druhý hlas, kabina už odpověděla.
         if (posted === 0) throw e;

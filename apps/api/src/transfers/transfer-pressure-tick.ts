@@ -95,6 +95,9 @@ export async function executeTransferPressureTick(
     // Sliby napsané v SMS (sestava, pozice, peníze, odchod).
     const { settleCoachCommitments } = await import("../messaging/coach-commitments");
     await settleCoachCommitments(env.DB);
+    // Co hráči slíbili o docházce (ranní trénink už proběhl): porušené „přijdu“ = omluva a vztah.
+    const { settleAttendancePledges } = await import("../messaging/attendance-pledge");
+    await settleAttendancePledges(env.DB, env);
   } catch (e) {
     logger.error({ module: "transfer-pressure" }, "unrest processing failed", e);
   }

@@ -11,6 +11,8 @@ import { pokusuZaTalent, youthAttempts, YOUTH_TALENT_AGE } from "../skills/talen
 import type { GeneratedPlayer } from "../generators/player";
 import { TRENINK_SITUACE } from "../incidents/nastaveni";
 import { occupationTrainingAttendance } from "../generators/occupations";
+import { logger } from "../lib/logger";
+import { SKIP_PLEDGE_REASONS, pledgedAttendProb, type PledgeIntent } from "../messaging/attendance-pledge";
 
 /**
  * Hráč v tréninku: GeneratedPlayer + volitelné stropy atributů (maxPotential ze
@@ -52,6 +54,36 @@ export function storedTrainingApproach(raw: unknown): TrainingApproach {
 
 /** Výchozí trénink klubu bez vlastního nastavení, stejný jako v GET /teams/:id/training. */
 export const DEFAULT_TRAINING_TYPE: TrainingType = "conditioning";
+
+/** Tréninkové dny podle počtu tréninků týdně, když klub nemá vlastní dny ani plán (0 = neděle). */
+export const DEFAULT_TRAINING_DAYS: Record<number, number[]> = {
+  1: [2], 2: [2, 4], 3: [1, 3, 5], 4: [1, 2, 4, 5], 5: [1, 2, 3, 4, 5],
+};
+
+/**
+ * Ve které dny v týdnu tým trénuje (0 = neděle), stejně jako denní tick: dny z týdenního plánu,
+ * jinak vlastní `training_days`, jinak podle počtu tréninků. Lidský klub bez typu tréninku
+ * a bez plánu netrénuje vůbec (`teamTrainingType`). `plan` je výsledek `parseTrainingPlan`.
+ */
+export function trainingWeekdays(
+  team: { user_id: unknown; training_type: string | null; training_sessions: number | null; training_days: string | null },
+  plan: Record<number, unknown> | null,
+): number[] {
+  const planDays = plan ? Object.keys(plan).map(Number).filter((d) => d >= 0 && d <= 6) : [];
+  if (planDays.length > 0) return planDays;
+  if (!teamTrainingType(team.training_type, team.user_id)) return [];
+  let custom: number[] | null = null;
+  if (team.training_days) {
+    try {
+      const parsed = JSON.parse(team.training_days) as unknown;
+      if (Array.isArray(parsed) && parsed.every((d) => typeof d === "number" && d >= 0 && d <= 6)) custom = parsed as number[];
+    } catch (e) {
+      logger.warn({ module: "training" }, "nečitelné training_days", e);
+    }
+  }
+  if (custom && custom.length > 0) return custom;
+  return DEFAULT_TRAINING_DAYS[team.training_sessions ?? 2] ?? DEFAULT_TRAINING_DAYS[2];
+}
 
 /**
  * Kolik kondice ubere jeden trénink podle typu (před násobkem intenzity). Kondice a taktika jsou
@@ -266,6 +298,8 @@ export interface TrainingAttendance {
   playerIndex: number;
   attended: boolean;
   reason?: string;
+  /** Hráč na tenhle trénink něco slíbil (messaging/attendance-pledge.ts). */
+  pledge?: PledgeIntent;
 }
 
 export interface TrainingResult {
@@ -459,6 +493,16 @@ export function simulateAttendance(
     const incidentniDuvod = incidentniDuvody?.[i];
     if (incidentniDuvod) {
       return { playerIndex: i, attended: false, reason: incidentniDuvod };
+    }
+    // Co hráč trenérovi v SMS řekl (messaging/attendance-pledge.ts): slib má přednost před
+    // náhodou i před trucem. Slíbil přijít → skoro jistě přijde, řekl, že nepřijde → chybí.
+    const pledge = (player as { attendancePledge?: PledgeIntent }).attendancePledge;
+    if (pledge) {
+      if (hod < pledgedAttendProb(attendProb, pledge)) return { playerIndex: i, attended: true, pledge };
+      return {
+        playerIndex: i, attended: false, pledge,
+        reason: pledge === "skip" ? rng.pick(SKIP_PLEDGE_REASONS) : rng.pick(isYouthAge(player.age) ? YOUNG_SAFE_REASONS : ABSENCE_REASONS),
+      };
     }
     // Truc po nenominaci (multiplayer/left-out.ts): přijde jen výjimečně, dokud ho
     // trenér nepřemluví nebo nevezme na zápas.

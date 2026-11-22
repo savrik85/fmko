@@ -41,6 +41,7 @@ import {
 } from "./ai-player-chat";
 import { loadChatMemory, offerStanceStmt } from "./player-memory";
 import { loadOwnRecentLines } from "./repetition";
+import { pledgesFromLife, loadTrainingDays, trainingScheduleText } from "./attendance-pledge";
 import {
   cupOutcome, describeLastCupMatch, describeNextCupMatch, isLater, loadLastCupMatch, loadNextCupMatch, withinPreviousWindow,
 } from "./cup-facts";
@@ -567,6 +568,7 @@ export function loadPlayerSnapshot(
     lastMatchRating: (lastStats.last_rating as number) ?? undefined,
     teamStreak: matchCtx?.teamStreak ?? 0,
     previousMatch: previousMatchOf(matchCtx, row.id as string),
+    ...pledgesFromLife(lifeContext),
   };
 }
 
@@ -741,6 +743,8 @@ export async function loadTeamContext(db: D1Database, teamId: string, playerTeam
     nextFriendly,
     leaguePosition,
     squadNames: squad.results.map((r) => `${r.first_name} ${r.last_name}`),
+    // Rozpis tréninků týmu, za který hraje: na co může slíbit, že přijde (attendance-pledge.ts).
+    trainingSchedule: trainingScheduleText(await loadTrainingDays(db, teamId)),
   };
 }
 
@@ -1934,12 +1938,19 @@ async function offendPlayer(
 export async function afterPlayerReply(
   db: D1Database,
   r: {
-    teamId: string; convId: string; player: PlayerSnapshot; reply: Pick<ReplyResult, "body" | "writeLater" | "transferStance" | "acceptsInvite">;
+    teamId: string; convId: string; player: PlayerSnapshot; reply: Pick<ReplyResult, "body" | "writeLater" | "transferStance" | "acceptsInvite" | "attendancePledge">;
     at: string; offerIds: string[];
     /** Incident, o kterém se dnes v hovoru mluví (téma vlákna), jinak nic. */
     incidentId?: string | null;
   },
 ): Promise<void> {
+  // Hráč řekl, že přijde, nebo nepřijde na trénink či zápas (attendance-pledge.ts).
+  if (r.reply.attendancePledge) {
+    const { recordAttendancePledge } = await import("./attendance-pledge");
+    await recordAttendancePledge(db, {
+      clubTeamId: r.teamId, convId: r.convId, playerId: r.player.id, playerFirstName: r.player.firstName, pledge: r.reply.attendancePledge,
+    });
+  }
   // Pozvání od trenéra (coach-commitments.ts): hráč v odpovědi kývl nebo odmítl.
   if (r.reply.acceptsInvite !== undefined && r.player.pendingInvite) {
     const { respondToCoachInvite } = await import("./coach-commitments");
