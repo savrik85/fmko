@@ -531,18 +531,45 @@ export async function replayUnplayedMatches(env: Bindings, limit = 2): Promise<A
   return out;
 }
 
+/**
+ * Smaže z telefonu trenéra žádost o rozhovor. Hledá jen v systémových konverzacích
+ * jeho týmu a přes json_extract: dřív se mazalo přes `metadata LIKE '%"interviewId":"…"%'`,
+ * což je 54 bajtů a D1 vzory delší než 50 bajtů odmítá, takže úklid vždy spadl.
+ * Smazaná nepřečtená žádost sníží počet nepřečtených a náhled konverzace ukáže předchozí zprávu.
+ */
+async function removeInterviewRequest(db: D1Database, interviewId: string, teamId: string): Promise<void> {
+  const found = await db.prepare(
+    `SELECT m.id, m.conversation_id, m.read FROM messages m
+       JOIN conversations c ON c.id = m.conversation_id
+      WHERE c.team_id = ? AND c.type = 'system' AND json_extract(m.metadata, '$.interviewId') = ?`,
+  ).bind(teamId, interviewId).all<{ id: string; conversation_id: string; read: number }>();
+  if (found.results.length === 0) return;
+
+  const unreadByConv = new Map<string, number>();
+  for (const m of found.results) {
+    unreadByConv.set(m.conversation_id, (unreadByConv.get(m.conversation_id) ?? 0) + (m.read ? 0 : 1));
+  }
+  await db.batch([
+    ...found.results.map((m) => db.prepare("DELETE FROM messages WHERE id = ?").bind(m.id)),
+    ...[...unreadByConv].map(([convId, unread]) => db.prepare(
+      `UPDATE conversations SET
+         unread_count = MAX(0, unread_count - ?2),
+         last_message_text = (SELECT body FROM messages WHERE conversation_id = ?1 ORDER BY sent_at DESC LIMIT 1),
+         last_message_at = (SELECT sent_at FROM messages WHERE conversation_id = ?1 ORDER BY sent_at DESC LIMIT 1)
+       WHERE id = ?1`,
+    ).bind(convId, unread)),
+  ]);
+}
+
 /** Zruší nevyřízené žádosti o předzápasový rozhovor kola, které už je odehrané. */
 export async function expirePreMatchInterviews(db: D1Database, calendarId: string): Promise<number> {
   try {
     const expired = await db
-      .prepare("SELECT id FROM coach_interviews WHERE match_calendar_id = ? AND status = 'pending' AND kind = 'pre_match'")
+      .prepare("SELECT id, team_id FROM coach_interviews WHERE match_calendar_id = ? AND status = 'pending' AND kind = 'pre_match'")
       .bind(calendarId)
-      .all<{ id: string }>();
+      .all<{ id: string; team_id: string }>();
     for (const ci of expired.results) {
-      await db
-        .prepare("DELETE FROM messages WHERE metadata LIKE ?")
-        .bind(`%"interviewId":"${ci.id}"%`)
-        .run()
+      await removeInterviewRequest(db, ci.id, ci.team_id)
         .catch((e) => logger.warn({ module: "league-round" }, `cleanup interview msg ${ci.id}`, e));
     }
     await db
