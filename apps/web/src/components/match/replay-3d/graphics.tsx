@@ -45,7 +45,8 @@ function labelOf({ detail, events, idx, event, attack, result }: GraphicsProps):
   if (attack || event.type === "penalty") return { text: "PENALTA", sub: event.playerName, tone: "danger" };
   switch (event.type) {
     case "goal": return { text: RESULTS.goal, tone: "goal" };
-    case "chance": return { text: event.detail?.startsWith("penalty_") && result !== "saved" ? "NEPROMĚNIL!" : RESULTS[result ?? "wide"], sub: event.playerName, tone: "miss" };
+    // U výsledku je řečeno, čí jméno to je: samotné „VEDLE! Novák“ se dalo číst i jako jméno brankáře.
+    case "chance": return { text: event.detail?.startsWith("penalty_") && result !== "saved" ? "NEPROMĚNIL!" : RESULTS[result ?? "wide"], sub: `${event.detail === "header_missed" ? "hlavičkoval" : "střílel"} ${event.playerName}`, tone: "miss" };
     case "card": return { text: event.detail === "red" ? "ČERVENÁ KARTA" : "ŽLUTÁ KARTA", tone: event.detail === "red" ? "red" : "yellow" };
     case "injury": return { text: "ZRANĚNÍ", tone: "miss" };
     case "substitution": return { text: "STŘÍDÁNÍ", tone: "info" };

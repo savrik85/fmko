@@ -122,7 +122,7 @@ export function Replay3D({ detail, events, progress }: { detail: Record<string, 
       <EventCard {...graphics} />
       {/* Jiná než hlavní kamera: rámeček kolem obrazu a nápis, která to je (scéna ho zapíná sama). */}
       <div ref={camBadge} style={{ display: "none" }} className="absolute inset-0 z-30 pointer-events-none border-4 border-white/70 data-[cam^=ref]:border-red-600 data-[cam^=ref]:shadow-[inset_0_0_90px_rgba(0,0,0,0.6)]">
-        <div className="absolute top-2 left-14 px-2 py-1 rounded bg-red-600 text-white text-xs font-heading font-bold tracking-wide" />
+        <div className="absolute top-11 sm:top-14 left-1/2 -translate-x-1/2 px-4 py-1 rounded-lg bg-red-600 text-white text-sm sm:text-lg font-heading font-[900] tracking-widest whitespace-nowrap shadow-lg" />
       </div>
       {curtain && (
         <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none bg-black/45">

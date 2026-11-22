@@ -44,7 +44,7 @@ const REF_LIVE = { from: 1.4, to: 3.8 };
 /** Hlavní kamera nekreslí nic za bližší postranní čárou (stojí tam, kde má stadion hlavní tribunu); ostatní kamery kreslí vše. */
 const MAIN_CLIP = [new THREE.Plane(new THREE.Vector3(-1, 0, 0), HALF_W + 1.2)];
 const NO_CLIP: THREE.Plane[] = [];
-const CAM_TEXT = { main: "", replay: "↺ OPAKOVANÝ ZÁBĚR", ref: "● REF CAM", refReplay: "● REF CAM · ↺ OPAKOVANÝ ZÁBĚR" };
+const CAM_TEXT = { main: "", replay: "↺ OPAKOVANÝ ZÁBĚR", ref: "● REF CAM · KAMERA ROZHODČÍHO", refReplay: "● REF CAM · ↺ OPAKOVANÝ ZÁBĚR" };
 
 function keeperShirts(home: ReplayKit, away: ReplayKit): { home: string; away: string } {
   const taken = [home.shirt, away.shirt, REFEREE_KIT.shirt].map((c) => new THREE.Color(c));
