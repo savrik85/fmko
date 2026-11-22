@@ -46,11 +46,41 @@ const punish = (now: string, kind: "srazka" | "pokuta" = "srazka") => sendPunish
 });
 
 describe("reakce na trest", () => {
-  it("Turek 23. 10.: na „Zaplatíš si to!“ odepsal před dvěma minutami, druhá reakce nepřijde", async () => {
-    await msg("m1", "user", "Kecy. Zaplatíš si to!", "2026-10-23T06:24:10.000Z");
-    await msg("m2", "player", "Trenére, fakt kecy? Takže myslíš, že ty poháry se zaplatí samy?", "2026-10-23T06:24:30.000Z", AI);
+  it("trenér trest v rozhovoru oznámil a hráč na něj před chvílí odepsal: druhá reakce nepřijde", async () => {
+    await msg("m1", "user", "Strhnu ti to z výplaty, ať víš.", "2026-10-23T06:24:10.000Z");
+    await msg("m2", "player", "Trenére, fakt? No tak si to strhněte.", "2026-10-23T06:24:30.000Z", AI);
     expect(await punish("2026-10-23T06:26:00Z")).toBe("covered");
     expect(fx.sendEventSms).not.toHaveBeenCalled();
+  });
+
+  it("oznámil jiný trest, než pak klikl: reakce na skutečný trest přijde", async () => {
+    await msg("m1", "user", "Strhnu ti to z výplaty, ať víš.", "2026-10-23T06:24:10.000Z");
+    await msg("m2", "player", "Trenére, fakt? No tak si to strhněte.", "2026-10-23T06:24:30.000Z", AI);
+    expect(await punish("2026-10-23T06:26:00Z", "pokuta")).toBe("sent");
+  });
+
+  it("Turek 23. 10.: „Zaplatíš si to!“ je výzva, ne oznámený trest: reakce přijde", async () => {
+    await msg("m1", "user", "Kecy. Zaplatíš si to!", "2026-10-23T06:24:10.000Z");
+    await msg("m2", "player", "Trenére, fakt kecy? Takže myslíš, že ty poháry se zaplatí samy?", "2026-10-23T06:24:30.000Z", AI);
+    expect(await punish("2026-10-23T06:26:00Z")).toBe("sent");
+  });
+
+  it("Sedlecký (Akcent, E2E 22. 11.): „zaplatíš to do koruny“, „zaplatíš, nebo ne?“ a klik na pokutu: reakce přijde", async () => {
+    await msg("m1", "user", "Marceli, vím, že jsi vybral ten sklad. Ty pomůcky zaplatíš, zloději.", "2026-11-22T02:20:00.000Z");
+    await msg("m2", "player", "Trenére, to bylo moje hloupý rozhodnutí, ale nic nevzal jsem, jen si hrát. Chci se sejít a domluvit.", "2026-11-22T02:20:30.000Z", AI);
+    await msg("m3", "user", "Žádný scházení. Celá hospoda ví, žes to byl ty. Zaplatíš to do koruny, rozumíš?", "2026-11-22T02:22:00.000Z");
+    await msg("m4", "player", "Trenére, nechápu proč takhle mluvíš.", "2026-11-22T02:22:30.000Z", AI);
+    await msg("m5", "user", "Mluvím tak, jak si zasloužíš. Ptám se naposled: zaplatíš ty ukradený pomůcky, nebo ne?", "2026-11-22T02:24:00.000Z");
+    await msg("m6", "player", "Trenére, nechci jít do hospody, doma mám ženu a dítě. Co dál?", "2026-11-22T02:24:30.000Z", AI);
+    await msg("m7", "user", "O hospodu nejde. Takže platit nebudeš? Řekni to rovnou.", "2026-11-22T02:26:00.000Z");
+    expect(await punish("2026-11-22T02:27:00Z", "pokuta")).toBe("sent");
+    expect(fx.sendEventSms).toHaveBeenCalledTimes(1);
+  });
+
+  it("výhrůžka s podmínkou trest neoznamuje", async () => {
+    await msg("m1", "user", "Jestli to do pátku nevrátíš, dostaneš pokutu.", "2026-11-22T02:20:00.000Z");
+    await msg("m2", "player", "Trenére, to nemyslíte vážně.", "2026-11-22T02:20:30.000Z", AI);
+    expect(await punish("2026-11-22T02:22:00Z", "pokuta")).toBe("sent");
   });
 
   it("Turek 13. 10.: „Seru na to!“ bez řeči o trestu, reakce přijde a navazuje vzdorně", async () => {

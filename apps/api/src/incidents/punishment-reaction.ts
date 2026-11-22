@@ -13,7 +13,7 @@
 import type { ChatEnv } from "../messaging/ai-player-chat";
 import { logger } from "../lib/logger";
 import { deadlineIn } from "../lib/time-budget";
-import { PUNISHMENT_TALK_RE, aiReplyCoveredIt } from "./button-sms";
+import { aiReplyCoveredIt, announcesPunishment } from "./button-sms";
 import { clubReceivesMessages } from "./club-messages";
 import { smsIncidentu } from "./incident-db";
 
@@ -169,8 +169,8 @@ export function deniesPunishment(body: string, kind: PunishmentKind): string | n
 }
 
 /**
- * Pošle reakci hráče na trest. Když na trest už odpověděl v rozhovoru (trenér mu ho tam
- * oznámil a hráč do deseti minut odepsal), nepošle nic: druhá reakce by se tloukla s první.
+ * Pošle reakci hráče na trest. Když na trest už odpověděl v rozhovoru (trenér mu právě tenhle
+ * trest oznámil a hráč do deseti minut odepsal), nepošle nic: druhá reakce by se tloukla s první.
  */
 export async function sendPunishmentReaction(
   db: D1Database,
@@ -185,7 +185,8 @@ export async function sendPunishmentReaction(
   const deadline = deadlineIn();
   if (!(await clubReceivesMessages(db, o.teamId))) return "skipped";
   const now = o.now ?? new Date();
-  if (await aiReplyCoveredIt(db, { teamId: o.teamId, playerId: o.player.id, coachRe: PUNISHMENT_TALK_RE, now })) {
+  // Jen když trenér v rozhovoru oznámil právě tenhle trest; výzva „zaplatíš to“ reakci nebere.
+  if (await aiReplyCoveredIt(db, { teamId: o.teamId, playerId: o.player.id, coachSaidIt: (t) => announcesPunishment(t, o.kind), now })) {
     logger.info({ module: M, teamId: o.teamId }, `reakce na trest ${o.incidentId} se neposílá, hráč na něj už odpověděl v rozhovoru`);
     return "covered";
   }
