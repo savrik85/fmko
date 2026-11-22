@@ -77,9 +77,27 @@ describe("pokuta z SMS a incident", () => {
     expect((await notes())[0].body).toContain("už za incident (Okradená tombola) trest má");
   });
 
-  it("starý uzavřený incident, neodhalený pachatel nebo žádný incident: pokuta z SMS se zapíše jako dřív", async () => {
+  // E2E 22. 11. (Fezko, Radek Turek): „Tu tombolu ti strhnu z výplaty.“ k tombole uzavřené
+  // srážkou před 5 herními dny zapsalo chatovou pokutu ⚖️ 202 Kč, druhý trest za totéž.
+  it("zpráva jmenuje incident, který už trest má: pokuta z SMS nevznikne nikdy, ať je to jak chce dávno", async () => {
+    await incident({ status: "uzavreny", resolution: "srazka", resolvedOn: "2026-11-17T16:00:00.000Z" });
+    const text = "Tu tombolu ti strhnu z výplaty.";
+    model.askModelJson.mockResolvedValue({ kind: "fine", quote: "strhnu z výplaty" });
+    expect(await handleCoachMessageForCommitment(db, {}, { teamId: "club", convId: "c1", playerId: "turek", text })).toBeNull();
+    expect(await fines()).toBe(0);
+    expect((await notes())[0].body).toContain("už za incident (Okradená tombola) trest má");
+    // Před měsícem a pokutou: pořád stejný incident, pořád žádná druhá pokuta.
+    await db.batch([db.prepare("DELETE FROM club_incidents"), db.prepare("DELETE FROM messages")]);
+    await incident({ status: "uzavreny", resolution: "pokuta", resolvedOn: "2026-10-20T16:00:00.000Z" });
+    expect(await handleCoachMessageForCommitment(db, {}, { teamId: "club", convId: "c1", playerId: "turek", text })).toBeNull();
+    expect(await fines()).toBe(0);
+    expect(await notes()).toHaveLength(1);
+  });
+
+  it("starý uzavřený incident a zpráva bez něj, neodhalený pachatel nebo žádný incident: pokuta z SMS se zapíše jako dřív", async () => {
     await incident({ status: "uzavreny", resolution: "srazka", resolvedOn: "2026-11-10T16:00:00.000Z" });
-    expect(await send()).toBeTruthy();
+    model.askModelJson.mockResolvedValue({ kind: "fine", quote: "Strhnu ti to z výplaty" });
+    expect(await handleCoachMessageForCommitment(db, {}, { teamId: "club", convId: "c1", playerId: "turek", text: "Adame, za ten zápas ti strhnu z výplaty. Strhnu ti to z výplaty." })).toBeTruthy();
     expect(await fines()).toBe(1);
 
     await db.prepare("DELETE FROM coach_commitments").run();
