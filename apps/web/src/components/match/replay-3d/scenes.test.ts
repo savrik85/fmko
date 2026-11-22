@@ -1,6 +1,6 @@
 // Spouští se z kořene repa: npx vitest run --root apps/web
 import { describe, expect, it } from "vitest";
-import { actionStarts, emptyFrame, HALF_L, HALF_W, Replay, sampleClip, scenedEvents, sceneTime, shootoutEvents, type ReplayEvent, type ReplayInput, type ReplayPlayer, type Scene } from "./scenes";
+import { actionStarts, emptyFrame, HALF_L, HALF_W, Replay, sampleClip, scenedEvents, sceneTime, shootoutEvents, substitutionsTogether, type ReplayEvent, type ReplayInput, type ReplayPlayer, type Scene } from "./scenes";
 
 const squad = (prefix: string): ReplayPlayer[] => ["GK", "DEF", "DEF", "DEF", "DEF", "MID", "MID", "MID", "MID", "FWD", "FWD"]
   .map((position, n) => ({ name: `${prefix} ${n}`, position }));
@@ -10,7 +10,7 @@ const event = (minute: number, type: string, teamId: 1 | 2, slot: number, extra:
   return { minute, type, playerId, playerName, teamId, description: `${type} ${playerName}`, ...extra };
 };
 const input = (events: ReplayEvent[]): ReplayInput => ({
-  matchId: "test", events, winner: "home",
+  matchId: "test", events, winner: "home", goodTerms: true,
   // Domácí trenér je sopka, hostující kliďas.
   home: { starters: squad("H"), subs: [{ name: "Sub 1", position: "MID" }], coach: { name: "Trenér D", motivation: 90, record: null } },
   away: { starters: squad("A"), subs: [], coach: { name: "Trenér H", motivation: 25, record: null } },
@@ -40,8 +40,8 @@ function problems(replay: Replay, scene: Scene, label: string): string[] {
   for (const [when, t] of [["začátku", scene.start], ["konci", sceneTime(scene, false, Infinity)]] as const) {
     sampleClip(scene.clip, t, frame);
     frame.figures.forEach((a, i) => frame.figures.forEach((b, j) => {
-      // Náhradníci na střídačce sedí vedle sebe těsněji.
-      if (j > i && a.visible && b.visible && !(a.pose === "sit" && b.pose === "sit") && Math.hypot(a.x - b.x, a.z - b.z) < 0.9) found.add(`figury ${i} a ${j} stojí na ${when} na sobě`);
+      // Náhradníci na střídačce sedí vedle sebe těsněji, trenéři v objetí stojí u sebe.
+      if (j > i && a.visible && b.visible && !(a.pose === b.pose && (a.pose === "sit" || a.pose === "hug")) && Math.hypot(a.x - b.x, a.z - b.z) < 0.9) found.add(`figury ${i} a ${j} stojí na ${when} na sobě`);
     }));
   }
   return [...found].map((p) => `${label}: ${p}`);
@@ -184,6 +184,23 @@ describe("scény 3D záznamu", () => {
       }
       expect(runs).toBeGreaterThan(5);
     }
+  });
+
+  it("střídání za zraněného je vždy samo, ostatní střídání týmu ve stejné minutě jsou jedno hromadné", () => {
+    const sub = (minute: number, teamId: 1 | 2) => event(minute, "substitution", teamId, 11);
+    const list = [event(75, "injury", 1, 5), sub(75, 1), sub(75, 1), sub(75, 1), sub(75, 2), sub(76, 1)];
+    expect(list.map((_, i) => substitutionsTogether(list, i))).toEqual([1, 1, 2, 2, 1, 1]);
+    expect(actionStarts(list)).toEqual([0, 1, 2, 4, 5]);
+  });
+
+  it("trenéři, kteří spolu vycházejí, se po podání ruky obejmou; ostatní ne", () => {
+    const poses = (goodTerms: boolean) => {
+      const replay = new Replay({ ...input([event(5, "goal", 1, 9)]), goodTerms }), scene = replay.intro(), frame = emptyFrame(replay.figures.length);
+      sampleClip(scene.clip, sceneTime(scene, false, Infinity), frame);
+      return replay.figures.flatMap((f, i) => (f.coach ? [frame.figures[i].pose] : []));
+    };
+    expect(poses(true)).toEqual(["hug", "hug"]);
+    expect(poses(false)).toEqual(["shake", "shake"]);
   });
 
   it("událost hráče, který není v sestavě, je chyba", () => {

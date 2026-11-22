@@ -107,7 +107,7 @@ const eTmp = new THREE.Euler(), cTmp = new THREE.Color();
 const HIDDEN = new THREE.Matrix4().makeScale(0, 0, 0);
 
 /** Hráči, rozhodčí a míč ve scéně stadionu; kreslí to, co právě hraje `step`, a řídí kameru. */
-export function ReplayScene({ replay, kits, snow, overview, step, replayBadge, veil, onReady }: {
+export function ReplayScene({ replay, kits, snow, overview, step, frame: root, veil, onReady }: {
   replay: Replay;
   kits: { home: ReplayKit; away: ReplayKit };
   /** Na sněhu se hraje s oranžovým míčem. */
@@ -115,8 +115,8 @@ export function ReplayScene({ replay, kits, snow, overview, step, replayBadge, v
   /** Pohled z výšky na celý stadion místo televizní kamery z tribuny. */
   overview: boolean;
   step: { current: ReplayStep };
-  /** Rámeček s nápisem „opakovaný záběr“; scéna ho ukazuje jen během opakování gólu. */
-  replayBadge: RefObject<HTMLDivElement | null>;
+  /** Obal záznamu: během opakovaného záběru gólu má atribut `data-replaying` (podle něj se ukáže rámeček a nápis). */
+  frame: RefObject<HTMLDivElement | null>;
   /** Plátno přes scénu: při střihu na něm doznívá poslední snímek starého záběru. */
   veil: RefObject<HTMLCanvasElement | null>;
   /** Zavolá se po prvním vykresleném snímku. */
@@ -205,7 +205,8 @@ export function ReplayScene({ replay, kits, snow, overview, step, replayBadge, v
       Object.assign(p, { play, elapsed: seamless ? p.t - first : 0 });
     }
     const { scene, attack } = play;
-    const elapsed = p.elapsed = hold ? 0 : p.elapsed + dt * rate;
+    // Závěr zápasu (`loop`) se přehrává dokola.
+    const elapsed = p.elapsed = hold ? 0 : (p.elapsed + dt * rate) % (play.scene.loop ? play.scene.end - play.scene.start : Infinity);
     // Gól: po chvíli oslavy se zakončení zpomaleně zopakuje, pak oslava pokračuje.
     const again = !attack && scene.replay ? scene.replay : null;
     const replaying = again !== null && elapsed >= REPLAY.after && elapsed < REPLAY.after + REPLAY.seconds;
@@ -228,7 +229,7 @@ export function ReplayScene({ replay, kits, snow, overview, step, replayBadge, v
       fade.left = Math.max(0, fade.left - dt);
       veil.current.style.opacity = String(fade.left / DISSOLVE);
     }
-    if (replayBadge.current) replayBadge.current.style.display = replaying ? "" : "none";
+    root.current?.toggleAttribute("data-replaying", replaying);
     if (last.current.clip !== scene.clip) paint(scene.clip);
     last.current = { clip: scene.clip, t, cuts: frame.cuts, replaying };
     const now = performance.now() / 1000;
@@ -255,8 +256,8 @@ export function ReplayScene({ replay, kits, snow, overview, step, replayBadge, v
       const faceX = dive ? 0 : sit ? 1 : moving ? dx : frame.ballX - s.x;
       const faceZ = dive ? -s.z : sit ? 0 : moving ? dz : frame.ballZ - s.z;
       if (f.pose === "down") s.yaw = 0;
-      // Při podání ruky zůstávají čelem k sobě, jak k sobě došli.
-      else if (f.pose !== "shake" && Math.abs(faceX) + Math.abs(faceZ) > 0.01) {
+      // Při podání ruky a objetí zůstávají čelem k sobě, jak k sobě došli.
+      else if (f.pose !== "shake" && f.pose !== "hug" && Math.abs(faceX) + Math.abs(faceZ) > 0.01) {
         const diff = Math.atan2(faceX, faceZ) - s.yaw;
         s.yaw += Math.atan2(Math.sin(diff), Math.cos(diff)) * (cut ? 1 : Math.min(1, dt * 7));
       }
@@ -269,7 +270,7 @@ export function ReplayScene({ replay, kits, snow, overview, step, replayBadge, v
         const scale = ((fig.player.height ?? 178) / 178) * FIGURE_SCALE;
         // Jak moc hráč běží (0 stojí, 1 sprint): podle toho se předklání, zvedá kolena a pracuje rukama.
         const run = Math.min(1, s.speed / 6);
-        const slide = f.pose === "slide", sit = f.pose === "sit";
+        const slide = f.pose === "slide", sit = f.pose === "sit", hug = f.pose === "hug";
         let lift = f.y + Math.abs(Math.sin(s.phase)) * 0.05 * run, shift = 0;
         qRoot.setFromAxisAngle(THREE.Object3D.DEFAULT_UP, s.yaw);
         if (f.pose === "down") {
@@ -284,7 +285,7 @@ export function ReplayScene({ replay, kits, snow, overview, step, replayBadge, v
           lift = 0.45;
         } else {
           // Předklon v běhu; při skluzu po kolenou je tělo zakloněné a níž.
-          qRoot.multiply(qPose.setFromEuler(eTmp.set(slide ? -0.35 : 0.24 * run, 0, 0)));
+          qRoot.multiply(qPose.setFromEuler(eTmp.set(slide ? -0.35 : hug ? 0.15 : 0.24 * run, 0, 0)));
           if (slide) lift = -0.4 * scale;
           // Sedí: boky ve výšce sedačky.
           if (sit) lift = SEAT_HIP_Y - BODY.hip[1] * scale;
@@ -301,12 +302,14 @@ export function ReplayScene({ replay, kits, snow, overview, step, replayBadge, v
           joints.hip[k].makeTranslation(BODY.hip[0] * side, BODY.hip[1], 0).multiply(mTmp.makeRotationX(thigh));
           joints.knee[k].copy(joints.hip[k]).multiply(mTmp.makeTranslation(0, -BODY.knee, 0)).multiply(mTmp.makeRotationX(knee));
           // Ruka: v běhu proti noze s ohnutým loktem; při oslavě zdvižená šikmo vzhůru, při výskoku na hlavičku jen
-          // pokrčená před tělem; natažená nahoru je při skoku brankáře a se zdviženou paží (`armUp`, jen pravá).
+          // pokrčená před tělem; natažená nahoru je při skoku brankáře a se zdviženou paží (`armUp`, jen levá).
+          // První paže (k = 0) je levá: postava se dívá po ose z a osa x jí míří doleva.
           const raised = armsUp || (f.pose === "armUp" && k === 0);
           // Podání ruky: pravá v pase před tělem, potřásá se v lokti (oba ve stejném rytmu, ruce zůstávají u sebe).
-          const shaking = f.pose === "shake" && k === 0;
-          const arm = shaking ? -0.55 : cheering ? 2.4 + Math.sin(now * 9 + i) * 0.15 : raised ? Math.PI - 0.25 : f.y > 0.05 ? 0.9 : swing * 0.8 * run + Math.sin(now * 1.3 + i * 2.1) * 0.05;
-          const elbow = shaking ? -0.6 + Math.sin(now * 11) * 0.15 : cheering ? -0.5 : raised ? -0.15 : f.y > 0.05 ? -0.9 : -(0.25 + 1.1 * run);
+          const shaking = f.pose === "shake" && k === 1;
+          // Objetí: obě paže před sebe kolem druhého, pravá ho poplácává po zádech.
+          const arm = hug ? -1.1 : shaking ? -0.55 : cheering ? 2.4 + Math.sin(now * 9 + i) * 0.15 : raised ? Math.PI - 0.25 : f.y > 0.05 ? 0.9 : swing * 0.8 * run + Math.sin(now * 1.3 + i * 2.1) * 0.05;
+          const elbow = hug ? -0.5 - (k === 1 ? Math.max(0, Math.sin(now * 8)) * 0.35 : 0) : shaking ? -0.6 + Math.sin(now * 11) * 0.15 : cheering ? -0.5 : raised ? -0.15 : f.y > 0.05 ? -0.9 : -(0.25 + 1.1 * run);
           joints.shoulder[k].makeTranslation(BODY.shoulder[0] * side, BODY.shoulder[1], 0).multiply(mTmp.makeRotationX(arm));
           joints.elbow[k].copy(joints.shoulder[k]).multiply(mTmp.makeTranslation(0, -BODY.elbow, 0)).multiply(mTmp.makeRotationX(elbow));
         }

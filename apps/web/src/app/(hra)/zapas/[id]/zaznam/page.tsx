@@ -9,6 +9,7 @@ import { PositionBadge } from "@/components/ui/position-badge";
 import { bestTextOn } from "@/lib/team-color";
 import type { BadgePattern } from "@/components/ui";
 import { clientOnly } from "@/components/client-only";
+import { OVERLAY_CONTROL } from "@/components/match/replay-3d/overlay";
 import { actionStarts, scenedEvents, shootoutEvents, substitutionsTogether, type ReplayKit } from "@/components/match/replay-3d/scenes";
 
 // 3D záznam se stáhne, až když ho hráč má zapnutý.
@@ -43,9 +44,10 @@ const FLAT_FAST_MS = { ...FLAT_MS, plain: 600, attack: 1800, drama: 2500, penalt
  * Ve 3D drží krok tak dlouho jako jeho scéna („Rychle“ ji přehrává dvakrát rychleji) a hned po něm přijde další,
  * ať obraz po odehrané akci nestojí; události bez scény proběhnou okamžitě (`plain`). `setup` je rozehrání před
  * šancí nebo kartou (roh, standardka, faul): útok nebo karta na ně navazují bez střihu, proto `setup` a `attack`
- * musí sedět se SETUP a ATTACK ve scenes.ts. Gól končí opakovaným záběrem.
+ * musí sedět se SETUP a ATTACK ve scenes.ts. Gól končí opakovaným záběrem. `embrace` je podání rukou s objetím
+ * (trenéři, kteří spolu vycházejí), `substitution` jedno střídání; hromadné si dělí krok `drama`.
  */
-const SCENE_MS = { coach: 4000, handshake: 3800, kickoff: 5000, secondHalf: 5000, plain: 0, setup: 2000, attack: 3500, goal: 8600, chance: 2200, drama: 3500, penalty: 4500 };
+const SCENE_MS = { coach: 4000, handshake: 3800, embrace: 5600, substitution: 2600, kickoff: 5000, secondHalf: 5000, plain: 0, setup: 2000, attack: 3500, goal: 8600, chance: 2200, drama: 3500, penalty: 4500 };
 /** Po skoku na akci stojí její první snímek, než se rozběhne (ať je vidět, kam se skočilo). */
 const CUE_MS = 700;
 
@@ -225,7 +227,7 @@ export default function MatchReplayPage() {
     const run = (n: number) => {
       if (n < steps.length) {
         setIntro(steps[n]);
-        later(sceneMs(steps[n] === "handshake" ? "handshake" : "coach"), () => run(n + 1));
+        later(sceneMs(steps[n] !== "handshake" ? "coach" : match.detail.coaches_on_good_terms ? "embrace" : "handshake"), () => run(n + 1));
         return;
       }
       setIntro(null);
@@ -396,7 +398,9 @@ export default function MatchReplayPage() {
       animating.current = true;
       setIdx((i) => i + 1);
       // Hromadné střídání je jedna scéna: její krok si střídání rozdělí, ať se vystřídají titulky všech.
-      later(next.type === "corner" || next.type === "freekick" || next.type === "foul" ? sceneMs("setup") : sceneMs("drama") / substitutionsTogether(match.events, idx), endStep);
+      const together = substitutionsTogether(match.events, idx);
+      later(next.type === "corner" || next.type === "freekick" || next.type === "foul" ? sceneMs("setup")
+        : together > 1 ? sceneMs("drama") / together : sceneMs(next.type === "substitution" ? "substitution" : "drama"), endStep);
       return;
     }
     // Po skoku se nečeká a událost se ukáže hned, ve stejném kroku jako zmizí stojící snímek.
@@ -470,7 +474,8 @@ export default function MatchReplayPage() {
       {/* ═══ PITCH VISUALIZATION (bet365/Sportradar style) ═══ */}
       <div className="rounded-b-xl overflow-hidden relative" style={{ background: "#1a2a1a" }}>
         {/* Pitch area */}
-        <div className="relative mx-3 my-3 overflow-hidden rounded-control" style={{ aspectRatio: "2.2/1" }}>
+        {/* Okno záznamu: ovládání přes obraz (overlay.ts) se ukáže po najetí myší nebo po klepnutí do okna. */}
+        <div tabIndex={0} className="group/viewer relative mx-3 my-3 overflow-hidden rounded-control outline-none" style={{ aspectRatio: "2.2/1" }}>
           {/* Dark pitch with subtle lines */}
           <svg viewBox="0 0 100 45" className="absolute inset-0 w-full h-full">
             {/* Pitch background — color reflects pitch condition (lighter = better visible) */}
@@ -655,7 +660,8 @@ export default function MatchReplayPage() {
                   progress={{ take, idx, flash, intro, kickoff, halfTime: htPause, finished, paused, cue, fast: speed === "fast", homeGoals: hg, awayGoals: ag }} />
               )}
               <button onClick={switchView} title={view3d ? "Přepnout na tracker" : "Přepnout na video"}
-                className="absolute top-2 left-2 z-30 h-8 px-2.5 rounded-lg bg-black/60 hover:bg-black/80 text-white text-xs font-heading font-bold">{view3d ? "Tracker" : "Video"}</button>
+                // Když video spadlo, zpráva v okně na přepínač odkazuje: je vidět pořád.
+                className={`absolute top-2 left-2 z-30 h-8 px-2.5 rounded-lg bg-black/85 hover:bg-black text-white text-xs font-heading font-bold ${failed3d ? "" : OVERLAY_CONTROL}`}>{view3d ? "Tracker" : "Video"}</button>
             </>
           )}
           {/* Team color side bars */}
