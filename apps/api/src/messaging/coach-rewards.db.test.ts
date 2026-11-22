@@ -153,9 +153,14 @@ describe("odměna za službu", () => {
     const button = (await systemNotes("c3")).find((m) => JSON.parse(m.metadata).type === "coach_commitment");
     expect(button?.body).toContain("odměnu si zasloužil");
     expect(await status(id)).toBe("active");
+    // Web: pod vyhranou odměnou „To nebyl slib“ nedává smysl (API by vrátilo 409).
+    expect(JSON.parse(button!.metadata)).toMatchObject({ won: true, done: false });
     await settleCoachCommitments(db, new Date("2026-11-26T10:00:00Z"));
     expect(await status(id)).toBe("broken");
     expect(REWARD_BROKEN_SMS).toContain((await playerSms("c3")).at(-1));
+    // Propadlá odměna: tlačítko „Vyplatit“ zmizí (dřív zůstalo a klik vrátil 409, Marek E2E 22. 11.).
+    const closed = (await systemNotes("c3")).find((m) => JSON.parse(m.metadata).type === "coach_commitment");
+    expect(JSON.parse(closed!.metadata)).toMatchObject({ closed: "broken" });
     expect((await db.prepare("SELECT delta FROM coach_relation_log WHERE player_id = 'p3'").first<{ delta: number }>())?.delta).toBe(-6);
   });
 
