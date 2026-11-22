@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   APOLOGY_CLUMSY_KABINA, APOLOGY_REFUSED_KABINA, APOLOGY_SINCERE_KABINA, LAPS_RAN_SMS, LAPS_REFUSED_SMS, LAST_CHANCE_REMINDERS,
-  RULE_BROKEN_SMS, TEAM_LAPS_KABINA, apologyTone, clubRuleLines, lapsOutcome, missedBefore, missedTrainingsAfter,
+  RULE_BROKEN_SMS, TEAM_LAPS_KABINA, apologyTone, clubRuleLines, lapsOutcome, lapsPunishmentCues, missedBefore, missedTrainingsAfter,
   pendingRequestOf, rulePromptLine, ruleText,
 } from "./coach-rules";
 import { COMMITMENT_HINT_RE, commitmentText, parseDetection, quoteHoldsUp } from "./coach-commitments";
@@ -21,6 +21,37 @@ describe("rozpoznání pravidel a trestů v SMS", () => {
     expect(quoteHoldsUp("jestli ještě něco provedeš, letíš", "Mas posledni sanci, jestli ještě něco provedeš, letíš.", "last_chance")).toBe(true);
     expect(quoteHoldsUp("budeš běhat kolečka", "Možná budeš běhat kolečka.", "laps_penalty")).toBe(false);
     expect(quoteHoldsUp("Omluvíš se kabině", "Omluvíš se kabině?", "squad_apology")).toBe(false);
+  });
+
+  // Lokální E2E 22. 11.: „začínáme v půl šesté a bude hodně běhání“ se zapsalo jako kolečka pro
+  // celou kabinu a na tréninku 12 hráčů opravdu ztratilo kondici.
+  it("plán tréninku, popis zátěže ani vtip trest nejsou, jen výslovný trest", () => {
+    const plan = "Ještě k úternímu tréninku: začínáme v půl šesté a bude hodně běhání.";
+    expect(parseDetection({ kind: "laps_penalty", quote: "bude hodně běhání", target: "team" }, "MID", plan)).toBeNull();
+    const plan2 = "Ve čtvrtek budeme běhat kolečka na rozcvičku a pak standardky.";
+    expect(parseDetection({ kind: "laps_penalty", quote: "budeme běhat kolečka na rozcvičku", target: "team" }, "MID", plan2)).toBeNull();
+    const load = "Zítra budeš hodně běhat, tak se pořádně vyspi.";
+    expect(parseDetection({ kind: "laps_penalty", quote: "Zítra budeš hodně běhat", target: "self" }, "MID", load)).toBeNull();
+    const joke = "Ty bys běhal kolečka i ve spánku 😂";
+    expect(parseDetection({ kind: "laps_penalty", quote: "Ty bys běhal kolečka i ve spánku", target: "self" }, "MID", joke)).toBeNull();
+    // Výslovný trest platí.
+    const real = "Kubo, za tu poslední omluvenku poběžíš zítra na tréninku kolečka.";
+    expect(parseDetection({ kind: "laps_penalty", quote: "poběžíš zítra na tréninku kolečka", target: "self" }, "MID", real))
+      .toEqual({ kind: "laps_penalty", target: "self" });
+    expect(parseDetection({ kind: "laps_penalty", quote: "za trest poběžíš kolečka", target: "self" }, "MID", "Za trest poběžíš kolečka."))
+      .toEqual({ kind: "laps_penalty", target: "self" });
+  });
+
+  it("celá kabina jen při výslovném „celá kabina“ nebo „všichni“, jinak jen tenhle hráč", () => {
+    // V SMS jednomu hráči je „budete“ vykání, ne celá kabina.
+    expect(parseDetection({ kind: "laps_penalty", quote: "Za trest budete běhat kolečka", target: "team" }, "MID", "Za trest budete běhat kolečka."))
+      .toEqual({ kind: "laps_penalty", target: "self" });
+    expect(parseDetection({ kind: "laps_penalty", quote: "za trest celá kabina poběží kolečka", target: "team" }, "MID", "Po tom výkonu za trest celá kabina poběží kolečka."))
+      .toEqual({ kind: "laps_penalty", target: "team" });
+    // „Kdo se omluví…“ je trest pro omluvené, bez „kdo“ to omluvení nejsou.
+    expect(parseDetection({ kind: "laps_penalty", quote: "za omluvenku poběžíš kolečka", target: "absentees" }, "MID", "Za omluvenku poběžíš kolečka."))
+      .toEqual({ kind: "laps_penalty", target: "self" });
+    expect(lapsPunishmentCues("Kdo se omluví, poběží kolečka.")).toEqual({ punishment: true, wholeSquad: false, plural: false, anyone: true });
   });
 
   it("kolečka: komu, výchozí jen tenhle hráč", () => {
