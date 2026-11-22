@@ -6,7 +6,8 @@
 
 import { nazevSituace } from "../incidents/situace";
 import { logger } from "../lib/logger";
-import { sendPlayerSMS } from "../messaging/system-sms";
+import { sendPlayerSmsToConversation, sendPlayerTemplateSMS } from "../messaging/system-sms";
+import type { ThreadEnd } from "../messaging/ai-player-chat";
 import { parseUnrest, type TransferUnrest } from "./offer-rejection-impact";
 import type { UnrestReason } from "./unrest-reasons";
 import { promiseInsert } from "./promises";
@@ -232,24 +233,53 @@ export function availableActions(
   });
 }
 
-// Fallback odpovědi hráče (když AI selže) — dle výsledku akce
-const FALLBACK_REPLIES: Record<Outcome, string[]> = {
+// Fallback odpovědi hráče (když AI selže) — dle výsledku akce. Hráč dostane variantu, kterou
+// ještě neposlal (sendPlayerTemplateSMS).
+export const FALLBACK_REPLIES: Record<Outcome, readonly string[]> = {
   calmed: [
     "Tak jo, trenére. Beru. Snad to myslíte vážně.",
     "Dobře. Tohle jsem potřeboval slyšet. Jdu makat.",
     "Fajn, trenére. Dáme to. Ale držte slovo.",
+    "Tak dobře, trenére. Za tohle díky.",
+    "Beru to, trenére. Uvidíte, že to vrátím na hřišti.",
+    "No vidíte, že to jde. Dobře, jedeme dál.",
+    "Tak jo. Tím se to dost mění, trenére.",
+    "Dobře, trenére. Dneska už to nebudu rozebírat.",
   ],
   partial: [
     "Hm, uvidíme, trenére. Slova jsou levný.",
     "Dobře, dám tomu šanci. Ale budu to sledovat.",
     "Jasně. Tak schválně, jak to dopadne.",
+    "No, nějaký začátek to je. Nadšenej ale nejsem.",
+    "Beru na vědomí, trenére. Zbytek uvidíme.",
+    "Tak jo, zkusím to. Ale nic neslibuju.",
+    "Dobře, trenére. Ještě mi to ale leží v hlavě.",
+    "Uvidíme. Zatím to tady nějak vydržím.",
   ],
   backfired: [
     "To myslíte vážně? Tohle mi řeknete po tom všem?",
     "Super pokec, trenére. Fakt jste mi pomohl…",
     "Radši jste mi nemusel psát vůbec.",
+    "Tohle mě teda neuklidnilo, trenére.",
+    "Díky za nic. Fakt.",
+    "Tak to jste to vylepšil, trenére. Ještě víc mě to štve.",
+    "Myslíte, že tímhle to spravíte? Ani náhodou.",
+    "No paráda. Tohle jsem slyšet nepotřeboval.",
   ],
 };
+/** Uklidnila ho dohoda, ale před chvílí se s trenérem pohádal: bere ji neochotně, nejásá. */
+export const GRUDGING_REPLIES: readonly string[] = [
+  "No dobře. Beru to, ale to předtím mě pořád štve.",
+  "Tak jo, trenére. Ale tu hádku jen tak nespolknu.",
+  "Fajn. Je to aspoň něco. Nadšenej nejsem.",
+  "Beru, trenére. Ale moc mě to předtím naštvalo.",
+  "Dobře, nechám to být. Zatím.",
+  "Tak jo. Ale příště se mnou mluvte rovnou, ne až potom.",
+  "Hm. Beru to, ale radost z toho nemám.",
+  "No, aspoň něco, trenére. Ještě mi to ale leží v žaludku.",
+];
+/** Předchozí rozhovor skončený před víc než tolika minutami už odpověď neovlivní. */
+const THREAD_END_MEMORY_MINUTES = 12 * 60;
 
 export interface UnrestTalkResult {
   ok: boolean;
@@ -370,8 +400,10 @@ export async function performUnrestAction(
   // Bez textů (AI trenér) se telefon neřeší: AI trenér nepíše a rozhovory nevede.
   const conv = silent ? null : await db.prepare(
     // Stejná konverzace jako v Telefonu: při starých duplikátech nejstarší (ai-player-spawn.ts).
-    "SELECT id, ai_thread_active, ai_thread_state FROM conversations WHERE team_id = ? AND type = 'player' AND participant_id = ? ORDER BY created_at, rowid LIMIT 1",
-  ).bind(teamId, playerId).first<{ id: string; ai_thread_active: number; ai_thread_state: string | null }>()
+    `SELECT c.id, c.ai_thread_active, c.ai_thread_state,
+            (SELECT MAX(m.sent_at) FROM messages m WHERE m.conversation_id = c.id AND m.sender_type = 'player') AS last_player_at
+       FROM conversations c WHERE c.team_id = ? AND c.type = 'player' AND c.participant_id = ? ORDER BY c.created_at, c.rowid LIMIT 1`,
+  ).bind(teamId, playerId).first<{ id: string; ai_thread_active: number; ai_thread_state: string | null; last_player_at: string | null }>()
     .catch((e) => { logger.warn({ module: "unrest" }, "load conversation", e); return null; });
   let inThread = false;
   if (conv?.ai_thread_active === 1) {
@@ -582,9 +614,12 @@ export async function performUnrestAction(
     }
   }
 
+  // Jak skončil předchozí rozhovor (hádka před dvěma minutami), ať hráč hned neotočí.
+  const threadEnd = conv ? recentThreadEnd(conv.ai_thread_state, conv.last_player_at, now) : undefined;
   let playerReply: string | null = null;
   try {
     const { generateUnrestReply } = await import("../messaging/ai-player-chat");
+    const { loadConversationHistory } = await import("../messaging/event-sms");
     const { loadLastOwnMessageAt, loadPlayerSnapshot, nactiSituaceTymu } = await import("../messaging/ai-player-spawn");
     const teamRow = await db.prepare("SELECT t.name, v.name as village_name FROM teams t LEFT JOIN villages v ON t.village_id = v.id WHERE t.id = ?")
       .bind(teamId).first<{ name: string; village_name: string | null }>();
@@ -598,22 +633,48 @@ export async function performUnrestAction(
     snapshot.lastOwnMessageAt = await loadLastOwnMessageAt(db, convId, playerId);
     const { loadOwnRecentLines } = await import("../messaging/repetition");
     snapshot.ownRecentLines = await loadOwnRecentLines(db, { playerId, convId });
+    // Historie bez právě poslané zprávy trenéra (ta jde do promptu zvlášť).
+    const history = (await loadConversationHistory(db, convId, 9));
+    if (history.at(-1)?.sender === "coach" && history.at(-1)?.body === coachMessage) history.pop();
     playerReply = await generateUnrestReply(env, snapshot, { teamName: teamRow?.name ?? "", villageName: teamRow?.village_name ?? undefined }, {
       coachMessage,
       unrestReason: unrest.teamName ? `trenér odmítl nabídku od ${unrest.teamName}, o kterou jsi stál` : "trenér ti zatrhl přestup, o který jsi stál",
       outcome,
+      history: history.slice(-8),
+      threadEnd,
     });
   } catch (e) {
     logger.warn({ module: "unrest" }, "AI reply failed, using fallback", e);
   }
-  if (!playerReply) {
-    const pool = FALLBACK_REPLIES[outcome];
-    playerReply = pool[Math.floor(Math.random() * pool.length)];
+  if (playerReply) {
+    playerReply = await sendPlayerSmsToConversation(db, convId, playerRef, playerReply, { ai_generated: true, scenario_id: "unrest_reply", outcome });
+  } else {
+    const pool = outcome === "calmed" && threadEnd?.tone === "negative" ? GRUDGING_REPLIES : FALLBACK_REPLIES[outcome];
+    playerReply = (await sendPlayerTemplateSMS(db, teamId, playerRef, pool, {
+      seed: `unrest|${playerId}|${action.id}|${nowIso}`, convId, metadata: { scenario_id: "unrest_reply", outcome },
+    })).body;
   }
-  await sendPlayerSMS(db, teamId, playerRef, playerReply);
 
   logger.info({ module: "unrest" }, `unrest-talk ${action.id}: ${name} ${playerRef.lastName} outcome=${outcome} level ${unrest.level}→${newLevel}`);
   return { ok: true, outcome, effects, playerReply, unrestLevel: newLevel };
+}
+
+/**
+ * Předchozí rozhovor s hráčem skončil (vlákno `done` s výsledkem) a hráč v něm naposledy psal
+ * před méně než `THREAD_END_MEMORY_MINUTES` minutami: jak skončil a kdy. Jinak undefined.
+ */
+export function recentThreadEnd(rawState: string | null, lastPlayerAt: string | null, now: Date): ThreadEnd | undefined {
+  if (!rawState || !lastPlayerAt) return undefined;
+  let state: { awaiting?: string; resolution?: { tone?: string; summary?: string } | null };
+  try { state = JSON.parse(rawState) as typeof state; } catch (e) {
+    logger.warn({ module: "unrest" }, "stav vlákna pro odpověď na dohodu", e);
+    return undefined;
+  }
+  const tone = state.resolution?.tone;
+  if (state.awaiting !== "done" || (tone !== "positive" && tone !== "negative" && tone !== "neutral")) return undefined;
+  const minutesAgo = (now.getTime() - Date.parse(lastPlayerAt)) / 60_000;
+  if (!Number.isFinite(minutesAgo) || minutesAgo < 0 || minutesAgo > THREAD_END_MEMORY_MINUTES) return undefined;
+  return { tone, summary: state.resolution?.summary ?? "", minutesAgo };
 }
 
 /**

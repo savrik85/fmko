@@ -381,6 +381,27 @@ describe("hráč neopakuje sám sebe", () => {
   });
 });
 
+describe("odpověď na dohodu po hádce", () => {
+  it("zná historii, ví o hádce a „No tak to je jiná“ přegeneruje", async () => {
+    vi.mocked(generateText).mockClear();
+    vi.mocked(generateText)
+      .mockResolvedValueOnce("No tak to je jiná, trenére! Díky moc.")
+      .mockResolvedValueOnce("Beru to, trenére. Ale to předtím mě pořád štve.");
+    const body = await generateUnrestReply({}, hrac(), tym, {
+      coachMessage: "Dostaneš prémii 2 000 Kč.", unrestReason: "trenér odmítl nabídku od FK Dobrš, o kterou jsi stál", outcome: "calmed",
+      history: [{ sender: "coach", body: "Nabídka nebyla dobrá." }, { sender: "player", body: "Takže mi lžeš do očí. Super." }],
+      threadEnd: { tone: "negative", summary: "Odchází naštvaný a zklamaný.", minutesAgo: 2 },
+    });
+    expect(body).toBe("Beru to, trenére. Ale to předtím mě pořád štve.");
+    const prompt = String(vi.mocked(generateText).mock.calls[0][1]);
+    expect(prompt).toContain("HISTORIE KONVERZACE");
+    expect(prompt).toContain("Takže mi lžeš do očí. Super.");
+    expect(prompt).toContain("neochotně a skřípavě");
+    expect(prompt).toContain("nezačínej „No tak to je jiná“");
+    expect(prompt).toContain("<<<Dostaneš prémii 2 000 Kč.>>>");
+  });
+});
+
 describe("po skončené životní situaci", () => {
   // Po „máme kluka Matyáše“ dřív prompt dál říkal „nevymýšlej si narození dítěte“ a hráč to mohl zapřít.
   const fresh = { kind: "narozeni_ditete", fact: "Před 2 dny jste se vrátili z porodnice, narodil se ti syn Matyáš (3,45 kila). Jsi čerstvý táta, doma máte miminko." };

@@ -42,6 +42,9 @@ describe("co je opakování", () => {
       "Tak to je super, že jsi to vyřešil.", "Už mám po šichtě a jdu na pivo.", "Super, trenére.", "To je jiná liga než my.",
     ]) expect(isStockSentence(s)).toBe(false);
     expect(findRepeatedSentences("Tak už mám padla, trenére. Co se děje?", [])).toEqual(["Tak už mám padla, trenére."]);
+    // Ohraný začátek i s pokračováním (31× po dohodě s nespokojeným).
+    expect(isStockSentence("No tak to je jiná, trenére, díky moc!")).toBe(true);
+    expect(isStockSentence("To je jiná liga než my.")).toBe(false);
   });
 
   it("dělí zprávu na věty i podle řádků a emoji nechává u věty", () => {
