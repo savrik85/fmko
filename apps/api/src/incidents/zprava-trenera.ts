@@ -33,6 +33,13 @@ export async function nastavTema(db: D1Database, convId: string, incidentId: str
   return (r?.meta?.changes ?? 0) > 0;
 }
 
+async function culpritRevealed(db: D1Database, teamId: string, incidentId: string): Promise<boolean> {
+  const row = await db.prepare("SELECT culprit_revealed FROM club_incidents WHERE id = ? AND team_id = ?")
+    .bind(incidentId, teamId).first<{ culprit_revealed: number | null }>()
+    .catch((e) => { logger.warn({ module: M }, `odhalení pachatele ${incidentId}`, e); return null; });
+  return row?.culprit_revealed === 1;
+}
+
 export async function zpracujZpravuTrenera(
   db: D1Database, opts: { teamId: string; convId: string; playerId: string; text: string },
 ): Promise<{ incidentId: string; vyslech: VysledekVyslechu | null } | null> {
@@ -48,8 +55,16 @@ export async function zpracujZpravuTrenera(
 
   // „Vrať to“ / „zaplať tu škodu“ pachateli (restitution.ts): rozhodne se dřív, než hráč odpoví.
   const { tryRestitution } = await import("./restitution");
-  await tryRestitution(db, { teamId: opts.teamId, playerId: opts.playerId, text: opts.text, gameDate: zaklad.game_date })
-    .catch((e) => logger.warn({ module: M }, `přemlouvání pachatele ${opts.playerId}`, e));
+  const amends = await tryRestitution(db, { teamId: opts.teamId, playerId: opts.playerId, text: opts.text, gameDate: zaklad.game_date })
+    .catch((e) => { logger.warn({ module: M }, `přemlouvání pachatele ${opts.playerId}`, e); return null; });
+  // Zpráva, která rozhodla o vrácení nebo náhradě, musí dostat odpověď: incident se stává tématem
+  // a na téma hráč odepíše vždy (coach-initiated.ts, ai-player-spawn.ts). Procházka (E2E 22. 11.)
+  // na „Dáš to klukům zpátky, nebo nic?“ vrátil 31 696 Kč a zprávu nechal na přečteno.
+  // Odmítnutí neodhaleného pachatele téma nezakládá: to by spustilo výslech, o který trenér nežádal.
+  if (amends && (amends.outcome !== "refused" || await culpritRevealed(db, opts.teamId, amends.incidentId))) {
+    await nastavTema(db, opts.convId, amends.incidentId, den);
+    return { incidentId: amends.incidentId, vyslech: null };
+  }
 
   let incidentId = temaZeStavu(zaklad.ai_thread_state, den)?.incidentId ?? null;
   if (!incidentId) {

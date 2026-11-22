@@ -2,9 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("./vyslech", () => ({ vyslechni: vi.fn(async () => ({ vysledek: "kryje", novy: true })) }));
 vi.mock("../messaging/coach-commitments", () => ({ recordInquiryTask: vi.fn(async () => "task-1") }));
+vi.mock("./restitution", () => ({ tryRestitution: vi.fn(async () => null) }));
 
 import { FalesnaD1, jakoD1, type Pravidlo } from "./testovaci-d1";
 import { recordInquiryTask } from "../messaging/coach-commitments";
+import { tryRestitution } from "./restitution";
 import { vyslechni } from "./vyslech";
 import { zpracujZpravuTrenera } from "./zprava-trenera";
 
@@ -91,5 +93,24 @@ describe("zpráva trenéra hráči", () => {
     expect(recordInquiryTask).toHaveBeenCalledWith(expect.anything(), {
       teamId: "tym-a", convId: "konv-1", playerId: "s", incidentId: "inc-cash", coachMessage: text,
     });
+  });
+
+  it("Procházka (E2E 22. 11.): zpráva, po které vrátil lup, se stává tématem (odpověď přijde)", async () => {
+    vi.mocked(tryRestitution).mockResolvedValueOnce({ outcome: "returned", amount: 31696, incidentId: "inc-kasa" });
+    const d = db(null);
+    expect(await zprava(d, "Ptám se znovu. Dáš to klukům zpátky, nebo nic?")).toEqual({ incidentId: "inc-kasa", vyslech: null });
+    expect(d.dotazy.find((q) => /UPDATE conversations SET ai_thread_state/.test(q.sql))?.params.slice(0, 2)).toEqual(["inc-kasa", "2026-09-16"]);
+    expect(vyslechni).not.toHaveBeenCalled();
+  });
+
+  it("odhalený pachatel vrácení odmítl: téma taky (ve znalostech má, že odmítl); neodhalený ne", async () => {
+    vi.mocked(tryRestitution).mockResolvedValueOnce({ outcome: "refused", incidentId: "inc-kasa" });
+    const revealed = db(null, [{ sql: /SELECT culprit_revealed FROM club_incidents/, first: { culprit_revealed: 1 } }]);
+    expect(await zprava(revealed, "Vrať ty prachy.")).toEqual({ incidentId: "inc-kasa", vyslech: null });
+
+    vi.mocked(tryRestitution).mockResolvedValueOnce({ outcome: "refused", incidentId: "inc-kasa" });
+    const hidden = db(null, [{ sql: /SELECT culprit_revealed FROM club_incidents/, first: { culprit_revealed: 0 } }]);
+    expect(await zprava(hidden, "Vrať ty prachy.")).toBeNull();
+    expect(hidden.pocet(/UPDATE conversations/)).toBe(0);
   });
 });
