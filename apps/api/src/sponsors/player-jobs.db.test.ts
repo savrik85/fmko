@@ -377,6 +377,13 @@ describe("dohoda s nespokojeným: sehnat mu práci u sponzora", () => {
     expect(lc.occupation).toBe("Truhlář");
     expect(lc.sponsorJob).toMatchObject({ sponsorId: SAWMILL });
     expect((lc.transferUnrest as { level: number }).level).toBe(20);
+    // Odpověď hráče na dohodu: bez modelu varianta s označením scénáře (B5).
+    const reply = await db.prepare(
+      `SELECT m.body, m.metadata FROM messages m JOIN conversations c ON c.id = m.conversation_id
+        WHERE c.participant_id = ? AND m.sender_type = 'player' ORDER BY m.rowid DESC LIMIT 1`,
+    ).bind(DVORAK).first<{ body: string; metadata: string }>();
+    expect(res.playerReply).toBe(reply?.body);
+    expect(JSON.parse(reply!.metadata)).toMatchObject({ scenario_id: "unrest_reply", outcome: "calmed" });
     const again = await performUnrestAction(db, {}, TEAM, DVORAK, "find_job");
     expect(again.ok).toBe(false);
     expect(await count("SELECT COUNT(*) AS n FROM sponsor_jobs")).toBe(1);

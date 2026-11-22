@@ -56,9 +56,16 @@ function significantWords(text: string): string[] {
  */
 const STOCK_SENTENCE_RE = /^(?:no |tak )*(?:uz mam (?:po sichte|padla|klid)(?: klid)?|uz jsem po sichte|to je (?:super|jina)(?: rec)?)$/;
 
-/** Jedna z ohraných vět, které hráči píšou pořád dokola (`STOCK_SENTENCE_RE`). */
+/**
+ * Ohraný začátek věty: „No tak to je jiná, trenére, díky moc“ (31× po dohodě s nespokojeným,
+ * i dvě minuty po hádce). „To je jiná liga než my“ ohrané není.
+ */
+const STOCK_OPENER_RE = /^(?:no )?tak to je jina\b/;
+
+/** Jedna z ohraných vět, které hráči píšou pořád dokola (`STOCK_SENTENCE_RE`, `STOCK_OPENER_RE`). */
 export function isStockSentence(sentence: string): boolean {
-  return STOCK_SENTENCE_RE.test(plainSentence(sentence));
+  const plain = plainSentence(sentence);
+  return STOCK_SENTENCE_RE.test(plain) || STOCK_OPENER_RE.test(plain);
 }
 
 /** Pravidlo do promptu proti ohraným větám. */

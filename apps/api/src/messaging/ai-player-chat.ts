@@ -732,8 +732,38 @@ export async function generateReply(
 }
 
 /**
+ * Jak skončil předchozí rozhovor s trenérem, když skončil nedávno (unrest.ts). Hráč, který
+ * před dvěma minutami odešel „velmi naštvaný“, nesmí hned jásat „No tak to je jiná, trenére!“
+ * (31× na produ; conv 237e2f26, 9ad187d6, 8f5296bd 7–9/2026).
+ */
+export interface ThreadEnd {
+  tone: "positive" | "negative" | "neutral";
+  summary: string;
+  minutesAgo: number;
+}
+
+/** Jak má hráč na dohodu odpovědět, podle výsledku a toho, jak skončil předchozí rozhovor. */
+export function unrestOutcomeHint(outcome: "calmed" | "partial" | "backfired", threadEnd?: ThreadEnd): string {
+  const soured = threadEnd && threadEnd.tone === "negative";
+  const ago = threadEnd ? (threadEnd.minutesAgo < 60 ? `před ${Math.max(1, Math.round(threadEnd.minutesAgo))} minutami` : "před chvílí") : "";
+  const quarrel = soured ? `Rozhovor s trenérem skončil ${ago} špatně${threadEnd!.summary ? ` (${threadEnd!.summary.replace(/[.\s]+$/, "")})` : ""} a ty jsi odešel naštvaný. ` : "";
+  if (outcome === "calmed") {
+    return soured
+      ? `${quarrel}Trenérova nabídka tě sice uklidnila, ale nebuď hned nadšený ani vděčný: přijmi ji neochotně a skřípavě, dej najevo, že to bereš, ale že ti hádka pořád leží v žaludku.`
+      : "Trenérova nabídka tě UKLIDNILA, odpověz smířlivě, s úlevou nebo vděkem (dle povahy třeba i s rýpnutím).";
+  }
+  if (outcome === "partial") {
+    return soured
+      ? `${quarrel}Trenérova slova tě uklidnila jen trochu: odpověz zdrženlivě a nedůvěřivě, dáš mu šanci, ale nic mu neodpouštíš.`
+      : "Trenérova slova tě uklidnila JEN ČÁSTEČNĚ, odpověz zdrženlivě, dáš mu šanci, ale připomeneš že to sleduješ.";
+  }
+  return `${quarrel}Trenérova slova tě NEUKLIDNILA, spíš naštvala, odpověz odmítavě nebo sarkasticky, dle temperamentu.`;
+}
+
+/**
  * Odpověď nespokojeného hráče na usmiřovací akci trenéra (unrest-talk).
- * Jediný levný Gemini call (text je jen kosmetika — efekty jsou deterministické).
+ * Jediný levný Gemini call (text je jen kosmetika — efekty jsou deterministické). Zná posledních
+ * pár zpráv a to, jak skončil předchozí rozhovor (`threadEnd`), ať navazuje a po hádce neotočí.
  * Při selhání vyhazuje GeminiUnavailableError — volající MUSÍ mít fallback šablonu.
  */
 export async function generateUnrestReply(
@@ -744,22 +774,25 @@ export async function generateUnrestReply(
     coachMessage: string;       // co trenér hráči napsal (šablona akce)
     unrestReason: string;       // proč hráč trucuje (např. odmítnutá nabídka od X)
     outcome: "calmed" | "partial" | "backfired"; // deterministický výsledek akce
+    /** Posledních pár zpráv konverzace (bez právě poslané trenérovy). */
+    history?: ThreadMessage[];
+    /** Předchozí rozhovor skončil nedávno (a jak). */
+    threadEnd?: ThreadEnd;
   },
 ): Promise<string> {
   const system = buildSystemPrompt(player, team);
-  const outcomeHint = context.outcome === "calmed"
-    ? "Trenérova nabídka tě UKLIDNILA, odpověz smířlivě, s úlevou nebo vděkem (dle povahy třeba i s rýpnutím)."
-    : context.outcome === "partial"
-      ? "Trenérova slova tě uklidnila JEN ČÁSTEČNĚ, odpověz zdrženlivě, dáš mu šanci, ale připomeneš že to sleduješ."
-      : "Trenérova slova tě NEUKLIDNILA, spíš naštvala, odpověz odmítavě nebo sarkasticky, dle temperamentu.";
+  const history = context.history ?? [];
 
   const prompt = (retryRule: string) => [
     system,
     "",
     `KONTEXT: Trucuješ, protože ${context.unrestReason}.`,
-    `TRENÉR ti právě napsal: "${context.coachMessage}"`,
+    ...(history.length > 0 ? ["", "HISTORIE KONVERZACE (naposledy dole):", formatHistory(history, player.firstName), ""] : []),
+    `TRENÉR ti právě napsal: ${coachQuote(context.coachMessage)}`,
+    COACH_TEXT_RULE,
     "",
-    outcomeHint,
+    unrestOutcomeHint(context.outcome, context.threadEnd),
+    "Navaž na to, co jste si psali, a nezačínej „No tak to je jiná“ ani jinou ohranou větou.",
     ...(retryRule ? [retryRule] : []),
     "NEPIŠ podpis. Vrať POUZE text SMS (1-2 věty, max 200 znaků).",
   ].join("\n");
