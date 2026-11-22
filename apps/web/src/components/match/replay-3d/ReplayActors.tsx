@@ -30,7 +30,7 @@ const BALL_RADIUS = 0.26;
 const HIGHLIGHT_SECONDS = 4;
 /** Televizní kamera jede za míčem (u zranění, karty a střídání za hráčem z titulku): na šířku z hlavní tribuny, na výšku zpoza branky. */
 const CAMERA = {
-  wide: { offset: new THREE.Vector3(23, 25, 0), fov: 42, follow: 0.55 },
+  wide: { offset: new THREE.Vector3(19, 28, 0), fov: 42, follow: 0.55 },
   tall: { offset: new THREE.Vector3(0, 34, 31), fov: 54, follow: 0.35 },
 };
 const FOLLOW_BANNERS = new Set(["injury", "sub", "red", "yellow"]);
@@ -161,17 +161,20 @@ export function ReplayActors({ plan, clock }: { plan: ReplayPlan; clock: ReplayC
         const scale = ((fig.player.height ?? 178) / 178) * FIGURE_SCALE;
         // Kořen postavy: poloha, natočení a póza (ležící, padající brankář).
         let lift = 0;
+        let shift = 0;
         qRoot.setFromAxisAngle(THREE.Object3D.DEFAULT_UP, s.yaw);
         if (f.pose === "down") {
+          // Ležící tělo má střed na místě hráče (simulace s ním tak počítá rozestupy).
           qRoot.multiply(qPose.setFromEuler(eTmp.set(-Math.PI / 2 + 0.1, 0, 0)));
           lift = 0.14;
+          shift = 0.85 * scale;
         } else if (f.pose === "diveLeft" || f.pose === "diveRight") {
           // Pád do strany ve světových souřadnicích: lokální osa x míří k cos(yaw) světové x.
           const roll = -1.25 * (f.pose === "diveRight" ? 1 : -1) * (Math.cos(s.yaw) >= 0 ? 1 : -1);
           qRoot.multiply(qPose.setFromEuler(eTmp.set(0, 0, roll)));
           lift = 0.45;
         }
-        mRoot.compose(vPos.set(s.x, PITCH_SURFACE_Y + lift, s.z), qRoot, vScale.setScalar(scale));
+        mRoot.compose(vPos.set(s.x + Math.sin(s.yaw) * shift, PITCH_SURFACE_Y + lift, s.z + Math.cos(s.yaw) * shift), qRoot, vScale.setScalar(scale));
 
         const swingAmp = Math.min(0.9, s.speed * 0.13);
         for (let k = 0; k < part.perFigure; k++) {
@@ -195,9 +198,7 @@ export function ReplayActors({ plan, clock }: { plan: ReplayPlan; clock: ReplayC
       if (!ring) return;
       ring.visible = i !== undefined;
       if (i === undefined) return;
-      // Ležící hráč má kroužek pod tělem, ne pod nohama.
-      const lying = frame.figures[i].pose === "down" ? 0.9 : 0;
-      ring.position.set(states[i].x - Math.sin(states[i].yaw) * lying, PITCH_SURFACE_Y + 0.03, states[i].z - Math.cos(states[i].yaw) * lying);
+      ring.position.set(states[i].x, PITCH_SURFACE_Y + 0.03, states[i].z);
       ring.scale.setScalar(1 + 0.12 * Math.sin(clock.t * 7));
     });
 
@@ -208,7 +209,7 @@ export function ReplayActors({ plan, clock }: { plan: ReplayPlan; clock: ReplayC
     const mix = who === undefined ? 0 : caption?.banner && FOLLOW_BANNERS.has(caption.banner) ? 1 : 0.5;
     const fx = who === undefined ? frame.ballX : THREE.MathUtils.lerp(frame.ballX, states[who].x, mix);
     const fz = who === undefined ? frame.ballZ : THREE.MathUtils.lerp(frame.ballZ, states[who].z, mix);
-    const wanted = vTmp.set(fx * (who === undefined ? cam.follow : 0.9), 0, THREE.MathUtils.clamp(fz, -HALF_L + (tall ? 16 : 15), HALF_L - (tall ? 14 : 15)));
+    const wanted = vTmp.set(fx * (who === undefined ? cam.follow : 0.9), 0, THREE.MathUtils.clamp(fz, -HALF_L + (tall ? 16 : 15), HALF_L - (tall ? 11 : 15)));
     if (!look.current || look.current.distanceTo(wanted) > 30) look.current = wanted.clone();
     else look.current.lerp(wanted, 1 - Math.exp(-Math.min(delta, 0.1) * 2.2));
     camera.position.copy(look.current).add(cam.offset);
