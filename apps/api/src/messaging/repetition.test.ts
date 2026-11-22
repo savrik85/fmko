@@ -179,6 +179,13 @@ describe("předem napsané varianty bez opakování", () => {
     expect(pickFreshVariant(loyal, [], "offer-1")).toEqual(pickFreshVariant(loyal, [], "offer-1"));
   });
 
+  it("dvě různé varianty se stejným klubem nejsou tatáž věta, lámaná šablona ano", () => {
+    expect(repeatsAny("To si děláte srandu?! FK Dobrš mě chtěl a vy to hodíte do koše bez jediného slova?!",
+      ["Super, trenére. FK Dobrš mě chtěl, já jsem chtěl jít a vy to zaříznete. Tak si to užijte."])).toBe(false);
+    expect(repeatsAny("Trenére, díky, že jste tu nabídku odmítl. Jsem tady doma a jinam nechci.",
+      ["Trenere, diky ze jste tu nabidku odmitl. Jsem tady doma a jinam nechci."])).toBe(true);
+  });
+
   it("opakuje zpráva některou z předchozích?", () => {
     expect(repeatsAny("Jsem tady doma a jinam nechci.", [loyal[0]])).toBe(true);
     expect(repeatsAny("Díky, trenére.", ["Díky, trenére!"])).toBe(false);
