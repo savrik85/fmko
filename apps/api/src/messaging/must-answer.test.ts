@@ -18,6 +18,16 @@ describe("odpověz hned", () => {
     expect(mustAnswerNow(p({ seriousTopic: true }))).toBe(true);
     expect(mustAnswerNow(p({ recentlyPostponed: true }))).toBe(true);
     expect(mustAnswerNow(p({ pendingOffers: [{ club: "Krumlov", interest: 2 } as never] }))).toBe(true);
-    expect(mustAnswerNow(p({ znalostiIncidentu: [{} as never] }))).toBe(true);
+    expect(mustAnswerNow(p({ znalostiIncidentu: [{ role: "pachatel" } as never] }))).toBe(true);
+  });
+
+  // Lokální E2E 22. 11.: veřejnou znalost kádru (`kadr`) má 67 % hráčů lidských klubů, a ti pak
+  // nikdy neodložili odpověď ani si v noci nepostěžovali. Vážné je jen, když je v tom hráč sám.
+  it("incident: jen když je v něm hráč zapletený, veřejná znalost kádru ani drb ne", () => {
+    expect(mustAnswerNow(p({ znalostiIncidentu: [{ role: "kadr" } as never] }))).toBe(false);
+    expect(mustAnswerNow(p({ znalostiIncidentu: [{ role: "drb" } as never, { role: "kadr" } as never] }))).toBe(false);
+    for (const role of ["pachatel", "obvineny", "svedek", "kamarad", "rival"]) {
+      expect(mustAnswerNow(p({ znalostiIncidentu: [{ role: "kadr" } as never, { role } as never] })), role).toBe(true);
+    }
   });
 });

@@ -476,13 +476,21 @@ export function buildSystemPrompt(
  * Postoj k nabídce se ptá jen u hráče, na kterého nějaká nabídka čeká.
  */
 /**
- * Odpovědět hned, ne „ozvu se pak“: vážná věc (incident, nabídka, stížnost, truc) nebo už
- * jednou v posledních 24 h odložil. Dřív to bylo 14 % odpovědí; ze 98 slibů „ozvu se“ se hráč
- * sám ozval jen ve 42, ve 36 trenér nevydržel a napsal dřív (prod 25. 10. – 18. 11.).
+ * Role v incidentu, kdy je v něm hráč sám zapletený: pachatel, obviněný, svědek, kamarád nebo
+ * rival pachatele. Veřejná znalost kádru (`kadr`) a drb to nejsou: `kadr` má 67 % hráčů lidských
+ * klubů (kopie produ 22. 11.) a ti by nikdy neodložili odpověď ani si v noci nepostěžovali.
+ */
+const INVOLVED_ROLES: ReadonlySet<string> = new Set(["pachatel", "obvineny", "svedek", "kamarad", "rival"]);
+
+/**
+ * Odpovědět hned, ne „ozvu se pak“: vážná věc (incident, ve kterém je hráč zapletený, hovor
+ * o incidentu, nabídka, stížnost, truc) nebo už jednou v posledních 24 h odložil. Dřív to bylo
+ * 14 % odpovědí; ze 98 slibů „ozvu se“ se hráč sám ozval jen ve 42, ve 36 trenér nevydržel
+ * a napsal dřív (prod 25. 10. – 18. 11.). Hovor o incidentu nastavuje `seriousTopic` volající.
  */
 export function mustAnswerNow(player: PlayerSnapshot): boolean {
   return !!player.recentlyPostponed || !!player.seriousTopic || (player.pendingOffers?.length ?? 0) > 0
-    || (player.znalostiIncidentu?.length ?? 0) > 0;
+    || (player.znalostiIncidentu ?? []).some((k) => INVOLVED_ROLES.has(k.role));
 }
 
 function replyFlagFields(player: PlayerSnapshot): { schema: string; rules: string[] } {
