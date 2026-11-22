@@ -145,8 +145,8 @@ const pickShirtTile = (shader: { vertexShader: string }) => {
 const TORSO = PARTS.find((part) => part.id === "torso")!;
 /** Barva branky po gólu: zelená nápisu „GÓÓÓL!“ (bg-green-500). */
 const GOAL_GREEN = "#22C55E";
-/** Auto, kterým po zápase odjíždí rozhodčí: jede po cestě za plotem areálu (x) zprava doleva (z). */
-const CAR_ROAD = { x: -(FENCE_BOUNDS.width / 2 + 4), from: -75, to: 75 };
+/** Auto, kterým po zápase odjíždí rozhodčí: jede po cestě za plotem areálu (x) zprava doleva (z), z obrazu ven i při pohledu z paneláku. */
+const CAR_ROAD = { x: -(FENCE_BOUNDS.width / 2 + 4), from: -110, to: 110 };
 
 interface FigureState { x: number; z: number; yaw: number; phase: number; speed: number }
 

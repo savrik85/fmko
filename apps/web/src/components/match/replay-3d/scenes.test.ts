@@ -29,7 +29,8 @@ function problems(replay: Replay, scene: Scene, label: string): string[] {
     if (Math.abs(frame.ballX) > HALF_W + 12 || Math.abs(frame.ballZ) > HALF_L + 14) found.add("míč je daleko mimo hřiště");
     now.forEach((f, i) => {
       if (!f.visible) return;
-      if (Math.abs(f.x) > HALF_W + 4 || Math.abs(f.z) > HALF_L + 2) found.add(`figura ${i} je mimo hřiště`);
+      // Rozhodčí po zápase odchází z areálu.
+      if (!(scene.drive && i === replay.referee) && (Math.abs(f.x) > HALF_W + 4 || Math.abs(f.z) > HALF_L + 2)) found.add(`figura ${i} je mimo hřiště`);
       const before = prev?.[i];
       if (before?.visible && frame.cuts === prevCuts && Math.hypot(f.x - before.x, f.z - before.z) * 30 > 9.5) found.add(`figura ${i} běží rychleji než 9,5 m/s`);
     });

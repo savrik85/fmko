@@ -1,7 +1,7 @@
 // 3D záznam je sestřih: každá důležitá událost zápasu má vlastní krátkou scénu, která začíná střihem na rozestavení
 // a končí, když ji záznam vystřídá další akcí. Engine neukládá souřadnice, scény se proto skládají
 // z uložených událostí; náhoda z id zápasu vybírá jen kosmetiku, takže přehrání vypadá vždy stejně.
-import { PITCH } from "../../stadium/stadium-3d/constants";
+import { FENCE_BOUNDS, PITCH } from "../../stadium/stadium-3d/constants";
 
 export const HALF_W = PITCH.width / 2;
 export const HALF_L = PITCH.depth / 2;
@@ -866,12 +866,24 @@ export class Replay {
       st.go(host, toward(at, to, 0.3), 0.3, wait + walk - 0.3);
       st.pose(host, "shake", 1.2, wait + walk);
     });
-    // Rozhodčí odejde z obrazu doprava (tam, kde mají střídačku hosté) a za chvíli odjede autem po cestě za plotem.
-    const exit = { x: BENCH_X - 1.5, z: Math.sign(st.bench("away").z) * (HALF_L + 2) };
-    const walk = dist(st.pos(this.referee), exit) / 3.2;
-    st.go(this.referee, exit, walk);
-    st.leave(this.referee, walk);
-    const drive = { from: st.t + walk + 3, to: st.t + walk + 3 + 10 };
+    // Rozhodčí odejde doprava (tam, kde mají střídačku hosté): podél lajny do rohu, přes zábradlí u hřiště a přes plot
+    // areálu, až zmizí i z pohledu z paneláku. Za chvíli odjede autem po cestě za plotem. `hop` = přeskok na konci úseku.
+    const right = Math.sign(st.bench("away").z);
+    const route = [
+      { to: { x: BENCH_X + 1, z: right * (HALF_L - 3) }, speed: 3.2, hop: false },
+      { to: { x: BENCH_X - 4.8, z: right * (HALF_L + 0.5) }, speed: 4.5, hop: true },
+      { to: { x: BENCH_X - 10, z: right * (FENCE_BOUNDS.depth / 2 - 0.5) }, speed: 6.5, hop: true },
+      { to: { x: BENCH_X - 10, z: right * 95 }, speed: 6.5, hop: false },
+    ];
+    let gone = 0;
+    for (const { to, speed, hop } of route) {
+      const seconds = dist(st.pos(this.referee, st.t + gone), to) / speed;
+      st.go(this.referee, to, seconds, gone);
+      gone += seconds;
+      if (hop) st.jump(this.referee, gone + 0.15);
+    }
+    st.leave(this.referee, gone);
+    const drive = { from: st.t + gone + 3, to: st.t + gone + 3 + 12 };
     st.wait(calm - meet);
 
     // 3. Klid po zápase, beze spěchu.
