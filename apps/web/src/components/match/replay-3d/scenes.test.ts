@@ -47,7 +47,7 @@ function problems(replay: Replay, scene: Scene, label: string): string[] {
 }
 
 function checkAll(replay: Replay, events: ReplayEvent[], label: string): string[] {
-  return [...problems(replay, replay.kickoff(), `${label} výkop`), ...events.flatMap((e, i) => problems(replay, replay.scene(i), `${label} #${i} ${e.minute}' ${e.type}${e.detail ? `/${e.detail}` : ""}`))];
+  return [...problems(replay, replay.kickoff(0), `${label} výkop`), ...problems(replay, replay.kickoff(events.length), `${label} výkop na konci`), ...events.flatMap((e, i) => problems(replay, replay.scene(i), `${label} #${i} ${e.minute}' ${e.type}${e.detail ? `/${e.detail}` : ""}`))];
 }
 
 describe("scény 3D záznamu", () => {

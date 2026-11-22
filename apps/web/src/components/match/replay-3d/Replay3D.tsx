@@ -50,7 +50,7 @@ export function Replay3D({ detail, events, progress }: { detail: Record<string, 
   // Krok 2D záznamu → scéna: „ŠANCE!“ je útočná fáze události, která teprve přijde, jinak běží poslední ukázaná událost.
   const attack = flash === "attacking";
   const still = kickoff !== null || halfTime || (idx === 0 && !attack);
-  const scene = useMemo(() => (still ? replay.kickoff() : replay.scene(attack ? idx : idx - 1)), [replay, still, attack, idx]);
+  const scene = useMemo(() => (still ? replay.kickoff(idx) : replay.scene(attack ? idx : idx - 1)), [replay, still, attack, idx]);
   const started = useMemo(() => ({ scene, attack, startedAt: performance.now() }), [scene, attack]);
   const step = useRef<ReplayStep>({ ...started, rate: 1 });
   /** Jen při vývoji: scéna zastavená pro snímek obrazovky (window.__replay3d.freeze). */
@@ -60,7 +60,7 @@ export function Replay3D({ detail, events, progress }: { detail: Record<string, 
     if (process.env.NODE_ENV !== "development") return;
     const freeze = (index: number, attackBeat: boolean, seconds: number) => {
       // Posledních 0,4 s se přehraje, ať mají hráči krok a natočení jako při sledování.
-      frozen.current = { scene: index < 0 ? replay.kickoff() : replay.scene(index), attack: attackBeat, startedAt: performance.now() - Math.max(0, seconds - 0.4) * 1000, rate: 1, hold: seconds };
+      frozen.current = { scene: index < 0 ? replay.kickoff(0) : replay.scene(index), attack: attackBeat, startedAt: performance.now() - Math.max(0, seconds - 0.4) * 1000, rate: 1, hold: seconds };
       step.current = frozen.current;
     };
     Object.assign(window, { __replay3d: { replay, freeze } });

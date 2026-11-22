@@ -214,17 +214,21 @@ export function ReplayScene({ replay, kits, step, tv }: {
 
     // Televizní kamera: stojí na tribuně u půlky, za míčem se jen otáčí a kousek popojíždí podél lajny.
     const east = tv.position[0] > HALF_W ? { x: tv.position[0], y: tv.position[1] } : GANTRY;
-    // Míří mezi míč a hráče, o které ve scéně jde (zraněný, potrestaný, střídající).
+    // Míří mezi míč a hráče, o které ve scéně jde; scéna o jednom hráči (zranění, karta, střídání) jen na ně.
     const focus = scene.focus.filter((i) => frame.figures[i].visible);
-    const fx = focus.reduce((sum, i) => sum + states[i].x, frame.ballX) / (focus.length + 1);
-    const fz = focus.reduce((sum, i) => sum + states[i].z, frame.ballZ) / (focus.length + 1);
+    const ballShare = scene.close && focus.length ? 0 : 1;
+    const fx = focus.reduce((sum, i) => sum + states[i].x, frame.ballX * ballShare) / (focus.length + ballShare);
+    const fz = focus.reduce((sum, i) => sum + states[i].z, frame.ballZ * ballShare) / (focus.length + ballShare);
     vLook.set(THREE.MathUtils.clamp(fx, -HALF_W, HALF_W) * 0.8, 0.8, THREE.MathUtils.clamp(fz, -HALF_L + 6, HALF_L - 6));
     if (cut) look.current.copy(vLook);
     else look.current.lerp(vLook, 1 - Math.exp(-dt * 2.5));
     camera.position.set(east.x, east.y, look.current.z * 0.45);
     camera.lookAt(look.current);
-    if (camera.fov !== CAMERA_FOV) {
-      camera.fov = CAMERA_FOV;
+    // Scénu o jednom hráči si kamera přiblíží tak, aby zabrala asi 13 metrů na výšku, ať je to daleko nebo blízko.
+    const wanted = scene.close ? THREE.MathUtils.clamp(THREE.MathUtils.radToDeg(2 * Math.atan(6.5 / camera.position.distanceTo(look.current))), 12, CAMERA_FOV) : CAMERA_FOV;
+    const fov = cut ? wanted : THREE.MathUtils.lerp(camera.fov, wanted, 1 - Math.exp(-dt * 3));
+    if (Math.abs(camera.fov - fov) > 0.01) {
+      camera.fov = fov;
       camera.updateProjectionMatrix();
     }
 

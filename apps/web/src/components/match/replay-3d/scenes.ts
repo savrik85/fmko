@@ -49,6 +49,8 @@ export interface Scene {
   focus: number[];
   card: { at: number; color: CardColor } | null;
   result: ShotResult | null;
+  /** Scéna o jednom hráči (faul, karta, zranění, střídání): kamera si ji přiblíží. */
+  close: boolean;
 }
 type Window = Omit<Scene, "clip">;
 
@@ -448,16 +450,16 @@ export class Replay {
     return { clip: built.clip, ...(built.windows.get(index) ?? { ...last, start: last.end, split: last.end }) };
   }
 
-  /** Rozestavení na výkop (začátek zápasu a poločasu). */
-  kickoff(): Scene {
-    const roster = this.rosters[0];
+  /** Rozestavení na výkop (začátek zápasu a poločasu) s hráči, kteří jsou na hřišti před událostí `index`. */
+  kickoff(index: number): Scene {
+    const roster = this.rosters[Math.min(index, this.rosters.length - 1)];
     const stage = new Stage(this.figures.length, roster, seededRng(this.input.matchId), this.referee);
     // Dva nejvýš postavení domácí stojí u míče.
     const pair = roster.home.filter((s) => s.role !== "GK").sort((a, b) => b.base.u - a.base.u).slice(0, 2);
     const fixed = new Map<number, Point>([[this.referee, { x: 4, z: 5 }], ...pair.map((s, n): [number, Point] => [s.figure, { x: n * 2.5 - 0.6, z: 0.7 }])]);
     stage.layout({ x: 0, z: 0 }, (slot, side) => uvToWorld(side, Math.min(slot.base.u * 0.8, 0.42), slot.base.v), fixed);
     stage.wait(PLAIN);
-    return { clip: stage.finish(), start: 0, split: 0, end: PLAIN, focus: [], card: null, result: null };
+    return { clip: stage.finish(), start: 0, split: 0, end: PLAIN, focus: [], card: null, result: null, close: false };
   }
 
   /** Kam hráč patří v otevřené hře podle míče a držení. */
@@ -490,7 +492,7 @@ export class Replay {
     const e = events[head];
     const side = sideOf(e.teamId);
     const find = (...types: string[]) => rest.find((i) => types.includes(events[i].type));
-    const window = (i: number, start: number, w: Partial<Window> = {}) => windows.set(i, { start, split: start, end: st.t, focus: [], card: null, result: null, ...w });
+    const window = (i: number, start: number, w: Partial<Window> = {}) => windows.set(i, { start, split: start, end: st.t, focus: [], card: null, result: null, close: false, ...w });
     const finisher = find("goal", "chance");
     const result = finisher === undefined ? null : events[finisher].type === "goal" ? "goal" : chanceResult(events[finisher]);
 
@@ -531,13 +533,13 @@ export class Replay {
       case "foul": {
         const fouler = this.onPitch(st, e);
         this.foul(st, side, fouler);
-        window(head, 0, { focus: [fouler] });
+        window(head, 0, { focus: [fouler], close: true });
         const card = find("card");
         if (card === undefined) return;
         const start = st.t;
         const carded = this.onPitch(st, events[card]);
         const color = events[card].detail === "red" ? "red" : "yellow";
-        return window(card, start, { focus: [carded], card: { at: this.showCard(st, carded, color), color } });
+        return window(card, start, { focus: [carded], close: true, card: { at: this.showCard(st, carded, color), color } });
       }
       case "card": {
         // Karta bez faulu (protesty): hráč stojí proti rozhodčímu.
@@ -546,20 +548,20 @@ export class Replay {
         const at = this.playSpot(other(side))(st.slot(carded), side, ball);
         this.open(st, ball, other(side), [[carded, at], [this.referee, { x: at.x + 2.6, z: at.z + 2 }]], [{ ...at, r: 3.5 }]);
         const color = e.detail === "red" ? "red" : "yellow";
-        return window(head, 0, { focus: [carded], card: { at: this.showCard(st, carded, color), color } });
+        return window(head, 0, { focus: [carded], close: true, card: { at: this.showCard(st, carded, color), color } });
       }
       case "injury": {
         const injured = this.onPitch(st, e);
         this.injury(st, side, injured);
-        window(head, 0, { focus: [injured] });
+        window(head, 0, { focus: [injured], close: true });
         for (const i of rest.filter((n) => events[n].type === "substitution")) {
           const start = st.t;
-          window(i, start, { focus: this.substitution(st, i) });
+          window(i, start, { focus: this.substitution(st, i), close: true });
         }
         return;
       }
       case "substitution":
-        return window(head, 0, { focus: this.substitution(st, head) });
+        return window(head, 0, { focus: this.substitution(st, head), close: true });
     }
     if (e.detail?.startsWith("shootout:")) {
       // Rozstřel se kope na jednu bránu; kdo kopal, uložené není, jde některý hráč z pole.
