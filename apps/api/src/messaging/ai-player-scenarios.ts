@@ -176,6 +176,11 @@ export interface PlayerSnapshot {
    */
   ownRecentLines?: string[];
   /**
+   * Jak trenérovi doposud psal: tykal, nebo vykal (address-form.ts `loadCoachAddress`, převažující
+   * tvar v jeho SMS). Null nebo chybí = z historie se nepozná, rozhodne věk a id (`coachAddressForm`).
+   */
+  coachAddress?: "ty" | "vy" | null;
+  /**
    * Co se hráči nedávno stalo a skončilo (porod, rodič z nemocnice), s fakty z hry
    * (incidents/life-news.ts `loadRecentLifeEvent`). `kind` je druh situace.
    */

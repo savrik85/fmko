@@ -240,6 +240,7 @@ async function spawnCasualForTeam(
   const topicTeam = { ...team, leaguePosition: undefined, lastMatchResult: topic.id === "casual_how_are_you" ? team.lastMatchResult : undefined };
 
   player.ownRecentLines = await loadOwnRecentLines(db, { playerId: player.id, teamId });
+  player.coachAddress = await (await import("./address-form")).loadCoachAddress(db, { playerId: player.id, teamId });
   player.recentLifeEvent = await loadRecentLifeEvent(db, teamId, player.id);
   let text: string;
   try {

@@ -15,6 +15,7 @@ import { seedFromString } from "../lib/seed";
 import { RETRY_MIN_MS, remainingMs } from "../lib/time-budget";
 import { tooSimilar } from "./match-speech";
 import { GeminiUnavailableError } from "./model-errors";
+import { addressRetryRule, wrongAddress, type CoachAddress } from "./address-form";
 
 const M = "repetition";
 
@@ -299,8 +300,21 @@ export function pickUnusedIndex(count: number, used: ReadonlySet<number>, seed: 
  */
 export function pickFreshVariant(
   variants: readonly string[], previous: readonly string[], seed: string,
+  /**
+   * Jak hráč trenérovi píše: varianty s opačným tvarem oslovení se vynechají, když mezi zbylými
+   * je nějaká, kterou ještě neposlal. Jinak rozhoduje jen to, co už poslal (opakování je horší).
+   */
+  opts: { address?: CoachAddress | null } = {},
 ): { text: string; index: number } {
   if (variants.length === 0) throw new Error("pickFreshVariant: prázdný seznam variant");
+  if (opts.address) {
+    const address = opts.address;
+    const fitting = variants.flatMap((v, i) => (wrongAddress(v, address) ? [] : [i]));
+    if (fitting.length > 0 && fitting.length < variants.length && fitting.some((i) => !repeatsAny(variants[i], previous))) {
+      const picked = pickFreshVariant(fitting.map((i) => variants[i]), previous, seed);
+      return { text: picked.text, index: fitting[picked.index] };
+    }
+  }
   const lastUse = variants.map((v) => {
     for (let i = previous.length - 1; i >= 0; i--) if (repeatsAny(v, [previous[i]])) return i;
     return -1;
@@ -352,8 +366,12 @@ export async function generateWithoutRepeats<T extends { body: string }>(
   previous: readonly string[] | undefined,
   generate: (retryRule: string) => Promise<T>,
   where: string,
-  /** `others`: věty spoluhráčů z téhož vlákna (kabina). Hlídají se celé věty, úvody a fráze jen vlastní. */
-  opts: { deadline?: number; others?: readonly string[] } = {},
+  /**
+   * `others`: věty spoluhráčů z téhož vlákna (kabina). Hlídají se celé věty, úvody a fráze jen vlastní.
+   * `address`: jak hráč trenérovi píše (address-form.ts). Text s opačným tvarem se jednou přegeneruje,
+   * když zbývá čas; jinak (nebo když ani druhý pokus tvar nedodrží) se pošle a zaloguje.
+   */
+  opts: { deadline?: number; others?: readonly string[]; address?: CoachAddress } = {},
 ): Promise<T> {
   const own = previous ?? [];
   previous = [...own, ...(opts.others ?? [])];
@@ -364,23 +382,36 @@ export async function generateWithoutRepeats<T extends { body: string }>(
   };
   const first = await generate("");
   const repeated = findRepeatedSentences(first.body, previous);
-  if (repeated.length === 0) return finish(first);
+  const firstWrongAddress = wrongAddress(first.body, opts.address);
+  if (repeated.length === 0 && !firstWrongAddress) return finish(first);
 
   let best = first;
   let bestRepeated = repeated;
   if (remainingMs(opts.deadline) < RETRY_MIN_MS) {
-    logger.info({ module: M }, `na přegenerování nezbývá čas (${where}), vyškrtávám rovnou`);
+    logger.info({ module: M }, `na přegenerování nezbývá čas (${where}), ${repeated.length > 0 ? "vyškrtávám rovnou" : "posílám s jiným tvarem oslovení"}`);
+    if (repeated.length === 0) return finish(first);
   } else {
     try {
-      const second = await generate(repeatRetryRule(repeated));
+      const rule = [
+        ...(repeated.length > 0 ? [repeatRetryRule(repeated)] : []),
+        ...(firstWrongAddress && opts.address ? [addressRetryRule(opts.address)] : []),
+      ].join("\n");
+      const second = await generate(rule);
       const again = findRepeatedSentences(second.body, previous);
-      if (again.length === 0) return finish(second);
+      // Opakování je horší než špatný tvar oslovení: druhý pokus bez opakování vyhrává,
+      // když první opakoval, nebo když tvar opravil.
+      if (again.length === 0 && (repeated.length > 0 || !wrongAddress(second.body, opts.address))) return finish(second);
+      if (repeated.length === 0) {
+        logger.warn({ module: M }, `tvar oslovení nesedí ani po druhém pokusu (${where}), posílám první: ${first.body}`);
+        return finish(first);
+      }
       if (again.length <= repeated.length) {
         best = second;
         bestRepeated = again;
       }
     } catch (e) {
       logger.warn({ module: M }, `druhý pokus bez opakování selhal (${where})`, e);
+      if (repeated.length === 0) return finish(first);
     }
   }
   const trimmed = withoutSentences(best.body, bestRepeated);

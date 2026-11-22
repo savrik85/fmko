@@ -339,6 +339,7 @@ async function deliverOne(
   const team = await spawn.loadTeamContext(db, row.team_id, playerTeamId);
   const { loadOwnRecentLines } = await import("../messaging/repetition");
   player.ownRecentLines = await loadOwnRecentLines(db, { playerId: player.id, convId });
+  player.coachAddress = await (await import("../messaging/address-form")).loadCoachAddress(db, { playerId: player.id, convId });
   player.recentLifeEvent = { kind: row.kind, fact: lifeEventFact(row.kind, facts, 0) };
 
   let body: string | null = null;

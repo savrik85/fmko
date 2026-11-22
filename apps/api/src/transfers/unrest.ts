@@ -633,6 +633,7 @@ export async function performUnrestAction(
     snapshot.lastOwnMessageAt = await loadLastOwnMessageAt(db, convId, playerId);
     const { loadOwnRecentLines } = await import("../messaging/repetition");
     snapshot.ownRecentLines = await loadOwnRecentLines(db, { playerId, convId });
+    snapshot.coachAddress = await (await import("../messaging/address-form")).loadCoachAddress(db, { playerId, convId });
     // Historie bez právě poslané zprávy trenéra (ta jde do promptu zvlášť).
     const history = (await loadConversationHistory(db, convId, 9));
     if (history.at(-1)?.sender === "coach" && history.at(-1)?.body === coachMessage) history.pop();

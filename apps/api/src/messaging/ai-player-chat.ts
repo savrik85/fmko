@@ -491,11 +491,13 @@ const FORMAL_UNTIL_AGE = 20;
 const ADULT_FORMAL_EVERY = 4;
 
 /**
- * Tyká hráč trenérovi, nebo mu vyká? Jednotně pro hráče, odvozené z věku a id (lokální E2E
- * 22. 11.: tentýž hráč střídal „Promiňte“ a „Promiň“, prompt oslovení neurčoval). Mladý kluk
- * vyká, ze starších asi každý čtvrtý.
+ * Tyká hráč trenérovi, nebo mu vyká? Hlavně podle toho, jak mu doposud psal (`coachAddress`,
+ * address-form.ts): pokyn proti historii tvar přepínal (E2E 22. 11., Král s pokynem TY a historií
+ * s vykáním napsal „A vy, trenére?“). Bez historie z věku a id, pořád stejně: mladý kluk vyká,
+ * ze starších asi každý čtvrtý.
  */
-export function coachAddressForm(player: Pick<PlayerSnapshot, "id" | "age">): "ty" | "vy" {
+export function coachAddressForm(player: Pick<PlayerSnapshot, "id" | "age" | "coachAddress">): "ty" | "vy" {
+  if (player.coachAddress) return player.coachAddress;
   if (player.age <= FORMAL_UNTIL_AGE) return "vy";
   return seedFromString(`address|${player.id}`) % ADULT_FORMAL_EVERY === 0 ? "vy" : "ty";
 }
@@ -767,7 +769,7 @@ export async function generateInitialMessage(
 
   const out = await generateWithoutRepeats(player.ownRecentLines, async (retryRule) => ({
     body: trimSms(await callModel(env, prompt(retryRule), { maxTokens: 200, temperature: 0.9 })),
-  }), `úvodní zpráva ${scenario.id}`);
+  }), `úvodní zpráva ${scenario.id}`, { address: coachAddressForm(player) });
   return out.body;
 }
 
@@ -870,7 +872,7 @@ export async function generateReply(
       conversationComplete: parsed.conversation_complete === true || isFinalTurn,
       ...parseReplyFlags(parsed, body, player),
     };
-  }, `odpověď ${scenario.id}`, { deadline: opts.deadline });
+  }, `odpověď ${scenario.id}`, { deadline: opts.deadline, address: coachAddressForm(player) });
 }
 
 /**
@@ -941,7 +943,7 @@ export async function generateUnrestReply(
 
   const out = await generateWithoutRepeats(player.ownRecentLines, async (retryRule) => ({
     body: trimSms(await callModel(env, prompt(retryRule), { maxTokens: 200, temperature: 0.9 })),
-  }), "truc");
+  }), "truc", { address: coachAddressForm(player) });
   return out.body;
 }
 
@@ -1140,7 +1142,7 @@ export async function generateCoachInitiatedReply(
       effect: complete ? coachChatEffect(parsed) : undefined,
       ...parseReplyFlags(parsed, body, player),
     };
-  }, "odpověď trenérovi", { deadline: opts.deadline });
+  }, "odpověď trenérovi", { deadline: opts.deadline, address: coachAddressForm(player) });
 }
 
 /**
@@ -1188,7 +1190,7 @@ export async function generateFollowUpMessage(
     const body = trimSms(parsed.body);
     const flags = parseReplyFlags(parsed, body, player);
     return { body, transferStance: flags.transferStance, attendancePledge: flags.attendancePledge };
-  }, "odložená zpráva", { deadline: opts.deadline });
+  }, "odložená zpráva", { deadline: opts.deadline, address: coachAddressForm(player) });
 }
 
 /** Dopad rozhovoru od trenéra z odpovědi modelu, oříznutý na povolené meze. */
