@@ -284,6 +284,8 @@ class Simulation {
   private k = 0;
   /** Krok, kterým začíná druhý poločas (jediný střih v záznamu). */
   private cut = -1;
+  /** Faulující a faulovaný, kteří se právě srazí (jinak se hráči vyhýbají). */
+  private contact: number[] = [];
   private half: 1 | 2 = 1;
   private possession: Side = "home";
   private layout: Layout = { kind: "kickoff" };
@@ -330,6 +332,10 @@ class Simulation {
       if (a.state === ON) Object.assign(a, this.spot(a, i, { x: 0, z: 0 }));
     });
     this.caption("Výkop!");
+    for (const side of ["home", "away"] as const) {
+      const n = input[side].starters.length;
+      if (n < 11) this.caption(`${input[side].name} nastupuje jen v počtu ${n} ${n === 1 ? "hráče" : "hráčů"}.`);
+    }
     this.run(1.5);
     this.takeBall("home", this.kickoffPair[0] ?? null);
     for (const group of groupEvents(this.events)) {
@@ -401,8 +407,8 @@ class Simulation {
     this.actors.forEach((a, i) => {
       const t = targets[i];
       if (!t) return;
-      // Hráč se cestou vyhne ostatním; dva ze scénáře (faul, souboj o míč) se míjet nemusí.
-      const avoid = this.actors.filter((b) => b !== a && b.state !== OFF && dist(a, b) < 4 && (!a.script || !b.script));
+      // Hráč se cestou vyhne ostatním, jen faulující a faulovaný se srazí.
+      const avoid = this.actors.filter((b, j) => b !== a && b.state !== OFF && dist(a, b) < 4 && !(this.contact.includes(i) && this.contact.includes(j)));
       this.move(a, t, a.script ? a.speed : a.state === LEAVING ? JOG * 0.8 : JOG, avoid);
       if (a.state === LEAVING && Math.abs(a.x) >= HALF_W + 0.9) a.state = OFF;
     });
@@ -438,6 +444,12 @@ class Simulation {
       const side = -nz * dx + nx * dz < 0 ? -0.8 : 0.8;
       wx += (nx - nz * side) * (AVOID - gap) * 12;
       wz += (nz + nx * side) * (AVOID - gap) * 12;
+    }
+    // Úhyb nesmí hráče rozběhnout nad sprint.
+    const w = Math.hypot(wx, wz);
+    if (w > SPRINT) {
+      wx *= SPRINT / w;
+      wz *= SPRINT / w;
     }
     const ax = (wx - a.vx) / DT;
     const az = (wz - a.vz) / DT;
@@ -617,10 +629,14 @@ class Simulation {
   private goalZ(side: Side) { return attackSign(side, this.half) * HALF_L; }
   private sign() { return this.rng() < 0.5 ? -1 : 1; }
 
-  /** Titulky jdou do fronty, aby se každý dal přečíst. */
+  /**
+   * Titulky jdou do fronty, aby se každý dal přečíst. Titulek o hráči (zranění, karta…) na frontu
+   * počká i s děním, ať se ukáže zároveň s ním; gól se ukáže hned.
+   */
   private caption(text: string, banner?: Banner, figures: (number | null)[] = []) {
-    const last = this.captions[this.captions.length - 1];
-    this.captions.push({ t: Math.max(this.now, this.captionFree()), text, banner, figures: figures.filter((f): f is number => f !== null) });
+    const about = figures.filter((f): f is number => f !== null);
+    if (about.length && banner !== "goal") this.drain();
+    this.captions.push({ t: banner === "goal" ? this.now : Math.max(this.now, this.captionFree()), text, banner, figures: about });
   }
 
   /** Kdy se dá ukázat další titulek. */
@@ -914,7 +930,7 @@ class Simulation {
       this.pass(shooter, toward(this.actors[shooter], shotSpot, Math.min(dist(this.actors[shooter], shotSpot), 6)), cross ? { arc: 3, h: 1, speed: 17 } : {});
     }
     if (dist(this.actors[shooter], shotSpot) > 3) this.carry(shooter, shotSpot, 0.3, SPRINT);
-    this.run(0.2);
+    this.drain();
     this.shot(side, result, 24, blocker);
     if (result === "goal") return this.goalScored(shooter, side, text, afterText);
     if (afterText) this.caption(afterText, undefined, [result === "saved" ? this.keeper(other(side)) : blocker]);
@@ -951,6 +967,7 @@ class Simulation {
       return;
     }
     this.pass(finisher, target, cross);
+    this.drain();
     this.shot(side, result, 18);
     if (result === "goal") return this.goalScored(finisher, side, finisherText, null);
     if (finisherText) this.caption(finisherText, undefined, [finisher]);
@@ -975,6 +992,7 @@ class Simulation {
     this.caption(text, undefined, [kicker]);
     this.run(0.6);
     this.takeBall(side, kicker);
+    this.drain();
     this.shot(side, result, isPenalty ? 26 : 20);
     if (result === "goal") return this.goalScored(kicker, side, afterText, null);
     if (afterText) this.caption(afterText);
@@ -994,16 +1012,18 @@ class Simulation {
       this.send(victim, { x: v.x, z: v.z });
       const contact = toward(v, this.actors[fouler], 0.6);
       this.send(fouler, contact);
+      this.contact = [fouler, victim];
       this.run(4, () => dist(this.actors[fouler], contact) < 0.2);
-      this.setPose(victim, "down", 1.7);
+      this.contact = [];
+      this.setPose(victim, "down", 2.6);
       this.send(fouler, toward(v, this.actors[fouler], 1.8), JOG);
     }
     this.ball = { kind: "rest" };
     this.setLayout({ kind: "play" }, other(side));
     const red = card?.event.detail === "red";
-    this.run(0.8);
+    this.run(0.5);
     if (card) this.caption(card.text, red ? "red" : "yellow", [fouler]);
-    this.run(card ? 2.2 : 1);
+    if (!red) this.run(card ? 2 : 1);
     // Po faulu se dvojice rozestoupí až v další akci.
     if (victim !== null) this.fouls.push({ a: fouler, b: victim, from, to: this.k + 2 * REPLAY_HZ });
     this.lastMinute = e.minute;
@@ -1026,8 +1046,13 @@ class Simulation {
     }
     this.caption(text, "injury", [figure]);
     this.ball = { kind: "rest" };
-    this.setPose(figure, "down", 3.2);
-    this.run(3.2);
+    this.setPose(figure, "down", 3.6);
+    this.freeAll();
+    // K zraněnému přiběhne nejbližší spoluhráč.
+    const a = this.actors[figure];
+    const near = this.onPitch(a.side).filter((f) => f !== figure && this.actors[f].role !== "GK").sort((x, y) => dist(this.actors[x], a) - dist(this.actors[y], a));
+    if (near[0] !== undefined) this.send(near[0], toward(a, this.actors[near[0]], 2), JOG);
+    this.run(3.6);
     this.lastMinute = e.minute;
     return figure;
   }

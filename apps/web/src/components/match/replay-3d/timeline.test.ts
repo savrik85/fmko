@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import type { MatchEvent } from "@okresni-masina/shared";
-import { attackSign, BENCH_ENTRY, CAPTION_GAP, HALF_L, HALF_W, OFF, ON, REPLAY_HZ, ReplayPlan, type ReplayInput, type ReplayPlayer } from "./timeline";
+import { attackSign, BENCH_ENTRY, CAPTION_GAP, HALF_L, HALF_W, LEAVING, OFF, ON, REPLAY_HZ, ReplayPlan, type ReplayInput, type ReplayPlayer } from "./timeline";
 import { replayInputOf } from "./useMatchReplay";
 import fixture from "./timeline.fixture.json";
 
@@ -103,6 +103,17 @@ function violations(input: ReplayInput): string[] {
   }
   const times = plan.captionTimes();
   times.forEach((t, i) => i > 0 && t - times[i - 1] < CAPTION_GAP - 1e-9 && fail("titulky moc rychle", t * REPLAY_HZ));
+  // Titulek sedí s děním: zraněný leží, vyloučený odchází, při gólu je míč v bráně, střídající u střídaček.
+  const captions = (plan as unknown as { captions: { t: number; banner?: string; figures: number[] }[] }).captions;
+  const tick = (t: number) => Math.min(s.ticks - 1, Math.round(t * REPLAY_HZ));
+  for (const c of captions) {
+    const f = c.figures[0];
+    const at = (dt: number) => tick(c.t + dt) * n + f;
+    if (c.banner === "injury" && s.pose[at(0.5)] !== 1) fail("zraněný při titulku neleží", tick(c.t), `#${f}`);
+    if (c.banner === "red" && ![0.5, 1, 1.5].some((dt) => s.state[at(dt)] === LEAVING)) fail("vyloučený při titulku neodchází", tick(c.t), `#${f}`);
+    if (c.banner === "sub" && Math.hypot(s.x[at(0)] - BENCH_ENTRY.x, s.z[at(0)] - BENCH_ENTRY.z) > 3) fail("střídající při titulku není u střídaček", tick(c.t), `#${f}`);
+    if (c.banner === "goal" && ![-0.2, 0, 0.3].some((dt) => Math.abs(s.ballZ[tick(c.t + dt)]) > HALF_L - 1)) fail("při titulku gólu míč není v bráně", tick(c.t));
+  }
   return out;
 }
 
