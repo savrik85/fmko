@@ -645,3 +645,33 @@ export function pickScenarioForPlayer(
 export function getScenarioById(id: string): AiScenario | null {
   return AI_PLAYER_SCENARIOS.find((s) => s.id === id) ?? CASUAL_TOPICS.find((s) => s.id === id) ?? null;
 }
+
+/**
+ * Proč hráč ví, že nejede (multiplayer/left-out.ts `NotCountedOn`): je na přestupové listině,
+ * nabízí ho trenér na hostování, nebo mu trenér napsal, že s ním nepočítá.
+ */
+const LEFT_OUT_KNOWN_REASONS: Record<string, string> = {
+  on_market: "Jsi na přestupové listině, trenér tě chce prodat, a proto tě na zápasy nebere. Víš to.",
+  on_loan: "Trenér tě nabízí na hostování do jiného klubu, a proto tě na zápasy nebere. Víš to.",
+  told_out: "Trenér ti sám napsal, že s tebou nepočítá, a proto tě na zápasy nebere. Víš to.",
+};
+
+/**
+ * Scénář trucového vlákna po nenominaci podle důvodu. Hráč na listině, na hostování nebo
+ * kterému trenér řekl, že s ním nepočítá, ví, proč nejede: neptá se na to (lokální E2E 22. 11.:
+ * Bílý po SMS „Na prodej se holt nehraje“ hned „Řekni rovnou, proč mě nebereš na zápasy“).
+ * Bez známého důvodu původní popis.
+ */
+export function leftOutScenario(reason: string | null | undefined): AiScenario | null {
+  const base = getScenarioById("left_out");
+  const known = reason ? LEFT_OUT_KNOWN_REASONS[reason] : undefined;
+  if (!base || !known) return base;
+  return {
+    ...base,
+    description: "Trenér tě nedávno nevzal na zápas, nebyl jsi ani na lavičce, a ty jsi mu to trucovitě napsal (tvoje první zpráva). "
+      + `${known} NEPTEJ se ho, proč nejedeš, ani jestli s tebou počítá. Trucuješ a na tréninky teď nechodíš. `
+      + "Mrzí tě, jak se s tebou zachází, a chceš vědět, co s tebou bude dál. Když s tebou trenér jedná slušně a na rovinu, "
+      + "postupně se uklidníš a řekneš, že na trénink zase přijdeš. Když tě odbyde, zesměšní nebo ti jen vyhrožuje, naštveš se víc "
+      + "a na trénink dál nepůjdeš. Nevymýšlej si jména spoluhráčů, která nejsou v první zprávě.",
+  };
+}

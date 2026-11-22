@@ -49,6 +49,7 @@ import {
 import {
   pickScenarioForPlayer,
   getScenarioById,
+  leftOutScenario,
   type AiScenario,
   type PlayerSnapshot,
 } from "./ai-player-scenarios";
@@ -120,6 +121,8 @@ interface AiThreadStateData {
   /** Incident, na který se trenér ptá (spec 7a). Platí jen v herní den `incidentDen`. */
   incidentId?: string;
   incidentDen?: string;
+  /** Truc po nenominaci: proč hráč ví, že nejede (on_market, on_loan, told_out). */
+  left_out_reason?: string;
   resolution?: {
     morale_delta: number;
     condition_delta: number;
@@ -1252,7 +1255,8 @@ async function handleAiPlayerReplyInner(
     return;
   }
 
-  const scenario = getScenarioById(state.scenario_id);
+  // Truc po nenominaci podle důvodu: hráč na listině se neptá, proč nejede.
+  const scenario = state.scenario_id === "left_out" ? leftOutScenario(state.left_out_reason) : getScenarioById(state.scenario_id);
   if (!scenario) {
     logger.warn({ module: "ai-player-spawn" }, `unknown scenario ${state.scenario_id}, force-closing thread`);
     await closeThread(db, convId, state, null);
