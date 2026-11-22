@@ -178,6 +178,24 @@ describe("odměna za službu", () => {
   });
 });
 
+describe("tlačítko 🎁 pod zprávou hráče (Bohuslav, E2E 22. 11.)", () => {
+  it("hráč napsal „shodil jsem…“ až po začátku běhu: tlačítko je pod jeho SMS, ne nad ní", async () => {
+    const id = await recordCommitment(db, {
+      clubTeamId: "club", playerId: "p3", convId: "c3", coachMessage: "Za tu pomoc ti koupím flašku",
+      detected: { kind: "reward", rewardType: "bottle" }, playerFirstName: "Vojtěch", now: T0,
+    });
+    // Běh začal v T, SMS hráče (model) se uložila o tři vteřiny později.
+    const tick = new Date("2026-12-03T10:00:00.000Z");
+    await db.prepare("INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, metadata, sent_at) VALUES ('sms', 'c3', 'player', 'p3', 'Vojtěch Havel', 'Trenére, shodil jsem 7,3 kg.', '{}', '2026-12-03T10:00:03.000Z')").run();
+    await db.prepare("UPDATE coach_commitments SET details = json_remove(details, '$.won') WHERE id = ?").bind(id).run();
+    const row = await db.prepare("SELECT * FROM coach_commitments WHERE id = ?").bind(id).first<Record<string, unknown>>();
+    const { markRewardEarned } = await import("./coach-rewards");
+    const buttonId = await markRewardEarned(db, { ...row, first_name: "Vojtěch", last_name: "Havel", nickname: null, avatar: null } as never, tick);
+    const sentAt = (await db.prepare("SELECT sent_at FROM messages WHERE id = ?").bind(buttonId).first<{ sent_at: string }>())!.sent_at;
+    expect(Date.parse(sentAt)).toBeGreaterThan(Date.parse("2026-12-03T10:00:03.000Z"));
+  });
+});
+
 describe("jen vlastní kádr", () => {
   it("hráči na hostování jinde odměnu za hubnutí z SMS nezapíše", async () => {
     model.askModelJson.mockResolvedValue({ kind: "weight_target", quote: "1000 Kč, když zhubneš", kg: null, days: null, reward: "money", amount: 1000 });

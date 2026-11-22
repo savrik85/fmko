@@ -5,7 +5,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { Miniflare } from "miniflare";
 import { BROKEN_PLEDGE_SMS, BROKEN_PLEDGE_RELATION, MATCH_ATTEND_PLEDGE_TEXTS, recordAttendancePledge, settleAttendancePledges } from "./attendance-pledge";
-import { afterPlayerReply } from "./ai-player-spawn";
+import { afterPlayerReply, applyResolutionAndClose } from "./ai-player-spawn";
 import { recordedExcuses } from "../events/match-absences";
 import type { PlayerSnapshot } from "./ai-player-scenarios";
 
@@ -20,7 +20,7 @@ beforeAll(async () => {
     "CREATE TABLE players (id TEXT PRIMARY KEY, team_id TEXT, first_name TEXT, last_name TEXT, nickname TEXT, avatar TEXT, nationality TEXT, life_context TEXT, coach_relationship INTEGER, status TEXT, loan_from_team_id TEXT)",
     "CREATE TABLE season_calendar (id TEXT PRIMARY KEY, league_id TEXT, season_number INTEGER, scheduled_at TEXT, status TEXT)",
     "CREATE TABLE matches (id TEXT PRIMARY KEY, calendar_id TEXT, home_team_id TEXT, away_team_id TEXT, status TEXT, created_at TEXT)",
-    "CREATE TABLE conversations (id TEXT PRIMARY KEY, team_id TEXT, type TEXT, title TEXT, participant_id TEXT, participant_avatar TEXT, last_message_text TEXT, last_message_at TEXT, unread_count INTEGER DEFAULT 0, created_at TEXT, pinned INTEGER DEFAULT 0)",
+    "CREATE TABLE conversations (id TEXT PRIMARY KEY, team_id TEXT, type TEXT, title TEXT, participant_id TEXT, participant_avatar TEXT, last_message_text TEXT, last_message_at TEXT, unread_count INTEGER DEFAULT 0, created_at TEXT, pinned INTEGER DEFAULT 0, ai_thread_state TEXT, ai_thread_active INTEGER DEFAULT 0)",
     "CREATE TABLE messages (id TEXT PRIMARY KEY, conversation_id TEXT, sender_type TEXT, sender_id TEXT, sender_name TEXT, body TEXT, metadata TEXT, sent_at TEXT, read INTEGER DEFAULT 0)",
     "CREATE TABLE coach_relation_log (id INTEGER PRIMARY KEY AUTOINCREMENT, player_id TEXT, team_id TEXT, old_value INTEGER, new_value INTEGER, delta INTEGER, raw_delta INTEGER, source TEXT, description TEXT, reference_id TEXT, game_date TEXT, created_at TEXT)",
     "CREATE TABLE coach_commitments (id TEXT PRIMARY KEY, team_id TEXT, player_id TEXT, conversation_id TEXT, kind TEXT, status TEXT, made_at TEXT, due_at TEXT, resolved_at TEXT, quote TEXT, details TEXT, last_reminder_key TEXT)",
@@ -58,6 +58,23 @@ describe("zápis slibu z odpovědi hráče", () => {
     });
     expect((await life()).trainingPledge).toMatchObject({ intent: "attend", from: "2026-11-20", until: "2026-11-20", once: true, convId: "c1", teamId: "club" });
     expect(await notes()).toEqual(["📝 Petr slíbil, že přijde na trénink v pátek 20. 11."]);
+  });
+
+  it("poznámka je pod odpovědí hráče, i když odpověď vlákno uzavře (Jelínek, E2E 22. 11.)", async () => {
+    // Vyhodnocení konce vlákna modelem trvá: odpověď dřív dostala čas až po něm, poznámka ze slibu byla nad ní.
+    const snapshot = { id: "p1", firstName: "Petr", lastName: "Šimek" } as PlayerSnapshot;
+    const at = "2026-11-19T17:25:00.000Z";
+    await afterPlayerReply(db, {
+      teamId: "club", convId: "c1", player: snapshot, at, offerIds: [],
+      reply: { body: "Jasně, trenére, zítra teda nejezdím.", writeLater: false, attendancePledge: { event: "match", intent: "skip", when: "next" } },
+    });
+    await applyResolutionAndClose(db, "c1", "club", "p1", "Jasně, trenére, zítra teda nejezdím.", "Petr Šimek", "left_out",
+      { trigger: "x", scenario_id: "left_out", max_replies: 2, current_replies: 2, awaiting: "player", initiated_at: at } as never,
+      { morale_delta: 0, condition_delta: 0, relationship_delta: 0, absence_days: 0, absence_reason: "", summary: "", tone: "neutral" }, at);
+    const order = (await db.prepare("SELECT sender_type, sent_at FROM messages WHERE conversation_id = 'c1' ORDER BY julianday(sent_at)")
+      .all<{ sender_type: string; sent_at: string }>()).results;
+    expect(order.map((m) => m.sender_type)).toEqual(["player", "system"]);
+    expect(order.map((m) => m.sent_at)).toEqual([at, "2026-11-19T17:25:01.000Z"]);
   });
 
   it("přemluvení přepíše starší „nepřijdu“", async () => {

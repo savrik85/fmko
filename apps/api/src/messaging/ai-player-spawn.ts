@@ -1470,7 +1470,8 @@ async function handleAiPlayerReplyInner(
     resolution.condition_delta = 0;
     resolution.absence_days = 0;
   }
-  await applyResolutionAndClose(db, convId, conv.team_id, player.id, reply.body, senderName, scenario.id, state, resolution);
+  // Odpověď má čas, kdy ji hráč napsal (před vyhodnocením): poznámka 📝 ze slibu je o vteřinu za ní.
+  await applyResolutionAndClose(db, convId, conv.team_id, player.id, reply.body, senderName, scenario.id, state, resolution, now);
   await pushPlayerReply(db, env, { teamId: conv.team_id, convId, sender: senderName, text: reply.body });
 }
 
@@ -1527,7 +1528,7 @@ export function closesLikeCoachChat(scenarioId: string, state: { hearsay_id?: st
   return scenarioId === "coach_initiated" || getScenarioById(scenarioId)?.category === "casual" || !!state.hearsay_id;
 }
 
-async function applyResolutionAndClose(
+export async function applyResolutionAndClose(
   db: D1Database,
   convId: string,
   teamId: string,
@@ -1538,8 +1539,14 @@ async function applyResolutionAndClose(
   scenarioId: string,
   state: AiThreadStateData,
   resolution: NonNullable<AiThreadStateData["resolution"]>,
+  /**
+   * Kdy hráč závěrečnou repliku napsal. Vyhodnocení modelem trvá i desítky vteřin a poznámka
+   * ze slibu (afterPlayerReply) má čas odpovědi + 1 s: bez toho byla nad odpovědí (E2E 22. 11.).
+   */
+  finalReplyAt?: string,
 ): Promise<void> {
   const now = new Date().toISOString();
+  const replyAt = finalReplyAt ?? now;
   const newState: AiThreadStateData = {
     ...state,
     current_replies: state.max_replies,
@@ -1561,7 +1568,7 @@ async function applyResolutionAndClose(
     // Závěrečná zpráva hráče
     ...(finalReplyBody === null ? [] : [db.prepare(
       "INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, metadata, sent_at, read) VALUES (?, ?, 'player', ?, ?, ?, ?, ?, 0)",
-    ).bind(uuid(), convId, playerId, senderName, finalReplyBody, JSON.stringify({ ai_generated: true, scenario_id: scenarioId, turn: state.max_replies, final: true }), now)]),
+    ).bind(uuid(), convId, playerId, senderName, finalReplyBody, JSON.stringify({ ai_generated: true, scenario_id: scenarioId, turn: state.max_replies, final: true }), replyAt)]),
 
     // Aplikace dopadu na hráče (morale + condition v life_context)
     db.prepare(
@@ -1977,6 +1984,7 @@ export async function afterPlayerReply(
     const { recordAttendancePledge } = await import("./attendance-pledge");
     await recordAttendancePledge(db, {
       clubTeamId: r.teamId, convId: r.convId, playerId: r.player.id, playerFirstName: r.player.firstName, pledge: r.reply.attendancePledge,
+      now: new Date(r.at),
     });
   }
   // Pokyn trenéra (kolečka, omluva kabině): hráč odepsal, jestli ho splní (coach-rules.ts).
