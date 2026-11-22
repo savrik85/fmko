@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { PERSUASION_FRESH_MS, isPersuasion, offersHelp, persuasionChance, persuasionFromLife, persuasionLine, persuasionRoll } from "./persuasion";
+import {
+  PERSUADED_ATTEND_REPLIES, PERSUADED_SKIP_REPLIES, PERSUASION_FRESH_MS, contradictsPersuasion, isPersuasion, offersHelp, persuasionChance,
+  persuasionFallback, persuasionFromLife, persuasionLine, persuasionRoll, replyStance,
+} from "./persuasion";
+import { addressFormOf } from "./address-form";
 
 // Doslovné zprávy trenéra z přetestu 3 (22. 11.), Veselý s kocovinou a Filip s leností.
 describe("pozná, že trenér hráče přemlouvá", () => {
@@ -52,5 +56,52 @@ describe("šance a rozhodnutí", () => {
     expect(persuasionLine(state)).not.toContain("—");
     expect(persuasionFromLife({ persuasion: state }, now)).toEqual(state);
     expect(persuasionFromLife({ persuasion: state }, new Date(Date.parse(state.at) + PERSUASION_FRESH_MS + 1000))).toBeUndefined();
+  });
+});
+
+// Přibyl (E2E 22. 11., final3 Chyba 4): rozhodnutí „přijde“, text „Nezvládnu ani poločas“.
+describe("text odpovědi proti rozhodnutí hry", () => {
+  it("pozná, co hráč píše: poslední zmínka rozhoduje, otázka a „příště“ se nepočítají", () => {
+    expect(replyStance("Nezvládnu ani poločas, díky za nabídku 😔")).toBe("skip");
+    expect(replyStance("Přijedu v pět, děkuju! 😊")).toBe("attend");
+    expect(replyStance("Nakonec to klaplo, dorazím.")).toBe("attend");
+    expect(replyStance("Celý zápas nezvládnu, ale přijdu.")).toBe("attend");
+    expect(replyStance("Nemůžu se dočkat, budu tam!")).toBe("attend");
+    expect(replyStance("Přijdu, ale nakonec to nestihnu.")).toBe("skip");
+    expect(replyStance("Přijdu příště, teď to fakt nejde.")).toBeNull();
+    expect(replyStance("A můžu přijít až na druhý poločas?")).toBeNull();
+    expect(replyStance("Díky, trenére, vážím si toho 😊")).toBeNull();
+  });
+
+  it("rozpor: „přijde“ s „nezvládnu“, „nepřijde“ s jasným „přijdu“", () => {
+    expect(contradictsPersuasion("Nezvládnu ani poločas, díky za nabídku 😔", "attend")).toBe(true);
+    expect(contradictsPersuasion("Trenére, nemůžu, fakt to nejde.", "attend")).toBe(true);
+    expect(contradictsPersuasion("Přijedu v pět, děkuju! 😊", "attend")).toBe(false);
+    expect(contradictsPersuasion("Díky, trenére, vážím si toho 😊", "attend")).toBe(false);
+    expect(contradictsPersuasion("Jasně, přijdu, trenére!", "skip")).toBe(true);
+    expect(contradictsPersuasion("Asi přijdu, uvidíme.", "skip")).toBe(false);
+    expect(contradictsPersuasion("Nechce se mi, fakt ne.", "skip")).toBe(false);
+  });
+
+  it("předem napsané věty: aspoň 8, různé, bez tvaru oslovení a podle rozhodnutí", () => {
+    for (const [pool, stance] of [[PERSUADED_ATTEND_REPLIES, "attend"], [PERSUADED_SKIP_REPLIES, "skip"]] as const) {
+      expect(pool.length).toBeGreaterThanOrEqual(8);
+      expect(new Set(pool).size).toBe(pool.length);
+      for (const t of pool) {
+        expect(t, t).not.toContain("—");
+        expect(addressFormOf(t), t).toBeNull();
+        expect(contradictsPersuasion(t, stance), t).toBe(false);
+        if (stance === "attend") expect(replyStance(t), t).toBe("attend");
+      }
+    }
+  });
+
+  it("věta navíc, kterou hráč trenérovi ještě neposlal", () => {
+    const p = { decided: "attend", key: "match:cal", attempts: 1 } as const;
+    const first = persuasionFallback(p, "p-pribyl", [], "ty");
+    expect(persuasionFallback(p, "p-pribyl", [], "ty")).toBe(first);
+    const sent: string[] = [];
+    for (let i = 0; i < PERSUADED_ATTEND_REPLIES.length; i++) sent.push(persuasionFallback(p, "p-pribyl", sent, "ty"));
+    expect(new Set(sent).size).toBe(PERSUADED_ATTEND_REPLIES.length);
   });
 });
