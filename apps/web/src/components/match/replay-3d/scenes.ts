@@ -23,6 +23,8 @@ const HOP = 0.7;
 const SETUP = 2, ATTACK = 3.5, GOAL = 6, CHANCE = 3, DRAMA = 4, PENALTY = 7, KICKOFF = 7.5;
 /** Jak dlouho drží rozhodčí kartu nad hlavou. */
 const CARD_UP = 1.4;
+/** Krok záznamu u scény dlouhé DRAMA (SCENE_MS.drama); hromadné střídání si ho dělí mezi titulky. */
+const DRAMA_STEP = 3.5;
 
 export type Side = "home" | "away";
 const SIDES = ["home", "away"] as const;
@@ -168,6 +170,8 @@ function follows(head: ReplayEvent, e: ReplayEvent): boolean {
     case "goal": return sameTeam && e.type === "assist";
     case "foul": return e.type === "card";
     case "injury": return sameTeam && e.type === "substitution";
+    // Víc střídání jednoho týmu ve stejné minutě je jedno hromadné střídání.
+    case "substitution": return sameTeam && e.type === "substitution";
     default: return false;
   }
 }
@@ -199,6 +203,15 @@ export function scenedEvents(events: ReplayEvent[]): boolean[] {
       default: return !!e.detail?.startsWith("shootout:");
     }
   });
+}
+
+/**
+ * Kolik střídání se odehraje ve scéně události `index` najednou (hromadné střídání). Jejich kroky záznamu se
+ * o délku scény podělí, ať se v ní stihnou titulky všech střídajících.
+ */
+export function substitutionsTogether(events: ReplayEvent[], index: number): number {
+  const heads = actionHeads(events);
+  return events[index].type === "substitution" ? events.filter((e, i) => heads[i] === heads[index] && e.type === "substitution").length : 1;
 }
 
 /** Kde začínají akce, které mají scénu (roh před gólem, faul před kartou…): sem skáče „předchozí/další akce“. */
@@ -863,6 +876,12 @@ export class Replay {
     const window = (i: number, start: number, w: Partial<Window> = {}) => windows.set(i, { start, split: start, end: st.t, focus: [], card: null, result: null, replay: null, ...w });
     /** Gól: po oslavě se zopakuje zakončení (od rozběhu ke střele po míč v síti). */
     const goalShots = (split: number) => ({ replay: { from: split - 1.8, to: split + 0.6 } });
+    /** Střídání (i hromadné): všichni se vymění v jedné scéně, titulky se v ní vystřídají po stejných dílech. */
+    const swap = (subs: number[]) => {
+      if (!subs.length) return;
+      const start = st.t, pairs = this.substitution(st, subs);
+      subs.forEach((i, n) => window(i, start + (n * DRAMA_STEP) / subs.length, { focus: pairs[n] }));
+    };
     const finisher = find("goal", "chance");
     const result = finisher === undefined ? null : events[finisher].type === "goal" ? "goal" : chanceResult(events[finisher]);
 
@@ -924,14 +943,10 @@ export class Replay {
         const injured = this.onPitch(st, e);
         this.injury(st, side, injured);
         window(head, 0, { focus: [injured] });
-        for (const i of rest.filter((n) => events[n].type === "substitution")) {
-          const start = st.t;
-          window(i, start, { focus: this.substitution(st, i) });
-        }
-        return;
+        return swap(rest.filter((n) => events[n].type === "substitution"));
       }
       case "substitution":
-        return window(head, 0, { focus: this.substitution(st, head) });
+        return swap(group);
     }
     if (e.detail?.startsWith("shootout:")) {
       // Rozstřel se kope na jednu bránu; kdo kopal, uložené není, jde některý hráč z pole.
@@ -1247,24 +1262,37 @@ export class Replay {
     st.t = DRAMA;
   }
 
-  /** Střídání: střih k postranní čáře u střídaček, hráči si plácnou a vymění se. Vrací [přicházející, odcházející]. */
-  private substitution(st: Stage, index: number): number[] {
-    const { incoming, outgoing } = this.swaps.get(index)!;
+  /**
+   * Střídání (i několik najednou): střih k postranní čáře u střídaček, hráči si plácnou a vymění se.
+   * Vrací [přicházející, odcházející] pro každé střídání.
+   */
+  private substitution(st: Stage, indices: number[]): number[][] {
+    const swaps = indices.map((i) => this.swaps.get(i)!);
     const end = st.t + DRAMA;
-    const z = (st.rng() - 0.5) * 6;
-    const ball = { x: 3, z: z + 9 };
+    // Jedna dvojice se mění někde u půlky, víc dvojic vedle sebe kolem ní.
+    const gap = Math.min(2.5, 8 / Math.max(1, swaps.length - 1));
+    const middle = swaps.length === 1 ? (st.rng() - 0.5) * 6 : -2;
+    const at = (n: number) => middle + (n - (swaps.length - 1) / 2) * gap;
+    const ball = { x: 3, z: middle + 9 };
     const spot = this.playSpot("home");
-    st.recast(this.rosters[index]);
-    st.layout(ball, (slot, side) => spot(slot, side, ball), new Map([[outgoing, { x: BENCH_X + 7, z: z + 1 }], [incoming, { x: BENCH_X - 1.6, z }], [this.referee, { x: BENCH_X + 4, z: z - 4 }]]), [{ x: BENCH_X + 4, z: z + 1, r: 5 }]);
-    st.coach(sideOf(this.events[index].teamId), "shout", 1.8);
-    st.go(outgoing, { x: BENCH_X + 0.5, z }, 1.9);
+    st.recast(this.rosters[indices[0]]);
+    st.layout(ball, (slot, side) => spot(slot, side, ball), new Map([
+      ...swaps.flatMap(({ incoming, outgoing }, n): [number, Point][] => [[outgoing, { x: BENCH_X + 7, z: at(n) + 1 }], [incoming, { x: BENCH_X - 1.6, z: at(n) }]]),
+      [this.referee, { x: BENCH_X + 4, z: at(0) - 4 }],
+    ]), swaps.map((_, n) => ({ x: BENCH_X + 4, z: at(n) + 1, r: 5 })));
+    st.coach(sideOf(this.events[indices[0]].teamId), "shout", 1.8);
+    swaps.forEach(({ outgoing }, n) => st.go(outgoing, { x: BENCH_X + 0.5, z: at(n) }, 1.9));
     st.wait(1.6);
-    st.pose(outgoing, "armUp", 0.6);
-    st.pose(incoming, "armUp", 0.6);
+    for (const { incoming, outgoing } of swaps) {
+      st.pose(outgoing, "armUp", 0.6);
+      st.pose(incoming, "armUp", 0.6);
+    }
     st.wait(0.4);
-    st.go(incoming, { x: BENCH_X + 8, z: z + 1.5 }, 2.2);
-    st.go(outgoing, { x: BENCH_X - 1.3, z: z + 2 }, 1.2);
+    swaps.forEach(({ incoming, outgoing }, n) => {
+      st.go(incoming, { x: BENCH_X + 8, z: at(n) + 1.5 }, 2.2);
+      st.go(outgoing, { x: BENCH_X - 1.3, z: at(n) + 2 }, 1.2);
+    });
     st.t = end;
-    return [incoming, outgoing];
+    return swaps.map(({ incoming, outgoing }) => [incoming, outgoing]);
   }
 }

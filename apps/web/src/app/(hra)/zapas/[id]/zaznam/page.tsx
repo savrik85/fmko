@@ -9,7 +9,7 @@ import { PositionBadge } from "@/components/ui/position-badge";
 import { bestTextOn } from "@/lib/team-color";
 import type { BadgePattern } from "@/components/ui";
 import { clientOnly } from "@/components/client-only";
-import { actionStarts, scenedEvents, shootoutEvents, type ReplayKit } from "@/components/match/replay-3d/scenes";
+import { actionStarts, scenedEvents, shootoutEvents, substitutionsTogether, type ReplayKit } from "@/components/match/replay-3d/scenes";
 
 // 3D záznam se stáhne, až když ho hráč má zapnutý.
 const Replay3D = clientOnly(() => import("@/components/match/replay-3d/Replay3D").then((m) => m.Replay3D));
@@ -388,7 +388,8 @@ export default function MatchReplayPage() {
     if (long3d && scened?.[idx]) {
       animating.current = true;
       setIdx((i) => i + 1);
-      later(sceneMs(next.type === "corner" || next.type === "freekick" || next.type === "foul" ? "setup" : "drama"), endStep);
+      // Hromadné střídání je jedna scéna: její krok si střídání rozdělí, ať se vystřídají titulky všech.
+      later(next.type === "corner" || next.type === "freekick" || next.type === "foul" ? sceneMs("setup") : sceneMs("drama") / substitutionsTogether(match.events, idx), endStep);
       return;
     }
     // Po skoku se nečeká a událost se ukáže hned, ve stejném kroku jako zmizí stojící snímek.
