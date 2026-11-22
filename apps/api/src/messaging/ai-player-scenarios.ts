@@ -173,8 +173,9 @@ export interface PlayerSnapshot {
   /**
    * Co hráč trenérovi v téhle konverzaci naposledy napsal (repetition.ts `loadOwnRecentLines`,
    * nejstarší první). Jde do promptu jako zakázané věty a hlídá se proti nim odpověď.
+   * `sentAt`: kdy je poslal (stejné pořadí); starší než 48 h se hlídají jen u dlouhých vět.
    */
-  ownRecentLines?: string[];
+  ownRecentLines?: string[] & { sentAt?: string[] };
   /**
    * Jak trenérovi doposud psal: tykal, nebo vykal (address-form.ts `loadCoachAddress`, převažující
    * tvar v jeho SMS). Null nebo chybí = z historie se nepozná, rozhodne věk a id (`coachAddressForm`).

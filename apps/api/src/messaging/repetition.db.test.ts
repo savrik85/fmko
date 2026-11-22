@@ -42,6 +42,8 @@ describe("poslední vlastní zprávy hráče", () => {
     expect(OWN_LINES_LIMIT).toBe(8);
     // Prázdná zpráva (jen fotka) místo nezabere.
     expect(lines).toEqual([2, 3, 4, 5, 6, 7, 8, 9].map((n) => `Zpráva hráče číslo ${n}.`));
+    // Kdy je poslal (staré věty se hlídají jen u dlouhých vět, repetition.ts `RECENT_LINES_MS`).
+    expect(lines.sentAt).toEqual([2, 3, 4, 5, 6, 7, 8, 9].map((n) => `2026-09-${String(10 + n).padStart(2, "0")}T18:00:00.000Z`));
   });
 
   it("napříč kabinou a 1:1: nejnovější vlastní zprávy, cizí ne", async () => {

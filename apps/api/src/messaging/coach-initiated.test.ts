@@ -68,7 +68,7 @@ describe("konverzace začatá trenérem a téma incidentu", () => {
     vi.mocked(generateCoachInitiatedReply).mockResolvedValue({ body: "Jo, v pohodě.", conversationComplete: false });
     const d = db(null);
     d.pravidla.unshift({
-      sql: /SELECT body FROM messages WHERE conversation_id = \? AND sender_type = 'player'/,
+      sql: /FROM messages WHERE conversation_id = \? AND sender_type = 'player' AND sender_id/,
       all: [{ body: "Promiňte, trenére, nestihl jsem to." }, { body: "Jste borec, díky." }, { body: "V úterý dorazím." }],
     });
     await zacni(d);

@@ -31,7 +31,7 @@ describe("SMS s daty pro telefon", () => {
     const money = reasonSmsVariants("money", undefined);
     expect(money.length).toBeGreaterThan(1);
     const sent = async (previous: string[]) => {
-      const db = new FalesnaD1([{ sql: /SELECT body FROM messages/, all: [...previous].reverse().map((body) => ({ body })) }]);
+      const db = new FalesnaD1([{ sql: /SELECT body, sent_at FROM messages/, all: [...previous].reverse().map((body) => ({ body })) }]);
       const r = await sendPlayerTemplateSMS(jakoD1(db), "tym-a", { id: "a", firstName: "Vojtěch", lastName: "Sedláček" },
         ["Trenére, FK E.ON Rudolfov mě chtěl a vy jste to zařízl."], { seed: "s", suffix: money, convId: "konv-1" });
       return r.body;
