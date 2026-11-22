@@ -438,9 +438,9 @@ class Stage {
     this.from = this.t;
     this.scripted = new Set(busy);
   }
-  /** Místo trenéra před střídačkou jeho týmu (domácí ji mají na záporné z). Střídačky si týmy o přestávce nemění. */
+  /** Místo trenéra před střídačkou jeho týmu (domácí ji mají na kladné z: z kamery vlevo, na polovině, kde začínají). Střídačky si týmy o přestávce nemění. */
   bench(side: Side): Point {
-    return { x: BENCH_X - 0.7, z: (side === "home" ? -7.5 : 7.5) * (this.mirror ? -1 : 1) };
+    return { x: BENCH_X - 0.7, z: (side === "home" ? 7.5 : -7.5) * (this.mirror ? -1 : 1) };
   }
 
   /**

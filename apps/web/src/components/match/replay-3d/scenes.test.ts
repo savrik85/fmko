@@ -88,12 +88,12 @@ describe("scény 3D záznamu", () => {
     const keeper = replay.figures.findIndex((f) => f.player.name === "H 0"), coach = replay.figures.findIndex((f) => f.coach && f.team === "home");
     const at = (scene: Scene) => { sampleClip(scene.clip, scene.start, frame); return [Math.sign(frame.figures[keeper].z), Math.sign(frame.figures[coach].z)]; };
     // Domácí brankář hájí v prvním poločase bránu na kladné z, ve druhém na záporné; trenér stojí pořád u své střídačky.
-    expect(at(replay.kickoff(0))).toEqual([1, -1]);
-    expect(at(replay.scene(1))).toEqual([1, -1]);
+    expect(at(replay.kickoff(0))).toEqual([1, 1]);
+    expect(at(replay.scene(1))).toEqual([1, 1]);
     const secondHalf = all.findIndex((e) => e.minute > 45);
-    expect(at(replay.kickoff(secondHalf))).toEqual([-1, -1]);
-    expect(at(replay.scene(secondHalf))).toEqual([-1, -1]);
-    expect(at(replay.finale())).toEqual([-1, -1]);
+    expect(at(replay.kickoff(secondHalf))).toEqual([-1, 1]);
+    expect(at(replay.scene(secondHalf))).toEqual([-1, 1]);
+    expect(at(replay.finale())).toEqual([-1, 1]);
   });
 
   it("útok končí ve chvíli, kdy míč doletí k bráně, a gól je v síti", () => {

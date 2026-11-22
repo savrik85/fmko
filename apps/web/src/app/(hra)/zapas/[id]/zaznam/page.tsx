@@ -771,14 +771,14 @@ export default function MatchReplayPage() {
       {/* ═══ CONTROLS ═══ */}
       <div className="flex flex-wrap justify-center items-center gap-3 py-2">
         {/* Přetáčení po akcích a pauza; čára je dělí od rychlosti přehrávání. */}
-        <div className="flex gap-1.5 pr-3 border-r-2 border-black/15">
+        <div className="flex gap-3 pr-3 border-r-2 border-black/15">
           {([
-            ["Předchozí akce", "\u23EE", () => (previousAction !== undefined ? jumpTo(previousAction) : begin()), false],
-            [paused ? "Pokračovat" : "Pauza", paused ? "\u25B6" : "\u23F8", () => setPaused((p) => !p), finished || htPause],
-            ["Další akce", "\u23ED", () => nextAction !== undefined && jumpTo(nextAction), nextAction === undefined],
-          ] as const).map(([title, icon, onClick, disabled]) => (
+            ["Předchozí akce", "\u25C0 Předchozí", () => (previousAction !== undefined ? jumpTo(previousAction) : begin()), false],
+            [paused ? "Pokračovat" : "Pauza", paused ? "\u25B6 Hrát" : "\u275A\u275A Pauza", () => setPaused((p) => !p), finished || htPause],
+            ["Další akce", "Další \u25B6", () => nextAction !== undefined && jumpTo(nextAction), nextAction === undefined],
+          ] as const).map(([title, label, onClick, disabled]) => (
             <button key={title} onClick={onClick} disabled={disabled} title={title}
-              className="w-12 h-12 rounded-xl bg-white text-ink text-lg shadow-md hover:shadow-lg disabled:opacity-40">{icon}</button>
+              className="px-5 py-3 rounded-xl text-base font-heading font-bold uppercase tracking-wide bg-white text-muted hover:text-ink shadow-md transition-all disabled:opacity-40 disabled:hover:text-muted">{label}</button>
           ))}
         </div>
         {!finished && !htPause && (["live", "fast", "instant"] as Speed[]).map((s) => (
