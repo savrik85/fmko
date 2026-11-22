@@ -44,10 +44,10 @@ const FLAT_FAST_MS = { ...FLAT_MS, plain: 600, attack: 1800, drama: 2500, penalt
  * Ve 3D drží krok tak dlouho jako jeho scéna („Rychle“ ji přehrává dvakrát rychleji) a hned po něm přijde další,
  * ať obraz po odehrané akci nestojí; události bez scény proběhnou okamžitě (`plain`). `setup` je rozehrání před
  * šancí nebo kartou (roh, standardka, faul): útok nebo karta na ně navazují bez střihu, proto `setup` a `attack`
- * musí sedět se SETUP a ATTACK ve scenes.ts. Gól končí opakovaným záběrem. `embrace` je podání rukou s objetím
- * (trenéři, kteří spolu vycházejí), `substitution` jedno střídání; hromadné si dělí krok `drama`.
+ * musí sedět se SETUP a ATTACK ve scenes.ts. Gól končí opakovaným záběrem. `substitution` je jedno střídání;
+ * hromadné si dělí krok `drama`.
  */
-const SCENE_MS = { coach: 4000, handshake: 3800, embrace: 5600, substitution: 2600, kickoff: 5000, secondHalf: 5000, plain: 0, setup: 2000, attack: 3500, goal: 6800, chance: 2200, drama: 3500, penalty: 4500 };
+const SCENE_MS = { coach: 4000, handshake: 3800, substitution: 2600, kickoff: 5000, secondHalf: 5000, plain: 0, setup: 2000, attack: 3500, goal: 6800, chance: 2200, drama: 3500, penalty: 4500 };
 /** Po skoku na akci stojí její první snímek, než se rozběhne (ať je vidět, kam se skočilo). */
 const CUE_MS = 700;
 
@@ -227,7 +227,7 @@ export default function MatchReplayPage() {
     const run = (n: number) => {
       if (n < steps.length) {
         setIntro(steps[n]);
-        later(sceneMs(steps[n] !== "handshake" ? "coach" : match.detail.coaches_on_good_terms ? "embrace" : "handshake"), () => run(n + 1));
+        later(sceneMs(steps[n] === "handshake" ? "handshake" : "coach"), () => run(n + 1));
         return;
       }
       setIntro(null);

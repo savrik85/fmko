@@ -43,11 +43,11 @@ export interface ReplayCoach {
   record: { played: number; won: number } | null;
 }
 /**
- * Před výkopem (sekundy): záběr na jednoho trenéra, pak odjezd kamery, při kterém k sobě dojdou, podání rukou
- * a mezi trenéry, kteří spolu vycházejí, objetí. Stejné délky mají kroky záznamu (SCENE_MS: coach,
- * handshake = MEET + HANDSHAKE, embrace = handshake + HUG).
+ * Před výkopem (sekundy): záběr na jednoho trenéra, pak odjezd kamery, při kterém k sobě dojdou, a podání rukou
+ * (trenéři, kteří spolu vycházejí, se v jeho druhé půlce obejmou). Stejné délky mají kroky záznamu (SCENE_MS:
+ * coach, handshake = MEET + HANDSHAKE).
  */
-const COACH_INTRO = 4, MEET = 1.6, HANDSHAKE = 2.2, HUG = 1.8;
+const COACH_INTRO = 4, MEET = 1.6, HANDSHAKE = 2.2;
 /** Podání ruky: jak daleko před sebe ruka dosáhne (`reach`) a o kolik je od středu těla (`aside`), v metrech. */
 const SHAKE = { reach: 0.5, aside: 0.36 };
 /** Sestava, jak ji ukládá detail zápasu. */
@@ -723,14 +723,14 @@ export class Replay {
       st.go(c.figure, c.to, walk);
       if (coaches.length === 2) st.pose(c.figure, "shake", HANDSHAKE, walk);
       if (hug) {
-        // Po podání ruky krok k sobě, na délku paže kolem zad toho druhého.
-        st.go(c.figure, { x: lerp(st.bench("home").x, c.to.x, 0.3), z: Math.sign(c.to.z) * 0.31 }, 0.4, walk + HANDSHAKE);
-        st.pose(c.figure, "hug", HUG, walk + HANDSHAKE);
+        // V půlce podání ruky krok k sobě, na délku paže kolem zad toho druhého.
+        st.go(c.figure, { x: lerp(st.bench("home").x, c.to.x, 0.3), z: Math.sign(c.to.z) * 0.31 }, 0.4, walk + HANDSHAKE / 2);
+        st.pose(c.figure, "hug", HANDSHAKE / 2, walk + HANDSHAKE / 2);
       }
     }
     // Střih mezi záběry na trenéry.
     for (let n = 1; n < coaches.length; n++) st.clip.cuts.push(n * COACH_INTRO);
-    st.t = walk + HANDSHAKE + (hug ? HUG : 0);
+    st.t = walk + HANDSHAKE;
     return this.introScene = { clip: st.finish(), start: 0, split: 0, end: st.t, focus: [], card: null, replay: null, camera };
   }
 
