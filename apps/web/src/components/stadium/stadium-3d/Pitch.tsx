@@ -36,8 +36,8 @@ interface PitchProps {
   /** Stébla trávy u nízkých kamer (jen počítač — na mobilu by stála moc výkonu). */
   grassBlades?: boolean;
   timeOfDay?: TimeOfDay;
-  /** Míč na středovém puntíku; při záznamu zápasu má vlastní míč. */
-  showCenterBall?: boolean;
+  /** Záznam zápasu: bez míče na středu (má vlastní) a se širšími čárami, které jsou z televizní kamery vidět celé. */
+  broadcast?: boolean;
 }
 
 /**
@@ -194,7 +194,7 @@ export function Pitch({
   snowCleared = false,
   grassBlades = false,
   timeOfDay = "day",
-  showCenterBall = true,
+  broadcast = false,
 }: PitchProps) {
   // Vyhřívání roztaví sníh na hrací ploše — okolí, střídačky ani terén ale
   // zasněžené zůstanou, takže je zelený obdélník uprostřed bílého areálu vidět.
@@ -337,7 +337,7 @@ export function Pitch({
       ))}
 
       {/* Čáry hřiště */}
-      <PitchLines hasFull={hasFull} hasCenter={hasCenter} opacity={hasLines ? (condition < 35 ? 0.75 : 0.92) : 0} />
+      <PitchLines hasFull={hasFull} hasCenter={hasCenter} wide={broadcast} opacity={hasLines ? (condition < 35 ? 0.75 : 0.92) : 0} />
 
       {/* Rohové praporky */}
       <CornerFlags />
@@ -351,7 +351,7 @@ export function Pitch({
       {isCleared && <SnowPiles />}
 
       {/* Zápasový fotbalový míč na středu */}
-      {hasCenter && showCenterBall && <MatchBall />}
+      {hasCenter && !broadcast && <MatchBall />}
 
       {/* Branky */}
       <Goal
@@ -507,10 +507,11 @@ function MatchBall() {
   );
 }
 
-function PitchLines({ hasFull, hasCenter, opacity }: { hasFull: boolean; hasCenter: boolean; opacity: number }) {
+function PitchLines({ hasFull, hasCenter, wide, opacity }: { hasFull: boolean; hasCenter: boolean; wide: boolean; opacity: number }) {
   const lineY = LINE_Y;
   const lineColor = "#fff";
-  const lineWidth = hasFull ? 0.25 : 0.15;
+  // Z nízké kamery za lajnou je čára podél hřiště tenčí než bod obrazu a trhá se, proto je při záznamu širší.
+  const lineWidth = wide ? 0.55 : hasFull ? 0.25 : 0.15;
 
   return (
     <group>

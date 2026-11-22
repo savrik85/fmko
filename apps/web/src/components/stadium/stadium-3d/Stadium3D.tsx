@@ -589,7 +589,7 @@ export function Stadium3D({
             snowCleared={snowClearingOrdered}
             grassBlades={!isMobile}
             timeOfDay={timeOfDay}
-            showCenterBall={!replay}
+            broadcast={!!replay}
           />
 
           {/* Tribuny okolo hřiště (v tréninkový den prázdné bez diváků) */}
