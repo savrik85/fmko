@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Miniflare } from "miniflare";
-import { OWN_LINES_LIMIT, loadOwnRecentLines } from "./repetition";
+import { OWN_LINES_LIMIT, loadOwnLinesAcross, loadOwnRecentLines } from "./repetition";
 
 let miniflare: Miniflare;
 let db: D1Database;
@@ -23,6 +23,11 @@ beforeAll(async () => {
     db.prepare("INSERT INTO messages VALUES ('coach', 'c1', 'user', 'u1', 'Trenér píše.', '2026-09-25T18:00:00Z')"),
     db.prepare("INSERT INTO messages VALUES ('empty', 'c1', 'player', 'p1', '', '2026-09-26T18:00:00Z')"),
     db.prepare("INSERT INTO messages VALUES ('other', 'c2', 'player', 'p2', 'Cizí hráč.', '2026-09-27T18:00:00Z')"),
+    // Kabina týmu: skupinový chat, píšou do něj všichni.
+    db.prepare("INSERT INTO conversations VALUES ('squad', 'team-a', 'squad', NULL, '2026-09-01T10:00:00Z')"),
+    db.prepare("INSERT INTO messages VALUES ('sq-1', 'squad', 'player', 'p1', 'Rozsekáme je!', '2026-09-28T18:00:00Z')"),
+    db.prepare("INSERT INTO messages VALUES ('sq-2', 'squad', 'player', 'p2', 'Já taky.', '2026-09-28T18:01:00Z')"),
+    db.prepare("INSERT INTO messages VALUES ('sq-3', 'squad', 'player', 'p1', 'Pivo platí trenér!', '2026-09-29T18:00:00Z')"),
   ];
   await db.batch(stmts);
 });
@@ -37,6 +42,13 @@ describe("poslední vlastní zprávy hráče", () => {
     expect(OWN_LINES_LIMIT).toBe(8);
     // Prázdná zpráva (jen fotka) místo nezabere.
     expect(lines).toEqual([2, 3, 4, 5, 6, 7, 8, 9].map((n) => `Zpráva hráče číslo ${n}.`));
+  });
+
+  it("napříč kabinou a 1:1: nejnovější vlastní zprávy, cizí ne", async () => {
+    const lines = await loadOwnLinesAcross(db, { playerId: "p1", convIds: ["squad"], teamId: "team-a" });
+    expect(lines).toEqual([4, 5, 6, 7, 8, 9].map((n) => `Zpráva hráče číslo ${n}.`).concat(["Rozsekáme je!", "Pivo platí trenér!"]));
+    expect(await loadOwnLinesAcross(db, { playerId: "p2", convIds: ["squad"] })).toEqual(["Já taky."]);
+    expect(await loadOwnLinesAcross(db, { playerId: "p3", convIds: [] })).toEqual([]);
   });
 
   it("bez id konverzace ji dohledá podle týmu a hráče", async () => {

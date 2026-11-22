@@ -253,3 +253,28 @@ export async function loadOwnRecentLines(
     .catch((e) => { logger.warn({ module: M }, `poslední zprávy hráče ${o.playerId}`, e); return null; });
   return (rows?.results ?? []).map((r) => (r.body ?? "").trim()).filter(Boolean).reverse();
 }
+
+/**
+ * Posledních `limit` zpráv hráče napříč konverzacemi, nejstarší první: kabina (skupinový chat
+ * `convIds`) i jeho konverzace 1:1 s trenérem (dohledá se podle `teamId`). V kabině hráč psal
+ * pořád stejné hlášky, protože hlídání opakování tam nebylo (balík 1 ho měl jen v 1:1).
+ */
+export async function loadOwnLinesAcross(
+  db: D1Database, o: { playerId: string; convIds: readonly string[]; teamId?: string; limit?: number },
+): Promise<string[]> {
+  const privateConv = o.teamId
+    ? (await db.prepare(
+      "SELECT id FROM conversations WHERE team_id = ? AND type = 'player' AND participant_id = ? ORDER BY created_at, rowid LIMIT 1",
+    ).bind(o.teamId, o.playerId).first<{ id: string }>()
+      .catch((e) => { logger.warn({ module: M }, `konverzace hráče ${o.playerId}`, e); return null; }))?.id
+    : undefined;
+  const convIds = [...new Set([...o.convIds, ...(privateConv ? [privateConv] : [])])];
+  if (convIds.length === 0) return [];
+  const rows = await db.prepare(
+    `SELECT body FROM messages WHERE conversation_id IN (${convIds.map(() => "?").join(", ")})
+        AND sender_type = 'player' AND sender_id = ? AND TRIM(COALESCE(body, '')) != ''
+      ORDER BY julianday(sent_at) DESC, rowid DESC LIMIT ?`,
+  ).bind(...convIds, o.playerId, o.limit ?? OWN_LINES_LIMIT).all<{ body: string | null }>()
+    .catch((e) => { logger.warn({ module: M }, `poslední zprávy hráče ${o.playerId} napříč konverzacemi`, e); return null; });
+  return (rows?.results ?? []).map((r) => (r.body ?? "").trim()).filter(Boolean).reverse();
+}

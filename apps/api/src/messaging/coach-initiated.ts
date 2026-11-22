@@ -29,7 +29,7 @@ import {
 } from "./ai-player-spawn";
 import type { OptionalPushKeys } from "../community/phone-push";
 import { loadChatMemory } from "./player-memory";
-import { loadOwnRecentLines } from "./repetition";
+import { loadOwnLinesAcross, loadOwnRecentLines } from "./repetition";
 import { addressedPlayers, applySpeech, persuadeAbsentees, pickResponders } from "./squad-talk";
 import { handleSquadBet } from "./coach-commitments";
 import { refundCoachSms } from "./phone-credit";
@@ -367,6 +367,8 @@ async function replyInSquadGroupInner(
         // Před celou kabinou nikdo nic neprozradí: jen veřejné znalosti (spec 10b).
         mluvci.znalostiIncidentu = await nactiZnalostiHrace(db, { teamId: opts.teamId, playerId: mluvci.id });
         mluvci.lastOwnMessageAt = await loadLastOwnMessageAt(db, opts.convId, mluvci.id);
+        // Co už napsal v kabině i trenérovi 1:1: ať neopakuje pořád stejné hlášky (repetition.ts).
+        mluvci.ownRecentLines = await loadOwnLinesAcross(db, { playerId: mluvci.id, convIds: [opts.convId], teamId: opts.teamId });
 
         /*
          * Poslední výměna v kabině — CHRONOLOGICKY a včetně toho, co psal trenér
