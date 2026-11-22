@@ -390,12 +390,17 @@ export async function markRewardEarned(db: D1Database, r: Pick<RewardRow, "id" |
     { id: r.player_id, firstName: r.first_name, lastName: r.last_name, nickname: r.nickname, avatar: r.avatar });
   const what = r.kind === "weight_target" ? `${r.first_name} splnil dohodu o hubnutí (${kgText(d.lost ?? d.kg ?? 0)} dole)`
     : d.incidentId ? `${r.first_name} zjistil, co jsi chtěl, a odměnu si zasloužil` : `${r.first_name}: slíbil jsi mu odměnu`;
+  // Pod zprávou hráče: jeho „shodil jsem…“ píše model a uloží se až po začátku běhu (E2E 22. 11.).
+  const last = await db.prepare("SELECT MAX(julianday(sent_at)) AS j FROM messages WHERE conversation_id = ?").bind(convId)
+    .first<{ j: number | null }>()
+    .catch((e) => { logger.warn({ module: M }, `poslední zpráva před tlačítkem odměny ${r.id}`, e); return null; });
+  const lastMs = last?.j != null ? Math.round((last.j - 2440587.5) * DAY_MS) : 0;
   await db.prepare(
     `INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, metadata, sent_at, read)
      VALUES (?, ?, 'system', 'Systém', ?, ?, ?, 1)`,
   ).bind(buttonMessageId, convId,
     `🎁 ${what}. Odměna: ${rewardWhat(d)} (${rewardPrice(d).toLocaleString("cs-CZ")} Kč), vyplatit ji musíš sám.`,
     JSON.stringify({ type: "coach_commitment", commitmentId: r.id, kind: r.kind, done: false }),
-    new Date(now.getTime() + 1000).toISOString()).run();
+    new Date(Math.max(now.getTime(), lastMs) + 1000).toISOString()).run();
   return buttonMessageId;
 }
