@@ -14,8 +14,8 @@ vi.mock("./ai-player-chat", async (importOriginal) => ({
 const askModelJson = model.askModelJson;
 import { recordCommitment, settleCoachCommitments } from "./coach-commitments";
 import {
-  APOLOGY_REFUSED_KABINA, APOLOGY_SINCERE_KABINA, LAPS_REFUSED_RELATION, LAPS_REFUSED_SMS, LAST_CHANCE_REMINDERS, RULE_BROKEN_SMS,
-  TRAINING_RULE_ATTENDANCE_BONUS, applyLapsAtTraining, handleSquadRule, loadClubRules, respondToCoachRequest, trainingRuleBonus,
+  APOLOGY_REFUSED_KABINA, APOLOGY_SINCERE_KABINA, LAPS_CONDITION, LAPS_REFUSED_RELATION, LAPS_REFUSED_SMS, LAST_CHANCE_REMINDERS, RULE_BROKEN_SMS,
+  TRAINING_RULE_ATTENDANCE_BONUS, applyLapsAtTraining, applyPendingLapsFatigue, handleSquadRule, loadClubRules, respondToCoachRequest, trainingRuleBonus,
 } from "./coach-rules";
 
 let miniflare: Miniflare;
@@ -154,6 +154,30 @@ describe("trestná kolečka", () => {
     expect(await status(id)).toBe("kept");
     expect(await life("p2")).toMatchObject({ condition: 85, morale: 49 });
     expect((await db.prepare("SELECT description FROM condition_log WHERE player_id = 'p2'").first<{ description: string }>())?.description).toBe("Trestná kolečka");
+  });
+
+  it("v denním ticku až po regeneraci: Marek 92 → 100 → 95, ne 92 → 87 → 100 (E2E 22. 11.)", async () => {
+    await db.prepare("UPDATE players SET life_context = json_set(life_context, '$.condition', 92) WHERE id = 'p2'").run();
+    const id = await recordCommitment(db, {
+      clubTeamId: "club", playerId: "p2", convId: "c2", coachMessage: "Budeš běhat kolečka", detected: { kind: "laps_penalty", target: "self" },
+      playerFirstName: "Patrik", now: T0,
+    });
+    await respondToCoachRequest(db, { commitmentId: id, playerId: "p2", accepted: true });
+    // Trénink: kolečka se zapíšou, kondice zatím ne.
+    await applyLapsAtTraining(db, { clubTeamId: "club", teamId: "club", gameDay: "2026-11-22", attended: new Map([["p2", true]]), deferCondition: true });
+    expect((await life("p2")).condition).toBe(92);
+    // Denní regenerace (daily-tick) vytáhne kondici na strop.
+    await db.prepare("UPDATE players SET life_context = json_set(life_context, '$.condition', 100)").run();
+    expect(await applyPendingLapsFatigue(db, "2026-11-22")).toBe(1);
+    expect((await life("p2")).condition).toBe(100 - LAPS_CONDITION);
+    expect((await db.prepare("SELECT old_value, new_value, description FROM condition_log WHERE player_id = 'p2'").first()))
+      .toEqual({ old_value: 100, new_value: 95, description: "Trestná kolečka" });
+    // Druhý běh (pokračování ticku) nic neodečte.
+    expect(await applyPendingLapsFatigue(db, "2026-11-22")).toBe(0);
+    expect((await life("p2")).condition).toBe(95);
+    // Ranní SMS o odběhaných kolečkách funguje dál.
+    await settleCoachCommitments(db, new Date("2026-11-22T10:00:00Z"));
+    expect(await status(id)).toBe("kept");
   });
 
   it("„kdo se omluví, běhá“: po zápase dostane trest každý omluvený zvlášť", async () => {

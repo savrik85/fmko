@@ -852,9 +852,11 @@ export async function executeDailyTick(
         }
 
         // Trestná kolečka z chatu: kdo je má a přišel, odběhá je, nebo odmítne (messaging/coach-rules.ts).
+        // Kondice za kolečka až po denní regeneraci (applyPendingLapsFatigue níž), jinak ji smaže.
         await applyLapsAtTraining(env.DB, {
           clubTeamId: clubId, teamId, gameDay: effectiveDate.toISOString(),
           attended: new Map(result.attendance.map((a) => [playersResult.results[a.playerIndex].id as string, a.attended])),
+          deferCondition: true,
         }).catch((e) => logger.warn({ module: "daily-tick", teamId }, "trestná kolečka", e));
 
         // Sliby docházky z SMS: splněné a porušené se zapíšou, omluvu a vztah vyřídí
@@ -1148,6 +1150,12 @@ export async function executeDailyTick(
     `UPDATE players SET life_context = json_set(life_context, '$.condition', ${recoveryNewCondSql})`,
   ).run();
   events.push({ type: "recovery", description: "Regenerace kondice (dle staminy a věku)" });
+  // Trestná kolečka z dnešního tréninku: −5 kondice až po regeneraci, ať má trest dopad.
+  {
+    const { applyPendingLapsFatigue } = await import("../messaging/coach-rules");
+    await applyPendingLapsFatigue(env.DB, effectiveDate.toISOString())
+      .catch((e) => logger.warn({ module: "daily-tick" }, "kondice za trestná kolečka", e));
+  }
 
   // Návrat po zranění: hráč, který byl delší dobu mimo, není rozehraný. Až do dneška
   // regenerace běžela i zraněným, takže se vraceli se 100 % kondice. Teď dostane kondici
