@@ -325,7 +325,7 @@ class Simulation {
         targets.forEach((q, j) => {
           if (!q || j === i || (idle[j] && j < i)) return;
           const d = dist(p, q);
-          const room = SPACING + (this.actors[j].pose === 1 ? LYING : 0);
+          const room = SPACING + (this.lying(this.actors[j]) ? LYING : 0);
           if (d >= room) return;
           const push = (room - d) / (idle[j] ? 2 : 1);
           const nx = d < 0.01 ? Math.cos(i) : (p.x - q.x) / d, nz = d < 0.01 ? Math.sin(i) : (p.z - q.z) / d;
@@ -364,7 +364,7 @@ class Simulation {
     for (const b of avoid) {
       if (standing && Math.hypot(b.vx, b.vz) > 0.5 && dist(a, b) > CLOSE) continue;
       // Kde budou oba za chvíli; kdo je už teď těsně u druhého, ustoupí přímo od něj.
-      const lying = b.pose === 1 ? LYING : 0;
+      const lying = this.lying(b) ? LYING : 0;
       const now = Math.max(0.05, dist(a, b) - lying);
       if (now < CLOSE) {
         wx += ((a.x - b.x) / now) * (CLOSE - now) * 20;
@@ -471,9 +471,11 @@ class Simulation {
       u = side === this.possession ? Math.min(base.u * 0.85, 0.44) : 0.1 + base.u * 0.45;
       v = base.v;
     } else if (L.kind === "penalty") {
-      const back = (19.5 + 3.5 * hash01(seed * 2.3)) / PITCH.depth;
-      u = side === L.attacker ? 1 - back : back;
-      v = -0.75 + 1.5 * hash01(seed * 3.7);
+      // Za vápnem v oblouku kolem penaltového bodu, oba týmy promíchaně.
+      const gz = attackSign(L.attacker, this.half) * HALF_L;
+      const r = 19.5 + 3.5 * hash01(seed * 2.3);
+      const angle = -1.1 + 2.2 * hash01(seed * 3.7);
+      return { x: r * Math.sin(angle), z: gz - Math.sign(gz) * r * Math.cos(angle) };
     } else if (L.kind === "box") {
       // Roh a centr: útočníci a stopeři ve vápně, krajní obránci vzadu; bránící ve vlastním vápně, útočník nahoře.
       const attacking = side === L.attacker;
@@ -540,6 +542,8 @@ class Simulation {
     a.poseFrom = this.k + Math.round(Math.max(0, delay) * REPLAY_HZ);
     a.poseUntil = a.poseFrom + Math.round(seconds * REPLAY_HZ);
   }
+  /** Leží na zemi (faulovaný, zraněný, brankář po skoku). */
+  private lying(a: Actor) { return a.pose >= 1 && a.pose <= 3 && this.k >= a.poseFrom; }
 
   /** Titulky jdou do fronty, ať se dají přečíst; titulek o hráči počká i s děním, ať se ukáže s ním; gól hned. */
   private caption(text: string, banner?: Banner, figures: (number | null)[] = []) {
