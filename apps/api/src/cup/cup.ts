@@ -679,6 +679,9 @@ async function simulateCupTie(
   }
   const homePre = homeLineup.map((p) => ({ ...p }));
   const awayPre = awayLineup.map((p) => ({ ...p }));
+  // Lavička před zápasem: engine z pole `subs` vyndává hráče, kteří šli na hřiště.
+  const homeBenchPre = homeSubs.map((p) => ({ ...p }));
+  const awayBenchPre = awaySubs.map((p) => ({ ...p }));
 
   // Pohár dřív jel natvrdo na "balanced" a nulovou sehranost a vztahy v něm neexistovaly
   // vůbec — z pohledu chemie i taktiky byl neviditelný. Teď se chová jako ligový zápas.
@@ -889,8 +892,8 @@ async function simulateCupTie(
 
   // ── Detail zápasu (průběh, sestavy, ratingy, počasí) + domácí tržby — parita s ligovým zápasem ──
   try {
-    const homeLineupData = buildCupLineupData(homePre, homeSubs, homeBuild.idMap, homeFormation, homeTactic, homeHardness);
-    const awayLineupData = buildCupLineupData(awayPre, awaySubs, awayBuild.idMap, awayFormation, awayTactic, awayHardness);
+    const homeLineupData = buildCupLineupData(homePre, homeBenchPre, homeBuild.idMap, homeFormation, homeTactic, homeHardness);
+    const awayLineupData = buildCupLineupData(awayPre, awayBenchPre, awayBuild.idMap, awayFormation, awayTactic, awayHardness);
     const ctx = ctxDejiste;
 
     // Komentář (dějiště = okres domácího reálného týmu; velkoklub bez okresu)
