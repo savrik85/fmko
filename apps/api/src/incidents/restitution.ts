@@ -30,6 +30,7 @@ import {
   dueWords, recordAmendsTask, repairableLosses, replacedLosses, returnableLosses, returnLosses, type AmendsTask,
 } from "./amends";
 import type { Ztrata } from "./typy";
+import { incidentNamedInText } from "./tema";
 import { stopaNaHrace } from "./vysetrovani";
 import type { AmendsDecision } from "./amends-decision";
 
@@ -122,28 +123,48 @@ type AmendsPlan = "return_now" | "pay_now" | AmendsTask;
  * je co opravit a trenér o opravě píše). Uzavřený incident (trest už padl, lup ale u hráče
  * zůstal nebo je pořád rozbito): slíbí, že to do dvou dní vrátí nebo opraví (amends.ts).
  */
-/** Incident hráče, u kterého jde škoda napravit: nejdřív otevřený, jinak uzavřený s lupem u něj. */
+interface CandidateRow extends IncidentRow {
+  recovered: number | null; resolution: string | null; resolved_on: string | null;
+}
+
+/**
+ * Incident hráče, u kterého jde škoda napravit. Přednost má ten, o kterém zpráva mluví (druh,
+ * místo, věc: `incidentNamedInText`), pak téma rozhovoru (`topicIncidentId`), a teprve když
+ * zpráva nic konkrétního nejmenuje, nejnovější: otevřený, jinak uzavřený s lupem u něj.
+ * Sedlecký (E2E 22. 11.) měl tombolu i vloupání do skladu uzavřené týž den; trenér chtěl
+ * peníze z tomboly a hra zapsala vrácení tréninkových pomůcek. Zpráva jmenuje incident, který
+ * napravit nejde (vráceno, nikdo neví, že to byl on): null, ne jiný incident.
+ */
 async function amendableIncident(
-  db: D1Database, o: { teamId: string; playerId: string; gameDate: string },
+  db: D1Database, o: { teamId: string; playerId: string; gameDate: string; text?: string; topicIncidentId?: string | null },
 ): Promise<{ inc: IncidentRow; open: boolean } | null> {
-  const open = await db.prepare(
-    `SELECT id, kind, category, status, loss, culprit_revealed FROM club_incidents
-      WHERE team_id = ? AND culprit_type = 'hrac' AND culprit_player_id = ? AND status IN ('otevreny', 'policie')
-        AND category IN ('kradez', 'poskozeni')
-      ORDER BY game_date DESC LIMIT 1`,
-  ).bind(o.teamId, o.playerId).first<IncidentRow>()
-    .catch((e) => { logger.warn({ module: M }, `incident pachatele ${o.playerId}`, e); return null; });
-  if (open) return { inc: open, open: true };
-  const closed = await db.prepare(
-    `SELECT id, kind, category, status, loss, culprit_revealed FROM club_incidents
-      WHERE team_id = ? AND culprit_type = 'hrac' AND culprit_player_id = ? AND status = 'uzavreny' AND culprit_revealed = 1
-        AND category IN ('kradez', 'poskozeni') AND COALESCE(recovered, 0) = 0
-        AND COALESCE(resolution, '') NOT IN (${SETTLED_RESOLUTIONS.map(() => "?").join(", ")})
-        AND julianday(substr(resolved_on, 1, 10)) >= julianday(substr(?, 1, 10)) - ?
-      ORDER BY resolved_on DESC LIMIT 1`,
-  ).bind(o.teamId, o.playerId, ...SETTLED_RESOLUTIONS, o.gameDate, CLOSED_AMENDS_DAYS).first<IncidentRow>()
-    .catch((e) => { logger.warn({ module: M }, `uzavřený incident pachatele ${o.playerId}`, e); return null; });
-  return closed ? { inc: closed, open: false } : null;
+  const rows = await db.prepare(
+    `SELECT id, kind, category, status, loss, culprit_revealed, recovered, resolution, resolved_on FROM club_incidents
+      WHERE team_id = ? AND culprit_type = 'hrac' AND culprit_player_id = ? AND category IN ('kradez', 'poskozeni')
+        AND (status IN ('otevreny', 'policie')
+             OR (status = 'uzavreny' AND julianday(substr(resolved_on, 1, 10)) >= julianday(substr(?, 1, 10)) - ?))
+      ORDER BY game_date DESC LIMIT 20`,
+  ).bind(o.teamId, o.playerId, o.gameDate, CLOSED_AMENDS_DAYS).all<CandidateRow>()
+    .catch((e) => { logger.warn({ module: M }, `incidenty pachatele ${o.playerId}`, e); return null; });
+  const all = rows?.results ?? [];
+  const isOpen = (r: CandidateRow) => r.status === "otevreny" || r.status === "policie";
+  const open = all.filter(isOpen);
+  const closed = all
+    .filter((r) => r.status === "uzavreny" && r.culprit_revealed === 1 && (r.recovered ?? 0) === 0 && !SETTLED_RESOLUTIONS.includes(r.resolution ?? ""))
+    .sort((a, b) => (b.resolved_on ?? "").localeCompare(a.resolved_on ?? ""));
+  const amendable = [...open, ...closed];
+  const pick = (r: CandidateRow | undefined) => (r ? { inc: r, open: isOpen(r) } : null);
+  if (o.text) {
+    const ordered = [...amendable, ...all.filter((r) => !amendable.includes(r))];
+    const named = incidentNamedInText(o.text, ordered.map((r) => ({ id: r.id, kind: r.kind, ztraty: nactiZtraty(r.loss) })));
+    if (named) {
+      const found = amendable.find((r) => r.id === named);
+      if (!found) logger.info({ module: M }, `zpráva pro ${o.playerId} mluví o ${named}, ten napravit nejde`);
+      return pick(found);
+    }
+  }
+  const topic = o.topicIncidentId ? amendable.find((r) => r.id === o.topicIncidentId) : undefined;
+  return pick(topic ?? amendable[0]);
 }
 
 /** Je co vrátit: lup klub nemá zpátky, nebo si koupil náhradu (pak vrácené prodá, amends.ts). */
@@ -229,7 +250,11 @@ function agreesToAmends(incidentId: string, playerId: string, chance: number): b
 
 export async function tryRestitution(
   db: D1Database,
-  o: { teamId: string; playerId: string; text: string; gameDate: string; now?: Date },
+  o: {
+    teamId: string; playerId: string; text: string; gameDate: string; now?: Date;
+    /** Incident, o kterém se dnes v rozhovoru mluví: platí, když zpráva sama nic nejmenuje („zaplatíš to, nebo ne?“). */
+    topicIncidentId?: string | null;
+  },
 ): Promise<RestitutionOutcome | null> {
   const r = await decideRestitution(db, o);
   if (r) await saveDecision(db, o, r.outcome, r.asked, r.revealed);
@@ -238,7 +263,7 @@ export async function tryRestitution(
 
 async function decideRestitution(
   db: D1Database,
-  o: { teamId: string; playerId: string; text: string; gameDate: string },
+  o: { teamId: string; playerId: string; text: string; gameDate: string; topicIncidentId?: string | null },
 ): Promise<{ outcome: RestitutionOutcome; asked: string; revealed: boolean } | null> {
   const request = amendsRequestOf(o.text);
   if (request.size === 0) return null;
@@ -393,14 +418,14 @@ export function promisesAmends(reply: string): boolean {
  */
 export async function recordPromisedAmends(
   db: D1Database,
-  o: { teamId: string; playerId: string; reply: string; now?: Date },
+  o: { teamId: string; playerId: string; reply: string; now?: Date; topicIncidentId?: string | null },
 ): Promise<{ task: AmendsTask; dueOn: string; willFail: boolean } | null> {
   const promised = promisedAmendsOf(o.reply);
   if (promised.size === 0) return null;
   const team = await db.prepare("SELECT game_date FROM teams WHERE id = ?").bind(o.teamId).first<{ game_date: string | null }>()
     .catch((e) => { logger.warn({ module: M }, `herní den pro slib nápravy ${o.teamId}`, e); return null; });
   if (!team?.game_date) return null;
-  const found = await amendableIncident(db, { teamId: o.teamId, playerId: o.playerId, gameDate: team.game_date });
+  const found = await amendableIncident(db, { teamId: o.teamId, playerId: o.playerId, gameDate: team.game_date, text: o.reply, topicIncidentId: o.topicIncidentId });
   if (!found || found.inc.culprit_revealed !== 1) return null;
   const { inc } = found;
   const losses = nactiZtraty(inc.loss);
