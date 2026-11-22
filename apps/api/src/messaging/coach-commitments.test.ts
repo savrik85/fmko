@@ -23,6 +23,45 @@ describe("předběžné síto", () => {
   it("obyčejný pokec model nevolá", () => {
     for (const t of ["Ahoj, jak se máš?", "Super výkon!", "Nevíš něco o té světlici?", "ok"]) expect(COMMITMENT_HINT_RE.test(t)).toBe(false);
   });
+
+  // Lokální E2E 22. 11.: každé zbytečné volání modelu zdrželo odpověď hráče a se slabým modelem
+  // ji poslalo až na ráno. Síto chytalo slova uvnitř jiných slov a běžná slova bez slibu.
+  it("slovo uvnitř jiného slova ani běžná slova bez slibu model nevolají (E2E 22. 11.)", () => {
+    for (const t of [
+      "Domluv se s tátou a dej mi vědět.",
+      "Budeš v neděli k dispozici?",
+      "To pořád platí?",
+      "Proč s námi nepojedeš?",
+      "Kubo, ve středu jsi chyběl. Byl jsi ožralej, ne?",
+      "Jak to vidíš s obranou?",
+      "Filipe, proč zítra nehraješ?",
+      "Honzo, přišla za tebe nabídka z Lannovky, 450 tisíc. Nechci tě pustit, jsi náš nejlepší útočník. Co ty na to?",
+      "Honzo, ráno ti to odpustím, ale vrátíš ty peníze z tomboly?",
+      "Tvoje omluvenka mě fakt nezajímá.",
+      "Ještě k úternímu tréninku: začínáme v půl šesté a bude hodně běhání.",
+      "V úterý trénink v půl šesté. Budeme hodně běhat, tak si vemte pořádný boty.",
+      "Marceli, vím, že jsi vybral ten sklad. Ty pomůcky zaplatíš, zloději.",
+      "Kluci, dneska jsme to zase nedali. Co se stalo? Vždyť jsme dali pět gólů.",
+    ]) expect(COMMITMENT_HINT_RE.test(t), t).toBe(false);
+  });
+
+  it("skutečné sliby z E2E a z produ pustí dál", () => {
+    for (const t of [
+      "Bohouši, dám ti 1000 Kč, když do dvou týdnů zhubneš.",
+      "Koupím ti flašku rumu, když zjistíš, kdo to byl.",
+      "Kubo, za tu poslední omluvenku poběžíš zítra na tréninku kolečka.",
+      "Honzo, máš poslední šanci. Jedna blbost a letíš.",
+      "Kubo, to jak ses choval v kabině po posledním zápase, bylo mimo. Omluvíš se celé kabině.",
+      "V neděli půjdeš do útoku.",
+      "Máš u mě pevné místo.",
+      "Zítra nastoupíš od začátku.",
+      "Dostaneš pokutu 500 Kč.",
+      "Za hattrick ti dám pětistovku.",
+      "Když vyhrajeme, je to na mě.",
+      "Když neshodíš 5 kilo, platíš pivo všem.",
+      "Nebudu ti bránit, když přijde nabídka.",
+    ]) expect(COMMITMENT_HINT_RE.test(t), t).toBe(true);
+  });
 });
 
 describe("odpověď modelu", () => {

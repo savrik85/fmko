@@ -670,8 +670,12 @@ async function callModel(
  * Krátký dotaz na model s odpovědí v JSON (rozpoznání slibu v SMS apod.). Teplota 0,
  * ať stejná zpráva dopadne pokaždé stejně. Null = model nevrátil nic použitelného.
  */
-export async function askModelJson<T>(env: ChatEnv, prompt: string, maxTokens = 120): Promise<T | null> {
-  const raw = await callModel(env, prompt, { json: true, maxTokens, temperature: 0 });
+export async function askModelJson<T>(
+  env: ChatEnv, prompt: string, maxTokens = 120,
+  /** `deadline`: rozpočet práce na pozadí (lib/time-budget.ts), jinak strop jednoho volání. */
+  opts: { deadline?: number } = {},
+): Promise<T | null> {
+  const raw = await callModel(env, prompt, { json: true, maxTokens, temperature: 0, deadline: opts.deadline });
   return tryParseJson<T>(raw);
 }
 

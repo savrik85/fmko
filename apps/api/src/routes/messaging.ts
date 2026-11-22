@@ -794,12 +794,17 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
 
   // Slib napsaný vlastními slovy („zítra hraješ“, „tady máš prémii“, „pojď na pivo“): hra ho
   // zapíše a pak hlídá (messaging/coach-commitments.ts). Hotové odpovědi (optionId) slib nedávají.
-  // Odpověď hráče čeká, až rozpoznání doběhne: o slibu a pozvání má vědět už v první odpovědi.
+  // Rozpoznání běží souběžně s odpovědí hráče a s vlastním rozpočtem. Odpověď na něj čeká jen
+  // chvilku (COMMITMENT_REPLY_WAIT_MS): s rychlým modelem o slibu ví hned, s pomalým od další zprávy.
   let commitmentReady: Promise<unknown> = Promise.resolve(null);
   if (conv?.type === "player" && conv.participant_id && !body.optionId && hasText) {
-    const { handleCoachMessageForCommitment } = await import("../messaging/coach-commitments");
-    commitmentReady = handleCoachMessageForCommitment(c.env.DB, c.env, { teamId, convId, playerId: conv.participant_id, text: body.body.trim() });
-    c.executionCtx.waitUntil(commitmentReady.then(() => undefined));
+    const { COMMITMENT_REPLY_WAIT_MS, handleCoachMessageForCommitment } = await import("../messaging/coach-commitments");
+    const { beforeDeadline } = await import("../lib/time-budget");
+    const detection = handleCoachMessageForCommitment(
+      c.env.DB, c.env, { teamId, convId, playerId: conv.participant_id, text: body.body.trim() }, { deadline: deadlineIn() },
+    );
+    c.executionCtx.waitUntil(detection.then(() => undefined));
+    commitmentReady = beforeDeadline(detection, Date.now() + COMMITMENT_REPLY_WAIT_MS, () => null);
     // Co trenér napsal o jiném hráči, se může roznést (hearsay/, Kabina má uši). Odpověď hráče na to nečeká.
     const { detectCoachMessage } = await import("../hearsay/coach-message");
     c.executionCtx.waitUntil(

@@ -140,25 +140,40 @@ const MONEY_EFFECT_COOLDOWN_DAYS = 14;
 /** Pozvání od trenéra má dopad nejvýš jednou za tolik dní. */
 const INVITE_EFFECT_COOLDOWN_DAYS = 7;
 
+/** Začátek a konec slova i s diakritikou (`\b` v JS zná jen ASCII: „odpustím“ by prošlo jako „pustím“). */
+const WB = "(?<![\\p{L}\\p{N}])";
+const WE = "(?![\\p{L}\\p{N}])";
+
 /**
  * Předběžné síto: model se volá jen u zpráv, kde slib může být. Projde i „platím“ nebo
  * „hraješ dobře“, rozhodne až model; chybí-li tu slovo, slib se nerozpozná vůbec.
+ *
+ * Každý zbytečný zásah stojí volání modelu a zdrží odpověď hráče. Lokální E2E (22. 11.) chytalo
+ * „Domluv“ (omluv), „k dispozici“ (pozic), „platí?“, „nepojedeš“, „odpustím“ (pustím), „ve středu“,
+ * „obranou“ i „450 tisíc“ v otázce na nabídku. Proto hranice slov a slibové tvary: pozice jen se
+ * slovesem slibu („zkusím tě“, „půjdeš do“), peníze jen s „Kč“ nebo „dám ti“, běhání jen jako trest.
  */
 export const COMMITMENT_HINT_RE = new RegExp([
-  "z[aá]klad", "sestav", "hraje[sš]", "nastoup", "jede[sš]", "od za[cč][aá]tku",
-  "pozic", "k[rř][ií]d", "[uú]to[kč]", "hrot", "obran", "stoper", "\\bbek", "z[aá]lo[hž]", "st[rř]ed", "br[aá]n", "g[oó]lman",
-  "pust[ií]m", "nebudu ti br[aá]nit", "pr[eé]mi", "odm[eě]n", "\\bplat", "p[rř]id[aá]m", "k[cč]\\b", "korun", "tis[ií]c", "\\d{3,}",
-  "slibu", "zkus[ií]m t", "postav[ií]m t", "d[aá]m t[eě]",
-  // Pozvání a sázky.
-  "\\bpiv", "hospod", "run[dt]", "\\bbas[auy]?\\b", "pan[aá]k", "zajd", "stav se", "zastav se", "sejd", "sej[ií]t", "prober", "probrat", "pokec", "kancel",
-  "g[oó]l", "hattrick", "hatrik", "vyhr", "v[yý]hr", "nul[auy]\\b", "[cč]ist[eé] kont", "asist", "p[rř]ihr",
+  // Sestava a pozice.
+  `z[aá]klad(?:u|n\\p{L}*|${WE})`, "sestav", `${WB}hraje[sš]${WE}`, "nastoup", "od za[cč][aá]tku", "pevn[eé] m[ií]sto",
+  `${WB}(?:zkus[ií]m|postav[ií]m|d[aá]m|po[sš]lu|hod[ií]m)\\s+t[eě]${WE}`, `${WB}p[uů]jde[sš]\\s+(?:do|na)${WE}`,
+  `${WB}bude[sš]\\s+(?:hr[aá]t|nastupovat|za[cč][ií]nat)`,
+  // Odchod, peníze.
+  `${WB}pust[ií]m${WE}`, "nebudu (?:ti )?br[aá]nit", "pr[eé]mi", "odm[eě]n", `${WB}plat(?:u|em|y|[ií]m)?${WE}`, `${WB}p[rř]id[aá]m${WE}`,
+  `${WB}zv(?:ednu|ed[aá]m|[yý][sš][ií]m)${WE}`, `${WB}k[cč]${WE}`, `${WB}korun`, `${WB}d[aá]m\\s+ti${WE}`, `${WB}ti\\s+d[aá]m${WE}`,
+  "stov(?:k|[aá]k)", "p[eě]tistov", "tis[ií]covk", `${WB}litr`, `${WB}na\\s+m[eě]${WE}`,
+  // Pozvání a sázky (sázka má vždy odměnu: „platím“, „piv“, „basa“, „Kč“, „na mě“).
+  `${WB}piv`, "hospod", `${WB}rund`, `${WB}bas(?:a|u|y)?${WE}`, "pan[aá]k", "zajd", `${WB}(?:za)?stav\\s+se${WE}`, "sejd", "sej[ií]t",
+  "prober", "probrat", "pokec", "kancel", `na\\s+jedno${WE}`, "na\\s+kafe", "hattrick", "hatrik", "hetrik",
   // Pokuta.
-  "pokut", "strhn", "sr[aá][zž]k", "z v[yý]plat", "ze mzdy",
-  // Pravidla a tresty: „kdo nechodí, nehraje“, kolečka, poslední šance, omluva kabině.
+  "pokut", "strhn", "sr[aá][zž]k", "z\\s+v[yý]plat", "ze\\s+mzdy",
   // Odměny mimo zápas: hubnutí, flaška, „litr“.
-  "hubn", "shod[ií]", "\\bkil", "fla[sš]k", "\\brum", "litr", "valk", "d[aá]rek", "koup[ií]m",
-  "nehraje", "nebude hr[aá]t", "kole[cč]k", "b[eě]h[aá]", "odb[eě]h", "posledn[ií] [sš]anc", "let[ií][sš]\\b", "vyhod[ií]m", "omluv",
-].join("|"), "i");
+  "hubn", "shod[ií]", `${WB}kil(?:o|a|ama|ech)?${WE}`, "fla[sš]k", "l[aá]hev", `${WB}rum(?:u|a|em)?${WE}`, "valk", "d[aá]rek", "koup[ií]m",
+  // Pravidla a tresty: „kdo nechodí, nehraje“, kolečka, poslední šance, omluva kabině. Plán tréninku
+  // („budeme hodně běhat“, „bude hodně běhání“) slibem není.
+  `${WB}nehraje${WE}`, "nebude\\s+hr[aá]t", "kole[cč]k", "za\\s+trest", "trestn", "odb[eě]h", "pob[eě][zž][ií]",
+  `${WB}bude(?:[sš]|te)\\s+b[eě]hat`, "posledn[ií]\\s+[sš]anc", `${WB}let[ií][sš]${WE}`, "vyhod[ií]m", `${WB}omluv(?:[ií][sš]|[ií]te|it)${WE}`,
+].join("|"), "iu");
 
 const ROLE_WORDS: Record<LineupRole, string> = { GK: "do brány", DEF: "do obrany", MID: "do zálohy", FWD: "do útoku" };
 
@@ -379,13 +394,15 @@ export function parseDetection(
 export async function detectCommitment(
   env: ChatEnv,
   o: { playerFirstName: string; playerPosition: string; coachMessage: string; previousPlayerMessage?: string | null },
+  /** Rozpočet práce na pozadí (lib/time-budget.ts): rozpoznání běží souběžně s odpovědí hráče. */
+  opts: { deadline?: number } = {},
 ): Promise<DetectedCommitment | null> {
   if (!COMMITMENT_HINT_RE.test(o.coachMessage)) return null;
   const chat = await import("./ai-player-chat");
   const parsed = await chat.askModelJson<{
     kind?: unknown; quote?: unknown; position?: unknown; amount?: unknown; percent?: unknown; condition?: unknown; reward?: unknown; target?: unknown;
     kg?: unknown; days?: unknown; forfeit?: unknown;
-  }>(env, detectionPrompt(o, chat), 220);
+  }>(env, detectionPrompt(o, chat), 220, { deadline: opts.deadline });
   return parseDetection(parsed, o.playerPosition, o.coachMessage);
 }
 
@@ -532,13 +549,24 @@ export function raisedBy(wage: number, percent: number): number {
 }
 
 /**
+ * Jak dlouho odpověď hráče počká na rozpoznání slibu. Rychlý model (Gemini, 1–3 s) to stihne
+ * a hráč o slibu ví už v první odpovědi (pozvání na pivo může rovnou přijmout). Pomalý model
+ * odpověď nezdrží: dřív na rozpoznání čekala celá a s Workers AI (12–21 s na volání) skončilo
+ * ~40 % odpovědí jako „odpoví později“ (lokální E2E 22. 11.). Slib se pak zapíše po odpovědi
+ * a hráč o něm ví od další zprávy (`commitmentPromptLines` se načítá u každé odpovědi znovu).
+ */
+export const COMMITMENT_REPLY_WAIT_MS = 3_000;
+
+/**
  * Zpráva trenéra hráči: rozpozná slib a zapíše ho. Volá se ve waitUntil po odeslání SMS,
  * nikdy nehází (slib nesmí shodit odeslání zprávy ani odpověď hráče).
+ * `deadline`: vlastní rozpočet rozpoznání (běží souběžně s odpovědí hráče, ne před ní).
  */
 export async function handleCoachMessageForCommitment(
   db: D1Database,
   env: ChatEnv,
   o: { teamId: string; convId: string; playerId: string; text: string },
+  opts: { deadline?: number } = {},
 ): Promise<string | null> {
   try {
     if (!COMMITMENT_HINT_RE.test(o.text)) return null;
@@ -553,7 +581,7 @@ export async function handleCoachMessageForCommitment(
       .catch((e) => { logger.warn({ module: M }, "poslední zpráva hráče", e); return null; });
     const detected = await detectCommitment(env, {
       playerFirstName: p.first_name, playerPosition: p.position, coachMessage: o.text, previousPlayerMessage: prev?.body ?? null,
-    });
+    }, { deadline: opts.deadline });
     if (!detected) return null;
     // Trest a pokyn jednotlivci jen hráči z vlastního kádru (áčko nebo U21): hráč na hostování
     // jinde ani bývalý hráč kolečka ani poslední šanci od cizího trenéra nedostane.
