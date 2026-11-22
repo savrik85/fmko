@@ -76,6 +76,12 @@ const lerp = (a: number, b: number, s: number) => a + (b - a) * s;
 const dist = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.z - b.z);
 const other = (side: Side): Side => (side === "home" ? "away" : "home");
 const sideOf = (teamId: number): Side => (teamId === 1 ? "home" : "away");
+/** Tým bez brankáře (v sestavě nebo po vyloučení) má v bráně prvního hráče; engine tam taky někoho postaví. */
+const withKeeper = <T extends { role: Role }>(slots: T[]): T[] =>
+  slots.length && !slots.some((x) => x.role === "GK") ? [{ ...slots[0], role: "GK" }, ...slots.slice(1)] : slots;
+/** Do brány jde `figure`; kdo ji do té doby zaskakoval, vrací se na své místo. */
+const soleKeeper = <T extends { figure: number; role: Role; base: { role: Role } }>(slots: T[], figure: number): T[] =>
+  slots.map((s) => (s.figure === figure ? { ...s, role: "GK" } : s.role === "GK" && s.base.role !== "GK" ? { ...s, role: s.base.role } : s));
 const toRole = (position: string): Role => (position === "GK" || position === "DEF" || position === "FWD" ? position : "MID");
 /**
  * Domácí útočí k záporné z: z hlavní tribuny doprava, stejně jako ve 2D záznamu. Scény se tak staví vždy;
@@ -538,8 +544,7 @@ export class Replay {
         this.ids.set(`${side}:${n + (side === "home" ? 1 : 101)}`, figure);
         roster[side].push({ figure, base: bases[n], role: bases[n].role });
       });
-      // Tým bez brankáře v sestavě má v bráně prvního hráče (engine tam taky někoho postaví).
-      if (roster[side].length && !roster[side].some((x) => x.role === "GK")) roster[side][0] = { ...roster[side][0], role: "GK" };
+      roster[side] = withKeeper(roster[side]);
     }
     this.referee = this.figures.push({ team: "referee", player: { id: "referee", name: "Rozhodčí", position: "MID", skinColor: "#E0B48C", hairColor: "#3B2F2F" } }) - 1;
     this.staff = { referee: this.referee, coaches: {} };
@@ -566,13 +571,14 @@ export class Replay {
         this.swaps.set(i, { incoming: figure, outgoing: out.figure });
         // Náhradní brankář jde do brány jen za brankáře nebo když to engine napíše.
         const role = e.description.includes("do brány") ? "GK" : out.role;
-        roster = { ...roster, [side]: roster[side].map((s) => (s === out ? { figure, base: out.base, role } : s)) };
+        const swapped = roster[side].map((s) => (s === out ? { figure, base: out.base, role } : s));
+        roster = { ...roster, [side]: role === "GK" ? soleKeeper(swapped, figure) : swapped };
       } else if (e.type === "card" && e.detail === "red") {
         const figure = this.figureOf(e);
-        roster = { ...roster, [side]: roster[side].filter((s) => s.figure !== figure) };
+        roster = { ...roster, [side]: withKeeper(roster[side].filter((s) => s.figure !== figure)) };
       } else if (e.detail === "emergency_gk") {
         const figure = this.figureOf(e);
-        roster = { ...roster, [side]: roster[side].map((s) => (s.figure === figure ? { ...s, role: "GK" as const } : s)) };
+        roster = { ...roster, [side]: soleKeeper(roster[side], figure) };
       }
     });
     this.finalRoster = roster;
