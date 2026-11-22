@@ -147,6 +147,35 @@ describe("konec jednání u kupce po protinávrhu prodávajícího", () => {
     expect(impactOffer()).toMatchObject({ offer_amount: raised });
   });
 
+  // E2E 22. 11. (Řeznictví Černý ČB): SMS po odmítnutí nikdy nepsal model. Do dopadu odmítnutí
+  // šlo jen GEMINI_API_KEY a VAPID, bez CACHE_KV (přepínač ai_provider) a bez AI (Workers AI).
+  it("dopad odmítnutí dostane celé prostředí: přepínač modelu i Workers AI", async () => {
+    const fakeAi = { run: vi.fn() } as unknown as Ai;
+    const env = { ...t.env, AI: fakeAi };
+    const envOf = (call: number) => sideEffects.applyOfferRejectionImpact.mock.calls[call][3] as { CACHE_KV?: unknown; AI?: unknown; DB?: unknown };
+
+    await insertTestOffer(t.db, { id: "offer", playerId: "star", from: "buyer-a", to: "seller-a", amount: BID });
+    expect(await rejectTransferOffer(env, "seller-a", "offer")).toEqual({ ok: true });
+    // Miniflare proxy nesnese toMatchObject: porovnává se totožnost.
+    expect(envOf(0).CACHE_KV).toBe(t.env.CACHE_KV);
+    expect(envOf(0).AI).toBe(fakeAi);
+    expect(envOf(0).DB).toBe(t.db);
+
+    await t.db.prepare("DELETE FROM transfer_offers").run();
+    await insertTestOffer(t.db, { id: "offer", playerId: "star", from: "buyer-a", to: "seller-a", amount: BID });
+    expect(await withdrawTransferOffer(env, "seller-a", "offer")).toEqual({ ok: true });
+    expect(envOf(1).CACHE_KV).toBe(t.env.CACHE_KV);
+    expect(envOf(1).AI).toBe(fakeAi);
+
+    // Kupec odmítne absurdní protinávrh: totéž přes settleBuyerSideEnd.
+    await t.db.prepare("DELETE FROM transfer_offers").run();
+    await t.db.prepare("DELETE FROM transfer_offer_events").run();
+    await counteredOffer(BID * 3);
+    expect(await rejectTransferOffer(env, "buyer-a", "offer")).toEqual({ ok: true });
+    expect(envOf(2).CACHE_KV).toBe(t.env.CACHE_KV);
+    expect(envOf(2).AI).toBe(fakeAi);
+  });
+
   it("stažení kupcem, když na tahu byl prodávající, se jako odmítnutí nepočítá", async () => {
     await insertTestOffer(t.db, { id: "offer", playerId: "star", from: "buyer-a", to: "seller-a", amount: BID });
     expect(await withdrawTransferOffer(t.env, "buyer-a", "offer")).toEqual({ ok: true });
