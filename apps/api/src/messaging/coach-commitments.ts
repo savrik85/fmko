@@ -28,7 +28,7 @@ import {
 } from "./coach-rules";
 import {
   REWARD_BROKEN_SMS, REWARD_KEPT_SMS, REWARD_KINDS, markRewardEarned, parseReward, parseWeightTarget, rewardPrice, rewardPromptLine,
-  rewardText, rewardWhat, weightDealDetails, weightDealNote, type RewardKind, type RewardType,
+  rewardLabel, rewardText, weightDealDetails, weightDealNote, type RewardKind, type RewardType,
 } from "./coach-rewards";
 // Chat se načítá až za běhu: ai-player-chat → player-memory → tento modul by jinak byl kruh.
 import type { ChatEnv } from "./ai-player-chat";
@@ -1358,7 +1358,8 @@ export async function fulfilMoneyCommitment(
       if (price > 0) {
         await recordTransaction(db, r.team_id, d.rewardType === "money" ? "player_bonus" : "manager_social", -price, `Odměna: ${name}`, gameDate, r.player_id);
       }
-      return `Odměna předána (${rewardWhat(reward)}, ${price.toLocaleString("cs-CZ")} Kč)`;
+      // Peníze jen částkou, věc v 1. pádě s cenou („flaška, 300 Kč“), ne „1 000 Kč, 1 000 Kč“.
+      return `Odměna předána (${reward.reward === "money" ? rewardLabel(reward) : `${rewardLabel(reward)}, ${price.toLocaleString("cs-CZ")} Kč`})`;
     };
   } else if (r.kind === "bonus") {
     const amount = d.amount ?? 0;
