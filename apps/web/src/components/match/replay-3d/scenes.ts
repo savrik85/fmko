@@ -826,7 +826,6 @@ export class Replay {
       figures(up).forEach((f, n) => {
         const from = 0.9 + (n % 4) * 0.1;
         st.pose(f, "celebrate", meet - from, from);
-        [1.6, 2.5].forEach((at) => st.jump(f, at + (n % 3) * 0.2));
       });
       st.coach(up, "joy", 0.9);
       st.coach(down, "upset", 1.2);
@@ -1322,10 +1321,15 @@ export class Replay {
     this.open(st, ball, other(side), [[injured, at], [this.referee, { x: at.x - 6, z: at.z - 5 }]], [{ ...down, r: 4.4 }]);
     st.go(injured, down, 0.6);
     st.pose(injured, "down", Infinity, 0.6);
-    // Dva nejbližší spoluhráči k němu dojdou, každý z jiné strany (kdo je daleko, zůstane stát).
-    st.outfield(side, [injured]).sort((a, b) => dist(st.pos(a), at) - dist(st.pos(b), at)).slice(0, 2).filter((m) => dist(st.pos(m), at) < 14)
-      .forEach((m, n) => st.go(m, { x: down.x + (n ? -1.7 : 1.9), z: down.z + (n ? 1.6 : -1.2) }, 3, 0.8));
-    st.go(this.referee, { x: at.x - 1.4, z: at.z - 1.6 }, 1.5, 0.7);
+    // Dva nejbližší spoluhráči k němu doběhnou a zastaví se před ním (kdo je daleko, zůstane stát). Rozhodčí
+    // přijde z opačné strany než první z nich; druhý zůstane stát, pokud by došel na místo rozhodčího.
+    const mates = st.outfield(side, [injured]).sort((a, b) => dist(st.pos(a), at) - dist(st.pos(b), at)).slice(0, 2).filter((m) => dist(st.pos(m), at) < 14);
+    const referee = mates.length ? toward(down, st.pos(mates[0]), -2.2) : { x: at.x - 1.4, z: at.z - 1.6 };
+    mates.forEach((m, n) => {
+      const to = toward(down, st.pos(m), 1.7 + n * 1.1);
+      if (dist(to, referee) > 1.3) st.go(m, to, 3, 0.8);
+    });
+    st.go(this.referee, referee, 1.5, 0.7);
     st.pose(this.referee, "armUp", 1.2, 1);
     st.coach(side, "shout", 1);
     st.t = DRAMA;

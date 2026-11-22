@@ -115,7 +115,7 @@ export function ReplayScene({ replay, kits, snow, overview, step, frame: root, v
   /** Pohled z výšky na celý stadion místo televizní kamery z tribuny. */
   overview: boolean;
   step: { current: ReplayStep };
-  /** Obal záznamu: během opakovaného záběru gólu má atribut `data-replaying` (podle něj se ukáže rámeček a nápis). */
+  /** Obal záznamu: během opakovaného záběru gólu má atribut `data-replaying` (podle něj se ukáže jeho nápis). */
   frame: RefObject<HTMLDivElement | null>;
   /** Plátno přes scénu: při střihu na něm doznívá poslední snímek starého záběru. */
   veil: RefObject<HTMLCanvasElement | null>;

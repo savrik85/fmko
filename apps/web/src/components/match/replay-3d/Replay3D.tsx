@@ -166,8 +166,6 @@ function Replay3DView({ detail, events, progress, onReady }: Replay3DProps) {
       </div>
       <EventCard {...graphics} />
       {coachSide && <CoachCard detail={detail} side={coachSide} />}
-      {/* Opakovaný záběr gólu má v obraze rámeček, kus od kraje (atribut `data-replaying` zapíná scéna sama). */}
-      <div className="hidden group-data-[replaying]/shot:block absolute inset-3 sm:inset-5 z-20 pointer-events-none rounded-lg border-4 border-white/70" />
       {/* O přestávce stojí týmy připravené na výkop a obraz je ztmavený. */}
       {halfTime && (
         <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none bg-black/45">
