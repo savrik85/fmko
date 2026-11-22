@@ -650,12 +650,6 @@ export default function MatchReplayPage() {
                 className="absolute top-2 left-2 z-30 h-8 px-2.5 rounded-lg bg-black/60 hover:bg-black/80 text-white text-xs font-heading font-bold">{view3d ? "2D" : "3D"}</button>
             </>
           )}
-          <div className="absolute bottom-2 left-2 z-30 flex gap-1 text-white text-sm">
-            <button onClick={() => (previousAction !== undefined ? jumpTo(previousAction) : begin())} title="Předchozí akce" className="w-8 h-8 rounded-lg bg-black/60 hover:bg-black/80 disabled:opacity-40">{"\u23EE"}</button>
-            <button onClick={() => setPaused((p) => !p)} disabled={finished || htPause} title={paused ? "Pokračovat" : "Pauza"} className="w-8 h-8 rounded-lg bg-black/60 hover:bg-black/80 disabled:opacity-40">{paused ? "\u25B6" : "\u23F8"}</button>
-            <button onClick={() => nextAction !== undefined && jumpTo(nextAction)} disabled={nextAction === undefined} title="Další akce" className="w-8 h-8 rounded-lg bg-black/60 hover:bg-black/80 disabled:opacity-40">{"\u23ED"}</button>
-          </div>
-
           {/* Team color side bars */}
           <div className="absolute left-0 top-0 bottom-0 w-1.5" style={{ backgroundColor: homeKit.shirt }} />
           <div className="absolute right-0 top-0 bottom-0 w-1.5" style={{ backgroundColor: awayKit.shirt }} />
@@ -775,7 +769,18 @@ export default function MatchReplayPage() {
       </div>
 
       {/* ═══ CONTROLS ═══ */}
-      <div className="flex justify-center gap-3 py-2">
+      <div className="flex flex-wrap justify-center items-center gap-3 py-2">
+        {/* Přetáčení po akcích a pauza; čára je dělí od rychlosti přehrávání. */}
+        <div className="flex gap-1.5 pr-3 border-r-2 border-black/15">
+          {([
+            ["Předchozí akce", "\u23EE", () => (previousAction !== undefined ? jumpTo(previousAction) : begin()), false],
+            [paused ? "Pokračovat" : "Pauza", paused ? "\u25B6" : "\u23F8", () => setPaused((p) => !p), finished || htPause],
+            ["Další akce", "\u23ED", () => nextAction !== undefined && jumpTo(nextAction), nextAction === undefined],
+          ] as const).map(([title, icon, onClick, disabled]) => (
+            <button key={title} onClick={onClick} disabled={disabled} title={title}
+              className="w-12 h-12 rounded-xl bg-white text-ink text-lg shadow-md hover:shadow-lg disabled:opacity-40">{icon}</button>
+          ))}
+        </div>
         {!finished && !htPause && (["live", "fast", "instant"] as Speed[]).map((s) => (
           <button key={s} onClick={() => setSpeed(s)}
             className={`px-6 py-3 rounded-xl text-base font-heading font-bold uppercase tracking-wide transition-all ${

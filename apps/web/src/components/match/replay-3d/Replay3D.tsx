@@ -88,6 +88,8 @@ export function Replay3D({ detail, events, progress, onReady }: {
   }, [venue, homeTeamId]);
 
   const [fullscreen, setFullscreen] = useState(false);
+  // Pohled: televizní kamera z tribuny, nebo celý stadion z výšky.
+  const [overview, setOverview] = useState(false);
   // Závěrečná scéna dohraje a obraz pod výsledkem zůstane stát.
   const [over, setOver] = useState(false);
   useEffect(() => {
@@ -131,7 +133,7 @@ export function Replay3D({ detail, events, progress, onReady }: {
         frozen={paused}
         // Pohled „z tribuny“ nemá rozostření okrajů, které stadion používá u pohledů z dálky.
         initialViewpoint="main_stand"
-        replay={<ReplayScene replay={replay} kits={kits} snow={detail.weather === "snow"} step={step} replayBadge={replayBadge} veil={veil} onReady={onReady} />}
+        replay={<ReplayScene replay={replay} kits={kits} snow={detail.weather === "snow"} overview={overview} step={step} replayBadge={replayBadge} veil={veil} onReady={onReady} />}
       />
       {/* Při střihu tu doznívá poslední snímek starého záběru (kreslí a zprůhledňuje ho scéna); grafika zůstává nad ním. */}
       <canvas ref={veil} style={{ opacity: 0 }} className="absolute inset-0 z-10 w-full h-full pointer-events-none" />
@@ -152,6 +154,10 @@ export function Replay3D({ detail, events, progress, onReady }: {
         </div>
       )}
       {fullscreen && <ScoreBug detail={detail} homeGoals={homeGoals} awayGoals={awayGoals} minute={events[index]?.minute} />}
+      <button onClick={() => setOverview((v) => !v)} title={overview ? "Pohled z tribuny" : "Pohled z výšky"}
+        className="absolute top-2 right-12 z-40 h-8 px-2.5 rounded-lg bg-black/60 hover:bg-black/80 text-white text-xs font-heading font-bold">
+        {overview ? "Z tribuny" : "Z výšky"}
+      </button>
       <button onClick={() => setFullscreen((v) => !v)} title={fullscreen ? "Zmenšit" : "Na celou obrazovku"}
         className="absolute top-2 right-2 z-40 w-8 h-8 rounded-lg bg-black/60 hover:bg-black/80 text-white text-base leading-none">
         {fullscreen ? "✕" : "⛶"}

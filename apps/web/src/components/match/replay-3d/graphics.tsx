@@ -130,7 +130,7 @@ function LowerThird({ color, name, avatar, title, note, board, badge }: {
   color: string; name: string; avatar: Record<string, unknown> | undefined; title: string; note: string | null | undefined; board: string | null; badge: ReactNode;
 }) {
   return (
-    <div className="absolute bottom-2 left-32 right-2 z-30 pointer-events-none">
+    <div className="absolute bottom-2 inset-x-2 z-30 pointer-events-none">
       <div className="flex items-stretch h-11 sm:h-16 rounded-lg overflow-hidden shadow-xl font-heading animate-in fade-in slide-in-from-bottom-2 duration-300">
         <div className="shrink-0 w-11 sm:w-16 overflow-hidden flex items-end justify-center font-[900] text-lg" style={{ backgroundColor: color, color: onColor(color) }}>
           {avatar ? <FaceAvatar faceConfig={avatar} size={50} className="scale-[0.7] sm:scale-100 origin-bottom" /> : <span className="self-center">{name.split(" ").map((w) => w[0]).slice(0, 2).join("")}</span>}

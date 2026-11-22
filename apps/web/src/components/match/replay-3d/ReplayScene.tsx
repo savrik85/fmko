@@ -39,6 +39,8 @@ const BALL_RADIUS = 0.28;
 const CAMERA = { x: HALF_W + 26, y: 13, fov: 26, pan: 9 };
 /** Kam kamera míří napříč hřištěm: tak, aby bližší postranní čára ležela u spodního okraje záběru. */
 const CAMERA_AIM_X = -4.6;
+/** Pohled z výšky: celý stadion z ptačí perspektivy, kamera stojí a nic se neořezává. */
+const OVERVIEW = { x: HALF_W + 46, y: 56, fov: 40 };
 /** Opakovaný záběr gólu přijde až po oslavě: zakončení ještě jednou, na poloviční rychlost, ať je vidět, co se stalo. */
 const REPLAY = { after: 3.6, seconds: 5 };
 /** Scéna nekreslí nic za bližší postranní čárou: kamera stojí tam, kde má stadion hlavní tribunu. */
@@ -105,11 +107,13 @@ const eTmp = new THREE.Euler(), cTmp = new THREE.Color();
 const HIDDEN = new THREE.Matrix4().makeScale(0, 0, 0);
 
 /** Hráči, rozhodčí a míč ve scéně stadionu; kreslí to, co právě hraje `step`, a řídí kameru. */
-export function ReplayScene({ replay, kits, snow, step, replayBadge, veil, onReady }: {
+export function ReplayScene({ replay, kits, snow, overview, step, replayBadge, veil, onReady }: {
   replay: Replay;
   kits: { home: ReplayKit; away: ReplayKit };
   /** Na sněhu se hraje s oranžovým míčem. */
   snow: boolean;
+  /** Pohled z výšky na celý stadion místo televizní kamery z tribuny. */
+  overview: boolean;
   step: { current: ReplayStep };
   /** Rámeček s nápisem „opakovaný záběr“; scéna ho ukazuje jen během opakování gólu. */
   replayBadge: RefObject<HTMLDivElement | null>;
@@ -151,9 +155,9 @@ export function ReplayScene({ replay, kits, snow, step, replayBadge, veil, onRea
   const drawn = useRef(false);
 
   useEffect(() => {
-    gl.clippingPlanes = CLIP_PLANES;
+    gl.clippingPlanes = overview ? [] : CLIP_PLANES;
     return () => { gl.clippingPlanes = []; };
-  }, [gl]);
+  }, [gl, overview]);
   useEffect(() => addAfterEffect(() => {
     const b = blend.current, target = veil.current;
     if (!b.wanted || !target) return;
@@ -355,11 +359,14 @@ export function ReplayScene({ replay, kits, snow, step, replayBadge, veil, onRea
       const s = b?.ease ? THREE.MathUtils.smoothstep(linear, 0, 1) : linear, to = linear > 0 ? b : a;
       camera.position.set(THREE.MathUtils.lerp(a.from.x, to.from.x, s), THREE.MathUtils.lerp(a.from.y, to.from.y, s), THREE.MathUtils.lerp(a.from.z, to.from.z, s));
       camera.lookAt(THREE.MathUtils.lerp(a.at.x, to.at.x, s), THREE.MathUtils.lerp(a.at.y, to.at.y, s), THREE.MathUtils.lerp(a.at.z, to.at.z, s));
+    } else if (overview) {
+      camera.position.set(OVERVIEW.x, OVERVIEW.y, 0);
+      camera.lookAt(0, 0, 0);
     } else {
       camera.position.set(CAMERA.x, CAMERA.y, look.current.z * 0.3);
       camera.lookAt(look.current);
     }
-    camera.fov = CAMERA.fov;
+    camera.fov = overview && !keys ? OVERVIEW.fov : CAMERA.fov;
     camera.updateProjectionMatrix();
 
     // Stín jako tmavé kolečko je levný a funguje i na mobilu.
