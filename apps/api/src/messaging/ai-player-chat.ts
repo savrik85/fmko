@@ -1193,6 +1193,8 @@ export async function generateSquadGroupReaction(
    */
   opts: {
     addressed?: boolean; mood?: string; afterTeammates?: boolean; deadline?: number;
+    /** Co v kabině nedávno napsali spoluhráči: doslova to po nich neopakuje (repetition.ts). */
+    teammateLines?: readonly string[];
     /**
      * Trenér psal o tréninku nebo zápase: „já dorazím“ v kabině je slib docházky jako v SMS
      * (attendance-pledge.ts). Model pak vrací JSON a slib dostane `onPledge`.
@@ -1252,7 +1254,7 @@ export async function generateSquadGroupReaction(
     }
     pledge = parseAttendancePledge(parsed.attendance_pledge);
     return { body: trimSms(parsed.text) };
-  }, "kabina", { deadline: opts.deadline });
+  }, "kabina", { deadline: opts.deadline, others: opts.teammateLines });
   if (pledge && opts.onPledge) opts.onPledge(pledge);
   return out.body;
 }

@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Miniflare } from "miniflare";
-import { OWN_LINES_LIMIT, loadOwnLinesAcross, loadOwnRecentLines } from "./repetition";
+import { OWN_LINES_LIMIT, loadOwnLinesAcross, loadOwnRecentLines, loadTeammateLines } from "./repetition";
 
 let miniflare: Miniflare;
 let db: D1Database;
@@ -49,6 +49,13 @@ describe("poslední vlastní zprávy hráče", () => {
     expect(lines).toEqual([4, 5, 6, 7, 8, 9].map((n) => `Zpráva hráče číslo ${n}.`).concat(["Rozsekáme je!", "Pivo platí trenér!"]));
     expect(await loadOwnLinesAcross(db, { playerId: "p2", convIds: ["squad"] })).toEqual(["Já taky."]);
     expect(await loadOwnLinesAcross(db, { playerId: "p3", convIds: [] })).toEqual([]);
+  });
+
+  it("věty spoluhráčů z kabiny: jen cizí, jen nedávné, nejstarší první", async () => {
+    const since = new Date("2026-09-28T00:00:00Z");
+    expect(await loadTeammateLines(db, { convId: "squad", playerId: "p2", since })).toEqual(["Rozsekáme je!", "Pivo platí trenér!"]);
+    expect(await loadTeammateLines(db, { convId: "squad", playerId: "p1", since })).toEqual(["Já taky."]);
+    expect(await loadTeammateLines(db, { convId: "squad", playerId: "p2", since: new Date("2026-09-29T00:00:00Z") })).toEqual(["Pivo platí trenér!"]);
   });
 
   it("bez id konverzace ji dohledá podle týmu a hráče", async () => {
