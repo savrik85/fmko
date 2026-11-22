@@ -5,7 +5,7 @@ import { FENCE_BOUNDS, PITCH } from "../../stadium/stadium-3d/constants";
 
 export const HALF_W = PITCH.width / 2;
 export const HALF_L = PITCH.depth / 2;
-export const GOAL_HALF_W = 3.66, GOAL_H = 2.44;
+const GOAL_HALF_W = 3.66, GOAL_H = 2.44;
 const PENALTY_SPOT = PITCH.penaltySpot, BOX_DEPTH = PITCH.penaltyArea.depth;
 /** Střídačky stojí u západní lajny. */
 const BENCH_X = -HALF_W;
@@ -26,7 +26,10 @@ const SETUP = 2, ATTACK = 3.5, GOAL = 6, CHANCE = 3, DRAMA = 4, PENALTY = 7, KIC
 const CARD_UP = 1.4;
 /** Krok záznamu u scény dlouhé DRAMA; hromadné střídání si ho dělí mezi titulky. */
 const DRAMA_STEP = 3.5;
-/** Opakovaný záběr gólu přijde až po oslavě (`after` sekund po gólu) a trvá `seconds`: zakončení ještě jednou a o něco pomaleji. */
+/**
+ * Opakovaný záběr gólu přijde až po oslavě (`after` sekund po gólu) a trvá `seconds`: zakončení ještě jednou a o něco
+ * pomaleji. Gól jím končí: po něm přijde rovnou další akce.
+ */
 export const REPLAY = { after: 3.6, seconds: 3.2 };
 
 export type Side = "home" | "away";
@@ -92,6 +95,8 @@ export interface Scene {
   /** Hráči, o které ve scéně jde (kroužek pod nohama). */
   focus: number[];
   card: { at: number; color: CardColor } | null;
+  /** Scéna končí gólem (ze hry, ze standardky, z penalty i v rozstřelu): branka po něm zezelená. */
+  goal: boolean;
   /** Gól: úsek klipu se zakončením, který se po oslavě zpomaleně zopakuje. */
   replay: { from: number; to: number } | null;
   /** Vlastní kamera scény (představení trenérů); jinak scénu točí televizní kamera z tribuny. */
@@ -746,7 +751,7 @@ export class Replay {
     // Střih mezi záběry na trenéry.
     for (let n = 1; n < coaches.length; n++) st.clip.cuts.push(n * COACH_INTRO);
     st.t = walk + HANDSHAKE;
-    return this.introScene = { clip: st.finish(), start: 0, split: 0, end: st.t, focus: [], card: null, replay: null, camera };
+    return this.introScene = { clip: st.finish(), start: 0, split: 0, end: st.t, focus: [], card: null, goal: false, replay: null, camera };
   }
 
   /**
@@ -792,7 +797,7 @@ export class Replay {
       }
     }
     st.t = KICKOFF;
-    const scene: Scene = { clip: st.finish(), start: 0, split: 0, end: KICKOFF, focus: [], card: null, replay: null };
+    const scene: Scene = { clip: st.finish(), start: 0, split: 0, end: KICKOFF, focus: [], card: null, goal: false, replay: null };
     this.kickoffs.set(index, scene);
     return scene;
   }
@@ -927,7 +932,7 @@ export class Replay {
     // Rozhodčí, který zůstal, stojí uprostřed a sedne si až poslední, zpříma.
     if (stays) st.pose(this.referee, "sitUp", Infinity, settled + 1.5);
     st.wait(Math.max(settled + 3, drive ? drive.to + 0.5 - st.t : 0));
-    this.closing = { clip: st.finish(), start: 0, split: 0, end: st.t, focus: [], card: null, replay: null, drive };
+    this.closing = { clip: st.finish(), start: 0, split: 0, end: st.t, focus: [], card: null, goal: false, replay: null, drive };
     return this.closing;
   }
 
@@ -970,9 +975,9 @@ export class Replay {
     const e = events[head];
     const side = sideOf(e.teamId);
     const find = (...types: string[]) => rest.find((i) => types.includes(events[i].type));
-    const window = (i: number, start: number, w: Partial<Window> = {}) => windows.set(i, { start, split: start, end: st.t, focus: [], card: null, replay: null, ...w });
+    const window = (i: number, start: number, w: Partial<Window> = {}) => windows.set(i, { start, split: start, end: st.t, focus: [], card: null, goal: false, replay: null, ...w });
     /** Gól: po oslavě se zopakuje zakončení (od rozběhu ke střele po míč v síti). */
-    const goalReplay = (split: number) => ({ from: split - 1.8, to: split + 0.6 });
+    const goalAt = (split: number) => ({ goal: true, replay: { from: split - 1.8, to: split + 0.6 } });
     const finisher = find("goal", "chance");
     const result = finisher === undefined ? null : events[finisher].type === "goal" ? "goal" : chanceResult(events[finisher]);
 
@@ -985,7 +990,7 @@ export class Replay {
         const block = rest.find((i) => events[i].detail === "block");
         const split = this.openPlay(st, side, shooter, shotResult, e.source === "counter",
           assist === undefined ? null : this.onPitch(st, events[assist]), block === undefined ? null : this.onPitch(st, events[block]));
-        return window(head, 0, { split, focus: [shooter], replay: e.type === "goal" ? goalReplay(split) : null });
+        return window(head, 0, { split, focus: [shooter], ...(e.type === "goal" && goalAt(split)) });
       }
       case "corner":
       case "freekick": {
@@ -997,7 +1002,7 @@ export class Replay {
         window(head, 0, { focus: [taker] });
         const start = st.t;
         const split = direct ? this.directKick(st, side, taker, result) : this.header(st, side, taker, header, result);
-        return window(finisher, start, { split, focus: [header], replay: result === "goal" ? goalReplay(split) : null });
+        return window(finisher, start, { split, focus: [header], ...(result === "goal" && goalAt(split)) });
       }
       case "penalty": {
         const kicker = this.onPitch(st, e);
@@ -1008,7 +1013,7 @@ export class Replay {
         const scored = result === "goal";
         const split = this.penaltyKick(st, side, kicker, result, scored ? ATTACK : 1.6, scored ? GOAL : DRAMA - 1.6, goalZ(side), false);
         // Zahozenou penaltu záznam ukáže bez útočné fáze, celý kop se odehraje najednou.
-        return window(finisher, start, { split: scored ? split : start, focus: [kicker], replay: scored ? goalReplay(split) : null });
+        return window(finisher, start, { split: scored ? split : start, focus: [kicker], ...(scored && goalAt(split)) });
       }
       case "foul": {
         const fouler = this.onPitch(st, e);
@@ -1046,8 +1051,9 @@ export class Replay {
     if (e.detail?.startsWith("shootout:")) {
       // Rozstřel se kope na jednu bránu; kdo kopal, uložené není, jde některý hráč z pole.
       const kicker = st.pick(side, [], ["FWD", "MID", "DEF"]) ?? st.keeper(side);
-      this.penaltyKick(st, side, kicker, chanceResult(e), 1.5, DRAMA - 1.5, -HALF_L, true);
-      return window(head, 0, { focus: [kicker] });
+      const result = chanceResult(e);
+      this.penaltyKick(st, side, kicker, result, 1.5, DRAMA - 1.5, -HALF_L, true);
+      return window(head, 0, { focus: [kicker], goal: result === "goal" });
     }
     throw new Error(`Událost ${e.type} v ${e.minute}. minutě scénu nemá`);
   }
