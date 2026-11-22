@@ -760,6 +760,9 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
     const { zpracujZpravuTrenera } = await import("../incidents/zprava-trenera");
     await zpracujZpravuTrenera(c.env.DB, { teamId, convId, playerId: conv.participant_id, text: body.body.trim() })
       .catch((e) => logger.warn({ module: "messaging" }, "otázka na incident", e));
+    // Přemlouvání omluveného hráče (messaging/persuasion.ts): jestli kývne, rozhodne hra tady, před odpovědí.
+    const { handlePersuasion } = await import("../messaging/persuasion");
+    await handlePersuasion(c.env.DB, { teamId, convId, playerId: conv.participant_id, text: body.body.trim() });
     // Domluva o váze (postava, část 3): slib nebo urážka se rozhodne tady, před odpovědí.
     const { handleWeightTalk } = await import("../season/weight-talk");
     await handleWeightTalk(c.env.DB, { teamId, convId, playerId: conv.participant_id, text: body.body.trim() })

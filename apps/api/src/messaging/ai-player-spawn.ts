@@ -43,6 +43,7 @@ import { loadChatMemory, offerStanceStmt } from "./player-memory";
 import { loadOwnRecentLines } from "./repetition";
 import { loadCoachAddress } from "./address-form";
 import { pledgesFromLife, loadTrainingDays, trainingScheduleText } from "./attendance-pledge";
+import { persuasionFromLife, persuasionPending } from "./persuasion";
 import { clubRuleLines, loadClubRules } from "./coach-rules";
 import {
   cupOutcome, describeLastCupMatch, describeNextCupMatch, isLater, loadLastCupMatch, loadNextCupMatch, withinPreviousWindow,
@@ -576,6 +577,8 @@ export function loadPlayerSnapshot(
     teamStreak: matchCtx?.teamStreak ?? 0,
     previousMatch: previousMatchOf(matchCtx, row.id as string),
     ...pledgesFromLife(lifeContext),
+    // Trenér ho přemlouval, ať přijde, a hra rozhodla (persuasion.ts): pevný pokyn do promptu.
+    persuasion: persuasionFromLife(lifeContext),
   };
 }
 
@@ -1387,7 +1390,7 @@ async function handleAiPlayerReplyInner(
     atWork: playerTimeContext(player, new Date()).situace === "prace",
   };
   // Dotaz na incident, domluva o váze a přemlouvání trucujícího hráče čekají odpověď.
-  const mayLeaveOnRead = !state.incidentId && !player.weightTalk && state.trigger !== "left_out";
+  const mayLeaveOnRead = !state.incidentId && !player.weightTalk && state.trigger !== "left_out" && !persuasionPending(player);
   if (mayLeaveOnRead && Math.random() < leftOnReadChance({ ...readInput, closing: isHardCap })) {
     await new Promise((resolve) => setTimeout(resolve, readDelayMs(Math.random())));
     await leaveOnReadAndClose(db, env, conv, state, player, scenario, history, opts.deadline);
@@ -1985,13 +1988,20 @@ export async function afterPlayerReply(
     incidentId?: string | null;
   },
 ): Promise<void> {
-  // Hráč řekl, že přijde, nebo nepřijde na trénink či zápas (attendance-pledge.ts).
-  if (r.reply.attendancePledge) {
+  // Hráč řekl, že přijde, nebo nepřijde na trénink či zápas (attendance-pledge.ts). Když o tom
+  // rozhodla hra při přemlouvání (persuasion.ts), příznak modelu pro tutéž věc neplatí.
+  const decidedByGame = persuasionPending(r.player) && r.player.persuasion?.event === r.reply.attendancePledge?.event;
+  if (r.reply.attendancePledge && !decidedByGame) {
     const { recordAttendancePledge } = await import("./attendance-pledge");
     await recordAttendancePledge(db, {
       clubTeamId: r.teamId, convId: r.convId, playerId: r.player.id, playerFirstName: r.player.firstName, pledge: r.reply.attendancePledge,
       now: new Date(r.at), replyBody: r.reply.body,
     });
+  }
+  // Trenér ho přemluvil a hra rozhodla, že přijde (persuasion.ts): slib se zapíše přímo, bez příznaku od modelu.
+  if (r.player.persuasion) {
+    const { applyPersuasion } = await import("./persuasion");
+    await applyPersuasion(db, { clubTeamId: r.teamId, convId: r.convId, player: r.player, at: r.at });
   }
   // Pokyn trenéra (kolečka, omluva kabině): hráč odepsal, jestli ho splní (coach-rules.ts).
   if (r.reply.acceptsRequest !== undefined && r.player.pendingRequest) {

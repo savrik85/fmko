@@ -370,24 +370,37 @@ export function pledgeNote(firstName: string, p: TrainingPledge | MatchPledge): 
     : `📝 ${firstName} na tréninky do ${datePhrase(p.until)} nepřijde.`;
 }
 
+/** Pevný pokyn podle rozhodnutí hry o přemluvení (persuasion.ts). */
+export function decidedLine(decided: "attend" | "skip"): string {
+  return decided === "attend"
+    ? "Trenér tě přemluvil. Rozhodl ses: PŘIJDEŠ, řekni to jasně (nakonec přijdeš). Nevymlouvej se a nic dalšího si k tomu nevymýšlej."
+    : "Trenér tě přemlouvá, ale rozhodl ses: NEPŘIJDEŠ, vymluv se po svém. Netvrď, že přijdeš.";
+}
+
 /** Řádky do promptu: hráč ví, co trenérovi řekl, a drží se toho (nebo si nechá domluvit). */
-export function pledgePromptLines(player: Pick<PlayerSnapshot, "trainingPledge" | "matchPledge">): string[] {
+export function pledgePromptLines(player: Pick<PlayerSnapshot, "trainingPledge" | "matchPledge" | "persuasion">): string[] {
   const lines: string[] = [];
   const t = player.trainingPledge;
+  // Trenér ho přemlouval a hra rozhodla (persuasion.ts): o tom nerozhoduje model.
+  const decidedFor = (event: PledgeEvent) => (player.persuasion?.event === event && !player.persuasion.applied ? player.persuasion.decided : undefined);
   if (t?.outcome === "broken") {
     lines.push(`- Trenérovi jsi slíbil, že přijdeš na trénink, a ${dayPhrase(t.outcomeDay ?? t.from)} jsi nepřišel. Trenér to ví, nezapírej to.`);
   } else if (t && !t.outcome) {
     lines.push(t.intent === "attend"
       ? `- Trenérovi jsi slíbil, že přijdeš na trénink ${t.once ? dayPhrase(t.from) : `(všechny do ${datePhrase(t.until)}).`} Platí to.`
-      : t.coachGranted
-        ? `- Trenér ti na trénink ${t.once ? dayPhrase(t.from) : `do ${datePhrase(t.until)}`} sám dal volno, odpočíváš. Když si to rozmyslí a chce tě tam, řekni mu jasně, že přijdeš.`
-        : `- Trenérovi jsi řekl, že na trénink ${t.once ? dayPhrase(t.from) : `do ${datePhrase(t.until)}`} nepřijdeš. Když tě přemluví, řekni mu jasně, že přijdeš.`);
+      : decidedFor("training")
+        ? `- Trenérovi jsi řekl, že na trénink ${t.once ? dayPhrase(t.from) : `do ${datePhrase(t.until)}`} nepřijdeš${t.coachGranted ? " (dal ti volno)" : ""}. ${decidedLine(decidedFor("training")!)}`
+        : t.coachGranted
+          ? `- Trenér ti na trénink ${t.once ? dayPhrase(t.from) : `do ${datePhrase(t.until)}`} sám dal volno, odpočíváš. Když si to rozmyslí a chce tě tam, řekni mu jasně, že přijdeš.`
+          : `- Trenérovi jsi řekl, že na trénink ${t.once ? dayPhrase(t.from) : `do ${datePhrase(t.until)}`} nepřijdeš. Když tě přemluví, řekni mu jasně, že přijdeš.`);
   }
   const m = player.matchPledge;
   if (m) {
     lines.push(m.intent === "attend"
       ? `- Trenérovi jsi slíbil, že na zápas ${dayPhrase(m.matchDay)} přijdeš.`
-      : `- Trenérovi jsi řekl, že na zápas ${dayPhrase(m.matchDay)} nepřijdeš. Když tě přemluví, řekni mu jasně, že přijdeš.`);
+      : decidedFor("match")
+        ? `- Trenérovi jsi řekl, že na zápas ${dayPhrase(m.matchDay)} nepřijdeš. ${decidedLine(decidedFor("match")!)}`
+        : `- Trenérovi jsi řekl, že na zápas ${dayPhrase(m.matchDay)} nepřijdeš. Když tě přemluví, řekni mu jasně, že přijdeš.`);
   }
   return lines;
 }
@@ -399,8 +412,10 @@ const HARD_ABSENCE_REASONS = new Set(["Zdraví", "Po obvinění", "Zranění", "
 /** Omluvenka z textu vážná, i když los dal „Osobní“: nemoc, nemocnice, pohřeb, porod. */
 const HARD_ABSENCE_TEXT_RE = /(nemoc|nemocn|doktor|l[eé]ka[rř]|operac|hore[cč]k|ch[rř]ipk|ang[ií]n|poh[rř]eb|um[rř]el|zem[rř]el|porod|rodi[lč]k)/i;
 /** Jak snadno se dá rozmluvit podle důvodu (squad-talk.ts `PERSUADE_BASE`: kocovina a výmluvy snadno, práce těžko). */
+/** Důvod „nepřijdu“, když hráči na trénink dal volno sám trenér: bere ho zpátky snadno. */
+export const COACH_REST_REASON = "Volno od trenéra";
 const PERSUADE_EASE: Record<string, number> = {
-  "": 2, Kocovina: 2, Alkohol: 2, "Jiné": 2, Celebrita: 1, Doprava: 1, "Osobní": 1, "Práce": 0, Dluhy: 0, "Bez řidičáku": 0, "Bez práce": 1,
+  "": 2, Kocovina: 2, Alkohol: 2, "Jiné": 2, [COACH_REST_REASON]: 2, Celebrita: 1, Doprava: 1, "Osobní": 1, "Práce": 0, Dluhy: 0, "Bez řidičáku": 0, "Bez práce": 1,
 };
 
 /**
@@ -413,10 +428,8 @@ const PERSUADE_EASE: Record<string, number> = {
 export function absencePersuasionLine(
   a: { reason: string; text: string }, p: Pick<PlayerSnapshot, "discipline" | "coachRelationship">,
 ): string | null {
-  if (HARD_ABSENCE_REASONS.has(a.reason) || HARD_ABSENCE_TEXT_RE.test(a.text)) return null;
-  let ease = PERSUADE_EASE[a.reason] ?? 1;
-  if (p.coachRelationship >= 60 || p.discipline >= 70) ease++;
-  if (p.coachRelationship < 35) ease--;
+  const ease = absenceEase(a, p);
+  if (ease === null) return null;
   const how = ease >= 2
     ? "Když tě trenér rozumně přemluví (potřebuje tě, nabídne řešení, vezme zpátky volno), dáš se přemluvit."
     : ease === 1
@@ -424,6 +437,19 @@ export function absencePersuasionLine(
       : "Přemluvit se skoro nedáš: musel by ti nabídnout opravdu dobré řešení.";
   return `${how} Dokud tě nepřemluví, drž se omluvenky a netvrď, že přijdeš. `
     + "Když tě přemluví, řekni mu jasně, že nakonec přijdeš: hra to vezme jako slib a omluvenka padá.";
+}
+
+/**
+ * Jak snadno se hráč nechá přemluvit (víc = snáz): podle důvodu (kocovina a výmluva snadno, práce
+ * těžko), vztahu k trenérovi a ukázněnosti. Null = přemluvit nejde (nemoc, pohřeb, zranění, stopka,
+ * výslech). Stejné číslo bere pokyn v promptu i rozhodnutí v kódu (persuasion.ts).
+ */
+export function absenceEase(a: { reason: string; text: string }, p: Pick<PlayerSnapshot, "discipline" | "coachRelationship">): number | null {
+  if (HARD_ABSENCE_REASONS.has(a.reason) || HARD_ABSENCE_TEXT_RE.test(a.text)) return null;
+  let ease = PERSUADE_EASE[a.reason] ?? 1;
+  if (p.coachRelationship >= 60 || p.discipline >= 70) ease++;
+  if (p.coachRelationship < 35) ease--;
+  return ease;
 }
 
 /** `life_context` z řádku hráče jako objekt; nečitelný JSON se zaloguje a bere jako prázdný. */

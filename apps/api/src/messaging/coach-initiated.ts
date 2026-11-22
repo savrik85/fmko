@@ -39,6 +39,7 @@ import { refundCoachSms } from "./phone-credit";
 import type { PlayerSnapshot } from "./ai-player-scenarios";
 import { carryWeightTalk, weightTalkFromState } from "../season/weight-talk";
 import { playerInClub } from "./player-reach";
+import { persuasionPending } from "./persuasion";
 
 const M = "coach-initiated";
 
@@ -163,8 +164,8 @@ export async function startCoachThread(
       coachStreak: await coachStreak(db, opts.convId),
       atWork: playerTimeContext(player, new Date()).situace === "prace",
     };
-    // Dotaz na incident a domluva o váze čekají odpověď, na ty hráč odepíše vždycky.
-    if (!tema && !player.weightTalk && Math.random() < leftOnReadChance(readInput)) {
+    // Dotaz na incident, domluva o váze a přemlouvání s rozhodnutím hry čekají odpověď, na ty hráč odepíše vždycky.
+    if (!tema && !player.weightTalk && !persuasionPending(player) && Math.random() < leftOnReadChance(readInput)) {
       await new Promise((resolve) => setTimeout(resolve, readDelayMs(Math.random())));
       await markCoachMessagesRead(db, opts.convId, new Date().toISOString());
       logger.info({ module: M }, `hráč ${opts.playerId} nechal trenéra na přečteno`);
