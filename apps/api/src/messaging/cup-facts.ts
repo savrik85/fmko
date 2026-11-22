@@ -11,9 +11,9 @@
  */
 
 import { logger } from "../lib/logger";
+import { matchDayLabel } from "./next-match";
 
 const M = "cup-facts";
-const TZ = "Europe/Prague";
 
 export interface LastCupMatch {
   id: string;
@@ -143,21 +143,9 @@ export function describeLastCupMatch(m: LastCupMatch): string | undefined {
   return `pohárový zápas (${cupLabel(m.cupName, m.round)}): ${verdict} ${m.myScore}:${m.oppScore} ${where} ${m.opponent}${pens}${result ? `, ${result}` : ""}`;
 }
 
-function pragueDay(d: Date): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
-}
-
 /** „zítra (sobota 28. 11.) v poledne venku s SK Lhota (Okresní pohár)“ */
 export function describeNextCupMatch(m: NextCupMatch, now: Date = new Date()): string {
-  const at = new Date(m.scheduledAt);
-  const weekday = new Intl.DateTimeFormat("cs-CZ", { timeZone: TZ, weekday: "long" }).format(at);
-  const date = new Intl.DateTimeFormat("cs-CZ", { timeZone: TZ, day: "numeric", month: "numeric" }).format(at);
-  const day = pragueDay(at);
-  const when = day === pragueDay(now)
-    ? `DNES (${weekday} ${date})`
-    : day === pragueDay(new Date(now.getTime() + 86400000))
-      ? `zítra (${weekday} ${date})`
-      : `${weekday} ${date}`;
+  const when = matchDayLabel(new Date(m.scheduledAt), now);
   const against = m.opponent ? ` ${m.isHome ? "doma s" : "venku s"} ${m.opponent}` : ", soupeř se teprve rozhodne";
   return `${when} v poledne${against}${m.cupName ? ` (${m.cupName})` : ""}`;
 }
