@@ -6568,6 +6568,18 @@ gameRouter.post("/admin/generate-youth-offer-all", async (c) => {
 
 // ── Coach interviews (Rozhovor kola) ──
 
+// POST /api/admin/interviews/cleanup-expired-requests?dryRun=1&limit=100 — jednorázový úklid
+// žádostí o rozhovor, které po propadnutí visely v telefonu (úklid po kole od 3. 5. padal
+// na délce vzoru LIKE). Bez dryRun maže po dávkách, `remaining` říká, kolik ještě zbývá.
+gameRouter.post("/admin/interviews/cleanup-expired-requests", async (c) => {
+  const dryRun = c.req.query("dryRun") === "1";
+  const limit = Math.min(Math.max(Number(c.req.query("limit") ?? 100) || 100, 1), 200);
+  const { cleanupExpiredInterviewRequests } = await import("../season/league-round");
+  const result = await cleanupExpiredInterviewRequests(c.env.DB, { limit, dryRun });
+  logger.info({ module: "game" }, `úklid propadlých žádostí o rozhovor${dryRun ? " (náhled)" : ""}: ${JSON.stringify(result)}`);
+  return c.json({ ok: true, dryRun, ...result });
+});
+
 // POST /api/admin/regenerate-pending-interviews — smaže všechny pending rozhovory
 // a vygeneruje nové se stejnou (league_id, calendar_id, game_week) trojicí.
 // Optional body: { groups: [{leagueId, calendarId, gameWeek, count}, ...] } — pokud zadané,
