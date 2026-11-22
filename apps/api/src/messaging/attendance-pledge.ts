@@ -514,6 +514,11 @@ export async function recordAttendancePledge(
         gameDay, trainingDays: await loadTrainingDays(db, p.team_id), matchDays: await loadMatchDays(db, p.team_id, gameDay), at, convId: o.convId,
       });
       if (!resolved) return null;
+      // Zraněný na trénink nechodí: slib by se nikdy nevyhodnotil (ani „přijdu“, ani „nepřijdu“).
+      if (await injuredOn(db, o.playerId, gameDay, resolved.from)) {
+        logger.info({ module: M, teamId: o.clubTeamId }, `hráč ${o.playerId} je ${resolved.from} zraněný, slib tréninku se nezapisuje`);
+        return null;
+      }
       // „Dej si pauzu“ od trenéra: volno, ne vynechaný trénink (daily-tick, pravidlo docházky).
       const granted = resolved.intent === "skip" && coachGrantsRest(coachText);
       // Stejný slib znovu („furt ne, nepřijdu“): nic nového, poznámka se nezdvojí.
@@ -529,6 +534,11 @@ export async function recordAttendancePledge(
       if (!ctx) return null;
       const matchDay = ctx.scheduledAt.slice(0, 10);
       if (matchDay > shiftDay(gameDay, PLEDGE_WINDOW_DAYS)) return null;
+      // Zraněný ani hráč se stopkou na zápas nastoupit nemůže: o docházce tu nerozhoduje slib.
+      if (await injuredOn(db, o.playerId, gameDay, matchDay) || await suspended(db, o.playerId)) {
+        logger.info({ module: M, teamId: o.clubTeamId }, `hráč ${o.playerId} je na zápas ${matchDay} zraněný nebo má stopku, slib se nezapisuje`);
+        return null;
+      }
       const before = pledgesFromLife(lifeOf(p.life_context)).matchPledge;
       if (before && before.intent === o.pledge.intent && before.matchKey === ctx.matchKey && before.teamId === p.team_id) return before;
       stored = { intent: o.pledge.intent, matchKey: ctx.matchKey, matchDay, at, convId: o.convId, teamId: p.team_id };
@@ -548,6 +558,26 @@ export async function recordAttendancePledge(
     logger.warn({ module: M, teamId: o.clubTeamId }, `slib docházky hráče ${o.playerId}`, e);
     return null;
   }
+}
+
+/**
+ * Bude hráč v herní den `day` ještě zraněný? Denní tick trénuje (bez zraněných, `days_remaining > 0`)
+ * dřív, než zranění o den zkrátí, takže v den `gameDay + k` je mimo, když `days_remaining >= k`.
+ * Přetest 3 (Antonín, koleno na 5 dní): slib tréninku, který se nikdy nevyhodnotí.
+ */
+async function injuredOn(db: D1Database, playerId: string, gameDay: string, day: string): Promise<boolean> {
+  const row = await db.prepare("SELECT MAX(days_remaining) AS days FROM injuries WHERE player_id = ? AND days_remaining > 0")
+    .bind(playerId).first<{ days: number | null }>()
+    .catch((e) => { logger.warn({ module: M }, `zranění hráče ${playerId}`, e); return null; });
+  const k = Math.round((Date.parse(`${day.slice(0, 10)}T12:00:00Z`) - Date.parse(`${gameDay.slice(0, 10)}T12:00:00Z`)) / 86_400_000);
+  return (row?.days ?? 0) >= k;
+}
+
+/** Má hráč stopku na příští zápas? Trénovat smí (tick ho na trénink pouští), hrát ne. */
+async function suspended(db: D1Database, playerId: string): Promise<boolean> {
+  const row = await db.prepare("SELECT suspended_matches FROM players WHERE id = ?").bind(playerId).first<{ suspended_matches: number | null }>()
+    .catch((e) => { logger.warn({ module: M }, `stopka hráče ${playerId}`, e); return null; });
+  return (row?.suspended_matches ?? 0) > 0;
 }
 
 /** Poslední zprávy trenéra v konverzaci (nejvýš dvě za poslední 3 hodiny před `now`), spojené. */
