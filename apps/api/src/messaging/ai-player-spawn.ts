@@ -25,7 +25,7 @@ import { PHOTO_CHANCE, PHOTO_SCENES, generatePlayerPhoto, historyBody, pickPhoto
 import { COACH_CHAT_MAX_MORALE, coachRelationStmts } from "../lib/coach-relation";
 import { weightTalkFromState } from "../season/weight-talk";
 import { coachStreak, leftOnReadChance, markCoachMessagesRead, readDelayMs } from "./left-on-read";
-import { describeNextFriendly, describeNextMatch, pragueDay } from "./next-match";
+import { describeNextFriendly, describeNextMatch, playedDayLabel, pragueDay } from "./next-match";
 import { refundCoachSms } from "./phone-credit";
 import {
   generateInitialMessage,
@@ -688,9 +688,11 @@ export async function loadTeamContext(db: D1Database, teamId: string, playerTeam
   const leagueAt = (lm?.simulated_at as string | null | undefined) ?? null;
   const cupResult = cupLast ? describeLastCupMatch(cupLast) : undefined;
   let lastMatchResult = leagueResult;
+  let lastMatchAt = leagueResult ? leagueAt : null;
   let previousMatchResult: string | undefined;
   if (cupLast && isLater(cupLast.simulatedAt, leagueAt)) {
     lastMatchResult = cupResult;
+    lastMatchAt = cupLast.simulatedAt;
     if (leagueResult && withinPreviousWindow(leagueAt, cupLast.simulatedAt)) previousMatchResult = `mistrovský zápas: ${leagueResult}`;
   } else if (cupLast && cupResult && withinPreviousWindow(cupLast.simulatedAt, leagueAt)) {
     previousMatchResult = cupResult;
@@ -741,6 +743,8 @@ export async function loadTeamContext(db: D1Database, teamId: string, playerTeam
     urban: row?.district === "Praha" || ["town", "small_city", "city"].includes(row?.village_size ?? ""),
     managerName: row?.manager_name ?? undefined,
     lastMatchResult,
+    // Den zápasu, ať model neříká „včera“ o dnešním kole (lokální E2E 22. 11.).
+    lastMatchWhen: lastMatchResult && lastMatchAt ? playedDayLabel(new Date(lastMatchAt)) : undefined,
     previousMatchResult,
     nextMatch,
     nextCupMatch,

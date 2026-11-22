@@ -75,6 +75,8 @@ export interface TeamContext {
   villageName?: string;
   leaguePosition?: number;
   lastMatchResult?: string;
+  /** Kdy se poslední zápas hrál („dnes, středa 25. 11.“, next-match.ts `playedDayLabel`). */
+  lastMatchWhen?: string;
   /** Příští mistrovský zápas, např. „dnes (čtvrtek 29. 10.) v 18:00 venku s X“. Bez něj hráč tvrdil, že se nehraje. */
   nextMatch?: string;
   /** Příští pohárový zápas (cup-facts.ts). Bez něj hráč den před pohárem tvrdil „O tom nic nevím“. */
@@ -435,7 +437,7 @@ export function buildSystemPrompt(
     "FAKTA O KLUBU, smíš se opírat VÝHRADNĚ o ně:",
     playingForFact(team),
     team.lastMatchResult
-      ? `- Poslední zápas: ${team.lastMatchResult}. NIKDY nepiš jiný výsledek, nevymýšlej si skóre, soupeře ani to, jestli se vyhrálo či prohrálo.`
+      ? `- Poslední zápas${team.lastMatchWhen ? ` (hrál se ${team.lastMatchWhen})` : ""}: ${team.lastMatchResult}. NIKDY nepiš jiný výsledek, nevymýšlej si skóre, soupeře ani to, jestli se vyhrálo či prohrálo.`
       : "- O posledním zápase nic nevíš. NEZMIŇUJ žádný výsledek, skóre ani soupeře.",
     team.previousMatchResult ? `- Předtím: ${team.previousMatchResult}.` : "",
     team.nextMatch
