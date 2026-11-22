@@ -205,9 +205,7 @@ export function ReplayScene({ replay, kits, snow, overview, step, frame: root, v
       Object.assign(p, { play, elapsed: seamless ? p.t - first : 0 });
     }
     const { scene, attack } = play;
-    // Závěr zápasu se přehrává dokola: na konci scény se vrátí na `loop`.
-    const ran = p.elapsed + dt * rate;
-    const elapsed = p.elapsed = hold ? 0 : scene.loop !== undefined && ran >= scene.end - scene.start ? ran - (scene.end - scene.loop) : ran;
+    const elapsed = p.elapsed = hold ? 0 : p.elapsed + dt * rate;
     // Gól: po chvíli oslavy se zakončení zpomaleně zopakuje, pak oslava pokračuje.
     const again = !attack && scene.replay ? scene.replay : null;
     const replaying = again !== null && elapsed >= REPLAY.after && elapsed < REPLAY.after + REPLAY.seconds;

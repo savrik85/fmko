@@ -88,8 +88,6 @@ export interface Scene {
   replay: { from: number; to: number } | null;
   /** Vlastní kamera scény (představení trenérů); jinak scénu točí televizní kamera z tribuny. */
   camera?: CameraKey[];
-  /** Scéna se po skončení přehrává znovu od tohohle času (závěr zápasu). */
-  loop?: number;
 }
 interface Point3 extends Point { y: number }
 /** Kde kamera v čase `t` stojí a kam míří. Mezi klíči jede rovnoměrně, s `ease` se rozjede a dojede; na klíč s `cut` se střihne. */
@@ -786,8 +784,8 @@ export class Replay {
    * Konec zápasu v jednom záběru, bez střihů a beze spěchu:
    * 1. závěrečný hvizd, vítězové zvedají ruce a kdo je na dně, klesá na trávník;
    * 2. podání rukou: většinou dojde vítěz za poraženým, občas poražený za vítězem a někteří si ruku nepodají;
-   * 3. klid po zápase: všichni zůstávají, kde jsou, jen se občas někdo projde pár kroků a vrátí se.
-   * Třetí část končí tak, jak začala, a záznam ji přehrává dokola bez viditelného švu.
+   * 3. klid po zápase: kdo to má blízko, dojde si pomalu sednout na střídačku, někdo si sedne na trávník a ostatní
+   *    zůstanou stát. Pak už se nikdo nehýbe a obraz tak zůstane.
    */
   finale(): Scene {
     if (this.closing) return this.closing;
@@ -857,15 +855,28 @@ export class Replay {
     });
     st.wait(calm - meet);
 
-    // 3. Klid po zápase: každý třetí z těch, kdo stojí, udělá pomalu pár kroků stranou a vrátí se na své místo.
-    SIDES.flatMap(figures).filter((f) => !grounded.has(f)).forEach((f, n) => {
-      if (n % 3) return;
-      const home = st.pos(f), wait = (n % 4) * 1.5;
-      st.go(f, toward(home, { x: 0, z: 0 }, n % 2 ? 1.2 : -1.2), 2.5, wait);
-      st.go(f, home, 2.5, wait + 5);
-    });
-    st.wait(12);
-    this.closing = { clip: st.finish(), start: 0, split: 0, end: st.t, focus: [], card: null, replay: null, loop: calm };
+    // 3. Klid po zápase, beze spěchu.
+    let settled = 0;
+    for (const side of SIDES) {
+      const bench = st.bench(side);
+      const standing = figures(side).filter((f) => !grounded.has(f)).sort((a, b) => dist(st.pos(a), bench) - dist(st.pos(b), bench));
+      // Na volná místa na střídačce (nejvýš dvě) si dojdou sednout ti, kdo to k ní mají nejblíž.
+      const taken = Math.min(roster.bench[side].length, SEATS.count), seats = Math.min(2, SEATS.count - taken, standing.length);
+      standing.forEach((f, n) => {
+        if (n < seats) {
+          const to = { x: BENCH_X - SEATS.behind, z: bench.z + (taken + n - (SEATS.count - 1) / 2) * SEATS.step };
+          const wait = n * 2, walk = dist(st.pos(f), to) / 1.4;
+          st.go(f, to, walk, wait);
+          st.pose(f, "sit", Infinity, wait + walk);
+          settled = Math.max(settled, wait + walk);
+        } else if (n % 2) {
+          // Každý druhý ze zbylých si po chvíli sedne na trávník.
+          st.pose(f, "slide", Infinity, 1 + n * 0.8);
+        }
+      });
+    }
+    st.wait(settled + 1);
+    this.closing = { clip: st.finish(), start: 0, split: 0, end: st.t, focus: [], card: null, replay: null };
     return this.closing;
   }
 
