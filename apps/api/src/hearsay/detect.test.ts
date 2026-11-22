@@ -41,6 +41,17 @@ describe("síto jmen", () => {
     expect(mentionCandidates([tomasN, tomasK], "Tomáši, Klíma hrál skvěle", ["tnovotny"]).map((c) => c.id)).toEqual(["tklima"]);
   });
 
+  // Lokální E2E 22. 11.: „Lukáši, proč jsi tenkrát vykradl ten sklad?“ Lukáši Kohoutovi se zapsalo
+  // jako kritika spoluhráče Jakuba Lukáše a šířilo se kabinou. Oslovení adresáta neplatí ani pro příjmení.
+  it("oslovení adresáta nestáhne spoluhráče, který se tak jmenuje příjmením ani přezdívkou", () => {
+    const kohout: MentionCandidate = { id: "kohout", firstName: "Lukáš", lastName: "Kohout" };
+    const jakubLukas: MentionCandidate = { id: "jlukas", firstName: "Jakub", lastName: "Lukáš" };
+    const pepa: MentionCandidate = { id: "pepa", firstName: "Martin", lastName: "Dvořák", nickname: "Lukáš" };
+    expect(mentionCandidates([kohout, jakubLukas, pepa], "Lukáši, proč jsi tenkrát vykradl ten sklad?", ["kohout"])).toEqual([]);
+    // Jiným jménem ho najde dál.
+    expect(mentionCandidates([kohout, jakubLukas], "Lukáši, Jakub hrál skvěle", ["kohout"]).map((c) => c.id)).toEqual(["jlukas"]);
+  });
+
   it("adresát sám není zmínka", () => {
     expect(mentionCandidates(club, "Šímo, makal jsi dobře", ["sima"])).toEqual([]);
   });
