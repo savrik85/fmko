@@ -42,16 +42,18 @@ export function Replay3D({ detail, events, progress }: { detail: Record<string, 
   const { idx, flash, kickoff, halfTime, finished, paused, fast, homeGoals, awayGoals } = progress;
   const homeName = detail.home_name as string, awayName = detail.away_name as string;
   const kits = useMemo(() => ({ home: detail.home_kit as ReplayKit, away: detail.away_kit as ReplayKit }), [detail]);
+  const pens = typeof detail.home_pens === "number" && typeof detail.away_pens === "number" && detail.home_pens + detail.away_pens > 0 ? { home: detail.home_pens, away: detail.away_pens } : null;
+  const margin = (detail.home_score as number) - (detail.away_score as number) || (pens ? pens.home - pens.away : 0);
   const replay = useMemo(() => new Replay({
-    matchId: detail.id as string, events,
+    matchId: detail.id as string, events, winner: margin > 0 ? "home" : margin < 0 ? "away" : null,
     home: { name: homeName, kit: kits.home, ...(detail.home_lineup_data as StoredLineup) },
     away: { name: awayName, kit: kits.away, ...(detail.away_lineup_data as StoredLineup) },
-  }), [detail, events, homeName, awayName, kits]);
+  }), [detail, events, homeName, awayName, kits, margin]);
 
   // Krok 2D záznamu → scéna: „ŠANCE!“ je útočná fáze události, která teprve přijde, jinak běží poslední ukázaná událost.
   const attack = flash === "attacking";
   const still = kickoff !== null || halfTime || (idx === 0 && !attack);
-  const scene = useMemo(() => (still ? replay.kickoff(idx) : replay.scene(attack ? idx : idx - 1)), [replay, still, attack, idx]);
+  const scene = useMemo(() => (finished ? replay.finale() : still ? replay.kickoff(idx) : replay.scene(attack ? idx : idx - 1)), [replay, finished, still, attack, idx]);
   const started = useMemo(() => ({ scene, attack, startedAt: performance.now() }), [scene, attack]);
   const step = useRef<ReplayStep>({ ...started, rate: 1 });
   /** Jen při vývoji: scéna zastavená pro snímek obrazovky (window.__replay3d.freeze). */
@@ -59,12 +61,13 @@ export function Replay3D({ detail, events, progress }: { detail: Record<string, 
   const rate = fast ? 2 : 1;
   // Pauza zastaví scénu tam, kde zrovna je.
   const pausedAt = useMemo(() => (paused ? ((performance.now() - started.startedAt) / 1000) * rate : undefined), [paused, started, rate]);
-  step.current = frozen.current ?? { ...started, rate, hold: pausedAt };
+  // O přestávce stojí týmy připravené na výkop druhého poločasu.
+  step.current = frozen.current ?? { ...started, rate, hold: halfTime ? 0 : pausedAt };
   useEffect(() => {
     if (process.env.NODE_ENV !== "development") return;
     const freeze = (index: number, attackBeat: boolean, seconds: number) => {
       // Posledních 0,4 s se přehraje, ať mají hráči krok a natočení jako při sledování.
-      frozen.current = { scene: index < 0 ? replay.kickoff(0) : replay.scene(index), attack: attackBeat, startedAt: performance.now() - Math.max(0, seconds - 0.4) * 1000, rate: 1, hold: seconds };
+      frozen.current = { scene: index === -2 ? replay.finale() : index < 0 ? replay.kickoff(0) : replay.scene(index), attack: attackBeat, startedAt: performance.now() - Math.max(0, seconds - 0.4) * 1000, rate: 1, hold: seconds };
       step.current = frozen.current;
     };
     Object.assign(window, { __replay3d: { replay, freeze } });
@@ -90,7 +93,9 @@ export function Replay3D({ detail, events, progress }: { detail: Record<string, 
   const attendance = detail.attendance as number | null;
 
   function labelOf(): { text: string; sub?: string; tone: keyof typeof TONES } | null {
-    if (still || finished || !event) return null;
+    if (finished) return { text: "KONEC ZÁPASU", sub: `${detail.home_score} : ${detail.away_score}${pens ? ` (pen. ${pens.home}:${pens.away})` : ""}`, tone: "info" };
+    if (kickoff) return { text: "VÝKOP", sub: kickoff === "2nd" ? "2. poločas" : undefined, tone: "info" };
+    if (still || !event) return null;
     const name = event.playerName;
     if (attack) return event.source === "penalty" ? { text: "PENALTA", sub: name, tone: "danger" } : { text: "ŠANCE!", sub: event.teamId === 1 ? homeName : awayName, tone: "danger" };
     if (event.detail?.startsWith("shootout:")) return { text: "ROZSTŘEL", sub: `${name}: ${event.detail === "shootout:goal" ? "gól" : "nedal"}`, tone: event.detail === "shootout:goal" ? "goal" : "miss" };
@@ -108,10 +113,8 @@ export function Replay3D({ detail, events, progress }: { detail: Record<string, 
     }
   }
 
-  const pens = typeof detail.home_pens === "number" && typeof detail.away_pens === "number" && detail.home_pens + detail.away_pens > 0 ? ` (pen. ${detail.home_pens}:${detail.away_pens})` : "";
-  const curtain = kickoff ? { text: "VÝKOP", sub: kickoff === "2nd" ? "2. poločas" : "" }
-    : halfTime ? { text: "POLOČAS", sub: `${homeGoals} : ${awayGoals}` }
-    : finished ? { text: "KONEC", sub: `${detail.home_score} : ${detail.away_score}${pens}` } : null;
+  // Výkop a konec zápasu mají vlastní scénu, obraz ztmaví jen přestávka.
+  const curtain = halfTime ? { text: "POLOČAS", sub: `${homeGoals} : ${awayGoals}` } : null;
 
   return (
     <div className={fullscreen ? "fixed inset-0 z-50 bg-black" : "absolute inset-0 z-20 rounded-control overflow-hidden bg-black"}>

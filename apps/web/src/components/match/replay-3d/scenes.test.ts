@@ -13,7 +13,7 @@ const event = (minute: number, type: string, teamId: 1 | 2, slot: number, extra:
   return { minute, type, playerId, playerName, teamId, description: `${type} ${playerName}`, ...extra };
 };
 const input = (events: ReplayEvent[]): ReplayInput => ({
-  matchId: "test", events,
+  matchId: "test", events, winner: "home",
   home: { name: "Domácí", kit, starters: squad("H"), subs: [{ id: "hs", name: "Sub 1", position: "MID" }] },
   away: { name: "Hosté", kit, starters: squad("A"), subs: [] },
 });
@@ -50,7 +50,7 @@ function problems(replay: Replay, scene: Scene, label: string): string[] {
 
 function checkAll(replay: Replay, events: ReplayEvent[], label: string): string[] {
   const scened = scenedEvents(events);
-  return [...problems(replay, replay.kickoff(0), `${label} výkop`), ...problems(replay, replay.kickoff(events.length), `${label} výkop na konci`),
+  return [...problems(replay, replay.kickoff(0), `${label} výkop`), ...problems(replay, replay.kickoff(events.length), `${label} výkop na konci`), ...problems(replay, replay.finale(), `${label} konec`),
     ...events.flatMap((e, i) => (scened[i] ? problems(replay, replay.scene(i), `${label} #${i} ${e.minute}' ${e.type}${e.detail ? `/${e.detail}` : ""}`) : []))];
 }
 
@@ -146,14 +146,14 @@ describe("scény 3D záznamu", () => {
 const dump = process.env.REPLAY_MATCHES;
 describe.skipIf(!dump)("zápasy z místní databáze", () => {
   it("všechny jdou přehrát bez chyby", () => {
-    type Detail = Record<string, unknown> & { id: string; events: ReplayEvent[]; home_lineup_data: { starters: ReplayPlayer[]; subs: ReplayPlayer[] }; away_lineup_data: { starters: ReplayPlayer[]; subs: ReplayPlayer[] } };
+    type Detail = Record<string, unknown> & { id: string; home_score: number; away_score: number; events: ReplayEvent[]; home_lineup_data: { starters: ReplayPlayer[]; subs: ReplayPlayer[] }; away_lineup_data: { starters: ReplayPlayer[]; subs: ReplayPlayer[] } };
     const matches = JSON.parse(readFileSync(dump!, "utf8")) as Detail[];
     const found: string[] = [];
     for (const m of matches) {
       const events = [...m.events, ...shootoutEvents(m)];
       try {
         const replay = new Replay({
-          matchId: m.id, events,
+          matchId: m.id, events, winner: m.home_score > m.away_score ? "home" : m.home_score < m.away_score ? "away" : null,
           home: { name: "Domácí", kit, ...m.home_lineup_data }, away: { name: "Hosté", kit, ...m.away_lineup_data },
         });
         found.push(...checkAll(replay, events, `${m.kind} ${m.id.slice(0, 8)}`));

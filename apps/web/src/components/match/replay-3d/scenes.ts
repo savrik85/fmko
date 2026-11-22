@@ -29,7 +29,8 @@ export interface ReplayKit { shirt: string; shorts: string; socks: string }
 export interface ReplayTeam { name: string; kit: ReplayKit; starters: ReplayPlayer[]; subs: ReplayPlayer[] }
 /** Událost zápasu, jak ji ukládá engine (detail zápasu z API). */
 export interface ReplayEvent { minute: number; type: string; playerId: number; playerName: string; teamId: number; description: string; detail?: string; source?: string }
-export interface ReplayInput { matchId: string; events: ReplayEvent[]; home: ReplayTeam; away: ReplayTeam }
+/** `winner` = kdo zápas vyhrál (i na penalty), null = remíza. */
+export interface ReplayInput { matchId: string; events: ReplayEvent[]; home: ReplayTeam; away: ReplayTeam; winner: Side | null }
 export interface Figure { team: Side | "referee"; player: ReplayPlayer }
 
 interface Point { x: number; z: number }
@@ -441,12 +442,15 @@ export class Replay {
   private readonly events: ReplayEvent[];
   /** Engine id hráče („home:7“) → figura. */
   private readonly ids = new Map<string, number>();
-  /** Kdo je na hřišti před každou událostí. */
+  /** Kdo je na hřišti před každou událostí a kdo po té poslední. */
   private readonly rosters: Roster[] = [];
+  private readonly finalRoster: Roster;
   private readonly swaps = new Map<number, { incoming: number; outgoing: number }>();
   private readonly heads: number[];
   private readonly scened: boolean[];
   private readonly clips = new Map<number, { clip: Clip; windows: Map<number, Window> }>();
+  private readonly kickoffs = new Map<number, Scene>();
+  private closing: Scene | null = null;
 
   constructor(private readonly input: ReplayInput) {
     this.events = input.events;
@@ -488,6 +492,7 @@ export class Replay {
         roster = { ...roster, [side]: roster[side].map((s) => (s.figure === figure ? { ...s, role: "GK" as const } : s)) };
       }
     });
+    this.finalRoster = roster;
   }
 
   private figureOf(e: ReplayEvent): number {
@@ -496,10 +501,18 @@ export class Replay {
     return figure;
   }
 
-  /** Scéna události `index`. Událost bez vlastní scény drží konec poslední akce před ní (před první akcí výkop). */
+  /**
+   * Scéna události `index`. Událost bez vlastní scény drží konec poslední akce před ní; před první akcí
+   * poločasu drží konec výkopu.
+   */
   scene(index: number): Scene {
     const shown = this.scened.lastIndexOf(true, index);
-    if (shown < 0) return this.kickoff(0);
+    const secondHalf = this.events.findIndex((e) => e.minute > 45);
+    const sinceKickoff = secondHalf >= 0 && index >= secondHalf ? secondHalf : 0;
+    if (shown < sinceKickoff) {
+      const kickoff = this.kickoff(sinceKickoff);
+      return { ...kickoff, start: kickoff.end, split: kickoff.end };
+    }
     const head = this.heads[shown];
     let built = this.clips.get(head);
     if (!built) {
@@ -515,16 +528,81 @@ export class Replay {
     return shown === index ? { clip: built.clip, ...window } : { clip: built.clip, ...window, start: window.end, split: window.end };
   }
 
-  /** Rozestavení na výkop (začátek zápasu a poločasu) s hráči, kteří jsou na hřišti před událostí `index`. */
+  /**
+   * Výkop před událostí `index`: rozhodčí zapíská, míč jde ze středu dozadu a tým se rozbíhá. První poločas
+   * rozehrávají domácí, druhý hosté.
+   */
   kickoff(index: number): Scene {
-    const roster = this.rosters[Math.min(index, this.rosters.length - 1)];
-    const stage = new Stage(this.figures.length, roster, seededRng(this.input.matchId), this.referee);
-    // Dva nejvýš postavení domácí stojí u míče.
-    const pair = roster.home.filter((s) => s.role !== "GK").sort((a, b) => b.base.u - a.base.u).slice(0, 2);
-    const fixed = new Map<number, Point>([[this.referee, { x: 4, z: 5 }], ...pair.map((s, n): [number, Point] => [s.figure, { x: n * 2.5 - 0.6, z: 0.7 }])]);
-    stage.layout({ x: 0, z: 0 }, (slot, side) => uvToWorld(side, Math.min(slot.base.u * 0.8, 0.42), slot.base.v), fixed);
-    stage.wait(PLAIN);
-    return { clip: stage.finish(), start: 0, split: 0, end: PLAIN, focus: [], card: null, result: null, replay: null };
+    const cached = this.kickoffs.get(index);
+    if (cached) return cached;
+    const second = index > 0 && this.events[index - 1].minute >= 45;
+    const side: Side = second ? "away" : "home", fwd = attackSign(side);
+    const roster = index < this.rosters.length ? this.rosters[index] : this.finalRoster;
+    const st = new Stage(this.figures.length, roster, seededRng(`${this.input.matchId}:kickoff:${second}`), this.referee);
+    // Dva nejvýš postavení hráči stojí u míče, třetí čeká na přihrávku dozadu.
+    const front = roster[side].filter((x) => x.role !== "GK").sort((a, b) => b.base.u - a.base.u).map((x) => x.figure);
+    const fixed = new Map<number, Point>([[this.referee, { x: -4, z: -fwd * 4 }]]);
+    front.slice(0, 2).forEach((f, n) => fixed.set(f, { x: n * 2.4 - 0.5, z: -fwd * 0.8 }));
+    if (front[2] !== undefined) fixed.set(front[2], { x: 3, z: -fwd * 9 });
+    st.layout({ x: 0, z: 0 }, (slot, sd) => uvToWorld(sd, Math.min(slot.base.u * 0.8, 0.42), slot.base.v), fixed, [{ x: 0, z: 0, r: 6 }, { x: 3, z: -fwd * 9, r: 3 }]);
+    st.pose(this.referee, "armUp", 0.8, 0.4);
+    st.wait(1.2);
+    if (front[2] !== undefined) {
+      st.pass(front[2], 0.8);
+      front.slice(0, 2).forEach((f, n) => st.go(f, { x: (n ? 7 : -6), z: fwd * 7 }, 1.8));
+      st.wait(0.8);
+      st.dribble(front[2], { x: 4, z: -fwd * 5 }, 1);
+    }
+    st.t = 3;
+    const scene: Scene = { clip: st.finish(), start: 0, split: 0, end: 3, focus: [], card: null, result: null, replay: null };
+    this.kickoffs.set(index, scene);
+    return scene;
+  }
+
+  /**
+   * Konec zápasu: rozhodčí odpíská, vítězové se radují, pak si oba týmy u půlicí čáry podají ruce
+   * a vítězové slaví ještě jednou. Při remíze jen podání rukou.
+   */
+  finale(): Scene {
+    if (this.closing) return this.closing;
+    const roster = this.finalRoster, winner = this.input.winner;
+    const st = new Stage(this.figures.length, roster, seededRng(`${this.input.matchId}:finale`), this.referee);
+    const ball = { x: 6, z: 9 };
+    const spot = this.playSpot("home");
+    st.layout(ball, (slot, side) => spot(slot, side, ball), new Map([[this.referee, { x: -3, z: 0 }]]), [{ x: -3, z: 0, r: 2.5 }]);
+    const line = (side: Side) => [...roster[side]].sort((a, b) => st.pos(a.figure).z - st.pos(b.figure).z).map((x) => x.figure);
+    const teams = { home: line("home"), away: line("away") };
+    st.pose(this.referee, "armUp", 1.2, 0.2);
+    st.wait(0.8);
+    if (winner) {
+      teams[winner].forEach((f, n) => { st.pose(f, "celebrate", 2.4, n * 0.05); st.jump(f, 0.5 + (n % 3) * 0.25); st.jump(f, 1.5 + (n % 3) * 0.25); });
+      st.wait(2.6);
+    }
+    // Podání rukou: oba týmy se seřadí proti sobě do dvou řad uprostřed hřiště, každý proti svému protějšku.
+    const walk = 5;
+    for (const side of ["home", "away"] as const) {
+      teams[side].forEach((f, n) => {
+        const to = { x: -3 + attackSign(side) * 0.75, z: -13 + n * 2.4 };
+        st.go(f, to, Math.max(walk - 1.5, dist(st.pos(f), to) / 6.5));
+        st.pose(f, "armUp", 0.9, walk + 0.2);
+      });
+    }
+    st.go(this.referee, { x: -3, z: -16.5 }, walk);
+    st.wait(walk + 1.4);
+    if (winner) {
+      // Vítězové se seběhnou do hloučku na své půlce a skáčou.
+      const centre = { x: 4, z: -attackSign(winner) * 20 };
+      teams[winner].forEach((f, n) => {
+        const angle = (n / teams[winner].length) * Math.PI * 2;
+        const to = { x: centre.x + Math.sin(angle) * (2 + (n % 2)), z: centre.z + Math.cos(angle) * (2 + (n % 2)) };
+        st.go(f, to, Math.max(2.4, dist(st.pos(f), to) / 6));
+        st.pose(f, "celebrate", Infinity, 1.6);
+        [5.2, 6, 6.8].forEach((at) => st.jump(f, at + (n % 3) * 0.12));
+      });
+      st.wait(7.5);
+    }
+    this.closing = { clip: st.finish(), start: 0, split: 0, end: st.t, focus: [], card: null, result: null, replay: null };
+    return this.closing;
   }
 
   /**
@@ -579,7 +657,7 @@ export class Replay {
         const block = rest.find((i) => events[i].detail === "block");
         const split = this.openPlay(st, side, shooter, shotResult, e.source === "counter",
           assist === undefined ? null : this.onPitch(st, events[assist]), block === undefined ? null : this.onPitch(st, events[block]));
-        return window(head, 0, { split, focus: [shooter], result: shotResult });
+        return window(head, 0, { split, focus: [shooter], result: shotResult, replay: e.type === "goal" ? { from: split - 1.6, to: split + 0.45, goalZ: goalZ(side) } : null });
       }
       case "corner":
       case "freekick": {
@@ -591,7 +669,7 @@ export class Replay {
         window(head, 0, { focus: [taker] });
         const start = st.t;
         const split = direct ? this.directKick(st, side, taker, result) : this.header(st, side, taker, header, result);
-        return window(finisher, start, { split, focus: [header], result });
+        return window(finisher, start, { split, focus: [header], result, replay: result === "goal" ? { from: split - 1.6, to: split + 0.45, goalZ: goalZ(side) } : null });
       }
       case "penalty": {
         const kicker = this.onPitch(st, e);
@@ -602,7 +680,7 @@ export class Replay {
         const scored = result === "goal";
         const split = this.penaltyKick(st, side, kicker, result, scored ? ATTACK : 1.6, scored ? GOAL : DRAMA - 1.6, goalZ(side), false);
         // Zahozenou penaltu 2D záznam ukáže bez útočné fáze, celý kop se odehraje najednou.
-        return window(finisher, start, { split: scored ? split : start, focus: [kicker], result });
+        return window(finisher, start, { split: scored ? split : start, focus: [kicker], result, replay: scored ? { from: split - 1.4, to: split + 0.45, goalZ: goalZ(side) } : null });
       }
       case "foul": {
         const fouler = this.onPitch(st, e);
@@ -664,18 +742,7 @@ export class Replay {
       st.ballTo(line(x), fly, { h: 0.4 + st.rng() * 1.5, arc: 0.4 });
       st.wait(fly);
       st.ballTo({ x: x * 0.9, z: gz + s * 1.4 }, 0.25, { h: 0.2 });
-      // Střelec běží slavit před hlavní tribunu, nejbližší spoluhráči za ním (kdo je daleko, neběží přes celé hřiště).
-      const corner = celebrationSpot(gz);
-      const mates = st.outfield(side, [shooter]).filter((m) => dist(st.pos(m), corner) < 22).sort((a, b) => dist(st.pos(a), corner) - dist(st.pos(b), corner)).slice(0, 3);
-      st.go(shooter, corner, Math.max(2.5, dist(st.pos(shooter), corner) / 6), 0.3);
-      st.pose(shooter, "celebrate", Infinity, 0.3);
-      mates.forEach((m, n) => {
-        // Do půlkruhu kolem střelce, ať nestojí na sobě.
-        const angle = Math.atan2(-corner.x, -corner.z + gz * 0.5) + (n - 1) * 0.9;
-        const to = { x: corner.x + Math.sin(angle) * 2.4, z: corner.z + Math.cos(angle) * 2.4 };
-        st.go(m, to, Math.max(3, dist(st.pos(m), to) / 6), 0.6);
-        st.pose(m, "celebrate", Infinity, 2.5);
-      });
+      this.celebrate(st, side, shooter, gz);
     } else if (result === "saved") {
       const side = sgn * (0.6 + st.rng() * 2);
       const at = reach(clamp(st.pos(gk).x + side, -GOAL_HALF_W + 0.4, GOAL_HALF_W - 0.4));
@@ -712,6 +779,36 @@ export class Replay {
     }
     st.t = split + after;
     return split;
+  }
+
+  /** Oslava gólu, pokaždé jedna ze tří: běh před tribunu se spoluhráči, skluz po kolenou, nebo hlouček, který skáče. */
+  private celebrate(st: Stage, side: Side, shooter: number, gz: number) {
+    const spot = celebrationSpot(gz);
+    const style = Math.floor(st.rng() * 3);
+    // Spoluhráči, kteří to mají blízko (nikdo neběží přes celé hřiště).
+    const mates = st.outfield(side, [shooter]).filter((m) => dist(st.pos(m), spot) < 22).sort((a, b) => dist(st.pos(a), spot) - dist(st.pos(b), spot)).slice(0, 3);
+    const run = Math.max(2.2, dist(st.pos(shooter), spot) / 6.5);
+    if (style === 1) {
+      // Skluz po kolenou: rozběh a posledních pár metrů po kolenou se zakloněným tělem.
+      st.go(shooter, toward(spot, st.pos(shooter), 3.5), run, 0.3);
+      st.go(shooter, spot, 1.4, 0.3 + run);
+      st.pose(shooter, "slide", 2.6, 0.3 + run);
+      st.pose(shooter, "celebrate", Infinity, 2.9 + run);
+    } else {
+      st.go(shooter, spot, run, 0.3);
+      st.pose(shooter, "celebrate", Infinity, 0.3);
+    }
+    mates.forEach((m, n) => {
+      // Do půlkruhu kolem střelce, ať nestojí na sobě.
+      const angle = Math.atan2(-spot.x, -spot.z + gz * 0.5) + (n - 1) * 0.9;
+      const to = { x: spot.x + Math.sin(angle) * 2.4, z: spot.z + Math.cos(angle) * 2.4 };
+      const arrive = Math.max(run + 0.4, dist(st.pos(m), to) / 6.5);
+      st.go(m, to, arrive, 0.6);
+      st.pose(m, "celebrate", Infinity, arrive);
+      // Hlouček skáče (při skluzu a hloučku), při běhu před tribunu jen zvednou ruce.
+      if (style > 0) [0.5, 1.3].forEach((at) => st.jump(m, 0.6 + arrive + at));
+    });
+    if (style === 2) [1.1, 1.9].forEach((at) => st.jump(shooter, 0.3 + run + at));
   }
 
   /** Akce ze hry: přihrávka do běhu a střela, u brejku sprint přes půl hřiště. */
