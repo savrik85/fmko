@@ -773,14 +773,16 @@ export default function MatchReplayPage() {
         {/* Přetáčení po akcích a pauza; čára je dělí od rychlosti přehrávání. */}
         <div className="flex gap-3 pr-3 border-r-2 border-black/15">
           {([
-            ["Předchozí akce", "\u25C0 Předchozí", () => (previousAction !== undefined ? jumpTo(previousAction) : begin()), false],
-            [paused ? "Pokračovat" : "Pauza", paused ? "\u25B6 Hrát" : "\u275A\u275A Pauza", () => setPaused((p) => !p), finished || htPause],
-            ["Další akce", "Další \u25B6", () => nextAction !== undefined && jumpTo(nextAction), nextAction === undefined],
+            ["Předchozí akce", "\u2759\u25C0", () => (previousAction !== undefined ? jumpTo(previousAction) : begin()), false],
+            [paused ? "Pokračovat" : "Pauza", paused ? "\u25B6" : "\u275A\u275A", () => setPaused((p) => !p), finished || htPause],
+            ["Další akce", "\u25B6\u2759", () => nextAction !== undefined && jumpTo(nextAction), nextAction === undefined],
           ] as const).map(([title, label, onClick, disabled]) => (
             <button key={title} onClick={onClick} disabled={disabled} title={title}
-              className="px-5 py-3 rounded-xl text-base font-heading font-bold uppercase tracking-wide bg-white text-muted hover:text-ink shadow-md transition-all disabled:opacity-40 disabled:hover:text-muted">{label}</button>
+              className="w-12 py-3 rounded-xl text-base font-heading font-bold uppercase tracking-wide bg-white text-muted hover:text-ink shadow-md transition-all disabled:opacity-40 disabled:hover:text-muted">{label}</button>
           ))}
         </div>
+        {/* Rychlost drží pohromadě: když se řada nevejde, spadne pod přetáčení celá. */}
+        <div className="flex gap-3">
         {!finished && !htPause && (["live", "fast", "instant"] as Speed[]).map((s) => (
           <button key={s} onClick={() => setSpeed(s)}
             className={`px-6 py-3 rounded-xl text-base font-heading font-bold uppercase tracking-wide transition-all ${
@@ -791,6 +793,7 @@ export default function MatchReplayPage() {
         {/* Pozadím je dres domácích — u bílého (#FFFFFF) by bílý popisek zmizel a tlačítko nešlo přečíst. */}
         {htPause && <button onClick={() => { setHtPause(false); setHtDone(true); setKickoff("2nd"); }} className={`px-8 py-3 rounded-xl text-base font-heading font-bold uppercase shadow-lg ${bestTextOn(hc) === "light" ? "text-white" : "text-gray-900"}`} style={{ backgroundColor: hc }}>2. poločas {"\u25B6"}</button>}
         {finished && <button onClick={() => router.push(`/zapas/${matchId}`)} className={`px-10 py-3 rounded-xl text-lg font-heading font-bold uppercase shadow-lg ${bestTextOn(hc) === "light" ? "text-white" : "text-gray-900"}`} style={{ backgroundColor: hc }}>Pokračovat na přehled</button>}
+        </div>
       </div>
 
       {/* ═══ TICKER ═══ */}

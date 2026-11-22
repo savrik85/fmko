@@ -155,7 +155,7 @@ export function Replay3D({ detail, events, progress, onReady }: {
       )}
       {fullscreen && <ScoreBug detail={detail} homeGoals={homeGoals} awayGoals={awayGoals} minute={events[index]?.minute} />}
       <button onClick={() => setOverview((v) => !v)} title={overview ? "Pohled z tribuny" : "Pohled z výšky"}
-        className="absolute top-2 right-12 z-40 h-8 px-2.5 rounded-lg bg-black/60 hover:bg-black/80 text-white text-xs font-heading font-bold">
+        className="absolute top-12 right-2 z-40 h-8 px-2.5 rounded-lg bg-black/60 hover:bg-black/80 text-white text-xs font-heading font-bold">
         {overview ? "Z tribuny" : "Z výšky"}
       </button>
       <button onClick={() => setFullscreen((v) => !v)} title={fullscreen ? "Zmenšit" : "Na celou obrazovku"}
