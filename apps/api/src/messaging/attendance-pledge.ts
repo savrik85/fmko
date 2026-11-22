@@ -464,15 +464,15 @@ export async function loadTrainingDays(db: D1Database, teamId: string): Promise<
   return trainingWeekdays(row, parseTrainingPlan(row.training_plan, teamId));
 }
 
-/** Herní dny se zápasem týmu v okně slibu: v den zápasu se netrénuje. */
+/**
+ * Herní dny se zápasem týmu v okně slibu: v den zápasu se netrénuje. Liga, přátelák i pohár,
+ * stejně jako denní tick (season/match-days.ts); dřív jen liga a slib na trénink v den poháru
+ * propadl bez dopadu (Procházka, přetest 3).
+ */
 async function loadMatchDays(db: D1Database, teamId: string, gameDay: string): Promise<Set<string>> {
-  const rows = await db.prepare(
-    `SELECT DISTINCT substr(sc.scheduled_at, 1, 10) AS day FROM season_calendar sc
-       JOIN matches m ON m.calendar_id = sc.id AND (m.home_team_id = ?1 OR m.away_team_id = ?1)
-      WHERE sc.status = 'scheduled' AND substr(sc.scheduled_at, 1, 10) > ?2 AND substr(sc.scheduled_at, 1, 10) <= ?3`,
-  ).bind(teamId, gameDay, shiftDay(gameDay, PLEDGE_WINDOW_DAYS)).all<{ day: string }>()
-    .catch((e) => { logger.warn({ module: M }, `zápasy týmu ${teamId}`, e); return { results: [] as Array<{ day: string }> }; });
-  return new Set(rows.results.map((r) => r.day));
+  const { loadTeamMatchDays } = await import("../season/match-days");
+  const rows = await loadTeamMatchDays(db, { from: shiftDay(gameDay, 1), to: shiftDay(gameDay, PLEDGE_WINDOW_DAYS), teamId });
+  return new Set(rows.map((r) => r.day));
 }
 
 /**
