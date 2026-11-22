@@ -50,7 +50,7 @@ export function ReplayOverlay({ plan, clock, matchId }: { plan: ReplayPlan; cloc
       </div>
 
       {banner && (
-        <div className="absolute inset-x-0 top-[11%] z-30 flex justify-center pointer-events-none">
+        <div className="absolute inset-x-0 bottom-28 sm:bottom-32 z-30 flex justify-center pointer-events-none">
           <div className={`font-heading font-black tracking-wider bg-black/45 rounded-2xl px-4 py-1 drop-shadow-[0_4px_12px_rgba(0,0,0,0.8)] animate-in zoom-in-75 fade-in duration-300 ${banner.className}`}>
             {banner.text}
           </div>

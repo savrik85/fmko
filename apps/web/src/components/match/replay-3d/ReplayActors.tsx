@@ -205,10 +205,12 @@ export function ReplayActors({ plan, clock }: { plan: ReplayPlan; clock: ReplayC
     // Kamera míří doprostřed mezi míč a hráče z titulku (ne přímo za hráčem, jinak by se zdálo, že stojí).
     const fx = (frame.ballX + focus.reduce((sum, i) => sum + states[i].x, 0)) / (focus.length + 1);
     const fz = (frame.ballZ + focus.reduce((sum, i) => sum + states[i].z, 0)) / (focus.length + 1);
-    const wanted = vTmp.set(fx * (focus.length ? 0.75 : cam.follow), 0, THREE.MathUtils.clamp(fz, -HALF_L + (tall ? 16 : 15), HALF_L - (tall ? 11 : 15)));
+    const wanted = vTmp.set(fx * (focus.length ? 1 : cam.follow), 0, THREE.MathUtils.clamp(fz, -HALF_L + (tall ? 16 : 15), HALF_L - (tall ? 11 : 15)));
     if (!look.current || look.current.distanceTo(wanted) > 30) look.current = wanted.clone();
     else look.current.lerp(wanted, 1 - Math.exp(-Math.min(delta, 0.1) * 2.2));
     camera.position.copy(look.current).add(cam.offset);
+    // Na šířku se u branky kamera posune k půlce, bránu vidí šikmo (skok brankáře podél brány by z boku nebyl vidět).
+    if (!tall) camera.position.z -= look.current.z * 0.6;
     camera.lookAt(look.current);
     if (camera.fov !== cam.fov) {
       camera.fov = cam.fov;
@@ -226,7 +228,7 @@ export function ReplayActors({ plan, clock }: { plan: ReplayPlan; clock: ReplayC
       // Hráč mimo záběr jmenovku nemá; u kraje se posune dovnitř, ať zůstane nad titulkem a ovládáním.
       if (Math.abs(vTmp.x) > 1 || Math.abs(vTmp.y) > 1) tag.style.display = "none";
       const x = THREE.MathUtils.clamp(((vTmp.x + 1) / 2) * size.width, 70, size.width - 70);
-      const y = THREE.MathUtils.clamp(((1 - vTmp.y) / 2) * size.height, 150, size.height - 140);
+      const y = THREE.MathUtils.clamp(((1 - vTmp.y) / 2) * size.height, 80, size.height - 200);
       tag.style.transform = `translate(${x}px, ${y}px) translate(-50%, -100%)`;
     });
 
