@@ -163,13 +163,28 @@ function whenWords(days: number): string {
   return `před ${days} dny`;
 }
 
-/** Věta do promptu chatu: co se hráči nedávno stalo. */
+/** Kolik dní je máma s miminkem v porodnici: dítě je o tolik starší, než kdy se vrátili. */
+const MATERNITY_STAY_DAYS = 3;
+
+/** Stáří miminka slovy: „4 dny“, „11 dní“, „2 týdny“. */
+function babyAgeWords(days: number): string {
+  if (days < 14) return days === 1 ? "1 den" : days <= 4 ? `${days} dny` : `${days} dní`;
+  const weeks = Math.floor(days / 7);
+  return weeks <= 4 ? `${weeks} týdny` : `${weeks} týdnů`;
+}
+
+/**
+ * Věta do promptu chatu: co se hráči nedávno stalo. U miminka i jeho stáří a co novorozeně
+ * (ne)umí: Mráz (E2E 22. 11.) den po porodnici psal, že „Kristýna už začíná chodiť“.
+ */
 export function lifeEventFact(kind: LifeNewsKind, data: LifeNewsData, daysAgo: number): string {
   if (kind === "narozeni_ditete" && data.baby) {
     const w = BABY_WORDS[data.baby.sex];
     const when = whenWords(daysAgo);
     return `${when.charAt(0).toUpperCase()}${when.slice(1)} jste se vrátili z porodnice, ${w.born} ${data.baby.name} (${formatWeight(data.baby.weightG)}). `
-      + "Jsi čerstvý táta, doma máte miminko.";
+      + "Jsi čerstvý táta, doma máte miminko. "
+      + `${data.baby.name} je na světě ${babyAgeWords(daysAgo + MATERNITY_STAY_DAYS)}, je to novorozeně: spí, pije a pláče. `
+      + "Nechodí, nesedí, nemluví a nic z toho ještě neumí, nic jiného si o něm nevymýšlej.";
   }
   const p = PARENT_WORDS[data.parent ?? "mother"];
   return `${p.your.charAt(0).toUpperCase()}${p.your.slice(1)} byl${data.parent === "mother" ? "a" : ""} v nemocnici, `

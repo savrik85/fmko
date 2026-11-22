@@ -99,7 +99,19 @@ describe("pokyn modelu a fakt do chatu", () => {
 
   it("chat ví, že je čerstvý táta, i jak se dítě jmenuje", () => {
     expect(lifeEventFact("narozeni_ditete", { baby: { sex: "boy", name: "Matyáš", weightG: 3450 } }, 3))
-      .toBe("Před 3 dny jste se vrátili z porodnice, narodil se ti syn Matyáš (3,45 kila). Jsi čerstvý táta, doma máte miminko.");
+      .toBe("Před 3 dny jste se vrátili z porodnice, narodil se ti syn Matyáš (3,45 kila). Jsi čerstvý táta, doma máte miminko. "
+        + "Matyáš je na světě 6 dní, je to novorozeně: spí, pije a pláče. Nechodí, nesedí, nemluví a nic z toho ještě neumí, nic jiného si o něm nevymýšlej.");
     expect(lifeEventFact("nemocny_rodic", { parent: "mother" }, 1)).toBe("Tvoje máma byla v nemocnici, včera ji pustili domů a je to lepší.");
+  });
+
+  // Mráz (E2E 22. 11.): „Kristýna už začíná chodiť v těchhle botičkách“ den po návratu z porodnice.
+  it("stáří miminka ve dnech a týdnech, ať model nevymýšlí, co umí", () => {
+    const fact = (days: number) => lifeEventFact("narozeni_ditete", { baby: { sex: "girl", name: "Kristýna", weightG: 3580 } }, days);
+    expect(fact(0)).toContain("Kristýna je na světě 3 dny");
+    expect(fact(1)).toContain("Kristýna je na světě 4 dny");
+    expect(fact(8)).toContain("Kristýna je na světě 11 dní");
+    expect(fact(14)).toContain("Kristýna je na světě 2 týdny");
+    expect(fact(30)).toContain("Kristýna je na světě 4 týdny");
+    expect(fact(1)).toContain("Nechodí");
   });
 });
