@@ -22,6 +22,7 @@ import { coachRelationStmts } from "../lib/coach-relation";
 import { createRng } from "../generators/rng";
 import { seedFromString } from "../lib/seed";
 import { TEMPLATE_HISTORY_LIMIT, loadOwnRecentLines, pickFreshVariant } from "../messaging/repetition";
+import { historyAddressForm, type CoachAddress } from "../messaging/address-form";
 import { loadActiveListing } from "../transfers/listing-status";
 
 type Rng = ReturnType<typeof createRng>;
@@ -294,10 +295,13 @@ export function notCountedOn(o: { listing: { kind: "transfer" | "loan" } | null;
   return o.toldOut ? "told_out" : null;
 }
 
-/** Trucovitá SMS hráče, se kterým se nepočítá: varianta, kterou trenérovi ještě neposlal. */
-export function notCountedOnText(reason: NotCountedOn, rng: Rng, previous: readonly string[]): string {
+/**
+ * Trucovitá SMS hráče, se kterým se nepočítá: varianta, kterou trenérovi ještě neposlal,
+ * v tvaru oslovení, jakým mu píše (`address`; varianty s vykáním tykajícímu hráči nepřijdou).
+ */
+export function notCountedOnText(reason: NotCountedOn, rng: Rng, previous: readonly string[], address?: CoachAddress | null): string {
   const pool = reason === "on_market" ? MARKET_TEXTS : reason === "on_loan" ? LOAN_TEXTS : TOLD_OUT_TEXTS;
-  return pickFreshVariant(pool, previous, `left-out-out|${Math.floor(rng.random() * 1e9)}`).text;
+  return pickFreshVariant(pool, previous, `left-out-out|${Math.floor(rng.random() * 1e9)}`, { address }).text;
 }
 
 /** Jak dlouho platí, co trenér hráči napsal o tom, že s ním nepočítá (Študlar 7. 10. → stížnost 8. 10.). */
@@ -327,6 +331,8 @@ export function complaintText(
   complaint: { reason: ComplaintReason; weaker: BenchPlayer | null; streak: number },
   rng: Rng,
   previous: readonly string[] | string | null = [],
+  /** Jak hráč trenérovi píše (address-form.ts): varianty s opačným tvarem se vynechají. */
+  address?: CoachAddress | null,
 ): string {
   const variants: string[] = complaint.reason === "skipped_for_weaker" && complaint.weaker
     ? SKIPPED_TEXTS.map((t) => t(complaint.weaker!.lastName))
@@ -334,7 +340,7 @@ export function complaintText(
       ? STREAK_TEXTS.map((t) => t(nthTime(complaint.streak)))
       : [...GENERIC_TEXTS];
   const lines = typeof previous === "string" ? [previous] : previous ?? [];
-  return pickFreshVariant(variants, lines, `left-out|${Math.floor(rng.random() * 1e9)}`).text;
+  return pickFreshVariant(variants, lines, `left-out|${Math.floor(rng.random() * 1e9)}`, { address }).text;
 }
 
 // ── Zápis do DB ────────────────────────────────────────────────────────────
@@ -487,7 +493,9 @@ export async function reactToLeftOut(
     logger.info({ module: "left-out", teamId }, `${sender.row.last_name} nejel, se kterým se nepočítá (${outReason}), už to trenérovi napsal`);
     return;
   }
-  let text = outReason ? notCountedOnText(outReason, rng, previous) : complaintText(complaint, rng, previous);
+  // Tykání nebo vykání podle toho, jak hráč trenérovi doposud psal (stejně jako sendPlayerTemplateSMS).
+  const address = historyAddressForm(previous);
+  let text = outReason ? notCountedOnText(outReason, rng, previous, address) : complaintText(complaint, rng, previous, address);
   const reason: ComplaintReason | NotCountedOn = outReason ?? complaint.reason;
   const sulks = rng.random() < sulkChance(sender, complaint, coachMotivation);
   if (sulks) {

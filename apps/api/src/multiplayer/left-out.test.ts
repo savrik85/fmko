@@ -1,3 +1,4 @@
+import { addressFormOf } from "../messaging/address-form";
 import { describe, it, expect } from "vitest";
 import { createRng } from "../generators/rng";
 import {
@@ -100,6 +101,25 @@ describe("complaintText", () => {
     const first = complaintText({ reason: "generic", weaker: null, streak: 1 }, fixedRng(0));
     const second = complaintText({ reason: "generic", weaker: null, streak: 1 }, fixedRng(0), first);
     expect(second).not.toBe(first);
+  });
+});
+
+describe("tvar oslovení (E2E 22. 11.: šablony se vybíraly bez něj)", () => {
+  it("kdo trenérovi tyká, nedostane stížnost s vykáním a naopak", () => {
+    const values = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99];
+    for (const address of ["ty", "vy"] as const) {
+      const wrong = address === "ty" ? "vy" : "ty";
+      for (const v of values) {
+        for (const reason of ["skipped_for_weaker", "streak", "generic"] as const) {
+          const t = complaintText({ reason, weaker: bench[1], streak: 3 }, fixedRng(v), [], address);
+          expect(addressFormOf(t), t).not.toBe(wrong);
+        }
+        for (const reason of ["on_market", "on_loan", "told_out"] as const) {
+          const t = notCountedOnText(reason, fixedRng(v), [], address);
+          expect(addressFormOf(t), t).not.toBe(wrong);
+        }
+      }
+    }
   });
 });
 

@@ -22,6 +22,7 @@ vi.mock("../messaging/ai-player-spawn", async (orig) => ({
 import { GeminiUnavailableError, generateInitialMessage } from "../messaging/ai-player-chat";
 import { getScenarioById } from "../messaging/ai-player-scenarios";
 import { babyFacts, deliverLifeNews, formatWeight, loadRecentLifeEvent, type LifeNewsData } from "./life-news";
+import { addressFormOf } from "../messaging/address-form";
 
 let miniflare: Miniflare;
 let db: D1Database;
@@ -110,6 +111,29 @@ describe("po porodu se hráč ozve", () => {
     const baby = babyFacts("birth-2");
     expect((await lastMessage("c1"))?.body).toContain(baby.name);
     expect(typeof (await dataOf("birth-2")).newsVariant).toBe("number");
+  });
+
+  it("předem napsaná zpráva drží tvar oslovení z historie a není označená jako od modelu (Lakatoš, E2E 22. 11.)", async () => {
+    // Lakatoš trenérovi tyká (7 SMS), šablona mu dřív napsala „Klidně se u nás stavte.“
+    await db.batch([
+      db.prepare("INSERT INTO messages (id, conversation_id, sender_type, sender_id, body, sent_at) VALUES ('h1', 'c1', 'player', 'p1', 'Trenére, víš, že jedeme do porodnice? Dám ti vědět.', '2026-11-17T10:00:00Z')"),
+      db.prepare("INSERT INTO messages (id, conversation_id, sender_type, sender_id, body, sent_at) VALUES ('h2', 'c1', 'player', 'p1', 'Díky, že jsi mě pustil, trenére.', '2026-11-17T11:00:00Z')"),
+    ]);
+    await situation({ id: "birth-ty", kind: "narozeni_ditete", player: "p1" });
+    vi.mocked(generateInitialMessage).mockRejectedValue(new GeminiUnavailableError("off"));
+    await deliverLifeNews(db, env, NOW);
+    const msg = await lastMessage("c1");
+    expect(msg?.body).toContain(babyFacts("birth-ty").name);
+    expect(addressFormOf(msg!.body)).toBe("ty");
+    expect(JSON.parse(msg!.metadata)).toMatchObject({ ai_generated: false, life_news: true, template: (await dataOf("birth-ty")).newsVariant });
+  });
+
+  it("kdo vyká, dostane šablonu s vykáním", async () => {
+    await db.prepare("INSERT INTO messages (id, conversation_id, sender_type, sender_id, body, sent_at) VALUES ('h1', 'c2', 'player', 'p2', 'Trenére, máte chvilku? Mám doma starost s mámou.', '2026-11-17T10:00:00Z')").run();
+    await situation({ id: "parent-vy", kind: "nemocny_rodic", player: "p2", data: { parent: "mother" } });
+    vi.mocked(generateInitialMessage).mockRejectedValue(new GeminiUnavailableError("off"));
+    await deliverLifeNews(db, env, NOW);
+    expect(addressFormOf((await lastMessage("c2"))!.body)).not.toBe("ty");
   });
 
   it("v noci, u AI klubu a u starší situace nic", async () => {

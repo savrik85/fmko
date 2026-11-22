@@ -377,9 +377,12 @@ async function payForfeit(db: D1Database, r: RewardRow, now: Date, human: boolea
   const { kabinaConversationId } = await import("./coach-rules");
   const convId = await kabinaConversationId(db, r.team_id);
   const { loadOwnRecentLines, pickFreshVariant } = await import("./repetition");
+  const { loadCoachAddress } = await import("./address-form");
   const previous = await loadOwnRecentLines(db, { playerId: r.player_id, convId, limit: 40 })
     .catch((e) => { logger.warn({ module: M }, "věty hráče v kabině", e); return [] as string[]; });
-  const body = pickFreshVariant(WEIGHT_FORFEIT_KABINA, previous, `forfeit|${r.id}`).text;
+  // Věta, která oslovuje trenéra, v tvaru, jakým mu hráč píše v SMS (konverzace 1:1).
+  const address = await loadCoachAddress(db, { playerId: r.player_id, teamId: r.team_id });
+  const body = pickFreshVariant(WEIGHT_FORFEIT_KABINA, previous, `forfeit|${r.id}`, { address }).text;
   const name = `${r.first_name} ${r.last_name}`;
   await db.batch([
     db.prepare(

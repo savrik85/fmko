@@ -20,6 +20,7 @@ import { seedFromString } from "../lib/seed";
 import type { AiScenario } from "../messaging/ai-player-scenarios";
 import { CASUAL_TOPICS } from "../messaging/casual-topics";
 import { brokenCzech } from "../messaging/foreign-speech";
+import type { CoachAddress } from "../messaging/address-form";
 import { pickUnusedIndex } from "../messaging/repetition";
 import { clubReceivesMessages } from "./club-messages";
 
@@ -84,7 +85,11 @@ const PARENT_WORDS = {
   mother: { parent: "máma", parentGen: "mámy", parentAcc: "mámu", ended: "skončila", your: "tvoje máma" },
 } as const;
 
-/** Předem napsané zprávy, když model nejede. Proměnné ve složených závorkách. */
+/**
+ * Předem napsané zprávy, když model nejede. Proměnné ve složených závorkách. Každá varianta
+ * má podobu s vykáním (`…_TEMPLATES`) a s tykáním (`…_TEMPLATES_TY`, stejné pořadí): Lakatoš
+ * trenérovi tyká a šablona mu napsala „Klidně se u nás stavte.“ (E2E 22. 11.).
+ */
 export const BIRTH_NEWS_TEMPLATES = [
   "Trenére, jsme doma z porodnice! Máme {child}, jmenuje se {name}, {weight}. Máma i {little} jsou v pořádku. Stavte se to s námi zapít.",
   "Tak je to tady, trenére. Mám {sonDaughter}, jmenuje se {name} a {weighed} {weight}. Musíte se stavit zapít {littleAcc}, pivo je vychlazený.",
@@ -101,6 +106,22 @@ export const PARENT_NEWS_TEMPLATES = [
   "Díky za trpělivost, trenére. {parent} je doma a zlepšuje se to. Teď už se zase můžu soustředit na fotbal.",
   "Trenére, {parentAcc} pustili domů, je to lepší. Díky, že jste mi dal klid. Zase se na mě můžete spolehnout.",
 ] as const;
+export const BIRTH_NEWS_TEMPLATES_TY = [
+  "Trenére, jsme doma z porodnice! Máme {child}, jmenuje se {name}, {weight}. Máma i {little} jsou v pořádku. Stav se to s námi zapít.",
+  "Tak je to tady, trenére. Mám {sonDaughter}, jmenuje se {name} a {weighed} {weight}. Musíš se stavit zapít {littleAcc}, pivo je vychlazený.",
+  "Trenére, slíbil jsem, že dám vědět: {name}, {weight}, {healthy} jako řípa. Už jsme doma. Přijď k nám na panáka zapít {littleAcc}.",
+  "Trenére, ještě se mi klepou ruce. Máme {child}, jmenuje se {name}, {weight}. Doma je teď veselo. Zastav se zapít, rád tě uvidím.",
+  "Jsme zpátky doma, trenére! {name} {weighed} {weight} a řve jak na tribuně. Stav se zapít {littleAcc}, jinak se urazím.",
+  "Trenére, máme {child}! {name}, {weight}. Pár nocí se nevyspím, ale stojí to za to. Zapijem to? Klidně se u nás stav.",
+] as const;
+export const PARENT_NEWS_TEMPLATES_TY = [
+  "Trenére, {parent} je z nemocnice doma a je to lepší. Díky, že jsi to chápal. Na trénink už zase chodím.",
+  "Tak už je to dobrý, trenére. {parent} je doma a pomalu se z toho dostává. Dík za pochopení, zase jedu naplno.",
+  "Trenére, ozývám se, jak jsem slíbil. {parent} už je mimo nemocnici a doktoři říkaj, že to bude dobrý. Díky, že jsi mě nechal být u {parentGen}.",
+  "Trenére, doma je zase klid, {parent} je na tom líp. Děkuju za pochopení, na trénink zase chodím normálně.",
+  "Díky za trpělivost, trenére. {parent} je doma a zlepšuje se to. Teď už se zase můžu soustředit na fotbal.",
+  "Trenére, {parentAcc} pustili domů, je to lepší. Díky, že jsi mi dal klid. Zase se na mě můžeš spolehnout.",
+] as const;
 
 function fill(template: string, values: Record<string, string>): string {
   const out = template.replace(/\{(\w+)\}/g, (_, k: string) => values[k] ?? "");
@@ -115,13 +136,16 @@ function templateValues(kind: LifeNewsKind, data: LifeNewsData): Record<string, 
 }
 
 /**
- * Předem napsaná zpráva: varianta, kterou hráč ještě nedostal (`used`), vybraná podle `seed`.
- * Když dostal všechny, začne se znovu od celé nabídky.
+ * Předem napsaná zpráva: varianta, kterou hráč ještě nedostal (`used`), vybraná podle `seed`,
+ * v tvaru oslovení, jakým trenérovi píše (`address`). Když dostal všechny, začne se znovu
+ * od celé nabídky.
  */
 export function fallbackNews(
-  kind: LifeNewsKind, data: LifeNewsData, used: readonly number[], seed: string,
+  kind: LifeNewsKind, data: LifeNewsData, used: readonly number[], seed: string, address: CoachAddress = "vy",
 ): { body: string; variant: number } {
-  const templates = kind === "narozeni_ditete" ? BIRTH_NEWS_TEMPLATES : PARENT_NEWS_TEMPLATES;
+  const templates = kind === "narozeni_ditete"
+    ? (address === "ty" ? BIRTH_NEWS_TEMPLATES_TY : BIRTH_NEWS_TEMPLATES)
+    : (address === "ty" ? PARENT_NEWS_TEMPLATES_TY : PARENT_NEWS_TEMPLATES);
   const variant = pickUnusedIndex(templates.length, new Set(used), `life-news|${seed}`);
   return { body: fill(templates[variant], templateValues(kind, data)), variant };
 }
@@ -330,7 +354,7 @@ async function deliverOne(
   }
 
   const spawn = await import("../messaging/ai-player-spawn");
-  const { GeminiUnavailableError, generateInitialMessage, playerTimeContext } = await import("../messaging/ai-player-chat");
+  const { GeminiUnavailableError, coachAddressForm, generateInitialMessage, playerTimeContext } = await import("../messaging/ai-player-chat");
   const playerRow = await db.prepare(
     `SELECT p.id, p.first_name, p.last_name, p.nickname, p.avatar, p.nationality, p.age, p.position, p.team_id, p.loan_from_team_id,
             p.personality, p.life_context, p.coach_relationship, p.is_celebrity, ${spawn.INJURY_COLUMN}
@@ -358,6 +382,8 @@ async function deliverOne(
   player.recentLifeEvent = { kind: row.kind, fact: lifeEventFact(row.kind, facts, 0) };
 
   let body: string | null = null;
+  /** Číslo předem napsané varianty, když model nejel (zpráva pak není `ai_generated`). */
+  let template: number | null = null;
   const { isAiEnabled } = await import("../lib/ai-provider");
   if (await isAiEnabled(env)) {
     try {
@@ -373,8 +399,9 @@ async function deliverOne(
     }
   }
   if (!body) {
-    const fallback = fallbackNews(row.kind, facts, await usedVariants(db, player.id, row.kind), row.id);
+    const fallback = fallbackNews(row.kind, facts, await usedVariants(db, player.id, row.kind), row.id, coachAddressForm(player));
     body = brokenCzech(fallback.body, player.nationality ?? null, `${player.id}|${fallback.body}`);
+    template = fallback.variant;
     await db.prepare("UPDATE club_incidents SET resolution_data = json_set(resolution_data, '$.newsVariant', ?) WHERE id = ?")
       .bind(fallback.variant, row.id).run()
       .catch((e) => logger.warn({ module: M }, `varianta zprávy o situaci ${row.id}`, e));
@@ -385,7 +412,10 @@ async function deliverOne(
     .bind(convId).first<{ ai_thread_active: number; ai_thread_state: string | null }>();
   const stmts = postPlayerMessageStmts(db, {
     convId, player, body, now: sentAt,
-    metadata: { ai_generated: true, scenario_id: scenario.id, turn: 0, type: "incident", incidentId: row.id, life_news: true },
+    metadata: {
+      ai_generated: template === null, ...(template !== null ? { template } : {}),
+      scenario_id: scenario.id, turn: 0, type: "incident", incidentId: row.id, life_news: true,
+    },
     preview: body.slice(0, 100),
   });
   // Rozjetý rozhovor zpráva nepřepíše; trenér na ni odpoví v něm a pozvání platí i tak.
