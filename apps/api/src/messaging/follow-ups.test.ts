@@ -232,7 +232,7 @@ describe("odpověď po výpadku modelu", () => {
       .bind(JSON.stringify({ scenario_id: "coach_initiated", awaiting: "coach", player_id: "p1" })).run();
     await schedule("retry_reply");
     await deliverDueFollowUps(db, {}, NOW);
-    expect(fx.handleAiPlayerReply).toHaveBeenCalledWith(expect.anything(), {}, "c1", { lateReply: "offline" });
+    expect(fx.handleAiPlayerReply).toHaveBeenCalledWith(expect.anything(), {}, "c1", { lateReply: "offline", fromRetry: true });
     const state = await db.prepare("SELECT ai_thread_state FROM conversations WHERE id = 'c1'").first<{ ai_thread_state: string }>();
     expect(JSON.parse(state!.ai_thread_state).awaiting).toBe("player");
   });

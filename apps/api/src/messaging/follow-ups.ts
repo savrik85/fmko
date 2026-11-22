@@ -40,6 +40,11 @@ export type FollowUpKind = "reply_later" | "retry_reply" | "after_invite" | "han
  * takže časem, ne počtem pokusů (revize 2026-10-25: 8 pokusů po hodině bylo málo).
  */
 const MAX_AGE_MS = 36 * 3600_000;
+/**
+ * Pojistka k času: tolik pokusů nejvýš (počítá i odklad, když hráč spí nebo maká). Čas i pokusy
+ * běží od prvního pokusu, opakovaný pokus nový řádek nezakládá (`fromRetry`).
+ */
+const MAX_ATTEMPTS = 48;
 /** Model nejde: další pokus za hodinu. */
 const RETRY_AFTER_MS = 60 * 60_000;
 /** Hledá se volná chvíle nejvýš tak daleko dopředu. */
@@ -145,8 +150,8 @@ export async function deliverDueFollowUps(
       if (result === "delivered") out.delivered++; else out.cancelled++;
       continue;
     }
-    if (result === "retry" && now.getTime() - Date.parse(row.created_at) > MAX_AGE_MS) {
-      logger.warn({ module: M, teamId: row.team_id }, `odložená zpráva ${row.id} (${row.kind}) se po ${MAX_AGE_MS / 3600_000} hodinách vzdává`);
+    if (result === "retry" && (now.getTime() - Date.parse(row.created_at) > MAX_AGE_MS || row.attempts + 1 >= MAX_ATTEMPTS)) {
+      logger.warn({ module: M, teamId: row.team_id }, `odložená zpráva ${row.id} (${row.kind}) se po ${row.attempts + 1} pokusech od ${row.created_at} vzdává`);
       // Zaplacená SMS, na kterou hráč ani po výpadku neodepsal: kredit zpět.
       if (row.kind === "retry_reply") await refundCoachSms(db, row.team_id, row.conversation_id, "odpověď po výpadku se vzdala");
       out.cancelled++;
@@ -376,15 +381,25 @@ async function retryReply(db: D1Database, env: FollowUpEnv, row: FollowUpRow): P
     ).bind(row.conversation_id).run();
     if ((claimed.meta?.changes ?? 0) === 0) return "cancelled";
     const { handleAiPlayerReply } = await import("./ai-player-spawn");
-    await handleAiPlayerReply(db, env, row.conversation_id, { lateReply: "offline" });
+    await handleAiPlayerReply(db, env, row.conversation_id, { lateReply: "offline", fromRetry: true });
   } else {
     const { startCoachThread } = await import("./coach-initiated");
     await startCoachThread(db, env, {
       convId: row.conversation_id, teamId: row.team_id, playerId: row.player_id,
-      coachMessage: lastCoach.body, lateReply: "offline",
+      coachMessage: lastCoach.body, lateReply: "offline", fromRetry: true,
     });
   }
-  return (await answeredOrRead(db, row, lastCoach)) ? "delivered" : "retry";
+  if (await answeredOrRead(db, row, lastCoach)) return "delivered";
+  // Odpověď spadla jinak než výpadkem modelu a kredit se už vrátil: další pokus nemá smysl.
+  if (await creditRefunded(db, lastCoach.id)) return "cancelled";
+  return "retry";
+}
+
+async function creditRefunded(db: D1Database, messageId: string): Promise<boolean> {
+  const r = await db.prepare("SELECT json_extract(COALESCE(metadata, '{}'), '$.creditRefunded') AS refunded FROM messages WHERE id = ?")
+    .bind(messageId).first<{ refunded: number | null }>()
+    .catch((e) => { logger.warn({ module: M }, `vrácený kredit zprávy ${messageId}`, e); return null; });
+  return r?.refunded === 1;
 }
 
 /**

@@ -1218,8 +1218,10 @@ export async function handleAiPlayerReply(
   /**
    * `lateReply`: odpověď přichází se zpožděním (follow-ups.ts), hráč řekne, že neměl telefon
    * u sebe. `deadline`: rozpočet práce na pozadí (lib/time-budget.ts), když běží ve waitUntil.
+   * `fromRetry`: opakovaný pokus z `retry_reply`; při výpadku modelu nový neplánuje, o další
+   * pokus (a o vrácení kreditu po vyčerpání) se stará follow-ups.ts.
    */
-  opts: { lateReply?: "offline"; deadline?: number } = {},
+  opts: { lateReply?: "offline"; deadline?: number; fromRetry?: boolean } = {},
 ): Promise<void> {
   try {
     await handleAiPlayerReplyInner(db, env, convId, opts);
@@ -1241,7 +1243,7 @@ async function handleAiPlayerReplyInner(
   db: D1Database,
   env: { GEMINI_API_KEY?: string; CACHE_KV?: KVNamespace } & OptionalPushKeys,
   convId: string,
-  opts: { lateReply?: "offline"; deadline?: number },
+  opts: { lateReply?: "offline"; deadline?: number; fromRetry?: boolean },
 ): Promise<void> {
   logger.info({ module: "ai-player-spawn" }, `handleAiPlayerReply START for conv ${convId}`);
   // Od téhle chvíle se počítá, jak dlouho hráči odpověď trvala. Generování
@@ -1405,7 +1407,8 @@ async function handleAiPlayerReplyInner(
       ).bind(JSON.stringify({ ...state, awaiting: "coach" }), convId).run()
         .catch((err) => logger.warn({ module: "ai-player-spawn" }, "rollback awaiting", err));
       // Trenér za SMS zaplatil: hráč odpoví, až model zase půjde (23. 10. neodepsal ~12 hodin nikdo).
-      await scheduleRetryReply(db, { teamId: conv.team_id, playerId: player.id, convId });
+      // Při opakovaném pokusu ne: nový řádek s čerstvým časem by počítal 36 h stále znovu (E2E 22. 11.).
+      if (!opts.fromRetry) await scheduleRetryReply(db, { teamId: conv.team_id, playerId: player.id, convId });
       return;
     }
     throw e;
