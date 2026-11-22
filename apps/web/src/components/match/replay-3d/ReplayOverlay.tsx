@@ -9,11 +9,11 @@ const SPEEDS = [{ value: 1, label: "▶ Živě", short: "▶" }, { value: 3, lab
 
 const BANNERS = {
   goal: { text: "GÓÓÓL!", className: "text-5xl sm:text-7xl text-white" },
-  penalty: { text: "PENALTA!", className: "text-3xl sm:text-5xl text-white" },
-  yellow: { text: "ŽLUTÁ", className: "text-3xl sm:text-5xl text-yellow-300" },
-  red: { text: "ČERVENÁ!", className: "text-3xl sm:text-5xl text-red-500" },
-  injury: { text: "✚ ZRANĚNÍ", className: "text-3xl sm:text-5xl text-red-400" },
-  sub: { text: "⇅ STŘÍDÁNÍ", className: "text-3xl sm:text-5xl text-sky-300" },
+  penalty: { text: "PENALTA!", className: "text-2xl sm:text-4xl text-white" },
+  yellow: { text: "ŽLUTÁ", className: "text-2xl sm:text-4xl text-yellow-300" },
+  red: { text: "ČERVENÁ!", className: "text-2xl sm:text-4xl text-red-500" },
+  injury: { text: "✚ ZRANĚNÍ", className: "text-2xl sm:text-4xl text-red-400" },
+  sub: { text: "⇅ STŘÍDÁNÍ", className: "text-2xl sm:text-4xl text-sky-300" },
 };
 
 const BUTTON = "px-2 py-1.5 rounded-lg text-white/80 hover:text-white hover:bg-white/15 text-xs font-heading font-bold";
@@ -53,7 +53,7 @@ export function ReplayOverlay({ plan, clock, matchId }: { plan: ReplayPlan; cloc
       </div>
 
       {banner && (
-        <div className="absolute inset-x-0 top-[22%] z-30 flex justify-center pointer-events-none">
+        <div className="absolute inset-x-0 top-[11%] z-30 flex justify-center pointer-events-none">
           <div className={`font-heading font-black tracking-wider drop-shadow-[0_4px_12px_rgba(0,0,0,0.8)] animate-in zoom-in-75 fade-in duration-300 ${banner.className}`}>
             {banner.text}
           </div>

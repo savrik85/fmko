@@ -30,7 +30,7 @@ const BALL_RADIUS = 0.26;
 const HIGHLIGHT_SECONDS = 4;
 /** Televizní kamera jede za míčem (u zranění, karty a střídání za hráčem z titulku): na šířku z hlavní tribuny, na výšku zpoza branky. */
 const CAMERA = {
-  wide: { offset: new THREE.Vector3(27, 21, 0), fov: 42, follow: 0.55 },
+  wide: { offset: new THREE.Vector3(23, 25, 0), fov: 42, follow: 0.55 },
   tall: { offset: new THREE.Vector3(0, 34, 31), fov: 54, follow: 0.35 },
 };
 const FOLLOW_BANNERS = new Set(["injury", "sub", "red", "yellow"]);
@@ -75,6 +75,14 @@ export function ReplayActors({ plan, clock }: { plan: ReplayPlan; clock: ReplayC
   const shadows = useRef<THREE.InstancedMesh>(null);
   const ball = useRef<THREE.Mesh>(null);
   const count = plan.figures.length;
+  // Míč s tmavými ploškami je vidět i na sněhu a z dálky se točí.
+  const ballGeometry = useMemo(() => {
+    const g = new THREE.IcosahedronGeometry(BALL_RADIUS, 1);
+    const colors = new Float32Array(g.attributes.position.count * 3);
+    for (let f = 0; f < colors.length / 9; f++) colors.fill(f % 4 ? 0.97 : 0.1, f * 9, f * 9 + 9);
+    g.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+    return g;
+  }, []);
   const camera = useThree((s) => s.camera) as THREE.PerspectiveCamera;
   const size = useThree((s) => s.size);
   const tall = size.width / Math.max(1, size.height) < 0.8;
@@ -196,7 +204,7 @@ export function ReplayActors({ plan, clock }: { plan: ReplayPlan; clock: ReplayC
     const who = caption?.banner && FOLLOW_BANNERS.has(caption.banner) ? focus[0] : undefined;
     const fx = who === undefined ? frame.ballX : states[who].x;
     const fz = who === undefined ? frame.ballZ : states[who].z;
-    const wanted = vTmp.set(fx * cam.follow, 0, THREE.MathUtils.clamp(fz, -HALF_L + (tall ? 14 : 15), HALF_L - (tall ? 8 : 15)));
+    const wanted = vTmp.set(fx * cam.follow, 0, THREE.MathUtils.clamp(fz, -HALF_L + (tall ? 18 : 15), HALF_L - (tall ? 8 : 15)));
     if (!look.current || look.current.distanceTo(wanted) > 30) look.current = wanted.clone();
     else look.current.lerp(wanted, 1 - Math.exp(-Math.min(delta, 0.1) * 2.2));
     camera.position.copy(look.current).add(cam.offset);
@@ -214,7 +222,10 @@ export function ReplayActors({ plan, clock }: { plan: ReplayPlan; clock: ReplayC
       tag.style.display = i === undefined ? "none" : "block";
       if (i === undefined) return;
       vTmp.set(states[i].x, PITCH_SURFACE_Y + 2.7, states[i].z).project(camera);
-      tag.style.transform = `translate(${((vTmp.x + 1) / 2) * size.width}px, ${((1 - vTmp.y) / 2) * size.height}px) translate(-50%, -100%)`;
+      // Jmenovka zůstane na obrazovce, nad titulkem a ovládáním.
+      const x = THREE.MathUtils.clamp(((vTmp.x + 1) / 2) * size.width, 70, size.width - 70);
+      const y = THREE.MathUtils.clamp(((1 - vTmp.y) / 2) * size.height, 80, size.height - 140);
+      tag.style.transform = `translate(${x}px, ${y}px) translate(-50%, -100%)`;
     });
 
     // Stíny: tmavé kolečko pod každým hráčem a pod míčem (levné, funguje i na mobilu).
@@ -254,8 +265,8 @@ export function ReplayActors({ plan, clock }: { plan: ReplayPlan; clock: ReplayC
         </mesh>
       ))}
       <mesh ref={ball}>
-        <icosahedronGeometry args={[BALL_RADIUS, 2]} />
-        <meshStandardMaterial color="#F9FAFB" roughness={0.35} flatShading />
+        <primitive object={ballGeometry} attach="geometry" />
+        <meshStandardMaterial vertexColors roughness={0.35} flatShading />
       </mesh>
     </group>
   );
