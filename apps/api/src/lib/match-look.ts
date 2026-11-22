@@ -24,6 +24,24 @@ export interface MatchCoach {
   motivation: number;
   skinColor?: string;
   hairColor?: string | null;
+  /** Celý obličej (facesjs) pro představení trenéra před výkopem. */
+  avatar?: Record<string, unknown>;
+  /** Kolik zápasů soutěže tým před tímhle odehrál a vyhrál; null = první zápas v soutěži nebo přátelák. */
+  record: { played: number; won: number } | null;
+}
+
+/**
+ * Soutěž zápasu: kde hledat její dřívější zápasy. `earlier` je podmínka nad aliasem `m` („stejná soutěž
+ * a dřív než tenhle zápas“) s parametry `binds`; `pens` = remízu rozhodují penalty (pohár, turnaj).
+ */
+export interface Competition {
+  table: "matches" | "cup_matches" | "tournament_matches";
+  teamColumns: { home: string; away: string };
+  /** Kluby tohohle zápasu, jak je soutěž eviduje (v poháru id z cup_teams). */
+  ids: { home: string; away: string };
+  earlier: string;
+  binds: unknown[];
+  pens: boolean;
 }
 
 export interface MatchLook {
@@ -120,6 +138,21 @@ function awayKit(team: TeamKitRow | undefined, fallback: string, homeShirt: stri
   return candidates.find((kit) => colorDistance(kit.shirt, homeShirt) > MIN_KIT_DISTANCE) ?? candidates[candidates.length - 1];
 }
 
+/** Bilance klubu v soutěži před tímhle zápasem. */
+async function recordBefore(db: D1Database, c: Competition, side: "home" | "away"): Promise<MatchCoach["record"]> {
+  const { home, away } = c.teamColumns;
+  const wins = (mine: string, theirs: string) =>
+    `m.${mine}_score > m.${theirs}_score${c.pens ? ` OR (m.${mine}_score = m.${theirs}_score AND m.${mine}_pens > m.${theirs}_pens)` : ""}`;
+  const id = c.ids[side];
+  const row = await db.prepare(
+    `SELECT COUNT(*) AS played,
+            COALESCE(SUM((m.${home} = ? AND (${wins("home", "away")})) OR (m.${away} = ? AND (${wins("away", "home")}))), 0) AS won
+       FROM ${c.table} m
+      WHERE m.status = 'simulated' AND ? IN (m.${home}, m.${away}) AND ${c.earlier}`,
+  ).bind(id, id, id, ...c.binds).first<{ played: number; won: number }>();
+  return row && row.played > 0 ? { played: row.played, won: row.won } : null;
+}
+
 /**
  * Dresy a trenéři obou klubů a vzhled hráčů pro 3D záznam. Vzhled (pleť, vlasy, výška) doplní
  * přímo do hráčů v sestavách; vzhled i trenér se berou aktuální, jako číslo dresu.
@@ -130,6 +163,7 @@ export async function loadMatchLook(
   away: MatchSide,
   homeLineup: LineupLike,
   awayLineup: LineupLike,
+  competition: Competition | null,
 ): Promise<MatchLook> {
   const teamIds = [home.teamId, away.teamId].filter((id): id is string => !!id);
   const teams = teamIds.length === 0 ? [] : (await db.prepare(
@@ -145,11 +179,11 @@ export async function loadMatchLook(
   const managers = teamIds.length === 0 ? [] : (await db.prepare(
     `SELECT team_id, name, avatar, motivation FROM managers WHERE team_id IN (${teamIds.map(() => "?").join(",")})`,
   ).bind(...teamIds).all<{ team_id: string; name: string; avatar: string; motivation: number }>()).results;
-  const coachOf = (teamId: string | null): MatchCoach | null => {
-    const row = managers.find((m) => m.team_id === teamId);
+  const coachOf = async (side: "home" | "away"): Promise<MatchCoach | null> => {
+    const row = managers.find((m) => m.team_id === (side === "home" ? home : away).teamId);
     if (!row) return null;
-    const { skinColor, hairColor } = playerLook({ avatar: row.avatar, physical: null });
-    return { name: row.name, motivation: row.motivation, skinColor, hairColor };
+    const { skinColor, hairColor, avatar } = playerLook({ avatar: row.avatar, physical: null });
+    return { name: row.name, motivation: row.motivation, skinColor, hairColor, avatar, record: competition ? await recordBefore(db, competition, side) : null };
   };
 
   const players = [homeLineup, awayLineup].flatMap((ld) => (ld ? [...(ld.starters ?? []), ...(ld.subs ?? [])] : []));
@@ -163,5 +197,5 @@ export async function loadMatchLook(
       if (row) Object.assign(p, playerLook(row));
     }
   }
-  return { home_kit, away_kit, home_coach: coachOf(home.teamId), away_coach: coachOf(away.teamId) };
+  return { home_kit, away_kit, home_coach: await coachOf("home"), away_coach: await coachOf("away") };
 }

@@ -981,7 +981,16 @@ matchesRouter.get("/matches/:id", async (c) => {
   }
   // Dresy a vzhled hráčů pro 3D záznam zápasu.
   const look = await loadMatchLook(c.env.DB, { teamId: row.home_team_id as string | null, fallbackColor: row.home_color as string | null },
-    { teamId: row.away_team_id as string | null, fallbackColor: row.away_color as string | null }, homeLineup, awayLineup);
+    { teamId: row.away_team_id as string | null, fallbackColor: row.away_color as string | null }, homeLineup, awayLineup,
+    // Přátelák soutěž nemá; ligový zápas se počítá mezi dřívější kola téže ligy a sezóny.
+    row.league_id && row.calendar_id ? {
+      table: "matches", teamColumns: { home: "home_team_id", away: "away_team_id" }, pens: false,
+      ids: { home: row.home_team_id as string, away: row.away_team_id as string },
+      earlier: `m.league_id = ? AND m.calendar_id IN (
+        SELECT sc.id FROM season_calendar sc JOIN season_calendar cur ON cur.id = ?
+         WHERE sc.league_id = cur.league_id AND sc.season_number = cur.season_number AND sc.scheduled_at < cur.scheduled_at)`,
+      binds: [row.league_id, row.calendar_id],
+    } : null);
 
   return c.json({
     ...row,
@@ -1050,7 +1059,12 @@ matchesRouter.get("/cup-matches/:id", async (c) => {
   }
   // Velkoklub nemá řádek v teams: dres v barvě z cup_teams.
   const look = await loadMatchLook(c.env.DB, { teamId: row.home_real_id as string | null, fallbackColor: row.home_color as string | null },
-    { teamId: row.away_real_id as string | null, fallbackColor: row.away_color as string | null }, homeLineup, awayLineup);
+    { teamId: row.away_real_id as string | null, fallbackColor: row.away_color as string | null }, homeLineup, awayLineup,
+    {
+      table: "cup_matches", teamColumns: { home: "home_cup_team_id", away: "away_cup_team_id" }, pens: true,
+      ids: { home: row.home_cup_team_id as string, away: row.away_cup_team_id as string },
+      earlier: "m.cup_id = ? AND m.round < ?", binds: [row.cup_id, row.round],
+    });
 
   return c.json({
     ...row,

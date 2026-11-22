@@ -37,7 +37,7 @@ function fakeDb(teams: TeamRow[], players: PlayerRow[] = [], managers: ManagerRo
 const HOME: TeamRow = { id: "h", primary_color: "#1E5AA8", home_shorts_color: "#FFFFFF" };
 
 async function kitsFor(away: TeamRow, home: TeamRow = HOME) {
-  return loadMatchLook(fakeDb([home, away]), { teamId: home.id }, { teamId: away.id }, null, null);
+  return loadMatchLook(fakeDb([home, away]), { teamId: home.id }, { teamId: away.id }, null, null, null);
 }
 
 describe("vzhled hráče pro 3D záznam", () => {
@@ -99,7 +99,7 @@ describe("dresy v zápase", () => {
   });
 
   it("pohárový klub bez řádku v teams hraje v barvě z cup_teams", async () => {
-    const kits = await loadMatchLook(fakeDb([HOME]), { teamId: "h" }, { teamId: null, fallbackColor: "#7A1F5C" }, null, null);
+    const kits = await loadMatchLook(fakeDb([HOME]), { teamId: "h" }, { teamId: null, fallbackColor: "#7A1F5C" }, null, null, null);
     expect(kits.away_kit).toEqual({ shirt: "#7A1F5C", shorts: "#7A1F5C", socks: "#7A1F5C" });
   });
 });
@@ -108,8 +108,8 @@ describe("trenéři u lajny", () => {
   it("trenér je manažer klubu se svou motivací a vzhledem; klub bez manažera trenéra nemá", async () => {
     const avatar = JSON.stringify({ body: { color: "#c68642" }, hair: { id: "short-bald", color: "#000000" } });
     const db = fakeDb([HOME, { id: "a", primary_color: "#D94032" }], [], [{ team_id: "h", name: "Karel Hromada", avatar, motivation: 85 }]);
-    const look = await loadMatchLook(db, { teamId: "h" }, { teamId: "a" }, null, null);
-    expect(look.home_coach).toEqual({ name: "Karel Hromada", motivation: 85, skinColor: "#c68642", hairColor: null });
+    const look = await loadMatchLook(db, { teamId: "h" }, { teamId: "a" }, null, null, null);
+    expect(look.home_coach).toEqual({ name: "Karel Hromada", motivation: 85, skinColor: "#c68642", hairColor: null, avatar: JSON.parse(avatar), record: null });
     expect(look.away_coach).toBeNull();
   });
 });
@@ -124,7 +124,7 @@ describe("vzhled hráčů v sestavách", () => {
     ]);
     const homeLineup = { starters: [{ id: "p1" }], subs: [{ id: "p2" }] };
     const awayLineup = { starters: [{ id: "ghost" }], subs: [] };
-    await loadMatchLook(db, { teamId: "h" }, { teamId: null }, homeLineup, awayLineup);
+    await loadMatchLook(db, { teamId: "h" }, { teamId: null }, homeLineup, awayLineup, null);
     expect(homeLineup.starters[0]).toEqual({ id: "p1", avatar: JSON.parse(avatar("crop-fade2")), skinColor: "#e8c4a0", hairColor: "#1a1a1a", height: 182 });
     expect(homeLineup.subs[0]).toEqual({ id: "p2", avatar: JSON.parse(avatar("short-bald")), skinColor: "#e8c4a0", hairColor: null });
     expect(awayLineup.starters[0]).toEqual({ id: "ghost" });
@@ -132,6 +132,6 @@ describe("vzhled hráčů v sestavách", () => {
 
   it("nečitelný JSON vzhledu je chyba", async () => {
     const db = fakeDb([], [{ id: "bad", avatar: "{nope", physical: null }]);
-    await expect(loadMatchLook(db, { teamId: null }, { teamId: null }, { starters: [{ id: "bad" }], subs: [] }, null)).rejects.toThrow(SyntaxError);
+    await expect(loadMatchLook(db, { teamId: null }, { teamId: null }, { starters: [{ id: "bad" }], subs: [] }, null, null)).rejects.toThrow(SyntaxError);
   });
 });
