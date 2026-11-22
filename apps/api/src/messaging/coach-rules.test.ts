@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   APOLOGY_CLUMSY_KABINA, APOLOGY_REFUSED_KABINA, APOLOGY_SINCERE_KABINA, LAPS_RAN_SMS, LAPS_REFUSED_SMS, LAST_CHANCE_REMINDERS,
   RULE_BROKEN_SMS, TEAM_LAPS_KABINA, apologyTone, clubRuleLines, lapsOutcome, lapsPunishmentCues, missedBefore, missedTrainingsAfter,
-  pendingRequestOf, rulePromptLine, ruleText,
+  pendingRequestOf, rulePromptLine, ruleText, acceptanceInReply,
 } from "./coach-rules";
 import { COMMITMENT_HINT_RE, commitmentText, parseDetection, quoteHoldsUp } from "./coach-commitments";
 import { vahaPachatele } from "../incidents/pachatel";
@@ -131,5 +131,34 @@ describe("pooly", () => {
       for (const t of pool) expect(t).not.toContain("—");
     }
     for (const t of [...RULE_BROKEN_SMS, ...LAST_CHANCE_REMINDERS]) expect(t).toContain("{name}");
+  });
+});
+
+// E2E 22. 11. (Bohuslav, dohoda o hubnutí): kývnutí bez „beru“ se nepoznalo a dohoda zůstala
+// bez odpovědi. Rozpoznání slibu dodělané hodinovým během (9fc12a96) bere kývnutí z textu.
+describe("kývnutí v textu odpovědi", () => {
+  it("souhlasné sloveso k věci dohody je kývnutí", () => {
+    for (const t of [
+      "Těch 3 kila dám dolů, 1000 Kč se mi hodí",
+      "Trenére, zhubnu těch 3 kila, mám to pod kontrolou.",
+      "Beru to vážně, zhubnu 3 kila do 14 dní.",
+      "Trenére, do dvou týdnů zhubnu těch 3 kila, to mám jasno.",
+      "Jasně, beru to. Dám do toho vše, chci ty prachy",
+      "Platí, jdu do toho.",
+      "Dám to, trenére.",
+    ]) expect(acceptanceInReply(t), t).toBe(true);
+  });
+
+  it("negace je odmítnutí, váhání, otázka a podmínka nic", () => {
+    for (const t of ["Ne, těch 3 kila nedám, zapomeň.", "Nezhubnu, to fakt ne.", "Nechci, kašlu na to."]) expect(acceptanceInReply(t), t).toBe(false);
+    for (const t of [
+      "Trenére, mám to pod kontrolou.",
+      // Otázka s „…, ne?“ není odmítnutí ani kývnutí (Bohuslav 19:04).
+      "Trenére, tys mi dal 1000 Kč, když zhubnu 3 kila, ne?",
+      "Asi to zhubnu, uvidíme.",
+      "Možná těch 3 kila dám dolů.",
+      "Jasně, asi to zvládnu.",
+      "Kdybych zhubnul, dáš mi to?",
+    ]) expect(acceptanceInReply(t), t).toBeUndefined();
   });
 });
