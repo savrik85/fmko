@@ -118,6 +118,8 @@ export interface RadekZnalostiDb {
   loss?: string | null;
   /** Kdy incident vznikl (skutečný čas): od té doby se hledá, jestli pachatel v SMS zapíral. */
   created_at?: string | null;
+  /** Kdy životní situace končí (herní den). Starší dotazy ho nemají. */
+  ends_on?: string | null;
   pachatel_jmeno: string | null;
   pachatel_prijmeni: string | null;
 }
@@ -149,6 +151,8 @@ export interface RadekZnalosti {
   createdAt?: string;
   /** Odhalený pachatel to dřív trenérovi v SMS zapíral (`znalosti-db.ts`). */
   deniedBefore?: boolean;
+  /** Životní situace už skončila (uzavřená, nebo po `ends_on`): jako probíhající do promptu nepatří. */
+  situationOver?: boolean;
 }
 
 /** Co pachatel vzal, pro prompt: věci malým písmenem, hotovost v Kč, poháry z vitríny poznáme. */
@@ -192,7 +196,20 @@ export function radekZnalosti(r: RadekZnalostiDb, playerId: string, dnes: string
     recovered: r.recovered === 1,
     ...(r.category === "kradez" && r.loss ? { loot: stolenWhat(r.kind, nactiZtraty(r.loss)) || undefined } : {}),
     ...(r.created_at ? { createdAt: r.created_at } : {}),
+    ...(lifeSituationOver(r, dnes) ? { situationOver: true } : {}),
   };
+}
+
+/**
+ * Skončená životní situace: „Oliver Mráz se chystá do porodnice“ zůstal v promptu (znalost
+ * kádru platí 14 dní) i vedle „vrátili jste se z porodnice“ (E2E 22. 11.). Co se stalo potom,
+ * zná hráč z `loadRecentLifeEvent` (life-news.ts). Konec = incident uzavřený, nebo už je po
+ * `ends_on` (denní tick ho uzavře až ráno).
+ */
+function lifeSituationOver(r: Pick<RadekZnalostiDb, "category" | "status" | "ends_on">, dnes: string): boolean {
+  if (r.category !== "zivotni") return false;
+  if (r.status !== "probiha") return true;
+  return !!r.ends_on && r.ends_on.slice(0, 10) <= dnes.slice(0, 10);
 }
 
 /**
@@ -213,6 +230,7 @@ export function isOwnRevealedOffence(r: RadekZnalosti): boolean {
 export function vyberZnalosti(radky: readonly RadekZnalosti[], temaId: string | null): RadekZnalosti[] {
   const skupiny = new Map<string, RadekZnalosti[]>();
   for (const r of radky) {
+    if (r.situationOver) continue;
     if (!VEREJNE_ROLE.has(r.role) && r.incidentId !== temaId && !isOwnRevealedOffence(r)) continue;
     skupiny.set(r.incidentId, [...(skupiny.get(r.incidentId) ?? []), r]);
   }

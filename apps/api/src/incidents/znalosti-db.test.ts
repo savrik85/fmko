@@ -88,6 +88,26 @@ describe("načtení znalostí hráče", () => {
     expect(blokZnalosti(before)).not.toContain("Dřív jsi to trenérovi zapíral,");
   });
 
+  it("skončená životní situace už v promptu jako probíhající není (Mráz, E2E 22. 11.: „se chystá do porodnice“ vedle návratu z porodnice)", async () => {
+    const birth = (over: Partial<RadekZnalostiDb>) => radekDb({
+      incident_id: "inc-porod", kind: "narozeni_ditete", category: "zivotni", fact: "Oliver Mráz se chystá do porodnice.",
+      game_date: "2026-09-07T16:00:00.000Z", culprit_player_id: null, ...over,
+    });
+    const ended = await nactiZnalostiHrace(jakoD1(sRadky([
+      birth({ role: "kadr", status: "uzavreny", resolution: "skoncila", ends_on: "2026-09-13" }),
+      birth({ role: "pachatel", fact: "Tvoje situace: Narození dítěte.", status: "uzavreny", resolution: "skoncila", ends_on: "2026-09-13" }),
+      radekDb(),
+    ])), { teamId: "tym-a", playerId: "mraz" });
+    expect(ended?.map((r) => r.incidentId)).toEqual(["inc-1"]);
+    expect(blokZnalosti(ended)).not.toContain("porodnice");
+    // Den po `ends_on`, než ji denní tick uzavře, už taky ne.
+    const overdue = await nactiZnalostiHrace(jakoD1(sRadky([birth({ role: "kadr", status: "probiha", ends_on: "2026-09-15" })])), { teamId: "tym-a", playerId: "s" });
+    expect(blokZnalosti(overdue)).not.toContain("porodnice");
+    // Probíhající ano.
+    const ongoing = await nactiZnalostiHrace(jakoD1(sRadky([birth({ role: "kadr", status: "probiha", ends_on: "2026-09-20" })])), { teamId: "tym-a", playerId: "s" });
+    expect(blokZnalosti(ongoing)).toContain("Oliver Mráz se chystá do porodnice.");
+  });
+
   it("bez herního dne nic nenačte a netvrdí, že hráč nic neví", async () => {
     const db = new FalesnaD1([{ sql: /FROM teams t WHERE t\.id = \?/, first: null }]);
     expect(await nactiZnalostiHrace(jakoD1(db), { teamId: "tym-a", playerId: "s" })).toBeUndefined();
