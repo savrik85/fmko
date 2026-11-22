@@ -283,6 +283,14 @@ export default function SoutezPage() {
   const closed = useMemo(
     () => proposals.filter((p) => p.status !== "open" && p.gesce === gesce), [proposals, gesce]);
   const openAll = useMemo(() => proposals.filter((p) => p.status === "open"), [proposals]);
+  // Odznaky na záložkách = co čeká na můj hlas, stejně jako odznak v menu (`toVote`
+  // v routes/competition.ts). Dřív počítaly všechny otevřené body a svítily do středy,
+  // i když trenér už dávno hlasoval.
+  const awaitingMyVote = useMemo(
+    () => state?.enabled
+      ? openAll.filter((p) => p.myAnswer == null && p.targetTeamId !== teamId)
+      : [],
+    [openAll, state, teamId]);
 
   // Člen grémia (činná funkce) limit nemá, zrcadlí holdsActiveOffice() na serveru.
   const holdsOffice = useMemo(
@@ -443,7 +451,7 @@ export default function SoutezPage() {
 
       <Tabs
         items={[
-          { key: "zasedani", label: "Zasedání", count: openAll.length || null },
+          { key: "zasedani", label: "Zasedání", count: awaitingMyVote.length || null },
           { key: "pokladna", label: "Pokladna" },
           { key: "vedeni", label: "Vedení", count: elections.filter((e) => e.status === "open" && !e.myVote && e.candidates.length > 0).length || null },
           { key: "zapisy", label: "Zápisy" },
@@ -473,7 +481,7 @@ export default function SoutezPage() {
           <Tabs
             items={gesceList.map((g) => ({
               key: g, label: GESCE_LABEL[g],
-              count: proposals.filter((p) => p.status === "open" && p.gesce === g).length || null,
+              count: awaitingMyVote.filter((p) => p.gesce === g).length || null,
             }))}
             value={gesce}
             onChange={setGesce}

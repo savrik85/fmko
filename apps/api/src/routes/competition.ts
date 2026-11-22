@@ -387,6 +387,9 @@ competitionRouter.get("/competition/:leagueId/proposals", async (c) => {
         status: p.status, majority: p.majority,
         payload: safeJson(p.payload as string),
         proposedByTeamId: p.proposed_by_team_id, proposerName: p.proposer_name,
+        // Návrh proti klubu (vyloučení, pokuta): o něm klub nehlasuje a odznak „čeká na
+        // tvůj hlas“ ho nepočítá, stejně jako `toVote` v počtu pro menu.
+        targetTeamId: (p.target_team_id as string | null) ?? null,
         openedGameDate: p.opened_game_date,
         closedGameDate: p.closed_game_date,
         effectiveFromSeason: p.effective_from_season,
