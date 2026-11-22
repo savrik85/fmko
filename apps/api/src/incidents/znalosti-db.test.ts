@@ -50,7 +50,7 @@ describe("načtení znalostí hráče", () => {
     const db = sRadky([]);
     expect(await nactiZnalostiHrace(jakoD1(db), { teamId: "tym-a", playerId: "s" })).toEqual([]);
     const dotaz = db.dotazy.find((d) => /FROM club_incident_knowledge k/.test(d.sql));
-    expect(dotaz?.params).toEqual(["s", "tym-a", 4, DNES, gameExpiry(DNES, -7)]);
+    expect(dotaz?.params).toEqual(["s", "tym-a", 4, DNES, DNES, gameExpiry(DNES, -7)]);
     expect(dotaz?.sql).toContain("i.status != 'uzavreny' OR i.resolved_on >= ?");
   });
 
