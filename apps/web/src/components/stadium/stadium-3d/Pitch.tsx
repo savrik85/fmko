@@ -536,17 +536,18 @@ function PitchLines({ hasFull, hasCenter, wide, opacity }: { hasFull: boolean; h
         <meshBasicMaterial color={lineColor} transparent opacity={opacity} />
       </mesh>
 
-      {/* Pokutová území - velké */}
-      <Rect x={0} z={-HALF_D + 9} w={22} h={18} y={lineY} color={lineColor} width={lineWidth} opacity={opacity} />
-      <Rect x={0} z={HALF_D - 9}  w={22} h={18} y={lineY} color={lineColor} width={lineWidth} opacity={opacity} />
-
-      {/* Brankovista - malá (jen na full) */}
-      {hasFull && (
-        <>
-          <Rect x={0} z={-HALF_D + 3.5} w={14} h={7} y={lineY} color={lineColor} width={lineWidth} opacity={opacity} />
-          <Rect x={0} z={HALF_D - 3.5}  w={14} h={7} y={lineY} color={lineColor} width={lineWidth} opacity={opacity} />
-        </>
-      )}
+      {[-1, 1].map((end) => (
+        <group key={end}>
+          {/* Pokutové území a značka pokutového kopu */}
+          <Rect x={0} z={end * (HALF_D - PITCH.penaltyArea.depth / 2)} w={PITCH.penaltyArea.width} h={PITCH.penaltyArea.depth} y={lineY} color={lineColor} width={lineWidth} opacity={opacity} />
+          <mesh position={[0, lineY + 0.01, end * (HALF_D - PITCH.penaltySpot)]} rotation={[-Math.PI / 2, 0, 0]}>
+            <circleGeometry args={[0.3, 8]} />
+            <meshBasicMaterial color={lineColor} transparent opacity={opacity} />
+          </mesh>
+          {/* Brankoviště (jen na full) */}
+          {hasFull && <Rect x={0} z={end * (HALF_D - PITCH.goalArea.depth / 2)} w={PITCH.goalArea.width} h={PITCH.goalArea.depth} y={lineY} color={lineColor} width={lineWidth} opacity={opacity} />}
+        </group>
+      ))}
     </group>
   );
 }

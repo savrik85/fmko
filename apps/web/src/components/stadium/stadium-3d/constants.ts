@@ -36,6 +36,11 @@ export const RAILING_MARGIN = APRON_MARGIN - 0.9;
 export const PITCH = {
   width: 40,    // X axis (kratší strana)
   depth: 60,    // Z axis (delší strana)
+  // Vápno v poměru ke hřišti jako na skutečném (68 × 105 m): pokutové území 40,3 × 16,5 m, brankoviště
+  // 18,3 × 5,5 m, značka 11 m od brány. `depth` je vzdálenost od brankové čáry do hřiště.
+  penaltyArea: { width: 24, depth: 10 },
+  goalArea: { width: 11, depth: 3.5 },
+  penaltySpot: 6.5,
 };
 
 // Trávník barvy podle pitch_condition (0-100). Stejné prahy jako v 2D verzi.

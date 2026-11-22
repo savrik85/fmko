@@ -5,7 +5,7 @@ import { PITCH } from "../../stadium/stadium-3d/constants";
 
 export const HALF_W = PITCH.width / 2;
 export const HALF_L = PITCH.depth / 2;
-const GOAL_HALF_W = 3.66, GOAL_H = 2.44, PENALTY_SPOT = 11, BOX_DEPTH = 18;
+const GOAL_HALF_W = 3.66, GOAL_H = 2.44, PENALTY_SPOT = PITCH.penaltySpot, BOX_DEPTH = PITCH.penaltyArea.depth;
 /** Střídačky stojí u západní lajny. */
 const BENCH_X = -HALF_W;
 const MAX_SPEED = 9;
@@ -852,7 +852,7 @@ export class Replay {
   /** Akce ze hry: přihrávka do běhu a střela, u brejku sprint přes půl hřiště. */
   private openPlay(st: Stage, side: Side, shooter: number, result: ShotResult, counter: boolean, assister: number | null, blocker: number | null): number {
     const gz = goalZ(side), fwd = attackSign(side), wing = st.rng() < 0.5 ? -1 : 1;
-    const shotSpot = inFront(gz, wing * st.rng() * 5, 11 + st.rng() * 4);
+    const shotSpot = inFront(gz, wing * st.rng() * 5, BOX_DEPTH - 1 + st.rng() * 4);
     const celebration = { ...celebrationSpot(gz), r: 3.6 };
     const refereeSpot = { ...toward(shotSpot, { x: -6, z: 0 }, 11), r: 2.4 };
     let marker: number | null;
@@ -864,7 +864,9 @@ export class Replay {
       const chasers = st.outfield(other(side), blocker === null ? [] : [blocker]).sort((a, b) => dist(st.pos(a), from) - dist(st.pos(b), from));
       marker = blocker ?? chasers.shift() ?? null;
       if (marker !== null) st.chase(marker, toward(shotSpot, { x: 0, z: gz }, 3), 3);
-      chasers.slice(0, 2).forEach((c, n) => st.chase(c, toward(shotSpot, from, 3 + n * 2), 3));
+      // Každý z jedné strany, ať se jim cesty nekříží a neskončí na sobě.
+      const behind = toward(shotSpot, from, 4);
+      chasers.slice(0, 2).sort((a, b) => st.pos(a).x - st.pos(b).x).forEach((c, n) => st.chase(c, { x: behind.x + (n ? 2.5 : -2.5), z: behind.z }, 3));
       st.dribble(shooter, toward(from, shotSpot, dist(from, shotSpot) / 2), 1.5);
       st.wait(1.5);
       st.dribble(shooter, shotSpot, 1.5);
@@ -901,7 +903,7 @@ export class Replay {
     /** Místa ve vápně: hráči na nich začnou a rozestoupí se. */
     const box = new Map<number, Point>();
     const order: Record<Role, number> = { FWD: 0, DEF: 1, MID: 2, GK: 3 };
-    const boxSpots = [[-2.5, 7], [3, 8.5], [0.5, 11.5], [-5.5, 10.5]].map(([across, out]) => inFront(gz, across, out));
+    const boxSpots = [[-2.5, 5.5], [3, 7], [0.5, 9.5], [-5.5, 8.5]].map(([across, out]) => inFront(gz, across, out));
     st.slots(side, ["FWD", "DEF", "MID"]).filter((x) => !fixed.has(x.figure))
       .sort((a, b) => order[a.role] - order[b.role] || Math.abs(a.base.v) - Math.abs(b.base.v))
       .slice(0, kind === "direct" ? 3 : 4).forEach((x, n) => box.set(x.figure, boxSpots[n]));
@@ -957,8 +959,8 @@ export class Replay {
   /** Penalta začíná faulem ve vápně: útočník padá, rozhodčí ukazuje na značku. */
   private penaltyFoul(st: Stage, side: Side, kicker: number) {
     const gz = goalZ(side), wing = st.rng() < 0.5 ? -1 : 1;
-    const from = inFront(gz, wing * 6, BOX_DEPTH + 3), to = inFront(gz, wing * 3, 11);
-    this.open(st, from, side, [[kicker, from], [this.referee, inFront(gz, -wing * 6, BOX_DEPTH + 6)]], [{ ...to, r: 6 }]);
+    const from = inFront(gz, wing * 6, BOX_DEPTH + 3), to = inFront(gz, wing * 3, BOX_DEPTH - 2.5);
+    this.open(st, from, side, [[kicker, from], [this.referee, inFront(gz, -wing * 6, BOX_DEPTH + 6)]], [{ ...to, r: 5 }]);
     const fouler = st.nearest(other(side), to) ?? st.keeper(other(side));
     st.go(fouler, { x: to.x + wing * 0.8, z: to.z }, Math.max(1.5, dist(st.pos(fouler), to) / 7));
     st.dribble(kicker, to, 1.5);
@@ -981,8 +983,8 @@ export class Replay {
     st.layout(spot, () => {
       const row = Math.floor(n / 10), across = (n++ % 10) - 4.5;
       if (shootout) return { x: across * 2.2, z: row * 2.4 - 1.2 };
-      const radius = 10 + row * 2.2;
-      return inFront(gz, Math.sin(across * 0.16) * radius, Math.max(BOX_DEPTH + 1 + row * 2, PENALTY_SPOT + Math.cos(across * 0.16) * radius));
+      const radius = 8 + row * 2.2;
+      return inFront(gz, Math.sin(across * 0.22) * radius, Math.max(BOX_DEPTH + 1 + row * 2, PENALTY_SPOT + Math.cos(across * 0.22) * radius));
     }, fixed, [{ ...celebrationSpot(gz), r: 3.6 }]);
     st.wait(lead - 1.2);
     st.go(kicker, toward(spot, { x: 0, z: gz }, -0.5), 0.7);
