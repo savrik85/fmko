@@ -288,7 +288,9 @@ incidentsRouter.post("/teams/:teamId/incidents/:id/rozhodnuti", async (c) => {
   const akce = AKCE_TRESTU.find((a) => a === body?.akce);
   if (!akce) return c.json({ error: "Neznámé rozhodnutí" }, 400);
   const zapasu = body?.zapasu === undefined || body.zapasu === "" ? undefined : Number(body.zapasu);
-  return odpovedAkce(c, await rozhodni(c.env, c.req.param("teamId"), c.req.param("id"), akce, { zapasu }));
+  return odpovedAkce(c, await rozhodni(c.env, c.req.param("teamId"), c.req.param("id"), akce, {
+    zapasu, waitUntil: (p) => c.executionCtx.waitUntil(p),
+  }));
 });
 
 // ── POST /api/teams/:teamId/incidents/:id/zaloha ────────────────────────────

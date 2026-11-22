@@ -8,6 +8,7 @@ vi.mock("../messaging/system-sms", () => ({
   sendSystemSMS: vi.fn(async () => undefined),
 }));
 vi.mock("../season/finance-processor", () => ({ recordTransaction: vi.fn(async () => 0) }));
+vi.mock("./punishment-reaction", () => ({ sendPunishmentReaction: vi.fn(async () => "sent") }));
 vi.mock("../transfers/remove-player", () => ({ removePlayer: vi.fn(async () => ({ ok: true })) }));
 vi.mock("../community/web-push", () => ({ sendWebPushToTeams: vi.fn(async () => undefined) }));
 vi.mock("../services/achievements", () => ({ checkReleaseAchievements: vi.fn(async () => []) }));
@@ -20,6 +21,7 @@ import { removePlayer } from "../transfers/remove-player";
 import { sendWebPushToTeams } from "../community/web-push";
 import { checkReleaseAchievements } from "../services/achievements";
 import { rozhodni } from "./akce";
+import { sendPunishmentReaction } from "./punishment-reaction";
 import type { IncidentRadek } from "./incident-db";
 import { FalesnaD1, jakoD1, type Pravidlo } from "./testovaci-d1";
 import { hracRadek, incidentRadek } from "./testovaci-stav";
@@ -47,7 +49,20 @@ describe("tresty", () => {
     const narok = db.dotazy.find((d) => /UPDATE club_incidents SET status = 'uzavreny'/.test(d.sql));
     expect(narok?.params.slice(0, 3)).toEqual(["pokuta", JSON.stringify({ castka: 200 }), DNES]);
     expect(recordTransaction).toHaveBeenCalledWith(expect.anything(), "tym-a", "incident_fine", 200, expect.any(String), DNES, "pokuta-inc-1");
-    expect(sendPlayerSMS).toHaveBeenCalledTimes(1);
+    // Reakci píše model podle trestu a částky (punishment-reaction.ts).
+    expect(sendPunishmentReaction).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(sendPunishmentReaction).mock.calls[0][2]).toMatchObject({ teamId: "tym-a", incidentId: "inc-1", kind: "pokuta", amount: 200, player: { id: "p" } });
+    // Verdikt zná pachatel po celou dobu trestu: řádek znalostí platí aspoň 5 týdnů od rozhodnutí.
+    const until = db.davky.flat().find((d) => /UPDATE club_incident_knowledge SET until = MAX\(until, \?\)/.test(d.sql));
+    expect(String(until?.params[0]).slice(0, 10)).toBe("2026-10-21");
+    expect(db.davky.flat().some((d) => /INSERT OR IGNORE INTO club_incident_knowledge/.test(d.sql))).toBe(true);
+  });
+
+  it("trest s čekáním na pozadí: reakce hráče jde do waitUntil", async () => {
+    const { env } = prostredi(ODHALENY);
+    const waitUntil = vi.fn();
+    expect(await rozhodni(env, "tym-a", "inc-1", "srazka", { waitUntil })).toEqual({ ok: true, castka: 400 });
+    expect(waitUntil).toHaveBeenCalledTimes(1);
   });
 
   it("srážka: rozloží se do 4 týdnů a teď se nic nestrhne", async () => {
@@ -104,7 +119,7 @@ describe("tresty", () => {
     expect(narok?.params.slice(0, 2)).toEqual(["vyradit", JSON.stringify({ zapasu: 2 })]);
     const absence = db.davky.flat().find((d) => /INSERT OR IGNORE INTO club_incident_absences/.test(d.sql));
     expect(absence?.params.slice(0, 8)).toEqual(["inc-1-abs-3", "inc-1", "tym-a", "p", "vyrazen", null, null, 2]);
-    expect(sendPlayerSMS).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(sendPunishmentReaction).mock.calls[0][2]).toMatchObject({ kind: "vyradit", matches: 2 });
   });
 
   it("předat policii: výslech za 2 dny a soud v den výsledku", async () => {
@@ -134,6 +149,7 @@ describe("tresty", () => {
     expect(await rozhodni(env, "tym-a", "inc-1", "pokuta")).toMatchObject({ ok: false, kod: 409 });
     expect(recordTransaction).not.toHaveBeenCalled();
     expect(sendPlayerSMS).not.toHaveBeenCalled();
+    expect(sendPunishmentReaction).not.toHaveBeenCalled();
   });
 });
 

@@ -35,6 +35,8 @@ import type { AkceTrestu, Obvineni, VysledekObvineni } from "./typy";
 import { dostupneAkce, lzeVyslychat, nactiObvineni, rozhodniObvineni } from "./vysetrovani";
 import { vyslechni } from "./vyslech";
 import type { VysledekVyslechu } from "./znalosti";
+import { ACCUSATION_TALK_RE, aiReplyCoveredIt } from "./button-sms";
+import { sendPunishmentReaction } from "./punishment-reaction";
 import { nastavTema } from "./zprava-trenera";
 
 const M = "incidents-akce";
@@ -115,8 +117,14 @@ export async function obvinHrace(
   }
 
   const klic = vysledek === "priznal" ? "obvineni_priznani" : vysledek === "usvedcen" ? "obvineni_usvedcen" : "obvineni_zapira";
-  await sendIncidentPlayerSms(db, teamId, { id: playerId, firstName: obvineny.krestni, lastName: obvineny.prijmeni }, text(rng, klic), smsIncidentu(incidentId))
-    .catch((e) => logger.warn({ module: M }, `SMS po obvinění ${incidentId}`, e));
+  // Zapírá, a v rozhovoru na obvinění před chvílí odpověděl taky: druhé zapírání ze šablony by
+  // bylo navíc. Přiznání nebo usvědčení je nová věc, ta přijde vždycky.
+  const covered = vysledek === "zapira"
+    && await aiReplyCoveredIt(db, { teamId, playerId, coachRe: ACCUSATION_TALK_RE });
+  if (!covered) {
+    await sendIncidentPlayerSms(db, teamId, { id: playerId, firstName: obvineny.krestni, lastName: obvineny.prijmeni }, text(rng, klic), smsIncidentu(incidentId))
+      .catch((e) => logger.warn({ module: M }, `SMS po obvinění ${incidentId}`, e));
+  }
   return { ok: true, vysledek, odhalen };
 }
 
@@ -225,10 +233,33 @@ export async function talkWithoutChat(env: Bindings, teamId: string, incidentId:
 }
 
 /** SMS, kterou pachatel odpoví na trest. U ostatních trestů hráč nepíše. */
-const SMS_TRESTU = { odpustit: "trest_odpustit", srazka: "trest_srazka", pokuta: "trest_pokuta", vyradit: "trest_vyradit" } as const;
+/**
+ * Pachatelův řádek znalostí platí po celou dobu trestu: srážka běží `SRAZKA_TYDNU` týdnů od
+ * rozhodnutí, a to může přijít až dny po incidentu. Bez řádku (pachatel přišel do kádru po
+ * incidentu) se založí, ať o verdiktu ví. Selhání se zaloguje, trest platí dál.
+ */
+async function keepVerdictInMemory(
+  db: D1Database, o: { teamId: string; incidentId: string; playerId: string; gameDate: string; seasonNumber: number; kind: string },
+): Promise<void> {
+  const until = gameExpiry(o.gameDate, SRAZKA_TYDNU * 7 + 7);
+  await db.batch([
+    db.prepare(
+      `INSERT OR IGNORE INTO club_incident_knowledge (incident_id, player_id, team_id, role, fact, willingness, until, season_number)
+       VALUES (?, ?, ?, 'pachatel', ?, 0, ?, ?)`,
+    ).bind(o.incidentId, o.playerId, o.teamId, vypln(TEXTY.znalost_pachatel[0], { nazev: nazevIncidentu(o.kind) }), until, o.seasonNumber),
+    db.prepare(
+      "UPDATE club_incident_knowledge SET until = MAX(until, ?) WHERE incident_id = ? AND player_id = ? AND team_id = ? AND role = 'pachatel'",
+    ).bind(until, o.incidentId, o.playerId, o.teamId),
+  ]).catch((e) => logger.warn({ module: M }, `verdikt ve znalostech pachatele ${o.incidentId}`, e));
+}
 
 export async function rozhodni(
-  env: Bindings, teamId: string, incidentId: string, akce: AkceTrestu, volby: { zapasu?: number } = {},
+  env: Bindings, teamId: string, incidentId: string, akce: AkceTrestu,
+  volby: {
+    zapasu?: number;
+    /** Reakci hráče píše model: na pozadí (`c.executionCtx.waitUntil`), ať trenér nečeká. Bez něj se čeká. */
+    waitUntil?: (p: Promise<unknown>) => void;
+  } = {},
 ): Promise<VysledekAkce<{ castka: number | null }>> {
   const db = env.DB;
   const [inc, gameDate] = await Promise.all([nactiIncident(db, teamId, incidentId), herniDatum(db, teamId)]);
@@ -373,8 +404,14 @@ export async function rozhodni(
       .catch((e) => logger.error({ module: M }, `pokuta ${incidentId}`, e));
   }
   if (akce === "odpustit" || akce === "srazka" || akce === "pokuta" || akce === "vyradit") {
-    await sendIncidentPlayerSms(db, teamId, sms, text(rng, SMS_TRESTU[akce]), smsIncidentu(incidentId))
-      .catch((e) => logger.warn({ module: M }, `SMS po trestu ${incidentId}`, e));
+    // Verdikt pachatel zná po celou dobu trestu (srážka běží 4 týdny od rozhodnutí), ne jen 60 dní od incidentu.
+    await keepVerdictInMemory(db, { teamId, incidentId, playerId: pachatel.id, gameDate, seasonNumber: inc.season_number, kind: inc.kind });
+    // Reakci píše model podle trestu, povahy a toho, co hráč před chvílí psal (punishment-reaction.ts).
+    const reaction = sendPunishmentReaction(db, env, {
+      teamId, incidentId, kind: akce, amount: castka, matches: zapasu ?? null, offence: nazevIncidentu(inc.kind), player: sms,
+    }).catch((e) => logger.warn({ module: M }, `SMS po trestu ${incidentId}`, e));
+    if (volby.waitUntil) volby.waitUntil(reaction);
+    else await reaction;
   }
   if (akce === "srazka" || akce === "pokuta" || akce === "vyradit") {
     await atributTrenera(db, teamId, incidentId, "discipline", 1, `Důsledný trest za incident: ${pachatel.jmeno}`, gameDate);
