@@ -27,7 +27,7 @@ import { PHOTO_SCENES, generatePlayerPhoto, workPhotoScene } from "./player-phot
 import { loadOwnRecentLines } from "./repetition";
 import { pickAmbience, recordVoiceMessage, voicePreviewText } from "./voice-message";
 import { deliverDueFollowUps, nextFreeMoment, postPlayerMessageStmts, scheduleFollowUp, type FollowUpEnv } from "./follow-ups";
-import type { PlayerSnapshot } from "./ai-player-scenarios";
+import type { AiScenario, PlayerSnapshot } from "./ai-player-scenarios";
 
 const M = "casual-messages";
 
@@ -377,6 +377,48 @@ async function rememberTopic(kv: KVNamespace | undefined, teamId: string, topicI
 export async function openInvite(kv: KVNamespace | undefined, convId: string, invite: OpenInvite): Promise<void> {
   await kv?.put(inviteKey(convId), JSON.stringify(invite), { expirationTtl: INVITE_TTL_SECONDS })
     .catch((e) => logger.warn({ module: M, teamId: invite.teamId }, "uložení pozvání", e));
+}
+
+/**
+ * Jak to s pozváním od hráče ve vlákně je: čeká na odpověď trenéra (`open`), trenér slíbil,
+ * že přijde, a poděkování teprve přijde (`accepted`), už byl a hráč poděkoval (`visited`),
+ * nebo pozvání vypršelo (`closed`). Počítá se jen od začátku vlákna (`sinceIso`).
+ */
+export type InviteStatus = "open" | "accepted" | "visited" | "closed";
+
+export async function inviteStatus(
+  db: D1Database, kv: KVNamespace | undefined, convId: string, sinceIso: string,
+): Promise<InviteStatus> {
+  const thanked = await db.prepare(
+    `SELECT 1 AS x FROM messages WHERE conversation_id = ? AND sender_type = 'player'
+        AND json_extract(metadata, '$.follow_up') = 'after_invite' AND julianday(sent_at) >= julianday(?) LIMIT 1`,
+  ).bind(convId, sinceIso).first<{ x: number }>()
+    .catch((e) => { logger.warn({ module: M }, `poděkování za návštěvu v ${convId}`, e); return null; });
+  if (thanked) return "visited";
+  const pending = await db.prepare(
+    `SELECT 1 AS x FROM player_follow_ups WHERE conversation_id = ? AND kind = 'after_invite' AND done_at IS NULL
+        AND julianday(created_at) >= julianday(?) LIMIT 1`,
+  ).bind(convId, sinceIso).first<{ x: number }>()
+    .catch((e) => { logger.warn({ module: M }, `přijaté pozvání v ${convId}`, e); return null; });
+  if (pending) return "accepted";
+  const open = await kv?.get(inviteKey(convId))
+    .catch((e) => { logger.warn({ module: M }, "čtení pozvání", e); return null; });
+  return open ? "open" : "closed";
+}
+
+const AFTER_INVITE_LINES: Record<Exclude<InviteStatus, "open">, string> = {
+  accepted: "Trenér už slíbil, že přijde. Znovu ho nezvi, nanejvýš se těš, že dorazí.",
+  visited: "Trenér už u vás byl, jak jste se domluvili, a ty jsi mu za to poděkoval. Znovu ho nezvi.",
+  closed: "Na pozvání už nečekáš. Znovu ho nezvi.",
+};
+
+/**
+ * Scénář vlákna s pozváním, když už pozvání neplatí: bez pozvánky a s tím, jak dopadlo.
+ * Lokální E2E 22. 11.: Lakatoš po přijetí i po poděkování za návštěvu zval znovu („Klidně
+ * přijď, Josef už spí“), protože scénář vlákna (life_news_baby) pořád zval.
+ */
+export function scenarioAfterInvite(scenario: AiScenario, status: Exclude<InviteStatus, "open">): AiScenario {
+  return { ...scenario, invite: undefined, description: `${scenario.description} ${AFTER_INVITE_LINES[status]}` };
 }
 
 /**

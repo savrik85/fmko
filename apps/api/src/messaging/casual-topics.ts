@@ -394,7 +394,7 @@ export const INVITES: Record<InviteKind, {
   },
   baby: {
     label: "zapít narození jeho dítěte",
-    thanks: "Trenér se na tvoje pozvání stavil zapít narození tvého dítěte. Děkuješ mu. Jméno a pohlaví dítěte znáš jen z toho, co o něm víš výš, jinak si nic nevymýšlej.",
+    thanks: "Trenér se na tvoje pozvání stavil zapít narození tvého dítěte. Děkuješ mu a dítě v poděkování zmíníš jménem. Jméno a pohlaví dítěte znáš jen z toho, co o něm víš výš, jinak si nic nevymýšlej.",
     photo: "baby_shoes", afterHours: 30, relation: 6, morale: 4,
   },
   bbq: {

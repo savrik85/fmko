@@ -251,6 +251,39 @@ describe("poděkování po přijatém pozvání", () => {
     expect(JSON.parse(conv!.ai_thread_state)).toMatchObject({ scenario_id: "casual_invite_thanks", casual: true });
   });
 
+  // Lokální E2E 22. 11. (C1): Lakatoš poděkoval jen „Dík za návštěvu, trenére!“, jméno syna
+  // Josefa vynechal. Pokyn k poděkování jméno nevyžadoval.
+  it("poděkování za zapití miminka zná jméno dítěte a použije ho", async () => {
+    await db.prepare("DROP TABLE club_incidents").run();
+    await db.prepare(
+      `CREATE TABLE club_incidents (id TEXT PRIMARY KEY, team_id TEXT, status TEXT, category TEXT, subject_player_id TEXT, kind TEXT,
+         resolution TEXT, resolution_data TEXT, resolved_on TEXT)`,
+    ).run();
+    await db.prepare(
+      `INSERT INTO club_incidents VALUES ('inc-baby', 't1', 'uzavreny', 'zivotni', 'p1', 'narozeni_ditete', 'skoncila',
+         '{"baby":{"sex":"boy","name":"Josef","weightG":2960}}', '2026-11-09')`,
+    ).run();
+    fx.generateFollowUpMessage
+      .mockResolvedValueOnce({ body: "Dík za návštěvu, trenére!" })
+      .mockResolvedValueOnce({ body: "Díky, že ses stavil, trenére!" });
+    await schedule("after_invite", { invite: "baby", topicId: "life_news_baby" });
+    expect((await deliverDueFollowUps(db, {}, NOW)).delivered).toBe(1);
+    const calls = fx.generateFollowUpMessage.mock.calls as unknown as Array<[unknown, unknown, unknown, unknown, string]>;
+    expect(calls[0][4]).toContain("Josef");
+    // Model jméno vynechal dvakrát: hra ho do poděkování doplní.
+    expect(calls).toHaveLength(2);
+    const sent = await db.prepare("SELECT body FROM messages WHERE conversation_id = 'c1' AND sender_type = 'player'").first<{ body: string }>();
+    expect(sent?.body).toBe("Díky, že ses stavil, trenére! Josef tě pozdravuje 👶");
+
+    // Tvar jména („Josefa“) stačí, druhý pokus netřeba.
+    fx.generateFollowUpMessage.mockClear();
+    await db.prepare("DELETE FROM messages").run();
+    fx.generateFollowUpMessage.mockResolvedValueOnce({ body: "Díky, že jsi přišel zapít Josefa, trenére!" });
+    await scheduleFollowUp(db, { teamId: "t1", playerId: "p1", convId: "c1", kind: "after_invite", dueAt: new Date(NOW.getTime() - 60_000), payload: { invite: "baby" }, now: NOW });
+    expect((await deliverDueFollowUps(db, {}, NOW)).delivered).toBe(1);
+    expect(fx.generateFollowUpMessage).toHaveBeenCalledTimes(1);
+  });
+
   it("svatba si vztah za účast započítala sama: poděkování ho nezdvojí", async () => {
     await schedule("after_invite", { invite: "wedding", topicId: "casual_wedding", effectApplied: true });
     expect((await deliverDueFollowUps(db, {}, NOW)).delivered).toBe(1);
