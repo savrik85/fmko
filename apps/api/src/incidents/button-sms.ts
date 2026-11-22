@@ -61,6 +61,18 @@ export function coachSaid(text: string, re: RegExp): boolean {
   return re.test(plain(text));
 }
 
+/** Díky, děkuju, dík, dikec, vděčný, „zachránil jsi mě“. */
+const THANKS_RE = /\b(dik|dekuj|vdecn|zachran)/;
+
+/**
+ * Hráč v odpovědi opravdu děkuje. Šablonu „díky za zálohu“ smí zastavit jen poděkování:
+ * Fiala (Koh-i-noor, E2E 22. 11.) na „můžeš 👍“ znovu prosil („Šel by mi nějaký předpoklad
+ * na výplatu?“) a po kliknutí na „Půjčit“ nepřišlo nic, protože se počítala každá odpověď.
+ */
+export function thanksInReply(text: string): boolean {
+  return THANKS_RE.test(plain(text));
+}
+
 /**
  * Odpověděl hráč za posledních `COVERED_WINDOW_MINUTES` minut v rozhovoru (text od modelu)
  * na totéž? Totéž znamená: odpověď patří do vlákna té věci (`scenarioIds`, např. prosba
@@ -73,6 +85,8 @@ export async function aiReplyCoveredIt(
     teamId: string; playerId: string; scenarioIds?: readonly string[]; coachRe?: RegExp;
     /** Přesnější než `coachRe`: věc ve zprávě trenéra opravdu byla (oznámený trest, ne výzva). */
     coachSaidIt?: (text: string) => boolean;
+    /** Počítá se jen odpověď, která tohle splní (u zálohy poděkování, `thanksInReply`). */
+    replyMatches?: (text: string) => boolean;
     now?: Date;
   },
 ): Promise<boolean> {
@@ -88,7 +102,8 @@ export async function aiReplyCoveredIt(
     .all<{ sender_type: string; body: string | null; sent_at: string; ai: number | null; scenario: string | null }>()
     .catch((e) => { logger.warn({ module: M }, `poslední rozhovor s hráčem ${o.playerId}`, e); return null; });
   const list = rows?.results ?? [];
-  const aiReplies = list.map((r, i) => ({ r, i })).filter(({ r }) => r.sender_type === "player" && r.ai === 1);
+  const aiReplies = list.map((r, i) => ({ r, i }))
+    .filter(({ r }) => r.sender_type === "player" && r.ai === 1 && (!o.replyMatches || o.replyMatches(r.body ?? "")));
   if (aiReplies.length === 0) return false;
   if (o.scenarioIds && aiReplies.some(({ r }) => r.scenario && o.scenarioIds!.includes(r.scenario))) return true;
   const re = o.coachRe;

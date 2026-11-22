@@ -249,6 +249,36 @@ describe("rozhodnutí o záloze", () => {
     expect(db.pocet(/UPDATE club_incidents SET resolution_data/)).toBe(1);
   });
 
+  // Odpovědi z rozhovoru o záloze (aiReplyCoveredIt), jak je vrací dotaz na zprávy s hráčem.
+  const rozhovor = (odpoved: string) => ({
+    sql: /FROM messages m JOIN conversations c/,
+    all: [
+      { sender_type: "player", body: "Trenére, stydím se o to psát, ale nešla by záloha? Splátky mě dusí.", sent_at: "2026-09-17T09:58:00.000Z", ai: 1, scenario: "zadost_o_zalohu" },
+      { sender_type: "user", body: "můžeš 👍", sent_at: "2026-09-17T09:59:00.000Z", ai: null, scenario: null },
+      { sender_type: "player", body: odpoved, sent_at: "2026-09-17T09:59:20.000Z", ai: 1, scenario: "zadost_o_zalohu" },
+    ],
+  });
+
+  it("Fiala (E2E 22. 11.): na „můžeš 👍“ znovu prosil, ne poděkoval: po půjčce SMS přijde", async () => {
+    const { env } = prostredi([
+      { sql: /FROM club_incidents WHERE id = \? AND team_id = \?/, first: { ...dluhy, subject_player_id: "s" } },
+      { sql: /SELECT game_date FROM teams/, first: { game_date: DNES } },
+      rozhovor("Fakt potřebuju peníze, dluhy mě dusí. Šel by mi nějaký předpoklad na výplatu?"),
+    ]);
+    expect(await rozhodniZalohu(env, "tym-a", "inc-1", "pujcit")).toMatchObject({ ok: true });
+    expect(sendPlayerTemplateSMS).toHaveBeenCalledTimes(1);
+  });
+
+  it("Němec (31. 10.): v rozhovoru o záloze už poděkoval, druhé díky ze šablony nepřijde", async () => {
+    const { env } = prostredi([
+      { sql: /FROM club_incidents WHERE id = \? AND team_id = \?/, first: { ...dluhy, subject_player_id: "s" } },
+      { sql: /SELECT game_date FROM teams/, first: { game_date: DNES } },
+      rozhovor("Fakt moc díky, trenére, strašně mi to pomůže! 🙏"),
+    ]);
+    expect(await rozhodniZalohu(env, "tym-a", "inc-1", "pujcit")).toMatchObject({ ok: true });
+    expect(sendPlayerTemplateSMS).not.toHaveBeenCalled();
+  });
+
   it("u jiného než dluhového incidentu 409", async () => {
     const { env } = prostredi([
       { sql: /FROM club_incidents WHERE id = \? AND team_id = \?/, first: incidentRadek() },
