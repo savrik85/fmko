@@ -161,6 +161,9 @@ export async function simulateTournamentMatch(
 
   const homePre = homeLineup.map((p) => ({ ...p }));
   const awayPre = awayLineup.map((p) => ({ ...p }));
+  // Lavička před zápasem: engine z pole `subs` vyndává hráče, kteří šli na hřiště.
+  const homeBenchPre = homeSubs.map((p) => ({ ...p }));
+  const awayBenchPre = awaySubs.map((p) => ({ ...p }));
 
   const { injectRelationships } = await import("../multiplayer/inject-relations");
   await injectRelationships(db, [
@@ -358,8 +361,8 @@ export async function simulateTournamentMatch(
        WHERE id = ?`
     ).bind(
       JSON.stringify(result.events), JSON.stringify(commentary), attendance, stadiumName, pitchCondition, weather,
-      JSON.stringify(buildCupLineupData(homePre, homeSubs, homeBuild.idMap, homeFormation, homeTactic, homeHardness)),
-      JSON.stringify(buildCupLineupData(awayPre, awaySubs, awayBuild.idMap, awayFormation, awayTactic, awayHardness)),
+      JSON.stringify(buildCupLineupData(homePre, homeBenchPre, homeBuild.idMap, homeFormation, homeTactic, homeHardness)),
+      JSON.stringify(buildCupLineupData(awayPre, awayBenchPre, awayBuild.idMap, awayFormation, awayTactic, awayHardness)),
       absences.length > 0 ? JSON.stringify(absences) : null, JSON.stringify(ratings),
       referee.profile.id, JSON.stringify(referee.snapshot),
       incidents.length > 0 ? JSON.stringify(incidents) : null, result.refereeGrade,
