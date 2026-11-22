@@ -632,6 +632,20 @@ async function incidentPunishingPlayer(db: D1Database, clubTeamId: string, playe
   return row ? { id: row.id, kind: row.kind, open: row.status !== "uzavreny" } : null;
 }
 
+/**
+ * Kdy trenér zprávu `text` v konverzaci poslal (poslední taková), jinak null. Poznámka patří
+ * hned pod ni, i když rozpoznání doběhne až po odpovědi hráče.
+ */
+async function coachMessageTime(db: D1Database, convId: string, text: string): Promise<Date | null> {
+  const row = await db.prepare(
+    `SELECT sent_at FROM messages WHERE conversation_id = ? AND sender_type = 'user' AND TRIM(body) = TRIM(?)
+      ORDER BY julianday(sent_at) DESC LIMIT 1`,
+  ).bind(convId, text).first<{ sent_at: string | null }>()
+    .catch((e) => { logger.warn({ module: M }, `čas zprávy trenéra v ${convId}`, e); return null; });
+  const ms = row?.sent_at ? Date.parse(row.sent_at.includes("T") ? row.sent_at : `${row.sent_at.replace(" ", "T")}Z`) : NaN;
+  return Number.isFinite(ms) ? new Date(ms) : null;
+}
+
 /** Poznámka jen pro trenéra pod jeho zprávou (jako coach-claims.ts): trest za incident patří k incidentu. */
 async function noteIncidentPunishment(
   db: D1Database, o: { convId: string; name: string; incident: PunishingIncident; now?: Date },
@@ -654,7 +668,8 @@ async function noteIncidentPunishment(
 export async function handleCoachMessageForCommitment(
   db: D1Database,
   env: ChatEnv,
-  o: { teamId: string; convId: string; playerId: string; text: string },
+  /** `sentAt`: kdy trenér zprávu poslal (ISO). Bez něj se dohledá v konverzaci. */
+  o: { teamId: string; convId: string; playerId: string; text: string; sentAt?: string },
   opts: { deadline?: number } = {},
 ): Promise<string | null> {
   try {
@@ -685,7 +700,10 @@ export async function handleCoachMessageForCommitment(
     if (detected.kind === "fine") {
       const incident = await incidentPunishingPlayer(db, p.club_id ?? o.teamId, o.playerId);
       if (incident) {
-        await noteIncidentPunishment(db, { convId: o.convId, name: `${p.first_name} ${p.last_name ?? ""}`.trim(), incident });
+        // Pod zprávu trenéra (její čas + 1 s), ne pod odpověď hráče: s pomalým modelem doběhne
+        // rozpoznání až po ní a ℹ️ s časem „teď“ byla pod ní (Turek, E2E 22. 11.).
+        const sent = o.sentAt && Number.isFinite(Date.parse(o.sentAt)) ? new Date(o.sentAt) : await coachMessageTime(db, o.convId, o.text);
+        await noteIncidentPunishment(db, { convId: o.convId, name: `${p.first_name} ${p.last_name ?? ""}`.trim(), incident, ...(sent ? { now: sent } : {}) });
         return null;
       }
     }
