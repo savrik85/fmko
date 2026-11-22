@@ -177,7 +177,7 @@ export interface PlayerSnapshot {
    * Co se hráči nedávno stalo a skončilo (porod, rodič z nemocnice), s fakty z hry
    * (incidents/life-news.ts `loadRecentLifeEvent`). `kind` je druh situace.
    */
-  recentLifeEvent?: { kind: string; fact: string };
+  recentLifeEvent?: { kind: string; fact: string; babyName?: string };
 }
 
 export interface AiScenario {

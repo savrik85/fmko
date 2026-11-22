@@ -217,7 +217,7 @@ async function factsOf(
  */
 export async function loadRecentLifeEvent(
   db: D1Database, teamId: string, playerId: string,
-): Promise<{ kind: LifeNewsKind; fact: string } | undefined> {
+): Promise<{ kind: LifeNewsKind; fact: string; babyName?: string } | undefined> {
   const row = await db.prepare(
     `SELECT i.id, i.team_id, i.kind, i.subject_player_id, i.resolution_data, i.resolved_on, t.game_date
        FROM club_incidents i JOIN teams t ON t.id = i.team_id
@@ -232,7 +232,9 @@ export async function loadRecentLifeEvent(
   if (!row?.resolved_on || !row.game_date) return undefined;
   const daysAgo = daysBetweenIso(row.resolved_on, row.game_date);
   if (daysAgo > REMEMBER_DAYS[row.kind]) return undefined;
-  return { kind: row.kind, fact: lifeEventFact(row.kind, await factsOf(db, row), daysAgo) };
+  const facts = await factsOf(db, row);
+  // Jméno dítěte zvlášť: poděkování za zapití ho musí použít (follow-ups.ts).
+  return { kind: row.kind, fact: lifeEventFact(row.kind, facts, daysAgo), ...(facts.baby ? { babyName: facts.baby.name } : {}) };
 }
 
 function pragueHour(now: Date): number {

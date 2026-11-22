@@ -230,6 +230,7 @@ async function deliverOne(db: D1Database, env: FollowUpEnv, row: FollowUpRow, no
   let topicId: string | null = null;
   let photoSceneId: string | undefined;
   let effect: { relation: number; morale: number; description: string } | null = null;
+  let babyName: string | null = null;
   if (row.kind === "reply_later") {
     // Dřív tu stálo „na začátku se krátce ozvi, že už můžeš“ a 93 odložených odpovědí začínalo
     // „Už mám po šichtě / padla, trenére.“ (prod 9–11/2026). Úvod je teď na hráči.
@@ -245,6 +246,11 @@ async function deliverOne(db: D1Database, env: FollowUpEnv, row: FollowUpRow, no
     const info = kind ? INVITES[kind] : undefined;
     if (!info) return "cancelled";
     instruction = info.thanks;
+    // Poděkování za zapití miminka jmenuje dítě (E2E 22. 11.: „Dík za návštěvu, trenére!“ bez jména).
+    if (kind === "baby" && player.recentLifeEvent?.babyName) {
+      babyName = player.recentLifeEvent.babyName;
+      instruction += ` Dítě se jmenuje ${babyName}, jméno v poděkování napiš.`;
+    }
     topicId = "casual_invite_thanks";
     photoSceneId = info.photo;
     // Svatba (weddings/) si vztah za účast započítala sama den po svatbě, poděkování ho nezdvojí.
@@ -269,6 +275,12 @@ async function deliverOne(db: D1Database, env: FollowUpEnv, row: FollowUpRow, no
   let generated: Awaited<ReturnType<typeof generateFollowUpMessage>>;
   try {
     generated = await generateFollowUpMessage(env, player, team, history, instruction, { photo: photo ? { alt: photo.alt } : undefined });
+    if (babyName && !mentionsName(generated.body, babyName)) {
+      // Jméno vynechal: jednou znovu s výslovným pokynem, a když zase ne, hra ho doplní.
+      generated = await generateFollowUpMessage(env, player, team, history,
+        `${instruction} POZOR: jméno dítěte (${babyName}) v poděkování MUSÍ být.`, { photo: photo ? { alt: photo.alt } : undefined });
+      if (!mentionsName(generated.body, babyName)) generated = { ...generated, body: `${generated.body} ${babyName} tě pozdravuje 👶` };
+    }
   } catch (e) {
     if (e instanceof GeminiUnavailableError) {
       logger.warn({ module: M, teamId: row.team_id }, `model nedostupný pro odloženou zprávu ${row.id}: ${e.message}`);
@@ -320,6 +332,12 @@ async function deliverOne(db: D1Database, env: FollowUpEnv, row: FollowUpRow, no
   logger.info({ module: M, teamId: row.team_id }, `odložená zpráva ${row.kind}: ${player.firstName} ${player.lastName}${photo ? " (fotka)" : ""}`);
   await pushPhoneMessage(db, env, { teamId: row.team_id, convId: row.conversation_id, sender: `${player.firstName} ${player.lastName}`, text: generated.body });
   return "delivered";
+}
+
+/** Je v textu jméno (i v jiném pádě: „Josefa“, „Kristýnku“)? Bez diakritiky a velikosti písmen. */
+export function mentionsName(text: string, name: string): boolean {
+  const plain = (t: string) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  return plain(text).includes(plain(name.slice(0, Math.max(3, name.length - 2))));
 }
 
 /**

@@ -1256,11 +1256,17 @@ async function handleAiPlayerReplyInner(
   }
 
   // Truc po nenominaci podle důvodu: hráč na listině se neptá, proč nejede.
-  const scenario = state.scenario_id === "left_out" ? leftOutScenario(state.left_out_reason) : getScenarioById(state.scenario_id);
+  let scenario = state.scenario_id === "left_out" ? leftOutScenario(state.left_out_reason) : getScenarioById(state.scenario_id);
   if (!scenario) {
     logger.warn({ module: "ai-player-spawn" }, `unknown scenario ${state.scenario_id}, force-closing thread`);
     await closeThread(db, convId, state, null);
     return;
+  }
+  // Pozvání od hráče (porod, zabijačka…): když ho trenér přijal nebo už byl, hráč nezve znovu.
+  if (scenario.invite) {
+    const { inviteStatus, scenarioAfterInvite } = await import("./casual-messages");
+    const status = await inviteStatus(db, env.CACHE_KV, convId, state.initiated_at);
+    if (status !== "open") scenario = scenarioAfterInvite(scenario, status);
   }
 
   // Načti hráče (recent stats nejsou pro reply potřeba, poslední zápas ano)
