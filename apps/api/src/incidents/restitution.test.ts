@@ -157,6 +157,8 @@ describe("vrácení po uzavřeném incidentu (Turek a poháry, 23.–24. 10.)", 
     const t = await task("task_return");
     expect(JSON.parse(t!.details!)).toEqual({ incidentId: "vit", dueOn: "2026-11-14" });
     expect((await db.prepare("SELECT fact FROM club_incident_knowledge").first<{ fact: string }>())?.fact).toContain("vrátíš nejpozději v sobotu 14. 11.");
+    // Sedláček (STS Čkyně, E2E 22. 11.): „…nejpozději v pondělí 23. 11..“ s dvojitou tečkou.
+    expect((await db.prepare("SELECT fact FROM club_incident_knowledge").first<{ fact: string }>())?.fact).not.toContain("14. 11..");
     // Trest platí dál, vrátí se až po lhůtě.
     expect(await db.prepare("SELECT resolution, recovered FROM club_incidents").first()).toEqual({ resolution: "srazka", recovered: 0 });
     expect(await db.prepare("SELECT trophy_case FROM equipment").first()).toEqual({ trophy_case: 1 });

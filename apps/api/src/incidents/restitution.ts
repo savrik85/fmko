@@ -261,8 +261,8 @@ async function promiseAmends(
     ]).catch((e) => logger.warn({ module: M }, `přiznání se slibem nápravy ${inc.id}`, e));
   }
   await addCulpritFact(db, inc.id, o.playerId, task === "task_return"
-    ? `Trenér tě požádal, ať to vrátíš, a ty jsi slíbil, že to vrátíš ${dueWords(dueOn)}.`
-    : `Trenér chtěl, ať to opravíš, a ty jsi slíbil, že to s brigádou opravíš ${dueWords(dueOn)}.`);
+    ? sentenceEnd(`Trenér tě požádal, ať to vrátíš, a ty jsi slíbil, že to vrátíš ${dueWords(dueOn)}`)
+    : sentenceEnd(`Trenér chtěl, ať to opravíš, a ty jsi slíbil, že to s brigádou opravíš ${dueWords(dueOn)}`));
   logger.info({ module: M, teamId: o.teamId }, `pachatel ${o.playerId} slíbil ${task} ${inc.id} do ${dueOn}`);
   return { outcome: "promised", task, dueOn };
 }
