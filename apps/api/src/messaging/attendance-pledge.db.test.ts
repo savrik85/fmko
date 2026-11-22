@@ -151,7 +151,10 @@ describe("zápis slibu z odpovědi hráče", () => {
       db.prepare("INSERT INTO cup_teams VALUES ('ct1', 'club'), ('ct2', 'rival')"),
       db.prepare("INSERT INTO cup_matches VALUES ('cm1', 'ct1', 'ct2', '2026-11-20T16:00:00.000Z')"),
     ]);
+    // „V pátek dorazím“ na den poháru nic neslibuje (dřív šel slib na úterý a 📝 ukázala jiný den).
     expect(await recordAttendancePledge(db, { clubTeamId: "club", convId: "c1", playerId: "p1", playerFirstName: "Petr", pledge: { event: "training", intent: "attend", when: "fri" } }))
+      .toBeNull();
+    expect(await recordAttendancePledge(db, { clubTeamId: "club", convId: "c1", playerId: "p1", playerFirstName: "Petr", pledge: { event: "training", intent: "attend", when: "next" } }))
       .toMatchObject({ from: "2026-11-24", until: "2026-11-24" });
     // Přátelák v úterý 24. 11.: v okně slibu (7 dní) už žádný trénink není, nic se nezapíše.
     await db.prepare("INSERT INTO matches VALUES ('f1', NULL, 'club', 'rival', 'scheduled', '2026-11-24T16:00:00.000Z')").run();
@@ -182,6 +185,45 @@ describe("zápis slibu z odpovědi hráče", () => {
     await db.batch([db.prepare("DELETE FROM injuries"), db.prepare("UPDATE players SET suspended_matches = 1 WHERE id = 'p1'")]);
     expect(await pledge("match")).toBeNull();
     expect(await pledge("training", "fri")).toMatchObject({ from: "2026-11-20" });
+  });
+
+  // E2E 22. 11. (Jitona: trénink v neděli, ve středu, v pátek a v sobotu): model vrátil „next“
+  // a 📝 ukázala nejbližší trénink místo dne, který hráč napsal.
+  it("Beran „Ve středu jsem tam“ v pátek 27. 11.: 📝 na středu 2. 12., ne na neděli 29. 11.", async () => {
+    await db.batch([
+      db.prepare("UPDATE teams SET training_days = '[0,3,5,6]', game_date = '2026-11-27T00:00:00Z' WHERE id = 'club'"),
+      db.prepare("INSERT INTO cup_teams VALUES ('ct1', 'club'), ('ct2', 'rival')"),
+      db.prepare("INSERT INTO cup_matches VALUES ('cm1', 'ct1', 'ct2', '2026-11-28T13:00:00.000Z')"),
+      db.prepare("INSERT INTO messages (id, conversation_id, sender_type, body, sent_at) VALUES ('t1', 'c1', 'user', ?, '2026-11-22T19:07:34.475Z')")
+        .bind("Honzo, dorazíš ve středu na trénink? Potřebuju tě na standardky."),
+    ]);
+    expect(await recordAttendancePledge(db, {
+      clubTeamId: "club", convId: "c1", playerId: "p1", playerFirstName: "Jan", pledge: { event: "training", intent: "attend", when: "next" },
+      replyBody: "Ve středu jsem tam, trenére! Standardky mi jdou 👍", now: new Date("2026-11-22T19:07:52.870Z"),
+    })).toMatchObject({ from: "2026-12-02", until: "2026-12-02" });
+    expect(await notes()).toEqual(["📝 Jan slíbil, že přijde na trénink ve středu 2. 12."]);
+  });
+
+  it("Hovorka „Dorazím v pátek!“ v neděli 29. 11.: 📝 na pátek 4. 12.; den bez tréninku nic", async () => {
+    await db.batch([
+      db.prepare("UPDATE teams SET training_days = '[0,3,5,6]', game_date = '2026-11-29T00:00:00Z' WHERE id = 'club'"),
+      db.prepare("INSERT INTO season_calendar VALUES ('cal2', 'L1', 3, '2026-11-30T17:00:00Z', 'scheduled')"),
+      db.prepare("INSERT INTO matches VALUES ('m2', 'cal2', 'club', 'rival', 'scheduled', '2026-11-01')"),
+      db.prepare("INSERT INTO messages (id, conversation_id, sender_type, body, sent_at) VALUES ('t1', 'c1', 'user', ?, '2026-11-22T19:31:15.255Z')")
+        .bind("Kubo, dorazíš v pátek na trénink? Budeme dělat standardky."),
+    ]);
+    expect(await recordAttendancePledge(db, {
+      clubTeamId: "club", convId: "c1", playerId: "p1", playerFirstName: "Jakub", pledge: { event: "training", intent: "attend", when: "next" },
+      replyBody: "Dorazím v pátek! Standardky budou dobré, jsem připravenej.", now: new Date("2026-11-22T19:31:31.517Z"),
+    })).toMatchObject({ from: "2026-12-04", until: "2026-12-04" });
+    expect(await notes()).toEqual(["📝 Jakub slíbil, že přijde na trénink v pátek 4. 12."]);
+    // V úterý se netrénuje: slib se nezapíše na jiný den.
+    await db.prepare("UPDATE players SET life_context = '{}' WHERE id = 'p1'").run();
+    expect(await recordAttendancePledge(db, {
+      clubTeamId: "club", convId: "c1", playerId: "p1", playerFirstName: "Jakub", pledge: { event: "training", intent: "attend", when: "next" },
+      replyBody: "V pátek nemůžu, ale v úterý dorazím, trenére.", now: new Date("2026-11-22T19:33:00Z"),
+    })).toBeNull();
+    expect((await life()).trainingPledge).toBeUndefined();
   });
 
   it("tým netrénuje: nic se nezapíše ani nepíše", async () => {
