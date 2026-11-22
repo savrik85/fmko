@@ -446,6 +446,24 @@ describe("Sedlecký (Akcent, E2E 22. 11.): rozhodnutí o nápravě platí i pro 
     expect(amendsDecisionFromLife(await life(), new Date("2026-11-22T22:00:00Z"))).toBeUndefined();
   });
 
+  // Kohoutek (Klamovka, E2E 22. 11.), usvědčený z vykradení skladu, na „Ty věci vrátíš, rozumíš?“
+  // po odmítnutí: „Fakt nevím co chceš, nikdy jsem nic neukradl, asi to bude nějakej omyl“.
+  // Pokyn „Vymluv se po svém“ vzal model jako „zapři“.
+  it("odmítnutí čin nezapírá: odmítá jen vrátit nebo zaplatit, na krádež se přišlo", async () => {
+    await tryRestitution(db, { teamId: TEAM, playerId: CULPRIT_ID, text: FIRST, gameDate: "2026-11-22T16:00:00.000Z", now: new Date("2026-11-22T17:40:10Z") });
+    const line = amendsDecisionLine(amendsDecisionFromLife(await life(), new Date("2026-11-22T17:41:00Z"))!);
+    expect(line).toContain("Rozhodl ses: NEUDĚLÁŠ to");
+    expect(line).toContain("čin nezapírej");
+    expect(line).toContain("nepiš, že jsi nic neudělal");
+    expect(line).not.toContain("Vymluv se po svém");
+    expect(line).toContain("nic neslibuj");
+    expect(line).not.toContain("—");
+    // Fakt ve znalostech říká totéž: nechce se mu, ale nezapírá.
+    const fact = (await db.prepare("SELECT fact FROM club_incident_knowledge").first<{ fact: string }>())!.fact;
+    expect(fact).toContain("nezapíráš");
+    expect(fact).not.toContain("vymlouváš se");
+  });
+
   it("kdo kývl a vrátil, má v pokynu hotovou věc, ne „vrátím to“ (Procházka: kustod hlásí vráceno, hráč píše v budoucím čase)", async () => {
     await incident({ category: "kradez", loss: [{ typ: "penize", castka: 700 }] });
     expect(await tryRestitution(db, { teamId: "tym", playerId: "p", text: "Dáš ty peníze zpátky?", gameDate: "2026-11-12", now: new Date("2026-11-12T12:00:00Z") }))
