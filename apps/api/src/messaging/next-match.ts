@@ -8,8 +8,31 @@
 const TZ = "Europe/Prague";
 
 /** Pražské datum jako YYYY-MM-DD, aby šlo porovnat „dnes" a „zítra" i přes půlnoc v UTC. */
-function pragueDay(d: Date): string {
+export function pragueDay(d: Date): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+}
+
+/**
+ * Pražský zítřek jako YYYY-MM-DD: další den v kalendáři, ne „teď + 24 hodin“. V noci
+ * přechodu na zimní čas má den 25 hodin a „za 24 hodin“ je pořád dnešek, při přechodu na
+ * letní čas (23 hodin) už pozítří.
+ */
+export function pragueTomorrow(now: Date): string {
+  const d = new Date(`${pragueDay(now)}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
+/** „DNES (čtvrtek 29. 10.)“, „zítra (čtvrtek 29. 10.)“, jinak „čtvrtek 29. 10.“ */
+export function matchDayLabel(at: Date, now: Date): string {
+  const weekday = new Intl.DateTimeFormat("cs-CZ", { timeZone: TZ, weekday: "long" }).format(at);
+  const date = new Intl.DateTimeFormat("cs-CZ", { timeZone: TZ, day: "numeric", month: "numeric" }).format(at);
+  const day = pragueDay(at);
+  return day === pragueDay(now)
+    ? `DNES (${weekday} ${date})`
+    : day === pragueTomorrow(now)
+      ? `zítra (${weekday} ${date})`
+      : `${weekday} ${date}`;
 }
 
 export function describeNextMatch(
@@ -18,18 +41,6 @@ export function describeNextMatch(
   opponentName: string,
   now: Date = new Date(),
 ): string {
-  const weekday = new Intl.DateTimeFormat("cs-CZ", { timeZone: TZ, weekday: "long" }).format(scheduledAt);
-  const date = new Intl.DateTimeFormat("cs-CZ", { timeZone: TZ, day: "numeric", month: "numeric" }).format(scheduledAt);
   const time = new Intl.DateTimeFormat("cs-CZ", { timeZone: TZ, hour: "2-digit", minute: "2-digit", hour12: false }).format(scheduledAt);
-
-  const today = pragueDay(now);
-  const tomorrow = pragueDay(new Date(now.getTime() + 24 * 3600 * 1000));
-  const day = pragueDay(scheduledAt);
-  const when = day === today
-    ? `DNES (${weekday} ${date})`
-    : day === tomorrow
-      ? `zítra (${weekday} ${date})`
-      : `${weekday} ${date}`;
-
-  return `${when} v ${time} ${isHome ? "doma s" : "venku s"} ${opponentName}`;
+  return `${matchDayLabel(scheduledAt, now)} v ${time} ${isHome ? "doma s" : "venku s"} ${opponentName}`;
 }

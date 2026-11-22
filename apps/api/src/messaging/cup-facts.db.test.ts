@@ -13,11 +13,16 @@ vi.mock("../stats/standings", () => ({ calculateStandings: vi.fn(async () => [])
 import { loadLastMatchContext, loadPlayerSnapshot, loadTeamContext } from "./ai-player-spawn";
 import { buildLastMatchFacts, buildPreviousMatchFacts, buildSystemPrompt } from "./ai-player-chat";
 import { cupOutcome, describeLastCupMatch, describeNextCupMatch, withinPreviousWindow, type LastCupMatch } from "./cup-facts";
+import { pragueTomorrow } from "./next-match";
 
 let miniflare: Miniflare;
 let db: D1Database;
 
-const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10) + "T11:00:00Z";
+/**
+ * Zítřek podle pražského kalendáře. Dřív `Date.now() + 1 den` v UTC: mezi 00:00 a 01:00
+ * v Praze (23:xx UTC) z toho vyšlo dnešní pražské datum a test čekal „zítra“ u dnešního zápasu.
+ */
+const tomorrow = `${pragueTomorrow(new Date())}T11:00:00Z`;
 
 beforeAll(async () => {
   miniflare = new Miniflare({
@@ -113,6 +118,27 @@ describe("popis pohárového zápasu", () => {
     expect(cupOutcome(base)).toBe("win");
     expect(describeLastCupMatch(base)).toBe("pohárový zápas (Okresní pohár, 2. kolo): remíza 2:2 doma s Lhota, na penalty jsme vyhráli 4:3, postupujeme");
     expect(cupOutcome({ ...base, myPens: 2, oppPens: 4 })).toBe("loss");
+  });
+
+  it("zítra se počítá od pražské půlnoci, ne od UTC", () => {
+    // 23:30 UTC 22. 11. je v Praze už 23. 11. 0:30: zápas 24. 11. je zítra, 23. 11. dnes.
+    const now = new Date("2026-11-22T23:30:00Z");
+    expect(describeNextCupMatch({ scheduledAt: "2026-11-24T11:00:00Z", isHome: false, opponent: "FK Vimperk", cupName: null }, now))
+      .toBe("zítra (úterý 24. 11.) v poledne venku s FK Vimperk");
+    expect(describeNextCupMatch({ scheduledAt: "2026-11-23T11:00:00Z", isHome: false, opponent: "FK Vimperk", cupName: null }, now))
+      .toMatch(/^DNES \(pondělí 23\. 11\.\)/);
+  });
+
+  it("zítra platí i v noci přechodu na zimní a letní čas", () => {
+    // 25. 10. 2026 0:30 v Praze (letní čas): den má 25 hodin, „teď + 24 h“ by byl pořád 25. 10.
+    expect(describeNextCupMatch({ scheduledAt: "2026-10-26T11:00:00Z", isHome: true, opponent: "Lhota", cupName: null }, new Date("2026-10-24T22:30:00Z")))
+      .toMatch(/^zítra \(pondělí 26\. 10\.\)/);
+    // 27. 3. 2027 23:30 v Praze: další den má 23 hodin, „teď + 24 h“ by byl už 29. 3.
+    const beforeSpring = new Date("2027-03-27T22:30:00Z");
+    expect(describeNextCupMatch({ scheduledAt: "2027-03-28T10:00:00Z", isHome: true, opponent: "Lhota", cupName: null }, beforeSpring))
+      .toMatch(/^zítra \(neděle 28\. 3\.\)/);
+    expect(describeNextCupMatch({ scheduledAt: "2027-03-29T10:00:00Z", isHome: true, opponent: "Lhota", cupName: null }, beforeSpring))
+      .toMatch(/^pondělí 29\. 3\./);
   });
 
   it("neznámý soupeř dalšího kola", () => {
