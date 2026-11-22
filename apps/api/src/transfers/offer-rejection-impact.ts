@@ -209,7 +209,10 @@ export interface RejectionSmsFacts {
 }
 
 const STANCE_TEXT: Record<RejectionStance, string> = {
-  loyal: "Odejít jsi nechtěl, tady jsi doma. Napiš mu krátce, že jsi rád, že tě nepustil. Bez patosu, po svém.",
+  // Ve 2. osobě k trenérovi: pokyn „že jsi rád, že tě nepustil“ model opsal jako „Fajn, že mě nepustil“ (E2E 22. 11.).
+  loyal: "Odejít jsi nechtěl, tady jsi doma. Oslov ho přímo a napiš mu krátce, že jsi rád, že tě tady nechal: "
+    + "„Díky, že jste mě nepustil“ nebo „Jsem rád, žes mě nepustil“, podle toho, jestli mu vykáš, nebo tykáš. "
+    + "Ne „že mě nepustil“, to zní, jako bys mluvil o někom jiném. Bez patosu, po svém.",
   wants: "Rád bys tam šel a štve tě to. Dej mu najevo zklamání a řekni mu, proč jsi chtěl jít.",
   hot: "Hodně jsi tam chtěl a jsi vzteklý. Klidně ostře, podle povahy, a řekni mu, proč jsi chtěl jít.",
   talked: "Psali jste si o té nabídce, takže tě to nepřekvapilo, ale stejně tě to štve. Řekni mu, proč jsi chtěl jít.",

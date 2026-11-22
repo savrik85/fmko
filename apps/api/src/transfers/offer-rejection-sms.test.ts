@@ -56,6 +56,12 @@ describe("co model ví", () => {
     const text = rejectionSmsInstruction(facts({ stance: "loyal", reasons: "lepšímu klubu" }));
     expect(text).toContain("Odejít jsi nechtěl");
     expect(text).not.toContain("Chtěl jsi odejít");
+    // David Hájek (E2E 22. 11.): „Fajn, že mě nepustil, trenére.“ Pokyn byl ve 3. osobě a model ho opsal.
+    expect(text).not.toContain("že jsi rád, že tě nepustil");
+    expect(text).toContain("Oslov ho přímo");
+    expect(text).toContain("„Díky, že jste mě nepustil“");
+    expect(text).toContain("„Jsem rád, žes mě nepustil“");
+    expect(text).not.toContain("—");
   });
 
   it("porušený slib je v textu", () => {
