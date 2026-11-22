@@ -804,7 +804,7 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
     const { COMMITMENT_REPLY_WAIT_MS, handleCoachMessageForCommitment } = await import("../messaging/coach-commitments");
     const { beforeDeadline } = await import("../lib/time-budget");
     const detection = handleCoachMessageForCommitment(
-      c.env.DB, c.env, { teamId, convId, playerId: conv.participant_id, text: body.body.trim() }, { deadline: deadlineIn() },
+      c.env.DB, c.env, { teamId, convId, playerId: conv.participant_id, text: body.body.trim(), sentAt: now }, { deadline: deadlineIn() },
     );
     c.executionCtx.waitUntil(detection.then(() => undefined));
     commitmentReady = beforeDeadline(detection, Date.now() + COMMITMENT_REPLY_WAIT_MS, () => null);

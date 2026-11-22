@@ -92,4 +92,23 @@ describe("pokuta z SMS a incident", () => {
     expect(await send()).toBeTruthy();
     expect(await fines()).toBe(1);
   });
+
+  it("ℹ️ je hned pod zprávou trenéra, ne pod odpovědí hráče, i když rozpoznání doběhne až po ní (Turek, E2E 22. 11.)", async () => {
+    await incident({ status: "uzavreny", resolution: "srazka", resolvedOn: "2026-11-22T16:00:00.000Z" });
+    // Trenér napsal v 17:57:30, hráč odpověděl v 17:57:53, rozpoznání (pomalý model) doběhlo až potom.
+    await db.batch([
+      db.prepare("INSERT INTO messages (id, conversation_id, sender_type, body, sent_at) VALUES ('coach', 'c1', 'user', ?, '2026-11-22T17:57:30.000Z')").bind(TEXT),
+      db.prepare("INSERT INTO messages (id, conversation_id, sender_type, sender_id, body, sent_at) VALUES ('reply', 'c1', 'player', 'turek', 'Ok, trenére, beru to. Promluvíme si zítra.', '2026-11-22T17:57:53.000Z')"),
+    ]);
+    expect(await handleCoachMessageForCommitment(db, {}, { teamId: "club", convId: "c1", playerId: "turek", text: TEXT, sentAt: "2026-11-22T17:57:30.000Z" })).toBeNull();
+    const order = (await db.prepare("SELECT sender_type FROM messages WHERE conversation_id = 'c1' ORDER BY sent_at, rowid").all<{ sender_type: string }>()).results;
+    expect(order.map((m) => m.sender_type)).toEqual(["user", "system", "player"]);
+    expect((await db.prepare("SELECT sent_at FROM messages WHERE sender_type = 'system'").first<{ sent_at: string }>())?.sent_at).toBe("2026-11-22T17:57:31.000Z");
+
+    // Bez času od volajícího se vezme čas té zprávy trenéra z konverzace.
+    await db.prepare("DELETE FROM messages WHERE sender_type = 'system'").run();
+    await send();
+    expect((await db.prepare("SELECT sent_at FROM messages WHERE sender_type = 'system'").first<{ sent_at: string }>())?.sent_at).toBe("2026-11-22T17:57:31.000Z");
+  });
 });
+
