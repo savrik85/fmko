@@ -544,6 +544,11 @@ class Simulation {
   }
   /** Leží na zemi (faulovaný, zraněný, brankář po skoku). */
   private lying(a: Actor) { return a.pose >= 1 && a.pose <= 3 && this.k >= a.poseFrom; }
+  /** Míč od padlého hráče odskočí kousek dál, ať mu neleží na těle. */
+  private looseBall(from: Point) {
+    this.ball = { kind: "rest" };
+    this.fly(toward(from, this.ballAt, 2.8), 0, 0.3, 0.5);
+  }
 
   /** Titulky jdou do fronty, ať se dají přečíst; titulek o hráči počká i s děním, ať se ukáže s ním; gól hned. */
   private caption(text: string, banner?: Banner, figures: (number | null)[] = []) {
@@ -930,16 +935,19 @@ class Simulation {
       this.contact = [];
       this.setPose(victim, "down", 2.6);
       this.send(fouler, toward(v, this.actors[fouler], 1.8), JOG);
+      this.looseBall(v);
     }
     this.ball = { kind: "rest" };
     this.setLayout({ kind: "play" }, other(side));
     const red = card?.event.detail === "red";
+    // Kartu dostane (a kroužek má) ten, koho jmenuje karta, obvykle faulující.
+    const carded = card ? this.actor(card.event, true) ?? fouler : fouler;
     this.run(0.5);
-    if (card) this.caption(card.text, red ? "red" : "yellow", [fouler]);
+    if (card) this.caption(card.text, red ? "red" : "yellow", [carded]);
     if (!red) this.run(card ? 2 : 1);
     // Po faulu se dvojice rozestoupí až v další akci.
     if (victim !== null) this.fouls.push({ a: fouler, b: victim, from, to: this.k + 2 * REPLAY_HZ });
-    if (card && red) this.sendOff(this.actor(card.event, true) ?? fouler);
+    if (card && red) this.sendOff(carded);
   }
 
   /** Vyloučený hráč odejde k nejbližší lajně a jeho místo zůstane prázdné. */
@@ -956,6 +964,7 @@ class Simulation {
     this.caption(text, "injury", [figure]);
     this.ball = { kind: "rest" };
     this.setPose(figure, "down", 3.6);
+    if (dist(this.ballAt, this.actors[figure]) < 1.5) this.looseBall(this.actors[figure]);
     this.freeAll();
     const a = this.actors[figure];
     const near = this.onPitch(a.side).filter((f) => f !== figure && this.actors[f].role !== "GK").sort((x, y) => dist(this.actors[x], a) - dist(this.actors[y], a));
