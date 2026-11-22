@@ -45,6 +45,14 @@ describe("předběžné síto", () => {
     ]) expect(COMMITMENT_HINT_RE.test(t), t).toBe(false);
   });
 
+  it("dlouhý patologický text projde sítem hned (bez vnořených kvantifikátorů)", () => {
+    for (const input of [" .!😅".repeat(5000) + "a", "základn".repeat(3000) + "x", "zkusím ".repeat(3000) + "a", "a ".repeat(10000)]) {
+      const started = performance.now();
+      COMMITMENT_HINT_RE.test(input);
+      expect(performance.now() - started, `${input.length} znaků`).toBeLessThan(50);
+    }
+  });
+
   it("skutečné sliby z E2E a z produ pustí dál", () => {
     for (const t of [
       "Bohouši, dám ti 1000 Kč, když do dvou týdnů zhubneš.",

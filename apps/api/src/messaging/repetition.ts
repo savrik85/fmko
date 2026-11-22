@@ -129,8 +129,22 @@ const INTERJECTION_OPENERS = new Set([
 
 /** Oslovení na začátku zprávy i s interpunkcí za ním: „Trenére, …“, „Šéfe!“, opile „trenere vole…“. */
 const ADDRESS_OPENER_RE = /^\s*(?:tren[eé]r(?:e|ko)|[sš][eé]fe)(?![\p{L}])[\s,!.?…:;-]*/iu;
-/** Konec věty: interpunkce a emoji. */
-const SENTENCE_TAIL_RE = /^(.*?)([\s.!?…]*(?:[\p{Extended_Pictographic}\u{1F3FB}-\u{1F3FF}\uFE0F\u200D]+[\s.!?…]*)*)$/su;
+/** Jeden znak konce věty: mezera, interpunkce, emoji (i barva pleti, variační znak a spojovač). */
+const TAIL_CHAR_RE = /^[\s.!?…\p{Extended_Pictographic}\u{1F3FB}-\u{1F3FF}\uFE0F\u200D]$/u;
+/** Delší věta se po klauzulích nekontroluje (SMS má nejvýš 280 znaků, tohle je pojistka). */
+const PHRASE_SENTENCE_MAX_CHARS = 500;
+
+/**
+ * Věta rozdělená na obsah a konec (interpunkce a emoji). Hledá se průchodem od konce po znacích,
+ * ne regulárním výrazem: vnořené kvantifikátory na řadě emoji před písmenem backtrackovaly
+ * exponenciálně (25 emoji = 1,7 s) a ve Workeru by přetekl limit CPU.
+ */
+export function sentenceTail(sentence: string): { core: string; tail: string } {
+  const chars = Array.from(sentence);
+  let i = chars.length;
+  while (i > 0 && TAIL_CHAR_RE.test(chars[i - 1])) i--;
+  return { core: chars.slice(0, i).join(""), tail: chars.slice(i).join("") };
+}
 
 /** Slova bez oslovení. */
 function wordsWithoutAddress(text: string): string[] {
@@ -199,7 +213,8 @@ export function withoutRepeatedPhrases(body: string, own: readonly string[]): st
   let changed = false;
   const kept: string[] = [];
   for (const sentence of splitSentences(body)) {
-    const [, core = sentence, tail = ""] = sentence.match(SENTENCE_TAIL_RE) ?? [];
+    if (sentence.length > PHRASE_SENTENCE_MAX_CHARS) { kept.push(sentence); continue; }
+    const { core, tail } = sentenceTail(sentence);
     const clauses = core.split(/,\s+/);
     const keep = clauses.filter((c) => !droppable(c));
     if (keep.length === clauses.length) { kept.push(sentence); continue; }

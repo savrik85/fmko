@@ -5,7 +5,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   findRepeatedSentences, generateWithoutRepeats, isStockSentence, ownLinesPromptBlock, pickFreshVariant, pickUnusedIndex,
-  repeatRetryRule, repeatsAny, sentencesRepeat, splitSentences, withoutRepeatedPhrases, withoutSentences,
+  repeatRetryRule, repeatsAny, sentenceTail, sentencesRepeat, splitSentences, withoutRepeatedPhrases, withoutSentences,
 } from "./repetition";
 import { GeminiUnavailableError } from "./model-errors";
 
@@ -278,5 +278,25 @@ describe("krátké fráze a úvody", () => {
   it("prompt řekne, ať zprávu nezačíná oslovením, když ho měla jedna ze dvou posledních", () => {
     expect(ownLinesPromptBlock(["Trenére, přijedu.", "Fajn."])).toContain("nezačínej oslovením");
     expect(ownLinesPromptBlock(["Přijedu.", "Fajn."])).not.toContain("nezačínej oslovením");
+  });
+});
+
+// Bezpečnostní kontrola 22. 11.: konec věty hledal regulární výraz s vnořenými kvantifikátory,
+// který na řadě emoji před písmenem backtrackoval exponenciálně (ReDoS, limit CPU ve Workeru).
+describe("konec věty bez backtrackingu", () => {
+  it("odřízne interpunkci a emoji z konce, uprostřed nic", () => {
+    expect(sentenceTail("Dneska jsem si užíval víkend 😅")).toEqual({ core: "Dneska jsem si užíval víkend", tail: " 😅" });
+    expect(sentenceTail("Mám se dobře, díky!!! 👍🏻❤️")).toEqual({ core: "Mám se dobře, díky", tail: "!!! 👍🏻❤️" });
+    expect(sentenceTail("Bez konce")).toEqual({ core: "Bez konce", tail: "" });
+    expect(sentenceTail("😅😂")).toEqual({ core: "", tail: "😅😂" });
+  });
+
+  it("patologický vstup doběhne hned", () => {
+    for (const input of [" .!😅".repeat(5000) + "a", "😅".repeat(5000) + "a", "😅".repeat(120) + "a"]) {
+      const started = performance.now();
+      sentenceTail(input);
+      withoutRepeatedPhrases(input, ["Trenére, jen si užívám víkend 😅"]);
+      expect(performance.now() - started, `${input.length} znaků`).toBeLessThan(50);
+    }
   });
 });
