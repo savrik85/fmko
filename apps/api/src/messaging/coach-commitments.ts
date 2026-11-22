@@ -585,11 +585,6 @@ export function raisedBy(wage: number, percent: number): number {
  */
 export const COMMITMENT_REPLY_WAIT_MS = 3_000;
 
-/**
- * Zpráva trenéra hráči: rozpozná slib a zapíše ho. Volá se ve waitUntil po odeslání SMS,
- * nikdy nehází (slib nesmí shodit odeslání zprávy ani odpověď hráče).
- * `deadline`: vlastní rozpočet rozpoznání (běží souběžně s odpovědí hráče, ne před ní).
- */
 /** Odpověď hráče na zprávu trenéra `text`, když už přišla (po té zprávě), a podle ní kývnutí na pokyn. */
 async function answerFromEarlierReply(
   db: D1Database, o: { commitmentId: string; kind: CommitmentKind; target?: string; convId: string; playerId: string; text: string },
@@ -665,60 +660,164 @@ async function noteIncidentPunishment(
     .catch((e) => logger.warn({ module: M }, `poznámka o trestu u incidentu ${o.incident.id}`, e));
 }
 
+/** Zpráva trenéra, kterou má rozpoznání slibu posoudit. `sentAt` = kdy ji poslal (ISO). */
+export interface CoachCommitmentInput { teamId: string; convId: string; playerId: string; text: string; sentAt?: string }
+
+/**
+ * Zpráva, kterou rozpoznání slibu nedodělalo (KV `commitment_pending:…`): výpadek nebo timeout
+ * modelu, nečitelná odpověď, nebo práci na pozadí utnul limit. Dodělá ji hodinový běh Telefonu
+ * (`processPendingCommitments`), stejně jako u zmínek o spoluhráčích (hearsay/coach-message.ts).
+ */
+const PENDING_PREFIX = "commitment_pending:";
+/** Hodinový běh sahá jen na záznamy starší než tohle: mladší ještě může zpracovávat požadavek. */
+const PENDING_MIN_AGE_MS = 5 * 60_000;
+/** Jak dlouho se rozpoznání zkouší (stejně dlouho jako odpověď po výpadku, follow-ups.ts). */
+const PENDING_TTL_S = 36 * 3600;
+
+type DetectionRun = { status: "recorded"; id: string } | { status: "none" } | { status: "failed"; error?: unknown };
+
+/** Rozpozná slib ve zprávě a zapíše ho. Výpadek modelu nehází, vrací `failed` (zkusí se znovu). */
+async function runCommitmentDetection(
+  db: D1Database, env: ChatEnv, o: CoachCommitmentInput, opts: { deadline?: number; now?: Date },
+): Promise<DetectionRun> {
+  const p = await db.prepare(
+    `SELECT p.first_name, p.last_name, p.position, p.weekly_wage, COALESCE(t.parent_team_id, t.id) AS club_id
+       FROM players p LEFT JOIN teams t ON t.id = ? WHERE p.id = ?`,
+  ).bind(o.teamId, o.playerId).first<{ first_name: string; last_name: string | null; position: string; weekly_wage: number | null; club_id: string | null }>();
+  if (!p) return { status: "none" };
+  // Zpráva hráče, na kterou trenér odpovídal (při pozdějším pokusu ne odpověď hráče na tuhle zprávu).
+  const prev = await db.prepare(
+    `SELECT body FROM messages WHERE conversation_id = ? AND sender_type = 'player'
+        AND (? IS NULL OR julianday(sent_at) < julianday(?)) ORDER BY sent_at DESC LIMIT 1`,
+  ).bind(o.convId, o.sentAt ?? null, o.sentAt ?? null).first<{ body: string }>()
+    .catch((e) => { logger.warn({ module: M }, "poslední zpráva hráče", e); return null; });
+  const chat = await import("./ai-player-chat");
+  let parsed: Parameters<typeof parseDetection>[0] | null;
+  try {
+    parsed = await chat.askModelJson<NonNullable<Parameters<typeof parseDetection>[0]>>(env, detectionPrompt({
+      playerFirstName: p.first_name, playerPosition: p.position, coachMessage: o.text, previousPlayerMessage: prev?.body ?? null,
+    }, chat), 220, { deadline: opts.deadline });
+  } catch (e) {
+    return { status: "failed", error: e };
+  }
+  if (!parsed) return { status: "failed" };
+  const detected = parseDetection(parsed, p.position, o.text);
+  if (!detected) {
+    logger.info({ module: M, teamId: o.teamId }, `zpráva v ${o.convId} prošla sítem slibů, model v ní slib nenašel`);
+    return { status: "none" };
+  }
+  // Trest a pokyn jednotlivci jen hráči z vlastního kádru (áčko nebo U21): hráč na hostování
+  // jinde ani bývalý hráč kolečka ani poslední šanci od cizího trenéra nedostane.
+  if (((RULE_KINDS as readonly string[]).includes(detected.kind) && !isSquadRule(detected.kind, detected.target))
+    || (REWARD_KINDS as readonly string[]).includes(detected.kind)) {
+    const { ownSquadTeamId } = await import("./player-reach");
+    if (!(await ownSquadTeamId(db, o.playerId, p.club_id ?? o.teamId))) return { status: "none" };
+  }
+  // „Strhnu ti to z výplaty“ odhalenému pachateli patří k incidentu: tam je srážka i pokuta.
+  // Chatová pokuta by byla druhý trest za totéž (Turek, FaSta, E2E 22. 11.: srážka 1 172 Kč
+  // u incidentu a vedle ní tlačítko na pokutu 293 Kč). Trenér dostane jen odkaz na incident.
+  if (detected.kind === "fine") {
+    const incident = await incidentPunishingPlayer(db, p.club_id ?? o.teamId, o.playerId);
+    if (incident) {
+      // Pod zprávu trenéra (její čas + 1 s), ne pod odpověď hráče: s pomalým modelem doběhne
+      // rozpoznání až po ní a ℹ️ s časem „teď“ byla pod ní (Turek, E2E 22. 11.).
+      const sent = o.sentAt && Number.isFinite(Date.parse(o.sentAt)) ? new Date(o.sentAt) : await coachMessageTime(db, o.convId, o.text);
+      await noteIncidentPunishment(db, { convId: o.convId, name: `${p.first_name} ${p.last_name ?? ""}`.trim(), incident, ...(sent ? { now: sent } : {}) });
+      return { status: "none" };
+    }
+  }
+  const id = await recordCommitment(db, {
+    clubTeamId: p.club_id ?? o.teamId, playerId: o.playerId, convId: o.convId, coachMessage: o.text, detected,
+    playerFirstName: p.first_name, weeklyWage: p.weekly_wage, ...(opts.now ? { now: opts.now } : {}),
+  });
+  if (!id) return { status: "none" };
+  // Pokyn nebo dohoda, na které hráč kývá: když už na zprávu odpověděl (rozpoznání trvalo déle
+  // než odpověď, COMMITMENT_REPLY_WAIT_MS), kývnutí se vezme z textu té odpovědi.
+  await answerFromEarlierReply(db, { commitmentId: id, kind: detected.kind, target: detected.target, convId: o.convId, playerId: o.playerId, text: o.text });
+  return { status: "recorded", id };
+}
+
+/**
+ * Zpráva trenéra hráči: rozpozná slib a zapíše ho. Volá se ve waitUntil po odeslání SMS,
+ * nikdy nehází (slib nesmí shodit odeslání zprávy ani odpověď hráče). Zpráva, která prošla
+ * sítem (`COMMITMENT_HINT_RE`), se nejdřív zapíše jako čekající: když model nestihne nebo
+ * spadne, dohodu nezahodí a zkusí ji hodinový běh (`processPendingCommitments`). E2E 22. 11.:
+ * 2 z 5 dohod o hubnutí s Workers AI vypadly bez varování a hráč věřil dohodě, kterou hra neznala.
+ * `deadline`: vlastní rozpočet rozpoznání (běží souběžně s odpovědí hráče, ne před ní).
+ */
 export async function handleCoachMessageForCommitment(
   db: D1Database,
   env: ChatEnv,
   /** `sentAt`: kdy trenér zprávu poslal (ISO). Bez něj se dohledá v konverzaci. */
-  o: { teamId: string; convId: string; playerId: string; text: string; sentAt?: string },
+  o: CoachCommitmentInput,
   opts: { deadline?: number } = {},
 ): Promise<string | null> {
+  if (!COMMITMENT_HINT_RE.test(o.text)) return null;
+  const sentAt = o.sentAt ?? new Date().toISOString();
+  const key = `${PENDING_PREFIX}${o.convId}:${Date.parse(sentAt)}`;
+  await env.CACHE_KV?.put(key, JSON.stringify({ ...o, sentAt }), { expirationTtl: PENDING_TTL_S })
+    .catch((e) => logger.warn({ module: M, teamId: o.teamId }, "čekající rozpoznání slibu do KV", e));
   try {
-    if (!COMMITMENT_HINT_RE.test(o.text)) return null;
-    const p = await db.prepare(
-      `SELECT p.first_name, p.last_name, p.position, p.weekly_wage, COALESCE(t.parent_team_id, t.id) AS club_id
-         FROM players p LEFT JOIN teams t ON t.id = ? WHERE p.id = ?`,
-    ).bind(o.teamId, o.playerId).first<{ first_name: string; last_name: string | null; position: string; weekly_wage: number | null; club_id: string | null }>();
-    if (!p) return null;
-    const prev = await db.prepare(
-      `SELECT body FROM messages WHERE conversation_id = ? AND sender_type = 'player' ORDER BY sent_at DESC LIMIT 1`,
-    ).bind(o.convId).first<{ body: string }>()
-      .catch((e) => { logger.warn({ module: M }, "poslední zpráva hráče", e); return null; });
-    const detected = await detectCommitment(env, {
-      playerFirstName: p.first_name, playerPosition: p.position, coachMessage: o.text, previousPlayerMessage: prev?.body ?? null,
-    }, { deadline: opts.deadline });
-    if (!detected) return null;
-    // Trest a pokyn jednotlivci jen hráči z vlastního kádru (áčko nebo U21): hráč na hostování
-    // jinde ani bývalý hráč kolečka ani poslední šanci od cizího trenéra nedostane.
-    if (((RULE_KINDS as readonly string[]).includes(detected.kind) && !isSquadRule(detected.kind, detected.target))
-      || (REWARD_KINDS as readonly string[]).includes(detected.kind)) {
-      const { ownSquadTeamId } = await import("./player-reach");
-      if (!(await ownSquadTeamId(db, o.playerId, p.club_id ?? o.teamId))) return null;
+    const r = await runCommitmentDetection(db, env, o, { deadline: opts.deadline });
+    if (r.status === "failed") {
+      logger.warn({ module: M, teamId: o.teamId }, `rozpoznání slibu v konverzaci ${o.convId} nedoběhlo (model), zkusí ho hodinový běh`, r.error);
+      return null;
     }
-    // „Strhnu ti to z výplaty“ odhalenému pachateli patří k incidentu: tam je srážka i pokuta.
-    // Chatová pokuta by byla druhý trest za totéž (Turek, FaSta, E2E 22. 11.: srážka 1 172 Kč
-    // u incidentu a vedle ní tlačítko na pokutu 293 Kč). Trenér dostane jen odkaz na incident.
-    if (detected.kind === "fine") {
-      const incident = await incidentPunishingPlayer(db, p.club_id ?? o.teamId, o.playerId);
-      if (incident) {
-        // Pod zprávu trenéra (její čas + 1 s), ne pod odpověď hráče: s pomalým modelem doběhne
-        // rozpoznání až po ní a ℹ️ s časem „teď“ byla pod ní (Turek, E2E 22. 11.).
-        const sent = o.sentAt && Number.isFinite(Date.parse(o.sentAt)) ? new Date(o.sentAt) : await coachMessageTime(db, o.convId, o.text);
-        await noteIncidentPunishment(db, { convId: o.convId, name: `${p.first_name} ${p.last_name ?? ""}`.trim(), incident, ...(sent ? { now: sent } : {}) });
-        return null;
-      }
-    }
-    const id = await recordCommitment(db, {
-      clubTeamId: p.club_id ?? o.teamId, playerId: o.playerId, convId: o.convId, coachMessage: o.text, detected,
-      playerFirstName: p.first_name, weeklyWage: p.weekly_wage,
-    });
-    // Pokyn nebo dohoda, na které hráč kývá: když už na zprávu odpověděl (rozpoznání trvalo déle
-    // než odpověď, COMMITMENT_REPLY_WAIT_MS), kývnutí se vezme z textu té odpovědi.
-    if (id) await answerFromEarlierReply(db, { commitmentId: id, kind: detected.kind, target: detected.target, convId: o.convId, playerId: o.playerId, text: o.text });
-    return id;
+    await env.CACHE_KV?.delete(key).catch((e) => logger.warn({ module: M, teamId: o.teamId }, "smazání čekajícího rozpoznání slibu", e));
+    return r.status === "recorded" ? r.id : null;
   } catch (e) {
-    logger.warn({ module: M, teamId: o.teamId }, `rozpoznání slibu v konverzaci ${o.convId}`, e);
+    logger.warn({ module: M, teamId: o.teamId }, `rozpoznání slibu v konverzaci ${o.convId} spadlo, zkusí ho hodinový běh`, e);
     return null;
   }
+}
+
+/**
+ * Hodinový běh Telefonu: dodělá rozpoznání slibů, které v požadavku nedoběhlo. Slib se zapíše
+ * s časem zprávy trenéra (lhůty i 📝 pod ní) a kývnutí se vezme z odpovědi, která mezitím přišla.
+ * Vrací počet dodělaných zpráv.
+ */
+export async function processPendingCommitments(db: D1Database, env: ChatEnv, now: Date = new Date()): Promise<number> {
+  if (!env.CACHE_KV) return 0;
+  const list = await env.CACHE_KV.list({ prefix: PENDING_PREFIX })
+    .catch((e) => { logger.warn({ module: M }, "seznam čekajících rozpoznání slibů", e); return null; });
+  let done = 0;
+  for (const { name } of list?.keys ?? []) {
+    const raw = await env.CACHE_KV.get(name)
+      .catch((e) => { logger.warn({ module: M }, `čekající rozpoznání slibu ${name}`, e); return null; });
+    if (!raw) continue;
+    let o: CoachCommitmentInput & { sentAt: string };
+    try {
+      o = JSON.parse(raw) as CoachCommitmentInput & { sentAt: string };
+    } catch (e) {
+      logger.warn({ module: M }, `čekající rozpoznání slibu ${name} není JSON`, e);
+      await env.CACHE_KV.delete(name).catch((err) => logger.warn({ module: M }, "smazání vadného záznamu", err));
+      continue;
+    }
+    if (!(Date.parse(o.sentAt) <= now.getTime() - PENDING_MIN_AGE_MS)) continue;
+    // Požadavek slib zapsal, jen nestihl smazat záznam: podruhé nic.
+    const already = await db.prepare(
+      "SELECT 1 AS x FROM coach_commitments WHERE conversation_id = ? AND quote = ? AND julianday(made_at) >= julianday(?) LIMIT 1",
+    ).bind(o.convId, quoteOf(o.text), o.sentAt).first<{ x: number }>()
+      .catch((e) => { logger.warn({ module: M }, `zapsaný slib ze zprávy ${name}`, e); return null; });
+    let finished = !!already;
+    if (!finished) {
+      try {
+        const r = await runCommitmentDetection(db, env, o, { now: new Date(o.sentAt) });
+        if (r.status === "failed") {
+          // Model pořád nejde: zkusí se příští hodinu, KV záznam sám vyprší.
+          logger.warn({ module: M, teamId: o.teamId }, `dodělání rozpoznání slibu ${name} zase nedoběhlo`, r.error);
+        } else {
+          finished = true;
+          if (r.status === "recorded") done++;
+        }
+      } catch (e) {
+        logger.warn({ module: M, teamId: o.teamId }, `dodělání rozpoznání slibu ${name}`, e);
+      }
+    }
+    if (finished) await env.CACHE_KV.delete(name).catch((e) => logger.warn({ module: M }, `smazání čekajícího rozpoznání slibu ${name}`, e));
+  }
+  if (done > 0) logger.info({ module: M }, `dodělané rozpoznání slibů: ${done}`);
+  return done;
 }
 
 // ─── Sázka celé kabiny ──────────────────────────────────────────────────────

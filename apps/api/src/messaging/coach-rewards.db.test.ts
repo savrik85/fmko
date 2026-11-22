@@ -265,3 +265,74 @@ describe("kývnutí na dohodu, která se zapsala až po odpovědi", () => {
     expect(await status(id)).toBe("active");
   });
 });
+
+// E2E 22. 11.: 2 z 5 dohod o hubnutí se s Workers AI nezapsaly (timeout rozpoznání), bez varování
+// v logu. Bohuslav pak trenérovi tvrdil „do dvou týdnů zhubnu těch 3 kila“, hra dohodu neznala.
+describe("rozpoznání dohody s pomalým nebo padajícím modelem", () => {
+  const TEXT = "Bohouši, dám ti 1000 Kč, když do dvou týdnů zhubneš.";
+  const DETECTED = { kind: "weight_target", quote: "dám ti 1000 Kč, když do dvou týdnů zhubneš", kg: null, days: 14, reward: "money", amount: 1000 };
+  const SENT = "2026-11-22T17:20:00.000Z";
+  const memoryKv = () => {
+    const store = new Map<string, string>();
+    return {
+      store,
+      put: vi.fn(async (k: string, v: string) => { store.set(k, v); }),
+      get: vi.fn(async (k: string) => store.get(k) ?? null),
+      delete: vi.fn(async (k: string) => { store.delete(k); }),
+      list: vi.fn(async ({ prefix }: { prefix?: string } = {}) => ({ keys: [...store.keys()].filter((k) => !prefix || k.startsWith(prefix)).map((name) => ({ name })), list_complete: true })),
+    };
+  };
+  const coachAndReply = () => db.batch([
+    db.prepare("INSERT INTO messages (id, conversation_id, sender_type, sender_id, body, sent_at) VALUES ('cm', 'c2', 'user', 'club', ?, ?)").bind(TEXT, SENT),
+    db.prepare("INSERT INTO messages (id, conversation_id, sender_type, sender_id, body, metadata, sent_at) VALUES ('pr', 'c2', 'player', 'p2', ?, ?, '2026-11-22T17:20:40.000Z')")
+      .bind("Jasně, trenére, do dvou týdnů zhubnu těch pár kil. Beru to vážně.", JSON.stringify({ ai_generated: true })),
+  ]);
+
+  it("timeout se zaloguje, dohoda počká a hodinový běh ji zapíše i s kývnutím z odpovědi", async () => {
+    const { logger } = await import("../lib/logger");
+    const warn = vi.spyOn(logger, "warn");
+    const kv = memoryKv();
+    const env = { CACHE_KV: kv as unknown as KVNamespace };
+    await coachAndReply();
+    const { GeminiUnavailableError } = await import("./model-errors");
+    model.askModelJson.mockRejectedValueOnce(new GeminiUnavailableError("workers-ai neodpověděl do 19932 ms"));
+    expect(await handleCoachMessageForCommitment(db, env, { teamId: "club", convId: "c2", playerId: "p2", text: TEXT, sentAt: SENT })).toBeNull();
+    expect(await db.prepare("SELECT COUNT(*) AS n FROM coach_commitments").first()).toEqual({ n: 0 });
+    expect(warn.mock.calls.some((c) => String(c[1]).includes("rozpoznání slibu") && String(c[1]).includes("hodinový běh"))).toBe(true);
+    expect(kv.store.size).toBe(1);
+
+    const { processPendingCommitments } = await import("./coach-commitments");
+    // Mladší záznam ještě může zpracovávat požadavek: hodinový běh ho nechá.
+    expect(await processPendingCommitments(db, env, new Date("2026-11-22T17:21:00Z"))).toBe(0);
+    expect(model.askModelJson).toHaveBeenCalledTimes(1);
+
+    model.askModelJson.mockResolvedValueOnce(DETECTED);
+    expect(await processPendingCommitments(db, env, new Date("2026-11-22T17:30:00Z"))).toBe(1);
+    const row = await db.prepare("SELECT kind, made_at, details FROM coach_commitments").first<{ kind: string; made_at: string; details: string }>();
+    expect(row?.kind).toBe("weight_target");
+    expect(row?.made_at).toBe(SENT);
+    // Hráč na dohodu kývl v odpovědi, která přišla dřív než zápis.
+    expect(JSON.parse(row!.details).accepted).toBe(true);
+    expect(kv.store.size).toBe(0);
+    // 📝 je pod zprávou trenéra, ne až na konci konverzace.
+    const note = await db.prepare("SELECT sent_at FROM messages WHERE sender_type = 'system' AND conversation_id = 'c2'").first<{ sent_at: string }>();
+    expect(note?.sent_at).toBe("2026-11-22T17:20:01.000Z");
+    // Další běh nic nezdvojí.
+    expect(await processPendingCommitments(db, env, new Date("2026-11-22T18:30:00Z"))).toBe(0);
+    expect(await db.prepare("SELECT COUNT(*) AS n FROM coach_commitments").first()).toEqual({ n: 1 });
+    warn.mockRestore();
+  });
+
+  it("nečitelná odpověď modelu se zkusí znovu, „žádný slib“ ne", async () => {
+    const kv = memoryKv();
+    const env = { CACHE_KV: kv as unknown as KVNamespace };
+    model.askModelJson.mockResolvedValueOnce(null);
+    await handleCoachMessageForCommitment(db, env, { teamId: "club", convId: "c2", playerId: "p2", text: TEXT, sentAt: SENT });
+    expect(kv.store.size).toBe(1);
+
+    kv.store.clear();
+    model.askModelJson.mockResolvedValueOnce({ kind: "none", quote: "" });
+    await handleCoachMessageForCommitment(db, env, { teamId: "club", convId: "c2", playerId: "p2", text: TEXT, sentAt: SENT });
+    expect(kv.store.size).toBe(0);
+  });
+});
