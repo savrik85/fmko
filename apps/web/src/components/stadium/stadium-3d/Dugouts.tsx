@@ -8,22 +8,19 @@ interface DugoutsProps {
   teamColor: string;
   secondaryColor?: string;
   weather?: WeatherType;
-  /** Záznam zápasu: z televizní kamery je střídačka domácích vlevo, na polovině, kde domácí začínají. */
-  broadcast?: boolean;
 }
 
 const HALF_W = PITCH.width / 2;
 
-export function Dugouts({ teamColor, secondaryColor = "#ffffff", weather, broadcast = false }: DugoutsProps) {
+export function Dugouts({ teamColor, secondaryColor = "#ffffff", weather }: DugoutsProps) {
   // Střídačky jsou podél západní postranní čáry (x = -HALF_W - 2.5)
   const dugoutX = -HALF_W - 2.2;
-  const homeZ = broadcast ? 7.5 : -7.5;
 
   return (
     <group>
-      {/* Domácí střídačka (z = -7) */}
+      {/* Domácí střídačka: z hlavní tribuny vlevo, na polovině, kde domácí v záznamu zápasu začínají */}
       <Dugout
-        position={[dugoutX, 0, homeZ]}
+        position={[dugoutX, 0, 7.5]}
         rotationY={Math.PI / 2}
         label="DOMÁCÍ"
         mainColor={teamColor}
@@ -32,9 +29,9 @@ export function Dugouts({ teamColor, secondaryColor = "#ffffff", weather, broadc
         weather={weather}
       />
 
-      {/* Hostující střídačka (z = 7.5) */}
+      {/* Hostující střídačka */}
       <Dugout
-        position={[dugoutX, 0, -homeZ]}
+        position={[dugoutX, 0, -7.5]}
         rotationY={Math.PI / 2}
         label="HOSTÉ"
         mainColor="#374151"

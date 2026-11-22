@@ -561,7 +561,7 @@ export function Stadium3D({
           <Floodlights level={f.lighting ?? 0} standsLevel={f.stands ?? 0} cornerStands={(standExtensions ?? []).some((e) => e.slot.startsWith("corner_")) || (extensionPreview?.slot.startsWith("corner_") ?? false)} timeOfDay={timeOfDay} weather={weather} isMobile={isMobile} />
 
           {/* Střídačky u postranní čáry */}
-          <Dugouts teamColor={teamColor} secondaryColor={secondaryColor} weather={weather} broadcast={!!replay} />
+          <Dugouts teamColor={teamColor} secondaryColor={secondaryColor} weather={weather} />
 
           {/* Obvodový plot */}
           <Fence level={f.fence ?? 0} bounds={layout.fence} colorOverride={fenceColor} />
