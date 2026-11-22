@@ -15,7 +15,7 @@ import { getOrCreatePlayerConversation } from "../messaging/ai-player-spawn";
 import { recordTransaction } from "../season/finance-processor";
 import type { VysledekAkce } from "./akce";
 import { denPlus, dluhyZretezenaId, prikazAbsence } from "./absence-hracu";
-import { ADVANCE_TALK_RE, aiReplyCoveredIt } from "./button-sms";
+import { ADVANCE_TALK_RE, aiReplyCoveredIt, thanksInReply } from "./button-sms";
 import { clubReceivesMessages, sendIncidentPlayerSms, sendIncidentPlayerTemplate } from "./club-messages";
 import { idIncidentu, zapisIncident } from "./dopady";
 import { posunHrace } from "./hraci";
@@ -344,9 +344,11 @@ export async function rozhodniZalohu(
     : { morale: ODMITNUTA_ZALOHA_MORALKA, vztah: ODMITNUTA_ZALOHA_VZTAH, description: "Nedostal zálohu na mzdu" }))
     .catch((e) => logger.warn({ module: M }, `dopad zálohy ${incidentId}`, e));
   // Na zálohu hráč odpověděl v rozhovoru o ní (nebo na trenérovu zprávu o penězích) před chvílí:
-  // druhé poděkování ze šablony by bylo navíc (Filip Němec, 31. 10.).
+  // druhé poděkování ze šablony by bylo navíc (Filip Němec, 31. 10.). U půjčky jen opravdové
+  // díky: když hráč místo toho znovu prosil, šablona přijde (Fiala, E2E 22. 11.).
   const covered = hrac ? await aiReplyCoveredIt(db, {
     teamId, playerId: hrac.id, scenarioIds: ["zadost_o_zalohu"], coachRe: ADVANCE_TALK_RE,
+    ...(akce === "pujcit" ? { replyMatches: thanksInReply } : {}),
   }) : false;
   if (hrac && !covered) {
     await sendIncidentPlayerTemplate(db, teamId, ref(hrac), akce === "pujcit" ? "zaloha_pujcena" : "zaloha_odmitnuta", { seed: `zaloha|${incidentId}`, metadata: smsIncidentu(incidentId) })
