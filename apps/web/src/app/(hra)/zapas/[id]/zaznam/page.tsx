@@ -9,7 +9,7 @@ import { PositionBadge } from "@/components/ui/position-badge";
 import { bestTextOn } from "@/lib/team-color";
 import type { BadgePattern } from "@/components/ui";
 import { clientOnly } from "@/components/client-only";
-import { scenedEvents, shootoutEvents } from "@/components/match/replay-3d/scenes";
+import { actionStarts, scenedEvents, shootoutEvents } from "@/components/match/replay-3d/scenes";
 
 // 3D záznam se stáhne, až když ho hráč má zapnutý.
 const Replay3D = clientOnly(() => import("@/components/match/replay-3d/Replay3D").then((m) => m.Replay3D));
@@ -113,7 +113,7 @@ export default function MatchReplayPage() {
   const [htPause, setHtPause] = useState(false);
   const [htDone, setHtDone] = useState(false);
   const [kickoff, setKickoff] = useState<"1st" | "2nd" | null>(null);
-  const [flash, setFlash] = useState<"goal" | "card" | "chance" | "attacking" | "injury" | "penalty" | null>(null);
+  const [flash, setFlash] = useState<"goal" | "card" | "chance" | "attacking" | "injury" | "penalty" | "substitution" | null>(null);
   const [flashEvent, setFlashEvent] = useState<MatchEvent | null>(null);
   const animating = useRef(false);
   const [tick, setTick] = useState(0);
@@ -127,6 +127,33 @@ export default function MatchReplayPage() {
   // 3D záznam ukazuje jen důležité akce; události bez scény (držení míče, počasí…) v něm proběhnou hned.
   const can3d = !!match?.home_lineup_data && !!match?.away_lineup_data;
   const scened = useMemo(() => (match && can3d ? scenedEvents(match.events) : null), [match, can3d]);
+  // Pauza a skok na předchozí/další akci. Rozběhnuté časovače patří k běhu `run`; po skoku už nic nezmění.
+  const [paused, setPaused] = useState(false);
+  const run = useRef(0);
+  const starts = useMemo(() => (match ? actionStarts(match.events) : []), [match]);
+  const jumpTo = (k: number) => {
+    if (!match) return;
+    run.current++;
+    animating.current = false;
+    const before = match.events.slice(0, k);
+    setHg(before.filter((e) => e.type === "goal" && e.teamId === 1).length);
+    setAg(before.filter((e) => e.type === "goal" && e.teamId !== 1).length);
+    setFlash(null); setFlashEvent(null); setKickoff(null); setHtPause(false); setFinished(false); setPaused(false);
+    setHtDone((before[k - 1]?.minute ?? 0) > 45);
+    setIdx(k);
+    setTick((t) => t + 1);
+  };
+  /** Událost, která se právě hraje (při „ŠANCE!“ ta, která teprve přijde). */
+  const playing = flash === "attacking" ? idx : idx - 1;
+  const previousAction = starts.findLast((k) => k < (starts.findLast((x) => x <= playing) ?? 0));
+  const nextAction = starts.find((k) => k > playing);
+  // Pauza zastaví obraz; pokračování pustí rozehranou akci znovu od začátku.
+  const togglePause = () => {
+    if (paused) return jumpTo(flash ? playing : idx);
+    run.current++;
+    animating.current = false;
+    setPaused(true);
+  };
 
   useEffect(() => {
     const hydrate = (r: Record<string, unknown>) => {
@@ -203,7 +230,8 @@ export default function MatchReplayPage() {
     if (!match) return;
     setKickoff("1st");
     animating.current = true;
-    const t = setTimeout(() => { setKickoff(null); animating.current = false; setTick((t) => t + 1); }, 3000);
+    const gen = run.current;
+    const t = setTimeout(() => { if (gen !== run.current) return; setKickoff(null); animating.current = false; setTick((t) => t + 1); }, 3000);
     return () => clearTimeout(t);
   }, [!!match]);
 
@@ -211,13 +239,15 @@ export default function MatchReplayPage() {
   useEffect(() => {
     if (kickoff !== "2nd") return;
     animating.current = true;
-    const t = setTimeout(() => { setKickoff(null); animating.current = false; setTick((t) => t + 1); }, 2500);
+    const gen = run.current;
+    const t = setTimeout(() => { if (gen !== run.current) return; setKickoff(null); animating.current = false; setTick((t) => t + 1); }, 2500);
     return () => clearTimeout(t);
   }, [kickoff]);
 
   // Auto-advance
   useEffect(() => {
-    if (!match || finished || htPause || animating.current) return;
+    if (!match || finished || htPause || paused || animating.current) return;
+    const gen = run.current;
     if (idx >= match.events.length) { setFinished(true); setHg(match.home_score); setAg(match.away_score); markSeen(); return; }
     if (speed === "instant") {
       let h = 0, a = 0;
@@ -236,7 +266,7 @@ export default function MatchReplayPage() {
       setFlash("penalty");
       setIdx((i) => i + 1);
       const dur = speed === "fast" ? 4000 : 7000;
-      setTimeout(() => { setFlash(null); setFlashEvent(null); animating.current = false; setTick((t) => t + 1); }, dur);
+      setTimeout(() => { if (gen !== run.current) return; setFlash(null); setFlashEvent(null); animating.current = false; setTick((t) => t + 1); }, dur);
       return;
     }
 
@@ -246,7 +276,8 @@ export default function MatchReplayPage() {
     const isPenaltyOutcome = next.type === "chance"
       && (next.detail === "penalty_missed" || next.detail === "penalty_saved");
     const isShot = (next.type === "goal" || next.type === "chance") && !isPenaltyOutcome;
-    const isDramatic = next.type === "card" || next.type === "injury" || isPenaltyOutcome;
+    const isSubScene = view3d && scened !== null && next.type === "substitution";
+    const isDramatic = next.type === "card" || next.type === "injury" || isPenaltyOutcome || isSubScene;
 
     if (isShot || isDramatic) {
       animating.current = true;
@@ -256,23 +287,24 @@ export default function MatchReplayPage() {
         setFlashEvent(next);
         const atkDur = speed === "fast" ? 1800 : 3500;
         setTimeout(() => {
+          if (gen !== run.current) return;
           if (next.type === "goal") {
             if (next.teamId === 1) setHg((s) => s + 1); else setAg((s) => s + 1);
             setFlash("goal");
             setIdx((i) => i + 1);
-            setTimeout(() => { setFlash(null); setFlashEvent(null); animating.current = false; setTick((t) => t + 1); }, 6000);
+            setTimeout(() => { if (gen !== run.current) return; setFlash(null); setFlashEvent(null); animating.current = false; setTick((t) => t + 1); }, 6000);
           } else {
             setFlash("chance");
             setIdx((i) => i + 1);
-            setTimeout(() => { setFlash(null); setFlashEvent(null); animating.current = false; setTick((t) => t + 1); }, 3000);
+            setTimeout(() => { if (gen !== run.current) return; setFlash(null); setFlashEvent(null); animating.current = false; setTick((t) => t + 1); }, 3000);
           }
         }, atkDur);
       } else {
         setFlashEvent(next);
-        setFlash(next.type === "card" ? "card" : isPenaltyOutcome ? "chance" : "injury");
+        setFlash(next.type === "card" ? "card" : isPenaltyOutcome ? "chance" : isSubScene ? "substitution" : "injury");
         setIdx((i) => i + 1);
         const dur = speed === "fast" ? 2500 : 4000;
-        setTimeout(() => { setFlash(null); setFlashEvent(null); animating.current = false; setTick((t) => t + 1); }, dur);
+        setTimeout(() => { if (gen !== run.current) return; setFlash(null); setFlashEvent(null); animating.current = false; setTick((t) => t + 1); }, dur);
       }
       return; // No cleanup — timeouts are fire-and-forget
     }
@@ -280,7 +312,7 @@ export default function MatchReplayPage() {
     // Čekání patří právě ukázané události (idx - 1); ve 3D se u události bez scény nečeká.
     const t = setTimeout(() => { setIdx((i) => i + 1); }, view3d && scened && idx > 0 && !scened[idx - 1] ? 0 : SPEED_MS[speed]);
     return () => clearTimeout(t);
-  }, [match, idx, speed, finished, htPause, htDone, tick, markSeen, view3d, scened]);
+  }, [match, idx, speed, finished, htPause, htDone, tick, markSeen, view3d, scened, paused]);
 
   if (loading) return <div className="flex items-center justify-center min-h-[60vh]"><Spinner /></div>;
   if (!match || match.events.length === 0) return (
@@ -528,12 +560,17 @@ export default function MatchReplayPage() {
             <>
               {view3d && (
                 <Replay3D detail={match.detail} events={match.events}
-                  progress={{ idx, flash, kickoff, halfTime: htPause, finished, fast: speed === "fast", homeGoals: hg, awayGoals: ag }} />
+                  progress={{ idx, flash, kickoff, halfTime: htPause, finished, paused, fast: speed === "fast", homeGoals: hg, awayGoals: ag }} />
               )}
               <button onClick={switchView} title={view3d ? "Přepnout na 2D záznam" : "Přepnout na 3D záznam"}
                 className="absolute top-2 left-2 z-30 h-8 px-2.5 rounded-lg bg-black/60 hover:bg-black/80 text-white text-xs font-heading font-bold">{view3d ? "2D" : "3D"}</button>
             </>
           )}
+          <div className="absolute bottom-2 left-2 z-30 flex gap-1 text-white text-sm">
+            <button onClick={() => jumpTo(previousAction ?? 0)} title="Předchozí akce" className="w-8 h-8 rounded-lg bg-black/60 hover:bg-black/80">{"\u23EE"}</button>
+            <button onClick={togglePause} disabled={finished} title={paused ? "Pokračovat" : "Pauza"} className="w-8 h-8 rounded-lg bg-black/60 hover:bg-black/80 disabled:opacity-40">{paused ? "\u25B6" : "\u23F8"}</button>
+            <button onClick={() => nextAction !== undefined && jumpTo(nextAction)} disabled={nextAction === undefined} title="Další akce" className="w-8 h-8 rounded-lg bg-black/60 hover:bg-black/80 disabled:opacity-40">{"\u23ED"}</button>
+          </div>
 
           {/* Team color side bars */}
           <div className="absolute left-0 top-0 bottom-0 w-2 rounded-l" style={{ backgroundColor: hc }} />
@@ -717,12 +754,12 @@ export default function MatchReplayPage() {
       </div>
 
       {/* ═══ KEY EVENTS TIMELINE — bottom ═══ */}
-      {vis.some((e) => e.type === "goal" || e.type === "card" || e.type === "injury") && (
+      {vis.some((e) => e.type === "goal" || e.type === "card" || e.type === "injury" || e.type === "substitution") && (
         <div className="card rounded-xl overflow-hidden px-4 py-2">
-          {vis.filter((e) => e.type === "goal" || e.type === "card" || e.type === "injury").map((e, i) => {
+          {vis.filter((e) => e.type === "goal" || e.type === "card" || e.type === "injury" || e.type === "substitution").map((e, i) => {
             const isHome = e.teamId === 1;
-            const icon = e.type === "goal" ? "\u26BD" : e.type === "card" ? (e.detail === "red" ? "\u{1F7E5}" : "\u{1F7E8}") : "\u{1F3E5}";
-            const color = e.type === "goal" ? "text-green-700 font-bold" : e.type === "card" ? (e.detail === "red" ? "text-red-600" : "text-yellow-600") : "text-red-500";
+            const icon = e.type === "goal" ? "\u26BD" : e.type === "card" ? (e.detail === "red" ? "\u{1F7E5}" : "\u{1F7E8}") : e.type === "substitution" ? "\u{1F501}" : "\u{1F3E5}";
+            const color = e.type === "goal" ? "text-green-700 font-bold" : e.type === "card" ? (e.detail === "red" ? "text-red-600" : "text-yellow-600") : e.type === "substitution" ? "text-muted" : "text-red-500";
             return (
               <div key={i} className="flex items-center gap-2 py-1 text-base font-heading">
                 <div className="flex-1 text-right">{isHome && <span className={color}>{e.playerName} {icon}</span>}</div>

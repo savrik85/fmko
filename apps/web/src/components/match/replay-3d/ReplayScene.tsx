@@ -15,7 +15,7 @@ export interface ReplayStep {
   startedAt: number;
   /** „Rychle“ přehrává scény dvakrát rychleji. */
   rate: number;
-  /** Jen při vývoji: scéna se v tomhle čase zastaví (snímky obrazovky). */
+  /** Scéna se v tomhle čase od začátku kroku zastaví (pauza; při vývoji snímky obrazovky). */
   hold?: number;
 }
 

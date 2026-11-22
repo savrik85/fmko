@@ -2,7 +2,7 @@
 // S REPLAY_MATCHES=<soubor JSON s detaily zápasů> projde i všechny zápasy z místní databáze.
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { HALF_L, HALF_W, Replay, sampleClip, scenedEvents, sceneTime, shootoutEvents, type Frame, type ReplayEvent, type ReplayInput, type ReplayPlayer, type Scene } from "./scenes";
+import { actionStarts, HALF_L, HALF_W, Replay, sampleClip, scenedEvents, sceneTime, shootoutEvents, type Frame, type ReplayEvent, type ReplayInput, type ReplayPlayer, type Scene } from "./scenes";
 
 const kit = { shirt: "#B91C1C", shorts: "#111827", socks: "#B91C1C" };
 const squad = (prefix: string): ReplayPlayer[] => ["GK", "DEF", "DEF", "DEF", "DEF", "MID", "MID", "MID", "MID", "FWD", "FWD"]
@@ -120,6 +120,12 @@ describe("scény 3D záznamu", () => {
     const goal = replay.scene(1), assist = replay.scene(2);
     expect(assist.clip).toBe(goal.clip);
     expect([assist.start, assist.split]).toEqual([goal.end, goal.end]);
+  });
+
+  it("akce začínají první událostí se scénou: roh před gólem, faul před kartou, zranění před střídáním", () => {
+    const starts = actionStarts(all).filter((i) => i < events.length);
+    expect(starts.map((i) => all[i].type)).toEqual(["goal", "goal", "chance", "chance", "chance", "chance", "chance", "corner", "freekick", "freekick",
+      "penalty", "penalty", "foul", "foul", "card", "injury", "goal"]);
   });
 
   it("rozstřel má pět sérií a sedí na uložený výsledek", () => {

@@ -15,10 +15,11 @@ const Stadium3D = clientOnly(() => import("@/components/stadium/stadium-3d/Stadi
 export interface ReplayProgress {
   /** Kolik událostí už 2D záznam ukázal. */
   idx: number;
-  flash: "goal" | "card" | "chance" | "attacking" | "injury" | "penalty" | null;
+  flash: "goal" | "card" | "chance" | "attacking" | "injury" | "penalty" | "substitution" | null;
   kickoff: "1st" | "2nd" | null;
   halfTime: boolean;
   finished: boolean;
+  paused: boolean;
   fast: boolean;
   homeGoals: number;
   awayGoals: number;
@@ -38,7 +39,7 @@ const initials = (name: string) => name.split(" ").map((w) => w[0]).filter(Boole
 
 /** 3D záznam zápasu na stadionu domácích, řízený stavem 2D záznamu. Vyplní rodiče, do kterého se vloží. */
 export function Replay3D({ detail, events, progress }: { detail: Record<string, unknown>; events: ReplayEvent[]; progress: ReplayProgress }) {
-  const { idx, flash, kickoff, halfTime, finished, fast, homeGoals, awayGoals } = progress;
+  const { idx, flash, kickoff, halfTime, finished, paused, fast, homeGoals, awayGoals } = progress;
   const homeName = detail.home_name as string, awayName = detail.away_name as string;
   const kits = useMemo(() => ({ home: detail.home_kit as ReplayKit, away: detail.away_kit as ReplayKit }), [detail]);
   const replay = useMemo(() => new Replay({
@@ -55,7 +56,10 @@ export function Replay3D({ detail, events, progress }: { detail: Record<string, 
   const step = useRef<ReplayStep>({ ...started, rate: 1 });
   /** Jen při vývoji: scéna zastavená pro snímek obrazovky (window.__replay3d.freeze). */
   const frozen = useRef<ReplayStep | null>(null);
-  step.current = frozen.current ?? { ...started, rate: fast ? 2 : 1 };
+  const rate = fast ? 2 : 1;
+  // Pauza zastaví scénu tam, kde zrovna je.
+  const pausedAt = useMemo(() => (paused ? ((performance.now() - started.startedAt) / 1000) * rate : undefined), [paused, started, rate]);
+  step.current = frozen.current ?? { ...started, rate, hold: pausedAt };
   useEffect(() => {
     if (process.env.NODE_ENV !== "development") return;
     const freeze = (index: number, attackBeat: boolean, seconds: number) => {

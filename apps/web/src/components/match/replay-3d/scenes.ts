@@ -156,6 +156,12 @@ export function scenedEvents(events: ReplayEvent[]): boolean[] {
   });
 }
 
+/** Kde začínají akce, které mají scénu (roh před gólem, faul před kartou…): sem skáče „předchozí/další akce“. */
+export function actionStarts(events: ReplayEvent[]): number[] {
+  const heads = actionHeads(events), scened = scenedEvents(events);
+  return events.flatMap((_, i) => (scened[i] && !scened.slice(heads[i], i).some(Boolean) ? [i] : []));
+}
+
 /**
  * Penaltový rozstřel jako události na konec záznamu. Uložený je jen výsledek rozstřelu, pořadí proměněných
  * a neproměněných kopů se proto dopočítá: oba týmy kopou stejně, poražený zahazuje naposled.
