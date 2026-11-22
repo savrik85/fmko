@@ -55,8 +55,6 @@ export interface Scene {
   result: ShotResult | null;
   /** Gól: úsek klipu se zakončením, který se zopakuje z jiné kamery, a branka, do které padl. */
   replay: { from: number; to: number; goalZ: number } | null;
-  /** Část scény ukáže kamera rozhodčího: u gólu opakovaný záběr, u zranění chvíli uprostřed scény. */
-  refCam: boolean;
 }
 type Window = Omit<Scene, "clip">;
 
@@ -574,7 +572,7 @@ export class Replay {
       st.dribble(front[2], { x: 5, z: fwd * 2 }, 2.4);
     }
     st.t = 5;
-    const scene: Scene = { clip: st.finish(), start: 0, split: 0, end: 5, focus: [], card: null, result: null, replay: null, refCam: false };
+    const scene: Scene = { clip: st.finish(), start: 0, split: 0, end: 5, focus: [], card: null, result: null, replay: null };
     this.kickoffs.set(index, scene);
     return scene;
   }
@@ -639,7 +637,7 @@ export class Replay {
       st.go(this.referee, { x: -19, z: -side * 3 }, 5);
       st.wait(6);
     }
-    this.closing = { clip: st.finish(), start: 0, split: 0, end: st.t, focus: [], card: null, result: null, replay: null, refCam: false };
+    this.closing = { clip: st.finish(), start: 0, split: 0, end: st.t, focus: [], card: null, result: null, replay: null };
     return this.closing;
   }
 
@@ -682,11 +680,9 @@ export class Replay {
     const e = events[head];
     const side = sideOf(e.teamId);
     const find = (...types: string[]) => rest.find((i) => types.includes(events[i].type));
-    const window = (i: number, start: number, w: Partial<Window> = {}) => windows.set(i, { start, split: start, end: st.t, focus: [], card: null, result: null, replay: null, refCam: false, ...w });
-    // Kamera rozhodčího jen občas, párkrát za zápas: u zhruba třetiny gólů a poloviny zranění.
-    const refCam = (share: number) => seededRng(`${this.input.matchId}:${head}:refcam`)() < share;
+    const window = (i: number, start: number, w: Partial<Window> = {}) => windows.set(i, { start, split: start, end: st.t, focus: [], card: null, result: null, replay: null, ...w });
     /** Gól: po oslavě se zopakuje zakončení (od rozběhu ke střele po míč v síti). */
-    const goalShots = (split: number) => ({ replay: { from: split - 1.8, to: split + 0.6, goalZ: goalZ(side) }, refCam: refCam(0.34) });
+    const goalShots = (split: number) => ({ replay: { from: split - 1.8, to: split + 0.6, goalZ: goalZ(side) } });
     const finisher = find("goal", "chance");
     const result = finisher === undefined ? null : events[finisher].type === "goal" ? "goal" : chanceResult(events[finisher]);
 
@@ -747,7 +743,7 @@ export class Replay {
       case "injury": {
         const injured = this.onPitch(st, e);
         this.injury(st, side, injured);
-        window(head, 0, { focus: [injured], refCam: refCam(0.5) });
+        window(head, 0, { focus: [injured] });
         for (const i of rest.filter((n) => events[n].type === "substitution")) {
           const start = st.t;
           window(i, start, { focus: this.substitution(st, i) });
