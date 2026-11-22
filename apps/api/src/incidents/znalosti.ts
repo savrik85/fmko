@@ -10,14 +10,16 @@
 
 import type { Rng } from "../generators/rng";
 import { gameExpiry } from "../lib/game-time";
+import { CATEGORY_LABELS } from "../equipment/equipment-generator";
 import { nazevIncidentu } from "./katalog";
+import { nactiZtraty } from "./popis";
 import {
   MAX_INCIDENTU_V_PROMPTU, OCHOTA_ROLE, ZNALOST_KADR_DNI, ZNALOST_KADR_ZAVAZNA_DNI, ZNALOST_PACHATEL_DNI,
 } from "./nastaveni";
 import { nazevSituace } from "./situace";
 import { MISTO_INCIDENTU, MISTO_TEXT } from "./stopy";
 import { text, TEXTY, vypln } from "./texty";
-import type { NavrhIncidentu, NavrhStopy, StavKlubu } from "./typy";
+import type { NavrhIncidentu, NavrhStopy, StavKlubu, Ztrata } from "./typy";
 
 export type RoleZnalosti = "kadr" | "svedek" | "kamarad" | "rival" | "pachatel" | "obvineny" | "drb";
 export type RoleSvedka = "svedek" | "kamarad" | "rival";
@@ -112,6 +114,10 @@ export interface RadekZnalostiDb {
   culprit_player_id: string | null;
   /** Lup je zpátky v klubu (vrácený, dopadený policií). Starší dotazy ho nemají. */
   recovered?: number | null;
+  /** JSON ztrát incidentu (typ `Ztrata`): co pachatel vzal. Starší dotazy ho nemají. */
+  loss?: string | null;
+  /** Kdy incident vznikl (skutečný čas): od té doby se hledá, jestli pachatel v SMS zapíral. */
+  created_at?: string | null;
   pachatel_jmeno: string | null;
   pachatel_prijmeni: string | null;
 }
@@ -137,6 +143,36 @@ export interface RadekZnalosti {
   pachatelJeOn: boolean;
   /** Lup je zpátky v klubu. Nenačtené = ne. */
   recovered?: boolean;
+  /** Co se u krádeže vzalo, slovy („dresy“, „31 696 Kč“). Jinak nic. */
+  loot?: string;
+  /** Kdy incident vznikl (skutečný čas). */
+  createdAt?: string;
+  /** Odhalený pachatel to dřív trenérovi v SMS zapíral (`znalosti-db.ts`). */
+  deniedBefore?: boolean;
+}
+
+/** Co pachatel vzal, pro prompt: věci malým písmenem, hotovost v Kč, poháry z vitríny poznáme. */
+export function stolenWhat(kind: string, losses: readonly Ztrata[]): string {
+  const items = losses.flatMap((z) => z.typ === "vybaveni"
+    ? [kind === "vitrina" ? "poháry z vitríny" : lowerFirst(CATEGORY_LABELS[z.kategorie] ?? z.kategorie)]
+    : []);
+  const cash = losses.flatMap((z) => (z.typ === "penize" && z.castka > 0 ? [`${z.castka.toLocaleString("cs-CZ")} Kč`] : []));
+  return [...new Set(items), ...cash].join(", ");
+}
+
+function lowerFirst(s: string): string {
+  return s.charAt(0).toLowerCase() + s.slice(1);
+}
+
+/**
+ * Pachatel v SMS zapírá („nic sem neukradl“, „v životě bych dresy nevzal“, „nebyl jsem to“).
+ * Hrdlička (Kávoviny) zapíral 21. 11. a model se pak držel vlastní historie i proti pokynu
+ * „nezapírej“: 4 ze 4 zapřel, s větou „dřív jsi zapíral, to už neplatí“ 3 ze 3 přiznal (E2E 22. 11.).
+ */
+const DENIAL_RE = /\b(neukradl|nevzal|nebral|nerozbil|neudelal jsem|nebyl jsem to|to jsem nebyl|ja to nebyl|to nebylo ode me|nemam s tim nic|o nicem nevim)\b/;
+
+export function deniesOffence(text: string): boolean {
+  return DENIAL_RE.test(text.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase());
 }
 
 function dnyMezi(od: string, do_: string): number {
@@ -154,6 +190,8 @@ export function radekZnalosti(r: RadekZnalostiDb, playerId: string, dnes: string
     pachatel: odhalen && jmeno ? jmeno : null,
     pachatelJeOn: odhalen && r.culprit_player_id === playerId,
     recovered: r.recovered === 1,
+    ...(r.category === "kradez" && r.loss ? { loot: stolenWhat(r.kind, nactiZtraty(r.loss)) || undefined } : {}),
+    ...(r.created_at ? { createdAt: r.created_at } : {}),
   };
 }
 
@@ -249,7 +287,11 @@ function pokynPachatele(r: RadekZnalosti): string {
   // Čin ohlášený v hospodě se ještě nestal (spec 9a).
   if (r.stav === "hrozi") return "Byl jsi v hospodě opilý a vykládal jsi to. Zlehčuj to, a když ti trenér domluví, slib, že nic neuděláš.";
   if (r.odhalen || r.vyslech === "priznal") {
-    return "Už se na to přišlo, nezapírej. Když na to přijde řeč, přiznej to a nevykrucuj se, i když je ti to trapné.";
+    // Model drží vlastní historii: kdo dřív zapíral, musí výslovně slyšet, že to už neplatí.
+    const denied = r.deniedBefore
+      ? "Dřív jsi to trenérovi zapíral, to už neplatí: přiznej, že jsi lhal."
+      : "Jestli jsi to trenérovi dřív zapíral, to už neplatí: přiznej, že jsi lhal.";
+    return `Už se na to přišlo, nezapírej. Když na to přijde řeč, přiznej to a nevykrucuj se, i když je ti to trapné. ${denied}`;
   }
   return "Zapírej, nic nepřiznávej.";
 }
@@ -272,7 +314,10 @@ export function lootLine(r: Pick<RadekZnalosti, "kategorie" | "stav" | "vysledek
 /** Provalený vlastní průšvih: co, kdy, jak se na to přišlo a jak to dopadlo, s pokynem nezapírat. */
 function ownOffenceLine(r: RadekZnalosti): string {
   const parts = [
-    r.fact, `Stalo se to ${kdy(r.predDny)}.`,
+    r.fact,
+    // „Vloupání do skladu“ samo neříká, co zmizelo: na „ty dresy“ by to model nespojil.
+    ...(r.loot ? [`Vzal jsi: ${r.loot}.`] : []),
+    `Stalo se to ${kdy(r.predDny)}.`,
     r.odhalen ? "Přišlo se na to, že jsi to byl ty." : "Trenérovi ses k tomu přiznal.",
   ];
   const outcome = r.vysledek ? VYSLEDEK_V_PROMPTU[r.vysledek] : undefined;
