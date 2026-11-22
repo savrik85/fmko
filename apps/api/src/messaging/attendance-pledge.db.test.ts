@@ -107,6 +107,16 @@ describe("zápis slibu z odpovědi hráče", () => {
     })).toMatchObject({ intent: "skip", from: "2026-11-20" });
   });
 
+  it("„v patek budu musím si to rozmyslet“ slib není (Stehlík, E2E 22. 11.: dostal 📝 na pátek)", async () => {
+    await db.prepare("INSERT INTO messages (id, conversation_id, sender_type, body, sent_at) VALUES ('t1', 'c1', 'user', 'A dorazíš v pátek na trénink?', '2026-11-19T17:24:00Z')").run();
+    expect(await recordAttendancePledge(db, {
+      clubTeamId: "club", convId: "c1", playerId: "p1", playerFirstName: "Petr", pledge: { event: "training", intent: "attend", when: "fri" },
+      replyBody: "trenere diky za otazku v patek budu musím si to rozmyslet ale diky za pochopení", now: new Date("2026-11-19T17:25:00Z"),
+    })).toBeNull();
+    expect((await life()).trainingPledge).toBeUndefined();
+    expect(await notes()).toEqual([]);
+  });
+
   it("odpověď mimo téma slib není: trenér psal výhrůžku, hráč odpověděl na starý hovor", async () => {
     await db.prepare("INSERT INTO messages (id, conversation_id, sender_type, body, sent_at) VALUES ('t1', 'c1', 'user', 'Šimone, jestli to uděláš ještě jednou, letíš.', '2026-11-19T17:24:00Z')").run();
     expect(await recordAttendancePledge(db, {
