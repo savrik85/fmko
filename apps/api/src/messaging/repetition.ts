@@ -11,12 +11,18 @@
  */
 
 import { logger } from "../lib/logger";
+import { seedFromString } from "../lib/seed";
 import { tooSimilar } from "./match-speech";
 
 const M = "repetition";
 
 /** Kolik posledních vlastních zpráv hráče se hlídá (i starších, než je okno historie). */
 export const OWN_LINES_LIMIT = 8;
+/**
+ * U předem napsaných variant se kouká dál do minulosti: šablona po odmítnuté nabídce přišla
+ * jednomu trenérovi pětkrát za dva měsíce (conv f14c5721, prod 9–11/2026).
+ */
+export const TEMPLATE_HISTORY_LIMIT = 40;
 /** Jedna zpráva v seznamu do promptu nejvýš takhle dlouhá. */
 const LINE_MAX_CHARS = 200;
 
@@ -99,6 +105,59 @@ export function withoutSentences(body: string, drop: readonly string[]): string 
   return significantWords(text).length >= 1 && plainWords(text).length >= 3 ? text : null;
 }
 
+/**
+ * Opakuje text (některou svou větou) jednu z předchozích zpráv? Pro předem napsané varianty:
+ * proti `sentencesRepeat` se počítá i krátká stejná věta („Beru to, trenére.“), u šablony
+ * je to pořád tatáž věta. Ohrané věty se tu nepočítají.
+ */
+export function repeatsAny(text: string, previous: readonly string[]): boolean {
+  const own = splitSentences(text);
+  return previous.some((p) => {
+    const old = splitSentences(p);
+    const oldPlain = new Set(old.map(plainSentence));
+    return own.some((s) => {
+      const plain = plainSentence(s);
+      return (plain.split(" ").length >= 2 && oldPlain.has(plain)) || old.some((o) => sentencesRepeat(s, o));
+    });
+  });
+}
+
+/**
+ * Index varianty, kterou hráč ještě nedostal (`used`), vybraný podle `seed`. Když dostal
+ * všechny, vybírá se znovu ze všech. Stejný seed dá stejnou variantu.
+ */
+export function pickUnusedIndex(count: number, used: ReadonlySet<number>, seed: string): number {
+  const all = Array.from({ length: count }, (_, i) => i);
+  const fresh = all.filter((i) => !used.has(i));
+  const pool = fresh.length > 0 ? fresh : all;
+  return pool[seedFromString(seed) % pool.length];
+}
+
+/**
+ * Předem napsaná varianta, kterou hráč trenérovi ještě neposlal. Porovnává se s jeho
+ * posledními zprávami (`previous`, nejstarší první) stejně jako odpověď modelu
+ * (`sentencesRepeat`), takže se pozná i šablona, kterou cizinec dostal lámaně. Když už
+ * poslal všechny, vezme se ta, kterou poslal nejdávněji.
+ */
+export function pickFreshVariant(
+  variants: readonly string[], previous: readonly string[], seed: string,
+): { text: string; index: number } {
+  if (variants.length === 0) throw new Error("pickFreshVariant: prázdný seznam variant");
+  const lastUse = variants.map((v) => {
+    for (let i = previous.length - 1; i >= 0; i--) if (repeatsAny(v, [previous[i]])) return i;
+    return -1;
+  });
+  const fresh = new Set(lastUse.flatMap((u, i) => (u === -1 ? [i] : [])));
+  if (fresh.size > 0) {
+    const index = pickUnusedIndex(variants.length, new Set(variants.map((_, i) => i).filter((i) => !fresh.has(i))), seed);
+    return { text: variants[index], index };
+  }
+  const oldest = Math.min(...lastUse);
+  const used = new Set(lastUse.flatMap((u, i) => (u === oldest ? [] : [i])));
+  const index = pickUnusedIndex(variants.length, used, seed);
+  return { text: variants[index], index };
+}
+
 function quote(line: string): string {
   const oneLine = line.replace(/\s+/g, " ").trim();
   return `„${oneLine.length > LINE_MAX_CHARS ? `${oneLine.slice(0, LINE_MAX_CHARS - 1)}…` : oneLine}“`;
@@ -157,12 +216,12 @@ export async function generateWithoutRepeats<T extends { body: string }>(
 }
 
 /**
- * Posledních `OWN_LINES_LIMIT` zpráv hráče v jeho konverzaci s trenérem, nejstarší první.
+ * Posledních `OWN_LINES_LIMIT` (nebo `limit`) zpráv hráče v jeho konverzaci s trenérem, nejstarší první.
  * Bez `convId` se konverzace dohledá podle týmu a hráče (úvodní zpráva, zpráva jen tak).
  * Selhání nic neblokuje: prázdný seznam.
  */
 export async function loadOwnRecentLines(
-  db: D1Database, o: { playerId: string; convId?: string | null; teamId?: string },
+  db: D1Database, o: { playerId: string; convId?: string | null; teamId?: string; limit?: number },
 ): Promise<string[]> {
   const convId = o.convId ?? (o.teamId
     ? (await db.prepare(
@@ -175,7 +234,7 @@ export async function loadOwnRecentLines(
     `SELECT body FROM messages WHERE conversation_id = ? AND sender_type = 'player' AND sender_id = ?
         AND TRIM(COALESCE(body, '')) != ''
       ORDER BY sent_at DESC LIMIT ?`,
-  ).bind(convId, o.playerId, OWN_LINES_LIMIT).all<{ body: string | null }>()
+  ).bind(convId, o.playerId, o.limit ?? OWN_LINES_LIMIT).all<{ body: string | null }>()
     .catch((e) => { logger.warn({ module: M }, `poslední zprávy hráče ${o.playerId}`, e); return null; });
   return (rows?.results ?? []).map((r) => (r.body ?? "").trim()).filter(Boolean).reverse();
 }

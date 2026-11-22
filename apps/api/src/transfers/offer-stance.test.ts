@@ -3,9 +3,11 @@ import { Miniflare } from "miniflare";
 
 const fx = vi.hoisted(() => ({
   sendPlayerSMS: vi.fn(async () => "conv"),
+  sendEventSms: vi.fn(async (_db: unknown, _env: unknown, req: { fallback: readonly string[] }) => ({ convId: "conv", body: req.fallback[0], aiGenerated: false })),
   computeInterestForOffer: vi.fn(async () => ({ level: 2, score: 60, factors: [{ label: "Lepší klub", delta: 20 }] })),
 }));
 vi.mock("../messaging/system-sms", () => ({ sendPlayerSMS: fx.sendPlayerSMS, sendSystemSMS: vi.fn(async () => undefined) }));
+vi.mock("../messaging/event-sms", () => ({ sendEventSms: fx.sendEventSms }));
 vi.mock("./player-interest", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./player-interest")>()),
   computeInterestForOffer: fx.computeInterestForOffer,
@@ -49,7 +51,7 @@ describe("co hráč o nabídce řekl v SMS", () => {
     fx.computeInterestForOffer.mockResolvedValueOnce({ level: 3, score: 85, factors: [{ label: "Lepší klub", delta: 20 }] });
     await withStance({ stance: "stay", at: new Date().toISOString(), offerIds: ["o1"] });
     await applyOfferRejectionImpact(db, offer, "reject");
-    expect(fx.sendPlayerSMS).toHaveBeenCalled();
+    expect(fx.sendEventSms).toHaveBeenCalled();
   });
 
   it("chtěl jít, ale v SMS řekl „odmítněte to“: po odmítnutí se nezlobí ani nepíše výčitku", async () => {
@@ -60,6 +62,7 @@ describe("co hráč o nabídce řekl v SMS", () => {
     expect(lc.offerStance).toBeUndefined();
     expect(lc.morale).toBe(60);
     expect(fx.sendPlayerSMS).not.toHaveBeenCalled();
+    expect(fx.sendEventSms).not.toHaveBeenCalled();
   });
 
   it("trenér s ním o nabídce psal: výčitka bez „bez jediného slova“", async () => {
@@ -69,9 +72,10 @@ describe("co hráč o nabídce řekl v SMS", () => {
     await db.prepare("INSERT INTO conversations VALUES ('c1', 'sts', 'p1')").run();
     await db.prepare("INSERT INTO messages VALUES ('m1', 'c1', 'user', 'Rozmysli to', ?)").bind(hourAgo).run();
     await applyOfferRejectionImpact(db, offer, "reject");
-    const body = (fx.sendPlayerSMS.mock.calls[0] as unknown[])[3] as string;
-    expect(body).toMatch(/o tom mluvili|Psali jsme/);
-    expect(body).not.toContain("bez jediného slova");
+    const req = (fx.sendEventSms.mock.calls[0] as unknown[])[2] as { instruction: string; fallback: string[] };
+    expect(req.instruction).toContain("předtím psal");
+    expect(req.fallback.every((f) => !f.includes("bez jediného slova"))).toBe(true);
+    expect(req.fallback.some((f) => /o tom mluvili|Psali jsme/.test(f))).toBe(true);
   });
 
   it("zpráva trenéra z doby před nabídkou se nepočítá", async () => {
@@ -80,8 +84,9 @@ describe("co hráč o nabídce řekl v SMS", () => {
     await db.prepare("INSERT INTO conversations VALUES ('c1', 'sts', 'p1')").run();
     await db.prepare("INSERT INTO messages VALUES ('m1', 'c1', 'user', 'Ahoj', ?)").bind(new Date(Date.now() - 7200_000).toISOString()).run();
     await applyOfferRejectionImpact(db, offer, "reject");
-    const body = (fx.sendPlayerSMS.mock.calls[0] as unknown[])[3] as string;
-    expect(body).not.toMatch(/o tom mluvili|Psali jsme/);
+    const req = (fx.sendEventSms.mock.calls[0] as unknown[])[2] as { instruction: string; fallback: string[] };
+    expect(req.instruction).toContain("předem nic neřekl");
+    expect(req.fallback.some((f) => /o tom mluvili|Psali jsme/.test(f))).toBe(false);
   });
 
   it("postoj platí týden a jen pro nabídky, o kterých věděl", () => {

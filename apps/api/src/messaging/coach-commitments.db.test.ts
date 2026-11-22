@@ -9,6 +9,7 @@ import {
   breakReleaseCommitment, cancelCommitment, fulfilMoneyCommitment, recordInquiryTask, respondToCoachInvite, listCommitments, loadCommitmentMemory, recordCommitment, settleCoachCommitments,
 } from "./coach-commitments";
 import { afterPlayerReply } from "./ai-player-spawn";
+import { LINEUP_PROMISE_BROKEN_SMS, LINEUP_PROMISE_KEPT_SMS } from "./promise-texts";
 import type { PlayerSnapshot } from "./ai-player-scenarios";
 
 let miniflare: Miniflare;
@@ -84,7 +85,7 @@ describe("slib sestavy z SMS", () => {
     await db.prepare("INSERT INTO matches (id, home_team_id, away_team_id, status, simulated_at, home_lineup_data, away_lineup_data) VALUES ('m1', 'club', 'rival', 'simulated', '2026-11-12T17:05:00Z', ?, NULL)").bind(lineup(["p1"])).run();
     expect(await settleCoachCommitments(db, new Date("2026-11-13T10:00:00Z"))).toBe(1);
     expect(await status(id)).toBe("kept");
-    expect((await smsTo("p1"))[0]).toMatch(/dodržel/);
+    expect(LINEUP_PROMISE_KEPT_SMS).toContain((await smsTo("p1"))[0]);
     const log = await db.prepare("SELECT source, delta FROM coach_relation_log WHERE player_id = 'p1'").first<{ source: string; delta: number }>();
     expect(log).toEqual({ source: "promise", delta: 4 });
     expect(await morale("p1")).toBe(53);
@@ -95,7 +96,7 @@ describe("slib sestavy z SMS", () => {
     await db.prepare("INSERT INTO matches (id, home_team_id, away_team_id, status, simulated_at, home_lineup_data, away_lineup_data) VALUES ('m1', 'club', 'rival', 'simulated', '2026-11-12T17:05:00Z', ?, NULL)").bind(lineup(["p2"], ["p1"])).run();
     await settleCoachCommitments(db, new Date("2026-11-13T10:00:00Z"));
     expect(await status(id)).toBe("broken");
-    expect((await smsTo("p1"))[0]).toMatch(/základ|od začátku/);
+    expect(LINEUP_PROMISE_BROKEN_SMS).toContain((await smsTo("p1"))[0]);
     expect(await morale("p1")).toBe(44);
   });
 

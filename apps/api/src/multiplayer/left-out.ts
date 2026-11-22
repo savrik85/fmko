@@ -21,6 +21,7 @@ import { coachTalkedSince } from "../hearsay/effects";
 import { coachRelationStmts } from "../lib/coach-relation";
 import { createRng } from "../generators/rng";
 import { seedFromString } from "../lib/seed";
+import { TEMPLATE_HISTORY_LIMIT, loadOwnRecentLines, pickFreshVariant } from "../messaging/repetition";
 
 type Rng = ReturnType<typeof createRng>;
 
@@ -222,6 +223,8 @@ const SKIPPED_TEXTS: ReadonlyArray<(who: string) => string> = [
   (who) => `${who} jede a já ani na střídačku? Tohle jsem si od vás nezasloužil.`,
   (who) => `Nechápu to. ${who} dostal místo na lavičce a já koukám na výsledek doma z gauče.`,
   (who) => `Trenére, co vám ${who} udělal, že jede místo mě? Já makám na každým tréninku.`,
+  (who) => `Takže ${who} jede a já budu koukat z hospody? Fakt díky, trenére.`,
+  (who) => `${who} dostal přednost přede mnou. Tak to mi teda vysvětlete, trenére.`,
 ];
 
 const STREAK_TEXTS: ReadonlyArray<(nth: string) => string> = [
@@ -230,6 +233,9 @@ const STREAK_TEXTS: ReadonlyArray<(nth: string) => string> = [
   (nth) => `Zase doma, už ${nth} v řadě. Tohle mě fakt nebaví.`,
   (nth) => `Už ${nth} jsem nejel ani na lavičku. Kluci se mi v hospodě smějou.`,
   (nth) => `Trenére, ${nth} po sobě nic. Jestli o mě nestojíte, tak to řekněte.`,
+  (nth) => `${capitalize(nth)} jsem doma, trenére. Asi už se mnou nepočítáte, co?`,
+  (nth) => `Už ${nth} mě nevezmete ani na lavičku. Co mám ještě udělat, trenére?`,
+  (nth) => `Trenére, ${nth} v řadě koukám na zápas z domu. Takhle mě to nebaví.`,
 ];
 
 const GENERIC_TEXTS: readonly string[] = [
@@ -239,6 +245,9 @@ const GENERIC_TEXTS: readonly string[] = [
   "Sedím doma a koukám na výsledky. Příště mě snad vezmete aspoň na lavičku.",
   "Trenére, co mám dělat jinak, abych se dostal aspoň do zápisu?",
   "Nejedu ani jako náhradník? To jsem teda nečekal.",
+  "Trenére, ani lavička? Myslel jsem, že aspoň náhradníka dělat můžu.",
+  "Tak jsem zůstal doma. Dobře, trenére, ale moc mě to nebere.",
+  "Trenére, na zápas jsem se těšil a nakonec nic. Aspoň mi řekněte proč.",
 ];
 
 function capitalize(s: string): string {
@@ -255,25 +264,22 @@ export function nthTime(n: number): string {
 }
 
 /**
- * Text SMS. `previousText` je poslední zpráva téhož hráče — stejná věta dvakrát
- * po sobě by prozradila šablonu.
+ * Text SMS. `previous` jsou poslední zprávy téhož hráče (repetition.ts): dostane větu,
+ * kterou trenérovi ještě neposlal. Dřív se hlídala jen ta úplně poslední a „Celej tejden
+ * makám…“ nebo „Sedím doma a koukám na výsledky“ chodily pořád dokola (prod 9–11/2026).
  */
 export function complaintText(
   complaint: { reason: ComplaintReason; weaker: BenchPlayer | null; streak: number },
   rng: Rng,
-  previousText?: string | null,
+  previous: readonly string[] | string | null = [],
 ): string {
   const variants: string[] = complaint.reason === "skipped_for_weaker" && complaint.weaker
     ? SKIPPED_TEXTS.map((t) => t(complaint.weaker!.lastName))
     : complaint.reason === "streak"
       ? STREAK_TEXTS.map((t) => t(nthTime(complaint.streak)))
       : [...GENERIC_TEXTS];
-  const start = Math.floor(rng.random() * variants.length);
-  for (let i = 0; i < variants.length; i++) {
-    const text = variants[(start + i) % variants.length];
-    if (text !== previousText) return text;
-  }
-  return variants[start];
+  const lines = typeof previous === "string" ? [previous] : previous ?? [];
+  return pickFreshVariant(variants, lines, `left-out|${Math.floor(rng.random() * 1e9)}`).text;
 }
 
 // ── Zápis do DB ────────────────────────────────────────────────────────────
@@ -413,14 +419,9 @@ export async function reactToLeftOut(
   if (!complaint) return;
 
   const sender = leftOut.find((p) => p.id === complaint.player.id)!;
-  const previous = await db.prepare(
-    `SELECT m.body FROM messages m JOIN conversations c ON c.id = m.conversation_id
-     WHERE c.team_id = ? AND c.participant_id = ? AND m.sender_type = 'player'
-     ORDER BY m.sent_at DESC LIMIT 1`,
-  ).bind(teamId, sender.id).first<{ body: string }>()
-    .catch((e) => { logger.warn({ module: "left-out" }, "poslední zpráva hráče", e); return null; });
+  const previous = await loadOwnRecentLines(db, { playerId: sender.id, teamId, limit: TEMPLATE_HISTORY_LIMIT });
 
-  let text = complaintText(complaint, rng, previous?.body);
+  let text = complaintText(complaint, rng, previous);
   const sulks = rng.random() < sulkChance(sender, complaint, coachMotivation);
   if (sulks) {
     text += ` ${SULK_SUFFIXES[Math.floor(rng.random() * SULK_SUFFIXES.length)]}`;

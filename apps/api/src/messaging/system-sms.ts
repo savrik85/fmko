@@ -29,26 +29,68 @@ export async function sendSystemSMS(
     .bind(body.slice(0, 100), convId).run().catch((e) => logger.warn({ module: "system-sms" }, "update system conv", e));
 }
 
+export interface PlayerSmsSender { id: string; firstName: string; lastName: string; nickname?: string | null; avatar?: string | null }
+
 /** Pošle zprávu OD HRÁČE do jeho 1:1 konverzace s trenérem (typ 'player'). Vrací id konverzace. */
 export async function sendPlayerSMS(
   db: D1Database,
   teamId: string,
-  player: { id: string; firstName: string; lastName: string; nickname?: string | null; avatar?: string | null },
+  player: PlayerSmsSender,
   body: string,
   metadata?: Record<string, unknown>,
 ): Promise<string> {
   const { getOrCreatePlayerConversation } = await import("./ai-player-spawn");
   const convId = await getOrCreatePlayerConversation(db, teamId, player);
-  // Cizinec píše lámaně, Slovák slovensky (šablony jsou česky).
-  const nat = await db.prepare("SELECT nationality FROM players WHERE id = ?").bind(player.id).first<{ nationality: string | null }>()
-    .catch((e) => { logger.warn({ module: "system-sms" }, "národnost hráče", e); return null; });
-  body = brokenCzech(body, nat?.nationality ?? null, `${player.id}|${body}`);
+  await sendPlayerSmsToConversation(db, convId, player, body, metadata);
+  return convId;
+}
+
+/**
+ * Zpráva od hráče do známé konverzace. Předem napsaný text cizinec dostane lámaně (šablony
+ * jsou česky); text od modelu (`metadata.ai_generated`) už jazyk hráče má a druhé lámání
+ * by z něj udělalo nesmysl.
+ */
+export async function sendPlayerSmsToConversation(
+  db: D1Database,
+  convId: string,
+  player: PlayerSmsSender,
+  body: string,
+  metadata?: Record<string, unknown>,
+): Promise<string> {
+  if (metadata?.ai_generated !== true) {
+    const nat = await db.prepare("SELECT nationality FROM players WHERE id = ?").bind(player.id).first<{ nationality: string | null }>()
+      .catch((e) => { logger.warn({ module: "system-sms" }, "národnost hráče", e); return null; });
+    body = brokenCzech(body, nat?.nationality ?? null, `${player.id}|${body}`);
+  }
   await db.prepare("INSERT INTO messages (id, conversation_id, sender_type, sender_id, sender_name, body, metadata, sent_at) VALUES (?, ?, 'player', ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))")
     .bind(crypto.randomUUID(), convId, player.id, `${player.firstName} ${player.lastName}`, body, metadata ? JSON.stringify(metadata) : null).run()
     .catch((e) => logger.warn({ module: "system-sms" }, "insert player msg", e));
   await db.prepare("UPDATE conversations SET unread_count = unread_count + 1, last_message_text = ?, last_message_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?")
     .bind(body.slice(0, 100), convId).run().catch((e) => logger.warn({ module: "system-sms" }, "update player conv", e));
-  return convId;
+  return body;
+}
+
+/**
+ * Předem napsaná SMS od hráče: z `variants` ta, kterou trenérovi ještě neposlal
+ * (`pickFreshVariant`, repetition.ts). Šablony se dřív losovaly bez paměti a tatáž věta
+ * přišla jednomu trenérovi i pětkrát (prod 9–11/2026). `suffix` se přidá za vybranou
+ * variantu (důvod odchodu), do výběru nepatří. Číslo varianty jde do `metadata.template`.
+ */
+export async function sendPlayerTemplateSMS(
+  db: D1Database,
+  teamId: string,
+  player: PlayerSmsSender,
+  variants: readonly string[],
+  opts: { seed: string; metadata?: Record<string, unknown>; suffix?: string; convId?: string },
+): Promise<{ convId: string; body: string; index: number }> {
+  const { getOrCreatePlayerConversation } = await import("./ai-player-spawn");
+  const { TEMPLATE_HISTORY_LIMIT, loadOwnRecentLines, pickFreshVariant } = await import("./repetition");
+  const convId = opts.convId ?? await getOrCreatePlayerConversation(db, teamId, player);
+  const previous = await loadOwnRecentLines(db, { playerId: player.id, convId, limit: TEMPLATE_HISTORY_LIMIT });
+  const picked = pickFreshVariant(variants, previous, opts.seed);
+  const text = opts.suffix ? `${picked.text} ${opts.suffix}` : picked.text;
+  const body = await sendPlayerSmsToConversation(db, convId, player, text, { ...(opts.metadata ?? {}), template: picked.index });
+  return { convId, body, index: picked.index };
 }
 
 /**

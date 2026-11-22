@@ -1,13 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../messaging/system-sms", () => ({ sendPlayerSMS: vi.fn(async () => "konv-1"), sendSystemSMS: vi.fn(async () => undefined) }));
+vi.mock("../messaging/system-sms", () => ({
+  sendPlayerSMS: vi.fn(async () => "konv-1"),
+  sendPlayerTemplateSMS: vi.fn(async () => ({ convId: "konv-1", body: "", index: 0 })),
+  sendSystemSMS: vi.fn(async () => undefined),
+}));
 vi.mock("../messaging/ai-player-spawn", () => ({ getOrCreatePlayerConversation: vi.fn(async () => "konv-1") }));
 vi.mock("../lib/ai-provider", () => ({ isAiEnabled: vi.fn(async () => true) }));
 vi.mock("../season/finance-processor", () => ({ recordTransaction: vi.fn(async () => 1000) }));
 
 import type { Bindings } from "../index";
 import { recordTransaction } from "../season/finance-processor";
-import { sendPlayerSMS } from "../messaging/system-sms";
+import { sendPlayerSMS, sendPlayerTemplateSMS } from "../messaging/system-sms";
 import { propadleZalohy, rozhodniZalohu, ukonciSituace, zalozSituaci, zretezDluhy } from "./situace-db";
 import { FalesnaD1, jakoD1, type Pravidlo } from "./testovaci-d1";
 import { hrac, incidentRadek, stavKlubu } from "./testovaci-stav";
@@ -41,7 +45,11 @@ describe("založení situace", () => {
     expect(await zalozSituaci(env, stav, navrh())).toMatch(/^inc-/);
     const lhuta = db.dotazy.find((d) => /UPDATE club_incidents SET deadline/.test(d.sql));
     expect(lhuta?.sql).toContain("deadline IS NULL");
-    expect(sendPlayerSMS).toHaveBeenCalledWith(expect.anything(), "tym-a", expect.objectContaining({ id: "s" }), expect.stringContaining("zálohu"), expect.objectContaining({ type: "incident" }));
+    // Varianta, kterou hráč ještě neposlal: všechny žádají o zálohu (repetition.ts).
+    expect(sendPlayerTemplateSMS).toHaveBeenCalledWith(
+      expect.anything(), "tym-a", expect.objectContaining({ id: "s" }), expect.arrayContaining([expect.stringContaining("zálohu")]),
+      expect.objectContaining({ metadata: expect.objectContaining({ type: "incident" }) }),
+    );
     expect(db.pocet(/UPDATE conversations SET ai_thread_active/)).toBe(1);
   });
 
@@ -112,7 +120,7 @@ describe("dluhy po ztrátě práce", () => {
     expect(insert(db)?.params).toContain(`${ZDROJ_ANO}-dluhy`);
     expect(insert(db)?.params).toContain("dluhy");
     expect(insert(db)?.params).toContain("s");
-    expect(sendPlayerSMS).toHaveBeenCalled();
+    expect(sendPlayerTemplateSMS).toHaveBeenCalled();
   });
 
   it("řetězení zavře původní ztrátu práce, ať hráč nedrží dva sloty naráz", async () => {
@@ -156,6 +164,7 @@ describe("dluhy po ztrátě práce", () => {
     expect(await zretezDluhy(env, stav())).toBe(false);
     expect(db.pocet(/UPDATE club_incidents SET deadline/)).toBe(0);
     expect(sendPlayerSMS).not.toHaveBeenCalled();
+    expect(sendPlayerTemplateSMS).not.toHaveBeenCalled();
   });
 });
 
@@ -189,7 +198,7 @@ describe("konec situace a propadlá lhůta zálohy", () => {
     expect(await propadleZalohy(env, { teamId: "tym-a", gameDate: DNES })).toBe(1);
     const zapis = db.dotazy.find((d) => /\$\.zaloha/.test(d.sql) && /UPDATE club_incidents/.test(d.sql));
     expect(zapis?.sql).toContain("json_extract(resolution_data, '$.zaloha') IS NULL");
-    expect(sendPlayerSMS).toHaveBeenCalled();
+    expect(sendPlayerTemplateSMS).toHaveBeenCalled();
   });
 });
 
@@ -226,6 +235,7 @@ describe("rozhodnutí o záloze", () => {
     // Žádné splátky, žádná odměna za půjčku, žádná SMS o vyplacené záloze.
     expect(db.dotazy.filter((d) => /tydnuZbyva/.test(JSON.stringify(d.params))).length).toBe(1);
     expect(sendPlayerSMS).not.toHaveBeenCalled();
+    expect(sendPlayerTemplateSMS).not.toHaveBeenCalled();
   });
 
   it("odmítnutí nesahá na peníze a druhé rozhodnutí je 409", async () => {

@@ -7,7 +7,7 @@
  */
 
 import { logger } from "../lib/logger";
-import { sendPlayerSMS } from "../messaging/system-sms";
+import { sendPlayerSMS, sendPlayerTemplateSMS } from "../messaging/system-sms";
 
 const M = "promises";
 
@@ -190,17 +190,18 @@ export const PROMISE_STATUS_LABELS: Record<PromiseStatus, string> = {
 
 // ─── Připomínky hráčů ───────────────────────────────────────────────────────
 
-const MINUTES_REMINDERS = [
+// Hráč dostane variantu, kterou trenérovi ještě neposlal (sendPlayerTemplateSMS). Dřív byly tři
+// a „jen připomínám: slíbil jste mi základ“ dostal tentýž trenér i dvakrát (prod 9–11/2026).
+export const MINUTES_REMINDERS: readonly string[] = [
   "Trenére, zítra hrajeme. Pamatujete, co jste mi slíbil? Počítám, že nastoupím od začátku.",
   "Zítra je zápas. Doufám, že platí, co jsme si řekli, a jdu do základu.",
   "Trenére, jen připomínám: slíbil jste mi základ. Zítra je zápas.",
+  "Trenére, zítra to platí, jak jsme se domluvili? Jsem připravenej od první minuty.",
+  "Zítra se hraje, trenére. Snad nezapomenete, co jste mi slíbil.",
+  "Trenére, na zítřek se těším. Počítám, že začínám, jak jsme si řekli.",
+  "Jen ať vám to nevypadne, trenére: zítra jdu od začátku, ne?",
+  "Trenére, zítra zápas a já vás beru za slovo, že nastoupím v základu.",
 ];
-
-function pick(pool: string[], seed: string): string {
-  let h = 0;
-  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
-  return pool[h % pool.length];
-}
 
 interface ReminderPlayer { id: string; first_name: string; last_name: string; nickname: string | null; avatar: string | null }
 
@@ -221,8 +222,8 @@ export async function remindMinutesPromises(db: D1Database, rosterTeamId: string
   ).bind(rosterTeamId, matchKey).all<ReminderPlayer & { promise_id: string; club_id: string }>()
     .catch((e) => { logger.warn({ module: M }, "sliby sestavy před zápasem", e); return { results: [] as Array<ReminderPlayer & { promise_id: string; club_id: string }> }; });
   for (const r of rows.results) {
-    await sendPlayerSMS(db, r.club_id, { id: r.id, firstName: r.first_name, lastName: r.last_name, nickname: r.nickname, avatar: r.avatar },
-      pick(MINUTES_REMINDERS, `${r.promise_id}|${matchKey}`));
+    await sendPlayerTemplateSMS(db, r.club_id, { id: r.id, firstName: r.first_name, lastName: r.last_name, nickname: r.nickname, avatar: r.avatar },
+      MINUTES_REMINDERS, { seed: `${r.promise_id}|${matchKey}`, metadata: { type: "promise_reminder" } });
     await db.prepare("UPDATE player_promises SET last_reminder_key = ? WHERE id = ?").bind(matchKey, r.promise_id).run()
       .catch((e) => logger.warn({ module: M }, "připomínka slibu sestavy", e));
   }

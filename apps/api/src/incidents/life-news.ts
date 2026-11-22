@@ -20,6 +20,7 @@ import { seedFromString } from "../lib/seed";
 import type { AiScenario } from "../messaging/ai-player-scenarios";
 import { CASUAL_TOPICS } from "../messaging/casual-topics";
 import { brokenCzech } from "../messaging/foreign-speech";
+import { pickUnusedIndex } from "../messaging/repetition";
 import { clubReceivesMessages } from "./club-messages";
 
 const M = "life-news";
@@ -121,9 +122,7 @@ export function fallbackNews(
   kind: LifeNewsKind, data: LifeNewsData, used: readonly number[], seed: string,
 ): { body: string; variant: number } {
   const templates = kind === "narozeni_ditete" ? BIRTH_NEWS_TEMPLATES : PARENT_NEWS_TEMPLATES;
-  const fresh = templates.map((_, i) => i).filter((i) => !used.includes(i));
-  const pool = fresh.length > 0 ? fresh : templates.map((_, i) => i);
-  const variant = pool[seedFromString(`life-news|${seed}`) % pool.length];
+  const variant = pickUnusedIndex(templates.length, new Set(used), `life-news|${seed}`);
   return { body: fill(templates[variant], templateValues(kind, data)), variant };
 }
 

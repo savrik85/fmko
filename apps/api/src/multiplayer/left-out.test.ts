@@ -84,6 +84,18 @@ describe("complaintText", () => {
     expect(complaintText({ reason: "streak", weaker: null, streak: 3 }, fixedRng(0))).toContain("potřetí");
     expect(nthTime(12)).toBe("po několikáté");
   });
+  it("věty, které hráč poslal i před pár zápasy, se nevyberou (prod 9–11/2026 chodily dokola)", () => {
+    const sent = [0, 0.2, 0.4, 0.6, 0.8].map((v) => complaintText({ reason: "generic", weaker: null, streak: 1 }, fixedRng(v)));
+    const previous = [...new Set(sent), "Jdu spát, trenére."];
+    for (const v of [0, 0.3, 0.7, 0.99]) {
+      expect(previous).not.toContain(complaintText({ reason: "generic", weaker: null, streak: 1 }, fixedRng(v), previous));
+    }
+    // Série: „Už potřetí…“ a „Už počtvrté…“ je tatáž věta.
+    const third = complaintText({ reason: "streak", weaker: null, streak: 3 }, fixedRng(0));
+    const fourth = complaintText({ reason: "streak", weaker: null, streak: 4 }, fixedRng(0), [third]);
+    expect(fourth.replace("počtvrté", "potřetí").replace("Počtvrté", "Potřetí")).not.toBe(third);
+  });
+
   it("stejnou větu dvakrát po sobě nepošle", () => {
     const first = complaintText({ reason: "generic", weaker: null, streak: 1 }, fixedRng(0));
     const second = complaintText({ reason: "generic", weaker: null, streak: 1 }, fixedRng(0), first);

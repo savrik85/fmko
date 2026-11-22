@@ -10,7 +10,8 @@
 import { createNotification } from "../community/notifications";
 import type { Bindings } from "../index";
 import { logger } from "../lib/logger";
-import { sendPlayerSMS, sendSystemSMS } from "../messaging/system-sms";
+import { sendPlayerSMS, sendPlayerTemplateSMS, sendSystemSMS } from "../messaging/system-sms";
+import { TEXTY, vypln, type KlicTextu } from "./texty";
 
 const M = "incidents-messages";
 
@@ -39,6 +40,23 @@ export async function sendIncidentPlayerSms(
 ): Promise<void> {
   if (!(await clubReceivesMessages(db, teamId))) return;
   await sendPlayerSMS(db, teamId, player, body, metadata);
+}
+
+/**
+ * Předem napsaná SMS od hráče z textů incidentu: varianta, kterou trenérovi ještě neposlal
+ * (`sendPlayerTemplateSMS`). Dřív se losovala bez paměti. AI klubu se nepošle.
+ */
+export async function sendIncidentPlayerTemplate(
+  db: D1Database,
+  teamId: string,
+  player: { id: string; firstName: string; lastName: string; nickname?: string | null; avatar?: string | null },
+  key: KlicTextu,
+  opts: { seed: string; values?: Record<string, string>; metadata?: Record<string, unknown> },
+): Promise<void> {
+  if (!(await clubReceivesMessages(db, teamId))) return;
+  await sendPlayerTemplateSMS(db, teamId, player, TEXTY[key].map((t) => vypln(t, opts.values ?? {})), {
+    seed: opts.seed, metadata: { ...(opts.metadata ?? {}), textKey: key },
+  });
 }
 
 /** Notifikace (a push) o incidentu. AI klubu se nepošle. */
