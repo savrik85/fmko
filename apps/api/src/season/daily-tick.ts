@@ -855,7 +855,7 @@ export async function executeDailyTick(
         }
 
         // Trestná kolečka z chatu: kdo je má a přišel, odběhá je, nebo odmítne (messaging/coach-rules.ts).
-        // Kondice za kolečka až po denní regeneraci (applyPendingLapsFatigue níž), jinak ji smaže.
+        // Kondice za kolečka až po regeneraci a bonusech z vybavení (krok laps-fatigue níž), jinak ji smažou.
         await applyLapsAtTraining(env.DB, {
           clubTeamId: clubId, teamId, gameDay: effectiveDate.toISOString(),
           attended: new Map(result.attendance.map((a) => [playersResult.results[a.playerIndex].id as string, a.attended])),
@@ -1153,12 +1153,6 @@ export async function executeDailyTick(
     `UPDATE players SET life_context = json_set(life_context, '$.condition', ${recoveryNewCondSql})`,
   ).run();
   events.push({ type: "recovery", description: "Regenerace kondice (dle staminy a věku)" });
-  // Trestná kolečka z dnešního tréninku: −5 kondice až po regeneraci, ať má trest dopad.
-  {
-    const { applyPendingLapsFatigue } = await import("../messaging/coach-rules");
-    await applyPendingLapsFatigue(env.DB, effectiveDate.toISOString())
-      .catch((e) => logger.warn({ module: "daily-tick" }, "kondice za trestná kolečka", e));
-  }
 
   // Návrat po zranění: hráč, který byl delší dobu mimo, není rozehraný. Až do dneška
   // regenerace běžela i zraněným, takže se vraceli se 100 % kondice. Teď dostane kondici
@@ -1272,6 +1266,15 @@ export async function executeDailyTick(
   } catch (e) {
     logger.error({ module: "daily-tick" }, "random life events", e);
   }
+  });
+
+  // Trestná kolečka z dnešního tréninku: −5 kondice až po VŠECH přírůstcích kondice v ticku
+  // (regenerace, sprchy, posilovna, náhodné události). Dřív se odečetla hned po regeneraci
+  // a bonus ze sprch ji vrátil na strop (Fiala 85 → 100 → 95 → 100, E2E 22. 11.).
+  // `run`: opakování snese, každý záznam se odečte jen jednou (`fatigue: applied`).
+  await steps.run("laps-fatigue", async () => {
+    const { applyPendingLapsFatigue } = await import("../messaging/coach-rules");
+    await applyPendingLapsFatigue(env.DB, effectiveDate.toISOString());
   });
 
   // (AI player chats mají vlastní cron 0 14 * * * v index.ts — nespouštět tady)
