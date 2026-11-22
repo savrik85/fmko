@@ -152,6 +152,7 @@ async function deliverOne(db: D1Database, env: PhoneEnv, row: PendingRow, now: D
   const team = await spawn.loadTeamContext(db, row.club_team_id, playerTeamId);
 
   player.ownRecentLines = await loadOwnRecentLines(db, { playerId: player.id, convId });
+  player.coachAddress = await (await import("../messaging/address-form")).loadCoachAddress(db, { playerId: player.id, convId });
   let body: string;
   try {
     body = await generateInitialMessage(env, player, scenario, team, now);

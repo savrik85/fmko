@@ -136,6 +136,15 @@ describe("tykání a vykání trenérovi", () => {
     const id = Array.from({ length: 50 }, (_, i) => `p-${i}`).find((x) => coachAddressForm({ id: x, age: 30 }) === "ty")!;
     expect(buildSystemPrompt(hrac({ id, age: 30 }), tym, kdy(2, 18))).toContain("Trenérovi TYKÁŠ");
   });
+
+  // E2E 22. 11.: Král (pokyn TY, v historii vykal) napsal „A vy, trenére?“. Historie má přednost.
+  it("tvar z hráčovy historie má přednost před věkem a id", () => {
+    const id = Array.from({ length: 50 }, (_, i) => `p-${i}`).find((x) => coachAddressForm({ id: x, age: 27 }) === "ty")!;
+    expect(coachAddressForm({ id, age: 27, coachAddress: "vy" })).toBe("vy");
+    expect(coachAddressForm({ id: "p-1", age: 18, coachAddress: "ty" })).toBe("ty");
+    expect(coachAddressForm({ id, age: 27, coachAddress: null })).toBe("ty");
+    expect(buildSystemPrompt(hrac({ id, age: 27, coachAddress: "vy" }), tym, kdy(2, 18))).toContain("Trenérovi VYKÁŠ");
+  });
 });
 
 describe("cizinec píše lámaně, Slovák slovensky", () => {

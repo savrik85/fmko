@@ -300,3 +300,52 @@ describe("konec věty bez backtrackingu", () => {
     }
   });
 });
+
+// Lokální E2E 22. 11. (Král, Mráz): pokyn TYKÁŠ/VYKÁŠ model nedržel a výstup se nekontroloval.
+describe("tvar oslovení trenéra ve vygenerované zprávě", () => {
+  it("opačný tvar: jednou přegeneruje s výslovným pokynem a pošle opravenou zprávu", async () => {
+    const gen = vi.fn()
+      .mockResolvedValueOnce({ body: "Relax, rodina. A vy co děláte, trenére?" })
+      .mockResolvedValueOnce({ body: "Relax, rodina. A co ty, trenére?" });
+    expect((await generateWithoutRepeats([], gen, "test", { address: "ty" })).body).toBe("Relax, rodina. A co ty, trenére?");
+    expect(gen).toHaveBeenCalledTimes(2);
+    expect(gen.mock.calls[1][0]).toContain("TYKÁŠ");
+  });
+
+  it("zpráva bez tvaru nebo se správným tvarem: jedno volání", async () => {
+    const gen = vi.fn(async () => ({ body: "V úterý dorazím, trenére." }));
+    await generateWithoutRepeats([], gen, "test", { address: "vy" });
+    const right = vi.fn(async () => ({ body: "Promiňte, trenére, v úterý dorazím." }));
+    await generateWithoutRepeats([], right, "test", { address: "vy" });
+    expect(gen).toHaveBeenCalledTimes(1);
+    expect(right).toHaveBeenCalledTimes(1);
+  });
+
+  it("bez času na druhý pokus pošle první zprávu (a zaloguje)", async () => {
+    const gen = vi.fn(async () => ({ body: "Měl bys se stavit, trenére." }));
+    expect((await generateWithoutRepeats([], gen, "test", { address: "vy", deadline: Date.now() + 2_000 })).body).toBe("Měl bys se stavit, trenére.");
+    expect(gen).toHaveBeenCalledTimes(1);
+  });
+
+  it("druhý pokus tvar nedodrží nebo opakuje: pošle první, nic nezahodí", async () => {
+    const wrongAgain = vi.fn()
+      .mockResolvedValueOnce({ body: "Měl bys se stavit, trenére." })
+      .mockResolvedValueOnce({ body: "Stav se, ať to zapijem, máš čas?" });
+    expect((await generateWithoutRepeats([], wrongAgain, "test", { address: "vy" })).body).toBe("Měl bys se stavit, trenére.");
+    const said = ["Promiňte, že píšu tak pozdě, mám toho moc."];
+    const repeats = vi.fn()
+      .mockResolvedValueOnce({ body: "Měl bys se stavit, trenére." })
+      .mockResolvedValueOnce({ body: "Promiňte, že píšu tak pozdě, mám toho moc." });
+    expect((await generateWithoutRepeats(said, repeats, "test", { address: "vy" })).body).toBe("Měl bys se stavit, trenére.");
+  });
+
+  it("předem napsaná varianta se stejným tvarem, jako hráč píše, dokud nějakou takovou ještě neposlal", () => {
+    const variants = ["Díky, trenére, jste borec.", "Díky, trenére, jsi borec.", "Díky moc, trenére."];
+    for (const seed of ["a", "b", "c", "d"]) {
+      expect(pickFreshVariant(variants, [], seed, { address: "ty" }).index).not.toBe(0);
+      expect(pickFreshVariant(variants, [], seed, { address: "vy" }).index).not.toBe(1);
+    }
+    // Obě vhodné už poslal: rozhoduje jen to, co poslal nejdávněji.
+    expect(pickFreshVariant(variants, ["Díky, trenére, jsi borec.", "Díky moc, trenére."], "a", { address: "ty" }).index).toBe(0);
+  });
+});

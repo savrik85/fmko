@@ -4,6 +4,7 @@
  */
 
 import { brokenCzech } from "./foreign-speech";
+import { historyAddressForm } from "./address-form";
 import { logger } from "../lib/logger";
 
 /** Pošle zprávu do systémové konverzace týmu (např. "Sportovní ředitel", "Fyzioterapeut"). */
@@ -76,7 +77,8 @@ export async function sendPlayerSmsToConversation(
  * přišla jednomu trenérovi i pětkrát (prod 9–11/2026). `suffix` se přidá za vybranou
  * variantu (důvod odchodu), do výběru nepatří. Číslo varianty jde do `metadata.template`.
  * `suffix` může mít víc znění: jde první, které hráč ještě nenapsal, a když napsal všechna,
- * žádné (důvod už trenér zná).
+ * žádné (důvod už trenér zná). Když hráč trenérovi doposud tykal nebo vykal, vybírá se z variant
+ * se stejným tvarem (a bez tvaru), pokud nějaké jsou (address-form.ts).
  */
 export async function sendPlayerTemplateSMS(
   db: D1Database,
@@ -89,7 +91,7 @@ export async function sendPlayerTemplateSMS(
   const { TEMPLATE_HISTORY_LIMIT, loadOwnRecentLines, pickFreshVariant, repeatsAny } = await import("./repetition");
   const convId = opts.convId ?? await getOrCreatePlayerConversation(db, teamId, player);
   const previous = await loadOwnRecentLines(db, { playerId: player.id, convId, limit: TEMPLATE_HISTORY_LIMIT });
-  const picked = pickFreshVariant(variants, previous, opts.seed);
+  const picked = pickFreshVariant(variants, previous, opts.seed, { address: historyAddressForm(previous) });
   const suffixes = typeof opts.suffix === "string" ? [opts.suffix] : opts.suffix ?? [];
   const suffix = suffixes.find((s) => !repeatsAny(s, previous));
   const text = suffix ? `${picked.text} ${suffix}` : picked.text;

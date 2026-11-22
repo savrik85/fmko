@@ -31,6 +31,7 @@ import {
 import type { OptionalPushKeys } from "../community/phone-push";
 import { loadChatMemory } from "./player-memory";
 import { loadOwnLinesAcross, loadOwnRecentLines, loadTeammateLines } from "./repetition";
+import { loadCoachAddress } from "./address-form";
 import { addressedPlayers, applySpeech, persuadeAbsentees, pickResponders } from "./squad-talk";
 import { handleSquadBet } from "./coach-commitments";
 import { handleSquadRule } from "./coach-rules";
@@ -122,6 +123,7 @@ export async function startCoachThread(
     player.recentlyPostponed = await loadRecentlyPostponed(db, opts.convId);
     player.lateReply = opts.lateReply;
     player.ownRecentLines = await loadOwnRecentLines(db, { playerId: player.id, convId: opts.convId });
+    player.coachAddress = await loadCoachAddress(db, { playerId: player.id, convId: opts.convId });
     const memory = await loadChatMemory(db, player, { teamId: opts.teamId, convId: opts.convId });
 
     /*
@@ -376,6 +378,8 @@ async function replyInSquadGroupInner(
         mluvci.lastOwnMessageAt = await loadLastOwnMessageAt(db, opts.convId, mluvci.id);
         // Co už napsal v kabině i trenérovi 1:1: ať neopakuje pořád stejné hlášky (repetition.ts).
         mluvci.ownRecentLines = await loadOwnLinesAcross(db, { playerId: mluvci.id, convIds: [opts.convId], teamId: opts.teamId });
+        // Tykání a vykání podle jeho konverzace s trenérem 1:1 (v kabině se kontroluje jen prompt).
+        mluvci.coachAddress = await loadCoachAddress(db, { playerId: mluvci.id, teamId: opts.teamId });
         // A co v kabině právě napsali spoluhráči: dva hráči jinak píšou doslova totéž (E2E 22. 11.).
         const teammateLines = await loadTeammateLines(db, { convId: opts.convId, playerId: mluvci.id });
 

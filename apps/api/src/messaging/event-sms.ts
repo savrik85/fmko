@@ -75,6 +75,7 @@ export async function loadEventSmsContext(
   player.recentLifeEvent = await loadRecentLifeEvent(db, o.clubTeamId, player.id);
   player.lastOwnMessageAt = await spawn.loadLastOwnMessageAt(db, o.convId, player.id);
   player.ownRecentLines = await loadOwnRecentLines(db, { playerId: player.id, convId: o.convId });
+  player.coachAddress = await (await import("./address-form")).loadCoachAddress(db, { playerId: player.id, convId: o.convId });
   // Píše kvůli vážné věci: odpoví hned a nesliboval by „ozvu se pak“.
   player.seriousTopic = true;
   await loadChatMemory(db, player, { teamId: o.clubTeamId, convId: o.convId });

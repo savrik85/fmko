@@ -64,6 +64,17 @@ describe("konverzace začatá trenérem a téma incidentu", () => {
     });
   });
 
+  it("tykání a vykání podle toho, jak hráč trenérovi doposud psal (Král, E2E 22. 11.)", async () => {
+    vi.mocked(generateCoachInitiatedReply).mockResolvedValue({ body: "Jo, v pohodě.", conversationComplete: false });
+    const d = db(null);
+    d.pravidla.unshift({
+      sql: /SELECT body FROM messages WHERE conversation_id = \? AND sender_type = 'player'/,
+      all: [{ body: "Promiňte, trenére, nestihl jsem to." }, { body: "Jste borec, díky." }, { body: "V úterý dorazím." }],
+    });
+    await zacni(d);
+    expect(vi.mocked(generateCoachInitiatedReply).mock.calls[0][1]).toMatchObject({ coachAddress: "vy" });
+  });
+
   it("pokračující vlákno si téma nese dál", async () => {
     vi.mocked(generateCoachInitiatedReply).mockResolvedValue({ body: "Nic nevím.", conversationComplete: false });
     const d = db(TEMA);
