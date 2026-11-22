@@ -413,6 +413,15 @@ export function repeatRetryRule(repeated: readonly string[]): string {
 }
 
 /**
+ * Pokyn k druhému pokusu v kabině: větu napsal spoluhráč, ne hráč. „Tohle jsi už napsal“ model
+ * u cizí věty nebere a napíše ji znovu (Rohde, E2E 22. 11.: druhý hlas se zahodil a kabina
+ * vypadala jako rozhovor s jedním).
+ */
+export function teammateRetryRule(repeated: readonly string[]): string {
+  return `POZOR: tohle už v kabině napsal spoluhráč: ${repeated.map(quote).join(", ")}. Nepiš to po něm ani podobně, napiš vlastní reakci jinými slovy.`;
+}
+
+/**
  * Text hráče bez opakování. Když první pokus opakuje dřívější větu (nebo ohranou větu), model zkusí ještě
  * jednou s výslovně zakázanou větou (nejvýš jedno přegenerování kvůli latenci a kvótě).
  * Když opakuje i potom, opakovaná věta se vyškrtne, pokud zbytek dává smysl; jinak hodí
@@ -454,8 +463,12 @@ export async function generateWithoutRepeats<T extends { body: string }>(
     if (repeated.length === 0) return finish(first);
   } else {
     try {
+      // Které věty opakují jeho vlastní zprávy a které jen to, co napsal spoluhráč (kabina).
+      const ownRepeats = findRepeatedSentences(first.body, recent, { old, coachMessage: opts.coachMessage });
+      const teammateRepeats = repeated.filter((r) => !ownRepeats.includes(r));
       const rule = [
-        ...(repeated.length > 0 ? [repeatRetryRule(repeated)] : []),
+        ...(ownRepeats.length > 0 ? [repeatRetryRule(ownRepeats)] : []),
+        ...(teammateRepeats.length > 0 ? [teammateRetryRule(teammateRepeats)] : []),
         ...(firstWrongAddress && opts.address ? [addressRetryRule(opts.address)] : []),
       ].join("\n");
       const second = await generate(rule);
