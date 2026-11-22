@@ -1,6 +1,13 @@
 /**
- * Ovládání přes obraz záznamu (přepínač Video/Tracker, pohled, celá obrazovka): je vidět, jen když je myš nad
- * oknem záznamu; na dotykovém zařízení po klepnutí do okna a zmizí po klepnutí jinam. Okno záznamu je
- * `group/viewer` a dá se zaměřit (tabIndex).
+ * Tlačítka přes obraz záznamu (přepínač Video/Tracker vlevo, pohled a celá obrazovka vpravo): bílá na černé,
+ * u krajů okna pod horními nápisy videa.
  */
-export const OVERLAY_CONTROL = "opacity-0 pointer-events-none transition-opacity group-hover/viewer:opacity-100 group-hover/viewer:pointer-events-auto [@media(hover:none)]:group-focus-within/viewer:opacity-100 [@media(hover:none)]:group-focus-within/viewer:pointer-events-auto";
+export const OVERLAY_BUTTON = "absolute h-7 rounded-md bg-black text-white text-xs font-heading font-bold shadow-md";
+/** Tlačítka jsou vidět pořád, ale průsvitná, ať nepřekáží obrazu; plná jsou pod myší. */
+export const OVERLAY_FAINT = "opacity-40 hover:opacity-100 transition-opacity";
+/** Horní nápisy videa končí v tomhle podílu šířky obrazu od jeho horního kraje (grafika se zmenšuje s obrazem). */
+export const BANNERS_BOTTOM = 52 / 848;
+/** Od bočních krajů obrazu jsou nápisy odsazené o tenhle podíl jeho šířky; tlačítka stejně. */
+export const BANNERS_INSET = 8 / 848;
+/** Mezera mezi nápisy a tlačítky a mezi tlačítky vedle sebe (px); tlačítko celé obrazovky je široké 28 px. */
+export const OVERLAY_GAP = 4;

@@ -8,7 +8,7 @@ import { Stadium3D } from "@/components/stadium/stadium-3d/Stadium3D";
 import { venueExtensions, venueFacilities } from "@/app/(hra)/turnaj/venue-scene";
 import { ReplayScene, type ReplayStep } from "./ReplayScene";
 import { CoachCard, EventCard, EventLabel, initials, ReplayMark, ScoreBug } from "./graphics";
-import { OVERLAY_CONTROL } from "./overlay";
+import { BANNERS_BOTTOM, BANNERS_INSET, OVERLAY_BUTTON, OVERLAY_FAINT, OVERLAY_GAP } from "./overlay";
 import { Replay, shootoutScore, sideOf, type ReplayCoach, type ReplayEvent, type ReplayKit, type ReplayLineup } from "./scenes";
 
 /** Šířka okna záznamu, pro kterou je grafika navržená (px); v jiném okně se zmenší nebo zvětší celá, jako obraz videa. */
@@ -119,6 +119,7 @@ function Replay3DView({ detail, events, progress, onReady }: Replay3DProps) {
     observer.observe(frame.current!);
     return () => observer.disconnect();
   }, []);
+  const buttonsTop = fit.scale * GRAPHICS_WIDTH * BANNERS_BOTTOM + OVERLAY_GAP, buttonsRight = fit.scale * GRAPHICS_WIDTH * BANNERS_INSET;
   const veil = useRef<HTMLCanvasElement>(null);
   // Představení trenérů, výkop, přestávka a konec zápasu grafiku události nemají.
   const event = cue === null && (intro !== null || kickoff !== null || halfTime || finished) ? undefined : events[index];
@@ -177,16 +178,17 @@ function Replay3DView({ detail, events, progress, onReady }: Replay3DProps) {
           </div>
         )}
       </div>
-      {/* Pohled se dá volit až od výkopu; představení trenérů má vlastní kameru. */}
+      {/* Tlačítka vpravo pod horními nápisy, vedle sebe: pohled a celá obrazovka. Pohled se dá volit až od výkopu;
+          představení trenérů má vlastní kameru. */}
       {intro === null && (
         <button onClick={() => setOverview((v) => !v)} title={overview ? "Pohled z tribuny" : "Pohled z paneláku"}
-          className={`absolute top-12 right-2 z-40 h-8 px-2.5 rounded-lg bg-black/85 hover:bg-black text-white text-xs font-heading font-bold ${OVERLAY_CONTROL}`}>
+          style={{ top: buttonsTop, right: buttonsRight + 28 + OVERLAY_GAP }} className={`${OVERLAY_BUTTON} ${OVERLAY_FAINT} z-40 px-2`}>
           {overview ? "Pohled z tribuny" : "Pohled z paneláku"}
         </button>
       )}
       <button onClick={() => setFullscreen((v) => !v)} title={fullscreen ? "Zmenšit" : "Na celou obrazovku"}
-        className={`absolute top-2 right-2 z-40 w-8 h-8 rounded-lg bg-black/85 hover:bg-black text-white text-base leading-none ${OVERLAY_CONTROL}`}>
-        {fullscreen ? "✕" : "⛶"}
+        style={{ top: buttonsTop, right: buttonsRight }} className={`${OVERLAY_BUTTON} ${OVERLAY_FAINT} z-40 w-7`}>
+        <span className="text-base leading-none">{fullscreen ? "✕" : "⛶"}</span>
       </button>
     </div>
   );
