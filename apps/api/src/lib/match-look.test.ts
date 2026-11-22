@@ -5,9 +5,12 @@ type TeamRow = {
   id: string;
   primary_color: string | null;
   secondary_color?: string | null;
+  jersey_pattern?: string | null;
   home_shorts_color?: string | null;
   home_socks_color?: string | null;
   away_primary_color?: string | null;
+  away_secondary_color?: string | null;
+  away_jersey_pattern?: string | null;
   away_shorts_color?: string | null;
   away_socks_color?: string | null;
 };
@@ -24,8 +27,8 @@ function fakeDb(teams: TeamRow[], players: PlayerRow[] = [], managers: ManagerRo
           if (sql.includes("FROM managers")) return { results: managers.filter((m) => ids.includes(m.team_id)) };
           const source: Array<{ id: string }> = sql.includes("FROM teams")
             ? teams.map((t) => ({
-                secondary_color: null, home_shorts_color: null, home_socks_color: null,
-                away_primary_color: null, away_shorts_color: null, away_socks_color: null, ...t,
+                secondary_color: null, jersey_pattern: null, home_shorts_color: null, home_socks_color: null,
+                away_primary_color: null, away_secondary_color: null, away_jersey_pattern: null, away_shorts_color: null, away_socks_color: null, ...t,
               }))
             : players;
           return { results: source.filter((r) => ids.includes(r.id)) };
@@ -58,7 +61,7 @@ describe("dresy v zápase", () => {
     const kits = await kitsFor({
       id: "a", primary_color: "#D94032", away_primary_color: "#F2C200", away_shorts_color: "#222222",
     });
-    expect(kits).toEqual({
+    expect(kits).toMatchObject({
       home_kit: { shirt: "#1E5AA8", shorts: "#FFFFFF", socks: "#1E5AA8" },
       away_kit: { shirt: "#F2C200", shorts: "#222222", socks: "#F2C200" },
       home_coach: null, away_coach: null, coaches_on_good_terms: false,
@@ -69,12 +72,12 @@ describe("dresy v zápase", () => {
     const kits = await kitsFor({
       id: "a", primary_color: "#D94032", home_shorts_color: "#000000", away_primary_color: "#2060B0",
     });
-    expect(kits.away_kit).toEqual({ shirt: "#D94032", shorts: "#000000", socks: "#D94032" });
+    expect(kits.away_kit).toMatchObject({ shirt: "#D94032", shorts: "#000000", socks: "#D94032" });
   });
 
   it("domácí sada hostů podobná domácím → sekundární barva", async () => {
     const kits = await kitsFor({ id: "a", primary_color: "#1A50A0", secondary_color: "#F2C200" });
-    expect(kits.away_kit).toEqual({ shirt: "#F2C200", shorts: "#F2C200", socks: "#F2C200" });
+    expect(kits.away_kit).toEqual({ shirt: "#F2C200", secondary: "#F2C200", pattern: "solid", shorts: "#F2C200", socks: "#F2C200" });
   });
 
   it("všechno podobné → bílá", async () => {
@@ -92,16 +95,25 @@ describe("dresy v zápase", () => {
 
   it("nevyplněné barvy → výchozí zelená a červená", async () => {
     const kits = await kitsFor({ id: "a", primary_color: null }, { id: "h", primary_color: null });
-    expect(kits).toEqual({
+    expect(kits).toMatchObject({
       home_kit: { shirt: "#2D5F2D", shorts: "#2D5F2D", socks: "#2D5F2D" },
       away_kit: { shirt: "#D94032", shorts: "#D94032", socks: "#D94032" },
       home_coach: null, away_coach: null, coaches_on_good_terms: false,
     });
   });
 
+  it("dres má vzor a doplňkovou barvu z editoru dresu, venkovní sada své vlastní", async () => {
+    const kits = await kitsFor(
+      { id: "a", primary_color: "#1E5AA8", away_primary_color: "#F2C200", away_secondary_color: "#111111", away_jersey_pattern: "hoops" },
+      { ...HOME, secondary_color: "#FFFFFF", jersey_pattern: "stripes" },
+    );
+    expect(kits.home_kit).toMatchObject({ shirt: "#1E5AA8", secondary: "#FFFFFF", pattern: "stripes" });
+    expect(kits.away_kit).toMatchObject({ shirt: "#F2C200", secondary: "#111111", pattern: "hoops" });
+  });
+
   it("pohárový klub bez řádku v teams hraje v barvě z cup_teams", async () => {
     const kits = await loadMatchLook(fakeDb([HOME]), { teamId: "h" }, { teamId: null, fallbackColor: "#7A1F5C" }, null, null, null);
-    expect(kits.away_kit).toEqual({ shirt: "#7A1F5C", shorts: "#7A1F5C", socks: "#7A1F5C" });
+    expect(kits.away_kit).toMatchObject({ shirt: "#7A1F5C", shorts: "#7A1F5C", socks: "#7A1F5C" });
   });
 });
 

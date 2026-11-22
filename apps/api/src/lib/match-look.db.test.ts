@@ -16,8 +16,8 @@ beforeAll(async () => {
   mf = new Miniflare({ modules: true, script: "export default { fetch() { return new Response('ok'); } }", d1Databases: ["DB"] });
   db = await mf.getD1Database("DB");
   await db.batch([
-    db.prepare(`CREATE TABLE teams (id TEXT PRIMARY KEY, primary_color TEXT, secondary_color TEXT, home_shorts_color TEXT, home_socks_color TEXT,
-      away_primary_color TEXT, away_shorts_color TEXT, away_socks_color TEXT)`),
+    db.prepare(`CREATE TABLE teams (id TEXT PRIMARY KEY, primary_color TEXT, secondary_color TEXT, jersey_pattern TEXT, home_shorts_color TEXT, home_socks_color TEXT,
+      away_primary_color TEXT, away_secondary_color TEXT, away_jersey_pattern TEXT, away_shorts_color TEXT, away_socks_color TEXT)`),
     db.prepare("CREATE TABLE managers (team_id TEXT, name TEXT, avatar TEXT, motivation INTEGER)"),
     db.prepare("CREATE TABLE manager_relations (team_a_id TEXT, team_b_id TEXT, respect INTEGER, heat INTEGER DEFAULT 0, PRIMARY KEY (team_a_id, team_b_id))"),
     db.prepare("CREATE TABLE season_calendar (id TEXT PRIMARY KEY, league_id TEXT, season_number INTEGER, scheduled_at TEXT)"),

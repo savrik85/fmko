@@ -14,8 +14,11 @@ interface PlayerLook {
   avatar?: Record<string, unknown>;
 }
 
+/** Sada dresů: `shirt` je hlavní barva dresu, `secondary` a `pattern` jeho vzor (editor dresu), trenýrky a štulpny. */
 interface MatchKit {
   shirt: string;
+  secondary: string;
+  pattern: string;
   shorts: string;
   socks: string;
 }
@@ -46,9 +49,12 @@ interface TeamKitRow {
   id: string;
   primary_color: string | null;
   secondary_color: string | null;
+  jersey_pattern: string | null;
   home_shorts_color: string | null;
   home_socks_color: string | null;
   away_primary_color: string | null;
+  away_secondary_color: string | null;
+  away_jersey_pattern: string | null;
   away_shorts_color: string | null;
   away_socks_color: string | null;
 }
@@ -103,13 +109,16 @@ function colorDistance(a: string, b: string): number {
 }
 
 function solidKit(color: string): MatchKit {
-  return { shirt: color, shorts: color, socks: color };
+  return { shirt: color, secondary: color, pattern: "solid", shorts: color, socks: color };
 }
 
 /** Domácí sada: trenýrky a štulpny bez vlastní barvy jsou v barvě dresu (jako v editoru dresu). */
 function homeKit(team: TeamKitRow | undefined, fallback: string): MatchKit {
   const shirt = team?.primary_color || fallback;
-  return { shirt, shorts: team?.home_shorts_color || shirt, socks: team?.home_socks_color || shirt };
+  return {
+    shirt, secondary: team?.secondary_color || shirt, pattern: team?.jersey_pattern || "solid",
+    shorts: team?.home_shorts_color || shirt, socks: team?.home_socks_color || shirt,
+  };
 }
 
 /**
@@ -121,7 +130,10 @@ function awayKit(team: TeamKitRow | undefined, fallback: string, homeShirt: stri
   const candidates: MatchKit[] = [];
   if (team?.away_primary_color) {
     const shirt = team.away_primary_color;
-    candidates.push({ shirt, shorts: team.away_shorts_color || shirt, socks: team.away_socks_color || shirt });
+    candidates.push({
+      shirt, secondary: team.away_secondary_color || shirt, pattern: team.away_jersey_pattern || "solid",
+      shorts: team.away_shorts_color || shirt, socks: team.away_socks_color || shirt,
+    });
   }
   candidates.push(homeKit(team, fallback));
   if (team?.secondary_color) candidates.push(solidKit(team.secondary_color));
@@ -164,8 +176,8 @@ export async function loadMatchLook(
   // Čtení na sobě nezávisí, jdou najednou.
   const [teams, managers, looks, relation, homeRecord, awayRecord] = await Promise.all([
     rowsIn<TeamKitRow>(
-      `SELECT id, primary_color, secondary_color, home_shorts_color, home_socks_color,
-              away_primary_color, away_shorts_color, away_socks_color
+      `SELECT id, primary_color, secondary_color, jersey_pattern, home_shorts_color, home_socks_color,
+              away_primary_color, away_secondary_color, away_jersey_pattern, away_shorts_color, away_socks_color
          FROM teams WHERE id`, teamIds),
     rowsIn<{ team_id: string; name: string; avatar: string; motivation: number }>("SELECT team_id, name, avatar, motivation FROM managers WHERE team_id", teamIds),
     rowsIn<{ id: string; avatar: string | null; physical: string | null }>("SELECT id, avatar, physical FROM players WHERE id", playerIds),
