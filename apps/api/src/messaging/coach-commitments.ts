@@ -604,26 +604,41 @@ async function answerFromEarlierReply(
   await answerRequestFromReply(db, { commitmentId: o.commitmentId, playerId: o.playerId, replyBody: reply.body });
 }
 
-/** Jak dlouho po uzavření incidentu srážkou nebo pokutou patří „strhnu ti to“ ještě k němu (herní dny). */
+/**
+ * Jak dlouho po uzavření incidentu srážkou nebo pokutou patří „strhnu ti to“ ještě k němu (herní
+ * dny), když zpráva incident nejmenuje. Zpráva, která ho jmenuje, k němu patří vždy.
+ */
 const INCIDENT_PUNISHMENT_DAYS = 2;
 
 interface PunishingIncident { id: string; kind: string; open: boolean }
 
 /**
- * Incident, za který se odhalenému pachateli trest dává (otevřený), nebo právě dal (uzavřený
- * srážkou či pokutou nejvýš před `INCIDENT_PUNISHMENT_DAYS` dny). Jinak null.
+ * Incident, za který se odhalenému pachateli trest dává (otevřený), nebo už dal (uzavřený
+ * srážkou či pokutou). Když zpráva trenéra incident jmenuje (věc, místo, druh:
+ * `incidentNamedInText`), je to on, ať byl uzavřený kdykoli: Fezko (E2E 22. 11.) „Tu tombolu
+ * ti strhnu z výplaty.“ k tombole se srážkou před 5 herními dny zapsalo druhou, chatovou pokutu.
+ * Zpráva bez jména incidentu: otevřený, jinak uzavřený nejvýš před `INCIDENT_PUNISHMENT_DAYS`
+ * dny. Jinak null.
  */
-async function incidentPunishingPlayer(db: D1Database, clubTeamId: string, playerId: string): Promise<PunishingIncident | null> {
-  const row = await db.prepare(
-    `SELECT i.id, i.kind, i.status FROM club_incidents i
+async function incidentPunishingPlayer(db: D1Database, clubTeamId: string, playerId: string, text: string): Promise<PunishingIncident | null> {
+  const rows = await db.prepare(
+    `SELECT i.id, i.kind, i.status, i.loss,
+            (julianday(substr(i.resolved_on, 1, 10))
+              >= julianday(substr(COALESCE((SELECT game_date FROM teams WHERE id = i.team_id), ?), 1, 10)) - ?) AS recent
+       FROM club_incidents i
       WHERE i.team_id = ? AND i.culprit_type = 'hrac' AND i.culprit_player_id = ? AND i.culprit_revealed = 1
-        AND (i.status IN ('otevreny', 'policie')
-             OR (i.status = 'uzavreny' AND i.resolution IN ('srazka', 'pokuta')
-                 AND julianday(substr(i.resolved_on, 1, 10))
-                   >= julianday(substr(COALESCE((SELECT game_date FROM teams WHERE id = i.team_id), ?), 1, 10)) - ?))
-      ORDER BY (i.status != 'uzavreny') DESC, i.game_date DESC LIMIT 1`,
-  ).bind(clubTeamId, playerId, new Date().toISOString(), INCIDENT_PUNISHMENT_DAYS).first<{ id: string; kind: string; status: string }>()
+        AND (i.status IN ('otevreny', 'policie') OR (i.status = 'uzavreny' AND i.resolution IN ('srazka', 'pokuta')))
+      ORDER BY (i.status != 'uzavreny') DESC, i.game_date DESC LIMIT 20`,
+  ).bind(new Date().toISOString(), INCIDENT_PUNISHMENT_DAYS, clubTeamId, playerId)
+    .all<{ id: string; kind: string; status: string; loss: string | null; recent: number | null }>()
     .catch((e) => { logger.warn({ module: M }, `incident pachatele ${playerId} k pokutě`, e); return null; });
+  const all = rows?.results ?? [];
+  if (all.length === 0) return null;
+  const [{ incidentNamedInText }, { nactiZtraty }] = await Promise.all([import("../incidents/tema"), import("../incidents/popis")]);
+  const named = incidentNamedInText(text, all.map((r) => ({ id: r.id, kind: r.kind, ztraty: nactiZtraty(r.loss) })));
+  const row = named
+    ? all.find((r) => r.id === named)
+    : all.find((r) => r.status !== "uzavreny") ?? all.find((r) => r.recent === 1);
   return row ? { id: row.id, kind: row.kind, open: row.status !== "uzavreny" } : null;
 }
 
@@ -717,7 +732,7 @@ async function runCommitmentDetection(
   // Chatová pokuta by byla druhý trest za totéž (Turek, FaSta, E2E 22. 11.: srážka 1 172 Kč
   // u incidentu a vedle ní tlačítko na pokutu 293 Kč). Trenér dostane jen odkaz na incident.
   if (detected.kind === "fine") {
-    const incident = await incidentPunishingPlayer(db, p.club_id ?? o.teamId, o.playerId);
+    const incident = await incidentPunishingPlayer(db, p.club_id ?? o.teamId, o.playerId, o.text);
     if (incident) {
       // Pod zprávu trenéra (její čas + 1 s), ne pod odpověď hráče: s pomalým modelem doběhne
       // rozpoznání až po ní a ℹ️ s časem „teď“ byla pod ní (Turek, E2E 22. 11.).
