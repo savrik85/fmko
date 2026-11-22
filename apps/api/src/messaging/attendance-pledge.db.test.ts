@@ -88,6 +88,51 @@ describe("zápis slibu z odpovědi hráče", () => {
     expect(await notes()).toEqual(["📝 Petr má na trénink v pátek 20. 11. od tebe volno."]);
   });
 
+  it("váhavé „asi nepřijdu“ slib není (Šimon Nový, E2E 22. 11.)", async () => {
+    await db.prepare("INSERT INTO messages (id, conversation_id, sender_type, body, sent_at) VALUES ('t1', 'c1', 'user', 'Petře, v pátek trénink v pět, dorazíš?', '2026-11-19T17:24:00Z')").run();
+    expect(await recordAttendancePledge(db, {
+      clubTeamId: "club", convId: "c1", playerId: "p1", playerFirstName: "Petr", pledge: { event: "training", intent: "skip", when: "fri" },
+      replyBody: "Trenére, asi nepřijdu. Šichta se nedá odsunout, přijde to zkrátka.", now: new Date("2026-11-19T17:25:00Z"),
+    })).toBeNull();
+    expect((await life()).trainingPledge).toBeUndefined();
+    expect(await notes()).toEqual([]);
+    // Jasné „nepřijdu“ k témuž je slib.
+    expect(await recordAttendancePledge(db, {
+      clubTeamId: "club", convId: "c1", playerId: "p1", playerFirstName: "Petr", pledge: { event: "training", intent: "skip", when: "fri" },
+      replyBody: "Trenére, v pátek nepřijdu, mám šichtu.", now: new Date("2026-11-19T17:26:00Z"),
+    })).toMatchObject({ intent: "skip", from: "2026-11-20" });
+  });
+
+  it("odpověď mimo téma slib není: trenér psal výhrůžku, hráč odpověděl na starý hovor", async () => {
+    await db.prepare("INSERT INTO messages (id, conversation_id, sender_type, body, sent_at) VALUES ('t1', 'c1', 'user', 'Šimone, jestli to uděláš ještě jednou, letíš.', '2026-11-19T17:24:00Z')").run();
+    expect(await recordAttendancePledge(db, {
+      clubTeamId: "club", convId: "c1", playerId: "p1", playerFirstName: "Petr", pledge: { event: "training", intent: "skip", when: "wed" },
+      replyBody: "Nepřijdu, šichta se nedá odsunout.", now: new Date("2026-11-19T17:25:00Z"),
+    })).toBeNull();
+    // Hráč sám jmenuje trénink: k tématu to je, i když se trenér neptal.
+    expect(await recordAttendancePledge(db, {
+      clubTeamId: "club", convId: "c1", playerId: "p1", playerFirstName: "Petr", pledge: { event: "training", intent: "skip", when: "fri" },
+      replyBody: "Jo, chápu. Na páteční trénink ale nepřijdu, mám šichtu.", now: new Date("2026-11-19T17:26:00Z"),
+    })).toMatchObject({ intent: "skip" });
+  });
+
+  it("stejný slib znovu: poznámka se nezdvojí (Jelínek 3× „nepřijde“, E2E 22. 11.)", async () => {
+    const again = (at: string) => recordAttendancePledge(db, {
+      clubTeamId: "club", convId: "c1", playerId: "p1", playerFirstName: "Petr", pledge: { event: "match", intent: "skip", when: "next" },
+      replyBody: "Furt ne, trenére! Na zápas nejdu.", now: new Date(at),
+    });
+    await again("2026-11-19T17:25:00Z");
+    await again("2026-11-19T17:27:00Z");
+    await again("2026-11-19T17:29:00Z");
+    expect(await notes()).toEqual(["📝 Petr na zápas v neděli 22. 11. nepřijde."]);
+    // Změna názoru poznámku dostane.
+    await recordAttendancePledge(db, {
+      clubTeamId: "club", convId: "c1", playerId: "p1", playerFirstName: "Petr", pledge: { event: "match", intent: "attend", when: "next" },
+      replyBody: "Tak jo, na zápas přijdu.", now: new Date("2026-11-19T17:31:00Z"),
+    });
+    expect(await notes()).toHaveLength(2);
+  });
+
   it("přemluvení přepíše starší „nepřijdu“", async () => {
     await recordAttendancePledge(db, { clubTeamId: "club", convId: "c1", playerId: "p1", playerFirstName: "Petr", pledge: { event: "training", intent: "skip", when: "week" } });
     expect((await life()).trainingPledge.intent).toBe("skip");
