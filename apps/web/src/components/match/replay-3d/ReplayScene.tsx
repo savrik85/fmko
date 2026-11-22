@@ -306,9 +306,9 @@ export function ReplayScene({ replay, kits, snow, overview, step, frame: root, v
           const raised = armsUp || (f.pose === "armUp" && k === 0);
           // Podání ruky: pravá v pase před tělem, potřásá se v lokti (oba ve stejném rytmu, ruce zůstávají u sebe).
           const shaking = f.pose === "shake" && k === 1;
-          // Objetí: obě paže před sebe kolem druhého, pravá ho poplácává po zádech.
-          const arm = hug ? -1.1 : shaking ? -0.55 : cheering ? 2.4 + Math.sin(now * 9 + i) * 0.15 : raised ? Math.PI - 0.25 : f.y > 0.05 ? 0.9 : swing * 0.8 * run + Math.sin(now * 1.3 + i * 2.1) * 0.05;
-          const elbow = hug ? -0.5 - (k === 1 ? Math.max(0, Math.sin(now * 8)) * 0.35 : 0) : shaking ? -0.6 + Math.sin(now * 11) * 0.15 : cheering ? -0.5 : raised ? -0.15 : f.y > 0.05 ? -0.9 : -(0.25 + 1.1 * run);
+          // Chlapské objetí: pravé ruce si dál drží mezi sebou, levá toho druhého poplácá po zádech.
+          const arm = hug ? (k === 1 ? -0.55 : -1.1) : shaking ? -0.55 : cheering ? 2.4 + Math.sin(now * 9 + i) * 0.15 : raised ? Math.PI - 0.25 : f.y > 0.05 ? 0.9 : swing * 0.8 * run + Math.sin(now * 1.3 + i * 2.1) * 0.05;
+          const elbow = hug ? (k === 1 ? -0.9 : -0.5 - Math.max(0, Math.sin(now * 8)) * 0.35) : shaking ? -0.6 + Math.sin(now * 11) * 0.15 : cheering ? -0.5 : raised ? -0.15 : f.y > 0.05 ? -0.9 : -(0.25 + 1.1 * run);
           joints.shoulder[k].makeTranslation(BODY.shoulder[0] * side, BODY.shoulder[1], 0).multiply(mTmp.makeRotationX(arm));
           joints.elbow[k].copy(joints.shoulder[k]).multiply(mTmp.makeTranslation(0, -BODY.elbow, 0)).multiply(mTmp.makeRotationX(elbow));
         }

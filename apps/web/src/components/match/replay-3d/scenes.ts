@@ -721,8 +721,8 @@ export class Replay {
       st.go(c.figure, c.to, walk);
       if (coaches.length === 2) st.pose(c.figure, "shake", HANDSHAKE, walk);
       if (hug) {
-        // V půlce podání ruky krok k sobě, na délku paže kolem zad toho druhého.
-        st.go(c.figure, { x: lerp(st.bench("home").x, c.to.x, 0.3), z: Math.sign(c.to.z) * 0.31 }, 0.4, walk + HANDSHAKE / 2);
+        // V půlce podání ruky se přitáhnou ramenem k rameni; ruce si dál drží.
+        st.go(c.figure, { x: c.to.x, z: Math.sign(c.to.z) * 0.3 }, 0.4, walk + HANDSHAKE / 2);
         st.pose(c.figure, "hug", HANDSHAKE / 2, walk + HANDSHAKE / 2);
       }
     }
