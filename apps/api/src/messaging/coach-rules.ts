@@ -457,17 +457,33 @@ export async function respondToCoachRequest(db: D1Database, o: { commitmentId: s
 
 /** Kývnutí v textu odpovědi (bez diakritiky): „beru“, „jasně“, „platí“, „jdu do toho“, „domluveno“. */
 const ACCEPT_RE = /\b(beru|jasne|jasny|jasnacka|plati|domluveno|dohodnuto|jdu do toho|jdeme do toho|jdem do toho|souhlasim|ok|okej|dobre|dobra|tak jo|bez problemu|spolehni se|udelam to|zvladnu to|ano)\b/;
-/** Odmítnutí: „ne“, „nebudu“, „nechci“, „zapomeň“, „kašlu na to“. */
-const REFUSE_RE = /\b(ne|nebudu|nechci|neberu|nezvladnu|zapomen|zapomente|kaslu|v zadnem pripade|nikdy|nehodlam|odmitam)\b/;
+/**
+ * Souhlasné sloveso k věci dohody nebo pokynu: „zhubnu těch 3 kila“, „těch 3 kila dám dolů“,
+ * „dám to“, „oběhnu je“, „omluvím se“ (E2E 22. 11., Bohuslav: kývnutí bez „beru“ se nepoznalo).
+ * Platí jen ve větě, která není otázka ani podmínka („…, když zhubnu 3 kila, ne?“).
+ */
+const AGREE_VERB_RE = /\b(zhubnu|shodim|dam (to|je|ty|dolu)|obehnu|odbehnu|zabehnu|omluvim se|udelam|zvladnu|slibuju|slibuji)\b/;
+const CONDITION_RE = /\b(kdyz|kdyby|kdybych|jestli|pokud)\b/;
+/** Váhání: „asi“, „možná“, „snad“, „uvidíme“, „zkusím“. Věta s ním kývnutí není. */
+const HEDGE_RE = /\b(asi|mozna|snad|uvidime|uvidim|nevim|zkusim|pokusim|tezko|spis|nejspis)\b/;
+/** Odmítnutí: „ne“, „nebudu“, „nechci“, „zapomeň“, „kašlu na to“, „nedám“, „nezhubnu“. */
+const REFUSE_RE = /\b(ne|nebudu|nechci|neberu|nezvladnu|nedam|nezhubnu|neshodim|neudelam|neobehnu|neomluvim|zapomen|zapomente|kaslu|v zadnem pripade|nikdy|nehodlam|odmitam)\b/;
+/** „…, ne?“ na konci otázky je dotaz, ne odmítnutí. */
+const TAG_QUESTION_RE = /\bne\s*\?/g;
 
 /**
  * Kývl hráč v textu odpovědi na pokyn nebo dohodu? Jen jasné: kývnutí bez odmítnutí (true),
- * odmítnutí bez kývnutí (false), jinak nevíme (undefined).
+ * odmítnutí bez kývnutí (false), jinak nevíme (undefined). Kývnutí je věta s „beru“, „platí“,
+ * „jdu do toho“ apod., nebo se souhlasným slovesem k věci (`AGREE_VERB_RE`), bez váhání.
  */
 export function acceptanceInReply(text: string): boolean | undefined {
-  const t = text.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
-  const yes = ACCEPT_RE.test(t);
-  const no = REFUSE_RE.test(t);
+  const t = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const yes = t.split(/(?<=[.!?…])\s+|\n+/).some((sentence) => {
+    if (HEDGE_RE.test(sentence)) return false;
+    if (ACCEPT_RE.test(sentence)) return true;
+    return AGREE_VERB_RE.test(sentence) && !sentence.trim().endsWith("?") && !CONDITION_RE.test(sentence);
+  });
+  const no = REFUSE_RE.test(t.replace(TAG_QUESTION_RE, "?"));
   if (yes === no) return undefined;
   return yes;
 }
