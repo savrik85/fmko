@@ -1383,7 +1383,9 @@ async function handleAiPlayerReplyInner(
 
   const newRepliesCount = state.current_replies + 1;
   // max_replies funguje jako tvrdý strop. AI ale může konverzaci uzavřít kdykoli dřív přes conversation_complete.
-  const isHardCap = newRepliesCount >= state.max_replies;
+  // Ráno po hospodě je víc výměn než u noční hlasovky (pub-night.ts `MORNING_AFTER_TURNS`).
+  const maxReplies = player.pubMorningAfter ? Math.max(state.max_replies, scenario.expectedTurns) : state.max_replies;
+  const isHardCap = newRepliesCount >= maxReplies;
 
   // „Přečteno“ (left-on-read.ts): hráč si zprávu přečte a neodpoví, rozhovor tím končí.
   // Rozhoduje se před generováním odpovědi, ať se mezitím neukazuje „píše…“.
@@ -1400,7 +1402,7 @@ async function handleAiPlayerReplyInner(
     return;
   }
 
-  logger.info({ module: "ai-player-spawn" }, `calling generateReply for conv ${convId} (turn ${newRepliesCount}/${state.max_replies}, isHardCap=${isHardCap})`);
+  logger.info({ module: "ai-player-spawn" }, `calling generateReply for conv ${convId} (turn ${newRepliesCount}/${maxReplies}, isHardCap=${isHardCap})`);
   let reply: ReplyResult;
   try {
     reply = await generateReply(env, player, history, scenario, teamCtx, isHardCap, { deadline: opts.deadline });

@@ -80,8 +80,15 @@ function morningAfterDescription(daysAgo: number): string {
 }
 
 /**
+ * Ráno potom je vlastně nový rozhovor: trenér se ptá, jak se má, a pak na další věci. Se dvěma
+ * výměnami ze scénáře hlasovky byla druhá otázka trenéra vždy poslední replikou (E2E 22. 11.).
+ */
+export const MORNING_AFTER_TURNS = 3;
+
+/**
  * Scénář vlákna a jestli hráč pořád sedí v hospodě. Scénář bez `atPub` se nemění. Po skončení
- * noci (`pubNightUntil`) hráč v hospodě nesedí a scénář je „ráno potom“ bez pozvánky.
+ * noci (`pubNightUntil`) hráč v hospodě nesedí a scénář je „ráno potom“ bez pozvánky a aspoň
+ * s `MORNING_AFTER_TURNS` výměnami.
  */
 export function pubThreadScenario(
   scenario: AiScenario, startedAt: string | undefined, now: Date = new Date(),
@@ -91,7 +98,10 @@ export function pubThreadScenario(
   if (!start || !Number.isFinite(start.getTime())) return { scenario, atPub: true };
   if (now.getTime() < pubNightUntil(start).getTime()) return { scenario, atPub: true };
   return {
-    scenario: { ...scenario, atPub: false, invite: undefined, description: morningAfterDescription(Math.max(1, pragueDaysBetween(start, now))) },
+    scenario: {
+      ...scenario, atPub: false, invite: undefined, expectedTurns: Math.max(scenario.expectedTurns, MORNING_AFTER_TURNS) as 2 | 3,
+      description: morningAfterDescription(Math.max(1, pragueDaysBetween(start, now))),
+    },
     atPub: false,
   };
 }
