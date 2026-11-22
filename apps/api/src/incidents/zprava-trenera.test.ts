@@ -95,6 +95,32 @@ describe("zpráva trenéra hráči", () => {
     });
   });
 
+  it("Hrdlička (E2E 22. 11.): otázka na odhalenou krádež, za kterou se mu strhává, založí téma a nikoho nevyslýchá", async () => {
+    const d = new FalesnaD1([
+      { sql: /FROM conversations c JOIN teams t/, first: { ai_thread_state: null, game_date: DNES, sezona: 4 } },
+      // Otevřené neodhalené krádeže: žádná. Ta jeho je uzavřená se srážkou.
+      { sql: /FROM club_incidents\s+WHERE team_id = \?/, all: [] },
+      { sql: /FROM club_incidents i\s+WHERE i\.team_id = \?/, all: [{ id: "inc-sklad", kind: "vloupani_sklad", loss: DRESY }] },
+    ]);
+    expect(await zprava(d, "Tak co, ukradl jsi ty dresy, nebo ne?")).toEqual({ incidentId: "inc-sklad", vyslech: null });
+    expect(d.dotazy.find((q) => /UPDATE conversations SET ai_thread_state/.test(q.sql))?.params.slice(0, 2)).toEqual(["inc-sklad", "2026-09-16"]);
+    const dotaz = d.dotazy.find((q) => /FROM club_incidents i\s+WHERE/.test(q.sql));
+    expect(dotaz?.sql).toContain("culprit_revealed = 1");
+    expect(dotaz?.sql).toContain("json_each");
+    expect(dotaz?.params).toEqual(["tym-a", 4, DNES, 60, "s", "s", "pachatel", "obvineny", "svedek", "kamarad", "rival", "s"]);
+    expect(vyslechni).not.toHaveBeenCalled();
+  });
+
+  it("zapletený hráč a otázka o něčem jiném: žádné téma", async () => {
+    const d = new FalesnaD1([
+      { sql: /FROM conversations c JOIN teams t/, first: { ai_thread_state: null, game_date: DNES, sezona: 4 } },
+      { sql: /FROM club_incidents\s+WHERE team_id = \?/, all: [] },
+      { sql: /FROM club_incidents i\s+WHERE i\.team_id = \?/, all: [{ id: "inc-sklad", kind: "vloupani_sklad", loss: DRESY }] },
+    ]);
+    expect(await zprava(d, "Dorazíš v úterý na trénink?")).toBeNull();
+    expect(d.pocet(/UPDATE conversations/)).toBe(0);
+  });
+
   it("Procházka (E2E 22. 11.): zpráva, po které vrátil lup, se stává tématem (odpověď přijde)", async () => {
     vi.mocked(tryRestitution).mockResolvedValueOnce({ outcome: "returned", amount: 31696, incidentId: "inc-kasa" });
     const d = db(null);

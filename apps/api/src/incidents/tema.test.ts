@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { jeOtazkaNaIncident, jeRecOHrozicim, najdiIncidentVTextu, normalizuj, temaZeStavu } from "./tema";
+import { involvedIncidentInText, jeOtazkaNaIncident, jeRecOHrozicim, najdiIncidentVTextu, normalizuj, temaZeStavu } from "./tema";
 import type { Ztrata } from "./typy";
 
 const SKLAD = { kind: "vloupani_sklad", ztraty: [{ typ: "vybaveni", kategorie: "jerseys", uroven: 2, stav: 70, urovniDolu: 2 }] as Ztrata[] };
@@ -175,5 +175,27 @@ describe("řeči z hospody (spec 9a)", () => {
   it("místo činu platí jen pro ten čin", () => {
     expect(jeRecOHrozicim("Na vitrínu ani nesahej.", "vitrina")).toBe(true);
     expect(jeRecOHrozicim("Na vitrínu ani nesahej.", "vloupani_sklad")).toBe(false);
+  });
+});
+
+describe("otázka hráči zapletenému do incidentu", () => {
+  const MICE = { kind: "vloupani_sklad", ztraty: [{ typ: "vybaveni", kategorie: "balls", uroven: 2, stav: 70, urovniDolu: 1 }] as Ztrata[] };
+  const both = [{ id: "kabina", ...OSLAVA_KABINA }, { id: "mice", ...MICE }];
+
+  it("přímé obvinění s věcí incidentu stačí i bez slova průšvihu (Benedikt, E2E 22. 11.)", () => {
+    expect(najdiIncidentVTextu("Martine, ty míče ze skladu jsi vzal ty, nebo ne?", both)).toBeNull();
+    expect(involvedIncidentInText("Martine, ty míče ze skladu jsi vzal ty, nebo ne?", both)).toBe("mice");
+    expect(involvedIncidentInText("Vzal jsi ty věci ze skladu?", both)).toBe("mice");
+    expect(involvedIncidentInText("Přiznej se, ten sklad jsi byl ty.", both)).toBe("mice");
+  });
+
+  it("běžná otázka na incident platí jako dřív", () => {
+    expect(involvedIncidentInText("Tak co, ukradl jsi ty dresy, nebo ne?", [{ id: "dresy", ...SKLAD }])).toBe("dresy");
+  });
+
+  it("věc bez obvinění ani obvinění bez věci téma nezakládá", () => {
+    expect(involvedIncidentInText("Ve skladu jsou nové míče, vezmi si jeden.", both)).toBeNull();
+    expect(involvedIncidentInText("Vzal jsi včera auto?", both)).toBeNull();
+    expect(involvedIncidentInText("Dorazíš v úterý na trénink?", both)).toBeNull();
   });
 });

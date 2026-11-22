@@ -40,6 +40,7 @@ const GAME_DATE = "2026-11-22T16:00:00.000Z";
 const THIEF = "p-hrdlicka";
 const CASH = "p-prochazka";
 const OTHER = "p-novak";
+const ACCUSED = "p-benedikt";
 const SKLAD = "inc-sklad";
 const DRESY = JSON.stringify([{ typ: "vybaveni", kategorie: "jerseys", uroven: 2, stav: 70, urovniDolu: 1 }]);
 /** Hodný a poslušný kluk: šance, že lup vrátí, je na stropu 90 %. */
@@ -81,11 +82,11 @@ beforeAll(async () => {
     db.prepare("INSERT INTO users (id, email, password_hash) VALUES ('user-must', 'must@example.test', 'x')"),
     db.prepare("INSERT INTO seasons (id, number, status) VALUES ('s4', 4, 'active')"),
     db.prepare("INSERT INTO teams (id, user_id, village_id, name, budget, game_date) VALUES (?, 'user-must', 'p06', 'Agrokat', 50000, ?)").bind(TEAM, GAME_DATE),
-    ...[[THIEF, "Petr", "Hrdlička"], [CASH, "Tomáš", "Procházka"], [OTHER, "Jan", "Novák"]].map(([id, first, last]) => db.prepare(
+    ...[[THIEF, "Petr", "Hrdlička"], [CASH, "Tomáš", "Procházka"], [OTHER, "Jan", "Novák"], [ACCUSED, "Martin", "Benedikt"]].map(([id, first, last]) => db.prepare(
       `INSERT INTO players (id, team_id, first_name, last_name, age, position, overall_rating, skills, physical, personality, life_context, avatar, status, coach_relationship, weekly_wage)
        VALUES (?, ?, ?, ?, 27, 'MID', 40, '{}', '{}', ?, '{}', '{}', 'active', 100, 400)`,
     ).bind(id, TEAM, first, last, OBEDIENT)),
-    ...[THIEF, CASH, OTHER].map((id) => db.prepare(
+    ...[THIEF, CASH, OTHER, ACCUSED].map((id) => db.prepare(
       "INSERT INTO conversations (id, team_id, type, title, participant_id) VALUES (?, ?, 'player', ?, ?)",
     ).bind(`conv-${id}`, TEAM, id, id)),
     // Hrdlička: vloupání do skladu před 17 dny, odhalený, trenér mu strhává ze mzdy.
@@ -98,6 +99,14 @@ beforeAll(async () => {
       `INSERT INTO club_incident_knowledge (incident_id, player_id, team_id, role, fact, until, season_number)
        VALUES (?, ?, ?, 'pachatel', 'Vloupal ses do skladu a vzal dresy.', '2027-01-05', 4)`,
     ).bind(SKLAD, THIEF, TEAM),
+    // Benedikt: trenér ho z vloupání do šaten obvinil, zapřel; pachatel se nenašel a incident se uzavřel.
+    db.prepare(
+      `INSERT INTO club_incidents (id, team_id, season_number, kind, category, status, severity, game_date, culprit_type, culprit_player_id,
+         culprit_revealed, loss, resolution, resolved_on, accused, text)
+       VALUES ('inc-mice', ?, 4, 'vloupani_sklad', 'kradez', 'uzavreny', 1, '2026-11-10T16:00:00.000Z', 'cizi', NULL, 0, ?, 'nevyreseno',
+         '2026-11-15T16:00:00.000Z', ?, 'Zmizely míče.')`,
+    ).bind(TEAM, JSON.stringify([{ typ: "vybaveni", kategorie: "balls", uroven: 2, stav: 70, urovniDolu: 1 }]),
+      JSON.stringify([{ playerId: ACCUSED, jmeno: "Martin Benedikt", den: "2026-11-12", vysledek: "zapira" }])),
     // Procházka: vybraná kasa, usvědčený, incident otevřený.
     db.prepare(
       `INSERT INTO club_incidents (id, team_id, season_number, kind, category, status, severity, game_date, culprit_type, culprit_player_id,
@@ -143,6 +152,19 @@ describe("na průšvih, ve kterém je zapletený, hráč odpoví vždy", () => {
   it("kontrola: na běžnou zprávu nechá trenéra na přečteno", async () => {
     await send(OTHER, "Jak se máš?");
     expect(await replies(OTHER)).toEqual([]);
+  }, 60_000);
+
+  it("Hrdlička: otázka na odhalenou krádež, za kterou se mu strhává, dostane odpověď", async () => {
+    await send(THIEF, "Tak co, ukradl jsi ty dresy, nebo ne?");
+    expect(await replies(THIEF)).toEqual(["Jo, trenére, přiznávám to."]);
+    // Model dostal v promptu jeho vlastní průšvih.
+    const prompt = vi.mocked(generateText).mock.calls.map((c) => String(c[1])).find((p) => p.includes("Vloupal ses do skladu"));
+    expect(prompt).toBeDefined();
+  }, 60_000);
+
+  it("Benedikt: obviněný z uzavřené krádeže odpoví na otázku k ní", async () => {
+    await send(ACCUSED, "Martine, ty míče ze skladu jsi vzal ty, nebo ne?");
+    expect(await replies(ACCUSED)).toEqual(["Jo, trenére, přiznávám to."]);
   }, 60_000);
 
   it("Procházka: zpráva, po které vrátil lup, dostane odpověď", async () => {
