@@ -4,7 +4,7 @@ import { useMemo, useRef } from "react";
 import * as THREE from "three";
 import { useFrame, useThree } from "@react-three/fiber";
 import { PITCH_SURFACE_Y, type ViewpointDef } from "@/components/stadium/stadium-3d/constants";
-import { HALF_L, HALF_W, sampleClip, sceneTime, type Clip, type Frame, type Replay, type ReplayKit, type ReplayPlayer, type Scene } from "./scenes";
+import { HALF_W, sampleClip, sceneTime, type Clip, type Frame, type Replay, type ReplayKit, type ReplayPlayer, type Scene } from "./scenes";
 
 /** Co má scéna právě hrát: krok 2D záznamu převedený na scénu a čas, kdy začal. */
 export interface ReplayStep {
@@ -26,9 +26,15 @@ const CARD_COLORS = { yellow: "#FACC15", red: "#DC2626" };
 /** Postavy jsou o kus větší než skutečnost, ať jsou z televizního pohledu čitelné i v malém okně. */
 const FIGURE_SCALE = 1.25;
 const BALL_RADIUS = 0.28;
-/** Televizní kamera stojí na hlavní (východní) tribuně; kde tribuna není, na lešení na jejím místě. */
-const GANTRY = { x: HALF_W + 9, y: 8 };
-const CAMERA_FOV = 34;
+/**
+ * Televizní kamera stojí celý zápas na jednom místě nad hlavní (východní) tribunou, kde tribuna není, na lešení
+ * na jejím místě. Záběr je široký a stálý; za míčem se kamera jen pomalu otáčí, nepřibližuje ani nepřejíždí.
+ */
+const GANTRY = { x: HALF_W + 12, y: 12 };
+/** O kolik výš nad místem „z tribuny“ kamera visí, ať vidí hřiště z nadhledu. */
+const CAMERA_LIFT = 1;
+/** Jak daleko od půlky se kamera za míčem natočí (m podél hřiště). */
+const CAMERA_PAN = 13;
 
 function keeperShirts(home: ReplayKit, away: ReplayKit): { home: string; away: string } {
   const taken = [home.shirt, away.shirt, REFEREE_KIT.shirt].map((c) => new THREE.Color(c));
@@ -40,6 +46,9 @@ function keeperShirts(home: ReplayKit, away: ReplayKit): { home: string; away: s
   };
   return { home: pick(), away: pick() };
 }
+
+const SKIN = "#E0B48C";
+const BOOTS = "#1F2937";
 
 interface PartDef {
   id: string;
@@ -53,12 +62,18 @@ interface PartDef {
   color: (kit: ReplayKit, shirt: string, player: ReplayPlayer) => string | null;
 }
 
+const skin = (_: ReplayKit, __: string, p: ReplayPlayer) => p.skinColor ?? SKIN;
+const HIP: [number, number, number] = [0.1, 0.92, 0], SHOULDER: [number, number, number] = [0.29, 1.45, 0];
+/** Postava z kvádrů: dres s krátkým rukávem, trenýrky, holá předloktí a stehna, štulpny a kopačky. */
 const PARTS: PartDef[] = [
-  { id: "thigh", perFigure: 2, geometry: new THREE.BoxGeometry(0.17, 0.42, 0.19), pivot: [0.1, 0.92, 0], offset: -0.21, swing: "leg", color: (kit) => kit.shorts },
-  { id: "shin", perFigure: 2, geometry: new THREE.BoxGeometry(0.13, 0.5, 0.14), pivot: [0.1, 0.92, 0], offset: -0.67, swing: "leg", color: (kit) => kit.socks },
+  { id: "shorts", perFigure: 2, geometry: new THREE.BoxGeometry(0.2, 0.26, 0.22), pivot: HIP, offset: -0.11, swing: "leg", color: (kit) => kit.shorts },
+  { id: "thigh", perFigure: 2, geometry: new THREE.BoxGeometry(0.15, 0.22, 0.17), pivot: HIP, offset: -0.34, swing: "leg", color: skin },
+  { id: "sock", perFigure: 2, geometry: new THREE.BoxGeometry(0.13, 0.36, 0.14), pivot: HIP, offset: -0.62, swing: "leg", color: (kit) => kit.socks },
+  { id: "boot", perFigure: 2, geometry: new THREE.BoxGeometry(0.14, 0.12, 0.24).translate(0, 0, 0.04), pivot: HIP, offset: -0.86, swing: "leg", color: () => BOOTS },
   { id: "torso", perFigure: 1, geometry: new THREE.BoxGeometry(0.44, 0.56, 0.25), pivot: [0, 1.2, 0], offset: 0, swing: null, color: (_, shirt) => shirt },
-  { id: "arm", perFigure: 2, geometry: new THREE.BoxGeometry(0.11, 0.56, 0.12), pivot: [0.29, 1.45, 0], offset: -0.27, swing: "arm", color: (_, shirt) => shirt },
-  { id: "head", perFigure: 1, geometry: new THREE.SphereGeometry(0.13, 12, 10), pivot: [0, 1.63, 0], offset: 0, swing: null, color: (_, __, p) => p.skinColor ?? "#E0B48C" },
+  { id: "sleeve", perFigure: 2, geometry: new THREE.BoxGeometry(0.13, 0.24, 0.14), pivot: SHOULDER, offset: -0.11, swing: "arm", color: (_, shirt) => shirt },
+  { id: "forearm", perFigure: 2, geometry: new THREE.BoxGeometry(0.1, 0.34, 0.11), pivot: SHOULDER, offset: -0.4, swing: "arm", color: skin },
+  { id: "head", perFigure: 1, geometry: new THREE.SphereGeometry(0.13, 12, 10), pivot: [0, 1.63, 0], offset: 0, swing: null, color: skin },
   { id: "hair", perFigure: 1, geometry: new THREE.BoxGeometry(0.25, 0.09, 0.26), pivot: [0, 1.73, -0.01], offset: 0, swing: null, color: (_, __, p) => p.hairColor ?? null },
 ];
 
@@ -72,9 +87,11 @@ const eTmp = new THREE.Euler(), cTmp = new THREE.Color();
 const HIDDEN = new THREE.Matrix4().makeScale(0, 0, 0);
 
 /** Hráči, rozhodčí a míč ve scéně stadionu; kreslí to, co právě hraje `step`, a řídí televizní kameru. */
-export function ReplayScene({ replay, kits, step, tv }: {
+export function ReplayScene({ replay, kits, snow, step, tv }: {
   replay: Replay;
   kits: { home: ReplayKit; away: ReplayKit };
+  /** Na sněhu se hraje s oranžovým míčem. */
+  snow: boolean;
   step: { current: ReplayStep };
   tv: ViewpointDef;
 }) {
@@ -83,14 +100,15 @@ export function ReplayScene({ replay, kits, step, tv }: {
   const states = useMemo<FigureState[]>(() => replay.figures.map(() => ({ x: 0, z: 0, yaw: 0, phase: 0, speed: 0 })), [replay]);
   const keepers = useMemo(() => keeperShirts(kits.home, kits.away), [kits]);
   const shadowGeometry = useMemo(() => new THREE.CircleGeometry(0.5, 16).rotateX(-Math.PI / 2), []);
-  // Míč s tmavými ploškami je vidět i na sněhu a je poznat, že se točí.
+  // Tmavé plošky jsou na míči proto, aby bylo poznat, že se točí.
   const ballGeometry = useMemo(() => {
     const g = new THREE.IcosahedronGeometry(BALL_RADIUS, 1);
     const colors = new Float32Array(g.attributes.position.count * 3);
-    for (let f = 0; f < colors.length / 9; f++) colors.fill(f % 4 ? 0.97 : 0.1, f * 9, f * 9 + 9);
+    const base = new THREE.Color(snow ? "#F97316" : "#F8F8F8"), patch = new THREE.Color("#1A1A1A");
+    for (let v = 0; v < colors.length / 3; v++) (Math.floor(v / 3) % 4 ? base : patch).toArray(colors, v * 3);
     g.setAttribute("color", new THREE.BufferAttribute(colors, 3));
     return g;
-  }, []);
+  }, [snow]);
   const meshes = useRef<(THREE.InstancedMesh | null)[]>([]);
   const shadows = useRef<THREE.InstancedMesh>(null);
   const rings = useRef<(THREE.Mesh | null)[]>([]);
@@ -212,22 +230,17 @@ export function ReplayScene({ replay, kits, step, tv }: {
       ring.scale.setScalar(1 + 0.12 * Math.sin(performance.now() / 140));
     });
 
-    // Televizní kamera: stojí na tribuně u půlky, za míčem se jen otáčí a kousek popojíždí podél lajny.
-    const east = tv.position[0] > HALF_W ? { x: tv.position[0], y: tv.position[1] } : GANTRY;
-    // Míří mezi míč a hráče, o které ve scéně jde; scéna o jednom hráči (zranění, karta, střídání) jen na ně.
-    const focus = scene.focus.filter((i) => frame.figures[i].visible);
-    const ballShare = scene.close && focus.length ? 0 : 1;
-    const fx = focus.reduce((sum, i) => sum + states[i].x, frame.ballX * ballShare) / (focus.length + ballShare);
-    const fz = focus.reduce((sum, i) => sum + states[i].z, frame.ballZ * ballShare) / (focus.length + ballShare);
-    vLook.set(THREE.MathUtils.clamp(fx, -HALF_W, HALF_W) * 0.8, 0.8, THREE.MathUtils.clamp(fz, -HALF_L + 6, HALF_L - 6));
+    const east = tv.position[0] > HALF_W ? { x: tv.position[0], y: tv.position[1] + CAMERA_LIFT } : GANTRY;
+    // Záběr na výšku pojme hřiště od vzdálené lajny po bližší. Kamera těsně nad lajnou (zastřešená tribuna)
+    // se pod sebe nedívá, jinak by z televizního pohledu byl pohled shora; pruh u bližší lajny pak v záběru není.
+    const near = Math.min(Math.atan2(east.y, east.x - HALF_W), THREE.MathUtils.degToRad(50)), far = Math.atan2(east.y, east.x + HALF_W);
+    const fov = THREE.MathUtils.clamp(THREE.MathUtils.radToDeg(near - far) + 8, 30, 50);
+    vLook.set(east.x - east.y / Math.tan((near + far) / 2), 0, THREE.MathUtils.clamp(frame.ballZ * 0.5, -CAMERA_PAN, CAMERA_PAN));
     if (cut) look.current.copy(vLook);
-    else look.current.lerp(vLook, 1 - Math.exp(-dt * 2.5));
-    camera.position.set(east.x, east.y, look.current.z * 0.45);
+    else look.current.lerp(vLook, 1 - Math.exp(-dt * 1.5));
+    camera.position.set(east.x, east.y, 0);
     camera.lookAt(look.current);
-    // Scénu o jednom hráči si kamera přiblíží tak, aby zabrala asi 13 metrů na výšku, ať je to daleko nebo blízko.
-    const wanted = scene.close ? THREE.MathUtils.clamp(THREE.MathUtils.radToDeg(2 * Math.atan(6.5 / camera.position.distanceTo(look.current))), 12, CAMERA_FOV) : CAMERA_FOV;
-    const fov = cut ? wanted : THREE.MathUtils.lerp(camera.fov, wanted, 1 - Math.exp(-dt * 3));
-    if (Math.abs(camera.fov - fov) > 0.01) {
+    if (camera.fov !== fov) {
       camera.fov = fov;
       camera.updateProjectionMatrix();
     }

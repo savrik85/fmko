@@ -128,7 +128,7 @@ export function Replay3D({ detail, events, progress }: { detail: Record<string, 
         showControls={false}
         // Pohled „z tribuny“ nemá rozostření okrajů, které stadion používá u pohledů z dálky.
         initialViewpoint="main_stand"
-        replay={(mainStand) => <ReplayScene replay={replay} kits={kits} step={step} tv={mainStand} />}
+        replay={(mainStand) => <ReplayScene replay={replay} kits={kits} snow={detail.weather === "snow"} step={step} tv={mainStand} />}
       />
 
       {label && (

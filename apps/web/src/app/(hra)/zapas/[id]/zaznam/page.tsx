@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
@@ -9,7 +9,7 @@ import { PositionBadge } from "@/components/ui/position-badge";
 import { bestTextOn } from "@/lib/team-color";
 import type { BadgePattern } from "@/components/ui";
 import { clientOnly } from "@/components/client-only";
-import { shootoutEvents } from "@/components/match/replay-3d/scenes";
+import { scenedEvents, shootoutEvents } from "@/components/match/replay-3d/scenes";
 
 // 3D záznam se stáhne, až když ho hráč má zapnutý.
 const Replay3D = clientOnly(() => import("@/components/match/replay-3d/Replay3D").then((m) => m.Replay3D));
@@ -124,6 +124,9 @@ export default function MatchReplayPage() {
   const [view3d, setView3d] = useState(true);
   useEffect(() => { setView3d(localStorage.getItem("replayView") !== "2d"); }, []);
   const switchView = () => { localStorage.setItem("replayView", view3d ? "2d" : "3d"); setView3d(!view3d); };
+  // 3D záznam ukazuje jen důležité akce; události bez scény (držení míče, počasí…) v něm proběhnou hned.
+  const can3d = !!match?.home_lineup_data && !!match?.away_lineup_data;
+  const scened = useMemo(() => (match && can3d ? scenedEvents(match.events) : null), [match, can3d]);
 
   useEffect(() => {
     const hydrate = (r: Record<string, unknown>) => {
@@ -274,9 +277,10 @@ export default function MatchReplayPage() {
       return; // No cleanup — timeouts are fire-and-forget
     }
 
-    const t = setTimeout(() => { setIdx((i) => i + 1); }, SPEED_MS[speed]);
+    // Čekání patří právě ukázané události (idx - 1); ve 3D se u události bez scény nečeká.
+    const t = setTimeout(() => { setIdx((i) => i + 1); }, view3d && scened && idx > 0 && !scened[idx - 1] ? 0 : SPEED_MS[speed]);
     return () => clearTimeout(t);
-  }, [match, idx, speed, finished, htPause, htDone, tick, markSeen]);
+  }, [match, idx, speed, finished, htPause, htDone, tick, markSeen, view3d, scened]);
 
   if (loading) return <div className="flex items-center justify-center min-h-[60vh]"><Spinner /></div>;
   if (!match || match.events.length === 0) return (
@@ -520,7 +524,7 @@ export default function MatchReplayPage() {
           </svg>
 
           {/* 3D záznam kreslí totéž co 2D hřiště pod ním; potřebuje uložené sestavy. */}
-          {match.home_lineup_data && match.away_lineup_data && (
+          {can3d && (
             <>
               {view3d && (
                 <Replay3D detail={match.detail} events={match.events}

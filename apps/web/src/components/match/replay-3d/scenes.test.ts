@@ -2,7 +2,7 @@
 // S REPLAY_MATCHES=<soubor JSON s detaily zápasů> projde i všechny zápasy z místní databáze.
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { HALF_L, HALF_W, Replay, sampleClip, sceneTime, shootoutEvents, type Frame, type ReplayEvent, type ReplayInput, type ReplayPlayer, type Scene } from "./scenes";
+import { HALF_L, HALF_W, Replay, sampleClip, scenedEvents, sceneTime, shootoutEvents, type Frame, type ReplayEvent, type ReplayInput, type ReplayPlayer, type Scene } from "./scenes";
 
 const kit = { shirt: "#B91C1C", shorts: "#111827", socks: "#B91C1C" };
 const squad = (prefix: string): ReplayPlayer[] => ["GK", "DEF", "DEF", "DEF", "DEF", "MID", "MID", "MID", "MID", "FWD", "FWD"]
@@ -38,16 +38,20 @@ function problems(replay: Replay, scene: Scene, label: string): string[] {
     prev = now;
     prevCuts = frame.cuts;
   }
-  // Na začátku scény nestojí dva hráči na sobě.
-  sampleClip(scene.clip, scene.start, frame);
-  frame.figures.forEach((a, i) => frame.figures.forEach((b, j) => {
-    if (j > i && a.visible && b.visible && Math.hypot(a.x - b.x, a.z - b.z) < 0.9) found.add(`figury ${i} a ${j} stojí na sobě`);
-  }));
+  // Na začátku ani na konci scény (ten drží až do další akce) nestojí dva hráči na sobě.
+  for (const [when, t] of [["začátku", scene.start], ["konci", sceneTime(scene, false, Infinity)]] as const) {
+    sampleClip(scene.clip, t, frame);
+    frame.figures.forEach((a, i) => frame.figures.forEach((b, j) => {
+      if (j > i && a.visible && b.visible && Math.hypot(a.x - b.x, a.z - b.z) < 0.9) found.add(`figury ${i} a ${j} stojí na ${when} na sobě`);
+    }));
+  }
   return [...found].map((p) => `${label}: ${p}`);
 }
 
 function checkAll(replay: Replay, events: ReplayEvent[], label: string): string[] {
-  return [...problems(replay, replay.kickoff(0), `${label} výkop`), ...problems(replay, replay.kickoff(events.length), `${label} výkop na konci`), ...events.flatMap((e, i) => problems(replay, replay.scene(i), `${label} #${i} ${e.minute}' ${e.type}${e.detail ? `/${e.detail}` : ""}`))];
+  const scened = scenedEvents(events);
+  return [...problems(replay, replay.kickoff(0), `${label} výkop`), ...problems(replay, replay.kickoff(events.length), `${label} výkop na konci`),
+    ...events.flatMap((e, i) => (scened[i] ? problems(replay, replay.scene(i), `${label} #${i} ${e.minute}' ${e.type}${e.detail ? `/${e.detail}` : ""}`) : []))];
 }
 
 describe("scény 3D záznamu", () => {
@@ -104,6 +108,18 @@ describe("scény 3D záznamu", () => {
     const visible = (name: string) => frame.figures[replay.figures.findIndex((f) => f.player.name === name)].visible;
     expect([visible("H 2"), visible("H 5"), visible("Sub 1"), visible("Rozhodčí")]).toEqual([false, false, true, true]);
     expect(frame.figures.filter((f) => f.visible).length).toBe(10 + 11 + 1);
+  });
+
+  it("scénu mají jen důležité akce; ostatní události drží konec poslední akce", () => {
+    const scened = scenedEvents(all);
+    const types = (shown: boolean) => [...new Set(all.filter((_, i) => scened[i] === shown).map((e) => e.detail?.startsWith("shootout:") ? "shootout" : e.type))].sort();
+    expect(types(true)).toEqual(["card", "chance", "corner", "foul", "freekick", "goal", "injury", "penalty", "shootout", "substitution"]);
+    expect(types(false)).toEqual(["assist", "corner", "special"]);
+    // Držení míče před první akcí: výkop. Asistence po gólu: stojící konec gólové scény.
+    expect(replay.scene(0).focus).toEqual([]);
+    const goal = replay.scene(1), assist = replay.scene(2);
+    expect(assist.clip).toBe(goal.clip);
+    expect([assist.start, assist.split]).toEqual([goal.end, goal.end]);
   });
 
   it("rozstřel má pět sérií a sedí na uložený výsledek", () => {
