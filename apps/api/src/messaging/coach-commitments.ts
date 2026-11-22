@@ -19,7 +19,8 @@
 
 import { logger } from "../lib/logger";
 import { applyCoachRelationDelta } from "../lib/coach-relation";
-import { sendPlayerSMS } from "./system-sms";
+import { LINEUP_PROMISE_BROKEN_SMS, LINEUP_PROMISE_KEPT_SMS } from "./promise-texts";
+import { sendPlayerTemplateSMS } from "./system-sms";
 // Chat se načítá až za běhu: ai-player-chat → player-memory → tento modul by jinak byl kruh.
 import type { ChatEnv } from "./ai-player-chat";
 
@@ -544,10 +545,11 @@ async function deliverInquiry(db: D1Database, r: SettleRow): Promise<void> {
       ORDER BY k.willingness DESC LIMIT 1`,
   ).bind(incidentId, r.player_id, r.team_id, r.team_id).first<{ first_name: string; last_name: string }>()
     .catch((e) => { logger.warn({ module: M }, "kdo ví víc u poptávání", e); return null; });
-  const body = lead
-    ? pick(INQUIRY_HINT_SMS, r.id).replace("{name}", `${lead.first_name} ${lead.last_name}`)
-    : pick(INQUIRY_NOTHING_SMS, r.id);
-  await sendPlayerSMS(db, r.team_id, { id: r.player_id, firstName: r.first_name, lastName: r.last_name, nickname: r.nickname, avatar: r.avatar }, body)
+  const pool = lead
+    ? INQUIRY_HINT_SMS.map((t) => t.replace("{name}", `${lead.first_name} ${lead.last_name}`))
+    : INQUIRY_NOTHING_SMS;
+  await sendPlayerTemplateSMS(db, r.team_id, { id: r.player_id, firstName: r.first_name, lastName: r.last_name, nickname: r.nickname, avatar: r.avatar },
+    pool, { seed: r.id, metadata: { type: "commitment", kind: r.kind } })
     .catch((e) => logger.warn({ module: M }, `zpráva po poptávání ${r.id}`, e));
 }
 
@@ -666,15 +668,11 @@ export function betVerdict(
   return { verdict: won ? "won" : "lost", match: teamMatch };
 }
 
-const KEPT_SMS: Record<CommitmentKind, string[]> = {
-  start_next: [
-    "Díky, trenére, že jste dodržel slovo. Vážím si toho.",
-    "Slíbil jste základ a dodržel jste to. To se cení, trenére.",
-  ],
-  start_soon: [
-    "Trenére, díky že jste dodržel slovo s tou sestavou. Vážím si toho.",
-    "Dodržel jste, co jste slíbil. Teď je na mně, abych to vracel na hřišti.",
-  ],
+// Varianty bez paměti dřív chodily pořád stejné („díky že jste dodržel slovo s tou sestavou“
+// 10×, prod 9–11/2026). Hráč teď dostane tu, kterou ještě neposlal (sendPlayerTemplateSMS).
+const KEPT_SMS: Record<CommitmentKind, readonly string[]> = {
+  start_next: LINEUP_PROMISE_KEPT_SMS,
+  start_soon: LINEUP_PROMISE_KEPT_SMS,
   position: [
     "Díky, že jste mě fakt zkusil na novým místě, trenére. Bavilo mě to.",
     "Slíbil jste to a dodržel. Na novým místě jsem se cítil dobře.",
@@ -702,14 +700,9 @@ const KEPT_SMS: Record<CommitmentKind, string[]> = {
   ],
 };
 
-const BROKEN_SMS: Record<CommitmentKind, string[]> = {
-  start_next: [
-    "Sliboval jste mi základ, trenére. A já zase nezačínal. Tak nevím, co si mám myslet.",
-    "Řekl jste, že jdu od začátku. Nešel jsem. Příště mi radši nic neslibujte.",
-  ],
-  start_soon: [
-    "Sliboval jste mi místo v sestavě, trenére. A já zase sedím. Tohle nemá cenu.",
-  ],
+const BROKEN_SMS: Record<CommitmentKind, readonly string[]> = {
+  start_next: LINEUP_PROMISE_BROKEN_SMS,
+  start_soon: LINEUP_PROMISE_BROKEN_SMS,
   position: [
     "Měl jsem jít na jiný místo, trenére. Nic z toho nebylo.",
     "Slíbil jste mi, že mě zkusíte jinde. Asi jste zapomněl.",
@@ -753,12 +746,18 @@ const MONEY_REMINDER_SMS: Record<"bonus" | "wage", string[]> = {
   wage: ["Trenére, platí to s těma vyššíma odměnama? Zatím nic.", "Jen připomínám, trenére: slíbil jste přidat na odměnách."],
 };
 
-const LINEUP_REMINDER_SMS = [
+const LINEUP_REMINDER_SMS: readonly string[] = [
   "Trenére, zítra hrajeme. Pamatujete, co jste mi slíbil?",
   "Zítra je zápas. Doufám, že platí, co jsme si řekli.",
+  "Trenére, jen ať nezapomenete, na čem jsme se domluvili. Zítra se hraje.",
+  "Zítra to platí, trenére? Já se na to připravuju.",
+  "Trenére, zítra je ten zápas. Beru vás za slovo.",
+  "Jen připomínám, trenére: zítra hrajeme a vy jste mi něco slíbil.",
+  "Trenére, těším se na zítřek. Doufám, že to dopadne, jak jsme si řekli.",
+  "Zítra zápas, trenére. Co jsme si řekli, to platí, ne?",
 ];
 
-function pick(pool: string[], seed: string): string {
+function pick(pool: readonly string[], seed: string): string {
   let h = 0;
   for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
   return pool[h % pool.length];
@@ -882,8 +881,8 @@ async function resolveCommitment(
   if (r.club_user_id === "ai") return;
   const pool = status === "kept" ? KEPT_SMS[r.kind] : BROKEN_SMS[r.kind];
   if (pool.length === 0) return;
-  await sendPlayerSMS(db, r.team_id, { id: r.player_id, firstName: r.first_name, lastName: r.last_name, nickname: r.nickname, avatar: r.avatar },
-    pick(pool, r.id)).catch((e) => logger.warn({ module: M }, `SMS po slibu ${r.id}`, e));
+  await sendPlayerTemplateSMS(db, r.team_id, { id: r.player_id, firstName: r.first_name, lastName: r.last_name, nickname: r.nickname, avatar: r.avatar },
+    pool, { seed: r.id, metadata: { type: "commitment", kind: r.kind, status } }).catch((e) => logger.warn({ module: M }, `SMS po slibu ${r.id}`, e));
 }
 
 /** Denně: vyhodnotí běžící sliby. Vrací počet uzavřených. */
@@ -940,8 +939,8 @@ export async function settleCoachCommitments(db: D1Database, now: Date = new Dat
         if (verdict === "pending") continue;
         if (verdict === "won" && match) { await markBetWon(db, r, d, match, now); continue; }
         if (verdict === "lost" && d.condition !== "win" && r.club_user_id !== "ai") {
-          await sendPlayerSMS(db, r.team_id, { id: r.player_id, firstName: r.first_name, lastName: r.last_name, nickname: r.nickname, avatar: r.avatar },
-            pick(BET_LOST_SMS, r.id)).catch((e) => logger.warn({ module: M }, "SMS po prohrané sázce", e));
+          await sendPlayerTemplateSMS(db, r.team_id, { id: r.player_id, firstName: r.first_name, lastName: r.last_name, nickname: r.nickname, avatar: r.avatar },
+            BET_LOST_SMS, { seed: r.id, metadata: { type: "commitment", kind: r.kind } }).catch((e) => logger.warn({ module: M }, "SMS po prohrané sázce", e));
         }
         await resolveCommitment(db, r, "expired", now);
         closed++;
@@ -961,8 +960,8 @@ export async function settleCoachCommitments(db: D1Database, now: Date = new Dat
       if (duePassed) { await resolveCommitment(db, r, "broken", now); closed++; continue; }
       const reminderDue = new Date(r.made_at).getTime() + MONEY_REMINDER_DAYS * DAY_MS < now.getTime();
       if (reminderDue && r.last_reminder_key !== "money" && r.club_user_id !== "ai") {
-        await sendPlayerSMS(db, r.team_id, { id: r.player_id, firstName: r.first_name, lastName: r.last_name, nickname: r.nickname, avatar: r.avatar },
-          pick(MONEY_REMINDER_SMS[r.kind], r.id));
+        await sendPlayerTemplateSMS(db, r.team_id, { id: r.player_id, firstName: r.first_name, lastName: r.last_name, nickname: r.nickname, avatar: r.avatar },
+          MONEY_REMINDER_SMS[r.kind], { seed: r.id, metadata: { type: "commitment", kind: r.kind } });
         await db.prepare("UPDATE coach_commitments SET last_reminder_key = 'money' WHERE id = ?").bind(r.id).run()
           .catch((e) => logger.warn({ module: M }, "připomínka peněz", e));
       }
@@ -1005,7 +1004,7 @@ async function markBetWon(db: D1Database, r: SettleRow, d: CommitmentDetails, ma
     // Sázka kabiny: připomene se v kabině, ne v soukromé SMS.
     await postInSquad(db, r.conversation_id, player, pick(BET_WON_SMS[d.condition ?? "win"], r.id), now);
   } else {
-    await sendPlayerSMS(db, r.team_id, player, pick(BET_WON_SMS[d.condition ?? "goal"], r.id));
+    await sendPlayerTemplateSMS(db, r.team_id, player, BET_WON_SMS[d.condition ?? "goal"], { seed: r.id, metadata: { type: "commitment", kind: r.kind } });
   }
   const { getOrCreatePlayerConversation } = await import("./ai-player-spawn");
   const convId = r.conversation_id ?? await getOrCreatePlayerConversation(db, r.team_id, player);
@@ -1033,8 +1032,8 @@ export async function remindCoachCommitments(db: D1Database, rosterTeamId: strin
   for (const r of rows.results) {
     if (seen.has(r.player_id)) continue;
     seen.add(r.player_id);
-    await sendPlayerSMS(db, r.team_id, { id: r.player_id, firstName: r.first_name, lastName: r.last_name, nickname: r.nickname, avatar: r.avatar },
-      pick(LINEUP_REMINDER_SMS, `${r.id}|${matchKey}`)).catch((e) => logger.warn({ module: M }, "připomínka slibu", e));
+    await sendPlayerTemplateSMS(db, r.team_id, { id: r.player_id, firstName: r.first_name, lastName: r.last_name, nickname: r.nickname, avatar: r.avatar },
+      LINEUP_REMINDER_SMS, { seed: `${r.id}|${matchKey}`, metadata: { type: "commitment_reminder" } }).catch((e) => logger.warn({ module: M }, "připomínka slibu", e));
     await db.prepare("UPDATE coach_commitments SET last_reminder_key = ? WHERE player_id = ? AND status = 'active' AND kind IN ('start_next', 'start_soon', 'position')")
       .bind(matchKey, r.player_id).run().catch((e) => logger.warn({ module: M }, "připomínka slibu, zápis", e));
   }

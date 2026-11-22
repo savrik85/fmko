@@ -4,8 +4,8 @@
  */
 import { describe, expect, it, vi } from "vitest";
 import {
-  findRepeatedSentences, generateWithoutRepeats, isStockSentence, ownLinesPromptBlock, repeatRetryRule, sentencesRepeat,
-  splitSentences, withoutSentences,
+  findRepeatedSentences, generateWithoutRepeats, isStockSentence, ownLinesPromptBlock, pickFreshVariant, pickUnusedIndex,
+  repeatRetryRule, repeatsAny, sentencesRepeat, splitSentences, withoutSentences,
 } from "./repetition";
 
 describe("co je opakování", () => {
@@ -148,5 +148,40 @@ describe("jedno přegenerování", () => {
       .mockResolvedValueOnce({ body: "Už mám po šichtě, trenére. V neděli dorazím." })
       .mockRejectedValueOnce(new Error("model nejede"));
     expect((await generateWithoutRepeats(previous, gen, "test")).body).toBe("V neděli dorazím.");
+  });
+});
+
+describe("předem napsané varianty bez opakování", () => {
+  // Poděkování za odmítnutou nabídku dostal jeden trenér pětkrát (conv f14c5721, prod 9–11/2026).
+  const loyal = [
+    "Trenére, díky, že jste tu nabídku odmítl. Jsem tady doma a jinam nechci.",
+    "Trenére, slyšel jsem o té nabídce. Dobře, že jste ji poslal k šípku. Já svůj dres nevyměním.",
+    "Díky, trenére. Kdyby se mě někdo ptal, řekl bych to samý: zůstávám.",
+  ];
+
+  it("index varianty, kterou hráč nedostal; když dostal všechny, ze všech", () => {
+    expect(pickUnusedIndex(3, new Set([0, 1]), "x")).toBe(2);
+    expect(pickUnusedIndex(3, new Set([0, 1, 2]), "x")).toBeLessThan(3);
+    expect(pickUnusedIndex(5, new Set(), "seed")).toBe(pickUnusedIndex(5, new Set(), "seed"));
+  });
+
+  it("věta, kterou hráč už poslal, se nevybere ani s jiným oslovením nebo čárkou", () => {
+    const previous = ["Šéfe, slyšel jsem o té nabídce. Dobře, že jste ji poslal k šípku. Já svůj dres nevyměním.", "Trenére díky že jste tu nabídku odmítl. Jsem tady doma a jinam nechci."];
+    for (const seed of ["a", "b", "c", "d", "e"]) expect(pickFreshVariant(loyal, previous, seed).index).toBe(2);
+  });
+
+  it("když poslal všechny, vezme tu, kterou poslal nejdávněji", () => {
+    const previous = [loyal[1], "Jdu na trénink.", loyal[0], loyal[2]];
+    expect(pickFreshVariant(loyal, previous, "x")).toEqual({ text: loyal[1], index: 1 });
+  });
+
+  it("stejný seed a stejná historie dají stejnou variantu", () => {
+    expect(pickFreshVariant(loyal, [], "offer-1")).toEqual(pickFreshVariant(loyal, [], "offer-1"));
+  });
+
+  it("opakuje zpráva některou z předchozích?", () => {
+    expect(repeatsAny("Jsem tady doma a jinam nechci.", [loyal[0]])).toBe(true);
+    expect(repeatsAny("Díky, trenére.", ["Díky, trenére!"])).toBe(false);
+    expect(repeatsAny("Tak to je jiná, trenére!", [])).toBe(false);
   });
 });

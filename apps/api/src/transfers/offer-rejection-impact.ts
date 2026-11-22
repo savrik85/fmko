@@ -11,12 +11,14 @@
  */
 
 import { computeInterestForOffer, interestOfferOf, INTEREST_LABELS } from "./player-interest";
-import { sendPlayerSMS, sendSystemSMS } from "../messaging/system-sms";
+import { sendPlayerSMS, sendPlayerTemplateSMS, sendSystemSMS } from "../messaging/system-sms";
 import { logger } from "../lib/logger";
 import { applyCoachRelationDelta } from "../lib/coach-relation";
-import { reasonSms, unrestReasonsFromFactors, type ClubStep, type UnrestReason } from "./unrest-reasons";
+import { reasonSms, reasonsText, unrestReasonsFromFactors, type ClubStep, type UnrestReason } from "./unrest-reasons";
+import { repeatsAny } from "../messaging/repetition";
 import { LEVEL_RANK } from "../league/district-leagues";
 import { resolvePromises } from "./promises";
+import { LINEUP_PROMISE_BROKEN_SMS, LINEUP_PROMISE_KEPT_SMS } from "../messaging/promise-texts";
 import { stanceForOffer } from "../messaging/player-memory";
 import { marketValue } from "@okresni-masina/shared";
 
@@ -103,25 +105,147 @@ export function parseUnrest(lifeContext: string | null | undefined): TransferUnr
   }
 }
 
-// ── SMS šablony hráče po odmítnuté nabídce (deterministické, bez AI) ──
-const REJECTED_SMS_WANTS: string[] = [
+// ── SMS hráče po odmítnuté nabídce ──
+// Píše ji model podle faktů (`rejectionSmsInstruction`, messaging/event-sms.ts). Tyhle
+// varianty jdou, když model nejede, a hráč dostane tu, kterou ještě neposlal. Dřív byly
+// po dvou až třech a bez paměti: 9 vět dělalo 29 % všech šablon (prod 9–11/2026).
+// Klub stojí v 1. pádě jako podmět („{team} o mě stál“) nebo nesklonně za předložkou.
+export const REJECTED_SMS_WANTS: readonly string[] = [
   "Trenére, slyšel jsem, že {team} o mě stál. A vy jste to smetl ze stolu? Tohle si budu pamatovat.",
   "Trenére, proč jste mi neřekl o té nabídce od {team}? Chtěl jsem to aspoň probrat. Zklamání.",
   "Trenére, {team} mě chtěl a vy jste to zařízl. Nevím, jestli tu ještě vidím budoucnost.",
+  "Takže nabídka od {team} šla do koše a mně nikdo nic neřekne? To mě fakt mrzí, trenére.",
+  "Trenére, od kluků se dozvídám, že jste odmítl {team}. Aspoň zeptat jste se mě mohl.",
+  "Nabídka od {team} a vy ani slovo? Trenére, tohle mě dost zklamalo.",
+  "Trenére, já bych do {team} šel. Škoda, že o mně rozhodujete beze mě.",
+  "Tak {team} o mě stál a skončilo to u vás na stole. Těžko se mi to polyká, trenére.",
 ];
-const REJECTED_SMS_WANTS_HOT: string[] = [
+export const REJECTED_SMS_WANTS_HOT: readonly string[] = [
   "To si děláte srandu?! {team} mě chtěl a vy to hodíte do koše bez jediného slova?!",
-  "Tak takhle teda ne, trenére. {team} byla moje šance a vy jste mi ji sebral. Uvidíme, jak se vám bude hrát beze mě.",
+  "Tak takhle teda ne, trenére. Nabídka od {team} byla moje šance a vy jste mi ji sebral. Uvidíme, jak se vám bude hrát beze mě.",
+  "Trenére, to je fakt síla. {team} o mě stál a vy to smetete ze stolu, aniž byste mi něco řekl?!",
+  "Já se z toho picnu. Nabídka od {team} a vy ji pošlete k šípku? Tohle vám nezapomenu.",
+  "Super, trenére. {team} mě chtěl, já jsem chtěl jít a vy to zaříznete. Tak si to užijte.",
+  "Tohle si nenechám líbit, trenére! Odmítnout {team} a ani mi nezavolat? Teď na mě nemluvte.",
+  "Trenére, jste normální? Takovou nabídku od {team} jen tak odmítnout? Mám toho dost.",
+  "Fakt díky, trenére. Moje šance v {team} je pryč a vy se mě ani nezeptáte. Tohle se nedělá.",
 ];
 // Trenér s hráčem o nabídce psal, takže „bez jediného slova“ by nebyla pravda.
-const REJECTED_SMS_WANTS_TALKED: string[] = [
+export const REJECTED_SMS_WANTS_TALKED: readonly string[] = [
   "Trenére, vím, že jsme o tom mluvili, ale stejně mě štve, že jste {team} odmítl. Tohle si budu pamatovat.",
-  "Psali jsme si o tom, já vím. Ale {team} byla moje šance a vy jste ji zařízl. Zklamání, trenére.",
+  "Psali jsme si o tom, já vím. Ale nabídka od {team} byla moje šance a vy jste ji zařízl. Zklamání, trenére.",
+  "Trenére, vysvětlil jste mi to, ale stejně mě to hlodá. {team} o mě fakt stál.",
+  "Dobře, řekl jste mi to na rovinu. Ale že jste {team} odmítl, mě pořád štve.",
+  "Trenére, beru, že jste mi to řekl předem. Spokojenej ale nejsem, do {team} jsem chtěl.",
+  "Chápu vaše důvody, trenére, jenže mně ta nabídka od {team} nejde z hlavy.",
+  "Aspoň jste mi to řekl, trenére. Radost ale nemám, {team} by pro mě byl krok dopředu.",
+  "Já vím, mluvili jsme o tom. Stejně je to blbý pocit, když {team} o mě stál a nic z toho nebude.",
 ];
-const REJECTED_SMS_LOYAL: string[] = [
+export const REJECTED_SMS_LOYAL: readonly string[] = [
   "Trenére, díky, že jste tu nabídku odmítl. Jsem tady doma a jinam nechci.",
   "Trenére, slyšel jsem o té nabídce. Dobře, že jste ji poslal k šípku. Já svůj dres nevyměním.",
+  "Trenére, nabídka od {team}? Ani mě to nelákalo. Jsem rád, že jsem tady.",
+  "Díky, trenére. Kdyby se mě někdo ptal, řekl bych to samý: zůstávám.",
+  "Trenére, slyšel jsem o nabídce od {team}. Dobře jste udělal, tady mám kluky i hospodu.",
+  "Jsem rád, že jste mě nepustil, trenére. Za tenhle klub budu kopat, dokud mi nohy slouží.",
+  "Trenére, díky za důvěru. Jinde bych se doma necítil.",
+  "To jste udělal dobře, trenére. Mě odsud nikdo nedostane.",
 ];
+/** Trenér sám volal do klubu, že hráče pustí („Pustit ho“), a nabídku stejně odmítl. */
+export const REJECTED_SMS_BROKEN_RELEASE: readonly string[] = [
+  "Volal jste do {team}, že mě pustíte, a teď to zase zaříznete? S vámi jsem skončil, trenére.",
+  "Trenére, sám jste do {team} volal, že mě pustíte. A teď nic? Tohle je podraz.",
+  "Slíbil jste, že nabídku od {team} vezmete. Nevzal jste ji. Už vám nevěřím ani slovo.",
+  "Tak vy zavoláte do {team}, že mě pustíte, a pak to necháte ležet? Fakt díky, trenére.",
+  "Trenére, nabídka od {team} přišla, jak jste chtěl, a vy jste ji stejně zařízl. To se nedělá.",
+  "Tohle jste slíbil vy, ne já. {team} poslal nabídku a vy nic. Se mnou už nepočítejte.",
+  "Trenére, kvůli čemu jste tam teda volal? Nabídka od {team} je pryč a já s ní.",
+  "Já už fakt nevím, co vám věřit. Volal jste do {team} a pak ji odmítnete. Skončil jsem.",
+];
+/** Trenér slíbil hráče pustit při další dobré nabídce (dohoda) a další odmítl. */
+export const REJECTED_SMS_BROKEN_TRANSFER: readonly string[] = [
+  "Slíbil jste, že mě při další dobré nabídce pustíte! {team} přišel a vy nic. S vámi jsem skončil.",
+  "Trenére, dal jste mi slovo, že mě pustíte. Nabídka od {team} je tady a vy ji odmítnete?",
+  "Tak tolik k vašemu slibu, trenére. {team} o mě stál a vy jste to zase zařízl.",
+  "Řekl jste, že mi při další nabídce nebudete bránit. Nabídka od {team} šla do koše. Podraz.",
+  "Trenére, já vám věřil. Slíbil jste, že mě pustíte, a nabídku od {team} jste stejně odmítl.",
+  "Vaše slovo nestojí za nic, trenére. Slib jste dal, {team} se ozval a stejně nic.",
+  "Trenére, pamatujete si vůbec, co jste mi slíbil? {team} chtěl a vy jste řekl ne.",
+  "Na slib, že mě pustíte, jsem čekal. Přišel {team} a vy to zahodíte. Tohle vám nezapomenu.",
+];
+
+/** Jak hráč odmítnutí bere: podle toho model píše a z toho se bere předem napsaná varianta. */
+export type RejectionStance = "loyal" | "wants" | "hot" | "talked" | "broken_release" | "broken_transfer";
+
+export const REJECTION_POOLS: Record<RejectionStance, readonly string[]> = {
+  loyal: REJECTED_SMS_LOYAL,
+  wants: REJECTED_SMS_WANTS,
+  hot: REJECTED_SMS_WANTS_HOT,
+  talked: REJECTED_SMS_WANTS_TALKED,
+  broken_release: REJECTED_SMS_BROKEN_RELEASE,
+  broken_transfer: REJECTED_SMS_BROKEN_TRANSFER,
+};
+
+/** Poděkování za odmítnutou nabídku: `metadata.scenario_id`, podle něj se pozná i později. */
+export const LOYAL_SCENARIO_ID = "offer_rejected_loyal";
+/** Druhé poděkování za odmítnutou nabídku dřív než po tolika dnech hráč nepíše. */
+export const LOYAL_REPEAT_DAYS = 30;
+
+export interface RejectionSmsFacts {
+  teamName: string;
+  amount: number;
+  isLoan: boolean;
+  trigger: "reject" | "expire";
+  stance: RejectionStance;
+  /** Trenér s hráčem od příchodu nabídky psal (`coachWroteAboutOffer`). */
+  coachTalked: boolean;
+  /** Proč chtěl odejít, slovy („lepšímu klubu“), nebo null. */
+  reasons: string | null;
+  /** Jakou soutěž klub hraje (`clubStepFor`), ať si ji model nevymýšlí. */
+  leagueNote: string | null;
+  /** Jak si stojí v kádru, slovy. */
+  squadRole: string | null;
+}
+
+const STANCE_TEXT: Record<RejectionStance, string> = {
+  loyal: "Odejít jsi nechtěl, tady jsi doma. Napiš mu krátce, že jsi rád, že tě nepustil. Bez patosu, po svém.",
+  wants: "Rád bys tam šel a štve tě to. Dej mu najevo zklamání a řekni mu, proč jsi chtěl jít.",
+  hot: "Hodně jsi tam chtěl a jsi vzteklý. Klidně ostře, podle povahy, a řekni mu, proč jsi chtěl jít.",
+  talked: "Psali jste si o té nabídce, takže tě to nepřekvapilo, ale stejně tě to štve. Řekni mu, proč jsi chtěl jít.",
+  broken_transfer: "Trenér ti dřív slíbil, že tě při další dobré nabídce pustí, a stejně ji odmítl. Cítíš se podvedený a jsi naštvaný.",
+  broken_release: "Trenér do toho klubu sám volal, že tě pustí, a teď jejich nabídku zase zařízl. Jsi vzteklý a cítíš se podvedený.",
+};
+
+/** Co model ví, když píše SMS po odmítnuté nebo propadlé nabídce. Jen fakta, která hra eviduje. */
+export function rejectionSmsInstruction(f: RejectionSmsFacts): string {
+  const amount = f.amount.toLocaleString("cs-CZ");
+  return [
+    f.trigger === "expire"
+      ? `Trenér nechal propadnout nabídku od klubu ${f.teamName}, ani na ni neodpověděl.`
+      : `Trenér odmítl nabídku od klubu ${f.teamName}.`,
+    f.isLoan
+      ? `Chtěli tě na hostování a tvému klubu za to nabízeli ${amount} Kč.`
+      : `Chtěli tě koupit a tvému klubu za tebe nabízeli ${amount} Kč odstupné.`,
+    "Ty peníze by dostal klub, ne ty. Jaký plat bys tam měl, nevíš, tak si ho nevymýšlej.",
+    f.leagueNote ?? "",
+    f.squadRole ?? "",
+    f.coachTalked
+      ? "Trenér ti o té nabídce předtím psal (je to v historii), takže netvrď, že ti nic neřekl."
+      : "Trenér ti o ní předem nic neřekl, dozvěděl ses to jinak.",
+    STANCE_TEXT[f.stance],
+    f.reasons && f.stance !== "loyal" ? `Chtěl jsi odejít hlavně kvůli ${f.reasons}.` : "",
+    "Netvrď, že odejdeš bez souhlasu klubu nebo že jsi jinde podepsal. Žádné jiné částky ani kluby si nevymýšlej.",
+  ].filter(Boolean).join(" ");
+}
+
+/** Jak si hráč stojí v kádru podle hodnocení (pořadí mezi aktivními hráči týmu). */
+export function squadRoleText(rank: number, total: number): string | null {
+  if (total < 5 || rank < 1) return null;
+  if (rank <= 3) return "Patříš k nejlepším hráčům kádru.";
+  if (rank <= 11) return "Patříš do základu.";
+  if (rank <= 16) return "Jsi spíš náhradník, do základu se dostáváš málo.";
+  return "Jsi na okraji kádru.";
+}
 
 // ── Fake injury katalog (vypadá jako běžné zranění, smsText je výmluva hráče) ──
 const FAKE_INJURIES: { type: string; description: string; smsText: string }[] = [
@@ -295,7 +419,16 @@ export async function applyOfferRejectionImpact(
       const newMorale = clamp(morale + 2, 0, 100);
       await db.prepare("UPDATE players SET life_context = json_set(life_context, '$.morale', ?) WHERE id = ?")
         .bind(newMorale, playerId).run().catch((e) => logger.warn({ module: "rejection-impact" }, "loyal morale boost", e));
-      if (!silent) await sendPlayerSMS(db, sellerClubTeamId, playerRef, pick(REJECTED_SMS_LOYAL).replace("{team}", teamName));
+      // Poděkování jednou za čas: conv f14c5721 dostala tutéž větu pětkrát (prod 9–11/2026).
+      if (!silent && !(await loyalThanksSentRecently(db, sellerClubTeamId, playerId, teamName))) {
+        await sendRejectionSms(db, env, {
+          clubTeamId: sellerClubTeamId, rosterTeamId: player.team_id as string, playerRef, offerId: offer.id as string | undefined,
+          facts: {
+            teamName, amount, isLoan, trigger, stance: "loyal", reasons: null, leagueNote: null, squadRole: null,
+            coachTalked: await coachWroteAboutOffer(db, sellerClubTeamId, playerId, offer.id as string | undefined),
+          },
+        });
+      }
     }
     return;
   }
@@ -378,16 +511,23 @@ export async function applyOfferRejectionImpact(
     return;
   }
 
-  // SMS od hráče — naštvání podle tempera; při porušeném slibu vždy nejostřejší
-  const pool = brokenTransferPledge ? REJECTED_SMS_WANTS_HOT
-    : await coachWroteAboutOffer(db, sellerClubTeamId, playerId, offer.id as string | undefined) ? REJECTED_SMS_WANTS_TALKED
-    : temper > 65 ? REJECTED_SMS_WANTS_HOT : REJECTED_SMS_WANTS;
-  const smsBody = brokenReleasePledge
-    ? `Volal jste do ${teamName}, že mě pustíte, a teď to zase zaříznete? S vámi jsem skončil, trenére.`
-    : brokenTransferPledge
-    ? `Slíbil jste, že mě při další dobré nabídce pustíte! ${teamName} přišel a vy nic. S vámi jsem skončil.`
-    : `${pick(pool).replace("{team}", teamName)}${newUnrest.reasons?.length ? ` ${reasonSms(newUnrest.reasons[0], step.step)}` : ""}`;
-  const convId = await sendPlayerSMS(db, sellerClubTeamId, playerRef, smsBody);
+  // SMS od hráče: naštvání podle tempera; při porušeném slibu vždy nejostřejší. Píše ji model
+  // podle faktů, bez něj varianta, kterou hráč ještě neposlal.
+  const coachTalked = await coachWroteAboutOffer(db, sellerClubTeamId, playerId, offer.id as string | undefined);
+  const smsStance: RejectionStance = brokenReleasePledge ? "broken_release"
+    : brokenTransferPledge ? "broken_transfer"
+    : coachTalked ? "talked"
+    : temper > 65 ? "hot" : "wants";
+  const reasons = newUnrest.reasons ?? [];
+  const convId = await sendRejectionSms(db, env, {
+    clubTeamId: sellerClubTeamId, rosterTeamId: player.team_id as string, playerRef, offerId: offer.id as string | undefined,
+    facts: {
+      teamName, amount, isLoan, trigger, stance: smsStance, coachTalked, leagueNote: step.note,
+      reasons: reasons.length > 0 ? reasonsText(reasons) : null, squadRole: null,
+    },
+    // Důvod odchodu se trenér dozví ze SMS (přání 2026-10-18), u předem napsané varianty větou navíc.
+    suffix: !brokenTransferPledge && reasons.length > 0 ? reasonSms(reasons[0], step.step) : undefined,
+  });
 
   // Otevřít živou konverzaci (AI thread): trenér může volně odpovědět, hráč reaguje,
   // po max 2 výměnách AI vyhodnotí dopad (viz applyResolutionAndClose — upravuje i truc).
@@ -458,8 +598,60 @@ export async function coachWroteAboutOffer(
   return !!row;
 }
 
-function pick<T>(arr: T[]): T {
-  return arr[Math.floor(Math.random() * arr.length)];
+/**
+ * Poslal hráč za posledních `LOYAL_REPEAT_DAYS` dní poděkování za odmítnutou nabídku?
+ * Nové zprávy mají `scenario_id`, starší se poznají podle textu.
+ */
+export async function loyalThanksSentRecently(
+  db: D1Database, clubTeamId: string, playerId: string, teamName: string, now: Date = new Date(),
+): Promise<boolean> {
+  const rows = await db.prepare(
+    `SELECT m.body, json_extract(m.metadata, '$.scenario_id') AS scenario
+       FROM messages m JOIN conversations c ON c.id = m.conversation_id
+      WHERE c.team_id = ? AND c.type = 'player' AND c.participant_id = ? AND m.sender_type = 'player'
+        AND julianday(m.sent_at) >= julianday(?)`,
+  ).bind(clubTeamId, playerId, new Date(now.getTime() - LOYAL_REPEAT_DAYS * DAY_MS).toISOString())
+    .all<{ body: string | null; scenario: string | null }>()
+    .catch((e) => { logger.warn({ module: "rejection-impact" }, "nedávné poděkování za odmítnutou nabídku", e); return null; });
+  const loyal = REJECTED_SMS_LOYAL.map((t) => t.replaceAll("{team}", teamName));
+  return (rows?.results ?? []).some((r) => r.scenario === LOYAL_SCENARIO_ID || repeatsAny(r.body ?? "", loyal));
+}
+
+/** Pořadí hráče v kádru podle hodnocení, slovy pro prompt. */
+async function squadRoleOf(db: D1Database, rosterTeamId: string, playerId: string): Promise<string | null> {
+  const r = await db.prepare(
+    `SELECT (SELECT COUNT(*) FROM players o WHERE o.team_id = ?1 AND (o.status IS NULL OR o.status = 'active')
+               AND o.overall_rating > p.overall_rating) + 1 AS rank,
+            (SELECT COUNT(*) FROM players o WHERE o.team_id = ?1 AND (o.status IS NULL OR o.status = 'active')) AS total
+       FROM players p WHERE p.id = ?2`,
+  ).bind(rosterTeamId, playerId).first<{ rank: number; total: number }>()
+    .catch((e) => { logger.warn({ module: "rejection-impact" }, `místo hráče v kádru ${playerId}`, e); return null; });
+  return r ? squadRoleText(r.rank, r.total) : null;
+}
+
+/** SMS hráče po odmítnuté nabídce (model, jinak předem napsaná varianta). Vrací konverzaci. */
+async function sendRejectionSms(
+  db: D1Database,
+  env: Parameters<typeof applyOfferRejectionImpact>[3],
+  o: {
+    clubTeamId: string; rosterTeamId: string; offerId: string | undefined;
+    playerRef: { id: string; firstName: string; lastName: string; nickname: string | null; avatar: string | null };
+    facts: RejectionSmsFacts; suffix?: string;
+  },
+): Promise<string> {
+  const facts = { ...o.facts, squadRole: o.facts.squadRole ?? await squadRoleOf(db, o.rosterTeamId, o.playerRef.id) };
+  const { sendEventSms } = await import("../messaging/event-sms");
+  const sent = await sendEventSms(db, env, {
+    clubTeamId: o.clubTeamId,
+    player: o.playerRef,
+    instruction: rejectionSmsInstruction(facts),
+    fallback: REJECTION_POOLS[facts.stance].map((t) => t.replaceAll("{team}", facts.teamName)),
+    fallbackSuffix: o.suffix,
+    seed: `rejection|${o.offerId ?? ""}|${o.playerRef.id}`,
+    scenarioId: facts.stance === "loyal" ? LOYAL_SCENARIO_ID : "rejected_offer",
+    metadata: { offerId: o.offerId ?? null, stance: facts.stance },
+  });
+  return sent.convId;
 }
 
 /**
@@ -517,6 +709,9 @@ async function processUnrestPlayer(db: D1Database, row: Record<string, unknown>)
   // AI klub: stejná mechanika, žádné SMS (hráč ani fyzioterapeut AI trenérovi nepíšou).
   const silent = row.club_user_id === "ai";
   const sms = async (body: string) => { if (!silent) await sendPlayerSMS(db, clubTeamId, playerRef, body); };
+  const smsVariant = async (pool: readonly string[], seed: string) => {
+    if (!silent) await sendPlayerTemplateSMS(db, clubTeamId, playerRef, pool, { seed, metadata: { type: "promise" } });
+  };
 
   // 1) Kontrola slibu minut (pledge 'minutes') — 2 ze 3 zápasů za klub od slibu v základu (45+ min)
   let pledgeBroken = false;
@@ -532,7 +727,7 @@ async function processUnrestPlayer(db: D1Database, row: Record<string, unknown>)
       unrest.pledge = null;
       await resolvePromises(db, playerId, ["minutes"], "kept");
       unrest.level = clamp(unrest.level - 10, 0, 100);
-      await sms("Trenére, díky že jste dodržel slovo s tou sestavou. Vážím si toho.");
+      await smsVariant(LINEUP_PROMISE_KEPT_SMS, `pledge-kept|${playerId}|${unrest.since ?? ""}`);
     } else if (verdict === "broken") {
       pledgeBroken = true;
       unrest.pledge = null;
@@ -540,7 +735,7 @@ async function processUnrestPlayer(db: D1Database, row: Record<string, unknown>)
       unrest.level = clamp(unrest.level + BROKEN_PLEDGE_UNREST, 0, 100);
       const morale: number = typeof lc.morale === "number" ? lc.morale : 50;
       lc.morale = clamp(morale - BROKEN_PLEDGE_MORALE, 0, 100);
-      await sms("Sliboval jste mi místo v sestavě, trenére. A já zase sedím. Tohle nemá cenu.");
+      await smsVariant(LINEUP_PROMISE_BROKEN_SMS, `pledge-broken|${playerId}|${unrest.since ?? ""}`);
     }
   } else if ((unrest.pledge?.type === "transfer" || unrest.pledge?.type === "release") && new Date(unrest.pledge.deadline) < new Date()) {
     // Slib prodeje vypršel bez další nabídky — smazat (porušení řeší applyOfferRejectionImpact)
