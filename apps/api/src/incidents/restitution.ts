@@ -8,8 +8,11 @@
  * Když trenér chce opravu („uděláte brigádu“) a je co opravit, slíbí opravu brigádou do dvou
  * dní. I po uzavřeném incidentu (trest padl, lup zůstal u hráče nebo je pořád rozbito) slíbí,
  * že to vrátí nebo opraví; splnění hlídá amends.ts (zadání 2026-11-22, Turek a poháry).
- * Zkouší se jednou na incident (značka `restitution` ve sloupci `tactics`, migrace 0317).
- * Volá incidents/zprava-trenera.ts ještě před odpovědí hráče, ta už výsledek zná.
+ * Rozhoduje se jednou na incident (značka `restitution` ve sloupci `tactics`, migrace 0317).
+ * Další výzva (téhož dne i později) nové losování nemá: dostane stejné rozhodnutí znovu
+ * (`repeated`). Kdo odmítl, odmítá dál; kdo slíbil, jeho slib (úkol s lhůtou) platí.
+ * Volá incidents/zprava-trenera.ts ještě před odpovědí hráče. Rozhodnutí jde do
+ * `life_context.amendsDecision` a odpověď dostane pevný pokyn (amends-decision.ts).
  */
 
 import { createRng } from "../generators/rng";
@@ -28,6 +31,7 @@ import {
 } from "./amends";
 import type { Ztrata } from "./typy";
 import { stopaNaHrace } from "./vysetrovani";
+import type { AmendsDecision } from "./amends-decision";
 
 const M = "incidents-restitution";
 
@@ -90,6 +94,8 @@ export type RestitutionOutcome = (
 ) & {
   /** Incident, o který šlo. Zpráva trenéra se jím stává tématem rozhovoru (zprava-trenera.ts). */
   incidentId: string;
+  /** Rozhodlo se už dřív (další výzva k témuž incidentu): stejné rozhodnutí, nový los ani zápis není. */
+  repeated?: true;
 };
 
 interface IncidentRow {
@@ -156,6 +162,55 @@ async function markRestitutionTried(db: D1Database, incidentId: string, playerId
   return (mark?.meta?.changes ?? 0) > 0;
 }
 
+/**
+ * Rozhodnutí z dřívější výzvy k témuž incidentu: běžící úkol vrátit nebo opravit = slib platí,
+ * jinak odmítl (kývnutí s vrácením hned incident uzavře a sem se nedojde).
+ */
+async function priorDecision(db: D1Database, incidentId: string, playerId: string): Promise<RestitutionOutcome> {
+  const task = await db.prepare(
+    `SELECT kind, status, details FROM coach_commitments
+      WHERE player_id = ? AND kind IN ('task_return', 'task_repair') AND json_extract(details, '$.incidentId') = ?
+      ORDER BY made_at DESC LIMIT 1`,
+  ).bind(playerId, incidentId).first<{ kind: AmendsTask; status: string; details: string | null }>()
+    .catch((e) => { logger.warn({ module: M }, `dřívější slib nápravy ${incidentId}`, e); return null; });
+  if (task?.status === "active") {
+    let dueOn: string | undefined;
+    try {
+      dueOn = (JSON.parse(task.details ?? "{}") as { dueOn?: string }).dueOn;
+    } catch (e) {
+      logger.warn({ module: M }, `detaily slibu nápravy ${incidentId}`, e);
+    }
+    if (dueOn) return { outcome: "promised", task: task.kind, dueOn, incidentId, repeated: true };
+  }
+  return { outcome: "refused", incidentId, repeated: true };
+}
+
+/** Co trenér chtěl, slovesem do pokynu (amends-decision.ts). */
+function askedVerb(request: ReadonlySet<AmendsRequest>, plan: AmendsPlan): string {
+  if (plan === "task_repair" || (request.has("repair") && !request.has("return") && !request.has("pay"))) return "opravíš";
+  if (request.has("return") && request.has("pay")) return "vrátíš nebo zaplatíš";
+  return request.has("pay") ? "zaplatíš" : "vrátíš";
+}
+
+/**
+ * Rozhodnutí do `life_context.amendsDecision`: odpověď hráče z něj dostane pevný pokyn.
+ * Odmítnutí neodhaleného pachatele ne: pokyn by modelu prozradil, že to byl on (zapírá dál).
+ */
+async function saveDecision(
+  db: D1Database, o: { playerId: string; now?: Date }, r: RestitutionOutcome, asked: string, revealed: boolean,
+): Promise<void> {
+  if (r.outcome === "refused" && !revealed) return;
+  const decision: AmendsDecision = {
+    incidentId: r.incidentId, outcome: r.outcome, asked, at: (o.now ?? new Date()).toISOString(),
+    ...(r.outcome === "promised" ? { task: r.task, dueText: dueWords(r.dueOn) } : {}),
+  };
+  await db.prepare(
+    `UPDATE players SET life_context = json_set(CASE WHEN json_valid(life_context) THEN life_context ELSE '{}' END, '$.amendsDecision', json(?))
+      WHERE id = ?`,
+  ).bind(JSON.stringify(decision), o.playerId).run()
+    .catch((e) => logger.warn({ module: M }, `rozhodnutí o nápravě pro odpověď ${r.incidentId}`, e));
+}
+
 /** Los, jestli pachatel napravit kývne. Stejné semínko pro žádost trenéra i jeho vlastní slib. */
 function agreesToAmends(incidentId: string, playerId: string, chance: number): boolean {
   return createRng(seedFromString(`restitution|${incidentId}|${playerId}`)).random() * 100 < chance;
@@ -163,8 +218,17 @@ function agreesToAmends(incidentId: string, playerId: string, chance: number): b
 
 export async function tryRestitution(
   db: D1Database,
-  o: { teamId: string; playerId: string; text: string; gameDate: string },
+  o: { teamId: string; playerId: string; text: string; gameDate: string; now?: Date },
 ): Promise<RestitutionOutcome | null> {
+  const r = await decideRestitution(db, o);
+  if (r) await saveDecision(db, o, r.outcome, r.asked, r.revealed);
+  return r?.outcome ?? null;
+}
+
+async function decideRestitution(
+  db: D1Database,
+  o: { teamId: string; playerId: string; text: string; gameDate: string },
+): Promise<{ outcome: RestitutionOutcome; asked: string; revealed: boolean } | null> {
   const request = amendsRequestOf(o.text);
   if (request.size === 0) return null;
   const found = await amendableIncident(db, o);
@@ -184,8 +248,13 @@ export async function tryRestitution(
     if ((await repairableLosses(db, o.teamId, losses)).length > 0) plan = "task_repair";
   }
   if (!plan) return null;
+  const asked = askedVerb(request, plan);
+  const revealed = inc.culprit_revealed === 1;
 
-  if (!(await markRestitutionTried(db, inc.id, o.playerId, o.teamId))) return null;
+  // Už se rozhodlo (dřív téhož dne nebo jindy): stejné rozhodnutí, žádný nový los.
+  if (!(await markRestitutionTried(db, inc.id, o.playerId, o.teamId))) {
+    return { outcome: await priorDecision(db, inc.id, o.playerId), asked, revealed };
+  }
 
   const player = await nactiHraceKadru(db, o.teamId, o.playerId);
   if (!player) return null;
@@ -204,10 +273,13 @@ export async function tryRestitution(
           : "Trenér po tobě chce, ať to vrátíš nebo zaplatíš. Nechce se ti a vymlouváš se.");
     }
     logger.info({ module: M, teamId: o.teamId }, `pachatel ${o.playerId} odmítl napravit ${inc.id} (šance ${chance} %)`);
-    return { outcome: "refused", incidentId: inc.id };
+    return { outcome: { outcome: "refused", incidentId: inc.id }, asked, revealed };
   }
 
-  if (plan === "task_return" || plan === "task_repair") return promiseAmends(db, o, inc, plan);
+  if (plan === "task_return" || plan === "task_repair") {
+    const promised = await promiseAmends(db, o, inc, plan);
+    return promised ? { outcome: promised, asked, revealed: true } : null;
+  }
 
   const name = `${player.krestni} ${player.prijmeni}`;
   const title = nazevIncidentu(inc.kind);
@@ -243,7 +315,7 @@ export async function tryRestitution(
   await sendIncidentSystemSms(db, o.teamId, SMS_ROLE_KUSTOD, body, smsIncidentu(inc.id))
     .catch((e) => logger.warn({ module: M }, `SMS po vrácení ${inc.id}`, e));
   logger.info({ module: M, teamId: o.teamId }, `pachatel ${o.playerId} ${outcome} ${inc.id}: ${total} Kč`);
-  return { outcome, amount: total, incidentId: inc.id };
+  return { outcome: { outcome, amount: total, incidentId: inc.id }, asked, revealed: true };
 }
 
 /**
