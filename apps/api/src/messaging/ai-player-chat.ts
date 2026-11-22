@@ -11,7 +11,7 @@ import { sanitizeForPrompt } from "../news/post-match-context";
 import { logger } from "../lib/logger";
 import { COACH_CHAT_MAX_MORALE, COACH_CHAT_MAX_RELATION } from "../lib/coach-relation";
 import { seedFromString } from "../lib/seed";
-import { MIN_MODEL_CALL_MS, remainingMs } from "../lib/time-budget";
+import { MIN_MODEL_CALL_MS, RETRY_MIN_MS, remainingMs } from "../lib/time-budget";
 import { getOccupationByName, smenaProPovolani } from "../generators/occupations";
 import {
   complainsAboutWaking, domacnostSeSituaci, kontextCasu, popisSituace, pravidloEmoji, wokenAtHome, type CasovyKontext,
@@ -23,7 +23,7 @@ import { memoryPromptLines, type OfferStance } from "./player-memory";
 import { STOCK_PHRASES_RULE, generateWithoutRepeats, ownLinesPromptBlock } from "./repetition";
 import { GeminiUnavailableError } from "./model-errors";
 import { ATTENDANCE_PLEDGE_RULE, ATTENDANCE_PLEDGE_SCHEMA, absencePersuasionLine, parseAttendancePledge, type RawAttendancePledge } from "./attendance-pledge";
-import { persuasionLine } from "./persuasion";
+import { contradictsPersuasion, persuasionFallback, persuasionLine, persuasionRetryRule } from "./persuasion";
 import { amendsDecisionLine } from "../incidents/amends-decision";
 import { requestRule } from "./coach-rules";
 
@@ -902,8 +902,8 @@ export async function generateReply(
     `{"body": "<text SMS, max 200 znaků>", "conversation_complete": <true pokud je téma vyřešené, jinak false>${flags.schema}}`,
   ];
 
-  return generateWithoutRepeats(player.ownRecentLines, async (retryRule) => {
-    const prompt = [...prompt0, retryRule, ...format].filter(Boolean).join("\n");
+  const attempt = (fixRule: string) => generateWithoutRepeats(player.ownRecentLines, async (retryRule) => {
+    const prompt = [...prompt0, fixRule, retryRule, ...format].filter(Boolean).join("\n");
     const raw = await callModel(env, prompt, { json: true, maxTokens: 256, temperature: 1.0, deadline: opts.deadline });
 
     const parsed = tryParseJson<{ body?: unknown; conversation_complete?: unknown; write_later?: unknown; transfer_stance?: unknown; accepts_invite?: unknown; attendance_pledge?: unknown; accepts_request?: unknown }>(raw);
@@ -924,6 +924,7 @@ export async function generateReply(
       ...parseReplyFlags(parsed, body, player),
     };
   }, `odpověď ${scenario.id}`, { deadline: opts.deadline, address: coachAddressForm(player), coachMessage: lastCoachMessage(history) });
+  return keepPersuasionDecision(player, await attempt(""), attempt, opts.deadline);
 }
 
 /**
@@ -1175,8 +1176,8 @@ export async function generateCoachInitiatedReply(
     `{"body": "<text SMS, max 200 znaků>", "conversation_complete": <true|false>, "relationship_delta": <číslo>, "morale_delta": <číslo>, "summary": "<věta>"${flags.schema}}`,
   ];
 
-  return generateWithoutRepeats(player.ownRecentLines, async (retryRule) => {
-    const prompt = [...prompt0, retryRule, ...format].filter(Boolean).join("\n");
+  const attempt = (fixRule: string) => generateWithoutRepeats(player.ownRecentLines, async (retryRule) => {
+    const prompt = [...prompt0, fixRule, retryRule, ...format].filter(Boolean).join("\n");
     const raw = await callModel(env, prompt, { json: true, maxTokens: 320, temperature: 0.95, deadline: opts.deadline });
     const parsed = tryParseJson<{
       body?: unknown; conversation_complete?: unknown;
@@ -1195,6 +1196,33 @@ export async function generateCoachInitiatedReply(
       ...parseReplyFlags(parsed, body, player),
     };
   }, "odpověď trenérovi", { deadline: opts.deadline, address: coachAddressForm(player), coachMessage: lastCoachMessage(history) });
+  return keepPersuasionDecision(player, await attempt(""), attempt, opts.deadline);
+}
+
+/**
+ * Odpověď na přemlouvání říká totéž, co rozhodla hra (persuasion.ts). Přibyl (E2E 22. 11.):
+ * hra rozhodla „přijde“, model podle starší omluvenky v historii napsal „Nezvládnu ani poločas,
+ * díky za nabídku 😔“. Při rozporu se jednou přegeneruje (když zbývá čas), jinak, nebo když ani
+ * druhý pokus nesedí, jde předem napsaná věta podle rozhodnutí.
+ */
+async function keepPersuasionDecision(
+  player: PlayerSnapshot, first: ReplyResult, regenerate: (fixRule: string) => Promise<ReplyResult>, deadline: number | undefined,
+): Promise<ReplyResult> {
+  const p = player.persuasion;
+  if (!p || p.applied || !contradictsPersuasion(first.body, p.decided)) return first;
+  logger.warn({ module: "ai-player-chat" }, `odpověď ${player.id} odporuje rozhodnutí přemlouvání (${p.decided}): ${first.body}`);
+  if (remainingMs(deadline) >= RETRY_MIN_MS) {
+    try {
+      const second = await regenerate(persuasionRetryRule(p.decided));
+      if (!contradictsPersuasion(second.body, p.decided)) return second;
+      logger.warn({ module: "ai-player-chat" }, `ani druhý pokus rozhodnutí nedodržel (${player.id}): ${second.body}`);
+    } catch (e) {
+      if (!(e instanceof GeminiUnavailableError)) throw e;
+      logger.warn({ module: "ai-player-chat" }, `druhý pokus odpovědi na přemlouvání ${player.id}`, e);
+    }
+  }
+  const { writeLater: _later, attendancePledge: _pledge, ...rest } = first;
+  return { ...rest, body: persuasionFallback(p, player.id, player.ownRecentLines ?? [], coachAddressForm(player)) };
 }
 
 /**

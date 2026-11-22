@@ -2008,7 +2008,7 @@ export async function afterPlayerReply(
   // Trenér ho přemluvil a hra rozhodla, že přijde (persuasion.ts): slib se zapíše přímo, bez příznaku od modelu.
   if (r.player.persuasion) {
     const { applyPersuasion } = await import("./persuasion");
-    await applyPersuasion(db, { clubTeamId: r.teamId, convId: r.convId, player: r.player, at: r.at });
+    await applyPersuasion(db, { clubTeamId: r.teamId, convId: r.convId, player: r.player, at: r.at, replyBody: r.reply.body });
   }
   // Pokyn trenéra (kolečka, omluva kabině): hráč odepsal, jestli ho splní (coach-rules.ts).
   if (r.reply.acceptsRequest !== undefined && r.player.pendingRequest) {

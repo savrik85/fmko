@@ -30,7 +30,7 @@ import { Hono } from "hono";
 import { generateText } from "../lib/ai-provider";
 import { messagingRouter } from "../routes/messaging";
 import { createSession } from "../auth/session";
-import { persuasionChance, persuasionRoll } from "./persuasion";
+import { PERSUADED_ATTEND_REPLIES, PERSUADED_SKIP_REPLIES, applyPersuasion, persuasionChance, persuasionRoll, replyStance } from "./persuasion";
 import { absenceEase } from "./attendance-pledge";
 import type { Bindings } from "../index";
 
@@ -180,5 +180,63 @@ describe("přemlouvání omluveného hráče rozhoduje hra", () => {
     await send(PRIBYL, "Aleši, upřímnou soustrast. Zápas je až v šest, nešlo by to po pohřbu ještě stihnout? Moc tě potřebuju.");
     expect((await life(PRIBYL)).persuasion).toBeUndefined();
     expect((await life(PRIBYL)).matchPledge).toBeUndefined();
+  }, 60_000);
+});
+
+// Přibyl (E2E 22. 11., final3 Chyba 4): hra rozhodla „přijde“, model napsal „Nezvládnu ani poločas,
+// díky za nabídku 😔“, a přesto 📝 a v kabině „Beru zpátky, budu tam.“
+describe("odpověď na přemlouvání odpovídá rozhodnutí hry", () => {
+  const PRIBYL_TEXT = "Nezvládnu ani poločas, díky za nabídku 😔";
+  const modelSays = (...bodies: string[]) => {
+    let i = 0;
+    vi.mocked(generateText).mockImplementation(async (_ctx, prompt) => {
+      if (String(prompt).includes("KONKRÉTNÍ slib")) return JSON.stringify({ kind: "none", quote: "" });
+      const body = bodies[Math.min(i, bodies.length - 1)];
+      i++;
+      return JSON.stringify({ body, conversation_complete: false });
+    });
+  };
+  const kabinaLine = async (playerId: string) => (await db.prepare(
+    "SELECT body, json_extract(metadata, '$.response') AS r FROM messages WHERE conversation_id = ? AND sender_id = ? AND id NOT LIKE 'exc-%' ORDER BY julianday(sent_at) DESC LIMIT 1",
+  ).bind(KABINA, playerId).first<{ body: string; r: string }>());
+
+  it("„přijde“, ale model 2× napíše „Nezvládnu ani poločas“: jde předem napsané „přijdu“, slib i kabina sedí", async () => {
+    modelSays(PRIBYL_TEXT);
+    await send(VESELY, VESELY_1);
+    expect(replyPrompts().some((p) => p.includes("POZOR, oprava: rozhodl ses, že PŘIJDEŠ"))).toBe(true);
+    const lines = await conv(VESELY);
+    const reply = lines.find((m) => m.sender_type === "player")!.body;
+    expect(reply).not.toBe(PRIBYL_TEXT);
+    expect(PERSUADED_ATTEND_REPLIES).toContain(reply);
+    expect(replyStance(reply)).toBe("attend");
+    expect(lines.at(-1)?.body).toMatch(/^📝 Jan slíbil, že přijde na zápas/);
+    expect((await kabinaLine(VESELY))?.r).toBe("yes");
+  }, 60_000);
+
+  it("„přijde“: když druhý pokus sedí, odejde ten", async () => {
+    modelSays(PRIBYL_TEXT, "Tak jo, přijedu v pět, děkuju! 😊");
+    await send(VESELY, VESELY_1);
+    expect((await conv(VESELY)).find((m) => m.sender_type === "player")?.body).toBe("Tak jo, přijedu v pět, děkuju! 😊");
+    expect((await life(VESELY)).matchPledge).toMatchObject({ intent: "attend", matchKey: CAL });
+  }, 60_000);
+
+  it("„nepřijde“, ale model napíše „Jasně, přijdu“: odejde odmítnutí a slib nevznikne", async () => {
+    modelSays("Jasně, přijdu, trenére! Budu tam.");
+    await send(FILIP, "Filipe, zítra tě v Hradčanech potřebuju. Přijď, jo?");
+    const reply = (await conv(FILIP)).find((m) => m.sender_type === "player")!.body;
+    expect(PERSUADED_SKIP_REPLIES).toContain(reply);
+    expect(replyStance(reply)).not.toBe("attend");
+    expect((await life(FILIP)).matchPledge).toBeUndefined();
+  }, 60_000);
+
+  it("slib proti textu odpovědi se nezapíše nikdy", async () => {
+    const persuasion = { key: `match:${CAL}`, event: "match" as const, attempts: 1, decided: "attend" as const, at: new Date().toISOString(), convId: `conv-${VESELY}` };
+    await db.prepare("UPDATE players SET life_context = json_set(life_context, '$.persuasion', json(?)) WHERE id = ?").bind(JSON.stringify(persuasion), VESELY).run();
+    expect(await applyPersuasion(db, {
+      clubTeamId: TEAM, convId: `conv-${VESELY}`, player: { id: VESELY, firstName: "Jan", persuasion }, at: new Date().toISOString(), replyBody: PRIBYL_TEXT,
+    })).toBe(false);
+    expect((await life(VESELY)).matchPledge).toBeUndefined();
+    expect((await life(VESELY)).persuasion.applied).toBe(true);
+    expect(await kabinaLine(VESELY)).toBeNull();
   }, 60_000);
 });
