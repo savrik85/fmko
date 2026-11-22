@@ -29,7 +29,7 @@ const DRAMA_STEP = 3.5;
 type Side = "home" | "away";
 const SIDES = ["home", "away"] as const;
 type Role = "GK" | "DEF" | "MID" | "FWD";
-type Pose = "down" | "diveLeft" | "diveRight" | "celebrate" | "armUp" | "slide" | "shake" | "hug" | "sit";
+type Pose = "down" | "diveLeft" | "diveRight" | "celebrate" | "armUp" | "slide" | "shake" | "hug" | "sit" | "rest";
 export type ShotResult = "goal" | "saved" | "post" | "bar" | "wide" | "over" | "blocked";
 type CardColor = "yellow" | "red";
 
@@ -831,13 +831,13 @@ export class Replay {
       st.coach(up, "joy", 0.9);
       st.coach(down, "upset", 1.2);
     }
-    // Kdo je na dně, klekne si nebo si lehne; kdo jde podat ruku, zůstane stát.
+    // Kdo je na dně, sedne si na trávník nebo si lehne na záda; kdo jde podat ruku, zůstane stát.
     const grounded = new Set<number>();
     for (const side of winner ? [down] : SIDES) {
       figures(side).forEach((f, n) => {
         if (n % 3 === 2 || walkers.has(f)) return;
         const from = 1 + (n % 5) * 0.25;
-        st.pose(f, n % 3 ? "slide" : "down", Infinity, from);
+        st.pose(f, n % 3 ? "rest" : "down", Infinity, from);
         grounded.add(f);
       });
     }
@@ -871,7 +871,7 @@ export class Replay {
           settled = Math.max(settled, wait + walk);
         } else if (n % 2) {
           // Každý druhý ze zbylých si po chvíli sedne na trávník.
-          st.pose(f, "slide", Infinity, 1 + n * 0.8);
+          st.pose(f, "rest", Infinity, 1 + n * 0.8);
         }
       });
     }

@@ -269,7 +269,7 @@ export function ReplayScene({ replay, kits, snow, overview, step, frame: root, v
         const scale = ((fig.player.height ?? 178) / 178) * FIGURE_SCALE;
         // Jak moc hráč běží (0 stojí, 1 sprint): podle toho se předklání, zvedá kolena a pracuje rukama.
         const run = Math.min(1, s.speed / 6);
-        const slide = f.pose === "slide", sit = f.pose === "sit", hug = f.pose === "hug";
+        const slide = f.pose === "slide", sit = f.pose === "sit", hug = f.pose === "hug", rest = f.pose === "rest";
         let lift = f.y + Math.abs(Math.sin(s.phase)) * 0.05 * run, shift = 0;
         qRoot.setFromAxisAngle(THREE.Object3D.DEFAULT_UP, s.yaw);
         if (f.pose === "down") {
@@ -284,8 +284,10 @@ export function ReplayScene({ replay, kits, snow, overview, step, frame: root, v
           lift = 0.45;
         } else {
           // Předklon v běhu; při skluzu po kolenou je tělo zakloněné a níž.
-          qRoot.multiply(qPose.setFromEuler(eTmp.set(slide ? -0.35 : hug ? 0.15 : 0.24 * run, 0, 0)));
+          qRoot.multiply(qPose.setFromEuler(eTmp.set(slide || rest ? -0.35 : hug ? 0.15 : 0.24 * run, 0, 0)));
           if (slide) lift = -0.4 * scale;
+          // Sedí na trávníku: boky u země, zakloněný, opřený o ruce za zády, kolena pokrčená a chodidla na zemi.
+          if (rest) lift = (0.14 - BODY.hip[1]) * scale;
           // Sedí: boky ve výšce sedačky.
           if (sit) lift = SEAT_HIP_Y - BODY.hip[1] * scale;
         }
@@ -296,8 +298,8 @@ export function ReplayScene({ replay, kits, snow, overview, step, frame: root, v
           const side = k === 0 ? 1 : -1;
           const swing = Math.sin(s.phase) * side;
           // Noha: stehno kmitá dopředu a dozadu, koleno se ohýbá, když jde noha vzad (při skluzu jsou kolena ohnutá pořád).
-          const thigh = sit ? -1.5 : slide ? 0.3 : -swing * 0.95 * run;
-          const knee = sit || slide ? 1.5 : run * (0.25 + 0.9 * Math.max(0, Math.cos(s.phase) * side));
+          const thigh = sit ? -1.5 : rest ? -1.25 : slide ? 0.3 : -swing * 0.95 * run;
+          const knee = rest ? 2.1 : sit || slide ? 1.5 : run * (0.25 + 0.9 * Math.max(0, Math.cos(s.phase) * side));
           joints.hip[k].makeTranslation(BODY.hip[0] * side, BODY.hip[1], 0).multiply(mTmp.makeRotationX(thigh));
           joints.knee[k].copy(joints.hip[k]).multiply(mTmp.makeTranslation(0, -BODY.knee, 0)).multiply(mTmp.makeRotationX(knee));
           // Ruka: v běhu proti noze s ohnutým loktem; při oslavě zdvižená šikmo vzhůru, při výskoku na hlavičku jen
@@ -307,8 +309,8 @@ export function ReplayScene({ replay, kits, snow, overview, step, frame: root, v
           // Podání ruky: pravá v pase před tělem, potřásá se v lokti (oba ve stejném rytmu, ruce zůstávají u sebe).
           const shaking = f.pose === "shake" && k === 1;
           // Chlapské objetí: pravé ruce si dál drží mezi sebou, levá toho druhého poplácá po zádech.
-          const arm = hug ? (k === 1 ? -0.55 : -1.1) : shaking ? -0.55 : cheering ? 2.4 + Math.sin(now * 9 + i) * 0.15 : raised ? Math.PI - 0.25 : f.y > 0.05 ? 0.9 : swing * 0.8 * run + Math.sin(now * 1.3 + i * 2.1) * 0.05;
-          const elbow = hug ? (k === 1 ? -0.9 : -0.5 - Math.max(0, Math.sin(now * 8)) * 0.35) : shaking ? -0.6 + Math.sin(now * 11) * 0.15 : cheering ? -0.5 : raised ? -0.15 : f.y > 0.05 ? -0.9 : -(0.25 + 1.1 * run);
+          const arm = rest ? 0.75 : hug ? (k === 1 ? -0.55 : -1.1) : shaking ? -0.55 : cheering ? 2.4 + Math.sin(now * 9 + i) * 0.15 : raised ? Math.PI - 0.25 : f.y > 0.05 ? 0.9 : swing * 0.8 * run + Math.sin(now * 1.3 + i * 2.1) * 0.05;
+          const elbow = rest ? -0.1 : hug ? (k === 1 ? -0.9 : -0.5 - Math.max(0, Math.sin(now * 8)) * 0.35) : shaking ? -0.6 + Math.sin(now * 11) * 0.15 : cheering ? -0.5 : raised ? -0.15 : f.y > 0.05 ? -0.9 : -(0.25 + 1.1 * run);
           joints.shoulder[k].makeTranslation(BODY.shoulder[0] * side, BODY.shoulder[1], 0).multiply(mTmp.makeRotationX(arm));
           joints.elbow[k].copy(joints.shoulder[k]).multiply(mTmp.makeTranslation(0, -BODY.elbow, 0)).multiply(mTmp.makeRotationX(elbow));
         }
