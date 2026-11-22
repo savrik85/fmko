@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, type RefObject } from "rea
 import * as THREE from "three";
 import { addAfterEffect, useFrame, useThree } from "@react-three/fiber";
 import { FENCE_BOUNDS, GOAL_NAME, PITCH_SURFACE_Y } from "@/components/stadium/stadium-3d/constants";
-import { emptyFrame, GOAL_H, GOAL_HALF_W, HALF_L, HALF_W, REPLAY, sampleClip, sceneTime, type Clip, type Figure, type Replay, type ReplayKit, type Scene, type Side } from "./scenes";
+import { emptyFrame, HALF_L, HALF_W, REPLAY, sampleClip, sceneTime, type Clip, type Figure, type Replay, type ReplayKit, type Scene, type Side } from "./scenes";
 
 /** Záběr: scéna a její část. Nový objekt znamená hrát od začátku, i když jde o tutéž scénu (skok zpět na její začátek). */
 interface ReplayPlay {
@@ -301,11 +301,13 @@ export function ReplayScene({ replay, kits, snow, overview, step, root, veil, on
     }
     const { scene, attack } = play;
     const elapsed = p.elapsed = hold ? 0 : p.elapsed + dt * rate;
-    // Gól: po chvíli oslavy se zakončení zpomaleně zopakuje, pak oslava pokračuje.
+    // Gól: po chvíli oslavy se zakončení zpomaleně zopakuje.
     const again = !attack && scene.replay ? scene.replay : null;
-    const replaying = again !== null && elapsed >= REPLAY.after && elapsed < REPLAY.after + REPLAY.seconds;
-    const t = replaying && again ? THREE.MathUtils.lerp(again.from, again.to, (elapsed - REPLAY.after) / REPLAY.seconds)
-      : sceneTime(scene, attack, again && elapsed >= REPLAY.after ? elapsed - REPLAY.seconds : elapsed);
+    // Opakovaný záběr je to poslední, co z gólu je: když skončí, drží jeho poslední snímek, dokud nepřijde další akce
+    // (k oslavě se obraz nevrací).
+    const replaying = again !== null && elapsed >= REPLAY.after;
+    const t = replaying && again ? THREE.MathUtils.lerp(again.from, again.to, Math.min(1, (elapsed - REPLAY.after) / REPLAY.seconds))
+      : sceneTime(scene, attack, elapsed);
     p.t = t;
     sampleClip(scene.clip, t, frame);
     // Střih: jiný klip, střih uvnitř klipu, skok zpět, začátek a konec opakovaného záběru. Stejně (hráči rovnou
@@ -431,8 +433,8 @@ export function ReplayScene({ replay, kits, snow, overview, step, root, veil, on
 
     // Karta ve zdvižené ruce rozhodčího; když ruku spustí, kartu schoval.
     const shown = scene.card && t >= scene.card.at && frame.figures[replay.referee].pose === "armUp" ? scene.card : null;
-    // Gól: jakmile je míč za čárou mezi tyčemi a pod břevnem, branka zezelená (barva nápisu „GÓÓÓL!“).
-    const inGoal = Math.abs(frame.ballZ) > HALF_L && Math.abs(frame.ballX) < GOAL_HALF_W && frame.ballY < GOAL_H;
+    // Gól: ve scéně, která končí gólem, branka zezelená (barva nápisu „GÓÓÓL!“), jakmile je míč za brankovou čárou.
+    const inGoal = scene.goal && Math.abs(frame.ballZ) > HALF_L;
     const goal = inGoal ? world.getObjectsByProperty("name", GOAL_NAME).find((g) => Math.sign(g.getWorldPosition(vPos).z) === Math.sign(frame.ballZ)) ?? null : null;
     if (goal !== scored.current) {
       if (scored.current) tintGoal(scored.current, false);
