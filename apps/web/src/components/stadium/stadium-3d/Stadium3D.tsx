@@ -123,6 +123,10 @@ interface Stadium3DProps {
   lastMatch?: LastMatchScore | null;
   initialTimeOfDay?: TimeOfDay;
   initialViewpoint?: CameraViewpoint;
+  /** Záznam zápasu ve scéně: kameru si řídí sám a míč na středu se nekreslí. */
+  replay?: React.ReactNode;
+  /** Zastavený obraz (pauza záznamu): scéna se přestane kreslit, takže stojí i sníh, vlajky a diváci. */
+  frozen?: boolean;
   initialWeather?: WeatherType;
   weather?: WeatherType;
   initialMode?: StadiumMode;
@@ -178,6 +182,8 @@ export function Stadium3D({
   lastMatch,
   initialTimeOfDay = "day",
   initialViewpoint = "overview",
+  replay,
+  frozen = false,
   initialWeather = "sunny",
   weather: weatherProp,
   initialMode = "match_day",
@@ -497,7 +503,7 @@ export function Stadium3D({
         // (trávník vs. okolní dlažba) perou o pořadí a prosvítají skrz sebe.
         // Kamera je díky minDistance=15 vždy dost daleko, takže near=1 nic neořízne.
         camera={{ position: VIEWPOINTS.overview.position, fov: VIEWPOINTS.overview.fov, near: 1, far: 400 }}
-        frameloop={inView ? "always" : "never"}
+        frameloop={inView && !frozen ? "always" : "never"}
         dpr={[1, dpr]}
         onCreated={() => {
           setTimeout(() => setIsSceneReady(true), 120);
@@ -526,7 +532,7 @@ export function Stadium3D({
         <WeatherEffects weather={weather} timeOfDay={timeOfDay} isMobile={isMobile} />
 
         {/* Plynulý kontrolér kamery a filmový oblet */}
-        <CameraController viewpoint={viewpoint} isMobile={isMobile} viewpoints={viewpoints} instant={!!onSnapshotReady} />
+        {replay ?? <CameraController viewpoint={viewpoint} isMobile={isMobile} viewpoints={viewpoints} instant={!!onSnapshotReady} />}
 
         {/* Post-processing: ambient occlusion, záře světel, vinětace, tone mapping (jen desktop) */}
         {fxActive && isSceneReady && <PostFX timeOfDay={timeOfDay} miniature={viewpoint === "overview" || viewpoint === "orbit"} />}
@@ -586,6 +592,7 @@ export function Stadium3D({
             snowCleared={snowClearingOrdered}
             grassBlades={!isMobile}
             timeOfDay={timeOfDay}
+            broadcast={!!replay}
           />
 
           {/* Tribuny okolo hřiště (v tréninkový den prázdné bez diváků) */}

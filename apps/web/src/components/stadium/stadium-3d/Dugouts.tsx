@@ -18,9 +18,9 @@ export function Dugouts({ teamColor, secondaryColor = "#ffffff", weather }: Dugo
 
   return (
     <group>
-      {/* Domácí střídačka (z = -7) */}
+      {/* Domácí střídačka: z hlavní tribuny vlevo, na polovině, kde domácí v záznamu zápasu začínají */}
       <Dugout
-        position={[dugoutX, 0, -7.5]}
+        position={[dugoutX, 0, 7.5]}
         rotationY={Math.PI / 2}
         label="DOMÁCÍ"
         mainColor={teamColor}
@@ -29,9 +29,9 @@ export function Dugouts({ teamColor, secondaryColor = "#ffffff", weather }: Dugo
         weather={weather}
       />
 
-      {/* Hostující střídačka (z = 7.5) */}
+      {/* Hostující střídačka */}
       <Dugout
-        position={[dugoutX, 0, 7.5]}
+        position={[dugoutX, 0, -7.5]}
         rotationY={Math.PI / 2}
         label="HOSTÉ"
         mainColor="#374151"
