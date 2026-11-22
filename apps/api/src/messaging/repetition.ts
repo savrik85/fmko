@@ -29,8 +29,11 @@ export const TEMPLATE_HISTORY_LIMIT = 40;
 /** Jedna zpráva v seznamu do promptu nejvýš takhle dlouhá. */
 const LINE_MAX_CHARS = 200;
 
-/** Oslovení trenéra: je skoro v každé větě, o opakování nic neříká. */
-const ADDRESS_WORDS = new Set(["trenere", "trenerko", "sefe"]);
+/**
+ * Oslovení trenéra: je skoro v každé větě, o opakování nic neříká. „Trenér“ v 1. pádě oslovuje
+ * hráč s lámanou češtinou („Nu, trenér, …“, Kovalčuk, E2E 22. 11.).
+ */
+const ADDRESS_WORDS = new Set(["trenere", "trenerko", "sefe", "trener"]);
 /** Výplňová slova, která sama o shodě vět nerozhodují. */
 const FILLER_WORDS = new Set([
   "diky", "fakt", "takze", "jako", "proste", "jsem", "jste", "neni", "bude", "tady", "teda", "tohle", "toho",
@@ -81,17 +84,63 @@ export function splitSentences(text: string): string[] {
 }
 
 /**
- * Je věta `a` opakováním věty `b`? Stejná věta (bez oslovení, aspoň tři slova), nebo shoda
- * významových slov podle `tooSimilar` (aspoň 60 % kratší věty a aspoň dvě slova). Krátké
- * „Díky.“ nebo „Jasně, dorazím.“ se za opakování nepočítají, ty k řeči patří.
+ * Slib nebo kývnutí („zhubnu“, „vrátím“, „zaplatím“, „přijdu“, „beru“, „platí“, „jdu do toho“),
+ * bez diakritiky. Nese obsah: hra podle něj zapisuje dohody a sliby (coach-rules.ts).
  */
-export function sentencesRepeat(a: string, b: string): boolean {
+const COMMITMENT_RE = /\b(zhubnu|shodim|vratim|zaplatim|nahradim|opravim|prijdu|dorazim|prijedu|beru|plati|slibuju|slibuji|udelam|jdu do toho|dam (to|je|ty|dolu))\b/;
+/** Nová delší věta je opakováním kratší staré jen s tolika společnými významovými slovy. */
+const LONGER_MIN_COMMON = 3;
+
+/** Začátky slov (`ECHO_STEM_CHARS`) jako množina. */
+function stemSet(words: readonly string[]): Set<string> {
+  return new Set(words.map((w) => w.slice(0, ECHO_STEM_CHARS)));
+}
+
+/** Jména uprostřed věty („Sport Life“, „Břevnovu“) bez diakritiky, bez oslovení. */
+function namesIn(sentence: string): string[] {
+  return sentence.split(/\s+/).slice(1)
+    .filter((w) => /^[„"(]?\p{Lu}\p{Ll}/u.test(w))
+    .flatMap(plainWords)
+    .filter((w) => !ADDRESS_WORDS.has(w));
+}
+
+/**
+ * Nese věta `a` proti `b` novou informaci: číslo, jméno, slib nebo kývnutí, nebo slovo
+ * z otázky trenéra (`coachMessage`, odpověď na ni), které `b` nemá?
+ */
+function addsInformation(a: string, b: string, coachMessage?: string): boolean {
+  const wordsB = new Set(plainWords(b));
+  if (plainWords(a).some((w) => /\d/.test(w) && !wordsB.has(w))) return true;
+  const stemsB = stemSet(plainWords(b));
+  if (namesIn(a).some((w) => !stemsB.has(w.slice(0, ECHO_STEM_CHARS)))) return true;
+  const plainA = plainWords(a).join(" ");
+  if (COMMITMENT_RE.test(plainA) && !COMMITMENT_RE.test(plainWords(b).join(" "))) return true;
+  if (!coachMessage?.includes("?")) return false;
+  const asked = stemSet(significantWords(coachMessage));
+  return [...stemSet(significantWords(a))].some((w) => asked.has(w) && !stemsB.has(w));
+}
+
+/**
+ * Je věta `a` (nová) opakováním věty `b` (dřívější)? Stejná věta (bez oslovení, aspoň tři
+ * slova), nebo shoda významových slov podle `tooSimilar` (aspoň 60 % kratší věty a aspoň dvě
+ * slova). Krátké „Díky.“ nebo „Jasně, dorazím.“ se za opakování nepočítají, ty k řeči patří.
+ *
+ * Nová věta delší než stará opakováním není, když s ní má jen dvě společná slova a je o víc
+ * než slovo delší, nebo když nese novou informaci (`addsInformation`). Kovalčuk (E2E 22. 11.):
+ * „kopačky mě stály 2500 korun, koupil jsem je v obchodě Sport Life“ na otázku, kolik stály,
+ * se vzalo jako opakování „podívej se, co jsem si koupil!“ a odpověď se vyškrtla.
+ */
+export function sentencesRepeat(a: string, b: string, coachMessage?: string): boolean {
   const pa = plainSentence(a);
   if (pa.split(" ").length >= 3 && pa === plainSentence(b)) return true;
   const wa = significantWords(a);
   const wb = significantWords(b);
   if (wa.length < 2 || wb.length < 2) return false;
-  return tooSimilar(wa.join(" "), wb.join(" "));
+  if (!tooSimilar(wa.join(" "), wb.join(" "))) return false;
+  if (wa.length <= wb.length) return true;
+  const common = wa.filter((w) => wb.includes(w)).length;
+  if (wa.length > wb.length + 1 && common < LONGER_MIN_COMMON) return false;
+  return !addsInformation(a, b, coachMessage);
 }
 
 /** Starší vlastní zprávy se porovnávají jen s dlouhými větami (`LONG_SENTENCE_WORDS`). */
@@ -140,8 +189,8 @@ export function findRepeatedSentences(
   return splitSentences(body).filter((s) => {
     if (isStockSentence(s)) return true;
     if (echoesCoach(s, opts.coachMessage)) return false;
-    if (recent.some((o) => sentencesRepeat(s, o))) return true;
-    return significantWords(s).length >= LONG_SENTENCE_WORDS && old.some((o) => sentencesRepeat(s, o));
+    if (recent.some((o) => sentencesRepeat(s, o, opts.coachMessage))) return true;
+    return significantWords(s).length >= LONG_SENTENCE_WORDS && old.some((o) => sentencesRepeat(s, o, opts.coachMessage));
   });
 }
 
@@ -257,16 +306,19 @@ function withoutOpenerClause(text: string): string {
 /**
  * Zpráva bez opakované krátké fráze a bez úvodu, který měla i jedna ze dvou posledních zpráv
  * hráče (`own`, nejstarší první). Krátká klauzule (nejvýš šest slov), ve které je fráze z jedné
- * ze tří posledních zpráv, nebo ohrané „díky za otázku“ se vyškrtne. Oslovení „Trenére,“ na
- * začátku smí být, ale nejvýš v jedné ze tří zpráv po sobě; stejné citoslovce na začátku
- * („Jasný trenére, …“) taky ne dvakrát po sobě. Když by zbytek nedával smysl, zpráva zůstane.
+ * ze tří posledních zpráv, nebo ohrané „díky za otázku“ se vyškrtne. Klauzule s číslem, slibem
+ * nebo kývnutím zůstane: Bohuslavovi (E2E 22. 11.) filtr vzal z kývnutí „zhubnu těch 3 kila“
+ * a hra dohodu nepoznala. Oslovení „Trenére,“ na začátku smí být, ale nejvýš v jedné ze tří
+ * zpráv po sobě; stejné citoslovce na začátku („Jasný trenére, …“) taky ne dvakrát po sobě.
+ * Když by zbytek nedával smysl, zpráva zůstane.
  */
 export function withoutRepeatedPhrases(body: string, own: readonly string[]): string {
   const seen = new Set(own.slice(-PHRASE_LOOKBACK).flatMap(phraseKeys));
   const droppable = (clause: string) => {
     const words = wordsWithoutAddress(clause);
-    return STOCK_CLAUSE_RE.test(words.join(" "))
-      || (words.length <= PHRASE_CLAUSE_MAX_WORDS && phraseKeys(clause).some((k) => seen.has(k)));
+    if (STOCK_CLAUSE_RE.test(words.join(" "))) return true;
+    if (words.some((w) => /\d/.test(w)) || COMMITMENT_RE.test(words.join(" "))) return false;
+    return words.length <= PHRASE_CLAUSE_MAX_WORDS && phraseKeys(clause).some((k) => seen.has(k));
   };
   const addressOnly = (clause: string) => plainWords(clause).length > 0 && wordsWithoutAddress(clause).length === 0;
 

@@ -359,7 +359,8 @@ describe("krátká odpověď na otázku trenéra a staré věty", () => {
     const gen = vi.fn()
       .mockResolvedValueOnce({ body: "V úterý dorazím, trenére." })
       .mockResolvedValueOnce({ body: "Jo, v úterý dorazím." });
-    expect((await generateWithoutRepeats(["Jo trenére, v úterý dorazím a máknu."], gen, "test")).body).toBe("Jo, v úterý dorazím.");
+    // Klauzule se slibem „v úterý dorazím“ zůstane, škrtne se jen „Jo“ (stejné citoslovce jako minule).
+    expect((await generateWithoutRepeats(["Jo trenére, v úterý dorazím a máknu."], gen, "test")).body).toBe("V úterý dorazím.");
     expect(gen).toHaveBeenCalledTimes(2);
   });
 });
@@ -444,5 +445,64 @@ describe("tvar oslovení bez času na druhý pokus", () => {
       const gen = vi.fn(async () => ({ body }));
       expect((await generateWithoutRepeats([], gen, "test", { address: "vy", deadline: Date.now() + 2_000 })).body).toBe(body);
     }
+  });
+});
+
+// E2E 22. 11.: hlídač opakování mazal věcné odpovědi. Kovalčuk (Rohlík, casual_new_boots) na
+// „A kolik tě stály a kde jsi je kupoval?“ odepsal cenu a obchod, věta se vzala jako opakování
+// „Nu, trenér, podívej se, co jsem si koupil!“ (2 společná slova ze 3) a odešlo jen poděkování.
+// Bohuslavovi frázový filtr vzal z kývnutí „zhubnu těch 3 kila“ a hra kývnutí nepoznala.
+describe("věta s novou informací není opakování", () => {
+  const BOOTS_BEFORE = [
+    "Nu, trenér, podívej se, co jsem si koupil! Djakuju, že vždycky poradíš, ale teď chci jen ukázat nové kopačky 😊",
+    "Nu, trenér, djakuju za odpověď! Teď už chci jen hrát v nich zítra proti Břevnovu 😊",
+  ];
+  const BOOTS_ANSWER = "Nu, trenér, kopačky mě stály 2500 korun, koupil jsem je v obchodě Sport Life.";
+  const BOOTS_QUESTION = "A kolik tě stály a kde jsi je kupoval?";
+
+  it("cena a obchod nejsou opakováním krátké věty „podívej se, co jsem si koupil“", () => {
+    expect(sentencesRepeat(BOOTS_ANSWER, "Nu, trenér, podívej se, co jsem si koupil!")).toBe(false);
+    expect(findRepeatedSentences(BOOTS_ANSWER, BOOTS_BEFORE, { coachMessage: BOOTS_QUESTION })).toEqual([]);
+  });
+
+  it("dlouhá nová věta s dvěma slovy z krátké staré věty opakováním není, krátká po dlouhé ano", () => {
+    expect(sentencesRepeat("Těším se na zápas, kluci jsou připravení a hlavně v pohodě.", "Těším se na zápas!")).toBe(false);
+    // Opačný směr: nová krátká věta opakuje myšlenku staré dlouhé (jako dřív).
+    expect(sentencesRepeat(
+      "Trenére, do dvou týdnů zhubnu těch 3 kila, to mám jasno.",
+      "Řeknu ti to teda přímo, trenére: beru to opravdu vážně, do dvou týdnů zhubnu těch 3 kila, to mám jasno.",
+    )).toBe(true);
+  });
+
+  it("odpověď na otázku, číslo, jméno nebo slib proti kratší obecné větě: nové", () => {
+    // Bez nové informace by to opakování bylo (stejná slova, podobná délka).
+    expect(sentencesRepeat("Kopačky stály hodně, koupil jsem nové.", "Podívej, koupil jsem nové kopačky!")).toBe(true);
+    expect(sentencesRepeat("Kopačky stály hodně, koupil jsem nové.", "Podívej, koupil jsem nové kopačky!", "A kolik tě stály?")).toBe(false);
+    expect(sentencesRepeat("Koupil jsem kopačky za 2500.", "Koupil jsem si kopačky!")).toBe(false);
+    expect(sentencesRepeat("Koupil jsem kopačky v Decathlonu.", "Koupil jsem si kopačky!")).toBe(false);
+    expect(sentencesRepeat("Do dvou týdnů to zhubnu, je to dost málo.", "Do dvou týdnů to je dost málo.")).toBe(false);
+    expect(sentencesRepeat("Do dvou týdnů to je fakt dost málo.", "Do dvou týdnů to je dost málo.")).toBe(true);
+  });
+
+  it("odpověď s cenou odejde celá, i když druhý pokus spadne", async () => {
+    const gen = vi.fn()
+      .mockResolvedValueOnce({ body: `${BOOTS_ANSWER} Djakuju za zájem, těším se na zítřejší zápas 😊` })
+      .mockRejectedValueOnce(new GeminiUnavailableError("timeout"));
+    const out = await generateWithoutRepeats(BOOTS_BEFORE, gen, "test", { coachMessage: BOOTS_QUESTION, deadline: Date.now() + 20_000 });
+    expect(out.body).toContain("2500 korun");
+    expect(out.body).toContain("Sport Life");
+  });
+
+  it("frázový filtr nevezme z kývnutí klauzuli se slibem a číslem (Bohuslav)", () => {
+    const own = [
+      "Trenére, tys mi dal 1000 Kč, když zhubnu 3 kila, ne?",
+      "Těch 3 kila dám dolů, 1000 Kč se mi hodí",
+      "Beru to vážně, do 6. 12. 1000 Kč se mi hodí",
+    ];
+    expect(withoutRepeatedPhrases("Trenére, zhubnu těch 3 kila, mám to pod kontrolou.", own))
+      .toBe("Trenére, zhubnu těch 3 kila, mám to pod kontrolou.");
+    // Výplň bez slibu a čísel se dál škrtá.
+    expect(withoutRepeatedPhrases("Trenére, mám se dobře, díky za otázku! Dneska jsem si užíval víkend 😅", ["Trenére, nic moc nedělám, jen si užívám víkend 😅"]))
+      .toBe("Mám se dobře!");
   });
 });
