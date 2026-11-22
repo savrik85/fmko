@@ -590,6 +590,25 @@ export const COMMITMENT_REPLY_WAIT_MS = 3_000;
  * nikdy nehází (slib nesmí shodit odeslání zprávy ani odpověď hráče).
  * `deadline`: vlastní rozpočet rozpoznání (běží souběžně s odpovědí hráče, ne před ní).
  */
+/** Odpověď hráče na zprávu trenéra `text`, když už přišla (po té zprávě), a podle ní kývnutí na pokyn. */
+async function answerFromEarlierReply(
+  db: D1Database, o: { commitmentId: string; kind: CommitmentKind; target?: string; convId: string; playerId: string; text: string },
+): Promise<void> {
+  const { REQUEST_KINDS } = await import("./player-memory");
+  if (!REQUEST_KINDS.includes(o.kind) || o.target === "team" || o.target === "absentees") return;
+  const reply = await db.prepare(
+    `SELECT m.body FROM messages m
+      WHERE m.conversation_id = ? AND m.sender_type = 'player' AND m.sender_id = ?
+        AND julianday(m.sent_at) > (SELECT MAX(julianday(c.sent_at)) FROM messages c
+              WHERE c.conversation_id = ? AND c.sender_type = 'user' AND TRIM(c.body) = TRIM(?))
+      ORDER BY julianday(m.sent_at) ASC LIMIT 1`,
+  ).bind(o.convId, o.playerId, o.convId, o.text).first<{ body: string | null }>()
+    .catch((e) => { logger.warn({ module: M }, `odpověď hráče na pokyn ${o.commitmentId}`, e); return null; });
+  if (!reply?.body) return;
+  const { answerRequestFromReply } = await import("./coach-rules");
+  await answerRequestFromReply(db, { commitmentId: o.commitmentId, playerId: o.playerId, replyBody: reply.body });
+}
+
 /** Jak dlouho po uzavření incidentu srážkou nebo pokutou patří „strhnu ti to“ ještě k němu (herní dny). */
 const INCIDENT_PUNISHMENT_DAYS = 2;
 
@@ -670,10 +689,14 @@ export async function handleCoachMessageForCommitment(
         return null;
       }
     }
-    return await recordCommitment(db, {
+    const id = await recordCommitment(db, {
       clubTeamId: p.club_id ?? o.teamId, playerId: o.playerId, convId: o.convId, coachMessage: o.text, detected,
       playerFirstName: p.first_name, weeklyWage: p.weekly_wage,
     });
+    // Pokyn nebo dohoda, na které hráč kývá: když už na zprávu odpověděl (rozpoznání trvalo déle
+    // než odpověď, COMMITMENT_REPLY_WAIT_MS), kývnutí se vezme z textu té odpovědi.
+    if (id) await answerFromEarlierReply(db, { commitmentId: id, kind: detected.kind, target: detected.target, convId: o.convId, playerId: o.playerId, text: o.text });
+    return id;
   } catch (e) {
     logger.warn({ module: M, teamId: o.teamId }, `rozpoznání slibu v konverzaci ${o.convId}`, e);
     return null;

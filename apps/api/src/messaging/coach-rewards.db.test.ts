@@ -214,3 +214,54 @@ describe("jen vlastní kádr", () => {
     expect((await db.prepare("SELECT player_id FROM coach_commitments").all<{ player_id: string }>()).results.map((r) => r.player_id)).toEqual(["p2"]);
   });
 });
+
+// Přetest 3 (C6): rozpoznání dohody doběhlo až po odpovědi hráče (COMMITMENT_REPLY_WAIT_MS 3 s),
+// takže hráčovo „Beru to vážně…“ se nezapsalo jako kývnutí a dohoda by propadla jako „nekývl“.
+describe("kývnutí na dohodu, která se zapsala až po odpovědi", () => {
+  const TEXT = "Ján, 1000 Kč, když do dvou týdnů zhubneš na normální váhu.";
+  const DETECTED = { kind: "weight_target", quote: "1000 Kč, když do dvou týdnů zhubneš na normální váhu", kg: null, days: 14, reward: "money", amount: 1000 };
+  const ago = (s: number) => new Date(Date.now() - s * 1000).toISOString();
+  const coachAndReply = (reply: string) => db.batch([
+    db.prepare("INSERT INTO messages (id, conversation_id, sender_type, sender_id, body, sent_at) VALUES ('cm', 'c2', 'user', 'club', ?, ?)").bind(TEXT, ago(20)),
+    db.prepare("INSERT INTO messages (id, conversation_id, sender_type, sender_id, body, metadata, sent_at) VALUES ('pr', 'c2', 'player', 'p2', ?, ?, ?)")
+      .bind(reply, JSON.stringify({ ai_generated: true }), ago(4)),
+  ]);
+  const accepted = async () => JSON.parse((await db.prepare("SELECT details FROM coach_commitments WHERE kind = 'weight_target'").first<{ details: string }>())!.details).accepted;
+
+  it("odpověď už je venku: kývnutí z jejího textu se zapíše (Bohuslav „Beru to vážně…“)", async () => {
+    model.askModelJson.mockResolvedValue(DETECTED);
+    await coachAndReply("Beru to vážně, trenére. Dva týdny žádný alkohol a jdu běhat.");
+    expect(await handleCoachMessageForCommitment(db, {}, { teamId: "club", convId: "c2", playerId: "p2", text: TEXT })).toBeTruthy();
+    expect(await accepted()).toBe(true);
+    expect((await life("p2")).dietPledgeUntil).toBeDefined();
+  });
+
+  it("odmítnutí z textu odpovědi dohodu zruší, nejasná odpověď ji nechá čekat", async () => {
+    model.askModelJson.mockResolvedValue(DETECTED);
+    await coachAndReply("Na to zapomeň, trenére, hubnout nebudu.");
+    const id = await handleCoachMessageForCommitment(db, {}, { teamId: "club", convId: "c2", playerId: "p2", text: TEXT });
+    expect(await accepted()).toBe(false);
+    expect(await status(id!)).toBe("expired");
+
+    await db.batch([db.prepare("DELETE FROM coach_commitments"), db.prepare("DELETE FROM messages")]);
+    await coachAndReply("A kolik je to kilo?");
+    await handleCoachMessageForCommitment(db, {}, { teamId: "club", convId: "c2", playerId: "p2", text: TEXT });
+    expect(await accepted()).toBeUndefined();
+  });
+
+  it("dohoda se zapsala, zatímco hráč psal: odpověď bez accepts_request ji podle textu přijme", async () => {
+    await db.prepare("INSERT INTO messages (id, conversation_id, sender_type, sender_id, body, sent_at) VALUES ('cm', 'c2', 'user', 'club', ?, ?)").bind(TEXT, ago(20)).run();
+    const id = await recordCommitment(db, {
+      clubTeamId: "club", playerId: "p2", convId: "c2", coachMessage: TEXT,
+      detected: { kind: "weight_target", kg: null, days: 14, rewardType: "money", amount: 1000 }, playerFirstName: "Ján", now: new Date(Date.now() - 15_000),
+    });
+    const { afterPlayerReply } = await import("./ai-player-spawn");
+    // Prompt odpovědi vznikl dřív než dohoda: hráč o ní nevěděl (žádné pendingRequest ani accepts_request).
+    await afterPlayerReply(db, {
+      teamId: "club", convId: "c2", player: { id: "p2", firstName: "Ján", lastName: "Balog" } as never, at: new Date().toISOString(), offerIds: [],
+      reply: { body: "Beru to vážně, trenére, jdu do toho.", writeLater: false },
+    });
+    expect(await accepted()).toBe(true);
+    expect(await status(id)).toBe("active");
+  });
+});
