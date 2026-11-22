@@ -49,15 +49,12 @@ export function ReplayOverlay({ plan, clock, matchId }: { plan: ReplayPlan; cloc
         </div>
       </div>
 
-      {banner && (
-        <div className="absolute inset-x-0 bottom-28 sm:bottom-32 z-30 flex justify-center pointer-events-none">
+      <div className="absolute bottom-3 sm:bottom-5 inset-x-0 z-30 flex flex-col items-center gap-2 px-3 pointer-events-none">
+        {banner && (
           <div className={`font-heading font-black tracking-wider bg-black/45 rounded-2xl px-4 py-1 drop-shadow-[0_4px_12px_rgba(0,0,0,0.8)] animate-in zoom-in-75 fade-in duration-300 ${banner.className}`}>
             {banner.text}
           </div>
-        </div>
-      )}
-
-      <div className="absolute bottom-3 sm:bottom-5 inset-x-0 z-30 flex flex-col items-center gap-2 px-3 pointer-events-none">
+        )}
         {(caption || ended) && (
           <div className="max-w-xl w-full bg-black/80 backdrop-blur-md border border-white/15 rounded-xl px-3 py-2 text-white text-xs sm:text-sm shadow-2xl">
             {ended ? `Konec zápasu · ${plan.home.name} ${score.home}:${score.away} ${plan.away.name}${plan.shootout ? ` (pen. ${plan.shootout.home}:${plan.shootout.away})` : ""}` : caption?.text}

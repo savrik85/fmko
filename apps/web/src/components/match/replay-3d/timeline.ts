@@ -16,7 +16,7 @@ const SPRINT = 7.5, JOG = 4.5, ACCEL = 5;
 const HYSTERESIS = 4;
 const SPACING = 1.7, AVOID = 1.4, LOOK_AHEAD = 0.4, CLOSE = 0.9;
 /** Ležící hráč je dlouhý jako on, zabírá víc místa. */
-const LYING = 1;
+const LYING = 1.4;
 /** Soupeř stojí u rozehrávky aspoň tak daleko od míče (pravidla). */
 const DEAD_BALL_GAP = 4;
 export const CAPTION_GAP = 1.5;
@@ -749,7 +749,7 @@ class Simulation {
       const x = this.sign() * (1 + this.rng() * 2.3);
       if (gk !== null) {
         this.send(gk, gkSpot(-Math.sign(x) * 1.6));
-        this.setPose(gk, dive(-Math.sign(x)), 1.2, flight({ x, z: gz }) - 0.5);
+        this.setPose(gk, dive(-Math.sign(x)), 2, flight({ x, z: gz }) - 0.5);
       }
       this.fly({ x, z: gz }, 0.3 + this.rng() * 1.7, 0.4, flight({ x, z: gz }));
       this.fly({ x: x * 0.9, z: gz + s * 1.3 }, 0.15, 0, 0.25);
@@ -757,7 +757,7 @@ class Simulation {
     }
     if (result === "saved" && gk !== null) {
       const x = this.sign() * (0.4 + this.rng() * 2.2);
-      if (Math.abs(x) > 1.2) this.setPose(gk, dive(x), 1.2, dist(from, gkSpot(x)) / speed - 0.5);
+      if (Math.abs(x) > 1.2) this.setPose(gk, dive(x), 1.6, dist(from, gkSpot(x)) / speed - 0.5);
       this.pass(gk, gkSpot(x), { h: 0.4 + this.rng() * 0.6, arc: 0.3, speed });
       this.run(1.1);
       return this.clearance(defending);
@@ -945,6 +945,7 @@ class Simulation {
     const carded = card ? this.actor(card.event, true) ?? fouler : fouler;
     this.run(0.5);
     if (card) this.caption(card.text, red ? "red" : "yellow", [carded]);
+    if (card && victim !== null) this.setPose(victim, "down", 1.5);
     if (!red) this.run(card ? 2 : 1);
     // Po faulu se dvojice rozestoupí až v další akci.
     if (victim !== null) this.fouls.push({ a: fouler, b: victim, from, to: this.k + 2 * REPLAY_HZ });
