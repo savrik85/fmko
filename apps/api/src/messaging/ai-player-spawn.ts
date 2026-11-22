@@ -1984,7 +1984,7 @@ export async function afterPlayerReply(
     const { recordAttendancePledge } = await import("./attendance-pledge");
     await recordAttendancePledge(db, {
       clubTeamId: r.teamId, convId: r.convId, playerId: r.player.id, playerFirstName: r.player.firstName, pledge: r.reply.attendancePledge,
-      now: new Date(r.at),
+      now: new Date(r.at), replyBody: r.reply.body,
     });
   }
   // Pokyn trenéra (kolečka, omluva kabině): hráč odepsal, jestli ho splní (coach-rules.ts).

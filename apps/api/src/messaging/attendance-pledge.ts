@@ -176,6 +176,34 @@ export function parseAttendancePledge(raw: unknown): RawAttendancePledge | null 
   return { event: r.event, intent: r.intent, when };
 }
 
+// ─── Jasný slib k tématu ─────────────────────────────────────────────────────
+
+/** Věta o docházce: „přijdu“, „nedorazím“, „budu tam“, „vynechám“, „nemůžu“. */
+const ATTEND_WORD_RE = /\b(n?e?prijd\w*|n?e?doraz\w*|n?e?prijed\w*|budu|nebudu|vynech\w*|nemuzu|nemohu|n?e?stihnu|nejdu|jdu|nejedu|jedu|pocitej\w*|dojdu)\b/;
+/** Váhání: „asi“, „možná“, „snad“, „uvidíme“, „nevím“, „zkusím“. */
+const HEDGE_RE = /\b(asi|mozna|snad|uvidime|uvidim|nevim|nejspis|spis|zkusim|pokusim|treba)\b/;
+/** Hráč sám jmenuje, o co jde (trénink, zápas): k tématu, i když se trenér neptal. */
+const EVENT_WORD_RE = /(tr[eé]nin|z[aá]pas|p[rř][aá]tel[aá]k|utk[aá]n|ma[cč]\b)/i;
+/** Trenér psal o docházce (nebo o volnu): odpověď „nepřijdu“ je k tématu. */
+const COACH_ATTENDANCE_RE = /(tr[eé]nin|z[aá]pas|p[rř][aá]tel[aá]k|doraz|omluv|chod[ií]t|p[rř][ií]j[dď]|p[rř]ijede|nedostav|chyb[eě]t|volno|pauz|odpo[cč]|vynech|bude[sš] tam|po[cč][ií]t[aá]m s tebou|nastoup|sestav)/i;
+
+/**
+ * Je to jasný slib k tématu? Váhavé „asi nepřijdu“ ne (Šimon Nový, E2E 22. 11.: model ho
+ * vzal jako pevný slib), ani odpověď, která s docházkou nesouvisí (trenér psal výhrůžku,
+ * hráč odpověděl na starší hovor), pokud hráč sám nejmenuje trénink nebo zápas.
+ * `coachText` prázdné = nevíme, o čem trenér psal, téma se nekontroluje.
+ */
+export function isClearPledge(replyBody: string, coachText: string): boolean {
+  const plainText = (t: string) => t.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  const hedged = replyBody.split(/(?<=[.!?…])\s+|\n+/).some((raw) => {
+    const sentence = plainText(raw);
+    return ATTEND_WORD_RE.test(sentence) && HEDGE_RE.test(sentence);
+  });
+  if (hedged) return false;
+  if (!coachText.trim()) return true;
+  return COACH_ATTENDANCE_RE.test(coachText) || EVENT_WORD_RE.test(replyBody);
+}
+
 /** Zpráva trenéra do kabiny, po které může někdo slíbit, že přijde, nebo říct, že nepřijde. */
 export const SQUAD_ATTENDANCE_TOPIC_RE = /(tr[eé]nin|z[aá]pas|doraz|omluv|chod[ií]t|p[rř][ií]j[dď]|nedostav|chyb[eě]t)/i;
 
@@ -448,19 +476,29 @@ async function loadMatchDays(db: D1Database, teamId: string, gameDay: string): P
  */
 export async function recordAttendancePledge(
   db: D1Database,
-  o: { clubTeamId: string; convId: string; playerId: string; playerFirstName: string; pledge: RawAttendancePledge; now?: Date },
+  o: {
+    clubTeamId: string; convId: string; playerId: string; playerFirstName: string; pledge: RawAttendancePledge; now?: Date;
+    /** Text odpovědi hráče: slib platí, jen když je jasný a k tématu (`isClearPledge`). Bez textu se nekontroluje. */
+    replyBody?: string;
+  },
 ): Promise<TrainingPledge | MatchPledge | null> {
   try {
     const now = o.now ?? new Date();
+    const coachText = o.replyBody !== undefined || o.pledge.intent === "skip" ? await recentCoachText(db, o.convId, now) : "";
+    if (o.replyBody !== undefined && !isClearPledge(o.replyBody, coachText)) {
+      logger.info({ module: M, teamId: o.clubTeamId }, `slib docházky hráče ${o.playerId} není jasný nebo k tématu, nezapisuje se`);
+      return null;
+    }
     // Jen vlastní kádr (áčko nebo U21 klubu konverzace). Hráč na hostování jinde ani cizí hráč
     // si slibem nesmí vyrobit omluvenku nebo vynechaný trénink v cizím klubu.
     const rosterTeamId = await ownSquadTeamId(db, o.playerId, o.clubTeamId);
     if (!rosterTeamId) return null;
     const p = await db.prepare(
-      `SELECT p.team_id, p.first_name, p.last_name, COALESCE(t.game_date, club.game_date) AS game_date
+      `SELECT p.team_id, p.first_name, p.last_name, COALESCE(t.game_date, club.game_date) AS game_date, p.life_context
          FROM players p LEFT JOIN teams t ON t.id = p.team_id LEFT JOIN teams club ON club.id = ?
         WHERE p.id = ? AND p.team_id = ?`,
-    ).bind(o.clubTeamId, o.playerId, rosterTeamId).first<{ team_id: string | null; first_name: string; last_name: string; game_date: string | null }>();
+    ).bind(o.clubTeamId, o.playerId, rosterTeamId)
+      .first<{ team_id: string | null; first_name: string; last_name: string; game_date: string | null; life_context: string | null }>();
     if (!p?.team_id || !p.game_date) return null;
     const gameDay = p.game_date.slice(0, 10);
     const at = now.toISOString();
@@ -471,7 +509,11 @@ export async function recordAttendancePledge(
       });
       if (!resolved) return null;
       // „Dej si pauzu“ od trenéra: volno, ne vynechaný trénink (daily-tick, pravidlo docházky).
-      const granted = resolved.intent === "skip" && coachGrantsRest(await recentCoachText(db, o.convId, now));
+      const granted = resolved.intent === "skip" && coachGrantsRest(coachText);
+      // Stejný slib znovu („furt ne, nepřijdu“): nic nového, poznámka se nezdvojí.
+      const before = pledgesFromLife(lifeOf(p.life_context)).trainingPledge;
+      if (before && !before.outcome && before.intent === resolved.intent && before.from === resolved.from && before.until === resolved.until
+        && before.teamId === p.team_id) return before;
       stored = { ...resolved, teamId: p.team_id, ...(granted ? { coachGranted: true } : {}) };
       await db.prepare("UPDATE players SET life_context = json_set(COALESCE(life_context, '{}'), '$.trainingPledge', json(?)) WHERE id = ?")
         .bind(JSON.stringify(stored), o.playerId).run();
@@ -481,6 +523,8 @@ export async function recordAttendancePledge(
       if (!ctx) return null;
       const matchDay = ctx.scheduledAt.slice(0, 10);
       if (matchDay > shiftDay(gameDay, PLEDGE_WINDOW_DAYS)) return null;
+      const before = pledgesFromLife(lifeOf(p.life_context)).matchPledge;
+      if (before && before.intent === o.pledge.intent && before.matchKey === ctx.matchKey && before.teamId === p.team_id) return before;
       stored = { intent: o.pledge.intent, matchKey: ctx.matchKey, matchDay, at, convId: o.convId, teamId: p.team_id };
       await db.prepare("UPDATE players SET life_context = json_set(COALESCE(life_context, '{}'), '$.matchPledge', json(?)) WHERE id = ?")
         .bind(JSON.stringify(stored), o.playerId).run();

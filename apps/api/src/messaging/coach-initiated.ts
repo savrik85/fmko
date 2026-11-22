@@ -433,7 +433,7 @@ async function replyInSquadGroupInner(
         if (pledge) {
           await recordAttendancePledge(db, {
             clubTeamId: opts.teamId, convId: opts.convId, playerId: mluvci.id, playerFirstName: mluvci.firstName, pledge,
-            now: new Date(Date.parse(at)),
+            now: new Date(Date.parse(at)), replyBody: text,
           });
         }
       } catch (e) {
