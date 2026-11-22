@@ -1318,8 +1318,10 @@ async function handleAiPlayerReplyInner(
     .catch((e) => { logger.warn({ module: "ai-player-spawn" }, "herní den pro domluvu o váze", e); return null; });
   if (teamGameDate?.game_date) player.weightTalk = weightTalkFromState(conv.ai_thread_state, teamGameDate.game_date);
   player.lastOwnMessageAt = await loadLastOwnMessageAt(db, convId, player.id);
-  // Stížnost, truc, odmítnutý přestup: na vážnou věc hráč odpoví hned, ne „ozvu se pak“.
-  player.seriousTopic = scenario.category === "complaint" || scenario.category === "transfer" || state.trigger === "left_out";
+  // Stížnost, truc, odmítnutý přestup, hovor o incidentu: na vážnou věc hráč odpoví hned, ne „ozvu se pak“.
+  // Samotná znalost incidentu vážná není, jen role v něm (mustAnswerNow).
+  player.seriousTopic = scenario.category === "complaint" || scenario.category === "transfer" || state.trigger === "left_out"
+    || !!state.incidentId;
   player.recentlyPostponed = await loadRecentlyPostponed(db, convId);
   player.lateReply = opts.lateReply;
   player.ownRecentLines = await loadOwnRecentLines(db, { playerId: player.id, convId });
