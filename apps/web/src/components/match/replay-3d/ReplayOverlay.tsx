@@ -5,10 +5,7 @@ import type { ReplayPlan } from "./timeline";
 import type { ReplayClock } from "./ReplayActors";
 
 /** Stejné volby jako 2D záznam: Živě, Rychle, Konec. */
-const SPEEDS = [
-  { value: 1, label: "▶ Živě", short: "▶" },
-  { value: 3, label: "▶▶ Rychle", short: "▶▶" },
-] as const;
+const SPEEDS = [{ value: 1, label: "▶ Živě", short: "▶" }, { value: 3, label: "▶▶ Rychle", short: "▶▶" }] as const;
 
 const BANNERS = {
   goal: { text: "GÓÓÓL!", className: "text-5xl sm:text-7xl text-white" },
@@ -70,22 +67,14 @@ export function ReplayOverlay({ plan, clock, matchId }: { plan: ReplayPlan; cloc
           </div>
         )}
         <div className="flex items-center gap-1 sm:gap-1.5 bg-black/85 backdrop-blur-xl border border-white/20 rounded-2xl px-2 py-1.5 shadow-2xl pointer-events-auto">
-          <button
-            onClick={() => update(ended ? { t: 0, playing: true } : { playing: !clock.playing })}
-            className={`${BUTTON} text-sm`}
-            title={ended ? "Přehrát znovu" : clock.playing ? "Pozastavit" : "Pokračovat"}
-          >
+          <button onClick={() => update(ended ? { t: 0, playing: true } : { playing: !clock.playing })} className={`${BUTTON} text-sm`}
+            title={ended ? "Přehrát znovu" : clock.playing ? "Pozastavit" : "Pokračovat"}>
             {ended ? "↺" : clock.playing ? "⏸" : "▶"}
           </button>
           <div className="flex items-center gap-0.5 bg-white/10 p-0.5 rounded-xl">
             {SPEEDS.map((s) => (
-              <button
-                key={s.value}
-                onClick={() => update({ speed: s.value })}
-                className={`px-2 py-1 rounded-lg text-[11px] sm:text-xs font-heading font-bold ${
-                  clock.speed === s.value ? "bg-pitch-500 text-white" : "text-white/70 hover:text-white hover:bg-white/10"
-                }`}
-              >
+              <button key={s.value} onClick={() => update({ speed: s.value })} className={`px-2 py-1 rounded-lg text-[11px] sm:text-xs font-heading font-bold ${
+                clock.speed === s.value ? "bg-pitch-500 text-white" : "text-white/70 hover:text-white hover:bg-white/10"}`}>
                 <span className="sm:hidden">{s.short}</span>
                 <span className="hidden sm:inline">{s.label}</span>
               </button>
@@ -95,11 +84,8 @@ export function ReplayOverlay({ plan, clock, matchId }: { plan: ReplayPlan; cloc
             ▶▶▶<span className="hidden sm:inline"> Konec</span>
           </button>
           <button onClick={go("/zaznam")} className={BUTTON} title="Přepnout na 2D záznam">2D</button>
-          <button
-            onClick={go("")}
-            className={ended ? "px-2.5 py-1.5 rounded-lg text-xs font-heading font-bold bg-pitch-500 hover:bg-pitch-600 text-white" : BUTTON}
-            title="Detail zápasu"
-          >
+          <button onClick={go("")} title="Detail zápasu"
+            className={ended ? "px-2.5 py-1.5 rounded-lg text-xs font-heading font-bold bg-pitch-500 hover:bg-pitch-600 text-white" : BUTTON}>
             {ended ? "Detail zápasu ➔" : "✕"}
           </button>
         </div>
