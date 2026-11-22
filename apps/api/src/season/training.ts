@@ -12,7 +12,7 @@ import type { GeneratedPlayer } from "../generators/player";
 import { TRENINK_SITUACE } from "../incidents/nastaveni";
 import { occupationTrainingAttendance } from "../generators/occupations";
 import { logger } from "../lib/logger";
-import { SKIP_PLEDGE_REASONS, pledgedAttendProb, type PledgeIntent } from "../messaging/attendance-pledge";
+import { COACH_REST_REASONS, SKIP_PLEDGE_REASONS, pledgedAttendProb, type PledgeIntent } from "../messaging/attendance-pledge";
 
 /**
  * Hráč v tréninku: GeneratedPlayer + volitelné stropy atributů (maxPotential ze
@@ -300,6 +300,8 @@ export interface TrainingAttendance {
   reason?: string;
   /** Hráč na tenhle trénink něco slíbil (messaging/attendance-pledge.ts). */
   pledge?: PledgeIntent;
+  /** Chybí, protože mu trenér sám dal volno: omluvená neúčast, ne vynechaný trénink. */
+  restByCoach?: boolean;
 }
 
 export interface TrainingResult {
@@ -499,9 +501,12 @@ export function simulateAttendance(
     const pledge = (player as { attendancePledge?: PledgeIntent }).attendancePledge;
     if (pledge) {
       if (hod < pledgedAttendProb(attendProb, pledge)) return { playerIndex: i, attended: true, pledge };
+      // Volno, o které si řekl trenér („dej si pauzu“): v docházce je to volno, ne výmluva.
+      const rest = pledge === "skip" && (player as { attendancePledgeRest?: boolean }).attendancePledgeRest === true;
       return {
-        playerIndex: i, attended: false, pledge,
-        reason: pledge === "skip" ? rng.pick(SKIP_PLEDGE_REASONS) : rng.pick(isYouthAge(player.age) ? YOUNG_SAFE_REASONS : ABSENCE_REASONS),
+        playerIndex: i, attended: false, pledge, ...(rest ? { restByCoach: true } : {}),
+        reason: rest ? rng.pick(COACH_REST_REASONS)
+          : pledge === "skip" ? rng.pick(SKIP_PLEDGE_REASONS) : rng.pick(isYouthAge(player.age) ? YOUNG_SAFE_REASONS : ABSENCE_REASONS),
       };
     }
     // Truc po nenominaci (multiplayer/left-out.ts): přijde jen výjimečně, dokud ho

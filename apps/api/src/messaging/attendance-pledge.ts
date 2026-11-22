@@ -56,6 +56,11 @@ export interface TrainingPledge {
   /** Doplní trénink: „kept“ / „broken“, a den, kdy se to stalo. Slib s výsledkem už neplatí. */
   outcome?: "kept" | "broken";
   outcomeDay?: string;
+  /**
+   * „Nepřijdu“, o které si řekl sám trenér („dej si od tréninku pauzu“): omluvená neúčast,
+   * nepočítá se do vynechaných tréninků ani do pravidla „kdo nechodí, nehraje“.
+   */
+  coachGranted?: boolean;
 }
 
 /** `life_context.matchPledge`: příští zápas týmu (calendar_id u ligy, id zápasu u přáteláku). */
@@ -105,6 +110,34 @@ export const SKIP_PLEDGE_REASONS: readonly string[] = [
   "Napsal ti, že nepřijde, a nepřišel",
   "Předem hlásil, že tenhle trénink pouští",
 ];
+
+/** Důvod v docházce, když trenér hráči na trénink sám dal volno (≥ 8 variant, třetí osoba). */
+export const COACH_REST_REASONS: readonly string[] = [
+  "Dal jsi mu volno, odpočívá",
+  "Má od tebe volno, jak jste si psali",
+  "Poslal jsi ho odpočívat",
+  "Na tvoje přání si dal pauzu",
+  "Volno od trenéra, šetří se",
+  "Jak jsi chtěl, dneska odpočívá",
+  "Vynechal, dal jsi mu pauzu",
+  "Odpočívá, volno jsi mu dal ty",
+];
+
+/**
+ * Trenér hráči volno sám dal: „dej si od tréninku pauzu“, „nechám tě odpočinout“, „klidně ho
+ * vynech“, „dám ti volno“. Ne zápor („nedám ti volno“) ani podmínka.
+ */
+const COACH_REST_RE = /\b(dej si|si dej) (od treninku |od zapasu |zitra |)?(pauzu|volno|oddech)|\b(dam|davam) ti (volno|pauzu|oddech)|\bmas (ode mne |ode me |)?(volno|pauzu)|\b(necham te|te necham) (odpocinout|vydechnout|doma)|\bodpocin si\b|\bzustan(es)? doma\b|\bklidne (ho |to |trenink |zitra )?vynech|\bnemusis (chodit|prijit|na trenink|dorazit)|\bsetri se\b/;
+
+export function coachGrantsRest(text: string): boolean {
+  const t = text.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  return COACH_REST_RE.test(t) && !/\b(jestli|pokud|kdyby)\b/.test(t);
+}
+
+/** Neúčast na tréninku v herní den `day` je volno od trenéra (slib „nepřijdu“, o který si řekl). */
+export function excusedByCoach(raw: unknown, day: string, teamId?: string): boolean {
+  return trainingPledgeIntent(raw, day, teamId) === "skip" && (raw as Partial<TrainingPledge>).coachGranted === true;
+}
 
 /** Odpověď hráče do kabiny zápasu, když trenérovi už v SMS řekl, že nemůže (≥ 8 variant). */
 export const MATCH_SKIP_PLEDGE_TEXTS: readonly string[] = [
@@ -295,6 +328,10 @@ export function pledgeNote(firstName: string, p: TrainingPledge | MatchPledge): 
     return p.once ? sentence(`📝 ${firstName} slíbil, že přijde na trénink ${dayPhrase(p.from)}`)
       : `📝 ${firstName} slíbil, že bude chodit na tréninky (do ${datePhrase(p.until)}).`;
   }
+  if (p.coachGranted) {
+    return p.once ? `📝 ${firstName} má na trénink ${dayPhrase(p.from)} od tebe volno.`
+      : `📝 ${firstName} má na tréninky do ${datePhrase(p.until)} od tebe volno.`;
+  }
   return p.once ? `📝 ${firstName} na trénink ${dayPhrase(p.from)} nepřijde.`
     : `📝 ${firstName} na tréninky do ${datePhrase(p.until)} nepřijde.`;
 }
@@ -308,7 +345,9 @@ export function pledgePromptLines(player: Pick<PlayerSnapshot, "trainingPledge" 
   } else if (t && !t.outcome) {
     lines.push(t.intent === "attend"
       ? `- Trenérovi jsi slíbil, že přijdeš na trénink ${t.once ? dayPhrase(t.from) : `(všechny do ${datePhrase(t.until)}).`} Platí to.`
-      : `- Trenérovi jsi řekl, že na trénink ${t.once ? dayPhrase(t.from) : `do ${datePhrase(t.until)}`} nepřijdeš. Když tě přemluví, řekni mu jasně, že přijdeš.`);
+      : t.coachGranted
+        ? `- Trenér ti na trénink ${t.once ? dayPhrase(t.from) : `do ${datePhrase(t.until)}`} sám dal volno, odpočíváš. Když si to rozmyslí a chce tě tam, řekni mu jasně, že přijdeš.`
+        : `- Trenérovi jsi řekl, že na trénink ${t.once ? dayPhrase(t.from) : `do ${datePhrase(t.until)}`} nepřijdeš. Když tě přemluví, řekni mu jasně, že přijdeš.`);
   }
   const m = player.matchPledge;
   if (m) {
@@ -431,7 +470,9 @@ export async function recordAttendancePledge(
         gameDay, trainingDays: await loadTrainingDays(db, p.team_id), matchDays: await loadMatchDays(db, p.team_id, gameDay), at, convId: o.convId,
       });
       if (!resolved) return null;
-      stored = { ...resolved, teamId: p.team_id };
+      // „Dej si pauzu“ od trenéra: volno, ne vynechaný trénink (daily-tick, pravidlo docházky).
+      const granted = resolved.intent === "skip" && coachGrantsRest(await recentCoachText(db, o.convId, now));
+      stored = { ...resolved, teamId: p.team_id, ...(granted ? { coachGranted: true } : {}) };
       await db.prepare("UPDATE players SET life_context = json_set(COALESCE(life_context, '{}'), '$.trainingPledge', json(?)) WHERE id = ?")
         .bind(JSON.stringify(stored), o.playerId).run();
     } else {
@@ -457,6 +498,17 @@ export async function recordAttendancePledge(
     logger.warn({ module: M, teamId: o.clubTeamId }, `slib docházky hráče ${o.playerId}`, e);
     return null;
   }
+}
+
+/** Poslední zprávy trenéra v konverzaci (nejvýš dvě za poslední 3 hodiny před `now`), spojené. */
+export async function recentCoachText(db: D1Database, convId: string, now: Date): Promise<string> {
+  const rows = await db.prepare(
+    `SELECT body FROM messages WHERE conversation_id = ? AND sender_type = 'user'
+        AND julianday(sent_at) <= julianday(?) AND julianday(sent_at) >= julianday(?) - 0.125
+      ORDER BY julianday(sent_at) DESC LIMIT 2`,
+  ).bind(convId, now.toISOString(), now.toISOString()).all<{ body: string | null }>()
+    .catch((e) => { logger.warn({ module: M }, `zprávy trenéra v ${convId}`, e); return { results: [] as Array<{ body: string | null }> }; });
+  return rows.results.map((r) => r.body ?? "").reverse().join(" ");
 }
 
 /** Index varianty podle semínka (stejné semínko, stejná věta). */
