@@ -76,8 +76,12 @@ describe("scény 3D záznamu", () => {
   const all = [...events, ...shootoutEvents({ id: "test", home_pens: 4, away_pens: 3, home_name: "Domácí", away_name: "Hosté" })];
   const replay = new Replay(input(all));
 
+  // Náhoda z id zápasu vybírá rozestavení a varianty scén: zkouší se víc zápasů, ne jedno šťastné id.
   it("každá událost má scénu bez skoků, rychlých běhů a hráčů na sobě", () => {
-    expect(checkAll(replay, all, "test")).toEqual([]);
+    for (let n = 0; n < 10; n++) {
+      const matchId = `match${n}`;
+      expect(checkAll(new Replay({ ...input(all), matchId }), all, matchId)).toEqual([]);
+    }
   });
 
   it("po přestávce si týmy vymění strany, střídačky ne", () => {

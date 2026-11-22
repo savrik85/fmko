@@ -4,7 +4,7 @@ import { FaceAvatar } from "@/components/players/face-avatar";
 import { BadgePreview, type BadgePattern } from "@/components/ui";
 import { bestTextOn } from "@/lib/team-color";
 import { useEffect, useState, type ReactNode } from "react";
-import { chanceResult, substitutedOut, type ReplayCoach, type ReplayEvent, type ReplayKit, type ReplayLineup, type ReplayPlayer, type ShotResult } from "./scenes";
+import { chanceResult, sideOf, substitutedOut, type ReplayCoach, type ReplayEvent, type ReplayKit, type ReplayLineup, type ReplayPlayer, type ShotResult, type Side } from "./scenes";
 
 /** Co se právě hraje: událost (při „ŠANCE“ ta, která teprve přijde) a její pořadí v zápase. */
 interface GraphicsProps {
@@ -25,12 +25,12 @@ const PANEL = "bg-[#0a0a0a]/90 text-white";
 const BAR_HEIGHT = "h-9 sm:h-11";
 
 export const initials = (name: string) => name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase();
-const teamName = (detail: Record<string, unknown>, e: ReplayEvent) => (e.teamId === 1 ? detail.home_name : detail.away_name) as string;
+const teamName = (detail: Record<string, unknown>, e: ReplayEvent) => detail[`${sideOf(e.teamId)}_name`] as string;
 /** Barva týmu v grafice je barva dresu, ve kterém hraje. */
-const kitColor = (detail: Record<string, unknown>, side: "home" | "away") => (detail[`${side}_kit`] as ReplayKit).shirt;
+const kitColor = (detail: Record<string, unknown>, side: Side) => (detail[`${side}_kit`] as ReplayKit).shirt;
 const onColor = (color: string) => (bestTextOn(color) === "light" ? "#fff" : "#111827");
 const playerOf = (detail: Record<string, unknown>, e: ReplayEvent): ReplayPlayer | undefined => {
-  const lineup = detail[e.teamId === 1 ? "home_lineup_data" : "away_lineup_data"] as ReplayLineup;
+  const lineup = detail[`${sideOf(e.teamId)}_lineup_data`] as ReplayLineup;
   return [...lineup.starters, ...lineup.subs].find((p) => p.name === e.playerName);
 };
 
@@ -98,7 +98,7 @@ function scorers(events: ReplayEvent[], index: number, teamId: number): string {
 export function EventCard({ detail, events, index, event, attack }: GraphicsProps) {
   if (!event || attack || !["goal", "card", "injury", "substitution"].includes(event.type)) return null;
   const player = playerOf(detail, event);
-  const color = kitColor(detail, event.teamId === 1 ? "home" : "away");
+  const color = kitColor(detail, sideOf(event.teamId));
   const goals = events.slice(0, index + 1).filter((e) => e.type === "goal" && e.playerName === event.playerName && e.teamId === event.teamId).length;
   const note = event.type === "goal" ? `${goals}. gól v zápase`
     : event.type === "substitution" ? `↓ ${substitutedOut(event)}`
@@ -110,7 +110,7 @@ export function EventCard({ detail, events, index, event, attack }: GraphicsProp
 }
 
 /** Představení trenéra před výkopem: obličej, jméno, klub a kolik ligových zápasů sezóny jeho tým odehrál a vyhrál. */
-export function CoachCard({ detail, side }: { detail: Record<string, unknown>; side: "home" | "away" }) {
+export function CoachCard({ detail, side }: { detail: Record<string, unknown>; side: Side }) {
   const coach = detail[`${side}_coach`] as ReplayCoach;
   const stats = coach.record && (
     <div className="text-center leading-none">
@@ -170,7 +170,7 @@ export function ReplayChip() {
  * a doletí na tabulku; teprve pak se na ní skóre změní.
  */
 export function ScoreBug({ detail, homeGoals, awayGoals, minute, scored, fast }: {
-  detail: Record<string, unknown>; homeGoals: number; awayGoals: number; minute: number | undefined; scored: "home" | "away" | null; fast: boolean;
+  detail: Record<string, unknown>; homeGoals: number; awayGoals: number; minute: number | undefined; scored: Side | null; fast: boolean;
 }) {
   // Po gólu: 0 = na tabulce je staré skóre (míč je sotva v síti), 1 = pod tabulkou je znak s novým skóre, 2 = letí na ni, 3 = skóre je na tabulce.
   const [step, setStep] = useState(0);
@@ -179,7 +179,7 @@ export function ScoreBug({ detail, homeGoals, awayGoals, minute, scored, fast }:
     const timers = [500, 1700, 2300].map((ms, n) => setTimeout(() => setStep(n + 1), ms / (fast ? 2 : 1)));
     return () => { timers.forEach(clearTimeout); setStep(0); };
   }, [scored, fast]);
-  const team = (side: "home" | "away", goals: number) => {
+  const team = (side: Side, goals: number) => {
     const name = detail[`${side}_name`] as string, flying = scored === side && step < 3;
     return (
       <div className={`flex items-center gap-2 ${side === "away" ? "flex-row-reverse" : ""}`}>

@@ -10,7 +10,7 @@ import { bestTextOn } from "@/lib/team-color";
 import type { BadgePattern } from "@/components/ui";
 import { clientOnly } from "@/components/client-only";
 import { OVERLAY_CONTROL } from "@/components/match/replay-3d/overlay";
-import { actionStarts, scenedEvents, shootoutEvents, substitutionsTogether, type ReplayKit } from "@/components/match/replay-3d/scenes";
+import { actionStarts, scenedEvents, shootoutEvents, STEP_SECONDS, substitutionsTogether, type ReplayKit } from "@/components/match/replay-3d/scenes";
 
 // 3D záznam se stáhne, až když ho hráč má zapnutý.
 const Replay3D = clientOnly(() => import("@/components/match/replay-3d/Replay3D").then((m) => m.Replay3D));
@@ -43,11 +43,15 @@ const FLAT_FAST_MS = { ...FLAT_MS, plain: 600, attack: 1800, drama: 2500, penalt
 /**
  * Ve 3D drží krok tak dlouho jako jeho scéna („Rychle“ ji přehrává dvakrát rychleji) a hned po něm přijde další,
  * ať obraz po odehrané akci nestojí; události bez scény proběhnou okamžitě (`plain`). `setup` je rozehrání před
- * šancí nebo kartou (roh, standardka, faul): útok nebo karta na ně navazují bez střihu, proto `setup` a `attack`
- * musí sedět se SETUP a ATTACK ve scenes.ts. Gól končí opakovaným záběrem. `substitution` je jedno střídání;
- * hromadné si dělí krok `drama`.
+ * šancí nebo kartou (roh, standardka, faul): útok nebo karta na ně navazují bez střihu. Gól končí opakovaným
+ * záběrem. `substitution` je jedno střídání; hromadné si dělí krok `drama`. Kroky, jejichž délku určuje scéna,
+ * jsou ze STEP_SECONDS.
  */
-const SCENE_MS = { coach: 4000, handshake: 3800, substitution: 2600, kickoff: 5000, secondHalf: 5000, plain: 0, setup: 2000, attack: 3500, goal: 6800, chance: 2200, drama: 3500, penalty: 4500 };
+const SCENE_MS = {
+  substitution: 2600, kickoff: 5000, secondHalf: 5000, plain: 0, chance: 2200, penalty: 4500,
+  coach: STEP_SECONDS.coach * 1000, handshake: STEP_SECONDS.handshake * 1000, setup: STEP_SECONDS.setup * 1000,
+  attack: STEP_SECONDS.attack * 1000, drama: STEP_SECONDS.drama * 1000, goal: STEP_SECONDS.goal * 1000,
+};
 /** Po skoku na akci stojí její první snímek, než se rozběhne (ať je vidět, kam se skočilo). */
 const CUE_MS = 700;
 
@@ -358,7 +362,6 @@ export default function MatchReplayPage() {
     }
 
     // Chances and goals: show "attacking" phase first for drama
-    // Use ref-based timeout to avoid cleanup issues
     // Zahozená penalta má napětí za sebou (bylo u nařízení) — jde rovnou k výsledku
     const isPenaltyOutcome = next.type === "chance"
       && (next.detail === "penalty_missed" || next.detail === "penalty_saved");
@@ -418,9 +421,9 @@ export default function MatchReplayPage() {
 
   const hc = match.home_color;
   const ac = match.away_color;
-  const activeTeamColor = cur ? (cur.teamId === 1 ? hc : ac) : "#666";
   // Dres v záhlaví a barva týmu u hřiště jsou podle dresů, ve kterých se hrálo (hosté mohli nastoupit ve venkovních).
   const homeKit = match.detail.home_kit as ReplayKit, awayKit = match.detail.away_kit as ReplayKit;
+  const activeTeamColor = cur ? (cur.teamId === 1 ? homeKit : awayKit).shirt : "#666";
 
   return (
     <div className="max-w-4xl mx-auto px-3 py-2 space-y-1.5">
@@ -431,7 +434,7 @@ export default function MatchReplayPage() {
           <div className="flex flex-col sm:flex-row items-center sm:gap-2 gap-2 flex-1 min-w-0">
             <div className="flex items-center gap-2">
               <BadgePreview primary={hc} secondary={match.home_secondary} pattern={match.home_badge as BadgePattern} initials={ini(match.home_name)} size={36} />
-              <JerseyPreview primary={homeKit.shirt} secondary={homeKit.shorts} size={28} />
+              <JerseyPreview primary={homeKit.shirt} secondary={match.home_secondary} size={28} />
             </div>
             <span className="font-heading font-bold text-white text-xs sm:text-lg text-center sm:text-left break-words leading-tight">{match.home_name}</span>
           </div>
@@ -448,7 +451,7 @@ export default function MatchReplayPage() {
           </div>
           <div className="flex flex-col sm:flex-row items-center sm:gap-2 gap-2 flex-1 min-w-0 sm:justify-end">
             <div className="flex items-center gap-2 sm:order-last">
-              <JerseyPreview primary={awayKit.shirt} secondary={awayKit.shorts} size={28} />
+              <JerseyPreview primary={awayKit.shirt} secondary={match.away_secondary} size={28} />
               <BadgePreview primary={ac} secondary={match.away_secondary} pattern={match.away_badge as BadgePattern} initials={ini(match.away_name)} size={36} />
             </div>
             <span className="font-heading font-bold text-white text-xs sm:text-lg text-center sm:text-right break-words leading-tight">{match.away_name}</span>
@@ -790,8 +793,8 @@ export default function MatchReplayPage() {
             ["Předchozí akce", "\u2759\u25C0", () => (previousAction !== undefined ? jumpTo(previousAction) : begin()), false],
             [paused ? "Pokračovat" : "Pauza", paused ? "\u25B6" : "\u275A\u275A", () => setPaused((p) => !p), finished || htPause],
             ["Další akce", "\u25B6\u2759", () => nextAction !== undefined && jumpTo(nextAction), nextAction === undefined],
-          ] as const).map(([title, label, onClick, disabled]) => (
-            <button key={title} onClick={onClick} disabled={disabled} title={title}
+          ] as const).map(([title, label, onClick, disabled], n) => (
+            <button key={n}onClick={onClick} disabled={disabled} title={title}
               className="w-12 py-3 rounded-xl text-base font-heading font-bold uppercase tracking-wide bg-white text-muted hover:text-ink shadow-md transition-all disabled:opacity-40 disabled:hover:text-muted">{label}</button>
           ))}
         </div>

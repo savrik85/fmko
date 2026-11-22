@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, type RefObject } from "react";
 import * as THREE from "three";
 import { addAfterEffect, useFrame, useThree } from "@react-three/fiber";
 import { PITCH_SURFACE_Y } from "@/components/stadium/stadium-3d/constants";
-import { emptyFrame, HALF_W, sampleClip, sceneTime, type Clip, type Figure, type Replay, type ReplayKit, type Scene } from "./scenes";
+import { emptyFrame, HALF_W, REPLAY, sampleClip, sceneTime, type Clip, type Figure, type Replay, type ReplayKit, type Scene } from "./scenes";
 
 /** Záběr: scéna a její část. Nový objekt znamená hrát od začátku, i když jde o tutéž scénu (skok zpět na její začátek). */
 interface ReplayPlay {
@@ -41,8 +41,6 @@ const CAMERA = { x: HALF_W + 26, y: 13, fov: 26, pan: 9 };
 const CAMERA_AIM_X = -4.6;
 /** Pohled z výšky: celý stadion z ptačí perspektivy, kamera stojí a nic se neořezává. */
 const OVERVIEW = { x: HALF_W + 46, y: 56, fov: 40 };
-/** Opakovaný záběr gólu přijde až po oslavě: zakončení ještě jednou a o něco pomaleji, ať je vidět, co se stalo. */
-const REPLAY = { after: 3.6, seconds: 3.2 };
 /** Scéna nekreslí nic za bližší postranní čárou: kamera stojí tam, kde má stadion hlavní tribunu. */
 const CLIP_PLANES = [new THREE.Plane(new THREE.Vector3(-1, 0, 0), HALF_W + 1.2)];
 /** Střih se prolíná: přes nový záběr ještě tolik sekund doznívá poslední snímek toho starého. */
@@ -107,7 +105,7 @@ const eTmp = new THREE.Euler(), cTmp = new THREE.Color();
 const HIDDEN = new THREE.Matrix4().makeScale(0, 0, 0);
 
 /** Hráči, rozhodčí a míč ve scéně stadionu; kreslí to, co právě hraje `step`, a řídí kameru. */
-export function ReplayScene({ replay, kits, snow, overview, step, frame: root, veil, onReady }: {
+export function ReplayScene({ replay, kits, snow, overview, step, root, veil, onReady }: {
   replay: Replay;
   kits: { home: ReplayKit; away: ReplayKit };
   /** Na sněhu se hraje s oranžovým míčem. */
@@ -116,7 +114,7 @@ export function ReplayScene({ replay, kits, snow, overview, step, frame: root, v
   overview: boolean;
   step: { current: ReplayStep };
   /** Obal záznamu: během opakovaného záběru gólu má atribut `data-replaying` (podle něj se ukáže jeho nápis). */
-  frame: RefObject<HTMLDivElement | null>;
+  root: RefObject<HTMLDivElement | null>;
   /** Plátno přes scénu: při střihu na něm doznívá poslední snímek starého záběru. */
   veil: RefObject<HTMLCanvasElement | null>;
   /** Zavolá se po prvním vykresleném snímku. */
@@ -361,7 +359,7 @@ export function ReplayScene({ replay, kits, snow, overview, step, frame: root, v
     if (keys) {
       // Vlastní kamera scény: mezi sousedními klíči jede, na klíč se střihem skočí.
       const n = keys.findLastIndex((k) => k.t <= t), a = keys[Math.max(n, 0)], b = keys[n + 1];
-      const linear = b && !b.cut ? THREE.MathUtils.clamp((t - a.t) / (b.t - a.t), 0, 1) : 0;
+      const linear = b ? THREE.MathUtils.clamp((t - a.t) / (b.t - a.t), 0, 1) : 0;
       const s = b?.ease ? THREE.MathUtils.smoothstep(linear, 0, 1) : linear, to = linear > 0 ? b : a;
       camera.position.set(THREE.MathUtils.lerp(a.from.x, to.from.x, s), THREE.MathUtils.lerp(a.from.y, to.from.y, s), THREE.MathUtils.lerp(a.from.z, to.from.z, s));
       camera.lookAt(THREE.MathUtils.lerp(a.at.x, to.at.x, s), THREE.MathUtils.lerp(a.at.y, to.at.y, s), THREE.MathUtils.lerp(a.at.z, to.at.z, s));

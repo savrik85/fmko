@@ -9,7 +9,7 @@ import { venueExtensions, venueFacilities } from "@/app/(hra)/turnaj/venue-scene
 import { ReplayScene, type ReplayStep } from "./ReplayScene";
 import { CoachCard, EventCard, EventLabel, initials, ReplayChip, ScoreBug } from "./graphics";
 import { OVERLAY_CONTROL } from "./overlay";
-import { Replay, shootoutScore, type ReplayCoach, type ReplayEvent, type ReplayKit, type ReplayLineup } from "./scenes";
+import { Replay, shootoutScore, sideOf, type ReplayCoach, type ReplayEvent, type ReplayKit, type ReplayLineup } from "./scenes";
 
 const Stadium3D = clientOnly(() => import("@/components/stadium/stadium-3d/Stadium3D").then((m) => m.Stadium3D));
 
@@ -129,7 +129,7 @@ function Replay3DView({ detail, events, progress, onReady }: Replay3DProps) {
     : kickoff ? { text: "VÝKOP", sub: kickoff === "2nd" ? "2. poločas" : undefined, tone: "info" as const } : undefined;
 
   // Gól se na výsledkovou tabulku připíše s animací: ve chvíli, kdy ho záznam počítá, patří poslední ukázané události.
-  const scored = flash === "goal" && cue === null ? (events[index].teamId === 1 ? "home" as const : "away" as const) : null;
+  const scored = flash === "goal" && cue === null ? sideOf(events[index].teamId) : null;
 
   return (
     <div ref={frame} className={`group/shot bg-black ${fullscreen ? "fixed inset-0 z-50" : "absolute inset-0 z-20"}`}>
@@ -152,7 +152,7 @@ function Replay3DView({ detail, events, progress, onReady }: Replay3DProps) {
         frozen={paused}
         // Pohled „z tribuny“ nemá rozostření okrajů, které stadion používá u pohledů z dálky.
         initialViewpoint="main_stand"
-        replay={<ReplayScene replay={replay} kits={kits} snow={detail.weather === "snow"} overview={overview} step={step} frame={frame} veil={veil} onReady={onReady} />}
+        replay={<ReplayScene replay={replay} kits={kits} snow={detail.weather === "snow"} overview={overview} step={step} root={frame} veil={veil} onReady={onReady} />}
       />
       {/* Při střihu tu doznívá poslední snímek starého záběru (kreslí a zprůhledňuje ho scéna); grafika zůstává nad ním. */}
       <canvas ref={veil} style={{ opacity: 0 }} className="absolute inset-0 z-10 w-full h-full pointer-events-none" />

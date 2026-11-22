@@ -16,17 +16,19 @@ const CUT = 1e-3;
 /** Výška výskoku na hlavičku. */
 const HOP = 0.7;
 /**
- * Délky scén (s). Rozehrání (`SETUP`) a útok (`ATTACK`) trvají přesně jako jejich krok záznamu (SCENE_MS
- * v zaznam/page.tsx), protože na ně další část téže akce navazuje bez střihu. Ostatní scény jsou o kus delší než
- * jejich krok, ať se v nich při střihu na další akci ještě něco děje.
+ * Délky scén (s). Rozehrání (`SETUP`) a útok (`ATTACK`) trvají přesně jako jejich krok záznamu (STEP_SECONDS),
+ * protože na ně další část téže akce navazuje bez střihu. Ostatní scény jsou o kus delší než jejich krok, ať se
+ * v nich při střihu na další akci ještě něco děje.
  */
 const SETUP = 2, ATTACK = 3.5, GOAL = 6, CHANCE = 3, DRAMA = 4, PENALTY = 7, KICKOFF = 7.5;
 /** Jak dlouho drží rozhodčí kartu nad hlavou. */
 const CARD_UP = 1.4;
-/** Krok záznamu u scény dlouhé DRAMA (SCENE_MS.drama); hromadné střídání si ho dělí mezi titulky. */
+/** Krok záznamu u scény dlouhé DRAMA; hromadné střídání si ho dělí mezi titulky. */
 const DRAMA_STEP = 3.5;
+/** Opakovaný záběr gólu přijde až po oslavě (`after` sekund po gólu) a trvá `seconds`: zakončení ještě jednou a o něco pomaleji. */
+export const REPLAY = { after: 3.6, seconds: 3.2 };
 
-type Side = "home" | "away";
+export type Side = "home" | "away";
 const SIDES = ["home", "away"] as const;
 type Role = "GK" | "DEF" | "MID" | "FWD";
 type Pose = "down" | "diveLeft" | "diveRight" | "celebrate" | "armUp" | "slide" | "shake" | "hug" | "sit" | "rest";
@@ -44,10 +46,13 @@ export interface ReplayCoach {
 }
 /**
  * Před výkopem (sekundy): záběr na jednoho trenéra, pak odjezd kamery, při kterém k sobě dojdou, a podání rukou
- * (trenéři, kteří spolu vycházejí, se v jeho druhé půlce obejmou). Stejné délky mají kroky záznamu (SCENE_MS:
- * coach, handshake = MEET + HANDSHAKE).
+ * (trenéři, kteří spolu vycházejí, se v jeho druhé půlce obejmou).
  */
 const COACH_INTRO = 4, MEET = 1.6, HANDSHAKE = 2.2;
+/** Jak dlouho drží kroky záznamu (s), jejichž délku určuje scéna; stránka záznamu se jimi řídí. */
+export const STEP_SECONDS = {
+  coach: COACH_INTRO, handshake: MEET + HANDSHAKE, setup: SETUP, attack: ATTACK, drama: DRAMA_STEP, goal: REPLAY.after + REPLAY.seconds,
+};
 /** Podání ruky: jak daleko před sebe ruka dosáhne (`reach`) a o kolik je od středu těla (`aside`), v metrech. */
 const SHAKE = { reach: 0.5, aside: 0.36 };
 /** Sestava, jak ji ukládá detail zápasu. */
@@ -90,15 +95,15 @@ export interface Scene {
   camera?: CameraKey[];
 }
 interface Point3 extends Point { y: number }
-/** Kde kamera v čase `t` stojí a kam míří. Mezi klíči jede rovnoměrně, s `ease` se rozjede a dojede; na klíč s `cut` se střihne. */
-interface CameraKey { t: number; from: Point3; at: Point3; cut?: boolean; ease?: true }
+/** Kde kamera v čase `t` stojí a kam míří. Mezi klíči jede rovnoměrně, s `ease` se rozjede a dojede; dva klíče ve stejném čase jsou střih. */
+interface CameraKey { t: number; from: Point3; at: Point3; ease?: true }
 type Window = Omit<Scene, "clip">;
 
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
 const lerp = (a: number, b: number, s: number) => a + (b - a) * s;
 const dist = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.z - b.z);
 const other = (side: Side): Side => (side === "home" ? "away" : "home");
-const sideOf = (teamId: number): Side => (teamId === 1 ? "home" : "away");
+export const sideOf = (teamId: number): Side => (teamId === 1 ? "home" : "away");
 /** Tým bez brankáře (v sestavě nebo po vyloučení) má v bráně prvního hráče; engine tam taky někoho postaví. */
 const withKeeper = <T extends { role: Role }>(slots: T[]): T[] =>
   slots.length && !slots.some((x) => x.role === "GK") ? [{ ...slots[0], role: "GK" }, ...slots.slice(1)] : slots;
@@ -481,7 +486,7 @@ class Stage {
     const spot = this.pos(figure);
     // Kam by vběhl za rozhodčím: kus do hřiště. Jen když tam nikdo nestojí; hráči bez úkolu mu tam pak nevběhnou.
     const inside = { x: BENCH_X + 2.5, z: spot.z + clamp(this.pos(this.staff.referee).z - spot.z, -5, 5) };
-    const room = SIDES.every((side) => this.roster[side].every((slot) => dist(this.pos(slot.figure), inside) > 1.5));
+    const room = this.free(inside, 1.5);
     if (mood === "joy") {
       this.pose(figure, "celebrate", 2 + 3 * fire, delay);
     } else if (mood === "upset") {
@@ -500,6 +505,11 @@ class Stage {
     }
   }
 
+  /** Nestojí do vzdálenosti `gap` od místa žádný hráč (kromě `except`)? */
+  free(p: Point, gap: number, except?: number): boolean {
+    return SIDES.every((side) => this.roster[side].every((slot) => slot.figure === except || dist(this.pos(slot.figure), p) > gap));
+  }
+
   slot(i: number): Slot {
     const slot = [...this.roster.home, ...this.roster.away].find((s) => s.figure === i);
     if (!slot) throw new Error(`Figura ${i} není na hřišti`);
@@ -507,8 +517,8 @@ class Stage {
   }
 
   slots(side: Side, roles: Role[]): Slot[] { return this.roster[side].filter((s) => roles.includes(s.role)); }
-  /** Brankář; tým bez brankáře v sestavě má v bráně prvního hráče (stejně jako engine). */
-  keeper(side: Side): number { return (this.slots(side, ["GK"])[0] ?? this.roster[side][0]).figure; }
+  /** Brankář; má ho každý tým (withKeeper). */
+  keeper(side: Side): number { return this.slots(side, ["GK"])[0].figure; }
   outfield(side: Side, exclude: number[] = []): number[] {
     const keeper = this.keeper(side);
     return this.roster[side].map((s) => s.figure).filter((f) => f !== keeper && !exclude.includes(f));
@@ -705,11 +715,11 @@ export class Replay {
     const walk = coaches.length * COACH_INTRO + MEET;
     const spotAt = (c: typeof coaches[number], t: number): Point => ({ x: c.from.x, z: lerp(c.from.z, c.to.z, t / walk) });
     // Kamera stojí na hřišti kousek před trenérem a jede s ním.
-    const closeUp = (c: typeof coaches[number], t: number, cut: boolean): CameraKey => {
+    const closeUp = (c: typeof coaches[number], t: number): CameraKey => {
       const p = spotAt(c, t);
-      return { t, from: { x: p.x + 6.3, y: 1.9, z: p.z - Math.sign(c.from.z) * 2.8 }, at: { ...p, y: 1.35 }, cut };
+      return { t, from: { x: p.x + 6.3, y: 1.9, z: p.z - Math.sign(c.from.z) * 2.8 }, at: { ...p, y: 1.35 } };
     };
-    const camera = coaches.flatMap((c, n) => [closeUp(c, n * COACH_INTRO, n > 0), closeUp(c, (n + 1) * COACH_INTRO, false)]);
+    const camera = coaches.flatMap((c, n) => [closeUp(c, n * COACH_INTRO), closeUp(c, (n + 1) * COACH_INTRO)]);
     if (coaches.length === 2) camera.push({ t: walk, from: { x: BENCH_X + 13, y: 4, z: 0 }, at: { x: BENCH_X, y: 1.3, z: 0 }, ease: true });
     // Hráči nestojí kameře ve výhledu: pruh podél lajny a prostor před místem podání rukou jsou volné.
     const clear: Zone[] = [...[-12, -8, -4, 0, 4, 8, 12].map((z) => ({ x: BENCH_X + 3.5, z, r: 4.5 })), { x: BENCH_X + 9, z: 0, r: 4.5 }, { x: 0, z: 0, r: 6 }];
@@ -919,7 +929,7 @@ export class Replay {
     const find = (...types: string[]) => rest.find((i) => types.includes(events[i].type));
     const window = (i: number, start: number, w: Partial<Window> = {}) => windows.set(i, { start, split: start, end: st.t, focus: [], card: null, replay: null, ...w });
     /** Gól: po oslavě se zopakuje zakončení (od rozběhu ke střele po míč v síti). */
-    const goalShots = (split: number) => ({ replay: { from: split - 1.8, to: split + 0.6 } });
+    const goalReplay = (split: number) => ({ from: split - 1.8, to: split + 0.6 });
     const finisher = find("goal", "chance");
     const result = finisher === undefined ? null : events[finisher].type === "goal" ? "goal" : chanceResult(events[finisher]);
 
@@ -932,7 +942,7 @@ export class Replay {
         const block = rest.find((i) => events[i].detail === "block");
         const split = this.openPlay(st, side, shooter, shotResult, e.source === "counter",
           assist === undefined ? null : this.onPitch(st, events[assist]), block === undefined ? null : this.onPitch(st, events[block]));
-        return window(head, 0, { split, focus: [shooter], ...(e.type === "goal" ? goalShots(split) : {}) });
+        return window(head, 0, { split, focus: [shooter], replay: e.type === "goal" ? goalReplay(split) : null });
       }
       case "corner":
       case "freekick": {
@@ -944,7 +954,7 @@ export class Replay {
         window(head, 0, { focus: [taker] });
         const start = st.t;
         const split = direct ? this.directKick(st, side, taker, result) : this.header(st, side, taker, header, result);
-        return window(finisher, start, { split, focus: [header], ...(result === "goal" ? goalShots(split) : {}) });
+        return window(finisher, start, { split, focus: [header], replay: result === "goal" ? goalReplay(split) : null });
       }
       case "penalty": {
         const kicker = this.onPitch(st, e);
@@ -955,7 +965,7 @@ export class Replay {
         const scored = result === "goal";
         const split = this.penaltyKick(st, side, kicker, result, scored ? ATTACK : 1.6, scored ? GOAL : DRAMA - 1.6, goalZ(side), false);
         // Zahozenou penaltu záznam ukáže bez útočné fáze, celý kop se odehraje najednou.
-        return window(finisher, start, { split: scored ? split : start, focus: [kicker], ...(scored ? goalShots(split) : {}) });
+        return window(finisher, start, { split: scored ? split : start, focus: [kicker], replay: scored ? goalReplay(split) : null });
       }
       case "foul": {
         const fouler = this.onPitch(st, e);
@@ -1089,7 +1099,7 @@ export class Replay {
     }
   }
 
-  /** Oslava gólu, jedna ze dvou: běh před tribunu se spoluhráči, nebo skluz po kolenou. Neskáče se. */
+  /** Oslava gólu, jedna ze dvou: běh před tribunu se spoluhráči, nebo skluz po kolenou. */
   private celebrate(st: Stage, side: Side, shooter: number, gz: number) {
     const spot = celebrationSpot(gz);
     const kneeSlide = st.rng() < 0.5;
@@ -1158,12 +1168,12 @@ export class Replay {
   /** Roh, centr ze strany nebo přímý kop: střih na rozestavení ve vápně; hráč, který kope, se hlásí o míč. */
   private setPiece(st: Stage, side: Side, taker: number, header: number, kind: "corner" | "cross" | "direct") {
     // Rohy a centry se kopou od vzdálenější lajny: pruh pod hlavní tribunou kamera nevidí.
-    const gz = goalZ(side), s = Math.sign(gz), sgn = -1, def = other(side);
+    const gz = goalZ(side), s = Math.sign(gz), def = other(side);
     const goal = { x: 0, z: gz };
-    const ball = kind === "corner" ? { x: sgn * (HALF_W - 0.4), z: gz - s * 0.4 }
-      : kind === "cross" ? inFront(gz, sgn * (13 + st.rng() * 4), 15 + st.rng() * 5)
+    const ball = kind === "corner" ? { x: -(HALF_W - 0.4), z: gz - s * 0.4 }
+      : kind === "cross" ? inFront(gz, -(13 + st.rng() * 4), 15 + st.rng() * 5)
       : inFront(gz, (st.rng() - 0.5) * 10, BOX_DEPTH + 3 + st.rng() * 3);
-    const target = inFront(gz, -sgn * st.rng() * 3, 6 + st.rng() * 2.5);
+    const target = inFront(gz, st.rng() * 3, 6 + st.rng() * 2.5);
     const fixed = new Map<number, Point>([[taker, kind === "direct" ? toward(ball, goal, -2.6) : toward(ball, target, -1.5)]]);
     // Zakončující si nabíhá zpoza penalty; do vápna jdou útočníci a střední obránci.
     if (header !== taker) fixed.set(header, toward(target, { x: 0, z: 0 }, 4.5));
@@ -1183,7 +1193,7 @@ export class Replay {
     const inTheWay = markers.at(-1);
     if (kind === "direct" && inTheWay !== undefined) fixed.set(inTheWay, toward(ball, goal, 8));
     fixed.set(st.keeper(def), { x: clamp(ball.x * 0.08, -1.5, 1.5), z: gz - s * 0.8 });
-    fixed.set(this.referee, inFront(gz, -sgn * 9, BOX_DEPTH - 2));
+    fixed.set(this.referee, inFront(gz, 9, BOX_DEPTH - 2));
     // Ostatní: útočící za vápnem a obránci vzadu na půlce, bránící před brankou a útočník nahoře.
     st.layout(ball, (slot, sd) => box.get(slot.figure) ?? (slot.role === "GK" ? uvToWorld(sd, 0.1, 0)
       : sd === side ? inFront(gz, slot.base.v * 12, slot.role === "DEF" ? 34 : BOX_DEPTH + 4)
@@ -1298,7 +1308,10 @@ export class Replay {
     if (color === "red") {
       const exit = { x: BENCH_X - 2, z: stood.z * 0.3 };
       const seconds = end - shown - 0.8;
-      st.go(carded, toward(stood, exit, Math.min(dist(stood, exit), 2.4 * seconds)), seconds, 0.8);
+      // Dojde, kam do konce scény stihne; stojí-li tam někdo, zastaví se o kus dřív.
+      const reach = Math.min(dist(stood, exit), 2.4 * seconds);
+      const to = [0, 1.5, 3].map((back) => toward(stood, exit, reach - back)).find((p) => st.free(p, 1.2, carded));
+      if (to) st.go(carded, to, seconds, 0.8);
     }
     st.wait(CARD_UP);
     // Rozehrává soupeř potrestaného, o kus dál směrem k jeho bráně.
