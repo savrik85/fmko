@@ -116,6 +116,31 @@ export function reasonSms(reason: UnrestReason, step: ClubStep | undefined): str
   return reason === "better_club" ? BETTER_CLUB_SMS[step ?? "stronger_team"] : REASON_SMS[reason];
 }
 
+/** Další znění téže věty o důvodu: hráč ji po dalším odmítnutí neřekne doslova znovu. */
+const BETTER_CLUB_SMS_MORE: Record<ClubStep, readonly string[]> = {
+  higher_league: ["Vyšší soutěž, to se nenabízí každý den.", "Zahrát si o soutěž výš, to by bylo něco."],
+  seniors: ["Mezi chlapama bych se naučil víc než tady.", "Mohl jsem konečně hrát s dospělýma."],
+  abroad: ["Zahrát si v Německu, to by bylo něco.", "Takovou šanci za hranicema člověk hned tak nedostane."],
+  stronger_team: ["Tam mají mančaft o třídu lepší.", "S nima bych hrál o něco víc než tady."],
+};
+const REASON_SMS_MORE: Record<Exclude<UnrestReason, "better_club">, readonly string[]> = {
+  money: ["Za takovou částku mě nechce každý, tak o mě vážně stáli.", "Když za mě někdo dá tolik, asi mě tam fakt potřebovali."],
+  minutes: ["Tam bych aspoň hrál, tady sedím.", "Tady se na hřiště skoro nedostanu."],
+  coach: ["Nějak si spolu poslední dobou nesedíme.", "Mezi náma to stejně moc neklape."],
+  morale: ["Tady mě to teď fakt netáhne.", "Už mě to tady nějak přestalo bavit."],
+  job: ["Měli pro mě i práci, tady mi nikdo nepomůže.", "Tam by mi našli i práci, tady nic."],
+};
+
+/**
+ * Všechna znění věty o důvodu, první je `reasonSms`. Za předem napsanou SMS po odmítnuté nabídce
+ * jde to, které hráč ještě nenapsal (system-sms.ts): lokální E2E 22. 11. přišla tatáž věta
+ * ve dvou SMS jednoho hráče čtyři minuty po sobě.
+ */
+export function reasonSmsVariants(reason: UnrestReason, step: ClubStep | undefined): string[] {
+  const more = reason === "better_club" ? BETTER_CLUB_SMS_MORE[step ?? "stronger_team"] : REASON_SMS_MORE[reason];
+  return [reasonSms(reason, step), ...more];
+}
+
 /**
  * Věta, kterou hráč v první SMS po odmítnutí řekne, proč chtěl pryč. Důvod se manažer
  * dozví od hráče, ne z panelu (přání 2026-10-18: „ať je to vše formou SMS“).
