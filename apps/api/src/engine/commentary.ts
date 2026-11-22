@@ -39,6 +39,8 @@ const FALLBACK_TEMPLATES = [
   { event_type: 'injury', template: '{player} je zraněný.', tags: [], district: null },
   { event_type: 'substitution', template: 'Střídání: {player}.', tags: [], district: null },
   { event_type: 'special', template: '{player} na míči.', tags: ['possession'], district: null },
+  { event_type: 'special', template: 'Konec zápasu! Obě mužstva míří do hospody na rozbor.', tags: ['full_time'], district: null },
+  { event_type: 'special', template: 'Píská se konec! Rozhodčí utíká k autu — pro jistotu.', tags: ['poor_referee'], district: null },
   { event_type: 'goal', template: 'GÓÓÓL! {player} doráží po vyraženém míči!', tags: ['scramble'], district: null },
   { event_type: 'penalty', template: 'Penalta! Míč si bere {player}.', tags: [], district: null },
   { event_type: 'corner', template: 'Roh zahrává {player}.', tags: [], district: null },
@@ -61,7 +63,7 @@ const FALLBACK_TEMPLATES = [
 const SITUATION_TAGS = new Set([
   // special
   "possession", "save", "block", "crowd", "gk_hero", "hangover", "exhausted", "argument",
-  "emergency_gk", "penalty_save", "half_time", "full_time", "advantage", "petty", "neuznany_gol",
+  "emergency_gk", "penalty_save", "half_time", "full_time", "poor_referee", "advantage", "petty", "neuznany_gol",
   "weather_slip", "weather_puddle", "weather_wind",
   // goal source
   "open_play", "counter", "penalty", "freekick", "corner", "cross", "scramble",
@@ -100,8 +102,9 @@ export function generateCommentary(
   let matching = templates.filter((t) => t.event_type === event.type && (t.district == null || t.district === district));
 
   // Situaci pojmenovává `detail` (special, karty, zahozené standardky) i `source` (zdroj gólu —
-  // u gólu je `detail` obsazený skóre, takže dorážka se pozná jen podle `source`).
-  const keys = [event.detail, event.source].filter((k): k is string => !!k);
+  // u gólu je `detail` obsazený skóre, takže dorážka se pozná jen podle `source`). Detail může nést
+  // za dvojtečkou upřesnění, které je taky tag („full_time:poor_referee“).
+  const keys = [...(event.detail?.split(":") ?? []), event.source].filter((k): k is string => !!k);
   if (keys.length > 0 && matching.length > 0) {
     const tagSpecific = matching.filter((t) => t.tags.some((tag) => keys.includes(tag)));
     if (tagSpecific.length > 0) {

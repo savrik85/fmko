@@ -31,6 +31,13 @@ function possibleLines(event: MatchEvent, tries = 400): Set<string> {
 }
 
 describe("výběr komentářových šablon", () => {
+  it("hláška o rozhodčím utíkajícím k autu padne jen po jeho slabém výkonu", () => {
+    const flees = (detail: string) => [...possibleLines(ev({ type: "special", detail }))].some((line) => line.includes("utíká k autu"));
+
+    expect(flees("full_time")).toBe(false);
+    expect(flees("full_time:poor_referee")).toBe(true);
+  });
+
   it("gól ze hry nikdy nedostane penaltovou hlášku", () => {
     // detail u gólu je skóre, takže na žádný tag nesedne → obecný los.
     const lines = [...possibleLines(ev({ type: "goal", detail: "1:0", source: "open_play" }))];
