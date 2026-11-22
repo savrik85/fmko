@@ -2,6 +2,7 @@
 
 import { FaceAvatar } from "@/components/players/face-avatar";
 import { bestTextOn } from "@/lib/team-color";
+import type { ReactNode } from "react";
 import type { ReplayCoach, ReplayEvent, ReplayKit, ReplayPlayer, ShotResult } from "./scenes";
 
 interface Lineup { starters: ReplayPlayer[]; subs: ReplayPlayer[] }
@@ -107,16 +108,26 @@ export function EventCard({ detail, events, index, event, attack }: GraphicsProp
     note={note} board={board} badge={`${event.minute}'`} />;
 }
 
-/** Představení trenéra před výkopem: obličej, jméno, klub a kolik zápasů soutěže jeho tým zatím vyhrál. */
+/** Představení trenéra před výkopem: obličej, jméno, klub a kolik zápasů soutěže jeho tým odehrál a vyhrál. */
 export function CoachCard({ detail, side }: { detail: Record<string, unknown>; side: "home" | "away" }) {
   const coach = detail[`${side}_coach`] as ReplayCoach;
+  const stats = coach.record && (
+    <div className="flex gap-3 sm:gap-5 text-center leading-none">
+      {([["Zápasy", coach.record.played], ["Výhry", coach.record.won]] as const).map(([label, value]) => (
+        <div key={label}>
+          <div className="text-[8px] sm:text-[11px] font-bold uppercase tracking-widest opacity-80">{label}</div>
+          <div className="mt-0.5 sm:mt-1">{value}</div>
+        </div>
+      ))}
+    </div>
+  );
   return <LowerThird key={side} color={kitColor(detail, side)} name={coach.name} avatar={coach.avatar} title={coach.name}
-    note={`Trenér · ${detail[`${side}_name`]}`} board={coach.record && "výhry / zápasy v soutěži"} badge={coach.record && `${coach.record.won}/${coach.record.played}`} />;
+    note={`Trenér · ${detail[`${side}_name`]}`} board={coach.record && "bilance týmu v soutěži"} badge={stats} />;
 }
 
 /** Titulek přes spodek obrazu: obličej na barvě klubu, jméno, světlý pruh s poznámkou a pole vpravo. */
 function LowerThird({ color, name, avatar, title, note, board, badge }: {
-  color: string; name: string; avatar: Record<string, unknown> | undefined; title: string; note: string | null | undefined; board: string | null; badge: string | null;
+  color: string; name: string; avatar: Record<string, unknown> | undefined; title: string; note: string | null | undefined; board: string | null; badge: ReactNode;
 }) {
   return (
     <div className="absolute bottom-2 left-32 right-2 z-30 pointer-events-none">

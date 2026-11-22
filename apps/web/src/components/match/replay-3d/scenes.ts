@@ -45,6 +45,8 @@ export interface ReplayCoach {
  * Stejné délky mají kroky záznamu (SCENE_MS: coach, handshake = MEET + HANDSHAKE).
  */
 const COACH_INTRO = 4, MEET = 1.6, HANDSHAKE = 2.2;
+/** Podání ruky: jak daleko před sebe ruka dosáhne (`reach`) a o kolik je od středu těla (`aside`), v metrech. */
+const SHAKE = { reach: 0.5, aside: 0.36 };
 /** `coach` = null: klub trenéra nemá a u lajny nikdo nestojí. */
 export interface ReplayTeam { name: string; kit: ReplayKit; starters: ReplayPlayer[]; subs: ReplayPlayer[]; coach: ReplayCoach | null }
 /** Událost zápasu, jak ji ukládá engine (detail zápasu z API). */
@@ -431,21 +433,31 @@ class Stage {
     return { x: BENCH_X - 0.7, z: (side === "home" ? -7.5 : 7.5) * (this.mirror ? -1 : 1) };
   }
 
-  /** Trenér týmu `side` prožívá, co se děje, podle své povahy: kliďas stojí, sopka skáče, mává a padá na kolena. */
+  /**
+   * Trenér týmu `side` prožívá, co se děje. Jak silně, je pokaždé jiné a záleží na povaze: sopka skáče, padá
+   * na kolena a běží za rozhodčím častěji než kliďas, ten většinou jen zvedne ruku.
+   */
   coach(side: Side, mood: Mood, delay = 0) {
     const coach = this.staff.coaches[side];
     if (!coach) return;
     const { figure, fire } = coach;
+    const strong = this.rng() < 0.25 + 0.6 * fire;
+    const spot = this.pos(figure);
     if (mood === "joy") {
       this.pose(figure, "celebrate", 2 + 3 * fire, delay);
-      if (fire > 0.6) [0.4, 1.2, 2].forEach((at) => this.jump(figure, delay + at));
+      if (strong) [0.4, 1.2, 2].forEach((at) => this.jump(figure, delay + at));
     } else if (mood === "upset") {
-      if (fire > 0.75) this.pose(figure, "slide", 2.5, delay);
-      else if (fire > 0.4) this.pose(figure, "armUp", 0.9, delay);
-    } else if (fire > 0.35) {
-      // Protest nebo pokyny: krok k lajně a ruka nahoře.
-      this.go(figure, { x: BENCH_X - 0.1, z: this.pos(figure).z }, 0.5, delay);
-      this.pose(figure, "armUp", mood === "anger" ? 1 + 2 * fire : 1, delay);
+      this.pose(figure, strong ? "slide" : "armUp", strong ? 2.5 : 0.9, delay);
+    } else if (mood === "anger" && strong) {
+      // Vběhne kus do hřiště směrem k rozhodčímu, křičí na něj a vrátí se před střídačku.
+      const referee = this.pos(this.staff.referee).z * (this.mirror ? -1 : 1), shouting = 1.5 + 1.5 * fire;
+      this.go(figure, { x: BENCH_X + 2.5, z: spot.z + clamp(referee - spot.z, -5, 5) }, 1.5, delay);
+      this.pose(figure, "armUp", shouting, delay + 1);
+      this.go(figure, spot, 2, delay + 1.5 + shouting);
+    } else {
+      // Pokyny nebo protest od lajny: krok k ní a ruka nahoře.
+      this.go(figure, { x: BENCH_X - 0.1, z: spot.z }, 0.5, delay);
+      this.pose(figure, "armUp", 1, delay);
     }
   }
 
@@ -653,7 +665,9 @@ export class Replay {
       const coach = this.staff.coaches[side];
       if (!coach) return [];
       const bench = st.bench(side), out = Math.sign(bench.z);
-      return [{ figure: coach.figure, from: { x: bench.x, z: bench.z + out * 3.5 }, to: { x: bench.x, z: out * 0.6 } }];
+      // Zastaví se na dosah ruky a o šířku ramen vedle sebe, ať se jim pravé ruce potkají.
+      const x = bench.x + out * SHAKE.aside;
+      return [{ figure: coach.figure, from: { x, z: bench.z + out * 3.5 }, to: { x, z: out * SHAKE.reach } }];
     });
     const walk = coaches.length * COACH_INTRO + MEET;
     const spotAt = (c: typeof coaches[number], t: number): Point => ({ x: c.from.x, z: lerp(c.from.z, c.to.z, t / walk) });
