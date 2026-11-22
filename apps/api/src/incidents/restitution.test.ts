@@ -1,7 +1,7 @@
 /**
  * Přemluvit pachatele, ať to vrátí nebo zaplatí: kdy kývne a co se pak stane.
  */
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { Miniflare } from "miniflare";
 import { amendsRequestOf, isRestitutionRequest, promisedAmendsOf, recordPromisedAmends, restitutionChance, tryRestitution } from "./restitution";
 import { amendsDeliveryChance, resaleValue, settleAmendsTask, type AmendsTaskRow } from "./amends";
@@ -439,7 +439,11 @@ describe("Sedlecký (Akcent, E2E 22. 11.): rozhodnutí o nápravě platí i pro 
     const row = await db.prepare("SELECT id, first_name, last_name, personality, life_context, coach_relationship, age FROM players WHERE id = ?").bind(CULPRIT_ID).first<Record<string, unknown>>();
     const { loadPlayerSnapshot } = await import("../messaging/ai-player-spawn");
     const { buildSystemPrompt } = await import("../messaging/ai-player-chat");
+    // Snapshot bere čerstvost rozhodnutí podle skutečných hodin: čas odpovědi z E2E, ne čas běhu testu.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-22T17:46:20Z"));
     const player = loadPlayerSnapshot(row!);
+    vi.useRealTimers();
     expect(player.amendsDecision?.outcome).toBe("refused");
     expect(buildSystemPrompt(player, { teamName: "FC Akcent VB", managerName: "Trenér" })).toContain(line);
     // Pokyn platí pro odpověď na tuhle výzvu i opožděnou (retry_reply), ne navždy.
