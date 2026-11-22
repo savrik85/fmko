@@ -16,6 +16,7 @@ import { loadActiveListing } from "../transfers/listing-status";
 import { computeInterestForOffer, interestOfferOf, type InterestLevel } from "../transfers/player-interest";
 import type { PlayerSnapshot } from "./ai-player-scenarios";
 import { commitmentPromptLines, loadCommitmentMemory, pendingInviteOf } from "./coach-commitments";
+import { pledgePromptLines } from "./attendance-pledge";
 import { claimPromptLines, loadCoachClaimMemory } from "./coach-claims";
 
 const M = "player-memory";
@@ -175,6 +176,7 @@ export function memoryPromptLines(player: PlayerSnapshot): string[] {
     lines.push(`- V posledních dnech jsi trenérovi ${player.missedCall.count > 1 ? `${player.missedCall.count}× ` : ""}volal a nevzal to. Volal jsi, protože tým prohrává a ty máš blbou náladu. Když se na to ptá, víš o tom.`);
   }
   lines.push(...commitmentPromptLines(player.coachCommitments));
+  lines.push(...pledgePromptLines(player));
   lines.push(...hearsayPromptLines(player.hearsay));
   if (player.marketListing) lines.push(marketListingLine(player.marketListing));
   lines.push(...claimPromptLines(player.coachClaims));

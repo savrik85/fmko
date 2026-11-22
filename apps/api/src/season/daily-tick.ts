@@ -9,6 +9,7 @@ import type { Bindings } from "../index";
 import { createRng } from "../generators/rng";
 import { teamSeed } from "../lib/seed";
 import { simulateTraining, trainingTypeLabel } from "./training";
+import { lifeOf, pledgeOutcome, trainingPledgeIntent, type TrainingPledge } from "../messaging/attendance-pledge";
 import { trainingExperienceChance } from "../skills/training";
 import { logger } from "../lib/logger";
 import type { PitchCareMode } from "../stadium/pitch-care";
@@ -397,35 +398,18 @@ export async function executeDailyTick(
     // tedy hůř než áčko, přestože právě u mládeže má rozvoj fungovat nejlíp.
     const clubId = (team.club_id as string) ?? teamId;
 
-    // Per-team training day check: custom training_days (JSON array) override default mapping.
-    // Smart skip: pokud má tým ligový zápas dnes nebo zítra, trénink se přeskočí ("trenér dal volno").
-    const trainingDayMap: Record<number, number[]> = {
-      1: [2], 2: [2, 4], 3: [1, 3, 5], 4: [1, 2, 4, 5], 5: [1, 2, 3, 4, 5],
-    };
-    const sessionsForTeam = (team.training_sessions as number) ?? 2;
-    let customTrainingDays: number[] | null = null;
-    if (team.training_days) {
-      try {
-        const parsed = JSON.parse(team.training_days as string);
-        if (Array.isArray(parsed) && parsed.every((d) => typeof d === "number" && d >= 0 && d <= 6)) {
-          customTrainingDays = parsed;
-        }
-      } catch (e) { logger.warn({ module: "daily-tick", teamId }, "parse training_days", e); }
-    }
     // Týdenní plán {"1":"conditioning","3":"tactics"} — každý den může mít vlastní typ tréninku.
     // Dny v plánu určují i to, KDY se trénuje (den bez záznamu = volno). Prázdný plán →
-    // původní chování: jeden training_type pro dny z training_days.
+    // původní chování: jeden training_type pro dny z training_days, jinak podle počtu tréninků.
+    // Stejný rozpis zná hráč v SMS (messaging/attendance-pledge.ts), proto jeden výpočet.
     const dayPlan = parseTrainingPlan(team.training_plan as string | null, teamId);
-    const planDays = dayPlan ? Object.keys(dayPlan).map(Number).filter((d) => d >= 0 && d <= 6) : [];
-
-    const teamTrainingDays = planDays.length > 0
-      ? planDays
-      : (customTrainingDays && customTrainingDays.length > 0)
-        ? customTrainingDays
-        : (trainingDayMap[sessionsForTeam] ?? trainingDayMap[2]);
+    const { storedTrainingType, storedTrainingApproach, teamTrainingType, trainingWeekdays } = await import("./training");
+    const teamTrainingDays = trainingWeekdays({
+      user_id: team.user_id, training_type: (team.training_type as string | null) ?? null,
+      training_sessions: (team.training_sessions as number | null) ?? null, training_days: (team.training_days as string | null) ?? null,
+    }, dayPlan);
     const isTeamTrainingDay = teamTrainingDays.includes(dayOfWeek);
     // Typ pro DNEŠNÍ den — z plánu, jinak jednotný týmový typ.
-    const { storedTrainingType, storedTrainingApproach, teamTrainingType } = await import("./training");
     const rawTrainingType = dayPlan?.[dayOfWeek]?.type ?? teamTrainingType(team.training_type as string | null, team.user_id);
     const todayTrainingType = storedTrainingType(rawTrainingType);
     const trainingApproach = storedTrainingApproach(team.training_approach);
@@ -521,6 +505,8 @@ export async function executeDailyTick(
             isCelebrity: !!(row.is_celebrity as number), celebrityType: personality.celebrityType,
             transferUnrest: lifeContext.transferUnrest?.level ?? 0,
             leftOutSulk: isSulking(lifeContext.leftOutSulk, effectiveDate.toISOString(), teamId),
+            // Co hráč trenérovi v SMS slíbil na dnešní trénink (messaging/attendance-pledge.ts).
+            attendancePledge: trainingPledgeIntent(lifeContext.trainingPledge, effectiveDate.toISOString(), teamId),
           };
         });
 
@@ -855,6 +841,23 @@ export async function executeDailyTick(
               `UPDATE players SET life_context = json_set(life_context, '$.absence', json(?)) WHERE id = ?`
             ).bind(absencePayload, playerId).run().catch((e) => logger.warn({ module: "daily-tick" }, "set training absence", e));
           }
+        }
+
+        // Sliby docházky z SMS: splněné a porušené se zapíšou, omluvu a vztah vyřídí
+        // denní běh v 10:00 (settleAttendancePledges), ať hráč nepíše ve čtyři ráno.
+        const pledgeStmts: D1PreparedStatement[] = [];
+        for (const a of result.attendance) {
+          if (!a.pledge) continue;
+          const row = playersResult.results[a.playerIndex];
+          const stored = lifeOf(row.life_context).trainingPledge as TrainingPledge | undefined;
+          const outcome = stored ? pledgeOutcome(stored, effectiveDate.toISOString(), a.attended) : null;
+          if (!outcome) continue;
+          pledgeStmts.push(env.DB.prepare(
+            "UPDATE players SET life_context = json_set(life_context, '$.trainingPledge.outcome', ?, '$.trainingPledge.outcomeDay', ?) WHERE id = ?",
+          ).bind(outcome, effectiveDate.toISOString().slice(0, 10), row.id as string));
+        }
+        if (pledgeStmts.length > 0) {
+          await env.DB.batch(pledgeStmts).catch((e) => logger.warn({ module: "daily-tick", teamId }, "výsledek slibů docházky", e));
         }
 
         // Update cumulative training attendance

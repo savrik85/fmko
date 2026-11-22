@@ -126,6 +126,9 @@ export interface PlayerSnapshot {
    * (`season/weight-talk.ts`), model jen odpoví podle něj. `undefined` = o váze řeč není.
    */
   weightTalk?: "pledge" | "refused";
+  /** Co trenérovi v SMS řekl o tréninku a o zápase (attendance-pledge.ts, `life_context`). */
+  trainingPledge?: import("./attendance-pledge").TrainingPledge;
+  matchPledge?: import("./attendance-pledge").MatchPledge;
 
   /**
    * Kdy hráč ve vlákně naposledy sám psal (ISO). Načítá volající přes

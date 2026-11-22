@@ -297,6 +297,7 @@ async function deliverOne(db: D1Database, env: FollowUpEnv, row: FollowUpRow, no
     preview: photo ? `📷 ${generated.body.slice(0, 90)}` : generated.body.slice(0, 100),
   }));
   if (generated.transferStance) stmts.push(offerStanceStmt(db, player.id, generated.transferStance, memory.offerIds));
+  const pledge = generated.attendancePledge;
   if (effect) {
     const { getTeamGameDate } = await import("../community/manager-relations");
     stmts.push(...coachRelationStmts(db, {
@@ -309,6 +310,13 @@ async function deliverOne(db: D1Database, env: FollowUpEnv, row: FollowUpRow, no
     ).bind(effect.morale, player.id));
   }
   await db.batch(stmts);
+  // „Ozvu se pak“ a pak „v pátek dorazím“: slib docházky platí i v odložené zprávě (attendance-pledge.ts).
+  if (pledge) {
+    const { recordAttendancePledge } = await import("./attendance-pledge");
+    await recordAttendancePledge(db, {
+      clubTeamId: row.team_id, convId: row.conversation_id, playerId: player.id, playerFirstName: player.firstName, pledge,
+    });
+  }
   logger.info({ module: M, teamId: row.team_id }, `odložená zpráva ${row.kind}: ${player.firstName} ${player.lastName}${photo ? " (fotka)" : ""}`);
   await pushPhoneMessage(db, env, { teamId: row.team_id, convId: row.conversation_id, sender: `${player.firstName} ${player.lastName}`, text: generated.body });
   return "delivered";
