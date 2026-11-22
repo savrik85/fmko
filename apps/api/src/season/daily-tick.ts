@@ -599,6 +599,10 @@ export async function executeDailyTick(
         const districtRow = await env.DB.prepare("SELECT v.district FROM teams t JOIN villages v ON v.id = t.village_id WHERE t.id = ?")
           .bind(team.club_id ?? teamId).first<{ district: string | null }>()
           .catch((e) => { logger.warn({ module: "daily-tick", teamId }, "district for training excuses", e); return null; });
+        // Pravidlo „kdo nechodí, nehraje“ v klubu (messaging/coach-rules.ts): kabina chodí víc.
+        const { applyLapsAtTraining, missedTrainingStmt, trainingRuleBonus } = await import("../messaging/coach-rules");
+        equipAttendanceBonus += await trainingRuleBonus(env.DB, clubId)
+          .catch((e) => { logger.warn({ module: "daily-tick", teamId }, "pravidlo docházky", e); return 0; });
         const result = simulateTraining(rng, squad, {
           type: todayTrainingType ?? "conditioning",
           intensity: todayIntensity,
@@ -837,11 +841,21 @@ export async function executeDailyTick(
           } else if (a.reason) {
             // Neúčast → uložit absence na life_context (vyčistí se následující den)
             const absencePayload = JSON.stringify({ reason: a.reason, category: "training", date: now.toISOString().slice(0, 10) });
-            await env.DB.prepare(
-              `UPDATE players SET life_context = json_set(life_context, '$.absence', json(?)) WHERE id = ?`
-            ).bind(absencePayload, playerId).run().catch((e) => logger.warn({ module: "daily-tick" }, "set training absence", e));
+            await env.DB.batch([
+              env.DB.prepare(
+                `UPDATE players SET life_context = json_set(life_context, '$.absence', json(?)) WHERE id = ?`
+              ).bind(absencePayload, playerId),
+              // Kdo kdy vynechal trénink: pravidlo „kdo nechodí, nehraje“ (messaging/coach-rules.ts).
+              missedTrainingStmt(env.DB, playerId, playerRow.life_context, effectiveDate.toISOString()),
+            ]).catch((e) => logger.warn({ module: "daily-tick" }, "set training absence", e));
           }
         }
+
+        // Trestná kolečka z chatu: kdo je má a přišel, odběhá je, nebo odmítne (messaging/coach-rules.ts).
+        await applyLapsAtTraining(env.DB, {
+          clubTeamId: clubId, teamId, gameDay: effectiveDate.toISOString(),
+          attended: new Map(result.attendance.map((a) => [playersResult.results[a.playerIndex].id as string, a.attended])),
+        }).catch((e) => logger.warn({ module: "daily-tick", teamId }, "trestná kolečka", e));
 
         // Sliby docházky z SMS: splněné a porušené se zapíšou, omluvu a vztah vyřídí
         // denní běh v 10:00 (settleAttendancePledges), ať hráč nepíše ve čtyři ráno.

@@ -33,6 +33,7 @@ import { loadChatMemory } from "./player-memory";
 import { loadOwnLinesAcross, loadOwnRecentLines } from "./repetition";
 import { addressedPlayers, applySpeech, persuadeAbsentees, pickResponders } from "./squad-talk";
 import { handleSquadBet } from "./coach-commitments";
+import { handleSquadRule } from "./coach-rules";
 import { refundCoachSms } from "./phone-credit";
 import type { PlayerSnapshot } from "./ai-player-scenarios";
 import { carryWeightTalk, weightTalkFromState } from "../season/weight-talk";
@@ -363,6 +364,8 @@ async function replyInSquadGroupInner(
       persuadeAbsentees(db, { teamId: opts.teamId, convId: opts.convId, message: opts.coachMessage, squad: kadr })
         .catch((e) => { logger.warn({ module: M, teamId: opts.teamId }, "přemlouvání omluvených", e); return []; }),
       handleSquadBet(db, env, { teamId: opts.teamId, convId: opts.convId, message: opts.coachMessage, representative }),
+      // Pravidla a tresty pro kabinu („kdo nechodí, nehraje“, kolečka, poslední šance; coach-rules.ts).
+      handleSquadRule(db, env, { teamId: opts.teamId, convId: opts.convId, message: opts.coachMessage, squad: kadr, representative }),
     ]);
 
     let posted = 0;

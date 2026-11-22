@@ -49,6 +49,8 @@ export interface HracKlubu {
   dluhy: boolean;
   /** Trenér mu odmítl zálohu (spec 5a, 7c). */
   zalohaOdmitnuta: boolean;
+  /** Trenér mu v chatu dal poslední šanci (messaging/coach-rules.ts): dává si bacha. */
+  lastChance?: boolean;
 }
 
 export interface StavKlubu {
