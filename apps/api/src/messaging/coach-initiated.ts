@@ -23,7 +23,7 @@ import {
   coachQuote, generateCoachInitiatedReply, generateSquadGroupReaction, GeminiUnavailableError, playerTimeContext,
 } from "./ai-player-chat";
 import { SQUAD_ATTENDANCE_TOPIC_RE, recordAttendancePledge, type RawAttendancePledge } from "./attendance-pledge";
-import { coachStreak, leftOnReadChance, markCoachMessagesRead, readDelayMs } from "./left-on-read";
+import { coachAskedSinceReply, coachStreak, leftOnReadChance, markCoachMessagesRead, readDelayMs } from "./left-on-read";
 import {
   INJURY_COLUMN, afterPlayerReply, loadLastMatchContext, loadLastOwnMessageAt, loadPlayerSnapshot, loadRecentlyPostponed, loadTeamContext, nactiSituaceTymu,
   pockejNezDopise, pushPlayerReply, scheduleRetryReply,
@@ -163,6 +163,8 @@ export async function startCoachThread(
       relationship: player.coachRelationship,
       coachStreak: await coachStreak(db, opts.convId),
       atWork: playerTimeContext(player, new Date()).situace === "prace",
+      // Na otázku trenéra hráč odpoví (left-on-read.ts), jen naštvaný ji nechá na přečteno.
+      coachAsked: coachAskedSinceReply(historie),
     };
     // Dotaz na incident, domluva o váze a přemlouvání s rozhodnutím hry čekají odpověď, na ty hráč odepíše vždycky.
     if (!tema && !player.weightTalk && !persuasionPending(player) && Math.random() < leftOnReadChance(readInput)) {

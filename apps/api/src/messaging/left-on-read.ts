@@ -19,17 +19,42 @@ export interface LeftOnReadInput {
   coachStreak: number;
   /** Hráč je zrovna v práci. */
   atWork: boolean;
+  /** Trenér se od hráčovy poslední odpovědi na něco zeptal (`coachAskedSinceReply`). */
+  coachAsked?: boolean;
 }
 
-/** Šance, že hráč zprávu jen přečte a neodpoví. */
+/** Vztah, pod kterým je hráč na trenéra naštvaný: na přečteno ho nechá i s otázkou. */
+export const HOSTILE_RELATIONSHIP = 30;
+
+/**
+ * Šance, že hráč zprávu jen přečte a neodpoví.
+ *
+ * Na otázku trenéra hráč odpoví, jen naštvaný (vztah pod 30) ji občas nechá na přečteno.
+ * E2E 22. 11.: na konci vlákna se zahodila hotová odpověď s pravděpodobností 25–45 %, i když
+ * se trenér ptal. Kovalčuk na „A kolik tě stály?“ 2× ze 3 neodpověděl, ráno po hospodě
+ * 4 z 9 posledních tahů („A kdo podle tebe u nás nejvíc maká?“) a Zíka uprostřed vlákna.
+ */
 export function leftOnReadChance(i: LeftOnReadInput): number {
-  const annoyed = i.relationship < 30 ? 0.2 : i.relationship < 45 ? 0.08 : 0;
+  const annoyed = i.relationship < HOSTILE_RELATIONSHIP ? 0.2 : i.relationship < 45 ? 0.08 : 0;
+  if (i.coachAsked) return i.relationship < HOSTILE_RELATIONSHIP ? Math.min(0.5, annoyed + (i.coachStreak >= 3 ? 0.3 : 0)) : 0;
   if (i.closing) return Math.min(0.5, 0.25 + annoyed);
   let chance = 0.04 + annoyed;
   if (i.atWork) chance += 0.08;
   // Třetí zpráva bez odpovědi: hráč má pocit, že ho trenér zahlcuje.
   if (i.coachStreak >= 3) chance += 0.3;
   return Math.min(0.5, chance);
+}
+
+/**
+ * Trenér se od hráčovy poslední odpovědi na něco zeptal: otazník v některé z jeho zpráv na konci
+ * historie (stejně jako `coachQuestion` v ai-player-chat.ts, podle kterého model dostane pokyn
+ * „nejdřív mu na to odpověz“).
+ */
+export function coachAskedSinceReply(history: readonly { sender: string; body: string }[]): boolean {
+  for (let i = history.length - 1; i >= 0 && history[i].sender === "coach"; i--) {
+    if (history[i].body.includes("?")) return true;
+  }
+  return false;
 }
 
 /** Pauza, než si hráč zprávu přečte: pár vteřin, ne hned po odeslání. */

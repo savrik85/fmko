@@ -9,6 +9,7 @@ vi.mock("./ai-player-chat", () => ({
 }));
 // „Přečteno“ je náhoda; testy ji vypnou (šance 0) a zapnou jen tam, kde ji zkoušejí.
 vi.mock("./left-on-read", () => ({
+  coachAskedSinceReply: vi.fn(() => false),
   coachStreak: vi.fn(async () => 1),
   leftOnReadChance: vi.fn(() => 0),
   markCoachMessagesRead: vi.fn(async () => undefined),

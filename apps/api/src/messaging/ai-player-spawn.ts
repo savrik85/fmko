@@ -24,7 +24,7 @@ import { pickAmbience, recordVoiceMessage, voicePreviewText, type RecordedVoiceM
 import { PHOTO_CHANCE, PHOTO_SCENES, generatePlayerPhoto, historyBody, pickPhotoScene } from "./player-photo";
 import { COACH_CHAT_MAX_MORALE, coachRelationStmts } from "../lib/coach-relation";
 import { weightTalkFromState } from "../season/weight-talk";
-import { coachStreak, leftOnReadChance, markCoachMessagesRead, readDelayMs } from "./left-on-read";
+import { coachAskedSinceReply, coachStreak, leftOnReadChance, markCoachMessagesRead, readDelayMs } from "./left-on-read";
 import { describeNextFriendly, describeNextMatch, playedDayLabel, pragueDay } from "./next-match";
 import { refundCoachSms } from "./phone-credit";
 import {
@@ -1393,6 +1393,8 @@ async function handleAiPlayerReplyInner(
     relationship: player.coachRelationship,
     coachStreak: await coachStreak(db, convId),
     atWork: playerTimeContext(player, new Date()).situace === "prace",
+    // Na otázku trenéra hráč odpoví (left-on-read.ts), jen naštvaný ji nechá na přečteno.
+    coachAsked: coachAskedSinceReply(history),
   };
   // Dotaz na incident, domluva o váze a přemlouvání trucujícího hráče čekají odpověď.
   const mayLeaveOnRead = !state.incidentId && !player.weightTalk && state.trigger !== "left_out" && !persuasionPending(player);
