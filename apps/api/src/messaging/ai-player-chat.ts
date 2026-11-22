@@ -23,6 +23,7 @@ import { memoryPromptLines, type OfferStance } from "./player-memory";
 import { STOCK_PHRASES_RULE, generateWithoutRepeats, ownLinesPromptBlock } from "./repetition";
 import { GeminiUnavailableError } from "./model-errors";
 import { ATTENDANCE_PLEDGE_RULE, ATTENDANCE_PLEDGE_SCHEMA, absencePersuasionLine, parseAttendancePledge, type RawAttendancePledge } from "./attendance-pledge";
+import { persuasionLine } from "./persuasion";
 import { requestRule } from "./coach-rules";
 
 
@@ -257,6 +258,14 @@ export function buildUpcomingAbsenceFacts(p: PlayerSnapshot): string {
     : `Trenérovi jsi do skupiny zápasu poslal omluvenku: „${a.text}“.`;
   // Skutečný důvod z losu (kocovina za „strejda slavil padesát“): podle povahy ho přizná, nebo ne.
   const truth = fixed ? "" : excuseTruthLine(a.reason, p);
+  // Trenér ho přemlouval a hra rozhodla (persuasion.ts): pevný pokyn místo úvahy modelu.
+  const decided = !fixed && p.persuasion?.event === "match" ? p.persuasion : undefined;
+  if (decided?.decided === "attend") {
+    return `- Na ${match} ses trenérovi původně omluvil. ${why} ${persuasionLine(decided)} NIKDY netvrď, že nevíš, o čem trenér mluví.`;
+  }
+  if (decided) {
+    return `- Na ${match} NEPŘIJDEŠ. ${why}${truth ? ` ${truth}` : ""} Víš o tom a trenér to ví taky. ${persuasionLine(decided)} NIKDY netvrď, že nevíš, o čem trenér mluví, ani že ses neomluvil.`;
+  }
   // Omluvenku drží, dokud ho trenér rozumně nepřemluví (attendance-pledge.ts); nemoc, zranění ani stopku ne.
   const persuasion = fixed ? null : absencePersuasionLine(a, p);
   if (persuasion) {

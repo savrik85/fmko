@@ -131,6 +131,8 @@ export interface PlayerSnapshot {
   /** Co trenérovi v SMS řekl o tréninku a o zápase (attendance-pledge.ts, `life_context`). */
   trainingPledge?: import("./attendance-pledge").TrainingPledge;
   matchPledge?: import("./attendance-pledge").MatchPledge;
+  /** Trenér ho přemlouval, ať přijde, a hra rozhodla (persuasion.ts). Jen čerstvé rozhodnutí. */
+  persuasion?: import("./persuasion").PersuasionState;
   /** Pokyn trenéra, na který má hráč odpovědět, jestli ho splní (kolečka, omluva kabině; coach-rules.ts). */
   pendingRequest?: { commitmentId: string; kind: string };
 
