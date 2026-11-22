@@ -437,7 +437,7 @@ export default function MatchReplayPage() {
           <div className="flex flex-col sm:flex-row items-center sm:gap-2 gap-2 flex-1 min-w-0">
             <div className="flex items-center gap-2">
               <BadgePreview primary={hc} secondary={match.home_secondary} pattern={match.home_badge as BadgePattern} initials={ini(match.home_name)} size={36} />
-              <JerseyPreview primary={homeKit.shirt} secondary={match.home_secondary} size={28} />
+              <JerseyPreview primary={homeKit.shirt} secondary={homeKit.secondary} pattern={homeKit.pattern} size={28} />
             </div>
             <span className="font-heading font-bold text-white text-xs sm:text-lg text-center sm:text-left break-words leading-tight">{match.home_name}</span>
           </div>
@@ -454,7 +454,7 @@ export default function MatchReplayPage() {
           </div>
           <div className="flex flex-col sm:flex-row items-center sm:gap-2 gap-2 flex-1 min-w-0 sm:justify-end">
             <div className="flex items-center gap-2 sm:order-last">
-              <JerseyPreview primary={awayKit.shirt} secondary={match.away_secondary} size={28} />
+              <JerseyPreview primary={awayKit.shirt} secondary={awayKit.secondary} pattern={awayKit.pattern} size={28} />
               <BadgePreview primary={ac} secondary={match.away_secondary} pattern={match.away_badge as BadgePattern} initials={ini(match.away_name)} size={36} />
             </div>
             <span className="font-heading font-bold text-white text-xs sm:text-lg text-center sm:text-right break-words leading-tight">{match.away_name}</span>

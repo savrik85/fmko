@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useRef, type RefObject } from "react";
 import * as THREE from "three";
 import { addAfterEffect, useFrame, useThree } from "@react-three/fiber";
-import { PITCH_SURFACE_Y } from "@/components/stadium/stadium-3d/constants";
-import { emptyFrame, HALF_W, REPLAY, sampleClip, sceneTime, type Clip, type Figure, type Replay, type ReplayKit, type Scene } from "./scenes";
+import { FENCE_BOUNDS, PITCH_SURFACE_Y } from "@/components/stadium/stadium-3d/constants";
+import { emptyFrame, HALF_W, REPLAY, sampleClip, sceneTime, type Clip, type Figure, type Replay, type ReplayKit, type Scene, type Side } from "./scenes";
 
 /** Záběr: scéna a její část. Nový objekt znamená hrát od začátku, i když jde o tutéž scénu (skok zpět na její začátek). */
 interface ReplayPlay {
@@ -22,7 +22,9 @@ export interface ReplayStep {
   hold: boolean;
 }
 
-const REFEREE_KIT: ReplayKit = { shirt: "#111827", shorts: "#111827", socks: "#111827" };
+/** Co má figura na sobě; vzor dresu mají jen hráči v poli. */
+type Outfit = Pick<ReplayKit, "shirt" | "shorts" | "socks">;
+const REFEREE_KIT: Outfit = { shirt: "#111827", shorts: "#111827", socks: "#111827" };
 /** Trenér má bundu v barvě dresu svého týmu a tmavé kalhoty. */
 const COACH_TROUSERS = "#1F2937";
 /** Brankář dostane první barvu, která se neplete s dresy obou týmů ani s druhým brankářem. */
@@ -74,12 +76,12 @@ interface PartDef {
   /** O kolik je střed dílu pod kloubem. */
   drop: number;
   /** Holá hlava vlasy nemá (null). */
-  color: (kit: ReplayKit, shirt: string, fig: Figure) => string | null;
+  color: (kit: Outfit, shirt: string, fig: Figure) => string | null;
 }
 
 /** Kde jsou klouby v těle (m): kyčel a rameno od středu, koleno a loket pod nimi. */
 const BODY = { hip: [0.1, 0.92], knee: 0.44, shoulder: [0.29, 1.45], elbow: 0.26 } as const;
-const skin = (_: ReplayKit, __: string, fig: Figure) => fig.player.skinColor ?? SKIN;
+const skin = (_: Outfit, __: string, fig: Figure) => fig.player.skinColor ?? SKIN;
 /** Postava z kvádrů s koleny a lokty: dres s krátkým rukávem, holá předloktí, trenýrky, vysoko vytažené štulpny, kopačky. */
 const PARTS: PartDef[] = [
   { id: "shorts", geometry: new THREE.BoxGeometry(0.19, 0.46, 0.21), on: "hip", drop: 0.21, color: (kit) => kit.shorts },
@@ -93,6 +95,56 @@ const PARTS: PartDef[] = [
   { id: "hair", geometry: new THREE.BoxGeometry(0.25, 0.09, 0.26), on: [0, 1.73, -0.01], drop: 0, color: (_, __, fig) => fig.player.hairColor ?? null },
 ];
 const perFigure = (part: PartDef) => (typeof part.on === "string" ? 2 : 1);
+
+/** Dresy na trupu jsou z jedné textury se třemi poli vedle sebe: domácí, hosté a bílé pole pro jednobarevné dresy. */
+const SHIRT_TILES = { home: 0, away: 1, plain: 2 };
+const TILE = 64;
+/** Vzor dresu z editoru (jersey-preview.tsx) nakreslený na jedno pole textury. */
+function drawShirt(ctx: CanvasRenderingContext2D, tile: number, { shirt, secondary, pattern }: ReplayKit) {
+  const x = tile * TILE;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x, 0, TILE, TILE);
+  ctx.clip();
+  ctx.fillStyle = shirt;
+  ctx.fillRect(x, 0, TILE, TILE);
+  ctx.fillStyle = secondary;
+  const bands = (count: number, width: number, vertical: boolean) => {
+    for (let n = 0; n < count; n++) {
+      const at = ((n + 0.5) / count) * TILE - width / 2;
+      if (vertical) ctx.fillRect(x + at, 0, width, TILE); else ctx.fillRect(x, at, TILE, width);
+    }
+  };
+  switch (pattern) {
+    case "stripes": bands(4, TILE / 8, true); break;
+    case "pinstripes": bands(8, TILE / 32, true); break;
+    case "hoops": bands(4, TILE / 8, false); break;
+    case "halves": ctx.fillRect(x + TILE / 2, 0, TILE / 2, TILE); break;
+    case "quarters": ctx.fillRect(x + TILE / 2, 0, TILE / 2, TILE / 2); ctx.fillRect(x, TILE / 2, TILE / 2, TILE / 2); break;
+    case "chest_band": ctx.fillRect(x, TILE * 0.3, TILE, TILE * 0.2); break;
+    case "sash":
+      ctx.beginPath();
+      ctx.moveTo(x, 0); ctx.lineTo(x + TILE * 0.35, 0); ctx.lineTo(x + TILE, TILE * 0.65); ctx.lineTo(x + TILE, TILE); ctx.lineTo(x + TILE * 0.65, TILE); ctx.lineTo(x, TILE * 0.35);
+      ctx.fill();
+      break;
+    case "gradient": {
+      const fade = ctx.createLinearGradient(0, 0, 0, TILE);
+      fade.addColorStop(0, shirt);
+      fade.addColorStop(1, secondary);
+      ctx.fillStyle = fade;
+      ctx.fillRect(x, 0, TILE, TILE);
+      break;
+    }
+  }
+  ctx.restore();
+}
+/** Každá figura bere z textury dresů své pole (atribut `tile`). */
+const pickShirtTile = (shader: { vertexShader: string }) => {
+  shader.vertexShader = `attribute float tile;\n${shader.vertexShader}`.replace("#include <uv_vertex>", `#include <uv_vertex>\nvMapUv.x = (vMapUv.x + tile) / ${Object.keys(SHIRT_TILES).length}.0;`);
+};
+const TORSO = PARTS.find((part) => part.id === "torso")!;
+/** Auto, kterým po zápase odjíždí rozhodčí: jede po cestě za plotem areálu (x) zprava doleva (z). */
+const CAR_ROAD = { x: -(FENCE_BOUNDS.width / 2 + 4), from: -75, to: 75 };
 
 interface FigureState { x: number; z: number; yaw: number; phase: number; speed: number }
 
@@ -126,6 +178,28 @@ export function ReplayScene({ replay, kits, snow, overview, step, root, veil, on
   const frame = useMemo(() => emptyFrame(count), [count]);
   const states = useMemo<FigureState[]>(() => replay.figures.map(() => ({ x: 0, z: 0, yaw: 0, phase: 0, speed: 0 })), [replay]);
   const keepers = useMemo(() => keeperShirts(kits.home, kits.away), [kits]);
+  const shirts = useMemo(() => {
+    const canvas = document.createElement("canvas");
+    canvas.width = TILE * Object.keys(SHIRT_TILES).length;
+    canvas.height = TILE;
+    const ctx = canvas.getContext("2d")!;
+    ctx.fillStyle = "#FFFFFF";
+    ctx.fillRect(0, 0, canvas.width, TILE);
+    drawShirt(ctx, SHIRT_TILES.home, kits.home);
+    drawShirt(ctx, SHIRT_TILES.away, kits.away);
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    // Bez mipmap: zmenšené pole by nabíralo barvu sousedního dresu.
+    texture.generateMipmaps = false;
+    texture.minFilter = THREE.LinearFilter;
+    return texture;
+  }, [kits]);
+  useEffect(() => () => shirts.dispose(), [shirts]);
+  const tiles = useMemo(() => {
+    const attribute = new THREE.InstancedBufferAttribute(new Float32Array(count), 1);
+    TORSO.geometry.setAttribute("tile", attribute);
+    return attribute;
+  }, [count]);
   const shadowGeometry = useMemo(() => new THREE.CircleGeometry(0.5, 16).rotateX(-Math.PI / 2), []);
   // Tmavé plošky jsou na míči proto, aby bylo poznat, že se točí.
   const ballGeometry = useMemo(() => {
@@ -141,6 +215,7 @@ export function ReplayScene({ replay, kits, snow, overview, step, root, veil, on
   const rings = useRef<(THREE.Mesh | null)[]>([]);
   const ball = useRef<THREE.Mesh>(null);
   const card = useRef<THREE.Mesh>(null);
+  const car = useRef<THREE.Group>(null);
   const camera = useThree((s) => s.camera) as THREE.PerspectiveCamera;
   const gl = useThree((s) => s.gl);
   /** Co se kreslilo minule: podle toho se pozná střih (hráči pak neběží, stojí rovnou na místě). */
@@ -179,13 +254,17 @@ export function ReplayScene({ replay, kits, snow, overview, step, root, veil, on
       const mesh = meshes.current[p];
       if (!mesh) return;
       replay.figures.forEach((fig, i) => {
-        const kit = fig.team === "referee" ? REFEREE_KIT : fig.coach ? { shirt: kits[fig.team].shirt, shorts: COACH_TROUSERS, socks: COACH_TROUSERS } : kits[fig.team];
+        const kit: Outfit = fig.team === "referee" ? REFEREE_KIT : fig.coach ? { shirt: kits[fig.team].shirt, shorts: COACH_TROUSERS, socks: COACH_TROUSERS } : kits[fig.team];
         const shirt = fig.team !== "referee" && clip.keepers.has(i) ? keepers[fig.team] : kit.shirt;
-        cTmp.set(part.color(kit, shirt, fig) ?? "#000000");
+        // Hráč v poli má dres se vzorem svého týmu: trup bere barvy z textury, rukávy jsou u vzoru „sleeves“ doplňkové.
+        const design = fig.team !== "referee" && !fig.coach && !clip.keepers.has(i) ? kits[fig.team] : null;
+        if (part === TORSO) tiles.setX(i, design ? SHIRT_TILES[fig.team as Side] : SHIRT_TILES.plain);
+        cTmp.set(design && part === TORSO ? "#FFFFFF" : design?.pattern === "sleeves" && part.id === "sleeve" ? design.secondary : part.color(kit, shirt, fig) ?? "#000000");
         for (let k = 0; k < perFigure(part); k++) mesh.setColorAt(i * perFigure(part) + k, cTmp);
       });
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     });
+    tiles.needsUpdate = true;
   };
 
   useFrame((_, delta) => {
@@ -332,6 +411,11 @@ export function ReplayScene({ replay, kits, snow, overview, step, root, veil, on
 
     // Karta ve zdvižené ruce rozhodčího; když ruku spustí, kartu schoval.
     const shown = scene.card && t >= scene.card.at && frame.figures[replay.referee].pose === "armUp" ? scene.card : null;
+    if (car.current) {
+      const driving = scene.drive !== undefined && t >= scene.drive.from && t < scene.drive.to;
+      car.current.visible = driving;
+      if (driving) car.current.position.set(CAR_ROAD.x, 0, THREE.MathUtils.mapLinear(t, scene.drive!.from, scene.drive!.to, CAR_ROAD.from, CAR_ROAD.to));
+    }
     if (card.current) {
       const r = states[replay.referee];
       card.current.visible = shown !== null;
@@ -396,9 +480,13 @@ export function ReplayScene({ replay, kits, snow, overview, step, root, veil, on
     <group>
       {PARTS.map((part, p) => (
         <instancedMesh key={part.id} ref={(m) => { meshes.current[p] = m; }} args={[part.geometry, undefined, count * perFigure(part)]} frustumCulled={false}>
-          <meshStandardMaterial roughness={0.8} />
+          {part === TORSO ? <meshStandardMaterial roughness={0.8} map={shirts} onBeforeCompile={pickShirtTile} /> : <meshStandardMaterial roughness={0.8} />}
         </instancedMesh>
       ))}
+      <group ref={car} visible={false}>
+        <mesh position={[0, 0.6, 0]}><boxGeometry args={[1.7, 0.7, 4.2]} /><meshStandardMaterial color="#B91C1C" roughness={0.4} /></mesh>
+        <mesh position={[0, 1.25, -0.2]}><boxGeometry args={[1.5, 0.6, 2.2]} /><meshStandardMaterial color="#1F2937" roughness={0.3} /></mesh>
+      </group>
       <instancedMesh ref={shadows} args={[shadowGeometry, undefined, count + 1]} frustumCulled={false} renderOrder={1}>
         <meshBasicMaterial color="#000000" transparent opacity={0.28} depthWrite={false} />
       </instancedMesh>

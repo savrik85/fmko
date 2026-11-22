@@ -7,7 +7,7 @@ import type { WeatherType } from "@/components/stadium/stadium-3d/constants";
 import { Stadium3D } from "@/components/stadium/stadium-3d/Stadium3D";
 import { venueExtensions, venueFacilities } from "@/app/(hra)/turnaj/venue-scene";
 import { ReplayScene, type ReplayStep } from "./ReplayScene";
-import { CoachCard, EventCard, EventLabel, initials, ReplayChip, ScoreBug } from "./graphics";
+import { CoachCard, EventCard, EventLabel, initials, ReplayMark, ScoreBug } from "./graphics";
 import { OVERLAY_CONTROL } from "./overlay";
 import { Replay, shootoutScore, sideOf, type ReplayCoach, type ReplayEvent, type ReplayKit, type ReplayLineup } from "./scenes";
 
@@ -158,12 +158,12 @@ function Replay3DView({ detail, events, progress, onReady }: Replay3DProps) {
       <canvas ref={veil} style={{ opacity: 0 }} className="absolute inset-0 z-10 w-full h-full pointer-events-none" />
 
       <div className="absolute top-0 left-0 z-30 origin-top-left pointer-events-none" style={{ width: GRAPHICS_WIDTH, height: fit.height, transform: `scale(${fit.scale})` }}>
-        {/* Nahoře vedle sebe: vlevo výsledková tabulka, vpravo nápis akce, při opakovaném záběru gólu mezi nimi jeho nápis. */}
+        {/* Nahoře vedle sebe: vlevo výsledková tabulka, vpravo nápis akce. */}
         <div className="absolute top-2 inset-x-2 flex items-start gap-2">
           <ScoreBug detail={detail} homeGoals={homeGoals} awayGoals={awayGoals} minute={events[index]?.minute} scored={scored} fast={fast} />
-          <ReplayChip />
           <EventLabel {...graphics} override={fixedLabel} />
         </div>
+        <ReplayMark />
         <EventCard {...graphics} />
         {coachSide && <CoachCard detail={detail} side={coachSide} />}
         {/* O přestávce stojí týmy připravené na výkop a obraz je ztmavený. */}

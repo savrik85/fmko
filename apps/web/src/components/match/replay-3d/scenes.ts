@@ -37,7 +37,8 @@ type CardColor = "yellow" | "red";
 
 /** `avatar` = obličej hráče (facesjs) pro titulek u gólu, karty, zranění a střídání. */
 export interface ReplayPlayer { name: string; position: string; skinColor?: string; hairColor?: string | null; height?: number; avatar?: Record<string, unknown> }
-export interface ReplayKit { shirt: string; shorts: string; socks: string }
+/** Sada dresů: hlavní barva dresu, jeho doplňková barva a vzor (jako v editoru dresu), trenýrky a štulpny. */
+export interface ReplayKit { shirt: string; secondary: string; pattern: string; shorts: string; socks: string }
 /** Trenér klubu (jeho manažer). `motivation` 1–100 říká, jak moc zápas u lajny prožívá. */
 export interface ReplayCoach {
   name: string; motivation: number; skinColor?: string; hairColor?: string | null; avatar?: Record<string, unknown>;
@@ -93,6 +94,8 @@ export interface Scene {
   replay: { from: number; to: number } | null;
   /** Vlastní kamera scény (představení trenérů); jinak scénu točí televizní kamera z tribuny. */
   camera?: CameraKey[];
+  /** Konec zápasu: v tomhle úseku klipu odjíždí rozhodčí autem po cestě za plotem. */
+  drive?: { from: number; to: number };
 }
 interface Point3 extends Point { y: number }
 /** Kde kamera v čase `t` stojí a kam míří. Mezi klíči jede rovnoměrně, s `ease` se rozjede a dojede; dva klíče ve stejném čase jsou střih. */
@@ -433,6 +436,9 @@ class Stage {
 
   /** Výskok na hlavičku: nahoře je hráč v čase `t` + `delay`. */
   jump(i: number, delay: number) { this.clip.hops[i].push(this.t + delay); }
+
+  /** Figura za `delay` sekund ze scény zmizí (odešla ze záběru). */
+  leave(i: number, delay: number) { this.clip.until[i] = this.t + delay; }
 
   pose(i: number, pose: Pose, seconds = Infinity, delay = 0) {
     this.clip.poses[i].push({ from: this.t + delay, to: this.t + delay + seconds, pose });
@@ -859,6 +865,12 @@ export class Replay {
       st.go(host, toward(at, to, 0.3), 0.3, wait + walk - 0.3);
       st.pose(host, "shake", 1.2, wait + walk);
     });
+    // Rozhodčí odejde z obrazu doprava (tam, kde mají střídačku hosté) a za chvíli odjede autem po cestě za plotem.
+    const exit = { x: BENCH_X - 1.5, z: Math.sign(st.bench("away").z) * (HALF_L + 2) };
+    const walk = dist(st.pos(this.referee), exit) / 3.2;
+    st.go(this.referee, exit, walk);
+    st.leave(this.referee, walk);
+    const drive = { from: st.t + walk + 3, to: st.t + walk + 3 + 10 };
     st.wait(calm - meet);
 
     // 3. Klid po zápase, beze spěchu.
@@ -881,8 +893,8 @@ export class Replay {
         }
       });
     }
-    st.wait(settled + 1);
-    this.closing = { clip: st.finish(), start: 0, split: 0, end: st.t, focus: [], card: null, replay: null };
+    st.wait(Math.max(settled + 1, drive.to + 0.5 - st.t));
+    this.closing = { clip: st.finish(), start: 0, split: 0, end: st.t, focus: [], card: null, replay: null, drive };
     return this.closing;
   }
 
@@ -1207,7 +1219,7 @@ export class Replay {
     const target = toward(st.pos(header), { x: 0, z: 0 }, -4.5);
     const marker = st.nearest(other(side), st.pos(header));
     st.wait(ATTACK - 2.4);
-    st.go(taker, toward(st.ball, target, -0.5), 0.4);
+    st.go(taker, toward(st.ball, target, -0.5), 0.5);
     st.wait(0.5);
     st.ballTo(target, 1.4, { h: 2.2, arc: 3.5 });
     st.go(header, target, 1.1, 0.3);
@@ -1226,7 +1238,7 @@ export class Replay {
     const inTheWay = st.nearest(other(side), toward(st.ball, goal, 8));
     st.pose(this.referee, "armUp", 0.8, 1.2);
     st.wait(ATTACK - 1.2);
-    st.go(kicker, toward(st.ball, goal, -0.5), 0.6);
+    st.go(kicker, toward(st.ball, goal, -0.5), 0.7);
     st.wait(0.7);
     return this.shoot(st, side, kicker, result, result === "goal" ? GOAL : CHANCE, goal.z, inTheWay, true);
   }

@@ -16,7 +16,7 @@ interface GraphicsProps {
 }
 
 const RESULTS: Record<ShotResult, string> = { goal: "GÓÓÓL!", saved: "CHYTIL BRANKÁŘ!", post: "TYČ!", bar: "BŘEVNO!", wide: "VEDLE!", over: "NAD BRÁNU!", blocked: "ZBLOKOVÁNO!" };
-// Červené pole má jen nápis opakovaného záběru (ReplayChip), ať se s ním nápis akce neplete; červená karta je červeným písmem.
+// Červené pole má jen nápis opakovaného záběru (ReplayMark), ať se s ním nápis akce neplete; červená karta je červeným písmem.
 const TONES = { goal: "bg-green-500 text-white", danger: "bg-orange-500 text-white", miss: "bg-slate-600 text-white", yellow: "bg-yellow-400 text-gray-900", red: "bg-white text-red-600", info: "bg-white text-gray-900" };
 interface Label { text: string; tag?: string; sub?: string; tone: keyof typeof TONES }
 /** Tmavá plocha televizní grafiky, stejná jako výsledková tabule 2D záznamu. */
@@ -156,10 +156,15 @@ function LowerThird({ color, name, avatar, title, note, board, badge }: {
   );
 }
 
-/** Nápis opakovaného záběru gólu; stojí nahoře mezi výsledkovou tabulkou a nápisem akce. */
-export function ReplayChip() {
+const REPLAY_CORNERS = ["top-0 left-0 border-t-4 border-l-4", "top-0 right-0 border-t-4 border-r-4", "bottom-0 left-0 border-b-4 border-l-4", "bottom-0 right-0 border-b-4 border-r-4"];
+
+/** Opakovaný záběr gólu: čtyři červené rohy kolem obrazu mezi horními nápisy a spodním titulkem a pod horními nápisy jeho název. */
+export function ReplayMark() {
   return (
-    <div className={`hidden group-data-[replaying]/shot:flex items-center px-3 ${BAR_HEIGHT} rounded-lg bg-red-600 text-white text-lg font-heading font-[900] tracking-widest whitespace-nowrap shadow-xl`}>↺ OPAKOVANÝ ZÁBĚR</div>
+    <div className="hidden group-data-[replaying]/shot:block absolute inset-x-2 top-16 bottom-20">
+      {REPLAY_CORNERS.map((corner) => <span key={corner} className={`absolute w-9 h-9 border-red-600 ${corner}`} />)}
+      <div className="absolute top-2 left-1/2 -translate-x-1/2 px-3 py-1 rounded-lg bg-red-600 text-white text-lg font-heading font-[900] tracking-widest whitespace-nowrap shadow-xl">↺ OPAKOVANÝ ZÁBĚR</div>
+    </div>
   );
 }
 
