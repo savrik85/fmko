@@ -872,10 +872,10 @@ class Simulation {
       return;
     }
     this.pass(finisher, target, cross);
-    this.drain();
+    if (result !== "goal" && finisherText) this.caption(finisherText, undefined, [finisher]);
+    else this.drain();
     this.shot(side, result, 18);
     if (result === "goal") return this.goalScored(finisher, side, finisherText, null);
-    if (finisherText) this.caption(finisherText, undefined, [finisher]);
     this.run(0.4);
   }
 
@@ -912,10 +912,10 @@ class Simulation {
     this.caption(text, undefined, [kicker]);
     this.run(0.6);
     this.takeBall(side, kicker);
-    this.drain();
+    if (result !== "goal" && afterText) this.caption(afterText, undefined, [kicker]);
+    else this.drain();
     this.shot(side, result, isPenalty ? 26 : 20);
     if (result === "goal") return this.goalScored(kicker, side, afterText, null);
-    if (afterText) this.caption(afterText);
     this.run(0.4);
   }
 
@@ -929,13 +929,13 @@ class Simulation {
     if (victim !== null) {
       const v = this.actors[victim];
       this.send(victim, { x: v.x, z: v.z });
-      const contact = toward(v, this.actors[fouler], 0.6);
+      const contact = toward(v, this.actors[fouler], 1);
       this.send(fouler, contact);
       this.contact = [fouler, victim];
       this.run(4, () => dist(this.actors[fouler], contact) < 0.2);
       this.contact = [];
       this.setPose(victim, "down", 2.6);
-      this.send(fouler, toward(v, this.actors[fouler], 1.8), JOG);
+      this.send(fouler, toward(v, this.actors[fouler], 2.4), JOG);
       this.looseBall(v);
     }
     this.ball = { kind: "rest" };
