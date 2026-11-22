@@ -2042,7 +2042,7 @@ export async function afterPlayerReply(
   // s lhůtou, ať má dopad, i když podle povahy nesplní (incidents/restitution.ts).
   const { promisesAmends, recordPromisedAmends } = await import("../incidents/restitution");
   if (promisesAmends(r.reply.body)) {
-    await recordPromisedAmends(db, { teamId: r.teamId, playerId: r.player.id, reply: r.reply.body, now: new Date(r.at) })
+    await recordPromisedAmends(db, { teamId: r.teamId, playerId: r.player.id, reply: r.reply.body, now: new Date(r.at), topicIncidentId: r.incidentId })
       .catch((e) => logger.warn({ module: "ai-player-spawn", teamId: r.teamId }, "slib nápravy z odpovědi hráče", e));
   }
   // „Poptám se a zítra dám vědět“: odpověď druhý den pošle úkol pátrání (deliverInquiry),

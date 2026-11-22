@@ -236,6 +236,49 @@ describe("vrácení po uzavřeném incidentu (Turek a poháry, 23.–24. 10.)", 
   });
 });
 
+describe("náprava k incidentu, o kterém trenér píše (Sedlecký, Akcent, E2E 22. 11.)", () => {
+  // Sedlecký měl uzavřenou tombolu (pokuta, peníze u něj) i vloupání do skladu (nechat být,
+  // lup u něj), obojí uzavřené týž den. Trenér chtěl peníze z tomboly, hra vybrala nejnovější
+  // uzavřený incident a zapsala vrácení tréninkových pomůcek ze skladu.
+  const COACH = "Marceli, kamera tě natočila u tomboly. Ty peníze zaplatíš, rozumíš?";
+  const twoClosed = (tombolaResolution = "pokuta") => db.batch([
+    db.prepare(`INSERT INTO club_incidents (id, team_id, kind, category, status, loss, culprit_type, culprit_player_id, culprit_revealed, resolution, resolution_data, resolved_on, game_date, recovered)
+      VALUES ('raffle', 'tym', 'tombola', 'kradez', 'uzavreny', ?, 'hrac', 'p', 1, ?, NULL, '2026-11-11T16:00:00.000Z', '2026-11-11T16:00:00.000Z', 0)`)
+      .bind(JSON.stringify([{ typ: "penize", castka: 2533 }]), tombolaResolution),
+    db.prepare(`INSERT INTO club_incidents (id, team_id, kind, category, status, loss, culprit_type, culprit_player_id, culprit_revealed, resolution, resolution_data, resolved_on, game_date, recovered)
+      VALUES ('store', 'tym', 'vloupani_sklad', 'kradez', 'uzavreny', ?, 'hrac', 'p', 1, 'nechat_byt', NULL, '2026-11-12T16:00:00.000Z', '2026-11-08T16:00:00.000Z', 0)`)
+      .bind(JSON.stringify([{ typ: "vybaveni", kategorie: "balls", uroven: 2, stav: 80, urovniDolu: 1 }])),
+    db.prepare("INSERT INTO club_incident_knowledge VALUES ('raffle', 'p', 'tym', 'pachatel', 'Tohle jsi udělal ty: Okradená tombola.', 0, NULL, NULL, NULL)"),
+    db.prepare("INSERT INTO club_incident_knowledge VALUES ('store', 'p', 'tym', 'pachatel', 'Tohle jsi udělal ty: Vloupání do skladu.', 0, NULL, NULL, NULL)"),
+  ]);
+  const at = { gameDate: "2026-11-12T16:00:00.000Z", now: new Date("2026-11-12T12:00:00Z") };
+
+  it("„kamera tě natočila u tomboly, ty peníze zaplatíš“: slib vrácení k tombole, ne ke skladu", async () => {
+    await twoClosed();
+    expect(await tryRestitution(db, { teamId: "tym", playerId: "p", text: COACH, ...at }))
+      .toEqual({ outcome: "promised", task: "task_return", dueOn: "2026-11-14", incidentId: "raffle" });
+    expect(JSON.parse((await task("task_return"))!.details!)).toMatchObject({ incidentId: "raffle" });
+    // Navazující „Zaplatíš to, nebo ne?“ nic nejmenuje: platí téma rozhovoru, stejné rozhodnutí.
+    expect(await tryRestitution(db, { teamId: "tym", playerId: "p", text: "Zaplatíš to, nebo ne?", topicIncidentId: "raffle", ...at }))
+      .toMatchObject({ outcome: "promised", incidentId: "raffle", repeated: true });
+    expect(await db.prepare("SELECT COUNT(*) AS n FROM coach_commitments").first()).toEqual({ n: 1 });
+  });
+
+  it("věc ze skladu míří na sklad; zpráva bez věci a bez tématu na nejnovější", async () => {
+    await twoClosed();
+    expect(await tryRestitution(db, { teamId: "tym", playerId: "p", text: "Vrať ty míče ze skladu.", ...at })).toMatchObject({ incidentId: "store" });
+    await db.prepare("DELETE FROM coach_commitments").run();
+    await db.prepare("UPDATE club_incident_knowledge SET tactics = NULL").run();
+    expect(await tryRestitution(db, { teamId: "tym", playerId: "p", text: "Vrátíš to?", ...at })).toMatchObject({ incidentId: "store" });
+  });
+
+  it("trenér píše o tombole, kterou už nahradil: nic, ne vrácení ze skladu", async () => {
+    await twoClosed("nahradil");
+    expect(await tryRestitution(db, { teamId: "tym", playerId: "p", text: COACH, ...at })).toBeNull();
+    expect(await task("task_return")).toBeNull();
+  });
+});
+
 describe("Turek a poháry podle kopie produ 22. 11. (C3a)", () => {
   // Fezko Výškovice: vitrína ukradená 22. 10., srážka 23. 10., klub vitrínu 24. 10. dokoupil
   // na úroveň 2. Turek: disciplína 17, vztah 1, los přemluvení 98,34 (strop šance 90).

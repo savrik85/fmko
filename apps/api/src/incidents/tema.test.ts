@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { involvedIncidentInText, jeOtazkaNaIncident, jeRecOHrozicim, najdiIncidentVTextu, normalizuj, temaZeStavu } from "./tema";
+import { incidentNamedInText, involvedIncidentInText, jeOtazkaNaIncident, jeRecOHrozicim, najdiIncidentVTextu, normalizuj, temaZeStavu } from "./tema";
 import type { Ztrata } from "./typy";
 
 const SKLAD = { kind: "vloupani_sklad", ztraty: [{ typ: "vybaveni", kategorie: "jerseys", uroven: 2, stav: 70, urovniDolu: 2 }] as Ztrata[] };
@@ -123,6 +123,21 @@ describe("na který incident se ptá", () => {
     expect(jeOtazkaNaIncident("Kdo kašle na trénink?", cashBox)).toBe(false);
     expect(jeOtazkaNaIncident("Kdo zničil ten kastrol?", cashBox)).toBe(false);
     expect(jeOtazkaNaIncident("Kdo ukrást chtěl kasu?", cashBox)).toBe(true);
+  });
+});
+
+describe("o kterém incidentu mluví žádost o nápravu (Sedlecký, E2E 22. 11.)", () => {
+  const RAFFLE = { id: "raffle", kind: "tombola", ztraty: [{ typ: "penize", castka: 2533 }] as Ztrata[] };
+  const STORE_CONES = { id: "store", kind: "vloupani_sklad", ztraty: [{ typ: "vybaveni", kategorie: "training_cones", uroven: 1, stav: 87, urovniDolu: 1 }] as Ztrata[] };
+  const KIOSK_CASH = { id: "kiosk", kind: "kasa_obcerstveni", ztraty: [{ typ: "penize", castka: 900 }] as Ztrata[] };
+
+  it("jmenuje druh, místo nebo věc i bez slova průšvihu; druh váží víc než peníze", () => {
+    expect(incidentNamedInText("Marceli, kamera tě natočila u tomboly. Ty peníze zaplatíš, rozumíš?", [STORE_CONES, RAFFLE])).toBe("raffle");
+    expect(incidentNamedInText("Ty pomůcky vrátíš, jasný?", [RAFFLE, STORE_CONES])).toBe("store");
+    expect(incidentNamedInText("Ty peníze z tomboly vrátíš.", [KIOSK_CASH, RAFFLE])).toBe("raffle");
+    // Jen peníze: první v pořadí volajícího.
+    expect(incidentNamedInText("Ty peníze vrátíš.", [KIOSK_CASH, RAFFLE])).toBe("kiosk");
+    expect(incidentNamedInText("Zaplatíš to, nebo ne?", [RAFFLE, STORE_CONES])).toBeNull();
   });
 });
 

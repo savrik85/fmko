@@ -75,6 +75,24 @@ function namesIncidentThing(slova: readonly string[], incident: { kind: string; 
   return kmeny.some((k) => slova.some((s) => s.startsWith(k)));
 }
 
+/**
+ * Incident, jehož druh, místo nebo věc zpráva jmenuje, bez signálu průšvihu: ten dodá sama
+ * zpráva (žádost „vrať to“, „zaplať to“, restitution.ts). Druh a místo („u tomboly“, „ze
+ * skladu“) váží víc než věc („ty peníze“), shoda = první v pořadí volajícího. Nic = null.
+ */
+export function incidentNamedInText(
+  text: string, incidents: ReadonlyArray<{ id: string; kind: string; ztraty: readonly Ztrata[] }>,
+): string | null {
+  const words = normalizuj(text).split(/[^a-z]+/).filter(Boolean);
+  const named = (stems: readonly string[]) => stems.some((k) => words.some((w) => w.startsWith(k)));
+  let best: { id: string; score: number } | null = null;
+  for (const i of incidents) {
+    const score = (named(SLOVA_DRUHU[i.kind] ?? []) ? 2 : 0) + (named(i.ztraty.flatMap(kmenyZtraty)) ? 1 : 0);
+    if (score > (best?.score ?? 0)) best = { id: i.id, score };
+  }
+  return best?.id ?? null;
+}
+
 /** Zmiňuje zpráva místo nebo věc právě tohohle incidentu, se signálem průšvihu nebo obecným slovem? */
 function mentionsIncidentStems(textZpravy: string, incident: { kind: string; ztraty: readonly Ztrata[] }): boolean {
   const t = normalizuj(textZpravy);

@@ -85,7 +85,11 @@ export async function zpracujZpravuTrenera(
 
   // „Vrať to“ / „zaplať tu škodu“ pachateli (restitution.ts): rozhodne se dřív, než hráč odpoví.
   const { tryRestitution } = await import("./restitution");
-  const amends = await tryRestitution(db, { teamId: opts.teamId, playerId: opts.playerId, text: opts.text, gameDate: zaklad.game_date })
+  // Zpráva, která incident nejmenuje („zaplatíš to, nebo ne?“), patří k tématu rozhovoru.
+  const amends = await tryRestitution(db, {
+    teamId: opts.teamId, playerId: opts.playerId, text: opts.text, gameDate: zaklad.game_date,
+    topicIncidentId: temaZeStavu(zaklad.ai_thread_state, den)?.incidentId ?? null,
+  })
     .catch((e) => { logger.warn({ module: M }, `přemlouvání pachatele ${opts.playerId}`, e); return null; });
   // Zpráva, která rozhodla o vrácení nebo náhradě, musí dostat odpověď: incident se stává tématem
   // a na téma hráč odepíše vždy (coach-initiated.ts, ai-player-spawn.ts). Procházka (E2E 22. 11.)
