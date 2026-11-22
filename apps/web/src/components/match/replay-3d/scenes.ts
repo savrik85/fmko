@@ -100,9 +100,6 @@ const sideOf = (teamId: number): Side => (teamId === 1 ? "home" : "away");
 /** Tým bez brankáře (v sestavě nebo po vyloučení) má v bráně prvního hráče; engine tam taky někoho postaví. */
 const withKeeper = <T extends { role: Role }>(slots: T[]): T[] =>
   slots.length && !slots.some((x) => x.role === "GK") ? [{ ...slots[0], role: "GK" }, ...slots.slice(1)] : slots;
-/** Do brány jde `figure`; kdo ji do té doby zaskakoval, vrací se na své místo. */
-const soleKeeper = <T extends { figure: number; role: Role; base: { role: Role } }>(slots: T[], figure: number): T[] =>
-  slots.map((s) => (s.figure === figure ? { ...s, role: "GK" } : s.role === "GK" && s.base.role !== "GK" ? { ...s, role: s.base.role } : s));
 const toRole = (position: string): Role => (position === "GK" || position === "DEF" || position === "FWD" ? position : "MID");
 /**
  * Domácí útočí k záporné z: z hlavní tribuny doprava, stejně jako ve 2D záznamu. Scény se tak staví vždy;
@@ -621,14 +618,13 @@ export class Replay {
         this.swaps.set(i, { incoming: figure, outgoing: out.figure });
         // Náhradní brankář jde do brány jen za brankáře nebo když to engine napíše.
         const role = e.description.includes("do brány") ? "GK" : out.role;
-        const swapped = roster[side].map((s) => (s === out ? { figure, base: out.base, role } : s));
-        roster = { ...roster, [side]: role === "GK" ? soleKeeper(swapped, figure) : swapped, bench: { ...roster.bench, [side]: roster.bench[side].filter((f) => f !== figure) } };
+        roster = { ...roster, [side]: roster[side].map((s) => (s === out ? { figure, base: out.base, role } : s)), bench: { ...roster.bench, [side]: roster.bench[side].filter((f) => f !== figure) } };
       } else if (e.type === "card" && e.detail === "red") {
         const figure = this.figureOf(e);
         roster = { ...roster, [side]: withKeeper(roster[side].filter((s) => s.figure !== figure)) };
       } else if (e.detail === "emergency_gk") {
         const figure = this.figureOf(e);
-        roster = { ...roster, [side]: soleKeeper(roster[side], figure) };
+        roster = { ...roster, [side]: roster[side].map((s) => (s.figure === figure ? { ...s, role: "GK" as const } : s)) };
       }
     });
     this.finalRoster = roster;
