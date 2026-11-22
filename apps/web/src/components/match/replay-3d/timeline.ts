@@ -484,7 +484,8 @@ class Simulation {
       v = staysBack ? base.v * 0.6 : (-0.5 + hash01(seed * 5.7)) * 0.7;
     } else {
       const shift = (b.u - 0.5) * 0.5 + (this.possession === side ? 0.06 : -0.06);
-      u = clamp(base.u + shift, 0.08, 0.92);
+      // Kousek dopředu či dozadu podle hráče, ať řada nestojí jako u stolního fotbalu.
+      u = clamp(base.u + shift + 0.05 * (hash01(seed * 7.3) - 0.5), 0.08, 0.92);
       v = clamp(base.v * 0.85 + b.v * 0.3, -1.05, 1.05);
     }
     return uvToWorld(side, this.half, u, v);

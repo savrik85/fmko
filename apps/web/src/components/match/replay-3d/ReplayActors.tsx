@@ -140,7 +140,9 @@ export function ReplayActors({ plan, clock }: { plan: ReplayPlan; clock: ReplayC
       const toBall = s.speed <= 0.8;
       const faceX = dive ? 0 : toBall ? frame.ballX - s.x : dx;
       const faceZ = dive ? -s.z : toBall ? frame.ballZ - s.z : dz;
-      if (f.pose !== "down" && Math.abs(faceX) + Math.abs(faceZ) > 0.01) {
+      // Ležící leží napříč obrazem (podél záběru by vypadal jako stojící).
+      if (f.pose === "down") s.yaw = tall ? Math.PI / 2 : 0;
+      else if (Math.abs(faceX) + Math.abs(faceZ) > 0.01) {
         const diff = Math.atan2(faceX, faceZ) - s.yaw;
         s.yaw += Math.atan2(Math.sin(diff), Math.cos(diff)) * Math.min(1, dt * 7);
       }
@@ -203,7 +205,7 @@ export function ReplayActors({ plan, clock }: { plan: ReplayPlan; clock: ReplayC
     // Kamera míří doprostřed mezi míč a hráče z titulku (ne přímo za hráčem, jinak by se zdálo, že stojí).
     const fx = (frame.ballX + focus.reduce((sum, i) => sum + states[i].x, 0)) / (focus.length + 1);
     const fz = (frame.ballZ + focus.reduce((sum, i) => sum + states[i].z, 0)) / (focus.length + 1);
-    const wanted = vTmp.set(fx * (focus.length ? 0.9 : cam.follow), 0, THREE.MathUtils.clamp(fz, -HALF_L + (tall ? 16 : 15), HALF_L - (tall ? 11 : 15)));
+    const wanted = vTmp.set(fx * (focus.length ? 0.75 : cam.follow), 0, THREE.MathUtils.clamp(fz, -HALF_L + (tall ? 16 : 15), HALF_L - (tall ? 11 : 15)));
     if (!look.current || look.current.distanceTo(wanted) > 30) look.current = wanted.clone();
     else look.current.lerp(wanted, 1 - Math.exp(-Math.min(delta, 0.1) * 2.2));
     camera.position.copy(look.current).add(cam.offset);
