@@ -19,6 +19,7 @@ import { nazevSituace } from "../incidents/situace";
 import { loadRecentLifeEvent } from "../incidents/life-news";
 import { logger } from "../lib/logger";
 import { seedFromString } from "../lib/seed";
+import { WRAP_UP_MS, remainingMs } from "../lib/time-budget";
 import { pickAmbience, recordVoiceMessage, voicePreviewText, type RecordedVoiceMessage } from "./voice-message";
 import { PHOTO_CHANCE, PHOTO_SCENES, generatePlayerPhoto, historyBody, pickPhotoScene } from "./player-photo";
 import { COACH_CHAT_MAX_MORALE, coachRelationStmts } from "../lib/coach-relation";
@@ -617,6 +618,11 @@ export async function loadTeamContext(db: D1Database, teamId: string, playerTeam
   };
 }
 
+/** Vyhodnocení rozhovoru po hotové odpovědi smí běžet ještě chvíli po rozpočtu (`WRAP_UP_MS`). */
+function wrapUpDeadline(deadline: number | undefined): number | undefined {
+  return deadline === undefined ? undefined : deadline + WRAP_UP_MS;
+}
+
 /** Nejstarší konverzace týmu s hráčem. Zdvojené z doby před opravou se tak nestřídají. */
 const FIND_PLAYER_CONVERSATION =
   "SELECT id FROM conversations WHERE team_id = ? AND type = 'player' AND participant_id = ? ORDER BY created_at, rowid LIMIT 1";
@@ -1035,8 +1041,11 @@ export async function handleAiPlayerReply(
   db: D1Database,
   env: { GEMINI_API_KEY?: string; CACHE_KV?: KVNamespace } & OptionalPushKeys,
   convId: string,
-  /** Odpověď přichází se zpožděním (follow-ups.ts): hráč řekne, že neměl telefon u sebe. */
-  opts: { lateReply?: "offline" } = {},
+  /**
+   * `lateReply`: odpověď přichází se zpožděním (follow-ups.ts), hráč řekne, že neměl telefon
+   * u sebe. `deadline`: rozpočet práce na pozadí (lib/time-budget.ts), když běží ve waitUntil.
+   */
+  opts: { lateReply?: "offline"; deadline?: number } = {},
 ): Promise<void> {
   try {
     await handleAiPlayerReplyInner(db, env, convId, opts);
@@ -1058,7 +1067,7 @@ async function handleAiPlayerReplyInner(
   db: D1Database,
   env: { GEMINI_API_KEY?: string; CACHE_KV?: KVNamespace } & OptionalPushKeys,
   convId: string,
-  opts: { lateReply?: "offline" },
+  opts: { lateReply?: "offline"; deadline?: number },
 ): Promise<void> {
   logger.info({ module: "ai-player-spawn" }, `handleAiPlayerReply START for conv ${convId}`);
   // Od téhle chvíle se počítá, jak dlouho hráči odpověď trvala. Generování
@@ -1188,14 +1197,14 @@ async function handleAiPlayerReplyInner(
   const mayLeaveOnRead = !state.incidentId && !player.weightTalk && state.trigger !== "left_out";
   if (mayLeaveOnRead && Math.random() < leftOnReadChance({ ...readInput, closing: isHardCap })) {
     await new Promise((resolve) => setTimeout(resolve, readDelayMs(Math.random())));
-    await leaveOnReadAndClose(db, env, conv, state, player, scenario, history);
+    await leaveOnReadAndClose(db, env, conv, state, player, scenario, history, opts.deadline);
     return;
   }
 
   logger.info({ module: "ai-player-spawn" }, `calling generateReply for conv ${convId} (turn ${newRepliesCount}/${state.max_replies}, isHardCap=${isHardCap})`);
   let reply: ReplyResult;
   try {
-    reply = await generateReply(env, player, history, scenario, teamCtx, isHardCap);
+    reply = await generateReply(env, player, history, scenario, teamCtx, isHardCap, { deadline: opts.deadline });
     logger.info({ module: "ai-player-spawn" }, `generateReply OK: complete=${reply.conversationComplete}, body=${reply.body.slice(0, 60)}`);
   } catch (e) {
     if (e instanceof GeminiUnavailableError) {
@@ -1214,11 +1223,11 @@ async function handleAiPlayerReplyInner(
   // Na konci rozhovoru už často není co dodat: hráč závěrečnou repliku nepošle, jen si
   // trenérovu zprávu přečte.
   if (mayLeaveOnRead && (reply.conversationComplete || isHardCap) && Math.random() < leftOnReadChance({ ...readInput, closing: true })) {
-    await leaveOnReadAndClose(db, env, conv, state, player, scenario, history);
+    await leaveOnReadAndClose(db, env, conv, state, player, scenario, history, opts.deadline);
     return;
   }
 
-  await pockejNezDopise(zacatek, reply.body, player);
+  await pockejNezDopise(zacatek, reply.body, player, opts.deadline);
 
   const now = new Date().toISOString();
   const senderName = `${player.firstName} ${player.lastName}`;
@@ -1251,7 +1260,7 @@ async function handleAiPlayerReplyInner(
   let resolution: AiThreadStateData["resolution"];
   try {
     const fullHistory: ThreadMessage[] = [...history, { sender: "player", body: reply.body }];
-    const evald = await evaluateResolution(env, player, fullHistory, scenario);
+    const evald = await evaluateResolution(env, player, fullHistory, scenario, { deadline: wrapUpDeadline(opts.deadline) });
     resolution = { ...evald };
   } catch (e) {
     logger.warn({ module: "ai-player-spawn" }, "evaluateResolution failed, using neutral", e);
@@ -1290,11 +1299,12 @@ async function leaveOnReadAndClose(
   player: PlayerSnapshot,
   scenario: AiScenario,
   history: ThreadMessage[],
+  deadline?: number,
 ): Promise<void> {
   await markCoachMessagesRead(db, conv.id, new Date().toISOString());
   let resolution: NonNullable<AiThreadStateData["resolution"]>;
   try {
-    resolution = { ...(await evaluateResolution(env, player, history, scenario)) };
+    resolution = { ...(await evaluateResolution(env, player, history, scenario, { deadline: wrapUpDeadline(deadline) })) };
   } catch (e) {
     logger.warn({ module: "ai-player-spawn" }, "vyhodnocení rozhovoru nechaného na přečteno, beru neutrální", e);
     resolution = {
@@ -1891,7 +1901,8 @@ export async function loadLastOwnMessageAt(
  * přijde později a ten, koho SMS vzbudila, se ozve nejpozději.
  *
  * Čas strávený generováním se odečítá: když model přemýšlel pět vteřin,
- * čeká se jen zbytek.
+ * čeká se jen zbytek. S rozpočtem práce na pozadí (`deadline`) se čeká nejvýš do něj,
+ * ať se hotová odpověď stihne uložit.
  */
 export async function pockejNezDopise(
   zacatek: number,
@@ -1900,6 +1911,7 @@ export async function pockejNezDopise(
     occupation?: string; id: string; discipline: number; temper: number;
     age: number; alcohol: number; lastOwnMessageAt?: string;
   },
+  deadline?: number,
 ): Promise<void> {
   const { kontextCasu, zpozdeniOdpovedi } = await import("./chat-kontext");
   const { smenaProPovolani } = await import("../generators/occupations");
@@ -1913,7 +1925,7 @@ export async function pockejNezDopise(
     discipline: player.discipline, temper: player.temper,
     podnapilost: cas.podnapilost,
   });
-  const zbyva = cil - (Date.now() - zacatek);
+  const zbyva = Math.min(cil - (Date.now() - zacatek), remainingMs(deadline));
   if (zbyva <= 0) return;
   await new Promise((r) => setTimeout(r, zbyva));
 }

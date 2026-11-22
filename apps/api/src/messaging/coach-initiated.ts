@@ -75,6 +75,8 @@ export async function startCoachThread(
     convId: string; teamId: string; playerId: string; coachMessage: string;
     /** Odpověď přichází se zpožděním po výpadku modelu (follow-ups.ts). */
     lateReply?: "offline";
+    /** Rozpočet práce na pozadí (lib/time-budget.ts), když běží ve waitUntil. */
+    deadline?: number;
   },
 ): Promise<boolean> {
   try {
@@ -164,10 +166,10 @@ export async function startCoachThread(
     }
 
     const zacatek = Date.now();
-    const reply = await generateCoachInitiatedReply(env, player, team, historie, false);
+    const reply = await generateCoachInitiatedReply(env, player, team, historie, false, { deadline: opts.deadline });
     // Stejná pauza jako u spawnovaných vláken: i tady hráč odpovídá v čase,
     // ne okamžitě po odeslání.
-    await pockejNezDopise(zacatek, reply.body, player);
+    await pockejNezDopise(zacatek, reply.body, player, opts.deadline);
 
     const now = new Date().toISOString();
     const jmeno = `${player.firstName} ${player.lastName}`;
@@ -288,7 +290,8 @@ export async function dopadRozhovoru(
 export async function replyInSquadGroup(
   db: D1Database,
   env: { GEMINI_API_KEY?: string },
-  opts: { convId: string; teamId: string; coachMessage: string },
+  /** `deadline`: rozpočet práce na pozadí (lib/time-budget.ts), další hlasy jen když zbývá čas. */
+  opts: { convId: string; teamId: string; coachMessage: string; deadline?: number },
 ): Promise<boolean> {
   const replied = await replyInSquadGroupInner(db, env, opts);
   // Kabina se podruhé nezkouší: když se nikdo neozval, SMS se vrací.
@@ -299,7 +302,7 @@ export async function replyInSquadGroup(
 async function replyInSquadGroupInner(
   db: D1Database,
   env: { GEMINI_API_KEY?: string },
-  opts: { convId: string; teamId: string; coachMessage: string },
+  opts: { convId: string; teamId: string; coachMessage: string; deadline?: number },
 ): Promise<boolean> {
   try {
     const rows = await db
@@ -395,7 +398,7 @@ async function replyInSquadGroupInner(
           env, mluvci, team, opts.coachMessage,
           (predchozi?.results ?? []).map((m) =>
             m.sender_type === "user" ? `TRENÉR: ${coachQuote(m.body)}` : `${m.sender_name}: ${m.body}`),
-          { addressed: addressed.has(mluvci.id), mood: speech?.mood || undefined, afterTeammates: i > 0 },
+          { addressed: addressed.has(mluvci.id), mood: speech?.mood || undefined, afterTeammates: i > 0, deadline: opts.deadline },
         );
         if (!text) continue;
 

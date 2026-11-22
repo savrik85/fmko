@@ -753,6 +753,9 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
   // začne generovat odpověď, aby ho model dostal v promptu jako pokyn.
   // Fotka bez popisku nemá text, který by šlo posoudit.
   const hasText = body.body.trim() !== "";
+  // Odpovědi hráčů běží ve waitUntil (~30 s po odpovědi): rozpočet na text od teď (lib/time-budget.ts).
+  const { deadlineIn } = await import("../lib/time-budget");
+  const backgroundDeadline = deadlineIn();
   if (conv?.type === "player" && conv.participant_id && hasText) {
     const { zpracujZpravuTrenera } = await import("../incidents/zprava-trenera");
     await zpracujZpravuTrenera(c.env.DB, { teamId, convId, playerId: conv.participant_id, text: body.body.trim() })
@@ -813,7 +816,7 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
     if (updateRes && (updateRes.meta?.changes ?? 0) > 0) {
       const { handleAiPlayerReply } = await import("../messaging/ai-player-spawn");
       c.executionCtx.waitUntil(
-        commitmentReady.then(() => handleAiPlayerReply(c.env.DB, c.env, convId))
+        commitmentReady.then(() => handleAiPlayerReply(c.env.DB, c.env, convId, { deadline: backgroundDeadline }))
           .catch((e) => logger.error({ module: "messaging" }, "handleAiPlayerReply failed", e)),
       );
     } else {
@@ -861,7 +864,7 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
         sulkThreadStarted = true;
         const { handleAiPlayerReply } = await import("../messaging/ai-player-spawn");
         c.executionCtx.waitUntil(
-          commitmentReady.then(() => handleAiPlayerReply(c.env.DB, c.env, convId))
+          commitmentReady.then(() => handleAiPlayerReply(c.env.DB, c.env, convId, { deadline: backgroundDeadline }))
             .catch((e) => logger.error({ module: "messaging" }, "odpověď trucujícího hráče", e)),
         );
       }
@@ -876,7 +879,7 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
     c.executionCtx.waitUntil(
       // Zpráva s fotkou jde do promptu stejně jako v historii, s popisem fotky.
       commitmentReady.then(() => startCoachThread(c.env.DB, c.env, {
-        convId, teamId, playerId, coachMessage: historyBody(body.body.trim(), photoMeta?.photoAlt),
+        convId, teamId, playerId, coachMessage: historyBody(body.body.trim(), photoMeta?.photoAlt), deadline: backgroundDeadline,
       })).catch((e) => logger.error({ module: "messaging" }, "konverzace zahájená trenérem", e)),
     );
   }
@@ -885,7 +888,7 @@ messagingRouter.post("/teams/:teamId/conversations/:convId", async (c) => {
   if (conv?.type === "squad_group") {
     const { replyInSquadGroup } = await import("../messaging/coach-initiated");
     c.executionCtx.waitUntil(
-      replyInSquadGroup(c.env.DB, c.env, { convId, teamId, coachMessage: body.body.trim() })
+      replyInSquadGroup(c.env.DB, c.env, { convId, teamId, coachMessage: body.body.trim(), deadline: backgroundDeadline })
         .catch((e) => logger.error({ module: "messaging" }, "reakce v kabině", e)),
     );
     // Pochvala nebo kritika před celou kabinou: ví ji všichni a jmenovaného zasáhne hned.

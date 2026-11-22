@@ -152,6 +152,19 @@ describe("jedno přegenerování", () => {
       .mockRejectedValueOnce(new Error("model nejede"));
     expect((await generateWithoutRepeats(previous, gen, "test")).body).toBe("V neděli dorazím.");
   });
+
+  it("s časovým rozpočtem přegeneruje jen s rezervou, jinak rovnou vyškrtne", async () => {
+    // Práce na pozadí končí po ~30 s: uříznutý druhý pokus by zahodil i hotový první text.
+    const repeating = () => vi.fn()
+      .mockResolvedValueOnce({ body: "Už mám po šichtě, trenére. V neděli dorazím." })
+      .mockResolvedValueOnce({ body: "Jasně, v neděli dorazím, spolehni se." });
+    const late = repeating();
+    expect((await generateWithoutRepeats(previous, late, "test", { deadline: Date.now() + 2_000 })).body).toBe("V neděli dorazím.");
+    expect(late).toHaveBeenCalledTimes(1);
+    const early = repeating();
+    expect((await generateWithoutRepeats(previous, early, "test", { deadline: Date.now() + 15_000 })).body).toBe("Jasně, v neděli dorazím, spolehni se.");
+    expect(early).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe("předem napsané varianty bez opakování", () => {

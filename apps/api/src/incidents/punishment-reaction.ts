@@ -12,6 +12,7 @@
 
 import type { ChatEnv } from "../messaging/ai-player-chat";
 import { logger } from "../lib/logger";
+import { deadlineIn } from "../lib/time-budget";
 import { PUNISHMENT_TALK_RE, aiReplyCoveredIt } from "./button-sms";
 import { clubReceivesMessages } from "./club-messages";
 import { smsIncidentu } from "./incident-db";
@@ -180,6 +181,8 @@ export async function sendPunishmentReaction(
     now?: Date;
   },
 ): Promise<"sent" | "covered" | "skipped"> {
+  // Běží ve waitUntil (incidents/akce.ts): rozpočet se počítá od začátku, i s dotazy před modelem.
+  const deadline = deadlineIn();
   if (!(await clubReceivesMessages(db, o.teamId))) return "skipped";
   const now = o.now ?? new Date();
   if (await aiReplyCoveredIt(db, { teamId: o.teamId, playerId: o.player.id, coachRe: PUNISHMENT_TALK_RE, now })) {
@@ -212,6 +215,7 @@ export async function sendPunishmentReaction(
     scenarioId: "punishment_reaction",
     metadata: { ...smsIncidentu(o.incidentId), punishment: o.kind, stance },
     reject: (body) => deniesPunishment(body, o.kind),
+    deadline,
   });
   return "sent";
 }

@@ -11,6 +11,7 @@ import { sanitizeForPrompt } from "../news/post-match-context";
 import { logger } from "../lib/logger";
 import { COACH_CHAT_MAX_MORALE, COACH_CHAT_MAX_RELATION } from "../lib/coach-relation";
 import { seedFromString } from "../lib/seed";
+import { MIN_MODEL_CALL_MS, remainingMs } from "../lib/time-budget";
 import { getOccupationByName, smenaProPovolani } from "../generators/occupations";
 import {
   complainsAboutWaking, domacnostSeSituaci, kontextCasu, popisSituace, pravidloEmoji, wokenAtHome, type CasovyKontext,
@@ -541,8 +542,13 @@ const MODEL_TIMEOUT_MS = 25_000;
 async function callModel(
   env: ChatEnv,
   prompt: string,
-  opts: { json?: boolean; maxTokens?: number; temperature?: number } = {},
+  /** `deadline`: rozpočet práce na pozadí (lib/time-budget.ts), volání dostane nejvýš zbývající čas. */
+  opts: { json?: boolean; maxTokens?: number; temperature?: number; deadline?: number } = {},
 ): Promise<string> {
+  const left = remainingMs(opts.deadline);
+  if (left < MIN_MODEL_CALL_MS) {
+    throw new GeminiUnavailableError("na volání modelu už nezbývá čas (rozpočet práce na pozadí)");
+  }
   const { aiContextFromEnv, generateText } = await import("../lib/ai-provider");
   const ctx = await aiContextFromEnv(env);
   if (ctx.provider === "off") {
@@ -556,7 +562,7 @@ async function callModel(
     module: "ai-player-chat",
     // Odpověď hráče běží ve waitUntil (~30 s): zaseklé volání musí skončit dřív, aby se
     // stihla vrátit „čeká na trenéra“ a naplánovat pozdější odpověď.
-    timeoutMs: MODEL_TIMEOUT_MS,
+    timeoutMs: Math.min(MODEL_TIMEOUT_MS, left),
   });
   if (!text) {
     throw new GeminiUnavailableError(`model (${ctx.provider}) nevrátil odpověď`);
@@ -659,6 +665,8 @@ export async function generateReply(
   scenario: AiScenario,
   team: TeamContext,
   isFinalTurn: boolean,
+  /** Rozpočet práce na pozadí (lib/time-budget.ts). */
+  opts: { deadline?: number } = {},
 ): Promise<ReplyResult> {
   const system = buildSystemPrompt(player, team);
   const histText = formatHistory(history, player.firstName);
@@ -709,7 +717,7 @@ export async function generateReply(
 
   return generateWithoutRepeats(player.ownRecentLines, async (retryRule) => {
     const prompt = [...prompt0, retryRule, ...format].filter(Boolean).join("\n");
-    const raw = await callModel(env, prompt, { json: true, maxTokens: 256, temperature: 1.0 });
+    const raw = await callModel(env, prompt, { json: true, maxTokens: 256, temperature: 1.0, deadline: opts.deadline });
 
     const parsed = tryParseJson<{ body?: unknown; conversation_complete?: unknown; write_later?: unknown; transfer_stance?: unknown; accepts_invite?: unknown }>(raw);
     if (!parsed) {
@@ -728,7 +736,7 @@ export async function generateReply(
       conversationComplete: parsed.conversation_complete === true || isFinalTurn,
       ...parseReplyFlags(parsed, body, player),
     };
-  }, `odpověď ${scenario.id}`);
+  }, `odpověď ${scenario.id}`, { deadline: opts.deadline });
 }
 
 /**
@@ -808,6 +816,8 @@ export async function evaluateResolution(
   player: PlayerSnapshot,
   history: ThreadMessage[],
   scenario: AiScenario,
+  /** Rozpočet práce na pozadí: odpověď hráče už je hotová, vyhodnocení nesmí utnout její zápis. */
+  opts: { deadline?: number } = {},
 ): Promise<ResolutionResult> {
   // Hodnotí se jen tenhle rozhovor, starší zprávy by do výsledku zatáhly dávná témata.
   const histText = history
@@ -850,7 +860,7 @@ export async function evaluateResolution(
     "- Pokud trenér řekl 'hraj' i když hráč žádal volno → absence_days = 0 ale relationship_delta záporné.",
   ].filter(Boolean).join("\n");
 
-  const raw = await callModel(env, prompt, { json: true, maxTokens: 256, temperature: 0.4 });
+  const raw = await callModel(env, prompt, { json: true, maxTokens: 256, temperature: 0.4, deadline: opts.deadline });
 
   const parsed = tryParseJson<ResolutionResult>(raw);
   if (!parsed) {
@@ -940,6 +950,8 @@ export async function generateCoachInitiatedReply(
   team: TeamContext,
   history: ThreadMessage[],
   isFinalTurn: boolean,
+  /** Rozpočet práce na pozadí (lib/time-budget.ts). */
+  opts: { deadline?: number } = {},
 ): Promise<ReplyResult> {
   const system = buildSystemPrompt(player, team);
   const histText = history
@@ -977,7 +989,7 @@ export async function generateCoachInitiatedReply(
 
   return generateWithoutRepeats(player.ownRecentLines, async (retryRule) => {
     const prompt = [...prompt0, retryRule, ...format].filter(Boolean).join("\n");
-    const raw = await callModel(env, prompt, { json: true, maxTokens: 320, temperature: 0.95 });
+    const raw = await callModel(env, prompt, { json: true, maxTokens: 320, temperature: 0.95, deadline: opts.deadline });
     const parsed = tryParseJson<{
       body?: unknown; conversation_complete?: unknown;
       relationship_delta?: unknown; morale_delta?: unknown; summary?: unknown;
@@ -994,7 +1006,7 @@ export async function generateCoachInitiatedReply(
       effect: complete ? coachChatEffect(parsed) : undefined,
       ...parseReplyFlags(parsed, body, player),
     };
-  }, "odpověď trenérovi");
+  }, "odpověď trenérovi", { deadline: opts.deadline });
 }
 
 /**
@@ -1008,7 +1020,8 @@ export async function generateFollowUpMessage(
   team: TeamContext,
   history: ThreadMessage[],
   instruction: string,
-  opts: { kdy?: Date; photo?: { alt: string } } = {},
+  /** `deadline`: rozpočet práce na pozadí (lib/time-budget.ts), zprávy po události běží ve waitUntil. */
+  opts: { kdy?: Date; photo?: { alt: string }; deadline?: number } = {},
 ): Promise<Pick<ReplyResult, "body" | "transferStance">> {
   const system = buildSystemPrompt(player, team, opts.kdy);
   const offers = (player.pendingOffers?.length ?? 0) > 0;
@@ -1032,14 +1045,14 @@ export async function generateFollowUpMessage(
   ].filter(Boolean).join("\n");
 
   return generateWithoutRepeats(player.ownRecentLines, async (retryRule) => {
-    const raw = await callModel(env, prompt(retryRule), { json: true, maxTokens: 256, temperature: 0.95 });
+    const raw = await callModel(env, prompt(retryRule), { json: true, maxTokens: 256, temperature: 0.95, deadline: opts.deadline });
     const parsed = tryParseJson<{ body?: unknown; transfer_stance?: unknown }>(raw);
     if (!parsed || typeof parsed.body !== "string" || !parsed.body.trim()) {
       throw new GeminiUnavailableError("Follow-up JSON parse failed");
     }
     const body = trimSms(parsed.body);
     return { body, transferStance: parseReplyFlags(parsed, body, player).transferStance };
-  }, "odložená zpráva");
+  }, "odložená zpráva", { deadline: opts.deadline });
 }
 
 /** Dopad rozhovoru od trenéra z odpovědi modelu, oříznutý na povolené meze. */
@@ -1074,8 +1087,11 @@ export async function generateSquadGroupReaction(
   coachMessage: string,
   /** Posledních pár replik CHRONOLOGICKY, ve tvaru „TRENÉR: …" / „Jméno: …". */
   historie: string[],
-  /** Trenér oslovil právě jeho; jak kabina vzala proslov před zápasem (squad-talk.ts). */
-  opts: { addressed?: boolean; mood?: string; afterTeammates?: boolean } = {},
+  /**
+   * Trenér oslovil právě jeho; jak kabina vzala proslov před zápasem (squad-talk.ts);
+   * rozpočet práce na pozadí (lib/time-budget.ts).
+   */
+  opts: { addressed?: boolean; mood?: string; afterTeammates?: boolean; deadline?: number } = {},
 ): Promise<string> {
   const system = buildSystemPrompt(player, team);
   const kontext = historie.length > 0
@@ -1109,8 +1125,8 @@ export async function generateSquadGroupReaction(
   // Vlastní věty z kabiny i z 1:1 (`ownRecentLines`) jsou v promptu a odpověď se proti nim hlídá.
   const out = await generateWithoutRepeats(player.ownRecentLines, async (retryRule) => {
     const text = [...prompt.slice(0, -1), ...(retryRule ? [retryRule] : []), prompt[prompt.length - 1]].join("\n");
-    return { body: trimSms(await callModel(env, text, { maxTokens: 120, temperature: 1.0 })) };
-  }, "kabina");
+    return { body: trimSms(await callModel(env, text, { maxTokens: 120, temperature: 1.0, deadline: opts.deadline })) };
+  }, "kabina", { deadline: opts.deadline });
   return out.body;
 }
 

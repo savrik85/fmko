@@ -6198,8 +6198,9 @@ gameRouter.post("/teams/:teamId/players/:playerId/unrest-talk", async (c) => {
   // Dohoda uprostřed rozhovoru po zatrhnutém přestupu: hráč odpoví v rozhovoru.
   if (result.threadConvId) {
     const { handleAiPlayerReply } = await import("../messaging/ai-player-spawn");
+    const { deadlineIn } = await import("../lib/time-budget");
     c.executionCtx.waitUntil(
-      handleAiPlayerReply(c.env.DB, c.env, result.threadConvId)
+      handleAiPlayerReply(c.env.DB, c.env, result.threadConvId, { deadline: deadlineIn() })
         .catch((e) => logger.error({ module: "game" }, "odpověď hráče na dohodu v rozhovoru", e)),
     );
   }

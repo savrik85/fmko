@@ -111,6 +111,35 @@ describe("bez modelu", () => {
   });
 });
 
+describe("časový rozpočet (waitUntil ~30 s)", () => {
+  it("pomalý model: po rozpočtu jde hned předem napsaná varianta, ne nic", async () => {
+    let finishLate: (v: { body: string }) => void = () => undefined;
+    vi.mocked(generateFollowUpMessage).mockImplementation(() => new Promise((resolve) => { finishLate = resolve; }));
+    const started = Date.now();
+    const deadline = started + 300;
+    const sent = await sendEventSms(db, env, request({ deadline }));
+    expect(Date.now() - started).toBeLessThan(1_500);
+    expect(sent.aiGenerated).toBe(false);
+    expect(request().fallback).toContain(sent.body);
+    // Model dostal stejný rozpočet (přegenerování a timeout volání se podle něj řídí).
+    expect(vi.mocked(generateFollowUpMessage).mock.calls[0][5]).toMatchObject({ deadline });
+    // Pozdní text od modelu už nic nepošle.
+    finishLate({ body: "Tohle přišlo pozdě." });
+    await new Promise((r) => setTimeout(r, 50));
+    expect((await messages()).map((m) => m.body)).not.toContain("Tohle přišlo pozdě.");
+    expect(await messages()).toHaveLength(1);
+  });
+
+  it("bez rozpočtu od volajícího platí 20 s od zavolání", async () => {
+    vi.mocked(generateFollowUpMessage).mockResolvedValue({ body: "Beru to, příště si dám pozor." });
+    const before = Date.now();
+    await sendEventSms(db, env, request());
+    const { deadline } = vi.mocked(generateFollowUpMessage).mock.calls[0][5] as { deadline: number };
+    expect(deadline - before).toBeGreaterThanOrEqual(20_000);
+    expect(deadline - before).toBeLessThan(21_000);
+  });
+});
+
 describe("poděkování za odmítnutou nabídku", () => {
   const insert = (id: string, body: string, at: string, metadata: string | null = null) => db.prepare(
     "INSERT INTO messages (id, conversation_id, sender_type, sender_id, body, metadata, sent_at) VALUES (?, 'c1', 'player', 'p1', ?, ?, ?)",
