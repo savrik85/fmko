@@ -78,6 +78,8 @@ export async function startCoachThread(
     convId: string; teamId: string; playerId: string; coachMessage: string;
     /** Odpověď přichází se zpožděním po výpadku modelu (follow-ups.ts). */
     lateReply?: "offline";
+    /** Opakovaný pokus z `retry_reply`: při výpadku modelu nový neplánuje, stará se follow-ups.ts. */
+    fromRetry?: boolean;
     /** Rozpočet práce na pozadí (lib/time-budget.ts), když běží ve waitUntil. */
     deadline?: number;
   },
@@ -235,7 +237,8 @@ export async function startCoachThread(
     if (e instanceof GeminiUnavailableError) {
       logger.warn({ module: M }, `model nedostupný pro ${opts.playerId}`);
       // Trenér za SMS zaplatil: hráč odpoví, až model zase půjde (23. 10. neodepsal ~12 hodin nikdo).
-      await scheduleRetryReply(db, { teamId: opts.teamId, playerId: opts.playerId, convId: opts.convId });
+      // Při opakovaném pokusu ne: nový řádek s čerstvým časem by počítal 36 h stále znovu (E2E 22. 11.).
+      if (!opts.fromRetry) await scheduleRetryReply(db, { teamId: opts.teamId, playerId: opts.playerId, convId: opts.convId });
       return false;
     }
     logger.error({ module: M }, `konverzace s hráčem ${opts.playerId}`, e);
