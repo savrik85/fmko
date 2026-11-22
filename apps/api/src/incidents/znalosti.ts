@@ -306,13 +306,15 @@ const LOOT_BACK = new Set(["vratil", "nahradil", "vyreseno_policii", "nestalo_se
 /**
  * U uzavřené krádeže, kde lup zůstal u pachatele: ať nesliboval, co hra neumí. Turek po srážce
  * za poháry slíbil „V pondělí je máš v kabině“ a nic se nestalo (Výškovice, 24. 10.). Vrátit
- * je teď může, ale jen když ho o to trenér požádá a on kývne (restitution.ts, amends.ts).
+ * je teď může, když ho o to trenér požádá a on kývne (restitution.ts, amends.ts). Když slíbí
+ * sám, slib se zapíše taky (`recordPromisedAmends`), pokyn ho od toho jen odrazuje.
  */
 export function lootLine(r: Pick<RadekZnalosti, "kategorie" | "stav" | "vysledek" | "recovered">): string {
   if (r.kategorie !== "kradez" || r.stav !== "uzavreny" || LOOT_BACK.has(r.vysledek ?? "")) return "";
   return r.recovered
     ? "Co jsi vzal, jsi pak klubu vrátil."
-    : "Co jsi vzal, máš pořád u sebe, klub to zpátky nedostal. Sám od sebe vrácení neslibuj: vrátíš to, jen když tě o to trenér požádá a ty mu to slíbíš.";
+    : "Co jsi vzal, máš pořád u sebe, klub to zpátky nedostal. Vrácení trenérovi sám nenabízej ani neslibuj, dokud tě o to výslovně nepožádá. "
+      + "Co mu slíbíš, hra zapíše a bere vážně.";
 }
 
 /** Provalený vlastní průšvih: co, kdy, jak se na to přišlo a jak to dopadlo, s pokynem nezapírat. */

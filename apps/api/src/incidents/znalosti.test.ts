@@ -289,7 +289,9 @@ describe("lup po uzavřené krádeži (Turek a poháry, 23.–24. 10.)", () => {
   it("zůstal u pachatele: ví to a sám vrácení neslibuje", () => {
     const line = lootLine({ kategorie: "kradez", stav: "uzavreny", vysledek: "srazka", recovered: false });
     expect(line).toContain("máš pořád u sebe");
-    expect(line).toContain("Sám od sebe vrácení neslibuj");
+    // Model pokyn „sám od sebe neslibuj“ přehlížel (Procházka, E2E 22. 11.): teď výslovně a s dopadem.
+    expect(line).toContain("Vrácení trenérovi sám nenabízej ani neslibuj, dokud tě o to výslovně nepožádá.");
+    expect(line).toContain("Co mu slíbíš, hra zapíše a bere vážně.");
   });
 
   it("vrátil ho později, nebo se incident vyřešil jinak: nic nebo „vrátil jsi“", () => {

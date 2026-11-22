@@ -38,7 +38,18 @@ function plain(s: string): string {
 /** Co trenér po pachateli chce: vrátit, zaplatit, nebo opravit (brigádou). */
 export type AmendsRequest = "return" | "pay" | "repair";
 
-const RETURN_RE = /\b(vrat|vratis|vratit|vratte|vrat to|vrat ty|vrat mi|dej to zpatky|dej to zpet|vrat to zpatky|prines (to|ty|je) zpatky|dones (to|ty|je) zpatky)\b/;
+/**
+ * „Vrať to“, „vrátíš ty poháry?“, „dáš to klukům zpátky?“, „přineseš ty dresy?“. Samotné
+ * „přineseš to“ ne („přineseš to pivo?“): jen se „zpátky“, místem v klubu nebo ukradenou věcí.
+ * Procházka (E2E 22. 11.) dostal „Dáš to klukům zpátky, nebo nic?“, slíbil a hra nic nezapsala.
+ */
+const RETURN_RE = new RegExp(`\\b(${[
+  "vrat", "vratis", "vratit", "vratte", "vrat to", "vrat ty", "vrat mi", "vrat to zpatky",
+  "dej (to|ty|je) (zpatky|zpet)", "das (to|ty|je|mi|nam|klubu|klukum)( \\w+)? (zpatky|zpet)", "das zpatky",
+  "(prines|dones)(es|te)? (to|ty|je)( \\w+)? (zpatky|zpet)",
+  "(prines|dones)(es|te)? (to|ty|je) do (klubu|kabiny|skladu|klubovny|vitriny)",
+  "(prines|dones)(es|te)? (ty|ten|tu) (pohary|dresy|mice|penize|prachy|veci|pomucky|kasu|tombolu)",
+].join("|")})\\b`);
 const PAY_RE = /\b(zaplat|zaplatis|zaplatit|nahrad|nahradis|nahradit|uhrad|uhradis)\b/;
 /** „Opravíte to“, „uděláte brigádu“, „dej to do pořádku“. Ne „opravdu“ ani „uklidni se“. */
 const REPAIR_RE = /\b(oprav|opravis|opravite|opravit|opravte|opravime|sprav|spravis|spravite|spravit|spravte|spravime|uklid|uklidis|uklidite|uklidit|uklidte|dej to do poradku|dat to do poradku|date to do poradku)\b|brigad/;
@@ -262,7 +273,7 @@ async function promiseAmends(
  * Hráč v odpovědi trenérovi slíbil, že to vrátí („Jo, vrátím je, trenére“, „Jasně, dám to
  * zpátky“, „přinesu je zpátky“). Bez objektu („vrátím se na trénink“), záporu ani podmínky ne.
  */
-const PROMISE_RETURN_RE = /\b(vratim (to|je|ty|vam|ti|vsechno|klubu|penize|pohary|dresy|mice|veci|co jsem vzal)|vratime (to|je|ty)|dam (to|je|ty|vam|ti|klubu|klukum|penize)( \w+)? (zpatky|zpet)|dam zpatky|prinesu (to|je|ty)|donesu (to|je|ty))\b/;
+const PROMISE_RETURN_RE = /\b(vratim (to|je|ty|vam|ti|vsechno|klubu|penize|pohary|dresy|mice|veci|co jsem vzal)|vratime (to|je|ty)|dam (to|je|ty|vam|ti|klubu|klukum|penize)( \w+)? (zpatky|zpet)|dam zpatky|prinesu (to|je|ty)|donesu (to|je|ty)|(to|je|ty) (prinesu|donesu|vratim)|(prinesu|donesu) (zpatky|zpet))\b/;
 /** Slíbil opravu („opravím to“, „spravíme to s klukama“, „uděláme brigádu“). */
 const PROMISE_REPAIR_RE = /\b(opravim (to|je|ty)|opravime (to|je|ty)|spravim (to|je|ty)|spravime (to|je|ty)|dam to do poradku|dame to do poradku|udelame brigadu|udelam brigadu)\b/;
 const PROMISE_CONDITION_RE = /\b(kdyby|kdybych|jestli|pokud)\b/;

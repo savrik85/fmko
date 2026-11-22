@@ -3,7 +3,7 @@
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { Miniflare } from "miniflare";
-import { amendsRequestOf, isRestitutionRequest, recordPromisedAmends, restitutionChance, tryRestitution } from "./restitution";
+import { amendsRequestOf, isRestitutionRequest, promisedAmendsOf, recordPromisedAmends, restitutionChance, tryRestitution } from "./restitution";
 import { amendsDeliveryChance, resaleValue, settleAmendsTask, type AmendsTaskRow } from "./amends";
 
 describe("žádost a šance", () => {
@@ -18,6 +18,29 @@ describe("žádost a šance", () => {
     expect([...amendsRequestOf("Není jednodušší to dojít uklidit a opravit?")]).toContain("repair");
     expect([...amendsRequestOf("Vrátíš ty poháry?")]).toEqual(["return"]);
     expect(amendsRequestOf("Opravdu? Tak se uklidni.").size).toBe(0);
+  });
+
+  it("žádost o vrácení i jinými slovy (E2E 22. 11.: Procházka „Dáš to klukům zpátky?“)", () => {
+    for (const t of [
+      "Ptám se znovu. Dáš to klukům zpátky, nebo nic?", "Dáš ty peníze zpátky?", "Radku, vrátíš to?",
+      "Přineseš ty poháry zpátky?", "Doneseš to zpátky do klubu?", "Přineseš ty dresy, nebo ne?",
+    ]) expect([...amendsRequestOf(t)], t).toContain("return");
+    for (const t of ["Přineseš to pivo na grilovačku?", "Dáš si pivo?", "Dáš mi vědět, jestli přijdeš?", "Vrátil ses už z práce?"]) {
+      expect(amendsRequestOf(t).has("return"), t).toBe(false);
+    }
+  });
+
+  it("slib vrácení v odpovědi hráče (věty z E2E 22. 11.)", () => {
+    for (const t of [
+      "Jasně, dám to zpátky. Kdy to potřebujete?", "Trenére, beru to jako vyřízený. Dám to zpátky, až budete potřebovat.",
+      "Jo, vrátím je, trenére.", "Trenére, vrátím to, slibuju. Peníze z tomboly dám zpátky 23. 11.",
+      "Jasně že je přinesu zpátky… V pondělí je máš v kabině.",
+    ]) expect([...promisedAmendsOf(t)], t).toEqual(["return"]);
+    expect([...promisedAmendsOf("Opravíme to s klukama do pondělí, slibuju.")]).toEqual(["repair"]);
+    for (const t of [
+      "Nic nevrátím.", "Proč bych to vracel?", "Mám to vrátit?", "Vrátím se na trénink v úterý.",
+      "Kdybych to měl, vrátím to.", "To jsem nebral, nemám co vracet.",
+    ]) expect(promisedAmendsOf(t).size, t).toBe(0);
   });
 
   it("slib splní spíš ukázněný hráč s dobrým vztahem, brigádu i pracovitý", () => {
@@ -177,6 +200,24 @@ describe("vrácení po uzavřeném incidentu (Turek a poháry, 23.–24. 10.)", 
       .toEqual({ outcome: "refused" });
     expect(await task("task_return")).toBeNull();
     expect((await db.prepare("SELECT fact FROM club_incident_knowledge").first<{ fact: string }>())?.fact).toContain("Odmítl jsi to");
+  });
+
+  it("Procházka (E2E 22. 11.): na „Je to pro tebe vyřízený?“ sám napsal „Dám to zpátky“: slib se zapíše a má lhůtu", async () => {
+    await closedTheft();
+    expect(await tryRestitution(db, { teamId: "tym", playerId: "p", text: "Tome, jak to teď bereš? Je to pro tebe vyřízený?", gameDate: "2026-11-12T16:00:00.000Z" })).toBeNull();
+    expect(await recordPromisedAmends(db, { teamId: "tym", playerId: "p", reply: "Trenére, beru to jako vyřízený. Dám to zpátky, až budete potřebovat.", now: new Date("2026-11-12T12:00:00Z") }))
+      .toEqual({ task: "task_return", dueOn: "2026-11-14", willFail: false });
+    expect((await db.prepare("SELECT fact FROM club_incident_knowledge").first<{ fact: string }>())?.fact).toContain("Sám jsi trenérovi slíbil, že to vrátíš nejpozději v sobotu 14. 11.");
+    expect(await settleAmendsTask(db, (await task("task_return"))!, new Date("2026-11-14T10:00:00Z"))).toBe("kept");
+    expect(await db.prepare("SELECT trophy_case FROM equipment").first()).toEqual({ trophy_case: 2 });
+  });
+
+  it("slib bez provaleného průšvihu nebo bez čeho vracet nic nezapíše", async () => {
+    await closedTheft("n");
+    await db.prepare("UPDATE club_incidents SET culprit_revealed = 0").run();
+    expect(await recordPromisedAmends(db, { teamId: "tym", playerId: "n", reply: "Jo, vrátím to.", now: new Date("2026-11-12T12:00:00Z") })).toBeNull();
+    expect(await recordPromisedAmends(db, { teamId: "tym", playerId: "p", reply: "Jo, vrátím to.", now: new Date("2026-11-12T12:00:00Z") })).toBeNull();
+    expect(await task("task_return")).toBeNull();
   });
 
   it("starší, než si pachatel průšvih pamatuje (60 dní), nebo už vrácené: nic", async () => {
