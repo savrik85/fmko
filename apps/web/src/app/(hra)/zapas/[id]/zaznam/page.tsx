@@ -168,10 +168,17 @@ export default function MatchReplayPage() {
   const prevBallX = useRef(50);
 
   const [stadiumInfo, setStadiumInfo] = useState<{ name: string; pitchCondition: number } | null>(null);
-  // 3D záznam je výchozí; kdo si přepne na 2D, tomu to zůstane.
+  // 3D záznam („Video“) je výchozí; kdo si přepne na 2D („Tracker“), tomu to zůstane.
   const [view3d, setView3d] = useState(true);
   useEffect(() => { setView3d(localStorage.getItem("replayView") !== "2d"); }, []);
-  const switchView = () => { localStorage.setItem("replayView", view3d ? "2d" : "3d"); setView3d(!view3d); };
+  // 3D záznam spadl: v okně je o tom zpráva a záznam stojí, dokud hráč nepřepne na 2D.
+  const [failed3d, setFailed3d] = useState(false);
+  const switchView = () => {
+    // Kdo z 3D odchází jen kvůli chybě, tomu 3D zůstane výchozí.
+    if (!failed3d) localStorage.setItem("replayView", view3d ? "2d" : "3d");
+    setView3d(!view3d);
+    setFailed3d(false);
+  };
   // 3D záznam ukazuje jen důležité akce; události bez scény (držení míče, počasí…) v něm proběhnou hned.
   const can3d = !!match?.home_lineup_data && !!match?.away_lineup_data;
   const long3d = view3d && can3d;
@@ -183,7 +190,7 @@ export default function MatchReplayPage() {
   const scened = useMemo(() => (match && can3d ? scenedEvents(match.events) : null), [match, can3d]);
   // Pauza a skok na předchozí/další akci.
   const [paused, setPaused] = useState(false);
-  const { later, cancel } = useStepTimer(paused);
+  const { later, cancel } = useStepTimer(paused || failed3d);
   const starts = useMemo(() => (match ? actionStarts(match.events) : []), [match]);
   /** Po skoku: akce, jejíž první snímek chvíli stojí, než se rozběhne. */
   const [cue, setCue] = useState<number | null>(null);
@@ -644,11 +651,11 @@ export default function MatchReplayPage() {
           {can3d && (
             <>
               {view3d && (
-                <Replay3D detail={match.detail} events={match.events} onReady={() => setReady3d(true)}
+                <Replay3D detail={match.detail} events={match.events} onReady={() => setReady3d(true)} onFailure={() => setFailed3d(true)}
                   progress={{ take, idx, flash, intro, kickoff, halfTime: htPause, finished, paused, cue, fast: speed === "fast", homeGoals: hg, awayGoals: ag }} />
               )}
-              <button onClick={switchView} title={view3d ? "Přepnout na 2D záznam" : "Přepnout na 3D záznam"}
-                className="absolute top-2 left-2 z-30 h-8 px-2.5 rounded-lg bg-black/60 hover:bg-black/80 text-white text-xs font-heading font-bold">{view3d ? "2D" : "3D"}</button>
+              <button onClick={switchView} title={view3d ? "Přepnout na tracker" : "Přepnout na video"}
+                className="absolute top-2 left-2 z-30 h-8 px-2.5 rounded-lg bg-black/60 hover:bg-black/80 text-white text-xs font-heading font-bold">{view3d ? "Tracker" : "Video"}</button>
             </>
           )}
           {/* Team color side bars */}

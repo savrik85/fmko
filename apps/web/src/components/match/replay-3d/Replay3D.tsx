@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Component, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { clientOnly } from "@/components/client-only";
 import { apiFetch } from "@/lib/api";
 import { builtExtensionsOf } from "@/components/stadium/stadium-3d/stand-levels";
@@ -39,14 +39,42 @@ interface StadiumData {
   standExtensions?: { slots: { slot: string; built?: { kind: string; level: number } | null }[] };
 }
 
-/** 3D záznam zápasu na stadionu domácích, řízený stavem záznamu. Vyplní rodiče, do kterého se vloží. */
-export function Replay3D({ detail, events, progress, onReady }: {
+interface Replay3DProps {
   detail: Record<string, unknown>;
   events: ReplayEvent[];
   progress: ReplayProgress;
   /** Scéna se poprvé vykreslila; záznam do té doby čeká s výkopem. */
   onReady: () => void;
-}) {
+}
+
+/**
+ * Chyba ve 3D záznamu nesmí hráči vzít celou stránku: místo obrazu se ukáže zpráva a zápas si dohraje ve 2D
+ * (přepínač je v rohu okna). Přepnutí zpět na 3D ho zkusí načíst znovu.
+ */
+class FailureGuard extends Component<{ onFailure: () => void; children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() { return { failed: true }; }
+  componentDidCatch(error: unknown) {
+    console.error("3D záznam selhal:", error);
+    this.props.onFailure();
+  }
+  render() {
+    if (!this.state.failed) return this.props.children;
+    return (
+      <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-1 px-6 bg-[#0a0a0a]/90 text-center font-heading text-white">
+        <div className="font-[900] text-base sm:text-2xl">Video se nepodařilo přehrát</div>
+        <div className="text-xs sm:text-base text-white/75">Přepněte vlevo nahoře na Tracker a zápas dohrajte tam.</div>
+      </div>
+    );
+  }
+}
+
+/** 3D záznam zápasu na stadionu domácích, řízený stavem záznamu. Vyplní rodiče, do kterého se vloží. */
+export function Replay3D({ onFailure, ...props }: Replay3DProps & { /** 3D záznam spadl a místo obrazu je zpráva. */ onFailure: () => void }) {
+  return <FailureGuard onFailure={onFailure}><Replay3DView {...props} /></FailureGuard>;
+}
+
+function Replay3DView({ detail, events, progress, onReady }: Replay3DProps) {
   const { take, idx, flash, intro, kickoff, halfTime, finished, paused, cue, fast, homeGoals, awayGoals } = progress;
   const homeName = detail.home_name as string;
   const kits = useMemo(() => ({ home: detail.home_kit as ReplayKit, away: detail.away_kit as ReplayKit }), [detail]);

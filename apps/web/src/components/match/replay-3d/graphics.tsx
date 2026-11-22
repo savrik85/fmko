@@ -66,7 +66,7 @@ export function EventLabel(props: GraphicsProps & { override?: Label }) {
   const label = props.override ?? labelOf(props);
   if (!label) return null;
   return (
-    <div className="absolute top-2 inset-x-12 z-30 flex justify-center pointer-events-none">
+    <div className="absolute top-2 inset-x-20 z-30 flex justify-center pointer-events-none">
       {/* Stejný nápis po sobě (roh → šance) se znovu neanimuje. */}
       <div key={`${label.text}-${label.tag}`} className="flex items-stretch max-w-full rounded-lg overflow-hidden shadow-xl font-heading animate-in fade-in zoom-in-95 duration-200">
         <div className={`flex items-center px-3 py-1 font-[900] text-base sm:text-2xl tracking-wider whitespace-nowrap ${TONES[label.tone]}`}>{label.text}</div>
