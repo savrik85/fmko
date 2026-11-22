@@ -90,7 +90,11 @@ export interface RuleDetails {
   /** Co hráč trenérovi odepsal (accepts_request): kývl, nebo odmítl. */
   accepted?: boolean;
   /** Kolečka: kdo už je na tréninku odběhal nebo odmítl, a jestli o tom trenér dostal SMS. */
-  done?: Array<{ playerId: string; outcome: LapsOutcome; day: string; notified?: boolean }>;
+  done?: Array<{
+    playerId: string; outcome: LapsOutcome; day: string; notified?: boolean;
+    /** Kondice za kolečka čeká na denní regeneraci (`applyPendingLapsFatigue`), pak „applied“. */
+    fatigue?: "pending" | "applied";
+  }>;
   /** Pravidlo docházky: zápasy už zkontrolované a kolik jich trenér dodržel. */
   checkedAt?: string;
   keptMatches?: number;
@@ -465,10 +469,14 @@ export function pendingRequestOf(
 /**
  * Po tréninku (denní tick): kdo měl kolečka a na trénink přišel, odběhá je, nebo odmítne.
  * Kondice a vztah se zapíšou hned, SMS pošle až denní běh v 10:00 (`settleRule`).
+ *
+ * `deferCondition` (denní tick): kondice se odečte až po denní regeneraci (`applyPendingLapsFatigue`).
+ * Jinak −5 smazala regenerace v tomtéž ticku (Marek 92 → 87 → 100, E2E 22. 11.) a kolečka
+ * u hráče nad ~85 neměla žádný dopad.
  */
 export async function applyLapsAtTraining(
   db: D1Database,
-  o: { clubTeamId: string; teamId: string; gameDay: string; attended: ReadonlyMap<string, boolean> },
+  o: { clubTeamId: string; teamId: string; gameDay: string; attended: ReadonlyMap<string, boolean>; deferCondition?: boolean },
 ): Promise<number> {
   const rows = await db.prepare(
     "SELECT id, player_id, details FROM coach_commitments WHERE team_id = ? AND kind = 'laps_penalty' AND status = 'active'",
@@ -495,8 +503,10 @@ export async function applyLapsAtTraining(
         if (!row) continue;
         // Společná kolečka celé kabiny nikdo jednotlivě neslíbil: rozhodne povaha.
         const outcome = lapsOutcome(traits(row), d.target === "team" ? undefined : d.accepted);
-        done.push({ playerId: id, outcome, day });
-        if (outcome === "ran") {
+        done.push({ playerId: id, outcome, day, ...(outcome === "ran" && o.deferCondition ? { fatigue: "pending" as const } : {}) });
+        if (outcome === "ran" && o.deferCondition) {
+          stmts.push(playerMoraleStmt(db, id, LAPS_RAN_MORALE));
+        } else if (outcome === "ran") {
           const cond = Number(lifeOf(row.life_context).condition ?? 100);
           const next = Math.max(5, cond - LAPS_CONDITION);
           stmts.push(db.prepare(
@@ -519,6 +529,49 @@ export async function applyLapsAtTraining(
       await db.batch(stmts);
     } catch (e) {
       logger.warn({ module: M }, `kolečka ${c.id}`, e);
+    }
+  }
+  return applied;
+}
+
+/**
+ * Denní tick po regeneraci kondice: kolečka odběhaná dnes na tréninku ubírají kondici až teď,
+ * ať je regenerace nesmaže. Každý záznam jen jednou (`fatigue: applied`). Vrací počet hráčů.
+ */
+export async function applyPendingLapsFatigue(db: D1Database, gameDay: string): Promise<number> {
+  const day = gameDay.slice(0, 10);
+  const rows = await db.prepare(
+    `SELECT id, team_id, details FROM coach_commitments WHERE kind = 'laps_penalty' AND status IN ('active', 'kept')
+        AND details LIKE '%"fatigue":"pending"%'`,
+  ).all<{ id: string; team_id: string; details: string | null }>()
+    .catch((e) => { logger.warn({ module: M }, "kolečka čekající na regeneraci", e); return { results: [] as never[] }; });
+  let applied = 0;
+  for (const c of rows.results) {
+    try {
+      const d = lifeOf(c.details) as RuleDetails;
+      const stmts: D1PreparedStatement[] = [];
+      for (const x of d.done ?? []) {
+        if (x.fatigue !== "pending" || x.outcome !== "ran") continue;
+        x.fatigue = "applied";
+        // Kolečka ze starších dnů (tick spadl před regenerací) už jen označí, kondice se neodečítá zpětně.
+        if (x.day !== day) continue;
+        const row = await loadPlayer(db, x.playerId);
+        if (!row) continue;
+        const cond = Number(lifeOf(row.life_context).condition ?? 100);
+        const next = Math.max(5, cond - LAPS_CONDITION);
+        stmts.push(db.prepare(
+          `UPDATE players SET life_context = json_set(life_context, '$.condition', MAX(5, COALESCE(json_extract(life_context, '$.condition'), 100) - ?)) WHERE id = ?`,
+        ).bind(LAPS_CONDITION, x.playerId));
+        if (next !== cond) {
+          const { logConditionStmt } = await import("../lib/condition-log");
+          stmts.push(logConditionStmt(db, x.playerId, row.team_id ?? c.team_id, cond, next, "training", "Trestná kolečka", day));
+        }
+        applied++;
+      }
+      stmts.push(db.prepare("UPDATE coach_commitments SET details = ? WHERE id = ?").bind(JSON.stringify(d), c.id));
+      await db.batch(stmts);
+    } catch (e) {
+      logger.warn({ module: M }, `kondice za kolečka ${c.id}`, e);
     }
   }
   return applied;
