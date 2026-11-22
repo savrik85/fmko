@@ -1733,17 +1733,6 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
       awayCondDrainMod * tacticDrainMod(away.tactic) * hardnessMods(away.hardness).drainMod * awayWeatherDrain, awayLateFatigueMod);
   }
 
-  // Full-time event
-  const lastPlayer = rng.pick(home.lineup);
-  addEvent(90, "special", lastPlayer, home.teamId,
-    `Konec zápasu! ${home.teamName} ${homeScore}:${awayScore} ${away.teamName}`,
-    "full_time");
-
-  // Sort events by minute
-  events.sort((a, b) => a.minute - b.minute);
-
-  const possessionHome = Math.max(30, Math.min(70, Math.round((homePossSum / 90) * 100)));
-
   // Známka rozhodčího za celý zápas — jako by ji dal delegát okresní komise.
   const worstIncident = refereeIncidents.reduce<RefereeIncident["severity"] | null>((acc, i) => {
     if (acc === "high" || i.severity === "high") return "high";
@@ -1756,6 +1745,18 @@ export function simulateMatch(rng: Rng, config: MatchConfig): MatchResult {
     incidentSeverity: worstIncident,
     lateEventShare: refFouls + refCards > 0 ? refLateEvents / (refFouls + refCards) : 0,
   });
+
+  // Full-time event. Po slabém výkonu rozhodčího (známka horší než 3) to detail řekne: komentář pak smí vzít
+  // hlášku o rozhodčím, který utíká k autu, a 3D záznam ho tak ukáže.
+  const lastPlayer = rng.pick(home.lineup);
+  addEvent(90, "special", lastPlayer, home.teamId,
+    `Konec zápasu! ${home.teamName} ${homeScore}:${awayScore} ${away.teamName}`,
+    refereeGrade > 3 ? "full_time:poor_referee" : "full_time");
+
+  // Sort events by minute
+  events.sort((a, b) => a.minute - b.minute);
+
+  const possessionHome = Math.max(30, Math.min(70, Math.round((homePossSum / 90) * 100)));
 
   return {
     homeScore,
