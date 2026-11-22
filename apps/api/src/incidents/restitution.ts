@@ -211,6 +211,17 @@ async function saveDecision(
     .catch((e) => logger.warn({ module: M }, `rozhodnutí o nápravě pro odpověď ${r.incidentId}`, e));
 }
 
+/** Rozhodovalo se už o nápravě tohohle incidentu (značka `restitution`)? */
+async function restitutionTried(db: D1Database, incidentId: string, playerId: string, teamId: string): Promise<boolean> {
+  const row = await db.prepare(
+    `SELECT 1 AS x FROM club_incident_knowledge
+      WHERE incident_id = ? AND player_id = ? AND team_id = ? AND role = 'pachatel'
+        AND EXISTS (SELECT 1 FROM json_each(CASE WHEN json_valid(tactics) THEN tactics ELSE '[]' END) WHERE value = 'restitution')`,
+  ).bind(incidentId, playerId, teamId).first<{ x: number }>()
+    .catch((e) => { logger.warn({ module: M }, `značka přemlouvání ${incidentId}`, e); return null; });
+  return !!row;
+}
+
 /** Los, jestli pachatel napravit kývne. Stejné semínko pro žádost trenéra i jeho vlastní slib. */
 function agreesToAmends(incidentId: string, playerId: string, chance: number): boolean {
   return createRng(seedFromString(`restitution|${incidentId}|${playerId}`)).random() * 100 < chance;
@@ -347,9 +358,10 @@ async function promiseAmends(
 
 /**
  * Hráč v odpovědi trenérovi slíbil, že to vrátí („Jo, vrátím je, trenére“, „Jasně, dám to
- * zpátky“, „přinesu je zpátky“). Bez objektu („vrátím se na trénink“), záporu ani podmínky ne.
+ * zpátky“, „přinesu je zpátky“). U krádeže i „zaplatím to“ (Sedlecký, E2E 22. 11.: peníze
+ * z tomboly). Bez objektu („vrátím se na trénink“), záporu ani podmínky ne.
  */
-const PROMISE_RETURN_RE = /\b(vratim (to|je|ty|vam|ti|vsechno|klubu|penize|pohary|dresy|mice|veci|co jsem vzal)|vratime (to|je|ty)|dam (to|je|ty|vam|ti|klubu|klukum|penize)( \w+)? (zpatky|zpet)|dam zpatky|prinesu (to|je|ty)|donesu (to|je|ty)|(to|je|ty) (prinesu|donesu|vratim)|(prinesu|donesu) (zpatky|zpet))\b/;
+const PROMISE_RETURN_RE = /\b(vratim (to|je|ty|vam|ti|vsechno|klubu|penize|pohary|dresy|mice|veci|co jsem vzal)|vratime (to|je|ty)|dam (to|je|ty|vam|ti|klubu|klukum|penize)( \w+)? (zpatky|zpet)|dam zpatky|prinesu (to|je|ty)|donesu (to|je|ty)|(to|je|ty) (prinesu|donesu|vratim|zaplatim)|(prinesu|donesu) (zpatky|zpet)|zaplatim (to|je|ty|vam|ti|klubu|skodu|penize|vsechno))\b/;
 /** Slíbil opravu („opravím to“, „spravíme to s klukama“, „uděláme brigádu“). */
 const PROMISE_REPAIR_RE = /\b(opravim (to|je|ty)|opravime (to|je|ty)|spravim (to|je|ty)|spravime (to|je|ty)|dam to do poradku|dame to do poradku|udelame brigadu|udelam brigadu)\b/;
 const PROMISE_CONDITION_RE = /\b(kdyby|kdybych|jestli|pokud)\b/;
@@ -375,8 +387,9 @@ export function promisesAmends(reply: string): boolean {
  * (amends.ts), ať má dopad. Turek (Fezko, E2E 22. 11.) odmítl podle losu a stejně napsal
  * „Jo, vrátím je, trenére.“; hra nezapsala nic a poháry se nevrátily. Kdo podle povahy
  * nekývne (stejný los jako na žádost trenéra), slib dostane také, ale v termínu ho nesplní:
- * napíše výmluvu, škoda trvá a ví, že slib nedodržel. Jen u provaleného průšvihu, jednou
- * na incident. Vrací lhůtu, nebo null.
+ * napíše výmluvu, škoda trvá a ví, že slib nedodržel. Kdo už žádost trenéra odmítl, má
+ * rozhodnuto (jednou na incident): slib je jen slovo a nesplní ho, i kdyby bez urážky
+ * v žádosti los vyšel jinak. Jen u provaleného průšvihu. Vrací lhůtu, nebo null.
  */
 export async function recordPromisedAmends(
   db: D1Database,
@@ -401,7 +414,8 @@ export async function recordPromisedAmends(
   if (!player) return null;
   const clueOnHim = stopaNaHrace(await nactiStopy(db, inc.id), player.id);
   const chance = restitutionChance(player, { revealed: true, clueOnHim, leniency: false, insult: false });
-  const willFail = !agreesToAmends(inc.id, o.playerId, chance);
+  // Žádost trenéra už odmítl (značka je, úkol ne, jinak by recordAmendsTask nic nezapsal): rozhodnuto.
+  const willFail = (await restitutionTried(db, inc.id, o.playerId, o.teamId)) || !agreesToAmends(inc.id, o.playerId, chance);
   const dueOn = await recordAmendsTask(db, {
     teamId: o.teamId, playerId: o.playerId, incidentId: inc.id, task, coachMessage: o.reply, gameDate: team.game_date, now: o.now, willFail,
   });

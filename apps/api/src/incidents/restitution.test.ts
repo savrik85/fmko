@@ -6,6 +6,8 @@ import { Miniflare } from "miniflare";
 import { amendsRequestOf, isRestitutionRequest, promisedAmendsOf, recordPromisedAmends, restitutionChance, tryRestitution } from "./restitution";
 import { amendsDeliveryChance, resaleValue, settleAmendsTask, type AmendsTaskRow } from "./amends";
 import { amendsDecisionFromLife, amendsDecisionLine } from "./amends-decision";
+import { createRng } from "../generators/rng";
+import { seedFromString } from "../lib/seed";
 
 describe("žádost a šance", () => {
   it("pozná „vrať to“ a „zaplať škodu“", () => {
@@ -420,5 +422,58 @@ describe("Sedlecký (Akcent, E2E 22. 11.): rozhodnutí o nápravě platí i pro 
     expect(await db.prepare("SELECT COUNT(*) AS n FROM coach_commitments").first()).toEqual({ n: 1 });
     const decision = amendsDecisionFromLife(JSON.parse((await db.prepare("SELECT life_context FROM players WHERE id = 'p'").first<{ life_context: string }>())!.life_context), new Date("2026-11-12T12:06:00Z"));
     expect(amendsDecisionLine(decision!)).toContain("VRÁTÍŠ to nejpozději v sobotu 14. 11.");
+  });
+});
+
+describe("pachatel sám nabídne vrácení (Hrdlička, E2E 22. 11.: 7 z 8 „vrátím je“)", () => {
+  const roll = (incidentId: string, playerId: string) => createRng(seedFromString(`restitution|${incidentId}|${playerId}`)).random() * 100;
+
+  it("věty z E2E i „zaplatím to“ (Sedlecký) se poznají jako slib vrácení, přiznání bez slibu ne", () => {
+    for (const t of [
+      "Jo, ukradl. Promiňte. Dresy mám doma, vrátím je. Byla to blbost, víte.", "Jo, ukradl. Promiňte. Vrátím to.",
+      "Ty dresy... jo, to jsem byl fakt já. Sorry za to. Vrátím je, slibuju!", "Jo, ukradl. Promiňte, vrátím to nejpozději v úterý 24. 11.",
+      "Jo, ukradl. Promiň, trenére. Vrátím to v pondělí už určitě.", "Jo, ukradl. Promiň, vrátím to.",
+      "Trenére, jo, zaplatím to. Dám to zítra.",
+    ]) expect([...promisedAmendsOf(t)], t).toEqual(["return"]);
+    for (const t of [
+      "Ty dresy... jo, to jsem byl fakt já. Promiňte, mel sem asi rozumek v hospodě včera. 😅", "Jo, ukradl. Seš krutej, ale už je to pryč.",
+      "Nezaplatím to.", "Zaplatím to, až budu mít výplatu, jestli vůbec.", "Kdo to zaplatí?",
+    ]) expect(promisedAmendsOf(t).size, t).toBe(0);
+  });
+
+  it("slib bez žádosti trenéra projde losem podle povahy a v termínu se pozná: vráceno, nebo výmluva", async () => {
+    await closedTheft();
+    const r = await recordPromisedAmends(db, { teamId: "tym", playerId: "p", reply: "Jo, ukradl. Promiňte. Dresy mám doma, vrátím je.", now: new Date("2026-11-12T12:00:00Z") });
+    const chance = restitutionChance({ disciplina: 100, temperament: 0, vztahKTrenerovi: 100 }, { revealed: true, clueOnHim: false, leniency: false, insult: false });
+    expect(r).toEqual({ task: "task_return", dueOn: "2026-11-14", willFail: roll("vit", "p") >= chance });
+    const outcome = await settleAmendsTask(db, (await task("task_return"))!, new Date("2026-11-14T10:00:00Z"));
+    expect(outcome === "kept" || outcome === "broken").toBe(true);
+    const player = (await db.prepare("SELECT body FROM messages WHERE sender_type = 'player'").first<{ body: string }>())?.body ?? "";
+    if (outcome === "kept") expect(player).toMatch(/vrácen|zpátky|vrátil/i);
+    else expect(player).toMatch(/nevrátil|nestihl|nezvládl|nevyšlo|není zpátky|doma/i);
+  });
+
+  it("po odmítnuté žádosti trenéra platí stejné rozhodnutí: slib se zapíše, ale nesplní, i když by bez urážky kývl", async () => {
+    await closedTheft();
+    // Povaha tak, aby los „kývne“ vyšel bez urážky a s urážkou ne (urážka bere 20 bodů).
+    const target = roll("vit", "p");
+    let personality: { discipline: number; temper: number; relationship: number } | null = null;
+    for (let rel = 0; rel <= 100 && !personality; rel++) {
+      for (let disc = 0; disc <= 100 && !personality; disc += 5) {
+        const p = { disciplina: disc, temperament: 50, vztahKTrenerovi: rel };
+        const calm = restitutionChance(p, { revealed: true, clueOnHim: false, leniency: false, insult: false });
+        const rude = restitutionChance(p, { revealed: true, clueOnHim: false, leniency: false, insult: true });
+        if (rude <= target && target < calm) personality = { discipline: disc, temper: 50, relationship: rel };
+      }
+    }
+    expect(personality).not.toBeNull();
+    await db.prepare("UPDATE players SET personality = ?, coach_relationship = ? WHERE id = 'p'")
+      .bind(JSON.stringify({ discipline: personality!.discipline, temper: personality!.temper }), personality!.relationship).run();
+    expect(await tryRestitution(db, { teamId: "tym", playerId: "p", text: "Vrať ty poháry, ty zloději!", gameDate: "2026-11-12T16:00:00.000Z" }))
+      .toEqual({ outcome: "refused", incidentId: "vit" });
+    expect(await recordPromisedAmends(db, { teamId: "tym", playerId: "p", reply: "Jo, vrátím je, trenére.", now: new Date("2026-11-12T12:00:00Z") }))
+      .toEqual({ task: "task_return", dueOn: "2026-11-14", willFail: true });
+    expect(await settleAmendsTask(db, (await task("task_return"))!, new Date("2026-11-14T10:00:00Z"))).toBe("broken");
+    expect(await db.prepare("SELECT trophy_case FROM equipment").first()).toEqual({ trophy_case: 1 });
   });
 });
