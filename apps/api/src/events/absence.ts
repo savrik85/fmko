@@ -300,7 +300,7 @@ const ABSURD_EXCUSES: Array<{ text: string; emoji: string; timing: AbsenceTiming
   { text: "Udělal jsem si zkoušku na rybářský lístek a musím to oslavit", emoji: "\u{1F41F}", timing: "match_day", env: "rural" },
   { text: "Zablokoval mi někdo výjezd z dvorku, čekám na odtahovou", emoji: "\u{1F698}", timing: "match_day" },
   { text: "Právě jsem zjistil, že mi teče střecha. Přesně teď. Přesně dneska", emoji: "\u{1F327}", timing: "match_day" },
-  { text: "Jdu na sraz ročníku, víme se dvacet let neviděli", emoji: "\u{1F37B}", timing: "day_before" },
+  { text: "Jdu na sraz ročníku, neviděli jsme se dvacet let", emoji: "\u{1F37B}", timing: "day_before" },
   { text: "Musím odchytit divočáka co mi rozryl zahradu", emoji: "\u{1F417}", timing: "match_day", env: "rural" },
   { text: "Krtek mi zničil záhon, chci ho chytit dřív než se vrátí", emoji: "\u{1F411}", timing: "match_day", env: "rural" },
   { text: "Srna skočila do sklepa, čekám na myslivce", emoji: "\u{1F98C}", timing: "match_day", env: "rural" },
