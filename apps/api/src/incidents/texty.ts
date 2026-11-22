@@ -219,21 +219,6 @@ export const TEXTY = {
     "Oznámení na hráče je zapsané: {hrac}. Rozhodne soud.",
     "Případ jsme převzali, podezřelý je hráč: {hrac}. Věc půjde k soudu.",
   ],
-  trest_odpustit: [
-    "Díky, trenére. Už se to nestane.",
-    "Tohle jsem nečekal. Nezklamu vás.",
-    "Díky za šanci, trenére. Beru to vážně.",
-  ],
-  trest_srazka: [
-    "Chápu, trenére. Odpracuju to.",
-    "Je to fér. Srážku beru.",
-    "Zasloužil jsem si to, strhněte mi to ze mzdy.",
-  ],
-  trest_pokuta: [
-    "Zaplatím to. Zasloužil jsem si to.",
-    "Dobře, pokutu beru.",
-    "Je to moje chyba, zaplatím.",
-  ],
   policie_neuspech: [
     "Šetření jsme odložili: {nazev}. Pachatele se zjistit nepodařilo.",
     "Bohužel nic: {nazev}. Pachatele jsme nenašli, případ vracíme.",
@@ -298,11 +283,6 @@ export const TEXTY = {
     "Vím, že jsem vyřazenej. Nepřijdu.",
     "Jsem za trest mimo, dneska nehraju.",
     "Chápu, že mě nechcete. Tentokrát nehraju.",
-  ],
-  trest_vyradit: [
-    "Chápu, trenére. Pár zápasů si odsedím.",
-    "Dobře, zasloužil jsem si to. Budu makat na tréninku.",
-    "Beru to. Vrátím se lepší.",
   ],
   lhuta_kradez: [
     "Uzavřeno bez výsledku: {nazev}. Kdo za tím stál, se nezjistilo.",
