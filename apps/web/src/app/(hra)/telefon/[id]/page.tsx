@@ -513,9 +513,16 @@ export default function ConversationPage() {
         </p>
       );
     }
+    // Propadlý slib (api coach-commitments.ts resolveCommitment): vyplatit ani zrušit už nejde.
+    if (money && (msg.metadata.closed === "broken" || msg.metadata.closed === "expired")) {
+      return <p className="-mx-2.5 mt-1.5 border-t border-black/10 pt-1.5 pb-0.5 text-center text-sm text-[#667781]">Slib propadl, vyplatit už nejde.</p>;
+    }
     // „To nebyl slib“ jde hodinu po zprávě (api coach-commitments.ts CANCEL_WINDOW_MS).
-    // Vyhraná sázka už slibem byla, tu zrušit nejde.
-    const canCancel = msg.metadata.kind !== "bet" && Date.now() - new Date(msg.sentAt).getTime() < 60 * 60 * 1000;
+    // Vyhraná sázka, splněná dohoda i zasloužená odměna už slibem byly, ty zrušit nejde
+    // (`won`; starší zprávy bez něj poznáme podle druhu, tlačítko u nich vzniká až po výhře).
+    const won = msg.metadata.won === true
+      || (money && (msg.metadata.kind === "bet" || msg.metadata.kind === "weight_target" || msg.metadata.kind === "reward"));
+    const canCancel = !won && Date.now() - new Date(msg.sentAt).getTime() < 60 * 60 * 1000;
     return (
       <>
         {money && (

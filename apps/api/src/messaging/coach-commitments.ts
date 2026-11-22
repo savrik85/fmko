@@ -1020,6 +1020,14 @@ async function resolveCommitment(
       .catch((e) => { logger.warn({ module: M }, `uzavření slibu ${r.id}`, e); return null; });
     // Souběžné vyhodnocení (tlačítko a denní běh): dopad jen jednou.
     if ((upd?.meta?.changes ?? 0) === 0) return;
+    // Propadlý slib s tlačítkem (odměna, sázka, prémie): tlačítko zmizí, klik by vrátil 409
+    // „Tenhle slib už neplatí“ (Marek, E2E 22. 11.).
+    const buttonId = detailsOf(r.details).buttonMessageId;
+    if (status !== "kept" && buttonId) {
+      await db.prepare("UPDATE messages SET metadata = json_set(COALESCE(metadata, '{}'), '$.closed', ?) WHERE id = ? AND json_extract(metadata, '$.done') IS NOT 1")
+        .bind(status, buttonId).run()
+        .catch((e) => logger.warn({ module: M }, `tlačítko propadlého slibu ${r.id}`, e));
+    }
   }
   if (status === "expired") return;
   const dd = detailsOf(r.details);
@@ -1245,7 +1253,7 @@ async function markBetWon(db: D1Database, r: SettleRow, d: CommitmentDetails, ma
      VALUES (?, ?, 'system', 'Systém', ?, ?, ?, 1)`,
   ).bind(buttonMessageId, convId,
     `🍺 ${r.first_name}: sázka vyšla, ${BET_CONDITION_TEXT[d.condition ?? "goal"]}. ${BET_REWARD_LABEL[d.reward ?? "keg"]} ${betPrice(d).toLocaleString("cs-CZ")} Kč, zaplatit musíš sám.`,
-    JSON.stringify({ type: "coach_commitment", commitmentId: r.id, kind: "bet", done: false }),
+    JSON.stringify({ type: "coach_commitment", commitmentId: r.id, kind: "bet", done: false, won: true }),
     new Date(now.getTime() + 1000).toISOString()).run()
     .catch((e) => logger.warn({ module: M }, `tlačítko vyhrané sázky ${r.id}`, e));
 }

@@ -422,7 +422,8 @@ export async function markRewardEarned(db: D1Database, r: Pick<RewardRow, "id" |
      VALUES (?, ?, 'system', 'Systém', ?, ?, ?, 1)`,
   ).bind(buttonMessageId, convId,
     `🎁 ${what}. Odměna: ${rewardSummary(d)}, vyplatit ji musíš sám.`,
-    JSON.stringify({ type: "coach_commitment", commitmentId: r.id, kind: r.kind, done: false }),
+    // `won`: odměna je splatná, „To nebyl slib“ už nejde (web, cancelCommitment).
+    JSON.stringify({ type: "coach_commitment", commitmentId: r.id, kind: r.kind, done: false, won: true }),
     new Date(Math.max(now.getTime(), lastMs) + 1000).toISOString()).run();
   return buttonMessageId;
 }
