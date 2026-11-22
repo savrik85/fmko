@@ -61,7 +61,7 @@ export interface ReplayLineup { starters: ReplayPlayer[]; subs: ReplayPlayer[] }
 interface ReplayTeam extends ReplayLineup { coach: ReplayCoach | null }
 /** Událost zápasu, jak ji ukládá engine (detail zápasu z API). */
 export interface ReplayEvent { minute: number; type: string; playerId: number; playerName: string; teamId: number; description: string; detail?: string; source?: string }
-/** `winner` = kdo zápas vyhrál (i na penalty), null = remíza. `goodTerms` = trenéři spolu vycházejí líp než neutrálně. */
+/** `winner` = kdo zápas vyhrál (i na penalty), null = remíza. `goodTerms` = trenéři jsou aspoň dobří známí. */
 export interface ReplayInput { matchId: string; events: ReplayEvent[]; home: ReplayTeam; away: ReplayTeam; winner: Side | null; goodTerms: boolean }
 export interface Figure { team: Side | "referee"; player: ReplayPlayer; coach?: true }
 /** Kdo je ve scéně kromě hráčů: rozhodčí a trenéři. `fire` = jak moc trenér zápas prožívá (0 kliďas, 1 sopka). */
@@ -832,10 +832,8 @@ export class Replay {
     const walkers = new Set(handshakes.map((h) => h.walker));
 
     if (winner) {
-      figures(up).forEach((f, n) => {
-        const from = 0.9 + (n % 4) * 0.1;
-        st.pose(f, "celebrate", meet - from, from);
-      });
+      // Ruce nad hlavu zvednou jen dva z vítězů.
+      figures(up).filter((_, n) => n % 5 === 3).forEach((f, n) => st.pose(f, "celebrate", meet - 1 - n * 0.3, 1 + n * 0.3));
       st.coach(up, "joy", 0.9);
       st.coach(down, "upset", 1.2);
     }
@@ -877,9 +875,9 @@ export class Replay {
           st.go(f, to, walk, wait);
           st.pose(f, "sit", Infinity, wait + walk);
           settled = Math.max(settled, wait + walk);
-        } else if (n % 2) {
-          // Každý druhý ze zbylých si po chvíli sedne na trávník.
-          st.pose(f, "rest", Infinity, 1 + n * 0.8);
+        } else {
+          // Ostatní si postupně sednou na trávník nebo si lehnou: stát nezůstane nikdo.
+          st.pose(f, n % 3 ? "rest" : "down", Infinity, 1 + n * 0.8);
         }
       });
     }
@@ -1367,7 +1365,8 @@ export class Replay {
     }
     st.wait(0.3);
     swaps.forEach(({ incoming, outgoing }, n) => {
-      st.go(incoming, { x: BENCH_X + 8, z: at(n) + 1.5 }, 2);
+      // Střídající běží rovně do hřiště, odcházející ho míjí bokem.
+      st.go(incoming, { x: BENCH_X + 8, z: at(n) - 0.4 }, 2);
       st.go(outgoing, { x: BENCH_X - 1.3, z: at(n) + 2 }, 1.2);
     });
     st.t = end;

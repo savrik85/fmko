@@ -22,7 +22,7 @@ interface Label { text: string; tag?: string; sub?: string; tone: keyof typeof T
 /** Tmavá plocha televizní grafiky, stejná jako výsledková tabule 2D záznamu. */
 const PANEL = "bg-[#0a0a0a]/90 text-white";
 /** Výška výsledkové tabulky a nápisu akce: stojí nahoře vedle sebe. */
-const BAR_HEIGHT = "h-9 sm:h-11";
+const BAR_HEIGHT = "h-11";
 
 export const initials = (name: string) => name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase();
 const teamName = (detail: Record<string, unknown>, e: ReplayEvent) => detail[`${sideOf(e.teamId)}_name`] as string;
@@ -72,11 +72,11 @@ export function EventLabel(props: GraphicsProps & { override?: Label }) {
   // Stejný nápis po sobě (roh → šance) se znovu neanimuje.
   return (
     <div key={`${label.text}-${label.tag}`} className={`ml-auto min-w-0 flex items-stretch ${BAR_HEIGHT} rounded-lg overflow-hidden shadow-xl font-heading animate-[fadeIn_0.2s_ease-out]`}>
-      <div className={`flex items-center px-3 font-[900] text-base sm:text-2xl tracking-wider whitespace-nowrap ${TONES[label.tone]}`}>{label.text}</div>
+      <div className={`flex items-center px-3 font-[900] text-2xl tracking-wider whitespace-nowrap ${TONES[label.tone]}`}>{label.text}</div>
       {(label.tag || label.sub) && (
         <div className={`flex items-center gap-2 px-3 min-w-0 ${PANEL}`}>
-          {label.tag && <span className="font-[800] text-[10px] sm:text-xs tracking-widest text-white/60 whitespace-nowrap">{label.tag}</span>}
-          {label.sub && <span className="font-bold text-xs sm:text-base truncate">{label.sub}</span>}
+          {label.tag && <span className="font-[800] text-xs tracking-widest text-white/60 whitespace-nowrap">{label.tag}</span>}
+          {label.sub && <span className="font-bold text-base truncate">{label.sub}</span>}
         </div>
       )}
     </div>
@@ -114,11 +114,11 @@ export function CoachCard({ detail, side }: { detail: Record<string, unknown>; s
   const coach = detail[`${side}_coach`] as ReplayCoach;
   const stats = coach.record && (
     <div className="text-center leading-none">
-      <div className="text-[7px] sm:text-[10px] font-[900] uppercase tracking-[0.25em] opacity-80">V lize</div>
-      <div className="flex gap-3 sm:gap-5 mt-0.5 sm:mt-1">
+      <div className="text-[10px] font-[900] uppercase tracking-[0.25em] opacity-80">V lize</div>
+      <div className="flex gap-5 mt-1">
         {([["Zápasy", coach.record.played], ["Výhry", coach.record.won]] as const).map(([label, value]) => (
           <div key={label}>
-            <div className="text-[7px] sm:text-[10px] font-bold uppercase tracking-widest opacity-80">{label}</div>
+            <div className="text-[10px] font-bold uppercase tracking-widest opacity-80">{label}</div>
             <div className="mt-0.5">{value}</div>
           </div>
         ))}
@@ -134,23 +134,23 @@ function LowerThird({ color, name, avatar, title, note, board, badge }: {
   color: string; name: string; avatar: Record<string, unknown> | undefined; title: string; note: string | null | undefined; board: string | null; badge: ReactNode;
 }) {
   return (
-    <div className="absolute bottom-2 inset-x-2 z-30 pointer-events-none">
-      <div className="flex items-stretch h-11 sm:h-16 rounded-lg overflow-hidden shadow-xl font-heading animate-slide-up">
-        <div className="shrink-0 w-11 sm:w-16 overflow-hidden flex items-end justify-center font-[900] text-lg" style={{ backgroundColor: color, color: onColor(color) }}>
-          {avatar ? <FaceAvatar faceConfig={avatar} size={50} className="scale-[0.7] sm:scale-100 origin-bottom" /> : <span className="self-center">{initials(name)}</span>}
+    <div className="absolute bottom-2 inset-x-2">
+      <div className="flex items-stretch h-16 rounded-lg overflow-hidden shadow-xl font-heading animate-slide-up">
+        <div className="shrink-0 w-16 overflow-hidden flex items-end justify-center font-[900] text-lg" style={{ backgroundColor: color, color: onColor(color) }}>
+          {avatar ? <FaceAvatar faceConfig={avatar} size={50} /> : <span className="self-center">{initials(name)}</span>}
         </div>
         <div className="flex-1 min-w-0 flex flex-col">
           <div className={`flex-1 flex items-center px-3 min-w-0 ${PANEL}`}>
-            <span className="text-sm sm:text-xl font-[900] uppercase tracking-wide truncate">{title}</span>
+            <span className="text-xl font-[900] uppercase tracking-wide truncate">{title}</span>
           </div>
           {note && (
-            <div className="flex items-center justify-between gap-3 px-3 h-4 sm:h-6 bg-white/95 text-gray-900 text-[9px] sm:text-xs font-bold uppercase tracking-wider">
+            <div className="flex items-center justify-between gap-3 px-3 h-6 bg-white/95 text-gray-900 text-xs font-bold uppercase tracking-wider">
               <span className="truncate">{note}</span>
-              {board && <span className="hidden sm:block truncate normal-case tracking-normal font-semibold text-gray-600">{board}</span>}
+              {board && <span className="truncate normal-case tracking-normal font-semibold text-gray-600">{board}</span>}
             </div>
           )}
         </div>
-        {badge && <div className="shrink-0 flex items-center px-3 font-[900] text-sm sm:text-2xl tabular-nums" style={{ backgroundColor: color, color: onColor(color) }}>{badge}</div>}
+        {badge && <div className="shrink-0 flex items-center px-3 font-[900] text-2xl tabular-nums" style={{ backgroundColor: color, color: onColor(color) }}>{badge}</div>}
       </div>
     </div>
   );
@@ -159,9 +159,7 @@ function LowerThird({ color, name, avatar, title, note, board, badge }: {
 /** Nápis opakovaného záběru gólu; stojí nahoře mezi výsledkovou tabulkou a nápisem akce. */
 export function ReplayChip() {
   return (
-    <div className={`hidden group-data-[replaying]/shot:flex items-center px-3 ${BAR_HEIGHT} rounded-lg bg-red-600 text-white text-sm sm:text-lg font-heading font-[900] tracking-widest whitespace-nowrap shadow-xl`}>
-      <span className="sm:hidden">↺ ZNOVU</span><span className="hidden sm:inline">↺ OPAKOVANÝ ZÁBĚR</span>
-    </div>
+    <div className={`hidden group-data-[replaying]/shot:flex items-center px-3 ${BAR_HEIGHT} rounded-lg bg-red-600 text-white text-lg font-heading font-[900] tracking-widest whitespace-nowrap shadow-xl`}>↺ OPAKOVANÝ ZÁBĚR</div>
   );
 }
 
@@ -184,13 +182,12 @@ export function ScoreBug({ detail, homeGoals, awayGoals, minute, scored, fast }:
     return (
       <div className={`flex items-center gap-2 ${side === "away" ? "flex-row-reverse" : ""}`}>
         <span className={`w-1.5 self-stretch ${side === "home" ? "rounded-l-lg" : ""}`} style={{ backgroundColor: kitColor(detail, side) }} />
-        <span className="hidden sm:block font-bold text-base truncate max-w-[9rem]">{name}</span>
-        <span className="sm:hidden font-bold text-sm">{initials(name)}</span>
-        <span className="relative font-[900] text-lg sm:text-2xl tabular-nums">
+        <span className="font-bold text-base truncate max-w-[9rem]">{name}</span>
+        <span className="relative font-[900] text-2xl tabular-nums">
           {flying ? goals - 1 : goals}
           {flying && (
             <span className={`absolute left-1/2 top-1/2 z-10 -translate-x-1/2 flex items-center justify-center transition-all duration-500 ease-in-out ${
-              step === 0 ? "translate-y-full scale-0 opacity-0" : step === 1 ? "translate-y-full scale-[1.6] sm:scale-[2.2]" : "-translate-y-1/2 scale-50 opacity-0"}`}>
+              step === 0 ? "translate-y-full scale-0 opacity-0" : step === 1 ? "translate-y-full scale-[2.2]" : "-translate-y-1/2 scale-50 opacity-0"}`}>
               {/* Pohár ukládá klubům jen barvu: znak má výchozí tvar a bílý doplněk, stejně jako v záhlaví záznamu. */}
               <BadgePreview primary={detail[`${side}_color`] as string} secondary={(detail[`${side}_secondary`] as string | null) ?? "#FFF"}
                 pattern={(detail[`${side}_badge`] as BadgePattern | null) ?? "shield"} initials="" size={48} />
@@ -206,7 +203,7 @@ export function ScoreBug({ detail, homeGoals, awayGoals, minute, scored, fast }:
       {team("home", homeGoals)}
       <span className="self-center text-white/40 font-[900]">:</span>
       {team("away", awayGoals)}
-      {minute !== undefined && <span className="self-center px-2 sm:px-3 border-l border-white/20 text-white/70 font-bold text-sm tabular-nums">{minute}&apos;</span>}
+      {minute !== undefined && <span className="self-center px-3 border-l border-white/20 text-white/70 font-bold text-sm tabular-nums">{minute}&apos;</span>}
     </div>
   );
 }

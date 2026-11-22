@@ -1,17 +1,18 @@
 "use client";
 
 import { Component, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { clientOnly } from "@/components/client-only";
 import { apiFetch } from "@/lib/api";
 import { builtExtensionsOf } from "@/components/stadium/stadium-3d/stand-levels";
 import type { WeatherType } from "@/components/stadium/stadium-3d/constants";
+import { Stadium3D } from "@/components/stadium/stadium-3d/Stadium3D";
 import { venueExtensions, venueFacilities } from "@/app/(hra)/turnaj/venue-scene";
 import { ReplayScene, type ReplayStep } from "./ReplayScene";
 import { CoachCard, EventCard, EventLabel, initials, ReplayChip, ScoreBug } from "./graphics";
 import { OVERLAY_CONTROL } from "./overlay";
 import { Replay, shootoutScore, sideOf, type ReplayCoach, type ReplayEvent, type ReplayKit, type ReplayLineup } from "./scenes";
 
-const Stadium3D = clientOnly(() => import("@/components/stadium/stadium-3d/Stadium3D").then((m) => m.Stadium3D));
+/** Šířka okna záznamu, pro kterou je grafika navržená (px); v jiném okně se zmenší nebo zvětší celá, jako obraz videa. */
+const GRAPHICS_WIDTH = 848;
 
 /** Stav záznamu (zaznam/page.tsx); 3D kreslí totéž, co právě ukazuje on. */
 interface ReplayProgress {
@@ -48,10 +49,7 @@ interface Replay3DProps {
   onReady: () => void;
 }
 
-/**
- * Chyba ve 3D záznamu nesmí hráči vzít celou stránku: místo obrazu se ukáže zpráva a zápas si dohraje ve 2D
- * (přepínač je v rohu okna). Přepnutí zpět na 3D ho zkusí načíst znovu.
- */
+/** Chyba ve 3D záznamu nesmí hráči vzít celou stránku: ohlásí se stránce záznamu, ta místo obrazu ukáže zprávu. */
 class FailureGuard extends Component<{ onFailure: () => void; children: ReactNode }, { failed: boolean }> {
   state = { failed: false };
   static getDerivedStateFromError() { return { failed: true }; }
@@ -59,19 +57,11 @@ class FailureGuard extends Component<{ onFailure: () => void; children: ReactNod
     console.error("3D záznam selhal:", error);
     this.props.onFailure();
   }
-  render() {
-    if (!this.state.failed) return this.props.children;
-    return (
-      <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-1 px-6 bg-[#0a0a0a]/90 text-center font-heading text-white">
-        <div className="font-[900] text-base sm:text-2xl">Video se nepodařilo přehrát</div>
-        <div className="text-xs sm:text-base text-white/75">Přepněte vlevo nahoře na Tracker a zápas dohrajte tam.</div>
-      </div>
-    );
-  }
+  render() { return this.state.failed ? null : this.props.children; }
 }
 
 /** 3D záznam zápasu na stadionu domácích, řízený stavem záznamu. Vyplní rodiče, do kterého se vloží. */
-export function Replay3D({ onFailure, ...props }: Replay3DProps & { /** 3D záznam spadl a místo obrazu je zpráva. */ onFailure: () => void }) {
+export function Replay3D({ onFailure, ...props }: Replay3DProps & { /** 3D záznam spadl. */ onFailure: () => void }) {
   return <FailureGuard onFailure={onFailure}><Replay3DView {...props} /></FailureGuard>;
 }
 
@@ -118,6 +108,16 @@ function Replay3DView({ detail, events, progress, onReady }: Replay3DProps) {
   const [overview, setOverview] = useState(false);
   const finalScore = `${detail.home_score} : ${detail.away_score}${pens ? ` (pen. ${pens.home}:${pens.away})` : ""}`;
   const frame = useRef<HTMLDivElement>(null);
+  // Grafika je rozvržená na šířku GRAPHICS_WIDTH a s oknem se zvětšuje a zmenšuje celá.
+  const [fit, setFit] = useState({ scale: 1, height: 0 });
+  useEffect(() => {
+    const observer = new ResizeObserver(([entry]) => {
+      const scale = entry.contentRect.width / GRAPHICS_WIDTH;
+      setFit({ scale, height: entry.contentRect.height / scale });
+    });
+    observer.observe(frame.current!);
+    return () => observer.disconnect();
+  }, []);
   const veil = useRef<HTMLCanvasElement>(null);
   // Představení trenérů, výkop, přestávka a konec zápasu grafiku události nemají.
   const event = cue === null && (intro !== null || kickoff !== null || halfTime || finished) ? undefined : events[index];
@@ -157,24 +157,25 @@ function Replay3DView({ detail, events, progress, onReady }: Replay3DProps) {
       {/* Při střihu tu doznívá poslední snímek starého záběru (kreslí a zprůhledňuje ho scéna); grafika zůstává nad ním. */}
       <canvas ref={veil} style={{ opacity: 0 }} className="absolute inset-0 z-10 w-full h-full pointer-events-none" />
 
-      {/* Nahoře vedle sebe: vlevo výsledková tabulka, vpravo nápis akce, při opakovaném záběru gólu mezi nimi jeho
-          nápis. V úzkém okně (telefon) se nápis akce vedle tabulky nevejde a je pod ní. */}
-      <div className="absolute top-2 inset-x-2 z-30 flex flex-wrap sm:flex-nowrap items-start gap-2 pointer-events-none">
-        <ScoreBug detail={detail} homeGoals={homeGoals} awayGoals={awayGoals} minute={events[index]?.minute} scored={scored} fast={fast} />
-        <ReplayChip />
-        <EventLabel {...graphics} override={fixedLabel} />
-      </div>
-      <EventCard {...graphics} />
-      {coachSide && <CoachCard detail={detail} side={coachSide} />}
-      {/* O přestávce stojí týmy připravené na výkop a obraz je ztmavený. */}
-      {halfTime && (
-        <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none bg-black/45">
-          <div className="text-center font-heading text-white">
-            <div className="font-[900] text-4xl sm:text-6xl tracking-widest">POLOČAS</div>
-            <div className="font-[800] text-xl sm:text-3xl text-white/80 mt-1 tabular-nums">{homeGoals} : {awayGoals}</div>
-          </div>
+      <div className="absolute top-0 left-0 z-30 origin-top-left pointer-events-none" style={{ width: GRAPHICS_WIDTH, height: fit.height, transform: `scale(${fit.scale})` }}>
+        {/* Nahoře vedle sebe: vlevo výsledková tabulka, vpravo nápis akce, při opakovaném záběru gólu mezi nimi jeho nápis. */}
+        <div className="absolute top-2 inset-x-2 flex items-start gap-2">
+          <ScoreBug detail={detail} homeGoals={homeGoals} awayGoals={awayGoals} minute={events[index]?.minute} scored={scored} fast={fast} />
+          <ReplayChip />
+          <EventLabel {...graphics} override={fixedLabel} />
         </div>
-      )}
+        <EventCard {...graphics} />
+        {coachSide && <CoachCard detail={detail} side={coachSide} />}
+        {/* O přestávce stojí týmy připravené na výkop a obraz je ztmavený. */}
+        {halfTime && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/45">
+            <div className="text-center font-heading text-white">
+              <div className="font-[900] text-6xl tracking-widest">POLOČAS</div>
+              <div className="font-[800] text-3xl text-white/80 mt-1 tabular-nums">{homeGoals} : {awayGoals}</div>
+            </div>
+          </div>
+        )}
+      </div>
       {/* Pohled se dá volit až od výkopu; představení trenérů má vlastní kameru. */}
       {intro === null && (
         <button onClick={() => setOverview((v) => !v)} title={overview ? "Pohled z tribuny" : "Pohled z paneláku"}

@@ -8,12 +8,8 @@ import { Spinner, BadgePreview, JerseyPreview } from "@/components/ui";
 import { PositionBadge } from "@/components/ui/position-badge";
 import { bestTextOn } from "@/lib/team-color";
 import type { BadgePattern } from "@/components/ui";
-import { clientOnly } from "@/components/client-only";
 import { OVERLAY_CONTROL } from "@/components/match/replay-3d/overlay";
 import { actionStarts, scenedEvents, shootoutEvents, STEP_SECONDS, substitutionsTogether, type ReplayKit } from "@/components/match/replay-3d/scenes";
-
-// 3D záznam se stáhne, až když ho hráč má zapnutý.
-const Replay3D = clientOnly(() => import("@/components/match/replay-3d/Replay3D").then((m) => m.Replay3D));
 
 interface MatchEvent { minute: number; type: string; playerId: number; playerName: string; teamId: number; description: string; detail?: string; }
 interface LineupPlayer { id: string; name: string; position: string; naturalPosition: string; rating: number }
@@ -177,8 +173,9 @@ export default function MatchReplayPage() {
   // 3D záznam („Video“) je výchozí; kdo si přepne na 2D („Tracker“), tomu to zůstane.
   const [view3d, setView3d] = useState(true);
   useEffect(() => { setView3d(localStorage.getItem("replayView") !== "2d"); }, []);
-  // 3D záznam spadl: v okně je o tom zpráva a záznam stojí, dokud hráč nepřepne na 2D.
+  // 3D záznam se nestáhl nebo spadl: v okně je o tom zpráva a záznam stojí, dokud hráč nepřepne na 2D.
   const [failed3d, setFailed3d] = useState(false);
+  const [Replay3D, setReplay3D] = useState<typeof import("@/components/match/replay-3d/Replay3D").Replay3D | null>(null);
   const switchView = () => {
     // Kdo z 3D odchází jen kvůli chybě, tomu 3D zůstane výchozí.
     if (!failed3d) localStorage.setItem("replayView", view3d ? "2d" : "3d");
@@ -190,6 +187,12 @@ export default function MatchReplayPage() {
   const long3d = view3d && can3d;
   const sceneMs = (step: keyof typeof SCENE_MS) => SCENE_MS[step] / (speed === "fast" ? 2 : 1);
   const stepMs = (step: keyof typeof FLAT_MS) => (long3d ? sceneMs(step) : (speed === "fast" ? FLAT_FAST_MS : FLAT_MS)[step]);
+  // 3D záznam se stáhne, až když ho hráč má zapnutý (po chybě znovu, až se na něj vrátí).
+  useEffect(() => {
+    if (!long3d || Replay3D) return;
+    import("@/components/match/replay-3d/Replay3D").then((m) => setReplay3D(() => m.Replay3D))
+      .catch((e) => { console.error("3D záznam se nepodařilo stáhnout:", e); setFailed3d(true); });
+  }, [long3d, Replay3D]);
   // Zápas se rozběhne, až je 3D scéna načtená; jinak by výkop proběhl za načítacím kolečkem.
   const [ready3d, setReady3d] = useState(false);
   const started = useRef(false);
@@ -658,7 +661,13 @@ export default function MatchReplayPage() {
           {/* 3D záznam kreslí totéž co 2D hřiště pod ním; potřebuje uložené sestavy. */}
           {can3d && (
             <>
-              {view3d && (
+              {view3d && failed3d && (
+                <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-1 px-6 bg-[#0a0a0a]/90 text-center font-heading text-white">
+                  <div className="font-[900] text-base sm:text-2xl">Video se nepodařilo přehrát</div>
+                  <div className="text-xs sm:text-base text-white/75">Přepněte vlevo nahoře na Tracker a zápas dohrajte tam.</div>
+                </div>
+              )}
+              {view3d && !failed3d && Replay3D && (
                 <Replay3D detail={match.detail} events={match.events} onReady={() => setReady3d(true)} onFailure={() => setFailed3d(true)}
                   progress={{ take, idx, flash, intro, kickoff, halfTime: htPause, finished, paused, cue, fast: speed === "fast", homeGoals: hg, awayGoals: ag }} />
               )}
