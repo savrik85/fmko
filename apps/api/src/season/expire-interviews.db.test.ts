@@ -7,7 +7,7 @@
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { Miniflare } from "miniflare";
-import { expirePreMatchInterviews } from "./league-round";
+import { cleanupExpiredInterviewRequests, expirePreMatchInterviews } from "./league-round";
 
 let miniflare: Miniflare;
 let db: D1Database;
@@ -107,5 +107,41 @@ describe("úklid nevyřízených předzápasových rozhovorů po kole", () => {
     await expirePreMatchInterviews(withLikeLimit(db), ROUND);
     const conv = await db.prepare("SELECT unread_count FROM conversations WHERE id = 'conv-news'").first<{ unread_count: number }>();
     expect(conv?.unread_count).toBe(1);
+  });
+});
+
+describe("jednorázový úklid žádostí, které visely od května", () => {
+  beforeEach(async () => {
+    // Stav z produ: rozhovor už propadl (status expired), žádost v telefonu zůstala.
+    await db.batch([
+      db.prepare(`UPDATE coach_interviews SET status = 'expired' WHERE id = '${INTERVIEW_ID}'`),
+      db.prepare(`INSERT INTO coach_interviews (id, team_id, match_calendar_id, status, kind) VALUES
+        ('iv-rival', 'rival', '${ROUND}', 'expired', 'pre_match'),
+        ('iv-answered', 'club', 'cal-round-7', 'answered', 'pre_match')`),
+      db.prepare(`INSERT INTO conversations (id, team_id, type, title, unread_count) VALUES ('conv-rival', 'rival', 'system', 'Zpravodaj', 1)`),
+      db.prepare(`INSERT INTO messages (id, conversation_id, sender_type, sender_name, body, metadata, sent_at, read) VALUES
+        ('m-rival', 'conv-rival', 'system', 'Redakce Zpravodaje', 'žádost', '{"type":"interview_request","interviewId":"iv-rival"}', '2026-11-21T08:00:00Z', 0),
+        ('m-answered', 'conv-news', 'system', 'Redakce Zpravodaje', 'zodpovězená', '{"type":"interview_request","interviewId":"iv-answered"}', '2026-11-14T08:00:00Z', 1)`),
+    ]);
+  });
+
+  it("náhled nic nesmaže, jen spočítá propadlé žádosti", async () => {
+    const r = await cleanupExpiredInterviewRequests(withLikeLimit(db), { limit: 100, dryRun: true });
+    expect(r).toEqual({ interviews: 2, messages: 2, unread: 2, remaining: 2 });
+    const count = await db.prepare("SELECT COUNT(*) AS c FROM messages").first<{ c: number }>();
+    expect(count?.c).toBe(5);
+  });
+
+  it("smaže jen žádosti k propadlým rozhovorům, po dávkách, a opraví nepřečtené", async () => {
+    const first = await cleanupExpiredInterviewRequests(withLikeLimit(db), { limit: 1, dryRun: false });
+    expect(first.interviews).toBe(1);
+    expect(first.remaining).toBe(1);
+    const second = await cleanupExpiredInterviewRequests(withLikeLimit(db), { limit: 100, dryRun: false });
+    expect(second.remaining).toBe(0);
+    const left = await db.prepare("SELECT id FROM messages ORDER BY id").all<{ id: string }>();
+    // Zůstane článek, žádost k ještě běžícímu rozhovoru i k zodpovězenému.
+    expect(left.results.map((r) => r.id)).toEqual(["m-answered", "m-next", "m-old"]);
+    const unread = await db.prepare("SELECT id, unread_count FROM conversations ORDER BY id").all<{ id: string; unread_count: number }>();
+    expect(unread.results).toEqual([{ id: "conv-news", unread_count: 1 }, { id: "conv-rival", unread_count: 0 }]);
   });
 });

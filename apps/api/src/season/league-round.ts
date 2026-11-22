@@ -537,13 +537,13 @@ export async function replayUnplayedMatches(env: Bindings, limit = 2): Promise<A
  * což je 54 bajtů a D1 vzory delší než 50 bajtů odmítá, takže úklid vždy spadl.
  * Smazaná nepřečtená žádost sníží počet nepřečtených a náhled konverzace ukáže předchozí zprávu.
  */
-async function removeInterviewRequest(db: D1Database, interviewId: string, teamId: string): Promise<void> {
+async function removeInterviewRequest(db: D1Database, interviewId: string, teamId: string): Promise<number> {
   const found = await db.prepare(
     `SELECT m.id, m.conversation_id, m.read FROM messages m
        JOIN conversations c ON c.id = m.conversation_id
       WHERE c.team_id = ? AND c.type = 'system' AND json_extract(m.metadata, '$.interviewId') = ?`,
   ).bind(teamId, interviewId).all<{ id: string; conversation_id: string; read: number }>();
-  if (found.results.length === 0) return;
+  if (found.results.length === 0) return 0;
 
   const unreadByConv = new Map<string, number>();
   for (const m of found.results) {
@@ -559,6 +559,40 @@ async function removeInterviewRequest(db: D1Database, interviewId: string, teamI
        WHERE id = ?1`,
     ).bind(convId, unread)),
   ]);
+  return found.results.length;
+}
+
+/**
+ * Jednorázový úklid žádostí o rozhovor, které po propadnutí zůstaly v telefonu, protože
+ * úklid po kole od 3. 5. padal na délce vzoru LIKE. Bere propadlé rozhovory, jejichž
+ * žádost ještě visí, po dávkách (`limit`), ať jeden běh nenarazí na limity D1.
+ * `dryRun` jen spočítá, co by smazal.
+ */
+export async function cleanupExpiredInterviewRequests(
+  db: D1Database, opts: { limit: number; dryRun: boolean },
+): Promise<{ interviews: number; messages: number; unread: number; remaining: number }> {
+  const pending = await db.prepare(
+    `SELECT ci.id, ci.team_id, COUNT(*) AS msgs, SUM(CASE WHEN m.read = 0 THEN 1 ELSE 0 END) AS unread
+       FROM messages m
+       JOIN conversations c ON c.id = m.conversation_id
+       JOIN coach_interviews ci ON ci.id = json_extract(m.metadata, '$.interviewId')
+      WHERE c.type = 'system' AND c.team_id = ci.team_id
+        AND json_extract(m.metadata, '$.type') = 'interview_request'
+        AND ci.status = 'expired'
+      GROUP BY ci.id, ci.team_id`,
+  ).all<{ id: string; team_id: string; msgs: number; unread: number }>();
+  const all = pending.results;
+  const batch = all.slice(0, opts.limit);
+  const unread = batch.reduce((s, r) => s + (r.unread ?? 0), 0);
+  if (opts.dryRun) {
+    return { interviews: batch.length, messages: batch.reduce((s, r) => s + r.msgs, 0), unread, remaining: all.length };
+  }
+  let messages = 0;
+  for (const r of batch) {
+    messages += await removeInterviewRequest(db, r.id, r.team_id)
+      .catch((e) => { logger.warn({ module: "league-round" }, `úklid propadlé žádosti o rozhovor ${r.id}`, e); return 0; });
+  }
+  return { interviews: batch.length, messages, unread, remaining: all.length - batch.length };
 }
 
 /** Zruší nevyřízené žádosti o předzápasový rozhovor kola, které už je odehrané. */
