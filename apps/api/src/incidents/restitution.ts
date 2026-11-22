@@ -82,11 +82,15 @@ export function restitutionChance(
   return Math.max(5, Math.min(90, Math.round(score)));
 }
 
-export type RestitutionOutcome =
+export type RestitutionOutcome = (
   | { outcome: "returned" | "paid"; amount: number }
   /** Kývl, že to do `dueOn` (herní den) vrátí nebo opraví brigádou (amends.ts). */
   | { outcome: "promised"; task: AmendsTask; dueOn: string }
-  | { outcome: "refused" };
+  | { outcome: "refused" }
+) & {
+  /** Incident, o který šlo. Zpráva trenéra se jím stává tématem rozhovoru (zprava-trenera.ts). */
+  incidentId: string;
+};
 
 interface IncidentRow {
   id: string; kind: string; category: string; status: string; loss: string | null; culprit_revealed: number;
@@ -200,7 +204,7 @@ export async function tryRestitution(
           : "Trenér po tobě chce, ať to vrátíš nebo zaplatíš. Nechce se ti a vymlouváš se.");
     }
     logger.info({ module: M, teamId: o.teamId }, `pachatel ${o.playerId} odmítl napravit ${inc.id} (šance ${chance} %)`);
-    return { outcome: "refused" };
+    return { outcome: "refused", incidentId: inc.id };
   }
 
   if (plan === "task_return" || plan === "task_repair") return promiseAmends(db, o, inc, plan);
@@ -239,7 +243,7 @@ export async function tryRestitution(
   await sendIncidentSystemSms(db, o.teamId, SMS_ROLE_KUSTOD, body, smsIncidentu(inc.id))
     .catch((e) => logger.warn({ module: M }, `SMS po vrácení ${inc.id}`, e));
   logger.info({ module: M, teamId: o.teamId }, `pachatel ${o.playerId} ${outcome} ${inc.id}: ${total} Kč`);
-  return { outcome, amount: total };
+  return { outcome, amount: total, incidentId: inc.id };
 }
 
 /**
@@ -264,7 +268,7 @@ async function promiseAmends(
     ? sentenceEnd(`Trenér tě požádal, ať to vrátíš, a ty jsi slíbil, že to vrátíš ${dueWords(dueOn)}`)
     : sentenceEnd(`Trenér chtěl, ať to opravíš, a ty jsi slíbil, že to s brigádou opravíš ${dueWords(dueOn)}`));
   logger.info({ module: M, teamId: o.teamId }, `pachatel ${o.playerId} slíbil ${task} ${inc.id} do ${dueOn}`);
-  return { outcome: "promised", task, dueOn };
+  return { outcome: "promised", task, dueOn, incidentId: inc.id };
 }
 
 // ── Slib v odpovědi hráče ──

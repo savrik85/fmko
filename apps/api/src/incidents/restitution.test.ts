@@ -110,7 +110,7 @@ describe("přemluvení pachatele", () => {
   it("krádež: vrátí balony i hotovost, přizná se a incident je vyřešený", async () => {
     await incident({ category: "kradez", loss: [{ typ: "vybaveni", kategorie: "balls", uroven: 3, urovniDolu: 2, stav: 80 }, { typ: "penize", castka: 700 }] });
     expect(await tryRestitution(db, { teamId: "tym", playerId: "p", text: "Pepo, vrať ty balony a nebudu to řešit.", gameDate: "2026-11-12" }))
-      .toEqual({ outcome: "returned", amount: 700 });
+      .toEqual({ outcome: "returned", amount: 700, incidentId: "inc" });
     expect(await db.prepare("SELECT balls, balls_condition FROM equipment").first()).toEqual({ balls: 3, balls_condition: 80 });
     expect(await db.prepare("SELECT status, resolution FROM club_incidents").first()).toEqual({ status: "uzavreny", resolution: "vratil" });
     expect((await db.prepare("SELECT budget FROM teams").first<{ budget: number }>())?.budget).toBe(1700);
@@ -125,7 +125,7 @@ describe("přemluvení pachatele", () => {
   it("poškození: zaplatí škodu ze svého, nejvýš čtyři týdenní odměny", async () => {
     await incident({ category: "poskozeni", loss: [{ typ: "stadion", zarizeni: "sprchy", urovni: 1, cena: 5000 }] });
     expect(await tryRestitution(db, { teamId: "tym", playerId: "p", text: "Zaplatíš tu škodu na sprchách.", gameDate: "2026-11-12" }))
-      .toEqual({ outcome: "paid", amount: 1600 });
+      .toEqual({ outcome: "paid", amount: 1600, incidentId: "inc" });
     expect(await db.prepare("SELECT resolution FROM club_incidents").first()).toEqual({ resolution: "nahradil" });
   });
 
@@ -153,7 +153,7 @@ describe("vrácení po uzavřeném incidentu (Turek a poháry, 23.–24. 10.)", 
   it("„Vrátíš ty poháry?“: hráč slíbí, vznikne úkol s lhůtou a do promptu jde, co slíbil", async () => {
     await closedTheft();
     expect(await tryRestitution(db, { teamId: "tym", playerId: "p", text: "Vrátíš ty poháry?", gameDate: "2026-11-12T16:00:00.000Z" }))
-      .toEqual({ outcome: "promised", task: "task_return", dueOn: "2026-11-14" });
+      .toEqual({ outcome: "promised", task: "task_return", dueOn: "2026-11-14", incidentId: "vit" });
     const t = await task("task_return");
     expect(JSON.parse(t!.details!)).toEqual({ incidentId: "vit", dueOn: "2026-11-14" });
     expect((await db.prepare("SELECT fact FROM club_incident_knowledge").first<{ fact: string }>())?.fact).toContain("vrátíš nejpozději v sobotu 14. 11.");
@@ -199,7 +199,7 @@ describe("vrácení po uzavřeném incidentu (Turek a poháry, 23.–24. 10.)", 
     await db.prepare("UPDATE players SET personality = ?, coach_relationship = 0 WHERE id = 'p'").bind(JSON.stringify({ discipline: 0, temper: 100 })).run();
     await closedTheft();
     expect(await tryRestitution(db, { teamId: "tym", playerId: "p", text: "Vrať ty poháry, ty zloději!", gameDate: "2026-11-12T16:00:00.000Z" }))
-      .toEqual({ outcome: "refused" });
+      .toEqual({ outcome: "refused", incidentId: "vit" });
     expect(await task("task_return")).toBeNull();
     expect((await db.prepare("SELECT fact FROM club_incident_knowledge").first<{ fact: string }>())?.fact).toContain("Odmítl jsi to");
   });
@@ -259,7 +259,7 @@ describe("Turek a poháry podle kopie produ 22. 11. (C3a)", () => {
 
   it("klub vitrínu dokoupil: žádost o vrácení má smysl dál, Turek podle losu odmítne", async () => {
     expect(await tryRestitution(db, { teamId: TEAM, playerId: TUREK, text: "Radku, ještě k vitríně. Vrátíš ty poháry?", gameDate: "2026-11-21T16:00:00.000Z" }))
-      .toEqual({ outcome: "refused" });
+      .toEqual({ outcome: "refused", incidentId: INC });
     expect(await fact()).toContain("Odmítl jsi to");
   });
 
