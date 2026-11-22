@@ -25,6 +25,8 @@ beforeAll(async () => {
     "CREATE TABLE coach_relation_log (id INTEGER PRIMARY KEY AUTOINCREMENT, player_id TEXT, team_id TEXT, old_value INTEGER, new_value INTEGER, delta INTEGER, raw_delta INTEGER, source TEXT, description TEXT, reference_id TEXT, game_date TEXT, created_at TEXT)",
     "CREATE TABLE coach_commitments (id TEXT PRIMARY KEY, team_id TEXT, player_id TEXT, conversation_id TEXT, kind TEXT, status TEXT, made_at TEXT, due_at TEXT, resolved_at TEXT, quote TEXT, details TEXT, last_reminder_key TEXT)",
     "CREATE TABLE cup_teams (id TEXT PRIMARY KEY, team_id TEXT)",
+    "CREATE TABLE injuries (id TEXT PRIMARY KEY, player_id TEXT, team_id TEXT, days_remaining INTEGER)",
+    "ALTER TABLE players ADD COLUMN suspended_matches INTEGER NOT NULL DEFAULT 0",
     "CREATE TABLE cup_matches (id TEXT PRIMARY KEY, home_cup_team_id TEXT, away_cup_team_id TEXT, scheduled_at TEXT)",
   ]) await db.prepare(sql).run();
 }, 30_000);
@@ -32,7 +34,7 @@ beforeAll(async () => {
 afterAll(async () => { await miniflare.dispose(); });
 
 beforeEach(async () => {
-  for (const t of ["teams", "players", "season_calendar", "matches", "conversations", "messages", "coach_relation_log", "coach_commitments", "cup_teams", "cup_matches"]) {
+  for (const t of ["teams", "players", "season_calendar", "matches", "conversations", "messages", "coach_relation_log", "coach_commitments", "cup_teams", "cup_matches", "injuries"]) {
     await db.prepare(`DELETE FROM ${t}`).run();
   }
   await db.batch([
@@ -155,6 +157,31 @@ describe("zápis slibu z odpovědi hráče", () => {
     await db.prepare("INSERT INTO matches VALUES ('f1', NULL, 'club', 'rival', 'scheduled', '2026-11-24T16:00:00.000Z')").run();
     expect(await recordAttendancePledge(db, { clubTeamId: "club", convId: "c1", playerId: "p1", playerFirstName: "Petr", pledge: { event: "training", intent: "skip", when: "next" } }))
       .toBeNull();
+  });
+
+  // Přetest 3 (Antonín Pospíšil, koleno na 5 dní): „Jasný, dorazím, trenére! 😊“ → 📝 „slíbil, že přijde
+  // na trénink“. Zraněný na trénink nechodí, slib se nikdy nevyhodnotí a trenér vidí slib, který nejde splnit.
+  it("zraněný slib na trénink ani zápas nedá, dokud je zraněný; hráč se stopkou ne na zápas", async () => {
+    await db.prepare("INSERT INTO injuries VALUES ('i1', 'p1', 'club', 5)").run();
+    const pledge = (event: "training" | "match", when: "next" | "tue" | "fri" = "next") => recordAttendancePledge(db, {
+      clubTeamId: "club", convId: "c1", playerId: "p1", playerFirstName: "Petr", pledge: { event, intent: "attend", when },
+    });
+    expect(await pledge("training")).toBeNull();
+    expect(await pledge("match")).toBeNull();
+    expect(await recordAttendancePledge(db, {
+      clubTeamId: "club", convId: "c1", playerId: "p1", playerFirstName: "Petr", pledge: { event: "training", intent: "skip", when: "next" },
+    })).toBeNull();
+    expect((await life()).trainingPledge).toBeUndefined();
+    expect((await life()).matchPledge).toBeUndefined();
+    expect(await notes()).toEqual([]);
+    // Zranění na 2 dny: pátek 20. 11. ještě ne, úterý 24. 11. už ano.
+    await db.prepare("UPDATE injuries SET days_remaining = 2").run();
+    expect(await pledge("training", "fri")).toBeNull();
+    expect(await pledge("training", "tue")).toMatchObject({ from: "2026-11-24" });
+    // Stopka: na zápas ne, trénovat smí (tick ho na trénink pouští).
+    await db.batch([db.prepare("DELETE FROM injuries"), db.prepare("UPDATE players SET suspended_matches = 1 WHERE id = 'p1'")]);
+    expect(await pledge("match")).toBeNull();
+    expect(await pledge("training", "fri")).toMatchObject({ from: "2026-11-20" });
   });
 
   it("tým netrénuje: nic se nezapíše ani nepíše", async () => {
