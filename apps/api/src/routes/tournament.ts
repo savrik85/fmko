@@ -428,9 +428,8 @@ tournamentRouter.get("/tournament-matches/:id", async (c) => {
     }
   }
 
-  const look = await loadMatchLook(c.env.DB, { teamId: row.home_team_id as string, fallbackColor: row.home_color as string | null },
-    { teamId: row.away_team_id as string, fallbackColor: row.away_color as string | null }, homeLineup, awayLineup,
-    row.scheduled_at as string);
+  const look = await loadMatchLook(c.env.DB, { teamId: row.home_team_id as string }, { teamId: row.away_team_id as string },
+    homeLineup, awayLineup, row.scheduled_at as string);
 
   const stage = row.stage as string;
   return c.json({

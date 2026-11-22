@@ -4,7 +4,7 @@
 import { orderPair } from "../community/manager-relations";
 import { currentSeasonSql } from "./season";
 
-export interface PlayerLook {
+interface PlayerLook {
   skinColor?: string;
   /** null = holá hlava. */
   hairColor?: string | null;
@@ -14,14 +14,14 @@ export interface PlayerLook {
   avatar?: Record<string, unknown>;
 }
 
-export interface MatchKit {
+interface MatchKit {
   shirt: string;
   shorts: string;
   socks: string;
 }
 
 /** Trenér u lajny = manažer klubu. Podle `motivation` (1–100) záznam pozná, jak moc zápas prožívá. */
-export interface MatchCoach {
+interface MatchCoach {
   name: string;
   motivation: number;
   skinColor?: string;
@@ -32,7 +32,7 @@ export interface MatchCoach {
   record: { played: number; won: number } | null;
 }
 
-export interface MatchLook {
+interface MatchLook {
   home_kit: MatchKit;
   away_kit: MatchKit;
   /** null = klub manažera nemá (velkoklub v poháru). */
@@ -54,12 +54,12 @@ interface TeamKitRow {
 }
 
 /** Klub v zápase: reálný tým (velkoklub v poháru ho nemá) a barva, když řádek v teams chybí. */
-export interface MatchSide {
+interface MatchSide {
   teamId: string | null;
   fallbackColor?: string | null;
 }
 
-type LineupLike = { starters?: Array<{ id: string }>; subs?: Array<{ id: string }> } | null;
+type LineupLike = { starters: Array<{ id: string }>; subs: Array<{ id: string }> } | null;
 
 const DEFAULT_HOME_COLOR = "#2D5F2D";
 const DEFAULT_AWAY_COLOR = "#D94032";
@@ -129,14 +129,14 @@ function awayKit(team: TeamKitRow | undefined, fallback: string, homeShirt: stri
   return candidates.find((kit) => colorDistance(kit.shirt, homeShirt) > MIN_KIT_DISTANCE)!;
 }
 
-/** Ligová bilance klubu v aktuální sezóně před výkopem `kickoff`. */
+/** Ligová bilance klubu v aktuální sezóně před výkopem `kickoff`; u zápasu z dřívější sezóny tedy žádná. */
 async function leagueRecordBefore(db: D1Database, teamId: string, kickoff: string): Promise<MatchCoach["record"]> {
   const row = await db.prepare(
     `SELECT COUNT(*) AS played,
             COALESCE(SUM((m.home_team_id = ?1 AND m.home_score > m.away_score) OR (m.away_team_id = ?1 AND m.away_score > m.home_score)), 0) AS won
        FROM matches m
        JOIN season_calendar sc ON sc.id = m.calendar_id
-      WHERE m.status = 'simulated' AND ?1 IN (m.home_team_id, m.away_team_id)
+      WHERE m.status = 'simulated' AND (m.home_team_id = ?1 OR m.away_team_id = ?1)
         AND ${currentSeasonSql("sc")} AND sc.scheduled_at < ?2`,
   ).bind(teamId, kickoff).first<{ played: number; won: number }>();
   return row && row.played > 0 ? { played: row.played, won: row.won } : null;
@@ -156,39 +156,44 @@ export async function loadMatchLook(
   kickoff: string | null,
 ): Promise<MatchLook> {
   const teamIds = [home.teamId, away.teamId].filter((id): id is string => !!id);
-  const teams = teamIds.length === 0 ? [] : (await db.prepare(
-    `SELECT id, primary_color, secondary_color, home_shorts_color, home_socks_color,
-            away_primary_color, away_shorts_color, away_socks_color
-       FROM teams WHERE id IN (${teamIds.map(() => "?").join(",")})`,
-  ).bind(...teamIds).all<TeamKitRow>()).results;
-  const homeTeam = teams.find((t) => t.id === home.teamId);
-  const awayTeam = teams.find((t) => t.id === away.teamId);
-  const home_kit = homeKit(homeTeam, home.fallbackColor || DEFAULT_HOME_COLOR);
-  const away_kit = awayKit(awayTeam, away.fallbackColor || DEFAULT_AWAY_COLOR, home_kit.shirt);
+  const players = [homeLineup, awayLineup].flatMap((ld) => (ld ? [...ld.starters, ...ld.subs] : []));
+  const playerIds = [...new Set(players.map((p) => p.id).filter(Boolean))];
+  const rowsIn = async <T>(select: string, ids: string[]): Promise<T[]> =>
+    ids.length === 0 ? [] : (await db.prepare(`${select} IN (${ids.map(() => "?").join(",")})`).bind(...ids).all<T>()).results;
+  const recordOf = (teamId: string | null) => (teamId && kickoff ? leagueRecordBefore(db, teamId, kickoff) : null);
+  // Čtení na sobě nezávisí, jdou najednou.
+  const [teams, managers, looks, relation, homeRecord, awayRecord] = await Promise.all([
+    rowsIn<TeamKitRow>(
+      `SELECT id, primary_color, secondary_color, home_shorts_color, home_socks_color,
+              away_primary_color, away_shorts_color, away_socks_color
+         FROM teams WHERE id`, teamIds),
+    rowsIn<{ team_id: string; name: string; avatar: string; motivation: number }>("SELECT team_id, name, avatar, motivation FROM managers WHERE team_id", teamIds),
+    rowsIn<{ id: string; avatar: string | null; physical: string | null }>("SELECT id, avatar, physical FROM players WHERE id", playerIds),
+    home.teamId && away.teamId
+      ? db.prepare("SELECT respect FROM manager_relations WHERE team_a_id = ? AND team_b_id = ?").bind(...orderPair(home.teamId, away.teamId)).first<{ respect: number }>()
+      : null,
+    recordOf(home.teamId),
+    recordOf(away.teamId),
+  ]);
 
-  const managers = teamIds.length === 0 ? [] : (await db.prepare(
-    `SELECT team_id, name, avatar, motivation FROM managers WHERE team_id IN (${teamIds.map(() => "?").join(",")})`,
-  ).bind(...teamIds).all<{ team_id: string; name: string; avatar: string; motivation: number }>()).results;
-  const coachOf = async (side: "home" | "away"): Promise<MatchCoach | null> => {
-    const row = managers.find((m) => m.team_id === (side === "home" ? home : away).teamId);
+  const home_kit = homeKit(teams.find((t) => t.id === home.teamId), home.fallbackColor || DEFAULT_HOME_COLOR);
+  const away_kit = awayKit(teams.find((t) => t.id === away.teamId), away.fallbackColor || DEFAULT_AWAY_COLOR, home_kit.shirt);
+
+  const coachOf = (teamId: string | null, record: MatchCoach["record"]): MatchCoach | null => {
+    const row = managers.find((m) => m.team_id === teamId);
     if (!row) return null;
     const { skinColor, hairColor, avatar } = playerLook({ avatar: row.avatar, physical: null });
-    return { name: row.name, motivation: row.motivation, skinColor, hairColor, avatar, record: kickoff ? await leagueRecordBefore(db, row.team_id, kickoff) : null };
+    return { name: row.name, motivation: row.motivation, skinColor, hairColor, avatar, record };
   };
 
-  const players = [homeLineup, awayLineup].flatMap((ld) => (ld ? [...(ld.starters ?? []), ...(ld.subs ?? [])] : []));
-  const ids = [...new Set(players.map((p) => p.id).filter(Boolean))];
-  if (ids.length > 0) {
-    const rows = await db.prepare(`SELECT id, avatar, physical FROM players WHERE id IN (${ids.map(() => "?").join(",")})`)
-      .bind(...ids).all<{ id: string; avatar: string | null; physical: string | null }>();
-    const byId = new Map(rows.results.map((r) => [r.id, r]));
-    for (const p of players) {
-      const row = byId.get(p.id);
-      if (row) Object.assign(p, playerLook(row));
-    }
+  const lookById = new Map(looks.map((r) => [r.id, r]));
+  for (const p of players) {
+    const row = lookById.get(p.id);
+    if (row) Object.assign(p, playerLook(row));
   }
-  const relation = home.teamId && away.teamId
-    ? await db.prepare("SELECT respect FROM manager_relations WHERE team_a_id = ? AND team_b_id = ?").bind(...orderPair(home.teamId, away.teamId)).first<{ respect: number }>()
-    : null;
-  return { home_kit, away_kit, home_coach: await coachOf("home"), away_coach: await coachOf("away"), coaches_on_good_terms: (relation?.respect ?? 0) > 0 };
+  // Bez řádku v manager_relations je vztah neutrální (respekt 0).
+  return {
+    home_kit, away_kit, home_coach: coachOf(home.teamId, homeRecord), away_coach: coachOf(away.teamId, awayRecord),
+    coaches_on_good_terms: (relation?.respect ?? 0) > 0,
+  };
 }

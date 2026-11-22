@@ -980,9 +980,8 @@ matchesRouter.get("/matches/:id", async (c) => {
     } catch (e) { logger.warn({ module: "matches" }, "merge squad numbers", e); }
   }
   // Dresy a vzhled hráčů pro 3D záznam zápasu.
-  const look = await loadMatchLook(c.env.DB, { teamId: row.home_team_id as string | null, fallbackColor: row.home_color as string | null },
-    { teamId: row.away_team_id as string | null, fallbackColor: row.away_color as string | null }, homeLineup, awayLineup,
-    row.calendar_at as string | null);
+  const look = await loadMatchLook(c.env.DB, { teamId: row.home_team_id as string | null }, { teamId: row.away_team_id as string | null },
+    homeLineup, awayLineup, row.calendar_at as string | null);
 
   return c.json({
     ...row,
@@ -1052,7 +1051,7 @@ matchesRouter.get("/cup-matches/:id", async (c) => {
   // Velkoklub nemá řádek v teams: dres v barvě z cup_teams.
   const look = await loadMatchLook(c.env.DB, { teamId: row.home_real_id as string | null, fallbackColor: row.home_color as string | null },
     { teamId: row.away_real_id as string | null, fallbackColor: row.away_color as string | null }, homeLineup, awayLineup,
-    row.scheduled_at as string);
+    cupKickoffIso(row.scheduled_at as string));
 
   return c.json({
     ...row,
