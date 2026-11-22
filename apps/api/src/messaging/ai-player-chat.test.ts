@@ -17,7 +17,7 @@ import { BEZ_ZNALOSTI, HLAVICKA_ZNALOSTI, type RadekZnalosti } from "../incident
 import { generateText } from "../lib/ai-provider";
 import {
   OTHER_LIFE_EVENTS_BAN, ZAKAZ_ZIVOTNICH_SITUACI, buildSystemPrompt, evaluateResolution, generateFollowUpMessage, generateInitialMessage, generateReply,
-  generateUnrestReply, popisZdravi,
+  generateSquadGroupReaction, generateUnrestReply, popisZdravi,
 } from "./ai-player-chat";
 import { getScenarioById } from "./ai-player-scenarios";
 import { complainsAboutWaking } from "./chat-kontext";
@@ -378,6 +378,25 @@ describe("hráč neopakuje sám sebe", () => {
     vi.mocked(generateText).mockResolvedValueOnce("Teď si mě vychutná žena. Ale beru to.").mockResolvedValueOnce("Dobře, beru to, uvidíme.");
     expect(await generateUnrestReply({}, hrac({ ownRecentLines: own }), tym, { coachMessage: "Promiň.", unrestReason: "trenér odmítl nabídku", outcome: "partial" }))
       .toBe("Dobře, beru to, uvidíme.");
+  });
+});
+
+describe("kabina bez opakování (dodělek balíku 1)", () => {
+  it("hráč v kabině ví, co už napsal, a opakovanou hlášku přegeneruje", async () => {
+    vi.mocked(generateText).mockClear();
+    vi.mocked(generateText)
+      .mockResolvedValueOnce("Jdeme do toho, trenére, rozsekáme je!")
+      .mockResolvedValueOnce("V sobotu jim to nandáme, kluci.");
+    const own = ["Jdeme do toho, trenére, rozsekáme je! 💪", "Ty prachy si nech, trenére."];
+    const body = await generateSquadGroupReaction({}, hrac({ ownRecentLines: own }), tym, "V sobotu hrajeme doma, chci vidět bojovnost.", []);
+    expect(body).toBe("V sobotu jim to nandáme, kluci.");
+    expect(vi.mocked(generateText)).toHaveBeenCalledTimes(2);
+    const first = String(vi.mocked(generateText).mock.calls[0][1]);
+    expect(first).toContain("CO UŽ JSI TRENÉROVI NAPSAL");
+    expect(first).toContain("„Ty prachy si nech, trenére.“");
+    const retry = String(vi.mocked(generateText).mock.calls[1][1]);
+    expect(retry).toContain("POZOR: tohle jsi trenérovi už napsal");
+    expect(retry.indexOf("POZOR:")).toBeLessThan(retry.indexOf("Maximálně 120 znaků"));
   });
 });
 

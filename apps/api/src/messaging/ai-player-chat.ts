@@ -1064,7 +1064,8 @@ export function coachChatEffect(parsed: { relationship_delta?: unknown; morale_d
  * Reakce jednoho hráče na trenérovu zprávu do kabiny.
  *
  * Kabina je skupinový chat, ne rozhovor — proto jedna krátká reakce bez
- * navazování a bez dopadů na hráče. Kdo se ozve, rozhoduje volající.
+ * navazování a bez dopadů na hráče. Kdo se ozve, rozhoduje volající. Hráč neopakuje,
+ * co už napsal v kabině ani trenérovi (`ownRecentLines`, repetition.ts).
  */
 export async function generateSquadGroupReaction(
   env: ChatEnv,
@@ -1103,10 +1104,14 @@ export async function generateSquadGroupReaction(
     "",
     "Zareaguj jednou krátkou větou, jak by se ozval člověk v partě, souhlas, rýpnutí, vtip, povzdech.",
     "Maximálně 120 znaků. Žádný podpis. Vrať POUZE text.",
-  ].filter(Boolean).join("\n");
+  ].filter(Boolean);
 
-  const raw = await callModel(env, prompt, { maxTokens: 120, temperature: 1.0 });
-  return trimSms(raw);
+  // Vlastní věty z kabiny i z 1:1 (`ownRecentLines`) jsou v promptu a odpověď se proti nim hlídá.
+  const out = await generateWithoutRepeats(player.ownRecentLines, async (retryRule) => {
+    const text = [...prompt.slice(0, -1), ...(retryRule ? [retryRule] : []), prompt[prompt.length - 1]].join("\n");
+    return { body: trimSms(await callModel(env, text, { maxTokens: 120, temperature: 1.0 })) };
+  }, "kabina");
+  return out.body;
 }
 
 export { GeminiUnavailableError };
