@@ -464,6 +464,13 @@ const ACCEPT_RE = /\b(beru|jasne|jasny|jasnacka|plati|domluveno|dohodnuto|jdu do
  */
 const AGREE_VERB_RE = /\b(zhubnu|shodim|dam (to|je|ty|dolu)|obehnu|odbehnu|zabehnu|omluvim se|udelam|zvladnu|slibuju|slibuji)\b/;
 const CONDITION_RE = /\b(kdyz|kdyby|kdybych|jestli|pokud)\b/;
+/** „Když to říkáš“, „když chceš“: přitakání, ne podmínka. */
+const AGREEING_WHEN_RE = /\bkdyz (to )?(rikas|rikate|myslis|myslite|chces|chcete)\b/g;
+/**
+ * Protinávrh: „ale chci 2000“, „přidáš mi?“, „ale jen 2 kila“, „ale až po sezóně“. Odpověď s ním
+ * není kývnutí ani odmítnutí (final3, E2E 22. 11.: „Dám to, ale chci 2000.“ se bralo jako kývl).
+ */
+const COUNTER_RE = /\b(ale chci|chci za to|ale jen|ale az|ale za|ale musis|ale musite|pod podminkou|jedine|pridas|pridate|pridej|pridejte|za kolik)\b/;
 /** Váhání: „asi“, „možná“, „snad“, „uvidíme“, „zkusím“. Věta s ním kývnutí není. */
 const HEDGE_RE = /\b(asi|mozna|snad|uvidime|uvidim|nevim|zkusim|pokusim|tezko|spis|nejspis)\b/;
 /** Odmítnutí: „ne“, „nebudu“, „nechci“, „zapomeň“, „kašlu na to“, „nedám“, „nezhubnu“. */
@@ -474,14 +481,16 @@ const TAG_QUESTION_RE = /\bne\s*\?/g;
 /**
  * Kývl hráč v textu odpovědi na pokyn nebo dohodu? Jen jasné: kývnutí bez odmítnutí (true),
  * odmítnutí bez kývnutí (false), jinak nevíme (undefined). Kývnutí je věta s „beru“, „platí“,
- * „jdu do toho“ apod., nebo se souhlasným slovesem k věci (`AGREE_VERB_RE`), bez váhání.
+ * „jdu do toho“ apod., nebo se souhlasným slovesem k věci (`AGREE_VERB_RE`), bez váhání
+ * a bez podmínky („Udělám to, když mi přidáš.“). Protinávrh kdekoli v odpovědi = nevíme.
  */
 export function acceptanceInReply(text: string): boolean | undefined {
-  const t = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const t = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(AGREEING_WHEN_RE, "");
+  if (COUNTER_RE.test(t)) return undefined;
   const yes = t.split(/(?<=[.!?…])\s+|\n+/).some((sentence) => {
-    if (HEDGE_RE.test(sentence)) return false;
+    if (HEDGE_RE.test(sentence) || CONDITION_RE.test(sentence)) return false;
     if (ACCEPT_RE.test(sentence)) return true;
-    return AGREE_VERB_RE.test(sentence) && !sentence.trim().endsWith("?") && !CONDITION_RE.test(sentence);
+    return AGREE_VERB_RE.test(sentence) && !sentence.trim().endsWith("?");
   });
   const no = REFUSE_RE.test(t.replace(TAG_QUESTION_RE, "?"));
   if (yes === no) return undefined;
