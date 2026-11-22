@@ -36,11 +36,11 @@ const CAMERA = { x: HALF_W + 26, y: 13, fov: 26, pan: 9 };
 const CAMERA_AIM_X = -4.6;
 /**
  * Opakovaný záběr gólu přijde až po oslavě, jako v televizi: zpomalené zakončení z nízké kamery u protější
- * lajny, občas z kamery rozhodčího. Skončí s krokem gólu ve 2D záznamu (6 s), pak jde další akce.
+ * lajny, občas z kamery rozhodčího. Běží na poloviční rychlost, ať je vidět, co se stalo; krok gólu trvá ve 3D 9,5 s.
  */
-const REPLAY = { after: 3.4, seconds: 2.6 };
+const REPLAY = { after: 3.6, seconds: 5 };
 /** Kamera rozhodčího u zranění: kdy ve scéně začne a skončí (s). */
-const REF_LIVE = { from: 1.4, to: 3.8 };
+const REF_LIVE = { from: 1.5, to: 5.5 };
 /** Hlavní kamera nekreslí nic za bližší postranní čárou (stojí tam, kde má stadion hlavní tribunu); ostatní kamery kreslí vše. */
 const MAIN_CLIP = [new THREE.Plane(new THREE.Vector3(-1, 0, 0), HALF_W + 1.2)];
 const NO_CLIP: THREE.Plane[] = [];
@@ -99,7 +99,7 @@ const eTmp = new THREE.Euler(), cTmp = new THREE.Color();
 const HIDDEN = new THREE.Matrix4().makeScale(0, 0, 0);
 
 /** Hráči, rozhodčí a míč ve scéně stadionu; kreslí to, co právě hraje `step`, a řídí kameru. */
-export function ReplayScene({ replay, kits, snow, step, camBadge }: {
+export function ReplayScene({ replay, kits, snow, step, camBadge, onReady }: {
   replay: Replay;
   kits: { home: ReplayKit; away: ReplayKit };
   /** Na sněhu se hraje s oranžovým míčem. */
@@ -107,6 +107,8 @@ export function ReplayScene({ replay, kits, snow, step, camBadge }: {
   step: { current: ReplayStep };
   /** Rámeček s nápisem kamery (opakovaný záběr, REF CAM); scéna ho ukazuje, jen když nekreslí hlavní kamera. */
   camBadge: RefObject<HTMLDivElement | null>;
+  /** Zavolá se po prvním vykresleném snímku. */
+  onReady: () => void;
 }) {
   const count = replay.figures.length;
   const frame = useMemo<Frame>(() => ({ figures: replay.figures.map(() => ({ visible: false, x: 0, y: 0, z: 0, pose: null })), ballX: 0, ballY: 0, ballZ: 0, cuts: 0 }), [replay]);
@@ -132,6 +134,7 @@ export function ReplayScene({ replay, kits, snow, step, camBadge }: {
   /** Co se kreslilo minule: podle toho se pozná střih (hráči pak neběží, stojí rovnou na místě). */
   const last = useRef<{ clip: Clip | null; t: number; cuts: number; view: string }>({ clip: null, t: 0, cuts: 0, view: "main" });
   const look = useRef(new THREE.Vector3());
+  const drawn = useRef(false);
 
   useEffect(() => () => { gl.clippingPlanes = NO_CLIP; }, [gl]);
 
@@ -150,6 +153,10 @@ export function ReplayScene({ replay, kits, snow, step, camBadge }: {
   };
 
   useFrame((_, delta) => {
+    if (!drawn.current) {
+      drawn.current = true;
+      onReady();
+    }
     const { scene, attack, startedAt, rate, hold = Infinity } = step.current;
     const elapsed = Math.min(hold, ((performance.now() - startedAt) / 1000) * rate);
     // Gól: po chvíli oslavy se zpomaleně zopakuje zakončení z jiné kamery, pak oslava pokračuje.

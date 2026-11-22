@@ -36,7 +36,13 @@ interface StadiumData {
 const initials = (name: string) => name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase();
 
 /** 3D záznam zápasu na stadionu domácích, řízený stavem 2D záznamu. Vyplní rodiče, do kterého se vloží. */
-export function Replay3D({ detail, events, progress }: { detail: Record<string, unknown>; events: ReplayEvent[]; progress: ReplayProgress }) {
+export function Replay3D({ detail, events, progress, onReady }: {
+  detail: Record<string, unknown>;
+  events: ReplayEvent[];
+  progress: ReplayProgress;
+  /** Scéna se poprvé vykreslila; 2D záznam do té doby čeká s výkopem. */
+  onReady: () => void;
+}) {
   const { idx, flash, kickoff, halfTime, finished, paused, fast, homeGoals, awayGoals } = progress;
   const homeName = detail.home_name as string, awayName = detail.away_name as string;
   const kits = useMemo(() => ({ home: detail.home_kit as ReplayKit, away: detail.away_kit as ReplayKit }), [detail]);
@@ -115,7 +121,7 @@ export function Replay3D({ detail, events, progress }: { detail: Record<string, 
         showControls={false}
         // Pohled „z tribuny“ nemá rozostření okrajů, které stadion používá u pohledů z dálky.
         initialViewpoint="main_stand"
-        replay={<ReplayScene replay={replay} kits={kits} snow={detail.weather === "snow"} step={step} camBadge={camBadge} />}
+        replay={<ReplayScene replay={replay} kits={kits} snow={detail.weather === "snow"} step={step} camBadge={camBadge} onReady={onReady} />}
       />
 
       <EventLabel {...graphics} override={fixedLabel} />

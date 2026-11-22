@@ -376,6 +376,13 @@ class Stage {
   }
 
   wait(seconds: number) { this.t += seconds; }
+  /** Od teď hráči bez úkolu drží tvar týmu podle míče (výkop: do hvizdu stojí, pak se hraje). */
+  release(shape: NonNullable<Stage["shape"]>) {
+    this.follow();
+    this.shape = shape;
+    this.keep = [];
+    this.from = this.t;
+  }
   /** Další rozestavení už počítá s jiným obsazením (druhé střídání v jedné akci). */
   recast(roster: Roster) { this.roster = roster; }
   slot(i: number): Slot {
@@ -549,18 +556,25 @@ export class Replay {
     const fixed = new Map<number, Point>([[this.referee, { x: -4, z: -fwd * 4 }]]);
     front.slice(0, 2).forEach((f, n) => fixed.set(f, { x: n * 2.4 - 0.5, z: -fwd * 0.8 }));
     if (front[2] !== undefined) fixed.set(front[2], { x: 3, z: -fwd * 9 });
-    st.layout({ x: 0, z: 0 }, (slot, sd) => uvToWorld(sd, Math.min(slot.base.u * 0.8, 0.42), slot.base.v), fixed, [{ x: 0, z: 0, r: 6 }, { x: 3, z: -fwd * 9, r: 3 }, { x: 8, z: fwd * 10, r: 2.6 }, { x: -7, z: fwd * 10, r: 2.6 }]);
-    st.pose(this.referee, "armUp", 0.8, 0.4);
-    st.wait(1.2);
-    if (front[2] !== undefined) {
-      st.pass(front[2], 0.8);
-      // Tým se rozbíhá ještě chvíli po konci výkopu, ať další akce nenaváže na stojící hráče.
-      front.slice(0, 2).forEach((f, n) => st.go(f, { x: (n ? 8 : -7), z: fwd * 10 }, 2.6));
-      st.wait(0.8);
-      st.dribble(front[2], { x: 5, z: -fwd * 3 }, 1.8);
+    st.layout({ x: 0, z: 0 }, (slot, sd) => uvToWorld(sd, Math.min(slot.base.u * 0.8, 0.42), slot.base.v), fixed, [{ x: 0, z: 0, r: 6 }, { x: 3, z: -fwd * 9, r: 3 }, { x: 8, z: fwd * 11, r: 2.6 }, { x: -7, z: fwd * 11, r: 2.6 }, { x: 5, z: fwd * 2, r: 2.6 }]);
+    // Chvíle klidu: týmy stojí na svých půlkách, rozhodčí zvedne ruku a zapíská.
+    st.pose(this.referee, "armUp", 1, 0.8);
+    st.wait(1.8);
+    // Rozehrávka: ťuk spoluhráči a míč jde dozadu; od té chvíle se hraje a oba týmy se dají do pohybu.
+    if (front[1] !== undefined) {
+      st.pass(front[1], 0.4);
+      st.wait(0.4);
     }
-    st.t = 3.8;
-    const scene: Scene = { clip: st.finish(), start: 0, split: 0, end: 3.8, focus: [], card: null, result: null, replay: null, refCam: false };
+    st.release(this.playSpot(side));
+    if (front[2] !== undefined) {
+      st.pass(front[2], 0.9);
+      front.slice(0, 2).forEach((f, n) => st.go(f, { x: n ? 8 : -7, z: fwd * 11 }, 3));
+      st.wait(0.9);
+      // Běží s míčem dopředu i chvíli po konci scény, ať další akce nenaváže na stojící hráče.
+      st.dribble(front[2], { x: 5, z: fwd * 2 }, 2.4);
+    }
+    st.t = 5;
+    const scene: Scene = { clip: st.finish(), start: 0, split: 0, end: 5, focus: [], card: null, result: null, replay: null, refCam: false };
     this.kickoffs.set(index, scene);
     return scene;
   }
@@ -654,7 +668,7 @@ export class Replay {
     // Kamera rozhodčího jen občas, párkrát za zápas: u zhruba třetiny gólů a poloviny zranění.
     const refCam = (share: number) => seededRng(`${this.input.matchId}:${head}:refcam`)() < share;
     /** Gól: po oslavě se zopakuje zakončení (od rozběhu ke střele po míč v síti). */
-    const goalShots = (split: number) => ({ replay: { from: split - 1.3, to: split + 0.5, goalZ: goalZ(side) }, refCam: refCam(0.34) });
+    const goalShots = (split: number) => ({ replay: { from: split - 1.8, to: split + 0.6, goalZ: goalZ(side) }, refCam: refCam(0.34) });
     const finisher = find("goal", "chance");
     const result = finisher === undefined ? null : events[finisher].type === "goal" ? "goal" : chanceResult(events[finisher]);
 

@@ -126,6 +126,11 @@ export default function MatchReplayPage() {
   const switchView = () => { localStorage.setItem("replayView", view3d ? "2d" : "3d"); setView3d(!view3d); };
   // 3D záznam ukazuje jen důležité akce; události bez scény (držení míče, počasí…) v něm proběhnou hned.
   const can3d = !!match?.home_lineup_data && !!match?.away_lineup_data;
+  // Ve 3D trvá výkop, gól a karta/zranění/střídání déle, ať se scéna (i s opakovaným záběrem) stihne odehrát.
+  const long3d = view3d && can3d;
+  // Zápas se rozběhne, až je 3D scéna načtená; jinak by výkop proběhl za načítacím kolečkem.
+  const [ready3d, setReady3d] = useState(false);
+  const started = useRef(false);
   const scened = useMemo(() => (match && can3d ? scenedEvents(match.events) : null), [match, can3d]);
   // Pauza a skok na předchozí/další akci. Rozběhnuté časovače patří k běhu `run`; po skoku už nic nezmění.
   const [paused, setPaused] = useState(false);
@@ -227,26 +232,26 @@ export default function MatchReplayPage() {
 
   // Show kickoff when match loads — block replay via animating ref
   useEffect(() => {
-    if (!match) return;
+    if (!match || started.current || (long3d && !ready3d)) return;
+    started.current = true;
     setKickoff("1st");
     animating.current = true;
     const gen = run.current;
-    const t = setTimeout(() => { if (gen !== run.current) return; setKickoff(null); animating.current = false; setTick((t) => t + 1); }, 3000);
-    return () => clearTimeout(t);
-  }, [!!match]);
+    setTimeout(() => { if (gen !== run.current) return; setKickoff(null); animating.current = false; setTick((t) => t + 1); }, long3d ? 5000 : 3000);
+  }, [!!match, long3d, ready3d]);
 
   // Kickoff 2nd half — auto-dismiss
   useEffect(() => {
     if (kickoff !== "2nd") return;
     animating.current = true;
     const gen = run.current;
-    const t = setTimeout(() => { if (gen !== run.current) return; setKickoff(null); animating.current = false; setTick((t) => t + 1); }, 2500);
+    const t = setTimeout(() => { if (gen !== run.current) return; setKickoff(null); animating.current = false; setTick((t) => t + 1); }, long3d ? 5000 : 2500);
     return () => clearTimeout(t);
   }, [kickoff]);
 
   // Auto-advance
   useEffect(() => {
-    if (!match || finished || htPause || paused || animating.current) return;
+    if (!match || !started.current || finished || htPause || paused || animating.current) return;
     const gen = run.current;
     if (idx >= match.events.length) { setFinished(true); setHg(match.home_score); setAg(match.away_score); markSeen(); return; }
     if (speed === "instant") {
@@ -292,7 +297,7 @@ export default function MatchReplayPage() {
             if (next.teamId === 1) setHg((s) => s + 1); else setAg((s) => s + 1);
             setFlash("goal");
             setIdx((i) => i + 1);
-            setTimeout(() => { if (gen !== run.current) return; setFlash(null); setFlashEvent(null); animating.current = false; setTick((t) => t + 1); }, 6000);
+            setTimeout(() => { if (gen !== run.current) return; setFlash(null); setFlashEvent(null); animating.current = false; setTick((t) => t + 1); }, long3d ? 9500 : 6000);
           } else {
             setFlash("chance");
             setIdx((i) => i + 1);
@@ -303,7 +308,7 @@ export default function MatchReplayPage() {
         setFlashEvent(next);
         setFlash(next.type === "card" ? "card" : isPenaltyOutcome ? "chance" : isSubScene ? "substitution" : "injury");
         setIdx((i) => i + 1);
-        const dur = speed === "fast" ? 2500 : 4000;
+        const dur = speed === "fast" ? 2500 : long3d ? 6000 : 4000;
         setTimeout(() => { if (gen !== run.current) return; setFlash(null); setFlashEvent(null); animating.current = false; setTick((t) => t + 1); }, dur);
       }
       return; // No cleanup — timeouts are fire-and-forget
@@ -559,7 +564,7 @@ export default function MatchReplayPage() {
           {can3d && (
             <>
               {view3d && (
-                <Replay3D detail={match.detail} events={match.events}
+                <Replay3D detail={match.detail} events={match.events} onReady={() => setReady3d(true)}
                   progress={{ idx, flash, kickoff, halfTime: htPause, finished, paused, fast: speed === "fast", homeGoals: hg, awayGoals: ag }} />
               )}
               <button onClick={switchView} title={view3d ? "Přepnout na 2D záznam" : "Přepnout na 3D záznam"}
