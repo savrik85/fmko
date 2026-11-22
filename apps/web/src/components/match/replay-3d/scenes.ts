@@ -608,7 +608,8 @@ export class Replay {
   private readonly finalRoster: Roster;
   private readonly swaps = new Map<number, { incoming: number; outgoing: number }>();
   private readonly heads: number[];
-  private readonly scened: boolean[];
+  /** Které události mají vlastní scénu (scenedEvents). */
+  readonly scened: boolean[];
   private readonly clips = new Map<number, { clip: Clip; windows: Map<number, Window> }>();
   private readonly scenes = new Map<number, Scene>();
   private introScene: Scene | null = null;

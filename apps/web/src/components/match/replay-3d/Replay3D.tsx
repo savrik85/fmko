@@ -121,8 +121,9 @@ function Replay3DView({ detail, events, progress, onReady }: Replay3DProps) {
   }, []);
   const buttonsTop = fit.scale * GRAPHICS_WIDTH * BANNERS_BOTTOM + OVERLAY_GAP, buttonsRight = fit.scale * GRAPHICS_WIDTH * BANNERS_INSET;
   const veil = useRef<HTMLCanvasElement>(null);
-  // Představení trenérů, výkop, přestávka a konec zápasu grafiku události nemají.
-  const event = cue === null && (intro !== null || kickoff !== null || halfTime || finished) ? undefined : events[index];
+  // Představení trenérů, výkop, přestávka a konec zápasu grafiku události nemají. Události bez scény taky ne: roh
+  // nebo standardka bez zakončení by jinak na okamžik ukázaly „ŠANCE“ nad obrazem předchozí akce.
+  const event = (cue === null && (intro !== null || kickoff !== null || halfTime || finished)) || !replay.scened[index] ? undefined : events[index];
   const coachSide = intro === "home" || intro === "away" ? intro : null;
   const attendance = detail.attendance as number | null;
   const graphics = { detail, events, index, event, attack };
