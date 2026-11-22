@@ -15,7 +15,7 @@ import { sendPlayerSMS, sendPlayerTemplateSMS, sendSystemSMS } from "../messagin
 import { logger } from "../lib/logger";
 import { deadlineIn } from "../lib/time-budget";
 import { applyCoachRelationDelta } from "../lib/coach-relation";
-import { reasonSms, reasonsText, unrestReasonsFromFactors, type ClubStep, type UnrestReason } from "./unrest-reasons";
+import { reasonSmsVariants, reasonsText, unrestReasonsFromFactors, type ClubStep, type UnrestReason } from "./unrest-reasons";
 import { repeatsAny } from "../messaging/repetition";
 import { LEVEL_RANK } from "../league/district-leagues";
 import { resolvePromises } from "./promises";
@@ -529,7 +529,7 @@ export async function applyOfferRejectionImpact(
       reasons: reasons.length > 0 ? reasonsText(reasons) : null, squadRole: null,
     },
     // Důvod odchodu se trenér dozví ze SMS (přání 2026-10-18), u předem napsané varianty větou navíc.
-    suffix: !brokenTransferPledge && reasons.length > 0 ? reasonSms(reasons[0], step.step) : undefined,
+    suffix: !brokenTransferPledge && reasons.length > 0 ? reasonSmsVariants(reasons[0], step.step) : undefined,
   });
 
   // Otevřít živou konverzaci (AI thread): trenér může volně odpovědět, hráč reaguje,
@@ -639,7 +639,7 @@ async function sendRejectionSms(
   o: {
     clubTeamId: string; rosterTeamId: string; offerId: string | undefined;
     playerRef: { id: string; firstName: string; lastName: string; nickname: string | null; avatar: string | null };
-    facts: RejectionSmsFacts; suffix?: string; deadline: number;
+    facts: RejectionSmsFacts; suffix?: string | readonly string[]; deadline: number;
   },
 ): Promise<string> {
   const facts = { ...o.facts, squadRole: o.facts.squadRole ?? await squadRoleOf(db, o.rosterTeamId, o.playerRef.id) };

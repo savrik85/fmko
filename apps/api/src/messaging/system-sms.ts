@@ -75,20 +75,24 @@ export async function sendPlayerSmsToConversation(
  * (`pickFreshVariant`, repetition.ts). Šablony se dřív losovaly bez paměti a tatáž věta
  * přišla jednomu trenérovi i pětkrát (prod 9–11/2026). `suffix` se přidá za vybranou
  * variantu (důvod odchodu), do výběru nepatří. Číslo varianty jde do `metadata.template`.
+ * `suffix` může mít víc znění: jde první, které hráč ještě nenapsal, a když napsal všechna,
+ * žádné (důvod už trenér zná).
  */
 export async function sendPlayerTemplateSMS(
   db: D1Database,
   teamId: string,
   player: PlayerSmsSender,
   variants: readonly string[],
-  opts: { seed: string; metadata?: Record<string, unknown>; suffix?: string; convId?: string },
+  opts: { seed: string; metadata?: Record<string, unknown>; suffix?: string | readonly string[]; convId?: string },
 ): Promise<{ convId: string; body: string; index: number }> {
   const { getOrCreatePlayerConversation } = await import("./ai-player-spawn");
-  const { TEMPLATE_HISTORY_LIMIT, loadOwnRecentLines, pickFreshVariant } = await import("./repetition");
+  const { TEMPLATE_HISTORY_LIMIT, loadOwnRecentLines, pickFreshVariant, repeatsAny } = await import("./repetition");
   const convId = opts.convId ?? await getOrCreatePlayerConversation(db, teamId, player);
   const previous = await loadOwnRecentLines(db, { playerId: player.id, convId, limit: TEMPLATE_HISTORY_LIMIT });
   const picked = pickFreshVariant(variants, previous, opts.seed);
-  const text = opts.suffix ? `${picked.text} ${opts.suffix}` : picked.text;
+  const suffixes = typeof opts.suffix === "string" ? [opts.suffix] : opts.suffix ?? [];
+  const suffix = suffixes.find((s) => !repeatsAny(s, previous));
+  const text = suffix ? `${picked.text} ${suffix}` : picked.text;
   const body = await sendPlayerSmsToConversation(db, convId, player, text, { ...(opts.metadata ?? {}), template: picked.index });
   return { convId, body, index: picked.index };
 }

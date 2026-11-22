@@ -90,7 +90,7 @@ export interface EventSmsRequest {
   /** Předem napsané varianty, když model nejede. */
   fallback: readonly string[];
   /** Věta za předem napsanou variantou (důvod odchodu), do výběru varianty nepatří. */
-  fallbackSuffix?: string;
+  fallbackSuffix?: string | readonly string[];
   /** Výběr předem napsané varianty (stejný seed, stejná volba mezi těmi, které hráč nedostal). */
   seed: string;
   /** Do `metadata.scenario_id`: podle něj se zpráva pozná (např. poděkování za odmítnutou nabídku). */
