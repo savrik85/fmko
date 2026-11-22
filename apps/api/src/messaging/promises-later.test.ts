@@ -51,6 +51,9 @@ describe("slib, že se ozve později", () => {
     "Trenér, ja vím, ja to myslet vážné. Ale teď ja práce, psat nemoct. Ja ozvat potom, ja? 😎",
     "Ducha? Vykládají mi fošny z náklaďáku a nemám čas, ale Čkyně je prostě lepší adresa. Proberem to večer. 🙄",
     "Trenére, machruje na mladý kluky! Teď musím dodělat řádky, proberem to detailně po šichtě. 🍏",
+    // řeknu ti to pak (Jungvirt, lokální E2E 22. 11.)
+    "Trenére, mám toho teď moc, řeším tady jízdy. Řeknu ti to večer, jo?",
+    "Teď nemůžu, povím ti to pak.",
     // opilý píše bez diakritiky
     "trenere ted nemuzu, napisu pozdejc",
   ];
@@ -82,6 +85,9 @@ describe("není to slib, že se ozve", () => {
     "Zavolám mámě, jestli může pohlídat malýho.",
     "Napíšu ti adresu, ať to najdeš.",
     "Trenére, neozvu se, dokud se mi neomluvíš.",
+    // „řeknu ti to“ bez času, nebo osobně
+    "Řeknu ti to na rovinu, nechci hrát v obraně.",
+    "Řeknu ti to večer na tréninku.",
     // trenérova věta „dej vědět“ hráčův slib není
     "Dej vědět, jak to dopadlo.",
   ];

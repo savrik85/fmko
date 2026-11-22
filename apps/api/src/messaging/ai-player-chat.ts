@@ -528,8 +528,9 @@ function parseReplyFlags(
   // přilepil k první nabídce, která přijde.
   const asked = (player.pendingOffers?.length ?? 0) > 0;
   return {
-    // Model pole občas vynechá, i když napíše „ozvu se pak". Text je pojistka.
-    writeLater: parsed.write_later === true || promisesLater(body),
+    // Rozhoduje text: model vracel write_later i bez slibu (lokální E2E 22. 11.: 2 ze 3 odložení
+    // falešná) a odložená zpráva pak tvrdila „napsal jsi, že se ozveš“. Pole v JSON je jen pro model.
+    writeLater: promisesLater(body),
     transferStance: asked && (parsed.transfer_stance === "stay" || parsed.transfer_stance === "leave") ? parsed.transfer_stance : undefined,
     acceptsInvite: player.pendingInvite && typeof parsed.accepts_invite === "boolean" ? parsed.accepts_invite : undefined,
     attendancePledge: parseAttendancePledge(parsed.attendance_pledge) ?? undefined,
@@ -560,6 +561,8 @@ export const PROMISES_LATER_RE = new RegExp([
   String.raw`\bdam (?:ti |vam )?(?:vedet|echo)(?!,? (?:kdyby|kdybych|jestli|kdyz)\b)(?:${END}|,? (?:${LATER}|co\b|kdy\b|termin))`,
   String.raw`\bproberem(?:e)?(?: to)?(?: v klidu| podrobne| detailne\w*)? (?:pak|potom|pozdeji|pozdejc|vecer|odpoledne|rano|jindy|po sichte|po smene)\b${IN_PERSON}`,
   String.raw`\b(?:pak|potom|vecer|odpoledne|pozdeji) to proberem(?:e)?\b${IN_PERSON}`,
+  // „Řeknu ti to večer, jo?“ (lokální E2E 22. 11.), „povím ti to pak“; osobně ne.
+  String.raw`\b(?:reknu|povim)(?: ti| vam)?(?: to)?,? ${LATER}${IN_PERSON}`,
 ].join("|"), "gu");
 
 /** Podmínka před slibem ve stejné větě („Kdyby se něco dělo, hned se ozvu“): to slib odpovědi není. */
