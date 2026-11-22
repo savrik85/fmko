@@ -14,6 +14,8 @@ const Stadium3D = clientOnly(() => import("@/components/stadium/stadium-3d/Stadi
 
 /** Stav záznamu (zaznam/page.tsx); 3D kreslí totéž, co právě ukazuje on. */
 export interface ReplayProgress {
+  /** Kolikrát se záznam pustil od začátku (tlačítko „předchozí“ až na úvod). */
+  take: number;
   /** Kolik událostí už záznam ukázal. */
   idx: number;
   flash: "goal" | "card" | "chance" | "attacking" | "injury" | "penalty" | null;
@@ -48,7 +50,7 @@ export function Replay3D({ detail, events, progress, onReady }: {
   /** Scéna se poprvé vykreslila; záznam do té doby čeká s výkopem. */
   onReady: () => void;
 }) {
-  const { idx, flash, intro, kickoff, halfTime, finished, paused, cue, fast, homeGoals, awayGoals } = progress;
+  const { take, idx, flash, intro, kickoff, halfTime, finished, paused, cue, fast, homeGoals, awayGoals } = progress;
   const homeName = detail.home_name as string, awayName = detail.away_name as string;
   const kits = useMemo(() => ({ home: detail.home_kit as ReplayKit, away: detail.away_kit as ReplayKit }), [detail]);
   const pens = typeof detail.home_pens === "number" && typeof detail.away_pens === "number" && detail.home_pens + detail.away_pens > 0 ? { home: detail.home_pens, away: detail.away_pens } : null;
@@ -67,7 +69,7 @@ export function Replay3D({ detail, events, progress, onReady }: {
   const scene = useMemo(() => (cue !== null ? replay.scene(cue) : intro ? replay.intro() : finished ? replay.finale() : shot ? replay.scene(idx) : replay.before(idx)), [replay, cue, intro !== null, finished, shot, idx]); // eslint-disable-line react-hooks/exhaustive-deps
   const attack = cue !== null ? scene.split > scene.start : shot;
   // Skok začíná nový záběr, i když míří na akci, která zrovna běží.
-  const play = useMemo(() => ({ scene, attack }), [scene, attack, cue !== null]); // eslint-disable-line react-hooks/exhaustive-deps
+  const play = useMemo(() => ({ scene, attack }), [scene, attack, cue !== null, take]); // eslint-disable-line react-hooks/exhaustive-deps
   // O přestávce stojí týmy připravené na výkop druhého poločasu.
   const step = useRef<ReplayStep>({ play, rate: 1 });
   step.current = { play, rate: fast ? 2 : 1, hold: halfTime || cue !== null ? 0 : undefined };

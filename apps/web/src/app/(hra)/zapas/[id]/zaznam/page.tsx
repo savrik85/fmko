@@ -203,6 +203,30 @@ export default function MatchReplayPage() {
     animating.current = true;
     later(CUE_MS, () => { animating.current = false; setTick((t) => t + 1); });
   };
+  /** Kolikrát se záznam pustil od začátku; 3D podle toho pozná, že má úvod přehrát znovu. */
+  const [take, setTake] = useState(0);
+  /** Záznam od začátku: představení trenérů (jen 3D), výkop, hra. */
+  const begin = () => {
+    if (!match) return;
+    setHg(0); setAg(0); setIdx(0); setCue(null); setFlash(null); setFlashEvent(null); setHtPause(false); setHtDone(false); setFinished(false); setPaused(false);
+    if (speed === "instant") setSpeed("live");
+    setTake((n) => n + 1);
+    animating.current = true;
+    // Představí se trenéři, které kluby mají; ruce si podají, jen když jsou oba.
+    const coaches = long3d ? (["home", "away"] as const).filter((side) => match.detail[`${side}_coach`]) : [];
+    const steps = [...coaches, ...(coaches.length === 2 ? (["handshake"] as const) : [])];
+    const run = (n: number) => {
+      if (n < steps.length) {
+        setIntro(steps[n]);
+        later(sceneMs(steps[n] === "handshake" ? "handshake" : "coach"), () => run(n + 1));
+        return;
+      }
+      setIntro(null);
+      setKickoff("1st");
+      later(stepMs("kickoff"), () => { setKickoff(null); animating.current = false; setTick((t) => t + 1); });
+    };
+    run(0);
+  };
   /** Událost, která se právě hraje (při „ŠANCE!“ ta, která teprve přijde; po skoku ta, na které záznam stojí). */
   const playing = cue ?? (flash === "attacking" ? idx : idx - 1);
   // Po konci zápasu je „předchozí“ jeho poslední akce.
@@ -283,21 +307,7 @@ export default function MatchReplayPage() {
   useEffect(() => {
     if (!match || started.current || (long3d && !ready3d)) return;
     started.current = true;
-    animating.current = true;
-    // Představí se trenéři, které kluby mají; ruce si podají, jen když jsou oba.
-    const coaches = long3d ? (["home", "away"] as const).filter((side) => match.detail[`${side}_coach`]) : [];
-    const steps = [...coaches, ...(coaches.length === 2 ? (["handshake"] as const) : [])];
-    const run = (n: number) => {
-      if (n < steps.length) {
-        setIntro(steps[n]);
-        later(sceneMs(steps[n] === "handshake" ? "handshake" : "coach"), () => run(n + 1));
-        return;
-      }
-      setIntro(null);
-      setKickoff("1st");
-      later(stepMs("kickoff"), () => { setKickoff(null); animating.current = false; setTick((t) => t + 1); });
-    };
-    run(0);
+    begin();
   }, [!!match, long3d, ready3d]);
 
   // Kickoff 2nd half — auto-dismiss
@@ -634,14 +644,14 @@ export default function MatchReplayPage() {
             <>
               {view3d && (
                 <Replay3D detail={match.detail} events={match.events} onReady={() => setReady3d(true)}
-                  progress={{ idx, flash, intro, kickoff, halfTime: htPause, finished, paused, cue, fast: speed === "fast", homeGoals: hg, awayGoals: ag }} />
+                  progress={{ take, idx, flash, intro, kickoff, halfTime: htPause, finished, paused, cue, fast: speed === "fast", homeGoals: hg, awayGoals: ag }} />
               )}
               <button onClick={switchView} title={view3d ? "Přepnout na 2D záznam" : "Přepnout na 3D záznam"}
                 className="absolute top-2 left-2 z-30 h-8 px-2.5 rounded-lg bg-black/60 hover:bg-black/80 text-white text-xs font-heading font-bold">{view3d ? "2D" : "3D"}</button>
             </>
           )}
           <div className="absolute bottom-2 left-2 z-30 flex gap-1 text-white text-sm">
-            <button onClick={() => jumpTo(previousAction ?? starts[0])} disabled={starts.length === 0} title="Předchozí akce" className="w-8 h-8 rounded-lg bg-black/60 hover:bg-black/80 disabled:opacity-40">{"\u23EE"}</button>
+            <button onClick={() => (previousAction !== undefined ? jumpTo(previousAction) : begin())} title="Předchozí akce" className="w-8 h-8 rounded-lg bg-black/60 hover:bg-black/80 disabled:opacity-40">{"\u23EE"}</button>
             <button onClick={() => setPaused((p) => !p)} disabled={finished || htPause} title={paused ? "Pokračovat" : "Pauza"} className="w-8 h-8 rounded-lg bg-black/60 hover:bg-black/80 disabled:opacity-40">{paused ? "\u25B6" : "\u23F8"}</button>
             <button onClick={() => nextAction !== undefined && jumpTo(nextAction)} disabled={nextAction === undefined} title="Další akce" className="w-8 h-8 rounded-lg bg-black/60 hover:bg-black/80 disabled:opacity-40">{"\u23ED"}</button>
           </div>
