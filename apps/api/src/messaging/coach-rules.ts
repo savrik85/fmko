@@ -382,9 +382,12 @@ async function postToKabina(
 ): Promise<string> {
   const convId = await kabinaConversationId(db, clubTeamId);
   const { loadOwnRecentLines, pickFreshVariant } = await import("./repetition");
+  const { loadCoachAddress } = await import("./address-form");
   const previous = await loadOwnRecentLines(db, { playerId: player.id, convId, limit: 40 })
     .catch((e) => { logger.warn({ module: M }, "poslední věty hráče v kabině", e); return [] as string[]; });
-  const body = pickFreshVariant(variants, previous, seed).text;
+  // Věta, která oslovuje trenéra, v tvaru, jakým mu hráč píše v SMS (konverzace 1:1).
+  const address = await loadCoachAddress(db, { playerId: player.id, teamId: clubTeamId });
+  const body = pickFreshVariant(variants, previous, seed, { address }).text;
   const name = `${player.first_name} ${player.last_name}`;
   await db.batch([
     db.prepare(

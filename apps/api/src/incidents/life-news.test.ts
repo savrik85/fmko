@@ -2,6 +2,7 @@
  * Zpráva po skončení porodu a nemoci rodiče: fakta, předem napsané varianty a pokyn modelu.
  */
 import { describe, expect, it } from "vitest";
+import { addressFormOf } from "../messaging/address-form";
 import {
   BIRTH_NEWS_TEMPLATES, PARENT_NEWS_TEMPLATES, babyFacts, fallbackNews, formatWeight, lifeEventFact, newsScenario,
   parentFromTexts, seededParent,
@@ -68,6 +69,21 @@ describe("předem napsané zprávy", () => {
         expect(body).not.toMatch(/[{}—]/);
       }
     }
+  });
+
+  it("každá varianta má podobu s tykáním i vykáním: šablona drží tvar oslovení (Lakatoš, E2E 22. 11.)", () => {
+    const boy = { baby: { sex: "boy" as const, name: "Josef", weightG: 2960 } };
+    for (const [kind, data, count] of [["narozeni_ditete", boy, BIRTH_NEWS_TEMPLATES.length], ["nemocny_rodic", { parent: "father" as const }, PARENT_NEWS_TEMPLATES.length]] as const) {
+      for (let i = 0; i < count; i++) {
+        const others = Array.from({ length: count }, (_, j) => j).filter((j) => j !== i);
+        const informal = fallbackNews(kind, data, others, "s", "ty");
+        const formal = fallbackNews(kind, data, others, "s", "vy");
+        expect(informal.variant).toBe(i);
+        expect(addressFormOf(informal.body), informal.body).not.toBe("vy");
+        expect(addressFormOf(formal.body), formal.body).not.toBe("ty");
+      }
+    }
+    expect(fallbackNews("narozeni_ditete", boy, [0, 1, 2, 3, 4], "s", "ty").body).toContain("Klidně se u nás stav.");
   });
 
   it("rod sedí: holka vážila a zve se zapít malou", () => {
