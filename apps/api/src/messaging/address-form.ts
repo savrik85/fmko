@@ -92,6 +92,89 @@ export function wrongAddress(body: string, expected: CoachAddress | undefined): 
   return f !== null && f !== expected;
 }
 
+// ─── Oprava bez modelu ───────────────────────────────────────────────────────
+//
+// E2E 22. 11. (Hrdlička, historie VY): přegenerování kvůli tvaru často nestihlo rozpočet a odešlo
+// „Promiň, trenére“ nebo „Seš krutej… Promiň“. Nejčastější jednoznačné tvary na začátku klauzule
+// a na konci věty jdou vyměnit bez rizika pro gramatiku; když ve zprávě zůstane opačný tvar
+// i jinde, oprava se nedělá vůbec (radši celá zpráva v jednom tvaru než napůl).
+
+type Swap = readonly [from: string, to: string];
+
+/** Začátek věty nebo klauzule (za čárkou). Delší dřív: „díky, že ses“ před „díky, že jsi“. */
+const START_TO_FORMAL: readonly Swap[] = [
+  ["díky, že ses", "díky, že jste se"], ["díky, že sis", "díky, že jste si"], ["díky, že jsi", "díky, že jste"],
+  ["nezlob se", "nezlobte se"], ["promiň", "promiňte"], ["víš", "víte"], ["seš", "jste"], ["jsi", "jste"],
+];
+const START_TO_INFORMAL: readonly Swap[] = [
+  ["díky, že jste se", "díky, že ses"], ["díky, že jste si", "díky, že sis"], ["díky, že jste", "díky, že jsi"],
+  ["nezlobte se", "nezlob se"], ["promiňte", "promiň"], ["víte", "víš"], ["jste", "jsi"],
+];
+/** Poslední slovo věty: „…, víš?“, „…, chápeš?“ jen před otazníkem, „…, promiň.“ kdekoli. */
+const END_TO_FORMAL: readonly Swap[] = [["víš", "víte"], ["chápeš", "chápete"], ["promiň", "promiňte"]];
+const END_TO_INFORMAL: readonly Swap[] = [["víte", "víš"], ["chápete", "chápeš"], ["promiňte", "promiň"]];
+const QUESTION_TAGS = new Set(["víš", "víte", "chápeš", "chápete"]);
+const LETTER_RE = /\p{L}/u;
+const SENTENCE_END_CHARS = new Set([".", "!", "?", "…", " "]);
+
+function withCase(original: string, replacement: string): string {
+  const first = original.charAt(0);
+  return first !== first.toLowerCase() ? replacement.charAt(0).toUpperCase() + replacement.slice(1) : replacement;
+}
+
+/** Vymění tvar na začátku klauzulí věty (začátek a za „, “). */
+function swapClauseStarts(sentence: string, swaps: readonly Swap[]): string {
+  let out = "";
+  let i = 0;
+  let clauseStart = true;
+  while (i < sentence.length) {
+    if (clauseStart && sentence[i] !== " ") {
+      const rest = sentence.slice(i).toLowerCase();
+      const hit = swaps.find(([from]) => rest.startsWith(from) && !LETTER_RE.test(rest.charAt(from.length)));
+      clauseStart = false;
+      if (hit) {
+        out += withCase(sentence.slice(i, i + hit[0].length), hit[1]);
+        i += hit[0].length;
+        continue;
+      }
+    }
+    if (sentence[i] === "," && sentence[i + 1] === " ") clauseStart = true;
+    out += sentence[i];
+    i++;
+  }
+  return out;
+}
+
+/** Vymění poslední slovo věty (za mezerou nebo čárkou), u „víš?“ jen před otazníkem. */
+function swapSentenceEnd(sentence: string, swaps: readonly Swap[]): string {
+  let end = sentence.length;
+  while (end > 0 && SENTENCE_END_CHARS.has(sentence[end - 1])) end--;
+  const core = sentence.slice(0, end);
+  const tail = sentence.slice(end);
+  const lower = core.toLowerCase();
+  const hit = swaps.find(([from]) => lower.endsWith(from) && lower.length > from.length
+    && (lower[lower.length - from.length - 1] === " " || lower[lower.length - from.length - 1] === ",")
+    && (!QUESTION_TAGS.has(from) || tail.includes("?")));
+  if (!hit) return sentence;
+  const at = core.length - hit[0].length;
+  return `${core.slice(0, at)}${withCase(core.slice(at), hit[1])}${tail}`;
+}
+
+/**
+ * Zpráva s tvarem oslovení `expected`, opravená bez modelu, nebo null: opravit nebylo co, nebo
+ * by v ní opačný tvar zůstal i jinde (tvar uprostřed věty se nemění, to by mohlo rozbít shodu).
+ */
+export function fixAddressForm(body: string, expected: CoachAddress): string | null {
+  const starts = expected === "vy" ? START_TO_FORMAL : START_TO_INFORMAL;
+  const ends = expected === "vy" ? END_TO_FORMAL : END_TO_INFORMAL;
+  // Věty i s mezerami mezi nimi (lichá místa pole), ať se text složí přesně zpátky.
+  const parts = body.split(/((?<=[.!?…])\s+|\n+)/u);
+  const out = parts.map((part, i) => (i % 2 === 1 || !part ? part : swapSentenceEnd(swapClauseStarts(part, starts), ends))).join("");
+  if (out === body) return null;
+  const wrong = expected === "vy" ? "ty" : "vy";
+  return addressMarkers(out)[wrong] === 0 ? out : null;
+}
+
 /** Pokyn k druhému pokusu, když model tvar oslovení nedodržel. */
 export function addressRetryRule(expected: CoachAddress): string {
   return expected === "vy"

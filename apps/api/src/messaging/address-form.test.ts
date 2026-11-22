@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addressFormOf, addressRetryRule, historyAddressForm, wrongAddress } from "./address-form";
+import { addressFormOf, addressRetryRule, fixAddressForm, historyAddressForm, wrongAddress } from "./address-form";
 
 // Doslovné zprávy z lokálního E2E 22. 11. (retest1.md, Tykání/vykání).
 describe("tvar oslovení ve zprávě", () => {
@@ -58,5 +58,27 @@ describe("tvar z historie hráče", () => {
     expect(wrongAddress("A vy co děláte, trenére?", undefined)).toBe(false);
     expect(addressRetryRule("vy")).toContain("VYKÁŠ");
     expect(addressRetryRule("ty")).toContain("TYKÁŠ");
+  });
+});
+
+describe("oprava tvaru oslovení bez modelu (fixAddressForm)", () => {
+  it("jen jednoznačné tvary na začátku a konci věty, s velkým písmenem jako v originálu", () => {
+    expect(fixAddressForm("Promiň, trenére.", "vy")).toBe("Promiňte, trenére.");
+    expect(fixAddressForm("Jo, promiň, trenére.", "vy")).toBe("Jo, promiňte, trenére.");
+    expect(fixAddressForm("Díky, že jsi přišel.", "vy")).toBe("Díky, že jste přišel.");
+    expect(fixAddressForm("Díky, že sis na mě udělal čas.", "vy")).toBe("Díky, že jste si na mě udělal čas.");
+    expect(fixAddressForm("Nezlob se, trenére.", "vy")).toBe("Nezlobte se, trenére.");
+    expect(fixAddressForm("Víte, trenére, je to těžký.", "ty")).toBe("Víš, trenére, je to těžký.");
+    expect(fixAddressForm("Je to těžký, chápete?", "ty")).toBe("Je to těžký, chápeš?");
+    expect(fixAddressForm("Díky, že jste mě pustil.", "ty")).toBe("Díky, že jsi mě pustil.");
+  });
+
+  it("nic, když tvar zůstane i jinde, když opravovat není co, nebo když je tvar správně", () => {
+    expect(fixAddressForm("Promiň, ale máš pravdu.", "vy")).toBeNull();
+    expect(fixAddressForm("Nevím, proč to vytahuješ teď.", "vy")).toBeNull();
+    expect(fixAddressForm("Promiňte, trenére.", "vy")).toBeNull();
+    expect(fixAddressForm("Promiňský sýr je dobrej.", "vy")).toBeNull();
+    // „Víš“ uprostřed věty ne: jen začátek a konec.
+    expect(fixAddressForm("To přece víš dobře.", "vy")).toBeNull();
   });
 });
