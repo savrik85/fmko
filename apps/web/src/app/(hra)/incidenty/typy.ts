@@ -87,6 +87,7 @@ export const VYSLEDEK_LABEL: Record<string, string> = {
   found_job: "Našel práci",
   vratil: "Hráč to vrátil",
   nahradil: "Hráč škodu zaplatil",
+  opravil: "Hráč škodu opravil brigádou",
 };
 
 export const TREST_LABEL: Record<AkceTrestu, string> = {

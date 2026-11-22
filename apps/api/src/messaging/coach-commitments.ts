@@ -21,6 +21,7 @@ import { logger } from "../lib/logger";
 import { applyCoachRelationDelta } from "../lib/coach-relation";
 import { LINEUP_PROMISE_BROKEN_SMS, LINEUP_PROMISE_KEPT_SMS } from "./promise-texts";
 import { sendPlayerTemplateSMS } from "./system-sms";
+import { czechDayWords } from "../weddings/wedding";
 // Chat se načítá až za běhu: ai-player-chat → player-memory → tento modul by jinak byl kruh.
 import type { ChatEnv } from "./ai-player-chat";
 
@@ -31,7 +32,9 @@ export type CommitmentKind = "start_next" | "start_soon" | "position" | "release
   // Bod 2 rozboru: trenér zve hráče (hospoda, schůzka) a sázky o výkon v příštím zápase.
   | "invite_pub" | "invite_talk" | "bet"
   // Bod 4: pokuta napsaná v SMS a úkol „poptej se“ k incidentu (incidents/zprava-trenera.ts).
-  | "fine" | "task_inquiry";
+  | "fine" | "task_inquiry"
+  // Pachatel slíbil vrátit lup nebo opravit škodu brigádou (incidents/restitution.ts, amends.ts).
+  | "task_return" | "task_repair";
 export type CommitmentStatus = "active" | "kept" | "broken" | "expired" | "cancelled";
 export type LineupRole = "GK" | "DEF" | "MID" | "FWD";
 export type BetCondition = "goal" | "hattrick" | "assist" | "win" | "clean_sheet";
@@ -77,14 +80,16 @@ export interface CommitmentDetails {
   buttonMessageId?: string;
   /** Dodržený slib opravdu změnil vztah (od něj se počítá lhůta proti „farmení“). */
   effect?: number;
-  /** Úkol „poptej se“: o jaký incident jde. */
+  /** Úkol „poptej se“, „vrať to“, „oprav to“: o jaký incident jde. */
   incidentId?: string;
+  /** Úkol „vrať to“ / „oprav to“: herní den lhůty `YYYY-MM-DD`. */
+  dueOn?: string;
 }
 
 /** Jak dlouho slib platí, než se vyhodnotí bez zápasu nebo bez vyplacení. */
 const DUE_DAYS: Record<CommitmentKind, number> = {
   start_next: 10, start_soon: 21, position: 10, release_offer: 30, bonus: 7, wage: 7,
-  invite_pub: 2, invite_talk: 3, bet: 10, fine: 3, task_inquiry: 1,
+  invite_pub: 2, invite_talk: 3, bet: 10, fine: 3, task_inquiry: 1, task_return: 2, task_repair: 2,
 };
 /** Kolik dní má trenér na zaplacení vyhrané sázky. */
 const BET_PAY_DAYS = 5;
@@ -130,6 +135,8 @@ export function commitmentText(kind: CommitmentKind, d: CommitmentDetails = {}):
     case "bet": return `Když ${BET_CONDITION_TEXT[d.condition ?? "goal"]}, trenér ${betRewardText(d)}`;
     case "fine": return `Pokutu ${(d.amount ?? 0).toLocaleString("cs-CZ")} Kč`;
     case "task_inquiry": return "Poptat se kvůli incidentu";
+    case "task_return": return "Vrátit, co vzal";
+    case "task_repair": return "Opravit škodu brigádou";
   }
 }
 
@@ -681,6 +688,8 @@ const KEPT_SMS: Record<CommitmentKind, readonly string[]> = {
   invite_pub: [],
   invite_talk: [],
   task_inquiry: [],
+  task_return: [],
+  task_repair: [],
   fine: [
     "No jo, trenére. Zasloužil jsem si to.",
     "Dobře, pokutu beru. Ale radost z toho nemám.",
@@ -713,6 +722,8 @@ const BROKEN_SMS: Record<CommitmentKind, readonly string[]> = {
   invite_pub: [],
   invite_talk: [],
   task_inquiry: [],
+  task_return: [],
+  task_repair: [],
   fine: [],
   bet: [
     "Trenére, sázka platila a pořád nic. Tak tolik k vašemu slovu.",
@@ -776,6 +787,9 @@ const EFFECTS: Record<CommitmentKind, { kept: [number, number]; broken: [number,
   // Udělená pokuta vztah i náladu zhorší, neudělená nic (hráč si nestěžuje, že pokutu nedostal).
   fine: { kept: [-5, -4], broken: [0, 0] },
   task_inquiry: { kept: [0, 0], broken: [0, 0] },
+  // Úkol pachatele: splnění i nesplnění řeší amends.ts (vrácení, oprava, SMS), vztah se nemění.
+  task_return: { kept: [0, 0], broken: [0, 0] },
+  task_repair: { kept: [0, 0], broken: [0, 0] },
   bonus: { kept: [6, 5], broken: [-8, -5] },
   wage: { kept: [8, 6], broken: [-8, -5] },
 };
@@ -953,6 +967,14 @@ export async function settleCoachCommitments(db: D1Database, now: Date = new Dat
       }
       if (r.kind === "task_inquiry") {
         if (duePassed) { await deliverInquiry(db, r); await resolveCommitment(db, r, "kept", now); closed++; }
+        continue;
+      }
+      if (r.kind === "task_return" || r.kind === "task_repair") {
+        // Lhůta pachatele uplynula: vrátí/opraví, nebo se vymluví (incidents/amends.ts si úkol zabere sám).
+        if (duePassed) {
+          const { settleAmendsTask } = await import("../incidents/amends");
+          if (await settleAmendsTask(db, r, now)) closed++;
+        }
         continue;
       }
       if (r.kind !== "bonus" && r.kind !== "wage") continue;
@@ -1283,6 +1305,7 @@ export function commitmentPromptLines(list: CommitmentMemory[] | undefined): str
     if (c.kind === "task_inquiry") {
       return c.status === "active" ? "- Trenér tě požádal, ať se poptáš kvůli incidentu v klubu. Kývl jsi na to a ozveš se mu, až něco zjistíš (zítra)." : "";
     }
+    if (c.kind === "task_return" || c.kind === "task_repair") return amendsPromptLine(c);
     if (c.kind === "fine") {
       return c.status === "active" ? `- Trenér ti napsal, že dostaneš pokutu (${(c.details.amount ?? 0).toLocaleString("cs-CZ")} Kč). Víš o tom, klidně se ohraď nebo ji přijmi podle povahy.`
         : c.status === "kept" ? `- Trenér ti nedávno dal pokutu (${(c.details.amount ?? 0).toLocaleString("cs-CZ")} Kč). Pamatuješ si to.` : "";
@@ -1293,6 +1316,24 @@ export function commitmentPromptLines(list: CommitmentMemory[] | undefined): str
   }).filter((line) => line.length > 0);
 }
 
+/** Pachatel slíbil vrátit nebo opravit (incidents/amends.ts): co platí a jak to dopadlo. */
+function amendsPromptLine(c: CommitmentMemory): string {
+  const ret = c.kind === "task_return";
+  const when = c.details.dueOn ? `nejpozději ${czechDayWords(c.details.dueOn)}` : "do dvou dnů";
+  if (c.status === "active") {
+    return ret
+      ? `- Slíbil jsi trenérovi, že vrátíš, co jsi vzal, ${when}. Platí to: věci opravdu vrátíš, jen nevíš přesně kdy během té doby. Nic jiného neslibuj.`
+      : `- Slíbil jsi trenérovi, že škodu s brigádou opravíš, ${when}. Platí to. Nic jiného neslibuj.`;
+  }
+  if (c.status === "kept") return ret ? "- Nedávno jsi klubu vrátil, co jsi vzal." : "- Nedávno jsi škodu s brigádou opravil, bolí tě z toho ještě záda.";
+  if (c.status === "broken") {
+    return ret
+      ? "- Slíbil jsi trenérovi vrátit, co jsi vzal, a nevrátil jsi to. Víš o tom a je ti to trapné."
+      : "- Slíbil jsi trenérovi opravit škodu brigádou a neopravil jsi ji. Víš o tom a je ti to trapné.";
+  }
+  return "";
+}
+
 /** Sliby z rozhovorů pro profil hráče (sekce Sliby), ve stejném tvaru jako player_promises. */
 export async function listCommitments(db: D1Database, playerId: string, clubTeamId: string): Promise<Array<{
   id: string; text: string; status: Exclude<CommitmentStatus, "cancelled">; madeAt: string; resolvedAt: string | null; quote: string | null;
@@ -1300,7 +1341,7 @@ export async function listCommitments(db: D1Database, playerId: string, clubTeam
   // Zrušené („to nebyl slib“) se neukazují: slib nikdy nebyl.
   const rows = await db.prepare(
     `SELECT id, kind, status, details, made_at, resolved_at, quote FROM coach_commitments
-      WHERE player_id = ? AND team_id = ? AND status != 'cancelled' AND kind NOT IN ('fine', 'task_inquiry')
+      WHERE player_id = ? AND team_id = ? AND status != 'cancelled' AND kind NOT IN ('fine', 'task_inquiry', 'task_return', 'task_repair')
       ORDER BY status = 'active' DESC, made_at DESC LIMIT 20`,
   ).bind(playerId, clubTeamId)
     .all<{ id: string; kind: CommitmentKind; status: Exclude<CommitmentStatus, "cancelled">; details: string | null; made_at: string; resolved_at: string | null; quote: string | null }>()
