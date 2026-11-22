@@ -1997,6 +1997,12 @@ export async function afterPlayerReply(
   if (r.reply.acceptsRequest !== undefined && r.player.pendingRequest) {
     const { respondToCoachRequest } = await import("./coach-rules");
     await respondToCoachRequest(db, { commitmentId: r.player.pendingRequest.commitmentId, playerId: r.player.id, accepted: r.reply.acceptsRequest });
+  } else if (!r.player.pendingRequest) {
+    // Pokyn ze stejné zprávy trenéra se zapsal, zatímco hráč psal (pomalé rozpoznání slibu):
+    // model o něm nevěděl, kývnutí se vezme z textu odpovědi.
+    const [{ answerRequestFromReply, requestFromSameMessage }, { REQUEST_KINDS }] = await Promise.all([import("./coach-rules"), import("./player-memory")]);
+    const late = await requestFromSameMessage(db, { playerId: r.player.id, convId: r.convId, at: r.at, kinds: REQUEST_KINDS });
+    if (late) await answerRequestFromReply(db, { commitmentId: late, playerId: r.player.id, replyBody: r.reply.body });
   }
   // Pozvání od trenéra (coach-commitments.ts): hráč v odpovědi kývl nebo odmítl.
   if (r.reply.acceptsInvite !== undefined && r.player.pendingInvite) {

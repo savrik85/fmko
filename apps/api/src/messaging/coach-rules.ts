@@ -452,6 +452,58 @@ export async function respondToCoachRequest(db: D1Database, o: { commitmentId: s
   return true;
 }
 
+/** Kývnutí v textu odpovědi (bez diakritiky): „beru“, „jasně“, „platí“, „jdu do toho“, „domluveno“. */
+const ACCEPT_RE = /\b(beru|jasne|jasny|jasnacka|plati|domluveno|dohodnuto|jdu do toho|jdeme do toho|jdem do toho|souhlasim|ok|okej|dobre|dobra|tak jo|bez problemu|spolehni se|udelam to|zvladnu to|ano)\b/;
+/** Odmítnutí: „ne“, „nebudu“, „nechci“, „zapomeň“, „kašlu na to“. */
+const REFUSE_RE = /\b(ne|nebudu|nechci|neberu|nezvladnu|zapomen|zapomente|kaslu|v zadnem pripade|nikdy|nehodlam|odmitam)\b/;
+
+/**
+ * Kývl hráč v textu odpovědi na pokyn nebo dohodu? Jen jasné: kývnutí bez odmítnutí (true),
+ * odmítnutí bez kývnutí (false), jinak nevíme (undefined).
+ */
+export function acceptanceInReply(text: string): boolean | undefined {
+  const t = text.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  const yes = ACCEPT_RE.test(t);
+  const no = REFUSE_RE.test(t);
+  if (yes === no) return undefined;
+  return yes;
+}
+
+/**
+ * Pokyn nebo dohoda (kolečka, omluva kabině, hubnutí) se zapsal až po odpovědi hráče nebo zatímco
+ * ji psal: model o něm nevěděl a `accepts_request` nevrátil. Kývnutí se pak vezme z textu odpovědi
+ * (přetest 3: Bohuslavovo „Beru to vážně…“ se nezapsalo a dohoda by propadla jako „nekývl“).
+ * Vrací, jestli se odpověď zapsala.
+ */
+export async function answerRequestFromReply(
+  db: D1Database, o: { commitmentId: string; playerId: string; replyBody: string },
+): Promise<boolean> {
+  const accepted = acceptanceInReply(o.replyBody);
+  if (accepted === undefined) return false;
+  logger.info({ module: M }, `pokyn ${o.commitmentId}: hráč ${o.playerId} ${accepted ? "kývl" : "odmítl"} v odpovědi, která přišla dřív než zápis`);
+  return respondToCoachRequest(db, { commitmentId: o.commitmentId, playerId: o.playerId, accepted });
+}
+
+/**
+ * Pokyn hráči, který vznikl ze zprávy trenéra, na kterou hráč právě odpověděl (zapsán po té
+ * zprávě, ještě bez odpovědi). `at`: čas odpovědi hráče.
+ */
+export async function requestFromSameMessage(
+  db: D1Database, o: { playerId: string; convId: string; at: string; kinds: readonly string[] },
+): Promise<string | null> {
+  const row = await db.prepare(
+    `SELECT c.id FROM coach_commitments c
+      WHERE c.player_id = ? AND c.status = 'active' AND c.kind IN (${o.kinds.map(() => "?").join(", ")})
+        AND json_extract(c.details, '$.accepted') IS NULL
+        AND COALESCE(json_extract(c.details, '$.target'), 'self') NOT IN ('team', 'absentees')
+        AND julianday(c.made_at) >= (SELECT MAX(julianday(m.sent_at)) FROM messages m
+              WHERE m.conversation_id = ? AND m.sender_type = 'user' AND julianday(m.sent_at) <= julianday(?))
+      ORDER BY c.made_at DESC LIMIT 1`,
+  ).bind(o.playerId, ...o.kinds, o.convId, o.at).first<{ id: string }>()
+    .catch((e) => { logger.warn({ module: M }, `pokyn ze zprávy trenéra pro ${o.playerId}`, e); return null; });
+  return row?.id ?? null;
+}
+
 /** Na co má hráč v odpovědi kývnout (nejnovější čerstvý pokyn bez odpovědi). */
 export function pendingRequestOf(
   list: ReadonlyArray<{ id: string; kind: string; status: string; details: RuleDetails; madeAt: string }> | undefined,
