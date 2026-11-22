@@ -2,8 +2,6 @@
  * Vzhled hráčů a dresy pro 3D záznam zápasu (detail ligového, pohárového i turnajového zápasu).
  */
 
-import { logger } from "./logger";
-
 export interface PlayerLook {
   skinColor?: string;
   /** null = holá hlava. */
@@ -43,9 +41,9 @@ const WHITE = "#FFFFFF";
 const BLACK = "#111111";
 /**
  * Dresy hostů se musí od domácích lišit: eukleidovská vzdálenost v RGB (0–255 na složku,
- * maximum ~441) nad 120. Tmavě zelená vs. tmavě modrá (~90) ještě splývá, červená vs. modrá (~250) ne.
+ * maximum ~441) nad 100. Tmavě zelená vs. tmavě modrá (~90) ještě splývá, zelená vs. modrá (~120) už ne.
  */
-const MIN_KIT_DISTANCE = 120;
+const MIN_KIT_DISTANCE = 100;
 
 /** Pleť a vlasy z obličeje (facesjs v `players.avatar`), výška z `players.physical`. */
 export function playerLook(row: { avatar: string | null; physical: string | null }): PlayerLook {
@@ -105,7 +103,7 @@ function awayKit(team: TeamKitRow | undefined, fallback: string, homeShirt: stri
 
 /**
  * Dresy obou klubů a vzhled hráčů pro 3D záznam. Vzhled (pleť, vlasy, výška) doplní
- * přímo do hráčů v sestavách; bere se aktuální, jako číslo dresu. Chyby jen loguje.
+ * přímo do hráčů v sestavách; bere se aktuální, jako číslo dresu.
  */
 export async function loadMatchLook(
   db: D1Database,
@@ -115,19 +113,11 @@ export async function loadMatchLook(
   awayLineup: LineupLike,
 ): Promise<{ home_kit: MatchKit; away_kit: MatchKit }> {
   const teamIds = [home.teamId, away.teamId].filter((id): id is string => !!id);
-  let teams: TeamKitRow[] = [];
-  if (teamIds.length > 0) {
-    try {
-      const res = await db.prepare(
-        `SELECT id, primary_color, secondary_color, home_shorts_color, home_socks_color,
-                away_primary_color, away_shorts_color, away_socks_color
-           FROM teams WHERE id IN (${teamIds.map(() => "?").join(",")})`,
-      ).bind(...teamIds).all<TeamKitRow>();
-      teams = res.results;
-    } catch (e) {
-      logger.warn({ module: "matches" }, "barvy dresů do detailu zápasu", e);
-    }
-  }
+  const teams = teamIds.length === 0 ? [] : (await db.prepare(
+    `SELECT id, primary_color, secondary_color, home_shorts_color, home_socks_color,
+            away_primary_color, away_shorts_color, away_socks_color
+       FROM teams WHERE id IN (${teamIds.map(() => "?").join(",")})`,
+  ).bind(...teamIds).all<TeamKitRow>()).results;
   const homeTeam = teams.find((t) => t.id === home.teamId);
   const awayTeam = teams.find((t) => t.id === away.teamId);
   const home_kit = homeKit(homeTeam, home.fallbackColor || DEFAULT_HOME_COLOR);
@@ -136,21 +126,12 @@ export async function loadMatchLook(
   const players = [homeLineup, awayLineup].flatMap((ld) => (ld ? [...(ld.starters ?? []), ...(ld.subs ?? [])] : []));
   const ids = [...new Set(players.map((p) => p.id).filter(Boolean))];
   if (ids.length > 0) {
-    try {
-      const res = await db.prepare(`SELECT id, avatar, physical FROM players WHERE id IN (${ids.map(() => "?").join(",")})`)
-        .bind(...ids).all<{ id: string; avatar: string | null; physical: string | null }>();
-      const byId = new Map(res.results.map((r) => [r.id, r]));
-      for (const p of players) {
-        const row = byId.get(p.id);
-        if (!row) continue;
-        try {
-          Object.assign(p, playerLook(row));
-        } catch (e) {
-          logger.warn({ module: "matches" }, `nečitelný vzhled hráče ${p.id}`, e);
-        }
-      }
-    } catch (e) {
-      logger.warn({ module: "matches" }, "vzhled hráčů do detailu zápasu", e);
+    const rows = await db.prepare(`SELECT id, avatar, physical FROM players WHERE id IN (${ids.map(() => "?").join(",")})`)
+      .bind(...ids).all<{ id: string; avatar: string | null; physical: string | null }>();
+    const byId = new Map(rows.results.map((r) => [r.id, r]));
+    for (const p of players) {
+      const row = byId.get(p.id);
+      if (row) Object.assign(p, playerLook(row));
     }
   }
   return { home_kit, away_kit };

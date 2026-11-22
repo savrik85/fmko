@@ -3,8 +3,6 @@
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { clientOnly } from "@/components/client-only";
-import { ReplayOverlay } from "@/components/match/replay-3d/ReplayOverlay";
-import { ReplayActors, useMatchReplay } from "@/components/match/replay-3d/useMatchReplay";
 import { useTeam } from "@/context/team-context";
 import { apiFetch } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
@@ -56,11 +54,9 @@ interface MatchInfo {
   venueColor: string | null;
   venueSecondary: string | null;
   isTournament: boolean;
-  attendance: number | null;
 }
 
 interface StadiumFacilities {
-  capacity?: number;
   facilities: Record<string, number>;
   standExtensions?: { slots: { slot: string; built?: { kind: string; level: number } | null }[] };
   customization?: Record<string, unknown>;
@@ -76,7 +72,6 @@ export default function MatchDayPage() {
   const [loading, setLoading] = useState(true);
   const [skipping, setSkipping] = useState(false);
   const [uiMode, setUiMode] = useState<"full" | "minimal" | "hidden">("full");
-  const { plan: replay, clock: replayClock, available: has3d, load: load3d, start: start3d } = useMatchReplay();
 
   useEffect(() => {
     // Pohár má vlastní tabulky i endpoint. Zkoušíme ligu první, protože těch zápasů je
@@ -118,14 +113,11 @@ export default function MatchDayPage() {
           venueColor: (venueLook?.primary as string) ?? null,
           venueSecondary: (venueLook?.secondary as string) ?? null,
           isTournament: r.isTournament === true,
-          attendance: typeof r.attendance === "number" ? r.attendance : null,
         });
-        load3d(r);
 
         // Turnaj: 3D podle hřiště z losu (úrovně tribun, střechy, světel z areálu).
         if (r.isTournament === true && venueLook) {
           setStadiumData({
-            capacity: (r.venue as { capacity?: number }).capacity,
             facilities: venueFacilities(venueLook),
             // Stejný tvar jako /stadium klubu, ať ho builtExtensionsOf přečte.
             standExtensions: { slots: venueExtensions(venueLook).map((e) => ({ slot: e.slot, built: { kind: e.kind, level: e.level } })) },
@@ -170,16 +162,15 @@ export default function MatchDayPage() {
     window.location.href = `/zapas/${matchId}`;
   };
 
-  // Zápas se přehraje ve 3D rovnou tady na načteném stadionu; když to nejde, ve 2D.
   const startMatch = async () => {
-    trackEvent("match_action", { action: has3d ? "watch_replay_3d" : "watch_replay", matchId, isHome: match?.isHome });
+    trackEvent("match_action", { action: "watch_replay", matchId, isHome: match?.isHome });
     const tid = teamId ?? (match?.isHome ? match.home_team_id : match?.away_team_id);
     await apiFetch(`/api/matches/${matchId}/mark-seen`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ teamId: tid }),
     }).catch((e) => console.error("mark-seen on replay:", e));
-    if (!(await start3d())) window.location.href = `/zapas/${matchId}/zaznam`;
+    window.location.href = `/zapas/${matchId}/zaznam`;
   };
 
   if (loading) {
@@ -202,7 +193,7 @@ export default function MatchDayPage() {
         className="absolute inset-0 w-full h-full z-0 pointer-events-auto"
         onClick={() => {
           // Na mobilu klepnutí do scény přepíná mezi plným zobrazením, miniaturou a skrytím
-          if (!replay && typeof window !== "undefined" && window.innerWidth < 640) {
+          if (typeof window !== "undefined" && window.innerWidth < 640) {
             setUiMode((prev) => (prev === "full" ? "minimal" : prev === "minimal" ? "hidden" : "full"));
           }
         }}
@@ -219,21 +210,12 @@ export default function MatchDayPage() {
           sponsors={match.isTournament ? ["P-Mobile"] : undefined}
           adBoardColor={match.isTournament ? "#C8006A" : undefined}
           stadiumName={match.stadium_name ?? `Stadion ${match.home_name}`}
-          viewpoint={replay ? "broadcast" : "orbit"}
-          showCenterBall={!replay}
-          // Na tribunách tolik lidí, kolik na zápas přišlo.
-          attendanceRatio={match.attendance !== null && stadiumData?.capacity ? Math.min(1, match.attendance / stadiumData.capacity) : undefined}
+          initialViewpoint="orbit"
           initialWeather={match.weather}
           showControls={false}
-        >
-          {replay && <ReplayActors plan={replay} clock={replayClock} />}
-        </Stadium3D>
+        />
       </div>
 
-      {replay && <ReplayOverlay plan={replay} clock={replayClock} matchId={matchId} />}
-
-      {!replay && (
-      <>
       {/* Horní ovládací a informační lišta */}
       <div className="absolute top-3 inset-x-3 sm:top-5 sm:inset-x-6 z-30 pointer-events-none flex items-center justify-between gap-2">
         {/* Odznáček kola / studia */}
@@ -480,8 +462,6 @@ export default function MatchDayPage() {
             🎥 Filmový oblet stadionu s aktuálním počasím zápasu
           </div>
         </div>
-      )}
-      </>
       )}
     </div>
   );

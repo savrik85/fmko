@@ -145,8 +145,7 @@ export const SKY_SUN_POSITION: [number, number, number] = [50, 30, 20];
 
 export type TimeOfDay = "day" | "sunset" | "night";
 
-/** `broadcast` = televizní pohled na celé hřiště pro záznam zápasu (v nabídce kamer stadionu není). */
-export type CameraViewpoint = "overview" | "main_stand" | "dugout" | "behind_goal" | "orbit" | "broadcast";
+export type CameraViewpoint = "overview" | "main_stand" | "dugout" | "behind_goal" | "orbit";
 
 export interface ViewpointDef {
   id: CameraViewpoint;
@@ -203,15 +202,6 @@ export const VIEWPOINTS: Record<CameraViewpoint, ViewpointDef> = {
     position: [52, 38, 52],
     target: [0, 0, 0],
     fov: 36,
-  },
-  broadcast: {
-    id: "broadcast",
-    label: "Zápas",
-    icon: "📺",
-    // Vysoko nad hlavní (východní) tribunou od půlicí čáry, celé hřiště v záběru.
-    position: [46, 26, 0],
-    target: [0, 0, 0],
-    fov: 44,
   },
 };
 

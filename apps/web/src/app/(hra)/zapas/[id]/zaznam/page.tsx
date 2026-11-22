@@ -8,7 +8,11 @@ import { Spinner, BadgePreview, JerseyPreview } from "@/components/ui";
 import { PositionBadge } from "@/components/ui/position-badge";
 import { bestTextOn } from "@/lib/team-color";
 import type { BadgePattern } from "@/components/ui";
-import { canPlay3d } from "@/components/match/replay-3d/useMatchReplay";
+import { clientOnly } from "@/components/client-only";
+import { shootoutEvents } from "@/components/match/replay-3d/scenes";
+
+// 3D záznam se stáhne, až když ho hráč má zapnutý.
+const Replay3D = clientOnly(() => import("@/components/match/replay-3d/Replay3D").then((m) => m.Replay3D));
 
 interface MatchEvent { minute: number; type: string; playerId: number; playerName: string; teamId: number; description: string; detail?: string; }
 interface LineupPlayer { id: string; name: string; position: string; naturalPosition: string; rating: number }
@@ -17,8 +21,8 @@ interface LineupData { starters: LineupPlayer[]; subs: LineupPlayer[]; formation
 interface MatchData {
   id: string; home_team_id: string; away_team_id: string; home_score: number; away_score: number; round: number | null;
   roundName: string | null; isCup: boolean;
-  /** Zápas jde přehrát i ve 3D na stadionu. */
-  has3d: boolean;
+  /** Celý detail zápasu z API pro 3D záznam (dresy, vzhled hráčů, stadion). */
+  detail: Record<string, unknown>;
   events: MatchEvent[]; commentary: string[];
   home_name: string; away_name: string; home_color: string; away_color: string;
   home_secondary: string; away_secondary: string; home_badge: string; away_badge: string;
@@ -116,6 +120,10 @@ export default function MatchReplayPage() {
   const prevBallX = useRef(50);
 
   const [stadiumInfo, setStadiumInfo] = useState<{ name: string; pitchCondition: number } | null>(null);
+  // 3D záznam je výchozí; kdo si přepne na 2D, tomu to zůstane.
+  const [view3d, setView3d] = useState(true);
+  useEffect(() => { setView3d(localStorage.getItem("replayView") !== "2d"); }, []);
+  const switchView = () => { localStorage.setItem("replayView", view3d ? "2d" : "3d"); setView3d(!view3d); };
 
   useEffect(() => {
     const hydrate = (r: Record<string, unknown>) => {
@@ -124,8 +132,9 @@ export default function MatchReplayPage() {
       setMatch({
         id: r.id as string, home_team_id: r.home_team_id as string, away_team_id: r.away_team_id as string,
         home_score: r.home_score as number, away_score: r.away_score as number, round: r.round as number | null,
-        roundName: (r.roundName as string) ?? null, isCup: r.isCup === true, has3d: canPlay3d(r),
-        events: ev, commentary: co,
+        roundName: (r.roundName as string) ?? null, isCup: r.isCup === true, detail: r,
+        // Penaltový rozstřel se přehraje jako události za koncem zápasu.
+        events: [...ev, ...shootoutEvents(r)], commentary: co,
         home_name: (r.home_name as string) ?? "Domácí", away_name: (r.away_name as string) ?? "Hosté",
         home_color: (r.home_color as string) ?? "#2D5F2D", away_color: (r.away_color as string) ?? "#D94032",
         home_secondary: (r.home_secondary as string) ?? "#FFF", away_secondary: (r.away_secondary as string) ?? "#FFF",
@@ -510,6 +519,18 @@ export default function MatchReplayPage() {
             )}
           </svg>
 
+          {/* 3D záznam kreslí totéž co 2D hřiště pod ním; potřebuje uložené sestavy. */}
+          {match.home_lineup_data && match.away_lineup_data && (
+            <>
+              {view3d && (
+                <Replay3D detail={match.detail} events={match.events}
+                  progress={{ idx, flash, kickoff, halfTime: htPause, finished, fast: speed === "fast", homeGoals: hg, awayGoals: ag }} />
+              )}
+              <button onClick={switchView} title={view3d ? "Přepnout na 2D záznam" : "Přepnout na 3D záznam"}
+                className="absolute top-2 left-2 z-30 h-8 px-2.5 rounded-lg bg-black/60 hover:bg-black/80 text-white text-xs font-heading font-bold">{view3d ? "2D" : "3D"}</button>
+            </>
+          )}
+
           {/* Team color side bars */}
           <div className="absolute left-0 top-0 bottom-0 w-2 rounded-l" style={{ backgroundColor: hc }} />
           <div className="absolute right-0 top-0 bottom-0 w-2 rounded-r" style={{ backgroundColor: ac }} />
@@ -637,9 +658,6 @@ export default function MatchReplayPage() {
             }`} style={speed === s ? { backgroundColor: hc } : undefined}
           >{s === "live" ? "\u25B6 Živě" : s === "fast" ? "\u25B6\u25B6 Rychle" : "\u25B6\u25B6\u25B6 Konec"}</button>
         ))}
-        {match.has3d && (
-          <button onClick={() => router.push(`/zapasovy-den/${matchId}`)} className="px-6 py-3 rounded-xl text-base font-heading font-bold uppercase tracking-wide bg-white text-muted hover:text-ink shadow-md">3D</button>
-        )}
         {/* Pozadím je dres domácích — u bílého (#FFFFFF) by bílý popisek zmizel a tlačítko nešlo přečíst. */}
         {htPause && <button onClick={() => { setHtPause(false); setHtDone(true); setKickoff("2nd"); }} className={`px-8 py-3 rounded-xl text-base font-heading font-bold uppercase shadow-lg ${bestTextOn(hc) === "light" ? "text-white" : "text-gray-900"}`} style={{ backgroundColor: hc }}>2. poločas {"\u25B6"}</button>}
         {finished && <button onClick={() => router.push(`/zapas/${matchId}`)} className={`px-10 py-3 rounded-xl text-lg font-heading font-bold uppercase shadow-lg ${bestTextOn(hc) === "light" ? "text-white" : "text-gray-900"}`} style={{ backgroundColor: hc }}>Pokračovat na přehled</button>}

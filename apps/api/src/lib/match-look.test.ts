@@ -1,6 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { loadMatchLook, playerLook } from "./match-look";
-import { logger } from "./logger";
 
 type TeamRow = {
   id: string;
@@ -119,16 +118,8 @@ describe("vzhled hráčů v sestavách", () => {
     expect(awayLineup.starters[0]).toEqual({ id: "ghost" });
   });
 
-  it("nečitelný JSON zaloguje a nevyhodí", async () => {
-    const warn = vi.spyOn(logger, "warn").mockImplementation(() => undefined);
-    const db = fakeDb([], [
-      { id: "bad", avatar: "{nope", physical: null },
-      { id: "ok", avatar: null, physical: JSON.stringify({ height: 175 }) },
-    ]);
-    const lineup = { starters: [{ id: "bad" }, { id: "ok" }], subs: [] };
-    await expect(loadMatchLook(db, { teamId: null }, { teamId: null }, lineup, null)).resolves.toBeDefined();
-    expect(lineup.starters).toEqual([{ id: "bad" }, { id: "ok", height: 175 }]);
-    expect(warn).toHaveBeenCalledTimes(1);
-    warn.mockRestore();
+  it("nečitelný JSON vzhledu je chyba", async () => {
+    const db = fakeDb([], [{ id: "bad", avatar: "{nope", physical: null }]);
+    await expect(loadMatchLook(db, { teamId: null }, { teamId: null }, { starters: [{ id: "bad" }], subs: [] }, null)).rejects.toThrow(SyntaxError);
   });
 });
