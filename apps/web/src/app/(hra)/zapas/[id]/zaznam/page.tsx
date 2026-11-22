@@ -378,7 +378,7 @@ export default function MatchReplayPage() {
       {/* ═══ PITCH VISUALIZATION (bet365/Sportradar style) ═══ */}
       <div className="rounded-b-xl overflow-hidden relative" style={{ background: "#1a2a1a" }}>
         {/* Pitch area */}
-        <div className="relative mx-3 my-3" style={{ aspectRatio: "2.2/1" }}>
+        <div className="relative mx-3 my-3 overflow-hidden rounded-control" style={{ aspectRatio: "2.2/1" }}>
           {/* Dark pitch with subtle lines */}
           <svg viewBox="0 0 100 45" className="absolute inset-0 w-full h-full">
             {/* Pitch background — color reflects pitch condition (lighter = better visible) */}
@@ -573,8 +573,8 @@ export default function MatchReplayPage() {
           </div>
 
           {/* Team color side bars */}
-          <div className="absolute left-0 top-0 bottom-0 w-2 rounded-l" style={{ backgroundColor: hc }} />
-          <div className="absolute right-0 top-0 bottom-0 w-2 rounded-r" style={{ backgroundColor: ac }} />
+          <div className="absolute left-0 top-0 bottom-0 w-1.5" style={{ backgroundColor: hc }} />
+          <div className="absolute right-0 top-0 bottom-0 w-1.5" style={{ backgroundColor: ac }} />
 
           {/* GOAL: full overlay with CSS animation */}
           {flash === "goal" && (

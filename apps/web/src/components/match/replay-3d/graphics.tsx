@@ -93,7 +93,7 @@ export function EventCard({ detail, events, idx, event, attack }: GraphicsProps)
     : teamName(detail, event);
   const board = event.type === "goal" ? [1, 2].map((teamId) => scorers(events, idx, teamId)) : null;
   return (
-    <div className="absolute bottom-2 left-28 right-2 z-30 pointer-events-none">
+    <div className="absolute bottom-2 left-32 right-2 z-30 pointer-events-none">
       <div key={idx} className="flex items-stretch h-10 sm:h-14 rounded-lg overflow-hidden shadow-xl bg-black/80 text-white font-heading animate-in fade-in slide-in-from-bottom-2 duration-300">
         <div className="w-1.5 shrink-0" style={{ backgroundColor: (event.teamId === 1 ? detail.home_color : detail.away_color) as string }} />
         <div className="shrink-0 w-10 sm:w-14 bg-white/90 overflow-hidden flex items-center justify-center text-gray-700 font-[800]">

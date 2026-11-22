@@ -96,7 +96,7 @@ export function Replay3D({ detail, events, progress }: { detail: Record<string, 
   const curtain = halfTime ? { text: "POLOČAS", sub: `${homeGoals} : ${awayGoals}` } : null;
 
   return (
-    <div className={fullscreen ? "fixed inset-0 z-50 bg-black" : "absolute inset-0 z-20 rounded-control overflow-hidden bg-black"}>
+    <div className={fullscreen ? "fixed inset-0 z-50 bg-black" : "absolute inset-0 z-20 bg-black"}>
       <Stadium3D
         pitchCondition={(detail.pitch_condition as number | null) ?? 85}
         pitchType={(venue?.look?.pitch_type as string) ?? (detail.pitch_type as string) ?? "natural"}
