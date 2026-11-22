@@ -8,11 +8,12 @@
 import { logger } from "../lib/logger";
 import { zaznamenejPromluvu } from "./hrozi-db";
 import { nactiZtraty } from "./popis";
-import { jeRecOHrozicim, najdiIncidentVTextu, temaZeStavu } from "./tema";
+import { involvedIncidentInText, jeRecOHrozicim, najdiIncidentVTextu, temaZeStavu } from "./tema";
 import { vyslechni } from "./vyslech";
 import type { VysledekVyslechu } from "./znalosti";
 
 import { isInquiryRequest, tacticOf } from "./interrogation-tactics";
+import { ZNALOST_PACHATEL_DNI } from "./nastaveni";
 const M = "incidents-zprava";
 
 /**
@@ -38,6 +39,35 @@ async function culpritRevealed(db: D1Database, teamId: string, incidentId: strin
     .bind(incidentId, teamId).first<{ culprit_revealed: number | null }>()
     .catch((e) => { logger.warn({ module: M }, `odhalení pachatele ${incidentId}`, e); return null; });
   return row?.culprit_revealed === 1;
+}
+
+/** Role, se kterými hráč o incidentu ví víc než kádr (club_incident_knowledge). */
+const INVOLVED_ROLES = ["pachatel", "obvineny", "svedek", "kamarad", "rival"] as const;
+
+/**
+ * Incident, na který se zpráva ptá, mezi těmi, do kterých je hráč zapletený: odhalený pachatel,
+ * obviněný trenérem, nebo role ve znalostech. I uzavřený, dokud si ho pachatel pamatuje
+ * (`ZNALOST_PACHATEL_DNI`). Otevřené neodhalené krádeže hledá už dotaz výš pro každého.
+ */
+async function findInvolvedIncident(
+  db: D1Database, o: { teamId: string; playerId: string; text: string; season: number; gameDate: string },
+): Promise<string | null> {
+  const rows = await db.prepare(
+    `SELECT i.id, i.kind, i.loss FROM club_incidents i
+      WHERE i.team_id = ? AND i.season_number = ? AND i.category IN ('kradez', 'poskozeni')
+        AND (i.status IN ('otevreny', 'policie')
+             OR (i.status = 'uzavreny' AND julianday(substr(i.resolved_on, 1, 10)) >= julianday(substr(?, 1, 10)) - ?))
+        AND ((i.culprit_player_id = ? AND i.culprit_revealed = 1)
+             OR EXISTS (SELECT 1 FROM club_incident_knowledge k
+                         WHERE k.incident_id = i.id AND k.player_id = ? AND k.team_id = i.team_id
+                           AND k.role IN (${INVOLVED_ROLES.map(() => "?").join(", ")}))
+             OR EXISTS (SELECT 1 FROM json_each(CASE WHEN json_valid(i.accused) THEN i.accused ELSE '[]' END)
+                         WHERE json_extract(value, '$.playerId') = ?))
+      ORDER BY i.game_date DESC LIMIT 10`,
+  ).bind(o.teamId, o.season, o.gameDate, ZNALOST_PACHATEL_DNI, o.playerId, o.playerId, ...INVOLVED_ROLES, o.playerId)
+    .all<{ id: string; kind: string; loss: string }>()
+    .catch((e) => { logger.warn({ module: M }, `incidenty, do kterých je zapletený ${o.playerId}`, e); return null; });
+  return involvedIncidentInText(o.text, (rows?.results ?? []).map((r) => ({ id: r.id, kind: r.kind, ztraty: nactiZtraty(r.loss) })));
 }
 
 export async function zpracujZpravuTrenera(
@@ -89,7 +119,16 @@ export async function zpracujZpravuTrenera(
         .catch((e) => { logger.warn({ module: M }, `hrozící čin hráče ${opts.playerId}`, e); return null; });
       if (hrozici && jeRecOHrozicim(opts.text, hrozici.kind)) incidentId = hrozici.id;
     }
-    if (!incidentId) return null;
+    if (!incidentId) {
+      // Odhalený nebo uzavřený incident, ve kterém je hráč zapletený (pachatel, obviněný, svědek):
+      // na otázku k němu musí odpovědět, proto téma. Hrdlička (E2E 22. 11.) nechal „Tak co, ukradl
+      // jsi ty dresy, nebo ne?“ 4× z 8 na přečteno a vlákno se uzavřelo se vztahem −10 a morálkou −8.
+      // Vyslýchat ani pátrat tu není co (neodhalené otevřené incidenty našel dotaz výš).
+      const involved = await findInvolvedIncident(db, { ...opts, season: zaklad.sezona, gameDate: zaklad.game_date });
+      if (!involved) return null;
+      await nastavTema(db, opts.convId, involved, den);
+      return { incidentId: involved, vyslech: null };
+    }
     // Navazující otázka („a kde?") klíčová slova mít nemusí, téma proto platí do konce dne.
     await nastavTema(db, opts.convId, incidentId, den);
   }

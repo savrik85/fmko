@@ -69,6 +69,12 @@ function kmenyZtraty(z: Ztrata): string[] {
     .map((slovo) => slovo.slice(0, -1));
 }
 
+/** Jmenuje zpráva místo nebo věc právě tohohle incidentu (začátek slova)? Bez signálu průšvihu. */
+function namesIncidentThing(slova: readonly string[], incident: { kind: string; ztraty: readonly Ztrata[] }): boolean {
+  const kmeny = [...(SLOVA_DRUHU[incident.kind] ?? []), ...incident.ztraty.flatMap(kmenyZtraty)];
+  return kmeny.some((k) => slova.some((s) => s.startsWith(k)));
+}
+
 /** Zmiňuje zpráva místo nebo věc právě tohohle incidentu, se signálem průšvihu nebo obecným slovem? */
 function mentionsIncidentStems(textZpravy: string, incident: { kind: string; ztraty: readonly Ztrata[] }): boolean {
   const t = normalizuj(textZpravy);
@@ -76,8 +82,26 @@ function mentionsIncidentStems(textZpravy: string, incident: { kind: string; ztr
   const hasTroubleSignal = OBECNA_SLOVA.some((s) => t.includes(s))
     || SIGNAL_PRUSVIHU.some((s) => t.includes(s)) || slova.includes("kdo");
   if (!hasTroubleSignal) return false;
-  const kmeny = [...(SLOVA_DRUHU[incident.kind] ?? []), ...incident.ztraty.flatMap(kmenyZtraty)];
-  return kmeny.some((k) => slova.some((s) => s.startsWith(k)));
+  return namesIncidentThing(slova, incident);
+}
+
+/** Trenér hráče z věci obviňuje přímo („vzal jsi“, „byl jsi to ty“, „přiznej se“). Bez diakritiky. */
+const ACCUSATION_RE = /\b(byls to ty|tys to (byl|udelal|vzal|rozbil)|jsi (to )?(byl|vzal|ukradl|rozbil|udelal|sebral)|(byl|vzal|ukradl|rozbil|udelal|sebral) jsi|vzals|rozbils|prizn\w*|zapir\w*)\b/;
+
+/**
+ * Incident, na který se ptá zpráva hráči, který je do něj zapletený (pachatel, obviněný, svědek).
+ * Kromě běžné otázky (`najdiIncidentVTextu`) stačí přímé obvinění s věcí nebo místem incidentu:
+ * „Martine, ty míče ze skladu jsi vzal ty?“ slovo průšvihu nemá, a přesto se ptá na ten incident.
+ */
+export function involvedIncidentInText(
+  textZpravy: string, incidenty: ReadonlyArray<{ id: string; kind: string; ztraty: readonly Ztrata[] }>,
+): string | null {
+  const found = najdiIncidentVTextu(textZpravy, incidenty);
+  if (found) return found;
+  const t = normalizuj(textZpravy);
+  if (!ACCUSATION_RE.test(t)) return null;
+  const slova = t.split(/[^a-z]+/).filter(Boolean);
+  return incidenty.find((i) => namesIncidentThing(slova, i))?.id ?? null;
 }
 
 export function jeOtazkaNaIncident(textZpravy: string, incident: { kind: string; ztraty: readonly Ztrata[] }): boolean {
