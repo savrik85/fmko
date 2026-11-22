@@ -120,6 +120,18 @@ describe("texty", () => {
     expect(lines[1]).toContain("NEDODRŽEL slib: prémii 1");
     expect(commitmentPromptLines(undefined)).toEqual([]);
   });
+
+  it("pachatel ví, co slíbil vrátit nebo opravit, a do kdy (Turek a poháry, 24. 10.)", () => {
+    const [active, broken, repaired] = commitmentPromptLines([
+      { id: "r", kind: "task_return", status: "active", details: { incidentId: "vit", dueOn: "2026-10-26" }, madeAt: "2026-10-24T15:45:00Z", resolvedAt: null },
+      { id: "s", kind: "task_return", status: "broken", details: { incidentId: "x" }, madeAt: "2026-10-10T10:00:00Z", resolvedAt: "2026-10-12T10:00:00Z" },
+      { id: "t", kind: "task_repair", status: "kept", details: { incidentId: "y" }, madeAt: "2026-10-11T10:00:00Z", resolvedAt: "2026-10-13T10:00:00Z" },
+    ]);
+    expect(active).toContain("vrátíš, co jsi vzal, nejpozději v pondělí 26. 10.");
+    expect(broken).toContain("nevrátil jsi to");
+    expect(repaired).toContain("s brigádou opravil");
+    expect(commitmentText("task_repair")).toBe("Opravit škodu brigádou");
+  });
 });
 
 describe("pozvání a sázky", () => {

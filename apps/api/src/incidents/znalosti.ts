@@ -110,6 +110,8 @@ export interface RadekZnalostiDb {
   resolution: string | null;
   culprit_revealed: number;
   culprit_player_id: string | null;
+  /** Lup je zpátky v klubu (vrácený, dopadený policií). Starší dotazy ho nemají. */
+  recovered?: number | null;
   pachatel_jmeno: string | null;
   pachatel_prijmeni: string | null;
 }
@@ -133,6 +135,8 @@ export interface RadekZnalosti {
   pachatel: string | null;
   /** Hráč, o jehož prompt jde, je sám odhalený pachatel. */
   pachatelJeOn: boolean;
+  /** Lup je zpátky v klubu. Nenačtené = ne. */
+  recovered?: boolean;
 }
 
 function dnyMezi(od: string, do_: string): number {
@@ -149,6 +153,7 @@ export function radekZnalosti(r: RadekZnalostiDb, playerId: string, dnes: string
     // Neodhaleného pachatele prompt znát nesmí, i kdyby dotaz jméno vrátil.
     pachatel: odhalen && jmeno ? jmeno : null,
     pachatelJeOn: odhalen && r.culprit_player_id === playerId,
+    recovered: r.recovered === 1,
   };
 }
 
@@ -204,6 +209,7 @@ const VYSLEDEK_V_PROMPTU: Record<string, readonly [string, string]> = {
   nestalo_se: ["Nakonec z toho nic nebylo.", "Nakonec jsi nic neudělal."],
   vratil: ["Lup vrátil.", "Lup jsi vrátil."],
   nahradil: ["Škodu zaplatil ze svého.", "Škodu jsi zaplatil ze svého."],
+  opravil: ["Škodu s brigádou opravil.", "Škodu jsi s brigádou opravil."],
 };
 
 function kdy(dni: number): string {
@@ -248,6 +254,21 @@ function pokynPachatele(r: RadekZnalosti): string {
   return "Zapírej, nic nepřiznávej.";
 }
 
+/** Výsledky, po kterých lup v klubu je (vrátil ho pachatel nebo policie). */
+const LOOT_BACK = new Set(["vratil", "nahradil", "vyreseno_policii", "nestalo_se", "nehoda"]);
+
+/**
+ * U uzavřené krádeže, kde lup zůstal u pachatele: ať nesliboval, co hra neumí. Turek po srážce
+ * za poháry slíbil „V pondělí je máš v kabině“ a nic se nestalo (Výškovice, 24. 10.). Vrátit
+ * je teď může, ale jen když ho o to trenér požádá a on kývne (restitution.ts, amends.ts).
+ */
+export function lootLine(r: Pick<RadekZnalosti, "kategorie" | "stav" | "vysledek" | "recovered">): string {
+  if (r.kategorie !== "kradez" || r.stav !== "uzavreny" || LOOT_BACK.has(r.vysledek ?? "")) return "";
+  return r.recovered
+    ? "Co jsi vzal, jsi pak klubu vrátil."
+    : "Co jsi vzal, máš pořád u sebe, klub to zpátky nedostal. Sám od sebe vrácení neslibuj: vrátíš to, jen když tě o to trenér požádá a ty mu to slíbíš.";
+}
+
 /** Provalený vlastní průšvih: co, kdy, jak se na to přišlo a jak to dopadlo, s pokynem nezapírat. */
 function ownOffenceLine(r: RadekZnalosti): string {
   const parts = [
@@ -257,6 +278,8 @@ function ownOffenceLine(r: RadekZnalosti): string {
   const outcome = r.vysledek ? VYSLEDEK_V_PROMPTU[r.vysledek] : undefined;
   if (outcome) parts.push(outcome[1]);
   else if (r.stav === "policie") parts.push("Vyšetřuje to policie.");
+  const loot = lootLine(r);
+  if (loot) parts.push(loot);
   return `- ${parts.join(" ")} POKYN: ${pokynPachatele(r)}`;
 }
 

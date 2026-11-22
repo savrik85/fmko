@@ -5,7 +5,7 @@ import { nazevIncidentu } from "./katalog";
 import { PROBLEMOVY, hrac, stavKlubu } from "./testovaci-stav";
 import type { NavrhIncidentu, NavrhStopy } from "./typy";
 import {
-  BEZ_ZNALOSTI, HLAVICKA_ZNALOSTI, blokZnalosti, radekDoPromptu, radekZnalosti, vyberZnalosti, znalostiIncidentu,
+  BEZ_ZNALOSTI, HLAVICKA_ZNALOSTI, blokZnalosti, lootLine, radekDoPromptu, radekZnalosti, vyberZnalosti, znalostiIncidentu,
   type RadekZnalostiDb,
 } from "./znalosti";
 
@@ -253,5 +253,30 @@ describe("block znalostí v promptu", () => {
     const neodhaleny = radekDoPromptu(radek({ ...zaklad, status: "uzavreny", resolution: "pokuta" }));
     expect(neodhaleny).toBe(`- ${zaklad.fact} Stalo se to před 3 dny.`);
     expect(radekDoPromptu(radek({ ...zaklad, ...ODHALENY }))).toContain("Udělal to Pepa Průšvih.");
+  });
+});
+
+describe("lup po uzavřené krádeži (Turek a poháry, 23.–24. 10.)", () => {
+  it("zůstal u pachatele: ví to a sám vrácení neslibuje", () => {
+    const line = lootLine({ kategorie: "kradez", stav: "uzavreny", vysledek: "srazka", recovered: false });
+    expect(line).toContain("máš pořád u sebe");
+    expect(line).toContain("Sám od sebe vrácení neslibuj");
+  });
+
+  it("vrátil ho později, nebo se incident vyřešil jinak: nic nebo „vrátil jsi“", () => {
+    expect(lootLine({ kategorie: "kradez", stav: "uzavreny", vysledek: "srazka", recovered: true })).toContain("jsi pak klubu vrátil");
+    expect(lootLine({ kategorie: "kradez", stav: "uzavreny", vysledek: "vratil", recovered: true })).toBe("");
+    expect(lootLine({ kategorie: "kradez", stav: "otevreny", vysledek: null, recovered: false })).toBe("");
+    expect(lootLine({ kategorie: "poskozeni", stav: "uzavreny", vysledek: "pokuta", recovered: false })).toBe("");
+  });
+
+  it("jde do řádku pachatele i se srážkou", () => {
+    const db: RadekZnalostiDb = {
+      incident_id: "vit", role: "pachatel", fact: "Vybral jsi vitrínu s poháry.", interrogation: null, kind: "vitrina", category: "kradez",
+      severity: 2, game_date: "2026-10-23T16:00:00.000Z", status: "uzavreny", resolution: "srazka", culprit_revealed: 1,
+      culprit_player_id: "turek", recovered: 0, pachatel_jmeno: "Radek", pachatel_prijmeni: "Turek",
+    };
+    const line = radekDoPromptu(radekZnalosti(db, "turek", "2026-10-24T16:00:00.000Z"));
+    expect(line).toContain("Trenér ti strhává peníze ze mzdy. Co jsi vzal, máš pořád u sebe");
   });
 });

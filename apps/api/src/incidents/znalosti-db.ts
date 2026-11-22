@@ -44,7 +44,7 @@ export async function zapisZnalosti(
  */
 const DOTAZ_ZNALOSTI = `
   SELECT k.incident_id, k.role, k.fact, k.interrogation,
-         i.kind, i.category, i.severity, i.game_date, i.status, i.resolution, i.culprit_revealed, i.culprit_player_id,
+         i.kind, i.category, i.severity, i.game_date, i.status, i.resolution, i.culprit_revealed, i.culprit_player_id, i.recovered,
          COALESCE(p.first_name, d.first_name) AS pachatel_jmeno, COALESCE(p.last_name, d.last_name) AS pachatel_prijmeni
     FROM club_incident_knowledge k
     JOIN club_incidents i ON i.id = k.incident_id
