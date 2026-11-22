@@ -38,11 +38,12 @@ export function mentionCandidates(club: MentionCandidate[], message: string, exc
   const words = plainWords(message);
   const skip = new Set(excludeIds);
   const excluded = club.filter((p) => skip.has(p.id));
-  // „Tomáši, hrál jsi skvěle“: oslovení adresáta není zmínka jeho jmenovce.
-  const addressWord = (w: string) => excluded.some((p) => wordMatchesName(w, p.firstName));
-  const hits = (name: string | null | undefined) => !!name && words.some((w) => wordMatchesName(w, name));
-  const firstNameHit = (name: string) => words.some((w) => wordMatchesName(w, name) && !addressWord(w));
-  return club.filter((p) => !skip.has(p.id) && (hits(p.nickname) || hits(p.lastName) || firstNameHit(p.firstName)));
+  // „Tomáši, hrál jsi skvěle“: oslovení adresáta (křestním jménem nebo přezdívkou) není zmínka
+  // jmenovce. Platí i pro příjmení a přezdívku spoluhráče: „Lukáši, proč jsi vykradl sklad?“
+  // Lukáši Kohoutovi nemluví o Jakubu Lukášovi (lokální E2E 22. 11., hearsay obvinil jeho).
+  const addressWord = (w: string) => excluded.some((p) => wordMatchesName(w, p.firstName) || (!!p.nickname && wordMatchesName(w, p.nickname)));
+  const hits = (name: string | null | undefined) => !!name && words.some((w) => wordMatchesName(w, name) && !addressWord(w));
+  return club.filter((p) => !skip.has(p.id) && (hits(p.nickname) || hits(p.lastName) || hits(p.firstName)));
 }
 
 function fullName(c: MentionCandidate): string {
