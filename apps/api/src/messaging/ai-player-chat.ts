@@ -76,6 +76,8 @@ export interface TeamContext {
   nextMatch?: string;
   /** Příští pohárový zápas (cup-facts.ts). Bez něj hráč den před pohárem tvrdil „O tom nic nevím“. */
   nextCupMatch?: string;
+  /** Domluvený přátelák (matches bez kola a soutěže), např. „DNES (sobota 21. 11.) v 18:00 doma s X“. */
+  nextFriendly?: string;
   /** Zápas druhého druhu pár dní před posledním, např. „mistrovský zápas: prohra 0:2 doma s X“. */
   previousMatchResult?: string;
   managerName?: string;
@@ -160,14 +162,74 @@ function buildPersonalityHints(p: PlayerSnapshot): string {
   return hints.length > 0 ? hints.join(", ") : "průměrná povaha";
 }
 
+/**
+ * Skutečné důvody omluvenky, které se od výmluvy liší a za které se hráč stydí. Nárovec
+ * (Budvar Spůle) měl 29. 10. v losu „Kocovina“ a trenérovi napsal „Strejda slavil padesát,
+ * nejde jít domů brzo“; hráč znal jen výmluvu. Ostatní důvody z losu (práce, osobní…) jsou
+ * pravda, kterou výmluva sama říká.
+ */
+const HIDDEN_ABSENCE_TRUTH: Record<string, string> = {
+  Kocovina: "jsi měl kocovinu, večer předtím jsi to přehnal",
+  Alkohol: "jsi pil a nebyl jsi ve stavu hrát",
+};
+
+/** Přizná hráč trenérovi, proč doopravdy nepřišel? Podle povahy, jeden hráč pokaždé stejně. */
+export function admitsExcuseTruth(p: Pick<PlayerSnapshot, "discipline" | "coachRelationship">): boolean {
+  return p.discipline >= 60 || (p.discipline >= 45 && p.coachRelationship >= 65);
+}
+
+/**
+ * Pravda o omluvence (rozhodnutí 2026-11-22): hráč zná skutečný důvod a podle povahy ho
+ * buď přizná (stydí se, vymlouvá se), nebo se drží své výmluvy. To, že chyběl, nepopře
+ * nikdy. Prázdný řetězec = skutečný důvod neznáme (zbyla jen výmluva).
+ */
+export function excuseTruthLine(reason: string, p: Pick<PlayerSnapshot, "discipline" | "coachRelationship">): string {
+  const hidden = HIDDEN_ABSENCE_TRUTH[reason];
+  if (hidden) {
+    const stance = admitsExcuseTruth(p)
+      ? "Když se tě na to trenér zeptá nebo tě prokoukne, přiznáš to: stydíš se a trochu se vymlouváš."
+      : "Trenérovi to nepřiznáš a držíš se své výmluvy, i když se vyptává.";
+    return `Pravda je, že ${hidden}. ${stance} To, že jsi na zápas nepřišel, nikdy nepopírej.`;
+  }
+  if (!reason || reason === "Omluvenka") return "";
+  return "Omluvenka je pravdivá, tak to opravdu bylo.";
+}
+
 /** Proč hráč v posledním zápase chyběl, důvody z `buildMatchPlayers` (match-runner.ts). */
-function absenceReasonFact(absence: PlayerSnapshot["lastMatchAbsence"]): string {
+function absenceReasonFact(absence: PlayerSnapshot["lastMatchAbsence"], p: PlayerSnapshot): string {
   if (absence?.reason === "Stopka za karty") return "Měl jsi stopku za karty a hrát jsi nesměl.";
   if (absence?.reason === "Zranění") return `Byl jsi zraněný${absence.text ? ` (${absence.text})` : ""}.`;
   if (absence?.reason === "Osobní volno") return "Měl jsi od trenéra osobní volno.";
-  return absence?.text
+  const said = absence?.text
     ? `Předem ses trenérovi omluvil, tvoje omluvenka zněla: „${absence.text}“.`
     : "Předem ses trenérovi omluvil.";
+  const truth = absence ? excuseTruthLine(absence.reason, p) : "";
+  return truth ? `${said} ${truth}` : said;
+}
+
+/** Vyřazení ze zápasu za trest (incident, `club_incident_absences`): nechyběl kvůli sobě. */
+const COACH_BAN_REASON = "Vyřazen trenérem";
+
+function matchCountWords(n: number): string {
+  return n === 1 ? "příští zápas" : `ještě ${n} ${n < 5 ? "zápasy" : "zápasů"}`;
+}
+
+/**
+ * Stopka za karty a vyřazení za trest. Bez toho se hráč se stopkou divil, že nehraje, a
+ * vyčítal to trenérovi. Stížnost na nenominaci (multiplayer/left-out.ts) suspendovaný ani
+ * vyřazený nedostane: do zápasu nejde a mezi vynechané se nepočítá.
+ */
+export function suspensionFact(p: PlayerSnapshot): string {
+  const s = p.suspension;
+  if (!s) return "";
+  const lines: string[] = [];
+  if (s.cards > 0) {
+    lines.push(`- Máš stopku za karty: ${matchCountWords(s.cards)} hrát nesmíš. Nehraješ kvůli stopce, ne kvůli trenérovi: nediv se a nestěžuj si, že tě nestaví.`);
+  }
+  if (s.coach > 0) {
+    lines.push(`- Trenér tě za trest vyřadil: ${matchCountWords(s.coach)} hrát nesmíš. Víš proč, nediv se tomu.`);
+  }
+  return lines.join("\n");
 }
 
 /**
@@ -179,12 +241,21 @@ function absenceReasonFact(absence: PlayerSnapshot["lastMatchAbsence"]): string 
 export function buildUpcomingAbsenceFacts(p: PlayerSnapshot): string {
   const a = p.upcomingAbsence;
   if (!a) return "";
-  const match = `${a.when === "dnes" ? "dnešní" : "zítřejší"} zápas${a.opponent ? ` proti ${a.opponent}` : ""}`;
+  const what = a.friendly ? "přátelák" : "zápas";
+  const match = `${a.when === "dnes" ? "dnešní" : "zítřejší"} ${what}${a.opponent ? ` proti ${a.opponent}` : ""}`;
+  const fixed = a.reason === "Stopka za karty" || a.reason === "Zranění" || a.reason === "Osobní volno";
   const why = a.reason === "Stopka za karty" ? "Máš stopku za karty a hrát nesmíš."
     : a.reason === "Zranění" ? `Jsi zraněný${a.text ? ` (${a.text})` : ""}.`
     : a.reason === "Osobní volno" ? "Máš od trenéra osobní volno."
-    : a.text ? `Trenérovi jsi do skupiny zápasu poslal omluvenku: „${a.text}“.` : "Trenérovi ses na něj omluvil.";
-  return `- Na ${match} NEPŘIJDEŠ. ${why} Víš o tom a trenér to ví taky. Když se tě na to ptá nebo tě přemlouvá, drž se své omluvenky: klidně ji rozveď, omluv se nebo řekni, že tě to mrzí. NIKDY netvrď, že přijdeš, že jsi doma a fit, ani že nevíš, o čem trenér mluví.`;
+    : !a.text ? "Trenérovi ses na něj omluvil."
+    : a.friendly ? `Trenérovi ses omluvil: „${a.text}“.`
+    : `Trenérovi jsi do skupiny zápasu poslal omluvenku: „${a.text}“.`;
+  // Skutečný důvod z losu (kocovina za „strejda slavil padesát“): podle povahy ho přizná, nebo ne.
+  const truth = fixed ? "" : excuseTruthLine(a.reason, p);
+  const keep = HIDDEN_ABSENCE_TRUTH[a.reason] && !fixed
+    ? ""
+    : " Když se tě na to ptá nebo tě přemlouvá, drž se své omluvenky: klidně ji rozveď, omluv se nebo řekni, že tě to mrzí.";
+  return `- Na ${match} NEPŘIJDEŠ. ${why}${truth ? ` ${truth}` : ""} Víš o tom a trenér to ví taky.${keep} NIKDY netvrď, že přijdeš, že jsi doma a fit, ani že nevíš, o čem trenér mluví.`;
 }
 
 /**
@@ -195,10 +266,13 @@ export function buildLastMatchFacts(p: PlayerSnapshot, lastMatchResult?: string)
   if (!p.lastMatchOutcome) return "";
   const verdict = lastMatchResult
     ?? (p.lastMatchOutcome === "win" ? "vyhráli jsme" : p.lastMatchOutcome === "loss" ? "prohráli jsme" : "remizovali jsme");
+  if (p.playedLastMatch === false && p.lastMatchSquad === "absent" && p.lastMatchAbsence?.reason === COACH_BAN_REASON) {
+    return `- V posledním zápase (${verdict}) jsi NEHRÁL. Trenér tě za trest vyřadil ze zápasu. Víš proč. NIKDY netvrď, že jsi hrál.`;
+  }
   if (p.playedLastMatch === false && p.lastMatchSquad === "absent") {
     // Omluvený hráč dřív dostal „trenér tě do nominace nedal" a na trenérovo „jak to dopadlo
     // s tím klíštětem?" odepsal „jaký klíště, vy jste mě nepostavil" (Chlumany 2026-11-04).
-    return `- V posledním zápase (${verdict}) jsi NEHRÁL. ${absenceReasonFact(p.lastMatchAbsence)} Trenér tě nevynechal, na zápas jsi nemohl ty. Když se tě na to trenér ptá, víš, o čem mluví. NIKDY netvrď, že jsi hrál, ani že tě trenér nepostavil.`;
+    return `- V posledním zápase (${verdict}) jsi NEHRÁL. ${absenceReasonFact(p.lastMatchAbsence, p)} Trenér tě nevynechal, na zápas jsi nemohl ty. Když se tě na to trenér ptá, víš, o čem mluví. NIKDY netvrď, že jsi hrál, ani že tě trenér nepostavil.`;
   }
   if (p.playedLastMatch === false) {
     // Dřív tu stálo vždycky „seděl jsi na lavičce", i u hráče, kterého trenér vůbec nenominoval.
@@ -362,6 +436,7 @@ export function buildSystemPrompt(
       ? `- Příští mistrovský zápas: ${team.nextMatch}.`
       : "- Termín dalšího mistrovského zápasu neznáš.",
     team.nextCupMatch ? `- Příští pohárový zápas: ${team.nextCupMatch}.` : "",
+    team.nextFriendly ? `- Domluvený přátelák: ${team.nextFriendly}.` : "",
     team.leaguePosition
       ? `- ${team.playingFor ? `Tým, za který hraješ (${team.playingFor.teamName}),` : "Tým"} je v tabulce na ${team.leaguePosition}. místě.`
       : "",
@@ -371,7 +446,8 @@ export function buildSystemPrompt(
     buildLastMatchFacts(player, team.lastMatchResult),
     buildPreviousMatchFacts(player, team.previousMatchResult),
     buildUpcomingAbsenceFacts(player),
-    "- Kromě mistrovských zápasů se hraje i pohár. O termínech zápasů, sestavě a o tom, kdo hrál, víš JEN to, co stojí v těchto faktech. NEVYMÝŠLEJ si, kdy se hraje, ani kdo nastoupil. Když trenér mluví o zápase, který ve faktech nemáš, nehádej se s ním, že se nehrálo: zeptej se ho, nebo řekni, že nevíš.",
+    suspensionFact(player),
+    "- Kromě mistrovských zápasů se hraje i pohár a přáteláky. O termínech zápasů, sestavě a o tom, kdo hrál, víš JEN to, co stojí v těchto faktech. NEVYMÝŠLEJ si, kdy se hraje, ani kdo nastoupil. Když trenér mluví o zápase, který ve faktech nemáš, nehádej se s ním, že se nehrálo: zeptej se ho, nebo řekni, že nevíš.",
     team.subjectPlayerName
       ? `- Konverzace je o konkrétním spoluhráči: ${team.subjectPlayerName}. Mluv VÝHRADNĚ o něm, nikoho jiného nejmenuj.`
       : "",

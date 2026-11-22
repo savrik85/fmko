@@ -55,8 +55,17 @@ export interface PlayerSnapshot {
   lastMatchSquad?: "played" | "bench" | "out" | "absent";
   /** Proč v posledním zápase chyběl (`matches.absences`), jen u `lastMatchSquad = "absent"`. */
   lastMatchAbsence?: { reason: string; text: string };
-  /** Omluvil se na dnešní nebo zítřejší zápas (stejně jako v sestavě). */
-  upcomingAbsence?: { reason: string; text: string; when: "dnes" | "zítra"; opponent: string | null };
+  /**
+   * Omluvil se na dnešní nebo zítřejší zápas (stejně jako v sestavě). `reason` je skutečný
+   * důvod z losu omluvenek („Kocovina“), `text` výmluva, kterou trenérovi napsal; prázdný
+   * `reason` = důvod neznáme. `friendly`: jde o dnešní přátelák (omluvenky ukazuje sestava).
+   */
+  upcomingAbsence?: { reason: string; text: string; when: "dnes" | "zítra"; opponent: string | null; friendly?: boolean };
+  /**
+   * Nesmí hrát: `cards` = zbývající zápasy stopky za karty (`players.suspended_matches`),
+   * `coach` = zbývající zápasy vyřazení za trest od trenéra (incident). Chybí = hrát smí.
+   */
+  suspension?: { cards: number; coach: number };
   /**
    * Zápas druhého druhu pár dní před posledním (pohár ve středu, liga v sobotu). Bez něj
    * Maun den po poháru, kde odehrál hodinu, odepsal „Jakej pohár zase?“ (2026-11-15).
